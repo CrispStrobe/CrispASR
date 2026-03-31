@@ -559,11 +559,14 @@ Decoder tensors use these names:
 
 ### Measured benchmark results
 
-| Version | Time (11s audio) | Wall speedup |
-|---------|-----------------|--------------|
-| Baseline (scalar) | ~825s (est.) | 1× |
-| FFTW3f + OpenBLAS + cross-KV (binary NOT linked) | 264s | 3.1× |
-| FFTW3f + OpenBLAS + cross-KV (properly linked) | 104s | **~8×** |
+| Version | Wall | User | Sys | Speedup |
+|---------|------|------|-----|---------|
+| Baseline (scalar) | ~825s | — | — | 1× |
+| FFTW3f + OpenBLAS + cross-KV (binary NOT linked) | 264s | — | — | 3.1× |
+| FFTW3f + OpenBLAS + cross-KV (properly linked) | 104s | 262s | 107s | **~8×** |
+| + BLAS attention (ct_rel_pos_mha) | 105s | 135s | 106s | ~8× |
+| + lazy F32 weight cache | 100s | 79s | 67s | ~8.3× |
+| + EncScratch + AVX2 F16C | **32s** | 32s | 22s | **~26×** |
 
 ### Critical debugging lesson: verify the binary actually links the libraries
 
@@ -584,16 +587,42 @@ with `-DBUILD_SHARED_LIBS=OFF` to avoid symlink I/O errors.
 
 ### Remaining bottlenecks (after current optimizations)
 
-1. **ct_to_f32 per-inference**: ~3.8 GB of scalar F16→F32 conversions each call (67 calls × avg 56MB).
-   The sys time of 1m47s for a 1m44s wall time confirms massive malloc churn.
-   Fix in progress: `ct_to_f32_ref()` with static cache + `cohere_model_warm_cache()` at init time.
+After EncScratch + AVX2 F16C: wall 32s, user 32s, sys 22s. **~26× total speedup.**
 
-2. **Memory allocation churn**: each `ct_linear` allocates a new `std::vector<float>` for output.
-   For 480 encoder GEMM calls × 2.8MB avg = 1.36 GB of alloc/free per encoder run.
-   Fix: pass pre-allocated output buffers instead of returning vectors.
+The dominant remaining bottleneck was identified through two iterations:
 
-3. **F16 weights via ggml**: current F16→F32 conversion throws away memory bandwidth advantage.
-   Fix: port to ggml compute graph (`ggml_mul_mat` handles F16 natively, enables GPU/quant).
+**Iteration 1 (EncScratch only, lazy cache)**: Sys time barely changed (67s→68s). The lazy F32 cache
+was ITSELF the bottleneck: allocating 7.8GB (3.9GB model × 2 for F16→F32) of std::vector storage
+on first inference caused ~1.9M page faults at ~35μs each = 68s of sys time. EncScratch eliminated
+per-layer intermediate allocations but the dominant alloc was the cache itself.
+
+**Iteration 2 (AVX2 F16C on-the-fly)**: Remove the F32 weight cache for large weight matrices.
+Instead: convert F16→F32 on-the-fly via AVX2 F16C hardware instructions (`_mm256_cvtph2ps`)
+into a single 26MB thread-local buffer (`tl_w_buf`), reused for every BLAS call.
+Result: 100s → 32s wall, sys 67s → 22s.
+
+Key insight: AVX2 F16C converts at ~56 billion F16/sec vs scalar at ~600M/sec (93× faster).
+For 3.9GB of encoder weights: scalar = ~3.3s, F16C = ~35ms. Negligible vs page fault cost.
+Only keep lazy F32 cache for small tensors (biases, norms, BN params < ~20KB each).
+
+**Current bottlenecks (after 32s):**
+1. Decoder weight conversion: 8 layers × 14 matrices × 27 decode steps still uses lazy cache.
+   Fix: apply ct_tensor_f32 to decoder weight matrices (same approach as encoder).
+2. Remaining 22s sys: page faults from decoder weight cache + other small allocs.
+3. F16 weight memory bandwidth: ggml port (P2B) would halve memory traffic.
+
+### F32 weight cache lessons (2026-03-31)
+
+`ct_to_f32_ref()` with static unordered_map works well LAZILY. Eager warm at startup
+(`cohere_model_warm_cache()`) was tried but caused ~2min startup time because it converts
+~3.8 GB of F16→F32 upfront. The startup overhead dominates any single-utterance benchmark.
+
+Lazy cache is the right default. Server-mode applications could call warm_cache once before
+the first inference to eliminate first-call overhead.
+
+Key: user time dropped from 262s → 79s (3.3×) with lazy cache. This confirms that decoder
+weight tensors were being converted 27× each (once per decode step) — the cache collapsed
+these to a single conversion per tensor.
 
 ### Architecture decisions
 

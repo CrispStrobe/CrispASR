@@ -175,16 +175,22 @@ This is what the ONNX model does. Integrates naturally into the ggml graph.
 | Memory alloc/sys overhead | ~0 | ~20–30 s (high sys time) | pre-alloc buffers |
 | **Total (measured)** | **~825 s** | **104 s** | **→ ~20 s target** |
 
-**Measured speedup**: 825s → 104s = **~8× total**
-- FFTW3f alone: expected ~57× for STFT component
-- OpenBLAS: working, but partly masked by ct_to_f32 overhead and scalar attn loops
-- Wall 1m44s, sys 1m47s: abnormally high sys time = massive malloc churn (~5 GB vector allocs/frees)
+**Measured speedup**: 825s → 100s = **~8.3× total** (latest: lazy F32 cache)
+
+| Session | Wall | User | Sys | Note |
+|---------|------|------|-----|------|
+| Baseline (scalar) | ~825s | — | — | — |
+| P1+P2A+P3 (FFTW3f+OpenBLAS+cross-KV) | 104s | 262s | 107s | OpenBLAS verified linked |
+| + BLAS attention | 105s | 135s | 106s | cblas_sgemm in ct_rel_pos_mha |
+| + lazy F32 cache | 100s | 79s | 67s | user time /4 threads ≈ 20s actual CPU |
+| + EncScratch + AVX2 F16C | **32s** | 32s | 22s | **~3.1× over prev, ~26× total** |
 
 **Remaining bottlenecks in priority order:**
-1. `ct_to_f32` per inference: ~30–40s — fix: F32 weight cache (P2A-cache, in progress)
-2. Memory allocation churn: ~20–30s sys time — fix: pre-allocate buffers in ct_linear
-3. Scalar attention loops in `ct_rel_pos_mha`: ~15–20s — fix: BLAS-ize or ggml port
-4. F16 matmul via ggml: ~2× over current F32 OpenBLAS — fix: ggml graph port (P2B)
+1. Sys time (22s): remaining page faults from ct_to_f32_ref for small tensors + decoder weight cache.
+   Decoder weights (8 × 14 matrices, 27 steps) still go through the lazy F32 cache.
+   Fix: apply ct_tensor_f32 to decoder weight matrices too.
+2. F16 matmul via ggml: proper 2× — fix: ggml graph port (P2B)
+3. GPU (CUDA/Metal): ~20-100× — blocked on P2B
 
 After P2B (ggml graph + F16):
 - F16 matmul: ~2× over F32 OpenBLAS → ~15–20 s total
@@ -199,18 +205,18 @@ After P2B (ggml graph + F16):
 | FFTW3f for STFT | Feature extraction | 50–60× | DONE |
 | OpenBLAS GEMM | All ct_linear calls | 10–20× | DONE (intermediate) |
 | Cross KV caching | Decoder | 2–10× | DONE |
-| F32 weight cache | Weight loading | ~3× (eliminates 30–40s overhead) | IN PROGRESS |
-| Pre-alloc ct_linear buffers | Memory churn | ~1.5–2× | TODO |
-| BLAS-ize attn score loops | Encoder attn | ~3–5× | TODO |
+| F32 weight cache (lazy) | Weight loading | ~3.3× (user 262s→79s) | DONE |
+| EncScratch + AVX2 F16C on-the-fly | Memory churn + conversion | **3.1× (100s→32s)** | DONE |
+| BLAS-ize attn score loops | Encoder attn | ~2× | TODO |
 | ggml compute graph | All | enables F16/GPU/quant | TODO (P2B) |
 | F16 matmul | Encoder/decoder | 2× | blocked on ggml |
 | Q8_0 quant | Encoder/decoder | 1.5–2× | blocked on ggml |
 | GPU (CUDA/Metal) | All | 20–100× | blocked on ggml |
 
 **Measured (P1+P2A+P3, 11s audio)**: 825s → 104s = **~8×**
-**After F32 cache + buffer pre-alloc**: est. 104s → ~35–50s
-**After BLAS attn**: est. ~20–30s
-**With ggml + F16**: est. ~15–20s → approaching real-time on CPU
+**Measured (P1+P2A+P3+scratch+F16C)**: 825s → 32s = **~26× total**
+**After decoder F16C fix**: est. ~20–25s
+**With ggml + F16 (P2B)**: est. ~10–15s → approaching real-time on CPU
 **With GPU**: real-time easily achievable
 
 ---
@@ -224,7 +230,8 @@ After P2B (ggml graph + F16):
 | Rust (cpu, no simd) | ~90–180s | pure Rust, no BLAS |
 | **Ours (baseline)** | **~825s** | naive DFT + scalar GEMM |
 | **Ours (P1+P2A+P3, measured)** | **104s** | FFTW3f + OpenBLAS + cross KV |
-| **Ours (+ F32 cache, est.)** | **~35–50s** | eliminates weight conversion overhead |
-| **Ours (+ BLAS attn, est.)** | **~20–30s** | |
+| **Ours (lazy F32 cache, measured)** | **100s** | user 79s, sys 67s (page-fault storm) |
+| **Ours (+ EncScratch + AVX2 F16C, measured)** | **32s** | user 32s, sys 22s — **26× total** |
+| **Ours (+ decoder F16C, est.)** | **~20–25s** | |
 | **Ours (ggml + F16, est.)** | **~10–15s** | CPU target |
 | **Ours (ggml + GPU, est.)** | **~0.3–1s** | stretch goal |

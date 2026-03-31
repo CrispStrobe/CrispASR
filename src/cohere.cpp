@@ -22,12 +22,17 @@
 #include <cstring>
 #include <map>
 #include <string>
+#include <unordered_map>
 #include <vector>
 #ifdef _OPENMP
 #include <omp.h>
 #endif
 #include <fftw3.h>
 #include <cblas.h>
+#if defined(__F16C__) && defined(__AVX2__)
+#include <immintrin.h>
+#define CT_HAVE_F16C 1
+#endif
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -415,6 +420,63 @@ static void ct_swish_inplace(float * x, int n) {
 }
 
 // ---------------------------------------------------------------------------
+// Fast F16→F32 conversion using AVX2/F16C hardware instructions.
+// Writes n floats into dst. Falls back to scalar bit-manipulation if no F16C.
+// ---------------------------------------------------------------------------
+static void ct_f16_to_f32(const uint16_t * src, float * dst, int n) {
+#ifdef CT_HAVE_F16C
+    int i = 0;
+    for (; i + 8 <= n; i += 8) {
+        __m128i h = _mm_loadu_si128((const __m128i *)(src + i));
+        __m256  f = _mm256_cvtph_ps(h);
+        _mm256_storeu_ps(dst + i, f);
+    }
+    for (; i < n; i++) {
+        uint16_t h = src[i];
+        uint32_t sign = (uint32_t)(h >> 15) << 31;
+        uint32_t exp  = (h >> 10) & 0x1F;
+        uint32_t mant = h & 0x3FF;
+        uint32_t r;
+        if      (exp == 0 && mant == 0) r = sign;
+        else if (exp == 31)             r = sign | 0x7F800000u | (mant << 13);
+        else                            r = sign | ((exp + (127 - 15)) << 23) | (mant << 13);
+        memcpy(dst + i, &r, sizeof(float));
+    }
+#else
+    for (int i = 0; i < n; i++) {
+        uint16_t h = src[i];
+        uint32_t sign = (uint32_t)(h >> 15) << 31;
+        uint32_t exp  = (h >> 10) & 0x1F;
+        uint32_t mant = h & 0x3FF;
+        uint32_t r;
+        if      (exp == 0 && mant == 0) r = sign;
+        else if (exp == 31)             r = sign | 0x7F800000u | (mant << 13);
+        else                            r = sign | ((exp + (127 - 15)) << 23) | (mant << 13);
+        memcpy(dst + i, &r, sizeof(float));
+    }
+#endif
+}
+
+// Thread-local F32 buffer for on-the-fly F16→F32 weight conversion.
+// Grows to max weight tensor size (~26 MB for enc ffn); never freed.
+static thread_local std::vector<float> tl_w_buf;
+
+// Convert an F16 ggml_tensor's data to F32 in tl_w_buf; return pointer.
+// Valid until the next call to ct_tensor_f32() on the same thread.
+static const float * ct_tensor_f32(const ggml_tensor * t) {
+    int n = (int)ggml_nelements(t);
+    if ((int)tl_w_buf.size() < n) tl_w_buf.resize(n);
+    if (t->type == GGML_TYPE_F16) {
+        ct_f16_to_f32((const uint16_t *)t->data, tl_w_buf.data(), n);
+    } else if (t->type == GGML_TYPE_F32) {
+        memcpy(tl_w_buf.data(), t->data, (size_t)n * sizeof(float));
+    } else {
+        for (int i = 0; i < n; i++) tl_w_buf[i] = ggml_get_f32_1d(const_cast<ggml_tensor *>(t), i);
+    }
+    return tl_w_buf.data();
+}
+
+// ---------------------------------------------------------------------------
 // Linear layer: out[m, T] = w[m, n] × in[n, T]  (weight in row-major out×in)
 // Returns newly allocated buffer (caller frees).
 // ---------------------------------------------------------------------------
@@ -436,6 +498,21 @@ static std::vector<float> ct_linear(const float * in, int n_in, int T,
                 out[t * n_out + o] += b[o];
     }
     return out;
+}
+
+// ct_linear_into: like ct_linear but writes into caller-supplied buffer (no malloc if already sized).
+static void ct_linear_into(std::vector<float>& out, const float * in, int n_in, int T,
+                            const float * w, int n_out, const float * b = nullptr) {
+    out.resize((size_t)T * n_out);
+    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
+                T, n_out, n_in,
+                1.0f, in, n_in, w, n_in,
+                0.0f, out.data(), n_out);
+    if (b) {
+        for (int t = 0; t < T; t++)
+            for (int o = 0; o < n_out; o++)
+                out[t * n_out + o] += b[o];
+    }
 }
 
 // Convert a ggml tensor's data to a float32 std::vector (host copy).
@@ -469,6 +546,15 @@ static std::vector<float> ct_to_f32(const ggml_tensor * t) {
         for (int i = 0; i < n; i++) out[i] = ggml_get_f32_1d(const_cast<ggml_tensor*>(t), i);
     }
     return out;
+}
+
+// Memoized ct_to_f32: converts once at model load time, returns const ref forever.
+// Populated eagerly by cohere_model_warm_cache(); safe because weights are immutable.
+static const std::vector<float> & ct_to_f32_ref(const ggml_tensor * t) {
+    static std::unordered_map<const ggml_tensor *, std::vector<float>> s_f32_cache;
+    auto it = s_f32_cache.find(t);
+    if (it != s_f32_cache.end()) return it->second;
+    return s_f32_cache.emplace(t, ct_to_f32(t)).first->second;
 }
 
 // ---------------------------------------------------------------------------
@@ -810,6 +896,36 @@ static std::vector<float> ct_conformer_conv(
 }
 
 // ---------------------------------------------------------------------------
+// Scratch buffers for encoder layers — pre-allocated once, reused every layer.
+// ---------------------------------------------------------------------------
+
+struct EncScratch {
+    // layer norm output (reused)
+    std::vector<float> x_norm;    // (T, d)
+    // FFN
+    std::vector<float> ff_h;      // (T, ffn_dim)
+    std::vector<float> ff_out;    // (T, d)
+    // Attention
+    std::vector<float> Q, K, V;   // (T, d) each
+    std::vector<float> R;         // (2T-1, d)
+    std::vector<float> Q_u, Q_v;  // (T, d) each
+    std::vector<float> AC;        // (H, T, T)
+    std::vector<float> BD_raw;    // (H, T, 2T-1)
+    std::vector<float> BD;        // (H, T, T)
+    std::vector<float> scores;    // (H, T, T)
+    std::vector<float> ctx_merged;// (T, d)
+    std::vector<float> attn_out;  // (T, d)
+    std::vector<float> pos_enc;   // (2T-1, d) — precomputed once per encode call
+    // Conv module
+    std::vector<float> cv_h;      // (T, 2d) — pw1 output
+    std::vector<float> cv_glu;    // (T, d)
+    std::vector<float> cv_trans;  // (d, T)
+    std::vector<float> cv_dw;     // (d, T)
+    std::vector<float> cv_out_dT; // (d, T)
+    std::vector<float> cv_out;    // (T, d)
+};
+
+// ---------------------------------------------------------------------------
 // Feed-forward sub-layer (Macaron style, called with scale=0.5)
 // x: (T, d), returns (T, d)
 // ---------------------------------------------------------------------------
@@ -827,6 +943,177 @@ static std::vector<float> ct_ffn(
     return out;
 }
 
+// Scratch variant: writes ff_h and ff_out into EncScratch.
+// Weight tensors converted on-the-fly via ct_tensor_f32 (no 7.8 GB F32 cache).
+static void ct_ffn_scratch(
+    EncScratch & sc,
+    const float * x, int T, int d, int ffn_dim, float scale,
+    const ggml_tensor * up_w_t, const float * up_b,
+    const ggml_tensor * dn_w_t, const float * dn_b
+) {
+    ct_linear_into(sc.ff_h, x, d, T, ct_tensor_f32(up_w_t), ffn_dim, up_b);
+    ct_swish_inplace(sc.ff_h.data(), ffn_dim * T);
+    ct_linear_into(sc.ff_out, sc.ff_h.data(), ffn_dim, T, ct_tensor_f32(dn_w_t), d, dn_b);
+    for (auto & v : sc.ff_out) v *= scale;
+}
+
+// Scratch variant of ct_conformer_conv: reuses cv_* buffers from EncScratch.
+// pw1_w and pw2_w are ggml_tensor* (converted on-the-fly); dw and bn params are float*.
+static const std::vector<float> & ct_conformer_conv_scratch(
+    EncScratch & sc,
+    const float * x, int T, int d, int k,
+    const ggml_tensor * pw1_w_t, const float * pw1_b,
+    const float * dw_w,  const float * dw_b,
+    const float * bn_w,  const float * bn_b,
+    const float * bn_mean, const float * bn_var,
+    const ggml_tensor * pw2_w_t, const float * pw2_b,
+    float bn_eps = 1e-5f
+) {
+    // pw1: (T, d) → (T, 2d)
+    ct_linear_into(sc.cv_h, x, d, T, ct_tensor_f32(pw1_w_t), 2*d, pw1_b);
+    // GLU: → (T, d) into sc.cv_glu
+    sc.cv_glu.resize((size_t)T * d);
+    for (int t = 0; t < T; t++)
+        for (int i = 0; i < d; i++)
+            sc.cv_glu[t * d + i] = sc.cv_h[t * 2*d + i] * sigmoid(sc.cv_h[t * 2*d + d + i]);
+    // Transpose (T,d) → (d,T)
+    sc.cv_trans.resize((size_t)d * T);
+    for (int t = 0; t < T; t++)
+        for (int i = 0; i < d; i++)
+            sc.cv_trans[i * T + t] = sc.cv_glu[t * d + i];
+    // Depthwise conv1d (d,T) → (d,T): inline from ct_dw_conv1d
+    int pad = (k - 1) / 2;
+    sc.cv_dw.assign((size_t)d * T, 0.0f);
+    for (int c = 0; c < d; c++) {
+        float bias = dw_b ? dw_b[c] : 0.0f;
+        for (int t = 0; t < T; t++) {
+            float v = bias;
+            for (int ki = 0; ki < k; ki++) {
+                int ti = t + ki - pad;
+                if (ti >= 0 && ti < T) v += sc.cv_trans[c * T + ti] * dw_w[c * k + ki];
+            }
+            sc.cv_dw[c * T + t] = v;
+        }
+    }
+    // Batch norm
+    for (int c = 0; c < d; c++) {
+        float inv = bn_w[c] / sqrtf(bn_var[c] + bn_eps);
+        float bias = bn_b[c] - bn_mean[c] * inv;
+        for (int t = 0; t < T; t++) sc.cv_dw[c * T + t] = sc.cv_dw[c * T + t] * inv + bias;
+    }
+    // Swish
+    ct_swish_inplace(sc.cv_dw.data(), d * T);
+    // pw2: (d,T) → (d,T) via BLAS: out = pw2_w @ cv_dw, layout (d,T)
+    // pw2_w is [d, d, 1, 1], cv_dw is [d, T] row-major → sgemm(d, T, d)
+    {
+        const float * pw2_w = ct_tensor_f32(pw2_w_t);
+        sc.cv_out_dT.resize((size_t)d * T);
+        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+                    d, T, d, 1.0f,
+                    pw2_w, d, sc.cv_dw.data(), T,
+                    0.0f, sc.cv_out_dT.data(), T);
+        if (pw2_b) {
+            for (int co = 0; co < d; co++)
+                for (int t = 0; t < T; t++)
+                    sc.cv_out_dT[co * T + t] += pw2_b[co];
+        }
+    }
+    // Transpose (d,T) → (T,d) into sc.cv_out
+    sc.cv_out.resize((size_t)T * d);
+    for (int t = 0; t < T; t++)
+        for (int i = 0; i < d; i++)
+            sc.cv_out[t * d + i] = sc.cv_out_dT[i * T + t];
+    return sc.cv_out;
+}
+
+// Scratch variant of ct_rel_pos_mha: reuses Q/K/V/R/Q_u/Q_v/AC/BD_raw/BD/scores/ctx_merged/attn_out.
+// Weight matrices converted on-the-fly via ct_tensor_f32 (no 7.8 GB F32 cache).
+// Uses sc.pos_enc (must be pre-filled by caller via ct_rel_pos_enc).
+static const std::vector<float> & ct_rel_pos_mha_scratch(
+    EncScratch & sc,
+    const float * x, int T, int d,
+    int H, int head_dim,
+    const ggml_tensor * q_w_t, const float * q_b,
+    const ggml_tensor * k_w_t, const float * k_b,
+    const ggml_tensor * v_w_t, const float * v_b,
+    const ggml_tensor * out_w_t, const float * out_b,
+    const ggml_tensor * pos_w_t,
+    const float * pos_bias_u,
+    const float * pos_bias_v
+) {
+    float scale = 1.0f / sqrtf((float)head_dim);
+    const int n2 = 2*T - 1;
+
+    ct_linear_into(sc.Q, x, d, T, ct_tensor_f32(q_w_t), d, q_b);
+    ct_linear_into(sc.K, x, d, T, ct_tensor_f32(k_w_t), d, k_b);
+    ct_linear_into(sc.V, x, d, T, ct_tensor_f32(v_w_t), d, v_b);
+
+    // R: positional projection (sc.pos_enc already filled by caller)
+    ct_linear_into(sc.R, sc.pos_enc.data(), d, n2, ct_tensor_f32(pos_w_t), d);
+
+    // Q_u = Q + pos_bias_u, Q_v = Q + pos_bias_v
+    sc.Q_u.resize((size_t)T * d);
+    sc.Q_v.resize((size_t)T * d);
+    for (int t = 0; t < T; t++)
+        for (int j = 0; j < d; j++) {
+            sc.Q_u[t*d + j] = sc.Q[t*d + j] + pos_bias_u[j];
+            sc.Q_v[t*d + j] = sc.Q[t*d + j] + pos_bias_v[j];
+        }
+
+    // AC[h, T, T] and BD_raw[h, T, 2T-1]
+    sc.AC.resize((size_t)H * T * T);
+    sc.BD_raw.resize((size_t)H * T * n2);
+    for (int h = 0; h < H; h++) {
+        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
+                    T, T, head_dim, 1.0f,
+                    sc.Q_u.data() + h*head_dim, d,
+                    sc.K.data()   + h*head_dim, d,
+                    0.0f, sc.AC.data() + h*T*T, T);
+        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
+                    T, n2, head_dim, 1.0f,
+                    sc.Q_v.data() + h*head_dim, d,
+                    sc.R.data()   + h*head_dim, d,
+                    0.0f, sc.BD_raw.data() + h*T*n2, n2);
+    }
+
+    // Relative shift BD_raw → BD
+    sc.BD.resize((size_t)H * T * T);
+    for (int h = 0; h < H; h++)
+        for (int i = 0; i < T; i++)
+            for (int j = 0; j < T; j++) {
+                int rel = j - i + T - 1;
+                sc.BD[(h * T + i) * T + j] = sc.BD_raw[(h * T + i) * n2 + rel];
+            }
+
+    // scores = (AC + BD) * scale, softmax per (head, query)
+    sc.scores.resize((size_t)H * T * T);
+    for (int i = 0; i < H * T * T; i++) sc.scores[i] = (sc.AC[i] + sc.BD[i]) * scale;
+    for (int h = 0; h < H; h++) {
+        for (int tq = 0; tq < T; tq++) {
+            float * row = sc.scores.data() + (h * T + tq) * T;
+            float mx = *std::max_element(row, row + T);
+            float sum = 0.0f;
+            for (int tk = 0; tk < T; tk++) { row[tk] = expf(row[tk] - mx); sum += row[tk]; }
+            for (int tk = 0; tk < T; tk++) row[tk] /= sum;
+        }
+    }
+
+    // ctx_merged[T, d] = scores[H,T,T] @ V[T,d], per-head with stride d
+    sc.ctx_merged.assign((size_t)T * d, 0.0f);
+    for (int h = 0; h < H; h++) {
+        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+                    T, head_dim, T, 1.0f,
+                    sc.scores.data() + h*T*T, T,
+                    sc.V.data()      + h*head_dim, d,
+                    0.0f,
+                    sc.ctx_merged.data() + h*head_dim, d);
+    }
+
+    // Output projection into sc.attn_out
+    ct_linear_into(sc.attn_out, sc.ctx_merged.data(), d, T, ct_tensor_f32(out_w_t), d, out_b);
+    return sc.attn_out;
+}
+
 // ---------------------------------------------------------------------------
 // Full Conformer encoder
 // mel: (n_mels, T_mel) row-major
@@ -838,18 +1125,18 @@ static std::vector<float> cohere_encode(const cohere_model & m, const float * me
 
     // --- Pre-encode: Conv2D subsampling ---
     // Input mel treated as (1, n_mels, T_mel) — single channel 2D signal
-    auto pre_conv0_w = ct_to_f32(m.pre_conv0_w);
-    auto pre_conv0_b = ct_to_f32(m.pre_conv0_b);
-    auto pre_conv2_w = ct_to_f32(m.pre_conv2_w);
-    auto pre_conv2_b = ct_to_f32(m.pre_conv2_b);
-    auto pre_conv3_w = ct_to_f32(m.pre_conv3_w);
-    auto pre_conv3_b = ct_to_f32(m.pre_conv3_b);
-    auto pre_conv5_w = ct_to_f32(m.pre_conv5_w);
-    auto pre_conv5_b = ct_to_f32(m.pre_conv5_b);
-    auto pre_conv6_w = ct_to_f32(m.pre_conv6_w);
-    auto pre_conv6_b = ct_to_f32(m.pre_conv6_b);
-    auto pre_out_w   = ct_to_f32(m.pre_out_w);
-    auto pre_out_b   = ct_to_f32(m.pre_out_b);
+    const auto & pre_conv0_w = ct_to_f32_ref(m.pre_conv0_w);
+    const auto & pre_conv0_b = ct_to_f32_ref(m.pre_conv0_b);
+    const auto & pre_conv2_w = ct_to_f32_ref(m.pre_conv2_w);
+    const auto & pre_conv2_b = ct_to_f32_ref(m.pre_conv2_b);
+    const auto & pre_conv3_w = ct_to_f32_ref(m.pre_conv3_w);
+    const auto & pre_conv3_b = ct_to_f32_ref(m.pre_conv3_b);
+    const auto & pre_conv5_w = ct_to_f32_ref(m.pre_conv5_w);
+    const auto & pre_conv5_b = ct_to_f32_ref(m.pre_conv5_b);
+    const auto & pre_conv6_w = ct_to_f32_ref(m.pre_conv6_w);
+    const auto & pre_conv6_b = ct_to_f32_ref(m.pre_conv6_b);
+    const auto & pre_out_w = ct_to_f32_ref(m.pre_out_w);
+    const auto & pre_out_b = ct_to_f32_ref(m.pre_out_b);
 
     // Transpose mel (n_mels, T_mel) → (T_mel, n_mels): H=time, W=mel (as in Rust encoder)
     std::vector<float> mel_T(T_mel * hp.n_mels);
@@ -903,74 +1190,78 @@ static std::vector<float> cohere_encode(const cohere_model & m, const float * me
     int d = hp.enc_d_model;
 
     // --- Conformer layers ---
+    // Pre-allocate scratch buffers once; reuse across all 48 layers.
+    EncScratch sc;
+    sc.x_norm.resize((size_t)T * d);
+    sc.pos_enc = ct_rel_pos_enc(T, d);  // sinusoidal table is the same every layer
+
     for (int li = 0; li < hp.enc_n_layers; li++) {
         const auto & l = m.enc_layers[li];
 
-        auto ff1_norm_w = ct_to_f32(l.ff1_norm_w);
-        auto ff1_norm_b = ct_to_f32(l.ff1_norm_b);
-        auto ff1_up_w   = ct_to_f32(l.ff1_up_w);
-        auto ff1_up_b   = ct_to_f32(l.ff1_up_b);
-        auto ff1_dn_w   = ct_to_f32(l.ff1_dn_w);
-        auto ff1_dn_b   = ct_to_f32(l.ff1_dn_b);
-
         // FF1: h = x + 0.5 * FF(norm(x))
-        std::vector<float> x_norm(T * d);
-        for (int t = 0; t < T; t++)
-            ct_layer_norm(x_norm.data() + t*d, enc_in.data() + t*d, d,
-                         ff1_norm_w.data(), ff1_norm_b.data());
-        auto ff1_out = ct_ffn(x_norm.data(), T, d, hp.enc_ffn_dim, 0.5f,
-                              ff1_up_w.data(), ff1_up_b.data(),
-                              ff1_dn_w.data(), ff1_dn_b.data());
-        for (int i = 0; i < T*d; i++) enc_in[i] += ff1_out[i];
+        // Small norm params cached via ct_to_f32_ref; large weights via ct_tensor_f32 (on-the-fly).
+        {
+            const auto & nw = ct_to_f32_ref(l.ff1_norm_w);
+            const auto & nb = ct_to_f32_ref(l.ff1_norm_b);
+            for (int t = 0; t < T; t++)
+                ct_layer_norm(sc.x_norm.data() + t*d, enc_in.data() + t*d, d, nw.data(), nb.data());
+        }
+        ct_ffn_scratch(sc, sc.x_norm.data(), T, d, hp.enc_ffn_dim, 0.5f,
+                       l.ff1_up_w, ct_to_f32_ref(l.ff1_up_b).data(),
+                       l.ff1_dn_w, ct_to_f32_ref(l.ff1_dn_b).data());
+        for (int i = 0; i < T*d; i++) enc_in[i] += sc.ff_out[i];
 
         // Self-attention
-        auto attn_norm_w = ct_to_f32(l.attn_norm_w);
-        auto attn_norm_b = ct_to_f32(l.attn_norm_b);
-        for (int t = 0; t < T; t++)
-            ct_layer_norm(x_norm.data() + t*d, enc_in.data() + t*d, d,
-                         attn_norm_w.data(), attn_norm_b.data());
-        auto attn_out = ct_rel_pos_mha(
-            x_norm.data(), T, d, hp.enc_n_heads, hp.enc_head_dim,
-            ct_to_f32(l.attn_q_w).data(), ct_to_f32(l.attn_q_b).data(),
-            ct_to_f32(l.attn_k_w).data(), ct_to_f32(l.attn_k_b).data(),
-            ct_to_f32(l.attn_v_w).data(), ct_to_f32(l.attn_v_b).data(),
-            ct_to_f32(l.attn_out_w).data(), ct_to_f32(l.attn_out_b).data(),
-            ct_to_f32(l.attn_pos_w).data(),
-            ct_to_f32(l.attn_pos_bias_u).data(),
-            ct_to_f32(l.attn_pos_bias_v).data()
+        {
+            const auto & nw = ct_to_f32_ref(l.attn_norm_w);
+            const auto & nb = ct_to_f32_ref(l.attn_norm_b);
+            for (int t = 0; t < T; t++)
+                ct_layer_norm(sc.x_norm.data() + t*d, enc_in.data() + t*d, d, nw.data(), nb.data());
+        }
+        ct_rel_pos_mha_scratch(sc,
+            sc.x_norm.data(), T, d, hp.enc_n_heads, hp.enc_head_dim,
+            l.attn_q_w,   ct_to_f32_ref(l.attn_q_b).data(),
+            l.attn_k_w,   ct_to_f32_ref(l.attn_k_b).data(),
+            l.attn_v_w,   ct_to_f32_ref(l.attn_v_b).data(),
+            l.attn_out_w, ct_to_f32_ref(l.attn_out_b).data(),
+            l.attn_pos_w,
+            ct_to_f32_ref(l.attn_pos_bias_u).data(),
+            ct_to_f32_ref(l.attn_pos_bias_v).data()
         );
-        for (int i = 0; i < T*d; i++) enc_in[i] += attn_out[i];
+        for (int i = 0; i < T*d; i++) enc_in[i] += sc.attn_out[i];
 
         // Convolution module
-        auto conv_norm_w = ct_to_f32(l.conv_norm_w);
-        auto conv_norm_b = ct_to_f32(l.conv_norm_b);
-        for (int t = 0; t < T; t++)
-            ct_layer_norm(x_norm.data() + t*d, enc_in.data() + t*d, d,
-                         conv_norm_w.data(), conv_norm_b.data());
-        auto conv_out = ct_conformer_conv(
-            x_norm.data(), T, d, hp.enc_conv_k,
-            ct_to_f32(l.conv_pw1_w).data(), ct_to_f32(l.conv_pw1_b).data(),
-            ct_to_f32(l.conv_dw_w).data(),  ct_to_f32(l.conv_dw_b).data(),
-            ct_to_f32(l.conv_bn_w).data(),  ct_to_f32(l.conv_bn_b).data(),
-            ct_to_f32(l.conv_bn_mean).data(), ct_to_f32(l.conv_bn_var).data(),
-            ct_to_f32(l.conv_pw2_w).data(), ct_to_f32(l.conv_pw2_b).data()
+        {
+            const auto & nw = ct_to_f32_ref(l.conv_norm_w);
+            const auto & nb = ct_to_f32_ref(l.conv_norm_b);
+            for (int t = 0; t < T; t++)
+                ct_layer_norm(sc.x_norm.data() + t*d, enc_in.data() + t*d, d, nw.data(), nb.data());
+        }
+        ct_conformer_conv_scratch(sc,
+            sc.x_norm.data(), T, d, hp.enc_conv_k,
+            l.conv_pw1_w, ct_to_f32_ref(l.conv_pw1_b).data(),
+            ct_to_f32_ref(l.conv_dw_w).data(), ct_to_f32_ref(l.conv_dw_b).data(),
+            ct_to_f32_ref(l.conv_bn_w).data(), ct_to_f32_ref(l.conv_bn_b).data(),
+            ct_to_f32_ref(l.conv_bn_mean).data(), ct_to_f32_ref(l.conv_bn_var).data(),
+            l.conv_pw2_w, ct_to_f32_ref(l.conv_pw2_b).data()
         );
-        for (int i = 0; i < T*d; i++) enc_in[i] += conv_out[i];
+        for (int i = 0; i < T*d; i++) enc_in[i] += sc.cv_out[i];
 
         // FF2
-        auto ff2_norm_w = ct_to_f32(l.ff2_norm_w);
-        auto ff2_norm_b = ct_to_f32(l.ff2_norm_b);
-        for (int t = 0; t < T; t++)
-            ct_layer_norm(x_norm.data() + t*d, enc_in.data() + t*d, d,
-                         ff2_norm_w.data(), ff2_norm_b.data());
-        auto ff2_out = ct_ffn(x_norm.data(), T, d, hp.enc_ffn_dim, 0.5f,
-                              ct_to_f32(l.ff2_up_w).data(), ct_to_f32(l.ff2_up_b).data(),
-                              ct_to_f32(l.ff2_dn_w).data(), ct_to_f32(l.ff2_dn_b).data());
-        for (int i = 0; i < T*d; i++) enc_in[i] += ff2_out[i];
+        {
+            const auto & nw = ct_to_f32_ref(l.ff2_norm_w);
+            const auto & nb = ct_to_f32_ref(l.ff2_norm_b);
+            for (int t = 0; t < T; t++)
+                ct_layer_norm(sc.x_norm.data() + t*d, enc_in.data() + t*d, d, nw.data(), nb.data());
+        }
+        ct_ffn_scratch(sc, sc.x_norm.data(), T, d, hp.enc_ffn_dim, 0.5f,
+                       l.ff2_up_w, ct_to_f32_ref(l.ff2_up_b).data(),
+                       l.ff2_dn_w, ct_to_f32_ref(l.ff2_dn_b).data());
+        for (int i = 0; i < T*d; i++) enc_in[i] += sc.ff_out[i];
 
         // Output norm
-        auto out_norm_w = ct_to_f32(l.out_norm_w);
-        auto out_norm_b = ct_to_f32(l.out_norm_b);
+        const auto & out_norm_w = ct_to_f32_ref(l.out_norm_w);
+        const auto & out_norm_b = ct_to_f32_ref(l.out_norm_b);
         for (int t = 0; t < T; t++)
             ct_layer_norm(enc_in.data() + t*d, enc_in.data() + t*d, d,
                          out_norm_w.data(), out_norm_b.data());
@@ -980,9 +1271,8 @@ static std::vector<float> cohere_encode(const cohere_model & m, const float * me
     }
 
     // Encoder-decoder projection: (T, enc_d) → (T, dec_d)
-    auto proj_w = ct_to_f32(m.enc_proj_w);
-    auto proj_b = ct_to_f32(m.enc_proj_b);
-    auto enc_out = ct_linear(enc_in.data(), d, T, proj_w.data(), hp.dec_d_model, proj_b.data());
+    const auto & proj_b = ct_to_f32_ref(m.enc_proj_b);
+    auto enc_out = ct_linear(enc_in.data(), d, T, ct_tensor_f32(m.enc_proj_w), hp.dec_d_model, proj_b.data());
 
     return enc_out;  // (T, dec_d)
 }
@@ -1005,8 +1295,8 @@ static void cohere_precompute_cross_kv(
     cross_kv_v.resize(hp.dec_n_layers);
     for (int li = 0; li < hp.dec_n_layers; li++) {
         const auto & l = m.dec_layers[li];
-        auto cross_k_w = ct_to_f32(l.cross_k_w);  auto cross_k_b = ct_to_f32(l.cross_k_b);
-        auto cross_v_w = ct_to_f32(l.cross_v_w);  auto cross_v_b = ct_to_f32(l.cross_v_b);
+        const auto & cross_k_w = ct_to_f32_ref(l.cross_k_w);  const auto & cross_k_b = ct_to_f32_ref(l.cross_k_b);
+        const auto & cross_v_w = ct_to_f32_ref(l.cross_v_w);  const auto & cross_v_b = ct_to_f32_ref(l.cross_v_b);
         cross_kv_k[li] = ct_linear(enc_out, d, T_enc, cross_k_w.data(), d, cross_k_b.data());
         cross_kv_v[li] = ct_linear(enc_out, d, T_enc, cross_v_w.data(), d, cross_v_b.data());
     }
@@ -1038,10 +1328,10 @@ static std::vector<float> cohere_decode_step(
     const int max_ctx = hp.dec_max_ctx;
 
     // Embeddings
-    auto emb_w    = ct_to_f32(m.dec_emb_w);  // [vocab, d]
-    auto pos_w    = ct_to_f32(m.dec_pos_w);  // [max_ctx, d]
-    auto emb_ln_w = ct_to_f32(m.dec_emb_ln_w);
-    auto emb_ln_b = ct_to_f32(m.dec_emb_ln_b);
+    const auto & emb_w = ct_to_f32_ref(m.dec_emb_w);  // [vocab, d]
+    const auto & pos_w = ct_to_f32_ref(m.dec_pos_w);  // [max_ctx, d]
+    const auto & emb_ln_w = ct_to_f32_ref(m.dec_emb_ln_w);
+    const auto & emb_ln_b = ct_to_f32_ref(m.dec_emb_ln_b);
 
     std::vector<float> h(n_tok * d);
     for (int i = 0; i < n_tok; i++) {
@@ -1056,12 +1346,12 @@ static std::vector<float> cohere_decode_step(
         const auto & l = m.dec_layers[li];
         float scale = 1.0f / sqrtf((float)hd);
 
-        auto attn_ln_w = ct_to_f32(l.attn_ln_w);
-        auto attn_ln_b = ct_to_f32(l.attn_ln_b);
-        auto attn_q_w  = ct_to_f32(l.attn_q_w);  auto attn_q_b = ct_to_f32(l.attn_q_b);
-        auto attn_k_w  = ct_to_f32(l.attn_k_w);  auto attn_k_b = ct_to_f32(l.attn_k_b);
-        auto attn_v_w  = ct_to_f32(l.attn_v_w);  auto attn_v_b = ct_to_f32(l.attn_v_b);
-        auto attn_o_w  = ct_to_f32(l.attn_o_w);  auto attn_o_b = ct_to_f32(l.attn_o_b);
+        const auto & attn_ln_w = ct_to_f32_ref(l.attn_ln_w);
+        const auto & attn_ln_b = ct_to_f32_ref(l.attn_ln_b);
+        const auto & attn_q_w = ct_to_f32_ref(l.attn_q_w);  const auto & attn_q_b = ct_to_f32_ref(l.attn_q_b);
+        const auto & attn_k_w = ct_to_f32_ref(l.attn_k_w);  const auto & attn_k_b = ct_to_f32_ref(l.attn_k_b);
+        const auto & attn_v_w = ct_to_f32_ref(l.attn_v_w);  const auto & attn_v_b = ct_to_f32_ref(l.attn_v_b);
+        const auto & attn_o_w = ct_to_f32_ref(l.attn_o_w);  const auto & attn_o_b = ct_to_f32_ref(l.attn_o_b);
 
         // --- Self-attention with KV cache ---
         std::vector<float> h_norm(n_tok * d);
@@ -1121,9 +1411,9 @@ static std::vector<float> cohere_decode_step(
 
         // --- Cross-attention ---
         // CK and CV are pre-computed once per utterance in cross_kv_k/v.
-        auto cross_ln_w = ct_to_f32(l.cross_ln_w);  auto cross_ln_b = ct_to_f32(l.cross_ln_b);
-        auto cross_q_w  = ct_to_f32(l.cross_q_w);   auto cross_q_b  = ct_to_f32(l.cross_q_b);
-        auto cross_o_w  = ct_to_f32(l.cross_o_w);   auto cross_o_b  = ct_to_f32(l.cross_o_b);
+        const auto & cross_ln_w = ct_to_f32_ref(l.cross_ln_w);  const auto & cross_ln_b = ct_to_f32_ref(l.cross_ln_b);
+        const auto & cross_q_w = ct_to_f32_ref(l.cross_q_w);   const auto & cross_q_b = ct_to_f32_ref(l.cross_q_b);
+        const auto & cross_o_w = ct_to_f32_ref(l.cross_o_w);   const auto & cross_o_b = ct_to_f32_ref(l.cross_o_b);
 
         std::vector<float> h_cross_norm(n_tok * d);
         for (int i = 0; i < n_tok; i++)
@@ -1159,9 +1449,9 @@ static std::vector<float> cohere_decode_step(
         for (int i = 0; i < n_tok * d; i++) h[i] += ca_proj[i];
 
         // --- FFN ---
-        auto ffn_ln_w = ct_to_f32(l.ffn_ln_w);  auto ffn_ln_b = ct_to_f32(l.ffn_ln_b);
-        auto ffn_up_w = ct_to_f32(l.ffn_up_w);  auto ffn_up_b = ct_to_f32(l.ffn_up_b);
-        auto ffn_dn_w = ct_to_f32(l.ffn_dn_w);  auto ffn_dn_b = ct_to_f32(l.ffn_dn_b);
+        const auto & ffn_ln_w = ct_to_f32_ref(l.ffn_ln_w);  const auto & ffn_ln_b = ct_to_f32_ref(l.ffn_ln_b);
+        const auto & ffn_up_w = ct_to_f32_ref(l.ffn_up_w);  const auto & ffn_up_b = ct_to_f32_ref(l.ffn_up_b);
+        const auto & ffn_dn_w = ct_to_f32_ref(l.ffn_dn_w);  const auto & ffn_dn_b = ct_to_f32_ref(l.ffn_dn_b);
 
         std::vector<float> h_ffn_norm(n_tok * d);
         for (int i = 0; i < n_tok; i++)
@@ -1173,10 +1463,10 @@ static std::vector<float> cohere_decode_step(
     }
 
     // Final layer norm + head
-    auto out_ln_w = ct_to_f32(m.dec_out_ln_w);
-    auto out_ln_b = ct_to_f32(m.dec_out_ln_b);
-    auto head_w   = ct_to_f32(m.dec_head_w);
-    auto head_b   = ct_to_f32(m.dec_head_b);
+    const auto & out_ln_w = ct_to_f32_ref(m.dec_out_ln_w);
+    const auto & out_ln_b = ct_to_f32_ref(m.dec_out_ln_b);
+    const auto & head_w = ct_to_f32_ref(m.dec_head_w);
+    const auto & head_b = ct_to_f32_ref(m.dec_head_b);
 
     for (int i = 0; i < n_tok; i++)
         ct_layer_norm(h.data() + i*d, h.data() + i*d, d, out_ln_w.data(), out_ln_b.data());
@@ -1190,6 +1480,71 @@ static std::vector<float> cohere_decode_step(
 // ---------------------------------------------------------------------------
 // Public C API
 // ---------------------------------------------------------------------------
+
+// Pre-populate the ct_to_f32_ref cache for every model weight tensor.
+// Called once at init so all inferences pay zero conversion cost.
+static void cohere_model_warm_cache(const cohere_model & m) {
+    fprintf(stderr, "cohere: warming F32 weight cache...\n");
+    auto w = [](const ggml_tensor * t){ if (t) ct_to_f32_ref(t); };
+
+    // Pre-encode conv subsampling
+    w(m.pre_conv0_w); w(m.pre_conv0_b);
+    w(m.pre_conv2_w); w(m.pre_conv2_b);
+    w(m.pre_conv3_w); w(m.pre_conv3_b);
+    w(m.pre_conv5_w); w(m.pre_conv5_b);
+    w(m.pre_conv6_w); w(m.pre_conv6_b);
+    w(m.pre_out_w);   w(m.pre_out_b);
+
+    // Encoder layers
+    for (const auto & l : m.enc_layers) {
+        w(l.ff1_norm_w); w(l.ff1_norm_b);
+        w(l.ff1_up_w);   w(l.ff1_up_b);
+        w(l.ff1_dn_w);   w(l.ff1_dn_b);
+        w(l.attn_norm_w); w(l.attn_norm_b);
+        w(l.attn_q_w);   w(l.attn_q_b);
+        w(l.attn_k_w);   w(l.attn_k_b);
+        w(l.attn_v_w);   w(l.attn_v_b);
+        w(l.attn_out_w); w(l.attn_out_b);
+        w(l.attn_pos_w); w(l.attn_pos_bias_u); w(l.attn_pos_bias_v);
+        w(l.conv_norm_w); w(l.conv_norm_b);
+        w(l.conv_pw1_w);  w(l.conv_pw1_b);
+        w(l.conv_dw_w);   w(l.conv_dw_b);
+        w(l.conv_bn_w);   w(l.conv_bn_b);
+        w(l.conv_bn_mean); w(l.conv_bn_var);
+        w(l.conv_pw2_w);  w(l.conv_pw2_b);
+        w(l.ff2_norm_w); w(l.ff2_norm_b);
+        w(l.ff2_up_w);   w(l.ff2_up_b);
+        w(l.ff2_dn_w);   w(l.ff2_dn_b);
+        w(l.out_norm_w); w(l.out_norm_b);
+    }
+
+    // Encoder→decoder projection
+    w(m.enc_proj_w); w(m.enc_proj_b);
+
+    // Decoder top-level
+    w(m.dec_emb_w); w(m.dec_pos_w);
+    w(m.dec_emb_ln_w); w(m.dec_emb_ln_b);
+    w(m.dec_out_ln_w); w(m.dec_out_ln_b);
+    w(m.dec_head_w);   w(m.dec_head_b);
+
+    // Decoder layers
+    for (const auto & l : m.dec_layers) {
+        w(l.attn_ln_w);  w(l.attn_ln_b);
+        w(l.attn_q_w);   w(l.attn_q_b);
+        w(l.attn_k_w);   w(l.attn_k_b);
+        w(l.attn_v_w);   w(l.attn_v_b);
+        w(l.attn_o_w);   w(l.attn_o_b);
+        w(l.cross_ln_w); w(l.cross_ln_b);
+        w(l.cross_q_w);  w(l.cross_q_b);
+        w(l.cross_k_w);  w(l.cross_k_b);
+        w(l.cross_v_w);  w(l.cross_v_b);
+        w(l.cross_o_w);  w(l.cross_o_b);
+        w(l.ffn_ln_w);   w(l.ffn_ln_b);
+        w(l.ffn_up_w);   w(l.ffn_up_b);
+        w(l.ffn_dn_w);   w(l.ffn_dn_b);
+    }
+    fprintf(stderr, "cohere: F32 weight cache ready\n");
+}
 
 struct cohere_context_params cohere_context_default_params(void) {
     return { .n_threads = 4, .use_flash = false };
@@ -1209,6 +1564,10 @@ struct cohere_context * cohere_init_from_file(const char * path_model,
     int kv_n = hp.dec_n_heads * hp.dec_max_ctx * hp.dec_head_dim;
     ctx->kv_cache_k.assign(hp.dec_n_layers, std::vector<float>(kv_n, 0.0f));
     ctx->kv_cache_v.assign(hp.dec_n_layers, std::vector<float>(kv_n, 0.0f));
+
+    // Note: F32 weight cache is lazy (populated on first use).
+    // cohere_model_warm_cache() can be called by the application if desired for
+    // server-mode workloads that process many utterances (amortises startup cost).
 
     return ctx;
 }
@@ -1242,8 +1601,8 @@ char * cohere_transcribe(struct cohere_context * ctx,
     fprintf(stderr, "cohere: computing mel features for %d samples (%.1fs)...\n",
             n_samples, (float)n_samples / hp.sample_rate);
 
-    auto mel_fb = ct_to_f32(ctx->model.fe_mel_fb);
-    auto window = ct_to_f32(ctx->model.fe_window);
+    const auto & mel_fb = ct_to_f32_ref(ctx->model.fe_mel_fb);
+    const auto & window = ct_to_f32_ref(ctx->model.fe_window);
 
     int T_mel = 0;
     auto mel = cohere_compute_features(hp,
