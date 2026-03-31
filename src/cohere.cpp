@@ -1018,12 +1018,6 @@ static std::vector<float> cohere_decode_step(
             h[i*d + j] = emb_w[tok * d + j] + pos_w[pos * d + j];
         ct_layer_norm(h.data() + i*d, h.data() + i*d, d, emb_ln_w.data(), emb_ln_b.data());
     }
-    // DEBUG: print h[0,:5] after embedding+LN (tok=tokens[0], pos=offset)
-    if (offset == 0 && n_tok > 1) {
-        fprintf(stderr, "DBG dec h[0]_emb+ln=");
-        for (int j = 0; j < 5; j++) fprintf(stderr, "%.4f ", h[j]);
-        fprintf(stderr, " tok=%d\n", tokens[0]);
-    }
     // Decoder layers
     for (int li = 0; li < hp.dec_n_layers; li++) {
         const auto & l = m.dec_layers[li];
@@ -1092,13 +1086,6 @@ static std::vector<float> cohere_decode_step(
         auto sa_proj = ct_linear(sa_out.data(), d, n_tok, attn_o_w.data(), d, attn_o_b.data());
         for (int i = 0; i < n_tok * d; i++) h[i] += sa_proj[i];
 
-        // DEBUG: print h[0,:5] after layer 0 self-attn
-        if (li == 0 && offset == 0 && n_tok > 1) {
-            fprintf(stderr, "DBG dec h[0]_sa_li0=");
-            for (int j = 0; j < 5; j++) fprintf(stderr, "%.4f ", h[j]);
-            fprintf(stderr, "\n");
-        }
-
         // --- Cross-attention ---
         auto cross_ln_w = ct_to_f32(l.cross_ln_w);  auto cross_ln_b = ct_to_f32(l.cross_ln_b);
         auto cross_q_w  = ct_to_f32(l.cross_q_w);   auto cross_q_b  = ct_to_f32(l.cross_q_b);
@@ -1139,13 +1126,6 @@ static std::vector<float> cohere_decode_step(
         auto ca_proj = ct_linear(ca_out.data(), d, n_tok, cross_o_w.data(), d, cross_o_b.data());
         for (int i = 0; i < n_tok * d; i++) h[i] += ca_proj[i];
 
-        // DEBUG: print h[0,:5] after layer 0 cross-attn + h[8,:5] (last prompt tok)
-        if (li == 0 && offset == 0 && n_tok > 1) {
-            fprintf(stderr, "DBG dec h[0]_ca_li0=");
-            for (int j = 0; j < 5; j++) fprintf(stderr, "%.4f ", h[j]);
-            fprintf(stderr, "\n");
-        }
-
         // --- FFN ---
         auto ffn_ln_w = ct_to_f32(l.ffn_ln_w);  auto ffn_ln_b = ct_to_f32(l.ffn_ln_b);
         auto ffn_up_w = ct_to_f32(l.ffn_up_w);  auto ffn_up_b = ct_to_f32(l.ffn_up_b);
@@ -1172,20 +1152,6 @@ static std::vector<float> cohere_decode_step(
     auto logits = ct_linear(h.data(), d, n_tok, head_w.data(), hp.vocab_size, head_b.data());
 
     // DEBUG: print top-5 logits at last prompt token position
-    if (offset == 0 && n_tok > 1) {
-        const float * last_l = logits.data() + (n_tok - 1) * hp.vocab_size;
-        // find top 5
-        std::vector<int> idx(hp.vocab_size);
-        for (int i = 0; i < hp.vocab_size; i++) idx[i] = i;
-        std::partial_sort(idx.begin(), idx.begin()+5, idx.end(),
-                          [&](int a, int b){ return last_l[a] > last_l[b]; });
-        fprintf(stderr, "DBG dec logits last_pos top5:");
-        for (int i = 0; i < 5; i++) fprintf(stderr, " %d(%.2f)", idx[i], last_l[idx[i]]);
-        fprintf(stderr, "\n");
-        fprintf(stderr, "DBG dec logits tok749=%.4f tok13764=%.4f\n",
-                last_l[749], last_l[13764]);
-    }
-
     return logits;
 }
 
