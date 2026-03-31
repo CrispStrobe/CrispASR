@@ -1,7 +1,11 @@
 # cohere.cpp — Bug Investigation Notes
 
 ## Status
-**WORKING** ✓ — C++ cohere-main produces correct transcription.
+**WORKING ✓ — SHIPPED**
+
+- GitHub: https://github.com/CrispStrobe/cohere-whisper.cpp (main=clean, debug=with DBG prints)
+- HuggingFace: https://huggingface.co/cstr/cohere-transcribe-03-2026-GGUF
+- optimize.md: full roadmap for FFT / BLAS / ggml / GPU speedups
 
 Root cause found and fixed: **mel per-feature normalization formula was wrong** (std was sqrt(T) times too large).
 All prior issues traced back to this single bug in both C++ and Python.
