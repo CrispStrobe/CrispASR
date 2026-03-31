@@ -117,7 +117,14 @@ add_library(cohere
             )
 target_include_directories(cohere PUBLIC . ../include)
 target_compile_features   (cohere PUBLIC cxx_std_17)
-target_link_libraries     (cohere PUBLIC ggml Threads::Threads)
+find_package(OpenMP)
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(cohere PUBLIC ggml Threads::Threads OpenMP::OpenMP_CXX)
+    target_compile_options(cohere PRIVATE -O3 -march=native)
+else()
+    target_link_libraries(cohere PUBLIC ggml Threads::Threads)
+    target_compile_options(cohere PRIVATE -O3 -march=native)
+endif()
 
 # Set the version numbers
 set_target_properties(whisper PROPERTIES

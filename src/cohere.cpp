@@ -23,6 +23,9 @@
 #include <map>
 #include <string>
 #include <vector>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -395,11 +398,14 @@ static std::vector<float> ct_linear(const float * in, int n_in, int T,
                                     const float * w, int n_out,
                                     const float * b = nullptr) {
     std::vector<float> out(n_out * T, 0.0f);
-    for (int t = 0; t < T; t++) {
-        for (int o = 0; o < n_out; o++) {
-            float v = b ? b[o] : 0.0f;
-            const float * row = w + o * n_in;
-            const float * xi  = in + t * n_in;
+    // Parallelize over output neurons — n_out is large (up to 5120), T may be small.
+    #pragma omp parallel for schedule(static)
+    for (int o = 0; o < n_out; o++) {
+        const float * row = w + o * n_in;
+        float bv = b ? b[o] : 0.0f;
+        for (int t = 0; t < T; t++) {
+            const float * xi = in + t * n_in;
+            float v = bv;
             for (int k = 0; k < n_in; k++) v += row[k] * xi[k];
             out[t * n_out + o] = v;
         }
@@ -407,11 +413,36 @@ static std::vector<float> ct_linear(const float * in, int n_in, int T,
     return out;
 }
 
-// Convert a ggml tensor's data to a float32 std::vector (host copy)
+// Convert a ggml tensor's data to a float32 std::vector (host copy).
+// Uses direct memory access for F16/F32 tensors to avoid dependence on the
+// ggml_table_f32_f16 lookup table (which requires ggml_init() to be called).
 static std::vector<float> ct_to_f32(const ggml_tensor * t) {
     int n = (int)ggml_nelements(t);
     std::vector<float> out(n);
-    for (int i = 0; i < n; i++) out[i] = ggml_get_f32_1d(const_cast<ggml_tensor*>(t), i);
+    if (t->type == GGML_TYPE_F32) {
+        const float * src = (const float *)t->data;
+        for (int i = 0; i < n; i++) out[i] = src[i];
+    } else if (t->type == GGML_TYPE_F16) {
+        const uint16_t * src = (const uint16_t *)t->data;
+        for (int i = 0; i < n; i++) {
+            uint16_t h = src[i];
+            uint32_t sign = (uint32_t)(h >> 15) << 31;
+            uint32_t exp  = (h >> 10) & 0x1F;
+            uint32_t mant = h & 0x3FF;
+            uint32_t r;
+            if (exp == 0 && mant == 0) {
+                r = sign;  // +/- zero
+            } else if (exp == 31) {
+                r = sign | 0x7F800000u | (mant << 13);  // inf or NaN
+            } else {
+                r = sign | ((exp + (127 - 15)) << 23) | (mant << 13);  // normal
+            }
+            memcpy(&out[i], &r, sizeof(float));
+        }
+    } else {
+        // fallback for other types (e.g. quantised) — requires ggml_init
+        for (int i = 0; i < n; i++) out[i] = ggml_get_f32_1d(const_cast<ggml_tensor*>(t), i);
+    }
     return out;
 }
 
@@ -483,14 +514,14 @@ static std::vector<float> cohere_compute_features(const cohere_hparams & hp,
         }
     }
 
-    // Per-feature normalization (mean=0, std=1 per mel bin, unbiased)
+    // Per-feature normalization: biased std (matches ONNX: std = sqrt(mean(diff²)))
     for (int m = 0; m < n_mels; m++) {
         float * row = mel.data() + m * T;
         double mean = 0.0, var = 0.0;
         for (int t = 0; t < T; t++) mean += row[t];
         mean /= T;
         for (int t = 0; t < T; t++) { double d = row[t] - mean; var += d*d; }
-        float std = sqrtf((float)(var * T / (T - 1.0) + 1e-5));
+        float std = sqrtf((float)(var / T + 1e-5));
         for (int t = 0; t < T; t++) row[t] = (row[t] - (float)mean) / std;
     }
 
@@ -606,7 +637,7 @@ static std::vector<float> ct_rel_shift(const float * bd, int H, int T) {
     for (int h = 0; h < H; h++)
         for (int i = 0; i < T; i++)
             for (int j = 0; j < T; j++) {
-                int rel = i - j + T - 1;  // index into 2T-1 positions
+                int rel = j - i + T - 1;  // BD[tq=i, tk=j] uses pos enc at tk-tq+T-1
                 out[(h * T + i) * T + j] = bd[(h * T + i) * n2 + rel];
             }
     return out;
@@ -631,13 +662,10 @@ static std::vector<float> ct_rel_pos_mha(
 ) {
     float scale = 1.0f / sqrtf((float)head_dim);
 
-    // Q, K, V: (T, d)
+    // Q, K, V: (T, d) — unscaled; scale applied to (AC+BD) below, matching Python
     auto Q = ct_linear(x, d, T, q_w, d, q_b);
     auto K = ct_linear(x, d, T, k_w, d, k_b);
     auto V = ct_linear(x, d, T, v_w, d, v_b);
-
-    // Scale Q
-    for (auto & v : Q) v *= scale;
 
     // Relative position encodings and projection
     auto pos_enc = ct_rel_pos_enc(T, d);          // (2T-1, d)
@@ -654,6 +682,7 @@ static std::vector<float> ct_rel_pos_mha(
     std::vector<float> AC(H * T * T, 0.0f);
     std::vector<float> BD_raw(H * T * (2*T-1), 0.0f);
 
+    #pragma omp parallel for schedule(static)
     for (int h = 0; h < H; h++) {
         // Compute AC
         for (int tq = 0; tq < T; tq++) {
@@ -684,9 +713,9 @@ static std::vector<float> ct_rel_pos_mha(
     // Relative shift
     auto BD = ct_rel_shift(BD_raw.data(), H, T);
 
-    // scores = AC + BD, then softmax over key axis
+    // scores = (AC + BD) * scale, then softmax — scale applied after, matching Python
     std::vector<float> scores(H * T * T);
-    for (int i = 0; i < H * T * T; i++) scores[i] = AC[i] + BD[i];
+    for (int i = 0; i < H * T * T; i++) scores[i] = (AC[i] + BD[i]) * scale;
 
     // Softmax per (head, query)
     for (int h = 0; h < H; h++) {
@@ -818,41 +847,49 @@ static std::vector<float> cohere_encode(const cohere_model & m, const float * me
     auto pre_out_w   = ct_to_f32(m.pre_out_w);
     auto pre_out_b   = ct_to_f32(m.pre_out_b);
 
-    // conv.0: Conv2d(1→256, k=3×3, stride=2, pad=1), groups=1
+    // Transpose mel (n_mels, T_mel) → (T_mel, n_mels): H=time, W=mel (as in Rust encoder)
+    std::vector<float> mel_T(T_mel * hp.n_mels);
+    for (int t = 0; t < T_mel; t++)
+        for (int m = 0; m < hp.n_mels; m++)
+            mel_T[t * hp.n_mels + m] = mel[m * T_mel + t];
+
+    // conv.0: Conv2d(1→256, k=3×3, stride=2, pad=1), groups=1  — H=time, W=mel
     int ch = hp.pre_conv_ch;  // 256
-    auto c0 = ct_conv2d(mel, 1, hp.n_mels, T_mel, pre_conv0_w.data(), ch, 3, 3, 2, 1, 1, pre_conv0_b.data());
-    int H1 = (hp.n_mels + 2*1 - 3) / 2 + 1; // 64
-    int W1 = (T_mel   + 2*1 - 3) / 2 + 1;
-    ct_swish_inplace(c0.data(), ch * H1 * W1);
+    auto c0 = ct_conv2d(mel_T.data(), 1, T_mel, hp.n_mels, pre_conv0_w.data(), ch, 3, 3, 2, 1, 1, pre_conv0_b.data());
+    int H1 = (T_mel      + 2*1 - 3) / 2 + 1;  // ~273
+    int W1 = (hp.n_mels  + 2*1 - 3) / 2 + 1;  // 64
+    for (int i = 0; i < ch * H1 * W1; i++) c0[i] = c0[i] > 0.0f ? c0[i] : 0.0f;  // ReLU
 
     // conv.2: depthwise Conv2d(256→256, k=3×3, stride=2, pad=1, groups=256)
     auto c2 = ct_conv2d(c0.data(), ch, H1, W1, pre_conv2_w.data(), ch, 3, 3, 2, 1, ch, pre_conv2_b.data());
-    int H2 = (H1 + 2*1 - 3) / 2 + 1;  // 32
+    int H2 = (H1 + 2*1 - 3) / 2 + 1;
     int W2 = (W1 + 2*1 - 3) / 2 + 1;
 
-    // conv.3: pointwise 1×1
+    // conv.3: pointwise 1×1 + ReLU
     auto c3 = ct_conv2d(c2.data(), ch, H2, W2, pre_conv3_w.data(), ch, 1, 1, 1, 0, 1, pre_conv3_b.data());
-    ct_swish_inplace(c3.data(), ch * H2 * W2);
+    for (int i = 0; i < ch * H2 * W2; i++) c3[i] = c3[i] > 0.0f ? c3[i] : 0.0f;  // ReLU
 
     // conv.5: depthwise Conv2d(256→256, k=3×3, stride=2, pad=1, groups=256)
     auto c5 = ct_conv2d(c3.data(), ch, H2, W2, pre_conv5_w.data(), ch, 3, 3, 2, 1, ch, pre_conv5_b.data());
-    int H3 = (H2 + 2*1 - 3) / 2 + 1;  // 16
+    int H3 = (H2 + 2*1 - 3) / 2 + 1;
     int W3 = (W2 + 2*1 - 3) / 2 + 1;
 
-    // conv.6: pointwise 1×1
+    // conv.6: pointwise 1×1 + ReLU
     auto c6 = ct_conv2d(c5.data(), ch, H3, W3, pre_conv6_w.data(), ch, 1, 1, 1, 0, 1, pre_conv6_b.data());
+    for (int i = 0; i < ch * H3 * W3; i++) c6[i] = c6[i] > 0.0f ? c6[i] : 0.0f;  // ReLU
 
-    // Flatten (256, H3, W3) → (256*H3, W3) then transpose to (W3, 256*H3) for linear
-    // The out linear takes (256 * H3) = 4096 → 1280
-    int flat = ch * H3;  // 4096
-    int T_sub = W3;      // T / 8
+    // Flatten (ch, H3, W3) → (H3, ch*W3): T_sub=H3 (time), flat=ch*W3=4096 (features)
+    // c6 layout: [c, h, w] = c6[(c*H3 + h)*W3 + w]
+    // flat_in layout: [t, feat] = flat_in[t * flat + c*W3 + w], where t=h
+    int flat  = ch * W3;  // 256 * 16 = 4096
+    int T_sub = H3;       // ~34 (time frames after 3× stride-2)
 
-    // Reshape c6 to (T_sub, flat): c6[c, h, t] → out[t, c*H3 + h]
+    // Reshape c6[c, t, w] → flat_in[t, c*W3 + w]
     std::vector<float> flat_in(T_sub * flat);
     for (int t = 0; t < T_sub; t++)
         for (int c = 0; c < ch; c++)
-            for (int h = 0; h < H3; h++)
-                flat_in[t * flat + c * H3 + h] = c6[(c * H3 + h) * T_sub + t];
+            for (int w = 0; w < W3; w++)
+                flat_in[t * flat + c * W3 + w] = c6[(c * H3 + t) * W3 + w];
 
     // pre_out: (T_sub, 4096) → (T_sub, 1280)
     auto enc_in = ct_linear(flat_in.data(), flat, T_sub, pre_out_w.data(), hp.enc_d_model, pre_out_b.data());
@@ -981,7 +1018,12 @@ static std::vector<float> cohere_decode_step(
             h[i*d + j] = emb_w[tok * d + j] + pos_w[pos * d + j];
         ct_layer_norm(h.data() + i*d, h.data() + i*d, d, emb_ln_w.data(), emb_ln_b.data());
     }
-
+    // DEBUG: print h[0,:5] after embedding+LN (tok=tokens[0], pos=offset)
+    if (offset == 0 && n_tok > 1) {
+        fprintf(stderr, "DBG dec h[0]_emb+ln=");
+        for (int j = 0; j < 5; j++) fprintf(stderr, "%.4f ", h[j]);
+        fprintf(stderr, " tok=%d\n", tokens[0]);
+    }
     // Decoder layers
     for (int li = 0; li < hp.dec_n_layers; li++) {
         const auto & l = m.dec_layers[li];
@@ -1050,6 +1092,13 @@ static std::vector<float> cohere_decode_step(
         auto sa_proj = ct_linear(sa_out.data(), d, n_tok, attn_o_w.data(), d, attn_o_b.data());
         for (int i = 0; i < n_tok * d; i++) h[i] += sa_proj[i];
 
+        // DEBUG: print h[0,:5] after layer 0 self-attn
+        if (li == 0 && offset == 0 && n_tok > 1) {
+            fprintf(stderr, "DBG dec h[0]_sa_li0=");
+            for (int j = 0; j < 5; j++) fprintf(stderr, "%.4f ", h[j]);
+            fprintf(stderr, "\n");
+        }
+
         // --- Cross-attention ---
         auto cross_ln_w = ct_to_f32(l.cross_ln_w);  auto cross_ln_b = ct_to_f32(l.cross_ln_b);
         auto cross_q_w  = ct_to_f32(l.cross_q_w);   auto cross_q_b  = ct_to_f32(l.cross_q_b);
@@ -1090,6 +1139,13 @@ static std::vector<float> cohere_decode_step(
         auto ca_proj = ct_linear(ca_out.data(), d, n_tok, cross_o_w.data(), d, cross_o_b.data());
         for (int i = 0; i < n_tok * d; i++) h[i] += ca_proj[i];
 
+        // DEBUG: print h[0,:5] after layer 0 cross-attn + h[8,:5] (last prompt tok)
+        if (li == 0 && offset == 0 && n_tok > 1) {
+            fprintf(stderr, "DBG dec h[0]_ca_li0=");
+            for (int j = 0; j < 5; j++) fprintf(stderr, "%.4f ", h[j]);
+            fprintf(stderr, "\n");
+        }
+
         // --- FFN ---
         auto ffn_ln_w = ct_to_f32(l.ffn_ln_w);  auto ffn_ln_b = ct_to_f32(l.ffn_ln_b);
         auto ffn_up_w = ct_to_f32(l.ffn_up_w);  auto ffn_up_b = ct_to_f32(l.ffn_up_b);
@@ -1099,7 +1155,7 @@ static std::vector<float> cohere_decode_step(
         for (int i = 0; i < n_tok; i++)
             ct_layer_norm(h_ffn_norm.data() + i*d, h.data() + i*d, d, ffn_ln_w.data(), ffn_ln_b.data());
         auto ffn_h = ct_linear(h_ffn_norm.data(), d, n_tok, ffn_up_w.data(), ffn, ffn_up_b.data());
-        ct_swish_inplace(ffn_h.data(), n_tok * ffn);
+        for (int i = 0; i < n_tok * ffn; i++) ffn_h[i] = ffn_h[i] > 0.0f ? ffn_h[i] : 0.0f;  // ReLU
         auto ffn_out = ct_linear(ffn_h.data(), ffn, n_tok, ffn_dn_w.data(), d, ffn_dn_b.data());
         for (int i = 0; i < n_tok * d; i++) h[i] += ffn_out[i];
     }
@@ -1113,7 +1169,24 @@ static std::vector<float> cohere_decode_step(
     for (int i = 0; i < n_tok; i++)
         ct_layer_norm(h.data() + i*d, h.data() + i*d, d, out_ln_w.data(), out_ln_b.data());
 
-    return ct_linear(h.data(), d, n_tok, head_w.data(), hp.vocab_size, head_b.data());
+    auto logits = ct_linear(h.data(), d, n_tok, head_w.data(), hp.vocab_size, head_b.data());
+
+    // DEBUG: print top-5 logits at last prompt token position
+    if (offset == 0 && n_tok > 1) {
+        const float * last_l = logits.data() + (n_tok - 1) * hp.vocab_size;
+        // find top 5
+        std::vector<int> idx(hp.vocab_size);
+        for (int i = 0; i < hp.vocab_size; i++) idx[i] = i;
+        std::partial_sort(idx.begin(), idx.begin()+5, idx.end(),
+                          [&](int a, int b){ return last_l[a] > last_l[b]; });
+        fprintf(stderr, "DBG dec logits last_pos top5:");
+        for (int i = 0; i < 5; i++) fprintf(stderr, " %d(%.2f)", idx[i], last_l[idx[i]]);
+        fprintf(stderr, "\n");
+        fprintf(stderr, "DBG dec logits tok749=%.4f tok13764=%.4f\n",
+                last_l[749], last_l[13764]);
+    }
+
+    return logits;
 }
 
 // ---------------------------------------------------------------------------
@@ -1214,7 +1287,7 @@ char * cohere_transcribe(struct cohere_context * ctx,
     for (auto & kv : ctx->kv_cache_v) std::fill(kv.begin(), kv.end(), 0.0f);
 
     const int eos_id  = tid("<|endoftext|>");
-    const int max_gen = hp.dec_max_ctx - (int)prompt.size() - 4;
+    const int max_gen = 100; // debug cap; was: hp.dec_max_ctx - (int)prompt.size() - 4
 
     // --- Run prompt through decoder ---
     auto logits = cohere_decode_step(ctx->model, enc_out.data(), T_enc,
@@ -1233,6 +1306,9 @@ char * cohere_transcribe(struct cohere_context * ctx,
         else           last_logits = logits.data();  // n_tok=1
 
         int next_tok = (int)(std::max_element(last_logits, last_logits + vocab) - last_logits);
+        fprintf(stderr, "cohere: step %d → tok %d (%s)\n", step, next_tok,
+                next_tok >= 0 && next_tok < (int)voc.id_to_token.size()
+                    ? voc.id_to_token[next_tok].c_str() : "?");
         if (next_tok == eos_id || next_tok < 0) break;
 
         generated.push_back(next_tok);
