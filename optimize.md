@@ -185,12 +185,15 @@ This is what the ONNX model does. Integrates naturally into the ggml graph.
 | + lazy F32 cache | 100s | 79s | 67s | user time /4 threads ≈ 20s actual CPU |
 | + EncScratch + AVX2 F16C | **32s** | 32s | 22s | **~3.1× over prev, ~26× total** |
 
-**Remaining bottlenecks in priority order:**
-1. Sys time (22s): remaining page faults from ct_to_f32_ref for small tensors + decoder weight cache.
-   Decoder weights (8 × 14 matrices, 27 steps) still go through the lazy F32 cache.
-   Fix: apply ct_tensor_f32 to decoder weight matrices too.
-2. F16 matmul via ggml: proper 2× — fix: ggml graph port (P2B)
-3. GPU (CUDA/Metal): ~20-100× — blocked on P2B
+**Remaining bottleneck (33s wall, ~25× total):**
+Almost entirely encoder BLAS (~25s single-thread). Multi-threading gives only ~1.77×
+for T=138 encoder matrices — thread overhead dominates for small M. The cblas_sgemm + F32
+path has hit its ceiling. Next gains require P2B (ggml graph port).
+
+**Next steps in priority order:**
+1. **P2B — ggml compute graph**: `ggml_mul_mat` with F16 weights → 2× memory BW + GPU dispatch
+2. Quantization (Q8_0): ~2× speedup on top of F16 (blocked on P2B)
+3. GPU (CUDA/Metal): ~10-20× over current (blocked on P2B)
 
 After P2B (ggml graph + F16):
 - F16 matmul: ~2× over F32 OpenBLAS → ~15–20 s total

@@ -1295,10 +1295,10 @@ static void cohere_precompute_cross_kv(
     cross_kv_v.resize(hp.dec_n_layers);
     for (int li = 0; li < hp.dec_n_layers; li++) {
         const auto & l = m.dec_layers[li];
-        const auto & cross_k_w = ct_to_f32_ref(l.cross_k_w);  const auto & cross_k_b = ct_to_f32_ref(l.cross_k_b);
-        const auto & cross_v_w = ct_to_f32_ref(l.cross_v_w);  const auto & cross_v_b = ct_to_f32_ref(l.cross_v_b);
-        cross_kv_k[li] = ct_linear(enc_out, d, T_enc, cross_k_w.data(), d, cross_k_b.data());
-        cross_kv_v[li] = ct_linear(enc_out, d, T_enc, cross_v_w.data(), d, cross_v_b.data());
+        const float * ck_w = ct_tensor_f32(l.cross_k_w);
+        cross_kv_k[li] = ct_linear(enc_out, d, T_enc, ck_w, d, ct_to_f32_ref(l.cross_k_b).data());
+        const float * cv_w = ct_tensor_f32(l.cross_v_w);
+        cross_kv_v[li] = ct_linear(enc_out, d, T_enc, cv_w, d, ct_to_f32_ref(l.cross_v_b).data());
     }
     fprintf(stderr, "cohere: cross KV pre-computed for %d layers, T_enc=%d\n",
             hp.dec_n_layers, T_enc);
@@ -1348,19 +1348,17 @@ static std::vector<float> cohere_decode_step(
 
         const auto & attn_ln_w = ct_to_f32_ref(l.attn_ln_w);
         const auto & attn_ln_b = ct_to_f32_ref(l.attn_ln_b);
-        const auto & attn_q_w = ct_to_f32_ref(l.attn_q_w);  const auto & attn_q_b = ct_to_f32_ref(l.attn_q_b);
-        const auto & attn_k_w = ct_to_f32_ref(l.attn_k_w);  const auto & attn_k_b = ct_to_f32_ref(l.attn_k_b);
-        const auto & attn_v_w = ct_to_f32_ref(l.attn_v_w);  const auto & attn_v_b = ct_to_f32_ref(l.attn_v_b);
-        const auto & attn_o_w = ct_to_f32_ref(l.attn_o_w);  const auto & attn_o_b = ct_to_f32_ref(l.attn_o_b);
-
         // --- Self-attention with KV cache ---
         std::vector<float> h_norm(n_tok * d);
         for (int i = 0; i < n_tok; i++)
             ct_layer_norm(h_norm.data() + i*d, h.data() + i*d, d, attn_ln_w.data(), attn_ln_b.data());
 
-        auto Q = ct_linear(h_norm.data(), d, n_tok, attn_q_w.data(), d, attn_q_b.data());
-        auto K = ct_linear(h_norm.data(), d, n_tok, attn_k_w.data(), d, attn_k_b.data());
-        auto V = ct_linear(h_norm.data(), d, n_tok, attn_v_w.data(), d, attn_v_b.data());
+        const float * q_w_f32 = ct_tensor_f32(l.attn_q_w);
+        auto Q = ct_linear(h_norm.data(), d, n_tok, q_w_f32, d, ct_to_f32_ref(l.attn_q_b).data());
+        const float * k_w_f32 = ct_tensor_f32(l.attn_k_w);
+        auto K = ct_linear(h_norm.data(), d, n_tok, k_w_f32, d, ct_to_f32_ref(l.attn_k_b).data());
+        const float * v_w_f32 = ct_tensor_f32(l.attn_v_w);
+        auto V = ct_linear(h_norm.data(), d, n_tok, v_w_f32, d, ct_to_f32_ref(l.attn_v_b).data());
 
         // Write K, V into cache at position [offset, offset+n_tok)
         int cache_size = H * max_ctx * hd;
@@ -1406,20 +1404,19 @@ static std::vector<float> cohere_decode_step(
             }
         }
         // Out projection + residual
-        auto sa_proj = ct_linear(sa_out.data(), d, n_tok, attn_o_w.data(), d, attn_o_b.data());
+        const float * o_w_f32 = ct_tensor_f32(l.attn_o_w);
+        auto sa_proj = ct_linear(sa_out.data(), d, n_tok, o_w_f32, d, ct_to_f32_ref(l.attn_o_b).data());
         for (int i = 0; i < n_tok * d; i++) h[i] += sa_proj[i];
 
         // --- Cross-attention ---
         // CK and CV are pre-computed once per utterance in cross_kv_k/v.
         const auto & cross_ln_w = ct_to_f32_ref(l.cross_ln_w);  const auto & cross_ln_b = ct_to_f32_ref(l.cross_ln_b);
-        const auto & cross_q_w = ct_to_f32_ref(l.cross_q_w);   const auto & cross_q_b = ct_to_f32_ref(l.cross_q_b);
-        const auto & cross_o_w = ct_to_f32_ref(l.cross_o_w);   const auto & cross_o_b = ct_to_f32_ref(l.cross_o_b);
-
         std::vector<float> h_cross_norm(n_tok * d);
         for (int i = 0; i < n_tok; i++)
             ct_layer_norm(h_cross_norm.data() + i*d, h.data() + i*d, d, cross_ln_w.data(), cross_ln_b.data());
 
-        auto CQ = ct_linear(h_cross_norm.data(), d, n_tok, cross_q_w.data(), d, cross_q_b.data());
+        const float * cq_w_f32 = ct_tensor_f32(l.cross_q_w);
+        auto CQ = ct_linear(h_cross_norm.data(), d, n_tok, cq_w_f32, d, ct_to_f32_ref(l.cross_q_b).data());
         const float * CK = cross_kv_k[li].data();
         const float * CV = cross_kv_v[li].data();
 
@@ -1445,33 +1442,31 @@ static std::vector<float> cohere_decode_step(
                 }
             }
         }
-        auto ca_proj = ct_linear(ca_out.data(), d, n_tok, cross_o_w.data(), d, cross_o_b.data());
+        const float * co_w_f32 = ct_tensor_f32(l.cross_o_w);
+        auto ca_proj = ct_linear(ca_out.data(), d, n_tok, co_w_f32, d, ct_to_f32_ref(l.cross_o_b).data());
         for (int i = 0; i < n_tok * d; i++) h[i] += ca_proj[i];
 
         // --- FFN ---
         const auto & ffn_ln_w = ct_to_f32_ref(l.ffn_ln_w);  const auto & ffn_ln_b = ct_to_f32_ref(l.ffn_ln_b);
-        const auto & ffn_up_w = ct_to_f32_ref(l.ffn_up_w);  const auto & ffn_up_b = ct_to_f32_ref(l.ffn_up_b);
-        const auto & ffn_dn_w = ct_to_f32_ref(l.ffn_dn_w);  const auto & ffn_dn_b = ct_to_f32_ref(l.ffn_dn_b);
-
         std::vector<float> h_ffn_norm(n_tok * d);
         for (int i = 0; i < n_tok; i++)
             ct_layer_norm(h_ffn_norm.data() + i*d, h.data() + i*d, d, ffn_ln_w.data(), ffn_ln_b.data());
-        auto ffn_h = ct_linear(h_ffn_norm.data(), d, n_tok, ffn_up_w.data(), ffn, ffn_up_b.data());
+        const float * ffn_up_f32 = ct_tensor_f32(l.ffn_up_w);
+        auto ffn_h = ct_linear(h_ffn_norm.data(), d, n_tok, ffn_up_f32, ffn, ct_to_f32_ref(l.ffn_up_b).data());
         for (int i = 0; i < n_tok * ffn; i++) ffn_h[i] = ffn_h[i] > 0.0f ? ffn_h[i] : 0.0f;  // ReLU
-        auto ffn_out = ct_linear(ffn_h.data(), ffn, n_tok, ffn_dn_w.data(), d, ffn_dn_b.data());
+        const float * ffn_dn_f32 = ct_tensor_f32(l.ffn_dn_w);
+        auto ffn_out = ct_linear(ffn_h.data(), ffn, n_tok, ffn_dn_f32, d, ct_to_f32_ref(l.ffn_dn_b).data());
         for (int i = 0; i < n_tok * d; i++) h[i] += ffn_out[i];
     }
 
     // Final layer norm + head
     const auto & out_ln_w = ct_to_f32_ref(m.dec_out_ln_w);
     const auto & out_ln_b = ct_to_f32_ref(m.dec_out_ln_b);
-    const auto & head_w = ct_to_f32_ref(m.dec_head_w);
-    const auto & head_b = ct_to_f32_ref(m.dec_head_b);
-
     for (int i = 0; i < n_tok; i++)
         ct_layer_norm(h.data() + i*d, h.data() + i*d, d, out_ln_w.data(), out_ln_b.data());
 
-    auto logits = ct_linear(h.data(), d, n_tok, head_w.data(), hp.vocab_size, head_b.data());
+    const float * head_w_f32 = ct_tensor_f32(m.dec_head_w);
+    auto logits = ct_linear(h.data(), d, n_tok, head_w_f32, hp.vocab_size, ct_to_f32_ref(m.dec_head_b).data());
 
     // DEBUG: print top-5 logits at last prompt token position
     return logits;

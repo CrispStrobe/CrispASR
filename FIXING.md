@@ -566,7 +566,8 @@ Decoder tensors use these names:
 | FFTW3f + OpenBLAS + cross-KV (properly linked) | 104s | 262s | 107s | **~8×** |
 | + BLAS attention (ct_rel_pos_mha) | 105s | 135s | 106s | ~8× |
 | + lazy F32 weight cache | 100s | 79s | 67s | ~8.3× |
-| + EncScratch + AVX2 F16C | **32s** | 32s | 22s | **~26×** |
+| + EncScratch + AVX2 F16C (encoder) | 32s | 32s | 22s | ~26× |
+| + F16C decoder weights | **33s** | 33s | 24s | ~25× (decoder weights were tiny) |
 
 ### Critical debugging lesson: verify the binary actually links the libraries
 
@@ -605,11 +606,22 @@ Key insight: AVX2 F16C converts at ~56 billion F16/sec vs scalar at ~600M/sec (9
 For 3.9GB of encoder weights: scalar = ~3.3s, F16C = ~35ms. Negligible vs page fault cost.
 Only keep lazy F32 cache for small tensors (biases, norms, BN params < ~20KB each).
 
-**Current bottlenecks (after 32s):**
-1. Decoder weight conversion: 8 layers × 14 matrices × 27 decode steps still uses lazy cache.
-   Fix: apply ct_tensor_f32 to decoder weight matrices (same approach as encoder).
-2. Remaining 22s sys: page faults from decoder weight cache + other small allocs.
-3. F16 weight memory bandwidth: ggml port (P2B) would halve memory traffic.
+**Current bottleneck (after 33s):**
+The remaining ~33s is almost entirely **encoder BLAS** (~25s single-thread). Decoder weights are
+too small (n_tok=1, all GEMVs) to matter. Multi-threading via OPENBLAS_NUM_THREADS=4 gives only
+~1.77× CPU utilization for T=138 encoder matrices — thread spawn overhead dominates for small M.
+
+**The cblas_sgemm + F32 path has hit its ceiling.** Further gains require:
+1. **ggml compute graph port (P2B)**: `ggml_mul_mat` with F16 weights halves memory bandwidth,
+   unlocks GPU dispatch, quantized GEMM. This is the correct next step.
+2. Quantization (Q8_0): ~2× fewer memory reads → ~2× speedup (blocked on P2B).
+3. GPU: after P2B, Metal/CUDA gives ~10-20× over current state.
+
+**Summary of this optimization session:**
+- Started: 104s (BLAS+cross-KV baseline)
+- Ended: ~33s = **~3.1× improvement this session, ~25× total from scalar baseline**
+- Key insight: the bottleneck was never the BLAS computation — it was the 7.8GB F32 weight
+  cache causing page fault storms. AVX2 F16C on-the-fly conversion was the breakthrough.
 
 ### F32 weight cache lessons (2026-03-31)
 
