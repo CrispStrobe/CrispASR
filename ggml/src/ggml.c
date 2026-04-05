@@ -1997,6 +1997,7 @@ static struct ggml_tensor * ggml_add_impl(
         struct ggml_tensor  * a,
         struct ggml_tensor  * b,
         bool                  inplace) {
+    //printf("DEBUG ADD: a name=%s ne=[%ld %ld %ld %ld] b name=%s ne=[%ld %ld %ld %ld]\n", a->name, a->ne[0], a->ne[1], a->ne[2], a->ne[3], b->name, b->ne[0], b->ne[1], b->ne[2], b->ne[3]); fflush(stdout);
     GGML_ASSERT(ggml_can_repeat(b, a));
 
     struct ggml_tensor * result = inplace ? ggml_view_tensor(ctx, a) : ggml_dup_tensor(ctx, a);
@@ -3217,6 +3218,9 @@ struct ggml_tensor * ggml_mul_mat(
         struct ggml_context * ctx,
         struct ggml_tensor  * a,
         struct ggml_tensor  * b) {
+    if (getenv("GGML_DEBUG")) {
+        printf("DEBUG GGML: ggml_mul_mat a ne [%ld %ld %ld %ld] b ne [%ld %ld %ld %ld] can_mul=%d\n", a->ne[0], a->ne[1], a->ne[2], a->ne[3], b->ne[0], b->ne[1], b->ne[2], b->ne[3], ggml_can_mul_mat(a, b)); fflush(stdout);
+    }
     GGML_ASSERT(ggml_can_mul_mat(a, b));
     GGML_ASSERT(!ggml_is_transposed(a));
 
@@ -4491,7 +4495,12 @@ struct ggml_tensor * ggml_conv_1d_dw(
 
     struct ggml_tensor * result = ggml_mul_mat(ctx, im2col, a);
 
-    result = ggml_reshape_3d(ctx, result, result->ne[0], result->ne[2], 1);
+    if (getenv("GGML_DEBUG")) {
+        printf("DEBUG CONV1D_DW: im2col ne [%ld %ld %ld %ld] n_elem=%ld\n", im2col->ne[0], im2col->ne[1], im2col->ne[2], im2col->ne[3], ggml_nelements(im2col));
+        printf("DEBUG CONV1D_DW: result ne [%ld %ld %ld %ld] n_elem=%ld\n", result->ne[0], result->ne[1], result->ne[2], result->ne[3], ggml_nelements(result));
+        fflush(stdout);
+    }
+    result = ggml_reshape_3d(ctx, result, result->ne[0], result->ne[1], result->ne[2]);
 
     return result;
 }

@@ -14,11 +14,11 @@ This document tracks the progress of porting `cohere-whisper.cpp` to a full `ggm
     - [x] Resolve `GGML_ASSERT(ggml_can_repeat(b, a))` broadcasting issues.
     - [x] Fix `ggml_mul_mat` dimension mismatches and transpose assertions.
     - [x] Verify numerical consistency and successful iterative decoding.
-- [ ] **Phase 2: Encoder Graph Port**
-    - [ ] Implement `cohere_build_graph_encoder` (48 Conformer layers).
-    - [ ] Port Conv2D subsampling to `ggml_conv_2d`.
-    - [ ] Implement Conformer relative-position attention (relative shift) in `ggml`.
-    - [ ] Implement Conformer convolution module.
+- [x] **Phase 2: Encoder Graph Port**
+    - [x] Implement `cohere_build_graph_encoder` (48 Conformer layers).
+    - [x] Port Conv2D subsampling to `ggml_conv_2d`.
+    - [x] Implement Conformer relative-position attention (relative shift) in `ggml`.
+    - [x] Implement Conformer convolution module.
 - [ ] **Phase 3: Integration & Cleanup**
     - [ ] Remove `cblas_sgemm` and `ct_linear` dependencies.
     - [ ] Remove manual F32 weight caching.
@@ -29,4 +29,21 @@ This document tracks the progress of porting `cohere-whisper.cpp` to a full `ggm
 
 ## Current Status
 - Decoder: **Graph implementation functional and verified**.
-- Encoder: **Imperative implementation functional (26x speedup)**. Porting to graph in progress.
+- Encoder: **Graph implementation functional and verified**. 
+- Full Pipeline: **Verified correct output on sample audio.**
+
+## Phase 5: Technical Learnings & Pitfalls (CRITICAL)
+
+### 1. GGML Tensor Layouts & Operations
+- **Conv1D Depthwise:** `ggml_conv_1d_dw` expects input layout `[T, C]` (ne0=T, ne1=C). If your hidden state is `[C, T]`, you **must** `ggml_transpose` before and `ggml_permute(1, 2, 0, 3)` after to restore layout.
+- **Broadcast Bias:** To add a bias `[C]` to a tensor `[C, T]`, use `ggml_add` with a reshaped bias `[C, 1, 1, 1]`.
+- **Softmax Scaling:** Conformer self-attention **requires** scaling by `1/sqrt(head_dim)` BEFORE softmax. Skipping this leads to saturated attention and broken output.
+
+### 2. Audio Preprocessing Consistency
+- **Mel Layout:** The subsampling Conv2D layers expect mel features in **time-major** layout `[T, n_mels]` (stored as `[1, n_mels, T]` for 2D conv). Storing them in mel-major layout `[n_mels, T]` will result in garbage encoder output.
+- **Normalization:** Ensure per-feature normalization matches the reference (PyTorch/ONNX) exactly, including the biased/unbiased variance calculation.
+
+### 3. GGML Infrastructure
+- **GGUF Memory Bug:** `gguf_init_from_file` with `no_alloc=true` has a known edge case where it might not calculate enough overhead for the `ggml_context` if many tensors are present. Adding a safety margin (`+10` descriptors) to the allocation in `gguf.cpp` fixes this.
+- **KV Cache Reset:** Use `ggml_backend_buffer_clear` instead of `memset` when the buffer is allocated on a non-CPU backend.
+- **Constants:** Tensors created in a `no_alloc=false` context (like persistent constants) use `ctx->data` directly; those on backends require `ggml_backend_tensor_set`. Mixed usage must be handled carefully.

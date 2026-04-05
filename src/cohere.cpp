@@ -24,6 +24,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <cstdarg>
 #ifdef _OPENMP
 #include <omp.h>
 #endif
@@ -505,7 +506,7 @@ static bool cohere_load_model(cohere_model & model,
         int ki = gguf_find_key(gguf_ctx, "tokenizer.ggml.tokens");
         if (ki >= 0) {
             int n = gguf_get_arr_n(gguf_ctx, ki);
-            printf("cohere: loading %d tokens from GGUF\n", n);
+            cohere_debug("cohere: loading %d tokens from GGUF\n", n);
             vocab.id_to_token.resize(n);
             for (int i = 0; i < n; i++) {
                 vocab.id_to_token[i] = gguf_get_arr_str(gguf_ctx, ki, i);
@@ -513,10 +514,10 @@ static bool cohere_load_model(cohere_model & model,
             }
             const char * specials[] = {"<|startoftranscript|>", "<|en|>", "<|endoftext|>"};
             for (const char * s : specials) {
-                printf("cohere: token '%s' -> ID %d\n", s, vocab.token_id(s));
+                cohere_debug("cohere: token '%s' -> ID %d\n", s, vocab.token_id(s));
             }
         } else {
-            printf("cohere: WARNING: tokenizer.ggml.tokens not found in GGUF\n");
+            cohere_debug("cohere: WARNING: tokenizer.ggml.tokens not found in GGUF\n");
         }
     }
 
@@ -573,9 +574,9 @@ static bool cohere_load_model(cohere_model & model,
             ggml_backend_tensor_get(tp, data.data(), 0, data.size());
             if (tp->type == GGML_TYPE_F16) {
                 float v0 = ggml_fp16_to_fp32(((ggml_fp16_t*)data.data())[0]);
-                printf("cohere: enc.proj.weight [0] (F16): %.4f\n", v0);
+                cohere_debug("cohere: enc.proj.weight [0] (F16): %.4f\n", v0);
             } else if (tp->type == GGML_TYPE_F32) {
-                printf("cohere: enc.proj.weight [0] (F32): %.4f\n", ((float*)data.data())[0]);
+                cohere_debug("cohere: enc.proj.weight [0] (F32): %.4f\n", ((float*)data.data())[0]);
             }
         }
     }
@@ -900,9 +901,9 @@ static std::vector<float> cohere_compute_features(const cohere_hparams & hp,
         for (int t = 0; t < T; t++) mel[t * n_mels + m] = (mel[t * n_mels + m] - (float)mean) / std;
     }
 
-    printf("cohere: mel m=0, t=0..4: [%.4f, %.4f, %.4f, %.4f, %.4f]\n",
+    cohere_debug("cohere: mel m=0, t=0..4: [%.4f, %.4f, %.4f, %.4f, %.4f]\n",
            mel[0*n_mels + 0], mel[1*n_mels + 0], mel[2*n_mels + 0], mel[3*n_mels + 0], mel[4*n_mels + 0]);
-    printf("cohere: mel t=0, m=0..4: [%.4f, %.4f, %.4f, %.4f, %.4f]\n",
+    cohere_debug("cohere: mel t=0, m=0..4: [%.4f, %.4f, %.4f, %.4f, %.4f]\n",
            mel[0*n_mels + 0], mel[0*n_mels + 1], mel[0*n_mels + 2], mel[0*n_mels + 3], mel[0*n_mels + 4]);
 
     return mel; // shape: [n_mels, T], time-major
@@ -956,23 +957,25 @@ static void cohere_precompute_cross_kv(
 // Logging & Debugging
 // ---------------------------------------------------------------------------
 
+static void cohere_debug(const char * fmt, ...) {
+    if (!getenv("COHERE_DEBUG")) return;
+    va_list args;
+    va_start(args, fmt);
+    vprintf(fmt, args);
+    va_end(args);
+    fflush(stdout);
+}
+
 static void cohere_log_tensor(const char * name, const struct ggml_tensor * t) {
+    if (!getenv("COHERE_DEBUG")) return;
     if (!t) {
-        printf("%-25s: NULL\n", name);
+        cohere_debug("%-25s: NULL\n", name);
         return;
     }
-    printf("%-25s: shape [%4ld, %4ld, %4ld, %4ld] type %d",
+    cohere_debug("%-25s: shape [%4ld, %4ld, %4ld, %4ld] type %d\n",
         name,
         (long)t->ne[0], (long)t->ne[1], (long)t->ne[2], (long)t->ne[3],
         (int)t->type);
-    
-    // We can't easily get values if it's on backend, but for this project 
-    // we often use it during graph building or just after compute.
-    // However, during graph building it's not computed yet.
-    // So let's only print values if they are available (e.g. from CPU backend).
-    // Actually, cohere_log_tensor is called DURING graph building, so it's useless for values.
-    printf("\n");
-    fflush(stdout);
 }
 
 // ---------------------------------------------------------------------------
@@ -989,7 +992,7 @@ static struct ggml_cgraph * cohere_build_graph_decoder(
     const int n_heads  = hp.dec_n_heads;
     const int head_dim = hp.dec_head_dim;
 
-    printf("\n--- cohere_build_graph_decoder: n_tokens=%d, offset=%d ---\n", n_tokens, offset);
+    cohere_debug("\n--- cohere_build_graph_decoder: n_tokens=%d, offset=%d ---\n", n_tokens, offset);
 
     struct ggml_init_params params = {
         .mem_size   = ctx->compute_meta.size(),
@@ -1217,7 +1220,7 @@ static std::vector<float> cohere_decode_step(
         struct ggml_tensor * CV_t = ggml_graph_get_tensor(gf, cv_name);
         
         if (il == 0 && offset == 0) {
-            printf("cohere: setting CK_0, size %zu, buffer=%p, first 5: [%.4f, %.4f, %.4f, %.4f, %.4f]\n",
+            cohere_debug("cohere: setting CK_0, size %zu, buffer=%p, first 5: [%.4f, %.4f, %.4f, %.4f, %.4f]\n",
                    cross_kv_k[il].size(), (void*)(CK_t ? CK_t->buffer : nullptr),
                    cross_kv_k[il][0], cross_kv_k[il][1], cross_kv_k[il][2], cross_kv_k[il][3], cross_kv_k[il][4]);
         }
@@ -1249,7 +1252,7 @@ static std::vector<float> cohere_decode_step(
         if (emb_ln) {
             std::vector<float> h(ggml_nelements(emb_ln));
             ggml_backend_tensor_get(emb_ln, h.data(), 0, h.size() * sizeof(float));
-            printf("cohere: step 0 (prompt) h[0] after emb_ln: [%.4f, %.4f, %.4f, %.4f, %.4f]\n",
+            cohere_debug("cohere: step 0 (prompt) h[0] after emb_ln: [%.4f, %.4f, %.4f, %.4f, %.4f]\n",
                 h[0], h[1], h[2], h[3], h[4]);
         }
 
@@ -1257,7 +1260,7 @@ static std::vector<float> cohere_decode_step(
         if (h0_sa) {
             std::vector<float> h(ggml_nelements(h0_sa));
             ggml_backend_tensor_get(h0_sa, h.data(), 0, h.size() * sizeof(float));
-            printf("cohere: step 0 (prompt) h[0] after sa_li0: [%.4f, %.4f, %.4f, %.4f, %.4f]\n",
+            cohere_debug("cohere: step 0 (prompt) h[0] after sa_li0: [%.4f, %.4f, %.4f, %.4f, %.4f]\n",
                 h[0], h[1], h[2], h[3], h[4]);
         }
 
@@ -1265,7 +1268,7 @@ static std::vector<float> cohere_decode_step(
         if (h0_ca) {
             std::vector<float> h(ggml_nelements(h0_ca));
             ggml_backend_tensor_get(h0_ca, h.data(), 0, h.size() * sizeof(float));
-            printf("cohere: step 0 (prompt) h[0] after ca_li0: [%.4f, %.4f, %.4f, %.4f, %.4f]\n",
+            cohere_debug("cohere: step 0 (prompt) h[0] after ca_li0: [%.4f, %.4f, %.4f, %.4f, %.4f]\n",
                 h[0], h[1], h[2], h[3], h[4]);
         }
         
@@ -1273,7 +1276,7 @@ static std::vector<float> cohere_decode_step(
         const float * last_logits = logits.data() + (n_tok - 1) * vocab_size;
         int top_id = 0;
         for (int i = 1; i < vocab_size; i++) if (last_logits[i] > last_logits[top_id]) top_id = i;
-        printf("cohere: step 0 (prompt) top_tok: %d, logit: %.4f, tok_749_logit: %.4f\n", 
+        cohere_debug("cohere: step 0 (prompt) top_tok: %d, logit: %.4f, tok_749_logit: %.4f\n", 
                top_id, last_logits[top_id], last_logits[749]);
     }
 
@@ -1464,14 +1467,14 @@ char * cohere_transcribe(struct cohere_context * ctx,
     // --- Encoder Graph ---
     struct ggml_cgraph * gf_enc = cohere_build_graph_encoder(ctx, T_mel);
 
-    printf("cohere: allocating encoder graph...\n"); fflush(stdout);
+    cohere_debug("cohere: allocating encoder graph...\n");
     ggml_backend_sched_reset(ctx->ggml_alloc);
     if (!ggml_backend_sched_alloc_graph(ctx->ggml_alloc, gf_enc)) {
         fprintf(stderr, "cohere: failed to allocate encoder graph\n");
         return nullptr;
     }
 
-    printf("cohere: setting encoder inputs...\n"); fflush(stdout);
+    cohere_debug("cohere: setting encoder inputs...\n");
     // Set mel input
     struct ggml_tensor * mel_t = ggml_graph_get_tensor(gf_enc, "mel");
     if (!mel_t) { fprintf(stderr, "error: mel tensor not found\n"); return nullptr; }
@@ -1490,13 +1493,13 @@ char * cohere_transcribe(struct cohere_context * ctx,
     if (!pos_enc_t->buffer) { fprintf(stderr, "error: pos_enc_t buffer is NULL\n"); }
     else ggml_backend_tensor_set(pos_enc_t, pos_enc_data.data(), 0, pos_enc_data.size() * sizeof(float));
 
-    printf("cohere: computing encoder graph...\n"); fflush(stdout);
+    cohere_debug("cohere: computing encoder graph...\n");
     if (ggml_backend_sched_graph_compute(ctx->ggml_alloc, gf_enc) != GGML_STATUS_SUCCESS) {
         fprintf(stderr, "cohere: failed to compute encoder graph\n");
         return nullptr;
     }
 
-    printf("cohere: encoder done.\n"); fflush(stdout);
+    cohere_debug("cohere: encoder done.\n");
     struct ggml_tensor * enc_out_t = ggml_graph_get_tensor(gf_enc, "enc_out");
     if (!enc_out_t) { fprintf(stderr, "error: enc_out tensor not found\n"); return nullptr; }
     
@@ -1507,10 +1510,9 @@ char * cohere_transcribe(struct cohere_context * ctx,
     std::vector<float> enc_out(ggml_nelements(enc_out_t));
     ggml_backend_tensor_get(enc_out_t, enc_out.data(), 0, enc_out.size() * sizeof(float));
 
-    printf("cohere: enc_out shape [%d, %d]\n", T_enc, (int)ggml_nelements(enc_out_t) / T_enc);
-    printf("cohere: enc_out[0, :5] = [%.4f, %.4f, %.4f, %.4f, %.4f]\n",
+    cohere_debug("cohere: enc_out shape [%d, %d]\n", T_enc, (int)ggml_nelements(enc_out_t) / T_enc);
+    cohere_debug("cohere: enc_out[0, :5] = [%.4f, %.4f, %.4f, %.4f, %.4f]\n",
            enc_out[0], enc_out[1], enc_out[2], enc_out[3], enc_out[4]);
-    fflush(stdout);
 
     // --- Decoder: build prompt ---
     // Special token IDs from vocab
@@ -1533,10 +1535,9 @@ char * cohere_transcribe(struct cohere_context * ctx,
     // Filter out any missing tokens
     prompt.erase(std::remove_if(prompt.begin(), prompt.end(), [](int t){ return t == -1; }), prompt.end());
 
-    printf("cohere: prompt IDs: ");
-    for (int id : prompt) printf("%d ", id);
-    printf("\n");
-    fflush(stdout);
+    cohere_debug("cohere: prompt IDs: ");
+    for (int id : prompt) cohere_debug("%d ", id);
+    cohere_debug("\n");
 
     // Pre-compute cross KV cache once for this utterance
     cohere_precompute_cross_kv(ctx->model, enc_out.data(), T_enc,
