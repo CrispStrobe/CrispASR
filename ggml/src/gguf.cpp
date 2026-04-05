@@ -747,17 +747,17 @@ struct gguf_context * gguf_init_from_file_ptr(FILE * file, struct gguf_init_para
                 return nullptr;
             }
 
-            const size_t overhead = n_tensors * ggml_tensor_overhead();
+            const size_t overhead = (n_tensors + 10) * ggml_tensor_overhead();
 
             mem_size = overhead;
         } else {
-            if ((n_tensors + 1) != 0 && SIZE_MAX / (n_tensors + 1) < ggml_tensor_overhead()) {
+            if ((n_tensors + 10) != 0 && SIZE_MAX / (n_tensors + 10) < ggml_tensor_overhead()) {
                 GGML_LOG_ERROR("%s: memory size overflow while allocating ggml context\n", __func__);
                 gguf_free(ctx);
                 return nullptr;
             }
 
-            const size_t overhead = (n_tensors + 1) * ggml_tensor_overhead();
+            const size_t overhead = (n_tensors + 10) * ggml_tensor_overhead();
 
             if (SIZE_MAX - overhead < ctx->size) {
                 GGML_LOG_ERROR("%s: memory size overflow while allocating ggml context\n", __func__);

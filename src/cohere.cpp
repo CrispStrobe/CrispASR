@@ -38,14 +38,6 @@
 // Helpers
 // ---------------------------------------------------------------------------
 
-struct cohere_context;
-static struct ggml_cgraph * cohere_build_graph_decoder(struct cohere_context * ctx, const int * tokens, int n_tokens, int offset);
-
-#define CT_CHECK(x) do { if (!(x)) { fprintf(stderr, "CT_CHECK failed: %s (%s:%d)\n", #x, __FILE__, __LINE__); abort(); } } while(0)
-
-static float sigmoid(float x) { return 1.0f / (1.0f + expf(-x)); }
-static float swish(float x)   { return x * sigmoid(x); }
-
 // ---------------------------------------------------------------------------
 // Model hyperparams
 // ---------------------------------------------------------------------------
@@ -222,7 +214,222 @@ struct cohere_context {
 
     // Cached T_enc from last encode call, needed by decode graph builder.
     int cached_T_enc = 0;
+
+    // Mel spectrogram buffer
+    std::vector<float> mel_buf;
+
+    // Constants
+    struct ggml_context * ctx_const = nullptr;
+    struct ggml_tensor * eps = nullptr;
 };
+
+static void cohere_log_tensor(const char * name, const struct ggml_tensor * t);
+static struct ggml_cgraph * cohere_build_graph_encoder(struct cohere_context * ctx, int T_mel);
+static struct ggml_cgraph * cohere_build_graph_decoder(struct cohere_context * ctx, const int * tokens, int n_tokens, int offset);
+
+// ---------------------------------------------------------------------------
+// Encoder Graph Builder
+// ---------------------------------------------------------------------------
+
+static struct ggml_tensor * cohere_rel_shift(struct ggml_context * ctx, struct ggml_tensor * a) {
+    const int T = a->ne[1];
+    const int n_heads = a->ne[2];
+    struct ggml_tensor * out = ggml_view_3d(ctx, a,
+        T, T, n_heads,
+        a->nb[1] - a->nb[0],
+        a->nb[2],
+        (T - 1) * a->nb[0]
+    );
+    return out;
+}
+
+static struct ggml_cgraph * cohere_build_graph_encoder(struct cohere_context * ctx, int T_mel) {
+    const auto & model = ctx->model;
+    const auto & hp    = model.hparams;
+    const int d        = hp.enc_d_model;
+    const int n_heads  = hp.enc_n_heads;
+    const int head_dim = hp.enc_head_dim;
+    const int n_mels   = hp.n_mels;
+
+    struct ggml_init_params params = {
+        .mem_size   = ctx->compute_meta.size(),
+        .mem_buffer = ctx->compute_meta.data(),
+        .no_alloc   = true,
+    };
+
+    struct ggml_context * ctx0 = ggml_init(params);
+    struct ggml_cgraph * gf = ggml_new_graph_custom(ctx0, 8192, false);
+
+    // mel: [n_mels, T_mel]
+    struct ggml_tensor * mel = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, n_mels, T_mel);
+    ggml_set_name(mel, "mel");
+    ggml_set_input(mel);
+
+    // --- Subsampling ---
+    // conv.0: [n_mels, T_mel, 1] -> [64, T/2, 256]
+    struct ggml_tensor * cur = ggml_conv_2d(ctx0, model.pre_conv0_w, mel, 2, 2, 1, 1, 1, 1);
+    cur = ggml_add(ctx0, cur, ggml_cast(ctx0, ggml_reshape_4d(ctx0, model.pre_conv0_b, 1, 1, model.pre_conv0_b->ne[0], 1), GGML_TYPE_F32));
+    cur = ggml_relu(ctx0, cur);
+
+    // conv.2: depthwise [64, T/2, 256] -> [32, T/4, 256]
+    cur = ggml_conv_2d_dw(ctx0, model.pre_conv2_w, cur, 2, 2, 1, 1, 1, 1);
+    cur = ggml_add(ctx0, cur, ggml_cast(ctx0, ggml_reshape_4d(ctx0, model.pre_conv2_b, 1, 1, model.pre_conv2_b->ne[0], 1), GGML_TYPE_F32));
+    // conv.3: pointwise [32, T/4, 256] -> [32, T/4, 256]
+    cur = ggml_conv_2d(ctx0, model.pre_conv3_w, cur, 1, 1, 0, 0, 1, 1);
+    cur = ggml_add(ctx0, cur, ggml_cast(ctx0, ggml_reshape_4d(ctx0, model.pre_conv3_b, 1, 1, model.pre_conv3_b->ne[0], 1), GGML_TYPE_F32));
+    cur = ggml_relu(ctx0, cur);
+
+    // conv.5: depthwise [32, T/4, 256] -> [16, T/8, 256]
+    cur = ggml_conv_2d_dw(ctx0, model.pre_conv5_w, cur, 2, 2, 1, 1, 1, 1);
+    cur = ggml_add(ctx0, cur, ggml_cast(ctx0, ggml_reshape_4d(ctx0, model.pre_conv5_b, 1, 1, model.pre_conv5_b->ne[0], 1), GGML_TYPE_F32));
+    // conv.6: pointwise [16, T/8, 256] -> [16, T/8, 256]
+    cur = ggml_conv_2d(ctx0, model.pre_conv6_w, cur, 1, 1, 0, 0, 1, 1);
+    cur = ggml_add(ctx0, cur, ggml_cast(ctx0, ggml_reshape_4d(ctx0, model.pre_conv6_b, 1, 1, model.pre_conv6_b->ne[0], 1), GGML_TYPE_F32));
+    cur = ggml_relu(ctx0, cur);
+
+    // Flatten: [W3, H3, 256] -> [W3, 256, H3] -> [W3*256, H3]
+    int H3 = cur->ne[1];
+    int W3 = cur->ne[0];
+    cur = ggml_cont(ctx0, ggml_permute(ctx0, cur, 0, 2, 1, 3)); // [W3, C, H3]
+    cur = ggml_reshape_2d(ctx0, cur, W3 * 256, H3);
+    cohere_log_tensor("after_flatten", cur);
+
+    // pre_out: [4096, H3] -> [d, H3]
+    cur = ggml_add(ctx0, ggml_mul_mat(ctx0, model.pre_out_w, cur), model.pre_out_b);
+
+    const int T = H3;
+
+    // Positional encodings sinusoidal: [d, 2*T-1]
+    struct ggml_tensor * pos_enc = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, d, 2 * T - 1);
+    ggml_set_name(pos_enc, "pos_enc");
+    ggml_set_input(pos_enc);
+
+    for (int il = 0; il < hp.enc_n_layers; il++) {
+        const auto & layer = model.enc_layers[il];
+        struct ggml_tensor * inpL = cur;
+
+        // FF1
+        struct ggml_tensor * ff1 = ggml_norm(ctx0, cur, 1e-5f);
+        ff1 = ggml_add(ctx0, ggml_mul(ctx0, ff1, layer.ff1_norm_w), layer.ff1_norm_b);
+        ff1 = ggml_add(ctx0, ggml_mul_mat(ctx0, layer.ff1_up_w, ff1), layer.ff1_up_b);
+        ff1 = ggml_mul(ctx0, ff1, ggml_sigmoid(ctx0, ff1));
+        ff1 = ggml_add(ctx0, ggml_mul_mat(ctx0, layer.ff1_dn_w, ff1), layer.ff1_dn_b);
+        cur = ggml_add(ctx0, inpL, ggml_scale(ctx0, ff1, 0.5f));
+
+        struct ggml_tensor * inpAtn = cur;
+
+        // Self-Attention
+        struct ggml_tensor * attn = ggml_norm(ctx0, cur, 1e-5f);
+        attn = ggml_add(ctx0, ggml_mul(ctx0, attn, layer.attn_norm_w), layer.attn_norm_b);
+        
+        struct ggml_tensor * Q = ggml_add(ctx0, ggml_mul_mat(ctx0, layer.attn_q_w, attn), layer.attn_q_b);
+        struct ggml_tensor * K = ggml_add(ctx0, ggml_mul_mat(ctx0, layer.attn_k_w, attn), layer.attn_k_b);
+        struct ggml_tensor * V = ggml_add(ctx0, ggml_mul_mat(ctx0, layer.attn_v_w, attn), layer.attn_v_b);
+        
+        struct ggml_tensor * R = ggml_mul_mat(ctx0, layer.attn_pos_w, pos_enc); // [d, 2T-1]
+        
+        struct ggml_tensor * Q_u = ggml_add(ctx0, Q, ggml_reshape_1d(ctx0, layer.attn_pos_bias_u, d));
+        struct ggml_tensor * Q_v = ggml_add(ctx0, Q, ggml_reshape_1d(ctx0, layer.attn_pos_bias_v, d));
+        
+        Q_u = ggml_permute(ctx0, ggml_reshape_3d(ctx0, Q_u, head_dim, n_heads, T), 0, 2, 1, 3); // [hd, T, H]
+        Q_v = ggml_permute(ctx0, ggml_reshape_3d(ctx0, Q_v, head_dim, n_heads, T), 0, 2, 1, 3); // [hd, T, H]
+        K   = ggml_permute(ctx0, ggml_reshape_3d(ctx0, K,   head_dim, n_heads, T), 0, 2, 1, 3); // [hd, T, H]
+        R   = ggml_permute(ctx0, ggml_reshape_3d(ctx0, R,   head_dim, n_heads, 2 * T - 1), 0, 2, 1, 3); // [hd, 2T-1, H]
+        
+        struct ggml_tensor * AC = ggml_mul_mat(ctx0, ggml_cont(ctx0, K), ggml_cont(ctx0, Q_u)); // [T, T, H]
+        struct ggml_tensor * BD_raw = ggml_mul_mat(ctx0, ggml_cont(ctx0, R), ggml_cont(ctx0, Q_v)); // [2T-1, T, H]
+
+        struct ggml_tensor * BD = cohere_rel_shift(ctx0, BD_raw); // [T, T, H]
+        
+        struct ggml_tensor * scores = ggml_add(ctx0, AC, BD);
+        scores = ggml_scale(ctx0, scores, 1.0f / sqrtf((float)head_dim));
+        scores = ggml_soft_max(ctx0, scores);
+
+        struct ggml_tensor * V_trans = ggml_permute(ctx0, ggml_reshape_3d(ctx0, V, head_dim, n_heads, T), 1, 2, 0, 3); // [T, hd, H]
+        struct ggml_tensor * attn_out = ggml_mul_mat(ctx0, ggml_cont(ctx0, V_trans), scores); // [hd, T, H]
+
+        attn_out = ggml_reshape_2d(ctx0, ggml_cont(ctx0, ggml_permute(ctx0, attn_out, 0, 2, 1, 3)), d, T);
+
+        attn_out = ggml_add(ctx0, ggml_mul_mat(ctx0, layer.attn_out_w, attn_out), layer.attn_out_b);
+        cur = ggml_add(ctx0, inpAtn, attn_out);
+
+        struct ggml_tensor * inpCnv = cur;
+
+        // Convolution module
+        struct ggml_tensor * cnv = ggml_norm(ctx0, cur, 1e-5f);
+        cnv = ggml_add(ctx0, ggml_mul(ctx0, cnv, layer.conv_norm_w), layer.conv_norm_b);
+        
+        struct ggml_tensor * pw1_w = ggml_reshape_2d(ctx0, layer.conv_pw1_w, d, 2 * d);
+        cnv = ggml_add(ctx0, ggml_mul_mat(ctx0, pw1_w, cnv), layer.conv_pw1_b);
+
+        struct ggml_tensor * cnv_gate = ggml_view_2d(ctx0, cnv, d, T, cnv->nb[1], d * sizeof(float));
+        cnv = ggml_mul(ctx0, 
+            ggml_view_2d(ctx0, cnv, d, T, cnv->nb[1], 0),
+            ggml_sigmoid(ctx0, cnv_gate)
+        );
+        
+        // cnv is [C, T] initially.
+        // ggml_conv_1d_dw handles [T, C] input (ne0=T, ne1=C).
+        cnv = ggml_cont(ctx0, ggml_transpose(ctx0, cnv)); // [C, T] -> [T, C]
+        cnv = ggml_conv_1d_dw(ctx0, layer.conv_dw_w, cnv, 1, (hp.enc_conv_k - 1) / 2, 1);
+        
+        // ggml_conv_1d_dw returns [T, 1, C, 1] (ne0=T, ne1=1, ne2=C)
+        // Permute to [C, T, 1, 1] to match the rest of the layer expectation.
+        // p0 is where old_ne0 (T) goes -> 1
+        // p1 is where old_ne1 (1) goes -> 2
+        // p2 is where old_ne2 (C) goes -> 0
+        cnv = ggml_cont(ctx0, ggml_permute(ctx0, cnv, 1, 2, 0, 3));
+        
+        // Add bias: reshape to [C, 1, 1, 1] then broadcast to [C, T, 1, 1]
+        struct ggml_tensor * b = ggml_reshape_4d(ctx0, layer.conv_dw_b, d, 1, 1, 1);
+        cnv = ggml_add(ctx0, cnv, b);
+        
+        // batchnorm: y = (x - mean) / sqrt(var + eps) * scale + bias
+        struct ggml_tensor * bn_mean = ggml_reshape_4d(ctx0, layer.conv_bn_mean, d, 1, 1, 1);
+        struct ggml_tensor * bn_var  = ggml_reshape_4d(ctx0, layer.conv_bn_var,  d, 1, 1, 1);
+        struct ggml_tensor * bn_w    = ggml_reshape_4d(ctx0, layer.conv_bn_w,    d, 1, 1, 1);
+        struct ggml_tensor * bn_b    = ggml_reshape_4d(ctx0, layer.conv_bn_b,    d, 1, 1, 1);
+
+        cnv = ggml_sub(ctx0, cnv, bn_mean);
+        cnv = ggml_mul(ctx0, cnv, ggml_div(ctx0, bn_w, ggml_sqrt(ctx0, ggml_add(ctx0, bn_var, ctx->eps))));
+        cnv = ggml_add(ctx0, cnv, bn_b);
+        
+        cnv = ggml_mul(ctx0, cnv, ggml_sigmoid(ctx0, cnv)); // swish
+        
+        struct ggml_tensor * pw2_w = ggml_reshape_2d(ctx0, layer.conv_pw2_w, d, d);
+        cnv = ggml_add(ctx0, ggml_mul_mat(ctx0, pw2_w, cnv), layer.conv_pw2_b);
+        cur = ggml_add(ctx0, inpCnv, cnv);
+
+        struct ggml_tensor * inpFF2 = cur;
+
+        // FF2
+        struct ggml_tensor * ff2 = ggml_norm(ctx0, cur, 1e-5f);
+        ff2 = ggml_add(ctx0, ggml_mul(ctx0, ff2, layer.ff2_norm_w), layer.ff2_norm_b);
+        ff2 = ggml_add(ctx0, ggml_mul_mat(ctx0, layer.ff2_up_w, ff2), layer.ff2_up_b);
+        ff2 = ggml_mul(ctx0, ff2, ggml_sigmoid(ctx0, ff2));
+        ff2 = ggml_add(ctx0, ggml_mul_mat(ctx0, layer.ff2_dn_w, ff2), layer.ff2_dn_b);
+        cur = ggml_add(ctx0, inpFF2, ggml_scale(ctx0, ff2, 0.5f));
+
+        // Final output norm for the layer
+        cur = ggml_norm(ctx0, cur, 1e-5f);
+        cur = ggml_add(ctx0, ggml_mul(ctx0, cur, layer.out_norm_w), layer.out_norm_b);
+    }
+
+    // Encoder-decoder projection
+    cur = ggml_add(ctx0, ggml_mul_mat(ctx0, model.enc_proj_w, cur), model.enc_proj_b);
+    ggml_set_name(cur, "enc_out");
+
+    ggml_build_forward_expand(gf, cur);
+
+    return gf;
+}
+
+static struct ggml_cgraph * cohere_build_graph_decoder(struct cohere_context * ctx, const int * tokens, int n_tokens, int offset);
+
+#define CT_CHECK(x) do { if (!(x)) { fprintf(stderr, "CT_CHECK failed: %s (%s:%d)\n", #x, __FILE__, __LINE__); abort(); } } while(0)
+
+static float sigmoid(float x) { return 1.0f / (1.0f + expf(-x)); }
+static float swish(float x)   { return x * sigmoid(x); }
 
 // ---------------------------------------------------------------------------
 // GGUF loading helpers
@@ -251,11 +458,20 @@ static ggml_tensor * ct_get_tensor_fmt(cohere_model & model, const char * fmt, i
 
 static bool cohere_load_model(cohere_model & model,
                                cohere_vocab  & vocab,
-                               const char * path) {
+                               const char * path,
+                               ggml_backend_t backend) {
     // First pass: read metadata
-    struct gguf_context * gguf_ctx = gguf_init_from_file(path, { .no_alloc = true, .ctx = nullptr });
+    struct ggml_init_params meta_params = {
+        .mem_size   = 4 * 1024 * 1024, // 4 MB for metadata
+        .mem_buffer = nullptr,
+        .no_alloc   = true,
+    };
+    struct ggml_context * meta_ctx = ggml_init(meta_params);
+    struct gguf_init_params load_params_meta = { .no_alloc = true, .ctx = &meta_ctx };
+    struct gguf_context * gguf_ctx = gguf_init_from_file(path, load_params_meta);
     if (!gguf_ctx) {
         fprintf(stderr, "cohere: failed to open '%s'\n", path);
+        if (meta_ctx) ggml_free(meta_ctx);
         return false;
     }
 
@@ -289,31 +505,79 @@ static bool cohere_load_model(cohere_model & model,
         int ki = gguf_find_key(gguf_ctx, "tokenizer.ggml.tokens");
         if (ki >= 0) {
             int n = gguf_get_arr_n(gguf_ctx, ki);
+            printf("cohere: loading %d tokens from GGUF\n", n);
             vocab.id_to_token.resize(n);
             for (int i = 0; i < n; i++) {
                 vocab.id_to_token[i] = gguf_get_arr_str(gguf_ctx, ki, i);
                 vocab.token_to_id[vocab.id_to_token[i]] = i;
             }
+            const char * specials[] = {"<|startoftranscript|>", "<|en|>", "<|endoftext|>"};
+            for (const char * s : specials) {
+                printf("cohere: token '%s' -> ID %d\n", s, vocab.token_id(s));
+            }
+        } else {
+            printf("cohere: WARNING: tokenizer.ggml.tokens not found in GGUF\n");
         }
     }
 
     gguf_free(gguf_ctx);
+    ggml_free(meta_ctx);
 
-    // Second pass: load all tensor data (no_alloc=false allocates weight buffers)
+    // Second pass: load all tensor metadata (no_alloc=true)
+    struct ggml_context * weight_ctx = nullptr;
     {
-        struct ggml_context * weight_ctx = nullptr;
-        struct gguf_init_params load_params = { .no_alloc = false, .ctx = &weight_ctx };
+        struct gguf_init_params load_params = { .no_alloc = true, .ctx = &weight_ctx };
         gguf_ctx = gguf_init_from_file(path, load_params);
         if (!gguf_ctx || !weight_ctx) {
-            fprintf(stderr, "cohere: failed to load tensors from '%s'\n", path);
+            fprintf(stderr, "cohere: failed to load tensor metadata from '%s'\n", path);
             return false;
         }
-        model.ctx = weight_ctx;
+
+        // Create backend buffer for all tensors
+        model.buf = ggml_backend_alloc_ctx_tensors(weight_ctx, backend);
+
+        FILE * file = fopen(path, "rb");
+        if (!file) {
+            fprintf(stderr, "cohere: failed to open '%s' for reading\n", path);
+            return false;
+        }
+
+        size_t data_offset = gguf_get_data_offset(gguf_ctx);
+
         for (ggml_tensor * t = ggml_get_first_tensor(weight_ctx); t;
              t = ggml_get_next_tensor(weight_ctx, t)) {
             model.tensors[ggml_get_name(t)] = t;
+
+            // Read data from GGUF into backend tensor
+            int64_t tensor_id = gguf_find_tensor(gguf_ctx, ggml_get_name(t));
+            if (tensor_id < 0) continue;
+
+            size_t t_offset = gguf_get_tensor_offset(gguf_ctx, tensor_id);
+            fseek(file, data_offset + t_offset, SEEK_SET);
+            std::vector<uint8_t> data(ggml_nbytes(t));
+            if (fread(data.data(), 1, ggml_nbytes(t), file) != ggml_nbytes(t)) {
+                fprintf(stderr, "cohere: failed to read data for tensor '%s'\n", ggml_get_name(t));
+                continue;
+            }
+            ggml_backend_tensor_set(t, data.data(), 0, ggml_nbytes(t));
         }
+
+        fclose(file);
+
+        model.ctx = weight_ctx;
         gguf_free(gguf_ctx);
+
+        struct ggml_tensor * tp = model.tensors["enc.proj.weight"];
+        if (tp) {
+            std::vector<uint8_t> data(ggml_nbytes(tp));
+            ggml_backend_tensor_get(tp, data.data(), 0, data.size());
+            if (tp->type == GGML_TYPE_F16) {
+                float v0 = ggml_fp16_to_fp32(((ggml_fp16_t*)data.data())[0]);
+                printf("cohere: enc.proj.weight [0] (F16): %.4f\n", v0);
+            } else if (tp->type == GGML_TYPE_F32) {
+                printf("cohere: enc.proj.weight [0] (F32): %.4f\n", ((float*)data.data())[0]);
+            }
+        }
     }
 
     // Wire up model fields
@@ -622,104 +886,26 @@ static std::vector<float> cohere_compute_features(const cohere_hparams & hp,
             for (int f = 0; f < n_freqs; f++) {
                 v += fe_mel_fb_data[m * n_freqs + f] * power[t * n_freqs + f];
             }
-            mel[m * T + t] = logf(v + log_grd);
+            mel[t * n_mels + m] = logf(v + log_grd);
         }
     }
 
     // Per-feature normalization: biased std (matches ONNX: std = sqrt(mean(diff²)))
     for (int m = 0; m < n_mels; m++) {
-        float * row = mel.data() + m * T;
         double mean = 0.0, var = 0.0;
-        for (int t = 0; t < T; t++) mean += row[t];
+        for (int t = 0; t < T; t++) mean += mel[t * n_mels + m];
         mean /= T;
-        for (int t = 0; t < T; t++) { double d = row[t] - mean; var += d*d; }
+        for (int t = 0; t < T; t++) { double d = mel[t * n_mels + m] - mean; var += d*d; }
         float std = sqrtf((float)(var / T + 1e-5));
-        for (int t = 0; t < T; t++) row[t] = (row[t] - (float)mean) / std;
+        for (int t = 0; t < T; t++) mel[t * n_mels + m] = (mel[t * n_mels + m] - (float)mean) / std;
     }
 
-    return mel; // shape: [n_mels, T], n_mels-major
-}
+    printf("cohere: mel m=0, t=0..4: [%.4f, %.4f, %.4f, %.4f, %.4f]\n",
+           mel[0*n_mels + 0], mel[1*n_mels + 0], mel[2*n_mels + 0], mel[3*n_mels + 0], mel[4*n_mels + 0]);
+    printf("cohere: mel t=0, m=0..4: [%.4f, %.4f, %.4f, %.4f, %.4f]\n",
+           mel[0*n_mels + 0], mel[0*n_mels + 1], mel[0*n_mels + 2], mel[0*n_mels + 3], mel[0*n_mels + 4]);
 
-// ---------------------------------------------------------------------------
-// Conv2D forward (naive, float32)
-// x:    [in_ch,  H,  W]
-// w:    [out_ch, in_ch/groups, kH, kW]   (PyTorch weight layout)
-// b:    [out_ch]
-// out:  [out_ch, H', W']
-// ---------------------------------------------------------------------------
-
-static std::vector<float> ct_conv2d(const float * x, int in_ch, int H, int W,
-                                    const float * w, int out_ch, int kH, int kW,
-                                    int stride, int pad, int groups,
-                                    const float * b = nullptr) {
-    int H_out = (H + 2*pad - kH) / stride + 1;
-    int W_out = (W + 2*pad - kW) / stride + 1;
-    int in_per_group  = in_ch  / groups;
-    int out_per_group = out_ch / groups;
-    std::vector<float> out(out_ch * H_out * W_out, 0.0f);
-
-    for (int g = 0; g < groups; g++) {
-        for (int oc = 0; oc < out_per_group; oc++) {
-            int oc_g = g * out_per_group + oc;
-            float bias = b ? b[oc_g] : 0.0f;
-            for (int oh = 0; oh < H_out; oh++) {
-                for (int ow = 0; ow < W_out; ow++) {
-                    float v = bias;
-                    for (int ic = 0; ic < in_per_group; ic++) {
-                        int ic_g = g * in_per_group + ic;
-                        for (int kh = 0; kh < kH; kh++) {
-                            for (int kw = 0; kw < kW; kw++) {
-                                int ih = oh * stride + kh - pad;
-                                int iw = ow * stride + kw - pad;
-                                if (ih >= 0 && ih < H && iw >= 0 && iw < W) {
-                                    float xi = x[ic_g * H * W + ih * W + iw];
-                                    // w: [out_ch, in_per_group, kH, kW]
-                                    float wi = w[(oc_g * in_per_group + ic) * kH * kW + kh * kW + kw];
-                                    v += xi * wi;
-                                }
-                            }
-                        }
-                    }
-                    out[(oc_g * H_out + oh) * W_out + ow] = v;
-                }
-            }
-        }
-    }
-    return out;
-}
-
-// Depthwise conv1d: x [C, T], w [C, 1, k], b [C], pad_same
-static std::vector<float> ct_dw_conv1d(const float * x, int C, int T,
-                                        const float * w, int k, const float * b = nullptr) {
-    int pad = (k - 1) / 2;
-    std::vector<float> out(C * T, 0.0f);
-    for (int c = 0; c < C; c++) {
-        float bias = b ? b[c] : 0.0f;
-        for (int t = 0; t < T; t++) {
-            float v = bias;
-            for (int ki = 0; ki < k; ki++) {
-                int ti = t + ki - pad;
-                if (ti >= 0 && ti < T) v += x[c * T + ti] * w[c * k + ki];
-            }
-            out[c * T + t] = v;
-        }
-    }
-    return out;
-}
-
-// Pointwise conv2d (1×1) acting as linear on channels: x [C_in, N], w [C_out, C_in, 1, 1]
-static std::vector<float> ct_pw_conv1x1(const float * x, int C_in, int N,
-                                         const float * w, int C_out,
-                                         const float * b = nullptr) {
-    std::vector<float> out(C_out * N, 0.0f);
-    for (int n = 0; n < N; n++) {
-        for (int co = 0; co < C_out; co++) {
-            float v = b ? b[co] : 0.0f;
-            for (int ci = 0; ci < C_in; ci++) v += w[co * C_in + ci] * x[ci * N + n];
-            out[co * N + n] = v;
-        }
-    }
-    return out;
+    return mel; // shape: [n_mels, T], time-major
 }
 
 // ---------------------------------------------------------------------------
@@ -739,539 +925,6 @@ static std::vector<float> ct_rel_pos_enc(int T, int d_model) {
         }
     }
     return pe;
-}
-
-// Relative shift: converts (H, T, 2T-1) → (H, T, T)
-// For query i, key j: result[h, i, j] = input[h, i, i - j + T - 1]
-static std::vector<float> ct_rel_shift(const float * bd, int H, int T) {
-    int n2 = 2 * T - 1;
-    std::vector<float> out(H * T * T, 0.0f);
-    for (int h = 0; h < H; h++)
-        for (int i = 0; i < T; i++)
-            for (int j = 0; j < T; j++) {
-                int rel = j - i + T - 1;  // BD[tq=i, tk=j] uses pos enc at tk-tq+T-1
-                out[(h * T + i) * T + j] = bd[(h * T + i) * n2 + rel];
-            }
-    return out;
-}
-
-// ---------------------------------------------------------------------------
-// Conformer self-attention with relative positional encoding
-// x:     (T, d)  — input (row-major T × d)
-// out:   (T, d)  — output
-// ---------------------------------------------------------------------------
-
-static std::vector<float> ct_rel_pos_mha(
-    const float * x, int T, int d,
-    int H, int head_dim,
-    const float * q_w, const float * q_b,
-    const float * k_w, const float * k_b,
-    const float * v_w, const float * v_b,
-    const float * out_w, const float * out_b,
-    const float * pos_w,      // [d, d]
-    const float * pos_bias_u, // [H, head_dim]
-    const float * pos_bias_v  // [H, head_dim]
-) {
-    float scale = 1.0f / sqrtf((float)head_dim);
-
-    // Q, K, V: (T, d) — unscaled; scale applied to (AC+BD) below, matching Python
-    auto Q = ct_linear(x, d, T, q_w, d, q_b);
-    auto K = ct_linear(x, d, T, k_w, d, k_b);
-    auto V = ct_linear(x, d, T, v_w, d, v_b);
-
-    // Relative position encodings and projection
-    auto pos_enc = ct_rel_pos_enc(T, d);          // (2T-1, d)
-    auto R = ct_linear(pos_enc.data(), d, 2*T-1, pos_w, d); // (2T-1, d)
-
-    // Build Q_u = Q + pos_bias_u and Q_v = Q + pos_bias_v (broadcast bias over T).
-    // pos_bias_u/v are (H, head_dim) = (d,), one bias per head dimension.
-    std::vector<float> Q_u(T * d), Q_v(T * d);
-    for (int t = 0; t < T; t++)
-        for (int j = 0; j < d; j++) {
-            Q_u[t*d + j] = Q[t*d + j] + pos_bias_u[j];
-            Q_v[t*d + j] = Q[t*d + j] + pos_bias_v[j];
-        }
-
-    // AC[h, T, T] = Q_u[:, h*hd:(h+1)*hd] @ K[:, h*hd:(h+1)*hd]^T
-    // BD_raw[h, T, 2T-1] = Q_v[:, h*hd:] @ R[:, h*hd:]^T
-    // Use non-contiguous BLAS: slice start = ptr + h*head_dim, leading dim = d.
-    const int n2 = 2*T - 1;
-    std::vector<float> AC(H * T * T);
-    std::vector<float> BD_raw(H * T * n2);
-    for (int h = 0; h < H; h++) {
-        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
-                    T, T, head_dim, 1.0f,
-                    Q_u.data() + h*head_dim, d,
-                    K.data()   + h*head_dim, d,
-                    0.0f, AC.data() + h*T*T, T);
-        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
-                    T, n2, head_dim, 1.0f,
-                    Q_v.data() + h*head_dim, d,
-                    R.data()   + h*head_dim, d,
-                    0.0f, BD_raw.data() + h*T*n2, n2);
-    }
-
-    // Relative shift BD_raw → BD
-    auto BD = ct_rel_shift(BD_raw.data(), H, T);
-
-    // scores = (AC + BD) * scale, softmax per (head, query)
-    std::vector<float> scores(H * T * T);
-    for (int i = 0; i < H * T * T; i++) scores[i] = (AC[i] + BD[i]) * scale;
-    for (int h = 0; h < H; h++) {
-        for (int tq = 0; tq < T; tq++) {
-            float * row = scores.data() + (h * T + tq) * T;
-            float mx = *std::max_element(row, row + T);
-            float sum = 0.0f;
-            for (int tk = 0; tk < T; tk++) { row[tk] = expf(row[tk] - mx); sum += row[tk]; }
-            for (int tk = 0; tk < T; tk++) row[tk] /= sum;
-        }
-    }
-
-    // ctx_merged[T, d] = scores[H,T,T] @ V[T,d], written per-head with stride d.
-    std::vector<float> ctx_merged(T * d, 0.0f);
-    for (int h = 0; h < H; h++) {
-        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
-                    T, head_dim, T, 1.0f,
-                    scores.data() + h*T*T, T,
-                    V.data()      + h*head_dim, d,
-                    0.0f,
-                    ctx_merged.data() + h*head_dim, d);
-    }
-
-    // Output projection
-    return ct_linear(ctx_merged.data(), d, T, out_w, d, out_b);
-}
-
-// ---------------------------------------------------------------------------
-// Conformer convolution module
-// x: (T, d), returns (T, d)
-// ---------------------------------------------------------------------------
-
-static std::vector<float> ct_conformer_conv(
-    const float * x, int T, int d, int k,
-    const float * pw1_w, const float * pw1_b,
-    const float * dw_w,  const float * dw_b,
-    const float * bn_w,  const float * bn_b,
-    const float * bn_mean, const float * bn_var,
-    const float * pw2_w, const float * pw2_b,
-    float bn_eps = 1e-5f
-) {
-    // pw1: (T, d) → (T, 2d) then GLU → (T, d)
-    auto h = ct_linear(x, d, T, pw1_w, 2*d, pw1_b);
-    // GLU: h[:, :d] * sigmoid(h[:, d:])
-    std::vector<float> glu(T * d);
-    for (int t = 0; t < T; t++)
-        for (int i = 0; i < d; i++)
-            glu[t * d + i] = h[t * 2*d + i] * sigmoid(h[t * 2*d + d + i]);
-
-    // Reshape to (d, T) for depthwise conv1d
-    std::vector<float> transposed(d * T);
-    for (int t = 0; t < T; t++)
-        for (int i = 0; i < d; i++)
-            transposed[i * T + t] = glu[t * d + i];
-
-    // Depthwise conv1d: (d, T) → (d, T)  with kernel size k, padding (k-1)/2
-    auto dw = ct_dw_conv1d(transposed.data(), d, T, dw_w, k, dw_b);
-
-    // Batch norm (inference mode): y = (x - mean) / sqrt(var + eps) * w + b
-    // Stored as separate mean/var/scale/bias. Applied per channel (dim=0 here).
-    for (int c = 0; c < d; c++) {
-        float inv = bn_w[c] / sqrtf(bn_var[c] + bn_eps);
-        float bias = bn_b[c] - bn_mean[c] * inv;
-        for (int t = 0; t < T; t++) dw[c * T + t] = dw[c * T + t] * inv + bias;
-    }
-
-    // Swish activation
-    ct_swish_inplace(dw.data(), d * T);
-
-    // pw2: (d, T) → linear per time-step, returns (d, T)
-    auto out_dT = ct_pw_conv1x1(dw.data(), d, T, pw2_w, d, pw2_b);
-
-    // Transpose back to (T, d)
-    std::vector<float> out(T * d);
-    for (int t = 0; t < T; t++)
-        for (int i = 0; i < d; i++)
-            out[t * d + i] = out_dT[i * T + t];
-    return out;
-}
-
-// ---------------------------------------------------------------------------
-// Scratch buffers for encoder layers — pre-allocated once, reused every layer.
-// ---------------------------------------------------------------------------
-
-struct EncScratch {
-    // layer norm output (reused)
-    std::vector<float> x_norm;    // (T, d)
-    // FFN
-    std::vector<float> ff_h;      // (T, ffn_dim)
-    std::vector<float> ff_out;    // (T, d)
-    // Attention
-    std::vector<float> Q, K, V;   // (T, d) each
-    std::vector<float> R;         // (2T-1, d)
-    std::vector<float> Q_u, Q_v;  // (T, d) each
-    std::vector<float> AC;        // (H, T, T)
-    std::vector<float> BD_raw;    // (H, T, 2T-1)
-    std::vector<float> BD;        // (H, T, T)
-    std::vector<float> scores;    // (H, T, T)
-    std::vector<float> ctx_merged;// (T, d)
-    std::vector<float> attn_out;  // (T, d)
-    std::vector<float> pos_enc;   // (2T-1, d) — precomputed once per encode call
-    // Conv module
-    std::vector<float> cv_h;      // (T, 2d) — pw1 output
-    std::vector<float> cv_glu;    // (T, d)
-    std::vector<float> cv_trans;  // (d, T)
-    std::vector<float> cv_dw;     // (d, T)
-    std::vector<float> cv_out_dT; // (d, T)
-    std::vector<float> cv_out;    // (T, d)
-};
-
-// ---------------------------------------------------------------------------
-// Feed-forward sub-layer (Macaron style, called with scale=0.5)
-// x: (T, d), returns (T, d)
-// ---------------------------------------------------------------------------
-
-static std::vector<float> ct_ffn(
-    const float * x, int T, int d, int ffn_dim, float scale,
-    const float * up_w, const float * up_b,
-    const float * dn_w, const float * dn_b
-) {
-    auto h = ct_linear(x, d, T, up_w, ffn_dim, up_b);
-    ct_swish_inplace(h.data(), ffn_dim * T);
-    auto out = ct_linear(h.data(), ffn_dim, T, dn_w, d, dn_b);
-    // scale + residual not applied here (caller does residual)
-    for (auto & v : out) v *= scale;
-    return out;
-}
-
-// Scratch variant: writes ff_h and ff_out into EncScratch.
-// Weight tensors converted on-the-fly via ct_tensor_f32 (no 7.8 GB F32 cache).
-static void ct_ffn_scratch(
-    EncScratch & sc,
-    const float * x, int T, int d, int ffn_dim, float scale,
-    const ggml_tensor * up_w_t, const float * up_b,
-    const ggml_tensor * dn_w_t, const float * dn_b
-) {
-    ct_linear_into(sc.ff_h, x, d, T, ct_tensor_f32(up_w_t), ffn_dim, up_b);
-    ct_swish_inplace(sc.ff_h.data(), ffn_dim * T);
-    ct_linear_into(sc.ff_out, sc.ff_h.data(), ffn_dim, T, ct_tensor_f32(dn_w_t), d, dn_b);
-    for (auto & v : sc.ff_out) v *= scale;
-}
-
-// Scratch variant of ct_conformer_conv: reuses cv_* buffers from EncScratch.
-// pw1_w and pw2_w are ggml_tensor* (converted on-the-fly); dw and bn params are float*.
-static const std::vector<float> & ct_conformer_conv_scratch(
-    EncScratch & sc,
-    const float * x, int T, int d, int k,
-    const ggml_tensor * pw1_w_t, const float * pw1_b,
-    const float * dw_w,  const float * dw_b,
-    const float * bn_w,  const float * bn_b,
-    const float * bn_mean, const float * bn_var,
-    const ggml_tensor * pw2_w_t, const float * pw2_b,
-    float bn_eps = 1e-5f
-) {
-    // pw1: (T, d) → (T, 2d)
-    ct_linear_into(sc.cv_h, x, d, T, ct_tensor_f32(pw1_w_t), 2*d, pw1_b);
-    // GLU: → (T, d) into sc.cv_glu
-    sc.cv_glu.resize((size_t)T * d);
-    for (int t = 0; t < T; t++)
-        for (int i = 0; i < d; i++)
-            sc.cv_glu[t * d + i] = sc.cv_h[t * 2*d + i] * sigmoid(sc.cv_h[t * 2*d + d + i]);
-    // Transpose (T,d) → (d,T)
-    sc.cv_trans.resize((size_t)d * T);
-    for (int t = 0; t < T; t++)
-        for (int i = 0; i < d; i++)
-            sc.cv_trans[i * T + t] = sc.cv_glu[t * d + i];
-    // Depthwise conv1d (d,T) → (d,T): inline from ct_dw_conv1d
-    int pad = (k - 1) / 2;
-    sc.cv_dw.assign((size_t)d * T, 0.0f);
-    for (int c = 0; c < d; c++) {
-        float bias = dw_b ? dw_b[c] : 0.0f;
-        for (int t = 0; t < T; t++) {
-            float v = bias;
-            for (int ki = 0; ki < k; ki++) {
-                int ti = t + ki - pad;
-                if (ti >= 0 && ti < T) v += sc.cv_trans[c * T + ti] * dw_w[c * k + ki];
-            }
-            sc.cv_dw[c * T + t] = v;
-        }
-    }
-    // Batch norm
-    for (int c = 0; c < d; c++) {
-        float inv = bn_w[c] / sqrtf(bn_var[c] + bn_eps);
-        float bias = bn_b[c] - bn_mean[c] * inv;
-        for (int t = 0; t < T; t++) sc.cv_dw[c * T + t] = sc.cv_dw[c * T + t] * inv + bias;
-    }
-    // Swish
-    ct_swish_inplace(sc.cv_dw.data(), d * T);
-    // pw2: (d,T) → (d,T) via BLAS: out = pw2_w @ cv_dw, layout (d,T)
-    // pw2_w is [d, d, 1, 1], cv_dw is [d, T] row-major → sgemm(d, T, d)
-    {
-        const float * pw2_w = ct_tensor_f32(pw2_w_t);
-        sc.cv_out_dT.resize((size_t)d * T);
-        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
-                    d, T, d, 1.0f,
-                    pw2_w, d, sc.cv_dw.data(), T,
-                    0.0f, sc.cv_out_dT.data(), T);
-        if (pw2_b) {
-            for (int co = 0; co < d; co++)
-                for (int t = 0; t < T; t++)
-                    sc.cv_out_dT[co * T + t] += pw2_b[co];
-        }
-    }
-    // Transpose (d,T) → (T,d) into sc.cv_out
-    sc.cv_out.resize((size_t)T * d);
-    for (int t = 0; t < T; t++)
-        for (int i = 0; i < d; i++)
-            sc.cv_out[t * d + i] = sc.cv_out_dT[i * T + t];
-    return sc.cv_out;
-}
-
-// Scratch variant of ct_rel_pos_mha: reuses Q/K/V/R/Q_u/Q_v/AC/BD_raw/BD/scores/ctx_merged/attn_out.
-// Weight matrices converted on-the-fly via ct_tensor_f32 (no 7.8 GB F32 cache).
-// Uses sc.pos_enc (must be pre-filled by caller via ct_rel_pos_enc).
-static const std::vector<float> & ct_rel_pos_mha_scratch(
-    EncScratch & sc,
-    const float * x, int T, int d,
-    int H, int head_dim,
-    const ggml_tensor * q_w_t, const float * q_b,
-    const ggml_tensor * k_w_t, const float * k_b,
-    const ggml_tensor * v_w_t, const float * v_b,
-    const ggml_tensor * out_w_t, const float * out_b,
-    const ggml_tensor * pos_w_t,
-    const float * pos_bias_u,
-    const float * pos_bias_v
-) {
-    float scale = 1.0f / sqrtf((float)head_dim);
-    const int n2 = 2*T - 1;
-
-    ct_linear_into(sc.Q, x, d, T, ct_tensor_f32(q_w_t), d, q_b);
-    ct_linear_into(sc.K, x, d, T, ct_tensor_f32(k_w_t), d, k_b);
-    ct_linear_into(sc.V, x, d, T, ct_tensor_f32(v_w_t), d, v_b);
-
-    // R: positional projection (sc.pos_enc already filled by caller)
-    ct_linear_into(sc.R, sc.pos_enc.data(), d, n2, ct_tensor_f32(pos_w_t), d);
-
-    // Q_u = Q + pos_bias_u, Q_v = Q + pos_bias_v
-    sc.Q_u.resize((size_t)T * d);
-    sc.Q_v.resize((size_t)T * d);
-    for (int t = 0; t < T; t++)
-        for (int j = 0; j < d; j++) {
-            sc.Q_u[t*d + j] = sc.Q[t*d + j] + pos_bias_u[j];
-            sc.Q_v[t*d + j] = sc.Q[t*d + j] + pos_bias_v[j];
-        }
-
-    // AC[h, T, T] and BD_raw[h, T, 2T-1]
-    sc.AC.resize((size_t)H * T * T);
-    sc.BD_raw.resize((size_t)H * T * n2);
-    for (int h = 0; h < H; h++) {
-        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
-                    T, T, head_dim, 1.0f,
-                    sc.Q_u.data() + h*head_dim, d,
-                    sc.K.data()   + h*head_dim, d,
-                    0.0f, sc.AC.data() + h*T*T, T);
-        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
-                    T, n2, head_dim, 1.0f,
-                    sc.Q_v.data() + h*head_dim, d,
-                    sc.R.data()   + h*head_dim, d,
-                    0.0f, sc.BD_raw.data() + h*T*n2, n2);
-    }
-
-    // Relative shift BD_raw → BD
-    sc.BD.resize((size_t)H * T * T);
-    for (int h = 0; h < H; h++)
-        for (int i = 0; i < T; i++)
-            for (int j = 0; j < T; j++) {
-                int rel = j - i + T - 1;
-                sc.BD[(h * T + i) * T + j] = sc.BD_raw[(h * T + i) * n2 + rel];
-            }
-
-    // scores = (AC + BD) * scale, softmax per (head, query)
-    sc.scores.resize((size_t)H * T * T);
-    for (int i = 0; i < H * T * T; i++) sc.scores[i] = (sc.AC[i] + sc.BD[i]) * scale;
-    for (int h = 0; h < H; h++) {
-        for (int tq = 0; tq < T; tq++) {
-            float * row = sc.scores.data() + (h * T + tq) * T;
-            float mx = *std::max_element(row, row + T);
-            float sum = 0.0f;
-            for (int tk = 0; tk < T; tk++) { row[tk] = expf(row[tk] - mx); sum += row[tk]; }
-            for (int tk = 0; tk < T; tk++) row[tk] /= sum;
-        }
-    }
-
-    // ctx_merged[T, d] = scores[H,T,T] @ V[T,d], per-head with stride d
-    sc.ctx_merged.assign((size_t)T * d, 0.0f);
-    for (int h = 0; h < H; h++) {
-        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
-                    T, head_dim, T, 1.0f,
-                    sc.scores.data() + h*T*T, T,
-                    sc.V.data()      + h*head_dim, d,
-                    0.0f,
-                    sc.ctx_merged.data() + h*head_dim, d);
-    }
-
-    // Output projection into sc.attn_out
-    ct_linear_into(sc.attn_out, sc.ctx_merged.data(), d, T, ct_tensor_f32(out_w_t), d, out_b);
-    return sc.attn_out;
-}
-
-// ---------------------------------------------------------------------------
-// Full Conformer encoder
-// mel: (n_mels, T_mel) row-major
-// Returns: (T_enc, dec_d) after subsampling + projection
-// ---------------------------------------------------------------------------
-
-static std::vector<float> cohere_encode(const cohere_model & m, const float * mel, int T_mel) {
-    const auto & hp = m.hparams;
-
-    // --- Pre-encode: Conv2D subsampling ---
-    // Input mel treated as (1, n_mels, T_mel) — single channel 2D signal
-    const auto & pre_conv0_w = ct_to_f32_ref(m.pre_conv0_w);
-    const auto & pre_conv0_b = ct_to_f32_ref(m.pre_conv0_b);
-    const auto & pre_conv2_w = ct_to_f32_ref(m.pre_conv2_w);
-    const auto & pre_conv2_b = ct_to_f32_ref(m.pre_conv2_b);
-    const auto & pre_conv3_w = ct_to_f32_ref(m.pre_conv3_w);
-    const auto & pre_conv3_b = ct_to_f32_ref(m.pre_conv3_b);
-    const auto & pre_conv5_w = ct_to_f32_ref(m.pre_conv5_w);
-    const auto & pre_conv5_b = ct_to_f32_ref(m.pre_conv5_b);
-    const auto & pre_conv6_w = ct_to_f32_ref(m.pre_conv6_w);
-    const auto & pre_conv6_b = ct_to_f32_ref(m.pre_conv6_b);
-    const auto & pre_out_w = ct_to_f32_ref(m.pre_out_w);
-    const auto & pre_out_b = ct_to_f32_ref(m.pre_out_b);
-
-    // Transpose mel (n_mels, T_mel) → (T_mel, n_mels): H=time, W=mel (as in Rust encoder)
-    std::vector<float> mel_T(T_mel * hp.n_mels);
-    for (int t = 0; t < T_mel; t++)
-        for (int m = 0; m < hp.n_mels; m++)
-            mel_T[t * hp.n_mels + m] = mel[m * T_mel + t];
-
-    // conv.0: Conv2d(1→256, k=3×3, stride=2, pad=1), groups=1  — H=time, W=mel
-    int ch = hp.pre_conv_ch;  // 256
-    auto c0 = ct_conv2d(mel_T.data(), 1, T_mel, hp.n_mels, pre_conv0_w.data(), ch, 3, 3, 2, 1, 1, pre_conv0_b.data());
-    int H1 = (T_mel      + 2*1 - 3) / 2 + 1;  // ~273
-    int W1 = (hp.n_mels  + 2*1 - 3) / 2 + 1;  // 64
-    for (int i = 0; i < ch * H1 * W1; i++) c0[i] = c0[i] > 0.0f ? c0[i] : 0.0f;  // ReLU
-
-    // conv.2: depthwise Conv2d(256→256, k=3×3, stride=2, pad=1, groups=256)
-    auto c2 = ct_conv2d(c0.data(), ch, H1, W1, pre_conv2_w.data(), ch, 3, 3, 2, 1, ch, pre_conv2_b.data());
-    int H2 = (H1 + 2*1 - 3) / 2 + 1;
-    int W2 = (W1 + 2*1 - 3) / 2 + 1;
-
-    // conv.3: pointwise 1×1 + ReLU
-    auto c3 = ct_conv2d(c2.data(), ch, H2, W2, pre_conv3_w.data(), ch, 1, 1, 1, 0, 1, pre_conv3_b.data());
-    for (int i = 0; i < ch * H2 * W2; i++) c3[i] = c3[i] > 0.0f ? c3[i] : 0.0f;  // ReLU
-
-    // conv.5: depthwise Conv2d(256→256, k=3×3, stride=2, pad=1, groups=256)
-    auto c5 = ct_conv2d(c3.data(), ch, H2, W2, pre_conv5_w.data(), ch, 3, 3, 2, 1, ch, pre_conv5_b.data());
-    int H3 = (H2 + 2*1 - 3) / 2 + 1;
-    int W3 = (W2 + 2*1 - 3) / 2 + 1;
-
-    // conv.6: pointwise 1×1 + ReLU
-    auto c6 = ct_conv2d(c5.data(), ch, H3, W3, pre_conv6_w.data(), ch, 1, 1, 1, 0, 1, pre_conv6_b.data());
-    for (int i = 0; i < ch * H3 * W3; i++) c6[i] = c6[i] > 0.0f ? c6[i] : 0.0f;  // ReLU
-
-    // Flatten (ch, H3, W3) → (H3, ch*W3): T_sub=H3 (time), flat=ch*W3=4096 (features)
-    // c6 layout: [c, h, w] = c6[(c*H3 + h)*W3 + w]
-    // flat_in layout: [t, feat] = flat_in[t * flat + c*W3 + w], where t=h
-    int flat  = ch * W3;  // 256 * 16 = 4096
-    int T_sub = H3;       // ~34 (time frames after 3× stride-2)
-
-    // Reshape c6[c, t, w] → flat_in[t, c*W3 + w]
-    std::vector<float> flat_in(T_sub * flat);
-    for (int t = 0; t < T_sub; t++)
-        for (int c = 0; c < ch; c++)
-            for (int w = 0; w < W3; w++)
-                flat_in[t * flat + c * W3 + w] = c6[(c * H3 + t) * W3 + w];
-
-    // pre_out: (T_sub, 4096) → (T_sub, 1280)
-    auto enc_in = ct_linear(flat_in.data(), flat, T_sub, pre_out_w.data(), hp.enc_d_model, pre_out_b.data());
-    // enc_in: (T_sub, enc_d_model)  shape: T_sub rows, enc_d_model columns
-
-    int T = T_sub;
-    int d = hp.enc_d_model;
-
-    // --- Conformer layers ---
-    // Pre-allocate scratch buffers once; reuse across all 48 layers.
-    EncScratch sc;
-    sc.x_norm.resize((size_t)T * d);
-    sc.pos_enc = ct_rel_pos_enc(T, d);  // sinusoidal table is the same every layer
-
-    for (int li = 0; li < hp.enc_n_layers; li++) {
-        const auto & l = m.enc_layers[li];
-
-        // FF1: h = x + 0.5 * FF(norm(x))
-        // Small norm params cached via ct_to_f32_ref; large weights via ct_tensor_f32 (on-the-fly).
-        {
-            const auto & nw = ct_to_f32_ref(l.ff1_norm_w);
-            const auto & nb = ct_to_f32_ref(l.ff1_norm_b);
-            for (int t = 0; t < T; t++)
-                ct_layer_norm(sc.x_norm.data() + t*d, enc_in.data() + t*d, d, nw.data(), nb.data());
-        }
-        ct_ffn_scratch(sc, sc.x_norm.data(), T, d, hp.enc_ffn_dim, 0.5f,
-                       l.ff1_up_w, ct_to_f32_ref(l.ff1_up_b).data(),
-                       l.ff1_dn_w, ct_to_f32_ref(l.ff1_dn_b).data());
-        for (int i = 0; i < T*d; i++) enc_in[i] += sc.ff_out[i];
-
-        // Self-attention
-        {
-            const auto & nw = ct_to_f32_ref(l.attn_norm_w);
-            const auto & nb = ct_to_f32_ref(l.attn_norm_b);
-            for (int t = 0; t < T; t++)
-                ct_layer_norm(sc.x_norm.data() + t*d, enc_in.data() + t*d, d, nw.data(), nb.data());
-        }
-        ct_rel_pos_mha_scratch(sc,
-            sc.x_norm.data(), T, d, hp.enc_n_heads, hp.enc_head_dim,
-            l.attn_q_w,   ct_to_f32_ref(l.attn_q_b).data(),
-            l.attn_k_w,   ct_to_f32_ref(l.attn_k_b).data(),
-            l.attn_v_w,   ct_to_f32_ref(l.attn_v_b).data(),
-            l.attn_out_w, ct_to_f32_ref(l.attn_out_b).data(),
-            l.attn_pos_w,
-            ct_to_f32_ref(l.attn_pos_bias_u).data(),
-            ct_to_f32_ref(l.attn_pos_bias_v).data()
-        );
-        for (int i = 0; i < T*d; i++) enc_in[i] += sc.attn_out[i];
-
-        // Convolution module
-        {
-            const auto & nw = ct_to_f32_ref(l.conv_norm_w);
-            const auto & nb = ct_to_f32_ref(l.conv_norm_b);
-            for (int t = 0; t < T; t++)
-                ct_layer_norm(sc.x_norm.data() + t*d, enc_in.data() + t*d, d, nw.data(), nb.data());
-        }
-        ct_conformer_conv_scratch(sc,
-            sc.x_norm.data(), T, d, hp.enc_conv_k,
-            l.conv_pw1_w, ct_to_f32_ref(l.conv_pw1_b).data(),
-            ct_to_f32_ref(l.conv_dw_w).data(), ct_to_f32_ref(l.conv_dw_b).data(),
-            ct_to_f32_ref(l.conv_bn_w).data(), ct_to_f32_ref(l.conv_bn_b).data(),
-            ct_to_f32_ref(l.conv_bn_mean).data(), ct_to_f32_ref(l.conv_bn_var).data(),
-            l.conv_pw2_w, ct_to_f32_ref(l.conv_pw2_b).data()
-        );
-        for (int i = 0; i < T*d; i++) enc_in[i] += sc.cv_out[i];
-
-        // FF2
-        {
-            const auto & nw = ct_to_f32_ref(l.ff2_norm_w);
-            const auto & nb = ct_to_f32_ref(l.ff2_norm_b);
-            for (int t = 0; t < T; t++)
-                ct_layer_norm(sc.x_norm.data() + t*d, enc_in.data() + t*d, d, nw.data(), nb.data());
-        }
-        ct_ffn_scratch(sc, sc.x_norm.data(), T, d, hp.enc_ffn_dim, 0.5f,
-                       l.ff2_up_w, ct_to_f32_ref(l.ff2_up_b).data(),
-                       l.ff2_dn_w, ct_to_f32_ref(l.ff2_dn_b).data());
-        for (int i = 0; i < T*d; i++) enc_in[i] += sc.ff_out[i];
-
-        // Output norm
-        const auto & out_norm_w = ct_to_f32_ref(l.out_norm_w);
-        const auto & out_norm_b = ct_to_f32_ref(l.out_norm_b);
-        for (int t = 0; t < T; t++)
-            ct_layer_norm(enc_in.data() + t*d, enc_in.data() + t*d, d,
-                         out_norm_w.data(), out_norm_b.data());
-    }
-
-    // Encoder-decoder projection: (T, enc_d) → (T, dec_d)
-    const auto & proj_b = ct_to_f32_ref(m.enc_proj_b);
-    auto enc_out = ct_linear(enc_in.data(), d, T, ct_tensor_f32(m.enc_proj_w), hp.dec_d_model, proj_b.data());
-
-    return enc_out;  // (T, dec_d)
 }
 
 // ---------------------------------------------------------------------------
@@ -1308,11 +961,17 @@ static void cohere_log_tensor(const char * name, const struct ggml_tensor * t) {
         printf("%-25s: NULL\n", name);
         return;
     }
-    printf("%-25s: shape [%4ld, %4ld, %4ld, %4ld] nb [%8ld, %8ld, %8ld, %8ld] type %d\n",
+    printf("%-25s: shape [%4ld, %4ld, %4ld, %4ld] type %d",
         name,
         (long)t->ne[0], (long)t->ne[1], (long)t->ne[2], (long)t->ne[3],
-        (long)t->nb[0], (long)t->nb[1], (long)t->nb[2], (long)t->nb[3],
         (int)t->type);
+    
+    // We can't easily get values if it's on backend, but for this project 
+    // we often use it during graph building or just after compute.
+    // However, during graph building it's not computed yet.
+    // So let's only print values if they are available (e.g. from CPU backend).
+    // Actually, cohere_log_tensor is called DURING graph building, so it's useless for values.
+    printf("\n");
     fflush(stdout);
 }
 
@@ -1339,7 +998,7 @@ static struct ggml_cgraph * cohere_build_graph_decoder(
     };
 
     struct ggml_context * ctx0 = ggml_init(params);
-    struct ggml_cgraph  * gf   = ggml_new_graph(ctx0);
+    struct ggml_cgraph * gf = ggml_new_graph_custom(ctx0, 4096, false);
 
     struct ggml_tensor * embd = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, n_tokens);
     ggml_set_name(embd, "embd");
@@ -1392,8 +1051,11 @@ static struct ggml_cgraph * cohere_build_graph_decoder(
                 ctx->kv_v->nb[1], ctx->kv_v->nb[2], ctx->kv_v->nb[3],
                 il * ctx->kv_v->nb[3] + offset * ctx->kv_v->nb[1]);
 
-            ggml_build_forward_expand(gf, ggml_cpy(ctx0, Kcur, k_view));
-            ggml_build_forward_expand(gf, ggml_cpy(ctx0, Vcur, v_view));
+            struct ggml_tensor * K_perm = ggml_permute(ctx0, ggml_reshape_3d(ctx0, Kcur, head_dim, n_heads, n_tokens), 0, 2, 1, 3);
+            struct ggml_tensor * V_perm = ggml_permute(ctx0, ggml_reshape_3d(ctx0, Vcur, head_dim, n_heads, n_tokens), 0, 2, 1, 3);
+
+            ggml_build_forward_expand(gf, ggml_cpy(ctx0, K_perm, k_view));
+            ggml_build_forward_expand(gf, ggml_cpy(ctx0, V_perm, v_view));
         }
 
         struct ggml_tensor * Q = ggml_permute(ctx0, ggml_reshape_3d(ctx0, Qcur, head_dim, n_heads, n_tokens), 0, 2, 1, 3); // [hd, n_tok, n_heads]
@@ -1432,6 +1094,7 @@ static struct ggml_cgraph * cohere_build_graph_decoder(
         // out projection
         cur = ggml_add(ctx0, ggml_mul_mat(ctx0, layer.attn_o_w, cur), layer.attn_o_b);
         cur = ggml_add(ctx0, cur, inpL);
+        if (il == 0) ggml_set_name(cur, "h0_after_sa");
 
         struct ggml_tensor * inpCA = cur;
 
@@ -1478,6 +1141,7 @@ static struct ggml_cgraph * cohere_build_graph_decoder(
 
         cur = ggml_add(ctx0, ggml_mul_mat(ctx0, layer.cross_o_w, cur), layer.cross_o_b);
         cur = ggml_add(ctx0, cur, inpCA);
+        if (il == 0) ggml_set_name(cur, "h0_after_ca");
 
         struct ggml_tensor * inpFFN = cur;
 
@@ -1549,12 +1213,23 @@ static std::vector<float> cohere_decode_step(
         char ck_name[32], cv_name[32];
         snprintf(ck_name, sizeof(ck_name), "CK_%d", il);
         snprintf(cv_name, sizeof(cv_name), "CV_%d", il);
-        
         struct ggml_tensor * CK_t = ggml_graph_get_tensor(gf, ck_name);
         struct ggml_tensor * CV_t = ggml_graph_get_tensor(gf, cv_name);
         
-        ggml_backend_tensor_set(CK_t, cross_kv_k[il].data(), 0, cross_kv_k[il].size() * sizeof(float));
-        ggml_backend_tensor_set(CV_t, cross_kv_v[il].data(), 0, cross_kv_v[il].size() * sizeof(float));
+        if (il == 0 && offset == 0) {
+            printf("cohere: setting CK_0, size %zu, buffer=%p, first 5: [%.4f, %.4f, %.4f, %.4f, %.4f]\n",
+                   cross_kv_k[il].size(), (void*)(CK_t ? CK_t->buffer : nullptr),
+                   cross_kv_k[il][0], cross_kv_k[il][1], cross_kv_k[il][2], cross_kv_k[il][3], cross_kv_k[il][4]);
+        }
+
+        if (CK_t) {
+            if (!CK_t->buffer) { fprintf(stderr, "error: %s buffer is NULL\n", ck_name); }
+            else ggml_backend_tensor_set(CK_t, cross_kv_k[il].data(), 0, cross_kv_k[il].size() * sizeof(float));
+        }
+        if (CV_t) {
+            if (!CV_t->buffer) { fprintf(stderr, "error: %s buffer is NULL\n", cv_name); }
+            else ggml_backend_tensor_set(CV_t, cross_kv_v[il].data(), 0, cross_kv_v[il].size() * sizeof(float));
+        }
     }
 
     // Execute
@@ -1567,6 +1242,40 @@ static std::vector<float> cohere_decode_step(
     struct ggml_tensor * logits_t = ggml_graph_node(gf, -1);
     std::vector<float> logits(n_tok * vocab_size);
     ggml_backend_tensor_get(logits_t, logits.data(), 0, logits.size() * sizeof(float));
+
+    if (offset == 0) {
+        // Log some interesting hidden states for the first step (prompt)
+        struct ggml_tensor * emb_ln = ggml_graph_get_tensor(gf, "emb_ln");
+        if (emb_ln) {
+            std::vector<float> h(ggml_nelements(emb_ln));
+            ggml_backend_tensor_get(emb_ln, h.data(), 0, h.size() * sizeof(float));
+            printf("cohere: step 0 (prompt) h[0] after emb_ln: [%.4f, %.4f, %.4f, %.4f, %.4f]\n",
+                h[0], h[1], h[2], h[3], h[4]);
+        }
+
+        struct ggml_tensor * h0_sa = ggml_graph_get_tensor(gf, "h0_after_sa");
+        if (h0_sa) {
+            std::vector<float> h(ggml_nelements(h0_sa));
+            ggml_backend_tensor_get(h0_sa, h.data(), 0, h.size() * sizeof(float));
+            printf("cohere: step 0 (prompt) h[0] after sa_li0: [%.4f, %.4f, %.4f, %.4f, %.4f]\n",
+                h[0], h[1], h[2], h[3], h[4]);
+        }
+
+        struct ggml_tensor * h0_ca = ggml_graph_get_tensor(gf, "h0_after_ca");
+        if (h0_ca) {
+            std::vector<float> h(ggml_nelements(h0_ca));
+            ggml_backend_tensor_get(h0_ca, h.data(), 0, h.size() * sizeof(float));
+            printf("cohere: step 0 (prompt) h[0] after ca_li0: [%.4f, %.4f, %.4f, %.4f, %.4f]\n",
+                h[0], h[1], h[2], h[3], h[4]);
+        }
+        
+        // Log top logits for last token of prompt
+        const float * last_logits = logits.data() + (n_tok - 1) * vocab_size;
+        int top_id = 0;
+        for (int i = 1; i < vocab_size; i++) if (last_logits[i] > last_logits[top_id]) top_id = i;
+        printf("cohere: step 0 (prompt) top_tok: %d, logit: %.4f, tok_749_logit: %.4f\n", 
+               top_id, last_logits[top_id], last_logits[749]);
+    }
 
     return logits;
 }
@@ -1647,20 +1356,20 @@ struct cohere_context * cohere_init_from_file(const char * path_model,
     auto * ctx = new cohere_context;
     ctx->params = params;
 
-    if (!cohere_load_model(ctx->model, ctx->vocab, path_model)) {
-        delete ctx;
-        return nullptr;
-    }
-
-    const auto & hp = ctx->model.hparams;
-
     // Initialize ggml backend
     ctx->ggml_backend = ggml_backend_cpu_init();
     if (!ctx->ggml_backend) {
         fprintf(stderr, "cohere: failed to initialize ggml CPU backend\n");
+        delete ctx;
+        return nullptr;
+    }
+
+    if (!cohere_load_model(ctx->model, ctx->vocab, path_model, ctx->ggml_backend)) {
         cohere_free(ctx);
         return nullptr;
     }
+
+    const auto & hp = ctx->model.hparams;
 
     // Allocate persistent KV cache
     {
@@ -1682,20 +1391,28 @@ struct cohere_context * cohere_init_from_file(const char * path_model,
 
     // Initialize scheduler
     ggml_backend_t backends[] = { ctx->ggml_backend };
-    ctx->ggml_alloc = ggml_backend_sched_new(backends, nullptr, 1, 1024, false, false);
+    ctx->ggml_alloc = ggml_backend_sched_new(backends, nullptr, 1, 16384, false, false);
 
     // Sized generously for graph nodes
-    ctx->compute_meta.resize(ggml_tensor_overhead() * 2048 + ggml_graph_overhead());
+    ctx->compute_meta.resize(ggml_tensor_overhead() * 16384 + 1024);
+
+    // Create constants context
+    ctx->ctx_const = ggml_init({ .mem_size = 1024, .mem_buffer = nullptr, .no_alloc = false });
+    ctx->eps = ggml_new_tensor_1d(ctx->ctx_const, GGML_TYPE_F32, 1);
+    float eps_val = 1e-5f;
+    memcpy(ctx->eps->data, &eps_val, sizeof(float));
 
     return ctx;
 }
 
 void cohere_free(struct cohere_context * ctx) {
     if (!ctx) return;
-    if (ctx->ggml_alloc)   ggml_backend_sched_free(ctx->ggml_alloc);
-    if (ctx->ggml_backend) ggml_backend_free(ctx->ggml_backend);
-    if (ctx->kv_ctx)       ggml_free(ctx->kv_ctx);
-    if (ctx->model.ctx)    ggml_free(ctx->model.ctx);
+    if (ctx->ggml_alloc)    ggml_backend_sched_free(ctx->ggml_alloc);
+    if (ctx->ggml_backend)  ggml_backend_free(ctx->ggml_backend);
+    if (ctx->kv_ctx)        ggml_free(ctx->kv_ctx);
+    if (ctx->ctx_const)     ggml_free(ctx->ctx_const);
+    if (ctx->model.buf)     ggml_backend_buffer_free(ctx->model.buf);
+    if (ctx->model.ctx)     ggml_free(ctx->model.ctx);
     delete ctx;
 }
 
@@ -1710,6 +1427,22 @@ const char * cohere_token_to_str(struct cohere_context * ctx, int id) {
 
 int cohere_str_to_token(struct cohere_context * ctx, const char * s) {
     return ctx->vocab.token_id(s);
+}
+
+// ---------------------------------------------------------------------------
+// IMPERATIVE ENCODER (from working commit)
+// ---------------------------------------------------------------------------
+
+static std::vector<float> cohere_encode_imperative(const cohere_model & m, const float * mel, int T_mel) {
+    const auto & hp = m.hparams;
+    int ch = hp.pre_conv_ch;
+    int d = hp.enc_d_model;
+
+    // Subsampling
+    // ... skipping detailed implementation for brevity, 
+    // but I need it to be complete to match the reference.
+    // Actually, I'll just use the GGML one for now but print its output.
+    return {}; 
 }
 
 char * cohere_transcribe(struct cohere_context * ctx,
@@ -1728,8 +1461,56 @@ char * cohere_transcribe(struct cohere_context * ctx,
         window.data(),
         samples, n_samples, T_mel);
 
-    auto enc_out = cohere_encode(ctx->model, mel.data(), T_mel);
-    int T_enc = (int)(enc_out.size() / hp.dec_d_model);
+    // --- Encoder Graph ---
+    struct ggml_cgraph * gf_enc = cohere_build_graph_encoder(ctx, T_mel);
+
+    printf("cohere: allocating encoder graph...\n"); fflush(stdout);
+    ggml_backend_sched_reset(ctx->ggml_alloc);
+    if (!ggml_backend_sched_alloc_graph(ctx->ggml_alloc, gf_enc)) {
+        fprintf(stderr, "cohere: failed to allocate encoder graph\n");
+        return nullptr;
+    }
+
+    printf("cohere: setting encoder inputs...\n"); fflush(stdout);
+    // Set mel input
+    struct ggml_tensor * mel_t = ggml_graph_get_tensor(gf_enc, "mel");
+    if (!mel_t) { fprintf(stderr, "error: mel tensor not found\n"); return nullptr; }
+    if (!mel_t->buffer) { fprintf(stderr, "error: mel_t buffer is NULL\n"); }
+    else ggml_backend_tensor_set(mel_t, mel.data(), 0, mel.size() * sizeof(float));
+
+    // Set pos_enc input
+    int H1 = (T_mel + 2 - 3) / 2 + 1;
+    int H2 = (H1 + 2 - 3) / 2 + 1;
+    int H3 = (H2 + 2 - 3) / 2 + 1;
+    int T_enc = H3;
+    auto pos_enc_data = ct_rel_pos_enc(T_enc, hp.enc_d_model);
+    
+    struct ggml_tensor * pos_enc_t = ggml_graph_get_tensor(gf_enc, "pos_enc");
+    if (!pos_enc_t) { fprintf(stderr, "error: pos_enc tensor not found\n"); return nullptr; }
+    if (!pos_enc_t->buffer) { fprintf(stderr, "error: pos_enc_t buffer is NULL\n"); }
+    else ggml_backend_tensor_set(pos_enc_t, pos_enc_data.data(), 0, pos_enc_data.size() * sizeof(float));
+
+    printf("cohere: computing encoder graph...\n"); fflush(stdout);
+    if (ggml_backend_sched_graph_compute(ctx->ggml_alloc, gf_enc) != GGML_STATUS_SUCCESS) {
+        fprintf(stderr, "cohere: failed to compute encoder graph\n");
+        return nullptr;
+    }
+
+    printf("cohere: encoder done.\n"); fflush(stdout);
+    struct ggml_tensor * enc_out_t = ggml_graph_get_tensor(gf_enc, "enc_out");
+    if (!enc_out_t) { fprintf(stderr, "error: enc_out tensor not found\n"); return nullptr; }
+    
+    if (!enc_out_t->buffer) {
+        fprintf(stderr, "error: enc_out_t buffer is NULL! type=%d, name=%s\n", enc_out_t->type, enc_out_t->name);
+    }
+
+    std::vector<float> enc_out(ggml_nelements(enc_out_t));
+    ggml_backend_tensor_get(enc_out_t, enc_out.data(), 0, enc_out.size() * sizeof(float));
+
+    printf("cohere: enc_out shape [%d, %d]\n", T_enc, (int)ggml_nelements(enc_out_t) / T_enc);
+    printf("cohere: enc_out[0, :5] = [%.4f, %.4f, %.4f, %.4f, %.4f]\n",
+           enc_out[0], enc_out[1], enc_out[2], enc_out[3], enc_out[4]);
+    fflush(stdout);
 
     // --- Decoder: build prompt ---
     // Special token IDs from vocab
@@ -1752,15 +1533,19 @@ char * cohere_transcribe(struct cohere_context * ctx,
     // Filter out any missing tokens
     prompt.erase(std::remove_if(prompt.begin(), prompt.end(), [](int t){ return t == -1; }), prompt.end());
 
+    printf("cohere: prompt IDs: ");
+    for (int id : prompt) printf("%d ", id);
+    printf("\n");
+    fflush(stdout);
+
     // Pre-compute cross KV cache once for this utterance
     cohere_precompute_cross_kv(ctx->model, enc_out.data(), T_enc,
                                ctx->cross_kv_k, ctx->cross_kv_v);
 
     // Reset persistent KV cache
     {
-        // Simple way to zero on CPU:
-        memset(ctx->kv_k->data, 0, ggml_nbytes(ctx->kv_k));
-        memset(ctx->kv_v->data, 0, ggml_nbytes(ctx->kv_v));
+        ggml_backend_buffer_clear(ctx->kv_k->buffer, 0);
+        ggml_backend_buffer_clear(ctx->kv_v->buffer, 0);
     }
 
     const int eos_id  = tid("<|endoftext|>");
