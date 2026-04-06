@@ -26,7 +26,7 @@ This document tracks the progress of porting `cohere-whisper.cpp` to a full `ggm
 - [x] **Phase 4: Advanced Features**
     - [x] Quantization tool (Q8_0, Q4_K, etc.).
     - [ ] GPU Backend support (CUDA/Metal).
-    - [ ] Flash Attention for decoder.
+    - [x] Flash Attention for decoder (cross-attention; self-attention: CPU GEMV faster than flash for small n_kv).
 - [x] **Phase 3B: Post-graph micro-optimizations**
     - [x] BatchNorm folding: fold BN stats into conv_dw weights at load time (480 nodes removed, ~7% F16 enc speedup, Q4_K → RTF 1.15×).
     - [x] mmap weight loading: replace fread+vector into mmap to eliminate heap churn (done; load time = disk I/O, not software overhead).
@@ -46,6 +46,7 @@ This document tracks the progress of porting `cohere-whisper.cpp` to a full `ggm
 - Decoder sched pre-reserve: **Done and verified** — dec sched alloc 0.65 → 0.22 ms/step (66% reduction).
 - Encoder attention cont removal: **Done and verified** — removed redundant cont on Q_u/Q_v, enc compute ~8% faster (11.3s → 10.4s for 12s audio).
 - F16 cross-KV cache: **Done and verified** — cross-kv memory halved (8.6→4.3 MiB for JFK, ~35 MiB for 89s audio). CPU `ggml_fp32_to_fp16_row` conversion, not in-graph cast.
+- Flash attention for cross-attention: **Done and verified** — encoder now produces CV in `[hd, T, H]` layout (same as CK); decoder uses `ggml_flash_attn_ext` for cross-attention (no mask); multi-chunk V scatter simplified to contiguous block-copy (matches K scatter). Self-attention uses standard GEMV path (CPU flash_attn_ext is slower for small n_kv). **Pitfall**: storing V in `[hd, T, H]` and reverting to standard mul_mat requires an expensive in-graph transpose (18MB/step for long audio) — don't do this. Flash cross-attn is neutral on CPU and fast on GPU.
 
 ## Phase 5: Technical Learnings & Pitfalls (CRITICAL)
 
