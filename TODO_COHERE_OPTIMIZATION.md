@@ -35,7 +35,7 @@ This document tracks the progress of porting `cohere-whisper.cpp` to a full `ggm
     - [x] Chunked encoder: process long audio in 30s windows to cap O(T²) attention cost.
     - [x] Decoder sched pre-reserve: call `ggml_backend_sched_reserve` with a max-offset step graph after the prompt pass so that gallocr's `size_max` covers all future autoregressive steps; `ggml_gallocr_needs_realloc` returns false and the re-planning cost is eliminated (dec sched alloc: 0.65 → 0.22 ms/step, 66% reduction).
     - [x] Encoder attention: remove redundant `ggml_cont` from Q_u and Q_v (second args of `mul_mat`); CPU backend's `from_float` handles non-contiguous src1 directly, eliminating the intermediate F32 copy and reducing cache pressure (−96 cont ops, enc compute ~8% faster).
-    - [x] F16 cross-KV cache: cast ck/cv to F16 in encoder graph (`ggml_cast(..., GGML_TYPE_F16)`) before extracting to CPU; store `cross_kv_k/v` tensors as `GGML_TYPE_F16`; decoder's `ggml_mul_mat` handles F16×F32 natively. Cross-KV memory halved (~70 → ~35 MiB for 89s audio), halving cross-attention memory-bandwidth per decoder step.
+    - [x] F16 cross-KV cache: convert F32 encoder output to F16 on CPU via `ggml_fp32_to_fp16_row` before uploading to `GGML_TYPE_F16` cross-KV backend tensors; decoder `ggml_mul_mat(F16_CK, F32_CQ)` handled natively. Cross-KV memory halved (8.6→4.3 MiB for JFK, ~70→~35 MiB for 89s audio). **Pitfall**: using `ggml_cast(..., GGML_TYPE_F16)` inside the encoder compute graph corrupts data (GGML_OP_CPY with `src[1]=result` self-reference confuses the gallocr) — always convert on the CPU side.
 
 ## Current Status
 - Decoder: **Graph implementation functional and verified**.
@@ -45,7 +45,7 @@ This document tracks the progress of porting `cohere-whisper.cpp` to a full `ggm
 - Chunked encoder (30s windows): **Done and verified** — 89s audio Q4_K 4-thread: RTF 1.07× vs 1.26× full-audio (16% speedup). Threads=1: 0.35×, threads=2: 0.66×, threads=4: 1.07×.
 - Decoder sched pre-reserve: **Done and verified** — dec sched alloc 0.65 → 0.22 ms/step (66% reduction).
 - Encoder attention cont removal: **Done and verified** — removed redundant cont on Q_u/Q_v, enc compute ~8% faster (11.3s → 10.4s for 12s audio).
-- F16 cross-KV cache: **Done and verified** — cross-kv memory halved (34.9 MiB for 89s audio), correctness confirmed against F32 reference.
+- F16 cross-KV cache: **Done and verified** — cross-kv memory halved (8.6→4.3 MiB for JFK, ~35 MiB for 89s audio). CPU `ggml_fp32_to_fp16_row` conversion, not in-graph cast.
 
 ## Phase 5: Technical Learnings & Pitfalls (CRITICAL)
 
