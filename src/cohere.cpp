@@ -13,6 +13,12 @@
 #include "ggml-cpu.h"
 #include "ggml-alloc.h"
 #include "ggml-backend.h"
+#if defined(GGML_USE_METAL)
+#include "ggml-metal.h"
+#endif
+#if defined(GGML_USE_CUDA)
+#include "ggml-cuda.h"
+#endif
 
 #include <algorithm>
 #include <cassert>
@@ -159,8 +165,77 @@ static void cohere_perf_print(const cohere_perf & p, int n_samples, int sample_r
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Per-op profiling (COHERE_PROF=1)
 // ---------------------------------------------------------------------------
+
+struct cohere_op_prof {
+    int64_t t_us  = 0;
+    int     count = 0;
+};
+
+struct cohere_prof_state {
+    // coarse buckets
+    cohere_op_prof mul_mat;    // GGML_OP_MUL_MAT
+    cohere_op_prof soft_max;   // GGML_OP_SOFT_MAX
+    cohere_op_prof norm;       // GGML_OP_NORM / RMS_NORM
+    cohere_op_prof cont;       // GGML_OP_CONT
+    cohere_op_prof im2col;     // GGML_OP_IM2COL (part of conv1d_dw expansion)
+    cohere_op_prof add;        // GGML_OP_ADD / GGML_OP_MUL / GGML_OP_SCALE
+    cohere_op_prof other;      // everything else (view, reshape, permute, silu, etc.)
+    int64_t t_node_start = 0;  // wall time before node execute (ask=true)
+};
+
+static bool cohere_prof_eval_cb(struct ggml_tensor * t, bool ask, void * user_data) {
+    auto * ps = (cohere_prof_state *)user_data;
+    if (ask) {
+        ps->t_node_start = ggml_time_us();
+        return true;
+    }
+    int64_t dt = ggml_time_us() - ps->t_node_start;
+    switch (t->op) {
+        case GGML_OP_MUL_MAT:     ps->mul_mat.t_us  += dt; ps->mul_mat.count++;  break;
+        case GGML_OP_SOFT_MAX:    ps->soft_max.t_us += dt; ps->soft_max.count++; break;
+        case GGML_OP_NORM:
+        case GGML_OP_RMS_NORM:    ps->norm.t_us     += dt; ps->norm.count++;     break;
+        case GGML_OP_CONT:        ps->cont.t_us     += dt; ps->cont.count++;     break;
+        case GGML_OP_IM2COL:
+        case GGML_OP_IM2COL_3D:   ps->im2col.t_us   += dt; ps->im2col.count++;  break;
+        case GGML_OP_ADD:
+        case GGML_OP_MUL:
+        case GGML_OP_SCALE:       ps->add.t_us      += dt; ps->add.count++;     break;
+        default:                  ps->other.t_us    += dt; ps->other.count++;    break;
+    }
+    return true;
+}
+
+static void cohere_prof_print(const cohere_prof_state & ps) {
+    auto pct = [&](int64_t v, int64_t total) {
+        return total > 0 ? 100.0 * v / total : 0.0;
+    };
+    int64_t total = ps.mul_mat.t_us + ps.soft_max.t_us + ps.norm.t_us
+                  + ps.cont.t_us + ps.im2col.t_us + ps.add.t_us + ps.other.t_us;
+    fprintf(stderr, "cohere: -------- encoder op profile (COHERE_PROF) --------\n");
+    fprintf(stderr, "cohere:  %-12s  %7.1f ms  %5.1f%%  n=%d\n",
+            "mul_mat",   ps.mul_mat.t_us/1e3,   pct(ps.mul_mat.t_us,total),   ps.mul_mat.count);
+    fprintf(stderr, "cohere:  %-12s  %7.1f ms  %5.1f%%  n=%d\n",
+            "soft_max",  ps.soft_max.t_us/1e3,  pct(ps.soft_max.t_us,total),  ps.soft_max.count);
+    fprintf(stderr, "cohere:  %-12s  %7.1f ms  %5.1f%%  n=%d\n",
+            "norm",      ps.norm.t_us/1e3,      pct(ps.norm.t_us,total),      ps.norm.count);
+    fprintf(stderr, "cohere:  %-12s  %7.1f ms  %5.1f%%  n=%d\n",
+            "cont",      ps.cont.t_us/1e3,      pct(ps.cont.t_us,total),      ps.cont.count);
+    fprintf(stderr, "cohere:  %-12s  %7.1f ms  %5.1f%%  n=%d\n",
+            "im2col",    ps.im2col.t_us/1e3,    pct(ps.im2col.t_us,total),    ps.im2col.count);
+    fprintf(stderr, "cohere:  %-12s  %7.1f ms  %5.1f%%  n=%d\n",
+            "add/mul/sc", ps.add.t_us/1e3,      pct(ps.add.t_us,total),       ps.add.count);
+    fprintf(stderr, "cohere:  %-12s  %7.1f ms  %5.1f%%  n=%d\n",
+            "other",     ps.other.t_us/1e3,     pct(ps.other.t_us,total),     ps.other.count);
+    fprintf(stderr, "cohere:  %-12s  %7.1f ms  (measured sum; real enc may differ due to overhead)\n",
+            "TOTAL",     total/1e3);
+    fprintf(stderr, "cohere: -------------------------------------------------------\n");
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
 
 // ---------------------------------------------------------------------------
 // Model hyperparams
@@ -332,9 +407,10 @@ struct cohere_context {
     std::vector<struct ggml_tensor *> cross_kv_k;
     std::vector<struct ggml_tensor *> cross_kv_v;
 
-    // ggml backend for compute graph execution (CPU; GPU backends slot in here later)
-    ggml_backend_t       ggml_backend = nullptr;
-    ggml_backend_sched_t ggml_alloc   = nullptr;
+    // ggml backends: primary (GPU if available, else CPU) + CPU fallback for unsupported ops
+    ggml_backend_t       ggml_backend     = nullptr; // primary backend (Metal/CUDA/CPU)
+    ggml_backend_t       ggml_backend_cpu = nullptr; // always CPU; used as sched fallback
+    ggml_backend_sched_t ggml_alloc       = nullptr;
 
     // Metadata context for graph node descriptors (no_alloc=true; actual buffers via gallocr)
     // Sized generously; only holds ggml_tensor_overhead() * N_NODES bytes.
@@ -1343,10 +1419,9 @@ struct cohere_context * cohere_init_from_file(const char * path_model,
     auto * ctx = new cohere_context;
     ctx->params = params;
 
-    // Thread count: params.n_threads, overridable via COHERE_THREADS env var.
-    // NOTE: ggml_backend_cpu_set_n_threads is intentionally NOT called by default —
-    // profiling showed it regressed performance for our matrix sizes.
-    // Set COHERE_THREADS=N to opt-in and compare.
+    // Thread count: overridable via COHERE_THREADS env var.
+    // NOTE: ggml_backend_cpu_set_n_threads is NOT called by default —
+    // profiling showed it regressed perf for our small matrix sizes.
     {
         const char * env = getenv("COHERE_THREADS");
         if (env) {
@@ -1354,24 +1429,50 @@ struct cohere_context * cohere_init_from_file(const char * path_model,
             if (n > 0) params.n_threads = n;
         }
     }
-    fprintf(stderr, "cohere: n_threads param=%d (use COHERE_THREADS=N to override)\n",
-            params.n_threads);
 
-    // Initialize ggml backend
-    ctx->ggml_backend = ggml_backend_cpu_init();
-    if (!ctx->ggml_backend) {
-        fprintf(stderr, "cohere: failed to initialize ggml CPU backend\n");
-        delete ctx;
-        return nullptr;
+    // ---------------------------------------------------------------------------
+    // Backend selection: GPU first (Metal/CUDA), CPU fallback.
+    // Set COHERE_DEVICE=cpu  to force CPU.
+    // Set COHERE_DEVICE=metal (or cuda) to request a specific backend.
+    // ---------------------------------------------------------------------------
+    ggml_backend_load_all(); // registers Metal (macOS), CUDA, Vulkan, etc. if compiled in
+
+    {
+        const char * dev_env = getenv("COHERE_DEVICE");
+        if (dev_env && strlen(dev_env) > 0) {
+            ctx->ggml_backend = ggml_backend_init_by_name(dev_env, nullptr);
+            if (!ctx->ggml_backend) {
+                fprintf(stderr, "cohere: WARNING: COHERE_DEVICE='%s' not available, falling back\n", dev_env);
+            }
+        }
+        if (!ctx->ggml_backend) {
+            ctx->ggml_backend = ggml_backend_init_best(); // GPU > CPU
+        }
+        if (!ctx->ggml_backend) {
+            fprintf(stderr, "cohere: failed to initialize any ggml backend\n");
+            delete ctx;
+            return nullptr;
+        }
     }
+
+    // Always have a CPU backend available as scheduler fallback for unsupported ops
+    ctx->ggml_backend_cpu = ggml_backend_cpu_init();
+    bool using_gpu = !ggml_backend_is_cpu(ctx->ggml_backend);
+    fprintf(stderr, "cohere: backend: %s%s\n",
+            ggml_backend_name(ctx->ggml_backend),
+            using_gpu ? "" : " (CPU-only)");
 
     // Apply thread count only when explicitly requested via env var
     if (getenv("COHERE_THREADS")) {
-        fprintf(stderr, "cohere: applying ggml_backend_cpu_set_n_threads(%d) [COHERE_THREADS override]\n",
+        fprintf(stderr, "cohere: applying n_threads=%d to CPU backend [COHERE_THREADS override]\n",
                 params.n_threads);
-        ggml_backend_cpu_set_n_threads(ctx->ggml_backend, params.n_threads);
+        ggml_backend_cpu_set_n_threads(ctx->ggml_backend_cpu, params.n_threads);
+        if (!using_gpu) {
+            ggml_backend_cpu_set_n_threads(ctx->ggml_backend, params.n_threads);
+        }
     } else {
-        fprintf(stderr, "cohere: NOT calling ggml_backend_cpu_set_n_threads (single-thread default)\n");
+        fprintf(stderr, "cohere: n_threads param=%d (use COHERE_THREADS=N to override)\n",
+                params.n_threads);
     }
 
     if (!cohere_load_model(ctx->model, ctx->vocab, path_model, ctx->ggml_backend)) {
@@ -1405,9 +1506,14 @@ struct cohere_context * cohere_init_from_file(const char * path_model,
                 hp.dec_head_dim, hp.dec_max_ctx, hp.dec_n_heads, hp.dec_n_layers);
     }
 
-    // Initialize scheduler
-    ggml_backend_t backends[] = { ctx->ggml_backend };
-    ctx->ggml_alloc = ggml_backend_sched_new(backends, nullptr, 1, 16384, false, false);
+    // Initialize scheduler — GPU backend first (highest priority), CPU as fallback
+    if (using_gpu) {
+        ggml_backend_t backends[] = { ctx->ggml_backend, ctx->ggml_backend_cpu };
+        ctx->ggml_alloc = ggml_backend_sched_new(backends, nullptr, 2, 16384, false, false);
+    } else {
+        ggml_backend_t backends[] = { ctx->ggml_backend };
+        ctx->ggml_alloc = ggml_backend_sched_new(backends, nullptr, 1, 16384, false, false);
+    }
 
     ctx->compute_meta.resize(ggml_tensor_overhead() * 16384 + 1024);
 
@@ -1432,8 +1538,10 @@ struct cohere_context * cohere_init_from_file(const char * path_model,
 
 void cohere_free(struct cohere_context * ctx) {
     if (!ctx) return;
-    if (ctx->ggml_alloc)    ggml_backend_sched_free(ctx->ggml_alloc);
-    if (ctx->ggml_backend)  ggml_backend_free(ctx->ggml_backend);
+    if (ctx->ggml_alloc)        ggml_backend_sched_free(ctx->ggml_alloc);
+    if (ctx->ggml_backend)      ggml_backend_free(ctx->ggml_backend);
+    if (ctx->ggml_backend_cpu && ctx->ggml_backend_cpu != ctx->ggml_backend)
+        ggml_backend_free(ctx->ggml_backend_cpu);
     if (ctx->kv_ctx)        ggml_free(ctx->kv_ctx);
     if (ctx->ctx_const)     ggml_free(ctx->ctx_const);
     if (ctx->cross_kv_ctx)  ggml_free(ctx->cross_kv_ctx);
@@ -1600,6 +1708,13 @@ char * cohere_transcribe(struct cohere_context * ctx,
     if (!pos_enc_t) { fprintf(stderr, "error: pos_enc tensor not found\n"); return nullptr; }
     ggml_backend_tensor_set(pos_enc_t, pos_enc_data.data(), 0, pos_enc_data.size() * sizeof(float));
 
+    // Optional per-op profiling (COHERE_PROF=1)
+    cohere_prof_state prof_state;
+    bool do_prof = getenv("COHERE_PROF") != nullptr;
+    if (do_prof) {
+        ggml_backend_sched_set_eval_callback(ctx->ggml_alloc, cohere_prof_eval_cb, &prof_state);
+    }
+
     t0 = ggml_time_us();
     if (ggml_backend_sched_graph_compute(ctx->ggml_alloc, gf_enc) != GGML_STATUS_SUCCESS) {
         fprintf(stderr, "cohere: failed to compute encoder graph\n");
@@ -1608,6 +1723,11 @@ char * cohere_transcribe(struct cohere_context * ctx,
     t1 = ggml_time_us();
     perf.t_enc_compute_us = t1 - t0;
     fprintf(stderr, "cohere: enc compute done      %.1f ms\n", perf.t_enc_compute_us / 1e3);
+
+    if (do_prof) {
+        ggml_backend_sched_set_eval_callback(ctx->ggml_alloc, nullptr, nullptr);
+        cohere_prof_print(prof_state);
+    }
 
     struct ggml_tensor * enc_out_t = ggml_graph_get_tensor(gf_enc, "enc_out");
     if (!enc_out_t) { fprintf(stderr, "error: enc_out tensor not found\n"); return nullptr; }

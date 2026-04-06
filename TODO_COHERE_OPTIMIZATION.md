@@ -29,7 +29,9 @@ This document tracks the progress of porting `cohere-whisper.cpp` to a full `ggm
     - [ ] Flash Attention for decoder.
 - [x] **Phase 3B: Post-graph micro-optimizations**
     - [x] BatchNorm folding: fold BN stats into conv_dw weights at load time (480 nodes removed, ~7% F16 enc speedup, Q4_K → RTF 1.15×).
-    - [ ] mmap weight loading: replace fread+vector into mmap to eliminate 7-20s cold-start I/O.
+    - [x] mmap weight loading: replace fread+vector into mmap to eliminate heap churn (done; load time = disk I/O, not software overhead).
+    - [x] Per-op profiler: `COHERE_PROF=1` — eval_callback shows mul_mat=87.6%, im2col=7.0% for 44s audio.
+    - [x] Metal/GPU backend: `ggml_backend_load_all()` + `ggml_backend_init_best()` + CPU fallback in sched; `COHERE_DEVICE=metal|cuda|cpu`; CMake: `GGML_METAL=ON` / `GGML_CUDA=ON`.
     - [ ] Chunked encoder: process long audio in overlapping 30s windows to cap O(T²) attention cost.
 
 ## Current Status

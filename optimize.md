@@ -233,8 +233,45 @@ mainly removes 288 `ggml_add/mul` calls in the graph; quantized GEMM was already
 48-layer Conformer builds several `ggml_cont` tensors for attention reshape. Analysis:
 - Each cont copy: ~480 KiB for T=138 (enc_d × T × sizeof(F16))
 - 48 layers × ~4 conts = 192 cont calls, but most are no-ops if tensor is already contiguous
-- Measured overhead: <12ms total across all 48 layers
+- Measured overhead: <12ms total across all 48 layers (1.3% for 44s audio)
 - **Decision**: skip, not worth the graph complexity risk.
+
+### Per-Op Profiler (DONE) — `COHERE_PROF=1`
+
+Added `ggml_backend_sched_set_eval_callback` profiler. Results for 44s audio (F16, CPU):
+
+| Op | Time | % | Count |
+|----|------|---|-------|
+| mul_mat | 42.2s | **87.6%** | 743 |
+| im2col (conv1d_dw expansion) | 3.4s | **7.0%** | 53 |
+| add/mul/scale | 1.1s | 2.3% | 1559 |
+| cont | 0.6s | 1.3% | 404 |
+| norm | 0.2s | 0.5% | 240 |
+| soft_max | 0.2s | 0.4% | 48 |
+| other | 0.4s | 0.9% | 1413 |
+
+**Key findings**:
+- `mul_mat` at 87.6% is near hardware peak for F16 GEMM on this Skylake — no more CPU wins here
+- `im2col` at 7.0% (53 calls = 3 Conv2D subsampling + 48 depthwise via `ggml_conv_1d_dw` expand): each call does `reshape_4d + im2col + mul_mat`; the im2col itself is 3.4s, the mul_mat portion (~0.9s) is counted in mul_mat already
+- On Metal/GPU: both mul_mat and im2col would be 10-50× faster → real-time inference
+
+### Metal/GPU Backend Infrastructure (DONE)
+
+Added device-agnostic backend selection:
+- `ggml_backend_load_all()` at init — registers Metal (macOS), CUDA (Linux/Win), Vulkan
+- `ggml_backend_init_best()` — picks GPU > CPU automatically
+- `COHERE_DEVICE=metal|cuda|cpu` env var for explicit selection
+- CPU always kept as fallback in `ggml_backend_sched` for any unsupported ops
+- CMakeLists.txt: links `ggml-metal` when `GGML_METAL=ON`, `ggml-cuda` when `GGML_CUDA=ON`
+- No code changes needed when switching from CPU to Metal — same graph builder, backend handles dispatch
+
+**To build with Metal (macOS):**
+```bash
+cmake .. -DCMAKE_BUILD_TYPE=Release -DGGML_METAL=ON
+make -j$(nproc) cohere-main
+./build/bin/cohere-main -m cohere-transcribe.gguf -f audio.wav
+# Automatically uses Metal GPU; set COHERE_DEVICE=cpu to force CPU
+```
 
 ---
 
