@@ -237,6 +237,23 @@ static void cohere_prof_print(const cohere_prof_state & ps) {
 // ---------------------------------------------------------------------------
 // Helpers
 
+// Like whisper.cpp's ggml_graph_compute_helper: set n_threads on every backend
+// in the scheduler (via registry proc address) before each compute call.
+// This ensures the thread count is applied correctly even after sched resets.
+static bool cohere_sched_graph_compute(ggml_backend_sched_t sched, struct ggml_cgraph * gf, int n_threads) {
+    for (int i = 0; i < ggml_backend_sched_get_n_backends(sched); i++) {
+        ggml_backend_t backend = ggml_backend_sched_get_backend(sched, i);
+        ggml_backend_dev_t dev = ggml_backend_get_device(backend);
+        ggml_backend_reg_t reg = dev ? ggml_backend_dev_backend_reg(dev) : nullptr;
+        if (reg) {
+            auto * fn = (ggml_backend_set_n_threads_t)
+                ggml_backend_reg_get_proc_address(reg, "ggml_backend_set_n_threads");
+            if (fn) fn(backend, n_threads);
+        }
+    }
+    return ggml_backend_sched_graph_compute(sched, gf) == GGML_STATUS_SUCCESS;
+}
+
 // ---------------------------------------------------------------------------
 // Model hyperparams
 // ---------------------------------------------------------------------------
@@ -1342,7 +1359,7 @@ static std::vector<float> cohere_decode_step(
     ggml_backend_tensor_set(position, pos_data.data(), 0, n_tok * sizeof(int));
 
     t0 = ggml_time_us();
-    if (ggml_backend_sched_graph_compute(ctx->ggml_alloc, gf) != GGML_STATUS_SUCCESS) {
+    if (!cohere_sched_graph_compute(ctx->ggml_alloc, gf, ctx->params.n_threads)) {
         fprintf(stderr, "cohere: failed to compute decoder graph\n");
         return {};
     }
@@ -1716,7 +1733,7 @@ char * cohere_transcribe(struct cohere_context * ctx,
     }
 
     t0 = ggml_time_us();
-    if (ggml_backend_sched_graph_compute(ctx->ggml_alloc, gf_enc) != GGML_STATUS_SUCCESS) {
+    if (!cohere_sched_graph_compute(ctx->ggml_alloc, gf_enc, ctx->params.n_threads)) {
         fprintf(stderr, "cohere: failed to compute encoder graph\n");
         return nullptr;
     }
