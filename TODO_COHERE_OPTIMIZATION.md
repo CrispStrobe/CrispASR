@@ -33,6 +33,7 @@ This document tracks the progress of porting `cohere-whisper.cpp` to a full `ggm
     - [x] Per-op profiler: `COHERE_PROF=1` — eval_callback shows mul_mat=87.6%, im2col=7.0% for 44s audio.
     - [x] Metal/GPU backend: `ggml_backend_load_all()` + `ggml_backend_init_best()` + CPU fallback in sched; `COHERE_DEVICE=metal|cuda|cpu`; CMake: `GGML_METAL=ON` / `GGML_CUDA=ON`.
     - [x] Chunked encoder: process long audio in 30s windows to cap O(T²) attention cost.
+    - [x] Fixed-shape KV views + mask: decoder uses max_ctx-sized K/V views with additive attention mask so gallocr plan is reused across autoregressive steps (dec sched alloc: 0.65 → 0.24 ms/step, 63% reduction).
 
 ## Current Status
 - Decoder: **Graph implementation functional and verified**.
@@ -40,6 +41,7 @@ This document tracks the progress of porting `cohere-whisper.cpp` to a full `ggm
 - Full Pipeline: **Verified correct output on sample audio.**
 - BatchNorm folding: **Done and verified** — 4940→4460 nodes, F16 RTF 0.96×, Q4_K RTF 1.15× (real-time).
 - Chunked encoder (30s windows): **Done and verified** — 89s audio Q4_K 4-thread: RTF 1.07× vs 1.26× full-audio (16% speedup). Threads=1: 0.35×, threads=2: 0.66×, threads=4: 1.07×.
+- Fixed-shape decoder KV views: **Done and verified** — dec sched alloc 0.65 → 0.24 ms/step.
 
 ## Phase 5: Technical Learnings & Pitfalls (CRITICAL)
 
