@@ -34,6 +34,7 @@ This document tracks the progress of porting `cohere-whisper.cpp` to a full `ggm
     - [x] Metal/GPU backend: `ggml_backend_load_all()` + `ggml_backend_init_best()` + CPU fallback in sched; `COHERE_DEVICE=metal|cuda|cpu`; CMake: `GGML_METAL=ON` / `GGML_CUDA=ON`.
     - [x] Chunked encoder: process long audio in 30s windows to cap O(T²) attention cost.
     - [x] Decoder sched pre-reserve: call `ggml_backend_sched_reserve` with a max-offset step graph after the prompt pass so that gallocr's `size_max` covers all future autoregressive steps; `ggml_gallocr_needs_realloc` returns false and the re-planning cost is eliminated (dec sched alloc: 0.65 → 0.22 ms/step, 66% reduction).
+    - [x] Encoder attention: remove redundant `ggml_cont` from Q_u and Q_v (second args of `mul_mat`); CPU backend's `from_float` handles non-contiguous src1 directly, eliminating the intermediate F32 copy and reducing cache pressure (−96 cont ops, enc compute ~8% faster).
 
 ## Current Status
 - Decoder: **Graph implementation functional and verified**.
@@ -42,6 +43,7 @@ This document tracks the progress of porting `cohere-whisper.cpp` to a full `ggm
 - BatchNorm folding: **Done and verified** — 4940→4460 nodes, F16 RTF 0.96×, Q4_K RTF 1.15× (real-time).
 - Chunked encoder (30s windows): **Done and verified** — 89s audio Q4_K 4-thread: RTF 1.07× vs 1.26× full-audio (16% speedup). Threads=1: 0.35×, threads=2: 0.66×, threads=4: 1.07×.
 - Decoder sched pre-reserve: **Done and verified** — dec sched alloc 0.65 → 0.22 ms/step (66% reduction).
+- Encoder attention cont removal: **Done and verified** — removed redundant cont on Q_u/Q_v, enc compute ~8% faster (11.3s → 10.4s for 12s audio).
 
 ## Phase 5: Technical Learnings & Pitfalls (CRITICAL)
 

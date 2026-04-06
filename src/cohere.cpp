@@ -567,8 +567,10 @@ static struct ggml_cgraph * cohere_build_graph_encoder(struct cohere_context * c
         K   = ggml_permute(ctx0, ggml_reshape_3d(ctx0, K,   head_dim, n_heads, T), 0, 2, 1, 3); // [hd, T, H]
         R   = ggml_permute(ctx0, ggml_reshape_3d(ctx0, R,   head_dim, n_heads, 2 * T - 1), 0, 2, 1, 3); // [hd, 2T-1, H]
         
-        struct ggml_tensor * AC = ggml_mul_mat(ctx0, ggml_cont(ctx0, K), ggml_cont(ctx0, Q_u)); // [T, T, H]
-        struct ggml_tensor * BD_raw = ggml_mul_mat(ctx0, ggml_cont(ctx0, R), ggml_cont(ctx0, Q_v)); // [2T-1, T, H]
+        // Q_u / Q_v are the second (src1) arg of mul_mat: ggml's CPU kernel handles non-contiguous
+        // src1 via its from_float conversion step, so the explicit cont op is redundant here.
+        struct ggml_tensor * AC = ggml_mul_mat(ctx0, ggml_cont(ctx0, K), Q_u); // [T, T, H]
+        struct ggml_tensor * BD_raw = ggml_mul_mat(ctx0, ggml_cont(ctx0, R), Q_v); // [2T-1, T, H]
 
         if (il == 0) {
             cohere_log_tensor("K", K);
