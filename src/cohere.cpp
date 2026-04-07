@@ -180,6 +180,7 @@ struct cohere_prof_state {
     cohere_op_prof norm;       // GGML_OP_NORM / RMS_NORM
     cohere_op_prof cont;       // GGML_OP_CONT
     cohere_op_prof im2col;     // GGML_OP_IM2COL (part of conv1d_dw expansion)
+    cohere_op_prof conv_dw;   // GGML_OP_CONV_2D_DW (direct depthwise conv)
     cohere_op_prof add;        // GGML_OP_ADD / GGML_OP_MUL / GGML_OP_SCALE
     cohere_op_prof other;      // everything else (view, reshape, permute, silu, etc.)
     int64_t t_node_start = 0;  // wall time before node execute (ask=true)
@@ -200,6 +201,7 @@ static bool cohere_prof_eval_cb(struct ggml_tensor * t, bool ask, void * user_da
         case GGML_OP_CONT:        ps->cont.t_us     += dt; ps->cont.count++;     break;
         case GGML_OP_IM2COL:
         case GGML_OP_IM2COL_3D:   ps->im2col.t_us   += dt; ps->im2col.count++;  break;
+        case GGML_OP_CONV_2D_DW:  ps->conv_dw.t_us  += dt; ps->conv_dw.count++; break;
         case GGML_OP_ADD:
         case GGML_OP_MUL:
         case GGML_OP_SCALE:       ps->add.t_us      += dt; ps->add.count++;     break;
@@ -213,7 +215,7 @@ static void cohere_prof_print(const cohere_prof_state & ps) {
         return total > 0 ? 100.0 * v / total : 0.0;
     };
     int64_t total = ps.mul_mat.t_us + ps.soft_max.t_us + ps.norm.t_us
-                  + ps.cont.t_us + ps.im2col.t_us + ps.add.t_us + ps.other.t_us;
+                  + ps.cont.t_us + ps.im2col.t_us + ps.conv_dw.t_us + ps.add.t_us + ps.other.t_us;
     fprintf(stderr, "cohere: -------- encoder op profile (COHERE_PROF) --------\n");
     fprintf(stderr, "cohere:  %-12s  %7.1f ms  %5.1f%%  n=%d\n",
             "mul_mat",   ps.mul_mat.t_us/1e3,   pct(ps.mul_mat.t_us,total),   ps.mul_mat.count);
@@ -225,6 +227,8 @@ static void cohere_prof_print(const cohere_prof_state & ps) {
             "cont",      ps.cont.t_us/1e3,      pct(ps.cont.t_us,total),      ps.cont.count);
     fprintf(stderr, "cohere:  %-12s  %7.1f ms  %5.1f%%  n=%d\n",
             "im2col",    ps.im2col.t_us/1e3,    pct(ps.im2col.t_us,total),    ps.im2col.count);
+    fprintf(stderr, "cohere:  %-12s  %7.1f ms  %5.1f%%  n=%d\n",
+            "conv_2d_dw", ps.conv_dw.t_us/1e3,  pct(ps.conv_dw.t_us,total),   ps.conv_dw.count);
     fprintf(stderr, "cohere:  %-12s  %7.1f ms  %5.1f%%  n=%d\n",
             "add/mul/sc", ps.add.t_us/1e3,      pct(ps.add.t_us,total),       ps.add.count);
     fprintf(stderr, "cohere:  %-12s  %7.1f ms  %5.1f%%  n=%d\n",
@@ -567,34 +571,22 @@ static struct ggml_cgraph * cohere_build_graph_encoder(struct cohere_context * c
         K   = ggml_permute(ctx0, ggml_reshape_3d(ctx0, K,   head_dim, n_heads, T), 0, 2, 1, 3); // [hd, T, H]
         R   = ggml_permute(ctx0, ggml_reshape_3d(ctx0, R,   head_dim, n_heads, 2 * T - 1), 0, 2, 1, 3); // [hd, 2T-1, H]
         
-        // Q_u / Q_v are the second (src1) arg of mul_mat: ggml's CPU kernel handles non-contiguous
-        // src1 via its from_float conversion step, so the explicit cont op is redundant here.
+        // Q_u / Q_v are src1 of mul_mat — CPU kernel handles non-contiguous src1 natively.
+        // K and R are src0 and must be contiguous (ggml_mul_mat asserts nb[0]==element_size and !transposed).
         struct ggml_tensor * AC = ggml_mul_mat(ctx0, ggml_cont(ctx0, K), Q_u); // [T, T, H]
         struct ggml_tensor * BD_raw = ggml_mul_mat(ctx0, ggml_cont(ctx0, R), Q_v); // [2T-1, T, H]
 
-        if (il == 0) {
-            cohere_log_tensor("K", K);
-            cohere_log_tensor("Q_u", Q_u);
-            cohere_log_tensor("AC", AC);
-        }
-
         struct ggml_tensor * BD = cohere_rel_shift(ctx0, BD_raw); // [T, T, H]
-        
+
         struct ggml_tensor * scores = ggml_add_inplace(ctx0, AC, BD);
         scores = ggml_scale_inplace(ctx0, scores, 1.0f / sqrtf((float)head_dim));
         scores = ggml_soft_max_inplace(ctx0, scores);
 
         struct ggml_tensor * V_reshaped = ggml_reshape_3d(ctx0, V, head_dim, n_heads, T);
-        if (il == 0) cohere_log_tensor("V_reshaped", V_reshaped);
 
+        // V_trans is transposed (nb[0] > nb[1]) so ggml_cont is required before mul_mat.
         struct ggml_tensor * V_trans = ggml_permute(ctx0, V_reshaped, 1, 2, 0, 3); // [T, hd, H]
         struct ggml_tensor * attn_out = ggml_mul_mat(ctx0, ggml_cont(ctx0, V_trans), scores); // [hd, T, H]
-
-        if (il == 0) {
-            cohere_log_tensor("scores", scores);
-            cohere_log_tensor("V_trans", V_trans);
-            cohere_log_tensor("attn_out", attn_out);
-        }
 
         attn_out = ggml_reshape_2d(ctx0, ggml_cont(ctx0, ggml_permute(ctx0, attn_out, 0, 2, 1, 3)), d, T);
 
@@ -617,16 +609,15 @@ static struct ggml_cgraph * cohere_build_graph_encoder(struct cohere_context * c
             ggml_sigmoid(ctx0, cnv_gate)
         );
         
-        // cnv is [C, T] initially.
-        // ggml_conv_1d_dw handles [T, C] input (ne0=T, ne1=C).
-        cnv = ggml_cont(ctx0, ggml_transpose(ctx0, cnv)); // [C, T] -> [T, C]
-        cnv = ggml_conv_1d_dw(ctx0, layer.conv_dw_w, cnv, 1, (hp.enc_conv_k - 1) / 2, 1);
-        
-        // ggml_conv_1d_dw returns [T, 1, C, 1] (ne0=T, ne1=1, ne2=C)
-        // Permute to [C, T, 1, 1] to match the rest of the layer expectation.
-        // p0 is where old_ne0 (T) goes -> 1
-        // p1 is where old_ne1 (1) goes -> 2
-        // p2 is where old_ne2 (C) goes -> 0
+        // Depthwise conv via ggml_conv_2d_dw_direct (no im2col intermediate buffer).
+        // Kernel needs F32 [k, 1, 1, d] layout; input needs contiguous [T, 1, d, 1] (WHCN).
+        // Cast F16 kernel to F32 and reshape from [k, 1, d] to [k, 1, 1, d].
+        struct ggml_tensor * dw_w_f32 = ggml_cast(ctx0, layer.conv_dw_w, GGML_TYPE_F32); // [k, 1, d]
+        struct ggml_tensor * dw_w_4d  = ggml_reshape_4d(ctx0, dw_w_f32, hp.enc_conv_k, 1, 1, d); // [k, 1, 1, d]
+        cnv = ggml_cont(ctx0, ggml_transpose(ctx0, cnv)); // [d, T] -> [T, d]
+        cnv = ggml_reshape_4d(ctx0, cnv, T, 1, d, 1);    // [T, 1, d, 1] WHCN for direct conv
+        cnv = ggml_conv_2d_dw_direct(ctx0, dw_w_4d, cnv, 1, 1, (hp.enc_conv_k - 1) / 2, 0, 1, 1);
+        // Output: [T, 1, d, 1] — same permute as conv_1d_dw path restores [d, T, 1, 1].
         cnv = ggml_cont(ctx0, ggml_permute(ctx0, cnv, 1, 2, 0, 3));
         
         // Add folded bias (BN folded into conv_dw_w/b at init by cohere_fold_batchnorm)
