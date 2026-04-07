@@ -73,7 +73,14 @@ ffmpeg -i input.mp3 -ar 16000 -ac 1 -c:a pcm_s16le audio.wav
   -f FNAME,  --file FNAME       input audio (WAV 16 kHz mono)
   -l LANG,   --language LANG    language code (default: en)
   -t N,      --threads N        thread count (default: 4)
-  -ot,       --output-txt       write transcript to <audio>.txt
+  -ot,       --output-txt       write plain transcript to <audio>.txt
+  -ts,       --timestamps       output with [HH:MM:SS.mmm --> ...] timestamps
+  -ml N,     --max-len N        max chars per output segment (0=unlimited)
+  -pc,       --print-colors     color-code output by token confidence
+  -osrt,     --output-srt       write SRT subtitle file (<audio>.srt)
+  -ovtt,     --output-vtt       write WebVTT subtitle file (<audio>.vtt)
+  -vad-model FNAME              path to ggml-silero-vad.bin for VAD segmentation
+  -vad-thold F                  VAD speech threshold (default: 0.5)
   -npnc,     --no-punctuation   disable punctuation in output
   -v,        --verbose          show timing info and per-step tokens
   -np,       --no-prints        suppress all informational output
@@ -91,7 +98,50 @@ COHERE_DEBUG=1       # verbose tensor/graph logging
 COHERE_PROF=1        # per-op profiling (mul_mat, conv, etc.)
 ```
 
-### 4. Quantize your own model
+### 4. Timestamps and subtitles
+
+Plain transcript with a single segment spanning the full audio:
+```bash
+./build/bin/cohere-main -m cohere-transcribe-q4_k.gguf -f audio.wav -ts
+# [00:00:00.000 --> 00:00:11.000]  And so, my fellow Americans, ...
+```
+
+With VAD (recommended for speech segmentation) and max 40 chars per line:
+```bash
+./build/bin/cohere-main -m cohere-transcribe-q4_k.gguf -f audio.wav \
+    -ts -vad-model ggml-silero-vad.bin -ml 40
+```
+
+Word-level approximation (linear interpolation within each segment):
+```bash
+./build/bin/cohere-main -m cohere-transcribe-q4_k.gguf -f audio.wav -ts -ml 1
+# [00:00:00.000 --> 00:00:00.300]  And
+# [00:00:00.300 --> 00:00:00.610]  so
+# ...
+```
+
+Generate SRT and WebVTT subtitle files:
+```bash
+./build/bin/cohere-main -m cohere-transcribe-q4_k.gguf -f audio.wav \
+    -ts -vad-model ggml-silero-vad.bin -ml 40 -osrt -ovtt
+# writes audio.srt and audio.vtt
+```
+
+Confidence color-coding (red = low confidence → green = high):
+```bash
+./build/bin/cohere-main -m cohere-transcribe-q4_k.gguf -f audio.wav -ts -pc
+```
+
+**VAD model download:**
+```bash
+# Using the whisper.cpp helper script:
+./models/download-ggml-model.sh silero-vad
+# Or manually copy ggml-silero-vad.bin to your working directory
+```
+
+**Timestamp note:** The Cohere model v1 does not output timestamp tokens (Cohere Labs confirmed native timestamps are planned for a future version). Within each VAD segment, token timestamps are linearly interpolated from character counts — accurate at segment level, approximate at word level. VAD boundary accuracy depends on the Silero model.
+
+### 5. Quantize your own model
 
 Convert from the original HF checkpoint first (see `export_gguf.py`), then quantize:
 ```bash
