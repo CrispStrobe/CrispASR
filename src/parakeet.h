@@ -79,6 +79,10 @@ int         parakeet_frame_dur_cs(struct parakeet_context * ctx);  // centisecon
 int         parakeet_n_mels      (struct parakeet_context * ctx);
 int         parakeet_sample_rate (struct parakeet_context * ctx);
 
+// Internal smoke test: build encoder graph on a zero mel of `T_mel` frames,
+// run it, and report the output T_enc. Returns T_enc on success or -1.
+int         parakeet_test_encoder(struct parakeet_context * ctx, int T_mel);
+
 #ifdef __cplusplus
 }
 #endif

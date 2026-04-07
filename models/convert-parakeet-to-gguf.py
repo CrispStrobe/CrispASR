@@ -224,6 +224,12 @@ def is_f32_tensor(gguf_name: str, shape: tuple[int, ...]) -> bool:
 # Main conversion
 # ---------------------------------------------------------------------------
 
+def model_d_for_layer(sd, layer_id: int) -> int:
+    """Look up d_model for the given encoder layer (1024 for parakeet-tdt-0.6b-v3)."""
+    key = f"encoder.layers.{layer_id}.conv.depthwise_conv.weight"
+    return int(sd[key].shape[0])
+
+
 def convert(nemo_path: Path, out_path: Path) -> None:
     print(f"Loading: {nemo_path}")
     with tempfile.TemporaryDirectory() as td:
@@ -274,6 +280,7 @@ def convert(nemo_path: Path, out_path: Path) -> None:
     n_written = 0
     n_f16 = 0
     n_f32 = 0
+    layers_seen = set()
     for name in sorted(sd.keys()):
         gguf_name = remap_name(name)
         if gguf_name is None:
@@ -294,7 +301,25 @@ def convert(nemo_path: Path, out_path: Path) -> None:
         if n_written <= 30 or n_written % 50 == 0:
             print(f"  {gguf_name:60s}  {str(t.shape):28s}  {t.dtype}")
 
-    print(f"\n  total tensors: {n_written}  (F16: {n_f16}, F32: {n_f32})")
+        # Track encoder layers so we can add a zero conv.dw.bias for each.
+        if gguf_name.startswith("encoder.layers.") and ".conv.dw.weight" in gguf_name:
+            li = int(gguf_name.split(".")[2])
+            layers_seen.add(li)
+
+    # Inject a zero-valued conv.dw.bias per encoder layer. This bias starts at
+    # zero in NeMo (the depthwise conv is bias-less and the BN that follows
+    # provides the bias term), but the C++ runtime folds BatchNorm into the
+    # depthwise conv at load time and writes the absorbed bias *into* this
+    # tensor — so it must exist in the GGUF buffer up front.
+    for li in sorted(layers_seen):
+        bias = np.zeros(int(model_d_for_layer(sd, li)), dtype=np.float32)
+        gguf_name = f"encoder.layers.{li}.conv.dw.bias"
+        writer.add_tensor(gguf_name, bias)
+        n_written += 1
+        n_f32 += 1
+
+    print(f"\n  total tensors: {n_written}  (F16: {n_f16}, F32: {n_f32})  "
+          f"(+{len(layers_seen)} synthetic conv.dw.bias)")
 
     writer.write_header_to_file()
     writer.write_kv_data_to_file()

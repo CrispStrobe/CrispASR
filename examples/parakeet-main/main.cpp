@@ -72,6 +72,16 @@ int main(int argc, char ** argv) {
     }
     fprintf(stderr, "\n");
 
+    // Smoke test: run the encoder on a zero mel of 100 frames (~1 s of audio
+    // post-mel) to verify the FastConformer graph compiles and computes.
+    fprintf(stderr, "%s: encoder smoke test ...\n", argv[0]);
+    int T_enc = parakeet_test_encoder(ctx, 100);
+    if (T_enc < 0) {
+        fprintf(stderr, "%s: encoder smoke test FAILED\n", argv[0]);
+        parakeet_free(ctx);
+        return 2;
+    }
+
     if (!audio_path.empty()) {
         fprintf(stderr, "%s: transcription not yet implemented (audio path ignored)\n", argv[0]);
     }

@@ -106,6 +106,7 @@ struct parakeet_enc_layer {
     ggml_tensor * norm_conv_w = nullptr, * norm_conv_b = nullptr;
     ggml_tensor * conv_pw1_w  = nullptr;  // (2 * d_model, d_model, 1) — followed by GLU
     ggml_tensor * conv_dw_w   = nullptr;  // (d_model, 1, K)
+    ggml_tensor * conv_dw_b   = nullptr;  // (d_model,) — synthetic, populated by BN fold
     ggml_tensor * conv_bn_w   = nullptr, * conv_bn_b   = nullptr;
     ggml_tensor * conv_bn_rm  = nullptr, * conv_bn_rv  = nullptr;
     ggml_tensor * conv_pw2_w  = nullptr;  // (d_model, d_model, 1)
@@ -167,11 +168,30 @@ struct parakeet_context {
     parakeet_model model;
     parakeet_vocab vocab;
 
-    ggml_backend_t backend     = nullptr;
-    ggml_backend_t backend_cpu = nullptr;
+    ggml_backend_t       backend     = nullptr;
+    ggml_backend_t       backend_cpu = nullptr;
+    ggml_backend_sched_t sched       = nullptr;
+
+    std::vector<uint8_t> compute_meta;     // metadata buffer for graph allocation
 
     int n_threads = 4;
 };
+
+// ---------------------------------------------------------------------------
+// Transformer-XL relative-position shift.
+// Same trick as cohere.cpp: a single ggml_view_3d that walks the BD matrix
+// with stride (nb[1] - nb[0]) along the time axis, dropping the upper
+// triangle so each row picks up the rel-pos score r_{j-i}. Zero-cost view.
+// ---------------------------------------------------------------------------
+static ggml_tensor * parakeet_rel_shift(ggml_context * ctx, ggml_tensor * a) {
+    const int T = (int)a->ne[1];
+    const int H = (int)a->ne[2];
+    return ggml_view_3d(ctx, a,
+        T, T, H,
+        a->nb[1] - a->nb[0],
+        a->nb[2],
+        (T - 1) * a->nb[0]);
+}
 
 // ===========================================================================
 // Loader helpers
@@ -351,6 +371,7 @@ static bool parakeet_load_model(parakeet_model & model,
         e.norm_conv_b = get("norm_conv.bias");
         e.conv_pw1_w  = get("conv.pw1.weight");
         e.conv_dw_w   = get("conv.dw.weight");
+        e.conv_dw_b   = get("conv.dw.bias");          // synthetic — populated by BN fold
         e.conv_pw2_w  = get("conv.pw2.weight");
         e.conv_bn_w   = get("conv.bn.weight");
         e.conv_bn_b   = get("conv.bn.bias");
@@ -397,6 +418,324 @@ static bool parakeet_load_model(parakeet_model & model,
 }
 
 // ===========================================================================
+// BatchNorm folding (load-time, once)
+//
+// Inference-time BN: y = (x - mean) / sqrt(var + eps) * gamma + beta
+//                     = x * s + (beta - mean * s)   where s = gamma/sqrt(var+eps)
+//
+// Since mean / var are fixed after training, we fold s into the depthwise conv
+// weights and absorb the bias shift into the synthetic conv_dw_b tensor (which
+// the converter pre-allocated as zeros). After this the encoder graph drops
+// the BN block entirely.
+// ===========================================================================
+
+static void parakeet_fold_batchnorm(parakeet_model & model) {
+    const int d   = (int)model.hparams.d_model;
+    const int K   = (int)model.hparams.conv_kernel;
+    const float eps = 1e-5f;
+
+    for (uint32_t il = 0; il < model.hparams.n_layers; il++) {
+        auto & e = model.enc[il];
+        if (!e.conv_dw_w || !e.conv_dw_b ||
+            !e.conv_bn_w || !e.conv_bn_b || !e.conv_bn_rm || !e.conv_bn_rv) {
+            fprintf(stderr, "parakeet: BN fold: missing tensor on layer %u\n", il);
+            return;
+        }
+
+        std::vector<float> bn_mean(d), bn_var(d), bn_w(d), bn_b(d);
+        ggml_backend_tensor_get(e.conv_bn_rm, bn_mean.data(), 0, d * sizeof(float));
+        ggml_backend_tensor_get(e.conv_bn_rv, bn_var .data(), 0, d * sizeof(float));
+        ggml_backend_tensor_get(e.conv_bn_w,  bn_w   .data(), 0, d * sizeof(float));
+        ggml_backend_tensor_get(e.conv_bn_b,  bn_b   .data(), 0, d * sizeof(float));
+
+        std::vector<float> s(d);
+        for (int c = 0; c < d; c++)
+            s[c] = bn_w[c] / sqrtf(bn_var[c] + eps);
+
+        // Fold s into conv_dw_w (F16, ggml shape [K, 1, d]).
+        {
+            std::vector<float> w_f32((size_t)K * d);
+            // dw_w is stored as F16; read+convert via ggml helpers.
+            std::vector<ggml_fp16_t> w_f16((size_t)K * d);
+            ggml_backend_tensor_get(e.conv_dw_w, w_f16.data(), 0, w_f16.size() * sizeof(ggml_fp16_t));
+            for (size_t i = 0; i < w_f16.size(); i++)
+                w_f32[i] = ggml_fp16_to_fp32(w_f16[i]);
+            for (int c = 0; c < d; c++)
+                for (int ki = 0; ki < K; ki++)
+                    w_f32[ki + c * K] *= s[c];
+            for (size_t i = 0; i < w_f16.size(); i++)
+                w_f16[i] = ggml_fp32_to_fp16(w_f32[i]);
+            ggml_backend_tensor_set(e.conv_dw_w, w_f16.data(), 0, w_f16.size() * sizeof(ggml_fp16_t));
+        }
+
+        // Fold into the synthetic conv_dw_b: b[c] = (0 - mean[c]) * s[c] + bn_b[c]
+        std::vector<float> dw_b(d);
+        for (int c = 0; c < d; c++)
+            dw_b[c] = -bn_mean[c] * s[c] + bn_b[c];
+        ggml_backend_tensor_set(e.conv_dw_b, dw_b.data(), 0, d * sizeof(float));
+    }
+
+    fprintf(stderr, "parakeet: BN folded into conv_dw weights for %u layers\n",
+            model.hparams.n_layers);
+}
+
+// ===========================================================================
+// Encoder graph builder
+//
+// Input:  mel [n_mels, T_mel]
+// Output: enc_out [d_model, T_enc]   where T_enc = T_mel / subsampling_factor
+// ===========================================================================
+
+static const float kLayerNormEps = 1e-5f;
+static const float kBatchNormEps = 1e-5f;
+
+static ggml_cgraph * parakeet_build_graph_encoder(parakeet_context * ctx, int T_mel) {
+    const auto & m  = ctx->model;
+    const auto & hp = m.hparams;
+    const int d        = (int)hp.d_model;
+    const int n_heads  = (int)hp.n_heads;
+    const int head_dim = (int)hp.head_dim;
+    const int n_mels   = (int)hp.n_mels;
+    const int K        = (int)hp.conv_kernel;
+
+    ggml_init_params ip = {
+        /*mem_size=*/   ctx->compute_meta.size(),
+        /*mem_buffer=*/ ctx->compute_meta.data(),
+        /*no_alloc=*/   true,
+    };
+    ggml_context * ctx0 = ggml_init(ip);
+    ggml_cgraph * gf = ggml_new_graph_custom(ctx0, 8192, false);
+
+    // ----- Input -----
+    ggml_tensor * mel = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, n_mels, T_mel);
+    ggml_set_name(mel, "mel");
+    ggml_set_input(mel);
+
+    // ----- Pre-encode (dw_striding subsampling 8×) -----
+    // Identical structure to cohere.cpp: Conv2d → ReLU → DwConv → PwConv → ReLU
+    // → DwConv → PwConv → ReLU → flatten → linear(d_model).
+    auto bias_4d = [&](ggml_context * ctx0, ggml_tensor * b) {
+        return ggml_cast(ctx0,
+            ggml_reshape_4d(ctx0, b, 1, 1, b->ne[0], 1),
+            GGML_TYPE_F32);
+    };
+
+    ggml_tensor * cur = ggml_conv_2d(ctx0, m.pre_encode.conv0_w, mel, 2, 2, 1, 1, 1, 1);
+    cur = ggml_add(ctx0, cur, bias_4d(ctx0, m.pre_encode.conv0_b));
+    cur = ggml_relu(ctx0, cur);
+
+    cur = ggml_conv_2d_dw(ctx0, m.pre_encode.conv2_w, cur, 2, 2, 1, 1, 1, 1);
+    cur = ggml_add(ctx0, cur, bias_4d(ctx0, m.pre_encode.conv2_b));
+    cur = ggml_conv_2d   (ctx0, m.pre_encode.conv3_w, cur, 1, 1, 0, 0, 1, 1);
+    cur = ggml_add(ctx0, cur, bias_4d(ctx0, m.pre_encode.conv3_b));
+    cur = ggml_relu(ctx0, cur);
+
+    cur = ggml_conv_2d_dw(ctx0, m.pre_encode.conv5_w, cur, 2, 2, 1, 1, 1, 1);
+    cur = ggml_add(ctx0, cur, bias_4d(ctx0, m.pre_encode.conv5_b));
+    cur = ggml_conv_2d   (ctx0, m.pre_encode.conv6_w, cur, 1, 1, 0, 0, 1, 1);
+    cur = ggml_add(ctx0, cur, bias_4d(ctx0, m.pre_encode.conv6_b));
+    cur = ggml_relu(ctx0, cur);
+
+    // Flatten freq×channel: [W3, H3, C] → [W3, C, H3] → [W3*C, H3]
+    const int H3 = (int)cur->ne[1];
+    const int W3 = (int)cur->ne[0];
+    const int C  = (int)hp.subsampling_channels;
+    cur = ggml_cont(ctx0, ggml_permute(ctx0, cur, 0, 2, 1, 3));
+    cur = ggml_reshape_2d(ctx0, cur, W3 * C, H3);
+
+    // out: linear(W3*C → d_model)
+    cur = ggml_add(ctx0, ggml_mul_mat(ctx0, m.pre_encode.out_w, cur), m.pre_encode.out_b);
+
+    const int T = H3;  // encoder time frames after 8× subsampling
+
+    // ----- Sinusoidal rel-pos table [d, 2T-1] -----
+    ggml_tensor * pos_enc = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, d, 2 * T - 1);
+    ggml_set_name(pos_enc, "pos_enc");
+    ggml_set_input(pos_enc);
+
+    // ----- 24× Conformer block -----
+    for (uint32_t il = 0; il < hp.n_layers; il++) {
+        const auto & e = m.enc[il];
+        ggml_tensor * inpL = cur;
+
+        // ---- FFN1 (macaron half) ----
+        ggml_tensor * x = ggml_norm(ctx0, cur, kLayerNormEps);
+        x = ggml_mul(ctx0, x, e.norm_ff1_w);
+        x = ggml_add(ctx0, x, e.norm_ff1_b);
+        x = ggml_mul_mat(ctx0, e.ff1_l1_w, x);
+        x = ggml_silu(ctx0, x);
+        x = ggml_mul_mat(ctx0, e.ff1_l2_w, x);
+        cur = ggml_add(ctx0, inpL, ggml_scale(ctx0, x, 0.5f));
+
+        ggml_tensor * inpAttn = cur;
+
+        // ---- Self-Attention (rel_pos with untied biases) ----
+        x = ggml_norm(ctx0, cur, kLayerNormEps);
+        x = ggml_mul(ctx0, x, e.norm_attn_w);
+        x = ggml_add(ctx0, x, e.norm_attn_b);
+
+        ggml_tensor * Q = ggml_mul_mat(ctx0, e.attn_q_w, x);
+        ggml_tensor * K_ = ggml_mul_mat(ctx0, e.attn_k_w, x);
+        ggml_tensor * V  = ggml_mul_mat(ctx0, e.attn_v_w, x);
+        ggml_tensor * R  = ggml_mul_mat(ctx0, e.attn_pos_w, pos_enc);
+
+        ggml_tensor * Q_u = ggml_add(ctx0, Q, ggml_reshape_1d(ctx0, e.pos_bias_u, d));
+        ggml_tensor * Q_v = ggml_add(ctx0, Q, ggml_reshape_1d(ctx0, e.pos_bias_v, d));
+
+        Q_u = ggml_permute(ctx0, ggml_reshape_3d(ctx0, Q_u, head_dim, n_heads, T), 0, 2, 1, 3);
+        Q_v = ggml_permute(ctx0, ggml_reshape_3d(ctx0, Q_v, head_dim, n_heads, T), 0, 2, 1, 3);
+        K_  = ggml_permute(ctx0, ggml_reshape_3d(ctx0, K_,  head_dim, n_heads, T), 0, 2, 1, 3);
+        R   = ggml_permute(ctx0, ggml_reshape_3d(ctx0, R,   head_dim, n_heads, 2 * T - 1), 0, 2, 1, 3);
+
+        ggml_tensor * AC = ggml_mul_mat(ctx0, ggml_cont(ctx0, K_), Q_u); // [T, T, H]
+        ggml_tensor * BD_raw = ggml_mul_mat(ctx0, ggml_cont(ctx0, R), Q_v); // [2T-1, T, H]
+        ggml_tensor * BD = parakeet_rel_shift(ctx0, BD_raw);                // [T, T, H]
+
+        ggml_tensor * scores = ggml_add(ctx0, AC, BD);
+        scores = ggml_scale(ctx0, scores, 1.0f / sqrtf((float)head_dim));
+        scores = ggml_soft_max(ctx0, scores);
+
+        ggml_tensor * V3 = ggml_reshape_3d(ctx0, V, head_dim, n_heads, T);
+        ggml_tensor * V_t = ggml_permute(ctx0, V3, 1, 2, 0, 3); // [T, hd, H]
+        ggml_tensor * attn_out = ggml_mul_mat(ctx0, ggml_cont(ctx0, V_t), scores); // [hd, T, H]
+        attn_out = ggml_reshape_2d(ctx0, ggml_cont(ctx0, ggml_permute(ctx0, attn_out, 0, 2, 1, 3)), d, T);
+
+        attn_out = ggml_mul_mat(ctx0, e.attn_out_w, attn_out);
+        cur = ggml_add(ctx0, inpAttn, attn_out);
+
+        // ---- Convolution module ----
+        ggml_tensor * inpConv = cur;
+        x = ggml_norm(ctx0, cur, kLayerNormEps);
+        x = ggml_mul(ctx0, x, e.norm_conv_w);
+        x = ggml_add(ctx0, x, e.norm_conv_b);
+
+        // pw1: [d → 2d], then GLU
+        ggml_tensor * pw1_w = ggml_reshape_2d(ctx0, e.conv_pw1_w, d, 2 * d);
+        ggml_tensor * cnv = ggml_mul_mat(ctx0, pw1_w, x);
+        ggml_tensor * cnv_gate = ggml_view_2d(ctx0, cnv, d, T, cnv->nb[1], d * sizeof(float));
+        cnv = ggml_mul(ctx0,
+            ggml_view_2d(ctx0, cnv, d, T, cnv->nb[1], 0),
+            ggml_sigmoid(ctx0, cnv_gate));
+
+        // dw conv (kernel 9, padding K/2). Same direct path as cohere.cpp.
+        ggml_tensor * dw_w_f32 = ggml_cast(ctx0, e.conv_dw_w, GGML_TYPE_F32);
+        ggml_tensor * dw_w_4d  = ggml_reshape_4d(ctx0, dw_w_f32, K, 1, 1, d);
+        cnv = ggml_cont(ctx0, ggml_transpose(ctx0, cnv));    // [d, T] → [T, d]
+        cnv = ggml_reshape_4d(ctx0, cnv, T, 1, d, 1);
+        cnv = ggml_conv_2d_dw_direct(ctx0, dw_w_4d, cnv, 1, 1, (K - 1) / 2, 0, 1, 1);
+        cnv = ggml_cont(ctx0, ggml_permute(ctx0, cnv, 1, 2, 0, 3)); // → [d, T, 1, 1]
+        cnv = ggml_reshape_2d(ctx0, cnv, d, T);
+
+        // BN was folded into conv_dw_w/b at load time (parakeet_fold_batchnorm).
+        // The fused bias is now in e.conv_dw_b.
+        cnv = ggml_add(ctx0, cnv, ggml_reshape_2d(ctx0, e.conv_dw_b, d, 1));
+
+        cnv = ggml_silu(ctx0, cnv); // swish
+
+        // pw2
+        ggml_tensor * pw2_w = ggml_reshape_2d(ctx0, e.conv_pw2_w, d, d);
+        cnv = ggml_mul_mat(ctx0, pw2_w, cnv);
+        cur = ggml_add(ctx0, inpConv, cnv);
+
+        // ---- FFN2 (macaron half) ----
+        ggml_tensor * inpFF2 = cur;
+        x = ggml_norm(ctx0, cur, kLayerNormEps);
+        x = ggml_mul(ctx0, x, e.norm_ff2_w);
+        x = ggml_add(ctx0, x, e.norm_ff2_b);
+        x = ggml_mul_mat(ctx0, e.ff2_l1_w, x);
+        x = ggml_silu(ctx0, x);
+        x = ggml_mul_mat(ctx0, e.ff2_l2_w, x);
+        cur = ggml_add(ctx0, inpFF2, ggml_scale(ctx0, x, 0.5f));
+
+        // ---- Final block LN ----
+        cur = ggml_norm(ctx0, cur, kLayerNormEps);
+        cur = ggml_mul(ctx0, cur, e.norm_out_w);
+        cur = ggml_add(ctx0, cur, e.norm_out_b);
+    }
+
+    ggml_set_name(cur, "enc_out");
+    ggml_build_forward_expand(gf, cur);
+    ggml_free(ctx0);
+    return gf;
+}
+
+// Helper: build the sinusoidal rel-pos table [d, 2T-1] expected by the encoder.
+// pos[i] = i - (T-1), then standard sinusoidal embedding (Transformer-XL style).
+static std::vector<float> parakeet_make_pos_enc(int d_model, int T) {
+    const int K = 2 * T - 1;
+    std::vector<float> pe((size_t)d_model * K, 0.0f);
+    for (int j = 0; j < K; j++) {
+        const float p = (float)(T - 1 - j);     // descending: [T-1, T-2, ..., -(T-1)]
+        for (int i = 0; i < d_model / 2; i++) {
+            const float div = expf(-logf(10000.0f) * (float)(2 * i) / (float)d_model);
+            pe[(size_t)(2 * i)     * K + j] = sinf(p * div);
+            pe[(size_t)(2 * i + 1) * K + j] = cosf(p * div);
+        }
+    }
+    return pe;
+}
+
+// Run the encoder once. Returns enc_out as a flat row-major [T_enc, d_model].
+// Caller computes T_enc as ceil(T_mel / subsampling_factor) (approximately —
+// the actual value depends on the conv arithmetic and is reported back).
+static std::vector<float> parakeet_encode_mel(parakeet_context * ctx,
+                                              const float * mel, int n_mels, int T_mel,
+                                              int * out_T_enc) {
+    if (n_mels != (int)ctx->model.hparams.n_mels) {
+        fprintf(stderr, "parakeet: mel feature mismatch (%d vs %d)\n",
+                n_mels, (int)ctx->model.hparams.n_mels);
+        return {};
+    }
+
+    if (!ctx->sched) {
+        ggml_backend_t backends[2] = { ctx->backend, ctx->backend_cpu };
+        int n_be = (ctx->backend != ctx->backend_cpu) ? 2 : 1;
+        ctx->sched = ggml_backend_sched_new(backends, nullptr, n_be, 8192, false, false);
+    }
+    if (ctx->compute_meta.empty()) {
+        ctx->compute_meta.resize(
+            ggml_tensor_overhead() * 8192 + ggml_graph_overhead_custom(8192, false));
+    }
+
+    ggml_cgraph * gf = parakeet_build_graph_encoder(ctx, T_mel);
+
+    ggml_backend_sched_reset(ctx->sched);
+    if (!ggml_backend_sched_alloc_graph(ctx->sched, gf)) {
+        fprintf(stderr, "parakeet: failed to alloc encoder graph\n");
+        return {};
+    }
+
+    // Set inputs
+    ggml_tensor * mel_in = ggml_graph_get_tensor(gf, "mel");
+    ggml_backend_tensor_set(mel_in, mel, 0, (size_t)n_mels * T_mel * sizeof(float));
+
+    ggml_tensor * pos_in = ggml_graph_get_tensor(gf, "pos_enc");
+    int T_enc = (int)pos_in->ne[1];
+    T_enc = (T_enc + 1) / 2;  // pos_enc has 2T-1 columns; recover T
+    auto pe = parakeet_make_pos_enc((int)ctx->model.hparams.d_model, T_enc);
+    ggml_backend_tensor_set(pos_in, pe.data(), 0, pe.size() * sizeof(float));
+
+    // Compute
+    if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS) {
+        fprintf(stderr, "parakeet: encoder graph compute failed\n");
+        return {};
+    }
+
+    ggml_tensor * out = ggml_graph_get_tensor(gf, "enc_out");
+    if (!out) {
+        fprintf(stderr, "parakeet: missing enc_out tensor\n");
+        return {};
+    }
+    const int d  = (int)out->ne[0];
+    const int Te = (int)out->ne[1];
+    if (out_T_enc) *out_T_enc = Te;
+
+    std::vector<float> result((size_t)d * Te);
+    ggml_backend_tensor_get(out, result.data(), 0, result.size() * sizeof(float));
+    return result;
+}
+
+// ===========================================================================
 // Backend selection
 // ===========================================================================
 
@@ -438,17 +777,38 @@ extern "C" struct parakeet_context * parakeet_init_from_file(
         parakeet_free(ctx);
         return nullptr;
     }
+
+    parakeet_fold_batchnorm(ctx->model);
     return ctx;
 }
 
 extern "C" void parakeet_free(struct parakeet_context * ctx) {
     if (!ctx) return;
+    if (ctx->sched)             ggml_backend_sched_free(ctx->sched);
     if (ctx->model.buf)         ggml_backend_buffer_free(ctx->model.buf);
     if (ctx->model.ctx)         ggml_free(ctx->model.ctx);
     if (ctx->backend && ctx->backend != ctx->backend_cpu)
         ggml_backend_free(ctx->backend);
     if (ctx->backend_cpu)       ggml_backend_free(ctx->backend_cpu);
     delete ctx;
+}
+
+// Internal C++ entry point for tests — declared in parakeet.h via a different
+// linkage section to avoid polluting the public C API.
+extern std::vector<float> parakeet_encode_mel(parakeet_context * ctx,
+                                              const float * mel, int n_mels, int T_mel,
+                                              int * out_T_enc);
+
+extern "C" int parakeet_test_encoder(struct parakeet_context * ctx, int T_mel) {
+    int n_mels = (int)ctx->model.hparams.n_mels;
+    std::vector<float> mel((size_t)n_mels * T_mel, 0.0f);
+    int T_enc = 0;
+    auto out = parakeet_encode_mel(ctx, mel.data(), n_mels, T_mel, &T_enc);
+    if (out.empty()) return -1;
+    fprintf(stderr, "parakeet: encoder OK — T_mel=%d → T_enc=%d  d=%d  out[0..3]=%g %g %g %g\n",
+            T_mel, T_enc, (int)ctx->model.hparams.d_model,
+            (double)out[0], (double)out[1], (double)out[2], (double)out[3]);
+    return T_enc;
 }
 
 extern "C" void parakeet_result_free(struct parakeet_result * r) {
