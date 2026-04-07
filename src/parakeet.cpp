@@ -1363,6 +1363,7 @@ extern "C" void parakeet_result_free(struct parakeet_result * r) {
     if (!r) return;
     free(r->text);
     free(r->tokens);
+    free(r->words);
     free(r);
 }
 
@@ -1444,6 +1445,67 @@ extern "C" struct parakeet_result * parakeet_transcribe_ex(
     // strip leading space
     if (!text.empty() && text[0] == ' ') text = text.substr(1);
     r->text = strdup(text.c_str());
+
+    // ----- Group sub-word tokens into words -----
+    //
+    // SentencePiece convention: a token starting with U+2581 (▁ → ' ') begins
+    // a new word. Punctuation tokens (e.g. ".", ",") attach to the *previous*
+    // word. Tokens that are pure punctuation and have no preceding word
+    // become a standalone word.
+    {
+        std::vector<parakeet_word_data> words;
+        words.reserve(r->n_tokens);
+
+        auto is_punct_only = [](const char * s) {
+            if (!s || !*s) return false;
+            for (const char * p = s; *p; p++) {
+                unsigned char c = (unsigned char)*p;
+                if (!(c == '.' || c == ',' || c == '?' || c == '!' ||
+                      c == ';' || c == ':' || c == '\'' || c == '"' ||
+                      c == '(' || c == ')' || c == '-')) return false;
+            }
+            return true;
+        };
+
+        parakeet_word_data cur = {};
+        bool have_cur = false;
+
+        for (int i = 0; i < r->n_tokens; i++) {
+            const auto & td = r->tokens[i];
+            if (!td.text[0]) continue;
+
+            const bool is_word_start = (td.text[0] == ' ');
+            const bool is_punct      = is_punct_only(td.text);
+
+            if (is_word_start && !is_punct && have_cur) {
+                words.push_back(cur);
+                cur = {};
+                have_cur = false;
+            }
+
+            if (!have_cur) {
+                cur.t0 = td.t0;
+                have_cur = true;
+            }
+            cur.t1 = td.t1;
+
+            // Append, dropping the leading space
+            const char * src = td.text + (is_word_start ? 1 : 0);
+            size_t cur_len = strlen(cur.text);
+            size_t cap = sizeof(cur.text) - cur_len - 1;
+            size_t add = strlen(src);
+            if (add > cap) add = cap;
+            memcpy(cur.text + cur_len, src, add);
+            cur.text[cur_len + add] = '\0';
+        }
+        if (have_cur) words.push_back(cur);
+
+        r->n_words = (int)words.size();
+        r->words = (parakeet_word_data *)calloc(r->n_words > 0 ? r->n_words : 1,
+                                                sizeof(parakeet_word_data));
+        for (int i = 0; i < r->n_words; i++) r->words[i] = words[i];
+    }
+
     return r;
 }
 

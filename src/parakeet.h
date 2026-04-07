@@ -42,10 +42,19 @@ struct parakeet_token_data {
     int64_t t1;        // end time,   centiseconds (start + duration*frame_dur_cs)
 };
 
+// Word-level data: sub-word tokens grouped at SentencePiece '▁' boundaries.
+struct parakeet_word_data {
+    char    text[64];  // word text (no leading space)
+    int64_t t0;        // start time, centiseconds (from first sub-word)
+    int64_t t1;        // end time,   centiseconds (from last sub-word)
+};
+
 struct parakeet_result {
     char   * text;                       // full transcript (malloc'd, caller owns)
     struct parakeet_token_data * tokens; // per-token timing (malloc'd)
     int      n_tokens;
+    struct parakeet_word_data  * words;  // grouped word timings (malloc'd)
+    int      n_words;
 };
 
 void parakeet_result_free(struct parakeet_result * r);

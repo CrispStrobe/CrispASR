@@ -105,6 +105,15 @@ int main(int argc, char ** argv) {
         }
         printf("%s\n", r->text ? r->text : "");
         if (verbosity >= 2) {
+            fprintf(stderr, "\n  --- words (%d) ---\n", r->n_words);
+            for (int i = 0; i < r->n_words; i++) {
+                const auto & w = r->words[i];
+                fprintf(stderr, "  [%5d.%02ds → %5d.%02ds]  %s\n",
+                    (int)(w.t0 / 100), (int)(w.t0 % 100),
+                    (int)(w.t1 / 100), (int)(w.t1 % 100),
+                    w.text);
+            }
+            fprintf(stderr, "\n  --- tokens (%d) ---\n", r->n_tokens);
             for (int i = 0; i < r->n_tokens; i++) {
                 const auto & td = r->tokens[i];
                 fprintf(stderr, "  [%5d.%02ds → %5d.%02ds]  id=%5d  '%s'\n",
