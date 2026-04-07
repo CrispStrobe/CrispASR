@@ -38,8 +38,11 @@
 #ifdef _OPENMP
 #include <omp.h>
 #endif
-#include <fftw3.h>
+#ifdef __APPLE__
+#include <Accelerate/Accelerate.h>  // cblas + vDSP, no external deps needed
+#else
 #include <cblas.h>
+#endif
 #if defined(__F16C__) && defined(__AVX2__)
 #include <immintrin.h>
 #define CT_HAVE_F16C 1
@@ -1021,6 +1024,46 @@ static const float * ct_tensor_f32(const ggml_tensor * t) {
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Iterative Cooley-Tukey FFT — real input, complex interleaved output.
+// N must be a power of 2. Output has N complex values (N*2 floats);
+// only the first N/2+1 are unique for real input.
+// ---------------------------------------------------------------------------
+static void cohere_fft_r2c(const float * in, int N, float * out) {
+    // Count bits for bit-reversal
+    int bits = 0;
+    for (int n = N; n > 1; n >>= 1) bits++;
+
+    // Bit-reversal copy (real → complex, imaginary = 0)
+    for (int i = 0; i < N; i++) {
+        int rev = 0;
+        for (int b = 0; b < bits; b++) rev = (rev << 1) | ((i >> b) & 1);
+        out[2*rev]   = in[i];
+        out[2*rev+1] = 0.0f;
+    }
+
+    // Cooley-Tukey butterflies
+    for (int len = 2; len <= N; len <<= 1) {
+        float ang = -2.0f * (float)M_PI / (float)len;
+        float wre = cosf(ang), wim = sinf(ang);
+        for (int i = 0; i < N; i += len) {
+            float ure = 1.0f, uim = 0.0f;
+            for (int j = 0; j < len / 2; j++) {
+                int a = i + j, b = i + j + len / 2;
+                float are = out[2*a], aim = out[2*a+1];
+                float bre = out[2*b], bim = out[2*b+1];
+                float tre = ure*bre - uim*bim, tim = ure*bim + uim*bre;
+                out[2*a]   = are + tre; out[2*a+1] = aim + tim;
+                out[2*b]   = are - tre; out[2*b+1] = aim - tim;
+                float new_ure = ure*wre - uim*wim;
+                uim = ure*wim + uim*wre;
+                ure = new_ure;
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Feature extraction: raw PCM → log-mel spectrogram
 // Returns float array of shape (n_mels, T_mel), row-major.
 // ---------------------------------------------------------------------------
@@ -1059,22 +1102,20 @@ static std::vector<float> cohere_compute_features(const cohere_hparams & hp,
     for (int i = 0; i < win; i++) window[lpad + i] = fe_window_data[i];
 
     // STFT → power spectrum → mel → log → normalize
-    // Use FFTW3f real-to-complex FFT: O(n_fft·log n_fft) vs O(n_fft²) for direct DFT.
+    // Self-contained iterative Cooley-Tukey FFT (no external dependencies).
     std::vector<float> power(n_freqs * T, 0.0f);
     {
-        std::vector<float>           fft_in(n_fft);
-        std::vector<fftwf_complex>   fft_out(n_freqs);
-        fftwf_plan plan = fftwf_plan_dft_r2c_1d(n_fft, fft_in.data(), fft_out.data(), FFTW_ESTIMATE);
+        std::vector<float> fft_in(n_fft);
+        std::vector<float> fft_out(n_fft * 2); // complex interleaved
         for (int t = 0; t < T; t++) {
             const float * frame = padded.data() + t * hop;
             for (int n = 0; n < n_fft; n++) fft_in[n] = frame[n] * window[n];
-            fftwf_execute(plan);
+            cohere_fft_r2c(fft_in.data(), n_fft, fft_out.data());
             for (int k = 0; k < n_freqs; k++) {
-                float re = fft_out[k][0], im = fft_out[k][1];
+                float re = fft_out[2*k], im = fft_out[2*k+1];
                 power[t * n_freqs + k] = re*re + im*im;
             }
         }
-        fftwf_destroy_plan(plan);
     }
 
     // mel filterbank: fe_mel_fb shape [1, n_mels, n_freqs]
