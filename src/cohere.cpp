@@ -1731,7 +1731,72 @@ struct cohere_result * cohere_transcribe_ex(struct cohere_context * ctx,
     COHERE_VLOG2(vb, "cohere: transcribe started   n_samples=%d  audio=%.2fs\n",
             n_samples, (double)n_samples / hp.sample_rate);
 
-    // --- Feature extraction ---
+    // --- Long-audio chunking: encode AND decode each 30s window independently ---
+    //
+    // The previous approach assembled a single giant cross-KV for all chunks and ran
+    // the decoder once. This is out-of-distribution for a model trained on ≤30s windows
+    // and causes the decoder to predict EOS far too early (e.g. ~70 words for a 2-min clip).
+    //
+    // Correct approach (same as Whisper): each 30s chunk is fully encode+decoded on its own.
+    // Results are concatenated with per-chunk t_offset_cs so timestamps remain absolute.
+    {
+        const int CHUNK_S = 30 * hp.sample_rate;
+        if (n_samples > CHUNK_S) {
+            // Merge helper: append src into dst
+            auto merge_results = [](cohere_result * dst, cohere_result * src) {
+                if (!src) return;
+                // Append text
+                if (src->text && src->text[0]) {
+                    std::string combined = dst->text ? std::string(dst->text) : "";
+                    if (!combined.empty() && combined.back() != ' ')
+                        combined += ' ';
+                    combined += src->text;
+                    free(dst->text);
+                    dst->text = (char *)malloc(combined.size() + 1);
+                    memcpy(dst->text, combined.c_str(), combined.size() + 1);
+                }
+                // Append tokens
+                if (src->n_tokens > 0) {
+                    int new_n = (dst->n_tokens) + src->n_tokens;
+                    cohere_token_data * new_toks = (cohere_token_data *)malloc(
+                            new_n * sizeof(cohere_token_data));
+                    if (dst->n_tokens > 0)
+                        memcpy(new_toks, dst->tokens, dst->n_tokens * sizeof(cohere_token_data));
+                    memcpy(new_toks + dst->n_tokens, src->tokens,
+                           src->n_tokens * sizeof(cohere_token_data));
+                    free(dst->tokens);
+                    dst->tokens  = new_toks;
+                    dst->n_tokens = new_n;
+                }
+                cohere_result_free(src);
+            };
+
+            cohere_result * full = (cohere_result *)calloc(1, sizeof(cohere_result));
+            full->text = (char *)calloc(1, 1);  // empty string
+
+            int offset = 0;
+            int chunk_idx = 0;
+            while (offset < n_samples) {
+                int chunk_end = std::min(offset + CHUNK_S, n_samples);
+                int64_t chunk_t0_cs = t_offset_cs +
+                        (int64_t)((double)offset / hp.sample_rate * 100.0);
+                COHERE_VLOG(vb, "cohere: chunk %d  samples [%d, %d)  t0=%.1fs\n",
+                        chunk_idx, offset, chunk_end, chunk_t0_cs / 100.0);
+                cohere_result * chunk_r = cohere_transcribe_ex(
+                        ctx,
+                        samples + offset,
+                        chunk_end - offset,
+                        lang,
+                        chunk_t0_cs);
+                merge_results(full, chunk_r);
+                offset = chunk_end;
+                chunk_idx++;
+            }
+            return full;
+        }
+    }
+
+    // --- Feature extraction (single chunk ≤ 30s) ---
     auto mel_fb = ct_get_f32(ctx->model.fe_mel_fb);
     auto window = ct_get_f32(ctx->model.fe_window);
 
