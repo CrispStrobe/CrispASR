@@ -2248,36 +2248,108 @@ struct cohere_result * cohere_transcribe_ex(struct cohere_context * ctx,
                         && ctx->step_attn.size() == generated.size();
 
     if (have_attn && !tok_data.empty()) {
+        const int n_tok   = (int)tok_data.size();
         const int T_enc   = ctx->attn_T_enc;
         const int n_heads = ctx->attn_n_heads;
 
-        // Compute the peak encoder frame for each tok_data entry.
-        std::vector<int64_t> tok_cs(tok_data.size());
-        for (int j = 0; j < (int)tok_data.size(); j++) {
-            int gi = tok_to_gen_idx[j];
-            const float * w = ctx->step_attn[gi].data();
+        // --- DTW-based token timestamp alignment ---
+        //
+        // We find the monotone path through the [n_tok × T_enc] cross-attention
+        // matrix that maximises cumulative attention weight, using dynamic programming
+        // with prefix-max predecessors.  This is the same approach as Whisper's
+        // experimental --dtw timestamps, but simplified to work with any model
+        // (no pre-selected "timing heads" needed).
+        //
+        // DP recurrence (prefix-max allows any forward jump per token step):
+        //   D[i][j] = A[i][j] + max_{k ≤ j}( D[i-1][k] )
+        //
+        // Each D[i][j] is backed by P[i][j] = argmax_{k ≤ j}( D[i-1][k] ),
+        // which is stored cheaply as the running argmax while scanning row i-1.
+        // Traceback is O(n_tok): path[i] = P[i+1][ path[i+1] ].
+        //
+        // Memory: two flat arrays of (n_tok × T_enc) floats/ints.
+        //   Worst case (30 s chunk): ~200 tokens × 375 frames × 8 bytes ≈ 600 KiB.
 
-            // Average cross-attn weights across all heads
-            std::vector<float> avg(T_enc, 0.0f);
+        // Step 1: head-averaged attention matrix A[n_tok * T_enc]
+        //
+        // Temporal offset correction:
+        // step_attn[i] is collected while the decoder processes generated[i] as input
+        // to produce the NEXT token's logits.  The cross-attention at that step reflects
+        // which encoder frames are relevant for predicting generated[i+1], not generated[i].
+        // Using step_attn[gi-1] (one step back) corrects this one-token forward bias,
+        // bringing timestamps to the start rather than the end of each word.
+        // For the very first generated token (gi==0) there is no previous step, so we
+        // use step_attn[0] (same as before — one-step error for the first token only).
+        std::vector<float> A(n_tok * T_enc, 0.0f);
+        for (int i = 0; i < n_tok; i++) {
+            int gi     = tok_to_gen_idx[i];
+            int gi_src = (gi > 0) ? gi - 1 : 0;  // one-step back to get start-of-token position
+            const float * w = ctx->step_attn[gi_src].data();
+            float * Ai = A.data() + i * T_enc;
             for (int h = 0; h < n_heads; h++)
                 for (int t = 0; t < T_enc; t++)
-                    avg[t] += w[h * T_enc + t];
-
-            int peak = (int)(std::max_element(avg.begin(), avg.end()) - avg.begin());
-            tok_cs[j] = t_offset_cs + (int64_t)peak * CS_PER_FRAME;
+                    Ai[t] += w[h * T_enc + t];
+            for (int t = 0; t < T_enc; t++)
+                Ai[t] /= n_heads;
         }
 
-        // Clamp so times are monotone non-decreasing (attn can jump around)
-        for (int j = 1; j < (int)tok_cs.size(); j++)
-            if (tok_cs[j] < tok_cs[j-1]) tok_cs[j] = tok_cs[j-1];
-
-        // Assign t0/t1: t1 of token j = t0 of token j+1; last token ends at seg_end
-        for (int j = 0; j < (int)tok_data.size(); j++) {
-            tok_data[j].t0 = tok_cs[j];
-            tok_data[j].t1 = (j + 1 < (int)tok_data.size()) ? tok_cs[j+1] : seg_end_cs;
+        // Column normalization: subtract per-frame mean across all tokens.
+        // Without this, "hot" encoder frames that many tokens attend to (often
+        // early frames or silence) dominate the prefix-max DP, causing the entire
+        // path to collapse to a single frame.  After normalization, the path
+        // is forced to spread — it only benefits from frames where a token attends
+        // *more than average*, not from frames that are globally popular.
+        {
+            std::vector<float> col_mean(T_enc, 0.f);
+            for (int i = 0; i < n_tok; i++)
+                for (int t = 0; t < T_enc; t++)
+                    col_mean[t] += A[i * T_enc + t];
+            for (int t = 0; t < T_enc; t++) col_mean[t] /= n_tok;
+            for (int i = 0; i < n_tok; i++)
+                for (int t = 0; t < T_enc; t++)
+                    A[i * T_enc + t] -= col_mean[t];
         }
-        COHERE_VLOG2(vb, "cohere: timestamps via cross-attention alignment (%d tokens)\n",
-                     (int)tok_data.size());
+
+        // Step 2: forward DP
+        std::vector<float> D(n_tok * T_enc);
+        std::vector<int>   P(n_tok * T_enc); // back-pointer: P[i][j] = best predecessor frame
+
+        // Row 0: no predecessors
+        for (int j = 0; j < T_enc; j++) D[j] = A[j];
+
+        for (int i = 1; i < n_tok; i++) {
+            const float * Di_1 = D.data() + (i-1) * T_enc;
+            const float * Ai   = A.data() + i     * T_enc;
+            float *       Di   = D.data() + i     * T_enc;
+            int   *       Pi   = P.data() + i     * T_enc;
+
+            // Running prefix-max scan over row i-1
+            float pm_val = Di_1[0];
+            int   pm_idx = 0;
+            for (int j = 0; j < T_enc; j++) {
+                if (Di_1[j] > pm_val) { pm_val = Di_1[j]; pm_idx = j; }
+                Di[j] = Ai[j] + pm_val;
+                Pi[j] = pm_idx;
+            }
+        }
+
+        // Step 3: traceback — recover optimal monotone path
+        std::vector<int> path(n_tok);
+        {
+            const float * Dlast = D.data() + (n_tok-1) * T_enc;
+            path[n_tok-1] = (int)(std::max_element(Dlast, Dlast + T_enc) - Dlast);
+        }
+        for (int i = n_tok-2; i >= 0; i--)
+            path[i] = P[(i+1)*T_enc + path[i+1]];
+
+        // Step 4: path[i] is the encoder frame for token i → centiseconds
+        for (int i = 0; i < n_tok; i++) {
+            tok_data[i].t0 = t_offset_cs + (int64_t)path[i] * CS_PER_FRAME;
+            tok_data[i].t1 = (i+1 < n_tok) ?
+                t_offset_cs + (int64_t)path[i+1] * CS_PER_FRAME : seg_end_cs;
+        }
+        COHERE_VLOG2(vb, "cohere: timestamps via DTW alignment (%d tokens, T_enc=%d)\n",
+                     n_tok, T_enc);
     } else {
         // Fallback: distribute segment duration proportional to character length
         int total_chars = 0;
