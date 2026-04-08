@@ -15,9 +15,11 @@ A fork of [whisper.cpp](https://github.com/ggml-org/whisper.cpp) that adds full 
 
 All five runtimes share the same NeMo-style mel preprocessor and (mostly) the same FastConformer encoder family — that's how we ported each new model in days rather than weeks.
 
-> **Looking for just the Cohere Transcribe runtime?** It still lives on the **[`ggml`](https://github.com/CrispStrobe/CrispASR/tree/ggml)** branch. This `parakeet` branch is a strict superset that adds parakeet + canary + nfa-align on top of the cohere infrastructure. The `parakeet` branch will become `main` once the rename + CI shake-out settle.
+> **Branch state.** Everything lives on `main` as of April 2026. The original cohere-only history is preserved at the [`archive/cohere-only`](https://github.com/CrispStrobe/CrispASR/tree/archive/cohere-only) branch as a historical reference.
 
-> **Future direction.** The plan is to fold the per-model `*-main` binaries into a single subcommand-driven `crispasr` binary, and `cohere-align` + `nfa-align` into a single `crispalign` binary. The current per-model binaries will remain as thin shims for backward compat. See `RENAMING.md` for the plan.
+> **Future direction.** The plan is to fold the per-model `*-main` binaries into a single subcommand-driven `crispasr` binary, and `cohere-align` + `nfa-align` into a single `crispalign` binary. The current per-model binaries will remain as thin shims for backward compat. See [`RENAMING.md`](RENAMING.md) for the plan.
+
+> **Pending upstream fixes** that affect this fork are tracked in [`UPSTREAM.md`](UPSTREAM.md) (currently: `whisper.cpp` `ffmpeg-transcode.cpp` mp4-container bug, ggml VNNI Q8_0 dispatch, NeMo aux model standalone release).
 
 ## Which runtime should I use?
 
