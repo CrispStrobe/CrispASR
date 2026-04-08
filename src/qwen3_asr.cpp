@@ -1132,9 +1132,12 @@ static ggml_cgraph * qwen3_asr_build_graph_llm_kv(qwen3_asr_context * ctx,
     // to all cached keys including itself. If we always declared the mask
     // input, the scheduler would optimize it away on the decode path and
     // ggml_graph_get_tensor("causal_mask") would return null.
+    //
+    // For prefill we use flash_attn_ext too, which requires the mask to
+    // be F16 (and contiguous, broadcast-compatible with Q's trailing dims).
     ggml_tensor * causal_mask = nullptr;
     if (T > 1) {
-        causal_mask = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, Lk, T);
+        causal_mask = ggml_new_tensor_2d(ctx0, GGML_TYPE_F16, Lk, T);
         ggml_set_name(causal_mask, "causal_mask");
         ggml_set_input(causal_mask);
     }
@@ -1227,16 +1230,10 @@ static ggml_cgraph * qwen3_asr_build_graph_llm_kv(qwen3_asr_context * ctx,
             // sub-block is contiguous because hd is fast and n_q is next.
             attn = ggml_reshape_2d(ctx0, attn, hd * n_q, T);
         } else {
-            // Prefill path: manual scores = K^T @ Q + mask, softmax, @ V.
-            ggml_tensor * scores = ggml_mul_mat(ctx0, Kfull, Q);
-            scores = ggml_add(ctx0, scores, causal_mask);
-            scores = ggml_soft_max_ext(ctx0, scores, nullptr, attn_scale, 0.0f);
-
-            // Vfull ne=(hd, Lk, n_q). Permute to (Lk, hd, n_q) for the dot.
-            ggml_tensor * V2 = ggml_cont(ctx0, ggml_permute(ctx0, Vfull, 1, 0, 2, 3));
-            attn = ggml_mul_mat(ctx0, V2, scores);
-            // attn ne=(hd, T, n_q) → permute back → reshape (hd*n_q, T)
-            attn = ggml_cont(ctx0, ggml_permute(ctx0, attn, 0, 2, 1, 3));
+            // Prefill path: ggml_flash_attn_ext with an F16 causal mask.
+            attn = ggml_flash_attn_ext(ctx0, Q, Kfull, Vfull, causal_mask,
+                                       attn_scale, 0.0f, 0.0f);
+            // Output ne = (hd, n_q, T, 1) → reshape to (hd*n_q, T)
             attn = ggml_reshape_2d(ctx0, attn, hd * n_q, T);
         }
 
@@ -1616,12 +1613,15 @@ extern "C" float * qwen3_asr_run_llm_kv(qwen3_asr_context * ctx,
     // Causal mask: only needed for prefill (T > 1). Decode (T = 1) uses
     // ggml_flash_attn_ext with no mask — the single new query attends to
     // all cached keys including itself, so no masking is needed.
-    std::vector<float> mask;
+    // ggml_flash_attn_ext requires the mask to be F16.
+    std::vector<ggml_fp16_t> mask;
     if (n_tokens > 1) {
-        mask.assign((size_t)Lk * n_tokens, 0.0f);
+        const ggml_fp16_t zero_h = ggml_fp32_to_fp16(0.0f);
+        const ggml_fp16_t neginf_h = ggml_fp32_to_fp16(-INFINITY);
+        mask.assign((size_t)Lk * n_tokens, zero_h);
         for (int q = 0; q < n_tokens; q++) {
             for (int k = n_past + q + 1; k < Lk; k++) {
-                mask[(size_t)q * Lk + k] = -INFINITY;
+                mask[(size_t)q * Lk + k] = neginf_h;
             }
         }
     }
@@ -1646,7 +1646,8 @@ extern "C" float * qwen3_asr_run_llm_kv(qwen3_asr_context * ctx,
     ggml_backend_tensor_set(pos_in, positions.data(), 0, positions.size() * sizeof(int32_t));
     if (n_tokens > 1) {
         ggml_tensor * mask_in = ggml_graph_get_tensor(gf, "causal_mask");
-        ggml_backend_tensor_set(mask_in, mask.data(), 0, mask.size() * sizeof(float));
+        ggml_backend_tensor_set(mask_in, mask.data(), 0,
+                                mask.size() * sizeof(ggml_fp16_t));
     }
 
     if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS) {
