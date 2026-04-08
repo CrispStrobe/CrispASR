@@ -27,8 +27,10 @@
 #include <cstdlib>
 #include <cstring>
 #include <fcntl.h>
+#include <climits>
 #include <map>
 #include <string>
+#include <unordered_map>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -153,6 +155,14 @@ struct qwen3_asr_model {
 
 struct qwen3_asr_vocab {
     std::vector<std::string> id_to_token;
+
+    // Reverse lookup: byte-encoded vocab string → token id (for BPE encode).
+    std::unordered_map<std::string, int32_t> token_to_id;
+
+    // BPE merges loaded from the GGUF. Each merge is a (left, right) pair
+    // of byte-encoded strings; the rank is the index in the list (lower = earlier
+    // merge = higher priority, matching GPT-2 / Qwen2 BPE convention).
+    std::unordered_map<std::string, int32_t> merge_rank;  // "left right" → rank
 };
 
 struct qwen3_asr_context {
@@ -266,8 +276,59 @@ static bool qwen3_asr_load_model(qwen3_asr_model & model,
         if (ki >= 0) {
             int n = gguf_get_arr_n(gctx, ki);
             vocab.id_to_token.resize(n);
+            vocab.token_to_id.reserve(n);
             for (int i = 0; i < n; i++) {
                 vocab.id_to_token[i] = gguf_get_arr_str(gctx, ki, i);
+                vocab.token_to_id[vocab.id_to_token[i]] = i;
+            }
+        }
+
+        // Register Qwen2/Qwen3 special tokens explicitly. The original
+        // vocab.json that the converter pulls strings from only has 151 643
+        // regular tokens; the special tokens (<|im_start|>, <|audio_pad|>,
+        // ...) live in tokenizer_config.json's added_tokens list, which the
+        // converter currently doesn't propagate, so they end up as
+        // "[PAD151644]" etc. in vocab.id_to_token. Patch them in here so
+        // qwen3_asr_tokenize and qwen3_asr_token_text can find them.
+        struct SpecialTok { int id; const char * text; };
+        static const SpecialTok specials[] = {
+            { 151643, "<|endoftext|>"     },
+            { 151644, "<|im_start|>"      },
+            { 151645, "<|im_end|>"        },
+            { 151646, "<|object_ref_start|>" },
+            { 151647, "<|object_ref_end|>"   },
+            { 151648, "<|box_start|>"     },
+            { 151649, "<|box_end|>"       },
+            { 151650, "<|quad_start|>"    },
+            { 151651, "<|quad_end|>"      },
+            { 151652, "<|vision_start|>"  },
+            { 151653, "<|vision_end|>"    },
+            { 151654, "<|vision_pad|>"    },
+            { 151655, "<|image_pad|>"     },
+            { 151656, "<|video_pad|>"     },
+            { 151669, "<|audio_start|>"   },
+            { 151670, "<|audio_end|>"     },
+            { 151676, "<|audio_pad|>"     },
+        };
+        for (const auto & sp : specials) {
+            if (sp.id < (int)vocab.id_to_token.size()) {
+                // Drop the old [PAD<id>] reverse-map entry if present
+                auto old_it = vocab.token_to_id.find(vocab.id_to_token[sp.id]);
+                if (old_it != vocab.token_to_id.end() && old_it->second == sp.id) {
+                    vocab.token_to_id.erase(old_it);
+                }
+                vocab.id_to_token[sp.id] = sp.text;
+                vocab.token_to_id[sp.text] = sp.id;
+            }
+        }
+        // Merges (BPE encode side). Each entry is a "left right" pair string;
+        // the ARRAY index is the merge's rank (lowest rank = highest priority).
+        int km = gguf_find_key(gctx, "tokenizer.ggml.merges");
+        if (km >= 0) {
+            int n = gguf_get_arr_n(gctx, km);
+            vocab.merge_rank.reserve(n);
+            for (int i = 0; i < n; i++) {
+                vocab.merge_rank[gguf_get_arr_str(gctx, km, i)] = i;
             }
         }
 
@@ -1295,6 +1356,222 @@ static ggml_cgraph * qwen3_asr_build_graph_embed(qwen3_asr_context * ctx, int n_
 extern "C" const char * qwen3_asr_token_text(qwen3_asr_context * ctx, int id) {
     if (!ctx || id < 0 || id >= (int)ctx->vocab.id_to_token.size()) return "";
     return ctx->vocab.id_to_token[id].c_str();
+}
+
+// ===========================================================================
+// BPE tokenizer (GPT-2 byte-level, Qwen2/Qwen3 compatible)
+//
+// Two-stage encode:
+//   1. Pre-tokenize: split the input on `<|special|>` markers and on
+//      whitespace boundaries. Special tokens are looked up directly in the
+//      vocab as full strings; the remaining text segments are byte-encoded
+//      via the GPT-2 byte→unicode mapping and then BPE-merged.
+//   2. BPE merge loop: for each pre-token, find the lowest-rank merge in
+//      the merge table and apply it, repeating until no merges apply.
+//      The final symbols are then looked up in the vocab.
+// ===========================================================================
+
+// GPT-2 byte → unicode mapping (one F32 per byte). Built lazily once.
+static const std::vector<int> & qwen3_byte_encoder() {
+    static std::vector<int> bs(256, 0);
+    static bool initialized = false;
+    if (initialized) return bs;
+    // Same construction as the byte_decoder in the CLI, but the inverse
+    // direction: bs[byte] = unicode codepoint.
+    std::vector<int> printable;
+    for (int b = 0x21; b <= 0x7e; b++) printable.push_back(b);
+    for (int b = 0xa1; b <= 0xac; b++) printable.push_back(b);
+    for (int b = 0xae; b <= 0xff; b++) printable.push_back(b);
+    int next_extra = 256;
+    for (int b = 0; b < 256; b++) {
+        bool is_printable = false;
+        for (int p : printable) if (p == b) { is_printable = true; break; }
+        if (is_printable) bs[b] = b;
+        else              bs[b] = next_extra++;
+    }
+    initialized = true;
+    return bs;
+}
+
+// Encode a UTF-8 codepoint into a UTF-8 byte sequence.
+static void qwen3_utf8_encode(uint32_t cp, std::string & out) {
+    if (cp < 0x80)        { out.push_back((char)cp); }
+    else if (cp < 0x800)  { out.push_back((char)(0xC0 | (cp >> 6)));
+                            out.push_back((char)(0x80 | (cp & 0x3F))); }
+    else if (cp < 0x10000){ out.push_back((char)(0xE0 | (cp >> 12)));
+                            out.push_back((char)(0x80 | ((cp >> 6) & 0x3F)));
+                            out.push_back((char)(0x80 | (cp & 0x3F))); }
+    else                  { out.push_back((char)(0xF0 | (cp >> 18)));
+                            out.push_back((char)(0x80 | ((cp >> 12) & 0x3F)));
+                            out.push_back((char)(0x80 | ((cp >> 6) & 0x3F)));
+                            out.push_back((char)(0x80 | (cp & 0x3F))); }
+}
+
+// Apply the byte encoder to a raw byte buffer, returning a UTF-8 string of
+// "safe" codepoints. Each input byte → one output codepoint via the GPT-2
+// byte→unicode map, then encoded as UTF-8.
+static std::string qwen3_bytes_to_unicode(const char * bytes, size_t n) {
+    auto & enc = qwen3_byte_encoder();
+    std::string out;
+    out.reserve(n);
+    for (size_t i = 0; i < n; i++) {
+        qwen3_utf8_encode((uint32_t)enc[(unsigned char)bytes[i]], out);
+    }
+    return out;
+}
+
+// BPE merge a single pre-token. The input is the byte-encoded unicode form.
+// Returns the list of vocab IDs after greedy lowest-rank merging.
+static void qwen3_bpe_one(const qwen3_asr_vocab & v, const std::string & word,
+                          std::vector<int32_t> & out) {
+    if (word.empty()) return;
+
+    // Split into UTF-8 codepoint substrings — each codepoint is one symbol.
+    std::vector<std::string> symbols;
+    {
+        size_t i = 0;
+        while (i < word.size()) {
+            unsigned char c = (unsigned char)word[i];
+            size_t len;
+            if      (c < 0x80) len = 1;
+            else if ((c & 0xE0) == 0xC0) len = 2;
+            else if ((c & 0xF0) == 0xE0) len = 3;
+            else if ((c & 0xF8) == 0xF0) len = 4;
+            else                          len = 1;
+            if (i + len > word.size()) len = 1;
+            symbols.emplace_back(word, i, len);
+            i += len;
+        }
+    }
+
+    if (symbols.empty()) return;
+
+    // Greedy: at each step, find the pair with the lowest merge rank and
+    // apply it. Repeat until no merges apply. Each merge reduces the
+    // symbol count by 1, so the loop terminates in at most N-1 iterations.
+    const int max_iter = (int)symbols.size();
+    for (int iter = 0; iter < max_iter && symbols.size() >= 2; iter++) {
+        int best_i = -1;
+        int best_rank = INT_MAX;
+        for (size_t k = 0; k + 1 < symbols.size(); k++) {
+            std::string pair = symbols[k] + " " + symbols[k+1];
+            auto it = v.merge_rank.find(pair);
+            if (it != v.merge_rank.end() && it->second < best_rank) {
+                best_rank = it->second;
+                best_i = (int)k;
+            }
+        }
+        if (best_i < 0) break;
+        symbols[best_i] += symbols[best_i+1];
+        symbols.erase(symbols.begin() + best_i + 1);
+    }
+
+    // Look up the final symbols in the vocab. Symbols that aren't in the
+    // vocab fall back to per-byte (which always exist for byte-level BPE).
+    for (const auto & s : symbols) {
+        auto it = v.token_to_id.find(s);
+        if (it != v.token_to_id.end()) {
+            out.push_back(it->second);
+        } else {
+            // Per-byte fallback: split into individual codepoints.
+            size_t i = 0;
+            while (i < s.size()) {
+                unsigned char c = (unsigned char)s[i];
+                size_t len;
+                if      (c < 0x80) len = 1;
+                else if ((c & 0xE0) == 0xC0) len = 2;
+                else if ((c & 0xF0) == 0xE0) len = 3;
+                else if ((c & 0xF8) == 0xF0) len = 4;
+                else                          len = 1;
+                std::string single(s, i, len);
+                auto jt = v.token_to_id.find(single);
+                if (jt != v.token_to_id.end()) out.push_back(jt->second);
+                i += len;
+            }
+        }
+    }
+}
+
+extern "C" int32_t * qwen3_asr_tokenize(qwen3_asr_context * ctx,
+                                        const char * text, int * out_n_tokens) {
+    if (!ctx || !text) {
+        if (out_n_tokens) *out_n_tokens = 0;
+        return nullptr;
+    }
+    const auto & v = ctx->vocab;
+    std::vector<int32_t> result;
+
+    const std::string s = text;
+    size_t i = 0;
+    while (i < s.size()) {
+        // 1. Special-token check: if the next chars are "<|...|>" and the
+        //    full token exists in the vocab, emit it directly.
+        if (s[i] == '<' && i + 1 < s.size() && s[i+1] == '|') {
+            size_t end = s.find("|>", i + 2);
+            if (end != std::string::npos) {
+                std::string special = s.substr(i, end + 2 - i);
+                auto it = v.token_to_id.find(special);
+                if (it != v.token_to_id.end()) {
+                    result.push_back(it->second);
+                    i = end + 2;
+                    continue;
+                }
+            }
+        }
+
+        // 2. Plain text segment: collect chars up to the next "<|...|>" we
+        //    can recognize. We treat a "<|" as a candidate boundary only if
+        //    it's an actual special token we know — otherwise we keep
+        //    extending the plain-text segment past it (a literal "<|" in
+        //    user text isn't a special token).
+        size_t j = i;
+        // Ensure we always advance by at least one char on every outer
+        // iteration, even if step 1 just failed on a "<|...|>" lookalike
+        // that isn't actually a special token.
+        if (s[j] == '<' && j + 1 < s.size() && s[j+1] == '|') j++;
+        while (j < s.size()) {
+            if (s[j] == '<' && j + 1 < s.size() && s[j+1] == '|') {
+                size_t end = s.find("|>", j + 2);
+                if (end != std::string::npos) {
+                    std::string special = s.substr(j, end + 2 - j);
+                    if (v.token_to_id.find(special) != v.token_to_id.end()) break;
+                }
+            }
+            j++;
+        }
+        std::string chunk = s.substr(i, j - i);
+        i = j;
+        if (chunk.empty()) continue;
+
+        // 3. Pre-split the chunk on whitespace boundaries the way GPT-2
+        //    does: each pre-token starts at a non-space char and includes
+        //    the leading space if present (Ġ marker). We approximate this
+        //    by splitting on transitions between "leading space + word",
+        //    "word", "punctuation", etc.
+        size_t k = 0;
+        while (k < chunk.size()) {
+            size_t start = k;
+            // Optional leading whitespace (single char)
+            if (chunk[k] == ' ' || chunk[k] == '\t' || chunk[k] == '\n') k++;
+            // The "word body" — everything until the next whitespace OR a
+            // standalone punctuation transition.
+            while (k < chunk.size() && chunk[k] != ' '
+                   && chunk[k] != '\t' && chunk[k] != '\n') {
+                k++;
+            }
+            if (k == start) k++;  // pure whitespace boundary, advance one
+            std::string pre(chunk, start, k - start);
+            // 4. Byte-encode and BPE-merge
+            std::string encoded = qwen3_bytes_to_unicode(pre.data(), pre.size());
+            qwen3_bpe_one(v, encoded, result);
+        }
+    }
+
+    if (out_n_tokens) *out_n_tokens = (int)result.size();
+    int32_t * out = (int32_t *)malloc(result.size() * sizeof(int32_t));
+    if (!out) { if (out_n_tokens) *out_n_tokens = 0; return nullptr; }
+    std::memcpy(out, result.data(), result.size() * sizeof(int32_t));
+    return out;
 }
 
 extern "C" qwen3_asr_context_params qwen3_asr_context_default_params(void) {

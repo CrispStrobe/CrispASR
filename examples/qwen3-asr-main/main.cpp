@@ -85,25 +85,30 @@ static bool load_wav_16k_mono(const std::string & path, std::vector<float> & out
 }
 
 // ---------------------------------------------------------------------------
-// Build prompt token IDs: hardcoded ChatML template, audio_pad count = N_audio.
-//   <|im_start|>system\n<|im_end|>\n<|im_start|>user\n
-//     <|audio_start|><|audio_pad|>×N<|audio_end|><|im_end|>\n
-//   <|im_start|>assistant\n
+// Build the ChatML prompt token IDs by tokenising the template via the
+// model's BPE encoder. This replaces the previous hardcoded ID list and
+// makes it trivial to add an explicit language hint or system prompt.
 // ---------------------------------------------------------------------------
-static std::vector<int32_t> build_prompt_ids(int n_audio_pad) {
-    const int IM_START = 151644, IM_END = 151645;
-    const int SYSTEM = 8948, USER = 872, ASSISTANT = 77091;
-    const int NL = 198;
-    const int AUDIO_START = 151669, AUDIO_END = 151670, AUDIO_PAD = 151676;
+static std::vector<int32_t> build_prompt_ids(qwen3_asr_context * ctx, int n_audio_pad) {
+    // Build the chat-template string with N copies of <|audio_pad|> in the
+    // user message. The BPE tokenizer recognises all the special tokens.
+    std::string text =
+        "<|im_start|>system\n<|im_end|>\n"
+        "<|im_start|>user\n"
+        "<|audio_start|>";
+    text.reserve(text.size() + 13 * n_audio_pad + 64);
+    for (int i = 0; i < n_audio_pad; i++) text += "<|audio_pad|>";
+    text +=
+        "<|audio_end|><|im_end|>\n"
+        "<|im_start|>assistant\n";
 
+    int n = 0;
+    int32_t * raw = qwen3_asr_tokenize(ctx, text.c_str(), &n);
     std::vector<int32_t> ids;
-    ids.reserve(16 + n_audio_pad);
-    ids.push_back(IM_START); ids.push_back(SYSTEM); ids.push_back(NL); ids.push_back(IM_END); ids.push_back(NL);
-    ids.push_back(IM_START); ids.push_back(USER);   ids.push_back(NL);
-    ids.push_back(AUDIO_START);
-    for (int i = 0; i < n_audio_pad; i++) ids.push_back(AUDIO_PAD);
-    ids.push_back(AUDIO_END); ids.push_back(IM_END); ids.push_back(NL);
-    ids.push_back(IM_START); ids.push_back(ASSISTANT); ids.push_back(NL);
+    if (raw) {
+        ids.assign(raw, raw + n);
+        free(raw);
+    }
     return ids;
 }
 
@@ -215,7 +220,7 @@ int main(int argc, char ** argv) {
             std::chrono::duration<double, std::milli>(t_enc - t_mel).count());
 
     // ----- Build prompt + embed text + splice audio -----
-    auto ids = build_prompt_ids(N_enc);
+    auto ids = build_prompt_ids(ctx, N_enc);
     int T_prompt = (int)ids.size();
     fprintf(stderr, "prompt: %d tokens (incl. %d audio_pad)\n", T_prompt, N_enc);
 

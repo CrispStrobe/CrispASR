@@ -81,6 +81,14 @@ float * qwen3_asr_run_llm(struct qwen3_asr_context * ctx,
 // raw UTF-8 bytes).
 const char * qwen3_asr_token_text(struct qwen3_asr_context * ctx, int id);
 
+// Tokenize a UTF-8 text string with the model's GPT-2 byte-level BPE.
+// Handles Qwen3 special tokens (`<|im_start|>`, `<|audio_pad|>`, etc.) by
+// looking them up in the vocab table directly before BPE-merging the
+// surrounding plain text. Returns a malloc'd int32 array of token IDs;
+// caller must free() the returned pointer. *out_n_tokens set on return.
+int32_t * qwen3_asr_tokenize(struct qwen3_asr_context * ctx,
+                             const char * text, int * out_n_tokens);
+
 // Compute the log-mel spectrogram for raw 16 kHz mono PCM samples, matching
 // HuggingFace WhisperFeatureExtractor (n_fft=400, hop=160, 128 mel bins,
 // log10 + clip-to-max-8 + (x+4)/4 normalization). Requires that the model

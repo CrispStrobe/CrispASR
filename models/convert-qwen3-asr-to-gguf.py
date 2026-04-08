@@ -226,6 +226,24 @@ def convert(input_dir: Path, out_path: Path) -> None:
     tokens = [tok for tok, _ in sorted_vocab]
     while len(tokens) < vocab_size:
         tokens.append(f"[PAD{len(tokens)}]")
+
+    # Pull the special tokens (e.g. <|im_start|>, <|audio_pad|>) out of
+    # tokenizer_config.json's added_tokens_decoder and patch them into the
+    # token list at their proper IDs. vocab.json itself only contains the
+    # 151643 regular BPE tokens; the special tokens live in the added_tokens
+    # block, and without this patch they end up as "[PAD<id>]" placeholders
+    # in the GGUF, which breaks the C++ BPE encoder's special-token lookup.
+    tcfg_path = input_dir / "tokenizer_config.json"
+    if tcfg_path.exists():
+        with open(tcfg_path, "r", encoding="utf-8") as f:
+            tcfg = json.load(f)
+        added = tcfg.get("added_tokens_decoder", {})
+        for tid_str, info in added.items():
+            tid = int(tid_str)
+            content = info.get("content")
+            if content and 0 <= tid < len(tokens):
+                tokens[tid] = content
+        print(f"  patched {len(added)} added/special tokens from tokenizer_config.json")
     print(f"  vocab: {len(tokens)} tokens")
 
     merges_path = input_dir / "merges.txt"
