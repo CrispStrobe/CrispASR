@@ -316,16 +316,18 @@ print("\n" + "=" * 60)
 print("9. First-token logits")
 print("=" * 60)
 
-with torch.no_grad():
-    # Run the model forward (not generate) to get logits
-    fwd_out = model(**inputs)
-    logits = fwd_out.logits[0, -1]  # last position logits
-    top_k = torch.topk(logits, 10)
-    save_result("prefill_logits_top10_vals", top_k.values.numpy(),
-                f"top-10 logit values from prefill")
-    save_result("prefill_logits_top10_ids", top_k.indices.numpy().astype(np.float32),
-                f"top-10 token IDs: {top_k.indices.tolist()}")
-    print(f"  Top-10 tokens: {[(processor.decode([tid]), float(val)) for tid, val in zip(top_k.indices.tolist(), top_k.values.tolist())]}")
+try:
+    with torch.no_grad():
+        fwd_out = model(**inputs)
+        logits = fwd_out.logits[0, -1]
+        top_k = torch.topk(logits, 10)
+        save_result("prefill_logits_top10_vals", top_k.values.numpy(),
+                    f"top-10 logit values from prefill")
+        save_result("prefill_logits_top10_ids", top_k.indices.numpy().astype(np.float32),
+                    f"top-10 token IDs: {top_k.indices.tolist()}")
+        print(f"  Top-10 tokens: {[(processor.decode([tid]), float(val)) for tid, val in zip(top_k.indices.tolist(), top_k.values.tolist())]}")
+except Exception as e:
+    print(f"  Prefill logits failed: {e} (expected — inputs_embeds/audio shape mismatch in forward mode)")
 
 # ============================================================
 # 10. Conv stem output (first few frames)

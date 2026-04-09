@@ -412,7 +412,6 @@ extern "C" float * voxtral4b_compute_mel(voxtral4b_context * ctx,
     if (!ctx || !samples || n_samples <= 0) return nullptr;
     if (!ctx->model.audio.mel_filters || !ctx->model.audio.mel_window) return nullptr;
     const int n_fft = 400, hop = 160, n_mels = 128, n_freqs = 201;
-    const int T_out = 3000;
 
     std::vector<float> hann(n_fft);
     ggml_backend_tensor_get(ctx->model.audio.mel_window, hann.data(), 0, n_fft*sizeof(float));
@@ -440,34 +439,33 @@ extern "C" float * voxtral4b_compute_mel(voxtral4b_context * ctx,
         }
     }
 
-    std::vector<float> mel((size_t)n_mels * T_out, 0.0f);
-    float mel_max = -1e30f;
+    // Make T even for conv stride-2 (drop first frame if odd, matching voxmlx)
+    int T_even = T;
+    int t_offset = 0;
+    if (T % 2 != 0) { T_even = T - 1; t_offset = 1; }
+
+    // Compute mel spectrogram — no padding to fixed size!
+    std::vector<float> mel((size_t)n_mels * T_even, 0.0f);
     for (int m = 0; m < n_mels; m++) {
-        for (int t = 0; t < std::min(T, T_out); t++) {
+        for (int t = 0; t < T_even; t++) {
             double s = 0.0;
             for (int k = 0; k < n_freqs; k++)
-                s += (double)filt[(size_t)k*n_mels+m] * power[(size_t)k*T+t];
+                s += (double)filt[(size_t)k*n_mels+m] * power[(size_t)k*(T) + (t + t_offset)];
             float lv = std::log10(std::max((float)s, 1e-10f));
-            mel[(size_t)m*T_out+t] = lv;
-            if (lv > mel_max) mel_max = lv;
-        }
-        for (int t = T; t < T_out; t++) {
-            float lv = std::log10(1e-10f);
-            mel[(size_t)m*T_out+t] = lv;
-            if (lv > mel_max) mel_max = lv;
+            mel[(size_t)m*T_even+t] = lv;
         }
     }
-    // VoxtralRealtime uses a FIXED global_log_mel_max=1.5 instead of the
-    // per-utterance max that Whisper uses. This is critical for correct output.
+
+    // VoxtralRealtime normalization with FIXED global_log_mel_max=1.5
     const float global_log_mel_max = 1.5f;
-    const float floor_v = global_log_mel_max - 8.0f;  // -6.5
+    const float floor_v = global_log_mel_max - 8.0f;
     for (size_t i = 0; i < mel.size(); i++) {
         float v = mel[i]; if (v < floor_v) v = floor_v;
         mel[i] = (v + 4.0f) / 4.0f;
     }
 
     if (out_n_mels) *out_n_mels = n_mels;
-    if (out_T_mel)  *out_T_mel  = T_out;
+    if (out_T_mel)  *out_T_mel  = T_even;
     float * result = (float*)malloc(mel.size()*sizeof(float));
     std::memcpy(result, mel.data(), mel.size()*sizeof(float));
     return result;
@@ -479,7 +477,7 @@ extern "C" float * voxtral4b_compute_mel(voxtral4b_context * ctx,
 
 static const float kRmsEps = 1e-5f;
 
-static ggml_cgraph * voxtral4b_build_graph_encoder(voxtral4b_context * ctx) {
+static ggml_cgraph * voxtral4b_build_graph_encoder(voxtral4b_context * ctx, int T_mel) {
     const auto & m  = ctx->model;
     const auto & hp = m.hparams;
     const int d         = (int)hp.audio_d_model;
@@ -488,7 +486,6 @@ static ggml_cgraph * voxtral4b_build_graph_encoder(voxtral4b_context * ctx) {
     const int n_layers  = (int)hp.audio_n_layers;
     const int proj_in   = (int)hp.proj_in_dim;
     const int n_mels    = (int)hp.n_mels;
-    const int T_mel     = 3000;
     const int swa       = (int)hp.audio_swa;
     const float attn_scale = 1.0f / std::sqrt((float)head_dim);
 
@@ -1045,12 +1042,14 @@ extern "C" int32_t * voxtral4b_tokenize(voxtral4b_context * ctx, const char * te
 extern "C" float * voxtral4b_run_encoder(voxtral4b_context * ctx,
                                          const float * mel, int n_mels, int T_mel,
                                          int * out_N, int * out_dim) {
-    if (!ctx || !mel || n_mels != 128 || T_mel != 3000) return nullptr;
-    const int T_enc = (T_mel + 1) / 2;  // ceil(3000/2) = 1500
-    const int N_out = T_enc / 4;  // 375
+    if (!ctx || !mel || n_mels != 128 || T_mel <= 0 || T_mel % 2 != 0) return nullptr;
+    const int T_enc = (T_mel + 1) / 2;
+    // Truncate to be divisible by 4 (downsample factor)
+    const int T_enc_ds = (T_enc / 4) * 4;  // round down
+    const int N_out = T_enc_ds / 4;
     const int dim   = (int)ctx->model.hparams.proj_out_dim;
 
-    ggml_cgraph * gf = voxtral4b_build_graph_encoder(ctx);
+    ggml_cgraph * gf = voxtral4b_build_graph_encoder(ctx, T_mel);
     ggml_backend_sched_reset(ctx->sched);
     if (!ggml_backend_sched_alloc_graph(ctx->sched, gf)) return nullptr;
 

@@ -228,17 +228,40 @@ def convert(input_dir: Path, out_path: Path) -> None:
     writer.add_uint32("tokenizer.tekken.n_vocab",    n_vocab)
 
     # Mel filterbank + Hann window
-    try:
-        from transformers import AutoFeatureExtractor
-        fe = AutoFeatureExtractor.from_pretrained(str(input_dir))
-        mel_filters = np.asarray(fe.mel_filters, dtype=np.float32)
-    except Exception:
-        # Fallback: compute from scratch (same as Whisper)
-        from transformers import WhisperFeatureExtractor
-        fe = WhisperFeatureExtractor(
-            feature_size=128, sampling_rate=16000,
-            hop_length=160, chunk_length=30, n_fft=400)
-        mel_filters = np.asarray(fe.mel_filters, dtype=np.float32)
+    # IMPORTANT: Voxtral Realtime uses SLANEY mel filters (not HTK/Whisper).
+    # All reference implementations (voxtral.c, voxmlx, voxtral-rs) use Slaney.
+    def build_slaney_mel_filters(sr=16000, n_fft=400, n_mels=128, f_min=0.0, f_max=8000.0):
+        """Slaney-style mel filter bank matching mistral_common/audio.py."""
+        n_freqs = n_fft // 2 + 1
+        def hz_to_mel(f):
+            min_log_hz, min_log_mel = 1000.0, 15.0
+            logstep = 27.0 / np.log(6.4)
+            mels = 3.0 * np.asarray(f, dtype=np.float64) / 200.0
+            mask = np.asarray(f) >= min_log_hz
+            mels[mask] = min_log_mel + np.log(np.asarray(f)[mask] / min_log_hz) * logstep
+            return mels
+        def mel_to_hz(m):
+            min_log_hz, min_log_mel = 1000.0, 15.0
+            logstep = np.log(6.4) / 27.0
+            freq = 200.0 * np.asarray(m, dtype=np.float64) / 3.0
+            mask = np.asarray(m) >= min_log_mel
+            freq[mask] = min_log_hz * np.exp(logstep * (np.asarray(m)[mask] - min_log_mel))
+            return freq
+        fft_freqs = np.linspace(0, sr / 2, n_freqs)
+        mel_min = hz_to_mel(np.array([f_min]))[0]
+        mel_max = hz_to_mel(np.array([f_max]))[0]
+        mel_freqs = np.linspace(mel_min, mel_max, n_mels + 2)
+        filter_freqs = mel_to_hz(mel_freqs)
+        filter_diff = np.diff(filter_freqs)
+        slopes = filter_freqs[np.newaxis, :] - fft_freqs[:, np.newaxis]
+        down_slopes = -slopes[:, :-2] / filter_diff[:-1]
+        up_slopes = slopes[:, 2:] / filter_diff[1:]
+        fb = np.maximum(0.0, np.minimum(down_slopes, up_slopes))
+        enorm = 2.0 / (filter_freqs[2:n_mels+2] - filter_freqs[:n_mels])
+        fb *= enorm[np.newaxis, :]
+        return fb.astype(np.float32)  # (n_freqs, n_mels)
+
+    mel_filters = build_slaney_mel_filters()
     print(f"  mel_filters shape: {mel_filters.shape}")
     writer.add_tensor("audio.mel_filters", mel_filters)
     n_fft_w = 400
