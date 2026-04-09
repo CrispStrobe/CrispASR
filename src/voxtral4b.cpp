@@ -170,6 +170,8 @@ struct voxtral4b_context {
     ggml_tensor *         kv_v   = nullptr;
 
     int n_threads = 4;
+    int delay_tokens = 6;  // 480ms default
+    std::vector<float> ada_scales;  // (n_layers × d_model), precomputed
 };
 
 // ===========================================================================
@@ -564,7 +566,8 @@ static ggml_cgraph * voxtral4b_build_graph_encoder(voxtral4b_context * ctx) {
         // Flash attention with optional SWA mask
         ggml_tensor * attn = ggml_flash_attn_ext(ctx0, Q, K, V, swa_mask,
                                                   attn_scale, 0.0f, 0.0f);
-        attn = ggml_reshape_2d(ctx0, attn, d, T_enc);
+        // Flash attn output: (hd, nh, T, 1) → reshape to (nh*hd, T) = (2048, T_enc)
+        attn = ggml_reshape_2d(ctx0, attn, n_heads * head_dim, T_enc);
 
         // Output projection
         attn = ggml_mul_mat(ctx0, b.attn_out_w, attn);
@@ -602,10 +605,82 @@ static ggml_cgraph * voxtral4b_build_graph_encoder(voxtral4b_context * ctx) {
 }
 
 // ===========================================================================
-// LLM KV-cached graph — same as 3B but with:
-//   - 26 layers, FFN=9216, SWA(8192)
-//   - Tied embeddings (lm_head = token_embd^T)
-//   - ada_rms_norm per layer (currently SKIPPED for V1 — treated as identity)
+// Ada-RMSNorm time conditioning
+//
+// The adaptive RMSNorm takes a sinusoidal time embedding of `delay_tokens`,
+// projects it through a small bottleneck (3072→32→3072), and scales the
+// post-attention hidden state: `h = h * (1 + scale)`.
+// ===========================================================================
+
+// Compute sinusoidal time embedding (same as voxtral.c / RoPE-style freqs)
+static void voxtral4b_compute_t_cond(float * out, int d, float t_value) {
+    int half = d / 2;
+    float log_theta = std::log(10000.0f);
+    for (int i = 0; i < half; i++) {
+        float inv_freq = std::exp(-log_theta * (float)i / (float)half);
+        float emb = t_value * inv_freq;
+        out[i] = std::cos(emb);
+        out[i + half] = std::sin(emb);
+    }
+}
+
+// Precompute per-layer ada_scale: scale[l] = ada_up(gelu(ada_down(t_cond)))
+// Returns (n_layers, d_model) F32 on CPU.
+static std::vector<float> voxtral4b_compute_ada_scales(
+    voxtral4b_context * ctx, int delay_tokens)
+{
+    const auto & hp = ctx->model.hparams;
+    const int d = (int)hp.llm_d_model;
+    const int ada_dim = (int)hp.ada_norm_dim;
+    const int n_layers = (int)hp.llm_n_layers;
+
+    // t_cond: sinusoidal embedding of delay_tokens
+    std::vector<float> t_cond(d);
+    voxtral4b_compute_t_cond(t_cond.data(), d, (float)delay_tokens);
+
+    std::vector<float> all_scales((size_t)n_layers * d, 0.0f);
+
+    for (int il = 0; il < n_layers; il++) {
+        const auto & b = ctx->model.llm.blocks[il];
+        if (!b.ada_down_w || !b.ada_up_w) continue;
+
+        // Download weights to CPU
+        std::vector<float> ada_down((size_t)ada_dim * d);
+        std::vector<float> ada_up((size_t)d * ada_dim);
+        ggml_backend_tensor_get(b.ada_down_w, ada_down.data(), 0, ada_down.size() * sizeof(float));
+        ggml_backend_tensor_get(b.ada_up_w, ada_up.data(), 0, ada_up.size() * sizeof(float));
+
+        // hidden = ada_down @ t_cond  (ada_dim × d) @ (d,) → (ada_dim,)
+        std::vector<float> hidden(ada_dim, 0.0f);
+        for (int i = 0; i < ada_dim; i++) {
+            double s = 0;
+            for (int j = 0; j < d; j++)
+                s += (double)ada_down[(size_t)i * d + j] * t_cond[j];
+            hidden[i] = (float)s;
+        }
+
+        // GELU
+        for (int i = 0; i < ada_dim; i++) {
+            float x = hidden[i];
+            hidden[i] = 0.5f * x * (1.0f + std::erf(x / std::sqrt(2.0f)));
+        }
+
+        // scale = 1 + ada_up @ hidden  (precompute the 1+ for direct mul in graph)
+        float * scale = all_scales.data() + (size_t)il * d;
+        for (int i = 0; i < d; i++) {
+            double s = 0;
+            for (int j = 0; j < ada_dim; j++)
+                s += (double)ada_up[(size_t)i * ada_dim + j] * hidden[j];
+            scale[i] = 1.0f + (float)s;
+        }
+    }
+
+    return all_scales;
+}
+
+// ===========================================================================
+// LLM KV-cached graph — 26 layers, FFN=9216, SWA(8192), tied embeddings,
+// ada_rms_norm time conditioning
 // ===========================================================================
 
 static ggml_cgraph * voxtral4b_build_graph_llm_kv(voxtral4b_context * ctx,
@@ -640,6 +715,11 @@ static ggml_cgraph * voxtral4b_build_graph_llm_kv(voxtral4b_context * ctx,
         ggml_set_name(causal_mask, "causal_mask");
         ggml_set_input(causal_mask);
     }
+
+    // Ada-scale per layer: (n_layers, d) — precomputed on CPU, passed as input
+    ggml_tensor * ada_scales = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, d, n_layers);
+    ggml_set_name(ada_scales, "ada_scales");
+    ggml_set_input(ada_scales);
 
     ggml_tensor * cur = embeds;
 
@@ -680,29 +760,45 @@ static ggml_cgraph * voxtral4b_build_graph_llm_kv(voxtral4b_context * ctx,
 
         // KV cache read
         int Lk = n_past + n_tokens;
-        ggml_tensor * Kc = ggml_view_3d(ctx0, ctx->kv_k, hd, Lk, n_kv,
+        ggml_tensor * Kfull = ggml_cont(ctx0, ggml_view_3d(ctx0, ctx->kv_k, hd, Lk, n_kv,
                                         ctx->kv_k->nb[1], ctx->kv_k->nb[2],
-                                        (size_t)il * ctx->kv_k->nb[3]);
-        ggml_tensor * Vc = ggml_view_3d(ctx0, ctx->kv_v, hd, Lk, n_kv,
+                                        (size_t)il * ctx->kv_k->nb[3]));
+        ggml_tensor * Vfull = ggml_cont(ctx0, ggml_view_3d(ctx0, ctx->kv_v, hd, Lk, n_kv,
                                         ctx->kv_v->nb[1], ctx->kv_v->nb[2],
-                                        (size_t)il * ctx->kv_v->nb[3]);
+                                        (size_t)il * ctx->kv_v->nb[3]));
+
+        // GQA expansion: repeat KV heads to match Q heads (32/8=4× repeat)
+        const int n_kv_grp = n_q / n_kv;
+        if (n_kv_grp > 1) {
+            ggml_tensor * K4 = ggml_reshape_4d(ctx0, Kfull, hd, Lk, 1, n_kv);
+            ggml_tensor * V4 = ggml_reshape_4d(ctx0, Vfull, hd, Lk, 1, n_kv);
+            K4 = ggml_repeat_4d(ctx0, K4, hd, Lk, n_kv_grp, n_kv);
+            V4 = ggml_repeat_4d(ctx0, V4, hd, Lk, n_kv_grp, n_kv);
+            Kfull = ggml_cont(ctx0, ggml_reshape_3d(ctx0, K4, hd, Lk, n_q));
+            Vfull = ggml_cont(ctx0, ggml_reshape_3d(ctx0, V4, hd, Lk, n_q));
+        }
 
         // Flash attention
         Q = ggml_cont(ctx0, ggml_permute(ctx0, Q, 0, 2, 1, 3));
-        Kc = ggml_cont(ctx0, ggml_permute(ctx0, Kc, 0, 2, 1, 3));
-        Vc = ggml_cont(ctx0, ggml_permute(ctx0, Vc, 0, 2, 1, 3));
 
         float scale = 1.0f / std::sqrt((float)hd);
-        ggml_tensor * attn = ggml_flash_attn_ext(ctx0, Q, Kc, Vc, causal_mask,
+        ggml_tensor * attn = ggml_flash_attn_ext(ctx0, Q, Kfull, Vfull, causal_mask,
                                                   scale, 0.0f, 0.0f);
         attn = ggml_reshape_2d(ctx0, attn, n_q * hd, n_tokens);
         attn = ggml_mul_mat(ctx0, b.attn_out_w, attn);
         cur = ggml_add(ctx0, residual, attn);
 
-        // FFN: Pre-RMSNorm + SwiGLU
+        // FFN: Post-attention RMSNorm + ada_rms_norm conditioning + SwiGLU
         residual = cur;
         cur = ggml_rms_norm(ctx0, cur, hp.llm_rms_eps);
         cur = ggml_mul(ctx0, cur, b.ffn_norm_w);
+
+        // Ada-scale: cur = cur * (1 + scale[il])  — precomputed as (1+scale) in ada_scales
+        {
+            ggml_tensor * scale = ggml_view_1d(ctx0, ada_scales, d,
+                                               (size_t)il * d * sizeof(float));
+            cur = ggml_mul(ctx0, cur, scale);
+        }
 
         ggml_tensor * gate = ggml_silu(ctx0, ggml_mul_mat(ctx0, b.ffn_gate_w, cur));
         ggml_tensor * up   = ggml_mul_mat(ctx0, b.ffn_up_w, cur);
@@ -782,6 +878,12 @@ extern "C" struct voxtral4b_context * voxtral4b_init_from_file(
     }
     ctx->compute_meta.resize(
         ggml_tensor_overhead() * 16384 + ggml_graph_overhead_custom(16384, false));
+
+    // Precompute ada_rms_norm scales from delay_tokens
+    ctx->ada_scales = voxtral4b_compute_ada_scales(ctx, ctx->delay_tokens);
+    if (params.verbosity >= 1)
+        fprintf(stderr, "voxtral4b: ada_scales computed for delay=%d (%d ms)\n",
+                ctx->delay_tokens, ctx->delay_tokens * 80);
 
     if (params.verbosity >= 1) {
         const auto & hp = ctx->model.hparams;
@@ -948,9 +1050,10 @@ extern "C" float * voxtral4b_run_encoder(voxtral4b_context * ctx,
         int swa = (int)ctx->model.hparams.audio_swa;
         std::vector<ggml_fp16_t> mask((size_t)T_enc * T_enc, ggml_fp32_to_fp16(0.0f));
         ggml_fp16_t neg_inf = ggml_fp32_to_fp16(-INFINITY);
+        // Causal + sliding window: mask k > q (causal) and k < q - swa (outside window)
         for (int q = 0; q < T_enc; q++)
             for (int k = 0; k < T_enc; k++)
-                if (std::abs(q - k) > swa / 2) mask[(size_t)q * T_enc + k] = neg_inf;
+                if (k > q || k < q - swa) mask[(size_t)q * T_enc + k] = neg_inf;
         ggml_backend_tensor_set(swa_t, mask.data(), 0, mask.size() * sizeof(ggml_fp16_t));
     }
 
@@ -1044,6 +1147,8 @@ extern "C" float * voxtral4b_run_llm_kv(voxtral4b_context * ctx,
                             (size_t)d * n_tokens * sizeof(float));
     ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "positions"), positions.data(), 0,
                             positions.size() * sizeof(int32_t));
+    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "ada_scales"), ctx->ada_scales.data(), 0,
+                            ctx->ada_scales.size() * sizeof(float));
     if (n_tokens > 1) {
         ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "causal_mask"), mask.data(), 0,
                                 mask.size() * sizeof(ggml_fp16_t));

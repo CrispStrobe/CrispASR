@@ -123,30 +123,29 @@ int main(int argc, char ** argv) {
     if (!no_prints) fprintf(stderr, "encoder: %d frames × %d dim  (%.0f ms)\n", N_enc, pdim,
             std::chrono::duration<double,std::milli>(t_enc-t_mel).count());
 
-    // Build prompt via tokenizer
-    std::vector<int32_t> ids;
-    {
-        std::string prefix = "<s>[INST][BEGIN_AUDIO]";
-        std::string suffix = "[/INST]lang:" + lang + "[TRANSCRIBE]";
-        int n_prefix=0, n_suffix=0;
-        int32_t * pid = voxtral4b_tokenize(ctx, prefix.c_str(), &n_prefix);
-        int32_t * sid = voxtral4b_tokenize(ctx, suffix.c_str(), &n_suffix);
-        ids.insert(ids.end(), pid, pid+n_prefix);
-        for (int i=0;i<N_enc;i++) ids.push_back(24);  // audio_pad
-        ids.insert(ids.end(), sid, sid+n_suffix);
-        free(pid); free(sid);
-    }
-    int T_prompt = (int)ids.size();
-    if (!no_prints) fprintf(stderr, "prompt: %d tokens (incl. %d audio_pad)\n", T_prompt, N_enc);
+    // Build prompt: BOS + STREAMING_PAD × (32 + delay_tokens)
+    // The 4B Realtime model ADDS adapter output to token embeddings (not splice).
+    const int delay_tokens = 6;  // 480ms default (6 × 80ms per token)
+    const int prompt_pad = 32 + delay_tokens;
+    int T_prompt = 1 + prompt_pad;  // BOS + pads
 
-    // Embed + splice
+    // But we also need to cover all N_enc audio frames. The prompt length
+    // should be at least N_enc so every audio frame has a decoder position.
+    if (T_prompt < N_enc) T_prompt = N_enc;
+    if (!no_prints) fprintf(stderr, "prompt: %d tokens (BOS + %d STREAMING_PAD, %d audio frames)\n",
+                            T_prompt, T_prompt - 1, N_enc);
+
+    // Build token IDs: BOS at pos 0, STREAMING_PAD everywhere else
+    std::vector<int32_t> ids(T_prompt);
+    ids[0] = 1;  // BOS
+    for (int i = 1; i < T_prompt; i++) ids[i] = 32;  // STREAMING_PAD
+
+    // Embed tokens, then ADD audio embeddings (element-wise)
     float * text_embeds = voxtral4b_embed_tokens(ctx, ids.data(), T_prompt);
     if (!text_embeds) { free(audio_embeds); voxtral4b_free(ctx); return 6; }
-    int spliced = 0;
-    for (int i=0;i<T_prompt&&spliced<N_enc;i++) {
-        if (ids[i]==24) {
-            std::memcpy(text_embeds+(size_t)i*pdim, audio_embeds+(size_t)spliced*pdim, pdim*sizeof(float));
-            spliced++;
+    for (int i = 0; i < std::min(N_enc, T_prompt); i++) {
+        for (int j = 0; j < pdim; j++) {
+            text_embeds[(size_t)i * pdim + j] += audio_embeds[(size_t)i * pdim + j];
         }
     }
     free(audio_embeds);
