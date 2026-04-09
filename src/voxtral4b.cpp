@@ -457,7 +457,10 @@ extern "C" float * voxtral4b_compute_mel(voxtral4b_context * ctx,
             if (lv > mel_max) mel_max = lv;
         }
     }
-    const float floor_v = mel_max - 8.0f;
+    // VoxtralRealtime uses a FIXED global_log_mel_max=1.5 instead of the
+    // per-utterance max that Whisper uses. This is critical for correct output.
+    const float global_log_mel_max = 1.5f;
+    const float floor_v = global_log_mel_max - 8.0f;  // -6.5
     for (size_t i = 0; i < mel.size(); i++) {
         float v = mel[i]; if (v < floor_v) v = floor_v;
         mel[i] = (v + 4.0f) / 4.0f;

@@ -123,64 +123,72 @@ int main(int argc, char ** argv) {
     if (!no_prints) fprintf(stderr, "encoder: %d frames × %d dim  (%.0f ms)\n", N_enc, pdim,
             std::chrono::duration<double,std::milli>(t_enc-t_mel).count());
 
-    // Build prompt: BOS + STREAMING_PAD × (32 + delay_tokens)
-    // The 4B Realtime model ADDS adapter output to token embeddings (not splice).
-    const int delay_tokens = 6;  // 480ms default (6 × 80ms per token)
-    const int prompt_pad = 32 + delay_tokens;
-    int T_prompt = 1 + prompt_pad;  // BOS + pads
-
-    // But we also need to cover all N_enc audio frames. The prompt length
-    // should be at least N_enc so every audio frame has a decoder position.
-    if (T_prompt < N_enc) T_prompt = N_enc;
-    if (!no_prints) fprintf(stderr, "prompt: %d tokens (BOS + %d STREAMING_PAD, %d audio frames)\n",
+    // Build prompt: BOS + STREAMING_PAD × (32 + delay_tokens) = 39 tokens.
+    // The 4B Realtime ADDS adapter outputs to token embeddings at each position.
+    // During prefill, positions 0..38 get adapter frames 0..38.
+    // During decode, each step gets the next adapter frame added.
+    const int delay_tokens = 6;  // 480ms default
+    const int T_prompt = 1 + 32 + delay_tokens;  // 39
+    if (!no_prints) fprintf(stderr, "prompt: %d tokens (BOS + %d STREAMING_PAD), %d audio frames total\n",
                             T_prompt, T_prompt - 1, N_enc);
 
-    // Build token IDs: BOS at pos 0, STREAMING_PAD everywhere else
-    std::vector<int32_t> ids(T_prompt);
-    ids[0] = 1;  // BOS
-    for (int i = 1; i < T_prompt; i++) ids[i] = 32;  // STREAMING_PAD
+    // Build prompt token IDs
+    std::vector<int32_t> prompt_ids(T_prompt);
+    prompt_ids[0] = 1;  // BOS
+    for (int i = 1; i < T_prompt; i++) prompt_ids[i] = 32;  // STREAMING_PAD
 
-    // Embed tokens, then ADD audio embeddings (element-wise)
-    float * text_embeds = voxtral4b_embed_tokens(ctx, ids.data(), T_prompt);
-    if (!text_embeds) { free(audio_embeds); voxtral4b_free(ctx); return 6; }
+    // Embed prompt tokens + add adapter frames for the prompt positions
+    float * prompt_embeds = voxtral4b_embed_tokens(ctx, prompt_ids.data(), T_prompt);
+    if (!prompt_embeds) { free(audio_embeds); voxtral4b_free(ctx); return 6; }
     for (int i = 0; i < std::min(N_enc, T_prompt); i++) {
         for (int j = 0; j < pdim; j++) {
-            text_embeds[(size_t)i * pdim + j] += audio_embeds[(size_t)i * pdim + j];
+            prompt_embeds[(size_t)i * pdim + j] += audio_embeds[(size_t)i * pdim + j];
         }
     }
-    free(audio_embeds);
 
     // KV cache + prefill
-    if (!voxtral4b_kv_init(ctx, 4096)) { free(text_embeds); voxtral4b_free(ctx); return 7; }
+    if (!voxtral4b_kv_init(ctx, 4096)) { free(prompt_embeds); free(audio_embeds); voxtral4b_free(ctx); return 7; }
     voxtral4b_kv_reset(ctx);
     auto t_pf0 = std::chrono::steady_clock::now();
     int n_t=0, vocab=0;
-    float * logits = voxtral4b_run_llm_kv(ctx, text_embeds, T_prompt, 0, &n_t, &vocab);
+    float * logits = voxtral4b_run_llm_kv(ctx, prompt_embeds, T_prompt, 0, &n_t, &vocab);
     auto t_pf1 = std::chrono::steady_clock::now();
-    if (!logits) { free(text_embeds); voxtral4b_free(ctx); return 8; }
-    free(text_embeds);
+    if (!logits) { free(prompt_embeds); free(audio_embeds); voxtral4b_free(ctx); return 8; }
+    free(prompt_embeds);
     if (!no_prints) fprintf(stderr, "prefill: %.0f ms\n",
             std::chrono::duration<double,std::milli>(t_pf1-t_pf0).count());
 
     int next=0; { float mx=-1e30f; for(int k=0;k<vocab;k++) if(logits[k]>mx){mx=logits[k];next=k;} }
     free(logits);
 
-    // Greedy decode
+    // Greedy decode — each step adds the next adapter frame to the token embedding
     const int EOS = 2;
     std::vector<int32_t> gen; gen.push_back(next);
     auto t_dec0 = std::chrono::steady_clock::now();
     int n_past = T_prompt;
-    while ((int)gen.size() < max_new && gen.back() != EOS) {
+    int adapter_pos = T_prompt;  // next adapter frame to consume
+
+    while ((int)gen.size() < max_new && gen.back() != EOS && adapter_pos < N_enc) {
         int32_t last = gen.back();
         float * tail = voxtral4b_embed_tokens(ctx, &last, 1);
         if (!tail) break;
+
+        // Add the next adapter frame to this token's embedding
+        if (adapter_pos < N_enc) {
+            for (int j = 0; j < pdim; j++) {
+                tail[j] += audio_embeds[(size_t)adapter_pos * pdim + j];
+            }
+        }
+
         float * lg = voxtral4b_run_llm_kv(ctx, tail, 1, n_past, nullptr, nullptr);
         free(tail); if (!lg) break;
         n_past++;
+        adapter_pos++;
         int nx=0; float mx=-1e30f;
         for(int k=0;k<vocab;k++) if(lg[k]>mx){mx=lg[k];nx=k;}
         free(lg); gen.push_back(nx);
     }
+    free(audio_embeds);
     auto t_dec1 = std::chrono::steady_clock::now();
     double dec_ms = std::chrono::duration<double,std::milli>(t_dec1-t_dec0).count();
     if (!no_prints)
