@@ -234,8 +234,30 @@ print("4. HF Processor mel features")
 print("=" * 60)
 
 inputs = processor(audio, return_tensors="pt")
-hf_mel = inputs["input_features"][0, 0]  # (n_mels, T)
-save_result("mel_hf", hf_mel.numpy(), "mel from HF VoxtralRealtimeFeatureExtractor")
+
+# Debug: print all input shapes
+print("  Input keys and shapes:")
+for k, v in inputs.items():
+    if hasattr(v, 'shape'):
+        print(f"    {k}: {v.shape} dtype={v.dtype}")
+
+# Mel features — handle various possible shapes
+raw_mel = inputs["input_features"]
+print(f"  raw input_features shape: {raw_mel.shape}")
+if raw_mel.dim() == 4:
+    hf_mel = raw_mel[0, 0]  # (batch, channel, n_mels, T) -> (n_mels, T)
+elif raw_mel.dim() == 3:
+    hf_mel = raw_mel[0]      # (batch, n_mels, T) -> (n_mels, T)
+elif raw_mel.dim() == 2:
+    hf_mel = raw_mel          # already (n_mels, T) or (T, n_mels)
+else:
+    hf_mel = raw_mel.squeeze()
+print(f"  hf_mel shape after squeeze: {hf_mel.shape}")
+save_result("mel_hf", hf_mel.numpy(), f"mel from HF processor, raw shape was {list(raw_mel.shape)}")
+
+# Also save the mel transposed if it looks like (T, n_mels)
+if hf_mel.shape[0] > hf_mel.shape[-1] if hf_mel.dim() >= 2 else False:
+    save_result("mel_hf_transposed", hf_mel.T.numpy(), "mel_hf transposed (might be correct orientation)")
 
 hf_input_ids = inputs["input_ids"][0]
 save_result("input_ids_hf", hf_input_ids.numpy().astype(np.float32),
