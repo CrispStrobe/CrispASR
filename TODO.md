@@ -1,105 +1,88 @@
 # CrispASR — comprehensive TODO
 
 Last updated: 2026-04-09. Covers all 7 (soon 8) runtimes, pending work,
-and strategic direction. Written at the end of a long multi-session port
-that added Qwen3-ASR and Voxtral to the family.
+and strategic direction.
 
 ---
 
 ## Immediate (next session)
 
-### 1. Build + commit GPU init changes (already written, not yet compiled)
+### 1. ~~Build + commit GPU init changes~~ ✅ DONE
+Switched canary_ctc, qwen3_asr, voxtral to `ggml_backend_init_best()`.
+Removed unnecessary Metal/CUDA ifdef includes. Built and verified.
 
-Files modified but not yet built/committed:
-- `src/qwen3_asr.cpp` — switched from `ggml_backend_cpu_init()` to
-  `ggml_backend_init_best()` which auto-selects Metal → CUDA → CPU.
-  Also added `#ifdef GGML_USE_METAL/CUDA` includes (can be removed
-  since `init_best` doesn't need them).
-- `src/voxtral.cpp` — same change.
-- `src/canary_ctc.cpp` — `cc_pick_backend()` now uses `init_best`.
-
-Need to: `cd /mnt/akademie_storage/whisper.cpp && cmake --build build -j`
-then verify the CLI still works, then `git add && commit && push`.
-
-### 2. Retry Voxtral 4B Realtime download
-
-Previous download failed. Run:
-```bash
-hf download mistralai/Voxtral-Mini-4B-Realtime-2602 --local-dir /tmp/voxtral-4b
-```
-
-Architecture plan already written at `voxtral-4b-todo.md`. Key new pieces:
+### 2. Voxtral 4B Realtime — port the model
+Weights downloaded to `/mnt/akademie_storage/voxtral-4b-realtime/` (17 GB).
+Architecture plan at `voxtral-4b-todo.md`. Key differences from 3B:
 RoPE encoder (not absolute pos embed), sliding window attention (encoder
-window=750, LLM window=8192), tied embeddings, different dims (26 layers,
-FFN=9216, RoPE θ=1e6).
+window=750, LLM window=8192), tied embeddings, 26 layers, FFN=9216,
+RoPE θ=1e6. Estimated effort: ~3-4 days.
 
-### 3. Upload voxtral HF README
-
-The file `hf_readmes/voxtral-mini-3b-2507-GGUF.md` was uploaded to HF
-already but NOT committed to the git repo. Commit it.
-
-Also `voxtral-comparison.md` was written but the user said NOT to commit
-it to git — it's a local analysis doc only.
+### 3. ~~Upload voxtral HF README~~ ✅ DONE
+Committed `hf_readmes/voxtral-mini-3b-2507-GGUF.md` to git.
 
 ---
 
 ## GPU support audit (current state)
 
-| Runtime | GPU status | What's needed |
-| --- | --- | --- |
-| **parakeet** | ✅ Metal + CUDA (explicit init) | Done |
-| **cohere** | ✅ `ggml_backend_init_best()` | Done |
-| **canary** | ✅ Metal + CUDA (explicit init) | Done |
-| **canary_ctc** (nfa-align) | 🔄 Changed to `init_best` (not yet compiled) | Build + test |
-| **wav2vec2** (cohere-align) | ❌ Old ggml pattern, no backend API | Needs refactor (~200 LOC) |
-| **qwen3_asr** | 🔄 Changed to `init_best` (not yet compiled) | Build + test |
-| **voxtral** | 🔄 Changed to `init_best` (not yet compiled) | Build + test |
+| Runtime | GPU status |
+| --- | --- |
+| **parakeet** | ✅ Metal + CUDA (explicit init) |
+| **cohere** | ✅ `ggml_backend_init_best()` |
+| **canary** | ✅ Metal + CUDA (explicit init) |
+| **canary_ctc** (nfa-align) | ✅ `ggml_backend_init_best()` with CPU fallback |
+| **wav2vec2** (cohere-align) | ❌ Old ggml pattern, no backend API — needs refactor (~200 LOC) |
+| **qwen3_asr** | ✅ `ggml_backend_init_best()` with CPU fallback |
+| **voxtral** | ✅ `ggml_backend_init_best()` with CPU fallback |
 
-After building, all 7 runtimes (except wav2vec2) will auto-detect GPU.
-No code changes needed for Metal/CUDA — `ggml_backend_init_best()` handles
-runtime dispatch. The CMake `GGML_METAL=ON` / `GGML_CUDA=ON` flags are
-already wired in `src/CMakeLists.txt` for all libraries.
+All runtimes except wav2vec2 now auto-detect GPU.
 
 ---
 
-## Timestamps / timecodes (feature gap)
+## Timestamps / timecodes (current state)
 
-| Runtime | Current timestamps | Approach |
+| Runtime | Timestamps | How |
 | --- | --- | --- |
-| **parakeet** | ✅ TDT duration head (free, per-token, ~80ms) | Done — best in class |
-| **cohere** | ✅ Cross-attention DTW (~360ms MAE) | Done |
-| **canary** | ❌ Segment-level only | Use nfa-align as 2nd pass |
-| **nfa-align** | ✅ CTC Viterbi forced alignment (~78ms MAE) | Done — can align any model's output |
-| **cohere-align** | ✅ char-level CTC (~30ms MAE, English only) | Done |
-| **qwen3_asr** | ❌ **None** | Options below |
-| **voxtral** | ❌ **None** | Options below |
+| **parakeet** | ✅ TDT duration head (~80ms) | Native, always available |
+| **cohere** | ✅ Cross-attention DTW (~360ms MAE) | Native, -ts flag |
+| **canary** | ✅ Decoder cross-attn + optional CTC re-align | Native + -am flag for CTC |
+| **nfa-align** | ✅ CTC Viterbi forced alignment (~78ms MAE) | Core purpose |
+| **cohere-align** | ✅ char-level CTC (~30ms MAE, English only) | Core purpose |
+| **qwen3_asr** | ✅ CTC aligner second pass (~78ms MAE) | -am + -timestamps flags |
+| **voxtral** | ✅ CTC aligner second pass (~78ms MAE) | -am + -timestamps flags |
 
-### Timestamp options for speech-LLMs (qwen3_asr + voxtral)
+All runtimes now have word-level timestamps. SRT/VTT output supported in
+parakeet, canary, qwen3-asr, voxtral.
 
-1. **nfa-align second pass (recommended, ~1 day):** After the LLM generates
-   the transcript, run `canary_ctc_align_words()` on the same audio + transcript
-   to get word-level timestamps at ~78ms MAE. Already implemented for canary;
-   just wire it as an optional `-timestamps` flag in the CLI. Works for any
-   language the CTC aligner supports (25 EU languages).
+---
 
-2. **Audio-frame-position timestamps (trivial, ~2 hours):** Each audio_pad
-   token in the prompt corresponds to a fixed time span:
-   - Qwen3-ASR: 143 frames for 11s → ~77ms per frame
-   - Voxtral: 375 frames for 30s → 80ms per frame
-   Map each generated text token back to the nearest audio_pad position via
-   the self-attention weights. Coarse (~80ms) but free.
+## CLI feature matrix
 
-3. **Cross-attention extraction (hard, ~3 days):** Extract the attention
-   weights between the audio-pad positions and the generated-text positions
-   from the LLM's self-attention layers. Apply DTW to align. The "cross-
-   attention" isn't a separate module — it's the self-attention between
-   audio and text tokens in the same sequence. Requires saving attention
-   weights per layer during the forward pass and modifying the graph.
+| Feature | parakeet | cohere | canary | qwen3-asr | voxtral |
+| --- | --- | --- | --- | --- | --- |
+| `-m` model | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `-f` audio | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `-t` threads | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `-l` language | — | ✅ 14 | ✅ 25 (sl/tl) | auto-detect | ✅ (tokenizer) |
+| `-am` CTC align | — | — | ✅ | ✅ | ✅ |
+| `-timestamps` | native | `-ts` | native + CTC | ✅ | ✅ |
+| `-osrt` | ✅ (file) | ✅ (file) | ✅ (file) | ✅ (stdout) | ✅ (stdout) |
+| `-ovtt` | ✅ (file) | ✅ (file) | ✅ (file) | ✅ (stdout) | ✅ (stdout) |
+| `-np` quiet | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `--flash` | ✅ | ✅ | ✅ | always on | always on |
+| `-vad-model` | ✅ | ✅ | ✅ | — | — |
+| `-ml` max-len | ✅ | ✅ | ✅ | — | — |
+| `-ck` chunking | ✅ | internal | ✅ | — | — |
 
-**Recommendation:** Option 1 (nfa-align second pass). It's proven, already
-implemented, and gives the best accuracy. The only cost is running the
-CTC aligner (~2-3s for an 11s clip), which is small relative to the LLM
-decode time.
+---
+
+## Tekken tokenizer — ✅ DONE
+
+`voxtral_tokenize()` is now fully implemented: rank-based byte BPE with
+pre-tokenizer splitting and special token handling. Verified with round-trip
+tests on English, German, special tokens, and the full prompt template.
+The voxtral CLI now uses the tokenizer instead of hardcoded token IDs,
+supporting any language without ID lookup tables.
 
 ---
 
@@ -111,83 +94,56 @@ decode time.
 - [x] Last-token-only lm_head slice (qwen3_asr, voxtral)
 - [x] Q4_K weight quantization with Q4_0 fallback for odd-width tensors
 - [x] Baked mel filterbank (no runtime recomputation)
+- [x] GPU auto-detection via ggml_backend_init_best()
 
 ### Next wins
 - [ ] **GPU backend** (~5-10× on LLM forward, biggest single win for voxtral 3B)
-- [ ] **Speculative decoding** — use a smaller draft model to propose N tokens,
-      verify with the big model in one forward pass. Could 2-3× the decode
-      throughput for voxtral.
+- [ ] **Speculative decoding** — use a smaller draft model to propose N tokens
 - [ ] **Continuous batching** — pipeline multiple audio files for throughput
-      (not latency). Relevant for server/batch workloads.
-- [ ] **Chunked long-audio** — for audio >30s, split into overlapping 30s
-      chunks, run encoder on each, concatenate. Currently voxtral pads to
-      30s; qwen3-asr handles arbitrary length but >30s means >375 audio
-      tokens which slows prefill quadratically.
-- [ ] **GGML_BLAS=ON** — tested, negligible speedup on CPU for Q4_K (ggml's
-      k-quant kernels skip BLAS). Only helps for F16/F32 weights which we
-      don't ship. Documented as a negative finding in qwen3-asr-benchmark.md.
+- [ ] **Chunked long-audio** — for audio >30s, split into overlapping 30s chunks
 
 ---
 
-## Voxtral 4B Realtime port (pending)
+## Voxtral 4B Realtime port (ready to start)
 
-Plan at `voxtral-4b-todo.md`. Key differences from the 3B:
+Weights downloaded to `/mnt/akademie_storage/voxtral-4b-realtime/`.
+Plan at `voxtral-4b-todo.md`. Key new pieces:
 - RoPE encoder (not absolute pos embed)
 - Sliding window attention (encoder=750, LLM=8192)
 - 26 layers, FFN=9216, RoPE θ=1e6
 - Tied embeddings
 - `VoxtralRealtimeForConditionalGeneration` (different HF class)
 
-Estimated effort: ~3-4 days. The SWA + RoPE encoder is genuinely new.
-
-Weights need to be downloaded:
-```bash
-hf download mistralai/Voxtral-Mini-4B-Realtime-2602 --local-dir /tmp/voxtral-4b
-```
-
----
-
-## Tekken tokenizer (incomplete)
-
-`voxtral_tokenize()` is a stub — the vocab blob is loaded but the
-rank-based byte BPE encode logic isn't implemented yet. The CLI
-currently hardcodes the transcription prompt token IDs. For audio
-understanding (Q&A) mode, a real Tekken encoder would be needed.
-
-The Tekken BPE is structurally similar to tiktoken: start with byte
-sequences, greedily merge the lowest-rank pair. The pre-tokenizer regex
-uses Unicode property classes (`\p{Lu}` etc.) which needs either:
-- A hand-rolled approximation (works for English/German)
-- A Unicode regex lib (RE2, onigmo, PCRE2)
-- A bundled Unicode character class table
-
-Estimated effort: ~300 LOC, ~1.5 days.
+Estimated effort: ~3-4 days.
 
 ---
 
 ## Model-specific pending items
 
 ### Qwen3-ASR
-- [ ] Timestamps (see above — nfa-align second pass)
+- [x] Timestamps ✅ (CTC aligner second pass)
 - [ ] Streaming support (chunked audio → incremental transcript)
 - [ ] Test on more languages (only tested English + German)
-- [ ] The Qwen3-ForcedAligner-0.6B companion model (separate from nfa-align)
+- [ ] The Qwen3-ForcedAligner-0.6B companion model
 
 ### Voxtral 3B
-- [ ] Timestamps (see above)
-- [ ] Audio understanding mode (Q&A about audio content) — needs Tekken tokenizer
-- [ ] Function calling from voice — needs Tekken + tool-use prompt format
+- [x] Timestamps ✅ (CTC aligner second pass)
+- [x] Tekken tokenizer ✅ (full BPE encoder)
+- [ ] Audio understanding mode (Q&A about audio content)
+- [ ] Function calling from voice — needs tool-use prompt format
 - [ ] Long audio >30s — needs chunked encoder or padding strategy
-- [ ] Test on non-English languages (only English tested)
+- [ ] Test on non-English languages
 
 ### Parakeet
 - [x] GPU support ✅
 - [x] Word timestamps ✅ (TDT)
+- [x] --flash CLI flag ✅
 - [ ] Auto language detection sometimes picks wrong language on accented audio
 
 ### Canary
 - [x] GPU support ✅
-- [ ] Word timestamps via nfa-align integration
+- [x] Word timestamps ✅ (decoder + optional CTC re-align)
+- [x] --flash CLI flag ✅
 - [ ] Speech translation quality validation on more language pairs
 
 ### Cohere
@@ -206,26 +162,22 @@ Estimated effort: ~300 LOC, ~1.5 days.
 | `cstr/canary-1b-v2-GGUF` | ✅ shipped | F16 + Q8_0 + Q5_0 + Q4_K |
 | `cstr/canary-ctc-aligner-GGUF` | ✅ shipped | F16 + Q8_0 + Q5_0 + Q4_K |
 | `cstr/cohere-transcribe-03-2026-GGUF` | ✅ shipped | F16 + Q8_0 + Q6_K + Q5_1 + Q5_0 + Q4_K |
-| `cstr/qwen3-asr-0.6b-GGUF` | ✅ shipped | F16 + Q8_0 + Q4_K (proper special tokens) |
+| `cstr/qwen3-asr-0.6b-GGUF` | ✅ shipped | F16 + Q8_0 + Q4_K |
 | `cstr/voxtral-mini-3b-2507-GGUF` | ✅ shipped | Q4_K + Q8_0 + README |
-| `cstr/voxtral-mini-4b-realtime-GGUF` | ❌ not started | Pending 4B port |
+| `cstr/voxtral-mini-4b-realtime-GGUF` | ❌ pending port | Weights downloaded |
 
 ---
 
 ## Code quality / cleanup
 
-- [ ] Remove the `#ifdef GGML_USE_METAL/CUDA` includes from qwen3_asr.cpp
-      and voxtral.cpp since `ggml_backend_init_best()` doesn't need them
-- [ ] Suppress the remaining -Wunused-variable warnings in voxtral.cpp
-      (proj_out, max_pos)
-- [ ] Factor out shared mel compute code (currently duplicated between
-      qwen3_asr.cpp and voxtral.cpp — identical ~150 LOC)
-- [ ] Factor out shared WAV reader (duplicated in every CLI main.cpp)
+- [x] Remove `#ifdef GGML_USE_METAL/CUDA` includes ✅
+- [x] Suppress -Wunused-variable warnings in voxtral.cpp ✅
+- [ ] Factor out shared mel compute code (~150 LOC duplicated between
+      qwen3_asr.cpp and voxtral.cpp — similar but voxtral pads to 3000)
+- [ ] Factor out shared WAV reader (duplicated in qwen3-asr/voxtral CLIs;
+      parakeet/canary use common-whisper instead)
 - [ ] Factor out shared .npy loader (duplicated in every test driver)
-- [ ] The voxtral Tekken vocab blob is stored as a 1D F32 tensor (wasteful
-      ~5 MB for 1.3 MB of actual bytes) because gguf-py's add_array
-      loses uint8 dtype. Could use a custom binary KV type or a better
-      gguf-py path.
+- [ ] The voxtral Tekken vocab blob stored as F32 tensor (wasteful ~5 MB)
 
 ---
 
@@ -235,26 +187,15 @@ Estimated effort: ~300 LOC, ~1.5 days.
 
 Analysed in `voxtral-comparison.md` (local, not committed). Summary:
 - llama.cpp's mtmd support for Voxtral has two unfixed bugs (#17868,
-  #18419), worse WER than transformers/vLLM at same precision, and
-  Ollama dropped llama.cpp for multimodal citing instability.
-- Our standalone ggml approach avoids all these issues.
-- Recommendation: keep CrispASR standalone as primary, optionally
-  produce llama.cpp-compatible GGUFs for ecosystem users.
-- For GPU: use ggml's native Metal/CUDA backends directly (already
-  wired via `ggml_backend_init_best()`), not llama.cpp's abstraction.
-
-### The "merkel.wav" lesson
-
-The Wikimedia file `Angela_Merkel_voice.ogg` used in test_german.md
-was actually Russian, not German. All three speech-LLMs (Qwen3-ASR,
-parakeet, whisper) correctly detected it as Russian. The prior analysis
-calling this a "parakeet bug" was wrong. Removed from all docs.
+  #18419), worse WER than transformers/vLLM at same precision
+- Our standalone ggml approach avoids all these issues
+- Recommendation: keep CrispASR standalone, optionally produce
+  llama.cpp-compatible GGUFs for ecosystem users
 
 ### predict-woo/qwen3-asr.cpp PR
 
 https://github.com/predict-woo/qwen3-asr.cpp/pull/7 — CMake build
-fixes for Linux (OpenMP linkage + auto ggml submodule build). Status:
-open, awaiting review.
+fixes for Linux. Status: open, awaiting review.
 
 ---
 
@@ -266,23 +207,18 @@ Saved at `/mnt/storage/german-samples/`:
 - `jazeschann.wav` (4.8s) — "Leider zu spät"
 - `De-Abwasch-article.wav` (79.4s) — Wikipedia: Dishwashing
 - `De-Afghani-article.wav` (207.6s) — Wikipedia: Afghani currency
-- `De-Airbus-A320-Familie_1-article.wav` (2303.3s) — too long for testing
 
 All from Wikimedia Commons, CC-licensed, 16 kHz mono WAV.
 
 ---
 
-## Session history (for context recovery)
+## Session history
 
-This project has been built across multiple long sessions:
-1. **Cohere Transcribe** — the original port, mel norm bug, DTW timestamps
+1. **Cohere Transcribe** — original port, mel norm bug, DTW timestamps
 2. **Parakeet TDT** — FastConformer + TDT decoder, free word timestamps
 3. **Canary 1B v2** — speech translation, nfa-align CTC aligner
-4. **Qwen3-ASR 0.6B** — first speech-LLM port (Whisper encoder + Qwen3 LLM),
-   5 stages across multiple sessions, BPE tokenizer, flash-attn, KV cache
-5. **Voxtral-Mini 3B** — second speech-LLM (Whisper-large-v3 encoder +
-   Llama 3 LLM), ported from zero to working CLI in one session
-
-The user prefers high autonomy — act first, ask only for remote-touching
-/ destructive / architectural decisions. See `feedback_autonomy.md` in
-the auto-memory directory.
+4. **Qwen3-ASR 0.6B** — first speech-LLM port, BPE tokenizer, flash-attn, KV cache
+5. **Voxtral-Mini 3B** — second speech-LLM, ported from zero in one session
+6. **Feature completion** (2026-04-09) — GPU init for all runtimes, word timestamps
+   for qwen3-asr/voxtral/canary via CTC aligner, Tekken tokenizer, --flash for
+   parakeet/canary, SRT/VTT/-np for qwen3-asr/voxtral, Voxtral 4B weights downloaded
