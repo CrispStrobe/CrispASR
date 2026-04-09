@@ -153,9 +153,90 @@ about.
 - [ ] HF upload: `cstr/voxtral-mini-3b-2507-GGUF`
 - [ ] README runtime table entry as the 7th runtime
 
-## Next session next step
+## Stage V0 — done (this commit)
 
-Verify the actual safetensors tensor shapes once the download finishes,
-particularly the `multi_modal_projector.linear_1.weight` shape (which
-will reveal whether it's 1280 → 3072 or 5120 → 3072 = "concat 4 frames").
-That confirms or refutes assumption (1) above and unblocks the converter.
+- [x] Architecture inspection (config + safetensors index + HTTP-range
+      shape verification of the projector)
+- [x] `models/convert-voxtral-to-gguf.py` — runs cleanly, produces
+      9.36 GB F16 GGUF, 762/762 tensors mapped
+- [x] `models/voxtral-verify-gguf.py` — structural verification of
+      every expected tensor + KV pair + Tekken blob
+- [x] `models/voxtral-llm-dump.py` — reference logits dump for the
+      LLM smoke test. Uses `processor.apply_chat_template()` (not raw
+      `[INST]` strings) so the text-only path produces sensible
+      output. Verified: prompt "Why should AI models be open-sourced?"
+      → Voxtral's top-1 next-token continuations decode coherently
+      ("our → ced → ? → What → Open[AI]..."). Confirms the README's
+      "Highly capable at text" claim — the model handles text-only
+      prompts as long as you go through the proper chat template.
+- [x] `src/voxtral.h` — public C API header with the runtime contract
+- [x] **Voxtral weights downloaded** (8.8 GB to /tmp/voxtral-inspect/)
+- [x] **`voxtral_logits.npy` reference dumped** (13 tokens × 131072
+      vocab) at /tmp/voxtral-ref/, ready for diff testing
+
+## Stage V1 — LLM forward (next session)
+
+The cleanest first deliverable. Cargo-cult `qwen3_asr.cpp`'s loader
++ `build_llm_body` graph builder, then strip Q/K-norm and update dims:
+
+- [ ] `src/voxtral.cpp` — model struct, hparams struct, GGUF loader
+      (binds all 762 tensors from the GGUF, ~250 LOC)
+- [ ] `voxtral_build_graph_llm()` — Llama 3 forward graph:
+      - Token embedding lookup
+      - 30 × layer:
+        - RMSNorm (no bias)
+        - Q/K/V projections (no biases) — note: NO Q-norm/K-norm here
+        - RoPE NEOX θ=1e8 (vs Qwen3's 1e6)
+        - GQA expand K/V from 8 → 32 heads (n_kv_grp=4 vs Qwen3's 2)
+        - Attention with causal mask
+        - O proj + residual
+        - RMSNorm + SwiGLU FFN + residual
+      - Final RMSNorm + lm_head
+      - Last-token-only lm_head slice (same opt as Qwen3)
+- [ ] `examples/voxtral-test-llm/main.cpp` — load .npy input_ids,
+      run forward, diff logits against `voxtral_logits.npy`
+
+Expected effort: ~600 LOC of C++ + ~150 LOC test driver. Should
+diff to F16 precision on first try since the LLM is structurally
+identical to Qwen3 minus 2 norm operations.
+
+## Stage V2 — audio encoder + projector
+
+- [ ] `voxtral_build_graph_encoder()` — Whisper-large-v3 encoder
+      graph using Conv1D primitives (NOT 2D like Qwen3-ASR):
+      - `ggml_conv_1d` for conv1 (1, 128, 1280) and conv2 (3, 1280, 1280)
+      - GELU activations
+      - Add the learned positional embedding (already F32 in the GGUF)
+      - 32 × pre-LN encoder block with biased attention (K-proj has no
+        bias — Whisper quirk; need to handle that)
+      - Final layer_norm
+- [ ] Multi-modal projector graph — stack 4 frames + Linear + GELU + Linear
+- [ ] Mel reuse — `qwen3_asr_compute_mel` already does what voxtral needs
+- [ ] Reference dump for the encoder + projector
+- [ ] Diff test
+
+## Stage V3 — Tekken tokenizer
+
+- [ ] `src/voxtral_tokenizer.{h,cpp}` — load the Tekken vocab + specials
+      blobs from the GGUF, implement the tiktoken-style rank BPE encode
+- [ ] Pre-tokenizer regex — Unicode property classes (`\p{Lu}` etc.)
+      not supported by libstdc++ `<regex>`. Options:
+      - Hand-rolled approximation (works for English/German/whitespace-heavy
+        prompts, may miss edge cases on Asian scripts)
+      - Vendor a small Unicode regex lib (PCRE2 or onigmo)
+      - Bundle a precompiled Unicode-character-class table
+- [ ] Audio chat template — Voxtral uses a Mistral-common-flavoured
+      template. Need to determine the exact special-token sequence
+      that wraps the audio frames in the prompt (probably an
+      `[AUDIO]...[/AUDIO]` pair around the audio_token_id placeholders).
+
+## Stage V4 — audio injection + end-to-end CLI + HF release
+
+- [ ] Splice audio embeds into prompt embeddings at audio_token_id positions
+- [ ] KV cache + flash-attn (reuse Qwen3's pattern verbatim)
+- [ ] `examples/voxtral-main/main.cpp`
+- [ ] Quantize via `cohere-quantize` (Q4_K should work — 3072 % 256 = 0
+      and 1280 % 256 = 256 doesn't divide cleanly so the encoder gets
+      Q4_0 fallback, same as Qwen3-ASR)
+- [ ] HF upload `cstr/voxtral-mini-3b-2507-GGUF`
+- [ ] README runtime table entry as the 7th runtime
