@@ -269,6 +269,25 @@ if(GGML_CUDA)
     target_link_libraries(voxtral PUBLIC ggml-cuda)
 endif()
 
+add_library(voxtral4b
+            voxtral4b.h
+            voxtral4b.cpp
+            )
+target_include_directories(voxtral4b PUBLIC . ../include)
+target_compile_features   (voxtral4b PUBLIC cxx_std_17)
+target_link_libraries     (voxtral4b PUBLIC ggml ggml-base Threads::Threads)
+if(NOT MSVC)
+    target_compile_options(voxtral4b PRIVATE -O3 -march=native)
+endif()
+if(GGML_METAL)
+    target_compile_definitions(voxtral4b PRIVATE GGML_USE_METAL)
+    target_link_libraries(voxtral4b PUBLIC ggml-metal)
+endif()
+if(GGML_CUDA)
+    target_compile_definitions(voxtral4b PRIVATE GGML_USE_CUDA)
+    target_link_libraries(voxtral4b PUBLIC ggml-cuda)
+endif()
+
 # ---------------------------------------------------------------------------
 # wav2vec2-ggml — Wav2Vec2ForCTC encoder (GGUF, ggml-based)
 # ---------------------------------------------------------------------------
