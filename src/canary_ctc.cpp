@@ -650,7 +650,8 @@ static bool cc_load_model(cc_model & model, canary_ctc_vocab & vocab,
 // ===========================================================================
 
 static ggml_backend_t cc_pick_backend() {
-    return ggml_backend_cpu_init();
+    ggml_backend_t b = ggml_backend_init_best();
+    return b ? b : ggml_backend_cpu_init();
 }
 
 // ===========================================================================

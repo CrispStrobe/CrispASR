@@ -1587,10 +1587,16 @@ extern "C" qwen3_asr_context * qwen3_asr_init_from_file(const char * path,
     ctx->params = params;
     ctx->n_threads = params.n_threads > 0 ? params.n_threads : 4;
 
+    // Try GPU backend first (Metal, CUDA, Vulkan...), fall back to CPU.
+    // ggml_backend_init_best() picks the highest-priority available backend.
+    ctx->backend = ggml_backend_init_best();
+    if (!ctx->backend) ctx->backend = ggml_backend_cpu_init();
     ctx->backend_cpu = ggml_backend_cpu_init();
-    ctx->backend     = ctx->backend_cpu;
     if (ctx->backend_cpu) {
         ggml_backend_cpu_set_n_threads(ctx->backend_cpu, ctx->n_threads);
+    }
+    if (ggml_backend_is_cpu(ctx->backend)) {
+        ggml_backend_cpu_set_n_threads(ctx->backend, ctx->n_threads);
     }
 
     if (!qwen3_asr_load_model(ctx->model, ctx->vocab, path, ctx->backend)) {
