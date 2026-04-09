@@ -504,20 +504,37 @@ static ggml_cgraph * voxtral4b_build_graph_encoder(voxtral4b_context * ctx) {
     ggml_set_name(mel, "mel");
     ggml_set_input(mel);
 
-    // Conv1d front-end (same topology as 3B Whisper encoder)
+    // Causal Conv1d front-end: left-pad only (padding_total = kernel_size - stride)
+    // Conv0: k=3, s=1 → left_pad=2, Conv1: k=3, s=2 → left_pad=1
     auto bias_1d = [&](ggml_tensor * b) {
         return ggml_reshape_3d(ctx0, b, 1, b->ne[0], 1);
     };
 
-    ggml_tensor * cur = ggml_conv_1d(ctx0, m.audio.conv1_w, mel, 1, 1, 1);
+    // Causal padding for conv0: pad 2 zeros on the left of the time dimension
+    // mel is (T_mel, n_mels), conv_1d treats ne[0] as time
+    // ggml_pad pads at the end; for left-padding we use ggml_concat with a zero tensor
+    ggml_tensor * pad0 = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, 2, n_mels);
+    ggml_set_name(pad0, "conv0_lpad");
+    ggml_set_input(pad0);  // will be set to zeros
+    ggml_tensor * mel_padded = ggml_concat(ctx0, pad0, mel, 0);  // concat along dim 0 (time)
+
+    ggml_tensor * cur = ggml_conv_1d(ctx0, m.audio.conv1_w, mel_padded, 1, 0, 1);  // pad=0!
     cur = ggml_add(ctx0, cur, bias_1d(m.audio.conv1_b));
     cur = ggml_gelu_erf(ctx0, cur);
 
-    cur = ggml_conv_1d(ctx0, m.audio.conv2_w, cur, 2, 1, 1);
+    // Causal padding for conv1: pad 1 zero on the left
+    ggml_tensor * pad1 = ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, 1, d, 1);
+    ggml_set_name(pad1, "conv1_lpad");
+    ggml_set_input(pad1);  // will be set to zeros
+    // cur is (T, d, 1) from conv_1d output; concat a (1, d, 1) zero on the left
+    cur = ggml_concat(ctx0, ggml_reshape_3d(ctx0, pad1, 1, d, 1), cur, 0);
+
+    cur = ggml_conv_1d(ctx0, m.audio.conv2_w, cur, 2, 0, 1);  // pad=0!
     cur = ggml_add(ctx0, cur, bias_1d(m.audio.conv2_b));
     cur = ggml_gelu_erf(ctx0, cur);
 
-    const int T_enc = T_mel / 2;
+    // Output length: conv0 out = T_mel (same with causal pad), conv1 out = ceil(T_mel/2)
+    const int T_enc = (T_mel + 1) / 2;  // ceil division for stride 2
     cur = ggml_reshape_2d(ctx0, cur, T_enc, d);
     cur = ggml_cont(ctx0, ggml_transpose(ctx0, cur));  // (d, T_enc)
 
@@ -1029,7 +1046,7 @@ extern "C" float * voxtral4b_run_encoder(voxtral4b_context * ctx,
                                          const float * mel, int n_mels, int T_mel,
                                          int * out_N, int * out_dim) {
     if (!ctx || !mel || n_mels != 128 || T_mel != 3000) return nullptr;
-    const int T_enc = T_mel / 2;  // 1500
+    const int T_enc = (T_mel + 1) / 2;  // ceil(3000/2) = 1500
     const int N_out = T_enc / 4;  // 375
     const int dim   = (int)ctx->model.hparams.proj_out_dim;
 
@@ -1040,6 +1057,14 @@ extern "C" float * voxtral4b_run_encoder(voxtral4b_context * ctx,
     // Set mel input
     ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "mel"), mel, 0,
                             (size_t)n_mels * T_mel * sizeof(float));
+
+    // Set causal conv padding to zeros
+    {
+        ggml_tensor * p0 = ggml_graph_get_tensor(gf, "conv0_lpad");
+        if (p0) { std::vector<float> zeros(2 * n_mels, 0.0f); ggml_backend_tensor_set(p0, zeros.data(), 0, zeros.size() * sizeof(float)); }
+        ggml_tensor * p1 = ggml_graph_get_tensor(gf, "conv1_lpad");
+        if (p1) { int d = (int)ctx->model.hparams.audio_d_model; std::vector<float> zeros(d, 0.0f); ggml_backend_tensor_set(p1, zeros.data(), 0, zeros.size() * sizeof(float)); }
+    }
 
     // Set encoder positions [0, 1, ..., T_enc-1]
     std::vector<int32_t> pos(T_enc);
