@@ -765,17 +765,21 @@ static ggml_cgraph * voxtral4b_build_graph_llm_kv(voxtral4b_context * ctx,
         K = ggml_rope_ext(ctx0, K, positions, nullptr, hd, 2, 0,
                           hp.llm_rope_theta, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f);
 
-        // KV cache write
-        const size_t kv_offset = (size_t)il * ctx->kv_k->nb[3] +
-                                 (size_t)n_past * ctx->kv_k->nb[1];
-        ggml_tensor * k_dst = ggml_view_3d(ctx0, ctx->kv_k, hd, n_tokens, n_kv,
-                                           ctx->kv_k->nb[1], ctx->kv_k->nb[2], kv_offset);
-        ggml_tensor * v_dst = ggml_view_3d(ctx0, ctx->kv_v, hd, n_tokens, n_kv,
-                                           ctx->kv_v->nb[1], ctx->kv_v->nb[2],
+        // Permute K, V from (hd, n_kv, T) → (hd, T, n_kv) for cache write
+        ggml_tensor * K_perm = ggml_permute(ctx0, K, 0, 2, 1, 3);
+        ggml_tensor * V_perm = ggml_permute(ctx0, V, 0, 2, 1, 3);
+
+        // KV cache write — cache layout: (hd, max_ctx, n_kv, n_layers)
+        ggml_tensor * k_dst = ggml_view_4d(ctx0, ctx->kv_k, hd, n_tokens, n_kv, 1,
+                                           ctx->kv_k->nb[1], ctx->kv_k->nb[2], ctx->kv_k->nb[3],
+                                           (size_t)il * ctx->kv_k->nb[3] +
+                                           (size_t)n_past * ctx->kv_k->nb[1]);
+        ggml_tensor * v_dst = ggml_view_4d(ctx0, ctx->kv_v, hd, n_tokens, n_kv, 1,
+                                           ctx->kv_v->nb[1], ctx->kv_v->nb[2], ctx->kv_v->nb[3],
                                            (size_t)il * ctx->kv_v->nb[3] +
                                            (size_t)n_past * ctx->kv_v->nb[1]);
-        ggml_build_forward_expand(gf, ggml_cpy(ctx0, K, k_dst));
-        ggml_build_forward_expand(gf, ggml_cpy(ctx0, V, v_dst));
+        ggml_build_forward_expand(gf, ggml_cpy(ctx0, K_perm, k_dst));
+        ggml_build_forward_expand(gf, ggml_cpy(ctx0, V_perm, v_dst));
 
         // KV cache read
         int Lk = n_past + n_tokens;
