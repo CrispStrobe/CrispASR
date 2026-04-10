@@ -758,9 +758,6 @@ static void shaw_block_attention_cpu(
                     }
                     scores[c * blk_len + r] = (qk + pos) * scale;
                 }
-                // Mask positions beyond blk_len (for padded last block)
-                for (int r = blk_len; r < ctx_size; r++)
-                    scores[c * blk_len + r] = -1e30f;
             }
 
             // Softmax per row
