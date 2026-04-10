@@ -21,6 +21,7 @@
 #include <string>
 #include <vector>
 #include <chrono>
+#include <unistd.h>
 
 static bool load_wav_16k_mono(const std::string & path, std::vector<float> & out) {
     std::ifstream f(path, std::ios::binary);
@@ -141,6 +142,29 @@ int main(int argc, char ** argv) {
     if (timestamps && aligner_path.empty()) {
         fprintf(stderr, "error: -timestamps / -osrt / -ovtt require -am ALIGNER.gguf\n");
         return 1;
+    }
+
+    // Auto-download: "-m auto" downloads the default Q4_K from HuggingFace
+    if (model_path == "auto" || model_path == "default") {
+        const char * home = getenv("HOME");
+        std::string cache_dir = std::string(home ? home : "/tmp") + "/.cache/crispasr";
+        std::string cached = cache_dir + "/voxtral-mini-3b-2507-q4_k.gguf";
+        if (access(cached.c_str(), F_OK) == 0) {
+            model_path = cached;
+            if (!no_prints) fprintf(stderr, "using cached model: %s\n", cached.c_str());
+        } else {
+            fprintf(stderr, "downloading voxtral-mini-3b-2507-q4_k.gguf (~2.5 GB)...\n");
+            std::string cmd = "mkdir -p '" + cache_dir + "' && "
+                "hf download cstr/voxtral-mini-3b-2507-GGUF "
+                "voxtral-mini-3b-2507-q4_k.gguf "
+                "--local-dir '" + cache_dir + "' 2>&1";
+            int rc = system(cmd.c_str());
+            if (rc != 0) {
+                fprintf(stderr, "download failed (rc=%d). Install hf CLI: pip install huggingface_hub\n", rc);
+                return 1;
+            }
+            model_path = cached;
+        }
     }
 
     std::vector<float> samples;
