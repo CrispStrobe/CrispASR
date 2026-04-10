@@ -765,13 +765,12 @@ static ggml_cgraph * granite_build_encoder(granite_speech_context * ctx, int T) 
         }
 
         // --- Conv module ---
-        // Pointwise up (1024 → 4096), depthwise conv (kernel=15), BN, SiLU, pointwise down
+        // LayerNorm → pointwise up → GLU → depthwise conv → BN → SiLU → pointwise down
         {
-            // The conv module operates in channel-first format
-            // cur: (d=1024, T) — ggml ne[0]=d
-
-            // Pointwise up: (1024 → 2*d=2048) via 1×1 conv weights stored as (out, in, 1)
-            ggml_tensor * x = cur;
+            // LayerNorm at the start (the HF ConformerConvModule.norm)
+            ggml_tensor * x = ggml_norm(ctx0, cur, 1e-5f);
+            if (b.conv_norm_w) x = ggml_mul(ctx0, x, b.conv_norm_w);
+            if (b.conv_norm_b) x = ggml_add(ctx0, x, b.conv_norm_b);
             if (b.conv_up_w) {
                 // conv_up_w ne=(1, 1024, 4096) — 1×1 conv, reshape to (1024, 4096) for matmul
                 int in_ch = (int)b.conv_up_w->ne[1];
@@ -812,9 +811,7 @@ static ggml_cgraph * granite_build_encoder(granite_speech_context * ctx, int T) 
             // These 1D (2048,) tensors broadcast over T via ggml_mul/ggml_add
             // Depthwise conv (kernel=15, groups=inner_dim, pad=7)
             // Uses ggml_conv_2d_dw_direct (same pattern as Parakeet encoder)
-            // TODO: weight layout needs verification against ground truth
-            // Disabled for now — produces wrong features. Enable after debugging.
-            #if 0
+            // Re-enabled for testing — using same pattern as Parakeet
             if (b.conv_dw_w) {
                 int K = (int)b.conv_dw_w->ne[0];  // 15
                 int inner = half_dim;  // 2048
@@ -827,7 +824,6 @@ static ggml_cgraph * granite_build_encoder(granite_speech_context * ctx, int T) 
                 x = ggml_cont(ctx0, ggml_permute(ctx0, x_t, 1, 2, 0, 3));
                 x = ggml_reshape_2d(ctx0, x, inner, T);
             }
-            #endif
 
             // BN (precomputed at load time): bn_w = scale, bn_b = shift
             if (b.conv_bn_w && b.conv_bn_b) {
