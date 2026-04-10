@@ -213,11 +213,14 @@ int main(int argc, char ** argv) {
     std::string transcript;
     for (auto id : gen) {
         if (id == EOS) break;
-        if (id < 1000) continue;  // skip control tokens (STREAMING_PAD=32, STREAMING_WORD=33, etc.)
+        if (id < 1000) continue;  // skip control tokens
         int len=0;
         const uint8_t * bytes = voxtral4b_token_text(ctx, id, &len);
         if (bytes && len > 0) transcript.append((const char*)bytes, len);
     }
+    // Trim leading/trailing whitespace
+    while (!transcript.empty() && (transcript.front() == ' ' || transcript.front() == '\t')) transcript.erase(transcript.begin());
+    while (!transcript.empty() && (transcript.back() == ' ' || transcript.back() == '\t')) transcript.pop_back();
     auto t_total = std::chrono::steady_clock::now();
     if (!no_prints) fprintf(stderr, "total: %.0f ms\n",
             std::chrono::duration<double,std::milli>(t_total-t0).count());

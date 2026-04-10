@@ -139,10 +139,17 @@ Full `voxtral_tokenize()` implemented and verified.
 
 ---
 
-## Voxtral 4B Realtime port (ready to start)
+## Voxtral 4B Realtime — ✅ COMPLETE
 
-Weights at `/mnt/akademie_storage/voxtral-4b-realtime/` (17 GB).
-Plan at `voxtral-4b-todo.md`. ~3-4 days.
+Ported, debugged, quantized, uploaded to HF.
+
+| GGUF | Size | Total (11s audio, CPU) |
+| --- | --- | --- |
+| F16 | 8.3 GB | 133s |
+| Q8_0 | 4.5 GB | 79s |
+| **Q4_K** | **2.4 GB** | **49s** |
+
+English + German verified. 13 languages supported.
 
 ---
 
@@ -167,8 +174,13 @@ Plan at `voxtral-4b-todo.md`. ~3-4 days.
 ### Canary
 - [ ] Speech translation quality validation
 
+### Voxtral 4B Realtime
+- [ ] SRT/VTT subtitle output
+- [ ] Temperature/sampling controls
+- [ ] Reduce right padding (17→10 tokens, matching voxtral.c)
+
 ### Cohere
-- [ ] F32→F16 self-attention KV (P4)
+- [x] F32→F16 self-attention KV ✅ (P4)
 - [ ] Upstream ffmpeg mp4 bug (UPSTREAM.md)
 
 ---
@@ -184,6 +196,7 @@ Plan at `voxtral-4b-todo.md`. ~3-4 days.
 | `cstr/cohere-transcribe-03-2026-GGUF` | ✅ shipped |
 | `cstr/qwen3-asr-0.6b-GGUF` | ✅ shipped |
 | `cstr/voxtral-mini-3b-2507-GGUF` | ✅ shipped |
+| `cstr/voxtral-mini-4b-realtime-GGUF` | ✅ shipped (Q4_K + Q8_0) |
 | `cstr/voxtral-mini-4b-realtime-GGUF` | ❌ pending port |
 
 ---
@@ -207,3 +220,7 @@ Plan at `voxtral-4b-todo.md`. ~3-4 days.
 6. **Feature completion** (2026-04-09) — GPU init, timestamps, Tekken,
    --flash, SRT/VTT, Voxtral 4B downloaded
 7. **Performance fixes** (2026-04-09) — P1-P4 GPU correctness fixes
+8. **Voxtral-Mini 4B Realtime** (2026-04-09/10) — full port from scratch,
+   7 critical bugs found via Kaggle ground truth + 3 reference implementations
+   (voxtral.c, voxmlx, voxtral-rs). Q4_K quantized: 2.4GB, 49s for 11s audio.
+   Uploaded to HF.
