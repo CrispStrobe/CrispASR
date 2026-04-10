@@ -77,31 +77,19 @@ model = GraniteSpeechForConditionalGeneration.from_pretrained(model_dir, torch_d
 model.eval()
 print("Model loaded!")
 
-# Process audio through the processor
+# Process audio through the processor (following the official README)
 print("\n=== Processor output ===")
-# GraniteSpeechProcessor expects text + audio separately, not conversation dicts
-import soundfile as sf
-audio_sf, sr_sf = sf.read(audio_path, dtype="float32")
-if sr_sf != 16000:
-    print(f"  WARNING: audio is {sr_sf} Hz, processor expects 16000 Hz")
+import torchaudio
+wav, sr_wav = torchaudio.load(audio_path, normalize=True)
+assert wav.shape[0] == 1 and sr_wav == 16000
 
-# Build prompt text with audio placeholder
-prompt_text = "USER: <|audio|> Transcribe the audio.\n ASSISTANT:"
-try:
-    inputs = processor(text=prompt_text, audio=audio_sf, return_tensors="pt")
-except Exception as e:
-    print(f"  Processor with text+audio failed: {e}")
-    # Try alternative: pass audio as list
-    try:
-        inputs = processor(text=[prompt_text], audio=[audio_sf], return_tensors="pt")
-    except Exception as e2:
-        print(f"  Alternative also failed: {e2}")
-        # Last resort: build inputs manually
-        print("  Building inputs manually...")
-        fe = processor.feature_extractor if hasattr(processor, 'feature_extractor') else processor.audio_processor
-        mel_out = fe(audio_sf, return_tensors="pt")
-        tok_out = processor.tokenizer(prompt_text, return_tensors="pt")
-        inputs = {**mel_out, **tok_out}
+tokenizer = processor.tokenizer
+user_prompt = "<|audio|>can you transcribe the speech into a written format?"
+chat = [{"role": "user", "content": user_prompt}]
+prompt = tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
+print(f"  Prompt: {prompt!r}")
+
+inputs = processor(prompt, wav, device="cpu", return_tensors="pt")
 print(f"Input keys: {list(inputs.keys())}")
 for k, v in inputs.items():
     if hasattr(v, 'shape'):
@@ -130,16 +118,19 @@ with torch.no_grad():
         proj_out = model.projector(enc_out.last_hidden_state)
         save("projector_out", proj_out[0], f"projector output (audio tokens for LLM)")
 
-# Full generation
+# Full generation (following README pattern)
 print("\n=== Generation ===")
 try:
     with torch.no_grad():
-        outputs = model.generate(**inputs, max_new_tokens=100)
-        gen_ids = outputs[0].tolist()
-        decoded = processor.batch_decode(outputs, skip_special_tokens=True)
+        model_outputs = model.generate(**inputs, max_new_tokens=200, do_sample=False, num_beams=1)
+        num_input_tokens = inputs["input_ids"].shape[-1]
+        new_tokens = model_outputs[0, num_input_tokens:].unsqueeze(0)
+        output_text = tokenizer.batch_decode(new_tokens, add_special_tokens=False, skip_special_tokens=True)
+        gen_ids = model_outputs[0].tolist()
         save("gen_ids", np.array(gen_ids[:50], dtype=np.float32), f"first 50 gen_ids")
-        results["gen_text"] = decoded[0] if decoded else ""
-        print(f"  Generated: {decoded[0]!r}")
+        results["gen_text"] = output_text[0] if output_text else ""
+        print(f"  Generated: {output_text[0]!r}")
+        print(f"  Input tokens: {num_input_tokens}, Output tokens: {len(gen_ids) - num_input_tokens}")
 except Exception as e:
     print(f"  Generation failed: {e}")
     import traceback; traceback.print_exc()
