@@ -791,6 +791,7 @@ static ggml_cgraph * voxtral4b_build_graph_llm_kv(voxtral4b_context * ctx,
                                         (size_t)il * ctx->kv_v->nb[3]));
 
         // GQA expansion: repeat KV heads to match Q heads (32/8=4× repeat)
+        // Explicit expansion is faster than native GQA in flash_attn_ext on CPU
         const int n_kv_grp = n_q / n_kv;
         if (n_kv_grp > 1) {
             ggml_tensor * K4 = ggml_reshape_4d(ctx0, Kfull, hd, Lk, 1, n_kv);
