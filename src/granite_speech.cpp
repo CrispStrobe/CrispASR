@@ -709,6 +709,126 @@ static void depthwise_conv_1d_cpu(float * out, const float * in,
 }
 
 // ===========================================================================
+// CPU-based blocked attention with Shaw relative position embeddings
+//
+// For each block of ctx_size frames:
+//   attn_weights = (Q @ K^T) * scale + pos_attn
+//   pos_attn[c,r] = sum_d Q[c,d] * RPE[c,r,d] * scale
+//   out = softmax(attn_weights) @ V
+// ===========================================================================
+
+static void shaw_block_attention_cpu(
+    float * out,          // (n_heads * hd, T) output — same layout as input
+    const float * Q_data, // (n_heads * hd, T) — ne[0]=n_heads*hd, ne[1]=T
+    const float * K_data, // same
+    const float * V_data, // same
+    const float * rpe,    // (ctx_size, ctx_size, hd) — precomputed RPE lookup for this layer
+    int T, int n_heads, int hd, int ctx_size, float scale,
+    int remainder)  // frames in last block (0 = no padding)
+{
+    const int d = n_heads * hd;
+    const int n_blocks = (T + ctx_size - 1) / ctx_size;
+
+    // Working buffers
+    std::vector<float> scores((size_t)ctx_size * ctx_size);
+    std::vector<float> attn_out((size_t)ctx_size * hd);
+
+    for (int blk = 0; blk < n_blocks; blk++) {
+        int blk_start = blk * ctx_size;
+        int blk_len = (blk == n_blocks - 1 && remainder > 0) ? remainder : ctx_size;
+
+        for (int h = 0; h < n_heads; h++) {
+            // Q_block[c, d] = Q_data[(h * hd + d) + (blk_start + c) * d_full]
+            // where d_full = n_heads * hd
+            // Layout: Q_data is (d, T) in ggml — element [dim, time] = Q_data[dim + time * d]
+
+            // Compute QK^T * scale + pos_attn for this block and head
+            for (int c = 0; c < blk_len; c++) {
+                for (int r = 0; r < blk_len; r++) {
+                    float qk = 0.0f;
+                    float pos = 0.0f;
+                    for (int dd = 0; dd < hd; dd++) {
+                        int q_idx = (h * hd + dd) + (blk_start + c) * d;
+                        int k_idx = (h * hd + dd) + (blk_start + r) * d;
+                        float q_val = Q_data[q_idx];
+                        float k_val = K_data[k_idx];
+                        qk += q_val * k_val;
+                        // pos_attn: Q[c,d] * RPE[c,r,d]
+                        pos += q_val * rpe[(size_t)(c * ctx_size + r) * hd + dd];
+                    }
+                    scores[c * blk_len + r] = (qk + pos) * scale;
+                }
+                // Mask positions beyond blk_len (for padded last block)
+                for (int r = blk_len; r < ctx_size; r++)
+                    scores[c * blk_len + r] = -1e30f;
+            }
+
+            // Softmax per row
+            for (int c = 0; c < blk_len; c++) {
+                float max_val = -1e30f;
+                for (int r = 0; r < blk_len; r++)
+                    if (scores[c * blk_len + r] > max_val) max_val = scores[c * blk_len + r];
+                float sum = 0.0f;
+                for (int r = 0; r < blk_len; r++) {
+                    scores[c * blk_len + r] = std::exp(scores[c * blk_len + r] - max_val);
+                    sum += scores[c * blk_len + r];
+                }
+                float inv_sum = 1.0f / (sum + 1e-10f);
+                for (int r = 0; r < blk_len; r++)
+                    scores[c * blk_len + r] *= inv_sum;
+            }
+
+            // Compute output: out[c, d] = sum_r scores[c, r] * V[r, d]
+            for (int c = 0; c < blk_len; c++) {
+                for (int dd = 0; dd < hd; dd++) {
+                    float sum = 0.0f;
+                    for (int r = 0; r < blk_len; r++) {
+                        int v_idx = (h * hd + dd) + (blk_start + r) * d;
+                        sum += scores[c * blk_len + r] * V_data[v_idx];
+                    }
+                    // Write to output: out[(h*hd + dd) + (blk_start + c) * d]
+                    out[(h * hd + dd) + (blk_start + c) * d] = sum;
+                }
+            }
+        }
+    }
+}
+
+// ===========================================================================
+// CPU-based linear layer helper (builds tiny ggml graph per matmul)
+// ===========================================================================
+
+// Apply: out = W @ x + b, where x is (d_in, T), W is (d_in, d_out), out is (d_out, T)
+static void cpu_linear(granite_speech_context * ctx, float * out,
+                       const float * x, ggml_tensor * W, ggml_tensor * bias,
+                       int d_in, int d_out, int T) {
+    // Simple CPU matmul (no ggml graph overhead for small ops)
+    // W in ggml: ne[0]=d_in, ne[1]=d_out. W[i,j] = data[j * d_in + i]
+    // ggml_mul_mat(W, x) computes W^T @ x
+    // For F32 weights, do it directly:
+    std::vector<float> w_f32((size_t)d_in * d_out);
+    ggml_backend_tensor_get(W, w_f32.data(), 0, w_f32.size() * sizeof(float));
+
+    std::vector<float> b_f32;
+    if (bias) {
+        b_f32.resize(d_out);
+        ggml_backend_tensor_get(bias, b_f32.data(), 0, d_out * sizeof(float));
+    }
+
+    // out[o, t] = sum_i W[i, o] * x[i, t] + bias[o]
+    // = sum_i w_f32[o * d_in + i] * x[i + t * d_in] + b[o]
+    for (int t = 0; t < T; t++) {
+        for (int o = 0; o < d_out; o++) {
+            float sum = 0.0f;
+            for (int i = 0; i < d_in; i++)
+                sum += w_f32[(size_t)o * d_in + i] * x[(size_t)i + (size_t)t * d_in];
+            if (bias) sum += b_f32[o];
+            out[(size_t)o + (size_t)t * d_out] = sum;
+        }
+    }
+}
+
+// ===========================================================================
 // Conformer encoder — CPU-based forward (not ggml graph)
 //
 // The encoder uses block-local attention (context_size=200) with Shaw
@@ -952,14 +1072,18 @@ extern "C" float * granite_speech_run_encoder(struct granite_speech_context * ct
                                               const float * mel, int n_mels, int T_mel,
                                               int * out_N, int * out_dim) {
     if (!ctx || !mel || n_mels != 160) return nullptr;
-    const int d = (int)ctx->model.hparams.enc_d_model;
-    const int kernel_size = (int)ctx->model.hparams.enc_conv_kernel;  // 15
-    const int conv_pad = kernel_size / 2;  // 7
+    const auto & hp = ctx->model.hparams;
+    const int d = (int)hp.enc_d_model;
+    const int n_heads = (int)hp.enc_n_heads;
+    const int hd = (int)hp.enc_head_dim;
+    const int n_layers = (int)hp.enc_n_layers;
+    const int ctx_size = 200;
 
     if (ctx->params.verbosity >= 2)
         fprintf(stderr, "  encoder: building graph for T=%d, d=%d, %d layers\n",
-                T_mel, d, (int)ctx->model.hparams.enc_n_layers);
+                T_mel, d, n_layers);
 
+    // Run the full encoder ggml graph (with flash_attn block mask, no RPE)
     ggml_cgraph * gf = granite_build_encoder(ctx, T_mel);
     ggml_backend_sched_reset(ctx->sched);
     if (!ggml_backend_sched_alloc_graph(ctx->sched, gf)) {
@@ -970,17 +1094,14 @@ extern "C" float * granite_speech_run_encoder(struct granite_speech_context * ct
     ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "enc_input"), mel, 0,
                             (size_t)T_mel * n_mels * sizeof(float));
 
-    // Block-diagonal attention mask (context_size=200)
+    // Block-diagonal attention mask
     {
-        const int ctx_size = 200;
         std::vector<ggml_fp16_t> mask((size_t)T_mel * T_mel, ggml_fp32_to_fp16(0.0f));
         ggml_fp16_t neg_inf = ggml_fp32_to_fp16(-INFINITY);
-        for (int q = 0; q < T_mel; q++) {
-            int q_block = q / ctx_size;
-            for (int k = 0; k < T_mel; k++) {
-                if (k / ctx_size != q_block) mask[(size_t)q * T_mel + k] = neg_inf;
-            }
-        }
+        for (int q = 0; q < T_mel; q++)
+            for (int k = 0; k < T_mel; k++)
+                if (k / ctx_size != q / ctx_size)
+                    mask[(size_t)q * T_mel + k] = neg_inf;
         ggml_tensor * mask_t = ggml_graph_get_tensor(gf, "block_mask");
         if (mask_t)
             ggml_backend_tensor_set(mask_t, mask.data(), 0, mask.size() * sizeof(ggml_fp16_t));
@@ -988,12 +1109,6 @@ extern "C" float * granite_speech_run_encoder(struct granite_speech_context * ct
             fprintf(stderr, "  encoder: block-local mask T=%d ctx=%d blocks=%d\n",
                     T_mel, ctx_size, (T_mel + ctx_size - 1) / ctx_size);
     }
-
-    // Fill depthwise conv IO tensor with zeros (will be replaced per-layer)
-    // The graph has a "dw_conv_io" tensor that serves as the depthwise conv
-    // input/output. We apply the conv on CPU between graph evaluations.
-    // NOTE: For V1, we run the graph once with the depthwise conv skipped (identity).
-    // The depthwise conv will be applied as a separate CPU pass in V2.
 
     if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS) {
         fprintf(stderr, "  encoder: graph compute failed\n");
