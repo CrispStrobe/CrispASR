@@ -944,9 +944,179 @@ extern "C" void granite_speech_kv_reset(struct granite_speech_context * ctx) {
     if (ctx && ctx->kv_buf) ggml_backend_buffer_clear(ctx->kv_buf, 0);
 }
 
-extern "C" float * granite_speech_run_llm_kv(struct granite_speech_context *, const float *, int, int, int *, int *) {
-    fprintf(stderr, "granite_speech: LLM not yet implemented\n");
-    return nullptr;
+// ===========================================================================
+// Granite LLM graph (40 layers, GQA 16/4, μP multipliers)
+// ===========================================================================
+
+static ggml_cgraph * granite_build_llm_kv(granite_speech_context * ctx,
+                                          int n_past, int n_tokens) {
+    const auto & m = ctx->model;
+    const auto & hp = m.hparams;
+    const int d = (int)hp.llm_d_model;      // 2048
+    const int n_q = (int)hp.llm_n_heads;    // 16
+    const int n_kv = (int)hp.llm_n_kv_heads;// 4
+    const int hd = (int)hp.llm_head_dim;    // 128
+    const int n_layers = (int)hp.llm_n_layers;
+    const int vocab = (int)hp.llm_vocab_size;
+
+    ggml_init_params ip = { ctx->compute_meta.size(), ctx->compute_meta.data(), true };
+    ggml_context * ctx0 = ggml_init(ip);
+    ggml_cgraph * gf = ggml_new_graph_custom(ctx0, 16384, false);
+
+    ggml_tensor * embeds = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, d, n_tokens);
+    ggml_set_name(embeds, "inputs_embeds"); ggml_set_input(embeds);
+
+    ggml_tensor * positions = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, n_tokens);
+    ggml_set_name(positions, "positions"); ggml_set_input(positions);
+
+    ggml_tensor * causal_mask = nullptr;
+    if (n_tokens > 1) {
+        causal_mask = ggml_new_tensor_2d(ctx0, GGML_TYPE_F16, n_past + n_tokens, n_tokens);
+        ggml_set_name(causal_mask, "causal_mask"); ggml_set_input(causal_mask);
+    }
+
+    ggml_tensor * cur = embeds;
+
+    for (int il = 0; il < n_layers; il++) {
+        const auto & b = m.llm.blocks[il];
+        ggml_tensor * residual = cur;
+
+        // Pre-RMSNorm
+        cur = ggml_rms_norm(ctx0, cur, hp.llm_rms_eps);
+        cur = ggml_mul(ctx0, cur, b.attn_norm_w);
+
+        // GQA self-attention
+        ggml_tensor * Q = ggml_mul_mat(ctx0, b.attn_q_w, cur);
+        ggml_tensor * K = ggml_mul_mat(ctx0, b.attn_k_w, cur);
+        ggml_tensor * V = ggml_mul_mat(ctx0, b.attn_v_w, cur);
+
+        Q = ggml_reshape_3d(ctx0, Q, hd, n_q, n_tokens);
+        K = ggml_reshape_3d(ctx0, K, hd, n_kv, n_tokens);
+        V = ggml_reshape_3d(ctx0, V, hd, n_kv, n_tokens);
+
+        // RoPE
+        Q = ggml_rope_ext(ctx0, Q, positions, nullptr, hd, 0, 0,
+                          hp.llm_rope_theta, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f);
+        K = ggml_rope_ext(ctx0, K, positions, nullptr, hd, 0, 0,
+                          hp.llm_rope_theta, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f);
+
+        // Permute K/V for cache write
+        ggml_tensor * K_perm = ggml_permute(ctx0, K, 0, 2, 1, 3);
+        ggml_tensor * V_perm = ggml_permute(ctx0, V, 0, 2, 1, 3);
+
+        // KV cache write
+        ggml_tensor * k_dst = ggml_view_4d(ctx0, ctx->kv_k, hd, n_tokens, n_kv, 1,
+                                           ctx->kv_k->nb[1], ctx->kv_k->nb[2], ctx->kv_k->nb[3],
+                                           (size_t)il * ctx->kv_k->nb[3] +
+                                           (size_t)n_past * ctx->kv_k->nb[1]);
+        ggml_tensor * v_dst = ggml_view_4d(ctx0, ctx->kv_v, hd, n_tokens, n_kv, 1,
+                                           ctx->kv_v->nb[1], ctx->kv_v->nb[2], ctx->kv_v->nb[3],
+                                           (size_t)il * ctx->kv_v->nb[3] +
+                                           (size_t)n_past * ctx->kv_v->nb[1]);
+        ggml_build_forward_expand(gf, ggml_cpy(ctx0, K_perm, k_dst));
+        ggml_build_forward_expand(gf, ggml_cpy(ctx0, V_perm, v_dst));
+
+        // KV cache read
+        int Lk = n_past + n_tokens;
+        ggml_tensor * Kfull = ggml_cont(ctx0, ggml_view_3d(ctx0, ctx->kv_k, hd, Lk, n_kv,
+                                        ctx->kv_k->nb[1], ctx->kv_k->nb[2],
+                                        (size_t)il * ctx->kv_k->nb[3]));
+        ggml_tensor * Vfull = ggml_cont(ctx0, ggml_view_3d(ctx0, ctx->kv_v, hd, Lk, n_kv,
+                                        ctx->kv_v->nb[1], ctx->kv_v->nb[2],
+                                        (size_t)il * ctx->kv_v->nb[3]));
+
+        // GQA expansion
+        const int n_kv_grp = n_q / n_kv;
+        if (n_kv_grp > 1) {
+            ggml_tensor * K4 = ggml_reshape_4d(ctx0, Kfull, hd, Lk, 1, n_kv);
+            ggml_tensor * V4 = ggml_reshape_4d(ctx0, Vfull, hd, Lk, 1, n_kv);
+            K4 = ggml_repeat_4d(ctx0, K4, hd, Lk, n_kv_grp, n_kv);
+            V4 = ggml_repeat_4d(ctx0, V4, hd, Lk, n_kv_grp, n_kv);
+            Kfull = ggml_reshape_3d(ctx0, K4, hd, Lk, n_q);
+            Vfull = ggml_reshape_3d(ctx0, V4, hd, Lk, n_q);
+        }
+
+        // Flash attention (μP: attention_multiplier replaces 1/sqrt(hd))
+        Q = ggml_cont(ctx0, ggml_permute(ctx0, Q, 0, 2, 1, 3));
+        ggml_tensor * attn = ggml_flash_attn_ext(ctx0, Q, Kfull, Vfull, causal_mask,
+                                                  hp.attention_multiplier, 0.0f, 0.0f);
+        attn = ggml_reshape_2d(ctx0, attn, n_q * hd, n_tokens);
+        attn = ggml_mul_mat(ctx0, b.attn_out_w, attn);
+
+        // μP: residual_multiplier scales the residual addition
+        cur = ggml_add(ctx0, residual, ggml_scale(ctx0, attn, hp.residual_multiplier));
+
+        // FFN: Pre-RMSNorm + SwiGLU
+        residual = cur;
+        cur = ggml_rms_norm(ctx0, cur, hp.llm_rms_eps);
+        cur = ggml_mul(ctx0, cur, b.ffn_norm_w);
+
+        ggml_tensor * gate = ggml_silu(ctx0, ggml_mul_mat(ctx0, b.ffn_gate_w, cur));
+        ggml_tensor * up = ggml_mul_mat(ctx0, b.ffn_up_w, cur);
+        cur = ggml_mul_mat(ctx0, b.ffn_down_w, ggml_mul(ctx0, gate, up));
+        cur = ggml_add(ctx0, residual, ggml_scale(ctx0, cur, hp.residual_multiplier));
+    }
+
+    // Final RMSNorm
+    cur = ggml_rms_norm(ctx0, cur, hp.llm_rms_eps);
+    cur = ggml_mul(ctx0, cur, m.llm.output_norm_w);
+
+    // LM head (separate, not tied) with μP logits scaling
+    if (n_tokens > 1) {
+        cur = ggml_view_1d(ctx0, cur, d, (size_t)(n_tokens - 1) * d * sizeof(float));
+        cur = ggml_reshape_2d(ctx0, cur, d, 1);
+    }
+    cur = ggml_mul_mat(ctx0, m.llm.output_w, cur);
+    cur = ggml_scale(ctx0, cur, 1.0f / hp.logits_scaling);  // μP logits scaling
+
+    ggml_set_name(cur, "logits");
+    ggml_build_forward_expand(gf, cur);
+    ggml_free(ctx0);
+    return gf;
+}
+
+extern "C" float * granite_speech_run_llm_kv(struct granite_speech_context * ctx,
+                                             const float * inputs_embeds,
+                                             int n_tokens, int n_past,
+                                             int * out_n_tokens, int * out_vocab_size) {
+    if (!ctx || !inputs_embeds || n_tokens <= 0) return nullptr;
+    const auto & hp = ctx->model.hparams;
+    const int d = (int)hp.llm_d_model;
+    const int vocab = (int)hp.llm_vocab_size;
+
+    std::vector<int32_t> positions(n_tokens);
+    for (int i = 0; i < n_tokens; i++) positions[i] = n_past + i;
+
+    std::vector<ggml_fp16_t> mask;
+    if (n_tokens > 1) {
+        int Lk = n_past + n_tokens;
+        mask.resize((size_t)n_tokens * Lk, ggml_fp32_to_fp16(0.0f));
+        ggml_fp16_t neg_inf = ggml_fp32_to_fp16(-INFINITY);
+        for (int q = 0; q < n_tokens; q++)
+            for (int k = 0; k < Lk; k++)
+                if (k > n_past + q) mask[(size_t)q * Lk + k] = neg_inf;
+    }
+
+    ggml_cgraph * gf = granite_build_llm_kv(ctx, n_past, n_tokens);
+    ggml_backend_sched_reset(ctx->sched);
+    if (!ggml_backend_sched_alloc_graph(ctx->sched, gf)) return nullptr;
+
+    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "inputs_embeds"), inputs_embeds, 0,
+                            (size_t)d * n_tokens * sizeof(float));
+    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "positions"), positions.data(), 0,
+                            positions.size() * sizeof(int32_t));
+    if (n_tokens > 1)
+        ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "causal_mask"), mask.data(), 0,
+                                mask.size() * sizeof(ggml_fp16_t));
+
+    if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS) return nullptr;
+
+    ggml_tensor * logits_t = ggml_graph_get_tensor(gf, "logits");
+    float * result = (float *)malloc((size_t)vocab * sizeof(float));
+    ggml_backend_tensor_get(logits_t, result, 0, (size_t)vocab * sizeof(float));
+    if (out_n_tokens) *out_n_tokens = 1;
+    if (out_vocab_size) *out_vocab_size = vocab;
+    return result;
 }
 
 extern "C" float * granite_speech_embed_tokens(struct granite_speech_context * ctx,
