@@ -25,6 +25,8 @@ Q4_K is 2.7× faster than F16 with identical output quality. German tested and w
 | **Voxtral 4B RT** | 4.4B | 2.4 GB | **54s** | 0.20× | Causal enc + Mistral LLM |
 | Voxtral 3B | 3.2B | 2.5 GB | 68s | 0.16× | Whisper enc + Llama LLM |
 
+| **Granite 1B** | 1.0B | 2.8 GB | **22.5s** | 0.49× | Conformer + Q-Former + Granite LLM |
+
 Qwen3-ASR and Parakeet TDT achieve real-time or faster on a 2 vCPU server.
 With GPU (Metal/CUDA), all models would be significantly faster.
 

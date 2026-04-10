@@ -28,18 +28,19 @@ Converted and tested with [CrispASR](https://github.com/CrispStrobe/CrispASR), a
 | File | Quant | Size | Description |
 |------|-------|------|-------------|
 | `granite-speech-1b.gguf` | F16 (enc/proj F32) | 5.2 GB | Full precision (reference) |
-| `granite-speech-1b-q8_0.gguf` | Q8_0 | ~2.6 GB | 8-bit quantized LLM |
-| `granite-speech-1b-q4_k.gguf` | Q4_K | ~1.6 GB | 4-bit K-quant LLM (recommended) |
+| `granite-speech-1b-q8_0.gguf` | Q8_0 | ~3.4 GB | 8-bit quantized LLM |
+| `granite-speech-1b-q4_k.gguf` | Q4_K | 2.8 GB | 4-bit K-quant LLM (recommended) |
 
 Encoder and projector weights are kept at F32 for accuracy (they are precision-sensitive due to Shaw relative position embeddings and cross-attention). Only the 40-layer Granite LLM is quantized.
 
 ## Performance (CPU, 4 threads, AVX2, jfk.wav 11s)
 
-| Quant | Encoder | Projector | Prefill | Decode (ms/tok) | Total |
-|-------|---------|-----------|---------|-----------------|-------|
-| F16 | 14s | 0.5s | 17s | 200 | 37s |
+| Quant | Size | Encoder | Prefill | Decode (ms/tok) | Total |
+|-------|------|---------|---------|-----------------|-------|
+| F16 | 5.2 GB | 14.1s | 16.6s | 200 | 37s |
+| **Q4_K** | **2.8 GB** | **13.5s** | **5.3s** | **115** | **22.5s** |
 
-(Q4_K and Q8_0 benchmarks pending)
+Q4_K recommended — 1.9× smaller, 1.6× faster, identical transcription quality. The encoder dominates at 13.5s (60% of total) because it runs per-layer on CPU; future optimization will consolidate it into a single ggml graph.
 
 ## Usage
 
