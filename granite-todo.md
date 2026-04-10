@@ -1,5 +1,5 @@
-> **STATUS (2026-04-10): ARCHITECTURE INSPECTED.** Model downloaded and analyzed.
-> Ready to start. Estimated effort: ~1 week. See TODO.md for priorities.
+> **STATUS (2026-04-10): COMPLETE.** Working transcription matching HF ground truth.
+> All 6 bugs found and fixed. See TODO.md for remaining tasks (quantize, upload, CLI).
 
 # ibm-granite/granite-4.0-1b-speech — port plan
 

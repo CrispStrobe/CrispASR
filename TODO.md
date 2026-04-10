@@ -1,6 +1,6 @@
 # CrispASR — comprehensive TODO
 
-Last updated: 2026-04-09.
+Last updated: 2026-04-10.
 
 ---
 
@@ -180,6 +180,14 @@ English + German verified. 13 languages supported.
 - [ ] Temperature/sampling controls
 - [ ] Reduce right padding (17→10 tokens, matching voxtral.c)
 
+### Granite Speech 1B
+- [ ] Build CLI (`granite-main` or integrate into consolidated CLI)
+- [ ] Quantize Q4_K + Q8_0
+- [ ] Upload to HF (`cstr/granite-speech-4.0-1b-GGUF`)
+- [ ] Word timestamps via CTC aligner
+- [ ] Performance tuning (encoder is slow: per-layer CPU → single ggml graph)
+- [ ] Remove dead ggml graph encoder (`granite_build_encoder`)
+
 ### Cohere
 - [x] F32→F16 self-attention KV ✅ (P4)
 - [ ] Upstream ffmpeg mp4 bug (UPSTREAM.md)
@@ -198,7 +206,7 @@ English + German verified. 13 languages supported.
 | `cstr/qwen3-asr-0.6b-GGUF` | ✅ shipped |
 | `cstr/voxtral-mini-3b-2507-GGUF` | ✅ shipped |
 | `cstr/voxtral-mini-4b-realtime-GGUF` | ✅ shipped (Q4_K + Q8_0) |
-| `cstr/voxtral-mini-4b-realtime-GGUF` | ❌ pending port |
+| `cstr/granite-speech-4.0-1b-GGUF` | ❌ pending quantize + upload |
 
 ---
 
@@ -225,3 +233,8 @@ English + German verified. 13 languages supported.
    7 critical bugs found via Kaggle ground truth + 3 reference implementations
    (voxtral.c, voxmlx, voxtral-rs). Q4_K quantized: 2.4GB, 49s for 11s audio.
    Uploaded to HF.
+9. **Granite Speech 4.0-1B** (2026-04-10) — full port: Conformer encoder
+   (Shaw RPE, depthwise conv, batch norm folding) + BLIP-2 Q-Former projector +
+   Granite LLM (μP multipliers). 6 bugs found: Hann window centering, Q-Former LN
+   target, embedding multiplier placement, CTC dim hardcoding, native GQA, and
+   **RoPE mode (NEOX vs NORMAL)** — the critical fix for correct transcription.

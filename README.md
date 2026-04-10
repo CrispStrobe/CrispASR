@@ -15,8 +15,9 @@ A fork of [whisper.cpp](https://github.com/ggml-org/whisper.cpp) that adds full 
 | **`qwen3-asr-main`** | [`Qwen/Qwen3-ASR-0.6B`](https://huggingface.co/Qwen/Qwen3-ASR-0.6B) — 900M speech-LLM (Whisper-style audio encoder + Qwen3 0.6B LLM with audio-token injection). 30 languages + 22 Chinese dialects, Open ASR avg WER 6.42, persistent KV cache | [`cstr/qwen3-asr-0.6b-GGUF`](https://huggingface.co/cstr/qwen3-asr-0.6b-GGUF) |
 | **`voxtral-main`** | [`mistralai/Voxtral-Mini-3B-2507`](https://huggingface.co/mistralai/Voxtral-Mini-3B-2507) — 3B speech-LLM (Whisper-large-v3 encoder + Mistral/Llama 3B LLM). ASR + audio understanding + text Q&A, 8 languages, function calling from voice. Best-in-class text performance retained | [`cstr/voxtral-mini-3b-2507-GGUF`](https://huggingface.co/cstr/voxtral-mini-3b-2507-GGUF) |
 | **`voxtral4b-main`** | [`mistralai/Voxtral-Mini-4B-Realtime-2602`](https://huggingface.co/mistralai/Voxtral-Mini-4B-Realtime-2602) — 4.4B **realtime streaming** speech-LLM (causal RoPE+SwiGLU encoder + Mistral 3.4B LLM with adaptive RMSNorm). 13 languages, <500ms latency, competitive with offline models | `cstr/voxtral-mini-4b-realtime-GGUF` (pending) |
+| **`granite-main`** | [`ibm-granite/granite-4.0-1b-speech`](https://huggingface.co/ibm-granite/granite-4.0-1b-speech) — 1B speech-LLM (16-layer Conformer encoder with Shaw RPE + BLIP-2 Q-Former projector + Granite 1B LLM with μP). 6 languages (en, fr, de, es, pt, ja), Apache-2.0 | `cstr/granite-speech-4.0-1b-GGUF` (pending) |
 
-All eight runtimes share ggml-based inference — that's how we ported each new model in days rather than weeks. Qwen3-ASR, Voxtral 3B, and Voxtral 4B Realtime are **speech-LLMs**: instead of dedicated CTC/transducer/seq2seq decoders, the audio encoder output frames are injected into the input embeddings of a stock LLM, and the LLM autoregressively generates the transcript. Voxtral 3B additionally supports audio understanding (Q&A about audio content) and function calling from voice. Voxtral 4B Realtime is a **natively streaming** model with a causal audio encoder and configurable transcription delay (240ms-2.4s), designed for on-device real-time ASR.
+All nine runtimes share ggml-based inference — that's how we ported each new model in days rather than weeks. Qwen3-ASR, Voxtral 3B, and Voxtral 4B Realtime are **speech-LLMs**: instead of dedicated CTC/transducer/seq2seq decoders, the audio encoder output frames are injected into the input embeddings of a stock LLM, and the LLM autoregressively generates the transcript. Voxtral 3B additionally supports audio understanding (Q&A about audio content) and function calling from voice. Voxtral 4B Realtime is a **natively streaming** model with a causal audio encoder and configurable transcription delay (240ms-2.4s), designed for on-device real-time ASR.
 
 > **Branch state.** Everything lives on `main` as of April 2026. The original cohere-only history is preserved at the [`archive/cohere-only`](https://github.com/CrispStrobe/CrispASR/tree/archive/cohere-only) branch as a historical reference.
 
@@ -378,18 +379,18 @@ huggingface-cli download cstr/voxtral-mini-3b-2507-GGUF \
 
 ## Current status
 
-| Component | parakeet | canary | cohere | qwen3-asr | voxtral 3B | voxtral 4B |
-| --- | --- | --- | --- | --- | --- | --- |
-| GGUF converter | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Encoder forward | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Decoder/LLM forward | ✅ TDT | ✅ Transformer | ✅ Transformer | ✅ Qwen3 LLM | ✅ Llama 3B | ✅ Llama 3.4B |
-| Word timestamps | ✅ TDT native | ✅ CTC re-align | ✅ cross-attn DTW | ✅ CTC 2nd pass | ✅ CTC 2nd pass | ✅ CTC 2nd pass |
-| SRT/VTT output | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
-| `--flash` attention | ✅ | ✅ | ✅ | always on | always on | always on |
-| VAD segmentation | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
-| GPU auto-detect | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Quantization | ✅ Q4_K-Q8_0 | ✅ | ✅ | ✅ | ✅ | ❌ pending |
-| HF release | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ pending |
+| Component | parakeet | canary | cohere | qwen3-asr | voxtral 3B | voxtral 4B | granite 1B |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| GGUF converter | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Encoder forward | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Decoder/LLM forward | ✅ TDT | ✅ Transformer | ✅ Transformer | ✅ Qwen3 LLM | ✅ Llama 3B | ✅ Llama 3.4B | ✅ Granite 1B |
+| Word timestamps | ✅ TDT native | ✅ CTC re-align | ✅ cross-attn DTW | ✅ CTC 2nd pass | ✅ CTC 2nd pass | ✅ CTC 2nd pass | ❌ pending |
+| SRT/VTT output | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
+| `--flash` attention | ✅ | ✅ | ✅ | always on | always on | always on | always on |
+| VAD segmentation | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| GPU auto-detect | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Quantization | ✅ Q4_K-Q8_0 | ✅ | ✅ | ✅ | ✅ | ❌ pending | ❌ pending |
+| HF release | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ pending | ❌ pending |
 
 See `TODO.md` for the full feature roadmap.
 
@@ -404,6 +405,7 @@ See `TODO.md` for the full feature roadmap.
 | `src/qwen3_asr.{h,cpp}` | Qwen3-ASR 0.6B — Whisper encoder + Qwen3 LLM |
 | `src/voxtral.{h,cpp}` | Voxtral-Mini 3B — Whisper-large-v3 encoder + Llama 3B |
 | `src/voxtral4b.{h,cpp}` | Voxtral-Mini 4B Realtime — causal encoder + Llama 3.4B |
+| `src/granite_speech.{h,cpp}` | Granite Speech 4.0-1B — Conformer + Q-Former + Granite LLM |
 | `src/wav2vec2-ggml.{h,cpp}` | wav2vec2 CTC for `cohere-align` |
 | `examples/*/main.cpp` | CLI entry points for each runtime |
 | `models/convert-*-to-gguf.py` | Model converters (HF/NeMo → GGUF) |
@@ -414,6 +416,7 @@ See `TODO.md` for the full feature roadmap.
 - **Cohere Transcribe**: Cohere Labs (Apache-2.0)
 - **Qwen3-ASR**: Qwen team / Alibaba (Apache-2.0)
 - **Voxtral-Mini 3B** and **Voxtral-Mini 4B Realtime**: Mistral AI (Apache-2.0)
+- **Granite Speech 4.0-1B**: IBM Granite team (Apache-2.0)
 - **wav2vec2 weights**: Jonatas Grosman (Apache-2.0)
 - **Underlying runtime**: [whisper.cpp](https://github.com/ggml-org/whisper.cpp) / [ggml](https://github.com/ggerganov/ggml) (MIT)
 
