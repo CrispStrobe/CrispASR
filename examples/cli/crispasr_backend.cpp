@@ -8,8 +8,8 @@
 // library is linked in.
 std::unique_ptr<CrispasrBackend> crispasr_make_parakeet_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_canary_backend();
+std::unique_ptr<CrispasrBackend> crispasr_make_cohere_backend();
 // Remaining constructors will land in subsequent steps:
-// std::unique_ptr<CrispasrBackend> crispasr_make_cohere_backend();
 // std::unique_ptr<CrispasrBackend> crispasr_make_qwen3_backend();
 // std::unique_ptr<CrispasrBackend> crispasr_make_voxtral_backend();
 // std::unique_ptr<CrispasrBackend> crispasr_make_voxtral4b_backend();
@@ -32,6 +32,7 @@ std::unique_ptr<CrispasrBackend> crispasr_make_canary_backend();
 std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string & name) {
     if (name == "parakeet") return crispasr_make_parakeet_backend();
     if (name == "canary")   return crispasr_make_canary_backend();
+    if (name == "cohere")   return crispasr_make_cohere_backend();
 
     // Additional backends plug in here as they're added.
     // if (name == "cohere")    return crispasr_make_cohere_backend();
@@ -49,7 +50,8 @@ std::vector<std::string> crispasr_list_backends() {
         "whisper",   // via the unmodified cli.cpp path
         "parakeet",
         "canary",
-        // future: "cohere", "qwen3", "voxtral", "voxtral4b", "granite"
+        "cohere",
+        // future: "qwen3", "voxtral", "voxtral4b", "granite"
     };
 }
 
