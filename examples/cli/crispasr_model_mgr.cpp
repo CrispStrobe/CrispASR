@@ -41,11 +41,13 @@ constexpr registry_entry k_registry[] = {
     { "voxtral4b", "voxtral-mini-4b-realtime-q4_k.gguf",
       "https://huggingface.co/cstr/voxtral-mini-4b-realtime-GGUF/resolve/main/voxtral-mini-4b-realtime-q4_k.gguf",
       "~3.3 GB" },
-    // Granite 4.0 1B Speech
-    { "granite", "granite-4.0-1b-speech-q4_k.gguf",
-      "https://huggingface.co/cstr/granite-4.0-1b-speech-GGUF/resolve/main/granite-4.0-1b-speech-q4_k.gguf",
-      "~900 MB" },
-    // Qwen3-ASR 0.6B
+    // Granite 4.0 1B Speech (new converter — includes BPE merges so the
+    // dispatcher's --translate path works end-to-end).
+    { "granite", "granite-speech-4.0-1b-q4_k.gguf",
+      "https://huggingface.co/cstr/granite-speech-4.0-1b-GGUF/resolve/main/granite-speech-4.0-1b-q4_k.gguf",
+      "~2.94 GB" },
+    // Qwen3-ASR 0.6B (smaller, faster default for the dispatcher's
+    // -m auto path; the 1.7B is much more accurate but ~3x larger)
     { "qwen3", "qwen3-asr-0.6b-q4_k.gguf",
       "https://huggingface.co/cstr/qwen3-asr-0.6b-GGUF/resolve/main/qwen3-asr-0.6b-q4_k.gguf",
       "~500 MB" },

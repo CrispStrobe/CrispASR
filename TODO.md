@@ -292,6 +292,35 @@ contributor-facing path for adding backends with confidence. Status:
   extension point — just another `if (be == "vosk")` branch. For
   now we stick with whisper-tiny (shipping) and the future native
   Silero GGUF port.
+- **[later]** **Qwen3-ForcedAligner-0.6B as a generic timestamp post-step.**
+  Qwen3 ships a separate `Qwen3-ForcedAligner-0.6B` model that predicts
+  per-token timestamps for an arbitrary (audio, transcript) pair. It
+  reuses the Qwen3-ASR audio encoder + LLM body, but its lm_head is
+  `(5000, 1024)` instead of `(vocab, 1024)` — each `<|timestamp|>`
+  placeholder (id 151705) in the input gets a 5000-class softmax
+  prediction, and `argmax * 80 ms` = the timestamp.
+  Implementation plan:
+   1. The converter already handles it via the existing
+      `models/convert-qwen3-asr-to-gguf.py` (verified — produces a
+      valid GGUF). The 5000-class lm_head appears as
+      `output.weight (5000, 1024)`.
+   2. The `qwen3_asr_load_model` C++ side currently dies with
+      "tensor read out of bounds" because it assumes the lm_head
+      shape matches `llm.vocab_size`. Fix is one branch: read the
+      lm_head shape from GGUF and don't assert it equals vocab.
+   3. Add a `qwen3_asr_run_aligner(ctx, audio, ids, n_ids,
+      out_ts)` extern "C" entry point that does ONE forward pass
+      (no autoregressive decode) and returns the argmax of the
+      output head at each input position where `id == 151705`.
+   4. Wire through `examples/cli/crispasr_aligner.cpp` as a second
+      provider beside canary-ctc-aligner, dispatched on the
+      `-am qwen3-forced-aligner-*.gguf` filename. Once it lands,
+      every backend in CrispASR can call `-am qwen3-fa.gguf` for
+      timestamps without going through the CTC aligner path.
+  This is functionally equivalent to a generic
+  `--forced-aligner BACKEND` post-step like LID and diarize — the
+  full HF pipeline is documented at
+  https://github.com/QwenLM/Qwen3-ASR/blob/main/qwen_asr/inference/qwen3_forced_aligner.py
 - **[later]** Native GGUF port of Silero's language detector. Wire the
   `--lid-backend silero` flag up to a real implementation so the LID
   pre-step has a second provider besides whisper-tiny. Needs:
