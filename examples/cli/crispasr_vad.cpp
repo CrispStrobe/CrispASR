@@ -10,6 +10,71 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
+#include <string>
+#include <sys/stat.h>
+#include <unistd.h>
+
+namespace {
+
+// Default Silero VAD model from the ggml-org/whisper-vad HF repo.
+// ~885 KB. Auto-downloaded on first use to ~/.cache/crispasr so users
+// can pass `--vad` without having to hunt down the GGUF.
+constexpr const char * kVadDefaultUrl =
+    "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v5.1.2.bin";
+constexpr const char * kVadDefaultFile = "ggml-silero-v5.1.2.bin";
+
+bool vad_file_exists(const std::string & p) {
+    struct stat st;
+    if (stat(p.c_str(), &st) != 0) return false;
+    // Treat 0-byte zombies (from a failed earlier download) as missing
+    // so the next attempt retries the fetch instead of handing a
+    // corrupted path to whisper_vad_init_from_file_with_params.
+    return st.st_size > 0;
+}
+
+std::string vad_cache_dir() {
+    const char * home = std::getenv("HOME");
+    std::string dir = (home && *home) ? home : "/tmp";
+    dir += "/.cache/crispasr";
+    mkdir(dir.c_str(), 0755);
+    return dir;
+}
+
+bool vad_fetch_url(const std::string & url, const std::string & dst,
+                   bool no_prints) {
+    if (!no_prints) {
+        fprintf(stderr, "crispasr[vad]: downloading %s\n", url.c_str());
+    }
+    const std::string cmd_curl =
+        "curl -fL --progress-bar -o " + dst + " " + url;
+    if (std::system(cmd_curl.c_str()) == 0 && vad_file_exists(dst)) return true;
+    const std::string cmd_wget =
+        "wget -q --show-progress -O " + dst + " " + url;
+    if (std::system(cmd_wget.c_str()) == 0 && vad_file_exists(dst)) return true;
+    return false;
+}
+
+// Resolve params.vad_model into a real file path. When empty (user passed
+// --vad without --vad-model), or set to "auto"/"default", download the
+// canonical Silero VAD GGUF into the crispasr cache dir on first use.
+// Returns an empty string if no VAD was requested at all.
+std::string resolve_vad_model(const whisper_params & p) {
+    const std::string & v = p.vad_model;
+    const bool want_vad   = p.vad || !v.empty();
+    if (!want_vad) return "";
+
+    // Explicit path (not auto/default) — use as-is.
+    if (!v.empty() && v != "auto" && v != "default") return v;
+
+    // Auto path: check the cache, download on miss.
+    const std::string dst = vad_cache_dir() + "/" + kVadDefaultFile;
+    if (vad_file_exists(dst)) return dst;
+    if (!vad_fetch_url(kVadDefaultUrl, dst, p.no_prints)) return "";
+    return dst;
+}
+
+} // namespace
 
 std::vector<crispasr_audio_slice> crispasr_compute_audio_slices(
     const float * samples,
@@ -21,16 +86,17 @@ std::vector<crispasr_audio_slice> crispasr_compute_audio_slices(
     std::vector<crispasr_audio_slice> slices;
 
     whisper_vad_context * vctx = nullptr;
-    const bool want_vad = !params.vad_model.empty();
+    const std::string vad_path = resolve_vad_model(params);
+    const bool want_vad = !vad_path.empty();
     if (want_vad) {
         whisper_vad_context_params vcp = whisper_vad_default_context_params();
         vcp.n_threads = params.n_threads;
-        vctx = whisper_vad_init_from_file_with_params(params.vad_model.c_str(), vcp);
+        vctx = whisper_vad_init_from_file_with_params(vad_path.c_str(), vcp);
         if (!vctx) {
             fprintf(stderr,
                     "crispasr: warning: failed to load VAD model '%s', "
                     "falling back to fixed chunking\n",
-                    params.vad_model.c_str());
+                    vad_path.c_str());
         }
     }
 
