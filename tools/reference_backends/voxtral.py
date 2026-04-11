@@ -24,7 +24,18 @@ DEFAULT_STAGES = [
     "proj1_out",
     "proj2_out",
     "encoder_output",
+    # Text-only LLM stages for voxtral-test-llm. When these are requested
+    # the backend builds a fixed text prompt via apply_chat_template() (no
+    # audio), runs one forward pass through language_model + lm_head, and
+    # emits per-token logits in ne-order [vocab, T] plus the token ids so
+    # the C++ driver can feed them into voxtral_run_llm and diff.
+    "llm_input_ids",
+    "llm_logits",
 ]
+
+# Fixed text-only prompt used for the LLM ground truth. Matches the legacy
+# models/voxtral-llm-dump.py so any hash-based verification cross-checks.
+_LLM_TEXT_PROMPT = "Why should AI models be open-sourced?"
 
 
 def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
@@ -100,4 +111,43 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
     for h in handles:
         h.remove()
     out.update(captures)
+
+    # ---- Text-only LLM forward for voxtral-test-llm ----
+    want_llm = bool(stages & {"llm_input_ids", "llm_logits"})
+    if want_llm:
+        print("  running text-only LLM forward (no audio)")
+        text_model = model.language_model
+        # HF layout: model.language_model can be either the stack directly
+        # or have a .model inner + .lm_head outer. Normalise.
+        text_inner = text_model.model if hasattr(text_model, "model") else text_model
+        lm_head = (text_model.lm_head if hasattr(text_model, "lm_head")
+                   else model.lm_head)
+
+        # apply_chat_template wraps the user text in Voxtral's Tekken
+        # control tokens the model was trained with. This matches what the
+        # Python inference path does for plain-text prompts and is the same
+        # template used by the deleted models/voxtral-llm-dump.py script.
+        conversation = [{
+            "role": "user",
+            "content": [{"type": "text", "text": _LLM_TEXT_PROMPT}],
+        }]
+        chat_inputs = processor.apply_chat_template(conversation)
+        input_ids_t = chat_inputs.input_ids  # (1, T)
+        input_ids_np = input_ids_t[0].detach().cpu().numpy().astype(np.int32)
+
+        if "llm_input_ids" in stages:
+            # Stored as F32 because core_gguf loads floats only; the C++
+            # driver casts back to int32 on read.
+            out["llm_input_ids"] = input_ids_np.astype(np.float32)
+
+        if "llm_logits" in stages:
+            with torch.no_grad():
+                lm_out = text_inner(input_ids=input_ids_t, use_cache=False)
+                hidden = lm_out.last_hidden_state  # (1, T, D)
+                logits = lm_head(hidden)            # (1, T, V)
+            # ne-order: [vocab, T] — matches the qwen3 archive layout and
+            # what the C++ voxtral-test-llm driver already parses.
+            full = logits[0].detach().cpu().float().numpy()  # (T, V)
+            out["llm_logits"] = full.T.copy()                 # (V, T)
+
     return out
