@@ -8,6 +8,7 @@
 #include "granite_speech.h"
 
 #include "core/ffn.h"
+#include "core/mel.h"
 #include "ggml.h"
 #include "ggml-alloc.h"
 #include "ggml-backend.h"
@@ -597,90 +598,98 @@ static void granite_fft(float * in, int N, float * out) {
     }
 }
 
+// granite_fft is non-const in-place recursive (like voxtral/qwen3). Wrap
+// it for the const-input core_mel::FftR2C contract using thread-local
+// scratch buffers (~4*N and ~8*N floats respectively).
+static void granite_fft_wrapper(const float * in, int N, float * out) {
+    static thread_local std::vector<float> scratch_in;
+    static thread_local std::vector<float> scratch_out;
+    if ((int)scratch_in.size()  < 4 * N) scratch_in.assign((size_t)4 * N, 0.0f);
+    if ((int)scratch_out.size() < 8 * N) scratch_out.assign((size_t)8 * N, 0.0f);
+    std::memcpy(scratch_in.data(), in, (size_t)N * sizeof(float));
+    granite_fft(scratch_in.data(), N, scratch_out.data());
+    std::memcpy(out, scratch_out.data(), (size_t)(2 * N) * sizeof(float));
+}
+
 extern "C" float * granite_speech_compute_mel(struct granite_speech_context * ctx,
                                               const float * samples, int n_samples,
                                               int * out_n_mels, int * out_T_mel) {
     if (!ctx || !samples || n_samples <= 0) return nullptr;
     const int n_fft = 512, win_length = 400, hop = 160, n_mels = 80, n_freqs = n_fft / 2 + 1;
 
-    // Load mel filters from GGUF
+    // Load mel filters from GGUF (shape: [n_freqs, n_mels], HF layout).
     std::vector<float> filt((size_t)n_freqs * n_mels);
-    if (ctx->model.encoder.mel_filters) {
-        ggml_backend_tensor_get(ctx->model.encoder.mel_filters, filt.data(), 0,
-                                filt.size() * sizeof(float));
-    } else {
-        return nullptr;
+    if (!ctx->model.encoder.mel_filters) return nullptr;
+    ggml_backend_tensor_get(ctx->model.encoder.mel_filters, filt.data(), 0,
+                            filt.size() * sizeof(float));
+
+    // Hann window: win_length=400 samples, synthesized here (granite
+    // doesn't ship a window tensor in the GGUF like the other models).
+    // core_mel::compute() handles the center-pad from win_length to n_fft
+    // internally, so we only construct the win_length-sized version.
+    std::vector<float> hann((size_t)win_length);
+    for (int i = 0; i < win_length; i++) {
+        hann[i] = 0.5f * (1.0f - std::cos(2.0f * (float)M_PI * i / win_length));
     }
 
-    // Hann window: win_length=400, center-padded to n_fft=512
-    // torchaudio/torch.stft center-pads when win_length < n_fft
-    std::vector<float> hann(n_fft, 0.0f);
-    const int pad_left = (n_fft - win_length) / 2;  // 56
-    for (int i = 0; i < win_length; i++)
-        hann[pad_left + i] = 0.5f * (1.0f - std::cos(2.0f * (float)M_PI * i / win_length));
+    // HF / Whisper cluster parameters, NOT dropping the last STFT frame
+    // (torchaudio's MelSpectrogram keeps it; granite's PyTorch reference
+    // does the same). Output layout is TimeMels so the per-frame stacking
+    // below can use plain std::memcpy on consecutive rows.
+    //
+    // Granite's original normalization was `v / 4.0 + 1.0`, which is
+    // mathematically identical to core_mel's GlobalClipMax
+    // `(v + 4.0) / 4.0`. No new knob needed.
+    core_mel::Params p;
+    p.n_fft      = n_fft;
+    p.hop_length = hop;
+    p.win_length = win_length;
+    p.n_mels     = n_mels;
+    p.log_base   = core_mel::LogBase::Log10;
+    p.log_guard  = core_mel::LogGuard::MaxClip;
+    p.norm       = core_mel::Normalization::GlobalClipMax;
+    p.layout     = core_mel::Layout::TimeMels;
+    p.fb_layout  = core_mel::FbLayout::FreqsMels;
+    p.matmul     = core_mel::MatmulPrecision::Double;
+    p.log_eps    = 1e-10f;
+    p.center_pad = true;
+    p.drop_last_frame = false;
 
-    // Center-pad (zero padding)
-    const int pad = n_fft / 2;
-    std::vector<float> padded((size_t)n_samples + 2 * pad, 0.0f);
-    std::memcpy(padded.data() + pad, samples, n_samples * sizeof(float));
+    int T = 0;
+    auto mel = core_mel::compute(
+        samples, n_samples,
+        hann.data(), win_length,
+        filt.data(), n_freqs,
+        granite_fft_wrapper,
+        p,
+        T);
 
-    int T_full = (int)((padded.size() - n_fft) / hop + 1);
-    // torchaudio MelSpectrogram does NOT drop the last frame
-    int T = T_full;
-    if (T <= 0) return nullptr;
+    if (mel.empty()) return nullptr;
 
-    // STFT → power → mel → log10
-    std::vector<float> mel((size_t)n_mels * T, 0.0f);
-    float mel_max = -1e30f;
-    {
-        std::vector<float> fi(n_fft * 4, 0.0f), fo(n_fft * 8, 0.0f);
-        std::vector<float> power(n_freqs);
-        for (int t = 0; t < T; t++) {
-            const float * frame = padded.data() + (size_t)t * hop;
-            for (int n = 0; n < n_fft; n++) fi[n] = frame[n] * hann[n];
-            granite_fft(fi.data(), n_fft, fo.data());
-            for (int k = 0; k < n_freqs; k++) {
-                float re = fo[2*k], im = fo[2*k+1];
-                power[k] = re * re + im * im;
-            }
-            // mel @ power → log10
-            for (int m = 0; m < n_mels; m++) {
-                double s = 0.0;
-                for (int k = 0; k < n_freqs; k++)
-                    s += (double)filt[(size_t)k * n_mels + m] * power[k];
-                float lv = std::log10(std::max((float)s, 1e-10f));
-                mel[(size_t)t * n_mels + m] = lv;  // (T, n_mels) layout for stacking
-                if (lv > mel_max) mel_max = lv;
-            }
-        }
-    }
-
-    // Normalize: max(logmel, mx - 8) / 4 + 1
-    const float floor_v = mel_max - 8.0f;
-    for (size_t i = 0; i < mel.size(); i++) {
-        float v = mel[i];
-        if (v < floor_v) v = floor_v;
-        mel[i] = v / 4.0f + 1.0f;
-    }
-
-    // Drop last frame if odd
+    // Granite-specific post-processing: drop the last frame if T is odd,
+    // then zip consecutive pairs of 80-mel frames into 160-mel rows so the
+    // encoder sees (T/2, 160). This is the only model in the repo that
+    // stacks mel frames this way, so it stays in the wrapper rather than
+    // as a core_mel knob.
     if (T % 2 == 1) T--;
-
-    // Stack 2 adjacent frames: (T, 80) → (T/2, 160)
-    int T_stacked = T / 2;
+    const int T_stacked = T / 2;
     std::vector<float> stacked((size_t)T_stacked * 160);
     for (int t = 0; t < T_stacked; t++) {
         std::memcpy(stacked.data() + (size_t)t * 160,
-                     mel.data() + (size_t)(2*t) * n_mels, n_mels * sizeof(float));
+                    mel.data() + (size_t)(2*t)     * n_mels, n_mels * sizeof(float));
         std::memcpy(stacked.data() + (size_t)t * 160 + n_mels,
-                     mel.data() + (size_t)(2*t+1) * n_mels, n_mels * sizeof(float));
+                    mel.data() + (size_t)(2*t + 1) * n_mels, n_mels * sizeof(float));
     }
 
     if (ctx->params.verbosity >= 2) {
         float mn = 1e30f, mx = -1e30f, sum = 0;
-        for (size_t i = 0; i < stacked.size(); i++) { if(stacked[i]<mn)mn=stacked[i]; if(stacked[i]>mx)mx=stacked[i]; sum+=stacked[i]; }
+        for (size_t i = 0; i < stacked.size(); i++) {
+            if (stacked[i] < mn) mn = stacked[i];
+            if (stacked[i] > mx) mx = stacked[i];
+            sum += stacked[i];
+        }
         fprintf(stderr, "  mel: (%d, 160) min=%.4f max=%.4f mean=%.6f\n",
-                T_stacked, mn, mx, sum/stacked.size());
+                T_stacked, mn, mx, sum / stacked.size());
     }
 
     if (out_n_mels) *out_n_mels = 160;
