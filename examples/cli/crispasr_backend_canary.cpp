@@ -32,6 +32,7 @@ public:
         return CAP_TIMESTAMPS_NATIVE
              | CAP_TIMESTAMPS_CTC
              | CAP_WORD_TIMESTAMPS
+             | CAP_TOKEN_CONFIDENCE
              | CAP_TRANSLATE
              | CAP_SRC_TGT_LANGUAGE
              | CAP_PUNCTUATION_TOGGLE
@@ -98,10 +99,11 @@ public:
         for (int i = 0; i < r->n_tokens; i++) {
             const auto & t = r->tokens[i];
             crispasr_token ct;
-            ct.text = t.text;
-            ct.id   = t.id;
-            ct.t0   = t.t0;
-            ct.t1   = t.t1;
+            ct.text       = t.text;
+            ct.id         = t.id;
+            ct.t0         = t.t0;
+            ct.t1         = t.t1;
+            ct.confidence = t.p;
             seg.tokens.push_back(std::move(ct));
         }
 

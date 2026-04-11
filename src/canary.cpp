@@ -1333,7 +1333,8 @@ extern "C" struct canary_result * canary_transcribe_ex(
     const int max_steps = 256;
     const int max_ctx   = (int)ctx->model.hparams.max_dec_ctx;
 
-    std::vector<int> generated = prompt;
+    std::vector<int>   generated = prompt;
+    std::vector<float> emitted_p;               // softmax prob per generated non-prompt token
     int offset = 0;
 
     if (ctx->params.verbosity >= 2) {
@@ -1361,7 +1362,20 @@ extern "C" struct canary_result * canary_transcribe_ex(
             fprintf(stderr, "  step %3d  tok=%5d  '%s'  logp=%.3f\n", step, best, pc, (double)best_lp);
         }
         if (best == eos) break;
+
+        // Softmax probability of the picked token. Numerically stable:
+        // subtract the max log-prob before exponentiating.
+        float best_p = 1.0f;
+        {
+            double sum = 0.0;
+            for (int v = 0; v < (int)logits.size(); v++) {
+                sum += std::exp((double)(logits[v] - best_lp));
+            }
+            best_p = sum > 0.0 ? (float)(1.0 / sum) : 0.0f;
+        }
+
         generated.push_back(best);
+        emitted_p.push_back(best_p);
 
         // Decode next step with the new token
         int tok = best;
@@ -1465,6 +1479,7 @@ extern "C" struct canary_result * canary_transcribe_ex(
 
         canary_token_data & td = r->tokens[i];
         td.id  = tid;
+        td.p   = (i < (int)emitted_p.size()) ? emitted_p[i] : -1.0f;
         if (have_attn) {
             int64_t a = t_offset_cs + (int64_t)path[i] * frame_dur_cs;
             int64_t b = (i+1 < n_emitted)

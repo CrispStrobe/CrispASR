@@ -42,6 +42,7 @@ struct canary_token_data {
     char    text[64];  // decoded text (▁ → ' ')
     int64_t t0;        // centiseconds (absolute, includes t_offset_cs)
     int64_t t1;
+    float   p;         // softmax probability of the emitted token [0, 1]
 };
 
 struct canary_word_data {
