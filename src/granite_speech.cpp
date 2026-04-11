@@ -641,46 +641,42 @@ extern "C" float * granite_speech_compute_mel(struct granite_speech_context * ct
     // Granite's original normalization was `v / 4.0 + 1.0`, which is
     // mathematically identical to core_mel's GlobalClipMax
     // `(v + 4.0) / 4.0`. No new knob needed.
+    // HF / Whisper cluster parameters, NOT dropping the last STFT frame
+    // (torchaudio's MelSpectrogram keeps it; granite's PyTorch reference
+    // does the same). stacked_frames=2 folds consecutive pairs of 80-mel
+    // frames into a single 160-column row; trailing odd frames are
+    // dropped automatically by core_mel::compute(). The encoder receives
+    // (T_stacked, 160) directly — no post-processing.
+    //
+    // Granite's original normalization was `v / 4.0 + 1.0`, which is
+    // mathematically identical to core_mel's GlobalClipMax
+    // `(v + 4.0) / 4.0`. No new knob needed.
     core_mel::Params p;
-    p.n_fft      = n_fft;
-    p.hop_length = hop;
-    p.win_length = win_length;
-    p.n_mels     = n_mels;
-    p.log_base   = core_mel::LogBase::Log10;
-    p.log_guard  = core_mel::LogGuard::MaxClip;
-    p.norm       = core_mel::Normalization::GlobalClipMax;
-    p.layout     = core_mel::Layout::TimeMels;
-    p.fb_layout  = core_mel::FbLayout::FreqsMels;
-    p.matmul     = core_mel::MatmulPrecision::Double;
-    p.log_eps    = 1e-10f;
-    p.center_pad = true;
+    p.n_fft          = n_fft;
+    p.hop_length     = hop;
+    p.win_length     = win_length;
+    p.n_mels         = n_mels;
+    p.log_base       = core_mel::LogBase::Log10;
+    p.log_guard      = core_mel::LogGuard::MaxClip;
+    p.norm           = core_mel::Normalization::GlobalClipMax;
+    p.layout         = core_mel::Layout::TimeMels;
+    p.fb_layout      = core_mel::FbLayout::FreqsMels;
+    p.matmul         = core_mel::MatmulPrecision::Double;
+    p.log_eps        = 1e-10f;
+    p.center_pad     = true;
     p.drop_last_frame = false;
+    p.stacked_frames = 2;
 
-    int T = 0;
-    auto mel = core_mel::compute(
+    int T_stacked = 0;
+    auto stacked = core_mel::compute(
         samples, n_samples,
         hann.data(), win_length,
         filt.data(), n_freqs,
         granite_fft_wrapper,
         p,
-        T);
+        T_stacked);
 
-    if (mel.empty()) return nullptr;
-
-    // Granite-specific post-processing: drop the last frame if T is odd,
-    // then zip consecutive pairs of 80-mel frames into 160-mel rows so the
-    // encoder sees (T/2, 160). This is the only model in the repo that
-    // stacks mel frames this way, so it stays in the wrapper rather than
-    // as a core_mel knob.
-    if (T % 2 == 1) T--;
-    const int T_stacked = T / 2;
-    std::vector<float> stacked((size_t)T_stacked * 160);
-    for (int t = 0; t < T_stacked; t++) {
-        std::memcpy(stacked.data() + (size_t)t * 160,
-                    mel.data() + (size_t)(2*t)     * n_mels, n_mels * sizeof(float));
-        std::memcpy(stacked.data() + (size_t)t * 160 + n_mels,
-                    mel.data() + (size_t)(2*t + 1) * n_mels, n_mels * sizeof(float));
-    }
+    if (stacked.empty()) return nullptr;
 
     if (ctx->params.verbosity >= 2) {
         float mn = 1e30f, mx = -1e30f, sum = 0;

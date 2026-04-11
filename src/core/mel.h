@@ -137,6 +137,16 @@ struct Params {
     // plain zero. This matches voxtral's behaviour where padded frames
     // participate in the global-max calculation at a sensible floor.
     int pad_to_T = 0;
+
+    // Stack `stacked_frames` consecutive mel frames into a single wider
+    // frame. With stacked_frames=2 the output goes from (T, n_mels) to
+    // (T/2, n_mels * 2) where row i is [mel[2i, :], mel[2i+1, :]]. If the
+    // frame count is not a multiple of stacked_frames the trailing
+    // remainder is dropped. Used by granite-speech's audio encoder which
+    // expects a (T/2, 160) input built from consecutive pairs of 80-mel
+    // frames. Default 1 (no stacking). Currently only supported with
+    // Layout::TimeMels; other layouts leave the knob ignored.
+    int stacked_frames = 1;
 };
 
 // Compute log-mel spectrogram from raw PCM samples.

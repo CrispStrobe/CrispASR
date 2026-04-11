@@ -203,7 +203,26 @@ std::vector<float> compute(
     }
 
     // -----------------------------------------------------------------
-    // 8. Output layout
+    // 8. Optional frame stacking (TimeMels only).
+    //    Collapses `stacked_frames` consecutive rows into one wider row.
+    //    Because mel_tn is already row-major [T_final, n_mels] and the
+    //    output layout keeps rows contiguous, stacking is a pure memory
+    //    reinterpret: drop any trailing frames that don't fill a full
+    //    group, then pretend the buffer is [T_final / s, n_mels * s].
+    // -----------------------------------------------------------------
+    if (p.stacked_frames > 1 && p.layout == Layout::TimeMels) {
+        const int s = p.stacked_frames;
+        const int T_stacked = T_final / s;
+        if (T_stacked > 0) {
+            mel_tn.resize((size_t)T_stacked * s * nmels);
+        } else {
+            mel_tn.clear();
+        }
+        T_out = T_stacked;
+    }
+
+    // -----------------------------------------------------------------
+    // 9. Output layout
     // -----------------------------------------------------------------
     if (p.layout == Layout::TimeMels) {
         return mel_tn;
