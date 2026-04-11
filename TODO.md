@@ -63,17 +63,26 @@ minimal pilot. The remaining pieces are documented below.
   ~15 lines of post-processing. `core_mel` coverage is now 8/8
   non-whisper models.
 
-- **[later]** **`cli.cpp` output writer refactor (task #4).**
-  `output_json` (282 lines) and `output_wts` (120 lines) in cli.cpp
-  still iterate a `whisper_context *` directly. Refactor to consume
-  `const std::vector<crispasr_segment> &` so the whisper backend can
-  also go through the unified writers. Unblocks the next item.
+- **[done]** ~~**`cli.cpp` output writer refactor (task #4).**~~
+  Done in a9365d8. All whisper output writers (txt/vtt/srt/csv/lrc/
+  score/json/wts) now take `const std::vector<crispasr_segment> &`
+  produced once by `cli_whisper_collect_segments(ctx)`. Byte-identical
+  regression verified on all 7 output formats.
 
-- **[later]** **`backend-whisper.cpp` wrapper (task #15).**
-  Gated on the output writer refactor. When both land, the whisper code
-  path in cli.cpp can dispatch through the same backend factory as
-  everything else, and the `#if 0`-guarded old `whisper_params` block
-  can come out.
+- **[done]** ~~**`backend-whisper.cpp` wrapper (task #15).**~~
+  Done in e120103. `crispasr_backend_whisper.cpp` implements the
+  CrispasrBackend interface on top of whisper.h. `--backend whisper`
+  now routes through the unified dispatch like every other backend,
+  and the `--list-backends` matrix reads the wrapper's capability
+  bitmask live (no more hardcoded `kWhisperCaps` constant). The
+  default (empty-backend) whisper path stays byte-identical.
+  Subsequent commits (a71f617 grammar + auto-dl, fb47aa0 VAD,
+  2f43f7c n_processors) filled in the rest of whisper_full_params
+  plumbing — the wrapper now advertises: ts-native, word-ts,
+  tok-conf, lang-detect, translate, temperature, beam-search,
+  grammar, flash, VAD-internal, parallel-processors, auto-dl.
+  The only gaps vs the historical cli.cpp path are stereo diarize
+  (needs pcmf32s through the dispatch) and -owts karaoke output.
 
 ---
 
@@ -101,10 +110,20 @@ The whisper backend in CrispASR is the most feature-complete. The
 capability matrix in the README shows which features are missing on
 each backend. High-value gaps to close:
 
-- **[later]** **Temperature / beam search** — no non-whisper backend
-  currently exposes sampling controls. `voxtral`, `voxtral4b`, `qwen3`,
-  `granite` all run pure greedy decode. Hook the sampler into the
-  shared `core/greedy_decode.h` helper when it lands.
+- **[done]** ~~**Temperature sampling for LLM backends**~~ — landed
+  in e4861c3 (pipeline) and 7a7e6cd (run_with_probs). voxtral,
+  voxtral4b, qwen3 and granite all honour `-tp N` via the shared
+  `core_greedy_decode` helper's `sample_temp` path. Default
+  temperature=0 stays on the bit-identical pure-argmax path.
+- **[later]** **Beam search for LLM backends** — the four LLM
+  backends still greedy-decode even with `-bs > 1`. Implementing
+  beam search on an autoregressive transformer decoder requires
+  per-beam KV cache cloning (expensive) or interleaved forwards.
+  Reasonable middle-ground: "best-of-N" sampling, where we run N
+  independent temperature-sampled decodes and pick the one with
+  highest mean token log-probability. That reuses the existing
+  `run_with_probs` output and costs N decode loops instead of
+  N*beam*seq forwards. Punted until there's concrete demand.
 
 - **[later]** **VAD integration in LLM backends.** qwen3 and voxtral
   currently don't chunk long audio; the dispatch layer does VAD slicing
@@ -221,10 +240,25 @@ contributor-facing path for adding backends with confidence. Status:
   `tools/reference_backends/granite.py`~~ — done; captures mel,
   per-layer encoder checkpoints, projector_out (Q-Former), llm_argmax,
   text. Strips the Kaggle-specific HF_TOKEN / gist-upload plumbing.
-- **[later]** Expose `audio_encoder`-only and `run_llm_kv`-only
-  standalone entry points in `parakeet` / `canary` / `cohere` C headers
-  so `crispasr-diff` can do stage-by-stage comparison for them too
-  (currently the encoder/decoder is entangled with the full transcribe).
+- **[done]** ~~Expose `audio_encoder`-only standalone entry points
+  in `parakeet` / `canary` / `cohere` C headers so `crispasr-diff`
+  can do stage-by-stage comparison for them too~~ — done in 7ba3c50.
+  Each backend now exposes `<name>_compute_mel` and
+  `<name>_run_encoder` alongside the existing `<name>_transcribe_ex`
+  batch entry point. `crispasr_diff_main.cpp` gained the matching
+  dispatch branches. What's still missing is
+  `tools/reference_backends/{parakeet,canary,cohere}.py` — those
+  backends aren't in REGISTERED_BACKENDS yet because loading NeMo
+  checkpoints from PyTorch is non-trivial (needs either
+  `nemo_toolkit` or direct .nemo unpacking following the pattern
+  in `models/convert-parakeet-to-gguf.py`). Follow-up below.
+- **[later]** Write `tools/reference_backends/parakeet.py`,
+  `canary.py`, `cohere.py` so the crispasr-diff harness has
+  references to compare against. Each follows the pattern already
+  in tools/reference_backends/{qwen3,voxtral,voxtral4b,granite}.py.
+  Parakeet and canary load .nemo tarballs via torch + tarfile
+  (mirroring models/convert-parakeet-to-gguf.py's unpack_nemo()).
+  Cohere loads a HF transformers checkpoint.
 - **[done]** ~~Migrate `examples/{qwen3,voxtral}-test-*/main.cpp`
   drivers to load their reference data from a crispasr-diff GGUF
   archive via `crispasr_diff::Ref` instead of the inline NPY parser.~~
