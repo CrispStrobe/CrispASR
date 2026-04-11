@@ -60,10 +60,38 @@ struct VoxtralOps {
 
     // Voxtral Tekken template:
     //   <s>[INST][BEGIN_AUDIO] <audio_pad>×N [/INST]lang:LANG[TRANSCRIBE]
-    static std::string build_prefix(const std::string & /*lang*/) {
+    // For --translate we swap [TRANSCRIBE] for an instruction prompt
+    // because Voxtral doesn't have a dedicated translate control token.
+    static std::string build_prefix(const whisper_params & /*p*/) {
         return "<s>[INST][BEGIN_AUDIO]";
     }
-    static std::string build_suffix(const std::string & lang) {
+    static std::string build_suffix(const whisper_params & p) {
+        const std::string lang = p.language.empty() ? std::string("en") : p.language;
+        if (p.translate) {
+            // Voxtral handles translation as an instruction. We keep
+            // the lang: marker so the model knows the source language
+            // and append a plain English directive in the user turn.
+            // Map ISO codes to full English names so the model gets
+            // an unambiguous target ("de" alone reads as Spanish "of").
+            auto to_eng = [](const std::string & c) -> std::string {
+                if (c == "en") return "English";
+                if (c == "de") return "German";
+                if (c == "fr") return "French";
+                if (c == "es") return "Spanish";
+                if (c == "it") return "Italian";
+                if (c == "pt") return "Portuguese";
+                if (c == "ru") return "Russian";
+                if (c == "ja") return "Japanese";
+                if (c == "zh") return "Chinese";
+                if (c == "nl") return "Dutch";
+                return c;
+            };
+            const std::string tgt = p.target_lang.empty()
+                                  ? std::string("English")
+                                  : to_eng(p.target_lang);
+            return "[/INST]lang:" + lang +
+                   " Translate the audio to " + tgt + ".[TRANSCRIBE]";
+        }
         return "[/INST]lang:" + lang + "[TRANSCRIBE]";
     }
 };
@@ -77,7 +105,8 @@ public:
 
     uint32_t capabilities() const override {
         return CAP_TIMESTAMPS_CTC | CAP_AUTO_DOWNLOAD | CAP_TEMPERATURE
-             | CAP_PUNCTUATION_TOGGLE | CAP_FLASH_ATTN | CAP_TOKEN_CONFIDENCE;
+             | CAP_PUNCTUATION_TOGGLE | CAP_FLASH_ATTN | CAP_TOKEN_CONFIDENCE
+             | CAP_TRANSLATE | CAP_SRC_TGT_LANGUAGE;
     }
 
     bool init(const whisper_params & p) override {

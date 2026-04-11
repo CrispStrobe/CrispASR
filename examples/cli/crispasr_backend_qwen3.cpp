@@ -84,7 +84,7 @@ public:
     uint32_t capabilities() const override {
         return CAP_TIMESTAMPS_CTC | CAP_LANGUAGE_DETECT | CAP_AUTO_DOWNLOAD
              | CAP_TEMPERATURE | CAP_PUNCTUATION_TOGGLE | CAP_FLASH_ATTN
-             | CAP_TOKEN_CONFIDENCE;
+             | CAP_TOKEN_CONFIDENCE | CAP_TRANSLATE | CAP_SRC_TGT_LANGUAGE;
     }
 
     bool init(const whisper_params & p) override {
@@ -122,13 +122,53 @@ public:
             return out;
         }
 
-        // ---- ChatML prompt: <|im_start|>system\n<|im_end|>\n
+        // ---- ChatML prompt: <|im_start|>system\n[SYS]<|im_end|>\n
         //                     <|im_start|>user\n<|audio_start|>
         //                     <|audio_pad|> x N
         //                     <|audio_end|><|im_end|>\n
         //                     <|im_start|>assistant\n
+        // For --translate we put a plain English instruction in the
+        // SYSTEM turn ("Translate the audio to TGT.") because qwen3-asr
+        // is a specialized ASR fine-tune that ignores user-turn
+        // instructions but does honour system-prompt control. The
+        // default transcribe path keeps the system turn empty, which
+        // is the bit-identical historical behaviour.
+        // Map ISO-639-1 codes to plain English language names — qwen3
+        // reads the system-prompt instruction literally and "Translate
+        // to de" gets interpreted as Spanish ("de" = "of"). Sending the
+        // full English name keeps the model on the right target.
+        auto iso_to_english = [](const std::string & code) -> std::string {
+            if (code == "en") return "English";
+            if (code == "de") return "German";
+            if (code == "fr") return "French";
+            if (code == "es") return "Spanish";
+            if (code == "it") return "Italian";
+            if (code == "pt") return "Portuguese";
+            if (code == "ru") return "Russian";
+            if (code == "ja") return "Japanese";
+            if (code == "ko") return "Korean";
+            if (code == "zh") return "Chinese";
+            if (code == "nl") return "Dutch";
+            if (code == "pl") return "Polish";
+            if (code == "tr") return "Turkish";
+            if (code == "ar") return "Arabic";
+            if (code == "hi") return "Hindi";
+            // For unrecognised codes (or already-spelled-out names),
+            // pass the input through verbatim — the model will get a
+            // best-effort hint.
+            return code;
+        };
+
+        std::string sys_instruction;
+        if (params.translate) {
+            const std::string tgt = params.target_lang.empty()
+                                  ? std::string("English")
+                                  : iso_to_english(params.target_lang);
+            sys_instruction = "Translate the speech to " + tgt + ".";
+        }
+
         std::string text =
-            "<|im_start|>system\n<|im_end|>\n"
+            "<|im_start|>system\n" + sys_instruction + "<|im_end|>\n"
             "<|im_start|>user\n"
             "<|audio_start|>";
         text.reserve(text.size() + (size_t)N_enc * 13 + 64);

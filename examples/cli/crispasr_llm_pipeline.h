@@ -60,8 +60,10 @@
 //
 //   static int audio_pad_id;                          // e.g. 24 for voxtral
 //   static int eos_id;                                // e.g. 2
-//   static std::string build_prefix(const std::string & lang);
-//   static std::string build_suffix(const std::string & lang);
+//   static std::string build_prefix(const whisper_params & p);
+//   static std::string build_suffix(const whisper_params & p);
+// (Both receive the full params struct so they can read e.g. .translate
+//  or .target_lang in addition to .language.)
 //
 
 // Run the shared audio-LLM pipeline end-to-end for one audio slice.
@@ -97,8 +99,8 @@ std::vector<crispasr_segment> crispasr_run_voxtral_style_pipeline(
     }
 
     // ---- Build prompt via the backend's tokenizer ----
-    const std::string prefix = Ops::build_prefix(params.language);
-    const std::string suffix = Ops::build_suffix(params.language);
+    const std::string prefix = Ops::build_prefix(params);
+    const std::string suffix = Ops::build_suffix(params);
 
     int n_prefix = 0, n_suffix = 0;
     int32_t * pid = Ops::tokenize(ctx, prefix.c_str(), &n_prefix);
