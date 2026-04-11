@@ -9,6 +9,7 @@
 
 #include "core/ffn.h"
 #include "core/attention.h"
+#include "core/bpe.h"
 #include "core/mel.h"
 #include "ggml.h"
 #include "ggml-alloc.h"
@@ -423,128 +424,7 @@ extern "C" struct granite_speech_context_params granite_speech_context_default_p
     return { /*n_threads=*/4, /*verbosity=*/1 };
 }
 
-// ===========================================================================
-// GPT-2 byte-level BPE tokenizer (encode side).
-//
-// Same algorithm as src/qwen3_asr.cpp's qwen3_byte_encoder + qwen3_bpe_one
-// pair — granite uses the same byte-level BPE family. Kept inline here
-// for now; will move to src/core/bpe.{h,cpp} when a third consumer
-// asks for it.
-// ===========================================================================
-
-static const std::vector<int> & granite_byte_encoder() {
-    static std::vector<int> bs(256, 0);
-    static bool initialized = false;
-    if (initialized) return bs;
-    std::vector<int> printable;
-    for (int b = 0x21; b <= 0x7e; b++) printable.push_back(b);
-    for (int b = 0xa1; b <= 0xac; b++) printable.push_back(b);
-    for (int b = 0xae; b <= 0xff; b++) printable.push_back(b);
-    int next_extra = 256;
-    for (int b = 0; b < 256; b++) {
-        bool is_printable = false;
-        for (int p : printable) if (p == b) { is_printable = true; break; }
-        if (is_printable) bs[b] = b;
-        else              bs[b] = next_extra++;
-    }
-    initialized = true;
-    return bs;
-}
-
-static void granite_utf8_encode(uint32_t cp, std::string & out) {
-    if (cp < 0x80)        { out.push_back((char)cp); }
-    else if (cp < 0x800)  { out.push_back((char)(0xC0 | (cp >> 6)));
-                            out.push_back((char)(0x80 | (cp & 0x3F))); }
-    else if (cp < 0x10000){ out.push_back((char)(0xE0 | (cp >> 12)));
-                            out.push_back((char)(0x80 | ((cp >> 6) & 0x3F)));
-                            out.push_back((char)(0x80 | (cp & 0x3F))); }
-    else                  { out.push_back((char)(0xF0 | (cp >> 18)));
-                            out.push_back((char)(0x80 | ((cp >> 12) & 0x3F)));
-                            out.push_back((char)(0x80 | ((cp >> 6) & 0x3F)));
-                            out.push_back((char)(0x80 | (cp & 0x3F))); }
-}
-
-static std::string granite_bytes_to_unicode(const char * bytes, size_t n) {
-    auto & enc = granite_byte_encoder();
-    std::string out;
-    out.reserve(n);
-    for (size_t i = 0; i < n; i++) {
-        granite_utf8_encode((uint32_t)enc[(unsigned char)bytes[i]], out);
-    }
-    return out;
-}
-
-// Greedy lowest-rank BPE merge for a single byte-encoded pre-token.
-// Appends the resulting vocab IDs to `out`. When merge_rank is empty
-// (older GGUFs), only complete-token lookup works — anything else
-// emits warning bytes.
-static void granite_bpe_one(const granite_speech_context * ctx,
-                            const std::string & word,
-                            std::vector<int32_t> & out)
-{
-    if (word.empty()) return;
-
-    // Split into UTF-8 codepoint substrings.
-    std::vector<std::string> symbols;
-    {
-        size_t i = 0;
-        while (i < word.size()) {
-            unsigned char c = (unsigned char)word[i];
-            size_t len;
-            if      (c < 0x80) len = 1;
-            else if ((c & 0xE0) == 0xC0) len = 2;
-            else if ((c & 0xF0) == 0xE0) len = 3;
-            else if ((c & 0xF8) == 0xF0) len = 4;
-            else                          len = 1;
-            if (i + len > word.size()) len = 1;
-            symbols.emplace_back(word, i, len);
-            i += len;
-        }
-    }
-    if (symbols.empty()) return;
-
-    if (!ctx->merge_rank.empty()) {
-        const int max_iter = (int)symbols.size();
-        for (int iter = 0; iter < max_iter && symbols.size() >= 2; iter++) {
-            int best_i = -1;
-            int best_rank = INT_MAX;
-            for (size_t k = 0; k + 1 < symbols.size(); k++) {
-                std::string pair = symbols[k] + " " + symbols[k+1];
-                auto it = ctx->merge_rank.find(pair);
-                if (it != ctx->merge_rank.end() && (int)it->second < best_rank) {
-                    best_rank = it->second;
-                    best_i = (int)k;
-                }
-            }
-            if (best_i < 0) break;
-            symbols[best_i] += symbols[best_i+1];
-            symbols.erase(symbols.begin() + best_i + 1);
-        }
-    }
-
-    for (const auto & s : symbols) {
-        auto it = ctx->token_to_id.find(s);
-        if (it != ctx->token_to_id.end()) {
-            out.push_back(it->second);
-        } else {
-            // Per-byte fallback
-            size_t i = 0;
-            while (i < s.size()) {
-                unsigned char c = (unsigned char)s[i];
-                size_t len;
-                if      (c < 0x80) len = 1;
-                else if ((c & 0xE0) == 0xC0) len = 2;
-                else if ((c & 0xF0) == 0xE0) len = 3;
-                else if ((c & 0xF8) == 0xF0) len = 4;
-                else                          len = 1;
-                std::string single(s, i, len);
-                auto jt = ctx->token_to_id.find(single);
-                if (jt != ctx->token_to_id.end()) out.push_back(jt->second);
-                i += len;
-            }
-        }
-    }
-}
+// ---- Tokenizer encode side (delegates to src/core/bpe.h) ----
 
 extern "C" int32_t * granite_speech_tokenize(struct granite_speech_context * ctx,
                                              const char * text, int * out_n) {
@@ -552,33 +432,9 @@ extern "C" int32_t * granite_speech_tokenize(struct granite_speech_context * ctx
         if (out_n) *out_n = 0;
         return nullptr;
     }
-    std::vector<int32_t> result;
-    const std::string s = text;
-
-    // Pre-tokenization: GPT-2 splits on whitespace + punctuation runs.
-    // For our limited use case (well-formed prompt fragments) the
-    // simpler "split on whitespace, prepend ' ' to non-leading words,
-    // BPE-encode each fragment" path is sufficient and matches what
-    // the HF tokenizer would produce for these inputs.
-    size_t i = 0;
-    bool first = true;
-    while (i < s.size()) {
-        // Skip pure whitespace runs.
-        while (i < s.size() && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n')) i++;
-        if (i >= s.size()) break;
-        // Collect a non-whitespace run.
-        size_t j = i;
-        while (j < s.size() && s[j] != ' ' && s[j] != '\t' && s[j] != '\n') j++;
-        std::string word = s.substr(i, j - i);
-        // Re-add the leading space the GPT-2 BPE expects on word starts
-        // (except for the very first word in the input).
-        if (!first) word = std::string(" ") + word;
-        first = false;
-        std::string encoded = granite_bytes_to_unicode(word.data(), word.size());
-        granite_bpe_one(ctx, encoded, result);
-        i = j;
-    }
-
+    auto result = core_bpe::tokenize_simple(ctx->token_to_id,
+                                            ctx->merge_rank,
+                                            std::string(text));
     int * out_arr = (int *)malloc(result.size() * sizeof(int));
     if (!out_arr) { if (out_n) *out_n = 0; return nullptr; }
     std::memcpy(out_arr, result.data(), result.size() * sizeof(int));

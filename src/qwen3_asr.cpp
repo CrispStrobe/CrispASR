@@ -1232,126 +1232,12 @@ extern "C" const char * qwen3_asr_token_text(qwen3_asr_context * ctx, int id) {
 //      The final symbols are then looked up in the vocab.
 // ===========================================================================
 
-// GPT-2 byte → unicode mapping (one F32 per byte). Built lazily once.
-static const std::vector<int> & qwen3_byte_encoder() {
-    static std::vector<int> bs(256, 0);
-    static bool initialized = false;
-    if (initialized) return bs;
-    // Same construction as the byte_decoder in the CLI, but the inverse
-    // direction: bs[byte] = unicode codepoint.
-    std::vector<int> printable;
-    for (int b = 0x21; b <= 0x7e; b++) printable.push_back(b);
-    for (int b = 0xa1; b <= 0xac; b++) printable.push_back(b);
-    for (int b = 0xae; b <= 0xff; b++) printable.push_back(b);
-    int next_extra = 256;
-    for (int b = 0; b < 256; b++) {
-        bool is_printable = false;
-        for (int p : printable) if (p == b) { is_printable = true; break; }
-        if (is_printable) bs[b] = b;
-        else              bs[b] = next_extra++;
-    }
-    initialized = true;
-    return bs;
-}
-
-// Encode a UTF-8 codepoint into a UTF-8 byte sequence.
-static void qwen3_utf8_encode(uint32_t cp, std::string & out) {
-    if (cp < 0x80)        { out.push_back((char)cp); }
-    else if (cp < 0x800)  { out.push_back((char)(0xC0 | (cp >> 6)));
-                            out.push_back((char)(0x80 | (cp & 0x3F))); }
-    else if (cp < 0x10000){ out.push_back((char)(0xE0 | (cp >> 12)));
-                            out.push_back((char)(0x80 | ((cp >> 6) & 0x3F)));
-                            out.push_back((char)(0x80 | (cp & 0x3F))); }
-    else                  { out.push_back((char)(0xF0 | (cp >> 18)));
-                            out.push_back((char)(0x80 | ((cp >> 12) & 0x3F)));
-                            out.push_back((char)(0x80 | ((cp >> 6) & 0x3F)));
-                            out.push_back((char)(0x80 | (cp & 0x3F))); }
-}
-
-// Apply the byte encoder to a raw byte buffer, returning a UTF-8 string of
-// "safe" codepoints. Each input byte → one output codepoint via the GPT-2
-// byte→unicode map, then encoded as UTF-8.
-static std::string qwen3_bytes_to_unicode(const char * bytes, size_t n) {
-    auto & enc = qwen3_byte_encoder();
-    std::string out;
-    out.reserve(n);
-    for (size_t i = 0; i < n; i++) {
-        qwen3_utf8_encode((uint32_t)enc[(unsigned char)bytes[i]], out);
-    }
-    return out;
-}
-
-// BPE merge a single pre-token. The input is the byte-encoded unicode form.
-// Returns the list of vocab IDs after greedy lowest-rank merging.
-static void qwen3_bpe_one(const qwen3_asr_vocab & v, const std::string & word,
-                          std::vector<int32_t> & out) {
-    if (word.empty()) return;
-
-    // Split into UTF-8 codepoint substrings — each codepoint is one symbol.
-    std::vector<std::string> symbols;
-    {
-        size_t i = 0;
-        while (i < word.size()) {
-            unsigned char c = (unsigned char)word[i];
-            size_t len;
-            if      (c < 0x80) len = 1;
-            else if ((c & 0xE0) == 0xC0) len = 2;
-            else if ((c & 0xF0) == 0xE0) len = 3;
-            else if ((c & 0xF8) == 0xF0) len = 4;
-            else                          len = 1;
-            if (i + len > word.size()) len = 1;
-            symbols.emplace_back(word, i, len);
-            i += len;
-        }
-    }
-
-    if (symbols.empty()) return;
-
-    // Greedy: at each step, find the pair with the lowest merge rank and
-    // apply it. Repeat until no merges apply. Each merge reduces the
-    // symbol count by 1, so the loop terminates in at most N-1 iterations.
-    const int max_iter = (int)symbols.size();
-    for (int iter = 0; iter < max_iter && symbols.size() >= 2; iter++) {
-        int best_i = -1;
-        int best_rank = INT_MAX;
-        for (size_t k = 0; k + 1 < symbols.size(); k++) {
-            std::string pair = symbols[k] + " " + symbols[k+1];
-            auto it = v.merge_rank.find(pair);
-            if (it != v.merge_rank.end() && it->second < best_rank) {
-                best_rank = it->second;
-                best_i = (int)k;
-            }
-        }
-        if (best_i < 0) break;
-        symbols[best_i] += symbols[best_i+1];
-        symbols.erase(symbols.begin() + best_i + 1);
-    }
-
-    // Look up the final symbols in the vocab. Symbols that aren't in the
-    // vocab fall back to per-byte (which always exist for byte-level BPE).
-    for (const auto & s : symbols) {
-        auto it = v.token_to_id.find(s);
-        if (it != v.token_to_id.end()) {
-            out.push_back(it->second);
-        } else {
-            // Per-byte fallback: split into individual codepoints.
-            size_t i = 0;
-            while (i < s.size()) {
-                unsigned char c = (unsigned char)s[i];
-                size_t len;
-                if      (c < 0x80) len = 1;
-                else if ((c & 0xE0) == 0xC0) len = 2;
-                else if ((c & 0xF0) == 0xE0) len = 3;
-                else if ((c & 0xF8) == 0xF0) len = 4;
-                else                          len = 1;
-                std::string single(s, i, len);
-                auto jt = v.token_to_id.find(single);
-                if (jt != v.token_to_id.end()) out.push_back(jt->second);
-                i += len;
-            }
-        }
-    }
-}
+// All four building blocks (byte_encoder, utf8_encode, bytes_to_unicode,
+// bpe_one) used to live inline here as `qwen3_*` statics. They now live
+// once in src/core/bpe.h — qwen3 calls into them via the namespace alias
+// below, granite uses the same primitives, and any future GPT-2-family
+// model gets them for free.
+#include "core/bpe.h"
 
 extern "C" int32_t * qwen3_asr_tokenize(qwen3_asr_context * ctx,
                                         const char * text, int * out_n_tokens) {
@@ -1422,9 +1308,9 @@ extern "C" int32_t * qwen3_asr_tokenize(qwen3_asr_context * ctx,
             }
             if (k == start) k++;  // pure whitespace boundary, advance one
             std::string pre(chunk, start, k - start);
-            // 4. Byte-encode and BPE-merge
-            std::string encoded = qwen3_bytes_to_unicode(pre.data(), pre.size());
-            qwen3_bpe_one(v, encoded, result);
+            // 4. Byte-encode and BPE-merge via the shared helpers.
+            std::string encoded = core_bpe::bytes_to_unicode(pre.data(), pre.size());
+            core_bpe::bpe_one(v.token_to_id, v.merge_rank, encoded, result);
         }
     }
 
