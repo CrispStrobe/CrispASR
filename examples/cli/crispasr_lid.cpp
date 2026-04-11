@@ -102,6 +102,24 @@ std::string resolve_whisper_lid_model(const whisper_params & p) {
     return dst;
 }
 
+// Process-lifetime cache: keep the whisper LID context around between
+// invocations so batch runs (multiple -f inputs, or multiple slices of
+// one long input) don't re-load the 75 MB ggml-tiny.bin every time.
+// Cache is keyed on the model path — if the user switches --lid-model
+// mid-run, we free the old context and load the new one.
+struct WhisperLidCache {
+    whisper_context * ctx        = nullptr;
+    std::string       model_path;
+    bool              use_gpu    = false;
+    int               gpu_device = 0;
+    bool              flash_attn = true;
+};
+
+WhisperLidCache & whisper_lid_cache() {
+    static WhisperLidCache c;
+    return c;
+}
+
 bool detect_with_whisper_tiny(
     const float * samples, int n_samples,
     const whisper_params & p,
@@ -110,26 +128,50 @@ bool detect_with_whisper_tiny(
     const std::string model_path = resolve_whisper_lid_model(p);
     if (model_path.empty()) return false;
 
-    whisper_context_params cp = whisper_context_default_params();
-    cp.use_gpu    = p.use_gpu;
-    cp.gpu_device = p.gpu_device;
-    cp.flash_attn = p.flash_attn;
+    WhisperLidCache & c = whisper_lid_cache();
 
-    whisper_context * ctx = whisper_init_from_file_with_params(
-        model_path.c_str(), cp);
-    if (!ctx) {
-        fprintf(stderr, "crispasr[lid]: failed to load '%s'\n", model_path.c_str());
-        return false;
+    // Invalidate the cache whenever the caller changes the model path or
+    // any of the cparams we pass to whisper_init_from_file_with_params.
+    // Fresh state + fresh model == fresh context, same as before.
+    const bool cache_miss = (c.ctx == nullptr) ||
+                            (c.model_path != model_path) ||
+                            (c.use_gpu    != p.use_gpu)  ||
+                            (c.gpu_device != p.gpu_device) ||
+                            (c.flash_attn != p.flash_attn);
+
+    if (cache_miss) {
+        if (c.ctx) {
+            whisper_free(c.ctx);
+            c.ctx = nullptr;
+        }
+        whisper_context_params cp = whisper_context_default_params();
+        cp.use_gpu    = p.use_gpu;
+        cp.gpu_device = p.gpu_device;
+        cp.flash_attn = p.flash_attn;
+
+        c.ctx = whisper_init_from_file_with_params(model_path.c_str(), cp);
+        if (!c.ctx) {
+            fprintf(stderr, "crispasr[lid]: failed to load '%s'\n", model_path.c_str());
+            return false;
+        }
+
+        if (!whisper_is_multilingual(c.ctx)) {
+            fprintf(stderr,
+                    "crispasr[lid]: model '%s' is English-only — pass a multilingual "
+                    "ggml-*.bin via --lid-model\n",
+                    model_path.c_str());
+            whisper_free(c.ctx);
+            c.ctx = nullptr;
+            return false;
+        }
+
+        c.model_path = model_path;
+        c.use_gpu    = p.use_gpu;
+        c.gpu_device = p.gpu_device;
+        c.flash_attn = p.flash_attn;
     }
 
-    if (!whisper_is_multilingual(ctx)) {
-        fprintf(stderr,
-                "crispasr[lid]: model '%s' is English-only — pass a multilingual "
-                "ggml-*.bin via --lid-model\n",
-                model_path.c_str());
-        whisper_free(ctx);
-        return false;
-    }
+    whisper_context * ctx = c.ctx;
 
     // Whisper's encoder expects exactly 30 s (480 000 samples). Pad with
     // zeros if the input is shorter; truncate if it's longer. LID only
@@ -140,14 +182,17 @@ bool detect_with_whisper_tiny(
     const int n_use = std::min(n_samples, NEED);
     std::memcpy(pcm.data(), samples, (size_t)n_use * sizeof(float));
 
+    // From here down we operate on the cached context. The cache owns
+    // ctx's lifetime — no whisper_free() here on the success or the
+    // transient-failure paths. Only the cache-invalidation branch above
+    // ever frees it.
+
     if (whisper_pcm_to_mel(ctx, pcm.data(), NEED, p.n_threads) != 0) {
         fprintf(stderr, "crispasr[lid]: pcm_to_mel failed\n");
-        whisper_free(ctx);
         return false;
     }
     if (whisper_encode(ctx, 0, p.n_threads) != 0) {
         fprintf(stderr, "crispasr[lid]: encode failed\n");
-        whisper_free(ctx);
         return false;
     }
 
@@ -157,7 +202,6 @@ bool detect_with_whisper_tiny(
         ctx, /*offset_ms=*/0, p.n_threads, probs.data());
     if (lang_id < 0 || lang_id >= n_langs) {
         fprintf(stderr, "crispasr[lid]: whisper_lang_auto_detect failed\n");
-        whisper_free(ctx);
         return false;
     }
 
@@ -171,7 +215,6 @@ bool detect_with_whisper_tiny(
                 out.lang_code.c_str(), out.confidence);
     }
 
-    whisper_free(ctx);
     return true;
 }
 
