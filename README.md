@@ -1,427 +1,576 @@
 # CrispASR
 
-> **Note:** this repo was previously called `cohere-whisper.cpp`. GitHub keeps a permanent redirect from the old URL, so existing links/clones still work.
+**One C++ binary, eight ASR model families, zero Python dependencies.**
 
-A fork of [whisper.cpp](https://github.com/ggml-org/whisper.cpp) that adds full C++ ggml runtimes for **multiple multilingual ASR models** plus a universal multilingual forced aligner:
+CrispASR is a fork of [whisper.cpp](https://github.com/ggml-org/whisper.cpp) that extends the familiar `whisper-cli` interface into a **unified speech recognition tool** called `crispasr`, backed by full ggml C++ runtimes for every major open-weights ASR architecture. One build, one binary, one consistent CLI — pick the backend at the command line or let CrispASR auto-detect it from your GGUF file.
 
-| Runtime | What it is | HF release |
-| --- | --- | --- |
-| **`parakeet-main`** | [`nvidia/parakeet-tdt-0.6b-v3`](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) — 600M FastConformer + TDT. Fastest multilingual ASR + **free word timestamps** | [`cstr/parakeet-tdt-0.6b-v3-GGUF`](https://huggingface.co/cstr/parakeet-tdt-0.6b-v3-GGUF) |
-| `parakeet-main` (DE) | [`johannhartmann/parakeet_de_med`](https://huggingface.co/johannhartmann/parakeet_de_med) — German medical PEFT fine-tune | [`cstr/parakeet_de_med-GGUF`](https://huggingface.co/cstr/parakeet_de_med-GGUF) |
-| **`canary-main`** | [`nvidia/canary-1b-v2`](https://huggingface.co/nvidia/canary-1b-v2) — 978M FastConformer + Transformer. Multilingual ASR + **speech translation** with explicit `-sl/-tl` flags | [`cstr/canary-1b-v2-GGUF`](https://huggingface.co/cstr/canary-1b-v2-GGUF) |
-| **`nfa-align`** | Auxiliary CTC model from canary-1b-v2's `.nemo` — **universal multilingual forced aligner** (25 languages, ~78 ms MAE) | [`cstr/canary-ctc-aligner-GGUF`](https://huggingface.co/cstr/canary-ctc-aligner-GGUF) |
-| `cohere-main` | [`CohereLabs/cohere-transcribe-03-2026`](https://huggingface.co/CohereLabs/cohere-transcribe-03-2026) — 2B Conformer + Transformer. Lowest English WER on Open ASR Leaderboard | [`cstr/cohere-transcribe-03-2026-GGUF`](https://huggingface.co/cstr/cohere-transcribe-03-2026-GGUF) |
-| `cohere-align` | wav2vec2 character CTC forced aligner (English-only, 30-50 ms MAE) | uses [`jonatasgrosman/wav2vec2-large-xlsr-53-english`](https://huggingface.co/jonatasgrosman/wav2vec2-large-xlsr-53-english) |
-| **`qwen3-asr-main`** | [`Qwen/Qwen3-ASR-0.6B`](https://huggingface.co/Qwen/Qwen3-ASR-0.6B) — 900M speech-LLM (Whisper-style audio encoder + Qwen3 0.6B LLM with audio-token injection). 30 languages + 22 Chinese dialects, Open ASR avg WER 6.42, persistent KV cache | [`cstr/qwen3-asr-0.6b-GGUF`](https://huggingface.co/cstr/qwen3-asr-0.6b-GGUF) |
-| **`voxtral-main`** | [`mistralai/Voxtral-Mini-3B-2507`](https://huggingface.co/mistralai/Voxtral-Mini-3B-2507) — 3B speech-LLM (Whisper-large-v3 encoder + Mistral/Llama 3B LLM). ASR + audio understanding + text Q&A, 8 languages, function calling from voice. Best-in-class text performance retained | [`cstr/voxtral-mini-3b-2507-GGUF`](https://huggingface.co/cstr/voxtral-mini-3b-2507-GGUF) |
-| **`voxtral4b-main`** | [`mistralai/Voxtral-Mini-4B-Realtime-2602`](https://huggingface.co/mistralai/Voxtral-Mini-4B-Realtime-2602) — 4.4B **realtime streaming** speech-LLM (causal RoPE+SwiGLU encoder + Mistral 3.4B LLM with adaptive RMSNorm). 13 languages, <500ms latency, competitive with offline models | `cstr/voxtral-mini-4b-realtime-GGUF` (pending) |
-| **`granite-main`** | [`ibm-granite/granite-4.0-1b-speech`](https://huggingface.co/ibm-granite/granite-4.0-1b-speech) — 1B speech-LLM (16-layer Conformer encoder with Shaw RPE + BLIP-2 Q-Former projector + Granite 1B LLM with μP). 6 languages (en, fr, de, es, pt, ja), Apache-2.0 | `cstr/granite-speech-4.0-1b-GGUF` (pending) |
+```console
+$ crispasr -m ggml-base.en.bin          -f samples/jfk.wav        # OpenAI Whisper
+$ crispasr -m parakeet-tdt-0.6b.gguf    -f samples/jfk.wav        # NVIDIA Parakeet
+$ crispasr -m canary-1b-v2.gguf         -f samples/jfk.wav        # NVIDIA Canary
+$ crispasr -m voxtral-mini-3b-2507.gguf -f samples/jfk.wav        # Mistral Voxtral
+$ crispasr --backend qwen3 -m auto      -f samples/jfk.wav        # -m auto downloads
+```
 
-All nine runtimes share ggml-based inference — that's how we ported each new model in days rather than weeks. Qwen3-ASR, Voxtral 3B, and Voxtral 4B Realtime are **speech-LLMs**: instead of dedicated CTC/transducer/seq2seq decoders, the audio encoder output frames are injected into the input embeddings of a stock LLM, and the LLM autoregressively generates the transcript. Voxtral 3B additionally supports audio understanding (Q&A about audio content) and function calling from voice. Voxtral 4B Realtime is a **natively streaming** model with a causal audio encoder and configurable transcription delay (240ms-2.4s), designed for on-device real-time ASR.
+No Python. No PyTorch. No separate per-model binary. No `pip install`. Just one C++ binary and a GGUF file.
 
-> **Branch state.** Everything lives on `main` as of April 2026. The original cohere-only history is preserved at the [`archive/cohere-only`](https://github.com/CrispStrobe/CrispASR/tree/archive/cohere-only) branch as a historical reference.
+---
 
-> **Future direction.** The plan is to fold the per-model `*-main` binaries into a single subcommand-driven `crispasr` binary, and `cohere-align` + `nfa-align` into a single `crispalign` binary. The current per-model binaries will remain as thin shims for backward compat. See [`RENAMING.md`](RENAMING.md) for the plan.
+## Table of contents
 
-> **Pending upstream fixes** that affect this fork are tracked in [`UPSTREAM.md`](UPSTREAM.md) (currently: `whisper.cpp` `ffmpeg-transcode.cpp` mp4-container bug, ggml VNNI Q8_0 dispatch, NeMo aux model standalone release).
+- [Supported backends](#supported-backends)
+- [Feature matrix](#feature-matrix)
+- [Install & build](#install--build)
+- [Quick start](#quick-start)
+- [CLI reference](#cli-reference)
+- [Voice Activity Detection (VAD)](#voice-activity-detection-vad)
+- [Word-level timestamps via CTC alignment](#word-level-timestamps-via-ctc-alignment)
+- [Output formats](#output-formats)
+- [Auto-download (`-m auto`)](#auto-download--m-auto)
+- [Audio formats](#audio-formats)
+- [Architecture](#architecture)
+- [Adding a new backend](#adding-a-new-backend)
+- [Branch state & roadmap](#branch-state--roadmap)
+- [Credits](#credits)
 
-## Which runtime should I use?
+---
 
-| Need | Right tool |
-| --- | --- |
-| Lowest English WER, model size doesn't matter | `cohere-main` (ggml branch) |
-| Word-level timestamps + multilingual + small + fast | **`parakeet-main`** |
-| Multilingual + **explicit language control** (no auto-detect) | **`canary-main`** |
-| **Speech translation** (X→En or En→X) | **`canary-main`** |
-| 30 ms-accurate word stamps via CTC forced alignment | `cohere-align` (ggml branch) |
-| **30 languages + 22 Chinese dialects** | **`qwen3-asr-main`** |
-| Speech-LLM with persistent KV cache (faster than realtime at Q4_K) | **`qwen3-asr-main`** |
-| **Realtime streaming** ASR (low latency, on-device) | **`voxtral4b-main`** |
-| Highest-quality offline speech-LLM (3B backbone) | **`voxtral-main`** |
+## Supported backends
 
-| | parakeet-tdt-0.6b-v3 | canary-1b-v2 |
-| --- | --- | --- |
-| Parameters | 600M | 978M |
-| Architecture | FastConformer encoder + TDT decoder | FastConformer encoder + Transformer decoder |
-| Languages | 25 EU (auto-detect) | 25 EU (explicit `-sl` flag) |
-| Speech translation | ❌ | ✅ X→En and En→X |
-| Word timestamps | ✅ from TDT duration head | ✗ (segment-level via auxiliary CTC) |
-| Q4_K size | 467 MB | ~600 MB |
-| Open ASR WER (avg) | 6.34% | 7.15% |
-| License | CC-BY-4.0 | CC-BY-4.0 |
+| Backend | Model | Architecture | Languages | License |
+|---|---|---|---|---|
+| **whisper** | [`ggml-base.en.bin`](https://huggingface.co/ggerganov/whisper.cpp/) and all OpenAI Whisper variants | Encoder-decoder transformer | 99 | MIT |
+| **parakeet** | [`nvidia/parakeet-tdt-0.6b-v3`](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) | FastConformer + TDT | 25 EU (auto-detect) | CC-BY-4.0 |
+| **canary** | [`nvidia/canary-1b-v2`](https://huggingface.co/nvidia/canary-1b-v2) | FastConformer + Transformer decoder | 25 EU (explicit `-sl/-tl`) | CC-BY-4.0 |
+| **cohere** | [`CohereLabs/cohere-transcribe-03-2026`](https://huggingface.co/CohereLabs/cohere-transcribe-03-2026) | Conformer + Transformer | 13 | CC-BY-NC-4.0 |
+| **granite** | [`ibm-granite/granite-4.0-1b-speech`](https://huggingface.co/ibm-granite/granite-4.0-1b-speech) | Conformer + BLIP-2 Q-Former + Granite LLM (μP) | en fr de es pt ja | Apache-2.0 |
+| **voxtral** | [`mistralai/Voxtral-Mini-3B-2507`](https://huggingface.co/mistralai/Voxtral-Mini-3B-2507) | Whisper encoder + Mistral 3B LLM, audio-token injection | 8 | Apache-2.0 |
+| **voxtral4b** | [`mistralai/Voxtral-Mini-4B-Realtime-2602`](https://huggingface.co/mistralai/Voxtral-Mini-4B-Realtime-2602) | Causal RoPE+SwiGLU encoder + 3.4B LLM with adaptive RMSNorm + sliding window | 13, realtime streaming | Apache-2.0 |
+| **qwen3** | [`Qwen/Qwen3-ASR-0.6B`](https://huggingface.co/Qwen/Qwen3-ASR-0.6B) | Whisper-style audio encoder + Qwen3 0.6B LLM | 30 + 22 Chinese dialects | Apache-2.0 |
 
-Both share the same FastConformer encoder code and the same NeMo-style mel preprocessor (128 mels, 16 kHz, n_fft=512, win=400, hop=160).
+All nine runtimes share ggml-based inference. The speech-LLM backends (**qwen3**, **voxtral**, **voxtral4b**, **granite**) inject audio encoder frames directly into an autoregressive language model's input embeddings, instead of using a dedicated CTC/transducer/seq2seq decoder.
+
+## Feature matrix
+
+Run `crispasr --list-backends` to see it live. Each backend declares capabilities at runtime; if you ask for a feature the selected backend does not support, CrispASR prints a warning and silently ignores the flag.
+
+| Feature | whisper | parakeet | canary | cohere | granite | voxtral | voxtral4b | qwen3 |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| Native timestamps | ✔ | ✔ | ✔ | ✔ | | | | |
+| CTC forced timestamps | | | ✔ | | ✔ | ✔ | ✔ | ✔ |
+| Word-level timing | ✔ | ✔ | ✔ | | via `-am` | via `-am` | via `-am` | via `-am` |
+| Per-token confidence | ✔ | | | ✔ | | | | |
+| Language auto-detect | ✔ | ✔ | | | | | | ✔ |
+| Speech translation | ✔ | | ✔ | | | | | |
+| Speaker diarization | ✔ | | | ✔ | | | | |
+| Grammar constraints (GBNF) | ✔ | | | | | | | |
+| Temperature sampling | ✔ | | | | | | | |
+| Beam search | ✔ | | | | | | | |
+| Flash attention | ✔ | ✔ | ✔ | ✔ | always on | always on | always on | always on |
+| Punctuation toggle | | | ✔ | ✔ | | | | |
+| Source / target language | | | ✔ | | | | | |
+| Auto-download | | | | | ✔ | ✔ | ✔ | ✔ |
+
+### Which backend should I pick?
+
+| Need | Pick |
+|---|---|
+| Battle-tested, all features exposed | **whisper** |
+| Lowest English WER | **cohere** |
+| Multilingual + word timestamps + small + fast | **parakeet** |
+| Multilingual with **explicit language control** | **canary** |
+| **Speech translation** (X→en or en→X) | **canary** |
+| **30 languages + Chinese dialects** | **qwen3** |
+| **Realtime streaming ASR** (<500 ms latency) | **voxtral4b** |
+| Highest-quality offline speech-LLM | **voxtral** |
+| Apache-licensed speech-LLM | **granite**, **voxtral**, **voxtral4b**, **qwen3** |
+
+---
+
+## Install & build
+
+### Prerequisites
+
+- C++17 compiler (GCC 10+, Clang 12+, MSVC 19.30+)
+- CMake 3.14+
+- Optional: `libavformat`/`libavcodec`/`libavutil`/`libswresample` for Opus/M4A ingestion (`WHISPER_FFMPEG=ON`)
+- Optional: `libopenblas`/MKL/Accelerate for `cohere` (speeds up its Conformer encoder)
+- `curl` or `wget` on `$PATH` if you want to use `-m auto` auto-download
+
+No Python, PyTorch, or pip required at runtime.
+
+### Build
+
+```bash
+git clone https://github.com/CrispStrobe/CrispASR
+cd CrispASR
+
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j$(nproc) --target whisper-cli
+```
+
+The target is named `whisper-cli` for CMake compatibility; the produced binary is `build/bin/crispasr` with a `build/bin/whisper-cli` alias next to it. Either name works.
+
+### With GPU backends
+
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_CUDA=ON     # NVIDIA
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_METAL=ON    # Apple Silicon
+```
+
+### With ffmpeg ingestion (Opus, M4A, WebM, …)
+
+```bash
+# Install ffmpeg dev libs first:
+#   apt install libavformat-dev libavcodec-dev libavutil-dev libswresample-dev
+
+cmake -B build-ffmpeg -DCMAKE_BUILD_TYPE=Release -DWHISPER_FFMPEG=ON
+cmake --build build-ffmpeg -j$(nproc) --target whisper-cli
+```
+
+> **Upstream bug warning.** `.m4a` / `.mp4` / `.webm` containers currently crash `whisper.cpp`'s ffmpeg integration. For those formats, pre-convert to WAV:
+> ```bash
+> ffmpeg -i input.opus -ar 16000 -ac 1 -c:a pcm_s16le -y /tmp/audio.wav
+> ```
+> Bare-codec `.opus` files work fine with `WHISPER_FFMPEG=ON`.
+
+---
+
+## Quick start
+
+### Whisper (historical path, byte-identical to upstream whisper-cli)
+
+```bash
+# Download a whisper model (same as upstream whisper.cpp)
+./models/download-ggml-model.sh base.en
+
+./build/bin/crispasr -m models/ggml-base.en.bin -f samples/jfk.wav
+# [00:00:00.000 --> 00:00:07.940]   And so my fellow Americans ask not what your country can do for you
+# [00:00:07.940 --> 00:00:10.760]   ask what you can do for your country.
+```
+
+### Parakeet (multilingual, free word timestamps, fastest)
+
+```bash
+# Grab the quantized model (~467 MB)
+curl -L -o parakeet.gguf \
+    https://huggingface.co/cstr/parakeet-tdt-0.6b-v3-GGUF/resolve/main/parakeet-tdt-0.6b-v3-q4_k.gguf
+
+./build/bin/crispasr -m parakeet.gguf -f samples/jfk.wav
+# Auto-detected backend 'parakeet' from GGUF metadata.
+# And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.
+
+# Word-level timestamps (one line per word)
+./build/bin/crispasr -m parakeet.gguf -f samples/jfk.wav -ml 1
+```
+
+### Canary (explicit language, speech translation)
+
+```bash
+# Transcription (source == target)
+./build/bin/crispasr --backend canary -m canary-1b-v2-q5_0.gguf -f audio.de.wav -sl de -tl de
+
+# Translation (German speech → English text)
+./build/bin/crispasr --backend canary -m canary-1b-v2-q5_0.gguf -f audio.de.wav -sl de -tl en
+
+# ...or use the familiar whisper-cli flag:
+./build/bin/crispasr --backend canary -m canary-1b-v2-q5_0.gguf -f audio.de.wav -l de --translate
+```
+
+### Voxtral (speech-LLM with auto-download)
+
+```bash
+# First run downloads ~2.5 GB to ~/.cache/crispasr/ via curl, then runs
+./build/bin/crispasr --backend voxtral -m auto -f samples/jfk.wav
+
+# Subsequent runs use the cached file
+./build/bin/crispasr --backend voxtral -m auto -f samples/jfk.wav -l en
+```
+
+### Qwen3-ASR (30 languages + Chinese dialects)
+
+```bash
+./build/bin/crispasr --backend qwen3 -m auto -f audio.zh.wav
+```
+
+---
+
+## CLI reference
+
+`crispasr` extends upstream `whisper-cli`'s argument set with a handful of backend-dispatch flags. Every historical whisper flag still works — when you don't pass `--backend`, whisper is the default.
+
+### Core
+
+| Flag | Meaning |
+|---|---|
+| `-m FNAME`, `--model FNAME` | Path to a model file, or `auto` to download a default for the selected backend |
+| `--backend NAME` | Force a specific backend. Default: auto-detected from GGUF metadata + filename heuristics |
+| `-f FNAME`, `--file FNAME` | Input audio (can repeat; also accepts positional filenames) |
+| `-t N`, `--threads N` | Thread count (default: `min(4, nproc)`) |
+| `-l LANG`, `--language LANG` | ISO-639-1 code (default: `en`) |
+| `--list-backends` | Print the capability matrix and exit |
+
+### Output
+
+| Flag | Output |
+|---|---|
+| `-otxt` | Plain text to `<audio>.txt` |
+| `-osrt` | SubRip (SRT) to `<audio>.srt` |
+| `-ovtt` | WebVTT to `<audio>.vtt` |
+| `-ocsv` | CSV (start, end, text) |
+| `-oj`, `-ojf` | JSON (compact or full with word/token arrays) |
+| `-olrc` | LRC lyrics format |
+| `-of FNAME` | Output file base (no extension) |
+| `-np` | No prints (suppress stderr progress) |
+| `-pc` | Color-code output by token confidence (where supported) |
+| `--no-timestamps` | Plain text only, no timing |
+| `-ml N` | Max chars per display segment. `0`=unlimited, `1`=per-word, `N`=split at word boundaries |
+
+### Segmentation / chunking
+
+| Flag | Meaning |
+|---|---|
+| `--vad` / `--vad-model FNAME` | Enable Silero VAD |
+| `-vt F` | VAD threshold (default 0.5) |
+| `-vspd N` | VAD min speech duration (ms, default 250) |
+| `-vsd N` | VAD min silence duration (ms, default 100) |
+| `-ck N`, `--chunk-seconds N` | Fallback chunk size when VAD is off (default 30 s) |
+
+### LLM-backend specific
+
+| Flag | Meaning |
+|---|---|
+| `-am FNAME`, `--aligner-model FNAME` | CTC aligner GGUF for word-level timestamps |
+| `-n N`, `--max-new-tokens N` | Max tokens the LLM may generate (default 512) |
+
+### Canary-specific
+
+| Flag | Meaning |
+|---|---|
+| `-sl LANG`, `--source-lang LANG` | Source language |
+| `-tl LANG`, `--target-lang LANG` | Target language (set different from `-sl` for translation) |
+| `--no-punctuation` | Disable punctuation and capitalisation in the output |
+
+### Whisper-only (ignored by other backends)
+
+`-tr`/`--translate`, `-di`/`--diarize`, `-tp`/`--temperature`, `-bs`/`--beam-size`, `--grammar`, `--prompt`, `-dl`/`--detect-language`, `--suppress-regex`, `-dtw`, `-fa`/`-nfa`, `-ng`/`--no-gpu`, and the full list from upstream `whisper-cli --help`.
+
+---
+
+## Voice Activity Detection (VAD)
+
+Every non-whisper backend uses the Silero VAD model to pre-slice long audio into speech segments, transcribe each slice, and re-stitch the output with absolute timestamps. Whisper handles VAD internally via `wparams.vad`.
+
+```bash
+# Download Silero VAD once (~0.7 MB)
+./models/download-ggml-model.sh silero-vad
+
+./build/bin/crispasr --backend parakeet -m parakeet.gguf -f long_audio.wav \
+    --vad-model ggml-silero-vad.bin \
+    -osrt
+```
+
+If you don't provide a VAD model, CrispASR falls back to fixed 30-second chunking (configurable via `-ck`). Encoder cost is O(T²) in the frame count, so for multi-minute audio you really want VAD.
+
+---
+
+## Word-level timestamps via CTC alignment
+
+The LLM-based backends (qwen3, voxtral, voxtral4b, granite) don't emit timestamps natively. CrispASR supports a second-pass forced alignment via NVIDIA's canary-ctc-aligner — a 600M-param FastConformer + CTC head that works on any transcript + audio pair in 25+ European languages.
+
+```bash
+# Grab the aligner once (~400 MB)
+curl -L -o canary-ctc-aligner.gguf \
+    https://huggingface.co/cstr/canary-ctc-aligner-GGUF/resolve/main/canary-ctc-aligner-q5_0.gguf
+
+# Now any LLM backend can produce word-level SRT output
+./build/bin/crispasr --backend voxtral -m auto -f samples/jfk.wav \
+    -am canary-ctc-aligner.gguf -osrt -ml 1
+# [00:00:00.240 --> 00:00:00.640]  And
+# [00:00:00.640 --> 00:00:00.880]  so,
+# [00:00:00.880 --> 00:00:01.040]  my
+# ...
+```
+
+Alignment granularity is one encoder frame, ~80 ms.
+
+---
+
+## Output formats
+
+CrispASR writes these formats side-by-side with the input audio (e.g. `jfk.wav` → `jfk.srt`, `jfk.vtt`, `jfk.json`). The JSON layout:
+
+```json
+{
+  "crispasr": {
+    "backend": "parakeet",
+    "model":   "parakeet-tdt-0.6b-v3-q4_k.gguf",
+    "language":"en"
+  },
+  "transcription": [
+    {
+      "timestamps": { "from": "00:00:00,240", "to": "00:00:10,880" },
+      "offsets":    { "from": 240, "to": 10880 },
+      "text":       "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+    }
+  ]
+}
+```
+
+Add `-ojf` (`--output-json-full`) to include per-word `words[]` and per-token `tokens[]` arrays when the backend populates them.
+
+---
+
+## Auto-download (`-m auto`)
+
+When you pass `-m auto` (or `-m default`), CrispASR downloads the default quantized model for the selected backend into `~/.cache/crispasr/` on first use. The registry:
+
+| Backend | Download | Approx size |
+|---|---|---|
+| parakeet | `cstr/parakeet-tdt-0.6b-v3-GGUF` | ~467 MB |
+| canary | `cstr/canary-1b-v2-GGUF` | ~600 MB |
+| voxtral | `cstr/voxtral-mini-3b-2507-GGUF` | ~2.5 GB |
+| voxtral4b | `cstr/voxtral-mini-4b-realtime-GGUF` | ~3.3 GB |
+| granite | `cstr/granite-4.0-1b-speech-GGUF` | ~900 MB |
+
+Downloads go through `curl` (preferred) with a `wget` fallback — **no Python, no libcurl link dependency**. Works identically on Linux, macOS, and Windows 10+ where `curl` ships in the base system. Models are cached by filename; re-running is a single `stat()` check.
 
 ---
 
 ## Audio formats
 
-Every CLI in this repo (`cohere-main`, `parakeet-main`, `canary-main`, `cohere-align`, `nfa-align`) routes input through the same `read_audio_data()` loader inherited from whisper.cpp. By default the loader uses two embedded single-header decoders:
+Every audio path goes through `read_audio_data()` inherited from upstream whisper.cpp. Two single-header decoders are embedded:
 
-- **[miniaudio](https://miniaud.io/)** — handles **WAV** (any bit depth, including 16/24/32-bit PCM, IEEE float, A-law, μ-law, ADPCM), **FLAC**, and **MP3**
-- **[stb_vorbis](https://github.com/nothings/stb)** — handles **OGG Vorbis**
+- **[miniaudio](https://miniaud.io/)** — WAV (any bit depth: 16/24/32 PCM, IEEE float, A-law, μ-law, ADPCM), FLAC, MP3
+- **[stb_vorbis](https://github.com/nothings/stb)** — OGG Vorbis
 
-So **out of the box, all five tools accept WAV / FLAC / MP3 / OGG Vorbis** at any bit depth, any sample rate (auto-resampled to 16 kHz), mono or stereo (auto-mixed to mono). No external dependencies needed.
+Out of the box, CrispASR accepts **WAV / FLAC / MP3 / OGG Vorbis** at any bit depth and any sample rate (auto-resampled to 16 kHz), mono or stereo (auto-mixed to mono).
 
-### What's NOT supported in the default build
+| Format | Default build | `WHISPER_FFMPEG=ON` |
+|---|:---:|:---:|
+| WAV / FLAC / MP3 / OGG | ✔ | ✔ |
+| `.opus` | ✗ | ✔ |
+| `.m4a` / `.mp4` / `.webm` | ✗ | ⚠ upstream crash, pre-convert |
+| `.aiff` / `.wma` / raw PCM | ✗ | pre-convert |
 
-| Format | Workaround |
-| --- | --- |
-| `.opus` | Convert to WAV first, OR build with `WHISPER_FFMPEG=ON` (see below) |
-| `.m4a`, `.aac`, `.alac` | Same — convert or use ffmpeg build |
-| `.webm`, `.mp4`, `.mkv`, `.mov` (video containers with audio tracks) | Same |
-| `.aiff`, `.au`, `.wma`, raw PCM | Same |
-
-### Option A — pre-convert with ffmpeg (zero changes to this repo)
-
-Single-line workaround that handles **every audio/video format ffmpeg knows**:
-
-```bash
-ffmpeg -i input.opus -ar 16000 -ac 1 -c:a pcm_s16le -y /tmp/audio.wav
-./build/bin/parakeet-main -m model.gguf -f /tmp/audio.wav -t 8
-
-# Same for video files — just extract the audio track:
-ffmpeg -i input.mp4 -vn -ar 16000 -ac 1 -c:a pcm_s16le -y /tmp/audio.wav
-```
-
-Most users running ASR tools already have ffmpeg installed. This is the recommended path for occasional use.
-
-### Option B — build with `WHISPER_FFMPEG=ON` (transparent in-process decoding)
-
-The whisper.cpp loader has a built-in ffmpeg fallback path: if miniaudio refuses a file, it routes the bytes through `libavformat` / `libavcodec` / `libswresample` to extract a 16 kHz mono PCM stream in-process. **No `/tmp/audio.wav` round-trip, no shell invocation, no separate ffmpeg binary needed at runtime** — just the shared libs.
-
-```bash
-# Install the ffmpeg dev libraries first (one-time):
-#   Debian/Ubuntu:  apt install libavformat-dev libavcodec-dev libavutil-dev libswresample-dev
-#   macOS:          brew install ffmpeg
-#   Fedora:         dnf install ffmpeg-devel
-
-cmake -B build-ffmpeg -DCMAKE_BUILD_TYPE=Release -DWHISPER_FFMPEG=ON
-cmake --build build-ffmpeg -j$(nproc) --target parakeet-main canary-main nfa-align cohere-main cohere-align
-
-# Now every CLI accepts every format ffmpeg supports, transparently:
-./build-ffmpeg/bin/parakeet-main -m model.gguf -f input.opus -t 8
-./build-ffmpeg/bin/canary-main   -m model.gguf -f input.mp4  -sl en -tl en -t 8
-./build-ffmpeg/bin/nfa-align     -m model.gguf -f input.m4a  -tt "transcript text"
-```
-
-The runtime then depends on the ffmpeg shared libraries (`libavformat.so`, `libavcodec.so`, `libavutil.so`, `libswresample.so`) — anywhere those are installed, it just works.
-
-### Measured results (this fork, on jfk.wav transcoded to various formats)
-
-| Format | Default build | `WHISPER_FFMPEG=ON` build |
-| --- | :---: | :---: |
-| `.wav` (any bit depth) | ✅ | ✅ |
-| `.flac`                 | ✅ | ✅ |
-| `.mp3`                  | ✅ | ✅ |
-| `.ogg` (Vorbis)         | ✅ | ✅ |
-| `.opus`                 | ❌ "failed to read audio data as wav" | ✅ perfect transcript |
-| `.m4a` (AAC)            | ❌ | ⚠ **crashes** (`munmap_chunk()` — upstream `whisper.cpp` `ffmpeg-transcode.cpp` bug on mp4-container files) |
-| `.webm` (Opus inside)   | ❌ | ⚠ **hangs** (same upstream bug class) |
-
-The upstream `ffmpeg-transcode.cpp` integration in `whisper.cpp` has known issues with mp4-family container formats. **For these the safe path is still pre-conversion via ffmpeg one-liner.** Bare-codec files like `.opus` work cleanly in the FFmpeg build.
-
-### When to use which option
-
-- **Default build (no ffmpeg dep)** — for clean WAV/FLAC/MP3/OGG pipelines, smallest binary, no system dependencies. **Recommended for most users.**
-- **`WHISPER_FFMPEG=ON` build** — adds in-process Opus support and a one-step decode for any other format that doesn't crash the upstream `ffmpeg-transcode.cpp`. Useful but currently NOT a complete substitute for pre-conversion: m4a/mp4/webm containers still crash. Treat it as opt-in convenience for `.opus` ingestion.
-- **Pre-conversion via ffmpeg** (`ffmpeg -i in.X -ar 16000 -ac 1 -c:a pcm_s16le out.wav`) — **the universally safe path** for everything not in the default-build column above. No build flags, no upstream bugs, identical results.
-
-Both binaries can coexist — keep `build/` for the lean default build and `build-ffmpeg/` for the Opus-supporting one.
-
-## Quick start — parakeet (fastest, multilingual ASR)
-
-```bash
-git clone -b parakeet https://github.com/CrispStrobe/CrispASR
-cd CrispASR
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j$(nproc) --target parakeet-main
-
-huggingface-cli download cstr/parakeet-tdt-0.6b-v3-GGUF \
-    parakeet-tdt-0.6b-v3-q4_k.gguf --local-dir .
-
-./build/bin/parakeet-main -m parakeet-tdt-0.6b-v3-q4_k.gguf -f samples/jfk.wav -t 8
-# And so, my fellow Americans, ask not what your country can do for you,
-# ask what you can do for your country.
-```
-
-Word timestamps via `-v`:
-```
-[ 0.32s →  0.64s]  And
-[ 0.64s →  0.88s]  so,
-[ 1.04s →  1.28s]  my
-[ 1.28s →  1.76s]  fellow
-[ 1.76s →  3.28s]  Americans.
-```
-
-Each boundary is one encoder frame = **80 ms**. Long audio + VAD + SRT/VTT/TXT all supported via `-vad-model`, `-osrt`, `-ovtt`, `-ot`, `-ml N`. See the [parakeet quick start above](#quick-start--parakeet-fastest-multilingual-asr) for the full CLI reference.
-
-The auto-language detect on parakeet works well for clean speech but can code-switch into English on German clips with technical vocabulary or proper nouns (see [`test_german.md`](test_german.md)). For German production use, prefer canary with `-sl de`.
-
-### Parakeet — German fine-tunes
-
-Any fine-tune of `parakeet-tdt-0.6b-v3` can be loaded with the same `parakeet-main` runtime, since the GGUF converter and C++ loader work on the architecture, not on a specific checkpoint. We've tested:
-
-- **[`johannhartmann/parakeet_de_med`](https://huggingface.co/johannhartmann/parakeet_de_med)** — PEFT decoder+joint fine-tune on German medical documentation, **3.28% WER** on the German medical test set (vs 11.73% for the base model). Encoder is frozen so it inherits the base model's auto-language behaviour, but the German bias on the decoder makes it the right choice for German medical transcription on CPU.
-
-```bash
-# Convert + run
-python models/convert-parakeet-to-gguf.py \
-    --nemo  parakeet_de_med.nemo \
-    --output parakeet_de_med.gguf
-./build/bin/cohere-quantize parakeet_de_med.gguf parakeet_de_med-q4_k.gguf q4_k
-./build/bin/parakeet-main -m parakeet_de_med-q4_k.gguf -f german_audio.wav -t 8
-```
-
-Pre-converted GGUFs at **[cstr/parakeet_de_med-GGUF](https://huggingface.co/cstr/parakeet_de_med-GGUF)** (F16 + Q4_K/Q5_0/Q8_0).
+For anything in the bottom half, the reliable path is `ffmpeg -i in.X -ar 16000 -ac 1 -c:a pcm_s16le out.wav` then pass the WAV.
 
 ---
 
-## Quick start — canary (explicit language + translation)
+## Architecture
 
-```bash
-cmake --build build -j$(nproc) --target canary-main
-
-# Convert your own from the .nemo (no pre-quantised yet at time of writing):
-pip install gguf torch sentencepiece huggingface_hub
-python -c "from huggingface_hub import snapshot_download; \
-  print(snapshot_download('nvidia/canary-1b-v2'))"
-python models/convert-canary-to-gguf.py \
-    --nemo  <snapshot-path>/canary-1b-v2.nemo \
-    --output canary-1b-v2.gguf
-
-./build/bin/canary-main -m canary-1b-v2.gguf -f samples/jfk.wav -sl en -tl en -t 8
-# And so, my fellow Americans, ask not what your country can do for you,
-# ask what you can do for your country.
-```
-
-### German ASR
-
-```bash
-./build/bin/canary-main -m canary-1b-v2.gguf -f german_audio.wav -sl de -tl de
-# Ich heiße Amadeus Scharma. Ich bin 1955 in Kassel in Deutschland geboren,
-# weitgehend in Indien aufgewachsen. ...
-```
-
-### Speech translation (German → English)
-
-```bash
-./build/bin/canary-main -m canary-1b-v2.gguf -f german_audio.wav -sl de -tl en
-# My name is Amadeo Sharma. I was born in Kassel in Germany in 1955,
-# and I grew up largely in India. ...
-```
-
-Same `-sl X -tl Y` works for any pair of the 25 supported languages: `bg cs da de el en es et fi fr hr hu it lt lv mt nl pl pt ro ru sk sl sv uk`. When `sl == tl` it's ASR; when they differ, it's speech translation.
-
-### CLI reference
+CrispASR is structured around two new layers on top of whisper.cpp:
 
 ```
-usage: canary-main [options] -m MODEL -f AUDIO
-
-  -m  FNAME       canary GGUF model
-  -f  FNAME       input audio (16 kHz mono WAV)
-  -sl LANG        source language ISO-639-1 (en, de, fr, ...)
-  -tl LANG        target language. Same as -sl → ASR; differs → translation
-  -t  N           threads (default: 4)
-  -v              dump per-token decoder steps for debugging
+┌───────────────────────────────────────────────────────────────────┐
+│ examples/cli/crispasr_*                                           │
+│   Backend interface, factory, dispatch, VAD slicing,              │
+│   common output writers, CTC aligner, auto-download, model-mgr    │
+├───────────────────────────────────────────────────────────────────┤
+│ examples/cli/cli.cpp (the crispasr binary)                        │
+│   Parses whisper-cli args, dispatches to backend when --backend   │
+│   is set or GGUF arch is non-whisper; otherwise runs whisper_full │
+│   unchanged                                                        │
+├───────────────────────────────────────────────────────────────────┤
+│ src/{whisper,parakeet,canary,canary_ctc,cohere,qwen3_asr,         │
+│      voxtral,voxtral4b,granite_speech}.cpp                        │
+│   Per-model runtimes (public C APIs)                              │
+├───────────────────────────────────────────────────────────────────┤
+│ src/core/      ← NEW shared library: crispasr-core                │
+│   mel.{h,cpp}          log-mel spectrogram (both NeMo + HF clusters)
+│   ffn.h                SwiGLU + SiLU FFN helpers (header-only)    │
+│   attention.h          Llama-style self-attention + flash-attn    │
+│   gguf_loader.{h,cpp}  Unified GGUF open / weight mmap / lookup   │
+├───────────────────────────────────────────────────────────────────┤
+│ ggml                                                               │
+└───────────────────────────────────────────────────────────────────┘
 ```
 
-The full VAD / chunking / SRT / VTT / TXT plumbing matches `parakeet-main` and is being added incrementally (see `canary-todo.md` for status).
+### `examples/cli/` — the dispatch layer
 
-### Architecture
+| File | Role |
+|---|---|
+| `cli.cpp` | whisper-cli entry point, extended with `--backend` dispatch branch |
+| `whisper_params.h` | Shared params struct (extracted from cli.cpp, extended) |
+| `crispasr_backend.{h,cpp}` | `CrispasrBackend` abstract class, capability bitmask, factory, GGUF auto-detect |
+| `crispasr_backend_{parakeet,canary,cohere,granite,voxtral,voxtral4b,qwen3}.cpp` | Per-backend thin wrapper over each model's C API |
+| `crispasr_vad.{h,cpp}` | Silero VAD slicing |
+| `crispasr_output.{h,cpp}` | TXT/SRT/VTT/CSV/JSON/LRC writers on `crispasr_segment` |
+| `crispasr_model_mgr.{h,cpp}` | `-m auto` via curl/wget shell-out |
+| `crispasr_aligner.{h,cpp}` | canary_ctc forced alignment wrapper |
+| `crispasr_llm_pipeline.h` | Templated audio-LLM pipeline (mel→encoder→prompt→KV decode) |
+| `crispasr_run.cpp` | Top-level pipeline dispatch: resolve → detect → load → slice → transcribe → write |
 
-| Component | Details |
-| --- | --- |
-| Encoder       | 32-layer FastConformer, d=1024, 8 heads, head_dim=128, FFN=4096, conv kernel=9, **biases on every linear/conv** (Canary uses `use_bias: true`) |
-| Subsampling   | Conv2d dw_striding stack, 8× temporal (100 → 12.5 fps) |
-| Decoder       | 8-layer pre-LN Transformer (self-attn + cross-attn + FFN), d=1024, 8 heads, head_dim=128, FFN=4096, max_ctx=1024 |
-| Embedding     | Token (16384 × 1024) + learned positional (1024 × 1024) + LN |
-| Output head   | Separate linear (1024 → 16384) |
-| Vocab         | 16384 SentencePiece (CanaryBPETokenizer, identical to Cohere Transcribe) |
-| Parameters    | ~978M (encoder 811M + decoder 152M + head 17M) |
-| Tensors       | 1478 in the GGUF (encoder 1294 + decoder 179 + head 2 + preprocessor 2) |
+### `src/core/` — the shared model primitives
 
-The Conformer encoder is identical in structure to parakeet's (we share the encoder code). The decoder block is pre-LN with three sub-layers: `LN → SA → +residual → LN → CA → +residual → LN → FFN → +residual`, FFN activation is ReLU (per NeMo's `PositionWiseFF` default). Self-attention KV cache lives on a backend buffer for fast autoregressive generation. Cross-attention K/V is pre-computed once per audio slice from the encoder output.
+The big DRY win: ~900 lines of duplicated scaffolding that every model file used to carry were extracted into a single static library, `crispasr-core`, linked into every non-whisper model target.
 
-### `nfa-align` — universal multilingual subword forced alignment
+| Header | Replaces | Consumers |
+|---|---|---|
+| `core/mel.{h,cpp}` | 7× copy-pasted STFT + mel filterbank + log + norm | parakeet, canary, canary_ctc, cohere, voxtral, voxtral4b, qwen3 |
+| `core/ffn.h` | 4× inline SwiGLU blocks | qwen3, voxtral, voxtral4b, granite |
+| `core/attention.h` | Llama-style self-attention with NEOX RoPE + GQA + flash-attn | voxtral (more coming) |
+| `core/gguf_loader.{h,cpp}` | 8× identical two-pass GGUF load + mmap + tensor-map build | all non-whisper models |
 
-`canary-1b-v2.nemo` actually ships with **two** weight files inside the tarball: the main encoder–decoder model AND a separate 600 M-parameter Parakeet-style FastConformer + CTC head trained with the same SentencePiece vocab. NVIDIA uses the latter inside [NeMo Forced Aligner](https://github.com/NVIDIA-NeMo/NeMo) (NFA) to compute reliable word-level timestamps for canary's transcripts.
+`core_mel::Params` spans both algorithm clusters: the NeMo family (`ln` + per-mel z-score + `(T, n_mels)` layout) and the HF/Whisper family (`log10` + global clip normalization + `(n_mels, T)` layout), with knobs for `LogGuard` (add-epsilon vs max-clip), `MatmulPrecision` (`Float` vs `Double`), `FbLayout` (`MelsFreqs` vs `FreqsMels`), `drop_last_frame` / `drop_first_frame_if_odd`, and `pad_to_T`.
 
-We extract that auxiliary model as a standalone GGUF and expose it via `nfa-align` — a **universal multilingual forced aligner** that works on **any transcript text** in the 25 supported languages.
+`core_gguf::WeightLoad` owns the `ggml_context`, the `ggml_backend_buffer_t`, and the `std::map<std::string, ggml_tensor*>` in one struct that models `std::move()` into their own state. The mmap path has a `pread`/`fseek` fallback for filesystems that don't support mmap.
 
-```bash
-# Build
-cmake --build build -j$(nproc) --target nfa-align
+### Whisper is the reference implementation
 
-# Download the aligner model
-huggingface-cli download cstr/canary-ctc-aligner-GGUF \
-    canary-ctc-aligner-q4_k.gguf --local-dir .
+`src/whisper.cpp` is **intentionally not migrated** to `src/core/` — it's the battle-tested reference and the `crispasr -m ggml-base.en.bin …` code path is byte-identical to upstream `whisper-cli`. This guarantee is a test gate: every CrispASR commit that touches the CLI is checked against it.
 
-# Forced-align an existing transcript (any source: canary, parakeet, cohere, whisper, hand-typed)
-./build/bin/nfa-align \
-    -m canary-ctc-aligner-q4_k.gguf \
-    -f samples/jfk.wav \
-    -tt "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
-```
+### Regression discipline
 
-Output:
-```
-[ 0.40 →  0.48]  And
-[ 0.64 →  1.04]  so,
-[ 1.12 →  1.20]  my
-[ 1.36 →  1.60]  fellow
-[ 1.84 →  3.20]  Americans,
-[ 3.52 →  3.76]  ask
-[ 4.08 →  4.16]  not
-...
-[10.08 → 11.04]  country.
-```
+Every `src/core/` migration commit includes a `md5sum`-level regression test against `samples/jfk.wav`:
 
-**Measured accuracy on JFK (22 words, vs `cohere-align` wav2vec2 ground truth):**
-
-| Method | MAE | Notes |
-| --- | ---: | --- |
-| `cohere-align` (wav2vec2 char CTC) | ~30-50 ms | English only, 1 model per language |
-| **`nfa-align` (subword CTC, this fork)** | **78 ms** | **All 25 EU languages in one model** |
-| `canary-main` cross-attention DTW | ~414 ms | Built into canary-main, no extra model |
-
-**5.3× tighter** than canary's built-in DTW path, and the **first multilingual forced aligner** in this fork. Works as a drop-in replacement for `cohere-align` with broader language coverage but slightly looser per-word boundaries (subword vs character granularity). For 24 of the 25 supported languages there is no comparable wav2vec2 model, so this is the only option at this accuracy.
-
-It also doubles as a standalone CTC ASR via `-decode`:
-
-```bash
-$ ./build/bin/nfa-align -m canary-ctc-aligner-q4_k.gguf -f samples/jfk.wav -decode
-And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country.
-```
-
-Pre-converted GGUFs at **[cstr/canary-ctc-aligner-GGUF](https://huggingface.co/cstr/canary-ctc-aligner-GGUF)** (F16 + Q4_K/Q5_0/Q8_0). Q4_K alignment is byte-identical to F16 on the verification clip.
-
-**License note.** The aligner model is the auxiliary CTC component of `nvidia/canary-1b-v2`, **CC-BY-4.0**, full credit and attribution to NVIDIA's NeMo team. See the HF model card for the full attribution and citation.
-
-### Decoder prompt format
-
-Canary uses task tokens in the decoder prompt prefix to drive ASR vs translation:
-
-```
-<|startofcontext|> <|startoftranscript|> <|emo:undefined|>
-<|src_lang|> <|target_lang|> <|pnc|>|<|nopnc|>
-<|notimestamp|> <|nodiarize|>
-... model output starts here ...
-```
-
-The src/tgt language tokens explicitly tell the decoder what language to expect and what language to emit. There is no auto-detect — this is the whole point of using canary. If the source language is unknown, you'd need a separate language-ID model.
+- **mel extraction**: bit-identical transcript + SRT on parakeet, canary, canary_ctc, voxtral, voxtral4b, qwen3. Cohere transcript is bit-identical but a single SRT boundary shifts by 80 ms due to the CBLAS→manual-loop matmul accumulator reorder.
+- **ffn extraction**: bit-identical on qwen3, voxtral, voxtral4b, granite.
+- **gguf_loader extraction**: bit-identical on all 8 non-whisper models.
+- **attention extraction**: bit-identical on voxtral (only consumer so far).
 
 ---
 
-## Quick start — Voxtral 4B Realtime (streaming speech-LLM)
+## Adding a new backend
 
-```bash
-cmake --build build -j$(nproc) --target voxtral4b-main
+Adding a new ASR model to CrispASR is a focused exercise in five files. The worked examples to copy from are the existing `crispasr_backend_*.cpp` adapters.
 
-# Convert from HuggingFace (or download pre-converted GGUF when available)
-python models/convert-voxtral4b-to-gguf.py \
-    --input /path/to/Voxtral-Mini-4B-Realtime-2602 \
-    --output voxtral-4b-realtime.gguf
+### 1. Land the model's C API in `src/yourmodel.{h,cpp}`
 
-./build/bin/voxtral4b-main -m voxtral-4b-realtime.gguf -f samples/jfk.wav
-# And so, my fellow Americans, ask not what your country can do for you.
-# Ask what you can do for your country.
+Following the established convention:
+
+```c
+struct yourmodel_context * yourmodel_init_from_file(const char * path, yourmodel_context_params p);
+void                       yourmodel_free(struct yourmodel_context *);
+char *                     yourmodel_transcribe(struct yourmodel_context *, const float * samples, int n);
 ```
 
-The 4B Realtime model is a **natively streaming** architecture with a causal audio encoder (RoPE + SwiGLU + sliding window attention). It produces text interleaved with streaming control tokens — the CLI filters these automatically for clean output. Key features:
+Use `src/core/mel`, `src/core/ffn`, `src/core/attention`, and `src/core/gguf_loader` wherever they fit — they cover ~80% of the boilerplate.
 
-- **13 languages** (en, fr, es, de, ru, zh, ja, it, pt, nl, ar, hi, ko)
-- **Configurable delay**: 480ms default (6 tokens), tunable from 240ms to 2.4s
-- **4.4B parameters** (970M encoder + 3.4B LLM), ~8.9 GB F16 GGUF
-- **Apache 2.0** license
-- Optional word timestamps via CTC aligner: `-am aligner.gguf -timestamps`
+### 2. Write the backend adapter
 
----
+Create `examples/cli/crispasr_backend_yourmodel.cpp`:
 
-## Quick start — Qwen3-ASR (30+ languages, speech-LLM)
+```cpp
+#include "crispasr_backend.h"
+#include "whisper_params.h"
+#include "yourmodel.h"
 
-```bash
-cmake --build build -j$(nproc) --target qwen3-asr-main
+namespace {
+class YourmodelBackend : public CrispasrBackend {
+public:
+    const char * name() const override { return "yourmodel"; }
+    uint32_t capabilities() const override {
+        return CAP_TIMESTAMPS_CTC | CAP_AUTO_DOWNLOAD | /* ... */;
+    }
+    bool init(const whisper_params & p) override { /* yourmodel_init_from_file(...) */ }
+    std::vector<crispasr_segment> transcribe(
+        const float * samples, int n, int64_t t_off,
+        const whisper_params & p) override { /* call yourmodel_transcribe and return segments */ }
+    void shutdown() override { /* yourmodel_free(...) */ }
+private:
+    yourmodel_context * ctx_ = nullptr;
+};
+} // namespace
 
-huggingface-cli download cstr/qwen3-asr-0.6b-GGUF \
-    qwen3-asr-0.6b-q4_k.gguf --local-dir .
-
-./build/bin/qwen3-asr-main -m qwen3-asr-0.6b-q4_k.gguf -f samples/jfk.wav
-# And so, my fellow Americans, ask not what your country can do for you,
-# ask what you can do for your country.
+std::unique_ptr<CrispasrBackend> crispasr_make_yourmodel_backend() {
+    return std::make_unique<YourmodelBackend>();
+}
 ```
 
-900M speech-LLM (Whisper encoder + Qwen3 0.6B LLM). Auto-detects language from audio. Supports 30 languages + 22 Chinese dialects. Optional word timestamps via CTC aligner:
+### 3. Register with the factory
+
+In `examples/cli/crispasr_backend.cpp`:
+
+```cpp
+std::unique_ptr<CrispasrBackend> crispasr_make_yourmodel_backend();
+// ...
+if (name == "yourmodel") return crispasr_make_yourmodel_backend();
+// ...
+std::vector<std::string> crispasr_list_backends() {
+    return { ..., "yourmodel" };
+}
+```
+
+Add the architecture string to `crispasr_detect_backend_from_gguf()` so `general.architecture` auto-detection works.
+
+### 4. Wire into CMake
+
+In `examples/cli/CMakeLists.txt`:
+
+```cmake
+add_executable(${TARGET}
+    # ...
+    crispasr_backend_yourmodel.cpp
+)
+
+target_link_libraries(${TARGET} PRIVATE
+    # ...
+    yourmodel_lib
+)
+```
+
+### 5. Optional: add to the model registry
+
+If your model has a canonical Q4_K HuggingFace release, add it to `crispasr_model_mgr.cpp`'s registry so `-m auto` works.
+
+### Regression-test your backend
 
 ```bash
-./build/bin/qwen3-asr-main -m qwen3-asr-0.6b-q4_k.gguf -f audio.wav \
-    -am canary-ctc-aligner-q4_k.gguf -timestamps
+./build/bin/crispasr --backend yourmodel -m model.gguf -f samples/jfk.wav -np > before.txt
+# ... make changes ...
+cmake --build build --target whisper-cli
+./build/bin/crispasr --backend yourmodel -m model.gguf -f samples/jfk.wav -np > after.txt
+diff before.txt after.txt && echo BIT-IDENTICAL
 ```
 
 ---
 
-## Quick start — Voxtral 3B (offline speech-LLM)
+## Branch state & roadmap
 
-```bash
-cmake --build build -j$(nproc) --target voxtral-main
+### What's done (on `integrated_cli`)
 
-huggingface-cli download cstr/voxtral-mini-3b-2507-GGUF \
-    voxtral-mini-3b-2507-q4_k.gguf --local-dir .
+- **Phase 1** — Unified CLI with backend dispatch, VAD, common output writers, CTC alignment, auto-download. 7 non-whisper backends wired (parakeet, canary, cohere, granite, voxtral, voxtral4b, qwen3). Whisper code path unchanged and byte-identical to upstream.
+- **Phase 0** — `src/core/` shared library (`crispasr-core`):
+  - `core/mel` ✅ 7 of 8 non-whisper models migrated
+  - `core/ffn` ✅ 4 of 4 SwiGLU consumers migrated
+  - `core/gguf_loader` ✅ all 8 non-whisper models migrated
+  - `core/attention` ✅ 1 of ~6 LLM attention blocks migrated (voxtral)
+- **Bit-identical regression** on `samples/jfk.wav` is the gate for every commit. ~877 lines of duplicated boilerplate removed from `src/`.
 
-./build/bin/voxtral-main -m voxtral-mini-3b-2507-q4_k.gguf -f samples/jfk.wav -l en
-# And so, my fellow Americans, ask not what your country can do for you,
-# ask what you can do for your country.
-```
+### Near-term (next sessions)
 
-3B speech-LLM (Whisper-large-v3 encoder + Mistral/Llama 3B). Supports 8 languages (`-l en/de/fr/es/it/pt/nl/hi`). Full Tekken tokenizer for audio understanding and function calling.
+- `core/attention.h` variants for persistent-KV-cache models (qwen3, voxtral4b, granite LLM) — needs a separate helper signature
+- `core/attention.h` variants for Q/K norm (qwen3), biases + no RoPE (voxtral audio), µP scale tricks (granite)
+- `core/greedy_decode.h` — unified LLM decode loop, retires the CLI-side `crispasr_llm_pipeline.h`
+- `core/mel::Params::stacked_frames` — for granite's 2-frame stacked output (the last holdout on mel extraction)
+- `cli.cpp` `output_json` / `output_wts` refactor to consume `crispasr_segment` — unblocks `backend-whisper.cpp` wrapper so whisper routes through the same dispatch as everything else
+- Delete the per-model `examples/*-main/` directories once the unified CLI has shipped and regression-tested in CI
+
+### Long-term
+
+- Microphone input (SDL2-based, pattern exists in `examples/stream/`)
+- HTTP / WebSocket server mode (pattern in `examples/server/`)
+- Model-agnostic batch processing with a progress bar
+- TTS subcommand (`crispasr speak …`) via voxtral-rs
 
 ---
 
-## Current status
+## Credits
 
-| Component | parakeet | canary | cohere | qwen3-asr | voxtral 3B | voxtral 4B | granite 1B |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| GGUF converter | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Encoder forward | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Decoder/LLM forward | ✅ TDT | ✅ Transformer | ✅ Transformer | ✅ Qwen3 LLM | ✅ Llama 3B | ✅ Llama 3.4B | ✅ Granite 1B |
-| Word timestamps | ✅ TDT native | ✅ CTC re-align | ✅ cross-attn DTW | ✅ CTC 2nd pass | ✅ CTC 2nd pass | ✅ CTC 2nd pass | ❌ pending |
-| SRT/VTT output | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
-| `--flash` attention | ✅ | ✅ | ✅ | always on | always on | always on | always on |
-| VAD segmentation | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
-| GPU auto-detect | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Quantization | ✅ Q4_K-Q8_0 | ✅ | ✅ | ✅ | ✅ | ❌ pending | ❌ pending |
-| HF release | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ pending | ❌ pending |
+- **[whisper.cpp](https://github.com/ggml-org/whisper.cpp)** — the ggml inference engine and the whisper runtime this fork is built on
+- **[ggml](https://github.com/ggml-org/ggml)** — the tensor library everything runs on
+- **NVIDIA NeMo** — parakeet, canary, and canary_ctc aligner
+- **Cohere** — cohere-transcribe
+- **Qwen team (Alibaba)** — Qwen3-ASR
+- **Mistral AI** — Voxtral Mini 3B and 4B Realtime
+- **IBM Granite team** — Granite Speech 4.0
+- **[miniaudio](https://miniaud.io/)** and **[stb_vorbis](https://github.com/nothings/stb)** — embedded audio decoders
 
-See `TODO.md` for the full feature roadmap.
-
-## Repository layout
-
-| Path | Description |
-| --- | --- |
-| `src/parakeet.{h,cpp}` | Parakeet TDT 0.6B — FastConformer + TDT transducer |
-| `src/canary.{h,cpp}` | Canary 1B v2 — FastConformer + Transformer decoder |
-| `src/canary_ctc.{h,cpp}` | CTC forced aligner (from canary's auxiliary model) |
-| `src/cohere.{h,cpp}` | Cohere Transcribe 2B — Conformer + Transformer |
-| `src/qwen3_asr.{h,cpp}` | Qwen3-ASR 0.6B — Whisper encoder + Qwen3 LLM |
-| `src/voxtral.{h,cpp}` | Voxtral-Mini 3B — Whisper-large-v3 encoder + Llama 3B |
-| `src/voxtral4b.{h,cpp}` | Voxtral-Mini 4B Realtime — causal encoder + Llama 3.4B |
-| `src/granite_speech.{h,cpp}` | Granite Speech 4.0-1B — Conformer + Q-Former + Granite LLM |
-| `src/wav2vec2-ggml.{h,cpp}` | wav2vec2 CTC for `cohere-align` |
-| `examples/*/main.cpp` | CLI entry points for each runtime |
-| `models/convert-*-to-gguf.py` | Model converters (HF/NeMo → GGUF) |
-
-## Attribution
-
-- **Parakeet TDT** and **Canary 1B v2**: NVIDIA NeMo team (CC-BY-4.0)
-- **Cohere Transcribe**: Cohere Labs (Apache-2.0)
-- **Qwen3-ASR**: Qwen team / Alibaba (Apache-2.0)
-- **Voxtral-Mini 3B** and **Voxtral-Mini 4B Realtime**: Mistral AI (Apache-2.0)
-- **Granite Speech 4.0-1B**: IBM Granite team (Apache-2.0)
-- **wav2vec2 weights**: Jonatas Grosman (Apache-2.0)
-- **Underlying runtime**: [whisper.cpp](https://github.com/ggml-org/whisper.cpp) / [ggml](https://github.com/ggerganov/ggml) (MIT)
-
-Voxtral 4B Realtime port cross-referenced against [antirez/voxtral.c](https://github.com/antirez/voxtral.c), [awni/voxmlx](https://github.com/awni/voxmlx), and [TrevorS/voxtral-mini-realtime-rs](https://github.com/TrevorS/voxtral-mini-realtime-rs).
+---
 
 ## License
 
-The fork code is MIT (matching whisper.cpp). Individual models have their own licenses — see the links above. Use of GGUF files must comply with each model's upstream license.
+Same as upstream whisper.cpp: **MIT**.
+
+Per-model weights are covered by their respective HuggingFace model licenses (see [Supported backends](#supported-backends)). The `crispasr` binary itself links model runtimes that are all permissively licensed (MIT / Apache-2.0 / CC-BY-4.0 for weights); the **cohere** backend's model weights are CC-BY-NC-4.0 and not suitable for commercial use — the runtime code is MIT but the model is not.
