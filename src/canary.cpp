@@ -462,16 +462,19 @@ static void canary_fft_r2c(const float * in, int N, float * out) {
 }
 
 // NeMo-style mel: same as parakeet (128 mel, 16 kHz, n_fft=512, win=400, hop=160).
+// Delegates to core_mel::compute() with the NeMo cluster's parameters; only
+// the FFT function pointer differs between parakeet/canary/canary_ctc/cohere.
+#include "core/mel.h"
+
 static std::vector<float> canary_compute_mel(canary_context * ctx,
                                              const float * samples, int n_samples,
                                              int & T_out) {
     const auto & hp = ctx->model.hparams;
-    const int n_fft     = (int)hp.n_fft;
-    const int hop       = (int)hp.hop_length;
-    const int win       = (int)hp.win_length;
-    const int n_freqs   = n_fft / 2 + 1;
-    const int n_mels    = (int)hp.n_mels;
-    const float log_eps = (float)(1.0 / (1 << 24));
+    const int n_fft   = (int)hp.n_fft;
+    const int hop     = (int)hp.hop_length;
+    const int win     = (int)hp.win_length;
+    const int n_freqs = n_fft / 2 + 1;
+    const int n_mels  = (int)hp.n_mels;
 
     if (!ctx->model.mel_fb || !ctx->model.mel_window) {
         fprintf(stderr, "canary: missing preprocessor.fb / window\n");
@@ -484,60 +487,24 @@ static std::vector<float> canary_compute_mel(canary_context * ctx,
     std::vector<float> mel_fb((size_t)n_mels * n_freqs);
     ggml_backend_tensor_get(ctx->model.mel_fb, mel_fb.data(), 0, mel_fb.size() * sizeof(float));
 
-    const int pad = n_fft / 2;
-    std::vector<float> padded((size_t)(pad + n_samples + pad), 0.0f);
-    memcpy(padded.data() + pad, samples, n_samples * sizeof(float));
+    core_mel::Params p;
+    p.n_fft      = n_fft;
+    p.hop_length = hop;
+    p.win_length = win;
+    p.n_mels     = n_mels;
+    p.log_base   = core_mel::LogBase::Ln;
+    p.norm       = core_mel::Normalization::PerFeatureZ;
+    p.layout     = core_mel::Layout::TimeMels;
+    p.log_eps    = (float)(1.0 / (1 << 24));
+    p.center_pad = true;
 
-    const int T = (int)((padded.size() - n_fft) / hop + 1);
-    T_out = T;
-
-    std::vector<float> window(n_fft, 0.0f);
-    int lpad = (n_fft - win) / 2;
-    for (int i = 0; i < win; i++) window[lpad + i] = window_raw[i];
-
-    std::vector<float> power((size_t)n_freqs * T, 0.0f);
-    {
-        std::vector<float> fft_in(n_fft);
-        std::vector<float> fft_out((size_t)n_fft * 2);
-        for (int t = 0; t < T; t++) {
-            const float * frame = padded.data() + (size_t)t * hop;
-            for (int n = 0; n < n_fft; n++) fft_in[n] = frame[n] * window[n];
-            canary_fft_r2c(fft_in.data(), n_fft, fft_out.data());
-            for (int k = 0; k < n_freqs; k++) {
-                float re = fft_out[2*k], im = fft_out[2*k+1];
-                power[(size_t)t * n_freqs + k] = re*re + im*im;
-            }
-        }
-    }
-
-    std::vector<float> mel_tn((size_t)T * n_mels, 0.0f);
-    for (int t = 0; t < T; t++) {
-        const float * pp = power.data() + (size_t)t * n_freqs;
-        float * mp = mel_tn.data() + (size_t)t * n_mels;
-        for (int m = 0; m < n_mels; m++) {
-            const float * fb = mel_fb.data() + (size_t)m * n_freqs;
-            float s = 0.0f;
-            for (int k = 0; k < n_freqs; k++) s += pp[k] * fb[k];
-            mp[m] = s;
-        }
-    }
-
-    for (size_t i = 0; i < mel_tn.size(); i++) mel_tn[i] = logf(mel_tn[i] + log_eps);
-
-    for (int m = 0; m < n_mels; m++) {
-        double sum = 0.0, sq = 0.0;
-        for (int t = 0; t < T; t++) sum += mel_tn[(size_t)t * n_mels + m];
-        double mean = sum / T;
-        for (int t = 0; t < T; t++) {
-            double dd = mel_tn[(size_t)t * n_mels + m] - mean;
-            sq += dd * dd;
-        }
-        float inv_std = 1.0f / sqrtf((float)(sq / T) + 1e-5f);
-        for (int t = 0; t < T; t++)
-            mel_tn[(size_t)t * n_mels + m] = (float)(mel_tn[(size_t)t * n_mels + m] - mean) * inv_std;
-    }
-
-    return mel_tn;
+    return core_mel::compute(
+        samples, n_samples,
+        window_raw.data(), win,
+        mel_fb.data(), n_freqs,
+        canary_fft_r2c,
+        p,
+        T_out);
 }
 
 // ===========================================================================
