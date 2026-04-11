@@ -1,4 +1,12 @@
 #!/usr/bin/env python3
+
+# LEGACY: kept to feed the examples/{qwen3,voxtral}-test-*/main.cpp
+# differential-test drivers which still consume .npy files with the
+# specific names this script produces. New backend ports should use
+# tools/dump_reference.py + tools/reference_backends/<name>.py, which
+# write a single GGUF tensor archive that crispasr-diff can load via
+# core_gguf::load_weights. See ARCHITECTURE.md for the overall picture.
+
 """Dump Voxtral audio encoder + projector reference activations.
 
 Captures ground-truth tensors at every architectural boundary for the
