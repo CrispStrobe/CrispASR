@@ -221,7 +221,7 @@ static bool whisper_params_parse(int argc, char ** argv, whisper_params & params
         else if (arg == "-n"    || arg == "--max-new-tokens")       { params.max_new_tokens  = std::stoi(ARGV_NEXT); }
         else if (arg == "-ck"   || arg == "--chunk-seconds")        { params.chunk_seconds   = std::stoi(ARGV_NEXT); }
         else if (                  arg == "--list-backends")        {
-            for (const auto & b : crispasr_list_backends()) printf("%s\n", b.c_str());
+            crispasr_print_backend_matrix();
             exit(0);
         }
         // Voice Activity Detection (VAD)

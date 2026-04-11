@@ -66,6 +66,80 @@ std::vector<std::string> crispasr_list_backends() {
 }
 
 // ---------------------------------------------------------------------------
+// Capability matrix for --list-backends
+// ---------------------------------------------------------------------------
+
+// Hard-coded whisper capabilities. Since the whisper backend wrapper isn't
+// implemented yet (whisper still goes through the historical cli.cpp
+// code path), we report what whisper_full() supports so users have an
+// accurate reference.
+static constexpr uint32_t kWhisperCaps =
+    CAP_TIMESTAMPS_NATIVE | CAP_WORD_TIMESTAMPS | CAP_TOKEN_CONFIDENCE |
+    CAP_LANGUAGE_DETECT | CAP_TRANSLATE | CAP_DIARIZE | CAP_GRAMMAR |
+    CAP_TEMPERATURE | CAP_BEAM_SEARCH | CAP_FLASH_ATTN |
+    CAP_PARALLEL_PROCESSORS | CAP_VAD_INTERNAL;
+
+struct feature_col {
+    const char * label;
+    uint32_t     flag;
+};
+
+static constexpr feature_col kFeatures[] = {
+    { "ts-native",    CAP_TIMESTAMPS_NATIVE  },
+    { "ts-ctc",       CAP_TIMESTAMPS_CTC     },
+    { "word-ts",      CAP_WORD_TIMESTAMPS    },
+    { "tok-conf",     CAP_TOKEN_CONFIDENCE   },
+    { "lang-detect",  CAP_LANGUAGE_DETECT    },
+    { "translate",    CAP_TRANSLATE          },
+    { "diarize",      CAP_DIARIZE            },
+    { "grammar",      CAP_GRAMMAR            },
+    { "temperature",  CAP_TEMPERATURE        },
+    { "beam",         CAP_BEAM_SEARCH        },
+    { "flash",        CAP_FLASH_ATTN         },
+    { "punctuation",  CAP_PUNCTUATION_TOGGLE },
+    { "src/tgt lang", CAP_SRC_TGT_LANGUAGE   },
+    { "auto-dl",      CAP_AUTO_DOWNLOAD      },
+};
+
+void crispasr_print_backend_matrix() {
+    const auto backends = crispasr_list_backends();
+
+    // Column widths
+    size_t name_w = 8;
+    for (const auto & b : backends) if (b.size() > name_w) name_w = b.size();
+
+    // Header
+    printf("crispasr backends (%zu):\n\n", backends.size());
+    printf("  %-*s", (int)name_w, "backend");
+    for (const auto & f : kFeatures) printf(" %-12s", f.label);
+    printf("\n  ");
+    for (size_t i = 0; i < name_w; i++) printf("-");
+    for (size_t i = 0; i < sizeof(kFeatures)/sizeof(kFeatures[0]); i++) {
+        printf(" ------------");
+    }
+    printf("\n");
+
+    // Each row: instantiate the backend just to read its capability bitmask.
+    for (const auto & name : backends) {
+        uint32_t caps = 0;
+        if (name == "whisper") {
+            caps = kWhisperCaps;
+        } else {
+            auto be = crispasr_create_backend(name);
+            if (be) caps = be->capabilities();
+            // backend destroyed when unique_ptr goes out of scope
+        }
+        printf("  %-*s", (int)name_w, name.c_str());
+        for (const auto & f : kFeatures) {
+            printf(" %-12s", (caps & f.flag) ? "   Y" : "    -");
+        }
+        printf("\n");
+    }
+    printf("\nUse --backend NAME to force a specific backend. When omitted, the\n");
+    printf("backend is auto-detected from GGUF metadata or the filename.\n");
+}
+
+// ---------------------------------------------------------------------------
 // GGUF auto-detection
 // ---------------------------------------------------------------------------
 

@@ -122,6 +122,10 @@ std::string crispasr_detect_backend_from_gguf(const std::string & model_path);
 // List the backend names that were compiled into this binary.
 std::vector<std::string> crispasr_list_backends();
 
+// Print a human-readable capability matrix for the available backends.
+// Called by --list-backends in cli.cpp.
+void crispasr_print_backend_matrix();
+
 // ---------------------------------------------------------------------------
 // Top-level entry point
 // ---------------------------------------------------------------------------
