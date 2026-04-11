@@ -77,7 +77,7 @@ public:
 
     uint32_t capabilities() const override {
         return CAP_TIMESTAMPS_CTC | CAP_AUTO_DOWNLOAD | CAP_TEMPERATURE
-             | CAP_PUNCTUATION_TOGGLE;
+             | CAP_PUNCTUATION_TOGGLE | CAP_FLASH_ATTN;
     }
 
     bool init(const whisper_params & p) override {

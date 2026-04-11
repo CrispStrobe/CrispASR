@@ -52,6 +52,14 @@ constexpr registry_entry k_registry[] = {
     { "granite", "granite-4.0-1b-speech-q4_k.gguf",
       "https://huggingface.co/cstr/granite-4.0-1b-speech-GGUF/resolve/main/granite-4.0-1b-speech-q4_k.gguf",
       "~900 MB" },
+    // Qwen3-ASR 0.6B
+    { "qwen3", "qwen3-asr-0.6b-q4_k.gguf",
+      "https://huggingface.co/cstr/qwen3-asr-0.6b-GGUF/resolve/main/qwen3-asr-0.6b-q4_k.gguf",
+      "~500 MB" },
+    // Cohere Transcribe 03-2026
+    { "cohere", "cohere-transcribe-q4_k.gguf",
+      "https://huggingface.co/cstr/cohere-transcribe-03-2026-GGUF/resolve/main/cohere-transcribe-q4_k.gguf",
+      "~550 MB" },
 };
 
 const registry_entry * lookup(const std::string & backend) {

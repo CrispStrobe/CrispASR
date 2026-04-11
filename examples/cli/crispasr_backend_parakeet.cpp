@@ -27,7 +27,8 @@ public:
              | CAP_WORD_TIMESTAMPS
              | CAP_FLASH_ATTN
              | CAP_LANGUAGE_DETECT
-             | CAP_PUNCTUATION_TOGGLE;
+             | CAP_PUNCTUATION_TOGGLE
+             | CAP_AUTO_DOWNLOAD;
     }
 
     bool init(const whisper_params & p) override {

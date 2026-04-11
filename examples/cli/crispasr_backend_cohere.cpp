@@ -32,7 +32,8 @@ public:
              | CAP_TOKEN_CONFIDENCE
              | CAP_DIARIZE
              | CAP_PUNCTUATION_TOGGLE
-             | CAP_FLASH_ATTN;
+             | CAP_FLASH_ATTN
+             | CAP_AUTO_DOWNLOAD;
     }
 
     bool init(const whisper_params & p) override {
