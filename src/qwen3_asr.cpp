@@ -477,6 +477,7 @@ static void qwen3_asr_fft(float * in, int N, float * out) {
 
 #include "core/mel.h"
 #include "core/ffn.h"
+#include "core/attention.h"
 
 // qwen3_asr_fft uses its input buffer as scratch during recursion (needs
 // ~4N extra floats past the input pointer). Wrap it to match core_mel's
@@ -1130,6 +1131,20 @@ static ggml_cgraph * qwen3_asr_build_graph_llm_kv(qwen3_asr_context * ctx,
 
     ggml_tensor * cur = embeds;
 
+    const core_attn::KvSelfAttnParams kvp = {
+        /*n_heads*/        n_q,
+        /*n_kv_heads*/     n_kv,
+        /*head_dim*/       hd,
+        /*n_kv_grp*/       n_kv_grp,
+        /*n_ctx_orig*/     (int)hp.llm_max_pos,
+        /*rope_theta*/     theta,
+        /*rope_beta_fast*/ 32.0f,
+        /*rope_beta_slow*/ 1.0f,
+        /*attn_scale*/     attn_scale,
+        /*qk_norm_eps*/    eps,
+        /*gqa_mode*/       core_attn::GQA_MANUAL_CONT,
+    };
+
     for (uint32_t il = 0; il < hp.llm_n_layers; il++) {
         const auto & b = m.llm.blocks[il];
         ggml_tensor * residual = cur;
@@ -1137,93 +1152,17 @@ static ggml_cgraph * qwen3_asr_build_graph_llm_kv(qwen3_asr_context * ctx,
         ggml_tensor * x = ggml_rms_norm(ctx0, cur, eps);
         x = ggml_mul(ctx0, x, b.attn_norm_w);
 
-        ggml_tensor * Q = ggml_mul_mat(ctx0, b.attn_q_w, x);
-        ggml_tensor * K = ggml_mul_mat(ctx0, b.attn_k_w, x);
-        ggml_tensor * V = ggml_mul_mat(ctx0, b.attn_v_w, x);
-        Q = ggml_reshape_3d(ctx0, Q, hd, n_q,  T);
-        K = ggml_reshape_3d(ctx0, K, hd, n_kv, T);
-        V = ggml_reshape_3d(ctx0, V, hd, n_kv, T);
-
-        Q = ggml_rms_norm(ctx0, Q, eps);
-        Q = ggml_mul(ctx0, Q, b.attn_q_norm_w);
-        K = ggml_rms_norm(ctx0, K, eps);
-        K = ggml_mul(ctx0, K, b.attn_k_norm_w);
-
-        Q = ggml_rope_ext(ctx0, Q, positions, nullptr,
-                          hd, GGML_ROPE_TYPE_NEOX, (int)hp.llm_max_pos,
-                          theta, 1.0f, 0.0f, 1.0f, 32.0f, 1.0f);
-        K = ggml_rope_ext(ctx0, K, positions, nullptr,
-                          hd, GGML_ROPE_TYPE_NEOX, (int)hp.llm_max_pos,
-                          theta, 1.0f, 0.0f, 1.0f, 32.0f, 1.0f);
-
-        // ---- Permute new K/V to (hd, T, n_kv) before writing into cache ----
-        // Cache layout: ne=(hd, max_ctx, n_kv, n_layers) — same as cohere.
-        ggml_tensor * K_new_perm = ggml_permute(ctx0, K, 0, 2, 1, 3);  // (hd, T, n_kv)
-        ggml_tensor * V_new_perm = ggml_permute(ctx0, V, 0, 2, 1, 3);
-
-        // ---- Write into the persistent KV cache ----
-        ggml_tensor * k_view = ggml_view_4d(ctx0, ctx->kv_k,
-            hd, T, n_kv, 1,
-            ctx->kv_k->nb[1], ctx->kv_k->nb[2], ctx->kv_k->nb[3],
-            il * ctx->kv_k->nb[3] + n_past * ctx->kv_k->nb[1]);
-        ggml_tensor * v_view = ggml_view_4d(ctx0, ctx->kv_v,
-            hd, T, n_kv, 1,
-            ctx->kv_v->nb[1], ctx->kv_v->nb[2], ctx->kv_v->nb[3],
-            il * ctx->kv_v->nb[3] + n_past * ctx->kv_v->nb[1]);
-        ggml_build_forward_expand(gf, ggml_cpy(ctx0, K_new_perm, k_view));
-        ggml_build_forward_expand(gf, ggml_cpy(ctx0, V_new_perm, v_view));
-
-        // ---- Read full K/V history from cache: (hd, Lk, n_kv) ----
-        ggml_tensor * Kfull = ggml_view_3d(ctx0, ctx->kv_k,
-            hd, Lk, n_kv,
-            ctx->kv_k->nb[1], ctx->kv_k->nb[2],
-            il * ctx->kv_k->nb[3]);
-        ggml_tensor * Vfull = ggml_view_3d(ctx0, ctx->kv_v,
-            hd, Lk, n_kv,
-            ctx->kv_v->nb[1], ctx->kv_v->nb[2],
-            il * ctx->kv_v->nb[3]);
-        Kfull = ggml_cont(ctx0, Kfull);
-        Vfull = ggml_cont(ctx0, Vfull);
-
-        // ---- GQA expand cached K/V from n_kv to n_q heads ----
-        if (n_kv_grp > 1) {
-            ggml_tensor * K4 = ggml_reshape_4d(ctx0, Kfull, hd, Lk, 1, n_kv);
-            ggml_tensor * V4 = ggml_reshape_4d(ctx0, Vfull, hd, Lk, 1, n_kv);
-            // We want (hd, Lk, n_q) where heads (0,1) = kv head 0, (2,3) = kv head 1, etc.
-            // Insert singleton at axis 2, repeat by n_kv_grp, reshape.
-            K4 = ggml_repeat_4d(ctx0, K4, hd, Lk, n_kv_grp, n_kv);
-            V4 = ggml_repeat_4d(ctx0, V4, hd, Lk, n_kv_grp, n_kv);
-            Kfull = ggml_cont(ctx0, ggml_reshape_3d(ctx0, K4, hd, Lk, n_q));
-            Vfull = ggml_cont(ctx0, ggml_reshape_3d(ctx0, V4, hd, Lk, n_q));
-        }
-
-        // ---- Permute Q to (hd, T, n_q) for attention ----
-        Q = ggml_cont(ctx0, ggml_permute(ctx0, Q, 0, 2, 1, 3));
-
-        ggml_tensor * attn;
-        if (T == 1) {
-            // Decode path: ggml_flash_attn_ext, no causal mask needed.
-            // For a single new query, all cached keys are valid attention
-            // targets (including the just-written K[n_past] which is the
-            // query's own self-attention). flash_attn_ext fuses
-            // QK^T → softmax → @V into one kernel and consumes the F16
-            // K/V cache directly without an explicit dequant.
-            // Output ne = (v->ne[0]=hd, q->ne[2]=n_q, q->ne[1]=T, 1).
-            attn = ggml_flash_attn_ext(ctx0, Q, Kfull, Vfull, /*mask*/nullptr,
-                                       attn_scale, /*max_bias*/0.0f,
-                                       /*logit_softcap*/0.0f);
-            // Reshape (hd, n_q, T, 1) → (hd*n_q, T) directly. The (hd, n_q)
-            // sub-block is contiguous because hd is fast and n_q is next.
-            attn = ggml_reshape_2d(ctx0, attn, hd * n_q, T);
-        } else {
-            // Prefill path: ggml_flash_attn_ext with an F16 causal mask.
-            attn = ggml_flash_attn_ext(ctx0, Q, Kfull, Vfull, causal_mask,
-                                       attn_scale, 0.0f, 0.0f);
-            // Output ne = (hd, n_q, T, 1) → reshape to (hd*n_q, T)
-            attn = ggml_reshape_2d(ctx0, attn, hd * n_q, T);
-        }
-
-        attn = ggml_mul_mat(ctx0, b.attn_output_w, attn);
+        // KV-cached GQA self-attention with Q/K norm — qwen3 is the only
+        // backend currently passing non-null q_norm_w/k_norm_w to the
+        // shared helper.
+        ggml_tensor * attn = core_attn::kv_self_attn(
+            ctx0, gf, x,
+            b.attn_q_w, b.attn_k_w, b.attn_v_w, b.attn_output_w,
+            b.attn_q_norm_w, b.attn_k_norm_w,
+            positions,
+            (T == 1) ? nullptr : causal_mask,
+            ctx->kv_k, ctx->kv_v,
+            (int)il, n_past, kvp);
         cur = ggml_add(ctx0, residual, attn);
 
         // ---- FFN ----

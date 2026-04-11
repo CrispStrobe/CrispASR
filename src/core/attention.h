@@ -32,6 +32,8 @@
 
 #include "ggml.h"
 
+#include <cstddef>
+
 namespace core_attn {
 
 // Parameters that differ from call to call. Everything here is a plain
@@ -128,6 +130,172 @@ static inline ggml_tensor * llama_self_attn(
 
     // Output projection (no bias).
     return ggml_mul_mat(ctx, o_w, attn);
+}
+
+// ---------------------------------------------------------------------------
+// KV-cached self-attention for the LLM decoders (qwen3-asr, voxtral,
+// voxtral4b, granite-speech).
+//
+// Replaces the Q/K/V-proj + [optional Q/K norm] + RoPE + persistent-KV-cache
+// write + cache read + [manual GQA expansion] + flash-attn-ext + output-proj
+// block that each of the four models has its own copy of. The helper does
+// NOT do the pre-attention RMSNorm or the post-attention residual add —
+// callers do those inline so the helper stays focused on the attention
+// block proper (which is where the per-model knobs live).
+//
+// KV cache layout convention: ne = (head_dim, max_ctx, n_kv_heads, n_layers).
+// Every consumer already stores its cache this way, which is why this helper
+// is shareable in the first place.
+// ---------------------------------------------------------------------------
+
+// GQA expansion strategy.
+//
+// qwen3 and voxtral (3b) manually expand each KV head into `n_kv_grp` query
+// heads via reshape_4d -> repeat_4d -> reshape_3d, and then wrap the final
+// reshape in ggml_cont. voxtral4b also manually expands, but skips the final
+// ggml_cont. granite skips the manual expansion entirely and relies on
+// ggml_flash_attn_ext's native GQA support (pass Kfull/Vfull with n_kv heads
+// directly, flash-attn handles the repeat internally).
+//
+// Each mode produces slightly different graph ops. Picking the wrong one
+// breaks bit-identity on the regression sweep, so this is an explicit knob.
+enum GqaMode {
+    GQA_MANUAL_CONT   = 0, // reshape_4d / repeat_4d / reshape_3d + ggml_cont
+    GQA_MANUAL_NOCONT = 1, // reshape_4d / repeat_4d / reshape_3d, no final cont
+    GQA_NATIVE        = 2, // no expansion; flash_attn_ext handles GQA itself
+};
+
+struct KvSelfAttnParams {
+    int      n_heads;        // query heads
+    int      n_kv_heads;     // key/value heads (== n_heads for MHA)
+    int      head_dim;       // per-head dimension
+    int      n_kv_grp;       // n_heads / n_kv_heads (caller precomputes)
+    int      n_ctx_orig;     // RoPE n_ctx_orig (some models 0, some llm_max_pos)
+    float    rope_theta;
+    float    rope_beta_fast; // RoPE extrapolation beta_fast (qwen3/voxtral: 32, others: 0)
+    float    rope_beta_slow; // RoPE extrapolation beta_slow (qwen3/voxtral: 1,  others: 0)
+    float    attn_scale;     // usually 1/sqrt(head_dim); granite uses µP scale
+    float    qk_norm_eps;    // RMSNorm epsilon for optional Q/K norm (qwen3); unused otherwise
+    GqaMode  gqa_mode;
+};
+
+// KV-cached self-attention. Writes the new K/V into the persistent cache
+// slice at [n_past, n_past + T) for layer `il`, then reads the full history
+// [0, n_past + T) back out and runs flash-attention against Q.
+//
+// Inputs:
+//   x            [d_model, T]  — pre-attention normalized activations
+//   q_w,k_w,v_w  projection weights (no biases for the Llama case)
+//   o_w          output projection weight (no bias)
+//   q_norm_w     [head_dim] Q-norm weight, or nullptr to skip (non-qwen3)
+//   k_norm_w     [head_dim] K-norm weight, or nullptr to skip
+//   positions    [T] I32 — absolute positions n_past, n_past+1, ...
+//   causal_mask  [Lk, T] F16 or nullptr (decode path uses nullptr)
+//   kv_k, kv_v   persistent cache, ne = (hd, max_ctx, n_kv, n_layers)
+//   il           layer index into the cache's trailing dim
+//   n_past       number of tokens already in the cache
+//
+// Output:
+//   attn         [d_model, T] — post-output-projection tensor. Caller adds
+//                                it to the residual.
+static inline ggml_tensor * kv_self_attn(
+    ggml_context * ctx0,
+    ggml_cgraph  * gf,
+    ggml_tensor  * x,
+    ggml_tensor  * q_w, ggml_tensor * k_w, ggml_tensor * v_w,
+    ggml_tensor  * o_w,
+    ggml_tensor  * q_norm_w, ggml_tensor * k_norm_w,
+    ggml_tensor  * positions,
+    ggml_tensor  * causal_mask,
+    ggml_tensor  * kv_k, ggml_tensor * kv_v,
+    int            il,
+    int            n_past,
+    const KvSelfAttnParams & p)
+{
+    const int hd    = p.head_dim;
+    const int n_q   = p.n_heads;
+    const int n_kv  = p.n_kv_heads;
+    const int grp   = p.n_kv_grp;
+    const int T     = (int)x->ne[1];
+    const int Lk    = n_past + T;
+
+    // ---- Q/K/V projections ----
+    ggml_tensor * Q = ggml_mul_mat(ctx0, q_w, x);
+    ggml_tensor * K = ggml_mul_mat(ctx0, k_w, x);
+    ggml_tensor * V = ggml_mul_mat(ctx0, v_w, x);
+
+    Q = ggml_reshape_3d(ctx0, Q, hd, n_q,  T);
+    K = ggml_reshape_3d(ctx0, K, hd, n_kv, T);
+    V = ggml_reshape_3d(ctx0, V, hd, n_kv, T);
+
+    // ---- Optional Q/K RMSNorm (qwen3) ----
+    if (q_norm_w) {
+        Q = ggml_rms_norm(ctx0, Q, p.qk_norm_eps);
+        Q = ggml_mul(ctx0, Q, q_norm_w);
+    }
+    if (k_norm_w) {
+        K = ggml_rms_norm(ctx0, K, p.qk_norm_eps);
+        K = ggml_mul(ctx0, K, k_norm_w);
+    }
+
+    // ---- NEOX RoPE ----
+    Q = ggml_rope_ext(ctx0, Q, positions, nullptr,
+                      hd, GGML_ROPE_TYPE_NEOX, p.n_ctx_orig,
+                      p.rope_theta, /*freq_scale*/1.0f, /*ext_factor*/0.0f,
+                      /*attn_factor*/1.0f,
+                      p.rope_beta_fast, p.rope_beta_slow);
+    K = ggml_rope_ext(ctx0, K, positions, nullptr,
+                      hd, GGML_ROPE_TYPE_NEOX, p.n_ctx_orig,
+                      p.rope_theta, 1.0f, 0.0f, 1.0f,
+                      p.rope_beta_fast, p.rope_beta_slow);
+
+    // ---- Permute new K/V to (hd, T, n_kv) for cache write ----
+    ggml_tensor * K_new_perm = ggml_permute(ctx0, K, 0, 2, 1, 3);
+    ggml_tensor * V_new_perm = ggml_permute(ctx0, V, 0, 2, 1, 3);
+
+    // ---- Write into the persistent KV cache at [n_past, n_past+T) ----
+    ggml_tensor * k_view = ggml_view_4d(ctx0, kv_k, hd, T, n_kv, 1,
+        kv_k->nb[1], kv_k->nb[2], kv_k->nb[3],
+        (size_t)il * kv_k->nb[3] + (size_t)n_past * kv_k->nb[1]);
+    ggml_tensor * v_view = ggml_view_4d(ctx0, kv_v, hd, T, n_kv, 1,
+        kv_v->nb[1], kv_v->nb[2], kv_v->nb[3],
+        (size_t)il * kv_v->nb[3] + (size_t)n_past * kv_v->nb[1]);
+    ggml_build_forward_expand(gf, ggml_cpy(ctx0, K_new_perm, k_view));
+    ggml_build_forward_expand(gf, ggml_cpy(ctx0, V_new_perm, v_view));
+
+    // ---- Read full K/V history from cache ----
+    ggml_tensor * Kfull = ggml_cont(ctx0, ggml_view_3d(ctx0, kv_k,
+        hd, Lk, n_kv,
+        kv_k->nb[1], kv_k->nb[2], (size_t)il * kv_k->nb[3]));
+    ggml_tensor * Vfull = ggml_cont(ctx0, ggml_view_3d(ctx0, kv_v,
+        hd, Lk, n_kv,
+        kv_v->nb[1], kv_v->nb[2], (size_t)il * kv_v->nb[3]));
+
+    // ---- GQA expansion ----
+    if (p.gqa_mode != GQA_NATIVE && grp > 1) {
+        ggml_tensor * K4 = ggml_reshape_4d(ctx0, Kfull, hd, Lk, 1, n_kv);
+        ggml_tensor * V4 = ggml_reshape_4d(ctx0, Vfull, hd, Lk, 1, n_kv);
+        K4 = ggml_repeat_4d(ctx0, K4, hd, Lk, grp, n_kv);
+        V4 = ggml_repeat_4d(ctx0, V4, hd, Lk, grp, n_kv);
+        if (p.gqa_mode == GQA_MANUAL_CONT) {
+            Kfull = ggml_cont(ctx0, ggml_reshape_3d(ctx0, K4, hd, Lk, n_q));
+            Vfull = ggml_cont(ctx0, ggml_reshape_3d(ctx0, V4, hd, Lk, n_q));
+        } else {
+            Kfull = ggml_reshape_3d(ctx0, K4, hd, Lk, n_q);
+            Vfull = ggml_reshape_3d(ctx0, V4, hd, Lk, n_q);
+        }
+    }
+
+    // ---- Permute Q to (hd, T, n_q) for flash-attn ----
+    Q = ggml_cont(ctx0, ggml_permute(ctx0, Q, 0, 2, 1, 3));
+
+    // ---- Flash attention + reshape + output projection ----
+    ggml_tensor * attn = ggml_flash_attn_ext(
+        ctx0, Q, Kfull, Vfull, causal_mask,
+        p.attn_scale, /*max_bias*/0.0f, /*logit_softcap*/0.0f);
+    attn = ggml_reshape_2d(ctx0, attn, hd * n_q, T);
+
+    return ggml_mul_mat(ctx0, o_w, attn);
 }
 
 } // namespace core_attn

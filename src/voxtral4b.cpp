@@ -377,6 +377,7 @@ static void voxtral4b_fft(float * in, int N, float * out) {
 
 #include "core/mel.h"
 #include "core/ffn.h"
+#include "core/attention.h"
 
 // Same in-place FFT quirk as voxtral 3B: voxtral4b_fft writes into its
 // input buffer during recursion, so we wrap it with a thread-local
@@ -681,8 +682,6 @@ static ggml_cgraph * voxtral4b_build_graph_llm_kv(voxtral4b_context * ctx,
     const int n_kv     = (int)hp.llm_n_kv_heads;
     const int hd       = (int)hp.llm_head_dim;
     const int n_layers = (int)hp.llm_n_layers;
-    const int ff       = (int)hp.llm_ff_dim;
-    const int vocab    = (int)hp.llm_vocab_size;
 
     ggml_init_params ip = {
         ctx->compute_meta.size(), ctx->compute_meta.data(), true,
@@ -712,6 +711,20 @@ static ggml_cgraph * voxtral4b_build_graph_llm_kv(voxtral4b_context * ctx,
 
     ggml_tensor * cur = embeds;
 
+    const core_attn::KvSelfAttnParams kvp = {
+        /*n_heads*/      n_q,
+        /*n_kv_heads*/   n_kv,
+        /*head_dim*/     hd,
+        /*n_kv_grp*/     n_q / n_kv,
+        /*n_ctx_orig*/   0,
+        /*rope_theta*/   hp.llm_rope_theta,
+        /*rope_beta_fast*/ 0.0f,
+        /*rope_beta_slow*/ 0.0f,
+        /*attn_scale*/   1.0f / std::sqrt((float)hd),
+        /*qk_norm_eps*/  0.0f,  // no Q/K norm
+        /*gqa_mode*/     core_attn::GQA_MANUAL_NOCONT,
+    };
+
     for (int il = 0; il < n_layers; il++) {
         const auto & b = m.llm.blocks[il];
         ggml_tensor * residual = cur;
@@ -720,65 +733,17 @@ static ggml_cgraph * voxtral4b_build_graph_llm_kv(voxtral4b_context * ctx,
         cur = ggml_rms_norm(ctx0, cur, hp.llm_rms_eps);
         cur = ggml_mul(ctx0, cur, b.attn_norm_w);
 
-        // GQA self-attention
-        ggml_tensor * Q = ggml_mul_mat(ctx0, b.attn_q_w, cur);
-        ggml_tensor * K = ggml_mul_mat(ctx0, b.attn_k_w, cur);
-        ggml_tensor * V = ggml_mul_mat(ctx0, b.attn_v_w, cur);
-
-        Q = ggml_reshape_3d(ctx0, Q, hd, n_q,  n_tokens);
-        K = ggml_reshape_3d(ctx0, K, hd, n_kv, n_tokens);
-        V = ggml_reshape_3d(ctx0, V, hd, n_kv, n_tokens);
-
-        // RoPE
-        Q = ggml_rope_ext(ctx0, Q, positions, nullptr, hd, 2, 0,
-                          hp.llm_rope_theta, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f);
-        K = ggml_rope_ext(ctx0, K, positions, nullptr, hd, 2, 0,
-                          hp.llm_rope_theta, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f);
-
-        // Permute K, V from (hd, n_kv, T) → (hd, T, n_kv) for cache write
-        ggml_tensor * K_perm = ggml_permute(ctx0, K, 0, 2, 1, 3);
-        ggml_tensor * V_perm = ggml_permute(ctx0, V, 0, 2, 1, 3);
-
-        // KV cache write — cache layout: (hd, max_ctx, n_kv, n_layers)
-        ggml_tensor * k_dst = ggml_view_4d(ctx0, ctx->kv_k, hd, n_tokens, n_kv, 1,
-                                           ctx->kv_k->nb[1], ctx->kv_k->nb[2], ctx->kv_k->nb[3],
-                                           (size_t)il * ctx->kv_k->nb[3] +
-                                           (size_t)n_past * ctx->kv_k->nb[1]);
-        ggml_tensor * v_dst = ggml_view_4d(ctx0, ctx->kv_v, hd, n_tokens, n_kv, 1,
-                                           ctx->kv_v->nb[1], ctx->kv_v->nb[2], ctx->kv_v->nb[3],
-                                           (size_t)il * ctx->kv_v->nb[3] +
-                                           (size_t)n_past * ctx->kv_v->nb[1]);
-        ggml_build_forward_expand(gf, ggml_cpy(ctx0, K_perm, k_dst));
-        ggml_build_forward_expand(gf, ggml_cpy(ctx0, V_perm, v_dst));
-
-        // KV cache read
-        int Lk = n_past + n_tokens;
-        ggml_tensor * Kfull = ggml_cont(ctx0, ggml_view_3d(ctx0, ctx->kv_k, hd, Lk, n_kv,
-                                        ctx->kv_k->nb[1], ctx->kv_k->nb[2],
-                                        (size_t)il * ctx->kv_k->nb[3]));
-        ggml_tensor * Vfull = ggml_cont(ctx0, ggml_view_3d(ctx0, ctx->kv_v, hd, Lk, n_kv,
-                                        ctx->kv_v->nb[1], ctx->kv_v->nb[2],
-                                        (size_t)il * ctx->kv_v->nb[3]));
-
-        // GQA expansion: repeat KV heads to match Q heads (32/8=4× repeat)
-        const int n_kv_grp = n_q / n_kv;
-        if (n_kv_grp > 1) {
-            ggml_tensor * K4 = ggml_reshape_4d(ctx0, Kfull, hd, Lk, 1, n_kv);
-            ggml_tensor * V4 = ggml_reshape_4d(ctx0, Vfull, hd, Lk, 1, n_kv);
-            K4 = ggml_repeat_4d(ctx0, K4, hd, Lk, n_kv_grp, n_kv);
-            V4 = ggml_repeat_4d(ctx0, V4, hd, Lk, n_kv_grp, n_kv);
-            Kfull = ggml_reshape_3d(ctx0, K4, hd, Lk, n_q);
-            Vfull = ggml_reshape_3d(ctx0, V4, hd, Lk, n_q);
-        }
-
-        // Flash attention
-        Q = ggml_cont(ctx0, ggml_permute(ctx0, Q, 0, 2, 1, 3));
-
-        float scale = 1.0f / std::sqrt((float)hd);
-        ggml_tensor * attn = ggml_flash_attn_ext(ctx0, Q, Kfull, Vfull, causal_mask,
-                                                  scale, 0.0f, 0.0f);
-        attn = ggml_reshape_2d(ctx0, attn, n_q * hd, n_tokens);
-        attn = ggml_mul_mat(ctx0, b.attn_out_w, attn);
+        // KV-cached GQA self-attention — shared core_attn helper. voxtral4b
+        // uses RoPE n_ctx_orig=0 and the manual-no-cont GQA mode, both of
+        // which diverge from the other models and are therefore per-model
+        // knobs in KvSelfAttnParams.
+        ggml_tensor * attn = core_attn::kv_self_attn(
+            ctx0, gf, cur,
+            b.attn_q_w, b.attn_k_w, b.attn_v_w, b.attn_out_w,
+            /*q_norm_w*/nullptr, /*k_norm_w*/nullptr,
+            positions, causal_mask,
+            ctx->kv_k, ctx->kv_v,
+            il, n_past, kvp);
         cur = ggml_add(ctx0, residual, attn);
 
         // FFN: Post-attention RMSNorm + ada_rms_norm conditioning + SwiGLU

@@ -8,6 +8,7 @@
 #include "granite_speech.h"
 
 #include "core/ffn.h"
+#include "core/attention.h"
 #include "core/mel.h"
 #include "ggml.h"
 #include "ggml-alloc.h"
@@ -1647,7 +1648,6 @@ static ggml_cgraph * granite_build_llm_kv(granite_speech_context * ctx,
     const int n_kv = (int)hp.llm_n_kv_heads;// 4
     const int hd = (int)hp.llm_head_dim;    // 128
     const int n_layers = (int)hp.llm_n_layers;
-    const int vocab = (int)hp.llm_vocab_size;
 
     ggml_init_params ip = { ctx->compute_meta.size(), ctx->compute_meta.data(), true };
     ggml_context * ctx0 = ggml_init(ip);
@@ -1670,6 +1670,20 @@ static ggml_cgraph * granite_build_llm_kv(granite_speech_context * ctx,
     ggml_tensor * cur = ggml_scale(ctx0, embeds, hp.embedding_multiplier);
     ggml_set_name(cur, "emb_scaled");
 
+    const core_attn::KvSelfAttnParams kvp = {
+        /*n_heads*/        n_q,
+        /*n_kv_heads*/     n_kv,
+        /*head_dim*/       hd,
+        /*n_kv_grp*/       n_q / n_kv,
+        /*n_ctx_orig*/     0,
+        /*rope_theta*/     hp.llm_rope_theta,
+        /*rope_beta_fast*/ 0.0f,
+        /*rope_beta_slow*/ 0.0f,
+        /*attn_scale*/     hp.attention_multiplier,  // µP — not 1/sqrt(hd)
+        /*qk_norm_eps*/    0.0f,                      // no Q/K norm
+        /*gqa_mode*/       core_attn::GQA_NATIVE,     // flash-attn handles GQA
+    };
+
     for (int il = 0; il < n_layers; il++) {
         const auto & b = m.llm.blocks[il];
         ggml_tensor * residual = cur;
@@ -1678,53 +1692,16 @@ static ggml_cgraph * granite_build_llm_kv(granite_speech_context * ctx,
         cur = ggml_rms_norm(ctx0, cur, hp.llm_rms_eps);
         cur = ggml_mul(ctx0, cur, b.attn_norm_w);
 
-        // GQA self-attention
-        ggml_tensor * Q = ggml_mul_mat(ctx0, b.attn_q_w, cur);
-        ggml_tensor * K = ggml_mul_mat(ctx0, b.attn_k_w, cur);
-        ggml_tensor * V = ggml_mul_mat(ctx0, b.attn_v_w, cur);
-
-        Q = ggml_reshape_3d(ctx0, Q, hd, n_q, n_tokens);
-        K = ggml_reshape_3d(ctx0, K, hd, n_kv, n_tokens);
-        V = ggml_reshape_3d(ctx0, V, hd, n_kv, n_tokens);
-
-        // RoPE — Granite uses half-rotation (split-half) style like HF rotate_half:
-        // pairs (i, i+dim/2), which maps to GGML_ROPE_TYPE_NEOX (mode=2)
-        Q = ggml_rope_ext(ctx0, Q, positions, nullptr, hd, 2 /*NEOX*/, 0,
-                          hp.llm_rope_theta, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f);
-        K = ggml_rope_ext(ctx0, K, positions, nullptr, hd, 2 /*NEOX*/, 0,
-                          hp.llm_rope_theta, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f);
-
-        // Permute K/V for cache write
-        ggml_tensor * K_perm = ggml_permute(ctx0, K, 0, 2, 1, 3);
-        ggml_tensor * V_perm = ggml_permute(ctx0, V, 0, 2, 1, 3);
-
-        // KV cache write
-        ggml_tensor * k_dst = ggml_view_4d(ctx0, ctx->kv_k, hd, n_tokens, n_kv, 1,
-                                           ctx->kv_k->nb[1], ctx->kv_k->nb[2], ctx->kv_k->nb[3],
-                                           (size_t)il * ctx->kv_k->nb[3] +
-                                           (size_t)n_past * ctx->kv_k->nb[1]);
-        ggml_tensor * v_dst = ggml_view_4d(ctx0, ctx->kv_v, hd, n_tokens, n_kv, 1,
-                                           ctx->kv_v->nb[1], ctx->kv_v->nb[2], ctx->kv_v->nb[3],
-                                           (size_t)il * ctx->kv_v->nb[3] +
-                                           (size_t)n_past * ctx->kv_v->nb[1]);
-        ggml_build_forward_expand(gf, ggml_cpy(ctx0, K_perm, k_dst));
-        ggml_build_forward_expand(gf, ggml_cpy(ctx0, V_perm, v_dst));
-
-        // KV cache read
-        int Lk = n_past + n_tokens;
-        ggml_tensor * Kfull = ggml_cont(ctx0, ggml_view_3d(ctx0, ctx->kv_k, hd, Lk, n_kv,
-                                        ctx->kv_k->nb[1], ctx->kv_k->nb[2],
-                                        (size_t)il * ctx->kv_k->nb[3]));
-        ggml_tensor * Vfull = ggml_cont(ctx0, ggml_view_3d(ctx0, ctx->kv_v, hd, Lk, n_kv,
-                                        ctx->kv_v->nb[1], ctx->kv_v->nb[2],
-                                        (size_t)il * ctx->kv_v->nb[3]));
-
-        // Flash attention with native GQA (n_q=16, n_kv=4)
-        Q = ggml_cont(ctx0, ggml_permute(ctx0, Q, 0, 2, 1, 3));
-        ggml_tensor * attn = ggml_flash_attn_ext(ctx0, Q, Kfull, Vfull, causal_mask,
-                                                  hp.attention_multiplier, 0.0f, 0.0f);
-        attn = ggml_reshape_2d(ctx0, attn, n_q * hd, n_tokens);
-        attn = ggml_mul_mat(ctx0, b.attn_out_w, attn);
+        // KV-cached self-attention. Granite is the one backend that relies
+        // on flash-attn-ext's native GQA path (no manual K/V repeat) and a
+        // µP attention_multiplier scale instead of the usual 1/sqrt(hd).
+        ggml_tensor * attn = core_attn::kv_self_attn(
+            ctx0, gf, cur,
+            b.attn_q_w, b.attn_k_w, b.attn_v_w, b.attn_out_w,
+            /*q_norm_w*/nullptr, /*k_norm_w*/nullptr,
+            positions, causal_mask,
+            ctx->kv_k, ctx->kv_v,
+            il, n_past, kvp);
 
         // μP: residual_multiplier scales the residual addition
         cur = ggml_add(ctx0, residual, ggml_scale(ctx0, attn, hp.residual_multiplier));
