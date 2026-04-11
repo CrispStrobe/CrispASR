@@ -253,11 +253,31 @@ curl -L -o parakeet.gguf \
 
 | Flag | Meaning |
 |---|---|
-| `--vad` / `--vad-model FNAME` | Enable Silero VAD |
+| `--vad` | Enable Silero VAD. Auto-downloads `ggml-silero-v5.1.2.bin` (~885 KB) to `~/.cache/crispasr/` on first use |
+| `--vad-model FNAME` | Override the VAD model path (default: auto) |
 | `-vt F` | VAD threshold (default 0.5) |
 | `-vspd N` | VAD min speech duration (ms, default 250) |
 | `-vsd N` | VAD min silence duration (ms, default 100) |
 | `-ck N`, `--chunk-seconds N` | Fallback chunk size when VAD is off (default 30 s) |
+
+### Sampling / decoding (whisper + LLM backends)
+
+| Flag | Meaning |
+|---|---|
+| `-tp F`, `--temperature F` | Sampling temperature. `0` = pure argmax (default, bit-identical). `> 0` enables multinomial sampling for whisper, voxtral, voxtral4b, qwen3, granite |
+| `-bs N`, `--beam-size N` | Beam search width (whisper only) |
+| `-tpi F`, `--temperature-inc F` | Whisper temperature-fallback increment |
+| `--grammar FNAME` | GBNF grammar file (whisper only, including `--backend whisper`) |
+| `--grammar-rule NAME` | Top-level rule name in the grammar |
+| `--prompt STR` | Initial prompt for whisper |
+
+### Language detection (LID)
+
+| Flag | Meaning |
+|---|---|
+| `-l auto`, `--detect-language` | Auto-detect the input language. Backends without native lang-detect (cohere, canary, granite, voxtral, voxtral4b) get it via the LID pre-step |
+| `--lid-backend NAME` | LID provider: `whisper` (default, ships ggml-tiny.bin), `silero` (placeholder pending native GGUF port), or `off` to disable |
+| `--lid-model FNAME` | Override the LID model path (default: auto-downloads `ggml-tiny.bin` ~75 MB on first use) |
 
 ### LLM-backend specific
 
@@ -266,17 +286,28 @@ curl -L -o parakeet.gguf \
 | `-am FNAME`, `--aligner-model FNAME` | CTC aligner GGUF for word-level timestamps |
 | `-n N`, `--max-new-tokens N` | Max tokens the LLM may generate (default 512) |
 
-### Canary-specific
+### Multi-language / translation
 
 | Flag | Meaning |
 |---|---|
-| `-sl LANG`, `--source-lang LANG` | Source language |
-| `-tl LANG`, `--target-lang LANG` | Target language (set different from `-sl` for translation) |
-| `--no-punctuation` | Disable punctuation and capitalisation in the output |
+| `-sl LANG`, `--source-lang LANG` | Source language (canary) |
+| `-tl LANG`, `--target-lang LANG` | Target language (canary; set different from `-sl` for X→Y translation) |
+| `-tr`, `--translate` | Translate to English (whisper, canary) |
+| `--no-punctuation` | Disable punctuation in the output. Native for cohere/canary, post-processed for everyone else |
 
-### Whisper-only (ignored by other backends)
+### Threading / processors
 
-`-tr`/`--translate`, `-di`/`--diarize`, `-tp`/`--temperature`, `-bs`/`--beam-size`, `--grammar`, `--prompt`, `-dl`/`--detect-language`, `--suppress-regex`, `-dtw`, `-fa`/`-nfa`, `-ng`/`--no-gpu`, and the full list from upstream `whisper-cli --help`.
+| Flag | Meaning |
+|---|---|
+| `-t N`, `--threads N` | Threads per inference call (default `min(4, nproc)`) |
+| `-p N`, `--processors N` | Run N parallel decoder states (whisper only — uses `whisper_full_parallel`) |
+| `--no-gpu` / `--device N` | Disable GPU or pin to GPU N |
+
+### Whisper-only flags
+
+These work both with the historical default whisper code path AND with `--backend whisper`. The historical path retains a few extras unique to it (`-owts` karaoke, full-mode JSON DTW tokens, `-di` stereo diarize) — pass a `ggml-*.bin` model without `--backend` to get them.
+
+`--diarize`, `-tdrz`/`--tinydiarize`, `--carry-initial-prompt`, `-dtw`, `-fa`/`-nfa`, `-suppress-regex`, `-suppress-nst`, and the full upstream `whisper-cli --help` list.
 
 ---
 
@@ -285,15 +316,16 @@ curl -L -o parakeet.gguf \
 Every non-whisper backend uses the Silero VAD model to pre-slice long audio into speech segments, transcribe each slice, and re-stitch the output with absolute timestamps. Whisper handles VAD internally via `wparams.vad`.
 
 ```bash
-# Download Silero VAD once (~0.7 MB)
-./models/download-ggml-model.sh silero-vad
-
+# Just pass --vad — the model is auto-downloaded on first use
 ./build/bin/crispasr --backend parakeet -m parakeet.gguf -f long_audio.wav \
-    --vad-model ggml-silero-vad.bin \
-    -osrt
+    --vad -osrt
+
+# Or point at an existing GGUF
+./build/bin/crispasr --backend parakeet -m parakeet.gguf -f long_audio.wav \
+    --vad-model ~/models/ggml-silero-v5.1.2.bin -osrt
 ```
 
-If you don't provide a VAD model, CrispASR falls back to fixed 30-second chunking (configurable via `-ck`). Encoder cost is O(T²) in the frame count, so for multi-minute audio you really want VAD.
+The cached model lives at `~/.cache/crispasr/ggml-silero-v5.1.2.bin` (~885 KB). If you don't provide `--vad`, CrispASR falls back to fixed 30-second chunking (configurable via `-ck`). Encoder cost is O(T²) in the frame count, so for multi-minute audio you really want VAD.
 
 ---
 
