@@ -37,6 +37,7 @@ public:
              | CAP_SRC_TGT_LANGUAGE
              | CAP_PUNCTUATION_TOGGLE
              | CAP_FLASH_ATTN
+             | CAP_TEMPERATURE
              | CAP_AUTO_DOWNLOAD;
     }
 
@@ -62,6 +63,9 @@ public:
     {
         std::vector<crispasr_segment> out;
         if (!ctx_) return out;
+
+        // Sticky decode-time sampling controls.
+        canary_set_temperature(ctx_, params.temperature, /*seed=*/0);
 
         // Resolve src/tgt language with the fallback chain:
         //   source_lang -> language

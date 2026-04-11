@@ -43,6 +43,12 @@ int         cohere_n_vocab(struct cohere_context * ctx);
 const char* cohere_token_to_str(struct cohere_context * ctx, int token_id);
 int         cohere_str_to_token(struct cohere_context * ctx, const char * str);
 
+// Sampling: temperature > 0 enables stable softmax sampling in the
+// transformer decoder. Default 0 keeps the bit-identical greedy path.
+// Sticky on the context until the next call.
+void        cohere_set_temperature(struct cohere_context * ctx,
+                                   float temperature, uint64_t seed);
+
 // ---- Extended API: per-token confidence and timing ----
 
 // Per-token data returned by cohere_transcribe_ex().

@@ -89,6 +89,12 @@ int         canary_n_vocab    (struct canary_context * ctx);
 const char* canary_token_to_str(struct canary_context * ctx, int token_id);
 int         canary_str_to_token(struct canary_context * ctx, const char * str);
 
+// Sampling: temperature > 0 makes the decoder sample over the per-step
+// softmax instead of argmax. Default 0 keeps the bit-identical greedy
+// path. Sticky on the context until the next call.
+void        canary_set_temperature(struct canary_context * ctx,
+                                   float temperature, uint64_t seed);
+
 // Hyper-parameters
 int         canary_frame_dur_cs(struct canary_context * ctx);
 int         canary_n_mels      (struct canary_context * ctx);

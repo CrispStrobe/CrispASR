@@ -31,6 +31,7 @@
 #include <cassert>
 #include <cmath>
 #include <cstdio>
+#include <random>
 #include <cstdlib>
 #include <cstring>
 #include <fcntl.h>
@@ -207,6 +208,13 @@ struct parakeet_context {
     parakeet_joint_weights     joint_w;
 
     int n_threads = 4;
+
+    // Decode-time sampling controls. Default temperature == 0 keeps the
+    // bit-identical pure-argmax path; > 0 switches the TDT decoder over
+    // to numerically-stable softmax sampling on the vocab+blank logits.
+    // Set via parakeet_set_temperature(); the field is sticky on the ctx.
+    float    decode_temperature = 0.0f;
+    uint64_t decode_seed        = 0;
 };
 
 // ---------------------------------------------------------------------------
@@ -1110,6 +1118,14 @@ parakeet_tdt_decode(parakeet_context * ctx,
     std::vector<float> proj_e(J.joint_hidden);
     std::vector<float> logits(J.vocab_total);
 
+    // Sampling state — only touched when ctx->decode_temperature > 0.
+    // We initialize unconditionally because seeding a mt19937_64 is
+    // cheap, and keeping it outside the inner loop preserves the same
+    // RNG sequence for the whole utterance.
+    const bool sampling = ctx->decode_temperature > 0.0f;
+    std::mt19937_64 rng(ctx->decode_seed != 0 ? ctx->decode_seed
+                        : (uint64_t)std::random_device{}());
+
     int t = 0;
     while (t < T_enc) {
         joint_proj_enc(J, enc + (size_t)t * d_model, proj_e);
@@ -1118,11 +1134,37 @@ parakeet_tdt_decode(parakeet_context * ctx,
         while (n_inner < max_per_step) {
             joint_step(J, proj_e.data(), pred_out.data(), logits);
 
-            // Argmax over the vocab+blank logits
+            // Argmax (default) or temperature sample over the vocab+blank
+            // logits. The duration logits are picked separately by argmax
+            // either way — they're trained as a 5-way classifier and
+            // sampling them would just inject random latency without any
+            // quality benefit.
             int   tok    = 0;
             float tok_lp = logits[0];
             for (int v = 1; v < n_vocab_blk; v++) {
                 if (logits[v] > tok_lp) { tok_lp = logits[v]; tok = v; }
+            }
+            if (sampling) {
+                // Numerically-stable softmax over the n_vocab_blk
+                // half of the joint logits, then inverse-CDF sample.
+                const float inv_t = 1.0f / ctx->decode_temperature;
+                std::vector<double> pr((size_t)n_vocab_blk);
+                double sum = 0.0;
+                for (int v = 0; v < n_vocab_blk; v++) {
+                    const double e = std::exp((double)((logits[v] - tok_lp) * inv_t));
+                    pr[(size_t)v] = e;
+                    sum += e;
+                }
+                if (sum > 0.0) {
+                    std::uniform_real_distribution<double> unif(0.0, sum);
+                    const double rr = unif(rng);
+                    double acc = 0.0;
+                    for (int v = 0; v < n_vocab_blk; v++) {
+                        acc += pr[(size_t)v];
+                        if (rr <= acc) { tok = v; break; }
+                    }
+                    tok_lp = logits[tok];
+                }
             }
 
             // Argmax over the duration logits (last n_dur entries)
@@ -1243,6 +1285,13 @@ extern std::vector<float> parakeet_encode_mel(parakeet_context * ctx,
                                               int * out_T_enc);
 
 // ---- Stage-level entry points for crispasr-diff ----
+
+extern "C" void parakeet_set_temperature(struct parakeet_context * ctx,
+                                         float temperature, uint64_t seed) {
+    if (!ctx) return;
+    ctx->decode_temperature = temperature;
+    ctx->decode_seed        = seed;
+}
 
 extern "C" float * parakeet_compute_mel(struct parakeet_context * ctx,
                                         const float * samples, int n_samples,

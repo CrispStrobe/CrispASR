@@ -84,6 +84,14 @@ int         parakeet_n_vocab    (struct parakeet_context * ctx);
 int         parakeet_blank_id   (struct parakeet_context * ctx);
 const char* parakeet_token_to_str(struct parakeet_context * ctx, int token_id);
 
+// Sampling: when temperature > 0, the TDT decoder draws each non-blank
+// token via stable-softmax(logits / temperature) instead of argmax.
+// Temperature == 0 (the default) keeps the bit-identical pure-greedy
+// path. Set per-call as needed; the setting is sticky on the context
+// until the next call. seed == 0 means time-based RNG.
+void        parakeet_set_temperature(struct parakeet_context * ctx,
+                                     float temperature, uint64_t seed);
+
 // Hyper-parameters needed by callers (frame duration for stamping etc.)
 int         parakeet_frame_dur_cs(struct parakeet_context * ctx);  // centiseconds per encoder frame
 int         parakeet_n_mels      (struct parakeet_context * ctx);

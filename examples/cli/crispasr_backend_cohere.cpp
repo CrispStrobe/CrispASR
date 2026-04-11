@@ -33,6 +33,7 @@ public:
              | CAP_DIARIZE
              | CAP_PUNCTUATION_TOGGLE
              | CAP_FLASH_ATTN
+             | CAP_TEMPERATURE
              | CAP_AUTO_DOWNLOAD;
     }
 
@@ -60,6 +61,9 @@ public:
     {
         std::vector<crispasr_segment> out;
         if (!ctx_) return out;
+
+        // Sticky decode-time sampling controls.
+        cohere_set_temperature(ctx_, params.temperature, /*seed=*/0);
 
         cohere_result * r = cohere_transcribe_ex(
             ctx_, samples, n_samples,

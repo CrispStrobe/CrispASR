@@ -40,6 +40,7 @@
 #include <cstring>
 #include <fcntl.h>
 #include <map>
+#include <random>
 #include <string>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -205,6 +206,12 @@ struct canary_context {
     std::vector<std::vector<float>> step_attn;
 
     int n_threads = 4;
+
+    // Sticky decode-time sampling controls. temperature == 0 keeps the
+    // bit-identical greedy path; > 0 switches to numerically-stable
+    // softmax sampling. Set via canary_set_temperature().
+    float    decode_temperature = 0.0f;
+    uint64_t decode_seed        = 0;
 };
 
 // ===========================================================================
@@ -1266,6 +1273,13 @@ extern "C" void canary_result_free(struct canary_result * r) {
     free(r);
 }
 
+extern "C" void canary_set_temperature(struct canary_context * ctx,
+                                       float temperature, uint64_t seed) {
+    if (!ctx) return;
+    ctx->decode_temperature = temperature;
+    ctx->decode_seed        = seed;
+}
+
 extern "C" int canary_n_vocab    (struct canary_context * ctx) { return (int)ctx->model.hparams.vocab_size; }
 extern "C" int canary_n_mels     (struct canary_context * ctx) { return (int)ctx->model.hparams.n_mels; }
 extern "C" int canary_sample_rate(struct canary_context * ctx) { return (int)ctx->model.hparams.sample_rate; }
@@ -1369,6 +1383,10 @@ extern "C" struct canary_result * canary_transcribe_ex(
 
     std::vector<int>   generated = prompt;
     std::vector<float> emitted_p;               // softmax prob per generated non-prompt token
+
+    const bool sampling = ctx->decode_temperature > 0.0f;
+    std::mt19937_64 rng(ctx->decode_seed != 0 ? ctx->decode_seed
+                        : (uint64_t)std::random_device{}());
     int offset = 0;
 
     if (ctx->params.verbosity >= 2) {
@@ -1384,11 +1402,32 @@ extern "C" struct canary_result * canary_transcribe_ex(
     offset = (int)prompt.size();
 
     for (int step = 0; step < max_steps && offset < max_ctx - 1; step++) {
-        // Argmax
+        // Argmax (default) or temperature sample
         int best = 0;
         float best_lp = logits[0];
         for (int v = 1; v < (int)logits.size(); v++) {
             if (logits[v] > best_lp) { best_lp = logits[v]; best = v; }
+        }
+        if (sampling) {
+            const int V = (int)logits.size();
+            const float inv_t = 1.0f / ctx->decode_temperature;
+            std::vector<double> pr((size_t)V);
+            double sum = 0.0;
+            for (int v = 0; v < V; v++) {
+                const double e = std::exp((double)((logits[v] - best_lp) * inv_t));
+                pr[(size_t)v] = e;
+                sum += e;
+            }
+            if (sum > 0.0) {
+                std::uniform_real_distribution<double> unif(0.0, sum);
+                const double rr = unif(rng);
+                double acc = 0.0;
+                for (int v = 0; v < V; v++) {
+                    acc += pr[(size_t)v];
+                    if (rr <= acc) { best = v; break; }
+                }
+                best_lp = logits[best];
+            }
         }
         if (ctx->params.verbosity >= 2 && step < 30) {
             const char * pc = (best >= 0 && best < (int)ctx->vocab.id_to_token.size())

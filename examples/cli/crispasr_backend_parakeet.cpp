@@ -29,6 +29,7 @@ public:
              | CAP_FLASH_ATTN
              | CAP_LANGUAGE_DETECT
              | CAP_PUNCTUATION_TOGGLE
+             | CAP_TEMPERATURE
              | CAP_AUTO_DOWNLOAD;
     }
 
@@ -50,10 +51,17 @@ public:
     std::vector<crispasr_segment> transcribe(
         const float * samples, int n_samples,
         int64_t t_offset_cs,
-        const whisper_params & /*params*/) override
+        const whisper_params & params) override
     {
         std::vector<crispasr_segment> out;
         if (!ctx_) return out;
+
+        // Sticky per-call sampling state. The setter just stores the
+        // value on the parakeet_context, so subsequent transcribe calls
+        // re-pick it up. We zero it on the first temp==0 call so a user
+        // who toggles --temperature back off doesn't keep the previous
+        // sampling state from a prior file.
+        parakeet_set_temperature(ctx_, params.temperature, /*seed=*/0);
 
         parakeet_result * r = parakeet_transcribe_ex(
             ctx_, samples, n_samples, t_offset_cs);

@@ -27,6 +27,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <map>
+#include <random>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -478,6 +479,12 @@ struct cohere_context {
 
     // Performance counters (reset at start of each cohere_transcribe())
     cohere_perf perf;
+
+    // Sticky decode-time sampling. temperature == 0 (default) keeps
+    // the bit-identical greedy path; > 0 switches the transformer
+    // decoder over to numerically-stable softmax sampling.
+    float    decode_temperature = 0.0f;
+    uint64_t decode_seed        = 0;
 };
 
 static void cohere_log_tensor(const char * name, const struct ggml_tensor * t);
@@ -2041,9 +2048,13 @@ struct cohere_result * cohere_transcribe_ex(struct cohere_context * ctx,
         ggml_backend_sched_reserve(ctx->ggml_alloc, gf_max);
     }
 
-    // Greedy decode
+    // Greedy / temperature-sampled decode
     std::vector<int>   generated;
     std::vector<float> gen_probs;
+    const bool sampling = ctx->decode_temperature > 0.0f;
+    std::mt19937_64 rng(ctx->decode_seed != 0 ? ctx->decode_seed
+                        : (uint64_t)std::random_device{}());
+
     for (int step = 0; step < max_gen; step++) {
         const int vocab = hp.vocab_size;
         const float * last_logits = (step == 0)
@@ -2052,11 +2063,51 @@ struct cohere_result * cohere_transcribe_ex(struct cohere_context * ctx,
 
         int next_tok = (int)(std::max_element(last_logits, last_logits + vocab) - last_logits);
 
-        // Numerically-stable softmax probability of chosen token
+        // Numerically-stable softmax probability of (initially) the
+        // argmax token. We compute the partition function once per
+        // step regardless of which path we take, because we need
+        // the per-token probability for the gen_probs vector either
+        // way.
         float max_l = last_logits[next_tok];
-        float sum_e = 0.0f;
-        for (int v = 0; v < vocab; v++) sum_e += expf(last_logits[v] - max_l);
-        float tok_p = 1.0f / sum_e;
+        double sum_e = 0.0;
+        for (int v = 0; v < vocab; v++) sum_e += std::exp((double)(last_logits[v] - max_l));
+        float tok_p = (float)(1.0 / sum_e);
+
+        if (sampling) {
+            // Re-do the partition with logits/T instead of logits.
+            const float inv_t = 1.0f / ctx->decode_temperature;
+            float max_lt = last_logits[0] * inv_t;
+            for (int v = 1; v < vocab; v++) {
+                const float s = last_logits[v] * inv_t;
+                if (s > max_lt) max_lt = s;
+            }
+            std::vector<double> pr((size_t)vocab);
+            double sum_t = 0.0;
+            for (int v = 0; v < vocab; v++) {
+                const double e = std::exp((double)(last_logits[v] * inv_t - max_lt));
+                pr[(size_t)v] = e;
+                sum_t += e;
+            }
+            if (sum_t > 0.0) {
+                std::uniform_real_distribution<double> unif(0.0, sum_t);
+                const double rr = unif(rng);
+                double acc = 0.0;
+                for (int v = 0; v < vocab; v++) {
+                    acc += pr[(size_t)v];
+                    if (rr <= acc) { next_tok = v; break; }
+                }
+                // Recompute the unsoftened probability of the
+                // newly-picked token so the JSON-full output reflects
+                // the model's actual confidence in it, not the
+                // temperature-warped value.
+                max_l = last_logits[next_tok];
+                sum_e = 0.0;
+                for (int v = 0; v < vocab; v++) {
+                    sum_e += std::exp((double)(last_logits[v] - max_l));
+                }
+                tok_p = (float)(1.0 / sum_e);
+            }
+        }
 
         COHERE_VLOG2(vb, "cohere: step %3d  tok=%5d  p=%.3f  %s\n",
                 step, next_tok, tok_p,
@@ -2310,6 +2361,13 @@ void cohere_result_free(struct cohere_result * r) {
     free(r->text);
     free(r->tokens);
     free(r);
+}
+
+void cohere_set_temperature(struct cohere_context * ctx,
+                            float temperature, uint64_t seed) {
+    if (!ctx) return;
+    ctx->decode_temperature = temperature;
+    ctx->decode_seed        = seed;
 }
 
 char * cohere_transcribe(struct cohere_context * ctx,
