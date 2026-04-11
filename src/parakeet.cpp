@@ -1070,9 +1070,10 @@ static void parakeet_init_joint_weights(parakeet_context * ctx) {
 // ===========================================================================
 
 struct parakeet_emitted_token {
-    int  id;
-    int  t_start;   // encoder frame at emission
-    int  t_end;     // emission + duration
+    int   id;
+    int   t_start;   // encoder frame at emission
+    int   t_end;     // emission + duration
+    float p;         // softmax probability of the emitted token [0, 1]
 };
 
 static std::vector<parakeet_emitted_token>
@@ -1141,9 +1142,22 @@ parakeet_tdt_decode(parakeet_context * ctx,
                 break;
             }
 
+            // Softmax probability of the picked token, scoped to the
+            // vocab+blank half of the joint logits (the duration logits
+            // are a separate softmax). Numerically stable: subtract the
+            // per-row max before exponentiating.
+            float tok_p = 1.0f;
+            {
+                double sum = 0.0;
+                for (int v = 0; v < n_vocab_blk; v++) {
+                    sum += std::exp((double)(logits[v] - tok_lp));
+                }
+                tok_p = sum > 0.0 ? (float)(1.0 / sum) : 0.0f;
+            }
+
             // Real token: emit and advance the predictor
             int t_end = std::min(T_enc, t + std::max(0, dur_skip));
-            emitted.push_back({tok, t, t_end});
+            emitted.push_back({tok, t, t_end, tok_p});
             predictor_step(W, tok, state, pred_out);
 
             // Advance encoder frame by the predicted duration (≥ 0). If 0,
@@ -1351,6 +1365,7 @@ extern "C" struct parakeet_result * parakeet_transcribe_ex(
         td.id  = e.id;
         td.t0  = t_offset_cs + (int64_t)e.t_start * frame_dur_cs;
         td.t1  = t_offset_cs + (int64_t)e.t_end   * frame_dur_cs;
+        td.p   = e.p;
         size_t n = std::min(vis.size(), sizeof(td.text) - 1);
         memcpy(td.text, vis.data(), n);
         td.text[n] = '\0';

@@ -40,6 +40,7 @@ struct parakeet_token_data {
     char    text[48];  // decoded text (SentencePiece '▁' converted to ' ')
     int64_t t0;        // start time, centiseconds (absolute, includes t_offset_cs)
     int64_t t1;        // end time,   centiseconds (start + duration*frame_dur_cs)
+    float   p;         // softmax probability of the emitted token [0,1]
 };
 
 // Word-level data: sub-word tokens grouped at SentencePiece '▁' boundaries.

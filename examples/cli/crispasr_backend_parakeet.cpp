@@ -25,6 +25,7 @@ public:
     uint32_t capabilities() const override {
         return CAP_TIMESTAMPS_NATIVE
              | CAP_WORD_TIMESTAMPS
+             | CAP_TOKEN_CONFIDENCE
              | CAP_FLASH_ATTN
              | CAP_LANGUAGE_DETECT
              | CAP_PUNCTUATION_TOGGLE
@@ -74,15 +75,16 @@ public:
             seg.words.push_back(std::move(cw));
         }
 
-        // Tokens (sub-word pieces with their own timing)
+        // Tokens (sub-word pieces with their own timing + softmax confidence)
         seg.tokens.reserve(r->n_tokens);
         for (int i = 0; i < r->n_tokens; i++) {
             const auto & t = r->tokens[i];
             crispasr_token ct;
-            ct.text = t.text;
-            ct.id   = t.id;
-            ct.t0   = t.t0;
-            ct.t1   = t.t1;
+            ct.text       = t.text;
+            ct.id         = t.id;
+            ct.t0         = t.t0;
+            ct.t1         = t.t1;
+            ct.confidence = t.p;
             seg.tokens.push_back(std::move(ct));
         }
 
