@@ -81,6 +81,18 @@ const char * granite_speech_token_text(struct granite_speech_context * ctx, int 
 char * granite_speech_decode_tokens(struct granite_speech_context * ctx,
                                      const int32_t * ids, int n_ids);
 
+// Tokenize a UTF-8 text string into vocab IDs using the granite GPT-2-style
+// byte-level BPE encoder. The result is a malloc'd int32 array of length
+// `*out_n`; the caller owns it and must free() it. Returns NULL on failure.
+//
+// Requires the GGUF to include `tokenizer.ggml.merges` (the newer
+// models/convert-granite-speech-to-gguf.py writes them; older GGUFs only
+// had `tokenizer.ggml.tokens`). When merges are missing the helper still
+// works for text that maps to single vocab entries, but it can't merge
+// sub-words and falls back to per-byte tokens for unknown sequences.
+int32_t * granite_speech_tokenize(struct granite_speech_context * ctx,
+                                  const char * text, int * out_n);
+
 #ifdef __cplusplus
 }
 #endif

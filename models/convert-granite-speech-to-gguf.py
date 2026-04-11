@@ -311,6 +311,23 @@ def convert(input_dir: Path, out_path: Path) -> None:
         writer.add_array("tokenizer.ggml.tokens", tokens)
         print(f"  tokenizer: {len(tokens)} tokens")
 
+    # BPE merges — required by the C++ encoder side (granite_speech_tokenize)
+    # for arbitrary text input. Older converted GGUFs will lack this key
+    # and the C++ side falls back gracefully (single-token vocab lookup
+    # only). Format: each line is "left right" — exactly the same content
+    # as the original merges.txt minus the leading "#version" comment.
+    merges_path = input_dir / "merges.txt"
+    if merges_path.exists():
+        with open(merges_path, encoding="utf-8") as f:
+            merges = []
+            for line in f:
+                line = line.rstrip("\n")
+                if not line or line.startswith("#"):
+                    continue
+                merges.append(line)
+        writer.add_array("tokenizer.ggml.merges", merges)
+        print(f"  merges:    {len(merges)} BPE merges")
+
     # Mel filterbank (80 bins)
     mel_filters = build_htk_mel_filters(sr=16000, n_fft=512, n_mels=80)
     writer.add_tensor("audio.mel_filters", mel_filters)

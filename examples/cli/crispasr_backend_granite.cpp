@@ -50,7 +50,8 @@ public:
 
     uint32_t capabilities() const override {
         return CAP_TIMESTAMPS_CTC | CAP_AUTO_DOWNLOAD | CAP_TEMPERATURE
-             | CAP_PUNCTUATION_TOGGLE | CAP_FLASH_ATTN | CAP_TOKEN_CONFIDENCE;
+             | CAP_PUNCTUATION_TOGGLE | CAP_FLASH_ATTN | CAP_TOKEN_CONFIDENCE
+             | CAP_TRANSLATE | CAP_SRC_TGT_LANGUAGE;
     }
 
     bool init(const whisper_params & p) override {
@@ -102,12 +103,54 @@ public:
         }
 
         // ---- Build prompt: [prefix] + [audio placeholders] + [suffix] ----
-        const int total_prompt = kNumPrefix + N_proj + kNumSuffix;
+        // Default suffix is the hardcoded "can you transcribe..." prompt
+        // tokenized once at dev time. For --translate we re-tokenize an
+        // alternative suffix at runtime via granite_speech_tokenize().
+        // Falls back gracefully when the GGUF predates the merges-table
+        // commit (we keep the original suffix and warn).
+        std::vector<int32_t> suffix_ids;
+        if (params.translate) {
+            auto iso_to_eng = [](const std::string & c) -> std::string {
+                if (c == "en") return "English";
+                if (c == "de") return "German";
+                if (c == "fr") return "French";
+                if (c == "es") return "Spanish";
+                if (c == "it") return "Italian";
+                if (c == "pt") return "Portuguese";
+                if (c == "ru") return "Russian";
+                if (c == "ja") return "Japanese";
+                if (c == "zh") return "Chinese";
+                return c;
+            };
+            const std::string tgt = params.target_lang.empty()
+                                  ? std::string("English")
+                                  : iso_to_eng(params.target_lang);
+            const std::string instr =
+                "can you translate the speech to " + tgt + "?\n ASSISTANT:";
+            int n_tok = 0;
+            int32_t * arr = granite_speech_tokenize(ctx_, instr.c_str(), &n_tok);
+            if (arr && n_tok > 0) {
+                suffix_ids.assign(arr, arr + n_tok);
+                free(arr);
+            } else {
+                fprintf(stderr,
+                        "crispasr[granite]: tokenize failed (re-convert with the "
+                        "newer models/convert-granite-speech-to-gguf.py to enable "
+                        "--translate); falling back to plain transcribe\n");
+            }
+        }
+
+        const int n_suffix = suffix_ids.empty() ? kNumSuffix : (int)suffix_ids.size();
+        const int total_prompt = kNumPrefix + N_proj + n_suffix;
         std::vector<int32_t> prompt_ids;
         prompt_ids.reserve(total_prompt);
         for (int i = 0; i < kNumPrefix; i++) prompt_ids.push_back(kPrefix[i]);
         for (int i = 0; i < N_proj; i++)    prompt_ids.push_back(kAudioTok);
-        for (int i = 0; i < kNumSuffix; i++) prompt_ids.push_back(kSuffix[i]);
+        if (suffix_ids.empty()) {
+            for (int i = 0; i < kNumSuffix; i++) prompt_ids.push_back(kSuffix[i]);
+        } else {
+            for (int i = 0; i < n_suffix; i++) prompt_ids.push_back(suffix_ids[i]);
+        }
 
         float * all_embeds = granite_speech_embed_tokens(ctx_, prompt_ids.data(), total_prompt);
         if (!all_embeds) {
