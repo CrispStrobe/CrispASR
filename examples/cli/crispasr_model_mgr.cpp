@@ -32,6 +32,13 @@ struct registry_entry {
 };
 
 constexpr registry_entry k_registry[] = {
+    // Whisper base.en (default for the unified --backend whisper path).
+    // Users who want a different size / language can either pass an
+    // explicit path or fall back to the historical whisper-cli flow on
+    // their own .bin files.
+    { "whisper", "ggml-base.en.bin",
+      "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin",
+      "~147 MB" },
     // Parakeet TDT 0.6B v3 quantised
     { "parakeet", "parakeet-tdt-0.6b-v3-q4_k.gguf",
       "https://huggingface.co/cstr/parakeet-tdt-0.6b-v3-GGUF/resolve/main/parakeet-tdt-0.6b-v3-q4_k.gguf",

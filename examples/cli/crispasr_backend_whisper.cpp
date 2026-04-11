@@ -25,6 +25,7 @@
 #include "crispasr_backend.h"
 #include "whisper_params.h"
 
+#include "grammar-parser.h"  // grammar_parser::parse_state::c_rules()
 #include "whisper.h"
 
 #include <cstdio>
@@ -44,10 +45,11 @@ public:
     uint32_t capabilities() const override {
         // What this wrapper can actually deliver when driven by
         // crispasr_run_backend. Features exclusive to the historical
-        // cli.cpp path (WTS, JSON-full with DTW, grammar, n_processors,
-        // whisper-internal VAD) are intentionally omitted; users who need
-        // them should run without --backend on a ggml-*.bin file, which
-        // keeps the byte-identical historical path.
+        // cli.cpp path (WTS, JSON-full with DTW, n_processors,
+        // whisper-internal VAD, stereo diarize) are intentionally
+        // omitted; users who need them should run without --backend on
+        // a ggml-*.bin file, which keeps the byte-identical historical
+        // path.
         return CAP_TIMESTAMPS_NATIVE
              | CAP_WORD_TIMESTAMPS
              | CAP_TOKEN_CONFIDENCE
@@ -55,7 +57,9 @@ public:
              | CAP_TRANSLATE
              | CAP_TEMPERATURE
              | CAP_BEAM_SEARCH
-             | CAP_FLASH_ATTN;
+             | CAP_GRAMMAR
+             | CAP_FLASH_ATTN
+             | CAP_AUTO_DOWNLOAD;
     }
 
     bool init(const whisper_params & p) override {
@@ -117,6 +121,31 @@ public:
         wp.suppress_nst     = p.suppress_nst;
 
         wp.no_timestamps    = p.no_timestamps;
+
+        // Grammar. When the user passed --grammar + --grammar-rule, the CLI
+        // has already parsed the GBNF and stashed it in params.grammar_parsed.
+        // Convert to whisper's C interface and hand it through. The
+        // grammar_rules vector must outlive whisper_full, so it lives here
+        // on the stack frame of transcribe(), not inside an if block.
+        std::vector<const whisper_grammar_element *> grammar_rules;
+        const bool use_grammar = (!p.grammar_parsed.rules.empty() &&
+                                  !p.grammar_rule.empty());
+        if (use_grammar) {
+            grammar_rules = p.grammar_parsed.c_rules();
+            auto it = p.grammar_parsed.symbol_ids.find(p.grammar_rule);
+            if (it != p.grammar_parsed.symbol_ids.end()) {
+                wp.grammar_rules    = grammar_rules.data();
+                wp.n_grammar_rules  = grammar_rules.size();
+                wp.i_start_rule     = it->second;
+                wp.grammar_penalty  = p.grammar_penalty;
+                // Beam search is required for grammar-constrained decoding.
+                wp.strategy = WHISPER_SAMPLING_BEAM_SEARCH;
+            } else {
+                fprintf(stderr,
+                        "crispasr[whisper]: grammar rule '%s' not found — ignoring\n",
+                        p.grammar_rule.c_str());
+            }
+        }
 
         if (whisper_full(ctx_, wp, samples, n_samples) != 0) {
             fprintf(stderr, "crispasr[whisper]: whisper_full failed\n");
