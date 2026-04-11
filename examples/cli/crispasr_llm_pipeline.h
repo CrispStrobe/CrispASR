@@ -25,6 +25,7 @@
 
 #include "crispasr_backend.h"
 #include "whisper_params.h"
+#include "core/greedy_decode.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -160,28 +161,18 @@ std::vector<crispasr_segment> crispasr_run_voxtral_style_pipeline(
     }
     free(logits);
 
-    // ---- Greedy decode loop ----
-    const int max_new = params.max_new_tokens > 0 ? params.max_new_tokens : 512;
-    std::vector<int32_t> gen;
-    gen.reserve(max_new);
-    gen.push_back(next);
-
-    int n_past = T_prompt;
-    while ((int)gen.size() < max_new && gen.back() != Ops::eos_id) {
-        int32_t last = gen.back();
-        float * tail = Ops::embed_tokens(ctx, &last, 1);
-        if (!tail) break;
-        float * lg = Ops::run_llm_kv(ctx, tail, 1, n_past, nullptr, nullptr);
-        free(tail);
-        if (!lg) break;
-        n_past++;
-
-        int nx = 0;
-        float mx = -1e30f;
-        for (int k = 0; k < vocab; k++) if (lg[k] > mx) { mx = lg[k]; nx = k; }
-        free(lg);
-        gen.push_back(nx);
-    }
+    // ---- Greedy decode loop (shared src/core/greedy_decode.h) ----
+    core_greedy_decode::Config dec_cfg;
+    dec_cfg.max_new_tokens = params.max_new_tokens > 0 ? params.max_new_tokens : 512;
+    dec_cfg.eos_id         = Ops::eos_id;
+    dec_cfg.vocab_size     = vocab;
+    auto gen = core_greedy_decode::run(
+        ctx,
+        /*first_token=*/next,
+        /*initial_n_past=*/T_prompt,
+        Ops::embed_tokens,
+        Ops::run_llm_kv,
+        dec_cfg);
 
     // ---- Detokenize ----
     std::string transcript;

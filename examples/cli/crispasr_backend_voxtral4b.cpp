@@ -18,6 +18,7 @@
 
 #include "crispasr_backend.h"
 #include "whisper_params.h"
+#include "core/greedy_decode.h"
 
 #include "voxtral4b.h"
 
@@ -142,39 +143,36 @@ public:
         }
         free(logits);
 
-        // ---- Streaming decode: add next adapter frame to each tail embed ----
+        // ---- Streaming decode via src/core/greedy_decode.h ----
+        // The 4B-Realtime variant is a "streaming" audio-LLM: on every
+        // decode step we add the next adapter frame to the tail
+        // embedding BEFORE the forward pass, and we stop the loop when
+        // we run out of adapter frames. That's what the pre-forward
+        // hook is for.
         constexpr int EOS = 2;
-        const int max_new = params.max_new_tokens > 0 ? params.max_new_tokens : 512;
-        std::vector<int32_t> gen;
-        gen.reserve(max_new);
-        gen.push_back(next);
-
-        int n_past      = T_prompt;
         int adapter_pos = T_prompt;
-
-        while ((int)gen.size() < max_new && gen.back() != EOS && adapter_pos < N_enc) {
-            int32_t last = gen.back();
-            float * tail = voxtral4b_embed_tokens(ctx_, &last, 1);
-            if (!tail) break;
-
-            if (adapter_pos < N_enc) {
-                for (int j = 0; j < pdim; j++) {
-                    tail[j] += audio_embeds[(size_t)adapter_pos * pdim + j];
-                }
+        auto pre_hook = [&](int /*step*/, float * tail) -> bool {
+            if (adapter_pos >= N_enc) return false;  // audio exhausted
+            for (int j = 0; j < pdim; j++) {
+                tail[j] += audio_embeds[(size_t)adapter_pos * pdim + j];
             }
-
-            float * lg = voxtral4b_run_llm_kv(ctx_, tail, 1, n_past, nullptr, nullptr);
-            free(tail);
-            if (!lg) break;
-            n_past++;
             adapter_pos++;
+            return true;
+        };
 
-            int nx = 0;
-            float mx = -1e30f;
-            for (int k = 0; k < vocab; k++) if (lg[k] > mx) { mx = lg[k]; nx = k; }
-            free(lg);
-            gen.push_back(nx);
-        }
+        core_greedy_decode::Config dec_cfg;
+        dec_cfg.max_new_tokens = params.max_new_tokens > 0 ? params.max_new_tokens : 512;
+        dec_cfg.eos_id         = EOS;
+        dec_cfg.vocab_size     = vocab;
+        auto gen = core_greedy_decode::run(
+            ctx_,
+            /*first_token=*/next,
+            /*initial_n_past=*/T_prompt,
+            voxtral4b_embed_tokens,
+            voxtral4b_run_llm_kv,
+            pre_hook,
+            dec_cfg);
+
         free(audio_embeds);
 
         // ---- Detokenize, filtering streaming control tokens (id < 1000) ----

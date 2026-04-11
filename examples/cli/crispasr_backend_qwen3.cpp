@@ -14,6 +14,7 @@
 
 #include "crispasr_backend.h"
 #include "whisper_params.h"
+#include "core/greedy_decode.h"
 
 #include "qwen3_asr.h"
 
@@ -200,7 +201,7 @@ public:
         }
         free(logits);
 
-        // ---- Greedy decode ----
+        // ---- Greedy decode via src/core/greedy_decode.h ----
         // Qwen3 EOS tokens: <|im_end|> (id unknown — look up via tokenize).
         int eos_id = -1;
         int n_eos = 0;
@@ -208,29 +209,17 @@ public:
         if (eos_arr && n_eos >= 1) eos_id = eos_arr[0];
         free(eos_arr);
 
-        const int max_new = params.max_new_tokens > 0 ? params.max_new_tokens : 256;
-        std::vector<int32_t> gen;
-        gen.reserve(max_new);
-        gen.push_back(next);
-
-        int n_past = (int)ids.size();
-        while ((int)gen.size() < max_new && gen.back() != eos_id) {
-            int32_t last = gen.back();
-            float * emb = qwen3_asr_embed_tokens(ctx_, &last, 1);
-            if (!emb) break;
-            float * lg = qwen3_asr_run_llm_kv(ctx_, emb, 1, n_past, nullptr, nullptr);
-            free(emb);
-            if (!lg) break;
-            n_past++;
-
-            int nx = 0;
-            float mx = -1e30f;
-            for (int k = 0; k < vocab; k++) {
-                if (lg[k] > mx) { mx = lg[k]; nx = k; }
-            }
-            free(lg);
-            gen.push_back(nx);
-        }
+        core_greedy_decode::Config dec_cfg;
+        dec_cfg.max_new_tokens = params.max_new_tokens > 0 ? params.max_new_tokens : 256;
+        dec_cfg.eos_id         = eos_id;
+        dec_cfg.vocab_size     = vocab;
+        auto gen = core_greedy_decode::run(
+            ctx_,
+            /*first_token=*/next,
+            /*initial_n_past=*/(int)ids.size(),
+            qwen3_asr_embed_tokens,
+            qwen3_asr_run_llm_kv,
+            dec_cfg);
 
         // ---- Detokenize via GPT-2 byte decoder ----
         // Qwen3-ASR emits structured metadata tokens before the transcript:

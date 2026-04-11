@@ -15,6 +15,7 @@
 
 #include "crispasr_backend.h"
 #include "whisper_params.h"
+#include "core/greedy_decode.h"
 
 #include "granite_speech.h"
 
@@ -148,30 +149,18 @@ public:
         }
         free(logits);
 
-        // ---- Decode loop ----
-        std::vector<int32_t> gen_ids;
-        int n_past    = total_prompt;
-        const int max_new = params.max_new_tokens > 0 ? params.max_new_tokens : 200;
-
-        for (int step = 0; step < max_new; step++) {
-            if (next == kEos) break;
-            gen_ids.push_back(next);
-
-            int32_t tok = next;
-            float * emb = granite_speech_embed_tokens(ctx_, &tok, 1);
-            if (!emb) break;
-            float * lg = granite_speech_run_llm_kv(ctx_, emb, 1, n_past, nullptr, nullptr);
-            free(emb);
-            if (!lg) break;
-            n_past++;
-
-            next = 0;
-            float mx = -1e30f;
-            for (int k = 0; k < vocab; k++) {
-                if (lg[k] > mx) { mx = lg[k]; next = k; }
-            }
-            free(lg);
-        }
+        // ---- Decode loop via src/core/greedy_decode.h ----
+        core_greedy_decode::Config dec_cfg;
+        dec_cfg.max_new_tokens = params.max_new_tokens > 0 ? params.max_new_tokens : 200;
+        dec_cfg.eos_id         = kEos;
+        dec_cfg.vocab_size     = vocab;
+        auto gen_ids = core_greedy_decode::run(
+            ctx_,
+            /*first_token=*/next,
+            /*initial_n_past=*/total_prompt,
+            granite_speech_embed_tokens,
+            granite_speech_run_llm_kv,
+            dec_cfg);
 
         // Strip EOS from generated IDs before detokenizing.
         std::vector<int32_t> text_ids;

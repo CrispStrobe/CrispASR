@@ -224,6 +224,7 @@ add_library(crispasr-core STATIC
             core/mel.cpp
             core/ffn.h
             core/attention.h
+            core/greedy_decode.h
             core/gguf_loader.h
             core/gguf_loader.cpp
             )
