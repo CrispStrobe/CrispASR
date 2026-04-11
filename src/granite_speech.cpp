@@ -76,6 +76,13 @@ struct granite_speech_hparams {
     uint32_t downsample_rate = 5;
     uint32_t window_size = 15;
     uint32_t audio_token_index = 100352;
+
+    // Control-token ids used by the CLI adapter (the C++ decode loop needs
+    // them to stop on EOS and to splice audio features at the correct
+    // position). Default to the granite-4.0-1b values so older GGUFs
+    // without these keys keep working unchanged.
+    uint32_t eos_token_id = 100257;
+    uint32_t bos_token_id = 100257;
 };
 
 // ===========================================================================
@@ -286,6 +293,8 @@ static bool granite_speech_load_model(granite_speech_model & model, const char *
         hp.downsample_rate    = core_gguf::kv_u32(g, "granite_speech.downsample_rate", hp.downsample_rate);
         hp.window_size        = core_gguf::kv_u32(g, "granite_speech.window_size", hp.window_size);
         hp.audio_token_index  = core_gguf::kv_u32(g, "granite_speech.audio_token_index", hp.audio_token_index);
+        hp.eos_token_id       = core_gguf::kv_u32(g, "granite_speech.llm.eos_token_id", hp.eos_token_id);
+        hp.bos_token_id       = core_gguf::kv_u32(g, "granite_speech.llm.bos_token_id", hp.bos_token_id);
 
         core_gguf::free_metadata(g);
     }
@@ -1995,4 +2004,26 @@ extern "C" char * granite_speech_decode_tokens(struct granite_speech_context * c
 extern "C" char * granite_speech_transcribe(struct granite_speech_context *, const float *, int) {
     fprintf(stderr, "granite_speech: full transcribe not yet implemented\n");
     return nullptr;
+}
+
+// ---------------------------------------------------------------------------
+// Control-token accessors
+//
+// Surface the audio placeholder / EOS / vocab size from hparams so the CLI
+// adapter (crispasr_backend_granite.cpp) can stop hardcoding granite-4.0-1b
+// specific constants. granite-3.x variants use a different tokenizer with
+// their own ids — querying at runtime lets a single backend host all four
+// model revisions with no per-version branching.
+// ---------------------------------------------------------------------------
+
+extern "C" int granite_speech_audio_token_id(struct granite_speech_context * ctx) {
+    return ctx ? (int)ctx->model.hparams.audio_token_index : -1;
+}
+
+extern "C" int granite_speech_eos_token_id(struct granite_speech_context * ctx) {
+    return ctx ? (int)ctx->model.hparams.eos_token_id : -1;
+}
+
+extern "C" int granite_speech_vocab_size(struct granite_speech_context * ctx) {
+    return ctx ? (int)ctx->model.hparams.llm_vocab_size : -1;
 }

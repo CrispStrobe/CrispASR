@@ -93,6 +93,14 @@ char * granite_speech_decode_tokens(struct granite_speech_context * ctx,
 int32_t * granite_speech_tokenize(struct granite_speech_context * ctx,
                                   const char * text, int * out_n);
 
+// Per-model control token ids read from the GGUF metadata at load time.
+// These vary between releases (granite-4.0 uses the 100k-vocab GPT-NeoX
+// table, granite-3.x uses the smaller 49160-token Granite tokenizer) so
+// callers must query them at runtime instead of hardcoding.
+int granite_speech_audio_token_id(struct granite_speech_context * ctx);
+int granite_speech_eos_token_id  (struct granite_speech_context * ctx);
+int granite_speech_vocab_size    (struct granite_speech_context * ctx);
+
 #ifdef __cplusplus
 }
 #endif

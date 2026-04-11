@@ -27,19 +27,30 @@
 
 namespace {
 
-// Granite chat-template tokens (GPT-2 BPE IDs). Same values as used in
-// examples/granite-main/main.cpp — captured from the HF chat template.
-constexpr int kAudioTok = 100352;
-constexpr int kEos      = 100257;
-// "USER: "
-constexpr int32_t kPrefix[]   = { 6584, 25, 220 };
-constexpr int     kNumPrefix  = 3;
-// "can you transcribe the speech into a written format?\n ASSISTANT:"
-constexpr int32_t kSuffix[]   = {
+// Granite chat-template prefix / suffix used around the audio placeholder.
+// For granite-4.0-1b-speech the constants below are the exact tokens
+// captured from the HF chat template under the GPT-NeoX tokenizer; for
+// granite-speech-3.x (which uses a different 49160-token tokenizer) we
+// re-tokenize the same strings at runtime via granite_speech_tokenize().
+//
+// Keeping both forms lets older granite-4.0 GGUFs that predate the
+// merges-table conversion still work unchanged (they fall through to
+// the hardcoded kPrefix4/kSuffix4 arrays), while granite-3.x / any
+// future release dispatches through the tokenizer path.
+constexpr int32_t kPrefix4[]   = { 6584, 25, 220 };                       // "USER: "
+constexpr int     kNumPrefix4  = 3;
+constexpr int32_t kSuffix4[]   = {                                        // "can you transcribe..."
     4919, 499, 1380, 3191, 279, 8982, 1139, 264, 5439, 3645, 30, 198,
     36660, 3931, 2891, 25
 };
-constexpr int     kNumSuffix  = 16;
+constexpr int     kNumSuffix4  = 16;
+
+// Legacy token ids for granite-4.0-1b. Only used when the GGUF doesn't
+// export granite_speech.llm.audio_token_index / eos_token_id (i.e. it
+// was produced before that key landed). Both accessors below fall back
+// to these when the runtime returns -1.
+constexpr int kLegacyAudioTok4 = 100352;
+constexpr int kLegacyEos4      = 100257;
 
 class GraniteBackend : public CrispasrBackend {
 public:
@@ -104,54 +115,93 @@ public:
         }
 
         // ---- Build prompt: [prefix] + [audio placeholders] + [suffix] ----
-        // Default suffix is the hardcoded "can you transcribe..." prompt
-        // tokenized once at dev time. For --translate we re-tokenize an
-        // alternative suffix at runtime via granite_speech_tokenize().
-        // Falls back gracefully when the GGUF predates the merges-table
-        // commit (we keep the original suffix and warn).
-        std::vector<int32_t> suffix_ids;
+        //
+        // Strategy:
+        //   1. Ask the runtime for audio_token_index / eos_token_id / vocab.
+        //      Newer GGUFs export them; older granite-4.0 GGUFs return
+        //      -1 and we fall back to the hardcoded granite-4.0 values.
+        //   2. If the model's audio_token_index is within the granite-4.0
+        //      100k-vocab range AND the GGUF didn't ship a merges table
+        //      (i.e. granite_speech_tokenize returns nothing for a simple
+        //      probe), reuse the hardcoded kPrefix4/kSuffix4 arrays — they
+        //      were captured from the granite-4.0 tokenizer and still
+        //      tokenize correctly under it.
+        //   3. Otherwise (granite-3.x, or granite-4.0 re-converted with
+        //      merges) re-tokenize the chat-template prefix + suffix at
+        //      runtime so the resulting ids match the model's vocab.
+        int audio_tok = granite_speech_audio_token_id(ctx_);
+        int eos_tok   = granite_speech_eos_token_id(ctx_);
+        const int vocab_sz = granite_speech_vocab_size(ctx_);
+        if (audio_tok < 0) audio_tok = kLegacyAudioTok4;
+        if (eos_tok   < 0) eos_tok   = kLegacyEos4;
+        (void)vocab_sz;
+
+        auto iso_to_eng = [](const std::string & c) -> std::string {
+            if (c == "en") return "English";
+            if (c == "de") return "German";
+            if (c == "fr") return "French";
+            if (c == "es") return "Spanish";
+            if (c == "it") return "Italian";
+            if (c == "pt") return "Portuguese";
+            if (c == "ru") return "Russian";
+            if (c == "ja") return "Japanese";
+            if (c == "zh") return "Chinese";
+            return c;
+        };
+
+        const std::string prefix_str = "USER: ";
+        std::string suffix_str =
+            "can you transcribe the speech into a written format?\n ASSISTANT:";
         if (params.translate) {
-            auto iso_to_eng = [](const std::string & c) -> std::string {
-                if (c == "en") return "English";
-                if (c == "de") return "German";
-                if (c == "fr") return "French";
-                if (c == "es") return "Spanish";
-                if (c == "it") return "Italian";
-                if (c == "pt") return "Portuguese";
-                if (c == "ru") return "Russian";
-                if (c == "ja") return "Japanese";
-                if (c == "zh") return "Chinese";
-                return c;
-            };
             const std::string tgt = params.target_lang.empty()
                                   ? std::string("English")
                                   : iso_to_eng(params.target_lang);
-            const std::string instr =
-                "can you translate the speech to " + tgt + "?\n ASSISTANT:";
-            int n_tok = 0;
-            int32_t * arr = granite_speech_tokenize(ctx_, instr.c_str(), &n_tok);
-            if (arr && n_tok > 0) {
-                suffix_ids.assign(arr, arr + n_tok);
-                free(arr);
-            } else {
+            suffix_str = "can you translate the speech to " + tgt +
+                         "?\n ASSISTANT:";
+        }
+
+        // Try runtime tokenization first.
+        std::vector<int32_t> prefix_ids, suffix_ids;
+        {
+            int n = 0;
+            int32_t * a = granite_speech_tokenize(ctx_, prefix_str.c_str(), &n);
+            if (a && n > 0) { prefix_ids.assign(a, a + n); free(a); }
+        }
+        {
+            int n = 0;
+            int32_t * a = granite_speech_tokenize(ctx_, suffix_str.c_str(), &n);
+            if (a && n > 0) { suffix_ids.assign(a, a + n); free(a); }
+        }
+
+        // Fall back to the hardcoded granite-4.0 arrays when runtime
+        // tokenization failed AND the model looks like granite-4.0 (its
+        // audio_token_index lives in the 100k+ range that matches the
+        // GPT-NeoX table the old arrays were captured under).
+        if (prefix_ids.empty() || suffix_ids.empty()) {
+            if (audio_tok == kLegacyAudioTok4) {
+                if (prefix_ids.empty())
+                    prefix_ids.assign(kPrefix4, kPrefix4 + kNumPrefix4);
+                if (suffix_ids.empty() && !params.translate)
+                    suffix_ids.assign(kSuffix4, kSuffix4 + kNumSuffix4);
+            }
+            if (prefix_ids.empty() || suffix_ids.empty()) {
                 fprintf(stderr,
-                        "crispasr[granite]: tokenize failed (re-convert with the "
-                        "newer models/convert-granite-speech-to-gguf.py to enable "
-                        "--translate); falling back to plain transcribe\n");
+                        "crispasr[granite]: tokenize failed — re-convert the GGUF "
+                        "with the newer models/convert-granite-speech-to-gguf.py "
+                        "to pick up the merges table\n");
+                free(proj);
+                return out;
             }
         }
 
-        const int n_suffix = suffix_ids.empty() ? kNumSuffix : (int)suffix_ids.size();
-        const int total_prompt = kNumPrefix + N_proj + n_suffix;
+        const int n_prefix = (int)prefix_ids.size();
+        const int n_suffix = (int)suffix_ids.size();
+        const int total_prompt = n_prefix + N_proj + n_suffix;
         std::vector<int32_t> prompt_ids;
         prompt_ids.reserve(total_prompt);
-        for (int i = 0; i < kNumPrefix; i++) prompt_ids.push_back(kPrefix[i]);
-        for (int i = 0; i < N_proj; i++)    prompt_ids.push_back(kAudioTok);
-        if (suffix_ids.empty()) {
-            for (int i = 0; i < kNumSuffix; i++) prompt_ids.push_back(kSuffix[i]);
-        } else {
-            for (int i = 0; i < n_suffix; i++) prompt_ids.push_back(suffix_ids[i]);
-        }
+        for (int id : prefix_ids) prompt_ids.push_back(id);
+        for (int i = 0; i < N_proj; i++) prompt_ids.push_back(audio_tok);
+        for (int id : suffix_ids) prompt_ids.push_back(id);
 
         float * all_embeds = granite_speech_embed_tokens(ctx_, prompt_ids.data(), total_prompt);
         if (!all_embeds) {
@@ -160,9 +210,9 @@ public:
             return out;
         }
 
-        // Splice projector output into the audio positions.
+        // Splice projector output into the audio positions (skip the prefix).
         for (int i = 0; i < N_proj; i++) {
-            std::memcpy(all_embeds + (size_t)(kNumPrefix + i) * proj_dim,
+            std::memcpy(all_embeds + (size_t)(n_prefix + i) * proj_dim,
                         proj + (size_t)i * proj_dim,
                         proj_dim * sizeof(float));
         }
@@ -190,7 +240,7 @@ public:
         // we stay on the historical bit-identical greedy path.
         core_greedy_decode::Config dec_cfg;
         dec_cfg.max_new_tokens = params.max_new_tokens > 0 ? params.max_new_tokens : 200;
-        dec_cfg.eos_id         = kEos;
+        dec_cfg.eos_id         = eos_tok;
         dec_cfg.vocab_size     = vocab;
         dec_cfg.temperature    = params.temperature;
 
@@ -222,7 +272,7 @@ public:
         // Strip EOS from generated IDs before detokenizing.
         std::vector<int32_t> text_ids;
         text_ids.reserve(gen_ids.size());
-        for (int32_t id : gen_ids) if (id != kEos) text_ids.push_back(id);
+        for (int32_t id : gen_ids) if (id != eos_tok) text_ids.push_back(id);
 
         char * text = granite_speech_decode_tokens(ctx_, text_ids.data(), (int)text_ids.size());
 
@@ -245,7 +295,7 @@ public:
         // avoid duplicating the batch detokenizer's merging logic.
         seg.tokens.reserve(gen_ids.size());
         for (size_t i = 0; i < gen_ids.size(); i++) {
-            if (gen_ids[i] == kEos) break;
+            if (gen_ids[i] == eos_tok) break;
             crispasr_token ct;
             ct.id         = gen_ids[i];
             ct.confidence = (i < probs.size()) ? probs[i] : -1.0f;

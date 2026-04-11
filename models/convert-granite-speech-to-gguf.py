@@ -234,6 +234,65 @@ def build_htk_mel_filters(sr=16000, n_fft=512, n_mels=80, f_min=0.0, f_max=8000.
 # Main
 # ---------------------------------------------------------------------------
 
+def _load_lora_adapter(input_dir: Path) -> tuple[dict, dict] | None:
+    """Load the granite-speech LoRA adapter tensors if present.
+
+    Returns (lora_weights, cfg) where `lora_weights` is a dict keyed by the
+    base tensor name (e.g. "language_model.model.layers.3.self_attn.q_proj.weight")
+    mapping to `(lora_A, lora_B, scale)` tuples ready to be merged via
+    `W_merged = W + scale * (B @ A)`. Returns None if no adapter is present.
+
+    granite-speech 3.x ships with an unmerged PEFT LoRA (r=64, alpha=32,
+    target_modules=[q_proj, v_proj]) that must be folded into the base LLM
+    weights at conversion time so the C++ runtime can stay linear-LoRA-free.
+    """
+    cfg_path = input_dir / "adapter_config.json"
+    ada_path = input_dir / "adapter_model.safetensors"
+    if not (cfg_path.exists() and ada_path.exists()):
+        return None
+    with open(cfg_path) as f:
+        cfg = json.load(f)
+    alpha = float(cfg.get("lora_alpha", 32))
+    r     = float(cfg.get("r", 64))
+    scale = alpha / r
+    targets = set(cfg.get("target_modules", ["q_proj", "v_proj"]))
+    print(f"  lora: r={int(r)} alpha={alpha:g} scale={scale:g} targets={sorted(targets)}")
+
+    # Collect (A, B) pairs keyed by the base weight path. PEFT tensors
+    # look like "...q_proj.lora_A.weight" / "...q_proj.lora_B.weight";
+    # the base weight this LoRA modifies is the corresponding ".weight".
+    import numpy as np
+    pairs: dict[str, dict[str, np.ndarray]] = {}
+    with safe_open(str(ada_path), framework="pt", device="cpu") as f:
+        for name in sorted(f.keys()):
+            if ".lora_A.weight" in name:
+                base = name.replace(".lora_A.weight", ".weight")
+                pairs.setdefault(base, {})["A"] = f.get_tensor(name).float().numpy()
+            elif ".lora_B.weight" in name:
+                base = name.replace(".lora_B.weight", ".weight")
+                pairs.setdefault(base, {})["B"] = f.get_tensor(name).float().numpy()
+
+    merged: dict[str, tuple] = {}
+    for base, ab in pairs.items():
+        if "A" in ab and "B" in ab:
+            # Only merge onto targets the adapter actually matches
+            if any(t in base for t in targets):
+                merged[base] = (ab["A"], ab["B"], scale)
+    print(f"  lora: merged deltas for {len(merged)} base tensors")
+    return merged, cfg
+
+
+def _apply_lora(name: str, arr, lora_map) -> any:
+    """Return `arr + scale * (B @ A)` when `name` has a LoRA delta, else `arr`."""
+    if lora_map is None or name not in lora_map:
+        return arr
+    A, B, scale = lora_map[name]
+    # W shape: (out, in); B: (out, r); A: (r, in). delta = (out, in).
+    import numpy as np
+    delta = (B @ A).astype(arr.dtype) * np.array(scale, dtype=arr.dtype)
+    return arr + delta
+
+
 def convert(input_dir: Path, out_path: Path) -> None:
     print(f"Loading: {input_dir}")
     with open(input_dir / "config.json") as f:
@@ -242,10 +301,26 @@ def convert(input_dir: Path, out_path: Path) -> None:
     text_cfg = cfg.get("text_config", {})
     proj_cfg = cfg.get("projector_config", {})
 
-    safetensor_files = sorted(input_dir.glob("model-*.safetensors"))
-    if not safetensor_files:
-        safetensor_files = sorted(input_dir.glob("*.safetensors"))
+    # Some HF snapshots (granite-speech-3.3-*) ship BOTH a model-*-of-N
+    # and a model-*-of-M shard set containing the same content under two
+    # layouts. Trust the index file — it names the shards the model was
+    # built against. Fall back to the naive glob for checkpoints that
+    # don't have an index.
+    idx_path = input_dir / "model.safetensors.index.json"
+    if idx_path.exists():
+        with open(idx_path) as f:
+            idx = json.load(f)
+        wanted = sorted(set(idx.get("weight_map", {}).values()))
+        safetensor_files = [input_dir / n for n in wanted]
+    else:
+        safetensor_files = sorted(input_dir.glob("model-*.safetensors"))
+        if not safetensor_files:
+            safetensor_files = sorted(input_dir.glob("*.safetensors"))
     print(f"  shards: {[p.name for p in safetensor_files]}")
+
+    # LoRA adapter merge (granite-speech 3.x has this; 4.0-1b does not).
+    lora_merged = _load_lora_adapter(input_dir)
+    lora_map = lora_merged[0] if lora_merged is not None else None
 
     print(f"Writing: {out_path}")
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -286,6 +361,32 @@ def convert(input_dir: Path, out_path: Path) -> None:
     writer.add_uint32("granite_speech.downsample_rate", cfg.get("downsample_rate", 5))
     writer.add_uint32("granite_speech.window_size", cfg.get("window_size", 15))
     writer.add_uint32("granite_speech.audio_token_index", cfg.get("audio_token_index", 100352))
+
+    # EOS / BOS — varies between releases (granite-4.0 uses 100257 from the
+    # GPT-NeoX table, granite-3.x uses 0 from the granite tokenizer). Read
+    # from generation_config.json when present, fall back to the LLM
+    # text_config, then a reasonable default.
+    gen_cfg_path = input_dir / "generation_config.json"
+    gen_cfg = {}
+    if gen_cfg_path.exists():
+        with open(gen_cfg_path) as f:
+            gen_cfg = json.load(f)
+    def _first_int(*vals, default):
+        for v in vals:
+            if isinstance(v, list) and v:
+                return int(v[0])
+            if isinstance(v, int):
+                return int(v)
+        return default
+    eos_id = _first_int(
+        gen_cfg.get("eos_token_id"), text_cfg.get("eos_token_id"),
+        default=text_cfg.get("eos_token_id", 0) or 0)
+    bos_id = _first_int(
+        gen_cfg.get("bos_token_id"), text_cfg.get("bos_token_id"),
+        default=text_cfg.get("bos_token_id", 0) or 0)
+    writer.add_uint32("granite_speech.llm.eos_token_id", eos_id)
+    writer.add_uint32("granite_speech.llm.bos_token_id", bos_id)
+    print(f"  eos_token_id={eos_id}  bos_token_id={bos_id}")
 
     # Tokenizer vocab (GPT-2 BPE — store token strings for detokenization)
     vocab_path = input_dir / "vocab.json"
@@ -342,6 +443,17 @@ def convert(input_dir: Path, out_path: Path) -> None:
     n_written = n_f16 = n_f32 = n_skipped = 0
     skipped = []
 
+    # Some granite releases tie the lm_head to the token embedding
+    # (granite-3.2, granite-3.3) so the safetensors has no separate
+    # `lm_head.weight`. Our C++ runtime expects `output.weight` anyway —
+    # when tied, we alias the embedding as output.weight below after the
+    # main loop finishes so we only write the tensor once.
+    tie_word_embeddings = bool(text_cfg.get("tie_word_embeddings", False))
+    if tie_word_embeddings:
+        print("  llm: tie_word_embeddings=true — aliasing token embedding as output.weight")
+    token_embd_arr = None  # captured during the loop for the tie-alias path
+
+    n_lora_merged = 0
     for sf_path in safetensor_files:
         print(f"  reading {sf_path.name}")
         with safe_open(str(sf_path), framework="pt", device="cpu") as f:
@@ -354,7 +466,12 @@ def convert(input_dir: Path, out_path: Path) -> None:
                 t = f.get_tensor(hf_name)
                 if "bfloat" in str(t.dtype):
                     t = t.float()
-                arr = t.numpy()
+                arr = t.numpy().astype(np.float32)
+                # Fold in the LoRA delta (no-op when this tensor isn't
+                # a LoRA target — the map lookup simply misses).
+                if lora_map is not None and hf_name in lora_map:
+                    arr = _apply_lora(hf_name, arr, lora_map)
+                    n_lora_merged += 1
                 if is_f32_tensor(gguf_name, arr.shape):
                     arr = arr.astype(np.float32)
                     n_f32 += 1
@@ -363,8 +480,23 @@ def convert(input_dir: Path, out_path: Path) -> None:
                     n_f16 += 1
                 writer.add_tensor(gguf_name, arr)
                 n_written += 1
+                if gguf_name == "token_embd.weight":
+                    token_embd_arr = arr
                 if n_written <= 20 or n_written % 100 == 0:
                     print(f"    {gguf_name:50s} {str(arr.shape):25s} {arr.dtype}")
+
+    if tie_word_embeddings and token_embd_arr is not None:
+        # Write a second copy of the token embedding under the lm_head
+        # name. GGUF tensor names must be unique — the base loop did not
+        # yet write output.weight because the source safetensors omits
+        # lm_head.weight when embeddings are tied.
+        writer.add_tensor("output.weight", token_embd_arr)
+        n_written += 1
+        print(f"    output.weight (aliased from token_embd.weight) "
+              f"{token_embd_arr.shape} {token_embd_arr.dtype}")
+
+    if lora_map is not None:
+        print(f"  lora: folded {n_lora_merged}/{len(lora_map)} deltas into base weights")
 
     print(f"\n  total: {n_written} tensors (F16: {n_f16}, F32: {n_f32}) skipped: {n_skipped}")
     if skipped:
