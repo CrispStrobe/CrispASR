@@ -582,3 +582,20 @@ This is slower than a single-graph approach (24 context alloc/free
 cycles + 24 graph plans) but produces correct results and uses much
 less memory. Good enough for CPU; for GPU acceleration, fixing gallocr
 to skip pre-allocated tensors is the proper solution.
+
+### Windows fseek overflow: the silent >2 GB file killer
+
+On Windows (MSVC), `long` is 32-bit even on x86_64. `fseek(fp, (long)offset, SEEK_SET)`
+silently wraps around at 2^31 = 2.1 GB. For GGUF files larger than
+this (voxtral4b Q4_K = 2.35 GB, Q8_0 = 4.4 GB), tensors stored past
+the 2 GB boundary get read from the wrong file offset, resulting in
+"missing tensor" errors or corrupt data.
+
+The fix: `_fseeki64()` on Windows, `fseeko()` on POSIX. Also add
+native Windows mmap (`CreateFileMapping` + `MapViewOfFile`) to bypass
+the fseek path entirely.
+
+**Lesson:** `fseek(fp, (long)x, ...)` is a bug on Windows for any file
+that might exceed 2 GB. Always use platform-specific 64-bit seek. This
+is a classic portability trap that doesn't manifest on Linux/macOS
+(where `long` is 64-bit on LP64).
