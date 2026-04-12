@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  push:
+    branches: [main, integrated_cli]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ===========================================================================
+  # Linux x86_64 (CPU)
+  # ===========================================================================
+  linux-x86_64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ libopenblas-dev
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGGML_OPENBLAS=ON
+
+      - name: Build
+        run: cmake --build build --target whisper-cli -j $(nproc)
+
+      - name: Smoke test - help
+        run: ./build/bin/crispasr --help
+
+      - name: Smoke test - list backends
+        run: ./build/bin/crispasr --list-backends
+
+      - name: Build quantize tool
+        run: cmake --build build --target crispasr-quantize -j $(nproc)
+
+  # ===========================================================================
+  # Linux x86_64 + Vulkan
+  # ===========================================================================
+  linux-vulkan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Vulkan SDK
+        run: |
+          wget -qO - https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo apt-key add -
+          sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-jammy.list https://packages.lunarg.com/vulkan/lunarg-vulkan-jammy.list || true
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ vulkan-sdk libvulkan-dev || sudo apt-get install -y cmake g++ libvulkan-dev
+
+      - name: Configure with Vulkan
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGGML_VULKAN=ON
+
+      - name: Build
+        run: cmake --build build --target whisper-cli -j $(nproc)
+
+      - name: Smoke test
+        run: ./build/bin/crispasr --list-backends
+
+  # ===========================================================================
+  # macOS (Apple Silicon / x86_64)
+  # ===========================================================================
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure with Metal
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGGML_METAL=ON
+
+      - name: Build
+        run: cmake --build build --target whisper-cli -j $(sysctl -n hw.logicalcpu)
+
+      - name: Smoke test
+        run: ./build/bin/crispasr --list-backends
+
+  # ===========================================================================
+  # Windows (MSVC)
+  # ===========================================================================
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release --target whisper-cli -j $env:NUMBER_OF_PROCESSORS
+
+      - name: Smoke test
+        run: .\build\bin\Release\crispasr.exe --list-backends
