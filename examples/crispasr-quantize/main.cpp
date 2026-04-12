@@ -103,8 +103,7 @@ static bool crispasr_model_quantize(const std::string & fname_inp, const std::st
                         (ggml_n_dims(t) == 2) && // Quantize only 2D matrices
                         (std::string(name).find("weight") != std::string::npos) &&
                         (std::string(name).find("norm") == std::string::npos) &&
-                        // Skip encoder/projector tensors (Granite Speech: precision-sensitive)
-                        (std::string(name).find("enc.") != 0) &&
+                        // Skip projector tensors (Granite Speech: precision-sensitive)
                         (std::string(name).find("proj.") != 0);
 
         const int64_t ncols = t->ne[0];

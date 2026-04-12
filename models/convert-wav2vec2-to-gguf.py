@@ -209,10 +209,17 @@ def main() -> None:
     config = model.config
     sd     = model.state_dict()
 
-    # Read vocab (id → token)
+    # Read vocab (id → token) — try local path first, then HF cache
     vocab_path = model_dir / "vocab.json"
-    with open(vocab_path, encoding="utf-8") as f:
-        vocab_dict = json.load(f)
+    if vocab_path.exists():
+        with open(vocab_path, encoding="utf-8") as f:
+            vocab_dict = json.load(f)
+    else:
+        # Download vocab.json from HF
+        from huggingface_hub import hf_hub_download
+        vp = hf_hub_download(repo_id=str(model_dir), filename="vocab.json")
+        with open(vp, encoding="utf-8") as f:
+            vocab_dict = json.load(f)
     id_to_token = {v: k for k, v in vocab_dict.items()}
     vocab_list  = [id_to_token.get(i, f"<{i}>") for i in range(config.vocab_size)]
 
