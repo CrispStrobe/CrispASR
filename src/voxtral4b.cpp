@@ -339,9 +339,30 @@ static bool voxtral4b_load_model(voxtral4b_model & model, voxtral4b_vocab & voca
         b.ada_up_w      = get(pfx + "ada_norm_up.weight");
     }
 
+    // Count actually-loaded tensors (non-null required tensors)
+    int n_missing = 0;
+    auto check = [&](ggml_tensor * t, const char * name) {
+        if (!t) { n_missing++; }
+    };
+    check(p.proj1, "proj1"); check(p.proj2, "proj2");
+    check(l.token_embd_w, "token_embd"); check(l.output_norm_w, "output_norm");
+    for (uint32_t il = 0; il < model.hparams.llm_n_layers; il++) {
+        const auto & b = l.blocks[il];
+        check(b.attn_norm_w, ""); check(b.attn_q_w, ""); check(b.attn_k_w, "");
+        check(b.attn_v_w, ""); check(b.attn_out_w, "");
+        check(b.ffn_norm_w, ""); check(b.ffn_gate_w, ""); check(b.ffn_up_w, "");
+        check(b.ffn_down_w, "");
+    }
     fprintf(stderr, "voxtral4b: loaded %d audio tensors + %d LLM tensors\n",
             (int)(model.hparams.audio_n_layers * 13 + 5),
             (int)(model.hparams.llm_n_layers * 11 + 2));
+    if (n_missing > 0) {
+        fprintf(stderr, "voxtral4b: ERROR: %d required tensors missing — GGUF file is corrupt or truncated.\n"
+                        "           If the file is > 2 GB, this may be a Windows fseek overflow bug.\n"
+                        "           Re-download the model or update CrispASR to the latest version.\n",
+                n_missing);
+        return false;
+    }
     return true;
 }
 

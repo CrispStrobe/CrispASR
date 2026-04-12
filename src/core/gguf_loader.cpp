@@ -129,10 +129,19 @@ struct MappedFile {
 
     explicit MappedFile(const char * path) {
 #if defined(_WIN32)
-        // TODO: Windows path. For now, fall back to fread in caller when
-        // ok==false.
-        (void)path;
-        ok = false;
+        HANDLE hFile = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ,
+                                   nullptr, OPEN_EXISTING, 0, nullptr);
+        if (hFile == INVALID_HANDLE_VALUE) return;
+        LARGE_INTEGER fsize;
+        if (!GetFileSizeEx(hFile, &fsize)) { CloseHandle(hFile); return; }
+        size = (size_t)fsize.QuadPart;
+        HANDLE hMap = CreateFileMappingA(hFile, nullptr, PAGE_READONLY, 0, 0, nullptr);
+        CloseHandle(hFile);
+        if (!hMap) return;
+        base = MapViewOfFile(hMap, FILE_MAP_READ, 0, 0, 0);
+        CloseHandle(hMap);
+        if (!base) return;
+        ok = true;
 #else
         fd = ::open(path, O_RDONLY);
         if (fd < 0) return;
@@ -147,7 +156,9 @@ struct MappedFile {
 #endif
     }
     ~MappedFile() {
-#if !defined(_WIN32)
+#if defined(_WIN32)
+        if (base) UnmapViewOfFile(base);
+#else
         if (base) ::munmap(base, size);
 #endif
     }
@@ -201,7 +212,11 @@ bool load_weights(const char  * path,
             const size_t off    = gguf_get_tensor_offset(gctx, tid);
             const size_t nbytes = ggml_nbytes(t);
             if (tbuf.size() < nbytes) tbuf.resize(nbytes);
-            if (fseek(fp, (long)(data_off + off), SEEK_SET) != 0) break;
+#if defined(_WIN32)
+            if (_fseeki64(fp, (int64_t)(data_off + off), SEEK_SET) != 0) break;
+#else
+            if (fseeko(fp, (off_t)(data_off + off), SEEK_SET) != 0) break;
+#endif
             if (fread(tbuf.data(), 1, nbytes, fp) != nbytes) break;
             ggml_backend_tensor_set(t, tbuf.data(), 0, nbytes);
         }
