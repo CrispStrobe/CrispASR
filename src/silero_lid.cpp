@@ -499,8 +499,6 @@ extern "C" const char * silero_lid_detect(
         C = C_half;  // 161
     }
 
-            C, T, cur.empty() ? 0.f : cur[0]);
-
     for (int si = 0; si < (int)m.stages.size(); si++) {
         const auto & st = m.stages[si];
 
