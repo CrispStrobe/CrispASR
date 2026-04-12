@@ -62,6 +62,13 @@ struct lid_stage {
 };
 
 struct lid_model {
+    // Front-end: learned Conv1d(1→322, kernel=320, stride=160)
+    ggml_tensor * frontend_w = nullptr;  // (322, 1, 320)
+    int frontend_stride = 160;
+    int frontend_kernel = 320;
+    int frontend_channels = 322;
+    int n_downsample_stages = 4;  // stride-2 after each of the first 4 stages
+
     std::vector<lid_stage> stages;  // 8
     ggml_tensor * adaptive_norm_filter = nullptr;  // (1, 1, 17)
     ggml_tensor * pool_weight = nullptr;           // (192,)
@@ -102,6 +109,7 @@ static bool lid_load(lid_model & m, const char * path, ggml_backend_t backend) {
     m.tensors = std::move(wl.tensors);
 
     // Bind top-level
+    m.frontend_w = lid_get(m, "lid.frontend.weight");
     m.adaptive_norm_filter = lid_get(m, "lid.adaptive_norm.filter");
     m.pool_weight = lid_get(m, "lid.pool.weight");
     m.lang_w = lid_get(m, "lid.lang.weight");
@@ -387,10 +395,36 @@ extern "C" const char * silero_lid_detect(
     if (!ctx || !samples || n_samples <= 0) return nullptr;
     const auto & m = ctx->model;
 
-    // ---- Run the encoder stages ----
-    // Data layout throughout: [C, T] channel-first, F32.
-    int C = 1, T = n_samples;
-    std::vector<float> cur(samples, samples + n_samples);
+    // ---- Front-end: learned Conv1d(1→322, k=320, stride=160) ----
+    // This is the model's "learned STFT" that frames raw audio into
+    // ~100 Hz feature frames. Without this step the model would run
+    // attention on T=176000 which is O(T^2) infeasible.
+    int T;
+    int C;
+    std::vector<float> cur;
+    if (m.frontend_w) {
+        const float * fw = (const float *)m.frontend_w->data;
+        int K_fe   = m.frontend_kernel;   // 320
+        int S_fe   = m.frontend_stride;   // 160
+        int C_fe   = m.frontend_channels; // 322
+        T = (n_samples - K_fe) / S_fe + 1;
+        C = C_fe;
+        cur.resize(C_fe * T);
+        // Conv1d: out[co, t] = sum_k(fw[co, 0, k] * samples[t*stride + k])
+        for (int co = 0; co < C_fe; co++) {
+            for (int t = 0; t < T; t++) {
+                float sum = 0.f;
+                for (int k = 0; k < K_fe; k++)
+                    sum += fw[co * K_fe + k] * samples[t * S_fe + k];
+                cur[co * T + t] = sum;
+            }
+        }
+    } else {
+        // Fallback: no front-end, use raw samples (will be slow)
+        T = n_samples;
+        C = 1;
+        cur.assign(samples, samples + n_samples);
+    }
 
     for (int si = 0; si < (int)m.stages.size(); si++) {
         const auto & st = m.stages[si];
@@ -445,9 +479,50 @@ extern "C" const char * silero_lid_detect(
             C = C_out;
         }
 
-        // ---- Transformer block ----
+        // ---- Stride-2 temporal downsampling (first 4 stages only) ----
+        // The conv1x1 between conv and transformer stages is actually a
+        // strided 1×1 Conv with stride=2 for the first 4 (128-dim) stages,
+        // halving T at each boundary. The last 4 (192-dim) stages use stride=1.
         const auto & tx = st.tx;
-        int D = st.dim;
+        if (tx.conv1x1_w && si < m.n_downsample_stages) {
+            int C_out = (int)tx.conv1x1_w->ne[2];  // ggml ne for (Cout, Cin, 1)
+            int T_out = T / 2;
+            std::vector<float> ds(C_out * T_out);
+            const float * cw = (const float *)tx.conv1x1_w->data;
+            const float * cb = tx.conv1x1_b ? (const float *)tx.conv1x1_b->data : nullptr;
+            // Strided 1×1 conv: out[co, t] = sum_ci(cw[co, ci] * cur[ci, 2*t]) + bias
+            for (int co = 0; co < C_out; co++) {
+                for (int t = 0; t < T_out; t++) {
+                    float sum = cb ? cb[co] : 0.f;
+                    int t_in = t * 2;
+                    for (int ci = 0; ci < C; ci++)
+                        sum += cw[co * C + ci] * cur[ci * T + t_in];
+                    ds[co * T_out + t] = sum;
+                }
+            }
+            cur = std::move(ds);
+            C = C_out;
+            T = T_out;
+        } else if (tx.conv1x1_w) {
+            // Stride-1 projection (192-dim stages)
+            int C_out = (int)tx.conv1x1_w->ne[2];
+            std::vector<float> proj(C_out * T);
+            const float * cw = (const float *)tx.conv1x1_w->data;
+            const float * cb = tx.conv1x1_b ? (const float *)tx.conv1x1_b->data : nullptr;
+            for (int co = 0; co < C_out; co++) {
+                for (int t = 0; t < T; t++) {
+                    float sum = cb ? cb[co] : 0.f;
+                    for (int ci = 0; ci < C; ci++)
+                        sum += cw[co * C + ci] * cur[ci * T + t];
+                    proj[co * T + t] = sum;
+                }
+            }
+            cur = std::move(proj);
+            C = C_out;
+        }
+
+        // ---- Transformer block ----
+        int D = C;
 
         if (tx.norm1_w && tx.qkv_w) {
             // Pre-norm attention

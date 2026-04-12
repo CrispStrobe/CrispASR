@@ -38,7 +38,6 @@
 #ifdef __APPLE__
 #include <Accelerate/Accelerate.h>  // cblas + vDSP, no external deps needed
 #else
-#include <cblas.h>
 #endif
 #if defined(__F16C__) && defined(__AVX2__)
 #include <immintrin.h>

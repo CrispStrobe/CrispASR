@@ -55,6 +55,21 @@ def convert(input_dir: Path, out_path: Path) -> None:
     for w in model.graph.initializer:
         inits[w.name] = onnx.numpy_helper.to_array(w).astype(np.float32)
 
+    # The initial frame-extraction Conv has stride=160 and uses a Constant
+    # node (not an initializer). Extract it from the ONNX graph.
+    for n in model.graph.node:
+        if n.op_type == 'Constant' and n.output[0] in [
+            inp for node in model.graph.node if node.op_type == 'Conv'
+            for inp in node.input[1:2]
+            if any(a.name == 'strides' and list(a.ints) == [160] for a in node.attribute)
+        ]:
+            for a in n.attribute:
+                if a.name == 'value':
+                    arr = onnx.numpy_helper.to_array(a.t).astype(np.float32)
+                    inits['_frontend_conv_weight'] = arr
+                    print(f"  frontend conv: {arr.shape} (stride=160, learned STFT)")
+                    break
+
     # Sort numeric IDs
     numeric_ids = sorted([int(k) for k in inits if k.isdigit()])
 
@@ -91,6 +106,12 @@ def convert(input_dir: Path, out_path: Path) -> None:
     writer.add_uint32("silero_lid.n_stages", 8)
     writer.add_uint32("silero_lid.conv_blocks_per_stage", 12)
     writer.add_uint32("silero_lid.conv_kernel", 5)
+    # Front-end: learned Conv1d(1→322, kernel=320, stride=160) = 100 Hz framing
+    writer.add_uint32("silero_lid.frontend_channels", 322)
+    writer.add_uint32("silero_lid.frontend_kernel", 320)
+    writer.add_uint32("silero_lid.frontend_stride", 160)
+    # Stage-boundary stride-2 downsampling after each of the first 4 (128-dim) stages
+    writer.add_uint32("silero_lid.n_downsample_stages", 4)
     writer.add_array("silero_lid.lang_strs", lang_list)
     writer.add_array("silero_lid.group_strs", group_list)
 
@@ -144,6 +165,12 @@ def convert(input_dir: Path, out_path: Path) -> None:
         roles = ["tx.qkv.weight", "tx.out.weight", "tx.ff1.weight", "tx.ff2.weight"]
         for role, mid in zip(roles, group):
             write(f"lid.{si}.{role}", inits[str(mid)])
+
+    # ---- Front-end Conv weight (learned STFT, stride=160) ----
+    if '_frontend_conv_weight' in inits:
+        write("lid.frontend.weight", inits['_frontend_conv_weight'])
+    else:
+        print("  WARNING: frontend conv weight not found in ONNX graph!")
 
     # ---- Top-level tensors ----
     write("lid.adaptive_norm.filter", inits["adaptive_normalization.filter_"])

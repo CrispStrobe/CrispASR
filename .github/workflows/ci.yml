@@ -49,12 +49,16 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install Vulkan SDK
+      - name: Install Vulkan SDK + glslc
         run: |
-          wget -qO - https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo apt-key add -
-          sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-jammy.list https://packages.lunarg.com/vulkan/lunarg-vulkan-jammy.list || true
+          # Install the Vulkan headers/loader + glslc shader compiler.
+          # ubuntu-latest (24.04) ships libvulkan-dev but not glslc;
+          # the glslc binary is in the `glslc` or `shaderc` package
+          # depending on the distro version.
           sudo apt-get update
-          sudo apt-get install -y cmake g++ vulkan-sdk libvulkan-dev || sudo apt-get install -y cmake g++ libvulkan-dev
+          sudo apt-get install -y cmake g++ libvulkan-dev glslc || \
+          sudo apt-get install -y cmake g++ libvulkan-dev glslang-tools || \
+          sudo apt-get install -y cmake g++ libvulkan-dev shaderc
 
       - name: Configure with Vulkan
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGGML_VULKAN=ON
