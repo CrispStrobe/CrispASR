@@ -195,19 +195,18 @@ static void dw_sep_conv1d(
             dw_out[c * T_in + t] = std::max(0.f, sum);  // ReLU
         }
     }
-    // Pointwise: [C_out, C_in, 1] + residual + ReLU
+    // Pointwise: [C_out, C_in, 1] + optional residual + ReLU
     for (int co = 0; co < C_out; co++) {
         for (int t = 0; t < T_in; t++) {
             float sum = pw_b[co];
             for (int ci = 0; ci < C_in; ci++)
                 sum += pw_w[co * C_in + ci] * dw_out[ci * T_in + t];
-            // Residual: add the input at the same channel position
-            // (only when C_in == C_out; when they differ, the caller
-            // applies a separate proj and the residual is omitted here)
             if (add_residual && C_in == C_out && co < C_in) {
                 sum += in[co * T_in + t];
             }
-            out[co * T_in + t] = std::max(0.f, sum);  // ReLU
+            // ReLU only when we're doing the normal residual path.
+            // For blocks with proj, the caller adds proj + ReLU.
+            out[co * T_in + t] = add_residual ? std::max(0.f, sum) : sum;
         }
     }
 }
@@ -547,32 +546,52 @@ extern "C" const char * silero_lid_detect(
             const float * pw_w_f = (const float *)cb.pw_w->data;
             const float * pw_b_f = (const float *)cb.pw_b->data;
 
+            // For blocks with proj: skip the residual+ReLU in dw_sep_conv1d
+            // (they'll be applied after the proj add below)
+            bool has_proj = (cb.proj_w != nullptr);
             dw_sep_conv1d(cur.data(), C_in, T,
                           dw_w_f, dw_b_f, 5,
                           pw_w_f, pw_b_f, C_out,
-                          out.data());
+                          out.data(),
+                          /*add_residual=*/!has_proj);
 
-            // Optional residual projection (last block of some stages)
+
+            // For the LAST block of each stage (which changes channel count),
+            // ONNX applies a separate 1×1 conv (proj) on the ORIGINAL BLOCK
+            // INPUT and ADDS it to the pw_conv output as the residual:
+            //   output = ReLU(pw_conv(ReLU(dw_conv(input))) + proj(input))
+            // This is different from regular blocks where the residual is
+            // just the identity: output = ReLU(pw_conv(...) + input).
             if (cb.proj_w) {
                 int C_proj = (int)cb.proj_w->ne[2];
-                std::vector<float> proj_out(C_proj * T);
                 const float * pj_w = (const float *)cb.proj_w->data;
                 const float * pj_b = cb.proj_b ? (const float *)cb.proj_b->data : nullptr;
-                // proj is a 1×1 conv: (C_proj, C_out, 1)
+                // proj applies to cur (block input), NOT out (conv output)!
+                // proj: (C_proj, C_in, 1) where C_in = original channel count
+                std::vector<float> proj_res(C_proj * T);
                 for (int co = 0; co < C_proj; co++) {
                     for (int t = 0; t < T; t++) {
                         float sum = pj_b ? pj_b[co] : 0.f;
-                        for (int ci = 0; ci < C_out; ci++)
-                            sum += pj_w[co * C_out + ci] * out[ci * T + t];
-                        proj_out[co * T + t] = sum;
+                        for (int ci = 0; ci < C; ci++)
+                            sum += pj_w[co * C + ci] * cur[ci * T + t];
+                        proj_res[co * T + t] = sum;
+                    }
+                }
+                // Add proj(input) to pw_conv output + ReLU
+                for (int co = 0; co < C_proj; co++) {
+                    for (int t = 0; t < T; t++) {
+                        out[co * T + t] = std::max(0.f, out[co * T + t] + proj_res[co * T + t]);
                     }
                 }
                 C_out = C_proj;
-                out = std::move(proj_out);
             }
 
             cur = std::move(out);
             C = C_out;
+
+            if (si == 0 && bi == 11) {
+                float m = 0; for(int i=0;i<C*T;i++) m+=cur[i]; m/=(C*T);
+            }
         }
 
         // ---- Stride-2 temporal downsampling (first 4 stages only) ----
