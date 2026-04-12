@@ -170,9 +170,9 @@ def convert(input_dir: Path, out_path: Path) -> None:
     writer.add_uint32("wav2vec2.pad_token_id",                  vocab_size - 1)  # CTC blank
     writer.add_uint32("wav2vec2.feat_extract_norm_type",        feat_extract_norm_type)
     for i in range(7):
-        writer.add_uint32(f"wav2vec2.conv_dim.{i}",    conv_dims[i] if i < len(conv_dims) else 512)
-        writer.add_uint32(f"wav2vec2.conv_kernel.{i}",  conv_kernels[i] if i < len(conv_kernels) else 3)
-        writer.add_uint32(f"wav2vec2.conv_stride.{i}",  conv_strides[i])
+        writer.add_uint32(f"wav2vec2.conv_dim_{i}",    conv_dims[i] if i < len(conv_dims) else 512)
+        writer.add_uint32(f"wav2vec2.conv_kernel_{i}",  conv_kernels[i] if i < len(conv_kernels) else 3)
+        writer.add_uint32(f"wav2vec2.conv_stride_{i}",  conv_strides[i])
 
     if vocab:
         writer.add_array("tokenizer.ggml.tokens", vocab)
