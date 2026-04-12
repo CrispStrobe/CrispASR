@@ -7,12 +7,18 @@
 
 #include "voxtral4b.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 #include "ggml.h"
 #include "ggml-alloc.h"
 #include "ggml-backend.h"
 #include "ggml-cpu.h"
 #include "gguf.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 #include <algorithm>
 #include <cassert>
 #include <climits>
@@ -20,15 +26,14 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <fcntl.h>
 #include <map>
 #include <string>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <unistd.h>
 #include <unordered_map>
 #include <vector>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 // ===========================================================================
 // Hyper-parameters
 // ===========================================================================
@@ -180,6 +185,9 @@ struct voxtral4b_context {
 
 #include "core/gguf_loader.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 static bool voxtral4b_load_model(voxtral4b_model & model, voxtral4b_vocab & vocab,
                                  const char * path, ggml_backend_t backend) {
     // Pass 1: metadata
@@ -379,6 +387,9 @@ static void voxtral4b_fft(float * in, int N, float * out) {
 #include "core/ffn.h"
 #include "core/attention.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 // Same in-place FFT quirk as voxtral 3B: voxtral4b_fft writes into its
 // input buffer during recursion, so we wrap it with a thread-local
 // scratch copy to satisfy core_mel::FftR2C's const input contract.

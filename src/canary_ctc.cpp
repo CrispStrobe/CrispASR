@@ -11,29 +11,37 @@
 
 #include "canary_ctc.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 #include "ggml.h"
 #include "ggml-alloc.h"
 #include "ggml-backend.h"
 #include "ggml-cpu.h"
 #include "gguf.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 #include "core/fastconformer.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <fcntl.h>
 #include <map>
 #include <string>
-#include <sys/mman.h>
-#include <sys/stat.h>
 #include <thread>
-#include <unistd.h>
 #include <unordered_map>
 #include <vector>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 // ===========================================================================
 // Hyperparameters (mirror canary_ctc.* keys in the GGUF)
 // ===========================================================================
@@ -126,6 +134,9 @@ struct canary_ctc_context {
 
 #include "core/gguf_loader.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 static ggml_tensor * cc_try_get(cc_model & m, const char * name) {
     return core_gguf::try_get(m.tensors, name);
 }
@@ -173,6 +184,9 @@ static void cc_fft_r2c(const float * in, int N, float * out) {
 
 #include "core/mel.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 static std::vector<float> cc_compute_mel(canary_ctc_context * ctx,
                                          const float * samples, int n_samples,
                                          int & T_out)

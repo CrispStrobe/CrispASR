@@ -55,17 +55,17 @@ All ten runtimes share ggml-based inference. The speech-LLM backends (**qwen3**,
 
 Run `crispasr --list-backends` to see it live. Each backend declares capabilities at runtime; if you ask for a feature the selected backend does not support, CrispASR prints a warning and silently ignores the flag.
 
-<!-- Generated from `crispasr --list-backends`. Keep in sync. -->
+<!-- Generated from `crispasr --list-backends` + cross-cutting features. -->
 
 | Feature | whisper | parakeet | canary | cohere | granite | voxtral | voxtral4b | qwen3 | fc-ctc |
 |---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
 | Native timestamps | ✔ | ✔ | ✔ | ✔ | | | | | |
 | CTC timestamps | | | ✔ | | ✔ | ✔ | ✔ | ✔ | ✔ |
-| Word-level timing | ✔ | ✔ | ✔ | ✔ | | | | | |
+| Word-level timing | ✔ | ✔ | ✔ | ✔ | `-am` | `-am` | `-am` | `-am` | `-am` |
 | Per-token confidence | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | |
-| Language auto-detect | ✔ | ✔ | | | | | | ✔ | |
+| Language auto-detect | ✔ | ✔ | LID | LID | LID | LID | LID | ✔ | LID |
 | Speech translation | ✔ | | ✔ | | ✔ | ✔ | | ✔ | |
-| Speaker diarization | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | |
+| Speaker diarization | all | all | all | all | all | all | all | all | all |
 | Grammar (GBNF) | ✔ | | | | | | | | |
 | Temperature sampling | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | |
 | Beam search | ✔ | | | | | ✔ | | | |
@@ -74,7 +74,7 @@ Run `crispasr --list-backends` to see it live. Each backend declares capabilitie
 | Source / target language | | | ✔ | | ✔ | ✔ | | ✔ | |
 | Auto-download | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | |
 
-Capabilities are declared at runtime by each backend. Word-level timing for backends without native word timestamps is available via the CTC forced aligner (`-am canary-ctc-aligner.gguf` or `-am qwen3-forced-aligner.gguf`). Language auto-detect for backends that don't declare it natively is available via the LID pre-step (`-l auto`).
+**Key:** ✔ = native, `-am` = via CTC forced aligner (`-am canary-ctc-aligner.gguf` or `-am qwen3-forced-aligner.gguf`), **LID** = via language identification pre-step (`-l auto`), **all** = available for every backend via `--diarize` post-step.
 
 **Speaker diarization** is available for all backends as a post-processing step via `--diarize`:
 - `--diarize-method energy` / `xcorr` — stereo-only, no extra deps

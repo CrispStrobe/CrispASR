@@ -32,10 +32,6 @@
 #include <unordered_map>
 #include <vector>
 #include <cstdarg>
-#include <fcntl.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <unistd.h>
 #ifdef _OPENMP
 #include <omp.h>
 #endif
@@ -726,6 +722,9 @@ static float swish(float x)   { return x * sigmoid(x); }
 
 #include "gguf.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 static ggml_tensor * ct_get_tensor(cohere_model & model, const std::string & name) {
     auto it = model.tensors.find(name);
     if (it == model.tensors.end()) {
@@ -747,6 +746,9 @@ static ggml_tensor * ct_get_tensor_fmt(cohere_model & model, const char * fmt, i
 
 #include "core/gguf_loader.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 static bool cohere_load_model(cohere_model & model,
                                cohere_vocab  & vocab,
                                const char * path,
@@ -1030,6 +1032,9 @@ static void cohere_fft_r2c(const float * in, int N, float * out) {
 
 #include "core/mel.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 static std::vector<float> cohere_compute_features(const cohere_hparams & hp,
                                                    const float * fe_mel_fb_data,
                                                    const float * fe_window_data,

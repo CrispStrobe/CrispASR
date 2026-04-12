@@ -14,28 +14,33 @@
 
 #include "qwen3_asr.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 #include "ggml.h"
 #include "ggml-alloc.h"
 #include "ggml-backend.h"
 #include "ggml-cpu.h"
 #include "gguf.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 #include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <fcntl.h>
 #include <climits>
 #include <map>
 #include <string>
 #include <unordered_map>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <unistd.h>
 #include <vector>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 // ===========================================================================
 // Hyper-parameters
 // ===========================================================================
@@ -203,6 +208,9 @@ struct qwen3_asr_context {
 
 #include "core/gguf_loader.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 static ggml_tensor * try_get(qwen3_asr_model & m, const char * name) {
     return core_gguf::try_get(m.tensors, name);
 }
@@ -497,6 +505,9 @@ static void qwen3_asr_fft(float * in, int N, float * out) {
 #include "core/ffn.h"
 #include "core/attention.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 // qwen3_asr_fft uses its input buffer as scratch during recursion (needs
 // ~4N extra floats past the input pointer). Wrap it to match core_mel's
 // const-input FftR2C signature, same trick as voxtral / voxtral4b.
@@ -1265,6 +1276,9 @@ extern "C" const char * qwen3_asr_token_text(qwen3_asr_context * ctx, int id) {
 // model gets them for free.
 #include "core/bpe.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 extern "C" int32_t * qwen3_asr_tokenize(qwen3_asr_context * ctx,
                                         const char * text, int * out_n_tokens) {
     if (!ctx || !text) {

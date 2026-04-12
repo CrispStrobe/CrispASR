@@ -7,6 +7,9 @@
 
 #include "granite_speech.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 #include "core/ffn.h"
 #include "core/attention.h"
 #include "core/bpe.h"
@@ -17,6 +20,9 @@
 #include "ggml-cpu.h"
 #include "gguf.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 #include <algorithm>
 #include <climits>
 #include <cassert>
@@ -24,15 +30,14 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <fcntl.h>
 #include <map>
 #include <string>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <unistd.h>
 #include <unordered_map>
 #include <vector>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 // ===========================================================================
 // Hyperparameters
 // ===========================================================================
@@ -254,6 +259,9 @@ struct granite_speech_context {
 
 #include "core/gguf_loader.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 static bool granite_speech_load_model(granite_speech_model & model, const char * path,
                                       ggml_backend_t backend) {
     // Pass 1: metadata

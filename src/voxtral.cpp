@@ -12,12 +12,18 @@
 
 #include "voxtral.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 #include "ggml.h"
 #include "ggml-alloc.h"
 #include "ggml-backend.h"
 #include "ggml-cpu.h"
 #include "gguf.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 #include <algorithm>
 #include <cassert>
 #include <climits>
@@ -25,15 +31,14 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <fcntl.h>
 #include <map>
 #include <string>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <unistd.h>
 #include <unordered_map>
 #include <vector>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 // ===========================================================================
 // Hyper-parameters (filled from voxtral.* GGUF kv)
 // ===========================================================================
@@ -192,6 +197,9 @@ struct voxtral_context {
 
 #include "core/gguf_loader.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 static ggml_tensor * try_get(voxtral_model & m, const char * name) {
     return core_gguf::try_get(m.tensors, name);
 }
@@ -408,6 +416,9 @@ static void voxtral_fft(float * in, int N, float * out) {
 #include "core/ffn.h"
 #include "core/attention.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 // core_mel::FftR2C expects a const-input function and passes a buffer of
 // exactly N floats. voxtral_fft() uses `in` as scratch during recursion
 // and needs 4*N slots, so we wrap it here with a local scratch vector

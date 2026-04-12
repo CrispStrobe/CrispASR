@@ -14,14 +14,23 @@
 
 #include "parakeet.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 #include "ggml.h"
 #include "ggml-alloc.h"
 #include "ggml-backend.h"
 #include "ggml-cpu.h"
 #include "gguf.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 #include "core/fastconformer.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 #ifdef GGML_USE_METAL
 #  include "ggml-metal.h"
 #endif
@@ -36,16 +45,15 @@
 #include <random>
 #include <cstdlib>
 #include <cstring>
-#include <fcntl.h>
 #include <map>
 #include <string>
-#include <sys/mman.h>
-#include <sys/stat.h>
 #include <thread>
-#include <unistd.h>
 #include <unordered_map>
 #include <vector>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 // ===========================================================================
 // CPU weight caches for the predictor LSTM and joint head
 //
@@ -201,6 +209,9 @@ struct parakeet_context {
 
 #include "core/gguf_loader.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 static ggml_tensor * try_get(parakeet_model & m, const char * name) {
     return core_gguf::try_get(m.tensors, name);
 }
@@ -422,6 +433,9 @@ static void parakeet_fft_r2c(const float * in, int N, float * out) {
 
 #include "core/mel.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 static std::vector<float> parakeet_compute_mel_impl(parakeet_context * ctx,
                                                     const float * samples, int n_samples,
                                                     int & T_out) {

@@ -20,14 +20,23 @@
 
 #include "canary.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 #include "ggml.h"
 #include "ggml-alloc.h"
 #include "ggml-backend.h"
 #include "ggml-cpu.h"
 #include "gguf.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 #include "core/fastconformer.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 #ifdef GGML_USE_METAL
 #  include "ggml-metal.h"
 #endif
@@ -40,17 +49,16 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <fcntl.h>
 #include <map>
 #include <random>
 #include <string>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <unistd.h>
 #include <thread>
 #include <unordered_map>
 #include <vector>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 // ===========================================================================
 // Hyper-parameters
 // ===========================================================================
@@ -196,6 +204,9 @@ struct canary_context {
 
 #include "core/gguf_loader.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 static ggml_tensor * try_get(canary_model & m, const char * name) {
     return core_gguf::try_get(m.tensors, name);
 }
@@ -397,6 +408,9 @@ static void canary_fft_r2c(const float * in, int N, float * out) {
 // the FFT function pointer differs between parakeet/canary/canary_ctc/cohere.
 #include "core/mel.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 static std::vector<float> canary_compute_mel_impl(canary_context * ctx,
                                                    const float * samples, int n_samples,
                                                    int & T_out) {
