@@ -13,8 +13,18 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#ifdef _WIN32
+#include <io.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#define close _close
+static int mkstemps(char * t, int s) {
+    (void)s; return _mktemp_s(t, strlen(t)+1) == 0 ? _open(t, _O_CREAT|_O_WRONLY, 0600) : -1;
+}
+#else
 #include <sys/stat.h>
 #include <unistd.h>
+#endif
 #include <vector>
 
 namespace {

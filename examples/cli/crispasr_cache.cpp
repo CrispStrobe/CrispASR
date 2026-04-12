@@ -6,8 +6,16 @@
 #include <cstdio>
 #include <cstdlib>
 #include <string>
+#ifdef _WIN32
+#include <direct.h>
+#include <io.h>
+#define access _access
+#define F_OK 0
+#define mkdir(d, m) _mkdir(d)
+#else
 #include <sys/stat.h>
 #include <unistd.h>
+#endif
 
 namespace crispasr_cache {
 
