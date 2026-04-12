@@ -374,6 +374,44 @@ Full tracking is in `UPSTREAM.md`. Short summary:
 | `cstr/canary-ctc-aligner-GGUF` | ✅ shipped |
 | `cstr/cohere-transcribe-03-2026-GGUF` | ✅ shipped |
 | `cstr/qwen3-asr-0.6b-GGUF` | ✅ shipped |
+| `cstr/qwen3-asr-1.7b-GGUF` | ✅ shipped |
+| `cstr/qwen3-forced-aligner-0.6b-GGUF` | ✅ shipped |
 | `cstr/voxtral-mini-3b-2507-GGUF` | ✅ shipped |
 | `cstr/voxtral-mini-4b-realtime-GGUF` | ✅ shipped (Q4_K + Q8_0) |
-| `cstr/granite-speech-4.0-1b-GGUF` | ❌ pending quantize + upload |
+| `cstr/granite-speech-4.0-1b-GGUF` | ✅ shipped (f16, q4_k, q5_0, q8_0) |
+| `cstr/granite-speech-3.3-2b-GGUF` | ✅ shipped (f16, q4_k, q5_0, q8_0) |
+| `cstr/granite-speech-3.3-8b-GGUF` | ✅ shipped (q4_k, q5_0, q8_0) |
+| `cstr/granite-speech-3.2-8b-GGUF` | ✅ shipped (q4_k, q5_0, q8_0) |
+| `cstr/stt-en-fastconformer-ctc-large-GGUF` | ✅ shipped (f16, q4_k, q5_0, q8_0) |
+| `cstr/stt-en-fastconformer-ctc-xlarge-GGUF` | ✅ shipped (f16, q4_k, q5_0, q8_0) |
+| `cstr/stt-en-fastconformer-ctc-xxlarge-GGUF` | ✅ shipped (f16, q4_k, q5_0, q8_0) |
+
+---
+
+## Current session pending (April 2026)
+
+### Silero LID native port (#56)
+- Converter + loader + CLI wiring: DONE (commit aea80da + 122dbb3)
+- Architecture: DONE (front-end stride-160, 4× stride-2, 8 stage pairs)
+- Forward pass runs (~55s) but detects WRONG language
+- Root cause: adaptive normalization not exact yet
+- File: src/silero_lid.{h,cpp}
+
+### omniASR wav2vec2 (#58 + #63)
+- Converter: DONE (models/convert-omniasr-ctc-to-gguf.py)
+- Backend: DONE (`--backend wav2vec2` / `omniasr`)
+- Forward pass: 2+ min on CPU, empty output
+- Blocked on: wav2vec2 ggml rewrite (manual C++ too slow + buggy)
+
+### Pyannote v3 native (#57)
+- ONNX downloaded + inspected: 50 nodes, 41 weights
+- Architecture: SincNet → MaxPool × 3 → LSTM × 4 → Linear → LogSoftmax
+- Need: converter + C++ runtime + spectral clustering
+
+### Granite speedup (#64)
+- 43s for 11s audio on CPU
+- Bottleneck: 40-layer LLM autoregressive decode
+
+### wav2vec2 ggml rewrite (#63)
+- Current manual C++ loops are CPU-only and slow
+- Need: full ggml graph for GPU support + speed
