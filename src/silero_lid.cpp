@@ -256,6 +256,7 @@ static void self_attention(
         }
     }
 
+    // Debug: compare input + QKV with ONNX
     // Split into Q, K, V each [T, D]
     auto Q = qkv.data();
     auto K = qkv.data() + D;
@@ -602,28 +603,30 @@ extern "C" const char * silero_lid_detect(
         const auto & tx = st.tx;
         int D = C;
 
-        if (tx.norm1_w && tx.qkv_w) {
-            // Pre-norm attention
-            layer_norm_ct(cur.data(), D, T,
-                         (const float *)tx.norm1_w->data,
-                         (const float *)tx.norm1_b->data);
-
+        if (tx.qkv_w) {
+            // POST-norm transformer (ONNX confirmed: no LN before QKV)
+            // 1. Self-attention (adds residual internally)
             self_attention(cur.data(), D, T,
                           (const float *)tx.qkv_w->data,
                           (const float *)tx.qkv_b->data,
                           (const float *)tx.out_w->data,
                           (const float *)tx.out_b->data);
-
-            // Pre-norm FFN
-            layer_norm_ct(cur.data(), D, T,
-                         (const float *)tx.norm2_w->data,
-                         (const float *)tx.norm2_b->data);
-
+            // 2. Post-attention LayerNorm
+            if (tx.norm1_w)
+                layer_norm_ct(cur.data(), D, T,
+                             (const float *)tx.norm1_w->data,
+                             (const float *)tx.norm1_b->data);
+            // 3. FFN (adds residual internally)
             ffn_residual(cur.data(), D, T,
                         (const float *)tx.ff1_w->data,
                         (const float *)tx.ff1_b->data,
                         (const float *)tx.ff2_w->data,
                         (const float *)tx.ff2_b->data);
+            // 4. Post-FFN LayerNorm
+            if (tx.norm2_w)
+                layer_norm_ct(cur.data(), D, T,
+                             (const float *)tx.norm2_w->data,
+                             (const float *)tx.norm2_b->data);
         }
 
         // ---- Stride-2 temporal downsampling (AFTER transformer, first 4 stages) ----
