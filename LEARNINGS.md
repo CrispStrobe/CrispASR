@@ -453,3 +453,74 @@ that saves only 3-5 MB — not worth the accuracy loss.
 kernels with small spatial dimensions (k ≤ 5) and few channels (C < 256),
 ship it F32. The 16 MB F32 Silero LID model is smaller than a single
 layer of most ASR encoders — quantization is pointless.
+
+---
+
+## Methodical debugging of ported models against ground truth
+
+This is the single most important workflow in the project. Every model
+port that "almost works" but produces wrong output will eat days unless
+you follow this process systematically.
+
+### The protocol
+
+1. **Get a reference implementation that provably works.** Either the
+   original Python/ONNX model (preferred — run via onnxruntime), or a
+   known-good C++ implementation. If ONNX: add all internal nodes as
+   graph outputs and run with intermediate capture.
+
+2. **Dump intermediates at every graph boundary.** Not just input/output
+   — dump after EVERY stage: normalization, projection, attention,
+   FFN, residual add. Save as `.npy` files with clear names.
+
+3. **Compare C++ vs reference at each stage, starting from the INPUT.**
+   Don't start debugging the attention if the input is already wrong.
+   Print first 8-16 values of each tensor at frame t=0. The divergence
+   point tells you exactly which operation is broken.
+
+4. **When you find the divergence point, check these in order:**
+   - **Tensor layout/transpose** — ggml uses ne[0]-fastest (column-major).
+     A `[T, H]` row-major C array becomes `[H, T]` in ggml (ne[0]=H).
+   - **Weight shapes** — GGUF stores shapes in ggml ne-order. A numpy
+     `(1024, 4096)` weight becomes ggml ne `[1024, 4096]`. For
+     `ggml_mul_mat(W, x)` = W^T @ x, we need `W.ne[0] == x.ne[0]`.
+   - **Padding type and amount** — zero vs reflect vs replicate. ONNX
+     Pad nodes encode padding as a dynamically-computed vector from
+     chains of 10+ ops. Always dump the actual padded tensor.
+   - **Activation functions** — missing ReLU, tanh, GELU. These are
+     easy to miss when tracing the ONNX graph manually.
+   - **Operation order** — pre-norm vs post-norm, attention before or
+     after stride-2, QKV split order.
+   - **Formula details** — stride-2 output is `(T-1)/2+1` not `T/2`.
+     Reflection padding `pad[i] = data[pad_size - i]` not `data[i]`.
+     Scale factor in attention: 1/sqrt(head_dim) not 1/sqrt(d_model).
+
+5. **For ggml graph debugging specifically:**
+   - The `ggml_backend_sched` may not correctly associate model weight
+     tensors with their backend buffer. Test with `ggml_backend_alloc`
+     instead of the scheduler for isolation.
+   - Mark tensors with `ggml_set_name()` and read them with
+     `ggml_backend_tensor_get()` BEFORE calling `ggml_backend_sched_free()`.
+   - F16 weight tensors in ggml_mul_mat work correctly in single mini-
+     graphs (as in `ggml_linear_f32()`) but may misbehave in large
+     graphs where the scheduler manages buffer allocation.
+   - When in doubt, build a 1-layer graph first and verify it matches
+     the manual path before scaling to all layers.
+
+6. **Never trust "close enough".** If the first frame's values differ
+   by more than 1e-4 from the reference, there's a bug. Float32
+   accumulation order can cause ~1e-5 drift per operation, so after
+   24 transformer layers you might see ~1e-3 drift — but a 0.1
+   difference at layer 0 means a structural bug.
+
+### Common traps
+
+- **ONNX QKV split order is not always Q,K,V.** Silero LID uses K,Q,V.
+  The only way to know is to dump the Slice node boundaries.
+- **ONNX padding is computed dynamically.** Don't assume reflect/zero
+  from the model architecture — dump the Pad node's padding vector.
+- **ONNX Reshape+Transpose chains for multi-head attention** can
+  interleave heads differently than simple offset slicing. Always
+  dump the post-reshape tensors to verify head layout.
+- **ggml_norm normalizes over ne[0].** Make sure ne[0] is the feature
+  dimension, not the time dimension.
