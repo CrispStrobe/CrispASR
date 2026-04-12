@@ -101,6 +101,7 @@ target_link_libraries(${TARGET} PRIVATE
     canary_ctc
     wav2vec2-ggml
     silero-lid
+    pyannote-seg
     ${FFMPEG_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}
 )

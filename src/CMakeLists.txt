@@ -359,6 +359,17 @@ if(NOT MSVC)
 endif()
 
 # ---------------------------------------------------------------------------
+# pyannote-seg — native pyannote-segmentation-3.0 (GGUF, CPU-only)
+# ---------------------------------------------------------------------------
+add_library(pyannote-seg STATIC pyannote_seg.h pyannote_seg.cpp)
+target_include_directories(pyannote-seg PUBLIC .)
+target_compile_features   (pyannote-seg PUBLIC cxx_std_17)
+target_link_libraries     (pyannote-seg PUBLIC crispasr-core ggml ggml-base ggml-cpu)
+if(NOT MSVC)
+    target_compile_options(pyannote-seg PRIVATE -O3)
+endif()
+
+# ---------------------------------------------------------------------------
 # silero-lid — native Silero Language Classifier 95 (GGUF, ggml-based)
 # ---------------------------------------------------------------------------
 add_library(silero-lid STATIC silero_lid.h silero_lid.cpp)
