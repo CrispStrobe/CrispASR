@@ -524,6 +524,7 @@ extern "C" const char * silero_lid_detect(
 
     for (int si = 0; si < (int)m.stages.size(); si++) {
         const auto & st = m.stages[si];
+            si, C, T, cur[0], [&]{ float s=0; for(int i=0;i<C*T;i++) s+=cur[i]; return s/(C*T); }());
 
         // ---- 12 conv blocks ----
         for (int bi = 0; bi < (int)st.conv_blocks.size(); bi++) {
