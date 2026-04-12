@@ -141,11 +141,11 @@ def write_encoder_layers(w: gguf.GGUFWriter, sd: dict, n_layers: int) -> None:
         w.add_tensor(f"enc.{i}.ln1.weight", f32(sd[f"{p}.layer_norm.weight"]))
         w.add_tensor(f"enc.{i}.ln1.bias",   f32(sd[f"{p}.layer_norm.bias"]))
 
-        # Attention projections (F16 for quantization eligibility)
+        # Attention projections (F16 or F32 depending on --dtype)
         for proj, short in [("q_proj", "q"), ("k_proj", "k"),
                              ("v_proj", "v"), ("out_proj", "out")]:
             w.add_tensor(f"enc.{i}.attn.{short}.weight",
-                         f16(sd[f"{p}.attention.{proj}.weight"]))
+                         wt(sd[f"{p}.attention.{proj}.weight"]))
             w.add_tensor(f"enc.{i}.attn.{short}.bias",
                          f32(sd[f"{p}.attention.{proj}.bias"]))
 
@@ -153,13 +153,13 @@ def write_encoder_layers(w: gguf.GGUFWriter, sd: dict, n_layers: int) -> None:
         w.add_tensor(f"enc.{i}.ln2.weight", f32(sd[f"{p}.final_layer_norm.weight"]))
         w.add_tensor(f"enc.{i}.ln2.bias",   f32(sd[f"{p}.final_layer_norm.bias"]))
 
-        # FFN (F16)
+        # FFN (F16 or F32 depending on --dtype)
         w.add_tensor(f"enc.{i}.ffn.fc1.weight",
-                     f16(sd[f"{p}.feed_forward.intermediate_dense.weight"]))
+                     wt(sd[f"{p}.feed_forward.intermediate_dense.weight"]))
         w.add_tensor(f"enc.{i}.ffn.fc1.bias",
                      f32(sd[f"{p}.feed_forward.intermediate_dense.bias"]))
         w.add_tensor(f"enc.{i}.ffn.fc2.weight",
-                     f16(sd[f"{p}.feed_forward.output_dense.weight"]))
+                     wt(sd[f"{p}.feed_forward.output_dense.weight"]))
         w.add_tensor(f"enc.{i}.ffn.fc2.bias",
                      f32(sd[f"{p}.feed_forward.output_dense.bias"]))
 
@@ -177,21 +177,27 @@ def write_lm_head(w: gguf.GGUFWriter, sd: dict) -> None:
 # ---------------------------------------------------------------------------
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Convert Wav2Vec2ForCTC HuggingFace model to GGUF F16")
+    p = argparse.ArgumentParser(description="Convert Wav2Vec2ForCTC HuggingFace model to GGUF")
     p.add_argument("--model-dir", type=Path, required=True,
-                   help="Path to HuggingFace Wav2Vec2ForCTC model directory")
+                   help="Path to HuggingFace Wav2Vec2ForCTC model directory (or HF model ID)")
     p.add_argument("--output", type=Path, required=True,
                    help="Output .gguf file path")
+    p.add_argument("--dtype", choices=["f16", "f32"], default="f16",
+                   help="Weight dtype for linear/attention/FFN tensors (default: f16)")
     return p.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    model_dir = args.model_dir.resolve()
+    model_dir = args.model_dir
     out_path  = args.output.resolve()
 
-    if not model_dir.exists():
-        sys.exit(f"Model directory not found: {model_dir}")
+    # Set the weight dtype function globally
+    global wt
+    wt = f32 if args.dtype == "f32" else f16
+    print(f"Weight dtype: {args.dtype}")
+
+    # Accept both local paths and HF model IDs
 
     print(f"Loading model from: {model_dir}")
     model = Wav2Vec2ForCTC.from_pretrained(str(model_dir))
