@@ -99,7 +99,7 @@ struct VoxtralOps {
 class VoxtralBackend : public CrispasrBackend {
 public:
     VoxtralBackend() = default;
-    ~VoxtralBackend() override { shutdown(); }
+    ~VoxtralBackend() override { VoxtralBackend::shutdown(); }
 
     const char * name() const override { return "voxtral"; }
 

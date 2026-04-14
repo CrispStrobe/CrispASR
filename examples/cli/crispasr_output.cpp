@@ -36,7 +36,7 @@ std::string crispasr_make_out_path(const std::string& audio, const std::string& 
     for (const char* e : exts) {
         const size_t el = strlen(e);
         if (base.size() > el && base.compare(base.size() - el, el, e) == 0) {
-            base = base.substr(0, base.size() - el);
+            base.resize(base.size() - el);
             break;
         }
     }

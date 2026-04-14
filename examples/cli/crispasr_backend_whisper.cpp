@@ -39,7 +39,7 @@ namespace {
 class WhisperBackend : public CrispasrBackend {
 public:
     WhisperBackend() = default;
-    ~WhisperBackend() override { shutdown(); }
+    ~WhisperBackend() override { WhisperBackend::shutdown(); }
 
     const char * name() const override { return "whisper"; }
 

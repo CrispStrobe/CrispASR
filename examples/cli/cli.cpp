@@ -571,7 +571,7 @@ struct whisper_print_user_data {
     int progress_prev;
 };
 
-static std::string estimate_diarization_speaker(std::vector<std::vector<float>> pcmf32s, int64_t t0, int64_t t1,
+static std::string estimate_diarization_speaker(const std::vector<std::vector<float>> & pcmf32s, int64_t t0, int64_t t1,
                                                 bool id_only = false) {
     std::string speaker = "";
     const int64_t n_samples = pcmf32s[0].size();
@@ -748,7 +748,7 @@ static std::vector<crispasr_segment> cli_whisper_collect_segments(struct whisper
 }
 
 static void output_txt(const std::vector<crispasr_segment>& segs, std::ofstream& fout, const whisper_params& params,
-                       std::vector<std::vector<float>> pcmf32s) {
+                       const std::vector<std::vector<float>> & pcmf32s) {
     const int n_segments = (int)segs.size();
     for (int i = 0; i < n_segments; ++i) {
         const char* text = segs[i].text.c_str();
@@ -765,7 +765,7 @@ static void output_txt(const std::vector<crispasr_segment>& segs, std::ofstream&
 }
 
 static void output_vtt(const std::vector<crispasr_segment>& segs, std::ofstream& fout, const whisper_params& params,
-                       std::vector<std::vector<float>> pcmf32s) {
+                       const std::vector<std::vector<float>> & pcmf32s) {
     fout << "WEBVTT\n\n";
 
     const int n_segments = (int)segs.size();
@@ -787,7 +787,7 @@ static void output_vtt(const std::vector<crispasr_segment>& segs, std::ofstream&
 }
 
 static void output_srt(const std::vector<crispasr_segment>& segs, std::ofstream& fout, const whisper_params& params,
-                       std::vector<std::vector<float>> pcmf32s) {
+                       const std::vector<std::vector<float>> & pcmf32s) {
     const int n_segments = (int)segs.size();
     for (int i = 0; i < n_segments; ++i) {
         const char* text = segs[i].text.c_str();
@@ -869,7 +869,7 @@ static char* escape_double_quotes_in_csv(const char* str) {
 }
 
 static void output_csv(const std::vector<crispasr_segment>& segs, std::ofstream& fout, const whisper_params& params,
-                       std::vector<std::vector<float>> pcmf32s) {
+                       const std::vector<std::vector<float>> & pcmf32s) {
     const int n_segments = (int)segs.size();
     fout << "start,end,";
     if (params.diarize && pcmf32s.size() == 2) {
@@ -909,7 +909,7 @@ static void output_score(const std::vector<crispasr_segment>& segs, std::ofstrea
 }
 
 static void output_json(const std::vector<crispasr_segment>& segs, std::ofstream& fout, const whisper_params& params,
-                        std::vector<std::vector<float>> pcmf32s, struct whisper_context* ctx) {
+                        const std::vector<std::vector<float>> & pcmf32s, struct whisper_context* ctx) {
     const bool full = params.output_jsn_full;
     int indent = 0;
 
@@ -1068,7 +1068,7 @@ static void output_json(const std::vector<crispasr_segment>& segs, std::ofstream
 // outputs a bash script that uses ffmpeg to generate a video with the subtitles
 // TODO: font parameter adjustments
 static bool output_wts(const std::vector<crispasr_segment>& segs, std::ofstream& fout, const whisper_params& params,
-                       std::vector<std::vector<float>> pcmf32s, const char* fname_inp, float t_sec,
+                       const std::vector<std::vector<float>> & pcmf32s, const char* fname_inp, float t_sec,
                        const char* fname_out) {
     static const char* font = params.font_path.c_str();
 
@@ -1195,7 +1195,7 @@ static bool output_wts(const std::vector<crispasr_segment>& segs, std::ofstream&
 }
 
 static void output_lrc(const std::vector<crispasr_segment>& segs, std::ofstream& fout, const whisper_params& params,
-                       std::vector<std::vector<float>> pcmf32s) {
+                       const std::vector<std::vector<float>> & pcmf32s) {
     fout << "[by:whisper.cpp]\n";
 
     const int n_segments = (int)segs.size();

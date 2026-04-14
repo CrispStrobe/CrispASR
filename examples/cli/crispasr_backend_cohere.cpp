@@ -22,7 +22,7 @@ namespace {
 class CohereBackend : public CrispasrBackend {
 public:
     CohereBackend() = default;
-    ~CohereBackend() override { shutdown(); }
+    ~CohereBackend() override { CohereBackend::shutdown(); }
 
     const char * name() const override { return "cohere"; }
 

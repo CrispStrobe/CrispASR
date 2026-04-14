@@ -32,7 +32,7 @@ namespace {
 class FastConformerCtcBackend : public CrispasrBackend {
 public:
     FastConformerCtcBackend() = default;
-    ~FastConformerCtcBackend() override { shutdown(); }
+    ~FastConformerCtcBackend() override { FastConformerCtcBackend::shutdown(); }
 
     const char * name() const override { return "fastconformer-ctc"; }
 

@@ -77,7 +77,7 @@ std::string decode_token(const std::string & s) {
 class Qwen3Backend : public CrispasrBackend {
 public:
     Qwen3Backend() = default;
-    ~Qwen3Backend() override { shutdown(); }
+    ~Qwen3Backend() override { Qwen3Backend::shutdown(); }
 
     const char * name() const override { return "qwen3"; }
 

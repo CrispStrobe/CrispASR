@@ -34,7 +34,7 @@ namespace {
 class Voxtral4bBackend : public CrispasrBackend {
 public:
     Voxtral4bBackend() = default;
-    ~Voxtral4bBackend() override { shutdown(); }
+    ~Voxtral4bBackend() override { Voxtral4bBackend::shutdown(); }
 
     const char * name() const override { return "voxtral4b"; }
 

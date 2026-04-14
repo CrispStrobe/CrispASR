@@ -114,7 +114,6 @@ jobs:
   cppcheck:
     name: cppcheck (static analysis)
     runs-on: ubuntu-latest
-    continue-on-error: true  # non-blocking: too many false positives in upstream code
     steps:
       - uses: actions/checkout@v4
 
@@ -131,7 +130,7 @@ jobs:
         run: |
           cppcheck \
             --error-exitcode=1 \
-            --enable=warning,performance,portability \
+            --enable=warning,style,performance,portability \
             --std=c++17 \
             --suppress=missingIncludeSystem \
             --suppress=unmatchedSuppression \

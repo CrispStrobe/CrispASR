@@ -55,7 +55,7 @@ constexpr int kLegacyEos4      = 100257;
 class GraniteBackend : public CrispasrBackend {
 public:
     GraniteBackend() = default;
-    ~GraniteBackend() override { shutdown(); }
+    ~GraniteBackend() override { GraniteBackend::shutdown(); }
 
     const char * name() const override { return "granite"; }
 

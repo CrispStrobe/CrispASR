@@ -19,7 +19,7 @@ namespace {
 class Wav2Vec2Backend : public CrispasrBackend {
 public:
     Wav2Vec2Backend() = default;
-    ~Wav2Vec2Backend() override { shutdown(); }
+    ~Wav2Vec2Backend() override { Wav2Vec2Backend::shutdown(); }
 
     const char * name() const override { return "wav2vec2"; }
 

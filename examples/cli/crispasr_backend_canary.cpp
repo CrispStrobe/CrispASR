@@ -24,7 +24,7 @@ namespace {
 class CanaryBackend : public CrispasrBackend {
 public:
     CanaryBackend() = default;
-    ~CanaryBackend() override { shutdown(); }
+    ~CanaryBackend() override { CanaryBackend::shutdown(); }
 
     const char * name() const override { return "canary"; }
 

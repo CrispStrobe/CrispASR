@@ -18,7 +18,7 @@ namespace {
 class ParakeetBackend : public CrispasrBackend {
 public:
     ParakeetBackend() = default;
-    ~ParakeetBackend() override { shutdown(); }
+    ~ParakeetBackend() override { ParakeetBackend::shutdown(); }
 
     const char * name() const override { return "parakeet"; }
 
