@@ -173,11 +173,12 @@ int process_one_input(CrispasrBackend & backend,
 
     auto t_start = std::chrono::steady_clock::now();
 
-    std::vector<std::vector<crispasr_segment>> per_slice;
-    per_slice.reserve(slices.size());
-    for (size_t i = 0; i < slices.size(); i++) {
+    // Process VAD slices — parallel when multiple slices AND n_processors > 1
+    std::vector<std::vector<crispasr_segment>> per_slice(slices.size());
+
+    auto process_slice = [&](size_t i, CrispasrBackend & be) {
         const auto & sl = slices[i];
-        std::vector<crispasr_segment> segs = backend.transcribe(
+        std::vector<crispasr_segment> segs = be.transcribe(
             samples.data() + sl.start,
             sl.end - sl.start,
             sl.t0_cs,
@@ -221,7 +222,64 @@ int process_one_input(CrispasrBackend & backend,
             }
         }
 
-        per_slice.push_back(std::move(segs));
+        per_slice[i] = std::move(segs);
+    };
+
+    const int n_workers = std::min(params.n_processors,
+                                    (int32_t)slices.size());
+
+    if (n_workers > 1 && slices.size() > 1) {
+        // Parallel slice processing with separate backend instances
+        if (!params.no_prints) {
+            fprintf(stderr, "crispasr: parallel processing %zu slices with %d workers\n",
+                    slices.size(), n_workers);
+        }
+
+        // Create extra backend instances for worker threads
+        std::vector<std::unique_ptr<CrispasrBackend>> workers;
+        workers.reserve(n_workers - 1);
+        bool pool_ok = true;
+        for (int w = 1; w < n_workers; w++) {
+            auto wb = crispasr_create_backend(params.backend);
+            if (!wb || !wb->init(params)) {
+                if (!params.no_prints)
+                    fprintf(stderr, "crispasr: warning: failed to create worker %d, reducing parallelism\n", w);
+                pool_ok = false;
+                break;
+            }
+            workers.push_back(std::move(wb));
+        }
+
+        if (pool_ok && !workers.empty()) {
+            // Dispatch slices round-robin across workers
+            std::vector<std::thread> threads;
+            std::atomic<size_t> next_slice{0};
+
+            auto worker_fn = [&](CrispasrBackend & be) {
+                while (true) {
+                    size_t idx = next_slice.fetch_add(1);
+                    if (idx >= slices.size()) break;
+                    process_slice(idx, be);
+                }
+            };
+
+            // Launch worker threads (workers[0..N-2] + main thread uses backend)
+            for (auto & w : workers) {
+                threads.emplace_back(worker_fn, std::ref(*w));
+            }
+            // Main thread also processes slices
+            worker_fn(backend);
+
+            for (auto & t : threads) t.join();
+        } else {
+            // Fallback to sequential
+            for (size_t i = 0; i < slices.size(); i++)
+                process_slice(i, backend);
+        }
+    } else {
+        // Sequential (single slice or n_processors == 1)
+        for (size_t i = 0; i < slices.size(); i++)
+            process_slice(i, backend);
     }
     auto all_segs = merge_segments(std::move(per_slice));
 
