@@ -164,6 +164,15 @@ struct whisper_params {
     std::string sherpa_embedding_model;   // speaker embedding ONNX (titanet / 3dspeaker)
     int         sherpa_num_clusters = 0;  // 0 = auto-estimate (sherpa default)
 
+    // Streaming mode: read raw 16 kHz s16le PCM from stdin in chunks,
+    // transcribe each chunk, print output immediately. Useful for piping
+    // from ffmpeg, sox, or a microphone capture utility:
+    //   ffmpeg -i mic.wav -f s16le -ar 16000 -ac 1 - | crispasr --stream -m model.gguf
+    bool        stream           = false;
+    int32_t     stream_step_ms   = 3000;  // chunk size in ms (default 3s)
+    int32_t     stream_length_ms = 10000; // context window in ms (default 10s)
+    int32_t     stream_keep_ms   = 200;   // overlap to keep between chunks
+
     // Override the directory used to cache auto-downloaded model files.
     // Default (empty): platform default (~/.cache/crispasr on POSIX,
     // %USERPROFILE%/.cache/crispasr on Windows). Set via --cache-dir.

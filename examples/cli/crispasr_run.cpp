@@ -18,10 +18,15 @@
 
 #include "common-whisper.h" // read_audio_data
 
+#include <algorithm>
 #include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#if defined(_WIN32)
+#  include <fcntl.h>
+#  include <io.h>
+#endif
 #include <memory>
 #include <mutex>
 #include <string>
@@ -302,6 +307,77 @@ int crispasr_run_backend(const whisper_params & params_in) {
         fprintf(stderr, "crispasr: error: failed to initialise backend '%s'\n",
                 backend_name.c_str());
         return 13;
+    }
+
+    // ---- Streaming mode: read raw PCM from stdin, transcribe chunks ----
+    if (params.stream) {
+        const int SR = 16000;
+        const int step_samples   = (params.stream_step_ms   * SR) / 1000;
+        const int length_samples = (params.stream_length_ms  * SR) / 1000;
+        const int keep_samples   = (params.stream_keep_ms    * SR) / 1000;
+
+        fprintf(stderr, "crispasr[stream]: reading raw s16le 16kHz mono PCM from stdin\n");
+        fprintf(stderr, "crispasr[stream]: step=%dms length=%dms keep=%dms\n",
+                params.stream_step_ms, params.stream_length_ms, params.stream_keep_ms);
+        fprintf(stderr, "crispasr[stream]: pipe audio in, e.g.:\n");
+        fprintf(stderr, "  ffmpeg -i input.wav -f s16le -ar 16000 -ac 1 - | crispasr --stream -m model.gguf\n\n");
+
+#if defined(_WIN32)
+        _setmode(_fileno(stdin), _O_BINARY);
+#endif
+
+        std::vector<float> pcm_window(length_samples, 0.0f);
+        std::vector<int16_t> read_buf(step_samples);
+        std::string prev_text;
+
+        while (true) {
+            // Read one step of raw s16le samples from stdin
+            size_t n_read = fread(read_buf.data(), sizeof(int16_t), step_samples, stdin);
+            if (n_read == 0) break;  // EOF
+
+            // Convert s16le to float
+            std::vector<float> new_samples(n_read);
+            for (size_t i = 0; i < n_read; i++)
+                new_samples[i] = read_buf[i] / 32768.0f;
+
+            // Shift window: keep the tail, append new samples
+            int n_keep = std::min(keep_samples, (int)pcm_window.size());
+            int n_new  = (int)new_samples.size();
+            int n_total = n_keep + n_new;
+            if (n_total > length_samples) n_total = length_samples;
+
+            std::vector<float> next_window(n_total);
+            // Copy keep portion from end of previous window
+            if (n_keep > 0 && (int)pcm_window.size() >= n_keep) {
+                std::copy(pcm_window.end() - n_keep, pcm_window.end(),
+                          next_window.begin());
+            }
+            // Append new samples
+            int copy_start = std::max(0, n_total - n_new);
+            std::copy(new_samples.begin(),
+                      new_samples.begin() + std::min(n_new, n_total),
+                      next_window.begin() + copy_start);
+            pcm_window = std::move(next_window);
+
+            // Transcribe the window
+            auto segs = backend->transcribe(pcm_window.data(), (int)pcm_window.size(),
+                                             0, params);
+            if (segs.empty()) continue;
+
+            // Build output text
+            std::string text;
+            for (const auto & s : segs) text += s.text;
+
+            // Simple dedup: only print if text changed
+            if (!text.empty() && text != prev_text) {
+                // Clear previous line and print new text
+                fprintf(stdout, "\33[2K\r%s", text.c_str());
+                fflush(stdout);
+                prev_text = text;
+            }
+        }
+        fprintf(stdout, "\n");
+        return 0;
     }
 
     // Process every input file.

@@ -230,6 +230,10 @@ static bool whisper_params_parse(int argc, char ** argv, whisper_params & params
         else if (                  arg == "--sherpa-embedding-model"){ params.sherpa_embedding_model = ARGV_NEXT; }
         else if (                  arg == "--sherpa-num-clusters")  { params.sherpa_num_clusters    = std::stoi(ARGV_NEXT); }
         else if (                  arg == "--cache-dir")            { params.cache_dir              = ARGV_NEXT; }
+        else if (                  arg == "--stream")               { params.stream                 = true; }
+        else if (                  arg == "--stream-step")          { params.stream_step_ms         = std::stoi(ARGV_NEXT); }
+        else if (                  arg == "--stream-length")        { params.stream_length_ms       = std::stoi(ARGV_NEXT); }
+        else if (                  arg == "--stream-keep")          { params.stream_keep_ms         = std::stoi(ARGV_NEXT); }
         else if (                  arg == "--list-backends")        {
             crispasr_print_backend_matrix();
             exit(0);
@@ -334,6 +338,10 @@ static void whisper_print_usage(int /*argc*/, char ** argv, const whisper_params
     fprintf(stderr, "  --sherpa-embedding-model PATH     [%-7s] sherpa speaker embedding ONNX\n",                     params.sherpa_embedding_model.c_str());
     fprintf(stderr, "  --sherpa-num-clusters N           [%-7d] sherpa cluster count (0 = auto)\n",                   params.sherpa_num_clusters);
     fprintf(stderr, "  --cache-dir DIR                   [%-7s] override auto-download cache directory\n",            params.cache_dir.empty() ? "default" : params.cache_dir.c_str());
+    fprintf(stderr, "  --stream                          [%-7s] streaming mode: read raw s16le PCM from stdin\n",    params.stream ? "true" : "false");
+    fprintf(stderr, "  --stream-step N                   [%-7d] chunk size in ms for streaming\n",                    params.stream_step_ms);
+    fprintf(stderr, "  --stream-length N                 [%-7d] context window in ms for streaming\n",                params.stream_length_ms);
+    fprintf(stderr, "  --stream-keep N                   [%-7d] overlap to keep between chunks in ms\n",              params.stream_keep_ms);
     fprintf(stderr, "  -n N,      --max-new-tokens N     [%-7d] max new tokens for LLM backends\n",                params.max_new_tokens);
     fprintf(stderr, "  -ck N,     --chunk-seconds N      [%-7d] fallback chunk size when VAD is disabled\n",       params.chunk_seconds);
     fprintf(stderr, "             -m auto                        download a default model for the chosen backend\n");
@@ -1065,7 +1073,7 @@ int main(int argc, char ** argv) {
         it++;
     }
 
-    if (params.fname_inp.empty()) {
+    if (params.fname_inp.empty() && !params.stream) {
         fprintf(stderr, "error: no input files specified\n");
         whisper_print_usage(argc, argv, params);
         return 2;
@@ -1100,7 +1108,7 @@ int main(int argc, char ** argv) {
             }
         }
 
-        if (explicit_backend || model_is_auto || auto_detected_non_whisper) {
+        if (explicit_backend || model_is_auto || auto_detected_non_whisper || params.stream) {
             const int rc = crispasr_run_backend(params);
 #if defined(_WIN32)
             // Bypass global C++ destructors (ggml Vulkan device teardown can
