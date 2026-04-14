@@ -56,11 +56,14 @@ jobs:
         # --Werror:  exit non-zero if any file would change.
         # Scope: project-owned C++ only — skip ggml/ and bindings/ (third-party).
         run: |
-          find src examples/cli \
+          ERRORS=$(find src examples/cli \
                \( -name '*.cpp' -o -name '*.h' \) \
                ! -name 'httplib.h' \
                -print0 \
-          | xargs -0 clang-format --dry-run --Werror
+          | xargs -0 clang-format --dry-run --Werror 2>&1 \
+          | grep -c 'error:.*clang-format' || true)
+          echo "Format violations: $ERRORS"
+          [ "$ERRORS" -eq 0 ]
 
   # ---------------------------------------------------------------------------
   # clang-tidy: lint + type-checking + security (ruff-lint + mypy + bandit)
