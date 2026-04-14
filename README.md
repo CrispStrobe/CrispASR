@@ -327,6 +327,30 @@ crispasr -m model.gguf -f audio.wav --alt
 
 Streaming works with all 11 backends. The `--stream-step` (default 3s), `--stream-length` (default 10s), and `--stream-keep` (default 200ms overlap) flags control the sliding window.
 
+### Server mode (persistent model, HTTP API)
+
+```bash
+# Start server with model loaded once
+crispasr --server -m model.gguf --port 8080
+
+# Transcribe via HTTP (model stays loaded between requests):
+curl -F "file=@audio.wav" http://localhost:8080/inference
+# Returns JSON: {"text": "...", "segments": [...], "backend": "parakeet", "duration": 11.0}
+
+# Hot-swap to a different model at runtime:
+curl -F "model=path/to/other-model.gguf" http://localhost:8080/load
+
+# Check server status:
+curl http://localhost:8080/health
+# {"status": "ok", "backend": "parakeet"}
+
+# List available backends:
+curl http://localhost:8080/backends
+# {"backends": ["whisper","parakeet","canary",...], "active": "parakeet"}
+```
+
+The server loads the model once at startup and keeps it in memory. Subsequent `/inference` requests reuse the loaded model with no reload overhead. Requests are mutex-serialized. Use `--host 0.0.0.0` to accept remote connections.
+
 ---
 
 ## CLI reference
