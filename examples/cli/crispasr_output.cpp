@@ -396,6 +396,44 @@ void crispasr_strip_punctuation(crispasr_segment & seg) {
 // Stdout printing
 // ---------------------------------------------------------------------------
 
+void crispasr_print_alternatives(const std::vector<crispasr_segment> & segs,
+                                  int n_alt)
+{
+    for (const auto & seg : segs) {
+        if (seg.tokens.empty()) {
+            // No token-level info — show segment text with overall confidence
+            printf("  \"%s\"", seg.text.c_str());
+            printf("\n");
+            continue;
+        }
+        for (const auto & tok : seg.tokens) {
+            if (tok.is_special) continue;
+            // Primary token with confidence
+            printf("  %-12s", tok.text.c_str());
+            if (tok.confidence >= 0) {
+                printf(" [%.1f%%]", tok.confidence * 100.0f);
+            }
+            // Show alternatives if available
+            if (!tok.alts.empty()) {
+                printf("  (");
+                int n = std::min(n_alt, (int)tok.alts.size());
+                for (int i = 0; i < n; i++) {
+                    if (i > 0) printf(", ");
+                    printf("%s %.1f%%", tok.alts[i].text.c_str(),
+                           tok.alts[i].prob * 100.0f);
+                }
+                printf(")");
+            } else if (tok.confidence >= 0 && tok.confidence < 0.8f) {
+                // No alternatives stored, but low confidence — flag it
+                printf("  [uncertain]");
+            }
+            printf("\n");
+        }
+        printf("\n");
+    }
+    fflush(stdout);
+}
+
 void crispasr_print_stdout(const std::vector<crispasr_disp_segment> & segs,
                            bool show_timestamps)
 {

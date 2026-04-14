@@ -241,6 +241,9 @@ int process_one_input(CrispasrBackend & backend,
         // transcripts don't interleave line-by-line.
         std::lock_guard<std::mutex> lock(g_stdout_mutex);
         crispasr_print_stdout(disp, show_timestamps);
+        if (params.show_alternatives) {
+            crispasr_print_alternatives(all_segs, params.n_alternatives);
+        }
     }
 
     if (params.output_txt)

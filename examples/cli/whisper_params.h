@@ -124,6 +124,11 @@ struct whisper_params {
     // Punctuation toggle (canary, cohere). Default on.
     bool        punctuation      = true;
 
+    // Show alternative token candidates alongside the primary text.
+    // Inspired by antirez/voxtral.c --alt mode.
+    bool        show_alternatives = false;
+    int32_t     n_alternatives    = 3;  // top-N alternatives per token
+
     // Path to a CTC aligner model (canary_ctc.gguf) used by LLM-based
     // backends to produce word-level timestamps via a second pass.
     std::string aligner_model;

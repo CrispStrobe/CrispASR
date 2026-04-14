@@ -230,6 +230,8 @@ static bool whisper_params_parse(int argc, char ** argv, whisper_params & params
         else if (                  arg == "--sherpa-embedding-model"){ params.sherpa_embedding_model = ARGV_NEXT; }
         else if (                  arg == "--sherpa-num-clusters")  { params.sherpa_num_clusters    = std::stoi(ARGV_NEXT); }
         else if (                  arg == "--cache-dir")            { params.cache_dir              = ARGV_NEXT; }
+        else if (                  arg == "--alt")                   { params.show_alternatives       = true; }
+        else if (                  arg == "--alt-n")                { params.n_alternatives         = std::stoi(ARGV_NEXT); }
         else if (                  arg == "--stream")               { params.stream                 = true; }
         else if (                  arg == "--stream-step")          { params.stream_step_ms         = std::stoi(ARGV_NEXT); }
         else if (                  arg == "--stream-length")        { params.stream_length_ms       = std::stoi(ARGV_NEXT); }
@@ -338,6 +340,8 @@ static void whisper_print_usage(int /*argc*/, char ** argv, const whisper_params
     fprintf(stderr, "  --sherpa-embedding-model PATH     [%-7s] sherpa speaker embedding ONNX\n",                     params.sherpa_embedding_model.c_str());
     fprintf(stderr, "  --sherpa-num-clusters N           [%-7d] sherpa cluster count (0 = auto)\n",                   params.sherpa_num_clusters);
     fprintf(stderr, "  --cache-dir DIR                   [%-7s] override auto-download cache directory\n",            params.cache_dir.empty() ? "default" : params.cache_dir.c_str());
+    fprintf(stderr, "  --alt                             [%-7s] show alternative token candidates with probabilities\n", params.show_alternatives ? "true" : "false");
+    fprintf(stderr, "  --alt-n N                         [%-7d] number of alternatives per token\n",                    params.n_alternatives);
     fprintf(stderr, "  --stream                          [%-7s] streaming mode: read raw s16le PCM from stdin\n",    params.stream ? "true" : "false");
     fprintf(stderr, "  --stream-step N                   [%-7d] chunk size in ms for streaming\n",                    params.stream_step_ms);
     fprintf(stderr, "  --stream-length N                 [%-7d] context window in ms for streaming\n",                params.stream_length_ms);

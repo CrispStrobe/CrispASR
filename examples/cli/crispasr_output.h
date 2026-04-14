@@ -82,6 +82,11 @@ bool crispasr_write_lrc(const std::string & path,
 void crispasr_print_stdout(const std::vector<crispasr_disp_segment> & segs,
                            bool show_timestamps);
 
+// Print per-token alternatives (--alt mode). Shows each token with its
+// confidence and top-N alternative candidates, inspired by antirez/voxtral.c.
+void crispasr_print_alternatives(const std::vector<crispasr_segment> & segs,
+                                  int n_alt);
+
 // Remove punctuation from a segment in-place: from seg.text, each
 // seg.words[i].text, and each seg.tokens[i].text. Called by the
 // dispatch layer when --no-punctuation is set and the backend didn't

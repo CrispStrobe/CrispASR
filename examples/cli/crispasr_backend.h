@@ -28,6 +28,12 @@ struct whisper_params;
 // Common result types
 // ---------------------------------------------------------------------------
 
+struct crispasr_token_alt {
+    std::string text;
+    float       prob = 0.0f;        // probability [0,1]
+    int32_t     id = -1;
+};
+
 struct crispasr_token {
     std::string text;
     float       confidence = -1.0f; // [0,1], -1 if unavailable
@@ -36,6 +42,7 @@ struct crispasr_token {
     int32_t     id = -1;            // backend-specific token id, -1 if unavailable
     int64_t     t_dtw = -1;         // whisper DTW token time, -1 if unused
     bool        is_special = false; // whisper: token id >= eot; skipped by wts
+    std::vector<crispasr_token_alt> alts; // top-N alternatives (--alt mode)
 };
 
 struct crispasr_word {
