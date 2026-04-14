@@ -186,6 +186,9 @@ struct whisper_params {
     int32_t stream_length_ms = 10000; // context window in ms (default 10s)
     int32_t stream_keep_ms = 200;     // overlap to keep between chunks
 
+    // Auto-download missing models without prompting (like pip install)
+    bool auto_download = false;
+
     // Override the directory used to cache auto-downloaded model files.
     // Default (empty): platform default (~/.cache/crispasr on POSIX,
     // %USERPROFILE%/.cache/crispasr on Windows). Set via --cache-dir.

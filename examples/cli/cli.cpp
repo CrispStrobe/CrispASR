@@ -320,6 +320,8 @@ static bool whisper_params_parse(int argc, char** argv, whisper_params& params) 
             params.stream_continuous = true;
         } else if (arg == "--monitor") {
             params.stream_monitor = true;
+        } else if (arg == "--auto-download") {
+            params.auto_download = true;
         } else if (arg == "--server") {
             params.server = true;
         } else if (arg == "--host") {
@@ -512,6 +514,8 @@ static void whisper_print_usage(int /*argc*/, char** argv, const whisper_params&
             params.sherpa_num_clusters);
     fprintf(stderr, "  --cache-dir DIR                   [%-7s] override auto-download cache directory\n",
             params.cache_dir.empty() ? "default" : params.cache_dir.c_str());
+    fprintf(stderr, "  --auto-download                   [%-7s] auto-download missing models without prompting\n",
+            params.auto_download ? "true" : "false");
     fprintf(stderr, "  --alt                             [%-7s] show alternative token candidates with probabilities\n",
             params.show_alternatives ? "true" : "false");
     fprintf(stderr, "  --alt-n N                         [%-7d] number of alternatives per token\n",

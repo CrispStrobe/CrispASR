@@ -24,4 +24,4 @@
 //
 // Returns an empty string on failure.
 std::string crispasr_resolve_model(const std::string& model_arg, const std::string& backend_name, bool quiet,
-                                   const std::string& cache_dir_override = "");
+                                   const std::string& cache_dir_override = "", bool auto_download = false);

@@ -6,6 +6,13 @@
 
 #include <cstdio>
 #include <string>
+#if defined(_WIN32)
+#include <io.h>
+#define isatty _isatty
+#define fileno _fileno
+#else
+#include <unistd.h>
+#endif
 
 namespace {
 
@@ -48,7 +55,34 @@ constexpr registry_entry k_registry[] = {
     // Cohere Transcribe 03-2026
     {"cohere", "cohere-transcribe-q4_k.gguf",
      "https://huggingface.co/cstr/cohere-transcribe-03-2026-GGUF/resolve/main/cohere-transcribe-q4_k.gguf", "~550 MB"},
+    // Wav2Vec2 English (CTC)
+    {"wav2vec2", "wav2vec2-xlsr-en-q4_k.gguf",
+     "https://huggingface.co/cstr/wav2vec2-large-xlsr-53-english-GGUF/resolve/main/wav2vec2-xlsr-en-q4_k.gguf",
+     "~212 MB"},
 };
+
+// Lookup by filename (for the "file not found → offer download" path).
+const registry_entry* lookup_by_filename(const std::string& filename) {
+    // Strip directory prefix if present
+    std::string base = filename;
+    auto slash = base.rfind('/');
+    if (slash != std::string::npos)
+        base = base.substr(slash + 1);
+    auto bslash = base.rfind('\\');
+    if (bslash != std::string::npos)
+        base = base.substr(bslash + 1);
+
+    for (const auto& e : k_registry) {
+        if (base == e.filename)
+            return &e;
+    }
+    // Fuzzy match: if the filename contains a registry entry's basename
+    for (const auto& e : k_registry) {
+        if (base.find(e.filename) != std::string::npos)
+            return &e;
+    }
+    return nullptr;
+}
 
 const registry_entry* lookup(const std::string& backend) {
     for (const auto& e : k_registry) {
@@ -61,10 +95,55 @@ const registry_entry* lookup(const std::string& backend) {
 } // namespace
 
 std::string crispasr_resolve_model(const std::string& model_arg, const std::string& backend_name, bool quiet,
-                                   const std::string& cache_dir_override) {
-    // Pass-through for explicit paths.
+                                   const std::string& cache_dir_override, bool auto_download) {
+    // Pass-through for explicit paths that exist on disk.
     if (model_arg != "auto" && model_arg != "default") {
-        return model_arg;
+        // Check if file exists
+        FILE* f = fopen(model_arg.c_str(), "rb");
+        if (f) {
+            fclose(f);
+            return model_arg;
+        }
+
+        // File not found — try to match against our registry and offer download
+        const registry_entry* match = lookup_by_filename(model_arg);
+        if (!match) {
+            // Also try backend-based lookup if we know the backend
+            if (!backend_name.empty())
+                match = lookup(backend_name);
+        }
+
+        if (match) {
+            fprintf(stderr,
+                    "crispasr: model '%s' not found locally.\n"
+                    "  Available for download: %s (%s)\n",
+                    model_arg.c_str(), match->filename, match->approx_size);
+
+            // Check if auto-download is requested (model_arg == filename from registry)
+            // or prompt the user on a TTY
+            bool do_download = false;
+            if (auto_download) {
+                do_download = true;
+                fprintf(stderr, "  Auto-downloading (--auto-download is set)...\n");
+            } else if (isatty(fileno(stdin))) {
+                fprintf(stderr, "  Download now? [Y/n] ");
+                fflush(stderr);
+                char c = 'y';
+                int ch = fgetc(stdin);
+                if (ch != EOF && ch != '\n')
+                    c = (char)ch;
+                do_download = (c == 'y' || c == 'Y' || c == '\n');
+            } else {
+                fprintf(stderr, "  Use --auto-download or -m auto to download automatically.\n");
+            }
+
+            if (do_download) {
+                return crispasr_cache::ensure_cached_file(match->filename, match->url, quiet, "crispasr",
+                                                          cache_dir_override);
+            }
+        }
+
+        return model_arg; // return as-is, will fail at load time with a clear error
     }
 
     const registry_entry* e = lookup(backend_name);
