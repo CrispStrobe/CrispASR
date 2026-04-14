@@ -165,7 +165,7 @@ std::vector<ctc_word_stamp> ctc_forced_align(
         float mx = *std::max_element(src, src + V);
         float s  = 0.f;
         for (int i = 0; i < V; i++) { dst[i] = src[i] - mx; s += expf(dst[i]); }
-        float ls = logf(s);
+        float ls = logf(std::max(s, 1e-30f));
         for (int i = 0; i < V; i++) dst[i] -= ls;
     }
 

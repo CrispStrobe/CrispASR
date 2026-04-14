@@ -815,7 +815,7 @@ extern "C" int canary_ctc_align_words(struct canary_ctc_context * ctx,
         float mx = *std::max_element(src, src + V);
         float s = 0.f;
         for (int i = 0; i < V; i++) { dst[i] = src[i] - mx; s += expf(dst[i]); }
-        float ls = logf(s);
+        float ls = logf(std::max(s, 1e-30f));
         for (int i = 0; i < V; i++) dst[i] -= ls;
     }
 

@@ -814,10 +814,12 @@ static bool cohere_load_model(cohere_model & model,
             std::vector<uint8_t> data(ggml_nbytes(tp));
             ggml_backend_tensor_get(tp, data.data(), 0, data.size());
             if (tp->type == GGML_TYPE_F16) {
-                float v0 = ggml_fp16_to_fp32(((ggml_fp16_t*)data.data())[0]);
+                ggml_fp16_t h; memcpy(&h, data.data(), sizeof(h));
+                float v0 = ggml_fp16_to_fp32(h);
                 cohere_debug("cohere: enc.proj.weight [0] (F16): %.4f\n", v0);
             } else if (tp->type == GGML_TYPE_F32) {
-                cohere_debug("cohere: enc.proj.weight [0] (F32): %.4f\n", ((float*)data.data())[0]);
+                float v0; memcpy(&v0, data.data(), sizeof(v0));
+                cohere_debug("cohere: enc.proj.weight [0] (F32): %.4f\n", v0);
             }
         }
     }

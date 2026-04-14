@@ -140,7 +140,5 @@ jobs:
             --suppress='*:examples/server/*' \
             --suppress='*:*httplib.h' \
             --suppress=unknownMacro \
-            --suppress=invalidFunctionArg \
-            --suppress=allocaCalled \
             --quiet \
             src/ examples/cli/

@@ -1262,10 +1262,11 @@ int main(int argc, char** argv) {
 
         // Use the contents of the response file as the command-line arguments.
         argc = static_cast<int>(vec_args.size());
-        argv = static_cast<char**>(alloca(argc * sizeof(char*)));
+        std::vector<char*> vec_argv(argc);
         for (int i = 0; i < argc; ++i) {
-            argv[i] = const_cast<char*>(vec_args[i].c_str());
+            vec_argv[i] = const_cast<char*>(vec_args[i].c_str());
         }
+        argv = vec_argv.data();
     }
 
     if (whisper_params_parse(argc, argv, params) == false) {
