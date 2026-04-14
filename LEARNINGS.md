@@ -583,6 +583,46 @@ cycles + 24 graph plans) but produces correct results and uses much
 less memory. Good enough for CPU; for GPU acceleration, fixing gallocr
 to skip pre-allocated tensors is the proper solution.
 
+---
+
+## Performance: what faster-whisper / insanely-fast-whisper do
+
+Analysed SYSTRAN/faster-whisper and Vaibhavs10/insanely-fast-whisper
+(April 2026). Key techniques and applicability to ggml:
+
+**Already have in CrispASR:**
+- Quantization (Q4_K/Q5_0/Q8_0) — fundamental to ggml
+- Flash attention (ggml_flash_attn_ext) — used by whisper backend
+- VAD pre-filtering (Silero) — skips silence before transcription
+- Multi-file parallelism (n_processors)
+
+**Could add (GPU-dependent, large impact):**
+- **Batched encoder** — process N audio chunks simultaneously on GPU.
+  Faster-whisper's `BatchedInferencePipeline` with batch_size=8 gives
+  3-5x speedup. Requires GPU (batch doesn't help much on CPU since
+  we already use all cores per chunk).
+- **Speculative decoding** — use a small "draft" model to predict
+  tokens, verify with the large model. 2-4x speedup for autoregressive
+  LLM backends (granite, voxtral, qwen3). Needs two models loaded.
+
+**Could add (CPU-friendly, moderate impact):**
+- **Pipelined mel+encode** — while LLM decodes chunk N, compute mel
+  for chunk N+1 in a background thread. ~15-20% speedup for LLM
+  backends on multi-core CPUs.
+- **Encoder output caching** — for repeated queries on the same audio
+  (e.g. trying different languages), cache the encoder output and only
+  re-run the decoder. Already implicit in whisper's architecture.
+
+**Not applicable:**
+- CTranslate2's CUDA kernels — ggml has its own CUDA backend
+- BetterTransformer API — PyTorch-specific
+- fp16 compute — ggml already does F16 matmul natively
+
+**Bottom line:** On CPU, we're already within 2x of the theoretical
+limit (2.2x realtime for parakeet on jfk.wav). The big wins are
+GPU-specific: batched encoder (5x) and speculative decoding (2-4x).
+These require CUDA/Metal hardware and are tracked as [later] in TODO.
+
 ### Windows fseek overflow: the silent >2 GB file killer
 
 On Windows (MSVC), `long` is 32-bit even on x86_64. `fseek(fp, (long)offset, SEEK_SET)`

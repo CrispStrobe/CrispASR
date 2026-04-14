@@ -171,6 +171,8 @@ int process_one_input(CrispasrBackend & backend,
         fprintf(stderr, "crispasr: processing %zu slice(s)\n", slices.size());
     }
 
+    auto t_start = std::chrono::steady_clock::now();
+
     std::vector<std::vector<crispasr_segment>> per_slice;
     per_slice.reserve(slices.size());
     for (size_t i = 0; i < slices.size(); i++) {
@@ -237,6 +239,14 @@ int process_one_input(CrispasrBackend & backend,
          params.max_len > 0  || params.print_colors ||
          params.diarize);
     {
+        auto t_end = std::chrono::steady_clock::now();
+        double t_total = std::chrono::duration<double>(t_end - t_start).count();
+        double audio_s = (double)samples.size() / SR;
+        if (!params.no_prints) {
+            fprintf(stderr, "crispasr: transcribed %.1fs audio in %.2fs (%.1fx realtime)\n",
+                    audio_s, t_total, audio_s / std::max(t_total, 0.001));
+        }
+
         // Serialize stdout across parallel workers so multi-file
         // transcripts don't interleave line-by-line.
         std::lock_guard<std::mutex> lock(g_stdout_mutex);
