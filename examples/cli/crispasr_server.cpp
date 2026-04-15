@@ -31,6 +31,7 @@
 #include <mutex>
 #include <sstream>
 #include <string>
+#include <iomanip>
 
 // Minimal JSON builder (avoid nlohmann dep for the server extension)
 static std::string json_escape(const std::string& s) {
@@ -107,6 +108,80 @@ static std::string segments_to_json(const std::vector<crispasr_segment>& segs, c
         full_text += s.text;
     }
     js << "  \"text\": \"" << json_escape(full_text) << "\"\n";
+    js << "}\n";
+    return js.str();
+}
+
+// Helpers for OpenAI compatibility
+static std::string format_timestamp_openai(int64_t t) {
+    // t is in centiseconds (1/100th)
+    double sec = t / 100.0;
+    std::ostringstream ss;
+    ss << std::fixed << std::setprecision(2) << sec;
+    return ss.str();
+}
+
+static std::string segments_to_srt(const std::vector<crispasr_segment>& segs) {
+    std::ostringstream out;
+    for (size_t i = 0; i < segs.size(); ++i) {
+        const auto& s = segs[i];
+        int64_t t0 = s.t0 * 10; // ms
+        int64_t t1 = s.t1 * 10; // ms
+        auto format_time = [](int64_t t) {
+            int h = t / 3600000; t %= 3600000;
+            int m = t / 60000; t %= 60000;
+            int sec = t / 1000; t %= 1000;
+            char buf[64];
+            snprintf(buf, sizeof(buf), "%02d:%02d:%02d,%03d", h, m, sec, (int)t);
+            return std::string(buf);
+        };
+        out << i + 1 << "\n" << format_time(t0) << " --> " << format_time(t1) << "\n" << s.text << "\n\n";
+    }
+    return out.str();
+}
+
+static std::string segments_to_vtt(const std::vector<crispasr_segment>& segs) {
+    std::ostringstream out;
+    out << "WEBVTT\n\n";
+    for (const auto& s : segs) {
+        int64_t t0 = s.t0 * 10;
+        int64_t t1 = s.t1 * 10;
+        auto format_time = [](int64_t t) {
+            int h = t / 3600000; t %= 3600000;
+            int m = t / 60000; t %= 60000;
+            int sec = t / 1000; t %= 1000;
+            char buf[64];
+            snprintf(buf, sizeof(buf), "%02d:%02d:%02d.%03d", h, m, sec, (int)t);
+            return std::string(buf);
+        };
+        out << format_time(t0) << " --> " << format_time(t1) << "\n" << s.text << "\n\n";
+    }
+    return out.str();
+}
+
+static std::string segments_to_openai_verbose(const std::vector<crispasr_segment>& segs, double duration_s) {
+    std::ostringstream js;
+    std::string full_text;
+    for (const auto& s : segs) {
+        if (!full_text.empty()) full_text += " ";
+        full_text += s.text;
+    }
+    js << "{\n";
+    js << "  \"task\": \"transcribe\",\n";
+    js << "  \"language\": \"english\",\n";
+    js << "  \"duration\": " << duration_s << ",\n";
+    js << "  \"text\": \"" << json_escape(full_text) << "\",\n";
+    js << "  \"segments\": [\n";
+    for (size_t i = 0; i < segs.size(); i++) {
+        const auto& s = segs[i];
+        js << "    {\n";
+        js << "      \"id\": " << i << ",\n";
+        js << "      \"start\": " << (s.t0 / 100.0) << ",\n";
+        js << "      \"end\": " << (s.t1 / 100.0) << ",\n";
+        js << "      \"text\": \"" << json_escape(s.text) << "\"\n";
+        js << "    }" << (i + 1 < segs.size() ? "," : "") << "\n";
+    }
+    js << "  ]\n";
     js << "}\n";
     return js.str();
 }
@@ -229,6 +304,70 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         res.set_content(json, "application/json");
     });
 
+    // POST /v1/audio/transcriptions — OpenAI compatible endpoint
+    svr.Post("/v1/audio/transcriptions", [&](const Request& req, Response& res) {
+        if (!ready.load()) {
+            res.status = 503;
+            res.set_content("{\"error\": \"model loading\"}", "application/json");
+            return;
+        }
+        if (!req.has_file("file")) {
+            res.status = 400;
+            res.set_content("{\"error\": \"no 'file' field\"}", "application/json");
+            return;
+        }
+
+        auto audio_file = req.get_file_value("file");
+        std::string response_format = req.has_file("response_format") ? req.get_file_value("response_format").content : "json";
+
+        std::string tmp_path = "/tmp/crispasr-openai-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".wav";
+        {
+            std::ofstream f(tmp_path, std::ios::binary);
+            f.write(audio_file.content.data(), audio_file.content.size());
+        }
+
+        std::vector<float> pcmf32;
+        std::vector<std::vector<float>> pcmf32s;
+        if (!read_audio_data(tmp_path, pcmf32, pcmf32s, params.diarize)) {
+            std::remove(tmp_path.c_str());
+            res.status = 400;
+            res.set_content("{\"error\": \"failed to read audio\"}", "application/json");
+            return;
+        }
+        std::remove(tmp_path.c_str());
+        double duration_s = (double)pcmf32.size() / 16000.0;
+
+        whisper_params rp = params;
+        if (req.has_file("language")) rp.language = req.get_file_value("language").content;
+        if (req.has_file("prompt"))   rp.prompt = req.get_file_value("prompt").content;
+        if (req.has_file("temperature")) rp.temperature = std::stof(req.get_file_value("temperature").content);
+
+        std::vector<crispasr_segment> segs;
+        {
+            std::lock_guard<std::mutex> lock(model_mutex);
+            segs = backend->transcribe(pcmf32.data(), (int)pcmf32.size(), 0, rp);
+        }
+
+        std::string full_text;
+        for (const auto& s : segs) {
+            if (!full_text.empty()) full_text += " ";
+            full_text += s.text;
+        }
+
+        if (response_format == "verbose_json") {
+            res.set_content(segments_to_openai_verbose(segs, duration_s), "application/json");
+        } else if (response_format == "vtt") {
+            res.set_content(segments_to_vtt(segs), "text/vtt");
+        } else if (response_format == "srt") {
+            res.set_content(segments_to_srt(segs), "text/plain");
+        } else if (response_format == "text") {
+            res.set_content(full_text, "text/plain");
+        } else {
+            // Default: json
+            res.set_content("{\"text\": \"" + json_escape(full_text) + "\"}", "application/json");
+        }
+    });
+
     // POST /load — hot-swap model
     svr.Post("/load", [&](const Request& req, Response& res) {
         std::lock_guard<std::mutex> lock(model_mutex);
@@ -299,6 +438,7 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
 
     fprintf(stderr, "\ncrispasr-server: listening on %s:%d\n", host.c_str(), port);
     fprintf(stderr, "  POST /inference  — upload audio file\n");
+    fprintf(stderr, "  POST /v1/audio/transcriptions — OpenAI API\n");
     fprintf(stderr, "  POST /load       — hot-swap model\n");
     fprintf(stderr, "  GET  /health     — server status\n");
     fprintf(stderr, "  GET  /backends   — list backends\n\n");
