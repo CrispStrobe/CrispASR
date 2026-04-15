@@ -16,7 +16,7 @@ jobs:
           submodules: recursive
 
       - name: Install deps
-        run: sudo apt-get update && sudo apt-get install -y cmake g++ libopenblas-dev
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ libopenblas-dev patchelf
 
       - name: Build
         run: |
@@ -28,6 +28,12 @@ jobs:
           mkdir -p release/crispasr-linux-x86_64
           cp build/bin/crispasr release/crispasr-linux-x86_64/
           cp build/bin/crispasr-quantize release/crispasr-linux-x86_64/
+          
+          find build -name "*.so*" -exec cp {} release/crispasr-linux-x86_64/ \;
+          
+          patchelf --set-rpath '$ORIGIN' release/crispasr-linux-x86_64/crispasr
+          patchelf --set-rpath '$ORIGIN' release/crispasr-linux-x86_64/crispasr-quantize
+          
           cd release && tar czf crispasr-linux-x86_64.tar.gz crispasr-linux-x86_64/
 
       - uses: actions/upload-artifact@v4
@@ -52,6 +58,12 @@ jobs:
           mkdir -p release/crispasr-macos
           cp build/bin/crispasr release/crispasr-macos/
           cp build/bin/crispasr-quantize release/crispasr-macos/
+          
+          find build -name "*.dylib" -exec cp {} release/crispasr-macos/ \;
+          
+          install_name_tool -add_rpath "@loader_path" release/crispasr-macos/crispasr
+          install_name_tool -add_rpath "@loader_path" release/crispasr-macos/crispasr-quantize
+          
           cd release && tar czf crispasr-macos.tar.gz crispasr-macos/
 
       - uses: actions/upload-artifact@v4
