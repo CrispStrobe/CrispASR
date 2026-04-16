@@ -39,7 +39,7 @@
 #include <vector>
 
 #ifdef _WIN32
-#include <io.h>     // _mktemp_s
+#include <io.h> // _mktemp_s
 #include <windows.h>
 #else
 #include <unistd.h> // mkstemp, close, unlink
@@ -92,8 +92,7 @@ static std::string write_temp_audio(const char* data, size_t size) {
 }
 
 // Read a multipart form field as a trimmed string, or return a default.
-static std::string form_string(const httplib::Request& req, const std::string& key,
-                               const std::string& def = "") {
+static std::string form_string(const httplib::Request& req, const std::string& key, const std::string& def = "") {
     if (!req.has_file(key))
         return def;
     std::string v = req.get_file_value(key).content;
@@ -141,12 +140,8 @@ struct transcription_result {
 
 // Load audio from a multipart file upload, transcribe it, return result.
 // Acquires model_mutex internally.
-static transcription_result do_transcribe(
-    const httplib::MultipartFormData& audio_file,
-    CrispasrBackend* backend,
-    std::mutex& model_mutex,
-    const whisper_params& rp) {
-
+static transcription_result do_transcribe(const httplib::MultipartFormData& audio_file, CrispasrBackend* backend,
+                                          std::mutex& model_mutex, const whisper_params& rp) {
     transcription_result result;
 
     // Write to a secure temporary file for audio decoding.
@@ -233,8 +228,8 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         }
 
         auto audio_file = req.get_file_value("file");
-        fprintf(stderr, "crispasr-server: /inference received '%s' (%zu bytes)\n",
-                audio_file.filename.c_str(), audio_file.content.size());
+        fprintf(stderr, "crispasr-server: /inference received '%s' (%zu bytes)\n", audio_file.filename.c_str(),
+                audio_file.content.size());
 
         // Per-request parameter overrides.
         whisper_params rp = params;
@@ -246,9 +241,8 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             return;
         }
 
-        fprintf(stderr, "crispasr-server: transcribed %.1fs audio in %.2fs (%.1fx realtime)\n",
-                result.duration_s, result.elapsed_s,
-                result.elapsed_s > 0 ? result.duration_s / result.elapsed_s : 0.0);
+        fprintf(stderr, "crispasr-server: transcribed %.1fs audio in %.2fs (%.1fx realtime)\n", result.duration_s,
+                result.elapsed_s, result.elapsed_s > 0 ? result.duration_s / result.elapsed_s : 0.0);
 
         std::string json = crispasr_segments_to_native_json(result.segs, backend_name, result.duration_s);
         res.set_content(json, "application/json");
@@ -282,15 +276,16 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
 
         // Parse OpenAI form fields.
         std::string response_format = form_string(req, "response_format", "json");
-        std::string language        = form_string(req, "language", params.language);
-        std::string prompt          = form_string(req, "prompt", "");
-        float temperature           = form_float(req, "temperature", params.temperature);
+        std::string language = form_string(req, "language", params.language);
+        std::string prompt = form_string(req, "prompt", "");
+        float temperature = form_float(req, "temperature", params.temperature);
 
         // Validate response_format early.
-        if (response_format != "json" && response_format != "verbose_json" &&
-            response_format != "text" && response_format != "srt" && response_format != "vtt") {
-            json_error(res, 400, "invalid response_format '" + response_format +
-                                     "'; must be one of: json, verbose_json, text, srt, vtt");
+        if (response_format != "json" && response_format != "verbose_json" && response_format != "text" &&
+            response_format != "srt" && response_format != "vtt") {
+            json_error(res, 400,
+                       "invalid response_format '" + response_format +
+                           "'; must be one of: json, verbose_json, text, srt, vtt");
             return;
         }
 
@@ -308,8 +303,7 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         }
 
         fprintf(stderr, "crispasr-server: transcribed %.1fs audio in %.2fs (%.1fx realtime), format=%s\n",
-                result.duration_s, result.elapsed_s,
-                result.elapsed_s > 0 ? result.duration_s / result.elapsed_s : 0.0,
+                result.duration_s, result.elapsed_s, result.elapsed_s > 0 ? result.duration_s / result.elapsed_s : 0.0,
                 response_format.c_str());
 
         // Format response.
@@ -322,8 +316,7 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         } else if (response_format == "verbose_json") {
             std::string task = rp.translate ? "translate" : "transcribe";
             res.set_content(
-                crispasr_segments_to_openai_verbose_json(
-                    result.segs, result.duration_s, language, task, temperature),
+                crispasr_segments_to_openai_verbose_json(result.segs, result.duration_s, language, task, temperature),
                 "application/json");
         } else {
             // Default: json — {"text": "..."}
@@ -366,10 +359,9 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         params.model = new_model;
         ready.store(true);
 
-        fprintf(stderr, "crispasr-server: hot-swapped to '%s' backend, model '%s'\n",
-                new_backend.c_str(), new_model.c_str());
-        res.set_content("{\"status\": \"ok\", \"backend\": \"" +
-                            crispasr_json_escape(new_backend) + "\"}",
+        fprintf(stderr, "crispasr-server: hot-swapped to '%s' backend, model '%s'\n", new_backend.c_str(),
+                new_model.c_str());
+        res.set_content("{\"status\": \"ok\", \"backend\": \"" + crispasr_json_escape(new_backend) + "\"}",
                         "application/json");
     });
 
@@ -378,8 +370,7 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
     // -----------------------------------------------------------------------
     svr.Get("/health", [&](const Request&, Response& res) {
         if (ready.load()) {
-            res.set_content("{\"status\": \"ok\", \"backend\": \"" +
-                                crispasr_json_escape(backend_name) + "\"}",
+            res.set_content("{\"status\": \"ok\", \"backend\": \"" + crispasr_json_escape(backend_name) + "\"}",
                             "application/json");
         } else {
             res.status = 503;

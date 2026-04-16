@@ -233,7 +233,9 @@ std::string crispasr_json_escape(const std::string& s) {
 }
 
 // Internal short alias.
-static inline const std::string json_escape(const std::string& s) { return crispasr_json_escape(s); }
+static inline const std::string json_escape(const std::string& s) {
+    return crispasr_json_escape(s);
+}
 
 bool crispasr_write_json(const std::string& path, const std::vector<crispasr_segment>& segs,
                          const std::string& backend_name, const std::string& model_path, const std::string& language,
@@ -527,15 +529,13 @@ std::string crispasr_segments_to_openai_json(const std::vector<crispasr_segment>
 }
 
 // Convert centiseconds to seconds as a double for OpenAI JSON output.
-static double cs_to_sec(int64_t cs) { return cs / 100.0; }
+static double cs_to_sec(int64_t cs) {
+    return cs / 100.0;
+}
 
-std::string crispasr_segments_to_openai_verbose_json(
-    const std::vector<crispasr_segment>& segs,
-    double duration_s,
-    const std::string& language,
-    const std::string& task,
-    float temperature) {
-
+std::string crispasr_segments_to_openai_verbose_json(const std::vector<crispasr_segment>& segs, double duration_s,
+                                                     const std::string& language, const std::string& task,
+                                                     float temperature) {
     std::string full_text = crispasr_segments_to_text(segs);
 
     std::ostringstream js;
@@ -615,11 +615,8 @@ std::string crispasr_segments_to_openai_verbose_json(
     return js.str();
 }
 
-std::string crispasr_segments_to_native_json(
-    const std::vector<crispasr_segment>& segs,
-    const std::string& backend_name,
-    double duration_s) {
-
+std::string crispasr_segments_to_native_json(const std::vector<crispasr_segment>& segs, const std::string& backend_name,
+                                             double duration_s) {
     std::ostringstream js;
     js << "{\n";
     js << "  \"backend\": \"" << json_escape(backend_name) << "\",\n";

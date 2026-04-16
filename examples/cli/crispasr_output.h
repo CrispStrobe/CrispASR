@@ -99,18 +99,13 @@ std::string crispasr_segments_to_openai_json(const std::vector<crispasr_segment>
 // OpenAI-compatible verbose JSON with segments, word timestamps, duration,
 // language, task. Matches the OpenAI /v1/audio/transcriptions verbose_json
 // response format.
-std::string crispasr_segments_to_openai_verbose_json(
-    const std::vector<crispasr_segment>& segs,
-    double duration_s,
-    const std::string& language,
-    const std::string& task,
-    float temperature);
+std::string crispasr_segments_to_openai_verbose_json(const std::vector<crispasr_segment>& segs, double duration_s,
+                                                     const std::string& language, const std::string& task,
+                                                     float temperature);
 
 // CrispASR native JSON (the format returned by /inference).
-std::string crispasr_segments_to_native_json(
-    const std::vector<crispasr_segment>& segs,
-    const std::string& backend_name,
-    double duration_s);
+std::string crispasr_segments_to_native_json(const std::vector<crispasr_segment>& segs, const std::string& backend_name,
+                                             double duration_s);
 
 // Remove punctuation from a segment in-place: from seg.text, each
 // seg.words[i].text, and each seg.tokens[i].text. Called by the
