@@ -856,12 +856,8 @@ It is a model-agnostic tool that iterates through the GGUF tensor list and re-qu
 
 ### Near-term (next sessions)
 
-- `core/attention.h` variants for persistent-KV-cache models (qwen3, voxtral4b, granite LLM) — needs a separate helper signature
-- `core/attention.h` variants for Q/K norm (qwen3), biases + no RoPE (voxtral audio), µP scale tricks (granite)
-- `core/greedy_decode.h` — unified LLM decode loop, retires the CLI-side `crispasr_llm_pipeline.h`
-- `core/mel::Params::stacked_frames` — for granite's 2-frame stacked output (the last holdout on mel extraction)
-- `cli.cpp` `output_json` / `output_wts` refactor to consume `crispasr_segment` — unblocks `backend-whisper.cpp` wrapper so whisper routes through the same dispatch as everything else
-- Delete the per-model `examples/*-main/` directories once the unified CLI has shipped and regression-tested in CI
+- `core/attention.h` — voxtral audio encoder attention (biases, no RoPE) is still inline; needs a variant in the shared header
+- Move `crispasr_llm_pipeline.h` from `examples/cli/` to `src/core/` — the pipeline template is stable and used by voxtral; qwen3/granite/voxtral4b could adopt it too
 
 ### Long-term
 

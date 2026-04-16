@@ -596,27 +596,19 @@ static ggml_cgraph* voxtral_build_graph_encoder(voxtral_context* ctx) {
         x = ggml_mul(ctx0, x, b.attn_norm_w);
         x = ggml_add(ctx0, x, b.attn_norm_b);
 
-        // Self-attention (biased Q, V, out_proj; NO bias on K — Whisper quirk)
-        ggml_tensor* Q = ggml_add(ctx0, ggml_mul_mat(ctx0, b.attn_q_w, x), b.attn_q_b);
-        ggml_tensor* K = ggml_mul_mat(ctx0, b.attn_k_w, x); // no bias
-        ggml_tensor* V = ggml_add(ctx0, ggml_mul_mat(ctx0, b.attn_v_w, x), b.attn_v_b);
-
-        // Reshape to (head_dim, n_heads, T_enc)
-        Q = ggml_reshape_3d(ctx0, Q, head_dim, n_heads, T_enc);
-        K = ggml_reshape_3d(ctx0, K, head_dim, n_heads, T_enc);
-        V = ggml_reshape_3d(ctx0, V, head_dim, n_heads, T_enc);
-
-        // Permute to (hd, T, n_h) for attention
-        Q = ggml_cont(ctx0, ggml_permute(ctx0, Q, 0, 2, 1, 3));
-        K = ggml_cont(ctx0, ggml_permute(ctx0, K, 0, 2, 1, 3));
-        V = ggml_cont(ctx0, ggml_permute(ctx0, V, 0, 2, 1, 3));
-
-        // No causal mask (encoder self-attention is bidirectional)
-        ggml_tensor* attn = ggml_flash_attn_ext(ctx0, Q, K, V, /*mask*/ nullptr, attn_scale, 0.0f, 0.0f);
-        // attn ne = (hd, n_h, T, 1) → reshape to (d, T)
-        attn = ggml_reshape_2d(ctx0, attn, d, T_enc);
-
-        attn = ggml_add(ctx0, ggml_mul_mat(ctx0, b.attn_out_w, attn), b.attn_out_b);
+        // Self-attention (biased Q, V, out_proj; NO bias on K — Whisper quirk).
+        // No RoPE — learned positional embedding was added above.
+        core_attn::EncoderSelfAttnParams eap;
+        eap.n_heads = n_heads;
+        eap.n_kv_heads = n_heads; // MHA
+        eap.head_dim = head_dim;
+        eap.n_kv_grp = 1;
+        eap.attn_scale = attn_scale;
+        eap.n_ctx_orig = 0;
+        eap.rope_theta = 0.0f;
+        ggml_tensor* attn = core_attn::encoder_self_attn(ctx0, x, b.attn_q_w, b.attn_q_b, b.attn_k_w,
+                                                         /*k_b*/ nullptr, b.attn_v_w, b.attn_v_b, b.attn_out_w,
+                                                         b.attn_out_b, /*positions*/ nullptr, /*mask*/ nullptr, eap);
         cur = ggml_add(ctx0, residual, attn);
 
         // Pre-LN + FFN (GELU, biased)

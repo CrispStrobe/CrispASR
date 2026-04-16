@@ -122,6 +122,90 @@ static inline ggml_tensor* llama_self_attn(ggml_context* ctx, ggml_tensor* x, gg
 }
 
 // ---------------------------------------------------------------------------
+// Encoder self-attention — biased Q/K/V/O projections, optional RoPE.
+//
+// Covers architectures like the Whisper audio encoder (voxtral 3B) and the
+// causal RoPE+SwiGLU audio encoder (voxtral4b). Key differences from the
+// LLM llama_self_attn():
+//   - Q, K, V, O projections can each have an optional bias (nullptr = skip)
+//   - RoPE is optional: pass positions == nullptr to skip
+//   - GQA expansion is included for architectures that use it
+//
+// The caller still handles the pre-attention norm and post-attention
+// residual add.
+// ---------------------------------------------------------------------------
+
+struct EncoderSelfAttnParams {
+    int n_heads;    // query heads
+    int n_kv_heads; // key/value heads (usually == n_heads for encoders)
+    int head_dim;
+    int n_kv_grp;     // n_heads / n_kv_heads (1 for MHA)
+    float attn_scale;  // usually 1/sqrt(head_dim)
+    // RoPE params (only used when positions != nullptr)
+    int n_ctx_orig;
+    float rope_theta;
+};
+
+static inline ggml_tensor* encoder_self_attn(ggml_context* ctx, ggml_tensor* x, ggml_tensor* q_w, ggml_tensor* q_b,
+                                             ggml_tensor* k_w, ggml_tensor* k_b, ggml_tensor* v_w, ggml_tensor* v_b,
+                                             ggml_tensor* o_w, ggml_tensor* o_b, ggml_tensor* positions,
+                                             ggml_tensor* mask, const EncoderSelfAttnParams& p) {
+    const int hd = p.head_dim;
+    const int n_q = p.n_heads;
+    const int n_kv = p.n_kv_heads;
+    const int grp = p.n_kv_grp;
+    const int T = (int)x->ne[1];
+
+    // Q/K/V projections with optional biases.
+    ggml_tensor* Q = ggml_mul_mat(ctx, q_w, x);
+    if (q_b)
+        Q = ggml_add(ctx, Q, q_b);
+    ggml_tensor* K = ggml_mul_mat(ctx, k_w, x);
+    if (k_b)
+        K = ggml_add(ctx, K, k_b);
+    ggml_tensor* V = ggml_mul_mat(ctx, v_w, x);
+    if (v_b)
+        V = ggml_add(ctx, V, v_b);
+
+    Q = ggml_reshape_3d(ctx, Q, hd, n_q, T);
+    K = ggml_reshape_3d(ctx, K, hd, n_kv, T);
+    V = ggml_reshape_3d(ctx, V, hd, n_kv, T);
+
+    // Optional RoPE (skip for encoders with learned positional embeddings).
+    if (positions) {
+        Q = ggml_rope_ext(ctx, Q, positions, nullptr, hd, GGML_ROPE_TYPE_NEOX, p.n_ctx_orig, p.rope_theta, 1.0f, 0.0f,
+                          1.0f, 0.0f, 0.0f);
+        K = ggml_rope_ext(ctx, K, positions, nullptr, hd, GGML_ROPE_TYPE_NEOX, p.n_ctx_orig, p.rope_theta, 1.0f, 0.0f,
+                          1.0f, 0.0f, 0.0f);
+    }
+
+    // GQA expansion (when n_kv_heads < n_heads).
+    if (grp > 1) {
+        ggml_tensor* K4 = ggml_reshape_4d(ctx, K, hd, 1, n_kv, T);
+        ggml_tensor* V4 = ggml_reshape_4d(ctx, V, hd, 1, n_kv, T);
+        K4 = ggml_repeat_4d(ctx, K4, hd, grp, n_kv, T);
+        V4 = ggml_repeat_4d(ctx, V4, hd, grp, n_kv, T);
+        K = ggml_cont(ctx, ggml_reshape_3d(ctx, K4, hd, n_q, T));
+        V = ggml_cont(ctx, ggml_reshape_3d(ctx, V4, hd, n_q, T));
+    }
+
+    // Permute to flash-attention layout: (head_dim, T, n_heads).
+    Q = ggml_cont(ctx, ggml_permute(ctx, Q, 0, 2, 1, 3));
+    K = ggml_cont(ctx, ggml_permute(ctx, K, 0, 2, 1, 3));
+    V = ggml_cont(ctx, ggml_permute(ctx, V, 0, 2, 1, 3));
+
+    // Flash attention (bidirectional if mask==nullptr, causal/SWA otherwise).
+    ggml_tensor* attn = ggml_flash_attn_ext(ctx, Q, K, V, mask, p.attn_scale, 0.0f, 0.0f);
+    attn = ggml_reshape_2d(ctx, attn, hd * n_q, T);
+
+    // Output projection with optional bias.
+    attn = ggml_mul_mat(ctx, o_w, attn);
+    if (o_b)
+        attn = ggml_add(ctx, attn, o_b);
+    return attn;
+}
+
+// ---------------------------------------------------------------------------
 // KV-cached self-attention for the LLM decoders (qwen3-asr, voxtral,
 // voxtral4b, granite-speech).
 //
