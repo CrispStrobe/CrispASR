@@ -433,6 +433,7 @@ and remove any that remain.
 | **Done** | #3 Granite µP | Already handled via existing knobs | 0 LOC |
 | **Done** | #4 Scheduler audit | Already done | 0 LOC |
 | **Done** | #8 voxtral Q&A | --ask flag for audio understanding | ~10 LOC |
+| **Done** | #14a granite dead code | Resurrected for graph encoder | 0 LOC |
 | **Low** | #7 voxtral4b streaming | Complex, niche | ~300 LOC |
 | **Low** | #9 Parakeet TDT GPU | Small gain, encoder dominates | ~150 LOC |
 | **Low** | #11 WebSocket streaming | Needs new dependency | ~300 LOC |

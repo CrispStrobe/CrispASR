@@ -194,7 +194,8 @@ each backend. High-value gaps to close:
   function, enable via `GRANITE_ENCODER_GRAPH=1`. Identical output on
   jfk.wav. Shaw RPE omitted (approximate) — follow up if accuracy
   issues surface on other test cases.
-- **[later]** Remove dead ggml graph encoder `granite_build_encoder`.
+- **[done]** ~~Remove dead ggml graph encoder `granite_build_encoder`.~~
+  Resurrected — now used by the graph encoder path (`GRANITE_ENCODER_GRAPH=1`).
 
 ### canary_ctc (aligner)
 - **[done]** ~~Fix single-backend scheduler — currently no CPU fallback
