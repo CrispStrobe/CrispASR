@@ -407,16 +407,55 @@ the rename to `crispasr` has propagated fully, change test references to
 may have stale build artifacts. They're untracked (not in git), so this
 is just `rm -rf` on local filesystems. Not a code change.
 
-### c. Granite dead code
-`granite_build_encoder` in `granite_speech.cpp` is a dead function from
-a previous attempt at ggml graph encoding. Remove it (or revive it for
-item #10 above).
+### c. Granite dead code — DONE
+`granite_build_encoder` resurrected for the ggml graph encoder path
+(`GRANITE_ENCODER_GRAPH=1`).
 
 ### d. Remove dead TODO markdown files
 The consolidation from 15 per-model markdown files into TODO.md,
 LEARNINGS.md, HISTORY.md was tracked but the deletion of the old files
 may not have been committed. Check: `ls *-todo.md benchmark_*.md ggml_plans.md`
 and remove any that remain.
+
+---
+
+## 15. CMake target rename (whisper-cli → crispasr)
+
+**Goal:** Rename the CMake target from `whisper-cli` to `crispasr` for
+consistency with the binary name.
+
+**Scope:** ~50 references across:
+- `examples/cli/CMakeLists.txt` — target definition + backward-compat aliases
+- `CMakeLists.txt` — MSVC warning suppression
+- `.github/workflows/{ci,release,lint}.yml` — 8 `--target whisper-cli` refs
+- `tests/CMakeLists.txt` — 15 `$<TARGET_FILE:whisper-cli>` refs
+- Shell scripts (8+) — `./build/bin/whisper-cli` paths
+- Documentation — README.md, ARCHITECTURE.md, etc.
+
+**Approach:** Single mechanical commit renaming all references. Keep
+the backward-compat symlink (whisper-cli → crispasr) in the install
+tree so existing scripts don't break.
+
+**Risk:** Low individually but touches many files. Best done as a
+standalone commit/PR to keep the diff reviewable.
+
+---
+
+## 16. Shaw RPE for granite encoder graph
+
+**Goal:** Add query-dependent Shaw relative position embeddings to the
+granite ggml graph encoder (currently uses flash_attn_ext with block
+mask only, omitting RPE).
+
+**Approach:** Replace `ggml_flash_attn_ext` with manual attention:
+1. QK^T via `ggml_mul_mat` → (C, C) per head
+2. RPE bias via 3D `ggml_mul_mat`: Q(hd, 1, C) × RPE(hd, C, C) → (C, 1, C)
+3. Add content + position scores, scale, softmax, V matmul
+4. Precompute RPE lookup (200, 200, 128) per layer at init time
+
+**Risk:** Medium. The 3D batched mul_mat for RPE bias needs careful
+tensor shape handling. Profile to verify the manual attention path
+isn't slower than flash_attn on CPU.
 
 ---
 
@@ -439,3 +478,5 @@ and remove any that remain.
 | **Low** | #11 WebSocket streaming | Needs new dependency | ~300 LOC |
 | **Low** | #12 Pipeline template | ROI too small with only 4 backends | 0 LOC |
 | **Low** | #14 Cleanup | Cosmetic | ~20 LOC |
+| **Medium** | #15 CMake target rename | Rename whisper-cli → crispasr across CI/tests/scripts (~50 refs) | ~50 files |
+| **Low** | #16 Shaw RPE for granite graph | Add query-dependent position bias to encoder graph | ~80 LOC |

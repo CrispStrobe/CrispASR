@@ -207,7 +207,12 @@ public:
         };
 
         std::string sys_instruction;
-        if (params.translate) {
+        if (!params.ask.empty()) {
+            // Note: qwen3-asr is an ASR-specific fine-tune that may
+            // ignore arbitrary instructions and transcribe anyway.
+            // voxtral 3B is better suited for audio Q&A.
+            sys_instruction = params.ask;
+        } else if (params.translate) {
             const std::string tgt =
                 params.target_lang.empty() ? std::string("English") : iso_to_english(params.target_lang);
             sys_instruction = "Translate the speech to " + tgt + ".";

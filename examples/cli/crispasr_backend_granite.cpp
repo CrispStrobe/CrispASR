@@ -179,7 +179,10 @@ public:
             std::string suffix_str = "can you transcribe the speech into a written format?"
                                      "<|end_of_text|>\n"
                                      "<|start_of_role|>assistant<|end_of_role|>";
-            if (params.translate) {
+            if (!params.ask.empty()) {
+                suffix_str = params.ask + "<|end_of_text|>\n"
+                                          "<|start_of_role|>assistant<|end_of_role|>";
+            } else if (params.translate) {
                 const std::string tgt =
                     params.target_lang.empty() ? std::string("English") : iso_to_eng(params.target_lang);
                 suffix_str = "can you translate the speech to " + tgt +
@@ -206,7 +209,16 @@ public:
             // logic drops trailing spaces (losing token 220), which
             // changes the prefix from 3 tokens to 2 and breaks decoding.
             prefix_ids.assign(kPrefix4, kPrefix4 + kNumPrefix4);
-            if (params.translate) {
+            if (!params.ask.empty()) {
+                const std::string instr = params.ask + "\n ASSISTANT:";
+                int n = 0;
+                int32_t* a = granite_speech_tokenize(ctx_, instr.c_str(), &n);
+                if (a && n > 0) {
+                    suffix_ids.assign(a, a + n);
+                    free(a);
+                } else if (a)
+                    free(a);
+            } else if (params.translate) {
                 const std::string tgt =
                     params.target_lang.empty() ? std::string("English") : iso_to_eng(params.target_lang);
                 const std::string instr = "can you translate the speech to " + tgt + "?\n ASSISTANT:";
