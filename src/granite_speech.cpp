@@ -1294,6 +1294,62 @@ static ggml_cgraph* granite_build_encoder(granite_speech_context* ctx, int T) {
     return gf;
 }
 
+// Run the full encoder as a single ggml compute graph (replaces the manual
+// per-op CPU loop path). Currently uses flash_attn_ext with a block-diagonal
+// mask but omits Shaw relative position embeddings — this produces slightly
+// different output from the CPU path. The main benefit is that the graph
+// automatically uses ggml's optimised matmul/conv kernels and can run on
+// GPU via the scheduler.
+static float* granite_run_encoder_graph(granite_speech_context* ctx, const float* mel, int n_mels, int T, int d) {
+    const auto& hp = ctx->model.hparams;
+    const int hd = (int)hp.enc_head_dim; // 128
+    const int ctx_size = 200;
+
+    ggml_cgraph* gf = granite_build_encoder(ctx, T);
+    ggml_backend_sched_reset(ctx->sched);
+    if (!ggml_backend_sched_alloc_graph(ctx->sched, gf)) {
+        fprintf(stderr, "granite_encoder_graph: alloc failed\n");
+        return nullptr;
+    }
+
+    // Fill input mel
+    ggml_tensor* inp = ggml_graph_get_tensor(gf, "enc_input");
+    ggml_backend_tensor_set(inp, mel, 0, (size_t)n_mels * T * sizeof(float));
+
+    // Fill block-diagonal attention mask: within each ctx_size block = 0 (attend),
+    // across blocks = -inf (masked out).
+    ggml_tensor* mask_t = ggml_graph_get_tensor(gf, "block_mask");
+    if (mask_t) {
+        std::vector<ggml_fp16_t> mask_data((size_t)T * T);
+        const ggml_fp16_t zero = ggml_fp32_to_fp16(0.0f);
+        const ggml_fp16_t neg_inf = ggml_fp32_to_fp16(-INFINITY);
+        for (int r = 0; r < T; r++)
+            for (int c = 0; c < T; c++)
+                mask_data[(size_t)r * T + c] = (r / ctx_size == c / ctx_size) ? zero : neg_inf;
+        ggml_backend_tensor_set(mask_t, mask_data.data(), 0, mask_data.size() * sizeof(ggml_fp16_t));
+    }
+
+    // RPE lookup (declared in graph but not yet used by attention — placeholder)
+    ggml_tensor* rpe_t = ggml_graph_get_tensor(gf, "rpe_lookup");
+    if (rpe_t) {
+        std::vector<float> rpe_zeros((size_t)ctx_size * hd * ctx_size, 0.0f);
+        ggml_backend_tensor_set(rpe_t, rpe_zeros.data(), 0, rpe_zeros.size() * sizeof(float));
+    }
+
+    if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS) {
+        fprintf(stderr, "granite_encoder_graph: compute failed\n");
+        return nullptr;
+    }
+
+    ggml_tensor* out = ggml_graph_get_tensor(gf, "enc_output");
+    if (!out)
+        return nullptr;
+    size_t total = (size_t)T * d;
+    float* result = (float*)malloc(total * sizeof(float));
+    ggml_backend_tensor_get(out, result, 0, total * sizeof(float));
+    return result;
+}
+
 // Build a tiny ggml graph for a single matmul: out = W @ x [+ bias]
 // x: (d_in, T), W: ggml tensor, out: (d_out, T)
 static bool run_matmul(granite_speech_context* ctx, float* out, const float* x, int d_in, int T, ggml_tensor* W,
@@ -1465,7 +1521,26 @@ extern "C" float* granite_speech_run_encoder(struct granite_speech_context* ctx,
     if (!ctx || !mel || n_mels != 160)
         return nullptr;
     const auto& hp = ctx->model.hparams;
-    const int d = (int)hp.enc_d_model;         // 1024
+    const int d = (int)hp.enc_d_model; // 1024
+
+    // Experimental: run the full encoder as a single ggml graph instead of
+    // the manual per-op CPU loop path. Enable with GRANITE_ENCODER_GRAPH=1.
+    // The graph path omits Shaw RPE (approximate), so output may differ
+    // slightly from the CPU path. Useful for benchmarking and GPU testing.
+    if (std::getenv("GRANITE_ENCODER_GRAPH")) {
+        if (ctx->params.verbosity >= 1)
+            fprintf(stderr, "  encoder: using ggml graph path (GRANITE_ENCODER_GRAPH=1)\n");
+        float* result = granite_run_encoder_graph(ctx, mel, n_mels, T_mel, d);
+        if (result) {
+            if (out_N)
+                *out_N = T_mel;
+            if (out_dim)
+                *out_dim = d;
+            return result;
+        }
+        fprintf(stderr, "  encoder: graph path failed, falling back to CPU loops\n");
+    }
+
     const int n_heads = (int)hp.enc_n_heads;   // 8
     const int hd = (int)hp.enc_head_dim;       // 128
     const int n_layers = (int)hp.enc_n_layers; // 16

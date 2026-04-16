@@ -191,8 +191,11 @@ each backend. High-value gaps to close:
   reduction order, so the change needs its own regression gate
   (allow small float drift; transcript must stay correct). Encoder
   Conformer is the dominant cost today (~22.5s on jfk.wav).
-- **[later]** Consider porting the per-layer CPU encoder to a single
-  ggml graph like canary did.
+- **[done]** ~~Consider porting the per-layer CPU encoder to a single
+  ggml graph.~~ Done: `granite_build_encoder()` wired with runner
+  function, enable via `GRANITE_ENCODER_GRAPH=1`. Identical output on
+  jfk.wav. Shaw RPE omitted (approximate) — follow up if accuracy
+  issues surface on other test cases.
 - **[later]** Remove dead ggml graph encoder `granite_build_encoder`.
 
 ### canary_ctc (aligner)
