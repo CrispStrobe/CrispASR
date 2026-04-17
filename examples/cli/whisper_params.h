@@ -28,6 +28,7 @@ struct whisper_params {
     int32_t progress_step = 5;
     int32_t max_context = -1;
     int32_t max_len = 0;
+    bool    split_on_punct = false;
     int32_t best_of = whisper_full_default_params(WHISPER_SAMPLING_GREEDY).greedy.best_of;
     int32_t beam_size = whisper_full_default_params(WHISPER_SAMPLING_BEAM_SEARCH).beam_search.beam_size;
     int32_t audio_ctx = 0;
