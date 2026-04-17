@@ -283,43 +283,86 @@ class CrispASR {
     _tryBindExtended();
   }
 
-  /// Lookup the 0.2.0 additions. Any missing symbol makes the matching
-  /// feature no-op, so a susurrus-flutter build using a v0.1.0 dylib keeps
+  /// Lookup the 0.2.0 additions. Any missing symbol leaves the matching
+  /// feature off, so a susurrus-flutter build using a v0.1.0 dylib keeps
   /// transcribing.
+  ///
+  /// Note: `lookupFunction<T, R>` needs its type arguments at the call site
+  /// to verify `NativeFunction<T>` — routing them through a generic
+  /// helper blows Dart FFI's type check. We use `providesSymbol` instead
+  /// so a missing symbol silently skips the feature.
   void _tryBindExtended() {
-    _paramsSetLanguage        = _tryLookup<_ParamsSetStringNative, _ParamsSetString>('crispasr_params_set_language');
-    _paramsSetInitialPrompt   = _tryLookup<_ParamsSetStringNative, _ParamsSetString>('crispasr_params_set_initial_prompt');
-    _paramsSetTranslate       = _tryLookup<_ParamsSetBoolNative,   _ParamsSetBool>  ('crispasr_params_set_translate');
-    _paramsSetDetectLanguage  = _tryLookup<_ParamsSetBoolNative,   _ParamsSetBool>  ('crispasr_params_set_detect_language');
-    _paramsSetTokenTimestamps = _tryLookup<_ParamsSetBoolNative,   _ParamsSetBool>  ('crispasr_params_set_token_timestamps');
-    _paramsSetNThreads        = _tryLookup<_ParamsSetIntNative,    _ParamsSetInt>   ('crispasr_params_set_n_threads');
-    _paramsSetMaxLen          = _tryLookup<_ParamsSetIntNative,    _ParamsSetInt>   ('crispasr_params_set_max_len');
-    _paramsSetSplitOnWord     = _tryLookup<_ParamsSetBoolNative,   _ParamsSetBool>  ('crispasr_params_set_split_on_word');
-    _paramsSetPrintRealtime   = _tryLookup<_ParamsSetBoolNative,   _ParamsSetBool>  ('crispasr_params_set_print_realtime');
-    _paramsSetPrintProgress   = _tryLookup<_ParamsSetBoolNative,   _ParamsSetBool>  ('crispasr_params_set_print_progress');
-    _paramsSetPrintTimestamps = _tryLookup<_ParamsSetBoolNative,   _ParamsSetBool>  ('crispasr_params_set_print_timestamps');
-    _paramsSetPrintSpecial    = _tryLookup<_ParamsSetBoolNative,   _ParamsSetBool>  ('crispasr_params_set_print_special');
+    if (_lib.providesSymbol('crispasr_params_set_language')) {
+      _paramsSetLanguage = _lib.lookupFunction<_ParamsSetStringNative, _ParamsSetString>('crispasr_params_set_language');
+    }
+    if (_lib.providesSymbol('crispasr_params_set_initial_prompt')) {
+      _paramsSetInitialPrompt = _lib.lookupFunction<_ParamsSetStringNative, _ParamsSetString>('crispasr_params_set_initial_prompt');
+    }
+    if (_lib.providesSymbol('crispasr_params_set_translate')) {
+      _paramsSetTranslate = _lib.lookupFunction<_ParamsSetBoolNative, _ParamsSetBool>('crispasr_params_set_translate');
+    }
+    if (_lib.providesSymbol('crispasr_params_set_detect_language')) {
+      _paramsSetDetectLanguage = _lib.lookupFunction<_ParamsSetBoolNative, _ParamsSetBool>('crispasr_params_set_detect_language');
+    }
+    if (_lib.providesSymbol('crispasr_params_set_token_timestamps')) {
+      _paramsSetTokenTimestamps = _lib.lookupFunction<_ParamsSetBoolNative, _ParamsSetBool>('crispasr_params_set_token_timestamps');
+    }
+    if (_lib.providesSymbol('crispasr_params_set_n_threads')) {
+      _paramsSetNThreads = _lib.lookupFunction<_ParamsSetIntNative, _ParamsSetInt>('crispasr_params_set_n_threads');
+    }
+    if (_lib.providesSymbol('crispasr_params_set_max_len')) {
+      _paramsSetMaxLen = _lib.lookupFunction<_ParamsSetIntNative, _ParamsSetInt>('crispasr_params_set_max_len');
+    }
+    if (_lib.providesSymbol('crispasr_params_set_split_on_word')) {
+      _paramsSetSplitOnWord = _lib.lookupFunction<_ParamsSetBoolNative, _ParamsSetBool>('crispasr_params_set_split_on_word');
+    }
+    if (_lib.providesSymbol('crispasr_params_set_print_realtime')) {
+      _paramsSetPrintRealtime = _lib.lookupFunction<_ParamsSetBoolNative, _ParamsSetBool>('crispasr_params_set_print_realtime');
+    }
+    if (_lib.providesSymbol('crispasr_params_set_print_progress')) {
+      _paramsSetPrintProgress = _lib.lookupFunction<_ParamsSetBoolNative, _ParamsSetBool>('crispasr_params_set_print_progress');
+    }
+    if (_lib.providesSymbol('crispasr_params_set_print_timestamps')) {
+      _paramsSetPrintTimestamps = _lib.lookupFunction<_ParamsSetBoolNative, _ParamsSetBool>('crispasr_params_set_print_timestamps');
+    }
+    if (_lib.providesSymbol('crispasr_params_set_print_special')) {
+      _paramsSetPrintSpecial = _lib.lookupFunction<_ParamsSetBoolNative, _ParamsSetBool>('crispasr_params_set_print_special');
+    }
 
-    _fullNTokens = _tryLookup<_FullNTokensNative, _FullNTokens>('whisper_full_n_tokens');
-    _tokenText   = _tryLookup<_TokenTextNative,   _TokenText>  ('whisper_full_get_token_text');
-    _tokenT0     = _tryLookup<_TokenT0Native,     _TokenT0>    ('crispasr_token_t0');
-    _tokenT1     = _tryLookup<_TokenT0Native,     _TokenT0>    ('crispasr_token_t1');
-    _tokenP      = _tryLookup<_TokenPNative,      _TokenP>     ('crispasr_token_p');
+    if (_lib.providesSymbol('whisper_full_n_tokens')) {
+      _fullNTokens = _lib.lookupFunction<_FullNTokensNative, _FullNTokens>('whisper_full_n_tokens');
+    }
+    if (_lib.providesSymbol('whisper_full_get_token_text')) {
+      _tokenText = _lib.lookupFunction<_TokenTextNative, _TokenText>('whisper_full_get_token_text');
+    }
+    if (_lib.providesSymbol('crispasr_token_t0')) {
+      _tokenT0 = _lib.lookupFunction<_TokenT0Native, _TokenT0>('crispasr_token_t0');
+    }
+    if (_lib.providesSymbol('crispasr_token_t1')) {
+      _tokenT1 = _lib.lookupFunction<_TokenT0Native, _TokenT0>('crispasr_token_t1');
+    }
+    if (_lib.providesSymbol('crispasr_token_p')) {
+      _tokenP = _lib.lookupFunction<_TokenPNative, _TokenP>('crispasr_token_p');
+    }
 
-    _detectLang  = _tryLookup<_DetectLangNative, _DetectLang>('crispasr_detect_language');
-    _vadSegments = _tryLookup<_VadSegmentsNative, _VadSegments>('crispasr_vad_segments');
-    _vadFree     = _tryLookup<_VadFreeNative,     _VadFree>    ('crispasr_vad_free');
+    if (_lib.providesSymbol('crispasr_detect_language')) {
+      _detectLang = _lib.lookupFunction<_DetectLangNative, _DetectLang>('crispasr_detect_language');
+    }
+    if (_lib.providesSymbol('crispasr_vad_segments')) {
+      _vadSegments = _lib.lookupFunction<_VadSegmentsNative, _VadSegments>('crispasr_vad_segments');
+    }
+    if (_lib.providesSymbol('crispasr_vad_free')) {
+      _vadFree = _lib.lookupFunction<_VadFreeNative, _VadFree>('crispasr_vad_free');
+    }
 
-    _langStr   = _tryLookup<_LangStrNative, _LangStr>('whisper_lang_str');
-    _langId    = _tryLookup<_LangIdNative,  _LangId> ('whisper_lang_id');
-    _langMaxId = _tryLookup<_IntNative,     _IntFn>  ('whisper_lang_max_id');
-  }
-
-  R? _tryLookup<T extends Function, R extends Function>(String name) {
-    try {
-      return _lib.lookupFunction<T, R>(name);
-    } catch (_) {
-      return null;
+    if (_lib.providesSymbol('whisper_lang_str')) {
+      _langStr = _lib.lookupFunction<_LangStrNative, _LangStr>('whisper_lang_str');
+    }
+    if (_lib.providesSymbol('whisper_lang_id')) {
+      _langId = _lib.lookupFunction<_LangIdNative, _LangId>('whisper_lang_id');
+    }
+    if (_lib.providesSymbol('whisper_lang_max_id')) {
+      _langMaxId = _lib.lookupFunction<_IntNative, _IntFn>('whisper_lang_max_id');
     }
   }
 
