@@ -367,6 +367,12 @@ add_library(wav2vec2-ggml STATIC wav2vec2-ggml.h wav2vec2-ggml.cpp)
 target_include_directories(wav2vec2-ggml PUBLIC .)
 target_compile_features   (wav2vec2-ggml PUBLIC cxx_std_17)
 target_link_libraries     (wav2vec2-ggml PUBLIC ggml ggml-base ggml-cpu)
+# PIC required so we can link this static lib into the whisper shared
+# library (libwhisper.so) on ELF platforms. Without it, ld fails with
+# "relocation R_X86_64_PC32 ... can not be used when making a shared
+# object; recompile with -fPIC". macOS / Windows don't care but setting
+# it everywhere is harmless.
+set_target_properties(wav2vec2-ggml PROPERTIES POSITION_INDEPENDENT_CODE ON)
 if(NOT MSVC)
     target_compile_options(wav2vec2-ggml PRIVATE -O3)
 endif()
