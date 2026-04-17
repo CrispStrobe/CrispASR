@@ -584,6 +584,8 @@ final model = CrispASR('ggml-base.en.bin');
 final segments = model.transcribePcm(pcmFloat32);
 ```
 
+Reference application: **[CrisperWeaver](https://github.com/CrispStrobe/CrisperWeaver)** — a cross-platform Flutter desktop/mobile transcription app built on `package:crispasr`. Ships with model browser + downloader (all 10 backends + quants), drag-and-drop files, mic capture, SRT/VTT/TXT export, per-run performance metrics, and full en/de i18n. macOS and Linux binaries are built in CI; Android/iOS are supported via the mobile toolchains below.
+
 ### Mobile
 
 ```bash
