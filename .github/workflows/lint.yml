@@ -136,6 +136,9 @@ jobs:
             -i bindings \
             --suppress='*:examples/server/*' \
             --suppress='*:*httplib.h' \
+            --suppress='*:src/miniaudio.h' \
+            --suppress='*:*miniaudio.h' \
+            --suppress='*:*stb_vorbis.c' \
             --suppress=unknownMacro \
             --suppress=nullPointerOutOfMemory \
             --suppress=nullPointerArithmeticOutOfMemory \
