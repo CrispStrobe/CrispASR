@@ -1,0 +1,15 @@
+[package]
+name = "crispasr"
+version = "0.1.0"
+edition = "2021"
+description = "Safe Rust wrapper for CrispASR speech recognition"
+license = "MIT"
+
+[dependencies]
+crispasr-sys = { path = "../crispasr-sys" }
+
+[features]
+default = []
+cuda = ["crispasr-sys/cuda"]
+metal = ["crispasr-sys/metal"]
+vulkan = ["crispasr-sys/vulkan"]
