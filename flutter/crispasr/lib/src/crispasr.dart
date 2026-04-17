@@ -61,6 +61,69 @@ class LanguageDetection {
       'LanguageDetection($code, ${(probability * 100).toStringAsFixed(1)}%)';
 }
 
+/// PCM returned by [decodeAudioFile] — always 16 kHz mono float32.
+class DecodedAudio {
+  final Float32List samples;
+  final int sampleRate;
+  const DecodedAudio({required this.samples, required this.sampleRate});
+
+  double get durationSeconds => samples.length / sampleRate;
+}
+
+/// Decode any WAV / MP3 / FLAC file to 16 kHz mono float32 PCM using
+/// miniaudio shipped inside libwhisper. Cross-platform, no ffmpeg needed.
+///
+/// Throws when the loaded dylib is pre-0.4.1 (no `crispasr_audio_load`
+/// symbol) or when the decoder can't handle the file (returns an error
+/// code from the C helper).
+DecodedAudio decodeAudioFile(String path, {String? libPath}) {
+  final lib = DynamicLibrary.open(libPath ?? CrispASR.defaultLibName());
+  if (!lib.providesSymbol('crispasr_audio_load')) {
+    throw UnsupportedError(
+        'Audio decoder not available in the loaded CrispASR library — '
+        'rebuild with 0.4.1+ helpers.');
+  }
+
+  final load = lib.lookupFunction<
+      Int32 Function(Pointer<Utf8>, Pointer<Pointer<Float>>, Pointer<Int32>, Pointer<Int32>),
+      int Function(Pointer<Utf8>, Pointer<Pointer<Float>>, Pointer<Int32>, Pointer<Int32>)>(
+    'crispasr_audio_load',
+  );
+  final free = lib.lookupFunction<
+      Void Function(Pointer<Float>),
+      void Function(Pointer<Float>)>('crispasr_audio_free');
+
+  final pathPtr = path.toNativeUtf8();
+  final pcmOut  = calloc<Pointer<Float>>();
+  final nOut    = calloc<Int32>();
+  final srOut   = calloc<Int32>();
+
+  try {
+    final rc = load(pathPtr, pcmOut, nOut, srOut);
+    if (rc != 0) {
+      throw Exception('crispasr_audio_load failed (code $rc) for $path');
+    }
+    final ptr = pcmOut.value;
+    final n = nOut.value;
+    final sr = srOut.value;
+    if (ptr == nullptr || n <= 0) {
+      throw Exception('Audio decoded to empty buffer: $path');
+    }
+    // Copy the native float* into a Dart-owned Float32List so we can
+    // free the native buffer now and not worry about lifetime.
+    final copy = Float32List(n);
+    final srcView = ptr.asTypedList(n);
+    copy.setAll(0, srcView);
+    free(ptr);
+    return DecodedAudio(samples: copy, sampleRate: sr > 0 ? sr : 16000);
+  } finally {
+    calloc.free(pathPtr);
+    calloc.free(pcmOut);
+    calloc.free(nOut);
+    calloc.free(srOut);
+  }
+}
+
 /// One decoded segment from [CrispasrSession.transcribe]. Similar to the
 /// Whisper-specific [Segment] but produced by a backend-agnostic code path.
 class SessionSegment {

@@ -110,6 +110,15 @@ void main() {
     }
   });
 
+  test('0.4.1 audio decoder helpers resolve', () {
+    for (final s in [
+      'crispasr_audio_load',
+      'crispasr_audio_free',
+    ]) {
+      expect(() => lib.lookup(s), returnsNormally, reason: s);
+    }
+  });
+
   test('0.4.0 unified session helpers resolve', () {
     for (final s in [
       'crispasr_session_open',

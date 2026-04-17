@@ -112,6 +112,10 @@ add_library(whisper
             # `crispasr_*` prefixes so they don't collide with
             # upstream whisper.h identifiers.
             crispasr_dart_helpers.cpp
+            # Audio file decoder (WAV / MP3 / FLAC via miniaudio).
+            # Lets language wrappers feed `crispasr_session_transcribe`
+            # any audio format without bundling an external ffmpeg.
+            crispasr_audio.cpp
             )
 # Non-Whisper backends the Dart binding can reach through
 # crispasr_dart_helpers.cpp are linked into libwhisper further down in
