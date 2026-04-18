@@ -107,20 +107,18 @@ add_library(whisper
             ../include/whisper.h
             whisper-arch.h
             whisper.cpp
-            # C-ABI helpers consumed by the Dart FFI binding in
-            # `flutter/crispasr/`. Declared extern "C" with
-            # `crispasr_*` prefixes so they don't collide with
-            # upstream whisper.h identifiers.
-            crispasr_dart_helpers.cpp
+            # C-ABI shared by every CrispASR consumer (CLI, Dart, Python,
+            # Rust). Declared extern "C" with `crispasr_*` prefixes so they
+            # don't collide with upstream whisper.h identifiers.
+            crispasr_c_api.cpp
             # Audio file decoder (WAV / MP3 / FLAC via miniaudio).
             # Lets language wrappers feed `crispasr_session_transcribe`
             # any audio format without bundling an external ffmpeg.
             crispasr_audio.cpp
             )
-# Non-Whisper backends the Dart binding can reach through
-# crispasr_dart_helpers.cpp are linked into libwhisper further down in
-# this file, once those targets have been declared. See the
-# "Dart FFI multi-backend linkage" section near the bottom.
+# Non-Whisper backends reachable through crispasr_c_api.cpp are linked
+# into libwhisper further down in this file, once those targets have been
+# declared. See the "multi-backend linkage" section near the bottom.
 
 # Cohere Transcribe library (Conformer encoder + transformer decoder)
 add_library(cohere
@@ -447,20 +445,19 @@ if (BUILD_SHARED_LIBS)
 endif()
 
 # ---------------------------------------------------------------------------
-# Dart FFI multi-backend linkage
+# Multi-backend linkage (consumed by CLI + Dart + Python + Rust)
 #
-# Non-Whisper CrispASR backends become reachable from Dart through the
-# `crispasr_*` C-ABI wrappers in crispasr_dart_helpers.cpp. Each backend
-# header is #included under `#if __has_include(...)`, and when the
-# corresponding CMake target exists we PUBLIC-link it into libwhisper so
-# the resulting shared library carries a DT_NEEDED on its sibling dylib.
-# Dart consumers only have to open libwhisper; the platform loader pulls
-# the rest automatically.
+# Non-Whisper CrispASR backends become reachable through the `crispasr_*`
+# C-ABI wrappers in crispasr_c_api.cpp. Each backend header is #included
+# under `#if __has_include(...)`, and when the corresponding CMake target
+# exists we PUBLIC-link it into libwhisper so the resulting shared library
+# carries a DT_NEEDED on its sibling dylib. Consumers only have to open
+# libwhisper; the platform loader pulls the rest automatically.
 #
 # Adding a new backend is a three-line change here: (1) build the
 # backend target as usual elsewhere in this file, (2) add
 # `target_link_libraries(whisper PUBLIC <target>)` below, (3) add the
-# `crispasr_<backend>_*` wrappers to crispasr_dart_helpers.cpp.
+# `crispasr_<backend>_*` wrappers to crispasr_c_api.cpp.
 # ---------------------------------------------------------------------------
 if (TARGET parakeet)
     target_link_libraries(whisper PUBLIC parakeet)

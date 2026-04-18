@@ -71,6 +71,10 @@ void main() {
       'crispasr_detect_language',
       'crispasr_vad_segments',
       'crispasr_vad_free',
+      // Canonical C-ABI version symbol (was `crispasr_dart_helpers_version`
+      // before the file moved to `src/crispasr_c_api.cpp`).
+      'crispasr_c_api_version',
+      // Back-compat alias, kept for one release cycle.
       'crispasr_dart_helpers_version',
     ]) {
       expect(() => lib.lookup(s), returnsNormally, reason: s);
@@ -90,12 +94,17 @@ void main() {
     }
   });
 
-  test('helpers_version reports 0.4.0', () {
-    final fn = lib.lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>(
-        'crispasr_dart_helpers_version');
-    final ptr = fn();
-    expect(ptr.cast<Uint8>().address, isNot(0));
-    expect(ptr.toDartString(), '0.4.0');
+  test('c_api_version reports 0.4.0 (canonical + alias agree)', () {
+    for (final sym in const [
+      'crispasr_c_api_version',
+      'crispasr_dart_helpers_version', // deprecated alias
+    ]) {
+      final fn = lib.lookupFunction<Pointer<Utf8> Function(),
+          Pointer<Utf8> Function()>(sym);
+      final ptr = fn();
+      expect(ptr.cast<Uint8>().address, isNot(0), reason: sym);
+      expect(ptr.toDartString(), '0.4.0', reason: sym);
+    }
   });
 
   test('0.3.0 streaming helpers resolve', () {

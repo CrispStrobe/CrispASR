@@ -1,12 +1,16 @@
-// CrispASR — C-ABI helpers used by the Dart FFI binding in
-// `flutter/crispasr/`. These wrap the handful of whisper.h entry points that
-// Dart can't call directly: functions that take or return structs by value,
-// plus a couple of convenience wrappers that would otherwise need Dart to
-// mirror the full `whisper_full_params` / `whisper_token_data` layouts.
+// CrispASR — C-ABI consumed by every CrispASR consumer: the CLI in
+// `examples/cli/`, the Dart FFI binding in `flutter/crispasr/`, the Python
+// ctypes binding in `python/crispasr/`, and the Rust `crispasr-sys` crate.
+// These wrap the handful of whisper.h entry points that external callers
+// can't reach directly (functions that take or return structs by value,
+// plus convenience wrappers that would otherwise force each binding to
+// mirror the full `whisper_full_params` / `whisper_token_data` layouts),
+// and also expose the higher-level CrispASR session/VAD/diarize surface.
 //
 // Every symbol here is plain C linkage, prefixed `crispasr_` so it can't
 // collide with upstream whisper.h identifiers. Keep signatures stable once
-// published — these are part of `package:crispasr`'s ABI contract.
+// published — these are part of CrispASR's published ABI contract shared
+// across all four consumers above.
 
 #include <cstdint>
 #include <cstdio>
@@ -1365,9 +1369,19 @@ CA_EXPORT void crispasr_session_close(crispasr_session* s) {
 }
 
 // =========================================================================
-// Version reporting for the Dart binding
+// Version reporting — identifies the C-ABI build to every consumer
+// (CLI, Dart, Python, Rust). Bump when breaking or extending the surface.
 // =========================================================================
 
-CA_EXPORT const char* crispasr_dart_helpers_version(void) {
+CA_EXPORT const char* crispasr_c_api_version(void) {
     return "0.4.0";
+}
+
+// Backwards-compatibility alias. The Dart smoke test and any 0.4.x-era
+// consumer probed `crispasr_dart_helpers_version`. The symbol was renamed
+// when the file moved to `crispasr_c_api.cpp` (no longer Dart-specific).
+// TODO: remove once all in-tree consumers are updated and a major-version
+// bump is cut.
+CA_EXPORT const char* crispasr_dart_helpers_version(void) {
+    return crispasr_c_api_version();
 }
