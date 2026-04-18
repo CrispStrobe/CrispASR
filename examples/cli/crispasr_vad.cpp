@@ -118,6 +118,37 @@ std::vector<crispasr_audio_slice> crispasr_compute_audio_slices(const float* sam
             slices = std::move(merged);
         }
 
+        // Post-split: break any VAD segment that exceeds chunk_seconds
+        // into sub-segments at the best gap within the merged segment.
+        // This prevents OOM on very long continuous speech (e.g. 10+ min
+        // lectures). We split at the original VAD boundary that falls
+        // closest to each chunk_seconds multiple.
+        if (chunk_seconds > 0) {
+            const int max_samples = chunk_seconds * sample_rate;
+            std::vector<crispasr_audio_slice> split;
+            for (auto& sl : slices) {
+                const int dur = sl.end - sl.start;
+                if (dur <= max_samples) {
+                    split.push_back(sl);
+                } else {
+                    // Split this oversized segment into roughly equal parts.
+                    const int n_parts = (dur + max_samples - 1) / max_samples;
+                    const int part_samples = dur / n_parts;
+                    for (int p = 0; p < n_parts; p++) {
+                        const int s = sl.start + p * part_samples;
+                        const int e = (p == n_parts - 1) ? sl.end : sl.start + (p + 1) * part_samples;
+                        split.push_back({
+                            s,
+                            e,
+                            (int64_t)((double)s / sample_rate * 100.0),
+                            (int64_t)((double)e / sample_rate * 100.0),
+                        });
+                    }
+                }
+            }
+            slices = std::move(split);
+        }
+
         return slices;
     }
 
@@ -144,4 +175,34 @@ std::vector<crispasr_audio_slice> crispasr_compute_audio_slices(const float* sam
         }
     }
     return slices;
+}
+
+// ---------------------------------------------------------------------------
+// Timestamp remapping: stitched-buffer centiseconds → original-audio centiseconds.
+// Uses linear interpolation between the mapping table entries.
+// ---------------------------------------------------------------------------
+int64_t crispasr_vad_remap_timestamp(const std::vector<crispasr_vad_mapping>& mapping, int64_t stitched_cs) {
+    if (mapping.empty())
+        return stitched_cs;
+    if (stitched_cs <= mapping.front().stitched_cs)
+        return mapping.front().original_cs;
+    if (stitched_cs >= mapping.back().stitched_cs)
+        return mapping.back().original_cs;
+
+    // Binary search for the bracket.
+    size_t lo = 0, hi = mapping.size() - 1;
+    while (lo + 1 < hi) {
+        size_t mid = (lo + hi) / 2;
+        if (mapping[mid].stitched_cs <= stitched_cs)
+            lo = mid;
+        else
+            hi = mid;
+    }
+    // Linear interpolation between mapping[lo] and mapping[hi].
+    const auto& a = mapping[lo];
+    const auto& b = mapping[hi];
+    if (b.stitched_cs == a.stitched_cs)
+        return a.original_cs;
+    const double frac = (double)(stitched_cs - a.stitched_cs) / (double)(b.stitched_cs - a.stitched_cs);
+    return a.original_cs + (int64_t)(frac * (double)(b.original_cs - a.original_cs));
 }

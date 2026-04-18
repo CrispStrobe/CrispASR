@@ -459,6 +459,79 @@ isn't slower than flash_attn on CPU.
 
 ---
 
+## 17. VAD stitching for long audio (whisper.cpp parity)
+
+**Goal:** Match whisper.cpp's VAD approach for non-whisper backends:
+stitch VAD segments into a contiguous buffer, process as one audio,
+remap timestamps back to original positions.
+
+**Current state (April 2026):**
+- VAD now works (centisecond bug fixed, segment merging added)
+- Each VAD segment is transcribed independently as a separate slice
+- This loses cross-segment context at boundaries
+- whisper.cpp stitches segments + builds a `vad_mapping_table` for
+  timestamp remapping — this gives better results
+
+**How whisper.cpp does it (src/whisper.cpp lines 6895-6980):**
+1. Concatenate all VAD segments into one contiguous float buffer
+2. Insert 0.1s silence between segments
+3. Add 0.1s overlap at segment boundaries
+4. Build `vad_mapping_table` (stitched_position → original_position)
+5. Process the stitched buffer through whisper's normal pipeline
+6. Remap output timestamps via `vad_time_map_get_original()`
+
+**How other projects handle long audio:**
+- **ChunkFormer**: Fixed chunks with 128-frame left+right context windows.
+  Model architecture supports this natively (trained with chunking).
+- **Eve (nexmoe)**: Silero VAD → Qwen3-ASR via sherpa-onnx. Same as us.
+- **Conformer-Athena**: Dynamic chunk-based attention (arxiv 2012.05481).
+  Model-level solution, not applicable to pre-trained models.
+
+**Our approach:** Infrastructure for stitching is in place
+(`crispasr_stitched_audio`, `crispasr_vad_remap_timestamp` in
+crispasr_vad.{h,cpp}). What remains is wiring it into the dispatch
+loop in `crispasr_run.cpp`:
+1. When VAD is active, stitch segments into one buffer
+2. Send the stitched buffer as a single `transcribe()` call
+3. Remap `seg.t0`/`seg.t1` and word timestamps afterward
+4. If the stitched buffer exceeds `chunk_seconds`, split at the
+   best VAD boundary within that range (already implemented)
+
+**Risk:** Medium. The stitching itself is simple. The tricky part is
+remapping word-level timestamps correctly (linear interpolation
+across silence gaps).
+
+**Immediate value:** Current VAD segment merging (min 3s, gap < 1s)
+already handles the common case well. The stitching improvement
+matters most for audio with many short pauses (lectures, interviews).
+
+---
+
+## 18. Qwen3 forced aligner accuracy improvements
+
+**Current state:** Basic aligner works but has known quality issues:
+1. Leading silence → timestamps start too early (aligner assigns
+   timestamps to silence). Workaround: use `--vad`.
+2. Missing `fix_timestamp()` LIS post-processing from the reference
+   implementation. We added a simpler forward clamp (monotonicity
+   enforcement) which handles most cases.
+3. 80ms resolution (5000 classes) is inherently coarser than
+   parakeet's native TDT timestamps.
+
+**Reference implementation:** See
+`qwen_asr/inference/qwen3_forced_aligner.py` in QwenLM/Qwen3-ASR.
+Key differences from our implementation:
+- Full LIS (longest increasing subsequence) for timestamp correction
+- Language-specific word tokenization (CJK character-level, nagisa
+  for Japanese, soynlp for Korean)
+- We use simple whitespace splitting for all languages
+
+**Recommendation:** Parakeet is the better choice for timestamp-
+critical use cases. The forced aligner is best as a fallback for
+backends that lack native timestamps (voxtral, granite, cohere).
+
+---
+
 ## Priority ordering
 
 | Priority | Item | Impact | Effort |
@@ -478,5 +551,7 @@ isn't slower than flash_attn on CPU.
 | **Low** | #11 WebSocket streaming | Needs new dependency | ~300 LOC |
 | **Low** | #12 Pipeline template | ROI too small with only 4 backends | 0 LOC |
 | **Low** | #14 Cleanup | Cosmetic | ~20 LOC |
+| **High** | #17 VAD stitching | Stitch VAD segments into one buffer like whisper.cpp, remap timestamps | ~100 LOC |
+| **Medium** | #18 Aligner LIS | Full LIS monotonicity fix + language-specific tokenization | ~80 LOC |
 | **Medium** | #15 CMake target rename | Rename whisper-cli → crispasr across CI/tests/scripts (~50 refs) | ~50 files |
 | **Low** | #16 Shaw RPE for granite graph | Add query-dependent position bias to encoder graph | ~80 LOC |

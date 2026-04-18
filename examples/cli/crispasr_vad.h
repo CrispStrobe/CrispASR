@@ -20,6 +20,25 @@ struct crispasr_audio_slice {
     int64_t t0_cs, t1_cs; // centiseconds, absolute start/end of the slice
 };
 
+// Stitched VAD result: VAD segments concatenated into a single buffer
+// with 0.1s silence gaps (matching whisper.cpp's approach). The mapping
+// table allows remapping timestamps from stitched-buffer positions back
+// to original-audio positions.
+struct crispasr_vad_mapping {
+    int64_t stitched_cs; // position in the stitched buffer (centiseconds)
+    int64_t original_cs; // corresponding position in the original audio
+};
+
+struct crispasr_stitched_audio {
+    std::vector<float> samples;                // stitched PCM buffer
+    std::vector<crispasr_vad_mapping> mapping; // timestamp remapping table
+    int64_t total_duration_cs = 0;             // total duration in centiseconds
+};
+
+// Remap a centisecond timestamp from stitched-buffer space back to
+// original-audio space using linear interpolation between mapping points.
+int64_t crispasr_vad_remap_timestamp(const std::vector<crispasr_vad_mapping>& mapping, int64_t stitched_cs);
+
 // Build the list of audio slices to transcribe.
 //
 // If params.vad_model is non-empty, runs Silero VAD and emits one slice per
