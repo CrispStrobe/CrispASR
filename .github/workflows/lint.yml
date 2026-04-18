@@ -57,8 +57,10 @@ jobs:
         # Scope: project-owned C++ only — skip ggml/ and bindings/ (third-party).
         run: |
           ERRORS=$(find src examples/cli \
-               \( -name '*.cpp' -o -name '*.h' \) \
+               \( -name '*.cpp' -o -name '*.h' -o -name '*.c' \) \
                ! -name 'httplib.h' \
+               ! -name 'miniaudio.h' \
+               ! -name 'stb_vorbis.c' \
                -print0 \
           | xargs -0 clang-format --dry-run --Werror 2>&1 \
           | grep -c 'error:.*clang-format' || true)
