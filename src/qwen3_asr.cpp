@@ -1992,6 +1992,23 @@ extern "C" int qwen3_asr_align_words(struct qwen3_asr_context* ctx, const float*
         return -7;
     }
 
+    // 6b. Fix timestamp monotonicity.
+    // The reference Qwen3-ForcedAligner uses a LIS (longest increasing
+    // subsequence) algorithm to correct out-of-order timestamps. We use
+    // a simpler forward clamp: each timestamp must be >= the previous one.
+    // This handles the common case of small local inversions without the
+    // complexity of full LIS + interpolation.
+    for (size_t i = 1; i < ts_classes.size(); i++) {
+        if (ts_classes[i] < ts_classes[i - 1])
+            ts_classes[i] = ts_classes[i - 1];
+    }
+
+    // Additionally, ensure each word's end >= start.
+    for (int w = 0; w < n_words; w++) {
+        if (ts_classes[2 * w + 1] < ts_classes[2 * w])
+            ts_classes[2 * w + 1] = ts_classes[2 * w];
+    }
+
     // 7. Convert classes → ms and write into the caller's parallel arrays.
     for (int w = 0; w < n_words; w++) {
         out_start_ms[w] = (int64_t)((float)ts_classes[2 * w + 0] * TIMESTAMP_SEGMENT_TIME_MS);
