@@ -163,6 +163,103 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, wh
 
     auto t_start = std::chrono::steady_clock::now();
 
+    // --------------- VAD stitching path (whisper.cpp-style) ---------------
+    // When VAD produces multiple slices, stitch them into one contiguous
+    // buffer (with 0.1s silence gaps) and process as a single transcribe()
+    // call. This preserves cross-segment context and avoids boundary
+    // artifacts. Timestamps are remapped from stitched-buffer positions
+    // back to original-audio positions.
+    //
+    // Skip stitching for whisper backend (it has its own internal VAD+seek)
+    // and when there's only one slice (no benefit).
+    const bool use_stitching = slices.size() > 1 && params.vad && params.backend != "whisper";
+
+    if (use_stitching) {
+        auto stitched = crispasr_stitch_vad_slices(samples.data(), (int)samples.size(), SR, slices);
+        if (!params.no_prints) {
+            fprintf(stderr, "crispasr: stitched %zu VAD segments → %.1fs (from %.1fs original)\n", slices.size(),
+                    (double)stitched.total_duration_cs / 100.0, (double)samples.size() / SR);
+        }
+
+        // Transcribe the stitched buffer as one call.
+        auto segs = backend.transcribe(stitched.samples.data(), (int)stitched.samples.size(), 0, params);
+
+        // Remap timestamps from stitched-buffer space to original-audio space.
+        for (auto& seg : segs) {
+            seg.t0 = crispasr_vad_remap_timestamp(stitched.mapping, seg.t0);
+            seg.t1 = crispasr_vad_remap_timestamp(stitched.mapping, seg.t1);
+            for (auto& w : seg.words) {
+                w.t0 = crispasr_vad_remap_timestamp(stitched.mapping, w.t0);
+                w.t1 = crispasr_vad_remap_timestamp(stitched.mapping, w.t1);
+            }
+        }
+
+        // Optional CTC alignment (on original audio, not stitched).
+        const bool want_align = !params.aligner_model.empty() && (backend.capabilities() & CAP_TIMESTAMPS_CTC);
+        if (want_align) {
+            for (auto& seg : segs) {
+                if (!seg.words.empty())
+                    continue;
+                // Find the original audio region for this segment.
+                const int s = (int)((double)seg.t0 / 100.0 * SR);
+                const int e = std::min((int)samples.size(), (int)((double)seg.t1 / 100.0 * SR));
+                if (e > s) {
+                    auto words = crispasr_ctc_align(params.aligner_model, seg.text, samples.data() + s, e - s, seg.t0,
+                                                    params.n_threads);
+                    if (!words.empty()) {
+                        seg.t0 = words.front().t0;
+                        seg.t1 = words.back().t1;
+                        seg.words = std::move(words);
+                    }
+                }
+            }
+        }
+
+        // Fall through to the shared output path below by wrapping
+        // the stitched result into per_slice / all_segs.
+        std::vector<std::vector<crispasr_segment>> stitched_per_slice(1);
+        stitched_per_slice[0] = std::move(segs);
+        auto all_segs = merge_segments(std::move(stitched_per_slice), slices);
+
+        if (!params.punctuation) {
+            for (auto& seg : all_segs)
+                crispasr_strip_punctuation(seg);
+        }
+
+        const auto disp = crispasr_make_disp_segments(all_segs, params.max_len, params.split_on_punct);
+        const bool show_timestamps =
+            !params.no_timestamps &&
+            (params.output_srt || params.output_vtt || params.max_len > 0 || params.print_colors || params.diarize);
+        {
+            auto t_end = std::chrono::steady_clock::now();
+            double t_total = std::chrono::duration<double>(t_end - t_start).count();
+            double audio_s = (double)samples.size() / SR;
+            if (!params.no_prints) {
+                fprintf(stderr, "crispasr: transcribed %.1fs audio in %.2fs (%.1fx realtime)\n", audio_s, t_total,
+                        audio_s / std::max(t_total, 0.001));
+            }
+            std::lock_guard<std::mutex> lock(g_stdout_mutex);
+            crispasr_print_stdout(disp, show_timestamps);
+            if (params.show_alternatives)
+                crispasr_print_alternatives(all_segs, params.n_alternatives);
+        }
+        if (params.output_txt)
+            crispasr_write_txt(crispasr_make_out_path(fname_inp, ".txt"), disp);
+        if (params.output_srt)
+            crispasr_write_srt(crispasr_make_out_path(fname_inp, ".srt"), disp);
+        if (params.output_vtt)
+            crispasr_write_vtt(crispasr_make_out_path(fname_inp, ".vtt"), disp);
+        if (params.output_csv)
+            crispasr_write_csv(crispasr_make_out_path(fname_inp, ".csv"), disp);
+        if (params.output_lrc)
+            crispasr_write_lrc(crispasr_make_out_path(fname_inp, ".lrc"), disp);
+        if (params.output_jsn)
+            crispasr_write_json(crispasr_make_out_path(fname_inp, ".json"), all_segs, backend.name(), params.model,
+                                params.language, params.output_jsn_full);
+        return 0;
+    }
+
+    // --------------- Per-slice path (non-VAD or single slice) ---------------
     // Process VAD slices — parallel when multiple slices AND n_processors > 1
     std::vector<std::vector<crispasr_segment>> per_slice(slices.size());
 

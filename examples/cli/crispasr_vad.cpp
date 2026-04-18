@@ -10,6 +10,7 @@
 #include "whisper.h" // whisper_vad_* API
 
 #include <algorithm>
+#include <cstring>
 #include <cstdio>
 #include <string>
 
@@ -175,6 +176,56 @@ std::vector<crispasr_audio_slice> crispasr_compute_audio_slices(const float* sam
         }
     }
     return slices;
+}
+
+// ---------------------------------------------------------------------------
+// Timestamp remapping: stitched-buffer centiseconds → original-audio centiseconds.
+// Uses linear interpolation between the mapping table entries.
+// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Stitch multiple VAD slices into a single contiguous audio buffer with
+// 0.1s silence gaps (matching whisper.cpp's approach). Builds a mapping
+// table for timestamp remapping.
+// ---------------------------------------------------------------------------
+crispasr_stitched_audio crispasr_stitch_vad_slices(const float* samples, int /*n_samples*/, int sample_rate,
+                                                   const std::vector<crispasr_audio_slice>& slices) {
+    crispasr_stitched_audio result;
+    if (slices.empty())
+        return result;
+
+    const int silence_samples = (int)(0.1f * sample_rate); // 0.1s silence gap
+
+    // Compute total size.
+    size_t total = 0;
+    for (const auto& sl : slices)
+        total += (size_t)(sl.end - sl.start);
+    total += (size_t)(slices.size() - 1) * silence_samples; // silence gaps
+
+    result.samples.resize(total, 0.0f);
+    result.mapping.reserve(slices.size() * 2);
+
+    int offset = 0;
+    for (size_t i = 0; i < slices.size(); i++) {
+        const auto& sl = slices[i];
+        const int seg_len = sl.end - sl.start;
+
+        // Map: stitched offset → original start.
+        result.mapping.push_back({(int64_t)((double)offset / sample_rate * 100.0), sl.t0_cs});
+
+        // Copy speech segment.
+        std::memcpy(result.samples.data() + offset, samples + sl.start, (size_t)seg_len * sizeof(float));
+        offset += seg_len;
+
+        // Map: stitched end → original end.
+        result.mapping.push_back({(int64_t)((double)offset / sample_rate * 100.0), sl.t1_cs});
+
+        // Insert silence gap (already zeroed by resize).
+        if (i + 1 < slices.size())
+            offset += silence_samples;
+    }
+
+    result.total_duration_cs = (int64_t)((double)offset / sample_rate * 100.0);
+    return result;
 }
 
 // ---------------------------------------------------------------------------

@@ -35,6 +35,13 @@ struct crispasr_stitched_audio {
     int64_t total_duration_cs = 0;             // total duration in centiseconds
 };
 
+// Stitch VAD slices into one contiguous buffer with 0.1s silence gaps.
+// Produces a mapping table for timestamp remapping. The stitched buffer
+// is shorter than the original audio (silence removed), allowing backends
+// to process longer recordings without OOM.
+crispasr_stitched_audio crispasr_stitch_vad_slices(const float* samples, int n_samples, int sample_rate,
+                                                   const std::vector<crispasr_audio_slice>& slices);
+
 // Remap a centisecond timestamp from stitched-buffer space back to
 // original-audio space using linear interpolation between mapping points.
 int64_t crispasr_vad_remap_timestamp(const std::vector<crispasr_vad_mapping>& mapping, int64_t stitched_cs);
