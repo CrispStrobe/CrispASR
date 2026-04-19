@@ -155,10 +155,16 @@ std::string crispasr_detect_backend_from_gguf(const std::string& model_path) {
     //      gguf_init_from_file() on them prints a confusing stderr warning.
     //   2. It's a fast path that covers nearly every real-world case
     //      (users consistently name their models after the architecture).
+    // Extract filename (after last / or \) for matching — avoid false
+    // positives from directory names (e.g. "test_cohere/" matching "cohere").
+    std::string fname = model_path;
+    auto sep = fname.find_last_of("/\\");
+    if (sep != std::string::npos)
+        fname = fname.substr(sep + 1);
     auto contains_ci = [&](const char* needle) {
         std::string lo;
-        lo.reserve(model_path.size());
-        for (char c : model_path)
+        lo.reserve(fname.size());
+        for (char c : fname)
             lo += (char)std::tolower((unsigned char)c);
         return lo.find(needle) != std::string::npos;
     };
@@ -218,20 +224,18 @@ std::string crispasr_detect_backend_from_gguf(const std::string& model_path) {
                 result = "cohere";
             else if (a == "cohere-transcribe")
                 result = "cohere";
-            else if (a == "qwen3-asr")
-                result = "qwen3";
-            else if (a == "qwen3_asr")
+            else if (a == "qwen3-asr" || a == "qwen3_asr" || a == "qwen3asr")
                 result = "qwen3";
             else if (a == "voxtral")
                 result = "voxtral";
-            else if (a == "voxtral4b")
+            else if (a == "voxtral4b" || a == "voxtral-4b" || a == "voxtral_4b")
                 result = "voxtral4b";
-            else if (a == "voxtral-4b")
-                result = "voxtral4b";
-            else if (a == "granite-speech")
+            else if (a == "granite-speech" || a == "granite_speech" || a == "granitespeech")
                 result = "granite";
-            else if (a == "granite_speech")
-                result = "granite";
+            else if (a == "wav2vec2" || a == "wav2vec2-ctc")
+                result = "wav2vec2";
+            else if (a == "fastconformer-ctc" || a == "stt-fastconformer-ctc" || a == "stt_fastconformer_ctc")
+                result = "fastconformer-ctc";
         }
     }
     gguf_free(gctx);
