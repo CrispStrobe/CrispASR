@@ -16,6 +16,7 @@ std::unique_ptr<CrispasrBackend> crispasr_make_voxtral4b_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_qwen3_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_fastconformer_ctc_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_wav2vec2_backend();
+std::unique_ptr<CrispasrBackend> crispasr_make_glm_asr_backend();
 
 #include "ggml.h"
 #include "gguf.h"
@@ -51,6 +52,8 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& name
         return crispasr_make_fastconformer_ctc_backend();
     if (name == "wav2vec2" || name == "omniasr")
         return crispasr_make_wav2vec2_backend();
+    if (name == "glm-asr" || name == "glmasr")
+        return crispasr_make_glm_asr_backend();
 
     fprintf(stderr, "crispasr: error: unknown backend '%s'\n", name.c_str());
     return nullptr;
@@ -58,8 +61,8 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& name
 
 std::vector<std::string> crispasr_list_backends() {
     return {
-        "whisper", "parakeet",          "canary",   "cohere", "granite", "voxtral", "voxtral4b",
-        "qwen3",   "fastconformer-ctc", "wav2vec2",
+        "whisper", "parakeet",          "canary",   "cohere",  "granite", "voxtral", "voxtral4b",
+        "qwen3",   "fastconformer-ctc", "wav2vec2", "glm-asr",
     };
 }
 
@@ -192,6 +195,8 @@ std::string crispasr_detect_backend_from_gguf(const std::string& model_path) {
         return "qwen3";
     if (contains_ci("granite") && contains_ci("speech"))
         return "granite";
+    if (contains_ci("glm") && contains_ci("asr"))
+        return "glm-asr";
     if (contains_ci("ggml-") && contains_ci(".bin"))
         return "whisper";
 
@@ -236,6 +241,8 @@ std::string crispasr_detect_backend_from_gguf(const std::string& model_path) {
                 result = "wav2vec2";
             else if (a == "fastconformer-ctc" || a == "stt-fastconformer-ctc" || a == "stt_fastconformer_ctc")
                 result = "fastconformer-ctc";
+            else if (a == "glmasr" || a == "glm-asr" || a == "glm_asr")
+                result = "glm-asr";
         }
     }
     gguf_free(gctx);

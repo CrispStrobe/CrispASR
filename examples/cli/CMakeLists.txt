@@ -26,6 +26,7 @@ add_executable(${TARGET}
     crispasr_backend_qwen3.cpp
     crispasr_backend_fastconformer_ctc.cpp
     crispasr_backend_wav2vec2.cpp
+    crispasr_backend_glm_asr.cpp
     crispasr_aligner_cli.cpp
     crispasr_vad_cli.cpp
     crispasr_lid_cli.cpp

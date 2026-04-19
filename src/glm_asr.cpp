@@ -437,17 +437,44 @@ extern "C" char* glm_asr_transcribe(struct glm_asr_context* ctx, const float* sa
     const auto& hp = ctx->model.hp;
 
     // 1. Compute mel
+    fprintf(stderr, "glm_asr: step 1 — computing mel...\n");
     int n_mels = 0, T_mel = 0;
     float* mel = glm_asr_compute_mel(ctx, samples, n_samples, &n_mels, &T_mel);
     if (!mel)
         return nullptr;
 
+    // Pad mel to 3000 frames (30s) — GLM-ASR expects fixed-length input
+    const int T_target = 3000;
+    if (T_mel < T_target) {
+        std::vector<float> padded((size_t)n_mels * T_target, 0.0f);
+        // Copy existing mel, then zero-pad
+        memcpy(padded.data(), mel, (size_t)n_mels * T_mel * sizeof(float));
+        // Need to pad each mel band separately if layout is (n_mels, T)
+        // core_mel outputs (n_mels, T) = mel[m * T + t]
+        // Padded should be mel[m * T_target + t] with zeros for t >= T_mel
+        for (int m = n_mels - 1; m >= 0; m--) {
+            // Move band m from position m*T_mel to m*T_target
+            if (m > 0)
+                memmove(padded.data() + (size_t)m * T_target, mel + (size_t)m * T_mel, T_mel * sizeof(float));
+            // Zero the padding
+            memset(padded.data() + (size_t)m * T_target + T_mel, 0, (size_t)(T_target - T_mel) * sizeof(float));
+        }
+        free(mel);
+        mel = (float*)malloc(padded.size() * sizeof(float));
+        memcpy(mel, padded.data(), padded.size() * sizeof(float));
+        T_mel = T_target;
+    }
+    fprintf(stderr, "glm_asr: mel done — n_mels=%d T_mel=%d\n", n_mels, T_mel);
+
     // 2. Run encoder + projector
+    fprintf(stderr, "glm_asr: step 2 — running encoder...\n");
     int N_enc = 0, enc_dim = 0;
     float* audio_embeds = glm_asr_run_encoder(ctx, mel, n_mels, T_mel, &N_enc, &enc_dim);
     free(mel);
     if (!audio_embeds)
         return nullptr;
+
+    fprintf(stderr, "glm_asr: encoder done — N_enc=%d enc_dim=%d\n", N_enc, enc_dim);
 
     // 3. Build prompt: <|user|>\n<|begin_of_audio|><|pad|>×N<|end_of_audio|><|user|>\nPlease transcribe...<|assistant|>\n
     std::vector<int32_t> ids;
@@ -482,7 +509,7 @@ extern "C" char* glm_asr_transcribe(struct glm_asr_context* ctx, const float* sa
     free(audio_embeds);
 
     // 6. KV cache + prefill + greedy decode
-    if (!glm_asr_kv_init(ctx, 4096)) {
+    if (!ctx->kv_ctx && !glm_asr_kv_init(ctx, 4096)) {
         free(text_embeds);
         return nullptr;
     }
@@ -565,10 +592,18 @@ extern "C" float* glm_asr_compute_mel(struct glm_asr_context* ctx, const float* 
     ggml_tensor* mel_win_t = nullptr;
     auto it = std::find_if(ctx->model.audio.blocks.begin(), ctx->model.audio.blocks.end(),
                            [](const glm_enc_block&) { return false; }); // dummy
-    // Look up directly from the weight map — they were loaded via core_gguf
-    // but not stored in a named field. Use ggml_get_tensor on the context.
+    // Look up from the ggml context (loaded via core_gguf::load_weights)
     mel_fb_t = ggml_get_tensor(ctx->model.ctx, "audio.mel_filters");
     mel_win_t = ggml_get_tensor(ctx->model.ctx, "audio.mel_window");
+    fprintf(stderr, "glm_asr: mel_fb_t=%p mel_win_t=%p\n", (void*)mel_fb_t, (void*)mel_win_t);
+    if (mel_fb_t) {
+        fprintf(stderr, "glm_asr: mel_fb ne=[%lld,%lld] nbytes=%zu\n", (long long)mel_fb_t->ne[0],
+                (long long)mel_fb_t->ne[1], ggml_nbytes(mel_fb_t));
+    }
+    if (mel_win_t) {
+        fprintf(stderr, "glm_asr: mel_win ne=[%lld] nbytes=%zu\n", (long long)mel_win_t->ne[0],
+                ggml_nbytes(mel_win_t));
+    }
 
     if (!mel_fb_t || !mel_win_t) {
         fprintf(stderr, "glm_asr: mel_filters or mel_window not found in model\n");
@@ -576,25 +611,95 @@ extern "C" float* glm_asr_compute_mel(struct glm_asr_context* ctx, const float* 
     }
 
     // Read mel data from backend
+    // mel_filters stored as (n_freqs, n_mels) in HF layout:
+    // ne[0] = n_mels or n_freqs depending on how it was written.
+    // Our converter writes numpy (201, 128) → ggml ne[0]=201, ne[1]=128
+    // OR ne[0]=128, ne[1]=201. Check both dims.
     int n_freqs = (int)mel_fb_t->ne[0];
-    std::vector<float> mel_fb((size_t)n_freqs * hp.n_mels);
+    int n_mels_fb = (int)mel_fb_t->ne[1];
+    if (n_mels_fb == 201) {
+        // Swapped — ne[0]=n_mels, ne[1]=n_freqs
+        std::swap(n_freqs, n_mels_fb);
+    }
+    fprintf(stderr, "glm_asr: reading mel_fb n_freqs=%d n_mels=%d (%zu floats)\n", n_freqs, n_mels_fb,
+            (size_t)n_freqs * n_mels_fb);
+    std::vector<float> mel_fb((size_t)n_freqs * n_mels_fb);
     ggml_backend_tensor_get(mel_fb_t, mel_fb.data(), 0, mel_fb.size() * sizeof(float));
 
     int win_len = (int)mel_win_t->ne[0];
     std::vector<float> mel_win(win_len);
     ggml_backend_tensor_get(mel_win_t, mel_win.data(), 0, mel_win.size() * sizeof(float));
 
-    // Compute mel using core_mel
+    // Compute mel using core_mel (Whisper/HF convention)
     core_mel::Params p;
     p.n_mels = hp.n_mels;
     p.n_fft = 400;
     p.hop_length = 160;
+    p.win_length = 400;
     p.center_pad = true;
+    p.log_base = core_mel::LogBase::Log10;
+    p.log_guard = core_mel::LogGuard::MaxClip;
+    p.log_eps = 1e-10f;
+    p.norm = core_mel::Normalization::GlobalClipMax;
+    p.layout = core_mel::Layout::MelsTime;
+    p.fb_layout = core_mel::FbLayout::FreqsMels; // HF layout
+    p.matmul = core_mel::MatmulPrecision::Double;
 
     int T_mel = 0;
-    auto mel = core_mel::compute(samples, n_samples, mel_win.data(), win_len, mel_fb.data(), n_freqs,
-                                 nullptr, // use default FFT
-                                 p, T_mel);
+    // Radix-2 FFT with zero-padding to next power of 2.
+    // core_mel calls fft(in, n_fft=400, out) — 400 is NOT a power of 2,
+    // so we pad to 512 internally.
+    auto glm_fft = [](const float* in, int N, float* out) {
+        // Pad to next power of 2
+        int N2 = 1;
+        while (N2 < N)
+            N2 <<= 1;
+
+        std::vector<float> buf(2 * N2, 0.0f);
+        for (int i = 0; i < N; i++)
+            buf[2 * i] = in[i];
+
+        // Bit-reversal permutation
+        for (int i = 1, j = 0; i < N2; i++) {
+            int bit = N2 >> 1;
+            for (; j & bit; bit >>= 1)
+                j ^= bit;
+            j ^= bit;
+            if (i < j) {
+                std::swap(buf[2 * i], buf[2 * j]);
+                std::swap(buf[2 * i + 1], buf[2 * j + 1]);
+            }
+        }
+        // Cooley-Tukey butterflies
+        for (int len = 2; len <= N2; len <<= 1) {
+            float ang = -2.0f * (float)M_PI / (float)len;
+            float wR = cosf(ang), wI = sinf(ang);
+            for (int i = 0; i < N2; i += len) {
+                float curR = 1.0f, curI = 0.0f;
+                for (int j = 0; j < len / 2; j++) {
+                    int a = i + j, b = i + j + len / 2;
+                    float uR = buf[2 * a], uI = buf[2 * a + 1];
+                    float vR = buf[2 * b], vI = buf[2 * b + 1];
+                    float tR = curR * vR - curI * vI, tI = curR * vI + curI * vR;
+                    buf[2 * a] = uR + tR;
+                    buf[2 * a + 1] = uI + tI;
+                    buf[2 * b] = uR - tR;
+                    buf[2 * b + 1] = uI - tI;
+                    float newR = curR * wR - curI * wI;
+                    curI = curR * wI + curI * wR;
+                    curR = newR;
+                }
+            }
+        }
+        // Copy first N bins to output (truncate the zero-padded part)
+        for (int i = 0; i < N; i++) {
+            out[2 * i] = buf[2 * i];
+            out[2 * i + 1] = buf[2 * i + 1];
+        }
+    };
+
+    auto mel = core_mel::compute(samples, n_samples, mel_win.data(), win_len, mel_fb.data(), n_freqs, glm_fft, p,
+                                 T_mel);
     if (mel.empty())
         return nullptr;
 
