@@ -1019,29 +1019,74 @@ define (harmless on POSIX; a no-op on MSVC where the guard fires).
 preamble. Consider banning direct `M_PI` use in code review — pulling
 FFT/trig through `core_mel` is portable for free.
 
-### Vulkan build works, performance varies wildly on hybrid GPUs
+### Vulkan first-run latency: the 13-second "Vulkan is slow" illusion
 
-`build-vulkan.bat` (`-DGGML_VULKAN=ON -DGGML_CUDA=OFF`) builds and
-runs. On a laptop with **both** an Intel iGPU and an NVIDIA dGPU,
-`ggml_vulkan` enumerates **both** and picks device 0 (the iGPU) by
-default. For parakeet Q4_K on jfk.wav:
+Initial measurement on a hybrid-GPU laptop (Intel Iris Xe + NVIDIA
+RTX A1000) reported Vulkan at **0.5× realtime** on parakeet Q4_K /
+jfk.wav vs CUDA at 10× RT — a 20× gap that looked like Vulkan being
+hopeless for ASR. Diagnosis was initially directed at device
+selection (maybe it's on the Intel iGPU?). **Wrong.**
 
-| Backend | Device | Wall-time | RTFx |
-|---|---|---|---|
-| CUDA (build/) | RTX A1000 | 1.10 s | 10.0× |
-| Vulkan (build-vulkan/) | Intel Iris Xe (default device 0) | 22.96 s | 0.5× |
+`ggml_backend_init_best()` already prefers `GGML_BACKEND_DEVICE_TYPE_GPU`
+over `_IGPU` — the NVIDIA dGPU was correctly selected. The real cost
+was **first-run pipeline compilation**: SPIR-V → native GPU ISA for
+~50-100 compute pipelines happens lazily on first dispatch, and
+ggml-vulkan passed `VK_NULL_HANDLE` to every
+`device->device.createComputePipeline(…)` call, meaning **no
+VkPipelineCache was used at all**. Subsequent runs only appeared
+"fast" because the NVIDIA driver has its own per-shader disk cache
+(`%LOCALAPPDATA%\NVIDIA\GLCache`) that catches the miss one level
+down. Wipe that cache and every Vulkan run is 13+ seconds again,
+permanently.
 
-The transcript is identical across all three paths, so it's a
-performance issue, not a correctness one: parakeet's graph leans
-heavily on `mul_mat` and small `conv1d`, and the Intel UMA iGPU with
-no matrix cores is ~20× slower than the dGPU on these ops. Vulkan on
-the dGPU (force via `--device 1` or `CRISPASR_VK_DEVICE=1`) closes
-most of the gap.
+**Fix** (`ggml/src/ggml-vulkan/ggml-vulkan.cpp`): added a persistent
+`vk::PipelineCache` on `vk_device_struct`, keyed by
+`vendor:device:driverVersion`, stored under `$LOCALAPPDATA\ggml\vulkan_pipeline_cache\`
+(Windows) / `$XDG_CACHE_HOME/ggml/vulkan_pipeline_cache/` (Linux) /
+`~/Library/Caches/ggml/vulkan_pipeline_cache/` (macOS). Loaded at
+device init, passed to every `createComputePipeline` call, flushed
+to disk every 4 new pipelines (counter on the device struct).
 
-**Lesson:** Don't ship a prebuilt Vulkan binary without a sensible
-device-selection default. On a hybrid-GPU laptop the user will pay a
-20× perf tax silently. Log the chosen device + a hint at startup, or
-prefer the discrete GPU when both are present.
+Flushing in the destructor alone is not sufficient on Windows: we
+call `_Exit(0)` from the CLI (see "Process exit hang" memory entry)
+to sidestep a Vulkan static-destructor stall, which also bypasses
+`~vk_device_struct()`. Periodic save inside
+`ggml_pipeline_request_descriptor_sets` / pipeline-creation covers
+this without any new public API.
+
+**Results** (parakeet Q4_K / jfk.wav, 11 s audio, same laptop):
+
+| Scenario | Transcribe time | RTFx |
+|---|---:|---:|
+| Vulkan cold (no caches) | 13.69 s | 0.8× |
+| Vulkan, only our ggml cache warm (NVIDIA GLCache wiped) | **1.34 s** | **8.2×** |
+| Vulkan, both caches warm | **0.64 s** | **17.1×** |
+| CUDA baseline | 1.21 s | 9.1× |
+
+Warm Vulkan now **beats** CUDA on this laptop (0.64 s vs 1.21 s —
+likely because NV_coopmat2 matmul kernels in ggml-vulkan are
+better-tuned for this shape than the CUDA path's `cublasGemmEx`
+call), and cold-run latency is now a one-time cost per install
+rather than per run. Disable via `GGML_VK_DISABLE_PIPELINE_CACHE=1`;
+inspect with `GGML_VK_PIPELINE_CACHE_DEBUG=1`.
+
+**Lessons:**
+
+1. When benchmarking GPU backends, **always run the target path
+   twice** and report both cold and warm numbers. "Vulkan is 20×
+   slower" was a first-run artifact that would have survived code
+   review unchanged if we'd trusted the single measurement.
+2. Shader native-compilation caching is **not** a driver-only
+   concern. Every Vulkan application that loads the same shaders
+   repeatedly should pass a `VkPipelineCache` to
+   `vkCreateComputePipelines` / `vkCreateGraphicsPipelines` and
+   persist it across runs. ggml-vulkan didn't, upstream — our
+   patch should probably be submitted.
+3. `_Exit()` bypasses destructors. Any caching scheme that only
+   flushes in a destructor will silently lose its work on Windows
+   builds that call `_Exit`. Periodic incremental save from the
+   hot path (throttled) is a simple workaround that doesn't need
+   new shutdown hooks.
 
 ### Issue #12 (prebuilt binary: silent exit after "using cached")
 

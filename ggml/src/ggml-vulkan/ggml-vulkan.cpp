@@ -23,6 +23,10 @@ DispatchLoaderDynamic & ggml_vk_default_dispatcher();
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <tuple>
@@ -177,6 +181,78 @@ struct vk_matmul_pipeline2 {
 struct vk_device_struct;
 typedef std::shared_ptr<vk_device_struct> vk_device;
 typedef std::weak_ptr<vk_device_struct> vk_device_ref;
+
+// ───────────────────────────────────────────────────────────────────────────
+// Persistent VkPipelineCache: shader pipeline native compilation is cached
+// to disk so the first-run latency (tens of seconds for large graphs) is
+// only paid once per driver+device+shader-version combination.
+// Disabled via GGML_VK_DISABLE_PIPELINE_CACHE=1; custom location via
+// GGML_VK_PIPELINE_CACHE_DIR.
+// ───────────────────────────────────────────────────────────────────────────
+static std::string ggml_vk_pipeline_cache_dir() {
+    const char * override_dir = std::getenv("GGML_VK_PIPELINE_CACHE_DIR");
+    if (override_dir && *override_dir) {
+        return std::string(override_dir);
+    }
+#if defined(_WIN32)
+    const char * base = std::getenv("LOCALAPPDATA");
+    if (!base || !*base) base = std::getenv("APPDATA");
+    if (!base || !*base) base = std::getenv("USERPROFILE");
+    if (!base || !*base) base = ".";
+    return std::string(base) + "\\ggml\\vulkan_pipeline_cache";
+#elif defined(__APPLE__)
+    const char * home = std::getenv("HOME");
+    if (!home || !*home) home = ".";
+    return std::string(home) + "/Library/Caches/ggml/vulkan_pipeline_cache";
+#else
+    const char * xdg = std::getenv("XDG_CACHE_HOME");
+    if (xdg && *xdg) {
+        return std::string(xdg) + "/ggml/vulkan_pipeline_cache";
+    }
+    const char * home = std::getenv("HOME");
+    if (!home || !*home) home = ".";
+    return std::string(home) + "/.cache/ggml/vulkan_pipeline_cache";
+#endif
+}
+
+static std::string ggml_vk_pipeline_cache_file(const vk::PhysicalDeviceProperties & props) {
+    std::string dir = ggml_vk_pipeline_cache_dir();
+    char fname[96];
+    std::snprintf(fname, sizeof(fname),
+                  "v1_vendor%04x_device%04x_driver%08x.bin",
+                  (unsigned)props.vendorID, (unsigned)props.deviceID,
+                  (unsigned)props.driverVersion);
+#if defined(_WIN32)
+    return dir + "\\" + fname;
+#else
+    return dir + "/" + fname;
+#endif
+}
+
+static std::vector<char> ggml_vk_read_pipeline_cache(const std::string & path) {
+    std::ifstream f(path, std::ios::binary | std::ios::ate);
+    if (!f.is_open()) return {};
+    std::streamsize n = f.tellg();
+    if (n <= 0) return {};
+    std::vector<char> buf((size_t)n);
+    f.seekg(0, std::ios::beg);
+    if (!f.read(buf.data(), n)) return {};
+    return buf;
+}
+
+static void ggml_vk_write_pipeline_cache(const std::string & path, const std::vector<uint8_t> & data) {
+    try {
+        std::filesystem::path p(path);
+        if (p.has_parent_path()) {
+            std::error_code ec;
+            std::filesystem::create_directories(p.parent_path(), ec);
+            // ignore ec: write will fail below if the dir really can't be created
+        }
+    } catch (...) { /* fs::path can throw on malformed input; fall through */ }
+    std::ofstream f(path, std::ios::binary | std::ios::trunc);
+    if (!f.is_open()) return;
+    f.write(reinterpret_cast<const char*>(data.data()), (std::streamsize)data.size());
+}
 
 struct vk_buffer_struct;
 typedef std::shared_ptr<vk_buffer_struct> vk_buffer;
@@ -596,6 +672,10 @@ struct vk_device_struct {
     bool pipeline_robustness;
     bool memory_priority;
     vk::Device device;
+    vk::PipelineCache pipeline_cache {};
+    std::string pipeline_cache_path;
+    uint32_t pipeline_cache_dirty {0};       // pipelines created since last save
+    uint32_t pipeline_cache_save_every {4};  // persist every N new pipelines
     uint32_t vendor_id;
     vk::DriverId driver_id;
     vk_device_architecture architecture;
@@ -887,6 +967,21 @@ struct vk_device_struct {
         all_pipelines.clear();
 
         device.destroyDescriptorSetLayout(dsl);
+
+        if (pipeline_cache) {
+            try {
+                std::vector<uint8_t> data = device.getPipelineCacheData(pipeline_cache);
+                if (!data.empty() && !pipeline_cache_path.empty()) {
+                    ggml_vk_write_pipeline_cache(pipeline_cache_path, data);
+                    GGML_LOG_DEBUG("ggml_vulkan: saved pipeline cache (%zu bytes) to %s\n",
+                                   data.size(), pipeline_cache_path.c_str());
+                }
+            } catch (const vk::SystemError &) {
+                // Non-fatal: cache just won't persist this session.
+            }
+            device.destroyPipelineCache(pipeline_cache);
+            pipeline_cache = VK_NULL_HANDLE;
+        }
 
         device.destroy();
     }
@@ -2206,7 +2301,30 @@ static void ggml_vk_create_pipeline_func(vk_device& device, vk_pipeline& pipelin
 #endif
 
     try {
-        pipeline->pipeline = device->device.createComputePipeline(VK_NULL_HANDLE, compute_pipeline_create_info).value;
+        pipeline->pipeline = device->device.createComputePipeline(device->pipeline_cache, compute_pipeline_create_info).value;
+        // Persist the pipeline cache periodically. _Exit() on Windows bypasses
+        // ~vk_device_struct(), so relying on the destructor alone loses the
+        // warmup work we just did.
+        if (device->pipeline_cache && !device->pipeline_cache_path.empty()) {
+            device->pipeline_cache_dirty++;
+            if (device->pipeline_cache_dirty >= device->pipeline_cache_save_every) {
+                try {
+                    std::vector<uint8_t> data = device->device.getPipelineCacheData(device->pipeline_cache);
+                    if (!data.empty()) {
+                        ggml_vk_write_pipeline_cache(device->pipeline_cache_path, data);
+                        if (std::getenv("GGML_VK_PIPELINE_CACHE_DEBUG")) {
+                            std::fprintf(stderr, "ggml_vulkan: saved pipeline cache (%zu bytes, after %u pipelines) to %s\n",
+                                         data.size(), device->pipeline_cache_dirty, device->pipeline_cache_path.c_str());
+                        }
+                    }
+                } catch (const vk::SystemError & e) {
+                    if (std::getenv("GGML_VK_PIPELINE_CACHE_DEBUG")) {
+                        std::fprintf(stderr, "ggml_vulkan: pipeline cache save failed: %s\n", e.what());
+                    }
+                }
+                device->pipeline_cache_dirty = 0;
+            }
+        }
     } catch (const vk::SystemError& e) {
         std::cerr << "ggml_vulkan: Compute pipeline creation failed for " << pipeline->name << std::endl;
         std::cerr << "ggml_vulkan: " << e.what() << std::endl;
@@ -5429,6 +5547,38 @@ static vk_device ggml_vk_get_device(size_t idx) {
             .setPEnabledExtensionNames(device_extensions);
         device_create_info.setPNext(&device_features2);
         device->device = device->physical_device.createDevice(device_create_info);
+
+        // Persistent pipeline cache (huge first-run latency win on drivers
+        // that don't aggressively cache shader native compilation themselves).
+        {
+            const char * disable = std::getenv("GGML_VK_DISABLE_PIPELINE_CACHE");
+            const bool cache_enabled = !(disable && *disable && disable[0] != '0');
+            if (cache_enabled) {
+                device->pipeline_cache_path = ggml_vk_pipeline_cache_file(device->properties);
+                std::vector<char> initial = ggml_vk_read_pipeline_cache(device->pipeline_cache_path);
+                vk::PipelineCacheCreateInfo pc_info;
+                if (!initial.empty()) {
+                    pc_info.initialDataSize = initial.size();
+                    pc_info.pInitialData = initial.data();
+                }
+                try {
+                    device->pipeline_cache = device->device.createPipelineCache(pc_info);
+                    if (std::getenv("GGML_VK_PIPELINE_CACHE_DEBUG")) {
+                        std::fprintf(stderr, "ggml_vulkan: created pipeline cache (%zu bytes preloaded) for %s\n",
+                                     initial.size(), device->pipeline_cache_path.c_str());
+                    }
+                } catch (const vk::SystemError &) {
+                    // Cache data was incompatible or allocation failed — retry with empty cache.
+                    vk::PipelineCacheCreateInfo empty_info;
+                    try {
+                        device->pipeline_cache = device->device.createPipelineCache(empty_info);
+                    } catch (const vk::SystemError &) {
+                        device->pipeline_cache = VK_NULL_HANDLE;
+                        device->pipeline_cache_path.clear();
+                    }
+                }
+            }
+        }
 
         // Queues
         ggml_vk_create_queue(device, device->compute_queue, compute_queue_family_index, 0, { vk::PipelineStageFlagBits::eComputeShader | vk::PipelineStageFlagBits::eTransfer }, false);
