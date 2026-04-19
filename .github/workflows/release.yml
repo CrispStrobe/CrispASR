@@ -67,7 +67,8 @@ jobs:
           name: crispasr-macos
           path: release/crispasr-macos.tar.gz
 
-  build-windows:
+  # ── Windows CPU (static, portable — no GPU driver required) ─────────────────
+  build-windows-cpu:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -82,18 +83,146 @@ jobs:
 
       - name: Package
         run: |
-          New-Item -ItemType Directory -Force release\crispasr-windows-x86_64
-          Copy-Item build\bin\Release\crispasr.exe release\crispasr-windows-x86_64\
-          Copy-Item build\bin\Release\crispasr-quantize.exe release\crispasr-windows-x86_64\
-          Compress-Archive -Path release\crispasr-windows-x86_64 -DestinationPath release\crispasr-windows-x86_64.zip
+          New-Item -ItemType Directory -Force release\crispasr-windows-x86_64-cpu
+          Copy-Item build\bin\Release\crispasr.exe release\crispasr-windows-x86_64-cpu\
+          Copy-Item build\bin\Release\crispasr-quantize.exe release\crispasr-windows-x86_64-cpu\
+          Compress-Archive -Path release\crispasr-windows-x86_64-cpu -DestinationPath release\crispasr-windows-x86_64-cpu.zip
 
       - uses: actions/upload-artifact@v4
         with:
-          name: crispasr-windows-x86_64
-          path: release/crispasr-windows-x86_64.zip
+          name: crispasr-windows-x86_64-cpu
+          path: release/crispasr-windows-x86_64-cpu.zip
+
+  # ── Windows CUDA (dynamic, requires NVIDIA driver on target machine) ─────────
+  build-windows-cuda:
+    runs-on: windows-latest
+    env:
+      CUDA_VERSION: "12.4.0"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Install CUDA Toolkit 12.4.0
+        shell: pwsh
+        run: |
+          $CUDA_VERSION = "12.4.0"
+          $CUDA_TOOLKIT_DIR = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v$CUDA_VERSION"
+          $CUDA_DOWNLOAD = "https://developer.download.nvidia.com/compute/cuda/redist"
+
+          $CUDART_VER   = "12.4.127"
+          $NVCC_VER     = "12.4.131"
+          $NVRTC_VER    = "12.4.127"
+          $CUBLAS_VER   = "12.4.5.8"
+          $NVTX_VER     = "12.4.127"
+          $PROFILER_VER = "12.4.127"
+          $VS_VER       = "12.4.127"
+          $CCCL_VER     = "12.4.127"
+
+          New-Item -ItemType Directory -Force -Path $CUDA_TOOLKIT_DIR | Out-Null
+          choco install unzip -y
+
+          curl -O "$CUDA_DOWNLOAD/cuda_cudart/windows-x86_64/cuda_cudart-windows-x86_64-${CUDART_VER}-archive.zip"
+          curl -O "$CUDA_DOWNLOAD/cuda_nvcc/windows-x86_64/cuda_nvcc-windows-x86_64-${NVCC_VER}-archive.zip"
+          curl -O "$CUDA_DOWNLOAD/cuda_nvrtc/windows-x86_64/cuda_nvrtc-windows-x86_64-${NVRTC_VER}-archive.zip"
+          curl -O "$CUDA_DOWNLOAD/libcublas/windows-x86_64/libcublas-windows-x86_64-${CUBLAS_VER}-archive.zip"
+          curl -O "$CUDA_DOWNLOAD/cuda_nvtx/windows-x86_64/cuda_nvtx-windows-x86_64-${NVTX_VER}-archive.zip"
+          curl -O "$CUDA_DOWNLOAD/cuda_profiler_api/windows-x86_64/cuda_profiler_api-windows-x86_64-${PROFILER_VER}-archive.zip"
+          curl -O "$CUDA_DOWNLOAD/visual_studio_integration/windows-x86_64/visual_studio_integration-windows-x86_64-${VS_VER}-archive.zip"
+          curl -O "$CUDA_DOWNLOAD/cuda_cccl/windows-x86_64/cuda_cccl-windows-x86_64-${CCCL_VER}-archive.zip"
+
+          unzip -q '*.zip' -d $CUDA_TOOLKIT_DIR
+
+          xcopy "$CUDA_TOOLKIT_DIR\cuda_cudart-windows-x86_64-${CUDART_VER}-archive\*"           "$CUDA_TOOLKIT_DIR" /E /I /H /Y
+          xcopy "$CUDA_TOOLKIT_DIR\cuda_nvcc-windows-x86_64-${NVCC_VER}-archive\*"               "$CUDA_TOOLKIT_DIR" /E /I /H /Y
+          xcopy "$CUDA_TOOLKIT_DIR\cuda_nvrtc-windows-x86_64-${NVRTC_VER}-archive\*"             "$CUDA_TOOLKIT_DIR" /E /I /H /Y
+          xcopy "$CUDA_TOOLKIT_DIR\libcublas-windows-x86_64-${CUBLAS_VER}-archive\*"             "$CUDA_TOOLKIT_DIR" /E /I /H /Y
+          xcopy "$CUDA_TOOLKIT_DIR\cuda_nvtx-windows-x86_64-${NVTX_VER}-archive\*"               "$CUDA_TOOLKIT_DIR" /E /I /H /Y
+          xcopy "$CUDA_TOOLKIT_DIR\cuda_profiler_api-windows-x86_64-${PROFILER_VER}-archive\*"   "$CUDA_TOOLKIT_DIR" /E /I /H /Y
+          xcopy "$CUDA_TOOLKIT_DIR\cuda_cccl-windows-x86_64-${CCCL_VER}-archive\*"               "$CUDA_TOOLKIT_DIR" /E /I /H /Y
+          xcopy "$CUDA_TOOLKIT_DIR\visual_studio_integration-windows-x86_64-${VS_VER}-archive\*" "$CUDA_TOOLKIT_DIR" /E /I /H /Y
+
+          echo "$CUDA_TOOLKIT_DIR\bin"      | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          echo "$CUDA_TOOLKIT_DIR\libnvvp"  | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          echo "CUDA_PATH=$CUDA_TOOLKIT_DIR" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Build
+        shell: cmd
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          cmake -S . -B build -G Ninja ^
+            -DCMAKE_BUILD_TYPE=Release ^
+            -DGGML_CUDA=ON ^
+            -DCMAKE_CUDA_ARCHITECTURES="75;80;86;89;90"
+          cmake --build build --target whisper-cli crispasr-quantize -j %NUMBER_OF_PROCESSORS%
+
+      - name: Package (binary + DLLs + CUDA runtime)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force release\crispasr-windows-x86_64-cuda | Out-Null
+          Copy-Item build\bin\crispasr.exe          release\crispasr-windows-x86_64-cuda\
+          Copy-Item build\bin\crispasr-quantize.exe release\crispasr-windows-x86_64-cuda\
+          Copy-Item build\bin\*.dll                 release\crispasr-windows-x86_64-cuda\
+          # CUDA runtime DLLs the binary transitively needs
+          Copy-Item "$env:CUDA_PATH\bin\cudart64_*.dll"  release\crispasr-windows-x86_64-cuda\ -ErrorAction SilentlyContinue
+          Copy-Item "$env:CUDA_PATH\bin\cublas64_*.dll"  release\crispasr-windows-x86_64-cuda\ -ErrorAction SilentlyContinue
+          Copy-Item "$env:CUDA_PATH\bin\cublasLt64_*.dll" release\crispasr-windows-x86_64-cuda\ -ErrorAction SilentlyContinue
+          Compress-Archive -Path release\crispasr-windows-x86_64-cuda -DestinationPath release\crispasr-windows-x86_64-cuda.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: crispasr-windows-x86_64-cuda
+          path: release/crispasr-windows-x86_64-cuda.zip
+
+  # ── Windows Vulkan (dynamic, works on NVIDIA/AMD/Intel with a Vulkan driver) ─
+  build-windows-vulkan:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Install Vulkan SDK
+        shell: pwsh
+        run: |
+          # Use the latest installer from the LunarG sdk manifest.
+          $ver = (Invoke-RestMethod -Uri "https://vulkan.lunarg.com/sdk/latest.json").windows
+          $url = "https://sdk.lunarg.com/sdk/download/$ver/windows/vulkan_sdk.exe"
+          Invoke-WebRequest -Uri $url -OutFile vulkan_sdk.exe
+          Start-Process -FilePath .\vulkan_sdk.exe -ArgumentList "--accept-licenses","--default-answer","--confirm-command","install" -Wait
+          $sdk = "C:\VulkanSDK\$ver"
+          echo "VULKAN_SDK=$sdk" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          echo "$sdk\Bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
+      - name: Build
+        shell: cmd
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          cmake -S . -B build -G Ninja ^
+            -DCMAKE_BUILD_TYPE=Release ^
+            -DGGML_VULKAN=ON ^
+            -DGGML_CUDA=OFF
+          cmake --build build --target whisper-cli crispasr-quantize -j %NUMBER_OF_PROCESSORS%
+
+      - name: Package (binary + DLLs)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force release\crispasr-windows-x86_64-vulkan | Out-Null
+          Copy-Item build\bin\crispasr.exe          release\crispasr-windows-x86_64-vulkan\
+          Copy-Item build\bin\crispasr-quantize.exe release\crispasr-windows-x86_64-vulkan\
+          Copy-Item build\bin\*.dll                 release\crispasr-windows-x86_64-vulkan\
+          # vulkan-1.dll is shipped with every GPU driver on Windows — do NOT bundle it.
+          Compress-Archive -Path release\crispasr-windows-x86_64-vulkan -DestinationPath release\crispasr-windows-x86_64-vulkan.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: crispasr-windows-x86_64-vulkan
+          path: release/crispasr-windows-x86_64-vulkan.zip
 
   publish:
-    needs: [build-linux, build-macos, build-windows]
+    needs: [build-linux, build-macos, build-windows-cpu, build-windows-cuda, build-windows-vulkan]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -107,5 +236,7 @@ jobs:
           files: |
             artifacts/crispasr-linux-x86_64/crispasr-linux-x86_64.tar.gz
             artifacts/crispasr-macos/crispasr-macos.tar.gz
-            artifacts/crispasr-windows-x86_64/crispasr-windows-x86_64.zip
+            artifacts/crispasr-windows-x86_64-cpu/crispasr-windows-x86_64-cpu.zip
+            artifacts/crispasr-windows-x86_64-cuda/crispasr-windows-x86_64-cuda.zip
+            artifacts/crispasr-windows-x86_64-vulkan/crispasr-windows-x86_64-vulkan.zip
           generate_release_notes: true
