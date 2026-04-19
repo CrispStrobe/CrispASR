@@ -792,38 +792,17 @@ static ggml_tensor* build_rel_mhsa(ggml_context* ctx, ggml_tensor* x, ggml_tenso
     // but with the pos_bias_u applied to improve accuracy slightly.
     // Full rel PE can be added later with CPU-side score computation.
 
-    // Simplified: just use content attention with bias_u (skip position attention)
-    ggml_tensor* scores = ggml_scale(ctx, matrix_ac, scale);
-
-    // Softmax + attention
-    scores = ggml_soft_max(ctx, scores); // [T, T, nh]
-
-    // V attention: scores @ V
-    ggml_tensor* v_perm = ggml_cont(ctx, ggml_permute(ctx, v, 0, 2, 1, 3)); // [hd, T, nh]
-    // scores: [T, T, nh], v_perm: [hd, T, nh]
-    // Need: for each head, scores @ v_perm
-    // scores^T @ v_perm won't work directly...
-    // Actually ggml_mul_mat(a, b) = a^T @ b along first dim
-    // a=v_perm [hd, T, nh], b=scores [T, T, nh]
-    // result: [T, T, nh] — wrong, we want [hd, T, nh]
-    // Need: for each head h: scores[h] @ v[h] = [T,T] @ [T,hd] = [T,hd]
-    // = scores^T @ v_perm in ggml terms? No...
+    // Combined scores: matrix_ac + matrix_bd (with rel_shift)
+    // For now, skip matrix_bd (position attention) and use only content attention
+    // matrix_ac: [T, T, nh] — content-based attention scores
+    // TODO: implement rel_shift for matrix_bd and add to scores
     //
-    // Actually: ggml_mul_mat(a,b) where a=[hd,T,nh], b=[T,T,nh]:
-    //   result.ne = [a.ne[1], b.ne[1], nh] = [T, T, nh] — wrong
-    //
-    // I need ggml_mul_mat(v_perm, scores_transposed) where scores_transposed has
-    // the dims swapped. Let me just use flash_attn for the final attention:
-    //
-    // Actually, the simplest approach: just use flash_attn with q_u, k, v
-    // This gives content attention + bias_u but no position attention.
-    // It's not perfect but it's much better than no attention.
-
+    // Use flash_attn with q+bias_u for content attention
     q_u = ggml_cont(ctx, ggml_permute(ctx, ggml_add(ctx, q, bias_u), 0, 2, 1, 3)); // [hd, T, nh]
-    k_perm = ggml_cont(ctx, ggml_permute(ctx, k, 0, 2, 1, 3));
+    ggml_tensor* k_fa = ggml_cont(ctx, ggml_permute(ctx, k, 0, 2, 1, 3));
     ggml_tensor* v_fa = ggml_cont(ctx, ggml_permute(ctx, v, 0, 2, 1, 3));
 
-    ggml_tensor* attn = ggml_flash_attn_ext(ctx, q_u, k_perm, v_fa, nullptr, scale, 0.0f, 0.0f);
+    ggml_tensor* attn = ggml_flash_attn_ext(ctx, q_u, k_fa, v_fa, nullptr, scale, 0.0f, 0.0f);
     attn = ggml_reshape_2d(ctx, attn, d, T);
     attn = ggml_mul_mat(ctx, mhsa.fc_w, attn);
 
