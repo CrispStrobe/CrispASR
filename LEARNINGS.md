@@ -751,3 +751,43 @@ Susurrus (CrispStrobe's Python ASR tool) uses:
 **Lesson:** VAD should be the default, not an opt-in. 30s chunks are
 too conservative for most models; 5-10 minutes is practical for
 variable-length backends on 16GB VRAM.
+
+### wav2vec2-base: post-norm vs pre-norm (the silent architecture trap)
+
+wav2vec2-base models (`do_stable_layer_norm=False`) use **post-norm**
+transformer layers: `attention → residual_add → LayerNorm → FFN →
+residual_add → LayerNorm`. wav2vec2-large models
+(`do_stable_layer_norm=True`) use **pre-norm**: `LayerNorm → attention →
+residual_add → LayerNorm → FFN → residual_add`.
+
+Our initial implementation only had pre-norm (matching the large XLSR
+model we first ported). Running a base model through pre-norm produces
+all-identical outputs at every time position — the encoder loses
+positional information and the CTC decoder outputs the same character
+(argmax=24 = "b") at every frame.
+
+**Symptoms:** Output is a single character repeated, or empty text.
+All positions have the same argmax.
+
+**Root cause debugging protocol:**
+1. Get HF reference intermediates (CNN out, feature projection, encoder
+   out, logits argmax) — these are ground truth.
+2. Add debug fprintf to C++ at each stage boundary.
+3. Compare stage by stage — CNN matched, feature projection matched,
+   but logits diverged completely.
+4. The argmax pattern `[24,24,24,24,...]` (all same) immediately points
+   to an encoder bug that collapses positional information.
+5. Check `do_stable_layer_norm` in the HF config — it controls the
+   norm ordering and is the first thing to verify when porting a new
+   wav2vec2 variant.
+
+**Second bug:** CTC blank token. `config.pad_token_id=1` (BOS) in base
+models, but CTC greedy decoding must skip vocab index 0 (`<pad>`) which
+is the actual CTC blank. The converter now hardcodes blank=0.
+
+**Lesson:** When porting a model architecture, always check for
+configuration flags that change the graph topology (norm ordering,
+activation type, bias presence). These are silent — the model loads
+and runs without errors, but produces garbage. A debug copy of the
+forward pass (`wav2vec2-ggml-debug.cpp`) with fprintf at each stage
+boundary is kept for future model variant debugging.
