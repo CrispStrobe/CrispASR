@@ -170,6 +170,10 @@ struct firered_model {
     ggml_tensor* ctc_w = nullptr; // [odim, d_model]
     ggml_tensor* ctc_b = nullptr;
 
+    // CMVN
+    ggml_tensor* cmvn_mean = nullptr; // [idim]
+    ggml_tensor* cmvn_std = nullptr;  // [idim]
+
     // Tokenizer
     std::vector<std::string> vocab;
 
@@ -453,6 +457,10 @@ extern "C" struct firered_asr_context* firered_asr_init_from_file(const char* pa
     m.ctc_w = get("ctc.weight");
     m.ctc_b = get("ctc.bias");
 
+    // CMVN
+    m.cmvn_mean = get("cmvn.mean");
+    m.cmvn_std = get("cmvn.std");
+
     // Scheduler
     int n_be = 1;
     ggml_backend_t backends[2] = {ctx->backend, nullptr};
@@ -632,10 +640,8 @@ static ggml_tensor* build_conv_module(ggml_context* ctx, ggml_tensor* x, const f
     // For matmul: need [in_dim, out_dim] = [1280, 5120]
     // pw1_w ne: [1, 1280, 5120] → reshape to [1280, 5120] for matmul
     // Use ggml_view to create a 2D view without reallocating
-    ggml_tensor* pw1_c = ggml_cont(ctx, conv.pw1_w);
-    ggml_tensor* pw1 = ggml_reshape_2d(ctx, pw1_c,
-                                       conv.pw1_w->ne[0] * conv.pw1_w->ne[1],
-                                       conv.pw1_w->ne[2]);
+    // pw1_w is 3D [1, 1280, 5120] — need 2D [1280, 5120] for matmul
+    ggml_tensor* pw1 = ggml_reshape_2d(ctx, conv.pw1_w, conv.pw1_w->ne[0] * conv.pw1_w->ne[1], conv.pw1_w->ne[2]);
     h = ggml_mul_mat(ctx, pw1, h);
 
     // GLU: split → sigmoid gate
@@ -651,8 +657,9 @@ static ggml_tensor* build_conv_module(ggml_context* ctx, ggml_tensor* x, const f
     int pad_left = kernel_size - 1;
     ht = ggml_pad_ext(ctx, ht, pad_left, 0, 0, 0, 0, 0, 0, 0);
     ht = ggml_conv_1d_dw(ctx, conv.dw_w, ht, 1, 0, 1);
-    ht = ggml_reshape_2d(ctx, ht, ht->ne[0], ht->ne[1]);
-    h = ggml_cont(ctx, ggml_transpose(ctx, ht)); // [2560, T]
+    // Output is [OL, 1, channels, 1] — reshape to [OL, channels]
+    ht = ggml_reshape_2d(ctx, ht, ht->ne[0], ht->ne[2]);
+    h = ggml_cont(ctx, ggml_transpose(ctx, ht)); // [channels, T]
 
     // LayerNorm (named batch_norm in checkpoint)
     h = ggml_norm(ctx, h, 1e-5f);
@@ -664,10 +671,7 @@ static ggml_tensor* build_conv_module(ggml_context* ctx, ggml_tensor* x, const f
 
     // Pointwise conv2: 2560 → 1280
     // pw2_w ne: [1, 2560, 1280]
-    ggml_tensor* pw2_c = ggml_cont(ctx, conv.pw2_w);
-    ggml_tensor* pw2 = ggml_reshape_2d(ctx, pw2_c,
-                                       conv.pw2_w->ne[0] * conv.pw2_w->ne[1],
-                                       conv.pw2_w->ne[2]);
+    ggml_tensor* pw2 = ggml_reshape_2d(ctx, conv.pw2_w, conv.pw2_w->ne[0] * conv.pw2_w->ne[1], conv.pw2_w->ne[2]);
     h = ggml_mul_mat(ctx, pw2, h); // [1280, T]
 
     return ggml_add(ctx, residual, h);
@@ -830,10 +834,26 @@ extern "C" char* firered_asr_transcribe(struct firered_asr_context* ctx, const f
     if (ctx->params.verbosity >= 1)
         fprintf(stderr, "firered_asr: %d fbank frames\n", n_frames);
 
-    // Step 2: Conv2d subsampling on CPU
+    // Step 1b: Apply CMVN (global mean-variance normalization)
+    if (m.cmvn_mean && m.cmvn_std) {
+        std::vector<float> mean_v(hp.idim), std_v(hp.idim);
+        ggml_backend_tensor_get(m.cmvn_mean, mean_v.data(), 0, hp.idim * sizeof(float));
+        ggml_backend_tensor_get(m.cmvn_std, std_v.data(), 0, hp.idim * sizeof(float));
+        for (int t_idx = 0; t_idx < n_frames; t_idx++)
+            for (int f = 0; f < hp.idim; f++)
+                features[t_idx * hp.idim + f] = (features[t_idx * hp.idim + f] - mean_v[f]) / std_v[f];
+    }
+
+    // Step 1c: Context padding (pad right with context-1 frames of zeros)
+    int context = 7; // from model config
+    int n_frames_padded = n_frames + context - 1;
+    std::vector<float> features_padded(n_frames_padded * hp.idim, 0.0f);
+    memcpy(features_padded.data(), features.data(), n_frames * hp.idim * sizeof(float));
+
+    // Step 2: Conv2d subsampling on CPU (using padded input)
     std::vector<float> subsampled;
     int T_sub = 0;
-    conv2d_subsample_cpu(features.data(), n_frames, hp.idim, m, subsampled, T_sub);
+    conv2d_subsample_cpu(features_padded.data(), n_frames_padded, hp.idim, m, subsampled, T_sub);
     if (T_sub <= 0)
         return nullptr;
 
@@ -870,15 +890,6 @@ extern "C" char* firered_asr_transcribe(struct firered_asr_context* ctx, const f
         // MHSA with relative PE
         x = build_rel_mhsa(ctx0, x, b.mhsa, hp.n_head, hp.head_dim);
         // Conv module
-        if (i == 0 && ctx->params.verbosity >= 1) {
-            fprintf(stderr, "  conv pw1_w: ne=[%lld,%lld,%lld,%lld] nelements=%lld contiguous=%d nb=[%lld,%lld,%lld,%lld]\n",
-                    (long long)b.conv.pw1_w->ne[0], (long long)b.conv.pw1_w->ne[1],
-                    (long long)b.conv.pw1_w->ne[2], (long long)b.conv.pw1_w->ne[3],
-                    (long long)ggml_nelements(b.conv.pw1_w),
-                    ggml_is_contiguous(b.conv.pw1_w),
-                    (long long)b.conv.pw1_w->nb[0], (long long)b.conv.pw1_w->nb[1],
-                    (long long)b.conv.pw1_w->nb[2], (long long)b.conv.pw1_w->nb[3]);
-        }
         x = build_conv_module(ctx0, x, b.conv, hp.d_model, hp.kernel_size);
         // Macaron FFN2 (half-step)
         x = build_macaron_ffn(ctx0, x, b.ffn2);
