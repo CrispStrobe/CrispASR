@@ -74,6 +74,15 @@ def main():
     audio_cfg = config.audio_config
     text_cfg = config.text_config
 
+    # Extract mel filterbank + window from processor
+    from transformers import AutoProcessor
+    proc = AutoProcessor.from_pretrained(args.input, trust_remote_code=True)
+    fe = proc.feature_extractor
+    mel_filters = np.asarray(fe.mel_filters, dtype=np.float32)  # (n_freqs, n_mels)
+    win = np.hanning(fe.n_fft + 1)[:-1].astype(np.float32)  # Hann window
+    print(f"  mel_filters shape: {mel_filters.shape}")
+    print(f"  mel_window shape: {win.shape}")
+
     # Create GGUF writer
     writer = gguf.GGUFWriter(args.output, "glmasr")
     writer.add_name("GLM-ASR-Nano")
@@ -151,7 +160,13 @@ def main():
             return True
         return False
 
-    tensor_count = 0
+    # Bake mel filterbank + window into the GGUF
+    writer.add_tensor("audio.mel_filters", mel_filters)
+    writer.add_tensor("audio.mel_window", win)
+    tensor_count = 2
+    print(f"  audio.mel_filters                                          {str(mel_filters.shape):20s} F32")
+    print(f"  audio.mel_window                                           {str(win.shape):20s} F32")
+
     for name, tensor in sorted(sd.items()):
         # Map HF names to GGUF names
         gguf_name = name

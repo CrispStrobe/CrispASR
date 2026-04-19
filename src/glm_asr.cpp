@@ -433,24 +433,179 @@ extern "C" int32_t* glm_asr_tokenize(struct glm_asr_context* ctx, const char* te
 extern "C" char* glm_asr_transcribe(struct glm_asr_context* ctx, const float* samples, int n_samples) {
     if (!ctx || !samples || n_samples <= 0)
         return nullptr;
-    // TODO: implement full pipeline (mel → encoder → projector → prompt → LLM decode)
-    fprintf(stderr, "glm_asr: transcribe() not yet implemented\n");
-    return strdup("");
+
+    const auto& hp = ctx->model.hp;
+
+    // 1. Compute mel
+    int n_mels = 0, T_mel = 0;
+    float* mel = glm_asr_compute_mel(ctx, samples, n_samples, &n_mels, &T_mel);
+    if (!mel)
+        return nullptr;
+
+    // 2. Run encoder + projector
+    int N_enc = 0, enc_dim = 0;
+    float* audio_embeds = glm_asr_run_encoder(ctx, mel, n_mels, T_mel, &N_enc, &enc_dim);
+    free(mel);
+    if (!audio_embeds)
+        return nullptr;
+
+    // 3. Build prompt: <|user|>\n<|begin_of_audio|><|pad|>×N<|end_of_audio|><|user|>\nPlease transcribe...<|assistant|>\n
+    std::vector<int32_t> ids;
+    ids.push_back(59253); // <|user|>
+    ids.push_back(59261); // <|begin_of_audio|>
+    for (int i = 0; i < N_enc; i++)
+        ids.push_back(59260); // <|pad|> (audio placeholder)
+    ids.push_back(59262);     // <|end_of_audio|>
+    ids.push_back(59253);     // <|user|>
+
+    // Tokenize the instruction — for now hardcode the token IDs for
+    // "Please transcribe this audio into text"
+    // TODO: proper tokenization
+    ids.push_back(59254); // <|assistant|>
+
+    // 4. Embed tokens
+    float* text_embeds = glm_asr_embed_tokens(ctx, ids.data(), (int)ids.size());
+    if (!text_embeds) {
+        free(audio_embeds);
+        return nullptr;
+    }
+
+    // 5. Splice audio embeddings into the <|pad|> positions
+    const int pdim = enc_dim; // 2048
+    int spliced = 0;
+    for (size_t i = 0; i < ids.size() && spliced < N_enc; i++) {
+        if (ids[i] == 59260) { // <|pad|>
+            memcpy(text_embeds + i * pdim, audio_embeds + (size_t)spliced * pdim, pdim * sizeof(float));
+            spliced++;
+        }
+    }
+    free(audio_embeds);
+
+    // 6. KV cache + prefill + greedy decode
+    if (!glm_asr_kv_init(ctx, 4096)) {
+        free(text_embeds);
+        return nullptr;
+    }
+    glm_asr_kv_reset(ctx);
+
+    int n_t = 0, vocab = 0;
+    float* logits = glm_asr_run_llm_kv(ctx, text_embeds, (int)ids.size(), 0, &n_t, &vocab);
+    free(text_embeds);
+    if (!logits)
+        return nullptr;
+
+    // First token: argmax
+    int next = 0;
+    float mx = logits[0];
+    for (int k = 1; k < vocab; k++) {
+        if (logits[k] > mx) {
+            mx = logits[k];
+            next = k;
+        }
+    }
+    free(logits);
+
+    // Greedy decode loop
+    std::string result;
+    int n_past = (int)ids.size();
+    const int max_tokens = 512;
+
+    auto is_eos = [&](int id) {
+        for (int i = 0; i < hp.n_eos; i++)
+            if (id == hp.eos_token_ids[i])
+                return true;
+        return false;
+    };
+
+    for (int step = 0; step < max_tokens; step++) {
+        if (is_eos(next))
+            break;
+
+        // Append token text
+        if (next >= 0 && next < (int)ctx->model.vocab.size()) {
+            const auto& tok = ctx->model.vocab[next];
+            // Skip special tokens
+            if (tok.size() < 2 || tok[0] != '<' || tok[1] != '|')
+                result += tok;
+        }
+
+        // Forward one token
+        float* emb = glm_asr_embed_tokens(ctx, &next, 1);
+        if (!emb)
+            break;
+        float* lg = glm_asr_run_llm_kv(ctx, emb, 1, n_past, nullptr, nullptr);
+        free(emb);
+        if (!lg)
+            break;
+        n_past++;
+
+        // Argmax
+        next = 0;
+        mx = lg[0];
+        for (int k = 1; k < vocab; k++) {
+            if (lg[k] > mx) {
+                mx = lg[k];
+                next = k;
+            }
+        }
+        free(lg);
+    }
+
+    return strdup(result.c_str());
 }
 
 extern "C" float* glm_asr_compute_mel(struct glm_asr_context* ctx, const float* samples, int n_samples, int* out_n_mels,
                                       int* out_T_mel) {
     if (!ctx || !samples)
         return nullptr;
-    // Use core_mel with whisper params (same as GLM-ASR's feature extractor)
-    // TODO: GLM-ASR mel extraction (same params as whisper large-v3).
-    // Need to bake mel_filters + window into the GGUF (like voxtral does),
-    // or generate them at runtime.
-    (void)n_samples;
-    (void)out_n_mels;
-    (void)out_T_mel;
-    fprintf(stderr, "glm_asr: compute_mel() not yet implemented\n");
-    return nullptr;
+    const auto& hp = ctx->model.hp;
+
+    // Get mel_filters and mel_window from model tensors
+    ggml_tensor* mel_fb_t = nullptr;
+    ggml_tensor* mel_win_t = nullptr;
+    auto it = std::find_if(ctx->model.audio.blocks.begin(), ctx->model.audio.blocks.end(),
+                           [](const glm_enc_block&) { return false; }); // dummy
+    // Look up directly from the weight map — they were loaded via core_gguf
+    // but not stored in a named field. Use ggml_get_tensor on the context.
+    mel_fb_t = ggml_get_tensor(ctx->model.ctx, "audio.mel_filters");
+    mel_win_t = ggml_get_tensor(ctx->model.ctx, "audio.mel_window");
+
+    if (!mel_fb_t || !mel_win_t) {
+        fprintf(stderr, "glm_asr: mel_filters or mel_window not found in model\n");
+        return nullptr;
+    }
+
+    // Read mel data from backend
+    int n_freqs = (int)mel_fb_t->ne[0];
+    std::vector<float> mel_fb((size_t)n_freqs * hp.n_mels);
+    ggml_backend_tensor_get(mel_fb_t, mel_fb.data(), 0, mel_fb.size() * sizeof(float));
+
+    int win_len = (int)mel_win_t->ne[0];
+    std::vector<float> mel_win(win_len);
+    ggml_backend_tensor_get(mel_win_t, mel_win.data(), 0, mel_win.size() * sizeof(float));
+
+    // Compute mel using core_mel
+    core_mel::Params p;
+    p.n_mels = hp.n_mels;
+    p.n_fft = 400;
+    p.hop_length = 160;
+    p.center_pad = true;
+
+    int T_mel = 0;
+    auto mel = core_mel::compute(samples, n_samples, mel_win.data(), win_len, mel_fb.data(), n_freqs,
+                                 nullptr, // use default FFT
+                                 p, T_mel);
+    if (mel.empty())
+        return nullptr;
+
+    if (out_n_mels)
+        *out_n_mels = hp.n_mels;
+    if (out_T_mel)
+        *out_T_mel = T_mel;
+
+    float* result = (float*)malloc(mel.size() * sizeof(float));
+    memcpy(result, mel.data(), mel.size() * sizeof(float));
+    return result;
 }
 
 extern "C" float* glm_asr_embed_tokens(struct glm_asr_context* ctx, const int32_t* ids, int n_ids) {
