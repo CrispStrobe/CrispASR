@@ -45,9 +45,9 @@ bool path_contains_ci(const std::string& p, const char* needle) {
     return lo.find(needle) != std::string::npos;
 }
 
-std::vector<CrispasrAlignedWord> align_qwen3_fa(const std::string& model_path,
-                                                const std::vector<std::string>& words, const float* samples,
-                                                int n_samples, int64_t t_offset_cs, int n_threads) {
+std::vector<CrispasrAlignedWord> align_qwen3_fa(const std::string& model_path, const std::vector<std::string>& words,
+                                                const float* samples, int n_samples, int64_t t_offset_cs,
+                                                int n_threads) {
     std::vector<CrispasrAlignedWord> out;
     if (words.empty())
         return out;
@@ -99,8 +99,8 @@ std::vector<CrispasrAlignedWord> align_qwen3_fa(const std::string& model_path,
 } // namespace
 
 std::vector<CrispasrAlignedWord> crispasr_align_words(const std::string& aligner_model, const std::string& transcript,
-                                                     const float* samples, int n_samples, int64_t t_offset_cs,
-                                                     int n_threads) {
+                                                      const float* samples, int n_samples, int64_t t_offset_cs,
+                                                      int n_threads) {
     std::vector<CrispasrAlignedWord> out;
     if (aligner_model.empty() || transcript.empty() || !samples || n_samples <= 0)
         return out;

@@ -146,8 +146,8 @@ void apply_vad_turns(std::vector<CrispasrDiarizeSegment>& segs) {
 //   4 = spk2,    5 = spk0+2, 6 = spk1+2
 // For each ASR segment, count the dominant speaker across its frames
 // and assign the most-frequent one.
-bool apply_pyannote(const float* mono, int n_samples, int64_t slice_t0_cs,
-                    std::vector<CrispasrDiarizeSegment>& segs, const std::string& model_path, int n_threads) {
+bool apply_pyannote(const float* mono, int n_samples, int64_t slice_t0_cs, std::vector<CrispasrDiarizeSegment>& segs,
+                    const std::string& model_path, int n_threads) {
     if (model_path.empty())
         return false;
 

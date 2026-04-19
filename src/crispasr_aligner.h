@@ -42,7 +42,6 @@ struct CrispasrAlignedWord {
 /// cost is dominated by the ASR pass upstream, not the aligner load.
 ///
 /// Returns an empty vector on any failure (error printed to stderr).
-std::vector<CrispasrAlignedWord> crispasr_align_words(const std::string& aligner_model,
-                                                     const std::string& transcript,
-                                                     const float* samples, int n_samples,
-                                                     int64_t t_offset_cs, int n_threads);
+std::vector<CrispasrAlignedWord> crispasr_align_words(const std::string& aligner_model, const std::string& transcript,
+                                                      const float* samples, int n_samples, int64_t t_offset_cs,
+                                                      int n_threads);

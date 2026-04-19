@@ -150,31 +150,33 @@ CA_EXPORT void crispasr_params_set_initial_prompt(whisper_full_params* p, const 
 // VAD (whisper.cpp built-in Silero pipeline). When enabled, whisper_full
 // detects speech spans internally and only decodes those regions —
 // timestamps are adjusted for the caller. Skips costly decode on silence.
-CA_EXPORT void crispasr_params_set_vad(whisper_full_params * p, int v) {
-    if (p) p->vad = v != 0;
+CA_EXPORT void crispasr_params_set_vad(whisper_full_params* p, int v) {
+    if (p)
+        p->vad = v != 0;
 }
-CA_EXPORT void crispasr_params_set_vad_model_path(whisper_full_params * p,
-                                                  const char *          path) {
-    if (p) p->vad_model_path = path; // caller owns the string
+CA_EXPORT void crispasr_params_set_vad_model_path(whisper_full_params* p, const char* path) {
+    if (p)
+        p->vad_model_path = path; // caller owns the string
 }
-CA_EXPORT void crispasr_params_set_vad_threshold(whisper_full_params * p,
-                                                 float t) {
-    if (p) p->vad_params.threshold = t;
+CA_EXPORT void crispasr_params_set_vad_threshold(whisper_full_params* p, float t) {
+    if (p)
+        p->vad_params.threshold = t;
 }
-CA_EXPORT void crispasr_params_set_vad_min_speech_ms(whisper_full_params * p,
-                                                     int ms) {
-    if (p) p->vad_params.min_speech_duration_ms = ms;
+CA_EXPORT void crispasr_params_set_vad_min_speech_ms(whisper_full_params* p, int ms) {
+    if (p)
+        p->vad_params.min_speech_duration_ms = ms;
 }
-CA_EXPORT void crispasr_params_set_vad_min_silence_ms(whisper_full_params * p,
-                                                      int ms) {
-    if (p) p->vad_params.min_silence_duration_ms = ms;
+CA_EXPORT void crispasr_params_set_vad_min_silence_ms(whisper_full_params* p, int ms) {
+    if (p)
+        p->vad_params.min_silence_duration_ms = ms;
 }
 
 // tinydiarize (`tdrz`) — whisper's own experimental speaker-turn marker
 // injection. Requires a whisper *.en.tdrz finetune. Emits `[SPEAKER_TURN]`
 // tokens in-segment which the host can split on.
-CA_EXPORT void crispasr_params_set_tdrz(whisper_full_params * p, int v) {
-    if (p) p->tdrz_enable = v != 0;
+CA_EXPORT void crispasr_params_set_tdrz(whisper_full_params* p, int v) {
+    if (p)
+        p->tdrz_enable = v != 0;
 }
 
 // NOTE — DTW (Dynamic Time Warping) fields for precise per-token timing
@@ -1303,12 +1305,12 @@ CA_EXPORT crispasr_session_result* crispasr_session_transcribe(crispasr_session*
 // pass sample_rate = 16000 for all currently-supported backends.
 // ---------------------------------------------------------------------------
 struct crispasr_vad_abi_opts {
-    float threshold;               // 0.5 typical
-    int32_t min_speech_duration_ms; // 250
+    float threshold;                 // 0.5 typical
+    int32_t min_speech_duration_ms;  // 250
     int32_t min_silence_duration_ms; // 100
-    int32_t speech_pad_ms;          // 30
-    int32_t chunk_seconds;          // 30 (0 = no max-split)
-    int32_t n_threads;              // 4
+    int32_t speech_pad_ms;           // 30
+    int32_t chunk_seconds;           // 30 (0 = no max-split)
+    int32_t n_threads;               // 4
 };
 
 CA_EXPORT crispasr_session_result* crispasr_session_transcribe_vad(crispasr_session* s, const float* pcm, int n_samples,
@@ -1447,15 +1449,13 @@ CA_EXPORT int crispasr_diarize_segments_abi(const float* left_pcm, const float* 
 // output buffer too small.
 // ---------------------------------------------------------------------------
 CA_EXPORT int crispasr_detect_language_pcm(const float* samples, int32_t n_samples,
-                                           int32_t method,           // 0 = whisper, 1 = silero
-                                           const char* model_path,   // concrete path (required)
+                                           int32_t method,         // 0 = whisper, 1 = silero
+                                           const char* model_path, // concrete path (required)
                                            int32_t n_threads,
-                                           int32_t use_gpu,          // 0 / 1
+                                           int32_t use_gpu, // 0 / 1
                                            int32_t gpu_device,
-                                           int32_t flash_attn,       // 0 / 1
-                                           char* out_lang_buf,
-                                           int32_t out_lang_cap,
-                                           float* out_confidence) {
+                                           int32_t flash_attn, // 0 / 1
+                                           char* out_lang_buf, int32_t out_lang_cap, float* out_confidence) {
     if (!samples || n_samples <= 0 || !model_path || !out_lang_buf || out_lang_cap <= 0)
         return -1;
     if (method != 0 && method != 1)
@@ -1501,17 +1501,14 @@ struct crispasr_align_result {
     std::vector<CrispasrAlignedWord> words;
 };
 
-CA_EXPORT crispasr_align_result* crispasr_align_words_abi(const char* aligner_model,
-                                                          const char* transcript,
-                                                          const float* samples,
-                                                          int32_t n_samples,
-                                                          int64_t t_offset_cs,
+CA_EXPORT crispasr_align_result* crispasr_align_words_abi(const char* aligner_model, const char* transcript,
+                                                          const float* samples, int32_t n_samples, int64_t t_offset_cs,
                                                           int32_t n_threads) {
     if (!aligner_model || !transcript || !samples || n_samples <= 0)
         return nullptr;
     auto* r = new crispasr_align_result();
-    r->words = crispasr_align_words(aligner_model, transcript, samples, n_samples, t_offset_cs,
-                                   n_threads > 0 ? n_threads : 4);
+    r->words =
+        crispasr_align_words(aligner_model, transcript, samples, n_samples, t_offset_cs, n_threads > 0 ? n_threads : 4);
     if (r->words.empty()) {
         delete r;
         return nullptr;
@@ -1555,8 +1552,7 @@ CA_EXPORT int crispasr_cache_ensure_file_abi(const char* filename, const char* u
     if (!filename || !url || !out_buf || out_cap <= 0)
         return -1;
     const std::string override_s = cache_dir_override ? cache_dir_override : "";
-    const std::string path =
-        crispasr_cache::ensure_cached_file(filename, url, quiet != 0, "crispasr", override_s);
+    const std::string path = crispasr_cache::ensure_cached_file(filename, url, quiet != 0, "crispasr", override_s);
     if (path.empty())
         return 1;
     if ((int)path.size() + 1 > out_cap)
@@ -1603,8 +1599,8 @@ static int write_entry(const CrispasrRegistryEntry& e, char* out_filename, int32
     return 0;
 }
 
-CA_EXPORT int crispasr_registry_lookup_abi(const char* backend, char* out_filename, int32_t filename_cap,
-                                           char* out_url, int32_t url_cap, char* out_size, int32_t size_cap) {
+CA_EXPORT int crispasr_registry_lookup_abi(const char* backend, char* out_filename, int32_t filename_cap, char* out_url,
+                                           int32_t url_cap, char* out_size, int32_t size_cap) {
     if (!backend || !out_filename || !out_url || !out_size || filename_cap <= 0 || url_cap <= 0 || size_cap <= 0)
         return -1;
     CrispasrRegistryEntry e;
@@ -1614,7 +1610,8 @@ CA_EXPORT int crispasr_registry_lookup_abi(const char* backend, char* out_filena
 }
 
 CA_EXPORT int crispasr_registry_lookup_by_filename_abi(const char* filename, char* out_filename, int32_t filename_cap,
-                                                      char* out_url, int32_t url_cap, char* out_size, int32_t size_cap) {
+                                                       char* out_url, int32_t url_cap, char* out_size,
+                                                       int32_t size_cap) {
     if (!filename || !out_filename || !out_url || !out_size || filename_cap <= 0 || url_cap <= 0 || size_cap <= 0)
         return -1;
     CrispasrRegistryEntry e;

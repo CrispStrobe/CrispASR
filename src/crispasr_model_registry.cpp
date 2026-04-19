@@ -111,9 +111,8 @@ std::string crispasr_resolve_model(const std::string& model_arg, const std::stri
 
         if (match && allow_download) {
             if (!quiet) {
-                fprintf(stderr,
-                        "crispasr: model '%s' not found locally — downloading %s (%s)\n",
-                        model_arg.c_str(), match->filename, match->approx_size);
+                fprintf(stderr, "crispasr: model '%s' not found locally — downloading %s (%s)\n", model_arg.c_str(),
+                        match->filename, match->approx_size);
             }
             return crispasr_cache::ensure_cached_file(match->filename, match->url, quiet, "crispasr",
                                                       cache_dir_override);
@@ -126,8 +125,7 @@ std::string crispasr_resolve_model(const std::string& model_arg, const std::stri
 
     const Entry* e = find_by_backend(backend_name);
     if (!e) {
-        fprintf(stderr,
-                "crispasr: -m auto not supported for backend '%s' (no default model registered)\n",
+        fprintf(stderr, "crispasr: -m auto not supported for backend '%s' (no default model registered)\n",
                 backend_name.c_str());
         return "";
     }

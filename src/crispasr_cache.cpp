@@ -9,6 +9,10 @@
 #include <cstring>
 #include <string>
 
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#endif
+
 #ifdef _WIN32
 #include <direct.h>
 #include <io.h>
@@ -367,25 +371,26 @@ bool fetch(const std::string& url, const std::string& dest, bool quiet) {
         fprintf(stderr, "crispasr: libcurl failed, falling back to curl CLI...\n");
 #endif
 
-    // ── curl CLI ──────────────────────────────────────────────────────────────
-    // -fL: fail on HTTP errors and follow redirects.
-    // shell_quote() uses double-quote style on Windows, single-quote on POSIX.
-    std::string curl_cmd = "curl -fL ";
-    curl_cmd += quiet ? "-s " : "--progress-bar ";
-    curl_cmd += "-o " + shell_quote(dest) + " " + shell_quote(url);
+        // ── curl/wget CLI (not available on iOS/Android) ────────────────────────
+#if !defined(__APPLE__) || !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
+    {
+        std::string curl_cmd = "curl -fL ";
+        curl_cmd += quiet ? "-s " : "--progress-bar ";
+        curl_cmd += "-o " + shell_quote(dest) + " " + shell_quote(url);
 
-    int rc = std::system(curl_cmd.c_str());
-    if (rc == 0 && file_present(dest))
-        return true;
+        int rc = std::system(curl_cmd.c_str());
+        if (rc == 0 && file_present(dest))
+            return true;
 
-    // ── wget ──────────────────────────────────────────────────────────────────
-    std::string wget_cmd = "wget ";
-    wget_cmd += quiet ? "-q " : "--show-progress ";
-    wget_cmd += "-O " + shell_quote(dest) + " " + shell_quote(url);
+        std::string wget_cmd = "wget ";
+        wget_cmd += quiet ? "-q " : "--show-progress ";
+        wget_cmd += "-O " + shell_quote(dest) + " " + shell_quote(url);
 
-    rc = std::system(wget_cmd.c_str());
-    if (rc == 0 && file_present(dest))
-        return true;
+        rc = std::system(wget_cmd.c_str());
+        if (rc == 0 && file_present(dest))
+            return true;
+    }
+#endif
 
     fprintf(stderr,
 #if defined(_WIN32) && defined(CRISPASR_USE_LIBCURL)
