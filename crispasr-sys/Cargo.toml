@@ -1,6 +1,6 @@
 [package]
 name = "crispasr-sys"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2021"
 description = "Raw FFI bindings to CrispASR (whisper.cpp fork) C API"
 license = "MIT"

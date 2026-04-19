@@ -397,6 +397,93 @@ class LidResult:
     confidence: float
 
 
+# =========================================================================
+# CTC / forced-aligner word timings (shared C-ABI, 0.4.7+)
+# =========================================================================
+
+@dataclass
+class AlignedWord:
+    """Per-word output of :func:`align_words`."""
+    text: str
+    start: float  # seconds (centiseconds / 100 on the C side)
+    end: float
+
+
+def align_words(
+    aligner_model: str,
+    transcript: str,
+    pcm: np.ndarray,
+    *,
+    t_offset: float = 0.0,
+    n_threads: int = 4,
+    lib_path: Optional[str] = None,
+) -> List[AlignedWord]:
+    """Run CTC forced alignment for a transcript + audio pair.
+
+    ``aligner_model`` filename picks the backend: paths containing
+    "forced-aligner" / "qwen3-fa" / "qwen3-forced" route to the
+    Qwen3-ForcedAligner path; everything else goes through
+    canary-ctc-aligner.
+
+    ``t_offset`` (seconds) is added to every word start/end so the
+    returned timings are absolute against the original audio.
+    Returns an empty list on failure.
+    """
+    if not aligner_model or not transcript or pcm is None or len(pcm) == 0:
+        return []
+
+    lib = ctypes.CDLL(lib_path or _find_lib())
+    if not hasattr(lib, "crispasr_align_words_abi"):
+        raise RuntimeError(
+            "crispasr_align_words_abi not in loaded library — rebuild "
+            "CrispASR 0.4.7+ to use forced alignment from the Python binding."
+        )
+    # (argtypes/restype wired in Session._setup_session_signatures when a
+    # session is open; do it defensively here too so standalone use works.)
+    lib.crispasr_align_words_abi.argtypes = [
+        ctypes.c_char_p, ctypes.c_char_p,
+        ctypes.POINTER(ctypes.c_float), ctypes.c_int32,
+        ctypes.c_int64, ctypes.c_int32,
+    ]
+    lib.crispasr_align_words_abi.restype = ctypes.c_void_p
+    lib.crispasr_align_result_n_words.argtypes = [ctypes.c_void_p]
+    lib.crispasr_align_result_n_words.restype = ctypes.c_int
+    lib.crispasr_align_result_word_text.argtypes = [ctypes.c_void_p, ctypes.c_int]
+    lib.crispasr_align_result_word_text.restype = ctypes.c_char_p
+    lib.crispasr_align_result_word_t0.argtypes = [ctypes.c_void_p, ctypes.c_int]
+    lib.crispasr_align_result_word_t0.restype = ctypes.c_int64
+    lib.crispasr_align_result_word_t1.argtypes = [ctypes.c_void_p, ctypes.c_int]
+    lib.crispasr_align_result_word_t1.restype = ctypes.c_int64
+    lib.crispasr_align_result_free.argtypes = [ctypes.c_void_p]
+    lib.crispasr_align_result_free.restype = None
+
+    pcm_np = np.asarray(pcm, dtype=np.float32)
+    res = lib.crispasr_align_words_abi(
+        aligner_model.encode("utf-8"),
+        transcript.encode("utf-8"),
+        pcm_np.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        int(len(pcm_np)),
+        int(round(t_offset * 100)),
+        int(n_threads),
+    )
+    if not res:
+        return []
+    try:
+        n = lib.crispasr_align_result_n_words(res)
+        out: List[AlignedWord] = []
+        for i in range(n):
+            t = lib.crispasr_align_result_word_text(res, i)
+            text = t.decode("utf-8") if t else ""
+            out.append(AlignedWord(
+                text=text,
+                start=lib.crispasr_align_result_word_t0(res, i) / 100.0,
+                end=lib.crispasr_align_result_word_t1(res, i) / 100.0,
+            ))
+        return out
+    finally:
+        lib.crispasr_align_result_free(res)
+
+
 def detect_language_pcm(
     pcm: np.ndarray,
     *,
@@ -623,6 +710,24 @@ class Session:
                 ctypes.POINTER(ctypes.c_float),
             ]
             lib.crispasr_detect_language_pcm.restype = ctypes.c_int
+        # 0.4.7+: shared CTC / forced-aligner word timings.
+        if hasattr(lib, "crispasr_align_words_abi"):
+            lib.crispasr_align_words_abi.argtypes = [
+                ctypes.c_char_p, ctypes.c_char_p,
+                ctypes.POINTER(ctypes.c_float), ctypes.c_int32,
+                ctypes.c_int64, ctypes.c_int32,
+            ]
+            lib.crispasr_align_words_abi.restype = ctypes.c_void_p
+            lib.crispasr_align_result_n_words.argtypes = [ctypes.c_void_p]
+            lib.crispasr_align_result_n_words.restype = ctypes.c_int
+            lib.crispasr_align_result_word_text.argtypes = [ctypes.c_void_p, ctypes.c_int]
+            lib.crispasr_align_result_word_text.restype = ctypes.c_char_p
+            lib.crispasr_align_result_word_t0.argtypes = [ctypes.c_void_p, ctypes.c_int]
+            lib.crispasr_align_result_word_t0.restype = ctypes.c_int64
+            lib.crispasr_align_result_word_t1.argtypes = [ctypes.c_void_p, ctypes.c_int]
+            lib.crispasr_align_result_word_t1.restype = ctypes.c_int64
+            lib.crispasr_align_result_free.argtypes = [ctypes.c_void_p]
+            lib.crispasr_align_result_free.restype = None
         lib.crispasr_session_result_n_segments.argtypes = [ctypes.c_void_p]
         lib.crispasr_session_result_n_segments.restype = ctypes.c_int
         lib.crispasr_session_result_segment_text.argtypes = [ctypes.c_void_p, ctypes.c_int]

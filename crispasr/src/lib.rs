@@ -515,6 +515,80 @@ impl Drop for Session {
 }
 
 // =========================================================================
+// CTC / forced-aligner word timings (shared C-ABI, 0.4.7+)
+// =========================================================================
+
+#[derive(Clone, Debug)]
+pub struct AlignedWord {
+    pub text: String,
+    pub start: f64, // seconds
+    pub end: f64,
+}
+
+/// Run CTC / forced-aligner word timings for a transcript + audio pair.
+///
+/// `aligner_model` filename picks the backend: paths containing
+/// "forced-aligner" / "qwen3-fa" / "qwen3-forced" route to the
+/// Qwen3-ForcedAligner path; everything else goes through
+/// canary-ctc-aligner. `t_offset` (seconds) is added to every word
+/// start/end so the returned timings are absolute against the
+/// original audio.
+///
+/// Returns an empty vector when the aligner failed or produced no
+/// output. Errors are printed to stderr by the library, since they
+/// typically indicate a missing / wrong model file.
+pub fn align_words(
+    aligner_model: &str,
+    transcript: &str,
+    pcm: &[f32],
+    t_offset: f64,
+    n_threads: i32,
+) -> Result<Vec<AlignedWord>, String> {
+    if aligner_model.is_empty() || transcript.is_empty() || pcm.is_empty() {
+        return Ok(Vec::new());
+    }
+    let model_c =
+        CString::new(aligner_model).map_err(|e| format!("aligner_model NUL: {e}"))?;
+    let trans_c = CString::new(transcript).map_err(|e| format!("transcript NUL: {e}"))?;
+
+    let res = unsafe {
+        crispasr_sys::crispasr_align_words_abi(
+            model_c.as_ptr(),
+            trans_c.as_ptr(),
+            pcm.as_ptr(),
+            pcm.len() as i32,
+            (t_offset * 100.0).round() as i64,
+            n_threads,
+        )
+    };
+    if res.is_null() {
+        return Ok(Vec::new());
+    }
+
+    let mut out = Vec::new();
+    unsafe {
+        let n = crispasr_sys::crispasr_align_result_n_words(res);
+        for i in 0..n {
+            let tp = crispasr_sys::crispasr_align_result_word_text(res, i);
+            let text = if tp.is_null() {
+                String::new()
+            } else {
+                CStr::from_ptr(tp).to_string_lossy().into_owned()
+            };
+            let t0 = crispasr_sys::crispasr_align_result_word_t0(res, i) as f64 / 100.0;
+            let t1 = crispasr_sys::crispasr_align_result_word_t1(res, i) as f64 / 100.0;
+            out.push(AlignedWord {
+                text,
+                start: t0,
+                end: t1,
+            });
+        }
+        crispasr_sys::crispasr_align_result_free(res);
+    }
+    Ok(out)
+}
+
+// =========================================================================
 // Language identification (shared C-ABI, 0.4.6+)
 // =========================================================================
 

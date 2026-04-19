@@ -233,6 +233,82 @@ bool diarizeSegments({
   return rc == 0;
 }
 
+/// One word + centisecond timings returned by [alignWords].
+class AlignedWord {
+  final String text;
+  final double start; // seconds
+  final double end;
+  const AlignedWord({required this.text, required this.start, required this.end});
+}
+
+/// CTC / forced-alignment word timings for a transcript + audio pair.
+///
+/// `alignerModel` picks the backend by filename convention: any path
+/// containing "forced-aligner" / "qwen3-fa" / "qwen3-forced" routes to
+/// the Qwen3-ForcedAligner path; everything else goes through
+/// canary-ctc-aligner.
+///
+/// `tOffset` (seconds) is added to every word's start/end so the
+/// returned timings are absolute against the original audio.
+List<AlignedWord> alignWords({
+  required String alignerModel,
+  required String transcript,
+  required Float32List pcm,
+  double tOffset = 0.0,
+  int nThreads = 4,
+  DynamicLibrary? lib,
+}) {
+  if (alignerModel.isEmpty || transcript.isEmpty || pcm.isEmpty) {
+    return const [];
+  }
+  lib ??= DynamicLibrary.open(CrispASR.defaultLibName());
+
+  final samples = calloc<Float>(pcm.length);
+  for (var i = 0; i < pcm.length; i++) samples[i] = pcm[i];
+  final modelPtr = alignerModel.toNativeUtf8();
+  final txtPtr = transcript.toNativeUtf8();
+
+  final fn = lib.lookupFunction<
+      Pointer<Void> Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<Float>,
+          Int32, Int64, Int32),
+      Pointer<Void> Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<Float>,
+          int, int, int)>('crispasr_align_words_abi');
+  final res = fn(modelPtr, txtPtr, samples, pcm.length,
+      (tOffset * 100).round(), nThreads);
+
+  calloc.free(samples);
+  calloc.free(modelPtr);
+  calloc.free(txtPtr);
+
+  if (res == nullptr) return const [];
+
+  final nFn = lib.lookupFunction<Int32 Function(Pointer<Void>),
+      int Function(Pointer<Void>)>('crispasr_align_result_n_words');
+  final textFn = lib.lookupFunction<
+      Pointer<Utf8> Function(Pointer<Void>, Int32),
+      Pointer<Utf8> Function(Pointer<Void>, int)>('crispasr_align_result_word_text');
+  final t0Fn = lib.lookupFunction<Int64 Function(Pointer<Void>, Int32),
+      int Function(Pointer<Void>, int)>('crispasr_align_result_word_t0');
+  final t1Fn = lib.lookupFunction<Int64 Function(Pointer<Void>, Int32),
+      int Function(Pointer<Void>, int)>('crispasr_align_result_word_t1');
+  final freeFn = lib.lookupFunction<Void Function(Pointer<Void>),
+      void Function(Pointer<Void>)>('crispasr_align_result_free');
+
+  final n = nFn(res);
+  final out = <AlignedWord>[];
+  for (var i = 0; i < n; i++) {
+    final tp = textFn(res, i);
+    final t = tp == nullptr ? '' : tp.toDartString();
+    out.add(AlignedWord(
+      text: t,
+      start: t0Fn(res, i) / 100.0,
+      end: t1Fn(res, i) / 100.0,
+    ));
+  }
+  freeFn(res);
+  return out;
+}
+
 /// Language identification result from [detectLanguagePcm]. `langCode`
 /// is an ISO 639-1 code ("en", "de", …) or empty on failure.
 class LidResult {

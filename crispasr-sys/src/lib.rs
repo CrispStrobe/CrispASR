@@ -114,6 +114,11 @@ pub struct CrispasrSession(c_void);
 #[repr(C)]
 pub struct CrispasrSessionResult(c_void);
 
+/// Opaque result handle for `crispasr_align_words_abi`. Must be freed
+/// with `crispasr_align_result_free`.
+#[repr(C)]
+pub struct CrispasrAlignResult(c_void);
+
 /// Tunables for [`crispasr_session_transcribe_vad`]. Mirrors whisper.cpp's
 /// `whisper_vad_params` plus the max-chunk fallback used to bound encoder
 /// cost on long audio. Pass a null pointer to use defaults.
@@ -241,6 +246,27 @@ extern "C" {
         out_lang_cap: c_int,
         out_confidence: *mut c_float,
     ) -> c_int;
+
+    /// Shared CTC / forced-aligner word timings (0.4.7+).
+    /// Pass any `aligner_model` path — filenames containing
+    /// "forced-aligner" / "qwen3-fa" / "qwen3-forced" go through the
+    /// Qwen3-ForcedAligner path; everything else uses canary-ctc.
+    /// Returns a handle the caller must free with
+    /// [`crispasr_align_result_free`]. Returns null on failure.
+    pub fn crispasr_align_words_abi(
+        aligner_model: *const c_char,
+        transcript: *const c_char,
+        samples: *const c_float,
+        n_samples: c_int,
+        t_offset_cs: i64,
+        n_threads: c_int,
+    ) -> *mut CrispasrAlignResult;
+
+    pub fn crispasr_align_result_n_words(r: *mut CrispasrAlignResult) -> c_int;
+    pub fn crispasr_align_result_word_text(r: *mut CrispasrAlignResult, i: c_int) -> *const c_char;
+    pub fn crispasr_align_result_word_t0(r: *mut CrispasrAlignResult, i: c_int) -> i64;
+    pub fn crispasr_align_result_word_t1(r: *mut CrispasrAlignResult, i: c_int) -> i64;
+    pub fn crispasr_align_result_free(r: *mut CrispasrAlignResult);
 
     pub fn crispasr_session_result_n_segments(r: *mut CrispasrSessionResult) -> c_int;
     pub fn crispasr_session_result_segment_text(

@@ -128,6 +128,10 @@ add_library(whisper
             # `crispasr_detect_language_pcm`. The sherpa-ONNX subprocess
             # method stays in the CLI shim.
             crispasr_lid.cpp
+            # Shared CTC / qwen3-fa forced alignment. Consumed by the CLI
+            # and by the C-ABI `crispasr_align_words_abi`. Both canary-ctc
+            # and qwen3-forced-aligner paths route through one call.
+            crispasr_aligner.cpp
             )
 # Non-Whisper backends reachable through crispasr_c_api.cpp are linked
 # into libwhisper further down in this file, once those targets have been

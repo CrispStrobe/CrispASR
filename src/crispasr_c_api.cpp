@@ -23,6 +23,7 @@
 #include "crispasr_vad.h"     // VAD slicing + stitching (shared with CLI)
 #include "crispasr_diarize.h" // Speaker diarization (shared with CLI)
 #include "crispasr_lid.h"     // Language identification (shared with CLI)
+#include "crispasr_aligner.h" // CTC / forced-aligner word timings (shared with CLI)
 // Non-Whisper backend headers. Each of these lives in `src/` and is built as
 // its own shared library — we link them into libwhisper privately so Dart
 // only has to open one library to reach every backend. Any missing header
@@ -1478,6 +1479,63 @@ CA_EXPORT int crispasr_detect_language_pcm(const float* samples, int32_t n_sampl
     if (out_confidence)
         *out_confidence = r.confidence;
     return 0;
+}
+
+// ---------------------------------------------------------------------------
+// CTC / forced-aligner word timings (shared across all 4 consumers).
+//
+// Runs a CTC aligner (canary-ctc by default, qwen3-forced-aligner when
+// the filename matches) on a transcript + audio pair and emits one
+// per-word entry with centisecond timings. Useful for LLM-based
+// backends (qwen3, voxtral, voxtral4b, granite) that don't produce
+// per-word timestamps on their own.
+//
+// Because each aligned word carries a dynamically-sized UTF-8 text
+// string, the result is returned as an opaque handle that the caller
+// frees with `crispasr_align_result_free`. Accessors below mirror the
+// session-result accessor pattern.
+// ---------------------------------------------------------------------------
+struct crispasr_align_result {
+    std::vector<CrispasrAlignedWord> words;
+};
+
+CA_EXPORT crispasr_align_result* crispasr_align_words_abi(const char* aligner_model,
+                                                          const char* transcript,
+                                                          const float* samples,
+                                                          int32_t n_samples,
+                                                          int64_t t_offset_cs,
+                                                          int32_t n_threads) {
+    if (!aligner_model || !transcript || !samples || n_samples <= 0)
+        return nullptr;
+    auto* r = new crispasr_align_result();
+    r->words = crispasr_align_words(aligner_model, transcript, samples, n_samples, t_offset_cs,
+                                   n_threads > 0 ? n_threads : 4);
+    if (r->words.empty()) {
+        delete r;
+        return nullptr;
+    }
+    return r;
+}
+
+CA_EXPORT int crispasr_align_result_n_words(crispasr_align_result* r) {
+    return r ? (int)r->words.size() : 0;
+}
+
+CA_EXPORT const char* crispasr_align_result_word_text(crispasr_align_result* r, int i) {
+    return (r && i >= 0 && i < (int)r->words.size()) ? r->words[i].text.c_str() : "";
+}
+
+CA_EXPORT int64_t crispasr_align_result_word_t0(crispasr_align_result* r, int i) {
+    return (r && i >= 0 && i < (int)r->words.size()) ? r->words[i].t0_cs : 0;
+}
+
+CA_EXPORT int64_t crispasr_align_result_word_t1(crispasr_align_result* r, int i) {
+    return (r && i >= 0 && i < (int)r->words.size()) ? r->words[i].t1_cs : 0;
+}
+
+CA_EXPORT void crispasr_align_result_free(crispasr_align_result* r) {
+    if (r)
+        delete r;
 }
 
 CA_EXPORT int crispasr_session_result_n_segments(crispasr_session_result* r) {

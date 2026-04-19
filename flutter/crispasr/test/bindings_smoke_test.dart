@@ -82,6 +82,14 @@ void main() {
       // Shared language identification (0.4.6+). Two methods (whisper,
       // silero) share the library path with the CLI.
       'crispasr_detect_language_pcm',
+      // Shared CTC / forced-aligner word timings (0.4.7+). Canary-CTC
+      // and Qwen3-ForcedAligner paths share one entry point.
+      'crispasr_align_words_abi',
+      'crispasr_align_result_n_words',
+      'crispasr_align_result_word_text',
+      'crispasr_align_result_word_t0',
+      'crispasr_align_result_word_t1',
+      'crispasr_align_result_free',
       // Canonical C-ABI version symbol (was `crispasr_dart_helpers_version`
       // before the file moved to `src/crispasr_c_api.cpp`).
       'crispasr_c_api_version',

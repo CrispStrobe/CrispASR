@@ -11,7 +11,7 @@
 #include "crispasr_vad_cli.h"
 #include "crispasr_output.h"
 #include "crispasr_model_mgr.h"
-#include "crispasr_aligner.h"
+#include "crispasr_aligner_cli.h"
 #include "crispasr_lid_cli.h"
 #include "crispasr_diarize_cli.h"
 #include "whisper_params.h"
