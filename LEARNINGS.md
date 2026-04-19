@@ -912,3 +912,30 @@ their body in `try { ... } catch (...) { return error_code; }`. The
 Session API does this by design. The legacy whisper-direct functions
 (`whisper_full`, `whisper_init_from_file_with_params`) do not. We mark
 the old Rust `CrispASR` struct as deprecated in favor of `Session`.
+
+### split-on-punct proportional fallback: the silent accuracy killer
+
+When `--split-on-punct` was used without `-ml N`, the display segment
+builder checked `seg.words.empty() || max_len == 0` and took the
+proportional interpolation path — even when the backend (parakeet)
+had produced accurate word-level timestamps. The proportional path
+estimates sentence boundaries by character position ratio, which can
+be off by 1+ seconds.
+
+**Symptoms:** Sentence start/end times don't match the actual speech.
+A sentence ending with "code." at 6.3s shows as ending at 7.3s.
+
+**Root cause:** `max_len == 0` (the default when `-ml` isn't passed)
+was treated as "no word packing" even though `split_on_punct` DOES
+need word-level timestamps for accurate splitting.
+
+**Fix:** `(max_len == 0 && !split_on_punct)` — only skip word packing
+when neither max_len nor split_on_punct is requested.
+
+**Second bug in the same path:** The flush happened AFTER updating
+`cur.t1 = w.t1`, so the flushed sentence included the NEXT word's
+end time. Moved flush to before the update.
+
+**Lesson:** When two features interact (max_len + split_on_punct),
+test all four combinations: (0,false), (0,true), (N,false), (N,true).
+The (0,true) case was never tested and silently degraded accuracy.

@@ -648,3 +648,17 @@ boundary. The `Session` API is safe (C-ABI wrapper catches exceptions).
 | **Done** | #21 CLI→library DRY refactor | VAD, diarize, LID, aligner, cache, registry promoted to src/ behind shared C-ABI | ~2000 LOC moved |
 | **Pending** | #22 Stream + audio decoder in wrappers | Expose `crispasr_audio_decode_*` + streaming session through Dart/Python/Rust bindings | ~150 LOC each |
 | **Pending** | #23 Diarization + LID + align in CrisperWeaver | Swap the MFCC/k-means stopgap for the lib path; wire LID for auto-language; add forced-aligner for LLM backends | ~250 LOC |
+
+## 25. Montreal Forced Aligner evaluation — NOT PLANNED
+
+MFA uses Kaldi + OpenFST + Pynini (heavy C++ dependencies, ~500MB).
+The core Viterbi alignment algorithm is simple (~200 LOC), but the
+acoustic models (TDNN-F) and pronunciation dictionaries (OpenFST
+graph composition) require the full Kaldi stack.
+
+Our existing aligners (canary-CTC, qwen3-forced-aligner) cover
+word-level alignment. MFA's advantage is phoneme-level precision,
+which is a niche use case. Users can run MFA externally via
+`pip install montreal-forced-aligner`.
+
+**Decision:** Not worth the dependency cost. Keep as external tool.
