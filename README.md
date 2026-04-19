@@ -492,7 +492,7 @@ These work both with the historical default whisper code path AND with `--backen
 
 ## Voice Activity Detection (VAD)
 
-Every non-whisper backend uses the Silero VAD model to pre-slice long audio into speech segments, transcribe each slice, and re-stitch the output with absolute timestamps. Whisper handles VAD internally via `wparams.vad`.
+Every non-whisper backend uses the Silero VAD model to segment long audio into speech regions, **stitch them into a single contiguous buffer** (with 0.1s silence gaps, matching whisper.cpp's internal approach), transcribe in one pass, and remap timestamps back to original-audio positions. This preserves cross-segment context and avoids boundary artifacts. Short VAD segments (< 3s) are auto-merged, and oversized segments are split at `--chunk-seconds` boundaries. Whisper handles VAD internally via `wparams.vad`.
 
 ```bash
 # Just pass --vad — the model is auto-downloaded on first use
@@ -505,6 +505,11 @@ Every non-whisper backend uses the Silero VAD model to pre-slice long audio into
 ```
 
 The cached model lives at `~/.cache/crispasr/ggml-silero-v5.1.2.bin` (~885 KB). If you don't provide `--vad`, CrispASR falls back to fixed 30-second chunking (configurable via `-ck`). Encoder cost is O(T²) in the frame count, so for multi-minute audio you really want VAD.
+
+**Recommended for subtitles:**
+```bash
+crispasr --backend parakeet -m parakeet.gguf -f long_audio.wav --vad -osrt --split-on-punct
+```
 
 ---
 
@@ -957,7 +962,7 @@ It is a model-agnostic tool that iterates through the GGUF tensor list and re-qu
 
 - **Ten backends shipped, all runtime-ready** through the unified `crispasr_session_*` C-ABI: whisper, parakeet, canary, cohere, granite, fastconformer-ctc, canary_ctc, voxtral (3B), voxtral4b, qwen3, wav2vec2.
 - **Unified language bindings** — Dart (`package:crispasr` 0.4.x), Python (`crispasr.Session`), Rust (`crispasr::Session`). One C-ABI, three wrappers, all 10 backends reachable from each.
-- **Cross-platform audio decoding** via `crispasr_audio_load` (embedded miniaudio). WAV / MP3 / FLAC without an ffmpeg dependency; same loader used from CLI, server, and all language bindings.
+- **Cross-platform audio decoding** via `crispasr_audio_load` (embedded miniaudio + stb_vorbis). WAV / MP3 / FLAC / OGG Vorbis without an ffmpeg dependency; same loader used from CLI, server, and all language bindings.
 - **`src/core/` shared library** (`crispasr-core`) —
   - `core/mel` ✅ all non-whisper models migrated (including granite's stacked-2-frame variant)
   - `core/ffn` ✅ all 4 SwiGLU consumers migrated
@@ -968,12 +973,18 @@ It is a model-agnostic tool that iterates through the GGUF tensor list and re-qu
 - **HTTP server** with persistent model, hot-swap, streaming, mic input, per-token alternatives.
 - **OpenAI-compatible API** — `POST /v1/audio/transcriptions` with all five response formats, drop-in replacement for the OpenAI Whisper API.
 - **Reference Flutter app** — [CrisperWeaver](https://github.com/CrispStrobe/CrisperWeaver), cross-platform desktop/mobile transcription app built on `package:crispasr`.
+- **VAD stitching** — Silero VAD segments are stitched into a single buffer with timestamp remapping (matching whisper.cpp's internal approach). Short segments merged, oversized segments split.
+- **Best-of-N sampling** — all 4 LLM backends (voxtral, voxtral4b, qwen3, granite) support `--best-of N` with temperature sampling.
+- **Audio Q&A** — voxtral 3B supports `--ask "question"` for audio understanding beyond transcription.
+- **Integration test suites** — Python (13 tests), Rust (5 tests), Dart (9 tests) covering Session API, transcription, timestamps, edge cases.
+- **Performance**: 3.8x faster than [antirez/voxtral.c](https://github.com/antirez/voxtral.c) on the same CPU for Voxtral 4B. See `PERFORMANCE.md` for benchmarks.
 
 ### Near-term
 
-- Finish `core/attention.h` migration — qwen3 and granite attention blocks still inline.
-- Move `crispasr_llm_pipeline.h` from `examples/cli/` to `src/core/` — voxtral uses it, the other 3 LLM backends could adopt.
-- Windows CI for the Flutter reference app (libcrispasr.dll is already built in CI).
+- CMake target rename: `whisper-cli` → `crispasr` across CI/tests/scripts (~50 references).
+- Shaw relative position embeddings for granite encoder graph (currently uses block mask only).
+- Full LIS monotonicity fix for qwen3 forced aligner (currently forward-clamp only).
+- Chunk-overlap experiments for fixed chunking (VAD is the recommended path, but the fixed-chunk fallback could benefit from 2s overlap like Susurrus does).
 
 ### Long-term
 
