@@ -121,12 +121,16 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
 
         printf("[%3d/%3d] %-40s - %10s, ", i + 1, n_tensors, name, ggml_type_name(type));
 
+        std::string sname(name);
+        bool is_weight = (sname.find("weight") != std::string::npos) ||
+                         // Kyutai STT uses shortened names ending in _w
+                         (sname.size() >= 2 && sname.substr(sname.size() - 2) == "_w");
         bool quantize = ggml_is_quantized(qtype) && (type == GGML_TYPE_F32 || type == GGML_TYPE_F16) &&
                         (ggml_n_dims(t) == 2) && // Quantize only 2D matrices
-                        (std::string(name).find("weight") != std::string::npos) &&
-                        (std::string(name).find("norm") == std::string::npos) &&
+                        is_weight &&
+                        (sname.find("norm") == std::string::npos) &&
                         // Skip projector tensors (Granite Speech: precision-sensitive)
-                        (std::string(name).find("proj.") != 0);
+                        (sname.find("proj.") != 0);
 
         const int64_t ncols = t->ne[0];
         ggml_type qtype_used = qtype;
