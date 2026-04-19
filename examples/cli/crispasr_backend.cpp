@@ -18,6 +18,7 @@ std::unique_ptr<CrispasrBackend> crispasr_make_fastconformer_ctc_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_wav2vec2_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_glm_asr_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_kyutai_stt_backend();
+std::unique_ptr<CrispasrBackend> crispasr_make_firered_asr_backend();
 
 #include "ggml.h"
 #include "gguf.h"
@@ -57,6 +58,8 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& name
         return crispasr_make_glm_asr_backend();
     if (name == "kyutai-stt" || name == "kyutai" || name == "moshi-stt")
         return crispasr_make_kyutai_stt_backend();
+    if (name == "firered-asr" || name == "firered")
+        return crispasr_make_firered_asr_backend();
 
     fprintf(stderr, "crispasr: error: unknown backend '%s'\n", name.c_str());
     return nullptr;
@@ -64,8 +67,8 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& name
 
 std::vector<std::string> crispasr_list_backends() {
     return {
-        "whisper", "parakeet",          "canary",   "cohere",  "granite",    "voxtral", "voxtral4b",
-        "qwen3",   "fastconformer-ctc", "wav2vec2", "glm-asr", "kyutai-stt",
+        "whisper", "parakeet",          "canary",   "cohere",  "granite",    "voxtral",     "voxtral4b",
+        "qwen3",   "fastconformer-ctc", "wav2vec2", "glm-asr", "kyutai-stt", "firered-asr",
     };
 }
 
@@ -204,6 +207,8 @@ std::string crispasr_detect_backend_from_gguf(const std::string& model_path) {
         return "kyutai-stt";
     if (contains_ci("moshi") && contains_ci("stt"))
         return "kyutai-stt";
+    if (contains_ci("firered") && contains_ci("asr"))
+        return "firered-asr";
     if (contains_ci("ggml-") && contains_ci(".bin"))
         return "whisper";
 
@@ -252,6 +257,8 @@ std::string crispasr_detect_backend_from_gguf(const std::string& model_path) {
                 result = "glm-asr";
             else if (a == "kyutai-stt" || a == "kyutai_stt" || a == "kyutaistt")
                 result = "kyutai-stt";
+            else if (a == "firered-asr" || a == "firered_asr" || a == "firereadasr")
+                result = "firered-asr";
         }
     }
     gguf_free(gctx);
