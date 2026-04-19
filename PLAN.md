@@ -702,6 +702,13 @@ simultaneously with sliding window attention (375).
 
 **Estimated effort:** 2-3 weeks (Mimi codec port is the hard part).
 
-**Decision:** Deferred. Novel and interesting but significantly more
-complex than encoder-decoder models. Would be CrispASR's first
-codec-based ASR backend. Track for future work.
+**Key discovery:** [`Codes4Fun/moshi.cpp`](https://github.com/Codes4Fun/moshi.cpp)
+already implements Mimi codec + STT + TTS in ggml (MIT license, 83
+commits, 28 stars). Works at 93 fps STT on RTX 2070. Supports GGUF,
+CUDA, Vulkan, CPU. Integration paths:
+1. Adapt their Mimi+STT code into our backend interface (~1 week)
+2. Use as subprocess backend like whisper.cpp (~1 day)
+3. Use as reference to build our own implementation (~2 weeks)
+
+**Decision:** Deferred but significantly de-risked by moshi.cpp's
+existence. When we do this, option 1 (adapt their code) is fastest.
