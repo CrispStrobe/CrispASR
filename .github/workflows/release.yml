@@ -3,6 +3,12 @@ name: Release
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build + release (e.g. v0.4.5)'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -14,6 +20,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Install deps
         run: sudo apt-get update && sudo apt-get install -y cmake g++ libopenblas-dev
@@ -41,6 +48,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Build
         run: |
@@ -65,6 +73,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Build
         run: |
@@ -94,6 +103,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
           files: |
             artifacts/crispasr-linux-x86_64/crispasr-linux-x86_64.tar.gz
             artifacts/crispasr-macos/crispasr-macos.tar.gz
