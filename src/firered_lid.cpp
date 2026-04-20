@@ -62,3 +62,4 @@ extern "C" const char* firered_lid_detect(struct firered_lid_context* ctx, const
 
     return ctx->last_result.c_str();
 }
+
