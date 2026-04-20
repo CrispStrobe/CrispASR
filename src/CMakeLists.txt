@@ -423,6 +423,15 @@ if(NOT MSVC)
 endif()
 
 # ---------------------------------------------------------------------------
+# ecapa-lid — ECAPA-TDNN language identification (107 languages, 43 MB)
+# ---------------------------------------------------------------------------
+add_library(ecapa-lid STATIC ecapa_lid.h ecapa_lid.cpp)
+set_target_properties(ecapa-lid PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(ecapa-lid PUBLIC .)
+target_compile_features   (ecapa-lid PUBLIC cxx_std_17)
+target_link_libraries     (ecapa-lid PUBLIC crispasr-core ggml ggml-base ggml-cpu)
+
+# ---------------------------------------------------------------------------
 # firered-vad — FireRedVAD (DFSMN voice activity detection)
 # ---------------------------------------------------------------------------
 add_library(firered-vad STATIC firered_vad.h firered_vad.cpp)
@@ -601,6 +610,9 @@ if (TARGET firered-vad)
 endif()
 if (TARGET firered-lid)
     target_link_libraries(whisper PUBLIC firered-lid)
+endif()
+if (TARGET ecapa-lid)
+    target_link_libraries(whisper PUBLIC ecapa-lid)
 endif()
 if (TARGET moonshine)
     target_link_libraries(whisper PUBLIC moonshine)

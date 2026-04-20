@@ -1509,7 +1509,7 @@ CA_EXPORT int crispasr_detect_language_pcm(const float* samples, int32_t n_sampl
                                            char* out_lang_buf, int32_t out_lang_cap, float* out_confidence) {
     if (!samples || n_samples <= 0 || !model_path || !out_lang_buf || out_lang_cap <= 0)
         return -1;
-    if (method < 0 || method > 2)
+    if (method < 0 || method > 3)
         return -1;
 
     CrispasrLidOptions opts;

@@ -56,6 +56,9 @@ constexpr const char* kSileroLidDefaultFile = "silero-lid-lang95-f32.gguf";
 constexpr const char* kFireredLidDefaultUrl =
     "https://huggingface.co/cstr/firered-lid-GGUF/resolve/main/firered-lid-f16.gguf";
 constexpr const char* kFireredLidDefaultFile = "firered-lid-f16.gguf";
+constexpr const char* kEcapaLidDefaultUrl =
+    "https://huggingface.co/cstr/ecapa-lid-107-GGUF/resolve/main/ecapa-lid-107.gguf";
+constexpr const char* kEcapaLidDefaultFile = "ecapa-lid-107.gguf";
 
 std::string resolve_whisper_lid_model(const whisper_params& p) {
     if (!p.lid_model.empty())
@@ -76,6 +79,13 @@ std::string resolve_firered_lid_model(const whisper_params& p) {
         return expand_home(p.lid_model);
     return crispasr_cache::ensure_cached_file(kFireredLidDefaultFile, kFireredLidDefaultUrl, p.no_prints,
                                               "crispasr[lid-firered]", p.cache_dir);
+}
+
+std::string resolve_ecapa_lid_model(const whisper_params& p) {
+    if (!p.lid_model.empty() && p.lid_model != "auto")
+        return expand_home(p.lid_model);
+    return crispasr_cache::ensure_cached_file(kEcapaLidDefaultFile, kEcapaLidDefaultUrl, p.no_prints,
+                                              "crispasr[lid-ecapa]", p.cache_dir);
 }
 
 // Common English-name → ISO 639-1 mapping for the sherpa subprocess path.
@@ -271,7 +281,28 @@ bool crispasr_detect_language_cli(const float* samples, int n_samples, const whi
         return false;
     }
 
-    fprintf(stderr, "crispasr[lid]: unknown --lid-backend '%s' (expected 'whisper', 'silero', or 'firered')\n",
+    if (be == "ecapa") {
+        const std::string model_path = resolve_ecapa_lid_model(params);
+        if (!model_path.empty()) {
+            CrispasrLidOptions opts;
+            opts.method = CrispasrLidMethod::Ecapa;
+            opts.model_path = model_path;
+            opts.n_threads = params.n_threads;
+            opts.verbose = !params.no_prints;
+            CrispasrLidResult r;
+            if (crispasr_detect_language(samples, n_samples, opts, r)) {
+                out.lang_code = r.lang_code;
+                out.confidence = r.confidence;
+                out.source = r.source;
+                return true;
+            }
+        }
+        fprintf(stderr, "crispasr[lid]: ecapa LID failed\n");
+        return false;
+    }
+
+    fprintf(stderr,
+            "crispasr[lid]: unknown --lid-backend '%s' (expected 'whisper', 'silero', 'firered', or 'ecapa')\n",
             be.c_str());
     return false;
 }

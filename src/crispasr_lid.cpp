@@ -7,6 +7,7 @@
 // the CLI shim.
 
 #include "crispasr_lid.h"
+#include "ecapa_lid.h"
 #include "firered_lid.h"
 #include "silero_lid.h"
 #include "whisper.h"
@@ -178,6 +179,36 @@ bool detect_firered(const float* samples, int n_samples, const CrispasrLidOption
     return true;
 }
 
+bool detect_ecapa(const float* samples, int n_samples, const CrispasrLidOptions& opts, CrispasrLidResult& out) {
+    if (opts.model_path.empty())
+        return false;
+
+    ecapa_lid_context* lid = ecapa_lid_init(opts.model_path.c_str(), opts.n_threads);
+    if (!lid) {
+        if (opts.verbose)
+            fprintf(stderr, "crispasr[lid]: ecapa_lid_init('%s') failed\n", opts.model_path.c_str());
+        return false;
+    }
+
+    float conf = 0.0f;
+    const char* lang = ecapa_lid_detect(lid, samples, n_samples, &conf);
+    std::string code = lang ? lang : "";
+    ecapa_lid_free(lid);
+
+    if (code.empty()) {
+        if (opts.verbose)
+            fprintf(stderr, "crispasr[lid]: ecapa_lid_detect returned no code\n");
+        return false;
+    }
+
+    out.lang_code = code;
+    out.confidence = conf;
+    out.source = "ecapa";
+    if (opts.verbose)
+        fprintf(stderr, "crispasr[lid]: detected '%s' (p=%.3f) via ecapa\n", out.lang_code.c_str(), out.confidence);
+    return true;
+}
+
 } // namespace
 
 bool crispasr_detect_language(const float* samples, int n_samples, const CrispasrLidOptions& opts,
@@ -191,6 +222,8 @@ bool crispasr_detect_language(const float* samples, int n_samples, const Crispas
         return detect_silero(samples, n_samples, opts, out);
     case CrispasrLidMethod::Firered:
         return detect_firered(samples, n_samples, opts, out);
+    case CrispasrLidMethod::Ecapa:
+        return detect_ecapa(samples, n_samples, opts, out);
     }
     return false;
 }

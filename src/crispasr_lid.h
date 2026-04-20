@@ -29,8 +29,9 @@
 
 enum class CrispasrLidMethod {
     Whisper = 0,
-    Silero = 1,
+    Silero  = 1,
     Firered = 2,
+    Ecapa   = 3,
 };
 
 struct CrispasrLidResult {
