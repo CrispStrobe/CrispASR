@@ -1498,3 +1498,55 @@ Qwen2.5-Omni (3B/7B) and Qwen3-Omni (30B MoE) are multimodal models
 
 **Recommendation:** Stick with Qwen3-ASR for ASR. Omni models are
 for multimodal use cases (speech generation, vision, etc.).
+
+### SpeechBrain Conv1d uses reflect padding, not zero padding
+
+SpeechBrain's `Conv1d` wrapper defaults to `padding_mode='reflect'`,
+not zero padding. This causes the conv1d output to differ
+dramatically at sequence boundaries. For the ECAPA block0 with k=5:
+- Zero pad: `out[co, 0] = 45.07` (uses two zero-padded frames)
+- Reflect pad: `out[co, 0] = 76.93` (uses reflected input frames)
+
+The 70% difference at the first frame propagates through the network.
+After fixing this, block0 output matches Python reference to <0.01.
+
+**Lesson:** Always check the `padding_mode` attribute of Conv1d wrappers.
+SpeechBrain, TorchAudio, and PyTorch all have different defaults.
+
+### SpeechBrain skip_transpose flag is critical
+
+SpeechBrain's `Conv1d` and `BatchNorm1d` both have a `skip_transpose`
+flag that controls whether they transpose `[N, C, T] ↔ [N, T, C]`
+before/after the underlying PyTorch operation. The ECAPA-TDNN model
+uses `skip_transpose=True` for both conv and BN, meaning:
+- Conv1d operates on `[N, C, T]` (standard temporal convolution)
+- BatchNorm1d normalizes over channels (standard)
+
+Without knowing this, one might transpose the input, causing the
+conv to operate over channels instead of time (completely wrong).
+
+### ECAPA-TDNN SE-Res2Net debugging status
+
+Block0 (TDNNBlock) output matches Python after fbank + reflect pad fixes.
+SE-Res2Net blocks (1-3) still produce different output. Possible causes:
+- Res2Net sub-band cumulative connection ordering
+- Dilation handling in reflect-padded dilated conv
+- SE block global average pooling implementation
+- Residual connection arithmetic
+
+The model architecture is complex (8-way channel split, sequential
+processing with cumulative additions, squeeze-excitation attention).
+Each sub-component needs stage-by-stage comparison.
+
+### Facebook OmniASR-CTC-300M architecture
+
+fairseq2-based, NOT HuggingFace Transformers:
+- 7-layer CNN feature extractor: Conv1d(1→512, k=10) + 6× Conv1d(512→512, k=3)
+  with LayerNorm + GELU (wav2vec2 pattern, ~320x downsampling)
+- Linear(512→1024) dimension projection
+- 24 Transformer encoder layers: d=1024, 16 heads, FFN=4096
+- Final projection: Linear(1024→9812) CTC head
+- SentencePiece tokenizer (9812 tokens)
+- 325M params, ~1.3 GB F32
+- Input: raw 16kHz PCM (no mel features)
+- Apache-2.0, 1600+ languages
