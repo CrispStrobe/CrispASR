@@ -1305,3 +1305,14 @@ you feed float32 features, the normalization is wrong.
 
 **Fix:** Scale float32 input by 32768 before fbank computation:
 `frame[i] = pcm[i] * 32768.0f`
+
+### Decoder n_head mismatch (FireRedLID)
+
+The FireRedLID decoder uses 8 attention heads (`layer_n_head=8`) but
+the encoder uses 20 heads (`n_head=20`). The C++ code used the
+encoder's n_head for the decoder, producing random language predictions
+instead of "en" for English audio.
+
+**Lesson:** Encoder and decoder may have DIFFERENT n_head values. Always
+store them separately in the GGUF metadata and read both.
+After fix: LID correctly identifies English on JFK audio.
