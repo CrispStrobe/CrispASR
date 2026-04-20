@@ -2,7 +2,7 @@
 
 #include <cstdio>
 
-static std::string replace_all(std::string str, const std::string & from, const std::string & to) {
+static std::string replace_all(std::string str, const std::string& from, const std::string& to) {
     size_t pos = 0;
     while ((pos = str.find(from, pos)) != std::string::npos) {
         str.replace(pos, from.length(), to);
@@ -11,8 +11,8 @@ static std::string replace_all(std::string str, const std::string & from, const 
     return str;
 }
 
-static std::string trim(const std::string & str) {
-    const char * ws = " \t";
+static std::string trim(const std::string& str) {
+    const char* ws = " \t";
     size_t start = str.find_first_not_of(ws);
     if (start == std::string::npos) {
         return "";
@@ -21,8 +21,8 @@ static std::string trim(const std::string & str) {
     return str.substr(start, end - start + 1);
 }
 
-bool moonshine_tokenizer::load(const char * path) {
-    FILE * f = fopen(path, "rb");
+bool moonshine_tokenizer::load(const char* path) {
+    FILE* f = fopen(path, "rb");
     if (!f) {
         fprintf(stderr, "%s: failed to open '%s'\n", __func__, path);
         return false;
@@ -75,7 +75,7 @@ bool moonshine_tokenizer::load(const char * path) {
     return true;
 }
 
-std::string moonshine_tokenizer::tokens_to_text(const std::vector<int32_t> & tokens) const {
+std::string moonshine_tokenizer::tokens_to_text(const std::vector<int32_t>& tokens) const {
     std::vector<uint8_t> result_bytes;
 
     for (int32_t token : tokens) {
@@ -83,7 +83,7 @@ std::string moonshine_tokenizer::tokens_to_text(const std::vector<int32_t> & tok
             continue;
         }
 
-        const auto & bytes = vocab[token];
+        const auto& bytes = vocab[token];
 
         // skip special tokens: <...>
         if (bytes.size() > 2 && bytes.front() == '<' && bytes.back() == '>') {

@@ -15,7 +15,7 @@ public:
 
     const char* name() const override { return "firered-asr"; }
 
-    uint32_t capabilities() const override { return CAP_AUTO_DOWNLOAD; }
+    uint32_t capabilities() const override { return CAP_TIMESTAMPS_CTC | CAP_AUTO_DOWNLOAD; }
 
     bool init(const whisper_params& params) override {
         firered_asr_context_params cp = firered_asr_context_default_params();

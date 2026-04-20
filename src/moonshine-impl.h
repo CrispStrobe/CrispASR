@@ -8,25 +8,31 @@
 struct moonshine_kv_cache {
     int n = 0;
     int max_len = 0;
-    std::vector<struct ggml_tensor *> k;
-    std::vector<struct ggml_tensor *> v;
-    struct ggml_context * ctx = nullptr;
+    std::vector<struct ggml_tensor*> k;
+    std::vector<struct ggml_tensor*> v;
+    struct ggml_context* ctx = nullptr;
     ggml_backend_buffer_t buf = nullptr;
 
     moonshine_kv_cache() = default;
     ~moonshine_kv_cache() { reset(); }
 
     void reset() {
-        if (buf) { ggml_backend_buffer_free(buf); buf = nullptr; }
-        if (ctx) { ggml_free(ctx); ctx = nullptr; }
+        if (buf) {
+            ggml_backend_buffer_free(buf);
+            buf = nullptr;
+        }
+        if (ctx) {
+            ggml_free(ctx);
+            ctx = nullptr;
+        }
         k.clear();
         v.clear();
         n = 0;
         max_len = 0;
     }
 
-    moonshine_kv_cache(const moonshine_kv_cache &) = delete;
-    moonshine_kv_cache & operator=(const moonshine_kv_cache &) = delete;
+    moonshine_kv_cache(const moonshine_kv_cache&) = delete;
+    moonshine_kv_cache& operator=(const moonshine_kv_cache&) = delete;
 };
 
 struct moonshine_hparams {
@@ -58,65 +64,65 @@ struct moonshine_hparams {
 };
 
 struct moonshine_encoder_layer {
-    struct ggml_tensor * attn_norm;
-    struct ggml_tensor * attn_q;
-    struct ggml_tensor * attn_k;
-    struct ggml_tensor * attn_v;
-    struct ggml_tensor * attn_o;
-    struct ggml_tensor * ffn_norm;
-    struct ggml_tensor * ffn_fc1_w;
-    struct ggml_tensor * ffn_fc1_b;
-    struct ggml_tensor * ffn_fc2_w;
-    struct ggml_tensor * ffn_fc2_b;
+    struct ggml_tensor* attn_norm = nullptr;
+    struct ggml_tensor* attn_q = nullptr;
+    struct ggml_tensor* attn_k = nullptr;
+    struct ggml_tensor* attn_v = nullptr;
+    struct ggml_tensor* attn_o = nullptr;
+    struct ggml_tensor* ffn_norm = nullptr;
+    struct ggml_tensor* ffn_fc1_w = nullptr;
+    struct ggml_tensor* ffn_fc1_b = nullptr;
+    struct ggml_tensor* ffn_fc2_w = nullptr;
+    struct ggml_tensor* ffn_fc2_b = nullptr;
 };
 
 struct moonshine_decoder_layer {
-    struct ggml_tensor * attn_norm;
-    struct ggml_tensor * attn_q;
-    struct ggml_tensor * attn_k;
-    struct ggml_tensor * attn_v;
-    struct ggml_tensor * attn_o;
-    struct ggml_tensor * cross_attn_norm;
-    struct ggml_tensor * cross_attn_q;
-    struct ggml_tensor * cross_attn_k;
-    struct ggml_tensor * cross_attn_v;
-    struct ggml_tensor * cross_attn_o;
-    struct ggml_tensor * ffn_norm;
-    struct ggml_tensor * ffn_fc1_w;
-    struct ggml_tensor * ffn_fc1_b;
-    struct ggml_tensor * ffn_fc2_w;
-    struct ggml_tensor * ffn_fc2_b;
+    struct ggml_tensor* attn_norm = nullptr;
+    struct ggml_tensor* attn_q = nullptr;
+    struct ggml_tensor* attn_k = nullptr;
+    struct ggml_tensor* attn_v = nullptr;
+    struct ggml_tensor* attn_o = nullptr;
+    struct ggml_tensor* cross_attn_norm = nullptr;
+    struct ggml_tensor* cross_attn_q = nullptr;
+    struct ggml_tensor* cross_attn_k = nullptr;
+    struct ggml_tensor* cross_attn_v = nullptr;
+    struct ggml_tensor* cross_attn_o = nullptr;
+    struct ggml_tensor* ffn_norm = nullptr;
+    struct ggml_tensor* ffn_fc1_w = nullptr;
+    struct ggml_tensor* ffn_fc1_b = nullptr;
+    struct ggml_tensor* ffn_fc2_w = nullptr;
+    struct ggml_tensor* ffn_fc2_b = nullptr;
 };
 
 struct moonshine_model {
-    moonshine_hparams hparams;
+    moonshine_hparams hparams = {};
 
     // encoder conv stem
-    struct ggml_tensor * enc_conv1_w;
-    struct ggml_tensor * enc_groupnorm_w;
-    struct ggml_tensor * enc_groupnorm_b;
-    struct ggml_tensor * enc_conv2_w;
-    struct ggml_tensor * enc_conv2_b;
-    struct ggml_tensor * enc_conv3_w;
-    struct ggml_tensor * enc_conv3_b;
+    struct ggml_tensor* enc_conv1_w = nullptr;
+    struct ggml_tensor* enc_groupnorm_w = nullptr;
+    struct ggml_tensor* enc_groupnorm_b = nullptr;
+    struct ggml_tensor* enc_conv2_w = nullptr;
+    struct ggml_tensor* enc_conv2_b = nullptr;
+    struct ggml_tensor* enc_conv3_w = nullptr;
+    struct ggml_tensor* enc_conv3_b = nullptr;
 
     // encoder layers
     std::vector<moonshine_encoder_layer> enc_layers;
 
     // encoder output norm
-    struct ggml_tensor * enc_output_norm;
+    struct ggml_tensor* enc_output_norm = nullptr;
 
     // decoder
-    struct ggml_tensor * dec_embed;
-    struct ggml_tensor * dec_output_norm;
-    struct ggml_tensor * dec_output;
+    struct ggml_tensor* dec_embed = nullptr;
+    struct ggml_tensor* dec_output_norm = nullptr;
+    struct ggml_tensor* dec_output = nullptr;
 
     // decoder layers
     std::vector<moonshine_decoder_layer> dec_layers;
 
     // ggml state
     ggml_backend_buffer_t buf_w = nullptr;
-    struct ggml_context * ctx_w = nullptr;
+    struct ggml_context* ctx_w = nullptr;
 
     moonshine_model() = default;
     ~moonshine_model() {
@@ -124,6 +130,6 @@ struct moonshine_model {
         ggml_free(ctx_w);
     }
 
-    moonshine_model(const moonshine_model &) = delete;
-    moonshine_model & operator=(const moonshine_model &) = delete;
+    moonshine_model(const moonshine_model&) = delete;
+    moonshine_model& operator=(const moonshine_model&) = delete;
 };
