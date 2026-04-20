@@ -75,11 +75,15 @@ struct whisper_params {
     bool suppress_nst = false;
     bool carry_initial_prompt = false;
 
-    std::string language = "en";
+    // Default "auto" for both model and language: running the CLI on any
+    // audio file with no further args auto-downloads a reasonable default
+    // whisper model and auto-detects the spoken language. User can still
+    // pin either with -l <lang> or -m <path>.
+    std::string language = "auto";
     std::string prompt;
     std::string ask; // Q&A prompt for audio understanding (voxtral --ask)
     std::string font_path = "/System/Library/Fonts/Supplemental/Courier New Bold.ttf";
-    std::string model = "models/ggml-base.en.bin";
+    std::string model = "auto";
     std::string grammar;
     std::string grammar_rule;
 

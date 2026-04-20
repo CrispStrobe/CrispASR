@@ -18,8 +18,10 @@ struct Entry {
 // Keep entries aligned with what the CLI-only registry used to ship.
 // Adding a new backend: one row here + a PUBLIC-link in src/CMakeLists.txt.
 constexpr Entry k_registry[] = {
-    {"whisper", "ggml-base.en.bin", "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin",
-     "~147 MB"},
+    // Multilingual by default so `-m auto` works for non-English audio.
+    // Users who want the smaller English-only build can pass
+    // `-m models/ggml-base.en.bin` explicitly (once downloaded).
+    {"whisper", "ggml-base.bin", "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin", "~147 MB"},
     {"parakeet", "parakeet-tdt-0.6b-v3-q4_k.gguf",
      "https://huggingface.co/cstr/parakeet-tdt-0.6b-v3-GGUF/resolve/main/parakeet-tdt-0.6b-v3-q4_k.gguf", "~467 MB"},
     {"canary", "canary-1b-v2-q4_k.gguf",

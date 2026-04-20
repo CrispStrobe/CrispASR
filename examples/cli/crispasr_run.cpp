@@ -424,17 +424,29 @@ int crispasr_run_backend(const whisper_params& params_in) {
     // Resolve backend name: explicit --backend takes priority; otherwise
     // auto-detect from the GGUF file. Defaults are handled in cli.cpp.
     std::string backend_name = params.backend;
+    const bool model_is_auto = params.model == "auto" || params.model == "default";
     if (backend_name.empty() || backend_name == "auto") {
-        backend_name = crispasr_detect_backend_from_gguf(params.model);
-        if (backend_name.empty()) {
-            fprintf(stderr,
-                    "crispasr: error: could not auto-detect backend from '%s'. "
-                    "Use --backend NAME to force one.\n",
-                    params.model.c_str());
-            return 10;
-        }
-        if (!params.no_prints) {
-            fprintf(stderr, "crispasr: detected backend '%s' from GGUF metadata\n", backend_name.c_str());
+        if (model_is_auto) {
+            // `-m auto` with no --backend: default to whisper, which is the
+            // most general-purpose ASR backend (multilingual + language
+            // auto-detect). Users who want parakeet / cohere / etc. can
+            // pass --backend NAME.
+            backend_name = "whisper";
+            if (!params.no_prints) {
+                fprintf(stderr, "crispasr: -m auto with no --backend — defaulting to whisper\n");
+            }
+        } else {
+            backend_name = crispasr_detect_backend_from_gguf(params.model);
+            if (backend_name.empty()) {
+                fprintf(stderr,
+                        "crispasr: error: could not auto-detect backend from '%s'. "
+                        "Use --backend NAME to force one.\n",
+                        params.model.c_str());
+                return 10;
+            }
+            if (!params.no_prints) {
+                fprintf(stderr, "crispasr: detected backend '%s' from GGUF metadata\n", backend_name.c_str());
+            }
         }
     }
 
