@@ -651,6 +651,7 @@ boundary. The `Session` API is safe (C-ABI wrapper catches exceptions).
 | **Done** | #27 Kyutai STT (13th backend) | Mimi neural audio codec + causal LM, novel codec-based architecture | ~900 LOC |
 | **Done** | #28 FireRedASR2-AED (14th backend) | Conformer encoder with rel-PE + CTC, hybrid ggml/CPU, 0.7x RT | ~1400 LOC |
 | **Done** | #29 FireRedVAD (DFSMN) | 588K-param VAD, 97.57% F1, output matches reference exactly | ~400 LOC |
+| **Done** | #30 Moonshine (15th backend) | 27M-param encoder-decoder, 11.2x RT, English-only, vendored from moonshine.cpp | ~1500 LOC vendored |
 
 ## 27. Kyutai STT — DONE
 
