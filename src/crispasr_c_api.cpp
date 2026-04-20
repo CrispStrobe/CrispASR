@@ -1213,8 +1213,7 @@ CA_EXPORT crispasr_session_result* crispasr_session_transcribe_lang(crispasr_ses
         // caller hasn't supplied a language the historical default of
         // en→en is preserved. Full translation control (src != tgt)
         // still needs the backend-specific helpers.
-        return run_char_transcribe(
-            canary_transcribe(s->canary_ctx, pcm, n_samples, lang.c_str(), lang.c_str(), true));
+        return run_char_transcribe(canary_transcribe(s->canary_ctx, pcm, n_samples, lang.c_str(), lang.c_str(), true));
     }
 #endif
 #ifdef CA_HAVE_QWEN3
