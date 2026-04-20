@@ -64,7 +64,10 @@ static void compute_fbank60(const float* pcm, int n_samples, std::vector<float>&
     }
 
     n_frames = (n_padded - win_len) / hop + 1;
-    if (n_frames <= 0) { n_frames = 0; return; }
+    if (n_frames <= 0) {
+        n_frames = 0;
+        return;
+    }
 
     int bins = N / 2 + 1;
     std::vector<float> mel_fb;
@@ -76,12 +79,15 @@ static void compute_fbank60(const float* pcm, int n_samples, std::vector<float>&
         auto mel2hz = [](float m) { return 700.0f * (powf(10.0f, m / 2595.0f) - 1.0f); };
         float ml = hz2mel(low_freq), mh = hz2mel(high_freq);
         std::vector<float> c(n_mels + 2);
-        for (int i = 0; i < n_mels + 2; i++) c[i] = mel2hz(ml + i * (mh - ml) / (n_mels + 1));
+        for (int i = 0; i < n_mels + 2; i++)
+            c[i] = mel2hz(ml + i * (mh - ml) / (n_mels + 1));
         for (int m = 0; m < n_mels; m++)
             for (int k = 0; k < bins; k++) {
                 float f = (float)k * sr / N;
-                if (f > c[m] && f <= c[m+1] && c[m+1] > c[m]) mel_fb[m*bins+k] = (f-c[m])/(c[m+1]-c[m]);
-                else if (f > c[m+1] && f < c[m+2] && c[m+2] > c[m+1]) mel_fb[m*bins+k] = (c[m+2]-f)/(c[m+2]-c[m+1]);
+                if (f > c[m] && f <= c[m + 1] && c[m + 1] > c[m])
+                    mel_fb[m * bins + k] = (f - c[m]) / (c[m + 1] - c[m]);
+                else if (f > c[m + 1] && f < c[m + 2] && c[m + 2] > c[m + 1])
+                    mel_fb[m * bins + k] = (c[m + 2] - f) / (c[m + 2] - c[m + 1]);
             }
     }
 
@@ -94,43 +100,60 @@ static void compute_fbank60(const float* pcm, int n_samples, std::vector<float>&
     auto fft512 = [](float* r, float* im) {
         const int n = 512;
         for (int i = 1, j = 0; i < n; i++) {
-            int b = n >> 1; for (; j & b; b >>= 1) j ^= b; j ^= b;
-            if (i < j) { std::swap(r[i], r[j]); std::swap(im[i], im[j]); }
+            int b = n >> 1;
+            for (; j & b; b >>= 1)
+                j ^= b;
+            j ^= b;
+            if (i < j) {
+                std::swap(r[i], r[j]);
+                std::swap(im[i], im[j]);
+            }
         }
         for (int l = 2; l <= n; l <<= 1) {
             float a = -2.f * (float)M_PI / l, wr = cosf(a), wi = sinf(a);
             for (int i = 0; i < n; i += l) {
                 float cr = 1, ci = 0;
                 for (int j = 0; j < l / 2; j++) {
-                    float t = r[i+j+l/2]*cr - im[i+j+l/2]*ci, u = r[i+j+l/2]*ci + im[i+j+l/2]*cr;
-                    r[i+j+l/2] = r[i+j]-t; im[i+j+l/2] = im[i+j]-u;
-                    r[i+j] += t; im[i+j] += u;
-                    float nr = cr*wr - ci*wi; ci = cr*wi + ci*wr; cr = nr;
+                    float t = r[i + j + l / 2] * cr - im[i + j + l / 2] * ci,
+                          u = r[i + j + l / 2] * ci + im[i + j + l / 2] * cr;
+                    r[i + j + l / 2] = r[i + j] - t;
+                    im[i + j + l / 2] = im[i + j] - u;
+                    r[i + j] += t;
+                    im[i + j] += u;
+                    float nr = cr * wr - ci * wi;
+                    ci = cr * wi + ci * wr;
+                    cr = nr;
                 }
             }
         }
     };
 
     const int fft_bins = N_fft / 2 + 1;
-    std::vector<int> bin_lo(bins); std::vector<float> bin_frac(bins);
+    std::vector<int> bin_lo(bins);
+    std::vector<float> bin_frac(bins);
     for (int k = 0; k < bins; k++) {
         float fft_idx = (float)k * sr / N * N_fft / (float)sr;
         int lo = std::min((int)fft_idx, fft_bins - 2);
-        bin_lo[k] = lo; bin_frac[k] = fft_idx - lo;
+        bin_lo[k] = lo;
+        bin_frac[k] = fft_idx - lo;
     }
 
     std::vector<float> fre(N_fft), fim(N_fft);
     for (int t = 0; t < n_frames; t++) {
         int off = t * hop;
-        std::fill(fre.begin(), fre.end(), 0); std::fill(fim.begin(), fim.end(), 0);
-        for (int i = 0; i < win_len; i++) fre[i] = pcm_padded[off + i] * window[i];
+        std::fill(fre.begin(), fre.end(), 0);
+        std::fill(fim.begin(), fim.end(), 0);
+        for (int i = 0; i < win_len; i++)
+            fre[i] = pcm_padded[off + i] * window[i];
         fft512(fre.data(), fim.data());
         std::vector<float> fft_power(fft_bins);
-        for (int j = 0; j < fft_bins; j++) fft_power[j] = fre[j]*fre[j] + fim[j]*fim[j];
+        for (int j = 0; j < fft_bins; j++)
+            fft_power[j] = fre[j] * fre[j] + fim[j] * fim[j];
         for (int m = 0; m < n_mels; m++) {
             float s = 0;
             for (int k = 0; k < bins; k++) {
-                float pw = fft_power[bin_lo[k]]*(1-bin_frac[k]) + fft_power[std::min(bin_lo[k]+1,fft_bins-1)]*bin_frac[k];
+                float pw = fft_power[bin_lo[k]] * (1 - bin_frac[k]) +
+                           fft_power[std::min(bin_lo[k] + 1, fft_bins - 1)] * bin_frac[k];
                 s += pw * mel_fb[m * bins + k];
             }
             features[t * n_mels + m] = 10.0f * log10f(std::max(s, 1e-10f));
@@ -138,7 +161,9 @@ static void compute_fbank60(const float* pcm, int n_samples, std::vector<float>&
     }
     float global_max = *std::max_element(features.begin(), features.end());
     float floor = global_max - 80.0f;
-    for (auto& v : features) if (v < floor) v = floor;
+    for (auto& v : features)
+        if (v < floor)
+            v = floor;
 }
 
 // ===========================================================================
@@ -147,16 +172,17 @@ static void compute_fbank60(const float* pcm, int n_samples, std::vector<float>&
 
 // Fused BN: x * (w/sqrt(v+eps)) + (b - m*w/sqrt(v+eps))
 // Pre-compute scale and shift on CPU, apply as ggml_mul + ggml_add
-static ggml_tensor* build_bn(ggml_context* ctx, ggml_tensor* x,
-                              ggml_tensor* w, ggml_tensor* b, ggml_tensor* m, ggml_tensor* v,
-                              ggml_tensor* eps) {
-    if (!w) return x;
+static ggml_tensor* build_bn(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w, ggml_tensor* b, ggml_tensor* m,
+                             ggml_tensor* v, ggml_tensor* eps) {
+    if (!w)
+        return x;
     // x: [T, C] → transpose to [C, T] for broadcasting, then back
     ggml_tensor* xt = ggml_cont(ctx, ggml_transpose(ctx, x));
     ggml_tensor* h = ggml_sub(ctx, xt, m);
     h = ggml_div(ctx, h, ggml_sqrt(ctx, ggml_add(ctx, v, eps)));
     h = ggml_mul(ctx, h, w);
-    if (b) h = ggml_add(ctx, h, b);
+    if (b)
+        h = ggml_add(ctx, h, b);
     return ggml_cont(ctx, ggml_transpose(ctx, h));
 }
 
@@ -170,15 +196,16 @@ static ggml_tensor* build_conv1d_k1(ggml_context* ctx, ggml_tensor* x, ggml_tens
     // mul_mat(ww [C_in, C_out], xt [C_in, T]) → [C_out, T]
     ggml_tensor* h = ggml_mul_mat(ctx, ww, xt); // [C_out, T]
     // Add bias [C_out] — broadcasts over dim 1 (T)
-    if (b) h = ggml_add(ctx, h, b);
+    if (b)
+        h = ggml_add(ctx, h, b);
     // Transpose back to [T, C_out]
     return ggml_cont(ctx, ggml_transpose(ctx, h));
 }
 
 // Conv1d with kernel > 1. Uses ggml_pad_reflect_1d for SpeechBrain compatibility.
 // Input: [T, C_in], output: [T_out, C_out]
-static ggml_tensor* build_conv1d(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w, ggml_tensor* b,
-                                  int stride, int dilation) {
+static ggml_tensor* build_conv1d(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w, ggml_tensor* b, int stride,
+                                 int dilation) {
     int K = (int)w->ne[0];
     int pad = dilation * (K - 1) / 2;
     if (pad > 0)
@@ -202,7 +229,10 @@ extern "C" struct ecapa_lid_context* ecapa_lid_init(const char* model_path, int 
     auto& m = ctx->model;
 
     gguf_context* gctx = core_gguf::open_metadata(model_path);
-    if (!gctx) { delete ctx; return nullptr; }
+    if (!gctx) {
+        delete ctx;
+        return nullptr;
+    }
     m.n_mels = core_gguf::kv_u32(gctx, "ecapa.n_mels", 60);
     m.n_classes = core_gguf::kv_u32(gctx, "ecapa.n_classes", 107);
     m.n_fft_orig = core_gguf::kv_u32(gctx, "ecapa.n_fft", 400);
@@ -213,7 +243,8 @@ extern "C" struct ecapa_lid_context* ecapa_lid_init(const char* model_path, int 
         m.labels.resize(n);
         for (int i = 0; i < n; i++) {
             const char* s = gguf_get_arr_str(gctx, tok_key, i);
-            if (s) m.labels[i] = s;
+            if (s)
+                m.labels[i] = s;
         }
     }
     gguf_free(gctx);
@@ -221,11 +252,16 @@ extern "C" struct ecapa_lid_context* ecapa_lid_init(const char* model_path, int 
     fprintf(stderr, "ecapa_lid: %d mels, %d classes, %zu labels\n", m.n_mels, m.n_classes, m.labels.size());
 
     ctx->backend = ggml_backend_init_best();
-    if (!ctx->backend) { delete ctx; return nullptr; }
+    if (!ctx->backend) {
+        delete ctx;
+        return nullptr;
+    }
 
     core_gguf::WeightLoad wl;
     if (!core_gguf::load_weights(model_path, ctx->backend, "ecapa-tdnn-lid", wl)) {
-        ggml_backend_free(ctx->backend); delete ctx; return nullptr;
+        ggml_backend_free(ctx->backend);
+        delete ctx;
+        return nullptr;
     }
     ctx->weight_ctx = wl.ctx;
     ctx->buf = wl.buf;
@@ -250,11 +286,16 @@ extern "C" struct ecapa_lid_context* ecapa_lid_init(const char* model_path, int 
 }
 
 extern "C" void ecapa_lid_free(struct ecapa_lid_context* ctx) {
-    if (!ctx) return;
-    if (ctx->sched) ggml_backend_sched_free(ctx->sched);
-    if (ctx->weight_ctx) ggml_free(ctx->weight_ctx);
-    if (ctx->buf) ggml_backend_buffer_free(ctx->buf);
-    if (ctx->backend) ggml_backend_free(ctx->backend);
+    if (!ctx)
+        return;
+    if (ctx->sched)
+        ggml_backend_sched_free(ctx->sched);
+    if (ctx->weight_ctx)
+        ggml_free(ctx->weight_ctx);
+    if (ctx->buf)
+        ggml_backend_buffer_free(ctx->buf);
+    if (ctx->backend)
+        ggml_backend_free(ctx->backend);
     delete ctx;
 }
 
@@ -264,12 +305,14 @@ extern "C" void ecapa_lid_free(struct ecapa_lid_context* ctx) {
 
 extern "C" const char* ecapa_lid_detect(struct ecapa_lid_context* ctx, const float* samples, int n_samples,
                                         float* confidence) {
-    if (!ctx || !samples || n_samples <= 0) return nullptr;
+    if (!ctx || !samples || n_samples <= 0)
+        return nullptr;
     auto& m = ctx->model;
     auto& ts = m.tensors;
 
     constexpr int kMaxSamples = 16000 * 5;
-    if (n_samples > kMaxSamples) n_samples = kMaxSamples;
+    if (n_samples > kMaxSamples)
+        n_samples = kMaxSamples;
 
     // Helper to get tensor by name
     auto G = [&](const std::string& name) -> ggml_tensor* {
@@ -281,7 +324,8 @@ extern "C" const char* ecapa_lid_detect(struct ecapa_lid_context* ctx, const flo
     std::vector<float> fbank;
     int T = 0;
     compute_fbank60(samples, n_samples, fbank, T, m.mel_fb_embedded, m.n_fft_orig);
-    if (T <= 0) return nullptr;
+    if (T <= 0)
+        return nullptr;
 
     // Debug: optionally load reference fbank
     const char* ref_path = getenv("ECAPA_REF_FBANK");
@@ -298,7 +342,8 @@ extern "C" const char* ecapa_lid_detect(struct ecapa_lid_context* ctx, const flo
     std::vector<float> x_data(m.n_mels * T);
     for (int c = 0; c < m.n_mels; c++) {
         float mean = 0;
-        for (int t = 0; t < T; t++) mean += fbank[t * m.n_mels + c];
+        for (int t = 0; t < T; t++)
+            mean += fbank[t * m.n_mels + c];
         mean /= T;
         for (int t = 0; t < T; t++)
             x_data[c * T + t] = fbank[t * m.n_mels + c] - mean;
@@ -324,8 +369,8 @@ extern "C" const char* ecapa_lid_detect(struct ecapa_lid_context* ctx, const flo
     // Block 0: Conv1d(60→1024, k=5) + ReLU + BN
     ggml_tensor* h = build_conv1d(ctx0, inp, G("emb.blocks.0.conv.weight"), G("emb.blocks.0.conv.bias"), 1, 1);
     h = ggml_relu(ctx0, h);
-    h = build_bn(ctx0, h, G("emb.blocks.0.bn.weight"), G("emb.blocks.0.bn.bias"),
-                 G("emb.blocks.0.bn.running_mean"), G("emb.blocks.0.bn.running_var"), eps_t);
+    h = build_bn(ctx0, h, G("emb.blocks.0.bn.weight"), G("emb.blocks.0.bn.bias"), G("emb.blocks.0.bn.running_mean"),
+                 G("emb.blocks.0.bn.running_var"), eps_t);
 
     // Blocks 1-3: SE-Res2Net
     // Each block: tdnn1(k=1) → Res2Net → tdnn2(k=1) → SE → residual
@@ -338,8 +383,8 @@ extern "C" const char* ecapa_lid_detect(struct ecapa_lid_context* ctx, const flo
         // tdnn1: Conv1d(1024→1024, k=1) + ReLU + BN
         ggml_tensor* h1 = build_conv1d_k1(ctx0, h, G(bp + ".tdnn1.conv.weight"), G(bp + ".tdnn1.conv.bias"));
         h1 = ggml_relu(ctx0, h1);
-        h1 = build_bn(ctx0, h1, G(bp + ".tdnn1.bn.weight"), G(bp + ".tdnn1.bn.bias"),
-                       G(bp + ".tdnn1.bn.running_mean"), G(bp + ".tdnn1.bn.running_var"), eps_t);
+        h1 = build_bn(ctx0, h1, G(bp + ".tdnn1.bn.weight"), G(bp + ".tdnn1.bn.bias"), G(bp + ".tdnn1.bn.running_mean"),
+                      G(bp + ".tdnn1.bn.running_var"), eps_t);
 
         // Res2Net: split 1024 channels into 8 sub-bands of 128
         // h1: [T, 1024] in ggml (ne[0]=T, ne[1]=1024)
@@ -367,11 +412,11 @@ extern "C" const char* ecapa_lid_detect(struct ecapa_lid_context* ctx, const flo
 
             // Conv1d(128→128, k=3, d=dilation) + ReLU + BN
             std::string sp = bp + ".res2net_block.blocks." + std::to_string(si - 1);
-            ggml_tensor* sub_out = build_conv1d(ctx0, sub_in, G(sp + ".conv.weight"), G(sp + ".conv.bias"),
-                                                1, dilation);
+            ggml_tensor* sub_out =
+                build_conv1d(ctx0, sub_in, G(sp + ".conv.weight"), G(sp + ".conv.bias"), 1, dilation);
             sub_out = ggml_relu(ctx0, sub_out);
-            sub_out = build_bn(ctx0, sub_out, G(sp + ".bn.weight"), G(sp + ".bn.bias"),
-                               G(sp + ".bn.running_mean"), G(sp + ".bn.running_var"), eps_t);
+            sub_out = build_bn(ctx0, sub_out, G(sp + ".bn.weight"), G(sp + ".bn.bias"), G(sp + ".bn.running_mean"),
+                               G(sp + ".bn.running_var"), eps_t);
 
             chunks.push_back(sub_out);
             prev = sub_out;
@@ -385,21 +430,19 @@ extern "C" const char* ecapa_lid_detect(struct ecapa_lid_context* ctx, const flo
         // tdnn2: Conv1d(1024→1024, k=1) + ReLU + BN
         ggml_tensor* h2 = build_conv1d_k1(ctx0, r2_out, G(bp + ".tdnn2.conv.weight"), G(bp + ".tdnn2.conv.bias"));
         h2 = ggml_relu(ctx0, h2);
-        h2 = build_bn(ctx0, h2, G(bp + ".tdnn2.bn.weight"), G(bp + ".tdnn2.bn.bias"),
-                       G(bp + ".tdnn2.bn.running_mean"), G(bp + ".tdnn2.bn.running_var"), eps_t);
+        h2 = build_bn(ctx0, h2, G(bp + ".tdnn2.bn.weight"), G(bp + ".tdnn2.bn.bias"), G(bp + ".tdnn2.bn.running_mean"),
+                      G(bp + ".tdnn2.bn.running_var"), eps_t);
 
         // SE: squeeze-excitation on tdnn2 output
         // Pool: mean over time → [1, 1024]
         ggml_tensor* se_pool = ggml_pool_1d(ctx0, h2, GGML_OP_POOL_AVG, T_cur, T_cur, 0);
         // conv1: 1024→128 + ReLU
-        ggml_tensor* se1 = build_conv1d_k1(ctx0, se_pool,
-                                            G(bp + ".se_block.conv1.conv.weight"),
-                                            G(bp + ".se_block.conv1.conv.bias"));
+        ggml_tensor* se1 =
+            build_conv1d_k1(ctx0, se_pool, G(bp + ".se_block.conv1.conv.weight"), G(bp + ".se_block.conv1.conv.bias"));
         se1 = ggml_relu(ctx0, se1);
         // conv2: 128→1024 + sigmoid
-        ggml_tensor* se2 = build_conv1d_k1(ctx0, se1,
-                                            G(bp + ".se_block.conv2.conv.weight"),
-                                            G(bp + ".se_block.conv2.conv.bias"));
+        ggml_tensor* se2 =
+            build_conv1d_k1(ctx0, se1, G(bp + ".se_block.conv2.conv.weight"), G(bp + ".se_block.conv2.conv.bias"));
         se2 = ggml_sigmoid(ctx0, se2);
 
         // Scale: h2 * se2 (broadcast se2 over time)
@@ -415,8 +458,8 @@ extern "C" const char* ecapa_lid_detect(struct ecapa_lid_context* ctx, const flo
     mfa_in = ggml_concat(ctx0, mfa_in, block_outputs[2], 1);
     ggml_tensor* mfa = build_conv1d_k1(ctx0, mfa_in, G("emb.mfa.conv.weight"), G("emb.mfa.conv.bias"));
     mfa = ggml_relu(ctx0, mfa);
-    mfa = build_bn(ctx0, mfa, G("emb.mfa.bn.weight"), G("emb.mfa.bn.bias"),
-                   G("emb.mfa.bn.running_mean"), G("emb.mfa.bn.running_var"), eps_t);
+    mfa = build_bn(ctx0, mfa, G("emb.mfa.bn.weight"), G("emb.mfa.bn.bias"), G("emb.mfa.bn.running_mean"),
+                   G("emb.mfa.bn.running_var"), eps_t);
 
     // ASP: Attentive Statistical Pooling
     // h_mean, h_std over time → cat with mfa → TDNN → tanh → conv → softmax → weighted mean+std
@@ -466,7 +509,8 @@ extern "C" const char* ecapa_lid_detect(struct ecapa_lid_context* ctx, const flo
         float sum = 0, sum2 = 0;
         for (int t = 0; t < T_mfa; t++) {
             float v = mfa_ct[c * T_mfa + t];
-            sum += v; sum2 += v * v;
+            sum += v;
+            sum2 += v * v;
         }
         h_mean[c] = sum / T_mfa;
         h_std[c] = sqrtf(std::max(sum2 / T_mfa - h_mean[c] * h_mean[c], 1e-10f));
@@ -474,7 +518,10 @@ extern "C" const char* ecapa_lid_detect(struct ecapa_lid_context* ctx, const flo
 
     // ASP input: [9216, T] = cat(mfa, mean_expanded, std_expanded)
     auto read_f32 = [](ggml_tensor* t, std::vector<float>& out) {
-        if (!t) { out.clear(); return; }
+        if (!t) {
+            out.clear();
+            return;
+        }
         int n = (int)ggml_nelements(t);
         out.resize(n);
         if (t->type == GGML_TYPE_F32)
@@ -533,10 +580,16 @@ extern "C" const char* ecapa_lid_detect(struct ecapa_lid_context* ctx, const flo
     // Softmax over time
     for (int c = 0; c < C_mfa; c++) {
         float mx = attn[c * T_mfa];
-        for (int t = 1; t < T_mfa; t++) if (attn[c * T_mfa + t] > mx) mx = attn[c * T_mfa + t];
+        for (int t = 1; t < T_mfa; t++)
+            if (attn[c * T_mfa + t] > mx)
+                mx = attn[c * T_mfa + t];
         float sum = 0;
-        for (int t = 0; t < T_mfa; t++) { attn[c * T_mfa + t] = expf(attn[c * T_mfa + t] - mx); sum += attn[c * T_mfa + t]; }
-        for (int t = 0; t < T_mfa; t++) attn[c * T_mfa + t] /= sum;
+        for (int t = 0; t < T_mfa; t++) {
+            attn[c * T_mfa + t] = expf(attn[c * T_mfa + t] - mx);
+            sum += attn[c * T_mfa + t];
+        }
+        for (int t = 0; t < T_mfa; t++)
+            attn[c * T_mfa + t] /= sum;
     }
 
     // Weighted mean + std
@@ -545,7 +598,8 @@ extern "C" const char* ecapa_lid_detect(struct ecapa_lid_context* ctx, const flo
         float wm = 0, wm2 = 0;
         for (int t = 0; t < T_mfa; t++) {
             float a = attn[c * T_mfa + t], v = mfa_ct[c * T_mfa + t];
-            wm += a * v; wm2 += a * v * v;
+            wm += a * v;
+            wm2 += a * v * v;
         }
         w_mean[c] = wm;
         w_std[c] = sqrtf(std::max(wm2 - wm * wm, 1e-10f));
@@ -553,7 +607,10 @@ extern "C" const char* ecapa_lid_detect(struct ecapa_lid_context* ctx, const flo
 
     // Pool: [6144] = cat(w_mean, w_std)
     std::vector<float> pool(6144);
-    for (int c = 0; c < C_mfa; c++) { pool[c] = w_mean[c]; pool[C_mfa + c] = w_std[c]; }
+    for (int c = 0; c < C_mfa; c++) {
+        pool[c] = w_mean[c];
+        pool[C_mfa + c] = w_std[c];
+    }
 
     // ASP BN
     std::vector<float> aspbn_w, aspbn_b, aspbn_m, aspbn_v;
@@ -571,7 +628,8 @@ extern "C" const char* ecapa_lid_detect(struct ecapa_lid_context* ctx, const flo
     std::vector<float> emb(256, 0);
     for (int i = 0; i < 256; i++) {
         double s = fc_b.empty() ? 0 : fc_b[i];
-        for (int k = 0; k < 6144; k++) s += pool[k] * fc_w[i * 6144 + k];
+        for (int k = 0; k < 6144; k++)
+            s += pool[k] * fc_w[i * 6144 + k];
         emb[i] = (float)s;
     }
 
@@ -590,7 +648,8 @@ extern "C" const char* ecapa_lid_detect(struct ecapa_lid_context* ctx, const flo
     std::vector<float> h1(512, 0);
     for (int i = 0; i < 512; i++) {
         double s = cls_b1[i];
-        for (int k = 0; k < 256; k++) s += emb[k] * cls_w1[i * 256 + k];
+        for (int k = 0; k < 256; k++)
+            s += emb[k] * cls_w1[i * 256 + k];
         h1[i] = (float)s;
     }
 
@@ -610,21 +669,30 @@ extern "C" const char* ecapa_lid_detect(struct ecapa_lid_context* ctx, const flo
     std::vector<float> logits(m.n_classes, 0);
     for (int i = 0; i < m.n_classes; i++) {
         double s = cls_b2[i];
-        for (int k = 0; k < 512; k++) s += h1[k] * cls_w2[i * 512 + k];
+        for (int k = 0; k < 512; k++)
+            s += h1[k] * cls_w2[i * 512 + k];
         logits[i] = (float)s;
     }
 
     // Softmax + argmax
     float mx = *std::max_element(logits.begin(), logits.end());
     float sum = 0;
-    for (auto& v : logits) { v = expf(v - mx); sum += v; }
-    int best = 0; float best_conf = logits[0] / sum;
+    for (auto& v : logits) {
+        v = expf(v - mx);
+        sum += v;
+    }
+    int best = 0;
+    float best_conf = logits[0] / sum;
     for (int i = 1; i < m.n_classes; i++) {
         float p = logits[i] / sum;
-        if (p > best_conf) { best_conf = p; best = i; }
+        if (p > best_conf) {
+            best_conf = p;
+            best = i;
+        }
     }
 
-    if (confidence) *confidence = best_conf;
+    if (confidence)
+        *confidence = best_conf;
     if (best >= 0 && best < (int)m.labels.size()) {
         ctx->last_result = m.labels[best];
         return ctx->last_result.c_str();

@@ -10,7 +10,7 @@
 #include <vector>
 
 class OmniasrBackend : public CrispasrBackend {
-  public:
+public:
     OmniasrBackend() = default;
 
     const char* name() const override { return "omniasr"; }
@@ -54,7 +54,7 @@ class OmniasrBackend : public CrispasrBackend {
         }
     }
 
-  private:
+private:
     omniasr_context* ctx_ = nullptr;
 };
 

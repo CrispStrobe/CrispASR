@@ -301,8 +301,7 @@ bool crispasr_detect_language_cli(const float* samples, int n_samples, const whi
         return false;
     }
 
-    fprintf(stderr,
-            "crispasr[lid]: unknown --lid-backend '%s' (expected 'whisper', 'silero', 'firered', or 'ecapa')\n",
+    fprintf(stderr, "crispasr[lid]: unknown --lid-backend '%s' (expected 'whisper', 'silero', 'firered', or 'ecapa')\n",
             be.c_str());
     return false;
 }

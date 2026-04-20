@@ -26,17 +26,17 @@
 // ===========================================================================
 
 struct omniasr_hparams {
-    int d_model    = 1024;
-    int d_ffn      = 4096;
-    int n_heads    = 16;
-    int n_enc      = 24;
-    int n_cnn      = 7;
+    int d_model = 1024;
+    int d_ffn = 4096;
+    int n_heads = 16;
+    int n_enc = 24;
+    int n_cnn = 7;
     int vocab_size = 9812;
-    int bos_id     = 0;
-    int eos_id     = 2;
-    int pad_id     = 1;
-    int unk_id     = 3;
-    int head_dim   = 64;
+    int bos_id = 0;
+    int eos_id = 2;
+    int pad_id = 1;
+    int unk_id = 3;
+    int head_dim = 64;
 };
 
 struct omniasr_model {
@@ -49,7 +49,7 @@ struct omniasr_model {
 struct omniasr_context {
     omniasr_model model;
     omniasr_context_params params;
-    ggml_backend_t backend   = nullptr;
+    ggml_backend_t backend = nullptr;
     ggml_backend_buffer_t buf = nullptr;
     ggml_backend_sched_t sched = nullptr;
     ggml_context* weight_ctx = nullptr;
@@ -72,22 +72,18 @@ extern "C" struct omniasr_context_params omniasr_context_default_params(void) {
 static ggml_tensor* build_ln(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w, ggml_tensor* b) {
     x = ggml_norm(ctx, x, 1e-5f);
     x = ggml_mul(ctx, x, w);
-    if (b) x = ggml_add(ctx, x, b);
+    if (b)
+        x = ggml_add(ctx, x, b);
     return x;
 }
 
 // Transformer encoder layer (pre-norm)
 // x: [d_model, T] col-major
-static ggml_tensor* build_enc_layer(ggml_context* ctx, ggml_tensor* x,
-                                     ggml_tensor* attn_ln_w, ggml_tensor* attn_ln_b,
-                                     ggml_tensor* q_w, ggml_tensor* q_b,
-                                     ggml_tensor* k_w, ggml_tensor* k_b,
-                                     ggml_tensor* v_w, ggml_tensor* v_b,
-                                     ggml_tensor* o_w, ggml_tensor* o_b,
-                                     ggml_tensor* ffn_ln_w, ggml_tensor* ffn_ln_b,
-                                     ggml_tensor* up_w, ggml_tensor* up_b,
-                                     ggml_tensor* down_w, ggml_tensor* down_b,
-                                     int n_heads, int head_dim) {
+static ggml_tensor* build_enc_layer(ggml_context* ctx, ggml_tensor* x, ggml_tensor* attn_ln_w, ggml_tensor* attn_ln_b,
+                                    ggml_tensor* q_w, ggml_tensor* q_b, ggml_tensor* k_w, ggml_tensor* k_b,
+                                    ggml_tensor* v_w, ggml_tensor* v_b, ggml_tensor* o_w, ggml_tensor* o_b,
+                                    ggml_tensor* ffn_ln_w, ggml_tensor* ffn_ln_b, ggml_tensor* up_w, ggml_tensor* up_b,
+                                    ggml_tensor* down_w, ggml_tensor* down_b, int n_heads, int head_dim) {
     int d = (int)x->ne[0];
     int T = (int)x->ne[1];
 
@@ -97,11 +93,14 @@ static ggml_tensor* build_enc_layer(ggml_context* ctx, ggml_tensor* x,
 
     // Q, K, V projections
     ggml_tensor* Q = ggml_mul_mat(ctx, q_w, h);
-    if (q_b) Q = ggml_add(ctx, Q, q_b);
+    if (q_b)
+        Q = ggml_add(ctx, Q, q_b);
     ggml_tensor* K = ggml_mul_mat(ctx, k_w, h);
-    if (k_b) K = ggml_add(ctx, K, k_b);
+    if (k_b)
+        K = ggml_add(ctx, K, k_b);
     ggml_tensor* V = ggml_mul_mat(ctx, v_w, h);
-    if (v_b) V = ggml_add(ctx, V, v_b);
+    if (v_b)
+        V = ggml_add(ctx, V, v_b);
 
     // Reshape for multi-head: [d, T] → [head_dim, n_heads, T]
     Q = ggml_reshape_3d(ctx, Q, head_dim, n_heads, T);
@@ -121,7 +120,8 @@ static ggml_tensor* build_enc_layer(ggml_context* ctx, ggml_tensor* x,
 
     // Output projection
     attn = ggml_mul_mat(ctx, o_w, attn);
-    if (o_b) attn = ggml_add(ctx, attn, o_b);
+    if (o_b)
+        attn = ggml_add(ctx, attn, o_b);
 
     // Residual
     x = ggml_add(ctx, residual, attn);
@@ -130,10 +130,12 @@ static ggml_tensor* build_enc_layer(ggml_context* ctx, ggml_tensor* x,
     residual = x;
     h = build_ln(ctx, x, ffn_ln_w, ffn_ln_b);
     h = ggml_mul_mat(ctx, up_w, h);
-    if (up_b) h = ggml_add(ctx, h, up_b);
+    if (up_b)
+        h = ggml_add(ctx, h, up_b);
     h = ggml_gelu(ctx, h);
     h = ggml_mul_mat(ctx, down_w, h);
-    if (down_b) h = ggml_add(ctx, h, down_b);
+    if (down_b)
+        h = ggml_add(ctx, h, down_b);
 
     return ggml_add(ctx, residual, h);
 }
@@ -151,19 +153,22 @@ extern "C" struct omniasr_context* omniasr_init_from_file(const char* path_model
 
     // Read metadata
     gguf_context* gctx = core_gguf::open_metadata(path_model);
-    if (!gctx) { delete ctx; return nullptr; }
+    if (!gctx) {
+        delete ctx;
+        return nullptr;
+    }
 
-    hp.d_model    = core_gguf::kv_u32(gctx, "omniasr.d_model", 1024);
-    hp.d_ffn      = core_gguf::kv_u32(gctx, "omniasr.d_ffn", 4096);
-    hp.n_heads    = core_gguf::kv_u32(gctx, "omniasr.n_heads", 16);
-    hp.n_enc      = core_gguf::kv_u32(gctx, "omniasr.n_enc_layers", 24);
-    hp.n_cnn      = core_gguf::kv_u32(gctx, "omniasr.n_cnn_layers", 7);
+    hp.d_model = core_gguf::kv_u32(gctx, "omniasr.d_model", 1024);
+    hp.d_ffn = core_gguf::kv_u32(gctx, "omniasr.d_ffn", 4096);
+    hp.n_heads = core_gguf::kv_u32(gctx, "omniasr.n_heads", 16);
+    hp.n_enc = core_gguf::kv_u32(gctx, "omniasr.n_enc_layers", 24);
+    hp.n_cnn = core_gguf::kv_u32(gctx, "omniasr.n_cnn_layers", 7);
     hp.vocab_size = core_gguf::kv_u32(gctx, "omniasr.vocab_size", 9812);
-    hp.bos_id     = core_gguf::kv_u32(gctx, "omniasr.bos_id", 0);
-    hp.eos_id     = core_gguf::kv_u32(gctx, "omniasr.eos_id", 2);
-    hp.pad_id     = core_gguf::kv_u32(gctx, "omniasr.pad_id", 1);
-    hp.unk_id     = core_gguf::kv_u32(gctx, "omniasr.unk_id", 3);
-    hp.head_dim   = hp.d_model / hp.n_heads;
+    hp.bos_id = core_gguf::kv_u32(gctx, "omniasr.bos_id", 0);
+    hp.eos_id = core_gguf::kv_u32(gctx, "omniasr.eos_id", 2);
+    hp.pad_id = core_gguf::kv_u32(gctx, "omniasr.pad_id", 1);
+    hp.unk_id = core_gguf::kv_u32(gctx, "omniasr.unk_id", 3);
+    hp.head_dim = hp.d_model / hp.n_heads;
 
     // CNN strides
     int stride_key = gguf_find_key(gctx, "omniasr.cnn_strides");
@@ -183,19 +188,23 @@ extern "C" struct omniasr_context* omniasr_init_from_file(const char* path_model
         m.vocab.resize(n);
         for (int i = 0; i < n; i++) {
             const char* s = gguf_get_arr_str(gctx, tok_key, i);
-            if (s) m.vocab[i] = s;
+            if (s)
+                m.vocab[i] = s;
         }
     }
     gguf_free(gctx);
 
     if (params.verbosity >= 1) {
-        fprintf(stderr, "omniasr: d=%d, ffn=%d, heads=%d, enc=%d, cnn=%d, vocab=%d\n",
-                hp.d_model, hp.d_ffn, hp.n_heads, hp.n_enc, hp.n_cnn, hp.vocab_size);
+        fprintf(stderr, "omniasr: d=%d, ffn=%d, heads=%d, enc=%d, cnn=%d, vocab=%d\n", hp.d_model, hp.d_ffn, hp.n_heads,
+                hp.n_enc, hp.n_cnn, hp.vocab_size);
     }
 
     // Load weights
     ctx->backend = ggml_backend_init_best();
-    if (!ctx->backend) { delete ctx; return nullptr; }
+    if (!ctx->backend) {
+        delete ctx;
+        return nullptr;
+    }
 
     core_gguf::WeightLoad wl;
     if (!core_gguf::load_weights(path_model, ctx->backend, "omniasr-ctc", wl)) {
@@ -218,11 +227,16 @@ extern "C" struct omniasr_context* omniasr_init_from_file(const char* path_model
 }
 
 extern "C" void omniasr_free(struct omniasr_context* ctx) {
-    if (!ctx) return;
-    if (ctx->sched) ggml_backend_sched_free(ctx->sched);
-    if (ctx->weight_ctx) ggml_free(ctx->weight_ctx);
-    if (ctx->buf) ggml_backend_buffer_free(ctx->buf);
-    if (ctx->backend) ggml_backend_free(ctx->backend);
+    if (!ctx)
+        return;
+    if (ctx->sched)
+        ggml_backend_sched_free(ctx->sched);
+    if (ctx->weight_ctx)
+        ggml_free(ctx->weight_ctx);
+    if (ctx->buf)
+        ggml_backend_buffer_free(ctx->buf);
+    if (ctx->backend)
+        ggml_backend_free(ctx->backend);
     delete ctx;
 }
 
@@ -231,7 +245,8 @@ extern "C" void omniasr_free(struct omniasr_context* ctx) {
 // ===========================================================================
 
 extern "C" char* omniasr_transcribe(struct omniasr_context* ctx, const float* samples, int n_samples) {
-    if (!ctx || !samples || n_samples <= 0) return nullptr;
+    if (!ctx || !samples || n_samples <= 0)
+        return nullptr;
 
     auto& m = ctx->model;
     auto& hp = m.hp;
@@ -275,8 +290,8 @@ extern "C" char* omniasr_transcribe(struct omniasr_context* ctx, const float* sa
         std::string prefix = "cnn." + std::to_string(i);
         ggml_tensor* conv_w = G(prefix + ".conv.weight");
         ggml_tensor* conv_b = G(prefix + ".conv.bias");
-        ggml_tensor* ln_w   = G(prefix + ".ln.weight");
-        ggml_tensor* ln_b   = G(prefix + ".ln.bias");
+        ggml_tensor* ln_w = G(prefix + ".ln.weight");
+        ggml_tensor* ln_b = G(prefix + ".ln.bias");
 
         int stride = (i < (int)m.cnn_strides.size()) ? m.cnn_strides[i] : 2;
 
@@ -328,7 +343,8 @@ extern "C" char* omniasr_transcribe(struct omniasr_context* ctx, const float* sa
     ggml_tensor* proj_w = G("proj.weight");
     ggml_tensor* proj_b = G("proj.bias");
     h = ggml_mul_mat(ctx0, proj_w, h); // [d_model, T]
-    if (proj_b) h = ggml_add(ctx0, h, proj_b);
+    if (proj_b)
+        h = ggml_add(ctx0, h, proj_b);
 
     ggml_set_name(h, "proj_out");
     ggml_set_output(h);
@@ -343,9 +359,9 @@ extern "C" char* omniasr_transcribe(struct omniasr_context* ctx, const float* sa
 
         if (wv_t && pb_t) {
             // Read weights to CPU
-            int K_pos = (int)wv_t->ne[0]; // 128
-            int IC_g  = (int)wv_t->ne[1]; // 64 (input channels per group)
-            int OC    = (int)wv_t->ne[2]; // 1024
+            int K_pos = (int)wv_t->ne[0];  // 128
+            int IC_g = (int)wv_t->ne[1];   // 64 (input channels per group)
+            int OC = (int)wv_t->ne[2];     // 1024
             int groups = OC / IC_g;        // 16
             int pad_pos = K_pos / 2; // 64 (fairseq2 convention: K//2, then trim output)
 
@@ -378,7 +394,7 @@ extern "C" char* omniasr_transcribe(struct omniasr_context* ctx, const float* sa
             // Read h_pre_pos: [d_model, T] col-major = data[t * d + c]... no:
             // ggml [d_model, T] with ne[0]=d_model, ne[1]=T: data[t * d_model + c]
             ggml_tensor* h_cpu_t = ggml_graph_get_tensor(gf, "h_pre_pos");
-            int d = (int)h_cpu_t->ne[0]; // 1024
+            int d = (int)h_cpu_t->ne[0];     // 1024
             int T_pos = (int)h_cpu_t->ne[1]; // 549
             std::vector<float> h_cpu(d * T_pos);
             ggml_backend_tensor_get(h_cpu_t, h_cpu.data(), 0, d * T_pos * sizeof(float));
@@ -459,22 +475,19 @@ extern "C" char* omniasr_transcribe(struct omniasr_context* ctx, const float* sa
             // Build transformer layers onto h
             for (int i = 0; i < hp.n_enc; i++) {
                 std::string p = "enc." + std::to_string(i);
-                h = build_enc_layer(ctx0, h,
-                                    G(p + ".attn_ln.weight"), G(p + ".attn_ln.bias"),
-                                    G(p + ".attn.q_proj.weight"), G(p + ".attn.q_proj.bias"),
-                                    G(p + ".attn.k_proj.weight"), G(p + ".attn.k_proj.bias"),
-                                    G(p + ".attn.v_proj.weight"), G(p + ".attn.v_proj.bias"),
-                                    G(p + ".attn.out.weight"), G(p + ".attn.out.bias"),
-                                    G(p + ".ffn_ln.weight"), G(p + ".ffn_ln.bias"),
-                                    G(p + ".ffn.up.weight"), G(p + ".ffn.up.bias"),
-                                    G(p + ".ffn.down.weight"), G(p + ".ffn.down.bias"),
-                                    hp.n_heads, hp.head_dim);
+                h = build_enc_layer(
+                    ctx0, h, G(p + ".attn_ln.weight"), G(p + ".attn_ln.bias"), G(p + ".attn.q_proj.weight"),
+                    G(p + ".attn.q_proj.bias"), G(p + ".attn.k_proj.weight"), G(p + ".attn.k_proj.bias"),
+                    G(p + ".attn.v_proj.weight"), G(p + ".attn.v_proj.bias"), G(p + ".attn.out.weight"),
+                    G(p + ".attn.out.bias"), G(p + ".ffn_ln.weight"), G(p + ".ffn_ln.bias"), G(p + ".ffn.up.weight"),
+                    G(p + ".ffn.up.bias"), G(p + ".ffn.down.weight"), G(p + ".ffn.down.bias"), hp.n_heads, hp.head_dim);
             }
 
             // Final LayerNorm + CTC head
             h = build_ln(ctx0, h, G("enc_ln.weight"), G("enc_ln.bias"));
             h = ggml_mul_mat(ctx0, ctc_w, h);
-            if (ctc_b) h = ggml_add(ctx0, h, ctc_b);
+            if (ctc_b)
+                h = ggml_add(ctx0, h, ctc_b);
 
             ggml_set_name(h, "logits");
             ggml_set_output(h);
@@ -511,16 +524,12 @@ extern "C" char* omniasr_transcribe(struct omniasr_context* ctx, const float* sa
     // Transformer encoder layers
     for (int i = 0; i < hp.n_enc; i++) {
         std::string p = "enc." + std::to_string(i);
-        h = build_enc_layer(ctx0, h,
-                            G(p + ".attn_ln.weight"), G(p + ".attn_ln.bias"),
-                            G(p + ".attn.q_proj.weight"), G(p + ".attn.q_proj.bias"),
-                            G(p + ".attn.k_proj.weight"), G(p + ".attn.k_proj.bias"),
-                            G(p + ".attn.v_proj.weight"), G(p + ".attn.v_proj.bias"),
-                            G(p + ".attn.out.weight"), G(p + ".attn.out.bias"),
-                            G(p + ".ffn_ln.weight"), G(p + ".ffn_ln.bias"),
-                            G(p + ".ffn.up.weight"), G(p + ".ffn.up.bias"),
-                            G(p + ".ffn.down.weight"), G(p + ".ffn.down.bias"),
-                            hp.n_heads, hp.head_dim);
+        h = build_enc_layer(ctx0, h, G(p + ".attn_ln.weight"), G(p + ".attn_ln.bias"), G(p + ".attn.q_proj.weight"),
+                            G(p + ".attn.q_proj.bias"), G(p + ".attn.k_proj.weight"), G(p + ".attn.k_proj.bias"),
+                            G(p + ".attn.v_proj.weight"), G(p + ".attn.v_proj.bias"), G(p + ".attn.out.weight"),
+                            G(p + ".attn.out.bias"), G(p + ".ffn_ln.weight"), G(p + ".ffn_ln.bias"),
+                            G(p + ".ffn.up.weight"), G(p + ".ffn.up.bias"), G(p + ".ffn.down.weight"),
+                            G(p + ".ffn.down.bias"), hp.n_heads, hp.head_dim);
     }
 
     // Final LayerNorm
@@ -528,7 +537,8 @@ extern "C" char* omniasr_transcribe(struct omniasr_context* ctx, const float* sa
 
     // CTC head: linear projection to vocab
     h = ggml_mul_mat(ctx0, ctc_w, h); // [vocab_size, T]
-    if (ctc_b) h = ggml_add(ctx0, h, ctc_b);
+    if (ctc_b)
+        h = ggml_add(ctx0, h, ctc_b);
 
     ggml_set_name(h, "logits");
     ggml_set_output(h);
@@ -559,13 +569,16 @@ read_logits:
     if (ctx->params.verbosity >= 2) {
         auto dump = [&](const char* name) {
             ggml_tensor* t = ggml_graph_get_tensor(gf, name);
-            if (!t) { fprintf(stderr, "  %s: NOT FOUND\n", name); return; }
+            if (!t) {
+                fprintf(stderr, "  %s: NOT FOUND\n", name);
+                return;
+            }
             float buf[10];
             int n = std::min(10, (int)ggml_nelements(t));
             ggml_backend_tensor_get(t, buf, 0, n * sizeof(float));
-            fprintf(stderr, "  %s: ne=[%lld,%lld], data[:5]=[%.4f,%.4f,%.4f,%.4f,%.4f]\n",
-                    name, (long long)t->ne[0], (long long)t->ne[1],
-                    buf[0], n>1?buf[1]:0, n>2?buf[2]:0, n>3?buf[3]:0, n>4?buf[4]:0);
+            fprintf(stderr, "  %s: ne=[%lld,%lld], data[:5]=[%.4f,%.4f,%.4f,%.4f,%.4f]\n", name, (long long)t->ne[0],
+                    (long long)t->ne[1], buf[0], n > 1 ? buf[1] : 0, n > 2 ? buf[2] : 0, n > 3 ? buf[3] : 0,
+                    n > 4 ? buf[4] : 0);
         };
         dump("cnn_out");
         dump("proj_out");
@@ -577,9 +590,11 @@ read_logits:
             std::vector<float> frame0(V_dbg);
             ggml_backend_tensor_get(lt, frame0.data(), 0, V_dbg * sizeof(float));
             int best = 0;
-            for (int i = 1; i < V_dbg; i++) if (frame0[i] > frame0[best]) best = i;
-            fprintf(stderr, "  logits frame 0: argmax=%d (%.4f), blank(%d)=%.4f\n",
-                    best, frame0[best], hp.pad_id, frame0[hp.pad_id]);
+            for (int i = 1; i < V_dbg; i++)
+                if (frame0[i] > frame0[best])
+                    best = i;
+            fprintf(stderr, "  logits frame 0: argmax=%d (%.4f), blank(%d)=%.4f\n", best, frame0[best], hp.pad_id,
+                    frame0[hp.pad_id]);
         }
     }
 
@@ -623,8 +638,8 @@ read_logits:
         if (tid < (int)m.vocab.size()) {
             std::string piece = m.vocab[tid];
             for (size_t i = 0; i < piece.size(); i++) {
-                if ((unsigned char)piece[i] == 0xE2 && i + 2 < piece.size() &&
-                    (unsigned char)piece[i + 1] == 0x96 && (unsigned char)piece[i + 2] == 0x81) {
+                if ((unsigned char)piece[i] == 0xE2 && i + 2 < piece.size() && (unsigned char)piece[i + 1] == 0x96 &&
+                    (unsigned char)piece[i + 2] == 0x81) {
                     result += ' ';
                     i += 2;
                 } else {
@@ -638,10 +653,13 @@ read_logits:
         fprintf(stderr, "omniasr: decoded %d tokens → %zu chars\n", (int)tokens.size(), result.size());
 
     // Trim
-    while (!result.empty() && result.front() == ' ') result.erase(result.begin());
-    while (!result.empty() && result.back() == ' ') result.pop_back();
+    while (!result.empty() && result.front() == ' ')
+        result.erase(result.begin());
+    while (!result.empty() && result.back() == ' ')
+        result.pop_back();
 
-    if (result.empty()) return nullptr;
+    if (result.empty())
+        return nullptr;
 
     char* out = (char*)malloc(result.size() + 1);
     memcpy(out, result.c_str(), result.size());

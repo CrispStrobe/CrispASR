@@ -1245,7 +1245,7 @@ CA_EXPORT crispasr_session_result* crispasr_session_transcribe_lang(crispasr_ses
         ops.token_text = &voxtral_token_text;
         ops.audio_pad_id = 24; // Tekken <audio_pad>
         ops.eos_id = 2;        // Tekken </s>
-        return run_voxtral_family(s->voxtral_ctx, ops, pcm, n_samples, lang.c_str());
+        return run_voxtral_family(s->voxtral_ctx, ops, pcm, n_samples, lang);
     }
 #endif
 #ifdef CA_HAVE_VOXTRAL4B
@@ -1262,7 +1262,7 @@ CA_EXPORT crispasr_session_result* crispasr_session_transcribe_lang(crispasr_ses
         ops.token_text = &voxtral4b_token_text;
         ops.audio_pad_id = 24;
         ops.eos_id = 2;
-        return run_voxtral_family(s->voxtral4b_ctx, ops, pcm, n_samples, lang.c_str());
+        return run_voxtral_family(s->voxtral4b_ctx, ops, pcm, n_samples, lang);
     }
 #endif
 #ifdef CA_HAVE_WAV2VEC2

@@ -532,10 +532,11 @@ static void whisper_print_usage(int /*argc*/, char** argv, const whisper_params&
             params.punctuation ? "false" : "true");
     fprintf(stderr, "  -am FNAME, --aligner-model FNAME  [%-7s] CTC aligner GGUF (LLM backends word timestamps)\n",
             params.aligner_model.c_str());
-    fprintf(stderr,
-            "  --lid-backend NAME                [%-7s] language-detect backend: whisper|silero|firered (for non-native "
-            "backends)\n",
-            params.lid_backend.c_str());
+    fprintf(
+        stderr,
+        "  --lid-backend NAME                [%-7s] language-detect backend: whisper|silero|firered (for non-native "
+        "backends)\n",
+        params.lid_backend.c_str());
     fprintf(stderr, "  --lid-model FNAME                 [%-7s] optional LID model path (default ggml-tiny.bin)\n",
             params.lid_model.c_str());
     fprintf(stderr,
