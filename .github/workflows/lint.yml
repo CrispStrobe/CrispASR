@@ -156,5 +156,6 @@ jobs:
             --suppress=unknownMacro \
             --suppress=nullPointerOutOfMemory \
             --suppress=nullPointerArithmeticOutOfMemory \
+            --suppress=toomanyconfigs \
             --quiet \
             src/ examples/cli/
