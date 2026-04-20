@@ -410,6 +410,15 @@ if(NOT MSVC)
 endif()
 
 # ---------------------------------------------------------------------------
+# firered-vad — FireRedVAD (DFSMN voice activity detection)
+# ---------------------------------------------------------------------------
+add_library(firered-vad STATIC firered_vad.h firered_vad.cpp)
+set_target_properties(firered-vad PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(firered-vad PUBLIC .)
+target_compile_features   (firered-vad PUBLIC cxx_std_17)
+target_link_libraries     (firered-vad PUBLIC crispasr-core ggml ggml-base ggml-cpu)
+
+# ---------------------------------------------------------------------------
 # firered-asr — FireRedASR2-AED (FireRedTeam/FireRedASR2-AED)
 # ---------------------------------------------------------------------------
 add_library(firered-asr STATIC firered_asr.h firered_asr.cpp)
@@ -564,6 +573,9 @@ if (TARGET kyutai-stt)
 endif()
 if (TARGET firered-asr)
     target_link_libraries(whisper PUBLIC firered-asr)
+endif()
+if (TARGET firered-vad)
+    target_link_libraries(whisper PUBLIC firered-vad)
 endif()
 # Pyannote segmentation is not a backend; it's consumed by
 # crispasr_diarize.cpp for the "pyannote" method. Still needs linking in
