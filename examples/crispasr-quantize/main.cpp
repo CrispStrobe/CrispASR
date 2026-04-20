@@ -88,6 +88,7 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
             arch = gguf_get_val_str(ctx_in, key);
     }
     const bool is_firered = (arch.find("firered") != std::string::npos);
+    const bool is_ecapa = (arch.find("ecapa") != std::string::npos);
 
     const int n_tensors = gguf_get_n_tensors(ctx_in);
     for (int i = 0; i < n_tensors; i++) {
@@ -138,7 +139,9 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
         // effectively 2D matmuls — safe to quantize. Other architectures'
         // 3D conv weights may be actual spatial kernels, so keep the 2D-only
         // rule for them.
-        const bool ok_dims = (ggml_n_dims(t) == 2) || (is_firered && ggml_n_dims(t) >= 2);
+        // FireRedASR/LID and ECAPA-TDNN: 3D conv weights (kernel=1 or small kernel)
+        // are effectively 2D matmuls — safe to quantize.
+        const bool ok_dims = (ggml_n_dims(t) == 2) || ((is_firered || is_ecapa) && ggml_n_dims(t) >= 2);
         bool quantize = ggml_is_quantized(qtype) && (type == GGML_TYPE_F32 || type == GGML_TYPE_F16) && ok_dims &&
                         is_weight && (sname.find("norm") == std::string::npos) &&
                         // Skip projector tensors (Granite Speech: precision-sensitive)

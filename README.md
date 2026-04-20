@@ -138,7 +138,8 @@ Three LID providers are available:
 
 - `--lid-backend whisper` (default) — uses a small multilingual ggml-*.bin model via the whisper.cpp C API. Auto-downloads ~75 MB on first use. 99 languages.
 - `--lid-backend silero` — native GGUF port of Silero's 95-language classifier. 16 MB F32, pure C++. Faster and smaller than whisper-tiny but slightly less accurate on long audio (>20s).
-- `--lid-backend firered` — FireRedLID (Conformer encoder + Transformer decoder). Q4_K recommended (544 MB, ~90% accuracy on 12-language TTS benchmark). 120 languages including Chinese dialects. Auto-downloads from HuggingFace. Available quants: F16 (1.8 GB), Q8_0 (957 MB), Q4_K (544 MB), Q2_K (350 MB — lower accuracy on similar languages).
+- `--lid-backend ecapa` — **recommended**: ECAPA-TDNN (43 MB F16, 107 languages, Apache-2.0). Purpose-built for language ID. Very high accuracy on TTS benchmark. Auto-downloads from HuggingFace.
+- `--lid-backend firered` — FireRedLID (Conformer encoder + Transformer decoder). Q4_K (544 MB), 120 languages including Chinese dialects. Slower but covers more languages.
 
 Two VAD providers are available:
 
@@ -476,7 +477,7 @@ curl http://localhost:8080/v1/audio/transcriptions \
 | Flag | Meaning |
 |---|---|
 | `-l auto`, `--detect-language` | Auto-detect the input language. Backends without native lang-detect (cohere, canary, granite, voxtral, voxtral4b) get it via the LID pre-step |
-| `--lid-backend NAME` | LID provider: `whisper` (default), `silero` (95 langs, 16 MB), `firered` (120 langs, 1.7 GB), or `off` |
+| `--lid-backend NAME` | LID provider: `whisper` (default), `silero` (95 langs, 16 MB), `ecapa` (107 langs, 43 MB), `firered` (120 langs, 544 MB), or `off` |
 | `--lid-model FNAME` | Override the LID model path (default: auto-downloads `ggml-tiny.bin` ~75 MB on first use) |
 
 ### LLM-backend specific

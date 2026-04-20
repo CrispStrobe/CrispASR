@@ -1550,3 +1550,31 @@ fairseq2-based, NOT HuggingFace Transformers:
 - 325M params, ~1.3 GB F32
 - Input: raw 16kHz PCM (no mel features)
 - Apache-2.0, 1600+ languages
+
+### ECAPA-TDNN SE/tdnn2 ordering bug
+
+SpeechBrain's `SERes2NetBlock.forward` processes in order:
+  `tdnn1 → res2net → tdnn2 → SE → residual`
+
+Our initial implementation had SE before tdnn2:
+  `tdnn1 → res2net → SE → tdnn2 → residual`
+
+The SE block's squeeze (global average pool) operates on the tdnn2
+output, not the res2net output. With the wrong order, the SE scale
+was computed from the wrong features, causing completely different
+final outputs (mean=0.009 in Python vs mean=-0.133 in C++).
+
+**Lesson:** When implementing a complex block with multiple sub-modules,
+always verify the execution order from the Python forward() source.
+The intuitive order (SE after the "main" processing) was wrong —
+SpeechBrain applies a post-projection (tdnn2) before squeeze-excitation.
+
+### ECAPA-TDNN: 43 MB model achieves ~100% on 12-language TTS benchmark
+
+The SpeechBrain ECAPA-TDNN (21M params, 43 MB F16) correctly identifies
+all 12 test languages (en, de, fr, es, ja, zh, ko, ru, ar, hi, pt, it)
+with p ≥ 0.96 confidence on edge-tts generated samples.
+
+This is dramatically better than FireRedLID (544 MB Q4_K, 83% accuracy)
+for common languages, and 13x smaller. For the 25 extra languages
+(Chinese dialects) that FireRedLID covers, it remains the only option.

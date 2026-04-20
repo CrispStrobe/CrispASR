@@ -719,18 +719,24 @@ FireRedVAD + FireRedLID wired through C API + Python/Rust/Dart wrappers.
 
 TODO: decoder performance optimization (ggml for matmuls).
 
-### ECAPA-TDNN LID — WIP (blocked)
+### ECAPA-TDNN LID — DONE
 
-Converter + C++ runtime built: `models/convert-ecapa-tdnn-lid-to-gguf.py`,
-`src/ecapa_lid.{h,cpp}`. 43 MB GGUF, 107 languages, Apache-2.0.
+`models/convert-ecapa-tdnn-lid-to-gguf.py`, `src/ecapa_lid.{h,cpp}`.
+43 MB F16 GGUF, 107 languages, Apache-2.0 (SpeechBrain VoxLingua107).
 CLI: `--lid-backend ecapa` (method=3). Integrated into all 3 wrappers.
 
-**Blocked:** Model predicts "nn" for all inputs (even model's own test file
-when using Python SpeechBrain class). Root cause: fbank features don't match
-what `torchaudio.compliance.kaldi.fbank` produces. Our dev machine has broken
-torchaudio. See LEARNINGS.md for details.
+**5 bugs found and fixed:**
+1. Power spectrum (re²+im²), not amplitude (sqrt(re²+im²))
+2. SpeechBrain fbank uses dB scale (10*log10) + 80 dB dynamic range clamp
+3. Reflect padding for Conv1d (SpeechBrain default, not zero padding)
+4. ReLU→BN order (SpeechBrain: conv→ReLU→BN, not conv→BN→ReLU)
+5. SE/tdnn2 order in SERes2NetBlock (tdnn2 before SE, not after)
 
-**Path forward:** Test on machine with working torchaudio, or try ONNX export.
+Embedded SpeechBrain filterbank matrix in GGUF for exact mel computation.
+400-point naive DFT (matching SpeechBrain's n_fft=400), center=True
+with reflect padding, Hann window (periodic).
+
+Accuracy: ~100% on 12-language edge-tts benchmark (en/de/fr/es/ja/zh etc.)
 MMS-LID (CC-BY-NC) deprioritized due to license.
 
 ### Qwen Omni ASR — NOT PLANNED
