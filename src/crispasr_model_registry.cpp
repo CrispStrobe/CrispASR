@@ -96,6 +96,20 @@ bool crispasr_registry_lookup_by_filename(const std::string& filename, CrispasrR
     return true;
 }
 
+bool crispasr_find_cached_model(CrispasrRegistryEntry& out, const std::string& cache_dir_override) {
+    // k_registry is already ordered whisper > parakeet > canary > ... —
+    // first entry wins, which matches the documented preference.
+    const std::string dir = crispasr_cache::dir(cache_dir_override);
+    for (const auto& e : k_registry) {
+        const std::string path = dir + "/" + e.filename;
+        if (crispasr_cache::file_present(path)) {
+            fill(out, e);
+            return true;
+        }
+    }
+    return false;
+}
+
 std::string crispasr_resolve_model(const std::string& model_arg, const std::string& backend_name, bool quiet,
                                    const std::string& cache_dir_override, bool allow_download) {
     // Concrete path that exists on disk — pass through.

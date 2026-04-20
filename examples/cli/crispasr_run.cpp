@@ -8,9 +8,11 @@
 // historical whisper-cli behaviour is bit-identical.
 
 #include "crispasr_backend.h"
+#include "crispasr_cache.h"
 #include "crispasr_vad_cli.h"
 #include "crispasr_output.h"
 #include "crispasr_model_mgr_cli.h"
+#include "crispasr_model_registry.h"
 #include "crispasr_aligner_cli.h"
 #include "crispasr_lid_cli.h"
 #include "crispasr_diarize_cli.h"
@@ -427,13 +429,24 @@ int crispasr_run_backend(const whisper_params& params_in) {
     const bool model_is_auto = params.model == "auto" || params.model == "default";
     if (backend_name.empty() || backend_name == "auto") {
         if (model_is_auto) {
-            // `-m auto` with no --backend: default to whisper, which is the
-            // most general-purpose ASR backend (multilingual + language
-            // auto-detect). Users who want parakeet / cohere / etc. can
-            // pass --backend NAME.
-            backend_name = "whisper";
-            if (!params.no_prints) {
-                fprintf(stderr, "crispasr: -m auto with no --backend — defaulting to whisper\n");
+            // `-m auto` with no --backend. Before defaulting to
+            // whisper-download, scan the cache for any already-downloaded
+            // registered model (whisper > parakeet > canary > …). Users
+            // who already have, say, a parakeet GGUF from a previous
+            // session shouldn't trigger a fresh 147 MB whisper download.
+            CrispasrRegistryEntry cached;
+            if (crispasr_find_cached_model(cached, params.cache_dir)) {
+                backend_name = cached.backend;
+                params.model = crispasr_cache::dir(params.cache_dir) + "/" + cached.filename;
+                if (!params.no_prints) {
+                    fprintf(stderr, "crispasr: -m auto — using cached %s model (%s)\n", backend_name.c_str(),
+                            cached.filename.c_str());
+                }
+            } else {
+                backend_name = "whisper";
+                if (!params.no_prints) {
+                    fprintf(stderr, "crispasr: -m auto with no cached model — defaulting to whisper\n");
+                }
             }
         } else {
             backend_name = crispasr_detect_backend_from_gguf(params.model);

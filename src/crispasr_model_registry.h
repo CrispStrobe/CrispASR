@@ -31,6 +31,15 @@ bool crispasr_registry_lookup(const std::string& backend, CrispasrRegistryEntry&
 /// user-supplied filename.
 bool crispasr_registry_lookup_by_filename(const std::string& filename, CrispasrRegistryEntry& out);
 
+/// Scan the cache directory for any already-downloaded model from the
+/// registry and return the first hit, preferring backends in this order:
+/// whisper > parakeet > canary > cohere > voxtral > voxtral4b > granite
+/// > qwen3 > wav2vec2. Populates `out` on success. Returns true if a
+/// cached model was found, false if the cache is empty. Intended for the
+/// `-m auto` path so a user who already has *any* model doesn't trigger
+/// a fresh download of whisper-base.
+bool crispasr_find_cached_model(CrispasrRegistryEntry& out, const std::string& cache_dir_override = "");
+
 /// Non-interactive resolve. If `model_arg` is a concrete file path that
 /// exists, returns it unchanged. If it's "auto" / "default", downloads
 /// the backend's canonical GGUF into the cache directory.
