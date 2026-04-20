@@ -937,3 +937,15 @@ Key ggml ops used:
 Full ggml graph working. Speed: 4.1s (6x vs CPU-only).
 100% accuracy on test languages. Key: no transpose needed between
 ggml and CPU — column-major layout is identical. See LEARNINGS.md.
+
+### OmniASR-CTC — WIP
+
+Converter + runtime + CLI backend adapter shipped. 16th backend.
+Model loads and runs (7.7s = 1.4x RT for 11s audio). CTC decode
+returns empty — likely LayerNorm dimension or CNN bias layout issue.
+
+Files: src/omniasr.{h,cpp}, models/convert-omniasr-ctc-to-gguf.py,
+examples/cli/crispasr_backend_omniasr.cpp
+
+Next: dump CNN output + first transformer layer output, compare
+with Python reference (fairseq2 inference).

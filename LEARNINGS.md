@@ -1659,3 +1659,21 @@ This caused bugs 3 times in ECAPA-TDNN:
 1. Input: incorrectly transposed before feeding to ggml_conv_1d
 2. MFA output: incorrectly treated as row-major when reading to CPU
 3. build_conv1d_k1: unnecessary transpose of already-correct data
+
+### OmniASR-CTC-300M: first working GGUF conversion
+
+Successfully converted facebook/omniASR-CTC-300M to GGUF (0.65 GB F16,
+423 tensors). Model loads, ggml graph computes in 7.7s for 11s audio.
+But CTC decode returns empty (all blanks).
+
+Architecture:
+- 7-layer CNN: Conv1d strides [5,2,2,2,2,2,2] = 320x downsampling
+- Linear(512→1024) projection
+- 24 Transformer encoder layers (pre-norm, 16 heads, FFN=4096, GELU)
+- CTC head: Linear(1024→9812) with SentencePiece tokenizer
+
+Key: this is fairseq2-based (not HuggingFace), so tensor names differ
+from standard wav2vec2. The converter shortens names to fit 64-char GGUF
+limit. CNN strides stored as array in GGUF metadata.
+
+The CTC blank = pad_id = 1 (SentencePiece <pad>).
