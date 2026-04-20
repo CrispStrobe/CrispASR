@@ -737,23 +737,7 @@ static void cpu_encoder(const float* subsampled, // [T, 608] row-major
     for (int t = 0; t < T; t++)
         for (int i = 0; i < d; i++)
             x[t * d + i] += proj_b_v[i];
-    fprintf(stderr, "  cpu_proj t=0 first 8: [%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f]\n", x[0], x[1], x[2], x[3], x[4],
-            x[5], x[6], x[7]);
-
-    // DEBUG: load reference features for exact comparison
-    {
-        FILE* ref_f = fopen("/mnt/storage/firered_ref/post_proj_dither0.bin", "rb");
-        if (ref_f) {
-            std::vector<float> ref_x(T * d);
-            size_t nread = fread(ref_x.data(), sizeof(float), T * d, ref_f);
-            fclose(ref_f);
-            if ((int)nread == T * d) {
-                x = std::move(ref_x);
-                fprintf(stderr, "  [DEBUG] loaded reference features: first 4 = [%.4f,%.4f,%.4f,%.4f]\n", x[0], x[1],
-                        x[2], x[3]);
-            }
-        }
-    }
+    // x: [T, d_model] row-major — linear projection done
 
     // Load PE: ggml [d_model, 9999, 1] → read as [9999, d_model] row-major
     std::vector<float> pe_full;
@@ -785,9 +769,6 @@ static void cpu_encoder(const float* subsampled, // [T, 608] row-major
             read_f32_vec(b.ffn1.down_b, down_b_v);
 
             cpu_layernorm(x.data(), ln_w.data(), ln_b_v.data(), tmp.data(), T, d);
-            if (li == 0) {
-                fprintf(stderr, "  FFN1 after LN: [%.4f,%.4f,%.4f,%.4f]\n", tmp[0], tmp[1], tmp[2], tmp[3]);
-            }
             // up: [T, d] @ up_w^T → [T, di]
             std::vector<float> h_up(T * di);
             cpu_matmul_bt(tmp.data(), up_w.data(), h_up.data(), T, d, di);
@@ -795,17 +776,11 @@ static void cpu_encoder(const float* subsampled, // [T, 608] row-major
                 for (int i = 0; i < di; i++)
                     h_up[t * di + i] += up_b_v[i];
             cpu_swish(h_up.data(), T * di);
-            if (li == 0) {
-                fprintf(stderr, "  FFN1 swish: [%.4f,%.4f,%.4f,%.4f]\n", h_up[0], h_up[1], h_up[2], h_up[3]);
-            }
             // down: [T, di] @ down_w^T → [T, d]
             cpu_matmul_bt(h_up.data(), down_w.data(), tmp.data(), T, di, d);
             for (int t = 0; t < T; t++)
                 for (int i = 0; i < d; i++)
                     tmp[t * d + i] += down_b_v[i];
-            if (li == 0) {
-                fprintf(stderr, "  FFN1 down+bias: [%.4f,%.4f,%.4f,%.4f]\n", tmp[0], tmp[1], tmp[2], tmp[3]);
-            }
             // The macaron residual in the Python code is:
             // block.forward: out = 0.5*x + 0.5*ffn1(x)
             // ffn1.forward: return net(x) + x  (internal residual!)
@@ -816,7 +791,6 @@ static void cpu_encoder(const float* subsampled, // [T, 608] row-major
         }
 
         if (li == 0) {
-            fprintf(stderr, "  CPU b0 after FFN1: [%.4f,%.4f,%.4f,%.4f]\n", x[0], x[1], x[2], x[3]);
         }
         // === MHSA with relative PE ===
         {
@@ -898,8 +872,6 @@ static void cpu_encoder(const float* subsampled, // [T, 608] row-major
             for (int i = 0; i < T * d; i++)
                 x[i] += fc_out[i]; // residual connection
         }
-        if (li == 0)
-            fprintf(stderr, "  CPU b0 after MHSA: [%.4f,%.4f,%.4f,%.4f]\n", x[0], x[1], x[2], x[3]);
 
         // === Conv module ===
         {
@@ -964,8 +936,6 @@ static void cpu_encoder(const float* subsampled, // [T, 608] row-major
             for (int i = 0; i < T * d; i++)
                 x[i] += conv_out[i];
         }
-        if (li == 0)
-            fprintf(stderr, "  CPU b0 after Conv: [%.4f,%.4f,%.4f,%.4f]\n", x[0], x[1], x[2], x[3]);
 
         // === Macaron FFN2: out = 0.5*x + 0.5*ffn2(x) ===
         {
@@ -1000,8 +970,6 @@ static void cpu_encoder(const float* subsampled, // [T, 608] row-major
             read_f32_vec(b.ln_b, ln_b_v);
             cpu_layernorm(x.data(), ln_w.data(), ln_b_v.data(), x.data(), T, d);
         }
-        if (li == 0)
-            fprintf(stderr, "  CPU b0 after LN: [%.4f,%.4f,%.4f,%.4f]\n", x[0], x[1], x[2], x[3]);
     }
 
     enc_output = std::move(x);
@@ -1348,7 +1316,7 @@ extern "C" char* firered_asr_transcribe(struct firered_asr_context* ctx, const f
 
     if (ctx->params.verbosity >= 1) {
         fprintf(stderr, "firered_asr: %d fbank frames\n", n_frames);
-        if (n_frames > 100) {
+        if (n_frames > 100 && ctx->params.verbosity >= 2) {
             fprintf(stderr, "  fbank t=0 first 5: [%.4f, %.4f, %.4f, %.4f, %.4f]\n", features[0], features[1],
                     features[2], features[3], features[4]);
             int t100 = 100 * 80;
