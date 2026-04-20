@@ -228,6 +228,19 @@ static bool whisper_params_parse(int argc, char** argv, whisper_params& params) 
             params.fname_out.emplace_back(ARGV_NEXT);
         } else if (arg == "-np" || arg == "--no-prints") {
             params.no_prints = true;
+        } else if (arg == "-v" || arg == "--verbose") {
+            // Turn on as many debug streams as we have today. Each branch
+            // is guarded so setting the var twice (e.g. via env + --verbose)
+            // doesn't clobber an explicit user setting.
+            params.verbose = true;
+#if defined(_WIN32)
+            // _putenv_s is the portable Win32 form; POSIX has setenv.
+            _putenv_s("GGML_VK_PIPELINE_CACHE_DEBUG", "1");
+            _putenv_s("GGML_CUDA_DEBUG", "1");
+#else
+            setenv("GGML_VK_PIPELINE_CACHE_DEBUG", "1", /*overwrite=*/0);
+            setenv("GGML_CUDA_DEBUG", "1", /*overwrite=*/0);
+#endif
         } else if (arg == "-ps" || arg == "--print-special") {
             params.print_special = true;
         } else if (arg == "-pc" || arg == "--print-colors") {
@@ -438,6 +451,10 @@ static void whisper_print_usage(int /*argc*/, char** argv, const whisper_params&
     fprintf(stderr, "  -of FNAME, --output-file FNAME    [%-7s] output file path (without file extension)\n", "");
     fprintf(stderr, "  -np,       --no-prints            [%-7s] do not print anything other than the results\n",
             params.no_prints ? "true" : "false");
+    fprintf(
+        stderr,
+        "  -v,        --verbose              [%-7s] verbose debug: model/cache paths, device pick, per-stage timings\n",
+        params.verbose ? "true" : "false");
     fprintf(stderr, "  -ps,       --print-special        [%-7s] print special tokens\n",
             params.print_special ? "true" : "false");
     fprintf(stderr, "  -pc,       --print-colors         [%-7s] print colors\n",

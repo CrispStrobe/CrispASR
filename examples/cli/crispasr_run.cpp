@@ -406,6 +406,21 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, wh
 int crispasr_run_backend(const whisper_params& params_in) {
     whisper_params params = params_in;
 
+    if (params.verbose) {
+        fprintf(stderr, "crispasr[verbose]: model arg          = '%s'\n", params.model.c_str());
+        fprintf(stderr, "crispasr[verbose]: backend arg        = '%s'\n",
+                params.backend.empty() ? "auto" : params.backend.c_str());
+        fprintf(stderr, "crispasr[verbose]: use_gpu            = %s\n", params.use_gpu ? "true" : "false");
+        fprintf(stderr, "crispasr[verbose]: gpu_backend        = '%s'\n",
+                params.gpu_backend.empty() ? "auto" : params.gpu_backend.c_str());
+        fprintf(stderr, "crispasr[verbose]: gpu_device         = %d\n", params.gpu_device);
+        fprintf(stderr, "crispasr[verbose]: cache_dir override = '%s'\n",
+                params.cache_dir.empty() ? "(default)" : params.cache_dir.c_str());
+        fprintf(stderr, "crispasr[verbose]: auto_download      = %s\n", params.auto_download ? "true" : "false");
+        fprintf(stderr, "crispasr[verbose]: n_threads          = %d\n", params.n_threads);
+        fprintf(stderr, "crispasr[verbose]: flash_attn         = %s\n", params.flash_attn ? "true" : "false");
+    }
+
     // Resolve backend name: explicit --backend takes priority; otherwise
     // auto-detect from the GGUF file. Defaults are handled in cli.cpp.
     std::string backend_name = params.backend;
@@ -426,6 +441,9 @@ int crispasr_run_backend(const whisper_params& params_in) {
     // Resolve "-m auto" via the model registry + curl/wget download.
     const std::string resolved = crispasr_resolve_model_cli(params.model, backend_name, params.no_prints,
                                                             params.cache_dir, params.auto_download);
+    if (params.verbose) {
+        fprintf(stderr, "crispasr[verbose]: resolved model     = '%s'\n", resolved.c_str());
+    }
     if (resolved.empty()) {
         return 11;
     }
@@ -443,6 +461,9 @@ int crispasr_run_backend(const whisper_params& params_in) {
     if (!backend->init(params)) {
         fprintf(stderr, "crispasr: error: failed to initialise backend '%s'\n", backend_name.c_str());
         return 13;
+    }
+    if (params.verbose) {
+        fprintf(stderr, "crispasr[verbose]: backend '%s' initialised OK\n", backend_name.c_str());
     }
 
     // ---- Streaming mode: read raw PCM from stdin, transcribe chunks ----

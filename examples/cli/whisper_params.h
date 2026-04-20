@@ -57,6 +57,7 @@ struct whisper_params {
     bool output_jsn_full = false;
     bool output_lrc = false;
     bool no_prints = false;
+    bool verbose = false; // -v / --verbose: enable per-backend debug output
     bool print_special = false;
     bool print_colors = false;
     bool print_confidence = false;

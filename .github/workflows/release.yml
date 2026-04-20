@@ -149,26 +149,37 @@ jobs:
 
       - name: Build
         shell: cmd
+        # CUDA architectures: -real suffix skips PTX and ships SASS only, which
+        # shrinks ggml-cuda.dll ~10× per arch. Covered: Turing (RTX 20 / GTX 16),
+        # Ampere (RTX 30, A-series laptop), Ada Lovelace (RTX 40). Users on
+        # older GPUs or newer Hopper/Blackwell can build from source or use
+        # the Vulkan prebuilt.
         run: |
           call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
           cmake -S . -B build -G Ninja ^
             -DCMAKE_BUILD_TYPE=Release ^
             -DGGML_CUDA=ON ^
-            -DCMAKE_CUDA_ARCHITECTURES="75;80;86;89;90"
+            -DCMAKE_CUDA_ARCHITECTURES="75-real;86-real;89-real"
           cmake --build build --target whisper-cli crispasr-quantize -j %NUMBER_OF_PROCESSORS%
 
       - name: Package (binary + DLLs + CUDA runtime)
         shell: pwsh
+        # cublasLt64 is NOT needed — dumpbin / PE-import scan on ggml-cuda.dll
+        # confirms it only imports cublas64 + cudart64 + the driver loader DLLs
+        # (cuda.dll / nvcuda.dll) which ship with every NVIDIA install.
+        # Skipping cublasLt alone saves ~470 MB uncompressed.
         run: |
           New-Item -ItemType Directory -Force release\crispasr-windows-x86_64-cuda | Out-Null
           Copy-Item build\bin\crispasr.exe          release\crispasr-windows-x86_64-cuda\
           Copy-Item build\bin\crispasr-quantize.exe release\crispasr-windows-x86_64-cuda\
-          Copy-Item build\bin\*.dll                 release\crispasr-windows-x86_64-cuda\
-          # CUDA runtime DLLs the binary transitively needs
-          Copy-Item "$env:CUDA_PATH\bin\cudart64_*.dll"  release\crispasr-windows-x86_64-cuda\ -ErrorAction SilentlyContinue
-          Copy-Item "$env:CUDA_PATH\bin\cublas64_*.dll"  release\crispasr-windows-x86_64-cuda\ -ErrorAction SilentlyContinue
-          Copy-Item "$env:CUDA_PATH\bin\cublasLt64_*.dll" release\crispasr-windows-x86_64-cuda\ -ErrorAction SilentlyContinue
-          Compress-Archive -Path release\crispasr-windows-x86_64-cuda -DestinationPath release\crispasr-windows-x86_64-cuda.zip
+          # Backend DLLs + ggml-* + whisper + crispasr, excluding the test-framework
+          # Catch2*.dll which the transcribe CLI never loads.
+          Get-ChildItem build\bin\*.dll | Where-Object { $_.Name -notlike 'Catch2*' } |
+            Copy-Item -Destination release\crispasr-windows-x86_64-cuda\
+          # CUDA runtime DLLs ggml-cuda.dll actually imports (see comment above).
+          Copy-Item "$env:CUDA_PATH\bin\cudart64_*.dll" release\crispasr-windows-x86_64-cuda\ -ErrorAction SilentlyContinue
+          Copy-Item "$env:CUDA_PATH\bin\cublas64_*.dll" release\crispasr-windows-x86_64-cuda\ -ErrorAction SilentlyContinue
+          Compress-Archive -Path release\crispasr-windows-x86_64-cuda -DestinationPath release\crispasr-windows-x86_64-cuda.zip -CompressionLevel Optimal
 
       - uses: actions/upload-artifact@v4
         with:
@@ -212,9 +223,10 @@ jobs:
           New-Item -ItemType Directory -Force release\crispasr-windows-x86_64-vulkan | Out-Null
           Copy-Item build\bin\crispasr.exe          release\crispasr-windows-x86_64-vulkan\
           Copy-Item build\bin\crispasr-quantize.exe release\crispasr-windows-x86_64-vulkan\
-          Copy-Item build\bin\*.dll                 release\crispasr-windows-x86_64-vulkan\
+          Get-ChildItem build\bin\*.dll | Where-Object { $_.Name -notlike 'Catch2*' } |
+            Copy-Item -Destination release\crispasr-windows-x86_64-vulkan\
           # vulkan-1.dll is shipped with every GPU driver on Windows — do NOT bundle it.
-          Compress-Archive -Path release\crispasr-windows-x86_64-vulkan -DestinationPath release\crispasr-windows-x86_64-vulkan.zip
+          Compress-Archive -Path release\crispasr-windows-x86_64-vulkan -DestinationPath release\crispasr-windows-x86_64-vulkan.zip -CompressionLevel Optimal
 
       - uses: actions/upload-artifact@v4
         with:
