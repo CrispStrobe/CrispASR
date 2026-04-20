@@ -288,17 +288,208 @@ extern "C" char* omniasr_transcribe(struct omniasr_context* ctx, const float* sa
 
         // Next conv expects [T, C] input. Transpose back.
         h = ggml_cont(ctx0, ggml_transpose(ctx0, h)); // [T, C]
+
+        // Debug: mark last CNN layer output
+        if (i == hp.n_cnn - 1) {
+            ggml_set_name(h, "cnn_out");
+            ggml_set_output(h);
+        }
     }
 
-    // h is [T_cnn, 512] after CNN
-    // Transpose to [512, T_cnn] for matmul projection
-    h = ggml_cont(ctx0, ggml_transpose(ctx0, h)); // [512, T_cnn]
+    // h is [T_cnn, 512] after CNN. Transpose to [512, T] for LN + projection.
+    h = ggml_cont(ctx0, ggml_transpose(ctx0, h)); // [512, T]
+
+    // Post-extract LayerNorm (on 512-dim CNN output)
+    ggml_tensor* pe_ln_w = G("encoder_frontend.post_extract_ln.weight");
+    ggml_tensor* pe_ln_b = G("encoder_frontend.post_extract_ln.bias");
+    if (pe_ln_w)
+        h = build_ln(ctx0, h, pe_ln_w, pe_ln_b);
+
+    // Pre-lookup CTC tensors (needed in both single-graph and two-graph paths)
+    ggml_tensor* ctc_w = G("ctc.weight");
+    ggml_tensor* ctc_b = G("ctc.bias");
 
     // Linear projection: 512 → d_model
     ggml_tensor* proj_w = G("proj.weight");
     ggml_tensor* proj_b = G("proj.bias");
-    h = ggml_mul_mat(ctx0, proj_w, h); // [d_model, T_cnn]
+    h = ggml_mul_mat(ctx0, proj_w, h); // [d_model, T]
     if (proj_b) h = ggml_add(ctx0, h, proj_b);
+
+    ggml_set_name(h, "proj_out");
+    ggml_set_output(h);
+
+    // Convolutional positional encoding: grouped Conv1d + GELU + residual.
+    // Weight normalization pre-computed in converter → stored as pos_conv.weight.
+    // Groups=16, kernel=128, channels=1024.
+    // ggml lacks grouped conv, so we split: graph 1 (CNN+proj), CPU (pos_conv), graph 2 (transformer+CTC).
+    {
+        ggml_tensor* wv_t = G("pos_conv.weight");
+        ggml_tensor* pb_t = G("pos_conv.bias");
+
+        if (wv_t && pb_t) {
+            // Read weights to CPU
+            int K_pos = (int)wv_t->ne[0]; // 128
+            int IC_g  = (int)wv_t->ne[1]; // 64 (input channels per group)
+            int OC    = (int)wv_t->ne[2]; // 1024
+            int groups = OC / IC_g;        // 16
+            int pad_pos = (K_pos - 1) / 2; // 63
+
+            // Read the projection output to CPU for pos conv computation
+            // h is [d_model=1024, T] in ggml. Mark as output to read after graph.
+            // But we haven't computed the graph yet! We need to split:
+            // Graph 1: CNN + LN + projection → read h to CPU
+            // CPU: pos_encoder grouped conv
+            // Graph 2: h + pos → transformer → CTC
+
+            // Mark h as output for Graph 1
+            ggml_set_name(h, "h_pre_pos");
+            ggml_set_output(h);
+            ggml_build_forward_expand(gf, h);
+
+            // Compute Graph 1
+            ggml_backend_sched_reset(ctx->sched);
+            if (!ggml_backend_sched_alloc_graph(ctx->sched, gf)) {
+                fprintf(stderr, "omniasr: graph 1 alloc failed\n");
+                ggml_free(ctx0);
+                return nullptr;
+            }
+            ggml_backend_tensor_set(inp, samples, 0, n_samples * sizeof(float));
+            if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS) {
+                fprintf(stderr, "omniasr: graph 1 compute failed\n");
+                ggml_free(ctx0);
+                return nullptr;
+            }
+
+            // Read h_pre_pos: [d_model, T] col-major = data[t * d + c]... no:
+            // ggml [d_model, T] with ne[0]=d_model, ne[1]=T: data[t * d_model + c]
+            ggml_tensor* h_cpu_t = ggml_graph_get_tensor(gf, "h_pre_pos");
+            int d = (int)h_cpu_t->ne[0]; // 1024
+            int T_pos = (int)h_cpu_t->ne[1]; // 549
+            std::vector<float> h_cpu(d * T_pos);
+            ggml_backend_tensor_get(h_cpu_t, h_cpu.data(), 0, d * T_pos * sizeof(float));
+
+            if (ctx->params.verbosity >= 2)
+                fprintf(stderr, "  pos_encoder: d=%d, T=%d, K=%d, groups=%d\n", d, T_pos, K_pos, groups);
+
+            // Read pre-computed pos conv weight (weight normalization done in converter)
+            // Layout: ggml [K, IC_g, OC] col-major = data[oc * IC_g * K + ic * K + k]
+            std::vector<float> pos_w(OC * IC_g * K_pos), bias(OC);
+            if (wv_t->type == GGML_TYPE_F16) {
+                std::vector<uint16_t> tmp(OC * IC_g * K_pos);
+                ggml_backend_tensor_get(wv_t, tmp.data(), 0, tmp.size() * 2);
+                pos_w.resize(tmp.size());
+                ggml_fp16_to_fp32_row((const ggml_fp16_t*)tmp.data(), pos_w.data(), tmp.size());
+            } else {
+                ggml_backend_tensor_get(wv_t, pos_w.data(), 0, pos_w.size() * sizeof(float));
+            }
+            ggml_backend_tensor_get(pb_t, bias.data(), 0, OC * sizeof(float));
+
+            // Grouped Conv1d on CPU: h [d=1024, T] → pos [d=1024, T]
+            // h layout: data[t * d + c] (ggml col-major)
+            // Groups=16: group g processes channels [g*64, (g+1)*64) with conv [64, 64, 128]
+            int C_per_g = IC_g; // 64
+            std::vector<float> pos(d * T_pos, 0);
+            for (int g = 0; g < groups; g++) {
+                int c_start = g * C_per_g;
+                for (int oc_local = 0; oc_local < C_per_g; oc_local++) {
+                    int oc = c_start + oc_local;
+                    for (int t = 0; t < T_pos; t++) {
+                        float s = bias[oc];
+                        for (int ic_local = 0; ic_local < C_per_g; ic_local++) {
+                            int ic = c_start + ic_local;
+                            for (int k = 0; k < K_pos; k++) {
+                                int ti = t + k - pad_pos;
+                                if (ti >= 0 && ti < T_pos) {
+                                    // h at [ic, ti]: h_cpu[ti * d + ic]
+                                    // weight at [oc, ic_local, k]: pos_w[oc * IC_g * K_pos + ic_local * K_pos + k]
+                                    s += h_cpu[ti * d + ic] * pos_w[oc * IC_g * K_pos + ic_local * K_pos + k];
+                                }
+                            }
+                        }
+                        // GELU
+                        float v = s;
+                        v = 0.5f * v * (1.0f + tanhf(0.7978845608f * (v + 0.044715f * v * v * v)));
+                        // pos at [oc, t]: pos[t * d + oc]
+                        pos[t * d + oc] = v;
+                    }
+                }
+            }
+
+            // Add pos to h: h = h + pos
+            for (int i = 0; i < d * T_pos; i++)
+                h_cpu[i] += pos[i];
+
+            // Now rebuild Graph 2: transformer + CTC using h_cpu as input
+            ggml_free(ctx0);
+            mem = ggml_tensor_overhead() * 8192 + ggml_graph_overhead_custom(65536, false);
+            meta.resize(mem);
+            gp = {mem, meta.data(), true};
+            ctx0 = ggml_init(gp);
+            gf = ggml_new_graph_custom(ctx0, 65536, false);
+
+            // New input: h with pos encoding [d_model, T]
+            h = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, d, T_pos);
+            ggml_set_name(h, "h_with_pos");
+            ggml_set_input(h);
+
+            // Continue with transformer layers below (h is the input)
+            // We'll set the tensor data before computing Graph 2
+            // Store h_cpu for later
+            // (the ggml_backend_tensor_set will happen after graph alloc)
+
+            // We need to store h_cpu and set it after alloc
+            // Use a static/member variable or lambda capture
+            // For simplicity: store in a local and set after alloc below
+
+            // Build transformer layers onto h
+            for (int i = 0; i < hp.n_enc; i++) {
+                std::string p = "enc." + std::to_string(i);
+                h = build_enc_layer(ctx0, h,
+                                    G(p + ".attn_ln.weight"), G(p + ".attn_ln.bias"),
+                                    G(p + ".attn.q_proj.weight"), G(p + ".attn.q_proj.bias"),
+                                    G(p + ".attn.k_proj.weight"), G(p + ".attn.k_proj.bias"),
+                                    G(p + ".attn.v_proj.weight"), G(p + ".attn.v_proj.bias"),
+                                    G(p + ".attn.out.weight"), G(p + ".attn.out.bias"),
+                                    G(p + ".ffn_ln.weight"), G(p + ".ffn_ln.bias"),
+                                    G(p + ".ffn.up.weight"), G(p + ".ffn.up.bias"),
+                                    G(p + ".ffn.down.weight"), G(p + ".ffn.down.bias"),
+                                    hp.n_heads, hp.head_dim);
+            }
+
+            // Final LayerNorm + CTC head
+            h = build_ln(ctx0, h, G("enc_ln.weight"), G("enc_ln.bias"));
+            h = ggml_mul_mat(ctx0, ctc_w, h);
+            if (ctc_b) h = ggml_add(ctx0, h, ctc_b);
+
+            ggml_set_name(h, "logits");
+            ggml_set_output(h);
+            ggml_build_forward_expand(gf, h);
+
+            // Allocate Graph 2
+            ggml_backend_sched_reset(ctx->sched);
+            if (!ggml_backend_sched_alloc_graph(ctx->sched, gf)) {
+                fprintf(stderr, "omniasr: graph 2 alloc failed\n");
+                ggml_free(ctx0);
+                return nullptr;
+            }
+
+            // Set h_with_pos input
+            ggml_tensor* h_inp = ggml_graph_get_tensor(gf, "h_with_pos");
+            ggml_backend_tensor_set(h_inp, h_cpu.data(), 0, d * T_pos * sizeof(float));
+
+            if (ctx->params.verbosity >= 1)
+                fprintf(stderr, "omniasr: %d samples, graph 2 computing (%d enc layers)...\n", n_samples, hp.n_enc);
+
+            if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS) {
+                fprintf(stderr, "omniasr: graph 2 compute failed\n");
+                ggml_free(ctx0);
+                return nullptr;
+            }
+
+            // Skip the original single-graph path below
+            goto read_logits;
+        }
+    }
 
     // h is now [d_model, T] — correct format for transformer layers
 
@@ -321,8 +512,6 @@ extern "C" char* omniasr_transcribe(struct omniasr_context* ctx, const float* sa
     h = build_ln(ctx0, h, G("enc_ln.weight"), G("enc_ln.bias"));
 
     // CTC head: linear projection to vocab
-    ggml_tensor* ctc_w = G("ctc.weight");
-    ggml_tensor* ctc_b = G("ctc.bias");
     h = ggml_mul_mat(ctx0, ctc_w, h); // [vocab_size, T]
     if (ctc_b) h = ggml_add(ctx0, h, ctc_b);
 
@@ -348,6 +537,35 @@ extern "C" char* omniasr_transcribe(struct omniasr_context* ctx, const float* sa
         fprintf(stderr, "omniasr: graph compute failed\n");
         ggml_free(ctx0);
         return nullptr;
+    }
+
+read_logits:
+    // Debug: read intermediate outputs
+    if (ctx->params.verbosity >= 2) {
+        auto dump = [&](const char* name) {
+            ggml_tensor* t = ggml_graph_get_tensor(gf, name);
+            if (!t) { fprintf(stderr, "  %s: NOT FOUND\n", name); return; }
+            float buf[10];
+            int n = std::min(10, (int)ggml_nelements(t));
+            ggml_backend_tensor_get(t, buf, 0, n * sizeof(float));
+            fprintf(stderr, "  %s: ne=[%lld,%lld], data[:5]=[%.4f,%.4f,%.4f,%.4f,%.4f]\n",
+                    name, (long long)t->ne[0], (long long)t->ne[1],
+                    buf[0], n>1?buf[1]:0, n>2?buf[2]:0, n>3?buf[3]:0, n>4?buf[4]:0);
+        };
+        dump("cnn_out");
+        dump("proj_out");
+        dump("logits");
+        // Also show logit stats at first frame
+        ggml_tensor* lt = ggml_graph_get_tensor(gf, "logits");
+        if (lt) {
+            int V_dbg = (int)lt->ne[0];
+            std::vector<float> frame0(V_dbg);
+            ggml_backend_tensor_get(lt, frame0.data(), 0, V_dbg * sizeof(float));
+            int best = 0;
+            for (int i = 1; i < V_dbg; i++) if (frame0[i] > frame0[best]) best = i;
+            fprintf(stderr, "  logits frame 0: argmax=%d (%.4f), blank(%d)=%.4f\n",
+                    best, frame0[best], hp.pad_id, frame0[hp.pad_id]);
+        }
     }
 
     // Read logits

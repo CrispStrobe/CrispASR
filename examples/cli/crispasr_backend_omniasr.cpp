@@ -20,6 +20,9 @@ class OmniasrBackend : public CrispasrBackend {
         omniasr_context_params cp = omniasr_context_default_params();
         cp.n_threads = params.n_threads;
         cp.verbosity = params.no_prints ? 0 : 1;
+        // OMNIASR_DEBUG=1 enables verbose debug output
+        if (getenv("OMNIASR_DEBUG"))
+            cp.verbosity = 2;
         ctx_ = omniasr_init_from_file(params.model.c_str(), cp);
         return ctx_ != nullptr;
     }

@@ -109,6 +109,26 @@ def main():
         name = name.replace("output_proj.", "out.")
         return name
 
+    # Pre-compute weight normalization for pos_encoder conv
+    # fairseq2 stores weight_g and weight_v separately
+    # Combined weight = g * v / ||v|| per output channel
+    if "encoder_frontend.pos_encoder.conv.weight_v" in sd:
+        wv = sd["encoder_frontend.pos_encoder.conv.weight_v"]  # [OC, IC/G, K]
+        wg = sd["encoder_frontend.pos_encoder.conv.weight_g"]  # [1, 1, K] or similar
+        # Weight normalization: w = g * v / ||v||
+        # wg: [1, 1, K=128] — gain per kernel position
+        # wv: [OC=1024, IC/G=64, K=128] — direction
+        # ||v|| computed per output channel: [OC, 1, 1]
+        v_norm = wv.reshape(wv.shape[0], -1).norm(dim=1).reshape(-1, 1, 1)  # [OC, 1, 1]
+        w_combined = (wg / (v_norm + 1e-12)) * wv  # broadcast: [1,1,K] * [OC,IC/G,K] / [OC,1,1]
+        sd["pos_conv.weight"] = w_combined
+        sd["pos_conv.bias"] = sd["encoder_frontend.pos_encoder.conv.bias"]
+        print(f"  Pre-computed pos_conv weight: {w_combined.shape}")
+        # Remove raw weight_g/weight_v to avoid storing them
+        del sd["encoder_frontend.pos_encoder.conv.weight_g"]
+        del sd["encoder_frontend.pos_encoder.conv.weight_v"]
+        del sd["encoder_frontend.pos_encoder.conv.bias"]
+
     tensor_count = 0
     for name in sorted(sd.keys()):
         t = sd[name].float().numpy()
