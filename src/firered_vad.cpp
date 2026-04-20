@@ -91,42 +91,75 @@ static void cpu_relu(float* x, int n) {
 }
 
 // FSMN: memory = x + lookback_conv(x) + lookahead_conv(x)
-// Depthwise conv: each channel independently
-// lookback: causal conv with kernel N1, stride S1
-// lookahead: anti-causal conv with kernel N2, stride S2
+// Replicates PyTorch's Conv1d exactly:
+//   lookback_filter: Conv1d(P,P, N1, stride=1, padding=(N1-1)*S1, dilation=S1, groups=P)
+//   lookahead_filter: Conv1d(P,P, N2, stride=1, padding=(N2-1)*S2, dilation=S2, groups=P)
+// Then: lookback = lb_conv(x)[:,:,:-(N1-1)*S1]  (trim right padding)
+//       lookahead = F.pad(la_conv(x)[:,:,N2*S2:], (0, S2))  (trim left, pad right)
 static void cpu_fsmn(const float* x, float* out, const float* lb_w, const float* la_w, int T, int P, int N1, int S1,
                      int N2, int S2) {
-    // Start with residual
-    memcpy(out, x, T * P * sizeof(float));
+    // x layout: [T, P] row-major
+    // Work in [P, T] layout for conv (transpose)
+    std::vector<float> x_pt(P * T);
+    for (int p = 0; p < P; p++)
+        for (int t = 0; t < T; t++)
+            x_pt[p * T + t] = x[t * P + p];
 
-    // Lookback: for each channel p, time t:
-    //   lb[t] = sum_{n=0}^{N1-1} w[n] * x[t - n*S1]
+    // Lookback: Conv1d(padding=(N1-1)*S1, dilation=S1, groups=P)
+    // Output length = T + 2*(N1-1)*S1 - S1*(N1-1) = T + (N1-1)*S1
+    int lb_pad = (N1 - 1) * S1;
+    int lb_out_len = T + lb_pad; // T + (N1-1)*S1
+    std::vector<float> lb_conv(P * lb_out_len, 0.0f);
     for (int p = 0; p < P; p++) {
-        for (int t = 0; t < T; t++) {
+        for (int t_out = 0; t_out < lb_out_len; t_out++) {
             float s = 0;
-            for (int n = 0; n < N1; n++) {
-                int ti = t - n * S1;
-                if (ti >= 0)
-                    s += lb_w[p * N1 + n] * x[ti * P + p];
+            for (int k = 0; k < N1; k++) {
+                int t_in = t_out - lb_pad + k * S1; // input index with padding offset
+                if (t_in >= 0 && t_in < T)
+                    s += lb_w[p * N1 + k] * x_pt[p * T + t_in];
             }
-            out[t * P + p] += s;
+            lb_conv[p * lb_out_len + t_out] = s;
         }
     }
+    // Trim: lookback[:,:,:-(N1-1)*S1] if (N1-1)*S1 > 0, else full
+    // lb_out_len - lb_pad = T, so we take first T elements
+    // → lb_trimmed[p][t] = lb_conv[p * lb_out_len + t] for t < T
 
-    // Lookahead: for each channel p, time t:
-    //   la[t] = sum_{n=0}^{N2-1} w[n] * x[t + (n+1)*S2]
-    if (N2 > 0) {
+    // Start with residual
+    memcpy(out, x, T * P * sizeof(float));
+    // Add lookback
+    for (int p = 0; p < P; p++)
+        for (int t = 0; t < T; t++)
+            out[t * P + p] += lb_conv[p * lb_out_len + t];
+
+    // Lookahead: Conv1d(padding=(N2-1)*S2, dilation=S2, groups=P)
+    if (N2 > 0 && T > 1) {
+        int la_pad = (N2 - 1) * S2;
+        int la_out_len = T + la_pad;
+        std::vector<float> la_conv(P * la_out_len, 0.0f);
         for (int p = 0; p < P; p++) {
-            for (int t = 0; t < T; t++) {
+            for (int t_out = 0; t_out < la_out_len; t_out++) {
                 float s = 0;
-                for (int n = 0; n < N2; n++) {
-                    int ti = t + (n + 1) * S2;
-                    if (ti < T)
-                        s += la_w[p * N2 + n] * x[ti * P + p];
+                for (int k = 0; k < N2; k++) {
+                    int t_in = t_out - la_pad + k * S2;
+                    if (t_in >= 0 && t_in < T)
+                        s += la_w[p * N2 + k] * x_pt[p * T + t_in];
                 }
-                out[t * P + p] += s;
+                la_conv[p * la_out_len + t_out] = s;
             }
         }
+        // Python: memory += F.pad(lookahead[:, :, N2*S2:], (0, S2))
+        // la_conv has la_out_len elements. Skip first N2*S2 elements.
+        // Remaining: la_out_len - N2*S2 = T + (N2-1)*S2 - N2*S2 = T - S2
+        // Then pad right by S2 → length T
+        int skip = N2 * S2;
+        for (int p = 0; p < P; p++)
+            for (int t = 0; t < T; t++) {
+                int la_idx = skip + t;
+                if (la_idx < la_out_len)
+                    out[t * P + p] += la_conv[p * la_out_len + la_idx];
+                // else: padded with 0 (no-op)
+            }
     }
 }
 
