@@ -29,8 +29,8 @@ static bool is_firered_vad_model(const char* path) {
 
 // FireRedVAD path: uses the DFSMN-based VAD model
 static std::vector<crispasr_audio_slice> compute_firered_vad_slices(const float* samples, int n_samples,
-                                                                     int sample_rate, const char* vad_model_path,
-                                                                     const crispasr_vad_options& opts) {
+                                                                    int sample_rate, const char* vad_model_path,
+                                                                    const crispasr_vad_options& opts) {
     std::vector<crispasr_audio_slice> slices;
 
     firered_vad_context* vctx = firered_vad_init(vad_model_path);
@@ -43,8 +43,8 @@ static std::vector<crispasr_audio_slice> compute_firered_vad_slices(const float*
     int n_segs = 0;
     float min_speech_sec = opts.min_speech_duration_ms / 1000.0f;
     float min_silence_sec = opts.min_silence_duration_ms / 1000.0f;
-    int rc = firered_vad_detect(vctx, samples, n_samples, &segs, &n_segs, opts.threshold, min_speech_sec,
-                                min_silence_sec);
+    int rc =
+        firered_vad_detect(vctx, samples, n_samples, &segs, &n_segs, opts.threshold, min_speech_sec, min_silence_sec);
     if (rc == 0 && segs && n_segs > 0) {
         for (int i = 0; i < n_segs; i++) {
             int64_t t0_cs = (int64_t)(segs[i].start_sec * 100.0f);

@@ -139,9 +139,8 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
         // 3D conv weights may be actual spatial kernels, so keep the 2D-only
         // rule for them.
         const bool ok_dims = (ggml_n_dims(t) == 2) || (is_firered && ggml_n_dims(t) >= 2);
-        bool quantize = ggml_is_quantized(qtype) && (type == GGML_TYPE_F32 || type == GGML_TYPE_F16) &&
-                        ok_dims && is_weight &&
-                        (sname.find("norm") == std::string::npos) &&
+        bool quantize = ggml_is_quantized(qtype) && (type == GGML_TYPE_F32 || type == GGML_TYPE_F16) && ok_dims &&
+                        is_weight && (sname.find("norm") == std::string::npos) &&
                         // Skip projector tensors (Granite Speech: precision-sensitive)
                         (sname.find("proj.") != 0);
 

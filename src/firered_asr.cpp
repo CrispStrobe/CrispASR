@@ -1287,9 +1287,8 @@ static ggml_tensor* build_conv_module(ggml_context* ctx, ggml_tensor* x, const f
     // Legacy GGUF: 3D [1, 1280, 5120] → reshape to [1280, 5120]
     // New GGUF (squeezed): already 2D [1280, 5120]
     ggml_tensor* pw1 = (ggml_n_dims(conv.pw1_w) > 2)
-                            ? ggml_reshape_2d(ctx, conv.pw1_w, conv.pw1_w->ne[0] * conv.pw1_w->ne[1],
-                                              conv.pw1_w->ne[2])
-                            : conv.pw1_w;
+                           ? ggml_reshape_2d(ctx, conv.pw1_w, conv.pw1_w->ne[0] * conv.pw1_w->ne[1], conv.pw1_w->ne[2])
+                           : conv.pw1_w;
     h = ggml_mul_mat(ctx, pw1, h);
 
     // GLU: split → sigmoid gate
@@ -1317,9 +1316,8 @@ static ggml_tensor* build_conv_module(ggml_context* ctx, ggml_tensor* x, const f
 
     // Pointwise conv2: 2560 → 1280
     ggml_tensor* pw2 = (ggml_n_dims(conv.pw2_w) > 2)
-                            ? ggml_reshape_2d(ctx, conv.pw2_w, conv.pw2_w->ne[0] * conv.pw2_w->ne[1],
-                                              conv.pw2_w->ne[2])
-                            : conv.pw2_w;
+                           ? ggml_reshape_2d(ctx, conv.pw2_w, conv.pw2_w->ne[0] * conv.pw2_w->ne[1], conv.pw2_w->ne[2])
+                           : conv.pw2_w;
     h = ggml_mul_mat(ctx, pw2, h); // [1280, T]
 
     return ggml_add(ctx, residual, h);
