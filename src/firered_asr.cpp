@@ -596,7 +596,8 @@ static void compute_fbank(const float* pcm, int n_samples, std::vector<float>& f
         std::vector<float> frame(win);
         float dc = 0.0f;
         for (int i = 0; i < win; i++) {
-            frame[i] = (offset + i < n_samples) ? pcm[offset + i] : 0.0f;
+            // Scale to int16 range: FireRedASR/LID CMVN trained on int16 fbank
+            frame[i] = ((offset + i < n_samples) ? pcm[offset + i] : 0.0f) * 32768.0f;
             dc += frame[i];
         }
         dc /= win;
