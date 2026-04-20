@@ -388,18 +388,15 @@ extern "C" int firered_vad_detect(struct firered_vad_context* ctx, const float* 
     cpu_linear(features.data(), m.fc1_w.data(), m.fc1_b.data(), h.data(), T, hp.idim, hp.H);
     cpu_relu(h.data(), T * hp.H);
 
-    fprintf(stderr, "  fc1[0,:5]=[%.2f,%.2f,%.2f,%.2f,%.2f]\n", h[0], h[1], h[2], h[3], h[4]);
     // fc2: [T, 256] → [T, 128] + ReLU
     std::vector<float> p(T * hp.P);
     cpu_linear(h.data(), m.fc2_w.data(), m.fc2_b.data(), p.data(), T, hp.H, hp.P);
     cpu_relu(p.data(), T * hp.P);
-    fprintf(stderr, "  fc2[0,:5]=[%.4f,%.4f,%.4f,%.4f,%.4f]\n", p[0], p[1], p[2], p[3], p[4]);
 
     // fsmn1
     std::vector<float> mem(T * hp.P);
     cpu_fsmn(p.data(), mem.data(), m.fsmn1_lb.data(), m.fsmn1_la.data(), T, hp.P, hp.N1, hp.S1, hp.N2, hp.S2);
 
-    fprintf(stderr, "  fsmn1[0,:5]=[%.4f,%.4f,%.4f,%.4f,%.4f]\n", mem[0], mem[1], mem[2], mem[3], mem[4]);
 
     // FSMN blocks
     std::vector<float> tmp_h(T * hp.H), tmp_p(T * hp.P), tmp_mem(T * hp.P);
@@ -413,27 +410,12 @@ extern "C" int firered_vad_detect(struct firered_vad_context* ctx, const float* 
         // FSMN
         cpu_fsmn(tmp_p.data(), tmp_mem.data(), b.lb_w.data(), b.la_w.data(), T, hp.P, hp.N1, hp.S1, hp.N2, hp.S2);
         if (i == 0) {
-            fprintf(stderr, "  b0.fc1[0,:5]=[%.4f,%.4f,%.4f,%.4f,%.4f] nonzero=%d\n", tmp_h[0], tmp_h[1], tmp_h[2],
-                    tmp_h[3], tmp_h[4], [&] {
-                        int c = 0;
-                        for (int j = 0; j < hp.H; j++)
-                            if (tmp_h[j] != 0)
-                                c++;
-                        return c;
-                    }());
-            fprintf(stderr, "  b0.fc2[0,:5]=[%.4f,%.4f,%.4f,%.4f,%.4f]\n", tmp_p[0], tmp_p[1], tmp_p[2], tmp_p[3],
-                    tmp_p[4]);
-            fprintf(stderr, "  b0.fsmn[0,:5]=[%.4f,%.4f,%.4f,%.4f,%.4f]\n", tmp_mem[0], tmp_mem[1], tmp_mem[2],
-                    tmp_mem[3], tmp_mem[4]);
         }
         // Skip connection
         for (int j = 0; j < T * hp.P; j++)
             mem[j] = tmp_mem[j] + mem[j];
-        if (i == 0)
-            fprintf(stderr, "  block0[0,:5]=[%.4f,%.4f,%.4f,%.4f,%.4f]\n", mem[0], mem[1], mem[2], mem[3], mem[4]);
     }
 
-    fprintf(stderr, "  after_blocks[0,:5]=[%.4f,%.4f,%.4f,%.4f,%.4f]\n", mem[0], mem[1], mem[2], mem[3], mem[4]);
 
     // DNN: [T, P] → [T, H] + ReLU
     cpu_linear(mem.data(), m.dnn_w.data(), m.dnn_b.data(), h.data(), T, hp.P, hp.H);

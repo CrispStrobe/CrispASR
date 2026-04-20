@@ -556,26 +556,15 @@ extern "C" const char* ecapa_lid_detect(struct ecapa_lid_context* ctx, const flo
     pad_1d_reflect(x.data(), m.n_mels, T, pad0, pad0, x_pad.data());
     int T0 = 0;
     std::vector<float> h0(1024 * T); // output channels=1024
-    fprintf(stderr, "ecapa_lid: block0 K=%d C_in=%d C_out=%d conv_w.size=%zu bn.weight=%zu\n", m.block0.K,
-            m.block0.C_in, m.block0.C_out, m.block0.conv_w.size(), m.block0.bn.weight.size());
-    fflush(stderr);
     if (m.block0.conv_w.empty()) {
         fprintf(stderr, "ecapa_lid: ERROR — block0 weights not loaded!\n");
         return nullptr;
     }
     conv1d(x_pad.data(), m.n_mels, T + 2 * pad0, m.block0.conv_w.data(), m.block0.conv_b.data(), 1024,
            m.block0.K, 1, 1, h0.data(), T0);
-    fprintf(stderr, "ecapa_lid: block0 conv done T0=%d, pre-BN h0[:5,0]=[%.4f,%.4f,%.4f,%.4f,%.4f]\n", T0,
-            h0[0*T0], h0[1*T0], h0[2*T0], h0[3*T0], h0[4*T0]);
-    fflush(stderr);
     batchnorm1d(h0.data(), 1024, T0, m.block0.bn.weight.data(), m.block0.bn.bias.data(), m.block0.bn.mean.data(),
                 m.block0.bn.var.data());
     relu_inplace(h0.data(), 1024 * T0);
-    fprintf(stderr, "  h0[0,:5,0]=[%.6f,%.6f,%.6f,%.6f,%.6f]\n",
-            h0[0*T0+0], h0[1*T0+0], h0[2*T0+0], h0[3*T0+0], h0[4*T0+0]);
-    fprintf(stderr, "  h0[0,:5,50]=[%.6f,%.6f,%.6f,%.6f,%.6f]\n",
-            h0[0*T0+50], h0[1*T0+50], h0[2*T0+50], h0[3*T0+50], h0[4*T0+50]);
-    fflush(stderr);
 
     // 4. SE-Res2Net blocks 1-3
     int C = 1024, scale = 8, sub_c = C / scale; // sub_c = 128
