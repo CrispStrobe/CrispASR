@@ -1111,9 +1111,22 @@ static crispasr_session_result* run_voxtral_family(Ctx* ctx, const VoxtralFamily
     return r;
 }
 
-CA_EXPORT crispasr_session_result* crispasr_session_transcribe(crispasr_session* s, const float* pcm, int n_samples) {
+// ---------------------------------------------------------------------------
+// Language-aware session transcribe. `language` is an ISO 639-1 code
+// ("en", "de", "ja", ...). Passing NULL or empty keeps each backend's
+// historical default (usually "en") so this is a strict superset of
+// `crispasr_session_transcribe`. Backends that don't take a language
+// input (parakeet, qwen3, granite, wav2vec2, fastconformer-ctc) ignore
+// the hint silently — parakeet/qwen3 auto-detect, granite is instruction-
+// tuned with its own prompt, wav2vec2 is usually mono-lingual.
+// ---------------------------------------------------------------------------
+CA_EXPORT crispasr_session_result* crispasr_session_transcribe_lang(crispasr_session* s, const float* pcm,
+                                                                    int n_samples, const char* language) {
     if (!s || !pcm || n_samples <= 0)
         return nullptr;
+
+    const std::string lang = (language && *language) ? language : "en";
+    const bool lang_set = (language && *language);
 
     auto* r = new crispasr_session_result();
     r->backend = s->backend;
@@ -1125,6 +1138,8 @@ CA_EXPORT crispasr_session_result* crispasr_session_transcribe(crispasr_session*
         wparams.print_timestamps = false;
         wparams.print_special = false;
         wparams.n_threads = s->n_threads;
+        if (lang_set)
+            wparams.language = lang.c_str();
 
         if (whisper_full(s->whisper_ctx, wparams, pcm, n_samples) != 0) {
             delete r;
@@ -1194,10 +1209,12 @@ CA_EXPORT crispasr_session_result* crispasr_session_transcribe(crispasr_session*
 
 #ifdef CA_HAVE_CANARY
     if (s->backend == "canary" && s->canary_ctx) {
-        // Default to English ASR (source=en, target=en, punctuation on).
-        // Full translation control is available through the backend-specific
-        // helpers if the caller wants to override.
-        return run_char_transcribe(canary_transcribe(s->canary_ctx, pcm, n_samples, "en", "en", true));
+        // Canary supports source/target language explicitly; when the
+        // caller hasn't supplied a language the historical default of
+        // en→en is preserved. Full translation control (src != tgt)
+        // still needs the backend-specific helpers.
+        return run_char_transcribe(
+            canary_transcribe(s->canary_ctx, pcm, n_samples, lang.c_str(), lang.c_str(), true));
     }
 #endif
 #ifdef CA_HAVE_QWEN3
@@ -1207,7 +1224,7 @@ CA_EXPORT crispasr_session_result* crispasr_session_transcribe(crispasr_session*
 #endif
 #ifdef CA_HAVE_COHERE
     if (s->backend == "cohere" && s->cohere_ctx) {
-        return run_char_transcribe(cohere_transcribe(s->cohere_ctx, pcm, n_samples, "en"));
+        return run_char_transcribe(cohere_transcribe(s->cohere_ctx, pcm, n_samples, lang.c_str()));
     }
 #endif
 #ifdef CA_HAVE_GRANITE
@@ -1229,7 +1246,7 @@ CA_EXPORT crispasr_session_result* crispasr_session_transcribe(crispasr_session*
         ops.token_text = &voxtral_token_text;
         ops.audio_pad_id = 24; // Tekken <audio_pad>
         ops.eos_id = 2;        // Tekken </s>
-        return run_voxtral_family(s->voxtral_ctx, ops, pcm, n_samples, /*lang=*/"en");
+        return run_voxtral_family(s->voxtral_ctx, ops, pcm, n_samples, lang.c_str());
     }
 #endif
 #ifdef CA_HAVE_VOXTRAL4B
@@ -1246,7 +1263,7 @@ CA_EXPORT crispasr_session_result* crispasr_session_transcribe(crispasr_session*
         ops.token_text = &voxtral4b_token_text;
         ops.audio_pad_id = 24;
         ops.eos_id = 2;
-        return run_voxtral_family(s->voxtral4b_ctx, ops, pcm, n_samples, /*lang=*/"en");
+        return run_voxtral_family(s->voxtral4b_ctx, ops, pcm, n_samples, lang.c_str());
     }
 #endif
 #ifdef CA_HAVE_WAV2VEC2
@@ -1300,6 +1317,13 @@ CA_EXPORT crispasr_session_result* crispasr_session_transcribe(crispasr_session*
     return nullptr;
 }
 
+// Back-compat wrapper. Existing 0.4.x consumers called the 3-arg shape;
+// now that's a thin forward to `_lang` with a null language hint, which
+// reproduces the historical per-backend defaults (usually "en").
+CA_EXPORT crispasr_session_result* crispasr_session_transcribe(crispasr_session* s, const float* pcm, int n_samples) {
+    return crispasr_session_transcribe_lang(s, pcm, n_samples, nullptr);
+}
+
 // ---------------------------------------------------------------------------
 // VAD-driven transcription over the session API.
 //
@@ -1325,9 +1349,16 @@ struct crispasr_vad_abi_opts {
     int32_t n_threads;               // 4
 };
 
-CA_EXPORT crispasr_session_result* crispasr_session_transcribe_vad(crispasr_session* s, const float* pcm, int n_samples,
-                                                                   int sample_rate, const char* vad_model_path,
-                                                                   const crispasr_vad_abi_opts* opts_or_null) {
+// 0.4.9+: language-aware VAD transcribe. Passing a non-empty ISO 639-1
+// code forwards it into whichever backend accepts one (whisper / canary /
+// cohere / voxtral / voxtral4b). NULL or empty keeps each backend's
+// historical default so this function is a strict superset of
+// `crispasr_session_transcribe_vad`.
+CA_EXPORT crispasr_session_result* crispasr_session_transcribe_vad_lang(crispasr_session* s, const float* pcm,
+                                                                        int n_samples, int sample_rate,
+                                                                        const char* vad_model_path,
+                                                                        const crispasr_vad_abi_opts* opts_or_null,
+                                                                        const char* language) {
     if (!s || !pcm || n_samples <= 0 || sample_rate <= 0)
         return nullptr;
 
@@ -1351,20 +1382,21 @@ CA_EXPORT crispasr_session_result* crispasr_session_transcribe_vad(crispasr_sess
         slices = crispasr_compute_vad_slices(pcm, n_samples, sample_rate, vad_model_path, opts);
     }
     if (slices.empty()) {
-        return crispasr_session_transcribe(s, pcm, n_samples);
+        return crispasr_session_transcribe_lang(s, pcm, n_samples, language);
     }
 
     // One slice ⇒ no stitching needed, but still clip to the speech region
     // so the backend doesn't burn cycles on leading / trailing silence.
     if (slices.size() == 1) {
         const auto& sl = slices.front();
-        return crispasr_session_transcribe(s, pcm + sl.start, sl.end - sl.start);
+        return crispasr_session_transcribe_lang(s, pcm + sl.start, sl.end - sl.start, language);
     }
 
     // Multiple slices ⇒ stitch with 0.1s silence gaps, transcribe once,
     // remap timestamps back to original-audio positions.
     auto stitched = crispasr_stitch_vad_slices(pcm, n_samples, sample_rate, slices);
-    crispasr_session_result* r = crispasr_session_transcribe(s, stitched.samples.data(), (int)stitched.samples.size());
+    crispasr_session_result* r =
+        crispasr_session_transcribe_lang(s, stitched.samples.data(), (int)stitched.samples.size(), language);
     if (!r)
         return nullptr;
 
@@ -1377,6 +1409,14 @@ CA_EXPORT crispasr_session_result* crispasr_session_transcribe_vad(crispasr_sess
         }
     }
     return r;
+}
+
+// Back-compat wrapper for 0.4.4–0.4.8 consumers. Forwards to the
+// language-aware variant with `language = NULL` (historical defaults).
+CA_EXPORT crispasr_session_result* crispasr_session_transcribe_vad(crispasr_session* s, const float* pcm, int n_samples,
+                                                                   int sample_rate, const char* vad_model_path,
+                                                                   const crispasr_vad_abi_opts* opts_or_null) {
+    return crispasr_session_transcribe_vad_lang(s, pcm, n_samples, sample_rate, vad_model_path, opts_or_null, nullptr);
 }
 
 // ---------------------------------------------------------------------------

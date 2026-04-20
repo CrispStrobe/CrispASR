@@ -328,11 +328,41 @@ impl Session {
     /// Transcribe 16 kHz mono `f32` PCM. The internal dispatcher routes
     /// to whichever backend this session was opened with.
     pub fn transcribe(&self, pcm: &[f32]) -> Result<Vec<SessionSegment>, String> {
+        self.transcribe_with_language(pcm, None)
+    }
+
+    /// Language-aware transcribe (0.4.9+). `language` is an optional
+    /// ISO 639-1 code ("en", "de", "ja", …). Backends that accept a
+    /// source-language hint honour it; others ignore silently. `None`
+    /// preserves each backend's historical default.
+    pub fn transcribe_with_language(
+        &self,
+        pcm: &[f32],
+        language: Option<&str>,
+    ) -> Result<Vec<SessionSegment>, String> {
         if pcm.is_empty() {
             return Ok(Vec::new());
         }
+        let lang_c = match language {
+            Some(l) if !l.is_empty() => Some(
+                CString::new(l).map_err(|e| format!("language NUL: {e}"))?,
+            ),
+            _ => None,
+        };
         let res = unsafe {
-            crispasr_sys::crispasr_session_transcribe(self.handle, pcm.as_ptr(), pcm.len() as i32)
+            match &lang_c {
+                Some(c) => crispasr_sys::crispasr_session_transcribe_lang(
+                    self.handle,
+                    pcm.as_ptr(),
+                    pcm.len() as i32,
+                    c.as_ptr(),
+                ),
+                None => crispasr_sys::crispasr_session_transcribe(
+                    self.handle,
+                    pcm.as_ptr(),
+                    pcm.len() as i32,
+                ),
+            }
         };
         if res.is_null() {
             return Err(format!(
@@ -404,6 +434,19 @@ impl Session {
         vad_model_path: &str,
         opts: Option<VadOptions>,
     ) -> Result<Vec<SessionSegment>, String> {
+        self.transcribe_vad_with_language(pcm, vad_model_path, opts, None)
+    }
+
+    /// Language-aware VAD transcribe (0.4.9+). Accepts an ISO 639-1
+    /// code that's forwarded into the backend's source-language hint.
+    /// See [`Self::transcribe_with_language`] for the full semantics.
+    pub fn transcribe_vad_with_language(
+        &self,
+        pcm: &[f32],
+        vad_model_path: &str,
+        opts: Option<VadOptions>,
+        language: Option<&str>,
+    ) -> Result<Vec<SessionSegment>, String> {
         if pcm.is_empty() {
             return Ok(Vec::new());
         }
@@ -411,16 +454,33 @@ impl Session {
         let path_c = CString::new(vad_model_path)
             .map_err(|e| format!("vad_model_path contains NUL byte: {e}"))?;
         let abi_opts = opts.unwrap_or_default().to_abi();
+        let lang_c = match language {
+            Some(l) if !l.is_empty() => Some(
+                CString::new(l).map_err(|e| format!("language NUL: {e}"))?,
+            ),
+            _ => None,
+        };
 
         let res = unsafe {
-            crispasr_sys::crispasr_session_transcribe_vad(
-                self.handle,
-                pcm.as_ptr(),
-                pcm.len() as i32,
-                16_000,
-                path_c.as_ptr(),
-                &abi_opts,
-            )
+            match &lang_c {
+                Some(c) => crispasr_sys::crispasr_session_transcribe_vad_lang(
+                    self.handle,
+                    pcm.as_ptr(),
+                    pcm.len() as i32,
+                    16_000,
+                    path_c.as_ptr(),
+                    &abi_opts,
+                    c.as_ptr(),
+                ),
+                None => crispasr_sys::crispasr_session_transcribe_vad(
+                    self.handle,
+                    pcm.as_ptr(),
+                    pcm.len() as i32,
+                    16_000,
+                    path_c.as_ptr(),
+                    &abi_opts,
+                ),
+            }
         };
         if res.is_null() {
             return Err(format!(

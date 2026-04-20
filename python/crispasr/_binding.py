@@ -786,6 +786,15 @@ class Session:
             ctypes.c_void_p, ctypes.POINTER(ctypes.c_float), ctypes.c_int,
         ]
         lib.crispasr_session_transcribe.restype = ctypes.c_void_p
+        # 0.4.9+: language-aware session transcribe. Backends that
+        # accept a source-language hint (whisper / canary / cohere /
+        # voxtral / voxtral4b) honour it; others ignore.
+        if hasattr(lib, "crispasr_session_transcribe_lang"):
+            lib.crispasr_session_transcribe_lang.argtypes = [
+                ctypes.c_void_p, ctypes.POINTER(ctypes.c_float), ctypes.c_int,
+                ctypes.c_char_p,
+            ]
+            lib.crispasr_session_transcribe_lang.restype = ctypes.c_void_p
         # 0.4.3+: VAD-driven session transcribe. hasattr-guarded so a
         # binding loaded against an older dylib still works for non-VAD
         # calls.
@@ -795,6 +804,15 @@ class Session:
                 ctypes.c_int, ctypes.c_char_p, ctypes.c_void_p,
             ]
             lib.crispasr_session_transcribe_vad.restype = ctypes.c_void_p
+        # 0.4.9+: language-aware VAD transcribe (same hint semantics
+        # as _lang above).
+        if hasattr(lib, "crispasr_session_transcribe_vad_lang"):
+            lib.crispasr_session_transcribe_vad_lang.argtypes = [
+                ctypes.c_void_p, ctypes.POINTER(ctypes.c_float), ctypes.c_int,
+                ctypes.c_int, ctypes.c_char_p, ctypes.c_void_p,
+                ctypes.c_char_p,
+            ]
+            lib.crispasr_session_transcribe_vad_lang.restype = ctypes.c_void_p
         # 0.4.5+: shared speaker diarization. Same hasattr guard.
         if hasattr(lib, "crispasr_diarize_segments_abi"):
             lib.crispasr_diarize_segments_abi.argtypes = [
@@ -866,8 +884,16 @@ class Session:
 
     def transcribe(
         self, pcm: np.ndarray, sample_rate: int = 16000,
+        *,
+        language: Optional[str] = None,
     ) -> List[SessionSegment]:
-        """Transcribe 16 kHz mono float32 PCM. Dispatches via crispasr_session."""
+        """Transcribe 16 kHz mono float32 PCM. Dispatches via crispasr_session.
+
+        ``language`` is an optional ISO 639-1 code ("en", "de", "ja", ...).
+        Backends that accept a source-language hint (whisper, canary,
+        cohere, voxtral, voxtral4b) honour it; others ignore silently.
+        ``None`` preserves each backend's historical default.
+        """
         if sample_rate != 16000:
             ratio = 16000 / sample_rate
             new_len = int(len(pcm) * ratio)
@@ -876,7 +902,11 @@ class Session:
         pcm = np.asarray(pcm, dtype=np.float32)
         samples_ptr = pcm.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
 
-        res = self._lib.crispasr_session_transcribe(self._handle, samples_ptr, len(pcm))
+        if language and hasattr(self._lib, "crispasr_session_transcribe_lang"):
+            res = self._lib.crispasr_session_transcribe_lang(
+                self._handle, samples_ptr, len(pcm), language.encode("utf-8"))
+        else:
+            res = self._lib.crispasr_session_transcribe(self._handle, samples_ptr, len(pcm))
         if not res:
             raise RuntimeError(f"crispasr_session_transcribe failed for backend {self.backend!r}")
 
@@ -914,6 +944,7 @@ class Session:
         speech_pad_ms: int = 30,
         chunk_seconds: int = 30,
         n_threads: int = 4,
+        language: Optional[str] = None,
     ) -> List[SessionSegment]:
         """Transcribe with Silero VAD segmentation + whisper.cpp-style stitching.
 
@@ -963,14 +994,25 @@ class Session:
             int(n_threads),
         )
 
-        res = self._lib.crispasr_session_transcribe_vad(
-            self._handle,
-            samples_ptr,
-            len(pcm),
-            16000,
-            vad_model_path.encode("utf-8"),
-            ctypes.byref(opts),
-        )
+        if language and hasattr(self._lib, "crispasr_session_transcribe_vad_lang"):
+            res = self._lib.crispasr_session_transcribe_vad_lang(
+                self._handle,
+                samples_ptr,
+                len(pcm),
+                16000,
+                vad_model_path.encode("utf-8"),
+                ctypes.byref(opts),
+                language.encode("utf-8"),
+            )
+        else:
+            res = self._lib.crispasr_session_transcribe_vad(
+                self._handle,
+                samples_ptr,
+                len(pcm),
+                16000,
+                vad_model_path.encode("utf-8"),
+                ctypes.byref(opts),
+            )
         if not res:
             raise RuntimeError(
                 f"crispasr_session_transcribe_vad failed for backend {self.backend!r}"

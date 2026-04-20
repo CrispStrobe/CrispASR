@@ -1499,7 +1499,14 @@ class CrispasrSession {
 
   /// Transcribe 16 kHz mono float32 PCM. Returns a list of segments
   /// with word-level timings when the backend supports them.
-  List<SessionSegment> transcribe(Float32List pcm) {
+  ///
+  /// Pass [language] as an ISO 639-1 code ("en", "de", "ja", …) to steer
+  /// backends that accept a source-language hint (whisper / canary /
+  /// cohere / voxtral / voxtral4b). Backends that auto-detect
+  /// (parakeet / qwen3) or that don't expose a language input
+  /// (granite / wav2vec2 / fastconformer-ctc) ignore the hint silently.
+  /// `null` or empty preserves each backend's historical default.
+  List<SessionSegment> transcribe(Float32List pcm, {String? language}) {
     if (_closed) throw StateError('CrispasrSession is closed');
     if (pcm.isEmpty) return const [];
 
@@ -1507,13 +1514,27 @@ class CrispasrSession {
     for (var i = 0; i < pcm.length; i++) {
       samples[i] = pcm[i];
     }
-    final transcribeFn = _lib.lookupFunction<
-        Pointer<Void> Function(Pointer<Void>, Pointer<Float>, Int32),
-        Pointer<Void> Function(Pointer<Void>, Pointer<Float>, int)>(
-      'crispasr_session_transcribe',
-    );
-    final res = transcribeFn(_handle, samples, pcm.length);
+
+    Pointer<Void> res;
+    Pointer<Utf8>? langPtr;
+    if (language != null && language.isNotEmpty) {
+      langPtr = language.toNativeUtf8();
+      final fn = _lib.lookupFunction<
+          Pointer<Void> Function(Pointer<Void>, Pointer<Float>, Int32, Pointer<Utf8>),
+          Pointer<Void> Function(Pointer<Void>, Pointer<Float>, int, Pointer<Utf8>)>(
+        'crispasr_session_transcribe_lang',
+      );
+      res = fn(_handle, samples, pcm.length, langPtr);
+    } else {
+      final fn = _lib.lookupFunction<
+          Pointer<Void> Function(Pointer<Void>, Pointer<Float>, Int32),
+          Pointer<Void> Function(Pointer<Void>, Pointer<Float>, int)>(
+        'crispasr_session_transcribe',
+      );
+      res = fn(_handle, samples, pcm.length);
+    }
     calloc.free(samples);
+    if (langPtr != null) calloc.free(langPtr);
     if (res == nullptr) {
       throw Exception('crispasr_session_transcribe returned null');
     }
@@ -1550,6 +1571,7 @@ class CrispasrSession {
     String vadModelPath, {
     int sampleRate = 16000,
     SessionVadOptions options = const SessionVadOptions(),
+    String? language,
   }) {
     if (_closed) throw StateError('CrispasrSession is closed');
     if (pcm.isEmpty) return const [];
@@ -1571,17 +1593,32 @@ class CrispasrSession {
     intView[3] = options.chunkSeconds;
     intView[4] = options.nThreads;
 
-    final fn = _lib.lookupFunction<
-        Pointer<Void> Function(Pointer<Void>, Pointer<Float>, Int32, Int32,
-            Pointer<Utf8>, Pointer<Uint8>),
-        Pointer<Void> Function(Pointer<Void>, Pointer<Float>, int, int,
-            Pointer<Utf8>, Pointer<Uint8>)>(
-      'crispasr_session_transcribe_vad',
-    );
-    final res = fn(_handle, samples, pcm.length, sampleRate, vadPathPtr, optsPtr);
+    Pointer<Void> res;
+    Pointer<Utf8>? langPtr;
+    if (language != null && language.isNotEmpty) {
+      langPtr = language.toNativeUtf8();
+      final fn = _lib.lookupFunction<
+          Pointer<Void> Function(Pointer<Void>, Pointer<Float>, Int32, Int32,
+              Pointer<Utf8>, Pointer<Uint8>, Pointer<Utf8>),
+          Pointer<Void> Function(Pointer<Void>, Pointer<Float>, int, int,
+              Pointer<Utf8>, Pointer<Uint8>, Pointer<Utf8>)>(
+        'crispasr_session_transcribe_vad_lang',
+      );
+      res = fn(_handle, samples, pcm.length, sampleRate, vadPathPtr, optsPtr, langPtr);
+    } else {
+      final fn = _lib.lookupFunction<
+          Pointer<Void> Function(Pointer<Void>, Pointer<Float>, Int32, Int32,
+              Pointer<Utf8>, Pointer<Uint8>),
+          Pointer<Void> Function(Pointer<Void>, Pointer<Float>, int, int,
+              Pointer<Utf8>, Pointer<Uint8>)>(
+        'crispasr_session_transcribe_vad',
+      );
+      res = fn(_handle, samples, pcm.length, sampleRate, vadPathPtr, optsPtr);
+    }
     calloc.free(samples);
     calloc.free(vadPathPtr);
     calloc.free(optsPtr);
+    if (langPtr != null) calloc.free(langPtr);
     if (res == nullptr) {
       throw Exception('crispasr_session_transcribe_vad returned null');
     }

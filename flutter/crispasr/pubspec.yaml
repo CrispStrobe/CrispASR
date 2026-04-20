@@ -1,6 +1,6 @@
 name: crispasr
 description: Lightweight on-device speech recognition via ggml. Supports Whisper, Qwen3-ASR, FastConformer, and more.
-version: 0.4.8
+version: 0.4.9
 homepage: https://github.com/CrispStrobe/CrispASR
 
 environment:

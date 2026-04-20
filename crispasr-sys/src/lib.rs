@@ -197,6 +197,18 @@ extern "C" {
         n_samples: c_int,
     ) -> *mut CrispasrSessionResult;
 
+    /// 0.4.9+: language-aware session transcribe. `language` is an
+    /// ISO 639-1 code or null/empty to keep the backend's historical
+    /// default. Backends that accept a source-language hint (whisper,
+    /// canary, cohere, voxtral, voxtral4b) honour it; others ignore
+    /// silently.
+    pub fn crispasr_session_transcribe_lang(
+        s: *mut CrispasrSession,
+        pcm: *const c_float,
+        n_samples: c_int,
+        language: *const c_char,
+    ) -> *mut CrispasrSessionResult;
+
     /// VAD-driven session transcribe. Runs Silero VAD on the PCM buffer,
     /// merges short / overlong speech slices, stitches them into one
     /// contiguous buffer with 0.1s silence gaps, calls the backend once,
@@ -213,6 +225,18 @@ extern "C" {
         sample_rate: c_int,
         vad_model_path: *const c_char,
         opts: *const CrispasrVadAbiOpts,
+    ) -> *mut CrispasrSessionResult;
+
+    /// 0.4.9+: language-aware VAD transcribe (same semantics as the
+    /// language kwarg on `crispasr_session_transcribe_lang`).
+    pub fn crispasr_session_transcribe_vad_lang(
+        s: *mut CrispasrSession,
+        pcm: *const c_float,
+        n_samples: c_int,
+        sample_rate: c_int,
+        vad_model_path: *const c_char,
+        opts: *const CrispasrVadAbiOpts,
+        language: *const c_char,
     ) -> *mut CrispasrSessionResult;
 
     /// Shared speaker diarization (0.4.5+). Writes a zero-based speaker

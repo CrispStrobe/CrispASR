@@ -41,4 +41,4 @@ __all__ = [
     "registry_lookup",
     "registry_lookup_by_filename",
 ]
-__version__ = "0.4.8"
+__version__ = "0.4.9"

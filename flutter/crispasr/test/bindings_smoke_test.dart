@@ -75,6 +75,11 @@ void main() {
       // stitches with 0.1s gaps, remaps timestamps — same algorithm
       // as the CLI's --vad path, reachable from every binding.
       'crispasr_session_transcribe_vad',
+      // Language-aware session transcribe (0.4.9+). Accepts an ISO
+      // 639-1 code so caller-supplied LID results can feed into the
+      // backend's source-language hint.
+      'crispasr_session_transcribe_lang',
+      'crispasr_session_transcribe_vad_lang',
       // Shared diarization (0.4.5+). Assigns a speaker index to each
       // caller-supplied segment; 4 methods (energy, xcorr, vad-turns,
       // pyannote) share the library path with the CLI.
