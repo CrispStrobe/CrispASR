@@ -321,7 +321,7 @@ static bool omniasr_alloc_kv_cache(omniasr_context* ctx, int max_ctx) {
 // ===========================================================================
 
 static char* omniasr_transcribe_llm(omniasr_context* ctx, const float* samples, int n_samples,
-                                     const std::vector<float>& encoder_out, int d_enc, int T_enc);
+                                    const std::vector<float>& encoder_out, int d_enc, int T_enc);
 
 // ===========================================================================
 // Transcribe
@@ -780,7 +780,7 @@ read_logits:
 // ===========================================================================
 
 static char* omniasr_transcribe_llm(omniasr_context* ctx, const float* /*samples*/, int /*n_samples*/,
-                                     const std::vector<float>& encoder_out, int d_enc, int T_enc) {
+                                    const std::vector<float>& encoder_out, int d_enc, int T_enc) {
     auto& m = ctx->model;
     auto& hp = m.hp;
     auto& ts = m.tensors;
@@ -792,7 +792,10 @@ static char* omniasr_transcribe_llm(omniasr_context* ctx, const float* /*samples
 
     // Helper to read tensor to CPU
     auto read_f32 = [](ggml_tensor* t, std::vector<float>& out) {
-        if (!t) { out.clear(); return; }
+        if (!t) {
+            out.clear();
+            return;
+        }
         int n = (int)ggml_nelements(t);
         out.resize(n);
         if (t->type == GGML_TYPE_F32)
@@ -804,7 +807,7 @@ static char* omniasr_transcribe_llm(omniasr_context* ctx, const float* /*samples
         }
     };
 
-    int dd = hp.d_dec;       // 4096
+    int dd = hp.d_dec;        // 4096
     int ffn_d = hp.d_ffn_dec; // 2816
     int nh = hp.n_heads_dec;  // 8
     int hd = hp.head_dim_dec; // 512
@@ -847,8 +850,8 @@ static char* omniasr_transcribe_llm(omniasr_context* ctx, const float* /*samples
     bool use_lang = (hp.n_langs > 0 && !lang_emb_data.empty());
     // Sequence: [audio_embs...] [lid_marker_emb] [lang_emb] [BOS_emb] [generated...]
     // lid_marker is special token at index vocab_size (9812) in text_frontend
-    int lid_marker_id = hp.vocab_size; // 9812 — the extra token in tok_emb (size 9813)
-    int n_lang_tokens = use_lang ? 2 : 0; // lid_marker + lang_emb
+    int lid_marker_id = hp.vocab_size;          // 9812 — the extra token in tok_emb (size 9813)
+    int n_lang_tokens = use_lang ? 2 : 0;       // lid_marker + lang_emb
     int prefix_len = T_enc + n_lang_tokens + 1; // audio + [lid_marker + lang] + BOS
     std::vector<float> prefix(prefix_len * dd);
 
@@ -920,14 +923,16 @@ static char* omniasr_transcribe_llm(omniasr_context* ctx, const float* /*samples
     // Helper: RMSNorm on a single vector
     auto rms_norm = [](const float* x, const float* w, float* out, int d) {
         float ss = 0;
-        for (int i = 0; i < d; i++) ss += x[i] * x[i];
+        for (int i = 0; i < d; i++)
+            ss += x[i] * x[i];
         float scale = 1.0f / sqrtf(ss / d + 1e-5f);
-        for (int i = 0; i < d; i++) out[i] = x[i] * scale * w[i];
+        for (int i = 0; i < d; i++)
+            out[i] = x[i] * scale * w[i];
     };
 
     // Helper: matmul x[d_in] @ w[d_out, d_in] → out[d_out]
     auto matvec = [](const float* w, const float* x, float* out, int d_out, int d_in) {
-        #pragma omp parallel for
+#pragma omp parallel for
         for (int i = 0; i < d_out; i++) {
             double s = 0;
             for (int k = 0; k < d_in; k++)
@@ -955,7 +960,7 @@ static char* omniasr_transcribe_llm(omniasr_context* ctx, const float* /*samples
 
     // Autoregressive generation
     std::vector<int> output_tokens;
-    std::vector<float> cur_hidden(dd);   // current token hidden state
+    std::vector<float> cur_hidden(dd); // current token hidden state
     std::vector<float> tmp(std::max(dd, ffn_d));
     std::vector<float> tmp2(std::max(dd, ffn_d));
     std::vector<float> tmp3(std::max(dd, ffn_d));
@@ -974,7 +979,8 @@ static char* omniasr_transcribe_llm(omniasr_context* ctx, const float* /*samples
             memcpy(cur_hidden.data(), prefix.data() + step * dd, dd * sizeof(float));
         } else {
             // Generated token: look up embedding
-            if (cur_token < 0 || cur_token >= tok_emb_size) break;
+            if (cur_token < 0 || cur_token >= tok_emb_size)
+                break;
             memcpy(cur_hidden.data(), tok_emb_data.data() + cur_token * dd, dd * sizeof(float));
         }
 
@@ -1084,12 +1090,14 @@ static char* omniasr_transcribe_llm(omniasr_context* ctx, const float* /*samples
                 fprintf(stderr, "  step %d: token=%d (%s) logit=%.4f\n", step, best,
                         best < (int)m.vocab.size() ? m.vocab[best].c_str() : "?", best_val);
 
-            if (best == hp.eos_id) break;
+            if (best == hp.eos_id)
+                break;
 
             output_tokens.push_back(best);
             cur_token = best;
 
-            if ((int)output_tokens.size() >= max_gen) break;
+            if ((int)output_tokens.size() >= max_gen)
+                break;
         }
     }
 

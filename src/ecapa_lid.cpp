@@ -29,8 +29,8 @@
 
 struct ecapa_model {
     int n_mels = 60, n_classes = 107, n_fft_orig = 400, fbank_bins = 201;
-    int cls_type = 0;       // 0=DNN (VoxLingua107), 1=cosine (CommonLanguage)
-    int lin_neurons = 256;  // FC output dim (256 for VoxLingua107, 192 for CommonLanguage)
+    int cls_type = 0;      // 0=DNN (VoxLingua107), 1=cosine (CommonLanguage)
+    int lin_neurons = 256; // FC output dim (256 for VoxLingua107, 192 for CommonLanguage)
     std::vector<float> mel_fb_embedded;
     std::vector<std::string> labels;
     std::map<std::string, ggml_tensor*> tensors; // all weight tensors by name
@@ -651,13 +651,16 @@ extern "C" const char* ecapa_lid_detect(struct ecapa_lid_context* ctx, const flo
         read_f32(G("cls.weight"), cls_w); // [n_classes, emb_dim]
         // L2 normalize emb
         float emb_norm = 0;
-        for (float v : emb) emb_norm += v * v;
+        for (float v : emb)
+            emb_norm += v * v;
         emb_norm = 1.0f / (sqrtf(emb_norm) + 1e-12f);
-        for (float& v : emb) v *= emb_norm;
+        for (float& v : emb)
+            v *= emb_norm;
         // Cosine similarity with each class weight
         for (int i = 0; i < m.n_classes; i++) {
             float w_norm = 0;
-            for (int k = 0; k < emb_dim; k++) w_norm += cls_w[i * emb_dim + k] * cls_w[i * emb_dim + k];
+            for (int k = 0; k < emb_dim; k++)
+                w_norm += cls_w[i * emb_dim + k] * cls_w[i * emb_dim + k];
             w_norm = 1.0f / (sqrtf(w_norm) + 1e-12f);
             double s = 0;
             for (int k = 0; k < emb_dim; k++)
@@ -681,7 +684,8 @@ extern "C" const char* ecapa_lid_detect(struct ecapa_lid_context* ctx, const flo
         std::vector<float> h1(hidden, 0);
         for (int i = 0; i < hidden; i++) {
             double s = cls_b1[i];
-            for (int k = 0; k < emb_dim; k++) s += emb[k] * cls_w1[i * emb_dim + k];
+            for (int k = 0; k < emb_dim; k++)
+                s += emb[k] * cls_w1[i * emb_dim + k];
             h1[i] = (float)s;
         }
         std::vector<float> cls_bn1_w, cls_bn1_b, cls_bn1_m, cls_bn1_v;
@@ -698,7 +702,8 @@ extern "C" const char* ecapa_lid_detect(struct ecapa_lid_context* ctx, const flo
         read_f32(G("cls.out.w.bias"), cls_b2);
         for (int i = 0; i < m.n_classes; i++) {
             double s = cls_b2[i];
-            for (int k = 0; k < hidden; k++) s += h1[k] * cls_w2[i * hidden + k];
+            for (int k = 0; k < hidden; k++)
+                s += h1[k] * cls_w2[i * hidden + k];
             logits[i] = (float)s;
         }
     }
