@@ -47,7 +47,9 @@ def main():
     emb_ckpt = torch.load(os.path.join(base, "embedding_model.ckpt"), map_location="cpu", weights_only=False)
     cls_ckpt = torch.load(os.path.join(base, "classifier.ckpt"), map_location="cpu", weights_only=False)
 
-    # Read language labels (skip metadata lines like '======' and 'starting_index')
+    # Read language labels — two formats:
+    # VoxLingua107: 'en: English' => 20
+    # CommonLanguage: 'English' => 5
     labels = []
     label_path = os.path.join(base, "label_encoder.txt")
     with open(label_path, "r", encoding="utf-8") as f:
@@ -55,14 +57,38 @@ def main():
             line = line.strip()
             if "=>" not in line or line.startswith("="):
                 continue
-            # Format: 'en: English' => 20
             label_str = line.split("=>")[0].strip().strip("'")
-            if ":" not in label_str:
-                continue  # skip 'starting_index' and similar metadata
-            code = label_str.split(":")[0].strip()
+            if label_str == "starting_index":
+                continue
+            if ": " in label_str:
+                # VoxLingua107 format: 'en: English' → extract ISO code
+                code = label_str.split(":")[0].strip()
+            else:
+                # CommonLanguage format: 'English' → use as-is
+                code = label_str
             labels.append(code)
 
+    # Detect n_mels from hyperparams
+    n_mels = 60  # VoxLingua107 default
+    hp_path = os.path.join(base, "hyperparams.yaml")
+    if os.path.exists(hp_path):
+        with open(hp_path) as f:
+            for line in f:
+                if line.strip().startswith("n_mels:") and not line.strip().startswith("n_mels: !"):
+                    n_mels = int(line.split(":")[1].strip())
+                    break
+
+    # Detect classifier type
+    cls_type = "cosine" if "weight" in cls_ckpt and len(cls_ckpt) <= 2 else "dnn"
+
+    # Detect lin_neurons from embedding model FC layer
+    fc_key = [k for k in emb_ckpt if "fc.conv" in k and "weight" in k]
+    lin_neurons = 256
+    if fc_key:
+        lin_neurons = emb_ckpt[fc_key[0]].shape[0]
+
     print(f"ECAPA-TDNN LID: {len(emb_ckpt)} emb tensors, {len(cls_ckpt)} cls tensors, {len(labels)} labels")
+    print(f"  n_mels={n_mels}, lin_neurons={lin_neurons}, cls_type={cls_type}")
 
     # Compute the exact SpeechBrain filterbank matrix for embedding in GGUF.
     # This avoids fbank mismatch at runtime.
@@ -77,7 +103,7 @@ def main():
         import torchaudio
         from speechbrain.processing.features import Filterbank
         # Extract the LINEAR filterbank matrix by running with log_mel=False and identity input
-        sb_fb = Filterbank(n_mels=60, n_fft=400, sample_rate=16000, freeze=True, log_mel=False)
+        sb_fb = Filterbank(n_mels=n_mels, n_fft=400, sample_rate=16000, freeze=True, log_mel=False)
         identity = torch.eye(201).unsqueeze(0)
         fb_out = sb_fb(identity)  # [1, 201, 60]
         fb_matrix = fb_out[0].detach().numpy().T.astype(np.float32)  # [60, 201]
@@ -87,18 +113,20 @@ def main():
         fb_matrix = None
 
     # Create GGUF
+    model_name = os.path.basename(args.input) if os.path.isdir(args.input) else args.input.split("/")[-1]
     writer = gguf.GGUFWriter(args.output, "ecapa-tdnn-lid")
-    writer.add_name("ECAPA-TDNN-LID-VoxLingua107")
+    writer.add_name(f"ECAPA-TDNN-LID-{model_name}")
 
     # Hyperparameters
-    writer.add_uint32("ecapa.n_mels", 60)
+    writer.add_uint32("ecapa.n_mels", n_mels)
     writer.add_uint32("ecapa.n_classes", len(labels))
     writer.add_uint32("ecapa.channels_0", 1024)
     writer.add_uint32("ecapa.channels_mfa", 3072)
     writer.add_uint32("ecapa.attention_channels", 128)
-    writer.add_uint32("ecapa.lin_neurons", 256)
-    writer.add_uint32("ecapa.n_se_res2net_blocks", 3)  # blocks 1,2,3
-    writer.add_uint32("ecapa.res2net_scale", 8)  # 1024/128 = 8 sub-bands
+    writer.add_uint32("ecapa.lin_neurons", lin_neurons)
+    writer.add_uint32("ecapa.n_se_res2net_blocks", 3)
+    writer.add_uint32("ecapa.res2net_scale", 8)
+    writer.add_uint32("ecapa.cls_type", 0 if cls_type == "dnn" else 1)  # 0=DNN, 1=cosine
 
     # Tokenizer (language labels)
     writer.add_array("tokenizer.ggml.tokens", labels)
