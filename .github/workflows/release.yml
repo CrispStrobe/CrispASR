@@ -42,6 +42,65 @@ jobs:
           name: crispasr-linux-x86_64
           path: release/crispasr-linux-x86_64.tar.gz
 
+  build-python-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Install deps
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ patchelf
+
+      - name: Build shared libraries
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PLATFORM_NO_VERSIONED_SONAME=ON \
+            -DWHISPER_BUILD_TESTS=OFF \
+            -DWHISPER_BUILD_EXAMPLES=OFF
+          cmake --build build -j$(nproc)
+
+      - name: Build Python ctypes helpers library
+        run: |
+          gcc -shared -fPIC -o build/libcrispasr_helpers.so \
+            python/crispasr/_helpers.c \
+            -Iinclude \
+            -Lbuild/src \
+            -lwhisper \
+            -Wl,-rpath,'$ORIGIN'
+
+      - name: Package Python binding
+        run: |
+          PKG=release/crispasr-python-linux-x86_64/crispasr
+          mkdir -p "$PKG"
+
+          # Python sources
+          cp python/crispasr/__init__.py "$PKG/"
+          cp python/crispasr/_binding.py "$PKG/"
+
+          # Shared libraries — placed alongside __init__.py so _find_lib()
+          # finds them via Path(__file__).parent without LD_LIBRARY_PATH
+          cp build/src/libwhisper.so        "$PKG/"
+          ln -sf libwhisper.so              "$PKG/libcrispasr.so"
+          cp build/ggml/src/libggml.so      "$PKG/" 2>/dev/null || true
+          cp build/ggml/src/libggml-base.so "$PKG/" 2>/dev/null || true
+          cp build/ggml/src/libggml-cpu.so  "$PKG/" 2>/dev/null || true
+          cp build/libcrispasr_helpers.so   "$PKG/"
+
+          # Patch RPATH to $ORIGIN so libs resolve siblings without LD_LIBRARY_PATH
+          for f in "$PKG"/*.so; do
+            patchelf --set-rpath '$ORIGIN' "$f" 2>/dev/null || true
+          done
+
+          cd release && tar czf crispasr-python-linux-x86_64.tar.gz crispasr-python-linux-x86_64/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: crispasr-python-linux-x86_64
+          path: release/crispasr-python-linux-x86_64.tar.gz
+
   build-macos:
     runs-on: macos-latest
     steps:
@@ -77,12 +136,6 @@ jobs:
           ref: ${{ inputs.tag || github.ref }}
 
       - name: Build
-        # -DGGML_NATIVE=OFF + explicit AVX2/FMA/F16C: the CI runner's CPU may
-        # have AVX-512 / AVX10, and GGML_NATIVE=ON emits instructions for the
-        # host CPU. That produces prebuilts that silently SIGILL
-        # (STATUS_ILLEGAL_INSTRUCTION → process terminates with no output)
-        # on older consumer CPUs. AVX2 is the right compat baseline — every
-        # x86-64 CPU since ~2013 (Haswell / Excavator) supports it.
         run: |
           cmake -S . -B build `
             -DCMAKE_BUILD_TYPE=Release `
@@ -114,11 +167,6 @@ jobs:
           submodules: recursive
           ref: ${{ inputs.tag || github.ref }}
 
-      # Uses the well-maintained Jimver action (v0.2.19, widely used
-      # upstream). Previous approach of hand-rolled curl + choco-installed
-      # unzip hit chocolatey.org 504 gateway timeouts on 2026-04-20 and
-      # failed the v0.4.12 release build — action handles retries +
-      # partial downloads itself.
       - name: Install CUDA Toolkit 12.4.0
         uses: Jimver/cuda-toolkit@v0.2.19
         with:
@@ -128,11 +176,6 @@ jobs:
 
       - name: Build
         shell: cmd
-        # CUDA architectures: -real suffix skips PTX and ships SASS only, which
-        # shrinks ggml-cuda.dll ~10× per arch. Covered: Turing (RTX 20 / GTX 16),
-        # Ampere (RTX 30, A-series laptop), Ada Lovelace (RTX 40). Users on
-        # older GPUs or newer Hopper/Blackwell can build from source or use
-        # the Vulkan prebuilt.
         run: |
           call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
           cmake -S . -B build -G Ninja ^
@@ -145,29 +188,12 @@ jobs:
 
       - name: Package (binary + DLLs + CUDA runtime)
         shell: pwsh
-        # CUDA DLL chain on Windows (confirmed via PE import scan on v0.4.10
-        # artifact after it silently failed to launch):
-        #
-        #   crispasr.exe
-        #     └─ ggml-cuda.dll   imports  cublas64_12.dll + cudart64_12.dll + nvcuda.dll
-        #     └─ cublas64_12.dll imports  cublasLt64_12.dll + nvcuda.dll   ← trap
-        #     └─ cublasLt64_12.dll  (474 MB, but transitively required)
-        #
-        # ggml-cuda.dll's own imports don't list cublasLt, so we skipped it in
-        # the initial trim attempt. But cublas64 itself DOES need cublasLt,
-        # and Windows fails the whole exe at load time with a silent
-        # STATUS_DLL_NOT_FOUND. Upstream ggml comment explicitly notes
-        # "As of 12.3.1 CUDA Toolkit for Windows does not offer a static
-        # cublas library", so we can't side-step this via static linking.
         run: |
           New-Item -ItemType Directory -Force release\crispasr-windows-x86_64-cuda | Out-Null
           Copy-Item build\bin\crispasr.exe          release\crispasr-windows-x86_64-cuda\
           Copy-Item build\bin\crispasr-quantize.exe release\crispasr-windows-x86_64-cuda\
-          # Backend DLLs + ggml-* + whisper + crispasr, excluding the test-framework
-          # Catch2*.dll which the transcribe CLI never loads.
           Get-ChildItem build\bin\*.dll | Where-Object { $_.Name -notlike 'Catch2*' } |
             Copy-Item -Destination release\crispasr-windows-x86_64-cuda\
-          # CUDA runtime DLLs — cublasLt is not optional on Windows, see comment above.
           Copy-Item "$env:CUDA_PATH\bin\cudart64_*.dll"   release\crispasr-windows-x86_64-cuda\ -ErrorAction SilentlyContinue
           Copy-Item "$env:CUDA_PATH\bin\cublas64_*.dll"   release\crispasr-windows-x86_64-cuda\ -ErrorAction SilentlyContinue
           Copy-Item "$env:CUDA_PATH\bin\cublasLt64_*.dll" release\crispasr-windows-x86_64-cuda\ -ErrorAction SilentlyContinue
@@ -190,7 +216,6 @@ jobs:
       - name: Install Vulkan SDK
         shell: pwsh
         run: |
-          # Use the latest installer from the LunarG sdk manifest.
           $ver = (Invoke-RestMethod -Uri "https://vulkan.lunarg.com/sdk/latest.json").windows
           $url = "https://sdk.lunarg.com/sdk/download/$ver/windows/vulkan_sdk.exe"
           Invoke-WebRequest -Uri $url -OutFile vulkan_sdk.exe
@@ -219,7 +244,6 @@ jobs:
           Copy-Item build\bin\crispasr-quantize.exe release\crispasr-windows-x86_64-vulkan\
           Get-ChildItem build\bin\*.dll | Where-Object { $_.Name -notlike 'Catch2*' } |
             Copy-Item -Destination release\crispasr-windows-x86_64-vulkan\
-          # vulkan-1.dll is shipped with every GPU driver on Windows — do NOT bundle it.
           Compress-Archive -Path release\crispasr-windows-x86_64-vulkan -DestinationPath release\crispasr-windows-x86_64-vulkan.zip -CompressionLevel Optimal
 
       - uses: actions/upload-artifact@v4
@@ -228,7 +252,7 @@ jobs:
           path: release/crispasr-windows-x86_64-vulkan.zip
 
   publish:
-    needs: [build-linux, build-macos, build-windows-cpu, build-windows-cuda, build-windows-vulkan]
+    needs: [build-linux, build-python-linux, build-macos, build-windows-cpu, build-windows-cuda, build-windows-vulkan]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -241,6 +265,7 @@ jobs:
           tag_name: ${{ inputs.tag || github.ref_name }}
           files: |
             artifacts/crispasr-linux-x86_64/crispasr-linux-x86_64.tar.gz
+            artifacts/crispasr-python-linux-x86_64/crispasr-python-linux-x86_64.tar.gz
             artifacts/crispasr-macos/crispasr-macos.tar.gz
             artifacts/crispasr-windows-x86_64-cpu/crispasr-windows-x86_64-cpu.zip
             artifacts/crispasr-windows-x86_64-cuda/crispasr-windows-x86_64-cuda.zip
