@@ -1792,7 +1792,15 @@ different tokenizer (`omniASR_tokenizer_written_v2`, 10288 tokens vs 9812)
 and is the only variant that reliably transcribes challenging English audio.
 v2 checkpoints available at `dl.fbaipublicfiles.com/mms/omniASR-LLM-300M-v2.pt`.
 
-**Reference pipeline** (from LEARNINGS entry): works perfectly with
-`ASRInferencePipeline(model_card="omniASR_LLM_300M_v2")` + `lang=["eng_Latn"]`.
-Needs fairseq2 (Python 3.11, specific torch 2.8.x, libsndfile). Produces
-verbatim JFK transcription.
+**Critical bug found**: The LLM converter shortened
+`encoder_frontend.post_extract_layer_norm` to `post_extract_ln` but the runtime
+code looked for the long name, got nullptr, and silently skipped the LayerNorm.
+This caused the projection output to diverge (cos=0.77 vs reference) making
+all downstream output garbage. Fix: try both short and long tensor names.
+
+**Before fix**: "it sounded to one and that was a particular pillow..."
+**After fix**: "and so my palamericas is not what your country can do for you..."
+
+The reference dump protocol (dump intermediates at each stage, compare cosine
+similarity) caught the bug immediately. CNN output was cos=0.999999, but
+proj_out diverged to cos=0.767. The fix brought all stages to cos>0.9999.

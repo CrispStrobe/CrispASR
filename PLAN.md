@@ -994,7 +994,11 @@ v2 model (10288 vocab) produces English output with lang_id=417 (eng_Latn):
 - 5s JFK → "it sounded to make it but" (wrong transcription)
 - 11s JFK → "it sounded to one and..." (wrong transcription)
 
-Short audio works, longer audio degrades. The encoder output quality is the bottleneck
-(same issue as CTC variant — grouped pos_conv precision or transformer issues).
+**Bug found and fixed**: post_extract LayerNorm was silently skipped due to
+tensor name mismatch between converter and runtime. All encoder stages now
+match Python reference (cos>0.9999).
 
-TODO: debug encoder accuracy against Python reference, beam search, dynamic lang selection.
+11s JFK result: "and so my palamericas is not what your country can do for
+you is what you can do for your country" — correct structure, most words right.
+
+TODO: beam search, dynamic lang selection, quantization, HF upload.
