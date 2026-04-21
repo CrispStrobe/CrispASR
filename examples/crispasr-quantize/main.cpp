@@ -147,7 +147,10 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
                         // Skip projector tensors (Granite Speech: precision-sensitive)
                         (sname.find("proj.") != 0) &&
                         // Skip small classifier heads (ECAPA cosine: 45x192, precision-critical)
-                        !(sname.find("cls.") == 0 && ggml_nelements(t) < 65536);
+                        !(sname.find("cls.") == 0 && ggml_nelements(t) < 65536) &&
+                        // Skip OmniASR-LLM bridging tensors (enc_proj, lm_head, tok_emb, lang_emb)
+                        (sname.find("enc_proj.") != 0) && (sname.find("lm_head.") != 0) &&
+                        (sname.find("tok_emb.") != 0) && (sname.find("lang_emb.") != 0);
 
         const int64_t ncols = t->ne[0];
         ggml_type qtype_used = qtype;

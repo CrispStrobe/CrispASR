@@ -1,4 +1,4 @@
-// crispasr_backend_omniasr.cpp — OmniASR-CTC backend adapter.
+// crispasr_backend_omniasr.cpp — OmniASR backend adapter (CTC + LLM).
 
 #include "crispasr_backend.h"
 #include "omniasr.h"
@@ -20,9 +20,14 @@ public:
         omniasr_context_params cp = omniasr_context_default_params();
         cp.n_threads = params.n_threads;
         cp.verbosity = params.no_prints ? 0 : 1;
-        // OMNIASR_DEBUG=1 enables verbose debug output
         if (getenv("OMNIASR_DEBUG"))
             cp.verbosity = 2;
+        // Pass language for LLM variant (e.g. "eng_Latn" from -l en)
+        // The LLM model uses this for language conditioning
+        if (!params.language.empty() && params.language != "auto")
+            lang_str_ = params.language;
+        if (!lang_str_.empty())
+            cp.language = lang_str_.c_str();
         ctx_ = omniasr_init_from_file(params.model.c_str(), cp);
         return ctx_ != nullptr;
     }
@@ -56,6 +61,7 @@ public:
 
 private:
     omniasr_context* ctx_ = nullptr;
+    std::string lang_str_;
 };
 
 std::unique_ptr<CrispasrBackend> crispasr_make_omniasr_backend() {
