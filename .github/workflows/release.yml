@@ -66,7 +66,7 @@ jobs:
         run: |
           gcc -shared -fPIC -o build/libcrispasr_helpers.so \
             python/crispasr/_helpers.c \
-            -Iinclude \
+            -Iinclude -Iggml/include \
             -Lbuild/src \
             -lwhisper \
             -Wl,-rpath,'$ORIGIN'
