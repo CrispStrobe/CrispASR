@@ -973,3 +973,21 @@ Key: input layer_norm, CTC blank=0, pos conv padding=K//2.
 
 TODO: upload to HF, convert 1B/3B/7B, improve grouped conv precision,
 investigate HF-native path via wav2vec2 backend.
+
+### OmniASR-LLM — IN PROGRESS
+
+Converter + runtime shipped. 3.26 GB F16 GGUF for LLM-300M.
+Architecture: same encoder as CTC + 12-layer LLaMA decoder (d=4096, 8 heads,
+SwiGLU FFN d_ffn=2816, RMSNorm, RoPE interleaved).
+
+**Key findings:**
+- Decoder input: [audio_embs, lid_marker(9812), lang_emb(414=eng), BOS, generated...]
+- fairseq2 RoPE uses interleaved pairing (NORMAL mode), not NEOX
+- Language ID = list_index + 1 (factory.py convention, index 0 = no-language)
+- CPU decoder works but slow (~3s/token, single-core matmul 4096×4096)
+
+**Status:** Generating tokens, quality needs debugging. With eng_Latn=414 gets "mm"
+for 0.5s audio (stops early). Testing with longer audio. Need to compare against
+Python reference for accuracy verification.
+
+TODO: ggml graph decoder optimization, reference comparison, beam search.

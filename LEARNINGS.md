@@ -1760,3 +1760,29 @@ The HF-native conversion (aadel4/omniASR-CTC-300M-v2) uses wav2vec2 names:
 
 Our omniasr runtime expects the fairseq2 format. The HF-native model can
 potentially be used with the existing wav2vec2 backend instead.
+
+### OmniASR-LLM: decoder architecture and language conditioning
+
+The OmniASR-LLM variant adds a 12-layer LLaMA decoder (d=4096, 8 heads,
+head_dim=512, SwiGLU FFN with d_ffn=2816). The encoder is identical to CTC.
+
+**Decoder input sequence** (from `create_default_syntax` in model.py):
+```
+[audio_embeddings...] [lid_marker] [lang_embedding] [BOS] [generated_tokens...]
+```
+
+**Special tokens** (from `Wav2Vec2LlamaSpecialTokens`):
+- `lid_marker` = vocab_size (9812) — extra entry in text_frontend embedding
+- Language ID = index in supported_langs list + 1 (factory.py adds +1, index 0 = no-language)
+- BOS = 0, EOS = 2, PAD = 1
+
+**Language ID mapping** (from `factory.py`):
+```python
+lang_mapping = {row["lang"].lower(): row["index"] + 1 for row in parquet_table}
+```
+Key indices: eng_Latn=414, deu_Latn=365
+
+**RoPE**: fairseq2 uses interleaved pairing `(x[2i], x[2i+1])` — this maps to
+`GGML_ROPE_TYPE_NORMAL` (mode 0), NOT NEOX (mode 2). This differs from most
+HuggingFace LLMs which use `rotate_half` (NEOX). Getting this wrong produces
+fluent but wrong-language output (Greek in our case).

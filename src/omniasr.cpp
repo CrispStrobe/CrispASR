@@ -837,11 +837,12 @@ static char* omniasr_transcribe_llm(omniasr_context* ctx, const float* /*samples
     // Language embedding
     std::vector<float> lang_emb_data;
     read_f32(G("lang_emb.weight"), lang_emb_data);
-    int lang_id = 414; // eng_Latn default (list_index + 1, per factory.py convention)
+    int lang_id = 417; // eng_Latn default (parquet_index=416, +1 per factory.py)
     // Factory: lang_mapping = {lang.lower(): parquet_index + 1}
     // Index 0 reserved for no-language/dropout
-    // Common: eng_Latn=414, deu_Latn=365, fra_Latn=499, spa_Latn=1448
-    // TODO: parse ctx->params.language to look up lang_id dynamically
+    // From languges_lookup_table.parquet:
+    //   eng_Latn=417, deu_Latn=367, fra_Latn=448, spa_Latn=1355, jpn_Jpan=632, kor_Hang=734
+    // TODO: embed parquet mapping in GGUF and parse ctx->params.language
 
     bool use_lang = (hp.n_langs > 0 && !lang_emb_data.empty());
     // Sequence: [audio_embs...] [lid_marker_emb] [lang_emb] [BOS_emb] [generated...]
