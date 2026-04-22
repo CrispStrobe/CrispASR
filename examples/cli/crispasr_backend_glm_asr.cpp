@@ -23,6 +23,7 @@ public:
         glm_asr_context_params cp = glm_asr_context_default_params();
         cp.n_threads = params.n_threads;
         cp.verbosity = params.no_prints ? 0 : 1;
+        cp.use_gpu = params.use_gpu && params.gpu_backend != "cpu";
         ctx_ = glm_asr_init_from_file(params.model.c_str(), cp);
         return ctx_ != nullptr;
     }

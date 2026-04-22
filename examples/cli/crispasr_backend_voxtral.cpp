@@ -26,10 +26,11 @@ struct VoxtralOps {
     // Mistral Tekken EOS.
     static constexpr int eos_id = 2;
 
-    static CtxT* init(const char* path, int n_threads, int verbosity) {
+    static CtxT* init(const char* path, int n_threads, int verbosity, bool use_gpu) {
         auto cp = voxtral_context_default_params();
         cp.n_threads = n_threads;
         cp.verbosity = verbosity;
+        cp.use_gpu = use_gpu;
         return voxtral_init_from_file(path, cp);
     }
     static void free_ctx(CtxT* ctx) { voxtral_free(ctx); }
@@ -119,7 +120,8 @@ public:
     }
 
     bool init(const whisper_params& p) override {
-        ctx_ = VoxtralOps::init(p.model.c_str(), p.n_threads, p.no_prints ? 0 : 1);
+        ctx_ = VoxtralOps::init(p.model.c_str(), p.n_threads, p.no_prints ? 0 : 1,
+                                p.use_gpu && p.gpu_backend != "cpu");
         if (!ctx_) {
             fprintf(stderr, "crispasr[voxtral]: failed to load model '%s'\n", p.model.c_str());
             return false;

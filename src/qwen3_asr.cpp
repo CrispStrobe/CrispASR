@@ -1353,6 +1353,7 @@ extern "C" qwen3_asr_context_params qwen3_asr_context_default_params(void) {
     qwen3_asr_context_params p = {};
     p.n_threads = 4;
     p.verbosity = 1;
+    p.use_gpu = true;
     return p;
 }
 
@@ -1363,7 +1364,7 @@ extern "C" qwen3_asr_context* qwen3_asr_init_from_file(const char* path, qwen3_a
 
     // Try GPU backend first (Metal, CUDA, Vulkan...), fall back to CPU.
     // ggml_backend_init_best() picks the highest-priority available backend.
-    ctx->backend = ggml_backend_init_best();
+    ctx->backend = params.use_gpu ? ggml_backend_init_best() : ggml_backend_cpu_init();
     if (!ctx->backend)
         ctx->backend = ggml_backend_cpu_init();
     ctx->backend_cpu = ggml_backend_cpu_init();

@@ -182,7 +182,7 @@ struct kyutai_stt_context {
 // ===========================================================================
 
 extern "C" struct kyutai_stt_context_params kyutai_stt_context_default_params(void) {
-    return {/*n_threads=*/4, /*verbosity=*/1};
+    return {/*n_threads=*/4, /*verbosity=*/1, /*use_gpu=*/true};
 }
 
 // --- Helpers ---
@@ -254,7 +254,7 @@ extern "C" struct kyutai_stt_context* kyutai_stt_init_from_file(const char* path
     sctx->params = params;
     sctx->n_threads = params.n_threads > 0 ? params.n_threads : 4;
 
-    sctx->backend = ggml_backend_init_best();
+    sctx->backend = params.use_gpu ? ggml_backend_init_best() : ggml_backend_cpu_init();
     if (!sctx->backend)
         sctx->backend = ggml_backend_cpu_init();
     sctx->backend_cpu = ggml_backend_cpu_init();

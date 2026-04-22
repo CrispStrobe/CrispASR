@@ -29,6 +29,7 @@ struct granite_speech_context;
 struct granite_speech_context_params {
     int n_threads;
     int verbosity; // 0=silent 1=normal 2=verbose
+    bool use_gpu;  // false => force CPU backend
 };
 
 struct granite_speech_context_params granite_speech_context_default_params(void);

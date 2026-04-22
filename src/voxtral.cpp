@@ -752,6 +752,7 @@ extern "C" voxtral_context_params voxtral_context_default_params(void) {
     voxtral_context_params p = {};
     p.n_threads = 4;
     p.verbosity = 1;
+    p.use_gpu = true;
     return p;
 }
 
@@ -761,7 +762,7 @@ extern "C" voxtral_context* voxtral_init_from_file(const char* path, voxtral_con
     ctx->n_threads = params.n_threads > 0 ? params.n_threads : 4;
 
     // Try GPU backend first (Metal, CUDA, Vulkan...), fall back to CPU.
-    ctx->backend = ggml_backend_init_best();
+    ctx->backend = params.use_gpu ? ggml_backend_init_best() : ggml_backend_cpu_init();
     if (!ctx->backend)
         ctx->backend = ggml_backend_cpu_init();
     ctx->backend_cpu = ggml_backend_cpu_init();

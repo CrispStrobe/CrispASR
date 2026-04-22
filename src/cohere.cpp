@@ -1535,7 +1535,8 @@ static void cohere_model_warm_cache(const cohere_model& m) {
 }
 
 struct cohere_context_params cohere_context_default_params(void) {
-    return {.n_threads = 4, .use_flash = false, .no_punctuation = false, .diarize = false, .verbosity = 1};
+    return {.n_threads = 4, .use_flash = false, .use_gpu = true, .no_punctuation = false, .diarize = false,
+            .verbosity = 1};
 }
 
 struct cohere_context* cohere_init_from_file(const char* path_model, struct cohere_context_params params) {
@@ -1560,7 +1561,9 @@ struct cohere_context* cohere_init_from_file(const char* path_model, struct cohe
     // Set COHERE_DEVICE=cpu  to force CPU.
     // Set COHERE_DEVICE=metal (or cuda) to request a specific backend.
     // ---------------------------------------------------------------------------
-    ggml_backend_load_all(); // registers Metal (macOS), CUDA, Vulkan, etc. if compiled in
+    if (params.use_gpu) {
+        ggml_backend_load_all(); // registers Metal (macOS), CUDA, Vulkan, etc. if compiled in
+    }
 
     {
         const char* dev_env = getenv("COHERE_DEVICE");
@@ -1571,7 +1574,7 @@ struct cohere_context* cohere_init_from_file(const char* path_model, struct cohe
             }
         }
         if (!ctx->ggml_backend) {
-            ctx->ggml_backend = ggml_backend_init_best(); // GPU > CPU
+            ctx->ggml_backend = params.use_gpu ? ggml_backend_init_best() : ggml_backend_cpu_init();
         }
         if (!ctx->ggml_backend) {
             fprintf(stderr, "cohere: failed to initialize any ggml backend\n");

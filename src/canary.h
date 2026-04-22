@@ -26,6 +26,7 @@ struct canary_context_params {
     int n_threads;
     bool use_flash; // flash attention in encoder/decoder (default: false)
     int verbosity;  // 0=silent 1=normal 2=verbose
+    bool use_gpu;   // false => force CPU backend
 };
 
 struct canary_context_params canary_context_default_params(void);

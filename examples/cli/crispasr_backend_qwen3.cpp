@@ -123,6 +123,7 @@ public:
         auto cp = qwen3_asr_context_default_params();
         cp.n_threads = p.n_threads;
         cp.verbosity = p.no_prints ? 0 : 1;
+        cp.use_gpu = p.use_gpu && p.gpu_backend != "cpu";
         ctx_ = qwen3_asr_init_from_file(p.model.c_str(), cp);
         if (!ctx_) {
             fprintf(stderr, "crispasr[qwen3]: failed to load model '%s'\n", p.model.c_str());

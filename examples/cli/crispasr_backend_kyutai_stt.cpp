@@ -21,6 +21,7 @@ public:
         kyutai_stt_context_params cp = kyutai_stt_context_default_params();
         cp.n_threads = params.n_threads;
         cp.verbosity = params.no_prints ? 0 : 1;
+        cp.use_gpu = params.use_gpu && params.gpu_backend != "cpu";
         ctx_ = kyutai_stt_init_from_file(params.model.c_str(), cp);
         return ctx_ != nullptr;
     }

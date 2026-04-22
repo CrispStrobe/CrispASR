@@ -838,7 +838,7 @@ static ggml_cgraph* voxtral4b_build_graph_embed(voxtral4b_context* ctx, int n_to
 // ===========================================================================
 
 extern "C" struct voxtral4b_context_params voxtral4b_context_default_params(void) {
-    return {/*n_threads=*/4, /*verbosity=*/1};
+    return {/*n_threads=*/4, /*verbosity=*/1, /*use_gpu=*/true};
 }
 
 extern "C" struct voxtral4b_context* voxtral4b_init_from_file(const char* path,
@@ -847,7 +847,7 @@ extern "C" struct voxtral4b_context* voxtral4b_init_from_file(const char* path,
     ctx->params = params;
     ctx->n_threads = params.n_threads > 0 ? params.n_threads : 4;
 
-    ctx->backend = ggml_backend_init_best();
+    ctx->backend = params.use_gpu ? ggml_backend_init_best() : ggml_backend_cpu_init();
     if (!ctx->backend)
         ctx->backend = ggml_backend_cpu_init();
     ctx->backend_cpu = ggml_backend_cpu_init();

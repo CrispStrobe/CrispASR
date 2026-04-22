@@ -1022,6 +1022,10 @@ static ggml_backend_t pick_backend() {
     return b ? b : ggml_backend_cpu_init();
 }
 
+static ggml_backend_t pick_backend(bool use_gpu) {
+    return use_gpu ? pick_backend() : ggml_backend_cpu_init();
+}
+
 // ===========================================================================
 // Public C API
 // ===========================================================================
@@ -1073,6 +1077,7 @@ extern "C" struct canary_context_params canary_context_default_params(void) {
     p.n_threads = std::min(4, (int)std::thread::hardware_concurrency());
     p.use_flash = false;
     p.verbosity = 1;
+    p.use_gpu = true;
     return p;
 }
 
@@ -1081,7 +1086,7 @@ extern "C" struct canary_context* canary_init_from_file(const char* path_model, 
     ctx->params = params;
     ctx->n_threads = params.n_threads > 0 ? params.n_threads : 4;
 
-    ctx->backend = pick_backend();
+    ctx->backend = pick_backend(params.use_gpu);
     ctx->backend_cpu = ggml_backend_cpu_init();
     if (!ctx->backend)
         ctx->backend = ctx->backend_cpu;

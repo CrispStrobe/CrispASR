@@ -13,6 +13,7 @@ struct cohere_context;
 struct cohere_context_params {
     int n_threads;       // default: number of physical cores
     bool use_flash;      // flash attention in decoder (default: false for now)
+    bool use_gpu;        // false => force CPU backend
     bool no_punctuation; // use <|nopnc|> instead of <|pnc|> in prompt (default: false)
     bool diarize;        // use <|diarize|> instead of <|nodiarize|>; model may emit
                          // <|spkchange|> and <|spk0|>..<|spk15|> tokens (experimental)

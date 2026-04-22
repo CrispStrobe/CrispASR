@@ -29,6 +29,7 @@ struct voxtral4b_context;
 struct voxtral4b_context_params {
     int n_threads;
     int verbosity; // 0=silent 1=normal 2=verbose
+    bool use_gpu;  // false => force CPU backend
 };
 
 struct voxtral4b_context_params voxtral4b_context_default_params(void);

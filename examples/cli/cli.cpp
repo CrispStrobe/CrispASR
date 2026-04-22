@@ -1275,8 +1275,6 @@ static void output_lrc(const std::vector<crispasr_segment>& segs, std::ofstream&
 static void cb_log_disable(enum ggml_log_level, const char*, void*) {}
 
 int main(int argc, char** argv) {
-    ggml_backend_load_all();
-
 #if defined(_WIN32)
     // Set the console output code page to UTF-8, while command line arguments
     // are still encoded in the system's code page. In this way, we can print
@@ -1320,6 +1318,10 @@ int main(int argc, char** argv) {
     if (whisper_params_parse(argc, argv, params) == false) {
         whisper_print_usage(argc, argv, params);
         return 1;
+    }
+
+    if (params.use_gpu && params.gpu_backend != "cpu") {
+        ggml_backend_load_all();
     }
 
     // remove non-existent files

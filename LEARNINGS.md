@@ -1875,3 +1875,9 @@ CLI adapter, treating `--gpu-backend cpu` the same as `-ng`.
 **Lesson:** For the non-whisper backends, GPU selection is not automatic
 just because the top-level CLI parsed the flag. Each backend adapter has
 to propagate that intent into its own backend picker.
+## 2026-04-22 - No-gpu mode must gate `ggml_backend_load_all()`
+
+- Symptom: `-ng --gpu-backend cpu` could still print `ggml_cuda_init: found ...` even after backend-specific code paths stopped using `ggml_backend_init_best()`.
+- Root cause: `examples/cli/cli.cpp` called `ggml_backend_load_all()` before parsing CLI flags, and `src/cohere.cpp` also loaded all backends unconditionally. That dynamic registration path probes CUDA as soon as the CUDA backend is loaded.
+- Fix: parse CLI args first, then call `ggml_backend_load_all()` only when `params.use_gpu` is true and `params.gpu_backend != "cpu"`. Any backend with its own unconditional `ggml_backend_load_all()` must apply the same guard.
+- Result: CPU-forced runs stop triggering global CUDA discovery just to select a CPU backend.

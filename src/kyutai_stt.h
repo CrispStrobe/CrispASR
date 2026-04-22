@@ -20,6 +20,7 @@ struct kyutai_stt_context;
 struct kyutai_stt_context_params {
     int n_threads;
     int verbosity; // 0=silent 1=normal 2=verbose
+    bool use_gpu;  // false => force CPU backend
 };
 
 struct kyutai_stt_context_params kyutai_stt_context_default_params(void);

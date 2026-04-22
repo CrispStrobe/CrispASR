@@ -47,6 +47,7 @@ public:
         auto cp = voxtral4b_context_default_params();
         cp.n_threads = p.n_threads;
         cp.verbosity = p.no_prints ? 0 : 1;
+        cp.use_gpu = p.use_gpu && p.gpu_backend != "cpu";
 
         ctx_ = voxtral4b_init_from_file(p.model.c_str(), cp);
         if (!ctx_) {
