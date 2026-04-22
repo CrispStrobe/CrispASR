@@ -146,13 +146,14 @@ add_library(whisper
 # declared. See the "multi-backend linkage" section near the bottom.
 
 # Cohere Transcribe library (Conformer encoder + transformer decoder)
-add_library(cohere
+add_library(cohere STATIC
             cohere-arch.h
             cohere.h
             cohere.cpp
             )
 target_include_directories(cohere PUBLIC . ../include)
 target_compile_features   (cohere PUBLIC cxx_std_20)
+set_target_properties(cohere PROPERTIES POSITION_INDEPENDENT_CODE ON)
 # BLAS for mel filterbank SGEMM (cblas_sgemm)
 if(APPLE)
     # Accelerate framework provides cblas and vDSP; no external deps needed.
@@ -205,12 +206,13 @@ endif()
 # ---------------------------------------------------------------------------
 # Canary 1B v2 — nvidia/canary-1b-v2 (FastConformer enc + Transformer dec, ASR + AST)
 # ---------------------------------------------------------------------------
-add_library(canary
+add_library(canary STATIC
             canary.h
             canary.cpp
             )
 target_include_directories(canary PUBLIC . ../include)
 target_compile_features   (canary PUBLIC cxx_std_17)
+set_target_properties(canary PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_link_libraries     (canary PUBLIC ggml ggml-base Threads::Threads crispasr-core)
 if(NOT MSVC)
     target_compile_options(canary PRIVATE -O3)
@@ -228,12 +230,13 @@ endif()
 # Canary CTC aligner — auxiliary CTC model from inside canary-1b-v2.nemo,
 # used for SentencePiece subword forced alignment of any transcript text.
 # ---------------------------------------------------------------------------
-add_library(canary_ctc
+add_library(canary_ctc STATIC
             canary_ctc.h
             canary_ctc.cpp
             )
 target_include_directories(canary_ctc PUBLIC . ../include)
 target_compile_features   (canary_ctc PUBLIC cxx_std_17)
+set_target_properties(canary_ctc PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_link_libraries     (canary_ctc PUBLIC ggml ggml-base Threads::Threads crispasr-core)
 if(NOT MSVC)
     target_compile_options(canary_ctc PRIVATE -O3)
@@ -275,12 +278,13 @@ set_target_properties(crispasr-core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 # ---------------------------------------------------------------------------
 # Parakeet TDT — nvidia/parakeet-tdt-0.6b-v3 (FastConformer encoder + TDT decoder)
 # ---------------------------------------------------------------------------
-add_library(parakeet
+add_library(parakeet STATIC
             parakeet.h
             parakeet.cpp
             )
 target_include_directories(parakeet PUBLIC . ../include)
 target_compile_features   (parakeet PUBLIC cxx_std_17)
+set_target_properties(parakeet PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_link_libraries     (parakeet PUBLIC ggml ggml-base Threads::Threads crispasr-core)
 if(NOT MSVC)
     target_compile_options(parakeet PRIVATE -O3)
@@ -297,12 +301,13 @@ endif()
 # ---------------------------------------------------------------------------
 # Qwen3-ASR — Qwen/Qwen3-ASR-0.6B (Whisper-style audio encoder + Qwen3 LLM)
 # ---------------------------------------------------------------------------
-add_library(qwen3_asr
+add_library(qwen3_asr STATIC
             qwen3_asr.h
             qwen3_asr.cpp
             )
 target_include_directories(qwen3_asr PUBLIC . ../include)
 target_compile_features   (qwen3_asr PUBLIC cxx_std_17)
+set_target_properties(qwen3_asr PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_link_libraries     (qwen3_asr PUBLIC ggml ggml-base Threads::Threads crispasr-core)
 if(NOT MSVC)
     target_compile_options(qwen3_asr PRIVATE -O3)
@@ -319,12 +324,13 @@ endif()
 # ---------------------------------------------------------------------------
 # Voxtral — mistralai/Voxtral-Mini-3B-2507 (Whisper encoder + Llama 3 LLM)
 # ---------------------------------------------------------------------------
-add_library(voxtral
+add_library(voxtral STATIC
             voxtral.h
             voxtral.cpp
             )
 target_include_directories(voxtral PUBLIC . ../include)
 target_compile_features   (voxtral PUBLIC cxx_std_17)
+set_target_properties(voxtral PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_link_libraries     (voxtral PUBLIC ggml ggml-base Threads::Threads crispasr-core)
 if(NOT MSVC)
     target_compile_options(voxtral PRIVATE -O3)
@@ -338,12 +344,13 @@ if(GGML_CUDA)
     target_link_libraries(voxtral PUBLIC ggml-cuda)
 endif()
 
-add_library(voxtral4b
+add_library(voxtral4b STATIC
             voxtral4b.h
             voxtral4b.cpp
             )
 target_include_directories(voxtral4b PUBLIC . ../include)
 target_compile_features   (voxtral4b PUBLIC cxx_std_17)
+set_target_properties(voxtral4b PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_link_libraries     (voxtral4b PUBLIC ggml ggml-base Threads::Threads crispasr-core)
 if(NOT MSVC)
     target_compile_options(voxtral4b PRIVATE -O3)
@@ -357,12 +364,13 @@ if(GGML_CUDA)
     target_link_libraries(voxtral4b PUBLIC ggml-cuda)
 endif()
 
-add_library(granite_speech
+add_library(granite_speech STATIC
             granite_speech.h
             granite_speech.cpp
             )
 target_include_directories(granite_speech PUBLIC . ../include)
 target_compile_features   (granite_speech PUBLIC cxx_std_17)
+set_target_properties(granite_speech PROPERTIES POSITION_INDEPENDENT_CODE ON)
 # OpenMP: linked when available so future `#pragma omp parallel for` on the
 # encoder hot loops can land without a CMake change. Adding the pragmas
 # themselves is a follow-up — see TODO.md → "Per-model follow-ups → granite".
