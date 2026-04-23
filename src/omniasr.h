@@ -20,6 +20,7 @@ struct omniasr_context;
 
 struct omniasr_context_params {
     int n_threads;
+    int max_new_tokens;   // LLM decoder generation cap
     int verbosity;        // 0=silent 1=normal 2=verbose
     const char* language; // ISO 639-3 lang code for LLM (e.g. "eng_Latn"), NULL for auto
     bool use_gpu;         // false => force CPU backend

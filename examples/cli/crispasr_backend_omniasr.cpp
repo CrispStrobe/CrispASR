@@ -20,6 +20,7 @@ public:
     bool init(const whisper_params& params) override {
         omniasr_context_params cp = omniasr_context_default_params();
         cp.n_threads = params.n_threads;
+        cp.max_new_tokens = params.max_new_tokens > 0 ? params.max_new_tokens : cp.max_new_tokens;
         cp.verbosity = params.no_prints ? 0 : 1;
         cp.use_gpu = crispasr_backend_should_use_gpu(params);
         if (getenv("OMNIASR_DEBUG"))

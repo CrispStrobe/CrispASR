@@ -105,6 +105,7 @@ struct omniasr_context {
 extern "C" struct omniasr_context_params omniasr_context_default_params(void) {
     omniasr_context_params p;
     p.n_threads = 4;
+    p.max_new_tokens = 512;
     p.verbosity = 1;
     p.language = nullptr;
     p.use_gpu = true;
@@ -150,6 +151,29 @@ static void dump_cpu(const float* data, int n, const char* name, const char* dir
     }
 }
 
+static bool read_tensor_row_f32(ggml_tensor* t, int row, int width, std::vector<float>& out) {
+    if (!t || row < 0 || width <= 0 || width > t->ne[0] || row >= t->ne[1]) {
+        out.clear();
+        return false;
+    }
+
+    out.resize(width);
+    const size_t offset = (size_t)row * t->nb[1];
+    if (t->type == GGML_TYPE_F32) {
+        ggml_backend_tensor_get(t, out.data(), offset, (size_t)width * sizeof(float));
+        return true;
+    }
+    if (t->type == GGML_TYPE_F16) {
+        std::vector<uint16_t> tmp(width);
+        ggml_backend_tensor_get(t, tmp.data(), offset, (size_t)width * sizeof(uint16_t));
+        ggml_fp16_to_fp32_row((const ggml_fp16_t*)tmp.data(), out.data(), width);
+        return true;
+    }
+
+    out.clear();
+    return false;
+}
+
 // ===========================================================================
 // ggml graph helpers
 // ===========================================================================
@@ -162,6 +186,43 @@ static ggml_tensor* build_ln(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w, 
     if (b)
         x = ggml_add(ctx, x, b);
     return x;
+}
+
+// OmniASR/Wav2Vec2 positional convolution: grouped Conv1d + GELU + residual.
+// ggml has no grouped conv op, so build it as one conv branch per group.
+// h: [C, T], w: [K, C_per_group, C], b: [C].
+static ggml_tensor* build_grouped_pos_conv(ggml_context* ctx, ggml_tensor* h, ggml_tensor* w, ggml_tensor* b) {
+    const int64_t K = w->ne[0];
+    const int64_t C_per_group = w->ne[1];
+    const int64_t C = w->ne[2];
+    const int64_t T = h->ne[1];
+    const int64_t groups = C / C_per_group;
+
+    GGML_ASSERT(h->ne[0] == C);
+    GGML_ASSERT(groups > 0 && groups * C_per_group == C);
+
+    ggml_tensor* pos = nullptr;
+    for (int64_t g = 0; g < groups; ++g) {
+        const int64_t c0 = g * C_per_group;
+
+        ggml_tensor* h_g = ggml_view_2d(ctx, h, C_per_group, T, h->nb[1], (size_t)c0 * h->nb[0]);
+        h_g = ggml_cont(ctx, ggml_transpose(ctx, h_g)); // [T, C_per_group]
+
+        ggml_tensor* w_g =
+            ggml_view_3d(ctx, w, K, C_per_group, C_per_group, w->nb[1], w->nb[2], (size_t)c0 * w->nb[2]);
+        w_g = ggml_cont(ctx, w_g);
+
+        ggml_tensor* y = ggml_conv_1d(ctx, w_g, h_g, 1, (int)(K / 2), 1); // [T + 1, C_per_group] for even K
+        y = ggml_view_2d(ctx, y, T, C_per_group, y->nb[1], 0);           // fairseq trims the final frame
+        y = ggml_cont(ctx, ggml_transpose(ctx, y));                      // [C_per_group, T]
+
+        ggml_tensor* b_g = ggml_view_1d(ctx, b, C_per_group, (size_t)c0 * b->nb[0]);
+        y = ggml_add(ctx, y, b_g);
+        pos = pos ? ggml_concat(ctx, pos, y, 0) : y;
+    }
+
+    pos = ggml_gelu(ctx, pos);
+    return ggml_add(ctx, h, pos);
 }
 
 // Transformer encoder layer (pre-norm)
@@ -566,206 +627,11 @@ extern "C" char* omniasr_transcribe(struct omniasr_context* ctx, const float* sa
     // Convolutional positional encoding: grouped Conv1d + GELU + residual.
     // Weight normalization pre-computed in converter → stored as pos_conv.weight.
     // Groups=16, kernel=128, channels=1024.
-    // ggml lacks grouped conv, so we split: graph 1 (CNN+proj), CPU (pos_conv), graph 2 (transformer+CTC).
     {
         ggml_tensor* wv_t = G("pos_conv.weight");
         ggml_tensor* pb_t = G("pos_conv.bias");
-
-        if (wv_t && pb_t) {
-            // Read weights to CPU
-            int K_pos = (int)wv_t->ne[0]; // 128
-            int IC_g = (int)wv_t->ne[1];  // 64 (input channels per group)
-            int OC = (int)wv_t->ne[2];    // 1024
-            int groups = OC / IC_g;       // 16
-            int pad_pos = K_pos / 2;      // 64 (fairseq2 convention: K//2, then trim output)
-
-            // Read the projection output to CPU for pos conv computation
-            // h is [d_model=1024, T] in ggml. Mark as output to read after graph.
-            // But we haven't computed the graph yet! We need to split:
-            // Graph 1: CNN + LN + projection → read h to CPU
-            // CPU: pos_encoder grouped conv
-            // Graph 2: h + pos → transformer → CTC
-
-            // Mark h as output for Graph 1
-            ggml_set_name(h, "h_pre_pos");
-            ggml_set_output(h);
-            ggml_build_forward_expand(gf, h);
-
-            // Compute Graph 1
-            ggml_backend_sched_reset(ctx->sched);
-            if (!ggml_backend_sched_alloc_graph(ctx->sched, gf)) {
-                fprintf(stderr, "omniasr: graph 1 alloc failed\n");
-                ggml_free(ctx0);
-                return nullptr;
-            }
-            ggml_backend_tensor_set(inp, pcm_norm.data(), 0, n_samples * sizeof(float));
-            if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS) {
-                fprintf(stderr, "omniasr: graph 1 compute failed\n");
-                ggml_free(ctx0);
-                return nullptr;
-            }
-
-            // Dump CNN output if available
-            {
-                ggml_tensor* cnn_t = ggml_graph_get_tensor(gf, "cnn_out");
-                if (cnn_t)
-                    dump_tensor(cnn_t, "cnn_out", dump_dir);
-                ggml_tensor* proj_t = ggml_graph_get_tensor(gf, "proj_out");
-                if (proj_t)
-                    dump_tensor(proj_t, "proj_out_graph1", dump_dir);
-            }
-
-            // Read h_pre_pos: [d_model, T] ggml col-major: data[t * d_model + c]
-            ggml_tensor* h_cpu_t = ggml_graph_get_tensor(gf, "h_pre_pos");
-            int d = (int)h_cpu_t->ne[0];     // 1024
-            int T_pos = (int)h_cpu_t->ne[1]; // 549
-            std::vector<float> h_cpu(d * T_pos);
-            ggml_backend_tensor_get(h_cpu_t, h_cpu.data(), 0, d * T_pos * sizeof(float));
-            dump_cpu(h_cpu.data(), d * T_pos, "h_pre_pos", dump_dir);
-
-            if (ctx->params.verbosity >= 2)
-                fprintf(stderr, "  pos_encoder: d=%d, T=%d, K=%d, groups=%d\n", d, T_pos, K_pos, groups);
-
-            // Read pre-computed pos conv weight (weight normalization done in converter)
-            // Layout: ggml [K, IC_g, OC] col-major = data[oc * IC_g * K + ic * K + k]
-            std::vector<float> pos_w(OC * IC_g * K_pos), bias(OC);
-            if (wv_t->type == GGML_TYPE_F16) {
-                std::vector<uint16_t> tmp(OC * IC_g * K_pos);
-                ggml_backend_tensor_get(wv_t, tmp.data(), 0, tmp.size() * 2);
-                pos_w.resize(tmp.size());
-                ggml_fp16_to_fp32_row((const ggml_fp16_t*)tmp.data(), pos_w.data(), tmp.size());
-            } else {
-                ggml_backend_tensor_get(wv_t, pos_w.data(), 0, pos_w.size() * sizeof(float));
-            }
-            ggml_backend_tensor_get(pb_t, bias.data(), 0, OC * sizeof(float));
-
-            // Grouped Conv1d on CPU: h [d=1024, T] → pos [d=1024, T]
-            // h layout: data[t * d + c] (ggml col-major)
-            // Groups=16: group g processes channels [g*64, (g+1)*64) with conv [64, 64, 128]
-            int C_per_g = IC_g; // 64
-            std::vector<float> pos(d * T_pos, 0);
-            for (int g = 0; g < groups; g++) {
-                int c_start = g * C_per_g;
-                for (int oc_local = 0; oc_local < C_per_g; oc_local++) {
-                    int oc = c_start + oc_local;
-                    for (int t = 0; t < T_pos; t++) {
-                        float s = bias[oc];
-                        for (int ic_local = 0; ic_local < C_per_g; ic_local++) {
-                            int ic = c_start + ic_local;
-                            for (int k = 0; k < K_pos; k++) {
-                                int ti = t + k - pad_pos;
-                                if (ti >= 0 && ti < T_pos) {
-                                    // h at [ic, ti]: h_cpu[ti * d + ic]
-                                    // weight at [oc, ic_local, k]: pos_w[oc * IC_g * K_pos + ic_local * K_pos + k]
-                                    s += h_cpu[ti * d + ic] * pos_w[oc * IC_g * K_pos + ic_local * K_pos + k];
-                                }
-                            }
-                        }
-                        // GELU
-                        float v = s;
-                        v = 0.5f * v * (1.0f + tanhf(0.7978845608f * (v + 0.044715f * v * v * v)));
-                        // pos at [oc, t]: pos[t * d + oc]
-                        pos[t * d + oc] = v;
-                    }
-                }
-            }
-
-            // Add pos to h: h = h + pos
-            for (int i = 0; i < d * T_pos; i++)
-                h_cpu[i] += pos[i];
-            dump_cpu(h_cpu.data(), d * T_pos, "pos_conv_out", dump_dir);
-
-            // Now rebuild Graph 2: transformer + CTC using h_cpu as input
-            ggml_free(ctx0);
-            mem = ggml_tensor_overhead() * 8192 + ggml_graph_overhead_custom(65536, false);
-            meta.resize(mem);
-            gp = {mem, meta.data(), true};
-            ctx0 = ggml_init(gp);
-            gf = ggml_new_graph_custom(ctx0, 65536, false);
-
-            // New input: h with pos encoding [d_model, T]
-            h = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, d, T_pos);
-            ggml_set_name(h, "h_with_pos");
-            ggml_set_input(h);
-
-            // Continue with transformer layers below (h is the input)
-            // We'll set the tensor data before computing Graph 2
-            // Store h_cpu for later
-            // (the ggml_backend_tensor_set will happen after graph alloc)
-
-            // We need to store h_cpu and set it after alloc
-            // Use a static/member variable or lambda capture
-            // For simplicity: store in a local and set after alloc below
-
-            // Build transformer layers onto h
-            for (int i = 0; i < hp.n_enc; i++) {
-                std::string p = "enc." + std::to_string(i);
-                h = build_enc_layer(
-                    ctx0, h, G(p + ".attn_ln.weight"), G(p + ".attn_ln.bias"), G(p + ".attn.q_proj.weight"),
-                    G(p + ".attn.q_proj.bias"), G(p + ".attn.k_proj.weight"), G(p + ".attn.k_proj.bias"),
-                    G(p + ".attn.v_proj.weight"), G(p + ".attn.v_proj.bias"), G(p + ".attn.out.weight"),
-                    G(p + ".attn.out.bias"), G(p + ".ffn_ln.weight"), G(p + ".ffn_ln.bias"), G(p + ".ffn.up.weight"),
-                    G(p + ".ffn.up.bias"), G(p + ".ffn.down.weight"), G(p + ".ffn.down.bias"), hp.n_heads, hp.head_dim);
-            }
-
-            // Final LayerNorm
-            h = build_ln(ctx0, h, G("enc_ln.weight"), G("enc_ln.bias"));
-
-            if (hp.model_type == 1) {
-                // LLM: mark encoder output, skip CTC head
-                ggml_set_name(h, "enc_out");
-                ggml_set_output(h);
-                ggml_build_forward_expand(gf, h);
-            } else {
-                // CTC: apply CTC head
-                h = ggml_mul_mat(ctx0, ctc_w, h);
-                if (ctc_b)
-                    h = ggml_add(ctx0, h, ctc_b);
-                ggml_set_name(h, "logits");
-                ggml_set_output(h);
-                ggml_build_forward_expand(gf, h);
-            }
-
-            // Allocate Graph 2
-            ggml_backend_sched_reset(ctx->sched);
-            if (!ggml_backend_sched_alloc_graph(ctx->sched, gf)) {
-                fprintf(stderr, "omniasr: graph 2 alloc failed\n");
-                ggml_free(ctx0);
-                return nullptr;
-            }
-
-            // Set h_with_pos input
-            ggml_tensor* h_inp = ggml_graph_get_tensor(gf, "h_with_pos");
-            ggml_backend_tensor_set(h_inp, h_cpu.data(), 0, d * T_pos * sizeof(float));
-
-            if (ctx->params.verbosity >= 1)
-                fprintf(stderr, "omniasr: %d samples, graph 2 computing (%d enc layers)...\n", n_samples, hp.n_enc);
-
-            if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS) {
-                fprintf(stderr, "omniasr: graph 2 compute failed\n");
-                ggml_free(ctx0);
-                return nullptr;
-            }
-
-            // LLM branch: read encoder output and run decoder
-            if (hp.model_type == 1) {
-                ggml_tensor* enc_out_t = ggml_graph_get_tensor(gf, "enc_out");
-                int d_e = (int)enc_out_t->ne[0];
-                int T_e = (int)enc_out_t->ne[1];
-                std::vector<float> enc_out_data(d_e * T_e);
-                ggml_backend_tensor_get(enc_out_t, enc_out_data.data(), 0, d_e * T_e * sizeof(float));
-                dump_cpu(enc_out_data.data(), d_e * T_e, "encoder_output", dump_dir);
-                ggml_free(ctx0);
-
-                if (ctx->params.verbosity >= 1)
-                    fprintf(stderr, "omniasr-llm: encoder done [%d, %d], running decoder...\n", d_e, T_e);
-
-                return omniasr_transcribe_llm(ctx, samples, n_samples, enc_out_data, d_e, T_e);
-            }
-
-            // Skip the original single-graph path below
-            goto read_logits;
-        }
+        if (wv_t && pb_t)
+            h = build_grouped_pos_conv(ctx0, h, wv_t, pb_t);
     }
 
     // h is now [d_model, T] — correct format for transformer layers
@@ -784,12 +650,15 @@ extern "C" char* omniasr_transcribe(struct omniasr_context* ctx, const float* sa
     // Final LayerNorm
     h = build_ln(ctx0, h, G("enc_ln.weight"), G("enc_ln.bias"));
 
-    // CTC head: linear projection to vocab
-    h = ggml_mul_mat(ctx0, ctc_w, h); // [vocab_size, T]
-    if (ctc_b)
-        h = ggml_add(ctx0, h, ctc_b);
-
-    ggml_set_name(h, "logits");
+    if (hp.model_type == 1) {
+        ggml_set_name(h, "enc_out");
+    } else {
+        // CTC head: linear projection to vocab
+        h = ggml_mul_mat(ctx0, ctc_w, h); // [vocab_size, T]
+        if (ctc_b)
+            h = ggml_add(ctx0, h, ctc_b);
+        ggml_set_name(h, "logits");
+    }
     ggml_set_output(h);
     ggml_build_forward_expand(gf, h);
 
@@ -811,6 +680,21 @@ extern "C" char* omniasr_transcribe(struct omniasr_context* ctx, const float* sa
         fprintf(stderr, "omniasr: graph compute failed\n");
         ggml_free(ctx0);
         return nullptr;
+    }
+
+    if (hp.model_type == 1) {
+        ggml_tensor* enc_out_t = ggml_graph_get_tensor(gf, "enc_out");
+        int d_e = (int)enc_out_t->ne[0];
+        int T_e = (int)enc_out_t->ne[1];
+        std::vector<float> enc_out_data((size_t)d_e * T_e);
+        ggml_backend_tensor_get(enc_out_t, enc_out_data.data(), 0, (size_t)d_e * T_e * sizeof(float));
+        dump_cpu(enc_out_data.data(), d_e * T_e, "encoder_output", dump_dir);
+        ggml_free(ctx0);
+
+        if (ctx->params.verbosity >= 1)
+            fprintf(stderr, "omniasr-llm: encoder done [%d, %d], running decoder...\n", d_e, T_e);
+
+        return omniasr_transcribe_llm(ctx, samples, n_samples, enc_out_data, d_e, T_e);
     }
 
 read_logits:
@@ -921,6 +805,60 @@ read_logits:
 // ===========================================================================
 // LLM decoder — ggml graph with KV cache (like voxtral4b)
 // ===========================================================================
+
+static bool omniasr_run_enc_proj(omniasr_context* ctx, const std::vector<float>& encoder_out, int d_enc, int T_enc,
+                                 std::vector<float>& audio_embs) {
+    auto& hp = ctx->model.hp;
+    const int dd = hp.d_dec;
+
+    if (!ctx->enc_proj_w || d_enc <= 0 || T_enc <= 0) {
+        audio_embs.clear();
+        return false;
+    }
+
+    ggml_init_params ip = {ctx->compute_meta.size(), ctx->compute_meta.data(), true};
+    ggml_context* ctx0 = ggml_init(ip);
+    ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 1024, false);
+
+    ggml_tensor* enc = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, d_enc, T_enc);
+    ggml_set_name(enc, "encoder_out");
+    ggml_set_input(enc);
+
+    ggml_tensor* out = ggml_mul_mat(ctx0, ctx->enc_proj_w, enc);
+    if (ctx->enc_proj_b)
+        out = ggml_add(ctx0, out, ctx->enc_proj_b);
+    ggml_set_name(out, "audio_embs");
+    ggml_set_output(out);
+    ggml_build_forward_expand(gf, out);
+
+    ggml_backend_sched_reset(ctx->sched);
+    if (!ggml_backend_sched_alloc_graph(ctx->sched, gf)) {
+        fprintf(stderr, "omniasr-llm: enc_proj graph alloc failed\n");
+        ggml_free(ctx0);
+        return false;
+    }
+
+    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "encoder_out"), encoder_out.data(), 0,
+                            (size_t)d_enc * T_enc * sizeof(float));
+    if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS) {
+        fprintf(stderr, "omniasr-llm: enc_proj graph compute failed\n");
+        ggml_free(ctx0);
+        return false;
+    }
+
+    ggml_tensor* out_t = ggml_graph_get_tensor(gf, "audio_embs");
+    if (!out_t || out_t->ne[0] != dd || out_t->ne[1] != T_enc) {
+        fprintf(stderr, "omniasr-llm: enc_proj output shape mismatch\n");
+        ggml_free(ctx0);
+        audio_embs.clear();
+        return false;
+    }
+
+    audio_embs.resize((size_t)dd * T_enc);
+    ggml_backend_tensor_get(out_t, audio_embs.data(), 0, (size_t)dd * T_enc * sizeof(float));
+    ggml_free(ctx0);
+    return true;
+}
 
 // Build decoder graph for n_tokens at position n_past
 static ggml_cgraph* omniasr_build_dec_graph(omniasr_context* ctx, int n_past, int n_tokens) {
@@ -1061,51 +999,22 @@ static char* omniasr_transcribe_llm(omniasr_context* ctx, const float* /*samples
 
     int dd = hp.d_dec; // 4096
 
-    // Helper to read tensor to CPU
-    auto read_f32 = [](ggml_tensor* t, std::vector<float>& out) {
-        if (!t) {
-            out.clear();
-            return;
-        }
-        int n = (int)ggml_nelements(t);
-        out.resize(n);
-        if (t->type == GGML_TYPE_F32)
-            ggml_backend_tensor_get(t, out.data(), 0, n * sizeof(float));
-        else if (t->type == GGML_TYPE_F16) {
-            std::vector<uint16_t> tmp(n);
-            ggml_backend_tensor_get(t, tmp.data(), 0, n * sizeof(uint16_t));
-            ggml_fp16_to_fp32_row((const ggml_fp16_t*)tmp.data(), out.data(), n);
-        }
-    };
-
-    // 1. Project encoder output via ggml graph: enc_proj(encoder_out) → [dd, T_enc]
-    std::vector<float> enc_proj_w_data, enc_proj_b_data;
-    read_f32(ctx->enc_proj_w, enc_proj_w_data);
-    read_f32(ctx->enc_proj_b, enc_proj_b_data);
-
-    std::vector<float> audio_embs(dd * T_enc);
-    for (int t = 0; t < T_enc; t++) {
-        for (int i = 0; i < dd; i++) {
-            double s = enc_proj_b_data.empty() ? 0 : enc_proj_b_data[i];
-            for (int k = 0; k < d_enc; k++)
-                s += encoder_out[t * d_enc + k] * enc_proj_w_data[i * d_enc + k];
-            audio_embs[t * dd + i] = (float)s;
-        }
+    // 1. Project encoder output via backend graph: enc_proj(encoder_out) → [dd, T_enc].
+    // This avoids re-reading projection weights and running a large CPU matmul per utterance.
+    std::vector<float> audio_embs;
+    const int64_t t_proj0 = ggml_time_us();
+    if (!omniasr_run_enc_proj(ctx, encoder_out, d_enc, T_enc, audio_embs)) {
+        fprintf(stderr, "omniasr-llm: enc_proj failed\n");
+        return nullptr;
     }
+    const int64_t t_proj1 = ggml_time_us();
 
     if (ctx->params.verbosity >= 2)
-        fprintf(stderr, "  enc_proj done: [%d, %d]\n", dd, T_enc);
+        fprintf(stderr, "  enc_proj done: [%d, %d] %.1f ms\n", dd, T_enc, (t_proj1 - t_proj0) / 1e3);
     dump_cpu(audio_embs.data(), dd * T_enc, "enc_proj_output", getenv("OMNIASR_DUMP_DIR"));
 
-    // 2. Build prefix: [BOS_emb, lang_emb, audio_embs...]
-    // BOS embedding from tok_emb
-    std::vector<float> tok_emb_data;
-    read_f32(ctx->tok_emb_w, tok_emb_data);
-    int tok_emb_size = (int)tok_emb_data.size() / dd;
-
-    // Language embedding
-    std::vector<float> lang_emb_data;
-    read_f32(ctx->lang_emb_w, lang_emb_data);
+    // 2. Build prefix without reading the full token embedding table to CPU.
+    const int tok_emb_size = ctx->tok_emb_w ? (int)ctx->tok_emb_w->ne[1] : 0;
     int lang_id = 417; // eng_Latn default (parquet_index=416, +1 per factory.py)
     // Factory: lang_mapping = {lang.lower(): parquet_index + 1}
     // Index 0 reserved for no-language/dropout
@@ -1113,7 +1022,7 @@ static char* omniasr_transcribe_llm(omniasr_context* ctx, const float* /*samples
     //   eng_Latn=417, deu_Latn=367, fra_Latn=448, spa_Latn=1355, jpn_Jpan=632, kor_Hang=734
     // TODO: embed parquet mapping in GGUF and parse ctx->params.language
 
-    bool use_lang = (hp.n_langs > 0 && !lang_emb_data.empty());
+    bool use_lang = (hp.n_langs > 0 && ctx->lang_emb_w);
     // Sequence: [audio_embs...] [lid_marker_emb] [lang_emb] [BOS_emb] [generated...]
     // lid_marker is special token at index vocab_size (9812) in text_frontend
     int lid_marker_id = hp.vocab_size;          // 9812 — the extra token in tok_emb (size 9813)
@@ -1127,28 +1036,41 @@ static char* omniasr_transcribe_llm(omniasr_context* ctx, const float* /*samples
     pos += T_enc;
 
     // Language conditioning: lid_marker + lang_emb
-    if (use_lang && lang_id >= 0 && lang_id < hp.n_langs && lid_marker_id < tok_emb_size) {
-        // lid_marker token embedding
-        for (int i = 0; i < dd; i++)
-            prefix[pos * dd + i] = tok_emb_data[lid_marker_id * dd + i];
+    std::vector<float> row;
+    if (use_lang && lang_id >= 0 && lang_id < hp.n_langs && lid_marker_id < tok_emb_size &&
+        read_tensor_row_f32(ctx->tok_emb_w, lid_marker_id, dd, row)) {
+        memcpy(prefix.data() + (size_t)pos * dd, row.data(), (size_t)dd * sizeof(float));
         pos++;
-        // Language embedding
-        for (int i = 0; i < dd; i++)
-            prefix[pos * dd + i] = lang_emb_data[lang_id * dd + i];
-        pos++;
+        if (read_tensor_row_f32(ctx->lang_emb_w, lang_id, dd, row)) {
+            memcpy(prefix.data() + (size_t)pos * dd, row.data(), (size_t)dd * sizeof(float));
+            pos++;
+        } else {
+            use_lang = false;
+            pos--;
+        }
+    } else {
+        use_lang = false;
     }
 
     // BOS embedding
-    for (int i = 0; i < dd; i++)
-        prefix[pos * dd + i] = tok_emb_data[hp.bos_id * dd + i];
+    if (!read_tensor_row_f32(ctx->tok_emb_w, hp.bos_id, dd, row)) {
+        fprintf(stderr, "omniasr-llm: failed to read BOS embedding\n");
+        return nullptr;
+    }
+    memcpy(prefix.data() + (size_t)pos * dd, row.data(), (size_t)dd * sizeof(float));
     pos++;
+
+    if (pos != prefix_len) {
+        prefix_len = pos;
+        prefix.resize((size_t)prefix_len * dd);
+    }
 
     if (ctx->params.verbosity >= 1)
         fprintf(stderr, "omniasr-llm: prefix len=%d (%d audio%s + BOS), lang_id=%d, d=%d\n", prefix_len, T_enc,
                 use_lang ? " + lid + lang" : "", lang_id, dd);
 
     // 3. Allocate KV cache and run decoder via ggml graph
-    int max_gen = 512;
+    int max_gen = ctx->params.max_new_tokens > 0 ? ctx->params.max_new_tokens : 512;
     int max_ctx = prefix_len + max_gen;
     // Allocate KV cache
     if (!ctx->kv_k) {
@@ -1199,20 +1121,10 @@ static char* omniasr_transcribe_llm(omniasr_context* ctx, const float* /*samples
         output_tokens.push_back(cur_token);
 
     // 6. Autoregressive generation: one token at a time
-    for (int step = 0; step < max_gen && cur_token != hp.eos_id; step++) {
-        // Look up token embedding on CPU
+    for (int step = 0; (int)output_tokens.size() < max_gen && cur_token != hp.eos_id; step++) {
+        // Look up only the current token row; do not pull the whole embedding table.
         std::vector<float> tok_emb(dd);
-        if (cur_token >= 0 && cur_token < tok_emb_size) {
-            // Read from backend tensor
-            size_t offset = (size_t)cur_token * dd * ggml_type_size(ctx->tok_emb_w->type);
-            if (ctx->tok_emb_w->type == GGML_TYPE_F16) {
-                std::vector<uint16_t> tmp16(dd);
-                ggml_backend_tensor_get(ctx->tok_emb_w, tmp16.data(), offset, dd * sizeof(uint16_t));
-                ggml_fp16_to_fp32_row((const ggml_fp16_t*)tmp16.data(), tok_emb.data(), dd);
-            } else {
-                ggml_backend_tensor_get(ctx->tok_emb_w, tok_emb.data(), offset, dd * sizeof(float));
-            }
-        } else {
+        if (cur_token < 0 || cur_token >= tok_emb_size || !read_tensor_row_f32(ctx->tok_emb_w, cur_token, dd, tok_emb)) {
             break; // Invalid token
         }
 
