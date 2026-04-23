@@ -128,8 +128,8 @@ static void omniasr_perf_print(const omniasr_perf& p, int n_samples, int verbosi
     fprintf(stderr, "omniasr:  enc read       %7.1f ms\n", p.t_enc_read_us / 1e3);
     fprintf(stderr, "omniasr:  prefill alloc  %7.1f ms  nodes=%d\n", p.t_prefill_alloc_us / 1e3, p.prefill_nodes);
     fprintf(stderr, "omniasr:  prefill compute%7.1f ms\n", p.t_prefill_compute_us / 1e3);
-    fprintf(stderr, "omniasr:  decode alloc   %7.1f ms  steps=%d nodes=%d\n", p.t_decode_alloc_us / 1e3,
-            p.n_dec_steps, p.decode_nodes);
+    fprintf(stderr, "omniasr:  decode alloc   %7.1f ms  steps=%d nodes=%d\n", p.t_decode_alloc_us / 1e3, p.n_dec_steps,
+            p.decode_nodes);
     fprintf(stderr, "omniasr:  decode compute %7.1f ms\n", p.t_decode_compute_us / 1e3);
     fprintf(stderr, "omniasr:  decode logits  %7.1f ms\n", p.t_decode_logits_us / 1e3);
     fprintf(stderr, "omniasr:  total measured %7.1f ms\n", p.t_total_us / 1e3);
@@ -224,13 +224,12 @@ static ggml_tensor* build_grouped_pos_conv(ggml_context* ctx, ggml_tensor* h, gg
         ggml_tensor* h_g = ggml_view_2d(ctx, h, C_per_group, T, h->nb[1], (size_t)c0 * h->nb[0]);
         h_g = ggml_cont(ctx, ggml_transpose(ctx, h_g)); // [T, C_per_group]
 
-        ggml_tensor* w_g =
-            ggml_view_3d(ctx, w, K, C_per_group, C_per_group, w->nb[1], w->nb[2], (size_t)c0 * w->nb[2]);
+        ggml_tensor* w_g = ggml_view_3d(ctx, w, K, C_per_group, C_per_group, w->nb[1], w->nb[2], (size_t)c0 * w->nb[2]);
         w_g = ggml_cont(ctx, w_g);
 
         ggml_tensor* y = ggml_conv_1d(ctx, w_g, h_g, 1, (int)(K / 2), 1); // [T + 1, C_per_group] for even K
-        y = ggml_view_2d(ctx, y, T, C_per_group, y->nb[1], 0);           // fairseq trims the final frame
-        y = ggml_cont(ctx, ggml_transpose(ctx, y));                      // [C_per_group, T]
+        y = ggml_view_2d(ctx, y, T, C_per_group, y->nb[1], 0);            // fairseq trims the final frame
+        y = ggml_cont(ctx, ggml_transpose(ctx, y));                       // [C_per_group, T]
 
         ggml_tensor* b_g = ggml_view_1d(ctx, b, C_per_group, (size_t)c0 * b->nb[0]);
         y = ggml_add(ctx, y, b_g);
@@ -839,9 +838,8 @@ read_logits:
 // LLM decoder — ggml graph with KV cache (like voxtral4b)
 // ===========================================================================
 
-static ggml_tensor* omniasr_build_dec_body(omniasr_context* ctx, ggml_context* ctx0, ggml_cgraph* gf,
-                                           ggml_tensor* cur, ggml_tensor* positions, ggml_tensor* causal_mask,
-                                           int n_past, int n_tokens) {
+static ggml_tensor* omniasr_build_dec_body(omniasr_context* ctx, ggml_context* ctx0, ggml_cgraph* gf, ggml_tensor* cur,
+                                           ggml_tensor* positions, ggml_tensor* causal_mask, int n_past, int n_tokens) {
     auto& hp = ctx->model.hp;
     int dd = hp.d_dec;
     int nh = hp.n_heads_dec;
@@ -1102,7 +1100,7 @@ static char* omniasr_transcribe_llm(omniasr_context* ctx, const std::vector<floa
     bool use_lang = (hp.n_langs > 0 && ctx->lang_emb_w);
     // Sequence: [audio_embs...] [lid_marker_emb] [lang_emb] [BOS_emb] [generated...]
     // lid_marker is special token at index vocab_size (9812) in text_frontend
-    int lid_marker_id = hp.vocab_size;          // 9812 — the extra token in tok_emb (size 9813)
+    int lid_marker_id = hp.vocab_size; // 9812 — the extra token in tok_emb (size 9813)
     if (lang_id < 0 || lang_id >= hp.n_langs || lid_marker_id >= tok_emb_size)
         use_lang = false;
     int n_lang_tokens = use_lang ? 2 : 0;       // lid_marker + lang_emb
