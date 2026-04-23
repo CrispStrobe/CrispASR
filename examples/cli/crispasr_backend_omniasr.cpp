@@ -1,6 +1,7 @@
 // crispasr_backend_omniasr.cpp — OmniASR backend adapter (CTC + LLM).
 
 #include "crispasr_backend.h"
+#include "crispasr_backend_utils.h"
 #include "omniasr.h"
 #include "whisper_params.h"
 
@@ -20,7 +21,7 @@ public:
         omniasr_context_params cp = omniasr_context_default_params();
         cp.n_threads = params.n_threads;
         cp.verbosity = params.no_prints ? 0 : 1;
-        cp.use_gpu = params.use_gpu && params.gpu_backend != "cpu";
+        cp.use_gpu = crispasr_backend_should_use_gpu(params);
         if (getenv("OMNIASR_DEBUG"))
             cp.verbosity = 2;
         // Pass language for LLM variant (e.g. "eng_Latn" from -l en)

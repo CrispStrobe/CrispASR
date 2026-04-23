@@ -6,6 +6,7 @@
 // prompt template.
 
 #include "crispasr_backend.h"
+#include "crispasr_backend_utils.h"
 #include "crispasr_llm_pipeline.h"
 #include "whisper_params.h"
 
@@ -120,7 +121,8 @@ public:
     }
 
     bool init(const whisper_params& p) override {
-        ctx_ = VoxtralOps::init(p.model.c_str(), p.n_threads, p.no_prints ? 0 : 1, p.use_gpu && p.gpu_backend != "cpu");
+        ctx_ =
+            VoxtralOps::init(p.model.c_str(), p.n_threads, p.no_prints ? 0 : 1, crispasr_backend_should_use_gpu(p));
         if (!ctx_) {
             fprintf(stderr, "crispasr[voxtral]: failed to load model '%s'\n", p.model.c_str());
             return false;

@@ -1,6 +1,7 @@
 // crispasr_backend_firered_asr.cpp — FireRedASR2-AED backend adapter.
 
 #include "crispasr_backend.h"
+#include "crispasr_backend_utils.h"
 #include "firered_asr.h"
 #include "whisper_params.h"
 
@@ -21,7 +22,7 @@ public:
         firered_asr_context_params cp = firered_asr_context_default_params();
         cp.n_threads = params.n_threads;
         cp.verbosity = params.no_prints ? 0 : 1;
-        cp.use_gpu = params.use_gpu && params.gpu_backend != "cpu";
+        cp.use_gpu = crispasr_backend_should_use_gpu(params);
         ctx_ = firered_asr_init_from_file(params.model.c_str(), cp);
         return ctx_ != nullptr;
     }

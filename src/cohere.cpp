@@ -1813,23 +1813,32 @@ struct cohere_result* cohere_transcribe_ex(struct cohere_context* ctx, const flo
         const int CHUNK_S = 30 * hp.sample_rate;
         if (n_samples > CHUNK_S) {
             // Merge helper: append src into dst
-            auto merge_results = [](cohere_result* dst, cohere_result* src) {
+            auto merge_results = [](cohere_result* dst, cohere_result* src) -> bool {
                 if (!src)
-                    return;
+                    return true;
                 // Append text
                 if (src->text && src->text[0]) {
                     std::string combined = dst->text ? std::string(dst->text) : "";
                     if (!combined.empty() && combined.back() != ' ')
                         combined += ' ';
                     combined += src->text;
+                    char* new_text = (char*)malloc(combined.size() + 1);
+                    if (!new_text) {
+                        cohere_result_free(src);
+                        return false;
+                    }
+                    memcpy(new_text, combined.c_str(), combined.size() + 1);
                     free(dst->text);
-                    dst->text = (char*)malloc(combined.size() + 1);
-                    memcpy(dst->text, combined.c_str(), combined.size() + 1);
+                    dst->text = new_text;
                 }
                 // Append tokens
                 if (src->n_tokens > 0) {
                     int new_n = (dst->n_tokens) + src->n_tokens;
                     cohere_token_data* new_toks = (cohere_token_data*)malloc(new_n * sizeof(cohere_token_data));
+                    if (!new_toks) {
+                        cohere_result_free(src);
+                        return false;
+                    }
                     if (dst->n_tokens > 0)
                         memcpy(new_toks, dst->tokens, dst->n_tokens * sizeof(cohere_token_data));
                     memcpy(new_toks + dst->n_tokens, src->tokens, src->n_tokens * sizeof(cohere_token_data));
@@ -1838,10 +1847,17 @@ struct cohere_result* cohere_transcribe_ex(struct cohere_context* ctx, const flo
                     dst->n_tokens = new_n;
                 }
                 cohere_result_free(src);
+                return true;
             };
 
             cohere_result* full = (cohere_result*)calloc(1, sizeof(cohere_result));
+            if (!full)
+                return nullptr;
             full->text = (char*)calloc(1, 1); // empty string
+            if (!full->text) {
+                cohere_result_free(full);
+                return nullptr;
+            }
 
             int offset = 0;
             int chunk_idx = 0;
@@ -1852,7 +1868,10 @@ struct cohere_result* cohere_transcribe_ex(struct cohere_context* ctx, const flo
                             chunk_t0_cs / 100.0);
                 cohere_result* chunk_r =
                     cohere_transcribe_ex(ctx, samples + offset, chunk_end - offset, lang, chunk_t0_cs);
-                merge_results(full, chunk_r);
+                if (!merge_results(full, chunk_r)) {
+                    cohere_result_free(full);
+                    return nullptr;
+                }
                 offset = chunk_end;
                 chunk_idx++;
             }
@@ -2259,6 +2278,8 @@ struct cohere_result* cohere_transcribe_ex(struct cohere_context* ctx, const flo
 
     // --- Decode tokens to text + build per-token data ---
     struct cohere_result* res = (struct cohere_result*)calloc(1, sizeof(struct cohere_result));
+    if (!res)
+        return nullptr;
     std::string full_text;
     std::vector<cohere_token_data> tok_data;
     // Maps tok_data index → generated[] index (needed for cross-attn lookup)
@@ -2481,9 +2502,17 @@ struct cohere_result* cohere_transcribe_ex(struct cohere_context* ctx, const flo
     res->n_tokens = (int)tok_data.size();
     if (res->n_tokens > 0) {
         res->tokens = (cohere_token_data*)malloc(res->n_tokens * sizeof(cohere_token_data));
+        if (!res->tokens) {
+            cohere_result_free(res);
+            return nullptr;
+        }
         memcpy(res->tokens, tok_data.data(), res->n_tokens * sizeof(cohere_token_data));
     }
     res->text = (char*)malloc(full_text.size() + 1);
+    if (!res->text) {
+        cohere_result_free(res);
+        return nullptr;
+    }
     memcpy(res->text, full_text.c_str(), full_text.size() + 1);
     return res;
 }

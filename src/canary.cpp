@@ -1329,10 +1329,16 @@ extern "C" struct canary_result* canary_transcribe_ex(struct canary_context* ctx
     }
 
     // 6. Build result (skip the prompt prefix)
-    auto* r = (canary_result*)calloc(1, sizeof(canary_result));
     int n_emitted = (int)generated.size() - (int)prompt.size();
+    auto* r = (canary_result*)calloc(1, sizeof(canary_result));
+    if (!r)
+        return nullptr;
     r->n_tokens = n_emitted;
     r->tokens = (canary_token_data*)calloc(n_emitted > 0 ? n_emitted : 1, sizeof(canary_token_data));
+    if (!r->tokens) {
+        canary_result_free(r);
+        return nullptr;
+    }
 
     // ----- Per-token timestamps via cross-attention DTW -----
     //
@@ -1452,6 +1458,10 @@ extern "C" struct canary_result* canary_transcribe_ex(struct canary_context* ctx
     if (!text.empty() && text[0] == ' ')
         text = text.substr(1);
     r->text = strdup(text.c_str());
+    if (!r->text) {
+        canary_result_free(r);
+        return nullptr;
+    }
 
     // Disable attn collection so the next call starts fresh
     ctx->collect_attn = false;
@@ -1501,6 +1511,10 @@ extern "C" struct canary_result* canary_transcribe_ex(struct canary_context* ctx
             words.push_back(cur);
         r->n_words = (int)words.size();
         r->words = (canary_word_data*)calloc(r->n_words > 0 ? r->n_words : 1, sizeof(canary_word_data));
+        if (!r->words) {
+            canary_result_free(r);
+            return nullptr;
+        }
         for (int i = 0; i < r->n_words; i++)
             r->words[i] = words[i];
     }
@@ -1514,6 +1528,10 @@ extern "C" char* canary_transcribe(struct canary_context* ctx, const float* samp
     if (!r)
         return nullptr;
     char* out = strdup(r->text ? r->text : "");
+    if (!out) {
+        canary_result_free(r);
+        return nullptr;
+    }
     canary_result_free(r);
     return out;
 }

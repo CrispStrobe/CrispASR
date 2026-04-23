@@ -14,6 +14,7 @@
 // CTC aligner second pass will be wired up once crispasr_aligner lands.
 
 #include "crispasr_backend.h"
+#include "crispasr_backend_utils.h"
 #include "whisper_params.h"
 #include "core/greedy_decode.h"
 
@@ -66,7 +67,7 @@ public:
         granite_speech_context_params cp = granite_speech_context_default_params();
         cp.n_threads = p.n_threads;
         cp.verbosity = p.no_prints ? 0 : 1;
-        cp.use_gpu = p.use_gpu && p.gpu_backend != "cpu";
+        cp.use_gpu = crispasr_backend_should_use_gpu(p);
 
         ctx_ = granite_speech_init_from_file(p.model.c_str(), cp);
         if (!ctx_) {

@@ -159,6 +159,10 @@ extern "C" struct glm_asr_context_params glm_asr_context_default_params(void) {
     return {/*n_threads=*/4, /*verbosity=*/1, /*use_gpu=*/true};
 }
 
+extern "C" int glm_asr_encoder_frames_from_mel_frames(int T_mel) {
+    return (T_mel + 1) / 2;
+}
+
 extern "C" struct glm_asr_context* glm_asr_init_from_file(const char* path_model,
                                                           struct glm_asr_context_params params) {
     auto* ctx = new glm_asr_context();
@@ -429,6 +433,8 @@ extern "C" int32_t* glm_asr_tokenize(struct glm_asr_context* ctx, const char* te
     if (ids.empty())
         return nullptr;
     auto* result = (int32_t*)malloc(ids.size() * sizeof(int32_t));
+    if (!result)
+        return nullptr;
     memcpy(result, ids.data(), ids.size() * sizeof(int32_t));
     return result;
 }
@@ -448,24 +454,21 @@ extern "C" char* glm_asr_transcribe(struct glm_asr_context* ctx, const float* sa
     if (!mel)
         return nullptr;
 
-    // Pad mel to 3000 frames (30s) — GLM-ASR expects fixed-length input
+    // Normalize mel to 3000 frames (30s) — GLM-ASR expects fixed-length input.
+    // Exact 30 s chunks can land at 3001 frames, so truncate as well as pad.
     const int T_target = 3000;
-    if (T_mel < T_target) {
+    if (T_mel != T_target) {
         std::vector<float> padded((size_t)n_mels * T_target, 0.0f);
-        // Copy existing mel, then zero-pad
-        memcpy(padded.data(), mel, (size_t)n_mels * T_mel * sizeof(float));
-        // Need to pad each mel band separately if layout is (n_mels, T)
-        // core_mel outputs (n_mels, T) = mel[m * T + t]
-        // Padded should be mel[m * T_target + t] with zeros for t >= T_mel
+        const int T_copy = std::min(T_mel, T_target);
+        // Need to copy each mel band separately because the source and target
+        // strides differ when normalizing to the fixed 3000-frame layout.
         for (int m = n_mels - 1; m >= 0; m--) {
-            // Move band m from position m*T_mel to m*T_target
-            if (m > 0)
-                memmove(padded.data() + (size_t)m * T_target, mel + (size_t)m * T_mel, T_mel * sizeof(float));
-            // Zero the padding
-            memset(padded.data() + (size_t)m * T_target + T_mel, 0, (size_t)(T_target - T_mel) * sizeof(float));
+            memcpy(padded.data() + (size_t)m * T_target, mel + (size_t)m * T_mel, (size_t)T_copy * sizeof(float));
         }
         free(mel);
         mel = (float*)malloc(padded.size() * sizeof(float));
+        if (!mel)
+            return nullptr;
         memcpy(mel, padded.data(), padded.size() * sizeof(float));
         T_mel = T_target;
     }
@@ -707,6 +710,8 @@ extern "C" float* glm_asr_compute_mel(struct glm_asr_context* ctx, const float* 
         *out_T_mel = T_mel;
 
     float* result = (float*)malloc(mel.size() * sizeof(float));
+    if (!result)
+        return nullptr;
     memcpy(result, mel.data(), mel.size() * sizeof(float));
     return result;
 }
@@ -743,6 +748,8 @@ extern "C" float* glm_asr_embed_tokens(struct glm_asr_context* ctx, const int32_
 
     ggml_tensor* out = ggml_graph_get_tensor(gf, "embeddings");
     float* result = (float*)malloc((size_t)n_ids * d * sizeof(float));
+    if (!result)
+        return nullptr;
     ggml_backend_tensor_get(out, result, 0, (size_t)n_ids * d * sizeof(float));
     return result;
 }
@@ -821,7 +828,7 @@ static ggml_cgraph* glm_build_encoder(glm_asr_context* ctx, int T_mel) {
     // ggml_conv_1d with k=3, s=2, p=1 produces floor(T/2) frames for odd
     // lengths in the unbatched (T, C) path used here. Using ceil(T/2) causes
     // the first post-conv reshape to overrun by one frame on odd T_mel.
-    const int T_enc = T_mel / 2;
+    const int T_enc = glm_asr_encoder_frames_from_mel_frames(T_mel);
     cur = ggml_reshape_2d(ctx0, cur, T_enc, d);
     cur = ggml_cont(ctx0, ggml_transpose(ctx0, cur)); // (d, T_enc)
 
@@ -919,7 +926,10 @@ static ggml_cgraph* glm_build_encoder(glm_asr_context* ctx, int T_mel) {
     // Projector: 4-frame stacking → linear1(5120→4096,GELU) → linear2(4096→2048)
     // Stack 4 consecutive frames: (d, T_enc) → (4*d, T_enc/4)
     const int T_proj = T_enc / 4;
+    const int T_pack = T_proj * 4;
     const int proj_in = 4 * d; // 5120
+    if (T_pack != T_enc)
+        cur = ggml_view_2d(ctx0, cur, T_pack, d, cur->nb[1], 0);
     cur = ggml_reshape_2d(ctx0, cur, proj_in, T_proj);
 
     cur = ggml_mul_mat(ctx0, m.proj.linear1_w, cur);
@@ -943,7 +953,7 @@ extern "C" float* glm_asr_run_encoder(struct glm_asr_context* ctx, const float* 
         return nullptr;
 
     const auto& hp = ctx->model.hp;
-    const int T_enc = T_mel / 2;
+    const int T_enc = glm_asr_encoder_frames_from_mel_frames(T_mel);
     const int T_proj = T_enc / 4;
     const int llm_d = hp.llm_hidden; // 2048
 
@@ -971,6 +981,8 @@ extern "C" float* glm_asr_run_encoder(struct glm_asr_context* ctx, const float* 
 
     ggml_tensor* out = ggml_graph_get_tensor(gf, "encoder_out");
     float* result = (float*)malloc((size_t)T_proj * llm_d * sizeof(float));
+    if (!result)
+        return nullptr;
     ggml_backend_tensor_get(out, result, 0, (size_t)T_proj * llm_d * sizeof(float));
 
     if (out_N)
@@ -1125,6 +1137,8 @@ extern "C" float* glm_asr_run_llm_kv(struct glm_asr_context* ctx, const float* i
     ggml_tensor* out = ggml_graph_get_tensor(gf, "logits");
     int n_out = (int)out->ne[1]; // 1 for last-token-only
     float* result = (float*)malloc((size_t)V * n_out * sizeof(float));
+    if (!result)
+        return nullptr;
     ggml_backend_tensor_get(out, result, 0, (size_t)V * n_out * sizeof(float));
 
     if (out_n_tokens)

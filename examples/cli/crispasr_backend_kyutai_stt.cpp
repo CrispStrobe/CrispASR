@@ -1,6 +1,7 @@
 // crispasr_backend_kyutai_stt.cpp — Kyutai STT backend adapter.
 
 #include "crispasr_backend.h"
+#include "crispasr_backend_utils.h"
 #include "kyutai_stt.h"
 #include "whisper_params.h"
 
@@ -21,7 +22,7 @@ public:
         kyutai_stt_context_params cp = kyutai_stt_context_default_params();
         cp.n_threads = params.n_threads;
         cp.verbosity = params.no_prints ? 0 : 1;
-        cp.use_gpu = params.use_gpu && params.gpu_backend != "cpu";
+        cp.use_gpu = crispasr_backend_should_use_gpu(params);
         ctx_ = kyutai_stt_init_from_file(params.model.c_str(), cp);
         return ctx_ != nullptr;
     }

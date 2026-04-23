@@ -10,6 +10,7 @@
 // whisper_params once during init.
 
 #include "crispasr_backend.h"
+#include "crispasr_backend_utils.h"
 #include "whisper_params.h"
 
 #include "cohere.h"
@@ -35,7 +36,7 @@ public:
         cohere_context_params cp = cohere_context_default_params();
         cp.n_threads = p.n_threads;
         cp.use_flash = p.flash_attn;
-        cp.use_gpu = p.use_gpu && p.gpu_backend != "cpu";
+        cp.use_gpu = crispasr_backend_should_use_gpu(p);
         cp.no_punctuation = !p.punctuation;
         cp.diarize = p.diarize;
         cp.verbosity = p.no_prints ? 0 : 1;

@@ -24,6 +24,7 @@ struct glm_asr_context_params {
 };
 
 struct glm_asr_context_params glm_asr_context_default_params(void);
+int glm_asr_encoder_frames_from_mel_frames(int T_mel);
 
 struct glm_asr_context* glm_asr_init_from_file(const char* path_model, struct glm_asr_context_params params);
 

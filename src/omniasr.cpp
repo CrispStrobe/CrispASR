@@ -911,6 +911,8 @@ read_logits:
         return nullptr;
 
     char* out = (char*)malloc(result.size() + 1);
+    if (!out)
+        return nullptr;
     memcpy(out, result.c_str(), result.size());
     out[result.size()] = '\0';
     return out;
@@ -1262,6 +1264,8 @@ static char* omniasr_transcribe_llm(omniasr_context* ctx, const float* /*samples
         return nullptr;
 
     char* out = (char*)malloc(result.size() + 1);
+    if (!out)
+        return nullptr;
     memcpy(out, result.c_str(), result.size());
     out[result.size()] = '\0';
     return out;
