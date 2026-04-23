@@ -212,16 +212,29 @@ static ggml_tensor* build_conv_rms_norm(ggml_context* ctx, ggml_tensor* x, ggml_
     return x;
 }
 
-// Causal Conv1d: left-pad by (K-1), then conv1d with stride.
+// Causal Conv1d: left-pad by padding_total = (K-1)*dilation - (stride-1), then conv1d.
 // Input/output in [C, T] format (channels-first, like PyTorch).
 // ggml_conv_1d produces [T_out, C_out] so we transpose.
 static ggml_tensor* build_causal_conv1d(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w, ggml_tensor* b, int stride) {
     int K = (int)w->ne[0];
-    int pad_left = K - 1;
+    int dilation = 1;
+    int pad_left = (K - 1) * dilation - (stride - 1); // VibeVoice/EnCodec convention
+    if (pad_left < 0)
+        pad_left = 0;
     // Input x is [C, T]. ggml_conv_1d wants [T, C_in], so transpose.
     x = ggml_cont(ctx, ggml_transpose(ctx, x)); // [C,T] → [T,C]
-    if (pad_left > 0)
-        x = ggml_pad_reflect_1d(ctx, x, pad_left, 0);
+    int T_in = (int)x->ne[0];
+    // Compute extra right padding for stride alignment (same as get_extra_padding_for_conv1d)
+    int pad_right = 0;
+    if (stride > 1) {
+        double n_frames = (double)(T_in - K + pad_left) / stride + 1.0;
+        int ideal_length = ((int)ceil(n_frames) - 1) * stride + (K - pad_left);
+        pad_right = ideal_length - T_in;
+        if (pad_right < 0)
+            pad_right = 0;
+    }
+    if (pad_left > 0 || pad_right > 0)
+        x = ggml_pad_reflect_1d(ctx, x, pad_left, pad_right);
     x = ggml_conv_1d(ctx, w, x, stride, 0, 1); // → [T_out, C_out]
     // Add bias (ne[0]=T_out, ne[1]=C_out; bias ne[0]=C_out → transpose, add, transpose)
     if (b) {
@@ -346,10 +359,13 @@ static ggml_cgraph* build_tokenizer_encoder_graph(vibevoice_context* ctx, const 
         ggml_tensor* ds_b = G(bn);
         if (ds_w) {
             int stride = (si == 0) ? 1 : ratios[si - 1]; // stem has stride 1
-            fprintf(stderr, "  ds.%d: w=[%lld,%lld,%lld] stride=%d\n", si,
-                    (long long)ds_w->ne[0], (long long)ds_w->ne[1], (long long)ds_w->ne[2], stride);
             h = build_causal_conv1d(ctx0, h, ds_w, ds_b, stride);
             fprintf(stderr, "  after ds.%d: h=[%lld,%lld]\n", si, (long long)h->ne[0], (long long)h->ne[1]);
+            // Mark for dump
+            char dname[64];
+            snprintf(dname, sizeof(dname), "at_ds_%d", si);
+            ggml_set_name(h, dname);
+            ggml_set_output(h);
         }
 
         // Stage blocks
@@ -453,8 +469,25 @@ extern "C" char* vibevoice_transcribe(struct vibevoice_context* ctx, const float
         fprintf(stderr, "vibevoice: acoustic encoder: [%d, %d] (vae_dim=%d, frames=%d)\n", vae_dim_at, T_audio,
                 vae_dim_at, T_audio);
 
-    // Dump for reference comparison
+    // Dump per-stage intermediates for reference comparison
     const char* dump_dir = getenv("VIBEVOICE_DUMP_DIR");
+    if (dump_dir && dump_dir[0]) {
+        for (int si = 0; si < hp.n_encoder_stages; si++) {
+            char tname[64], path[512];
+            snprintf(tname, sizeof(tname), "at_ds_%d", si);
+            ggml_tensor* t = ggml_graph_get_tensor(gf_at, tname);
+            if (t) {
+                int n = (int)ggml_nelements(t);
+                std::vector<float> d(n);
+                ggml_backend_tensor_get(t, d.data(), 0, n * sizeof(float));
+                snprintf(path, sizeof(path), "%s/%s.bin", dump_dir, tname);
+                FILE* f = fopen(path, "wb");
+                if (f) { fwrite(d.data(), sizeof(float), n, f); fclose(f); }
+                fprintf(stderr, "  DUMP: %s [%lld,%lld] → %s\n", tname,
+                        (long long)t->ne[0], (long long)t->ne[1], path);
+            }
+        }
+    }
     if (dump_dir && dump_dir[0]) {
         char path[512];
         snprintf(path, sizeof(path), "%s/acoustic_mean.bin", dump_dir);
