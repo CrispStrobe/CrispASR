@@ -195,13 +195,32 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
 
     // Initial model load
     {
+        const bool model_is_auto = params.model == "auto" || params.model == "default";
         if (backend_name.empty() || backend_name == "auto") {
-            backend_name = crispasr_detect_backend_from_gguf(params.model);
+            if (model_is_auto) {
+                backend_name = "whisper";
+                if (!params.no_prints) {
+                    fprintf(stderr, "crispasr-server: -m auto with no backend — defaulting to whisper\n");
+                }
+            } else {
+                backend_name = crispasr_detect_backend_from_gguf(params.model);
+            }
         }
         if (backend_name.empty()) {
             fprintf(stderr, "crispasr-server: cannot detect backend from '%s'\n", params.model.c_str());
             return 1;
         }
+
+        const std::string resolved =
+            crispasr_resolve_model_cli(params.model, backend_name, params.no_prints, params.cache_dir,
+                                       params.auto_download || model_is_auto);
+        if (resolved.empty()) {
+            fprintf(stderr, "crispasr-server: failed to resolve model '%s' for backend '%s'\n", params.model.c_str(),
+                    backend_name.c_str());
+            return 1;
+        }
+        params.model = resolved;
+
         backend = crispasr_create_backend(backend_name);
         if (!backend || !backend->init(params)) {
             fprintf(stderr, "crispasr-server: failed to init backend '%s'\n", backend_name.c_str());

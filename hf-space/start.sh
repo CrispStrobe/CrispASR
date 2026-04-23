@@ -21,7 +21,7 @@ declare -a cmd
 cmd=(crispasr --server --host "$SERVER_HOST" --port "$SERVER_PORT" -l "$LANGUAGE")
 
 if [[ "$AUTO_DOWNLOAD" == "1" ]]; then
-    cmd+=(-m auto)
+    cmd+=(-m auto --auto-download)
 else
     cmd+=(-m "$MODEL_PATH")
 fi
