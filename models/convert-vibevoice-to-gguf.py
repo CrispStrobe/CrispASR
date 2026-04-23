@@ -111,7 +111,9 @@ def main():
 
     # Name shortening for GGUF 64-char limit
     def shorten(name):
-        name = name.replace("model.", "")
+        # Strip leading "model." prefix only (not "model." inside "language_model.")
+        if name.startswith("model."):
+            name = name[len("model."):]
         name = name.replace("acoustic_tokenizer.encoder.", "at_enc.")
         name = name.replace("semantic_tokenizer.encoder.", "st_enc.")
         name = name.replace("acoustic_connector.", "at_conn.")
