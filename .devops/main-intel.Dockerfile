@@ -14,7 +14,8 @@ RUN if [ "${GGML_SYCL_F16}" = "ON" ]; then \
         echo "GGML_SYCL_F16 is set" \
         && export OPT_SYCL_F16="-DGGML_SYCL_F16=ON"; \
     fi && \
-    make base.en CMAKE_ARGS="-DGGML_SYCL=1 -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icpx ${OPT_SYCL_F16}"
+    cmake -B build -DWHISPER_BUILD_TESTS=OFF -DGGML_SYCL=1 -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icpx ${OPT_SYCL_F16} && \
+    cmake --build build -j"$(nproc)" --target whisper-cli
 
 FROM intel/oneapi-basekit:$ONEAPI_VERSION AS runtime
 WORKDIR /app
@@ -24,5 +25,9 @@ RUN apt-get update && \
   && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
 COPY --from=build /app /app
+RUN useradd -m -u 1000 crispasr && \
+  mkdir -p /cache /models && \
+  chown -R crispasr:crispasr /app /cache /models
 ENV PATH=/app/build/bin:$PATH
+USER crispasr
 ENTRYPOINT [ "bash", "-c" ]

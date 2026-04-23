@@ -16,7 +16,8 @@ RUN apt-get update && \
 
 COPY . .
 # Enable muBLAS
-RUN make base.en CMAKE_ARGS="-DGGML_MUSA=1"
+RUN cmake -B build -DWHISPER_BUILD_TESTS=OFF -DGGML_MUSA=1 && \
+    cmake --build build -j"$(nproc)" --target whisper-cli
 
 RUN find /app/build -name "*.o" -delete && \
     find /app/build -name "*.a" -delete && \
@@ -35,6 +36,10 @@ RUN apt-get update && \
 COPY --from=build /app/build/bin /app/build/bin
 COPY --from=build /app/samples /app/samples
 COPY --from=build /app/models /app/models
+RUN useradd -m -u 1000 crispasr && \
+    mkdir -p /cache /models && \
+    chown -R crispasr:crispasr /app /cache /models
 
 ENV PATH=/app/build/bin:$PATH
+USER crispasr
 ENTRYPOINT [ "bash", "-c" ]

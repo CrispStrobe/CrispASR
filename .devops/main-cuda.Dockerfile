@@ -24,8 +24,8 @@ ENV CUDA_MAIN_VERSION=13.0
 ENV LD_LIBRARY_PATH /usr/local/cuda-${CUDA_MAIN_VERSION}/compat:$LD_LIBRARY_PATH
 
 COPY . .
-# Enable cuBLAS
-RUN make base.en CMAKE_ARGS="-DGGML_CUDA=1 -DCMAKE_CUDA_ARCHITECTURES='75;80;86;90'"
+RUN cmake -B build -DWHISPER_BUILD_TESTS=OFF -DGGML_CUDA=1 -DCMAKE_CUDA_ARCHITECTURES="75;80;86;90" && \
+    cmake --build build -j"$(nproc)" --target whisper-cli
 
 RUN find /app/build -name "*.o" -delete && \
     find /app/build -name "*.a" -delete && \
@@ -44,7 +44,11 @@ RUN apt-get update && \
   && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
 COPY --from=build /app /app
+RUN useradd -m -u 1000 crispasr && \
+  mkdir -p /cache /models && \
+  chown -R crispasr:crispasr /app /cache /models
 RUN du -sh /app/*
 RUN find /app -type f -size +100M
 ENV PATH=/app/build/bin:$PATH
+USER crispasr
 ENTRYPOINT [ "bash", "-c" ]

@@ -410,12 +410,18 @@ For CUDA builds, use the override file:
 docker compose -f docker-compose.yml -f docker-compose.cuda.yml up --build
 ```
 
+The compose files default to local image tags (`crispasr-local:*`) so they don't depend on pulling a published registry image first.
+
 You can override the loaded model and startup flags through `.env`:
 - `CRISPASR_MODEL=/models/parakeet-tdt-0.6b-v2.gguf`
 - `CRISPASR_BACKEND=parakeet`
 - `CRISPASR_LANGUAGE=auto`
 - `CRISPASR_AUTO_DOWNLOAD=1`
 - `CRISPASR_EXTRA_ARGS=--no-punctuation`
+
+The service is configured to avoid serving as root by default:
+- `user: "${CRISPASR_UID:-1000}:${CRISPASR_GID:-1000}"`
+- `security_opt: ["no-new-privileges:true"]`
 
 ### OpenAI-compatible API
 

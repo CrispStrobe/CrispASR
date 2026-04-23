@@ -1,0 +1,80 @@
+name: Docker Smoke
+
+on:
+  pull_request:
+    paths:
+      - ".devops/**"
+      - "docker-compose*.yml"
+      - ".dockerignore"
+      - ".env.example"
+      - ".github/workflows/docker-smoke.yml"
+      - "README.md"
+      - "CMakeLists.txt"
+      - "src/**"
+      - "examples/**"
+      - "ggml/**"
+  push:
+    branches:
+      - main
+    paths:
+      - ".devops/**"
+      - "docker-compose*.yml"
+      - ".dockerignore"
+      - ".env.example"
+      - ".github/workflows/docker-smoke.yml"
+      - "README.md"
+      - "CMakeLists.txt"
+      - "src/**"
+      - "examples/**"
+      - "ggml/**"
+
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Validate compose YAML
+        run: |
+          python3 - <<'PY'
+          import yaml
+          for path in ("docker-compose.yml", "docker-compose.cuda.yml"):
+              with open(path, "r", encoding="utf-8") as f:
+                  yaml.safe_load(f)
+          print("compose-yaml-ok")
+          PY
+
+      - name: Download a smoke-test model
+        run: |
+          mkdir -p models cache
+          ./models/download-ggml-model.sh base.en
+
+      - name: Build image
+        run: docker build -f .devops/main.Dockerfile -t crispasr-local:main .
+
+      - name: Start server
+        run: |
+          cp .env.example .env
+          {
+            echo "CRISPASR_MODEL=/models/ggml-base.en.bin"
+            echo "CRISPASR_BACKEND=whisper"
+            echo "CRISPASR_LANGUAGE=en"
+          } >> .env
+          docker compose up -d
+
+      - name: Wait for health
+        run: |
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/health >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose logs
+          exit 1
+
+      - name: Stop stack
+        if: always()
+        run: docker compose down -v

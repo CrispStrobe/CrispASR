@@ -1,11 +1,14 @@
 services:
   crispasr:
-    image: ${CRISPASR_IMAGE:-ghcr.io/crispstrobe/crispasr:main}
+    image: ${CRISPASR_IMAGE:-crispasr-local:main}
     build:
       context: .
       dockerfile: .devops/main.Dockerfile
     ports:
       - "${CRISPASR_PORT:-8080}:8080"
+    user: "${CRISPASR_UID:-1000}:${CRISPASR_GID:-1000}"
+    security_opt:
+      - no-new-privileges:true
     volumes:
       - ./models:/models
       - ./cache:/cache
@@ -19,12 +22,12 @@ services:
     command: >-
       '
       set -e;
-      args=(crispasr --server --host 0.0.0.0 --port "${CRISPASR_PORT}" -m "${CRISPASR_MODEL}" --cache-dir /cache);
-      if [ -n "${CRISPASR_BACKEND}" ]; then args+=(--backend "${CRISPASR_BACKEND}"); fi;
-      if [ -n "${CRISPASR_LANGUAGE}" ]; then args+=(-l "${CRISPASR_LANGUAGE}"); fi;
-      if [ "${CRISPASR_AUTO_DOWNLOAD}" = "1" ]; then args+=(--auto-download); fi;
-      if [ -n "${CRISPASR_EXTRA_ARGS}" ]; then args+=(${CRISPASR_EXTRA_ARGS}); fi;
-      exec "${args[@]}"
+      args=(crispasr --server --host 0.0.0.0 --port "$${CRISPASR_PORT}" -m "$${CRISPASR_MODEL}" --cache-dir /cache);
+      if [ -n "$${CRISPASR_BACKEND}" ]; then args+=(--backend "$${CRISPASR_BACKEND}"); fi;
+      if [ -n "$${CRISPASR_LANGUAGE}" ]; then args+=(-l "$${CRISPASR_LANGUAGE}"); fi;
+      if [ "$${CRISPASR_AUTO_DOWNLOAD}" = "1" ]; then args+=(--auto-download); fi;
+      if [ -n "$${CRISPASR_EXTRA_ARGS}" ]; then eval "args+=($${CRISPASR_EXTRA_ARGS})"; fi;
+      exec "$${args[@]}"
       '
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:${CRISPASR_PORT:-8080}/health >/dev/null"]
