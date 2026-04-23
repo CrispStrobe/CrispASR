@@ -131,7 +131,7 @@ static void omniasr_perf_print(const omniasr_perf& p, int n_samples, int verbosi
     fprintf(stderr, "omniasr:  decode alloc   %7.1f ms  steps=%d nodes=%d\n", p.t_decode_alloc_us / 1e3, p.n_dec_steps,
             p.decode_nodes);
     fprintf(stderr, "omniasr:  decode compute %7.1f ms\n", p.t_decode_compute_us / 1e3);
-    fprintf(stderr, "omniasr:  decode logits  %7.1f ms\n", p.t_decode_logits_us / 1e3);
+    fprintf(stderr, "omniasr:  token readback %7.1f ms\n", p.t_decode_logits_us / 1e3);
     fprintf(stderr, "omniasr:  total measured %7.1f ms\n", p.t_total_us / 1e3);
     if (p.t_total_us > 0)
         fprintf(stderr, "omniasr:  realtime       %7.2fx\n", audio_s / (p.t_total_us / 1e6));
@@ -892,7 +892,8 @@ static ggml_tensor* omniasr_build_dec_body(omniasr_context* ctx, ggml_context* c
 
 // Build decoder graph for n_tokens at position n_past. Prefill uses F32 embeddings;
 // single-token decode can use token IDs and backend get_rows to avoid CPU embedding copies.
-static ggml_cgraph* omniasr_build_dec_graph(omniasr_context* ctx, int n_past, int n_tokens, bool input_ids_mode) {
+static ggml_cgraph* omniasr_build_dec_graph(omniasr_context* ctx, int n_past, int n_tokens, bool input_ids_mode,
+                                            bool output_token_id) {
     auto& hp = ctx->model.hp;
     int dd = hp.d_dec;
 
@@ -926,18 +927,25 @@ static ggml_cgraph* omniasr_build_dec_graph(omniasr_context* ctx, int n_past, in
 
     cur = omniasr_build_dec_body(ctx, ctx0, gf, cur, positions, causal_mask, n_past, n_tokens);
 
+    if (output_token_id) {
+        cur = ggml_argmax(ctx0, cur);
+        ggml_set_name(cur, "next_token");
+        ggml_set_output(cur);
+        ggml_build_forward_expand(gf, cur);
+        return gf;
+    }
+
     ggml_set_name(cur, "logits");
     ggml_set_output(cur);
     ggml_build_forward_expand(gf, cur);
     return gf;
 }
 
-static bool omniasr_run_dec_token(omniasr_context* ctx, int token_id, int n_past, std::vector<float>& logits,
-                                  omniasr_perf* perf) {
+static bool omniasr_run_dec_token(omniasr_context* ctx, int token_id, int n_past, int& next_token, omniasr_perf* perf) {
     int32_t input_id = token_id;
     int32_t position = n_past;
 
-    ggml_cgraph* gf = omniasr_build_dec_graph(ctx, n_past, 1, true);
+    ggml_cgraph* gf = omniasr_build_dec_graph(ctx, n_past, 1, true, true);
     if (perf && perf->decode_nodes == 0)
         perf->decode_nodes = ggml_graph_n_nodes(gf);
     ggml_backend_sched_reset(ctx->sched);
@@ -962,18 +970,18 @@ static bool omniasr_run_dec_token(omniasr_context* ctx, int token_id, int n_past
         perf->n_dec_steps++;
     }
 
-    ggml_tensor* lt = ggml_graph_get_tensor(gf, "logits");
-    int V = (int)lt->ne[0];
-    logits.resize(V);
+    ggml_tensor* nt = ggml_graph_get_tensor(gf, "next_token");
+    int32_t id = 0;
     t0 = ggml_time_us();
-    ggml_backend_tensor_get(lt, logits.data(), 0, V * sizeof(float));
+    ggml_backend_tensor_get(nt, &id, 0, sizeof(id));
+    next_token = id;
     if (perf)
         perf->t_decode_logits_us += ggml_time_us() - t0;
     return true;
 }
 
 static ggml_cgraph* omniasr_build_prefill_graph(omniasr_context* ctx, int d_enc, int T_enc, bool use_lang,
-                                                int prefix_len) {
+                                                int prefix_len, bool output_token_id) {
     auto& hp = ctx->model.hp;
     int dd = hp.d_dec;
 
@@ -1016,6 +1024,14 @@ static ggml_cgraph* omniasr_build_prefill_graph(omniasr_context* ctx, int d_enc,
     ggml_set_input(causal_mask);
 
     cur = omniasr_build_dec_body(ctx, ctx0, gf, cur, positions, causal_mask, 0, prefix_len);
+    if (output_token_id) {
+        cur = ggml_argmax(ctx0, cur);
+        ggml_set_name(cur, "next_token");
+        ggml_set_output(cur);
+        ggml_build_forward_expand(gf, cur);
+        return gf;
+    }
+
     ggml_set_name(cur, "logits");
     ggml_set_output(cur);
     ggml_build_forward_expand(gf, cur);
@@ -1023,8 +1039,8 @@ static ggml_cgraph* omniasr_build_prefill_graph(omniasr_context* ctx, int d_enc,
 }
 
 static bool omniasr_run_prefill(omniasr_context* ctx, const std::vector<float>& encoder_out, int d_enc, int T_enc,
-                                bool use_lang, int lang_id, int lid_marker_id, int prefix_len,
-                                std::vector<float>& logits, omniasr_perf* perf) {
+                                bool use_lang, int lang_id, int lid_marker_id, int prefix_len, int& next_token,
+                                omniasr_perf* perf) {
     std::vector<int32_t> positions(prefix_len);
     for (int i = 0; i < prefix_len; i++)
         positions[i] = i;
@@ -1040,7 +1056,7 @@ static bool omniasr_run_prefill(omniasr_context* ctx, const std::vector<float>& 
     int32_t lang = lang_id;
     int32_t bos = ctx->model.hp.bos_id;
 
-    ggml_cgraph* gf = omniasr_build_prefill_graph(ctx, d_enc, T_enc, use_lang, prefix_len);
+    ggml_cgraph* gf = omniasr_build_prefill_graph(ctx, d_enc, T_enc, use_lang, prefix_len, true);
     if (perf)
         perf->prefill_nodes = ggml_graph_n_nodes(gf);
     ggml_backend_sched_reset(ctx->sched);
@@ -1072,11 +1088,11 @@ static bool omniasr_run_prefill(omniasr_context* ctx, const std::vector<float>& 
     if (perf)
         perf->t_prefill_compute_us += ggml_time_us() - t0;
 
-    ggml_tensor* lt = ggml_graph_get_tensor(gf, "logits");
-    int V = (int)lt->ne[0];
-    logits.resize(V);
+    ggml_tensor* nt = ggml_graph_get_tensor(gf, "next_token");
+    int32_t id = 0;
     t0 = ggml_time_us();
-    ggml_backend_tensor_get(lt, logits.data(), 0, V * sizeof(float));
+    ggml_backend_tensor_get(nt, &id, 0, sizeof(id));
+    next_token = id;
     if (perf)
         perf->t_decode_logits_us += ggml_time_us() - t0;
     return true;
@@ -1130,8 +1146,8 @@ static char* omniasr_transcribe_llm(omniasr_context* ctx, const std::vector<floa
         ggml_backend_buffer_clear(ctx->kv_buf, 0);
     ctx->kv_n_used = 0;
     // 4. Prefill decoder with entire prefix
-    std::vector<float> logits;
-    if (!omniasr_run_prefill(ctx, encoder_out, d_enc, T_enc, use_lang, lang_id, lid_marker_id, prefix_len, logits,
+    int cur_token = 0;
+    if (!omniasr_run_prefill(ctx, encoder_out, d_enc, T_enc, use_lang, lang_id, lid_marker_id, prefix_len, cur_token,
                              perf)) {
         fprintf(stderr, "omniasr-llm: prefill failed\n");
         return nullptr;
@@ -1141,20 +1157,8 @@ static char* omniasr_transcribe_llm(omniasr_context* ctx, const std::vector<floa
     if (ctx->params.verbosity >= 1)
         fprintf(stderr, "omniasr-llm: prefill done (%d tokens)\n", prefix_len);
 
-    // 5. Greedy argmax from prefill logits → first generated token
+    // 5. Greedy argmax from prefill graph → first generated token
     std::vector<int> output_tokens;
-    auto argmax = [&](const std::vector<float>& lg) -> int {
-        int best = 0;
-        float best_val = lg[0];
-        for (int i = 1; i < (int)lg.size(); i++)
-            if (lg[i] > best_val) {
-                best_val = lg[i];
-                best = i;
-            }
-        return best;
-    };
-
-    int cur_token = argmax(logits);
     if (ctx->params.verbosity >= 2)
         fprintf(stderr, "  prefill → token=%d (%s)\n", cur_token,
                 cur_token < (int)m.vocab.size() ? m.vocab[cur_token].c_str() : "?");
@@ -1169,12 +1173,11 @@ static char* omniasr_transcribe_llm(omniasr_context* ctx, const std::vector<floa
         }
 
         int n_past = prefix_len + step;
-        if (!omniasr_run_dec_token(ctx, cur_token, n_past, logits, perf)) {
+        if (!omniasr_run_dec_token(ctx, cur_token, n_past, cur_token, perf)) {
             fprintf(stderr, "omniasr-llm: decode step %d failed\n", step);
             break;
         }
 
-        cur_token = argmax(logits);
         if (cur_token == hp.eos_id)
             break;
         output_tokens.push_back(cur_token);
