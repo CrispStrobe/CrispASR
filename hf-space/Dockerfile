@@ -22,6 +22,7 @@ RUN apt-get update && \
 COPY --from=build /src/CrispASR/build /opt/crispasr/build
 COPY hf-space/requirements.txt /space/requirements.txt
 RUN pip3 install --no-cache-dir -r /space/requirements.txt
+RUN find /opt/crispasr/build -type f -name 'lib*.so*' -exec cp -a {} /usr/local/lib/ \; && ldconfig
 
 COPY hf-space/app.py hf-space/start.sh /space/
 RUN chmod +x /space/start.sh && \
@@ -30,7 +31,6 @@ RUN chmod +x /space/start.sh && \
   chown -R app:app /space /opt/crispasr /models /cache
 
 ENV PATH=/opt/crispasr/build/bin:$PATH
-ENV LD_LIBRARY_PATH=/opt/crispasr/build/src:/opt/crispasr/build/bin:${LD_LIBRARY_PATH}
 ENV CRISPASR_SERVER_URL=http://127.0.0.1:8080
 ENV GRADIO_SERVER_NAME=0.0.0.0
 ENV GRADIO_SERVER_PORT=7860
