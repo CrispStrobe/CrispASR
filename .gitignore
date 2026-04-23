@@ -5,6 +5,9 @@
 .coreml/
 .test/
 .venv/
+.env
+.env.*
+!.env.example
 .vs/
 .vscode/
 .DS_Store
