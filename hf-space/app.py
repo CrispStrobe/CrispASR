@@ -9,8 +9,8 @@ import requests
 
 SERVER_URL = os.environ.get("CRISPASR_SERVER_URL", "http://127.0.0.1:8080").rstrip("/")
 SPACE_TITLE = os.environ.get("CRISPASR_SPACE_TITLE", "CrispASR")
-DEFAULT_LANGUAGE = os.environ.get("CRISPASR_LANGUAGE", "auto")
-DEFAULT_MODEL = os.environ.get("CRISPASR_MODEL", "/models/model.gguf")
+DEFAULT_LANGUAGE = os.environ.get("CRISPASR_LANGUAGE", "en")
+DEFAULT_MODEL = os.environ.get("CRISPASR_MODEL", "auto")
 
 
 def _request(method: str, path: str, **kwargs):
@@ -39,7 +39,7 @@ def wait_for_server():
     last_status = "starting"
     last_health = ""
     last_models = DEFAULT_MODEL
-    for _ in range(60):
+    for _ in range(300):
         last_status, last_health, last_models = fetch_status()
         if last_status == "ready":
             break

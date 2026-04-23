@@ -17,8 +17,8 @@ This folder contains a Hugging Face Docker Space wrapper for CrispASR:
 
 - `CRISPASR_MODEL=/models/model.gguf`
 - `CRISPASR_BACKEND=whisper` or another backend name
-- `CRISPASR_LANGUAGE=auto`
-- `CRISPASR_AUTO_DOWNLOAD=0`
+- `CRISPASR_LANGUAGE=en`
+- `CRISPASR_AUTO_DOWNLOAD=1`
 - `CRISPASR_EXTRA_ARGS=`
 
 ## Local build

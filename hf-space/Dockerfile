@@ -5,7 +5,10 @@ RUN apt-get update && \
   apt-get install -y build-essential cmake git curl && \
   rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
-COPY . .
+ARG CRISPASR_REPO=https://github.com/CrispStrobe/CrispASR
+ARG CRISPASR_REF=main
+
+RUN git clone --depth 1 --branch "${CRISPASR_REF}" "${CRISPASR_REPO}" /src/CrispASR
 RUN cmake -B build -DWHISPER_BUILD_TESTS=OFF && \
   cmake --build build -j"$(nproc)" --target whisper-cli
 
