@@ -6,7 +6,7 @@ RUN apt-get update && \
   rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
 ARG CRISPASR_REPO=https://github.com/CrispStrobe/CrispASR
-ARG CRISPASR_REF=main
+ARG CRISPASR_REF=faf0d1f
 
 RUN git clone --depth 1 --branch "${CRISPASR_REF}" "${CRISPASR_REPO}" /src/CrispASR
 RUN cmake -B build -DWHISPER_BUILD_TESTS=OFF && \
