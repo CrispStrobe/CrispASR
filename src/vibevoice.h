@@ -38,30 +38,25 @@ char* vibevoice_transcribe(struct vibevoice_context* ctx, const float* samples, 
 // Run the acoustic σ-VAE encoder. Returns a malloc'd float array of shape
 // [*n_frames * *vae_dim] in row-major order (frame-major: data[t*vae_dim+c]).
 // Caller frees with free(). Returns NULL on failure.
-float* vibevoice_run_acoustic_encoder(struct vibevoice_context* ctx,
-                                      const float* samples, int n_samples,
-                                      int* n_frames, int* vae_dim);
+float* vibevoice_run_acoustic_encoder(struct vibevoice_context* ctx, const float* samples, int n_samples, int* n_frames,
+                                      int* vae_dim);
 
 // Run the semantic encoder. Same layout as acoustic. Returns NULL on failure.
-float* vibevoice_run_semantic_encoder(struct vibevoice_context* ctx,
-                                      const float* samples, int n_samples,
-                                      int* n_frames, int* vae_dim);
+float* vibevoice_run_semantic_encoder(struct vibevoice_context* ctx, const float* samples, int n_samples, int* n_frames,
+                                      int* vae_dim);
 
 // Run one SpeechConnector (FC1 → RMSNorm → FC2) on pre-computed encoder mean.
 // prefix: "at_conn" (acoustic) or "se_conn" (semantic).
 // encoder_mean: row-major [n_frames * vae_dim].
 // Returns malloc'd float [n_frames * *d_lm]. Caller frees. Returns NULL on failure.
-float* vibevoice_run_connector(struct vibevoice_context* ctx,
-                               const char* prefix,
-                               const float* encoder_mean, int n_frames, int vae_dim,
-                               int* d_lm);
+float* vibevoice_run_connector(struct vibevoice_context* ctx, const char* prefix, const float* encoder_mean,
+                               int n_frames, int vae_dim, int* d_lm);
 
 // Run both encoders + both connectors and return the combined speech features
 // (element-wise sum of acoustic and semantic connector outputs).
 // Returns malloc'd float [*n_frames * *d_lm]. Caller frees. Returns NULL on failure.
-float* vibevoice_encode_speech(struct vibevoice_context* ctx,
-                               const float* samples, int n_samples,
-                               int* n_frames, int* d_lm);
+float* vibevoice_encode_speech(struct vibevoice_context* ctx, const float* samples, int n_samples, int* n_frames,
+                               int* d_lm);
 
 #ifdef __cplusplus
 }

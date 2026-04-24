@@ -896,20 +896,22 @@ extern "C" char* vibevoice_transcribe(struct vibevoice_context* ctx, const float
     snprintf(dur_str, sizeof(dur_str), "%.2f", dur);
     std::vector<int> dur_tokens;
     for (const char* p = dur_str; *p; p++) {
-        if (*p >= '0' && *p <= '9') dur_tokens.push_back(15 + (*p - '0'));
-        else if (*p == '.') dur_tokens.push_back(13);
+        if (*p >= '0' && *p <= '9')
+            dur_tokens.push_back(15 + (*p - '0'));
+        else if (*p == '.')
+            dur_tokens.push_back(13);
     }
     std::vector<int> suffix_tokens = {
-        198,                                                           // \n
-        1986, 374, 264, 220,                                           // This is a<space>
+        198,                 // \n
+        1986, 374, 264, 220, // This is a<space>
     };
     suffix_tokens.insert(suffix_tokens.end(), dur_tokens.begin(), dur_tokens.end());
     std::vector<int> suffix_tail = {
-        6546,     7699,  11,  4587, 38840, 432, 449,   1493,           // seconds audio, please transcribe it with these
-        6894,     25,                                                  // keys:
-        5145,     882,   11,  3972, 882,   11,  29073, 3034, 11, 8883, // Start time, End time, Speaker ID, Content
-        151645,   198,                                                 // <|im_end|>\n
-        IM_START, 77091, 198                                           // <|im_start|>assistant\n
+        6546,     7699,  11, 4587, 38840, 432, 449,   1493,           // seconds audio, please transcribe it with these
+        6894,     25,                                                 // keys:
+        5145,     882,   11, 3972, 882,   11,  29073, 3034, 11, 8883, // Start time, End time, Speaker ID, Content
+        151645,   198,                                                // <|im_end|>\n
+        IM_START, 77091, 198                                          // <|im_start|>assistant\n
     };
     suffix_tokens.insert(suffix_tokens.end(), suffix_tail.begin(), suffix_tail.end());
 

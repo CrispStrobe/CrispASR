@@ -10,13 +10,13 @@ extern "C" {
 struct fireredpunc_context;
 
 // Load a FireRedPunc GGUF model.
-struct fireredpunc_context * fireredpunc_init(const char * model_path);
+struct fireredpunc_context* fireredpunc_init(const char* model_path);
 
 // Add punctuation to unpunctuated text. Returns newly allocated string (caller frees).
-char * fireredpunc_process(struct fireredpunc_context * ctx, const char * text);
+char* fireredpunc_process(struct fireredpunc_context* ctx, const char* text);
 
 // Free context.
-void fireredpunc_free(struct fireredpunc_context * ctx);
+void fireredpunc_free(struct fireredpunc_context* ctx);
 
 #ifdef __cplusplus
 }
