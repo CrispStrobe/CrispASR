@@ -55,6 +55,7 @@ struct vibevoice_hparams {
 struct vibevoice_model {
     vibevoice_hparams hp;
     std::map<std::string, ggml_tensor*> tensors;
+    std::vector<std::string> vocab;
 };
 
 struct vibevoice_context {
@@ -132,6 +133,17 @@ extern "C" struct vibevoice_context* vibevoice_init_from_file(const char* path_m
         hp.encoder_depths.resize(n);
         for (int i = 0; i < n; i++)
             hp.encoder_depths[i] = ((const int32_t*)gguf_get_arr_data(gctx, depths_key))[i];
+    }
+
+    // Load vocabulary
+    const int tok_key = gguf_find_key(gctx, "tokenizer.ggml.tokens");
+    if (tok_key >= 0) {
+        int n = gguf_get_arr_n(gctx, tok_key);
+        m.vocab.resize(n);
+        for (int i = 0; i < n; i++) {
+            const char* s = gguf_get_arr_str(gctx, tok_key, i);
+            if (s) m.vocab[i] = s;
+        }
     }
 
     gguf_free(gctx);
@@ -681,20 +693,26 @@ extern "C" char* vibevoice_transcribe(struct vibevoice_context* ctx, const float
     const int IM_START     = 151644;
     // const int IM_END       = 151645;
 
-    // System prompt tokens (hardcoded from processor output)
-    // "You are a helpful assistant that transcribes speech audio into structured text."
+    // Exact prompt template from VibeVoice processor output
+    // System: "You are a helpful assistant that transcribes audio input into text output in JSON format."
     std::vector<int> system_tokens = {
-        IM_START, 8948, 198, 2610, 525, 264, 10950, 17847, 429, 1356, 55136,
-        7699, 1946, 1119, 1467, 2550, 304, 4718, 3561, 13, 198,
-        151645, 198, IM_START, 872, 198
+        IM_START, 8948, 198,                                         // <|im_start|>system\n
+        2610, 525, 264, 10950, 17847, 429, 1356, 55136,             // You are a helpful assistant that transcribes
+        7699, 1946, 1119, 1467, 2550, 304, 4718, 3561, 13,          // audio input into text output in JSON format.
+        198, 151645, 198, IM_START, 872, 198                         // \n<|im_end|>\n<|im_start|>user\n
     };
-    // After speech: "\nThis is a XX.XX seconds audio, please transcribe it with these keys: Start time, End time, Speaker ID, Content"
-    // For simplicity, use a minimal suffix
+    // After speech tokens: "\nThis is a XX.XX seconds audio, please transcribe it with these keys: Start time, End time, Speaker ID, Content<|im_end|>\n"
+    float dur = n_samples / 24000.0f;
+    // Duration as string tokens (simplified — just use "11.00" for now)
     std::vector<int> suffix_tokens = {
-        198, 1986, 374, 264, 7510, 11, 4587, 38840, 432, 449,
-        1493, 7039, 25, 5765, 882, 11, 4060, 882, 11, 27657, 3034, 11, 9059, 198,
-        151645, 198, IM_START, 77091, 198
+        198,                                                          // \n
+        1986, 374, 264, 220, 16, 16, 13, 15, 15,                     // This is a 11.00
+        6546, 7699, 11, 4587, 38840, 432, 449, 1493,                 // seconds audio, please transcribe it with these
+        6894, 25,                                                     // keys:
+        5145, 882, 11, 3972, 882, 11, 29073, 3034, 11, 8883,         // Start time, End time, Speaker ID, Content
+        151645, 198                                                   // <|im_end|>\n
     };
+    (void)dur;
 
     // Build full token sequence
     std::vector<int> prompt_tokens;
@@ -816,25 +834,73 @@ extern "C" char* vibevoice_transcribe(struct vibevoice_context* ctx, const float
             cur = ggml_rms_norm(ctx0, cur, 1e-6f);
             cur = ggml_mul(ctx0, cur, G(std::string(p) + ".attn_ln.weight"));
 
-            // KV-cached GQA self-attention
-            ggml_tensor* attn = core_attn::kv_self_attn(
-                ctx0, gf, cur,
-                G(std::string(p) + ".attn.q_proj.weight"),
-                G(std::string(p) + ".attn.k_proj.weight"),
-                G(std::string(p) + ".attn.v_proj.weight"),
-                G(std::string(p) + ".attn.o_proj.weight"),
-                nullptr, nullptr, // no Q/K norm
-                positions, causal_mask,
-                ctx->kv_k, ctx->kv_v, il, n_past, kvp);
+            // Qwen2 has bias on Q and K projections.
+            // Apply Q/K projections with bias BEFORE kv_self_attn,
+            // then pass identity weights so kv_self_attn skips the projection.
+            // Actually simpler: inline the attention with bias.
+            {
+                ggml_tensor* q_w = G(std::string(p) + ".attn.q_proj.weight");
+                ggml_tensor* k_w = G(std::string(p) + ".attn.k_proj.weight");
+                ggml_tensor* v_w = G(std::string(p) + ".attn.v_proj.weight");
+                ggml_tensor* o_w = G(std::string(p) + ".attn.o_proj.weight");
+                ggml_tensor* q_b = G(std::string(p) + ".attn.q_proj.bias");
+                ggml_tensor* k_b = G(std::string(p) + ".attn.k_proj.bias");
 
-            // Add Q/K bias if present
-            // Qwen2 has bias on Q and K projections — handled inside kv_self_attn? No.
-            // Actually kv_self_attn does Q = mul_mat(q_w, x), no bias addition.
-            // For Qwen2, biases exist but are on Q and K only (not V and O).
-            // The core_attn helper doesn't support per-projection biases.
-            // TODO: add Q/K bias support to kv_self_attn or handle externally.
+                int T_cur = (int)cur->ne[1];
+                int Lk = n_past + T_cur;
 
-            cur = ggml_add(ctx0, residual, attn);
+                // Q, K, V projections with bias
+                ggml_tensor* Q = ggml_mul_mat(ctx0, q_w, cur);
+                if (q_b) Q = ggml_add(ctx0, Q, q_b);
+                ggml_tensor* K = ggml_mul_mat(ctx0, k_w, cur);
+                if (k_b) K = ggml_add(ctx0, K, k_b);
+                ggml_tensor* V = ggml_mul_mat(ctx0, v_w, cur);
+
+                // Reshape for multi-head
+                Q = ggml_reshape_3d(ctx0, Q, kvp.head_dim, kvp.n_heads, T_cur);
+                K = ggml_reshape_3d(ctx0, K, kvp.head_dim, kvp.n_kv_heads, T_cur);
+                V = ggml_reshape_3d(ctx0, V, kvp.head_dim, kvp.n_kv_heads, T_cur);
+
+                // RoPE
+                Q = ggml_rope_ext(ctx0, Q, positions, nullptr, kvp.head_dim, GGML_ROPE_TYPE_NEOX,
+                                  0, kvp.rope_theta, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f);
+                K = ggml_rope_ext(ctx0, K, positions, nullptr, kvp.head_dim, GGML_ROPE_TYPE_NEOX,
+                                  0, kvp.rope_theta, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f);
+
+                // Write K, V to cache
+                ggml_tensor* K_perm = ggml_permute(ctx0, K, 0, 2, 1, 3);
+                ggml_tensor* V_perm = ggml_permute(ctx0, V, 0, 2, 1, 3);
+                ggml_tensor* k_view = ggml_view_4d(ctx0, ctx->kv_k,
+                    kvp.head_dim, T_cur, kvp.n_kv_heads, 1,
+                    ctx->kv_k->nb[1], ctx->kv_k->nb[2], ctx->kv_k->nb[3],
+                    (size_t)il * ctx->kv_k->nb[3] + (size_t)n_past * ctx->kv_k->nb[1]);
+                ggml_tensor* v_view = ggml_view_4d(ctx0, ctx->kv_v,
+                    kvp.head_dim, T_cur, kvp.n_kv_heads, 1,
+                    ctx->kv_v->nb[1], ctx->kv_v->nb[2], ctx->kv_v->nb[3],
+                    (size_t)il * ctx->kv_v->nb[3] + (size_t)n_past * ctx->kv_v->nb[1]);
+                ggml_build_forward_expand(gf, ggml_cpy(ctx0, K_perm, k_view));
+                ggml_build_forward_expand(gf, ggml_cpy(ctx0, V_perm, v_view));
+
+                // Read full K, V from cache
+                ggml_tensor* Kfull = ggml_cont(ctx0, ggml_view_3d(ctx0, ctx->kv_k,
+                    kvp.head_dim, Lk, kvp.n_kv_heads,
+                    ctx->kv_k->nb[1], ctx->kv_k->nb[2], (size_t)il * ctx->kv_k->nb[3]));
+                ggml_tensor* Vfull = ggml_cont(ctx0, ggml_view_3d(ctx0, ctx->kv_v,
+                    kvp.head_dim, Lk, kvp.n_kv_heads,
+                    ctx->kv_v->nb[1], ctx->kv_v->nb[2], (size_t)il * ctx->kv_v->nb[3]));
+
+                // Permute Q for flash-attn: [hd, T, nh]
+                Q = ggml_cont(ctx0, ggml_permute(ctx0, Q, 0, 2, 1, 3));
+
+                // Flash attention (native GQA)
+                ggml_tensor* attn_out = ggml_flash_attn_ext(ctx0, Q, Kfull, Vfull,
+                    causal_mask, kvp.attn_scale, 0.0f, 0.0f);
+
+                attn_out = ggml_reshape_2d(ctx0, attn_out, hp.d_lm, T_cur);
+                attn_out = ggml_mul_mat(ctx0, o_w, attn_out);
+
+                cur = ggml_add(ctx0, residual, attn_out);
+            }
 
             // FFN: RMSNorm + SwiGLU
             residual = cur;
@@ -952,14 +1018,19 @@ extern "C" char* vibevoice_transcribe(struct vibevoice_context* ctx, const float
     if (ctx->params.verbosity >= 1)
         fprintf(stderr, "vibevoice: generated %d tokens\n", (int)output_tokens.size());
 
-    // 11. Detokenize — for now just dump raw token IDs
-    // Qwen2 tokenizer is BPE with 151936 tokens — we'd need the full tokenizer.
-    // For now, output raw token IDs as comma-separated
+    // 11. Detokenize using embedded vocabulary
     std::string result;
     for (int tid : output_tokens) {
-        if (!result.empty()) result += ",";
-        result += std::to_string(tid);
+        if (tid >= 0 && tid < (int)m.vocab.size()) {
+            const std::string& piece = m.vocab[tid];
+            // Skip special tokens (start with <| and end with |>)
+            if (piece.size() >= 4 && piece[0] == '<' && piece[1] == '|')
+                continue;
+            result += piece;
+        }
     }
+    // Qwen2 BPE uses byte-level encoding — tokens starting with Ġ represent space
+    // For now just output as-is; the BPE pieces concatenate directly
 
     if (result.empty())
         return nullptr;

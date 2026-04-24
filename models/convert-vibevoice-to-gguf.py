@@ -100,14 +100,20 @@ def main():
     writer.add_array("vibevoice.encoder_ratios", encoder_ratios)
     writer.add_array("vibevoice.encoder_depths", encoder_depths)
 
-    # Read tokenizer if available
-    tok_path = os.path.join(model_dir, "tokenizer.json")
-    if os.path.exists(tok_path):
-        # Qwen2 tokenizer — just store vocab size as metadata
-        # Full tokenizer is complex (BPE with 151936 tokens)
-        # For now, we'll use the Qwen2 tokenizer at runtime
+    # Embed Qwen2 vocabulary for token ID → string decoding
+    try:
+        from transformers import AutoTokenizer
+        tok = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-1.5B", trust_remote_code=True)
+        vocab_map = tok.get_vocab()
+        inv = {v: k for k, v in vocab_map.items()}
+        max_id = max(inv.keys())
+        vocab_list = [inv.get(i, f"<unk_{i}>") for i in range(max_id + 1)]
+        writer.add_array("tokenizer.ggml.tokens", vocab_list)
+        writer.add_uint32("vibevoice.has_tokenizer", 1)
+        print(f"  Qwen2 tokenizer: {len(vocab_list)} tokens embedded")
+    except Exception as e:
         writer.add_uint32("vibevoice.has_tokenizer", 0)
-        print(f"  Qwen2 tokenizer: {vocab_size} tokens (not embedded, use external)")
+        print(f"  Tokenizer not embedded: {e}")
 
     # Name shortening for GGUF 64-char limit
     def shorten(name):
