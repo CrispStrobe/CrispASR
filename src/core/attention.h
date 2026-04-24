@@ -65,19 +65,41 @@ struct LlamaSelfAttnParams {
 // Output:
 //   attn           [d_model, T]  — post-output-projection tensor. The
 //                                   caller adds it to the residual.
+// Fused QKV variant: if qkv_w is non-null, do a single matmul and split.
+// qkv_w shape: [d_model, n_q*hd + 2*n_kv*hd] — concatenated Q, K, V weights.
+// Falls back to 3 separate matmuls when qkv_w is null (backward compat).
 static inline ggml_tensor* llama_self_attn(ggml_context* ctx, ggml_tensor* x, ggml_tensor* q_w, ggml_tensor* k_w,
                                            ggml_tensor* v_w, ggml_tensor* o_w, ggml_tensor* positions,
-                                           ggml_tensor* mask, const LlamaSelfAttnParams& p) {
+                                           ggml_tensor* mask, const LlamaSelfAttnParams& p,
+                                           ggml_tensor* qkv_w = nullptr) {
     const int hd = p.head_dim;
     const int n_q = p.n_heads;
     const int n_kv = p.n_kv_heads;
     const int n_ctx = p.n_ctx_orig;
     const int grp = p.n_kv_grp;
 
-    // Q/K/V projections (no biases for the Llama case).
-    ggml_tensor* Q = ggml_mul_mat(ctx, q_w, x);
-    ggml_tensor* K = ggml_mul_mat(ctx, k_w, x);
-    ggml_tensor* V = ggml_mul_mat(ctx, v_w, x);
+    ggml_tensor* Q;
+    ggml_tensor* K;
+    ggml_tensor* V;
+
+    if (qkv_w) {
+        // Single fused matmul: one mul_mat instead of three.
+        // qkv_w: [d_model, q_dim + k_dim + v_dim]
+        // Output: [q_dim + k_dim + v_dim, T]
+        ggml_tensor* qkv = ggml_mul_mat(ctx, qkv_w, x);
+        const int q_dim = n_q * hd;
+        const int kv_dim = n_kv * hd;
+        const int T = (int)x->ne[1];
+        // Split along ne[0]: Q=[0..q_dim), K=[q_dim..q_dim+kv_dim), V=[q_dim+kv_dim..)
+        Q = ggml_view_2d(ctx, qkv, q_dim, T, qkv->nb[1], 0);
+        K = ggml_view_2d(ctx, qkv, kv_dim, T, qkv->nb[1], q_dim * ggml_type_size(qkv->type));
+        V = ggml_view_2d(ctx, qkv, kv_dim, T, qkv->nb[1], (q_dim + kv_dim) * ggml_type_size(qkv->type));
+    } else {
+        // Standard 3 separate matmuls (backward compat).
+        Q = ggml_mul_mat(ctx, q_w, x);
+        K = ggml_mul_mat(ctx, k_w, x);
+        V = ggml_mul_mat(ctx, v_w, x);
+    }
 
     // T is the time dim of x; ggml stores [d_model, T] as ne = [d_model, T].
     const int T = (int)x->ne[1];
@@ -286,7 +308,7 @@ static inline ggml_tensor* kv_self_attn(ggml_context* ctx0, ggml_cgraph* gf, ggm
                                         ggml_tensor* k_w, ggml_tensor* v_w, ggml_tensor* o_w, ggml_tensor* q_norm_w,
                                         ggml_tensor* k_norm_w, ggml_tensor* positions, ggml_tensor* causal_mask,
                                         ggml_tensor* kv_k, ggml_tensor* kv_v, int il, int n_past,
-                                        const KvSelfAttnParams& p) {
+                                        const KvSelfAttnParams& p, ggml_tensor* qkv_w = nullptr) {
     const int hd = p.head_dim;
     const int n_q = p.n_heads;
     const int n_kv = p.n_kv_heads;
@@ -295,9 +317,23 @@ static inline ggml_tensor* kv_self_attn(ggml_context* ctx0, ggml_cgraph* gf, ggm
     const int Lk = n_past + T;
 
     // ---- Q/K/V projections ----
-    ggml_tensor* Q = ggml_mul_mat(ctx0, q_w, x);
-    ggml_tensor* K = ggml_mul_mat(ctx0, k_w, x);
-    ggml_tensor* V = ggml_mul_mat(ctx0, v_w, x);
+    ggml_tensor* Q;
+    ggml_tensor* K;
+    ggml_tensor* V;
+
+    if (qkv_w) {
+        // Fused: one matmul, then split output
+        ggml_tensor* qkv = ggml_mul_mat(ctx0, qkv_w, x);
+        const int q_dim = n_q * hd;
+        const int kv_dim = n_kv * hd;
+        Q = ggml_view_2d(ctx0, qkv, q_dim, T, qkv->nb[1], 0);
+        K = ggml_view_2d(ctx0, qkv, kv_dim, T, qkv->nb[1], q_dim * ggml_type_size(qkv->type));
+        V = ggml_view_2d(ctx0, qkv, kv_dim, T, qkv->nb[1], (q_dim + kv_dim) * ggml_type_size(qkv->type));
+    } else {
+        Q = ggml_mul_mat(ctx0, q_w, x);
+        K = ggml_mul_mat(ctx0, k_w, x);
+        V = ggml_mul_mat(ctx0, v_w, x);
+    }
 
     Q = ggml_reshape_3d(ctx0, Q, hd, n_q, T);
     K = ggml_reshape_3d(ctx0, K, hd, n_kv, T);
