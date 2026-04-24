@@ -276,7 +276,9 @@ static bool fireredpunc_load(fireredpunc_context& ctx, const char* path) {
             ctx.d_ffn, ctx.n_heads, ctx.vocab_size, ctx.n_classes);
 
     // Pass 2: weights
-    ctx.backend = ggml_backend_cpu_init();
+    ctx.backend = ggml_backend_init_best();
+    if (!ctx.backend)
+        ctx.backend = ggml_backend_cpu_init();
     core_gguf::WeightLoad wl;
     if (!core_gguf::load_weights(path, ctx.backend, "fireredpunc", wl))
         return false;

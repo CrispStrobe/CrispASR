@@ -362,7 +362,9 @@ static void ffn_residual(float* x, int D, int T, const float* ff1_w, const float
 extern "C" struct silero_lid_context* silero_lid_init(const char* gguf_path, int n_threads) {
     auto* ctx = new silero_lid_context();
     ctx->n_threads = n_threads > 0 ? n_threads : 4;
-    ctx->backend = ggml_backend_cpu_init(); // 17 MB model, CPU is fine
+    ctx->backend = ggml_backend_init_best();
+    if (!ctx->backend)
+        ctx->backend = ggml_backend_cpu_init();
     if (!ctx->backend) {
         delete ctx;
         return nullptr;

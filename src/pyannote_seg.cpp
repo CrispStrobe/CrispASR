@@ -74,7 +74,9 @@ struct pyannote_seg_context {
 // ===========================================================================
 
 static bool pyannote_load(pyannote_model& m, const char* path) {
-    ggml_backend_t backend = ggml_backend_cpu_init();
+    ggml_backend_t backend = ggml_backend_init_best();
+    if (!backend)
+        backend = ggml_backend_cpu_init();
     core_gguf::WeightLoad wl;
     if (!core_gguf::load_weights(path, backend, "pyannote_seg", wl)) {
         ggml_backend_free(backend);
