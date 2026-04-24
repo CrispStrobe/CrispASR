@@ -84,10 +84,12 @@ struct wav2vec2_model {
     wav2vec2_hparams hparams;
 
     w2v_cnn_layer cnn[7];
-    ggml_tensor *fp_ln_w = nullptr, *fp_ln_b = nullptr; // feature-proj LN
-    ggml_tensor *fp_w = nullptr, *fp_b = nullptr;       // feature-proj linear
+    ggml_tensor *fp_ln_w = nullptr, *fp_ln_b = nullptr;       // feature-proj LN
+    ggml_tensor *fp_w = nullptr, *fp_b = nullptr;             // feature-proj linear
     ggml_tensor *pos_conv_w = nullptr, *pos_conv_b = nullptr; // single-layer (wav2vec2)
-    struct { ggml_tensor *w = nullptr, *b = nullptr; } pos_conv_layers[8]; // multi-layer (data2vec)
+    struct {
+        ggml_tensor *w = nullptr, *b = nullptr;
+    } pos_conv_layers[8];      // multi-layer (data2vec)
     int n_pos_conv_layers = 1; // 1 for wav2vec2, 5 for data2vec
     ggml_tensor *enc_ln_w = nullptr, *enc_ln_b = nullptr;
     std::vector<w2v_enc_layer> enc;

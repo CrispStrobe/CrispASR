@@ -1851,8 +1851,8 @@ extern "C" char* firered_asr_transcribe(struct firered_asr_context* ctx, const f
                 for (int li = 0; li < hp.n_layers_dec; li++) {
                     auto& c = dec_cache[li];
                     // Enable trace by env var only; the CLI only has a single -v flag.
-                    const bool debug_dec_here =
-                        (debug_dec_step >= 0 && debug_dec_layer >= 0 && step == debug_dec_step && li == debug_dec_layer);
+                    const bool debug_dec_here = (debug_dec_step >= 0 && debug_dec_layer >= 0 &&
+                                                 step == debug_dec_step && li == debug_dec_layer);
 
                     // === Self-attention (causal, attend to history) ===
                     {

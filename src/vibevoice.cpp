@@ -93,7 +93,7 @@ extern "C" struct vibevoice_context_params vibevoice_context_default_params(void
 // ===========================================================================
 
 extern "C" struct vibevoice_context* vibevoice_init_from_file(const char* path_model,
-                                                               struct vibevoice_context_params params) {
+                                                              struct vibevoice_context_params params) {
     auto* ctx = new vibevoice_context();
     ctx->params = params;
     auto& m = ctx->model;
@@ -142,7 +142,8 @@ extern "C" struct vibevoice_context* vibevoice_init_from_file(const char* path_m
         m.vocab.resize(n);
         for (int i = 0; i < n; i++) {
             const char* s = gguf_get_arr_str(gctx, tok_key, i);
-            if (s) m.vocab[i] = s;
+            if (s)
+                m.vocab[i] = s;
         }
     }
 
@@ -156,8 +157,8 @@ extern "C" struct vibevoice_context* vibevoice_init_from_file(const char* path_m
     }
 
     // Load weights
-    ctx->backend = hp.d_lm > 0 ? (params.use_gpu ? ggml_backend_init_best() : ggml_backend_cpu_init())
-                                : ggml_backend_cpu_init();
+    ctx->backend =
+        hp.d_lm > 0 ? (params.use_gpu ? ggml_backend_init_best() : ggml_backend_cpu_init()) : ggml_backend_cpu_init();
     if (!ctx->backend) {
         delete ctx;
         return nullptr;
@@ -216,8 +217,8 @@ static ggml_tensor* build_conv_rms_norm(ggml_context* ctx, ggml_tensor* x, ggml_
     if (w) {
         // Verify shapes match before mul
         if (x->ne[0] != w->ne[0]) {
-            fprintf(stderr, "  BUG: conv_rms_norm shape mismatch: x=[%lld,%lld] w=[%lld]\n",
-                    (long long)x->ne[0], (long long)x->ne[1], (long long)w->ne[0]);
+            fprintf(stderr, "  BUG: conv_rms_norm shape mismatch: x=[%lld,%lld] w=[%lld]\n", (long long)x->ne[0],
+                    (long long)x->ne[1], (long long)w->ne[0]);
         }
         x = ggml_mul(ctx, x, w);
     }
@@ -251,8 +252,8 @@ static ggml_tensor* build_causal_conv1d(ggml_context* ctx, ggml_tensor* x, ggml_
     // Add bias (ne[0]=T_out, ne[1]=C_out; bias ne[0]=C_out → transpose, add, transpose)
     if (b) {
         ggml_tensor* xt = ggml_cont(ctx, ggml_transpose(ctx, x)); // [C_out, T_out]
-        xt = ggml_add(ctx, xt, b); // [C_out] + [C_out, T_out] broadcasts over T
-        return xt; // already in [C, T] format
+        xt = ggml_add(ctx, xt, b);                                // [C_out] + [C_out, T_out] broadcasts over T
+        return xt;                                                // already in [C, T] format
     }
     return ggml_cont(ctx, ggml_transpose(ctx, x)); // [T_out, C_out] → [C_out, T_out]
 }
@@ -303,9 +304,9 @@ static ggml_tensor* build_causal_dw_conv1d(ggml_context* ctx, ggml_tensor* x, gg
 //   mixer: ConvRMSNorm → depthwise_conv → gamma_scale → residual
 //   FFN:   ConvRMSNorm → linear1(SiLU)→linear2 → gamma_scale → residual
 static ggml_tensor* build_block1d(ggml_context* ctx, ggml_tensor* x, ggml_tensor* norm_w, ggml_tensor* dw_conv_w,
-                                   ggml_tensor* dw_conv_b, ggml_tensor* gamma, ggml_tensor* ffn_norm_w,
-                                   ggml_tensor* ffn_up_w, ggml_tensor* ffn_up_b, ggml_tensor* ffn_down_w,
-                                   ggml_tensor* ffn_down_b, ggml_tensor* ffn_gamma) {
+                                  ggml_tensor* dw_conv_b, ggml_tensor* gamma, ggml_tensor* ffn_norm_w,
+                                  ggml_tensor* ffn_up_w, ggml_tensor* ffn_up_b, ggml_tensor* ffn_down_w,
+                                  ggml_tensor* ffn_down_b, ggml_tensor* ffn_gamma) {
     // Mixer path
     ggml_tensor* residual = x;
     fprintf(stderr, "    block: x=[%lld,%lld]\n", (long long)x->ne[0], (long long)x->ne[1]);
@@ -315,8 +316,8 @@ static ggml_tensor* build_block1d(ggml_context* ctx, ggml_tensor* x, ggml_tensor
     fprintf(stderr, "    after dw_conv: h=[%lld,%lld]\n", (long long)h->ne[0], (long long)h->ne[1]);
     if (gamma) {
         if (h->ne[0] != gamma->ne[0])
-            fprintf(stderr, "  BUG: gamma shape mismatch: h=[%lld,%lld] gamma=[%lld]\n",
-                    (long long)h->ne[0], (long long)h->ne[1], (long long)gamma->ne[0]);
+            fprintf(stderr, "  BUG: gamma shape mismatch: h=[%lld,%lld] gamma=[%lld]\n", (long long)h->ne[0],
+                    (long long)h->ne[1], (long long)gamma->ne[0]);
         h = ggml_mul(ctx, h, gamma);
     }
     x = ggml_add(ctx, residual, h);
@@ -406,17 +407,11 @@ static ggml_cgraph* build_tokenizer_encoder_graph(vibevoice_context* ctx, const 
             char base[128];
             snprintf(base, sizeof(base), "%s.s.%d.%d", prefix, si, bi);
 
-            h = build_block1d(ctx0, h,
-                              G(std::string(base) + ".norm.weight"),
-                              G(std::string(base) + ".dw_conv.weight"),
-                              G(std::string(base) + ".dw_conv.bias"),
-                              G(std::string(base) + ".gamma"),
-                              G(std::string(base) + ".ffn_ln.weight"),
-                              G(std::string(base) + ".ffn.up.weight"),
-                              G(std::string(base) + ".ffn.up.bias"),
-                              G(std::string(base) + ".ffn.down.weight"),
-                              G(std::string(base) + ".ffn.down.bias"),
-                              G(std::string(base) + ".ffn_gamma"));
+            h = build_block1d(ctx0, h, G(std::string(base) + ".norm.weight"), G(std::string(base) + ".dw_conv.weight"),
+                              G(std::string(base) + ".dw_conv.bias"), G(std::string(base) + ".gamma"),
+                              G(std::string(base) + ".ffn_ln.weight"), G(std::string(base) + ".ffn.up.weight"),
+                              G(std::string(base) + ".ffn.up.bias"), G(std::string(base) + ".ffn.down.weight"),
+                              G(std::string(base) + ".ffn.down.bias"), G(std::string(base) + ".ffn_gamma"));
             // Mark stage 0 block outputs
             if (si == 0) {
                 char bname[64];
@@ -514,14 +509,18 @@ extern "C" char* vibevoice_transcribe(struct vibevoice_context* ctx, const float
         // Dump stage intermediates
         auto dump_graph_tensor = [&](const char* tname) {
             ggml_tensor* t = ggml_graph_get_tensor(gf_at, tname);
-            if (!t) return;
+            if (!t)
+                return;
             int n = (int)ggml_nelements(t);
             std::vector<float> d(n);
             ggml_backend_tensor_get(t, d.data(), 0, n * sizeof(float));
             char path[512];
             snprintf(path, sizeof(path), "%s/%s.bin", dump_dir, tname);
             FILE* f = fopen(path, "wb");
-            if (f) { fwrite(d.data(), sizeof(float), n, f); fclose(f); }
+            if (f) {
+                fwrite(d.data(), sizeof(float), n, f);
+                fclose(f);
+            }
             fprintf(stderr, "  DUMP: %s [%lld,%lld] → %s\n", tname, (long long)t->ne[0], (long long)t->ne[1], path);
         };
         // Block outputs
@@ -541,9 +540,11 @@ extern "C" char* vibevoice_transcribe(struct vibevoice_context* ctx, const float
                 ggml_backend_tensor_get(t, d.data(), 0, n * sizeof(float));
                 snprintf(path, sizeof(path), "%s/%s.bin", dump_dir, tname);
                 FILE* f = fopen(path, "wb");
-                if (f) { fwrite(d.data(), sizeof(float), n, f); fclose(f); }
-                fprintf(stderr, "  DUMP: %s [%lld,%lld] → %s\n", tname,
-                        (long long)t->ne[0], (long long)t->ne[1], path);
+                if (f) {
+                    fwrite(d.data(), sizeof(float), n, f);
+                    fclose(f);
+                }
+                fprintf(stderr, "  DUMP: %s [%lld,%lld] → %s\n", tname, (long long)t->ne[0], (long long)t->ne[1], path);
             }
         }
     }
@@ -587,7 +588,10 @@ extern "C" char* vibevoice_transcribe(struct vibevoice_context* ctx, const float
     // acoustic: [vae_dim_at=64] → [d_lm=1536]
     // semantic: [vae_dim_st=128] → [d_lm=1536]
     auto read_f32 = [](ggml_tensor* t, std::vector<float>& out) {
-        if (!t) { out.clear(); return; }
+        if (!t) {
+            out.clear();
+            return;
+        }
         int n = (int)ggml_nelements(t);
         out.resize(n);
         if (t->type == GGML_TYPE_F32)
@@ -599,8 +603,7 @@ extern "C" char* vibevoice_transcribe(struct vibevoice_context* ctx, const float
         }
     };
 
-    auto run_connector = [&](const char* prefix, const float* input, int dim_in, int T,
-                              std::vector<float>& output) {
+    auto run_connector = [&](const char* prefix, const float* input, int dim_in, int T, std::vector<float>& output) {
         // FC1: [dim_in → d_lm] per frame
         std::vector<float> fc1_w, fc1_b, norm_w, fc2_w, fc2_b;
         read_f32(G(std::string(prefix) + ".fc1.weight"), fc1_w);
@@ -623,7 +626,8 @@ extern "C" char* vibevoice_transcribe(struct vibevoice_context* ctx, const float
             }
             // RMSNorm (no activation — connector is FC1→RMSNorm→FC2, no SiLU)
             float ss = 0;
-            for (int i = 0; i < d_lm; i++) ss += h1[i] * h1[i];
+            for (int i = 0; i < d_lm; i++)
+                ss += h1[i] * h1[i];
             float scale = 1.0f / sqrtf(ss / d_lm + 1e-6f);
             for (int i = 0; i < d_lm; i++)
                 h1[i] = h1[i] * scale * (norm_w.empty() ? 1.0f : norm_w[i]);
@@ -657,18 +661,24 @@ extern "C" char* vibevoice_transcribe(struct vibevoice_context* ctx, const float
     run_connector("se_conn", st_tc.data(), vae_dim_st, T_sem, semantic_features);
 
     if (ctx->params.verbosity >= 1)
-        fprintf(stderr, "vibevoice: connectors done: acoustic=[%d,%d] semantic=[%d,%d]\n",
-                T_audio, hp.d_lm, T_sem, hp.d_lm);
+        fprintf(stderr, "vibevoice: connectors done: acoustic=[%d,%d] semantic=[%d,%d]\n", T_audio, hp.d_lm, T_sem,
+                hp.d_lm);
 
     // Dump connector outputs
     if (dump_dir && dump_dir[0]) {
         char path[512];
         snprintf(path, sizeof(path), "%s/acoustic_features.bin", dump_dir);
         FILE* f = fopen(path, "wb");
-        if (f) { fwrite(acoustic_features.data(), sizeof(float), T_audio * hp.d_lm, f); fclose(f); }
+        if (f) {
+            fwrite(acoustic_features.data(), sizeof(float), T_audio * hp.d_lm, f);
+            fclose(f);
+        }
         snprintf(path, sizeof(path), "%s/semantic_features.bin", dump_dir);
         f = fopen(path, "wb");
-        if (f) { fwrite(semantic_features.data(), sizeof(float), T_sem * hp.d_lm, f); fclose(f); }
+        if (f) {
+            fwrite(semantic_features.data(), sizeof(float), T_sem * hp.d_lm, f);
+            fclose(f);
+        }
         fprintf(stderr, "  DUMP: connector outputs saved\n");
     }
 
@@ -687,7 +697,8 @@ extern "C" char* vibevoice_transcribe(struct vibevoice_context* ctx, const float
             size_t rd = fread(ref_features.data(), sizeof(float), n, f);
             fclose(f);
             (void)rd;
-            fprintf(stderr, "vibevoice: INJECTING reference features [%d, %d] from %s\n", T_ref, hp.d_lm, ref_features_path);
+            fprintf(stderr, "vibevoice: INJECTING reference features [%d, %d] from %s\n", T_ref, hp.d_lm,
+                    ref_features_path);
             // Replace features with reference
             T_audio = T_ref;
             T_sem = T_ref;
@@ -710,31 +721,31 @@ extern "C" char* vibevoice_transcribe(struct vibevoice_context* ctx, const float
     // 5. Build prompt: system_tokens + <speech_start> + speech_pad × T + <speech_end> + suffix
     // Token IDs from VibeVoice processor (Qwen2 tokenizer with special tokens)
     const int SPEECH_START = 151646;
-    const int SPEECH_PAD   = 151648;
-    const int SPEECH_END   = 151647;
-    const int EOS_TOKEN    = 151643;
-    const int IM_START     = 151644;
+    const int SPEECH_PAD = 151648;
+    const int SPEECH_END = 151647;
+    const int EOS_TOKEN = 151643;
+    const int IM_START = 151644;
     // const int IM_END       = 151645;
 
     // Exact prompt template from VibeVoice processor output
     // System: "You are a helpful assistant that transcribes audio input into text output in JSON format."
     std::vector<int> system_tokens = {
-        IM_START, 8948, 198,                                         // <|im_start|>system\n
-        2610, 525, 264, 10950, 17847, 429, 1356, 55136,             // You are a helpful assistant that transcribes
-        7699, 1946, 1119, 1467, 2550, 304, 4718, 3561, 13,          // audio input into text output in JSON format.
-        198, 151645, 198, IM_START, 872, 198                         // \n<|im_end|>\n<|im_start|>user\n
+        IM_START, 8948,   198,                                         // <|im_start|>system\n
+        2610,     525,    264,  10950,    17847, 429, 1356, 55136,     // You are a helpful assistant that transcribes
+        7699,     1946,   1119, 1467,     2550,  304, 4718, 3561,  13, // audio input into text output in JSON format.
+        198,      151645, 198,  IM_START, 872,   198                   // \n<|im_end|>\n<|im_start|>user\n
     };
     // After speech tokens: "\nThis is a XX.XX seconds audio, please transcribe it with these keys: Start time, End time, Speaker ID, Content<|im_end|>\n"
     float dur = n_samples / 24000.0f;
     // Duration as string tokens (simplified — just use "11.00" for now)
     std::vector<int> suffix_tokens = {
-        198,                                                          // \n
-        1986, 374, 264, 220, 16, 16, 13, 15, 15,                     // This is a 11.00
-        6546, 7699, 11, 4587, 38840, 432, 449, 1493,                 // seconds audio, please transcribe it with these
-        6894, 25,                                                     // keys:
-        5145, 882, 11, 3972, 882, 11, 29073, 3034, 11, 8883,         // Start time, End time, Speaker ID, Content
-        151645, 198,                                                  // <|im_end|>\n
-        IM_START, 77091, 198                                              // <|im_start|>assistant\n
+        198,                                                           // \n
+        1986,     374,   264, 220,  16,    16,  13,    15,   15,       // This is a 11.00
+        6546,     7699,  11,  4587, 38840, 432, 449,   1493,           // seconds audio, please transcribe it with these
+        6894,     25,                                                  // keys:
+        5145,     882,   11,  3972, 882,   11,  29073, 3034, 11, 8883, // Start time, End time, Speaker ID, Content
+        151645,   198,                                                 // <|im_end|>\n
+        IM_START, 77091, 198                                           // <|im_start|>assistant\n
     };
     (void)dur;
 
@@ -750,8 +761,8 @@ extern "C" char* vibevoice_transcribe(struct vibevoice_context* ctx, const float
     int prefix_len = (int)prompt_tokens.size();
 
     if (ctx->params.verbosity >= 1)
-        fprintf(stderr, "vibevoice: prompt: %d tokens (speech at %d-%d)\n",
-                prefix_len, speech_start_pos, speech_start_pos + T_audio - 1);
+        fprintf(stderr, "vibevoice: prompt: %d tokens (speech at %d-%d)\n", prefix_len, speech_start_pos,
+                speech_start_pos + T_audio - 1);
 
     // 6. Embed all tokens, then replace speech positions with speech features
     // Read token embeddings from model
@@ -763,18 +774,14 @@ extern "C" char* vibevoice_transcribe(struct vibevoice_context* ctx, const float
     for (int i = 0; i < prefix_len; i++) {
         int tid = prompt_tokens[i];
         if (tid < tok_emb_vocab) {
-            memcpy(prefix_embeds.data() + i * hp.d_lm,
-                   tok_emb_data.data() + tid * hp.d_lm,
-                   hp.d_lm * sizeof(float));
+            memcpy(prefix_embeds.data() + i * hp.d_lm, tok_emb_data.data() + tid * hp.d_lm, hp.d_lm * sizeof(float));
         }
     }
     // Replace speech positions with combined features (no scaling — ASR variant
     // doesn't apply speech_scaling_factor; that's only in the base TTS model)
     for (int i = 0; i < T_audio; i++) {
         int pos = speech_start_pos + i;
-        memcpy(prefix_embeds.data() + pos * hp.d_lm,
-               speech_features.data() + i * hp.d_lm,
-               hp.d_lm * sizeof(float));
+        memcpy(prefix_embeds.data() + pos * hp.d_lm, speech_features.data() + i * hp.d_lm, hp.d_lm * sizeof(float));
     }
 
     if (ctx->params.verbosity >= 1)
@@ -867,9 +874,11 @@ extern "C" char* vibevoice_transcribe(struct vibevoice_context* ctx, const float
 
                 // Q, K, V projections with bias
                 ggml_tensor* Q = ggml_mul_mat(ctx0, q_w, cur);
-                if (q_b) Q = ggml_add(ctx0, Q, q_b);
+                if (q_b)
+                    Q = ggml_add(ctx0, Q, q_b);
                 ggml_tensor* K = ggml_mul_mat(ctx0, k_w, cur);
-                if (k_b) K = ggml_add(ctx0, K, k_b);
+                if (k_b)
+                    K = ggml_add(ctx0, K, k_b);
                 ggml_tensor* V = ggml_mul_mat(ctx0, v_w, cur);
 
                 // Reshape for multi-head
@@ -878,39 +887,37 @@ extern "C" char* vibevoice_transcribe(struct vibevoice_context* ctx, const float
                 V = ggml_reshape_3d(ctx0, V, kvp.head_dim, kvp.n_kv_heads, T_cur);
 
                 // RoPE
-                Q = ggml_rope_ext(ctx0, Q, positions, nullptr, kvp.head_dim, GGML_ROPE_TYPE_NEOX,
-                                  0, kvp.rope_theta, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f);
-                K = ggml_rope_ext(ctx0, K, positions, nullptr, kvp.head_dim, GGML_ROPE_TYPE_NEOX,
-                                  0, kvp.rope_theta, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f);
+                Q = ggml_rope_ext(ctx0, Q, positions, nullptr, kvp.head_dim, GGML_ROPE_TYPE_NEOX, 0, kvp.rope_theta,
+                                  1.0f, 0.0f, 1.0f, 0.0f, 0.0f);
+                K = ggml_rope_ext(ctx0, K, positions, nullptr, kvp.head_dim, GGML_ROPE_TYPE_NEOX, 0, kvp.rope_theta,
+                                  1.0f, 0.0f, 1.0f, 0.0f, 0.0f);
 
                 // Write K, V to cache
                 ggml_tensor* K_perm = ggml_permute(ctx0, K, 0, 2, 1, 3);
                 ggml_tensor* V_perm = ggml_permute(ctx0, V, 0, 2, 1, 3);
-                ggml_tensor* k_view = ggml_view_4d(ctx0, ctx->kv_k,
-                    kvp.head_dim, T_cur, kvp.n_kv_heads, 1,
-                    ctx->kv_k->nb[1], ctx->kv_k->nb[2], ctx->kv_k->nb[3],
-                    (size_t)il * ctx->kv_k->nb[3] + (size_t)n_past * ctx->kv_k->nb[1]);
-                ggml_tensor* v_view = ggml_view_4d(ctx0, ctx->kv_v,
-                    kvp.head_dim, T_cur, kvp.n_kv_heads, 1,
-                    ctx->kv_v->nb[1], ctx->kv_v->nb[2], ctx->kv_v->nb[3],
-                    (size_t)il * ctx->kv_v->nb[3] + (size_t)n_past * ctx->kv_v->nb[1]);
+                ggml_tensor* k_view = ggml_view_4d(ctx0, ctx->kv_k, kvp.head_dim, T_cur, kvp.n_kv_heads, 1,
+                                                   ctx->kv_k->nb[1], ctx->kv_k->nb[2], ctx->kv_k->nb[3],
+                                                   (size_t)il * ctx->kv_k->nb[3] + (size_t)n_past * ctx->kv_k->nb[1]);
+                ggml_tensor* v_view = ggml_view_4d(ctx0, ctx->kv_v, kvp.head_dim, T_cur, kvp.n_kv_heads, 1,
+                                                   ctx->kv_v->nb[1], ctx->kv_v->nb[2], ctx->kv_v->nb[3],
+                                                   (size_t)il * ctx->kv_v->nb[3] + (size_t)n_past * ctx->kv_v->nb[1]);
                 ggml_build_forward_expand(gf, ggml_cpy(ctx0, K_perm, k_view));
                 ggml_build_forward_expand(gf, ggml_cpy(ctx0, V_perm, v_view));
 
                 // Read full K, V from cache
-                ggml_tensor* Kfull = ggml_cont(ctx0, ggml_view_3d(ctx0, ctx->kv_k,
-                    kvp.head_dim, Lk, kvp.n_kv_heads,
-                    ctx->kv_k->nb[1], ctx->kv_k->nb[2], (size_t)il * ctx->kv_k->nb[3]));
-                ggml_tensor* Vfull = ggml_cont(ctx0, ggml_view_3d(ctx0, ctx->kv_v,
-                    kvp.head_dim, Lk, kvp.n_kv_heads,
-                    ctx->kv_v->nb[1], ctx->kv_v->nb[2], (size_t)il * ctx->kv_v->nb[3]));
+                ggml_tensor* Kfull =
+                    ggml_cont(ctx0, ggml_view_3d(ctx0, ctx->kv_k, kvp.head_dim, Lk, kvp.n_kv_heads, ctx->kv_k->nb[1],
+                                                 ctx->kv_k->nb[2], (size_t)il * ctx->kv_k->nb[3]));
+                ggml_tensor* Vfull =
+                    ggml_cont(ctx0, ggml_view_3d(ctx0, ctx->kv_v, kvp.head_dim, Lk, kvp.n_kv_heads, ctx->kv_v->nb[1],
+                                                 ctx->kv_v->nb[2], (size_t)il * ctx->kv_v->nb[3]));
 
                 // Permute Q for flash-attn: [hd, T, nh]
                 Q = ggml_cont(ctx0, ggml_permute(ctx0, Q, 0, 2, 1, 3));
 
                 // Flash attention (native GQA)
-                ggml_tensor* attn_out = ggml_flash_attn_ext(ctx0, Q, Kfull, Vfull,
-                    causal_mask, kvp.attn_scale, 0.0f, 0.0f);
+                ggml_tensor* attn_out =
+                    ggml_flash_attn_ext(ctx0, Q, Kfull, Vfull, causal_mask, kvp.attn_scale, 0.0f, 0.0f);
 
                 attn_out = ggml_reshape_2d(ctx0, attn_out, hp.d_lm, T_cur);
                 attn_out = ggml_mul_mat(ctx0, o_w, attn_out);
@@ -922,11 +929,9 @@ extern "C" char* vibevoice_transcribe(struct vibevoice_context* ctx, const float
             residual = cur;
             cur = ggml_rms_norm(ctx0, cur, 1e-6f);
             cur = ggml_mul(ctx0, cur, G(std::string(p) + ".ffn_ln.weight"));
-            ggml_tensor* ffn = core_ffn::swiglu(
-                ctx0, cur,
-                G(std::string(p) + ".ffn.gate.weight"),
-                G(std::string(p) + ".ffn.up.weight"),
-                G(std::string(p) + ".ffn.down.weight"));
+            ggml_tensor* ffn =
+                core_ffn::swiglu(ctx0, cur, G(std::string(p) + ".ffn.gate.weight"),
+                                 G(std::string(p) + ".ffn.up.weight"), G(std::string(p) + ".ffn.down.weight"));
             cur = ggml_add(ctx0, residual, ffn);
         }
 
@@ -965,7 +970,8 @@ extern "C" char* vibevoice_transcribe(struct vibevoice_context* ctx, const float
 
         ggml_cgraph* gf = build_decoder_graph(n_tokens, n_past);
         ggml_backend_sched_reset(ctx->sched);
-        if (!ggml_backend_sched_alloc_graph(ctx->sched, gf)) return false;
+        if (!ggml_backend_sched_alloc_graph(ctx->sched, gf))
+            return false;
 
         ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "dec_input"), embeds, 0,
                                 (size_t)hp.d_lm * n_tokens * sizeof(float));
@@ -975,7 +981,8 @@ extern "C" char* vibevoice_transcribe(struct vibevoice_context* ctx, const float
             ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "causal_mask"), mask.data(), 0,
                                     mask.size() * sizeof(ggml_fp16_t));
 
-        if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS) return false;
+        if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS)
+            return false;
 
         ggml_tensor* lt = ggml_graph_get_tensor(gf, "logits");
         int V = (int)lt->ne[0];
@@ -1002,7 +1009,8 @@ extern "C" char* vibevoice_transcribe(struct vibevoice_context* ctx, const float
     auto argmax = [](const std::vector<float>& lg) -> int {
         int best = 0;
         for (int i = 1; i < (int)lg.size(); i++)
-            if (lg[i] > lg[best]) best = i;
+            if (lg[i] > lg[best])
+                best = i;
         return best;
     };
 
@@ -1021,10 +1029,12 @@ extern "C" char* vibevoice_transcribe(struct vibevoice_context* ctx, const float
             memcpy(tok_emb.data(), tok_emb_data.data() + cur_token * hp.d_lm, hp.d_lm * sizeof(float));
 
         int n_past = prefix_len + step;
-        if (!run_decoder(tok_emb.data(), 1, n_past, logits)) break;
+        if (!run_decoder(tok_emb.data(), 1, n_past, logits))
+            break;
 
         cur_token = argmax(logits);
-        if (cur_token == EOS_TOKEN) break;
+        if (cur_token == EOS_TOKEN)
+            break;
         output_tokens.push_back(cur_token);
 
         if (ctx->params.verbosity >= 2 && step < 5)

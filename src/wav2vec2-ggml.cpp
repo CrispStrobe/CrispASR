@@ -943,7 +943,10 @@ std::vector<float> wav2vec2_compute_logits_graph(const wav2vec2_model& m, const 
             char path[512];
             snprintf(path, sizeof(path), "%s/feat_proj.bin", dump);
             FILE* f = fopen(path, "wb");
-            if (f) { fwrite(hidden.data(), sizeof(float), T * H, f); fclose(f); }
+            if (f) {
+                fwrite(hidden.data(), sizeof(float), T * H, f);
+                fclose(f);
+            }
             fprintf(stderr, "  DUMP: feat_proj [%d,%d] → %s\n", T, H, path);
         }
     }
@@ -1028,7 +1031,10 @@ std::vector<float> wav2vec2_compute_logits_graph(const wav2vec2_model& m, const 
                     char path[512];
                     snprintf(path, sizeof(path), "%s/pos_layer_%d.bin", dump, li);
                     FILE* f = fopen(path, "wb");
-                    if (f) { fwrite(pos_out.data(), sizeof(float), H * T, f); fclose(f); }
+                    if (f) {
+                        fwrite(pos_out.data(), sizeof(float), H * T, f);
+                        fclose(f);
+                    }
                     fprintf(stderr, "  DUMP: pos_layer_%d [%d,%d] → %s\n", li, H, T, path);
                 }
             }
@@ -1052,7 +1058,10 @@ std::vector<float> wav2vec2_compute_logits_graph(const wav2vec2_model& m, const 
             char path[512];
             snprintf(path, sizeof(path), "%s/after_pos_conv.bin", dump);
             FILE* f = fopen(path, "wb");
-            if (f) { fwrite(hidden.data(), sizeof(float), T * H, f); fclose(f); }
+            if (f) {
+                fwrite(hidden.data(), sizeof(float), T * H, f);
+                fclose(f);
+            }
             fprintf(stderr, "  DUMP: after_pos_conv [%d,%d] → %s\n", T, H, path);
         }
     }
@@ -1148,9 +1157,12 @@ std::vector<float> wav2vec2_compute_logits_graph(const wav2vec2_model& m, const 
                                 char path[512];
                                 snprintf(path, sizeof(path), "%s/after_global_ln.bin", dump);
                                 FILE* f = fopen(path, "wb");
-                                if (f) { fwrite(d.data(), sizeof(float), ne, f); fclose(f); }
-                                fprintf(stderr, "  DUMP: after_global_ln [%lld,%lld] → %s\n",
-                                        (long long)gln->ne[0], (long long)gln->ne[1], path);
+                                if (f) {
+                                    fwrite(d.data(), sizeof(float), ne, f);
+                                    fclose(f);
+                                }
+                                fprintf(stderr, "  DUMP: after_global_ln [%lld,%lld] → %s\n", (long long)gln->ne[0],
+                                        (long long)gln->ne[1], path);
                             }
                         }
                         ggml_tensor* out = ggml_graph_get_tensor(gf, "logits");
