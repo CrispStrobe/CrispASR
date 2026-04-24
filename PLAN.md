@@ -1302,7 +1302,7 @@ models considered (MIT, Apache-2.0). CC-BY-NC models postponed.
 
 ---
 
-## 31. Language detection info in JSON output (issue #17)
+## 31. Language detection info in JSON output (issue #17) — DONE
 
 **Request**: CrispStrobe/CrispASR#17 — expose detected language + confidence
 in structured output (JSON/SRT/VTT), not just stderr.
@@ -1347,7 +1347,7 @@ stderr. The JSON/SRT/VTT formatters don't include it.
 
 ---
 
-## 32. Upload CUDA artifact to v0.4.14 release
+## 32. Upload CUDA artifact to v0.4.14 release — DONE (auto-published by CI)
 
 The v0.4.14 release at https://github.com/CrispStrobe/CrispASR/releases/tag/v0.4.14
 was published with 6 of 7 artifacts (CUDA still building). When the CUDA build
@@ -1376,7 +1376,7 @@ gh api repos/CrispStrobe/CrispASR/releases/311957303 -X PATCH \
 
 ---
 
-## 33. OmniASR-LLM remaining optimizations
+## 33. OmniASR-LLM remaining optimizations — PARTIAL (lang selection DONE)
 
 **Beam search**: Currently greedy-only. The reference pipeline uses
 `Wav2Vec2LlamaBeamSearchSeq2SeqGenerator` with `nbest=1`. Adding beam
