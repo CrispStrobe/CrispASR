@@ -157,19 +157,18 @@ No response. HF model card has no license field.
 
 ### Optimizations (cross-cutting, from survey + CrispEmbed comparison)
 
-| # | Optimization | Applies to | Expected gain | Effort |
+| # | Optimization | Applies to | Expected gain | Status |
 |---|---|---|---|---|
-| O1 | `ggml_soft_max_ext` with baked scale | All attention layers (all backends) | Already done (flash_attn_ext) | — |
-| O2 | Fused QKV pre-merge (single matmul) | LLM decoders (voxtral, qwen3, granite, glm, omniasr-llm) | ~10-15% attn | Medium |
-| **O11** | **wav2vec2 CNN → ggml graph** | wav2vec2 backend | **~10x** (95s→~10s est.) | Medium |
-| O3 | Temperature sampling for more backends | glm-asr, kyutai-stt, moonshine, omniasr-LLM | Feature parity | Low |
-| O4 | Beam search for LLM backends | All Audio-LLM backends (via core_greedy_decode) | Quality improvement | High |
-| O5 | Pipelined mel+encode threading | LLM backends on multi-core CPU | ~15-20% | Medium |
-| O6 | Batched encoder (GPU) | All backends with GPU support | 3-5x on GPU | High |
-| O7 | Speculative decoding | LLM backends | 2-4x decode speed | High |
-| O8 | GPU offload for CPU-only backends | parakeet, granite, voxtral4b, firered, moonshine, omniasr | Varies | Medium |
-| O9 | FireRedASR persistent decoder graph | firered-asr | ~2x decode | Medium |
-| O10 | Chunked window attention | voxtral4b (SWA=750), long audio | O(N*W) vs O(N²) | Medium |
+| O1 | `ggml_soft_max_ext` fusion | wav2vec2, canary, fastconformer | -10% wav2vec2 | **DONE** |
+| O11 | wav2vec2 CNN → ggml | wav2vec2 family | **10.8x** | **DONE** |
+| O9/#44 | FireRed ggml Q4_K decoder | firered-asr | **6.3x** | **DONE** |
+| O10 | Sliding window attention | voxtral4b | Already implemented | **DONE** |
+| O2 | Fused QKV pre-merge | LLM decoders | ~10-15% attn | TODO |
+| O3 | Temperature sampling | glm, kyutai, moonshine, omniasr-llm | Feature parity | TODO |
+| O5 | Pipelined mel+encode | LLM backends, CPU | ~15-20% | TODO |
+| O4 | Beam search for LLMs | Audio-LLM backends | Quality | TODO |
+| O6 | Batched encoder (GPU) | All + GPU | 3-5x | TODO |
+| O7 | Speculative decoding | LLM backends | 2-4x decode | TODO |
 
 **From COMPARISON.md (llama.cpp patterns):**
 - `ggml_soft_max_ext` with baked scale (O1) — already in llama.cpp, saves one `ggml_scale` op per attention layer
