@@ -23,6 +23,8 @@ import argparse
 import os
 import sys
 
+import numpy as np
+
 try:
     import gguf
 except ImportError:
@@ -109,18 +111,33 @@ def main():
     writer.add_array("tokenizer.ggml.tokens", vocab_list)
     writer.add_uint32("vibevoice.has_tokenizer", 1)
 
-    # Copy every tensor byte-for-byte from the input.
-    # GGUFReader's t.data is a numpy view into the mmap'd file. For quantized
-    # types its .shape reflects the logical tensor dims, not byte dims. The
-    # gguf writer's add_tensor with raw_dtype calls quant_shape_from_byte_shape
-    # which expects shape to be in *byte* units. Fix: flatten to a 1D uint8
-    # array so shape=(nbytes,) and the quant shape inference works correctly.
-    import numpy as np
-
+    # Copy every tensor by reference — no dtype changes, no reshapes.
+    #
+    # gguf-py has two gotchas that together silently corrupt the output:
+    #
+    #   1. GGUFReader exposes quantized tensors with dtype=uint8 and a
+    #      numpy shape = (outer, bytes_per_row). When add_tensor sees
+    #      dtype=uint8, it calls quant_shape_from_byte_shape to recover
+    #      the logical shape — but it takes shape[-1] as "bytes per row"
+    #      and derives the logical last-dim from that. A prior attempt
+    #      (flatten to 1D uint8) bypassed truncation but stored a 1D
+    #      header shape, so the runtime saw lm_head.weight as rank-1 and
+    #      ggml_mul_mat failed. Another prior attempt (raw_shape=logical)
+    #      crashed because the uint8 branch reinterpreted that logical
+    #      shape as bytes-per-row.
+    #
+    #   2. ggml tensor shape is stored ne0-first (fastest-varying first);
+    #      numpy's shape is reversed. So raw_shape must be
+    #      reversed(reader_t.shape).
+    #
+    # Robust path: view the uint8 buffer as int8 — same bytes, but the
+    # dtype check in GGUFWriter.add_tensor_info no longer fires, so it
+    # trusts our raw_shape verbatim. Then the correct 2D logical shape
+    # and full-length byte buffer both land in the output.
     for t in reader.tensors:
-        # Flatten to contiguous uint8 so nbytes == len == actual byte count
-        raw = np.frombuffer(t.data.tobytes(), dtype=np.uint8)
-        writer.add_tensor(t.name, raw, raw_dtype=t.tensor_type)
+        ggml_shape = tuple(int(x) for x in reversed(t.shape))
+        data = t.data.view(np.int8) if t.data.dtype == np.uint8 else t.data
+        writer.add_tensor(t.name, data, raw_shape=ggml_shape, raw_dtype=t.tensor_type)
 
     writer.write_header_to_file()
     writer.write_kv_data_to_file()
