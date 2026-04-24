@@ -2209,6 +2209,68 @@ wav2vec2 is now **1.1x realtime** (faster than real-time), up from 0.1x.
   output `ne[0]=L_out`, data is `[C, L]` channel-first when read linearly.
   All downstream code must account for this.
 
+## FireRed decoder ggml native Q4_K — 6.3x speedup (April 2026)
+
+### The bottleneck
+
+`FIRERED_BENCH=1` profiling revealed the decoder was spending **41% of its
+time** (23.6s out of 57.9s) on `read_f32_vec` — dequantizing all 16 layers'
+Q4_K weight matrices to F32 CPU vectors before the decode loop even started.
+
+Per-step decoding (28 steps × ~650ms) accounted for 31%. The matmuls
+themselves were already OpenMP-parallelized but ran on F32 copies of the
+weights, missing ggml's native Q4_K kernel optimizations.
+
+### The fix
+
+**`ggml_vecmat` helper**: a micro-graph per matmul call that references the
+original Q4_K weight tensors directly via `ggml_mul_mat`. Each call:
+1. Creates a tiny ggml context (10 tensors, ~256 KB metadata)
+2. Builds a 1-op graph: `mul_mat(weight_Q4K, input_F32)`
+3. Assigns weight tensor to the backend, allocates graph, computes, reads output
+4. Frees the context
+
+This sounds expensive (graph creation per call) but the Q4_K kernel is so much
+faster than the F32 matmul that the overhead is negligible:
+
+| Metric | F32 matmul + OpenMP | ggml Q4_K native | Speedup |
+|---|---|---|---|
+| Weight init | 23,626 ms | 441 ms | **53.6x** |
+| Per-step decode | 650 ms | 70 ms | **9.3x** |
+| Total | 57.9 s | 19.4 s | **3.0x** |
+
+From the original manual C++ baseline: **123s → 19.4s = 6.3x total**.
+
+### Why ggml Q4_K is faster than OpenMP F32
+
+1. **No dequantization init**: Q4_K weights stay in 4-bit format. The
+   `ggml_mul_mat` kernel fuses dequant + multiply in one SIMD pass.
+2. **Memory bandwidth**: Q4_K is 0.56 bytes/weight vs F32's 4 bytes/weight.
+   For d=1280, one weight matrix is 0.9 MB (Q4_K) vs 6.6 MB (F32).
+   The Q4_K version fits in L2 cache; the F32 version doesn't.
+3. **ggml's AVX2 kernels**: hand-tuned Q4_K dot product with `_mm256`
+   intrinsics processes 32 weights per instruction.
+
+### Architecture of the fix
+
+- **Greedy path** (beam_size=1): all 8 matmuls per layer use `ggml_vecmat`
+  with the original ggml weight tensors. No F32 copies at all.
+- **Beam path** (beam_size>1): lazy-loads F32 weights on first beam step.
+  This preserves the existing beam search which modifies KV history
+  per-hypothesis. The 23.6s init only hits if beam search is actually used.
+- **Cross-attn K/V precompute**: uses ggml batch matmul graph (one graph
+  for both K and V projections per layer).
+- **Norm/bias tensors**: still read to F32 since they're small (~d floats
+  each) and needed for CPU LayerNorm.
+
+### Key lesson
+
+**Don't dequantize quantized weights to F32 for CPU matmul — use ggml's
+native quantized kernels instead.** Even with the overhead of creating a
+tiny ggml graph per matmul call, the native Q4_K path is 9.3x faster
+than OpenMP-parallelized F32 matmul. The memory bandwidth savings alone
+(7x less data) more than compensate for the graph creation overhead.
+
 ## VibeVoice-ASR prompt template verification (April 2026)
 
 **Verified against HF transformers + microsoft/VibeVoice GitHub repo:**
