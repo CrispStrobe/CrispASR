@@ -285,14 +285,14 @@ static ggml_tensor* build_causal_dw_conv1d(ggml_context* ctx, ggml_tensor* x, gg
     // Let's try storing conv weights as F32 in the GGUF instead.
     //
     // For now: use ggml_conv_1d_dw with the known F16 precision cost.
+    // Use ggml_conv_1d_dw — the F16 im2col precision loss is acceptable
+    // per-block (cos=0.999) but accumulates through 29 blocks (cos=0.7-0.8).
+    // TODO: implement custom F32 depthwise conv or modify ggml_conv_1d_dw.
     x = ggml_conv_1d_dw(ctx, w, x, 1, 0, 1);
 
     // conv_1d_dw returns 3D+ result — flatten to 2D then transpose to [C, T]
-    if (ggml_n_dims(x) > 2) {
-        // Result is [ne[0]=T_out, ne[1]=1, ne[2]=C] — collapse ne[1]
+    if (ggml_n_dims(x) > 2)
         x = ggml_reshape_2d(ctx, x, x->ne[0], x->ne[1] * x->ne[2]);
-    }
-    // x is [T_out, C]. Transpose to [C, T_out]
     x = ggml_cont(ctx, ggml_transpose(ctx, x));
     if (b)
         x = ggml_add(ctx, x, b); // [C] + [C, T] broadcasts
@@ -673,6 +673,29 @@ extern "C" char* vibevoice_transcribe(struct vibevoice_context* ctx, const float
     }
 
     // 4. Combine acoustic + semantic features (element-wise sum)
+    // Debug: optionally inject Python reference features
+    const char* ref_features_path = getenv("VIBEVOICE_REF_FEATURES");
+    if (ref_features_path && ref_features_path[0]) {
+        FILE* f = fopen(ref_features_path, "rb");
+        if (f) {
+            fseek(f, 0, SEEK_END);
+            int n = (int)(ftell(f) / sizeof(float));
+            fseek(f, 0, SEEK_SET);
+            // Reference is [T, d_lm] = [83, 1536]
+            int T_ref = n / hp.d_lm;
+            std::vector<float> ref_features(n);
+            size_t rd = fread(ref_features.data(), sizeof(float), n, f);
+            fclose(f);
+            (void)rd;
+            fprintf(stderr, "vibevoice: INJECTING reference features [%d, %d] from %s\n", T_ref, hp.d_lm, ref_features_path);
+            // Replace features with reference
+            T_audio = T_ref;
+            T_sem = T_ref;
+            acoustic_features.resize(T_ref * hp.d_lm);
+            semantic_features.assign(T_ref * hp.d_lm, 0.0f); // zero semantic — ref already combined
+            memcpy(acoustic_features.data(), ref_features.data(), T_ref * hp.d_lm * sizeof(float));
+        }
+    }
     if (T_audio != T_sem) {
         fprintf(stderr, "vibevoice: frame mismatch: acoustic=%d, semantic=%d\n", T_audio, T_sem);
         return nullptr;
@@ -710,7 +733,8 @@ extern "C" char* vibevoice_transcribe(struct vibevoice_context* ctx, const float
         6546, 7699, 11, 4587, 38840, 432, 449, 1493,                 // seconds audio, please transcribe it with these
         6894, 25,                                                     // keys:
         5145, 882, 11, 3972, 882, 11, 29073, 3034, 11, 8883,         // Start time, End time, Speaker ID, Content
-        151645, 198                                                   // <|im_end|>\n
+        151645, 198,                                                  // <|im_end|>\n
+        IM_START, 77091, 198                                              // <|im_start|>assistant\n
     };
     (void)dur;
 
