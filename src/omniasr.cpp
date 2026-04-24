@@ -56,6 +56,7 @@ struct omniasr_model {
     std::map<std::string, ggml_tensor*> tensors;
     std::vector<std::string> vocab;
     std::vector<int> cnn_strides;
+    std::vector<std::string> lang_codes; // FLORES-200 lang codes for LLM lang conditioning
 };
 
 // Decoder layer weight pointers for ggml graph building
@@ -360,6 +361,17 @@ extern "C" struct omniasr_context* omniasr_init_from_file(const char* path_model
             const char* s = gguf_get_arr_str(gctx, tok_key, i);
             if (s)
                 m.vocab[i] = s;
+        }
+    }
+    // Load language codes for LLM lang conditioning
+    const int lang_key = gguf_find_key(gctx, "omniasr.lang_codes");
+    if (lang_key >= 0) {
+        int n = gguf_get_arr_n(gctx, lang_key);
+        m.lang_codes.resize(n);
+        for (int i = 0; i < n; i++) {
+            const char* s = gguf_get_arr_str(gctx, lang_key, i);
+            if (s)
+                m.lang_codes[i] = s;
         }
     }
     gguf_free(gctx);
@@ -1106,12 +1118,36 @@ static char* omniasr_transcribe_llm(omniasr_context* ctx, const std::vector<floa
     int dd = hp.d_dec; // 4096
 
     const int tok_emb_size = ctx->tok_emb_w ? (int)ctx->tok_emb_w->ne[1] : 0;
-    int lang_id = 417; // eng_Latn default (parquet_index=416, +1 per factory.py)
-    // Factory: lang_mapping = {lang.lower(): parquet_index + 1}
-    // Index 0 reserved for no-language/dropout
-    // From languges_lookup_table.parquet:
-    //   eng_Latn=417, deu_Latn=367, fra_Latn=448, spa_Latn=1355, jpn_Jpan=632, kor_Hang=734
-    // TODO: embed parquet mapping in GGUF and parse ctx->params.language
+    // Look up language ID from embedded mapping or params
+    int lang_id = 417; // eng_Latn default
+    if (ctx->params.language && ctx->params.language[0]) {
+        std::string lang_str(ctx->params.language);
+        // Try direct FLORES-200 match first (e.g. "eng_Latn")
+        for (int i = 0; i < (int)m.lang_codes.size(); i++) {
+            if (m.lang_codes[i] == lang_str) {
+                lang_id = i + 1; // +1 per factory.py convention
+                break;
+            }
+        }
+        // Try ISO 639-1 → FLORES-200 mapping for common codes
+        static const std::pair<const char*, const char*> iso_to_flores[] = {
+            {"en", "eng_Latn"}, {"de", "deu_Latn"}, {"fr", "fra_Latn"}, {"es", "spa_Latn"},
+            {"it", "ita_Latn"}, {"pt", "por_Latn"}, {"nl", "nld_Latn"}, {"ru", "rus_Cyrl"},
+            {"zh", "zho_Hans"}, {"ja", "jpn_Jpan"}, {"ko", "kor_Hang"}, {"ar", "arb_Arab"},
+            {"hi", "hin_Deva"}, {"tr", "tur_Latn"}, {"pl", "pol_Latn"}, {"sv", "swe_Latn"},
+        };
+        for (auto& [iso, flores] : iso_to_flores) {
+            if (lang_str == iso) {
+                for (int i = 0; i < (int)m.lang_codes.size(); i++) {
+                    if (m.lang_codes[i] == flores) {
+                        lang_id = i + 1;
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+    }
 
     bool use_lang = (hp.n_langs > 0 && ctx->lang_emb_w);
     // Sequence: [audio_embs...] [lid_marker_emb] [lang_emb] [BOS_emb] [generated...]
