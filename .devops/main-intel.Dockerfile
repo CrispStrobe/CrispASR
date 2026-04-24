@@ -15,7 +15,7 @@ RUN if [ "${GGML_SYCL_F16}" = "ON" ]; then \
         && export OPT_SYCL_F16="-DGGML_SYCL_F16=ON"; \
     fi && \
     cmake -B build -DWHISPER_BUILD_TESTS=OFF -DGGML_SYCL=1 -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icpx ${OPT_SYCL_F16} && \
-    cmake --build build -j"$(nproc)" --target whisper-cli
+    cmake --build build -j"$(nproc)" --target crispasr
 
 FROM intel/oneapi-basekit:$ONEAPI_VERSION AS runtime
 WORKDIR /app

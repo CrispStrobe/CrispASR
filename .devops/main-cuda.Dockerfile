@@ -27,7 +27,7 @@ COPY . .
 ARG CRISPASR_BUILD_JOBS
 RUN jobs="${CRISPASR_BUILD_JOBS:-$(nproc)}" && \
     cmake -S . -B build -G Ninja -DWHISPER_BUILD_TESTS=OFF -DGGML_CUDA=1 -DCMAKE_CUDA_ARCHITECTURES="75;80;86;90" && \
-    cmake --build build -j"${jobs}" --target whisper-cli
+    cmake --build build -j"${jobs}" --target crispasr
 
 RUN find /app/build -name "*.o" -delete && \
     find /app/build -name "*.a" -delete && \

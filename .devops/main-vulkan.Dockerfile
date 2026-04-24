@@ -7,7 +7,7 @@ RUN apt-get update && \
 
 COPY . .
 RUN cmake -B build -DWHISPER_BUILD_TESTS=OFF -DGGML_VULKAN=1 && \
-  cmake --build build -j"$(nproc)" --target whisper-cli
+  cmake --build build -j"$(nproc)" --target crispasr
 
 FROM ubuntu:24.04 AS runtime
 WORKDIR /app
