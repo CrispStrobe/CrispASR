@@ -35,7 +35,9 @@ RUN apt-get update && \
 
 COPY --from=build /app/build/bin /app/build/bin
 COPY --from=build /app/samples /app/samples
-COPY --from=build /app/models /app/models
+# /models is a volume mount point — actual models (and the convert-*.py
+# tools) are excluded by .dockerignore. Don't COPY them from the build
+# stage; the user mounts their model directory at /models at runtime.
 RUN (id -u crispasr 2>/dev/null || \
      useradd -m -u 1000 crispasr 2>/dev/null || \
      useradd -m crispasr) && \
