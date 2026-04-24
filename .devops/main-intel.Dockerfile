@@ -25,7 +25,7 @@ RUN apt-get update && \
   && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
 COPY --from=build /app /app
-RUN useradd -m -u 1000 crispasr && \
+RUN id -u crispasr 2>/dev/null || useradd -m -u 1000 crispasr; \
   mkdir -p /cache /models && \
   chown -R crispasr:crispasr /app /cache /models
 ENV PATH=/app/build/bin:$PATH
