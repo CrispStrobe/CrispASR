@@ -152,11 +152,40 @@ struct glm_asr_context {
 };
 
 // ===========================================================================
+// Temperature-aware token selection
+static int sample_token(const float* logits, int vocab, float temperature) {
+    if (temperature <= 0.0f) {
+        int best = 0;
+        for (int i = 1; i < vocab; i++)
+            if (logits[i] > logits[best])
+                best = i;
+        return best;
+    }
+    float maxv = logits[0];
+    for (int i = 1; i < vocab; i++)
+        if (logits[i] > maxv)
+            maxv = logits[i];
+    float sum = 0;
+    std::vector<float> probs(vocab);
+    for (int i = 0; i < vocab; i++) {
+        probs[i] = expf((logits[i] - maxv) / temperature);
+        sum += probs[i];
+    }
+    float r = ((float)rand() / (float)RAND_MAX) * sum;
+    float acc = 0;
+    for (int i = 0; i < vocab; i++) {
+        acc += probs[i];
+        if (acc >= r)
+            return i;
+    }
+    return vocab - 1;
+}
+
 // Implementation
 // ===========================================================================
 
 extern "C" struct glm_asr_context_params glm_asr_context_default_params(void) {
-    return {/*n_threads=*/4, /*verbosity=*/1, /*use_gpu=*/true};
+    return {/*n_threads=*/4, /*verbosity=*/1, /*use_gpu=*/true, /*temperature=*/0.0f};
 }
 
 extern "C" int glm_asr_encoder_frames_from_mel_frames(int T_mel) {
@@ -527,16 +556,10 @@ extern "C" char* glm_asr_transcribe(struct glm_asr_context* ctx, const float* sa
 
     // First token: argmax
     int next = 0;
-    float mx = logits[0];
-    for (int k = 1; k < vocab; k++) {
-        if (logits[k] > mx) {
-            mx = logits[k];
-            next = k;
-        }
-    }
+    next = sample_token(logits, vocab, ctx->params.temperature);
     free(logits);
 
-    // Greedy decode loop
+    // Decode loop
     std::string result;
     int n_past = (int)ids.size();
     const int max_tokens = 512;
@@ -588,15 +611,7 @@ extern "C" char* glm_asr_transcribe(struct glm_asr_context* ctx, const float* sa
             break;
         n_past++;
 
-        // Argmax
-        next = 0;
-        mx = lg[0];
-        for (int k = 1; k < vocab; k++) {
-            if (lg[k] > mx) {
-                mx = lg[k];
-                next = k;
-            }
-        }
+        next = sample_token(lg, vocab, ctx->params.temperature);
         free(lg);
     }
 

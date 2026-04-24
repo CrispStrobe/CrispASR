@@ -31,6 +31,36 @@
 #include <string>
 #include <vector>
 
+// Temperature-aware token selection: argmax when temp<=0, softmax sampling otherwise.
+static int sample_token(const float* logits, int vocab, float temperature) {
+    if (temperature <= 0.0f) {
+        int best = 0;
+        for (int i = 1; i < vocab; i++)
+            if (logits[i] > logits[best])
+                best = i;
+        return best;
+    }
+    // Softmax with temperature
+    float maxv = logits[0];
+    for (int i = 1; i < vocab; i++)
+        if (logits[i] > maxv)
+            maxv = logits[i];
+    float sum = 0;
+    std::vector<float> probs(vocab);
+    for (int i = 0; i < vocab; i++) {
+        probs[i] = expf((logits[i] - maxv) / temperature);
+        sum += probs[i];
+    }
+    float r = ((float)rand() / (float)RAND_MAX) * sum;
+    float acc = 0;
+    for (int i = 0; i < vocab; i++) {
+        acc += probs[i];
+        if (acc >= r)
+            return i;
+    }
+    return vocab - 1;
+}
+
 // ===========================================================================
 // Model structures
 // ===========================================================================
@@ -182,7 +212,7 @@ struct kyutai_stt_context {
 // ===========================================================================
 
 extern "C" struct kyutai_stt_context_params kyutai_stt_context_default_params(void) {
-    return {/*n_threads=*/4, /*verbosity=*/1, /*use_gpu=*/true};
+    return {/*n_threads=*/4, /*verbosity=*/1, /*use_gpu=*/true, /*temperature=*/0.0f};
 }
 
 // --- Helpers ---
@@ -1084,20 +1114,11 @@ extern "C" char* kyutai_stt_transcribe(struct kyutai_stt_context* ctx, const flo
         std::vector<float> logits_data(hp.text_card);
         ggml_backend_tensor_get(logits, logits_data.data(), 0, hp.text_card * sizeof(float));
 
-        int best_id = 0;
-        float best_val = logits_data[0];
-        for (int i = 1; i < hp.text_card; i++) {
-            if (logits_data[i] > best_val) {
-                best_val = logits_data[i];
-                best_id = i;
-            }
-        }
-
-        text_token = best_id;
+        text_token = sample_token(logits_data.data(), hp.text_card, ctx->params.temperature);
         n_past++;
 
         if (ctx->params.verbosity >= 2 && (t < 5 || t % 20 == 0)) {
-            fprintf(stderr, "  [frame %d] text_token=%d best_val=%.4f\n", t, text_token, best_val);
+            fprintf(stderr, "  [frame %d] text_token=%d logit=%.4f\n", t, text_token, logits_data[text_token]);
         }
 
         // Decode token to text

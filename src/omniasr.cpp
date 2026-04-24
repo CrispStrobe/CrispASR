@@ -149,6 +149,7 @@ extern "C" struct omniasr_context_params omniasr_context_default_params(void) {
     p.verbosity = 1;
     p.language = nullptr;
     p.use_gpu = true;
+    p.temperature = 0.0f;
     return p;
 }
 

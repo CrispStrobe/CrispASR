@@ -25,6 +25,7 @@ public:
         cp.n_threads = params.n_threads;
         cp.verbosity = params.no_prints ? 0 : 1;
         cp.use_gpu = crispasr_backend_should_use_gpu(params);
+        cp.temperature = params.temperature;
         ctx_ = glm_asr_init_from_file(params.model.c_str(), cp);
         return ctx_ != nullptr;
     }

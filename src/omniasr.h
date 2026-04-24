@@ -24,6 +24,7 @@ struct omniasr_context_params {
     int verbosity;        // 0=silent 1=normal 2=verbose
     const char* language; // ISO 639-3 lang code for LLM (e.g. "eng_Latn"), NULL for auto
     bool use_gpu;         // false => force CPU backend
+    float temperature;    // 0 = greedy argmax, >0 = softmax sampling
 };
 
 struct omniasr_context_params omniasr_context_default_params(void);
