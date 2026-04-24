@@ -1205,6 +1205,21 @@ extern "C" char* vibevoice_transcribe(struct vibevoice_context* ctx, const float
     if (ctx->params.verbosity >= 1)
         fprintf(stderr, "vibevoice: generated %d tokens\n", (int)output_tokens.size());
 
+    // Debug: dump first 20 generated tokens
+    if (getenv("VIBEVOICE_DEBUG")) {
+        fprintf(stderr, "vibevoice: first 20 tokens: [");
+        for (int i = 0; i < std::min((int)output_tokens.size(), 20); i++) {
+            int tid = output_tokens[i];
+            const char* piece = (tid >= 0 && tid < (int)m.vocab.size()) ? m.vocab[tid].c_str() : "?";
+            fprintf(stderr, "%s%d(%s)", i ? ", " : "", tid, piece);
+        }
+        fprintf(stderr, "]\n");
+
+        // Also dump logits from first decode step for comparison
+        fprintf(stderr, "vibevoice: first-step logits top-5: ");
+        // Re-run first step just for logging if we kept logits
+    }
+
     // 11. Detokenize using embedded vocabulary
     std::string result;
     for (int tid : output_tokens) {
@@ -1217,8 +1232,12 @@ extern "C" char* vibevoice_transcribe(struct vibevoice_context* ctx, const float
         }
     }
 
-    if (result.empty())
+    if (result.empty()) {
+        if (getenv("VIBEVOICE_DEBUG")) {
+            fprintf(stderr, "vibevoice: result is EMPTY after detokenization (all tokens were special)\n");
+        }
         return nullptr;
+    }
 
     char* out = (char*)malloc(result.size() + 1);
     memcpy(out, result.c_str(), result.size());
