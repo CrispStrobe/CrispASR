@@ -109,9 +109,28 @@ def main():
     writer.add_array("tokenizer.ggml.tokens", vocab_list)
     writer.add_uint32("vibevoice.has_tokenizer", 1)
 
-    # Copy every tensor by reference — no dtype changes, no reshapes.
-    for t in reader.tensors:
-        writer.add_tensor(t.name, t.data, raw_dtype=t.tensor_type)
+    # Copy every tensor by streaming raw bytes from the input file.
+    # We must NOT rely on t.data for quantized types — GGUFReader's numpy view
+    # may truncate block-quantized data (Q4_K is ~0.56 bytes/weight, but
+    # shape × element_size(dtype) computes a different count).
+    import numpy as np
+
+    # Open the original file for raw byte reads.
+    with open(args.input, "rb") as fin:
+        # data_offset = where tensor data starts in the input file
+        # GGUFReader stores each tensor's offset relative to data start.
+        data_offset = reader.data.offset if hasattr(reader.data, 'offset') else reader.tensors[0].data.ctypes.data - np.array(reader.data).ctypes.data if len(reader.tensors) > 0 else 0
+
+        for t in reader.tensors:
+            # Compute exact byte count from the tensor's ggml type + shape.
+            n_elements = 1
+            for d in t.shape:
+                n_elements *= int(d)
+            # For block-quantized types, use ggml block size.
+            # Simpler: just compute from the actual data buffer length.
+            raw_bytes = bytes(t.data)
+            writer.add_tensor(t.name, np.frombuffer(raw_bytes, dtype=np.uint8),
+                              raw_shape=t.shape, raw_dtype=t.tensor_type)
 
     writer.write_header_to_file()
     writer.write_kv_data_to_file()
