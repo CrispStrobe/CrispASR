@@ -5,7 +5,7 @@ services:
       context: .
       dockerfile: .devops/main.Dockerfile
     ports:
-      - "${CRISPASR_PORT:-8080}:8080"
+      - "${CRISPASR_HOST_PORT:-${CRISPASR_PORT:-8080}}:${CRISPASR_PORT:-8080}"
     user: "${CRISPASR_UID:-1000}:${CRISPASR_GID:-1000}"
     security_opt:
       - no-new-privileges:true
@@ -22,7 +22,7 @@ services:
       CRISPASR_API_KEYS: ${CRISPASR_API_KEYS:-}
       CRISPASR_EXTRA_ARGS: ${CRISPASR_EXTRA_ARGS:-}
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:${CRISPASR_PORT:-8080}/health >/dev/null"]
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:$${CRISPASR_PORT:-8080}/health >/dev/null"]
       interval: 30s
       timeout: 5s
       retries: 5
