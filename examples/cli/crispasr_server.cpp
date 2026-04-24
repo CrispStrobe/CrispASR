@@ -209,8 +209,8 @@ static transcription_result do_transcribe(const httplib::MultipartFormData& audi
     transcription_result result;
 
     if (rp.verbose)
-        fprintf(stderr, "crispasr-server: processing '%s' (%zu bytes)\n",
-                audio_file.filename.c_str(), audio_file.content.size());
+        fprintf(stderr, "crispasr-server: processing '%s' (%zu bytes)\n", audio_file.filename.c_str(),
+                audio_file.content.size());
 
     // Write to a secure temporary file for audio decoding.
     std::string tmp_path = write_temp_audio(audio_file.content.data(), audio_file.content.size());
@@ -253,8 +253,8 @@ static transcription_result do_transcribe(const httplib::MultipartFormData& audi
         } else {
             // Chunk long audio into fixed segments
             if (rp.verbose)
-                fprintf(stderr, "crispasr-server: chunking %.1fs audio into %ds segments\n",
-                        result.duration_s, rp.chunk_seconds);
+                fprintf(stderr, "crispasr-server: chunking %.1fs audio into %ds segments\n", result.duration_s,
+                        rp.chunk_seconds);
             for (int offset = 0; offset < n_samples; offset += max_chunk_samples) {
                 int chunk_len = std::min(max_chunk_samples, n_samples - offset);
                 int64_t t_offset_cs = (int64_t)((double)offset / SR * 100.0);
@@ -559,8 +559,7 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
     // -----------------------------------------------------------------------
     // Log unmatched requests (helps debug wrong endpoints like /audio/transcriptions)
     svr.set_error_handler([&](const Request& req, Response& res) {
-        fprintf(stderr, "crispasr-server: %s %s → 404 (no matching route)\n",
-                req.method.c_str(), req.path.c_str());
+        fprintf(stderr, "crispasr-server: %s %s → 404 (no matching route)\n", req.method.c_str(), req.path.c_str());
         res.set_content("{\"error\": \"not found. Use POST /v1/audio/transcriptions\"}", "application/json");
     });
 

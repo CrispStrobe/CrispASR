@@ -41,7 +41,8 @@ static inline double crispasr_rss_mb() {
 
 // Log memory if verbose is true.
 static inline void crispasr_log_mem(bool verbose, const char* label) {
-    if (!verbose) return;
+    if (!verbose)
+        return;
     double rss = crispasr_rss_mb();
     if (rss > 0)
         fprintf(stderr, "crispasr[mem]: %-30s RSS=%.0f MB\n", label, rss);
@@ -49,14 +50,20 @@ static inline void crispasr_log_mem(bool verbose, const char* label) {
 
 // Estimate memory needed for a given audio duration and backend.
 // Returns estimated MB. Very rough — just prevents obvious OOM.
-static inline double crispasr_estimate_mem_mb(double audio_seconds, const char* backend) {
-    // Base: model weight memory (already loaded, not counted here).
-    // Encoder attention: O(T²) per layer.
-    // T ≈ audio_seconds × 50 (mel frames) for whisper-style encoders
-    // T ≈ audio_seconds × 50 for wav2vec2 CNN output
+static inline double crispasr_estimate_mem_mb(double audio_seconds, const char* /*backend*/) {
     double T = audio_seconds * 50.0;
-    double attn_mb = (T * T * 4.0) / (1024.0 * 1024.0); // one attention layer F32
-    // Most encoders have 6-48 layers, but flash_attn_ext doesn't materialize
-    // the full T×T matrix. Rough estimate: 2× for intermediate buffers.
+    double attn_mb = (T * T * 4.0) / (1024.0 * 1024.0);
     return attn_mb * 2.0;
+}
+
+// Check if audio is too long for the backend and warn.
+// Returns true if audio should be chunked.
+static inline bool crispasr_check_audio_length(double audio_seconds, int chunk_seconds, bool verbose) {
+    if (audio_seconds > (double)chunk_seconds * 1.5) {
+        if (verbose)
+            fprintf(stderr, "crispasr[mem]: audio %.1fs exceeds chunk limit %ds — will auto-chunk\n",
+                    audio_seconds, chunk_seconds);
+        return true;
+    }
+    return false;
 }

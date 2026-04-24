@@ -40,10 +40,11 @@
 namespace {
 
 // Apply FireRedPunc punctuation restoration to all segments.
-static void apply_punc_model(fireredpunc_context * punc_ctx, std::vector<crispasr_segment> & segs) {
-    if (!punc_ctx) return;
-    for (auto & seg : segs) {
-        char * result = fireredpunc_process(punc_ctx, seg.text.c_str());
+static void apply_punc_model(fireredpunc_context* punc_ctx, std::vector<crispasr_segment>& segs) {
+    if (!punc_ctx)
+        return;
+    for (auto& seg : segs) {
+        char* result = fireredpunc_process(punc_ctx, seg.text.c_str());
         if (result) {
             seg.text = result;
             free(result);
@@ -117,7 +118,7 @@ std::mutex g_stdout_mutex;
 // per-thread backend instances. Returns 0 on success, non-zero on
 // failure.
 int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, whisper_params params,
-                      fireredpunc_context * punc_ctx = nullptr) {
+                      fireredpunc_context* punc_ctx = nullptr) {
     std::vector<float> samples;
     std::vector<std::vector<float>> stereo;
     const bool want_stereo = params.diarize;
@@ -129,8 +130,8 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, wh
     if (params.verbose) {
         double dur = (double)samples.size() / 16000.0;
         double est = crispasr_estimate_mem_mb(dur, backend.name());
-        fprintf(stderr, "crispasr[verbose]: audio %.1fs (%zu samples, %.1f MB PCM), est encoder mem ~%.0f MB\n",
-                dur, samples.size(), samples.size() * 4.0 / 1e6, est);
+        fprintf(stderr, "crispasr[verbose]: audio %.1fs (%zu samples, %.1f MB PCM), est encoder mem ~%.0f MB\n", dur,
+                samples.size(), samples.size() * 4.0 / 1e6, est);
     }
     bool have_stereo = want_stereo && stereo.size() == 2 && !stereo[0].empty() && stereo[0].size() == stereo[1].size();
     if (have_stereo) {
@@ -390,8 +391,8 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, wh
         // Progressive mode: process slices sequentially, flush output after each.
         // This gives media players SRT entries as soon as each VAD segment is done.
         int srt_index = 1; // running SRT entry counter
-        const bool show_ts = !params.no_timestamps && (params.output_srt || params.output_vtt ||
-                                                        params.max_len > 0 || params.print_colors || params.diarize);
+        const bool show_ts = !params.no_timestamps && (params.output_srt || params.output_vtt || params.max_len > 0 ||
+                                                       params.print_colors || params.diarize);
         for (size_t i = 0; i < slices.size(); i++) {
             process_slice(i, backend);
 
@@ -410,18 +411,15 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, wh
                 if (params.output_srt) {
                     int t0_ms = (int)(d.t0 * 10);
                     int t1_ms = (int)(d.t1 * 10);
-                    printf("%d\n%02d:%02d:%02d,%03d --> %02d:%02d:%02d,%03d\n%s\n\n",
-                           srt_index++,
-                           t0_ms / 3600000, (t0_ms / 60000) % 60, (t0_ms / 1000) % 60, t0_ms % 1000,
-                           t1_ms / 3600000, (t1_ms / 60000) % 60, (t1_ms / 1000) % 60, t1_ms % 1000,
-                           d.text.c_str());
+                    printf("%d\n%02d:%02d:%02d,%03d --> %02d:%02d:%02d,%03d\n%s\n\n", srt_index++, t0_ms / 3600000,
+                           (t0_ms / 60000) % 60, (t0_ms / 1000) % 60, t0_ms % 1000, t1_ms / 3600000,
+                           (t1_ms / 60000) % 60, (t1_ms / 1000) % 60, t1_ms % 1000, d.text.c_str());
                 } else {
                     if (show_ts) {
                         int s0 = (int)(d.t0 * 10), s1 = (int)(d.t1 * 10);
-                        printf("[%02d:%02d:%02d.%03d --> %02d:%02d:%02d.%03d]  %s\n",
-                               s0 / 3600000, (s0 / 60000) % 60, (s0 / 1000) % 60, s0 % 1000,
-                               s1 / 3600000, (s1 / 60000) % 60, (s1 / 1000) % 60, s1 % 1000,
-                               d.text.c_str());
+                        printf("[%02d:%02d:%02d.%03d --> %02d:%02d:%02d.%03d]  %s\n", s0 / 3600000, (s0 / 60000) % 60,
+                               (s0 / 1000) % 60, s0 % 1000, s1 / 3600000, (s1 / 60000) % 60, (s1 / 1000) % 60,
+                               s1 % 1000, d.text.c_str());
                     } else {
                         printf("%s", d.text.c_str());
                     }
@@ -444,8 +442,7 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, wh
         // Write output files (full set, from all slices combined)
         // Re-collect all per_slice segments for file output
         // (stdout already got progressive output above)
-        if (params.output_txt || params.output_vtt || params.output_csv ||
-            params.output_lrc || params.output_jsn) {
+        if (params.output_txt || params.output_vtt || params.output_csv || params.output_lrc || params.output_jsn) {
             // Re-run all slices to collect for file output
             std::vector<std::vector<crispasr_segment>> per_slice_redo(slices.size());
             for (size_t i = 0; i < slices.size(); i++) {
@@ -617,7 +614,7 @@ int crispasr_run_backend(const whisper_params& params_in) {
     }
 
     // Optional punctuation restoration post-processor.
-    fireredpunc_context * punc_ctx = nullptr;
+    fireredpunc_context* punc_ctx = nullptr;
     if (!params.punc_model.empty()) {
         punc_ctx = fireredpunc_init(params.punc_model.c_str());
         if (!punc_ctx) {

@@ -937,11 +937,11 @@ extern "C" char* vibevoice_transcribe(struct vibevoice_context* ctx, const float
     };
     suffix_tokens.insert(suffix_tokens.end(), dur_tokens.begin(), dur_tokens.end());
     std::vector<int> suffix_tail = {
-        6546,     7699, 11, 4587, 38840, 432, 449,   1493,           // seconds audio, please transcribe it with these
-        6894,     25,                                                // keys:
-        5145,     882,  11, 3972, 882,   11,  29073, 3034, 11, 8883, // Start time, End time, Speaker ID, Content
-        IM_END,   198,                                               // <|im_end|>\n
-        IM_START, 77091, 198                                         // <|im_start|>assistant\n (add_generation_prompt=True)
+        6546,     7699,  11, 4587, 38840, 432, 449,   1493,           // seconds audio, please transcribe it with these
+        6894,     25,                                                 // keys:
+        5145,     882,   11, 3972, 882,   11,  29073, 3034, 11, 8883, // Start time, End time, Speaker ID, Content
+        IM_END,   198,                                                // <|im_end|>\n
+        IM_START, 77091, 198 // <|im_start|>assistant\n (add_generation_prompt=True)
     };
     suffix_tokens.insert(suffix_tokens.end(), suffix_tail.begin(), suffix_tail.end());
 
