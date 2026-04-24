@@ -501,6 +501,9 @@ add_library(wav2vec2-ggml STATIC wav2vec2-ggml.h wav2vec2-ggml.cpp)
 target_include_directories(wav2vec2-ggml PUBLIC .)
 target_compile_features   (wav2vec2-ggml PUBLIC cxx_std_17)
 target_link_libraries     (wav2vec2-ggml PUBLIC ggml ggml-base ggml-cpu)
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(wav2vec2-ggml PUBLIC OpenMP::OpenMP_CXX)
+endif()
 # PIC required so we can link this static lib into the whisper shared
 # library (libwhisper.so) on ELF platforms. Without it, ld fails with
 # "relocation R_X86_64_PC32 ... can not be used when making a shared
