@@ -931,7 +931,10 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
         glm_asr_context_params p = glm_asr_context_default_params();
         p.n_threads = s->n_threads;
         s->glmasr_ctx = glm_asr_init_from_file(model_path, p);
-        if (!s->glmasr_ctx) { delete s; return nullptr; }
+        if (!s->glmasr_ctx) {
+            delete s;
+            return nullptr;
+        }
         return s;
     }
 #endif
@@ -940,7 +943,10 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
         kyutai_stt_context_params p = kyutai_stt_context_default_params();
         p.n_threads = s->n_threads;
         s->kyutai_ctx = kyutai_stt_init_from_file(model_path, p);
-        if (!s->kyutai_ctx) { delete s; return nullptr; }
+        if (!s->kyutai_ctx) {
+            delete s;
+            return nullptr;
+        }
         return s;
     }
 #endif
@@ -949,14 +955,20 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
         firered_asr_context_params p = firered_asr_context_default_params();
         p.n_threads = s->n_threads;
         s->firered_ctx = firered_asr_init_from_file(model_path, p);
-        if (!s->firered_ctx) { delete s; return nullptr; }
+        if (!s->firered_ctx) {
+            delete s;
+            return nullptr;
+        }
         return s;
     }
 #endif
 #ifdef CA_HAVE_MOONSHINE
     if (s->backend == "moonshine") {
         s->moonshine_ctx = moonshine_init(model_path);
-        if (!s->moonshine_ctx) { delete s; return nullptr; }
+        if (!s->moonshine_ctx) {
+            delete s;
+            return nullptr;
+        }
         moonshine_set_n_threads((moonshine_context*)s->moonshine_ctx, s->n_threads);
         return s;
     }
@@ -966,7 +978,10 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
         omniasr_context_params p = omniasr_context_default_params();
         p.n_threads = s->n_threads;
         s->omniasr_ctx = omniasr_init_from_file(model_path, p);
-        if (!s->omniasr_ctx) { delete s; return nullptr; }
+        if (!s->omniasr_ctx) {
+            delete s;
+            return nullptr;
+        }
         return s;
     }
 #endif
@@ -1471,7 +1486,8 @@ CA_EXPORT crispasr_session_result* crispasr_session_transcribe_lang(crispasr_ses
             text = glm_asr_transcribe((glm_asr_context*)s->glmasr_ctx, pcm, n_samples);
 #endif
 #ifdef CA_HAVE_KYUTAI
-        if (!text && (s->backend == "kyutai-stt" || s->backend == "kyutai" || s->backend == "moshi-stt") && s->kyutai_ctx)
+        if (!text && (s->backend == "kyutai-stt" || s->backend == "kyutai" || s->backend == "moshi-stt") &&
+            s->kyutai_ctx)
             text = kyutai_stt_transcribe((kyutai_stt_context*)s->kyutai_ctx, pcm, n_samples);
 #endif
 #ifdef CA_HAVE_FIRERED
@@ -1485,7 +1501,8 @@ CA_EXPORT crispasr_session_result* crispasr_session_transcribe_lang(crispasr_ses
         }
 #endif
 #ifdef CA_HAVE_OMNIASR
-        if (!text && (s->backend == "omniasr" || s->backend == "omniasr-ctc" || s->backend == "omniasr-llm") && s->omniasr_ctx)
+        if (!text && (s->backend == "omniasr" || s->backend == "omniasr-ctc" || s->backend == "omniasr-llm") &&
+            s->omniasr_ctx)
             text = omniasr_transcribe((omniasr_context*)s->omniasr_ctx, pcm, n_samples);
 #endif
         if (text) {
@@ -1494,7 +1511,8 @@ CA_EXPORT crispasr_session_result* crispasr_session_transcribe_lang(crispasr_ses
             seg.t0 = 0;
             seg.t1 = (int64_t)((double)n_samples * 100.0 / 16000.0);
             r->segments.push_back(std::move(seg));
-            if (need_free) std::free(text);
+            if (need_free)
+                std::free(text);
             return r;
         }
     }
@@ -1991,8 +2009,12 @@ CA_EXPORT void crispasr_punc_free(void* ctx) {
     fireredpunc_free((fireredpunc_context*)ctx);
 }
 #else
-CA_EXPORT void* crispasr_punc_init(const char*) { return nullptr; }
-CA_EXPORT const char* crispasr_punc_process(void*, const char*) { return nullptr; }
+CA_EXPORT void* crispasr_punc_init(const char*) {
+    return nullptr;
+}
+CA_EXPORT const char* crispasr_punc_process(void*, const char*) {
+    return nullptr;
+}
 CA_EXPORT void crispasr_punc_free_text(const char*) {}
 CA_EXPORT void crispasr_punc_free(void*) {}
 #endif

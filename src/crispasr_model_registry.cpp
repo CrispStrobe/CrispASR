@@ -47,8 +47,7 @@ constexpr Entry k_registry[] = {
     {"hubert", "hubert-large-ls960-ft-q4_k.gguf",
      "https://huggingface.co/cstr/hubert-large-ls960-ft-GGUF/resolve/main/hubert-large-ls960-ft-q4_k.gguf", "~200 MB"},
     {"data2vec", "data2vec-audio-base-960h-q4_k.gguf",
-     "https://huggingface.co/cstr/data2vec-audio-960h-GGUF/resolve/main/data2vec-audio-base-960h-q4_k.gguf",
-     "~60 MB"},
+     "https://huggingface.co/cstr/data2vec-audio-960h-GGUF/resolve/main/data2vec-audio-base-960h-q4_k.gguf", "~60 MB"},
     {"vibevoice", "vibevoice-asr-q4_k.gguf",
      "https://huggingface.co/cstr/vibevoice-asr-GGUF/resolve/main/vibevoice-asr-q4_k.gguf", "~4.5 GB"},
 };

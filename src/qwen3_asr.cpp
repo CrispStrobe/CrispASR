@@ -2000,7 +2000,7 @@ extern "C" int qwen3_asr_align_words(struct qwen3_asr_context* ctx, const float*
     {
         const int M = (int)ts_classes.size();
         // O(n log n) LIS — find indices of the longest non-decreasing subsequence
-        std::vector<int> dp;     // dp[i] = smallest tail value for IS of length i+1
+        std::vector<int> dp; // dp[i] = smallest tail value for IS of length i+1
         std::vector<int> parent(M, -1);
         std::vector<int> idx_map; // which index produced each dp entry
 
