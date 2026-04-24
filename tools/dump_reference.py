@@ -86,16 +86,20 @@ import numpy as np
 #   1. tools/reference_backends/<name>.py  with dump() + DEFAULT_STAGES
 #   2. one line here.
 REGISTERED_BACKENDS: Dict[str, str] = {
-    "qwen3":     "reference_backends.qwen3",
-    "voxtral":   "reference_backends.voxtral",
-    "voxtral4b": "reference_backends.voxtral4b",
-    "granite":   "reference_backends.granite",
+    "qwen3":      "reference_backends.qwen3",
+    "voxtral":    "reference_backends.voxtral",
+    "voxtral4b":  "reference_backends.voxtral4b",
+    "granite":    "reference_backends.granite",
     # Encoder-decoder (NeMo + Cohere) reference backends. These capture
     # encoder activations via forward hooks and run generate() for a
     # greedy transcript check — no per-token logits, because the decoder
     # autoregresses with a KV cache that doesn't have a clean "per-step
     # logits" entry point the way the speech-LLMs do.
-    "cohere":    "reference_backends.cohere",
+    "cohere":     "reference_backends.cohere",
+    # VibeVoice-ASR 7B: two σ-VAE encoders + connectors + Qwen2 decoder.
+    # NOTE: audio must be 16 kHz on entry (shared loader); the backend
+    # resamples to 24 kHz internally.
+    "vibevoice":  "reference_backends.vibevoice",
 }
 
 DEFAULT_STAGES_BY_BACKEND: Dict[str, List[str]] = {}  # populated at import
