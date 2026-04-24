@@ -36,7 +36,9 @@ RUN apt-get update && \
 COPY --from=build /app/build/bin /app/build/bin
 COPY --from=build /app/samples /app/samples
 COPY --from=build /app/models /app/models
-RUN id -u crispasr 2>/dev/null || useradd -m -u 1000 crispasr; \
+RUN (id -u crispasr 2>/dev/null || \
+     useradd -m -u 1000 crispasr 2>/dev/null || \
+     useradd -m crispasr) && \
     mkdir -p /cache /models && \
     chown -R crispasr:crispasr /app /cache /models
 

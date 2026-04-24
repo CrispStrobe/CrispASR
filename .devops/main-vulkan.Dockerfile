@@ -17,9 +17,11 @@ RUN apt-get update && \
   && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
 COPY --from=build /app /app
-RUN id -u crispasr 2>/dev/null || useradd -m -u 1000 crispasr; \
-  mkdir -p /cache /models && \
-  chown -R crispasr:crispasr /app /cache /models
+RUN (id -u crispasr 2>/dev/null || \
+     useradd -m -u 1000 crispasr 2>/dev/null || \
+     useradd -m crispasr) && \
+    mkdir -p /cache /models && \
+    chown -R crispasr:crispasr /app /cache /models
 ENV PATH=/app/build/bin:$PATH
 USER crispasr
 ENTRYPOINT [ "bash", "/app/.devops/run-server.sh" ]
