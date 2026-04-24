@@ -1669,6 +1669,7 @@ extern "C" char* firered_asr_transcribe(struct firered_asr_context* ctx, const f
             debug_dec_layer = atoi(env);
 
         // Cache all decoder layer weights ONCE before the loop
+        int64_t t_weight_cache0 = ggml_time_us();
         struct dec_layer_cache {
             std::vector<float> sattn_norm_w, sattn_norm_b;
             std::vector<float> sattn_w_qs, sattn_w_qs_b, sattn_w_ks, sattn_w_vs, sattn_w_vs_b;
@@ -1772,8 +1773,9 @@ extern "C" char* firered_asr_transcribe(struct firered_asr_context* ctx, const f
             }
         }
 
-        if (ctx->params.verbosity >= 1)
-            fprintf(stderr, "firered_asr: decoder weights cached, K/V pre-computed\n");
+        int64_t t_weight_cache = ggml_time_us() - t_weight_cache0;
+        if (ctx->params.verbosity >= 1 || getenv("FIRERED_BENCH"))
+            fprintf(stderr, "firered_asr: decoder weights cached + K/V pre-computed in %.1fms\n", t_weight_cache / 1e3);
 
         ggml_context* dec_proj_ctx = nullptr;
         ggml_cgraph* dec_proj_gf = nullptr;
@@ -1852,6 +1854,8 @@ extern "C" char* firered_asr_transcribe(struct firered_asr_context* ctx, const f
             if (beam_size == 1) {
                 auto& beam = beams[0];
                 int cur_token = beam.tokens.back();
+                int64_t t_logit = 0;
+                int64_t t_step0 = ggml_time_us();
 
                 // Embed
                 std::vector<float> x(d);
@@ -1977,6 +1981,7 @@ extern "C" char* firered_asr_transcribe(struct firered_asr_context* ctx, const f
                         x[i] += mlp_out[i];
                 }
 
+                int64_t tl0 = ggml_time_us();
                 std::vector<float> xn(d);
                 cpu_layernorm(x.data(), norm_w.data(), norm_b.data(), xn.data(), 1, d);
 
@@ -1985,6 +1990,13 @@ extern "C" char* firered_asr_transcribe(struct firered_asr_context* ctx, const f
                     logits.resize(odim);
                     cpu_matmul_bt(xn.data(), prj_w.data(), logits.data(), 1, d, odim);
                 }
+                t_logit += ggml_time_us() - tl0;
+
+                if (getenv("FIRERED_BENCH") && (step < 3 || step == max_len - 1)) {
+                    int64_t t_step = ggml_time_us() - t_step0;
+                    fprintf(stderr, "firered: step %d: %.1fms (logit=%.1fms)\n", step, t_step / 1e3, t_logit / 1e3);
+                }
+
                 int best_token = 0;
                 float best_logit = logits[0];
                 for (int i = 1; i < odim; i++)
