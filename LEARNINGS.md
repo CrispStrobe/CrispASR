@@ -2033,5 +2033,16 @@ ASR model. The documented ASR model is `microsoft/VibeVoice-ASR` (7B) or
 mostly-silent audio. Need to verify with actual speech content before further
 C++ debugging.
 
-**Next step**: run full Python VibeVoice inference on non-silent audio to
-verify the model produces useful output, then replicate in C++.
+**CONFIRMED**: `microsoft/VibeVoice-1.5B` does NOT produce valid ASR output
+even in full Python pipeline on CPU. Tested with 3s of actual JFK speech
+(rms=0.1141) — generates `<|vision_start|>+<|vision_pad|>` garbage, empty text.
+
+The documented working ASR model is `microsoft/VibeVoice-ASR` (7B, ~14 GB).
+Our C++ pipeline is architecturally correct (encoder + connector + Qwen2
+decoder all run) — it just needs the right model weights (7B ASR variant).
+
+**Options for proceeding:**
+1. Download and convert `microsoft/VibeVoice-ASR` (7B) — needs ~14 GB disk + RAM
+2. Try `microsoft/VibeVoice-Realtime-0.5B` — smaller, streaming-focused
+3. Try `microsoft/VibeVoice-ASR-HF` — HF-native 7B, might be simpler to port
+4. Deprioritize VibeVoice and focus on other models
