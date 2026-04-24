@@ -2161,6 +2161,54 @@ firered-asr, moonshine, omniasr. Pattern: `#ifdef CA_HAVE_*` guards in
 reachable from Python (`crispasr.Session`), Rust (`crispasr::Session`),
 and Dart (`CrispasrSession`).
 
+## wav2vec2 CNN optimization — 10.8x speedup (April 2026)
+
+### The bottleneck
+
+`WAV2VEC2_BENCH=1` revealed the manual C++ CNN feature extractor was
+**88% of total runtime** (95s out of 108s for 11s audio). Seven Conv1d
+layers on 176K samples with scalar nested loops.
+
+### The fix (two parts)
+
+**1. Replace CNN with ggml im2col + mul_mat** (47x CNN speedup):
+- `ggml_conv_1d` hardcodes F16 im2col which caused precision loss through
+  7 layers (all CTC predictions became blank). Fix: call `ggml_im2col`
+  with `GGML_TYPE_F32` + `ggml_mul_mat` directly.
+- Per-layer ggml graphs (not one big graph) to avoid OOM from im2col
+  intermediates on 176K-sample first layer.
+- Key insight: `ggml_conv_1d` output has `ne[0]=L_out` (time as fast dim),
+  NOT `ne[0]=OC`. Must transpose for bias/norm/gelu, then transpose back.
+- Data read from `ggml_backend_tensor_get` is in ggml layout `[C, T]`
+  (channel-first), but downstream code expects `[T, C]` row-major. Must
+  transpose after the CNN loop.
+
+**2. OpenMP parallelize grouped pos_conv** (3.4x pos_conv speedup):
+- `#pragma omp parallel for collapse(2)` over groups × output channels
+- Required adding `OpenMP::OpenMP_CXX` to wav2vec2-ggml CMake target
+
+### Results
+
+| Phase | Before | After | Speedup |
+|---|---|---|---|
+| CNN extract | 95,193 ms | 2,423 ms | **39x** |
+| Pos conv | 6,840 ms | 2,050 ms | **3.3x** |
+| Encoder graph | 6,277 ms | 5,798 ms | 1.1x |
+| **Total** | **108,357 ms** | **10,005 ms** | **10.8x** |
+
+wav2vec2 is now **1.1x realtime** (faster than real-time), up from 0.1x.
+
+### Lessons
+
+- **Always benchmark per-phase first.** The CNN being 88% was invisible
+  without per-phase timing. The "obvious" optimization target (transformer
+  encoder) was only 6% of runtime.
+- **ggml_conv_1d uses F16 im2col** — for models that chain 7+ conv layers,
+  use F32 im2col + mul_mat directly instead.
+- **ggml tensor layout matters**: `ne[0]` is the fast dimension. For conv1d
+  output `ne[0]=L_out`, data is `[C, L]` channel-first when read linearly.
+  All downstream code must account for this.
+
 ## VibeVoice-ASR prompt template verification (April 2026)
 
 **Verified against HF transformers + microsoft/VibeVoice GitHub repo:**
