@@ -894,8 +894,7 @@ std::vector<float> wav2vec2_compute_logits_graph(const wav2vec2_model& m, const 
 
         // Use F32 im2col + mul_mat instead of ggml_conv_1d (which forces F16
         // im2col, causing precision loss through 7 CNN layers).
-        ggml_tensor* im2c = ggml_im2col(cctx, m.cnn[li].conv_w, inp,
-                                         (int)S, 0, 0, 0, 1, 0, false, GGML_TYPE_F32);
+        ggml_tensor* im2c = ggml_im2col(cctx, m.cnn[li].conv_w, inp, (int)S, 0, 0, 0, 1, 0, false, GGML_TYPE_F32);
         // im2col output: [IC*K, OL] ; kernel reshaped: [IC*K, OC]
         // mul_mat(kernel_2d, im2col) → [OC, OL] ... but ggml_conv_1d does
         // [L_out, OC] via a specific reshape. Let me match that:
@@ -917,8 +916,10 @@ std::vector<float> wav2vec2_compute_logits_graph(const wav2vec2_model& m, const 
         // Norm: ggml_norm over ne[0]=OC — matches LayerNorm/GroupNorm over channels
         if (m.cnn[li].has_norm) {
             cur = ggml_norm(cctx, cur, hp.layer_norm_eps);
-            if (m.cnn[li].norm_w) cur = ggml_mul(cctx, cur, m.cnn[li].norm_w);
-            if (m.cnn[li].norm_b) cur = ggml_add(cctx, cur, m.cnn[li].norm_b);
+            if (m.cnn[li].norm_w)
+                cur = ggml_mul(cctx, cur, m.cnn[li].norm_w);
+            if (m.cnn[li].norm_b)
+                cur = ggml_add(cctx, cur, m.cnn[li].norm_b);
         }
 
         cur = ggml_gelu(cctx, cur);
@@ -934,15 +935,20 @@ std::vector<float> wav2vec2_compute_logits_graph(const wav2vec2_model& m, const 
 
         ggml_backend_t bks[1] = {m.backend};
         ggml_backend_sched_t sc = ggml_backend_sched_new(bks, nullptr, 1, 128, false, false);
-        auto asgn = [&](ggml_tensor* t) { if (t) ggml_backend_sched_set_tensor_backend(sc, t, m.backend); };
-        asgn(m.cnn[li].conv_w); asgn(m.cnn[li].conv_b);
-        asgn(m.cnn[li].norm_w); asgn(m.cnn[li].norm_b);
+        auto asgn = [&](ggml_tensor* t) {
+            if (t)
+                ggml_backend_sched_set_tensor_backend(sc, t, m.backend);
+        };
+        asgn(m.cnn[li].conv_w);
+        asgn(m.cnn[li].conv_b);
+        asgn(m.cnn[li].norm_w);
+        asgn(m.cnn[li].norm_b);
 
         ggml_backend_sched_reset(sc);
         bool ok = ggml_backend_sched_alloc_graph(sc, gf_l);
         if (ok) {
-            ggml_backend_tensor_set(ggml_graph_get_tensor(gf_l, "cnn_in"),
-                                     cnn_buf.data(), 0, L_cur * C_cur * sizeof(float));
+            ggml_backend_tensor_set(ggml_graph_get_tensor(gf_l, "cnn_in"), cnn_buf.data(), 0,
+                                    L_cur * C_cur * sizeof(float));
             ok = (ggml_backend_sched_graph_compute(sc, gf_l) == GGML_STATUS_SUCCESS);
         }
         if (ok) {
@@ -951,7 +957,8 @@ std::vector<float> wav2vec2_compute_logits_graph(const wav2vec2_model& m, const 
             ggml_backend_tensor_get(out_t, cnn_buf.data(), 0, cnn_buf.size() * sizeof(float));
         } else {
             // Fallback to manual C++ (shouldn't happen on CPU backend)
-            if (bench) fprintf(stderr, "wav2vec2: CNN layer %d ggml failed, manual fallback\n", li);
+            if (bench)
+                fprintf(stderr, "wav2vec2: CNN layer %d ggml failed, manual fallback\n", li);
             std::vector<float> cf(C_cur * L_cur), co(C_out * ((L_cur - K) / S + 1));
             for (uint32_t t2 = 0; t2 < L_cur; t2++)
                 for (uint32_t c = 0; c < C_cur; c++)
@@ -959,13 +966,17 @@ std::vector<float> wav2vec2_compute_logits_graph(const wav2vec2_model& m, const 
             std::vector<float> w_buf;
             const float* wdata;
             if (m.cnn[li].conv_w->type == GGML_TYPE_F16) {
-                size_t n = C_out * C_cur * K; w_buf.resize(n);
+                size_t n = C_out * C_cur * K;
+                w_buf.resize(n);
                 const ggml_fp16_t* w16 = (const ggml_fp16_t*)m.cnn[li].conv_w->data;
-                for (size_t i = 0; i < n; i++) w_buf[i] = ggml_fp16_to_fp32(w16[i]);
+                for (size_t i = 0; i < n; i++)
+                    w_buf[i] = ggml_fp16_to_fp32(w16[i]);
                 wdata = w_buf.data();
-            } else { wdata = (const float*)m.cnn[li].conv_w->data; }
-            conv1d(cf.data(), wdata, m.cnn[li].conv_b ? (const float*)m.cnn[li].conv_b->data : nullptr,
-                   co.data(), (int)C_cur, (int)C_out, (int)K, (int)S, (int)L_cur, 0);
+            } else {
+                wdata = (const float*)m.cnn[li].conv_w->data;
+            }
+            conv1d(cf.data(), wdata, m.cnn[li].conv_b ? (const float*)m.cnn[li].conv_b->data : nullptr, co.data(),
+                   (int)C_cur, (int)C_out, (int)K, (int)S, (int)L_cur, 0);
             if (m.cnn[li].has_norm) {
                 const float* nw = (const float*)m.cnn[li].norm_w->data;
                 const float* nb = (const float*)m.cnn[li].norm_b->data;
@@ -974,7 +985,8 @@ std::vector<float> wav2vec2_compute_logits_graph(const wav2vec2_model& m, const 
                 else
                     instance_norm_1d(co.data(), co.data(), nw, nb, (int)C_out, (int)L_out, hp.layer_norm_eps);
             }
-            for (float& v : co) v = gelu(v);
+            for (float& v : co)
+                v = gelu(v);
             cnn_buf.resize(L_out * C_out);
             for (uint32_t t2 = 0; t2 < L_out; t2++)
                 for (uint32_t c = 0; c < C_out; c++)
