@@ -1053,3 +1053,76 @@ class Session:
 
     def __exit__(self, *args):
         self.close()
+
+
+# =========================================================================
+# FireRedPunc — punctuation restoration post-processor
+# =========================================================================
+
+class PuncModel:
+    """BERT-based punctuation restoration (FireRedPunc).
+
+    Adds punctuation and capitalization to unpunctuated ASR output.
+    Particularly useful for CTC-based backends (wav2vec2, omniasr,
+    fastconformer-ctc, firered-asr) that output lowercase text without
+    punctuation.
+
+    Usage::
+
+        punc = crispasr.PuncModel("fireredpunc-q8_0.gguf")
+        text = punc.process("and so my fellow americans ask not")
+        punc.close()
+
+    Or as context manager::
+
+        with crispasr.PuncModel("fireredpunc.gguf") as punc:
+            for seg in segments:
+                seg.text = punc.process(seg.text)
+    """
+
+    def __init__(self, model_path: str, lib_path: Optional[str] = None):
+        self._lib = ctypes.CDLL(lib_path or _find_lib())
+        self._setup_punc_signatures()
+        self._handle = self._lib.crispasr_punc_init(model_path.encode("utf-8"))
+        if not self._handle:
+            raise RuntimeError(f"Failed to load punctuation model: {model_path}")
+
+    def _setup_punc_signatures(self):
+        lib = self._lib
+        for name in ("crispasr_punc_init", "crispasr_punc_process",
+                      "crispasr_punc_free_text", "crispasr_punc_free"):
+            if not hasattr(lib, name):
+                raise RuntimeError(
+                    "FireRedPunc API not found — rebuild CrispASR 0.5.0+")
+        lib.crispasr_punc_init.argtypes = [ctypes.c_char_p]
+        lib.crispasr_punc_init.restype = ctypes.c_void_p
+        lib.crispasr_punc_process.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+        lib.crispasr_punc_process.restype = ctypes.c_char_p
+        lib.crispasr_punc_free_text.argtypes = [ctypes.c_char_p]
+        lib.crispasr_punc_free_text.restype = None
+        lib.crispasr_punc_free.argtypes = [ctypes.c_void_p]
+        lib.crispasr_punc_free.restype = None
+
+    def process(self, text: str) -> str:
+        """Add punctuation to unpunctuated text."""
+        result = self._lib.crispasr_punc_process(
+            self._handle, text.encode("utf-8"))
+        if not result:
+            return text
+        out = result.decode("utf-8")
+        self._lib.crispasr_punc_free_text(result)
+        return out
+
+    def close(self) -> None:
+        if getattr(self, "_handle", None):
+            self._lib.crispasr_punc_free(self._handle)
+            self._handle = None
+
+    def __del__(self):
+        self.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()

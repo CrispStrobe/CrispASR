@@ -1,1396 +1,255 @@
-# CrispASR — Implementation plan for remaining work
+# CrispASR — Pending work
 
-This document details how each remaining roadmap item would be
-implemented. It's written for a fresh session that hasn't seen the
-prior conversation — every item is self-contained with file paths,
-line numbers, approach, risks, and verification steps.
+Pending roadmap items. Each is self-contained with files, approach, and
+effort estimate. Completed items have been moved to `HISTORY.md`.
 
-**Current state (April 2026, v0.3.0):** 11 ASR backends, unified CLI,
-OpenAI-compatible server, shared `src/core/` library (mel, ffn,
-attention, gguf_loader, greedy_decode, bpe), ground-truth diff infra,
-CI on 6 platforms + 3-job lint.
-
----
-
-## Table of contents
-
-1. [voxtral4b audio encoder → encoder_self_attn()](#1-voxtral4b-audio-encoder-migration)
-2. [Qwen3 forced aligner as generic timestamp provider](#2-qwen3-forced-aligner)
-3. [Granite µP scale extraction into core/attention.h](#3-granite-µp-scale)
-4. [Scheduler reuse audit (stale TODO cleanup)](#4-scheduler-reuse-audit)
-5. [Reference backends for parakeet/canary/cohere](#5-reference-backends)
-6. [Best-of-N sampling for LLM backends](#6-best-of-n-sampling)
-7. [Native voxtral4b streaming protocol](#7-voxtral4b-native-streaming)
-8. [Audio understanding / Q&A mode for voxtral 3B](#8-voxtral-audio-qa)
-9. [Parakeet TDT decoder ggml graph port](#9-parakeet-tdt-gpu)
-10. [Granite encoder ggml graph port](#10-granite-encoder-graph)
-11. [WebSocket streaming server](#11-websocket-streaming)
-12. [Pipeline template consolidation](#12-pipeline-template)
-13. [canary_ctc aligner CPU fallback](#13-canary-ctc-fallback)
-14. [Misc cleanup items](#14-misc-cleanup)
-
----
-
-## 1. voxtral4b audio encoder migration — DONE
-
-**Status:** Completed. Added `bool permute_cont` flag to
-`EncoderSelfAttnParams` (default `true`). Replaced the 32-line inline
-attention block in voxtral4b.cpp with a single `encoder_self_attn()`
-call using `permute_cont = false`. Bit-identical output verified on
-jfk.wav.
-
----
-
-## 2. Qwen3 forced aligner — DONE
-
-**Status:** Fully implemented and verified. All code already exists:
-
-- `qwen3_asr.cpp:372-382` — lm_head shape read from tensor, not asserted
-- `qwen3_asr.h:160-190` — `qwen3_asr_lm_head_dim()`, `qwen3_asr_run_aligner()`,
-  `qwen3_asr_align_words()` APIs
-- `crispasr_aligner.cpp:61-129` — dispatch via filename detection
-  ("forced-aligner", "qwen3-fa", "qwen3-forced")
-- GGUF converter handles the aligner model out of the box
-- HF release: `cstr/qwen3-forced-aligner-0.6b-GGUF`
-
-Verified working:
-```bash
-crispasr --backend voxtral -m voxtral.gguf -f samples/jfk.wav \
-    -am qwen3-forced-aligner-0.6b.gguf -osrt -ml 1
-```
-Produces per-word SRT timestamps (80ms resolution, 5000 classes).
-
----
-
-## 3. Granite µP scale
-
-**Goal:** Document and optionally extract granite's µP (maximal update
-parameterization) attention and residual scaling into named parameters.
-
-**Files:**
-- `src/granite_speech.cpp` — lines using `hp.attention_multiplier`
-  and `hp.residual_multiplier`
-- `src/core/attention.h` — `KvSelfAttnParams::attn_scale` already
-  handles the attention multiplier
-
-**Current state:** Granite already uses `attn_scale = hp.attention_multiplier`
-(0.0078125 = 1/128) instead of the standard `1/sqrt(head_dim)`, and this
-is passed through `KvSelfAttnParams::attn_scale`. The `residual_multiplier`
-(0.22) is applied outside the helper, inline in granite_speech.cpp:
-```cpp
-cur = ggml_add(ctx0, residual, ggml_scale(ctx0, attn, hp.residual_multiplier));
-```
-
-**Assessment:** This is already clean. The `attn_scale` knob covers the
-attention side, and the residual multiplier is a one-line inline scale
-that doesn't benefit from extraction. **No code change needed** — just
-update TODO.md to mark it as "handled via existing knobs."
-
----
-
-## 4. Scheduler reuse audit
-
-**Goal:** Verify that the TODO item about recreating `ggml_backend_sched`
-per call is resolved.
-
-**Current state:** All 11 backends create `ggml_backend_sched_new()` once
-at init and use `ggml_backend_sched_reset()` between compute calls:
-- qwen3: init at line 1390, reset at lines 1462/1547/1624/1656
-- voxtral: init at line 787, reset at lines 996/1028/1068/1311
-- voxtral4b: init at line 889, reset pattern matches
-- granite: init at line 700, reset pattern matches
-- parakeet/canary/cohere/canary_ctc: same pattern
-
-**Action:** Mark the TODO item as done. No code changes needed.
-
----
-
-## 5. Reference backends for parakeet/canary/cohere
-
-**Goal:** Write `tools/reference_backends/{parakeet,canary,cohere}.py`
-so `crispasr-diff` can generate reference activations for these backends.
-
-**Files to create:**
-- `tools/reference_backends/parakeet.py`
-- `tools/reference_backends/canary.py`
-- `tools/reference_backends/cohere.py`
-
-**Approach for each:**
-
-### parakeet.py
-- Load the `.nemo` tarball using `tarfile` + `torch.load()`, following
-  the pattern in `models/convert-parakeet-to-gguf.py`'s `unpack_nemo()`.
-- Run the NeMo model's `forward()` with PyTorch hooks to capture:
-  `mel`, `encoder_output` (per-layer), `tdt_joint_logits`, `decoded_text`.
-- The model uses `nemo_toolkit` OR can be loaded as raw PyTorch state
-  dict with manual forward pass (the converter already does this for
-  weight extraction). Prefer the manual path to avoid nemo dependency.
-
-### canary.py
-- Similar to parakeet — `.nemo` tarball, `unpack_nemo()`, PyTorch
-  state dict.
-- Capture: `mel`, `encoder_output`, `decoder_cross_attn_kv`,
-  `decoder_output`, `decoded_text`.
-- Canary has both encoder (FastConformer) and decoder (Transformer)
-  stages, so more capture points.
-
-### cohere.py
-- Load via `transformers.AutoModel.from_pretrained("CohereLabs/cohere-transcribe-03-2026")`.
-- Capture: `mel` (pre-emphasized), `encoder_output`, `decoder_logits`,
-  `decoded_text`.
-- Simpler than NeMo models since HF transformers has a clean API.
-
-**Template:** Follow `tools/reference_backends/qwen3.py` for the
-registration pattern:
-```python
-BACKEND_NAME = "parakeet"
-DEFAULT_STAGES = ["mel", "encoder", "text"]
-
-def load_model(model_dir, device="cpu"):
-    ...
-def capture_stages(model, audio_path, stages):
-    ...
-    return {"mel": mel_np, "encoder": enc_np, "text": text}
-```
-
-**Verification:** For each backend, run:
-```bash
-python tools/dump_reference.py --backend parakeet \
-    --model-dir /path/to/parakeet-tdt-0.6b-v3 \
-    --audio samples/jfk.wav --output /tmp/parakeet-ref.gguf
-./build/bin/crispasr-diff parakeet parakeet.gguf /tmp/parakeet-ref.gguf samples/jfk.wav
-```
-
-**Risk:** Medium. NeMo checkpoint loading is non-trivial — the `.nemo`
-tarball contains nested `model_weights.ckpt` files with non-standard
-key names. The converter scripts already handle this, so the code can
-be adapted.
-
-**LOC:** ~100–150 lines per backend.
-
----
-
-## 6. Best-of-N sampling for LLM backends — DONE
-
-**Status:** Implemented for all four LLM backends (voxtral, qwen3,
-granite, voxtral4b). Added `run_with_probs()` overload with PreHook
-in `greedy_decode.h` for voxtral4b's streaming audio injection.
-Verified: temperature=0 stays bit-identical on all backends;
-`--best-of 3 -tp 0.3` works on all (qwen3 score=0.9726, voxtral4b
-score=0.9785).
-
----
-
-## 7. voxtral4b native streaming protocol
-
-**Goal:** Expose voxtral4b's native streaming mode — the model is
-designed for realtime ASR with configurable 240ms–2.4s latency.
-
-**Current state:** voxtral4b runs in chunk-and-transcribe mode like
-other backends. The `pre_hook` in `crispasr_backend_voxtral4b.cpp`
-already implements the streaming audio injection mechanism (adds one
-audio frame to the LLM embedding per decode step), but this operates
-on pre-segmented chunks, not a continuous stream.
-
-**Design:**
-1. **New CLI mode:** `crispasr --backend voxtral4b --stream-native -m model.gguf`
-   enters a loop that reads PCM from stdin in small chunks (240ms at
-   minimum), runs the audio encoder on each chunk, and feeds encoder
-   frames to the LLM one at a time during generation.
-2. **Latency control:** `--stream-delay 240` (ms) controls how many
-   audio frames to buffer before starting generation. The model
-   supports 240ms, 480ms, 960ms, and 2400ms modes.
-3. **Output:** Each generated token is printed immediately (partial
-   transcript), with periodic newlines at sentence boundaries.
-
-**Implementation:**
-- Extend `crispasr_backend_voxtral4b.cpp` with a `transcribe_streaming()`
-  method that takes a callback for new PCM data.
-- The audio encoder runs on accumulated chunks (e.g. 1 second of audio),
-  producing N encoder frames that are queued.
-- The LLM decode loop pops frames from the queue via the existing
-  `pre_hook` mechanism, blocking if no frames are available yet.
-- Thread model: main thread reads PCM and runs encoder, decode thread
-  runs the LLM. A mutex-protected frame queue connects them.
-
-**Verification:**
-- Pipe audio from ffmpeg: `ffmpeg -i audio.wav -f s16le -ar 16000 -ac 1 - | crispasr --backend voxtral4b --stream-native -m model.gguf`
-- Measure time-to-first-token from audio start.
-- Compare transcript quality vs chunk mode.
-
-**Risk:** High. This is a significant feature that changes the
-threading model. The audio encoder → LLM frame injection timing is
-critical. The existing `--stream` mode (generic, works for all backends)
-is simpler and may be sufficient for most users.
-
-**LOC:** ~200–300 lines.
-
----
-
-## 8. voxtral audio Q&A
-
-**Goal:** Support audio understanding / Q&A mode for voxtral 3B, beyond
-transcription.
-
-**Current state:** The model supports arbitrary prompts over audio
-content (summarization, Q&A, analysis). Currently only the transcription
-prompt template is implemented.
-
-**Approach:**
-1. Add `--prompt-mode chat` flag (or `--ask "What language is spoken?"`)
-   that switches from the transcription template to a chat template.
-2. The Tekken chat template for voxtral:
-   ```
-   <s>[INST][BEGIN_AUDIO]<audio_pad>×N[/INST]<user_question>[/INST]
-   ```
-3. Output: print the LLM's free-form text response (not structured
-   as crispasr_segment with timestamps — this is conversational output).
-
-**Implementation:**
-- In `crispasr_backend_voxtral.cpp`, add an `ask()` method alongside
-  `transcribe()`.
-- The `VoxtralOps::build_suffix()` already takes `whisper_params` and
-  can read a new `params.ask_prompt` field.
-- In `cli.cpp`, wire `--ask` to set the prompt and call the backend.
-
-**Risk:** Low — the transcription pipeline already works; this just
-changes the prompt template.
-
-**LOC:** ~50 lines.
-
----
-
-## 9. Parakeet TDT decoder ggml graph port
-
-**Goal:** Port parakeet's TDT decoder (LSTM predictor + joint head)
-from manual CPU float* loops to ggml graphs for GPU acceleration.
-
-**Files:**
-- `src/parakeet.cpp` — the TDT decoder section (~300 lines of manual
-  LSTM stepping + joint network evaluation)
-
-**Current state:** The encoder runs as a ggml graph (via core/mel +
-FastConformer), but the TDT decoder is hand-written C++ with manual
-LSTM cell computation, joint head matrix multiplies, and token-by-token
-stepping.
-
-**Challenge:** The LSTM is inherently sequential — each time step
-depends on the previous hidden state. On GPU this means per-step
-kernel launches with tiny workloads. The encoder is already 85%+ of
-total time (FastConformer with O(T²) attention), so GPU-accelerating
-the decoder saves at most 15%.
-
-**Approach:**
-1. Build a ggml graph for one LSTM step: `x → gate(W_ih, W_hh) → cell update → hidden`.
-2. Run in a loop with `ggml_backend_sched_reset()` between steps.
-3. The joint head (a single matmul + tanh + linear) goes in the same
-   graph as the LSTM step.
-4. Use the scheduler's GPU backend if available, CPU otherwise.
-
-**Verification:**
-- Bit-identical transcript on samples/jfk.wav before and after.
-- Benchmark: time the decoder phase alone (encoder excluded).
-
-**Risk:** Medium. LSTM in ggml is unusual — most ggml models are
-transformer-based. The per-step graph is very small (a few matmuls),
-so the overhead of graph construction and scheduling may exceed the
-compute time. Profile before committing.
-
-**LOC:** ~100–150 lines.
-
----
-
-## 10. Granite encoder ggml graph port — DONE (CPU verified)
-
-**Status:** The existing `granite_build_encoder()` graph was wired up
-with a new `granite_run_encoder_graph()` runner function. Enable with
-`GRANITE_ENCODER_GRAPH=1` environment variable; falls back to CPU loops
-on failure.
-
-**Results on CPU (q5_0, jfk.wav):**
-- Output: identical transcript to CPU loop path
-- Timing: ~35.4s graph vs ~36.0s CPU loops (marginal improvement on
-  CPU — the LLM decode dominates at ~26s)
-- GPU expected to drop encoder from ~10s to <1s
-
-**Known limitation:** Shaw relative position embeddings are omitted
-in the graph path (uses flash_attn_ext with block mask only). Output
-is identical for this test case despite the approximation. For cases
-where RPE matters, implement Q@RPE bias via manual ggml_mul_mat +
-ggml_soft_max attention instead of flash_attn_ext.
-
-**Follow-up:** Add Shaw RPE to the graph path for full accuracy parity.
-
----
-
-## 11. WebSocket streaming server
-
-**Goal:** Add WebSocket support to the server for real-time
-transcription over HTTP.
-
-**Current state:** The server uses httplib (HTTP only). Real-time
-streaming requires WebSocket for bidirectional audio/text flow.
-
-**Approach:**
-1. httplib does not support WebSocket. Two options:
-   a. Add a WebSocket library (e.g. `websocketpp`, header-only) as a
-      second listener alongside the HTTP server.
-   b. Use a simple custom WebSocket handshake on a separate port
-      (the protocol is well-documented and the handshake is ~50 lines).
-2. Client sends raw PCM audio chunks over the WebSocket.
-3. Server processes each chunk through the backend's transcribe() and
-   sends back JSON results incrementally.
-4. Keep the existing HTTP endpoints unchanged.
-
-**Wire protocol (matching common ASR WebSocket APIs):**
-```
-Client → Server: binary PCM frames (16 kHz, 16-bit, mono)
-Server → Client: {"text": "partial...", "is_final": false}
-Server → Client: {"text": "Final result.", "is_final": true}
-Client → Server: {"type": "close"}  (or WebSocket close frame)
-```
-
-**Risk:** Medium. WebSocket adds a new dependency or custom protocol
-code. The httplib library doesn't support it natively.
-
-**LOC:** ~200–300 lines.
-
----
-
-## 12. Pipeline template consolidation
-
-**Goal:** Evaluate whether qwen3, granite, and voxtral4b backend
-adapters should adopt the `crispasr_llm_pipeline.h` template (currently
-only used by voxtral 3B).
-
-**Current state:**
-- `crispasr_llm_pipeline.h` implements: mel → encoder → prompt build →
-  embed → splice → KV init → best-of-N decode → detokenize.
-- voxtral uses it via `VoxtralOps` traits struct (~100 lines).
-- qwen3/granite/voxtral4b implement the same pipeline inline
-  (~100–150 lines each) with minor differences:
-  - **qwen3:** GPT-2 byte-encoded token text needs `decode_gpt2_bytes()`.
-  - **granite:** Different prompt template, BPE tokenizer.
-  - **voxtral4b:** Streaming pre_hook audio injection.
-
-**Assessment:** The template would need these additions to cover all:
-1. A `decode_token(ctx, id) → string` trait method (instead of raw
-   `token_text → bytes`), to handle qwen3's GPT-2 encoding.
-2. voxtral4b's streaming pre_hook is already supported by
-   `core_greedy_decode::run()` — the pipeline template just needs to
-   accept an optional pre_hook in its Ops traits.
-
-**Recommendation:** Do this only if we add a 5th LLM backend.
-Currently 3/4 backends are inline and work fine. The ROI of
-templatizing is small.
-
----
-
-## 13. canary_ctc aligner CPU fallback — DONE
-
-**Status:** Already implemented. Both scheduler init points
-(`canary_ctc_compute_logits_from_mel_debug` at line 578 and
-`canary_ctc_compute_logits` at line 626) already use the 2-backend
-pattern (GPU primary + CPU fallback). No code change needed.
-
----
-
-## 14. Misc cleanup items
-
-### a. Test target rename
-`tests/CMakeLists.txt` uses `whisper-cli` as the test target name. Once
-the rename to `crispasr` has propagated fully, change test references to
-`$<TARGET_FILE:crispasr>`. Low priority, cosmetic.
-
-### b. Delete empty legacy dirs
-`examples/{parakeet,canary,cohere,qwen3-asr,voxtral,voxtral4b,granite}-main/`
-may have stale build artifacts. They're untracked (not in git), so this
-is just `rm -rf` on local filesystems. Not a code change.
-
-### c. Granite dead code — DONE
-`granite_build_encoder` resurrected for the ggml graph encoder path
-(`GRANITE_ENCODER_GRAPH=1`).
-
-### d. Remove dead TODO markdown files
-The consolidation from 15 per-model markdown files into TODO.md,
-LEARNINGS.md, HISTORY.md was tracked but the deletion of the old files
-may not have been committed. Check: `ls *-todo.md benchmark_*.md ggml_plans.md`
-and remove any that remain.
-
----
-
-## 15. CMake target rename (whisper-cli → crispasr)
-
-**Goal:** Rename the CMake target from `whisper-cli` to `crispasr` for
-consistency with the binary name.
-
-**Scope:** ~50 references across:
-- `examples/cli/CMakeLists.txt` — target definition + backward-compat aliases
-- `CMakeLists.txt` — MSVC warning suppression
-- `.github/workflows/{ci,release,lint}.yml` — 8 `--target whisper-cli` refs
-- `tests/CMakeLists.txt` — 15 `$<TARGET_FILE:whisper-cli>` refs
-- Shell scripts (8+) — `./build/bin/whisper-cli` paths
-- Documentation — README.md, ARCHITECTURE.md, etc.
-
-**Approach:** Single mechanical commit renaming all references. Keep
-the backward-compat symlink (whisper-cli → crispasr) in the install
-tree so existing scripts don't break.
-
-**Risk:** Low individually but touches many files. Best done as a
-standalone commit/PR to keep the diff reviewable.
-
----
-
-## 16. Shaw RPE for granite encoder graph
-
-**Goal:** Add query-dependent Shaw relative position embeddings to the
-granite ggml graph encoder (currently uses flash_attn_ext with block
-mask only, omitting RPE).
-
-**Approach:** Replace `ggml_flash_attn_ext` with manual attention:
-1. QK^T via `ggml_mul_mat` → (C, C) per head
-2. RPE bias via 3D `ggml_mul_mat`: Q(hd, 1, C) × RPE(hd, C, C) → (C, 1, C)
-3. Add content + position scores, scale, softmax, V matmul
-4. Precompute RPE lookup (200, 200, 128) per layer at init time
-
-**Risk:** Medium. The 3D batched mul_mat for RPE bias needs careful
-tensor shape handling. Profile to verify the manual attention path
-isn't slower than flash_attn on CPU.
-
----
-
-## 17. VAD stitching for long audio (whisper.cpp parity) — DONE
-
-**Shipped:** v0.4.3 (CLI-internal stitching) → v0.4.4 (exposed via
-C-ABI as `crispasr_session_transcribe_vad`, so Dart/Python/Rust all
-get it through one call).
-
-**Goal:** Match whisper.cpp's VAD approach for non-whisper backends:
-stitch VAD segments into a contiguous buffer, process as one audio,
-remap timestamps back to original positions.
-
-**Current state:** Done end-to-end. The shared library
-(`src/crispasr_vad.{h,cpp}`) owns slicing + merge/split + stitch +
-remap. The CLI calls it. The C-ABI function
-`crispasr_session_transcribe_vad(session, pcm, n, sr, vad_path, opts)`
-runs the whole pipeline in one FFI hop and every wrapper binds it.
-CrisperWeaver v0.1.7 uses this path for all 9 non-whisper backends.
-
-**Pre-DRY state (for archival context):**
-- VAD worked (centisecond bug fixed, segment merging added)
-- Each VAD segment was transcribed independently as a separate slice
-- This lost cross-segment context at boundaries
-- whisper.cpp stitches segments + builds a `vad_mapping_table` for
-  timestamp remapping — this gave better results
-
-**How whisper.cpp does it (src/whisper.cpp lines 6895-6980):**
-1. Concatenate all VAD segments into one contiguous float buffer
-2. Insert 0.1s silence between segments
-3. Add 0.1s overlap at segment boundaries
-4. Build `vad_mapping_table` (stitched_position → original_position)
-5. Process the stitched buffer through whisper's normal pipeline
-6. Remap output timestamps via `vad_time_map_get_original()`
-
-**How other projects handle long audio:**
-- **ChunkFormer**: Fixed chunks with 128-frame left+right context windows.
-  Model architecture supports this natively (trained with chunking).
-- **Eve (nexmoe)**: Silero VAD → Qwen3-ASR via sherpa-onnx. Same as us.
-- **Conformer-Athena**: Dynamic chunk-based attention (arxiv 2012.05481).
-  Model-level solution, not applicable to pre-trained models.
-
-**Our approach:** Infrastructure for stitching is in place
-(`crispasr_stitched_audio`, `crispasr_vad_remap_timestamp` in
-crispasr_vad.{h,cpp}). What remains is wiring it into the dispatch
-loop in `crispasr_run.cpp`:
-1. When VAD is active, stitch segments into one buffer
-2. Send the stitched buffer as a single `transcribe()` call
-3. Remap `seg.t0`/`seg.t1` and word timestamps afterward
-4. If the stitched buffer exceeds `chunk_seconds`, split at the
-   best VAD boundary within that range (already implemented)
-
-**Risk:** Medium. The stitching itself is simple. The tricky part is
-remapping word-level timestamps correctly (linear interpolation
-across silence gaps).
-
-**Immediate value:** Current VAD segment merging (min 3s, gap < 1s)
-already handles the common case well. The stitching improvement
-matters most for audio with many short pauses (lectures, interviews).
-
----
-
-## 21. CLI→library DRY refactor — DONE (v0.4.4–v0.4.8)
-
-**Goal:** End the duplication between `examples/cli/crispasr_*.{h,cpp}`
-and the C-ABI. Each release in this cycle promoted one concern from
-CLI-only into `src/` behind the shared C-ABI, leaving the CLI with
-nothing but arg parsing, output formatting, and thin UX shims.
-
-**Shipped:**
-
-| Release | Moved to `src/` | New C-ABI |
-|---|---|---|
-| v0.4.4 | VAD slicing + stitching + remap (`crispasr_vad.{h,cpp}`) + file rename `crispasr_dart_helpers.cpp` → `crispasr_c_api.cpp` | `crispasr_session_transcribe_vad` |
-| v0.4.5 | 4 in-process diarizers: energy, xcorr, vad-turns, native pyannote (`crispasr_diarize.{h,cpp}`) | `crispasr_diarize_segments_abi` |
-| v0.4.6 | whisper-tiny + silero-native LID with context cache (`crispasr_lid.{h,cpp}`) | `crispasr_detect_language_pcm` |
-| v0.4.7 | canary-CTC + qwen3-forced-aligner (`crispasr_aligner.{h,cpp}`) | `crispasr_align_words_abi` + 5 result accessors |
-| v0.4.8 | HF download + cache (`crispasr_cache.{h,cpp}`) + model registry (`crispasr_model_registry.{h,cpp}`) | `crispasr_cache_ensure_file_abi`, `crispasr_cache_dir_abi`, `crispasr_registry_lookup_abi`, `_by_filename_abi` |
-
-**What stayed in the CLI:**
-- `cli.cpp` — arg parsing + dispatch
-- `crispasr_backend.{h,cpp}` + `crispasr_backend_*.cpp` — the
-  whisper-cli-shaped `CrispasrBackend` wrapper over each model's
-  native C API (the session API in `src/` is the modern path; this
-  one is kept for the historical `whisper-cli`-compatible mode)
-- `crispasr_output.cpp` — TXT/SRT/VTT/CSV/JSON/LRC writers
-- `crispasr_server.cpp` — HTTP server for persistent-model mode
-- `crispasr_diff*.cpp` — diff tool for regression runs
-- `*_cli.{h,cpp}` shims: `crispasr_vad_cli`, `crispasr_lid_cli`,
-  `crispasr_diarize_cli`, `crispasr_model_mgr_cli`, `crispasr_aligner_cli`
-  — all purely UX policy (auto-download from `~/.cache/crispasr`,
-  sherpa-ONNX subprocess fallback, TTY download prompt, format
-  adapter layer)
-
-**Wrapper alignment:** all three bindings bumped to match.
-- `package:crispasr` 0.4.8 (Dart)
-- `crispasr` 0.4.8 (Python)
-- `crispasr` + `crispasr-sys` 0.1.6 (Rust)
-
-Each wrapper gained top-level helpers for every promoted function,
-plus a `*_abi` ABI-POD struct for the parameters where that makes
-sense (VAD opts, diarize opts). The `crispasr_dart_helpers_version`
-C-ABI symbol is kept as a back-compat alias pointing at
-`crispasr_c_api_version`, so 0.4.x-era external consumers keep
-resolving.
-
-**Lessons:**
-- Header basename clashes between `src/crispasr_vad.h` and
-  `examples/cli/crispasr_vad.h` break the build because the whisper
-  target marks `src/` `PUBLIC` on its include path. Fix: rename the
-  CLI header to `crispasr_vad_cli.h` (and same for diarize/lid/
-  model_mgr/aligner).
-- Function-name collisions between CLI and library (e.g. both had a
-  `crispasr_detect_language`) are OK in C++ if argument types
-  differ (different mangled names) but fragile. Safer pattern: CLI
-  shim exposes `crispasr_*_cli(...)` variants.
-- POD ABI structs need explicit `_pad` fields for predictable layout
-  on 32-bit vs 64-bit. We use `int32_t` explicitly and check sizes
-  in the Dart/Python/Rust bindings.
-
----
-
-## 18. Qwen3 forced aligner accuracy improvements
-
-**Current state:** Basic aligner works but has known quality issues:
-1. Leading silence → timestamps start too early (aligner assigns
-   timestamps to silence). Workaround: use `--vad`.
-2. Missing `fix_timestamp()` LIS post-processing from the reference
-   implementation. We added a simpler forward clamp (monotonicity
-   enforcement) which handles most cases.
-3. 80ms resolution (5000 classes) is inherently coarser than
-   parakeet's native TDT timestamps.
-
-**Reference implementation:** See
-`qwen_asr/inference/qwen3_forced_aligner.py` in QwenLM/Qwen3-ASR.
-Key differences from our implementation:
-- Full LIS (longest increasing subsequence) for timestamp correction
-- Language-specific word tokenization (CJK character-level, nagisa
-  for Japanese, soynlp for Korean)
-- We use simple whitespace splitting for all languages
-
-**Recommendation:** Parakeet is the better choice for timestamp-
-critical use cases. The forced aligner is best as a fallback for
-backends that lack native timestamps (voxtral, granite, cohere).
-
----
-
-## 24. Wrapper integration test suites — DONE
-
-Python (13 tests), Rust (5+3 ignored), Dart (9 tests) — all passing.
-
-| Wrapper | Tests | Pass | Notes |
-|---|---|---|---|
-| Python | 13 | 13 | Session API: whisper + parakeet, transcription, timestamps, edge cases |
-| Rust | 8 | 5 (+3 ignored) | Session API works; old CrispASR API crashes (C++ exceptions through FFI) |
-| Dart | 9 | 9 | FFI smoke (7) + transcription (2) |
-
-**Known issue:** The old Rust `CrispASR` struct (wrapping `whisper_full()`
-directly) crashes because C++ exceptions propagate through Rust's FFI
-boundary. The `Session` API is safe (C-ABI wrapper catches exceptions).
-`CrispASR` is deprecated in favor of `Session`.
+**Current state (April 2026, v0.5.0):** 17 ASR backends, unified CLI,
+OpenAI-compatible server, shared `src/core/` library, FireRedPunc
+post-processor, C-ABI + Python/Rust/Dart wrappers, CI on 6 platforms.
 
 ---
 
 ## Priority ordering
 
-| Priority | Item | Impact | Effort |
-|---|---|---|---|
-| **Done** | #2 Qwen3 forced aligner | Already implemented and verified | 0 LOC |
-| **Done** | #10 Granite encoder graph | Wired and tested on CPU; enable with GRANITE_ENCODER_GRAPH=1 | ~60 LOC new |
-| **Done** | #1 voxtral4b encoder migration | Migrated to encoder_self_attn() | 0 LOC |
-| **Done** | #6 Best-of-N for all LLM backends | All 4 backends support --best-of N | 0 LOC |
-| **Done** | #13 canary_ctc CPU fallback | Already implemented | 0 LOC |
-| **Medium** | #5 Reference backends | Testing infrastructure completeness | ~400 LOC |
-| **Done** | #3 Granite µP | Already handled via existing knobs | 0 LOC |
-| **Done** | #4 Scheduler audit | Already done | 0 LOC |
-| **Done** | #8 voxtral Q&A | --ask flag for audio understanding | ~10 LOC |
-| **Done** | #14a granite dead code | Resurrected for graph encoder | 0 LOC |
-| **Low** | #7 voxtral4b streaming | Complex, niche | ~300 LOC |
-| **Low** | #9 Parakeet TDT GPU | Small gain, encoder dominates | ~150 LOC |
-| **Low** | #11 WebSocket streaming | Needs new dependency | ~300 LOC |
-| **Low** | #12 Pipeline template | ROI too small with only 4 backends | 0 LOC |
-| **Low** | #14 Cleanup | Cosmetic | ~20 LOC |
-| **Done** | #17 VAD stitching | Stitch + remap matching whisper.cpp | ~155 LOC |
-| **Medium** | #18 Aligner LIS | Full LIS monotonicity fix + language-specific tokenization | ~80 LOC |
-| **Medium** | #15 CMake target rename | Rename whisper-cli → crispasr across CI/tests/scripts (~50 refs) | ~50 files |
-| **High** | #19 wav2vec2-base support | Fix forward pass for base models (768 hidden, group norm) | ~50 LOC |
-| **Medium** | #20 OGG support on Windows | stb_vorbis not linked or read_audio_data path issue (#10) | ~20 LOC |
-| **Low** | #16 Shaw RPE for granite graph | Add query-dependent position bias to encoder graph | ~80 LOC |
-| **Done** | #21 CLI→library DRY refactor | VAD, diarize, LID, aligner, cache, registry promoted to src/ behind shared C-ABI | ~2000 LOC moved |
-| **Pending** | #22 Stream + audio decoder in wrappers | Expose `crispasr_audio_decode_*` + streaming session through Dart/Python/Rust bindings | ~150 LOC each |
-| **Pending** | #23 Diarization + LID + align in CrisperWeaver | Swap the MFCC/k-means stopgap for the lib path; wire LID for auto-language; add forced-aligner for LLM backends | ~250 LOC |
-| **Done** | #27 Kyutai STT (13th backend) | Mimi neural audio codec + causal LM, novel codec-based architecture | ~900 LOC |
-| **Done** | #28 FireRedASR2-AED (14th backend) | Conformer encoder with rel-PE + CTC, hybrid ggml/CPU, 0.7x RT | ~1400 LOC |
-| **Done** | #29 FireRedVAD (DFSMN) | 588K-param VAD, 97.57% F1, output matches reference exactly | ~400 LOC |
-| **Done** | #30 Moonshine (15th backend) | 27M-param encoder-decoder, 11.2x RT, English-only, vendored from moonshine.cpp | ~1500 LOC vendored |
-| **Done** | #31 FireRedASR decoder | Greedy Transformer decoder (self+cross attn), matches reference exactly | ~200 LOC |
-| **Done** | #32 FireRedLID | 120-language LID via shared encoder + 6L decoder, correctly identifies English | converter + runtime |
-| **Done** | #33 Beam search decoder | Per-beam KV cache, log-softmax scoring, top-B pruning | ~200 LOC |
-
-## 27. Kyutai STT — DONE
-
-13th backend. Architecture: Mimi audio codec encoder (SEANet CNN + 8-layer
-transformer + stride-2 downsample + RVQ with 32 codebooks) → 16-layer causal
-transformer LM (2048d, RoPE, SwiGLU, RMSNorm) → SentencePiece text output.
-
-Key implementation lessons (discovered via stage-by-stage diff testing):
-- Conv1d uses **causal (left-only) padding**: `pad_left = kernel_size - stride`
-  zeros prepended via `ggml_pad_ext`. Symmetric padding breaks the Mimi encoder.
-- RoPE is **interleaved** (`GGML_ROPE_TYPE_NORMAL=0`), not NEOX layout.
-- Encoder transformer attention is **causal with context=250**.
-- Initial tokens: `text_card` (8000) for text, `card` (2048) for audio — NOT
-  the text padding token (3).
-- Codebook embeddings pre-computed from `embedding_sum / cluster_usage` at
-  GGUF conversion time. RVQ CPU nearest-neighbor search at inference.
-- Reference: [moshi.cpp](https://github.com/Codes4Fun/moshi.cpp) (MIT).
-
-Files: `src/kyutai_stt.{h,cpp}`, `models/convert-kyutai-stt-to-gguf.py`,
-`examples/cli/crispasr_backend_kyutai_stt.cpp`,
-`tools/dump_kyutai_stt_reference.py`.
-
-## 28. FireRedASR2-AED — DONE
-
-14th backend. Architecture: Conformer encoder (16L, d=1280, 20 heads,
-relative positional encoding with pos_bias_u/v, macaron FFN, depthwise
-separable conv k=33, LayerNorm) + CTC head (8667 tokens).
-
-Key implementation: hybrid ggml/CPU encoder. All matrix multiplications
-(FFN, Q/K/V projections, pointwise convolutions, depthwise conv, FC)
-run on ggml. Only the attention scoring (rel_shift + softmax + V
-weighting) runs on CPU, since the `_rel_shift` operation requires
-row-major reshape which ggml (column-major) cannot express.
-
-Performance: 16s for 11s audio (0.7x RT). The CPU attention scoring
-is O(T²·hd) per head which is small (~6MB for T=275, nh=20, hd=64)
-compared to the O(T·d²) matmuls handled by ggml.
-
-Six bugs found via stage-by-stage diff-testing (see LEARNINGS.md):
-FFN internal residual, rel_shift index formula, PE center extraction,
-symmetric conv padding, fbank energy floor, dw conv reshape.
-
-Files: `src/firered_asr.{h,cpp}`, `models/convert-firered-asr-to-gguf.py`,
-`examples/cli/crispasr_backend_firered_asr.cpp`,
-`tools/dump_firered_asr_reference.py`.
-
-Transformer decoder with beam search: DONE. Both greedy and beam=3
-produce correct output. int16 fbank scaling fix dramatically improved
-ASR accuracy. LID decoder uses 8 heads (not encoder's 20).
-
-Quantization fix: `read_f32_vec` now handles F32/F16/quantized types
-(Q8_0, Q4_K, Q2_K etc.) via `ggml_get_type_traits(type)->to_float`.
-Conv1d kernel=1 weights squeezed from 3D→2D in converter for better
-quantization (saves ~40% at Q2_K).
-
-LID optimizations: single-step decode (max_len=2, greedy), first-token
-output mapping, 5s input cap. Benchmark: 83% accuracy (Q2_K) / ~90%+
-(Q4_K) on 12-language edge-tts test (`tools/benchmark_lid.py`).
-
-All quants uploaded to `cstr/firered-lid-GGUF` (F16, Q8_0, Q4_K, Q2_K).
-FireRedVAD + FireRedLID wired through C API + Python/Rust/Dart wrappers.
-
-TODO: decoder performance optimization (ggml for matmuls).
-
-### ECAPA-TDNN LID — DONE
-
-`models/convert-ecapa-tdnn-lid-to-gguf.py`, `src/ecapa_lid.{h,cpp}`.
-Two model variants supported:
-- **VoxLingua107**: 43 MB F16, 107 languages, 60 mels, DNN classifier
-  HF: `cstr/ecapa-lid-107-GGUF`
-- **CommonLanguage**: 40 MB F16, 45 languages, 80 mels, cosine classifier
-  HF: `cstr/ecapa-lid-commonlanguage-GGUF`
-
-CLI: `--lid-backend ecapa` (method=3). Integrated into all 3 wrappers.
-
-**5 bugs found and fixed:**
-1. Power spectrum (re²+im²), not amplitude (sqrt(re²+im²))
-2. SpeechBrain fbank uses dB scale (10*log10) + 80 dB dynamic range clamp
-3. Reflect padding for Conv1d (SpeechBrain default, not zero padding)
-4. ReLU→BN order (SpeechBrain: conv→ReLU→BN, not conv→BN→ReLU)
-5. SE/tdnn2 order in SERes2NetBlock (tdnn2 before SE, not after)
-
-Embedded SpeechBrain filterbank matrix in GGUF for exact mel computation.
-400-point naive DFT (matching SpeechBrain's n_fft=400), center=True
-with reflect padding, Hann window (periodic).
-
-Converter auto-detects n_mels, lin_neurons, classifier type, and label format.
-Runtime handles both DNN and cosine classifiers dynamically.
-Quantization NOT viable — even Q8_0 breaks accuracy (see LEARNINGS.md).
-
-Accuracy: ~100% on 12-language edge-tts benchmark (en/de/fr/es/ja/zh etc.)
-MMS-LID (CC-BY-NC) deprioritized due to license.
-
-### Qwen Omni ASR — NOT PLANNED
-
-Qwen2.5-Omni (3B/7B) and Qwen3-Omni (30B MoE) assessed. Not suitable
-for CrispASR:
-- Split GGUF (mmproj + LLM) incompatible with monolithic pattern
-- 3-30x larger than Qwen3-ASR with no ASR accuracy advantage
-- Already in llama.cpp libmtmd
-- Multimodal complexity (Thinker-Talker, speech gen) with no ASR benefit
-
-Recommendation: use Qwen3-ASR (0.6B/1.7B) for Qwen-based ASR.
-
-### Facebook OmniASR — HIGH PRIORITY
-
-Facebook's OmniASR family (Apache-2.0): wav2vec2-based, 1,600+ languages,
-300M to 7B parameters. Three variants:
-- **CTC** (non-autoregressive, fastest): wav2vec2 encoder + linear projection
-- **W2V** (encoder only): self-supervised representations
-- **LLM** (autoregressive, best quality): wav2vec2 encoder + 1.2B transformer decoder
-
-**Recommended first target: OmniASR-CTC-300M**
-- 325M params, ~1.3 GB F32 → ~350 MB Q4_K
-- Can reuse our existing wav2vec2 backend for the encoder
-- CTC head is a single linear layer (trivial to add)
-- Beats Whisper-small/medium on multilingual benchmarks
-- 1,600+ languages without explicit language ID
-
-No GGUF conversions exist yet. High-impact new backend.
-
-## 29. Ecosystem comparison and new backends — PENDING
-
-### ggml ASR projects to benchmark against:
-| Project | Models | Key optimizations | Priority |
-|---|---|---|---|
-| [qwen3-asr.cpp](https://github.com/predict-woo/qwen3-asr.cpp) | Qwen3-ASR | Flash Attn 3.7x, selective logits, F16 KV cache, vDSP mel (45x on Apple) | High — adopt optimizations |
-| [RapidSpeech.cpp](https://github.com/RapidAI/RapidSpeech.cpp) | Multi-model | Zero-allocation graphs, edge-focused, advanced quant (Q4_K/Q5_K/Q6_K) | Medium |
-| [moonshine.cpp](https://github.com/csexton-ua/moonshine.cpp) | Moonshine v1/v2 | Lightweight, streaming v2, clean GGML-native | **Done** — 15th backend |
-| [FunASR-GGML](https://github.com/huaxin0/FunASR-GGML) | SenseVoice (Qwen3) | 3-stage pipeline, CUDA support, KV cache | Medium |
-| [whisper_ggml](https://github.com/sk3llo/whisper_ggml) | Whisper | CoreML leveraging for iOS | Low |
-| koboldcpp | Various | Unknown | Medium — need to check |
-
-### FireRed companion models:
-| Model | Task | F1/Accuracy | Notes |
-|---|---|---|---|
-| FireRedVAD | Voice Activity Detection | 97.57% F1 | Beats Silero/TEN/FunASR/WebRTC VAD, streaming support |
-| FireRedLID | Language ID | 97.18% | 100+ languages + 20+ Chinese dialects |
-| FireRedPunc | Punctuation | 78.90% F1 | BERT-based, Chinese+English. Needed for issue #22: FireRedASR2 currently emits uppercase/no-punctuation text; punctuation/casing restoration is not implemented. |
-
-### Issue #22 triage: Vulkan, FireRedASR2, subtitles, hotwords
-
-**NVIDIA + Vulkan:** CrispASR already has a dedicated Windows Vulkan
-build path (`build-vulkan.bat`), which configures `GGML_VULKAN=ON` and
-`GGML_CUDA=OFF` into `build-vulkan\`. A normal CUDA build from
-`build-windows.bat -DGGML_CUDA=ON` is not a Vulkan-capable artifact.
-At runtime, `--gpu-backend vulkan` can force Vulkan only if the binary
-was built with Vulkan support. Documentation/release notes should make
-this clearer: use the Vulkan artifact or `build-vulkan.bat`, then test
-with `build-vulkan\bin\crispasr.exe --gpu-backend vulkan ...`.
-
-**FireRedASR2 punctuation/casing:** The current FireRedASR2 AED path
-does not include punctuation restoration or true casing restoration.
-Best next fix is to port FireRedPunc as a post-processor and expose it
-as an optional backend-agnostic punctuation/casing pass. This is more
-correct than ad-hoc capitalization rules, especially for Chinese/English
-mixed text.
-
-Source inspection notes:
-- FireRedPunc is a **BERT token-classification model** over `chinese-lert-base`
-  plus a linear classifier head (`fireredpunc_bert.py` in FireRedASR2S).
-- The runtime applies punctuation per token, then does a rule-based text fix
-  pass for English spacing/capitalization (`RuleBaedTxtFix` in `punc.py`).
-- This means the native port can be split cleanly into:
-  1. converter (`model.pth.tar` + `chinese-lert-base` + output labels → GGUF)
-  2. BERT encoder + token-classifier runtime
-  3. lightweight post-processing for spacing/casing
-- It is feasible, but it is a **new model family**, not a tiny patch to
-  `firered_asr.cpp`.
-
-**FireRedASR2 GPU speed:** The implementation is still hybrid. The
-encoder uses ggml/GPU for many matmuls, but the AED decoder/beam loop
-is CPU-side (`src/firered_asr.cpp`), including per-step self-attention,
-cross-attention, MLP, logits, and beam pruning. Users reporting "GPU is
-slow" are likely observing this CPU decoder bottleneck rather than a
-simple GPU selection bug. The real fix is a GPU-resident decoder graph
-or at least ggml graphs for decoder matmuls with minimal readback.
-
-**Update (2026-04-23):** FireRed decoder speed work made real progress:
-
-- `abc5c35` added a dedicated greedy fast path (`beam_size == 1`)
-- `2526417` trimmed remaining greedy decoder overhead
-- `a7ece2f` moved decoder cross-attention encoder-side `K/V` precompute
-  and final vocab projection onto ggml/GPU
-
-Current measured result on `issue19-5s.wav` with `-t 8 -l en`:
-
-- greedy `-bs 1`: `26.86s -> 8.68s` (~`3.1x` faster)
-- beam `-bs 3`: `29.59s -> 19.02s` (~`1.56x` faster)
-
-Just as important: several smaller ideas were tested and reverted
-because they regressed speed:
-
-- scratch-buffer reuse inside the decoder loop
-- per-call ggml graphs for small MLP projections
-- parallel `gemv` helper for small decoder vector-matrix products
-
-This narrowed the next step substantially: the remaining useful work is
-**persistent larger decoder graphs**, not more CPU micro-optimizations.
-The next concrete target is a reused greedy decoder subgraph per layer
-or per token step so more of self-attn / cross-attn / MLP can stay on
-ggml with less scheduler overhead.
-
-**Subtitle timing:** Parakeet remains the recommended timestamp-critical
-backend because it has native word timestamps. For LLM/no-native-timestamp
-backends, recommend `--vad -am <ctc-aligner.gguf> -osrt --split-on-punct`;
-`--vad` avoids leading-silence timestamp drift.
-
-**Hotwords:** CrispASR has `--prompt` for Whisper-style context, but no
-generic hotword boosting/scoring API. Hotwords should be tracked as a
-new cross-backend feature. Candidate implementation paths:
-1. Prompt/context injection where the model supports it.
-2. Decoder logit bias for LLM backends.
-3. Backend-native support for models that expose hotwords directly.
-
-**New backend candidates from issue #22:**
-- **Fun-ASR-Nano-2512**: 800M, ~2 GB HF repo, supports low-latency ASR
-  and hotwords through its Python/FunASR API. Not a quick GGUF drop-in:
-  checkpoint is PyTorch/custom code, so it needs a converter and native
-  runtime work. The model card still lists **timestamps as TODO**, so it is
-  not currently a better subtitle-timing backend than parakeet/canary-align.
-- **VibeVoice-ASR**: 9B BF16, ~17 GB HF repo, MIT license, Transformers
-  support, long-form 60-minute input, diarization, timestamps, hotwords,
-  and 50+ languages. High feature value but a major backend effort due
-  to size and architecture. This is better framed as a heavyweight
-  external-runtime or future major-backend project, not a near-term ggml port.
-
-### VAD alternatives to evaluate:
-- TEN-VAD, FunASR-VAD, WebRTC-VAD — compare accuracy/latency vs our Silero VAD
-
-### New model backends to consider:
-- **Moonshine** (15th backend) — lightweight, streaming, already has ggml impl
-- **SenseVoice/Paraformer** — via FunASR-GGML reference, Alibaba's ASR family
-- **Fun-ASR-Nano-2512** — issue #22 candidate; hotwords, multilingual,
-  custom PyTorch architecture; needs converter/runtime evaluation
-- **VibeVoice-ASR** — issue #22 candidate; hotwords + timestamps +
-  diarization, but 9B/17 GB makes it a large-backend project
-
----
-
-## 34. VibeVoice-ASR — DETAILED ARCHITECTURE ANALYSIS
-
-**CRITICAL**: `microsoft/VibeVoice-1.5B` is a TTS model, NOT ASR!
-The ASR model is `microsoft/VibeVoice-ASR` (7B, ~17 GB, MIT license).
-Architecture class: `VibeVoiceForASRTraining`.
-
-**Model**: `microsoft/VibeVoice-ASR` (7B, MIT license, ~17 GB safetensors)
-
-Architecture has 5 components (for ASR only, skip audio decoder):
-
-### 1. Acoustic Tokenizer Encoder (276 tensors)
-σ-VAE encoder with ConvNeXt-like blocks:
-- 7 downsample layers (Conv1d stride=[8,5,5,4,2,2] + 1 initial = 3200x total)
-- 7 stages with depths=[3,3,3,3,3,3,8] blocks per stage
-- Each block: `depthwise_conv → RMSNorm → FFN(linear1→SiLU→linear2) → layer_scale`
-- Base filters: 32, scaling up through stages
-- Input: 24kHz audio (NOT 16kHz)
-- Output: σ-VAE latent codes at ~7.5 tokens/sec
-
-### 2. Semantic Tokenizer Encoder (276 tensors)
-Same ConvNeXt architecture as acoustic tokenizer.
-Extracts content-aligned features parallel to acoustic path.
-
-### 3. Connectors (2×5 = 10 tensors)
-`FC1 → RMSNorm → FC2` — projects tokenizer output to LM hidden dim (1536).
-
-### 4. Language Model (338 tensors)
-Qwen2-1.5B decoder:
-- 28 layers, d=1536, 12 query heads, 2 KV heads (GQA 6:1)
-- FFN: SwiGLU (gate+up→down), intermediate=8960
-- RoPE theta=1000000.0, head_dim=128
-- vocab_size=151936
-
-### 5. Prediction Head (26 tensors)
-Converts LM hidden states to text tokens.
-
-### Feasibility Assessment
-**All ops are standard**: Conv1d, linear, RMSNorm, depthwise_conv, SiLU/GELU.
-No custom ops, no attention in tokenizers.
-
-**Reusable components**:
-- LM decoder: reuse our Qwen-style kv_self_attn + SwiGLU (from qwen3-asr)
-- Conv blocks: similar to our CNN frontends
-- Connectors: trivial linear projections
-
-**Challenges**:
-1. 24kHz input (all our models use 16kHz) — need resampling or new mel
-2. σ-VAE encoder is novel — no existing reference in our codebase
-3. Two parallel tokenizer paths (acoustic + semantic)
-4. 926 tensors for ASR path alone
-5. 5.2 GB model — needs aggressive quantization
-
-**Work items**:
-1. Write converter: `models/convert-vibevoice-to-gguf.py` — 926 tensors
-2. Implement σ-VAE encoder runtime: ConvNeXt blocks with depthwise conv
-3. Implement semantic tokenizer runtime (same architecture)
-4. Wire connectors + Qwen2 decoder (reuse kv_self_attn infrastructure)
-5. Handle 24kHz input (resample from 16kHz or accept 24kHz natively)
-6. Reference diff-testing against Python HF implementation
-
-**Estimated effort**: 2-3 sessions. The tokenizers are the hard part;
-the LM decoder is well-understood from qwen3-asr/omniasr-llm.
-
-**Priority**: HIGH — only model with native timestamps + diarization +
-hotwords + 50+ languages. MIT license. 1.5B variant is manageable size.
-
-### Current progress (April 2026):
-- Converter: `models/convert-vibevoice-to-gguf.py` — 928 ASR tensors, 4.72 GB F16
-- Header + stub runtime: `src/vibevoice.{h,cpp}` — compiles, CMake wired
-- Python reference: acoustic_mean [83,64], semantic_mean [83,128],
-  features [83,1536] verified on JFK at 24kHz
-- Key discovery: `ggml_conv_1d_dw` exists for depthwise conv (critical for Block1D)
-- Architecture fully mapped: Block1D = RMSNorm→dw_conv→gamma→residual + RMSNorm→FFN→gamma→residual
-- Qwen2 decoder reusable from OmniASR-LLM infrastructure
-
-### Updated progress (April 2026):
-
-**C++ runtime (`src/vibevoice.cpp`) — COMPLETE pipeline, working end-to-end:**
-- ConvNeXt encoder: 7 stages, 29 Block1D blocks (RMSNorm→dw_conv→gamma→residual + RMSNorm→FFN→gamma→residual)
-- Semantic encoder: same architecture, separate tensor prefix
-- Connectors: FC1→RMSNorm→FC2 (no activation — verified against Python)
-- Feature combination: acoustic + semantic (element-wise sum, no scaling for ASR variant)
-- Prompt construction: Qwen2 chat template with speech token insertion + assistant prefix
-- Qwen2 decoder: 28L with KV cache, GQA, inline Q/K bias, SwiGLU FFN, RoPE
-- Vocab: 151665+ tokens embedded in GGUF for decoding (no tiktoken needed)
-- Debug: `VIBEVOICE_REF_FEATURES` env var to inject Python reference features
-- Debug: `VIBEVOICE_DUMP_DIR` env var for per-stage intermediate dumps
-
-**What was wrong with the 1.5B test:**
-The `microsoft/VibeVoice-1.5B` model is TTS-only. Its HF model card explicitly
-says "Use to generate any text transcript" is OUT OF SCOPE. The Python reference
-with 1.5B also produces garbage (`<|vision_pad|>` tokens). The correct ASR model
-is `microsoft/VibeVoice-ASR` (7B).
-
-**Architecture differences (1.5B TTS vs 7B ASR):**
-| | VibeVoice-1.5B (TTS) | VibeVoice-ASR (7B) |
-|---|---|---|
-| Purpose | Text-to-speech | Speech-to-text |
-| Architecture class | `VibeVoiceForConditionalGeneration` | `VibeVoiceForASRTraining` |
-| Decoder d_model | 1536 | 3584 |
-| Decoder heads | 12 (2 KV) | 28 (4 KV) |
-| Decoder FFN | 8960 | 18944 |
-| Vocab | 151936 | 152064 |
-| Encoder | Same (vae_dim=64, ratios=[8,5,5,4,2,2]) | Same |
-
-**Known issues:**
-1. **F16 im2col precision**: ggml_conv_1d_dw forces F16 intermediates through
-   im2col. With 29 ConvNeXt blocks, cosine drops to 0.7-0.8 vs Python F32.
-   Python F16 gives cos=0.999 — the loss is ggml-specific. Fix: implement
-   CPU depthwise conv without im2col, or modify ggml to use F32 im2col.
-
-2. **Memory**: The 7B ASR model needs ~14 GB RAM for F32, ~7 GB for F16.
-   Convert to Q4_K (~4 GB) for inference on limited-RAM machines.
-   The converter itself OOMs on 8 GB RAM due to Qwen2.5-7B embedding
-   (152064 × 3584 = 2.1 GB as F32). Fix: convert tensors one at a time
-   using safetensors.safe_open (reads individual tensors without full load).
-
-3. **Causal padding**: Fixed — uses `(K-1)*dilation - (stride-1)` formula
-   plus `get_extra_padding_for_conv1d` for stride alignment.
-
-4. **Audio normalization**: The preprocessor config specifies `db_normalize=true`,
-   `target_dB_FS=-25`. Our C++ doesn't normalize audio — need to add this.
-
-**Next steps (on a machine with ≥16 GB RAM or GPU):**
-1. Fix converter to not OOM: use `safe_open` per-tensor, write vocab from
-   tokenizer separately, process large embedding in chunks
-2. Convert VibeVoice-ASR 7B → GGUF → Q4_K
-3. Run Python reference on 7B to get ground truth transcription
-4. Test C++ pipeline with the ASR model weights
-5. Fix encoder precision (CPU depthwise conv or ggml F32 im2col)
-6. Quantize, test, upload to HF
-
-**TTS support (future):**
-Keep TTS as a module within CrispASR (not a separate project). The σ-VAE
-decoder (276 tensors, transposed ConvNeXt) shares the same GGUF and runtime.
-Add `vibevoice_synthesize()` alongside `vibevoice_transcribe()`.
-CLI: `crispasr --tts "text" -o output.wav`.
-
-## 25. Montreal Forced Aligner evaluation — NOT PLANNED
-
-MFA uses Kaldi + OpenFST + Pynini (heavy C++ dependencies, ~500MB).
-The core Viterbi alignment algorithm is simple (~200 LOC), but the
-acoustic models (TDNN-F) and pronunciation dictionaries (OpenFST
-graph composition) require the full Kaldi stack.
-
-Our existing aligners (canary-CTC, qwen3-forced-aligner) cover
-word-level alignment. MFA's advantage is phoneme-level precision,
-which is a niche use case. Users can run MFA externally via
-`pip install montreal-forced-aligner`.
-
-**Decision:** Not worth the dependency cost. Keep as external tool.
-
-## 26. GLM-ASR-Nano backend — DONE
-
-**Model:** zai-org/GLM-ASR-Nano-2512 (1.5B params, MIT license)
-**Architecture:** Whisper encoder (1280d, 32L, partial RoPE factor=0.5)
-+ 4-frame-stack projector (5120→4096→2048) + Llama LLM (2048d, 28L,
-GQA 16/4, SwiGLU). 17 languages, optimized for Mandarin + English.
-
-**Shipped:**
-- GGUF converter (747 tensors, 4.52 GB F16)
-- C++ runtime with partial RoPE, GPT-2 BPE decoding
-- Backend adapter registered as 'glm-asr', auto-detection for 'glmasr'
-- Correct transcription on jfk.wav verified
-
-**Key learnings:**
-- Partial RoPE (factor≠1.0) must split Q/K, apply RoPE to first half only
-- FFT for n_fft=400 needs zero-padding to 512 (radix-2 requirement)
-- KV cache context must be no_alloc=true for ggml_backend_sched
-
-## 27. Kyutai STT evaluation — DEFERRED
-
-**Model:** kyutai/stt-2.6b-en (2.6B params, CC-BY-4.0, English only)
-**Architecture:** Decoder-only transformer with Mimi neural audio codec.
-
-Unlike all other CrispASR backends which use mel spectrograms, Kyutai
-STT uses a **neural audio codec** (Mimi) to tokenize audio into 32
-parallel codebook streams at 12.5 Hz. The STT decoder is a 48-layer
-transformer that processes these 32+1 (audio+text) token streams
-simultaneously with sliding window attention (375).
-
-**Complexity assessment:**
-1. **Mimi codec** — CNN encoder + 8-layer transformer + 32-codebook
-   residual VQ. Novel architecture, ~200MB. No mel at all.
-2. **Multistream decoder** — 32 audio codebook streams + 1 text stream
-   interleaved. 48 layers, 2048 hidden, 32 heads.
-3. **24 kHz audio** — our pipeline assumes 16 kHz everywhere.
-4. **Two-model inference** — Mimi runs first, then STT decoder.
-
-**Estimated effort:** 2-3 weeks (Mimi codec port is the hard part).
-
-**Key discovery:** [`Codes4Fun/moshi.cpp`](https://github.com/Codes4Fun/moshi.cpp)
-already implements Mimi codec + STT + TTS in ggml (MIT license, 83
-commits, 28 stars). Works at 93 fps STT on RTX 2070. Supports GGUF,
-CUDA, Vulkan, CPU. Integration paths:
-1. Adapt their Mimi+STT code into our backend interface (~1 week)
-2. Use as subprocess backend like whisper.cpp (~1 day)
-3. Use as reference to build our own implementation (~2 weeks)
-
-**Decision:** Deferred but significantly de-risked by moshi.cpp's
-existence. When we do this, option 1 (adapt their code) is fastest.
-
-### Integration analysis (from code review of Codes4Fun/moshi.cpp)
-
-**Code structure (~4500 LOC):**
-- `compression.h` (326L) — Mimi codec: SeanetEncoder → transformer → downsample → RVQ encode
-- `lm.h` (1134L) — language model: multistream transformer with depth-former
-- `seanet.h` (261L) — SEANet encoder/decoder (CNN with residual blocks)
-- `transformer.h` (1373L) — streaming transformer with RoPE, sliding window
-- `vq.h` (120L) — residual vector quantization (32 codebooks)
-- `moshi-stt.cpp` (738L) — STT tool: audio→mimi_encode→lm_send→text
-
-**Key API surface (from moshi.h):**
-```c
-mimi_encode_send(encoder, float* frame);      // 1920 samples (24kHz)
-mimi_encode_receive(encoder, int16_t* tokens); // 32 codebook tokens
-moshi_lm_send2(gen, tokens);                   // feed to LM
-moshi_lm_receive2(gen, text_token, vad);       // get text + VAD
-```
-
-**Dependencies beyond ggml:**
-- SentencePiece (tokenizer) — we already have BPE in core/bpe.h
-- FFmpeg/libav (audio decode + resample to 24kHz) — we have miniaudio
-- SDL2 (mic capture) — we have our own mic path
-
-**Integration approach (option 1 — adapt their code):**
-
-1. **Vendor their core modules** into `src/kyutai_stt/`:
-   - `compression.h` + `seanet.h` + `vq.h` → Mimi codec
-   - `lm.h` + `transformer.h` → STT decoder
-   - Strip their `ScratchContext`/`GraphContext` wrappers, use our
-     `ggml_backend_sched` pattern instead
-
-2. **Write `src/kyutai_stt.{h,cpp}`** — our C API wrapper:
-   - `kyutai_stt_init_from_file()` — loads Mimi codec + STT LM
-   - `kyutai_stt_transcribe()` — full pipeline:
-     a. Resample 16kHz→24kHz (or accept 24kHz)
-     b. Frame loop: audio→mimi_encode→lm_step→accumulate text
-     c. Return transcript
-   - Use their safetensors loader OR write a GGUF converter
-
-3. **Backend adapter** (`crispasr_backend_kyutai_stt.cpp`)
-
-4. **Model conversion**: their code loads safetensors directly with
-   optional GGUF caching. We could either:
-   a. Write a Python GGUF converter (our standard approach)
-   b. Adopt their safetensors→GGUF caching (less work)
-
-**Estimated effort:** ~1 week for a working STT backend.
-The Mimi codec (~700 LOC across seanet+compression+vq) is the novel
-component; everything else maps to patterns we've already implemented.
-
-**Blocker:** SentencePiece dependency. Their tokenizer uses the
-SentencePiece C++ library. We'd need to either bundle it or implement
-a compatible tokenizer reader. Their tokenizer model is a `.model`
-file (protobuf), not JSON like our other backends.
-
-### ECAPA-TDNN ggml graph — IN PROGRESS
-
-The CPU+OpenMP version works correctly (12.9s, detects English).
-The ggml graph version runs in 4.6s but has accuracy issues from:
-1. Tensor layout mismatch in build_conv1d_k1 transpose chain
-2. Res2Net sub-band ggml_view_2d offset needs verification
-3. SE block pool_1d on transposed tensor
-
-Block0 output matches Python when using ggml_pad_reflect_1d + correct
-input layout (column-major = no transpose from CPU). The issue is in
-how subsequent layers handle the [T, C] ↔ [C, T] transpositions.
-
-Key ggml ops used:
-- ggml_conv_1d + ggml_pad_reflect_1d (block0, Res2Net k=3 convs)
-- ggml_mul_mat (tdnn1/tdnn2/MFA k=1 convs, SE convs, classifier)
-- ggml_pool_1d (SE global average pool)
-- ggml_relu, ggml_sigmoid
-- ggml_view_2d (Res2Net sub-band splitting)
-- ggml_concat (Res2Net + MFA recombination)
-
-### ECAPA-TDNN ggml graph — DONE (update)
-
-Full ggml graph working. Speed: 4.1s (6x vs CPU-only).
-100% accuracy on test languages. Key: no transpose needed between
-ggml and CPU — column-major layout is identical. See LEARNINGS.md.
-
-### OmniASR-CTC — WIP
-
-Converter + runtime + CLI backend adapter shipped. 16th backend.
-Model loads and runs (7.7s = 1.4x RT for 11s audio). CTC decode
-returns empty — likely LayerNorm dimension or CNN bias layout issue.
-
-Files: src/omniasr.{h,cpp}, models/convert-omniasr-ctc-to-gguf.py,
-examples/cli/crispasr_backend_omniasr.cpp
-
-Next: dump CNN output + first transformer layer output, compare
-with Python reference (fairseq2 inference).
-
-### OmniASR-CTC — DONE (300M variant, update)
-
-16th backend working! 194 MB Q4_K, 1600+ languages.
-JFK: "en so my tonek n what yor campri kand fur yo s watyukandfur yor kontry"
-Key: input layer_norm, CTC blank=0, pos conv padding=K//2.
-
-**Two GGUF formats exist:**
-- fairseq2-converted (`omniasr-ctc-300m.gguf`) — uses our omniasr runtime
-  tensor names: `cnn.0.ln.weight`, `enc.0.attn_ln.weight`, `ctc.weight`
-- HF-native (aadel4 wav2vec2 conversion) — different names, `general.architecture: wav2vec2`
-  potentially usable with existing wav2vec2 backend
-
-TODO: upload to HF, convert 1B/3B/7B, improve grouped conv precision,
-investigate HF-native path via wav2vec2 backend.
-
-### OmniASR-LLM — IN PROGRESS
-
-Converter + runtime shipped. 3.26 GB F16 GGUF for LLM-300M.
-Architecture: same encoder as CTC + 12-layer LLaMA decoder (d=4096, 8 heads,
-SwiGLU FFN d_ffn=2816, RMSNorm, RoPE interleaved).
-
-**Key findings:**
-- Decoder input: [audio_embs, lid_marker(9812), lang_emb(414=eng), BOS, generated...]
-- fairseq2 RoPE uses interleaved pairing (NORMAL mode), not NEOX
-- Language ID = list_index + 1 (factory.py convention, index 0 = no-language)
-- CPU decoder works but slow (~3s/token, single-core matmul 4096×4096)
-
-**Status:** ggml graph decoder optimized — 552-token prefill + generation in 70s
-(was >10 min with CPU matmul). Uses `core_attn::kv_self_attn` + `core_ffn::swiglu`.
-
-v2 model (10288 vocab) produces English output with lang_id=417 (eng_Latn):
-- 0.5s JFK → "and we were going to do" (correct language, hallucinated content)
-- 5s JFK → "it sounded to make it but" (wrong transcription)
-- 11s JFK → "it sounded to one and..." (wrong transcription)
-
-**Bug found and fixed**: post_extract LayerNorm was silently skipped due to
-tensor name mismatch between converter and runtime. All encoder stages now
-match Python reference (cos>0.9999).
-
-11s JFK result: "and so my palamericas is not what your country can do for
-you is what you can do for your country" — correct structure, most words right.
-
-Quantized: Q4_K (1.1 GB), Q8_0 (1.8 GB) — identical output to F16.
-Key: skip bridging tensors (enc_proj, lm_head, tok_emb, lang_emb).
-HF: `cstr/omniasr-llm-300m-v2-GGUF`
-
-TODO: beam search, dynamic lang selection from parquet.
-
----
-
-## 30. PazaBench model coverage assessment
-
-Assessed 16 ASR model families from [PazaBench](https://github.com/microsoft/PazaBench)
-against CrispASR's current 17 backends. Only open-weight, commercially-licensed
-models considered (MIT, Apache-2.0). CC-BY-NC models postponed.
-
-### Already covered by CrispASR
-
-| PazaBench family | CrispASR backend | Notes |
-|---|---|---|
-| OpenAI Whisper | `whisper` | All sizes (tiny→large-v3-turbo) |
-| NVIDIA NeMo (canary, parakeet) | `canary`, `parakeet` | canary-1b-v2, parakeet-tdt-0.6b-v3 |
-| IBM Granite Speech | `granite` | 3.2-8b, 3.3-2b, 3.3-8b |
-| Kyutai STT | `kyutai-stt` | stt-1b-en, stt-2.6b-en |
-| Moonshine | `moonshine` | tiny, base |
-| Facebook OmniASR | `omniasr` | CTC-300M + LLM-300M-v2 |
-| Facebook Wav2Vec2 | `wav2vec2` | Any Wav2Vec2ForCTC model |
-
-### Easy wins — likely work with existing backends (try first)
-
-| Model | License | Approach | Effort |
-|---|---|---|---|
-| **Distil Whisper** (distil-large-v2/v3) | MIT | Same arch as whisper → should work via `whisper` backend with standard GGUF | Trivial — test only |
-| **Lite ASR / EfficientSpeech** (lite-whisper-*) | Apache-2.0 | Whisper distillation → may work with `whisper` backend | Trivial — test, may need minor tweaks |
-| **Data2Vec Audio** (data2vec-audio-base/large) | Apache-2.0 | Wav2Vec2ForCTC architecture → should work via `wav2vec2` backend | Low — convert + test |
-| **HuBERT** (hubert-large-ls960-ft) | Apache-2.0 | Wav2Vec2ForCTC compatible → should work via `wav2vec2` backend | Low — convert + test |
-
-### Medium effort — new converter, possibly minor runtime changes
-
-| Model | License | Architecture | Effort | Priority |
+| Priority | Item | Impact | Effort | Status |
 |---|---|---|---|---|
-| **Wav2Vec2 Conformer** | Apache-2.0 | Conformer attention (conv + self-attn) vs vanilla transformer in wav2vec2. Relative/rotary positional encoding. | Medium — needs conformer attention in encoder | Medium |
-| **Qwen2-Audio** (7B) | Apache-2.0 | Whisper encoder + Qwen2 7B LLM. Similar pattern to qwen3-asr but different LLM architecture (GQA, SwiGLU). Large model (7B). | Medium — encoder reuse, new LLM decoder | Medium |
-| **OmniASR larger variants** (CTC-1B/3B/7B, LLM-1B/3B/7B) | Apache-2.0 | Same arch as 300M, just bigger. Converter handles it. May need memory optimizations. | Low-Medium — convert + test | High |
+| ~~HIGH~~ | ~~#36 ASCII punc mapping~~ | ~~Fix English output~~ | ~~Trivial~~ | **DONE** |
+| ~~HIGH~~ | ~~#37 Progressive SRT (#24)~~ | ~~Streaming subtitles~~ | ~~Medium~~ | **DONE** |
+| ~~MEDIUM~~ | ~~#38 Fullstop-punc multilingual~~ | ~~DE/FR/IT punc~~ | ~~Medium~~ | **DONE** |
+| ~~MEDIUM~~ | ~~#39 Session API backends~~ | ~~5 backends wired~~ | ~~Low-Med~~ | **DONE** |
+| **MEDIUM** | [#40 Moonshine variants](#40-more-moonshine-model-variants) | Easy model uploads | Trivial | Needs ext converter |
+| **MEDIUM** | [#5 Reference backends](#5-reference-backends-for-parakeetcanarycohere) | Test infra completeness | Medium |
+| **LOW** | [#41 Moonshine IPA](#41-moonshine-phoneme--ipa-output) | Niche (phoneme output) | Medium-High |
+| **LOW** | [#7 voxtral4b streaming](#7-native-voxtral4b-streaming) | Complex, niche | High |
+| **LOW** | [#9 Parakeet TDT GPU](#9-parakeet-tdt-decoder-gpu) | Small gain (encoder dominates) | Medium |
+| **LOW** | [#11 WebSocket server](#11-websocket-streaming-server) | Needs new dependency | High |
+| **LOW** | [#16 Shaw RPE](#16-shaw-rpe-for-granite-graph) | Accuracy edge case | Medium |
+| **LOW** | [#15 CMake rename](#15-cmake-target-rename) | Cosmetic | Low |
+| **LOW** | [#18 Aligner LIS](#18-qwen3-aligner-accuracy) | Niche improvement | Low |
+| **BLOCKED** | [#42 VibeVoice-ASR 7B](#42-vibevoice-asr-7b) | Needs ≥16 GB RAM | High |
+| **BLOCKED** | [#43 Fun-ASR-Nano](#43-fun-asr-nano) | License unclear | Medium |
 
-### Complex — significant new runtime needed
+---
 
-| Model | License | Architecture | Effort | Priority |
-|---|---|---|---|---|
-| **Paza** (Phi-4 multimodal) | MIT | Phi-4 14B with audio adapter. Multimodal (image+audio+text). Very large. | High — needs Phi-4 LLM runtime | Low |
-| **Phi-4 Multimodal** | MIT | Same as Paza but vanilla Phi-4. 14B params, multimodal. Already in llama.cpp. | High — better to use llama.cpp directly | Low |
-| **NeMo Canary-Qwen-2.5b** | Apache-2.0 | NeMo FastConformer + Qwen2.5 decoder. Different from canary-1b. | Medium-High — new decoder type | Medium |
+## 36. ASCII punctuation mapping
 
-### Postponed — non-commercial license
+**Problem:** FireRedPunc outputs Chinese full-width marks (`，` `。` `？` `！`)
+even for English text.
 
-| Model | License | Reason |
+**Fix:** Auto-detect Latin-script input → map to ASCII (`, . ? !`).
+
+**Files:** `src/fireredpunc.cpp` — 4 string replacements after BERT pass.
+
+**Effort:** Trivial (~10 LOC).
+
+---
+
+## 37. Progressive SRT output (issue #24)
+
+**Problem:** Non-whisper backends buffer all segments and flush stdout at
+the end. 30-minute files produce nothing until fully processed. Media
+players (PotPlayer) need progressive SRT for real-time subtitle display.
+
+**Approach:** `--flush-after N` flag (default: 0 = all-at-end). N=1 means
+print each SRT entry as its VAD slice finishes.
+
+**Implementation:**
+- Per-slice loop in `crispasr_run.cpp`: after `transcribe()`, immediately
+  format + print SRT entries.
+- Post-processing (punc, strip) runs per-slice.
+- Diarization: skip or defer when progressive (needs full context).
+- Maintain SRT index counter across slices.
+
+**Files:** `examples/cli/crispasr_run.cpp`, `whisper_params.h`, `cli.cpp`.
+
+**Effort:** Medium (~100 LOC).
+
+---
+
+## 38. Fullstop-punctuation-multilingual
+
+**Model:** `oliverguhr/fullstop-punctuation-multilang-large` (MIT)
+
+**Architecture:** XLM-RoBERTa-large (560M params). Token classification
+with 6 classes (`. , ? - :` + no-punc). Includes truecasing.
+
+**Languages:** English, German, French, Italian.
+
+**Differences from FireRedPunc:**
+- RoBERTa (no token_type_embeddings, different LN order)
+- 250K SentencePiece vocab (vs 21K WordPiece)
+- 6 classes (vs 5), ASCII punctuation output
+
+**Approach:** Extend `fireredpunc.cpp` to detect model type from GGUF
+metadata and handle both BERT and RoBERTa. Or create separate runtime.
+
+**Other candidates:**
+- `felflare/bert-restore-punctuation` (MIT, BERT-base, English, truecasing)
+- `xashru/punctuation-restoration` (Apache-2.0, XLM-RoBERTa, 40+ langs)
+
+**Size:** ~1.1 GB F16, ~300 MB Q4_K.
+
+**Effort:** Medium (~200 LOC converter + ~100 LOC runtime).
+
+---
+
+## 39. Session API for remaining backends
+
+**Problem:** C-ABI session API missing cases for glm-asr, kyutai-stt,
+firered-asr, moonshine, omniasr. These work via CLI but not via
+Python/Rust/Dart wrappers.
+
+**Fix:** Add switch cases in `crispasr_c_api.cpp` for open/transcribe/close.
+Context struct pointers already exist.
+
+**Files:** `src/crispasr_c_api.cpp` (~30 LOC per backend × 5).
+
+**Effort:** Low-Medium (~150 LOC).
+
+---
+
+## 40. More Moonshine model variants
+
+Convert + upload to HuggingFace:
+- `moonshine-base` (61.5M, better WER)
+- `moonshine-streaming-tiny/small/medium`
+- `moonshine-tiny-{ja,ar,ko,zh,vi,uk}` (multilingual)
+- `moonshine-base-{ja,uk,vi,zh,ar,ko}` (multilingual)
+
+Existing converter handles all sizes. Run + quantize + upload.
+
+**Effort:** Trivial per-model.
+
+---
+
+## 41. Moonshine phoneme / IPA output
+
+moonshine-ai/moonshine has a `GraphemeToPhonemizer` — G2P (text→IPA),
+NOT audio→phoneme. Runs on transcription output.
+
+**Options:**
+1. Port G2P tables to C++ (~500 LOC, needs pronunciation dicts)
+2. Post-processing module with `--output-ipa` flag
+3. External-only (document piping through Python G2P)
+
+**Recommendation:** Option 3 for now. IPA is niche; ROI of porting is low.
+
+---
+
+## 5. Reference backends for parakeet/canary/cohere
+
+Write `tools/reference_backends/{parakeet,canary,cohere}.py` for
+`crispasr-diff` reference activation comparison.
+
+**Effort:** ~100-150 LOC per backend.
+
+---
+
+## 7. Native voxtral4b streaming
+
+Expose voxtral4b's native 240ms-2.4s latency streaming via pre_hook
+audio frame injection. Needs threading (encoder thread + decoder thread).
+
+**Effort:** ~200-300 LOC. High complexity.
+
+---
+
+## 9. Parakeet TDT decoder GPU
+
+Port LSTM predictor + joint head from CPU loops to ggml graphs. LSTM
+is sequential → per-step kernel launches. Encoder already 85%+ of time.
+
+**Effort:** ~150 LOC. Small gain.
+
+---
+
+## 11. WebSocket streaming server
+
+Add `/ws` endpoint for real-time streaming over HTTP. httplib doesn't
+support WebSocket — need custom protocol or library.
+
+**Effort:** ~200-300 LOC.
+
+---
+
+## 15. CMake target rename
+
+Rename `whisper-cli` → `crispasr` across CMake/CI/tests/scripts (~50 refs).
+Keep backward-compat symlink.
+
+---
+
+## 16. Shaw RPE for granite graph
+
+Add query-dependent Shaw RPE to granite ggml encoder graph (currently
+uses flash_attn_ext without RPE). Manual attention: QK^T + RPE bias +
+softmax + V matmul.
+
+**Effort:** ~80 LOC.
+
+---
+
+## 18. Qwen3 aligner accuracy
+
+Add full LIS (longest increasing subsequence) monotonicity fix and
+language-specific word tokenization (CJK, nagisa for Japanese).
+
+**Effort:** ~80 LOC.
+
+---
+
+## 42. VibeVoice-ASR 7B
+
+**BLOCKED:** Needs ≥16 GB RAM for conversion. Converter OOMs on 8 GB due
+to Qwen2.5-7B embedding (152064 × 3584 = 2.1 GB F32).
+
+**Fix:** Use `safe_open` per-tensor conversion. Then Q4_K → ~4 GB.
+
+Full architecture analysis in HISTORY.md #34. C++ runtime partially
+implemented (`src/vibevoice.cpp`). F16 im2col precision issue in
+depthwise conv needs fixing.
+
+---
+
+## 43. Fun-ASR-Nano
+
+**BLOCKED:** License unclear. Issue filed at `FunAudioLLM/Fun-ASR#99`.
+No response. HF model card has no license field.
+
+---
+
+## Ecosystem expansion (lower priority)
+
+### New backends from PazaBench assessment (see HISTORY.md #30)
+
+| Model | License | Approach | Priority |
+|---|---|---|---|
+| Wav2Vec2 Conformer | Apache-2.0 | Conformer attention variant | Medium |
+| Qwen2-Audio 7B | Apache-2.0 | Whisper encoder + Qwen2 LLM | Medium |
+| OmniASR larger (1B/3B/7B) | Apache-2.0 | Same converter, bigger models | Medium |
+| NeMo Canary-Qwen-2.5b | Apache-2.0 | FastConformer + Qwen2.5 decoder | Medium |
+| Paza / Phi-4 | MIT | 14B multimodal, defer to llama.cpp | Low |
+
+### From llama.cpp (MIT)
+
+| Model | Architecture | Notes |
 |---|---|---|
-| **Facebook MMS** (mms-1b-all, mms-1b-fl102) | CC-BY-NC 4.0 | Non-commercial only. Covers 1100+ languages but license prohibits commercial use. |
-| **OmniASR-LLM-7B-ZS** | Apache-2.0 (model) but impractical | Zero-shot variant needs 10 context examples per inference — too complex for our use case |
+| Ultravox | Whisper encoder + Llama 3.2 1B/8B | Speech understanding |
+| Gemma 4 Audio | Conformer, chunked attention | Streaming, multimodal |
+| LFM2-Audio | Conformer variant | Position embeddings |
 
-### Recommended priority order
+### Post-processing
 
-1. **OmniASR larger variants** (CTC-1B, LLM-1B) — same code, just bigger models. High impact.
-2. **Data2Vec + HuBERT** — likely work with wav2vec2 backend. Quick wins for benchmark coverage.
-3. **Distil Whisper + Lite ASR** — test with existing whisper backend. Free coverage.
-4. **Wav2Vec2 Conformer** — needs conformer attention, moderate effort.
-5. **Qwen2-Audio** — medium effort, good multilingual + audio understanding.
-6. **NeMo Canary-Qwen-2.5b** — if NeMo ecosystem is a priority.
-7. **Paza / Phi-4** — defer to llama.cpp multimodal tooling.
+| Model | License | Type | Priority |
+|---|---|---|---|
+| FireRedPunc | Apache-2.0 | BERT punct (zh+en) | **DONE** |
+| fullstop-multilingual | MIT | XLM-R punct (en/de/fr/it) | Medium |
+| bert-restore-punctuation | MIT | BERT punct+truecase (en) | Medium |
+| xashru/punctuation | Apache-2.0 | XLM-R+BiLSTM-CRF (40+ langs) | Low |
 
----
+### Other
 
-## 31. Language detection info in JSON output (issue #17) — DONE
-
-**Request**: CrispStrobe/CrispASR#17 — expose detected language + confidence
-in structured output (JSON/SRT/VTT), not just stderr.
-
-**Current state**: When `-l auto` is used, `CrispasrLidResult` (lang_code,
-confidence, source) is populated in the CLI pipeline but only printed to
-stderr. The JSON/SRT/VTT formatters don't include it.
-
-**Implementation**:
-
-1. `examples/cli/cli.cpp` — after LID runs, store the result in a struct
-   accessible to the output formatters. Currently the result is consumed
-   inline and discarded.
-
-2. JSON output (`-oj`): add top-level fields before segments array:
-   ```json
-   {
-     "language": "en",
-     "language_confidence": 0.98,
-     "language_source": "ecapa",
-     "segments": [...]
-   }
-   ```
-
-3. SRT/VTT: optionally add a comment line at the top:
-   ```
-   NOTE Language: en (confidence: 0.98, source: ecapa)
-   ```
-
-4. For per-segment LID (multilingual audio): run LID on each VAD segment
-   and annotate each segment with its language. This requires changes to
-   the segment loop in `cli.cpp` — each chunk would call
-   `crispasr_detect_language()` independently. Adds latency but enables
-   correct transcription of code-switched audio.
-
-**Files**:
-- `examples/cli/cli.cpp` — LID result propagation + JSON/SRT/VTT output
-- `examples/cli/whisper_params.h` — add `lid_result` field to params or
-  a separate output struct
-
-**Effort**: Low (JSON field) to Medium (per-segment LID).
-
----
-
-## 32. Upload CUDA artifact to v0.4.14 release — DONE (auto-published by CI)
-
-The v0.4.14 release at https://github.com/CrispStrobe/CrispASR/releases/tag/v0.4.14
-was published with 6 of 7 artifacts (CUDA still building). When the CUDA build
-from run 24748094665 completes:
-
-```bash
-# Download CUDA artifact
-CUDA_ID=$(gh api repos/CrispStrobe/CrispASR/actions/runs/24748094665/artifacts \
-  -q '.artifacts[] | select(.name=="crispasr-windows-x86_64-cuda") | .id')
-gh api repos/CrispStrobe/CrispASR/actions/artifacts/$CUDA_ID/zip > /tmp/cuda.zip
-cd /tmp && unzip -o cuda.zip && rm cuda.zip
-
-# Upload to release
-UPLOAD_URL=$(gh api repos/CrispStrobe/CrispASR/releases/311957303 \
-  -q '.upload_url' | sed 's/{.*//')
-curl -X POST \
-  -H "Authorization: token $(gh auth token)" \
-  -H "Content-Type: application/octet-stream" \
-  --data-binary @/tmp/crispasr-windows-x86_64-cuda.zip \
-  "${UPLOAD_URL}?name=crispasr-windows-x86_64-cuda.zip"
-
-# Update release notes to remove "building..." line
-gh api repos/CrispStrobe/CrispASR/releases/311957303 -X PATCH \
-  -f body="<updated notes with CUDA row>"
-```
-
----
-
-## 33. OmniASR-LLM remaining optimizations — PARTIAL (lang selection DONE)
-
-**Beam search**: Currently greedy-only. The reference pipeline uses
-`Wav2Vec2LlamaBeamSearchSeq2SeqGenerator` with `nbest=1`. Adding beam
-search (even beam=2) would improve quality. Implementation: keep N
-hypothesis KV caches, expand candidates at each step, prune.
-
-**Dynamic language selection**: Currently hardcoded `eng_Latn=417`. Need to:
-1. Embed the `languges_lookup_table.parquet` mapping in the GGUF as a
-   string array (lang codes) with matching indices.
-2. Parse `ctx->params.language` at runtime to look up the embedding index.
-3. Map CrispASR's ISO 639-1 codes (en, de, fr) to FLORES-200 codes
-   (eng_Latn, deu_Latn, fra_Latn) using a static table.
-
-**Encoder accuracy**: The encoder produces cos>0.9999 vs Python reference
-on all stages (verified). Remaining transcription errors ("palamericas"
-vs "fellow Americans") are model-level limitations of the 300M encoder,
-not implementation bugs. Larger variants (1B, 3B) should be better.
+- **FireRedASR GPU decoder** — persistent ggml graph for self-attn/cross-attn/MLP per decode step
+- **OmniASR-LLM beam search** — beam=2+ with N hypothesis KV caches
+- **TTS module** — VibeVoice-1.5B σ-VAE decoder for text-to-speech
+- **ggml_conv_1d_dw F16 im2col fix** — CPU depthwise conv without im2col for VibeVoice precision

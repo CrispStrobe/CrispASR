@@ -542,6 +542,18 @@ if(NOT MSVC)
 endif()
 
 # ---------------------------------------------------------------------------
+# fireredpunc — FireRedPunc BERT-based punctuation restoration
+# ---------------------------------------------------------------------------
+add_library(fireredpunc STATIC fireredpunc.h fireredpunc.cpp)
+set_target_properties(fireredpunc PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(fireredpunc PUBLIC .)
+target_compile_features   (fireredpunc PUBLIC cxx_std_17)
+target_link_libraries     (fireredpunc PUBLIC crispasr-core ggml ggml-base ggml-cpu)
+if(NOT MSVC)
+    target_compile_options(fireredpunc PRIVATE -O3)
+endif()
+
+# ---------------------------------------------------------------------------
 # ctc-align — CTC forced alignment (Viterbi DP, CPU-only, no ggml dependency)
 # ---------------------------------------------------------------------------
 add_library(ctc-align STATIC align.h align.cpp)
@@ -657,6 +669,9 @@ if (TARGET ecapa-lid)
 endif()
 if (TARGET moonshine)
     target_link_libraries(whisper PUBLIC moonshine)
+endif()
+if (TARGET fireredpunc)
+    target_link_libraries(whisper PUBLIC fireredpunc)
 endif()
 # Pyannote segmentation is not a backend; it's consumed by
 # crispasr_diarize.cpp for the "pyannote" method. Still needs linking in

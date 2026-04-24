@@ -366,4 +366,12 @@ extern "C" {
         out_name: *mut c_char,
         out_cap: c_int,
     ) -> c_int;
+
+    // --- FireRedPunc punctuation restoration ---
+    pub fn crispasr_punc_init(model_path: *const c_char) -> *mut c_void;
+    pub fn crispasr_punc_process(ctx: *mut c_void, text: *const c_char) -> *mut c_char;
+    pub fn crispasr_punc_free_text(text: *mut c_char);
+    pub fn crispasr_punc_free(ctx: *mut c_void);
+
+    pub fn crispasr_c_api_version() -> *const c_char;
 }

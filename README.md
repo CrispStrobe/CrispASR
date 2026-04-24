@@ -95,7 +95,7 @@ Run `crispasr --list-backends` to see it live. Each backend declares capabilitie
 | Source / target language | | | ✔ | | ✔ | ✔ | | ✔ | | | | | | | |
 | Audio Q&A (`--ask`) | | | | | * | ✔ | | * | | | | | | | |
 | Streaming (`--stream/--mic/--live`) | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |
-| Auto-download (`-m auto`) | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | | | ✔ | ✔ | ✔ | ✔ | |
+| Auto-download (`-m auto`) | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | | | ✔ | ✔ | ✔ | ✔ | ✔ |
 
 **Key:** ✔ = native/built-in, `-am` = via CTC forced aligner (`-am canary-ctc-aligner.gguf` or `-am qwen3-forced-aligner.gguf`), **LID** = via external language identification pre-step (`-l auto`), **all** = via `--diarize` post-step (not declared by backend but always available), * = flag accepted but model is ASR-tuned and may just transcribe.
 
@@ -108,6 +108,65 @@ Run `crispasr --list-backends` to see it live. Each backend declares capabilitie
 **Language identification** for backends without native LID: `--lid-backend whisper` (default, 75 MB ggml-tiny.bin), `--lid-backend silero` (native GGUF, 16 MB, 95 languages), or `--lid-backend firered` (FireRedLID, 1.7 GB, 120 languages — Conformer encoder + Transformer decoder).
 
 **Voice activity detection**: `--vad` uses the default Silero VAD (~885 KB, auto-downloaded). Each VAD segment is transcribed independently, producing separate SRT/VTT entries with correct timestamps. Use `--vad --split-on-punct` for best subtitle output. Pass `--vad-model <path>` to use an alternative model — if the filename contains "firered-vad", FireRedVAD (DFSMN, 2.4 MB) is used automatically.
+
+**Punctuation restoration** (`--punc-model`): CTC-based backends (wav2vec2, omniasr, fastconformer-ctc, firered-asr) output **lowercase text without punctuation**. Add `--punc-model <model>.gguf` to restore punctuation and capitalization via a BERT-based post-processor. Works with **all** backends — LLM backends already produce punctuated output, so the punc model is a no-op for those. Two models are supported:
+
+| Model | License | Languages | Size (Q4_K) | HuggingFace |
+|---|---|---|---|---|
+| **FireRedPunc** | Apache-2.0 | Chinese + English | 56 MB (Q4_K) / 104 MB (Q8_0) | [`cstr/fireredpunc-GGUF`](https://huggingface.co/cstr/fireredpunc-GGUF) |
+| **fullstop-punctuation-multilingual** | MIT | English, German, French, Italian | 254 MB (Q4_K) | [`cstr/fullstop-punc-multilang-GGUF`](https://huggingface.co/cstr/fullstop-punc-multilang-GGUF) |
+
+FireRedPunc uses BERT-base (12L, d=768, 5 classes: comma/period/question/exclamation). Fullstop uses XLM-RoBERTa-large (24L, d=1024, 6 classes including dash and colon). Both auto-detect Latin script and output ASCII punctuation for English/European text.
+
+```bash
+# CTC backend + punc model → proper output
+crispasr --backend wav2vec2 -m wav2vec2.gguf --punc-model fireredpunc-q8_0.gguf -f audio.wav
+# Output: "And so my fellow americans, ask not what your country can do for you."
+
+# Multilingual punc (German/French/Italian)
+crispasr --backend omniasr -m omniasr.gguf --punc-model fullstop-punc-q4_k.gguf -f audio_de.wav
+```
+
+Also available via the Python/Rust/Dart wrappers:
+```python
+import crispasr
+with crispasr.PuncModel("fireredpunc-q8_0.gguf") as punc:
+    text = punc.process("and so my fellow americans ask not")
+    # -> "And so my fellow americans, ask not..."
+```
+
+<details>
+<summary>Which backends produce punctuation natively?</summary>
+
+| Backend | Punctuation | Capitalization | Notes |
+|---|:-:|:-:|---|
+| whisper | ✔ | ✔ | Full punctuation and casing |
+| parakeet | ✔ | ✔ | |
+| canary | ✔ | ✔ | |
+| cohere | ✔ | ✔ | Toggleable via `--no-punctuation` |
+| granite | ✔ | ✔ | LLM output |
+| voxtral | ✔ | ✔ | LLM output |
+| voxtral4b | ✔ | ✔ | LLM output |
+| qwen3 | ✔ | ✔ | LLM output |
+| glm-asr | ✔ | ✔ | LLM output |
+| kyutai-stt | ✔ | ✔ | LLM output |
+| moonshine | ✔ | ✔ | Encoder-decoder output |
+| **fastconformer-ctc** | **no** | **no** | CTC — add `--punc-model` |
+| **wav2vec2** | **no** | **no** | CTC — add `--punc-model` |
+| **firered-asr** | **no** | **no** | CTC — add `--punc-model` |
+| **omniasr** (CTC) | **no** | **no** | CTC — add `--punc-model` |
+| **omniasr** (LLM) | ✔ | ✔ | Autoregressive decoder |
+
+Other freely-licensed alternatives that could be added: [felflare/bert-restore-punctuation](https://huggingface.co/felflare/bert-restore-punctuation) (MIT, English, includes truecasing), [xashru/punctuation-restoration](https://github.com/xashru/punctuation-restoration) (Apache-2.0, 40+ languages, BiLSTM-CRF).
+
+</details>
+
+**Progressive subtitle output** (`--flush-after`): By default, non-whisper backends buffer all segments and print output at the end. For real-time subtitle consumption (PotPlayer, custom media players), use `--flush-after 1` to print each SRT entry to stdout immediately after its VAD segment is transcribed:
+
+```bash
+crispasr --backend parakeet -m parakeet.gguf --vad --flush-after 1 -osrt -f long_audio.wav
+# SRT entries appear progressively as each segment finishes
+```
 
 **JSON output with language detection**: When using `-l auto -oj`, the JSON output includes detected language info:
 ```json
@@ -811,6 +870,10 @@ When you pass `-m auto` (or `-m default`), CrispASR downloads the default quanti
 | qwen3 | `cstr/qwen3-asr-0.6b-GGUF` | ~500 MB |
 | cohere | `cstr/cohere-transcribe-03-2026-GGUF` | ~550 MB |
 | wav2vec2 | `cstr/wav2vec2-large-xlsr-53-english-GGUF` | ~212 MB |
+| omniasr | `cstr/omniASR-CTC-1B-GGUF` | ~551 MB |
+| omniasr-llm | `cstr/omniasr-llm-300m-v2-GGUF` | ~580 MB |
+| hubert | `cstr/hubert-large-ls960-ft-GGUF` | ~200 MB |
+| data2vec | `cstr/data2vec-audio-960h-GGUF` | ~60 MB |
 
 Downloads go through `curl` (preferred) with a `wget` fallback — **no Python, no libcurl link dependency**. Works identically on Linux, macOS, and Windows 10+ where `curl` ships in the base system. Models are cached by filename; re-running is a single `stat()` check. The same registry + cache helpers are reachable from the wrappers via `crispasr.registry_lookup()` / `crispasr.cache_ensure_file()` so Python/Rust callers can drive `-m auto`-style resolution without re-implementing it.
 

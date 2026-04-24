@@ -319,6 +319,10 @@ static bool whisper_params_parse(int argc, char** argv, whisper_params& params) 
             params.target_lang = whisper_param_turn_lowercase(ARGV_NEXT);
         } else if (arg == "--no-punctuation") {
             params.punctuation = false;
+        } else if (arg == "--punc-model") {
+            params.punc_model = ARGV_NEXT;
+        } else if (arg == "--flush-after") {
+            params.flush_after = std::stoi(ARGV_NEXT);
         } else if (arg == "-am" || arg == "--aligner-model") {
             params.aligner_model = ARGV_NEXT;
         } else if (arg == "-n" || arg == "--max-new-tokens") {
@@ -534,6 +538,10 @@ static void whisper_print_usage(int /*argc*/, char** argv, const whisper_params&
             params.target_lang.c_str());
     fprintf(stderr, "             --no-punctuation       [%-7s] disable punctuation (canary, cohere)\n",
             params.punctuation ? "false" : "true");
+    fprintf(stderr, "             --punc-model FNAME     [%-7s] FireRedPunc GGUF for punctuation restoration\n",
+            params.punc_model.c_str());
+    fprintf(stderr, "             --flush-after N        [%-7d] flush SRT to stdout every N segments (0=all at end)\n",
+            params.flush_after);
     fprintf(stderr, "  -am FNAME, --aligner-model FNAME  [%-7s] CTC aligner GGUF (LLM backends word timestamps)\n",
             params.aligner_model.c_str());
     fprintf(

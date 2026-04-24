@@ -988,3 +988,63 @@ pub fn diarize_segments(
         other => Err(format!("crispasr_diarize_segments_abi returned {other}")),
     }
 }
+
+// =========================================================================
+// FireRedPunc — punctuation restoration post-processor
+// =========================================================================
+
+/// BERT-based punctuation restoration model (FireRedPunc).
+///
+/// Adds punctuation and capitalization to unpunctuated ASR output.
+/// Particularly useful for CTC-based backends (wav2vec2, omniasr,
+/// fastconformer-ctc, firered-asr) that output lowercase text.
+///
+/// ```no_run
+/// use crispasr::PuncModel;
+///
+/// let punc = PuncModel::open("fireredpunc-q8_0.gguf").unwrap();
+/// let text = punc.process("and so my fellow americans ask not");
+/// println!("{text}"); // "And so my fellow americans, ask not..."
+/// ```
+pub struct PuncModel {
+    handle: *mut std::ffi::c_void,
+}
+
+unsafe impl Send for PuncModel {}
+
+impl PuncModel {
+    /// Load a FireRedPunc GGUF model.
+    pub fn open(model_path: &str) -> Result<Self, String> {
+        let c_path = CString::new(model_path).map_err(|e| e.to_string())?;
+        let handle = unsafe { crispasr_sys::crispasr_punc_init(c_path.as_ptr()) };
+        if handle.is_null() {
+            return Err(format!("Failed to load punc model: {model_path}"));
+        }
+        Ok(Self { handle })
+    }
+
+    /// Add punctuation to unpunctuated text.
+    pub fn process(&self, text: &str) -> String {
+        let c_text = CString::new(text).unwrap_or_default();
+        let result = unsafe {
+            crispasr_sys::crispasr_punc_process(self.handle, c_text.as_ptr())
+        };
+        if result.is_null() {
+            return text.to_string();
+        }
+        let out = unsafe { CStr::from_ptr(result) }
+            .to_string_lossy()
+            .into_owned();
+        unsafe { crispasr_sys::crispasr_punc_free_text(result) };
+        out
+    }
+}
+
+impl Drop for PuncModel {
+    fn drop(&mut self) {
+        if !self.handle.is_null() {
+            unsafe { crispasr_sys::crispasr_punc_free(self.handle) };
+            self.handle = std::ptr::null_mut();
+        }
+    }
+}

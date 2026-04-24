@@ -2046,3 +2046,117 @@ The correct ASR model is `microsoft/VibeVoice-ASR` (7B):
 Our C++ pipeline (encoder + connectors + Qwen2 decoder) has the right
 architecture — just needs the correct 7B ASR weights. The converter
 handles different decoder dimensions automatically.
+
+---
+
+## FireRedPunc / fullstop-punc — BERT punctuation restoration (April 2026)
+
+### Architecture
+Two punctuation models implemented as post-processors:
+
+| Model | Base | Layers | d_model | Heads | Vocab | Labels | Tokenizer |
+|---|---|---|---|---|---|---|---|
+| FireRedPunc | BERT (LERT) | 12 | 768 | 12 | 21,128 | 5 (space/，/。/？/！) | WordPiece |
+| fullstop-punc | XLM-RoBERTa-large | 24 | 1024 | 16 | 250,002 | 6 (space/./,/?/-/:) | SentencePiece |
+
+Both are token classifiers: BERT/RoBERTa encoder → Linear(d, n_classes).
+ggml graph uses `ggml_flash_attn_ext` for multi-head attention.
+
+### Bugs found and fixed
+
+**1. Missing SEP token (critical)**
+BERT and RoBERTa both expect `[CLS] tokens [SEP]` as input. Our code
+only prepended CLS (`seq_len = N + 1`), never appending SEP. This caused
+completely wrong logits — the model was trained with SEP and its absence
+shifted the attention patterns.
+
+Fix: `seq_len = N + 2`, `ids[N+1] = SEP_id` (102 for BERT, 2 for RoBERTa).
+
+Symptom: logits ~1-2 points off from reference, commas placed on wrong
+words. Python F16 still predicted correctly — ruling out precision as
+the cause. The diff-testing methodology (stage-by-stage comparison with
+Python reference) quickly identified this: embeddings matched perfectly
+(cos>0.999) but final logits diverged, pointing to a systematic error in
+the self-attention computation that only manifests with a wrong sequence
+structure.
+
+**2. RoBERTa position ID offset**
+RoBERTa position embeddings have `padding_idx=1`. Position 0 is for
+`<pad>`, position 1 is zeroed out (the padding index), and actual content
+starts at position 2. Our code used `pos_ids = [0, 1, 2, ...]` (BERT
+convention) instead of `pos_ids = [2, 3, 4, ...]` (RoBERTa convention).
+
+Fix: `pos[i] = i + padding_idx + 1` when `is_sentencepiece = true`.
+
+Symptom: logits completely wrong (class 0 predicted for all tokens).
+Diagnosed by comparing embedding output at position 15 — the values
+were off because wrong position embeddings were summed.
+
+**3. SentencePiece subtoken counting mismatch**
+The text reconstruction code re-tokenizes each word to count how many
+subtokens it consumed, mapping prediction indices back to words.
+For SentencePiece, words are prefixed with `▁` (U+2581), not `##`.
+The code was using WordPiece `##`-prefix matching for SentencePiece
+tokens, causing wrong subtoken counts and shifted punctuation placement.
+
+Fix: Separate SentencePiece path that prefixes with `▁` and does
+greedy longest-match in the SentencePiece vocab.
+
+Symptom: comma placed on "can" instead of "you" — the subtoken count
+for "americans" (split into ["▁american", "s"] = 2 tokens) was counted
+as 1 with the WordPiece path, shifting all subsequent predictions by 1.
+
+**4. Chinese full-width punctuation for English text**
+FireRedPunc was trained on Chinese data and outputs full-width marks
+(`，` `。` `？` `！`) even for English input.
+
+Fix: Auto-detect Latin script (count Latin vs CJK characters), map
+full-width to ASCII when Latin dominates. Simple 4-replacement post-step.
+
+### Methodology lesson reinforced
+
+The user correctly pushed back when I blamed "F16 precision loss" for wrong
+punctuation placement. The actual bug (missing SEP token) was a computation
+error, not a precision issue. **Python F16 still predicted correctly** —
+this ruled out precision as the root cause.
+
+The diff-testing protocol worked exactly as designed:
+1. Dump Python reference (logits, embeddings, per-layer outputs)
+2. Dump C++ intermediates at the same positions
+3. Compare cosine similarity at each stage
+4. Embeddings matched (cos>0.999) → bug is after embeddings
+5. Final logits diverged (cos~0.93) → systematic error in transformer
+6. Traced to missing SEP token in input construction
+
+Key principle: **when Python F16 works but C++ F16 doesn't, it's NOT a
+precision issue.** Look for structural bugs (wrong input construction,
+missing tokens, wrong tensor shapes).
+
+### Quantization notes
+
+| Model | F16 | Q8_0 | Q4_K | Accuracy |
+|---|---|---|---|---|
+| FireRedPunc | 195 MB | 104 MB | 56 MB | Q8_0 = F16 exact; Q4_K drops some commas |
+| fullstop-punc | 1.6 GB | 572 MB | 254 MB | All quants identical on JFK test |
+
+FireRedPunc Q4_K is more sensitive because BERT-base (12L, d=768) has
+less redundancy than XLM-RoBERTa-large (24L, d=1024). Recommend Q8_0
+for FireRedPunc, Q4_K for fullstop-punc.
+
+### Progressive SRT output (issue #24)
+
+Non-whisper backends buffered all segments before printing. Added
+`--flush-after N` flag: when N=1, each SRT entry is flushed to stdout
+as soon as its VAD slice finishes transcription. Post-processing (punc
+model, punctuation stripping) runs per-slice.
+
+Limitation: diarization needs full segment context — skip when
+`--flush-after` is set. Word-level alignment (`-am`) works per-slice.
+
+### Session API expansion
+
+Added 5 missing backends to the C-ABI session API: glm-asr, kyutai-stt,
+firered-asr, moonshine, omniasr. Pattern: `#ifdef CA_HAVE_*` guards in
+`crispasr_c_api.cpp` for open/transcribe/close. All backends now
+reachable from Python (`crispasr.Session`), Rust (`crispasr::Session`),
+and Dart (`CrispasrSession`).

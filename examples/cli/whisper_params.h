@@ -132,6 +132,13 @@ struct whisper_params {
     // Punctuation toggle (canary, cohere). Default on.
     bool punctuation = true;
 
+    // Path to FireRedPunc GGUF model for punctuation restoration post-step.
+    std::string punc_model;
+
+    // Progressive SRT: flush stdout after every N segments (0 = all at end).
+    // When set to 1, each VAD slice's SRT entries are printed immediately.
+    int flush_after = 0;
+
     // Show alternative token candidates alongside the primary text.
     // Inspired by antirez/voxtral.c --alt mode.
     bool show_alternatives = false;

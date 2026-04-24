@@ -285,3 +285,49 @@ Preserved outside these four: `UPSTREAM.md` (active upstream tracker),
 `README_sycl.md` (Intel SYCL backend build), `ci/README.md` (CI
 tooling), `models/README.md` (converter scripts), `samples/README.md`
 (sample audio), and `hf_readmes/*.md` (HuggingFace model cards).
+
+---
+
+## Completed roadmap items (from PLAN.md, April 2026)
+
+Items below were tracked in PLAN.md with full implementation details.
+Moved here once shipped. See git history for code diffs.
+
+### Core infrastructure (items 1-4, 6, 8, 10, 13, 17, 21, 24)
+
+- **#1 voxtral4b encoder → encoder_self_attn()** — migrated with `permute_cont=false`. Bit-identical.
+- **#2 Qwen3 forced aligner** — `qwen3_asr_run_aligner()` + `crispasr_aligner.cpp`. HF: `cstr/qwen3-forced-aligner-0.6b-GGUF`.
+- **#3 Granite µP scale** — already handled via `KvSelfAttnParams::attn_scale`. No change needed.
+- **#4 Scheduler reuse audit** — all backends use create-once + `ggml_backend_sched_reset()`.
+- **#6 Best-of-N sampling** — all 4 LLM backends (voxtral/qwen3/granite/voxtral4b). `--best-of N -tp T`.
+- **#8 voxtral audio Q&A** — `--ask "question"` flag for audio understanding.
+- **#10 Granite encoder ggml graph** — `GRANITE_ENCODER_GRAPH=1` env var. CPU-verified identical.
+- **#13 canary_ctc CPU fallback** — already implemented (2-backend GPU+CPU pattern).
+- **#17 VAD stitching** — stitch + remap matching whisper.cpp. C-ABI: `crispasr_session_transcribe_vad`.
+- **#21 CLI→library DRY refactor** — VAD, diarize, LID, aligner, cache, registry promoted to `src/` behind shared C-ABI (v0.4.4–v0.4.8).
+- **#24 Wrapper test suites** — Python (13), Rust (5+3), Dart (9) tests.
+
+### New backends (items 26-34)
+
+- **#26 GLM-ASR-Nano** — 12th backend. Whisper encoder + Llama 1.5B. MIT. `glm-asr`.
+- **#27 Kyutai STT** — 13th backend. Mimi codec + causal LM. MIT. `kyutai-stt`.
+- **#28 FireRedASR2-AED** — 14th backend. Conformer + CTC + beam search. Apache-2.0. `firered-asr`.
+- **#29 FireRedVAD** — DFSMN 588K-param VAD, 97.57% F1.
+- **#30 Moonshine** — 15th backend. Conv+transformer encoder-decoder. MIT. `moonshine`.
+- **#31 FireRedASR decoder** — greedy + beam search Transformer decoder.
+- **#32 FireRedLID** — 120-language LID via shared encoder + 6L decoder.
+- **#33 OmniASR-LLM** — 16th backend variant. wav2vec2 encoder + 12L LLaMA decoder. Apache-2.0. Dynamic language selection (1693 FLORES-200 codes).
+- **#34 VibeVoice** — architecture analysis complete. 1.5B is TTS-only; ASR is 7B (blocked on RAM).
+- **ECAPA-TDNN LID** — 107-language LID, ggml graph (4.1s, 6x speedup), 100% accuracy. Two variants (VoxLingua107 + CommonLanguage).
+- **OmniASR-CTC** — 300M and 1B variants working. HF: `cstr/omniASR-CTC-1B-GGUF`.
+
+### Post-processing (item 35)
+
+- **#35 FireRedPunc** — BERT-based punctuation restoration. GGUF converter + C++ runtime + CLI (`--punc-model`) + C-ABI + Python/Rust/Dart wrappers. HF: `cstr/fireredpunc-GGUF` (F16/Q8_0/Q4_K). Verified exact match against Python reference.
+
+### Other completed items
+
+- **#31 JSON LID (issue #17)** — language_detected/confidence/source in JSON output.
+- **#25 Montreal Forced Aligner** — NOT PLANNED (too heavy, external tool).
+- **Qwen Omni ASR** — NOT PLANNED (split GGUF, too large, already in llama.cpp).
+- **#30 PazaBench assessment** — 16 model families assessed. 7 already covered, 4 easy wins identified.

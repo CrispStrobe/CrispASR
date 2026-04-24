@@ -55,7 +55,7 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& name
         return crispasr_make_qwen3_backend();
     if (name == "fastconformer-ctc")
         return crispasr_make_fastconformer_ctc_backend();
-    if (name == "wav2vec2")
+    if (name == "wav2vec2" || name == "hubert" || name == "data2vec")
         return crispasr_make_wav2vec2_backend();
     if (name == "vibevoice")
         return crispasr_make_vibevoice_backend();
@@ -67,7 +67,7 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& name
         return crispasr_make_firered_asr_backend();
     if (name == "moonshine")
         return crispasr_make_moonshine_backend();
-    if (name == "omniasr" || name == "omniasr-ctc")
+    if (name == "omniasr" || name == "omniasr-ctc" || name == "omniasr-llm")
         return crispasr_make_omniasr_backend();
 
     fprintf(stderr, "crispasr: error: unknown backend '%s'\n", name.c_str());
@@ -76,8 +76,9 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& name
 
 std::vector<std::string> crispasr_list_backends() {
     return {
-        "whisper",           "parakeet", "canary",  "cohere",     "granite",     "voxtral",   "voxtral4b", "qwen3",
-        "fastconformer-ctc", "wav2vec2", "vibevoice", "glm-asr", "kyutai-stt", "firered-asr", "moonshine", "omniasr",
+        "whisper",           "parakeet", "canary",  "cohere",     "granite",     "voxtral",     "voxtral4b",
+        "qwen3",   "fastconformer-ctc", "wav2vec2", "hubert",  "data2vec",   "vibevoice",   "glm-asr",
+        "kyutai-stt", "firered-asr", "moonshine", "omniasr", "omniasr-llm",
     };
 }
 
@@ -202,8 +203,14 @@ std::string crispasr_detect_backend_from_gguf(const std::string& model_path) {
         return "omniasr";
     if (contains_ci("wav2vec2"))
         return "wav2vec2";
+    if (contains_ci("hubert"))
+        return "wav2vec2";
+    if (contains_ci("data2vec"))
+        return "wav2vec2";
     if (contains_ci("vibevoice"))
         return "vibevoice";
+    if (contains_ci("fireredpunc"))
+        return "fireredpunc";
     if (contains_ci("canary"))
         return "canary";
     if (contains_ci("cohere"))
@@ -280,6 +287,12 @@ std::string crispasr_detect_backend_from_gguf(const std::string& model_path) {
             else if (a == "omniasr-ctc" || a == "omniasr_ctc" || a == "omniasr" || a == "omniasr-llm" ||
                      a == "omniasr_llm")
                 result = "omniasr";
+            else if (a == "hubert" || a == "hubert-ctc")
+                result = "wav2vec2";
+            else if (a == "data2vec" || a == "data2vec-audio" || a == "data2vec_audio")
+                result = "wav2vec2";
+            else if (a == "fireredpunc")
+                result = "fireredpunc";
         }
     }
     gguf_free(gctx);

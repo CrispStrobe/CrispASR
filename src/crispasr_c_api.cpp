@@ -70,6 +70,30 @@
 #include "vibevoice.h"
 #define CA_HAVE_VIBEVOICE 1
 #endif
+#if __has_include("glm_asr.h")
+#include "glm_asr.h"
+#define CA_HAVE_GLMASR 1
+#endif
+#if __has_include("kyutai_stt.h")
+#include "kyutai_stt.h"
+#define CA_HAVE_KYUTAI 1
+#endif
+#if __has_include("firered_asr.h")
+#include "firered_asr.h"
+#define CA_HAVE_FIRERED 1
+#endif
+#if __has_include("moonshine.h")
+#include "moonshine.h"
+#define CA_HAVE_MOONSHINE 1
+#endif
+#if __has_include("omniasr.h")
+#include "omniasr.h"
+#define CA_HAVE_OMNIASR 1
+#endif
+#if __has_include("fireredpunc.h")
+#include "fireredpunc.h"
+#define CA_HAVE_FIREREDPUNC 1
+#endif
 
 #ifdef _WIN32
 #define CA_EXPORT extern "C" __declspec(dllexport)
@@ -719,6 +743,21 @@ struct crispasr_session {
 #ifdef CA_HAVE_VIBEVOICE
     vibevoice_context* vibevoice_ctx = nullptr;
 #endif
+#ifdef CA_HAVE_GLMASR
+    void* glmasr_ctx = nullptr;
+#endif
+#ifdef CA_HAVE_KYUTAI
+    void* kyutai_ctx = nullptr;
+#endif
+#ifdef CA_HAVE_FIRERED
+    void* firered_ctx = nullptr;
+#endif
+#ifdef CA_HAVE_MOONSHINE
+    void* moonshine_ctx = nullptr;
+#endif
+#ifdef CA_HAVE_OMNIASR
+    void* omniasr_ctx = nullptr;
+#endif
 };
 
 struct crispasr_session_seg {
@@ -863,7 +902,7 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
     }
 #endif
 #ifdef CA_HAVE_WAV2VEC2
-    if (s->backend == "wav2vec2") {
+    if (s->backend == "wav2vec2" || s->backend == "hubert" || s->backend == "data2vec") {
         s->wav2vec2_ctx = new wav2vec2_model();
         if (!wav2vec2_load(model_path, *s->wav2vec2_ctx)) {
             delete s->wav2vec2_ctx;
@@ -884,6 +923,50 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
             delete s;
             return nullptr;
         }
+        return s;
+    }
+#endif
+#ifdef CA_HAVE_GLMASR
+    if (s->backend == "glm-asr" || s->backend == "glmasr") {
+        glm_asr_context_params p = glm_asr_context_default_params();
+        p.n_threads = s->n_threads;
+        s->glmasr_ctx = glm_asr_init_from_file(model_path, p);
+        if (!s->glmasr_ctx) { delete s; return nullptr; }
+        return s;
+    }
+#endif
+#ifdef CA_HAVE_KYUTAI
+    if (s->backend == "kyutai-stt" || s->backend == "kyutai" || s->backend == "moshi-stt") {
+        kyutai_stt_context_params p = kyutai_stt_context_default_params();
+        p.n_threads = s->n_threads;
+        s->kyutai_ctx = kyutai_stt_init_from_file(model_path, p);
+        if (!s->kyutai_ctx) { delete s; return nullptr; }
+        return s;
+    }
+#endif
+#ifdef CA_HAVE_FIRERED
+    if (s->backend == "firered-asr" || s->backend == "firered") {
+        firered_asr_context_params p = firered_asr_context_default_params();
+        p.n_threads = s->n_threads;
+        s->firered_ctx = firered_asr_init_from_file(model_path, p);
+        if (!s->firered_ctx) { delete s; return nullptr; }
+        return s;
+    }
+#endif
+#ifdef CA_HAVE_MOONSHINE
+    if (s->backend == "moonshine") {
+        s->moonshine_ctx = moonshine_init(model_path);
+        if (!s->moonshine_ctx) { delete s; return nullptr; }
+        moonshine_set_n_threads((moonshine_context*)s->moonshine_ctx, s->n_threads);
+        return s;
+    }
+#endif
+#ifdef CA_HAVE_OMNIASR
+    if (s->backend == "omniasr" || s->backend == "omniasr-ctc" || s->backend == "omniasr-llm") {
+        omniasr_context_params p = omniasr_context_default_params();
+        p.n_threads = s->n_threads;
+        s->omniasr_ctx = omniasr_init_from_file(model_path, p);
+        if (!s->omniasr_ctx) { delete s; return nullptr; }
         return s;
     }
 #endif
@@ -955,6 +1038,21 @@ CA_EXPORT int crispasr_session_available_backends(char* out_csv, int out_cap) {
 #endif
 #ifdef CA_HAVE_VIBEVOICE
     list += ",vibevoice";
+#endif
+#ifdef CA_HAVE_GLMASR
+    list += ",glm-asr";
+#endif
+#ifdef CA_HAVE_KYUTAI
+    list += ",kyutai-stt";
+#endif
+#ifdef CA_HAVE_FIRERED
+    list += ",firered-asr";
+#endif
+#ifdef CA_HAVE_MOONSHINE
+    list += ",moonshine";
+#endif
+#ifdef CA_HAVE_OMNIASR
+    list += ",omniasr";
 #endif
     std::strncpy(out_csv, list.c_str(), out_cap - 1);
     out_csv[out_cap - 1] = '\0';
@@ -1341,8 +1439,6 @@ CA_EXPORT crispasr_session_result* crispasr_session_transcribe_lang(crispasr_ses
 #endif
 #ifdef CA_HAVE_CTC
     if ((s->backend == "fastconformer-ctc" || s->backend == "canary-ctc") && s->ctc_ctx) {
-        // Two-stage: encoder → logits → greedy CTC decode. Same pipeline
-        // the CLI's FastConformerCtcBackend uses.
         float* logits = nullptr;
         int T_enc = 0, V = 0;
         if (canary_ctc_compute_logits(s->ctc_ctx, pcm, n_samples, &logits, &T_enc, &V) != 0 || !logits) {
@@ -1364,6 +1460,44 @@ CA_EXPORT crispasr_session_result* crispasr_session_transcribe_lang(crispasr_ses
         return r;
     }
 #endif
+
+    // Generic text-returning backends: glm-asr, kyutai-stt, firered-asr,
+    // moonshine, omniasr — all return a malloc'd/static string from transcribe().
+    {
+        char* text = nullptr;
+        bool need_free = true;
+#ifdef CA_HAVE_GLMASR
+        if ((s->backend == "glm-asr" || s->backend == "glmasr") && s->glmasr_ctx)
+            text = glm_asr_transcribe((glm_asr_context*)s->glmasr_ctx, pcm, n_samples);
+#endif
+#ifdef CA_HAVE_KYUTAI
+        if (!text && (s->backend == "kyutai-stt" || s->backend == "kyutai" || s->backend == "moshi-stt") && s->kyutai_ctx)
+            text = kyutai_stt_transcribe((kyutai_stt_context*)s->kyutai_ctx, pcm, n_samples);
+#endif
+#ifdef CA_HAVE_FIRERED
+        if (!text && (s->backend == "firered-asr" || s->backend == "firered") && s->firered_ctx)
+            text = firered_asr_transcribe((firered_asr_context*)s->firered_ctx, pcm, n_samples);
+#endif
+#ifdef CA_HAVE_MOONSHINE
+        if (!text && s->backend == "moonshine" && s->moonshine_ctx) {
+            text = (char*)moonshine_transcribe((moonshine_context*)s->moonshine_ctx, pcm, n_samples);
+            need_free = false; // moonshine returns internal pointer
+        }
+#endif
+#ifdef CA_HAVE_OMNIASR
+        if (!text && (s->backend == "omniasr" || s->backend == "omniasr-ctc" || s->backend == "omniasr-llm") && s->omniasr_ctx)
+            text = omniasr_transcribe((omniasr_context*)s->omniasr_ctx, pcm, n_samples);
+#endif
+        if (text) {
+            crispasr_session_seg seg;
+            seg.text = text;
+            seg.t0 = 0;
+            seg.t1 = (int64_t)((double)n_samples * 100.0 / 16000.0);
+            r->segments.push_back(std::move(seg));
+            if (need_free) std::free(text);
+            return r;
+        }
+    }
 
     delete r;
     return nullptr;
@@ -1804,8 +1938,6 @@ CA_EXPORT void crispasr_session_close(crispasr_session* s) {
 #endif
 #ifdef CA_HAVE_WAV2VEC2
     if (s->wav2vec2_ctx) {
-        // wav2vec2 has no dedicated free fn — the destructor chain releases
-        // ggml_context, backend buffer, and tensors.
         delete s->wav2vec2_ctx;
     }
 #endif
@@ -1813,8 +1945,57 @@ CA_EXPORT void crispasr_session_close(crispasr_session* s) {
     if (s->vibevoice_ctx)
         vibevoice_free(s->vibevoice_ctx);
 #endif
+#ifdef CA_HAVE_GLMASR
+    if (s->glmasr_ctx)
+        glm_asr_free((glm_asr_context*)s->glmasr_ctx);
+#endif
+#ifdef CA_HAVE_KYUTAI
+    if (s->kyutai_ctx)
+        kyutai_stt_free((kyutai_stt_context*)s->kyutai_ctx);
+#endif
+#ifdef CA_HAVE_FIRERED
+    if (s->firered_ctx)
+        firered_asr_free((firered_asr_context*)s->firered_ctx);
+#endif
+#ifdef CA_HAVE_MOONSHINE
+    if (s->moonshine_ctx)
+        moonshine_free((moonshine_context*)s->moonshine_ctx);
+#endif
+#ifdef CA_HAVE_OMNIASR
+    if (s->omniasr_ctx)
+        omniasr_free((omniasr_context*)s->omniasr_ctx);
+#endif
     delete s;
 }
+
+// =========================================================================
+// FireRedPunc — punctuation restoration post-processor
+// =========================================================================
+// These are standalone entry points (not part of the session API) so any
+// consumer can load a punc model once and call it on arbitrary text.
+
+#ifdef CA_HAVE_FIREREDPUNC
+CA_EXPORT void* crispasr_punc_init(const char* model_path) {
+    return (void*)fireredpunc_init(model_path);
+}
+
+CA_EXPORT const char* crispasr_punc_process(void* ctx, const char* text) {
+    return fireredpunc_process((fireredpunc_context*)ctx, text);
+}
+
+CA_EXPORT void crispasr_punc_free_text(const char* text) {
+    free((void*)text);
+}
+
+CA_EXPORT void crispasr_punc_free(void* ctx) {
+    fireredpunc_free((fireredpunc_context*)ctx);
+}
+#else
+CA_EXPORT void* crispasr_punc_init(const char*) { return nullptr; }
+CA_EXPORT const char* crispasr_punc_process(void*, const char*) { return nullptr; }
+CA_EXPORT void crispasr_punc_free_text(const char*) {}
+CA_EXPORT void crispasr_punc_free(void*) {}
+#endif
 
 // =========================================================================
 // Version reporting — identifies the C-ABI build to every consumer
@@ -1822,7 +2003,7 @@ CA_EXPORT void crispasr_session_close(crispasr_session* s) {
 // =========================================================================
 
 CA_EXPORT const char* crispasr_c_api_version(void) {
-    return "0.4.0";
+    return "0.5.0";
 }
 
 // Backwards-compatibility alias. The Dart smoke test and any 0.4.x-era

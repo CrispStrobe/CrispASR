@@ -17,6 +17,7 @@
 #include "crispasr_lid_cli.h"
 #include "crispasr_diarize_cli.h"
 #include "whisper_params.h"
+#include "fireredpunc.h"
 
 #include "common-whisper.h" // read_audio_data
 
@@ -36,6 +37,18 @@
 #include <vector>
 
 namespace {
+
+// Apply FireRedPunc punctuation restoration to all segments.
+static void apply_punc_model(fireredpunc_context * punc_ctx, std::vector<crispasr_segment> & segs) {
+    if (!punc_ctx) return;
+    for (auto & seg : segs) {
+        char * result = fireredpunc_process(punc_ctx, seg.text.c_str());
+        if (result) {
+            seg.text = result;
+            free(result);
+        }
+    }
+}
 
 // Capability-vs-request check. For each requested feature, warn on stderr
 // when the backend doesn't support it. Not fatal — the feature is silently
@@ -102,7 +115,8 @@ std::mutex g_stdout_mutex;
 // state, so multiple workers can run concurrently against pre-loaded
 // per-thread backend instances. Returns 0 on success, non-zero on
 // failure.
-int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, whisper_params params) {
+int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, whisper_params params,
+                      fireredpunc_context * punc_ctx = nullptr) {
     std::vector<float> samples;
     std::vector<std::vector<float>> stereo;
     const bool want_stereo = params.diarize;
@@ -234,6 +248,7 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, wh
         stitched_per_slice[0] = std::move(segs);
         auto all_segs = merge_segments(std::move(stitched_per_slice), slices);
 
+        apply_punc_model(punc_ctx, all_segs);
         if (!params.punctuation) {
             for (auto& seg : all_segs)
                 crispasr_strip_punctuation(seg);
@@ -363,6 +378,95 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, wh
             for (size_t i = 0; i < slices.size(); i++)
                 process_slice(i, backend);
         }
+    } else if (params.flush_after > 0 && slices.size() > 1) {
+        // Progressive mode: process slices sequentially, flush output after each.
+        // This gives media players SRT entries as soon as each VAD segment is done.
+        int srt_index = 1; // running SRT entry counter
+        const bool show_ts = !params.no_timestamps && (params.output_srt || params.output_vtt ||
+                                                        params.max_len > 0 || params.print_colors || params.diarize);
+        for (size_t i = 0; i < slices.size(); i++) {
+            process_slice(i, backend);
+
+            // Post-process this slice immediately
+            auto slice_segs = std::move(per_slice[i]);
+            apply_punc_model(punc_ctx, slice_segs);
+            if (!params.punctuation) {
+                for (auto& seg : slice_segs)
+                    crispasr_strip_punctuation(seg);
+            }
+
+            auto disp = crispasr_make_disp_segments(slice_segs, params.max_len, params.split_on_punct);
+
+            // Print SRT entries progressively to stdout
+            for (const auto& d : disp) {
+                if (params.output_srt) {
+                    int t0_ms = (int)(d.t0 * 10);
+                    int t1_ms = (int)(d.t1 * 10);
+                    printf("%d\n%02d:%02d:%02d,%03d --> %02d:%02d:%02d,%03d\n%s\n\n",
+                           srt_index++,
+                           t0_ms / 3600000, (t0_ms / 60000) % 60, (t0_ms / 1000) % 60, t0_ms % 1000,
+                           t1_ms / 3600000, (t1_ms / 60000) % 60, (t1_ms / 1000) % 60, t1_ms % 1000,
+                           d.text.c_str());
+                } else {
+                    if (show_ts) {
+                        int s0 = (int)(d.t0 * 10), s1 = (int)(d.t1 * 10);
+                        printf("[%02d:%02d:%02d.%03d --> %02d:%02d:%02d.%03d]  %s\n",
+                               s0 / 3600000, (s0 / 60000) % 60, (s0 / 1000) % 60, s0 % 1000,
+                               s1 / 3600000, (s1 / 60000) % 60, (s1 / 1000) % 60, s1 % 1000,
+                               d.text.c_str());
+                    } else {
+                        printf("%s", d.text.c_str());
+                    }
+                }
+            }
+            fflush(stdout);
+        }
+
+        // Timing
+        {
+            auto t_end = std::chrono::steady_clock::now();
+            double t_total = std::chrono::duration<double>(t_end - t_start).count();
+            double audio_s = (double)samples.size() / SR;
+            if (!params.no_prints) {
+                fprintf(stderr, "crispasr: transcribed %.1fs audio in %.2fs (%.1fx realtime)\n", audio_s, t_total,
+                        audio_s / t_total);
+            }
+        }
+
+        // Write output files (full set, from all slices combined)
+        // Re-collect all per_slice segments for file output
+        // (stdout already got progressive output above)
+        if (params.output_txt || params.output_vtt || params.output_csv ||
+            params.output_lrc || params.output_jsn) {
+            // Re-run all slices to collect for file output
+            std::vector<std::vector<crispasr_segment>> per_slice_redo(slices.size());
+            for (size_t i = 0; i < slices.size(); i++) {
+                process_slice(i, backend);
+                per_slice_redo[i] = std::move(per_slice[i]);
+            }
+            auto all_segs = merge_segments(std::move(per_slice_redo), slices);
+            apply_punc_model(punc_ctx, all_segs);
+            if (!params.punctuation)
+                for (auto& seg : all_segs)
+                    crispasr_strip_punctuation(seg);
+            auto disp_all = crispasr_make_disp_segments(all_segs, params.max_len, params.split_on_punct);
+
+            if (params.output_txt)
+                crispasr_write_txt(crispasr_make_out_path(fname_inp, ".txt"), disp_all);
+            if (params.output_srt)
+                crispasr_write_srt(crispasr_make_out_path(fname_inp, ".srt"), disp_all);
+            if (params.output_vtt)
+                crispasr_write_vtt(crispasr_make_out_path(fname_inp, ".vtt"), disp_all);
+            if (params.output_csv)
+                crispasr_write_csv(crispasr_make_out_path(fname_inp, ".csv"), disp_all);
+            if (params.output_lrc)
+                crispasr_write_lrc(crispasr_make_out_path(fname_inp, ".lrc"), disp_all);
+            if (params.output_jsn)
+                crispasr_write_json(crispasr_make_out_path(fname_inp, ".json"), all_segs, backend.name(), params.model,
+                                    params.language, params.output_jsn_full,
+                                    lid_info.lang_code.empty() ? nullptr : &lid_info);
+        }
+        return 0;
     } else {
         // Sequential (single slice or n_processors == 1)
         for (size_t i = 0; i < slices.size(); i++)
@@ -370,6 +474,7 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, wh
     }
     auto all_segs = merge_segments(std::move(per_slice), slices);
 
+    apply_punc_model(punc_ctx, all_segs);
     if (!params.punctuation) {
         for (auto& seg : all_segs) {
             crispasr_strip_punctuation(seg);
@@ -501,6 +606,18 @@ int crispasr_run_backend(const whisper_params& params_in) {
     }
     if (params.verbose) {
         fprintf(stderr, "crispasr[verbose]: backend '%s' initialised OK\n", backend_name.c_str());
+    }
+
+    // Optional punctuation restoration post-processor.
+    fireredpunc_context * punc_ctx = nullptr;
+    if (!params.punc_model.empty()) {
+        punc_ctx = fireredpunc_init(params.punc_model.c_str());
+        if (!punc_ctx) {
+            fprintf(stderr, "crispasr: warning: failed to load punc model '%s' — continuing without\n",
+                    params.punc_model.c_str());
+        } else if (!params.no_prints) {
+            fprintf(stderr, "crispasr: loaded punctuation model '%s'\n", params.punc_model.c_str());
+        }
     }
 
     // ---- Streaming mode: read raw PCM from stdin, transcribe chunks ----
@@ -687,7 +804,7 @@ int crispasr_run_backend(const whisper_params& params_in) {
                     const int idx = next_idx.fetch_add(1);
                     if (idx >= n_files)
                         break;
-                    const int file_rc = process_one_input(be, params.fname_inp[idx], params);
+                    const int file_rc = process_one_input(be, params.fname_inp[idx], params, punc_ctx);
                     if (file_rc != 0)
                         agg_rc.store(file_rc);
                 }
@@ -702,7 +819,7 @@ int crispasr_run_backend(const whisper_params& params_in) {
     }
 
     for (const auto& fname_inp : params.fname_inp) {
-        const int file_rc = process_one_input(*backend, fname_inp, params);
+        const int file_rc = process_one_input(*backend, fname_inp, params, punc_ctx);
         if (file_rc != 0)
             rc = file_rc;
     }
@@ -870,6 +987,8 @@ int crispasr_run_backend(const whisper_params& params_in) {
         }
         auto all_segs = merge_segments(std::move(per_slice), slices);
 
+        apply_punc_model(punc_ctx, all_segs);
+
         // Optional post-processing: strip punctuation when --no-punctuation
         // is set. Cohere and canary pass p.punctuation through to their C
         // APIs natively and will usually return text that's already clean,
@@ -912,5 +1031,8 @@ int crispasr_run_backend(const whisper_params& params_in) {
                 all_segs, backend->name(), params.model, params.language,
                 params.output_jsn_full, nullptr);
     }
+
+    if (punc_ctx) fireredpunc_free(punc_ctx);
+    return 0;
 }
 #endif

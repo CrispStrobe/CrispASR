@@ -1696,3 +1696,70 @@ class CrispasrSession {
     _handle = nullptr;
   }
 }
+
+// =========================================================================
+// FireRedPunc — punctuation restoration post-processor
+// =========================================================================
+
+/// BERT-based punctuation restoration model (FireRedPunc).
+///
+/// Adds punctuation and capitalization to unpunctuated ASR output.
+/// Particularly useful for CTC-based backends (wav2vec2, omniasr,
+/// fastconformer-ctc, firered-asr) that output lowercase text.
+///
+/// ```dart
+/// final punc = PuncModel.open('fireredpunc-q8_0.gguf');
+/// final text = punc.process('and so my fellow americans ask not');
+/// print(text); // "And so my fellow americans, ask not..."
+/// punc.close();
+/// ```
+class PuncModel {
+  final DynamicLibrary _lib;
+  Pointer<Void> _handle;
+  bool _closed = false;
+
+  PuncModel._(this._lib, this._handle);
+
+  /// Load a FireRedPunc GGUF model.
+  static PuncModel open(String modelPath, {String? libPath}) {
+    final lib = DynamicLibrary.open(libPath ?? _defaultLibPath());
+    final initFn = lib.lookupFunction<
+        Pointer<Void> Function(Pointer<Utf8>),
+        Pointer<Void> Function(Pointer<Utf8>)>('crispasr_punc_init');
+    final pathPtr = modelPath.toNativeUtf8();
+    final handle = initFn(pathPtr);
+    calloc.free(pathPtr);
+    if (handle == nullptr) {
+      throw Exception('Failed to load punc model: $modelPath');
+    }
+    return PuncModel._(lib, handle);
+  }
+
+  /// Add punctuation to unpunctuated text.
+  String process(String text) {
+    if (_closed) throw StateError('PuncModel is closed');
+    final processFn = _lib.lookupFunction<
+        Pointer<Utf8> Function(Pointer<Void>, Pointer<Utf8>),
+        Pointer<Utf8> Function(Pointer<Void>, Pointer<Utf8>)>('crispasr_punc_process');
+    final freeFn = _lib.lookupFunction<
+        Void Function(Pointer<Utf8>),
+        void Function(Pointer<Utf8>)>('crispasr_punc_free_text');
+    final textPtr = text.toNativeUtf8();
+    final resultPtr = processFn(_handle, textPtr);
+    calloc.free(textPtr);
+    if (resultPtr == nullptr) return text;
+    final result = resultPtr.toDartString();
+    freeFn(resultPtr);
+    return result;
+  }
+
+  void close() {
+    if (_closed) return;
+    _closed = true;
+    final freeFn = _lib.lookupFunction<
+        Void Function(Pointer<Void>),
+        void Function(Pointer<Void>)>('crispasr_punc_free');
+    freeFn(_handle);
+    _handle = nullptr;
+  }
+}
