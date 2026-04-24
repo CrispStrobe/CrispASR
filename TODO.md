@@ -7,7 +7,26 @@ blocked on external fixes (tracked in detail in `UPSTREAM.md`).
 
 Historical milestones and the per-model port plans are in `HISTORY.md`.
 Technical deep-dives (optimisation notes, RoPE lessons, benchmark tables)
-are in `LEARNINGS.md`.
+are in `LEARNINGS.md`. Full roadmap in `PLAN.md`.
+
+---
+
+## Pending optimizations (v0.5.x)
+
+| # | Optimization | Backends | Expected gain | Effort |
+|---|---|---|---|---|
+| O2 | Fused QKV pre-merge (single matmul) | LLM decoders (voxtral, qwen3, granite, glm, omniasr-llm) | ~10-15% attn | Medium |
+| O5 | Pipelined mel+encode threading | LLM backends, CPU | ~15-20% | Medium |
+| O4 | Beam search for LLM backends | All Audio-LLM | Quality improvement | High |
+| O6 | Batched encoder (GPU only) | All backends | 3-5x on GPU | High |
+| O7 | Speculative decoding | LLM backends | 2-4x decode | High |
+
+## Pending features (v0.5.x)
+
+- **WebSocket streaming server** — `/ws` endpoint for real-time transcription
+- **Audio format support** — fix `.m4a`/`.mp4`/`.webm` crash in ffmpeg path
+- **Moonshine streaming** — different architecture, needs new runtime
+- **VibeVoice-ASR 7B** — blocked on ≥16 GB RAM for conversion
 
 ---
 
