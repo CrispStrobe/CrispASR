@@ -89,23 +89,25 @@ Run `crispasr --list-backends` to see it live. Each backend declares capabilitie
 |---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
 | Native timestamps | ✔ | ✔ | ✔ | ✔ | | | | | | | | | | | |
 | CTC timestamps | | | ✔ | | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | | ✔ | | ✔ |
-| Word-level timing | ✔ | ✔ | ✔ | ✔ | `-am` | `-am` | `-am` | `-am` | | | | | | | |
+| Word-level timing | ✔ | ✔ | ✔ | ✔ | `-am` | `-am` | `-am` | `-am` | `-am` | `-am` | `-am` | | `-am` | `-am` | `-am` |
 | Per-token confidence | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | | | | | | | |
 | Language auto-detect | ✔ | ✔ | LID | LID | LID | LID | LID | ✔ | LID | LID | ✔ | LID | LID | LID | LID |
 | Speech translation | ✔ | | ✔ | | ✔ | ✔ | | ✔ | | | | | | | |
 | Speaker diarization | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | all | all | all | all | all | all | all |
 | Grammar (GBNF) | ✔ | | | | | | | | | | | | | | |
 | Temperature sampling | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | | | ✔ | | | | |
-| Beam search | ✔ | | | | | ✔ | | | | | | | ✔ | | |
+| Beam search | ✔ | | | | | | | | | | | | ✔ | | |
 | Best-of-N (`--best-of`) | ✔ | | | | ✔ | ✔ | ✔ | ✔ | | | | | | | |
-| Flash attention | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | | | | ✔ | | | ✔ |
+| Flash attention | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | | | ✔ | ✔ | ✔ | ✔ | ✔ |
+| KV cache | ✔ | | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | | | ✔ | ✔ | ✔ | ✔ | * |
 | Punctuation toggle | | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | | | | | | | |
+| Punc restoration | pp | pp | pp | pp | pp | pp | pp | pp | pp | pp | pp | pp | pp | pp | pp |
 | Source / target language | | | ✔ | | ✔ | ✔ | | ✔ | | | | | | | |
 | Audio Q&A (`--ask`) | | | | | * | ✔ | | * | | | | | | | |
 | Streaming (`--stream/--mic/--live`) | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |
 | Auto-download (`-m auto`) | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | | | ✔ | ✔ | ✔ | ✔ | ✔ |
 
-**Key:** ✔ = native/built-in, `-am` = via CTC forced aligner (`-am canary-ctc-aligner.gguf` or `-am qwen3-forced-aligner.gguf`), **LID** = via external language identification pre-step (`-l auto`), **all** = via `--diarize` post-step (not declared by backend but always available), * = flag accepted but model is ASR-tuned and may just transcribe.
+**Key:** ✔ = native/built-in, `-am` = via CTC forced aligner (`-am canary-ctc-aligner.gguf` or `-am qwen3-forced-aligner.gguf`), **LID** = via external language identification pre-step (`-l auto`), **all** = via `--diarize` post-step (not declared by backend but always available), **pp** = via `--punc-model` post-processor (FireRedPunc or fullstop-punc), * = omniasr-LLM has KV cache (CTC variant does not).
 
 **Speaker diarization** is available for all backends as a post-processing step via `--diarize`:
 - `--diarize-method energy` / `xcorr` — stereo-only, no extra deps
@@ -1014,6 +1016,45 @@ Every `src/core/` migration commit includes a `md5sum`-level regression test aga
 - **ffn extraction**: bit-identical on qwen3, voxtral, voxtral4b, granite.
 - **gguf_loader extraction**: bit-identical on all 8 non-whisper models.
 - **attention extraction**: bit-identical on voxtral (only consumer so far).
+
+### Backend internals
+
+<details>
+<summary>Optimization and graph survey (all backends)</summary>
+
+| Backend | Arch pattern | ggml graph | Flash attn | KV cache | GPU | Shared core modules |
+|---|---|:-:|:-:|:-:|:-:|---|
+| whisper | Enc-dec transformer | ✔ | ✔ | ✔ | CUDA/Metal | (upstream) |
+| parakeet | FastConformer + TDT | ✔ | ✔ | partial | CPU | mel, fastconformer |
+| canary | FastConformer + Transformer dec | ✔ | ✔ | ✔ | CUDA/Metal | mel, fastconformer |
+| cohere | Conformer + Transformer dec | ✔ | ✔ | ✔ | CUDA/Metal | mel |
+| granite | Conformer + Q-Former + LLM | ✔ | ✔ | ✔ | CPU | mel, kv_self_attn, swiglu, greedy_decode, bpe |
+| voxtral | Whisper enc + Mistral LLM | ✔ | ✔ | ✔ | CUDA/Metal | mel, kv_self_attn, encoder_self_attn, swiglu, greedy_decode, bpe |
+| voxtral4b | RoPE enc + 3.4B LLM | ✔ | ✔ | ✔ | CPU | mel, kv_self_attn, encoder_self_attn, swiglu, greedy_decode, bpe |
+| qwen3 | Whisper enc + Qwen3 LLM | ✔ | ✔ | ✔ | CUDA/Metal | mel, kv_self_attn, swiglu, greedy_decode, bpe |
+| fc-ctc | FastConformer + CTC | ✔ | ✔ | — | CPU | mel, fastconformer |
+| wav2vec2 | CNN + Transformer + CTC | ✔ | — | — | CUDA/Metal | gguf_loader |
+| glm-asr | Whisper enc + Llama LLM | ✔ | ✔ | ✔ | CPU | mel, kv_self_attn, swiglu, greedy_decode, bpe |
+| kyutai-stt | Mimi codec + causal LM | ✔ | ✔ | ✔ | CPU | gguf_loader |
+| firered-asr | Conformer + CTC + beam dec | ✔ | ✔ | ✔ | CPU | mel, gguf_loader |
+| moonshine | Conv + 6L enc-dec | ✔ | ✔ | ✔ | CPU | (vendored) |
+| omniasr | wav2vec2 enc + CTC/LLM | ✔ | ✔ | CTC:— LLM:✔ | CPU | gguf_loader, kv_self_attn, swiglu |
+| vibevoice | σ-VAE + Qwen2 7B | ✔ | ✔ | ✔ | CUDA/Metal | gguf_loader |
+
+**Architecture families:**
+- **Feedforward CTC** (wav2vec2, omniasr-CTC, fc-ctc, firered-asr): No decoder, no KV cache. Fastest. No native punctuation.
+- **Encoder-decoder** (whisper, canary, cohere, moonshine): Cross-attention KV cache, autoregressive text decoder.
+- **Audio-LLM** (granite, voxtral, voxtral4b, qwen3, glm-asr, omniasr-LLM, vibevoice): Audio features injected into LLM embedding space, KV-cached autoregressive decoding.
+- **Transducer** (parakeet): LSTM predictor + joint network, frame-synchronous TDT decoding.
+- **Codec + LM** (kyutai-stt): Neural audio codec (RVQ) → token-based LM.
+
+**Optimization opportunities:**
+- **Beam search** could be added to all encoder-decoder and Audio-LLM backends (currently only whisper + firered-asr)
+- **Fused QKV** (single matmul for Q/K/V projections) — used in CrispEmbed, applicable to all attention layers
+- **Temperature sampling** could be added to glm-asr, kyutai-stt, firered-asr, moonshine, omniasr-LLM via `core_greedy_decode`
+- **GPU offload** for CPU-only backends (parakeet, granite, voxtral4b, etc.) — needs ggml_backend_sched with GPU primary
+
+</details>
 
 ---
 
