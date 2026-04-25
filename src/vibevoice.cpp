@@ -3368,66 +3368,10 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
         // Add text type embedding (type=1) since these are "text" positions
         // (In the official pipeline, tts_text_masks=1 for text window positions)
         // Actually for neg path, the mask might be different... let's add type=1 to match pos path
-        // Run <|image_pad|> tokens through the NEG BASE LM (with voice.neg_lm KV)
-        // to get the neg base LM hidden states (same as pos path but with pad tokens).
-        {
-            int neg_base_vsl = ctx->voice.lm_seq_len > 0 ? 1 : 0; // neg_lm has 1 token
-            // Build temp KV for neg base LM
-            int neg_base_max = neg_base_vsl + n_text + 4;
-            size_t neg_bk_size = (size_t)ggml_type_size(GGML_TYPE_F16) * hp.head_dim * neg_base_max * hp.n_kv_heads * hp.n_lm_layers;
-            ggml_init_params nbkp = {2 * ggml_tensor_overhead(), nullptr, true};
-            ggml_context* nbk_ctx = ggml_init(nbkp);
-            ggml_tensor* nbk_k = ggml_new_tensor_4d(nbk_ctx, GGML_TYPE_F16, hp.head_dim, neg_base_max, hp.n_kv_heads, hp.n_lm_layers);
-            ggml_tensor* nbk_v = ggml_new_tensor_4d(nbk_ctx, GGML_TYPE_F16, hp.head_dim, neg_base_max, hp.n_kv_heads, hp.n_lm_layers);
-            ggml_backend_buffer_t nbk_buf = ggml_backend_alloc_buffer(ctx->backend, 2 * neg_bk_size);
-            uint8_t* nbk_ptr = (uint8_t*)ggml_backend_buffer_get_base(nbk_buf);
-            ggml_backend_tensor_alloc(nbk_buf, nbk_k, nbk_ptr);
-            ggml_backend_tensor_alloc(nbk_buf, nbk_v, nbk_ptr + neg_bk_size);
-            ggml_backend_buffer_clear(nbk_buf, 0);
-
-            // Pre-fill neg base LM KV from voice.neg_lm
-            size_t el_sz = ggml_type_size(GGML_TYPE_F16);
-            for (int il = 0; il < hp.n_lm_layers; il++) {
-                for (int kvt = 0; kvt < 2; kvt++) {
-                    char vn[128];
-                    snprintf(vn, sizeof(vn), "voice.neg_lm.%d.%s", il, kvt == 0 ? "k" : "v");
-                    auto it2 = ctx->voice.tensors.find(vn);
-                    if (it2 == ctx->voice.tensors.end()) continue;
-                    ggml_tensor* src2 = it2->second;
-                    ggml_tensor* dst2 = (kvt == 0) ? nbk_k : nbk_v;
-                    size_t src2_bytes = ggml_nbytes(src2);
-                    size_t layer_off2 = (size_t)il * dst2->nb[3];
-                    std::vector<uint8_t> tmp2(src2_bytes);
-                    ggml_backend_tensor_get(src2, tmp2.data(), 0, src2_bytes);
-                    // neg_lm has 1 token per head: head_src = hd * 1 * el_sz
-                    size_t head_src2 = (size_t)hp.head_dim * 1 * el_sz;
-                    size_t head_dst2 = (size_t)hp.head_dim * neg_base_max * el_sz;
-                    for (int ih2 = 0; ih2 < hp.n_kv_heads; ih2++)
-                        ggml_backend_tensor_set(dst2, tmp2.data() + (size_t)ih2 * head_src2,
-                                                layer_off2 + (size_t)ih2 * head_dst2, head_src2);
-                }
-            }
-
-            // Embed <|image_pad|> with BASE LM embeddings
-            std::vector<int32_t> pad_ids(n_text, IMAGE_PAD);
-            auto neg_base_embeds = run_token_embedding_lookup(ctx, pad_ids.data(), n_text);
-
-            // Run neg base LM (same graph structure as pos base LM but with neg KV)
-            // For simplicity, use run_lm_hidden_states which doesn't use KV cache.
-            // Actually we need the neg base LM KV cache. Let me build a minimal graph.
-            // This is the same as the pos base LM graph but using nbk_k/nbk_v.
-            // For brevity, just run without voice context (neg base LM has only 1 token of context)
-            // The 1-token neg context has minimal impact compared to 74-token pos context.
-            // For now, use run_lm_hidden_states (no KV cache) as approximation.
-            auto neg_base_hidden = run_lm_hidden_states(ctx, pad_ids.data(), n_text, true);
-
-            // Replace neg embeddings with neg base LM hidden states
-            if ((int)neg_base_hidden.size() == n_text * d_lm) {
-                neg_emb = neg_base_hidden;
-            }
-
-            ggml_backend_buffer_free(nbk_buf);
-            ggml_free(nbk_ctx);
+        // Use precomputed all_neg_base_hidden (computed once upfront).
+        // No need to rebuild temp KV cache or run base LM again.
+        if (!all_neg_base_hidden.empty()) {
+            neg_emb.assign(all_neg_base_hidden.begin(), all_neg_base_hidden.begin() + (size_t)n_text * d_lm);
         }
 
         // Add type embedding (text=1)
@@ -3468,6 +3412,8 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
 
     int total_frames = 0;
     bool finished = false;
+    double bench_sum_diff = 0, bench_sum_lm = 0;
+    int bench_frames = 0;
 
     while (!finished && total_frames < n_frames) {
         // Generate SPEECH_WINDOW frames
@@ -3475,6 +3421,7 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
 
         for (int si = 0; si < frames_this_window && !finished; si++) {
             int fi = total_frames + si;
+            auto t_frame_start = std::chrono::high_resolution_clock::now();
         if (verbosity >= 1 && (fi == 0 || (fi + 1) % 5 == 0 || fi == n_frames - 1))
             fprintf(stderr, "  frame %d/%d...\n", fi + 1, n_frames);
 
@@ -3556,6 +3503,8 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
             vibevoice_dump_f32(dump_dir, "tts_latent_frame0", z.data(), z.size());
         }
 
+        auto t_diff_end = std::chrono::high_resolution_clock::now();
+
         // b. Feed generated latent back through acoustic connector → LM embedding
         auto speech_embed = run_connector_stage(ctx, "at_conn", z.data(), 1, vae_dim);
         if (speech_embed.empty()) {
@@ -3625,6 +3574,20 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
                         }
                     }
                 }
+            }
+        }
+        // Per-frame timing accumulation
+        if (getenv("VIBEVOICE_BENCH")) {
+            auto t_frame_end = std::chrono::high_resolution_clock::now();
+            double diff_ms = std::chrono::duration<double, std::milli>(t_diff_end - t_frame_start).count();
+            double rest_ms = std::chrono::duration<double, std::milli>(t_frame_end - t_diff_end).count();
+            bench_sum_diff += diff_ms;
+            bench_sum_lm += rest_ms;
+            bench_frames++;
+            if (fi == 0 || finished) {
+                fprintf(stderr, "  BENCH[%d frames]: diffusion=%.0fms/frame (%.0fms total), LM+conn+eos=%.0fms/frame (%.0fms total)\n",
+                        bench_frames, bench_sum_diff / bench_frames, bench_sum_diff,
+                        bench_sum_lm / bench_frames, bench_sum_lm);
             }
         }
         } // end speech frame loop
