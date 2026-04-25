@@ -19,25 +19,26 @@ namespace {
 // Check if a Unicode codepoint is CJK (Chinese/Japanese/Korean).
 // CJK characters need per-character splitting since there are no spaces.
 static bool is_cjk_codepoint(uint32_t cp) {
-    return (cp >= 0x4E00 && cp <= 0x9FFF)   // CJK Unified Ideographs
-        || (cp >= 0x3400 && cp <= 0x4DBF)   // CJK Extension A
-        || (cp >= 0x3040 && cp <= 0x309F)   // Hiragana
-        || (cp >= 0x30A0 && cp <= 0x30FF)   // Katakana
-        || (cp >= 0xAC00 && cp <= 0xD7AF)   // Hangul Syllables
-        || (cp >= 0x3000 && cp <= 0x303F)   // CJK Symbols and Punctuation
-        || (cp >= 0xFF00 && cp <= 0xFFEF);  // Fullwidth Forms
+    return (cp >= 0x4E00 && cp <= 0x9FFF)     // CJK Unified Ideographs
+           || (cp >= 0x3400 && cp <= 0x4DBF)  // CJK Extension A
+           || (cp >= 0x3040 && cp <= 0x309F)  // Hiragana
+           || (cp >= 0x30A0 && cp <= 0x30FF)  // Katakana
+           || (cp >= 0xAC00 && cp <= 0xD7AF)  // Hangul Syllables
+           || (cp >= 0x3000 && cp <= 0x303F)  // CJK Symbols and Punctuation
+           || (cp >= 0xFF00 && cp <= 0xFFEF); // Fullwidth Forms
 }
 
 // Decode one UTF-8 codepoint from pos, return (codepoint, byte_length).
 static std::pair<uint32_t, int> decode_utf8(const std::string& s, size_t pos) {
     unsigned char b = (unsigned char)s[pos];
-    if (b < 0x80) return {b, 1};
+    if (b < 0x80)
+        return {b, 1};
     if ((b & 0xE0) == 0xC0 && pos + 1 < s.size())
-        return {((b & 0x1F) << 6) | (s[pos+1] & 0x3F), 2};
+        return {((b & 0x1F) << 6) | (s[pos + 1] & 0x3F), 2};
     if ((b & 0xF0) == 0xE0 && pos + 2 < s.size())
-        return {((b & 0x0F) << 12) | ((s[pos+1] & 0x3F) << 6) | (s[pos+2] & 0x3F), 3};
+        return {((b & 0x0F) << 12) | ((s[pos + 1] & 0x3F) << 6) | (s[pos + 2] & 0x3F), 3};
     if ((b & 0xF8) == 0xF0 && pos + 3 < s.size())
-        return {((b & 0x07) << 18) | ((s[pos+1] & 0x3F) << 12) | ((s[pos+2] & 0x3F) << 6) | (s[pos+3] & 0x3F), 4};
+        return {((b & 0x07) << 18) | ((s[pos + 1] & 0x3F) << 12) | ((s[pos + 2] & 0x3F) << 6) | (s[pos + 3] & 0x3F), 4};
     return {b, 1};
 }
 

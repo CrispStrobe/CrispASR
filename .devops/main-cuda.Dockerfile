@@ -19,12 +19,16 @@ RUN apt-get update && \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
-# Note: do NOT preload /usr/local/cuda-13.0/compat onto LD_LIBRARY_PATH.
-# The forward-compat libcuda is for OLDER host drivers loading newer
-# runtimes; force-prepending it shadows the host libcuda.so.1 that the
-# nvidia container runtime mounts, which breaks initialization on hosts
-# whose driver is NEWER than the compat libs were built against — see
-# issue #31 (driver R595 + this image → 'unsupported driver/cuda combo').
+# LIBRARY_PATH is read by ld at LINK time only (not at runtime). Without
+# this, the build fails 'libggml-cuda.so undefined reference to
+# cuGetErrorString' because CMake's CUDAToolkit module doesn't always
+# locate the libcuda stub in CUDA 13's lib64/stubs layout.
+#
+# Critically NOT LD_LIBRARY_PATH: that's the runtime path, and force-
+# prepending the compat libs there shadows the host libcuda.so.1 that
+# the nvidia container runtime mounts → 'unsupported driver/cuda combo'
+# on hosts whose driver is newer than the compat libs (#31).
+ENV LIBRARY_PATH=/usr/local/cuda-13.0/lib64/stubs:/usr/local/cuda-13.0/compat:$LIBRARY_PATH
 
 COPY . .
 ARG CRISPASR_BUILD_JOBS

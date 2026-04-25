@@ -22,11 +22,10 @@ RUN apt-get update && \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
-# Note: do NOT preload /usr/local/cuda-12.4/compat onto LD_LIBRARY_PATH —
-# see main-cuda.Dockerfile for the explanation. Hosts whose driver is
-# NEWER than the compat libs hit 'unsupported driver/cuda combo' (#31).
-# The compat libs remain available in the image for callers who need
-# them; we just don't force them on top of LD_LIBRARY_PATH.
+# Build-time link path for libcuda stub (see main-cuda.Dockerfile for
+# the rationale — LIBRARY_PATH is link-only, NOT LD_LIBRARY_PATH which
+# would shadow the host's libcuda at runtime and reproduce #31).
+ENV LIBRARY_PATH=/usr/local/cuda-12.4/lib64/stubs:/usr/local/cuda-12.4/compat:$LIBRARY_PATH
 
 COPY . .
 ARG CRISPASR_BUILD_JOBS
