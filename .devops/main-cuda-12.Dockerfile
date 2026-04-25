@@ -22,10 +22,11 @@ RUN apt-get update && \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
-# Forward-compat libs let drivers older than the toolkit's native floor
-# still talk to this runtime. CUDA 12.4 + R510+ is the supported combo.
-ENV CUDA_MAIN_VERSION=12.4
-ENV LD_LIBRARY_PATH=/usr/local/cuda-${CUDA_MAIN_VERSION}/compat:$LD_LIBRARY_PATH
+# Note: do NOT preload /usr/local/cuda-12.4/compat onto LD_LIBRARY_PATH —
+# see main-cuda.Dockerfile for the explanation. Hosts whose driver is
+# NEWER than the compat libs hit 'unsupported driver/cuda combo' (#31).
+# The compat libs remain available in the image for callers who need
+# them; we just don't force them on top of LD_LIBRARY_PATH.
 
 COPY . .
 ARG CRISPASR_BUILD_JOBS
@@ -41,8 +42,7 @@ RUN find /app/build -name "*.o" -delete && \
     rm -rf /app/build/_deps
 
 FROM ${BASE_CUDA_RUN_CONTAINER} AS runtime
-ENV CUDA_MAIN_VERSION=12.4
-ENV LD_LIBRARY_PATH=/usr/local/cuda-${CUDA_MAIN_VERSION}/compat:$LD_LIBRARY_PATH
+# See note in the build stage about not prepending compat to LD_LIBRARY_PATH.
 WORKDIR /app
 
 RUN apt-get update && \

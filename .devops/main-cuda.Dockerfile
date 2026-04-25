@@ -19,9 +19,12 @@ RUN apt-get update && \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
-# Ref: https://stackoverflow.com/a/53464012
-ENV CUDA_MAIN_VERSION=13.0
-ENV LD_LIBRARY_PATH /usr/local/cuda-${CUDA_MAIN_VERSION}/compat:$LD_LIBRARY_PATH
+# Note: do NOT preload /usr/local/cuda-13.0/compat onto LD_LIBRARY_PATH.
+# The forward-compat libcuda is for OLDER host drivers loading newer
+# runtimes; force-prepending it shadows the host libcuda.so.1 that the
+# nvidia container runtime mounts, which breaks initialization on hosts
+# whose driver is NEWER than the compat libs were built against — see
+# issue #31 (driver R595 + this image → 'unsupported driver/cuda combo').
 
 COPY . .
 ARG CRISPASR_BUILD_JOBS
@@ -37,8 +40,7 @@ RUN find /app/build -name "*.o" -delete && \
     rm -rf /app/build/_deps
 
 FROM ${BASE_CUDA_RUN_CONTAINER} AS runtime
-ENV CUDA_MAIN_VERSION=13.0
-ENV LD_LIBRARY_PATH /usr/local/cuda-${CUDA_MAIN_VERSION}/compat:$LD_LIBRARY_PATH
+# See note in the build stage about not prepending compat to LD_LIBRARY_PATH.
 WORKDIR /app
 
 RUN apt-get update && \
