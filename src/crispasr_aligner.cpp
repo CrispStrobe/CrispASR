@@ -16,21 +16,57 @@
 
 namespace {
 
-// Whitespace split — same semantics the CLI has used since the aligner
-// landed. Punctuation stays attached to the word; the aligner vocab
-// handles re-tokenisation.
+// Check if a Unicode codepoint is CJK (Chinese/Japanese/Korean).
+// CJK characters need per-character splitting since there are no spaces.
+static bool is_cjk_codepoint(uint32_t cp) {
+    return (cp >= 0x4E00 && cp <= 0x9FFF)   // CJK Unified Ideographs
+        || (cp >= 0x3400 && cp <= 0x4DBF)   // CJK Extension A
+        || (cp >= 0x3040 && cp <= 0x309F)   // Hiragana
+        || (cp >= 0x30A0 && cp <= 0x30FF)   // Katakana
+        || (cp >= 0xAC00 && cp <= 0xD7AF)   // Hangul Syllables
+        || (cp >= 0x3000 && cp <= 0x303F)   // CJK Symbols and Punctuation
+        || (cp >= 0xFF00 && cp <= 0xFFEF);  // Fullwidth Forms
+}
+
+// Decode one UTF-8 codepoint from pos, return (codepoint, byte_length).
+static std::pair<uint32_t, int> decode_utf8(const std::string& s, size_t pos) {
+    unsigned char b = (unsigned char)s[pos];
+    if (b < 0x80) return {b, 1};
+    if ((b & 0xE0) == 0xC0 && pos + 1 < s.size())
+        return {((b & 0x1F) << 6) | (s[pos+1] & 0x3F), 2};
+    if ((b & 0xF0) == 0xE0 && pos + 2 < s.size())
+        return {((b & 0x0F) << 12) | ((s[pos+1] & 0x3F) << 6) | (s[pos+2] & 0x3F), 3};
+    if ((b & 0xF8) == 0xF0 && pos + 3 < s.size())
+        return {((b & 0x07) << 18) | ((s[pos+1] & 0x3F) << 12) | ((s[pos+2] & 0x3F) << 6) | (s[pos+3] & 0x3F), 4};
+    return {b, 1};
+}
+
+// Split text into "words" for CTC alignment.
+// For space-delimited languages: split on whitespace.
+// For CJK: split per character (no spaces between words).
 std::vector<std::string> tokenise_words(const std::string& text) {
     std::vector<std::string> out;
     std::string cur;
-    for (char c : text) {
-        if (c == ' ' || c == '\n' || c == '\t' || c == '\r') {
+    size_t i = 0;
+    while (i < text.size()) {
+        auto [cp, len] = decode_utf8(text, i);
+        if (cp == ' ' || cp == '\n' || cp == '\t' || cp == '\r') {
             if (!cur.empty()) {
                 out.push_back(cur);
                 cur.clear();
             }
+        } else if (is_cjk_codepoint(cp)) {
+            // Flush any accumulated non-CJK text
+            if (!cur.empty()) {
+                out.push_back(cur);
+                cur.clear();
+            }
+            // Each CJK character is its own "word" for alignment
+            out.push_back(text.substr(i, len));
         } else {
-            cur += c;
+            cur += text.substr(i, len);
         }
+        i += len;
     }
     if (!cur.empty())
         out.push_back(cur);
