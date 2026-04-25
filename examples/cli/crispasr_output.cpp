@@ -203,7 +203,21 @@ std::vector<crispasr_disp_segment> crispasr_make_disp_segments(const std::vector
         };
 
         for (const auto& w : seg.words) {
-            const std::string sep = cur.text.empty() ? "" : " ";
+            // No space separator for CJK characters (Japanese/Chinese/Korean have no word spaces)
+            bool prev_is_cjk = false;
+            bool cur_is_cjk = false;
+            if (!cur.text.empty()) {
+                // Check last codepoint of current text
+                size_t last = cur.text.size() - 1;
+                while (last > 0 && (cur.text[last] & 0xC0) == 0x80) last--;
+                unsigned char b = (unsigned char)cur.text[last];
+                prev_is_cjk = (b >= 0xE0); // CJK chars are 3+ bytes in UTF-8
+            }
+            if (!w.text.empty()) {
+                unsigned char b = (unsigned char)w.text[0];
+                cur_is_cjk = (b >= 0xE0); // 3+ byte UTF-8 = likely CJK
+            }
+            const std::string sep = cur.text.empty() ? "" : (prev_is_cjk || cur_is_cjk) ? "" : " ";
             const bool would_overflow =
                 max_len > 1 && !cur.text.empty() && (int)(cur.text.size() + sep.size() + w.text.size()) > max_len;
 
