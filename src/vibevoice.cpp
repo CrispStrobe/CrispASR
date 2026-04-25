@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -219,8 +220,10 @@ extern "C" struct vibevoice_context* vibevoice_init_from_file(const char* path_m
     }
     ctx->compute_meta.resize(ggml_tensor_overhead() * 8192 + ggml_graph_overhead_custom(65536, false));
 
-    if (params.verbosity >= 1)
-        fprintf(stderr, "vibevoice: loaded %zu tensors\n", m.tensors.size());
+    if (params.verbosity >= 1) {
+        const char* be_name = ggml_backend_name(ctx->backend);
+        fprintf(stderr, "vibevoice: loaded %zu tensors (backend: %s)\n", m.tensors.size(), be_name);
+    }
 
     return ctx;
 }
@@ -2133,6 +2136,7 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
     int vae_dim = hp.vae_dim_acoustic;
     int d_lm = hp.d_lm;
     const char* dump_dir = getenv("VIBEVOICE_TTS_DUMP");
+    const auto tts_t0 = std::chrono::high_resolution_clock::now();
 
     // Detect model type: Realtime (has TTS LM) vs Base (single LM)
     bool is_base_model = (hp.tts_n_layers == 0);
@@ -3679,8 +3683,13 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
     int n_audio = (int)audio_out->ne[1];
     int total_audio = n_ch * n_audio;
 
-    if (verbosity >= 1)
-        fprintf(stderr, "vibevoice TTS: output %d samples (%.2f sec at 24kHz)\n", total_audio, total_audio / 24000.0f);
+    if (verbosity >= 1) {
+        const auto tts_t1 = std::chrono::high_resolution_clock::now();
+        double tts_ms = std::chrono::duration<double, std::milli>(tts_t1 - tts_t0).count();
+        double audio_sec = total_audio / 24000.0;
+        fprintf(stderr, "vibevoice TTS: output %d samples (%.2f sec at 24kHz) in %.1f ms (%.2fx realtime)\n",
+                total_audio, audio_sec, tts_ms, audio_sec / (tts_ms / 1000.0));
+    }
 
     std::vector<float> raw_audio((size_t)total_audio);
     ggml_backend_tensor_get(audio_out, raw_audio.data(), 0, (size_t)total_audio * sizeof(float));
