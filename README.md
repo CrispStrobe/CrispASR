@@ -1057,6 +1057,8 @@ Every `src/core/` migration commit includes a `md5sum`-level regression test aga
 
 Adding a new ASR model to CrispASR is a focused exercise in five files. The worked examples to copy from are the existing `crispasr_backend_*.cpp` adapters.
 
+> **Heads-up on `clang-format`** — CI pins `clang-format-18`. Homebrew's default `clang-format` keg is on v22+, which formats some constructs differently and will fail the lint job. Pin it locally with `pip install 'clang-format==18.1.8'` and put `~/Library/Python/3.11/bin` (or your equivalent pip user-bin) ahead of `/opt/homebrew/bin` on `PATH`. One pip install, no LLVM toolchain needed.
+
 ### 1. Land the model's C API in `src/yourmodel.{h,cpp}`
 
 Following the established convention:
