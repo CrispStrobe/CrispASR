@@ -172,7 +172,7 @@ No response. HF model card has no license field.
 | O6 | Batched encoder (GPU) | All + GPU | 3-5x | TODO |
 | O7 | Speculative decoding | LLM backends | 2-4x decode | TODO |
 | O12 | `ggml_conv_1d_cf` channels-first conv | vibevoice VAE | **-29% VAE, -15% total** | **DONE** |
-| O13 | `ggml_conv_1d_cf` for wav2vec2 CNN | wav2vec2 family | Est. 10-20% CNN stem | In progress |
+| O13 | `ggml_conv_1d_group` + CNN cleanup | wav2vec2 family | **-12% total** (pos -12%, CNN -22%) | **DONE** |
 | O14 | `--tts-steps` configurable DPM steps | vibevoice TTS | **-31% diffusion** | **DONE** |
 | O15 | Remove redundant neg base LM | vibevoice TTS | Eliminated 60 LOC of wasted compute | **DONE** |
 
