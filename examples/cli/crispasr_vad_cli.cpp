@@ -13,20 +13,16 @@
 
 #include <string>
 
-namespace {
-
 // Default Silero VAD model from the ggml-org/whisper-vad HF repo.
 // ~885 KB. Auto-downloaded on first use to ~/.cache/crispasr so users
 // can pass `--vad` without having to hunt down the GGUF.
+namespace {
 constexpr const char* kVadDefaultUrl =
     "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v5.1.2.bin";
 constexpr const char* kVadDefaultFile = "ggml-silero-v5.1.2.bin";
+} // namespace
 
-// Resolve params.vad_model into a real file path. When empty (user passed
-// --vad without --vad-model), or set to "auto"/"default", download the
-// canonical Silero VAD GGUF into the crispasr cache dir on first use.
-// Returns an empty string if no VAD was requested at all.
-std::string resolve_vad_model(const whisper_params& p) {
+std::string crispasr_resolve_vad_model(const whisper_params& p) {
     const std::string& v = p.vad_model;
     const bool want_vad = p.vad || !v.empty();
     if (!want_vad)
@@ -37,11 +33,9 @@ std::string resolve_vad_model(const whisper_params& p) {
                                               p.cache_dir);
 }
 
-} // namespace
-
 std::vector<crispasr_audio_slice> crispasr_compute_audio_slices(const float* samples, int n_samples, int sample_rate,
                                                                 int chunk_seconds, const whisper_params& params) {
-    const std::string vad_path = resolve_vad_model(params);
+    const std::string vad_path = crispasr_resolve_vad_model(params);
 
     if (!vad_path.empty()) {
         crispasr_vad_options opts;

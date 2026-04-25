@@ -15,9 +15,21 @@
 
 #include "crispasr_vad.h" // from src/ via whisper target's PUBLIC include dir
 
+#include <string>
 #include <vector>
 
 struct whisper_params; // fwd decl
+
+// Resolve the user-supplied VAD model path. When the user passed `--vad`
+// without `--vad-model` (or with `--vad-model auto|default`), download
+// the canonical ggml-silero-v5.1.2.bin into the crispasr cache dir on
+// first use. Returns empty if VAD was not requested at all.
+//
+// Both the unified slicer and the whisper backend call this so users
+// get the same auto-download UX whether their model uses whisper-internal
+// VAD (whisper.cpp's `wparams.vad_model_path`) or the unified slicer
+// (which everything else uses).
+std::string crispasr_resolve_vad_model(const whisper_params& p);
 
 // Build the list of audio slices for a CLI invocation.
 //

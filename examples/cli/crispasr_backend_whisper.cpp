@@ -23,6 +23,7 @@
 // an actual instance — so there's only one source of truth.
 
 #include "crispasr_backend.h"
+#include "crispasr_vad_cli.h" // crispasr_resolve_vad_model — auto-DL silero
 #include "whisper_params.h"
 
 #include "grammar-parser.h" // grammar_parser::parse_state::c_rules()
@@ -121,8 +122,13 @@ public:
         // without interfering: the dispatcher's slicing is a no-op when
         // params.vad_model is empty, in which case all of whisper-internal
         // VAD's behaviour is preserved.
+        // Resolve VAD model so `--vad` without `--vad-model` auto-downloads
+        // ggml-silero-v5.1.2.bin to the cache, matching the non-whisper
+        // backends' UX (#33). The resolved path must outlive the whisper
+        // call, so we hold it on the stack here.
+        const std::string vad_path = crispasr_resolve_vad_model(p);
         wp.vad = p.vad;
-        wp.vad_model_path = p.vad_model.c_str();
+        wp.vad_model_path = vad_path.c_str();
         wp.vad_params.threshold = p.vad_threshold;
         wp.vad_params.min_speech_duration_ms = p.vad_min_speech_duration_ms;
         wp.vad_params.min_silence_duration_ms = p.vad_min_silence_duration_ms;

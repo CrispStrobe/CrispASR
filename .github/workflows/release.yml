@@ -200,17 +200,21 @@ jobs:
   build-windows-cuda:
     runs-on: windows-latest
     env:
-      CUDA_VERSION: "12.4.0"
+      CUDA_VERSION: "12.8.0"
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
           ref: ${{ inputs.tag || github.ref }}
 
-      - name: Install CUDA Toolkit 12.4.0
+      # CUDA 12.8 is the minimum that ships sm_120 SASS for Blackwell
+      # consumer GPUs (RTX 50xx). Earlier toolkits (12.4 etc.) only know
+      # up to sm_90, so RTX 5060/5070/5080/5090 fail at runtime with
+      # 'no kernel image is available'.
+      - name: Install CUDA Toolkit 12.8.0
         uses: Jimver/cuda-toolkit@v0.2.19
         with:
-          cuda: '12.4.0'
+          cuda: '12.8.0'
           method: 'network'
           sub-packages: '["nvcc", "cudart", "cublas", "cublas_dev", "nvrtc", "nvrtc_dev", "nvtx", "cuda_profiler_api", "visual_studio_integration"]'
 
@@ -221,7 +225,7 @@ jobs:
           cmake -S . -B build -G Ninja ^
             -DCMAKE_BUILD_TYPE=Release ^
             -DGGML_CUDA=ON ^
-            -DCMAKE_CUDA_ARCHITECTURES="75-real;86-real;89-real" ^
+            -DCMAKE_CUDA_ARCHITECTURES="75-real;86-real;89-real;120-real;120-virtual" ^
             -DGGML_NATIVE=OFF ^
             -DGGML_AVX2=ON -DGGML_FMA=ON -DGGML_F16C=ON
           cmake --build build --target crispasr crispasr-quantize -j %NUMBER_OF_PROCESSORS%

@@ -110,15 +110,50 @@ static std::vector<std::pair<std::string, float>> split_text_at_punct(const std:
     return sentences;
 }
 
+// True if `text` contains at least two sentence-ending marks (so splitting
+// would produce multiple sentences). Used to decide between text-level and
+// word-level splitting.
+static int count_sentence_ends(const std::string& text) {
+    int n = 0;
+    for (size_t i = 0; i < text.size(); ) {
+        int plen = is_sentence_end_at(text, i);
+        if (plen > 0) {
+            n++;
+            i += plen;
+        } else {
+            i++;
+        }
+    }
+    return n;
+}
+
+// True if any word in `words` ends with a sentence-ending punctuation mark.
+// Used to detect when word-level splitting would actually produce sentence
+// boundaries — false for tokenizers that don't carry punctuation as a word
+// suffix (e.g. cohere with CJK input groups everything into one pseudo-word).
+static bool words_carry_sentence_ends(const std::vector<crispasr_word>& words) {
+    for (const auto& w : words) {
+        if (w.text.empty()) continue;
+        const size_t n = w.text.size();
+        if (n >= 1 && is_sentence_end_at(w.text, n - 1) == 1) return true;
+        if (n >= 3 && is_sentence_end_at(w.text, n - 3) == 3) return true;
+    }
+    return false;
+}
+
 std::vector<crispasr_disp_segment> crispasr_make_disp_segments(const std::vector<crispasr_segment>& segments,
                                                                int max_len, bool split_on_punct) {
     std::vector<crispasr_disp_segment> out;
 
     for (const auto& seg : segments) {
         // Easy path: no word data, or no splitting/max_len requested.
-        // When split_on_punct is enabled AND words exist, skip this path
-        // and use the word-level packing below for accurate timestamps.
-        if (seg.words.empty() || (max_len == 0 && !split_on_punct)) {
+        // Also forced when split_on_punct is on but the words don't carry
+        // sentence-ending punctuation — e.g. cohere on Japanese, where every
+        // token is grouped into one giant pseudo-word so the word-packing
+        // splitter never sees a 。/？/！ at a word boundary (#29).
+        const bool punct_in_text = split_on_punct && count_sentence_ends(seg.text) >= 2;
+        const bool words_unhelpful = punct_in_text && !words_carry_sentence_ends(seg.words);
+        if (seg.words.empty() || words_unhelpful || (max_len == 0 && !split_on_punct)) {
             if (!seg.text.empty()) {
                 // If split_on_punct is enabled, split the text at sentence boundaries
                 // and interpolate timestamps proportionally.

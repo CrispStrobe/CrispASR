@@ -5,7 +5,9 @@
 #include "grammar-parser.h"
 #include "whisper_params.h"   // struct whisper_params (shared with crispasr_*)
 #include "crispasr_backend.h" // crispasr_run_backend() dispatch entry point
+#include "crispasr_output.h"  // crispasr_make_disp_segments — split-on-punct (#29)
 #include "crispasr_server.h"  // crispasr_run_server()
+#include "crispasr_vad_cli.h" // crispasr_resolve_vad_model — auto-DL silero (#33)
 
 #include <cmath>
 #include <algorithm>
@@ -1642,8 +1644,14 @@ int main(int argc, char** argv) {
 
             wparams.suppress_nst = params.suppress_nst;
 
+            // Resolve `--vad` without `--vad-model` to the canonical
+            // ggml-silero-v5.1.2.bin in the cache, downloading on first
+            // use — matches the auto-cache UX of every non-whisper
+            // backend (#33). Path must outlive whisper_full(); kept on
+            // this stack frame.
+            const std::string resolved_vad_path = crispasr_resolve_vad_model(params);
             wparams.vad = params.vad;
-            wparams.vad_model_path = params.vad_model.c_str();
+            wparams.vad_model_path = resolved_vad_path.c_str();
 
             wparams.vad_params.threshold = params.vad_threshold;
             wparams.vad_params.min_speech_duration_ms = params.vad_min_speech_duration_ms;
@@ -1717,7 +1725,28 @@ int main(int argc, char** argv) {
             // Collect whisper segments + tokens into the unified vector once,
             // so every writer below is whisper_context-free (except JSON,
             // which still needs ctx for systeminfo/model metadata).
-            const std::vector<crispasr_segment> segs = cli_whisper_collect_segments(ctx);
+            std::vector<crispasr_segment> segs = cli_whisper_collect_segments(ctx);
+
+            // Honor --split-on-punct in the legacy whisper output path (#29).
+            // Without this the writers below emit whisper's raw segments,
+            // which can run 30+ seconds in CJK and ignore --split-on-punct
+            // entirely. Re-segment via the unified display-segment splitter,
+            // then convert back to crispasr_segment for the writers (which
+            // only read t0/t1/text/speaker for non-token formats).
+            if (params.split_on_punct || params.max_len > 0) {
+                auto disp = crispasr_make_disp_segments(segs, params.max_len, params.split_on_punct);
+                std::vector<crispasr_segment> resplit;
+                resplit.reserve(disp.size());
+                for (auto& d : disp) {
+                    crispasr_segment s;
+                    s.t0 = d.t0;
+                    s.t1 = d.t1;
+                    s.text = std::move(d.text);
+                    s.speaker = std::move(d.speaker);
+                    resplit.push_back(std::move(s));
+                }
+                segs = std::move(resplit);
+            }
 
             // macros to stringify function name
 #define output_func(func, ext, param, ...)                                                                             \

@@ -52,29 +52,50 @@ static int lookup_char(const std::unordered_map<std::string, int>& v2id, unsigne
     return it != v2id.end() ? it->second : -1;
 }
 
+// Decode the UTF-8 sequence starting at `word[i]` and return its byte length
+// (1–4). Returns 1 for invalid leading bytes (graceful degrade — caller will
+// look up that single byte and miss, which is no worse than before).
+static int utf8_seq_len(const std::string& word, size_t i) {
+    unsigned char b = (unsigned char)word[i];
+    if (b < 0x80) return 1;
+    if ((b & 0xE0) == 0xC0) return 2;
+    if ((b & 0xF0) == 0xE0) return 3;
+    if ((b & 0xF8) == 0xF0) return 4;
+    return 1; // invalid leading byte — fall back to single-byte
+}
+
 // Append the CTC token IDs for a single word to `out_chars`.
-// Returns false (with a warning) if no characters of the word appear in vocab.
+// Returns false if no characters of the word appear in vocab.
+//
+// Iterates by UTF-8 codepoint, not byte. For multibyte chars (Japanese/Chinese/
+// Korean/accented Latin etc.) the vocab usually carries the full UTF-8 string
+// (e.g. "こ" as a 3-byte entry), not individual bytes. Per-byte iteration
+// previously made every CJK alignment fail with zero overlap (#32).
 static bool word_to_ids(const std::string& word, const std::unordered_map<std::string, int>& v2id, int blank_id,
                         std::vector<int>& out_chars) {
     bool any = false;
-    for (unsigned char c : word) {
-        // Lowercase ASCII letters
-        char lc = (char)std::tolower(c);
-        int id = lookup_char(v2id, (unsigned char)lc);
-        if (id >= 0 && id != blank_id) {
-            out_chars.push_back(id);
-            any = true;
-        }
-        // Non-ASCII bytes (e.g. accented chars like é = 0xC3 0xA9 in UTF-8):
-        // try the raw byte — some multilingual models include full UTF-8 tokens.
-        else if (c > 127) {
-            char raw[2] = {(char)c, '\0'};
-            auto it = v2id.find(raw);
+    for (size_t i = 0; i < word.size(); ) {
+        const int n = utf8_seq_len(word, i);
+        // Single ASCII byte — try lowercase first, then raw.
+        if (n == 1) {
+            const char lc = (char)std::tolower((unsigned char)word[i]);
+            int id = lookup_char(v2id, (unsigned char)lc);
+            if (id < 0)
+                id = lookup_char(v2id, (unsigned char)word[i]);
+            if (id >= 0 && id != blank_id) {
+                out_chars.push_back(id);
+                any = true;
+            }
+        } else if (i + (size_t)n <= word.size()) {
+            // Multi-byte UTF-8 codepoint — look up the full sequence.
+            std::string cp(word, i, (size_t)n);
+            auto it = v2id.find(cp);
             if (it != v2id.end() && it->second != blank_id) {
                 out_chars.push_back(it->second);
                 any = true;
             }
         }
+        i += (size_t)n;
     }
     return any;
 }
