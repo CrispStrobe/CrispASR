@@ -2515,3 +2515,48 @@ and reused via `ggml_backend_sched_reset()`.
 
 **Remaining bottleneck**: 20-layer TTS LM forward pass (~150ms × 14 frames = 2.1s).
 Would need fused QKV, persistent KV view indexing, or GPU offload for further gains.
+
+---
+
+## HuggingFace downloads need `hf_xet` since the xet migration (April 2026)
+
+HuggingFace has migrated all model storage to its **xet CAS backend**
+(`cas-bridge.xethub.hf.co`). Every `huggingface.co/<repo>/resolve/main/<file>`
+URL now 302-redirects to a signed S3 URL on `cas-bridge.xethub.hf.co`.
+This affects every newly-uploaded weight and most existing repos.
+
+**The default Python HTTP path doesn't cope.** `huggingface_hub`'s
+urllib3-based client times out with `Read timed out` on every shard,
+and `huggingface_hub`'s auto-resume just hits the same wall in a loop.
+Direct `curl -C - --retry 10` also fails — it gets 70-80% of each shard
+then exits with code 18 (partial file) when the xet edge resets the
+TLS connection. curl's default `--retry` does not fire on exit 18, and
+even with `--retry-all-errors` the recovery loop is fragile.
+
+**`pip install hf_xet` fixes it for both the Python lib and the CLI.**
+`hf_xet` is an *optional* PyPI package that ships a Rust-native xet
+client. When installed, both the `huggingface_hub` Python library and
+the `hf` CLI silently delegate to it — same xet endpoints, dramatically
+more robust client. Without it, both tools fall back to the urllib3
+path and quietly time out.
+
+**No HF mirror escapes xet.** `hf-mirror.com`, `?download=true`,
+ModelScope (404 for VibeVoice repos), and every community re-upload
+of the same weights all 302 to `cas-bridge.xethub.hf.co`. xet IS the
+storage layer — there is no LFS-direct path on HF anymore.
+
+**The fix workflow:**
+
+```bash
+pip install hf_xet              # installs the Rust client
+hf download org/Model-7B \
+    --local-dir /path/to/dest   # now goes through hf_xet
+```
+
+`hf` CLI auto-detects `hf_xet` at runtime; no env var or flag needed.
+For the converter scripts that call `snapshot_download(...)` directly,
+the same auto-detection kicks in once `hf_xet` is in the env.
+
+**Cost of getting this wrong:** ~30 minutes of failed retries +
+partial-file curl loops + searching for non-xet mirrors that don't
+exist. Single one-liner away from working downloads.
