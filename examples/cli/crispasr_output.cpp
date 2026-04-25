@@ -115,7 +115,7 @@ static std::vector<std::pair<std::string, float>> split_text_at_punct(const std:
 // word-level splitting.
 static int count_sentence_ends(const std::string& text) {
     int n = 0;
-    for (size_t i = 0; i < text.size(); ) {
+    for (size_t i = 0; i < text.size();) {
         int plen = is_sentence_end_at(text, i);
         if (plen > 0) {
             n++;
@@ -133,10 +133,13 @@ static int count_sentence_ends(const std::string& text) {
 // suffix (e.g. cohere with CJK input groups everything into one pseudo-word).
 static bool words_carry_sentence_ends(const std::vector<crispasr_word>& words) {
     for (const auto& w : words) {
-        if (w.text.empty()) continue;
+        if (w.text.empty())
+            continue;
         const size_t n = w.text.size();
-        if (n >= 1 && is_sentence_end_at(w.text, n - 1) == 1) return true;
-        if (n >= 3 && is_sentence_end_at(w.text, n - 3) == 3) return true;
+        if (n >= 1 && is_sentence_end_at(w.text, n - 1) == 1)
+            return true;
+        if (n >= 3 && is_sentence_end_at(w.text, n - 3) == 3)
+            return true;
     }
     return false;
 }

@@ -57,10 +57,14 @@ static int lookup_char(const std::unordered_map<std::string, int>& v2id, unsigne
 // look up that single byte and miss, which is no worse than before).
 static int utf8_seq_len(const std::string& word, size_t i) {
     unsigned char b = (unsigned char)word[i];
-    if (b < 0x80) return 1;
-    if ((b & 0xE0) == 0xC0) return 2;
-    if ((b & 0xF0) == 0xE0) return 3;
-    if ((b & 0xF8) == 0xF0) return 4;
+    if (b < 0x80)
+        return 1;
+    if ((b & 0xE0) == 0xC0)
+        return 2;
+    if ((b & 0xF0) == 0xE0)
+        return 3;
+    if ((b & 0xF8) == 0xF0)
+        return 4;
     return 1; // invalid leading byte — fall back to single-byte
 }
 
@@ -74,7 +78,7 @@ static int utf8_seq_len(const std::string& word, size_t i) {
 static bool word_to_ids(const std::string& word, const std::unordered_map<std::string, int>& v2id, int blank_id,
                         std::vector<int>& out_chars) {
     bool any = false;
-    for (size_t i = 0; i < word.size(); ) {
+    for (size_t i = 0; i < word.size();) {
         const int n = utf8_seq_len(word, i);
         // Single ASCII byte — try lowercase first, then raw.
         if (n == 1) {
