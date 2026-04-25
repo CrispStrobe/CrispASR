@@ -115,6 +115,7 @@ extern "C" struct vibevoice_context_params vibevoice_context_default_params(void
     p.max_new_tokens = 512;
     p.verbosity = 1;
     p.use_gpu = true;
+    p.tts_steps = 20;
     return p;
 }
 
@@ -2962,7 +2963,7 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
     n_frames = std::min(n_frames, 300);
     int voice_ctx = ctx->voice.tts_seq_len; // 0 if no voice loaded
     int max_ctx = voice_ctx + prefix_len + n_frames + 16;
-    int num_steps = 20;
+    int num_steps = ctx->params.tts_steps > 0 ? ctx->params.tts_steps : 20;
 
     if (!ctx->kv_k || ctx->kv_max_ctx < max_ctx) {
         if (ctx->kv_ctx)
@@ -3073,8 +3074,13 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
     // Reuse the existing KV-cached decoder graph builder from ASR
     // (build_decoder_graph lambda is inside vibevoice_transcribe; let's inline a simpler version)
     // kv_sel: 0=positive (kv_k/kv_v), 1=negative (kv_neg_k/kv_neg_v)
+    // Accumulators for run_lm_step sub-timing
+    double lm_build_ms = 0, lm_alloc_ms = 0, lm_compute_ms = 0;
+    int lm_step_count = 0;
+
     auto run_lm_step = [&](const float* embeds, int n_tokens, int n_past, std::vector<float>& hidden_out,
                            int kv_sel = 0) -> bool {
+        auto t_build0 = std::chrono::high_resolution_clock::now();
         ggml_tensor* cur_kv_k = (kv_sel == 0) ? ctx->kv_k : ctx->kv_neg_k;
         ggml_tensor* cur_kv_v = (kv_sel == 0) ? ctx->kv_v : ctx->kv_neg_v;
         if (!cur_kv_k || !cur_kv_v)
@@ -3186,6 +3192,9 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
         ggml_build_forward_expand(gf, cur);
 
         // Run
+        auto t_alloc0 = std::chrono::high_resolution_clock::now();
+        lm_build_ms += std::chrono::duration<double, std::milli>(t_alloc0 - t_build0).count();
+
         ggml_backend_sched_reset(ctx->sched);
         if (!ggml_backend_sched_alloc_graph(ctx->sched, gf))
             return false;
@@ -3209,8 +3218,15 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
                                     mask.size() * sizeof(ggml_fp16_t));
         }
 
+        auto t_compute0 = std::chrono::high_resolution_clock::now();
+        lm_alloc_ms += std::chrono::duration<double, std::milli>(t_compute0 - t_alloc0).count();
+
         if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS)
             return false;
+
+        auto t_compute1 = std::chrono::high_resolution_clock::now();
+        lm_compute_ms += std::chrono::duration<double, std::milli>(t_compute1 - t_compute0).count();
+        lm_step_count++;
 
         hidden_out.resize(hp.d_lm);
         ggml_backend_tensor_get(ggml_graph_get_tensor(gf, "tts_hidden_out"), hidden_out.data(), 0,
@@ -3680,12 +3696,20 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
 
     // 6. Scale and decode
     const auto t_ar_done = std::chrono::high_resolution_clock::now();
+    if (getenv("VIBEVOICE_BENCH") && lm_step_count > 0) {
+        fprintf(stderr, "  BENCH LM step (%d calls): build=%.0fms (%.1f/call), alloc=%.0fms (%.1f/call), compute=%.0fms (%.1f/call)\n",
+                lm_step_count, lm_build_ms, lm_build_ms / lm_step_count,
+                lm_alloc_ms, lm_alloc_ms / lm_step_count,
+                lm_compute_ms, lm_compute_ms / lm_step_count);
+    }
     int actual_frames = total_latent / vae_dim;
     std::vector<float> scaled_latent(total_latent);
     for (int i = 0; i < total_latent; i++)
         scaled_latent[i] = all_latents[i] / scaling_factor - bias_factor;
 
+    auto t_vae_build0 = std::chrono::high_resolution_clock::now();
     ggml_cgraph* dec_gf = build_vae_decoder_graph(ctx, actual_frames);
+    auto t_vae_alloc0 = std::chrono::high_resolution_clock::now();
     ggml_backend_sched_reset(ctx->sched);
     if (!ggml_backend_sched_alloc_graph(ctx->sched, dec_gf)) {
         fprintf(stderr, "vibevoice TTS: decoder graph alloc failed\n");
@@ -3694,10 +3718,20 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
 
     ggml_backend_tensor_set(ggml_graph_get_tensor(dec_gf, "dec_latent"), scaled_latent.data(), 0,
                             total_latent * sizeof(float));
+    auto t_vae_compute0 = std::chrono::high_resolution_clock::now();
 
     if (ggml_backend_sched_graph_compute(ctx->sched, dec_gf) != GGML_STATUS_SUCCESS) {
         fprintf(stderr, "vibevoice TTS: decoder compute failed\n");
         return nullptr;
+    }
+    auto t_vae_compute1 = std::chrono::high_resolution_clock::now();
+    if (getenv("VIBEVOICE_BENCH")) {
+        fprintf(stderr, "  BENCH VAE (%d frames→%dx): build=%.0fms, alloc=%.0fms, compute=%.0fms, ops=%d\n",
+                actual_frames, actual_frames * 3200,
+                std::chrono::duration<double, std::milli>(t_vae_alloc0 - t_vae_build0).count(),
+                std::chrono::duration<double, std::milli>(t_vae_compute0 - t_vae_alloc0).count(),
+                std::chrono::duration<double, std::milli>(t_vae_compute1 - t_vae_compute0).count(),
+                ggml_graph_n_nodes(dec_gf));
     }
 
     ggml_tensor* audio_out = ggml_graph_get_tensor(dec_gf, "dec_audio");

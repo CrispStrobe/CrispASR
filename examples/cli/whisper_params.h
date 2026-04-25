@@ -215,4 +215,5 @@ struct whisper_params {
     std::string tts_text;
     std::string tts_output;     // output WAV file path (default: tts_output.wav)
     std::string tts_voice;      // voice prompt GGUF path
+    int         tts_steps = 20; // DPM-Solver++ inference steps (10-20, default 20)
 };

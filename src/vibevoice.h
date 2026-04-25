@@ -19,8 +19,9 @@ struct vibevoice_context;
 struct vibevoice_context_params {
     int n_threads;
     int max_new_tokens;
-    int verbosity; // 0=silent 1=normal 2=verbose
+    int verbosity;      // 0=silent 1=normal 2=verbose
     bool use_gpu;
+    int tts_steps;      // DPM-Solver++ inference steps (default 20, min 4)
 };
 
 struct vibevoice_context_params vibevoice_context_default_params(void);

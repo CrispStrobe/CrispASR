@@ -368,6 +368,10 @@ static bool whisper_params_parse(int argc, char** argv, whisper_params& params) 
             params.tts_output = ARGV_NEXT;
         } else if (arg == "--voice") {
             params.tts_voice = ARGV_NEXT;
+        } else if (arg == "--tts-steps") {
+            params.tts_steps = std::stoi(ARGV_NEXT);
+            if (params.tts_steps < 1) params.tts_steps = 1;
+            if (params.tts_steps > 100) params.tts_steps = 100;
         } else if (arg == "--auto-download") {
             params.auto_download = true;
         } else if (arg == "--server") {
