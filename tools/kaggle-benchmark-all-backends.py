@@ -164,6 +164,25 @@ import resource
 
 results = []
 
+def _cleanup_cache(backend_name):
+    """Remove downloaded model files from cache, keeping whisper-tiny and silero VAD."""
+    cache_dir = os.path.expanduser("~/.cache/crispasr")
+    if not os.path.isdir(cache_dir):
+        return
+    freed = 0
+    for f in os.listdir(cache_dir):
+        fpath = os.path.join(cache_dir, f)
+        if not os.path.isfile(fpath):
+            continue
+        # Keep whisper tiny (LID) and silero VAD — shared across backends
+        if "ggml-tiny" in f or "silero" in f or "tokenizer" in f:
+            continue
+        sz = os.path.getsize(fpath) / 1024 / 1024
+        os.remove(fpath)
+        freed += sz
+    if freed > 0:
+        print(f"    Cleaned cache: {freed:.0f} MB freed")
+
 def benchmark_backend(backend, display_name, timeout, notes):
     """Run a single backend benchmark. Returns result dict."""
     print(f"\n{'='*60}")
@@ -193,6 +212,8 @@ def benchmark_backend(backend, display_name, timeout, notes):
     if not ok:
         result["status"] = "TIMEOUT" if "TIMEOUT" in stderr else "CRASH"
         print(f"  ✗ {result['status']} after {elapsed:.1f}s")
+        # Still clean up any downloaded model to free disk
+        _cleanup_cache(backend)
         return result
 
     # Step 2: Parse transcript
@@ -204,6 +225,7 @@ def benchmark_backend(backend, display_name, timeout, notes):
     if not transcript:
         result["status"] = "EMPTY"
         print(f"  ✗ Empty output after {elapsed:.1f}s")
+        _cleanup_cache(backend)
         return result
 
     # Step 3: Compute WER
@@ -211,20 +233,24 @@ def benchmark_backend(backend, display_name, timeout, notes):
     result["wer"] = round(w, 4)
     result["status"] = "PASS" if w < 0.3 else "DEGRADED" if w < 0.5 else "FAIL"
 
-    # Step 4: Find model size
+    # Step 4: Find model size before cleanup
     cache_dir = os.path.expanduser("~/.cache/crispasr")
     if os.path.isdir(cache_dir):
-        for f in os.listdir(cache_dir):
-            if f.endswith(".gguf") or f.endswith(".bin"):
-                fpath = os.path.join(cache_dir, f)
-                sz = os.path.getsize(fpath) / 1024 / 1024
-                result["model_size_mb"] = round(sz, 1)
-                break  # use first match
+        for f in sorted(os.listdir(cache_dir)):
+            fpath = os.path.join(cache_dir, f)
+            if os.path.isfile(fpath) and (f.endswith(".gguf") or f.endswith(".bin")):
+                if "ggml-tiny" not in f and "silero" not in f:
+                    result["model_size_mb"] = round(os.path.getsize(fpath) / 1024 / 1024, 1)
+                    break
 
     status_icon = {"PASS": "✓", "DEGRADED": "~", "FAIL": "✗"}.get(result["status"], "?")
+    sz_str = f"{result['model_size_mb']:.0f}MB" if result["model_size_mb"] else "?"
     print(f"  {status_icon} WER={w:.1%}  RT={result['realtime_factor']:.1f}x  "
-          f"Time={elapsed:.1f}s")
+          f"Time={elapsed:.1f}s  Model={sz_str}")
     print(f"    Output: {transcript[:100]}")
+
+    # Step 5: Clean up model to free disk for the next backend
+    _cleanup_cache(backend)
 
     return result
 
