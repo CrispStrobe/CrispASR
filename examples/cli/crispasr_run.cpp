@@ -127,6 +127,23 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, wh
         fprintf(stderr, "crispasr: error: failed to read audio '%s'\n", fname_inp.c_str());
         return 20;
     }
+    // When --verbose (-v) or CRISPASR_VERBOSE=1 is set, activate ALL
+    // backend-specific debug/bench/verbose env vars. Uses setenv with
+    // overwrite=0 so explicit per-backend vars still take precedence.
+    if (params.verbose || (getenv("CRISPASR_VERBOSE") && getenv("CRISPASR_VERBOSE")[0])) {
+        params.verbose = true;
+        setenv("WAV2VEC2_VERBOSE", "1", 0);
+        setenv("WAV2VEC2_BENCH", "1", 0);
+        setenv("VIBEVOICE_BENCH", "1", 0);
+        setenv("VIBEVOICE_DEBUG", "1", 0);
+        setenv("FIRERED_BENCH", "1", 0);
+        setenv("FIRERED_DEBUG_DECODER_STEP", "1", 0);
+        setenv("COHERE_DEBUG", "1", 0);
+        setenv("COHERE_BENCH", "1", 0);
+        setenv("OMNIASR_BENCH", "1", 0);
+        setenv("FIREREDPUNC_DEBUG", "1", 0);
+    }
+
     crispasr_log_mem(params.verbose, "after audio decode");
     if (params.verbose) {
         double dur = (double)samples.size() / 16000.0;
