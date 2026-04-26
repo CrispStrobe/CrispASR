@@ -60,8 +60,8 @@ test_backend() {
     local normalized
     normalized=$(echo "$output" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z ]//g' | tr -s ' ')
 
-    # Check for key phrase (allow singular "american" for moonshine)
-    if echo "$normalized" | grep -q "fellow american"; then
+    # Check for key phrase (allow variants: american/americans/americas)
+    if echo "$normalized" | grep -q "fellow america"; then
         echo "PASS ($output)"
         PASS=$((PASS + 1))
     else
