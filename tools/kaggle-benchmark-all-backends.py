@@ -159,6 +159,8 @@ generator = ["-G", "Ninja"] if has_ninja else []
 common_flags = [
     "-DCMAKE_BUILD_TYPE=Release",
     "-DWHISPER_BUILD_TESTS=OFF",  # skip test binaries — saves ~30% build time
+    "-DCMAKE_C_FLAGS=-fopenmp",
+    "-DCMAKE_CXX_FLAGS=-fopenmp",
 ]
 
 cmake_ok = not need_reconfigure  # skip configure if cache exists
