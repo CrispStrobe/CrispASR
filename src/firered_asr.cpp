@@ -262,8 +262,8 @@ extern "C" struct firered_asr_context* firered_asr_init_from_file(const char* pa
     ctx->n_threads = params.n_threads > 0 ? params.n_threads : 4;
 
     if (params.verbosity >= 1) {
-        fprintf(stderr, "firered_asr: init start (verbosity=%d, use_gpu=%d, threads=%d)\n",
-                params.verbosity, params.use_gpu, params.n_threads);
+        fprintf(stderr, "firered_asr: init start (verbosity=%d, use_gpu=%d, threads=%d)\n", params.verbosity,
+                params.use_gpu, params.n_threads);
     }
     // Load weights to CPU so the decoder can use native Q4_K SIMD kernels
     // (70ms/step vs 587ms with F32 dequant or 2600ms with per-call CUDA graphs).
@@ -343,8 +343,7 @@ extern "C" struct firered_asr_context* firered_asr_init_from_file(const char* pa
         auto it = ts.find(name);
         if (it == ts.end()) {
             // Suppress known-missing tensors (BN running stats not needed at inference)
-            if (params.verbosity >= 2 &&
-                !strstr(name, "running_mean") && !strstr(name, "running_var"))
+            if (params.verbosity >= 2 && !strstr(name, "running_mean") && !strstr(name, "running_var"))
                 fprintf(stderr, "firered_asr: tensor '%s' not found\n", name);
             return nullptr;
         }
@@ -1924,8 +1923,8 @@ extern "C" char* firered_asr_transcribe(struct firered_asr_context* ctx, const f
         const float inv_sqrt_hd_dec = 1.0f / sqrtf((float)hd_dec);
 
         if (ctx->params.verbosity >= 1)
-            fprintf(stderr, "firered_asr: decoder starting (max_len=%d, beam=%d, layers=%d)\n",
-                    max_len, beam_size_effective, hp.n_layers_dec);
+            fprintf(stderr, "firered_asr: decoder starting (max_len=%d, beam=%d, layers=%d)\n", max_len,
+                    beam_size_effective, hp.n_layers_dec);
         int64_t t_dec0 = ggml_time_us();
 
         for (int step = 0; step < max_len; step++) {
@@ -1941,8 +1940,8 @@ extern "C" char* firered_asr_transcribe(struct firered_asr_context* ctx, const f
 
             if (ctx->params.verbosity >= 2 || (getenv("FIRERED_BENCH") && (step % 20 == 0 || step < 3))) {
                 int64_t t_now = ggml_time_us();
-                fprintf(stderr, "firered_asr: decode step %d/%d (%.1fms elapsed)\n",
-                        step, max_len, (t_now - t_dec0) / 1e3);
+                fprintf(stderr, "firered_asr: decode step %d/%d (%.1fms elapsed)\n", step, max_len,
+                        (t_now - t_dec0) / 1e3);
             }
 
             // Greedy path uses cached CPU matmuls (same as beam path).
@@ -1976,9 +1975,12 @@ extern "C" char* firered_asr_transcribe(struct firered_asr_context* ctx, const f
 
                         // Q/K/V via ggml_vecmat — uses Q4_K weights directly, no dequant
                         std::vector<float> Q_sa(d), K_cur(d), V_cur(d);
-                        ggml_vecmat(ctx->backend_cpu, ctx->sched, blk.sattn.w_qs, blk.sattn.w_qs_b, xn.data(), Q_sa.data(), d, d);
-                        ggml_vecmat(ctx->backend_cpu, ctx->sched, blk.sattn.w_ks, nullptr, xn.data(), K_cur.data(), d, d);
-                        ggml_vecmat(ctx->backend_cpu, ctx->sched, blk.sattn.w_vs, blk.sattn.w_vs_b, xn.data(), V_cur.data(), d, d);
+                        ggml_vecmat(ctx->backend_cpu, ctx->sched, blk.sattn.w_qs, blk.sattn.w_qs_b, xn.data(),
+                                    Q_sa.data(), d, d);
+                        ggml_vecmat(ctx->backend_cpu, ctx->sched, blk.sattn.w_ks, nullptr, xn.data(), K_cur.data(), d,
+                                    d);
+                        ggml_vecmat(ctx->backend_cpu, ctx->sched, blk.sattn.w_vs, blk.sattn.w_vs_b, xn.data(),
+                                    V_cur.data(), d, d);
 
                         auto& sa_k_hist = *beam.sa_k[li];
                         auto& sa_v_hist = *beam.sa_v[li];
@@ -2007,7 +2009,8 @@ extern "C" char* firered_asr_transcribe(struct firered_asr_context* ctx, const f
 
                         // Output projection via ggml
                         std::vector<float> sa_fc(d);
-                        ggml_vecmat(ctx->backend_cpu, ctx->sched, blk.sattn.fc_w, blk.sattn.fc_b, sa_out.data(), sa_fc.data(), d, d);
+                        ggml_vecmat(ctx->backend_cpu, ctx->sched, blk.sattn.fc_w, blk.sattn.fc_b, sa_out.data(),
+                                    sa_fc.data(), d, d);
                         for (int i = 0; i < d; i++)
                             x[i] += sa_fc[i];
                     }
@@ -2017,7 +2020,8 @@ extern "C" char* firered_asr_transcribe(struct firered_asr_context* ctx, const f
                     cpu_layernorm(x.data(), c.xattn_norm_w.data(), c.xattn_norm_b.data(), xn.data(), 1, d);
 
                     std::vector<float> Qx(d);
-                    ggml_vecmat(ctx->backend_cpu, ctx->sched, blk.xattn.w_qs, blk.xattn.w_qs_b, xn.data(), Qx.data(), d, d);
+                    ggml_vecmat(ctx->backend_cpu, ctx->sched, blk.xattn.w_qs, blk.xattn.w_qs_b, xn.data(), Qx.data(), d,
+                                d);
 
                     std::vector<float> attn_out(d, 0);
                     for (int h = 0; h < nh_dec; h++) {
@@ -2038,7 +2042,8 @@ extern "C" char* firered_asr_transcribe(struct firered_asr_context* ctx, const f
                     }
 
                     std::vector<float> fc_out(d);
-                    ggml_vecmat(ctx->backend_cpu, ctx->sched, blk.xattn.fc_w, blk.xattn.fc_b, attn_out.data(), fc_out.data(), d, d);
+                    ggml_vecmat(ctx->backend_cpu, ctx->sched, blk.xattn.fc_w, blk.xattn.fc_b, attn_out.data(),
+                                fc_out.data(), d, d);
                     for (int i = 0; i < d; i++)
                         x[i] += fc_out[i];
 
@@ -2050,7 +2055,8 @@ extern "C" char* firered_asr_transcribe(struct firered_asr_context* ctx, const f
                         h_up[i] = 0.5f * v * (1.0f + tanhf(0.7978845608f * (v + 0.044715f * v * v * v)));
                     }
                     std::vector<float> mlp_out(d);
-                    ggml_vecmat(ctx->backend_cpu, ctx->sched, blk.mlp_w2, blk.mlp_b2, h_up.data(), mlp_out.data(), c.di, d);
+                    ggml_vecmat(ctx->backend_cpu, ctx->sched, blk.mlp_w2, blk.mlp_b2, h_up.data(), mlp_out.data(), c.di,
+                                d);
                     for (int i = 0; i < d; i++)
                         x[i] += mlp_out[i];
                 }

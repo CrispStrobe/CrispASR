@@ -293,14 +293,15 @@ static bool fetch_libcurl(const std::string& url, const std::string& dest, bool 
     curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 10L);
     curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L); // fail on 4xx/5xx
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "CrispASR/1.0");
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 300L);     // 5 min max for large models
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 300L); // 5 min max for large models
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 30L);
 
     // HF xet storage: add Accept header for binary downloads + auth token if available
     struct curl_slist* headers = nullptr;
     headers = curl_slist_append(headers, "Accept: application/octet-stream");
     const char* hf_token = getenv("HF_TOKEN");
-    if (!hf_token) hf_token = getenv("HUGGING_FACE_HUB_TOKEN");
+    if (!hf_token)
+        hf_token = getenv("HUGGING_FACE_HUB_TOKEN");
     if (hf_token && hf_token[0]) {
         std::string auth = "Authorization: Bearer " + std::string(hf_token);
         headers = curl_slist_append(headers, auth.c_str());
@@ -393,7 +394,8 @@ bool fetch(const std::string& url, const std::string& dest, bool quiet) {
         curl_cmd += "-H 'Accept: application/octet-stream' ";
         {
             const char* tok = getenv("HF_TOKEN");
-            if (!tok) tok = getenv("HUGGING_FACE_HUB_TOKEN");
+            if (!tok)
+                tok = getenv("HUGGING_FACE_HUB_TOKEN");
             if (tok && tok[0])
                 curl_cmd += "-H 'Authorization: Bearer " + std::string(tok) + "' ";
         }
@@ -408,7 +410,8 @@ bool fetch(const std::string& url, const std::string& dest, bool quiet) {
         wget_cmd += "--header='Accept: application/octet-stream' ";
         {
             const char* tok = getenv("HF_TOKEN");
-            if (!tok) tok = getenv("HUGGING_FACE_HUB_TOKEN");
+            if (!tok)
+                tok = getenv("HUGGING_FACE_HUB_TOKEN");
             if (tok && tok[0])
                 wget_cmd += "--header='Authorization: Bearer " + std::string(tok) + "' ";
         }

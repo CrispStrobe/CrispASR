@@ -735,17 +735,21 @@ extern "C" char* omniasr_transcribe(struct omniasr_context* ctx, const float* sa
     if (dump_dir && dump_dir[0]) {
         auto dump_tensor = [&](const char* name) {
             ggml_tensor* t = ggml_graph_get_tensor(gf, name);
-            if (!t) return;
+            if (!t)
+                return;
             size_t n = ggml_nelements(t);
             std::vector<float> buf(n);
             ggml_backend_tensor_get(t, buf.data(), 0, n * sizeof(float));
             char path[512];
             snprintf(path, sizeof(path), "%s/%s.bin", dump_dir, name);
             FILE* f = fopen(path, "wb");
-            if (f) { fwrite(buf.data(), sizeof(float), n, f); fclose(f); }
-            fprintf(stderr, "  DUMP %s [%lld, %lld] first8: [%.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f]\n",
-                    name, (long long)t->ne[0], (long long)t->ne[1],
-                    buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7]);
+            if (f) {
+                fwrite(buf.data(), sizeof(float), n, f);
+                fclose(f);
+            }
+            fprintf(stderr, "  DUMP %s [%lld, %lld] first8: [%.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f]\n", name,
+                    (long long)t->ne[0], (long long)t->ne[1], buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6],
+                    buf[7]);
         };
         dump_tensor("cnn_out");
         dump_tensor("proj_out");
@@ -780,7 +784,6 @@ extern "C" char* omniasr_transcribe(struct omniasr_context* ctx, const float* sa
         return out;
     }
 
-read_logits:
     // Debug: read intermediate outputs
     if (ctx->params.verbosity >= 2) {
         auto dump = [&](const char* name) {
