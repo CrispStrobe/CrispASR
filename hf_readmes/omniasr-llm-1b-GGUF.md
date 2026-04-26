@@ -10,24 +10,23 @@ tags:
 - ggml
 - omniasr
 pipeline_tag: automatic-speech-recognition
-base_model: facebook/omniASR-LLM-300M
+base_model: facebook/omniASR-LLM-1B
 ---
 
-# OmniASR LLM-300M — GGUF
+# OmniASR LLM-1B — GGUF
 
-GGUF conversion of [`facebook/omniASR-LLM-300M`](https://huggingface.co/facebook/omniASR-LLM-300M) for use with [CrispASR](https://github.com/CrispStrobe/CrispASR).
+GGUF conversion of [`facebook/omniASR-LLM-1B`](https://huggingface.co/facebook/omniASR-LLM-1B) for use with [CrispASR](https://github.com/CrispStrobe/CrispASR).
 
 OmniASR is Meta's **multilingual ASR** model family supporting **1600+ languages**. Apache-2.0 license.
 
-Autoregressive LLM decoder with language conditioning. Near-perfect English output.
+Larger encoder (48L) + LLM decoder. Near-perfect English output.
 
 ## Files
 
 | File | Size |
 | --- | ---: |
-| `omniasr-llm-300m-v2-f16.gguf` | 3.0 GB |
-| `omniasr-llm-300m-v2-q4_k.gguf` | 1018 MB |
-| `omniasr-llm-300m-v2-q8_0.gguf` | 1.7 GB |
+| `omniasr-llm-1b-f16.gguf` | 4.2 GB |
+| `omniasr-llm-1b-q4_k.gguf` | 1.3 GB |
 
 ## Quick Start
 

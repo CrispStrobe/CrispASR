@@ -10,24 +10,24 @@ tags:
 - ggml
 - omniasr
 pipeline_tag: automatic-speech-recognition
-base_model: facebook/omniASR-LLM-300M
+base_model: aadel4/omniASR-CTC-300M-v2
 ---
 
-# OmniASR LLM-300M — GGUF
+# OmniASR CTC-300M-v2 — GGUF
 
-GGUF conversion of [`facebook/omniASR-LLM-300M`](https://huggingface.co/facebook/omniASR-LLM-300M) for use with [CrispASR](https://github.com/CrispStrobe/CrispASR).
+GGUF conversion of [`aadel4/omniASR-CTC-300M-v2`](https://huggingface.co/aadel4/omniASR-CTC-300M-v2) for use with [CrispASR](https://github.com/CrispStrobe/CrispASR).
 
 OmniASR is Meta's **multilingual ASR** model family supporting **1600+ languages**. Apache-2.0 license.
 
-Autoregressive LLM decoder with language conditioning. Near-perfect English output.
+Works on audio ≤5 seconds (model positional encoding limit). Use `--vad` for longer audio.
 
 ## Files
 
 | File | Size |
 | --- | ---: |
-| `omniasr-llm-300m-v2-f16.gguf` | 3.0 GB |
-| `omniasr-llm-300m-v2-q4_k.gguf` | 1018 MB |
-| `omniasr-llm-300m-v2-q8_0.gguf` | 1.7 GB |
+| `omniasr-ctc-300m-v2-q4_k.gguf` | 194 MB |
+| `omniasr-ctc-300m-v2-q8_0.gguf` | 343 MB |
+| `omniasr-ctc-300m-v2.gguf` | 623 MB |
 
 ## Quick Start
 
@@ -35,7 +35,7 @@ Autoregressive LLM decoder with language conditioning. Near-perfect English outp
 git clone https://github.com/CrispStrobe/CrispASR && cd CrispASR
 cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j$(nproc)
 
-./build/bin/crispasr --backend omniasr-llm -m auto --auto-download -f audio.wav
+./build/bin/crispasr --backend omniasr -m auto --auto-download -f audio.wav
 ```
 
 ## Conversion
