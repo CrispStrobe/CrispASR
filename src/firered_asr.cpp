@@ -1739,7 +1739,9 @@ extern "C" char* firered_asr_transcribe(struct firered_asr_context* ctx, const f
         // For LID models (odim <= 256, small vocab), only 1 decode step needed —
         // the first token after SOS is the language. Full ASR needs longer sequences.
         const bool is_lid = (hp.odim <= 256);
-        int max_len = is_lid ? 2 : std::min(T_sub * 2, 300);
+        // ~3-4 BPE tokens per second of audio is typical for ASR.
+        // Cap at T_sub (1 token per subsampled frame) which is already generous.
+        int max_len = is_lid ? 2 : std::min(T_sub, 150);
         int beam_size_effective = is_lid ? 1 : std::max(1, ctx->params.beam_size);
         int d = hp.d_model;
         int odim = hp.odim;
