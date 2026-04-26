@@ -587,7 +587,7 @@ static int run_encoder(moonshine_streaming_context* ctx, const float* frontend_o
         fn = ggml_mul_mat(ctx0, L.ffn_fc1_w, fn);
         if (L.ffn_fc1_b)
             fn = ggml_add(ctx0, fn, L.ffn_fc1_b);
-        fn = ggml_gelu_erf(ctx0, fn);  // exact GELU (erf variant) matching PyTorch default
+        fn = ggml_gelu_erf(ctx0, fn);
         fn = ggml_mul_mat(ctx0, L.ffn_fc2_w, fn);
         if (L.ffn_fc2_b)
             fn = ggml_add(ctx0, fn, L.ffn_fc2_b);
@@ -602,6 +602,13 @@ static int run_encoder(moonshine_streaming_context* ctx, const float* frontend_o
     ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 16384, false);
     ggml_build_forward_expand(gf, cur);
 
+    // Check weight integrity before gallocr
+    if (verbose) {
+        float w0[4];
+        ggml_backend_tensor_get(m.enc[0].attn_q_w, w0, 0, 4 * sizeof(float));
+        fprintf(stderr, "  pre-gallocr: enc.0.attn.q[0..3] = [%.6f,%.6f,%.6f,%.6f]\n", w0[0], w0[1], w0[2], w0[3]);
+    }
+
     // Allocate + set inputs
     ggml_gallocr_t gallocr = ggml_gallocr_new(ggml_backend_get_default_buffer_type(ctx->backend));
     if (!ggml_gallocr_alloc_graph(gallocr, gf)) {
@@ -609,6 +616,13 @@ static int run_encoder(moonshine_streaming_context* ctx, const float* frontend_o
         ggml_gallocr_free(gallocr);
         ggml_free(ctx0);
         return -1;
+    }
+
+    // Check weight integrity after gallocr
+    if (verbose) {
+        float w0[4];
+        ggml_backend_tensor_get(m.enc[0].attn_q_w, w0, 0, 4 * sizeof(float));
+        fprintf(stderr, "  post-gallocr: enc.0.attn.q[0..3] = [%.6f,%.6f,%.6f,%.6f]\n", w0[0], w0[1], w0[2], w0[3]);
     }
 
     ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "enc_input"), frontend_out, 0, (size_t)T_enc * d * sizeof(float));
