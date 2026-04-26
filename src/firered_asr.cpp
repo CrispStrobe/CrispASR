@@ -265,12 +265,15 @@ extern "C" struct firered_asr_context* firered_asr_init_from_file(const char* pa
         fprintf(stderr, "firered_asr: init start (verbosity=%d, use_gpu=%d, threads=%d)\n",
                 params.verbosity, params.use_gpu, params.n_threads);
     }
-    ctx->backend = params.use_gpu ? ggml_backend_init_best() : ggml_backend_cpu_init();
-    if (!ctx->backend)
-        ctx->backend = ggml_backend_cpu_init();
+    // Load weights to CPU so the decoder can use native Q4_K SIMD kernels
+    // (70ms/step vs 587ms with F32 dequant or 2600ms with per-call CUDA graphs).
+    // The encoder uses ggml_backend_sched which auto-copies CPU weights to GPU.
     ctx->backend_cpu = ggml_backend_cpu_init();
+    ctx->backend = params.use_gpu ? ggml_backend_init_best() : ctx->backend_cpu;
+    if (!ctx->backend || ggml_backend_is_cpu(ctx->backend))
+        ctx->backend = ctx->backend_cpu;
     if (params.verbosity >= 1)
-        fprintf(stderr, "firered_asr: backend ready (%s)\n",
+        fprintf(stderr, "firered_asr: backend ready (compute=%s, weights=CPU)\n",
                 ggml_backend_is_cpu(ctx->backend) ? "CPU" : "GPU");
     ggml_backend_cpu_set_n_threads(ctx->backend_cpu, ctx->n_threads);
     if (ggml_backend_is_cpu(ctx->backend))
@@ -322,11 +325,12 @@ extern "C" struct firered_asr_context* firered_asr_init_from_file(const char* pa
     }
 
     // ---- pass 2: load tensor data ----
+    // Always load to CPU: the decoder uses native Q4_K SIMD (70ms/step vs
+    // 590ms with F32 dequant). The encoder scheduler auto-copies to GPU.
     if (params.verbosity >= 1)
-        fprintf(stderr, "firered_asr: loading weights to %s...\n",
-                ggml_backend_is_cpu(ctx->backend) ? "CPU" : "GPU");
+        fprintf(stderr, "firered_asr: loading weights to CPU (Q4_K SIMD decoder)...\n");
     core_gguf::WeightLoad wl;
-    if (!core_gguf::load_weights(path_model, ctx->backend, "firered_asr", wl)) {
+    if (!core_gguf::load_weights(path_model, ctx->backend_cpu, "firered_asr", wl)) {
         fprintf(stderr, "firered_asr: failed to load weights from '%s'\n", path_model);
         delete ctx;
         return nullptr;
@@ -1720,21 +1724,6 @@ extern "C" char* firered_asr_transcribe(struct firered_asr_context* ctx, const f
         read_f32_vec(m.dec.norm_out_b, norm_b);
         read_f32_vec(m.dec.prj_w, prj_w); // [odim, d]
 
-        if (ctx->params.verbosity >= 2) {
-            // Dump first values of key decoder tensors to verify GPU→CPU dequantization
-            auto dump = [](const char* name, const std::vector<float>& v, int n) {
-                fprintf(stderr, "  %s[0..%d]: [", name, n-1);
-                for (int i = 0; i < n && i < (int)v.size(); i++)
-                    fprintf(stderr, "%s%.4f", i?",":"", v[i]);
-                fprintf(stderr, "] (total %zu)\n", v.size());
-            };
-            dump("emb_w", emb_w, 8);
-            dump("pe_dec", pe_dec, 8);
-            dump("norm_w", norm_w, 8);
-            dump("norm_b", norm_b, 8);
-            dump("prj_w", prj_w, 8);
-        }
-
         float scale = sqrtf((float)hp.d_model);
         // For LID models (odim <= 256, small vocab), only 1 decode step needed —
         // the first token after SOS is the language. Full ASR needs longer sequences.
@@ -1964,42 +1953,9 @@ extern "C" char* firered_asr_transcribe(struct firered_asr_context* ctx, const f
             // The ggml_vecmat approach creates 128 tiny GPU graphs per step,
             // where CUDA launch overhead (~20ms each) dominates compute (~0.1ms).
             // CPU matmuls with pre-cached F32 weights: ~0.5ms each → ~64ms/step.
+            // Greedy decode: use ggml_vecmat with CPU backend for native Q4_K
+            // SIMD kernels (70ms/step). Weights are on CPU buffer.
             if (beam_size == 1) {
-                // Lazy-load full F32 weights on first greedy step (shared with beam cache)
-                if (!dec_cache[0].full_cached) {
-                    int64_t t_dequant0 = ggml_time_us();
-                    for (int li2 = 0; li2 < hp.n_layers_dec; li2++) {
-                        auto& b2 = m.dec.blocks[li2];
-                        auto& c2 = dec_cache[li2];
-                        read_f32_vec(b2.sattn.w_qs, c2.sattn_w_qs);
-                        if (b2.sattn.w_qs_b) read_f32_vec(b2.sattn.w_qs_b, c2.sattn_w_qs_b);
-                        read_f32_vec(b2.sattn.w_ks, c2.sattn_w_ks);
-                        read_f32_vec(b2.sattn.w_vs, c2.sattn_w_vs);
-                        if (b2.sattn.w_vs_b) read_f32_vec(b2.sattn.w_vs_b, c2.sattn_w_vs_b);
-                        read_f32_vec(b2.sattn.fc_w, c2.sattn_fc_w);
-                        if (b2.sattn.fc_b) read_f32_vec(b2.sattn.fc_b, c2.sattn_fc_b);
-                        read_f32_vec(b2.xattn.w_qs, c2.xattn_w_qs);
-                        if (b2.xattn.w_qs_b) read_f32_vec(b2.xattn.w_qs_b, c2.xattn_w_qs_b);
-                        read_f32_vec(b2.xattn.fc_w, c2.xattn_fc_w);
-                        if (b2.xattn.fc_b) read_f32_vec(b2.xattn.fc_b, c2.xattn_fc_b);
-                        read_f32_vec(b2.mlp_w1, c2.mlp_w1);
-                        if (b2.mlp_b1) read_f32_vec(b2.mlp_b1, c2.mlp_b1);
-                        read_f32_vec(b2.mlp_w2, c2.mlp_w2);
-                        if (b2.mlp_b2) read_f32_vec(b2.mlp_b2, c2.mlp_b2);
-                        c2.full_cached = true;
-                    }
-                    if (ctx->params.verbosity >= 1) {
-                        int64_t t_dequant = ggml_time_us() - t_dequant0;
-                        fprintf(stderr, "firered_asr: decoder weights dequantized in %.1fms\n", t_dequant / 1e3);
-                    }
-                    if (ctx->params.verbosity >= 2) {
-                        auto& c0 = dec_cache[0];
-                        fprintf(stderr, "  dec.0 sattn_w_qs[0..7]: [%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f]\n",
-                                c0.sattn_w_qs[0], c0.sattn_w_qs[1], c0.sattn_w_qs[2], c0.sattn_w_qs[3],
-                                c0.sattn_w_qs[4], c0.sattn_w_qs[5], c0.sattn_w_qs[6], c0.sattn_w_qs[7]);
-                    }
-                }
-
                 auto& beam = beams[0];
                 int cur_token = beam.tokens.back();
                 int64_t t_logit = 0;
@@ -2009,41 +1965,31 @@ extern "C" char* firered_asr_transcribe(struct firered_asr_context* ctx, const f
                 std::vector<float> x(d);
                 for (int i = 0; i < d; i++) {
                     x[i] = emb_w[cur_token * d + i] * scale;
-                }
-                if (ctx->params.verbosity >= 2 && step < 2) {
-                    fprintf(stderr, "  step%d: token=%d(sos=%d,eos=%d), x_emb[0..7]=[%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f]\n",
-                            step, cur_token, hp.sos_id, hp.eos_id,
-                            x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7]);
-                }
-                for (int i = 0; i < d; i++) {
                     if (step < (int)(m.dec.pe->ne[1]))
                         x[i] += pe_dec[step * d + i];
                 }
 
                 for (int li = 0; li < hp.n_layers_dec; li++) {
                     auto& c = dec_cache[li];
-                    const bool debug_dec_here = (debug_dec_step >= 0 && debug_dec_layer >= 0 &&
-                                                 step == debug_dec_step && li == debug_dec_layer);
+                    auto& blk = m.dec.blocks[li];
 
                     // === Self-attention (causal, attend to history) ===
                     {
                         std::vector<float> xn(d);
                         cpu_layernorm(x.data(), c.sattn_norm_w.data(), c.sattn_norm_b.data(), xn.data(), 1, d);
 
+                        // Q/K/V via ggml_vecmat — uses Q4_K weights directly, no dequant
                         std::vector<float> Q_sa(d), K_cur(d), V_cur(d);
-                        cpu_matmul_bt(xn.data(), c.sattn_w_qs.data(), Q_sa.data(), 1, d, d);
-                        if (!c.sattn_w_qs_b.empty())
-                            for (int i = 0; i < d; i++) Q_sa[i] += c.sattn_w_qs_b[i];
-                        cpu_matmul_bt(xn.data(), c.sattn_w_ks.data(), K_cur.data(), 1, d, d);
-                        cpu_matmul_bt(xn.data(), c.sattn_w_vs.data(), V_cur.data(), 1, d, d);
-                        if (!c.sattn_w_vs_b.empty())
-                            for (int i = 0; i < d; i++) V_cur[i] += c.sattn_w_vs_b[i];
+                        ggml_vecmat(ctx->backend_cpu, ctx->sched, blk.sattn.w_qs, blk.sattn.w_qs_b, xn.data(), Q_sa.data(), d, d);
+                        ggml_vecmat(ctx->backend_cpu, ctx->sched, blk.sattn.w_ks, nullptr, xn.data(), K_cur.data(), d, d);
+                        ggml_vecmat(ctx->backend_cpu, ctx->sched, blk.sattn.w_vs, blk.sattn.w_vs_b, xn.data(), V_cur.data(), d, d);
 
                         auto& sa_k_hist = *beam.sa_k[li];
                         auto& sa_v_hist = *beam.sa_v[li];
                         sa_k_hist.insert(sa_k_hist.end(), K_cur.begin(), K_cur.end());
                         sa_v_hist.insert(sa_v_hist.end(), V_cur.begin(), V_cur.end());
 
+                        // Attention scoring (CPU — variable-length history)
                         int n_hist = (int)(sa_k_hist.size() / d);
                         std::vector<float> sa_out(d, 0);
                         for (int h = 0; h < nh_dec; h++) {
@@ -2062,13 +2008,12 @@ extern "C" char* firered_asr_transcribe(struct firered_asr_context* ctx, const f
                                 sa_out[h * hd_dec + dd] = (float)s;
                             }
                         }
-                        if (debug_dec_here)
-                            firered_debug_dump_vec("greedy.sa_out", sa_out, 8);
 
+                        // Output projection via ggml
                         std::vector<float> sa_fc(d);
-                        cpu_matmul_bt(sa_out.data(), c.sattn_fc_w.data(), sa_fc.data(), 1, d, d);
+                        ggml_vecmat(ctx->backend_cpu, ctx->sched, blk.sattn.fc_w, blk.sattn.fc_b, sa_out.data(), sa_fc.data(), d, d);
                         for (int i = 0; i < d; i++)
-                            x[i] += sa_fc[i] + (c.sattn_fc_b.empty() ? 0 : c.sattn_fc_b[i]);
+                            x[i] += sa_fc[i];
                     }
 
                     // === Cross-attention ===
@@ -2076,9 +2021,7 @@ extern "C" char* firered_asr_transcribe(struct firered_asr_context* ctx, const f
                     cpu_layernorm(x.data(), c.xattn_norm_w.data(), c.xattn_norm_b.data(), xn.data(), 1, d);
 
                     std::vector<float> Qx(d);
-                    cpu_matmul_bt(xn.data(), c.xattn_w_qs.data(), Qx.data(), 1, d, d);
-                    if (!c.xattn_w_qs_b.empty())
-                        for (int i = 0; i < d; i++) Qx[i] += c.xattn_w_qs_b[i];
+                    ggml_vecmat(ctx->backend_cpu, ctx->sched, blk.xattn.w_qs, blk.xattn.w_qs_b, xn.data(), Qx.data(), d, d);
 
                     std::vector<float> attn_out(d, 0);
                     for (int h = 0; h < nh_dec; h++) {
@@ -2097,33 +2040,21 @@ extern "C" char* firered_asr_transcribe(struct firered_asr_context* ctx, const f
                             attn_out[h * hd_dec + dd] = (float)s;
                         }
                     }
-                    if (debug_dec_here) {
-                        firered_debug_dump_vec("greedy.qx", Qx, 8);
-                        firered_debug_dump_vec("greedy.attn_out", attn_out, 8);
-                    }
 
                     std::vector<float> fc_out(d);
-                    cpu_matmul_bt(attn_out.data(), c.xattn_fc_w.data(), fc_out.data(), 1, d, d);
+                    ggml_vecmat(ctx->backend_cpu, ctx->sched, blk.xattn.fc_w, blk.xattn.fc_b, attn_out.data(), fc_out.data(), d, d);
                     for (int i = 0; i < d; i++)
-                        x[i] += fc_out[i] + (c.xattn_fc_b.empty() ? 0 : c.xattn_fc_b[i]);
+                        x[i] += fc_out[i];
 
                     cpu_layernorm(x.data(), c.mlp_norm_w.data(), c.mlp_norm_b.data(), xn.data(), 1, d);
                     std::vector<float> h_up(c.di);
-                    cpu_matmul_bt(xn.data(), c.mlp_w1.data(), h_up.data(), 1, d, c.di);
-                    if (!c.mlp_b1.empty())
-                        for (int i = 0; i < c.di; i++) h_up[i] += c.mlp_b1[i];
+                    ggml_vecmat(ctx->backend_cpu, ctx->sched, blk.mlp_w1, blk.mlp_b1, xn.data(), h_up.data(), d, c.di);
                     for (int i = 0; i < c.di; i++) {
                         float v = h_up[i];
                         h_up[i] = 0.5f * v * (1.0f + tanhf(0.7978845608f * (v + 0.044715f * v * v * v)));
                     }
                     std::vector<float> mlp_out(d);
-                    cpu_matmul_bt(h_up.data(), c.mlp_w2.data(), mlp_out.data(), 1, c.di, d);
-                    if (!c.mlp_b2.empty())
-                        for (int i = 0; i < d; i++) mlp_out[i] += c.mlp_b2[i];
-                    if (debug_dec_here) {
-                        firered_debug_dump_vec("greedy.fc_out", fc_out, 8);
-                        firered_debug_dump_vec("greedy.mlp_out", mlp_out, 8);
-                    }
+                    ggml_vecmat(ctx->backend_cpu, ctx->sched, blk.mlp_w2, blk.mlp_b2, h_up.data(), mlp_out.data(), c.di, d);
                     for (int i = 0; i < d; i++)
                         x[i] += mlp_out[i];
                 }
@@ -2132,12 +2063,9 @@ extern "C" char* firered_asr_transcribe(struct firered_asr_context* ctx, const f
                 std::vector<float> xn(d);
                 cpu_layernorm(x.data(), norm_w.data(), norm_b.data(), xn.data(), 1, d);
 
-                // Always use CPU for greedy logit projection — the GPU
-                // project_decoder_logits reuses a graph that conflicts with
-                // the scheduler state after decoder weight dequantization,
-                // producing wrong logits and never hitting EOS.
+                // Logit projection via ggml (Q4_K native on CPU)
                 std::vector<float> logits(odim);
-                cpu_matmul_bt(xn.data(), prj_w.data(), logits.data(), 1, d, odim);
+                ggml_vecmat(ctx->backend_cpu, ctx->sched, m.dec.prj_w, nullptr, xn.data(), logits.data(), d, odim);
                 t_logit += ggml_time_us() - tl0;
 
                 if (getenv("FIRERED_BENCH") && (step < 3 || step == max_len - 1)) {
