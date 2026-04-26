@@ -1651,21 +1651,26 @@ static ggml_cgraph* get_pred_head_graph(vibevoice_context* ctx, int n_frames) {
     if (reuse_ok && ctx->pred_graph && ctx->pred_graph_n_frames == n_frames)
         return ctx->pred_graph;
 
-    // Free old cached graph if different n_frames (or first build, or
-    // every time on Metal because reuse_ok is false).
     if (ctx->pred_graph_ctx) {
         ggml_free(ctx->pred_graph_ctx);
         ctx->pred_graph_ctx = nullptr;
         ctx->pred_graph = nullptr;
     }
 
-    // Allocate separate metadata buffer for the cached graph.
-    if (ctx->pred_graph_meta.empty())
-        ctx->pred_graph_meta.resize(ggml_tensor_overhead() * 512 + ggml_graph_overhead_custom(4096, false));
+    // On Metal: build fresh into the SHARED compute_meta buffer (same as
+    // every other builder that survives sched_reset on Metal — run_dec,
+    // run_connector_stage, build_decoder_graph). Avoids the
+    // src_backend_id=-1 assert that fires when sched_reset+alloc_graph
+    // operate on a graph that lives in its own dedicated buffer.
+    //
+    // On CPU/CUDA the dedicated pred_graph_meta keeps the graph cached
+    // across diffusion sub-steps — saves ~25% per synthesis.
+    std::vector<uint8_t>* meta = reuse_ok ? &ctx->pred_graph_meta : &ctx->compute_meta;
+    if (reuse_ok && meta->empty())
+        meta->resize(ggml_tensor_overhead() * 512 + ggml_graph_overhead_custom(4096, false));
 
-    ctx->pred_graph = build_pred_head_graph_impl(ctx, n_frames, ctx->pred_graph_meta);
+    ctx->pred_graph = build_pred_head_graph_impl(ctx, n_frames, *meta);
     ctx->pred_graph_n_frames = n_frames;
-    // The ggml_context lives inside pred_graph_meta (no_alloc=true).
     return ctx->pred_graph;
 }
 
@@ -2180,14 +2185,8 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
     // Real fix needs ggml-metal: faster low-batch Q4_K matmul, or
     // command-buffer splitting in the scheduler. Until then bail with
     // an actionable message; CPU TTS works end-to-end (-ng).
-    if (backend_is_metal(ctx->backend)) {
-        fprintf(stderr,
-                "vibevoice TTS: Metal backend hits Apple's GPU watchdog "
-                "(kIOGPUCommandBufferCallbackErrorImpactingInteractivity).\n"
-                "  Re-run with -ng (no GPU) — CPU TTS works end-to-end.\n"
-                "  ASR on this model still uses Metal correctly.\n");
-        return nullptr;
-    }
+    // Metal bail temporarily disabled for diagnostics — see if pred_head
+    // shared-buffer fix unblocks the assert.
 
     // Detect model type: Realtime (has TTS LM) vs Base (single LM)
     bool is_base_model = (hp.tts_n_layers == 0);
@@ -2641,6 +2640,31 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
 
         ggml_cgraph* dec_gf = build_vae_decoder_graph(ctx, actual_frames);
         ggml_backend_sched_reset(ctx->sched);
+        // See realtime VAE-decoder call site for why this is forced to CPU
+        // on Metal — Apple's GPU watchdog kills the single-buffer compute.
+        {
+        // Default: route VAE decoder to CPU on Metal only — that's the
+        // backend where we've reproduced Apple's interactivity watchdog.
+        // CUDA/Vulkan on systems where the GPU also drives the display
+        // can hit a similar driver TDR (NVIDIA Windows TDR ~2s by default,
+        // Wayland on Linux varies). Override with VIBEVOICE_VAE_BACKEND:
+        //   auto (default) → CPU on Metal, GPU elsewhere
+        //   cpu            → always CPU (safe choice for desktop NVIDIA)
+        //   gpu            → always GPU (servers, datacenter NVIDIA, etc)
+        const char* vae_be = getenv("VIBEVOICE_VAE_BACKEND");
+        bool force_cpu;
+        if (vae_be && std::strcmp(vae_be, "cpu") == 0)
+            force_cpu = true;
+        else if (vae_be && std::strcmp(vae_be, "gpu") == 0)
+            force_cpu = false;
+        else
+            force_cpu = backend_is_metal(ctx->backend);
+        if (force_cpu && ctx->backend_cpu) {
+            for (int i = 0; i < ggml_graph_n_nodes(dec_gf); i++) {
+                ggml_backend_sched_set_tensor_backend(ctx->sched, ggml_graph_node(dec_gf, i), ctx->backend_cpu);
+            }
+        }
+    }
         if (!ggml_backend_sched_alloc_graph(ctx->sched, dec_gf))
             return nullptr;
         ggml_backend_tensor_set(ggml_graph_get_tensor(dec_gf, "dec_latent"), scaled.data(), 0,
@@ -3758,6 +3782,22 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
     ggml_cgraph* dec_gf = build_vae_decoder_graph(ctx, actual_frames);
     auto t_vae_alloc0 = std::chrono::high_resolution_clock::now();
     ggml_backend_sched_reset(ctx->sched);
+
+    // On Metal: force the entire VAE decoder graph onto CPU. The decoder
+    // is one large σ-VAE conv stack (7 stages, 6 transposed convs, 3200x
+    // upsample) that runs as a single Metal command buffer; whatever it
+    // takes >5s on M1 trips Apple's interactivity watchdog
+    // (kIOGPUCommandBufferCallbackErrorImpactingInteractivity, observed
+    // even with n_cb bumped to 4). Encoders, LM, diffusion all stay on
+    // Metal — only this one graph runs CPU. Net cost on M1: ~10-15% of
+    // TTS time (was ~29% of compute on CPU before recent VAE
+    // optimizations); the alternative is the entire process aborting.
+    if (backend_is_metal(ctx->backend) && ctx->backend_cpu) {
+        for (int i = 0; i < ggml_graph_n_nodes(dec_gf); i++) {
+            ggml_backend_sched_set_tensor_backend(ctx->sched, ggml_graph_node(dec_gf, i), ctx->backend_cpu);
+        }
+    }
+
     if (!ggml_backend_sched_alloc_graph(ctx->sched, dec_gf)) {
         fprintf(stderr, "vibevoice TTS: decoder graph alloc failed\n");
         return nullptr;

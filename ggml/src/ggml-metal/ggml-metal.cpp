@@ -599,7 +599,19 @@ ggml_backend_t ggml_backend_metal_init(void) {
         /* .context   = */ ctx,
     };
 
-    ggml_backend_metal_set_n_cb(backend, 1);
+    // Default n_cb=4: split big graphs (e.g. vibevoice σ-VAE decoder) across
+    // more Metal command buffers so no single submit holds the GPU long
+    // enough to trigger Apple's interactivity watchdog
+    // (kIOGPUCommandBufferCallbackErrorImpactingInteractivity). The
+    // upstream default of 1 puts essentially the whole graph in one buffer,
+    // which works fine for LLaMA-shaped decode but kills TTS-shaped graphs.
+    // Override per-process via GGML_METAL_NCB env (see set_n_cb call below).
+    {
+        const char* ncb_env = getenv("GGML_METAL_NCB");
+        int ncb = ncb_env ? atoi(ncb_env) : 4;
+        if (ncb < 1) ncb = 1;
+        ggml_backend_metal_set_n_cb(backend, ncb);
+    }
 
     return backend;
 }
@@ -693,7 +705,19 @@ static ggml_backend_t ggml_backend_metal_device_init_backend(ggml_backend_dev_t 
         /* .context   = */ ctx,
     };
 
-    ggml_backend_metal_set_n_cb(backend, 1);
+    // Default n_cb=4: split big graphs (e.g. vibevoice σ-VAE decoder) across
+    // more Metal command buffers so no single submit holds the GPU long
+    // enough to trigger Apple's interactivity watchdog
+    // (kIOGPUCommandBufferCallbackErrorImpactingInteractivity). The
+    // upstream default of 1 puts essentially the whole graph in one buffer,
+    // which works fine for LLaMA-shaped decode but kills TTS-shaped graphs.
+    // Override per-process via GGML_METAL_NCB env (see set_n_cb call below).
+    {
+        const char* ncb_env = getenv("GGML_METAL_NCB");
+        int ncb = ncb_env ? atoi(ncb_env) : 4;
+        if (ncb < 1) ncb = 1;
+        ggml_backend_metal_set_n_cb(backend, ncb);
+    }
 
     return backend;
 
