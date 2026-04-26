@@ -30,9 +30,10 @@ are in `LEARNINGS.md`. Full roadmap in `PLAN.md`.
 - **Moonshine streaming** — **[next, IN PROGRESS]** different architecture from regular moonshine.
   Converter DONE (`models/convert-moonshine-streaming-to-gguf.py`, tested tiny+small).
   Runtime skeleton compiles (`src/moonshine_streaming.{h,cpp}`), loads GGUF, binds 161 tensors.
-  Audio frontend implemented (CPU). Encoder needs rewrite to single-graph pattern.
-  Decoder not yet implemented. Backend wrapper not yet created.
-  Reference: frontend `[-0.2069,...]`, enc `[0.5546,-0.0089,...]`, transcript OK.
+  Audio frontend implemented (CPU). Encoder gallocr pattern implemented; likely divergence fixed
+  (changed ggml_gelu→ggml_gelu_erf to match PyTorch default — needs verification with model).
+  Decoder not yet implemented (KV cache + cross-attention + greedy decode). Backend wrapper stub exists.
+  Reference: frontend `[-0.2069,...]`, enc `[0.5546,-0.0089,...]`.
   Sizes: tiny 34M, small 123M, medium 245M. All MIT.
 - **Gemma-4-E2B** — **[queued]** Google multimodal with 300M USM Conformer audio encoder + 2.3B Gemma4 LLM.
   GGUF exists at ggml-org (text+vision only). llama.cpp PR #21421 adds audio conformer.
