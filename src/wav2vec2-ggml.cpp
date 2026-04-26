@@ -1242,9 +1242,18 @@ std::vector<float> wav2vec2_compute_logits_graph(const wav2vec2_model& m, const 
         std::vector<uint8_t> compute_meta;
         ggml_cgraph* gf = wav2vec2_build_transformer_graph(m, T, compute_meta);
         if (gf) {
-            ggml_backend_cpu_set_n_threads(m.backend, n_threads);
-            ggml_backend_t backends[1] = {m.backend};
-            ggml_backend_sched_t sched = ggml_backend_sched_new(backends, nullptr, 1, 16384, false, false);
+            if (ggml_backend_is_cpu(m.backend))
+                ggml_backend_cpu_set_n_threads(m.backend, n_threads);
+            // Dual-backend scheduler: GPU primary + CPU fallback for unsupported ops
+            ggml_backend_t enc_cpu = nullptr;
+            int enc_n_be = 1;
+            ggml_backend_t backends[2] = {m.backend, nullptr};
+            if (!ggml_backend_is_cpu(m.backend)) {
+                enc_cpu = ggml_backend_cpu_init();
+                ggml_backend_cpu_set_n_threads(enc_cpu, n_threads);
+                backends[enc_n_be++] = enc_cpu;
+            }
+            ggml_backend_sched_t sched = ggml_backend_sched_new(backends, nullptr, enc_n_be, 16384, false, false);
 
             // CRITICAL: assign all weight tensors to the model's backend
             // so the scheduler doesn't reallocate them
@@ -1328,6 +1337,7 @@ std::vector<float> wav2vec2_compute_logits_graph(const wav2vec2_model& m, const 
                                 }
                             }
                             ggml_backend_sched_free(sched);
+                            if (enc_cpu) ggml_backend_free(enc_cpu);
                             t_enc = ggml_time_us() - t0;
                             if (bench) {
                                 fprintf(stderr, "wav2vec2: =========== performance report ===========\n");
@@ -1347,6 +1357,7 @@ std::vector<float> wav2vec2_compute_logits_graph(const wav2vec2_model& m, const 
                 }
             }
             ggml_backend_sched_free(sched);
+            if (enc_cpu) ggml_backend_free(enc_cpu);
             // Fall through to per-layer path if sched failed
             fprintf(stderr, "[wav2vec2] sched path failed (alloc or compute), using per-layer fallback\n");
         }

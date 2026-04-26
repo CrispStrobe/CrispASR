@@ -325,12 +325,14 @@ struct moonshine_context* moonshine_init_with_params(struct moonshine_init_param
         return nullptr;
     }
 
-    // 7. Initialize backend (GPU if available, CPU fallback)
-    ctx->backend = ggml_backend_init_best();
-    if (!ctx->backend)
-        ctx->backend = ggml_backend_cpu_init();
+    // 7. Initialize backend.
+    // Force CPU: weights are allocated on CPU buffer (line 138) and the graph
+    // uses ggml_backend_graph_compute (no scheduler). GPU would crash because
+    // it can't access CPU-resident weight tensors without a scheduler.
+    // The model is tiny (27M params) so GPU overhead exceeds compute benefit.
+    ctx->backend = ggml_backend_cpu_init();
     if (!ctx->backend) {
-        fprintf(stderr, "%s: failed to init any backend\n", __func__);
+        fprintf(stderr, "%s: failed to init CPU backend\n", __func__);
         delete ctx;
         return nullptr;
     }
