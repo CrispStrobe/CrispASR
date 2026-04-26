@@ -707,10 +707,292 @@ extern "C" char* moonshine_streaming_transcribe(struct moonshine_streaming_conte
                 enc_output[2], enc_output[3], enc_output[4], enc_output[5], enc_output[6], enc_output[7]);
     }
 
-    // Step 3: Decoder (greedy, autoregressive)
-    // TODO: implement full decoder with cross-attention KV cache
-    // For now, return placeholder
-    std::string result = "[moonshine-streaming decoder not yet implemented]";
+    // Step 3: Decoder — adapted from moonshine.cpp's decoder pattern.
+    // Uses ggml tensor KV caches with gallocr per step.
+    auto& hp = m.hp;
+    int enc_h = (int)hp.enc_hidden;
+    int dec_h = (int)hp.dec_hidden;
+    int dec_layers = (int)hp.dec_n_layers;
+    int dec_heads = (int)hp.dec_n_heads;
+    int dec_kv_heads = (int)hp.dec_kv_heads;
+    int dec_head_dim = (int)hp.dec_head_dim;
+    int dec_inter = (int)hp.dec_intermediate;
+    int vocab = (int)hp.vocab_size;
+    int rotary_dim = (int)(dec_head_dim * hp.partial_rotary_factor);
+    float rope_theta = hp.rope_theta;
+    float ln_eps = 1e-5f;
+    float scale = 1.0f / sqrtf((float)dec_head_dim);
+    int max_tokens = std::min((int)ceil(n_samples / 16000.0 * 6.5), 194);
+
+    // ── Allocate KV caches as ggml tensors ──────────────────────────────
+    int kv_max = max_tokens + 2;
+    size_t kv_tensors = dec_layers * 4 + 4; // self K/V + cross K/V per layer
+    size_t kv_mem = ggml_tensor_overhead() * kv_tensors + 256;
+    struct ggml_init_params kv_gp = {kv_mem, nullptr, true};
+    ggml_context* kv_ctx = ggml_init(kv_gp);
+    if (!kv_ctx)
+        return nullptr;
+
+    struct kv_layer {
+        ggml_tensor* self_k;
+        ggml_tensor* self_v;
+        ggml_tensor* cross_k;
+        ggml_tensor* cross_v;
+    };
+    std::vector<kv_layer> kv(dec_layers);
+    for (int i = 0; i < dec_layers; i++) {
+        kv[i].self_k = ggml_new_tensor_3d(kv_ctx, GGML_TYPE_F32, dec_head_dim, kv_max, dec_kv_heads);
+        kv[i].self_v = ggml_new_tensor_3d(kv_ctx, GGML_TYPE_F32, dec_head_dim, kv_max, dec_kv_heads);
+        kv[i].cross_k = ggml_new_tensor_3d(kv_ctx, GGML_TYPE_F32, dec_head_dim, T_enc, dec_kv_heads);
+        kv[i].cross_v = ggml_new_tensor_3d(kv_ctx, GGML_TYPE_F32, dec_head_dim, T_enc, dec_kv_heads);
+    }
+    ggml_backend_buffer_t kv_buf = ggml_backend_alloc_ctx_tensors_from_buft(kv_ctx, ggml_backend_cpu_buffer_type());
+    if (!kv_buf) {
+        ggml_free(kv_ctx);
+        return nullptr;
+    }
+    ggml_backend_buffer_clear(kv_buf, 0);
+
+    // ── Precompute cross-attention K/V ──────────────────────────────────
+    // For moonshine-streaming: add learned pos_emb to encoder output before K/V projection
+    {
+        size_t xkv_n = dec_layers * 10 + 20;
+        size_t xkv_mem = ggml_tensor_overhead() * xkv_n + ggml_graph_overhead();
+        struct ggml_init_params xkv_gp = {xkv_mem, nullptr, true};
+        ggml_context* xctx = ggml_init(xkv_gp);
+        if (!xctx) {
+            ggml_backend_buffer_free(kv_buf);
+            ggml_free(kv_ctx);
+            return nullptr;
+        }
+
+        // Encoder output [enc_h, T_enc]
+        ggml_tensor* enc_inp = ggml_new_tensor_2d(xctx, GGML_TYPE_F32, enc_h, T_enc);
+        ggml_set_name(enc_inp, "xkv_enc");
+        ggml_set_input(enc_inp);
+
+        ggml_cgraph* xgf = ggml_new_graph(xctx);
+        std::vector<ggml_tensor*> k_outs(dec_layers), v_outs(dec_layers);
+
+        // Add learned positional embedding to encoder output before projection
+        ggml_tensor* enc_pos = enc_inp;
+        if (m.dec_pos_emb_w) {
+            // pos_emb is [max_pos, enc_h] — slice to [T_enc, enc_h] = [enc_h, T_enc] in ggml
+            ggml_tensor* pos_ids = ggml_new_tensor_1d(xctx, GGML_TYPE_I32, T_enc);
+            ggml_set_name(pos_ids, "pos_ids");
+            ggml_set_input(pos_ids);
+            ggml_tensor* pos_emb = ggml_get_rows(xctx, m.dec_pos_emb_w, pos_ids);
+            enc_pos = ggml_add(xctx, enc_inp, pos_emb);
+        }
+
+        // Optional encoder→decoder projection
+        if (m.dec_enc_proj_w) {
+            enc_pos = ggml_mul_mat(xctx, m.dec_enc_proj_w, enc_pos);
+        }
+
+        for (int i = 0; i < dec_layers; i++) {
+            auto& L = m.dec[i];
+            ggml_tensor* K = ggml_mul_mat(xctx, L.cross_attn_k_w, enc_pos);
+            K = ggml_reshape_3d(xctx, K, dec_head_dim, dec_kv_heads, T_enc);
+            K = ggml_cont(xctx, ggml_permute(xctx, K, 0, 2, 1, 3));
+            char nk[32];
+            snprintf(nk, sizeof(nk), "xk_%d", i);
+            ggml_set_name(K, nk);
+            ggml_set_output(K);
+            k_outs[i] = K;
+            ggml_build_forward_expand(xgf, K);
+
+            ggml_tensor* V = ggml_mul_mat(xctx, L.cross_attn_v_w, enc_pos);
+            V = ggml_reshape_3d(xctx, V, dec_head_dim, dec_kv_heads, T_enc);
+            V = ggml_cont(xctx, ggml_permute(xctx, V, 0, 2, 1, 3));
+            char nv[32];
+            snprintf(nv, sizeof(nv), "xv_%d", i);
+            ggml_set_name(V, nv);
+            ggml_set_output(V);
+            v_outs[i] = V;
+            ggml_build_forward_expand(xgf, V);
+        }
+
+        ggml_gallocr_t xalloc = ggml_gallocr_new(ggml_backend_get_default_buffer_type(ctx->backend));
+        if (!ggml_gallocr_alloc_graph(xalloc, xgf)) {
+            ggml_gallocr_free(xalloc);
+            ggml_free(xctx);
+            ggml_backend_buffer_free(kv_buf);
+            ggml_free(kv_ctx);
+            return nullptr;
+        }
+        ggml_backend_tensor_set(ggml_graph_get_tensor(xgf, "xkv_enc"), enc_output.data(), 0,
+                                (size_t)enc_h * T_enc * sizeof(float));
+        if (m.dec_pos_emb_w) {
+            std::vector<int32_t> pos_data(T_enc);
+            for (int i = 0; i < T_enc; i++)
+                pos_data[i] = i;
+            ggml_tensor* pt = ggml_graph_get_tensor(xgf, "pos_ids");
+            if (pt)
+                ggml_backend_tensor_set(pt, pos_data.data(), 0, T_enc * sizeof(int32_t));
+        }
+
+        ggml_backend_graph_compute(ctx->backend, xgf);
+
+        size_t kv_bytes = (size_t)dec_head_dim * T_enc * dec_kv_heads * sizeof(float);
+        for (int i = 0; i < dec_layers; i++) {
+            ggml_backend_tensor_get(k_outs[i], kv[i].cross_k->data, 0, kv_bytes);
+            ggml_backend_tensor_get(v_outs[i], kv[i].cross_v->data, 0, kv_bytes);
+        }
+        ggml_gallocr_free(xalloc);
+        ggml_free(xctx);
+    }
+
+    if (ctx->verbosity >= 1)
+        fprintf(stderr, "moonshine_streaming: cross-KV precomputed (%d layers)\n", dec_layers);
+
+    // ── Greedy decode loop ──────────────────────────────────────────────
+    ggml_gallocr_t dec_alloc = ggml_gallocr_new(ggml_backend_get_default_buffer_type(ctx->backend));
+    int32_t cur_token = (int32_t)hp.bos_token_id;
+    std::vector<int32_t> tokens;
+    int kv_pos = 0;
+
+    for (int step = 0; step < max_tokens; step++) {
+        size_t dn = dec_layers * 60 + 50;
+        size_t dmem = ggml_tensor_overhead() * dn + ggml_graph_overhead();
+        struct ggml_init_params dgp = {dmem, nullptr, true};
+        ggml_context* dctx = ggml_init(dgp);
+        if (!dctx)
+            break;
+
+        ggml_tensor* tok_inp = ggml_new_tensor_1d(dctx, GGML_TYPE_I32, 1);
+        ggml_set_name(tok_inp, "tok");
+        ggml_set_input(tok_inp);
+        ggml_tensor* pos_inp = ggml_new_tensor_1d(dctx, GGML_TYPE_I32, 1);
+        ggml_set_name(pos_inp, "pos");
+        ggml_set_input(pos_inp);
+
+        ggml_cgraph* dgf = ggml_new_graph(dctx);
+
+        // Token embedding + cast to F32
+        ggml_tensor* cur = ggml_get_rows(dctx, m.dec_embed_w, tok_inp);
+        if (cur->type != GGML_TYPE_F32)
+            cur = ggml_cast(dctx, cur, GGML_TYPE_F32);
+
+        for (int li = 0; li < dec_layers; li++) {
+            auto& L = m.dec[li];
+
+            // === Self-attention ===
+            ggml_tensor* res = cur;
+            cur = ggml_mul(dctx, ggml_norm(dctx, cur, ln_eps), L.attn_norm_w);
+
+            ggml_tensor* Q = ggml_mul_mat(dctx, L.attn_q_w, cur);
+            ggml_tensor* Kn = ggml_mul_mat(dctx, L.attn_k_w, cur);
+            ggml_tensor* Vn = ggml_mul_mat(dctx, L.attn_v_w, cur);
+
+            Q = ggml_reshape_3d(dctx, Q, dec_head_dim, dec_heads, 1);
+            Kn = ggml_reshape_3d(dctx, Kn, dec_head_dim, dec_kv_heads, 1);
+            Vn = ggml_reshape_3d(dctx, Vn, dec_head_dim, dec_kv_heads, 1);
+
+            // Partial RoPE
+            Q = ggml_rope_ext(dctx, Q, pos_inp, nullptr, rotary_dim, 0, 0, rope_theta, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f);
+            Kn = ggml_rope_ext(dctx, Kn, pos_inp, nullptr, rotary_dim, 0, 0, rope_theta, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f);
+
+            // Write to self-KV cache
+            Kn = ggml_permute(dctx, Kn, 0, 2, 1, 3);
+            Vn = ggml_permute(dctx, Vn, 0, 2, 1, 3);
+            ggml_tensor* ks = ggml_view_3d(dctx, kv[li].self_k, dec_head_dim, 1, dec_kv_heads, kv[li].self_k->nb[1],
+                                           kv[li].self_k->nb[2], kv_pos * kv[li].self_k->nb[1]);
+            ggml_tensor* vs = ggml_view_3d(dctx, kv[li].self_v, dec_head_dim, 1, dec_kv_heads, kv[li].self_v->nb[1],
+                                           kv[li].self_v->nb[2], kv_pos * kv[li].self_v->nb[1]);
+            ggml_build_forward_expand(dgf, ggml_cpy(dctx, Kn, ks));
+            ggml_build_forward_expand(dgf, ggml_cpy(dctx, Vn, vs));
+
+            int kvl = kv_pos + 1;
+            ggml_tensor* Kc = ggml_view_3d(dctx, kv[li].self_k, dec_head_dim, kvl, dec_kv_heads, kv[li].self_k->nb[1],
+                                           kv[li].self_k->nb[2], 0);
+            ggml_tensor* Vc = ggml_view_3d(dctx, kv[li].self_v, dec_head_dim, kvl, dec_kv_heads, kv[li].self_v->nb[1],
+                                           kv[li].self_v->nb[2], 0);
+            Q = ggml_permute(dctx, Q, 0, 2, 1, 3);
+            ggml_tensor* attn = ggml_flash_attn_ext(dctx, Q, Kc, Vc, nullptr, scale, 0.0f, 0.0f);
+            attn = ggml_reshape_2d(dctx, attn, dec_heads * dec_head_dim, 1);
+            cur = ggml_add(dctx, ggml_mul_mat(dctx, L.attn_o_w, attn), res);
+
+            // === Cross-attention ===
+            res = cur;
+            cur = ggml_mul(dctx, ggml_norm(dctx, cur, ln_eps), L.cross_attn_norm_w);
+            ggml_tensor* Qx = ggml_mul_mat(dctx, L.cross_attn_q_w, cur);
+            Qx = ggml_reshape_3d(dctx, Qx, dec_head_dim, dec_heads, 1);
+            Qx = ggml_permute(dctx, Qx, 0, 2, 1, 3);
+            ggml_tensor* Kcx = ggml_view_3d(dctx, kv[li].cross_k, dec_head_dim, T_enc, dec_kv_heads,
+                                            kv[li].cross_k->nb[1], kv[li].cross_k->nb[2], 0);
+            ggml_tensor* Vcx = ggml_view_3d(dctx, kv[li].cross_v, dec_head_dim, T_enc, dec_kv_heads,
+                                            kv[li].cross_v->nb[1], kv[li].cross_v->nb[2], 0);
+            ggml_tensor* xa = ggml_flash_attn_ext(dctx, Qx, Kcx, Vcx, nullptr, scale, 0.0f, 0.0f);
+            xa = ggml_reshape_2d(dctx, xa, dec_heads * dec_head_dim, 1);
+            cur = ggml_add(dctx, ggml_mul_mat(dctx, L.cross_attn_o_w, xa), res);
+
+            // === SiLU-gated FFN ===
+            res = cur;
+            cur = ggml_mul(dctx, ggml_norm(dctx, cur, ln_eps), L.ffn_norm_w);
+            ggml_tensor* fc1 = ggml_mul_mat(dctx, L.ffn_fc1_w, cur);
+            if (L.ffn_fc1_b)
+                fc1 = ggml_add(dctx, fc1, L.ffn_fc1_b);
+            // Split: first half = value, second half = gate
+            ggml_tensor* val = ggml_view_2d(dctx, fc1, dec_inter, 1, fc1->nb[1], 0);
+            ggml_tensor* gate = ggml_view_2d(dctx, fc1, dec_inter, 1, fc1->nb[1], dec_inter * sizeof(float));
+            cur = ggml_mul(dctx, ggml_silu(dctx, gate), val);
+            cur = ggml_mul_mat(dctx, L.ffn_fc2_w, cur);
+            if (L.ffn_fc2_b)
+                cur = ggml_add(dctx, cur, L.ffn_fc2_b);
+            cur = ggml_add(dctx, cur, res);
+        }
+
+        // Final norm + logits
+        cur = ggml_mul(dctx, ggml_norm(dctx, cur, ln_eps), m.dec_output_norm_w);
+        ggml_tensor* logits = ggml_mul_mat(dctx, m.dec_output_w, cur);
+        ggml_set_name(logits, "logits");
+        ggml_set_output(logits);
+        ggml_build_forward_expand(dgf, logits);
+
+        if (!ggml_gallocr_alloc_graph(dec_alloc, dgf)) {
+            ggml_free(dctx);
+            break;
+        }
+        ggml_backend_tensor_set(ggml_graph_get_tensor(dgf, "tok"), &cur_token, 0, sizeof(int32_t));
+        int32_t pos_val = kv_pos;
+        ggml_backend_tensor_set(ggml_graph_get_tensor(dgf, "pos"), &pos_val, 0, sizeof(int32_t));
+
+        if (ggml_backend_graph_compute(ctx->backend, dgf) != GGML_STATUS_SUCCESS) {
+            ggml_free(dctx);
+            break;
+        }
+
+        std::vector<float> logits_data(vocab);
+        ggml_backend_tensor_get(ggml_graph_get_tensor(dgf, "logits"), logits_data.data(), 0, vocab * sizeof(float));
+        ggml_free(dctx);
+
+        // Greedy argmax
+        int best = 0;
+        for (int i = 1; i < vocab; i++)
+            if (logits_data[i] > logits_data[best])
+                best = i;
+
+        if (best == (int)hp.eos_token_id)
+            break;
+        tokens.push_back(best);
+        cur_token = best;
+        kv_pos++;
+
+        if (ctx->verbosity >= 2 && step < 3) {
+            fprintf(stderr, "  dec step %d: token=%d\n", step, best);
+        }
+    }
+    ggml_gallocr_free(dec_alloc);
+
+    if (ctx->verbosity >= 1)
+        fprintf(stderr, "moonshine_streaming: decoder produced %d tokens\n", (int)tokens.size());
+
+    // ── Detokenize ──────────────────────────────────────────────────────
+    std::string result = ctx->tokenizer.tokens_to_text(tokens);
+
+    ggml_backend_buffer_free(kv_buf);
+    ggml_free(kv_ctx);
 
     char* out = (char*)malloc(result.size() + 1);
     memcpy(out, result.c_str(), result.size() + 1);
