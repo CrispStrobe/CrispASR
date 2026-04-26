@@ -1371,6 +1371,39 @@ Without the stage-by-stage protocol, these bugs would have been
 invisible — the model runs without errors in all cases, just produces
 wrong text.
 
+### `ggml_backend_sched_alloc_graph` return value isn't optional on Metal
+
+`hybrid_encoder` runs three small graphs per encoder layer (proj, A, B)
+and the proj graph silently ignored the return value of
+`ggml_backend_sched_alloc_graph`:
+
+```cpp
+ggml_backend_sched_reset(sctx->sched);
+ggml_backend_sched_alloc_graph(sctx->sched, gf);   // ← return value dropped
+ggml_backend_tensor_set(...);
+ggml_backend_sched_graph_compute(sctx->sched, gf); // CRASH on Metal
+```
+
+When alloc fails, the scheduler's per-tensor backend assignments are in
+an indeterminate state. `ggml_backend_sched_graph_compute` then walks
+that state and dispatches the projection mul_mat to Metal with whatever
+shape happens to live in `op->src[0]->ne[]` — often something that
+trips `GGML_ASSERT(ne00 == ne10)` at `ggml-metal-ops.cpp:2029`. The
+assert message looks like a shape mismatch in *user code*, but the real
+operands are fine — the bug is upstream in the scheduler init.
+
+CPU and CUDA tolerated this by accident. CUDA paths through ggml-cuda
+re-derived shape locally; Metal's mul_mat trusts the scheduler.
+
+**Fix:** treat alloc-graph failure as a hard error. Graphs A and B
+already used the `if (!alloc) bail` pattern; bringing the proj graph in
+line is a 4-line change.
+
+**Lesson:** any time you see `GGML_ASSERT(ne00 == ne10)` fire on a
+matmul with operands that *should* match, suspect scheduler-state
+corruption upstream — not a real shape bug. Check that every
+`alloc_graph` call paired with a `graph_compute` checks its return.
+
 ## FireRedVAD: FSMN Conv1d replication
 
 ### Manual conv index arithmetic vs PyTorch Conv1d
