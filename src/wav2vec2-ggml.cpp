@@ -1145,31 +1145,20 @@ std::vector<float> wav2vec2_compute_logits_graph(const wav2vec2_model& m, const 
     }
 
     t_proj = ggml_time_us() - t0;
-    // ---- 3. Positional conv via ggml_conv_1d_group ----
+    // ---- 3. Positional conv (grouped Conv1d + GELU + residual) ----
+    // Uses manual CPU grouped_conv1d_same with GPU-safe weight access via
+    // tensor_data_f32. The grouped conv is a single op per layer — the
+    // expensive matmuls (QKV/FFN) run on GPU via ggml_linear_f32.
     t0 = ggml_time_us();
     {
         int G_pos = (int)hp.num_conv_pos_embedding_groups;
         int n_layers = m.n_pos_conv_layers;
 
-        // hidden is [T, H] in C row-major: hidden[t * H + h].
-        // ggml tensor [T, H] (ne[0]=T, ne[1]=H) stores data as data[t + h * T],
-        // which equals hidden_cf[h * T + t] — channel-first C array.
-        // Transpose hidden to channel-first for ggml tensor loading.
+        // Transpose hidden [T,H] row-major to channel-first [H,T]
         std::vector<float> pos_cf(H * T);
         for (int t = 0; t < T; t++)
             for (int h = 0; h < H; h++)
                 pos_cf[h * T + t] = hidden[t * H + h];
-
-        // Dual-backend scheduler: ggml_conv_1d_group is CPU-only (no Metal/CUDA kernel),
-        // so the scheduler needs a CPU fallback when m.backend is GPU.
-        ggml_backend_t pos_cpu = ggml_backend_cpu_init();
-        ggml_backend_cpu_set_n_threads(pos_cpu, n_threads);
-        int pos_n_be = 1;
-        ggml_backend_t pos_bks[2] = {m.backend, nullptr};
-        if (!ggml_backend_is_cpu(m.backend)) {
-            pos_bks[pos_n_be++] = pos_cpu;
-        }
-        ggml_backend_sched_t pos_sc = ggml_backend_sched_new(pos_bks, nullptr, pos_n_be, 256, false, false);
 
         for (int li = 0; li < n_layers; li++) {
             ggml_tensor* w_tensor = (li == 0 && m.pos_conv_w) ? m.pos_conv_w : m.pos_conv_layers[li].w;
@@ -1180,111 +1169,33 @@ std::vector<float> wav2vec2_compute_logits_graph(const wav2vec2_model& m, const 
             }
 
             int K_this = (int)w_tensor->ne[0];
-            // "Same" padding: pad_left = (K-1)/2, pad_right = (K-1) - pad_left
-            int pad_left = (K_this - 1) / 2;
-            int pad_right = (K_this - 1) - pad_left;
 
-            size_t gmem = ggml_tensor_overhead() * 30 + ggml_graph_overhead() + 2 * 1024 * 1024;
-            struct ggml_init_params gp = {gmem, nullptr, true};
-            ggml_context* pctx = ggml_init(gp);
+            // Grouped positional conv: manual CPU with GPU-safe weight access.
+            // Uses tensor_data_f32() which reads GPU weights to CPU cache.
+            const float* pw = tensor_data_f32(w_tensor);
+            const float* pb = b_tensor ? tensor_data_f32(b_tensor) : nullptr;
+            std::vector<float> pos_out(H * T, 0.0f);
+            grouped_conv1d_same(pos_cf.data(), pw, pb, pos_out.data(), H, H, K_this, G_pos, T);
 
-            // Input as ggml [T, H] — data stored channel-first: data[t + h*T]
-            ggml_tensor* inp = ggml_new_tensor_2d(pctx, GGML_TYPE_F32, (int64_t)T, (int64_t)H);
-            ggml_set_name(inp, "pos_in");
-            ggml_set_input(inp);
-
-            // Pre-pad along ne[0]=T for asymmetric "same" padding
-            ggml_tensor* inp_padded = ggml_pad_ext(pctx, inp, pad_left, pad_right, 0, 0, 0, 0, 0, 0);
-
-            // Grouped conv: [K, H/G, H] × [T_padded, H] → [T, H]
-            ggml_tensor* cur = ggml_conv_1d_group(pctx, w_tensor, inp_padded, 1, 0, 1, G_pos);
-            if (ggml_n_dims(cur) > 2)
-                cur = ggml_reshape_2d(pctx, cur, cur->ne[0], cur->ne[1]);
-
-            // Bias: output [T, H] in ggml = data[t + h*T].
-            // ggml_add broadcasts b[ne[0]] over ne[1]. Here ne[0]=T, b has H elements.
-            // Need to transpose to [H, T], add bias, transpose back.
-            if (b_tensor) {
-                cur = ggml_cont(pctx, ggml_transpose(pctx, cur)); // [H, T]
-                cur = ggml_add(pctx, cur, b_tensor);
-                cur = ggml_cont(pctx, ggml_transpose(pctx, cur)); // [T, H]
-            }
-
-            // Multi-layer: LayerNorm over channels
             if (n_layers > 1) {
-                cur = ggml_cont(pctx, ggml_transpose(pctx, cur)); // [H, T]
-                cur = ggml_norm(pctx, cur, hp.layer_norm_eps);
-                cur = ggml_cont(pctx, ggml_transpose(pctx, cur)); // [T, H]
-            }
-
-            cur = ggml_gelu(pctx, cur);
-
-            ggml_set_name(cur, "pos_out");
-            ggml_set_output(cur);
-
-            ggml_cgraph* gf_p = ggml_new_graph(pctx);
-            ggml_build_forward_expand(gf_p, cur);
-
-            ggml_backend_sched_set_tensor_backend(pos_sc, w_tensor, m.backend);
-            if (b_tensor)
-                ggml_backend_sched_set_tensor_backend(pos_sc, b_tensor, m.backend);
-
-            ggml_backend_sched_reset(pos_sc);
-            bool ok = ggml_backend_sched_alloc_graph(pos_sc, gf_p);
-            if (ok) {
-                // Load channel-first data into ggml [T, H] tensor
-                ggml_backend_tensor_set(ggml_graph_get_tensor(gf_p, "pos_in"), pos_cf.data(), 0,
-                                        (size_t)T * H * sizeof(float));
-                ok = (ggml_backend_sched_graph_compute(pos_sc, gf_p) == GGML_STATUS_SUCCESS);
-            }
-
-            if (ok) {
-                ggml_tensor* out_t = ggml_graph_get_tensor(gf_p, "pos_out");
-                ggml_backend_tensor_get(out_t, pos_cf.data(), 0, (size_t)T * H * sizeof(float));
-            } else {
-                fprintf(stderr, "[wav2vec2] pos_conv ggml layer %d failed, manual fallback\n", li);
-                // Fallback to manual grouped conv (pos_cf is already channel-first)
-                std::vector<float> pw_buf;
-                const float* pw;
-                size_t pw_n = (size_t)ggml_nelements(w_tensor);
-                if (w_tensor->type == GGML_TYPE_F16) {
-                    pw_buf.resize(pw_n);
-                    const ggml_fp16_t* p16 = (const ggml_fp16_t*)w_tensor->data;
-                    for (size_t i2 = 0; i2 < pw_n; i2++)
-                        pw_buf[i2] = ggml_fp16_to_fp32(p16[i2]);
-                    pw = pw_buf.data();
-                } else {
-                    pw = tensor_data_f32(w_tensor);
-                }
-                const float* pb = b_tensor ? tensor_data_f32(b_tensor) : nullptr;
-                std::vector<float> pos_out(H * T, 0.0f);
-                grouped_conv1d_same(pos_cf.data(), pw, pb, pos_out.data(), H, H, K_this, G_pos, T);
-
-                if (n_layers > 1) {
-                    for (int t2 = 0; t2 < T; t2++) {
-                        double sum2 = 0, sq2 = 0;
-                        for (int h2 = 0; h2 < H; h2++) {
-                            float v2 = pos_out[h2 * T + t2];
-                            sum2 += v2;
-                            sq2 += (double)v2 * v2;
-                        }
-                        float mean2 = (float)(sum2 / H), var2 = (float)(sq2 / H) - mean2 * mean2;
-                        float inv2 = 1.0f / sqrtf(var2 + hp.layer_norm_eps);
-                        for (int h2 = 0; h2 < H; h2++)
-                            pos_out[h2 * T + t2] = (pos_out[h2 * T + t2] - mean2) * inv2;
+                for (int t2 = 0; t2 < T; t2++) {
+                    double sum2 = 0, sq2 = 0;
+                    for (int h2 = 0; h2 < H; h2++) {
+                        float v2 = pos_out[h2 * T + t2];
+                        sum2 += v2;
+                        sq2 += (double)v2 * v2;
                     }
+                    float mean2 = (float)(sum2 / H);
+                    float var2 = (float)(sq2 / H) - mean2 * mean2;
+                    float inv2 = 1.0f / sqrtf(var2 + hp.layer_norm_eps);
+                    for (int h2 = 0; h2 < H; h2++)
+                        pos_out[h2 * T + t2] = (pos_out[h2 * T + t2] - mean2) * inv2;
                 }
-                for (auto& v : pos_out)
-                    v = gelu(v);
-                pos_cf = std::move(pos_out);
             }
-
-            ggml_free(pctx);
+            for (auto& v : pos_out)
+                v = gelu(v);
+            pos_cf = std::move(pos_out);
         }
-
-        ggml_backend_sched_free(pos_sc);
-        if (!ggml_backend_is_cpu(m.backend))
-            ggml_backend_free(pos_cpu);
 
         // Add residual: hidden[t*H+h] += pos_cf[h*T+t]
         for (int t = 0; t < T; t++)
