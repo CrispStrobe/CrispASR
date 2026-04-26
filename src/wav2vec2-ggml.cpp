@@ -875,26 +875,16 @@ std::vector<float> wav2vec2_compute_logits_graph(const wav2vec2_model& m, const 
     // the next conv1d input [L, Cin].
     t0 = ggml_time_us();
 
-    // Persistent scheduler for CNN layers — dual-backend for GPU compatibility.
-    // CNN uses im2col + mul_mat which have CUDA/Metal kernels, but some norm ops
-    // may need CPU fallback on certain backends.
-    ggml_backend_t cnn_cpu = nullptr;
-    int cnn_n_be = 1;
-    ggml_backend_t cnn_bks[2] = {m.backend, nullptr};
-    if (!ggml_backend_is_cpu(m.backend)) {
-        cnn_cpu = ggml_backend_cpu_init();
-        ggml_backend_cpu_set_n_threads(cnn_cpu, n_threads);
-        cnn_bks[cnn_n_be++] = cnn_cpu;
-    }
-    ggml_backend_sched_t cnn_sc = ggml_backend_sched_new(cnn_bks, nullptr, cnn_n_be, 128, false, false);
+    // Persistent scheduler for CNN layers — reused across all 7 conv layers.
+    ggml_backend_t cnn_bks[1] = {m.backend};
+    ggml_backend_sched_t cnn_sc = ggml_backend_sched_new(cnn_bks, nullptr, 1, 128, false, false);
 
     // cnn_buf holds data in ggml [L, C] format = memory layout data[l + c*L]
     // which is channel-first in C row-major terms: data[c * L + l].
     std::vector<float> cnn_buf(audio.begin(), audio.end());
     uint32_t L_cur = (uint32_t)n_samples, C_cur = 1;
 
-    if (ggml_backend_is_cpu(m.backend))
-        ggml_backend_cpu_set_n_threads(m.backend, n_threads);
+    ggml_backend_cpu_set_n_threads(m.backend, n_threads);
 
     for (uint32_t li = 0; li < hp.num_feat_extract_layers; li++) {
         uint32_t C_out = hp.conv_dim[li];
@@ -1011,8 +1001,6 @@ std::vector<float> wav2vec2_compute_logits_graph(const wav2vec2_model& m, const 
         C_cur = C_out;
     }
     ggml_backend_sched_free(cnn_sc);
-    if (cnn_cpu)
-        ggml_backend_free(cnn_cpu);
 
     int T = (int)L_cur;
     int C_cnn = (int)C_cur;
