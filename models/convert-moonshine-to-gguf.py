@@ -333,10 +333,14 @@ def main():
         if hf_name in CONV1D_TENSORS:
             print(f"  Conv1d weight (no transpose needed): {hf_name} {data.shape}")
 
-        # Convert dtype (returns same array if already correct dtype and contiguous)
-        data = np.ascontiguousarray(data.astype(out_dtype))
-
-        writer.add_tensor(gguf_name, data, raw_dtype=ggml_type)
+        # 1D tensors (norms, biases, scalars) must stay F32 — they're used in
+        # ggml_mul/ggml_add binary ops which require F32 operands.
+        if data.ndim <= 1:
+            data = np.ascontiguousarray(data.astype(np.float32))
+            writer.add_tensor(gguf_name, data, raw_dtype=GGMLQuantizationType.F32)
+        else:
+            data = np.ascontiguousarray(data.astype(out_dtype))
+            writer.add_tensor(gguf_name, data, raw_dtype=ggml_type)
         mapped_count += 1
 
     if unmapped:

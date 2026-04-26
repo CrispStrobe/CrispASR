@@ -338,18 +338,25 @@ struct moonshine_context* moonshine_init_with_params(struct moonshine_init_param
     return ctx;
 }
 
-// conv_1d using F32 im2col (ggml_conv_1d hardcodes F16 which requires F16 kernels)
+// conv_1d using F32 im2col. Kernel can be any quantized type (F16, Q4_K, etc.)
+// since it goes into src0 of ggml_mul_mat; im2col (F32) goes into src1.
 static struct ggml_tensor* conv_1d_f32(struct ggml_context* ctx0,
                                        struct ggml_tensor* kernel, // [K, IC, OC]
                                        struct ggml_tensor* input,  // [IL, IC, N]
                                        int stride, int pad, int dil) {
     struct ggml_tensor* im2col = ggml_im2col(ctx0, kernel, input, stride, 0, pad, 0, dil, 0, false, GGML_TYPE_F32);
 
+    // ggml_mul_mat(A, B) = A^T @ B. Kernel as src0 (can be quantized), im2col as src1 (F32).
+    // kernel_2d: [IC*K, OC], im2col_2d: [IC*K, N*OL]
+    // result: kernel^T[OC, IC*K] @ im2col[IC*K, N*OL] = [OC, N*OL]
     struct ggml_tensor* result =
-        ggml_mul_mat(ctx0, ggml_reshape_2d(ctx0, im2col, im2col->ne[0], im2col->ne[2] * im2col->ne[1]),
-                     ggml_reshape_2d(ctx0, kernel, kernel->ne[0] * kernel->ne[1], kernel->ne[2]));
+        ggml_mul_mat(ctx0, ggml_reshape_2d(ctx0, kernel, kernel->ne[0] * kernel->ne[1], kernel->ne[2]),
+                     ggml_reshape_2d(ctx0, im2col, im2col->ne[0], im2col->ne[2] * im2col->ne[1]));
 
-    result = ggml_reshape_3d(ctx0, result, im2col->ne[1], kernel->ne[2], im2col->ne[2]);
+    // result is [OC, N*OL] → need [OL, OC, N]
+    // Transpose to [N*OL, OC] then reshape
+    result = ggml_cont(ctx0, ggml_transpose(ctx0, result)); // [N*OL, OC]
+    result = ggml_reshape_3d(ctx0, result, im2col->ne[1], kernel->ne[2], im2col->ne[2]); // [OL, OC, N]
 
     return result;
 }
