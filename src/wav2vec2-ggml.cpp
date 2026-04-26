@@ -114,12 +114,18 @@ bool wav2vec2_load(const char* fname, wav2vec2_model& model) {
 
     // Phase 2: load tensors via core_gguf (backend-buffer-backed)
     // This puts all weights in a ggml_backend_buffer so the graph
-    // scheduler can reference them without cross-context issues.
-    // Try GPU first (CUDA/Metal/Vulkan), fall back to CPU.
-    model.backend = ggml_backend_init_best();
-    if (!model.backend) {
-        model.backend = ggml_backend_cpu_init();
-    }
+    // CPU backend required: wav2vec2's hybrid encoder uses manual CPU loops
+    // for relative-position attention (rel_shift), layer_norm, and grouped
+    // positional conv — these dereference weight tensor ->data as CPU
+    // pointers. GPU weights segfault on CUDA/Metal.
+    //
+    // The ggml scheduler-based paths (CNN, transformer encoder graph) COULD
+    // use GPU, but the per-layer fallback path and feature projection also
+    // access weight data directly. Full GPU migration requires converting
+    // all manual CPU ops to ggml graphs.
+    //
+    // Reverts f01cb74 which prematurely switched to ggml_backend_init_best().
+    model.backend = ggml_backend_cpu_init();
     if (!model.backend) {
         fprintf(stderr, "[wav2vec2] failed to init any backend\n");
         return false;
