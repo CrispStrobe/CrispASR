@@ -2128,11 +2128,12 @@ extern "C" char* firered_asr_transcribe(struct firered_asr_context* ctx, const f
                 std::vector<float> xn(d);
                 cpu_layernorm(x.data(), norm_w.data(), norm_b.data(), xn.data(), 1, d);
 
-                std::vector<float> logits;
-                if (!project_decoder_logits(xn.data(), logits)) {
-                    logits.resize(odim);
-                    cpu_matmul_bt(xn.data(), prj_w.data(), logits.data(), 1, d, odim);
-                }
+                // Always use CPU for greedy logit projection — the GPU
+                // project_decoder_logits reuses a graph that conflicts with
+                // the scheduler state after decoder weight dequantization,
+                // producing wrong logits and never hitting EOS.
+                std::vector<float> logits(odim);
+                cpu_matmul_bt(xn.data(), prj_w.data(), logits.data(), 1, d, odim);
                 t_logit += ggml_time_us() - tl0;
 
                 if (getenv("FIRERED_BENCH") && (step < 3 || step == max_len - 1)) {
