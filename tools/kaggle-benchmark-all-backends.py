@@ -176,11 +176,82 @@ ok, out, _, _ = run(f"cd {CRISPASR_DIR} && git log --oneline -1")
 git_hash = out.strip() if ok else "unknown"
 print(f"✓ CrispASR built ({'GPU' if has_gpu else 'CPU'}) — {git_hash}")
 
-# ─────────────────────────── cell 4 (code) ───────────────────────────
+# ─────────────────────────── cell 4a (code) ───────────────────────────
+# ── Model download helper (handles HF xet storage) ────────────────────────
+# CrispASR's built-in curl downloader can't handle HF's xet storage layer.
+# This helper downloads one model at a time via huggingface_hub before each test.
+from huggingface_hub import hf_hub_download
+
+CACHE_DIR = os.path.expanduser("~/.cache/crispasr")
+os.makedirs(CACHE_DIR, exist_ok=True)
+
+# Pre-download shared models (whisper-tiny for LID, silero for VAD) — kept across tests
+for local_name, repo, hf_name in [
+    ("ggml-tiny.bin", "ggerganov/whisper.cpp", "ggml-tiny.bin"),
+    ("ggml-silero-v5.1.2.bin", "ggerganov/whisper.cpp", "ggml-silero-v5.1.2.bin"),
+]:
+    dst = os.path.join(CACHE_DIR, local_name)
+    if not os.path.isfile(dst):
+        try:
+            hf_hub_download(repo, hf_name, local_dir=CACHE_DIR)
+            print(f"  ✓ {local_name}")
+        except Exception as e:
+            print(f"  ✗ {local_name}: {e}")
+
+# Per-backend model registry: backend_name → (local_filename, hf_repo, hf_filename)
+MODEL_REGISTRY = {
+    "whisper":           ("ggml-base.bin",               "ggerganov/whisper.cpp",                    "ggml-base.bin"),
+    "parakeet":          ("parakeet-tdt-0.6b-v3-q4_k.gguf","cstr/parakeet-tdt-0.6b-v3-GGUF",       "parakeet-tdt-0.6b-v3-q4_k.gguf"),
+    "moonshine":         ("moonshine-tiny-q4_k.gguf",    "cstr/moonshine-tiny-GGUF",                "moonshine-tiny-q4_k.gguf"),
+    "wav2vec2":          ("wav2vec2-xlsr-en-q4_k.gguf",  "cstr/wav2vec2-large-xlsr-53-english-GGUF","wav2vec2-xlsr-en-q4_k.gguf"),
+    "fastconformer-ctc": ("stt-en-fastconformer-ctc-large-q4_k.gguf","cstr/stt-en-fastconformer-ctc-large-GGUF","stt-en-fastconformer-ctc-large-q4_k.gguf"),
+    "data2vec":          ("data2vec-audio-base-960h-q4_k.gguf","cstr/data2vec-audio-960h-GGUF",     "data2vec-audio-base-960h-q4_k.gguf"),
+    "hubert":            ("hubert-large-ls960-ft-q4_k.gguf","cstr/hubert-large-ls960-ft-GGUF",      "hubert-large-ls960-ft-q4_k.gguf"),
+    "canary":            ("canary-1b-v2-q4_k.gguf",      "cstr/canary-1b-v2-GGUF",                 "canary-1b-v2-q4_k.gguf"),
+    "cohere":            ("cohere-transcribe-q4_k.gguf",  "cstr/cohere-transcribe-03-2026-GGUF",    "cohere-transcribe-q4_k.gguf"),
+    "qwen3":             ("qwen3-asr-0.6b-q4_k.gguf",    "cstr/qwen3-asr-0.6b-GGUF",              "qwen3-asr-0.6b-q4_k.gguf"),
+    "omniasr":           ("omniasr-ctc-1b-v2-q4_k.gguf",  "cstr/omniASR-CTC-1B-v2-GGUF",          "omniasr-ctc-1b-v2-q4_k.gguf"),
+    "omniasr-llm":       ("omniasr-llm-300m-v2-q4_k.gguf","cstr/omniasr-llm-300m-v2-GGUF",         "omniasr-llm-300m-v2-q4_k.gguf"),
+    "glm-asr":           ("glm-asr-nano-q4_k.gguf",      "cstr/glm-asr-nano-GGUF",                "glm-asr-nano-q4_k.gguf"),
+    "firered-asr":       ("firered-asr2-aed-q4_k.gguf",  "cstr/firered-asr2-aed-GGUF",            "firered-asr2-aed-q4_k.gguf"),
+    "kyutai-stt":        ("kyutai-stt-1b-q4_k.gguf",     "cstr/kyutai-stt-1b-GGUF",               "kyutai-stt-1b-q4_k.gguf"),
+    "vibevoice":         ("vibevoice-asr-q4_k.gguf",     "cstr/vibevoice-asr-GGUF",                "vibevoice-asr-q4_k.gguf"),
+    "voxtral":           ("voxtral-mini-3b-2507-q4_k.gguf","cstr/voxtral-mini-3b-2507-GGUF",       "voxtral-mini-3b-2507-q4_k.gguf"),
+    "voxtral4b":         ("voxtral-mini-4b-realtime-q4_k.gguf","cstr/voxtral-mini-4b-realtime-GGUF","voxtral-mini-4b-realtime-q4_k.gguf"),
+    "granite":           ("granite-speech-4.0-1b-q4_k.gguf","cstr/granite-speech-4.0-1b-GGUF",     "granite-speech-4.0-1b-q4_k.gguf"),
+}
+
+# Also download moonshine tokenizer
+_tok_dst = os.path.join(CACHE_DIR, "tokenizer.bin")
+if not os.path.isfile(_tok_dst):
+    try:
+        hf_hub_download("cstr/moonshine-tiny-GGUF", "tokenizer.bin", local_dir=CACHE_DIR)
+    except Exception:
+        pass
+
+def ensure_model_downloaded(backend_name):
+    """Download model for backend via huggingface_hub (handles xet). Returns download time."""
+    if backend_name not in MODEL_REGISTRY:
+        return 0
+    local_name, repo, hf_name = MODEL_REGISTRY[backend_name]
+    dst = os.path.join(CACHE_DIR, local_name)
+    if os.path.isfile(dst):
+        return 0
+    t0 = time.time()
+    try:
+        hf_hub_download(repo, hf_name, local_dir=CACHE_DIR)
+        elapsed = time.time() - t0
+        sz = os.path.getsize(dst) / 1024 / 1024 if os.path.isfile(dst) else 0
+        print(f"    Downloaded {local_name} ({sz:.0f} MB, {elapsed:.1f}s)")
+        return elapsed
+    except Exception as e:
+        print(f"    ✗ Download failed: {e}")
+        return time.time() - t0
+
+# ─────────────────────────── cell 4b (code) ───────────────────────────
 # ── Download test audio ────────────────────────────────────────────────────
 JFK_WAV = f"{SAMPLE_DIR}/jfk.wav"
 if not os.path.isfile(JFK_WAV):
-    # jfk.wav is in the CrispASR repo
     shutil.copy(f"{CRISPASR_DIR}/samples/jfk.wav", JFK_WAV)
     print(f"✓ jfk.wav copied ({os.path.getsize(JFK_WAV)} bytes)")
 
@@ -255,8 +326,11 @@ def benchmark_backend(backend, display_name, timeout, notes):
         "model_size_mb": None,
     }
 
-    # Run with verbose logging. The wall time includes download + load + inference.
-    # CrispASR's own stderr timing ("transcribed Xs in Ys") excludes download.
+    # Download model via huggingface_hub (handles xet storage) BEFORE timing
+    dl_time = ensure_model_downloaded(backend)
+    result["download_s"] = round(dl_time, 1)
+
+    # Run inference — model is now cached in ~/.cache/crispasr
     cmd = (f"CRISPASR_VERBOSE=1 {CRISPASR} --backend {backend} -m auto --auto-download "
            f"-f {JFK_WAV} --no-prints -v")
     t0 = time.time()
