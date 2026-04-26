@@ -225,13 +225,13 @@ def main():
             del sd["encoder_frontend.pos_encoder.conv.bias"]
     elif "encoder_frontend.pos_encoder.conv.weight_v" in sd:
         wv = sd["encoder_frontend.pos_encoder.conv.weight_v"]  # [OC, IC/G, K]
-        wg = sd["encoder_frontend.pos_encoder.conv.weight_g"]  # [1, 1, K] or similar
+        wg = sd["encoder_frontend.pos_encoder.conv.weight_g"]  # [1, 1, K]
         # Weight normalization: w = g * v / ||v||
-        # wg: [1, 1, K=128] — gain per kernel position
-        # wv: [OC=1024, IC/G=64, K=128] — direction
-        # ||v|| computed per output channel: [OC, 1, 1]
-        v_norm = wv.reshape(wv.shape[0], -1).norm(dim=1).reshape(-1, 1, 1)  # [OC, 1, 1]
-        w_combined = (wg / (v_norm + 1e-12)) * wv  # broadcast: [1,1,K] * [OC,IC/G,K] / [OC,1,1]
+        # fairseq2 uses weight_norm dim=2: norm over all dims except K
+        # wg: [1, 1, K=128], wv: [OC, IC/G, K=128]
+        # norm = ||v|| over dims [0,1] → [1, 1, K]
+        v_norm = wv.norm(dim=[0, 1], keepdim=True)  # [1, 1, K]
+        w_combined = wg * (wv / (v_norm + 1e-12))
         sd["pos_conv.weight"] = w_combined
         sd["pos_conv.bias"] = sd["encoder_frontend.pos_encoder.conv.bias"]
         print(f"  Pre-computed pos_conv weight: {w_combined.shape}")
