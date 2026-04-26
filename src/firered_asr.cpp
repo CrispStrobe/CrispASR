@@ -1146,7 +1146,11 @@ static void hybrid_encoder(const float* subsampled, int T, int flat_dim, firered
         ggml_build_forward_expand(gf, out);
 
         ggml_backend_sched_reset(sctx->sched);
-        ggml_backend_sched_alloc_graph(sctx->sched, gf);
+        if (!ggml_backend_sched_alloc_graph(sctx->sched, gf)) {
+            fprintf(stderr, "firered_asr: proj graph alloc failed (T=%d flat_dim=%d)\n", T, flat_dim);
+            enc_output.assign(T * d, 0);
+            return;
+        }
         ggml_backend_tensor_set(inp, subsampled, 0, flat_dim * T * sizeof(float));
         ggml_backend_sched_graph_compute(sctx->sched, gf);
         ggml_backend_tensor_get(out, x_buf.data(), 0, d * T * sizeof(float));
