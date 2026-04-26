@@ -430,6 +430,16 @@ if(NOT MSVC)
     target_compile_options(moonshine PRIVATE -O3)
 endif()
 
+add_library(moonshine_streaming STATIC moonshine_streaming.h moonshine_streaming.cpp
+            moonshine-tokenizer.h moonshine-tokenizer.cpp)
+set_target_properties(moonshine_streaming PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(moonshine_streaming PUBLIC .)
+target_compile_features   (moonshine_streaming PUBLIC cxx_std_17)
+target_link_libraries     (moonshine_streaming PUBLIC ggml ggml-base ggml-cpu)
+if(NOT MSVC)
+    target_compile_options(moonshine_streaming PRIVATE -O3)
+endif()
+
 # ---------------------------------------------------------------------------
 # omniasr — Facebook OmniASR-CTC (wav2vec2-style, 1600+ languages)
 # ---------------------------------------------------------------------------
