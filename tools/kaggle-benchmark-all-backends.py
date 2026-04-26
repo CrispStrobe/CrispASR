@@ -219,7 +219,7 @@ os.makedirs(CACHE_DIR, exist_ok=True)
 # Pre-download shared models (whisper-tiny for LID, silero for VAD) — kept across tests
 for local_name, repo, hf_name in [
     ("ggml-tiny.bin", "ggerganov/whisper.cpp", "ggml-tiny.bin"),
-    ("ggml-silero-v5.1.2.bin", "ggerganov/whisper.cpp", "ggml-silero-v5.1.2.bin"),
+    ("ggml-silero-v5.1.2.bin", "ggml-org/whisper-vad", "ggml-silero-v5.1.2.bin"),
 ]:
     dst = os.path.join(CACHE_DIR, local_name)
     if not os.path.isfile(dst):
@@ -363,8 +363,10 @@ def benchmark_backend(backend, display_name, timeout, notes):
 
     # Run inference — model is now cached in ~/.cache/crispasr
     # Stream stderr in real-time for all backends to diagnose hangs
+    # Use greedy decoding (--beam 1) for benchmark: beam search is 5x slower
+    # and doesn't meaningfully change WER on short test audio.
     cmd = (f"CRISPASR_VERBOSE=1 FIRERED_BENCH=1 {CRISPASR} --backend {backend} -m auto --auto-download "
-           f"-f {JFK_WAV} --no-prints -v")
+           f"-f {JFK_WAV} --no-prints -v -bs 1")
     t0 = time.time()
     ok, stdout, stderr, elapsed = run(cmd, timeout=timeout, stream_stderr=True)
     result["wall_s"] = round(elapsed, 2)
