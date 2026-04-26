@@ -15,6 +15,7 @@
 #include "crispasr_model_registry.h"
 #include "crispasr_aligner_cli.h"
 #include "crispasr_lid_cli.h"
+#include "crispasr_lid.h" // crispasr_lid_free_cache()
 #include "crispasr_diarize_cli.h"
 #include "crispasr_mem.h"
 #include "whisper_params.h"
@@ -177,6 +178,10 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, wh
             fprintf(stderr, "crispasr: LID failed, falling back to params.language='%s'\n", params.language.c_str());
         }
     }
+
+    // Free the cached whisper LID context to release GPU VRAM before
+    // the ASR backend allocates its own model + KV cache (#35 OOM fix).
+    crispasr_lid_free_cache();
 
     const auto slices =
         crispasr_compute_audio_slices(samples.data(), (int)samples.size(), SR, params.chunk_seconds, params);

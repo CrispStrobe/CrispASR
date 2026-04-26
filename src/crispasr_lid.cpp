@@ -232,3 +232,12 @@ bool crispasr_detect_language(const float* samples, int n_samples, const Crispas
     }
     return false;
 }
+
+void crispasr_lid_free_cache() {
+    WhisperLidCache& c = whisper_lid_cache();
+    if (c.ctx) {
+        whisper_free(c.ctx);
+        c.ctx = nullptr;
+        c.model_path.clear();
+    }
+}

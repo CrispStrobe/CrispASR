@@ -56,3 +56,7 @@ struct CrispasrLidOptions {
 /// true, and the function returns false.
 bool crispasr_detect_language(const float* samples, int n_samples, const CrispasrLidOptions& opts,
                               CrispasrLidResult& out);
+
+/// Free the cached whisper LID context to release GPU memory.
+/// Call after LID is done and before loading the ASR model.
+void crispasr_lid_free_cache();
