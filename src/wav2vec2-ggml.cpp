@@ -1074,8 +1074,16 @@ std::vector<float> wav2vec2_compute_logits_graph(const wav2vec2_model& m, const 
             for (int h = 0; h < H; h++)
                 pos_cf[h * T + t] = hidden[t * H + h];
 
-        ggml_backend_t pos_bks[1] = {m.backend};
-        ggml_backend_sched_t pos_sc = ggml_backend_sched_new(pos_bks, nullptr, 1, 256, false, false);
+        // Dual-backend scheduler: ggml_conv_1d_group is CPU-only (no Metal/CUDA kernel),
+        // so the scheduler needs a CPU fallback when m.backend is GPU.
+        ggml_backend_t pos_cpu = ggml_backend_cpu_init();
+        ggml_backend_cpu_set_n_threads(pos_cpu, n_threads);
+        int pos_n_be = 1;
+        ggml_backend_t pos_bks[2] = {m.backend, nullptr};
+        if (!ggml_backend_is_cpu(m.backend)) {
+            pos_bks[pos_n_be++] = pos_cpu;
+        }
+        ggml_backend_sched_t pos_sc = ggml_backend_sched_new(pos_bks, nullptr, pos_n_be, 256, false, false);
 
         for (int li = 0; li < n_layers; li++) {
             ggml_tensor* w_tensor = (li == 0 && m.pos_conv_w) ? m.pos_conv_w : m.pos_conv_layers[li].w;
@@ -1189,6 +1197,8 @@ std::vector<float> wav2vec2_compute_logits_graph(const wav2vec2_model& m, const 
         }
 
         ggml_backend_sched_free(pos_sc);
+        if (!ggml_backend_is_cpu(m.backend))
+            ggml_backend_free(pos_cpu);
 
         // Add residual: hidden[t*H+h] += pos_cf[h*T+t]
         for (int t = 0; t < T; t++)
