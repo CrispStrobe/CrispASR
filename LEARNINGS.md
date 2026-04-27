@@ -642,6 +642,46 @@ to decoder space. The positional embedding for cross-attention
 `config.encoder_hidden_size` vs `config.hidden_size`. If they differ,
 look for a projection layer in the decoder.
 
+### Gemma4-E2B: USM Conformer + Gemma4 LLM architecture notes
+
+Google Gemma-4-E2B (2.3B, Apache 2.0) combines a USM Conformer audio
+encoder (12L, 1024d) with a Gemma4 LLM decoder (35L, 1536d). Key
+implementation details that differ from other encoder-LLM backends:
+
+**Per-Layer Embeddings (PLE):** Gemma4 adds a gated per-layer embedding
+at each decoder layer. A single large embedding table `embed_tokens_per_layer`
+([vocab, n_layers×256]) stores 256-dim vectors per layer per token. At each
+layer: gate = sigmoid(W_gate @ ple_slice), proj = W_proj @ ple_slice,
+hidden += gate * proj. The table is 262K × 8960 = ~2.3B elements — large
+even at F16. Implementation: single `ggml_get_rows` + per-layer `ggml_view_2d`.
+
+**Gemma embedding scale:** Token embeddings are multiplied by sqrt(hidden_size)
+before feeding into the LLM, matching Gemma/Gemma2 convention. Missing this
+produces subtly wrong outputs.
+
+**Pre/post norms with layer_scalar:** Unlike Llama which uses only pre-norm,
+Gemma4 uses both pre-norm and post-norm around attention and FFN, plus an
+optional layer_scalar multiplier on the residual contribution.
+
+**Logit softcapping:** Final logits are capped via tanh(logits/30.0) * 30.0.
+This is applied after the lm_head matmul and before argmax/sampling.
+`ggml_flash_attn_ext` also supports logit_softcap for the conformer encoder
+attention (cap=50.0).
+
+**Conformer self-attention:** USM uses per_dim_scale (learned per head dim,
+replaces 1/sqrt(d)), chunked attention (chunk=12, left_context=13), and
+relative position bias via rel_k_proj. First-pass implementation uses full
+attention + per_dim_scale; chunked + rel_pos to be added via diff-testing.
+
+**Conv2D subsampling:** Two Conv2d layers (stride 2) reduce mel [T, 128] →
+[T/4, 32, 32] → flatten to [1024, T/4]. Uses ggml_conv_2d with padding.
+RMSNorm is applied per-channel (transpose → norm → transpose).
+
+**BPE without merges:** The 262K BPE vocabulary is stored in GGUF but merges
+are skipped (GGUF type 9 incompatibility). core_bpe falls back to per-byte
+encoding when merge_rank is empty, which works for inference since the model
+generates token IDs that are decoded via the vocab lookup.
+
 ---
 
 ## Methodical debugging of ported models against ground truth
