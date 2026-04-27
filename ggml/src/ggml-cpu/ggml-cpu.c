@@ -217,6 +217,12 @@ static const struct ggml_type_traits_cpu type_traits_cpu[GGML_TYPE_COUNT] = {
         .vec_dot_type             = GGML_TYPE_F16,
         .nrows                    = 1,
     },
+    [GGML_TYPE_Q1_0] = {
+        .from_float               = quantize_row_q1_0,
+        .vec_dot                  = ggml_vec_dot_q1_0_q8_0,
+        .vec_dot_type             = GGML_TYPE_Q8_0,
+        .nrows                    = 1,
+    },
     [GGML_TYPE_Q4_0] = {
         .from_float               = quantize_row_q4_0,
         .vec_dot                  = ggml_vec_dot_q4_0_q8_0,
@@ -1884,14 +1890,6 @@ static void ggml_compute_forward(struct ggml_compute_params * params, struct ggm
             {
                 ggml_compute_forward_conv_transpose_1d(params, tensor);
             } break;
-        case GGML_OP_CONV_1D_CF:
-            {
-                ggml_compute_forward_conv_1d_cf(params, tensor);
-            } break;
-        case GGML_OP_CONV_1D_GROUP:
-            {
-                ggml_compute_forward_conv_1d_group(params, tensor);
-            } break;
         case GGML_OP_IM2COL:
             {
                 ggml_compute_forward_im2col(params, tensor);
@@ -2336,8 +2334,6 @@ static int ggml_get_n_tasks(struct ggml_tensor * node, int n_threads) {
         case GGML_OP_CONV_3D:
         case GGML_OP_CONV_2D_DW:
         case GGML_OP_CONV_TRANSPOSE_1D:
-        case GGML_OP_CONV_1D_CF:
-        case GGML_OP_CONV_1D_GROUP:
         case GGML_OP_CONV_TRANSPOSE_2D:
             {
                 n_tasks = n_threads;
@@ -2360,11 +2356,15 @@ static int ggml_get_n_tasks(struct ggml_tensor * node, int n_threads) {
         case GGML_OP_FLASH_ATTN_BACK:
         case GGML_OP_SSM_CONV:
         case GGML_OP_SSM_SCAN:
+            {
+                n_tasks = n_threads;
+            } break;
         case GGML_OP_RWKV_WKV6:
         case GGML_OP_GATED_LINEAR_ATTN:
         case GGML_OP_RWKV_WKV7:
             {
-                n_tasks = n_threads;
+                const int64_t n_heads = node->src[1]->ne[1];
+                n_tasks = MIN(n_threads, n_heads);
             } break;
         case GGML_OP_WIN_PART:
         case GGML_OP_WIN_UNPART:
@@ -2839,16 +2839,6 @@ struct ggml_cplan ggml_graph_plan(
                 case GGML_OP_ROPE_BACK:
                     {
                         cur = ggml_type_size(GGML_TYPE_F32) * node->ne[0] * n_tasks;
-                    } break;
-                case GGML_OP_CONV_1D_CF:
-                    {
-                        // Direct conv — no workspace needed
-                        cur = 0;
-                    } break;
-                case GGML_OP_CONV_1D_GROUP:
-                    {
-                        // Direct loop — no workspace needed (kernel dequant uses stack)
-                        cur = 0;
                     } break;
                 case GGML_OP_CONV_TRANSPOSE_1D:
                     {

@@ -53,6 +53,16 @@
 
 #define UNUSED GGML_UNUSED
 
+uint64_t ggml_graph_next_uid(void) {
+#ifdef _MSC_VER
+    static volatile long long counter = 1;
+    return (uint64_t) _InterlockedIncrement64(&counter) - 1;
+#else
+    static uint64_t counter = 1;
+    return __atomic_fetch_add(&counter, 1, __ATOMIC_RELAXED);
+#endif
+}
+
 // Needed for ggml_fp32_to_bf16_row()
 #if defined(__AVX512BF16__)
 #if defined(_MSC_VER)
@@ -651,6 +661,14 @@ static const struct ggml_type_traits type_traits[GGML_TYPE_COUNT] = {
         .to_float                 = (ggml_to_float_t) ggml_fp16_to_fp32_row,
         .from_float_ref           = (ggml_from_float_t) ggml_fp32_to_fp16_row,
     },
+    [GGML_TYPE_Q1_0] = {
+        .type_name                = "q1_0",
+        .blck_size                = QK1_0,
+        .type_size                = sizeof(block_q1_0),
+        .is_quantized             = true,
+        .to_float                 = (ggml_to_float_t) dequantize_row_q1_0,
+        .from_float_ref           = (ggml_from_float_t) quantize_row_q1_0_ref,
+    },
     [GGML_TYPE_Q4_0] = {
         .type_name                = "q4_0",
         .blck_size                = QK4_0,
@@ -1005,8 +1023,6 @@ static const char * GGML_OP_NAME[GGML_OP_COUNT] = {
     "ROPE_BACK",
     "CLAMP",
     "CONV_TRANSPOSE_1D",
-    "CONV_1D_CF",
-    "CONV_1D_GROUP",
     "IM2COL",
     "IM2COL_BACK",
     "IM2COL_3D",
@@ -1059,7 +1075,7 @@ static const char * GGML_OP_NAME[GGML_OP_COUNT] = {
     "GLU",
 };
 
-static_assert(GGML_OP_COUNT == 98, "GGML_OP_COUNT != 96");
+static_assert(GGML_OP_COUNT == 96, "GGML_OP_COUNT != 96");
 
 static const char * GGML_OP_SYMBOL[GGML_OP_COUNT] = {
     "none",
@@ -1117,8 +1133,6 @@ static const char * GGML_OP_SYMBOL[GGML_OP_COUNT] = {
     "rope_back(x)",
     "clamp(x)",
     "conv_transpose_1d(x)",
-    "conv_1d_cf(x)",
-    "conv_1d_group(x)",
     "im2col(x)",
     "im2col_back(x)",
     "im2col_3d(x)",
@@ -1171,7 +1185,7 @@ static const char * GGML_OP_SYMBOL[GGML_OP_COUNT] = {
     "glu(x)",
 };
 
-static_assert(GGML_OP_COUNT == 98, "GGML_OP_COUNT != 96");
+static_assert(GGML_OP_COUNT == 96, "GGML_OP_COUNT != 96");
 
 static_assert(GGML_OP_POOL_COUNT == 2, "GGML_OP_POOL_COUNT != 2");
 
@@ -1388,6 +1402,7 @@ enum ggml_type ggml_ftype_to_ggml_type(enum ggml_ftype ftype) {
         case GGML_FTYPE_MOSTLY_BF16:          wtype = GGML_TYPE_BF16;  break;
         case GGML_FTYPE_MOSTLY_Q4_0:          wtype = GGML_TYPE_Q4_0;  break;
         case GGML_FTYPE_MOSTLY_Q4_1:          wtype = GGML_TYPE_Q4_1;  break;
+        case GGML_FTYPE_MOSTLY_Q1_0:          wtype = GGML_TYPE_Q1_0;  break;
         case GGML_FTYPE_MOSTLY_Q5_0:          wtype = GGML_TYPE_Q5_0;  break;
         case GGML_FTYPE_MOSTLY_Q5_1:          wtype = GGML_TYPE_Q5_1;  break;
         case GGML_FTYPE_MOSTLY_Q8_0:          wtype = GGML_TYPE_Q8_0;  break;
@@ -2001,7 +2016,6 @@ static struct ggml_tensor * ggml_add_impl(
         struct ggml_tensor  * a,
         struct ggml_tensor  * b,
         bool                  inplace) {
-    //printf("DEBUG ADD: a name=%s ne=[%ld %ld %ld %ld] b name=%s ne=[%ld %ld %ld %ld]\n", a->name, a->ne[0], a->ne[1], a->ne[2], a->ne[3], b->name, b->ne[0], b->ne[1], b->ne[2], b->ne[3]); fflush(stdout);
     GGML_ASSERT(ggml_can_repeat(b, a));
 
     struct ggml_tensor * result = inplace ? ggml_view_tensor(ctx, a) : ggml_dup_tensor(ctx, a);
@@ -3222,9 +3236,6 @@ struct ggml_tensor * ggml_mul_mat(
         struct ggml_context * ctx,
         struct ggml_tensor  * a,
         struct ggml_tensor  * b) {
-    if (getenv("GGML_DEBUG")) {
-        printf("DEBUG GGML: ggml_mul_mat a ne [%lld %lld %lld %lld] b ne [%lld %lld %lld %lld] can_mul=%d\n", (long long)a->ne[0], (long long)a->ne[1], (long long)a->ne[2], (long long)a->ne[3], (long long)b->ne[0], (long long)b->ne[1], (long long)b->ne[2], (long long)b->ne[3], ggml_can_mul_mat(a, b)); fflush(stdout);
-    }
     GGML_ASSERT(ggml_can_mul_mat(a, b));
     GGML_ASSERT(!ggml_is_transposed(a));
 
@@ -4499,12 +4510,7 @@ struct ggml_tensor * ggml_conv_1d_dw(
 
     struct ggml_tensor * result = ggml_mul_mat(ctx, im2col, a);
 
-    if (getenv("GGML_DEBUG")) {
-        printf("DEBUG CONV1D_DW: im2col ne [%lld %lld %lld %lld] n_elem=%lld\n", (long long)im2col->ne[0], (long long)im2col->ne[1], (long long)im2col->ne[2], (long long)im2col->ne[3], (long long)ggml_nelements(im2col));
-        printf("DEBUG CONV1D_DW: result ne [%lld %lld %lld %lld] n_elem=%lld\n", (long long)result->ne[0], (long long)result->ne[1], (long long)result->ne[2], (long long)result->ne[3], (long long)ggml_nelements(result));
-        fflush(stdout);
-    }
-    result = ggml_reshape_3d(ctx, result, result->ne[0], result->ne[1], result->ne[2]);
+    result = ggml_reshape_3d(ctx, result, result->ne[0], result->ne[2], 1);
 
     return result;
 }
@@ -4518,119 +4524,6 @@ struct ggml_tensor * ggml_conv_1d_dw_ph(
         int                   s0,
         int                   d0) {
     return ggml_conv_1d_dw(ctx, a, b, s0, a->ne[0] / 2, d0);
-}
-
-// ggml_conv_1d_cf — channels-first 1D convolution (direct, no im2col)
-//
-// a: kernel [K, C_in, C_out]
-// b: data   [C_in, T]         (channels-first: ne[0]=C_in, ne[1]=T)
-// out:      [C_out, T_out]    (channels-first)
-//
-// T_out = floor((T + 2*p0 - d0*(K-1) - 1) / s0) + 1
-
-struct ggml_tensor * ggml_conv_1d_cf(
-        struct ggml_context * ctx,
-        struct ggml_tensor  * a,
-        struct ggml_tensor  * b,
-        int                   s0,
-        int                   p0,
-        int                   d0) {
-    GGML_ASSERT(ggml_is_matrix(b));        // b is 2D: [C_in, T]
-    GGML_ASSERT(a->ne[1] == b->ne[0]);     // C_in must match
-    GGML_ASSERT(a->ne[3] == 1);
-
-    const int64_t T_out = ggml_calc_conv_output_size(b->ne[1], a->ne[0], s0, p0, d0);
-    GGML_ASSERT(T_out > 0);
-
-    const int64_t ne[4] = { a->ne[2], T_out, 1, 1 }; // [C_out, T_out]
-    struct ggml_tensor * result = ggml_new_tensor(ctx, GGML_TYPE_F32, 4, ne);
-
-    int32_t params[] = { s0, p0, d0, 0 }; // last 0 = not depthwise
-    ggml_set_op_params(result, params, sizeof(params));
-
-    result->op     = GGML_OP_CONV_1D_CF;
-    result->src[0] = a;
-    result->src[1] = b;
-
-    return result;
-}
-
-// ggml_conv_1d_dw_cf — depthwise channels-first 1D convolution
-//
-// a: kernel [K, 1, C]
-// b: data   [C, T]
-// out:      [C, T_out]
-
-struct ggml_tensor * ggml_conv_1d_dw_cf(
-        struct ggml_context * ctx,
-        struct ggml_tensor  * a,
-        struct ggml_tensor  * b,
-        int                   s0,
-        int                   p0,
-        int                   d0) {
-    GGML_ASSERT(ggml_is_matrix(b));
-    GGML_ASSERT(a->ne[1] == 1);           // depthwise: groups = C
-    GGML_ASSERT(a->ne[2] == b->ne[0]);    // C must match
-    GGML_ASSERT(a->ne[3] == 1);
-
-    const int64_t T_out = ggml_calc_conv_output_size(b->ne[1], a->ne[0], s0, p0, d0);
-    GGML_ASSERT(T_out > 0);
-
-    const int64_t ne[4] = { b->ne[0], T_out, 1, 1 }; // [C, T_out]
-    struct ggml_tensor * result = ggml_new_tensor(ctx, GGML_TYPE_F32, 4, ne);
-
-    int32_t params[] = { s0, p0, d0, 1 }; // last 1 = depthwise
-    ggml_set_op_params(result, params, sizeof(params));
-
-    result->op     = GGML_OP_CONV_1D_CF;
-    result->src[0] = a;
-    result->src[1] = b;
-
-    return result;
-}
-
-// ggml_conv_1d_group — grouped 1D convolution
-//
-// a: kernel [K, C_in/G, C_out]
-// b: data   [T, C_in]               (time-major, ne[0]=T, ne[1]=C_in)
-// out:      [T_out, C_out]          (time-major)
-//
-// Each of G groups computes independently:
-//   group g: kernel[:, :, g*cout_pg:(g+1)*cout_pg] convolves
-//            data[:, g*cin_pg:(g+1)*cin_pg]
-
-struct ggml_tensor * ggml_conv_1d_group(
-        struct ggml_context * ctx,
-        struct ggml_tensor  * a,
-        struct ggml_tensor  * b,
-        int                   s0,
-        int                   p0,
-        int                   d0,
-        int                   groups) {
-    // a: [K, C_in/G, C_out], b: [ne0, C_in, ...]
-    // Allow non-matrix b (e.g. from ggml_pad_ext which returns 4D)
-    const int64_t C_in  = b->ne[1];
-    const int64_t T_in  = b->ne[0];
-    const int64_t C_out = a->ne[2];
-    GGML_ASSERT(a->ne[3] == 1);
-    GGML_ASSERT(C_in  % groups == 0);
-    GGML_ASSERT(C_out % groups == 0);
-    GGML_ASSERT(a->ne[1] == C_in / groups);
-
-    const int64_t T_out = ggml_calc_conv_output_size(T_in, a->ne[0], s0, p0, d0);
-    GGML_ASSERT(T_out > 0);
-
-    const int64_t ne[4] = { T_out, C_out, 1, 1 };
-    struct ggml_tensor * result = ggml_new_tensor(ctx, GGML_TYPE_F32, 4, ne);
-
-    int32_t params[] = { s0, p0, d0, groups };
-    ggml_set_op_params(result, params, sizeof(params));
-
-    result->op     = GGML_OP_CONV_1D_GROUP;
-    result->src[0] = a;
-    result->src[1] = b;
-
-    return result;
 }
 
 // ggml_conv_transpose_1d
@@ -7215,6 +7108,7 @@ struct ggml_cgraph * ggml_new_graph_custom(struct ggml_context * ctx, size_t siz
         /*.use_counts   =*/ use_counts_ptr,
         /*.hash_table   =*/ { hash_size, hash_used, hash_keys_ptr },
         /*.order        =*/ GGML_CGRAPH_EVAL_ORDER_LEFT_TO_RIGHT,
+        /*.uid          =*/ 0,
     };
 
     ggml_hash_set_reset(&cgraph->visited_hash_set);
@@ -7242,6 +7136,7 @@ struct ggml_cgraph ggml_graph_view(struct ggml_cgraph * cgraph0, int i0, int i1)
         /*.use_counts       =*/ cgraph0->use_counts,
         /*.visited_hash_set =*/ cgraph0->visited_hash_set,
         /*.order            =*/ cgraph0->order,
+        /*.uid              =*/ 0
     };
 
     return cgraph;
@@ -7778,6 +7673,7 @@ size_t ggml_quantize_chunk(
     size_t result = 0;
 
     switch (type) {
+        case GGML_TYPE_Q1_0:    result = quantize_q1_0(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
         case GGML_TYPE_Q4_0:    result = quantize_q4_0(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
         case GGML_TYPE_Q4_1:    result = quantize_q4_1(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
         case GGML_TYPE_Q5_0:    result = quantize_q5_0(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;

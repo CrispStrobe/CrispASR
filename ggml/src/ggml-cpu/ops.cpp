@@ -664,6 +664,7 @@ void ggml_compute_forward_add(
             {
                 ggml_compute_forward_add_non_quantized(params, dst);
             } break;
+        case GGML_TYPE_Q1_0:
         case GGML_TYPE_Q4_0:
         case GGML_TYPE_Q4_1:
         case GGML_TYPE_Q5_0:
@@ -1113,6 +1114,7 @@ void ggml_compute_forward_add1(
                     GGML_ABORT("fatal error");
                 }
             } break;
+        case GGML_TYPE_Q1_0:
         case GGML_TYPE_Q4_0:
         case GGML_TYPE_Q4_1:
         case GGML_TYPE_Q5_0:
@@ -1242,6 +1244,7 @@ void ggml_compute_forward_acc(
             } break;
         case GGML_TYPE_F16:
         case GGML_TYPE_BF16:
+        case GGML_TYPE_Q1_0:
         case GGML_TYPE_Q4_0:
         case GGML_TYPE_Q4_1:
         case GGML_TYPE_Q5_0:
@@ -4331,6 +4334,7 @@ void ggml_compute_forward_out_prod(
     const ggml_tensor * src0 = dst->src[0];
 
     switch (src0->type) {
+        case GGML_TYPE_Q1_0:
         case GGML_TYPE_Q4_0:
         case GGML_TYPE_Q4_1:
         case GGML_TYPE_Q5_0:
@@ -4606,6 +4610,7 @@ void ggml_compute_forward_set(
             } break;
         case GGML_TYPE_F16:
         case GGML_TYPE_BF16:
+        case GGML_TYPE_Q1_0:
         case GGML_TYPE_Q4_0:
         case GGML_TYPE_Q4_1:
         case GGML_TYPE_Q5_0:
@@ -4829,6 +4834,7 @@ void ggml_compute_forward_get_rows(
     const ggml_tensor * src0 = dst->src[0];
 
     switch (src0->type) {
+        case GGML_TYPE_Q1_0:
         case GGML_TYPE_Q4_0:
         case GGML_TYPE_Q4_1:
         case GGML_TYPE_Q5_0:
@@ -5554,6 +5560,7 @@ void ggml_compute_forward_clamp(
                 ggml_compute_forward_clamp_f16(params, dst);
             } break;
         case GGML_TYPE_BF16:
+        case GGML_TYPE_Q1_0:
         case GGML_TYPE_Q4_0:
         case GGML_TYPE_Q4_1:
         case GGML_TYPE_Q5_0:
@@ -5914,192 +5921,6 @@ void ggml_compute_forward_rope_back(
             {
                 GGML_ABORT("fatal error");
             }
-    }
-}
-
-// ggml_compute_forward_conv_1d_cf — channels-first 1D convolution (F32 direct)
-//
-// Regular mode (params[3]==0):
-//   src0 (kernel): [K, C_in, C_out]
-//   src1 (data):   [C_in, T]
-//   dst:           [C_out, T_out]
-//
-// Depthwise mode (params[3]==1):
-//   src0 (kernel): [K, 1, C]
-//   src1 (data):   [C, T]
-//   dst:           [C, T_out]
-//
-// Threading: parallelize over output channels (regular) or channels (depthwise).
-
-// Helper: read kernel weight at flat index, handling F16/F32
-static inline float conv1d_cf_kernel_val(const ggml_tensor * src0, int64_t idx) {
-    if (src0->type == GGML_TYPE_F32) {
-        return ((const float *)src0->data)[idx];
-    } else if (src0->type == GGML_TYPE_F16) {
-        return ggml_fp16_to_fp32(((const ggml_fp16_t *)src0->data)[idx]);
-    } else if (src0->type == GGML_TYPE_BF16) {
-        return ggml_bf16_to_fp32(((const ggml_bf16_t *)src0->data)[idx]);
-    }
-    GGML_ABORT("unsupported kernel type for conv_1d_cf");
-}
-
-void ggml_compute_forward_conv_1d_cf(
-        const ggml_compute_params * params,
-              ggml_tensor * dst) {
-
-    const ggml_tensor * src0 = dst->src[0]; // kernel
-    const ggml_tensor * src1 = dst->src[1]; // data
-
-    GGML_ASSERT(src1->type == GGML_TYPE_F32);
-    GGML_ASSERT(dst->type  == GGML_TYPE_F32);
-
-    const int32_t s0        = ((const int32_t *)(dst->op_params))[0]; // stride
-    const int32_t p0        = ((const int32_t *)(dst->op_params))[1]; // padding
-    const int32_t d0        = ((const int32_t *)(dst->op_params))[2]; // dilation
-    const int32_t depthwise = ((const int32_t *)(dst->op_params))[3];
-
-    const int ith = params->ith;
-    const int nth = params->nth;
-
-    const int64_t K    = src0->ne[0];
-    const int64_t C_in = src1->ne[0];
-    const int64_t T    = src1->ne[1];
-
-    const int64_t C_out = dst->ne[0];
-    const int64_t T_out = dst->ne[1];
-
-    const float * data = (const float *)src1->data;
-    float * out = (float *)dst->data;
-
-    if (depthwise) {
-        // Depthwise: kernel [K, 1, C], data [C, T] → out [C, T_out]
-        // data is channels-first: element [c, t] at offset c + t * C
-        const int64_t C = C_in;
-        GGML_ASSERT(C_out == C);
-
-        // Pre-dequantize kernel per channel for inner loop efficiency
-        // K is typically small (7), so a stack buffer suffices
-        float kbuf[64]; // supports kernel up to size 64
-        GGML_ASSERT(K <= 64);
-
-        for (int64_t c = ith; c < C; c += nth) {
-            // Dequantize kernel for this channel once
-            for (int64_t k = 0; k < K; k++) {
-                kbuf[k] = conv1d_cf_kernel_val(src0, k + c * K);
-            }
-
-            for (int64_t t = 0; t < T_out; t++) {
-                float sum = 0.0f;
-                for (int64_t k = 0; k < K; k++) {
-                    const int64_t t_in = t * s0 + k * d0 - p0;
-                    if (t_in >= 0 && t_in < T) {
-                        sum += kbuf[k] * data[c + t_in * C_in];
-                    }
-                }
-                out[c + t * C_out] = sum;
-            }
-        }
-    } else {
-        // Regular: kernel [K, C_in, C_out], data [C_in, T] → out [C_out, T_out]
-
-        for (int64_t co = ith; co < C_out; co += nth) {
-            for (int64_t t = 0; t < T_out; t++) {
-                float sum = 0.0f;
-                for (int64_t ci = 0; ci < C_in; ci++) {
-                    for (int64_t k = 0; k < K; k++) {
-                        const int64_t t_in = t * s0 + k * d0 - p0;
-                        if (t_in >= 0 && t_in < T) {
-                            sum += conv1d_cf_kernel_val(src0, k + ci * K + co * K * C_in)
-                                 * data[ci + t_in * C_in];
-                        }
-                    }
-                }
-                out[co + t * C_out] = sum;
-            }
-        }
-    }
-}
-
-// ggml_compute_forward_conv_1d_group — grouped 1D convolution (direct, no workspace)
-//
-// src0 (kernel): [K, cin_pg, C_out]  where cin_pg = C_in / groups
-// src1 (data):   ne[0]=T, ne[1]=C_in  (ggml layout: data[t + c*T])
-// dst:           ne[0]=T_out, ne[1]=C_out
-//
-// ggml memory layout for [T, C]: element (t, c) at data[t + c * T]
-// This is channel-first in C array terms: data[c * T + t].
-// Threading: parallelize over output channels.
-
-void ggml_compute_forward_conv_1d_group(
-        const ggml_compute_params * params,
-              ggml_tensor * dst) {
-
-    const ggml_tensor * src0 = dst->src[0]; // kernel
-    const ggml_tensor * src1 = dst->src[1]; // data
-
-    GGML_ASSERT(src1->type == GGML_TYPE_F32);
-    GGML_ASSERT(dst->type  == GGML_TYPE_F32);
-
-    const int32_t s0     = ((const int32_t *)(dst->op_params))[0];
-    const int32_t p0     = ((const int32_t *)(dst->op_params))[1];
-    const int32_t d0     = ((const int32_t *)(dst->op_params))[2];
-    const int32_t groups = ((const int32_t *)(dst->op_params))[3];
-
-    const int ith = params->ith;
-    const int nth = params->nth;
-
-    const int64_t K      = src0->ne[0];
-    const int64_t cin_pg = src0->ne[1]; // C_in / groups
-    const int64_t C_out  = src0->ne[2];
-    const int64_t T      = src1->ne[0];
-    const int64_t C_in   = src1->ne[1];
-    const int64_t T_out  = dst->ne[0];
-    const int64_t cout_pg = C_out / groups;
-
-    // ggml [T, C] layout: element (t, c) at offset t + c * T
-    const float * data = (const float *)src1->data;
-    float * out = (float *)dst->data;
-
-    // Pre-dequant kernel for this output channel (stack buffer, K*cin_pg per channel)
-    // K=128, cin_pg=64 → 8192 floats = 32KB, fits in stack
-    float kbuf[16384];
-    GGML_ASSERT(K * cin_pg <= 16384);
-
-    for (int64_t og = ith; og < C_out; og += nth) {
-        const int64_t g   = og / cout_pg;
-        const int64_t ic0 = g * cin_pg;
-
-        // Dequantize kernel for output channel og: K * cin_pg weights
-        const size_t koff = (size_t)og * K * cin_pg;
-        if (src0->type == GGML_TYPE_F32) {
-            memcpy(kbuf, (const float *)src0->data + koff, K * cin_pg * sizeof(float));
-        } else if (src0->type == GGML_TYPE_F16) {
-            const ggml_fp16_t * k16 = (const ggml_fp16_t *)src0->data + koff;
-            for (int64_t i = 0; i < K * cin_pg; i++)
-                kbuf[i] = ggml_fp16_to_fp32(k16[i]);
-        } else {
-            GGML_ABORT("unsupported kernel type for conv_1d_group");
-        }
-
-        // Direct convolution: for each output time step
-        for (int64_t t = 0; t < T_out; t++) {
-            float sum = 0.0f;
-            // kernel layout: kbuf[k + ic * K] for k in [0,K), ic in [0,cin_pg)
-            for (int64_t ic = 0; ic < cin_pg; ic++) {
-                const float * krow = kbuf + ic * K;
-                // data channel (ic0 + ic) at time t_in:
-                // ggml [T, C] → data[t_in + (ic0 + ic) * T]
-                const float * dchan = data + (ic0 + ic) * T;
-                for (int64_t k = 0; k < K; k++) {
-                    const int64_t t_in = t * s0 + k * d0 - p0;
-                    if (t_in >= 0 && t_in < T) {
-                        sum += krow[k] * dchan[t_in];
-                    }
-                }
-            }
-            // ggml [T_out, C_out] → out[t + og * T_out]
-            out[t + og * T_out] = sum;
-        }
     }
 }
 
@@ -10139,13 +9960,9 @@ static void ggml_compute_forward_rwkv_wkv6_f32(
     const int ith = params->ith;
     const int nth = params->nth;
 
-    if (ith >= HEADS) {
-        return;
-    }
-
-    const int h_start = (HEADS * ith) / nth;
-    const int h_end = ((HEADS * (ith + 1)) / nth < HEADS) ?
-                (HEADS * (ith + 1)) / nth : HEADS;
+    const int h_start =  (HEADS * (ith    )) / nth;
+    const int h_end   = ((HEADS * (ith + 1)) / nth < HEADS) ?
+                         (HEADS * (ith + 1)) / nth : HEADS;
 
     float * k =          (float *) dst->src[0]->data;
     float * v =          (float *) dst->src[1]->data;
@@ -10356,13 +10173,9 @@ static void ggml_compute_forward_gla_f32(
     const int ith = params->ith;
     const int nth = params->nth;
 
-    if (ith >= HEADS) {
-        return;
-    }
-
-    const int h_start = (HEADS * ith) / nth;
-    const int h_end = ((HEADS * (ith + 1)) / nth < HEADS) ?
-                (HEADS * (ith + 1)) / nth : HEADS;
+    const int h_start =  (HEADS * (ith    )) / nth;
+    const int h_end   = ((HEADS * (ith + 1)) / nth < HEADS) ?
+                         (HEADS * (ith + 1)) / nth : HEADS;
 
     float * k = (float *) dst->src[0]->data;
     float * v = (float *) dst->src[1]->data;
@@ -10819,13 +10632,9 @@ static void ggml_compute_forward_rwkv_wkv7_f32(
     const int ith = params->ith;
     const int nth = params->nth;
 
-    if (ith >= HEADS) {
-        return;
-    }
-
-    const int h_start = (HEADS * ith) / nth;
-    const int h_end = ((HEADS * (ith + 1)) / nth < HEADS) ?
-                (HEADS * (ith + 1)) / nth : HEADS;
+    const int h_start =  (HEADS * (ith    )) / nth;
+    const int h_end   = ((HEADS * (ith + 1)) / nth < HEADS) ?
+                         (HEADS * (ith + 1)) / nth : HEADS;
 
     float * r = (float *) dst->src[0]->data;
     float * w = (float *) dst->src[1]->data;

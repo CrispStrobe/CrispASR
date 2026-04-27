@@ -90,6 +90,8 @@ static ggml_backend_buffer_i ggml_backend_metal_buffer_shared_i = {
     /* .memset_tensor   = */ ggml_backend_metal_buffer_shared_memset_tensor,
     /* .set_tensor      = */ ggml_backend_metal_buffer_shared_set_tensor,
     /* .get_tensor      = */ ggml_backend_metal_buffer_shared_get_tensor,
+    /* .set_tensor_2d   = */ NULL,
+    /* .get_tensor_2d   = */ NULL,
     /* .cpy_tensor      = */ ggml_backend_metal_buffer_shared_cpy_tensor,
     /* .clear           = */ ggml_backend_metal_buffer_shared_clear,
     /* .reset           = */ NULL,
@@ -158,15 +160,17 @@ static void ggml_backend_metal_buffer_private_clear(ggml_backend_buffer_t buffer
 }
 
 static ggml_backend_buffer_i ggml_backend_metal_buffer_private_i = {
-    /* .free_buffer     = */ ggml_backend_metal_buffer_private_free_buffer,
-    /* .get_base        = */ ggml_backend_metal_buffer_private_get_base,
-    /* .init_tensor     = */ NULL,
-    /* .memset_tensor   = */ ggml_backend_metal_buffer_private_memset_tensor,
-    /* .set_tensor      = */ ggml_backend_metal_buffer_private_set_tensor,
-    /* .get_tensor      = */ ggml_backend_metal_buffer_private_get_tensor,
-    /* .cpy_tensor      = */ ggml_backend_metal_buffer_private_cpy_tensor,
-    /* .clear           = */ ggml_backend_metal_buffer_private_clear,
-    /* .reset           = */ NULL,
+    /* .free_buffer             = */ ggml_backend_metal_buffer_private_free_buffer,
+    /* .get_base                = */ ggml_backend_metal_buffer_private_get_base,
+    /* .init_tensor             = */ NULL,
+    /* .memset_tensor           = */ ggml_backend_metal_buffer_private_memset_tensor,
+    /* .set_tensor              = */ ggml_backend_metal_buffer_private_set_tensor,
+    /* .get_tensor              = */ ggml_backend_metal_buffer_private_get_tensor,
+    /* .get_tensor_2d_async     = */ NULL,
+    /* .set_tensor_2d_async     = */ NULL,
+    /* .cpy_tensor              = */ ggml_backend_metal_buffer_private_cpy_tensor,
+    /* .clear                   = */ ggml_backend_metal_buffer_private_clear,
+    /* .reset                   = */ NULL,
 };
 
 static bool ggml_backend_buffer_is_metal(ggml_backend_buffer_t buffer) {
@@ -563,6 +567,8 @@ static ggml_backend_i ggml_backend_metal_i = {
     /* .free                    = */ ggml_backend_metal_free,
     /* .set_tensor_async        = */ ggml_backend_metal_set_tensor_async,
     /* .get_tensor_async        = */ ggml_backend_metal_get_tensor_async,
+    /* .get_tensor_2d_async     = */ NULL,
+    /* .set_tensor_2d_async     = */ NULL,
     /* .cpy_tensor_async        = */ ggml_backend_metal_cpy_tensor_async, // only needed for multi-GPU setups
     /* .synchronize             = */ ggml_backend_metal_synchronize,
     /* .graph_plan_create       = */ NULL,
@@ -599,21 +605,7 @@ ggml_backend_t ggml_backend_metal_init(void) {
         /* .context   = */ ctx,
     };
 
-    // Default n_cb=1 (matches upstream — set_n_cb's own warning notes
-    // that "n_cb > 2 is not recommended and can degrade performance"
-    // for LLaMA-shaped decode). Earlier this session bumped the default
-    // to 4 hoping to dodge Apple's interactivity watchdog on TTS-shaped
-    // graphs by splitting submits — turned out the watchdog fires per
-    // command buffer regardless of how many there are. The proper fix
-    // for VibeVoice TTS was per-tensor backend routing of the σ-VAE
-    // decoder to CPU (see vibevoice.cpp). Keep the env-override knob
-    // in case someone hits a different big-graph case later.
-    {
-        const char* ncb_env = getenv("GGML_METAL_NCB");
-        int ncb = ncb_env ? atoi(ncb_env) : 1;
-        if (ncb < 1) ncb = 1;
-        ggml_backend_metal_set_n_cb(backend, ncb);
-    }
+    ggml_backend_metal_set_n_cb(backend, 1);
 
     return backend;
 }
@@ -707,21 +699,7 @@ static ggml_backend_t ggml_backend_metal_device_init_backend(ggml_backend_dev_t 
         /* .context   = */ ctx,
     };
 
-    // Default n_cb=1 (matches upstream — set_n_cb's own warning notes
-    // that "n_cb > 2 is not recommended and can degrade performance"
-    // for LLaMA-shaped decode). Earlier this session bumped the default
-    // to 4 hoping to dodge Apple's interactivity watchdog on TTS-shaped
-    // graphs by splitting submits — turned out the watchdog fires per
-    // command buffer regardless of how many there are. The proper fix
-    // for VibeVoice TTS was per-tensor backend routing of the σ-VAE
-    // decoder to CPU (see vibevoice.cpp). Keep the env-override knob
-    // in case someone hits a different big-graph case later.
-    {
-        const char* ncb_env = getenv("GGML_METAL_NCB");
-        int ncb = ncb_env ? atoi(ncb_env) : 1;
-        if (ncb < 1) ncb = 1;
-        ggml_backend_metal_set_n_cb(backend, ncb);
-    }
+    ggml_backend_metal_set_n_cb(backend, 1);
 
     return backend;
 

@@ -1402,8 +1402,9 @@ static ggml_tensor* build_conv_module(ggml_context* ctx, ggml_tensor* x, const f
     int pad_sym = (kernel_size - 1) / 2;                      // 16 on each side
     ht = ggml_pad_ext(ctx, ht, pad_sym, pad_sym, 0, 0, 0, 0, 0, 0);
     ht = ggml_conv_1d_dw(ctx, conv.dw_w, ht, 1, 0, 1);
-    // Output is [OL, 1, channels, 1] — reshape to [OL, channels]
-    ht = ggml_reshape_2d(ctx, ht, ht->ne[0], ht->ne[2]);
+    // Output from conv_1d_dw is [OL, channels, 1] — reshape to [OL, channels]
+    if (ggml_n_dims(ht) > 2)
+        ht = ggml_reshape_2d(ctx, ht, ht->ne[0], ht->ne[1]);
     h = ggml_cont(ctx, ggml_transpose(ctx, ht)); // [channels, T]
 
     // LayerNorm (named batch_norm in checkpoint)
