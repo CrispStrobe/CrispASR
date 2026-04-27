@@ -294,6 +294,7 @@ def convert(nemo_path: Path, out_path: Path) -> None:
     n_f16 = 0
     n_f32 = 0
     layers_seen = set()
+    layers_with_dw_bias = set()
     for name in sorted(sd.keys()):
         gguf_name = remap_name(name)
         if gguf_name is None:
@@ -318,13 +319,17 @@ def convert(nemo_path: Path, out_path: Path) -> None:
         if gguf_name.startswith("encoder.layers.") and ".conv.dw.weight" in gguf_name:
             li = int(gguf_name.split(".")[2])
             layers_seen.add(li)
+        # Track layers that already have a dw.bias from the checkpoint.
+        if gguf_name.startswith("encoder.layers.") and ".conv.dw.bias" in gguf_name:
+            li = int(gguf_name.split(".")[2])
+            layers_with_dw_bias.add(li)
 
-    # Inject a zero-valued conv.dw.bias per encoder layer. This bias starts at
-    # zero in NeMo (the depthwise conv is bias-less and the BN that follows
-    # provides the bias term), but the C++ runtime folds BatchNorm into the
-    # depthwise conv at load time and writes the absorbed bias *into* this
-    # tensor — so it must exist in the GGUF buffer up front.
+    # Inject a zero-valued conv.dw.bias per encoder layer that doesn't already
+    # have one. Older NeMo models have bias-less depthwise conv (BN provides the
+    # bias term), but newer ones (parakeet-ja) have an explicit bias.
     for li in sorted(layers_seen):
+        if li in layers_with_dw_bias:
+            continue  # already has a real bias from the checkpoint
         bias = np.zeros(int(model_d_for_layer(sd, li)), dtype=np.float32)
         gguf_name = f"encoder.layers.{li}.conv.dw.bias"
         writer.add_tensor(gguf_name, bias)
@@ -333,7 +338,7 @@ def convert(nemo_path: Path, out_path: Path) -> None:
 
     print(
         f"\n  total tensors: {n_written}  (F16: {n_f16}, F32: {n_f32})  "
-        f"(+{len(layers_seen)} synthetic conv.dw.bias)"
+        f"(+{len(layers_seen) - len(layers_with_dw_bias)} synthetic conv.dw.bias)"
     )
 
     writer.write_header_to_file()
