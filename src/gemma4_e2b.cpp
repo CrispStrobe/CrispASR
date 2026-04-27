@@ -166,6 +166,58 @@ struct gemma4_e2b_context {
     float temperature = 0.0f;
 };
 
+// ── Conformer encoder graph builder ─────────────────────────────────────────
+// Builds a single ggml graph for the full 12-layer USM Conformer encoder.
+// Input: mel features [n_mels, T_mel] after Conv2D subsampling → [hidden, T_sub]
+// Output: [output_proj_dims, T_sub]
+
+static ggml_tensor* build_macaron_ffn(ggml_context* ctx, ggml_tensor* x, ggml_tensor* pre_ln, ggml_tensor* up_w,
+                                      ggml_tensor* down_w, ggml_tensor* post_ln, float residual_weight, float eps) {
+    // Half-step FFN: x + residual_weight * post_ln(down(silu(up(pre_ln(x)))))
+    ggml_tensor* h = ggml_rms_norm(ctx, x, eps);
+    h = ggml_mul(ctx, h, pre_ln);
+    h = ggml_mul_mat(ctx, up_w, h);
+    h = ggml_silu(ctx, h);
+    h = ggml_mul_mat(ctx, down_w, h);
+    ggml_tensor* normed = ggml_rms_norm(ctx, h, eps);
+    normed = ggml_mul(ctx, normed, post_ln);
+    return ggml_add(ctx, x, ggml_scale(ctx, normed, residual_weight));
+}
+
+static ggml_tensor* build_light_conv1d(ggml_context* ctx, ggml_tensor* x, const g4e_audio_layer& L, int T, int hidden,
+                                       float eps) {
+    // LightConv1d: pre_ln → gate_proj (GLU: split → sigmoid gate) → depthwise_conv1d(causal, k=5) →
+    // conv_norm → out_proj + residual
+    ggml_tensor* residual = x;
+    ggml_tensor* h = ggml_rms_norm(ctx, x, eps);
+    h = ggml_mul(ctx, h, L.conv_pre_ln);
+
+    // GLU gating: gate_proj produces [2*hidden, T], split into value + gate
+    h = ggml_mul_mat(ctx, L.conv_gate_w, h); // [2*hidden, T]
+    int half = hidden;
+    ggml_tensor* val = ggml_view_2d(ctx, h, half, T, h->nb[1], 0);
+    ggml_tensor* gate = ggml_view_2d(ctx, h, half, T, h->nb[1], half * ggml_type_size(h->type));
+    h = ggml_mul(ctx, val, ggml_sigmoid(ctx, gate)); // [hidden, T]
+
+    // Causal depthwise conv1d (kernel=5, left-pad=4)
+    // Transpose [hidden, T] → [T, hidden] for conv_1d_dw
+    ggml_tensor* ht = ggml_cont(ctx, ggml_transpose(ctx, h));
+    int k = 5;
+    int pad_left = k - 1; // causal: all padding on left
+    ht = ggml_pad_ext(ctx, ht, pad_left, 0, 0, 0, 0, 0, 0, 0);
+    ht = ggml_conv_1d_dw(ctx, L.conv_dw_w, ht, 1, 0, 1);
+    if (ggml_n_dims(ht) > 2)
+        ht = ggml_reshape_2d(ctx, ht, ht->ne[0], ht->ne[1]);
+    h = ggml_cont(ctx, ggml_transpose(ctx, ht)); // back to [hidden, T]
+
+    // Conv norm + out projection
+    h = ggml_rms_norm(ctx, h, eps);
+    h = ggml_mul(ctx, h, L.conv_ln);
+    h = ggml_mul_mat(ctx, L.conv_out_w, h);
+
+    return ggml_add(ctx, residual, h);
+}
+
 // ── Public API ──────────────────────────────────────────────────────────────
 
 extern "C" struct gemma4_e2b_context_params gemma4_e2b_context_default_params(void) {
@@ -384,37 +436,66 @@ extern "C" char* gemma4_e2b_transcribe(struct gemma4_e2b_context* ctx, const flo
     auto& lhp = m.llm_hp;
     bool verbose = ctx->verbosity >= 2 || getenv("GEMMA4_E2B_BENCH");
 
-    // ── Step 1: Mel spectrogram ─────────────────────────────────────────
-    // 128-bin log-mel, 16kHz, 40ms frames (HF/Whisper-style)
-    // TODO: use core_mel::compute with baked filterbank from GGUF
-    // For now, placeholder — needs mel filterbank tensor in GGUF
     if (ctx->verbosity >= 1)
         fprintf(stderr, "gemma4_e2b: %d samples (%.1fs)\n", n_samples, n_samples / 16000.0f);
 
-    // ── Step 2: Conv2D subsampling ──────────────────────────────────────
-    // Two Conv2D layers: [1, n_mels, T_mel] → [128, n_mels/2, T_mel/2] → [32, n_mels/4, T_mel/4]
-    // Then flatten + linear projection to [1024, T_sub]
-    // TODO: implement when we have a converted GGUF to test against
+    // ── Step 1: Mel spectrogram (128-bin, 16kHz, HF/Whisper-style) ──────
+    // Uses core_mel::compute — same as qwen3/voxtral (HF cluster:
+    // log10 + global clip, n_mels=128, n_fft=400, hop=160, win=400)
+    // TODO: bake filterbank into GGUF; for now, compute at runtime
+    // core_mel::Params mel_params;
+    // mel_params.n_mels = 128;
+    // mel_params.n_fft = 400;
+    // mel_params.hop_length = 160;  // 10ms at 16kHz
+    // mel_params.style = core_mel::Style::HF_WHISPER;
+    // auto mel = core_mel::compute(pcm, n_samples, mel_params);
+    // int T_mel = mel.T;
+    // Max 30s: T_mel = min(T_mel, 3000)
 
-    // ── Step 3: Conformer encoder (12 layers) ───────────────────────────
-    // Each layer: FFN1 (macaron) → self-attn (chunked + rel_pos) → LightConv1d → FFN2 → out_norm
-    // Residual weight: 0.5 (half-step residuals in macaron FFN)
-    // TODO: implement — architecture is well-understood from tensor dump
+    // ── Step 2: Conv2D subsampling (4x temporal reduction) ──────────────
+    // layer0: Conv2D(1→128, k=3, s=2) + RMSNorm → [128, n_mels/2, T_mel/2]
+    // layer1: Conv2D(128→32, k=3, s=2) + RMSNorm → [32, n_mels/4, T_mel/4]
+    // flatten: [32 * n_mels/4, T_mel/4] = [32*32, T_sub] = [1024, T_sub]
+    // input_proj: Linear(1024→1024) → [1024, T_sub]
+    // T_sub ≈ T_mel / 4
 
-    // ── Step 4: Audio → LLM token injection ─────────────────────────────
-    // Tokenize prompt with <audio> placeholder, replace with conformer output
-    // Output projection: [1024, T_sub] → [1536, T_sub] via audio_output_proj
-    // Embedding projection: [1536, T_sub] → [1536, T_sub] via audio_embed_proj
-    // TODO: implement chat template + audio injection (same pattern as qwen3)
+    // ── Step 3: Conformer encoder (12 layers, macaron architecture) ─────
+    // For each layer (residual_weight=0.5):
+    //   x = x + 0.5 * FFN1(pre_ln(x))                    // macaron half-step
+    //   x = x + self_attn(pre_ln(x))                      // chunked attention + relative pos
+    //   x = x + LightConv1d(pre_ln(x))                    // causal depthwise conv + GLU
+    //   x = x + 0.5 * FFN2(pre_ln(x))                    // macaron half-step
+    //   x = out_norm(x)
+    //
+    // Self-attention: chunked (chunk_size=12, left_context=13, right_context=0)
+    //   Uses per_dim_scale (learned, [head_dim]) + relative_k_proj for position bias
+    //   Attention logit cap: 50.0 (tanh capping)
+    //
+    // LightConv1d: pre_ln → gate_proj (GLU split) → depthwise_conv1d(k=5, causal)
+    //   → conv_norm → out_proj
+    //
+    // FFN: pre_ln → up_proj (SiLU) → down_proj
 
-    // ── Step 5: Gemma4 LLM decode ───────────────────────────────────────
-    // 35-layer decoder with PLE, hybrid sliding/full attention, SwiGLU
-    // Reuses core_attn::kv_self_attn (Q/K norms, GQA) and core_ffn::swiglu
-    // TODO: implement — needs KV cache allocation, chat template
+    // ── Step 4: Output projection + audio embedding ─────────────────────
+    // output_proj: Linear(1024→1536, bias) — maps conformer output to LLM dim
+    // embed_proj:  Linear(1536→1536)      — audio embedding projection
 
-    // For now, return nullptr (not implemented)
+    // ── Step 5: Gemma4 LLM decode (35 layers) ───────────────────────────
+    // Chat template: "<start_of_turn>user\n<audio>Transcribe...<end_of_turn>\n<start_of_turn>model\n"
+    // Audio tokens injected at <audio> placeholder position
+    //
+    // Per-layer: PLE (per-layer embedding lookup + gate + projection) +
+    //   hybrid attention (sliding_window=512 most layers, full every 5th) +
+    //   pre/post norms + SwiGLU FFN
+    //
+    // Reuses: core_attn::kv_self_attn (Q/K RMSNorm, GQA 8Q/1KV)
+    //         core_ffn::swiglu (gate_proj, up_proj, down_proj)
+    //
+    // Final: RMSNorm → lm_head → softcap(30.0) → greedy/sample
+
+    // Not yet implemented — waiting for GGUF + differential testing
     if (ctx->verbosity >= 1)
-        fprintf(stderr, "gemma4_e2b: transcribe not yet implemented (need converted GGUF)\n");
+        fprintf(stderr, "gemma4_e2b: forward pass not yet implemented\n");
     return nullptr;
 }
 
