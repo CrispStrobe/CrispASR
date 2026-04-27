@@ -446,6 +446,7 @@ static bool ggml_grouped_conv1d_same(const float* x_cf, float* y_cf, int C, int 
     for (int g = 0; g < G; g++) {
         // Slice padded input: [T_pad, cpg] for this group
         ggml_tensor* x_g = ggml_view_2d(ctx0, padded, T_pad, cpg, padded->nb[1], (size_t)g * cpg * padded->nb[1]);
+        x_g = ggml_cont(ctx0, x_g);
         x_g = ggml_reshape_3d(ctx0, x_g, T_pad, cpg, 1);
 
         // Slice weight: [K, cpg, cpg] for this group
@@ -590,9 +591,63 @@ static void ggml_linear_f32(std::vector<uint8_t>& scratch, ggml_tensor* W, const
 // ggml_conv_1d with varying strides + LayerNorm/InstanceNorm is fiddly
 // to get right in graph form and the CNN is <5% of total compute.
 // Only the transformer + feature projection + LM head are in the graph.
+// Build ggml graph for grouped conv1d ops inside the transformer graph.
+// Adds pos_conv (G groups × im2col + mul_mat) + GELU + residual to the graph.
+// Input: cur [H, T] channel-first. Returns: cur + gelu(grouped_conv(cur)).
+static ggml_tensor* build_pos_conv_graph(ggml_context* ctx0, ggml_cgraph* gf, ggml_tensor* cur, ggml_tensor* w_tensor,
+                                         ggml_tensor* b_tensor, int H, int T, int K, int G) {
+    int cpg = H / G;
+    int pad_l = (K - 1) / 2;
+    int pad_r = K - 1 - pad_l;
+
+    // Pad: [H, T] → [H, T+pad_l+pad_r]
+    ggml_tensor* padded = ggml_pad_ext(ctx0, cur, pad_l, pad_r, 0, 0, 0, 0, 0, 0);
+    int T_pad = T + pad_l + pad_r;
+
+    // Build G independent conv branches, accumulate into one output
+    // Each group: slice input [cpg, T_pad], slice weight [K, cpg, cpg], im2col+mul_mat → [cpg, T]
+    std::vector<ggml_tensor*> group_outs(G);
+    for (int g = 0; g < G; g++) {
+        ggml_tensor* x_g = ggml_view_2d(ctx0, padded, T_pad, cpg, padded->nb[1], (size_t)g * cpg * padded->nb[1]);
+        x_g = ggml_cont(ctx0, x_g);
+        x_g = ggml_reshape_3d(ctx0, x_g, T_pad, cpg, 1);
+
+        ggml_tensor* w_g = ggml_view_3d(ctx0, w_tensor, K, cpg, cpg, w_tensor->nb[1], w_tensor->nb[2],
+                                        (size_t)g * cpg * w_tensor->nb[2]);
+
+        ggml_tensor* im2col = ggml_im2col(ctx0, w_g, x_g, 1, 0, 0, 0, 1, 0, false, GGML_TYPE_F32);
+        ggml_tensor* w_2d = ggml_reshape_2d(ctx0, w_g, K * cpg, cpg);
+        ggml_tensor* im_2d = ggml_reshape_2d(ctx0, im2col, K * cpg, T);
+        ggml_tensor* conv = ggml_mul_mat(ctx0, w_2d, im_2d); // [cpg, T]
+
+        if (b_tensor) {
+            ggml_tensor* b_g = ggml_view_1d(ctx0, b_tensor, cpg, (size_t)g * cpg * sizeof(float));
+            conv = ggml_add(ctx0, conv, b_g);
+        }
+        group_outs[g] = conv;
+    }
+
+    // Assemble groups into output [H, T]: copy each group's [cpg, T] into the
+    // correct channel slice of a pre-allocated output tensor.
+    ggml_tensor* conv_out = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, H, T);
+    ggml_set_name(conv_out, "pos_conv_out");
+    // Initialize to zero (will be overwritten by copies)
+    for (int g = 0; g < G; g++) {
+        // group_outs[g] is [cpg, T] from mul_mat
+        // Target slice: conv_out[g*cpg .. (g+1)*cpg, :] = [cpg, T]
+        ggml_tensor* dst_slice = ggml_view_2d(ctx0, conv_out, cpg, T, conv_out->nb[1], (size_t)g * cpg * sizeof(float));
+        ggml_build_forward_expand(gf, ggml_cpy(ctx0, group_outs[g], dst_slice));
+    }
+
+    // GELU + residual
+    conv_out = ggml_gelu(ctx0, conv_out);
+    return ggml_add(ctx0, cur, conv_out);
+}
+
 static ggml_cgraph* wav2vec2_build_transformer_graph(const wav2vec2_model& m,
                                                      int T, // number of CNN output frames (computed by caller)
-                                                     std::vector<uint8_t>& compute_meta) {
+                                                     std::vector<uint8_t>& compute_meta,
+                                                     bool include_pos_conv = false) {
     const auto& hp = m.hparams;
     const int H = (int)hp.hidden_size;
     const int n_heads = (int)hp.num_attention_heads;
@@ -600,16 +655,25 @@ static ggml_cgraph* wav2vec2_build_transformer_graph(const wav2vec2_model& m,
     const int L = (int)hp.num_hidden_layers;
     const float ln_eps = hp.layer_norm_eps;
 
-    size_t ctx_size = ggml_tensor_overhead() * 16384 + ggml_graph_overhead_custom(16384, false);
+    // Increase context size to accommodate pos_conv ops if included
+    size_t extra = include_pos_conv ? (size_t)hp.num_conv_pos_embedding_groups * 20 : 0;
+    size_t ctx_size = ggml_tensor_overhead() * (16384 + extra) + ggml_graph_overhead_custom(16384 + extra, false);
     compute_meta.resize(ctx_size);
     ggml_init_params ip = {ctx_size, compute_meta.data(), true};
     ggml_context* ctx0 = ggml_init(ip);
-    ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 16384, false);
+    ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 16384 + (int)extra, false);
 
-    // Input: feature-projected hidden states [H, T] from the CNN + proj
+    // Input: feature-projected hidden states [H, T] (before or after pos_conv)
     ggml_tensor* cur = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, H, T);
     ggml_set_name(cur, "hidden_in");
     ggml_set_input(cur);
+
+    // Optional: include positional conv in the graph
+    if (include_pos_conv && m.pos_conv_w) {
+        int K_pos = (int)hp.num_conv_pos_embeddings;
+        int G_pos = (int)hp.num_conv_pos_embedding_groups;
+        cur = build_pos_conv_graph(ctx0, gf, cur, m.pos_conv_w, m.pos_conv_b, H, T, K_pos, G_pos);
+    }
 
     const bool pre_norm = (hp.do_stable_layer_norm != 0);
 
@@ -1256,10 +1320,13 @@ static std::vector<float> wav2vec2_compute_logits_graph(const wav2vec2_model& m,
     }
 
     t_proj = ggml_time_us() - t0;
+
+    // Save pre-pos_conv hidden for the integrated graph path
+    std::vector<float> hidden_pre_pos(hidden);
+
     // ---- 3. Positional conv (grouped Conv1d + GELU + residual) ----
-    // Uses manual CPU grouped_conv1d_same with GPU-safe weight access via
-    // tensor_data_f32. The grouped conv is a single op per layer — the
-    // expensive matmuls (QKV/FFN) run on GPU via ggml_linear_f32.
+    // This step is skipped when the full graph includes pos_conv (sched path below).
+    // Kept as fallback for the per-layer path.
     t0 = ggml_time_us();
     {
         int G_pos = (int)hp.num_conv_pos_embedding_groups;
@@ -1344,10 +1411,11 @@ static std::vector<float> wav2vec2_compute_logits_graph(const wav2vec2_model& m,
                        ggml_tensor_overhead() * 200 + ggml_graph_overhead_custom(512, false) + 32 * 1024 * 1024;
 
     // Try full-graph path with ggml_backend_sched (GPU-ready)
-    // Uses the pre-built graph function + explicit weight tensor assignment
+    // TODO: include_pos_conv=true integrates grouped conv into the graph but
+    // has view/reshape contiguity issues in ggml_concat/ggml_cpy. Disabled for now.
     {
         std::vector<uint8_t> compute_meta;
-        ggml_cgraph* gf = wav2vec2_build_transformer_graph(m, T, compute_meta);
+        ggml_cgraph* gf = wav2vec2_build_transformer_graph(m, T, compute_meta, /*include_pos_conv=*/false);
         if (gf) {
             if (ggml_backend_is_cpu(m.backend))
                 ggml_backend_cpu_set_n_threads(m.backend, n_threads);
@@ -1372,7 +1440,7 @@ static std::vector<float> wav2vec2_compute_logits_graph(const wav2vec2_model& m,
             assign(m.fp_b);
             assign(m.fp_ln_w);
             assign(m.fp_ln_b);
-            assign(m.pos_conv_w);
+            assign(m.pos_conv_w); // Also used inside graph when include_pos_conv=true
             assign(m.pos_conv_b);
             assign(m.enc_ln_w);
             assign(m.enc_ln_b);
