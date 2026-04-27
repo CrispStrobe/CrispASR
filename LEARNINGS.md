@@ -523,6 +523,19 @@ kernels with small spatial dimensions (k ≤ 5) and few channels (C < 256),
 ship it F32. The 16 MB F32 Silero LID model is smaller than a single
 layer of most ASR encoders — quantization is pointless.
 
+### BPE merges break GGUF loading (skip add_token_merges)
+
+The gguf Python library's `add_token_merges()` writes string arrays as
+GGUF type 9. Our C-side `gguf_init_from_file` rejects type 9 with
+`key 'tokenizer.ggml.merges' has invalid GGUF type`. This blocks
+model loading entirely (not just tokenizer — the whole GGUF fails).
+
+**Fix:** Don't store merges. The BPE decoder in `core/bpe.h` works
+from the token vocab alone (greedy byte-pair matching). Merges would
+add 10-30 MB to the header for no benefit in our use case.
+
+Affected converters: gemma4-e2b, mimo-asr (any model with >100K BPE vocab).
+
 ### CUDA im2col grid overflow (MUST RE-APPLY after every ggml bump)
 
 Upstream ggml's CUDA im2col kernel uses `OW` (output width) directly as
