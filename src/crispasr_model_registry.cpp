@@ -72,6 +72,9 @@ constexpr Entry k_registry[] = {
     {"gemma4-e2b", "gemma4-e2b-it-q4_k.gguf",
      "https://huggingface.co/cstr/gemma4-e2b-it-GGUF/resolve/main/gemma4-e2b-it-q4_k.gguf",
      "~2.5 GB", nullptr, nullptr},
+    {"parakeet-ja", "parakeet-tdt-0.6b-ja-q4_k.gguf",
+     "https://huggingface.co/cstr/parakeet-tdt-0.6b-ja-GGUF/resolve/main/parakeet-tdt-0.6b-ja-q4_k.gguf",
+     "~449 MB", nullptr, nullptr},
 };
 // clang-format on
 

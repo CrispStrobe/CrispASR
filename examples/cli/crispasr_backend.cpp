@@ -265,7 +265,7 @@ std::string crispasr_detect_backend_from_gguf(const std::string& model_path) {
                 result = "whisper";
             else if (a == "parakeet")
                 result = "parakeet";
-            else if (a == "parakeet-tdt")
+            else if (a == "parakeet-tdt" || a == "parakeet-ja" || a == "parakeet_ja")
                 result = "parakeet";
             else if (a == "canary")
                 result = "canary";
