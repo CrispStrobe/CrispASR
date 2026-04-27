@@ -704,14 +704,24 @@ int crispasr_run_backend(const whisper_params& params_in) {
     }
 
     // Optional punctuation restoration post-processor.
+    // `--punc-model auto` or `--punc-model firered` → auto-download Q4_K (~50 MB).
     fireredpunc_context* punc_ctx = nullptr;
-    if (!params.punc_model.empty()) {
-        punc_ctx = fireredpunc_init(params.punc_model.c_str());
-        if (!punc_ctx) {
-            fprintf(stderr, "crispasr: warning: failed to load punc model '%s' — continuing without\n",
-                    params.punc_model.c_str());
-        } else if (!params.no_prints) {
-            fprintf(stderr, "crispasr: loaded punctuation model '%s'\n", params.punc_model.c_str());
+    {
+        std::string punc_path = params.punc_model;
+        if (punc_path == "auto" || punc_path == "firered") {
+            punc_path = crispasr_cache::ensure_cached_file(
+                "fireredpunc-q4_k.gguf",
+                "https://huggingface.co/cstr/fireredpunc-GGUF/resolve/main/fireredpunc-q4_k.gguf", params.no_prints,
+                "crispasr[punc]", params.cache_dir);
+        }
+        if (!punc_path.empty()) {
+            punc_ctx = fireredpunc_init(punc_path.c_str());
+            if (!punc_ctx) {
+                fprintf(stderr, "crispasr: warning: failed to load punc model '%s' — continuing without\n",
+                        punc_path.c_str());
+            } else if (!params.no_prints) {
+                fprintf(stderr, "crispasr: loaded punctuation model '%s'\n", punc_path.c_str());
+            }
         }
     }
 

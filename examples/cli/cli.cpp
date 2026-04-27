@@ -552,7 +552,7 @@ static void whisper_print_usage(int /*argc*/, char** argv, const whisper_params&
             params.target_lang.c_str());
     fprintf(stderr, "             --no-punctuation       [%-7s] disable punctuation (canary, cohere)\n",
             params.punctuation ? "false" : "true");
-    fprintf(stderr, "             --punc-model FNAME     [%-7s] FireRedPunc GGUF for punctuation restoration\n",
+    fprintf(stderr, "             --punc-model FNAME     [%-7s] FireRedPunc GGUF (or 'auto' to download)\n",
             params.punc_model.c_str());
     fprintf(stderr, "             --flush-after N        [%-7d] flush SRT to stdout every N segments (0=all at end)\n",
             params.flush_after);
@@ -620,7 +620,8 @@ static void whisper_print_usage(int /*argc*/, char** argv, const whisper_params&
     fprintf(stderr, "\nVoice Activity Detection (VAD) options:\n");
     fprintf(stderr, "             --vad                           [%-7s] enable Voice Activity Detection (VAD)\n",
             params.vad ? "true" : "false");
-    fprintf(stderr, "  -vm FNAME, --vad-model FNAME               [%-7s] VAD model path\n", params.vad_model.c_str());
+    fprintf(stderr, "  -vm FNAME, --vad-model FNAME               [%-7s] VAD model (path, 'firered', or 'silero')\n",
+            params.vad_model.c_str());
     fprintf(stderr, "  -vt N,     --vad-threshold N               [%-7.2f] VAD threshold for speech recognition\n",
             params.vad_threshold);
     fprintf(stderr, "  -vspd N,   --vad-min-speech-duration-ms  N [%-7d] VAD min speech duration (0.0-1.0)\n",

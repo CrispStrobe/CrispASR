@@ -90,6 +90,14 @@
 #include "omniasr.h"
 #define CA_HAVE_OMNIASR 1
 #endif
+#if __has_include("moonshine_streaming.h")
+#include "moonshine_streaming.h"
+#define CA_HAVE_MOONSHINE_STREAMING 1
+#endif
+#if __has_include("gemma4_e2b.h")
+#include "gemma4_e2b.h"
+#define CA_HAVE_GEMMA4_E2B 1
+#endif
 #if __has_include("fireredpunc.h")
 #include "fireredpunc.h"
 #define CA_HAVE_FIREREDPUNC 1
@@ -755,6 +763,12 @@ struct crispasr_session {
 #ifdef CA_HAVE_MOONSHINE
     void* moonshine_ctx = nullptr;
 #endif
+#ifdef CA_HAVE_MOONSHINE_STREAMING
+    void* moonshine_streaming_ctx = nullptr;
+#endif
+#ifdef CA_HAVE_GEMMA4_E2B
+    void* gemma4_e2b_ctx = nullptr;
+#endif
 #ifdef CA_HAVE_OMNIASR
     void* omniasr_ctx = nullptr;
 #endif
@@ -970,6 +984,30 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
             return nullptr;
         }
         moonshine_set_n_threads((moonshine_context*)s->moonshine_ctx, s->n_threads);
+        return s;
+    }
+#endif
+#ifdef CA_HAVE_MOONSHINE_STREAMING
+    if (s->backend == "moonshine-streaming") {
+        moonshine_streaming_context_params p = moonshine_streaming_context_default_params();
+        p.n_threads = s->n_threads;
+        s->moonshine_streaming_ctx = moonshine_streaming_init_from_file(model_path, p);
+        if (!s->moonshine_streaming_ctx) {
+            delete s;
+            return nullptr;
+        }
+        return s;
+    }
+#endif
+#ifdef CA_HAVE_GEMMA4_E2B
+    if (s->backend == "gemma4-e2b") {
+        gemma4_e2b_context_params p = gemma4_e2b_context_default_params();
+        p.n_threads = s->n_threads;
+        s->gemma4_e2b_ctx = gemma4_e2b_init_from_file(model_path, p);
+        if (!s->gemma4_e2b_ctx) {
+            delete s;
+            return nullptr;
+        }
         return s;
     }
 #endif
@@ -1501,6 +1539,15 @@ CA_EXPORT crispasr_session_result* crispasr_session_transcribe_lang(crispasr_ses
             need_free = false; // moonshine returns internal pointer
         }
 #endif
+#ifdef CA_HAVE_MOONSHINE_STREAMING
+        if (!text && s->backend == "moonshine-streaming" && s->moonshine_streaming_ctx)
+            text = moonshine_streaming_transcribe((moonshine_streaming_context*)s->moonshine_streaming_ctx, pcm,
+                                                  n_samples);
+#endif
+#ifdef CA_HAVE_GEMMA4_E2B
+        if (!text && s->backend == "gemma4-e2b" && s->gemma4_e2b_ctx)
+            text = gemma4_e2b_transcribe((gemma4_e2b_context*)s->gemma4_e2b_ctx, pcm, n_samples);
+#endif
 #ifdef CA_HAVE_OMNIASR
         if (!text && (s->backend == "omniasr" || s->backend == "omniasr-ctc" || s->backend == "omniasr-llm") &&
             s->omniasr_ctx)
@@ -1984,6 +2031,14 @@ CA_EXPORT void crispasr_session_close(crispasr_session* s) {
 #ifdef CA_HAVE_MOONSHINE
     if (s->moonshine_ctx)
         moonshine_free((moonshine_context*)s->moonshine_ctx);
+#endif
+#ifdef CA_HAVE_MOONSHINE_STREAMING
+    if (s->moonshine_streaming_ctx)
+        moonshine_streaming_free((moonshine_streaming_context*)s->moonshine_streaming_ctx);
+#endif
+#ifdef CA_HAVE_GEMMA4_E2B
+    if (s->gemma4_e2b_ctx)
+        gemma4_e2b_free((gemma4_e2b_context*)s->gemma4_e2b_ctx);
 #endif
 #ifdef CA_HAVE_OMNIASR
     if (s->omniasr_ctx)
