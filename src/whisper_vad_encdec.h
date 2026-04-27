@@ -23,11 +23,9 @@ struct whisper_vad_encdec_context* whisper_vad_encdec_init(const char* model_pat
 //   (despite freeze_encoder:true in the training config), so this output
 //   CANNOT be reused for whisper ASR decoding — the representations differ
 //   from whisper-base. Kept for potential future use or analysis.
-int whisper_vad_encdec_detect(struct whisper_vad_encdec_context* ctx,
-                              const float* samples, int n_samples,
-                              struct whisper_vad_encdec_segment** segments, int* n_segments,
-                              float threshold, float min_speech_sec, float min_silence_sec,
-                              float** probs_out, int* n_frames_out,
+int whisper_vad_encdec_detect(struct whisper_vad_encdec_context* ctx, const float* samples, int n_samples,
+                              struct whisper_vad_encdec_segment** segments, int* n_segments, float threshold,
+                              float min_speech_sec, float min_silence_sec, float** probs_out, int* n_frames_out,
                               float** encoder_out, int* encoder_out_size);
 
 void whisper_vad_encdec_free(struct whisper_vad_encdec_context* ctx);
