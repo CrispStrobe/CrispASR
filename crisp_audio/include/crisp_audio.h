@@ -99,6 +99,7 @@ float* crisp_audio_encode(struct crisp_audio_context* ctx,
 int crisp_audio_d_model(struct crisp_audio_context* ctx);
 int crisp_audio_output_dim(struct crisp_audio_context* ctx);
 int crisp_audio_n_layers(struct crisp_audio_context* ctx);
+int crisp_audio_n_window(struct crisp_audio_context* ctx);
 enum crisp_audio_dialect crisp_audio_dialect_of(struct crisp_audio_context* ctx);
 
 #ifdef __cplusplus

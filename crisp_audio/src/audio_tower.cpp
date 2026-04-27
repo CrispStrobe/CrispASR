@@ -214,52 +214,51 @@ bool load_model(crisp_audio_context& ctx, const char* path,
             return false;
         }
         auto& hp = ctx.hp;
-        auto u = [&](const char* k, uint32_t d) {
-            return core_gguf::kv_u32(gctx, (mprefix + k).c_str(), d);
-        };
-        hp.sample_rate = u("sample_rate", hp.sample_rate);
-        hp.n_mels = u("n_mels", hp.n_mels);
-        hp.n_fft = u("n_fft", hp.n_fft);
-        hp.win_length = u("win_length", hp.win_length);
-        hp.hop_length = u("hop_length", hp.hop_length);
-        hp.n_layers = u("n_layers", hp.n_layers);
-        hp.d_model = u("d_model", hp.d_model);
-        hp.n_heads = u("n_heads", hp.n_heads);
-        hp.head_dim = u("head_dim", hp.head_dim);
-        hp.ff_dim = u("ff_dim", hp.ff_dim);
-        hp.conv_ch = u("conv_channels", hp.conv_ch);
-        hp.output_dim = u("output_dim", hp.output_dim);
-        hp.max_source_pos = u("max_source_pos", hp.max_source_pos);
-        hp.n_window = u("n_window", hp.n_window);
-        hp.n_window_infer = u("n_window_infer", hp.n_window_infer);
-        // If meta_prefix didn't match (e.g. user passed "audio." but the GGUF
-        // uses "qwen3asr.audio."), fall back to qwen3-asr's keys so existing
-        // qwen3-asr GGUFs Just Work without conversion.
-        if (hp.d_model == 896 && mprefix != "qwen3asr.audio.") {
-            // Looks like nothing was overridden — try the qwen3-asr names.
-            auto u2 = [&](const char* k, uint32_t d) {
-                return core_gguf::kv_u32(gctx, (std::string("qwen3asr.audio.") + k).c_str(), d);
-            };
-            auto u3 = [&](const char* k, uint32_t d) {
-                return core_gguf::kv_u32(gctx, (std::string("qwen3asr.") + k).c_str(), d);
-            };
-            hp.sample_rate = u3("sample_rate", hp.sample_rate);
-            hp.n_mels = u3("n_mels", hp.n_mels);
-            hp.n_fft = u3("n_fft", hp.n_fft);
-            hp.win_length = u3("win_length", hp.win_length);
-            hp.hop_length = u3("hop_length", hp.hop_length);
-            hp.n_layers = u2("n_layers", hp.n_layers);
-            hp.d_model = u2("d_model", hp.d_model);
-            hp.n_heads = u2("n_heads", hp.n_heads);
-            hp.head_dim = u2("head_dim", hp.head_dim);
-            hp.ff_dim = u2("ff_dim", hp.ff_dim);
-            hp.conv_ch = u2("conv_channels", hp.conv_ch);
-            hp.output_dim = u2("proj_dim", hp.output_dim);
-            hp.max_source_pos = u2("max_source_pos", hp.max_source_pos);
-            // qwen3-asr stores chunking at the top level under qwen3asr.*
-            hp.n_window = u3("n_window", hp.n_window);
-            hp.n_window_infer = u3("n_window_infer", hp.n_window_infer);
+        // Pick the key prefix the file actually uses. We try the caller's
+        // requested prefix first; if its canonical "d_model" key isn't
+        // present we fall back to the qwen3-asr key layout so existing
+        // qwen3-asr GGUFs work without re-conversion.
+        std::string ap = mprefix;          // audio-fields prefix
+        std::string tp;                    // top-level (sr/n_fft/etc.) prefix
+        const std::string canonical_probe = mprefix + "d_model";
+        if (gguf_find_key(gctx, canonical_probe.c_str()) < 0) {
+            const std::string qwen_probe = "qwen3asr.audio.d_model";
+            if (gguf_find_key(gctx, qwen_probe.c_str()) >= 0) {
+                ap = "qwen3asr.audio.";
+                tp = "qwen3asr.";
+            } else {
+                tp = mprefix;  // both stay at requested prefix; defaults will apply
+            }
+        } else {
+            tp = mprefix;
         }
+        auto ua = [&](const char* k, uint32_t d) {
+            return core_gguf::kv_u32(gctx, (ap + k).c_str(), d);
+        };
+        auto ut = [&](const char* k, uint32_t d) {
+            return core_gguf::kv_u32(gctx, (tp + k).c_str(), d);
+        };
+        // Top-level audio config (sample rate / FFT / window).
+        hp.sample_rate    = ut("sample_rate", hp.sample_rate);
+        hp.n_mels         = ut("n_mels", hp.n_mels);
+        hp.n_fft          = ut("n_fft", hp.n_fft);
+        hp.win_length     = ut("win_length", hp.win_length);
+        hp.hop_length     = ut("hop_length", hp.hop_length);
+        hp.n_window       = ut("n_window", hp.n_window);
+        hp.n_window_infer = ut("n_window_infer", hp.n_window_infer);
+        // Encoder hparams.
+        hp.n_layers       = ua("n_layers", hp.n_layers);
+        hp.d_model        = ua("d_model", hp.d_model);
+        hp.n_heads        = ua("n_heads", hp.n_heads);
+        hp.head_dim       = ua("head_dim", hp.head_dim);
+        hp.ff_dim         = ua("ff_dim", hp.ff_dim);
+        hp.conv_ch        = ua("conv_channels", hp.conv_ch);
+        hp.max_source_pos = ua("max_source_pos", hp.max_source_pos);
+        // qwen3-asr converter wrote `proj_dim`; BidirLM/crisp_audio writes
+        // `output_dim`. Try both so the same loader works on both GGUF
+        // dialects without forcing the user to re-run the converter.
+        hp.output_dim = ua("output_dim",
+                           ua("proj_dim", hp.output_dim));
         core_gguf::free_metadata(gctx);
     }
 
@@ -385,7 +384,7 @@ ggml_cgraph* build_graph_qwen_omni(crisp_audio_context& ctx,
         /*no_alloc=*/true,
     };
     ggml_context* g = ggml_init(ip);
-    ggml_cgraph* gf = ggml_new_graph_custom(g, 8192, false);
+    ggml_cgraph* gf = ggml_new_graph_custom(g, 16384, false);
 
     ggml_tensor* mel = ggml_new_tensor_4d(g, GGML_TYPE_F32, T_chunk, n_mels, 1, num_chunks);
     ggml_set_name(mel, "mel_batched");
@@ -430,7 +429,7 @@ ggml_cgraph* build_graph_qwen_omni(crisp_audio_context& ctx,
     cur = ggml_cont(g, cur);
     cur = ggml_reshape_2d(g, cur, d, N_padded);
 
-    const float attn_scale = 1.0f / std::sqrtf((float)head_dim);
+    const float attn_scale = 1.0f / std::sqrt((float)head_dim);
     for (uint32_t il = 0; il < hp.n_layers; il++) {
         const auto& b = w.blocks[il];
         ggml_tensor* residual = cur;
@@ -540,16 +539,22 @@ struct crisp_audio_context* crisp_audio_init_from_file(
         return nullptr;
     }
 
-    // Compute-meta scratch buffer for graph allocator (~256 MB ceiling —
-    // qwen3-asr's 18-layer encoder fits in <50 MB; BidirLM's 24-layer fits
-    // in <80 MB. Generous headroom for chunked inputs.).
-    ctx->compute_meta.resize(256 * 1024 * 1024);
+    // Sized to match qwen3_asr's pattern (ggml metadata, not actual data —
+    // graph holds ~290 ops for an 18-layer encoder, ~390 for 24 layers, so
+    // 16384 is comfortable headroom).
+    constexpr int kGraphCapacity = 16384;
+    ctx->compute_meta.resize(
+        ggml_tensor_overhead() * kGraphCapacity +
+        ggml_graph_overhead_custom(kGraphCapacity, false));
 
     std::vector<ggml_backend_t> backends;
     backends.push_back(ctx->backend);
     if (ctx->backend_cpu) backends.push_back(ctx->backend_cpu);
+    // op_offload=false to match qwen3_asr's behavior — keeps each tensor
+    // on its assigned backend rather than letting the scheduler migrate.
     ctx->sched = ggml_backend_sched_new(backends.data(), nullptr,
-                                        (int)backends.size(), 8192, false, true);
+                                        (int)backends.size(),
+                                        kGraphCapacity, false, false);
 
     if (ctx->verbosity >= 1) {
         fprintf(stderr,
@@ -706,6 +711,9 @@ int crisp_audio_output_dim(struct crisp_audio_context* ctx) {
 }
 int crisp_audio_n_layers(struct crisp_audio_context* ctx) {
     return ctx ? (int)ctx->hp.n_layers : 0;
+}
+int crisp_audio_n_window(struct crisp_audio_context* ctx) {
+    return ctx ? (int)ctx->hp.n_window : 0;
 }
 enum crisp_audio_dialect crisp_audio_dialect_of(struct crisp_audio_context* ctx) {
     return ctx ? ctx->dialect : CRISP_AUDIO_DIALECT_AUTO;
