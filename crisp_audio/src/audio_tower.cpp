@@ -33,6 +33,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <map>
 #include <memory>
 #include <string>
@@ -69,6 +70,14 @@ struct hparams {
     // Chunking
     uint32_t n_window = 50;        // (full chunk = n_window * 2 mel frames)
     uint32_t n_window_infer = 800; // not used by Stage-2 encoder graph
+
+    // Attention-mask shape:
+    //   0 = full (all post-cnn frames attend to each other) — qwen3-asr's
+    //       eager_attention_forward ignores cu_seqlens, so this matches HF.
+    //   1 = windowed — encoder attention is block-diagonal across windows of
+    //       (T_chunk_out * (n_window_infer / (n_window*2))) frames AND
+    //       padding-frame keys are masked off. BidirLM-Omni uses this.
+    uint32_t attn_window_mode = 0;
 };
 
 // ---------------------------------------------------------------------------
@@ -246,6 +255,7 @@ bool load_model(crisp_audio_context& ctx, const char* path,
         hp.hop_length     = ut("hop_length", hp.hop_length);
         hp.n_window       = ut("n_window", hp.n_window);
         hp.n_window_infer = ut("n_window_infer", hp.n_window_infer);
+        hp.attn_window_mode = ua("attn_window_mode", hp.attn_window_mode);
         // Encoder hparams.
         hp.n_layers       = ua("n_layers", hp.n_layers);
         hp.d_model        = ua("d_model", hp.d_model);
@@ -660,6 +670,52 @@ float* crisp_audio_encode(struct crisp_audio_context* ctx,
     }
 
     std::vector<float> mask((size_t)N_padded * N_padded, 0.0f);
+    if (hp.attn_window_mode == 1) {
+        // BidirLM-style windowed mask: block-diagonal over inference windows
+        // of `chunks_per_window * T_chunk_out` valid post-cnn frames. Padding
+        // frames at chunk tails are masked off as KEYS (no real query attends
+        // to them) but as QUERIES they get a zero row — softmax over -inf row
+        // would produce NaN, so we leave padding rows unmasked. Their outputs
+        // are discarded by the BidirLM wrapper's pooling step anyway.
+        const float kNegInf = -std::numeric_limits<float>::infinity();
+        const int chunks_per_window = (hp.n_window > 0)
+            ? std::max(1, (int)(hp.n_window_infer / (hp.n_window * 2)))
+            : 1;
+        const int window_aftercnn = chunks_per_window * T_chunk_out;
+        std::vector<int> valid_per_chunk(num_chunks);
+        for (int c = 0; c < num_chunks; c++) {
+            const int t_len = std::min(chunk_T, T_mel - c * chunk_T);
+            int v = t_len;
+            for (int s = 0; s < 3; s++) v = (v - 1) / 2 + 1;
+            valid_per_chunk[c] = v;
+        }
+        // Determine which global frame indices are valid (and therefore have
+        // a window assignment).
+        std::vector<int> window_id(N_padded, -1);
+        int next_window = 0;
+        int frames_in_current_window = 0;
+        for (int c = 0; c < num_chunks; c++) {
+            for (int f = 0; f < valid_per_chunk[c]; f++) {
+                if (frames_in_current_window == window_aftercnn) {
+                    next_window++;
+                    frames_in_current_window = 0;
+                }
+                window_id[c * T_chunk_out + f] = next_window;
+                frames_in_current_window++;
+            }
+        }
+        // Build the mask: for each valid query row i, allow attention only
+        // to keys in the same window. For padding query rows (window_id == -1)
+        // leave full zero attention — their outputs are pooled out.
+        for (int i = 0; i < N_padded; i++) {
+            if (window_id[i] < 0) continue;  // padding query: keep zero row
+            for (int j = 0; j < N_padded; j++) {
+                if (window_id[j] != window_id[i]) {
+                    mask[(size_t)i * N_padded + j] = kNegInf;
+                }
+            }
+        }
+    }
 
     ggml_cgraph* gf = build_graph_qwen_omni(*ctx, chunk_T, num_chunks, T_chunk_out);
     ggml_backend_sched_reset(ctx->sched);
