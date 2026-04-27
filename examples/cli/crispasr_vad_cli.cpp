@@ -14,12 +14,15 @@
 #include <string>
 
 // Default VAD models. Auto-downloaded on first use to ~/.cache/crispasr.
-// `--vad` alone → Silero (~885 KB). `--vad -vm firered` → FireRedVAD (~2.4 MB).
+// `--vad` alone → Silero. `--vad -vm firered` → FireRedVAD. `--vad -vm whisper-vad` → Whisper-VAD-EncDec.
 namespace {
 constexpr const char* kVadSileroUrl = "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v5.1.2.bin";
 constexpr const char* kVadSileroFile = "ggml-silero-v5.1.2.bin";
 constexpr const char* kVadFireredUrl = "https://huggingface.co/cstr/firered-vad-GGUF/resolve/main/firered-vad.gguf";
 constexpr const char* kVadFireredFile = "firered-vad.gguf";
+constexpr const char* kVadWhisperUrl =
+    "https://huggingface.co/cstr/whisper-vad-encdec-asmr-GGUF/resolve/main/whisper-vad-asmr-q4_k.gguf";
+constexpr const char* kVadWhisperFile = "whisper-vad-asmr-q4_k.gguf";
 } // namespace
 
 // Check if a path refers to a FireRedVAD model (by filename pattern).
@@ -40,11 +43,15 @@ std::string crispasr_resolve_vad_model(const whisper_params& p) {
     if (!want_vad)
         return "";
     // Explicit path (not a keyword) — use as-is
-    if (!v.empty() && v != "auto" && v != "default" && v != "silero" && v != "firered")
+    if (!v.empty() && v != "auto" && v != "default" && v != "silero" && v != "firered" && v != "whisper-vad")
         return v;
     // `--vad -vm firered` → auto-download FireRedVAD (2.4 MB, F1=97.57%)
     if (v == "firered")
         return crispasr_cache::ensure_cached_file(kVadFireredFile, kVadFireredUrl, p.no_prints, "crispasr[vad]",
+                                                  p.cache_dir);
+    // `--vad -vm whisper-vad` → auto-download Whisper-VAD-EncDec (22 MB Q4_K, experimental)
+    if (v == "whisper-vad")
+        return crispasr_cache::ensure_cached_file(kVadWhisperFile, kVadWhisperUrl, p.no_prints, "crispasr[vad]",
                                                   p.cache_dir);
     // Default / auto / silero → Silero VAD (885 KB)
     return crispasr_cache::ensure_cached_file(kVadSileroFile, kVadSileroUrl, p.no_prints, "crispasr[vad]", p.cache_dir);
