@@ -497,6 +497,13 @@ target_include_directories(firered-vad PUBLIC .)
 target_compile_features   (firered-vad PUBLIC cxx_std_17)
 target_link_libraries     (firered-vad PUBLIC crispasr-core ggml ggml-base ggml-cpu)
 
+# whisper-vad-encdec — Whisper-encoder + TransformerDecoder VAD
+add_library(whisper-vad-encdec STATIC whisper_vad_encdec.h whisper_vad_encdec.cpp)
+set_target_properties(whisper-vad-encdec PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(whisper-vad-encdec PUBLIC .)
+target_compile_features   (whisper-vad-encdec PUBLIC cxx_std_17)
+target_link_libraries     (whisper-vad-encdec PUBLIC ggml ggml-base ggml-cpu)
+
 # ---------------------------------------------------------------------------
 # firered-lid — FireRedLID (120-language identification)
 # ---------------------------------------------------------------------------
@@ -679,6 +686,9 @@ if (TARGET firered-asr)
 endif()
 if (TARGET firered-vad)
     target_link_libraries(whisper PUBLIC firered-vad)
+endif()
+if (TARGET whisper-vad-encdec)
+    target_link_libraries(whisper PUBLIC whisper-vad-encdec)
 endif()
 if (TARGET firered-lid)
     target_link_libraries(whisper PUBLIC firered-lid)

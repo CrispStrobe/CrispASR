@@ -178,6 +178,12 @@ def main():
             gguf_name = name  # already named
 
         data = arr.astype(np.float32) if arr.dtype != np.float32 else arr
+        # ONNX MatMul weights are [in, out] for input@weight. ggml_mul_mat(W, x)
+        # needs ne[0]=in, ne[1]=out. Since numpy [in, out] → ggml ne[0]=out, ne[1]=in,
+        # we must transpose 2D weight matrices so ggml sees ne[0]=in correctly.
+        # Exception: embeddings (embed_positions, position_queries) are lookups, not matmuls.
+        if data.ndim == 2 and "weight" in gguf_name and "embed" not in gguf_name and "position" not in gguf_name:
+            data = data.T
         data = np.ascontiguousarray(data)
         writer.add_tensor(gguf_name, data, raw_dtype=GGMLQuantizationType.F32)
         mapped += 1

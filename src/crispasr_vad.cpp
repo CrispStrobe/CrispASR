@@ -11,6 +11,10 @@
 
 #include "firered_vad.h" // FireRedVAD (DFSMN) — alternative to Silero
 #include "whisper.h"     // whisper_vad_* API (Silero VAD)
+#if __has_include("whisper_vad_encdec.h")
+#include "whisper_vad_encdec.h" // Whisper-encoder + decoder VAD (ONNX-converted)
+#define CA_HAVE_WVAD_ENCDEC 1
+#endif
 
 #include <algorithm>
 #include <cstdio>
@@ -67,10 +71,37 @@ std::vector<crispasr_audio_slice> crispasr_compute_vad_slices(const float* sampl
     if (!vad_model_path || !*vad_model_path || n_samples <= 0)
         return slices;
 
-    // Dispatch: use FireRedVAD for firered-vad models, Silero for everything else
+    // Dispatch by filename pattern: firered → DFSMN, whisper-vad → EncDec, else → Silero
     if (is_firered_vad_model(vad_model_path)) {
         slices = compute_firered_vad_slices(samples, n_samples, sample_rate, vad_model_path, opts);
-    } else {
+    }
+#ifdef CA_HAVE_WVAD_ENCDEC
+    else if (std::string(vad_model_path).find("whisper") != std::string::npos &&
+             std::string(vad_model_path).find("vad") != std::string::npos &&
+             std::string(vad_model_path).find(".gguf") != std::string::npos) {
+        whisper_vad_encdec_context* vctx = whisper_vad_encdec_init(vad_model_path);
+        if (vctx) {
+            whisper_vad_encdec_segment* segs = nullptr;
+            int n_segs = 0;
+            float min_speech_sec = opts.min_speech_duration_ms / 1000.0f;
+            float min_silence_sec = opts.min_silence_duration_ms / 1000.0f;
+            whisper_vad_encdec_detect(vctx, samples, n_samples, &segs, &n_segs, opts.threshold, min_speech_sec,
+                                      min_silence_sec, nullptr, nullptr);
+            for (int i = 0; i < n_segs; i++) {
+                int64_t t0_cs = (int64_t)(segs[i].start_sec * 100.0f);
+                int64_t t1_cs = (int64_t)(segs[i].end_sec * 100.0f);
+                int s = std::max(0, (int)(segs[i].start_sec * sample_rate));
+                int e = std::min(n_samples, (int)(segs[i].end_sec * sample_rate));
+                if (e > s)
+                    slices.push_back({s, e, t0_cs, t1_cs});
+            }
+            if (segs)
+                free(segs);
+            whisper_vad_encdec_free(vctx);
+        }
+    }
+#endif
+    else {
         // Default: Silero VAD via whisper.cpp API
         whisper_vad_context_params vcp = whisper_vad_default_context_params();
         vcp.n_threads = opts.n_threads;
