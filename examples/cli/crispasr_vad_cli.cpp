@@ -13,13 +13,13 @@
 
 #include <string>
 
-// Default Silero VAD model from the ggml-org/whisper-vad HF repo.
-// ~885 KB. Auto-downloaded on first use to ~/.cache/crispasr so users
-// can pass `--vad` without having to hunt down the GGUF.
+// Default VAD models. Auto-downloaded on first use to ~/.cache/crispasr.
+// `--vad` alone → Silero (~885 KB). `--vad -vm firered` → FireRedVAD (~2.4 MB).
 namespace {
-constexpr const char* kVadDefaultUrl =
-    "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v5.1.2.bin";
-constexpr const char* kVadDefaultFile = "ggml-silero-v5.1.2.bin";
+constexpr const char* kVadSileroUrl = "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v5.1.2.bin";
+constexpr const char* kVadSileroFile = "ggml-silero-v5.1.2.bin";
+constexpr const char* kVadFireredUrl = "https://huggingface.co/cstr/firered-vad-GGUF/resolve/main/firered-vad.gguf";
+constexpr const char* kVadFireredFile = "firered-vad.gguf";
 } // namespace
 
 // Check if a path refers to a FireRedVAD model (by filename pattern).
@@ -39,10 +39,15 @@ std::string crispasr_resolve_vad_model(const whisper_params& p) {
     const bool want_vad = p.vad || !v.empty();
     if (!want_vad)
         return "";
-    if (!v.empty() && v != "auto" && v != "default")
+    // Explicit path (not a keyword) — use as-is
+    if (!v.empty() && v != "auto" && v != "default" && v != "silero" && v != "firered")
         return v;
-    return crispasr_cache::ensure_cached_file(kVadDefaultFile, kVadDefaultUrl, p.no_prints, "crispasr[vad]",
-                                              p.cache_dir);
+    // `--vad -vm firered` → auto-download FireRedVAD (2.4 MB, F1=97.57%)
+    if (v == "firered")
+        return crispasr_cache::ensure_cached_file(kVadFireredFile, kVadFireredUrl, p.no_prints, "crispasr[vad]",
+                                                  p.cache_dir);
+    // Default / auto / silero → Silero VAD (885 KB)
+    return crispasr_cache::ensure_cached_file(kVadSileroFile, kVadSileroUrl, p.no_prints, "crispasr[vad]", p.cache_dir);
 }
 
 bool crispasr_vad_is_firered(const whisper_params& p) {
