@@ -366,7 +366,12 @@ extern "C" struct whisper_vad_encdec_context* whisper_vad_encdec_init(const char
 
 // ── Forward pass ───────────────────────────────────────────────────────────
 
-static std::vector<float> wvad_forward(whisper_vad_encdec_context* ctx, const float* mel_data, int n_frames) {
+struct wvad_result {
+    std::vector<float> probs;   // frame-level speech probabilities
+    std::vector<float> enc_emb; // encoder output [d * T] — reusable for whisper ASR
+};
+
+static wvad_result wvad_forward(whisper_vad_encdec_context* ctx, const float* mel_data, int n_frames) {
     auto& m = ctx->model;
     const int d = m.d_model;
     const int nh = m.n_heads;
@@ -482,6 +487,8 @@ static std::vector<float> wvad_forward(whisper_vad_encdec_context* ctx, const fl
     // h = encoder output [d, T]
 
     ggml_tensor* enc_out = h;
+    ggml_set_name(enc_out, "enc_out");
+    ggml_set_output(enc_out);
 
     // ── Decoder (2 layers with self-attn + cross-attn) ──
     // Input: position queries [d, T, 1] → squeeze to [d, T]
@@ -607,6 +614,16 @@ static std::vector<float> wvad_forward(whisper_vad_encdec_context* ctx, const fl
     int n_out = (int)(ggml_nelements(out));
     std::vector<float> logits_vec(n_out);
     ggml_backend_tensor_get(out, logits_vec.data(), 0, n_out * sizeof(float));
+
+    // Read encoder output (for reuse by whisper ASR — encoder is frozen whisper-base)
+    ggml_tensor* enc_t = ggml_graph_get_tensor(gf, "enc_out");
+    std::vector<float> enc_vec;
+    if (enc_t) {
+        int enc_n = (int)ggml_nelements(enc_t);
+        enc_vec.resize(enc_n);
+        ggml_backend_tensor_get(enc_t, enc_vec.data(), 0, enc_n * sizeof(float));
+    }
+
     ggml_free(ctx0);
 
     // Sigmoid
@@ -614,7 +631,7 @@ static std::vector<float> wvad_forward(whisper_vad_encdec_context* ctx, const fl
     for (int i = 0; i < n_out; i++)
         probs[i] = 1.0f / (1.0f + expf(-logits_vec[i]));
 
-    return probs;
+    return {probs, enc_vec};
 }
 
 // ── Detect ─────────────────────────────────────────────────────────────────
@@ -622,7 +639,7 @@ static std::vector<float> wvad_forward(whisper_vad_encdec_context* ctx, const fl
 extern "C" int whisper_vad_encdec_detect(struct whisper_vad_encdec_context* ctx, const float* samples, int n_samples,
                                          struct whisper_vad_encdec_segment** segments, int* n_segments, float threshold,
                                          float min_speech_sec, float min_silence_sec, float** probs_out,
-                                         int* n_frames_out) {
+                                         int* n_frames_out, float** encoder_out, int* encoder_out_size) {
     if (!ctx || !samples || n_samples <= 0)
         return -1;
     auto& m = ctx->model;
@@ -664,9 +681,10 @@ extern "C" int whisper_vad_encdec_detect(struct whisper_vad_encdec_context* ctx,
     int T_mel = (int)(mel.size() / 80);
 
     // Forward pass
-    auto probs = wvad_forward(ctx, mel.data(), T_mel);
-    if (probs.empty())
+    auto fwd = wvad_forward(ctx, mel.data(), T_mel);
+    if (fwd.probs.empty())
         return -1;
+    auto& probs = fwd.probs;
 
     int nf = (int)probs.size();
 
@@ -677,6 +695,15 @@ extern "C" int whisper_vad_encdec_detect(struct whisper_vad_encdec_context* ctx,
     }
     if (n_frames_out)
         *n_frames_out = nf;
+
+    // Output encoder embeddings if requested (frozen whisper-base encoder output,
+    // can be injected into whisper's cross-attention state to skip the ASR encoder pass)
+    if (encoder_out && !fwd.enc_emb.empty()) {
+        *encoder_out = (float*)malloc(fwd.enc_emb.size() * sizeof(float));
+        memcpy(*encoder_out, fwd.enc_emb.data(), fwd.enc_emb.size() * sizeof(float));
+    }
+    if (encoder_out_size)
+        *encoder_out_size = (int)fwd.enc_emb.size();
 
     // Extract segments with hysteresis
     float neg_thresh = std::max(threshold - 0.15f, 0.01f);

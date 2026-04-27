@@ -86,7 +86,7 @@ std::vector<crispasr_audio_slice> crispasr_compute_vad_slices(const float* sampl
             float min_speech_sec = opts.min_speech_duration_ms / 1000.0f;
             float min_silence_sec = opts.min_silence_duration_ms / 1000.0f;
             whisper_vad_encdec_detect(vctx, samples, n_samples, &segs, &n_segs, opts.threshold, min_speech_sec,
-                                      min_silence_sec, nullptr, nullptr);
+                                      min_silence_sec, nullptr, nullptr, nullptr, nullptr);
             for (int i = 0; i < n_segs; i++) {
                 int64_t t0_cs = (int64_t)(segs[i].start_sec * 100.0f);
                 int64_t t1_cs = (int64_t)(segs[i].end_sec * 100.0f);
