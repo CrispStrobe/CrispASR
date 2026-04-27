@@ -109,9 +109,12 @@ struct wav2vec2_model {
     // Without this, on Metal the residency set survives past main() and
     // ggml_metal's static teardown trips ggml_metal_rsets_free's assert.
     ~wav2vec2_model() noexcept {
-        if (buf) ggml_backend_buffer_free(buf);
-        if (ctx) ggml_free(ctx);
-        if (backend) ggml_backend_free(backend);
+        if (buf)
+            ggml_backend_buffer_free(buf);
+        if (ctx)
+            ggml_free(ctx);
+        if (backend)
+            ggml_backend_free(backend);
     }
 };
 

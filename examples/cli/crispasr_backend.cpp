@@ -82,9 +82,13 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& name
 
 std::vector<std::string> crispasr_list_backends() {
     return {
-        "whisper",    "parakeet",          "canary",    "cohere",  "granite",     "voxtral",   "voxtral4b",
-        "qwen3",      "fastconformer-ctc", "wav2vec2",  "hubert",  "data2vec",    "vibevoice", "glm-asr",
-        "kyutai-stt", "firered-asr",       "moonshine", "moonshine-streaming", "gemma4-e2b", "omniasr", "omniasr-llm",
+        "whisper",     "parakeet",  "canary",
+        "cohere",      "granite",   "voxtral",
+        "voxtral4b",   "qwen3",     "fastconformer-ctc",
+        "wav2vec2",    "hubert",    "data2vec",
+        "vibevoice",   "glm-asr",   "kyutai-stt",
+        "firered-asr", "moonshine", "moonshine-streaming",
+        "gemma4-e2b",  "omniasr",   "omniasr-llm",
     };
 }
 

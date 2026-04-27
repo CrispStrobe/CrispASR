@@ -56,9 +56,9 @@ jobs:
           # the glslc binary is in the `glslc` or `shaderc` package
           # depending on the distro version.
           sudo apt-get update
-          sudo apt-get install -y cmake g++ libvulkan-dev glslc || \
-          sudo apt-get install -y cmake g++ libvulkan-dev glslang-tools || \
-          sudo apt-get install -y cmake g++ libvulkan-dev shaderc
+          sudo apt-get install -y cmake g++ libvulkan-dev spirv-headers glslc || \
+          sudo apt-get install -y cmake g++ libvulkan-dev spirv-headers glslang-tools || \
+          sudo apt-get install -y cmake g++ libvulkan-dev spirv-headers shaderc
 
       - name: Configure with Vulkan
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGGML_VULKAN=ON
