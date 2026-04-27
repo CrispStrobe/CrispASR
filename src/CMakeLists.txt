@@ -308,7 +308,7 @@ add_library(qwen3_asr STATIC
 target_include_directories(qwen3_asr PUBLIC . ../include)
 target_compile_features   (qwen3_asr PUBLIC cxx_std_17)
 set_target_properties(qwen3_asr PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_link_libraries     (qwen3_asr PUBLIC ggml ggml-base Threads::Threads crispasr-core)
+target_link_libraries     (qwen3_asr PUBLIC ggml ggml-base Threads::Threads crispasr-core crisp_audio)
 if(NOT MSVC)
     target_compile_options(qwen3_asr PRIVATE -O3)
 endif()
