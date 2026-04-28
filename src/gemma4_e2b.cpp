@@ -530,12 +530,41 @@ static bool g4e_kv_init(gemma4_e2b_context* ctx, int max_ctx) {
     return true;
 }
 
-// ── Conformer self-attention (full, no chunking) ───────────────────────────
-// First-pass: uses full attention with per_dim_scale. Chunked attention
-// and relative position bias to be added when differential testing passes.
+// Build a chunked-local attention mask matching HF Gemma4AudioAttention.
+// Each block of `chunk_size` Q positions attends to a K window covering
+// the block plus `context_left - 1` past frames and `context_right`
+// future frames. Positions outside that window are masked with -inf.
+//
+// Returned vector has shape [T, T] in row-major (q outer, k inner) — the
+// same layout ggml_flash_attn_ext expects when given mask shape (Lk, Lq)
+// after a contiguous F16 tensor view: actually flash_attn_ext expects
+// mask shape (n_kv_heads, n_padded, T) so we just hand it the smallest
+// equivalent buffer via a 2D F16 tensor of shape [n_kv_padded, T].
+static std::vector<ggml_fp16_t> g4e_build_audio_attn_mask(int T, int chunk_size, int context_left, int context_right) {
+    const ggml_fp16_t zero_h = ggml_fp32_to_fp16(0.0f);
+    const ggml_fp16_t neginf_h = ggml_fp32_to_fp16(-INFINITY);
+    std::vector<ggml_fp16_t> mask((size_t)T * (size_t)T, neginf_h);
+    const int max_past = context_left - 1; // HF: max_past_horizon
+    for (int q = 0; q < T; q++) {
+        const int b = q / chunk_size;
+        const int blk_start = b * chunk_size;
+        const int k_lo = std::max(0, blk_start - max_past);
+        const int k_hi = std::min(T, blk_start + chunk_size + context_right);
+        for (int k = k_lo; k < k_hi; k++)
+            mask[(size_t)q * T + k] = zero_h;
+    }
+    return mask;
+}
+
+// ── Conformer self-attention ────────────────────────────────────────────────
+// Approximates HF Gemma4AudioAttention via chunked-local attention via mask
+// (without the relative position bias). For short audio the mask captures
+// the dominant attention pattern; the rel_pos_bias contribution is a
+// follow-up — see Gemma4AudioRelPositionalEncoding + the matrix_bd term
+// in Gemma4AudioAttention.forward.
 
 static ggml_tensor* build_conformer_self_attn(ggml_context* ctx, ggml_tensor* x, const g4e_audio_layer& L,
-                                              const g4e_audio_hp& hp) {
+                                              const g4e_audio_hp& hp, ggml_tensor* attn_mask) {
     const int hd = (int)hp.head_dim;
     const int n_h = (int)hp.num_heads;
     const int T = (int)x->ne[1];
@@ -577,14 +606,11 @@ static ggml_tensor* build_conformer_self_attn(ggml_context* ctx, ggml_tensor* x,
     K = ggml_cont(ctx, ggml_permute(ctx, K, 0, 2, 1, 3));
     V = ggml_cont(ctx, ggml_permute(ctx, V, 0, 2, 1, 3));
 
-    // Full bidirectional attention (no mask), with logit softcapping.
-    // HF uses chunked local attention with relative position bias — see
-    // Gemma4AudioAttention.forward — but for short audio (<chunk_size *
-    // num_blocks) full attention is a reasonable approximation. The Q/K
-    // scales above keep the softmax-input distribution in line with HF;
-    // the bigger numerical gap from chunking is its own follow-up.
+    // Chunked-local attention via mask + logit softcapping. The mask
+    // restricts each Q chunk to a local K window; relative position bias
+    // (matrix_bd term in HF) is not yet included — that's a follow-up.
     float attn_scale = 1.0f; // per_dim_scale + k_scale replace 1/sqrt(d)
-    ggml_tensor* attn = ggml_flash_attn_ext(ctx, Q, K, V, nullptr, attn_scale, 0.0f, hp.attention_logit_cap);
+    ggml_tensor* attn = ggml_flash_attn_ext(ctx, Q, K, V, attn_mask, attn_scale, 0.0f, hp.attention_logit_cap);
     attn = ggml_reshape_2d(ctx, attn, hd * n_h, T);
 
     // Output projection
@@ -1474,6 +1500,13 @@ extern "C" char* gemma4_e2b_transcribe(struct gemma4_e2b_context* ctx, const flo
 
     int hidden = (int)ahp.hidden_size;
 
+    // Build the chunked-local attention mask (graph input). Shape (T_sub, T_sub),
+    // F16, with -inf at masked positions and 0 at attended ones. Same mask for
+    // every audio layer. ggml_flash_attn_ext expects mask along (Lk, Lq).
+    ggml_tensor* audio_attn_mask = ggml_new_tensor_2d(ectx, GGML_TYPE_F16, T_sub, T_sub);
+    ggml_set_name(audio_attn_mask, "audio_attn_mask");
+    ggml_set_input(audio_attn_mask);
+
     // ── Conformer encoder (12 layers) ──
     for (uint32_t il = 0; il < ahp.num_layers; il++) {
         const auto& L = m.audio_layers[il];
@@ -1483,8 +1516,8 @@ extern "C" char* gemma4_e2b_transcribe(struct gemma4_e2b_context* ctx, const flo
             h = build_macaron_ffn(ectx, h, L.ffn1_pre_ln, L.ffn1_up_w, L.ffn1_down_w, L.ffn1_post_ln,
                                   ahp.residual_weight, eps);
 
-        // Self-attention (full, with per_dim_scale)
-        h = build_conformer_self_attn(ectx, h, L, ahp);
+        // Self-attention (chunked-local with attn_mask)
+        h = build_conformer_self_attn(ectx, h, L, ahp, audio_attn_mask);
 
         // LightConv1d
         if (L.conv_gate_w)
@@ -1526,6 +1559,14 @@ extern "C" char* gemma4_e2b_transcribe(struct gemma4_e2b_context* ctx, const flo
     // Set mel input data
     ggml_tensor* mel_t = ggml_graph_get_tensor(enc_gf, "mel");
     ggml_backend_tensor_set(mel_t, mel.data(), 0, (size_t)T_mel * n_mels * sizeof(float));
+
+    // Audio chunked-local mask. T_sub is on the mask tensor shape (square).
+    ggml_tensor* mask_t = ggml_graph_get_tensor(enc_gf, "audio_attn_mask");
+    if (mask_t) {
+        const int T_sub_mask = (int)mask_t->ne[0];
+        auto mask_buf = g4e_build_audio_attn_mask(T_sub_mask, (int)ahp.chunk_size, (int)ahp.context_left, 0);
+        ggml_backend_tensor_set(mask_t, mask_buf.data(), 0, mask_buf.size() * sizeof(ggml_fp16_t));
+    }
 
     if (ggml_backend_sched_graph_compute(ctx->sched, enc_gf) != GGML_STATUS_SUCCESS) {
         fprintf(stderr, "gemma4_e2b: encoder graph compute failed\n");
@@ -1835,13 +1876,17 @@ extern "C" float* gemma4_e2b_run_encoder(struct gemma4_e2b_context* ctx, const f
     if (m.sub_input_proj_w)
         h = ggml_mul_mat(ectx, m.sub_input_proj_w, h);
 
+    ggml_tensor* audio_attn_mask = ggml_new_tensor_2d(ectx, GGML_TYPE_F16, T_sub, T_sub);
+    ggml_set_name(audio_attn_mask, "audio_attn_mask");
+    ggml_set_input(audio_attn_mask);
+
     int hidden = (int)ahp.hidden_size;
     for (uint32_t il = 0; il < ahp.num_layers; il++) {
         const auto& L = m.audio_layers[il];
         if (L.ffn1_up_w)
             h = build_macaron_ffn(ectx, h, L.ffn1_pre_ln, L.ffn1_up_w, L.ffn1_down_w, L.ffn1_post_ln,
                                   ahp.residual_weight, eps);
-        h = build_conformer_self_attn(ectx, h, L, ahp);
+        h = build_conformer_self_attn(ectx, h, L, ahp, audio_attn_mask);
         if (L.conv_gate_w)
             h = build_light_conv1d(ectx, h, L, T_sub, hidden, eps);
         if (L.ffn2_up_w)
@@ -1871,6 +1916,12 @@ extern "C" float* gemma4_e2b_run_encoder(struct gemma4_e2b_context* ctx, const f
     }
     ggml_tensor* mel_t = ggml_graph_get_tensor(enc_gf, "mel");
     ggml_backend_tensor_set(mel_t, mel, 0, (size_t)T_mel * n_mels * sizeof(float));
+    ggml_tensor* mask_t = ggml_graph_get_tensor(enc_gf, "audio_attn_mask");
+    if (mask_t) {
+        const int T_sub_mask = (int)mask_t->ne[0];
+        auto mask_buf = g4e_build_audio_attn_mask(T_sub_mask, (int)ahp.chunk_size, (int)ahp.context_left, 0);
+        ggml_backend_tensor_set(mask_t, mask_buf.data(), 0, mask_buf.size() * sizeof(ggml_fp16_t));
+    }
     if (ggml_backend_sched_graph_compute(ctx->sched, enc_gf) != GGML_STATUS_SUCCESS) {
         ggml_free(ectx);
         return nullptr;
