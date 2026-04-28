@@ -18,8 +18,14 @@
 //     loaded via `qwen3_tts_set_codec_path`. `qwen3_tts_synthesize`
 //     produces PCM end-to-end when a voice pack is also loaded.
 //     CPU path verified (T=5 frames → 9600 samples, all finite, correct
-//     range). Metal path hangs on M1 — the GPU scheduler conflicts with
-//     ggml_conv_1d_dw + SnakeBeta ops; investigate separately.
+//     range). Pinned to backend_cpu via a dedicated `codec_sched`:
+//     Metal hangs on M1 (kIOGPUCommandBufferCallbackErrorImpactingInteractivity).
+//     Root cause isolated via QWEN3_TTS_CODEC_FORCE_METAL=1 + per-op
+//     trace: ggml-Metal hangs on GGML_OP_CONV_TRANSPOSE_1D in decoder
+//     block 1 (stride=5, output [1605, 384]); block 0 (stride=8,
+//     output [320, 768]) is fine. Likely a ggml-Metal kernel bug at
+//     large transposed-conv output sizes (file upstream). Talker /
+//     code_predictor still run on Metal when use_gpu=true.
 //
 //   ✗ speaker_encoder (ECAPA-style TDNN + Res2Net + ASP for voice
 //     cloning): weights are loaded into the model struct but the
@@ -59,6 +65,7 @@
 #include "core/bpe.h"
 #include "core/ffn.h"
 #include "core/gguf_loader.h"
+#include "core/mel.h"
 #include "ggml-alloc.h"
 #include "ggml-backend.h"
 #include "ggml-cpu.h"
@@ -232,6 +239,34 @@ struct g3t_vocab {
 };
 
 // ---------------------------------------------------------------------------
+// Speaker encoder structs (PLAN #52 step 4 — ECAPA-TDNN)
+// ---------------------------------------------------------------------------
+
+struct g3t_spk_tdnn_w { ggml_tensor* w = nullptr; ggml_tensor* b = nullptr; };
+struct g3t_spk_res2net { g3t_spk_tdnn_w blocks[7]; }; // scale=8 → 7 inner TDNNs
+struct g3t_spk_se {
+    ggml_tensor* c1w = nullptr; ggml_tensor* c1b = nullptr;
+    ggml_tensor* c2w = nullptr; ggml_tensor* c2b = nullptr;
+};
+struct g3t_spk_se_res2net {
+    g3t_spk_tdnn_w tdnn1, tdnn2;
+    g3t_spk_res2net res2net;
+    g3t_spk_se se;
+};
+struct g3t_spk_asp {
+    g3t_spk_tdnn_w tdnn; // (3C, 128, k=1)
+    ggml_tensor* conv_w = nullptr; ggml_tensor* conv_b = nullptr; // (C, 128, k=1)
+};
+struct g3t_spk_enc {
+    g3t_spk_tdnn_w blk0;     // initial TDNN: 128→512, k=5, d=1
+    g3t_spk_se_res2net blk[3]; // 3 SE-Res2Net blocks, d=2/3/4
+    g3t_spk_tdnn_w mfa;      // 1536→1536, k=1
+    g3t_spk_asp asp;         // attentive-statistics pooling
+    ggml_tensor* fc_w = nullptr; ggml_tensor* fc_b = nullptr; // 3072→1024
+    bool loaded = false;
+};
+
+// ---------------------------------------------------------------------------
 // Codec decoder structs (PLAN #52 step 3)
 // ---------------------------------------------------------------------------
 
@@ -349,6 +384,13 @@ struct qwen3_tts_context {
     ggml_backend_t backend = nullptr;
     ggml_backend_t backend_cpu = nullptr;
     ggml_backend_sched_t sched = nullptr;
+    // Separate CPU-only scheduler for the codec decode graph. Metal hangs
+    // on M1 with the codec's ggml_conv_1d_dw + SnakeBeta (sin/exp) chain
+    // (kIOGPUCommandBufferCallbackErrorImpactingInteractivity), so codec
+    // weights are pinned to backend_cpu and run through this scheduler
+    // independently of params.use_gpu. Talker / code_predictor still use
+    // `sched` (GPU-accelerated when available).
+    ggml_backend_sched_t codec_sched = nullptr;
 
     ggml_context* ctx_w = nullptr;
     ggml_backend_buffer_t buf_w = nullptr;
@@ -383,6 +425,10 @@ struct qwen3_tts_context {
 
     g3t_codec codec;
     std::vector<uint8_t> codec_compute_meta;
+
+    g3t_spk_enc spk_enc;
+    std::vector<float> runtime_spk_emb; // set by qwen3_tts_set_voice_prompt
+    std::vector<uint8_t> spk_compute_meta;
 };
 
 // ---------------------------------------------------------------------------
@@ -1268,8 +1314,13 @@ bool build_icl_prefill_embeds(qwen3_tts_context* c, const std::string& syn_text,
         return false;
     }
 
+    // Speaker embedding: prefer runtime ECAPA embedding over voice pack's baked one.
     std::vector<float> spk_buf(d);
-    ggml_backend_tensor_get(spk_t, spk_buf.data(), 0, (size_t)d * sizeof(float));
+    if ((int)c->runtime_spk_emb.size() == d)
+        spk_buf = c->runtime_spk_emb;
+    else
+        ggml_backend_tensor_get(spk_t, spk_buf.data(), 0, (size_t)d * sizeof(float));
+
     std::vector<int32_t> ref_code_TC((size_t)T_codec * n_groups);
     ggml_backend_tensor_get(code_t, ref_code_TC.data(), 0, ref_code_TC.size() * sizeof(int32_t));
 
@@ -1758,9 +1809,17 @@ static bool load_codec(qwen3_tts_context* c, const char* path) {
     hp.rms_norm_eps   = core_gguf::kv_f32(meta, "qwen3tts_codec.dec.rms_norm_eps",  hp.rms_norm_eps);
     core_gguf::free_metadata(meta);
 
-    // Pass 2: weights
+    // Pass 2: weights — pinned to CPU backend (see codec_sched comment in
+    // qwen3_tts_context). Override with QWEN3_TTS_CODEC_FORCE_METAL=1 to
+    // reproduce the M1 Metal crash for instrumentation.
+    const bool force_metal = std::getenv("QWEN3_TTS_CODEC_FORCE_METAL") != nullptr;
+    ggml_backend_t weight_backend = force_metal ? c->backend : c->backend_cpu;
+    if (force_metal && c->params.verbosity >= 0) {
+        fprintf(stderr, "qwen3_tts: codec: QWEN3_TTS_CODEC_FORCE_METAL=1 — loading weights onto %s\n",
+                ggml_backend_name(weight_backend));
+    }
     core_gguf::WeightLoad wl;
-    if (!core_gguf::load_weights(path, c->backend, "codec", wl)) {
+    if (!core_gguf::load_weights(path, weight_backend, "codec", wl)) {
         fprintf(stderr, "qwen3_tts: codec: failed to load weights from '%s'\n", path);
         return false;
     }
@@ -1860,11 +1919,66 @@ static bool load_codec(qwen3_tts_context* c, const char* path) {
     // Codec compute metadata
     c->codec_compute_meta.resize(ggml_tensor_overhead() * 8192 + ggml_graph_overhead_custom(8192, false));
 
+    // CPU-only scheduler for the codec graph (see qwen3_tts_context).
+    if (!c->codec_sched) {
+        ggml_backend_t cpu_backends[1] = {c->backend_cpu};
+        c->codec_sched = ggml_backend_sched_new(cpu_backends, nullptr, 1, 8192, false, false);
+        if (!c->codec_sched) {
+            fprintf(stderr, "qwen3_tts: codec: failed to create CPU scheduler\n");
+            return false;
+        }
+    }
+
     codec.loaded = true;
     if (c->params.verbosity >= 1)
         fprintf(stderr, "qwen3_tts: codec loaded from '%s'  (%uL d=%u/%u  rvq=%u)\n",
                 path, hp.n_layers, hp.d_model, hp.latent_dim, hp.n_q);
     return true;
+}
+
+// ---------------------------------------------------------------------------
+// Per-op trace callback for codec graph debugging on Metal. Enabled when
+// QWEN3_TTS_CODEC_TRACE=1 (or QWEN3_TTS_CODEC_FORCE_METAL=1, which implies
+// trace). Prints "[idx/N] op_name(tensor_name) shape -> backend" before
+// each node, then synchronizes the assigned backend after, so when the
+// GPU crashes the last printed line names the offending op.
+// ---------------------------------------------------------------------------
+struct codec_trace_state {
+    ggml_backend_sched_t sched = nullptr;
+    int idx = 0;
+    int total = 0;
+};
+
+static bool codec_trace_eval_cb(struct ggml_tensor* t, bool ask, void* user_data) {
+    auto* s = (codec_trace_state*)user_data;
+    if (ask) {
+        ggml_backend_t be = ggml_backend_sched_get_tensor_backend(s->sched, t);
+        const char* be_name = be ? ggml_backend_name(be) : "?";
+        char shape[64];
+        snprintf(shape, sizeof(shape), "[%lld,%lld,%lld,%lld]",
+                 (long long)t->ne[0], (long long)t->ne[1],
+                 (long long)t->ne[2], (long long)t->ne[3]);
+        fprintf(stderr, "  [%4d/%4d] %-22s %-32s %-22s -> %s\n",
+                s->idx, s->total, ggml_op_name(t->op),
+                t->name[0] ? t->name : "(unnamed)", shape, be_name);
+        fflush(stderr);
+        return true;
+    }
+    // Post-execute: synchronize so a Metal hang is attributed to *this* op.
+    ggml_backend_t be = ggml_backend_sched_get_tensor_backend(s->sched, t);
+    if (be)
+        ggml_backend_synchronize(be);
+    s->idx++;
+    return true;
+}
+
+// Returns the codec scheduler to use for compute. Defaults to the CPU-only
+// codec_sched; QWEN3_TTS_CODEC_FORCE_METAL=1 routes through the main
+// Metal-capable c->sched to reproduce the M1 crash for instrumentation.
+static ggml_backend_sched_t codec_pick_sched(qwen3_tts_context* c) {
+    if (std::getenv("QWEN3_TTS_CODEC_FORCE_METAL"))
+        return c->sched;
+    return c->codec_sched;
 }
 
 // ---------------------------------------------------------------------------
@@ -1906,8 +2020,9 @@ static float* codec_decode_codes(qwen3_tts_context* c, const int32_t* codes, int
         pos[i] = i;
 
     ggml_cgraph* gf = build_graph_codec_decode(c, T_codec);
-    ggml_backend_sched_reset(c->sched);
-    if (!ggml_backend_sched_alloc_graph(c->sched, gf)) {
+    ggml_backend_sched_t sched = codec_pick_sched(c);
+    ggml_backend_sched_reset(sched);
+    if (!ggml_backend_sched_alloc_graph(sched, gf)) {
         fprintf(stderr, "qwen3_tts: codec: graph alloc failed\n");
         return nullptr;
     }
@@ -1920,8 +2035,20 @@ static float* codec_decode_codes(qwen3_tts_context* c, const int32_t* codes, int
         ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "codec_mask"),
                                 mask_data.data(), 0, mask_data.size() * sizeof(ggml_fp16_t));
 
-    if (ggml_backend_sched_graph_compute(c->sched, gf) != GGML_STATUS_SUCCESS) {
-        fprintf(stderr, "qwen3_tts: codec: compute failed\n");
+    codec_trace_state ts{sched, 0, ggml_graph_n_nodes(gf)};
+    const bool trace = std::getenv("QWEN3_TTS_CODEC_TRACE") || std::getenv("QWEN3_TTS_CODEC_FORCE_METAL");
+    if (trace) {
+        fprintf(stderr, "qwen3_tts: codec: tracing %d nodes (sched=%s)\n",
+                ts.total, sched == c->codec_sched ? "codec_cpu" : "main");
+        ggml_backend_sched_set_eval_callback(sched, codec_trace_eval_cb, &ts);
+    }
+
+    ggml_status st = ggml_backend_sched_graph_compute(sched, gf);
+    if (trace)
+        ggml_backend_sched_set_eval_callback(sched, nullptr, nullptr);
+    if (st != GGML_STATUS_SUCCESS) {
+        fprintf(stderr, "qwen3_tts: codec: compute failed (status=%d, last_op_idx=%d)\n",
+                (int)st, ts.idx);
         return nullptr;
     }
 
@@ -1970,8 +2097,9 @@ static float* codec_extract_stage(qwen3_tts_context* c, const int32_t* codes, in
         pos[i] = i;
 
     ggml_cgraph* gf = build_graph_codec_decode(c, T_codec);
-    ggml_backend_sched_reset(c->sched);
-    if (!ggml_backend_sched_alloc_graph(c->sched, gf))
+    ggml_backend_sched_t sched = codec_pick_sched(c);
+    ggml_backend_sched_reset(sched);
+    if (!ggml_backend_sched_alloc_graph(sched, gf))
         return nullptr;
 
     ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "codec_codes"),
@@ -1982,8 +2110,22 @@ static float* codec_extract_stage(qwen3_tts_context* c, const int32_t* codes, in
         ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "codec_mask"),
                                 mask_data.data(), 0, mask_data.size() * sizeof(ggml_fp16_t));
 
-    if (ggml_backend_sched_graph_compute(c->sched, gf) != GGML_STATUS_SUCCESS)
+    codec_trace_state ts{sched, 0, ggml_graph_n_nodes(gf)};
+    const bool trace = std::getenv("QWEN3_TTS_CODEC_TRACE") || std::getenv("QWEN3_TTS_CODEC_FORCE_METAL");
+    if (trace) {
+        fprintf(stderr, "qwen3_tts: codec: tracing %d nodes (sched=%s, stage=%s)\n",
+                ts.total, sched == c->codec_sched ? "codec_cpu" : "main", stage_name);
+        ggml_backend_sched_set_eval_callback(sched, codec_trace_eval_cb, &ts);
+    }
+
+    ggml_status st = ggml_backend_sched_graph_compute(sched, gf);
+    if (trace)
+        ggml_backend_sched_set_eval_callback(sched, nullptr, nullptr);
+    if (st != GGML_STATUS_SUCCESS) {
+        fprintf(stderr, "qwen3_tts: codec: compute failed (status=%d, last_op_idx=%d)\n",
+                (int)st, ts.idx);
         return nullptr;
+    }
 
     ggml_tensor* t = ggml_graph_get_tensor(gf, stage_name);
     if (!t) {
@@ -1998,6 +2140,287 @@ static float* codec_extract_stage(qwen3_tts_context* c, const int32_t* codes, in
     if (out_n)
         *out_n = (int)n;
     return buf;
+}
+
+// ============================================================================
+// Speaker encoder implementation (PLAN #52 step 4 — ECAPA-TDNN)
+// ============================================================================
+
+static void spk_fft_r2c(const float* in, int N, float* out) {
+    int bits = 0;
+    for (int n = N; n > 1; n >>= 1) bits++;
+    for (int i = 0; i < N; i++) {
+        int rev = 0;
+        for (int b = 0; b < bits; b++) rev = (rev << 1) | ((i >> b) & 1);
+        out[2 * rev] = in[i]; out[2 * rev + 1] = 0.0f;
+    }
+    for (int len = 2; len <= N; len <<= 1) {
+        float ang = -2.0f * (float)M_PI / (float)len;
+        float wre = cosf(ang), wim = sinf(ang);
+        for (int i = 0; i < N; i += len) {
+            float ure = 1.0f, uim = 0.0f;
+            for (int j = 0; j < len / 2; j++) {
+                int a = i + j, bj = i + j + len / 2;
+                float are = out[2*a], aim = out[2*a+1], bre = out[2*bj], bim = out[2*bj+1];
+                float tre = ure*bre - uim*bim, tim = ure*bim + uim*bre;
+                out[2*a] = are+tre; out[2*a+1] = aim+tim;
+                out[2*bj] = are-tre; out[2*bj+1] = aim-tim;
+                float nr = ure*wre - uim*wim; uim = ure*wim + uim*wre; ure = nr;
+            }
+        }
+    }
+}
+
+// Slaney-normalized HTK-scale mel filterbank. Layout: [n_mels, n_freqs] row-major.
+static std::vector<float> build_slaney_mel_fb(int n_mels, int n_fft, int sr, float fmin, float fmax) {
+    const int n_freqs = n_fft / 2 + 1;
+    auto hz_to_mel = [](float hz) { return 2595.0f * log10f(1.0f + hz / 700.0f); };
+    auto mel_to_hz = [](float mel) { return 700.0f * (powf(10.0f, mel / 2595.0f) - 1.0f); };
+    const float mel_lo = hz_to_mel(fmin);
+    const float mel_hi = hz_to_mel(fmax > 0.0f ? fmax : (float)sr / 2.0f);
+    std::vector<float> mel_pts(n_mels + 2), hz_pts(n_mels + 2);
+    for (int i = 0; i <= n_mels + 1; i++)
+        hz_pts[i] = mel_to_hz(mel_lo + (mel_hi - mel_lo) * i / (n_mels + 1));
+    std::vector<float> freq_bins(n_freqs);
+    for (int k = 0; k < n_freqs; k++) freq_bins[k] = (float)sr * k / (float)n_fft;
+    std::vector<float> fb((size_t)n_mels * n_freqs, 0.0f);
+    for (int m = 0; m < n_mels; m++) {
+        float lo = hz_pts[m], ctr = hz_pts[m+1], hi = hz_pts[m+2];
+        float enorm = (hi > lo) ? 2.0f / (hi - lo) : 1.0f;
+        for (int k = 0; k < n_freqs; k++) {
+            float f = freq_bins[k], w = 0.0f;
+            if (f >= lo && f < ctr && ctr > lo) w = (f - lo) / (ctr - lo);
+            else if (f >= ctr && f <= hi && hi > ctr) w = (hi - f) / (hi - ctr);
+            fb[(size_t)m * n_freqs + k] = w * enorm;
+        }
+    }
+    return fb;
+}
+
+// 128-mel spectrogram for the speaker encoder: reflect-pad + Hann STFT + slaney mel.
+// Returns (T, 128) row-major float32.
+static std::vector<float> compute_spk_mel(const float* audio, int n_samples, int* T_out) {
+    const int n_fft = 1024, hop = 256, n_mels = 128, sr = 24000;
+    const float fmin = 0.0f, fmax = 12000.0f;
+    const int pad = (n_fft - hop) / 2; // 384 reflect-pad on each side
+
+    // Reflect-pad audio
+    std::vector<float> audio_p(n_samples + 2 * pad, 0.0f);
+    for (int i = 0; i < pad && i < n_samples; i++)
+        audio_p[i] = audio[pad - 1 - i];
+    for (int i = 0; i < n_samples; i++)
+        audio_p[pad + i] = audio[i];
+    for (int i = 0; i < pad && i < n_samples; i++)
+        audio_p[pad + n_samples + i] = audio[n_samples - 1 - i];
+
+    // Periodic Hann window
+    std::vector<float> hann(n_fft);
+    for (int i = 0; i < n_fft; i++)
+        hann[i] = 0.5f * (1.0f - cosf(2.0f * (float)M_PI * i / (float)n_fft));
+
+    const int n_freqs = n_fft / 2 + 1;
+    auto mel_fb = build_slaney_mel_fb(n_mels, n_fft, sr, fmin, fmax);
+
+    core_mel::Params p;
+    p.n_fft      = n_fft; p.hop_length = hop; p.win_length = n_fft; p.n_mels = n_mels;
+    p.log_base   = core_mel::LogBase::Ln;
+    p.log_guard  = core_mel::LogGuard::MaxClip; p.log_eps = 1e-5f;
+    p.spec_kind  = core_mel::SpecKind::Power;
+    p.norm       = core_mel::Normalization::None;
+    p.layout     = core_mel::Layout::TimeMels; // (T, n_mels) output
+    p.fb_layout  = core_mel::FbLayout::MelsFreqs;
+    p.matmul     = core_mel::MatmulPrecision::Double;
+    p.center_pad = false; // already reflect-padded
+
+    int T = 0;
+    auto mel = core_mel::compute(audio_p.data(), (int)audio_p.size(), hann.data(), n_fft,
+                                  mel_fb.data(), n_freqs, spk_fft_r2c, p, T);
+    if (T_out) *T_out = T;
+    return mel; // (T, 128) row-major
+}
+
+// ---------------------------------------------------------------------------
+// ECAPA graph builder helpers
+// ---------------------------------------------------------------------------
+
+// Conv1d with symmetric zero-padding ("same"). Input/output: [C, T].
+static ggml_tensor* spk_same_conv1d(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w, ggml_tensor* b, int dilation) {
+    const int K = (int)w->ne[0];
+    const int pad = (K - 1) * dilation / 2;
+    x = ggml_cont(ctx, ggml_transpose(ctx, x));
+    x = ggml_conv_1d(ctx, w, x, 1, pad, dilation);
+    x = ggml_cont(ctx, ggml_transpose(ctx, x));
+    if (b) x = ggml_add(ctx, x, b);
+    return x;
+}
+
+static ggml_tensor* spk_tdnn_block(ggml_context* ctx, ggml_tensor* x, const g3t_spk_tdnn_w& t, int dilation) {
+    return ggml_relu(ctx, spk_same_conv1d(ctx, x, t.w, t.b, dilation));
+}
+
+static ggml_tensor* spk_se_block(ggml_context* ctx, ggml_tensor* x, const g3t_spk_se& se) {
+    const int T = (int)x->ne[1];
+    // Global mean over T for each C channel
+    ggml_tensor* m = ggml_cont(ctx, ggml_transpose(ctx,
+        ggml_scale(ctx, ggml_sum_rows(ctx,
+            ggml_cont(ctx, ggml_transpose(ctx, x))), 1.0f / T))); // [C, 1]
+    auto w1 = ggml_reshape_2d(ctx, se.c1w, se.c1w->ne[1], se.c1w->ne[2]);
+    ggml_tensor* h = ggml_relu(ctx, ggml_add(ctx, ggml_mul_mat(ctx, w1, m), se.c1b));
+    auto w2 = ggml_reshape_2d(ctx, se.c2w, se.c2w->ne[1], se.c2w->ne[2]);
+    ggml_tensor* sc = ggml_sigmoid(ctx, ggml_add(ctx, ggml_mul_mat(ctx, w2, h), se.c2b));
+    return ggml_mul(ctx, x, ggml_repeat(ctx, sc, x));
+}
+
+static ggml_tensor* spk_res2net_block(ggml_context* ctx, ggml_tensor* x, const g3t_spk_res2net& r, int dilation) {
+    const int T = (int)x->ne[1];
+    const int chunk = 64; // C/8
+    ggml_tensor* outs[8];
+    for (int i = 0; i < 8; i++) {
+        ggml_tensor* ci = ggml_cont(ctx, ggml_view_2d(ctx, x, chunk, T, x->nb[1],
+                                                      (size_t)i * chunk * sizeof(float)));
+        if (i == 0) { outs[i] = ci; continue; }
+        ggml_tensor* in = (i == 1) ? ci : ggml_add(ctx, ci, outs[i - 1]);
+        outs[i] = spk_tdnn_block(ctx, in, r.blocks[i - 1], dilation);
+    }
+    ggml_tensor* out = outs[0];
+    for (int i = 1; i < 8; i++) out = ggml_concat(ctx, out, outs[i], 0);
+    return out;
+}
+
+static ggml_tensor* spk_se_res2net(ggml_context* ctx, ggml_tensor* x, const g3t_spk_se_res2net& blk, int d) {
+    ggml_tensor* res = x;
+    x = spk_tdnn_block(ctx, x, blk.tdnn1, 1);
+    x = spk_res2net_block(ctx, x, blk.res2net, d);
+    x = spk_tdnn_block(ctx, x, blk.tdnn2, 1);
+    x = spk_se_block(ctx, x, blk.se);
+    return ggml_add(ctx, x, res);
+}
+
+static ggml_tensor* spk_asp_block(ggml_context* ctx, ggml_tensor* x, const g3t_spk_asp& asp) {
+    const int T = (int)x->ne[1];
+    // Global statistics for attention input
+    ggml_tensor* xT = ggml_cont(ctx, ggml_transpose(ctx, x));
+    ggml_tensor* m1C = ggml_scale(ctx, ggml_sum_rows(ctx, xT), 1.0f / T);          // [1, C]
+    ggml_tensor* mC1 = ggml_cont(ctx, ggml_transpose(ctx, m1C));                   // [C, 1]
+    ggml_tensor* mCT = ggml_repeat(ctx, mC1, x);                                   // [C, T]
+    ggml_tensor* d2 = ggml_mul(ctx, ggml_sub(ctx, x, mCT), ggml_sub(ctx, x, mCT));
+    ggml_tensor* s1C = ggml_sqrt(ctx, ggml_scale(ctx, ggml_sum_rows(ctx,
+                          ggml_cont(ctx, ggml_transpose(ctx, d2))), 1.0f / T));     // [1, C]
+    ggml_tensor* sCT = ggml_repeat(ctx, ggml_cont(ctx, ggml_transpose(ctx, s1C)), x);  // [C, T]
+    // [x, mean, std] → TDNN → tanh → k=1-conv → softmax over T
+    ggml_tensor* att = ggml_concat(ctx, ggml_concat(ctx, x, mCT, 0), sCT, 0);
+    att = spk_tdnn_block(ctx, att, asp.tdnn, 1);
+    att = ggml_tanh(ctx, att);
+    auto cw = ggml_reshape_2d(ctx, asp.conv_w, asp.conv_w->ne[1], asp.conv_w->ne[2]);
+    att = ggml_add(ctx, ggml_mul_mat(ctx, cw, att), asp.conv_b);    // [C, T]
+    att = ggml_cont(ctx, ggml_transpose(ctx, att));                  // [T, C]
+    att = ggml_soft_max(ctx, att);                                   // softmax over T (ne[0])
+    att = ggml_cont(ctx, ggml_transpose(ctx, att));                  // [C, T]
+    // Weighted mean and std → [2C, 1]
+    ggml_tensor* wx = ggml_mul(ctx, att, x);
+    ggml_tensor* wm = ggml_cont(ctx, ggml_transpose(ctx,
+                         ggml_sum_rows(ctx, ggml_cont(ctx, ggml_transpose(ctx, wx))))); // [C,1]
+    ggml_tensor* wmCT = ggml_repeat(ctx, wm, x);
+    ggml_tensor* dd = ggml_sub(ctx, x, wmCT);
+    ggml_tensor* ws = ggml_sqrt(ctx, ggml_cont(ctx, ggml_transpose(ctx,
+                         ggml_sum_rows(ctx, ggml_cont(ctx, ggml_transpose(ctx,
+                           ggml_mul(ctx, att, ggml_mul(ctx, dd, dd)))))))); // [C,1]
+    return ggml_concat(ctx, wm, ws, 0); // [2C, 1]
+}
+
+static ggml_cgraph* build_graph_spk_enc(qwen3_tts_context* c, int T_mel) {
+    const auto& spk = c->spk_enc;
+    ggml_init_params ip = {c->spk_compute_meta.size(), c->spk_compute_meta.data(), true};
+    ggml_context* ctx0 = ggml_init(ip);
+    ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 4096, false);
+
+    ggml_tensor* h = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, 128, T_mel); // [128, T]
+    ggml_set_name(h, "spk_mel"); ggml_set_input(h);
+
+    h = spk_tdnn_block(ctx0, h, spk.blk0, 1);
+
+    static const int dilations[3] = {2, 3, 4};
+    ggml_tensor* blk_outs[3];
+    for (int i = 0; i < 3; i++) {
+        h = spk_se_res2net(ctx0, h, spk.blk[i], dilations[i]);
+        blk_outs[i] = h;
+    }
+
+    ggml_tensor* mfa_in = ggml_concat(ctx0, ggml_concat(ctx0, blk_outs[0], blk_outs[1], 0), blk_outs[2], 0);
+    h = spk_tdnn_block(ctx0, mfa_in, spk.mfa, 1);
+    h = spk_asp_block(ctx0, h, spk.asp);         // [3072, 1]
+
+    auto fcw = ggml_reshape_2d(ctx0, spk.fc_w, spk.fc_w->ne[1], spk.fc_w->ne[2]);
+    h = ggml_add(ctx0, ggml_mul_mat(ctx0, fcw, h), spk.fc_b); // [1024, 1]
+    h = ggml_reshape_1d(ctx0, h, 1024);
+    ggml_set_name(h, "spk_emb");
+    ggml_build_forward_expand(gf, h);
+    ggml_free(ctx0);
+    return gf;
+}
+
+static bool load_spk_enc(qwen3_tts_context* c) {
+    auto& spk = c->spk_enc;
+    char buf[256];
+    auto req = [&](const char* n) { return require(c, n); };
+    auto fmt = [&](const char* f, auto... a) -> std::string {
+        snprintf(buf, sizeof(buf), f, a...); return buf; };
+
+    spk.blk0.w = req("speaker.blocks.0.conv.weight");
+    spk.blk0.b = req("speaker.blocks.0.conv.bias");
+    if (!spk.blk0.w) return false;
+
+    for (int i = 0; i < 3; i++) {
+        int bi = i + 1; auto& blk = spk.blk[i];
+        blk.tdnn1.w = req(fmt("speaker.blocks.%d.tdnn1.conv.weight", bi).c_str());
+        blk.tdnn1.b = req(fmt("speaker.blocks.%d.tdnn1.conv.bias",   bi).c_str());
+        blk.tdnn2.w = req(fmt("speaker.blocks.%d.tdnn2.conv.weight", bi).c_str());
+        blk.tdnn2.b = req(fmt("speaker.blocks.%d.tdnn2.conv.bias",   bi).c_str());
+        blk.se.c1w  = req(fmt("speaker.blocks.%d.se_block.conv1.weight", bi).c_str());
+        blk.se.c1b  = req(fmt("speaker.blocks.%d.se_block.conv1.bias",   bi).c_str());
+        blk.se.c2w  = req(fmt("speaker.blocks.%d.se_block.conv2.weight", bi).c_str());
+        blk.se.c2b  = req(fmt("speaker.blocks.%d.se_block.conv2.bias",   bi).c_str());
+        for (int j = 0; j < 7; j++) {
+            blk.res2net.blocks[j].w = req(fmt("speaker.blocks.%d.res2net_block.blocks.%d.conv.weight", bi, j).c_str());
+            blk.res2net.blocks[j].b = req(fmt("speaker.blocks.%d.res2net_block.blocks.%d.conv.bias",   bi, j).c_str());
+            if (!blk.res2net.blocks[j].w) return false;
+        }
+    }
+    spk.mfa.w = req("speaker.mfa.conv.weight");
+    spk.mfa.b = req("speaker.mfa.conv.bias");
+    spk.asp.tdnn.w = req("speaker.asp.tdnn.conv.weight");
+    spk.asp.tdnn.b = req("speaker.asp.tdnn.conv.bias");
+    spk.asp.conv_w = req("speaker.asp.conv.weight");
+    spk.asp.conv_b = req("speaker.asp.conv.bias");
+    spk.fc_w = req("speaker.fc.weight");
+    spk.fc_b = req("speaker.fc.bias");
+    if (!spk.mfa.w || !spk.asp.tdnn.w || !spk.fc_w) return false;
+
+    c->spk_compute_meta.resize(ggml_tensor_overhead() * 4096 + ggml_graph_overhead_custom(4096, false));
+    spk.loaded = true;
+    if (c->params.verbosity >= 1)
+        fprintf(stderr, "qwen3_tts: speaker encoder loaded (ECAPA-TDNN 128→1024)\n");
+    return true;
+}
+
+// Run speaker encoder on mel (T, 128) row-major → (1024,) embedding.
+static std::vector<float> run_spk_enc(qwen3_tts_context* c, const float* mel_TC, int T_mel) {
+    // Transpose to channels-first [128, T]
+    std::vector<float> mel_CT((size_t)128 * T_mel);
+    for (int t = 0; t < T_mel; t++)
+        for (int k = 0; k < 128; k++)
+            mel_CT[(size_t)k * T_mel + t] = mel_TC[(size_t)t * 128 + k];
+
+    ggml_cgraph* gf = build_graph_spk_enc(c, T_mel);
+    ggml_backend_sched_reset(c->sched);
+    if (!ggml_backend_sched_alloc_graph(c->sched, gf)) return {};
+    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "spk_mel"),
+                            mel_CT.data(), 0, mel_CT.size() * sizeof(float));
+    if (ggml_backend_sched_graph_compute(c->sched, gf) != GGML_STATUS_SUCCESS) return {};
+    std::vector<float> emb(1024);
+    ggml_backend_tensor_get(ggml_graph_get_tensor(gf, "spk_emb"),
+                            emb.data(), 0, 1024 * sizeof(float));
+    return emb;
 }
 
 } // namespace
@@ -2121,6 +2544,7 @@ extern "C" struct qwen3_tts_context* qwen3_tts_init_from_file(const char* path_m
         return nullptr;
     }
     load_code_predictor(c); // soft
+    load_spk_enc(c);        // soft — logs a warning if tensors are missing but doesn't fail
 
     // Scheduler
     {
@@ -2159,6 +2583,93 @@ extern "C" int qwen3_tts_set_voice_prompt(struct qwen3_tts_context* ctx, const c
     if (!ctx)
         return -1;
     ctx->voice_prompt_path = wav_path ? wav_path : "";
+    if (!wav_path || !*wav_path)
+        return 0;
+    if (!ctx->spk_enc.loaded) {
+        fprintf(stderr, "qwen3_tts: set_voice_prompt: speaker encoder not loaded\n");
+        return -1;
+    }
+
+    // Read WAV file: expect 24 kHz mono 16-bit or 32-bit float PCM.
+    FILE* f = std::fopen(wav_path, "rb");
+    if (!f) {
+        fprintf(stderr, "qwen3_tts: cannot open wav '%s'\n", wav_path);
+        return -1;
+    }
+    // RIFF header
+    char riff[4]; std::fread(riff, 1, 4, f);
+    if (riff[0] != 'R' || riff[1] != 'I' || riff[2] != 'F' || riff[3] != 'F') {
+        std::fclose(f); fprintf(stderr, "qwen3_tts: not a RIFF WAV\n"); return -1; }
+    std::fseek(f, 4, SEEK_CUR); // chunk size
+    char wave[4]; std::fread(wave, 1, 4, f);
+    if (wave[0] != 'W' || wave[1] != 'A' || wave[2] != 'V' || wave[3] != 'E') {
+        std::fclose(f); return -1; }
+
+    int sr = 0, channels = 0, bits = 0;
+    bool is_float = false;
+    bool found_data = false;
+    std::vector<float> samples;
+
+    while (!found_data) {
+        char id[4]; uint32_t sz;
+        if (std::fread(id, 1, 4, f) != 4 || std::fread(&sz, 4, 1, f) != 1) break;
+        if (id[0]=='f' && id[1]=='m' && id[2]=='t' && id[3]==' ') {
+            uint16_t fmt, ch; uint32_t srate; uint32_t brate; uint16_t bal, bps;
+            std::fread(&fmt, 2, 1, f); std::fread(&ch, 2, 1, f);
+            std::fread(&srate, 4, 1, f); std::fread(&brate, 4, 1, f);
+            std::fread(&bal, 2, 1, f); std::fread(&bps, 2, 1, f);
+            if (sz > 16) std::fseek(f, sz - 16, SEEK_CUR);
+            sr = (int)srate; channels = (int)ch; bits = (int)bps;
+            is_float = (fmt == 3); // IEEE float
+        } else if (id[0]=='d' && id[1]=='a' && id[2]=='t' && id[3]=='a') {
+            if (sr != 24000) {
+                std::fclose(f);
+                fprintf(stderr, "qwen3_tts: voice prompt must be 24kHz, got %d Hz\n", sr);
+                return -1;
+            }
+            const int n_frames = (int)(sz / (channels * (bits / 8)));
+            samples.reserve((size_t)n_frames);
+            if (bits == 16 && !is_float) {
+                std::vector<int16_t> raw(n_frames * channels);
+                std::fread(raw.data(), 2, raw.size(), f);
+                for (int i = 0; i < n_frames; i++) {
+                    float s = 0.0f;
+                    for (int c = 0; c < channels; c++) s += raw[(size_t)i * channels + c] / 32768.0f;
+                    samples.push_back(s / channels);
+                }
+            } else if (bits == 32 && is_float) {
+                std::vector<float> raw(n_frames * channels);
+                std::fread(raw.data(), 4, raw.size(), f);
+                for (int i = 0; i < n_frames; i++) {
+                    float s = 0.0f;
+                    for (int c = 0; c < channels; c++) s += raw[(size_t)i * channels + c];
+                    samples.push_back(s / channels);
+                }
+            } else {
+                std::fclose(f);
+                fprintf(stderr, "qwen3_tts: unsupported WAV format: %d bits, float=%d\n", bits, (int)is_float);
+                return -1;
+            }
+            found_data = true;
+        } else {
+            std::fseek(f, sz, SEEK_CUR);
+        }
+    }
+    std::fclose(f);
+    if (samples.empty()) { fprintf(stderr, "qwen3_tts: no audio in wav\n"); return -1; }
+
+    // Compute mel + speaker embedding
+    int T_mel = 0;
+    auto mel = compute_spk_mel(samples.data(), (int)samples.size(), &T_mel);
+    if (mel.empty()) { fprintf(stderr, "qwen3_tts: mel computation failed\n"); return -1; }
+
+    auto emb = run_spk_enc(ctx, mel.data(), T_mel);
+    if (emb.empty()) { fprintf(stderr, "qwen3_tts: ECAPA forward failed\n"); return -1; }
+
+    ctx->runtime_spk_emb = std::move(emb);
+    if (ctx->params.verbosity >= 1)
+        fprintf(stderr, "qwen3_tts: voice prompt set from '%s'  (%d samples, T_mel=%d)\n",
+                wav_path, (int)samples.size(), T_mel);
     return 0;
 }
 
@@ -2517,6 +3028,8 @@ extern "C" void qwen3_tts_pcm_free(float* pcm) {
 extern "C" void qwen3_tts_free(struct qwen3_tts_context* ctx) {
     if (!ctx)
         return;
+    if (ctx->codec_sched)
+        ggml_backend_sched_free(ctx->codec_sched);
     if (ctx->sched)
         ggml_backend_sched_free(ctx->sched);
     if (ctx->kv_buf)
@@ -2548,4 +3061,25 @@ extern "C" void qwen3_tts_set_n_threads(struct qwen3_tts_context* ctx, int n_thr
     ctx->n_threads = n_threads;
     if (ctx->backend_cpu)
         ggml_backend_cpu_set_n_threads(ctx->backend_cpu, n_threads);
+}
+
+extern "C" float* qwen3_tts_compute_speaker_embedding(struct qwen3_tts_context* ctx,
+                                                       const float* audio, int n_samples,
+                                                       int* out_dim) {
+    if (out_dim) *out_dim = 0;
+    if (!ctx || !audio || n_samples <= 0) return nullptr;
+    if (!ctx->spk_enc.loaded) {
+        fprintf(stderr, "qwen3_tts: compute_speaker_embedding: ECAPA not loaded\n");
+        return nullptr;
+    }
+    int T_mel = 0;
+    auto mel = compute_spk_mel(audio, n_samples, &T_mel);
+    if (mel.empty()) return nullptr;
+    auto emb = run_spk_enc(ctx, mel.data(), T_mel);
+    if (emb.empty()) return nullptr;
+    float* buf = (float*)malloc(1024 * sizeof(float));
+    if (!buf) return nullptr;
+    std::memcpy(buf, emb.data(), 1024 * sizeof(float));
+    if (out_dim) *out_dim = 1024;
+    return buf;
 }

@@ -148,6 +148,15 @@ void qwen3_tts_free(struct qwen3_tts_context* ctx);
 
 void qwen3_tts_set_n_threads(struct qwen3_tts_context* ctx, int n_threads);
 
+// Compute a 1024-d speaker embedding from 24 kHz mono float32 audio
+// via the ECAPA-TDNN speaker encoder. Returns a malloc'd float[1024]
+// array that the caller frees with free(). Returns nullptr on failure.
+// Does NOT set the context's active voice — call qwen3_tts_set_voice_prompt
+// to both compute and activate the embedding for synthesis.
+float* qwen3_tts_compute_speaker_embedding(struct qwen3_tts_context* ctx,
+                                            const float* audio, int n_samples,
+                                            int* out_dim);
+
 #ifdef __cplusplus
 }
 #endif
