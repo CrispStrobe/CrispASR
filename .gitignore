@@ -90,3 +90,7 @@ __pycache__/
 target/
 **/*.rlib
 Cargo.lock
+
+# Claude session notes (private, do not publish)
+CLAUDE.md
+CLAUDE.*.md
