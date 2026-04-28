@@ -59,10 +59,12 @@ def load_model_dir(model_id: str) -> Path:
 # and map the rest to a clean GGUF naming scheme.
 
 SKIP_PATTERNS = [
-    ".input_max", ".input_min", ".output_max", ".output_min",  # clipping scalars
     "model.vision_tower.",   # skip vision encoder (not needed for ASR)
     "model.embed_vision.",   # skip vision embedding
 ]
+# QAT clipping scalars on Gemma4ClippableLinear. We KEEP these for the
+# audio tower (HF applies them at inference per `use_clipped_linears=True`)
+# but skip for the vision tower (already filtered above).
 
 
 def should_skip(name: str) -> bool:
