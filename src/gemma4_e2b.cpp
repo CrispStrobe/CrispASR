@@ -515,19 +515,21 @@ static ggml_cgraph* g4e_build_graph_llm_kv(gemma4_e2b_context* ctx, int n_past, 
         const auto& b = m.llm_layers[il];
 
         // ── PLE (per-layer embedding adjustment) ──
-        // Gemma3n flow (per the HF modeling source):
-        //   gate = act_fn(per_layer_input_gate(hidden))    # 1536 → 256
+        // Gemma4 flow (per transformers/models/gemma4/modeling_gemma4.py):
+        //   gate  = act_fn(per_layer_input_gate(hidden))   # 1536 → 256
         //   gated = gate * per_layer_emb_for_this_layer    # element-wise (256,)
         //   delta = per_layer_projection(gated)            # 256 → 1536
         //   hidden += post_per_layer_input_norm(delta)
-        // (The full Gemma3n forward also runs AltUp + LAuREL between
-        // attention and FFN; those tensors are NOT extracted by our
-        // converter today, so the PLE here is a partial implementation
-        // that at least gets the dimensions right and stops the
-        // ggml_can_mul_mat assert.)
         //
         // ple_gate.weight  PyTorch (256, 1536)  → ggml ne[0]=1536, ne[1]=256.  Linear(1536→256).
         // ple_proj.weight  PyTorch (1536, 256)  → ggml ne[0]=256, ne[1]=1536.  Linear(256→1536).
+        //
+        // PLAN #50 — the attention block below still trips
+        // ggml_can_mul_mat on full-attention layers (head_dim=512)
+        // because `kvp` is built once with the local head_dim=256.
+        // Fix is to read `layer_full_mask` from the GGUF and rebuild
+        // kvp per layer (sliding=256, full=global_head_dim=512), with
+        // matching RoPE theta + partial_rotary_factor.
         if (ple_all && b.ple_gate && b.ple_proj) {
             // Slice this layer's PLE: [ple_dim, T] from [n_layers*ple_dim, T]
             ggml_tensor* ple_slice = ggml_view_2d(ctx0, ple_all, ple_dim, T, ple_all->nb[1],
