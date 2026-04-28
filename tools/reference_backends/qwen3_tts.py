@@ -42,10 +42,17 @@ DEFAULT_STAGES = [
     "text_input_ids",
     "ref_input_ids",
     "text_proj_out",
+    # ICL-mode stages — capture the prefill embedding the official
+    # generate_voice_clone path actually feeds into talker.model, plus
+    # codec_head logits at the last position (= what greedy AR decode
+    # would sample first). Together these isolate "is our talker graph
+    # bit-equivalent given the same prefill" from "does our C++ prefill
+    # builder match the PyTorch one".
+    "talker_inputs_embeds",
+    "talker_logits",
     "talker_layer_0_out",
     "talker_layer_27_out",
     "talker_output_norm",
-    "talker_logits",
     "generated_codes",
 ]
 
@@ -122,50 +129,75 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
         out["text_proj_out"] = text_proj_out[0].detach().cpu().numpy().astype(np.float32)
 
     # ---- Per-layer + lm_head dump via forward hooks on a real prefill ----
+    #
+    # The reference path is `tts.generate_voice_clone(..., do_sample=False)`
+    # which internally runs `Qwen3TTSForConditionalGeneration.generate` →
+    # builds the ICL prefill (text role + codec sentinels + speaker
+    # embedding + first-frame codec sum + tail) → calls
+    # `talker.forward(inputs_embeds=...)` → samples codebook-0 from
+    # `codec_head` and steps the AR loop.
+    #
+    # We hook the talker decoder layers + final norm + codec_head AND
+    # also intercept `talker.model.forward` to capture the actual
+    # `inputs_embeds` argument it received. That `inputs_embeds` is
+    # exactly what our C++ talker should consume; the matching
+    # `codec_head` output at position [-1] is what greedy decode would
+    # then sample from.
+
     captures: Dict[str, np.ndarray] = {}
 
-    def cap(name: str, take_first: bool = True):
+    def cap(name: str):
+        # Capture the FIRST forward call (the prefill). Decode steps fire
+        # the hook again with shape (1, 1, *) and would overwrite the
+        # full-prefill capture — explicitly skip those.
         def hook(_mod, _inp, output):
+            if name in captures:
+                return
             t = output[0] if isinstance(output, tuple) else output
             captures[name] = t.detach().cpu().float().numpy()
         return hook
 
     handles = []
     layer_hook_map = {
-        "talker_layer_0_out":   talker.model.layers[0],
-        "talker_layer_27_out":  talker.model.layers[-1],
-        "talker_output_norm":   talker.model.norm,
-        "talker_logits":        talker.codec_head,
+        "talker_layer_0_out":  talker.model.layers[0],
+        "talker_layer_27_out": talker.model.layers[-1],
+        "talker_output_norm":  talker.model.norm,
+        "talker_logits":       talker.codec_head,
     }
     for stage_name, mod in layer_hook_map.items():
         if stage_name in stages:
             handles.append(mod.register_forward_hook(cap(stage_name)))
 
+    # Pre-hook on talker.model captures the kwargs (specifically
+    # inputs_embeds) so we can write the exact prefill back out.
+    if "talker_inputs_embeds" in stages:
+        def cap_embeds(_mod, args, kwargs):
+            embeds = kwargs.get("inputs_embeds", None)
+            if embeds is None and len(args) >= 5:
+                embeds = args[4]  # signature: (input_ids, attention_mask, position_ids, past_key_values, inputs_embeds)
+            if embeds is not None and "talker_inputs_embeds" not in captures:
+                captures["talker_inputs_embeds"] = embeds[0].detach().cpu().float().numpy()
+        handles.append(talker.model.register_forward_pre_hook(cap_embeds, with_kwargs=True))
+
     # ---- Run generate (greedy) for deterministic codes + activations ----
-    # do_sample=False => greedy; max_new_tokens=64 keeps this fast for the
-    # diff harness even on CPU. Captures fire on the prefill forward.
-    if any(s in stages for s in (*layer_hook_map.keys(), "generated_codes")):
-        # Need at least 1 ref item; build the standard ICL prompt.
-        # `audio` is the reference WAV (already 16 kHz mono float32).
+    if any(s in stages for s in (*layer_hook_map.keys(),
+                                 "talker_inputs_embeds",
+                                 "generated_codes")):
         prompt_items = tts.create_voice_clone_prompt(
             ref_audio=(audio.astype(np.float32), 16000),
             ref_text=ref_text,
             x_vector_only_mode=False,
         )
         with torch.no_grad():
-            wavs, _sr = tts.generate_voice_clone(
+            tts.generate_voice_clone(
                 text=syn_text,
                 language=language,
                 voice_clone_prompt=prompt_items,
-                max_new_tokens=int(max(64, max_new_tokens or 0)),
+                max_new_tokens=int(max(8, max_new_tokens or 0)),
                 do_sample=False,
                 temperature=1.0,  # ignored when do_sample=False
                 top_k=1,
             )
-        # generate_voice_clone returns wavs; we don't use them here, but
-        # the talker codes were captured implicitly via the lm_head hook.
-        # For an explicit code stream we'd need a tap inside .generate
-        # — skipped for v0; the logits hook is enough for diff testing.
 
     for h in handles:
         h.remove()

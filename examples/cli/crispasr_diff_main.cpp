@@ -45,6 +45,7 @@
 
 #include "common-whisper.h"
 
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -347,6 +348,21 @@ static StageResult qwen3_tts_text_proj_r(qwen3_tts_context* ctx, const int32_t* 
     return r;
 }
 
+static StageResult qwen3_tts_talker_logits_r(qwen3_tts_context* ctx, const float* embeds, int n_tokens) {
+    StageResult r;
+    int vocab = 0;
+    float* logits = qwen3_tts_run_talker_with_embeds(ctx, embeds, n_tokens, &vocab);
+    if (!logits) {
+        r.note = "qwen3_tts_run_talker_with_embeds returned null";
+        return r;
+    }
+    r.shape = {1, vocab};
+    r.data.assign(logits, logits + (size_t)vocab);
+    free(logits);
+    r.ok = true;
+    return r;
+}
+
 } // namespace
 
 
@@ -530,6 +546,71 @@ int main(int argc, char** argv) {
                 record(rep);
             } else {
                 printf("[ERR ] text_proj_out            %s\n", tp_r.note.c_str());
+                n_fail++;
+            }
+        }
+
+        // Stage: talker_logits — read the PyTorch-built ICL prefill
+        // embedding (talker_inputs_embeds) directly from the reference
+        // archive, run our talker graph on it, and compare the
+        // codec_head logits at position[-1] against the reference's
+        // talker_logits[-1]. This isolates "talker graph correctness"
+        // from "prefill builder correctness" — perfect cosine here
+        // means the 28L Qwen3 forward + Q/K-norm + flash_attn + RoPE
+        // + SwiGLU all match PyTorch given identical inputs, even
+        // before our own ICL prefill builder is wired up.
+        auto embeds_pair = ref.get_f32("talker_inputs_embeds");
+        auto embeds_shape = ref.shape("talker_inputs_embeds");
+        if (!embeds_pair.first || embeds_shape.size() != 2) {
+            printf("[SKIP] talker_logits           talker_inputs_embeds not in reference (re-dump with that stage)\n");
+            n_skip++;
+        } else {
+            const int T = (int)embeds_shape[0];
+            const int d = (int)embeds_shape[1];
+            (void)d;
+            auto tl_r = qwen3_tts_talker_logits_r(ctx, embeds_pair.first, T);
+            if (tl_r.ok) {
+                // Reference talker_logits is shape (T, vocab); we only have
+                // logits at position -1. Slice the reference to the last
+                // row before comparing.
+                auto ref_logits_pair = ref.get_f32("talker_logits");
+                auto ref_logits_shape = ref.shape("talker_logits");
+                if (!ref_logits_pair.first || ref_logits_shape.size() != 2) {
+                    printf("[SKIP] talker_logits           talker_logits ref tensor missing/wrong shape\n");
+                    n_skip++;
+                } else {
+                    const int Tref = (int)ref_logits_shape[0];
+                    const int vocab = (int)ref_logits_shape[1];
+                    const float* ref_last = ref_logits_pair.first + (size_t)(Tref - 1) * vocab;
+                    // ref.compare expects the named tensor to match buffer length;
+                    // since we've already loaded talker_logits, just compute the
+                    // metrics inline against the last row.
+                    crispasr_diff::Report rep;
+                    rep.found = true;
+                    rep.n_elem = (size_t)vocab;
+                    rep.shape = {1, vocab};
+                    double dot = 0, na = 0, nb = 0, max_abs = 0, sum_abs = 0, sum_sq = 0;
+                    for (int i = 0; i < vocab; i++) {
+                        double a = tl_r.data[i], b = ref_last[i];
+                        dot += a * b;
+                        na += a * a;
+                        nb += b * b;
+                        double d = a - b;
+                        if (std::fabs(d) > max_abs)
+                            max_abs = std::fabs(d);
+                        sum_abs += std::fabs(d);
+                        sum_sq += d * d;
+                    }
+                    rep.cos_min = (na > 0 && nb > 0) ? (float)(dot / std::sqrt(na * nb)) : 1.0f;
+                    rep.cos_mean = rep.cos_min;
+                    rep.max_abs = (float)max_abs;
+                    rep.mean_abs = (float)(sum_abs / vocab);
+                    rep.rms = (float)std::sqrt(sum_sq / vocab);
+                    print_row("talker_logits", rep, COS_THRESHOLD);
+                    record(rep);
+                }
+            } else {
+                printf("[ERR ] talker_logits           %s\n", tl_r.note.c_str());
                 n_fail++;
             }
         }

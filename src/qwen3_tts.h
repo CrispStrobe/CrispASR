@@ -66,6 +66,17 @@ int qwen3_tts_set_voice_prompt(struct qwen3_tts_context* ctx, const char* wav_pa
 // text_embedding lookup or the text_proj fc1/fc2.
 float* qwen3_tts_run_text_proj(struct qwen3_tts_context* ctx, const int32_t* ids, int n_tokens, int* out_T, int* out_d);
 
+// Run the talker prefill on a caller-supplied embedding tensor of shape
+// (n_tokens, hidden_size). Returns the codec_head logits at the LAST
+// position (= what greedy AR decode would sample first). *out_vocab is
+// set to vocab_size (3072). Caller frees with free().
+//
+// Decouples "is the talker graph numerically correct" from "is the
+// prefill builder semantically correct" — feed in a PyTorch-prebuilt
+// embedding, expect bit-equivalent logits at the tail.
+float* qwen3_tts_run_talker_with_embeds(struct qwen3_tts_context* ctx, const float* embeds, int n_tokens,
+                                        int* out_vocab);
+
 // Run the talker on `text`, AR-decode codebook-0 until <eos> or the
 // step limit, and return the resulting code stream. *out_n_codes is
 // set to the number of codes produced. Caller frees with

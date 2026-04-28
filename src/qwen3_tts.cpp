@@ -855,6 +855,22 @@ extern "C" float* qwen3_tts_run_text_proj(struct qwen3_tts_context* ctx, const i
     return r;
 }
 
+extern "C" float* qwen3_tts_run_talker_with_embeds(struct qwen3_tts_context* ctx, const float* embeds, int n_tokens,
+                                                   int* out_vocab) {
+    if (out_vocab)
+        *out_vocab = 0;
+    if (!ctx || !embeds || n_tokens <= 0)
+        return nullptr;
+    // Guarantee a clean cache: this is a one-shot diff entry point, so
+    // n_past=0 always.
+    float* logits = run_talker_kv(ctx, embeds, n_tokens, /*n_past=*/0);
+    if (!logits)
+        return nullptr;
+    if (out_vocab)
+        *out_vocab = (int)ctx->hp.vocab_size;
+    return logits;
+}
+
 extern "C" int32_t* qwen3_tts_synthesize_codes(struct qwen3_tts_context* ctx, const char* text, int* out_n_codes) {
     if (out_n_codes)
         *out_n_codes = 0;
