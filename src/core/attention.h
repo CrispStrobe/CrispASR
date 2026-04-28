@@ -289,6 +289,12 @@ struct KvSelfAttnParams {
     // i.e. n_rot = head_dim/4) and Phi-3-style models. Default 0 means
     // rotate the entire head_dim — matches every existing caller.
     int n_rot = 0;
+    // Apply RMSNorm-without-learned-weight to V before the cache write.
+    // Gemma4's `v_norm` is constructed with `with_scale=False`, i.e.
+    // RMSNorm with no learned scale tensor — there is no weight to load,
+    // we just need to run the normalisation op on V. Default false → no
+    // op, matches every other consumer.
+    bool v_rms_norm = false;
 };
 
 // KV-cached self-attention. Writes the new K/V into the persistent cache
@@ -353,6 +359,14 @@ static inline ggml_tensor* kv_self_attn(ggml_context* ctx0, ggml_cgraph* gf, ggm
     if (k_norm_w) {
         K = ggml_rms_norm(ctx0, K, p.qk_norm_eps);
         K = ggml_mul(ctx0, K, k_norm_w);
+    }
+
+    // ---- Optional V RMSNorm without learned weight (gemma4) ----
+    // gemma4's v_norm is `Gemma4RMSNorm(head_dim, with_scale=False)`,
+    // so there is no weight tensor — we just normalise V along its
+    // last (head_dim) axis, exactly as ggml_rms_norm does.
+    if (p.v_rms_norm) {
+        V = ggml_rms_norm(ctx0, V, p.qk_norm_eps);
     }
 
     // ---- RoPE (NEOX for most models, NORMAL for fairseq2/omniasr) ----

@@ -161,8 +161,16 @@ struct g4e_model {
 
     // LLM embeddings
     ggml_tensor* llm_embed_w = nullptr;    // [vocab, hidden]
-    ggml_tensor* llm_ple_w = nullptr;      // [vocab, 35*256] — per-layer embeddings
+    ggml_tensor* llm_ple_w = nullptr;      // [vocab_per_layer, n_layers*ple_dim] — per-layer embeddings
     ggml_tensor* llm_final_norm = nullptr; // [hidden]
+    // Per-layer-input projection from inputs_embeds (Gemma4):
+    //   per_layer_proj  = Linear(hidden -> n_layers*ple_dim)  bias=False
+    //   per_layer_norm  = RMSNorm(ple_dim)
+    // The mixed input fed into each layer's PLE block is:
+    //   pli = (norm(per_layer_proj(inputs_embeds) * 1/sqrt(hidden))
+    //        + embed_tokens_per_layer(input_ids) * sqrt(ple_dim)) * 1/sqrt(2)
+    ggml_tensor* llm_per_layer_proj_w = nullptr;    // [hidden, n_layers*ple_dim]
+    ggml_tensor* llm_per_layer_proj_norm = nullptr; // [ple_dim]
 
     // LLM layers
     std::vector<g4e_llm_layer> llm_layers;
@@ -214,6 +222,19 @@ struct gemma4_e2b_context {
     int eos_id = 1;
     int start_of_turn_id = -1;
     int end_of_turn_id = -1;
+    // Audio "soft token" placeholder. HF's `Gemma4Model.forward` runs
+    // `get_per_layer_inputs(input_ids)` over the *unmerged* input_ids
+    // (i.e. before vision/audio embeddings replace their soft tokens),
+    // so the PLE lookup at audio positions hits whatever placeholder
+    // the tokenizer used. We use the same placeholder here so the per-
+    // layer input stream is consistent with the reference.
+    int audio_soft_token_id = -1;
+
+    // Per-token IDs for the next g4e_run_llm_kv call. Populated by
+    // gemma4_e2b_transcribe (prefill — uses audio_soft_token_id for the
+    // audio span) and by g4e_embed_tokens (decode — single token). The
+    // graph reads this via the `ple_ids` input tensor.
+    std::vector<int32_t> ple_token_ids;
 };
 
 // ── Conformer encoder graph builder ─────────────────────────────────────────
@@ -529,12 +550,12 @@ static ggml_cgraph* g4e_build_graph_llm_kv(gemma4_e2b_context* ctx, int n_past, 
     const int n_kv = (int)lhp.num_kv_heads;
     const int hd = (int)lhp.head_dim;
     const int n_kv_grp = n_q / n_kv;
+    const int N = (int)lhp.num_layers;
     const float eps = lhp.rms_norm_eps;
     const float theta = lhp.rope_theta;
-    const float attn_scale = 1.0f / std::sqrt((float)hd);
     const int T = n_tokens;
     const int Lk = n_past + T;
-    const int ple_dim = 256; // per-layer embedding dimension
+    const int ple_dim = 256; // hidden_size_per_layer_input
 
     ggml_init_params ip = {ctx->compute_meta.size(), ctx->compute_meta.data(), true};
     ggml_context* ctx0 = ggml_init(ip);
@@ -548,7 +569,9 @@ static ggml_cgraph* g4e_build_graph_llm_kv(gemma4_e2b_context* ctx, int n_past, 
     ggml_set_name(positions, "positions");
     ggml_set_input(positions);
 
-    // PLE input: token IDs for per-layer embedding lookup
+    // PLE input: token IDs for per-layer embedding lookup. Multimodal
+    // tokens (audio frames) carry the audio-soft-token id here so the
+    // PLE table is indexed consistently with HF's get_per_layer_inputs.
     ggml_tensor* ple_ids = nullptr;
     if (m.llm_ple_w) {
         ple_ids = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, T);
@@ -566,27 +589,52 @@ static ggml_cgraph* g4e_build_graph_llm_kv(gemma4_e2b_context* ctx, int n_past, 
 
     ggml_tensor* cur = embeds;
 
-    // PLE lookup: get all per-layer embeddings at once
-    ggml_tensor* ple_all = nullptr;
-    if (m.llm_ple_w && ple_ids) {
-        // ple_w: [n_layers*ple_dim, vocab] in ggml → get_rows returns [n_layers*ple_dim, T]
-        ple_all = ggml_get_rows(ctx0, m.llm_ple_w, ple_ids);
+    // ── Per-layer input prep (Gemma4 `project_per_layer_inputs`) ──
+    //   ple_lookup = embed_tokens_per_layer(input_ids).reshape(T, n_layers, ple_dim)
+    //                * sqrt(ple_dim)                                    # embed_scale on PLE table
+    //   ple_proj   = per_layer_model_projection(inputs_embeds)
+    //                * (1/sqrt(hidden))                                 # per_layer_model_projection_scale
+    //   ple_proj   = per_layer_projection_norm(ple_proj.reshape(T, n_layers, ple_dim))
+    //   pli        = (ple_proj + ple_lookup) * (1/sqrt(2))              # per_layer_input_scale
+    // The result has shape [ple_dim, n_layers, T] in ggml; each layer
+    // picks `pli[:, il, :]` via a strided 2-D view at PLE time below.
+    ggml_tensor* per_layer_inputs = nullptr;
+    if (ple_ids && m.llm_ple_w) {
+        // 1. PLE lookup, scale by sqrt(ple_dim).
+        ggml_tensor* ple_lookup = ggml_get_rows(ctx0, m.llm_ple_w, ple_ids); // [n_layers*ple_dim, T]
+        ple_lookup = ggml_scale(ctx0, ple_lookup, std::sqrt((float)ple_dim));
+        // ggml stores this row-major as ne=[n_layers*ple_dim, T]; reshape
+        // to [ple_dim, n_layers, T] so each "layer slice" along ne[1] is
+        // contiguous in memory and the per-layer view is just a stride.
+        ple_lookup = ggml_reshape_3d(ctx0, ple_lookup, ple_dim, N, T);
+
+        if (m.llm_per_layer_proj_w && m.llm_per_layer_proj_norm) {
+            // 2. Linear projection of inputs_embeds, scale by 1/sqrt(hidden).
+            ggml_tensor* ple_proj = ggml_mul_mat(ctx0, m.llm_per_layer_proj_w, embeds); // [n_layers*ple_dim, T]
+            ple_proj = ggml_scale(ctx0, ple_proj, 1.0f / std::sqrt((float)d));
+            ple_proj = ggml_reshape_3d(ctx0, ple_proj, ple_dim, N, T);
+            // 3. RMSNorm along ple_dim (ne[0]) — ggml_rms_norm normalises
+            //    along the innermost dim by default, which is ple_dim.
+            ple_proj = ggml_rms_norm(ctx0, ple_proj, eps);
+            ple_proj = ggml_mul(ctx0, ple_proj, m.llm_per_layer_proj_norm); // broadcast [ple_dim] over n_layers, T
+            // 4. Mix.
+            per_layer_inputs = ggml_add(ctx0, ple_proj, ple_lookup);
+            per_layer_inputs = ggml_scale(ctx0, per_layer_inputs, 1.0f / std::sqrt(2.0f));
+        } else {
+            // Fallback when the projection tensors are missing (older GGUF).
+            per_layer_inputs = ple_lookup;
+        }
     }
 
-    // Build attention params for both layer types up front. Sliding
-    // (local) layers use head_dim with the regular RoPE theta. Full
-    // (global) layers use global_head_dim with rope_theta_full and
-    // partial-rotary RoPE — only the first `partial_rotary_factor`
-    // fraction of the head dimension is rotated.
+    // Attention params for sliding (local) and full layers. Gemma4's
+    // attention uses scaling=1.0 (NOT 1/sqrt(d)) — the q_norm provides
+    // the effective scaling. Full-attention layers use partial-rotary
+    // RoPE: only the first `partial_rotary_factor * head_dim` entries
+    // are rotated. Sliding layers rotate the whole head_dim.
     const int hd_full = (int)lhp.global_head_dim;
-    const float attn_scale_full = 1.0f / std::sqrt((float)hd_full);
-    // Gemma4's full-attention layers use partial-rotary RoPE: only
-    // the first `partial_rotary_factor * head_dim` entries are
-    // rotated, the rest pass through. Sliding layers use full-dim
-    // RoPE (n_rot = 0 → core_attn defaults to head_dim).
     const int n_rot_full = std::max(1, (int)std::round(hd_full * lhp.partial_rotary_factor));
 
-    const core_attn::KvSelfAttnParams kvp_local = {
+    core_attn::KvSelfAttnParams kvp_local = {
         /*n_heads*/ n_q,
         /*n_kv_heads*/ n_kv,
         /*head_dim*/ hd,
@@ -595,27 +643,29 @@ static ggml_cgraph* g4e_build_graph_llm_kv(gemma4_e2b_context* ctx, int n_past, 
         /*rope_theta*/ theta,
         /*rope_beta_fast*/ 32.0f,
         /*rope_beta_slow*/ 1.0f,
-        /*attn_scale*/ attn_scale,
+        /*attn_scale*/ 1.0f,   // Gemma4: scaling=1.0 (q_norm replaces 1/sqrt(d))
         /*qk_norm_eps*/ eps,
         /*gqa_mode*/ core_attn::GQA_MANUAL_CONT,
     };
-    core_attn::KvSelfAttnParams kvp_full = {
-        /*n_heads*/ n_q,
-        /*n_kv_heads*/ n_kv,
-        /*head_dim*/ hd_full,
-        /*n_kv_grp*/ n_kv_grp,
-        /*n_ctx_orig*/ (int)lhp.max_position_embeddings,
-        /*rope_theta*/ lhp.rope_theta_full,
-        /*rope_beta_fast*/ 32.0f,
-        /*rope_beta_slow*/ 1.0f,
-        /*attn_scale*/ attn_scale_full,
-        /*qk_norm_eps*/ eps,
-        /*gqa_mode*/ core_attn::GQA_MANUAL_CONT,
-    };
+    kvp_local.v_rms_norm = true; // Gemma4: v_norm = RMSNorm(head_dim, with_scale=False)
+    core_attn::KvSelfAttnParams kvp_full = kvp_local;
+    kvp_full.head_dim = hd_full;
+    kvp_full.rope_theta = lhp.rope_theta_full;
     kvp_full.n_rot = n_rot_full;
 
     auto is_full_layer = [&](uint32_t il) -> bool {
         return il < lhp.layer_full_mask.size() && lhp.layer_full_mask[il];
+    };
+
+    // Per-layer slice of `per_layer_inputs`. Layout is [ple_dim, n_layers, T]
+    // so layer `il` maps to rows il*nb[1] (contiguous along ne[0]) repeating
+    // every nb[2] bytes per token. A 2-D view captures the (ple_dim, T)
+    // submatrix with row stride nb[2].
+    auto pli_for_layer = [&](uint32_t il) -> ggml_tensor* {
+        if (!per_layer_inputs)
+            return nullptr;
+        return ggml_view_2d(ctx0, per_layer_inputs, ple_dim, T, per_layer_inputs->nb[2],
+                            (size_t)il * per_layer_inputs->nb[1]);
     };
 
     for (uint32_t il = 0; il < lhp.num_layers; il++) {
@@ -626,34 +676,9 @@ static ggml_cgraph* g4e_build_graph_llm_kv(gemma4_e2b_context* ctx, int n_past, 
         ggml_tensor* kv_v_for_layer = (full && ctx->kv_v_full) ? ctx->kv_v_full : ctx->kv_v;
         const int donor_il = (il < lhp.kv_share_donor.size()) ? lhp.kv_share_donor[il] : -1;
 
-        // ── PLE (per-layer embedding adjustment) ──
-        // Gemma4 flow (per transformers/models/gemma4/modeling_gemma4.py):
-        //   gate  = act_fn(per_layer_input_gate(hidden))   # 1536 → 256
-        //   gated = gate * per_layer_emb_for_this_layer    # element-wise (256,)
-        //   delta = per_layer_projection(gated)            # 256 → 1536
-        //   hidden += post_per_layer_input_norm(delta)
-        //
-        // ple_gate.weight  PyTorch (256, 1536)  → ggml ne[0]=1536, ne[1]=256.  Linear(1536→256).
-        // ple_proj.weight  PyTorch (1536, 256)  → ggml ne[0]=256, ne[1]=1536.  Linear(256→1536).
-        if (ple_all && b.ple_gate && b.ple_proj) {
-            // Slice this layer's PLE: [ple_dim, T] from [n_layers*ple_dim, T]
-            ggml_tensor* ple_slice = ggml_view_2d(ctx0, ple_all, ple_dim, T, ple_all->nb[1],
-                                                  (size_t)il * ple_dim * ggml_type_size(ple_all->type));
-            // hidden → 256
-            ggml_tensor* gate = ggml_mul_mat(ctx0, b.ple_gate, cur);
-            gate = ggml_gelu(ctx0, gate); // Gemma3n act_fn = GELU (pytorch_tanh)
-            // 256 × 256 element-wise
-            ggml_tensor* gated = ggml_mul(ctx0, gate, ple_slice);
-            // 256 → hidden
-            ggml_tensor* delta = ggml_mul_mat(ctx0, b.ple_proj, gated);
-            if (b.post_ple_norm) {
-                delta = ggml_rms_norm(ctx0, delta, eps);
-                delta = ggml_mul(ctx0, delta, b.post_ple_norm);
-            }
-            cur = ggml_add(ctx0, cur, delta);
-        }
-
-        // ── Attention ──
+        // ── Attention block ──
+        // HF: residual = h; h = input_layernorm(h); h, _ = self_attn(h, ...);
+        //     h = post_attention_layernorm(h); h = residual + h
         ggml_tensor* residual = cur;
         ggml_tensor* x = ggml_rms_norm(ctx0, cur, eps);
         x = ggml_mul(ctx0, x, b.attn_norm);
@@ -661,6 +686,8 @@ static ggml_cgraph* g4e_build_graph_llm_kv(gemma4_e2b_context* ctx, int n_past, 
         ggml_tensor* attn;
         if (donor_il < 0) {
             // Non-shared: standard Q/K/V projection + cache write/read.
+            // The helper applies q_norm, k_norm, v_norm (RMS-no-weight),
+            // RoPE, and writes into the layer's own cache slot.
             attn = core_attn::kv_self_attn(ctx0, gf, x, b.q_proj, b.k_proj, b.v_proj, b.o_proj, b.q_norm, b.k_norm,
                                            positions, (T == 1) ? nullptr : causal_mask, kv_k_for_layer,
                                            kv_v_for_layer, (int)il, n_past, kvp);
@@ -683,9 +710,8 @@ static ggml_cgraph* g4e_build_graph_llm_kv(gemma4_e2b_context* ctx, int n_past, 
             Q = ggml_rope_ext(ctx0, Q, positions, nullptr, n_rot_e, kvp.rope_type, kvp.n_ctx_orig, kvp.rope_theta,
                               1.0f, 0.0f, 1.0f, kvp.rope_beta_fast, kvp.rope_beta_slow);
 
-            // Read full K/V history from donor's slot. K is RoPE'd at write
-            // time (donor already ran), so no extra RoPE here — same as the
-            // non-shared read path inside core_attn::kv_self_attn.
+            // Read full K/V history from donor's slot. K and V are stored
+            // post-norm/post-RoPE in the cache, so no extra processing here.
             ggml_tensor* Kfull = ggml_cont(
                 ctx0, ggml_view_3d(ctx0, kv_k_for_layer, hd_e, Lk, n_kv_e, kv_k_for_layer->nb[1],
                                    kv_k_for_layer->nb[2], (size_t)donor_il * kv_k_for_layer->nb[3]));
@@ -714,18 +740,15 @@ static ggml_cgraph* g4e_build_graph_llm_kv(gemma4_e2b_context* ctx, int n_past, 
             attn = ggml_mul_mat(ctx0, b.o_proj, attnt);
         }
 
-        // Post-attention norm
         if (b.post_attn_norm) {
             attn = ggml_rms_norm(ctx0, attn, eps);
             attn = ggml_mul(ctx0, attn, b.post_attn_norm);
         }
-
-        // Residual with optional layer_scalar
-        if (b.layer_scalar)
-            attn = ggml_mul(ctx0, attn, b.layer_scalar);
         cur = ggml_add(ctx0, residual, attn);
 
-        // ── FFN (SwiGLU) ──
+        // ── FFN block (SwiGLU) ──
+        // HF: residual = h; h = pre_feedforward_layernorm(h); h = mlp(h);
+        //     h = post_feedforward_layernorm(h); h = residual + h
         residual = cur;
         x = ggml_rms_norm(ctx0, cur, eps);
         if (b.pre_ffn_norm)
@@ -733,15 +756,38 @@ static ggml_cgraph* g4e_build_graph_llm_kv(gemma4_e2b_context* ctx, int n_past, 
 
         ggml_tensor* mlp = core_ffn::swiglu(ctx0, x, b.gate_proj, b.up_proj, b.down_proj);
 
-        // Post-FFN norm
         if (b.post_ffn_norm) {
             mlp = ggml_rms_norm(ctx0, mlp, eps);
             mlp = ggml_mul(ctx0, mlp, b.post_ffn_norm);
         }
-
-        if (b.layer_scalar)
-            mlp = ggml_mul(ctx0, mlp, b.layer_scalar);
         cur = ggml_add(ctx0, residual, mlp);
+
+        // ── PLE block (per-layer-input adjustment) ──
+        // HF: residual = h
+        //     h = per_layer_input_gate(h)        # Linear 1536→256, no bias
+        //     h = act_fn(h)                       # GELU
+        //     h = h * per_layer_input             # element-wise (T, 256)
+        //     h = per_layer_projection(h)        # Linear 256→1536, no bias
+        //     h = post_per_layer_input_norm(h)   # RMSNorm dim=1536
+        //     h = residual + h
+        // This sits AFTER attention + FFN, BEFORE the layer_scalar multiply.
+        if (per_layer_inputs && b.ple_gate && b.ple_proj) {
+            ggml_tensor* pli = pli_for_layer(il);
+            ggml_tensor* gate = ggml_mul_mat(ctx0, b.ple_gate, cur);  // [ple_dim, T]
+            gate = ggml_gelu(ctx0, gate);                              // ACT2FN[hidden_activation] = gelu_pytorch_tanh
+            ggml_tensor* gated = ggml_mul(ctx0, gate, pli);            // element-wise [ple_dim, T]
+            ggml_tensor* delta = ggml_mul_mat(ctx0, b.ple_proj, gated); // [hidden, T]
+            if (b.post_ple_norm) {
+                delta = ggml_rms_norm(ctx0, delta, eps);
+                delta = ggml_mul(ctx0, delta, b.post_ple_norm);
+            }
+            cur = ggml_add(ctx0, cur, delta);
+        }
+
+        // ── layer_scalar (single multiply at end of layer) ──
+        // HF: hidden_states *= self.layer_scalar
+        if (b.layer_scalar)
+            cur = ggml_mul(ctx0, cur, b.layer_scalar);
     }
 
     // Final norm
@@ -827,11 +873,16 @@ static float* g4e_run_llm_kv(gemma4_e2b_context* ctx, const float* inputs_embeds
                 mask[(size_t)q * Lk + k] = neginf_h;
     }
 
-    // PLE token IDs: for decode steps we need the last token ID.
-    // The caller provides embeddings, not token IDs. For the decode step,
-    // we store the last-generated token ID in a field. For prefill, the
-    // IDs are set by the caller via the ple_ids input tensor.
-    // TODO: pass token IDs through for PLE in decode path
+    // PLE token IDs. Caller (transcribe / embed_tokens) is responsible for
+    // sizing ctx->ple_token_ids to match n_tokens before we get here. For
+    // audio frames we use audio_soft_token_id; for text tokens we use the
+    // actual token id. Mismatched length → fall back to bos_id repeats.
+    if ((int)ctx->ple_token_ids.size() != n_tokens) {
+        if (ctx->verbosity >= 2)
+            fprintf(stderr, "gemma4_e2b: ple_token_ids size %zu != n_tokens %d, padding with bos\n",
+                    ctx->ple_token_ids.size(), n_tokens);
+        ctx->ple_token_ids.assign((size_t)n_tokens, ctx->bos_id);
+    }
 
     ggml_cgraph* gf = g4e_build_graph_llm_kv(ctx, n_past, n_tokens);
     ggml_backend_sched_reset(ctx->sched);
@@ -844,6 +895,10 @@ static float* g4e_run_llm_kv(gemma4_e2b_context* ctx, const float* inputs_embeds
     ggml_backend_tensor_set(embeds_in, inputs_embeds, 0, (size_t)d * n_tokens * sizeof(float));
     ggml_tensor* pos_in = ggml_graph_get_tensor(gf, "positions");
     ggml_backend_tensor_set(pos_in, positions.data(), 0, positions.size() * sizeof(int32_t));
+    ggml_tensor* ple_ids_in = ggml_graph_get_tensor(gf, "ple_ids");
+    if (ple_ids_in)
+        ggml_backend_tensor_set(ple_ids_in, ctx->ple_token_ids.data(), 0,
+                                (size_t)n_tokens * sizeof(int32_t));
     if (n_tokens > 1) {
         ggml_tensor* mask_in = ggml_graph_get_tensor(gf, "causal_mask");
         ggml_backend_tensor_set(mask_in, mask.data(), 0, mask.size() * sizeof(ggml_fp16_t));
@@ -869,6 +924,13 @@ static float* g4e_embed_tokens(gemma4_e2b_context* ctx, const int32_t* ids, int 
     if (!ctx || !ids || n <= 0)
         return nullptr;
     const int d = (int)ctx->model.llm_hp.hidden_size;
+
+    // Stash for the next g4e_run_llm_kv call so the PLE block has the
+    // correct per-token ids. The decode loop takes this branch with n=1
+    // for every step; prefill takes a different path (transcribe builds
+    // the full ple_token_ids vector explicitly, including audio
+    // placeholders, before the prefill forward).
+    ctx->ple_token_ids.assign(ids, ids + n);
 
     ggml_cgraph* gf = g4e_build_graph_embed(ctx, n);
     ggml_backend_sched_reset(ctx->sched);
@@ -1080,6 +1142,8 @@ extern "C" struct gemma4_e2b_context* gemma4_e2b_init_from_file(const char* path
     m.llm_embed_w = get("llm.embed_tokens.weight");
     m.llm_ple_w = get("llm.embed_tokens_per_layer.weight");
     m.llm_final_norm = get("llm.norm.weight");
+    m.llm_per_layer_proj_w = get("llm.per_layer_model_projection.weight");
+    m.llm_per_layer_proj_norm = get("llm.per_layer_projection_norm.weight");
 
     m.llm_layers.resize(lhp.num_layers);
     for (uint32_t i = 0; i < lhp.num_layers; i++) {
@@ -1181,23 +1245,31 @@ extern "C" struct gemma4_e2b_context* gemma4_e2b_init_from_file(const char* path
     g4e_gen_hann_window(400, ctx->mel_window);
     g4e_gen_mel_filterbank(128, 400, 16000, ctx->mel_filterbank);
 
-    // Look up special token IDs from vocab
+    // Look up special token IDs from vocab. Gemma4 uses `<|turn>` /
+    // `<turn|>` for turn markers (not `<start_of_turn>` / `<end_of_turn>`
+    // like Gemma2/3) and `<|audio|>` as the audio soft-token placeholder.
+    // We accept both naming styles so the loader works on a Gemma2/3-
+    // converted GGUF too.
     for (int i = 0; i < (int)m.vocab.size(); i++) {
         if (m.vocab[i] == "<bos>")
             ctx->bos_id = i;
         else if (m.vocab[i] == "<eos>" || m.vocab[i] == "</s>")
             ctx->eos_id = i;
-        else if (m.vocab[i] == "<start_of_turn>")
+        else if (m.vocab[i] == "<|turn>" || m.vocab[i] == "<start_of_turn>")
             ctx->start_of_turn_id = i;
-        else if (m.vocab[i] == "<end_of_turn>")
+        else if (m.vocab[i] == "<turn|>" || m.vocab[i] == "<end_of_turn>")
             ctx->end_of_turn_id = i;
+        else if (m.vocab[i] == "<|audio|>" || m.vocab[i] == "<audio_soft_token>" ||
+                 m.vocab[i] == "<audio>")
+            ctx->audio_soft_token_id = i;
     }
 
     if (params.verbosity >= 1) {
         fprintf(stderr, "gemma4_e2b: audio %uL×%u, llm %uL×%u, vocab %u\n", ahp.num_layers, ahp.hidden_size,
                 lhp.num_layers, lhp.hidden_size, lhp.vocab_size);
-        fprintf(stderr, "gemma4_e2b: bos=%d eos=%d start_of_turn=%d end_of_turn=%d\n", ctx->bos_id, ctx->eos_id,
-                ctx->start_of_turn_id, ctx->end_of_turn_id);
+        fprintf(stderr, "gemma4_e2b: bos=%d eos=%d start_of_turn=%d end_of_turn=%d audio_soft=%d\n",
+                ctx->bos_id, ctx->eos_id, ctx->start_of_turn_id, ctx->end_of_turn_id,
+                ctx->audio_soft_token_id);
     }
 
     return ctx;
@@ -1429,12 +1501,27 @@ extern "C" char* gemma4_e2b_transcribe(struct gemma4_e2b_context* ctx, const flo
     if (nl_id >= 0)
         prompt_ids.push_back(nl_id);
 
+    // Optional audio-span markers. Gemma4 wraps audio embeddings with
+    // `<|audio>` (boa) and `<audio|>` (eoa); the soft tokens between
+    // them are the placeholders for the audio frames.
+    int boa_id = find_token("<|audio>");
+    int eoa_id = find_token("<audio|>");
+    if (boa_id >= 0)
+        prompt_ids.push_back(boa_id);
+
     int audio_insert_pos = (int)prompt_ids.size(); // audio goes here
 
     // "Transcribe the following audio clip into text."
     // Simple approach: try to find common subword tokens
     std::vector<std::string> text_tokens = {"Transcribe", " the",  " following", " audio",
                                             " clip",      " into", " text",      "."};
+    if (eoa_id >= 0) {
+        // Push eoa AFTER the audio soft tokens — but the soft tokens are
+        // injected later via the prefix/suffix split, so we just remember
+        // to start the suffix with eoa. Easiest: push it now into the
+        // suffix-portion of prompt_ids (positions ≥ audio_insert_pos).
+        prompt_ids.push_back(eoa_id);
+    }
     for (auto& w : text_tokens) {
         int tid = find_token(w);
         if (tid >= 0)
@@ -1493,6 +1580,23 @@ extern "C" char* gemma4_e2b_transcribe(struct gemma4_e2b_context* ctx, const flo
     if (!g4e_kv_init(ctx, max_ctx)) {
         fprintf(stderr, "gemma4_e2b: kv init failed\n");
         return nullptr;
+    }
+
+    // Per-token IDs for the prefill PLE lookup. Audio frames don't have
+    // text token ids of their own — Gemma4Model.forward (HF) computes
+    // get_per_layer_inputs on the *unmerged* input_ids, where each audio
+    // slot still carries the audio-soft-token placeholder. We do the
+    // same here.
+    {
+        const int audio_id = (ctx->audio_soft_token_id >= 0) ? ctx->audio_soft_token_id : ctx->bos_id;
+        ctx->ple_token_ids.clear();
+        ctx->ple_token_ids.reserve((size_t)T_total);
+        for (int i = 0; i < n_prefix; i++)
+            ctx->ple_token_ids.push_back(prompt_ids[i]);
+        for (int i = 0; i < N_audio; i++)
+            ctx->ple_token_ids.push_back(audio_id);
+        for (int i = 0; i < n_suffix; i++)
+            ctx->ple_token_ids.push_back(prompt_ids[(size_t)n_prefix + i]);
     }
 
     // Prefill: run full prompt through LLM to fill KV cache
