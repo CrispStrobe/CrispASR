@@ -453,6 +453,30 @@ if(NOT MSVC)
 endif()
 
 # ---------------------------------------------------------------------------
+# mimo_asr — XiaomiMiMo/MiMo-V2.5-ASR (input_local_transformer + Qwen2 LLM)
+# ---------------------------------------------------------------------------
+add_library(mimo_asr STATIC mimo_asr.h mimo_asr.cpp)
+set_target_properties(mimo_asr PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(mimo_asr PUBLIC .)
+target_compile_features   (mimo_asr PUBLIC cxx_std_17)
+target_link_libraries     (mimo_asr PUBLIC crispasr-core ggml ggml-base ggml-cpu)
+if(NOT MSVC)
+    target_compile_options(mimo_asr PRIVATE -O3)
+endif()
+
+# ---------------------------------------------------------------------------
+# qwen3_tts — Qwen/Qwen3-TTS (Qwen3 talker + 16-codebook RVQ output)
+# ---------------------------------------------------------------------------
+add_library(qwen3_tts STATIC qwen3_tts.h qwen3_tts.cpp)
+set_target_properties(qwen3_tts PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(qwen3_tts PUBLIC .)
+target_compile_features   (qwen3_tts PUBLIC cxx_std_17)
+target_link_libraries     (qwen3_tts PUBLIC crispasr-core ggml ggml-base ggml-cpu)
+if(NOT MSVC)
+    target_compile_options(qwen3_tts PRIVATE -O3)
+endif()
+
+# ---------------------------------------------------------------------------
 # omniasr — Facebook OmniASR-CTC (wav2vec2-style, 1600+ languages)
 # ---------------------------------------------------------------------------
 add_library(omniasr STATIC omniasr.h omniasr.cpp)
@@ -720,6 +744,12 @@ if (TARGET moonshine_streaming)
 endif()
 if (TARGET gemma4_e2b)
     target_link_libraries(whisper PUBLIC gemma4_e2b)
+endif()
+if (TARGET mimo_asr)
+    target_link_libraries(whisper PUBLIC mimo_asr)
+endif()
+if (TARGET qwen3_tts)
+    target_link_libraries(whisper PUBLIC qwen3_tts)
 endif()
 if (TARGET fireredpunc)
     target_link_libraries(whisper PUBLIC fireredpunc)
