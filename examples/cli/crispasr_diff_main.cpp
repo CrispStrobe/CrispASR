@@ -40,6 +40,7 @@
 #include "parakeet.h"
 #include "canary.h"
 #include "cohere.h"
+#include "gemma4_e2b.h"
 
 #include "common-whisper.h"
 
@@ -278,6 +279,56 @@ static StageResult cohere_encoder_r(cohere_context* ctx, const float* samples, i
     return r;
 }
 
+// ---- gemma4-e2b (USM Conformer + Gemma4 LLM) ----
+
+static StageResult gemma4_mel_r(gemma4_e2b_context* ctx, const float* samples, int n_samples) {
+    StageResult r;
+    int n_mels = 0, T_mel = 0;
+    float* mel = gemma4_e2b_compute_mel(ctx, samples, n_samples, &n_mels, &T_mel);
+    if (!mel) {
+        r.note = "gemma4_e2b_compute_mel returned null";
+        return r;
+    }
+    r.shape = {n_mels, T_mel};
+    r.data.assign(mel, mel + (size_t)n_mels * T_mel);
+    free(mel);
+    r.ok = true;
+    return r;
+}
+
+static StageResult gemma4_encoder_r(gemma4_e2b_context* ctx, const float* samples, int n_samples) {
+    StageResult r;
+    int n_mels = 0, T_mel = 0;
+    float* mel = gemma4_e2b_compute_mel(ctx, samples, n_samples, &n_mels, &T_mel);
+    if (!mel) {
+        r.note = "mel failed";
+        return r;
+    }
+    int T_enc = 0, d_model = 0;
+    float* enc = gemma4_e2b_run_encoder(ctx, mel, n_mels, T_mel, &T_enc, &d_model);
+    free(mel);
+    if (!enc) {
+        r.note = "gemma4_e2b_run_encoder returned null";
+        return r;
+    }
+    // The Python reference returns encoder_output as (T_enc, d_model) where
+    // d_model is the LLM hidden size (1536) — i.e. post audio_embed_proj.
+    // Our buffer is laid out [d_model, T_enc] in row-major; the diff
+    // harness treats it as a flat float array so the contents must match
+    // the reference flat layout. The Python reference dump uses
+    // [T_enc, d_model] as a (T,d) matrix; ggml stores [d, T] which is
+    // numerically the SAME contiguous bytes if you read it row-major and
+    // interpret as (T, d). cos_min is invariant under shape
+    // interpretation, so as long as both sides are consistent the
+    // comparison is meaningful. Report shape as (T_enc, d_model) to
+    // match the Python convention.
+    r.shape = {T_enc, d_model};
+    r.data.assign(enc, enc + (size_t)T_enc * d_model);
+    free(enc);
+    r.ok = true;
+    return r;
+}
+
 } // namespace
 
 
@@ -305,7 +356,7 @@ int main(int argc, char** argv) {
         fprintf(stderr,
                 "usage: %s <backend> <model.gguf> <reference.gguf> <audio.wav>\n"
                 "\n"
-                "  backend       one of: voxtral, voxtral4b, qwen3, granite, parakeet, canary, cohere\n"
+                "  backend       one of: voxtral, voxtral4b, qwen3, granite, parakeet, canary, cohere, gemma4\n"
                 "  model.gguf    crispasr-compatible model weights\n"
                 "  reference.gguf  archive produced by tools/dump_reference.py\n"
                 "  audio.wav     16 kHz mono WAV\n",
@@ -539,10 +590,41 @@ int main(int argc, char** argv) {
         }
 
         cohere_free(ctx);
+    } else if (backend_name == "gemma4" || backend_name == "gemma4-e2b") {
+        auto cp = gemma4_e2b_context_default_params();
+        cp.n_threads = 4;
+        cp.verbosity = 0;
+        gemma4_e2b_context* ctx = gemma4_e2b_init_from_file(model_path.c_str(), cp);
+        if (!ctx) {
+            fprintf(stderr, "failed to load gemma4-e2b model\n");
+            return 4;
+        }
+
+        auto mel_r = gemma4_mel_r(ctx, samples.data(), (int)samples.size());
+        if (mel_r.ok) {
+            auto rep = ref.compare("mel_spectrogram", mel_r.data.data(), mel_r.data.size());
+            print_row("mel_spectrogram", rep, COS_THRESHOLD);
+            record(rep);
+        } else {
+            printf("[ERR ] mel_spectrogram         %s\n", mel_r.note.c_str());
+            n_fail++;
+        }
+
+        auto enc_r = gemma4_encoder_r(ctx, samples.data(), (int)samples.size());
+        if (enc_r.ok) {
+            auto rep = ref.compare("encoder_output", enc_r.data.data(), enc_r.data.size());
+            print_row("encoder_output", rep, COS_THRESHOLD);
+            record(rep);
+        } else {
+            printf("[ERR ] encoder_output          %s\n", enc_r.note.c_str());
+            n_fail++;
+        }
+
+        gemma4_e2b_free(ctx);
     } else {
         fprintf(stderr,
                 "crispasr-diff: backend '%s' is not recognised. "
-                "Supported: voxtral, voxtral4b, qwen3, granite, parakeet, canary, cohere.\n",
+                "Supported: voxtral, voxtral4b, qwen3, granite, parakeet, canary, cohere, gemma4.\n",
                 backend_name.c_str());
         return 5;
     }

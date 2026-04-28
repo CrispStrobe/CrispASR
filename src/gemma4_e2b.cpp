@@ -220,14 +220,14 @@ struct gemma4_e2b_context {
     // Special token IDs (looked up at init from vocab)
     int bos_id = 2;
     int eos_id = 1;
+    int pad_id = 0;
     int start_of_turn_id = -1;
     int end_of_turn_id = -1;
-    // Audio "soft token" placeholder. HF's `Gemma4Model.forward` runs
-    // `get_per_layer_inputs(input_ids)` over the *unmerged* input_ids
-    // (i.e. before vision/audio embeddings replace their soft tokens),
-    // so the PLE lookup at audio positions hits whatever placeholder
-    // the tokenizer used. We use the same placeholder here so the per-
-    // layer input stream is consistent with the reference.
+    // Audio soft-token id, used to wrap the audio span in the prompt so
+    // the model can find/locate the audio modality. The PLE lookup at
+    // audio positions, however, should NOT use this id — see the comment
+    // in gemma4_e2b_transcribe and HF Gemma4Model.forward L2215, which
+    // replaces multimodal token ids with pad_token_id before embedding.
     int audio_soft_token_id = -1;
 
     // Per-token IDs for the next g4e_run_llm_kv call. Populated by
@@ -1251,7 +1251,9 @@ extern "C" struct gemma4_e2b_context* gemma4_e2b_init_from_file(const char* path
     // We accept both naming styles so the loader works on a Gemma2/3-
     // converted GGUF too.
     for (int i = 0; i < (int)m.vocab.size(); i++) {
-        if (m.vocab[i] == "<bos>")
+        if (m.vocab[i] == "<pad>")
+            ctx->pad_id = i;
+        else if (m.vocab[i] == "<bos>")
             ctx->bos_id = i;
         else if (m.vocab[i] == "<eos>" || m.vocab[i] == "</s>")
             ctx->eos_id = i;
@@ -1582,19 +1584,20 @@ extern "C" char* gemma4_e2b_transcribe(struct gemma4_e2b_context* ctx, const flo
         return nullptr;
     }
 
-    // Per-token IDs for the prefill PLE lookup. Audio frames don't have
-    // text token ids of their own — Gemma4Model.forward (HF) computes
-    // get_per_layer_inputs on the *unmerged* input_ids, where each audio
-    // slot still carries the audio-soft-token placeholder. We do the
-    // same here.
+    // Per-token IDs for the prefill PLE lookup. HF Gemma4Model.forward
+    // (line 2208-2221) replaces multimodal token ids with `pad_token_id`
+    // BEFORE the `embed_tokens_per_layer` lookup, then constructs the
+    // per_layer_inputs from those pad-replaced ids. So at audio
+    // positions we feed pad_id (0) into the lookup, NOT the audio
+    // soft-token id — even though the audio soft-token is what the
+    // tokenizer produces in the input ids before merging.
     {
-        const int audio_id = (ctx->audio_soft_token_id >= 0) ? ctx->audio_soft_token_id : ctx->bos_id;
         ctx->ple_token_ids.clear();
         ctx->ple_token_ids.reserve((size_t)T_total);
         for (int i = 0; i < n_prefix; i++)
             ctx->ple_token_ids.push_back(prompt_ids[i]);
         for (int i = 0; i < N_audio; i++)
-            ctx->ple_token_ids.push_back(audio_id);
+            ctx->ple_token_ids.push_back(ctx->pad_id);
         for (int i = 0; i < n_suffix; i++)
             ctx->ple_token_ids.push_back(prompt_ids[(size_t)n_prefix + i]);
     }
@@ -1645,6 +1648,179 @@ extern "C" char* gemma4_e2b_transcribe(struct gemma4_e2b_context* ctx, const flo
         result = result.substr(s, e - s + 1);
 
     return strdup(result.c_str());
+}
+
+// ── Stage hooks for crispasr-diff ──────────────────────────────────────────
+// These mirror the parakeet/voxtral pattern: each one runs a slice of the
+// pipeline and returns a malloc'd float buffer the caller frees. They share
+// the mel + encoder code path used by gemma4_e2b_transcribe so any number
+// drift between the diff harness and end-to-end runs would be a bug here.
+
+extern "C" float* gemma4_e2b_compute_mel(struct gemma4_e2b_context* ctx, const float* pcm, int n_samples,
+                                         int* out_n_mels, int* out_T_mel) {
+    if (!ctx || !pcm || n_samples <= 0 || !out_n_mels || !out_T_mel)
+        return nullptr;
+
+    const int n_fft = 400, hop = 160, n_mels = 128;
+    const int n_freqs = n_fft / 2 + 1;
+    auto& m = ctx->model;
+
+    // Prefer GGUF-stored mel resources; fall back to runtime-generated.
+    std::vector<float> hann_buf, filt_buf;
+    const float* hann_ptr = ctx->mel_window.data();
+    const float* filt_ptr = ctx->mel_filterbank.data();
+    if (m.mel_window && m.mel_filters) {
+        hann_buf.resize(n_fft);
+        ggml_backend_tensor_get(m.mel_window, hann_buf.data(), 0, n_fft * sizeof(float));
+        filt_buf.resize((size_t)n_freqs * n_mels);
+        ggml_backend_tensor_get(m.mel_filters, filt_buf.data(), 0, filt_buf.size() * sizeof(float));
+        hann_ptr = hann_buf.data();
+        filt_ptr = filt_buf.data();
+    }
+
+    core_mel::Params mp;
+    mp.n_fft = n_fft;
+    mp.hop_length = hop;
+    mp.win_length = n_fft;
+    mp.n_mels = n_mels;
+    mp.log_base = core_mel::LogBase::Log10;
+    mp.log_guard = core_mel::LogGuard::MaxClip;
+    mp.norm = core_mel::Normalization::GlobalClipMax;
+    mp.layout = core_mel::Layout::MelsTime;
+    mp.fb_layout = core_mel::FbLayout::FreqsMels;
+    mp.matmul = core_mel::MatmulPrecision::Double;
+    mp.log_eps = 1e-10f;
+    mp.center_pad = true;
+    mp.drop_last_frame = true;
+
+    int T_mel = 0;
+    auto mel = core_mel::compute(pcm, n_samples, hann_ptr, n_fft, filt_ptr, n_freqs, g4e_fft_wrapper, mp, T_mel);
+    if (mel.empty())
+        return nullptr;
+    if (T_mel > 3000)
+        T_mel = 3000;
+
+    const size_t n = (size_t)n_mels * (size_t)T_mel;
+    float* out = (float*)malloc(n * sizeof(float));
+    if (!out)
+        return nullptr;
+    std::memcpy(out, mel.data(), std::min((size_t)mel.size(), n) * sizeof(float));
+    *out_n_mels = n_mels;
+    *out_T_mel = T_mel;
+    return out;
+}
+
+extern "C" float* gemma4_e2b_run_encoder(struct gemma4_e2b_context* ctx, const float* mel, int n_mels, int T_mel,
+                                         int* out_T_enc, int* out_d_model) {
+    if (!ctx || !mel || n_mels <= 0 || T_mel <= 0 || !out_T_enc || !out_d_model)
+        return nullptr;
+
+    auto& m = ctx->model;
+    auto& ahp = m.audio_hp;
+    const float eps = m.llm_hp.rms_norm_eps;
+
+    // Build encoder graph (same shape as gemma4_e2b_transcribe).
+    size_t enc_mem = ggml_tensor_overhead() * 8192 + ggml_graph_overhead_custom(32768, false);
+    std::vector<uint8_t> enc_meta(enc_mem);
+    ggml_init_params enc_ip = {enc_mem, enc_meta.data(), true};
+    ggml_context* ectx = ggml_init(enc_ip);
+    ggml_cgraph* enc_gf = ggml_new_graph_custom(ectx, 32768, false);
+
+    ggml_tensor* mel_in = ggml_new_tensor_4d(ectx, GGML_TYPE_F32, T_mel, n_mels, 1, 1);
+    ggml_set_name(mel_in, "mel");
+    ggml_set_input(mel_in);
+
+    ggml_tensor* h = mel_in;
+    if (m.sub_conv0_w) {
+        h = ggml_conv_2d(ectx, m.sub_conv0_w, h, 2, 2, 1, 1, 1, 1);
+        if (m.sub_norm0_w) {
+            int ow = (int)h->ne[0], oh = (int)h->ne[1], c = (int)h->ne[2];
+            h = ggml_reshape_2d(ectx, h, ow * oh, c);
+            h = ggml_cont(ectx, ggml_transpose(ectx, h));
+            h = ggml_rms_norm(ectx, h, eps);
+            h = ggml_mul(ectx, h, m.sub_norm0_w);
+            h = ggml_cont(ectx, ggml_transpose(ectx, h));
+            h = ggml_reshape_4d(ectx, h, ow, oh, c, 1);
+        }
+        h = ggml_silu(ectx, h);
+    }
+    if (m.sub_conv1_w) {
+        h = ggml_conv_2d(ectx, m.sub_conv1_w, h, 2, 2, 1, 1, 1, 1);
+        if (m.sub_norm1_w) {
+            int ow = (int)h->ne[0], oh = (int)h->ne[1], c = (int)h->ne[2];
+            h = ggml_reshape_2d(ectx, h, ow * oh, c);
+            h = ggml_cont(ectx, ggml_transpose(ectx, h));
+            h = ggml_rms_norm(ectx, h, eps);
+            h = ggml_mul(ectx, h, m.sub_norm1_w);
+            h = ggml_cont(ectx, ggml_transpose(ectx, h));
+            h = ggml_reshape_4d(ectx, h, ow, oh, c, 1);
+        }
+        h = ggml_silu(ectx, h);
+    }
+
+    int T_sub = (int)h->ne[0];
+    int feat_dim = (int)h->ne[1] * (int)h->ne[2];
+    h = ggml_reshape_2d(ectx, h, T_sub, feat_dim);
+    h = ggml_cont(ectx, ggml_transpose(ectx, h));
+    if (m.sub_input_proj_w)
+        h = ggml_mul_mat(ectx, m.sub_input_proj_w, h);
+
+    int hidden = (int)ahp.hidden_size;
+    for (uint32_t il = 0; il < ahp.num_layers; il++) {
+        const auto& L = m.audio_layers[il];
+        if (L.ffn1_up_w)
+            h = build_macaron_ffn(ectx, h, L.ffn1_pre_ln, L.ffn1_up_w, L.ffn1_down_w, L.ffn1_post_ln,
+                                  ahp.residual_weight, eps);
+        h = build_conformer_self_attn(ectx, h, L, ahp);
+        if (L.conv_gate_w)
+            h = build_light_conv1d(ectx, h, L, T_sub, hidden, eps);
+        if (L.ffn2_up_w)
+            h = build_macaron_ffn(ectx, h, L.ffn2_pre_ln, L.ffn2_up_w, L.ffn2_down_w, L.ffn2_post_ln,
+                                  ahp.residual_weight, eps);
+        if (L.out_ln) {
+            h = ggml_rms_norm(ectx, h, eps);
+            h = ggml_mul(ectx, h, L.out_ln);
+        }
+    }
+    if (m.audio_output_proj_w) {
+        h = ggml_mul_mat(ectx, m.audio_output_proj_w, h);
+        if (m.audio_output_proj_b)
+            h = ggml_add(ectx, h, m.audio_output_proj_b);
+    }
+    if (m.audio_embed_proj_w)
+        h = ggml_mul_mat(ectx, m.audio_embed_proj_w, h);
+
+    ggml_set_name(h, "encoder_out");
+    ggml_set_output(h);
+    ggml_build_forward_expand(enc_gf, h);
+
+    ggml_backend_sched_reset(ctx->sched);
+    if (!ggml_backend_sched_alloc_graph(ctx->sched, enc_gf)) {
+        ggml_free(ectx);
+        return nullptr;
+    }
+    ggml_tensor* mel_t = ggml_graph_get_tensor(enc_gf, "mel");
+    ggml_backend_tensor_set(mel_t, mel, 0, (size_t)T_mel * n_mels * sizeof(float));
+    if (ggml_backend_sched_graph_compute(ctx->sched, enc_gf) != GGML_STATUS_SUCCESS) {
+        ggml_free(ectx);
+        return nullptr;
+    }
+
+    ggml_tensor* enc_out_t = ggml_graph_get_tensor(enc_gf, "encoder_out");
+    int proj_dim = (int)enc_out_t->ne[0];
+    int N_audio = (int)enc_out_t->ne[1];
+    const size_t n_floats = (size_t)proj_dim * (size_t)N_audio;
+    float* out = (float*)malloc(n_floats * sizeof(float));
+    if (!out) {
+        ggml_free(ectx);
+        return nullptr;
+    }
+    ggml_backend_tensor_get(enc_out_t, out, 0, n_floats * sizeof(float));
+    ggml_free(ectx);
+
+    *out_T_enc = N_audio;
+    *out_d_model = proj_dim;
+    return out;
 }
 
 extern "C" void gemma4_e2b_free(struct gemma4_e2b_context* ctx) {
