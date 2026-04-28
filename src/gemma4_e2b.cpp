@@ -65,6 +65,12 @@ struct g4e_llm_hp {
     bool attention_k_eq_v = false;
     // 1 = full attention, 0 = sliding. Indexed by layer; size = num_layers.
     std::vector<int32_t> layer_full_mask;
+    // KV-cache sharing (Gemma4-style). The LAST `num_kv_shared_layers`
+    // layers don't compute their own K/V — they reuse K/V from an earlier
+    // donor layer of the same `layer_type`. -1 = compute own K/V; non-
+    // negative = read K/V from cache slot at this donor index. Built once
+    // after the per-layer mask is known (see g4e_compute_kv_share_donor).
+    std::vector<int32_t> kv_share_donor;
 };
 
 // ── Model tensors ───────────────────────────────────────────────────────────
@@ -372,6 +378,37 @@ static void g4e_gen_hann_window(int n_fft, std::vector<float>& win) {
         win[i] = 0.5f * (1.0f - std::cos(2.0f * (float)M_PI * i / n_fft));
 }
 
+// ── KV-cache sharing (Gemma4) ──────────────────────────────────────────────
+// Mirrors transformers/models/gemma4/modeling_gemma4.py:
+//
+//   first_kv_shared_layer_idx = num_hidden_layers - num_kv_shared_layers
+//   is_kv_shared_layer        = layer_idx >= first_kv_shared_layer_idx > 0
+//   kv_shared_layer_index     = last layer in [0, first_kv_shared_layer_idx)
+//                               with the SAME layer_type as this layer.
+//
+// The shared layer does NOT compute its own K/V (and HF doesn't even
+// allocate k_proj/v_proj/k_norm/v_norm for it); it reads the donor's
+// already-RoPE'd, already-cached K/V instead. Same `layer_type`
+// guarantees same head_dim, same RoPE, same kv buffer.
+static void g4e_compute_kv_share_donor(g4e_llm_hp& lhp) {
+    const int N = (int)lhp.num_layers;
+    const int Ns = (int)lhp.num_kv_shared_layers;
+    lhp.kv_share_donor.assign(N, -1);
+    if (Ns <= 0 || Ns >= N || (int)lhp.layer_full_mask.size() < N)
+        return;
+    const int first_shared = N - Ns;
+    for (int il = first_shared; il < N; il++) {
+        const int my_type = lhp.layer_full_mask[il] ? 1 : 0;
+        for (int j = first_shared - 1; j >= 0; j--) {
+            const int j_type = lhp.layer_full_mask[j] ? 1 : 0;
+            if (j_type == my_type) {
+                lhp.kv_share_donor[il] = j;
+                break;
+            }
+        }
+    }
+}
+
 // ── KV cache init ──────────────────────────────────────────────────────────
 
 static bool g4e_kv_init(gemma4_e2b_context* ctx, int max_ctx) {
@@ -587,6 +624,7 @@ static ggml_cgraph* g4e_build_graph_llm_kv(gemma4_e2b_context* ctx, int n_past, 
         const auto& kvp = full ? kvp_full : kvp_local;
         ggml_tensor* kv_k_for_layer = (full && ctx->kv_k_full) ? ctx->kv_k_full : ctx->kv_k;
         ggml_tensor* kv_v_for_layer = (full && ctx->kv_v_full) ? ctx->kv_v_full : ctx->kv_v;
+        const int donor_il = (il < lhp.kv_share_donor.size()) ? lhp.kv_share_donor[il] : -1;
 
         // ── PLE (per-layer embedding adjustment) ──
         // Gemma4 flow (per transformers/models/gemma4/modeling_gemma4.py):
@@ -620,10 +658,61 @@ static ggml_cgraph* g4e_build_graph_llm_kv(gemma4_e2b_context* ctx, int n_past, 
         ggml_tensor* x = ggml_rms_norm(ctx0, cur, eps);
         x = ggml_mul(ctx0, x, b.attn_norm);
 
-        ggml_tensor* attn =
-            core_attn::kv_self_attn(ctx0, gf, x, b.q_proj, b.k_proj, b.v_proj, b.o_proj, b.q_norm, b.k_norm, positions,
-                                    (T == 1) ? nullptr : causal_mask, kv_k_for_layer, kv_v_for_layer,
-                                    (int)il, n_past, kvp);
+        ggml_tensor* attn;
+        if (donor_il < 0) {
+            // Non-shared: standard Q/K/V projection + cache write/read.
+            attn = core_attn::kv_self_attn(ctx0, gf, x, b.q_proj, b.k_proj, b.v_proj, b.o_proj, b.q_norm, b.k_norm,
+                                           positions, (T == 1) ? nullptr : causal_mask, kv_k_for_layer,
+                                           kv_v_for_layer, (int)il, n_past, kvp);
+        } else {
+            // KV-shared layer: compute Q only, read K/V from donor's slot.
+            // Donor has the same `layer_type` (sliding/full) by construction,
+            // so head_dim, RoPE, n_kv_grp, attn_scale all match `kvp`.
+            const int hd_e = kvp.head_dim;
+            const int n_q_e = kvp.n_heads;
+            const int n_kv_e = kvp.n_kv_heads;
+            const int grp_e = kvp.n_kv_grp;
+            const int n_rot_e = kvp.n_rot > 0 ? kvp.n_rot : hd_e;
+
+            ggml_tensor* Q = ggml_mul_mat(ctx0, b.q_proj, x);
+            Q = ggml_reshape_3d(ctx0, Q, hd_e, n_q_e, T);
+            if (b.q_norm) {
+                Q = ggml_rms_norm(ctx0, Q, kvp.qk_norm_eps);
+                Q = ggml_mul(ctx0, Q, b.q_norm);
+            }
+            Q = ggml_rope_ext(ctx0, Q, positions, nullptr, n_rot_e, kvp.rope_type, kvp.n_ctx_orig, kvp.rope_theta,
+                              1.0f, 0.0f, 1.0f, kvp.rope_beta_fast, kvp.rope_beta_slow);
+
+            // Read full K/V history from donor's slot. K is RoPE'd at write
+            // time (donor already ran), so no extra RoPE here — same as the
+            // non-shared read path inside core_attn::kv_self_attn.
+            ggml_tensor* Kfull = ggml_cont(
+                ctx0, ggml_view_3d(ctx0, kv_k_for_layer, hd_e, Lk, n_kv_e, kv_k_for_layer->nb[1],
+                                   kv_k_for_layer->nb[2], (size_t)donor_il * kv_k_for_layer->nb[3]));
+            ggml_tensor* Vfull = ggml_cont(
+                ctx0, ggml_view_3d(ctx0, kv_v_for_layer, hd_e, Lk, n_kv_e, kv_v_for_layer->nb[1],
+                                   kv_v_for_layer->nb[2], (size_t)donor_il * kv_v_for_layer->nb[3]));
+
+            if (kvp.gqa_mode != core_attn::GQA_NATIVE && grp_e > 1) {
+                ggml_tensor* K4 = ggml_reshape_4d(ctx0, Kfull, hd_e, Lk, 1, n_kv_e);
+                ggml_tensor* V4 = ggml_reshape_4d(ctx0, Vfull, hd_e, Lk, 1, n_kv_e);
+                K4 = ggml_repeat_4d(ctx0, K4, hd_e, Lk, grp_e, n_kv_e);
+                V4 = ggml_repeat_4d(ctx0, V4, hd_e, Lk, grp_e, n_kv_e);
+                if (kvp.gqa_mode == core_attn::GQA_MANUAL_CONT) {
+                    Kfull = ggml_cont(ctx0, ggml_reshape_3d(ctx0, K4, hd_e, Lk, n_q_e));
+                    Vfull = ggml_cont(ctx0, ggml_reshape_3d(ctx0, V4, hd_e, Lk, n_q_e));
+                } else {
+                    Kfull = ggml_reshape_3d(ctx0, K4, hd_e, Lk, n_q_e);
+                    Vfull = ggml_reshape_3d(ctx0, V4, hd_e, Lk, n_q_e);
+                }
+            }
+
+            Q = ggml_cont(ctx0, ggml_permute(ctx0, Q, 0, 2, 1, 3));
+            ggml_tensor* attnt = ggml_flash_attn_ext(ctx0, Q, Kfull, Vfull, (T == 1) ? nullptr : causal_mask,
+                                                    kvp.attn_scale, 0.0f, 0.0f);
+            attnt = ggml_reshape_2d(ctx0, attnt, hd_e * n_q_e, T);
+            attn = ggml_mul_mat(ctx0, b.o_proj, attnt);
+        }
 
         // Post-attention norm
         if (b.post_attn_norm) {
@@ -1064,6 +1153,16 @@ extern "C" struct gemma4_e2b_context* gemma4_e2b_init_from_file(const char* path
                         n_full, lhp.num_layers, lhp.head_dim, lhp.global_head_dim);
             }
         }
+    }
+
+    // KV-share donor map (Gemma4: last `num_kv_shared_layers` layers reuse
+    // K/V from the last earlier layer of the same `layer_type`).
+    g4e_compute_kv_share_donor(lhp);
+    if (params.verbosity >= 1 && lhp.num_kv_shared_layers > 0) {
+        int n_shared = 0;
+        for (int v : lhp.kv_share_donor) if (v >= 0) n_shared++;
+        fprintf(stderr, "gemma4_e2b: kv-share %d/%u layers reuse donor K/V\n",
+                n_shared, lhp.num_layers);
     }
 
     // Setup scheduler for GPU-accelerated encoder/LLM
