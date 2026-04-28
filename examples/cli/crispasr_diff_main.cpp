@@ -561,26 +561,28 @@ int main(int argc, char** argv) {
         // before our own ICL prefill builder is wired up.
         auto embeds_pair = ref.get_f32("talker_inputs_embeds");
         auto embeds_shape = ref.shape("talker_inputs_embeds");
-        if (!embeds_pair.first || embeds_shape.size() != 2) {
+        // GGUF ne[] is reverse of numpy: tensor saved as numpy (T, d) has
+        // ne[0]=d, ne[1]=T. We want (T, d) here.
+        if (!embeds_pair.first || embeds_shape.size() < 2) {
             printf("[SKIP] talker_logits           talker_inputs_embeds not in reference (re-dump with that stage)\n");
             n_skip++;
         } else {
-            const int T = (int)embeds_shape[0];
-            const int d = (int)embeds_shape[1];
+            const int T = (int)embeds_shape[1];
+            const int d = (int)embeds_shape[0];
             (void)d;
             auto tl_r = qwen3_tts_talker_logits_r(ctx, embeds_pair.first, T);
             if (tl_r.ok) {
-                // Reference talker_logits is shape (T, vocab); we only have
-                // logits at position -1. Slice the reference to the last
-                // row before comparing.
+                // Reference talker_logits is numpy (1, T, vocab); GGUF
+                // stores ne=[vocab, T, 1]. Compare position[-1] of the
+                // T axis against our (vocab,) output at position[-1].
                 auto ref_logits_pair = ref.get_f32("talker_logits");
                 auto ref_logits_shape = ref.shape("talker_logits");
-                if (!ref_logits_pair.first || ref_logits_shape.size() != 2) {
+                if (!ref_logits_pair.first || ref_logits_shape.size() < 2) {
                     printf("[SKIP] talker_logits           talker_logits ref tensor missing/wrong shape\n");
                     n_skip++;
                 } else {
-                    const int Tref = (int)ref_logits_shape[0];
-                    const int vocab = (int)ref_logits_shape[1];
+                    const int vocab = (int)ref_logits_shape[0];
+                    const int Tref = (int)ref_logits_shape[1];
                     const float* ref_last = ref_logits_pair.first + (size_t)(Tref - 1) * vocab;
                     // ref.compare expects the named tensor to match buffer length;
                     // since we've already loaded talker_logits, just compute the
@@ -614,6 +616,94 @@ int main(int argc, char** argv) {
                 n_fail++;
             }
         }
+        // Stage: talker_logits_via_icl_prefill — the full self-test.
+        // Build the ICL prefill on the C++ side (text_embed + text_proj
+        // for the chat template + codec sentinels + speaker_embed (from
+        // baked voice pack) + per-frame summed codec embeddings of
+        // ref_code), feed it through the talker, compare codec_head[-1]
+        // against PyTorch's talker_logits[-1]. If our prefill builder
+        // matches, this passes at cos_min=1.000000 just like the prior
+        // stage that consumed PyTorch's prefill verbatim.
+        const std::string syn_text = ref.meta("qwen3_tts_syn_text");
+        const std::string ref_text = ref.meta("qwen3_tts_ref_text");
+        if (syn_text.empty() || ref_text.empty()) {
+            printf("[SKIP] talker_logits_via_icl  qwen3_tts_syn_text / qwen3_tts_ref_text not in reference (set "
+                   "env vars at dump time)\n");
+            n_skip++;
+        } else {
+            // Need a voice pack — load the canonical clone pack.
+            int rc = qwen3_tts_load_voice_pack(ctx, "/tmp/qwen3-tts-voice-pack.gguf");
+            if (rc != 0) {
+                printf("[SKIP] talker_logits_via_icl  voice pack not loaded (run bake-qwen3-tts-voice-pack first)\n");
+                n_skip++;
+            } else {
+                int Tprefill = 0;
+                float* my_prefill = qwen3_tts_build_icl_prefill(ctx, syn_text.c_str(), ref_text.c_str(), &Tprefill);
+                if (!my_prefill) {
+                    printf("[ERR ] talker_logits_via_icl  build_icl_prefill returned null\n");
+                    n_fail++;
+                } else {
+                    // Sanity: compare our prefill to the reference prefill before
+                    // running the talker. If they differ here, the bug is in
+                    // build_icl_prefill; if they match here, the bug is in
+                    // talker invocation state.
+                    if (embeds_pair.first && (int)embeds_shape[1] == Tprefill) {
+                        const int dd = (int)embeds_shape[0];
+                        double max_pre = 0;
+                        for (size_t i = 0; i < (size_t)Tprefill * dd; i++) {
+                            double diff = std::fabs(my_prefill[i] - embeds_pair.first[i]);
+                            if (diff > max_pre)
+                                max_pre = diff;
+                        }
+                        printf("[INFO] icl_prefill_vs_ref     max_abs=%.4e (over T=%d × d=%d)\n", max_pre, Tprefill, dd);
+                    }
+                    auto tl_r = qwen3_tts_talker_logits_r(ctx, my_prefill, Tprefill);
+                    free(my_prefill);
+                    if (tl_r.ok) {
+                        auto ref_logits_pair = ref.get_f32("talker_logits");
+                        auto ref_logits_shape = ref.shape("talker_logits");
+                        if (!ref_logits_pair.first || ref_logits_shape.size() < 2) {
+                            printf("[SKIP] talker_logits_via_icl  ref talker_logits missing\n");
+                            n_skip++;
+                        } else {
+                            const int vocab = (int)ref_logits_shape[0];
+                            const int Tref = (int)ref_logits_shape[1];
+                            const float* ref_last = ref_logits_pair.first + (size_t)(Tref - 1) * vocab;
+                            crispasr_diff::Report rep;
+                            rep.found = true;
+                            rep.n_elem = (size_t)vocab;
+                            rep.shape = {1, vocab};
+                            double dot = 0, na = 0, nb = 0, max_abs = 0, sum_abs = 0, sum_sq = 0;
+                            for (int i = 0; i < vocab; i++) {
+                                double a = tl_r.data[i], b = ref_last[i];
+                                dot += a * b;
+                                na += a * a;
+                                nb += b * b;
+                                double d = a - b;
+                                if (std::fabs(d) > max_abs)
+                                    max_abs = std::fabs(d);
+                                sum_abs += std::fabs(d);
+                                sum_sq += d * d;
+                            }
+                            rep.cos_min = (na > 0 && nb > 0) ? (float)(dot / std::sqrt(na * nb)) : 1.0f;
+                            rep.cos_mean = rep.cos_min;
+                            rep.max_abs = (float)max_abs;
+                            rep.mean_abs = (float)(sum_abs / vocab);
+                            rep.rms = (float)std::sqrt(sum_sq / vocab);
+                            char extra[64];
+                            snprintf(extra, sizeof(extra), "T_prefill=%d  argmax=%d", Tprefill,
+                                     (int)(std::max_element(tl_r.data.begin(), tl_r.data.end()) - tl_r.data.begin()));
+                            print_row("talker_logits_via_icl", rep, COS_THRESHOLD, extra);
+                            record(rep);
+                        }
+                    } else {
+                        printf("[ERR ] talker_logits_via_icl  %s\n", tl_r.note.c_str());
+                        n_fail++;
+                    }
+                }
+            }
+        }
+
         qwen3_tts_free(ctx);
     } else if (backend_name == "granite") {
         auto cp = granite_speech_context_default_params();

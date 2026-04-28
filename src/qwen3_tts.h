@@ -48,6 +48,24 @@ int qwen3_tts_set_codec_path(struct qwen3_tts_context* ctx, const char* path);
 // forward lands.
 int qwen3_tts_set_voice_prompt(struct qwen3_tts_context* ctx, const char* wav_path);
 
+// Load a voice pack GGUF (produced by `models/bake-qwen3-tts-voice-pack.py`)
+// containing one or more `(spk_embedding, ref_code)` pairs extracted via
+// the official qwen-tts package. Required for voice-clone synthesis
+// until the runtime ECAPA speaker_encoder + codec encoder forwards
+// land.  Returns 0 on success.
+int qwen3_tts_load_voice_pack(struct qwen3_tts_context* ctx, const char* path);
+
+// Select an active voice from the loaded voice pack by name.
+// Returns 0 on success, -1 if no voice pack is loaded, -2 if the
+// name is not in the pack.
+int qwen3_tts_select_voice(struct qwen3_tts_context* ctx, const char* name);
+
+// Set the synthesis language: 0=auto (no language hint, "nothink"
+// path), >0 = codec_language_id from the model config (e.g. English=2050,
+// Chinese=2055, Japanese=2058 — see the `codec_language_id` field in the
+// HF config.json's talker_config). Returns 0 on success.
+int qwen3_tts_set_language(struct qwen3_tts_context* ctx, int codec_language_id);
+
 // ---------------------------------------------------------------------------
 // Diff-harness stage APIs (PLAN #52 step 4)
 //
@@ -76,6 +94,16 @@ float* qwen3_tts_run_text_proj(struct qwen3_tts_context* ctx, const int32_t* ids
 // embedding, expect bit-equivalent logits at the tail.
 float* qwen3_tts_run_talker_with_embeds(struct qwen3_tts_context* ctx, const float* embeds, int n_tokens,
                                         int* out_vocab);
+
+// Build the full ICL prefill embedding from a (syn_text, ref_text) pair
+// using the active voice pack's spk_embedding + ref_code. Returns a
+// freshly malloc'd float buffer of shape (T, hidden_size). *out_T is
+// set to T on success. Caller frees with free().
+//
+// Mirrors `Qwen3TTSForConditionalGeneration.generate_icl_prompt` for
+// the non_streaming_mode=False voice-clone Base path.
+float* qwen3_tts_build_icl_prefill(struct qwen3_tts_context* ctx, const char* syn_text, const char* ref_text,
+                                   int* out_T);
 
 // Run the talker on `text`, AR-decode codebook-0 until <eos> or the
 // step limit, and return the resulting code stream. *out_n_codes is

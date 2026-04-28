@@ -63,7 +63,7 @@ _DEFAULT_REF_TEXT = (
     "But you know what? You blew it! And thanks to you."
 )
 _DEFAULT_SYN_TEXT = "Good one. Okay, fine, I'm just gonna leave this sock monkey here. Goodbye."
-_DEFAULT_LANG = "English"
+_DEFAULT_LANG = "Auto"
 
 
 def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],

@@ -63,6 +63,7 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import os
 import sys
 import wave
 from pathlib import Path
@@ -307,6 +308,12 @@ def main() -> None:
         "sample_rate": 16000,
         "generated_text": str(captures.pop("generated_text", "")) if "generated_text" in captures else "",
     }
+    # Pass through env-configurable prompt/text/voice metadata so diff
+    # harnesses on the C++ side can replay the exact synthesis context.
+    for env_key in ("QWEN3_TTS_SYN_TEXT", "QWEN3_TTS_REF_TEXT", "QWEN3_TTS_LANG", "QWEN3_TTS_VOICE"):
+        val = os.environ.get(env_key)
+        if val is not None:
+            meta[env_key.lower()] = val
     write_gguf_archive(captures, meta, args.output)
     print(f"Wrote GGUF archive: {args.output}  "
           f"({args.output.stat().st_size/1024:.1f} KiB)")
