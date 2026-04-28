@@ -1535,14 +1535,19 @@ extern "C" char* gemma4_e2b_transcribe(struct gemma4_e2b_context* ctx, const flo
         }
     }
 
-    // ── Output projection: Linear(1024→1536, bias) + embed proj ──
+    // ── Output projection: Linear(1024→1536, bias) + adapter ──
     if (m.audio_output_proj_w) {
         h = ggml_mul_mat(ectx, m.audio_output_proj_w, h);
         if (m.audio_output_proj_b)
             h = ggml_add(ectx, h, m.audio_output_proj_b);
     }
-    if (m.audio_embed_proj_w)
+    // Audio→LLM adapter (HF Gemma4MultimodalEmbedder.forward L1973-1974):
+    //   embs_normed = embedding_pre_projection_norm(inputs_embeds)  # RMSNorm(no-weight)
+    //   return embedding_projection(embs_normed)                     # Linear(no-bias)
+    if (m.audio_embed_proj_w) {
+        h = ggml_rms_norm(ectx, h, eps);                     // pre-projection norm, no weight
         h = ggml_mul_mat(ectx, m.audio_embed_proj_w, h);
+    }
 
     ggml_set_name(h, "encoder_out");
     ggml_set_output(h);
@@ -1902,8 +1907,12 @@ extern "C" float* gemma4_e2b_run_encoder(struct gemma4_e2b_context* ctx, const f
         if (m.audio_output_proj_b)
             h = ggml_add(ectx, h, m.audio_output_proj_b);
     }
-    if (m.audio_embed_proj_w)
+    // Audio→LLM adapter: RMSNorm(no-weight) then Linear(no-bias)
+    // matching HF Gemma4MultimodalEmbedder.forward L1973-1974.
+    if (m.audio_embed_proj_w) {
+        h = ggml_rms_norm(ectx, h, eps);
         h = ggml_mul_mat(ectx, m.audio_embed_proj_w, h);
+    }
 
     ggml_set_name(h, "encoder_out");
     ggml_set_output(h);
