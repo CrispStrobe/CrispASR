@@ -179,10 +179,22 @@ def main():
     def u32(k, v): w.add_uint32(k, int(v))
     def f32(k, v): w.add_float32(k, float(v))
 
-    u32("qwen3tts_codec.sample_rate", cfg.get("sampling_rate", 24000))
-    f32("qwen3tts_codec.frame_rate",  cfg.get("frame_rate", 12.5))
+    # Top-level audio params — Qwen3-TTS-Tokenizer-12Hz uses
+    # input_sample_rate / output_sample_rate (not the generic
+    # `sampling_rate`), and the encoder frame rate lives inside
+    # encoder_config as `_frame_rate`. Persist all of them so the
+    # runtime can drive the codec at the right rate without re-reading
+    # the YAML.
+    u32("qwen3tts_codec.input_sample_rate",
+        cfg.get("input_sample_rate", cfg.get("sampling_rate", 24000)))
+    u32("qwen3tts_codec.output_sample_rate",
+        cfg.get("output_sample_rate", cfg.get("sampling_rate", 24000)))
+    f32("qwen3tts_codec.frame_rate",
+        enc.get("_frame_rate", cfg.get("frame_rate", 12.5)))
     u32("qwen3tts_codec.encode_downsample", cfg.get("encode_downsample_rate", 1920))
     u32("qwen3tts_codec.decode_upsample",   cfg.get("decode_upsample_rate", 1920))
+    u32("qwen3tts_codec.encoder_valid_num_quantizers",
+        cfg.get("encoder_valid_num_quantizers", 16))
 
     # encoder
     u32("qwen3tts_codec.enc.n_layers",   enc.get("num_hidden_layers", 8))
@@ -210,12 +222,54 @@ def main():
     if "upsample_rates" in dec:
         w.add_array("qwen3tts_codec.dec.upsample_rates", list(dec["upsample_rates"]))
 
-    # semantic quantizers (Qwen3 codec has a small "semantic" head separate
-    # from the main RVQ stack)
+    # Semantic quantisers (Qwen3 codec has a small "semantic" head
+    # separate from the main RVQ stack — encoded redundantly into both
+    # the encoder_config and decoder_config sections in the HF YAML).
     u32("qwen3tts_codec.semantic_quantizers",
-        cfg.get("semantic_quantizers", 1))
+        dec.get("num_semantic_quantizers",
+            enc.get("num_semantic_quantizers",
+                cfg.get("semantic_quantizers", 1))))
     u32("qwen3tts_codec.semantic_codebook_size",
-        cfg.get("semantic_codebook_size", 4096))
+        dec.get("semantic_codebook_size",
+            cfg.get("semantic_codebook_size", 4096)))
+
+    # Decoder-side numerical params we'll need at runtime.
+    f32("qwen3tts_codec.dec.rope_theta", dec.get("rope_theta", 10000.0))
+    f32("qwen3tts_codec.dec.rms_norm_eps", dec.get("rms_norm_eps", 1e-5))
+    u32("qwen3tts_codec.dec.head_dim", dec.get("head_dim", 64))
+    u32("qwen3tts_codec.dec.max_pos", dec.get("max_position_embeddings", 8000))
+    u32("qwen3tts_codec.dec.vq_hidden_dim",
+        dec.get("vector_quantization_hidden_dimension", 512))
+    f32("qwen3tts_codec.dec.layer_scale_initial",
+        dec.get("layer_scale_initial_scale", 0.01))
+    if "upsampling_ratios" in dec:
+        w.add_array("qwen3tts_codec.dec.upsample_ratios_extra",
+                    list(dec["upsampling_ratios"]))
+
+    # Encoder-side numerical params (used during voice clone from a
+    # reference audio signal).
+    f32("qwen3tts_codec.enc.rope_theta", enc.get("rope_theta", 10000.0))
+    f32("qwen3tts_codec.enc.norm_eps",   enc.get("norm_eps", 1e-5))
+    u32("qwen3tts_codec.enc.head_dim",   enc.get("head_dim", 64))
+    u32("qwen3tts_codec.enc.max_pos",    enc.get("max_position_embeddings", 8000))
+    u32("qwen3tts_codec.enc.kernel_size", enc.get("kernel_size", 7))
+    u32("qwen3tts_codec.enc.last_kernel_size", enc.get("last_kernel_size", 3))
+    u32("qwen3tts_codec.enc.compress",   enc.get("compress", 2))
+    u32("qwen3tts_codec.enc.dilation_growth_rate",
+        enc.get("dilation_growth_rate", 2))
+    u32("qwen3tts_codec.enc.num_filters", enc.get("num_filters", 64))
+    u32("qwen3tts_codec.enc.num_residual_layers",
+        enc.get("num_residual_layers", 1))
+    u32("qwen3tts_codec.enc.upsample_groups",
+        enc.get("upsample_groups", 512))
+    u32("qwen3tts_codec.enc.residual_kernel_size",
+        enc.get("residual_kernel_size", 3))
+    u32("qwen3tts_codec.enc.audio_channels",
+        enc.get("audio_channels", 1))
+    f32("qwen3tts_codec.enc.layer_scale_initial",
+        enc.get("layer_scale_initial_scale", 0.01))
+    f32("qwen3tts_codec.enc.trim_right_ratio",
+        enc.get("trim_right_ratio", 1.0))
 
     n_mapped = 0
     n_skipped = 0
