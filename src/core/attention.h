@@ -283,6 +283,12 @@ struct KvSelfAttnParams {
     float qk_norm_eps;    // RMSNorm epsilon for optional Q/K norm (qwen3); unused otherwise
     GqaMode gqa_mode;
     int rope_type = GGML_ROPE_TYPE_NEOX; // NEOX for most models, NORMAL for fairseq2/omniasr
+    // Partial-rotary RoPE: number of head-dim entries to rotate. The
+    // remaining `head_dim - n_rot` entries pass through unchanged. Used
+    // by Gemma4 full-attention layers (`partial_rotary_factor=0.25`,
+    // i.e. n_rot = head_dim/4) and Phi-3-style models. Default 0 means
+    // rotate the entire head_dim — matches every existing caller.
+    int n_rot = 0;
 };
 
 // KV-cached self-attention. Writes the new K/V into the persistent cache
@@ -350,10 +356,15 @@ static inline ggml_tensor* kv_self_attn(ggml_context* ctx0, ggml_cgraph* gf, ggm
     }
 
     // ---- RoPE (NEOX for most models, NORMAL for fairseq2/omniasr) ----
-    Q = ggml_rope_ext(ctx0, Q, positions, nullptr, hd, p.rope_type, p.n_ctx_orig, p.rope_theta,
+    // p.n_rot > 0 selects partial-rotary mode (only the first n_rot
+    // entries of each head are rotated; the rest pass through). 0
+    // means rotate the entire head_dim, which matches every existing
+    // caller's prior behaviour.
+    const int n_rot = p.n_rot > 0 ? p.n_rot : hd;
+    Q = ggml_rope_ext(ctx0, Q, positions, nullptr, n_rot, p.rope_type, p.n_ctx_orig, p.rope_theta,
                       /*freq_scale*/ 1.0f, /*ext_factor*/ 0.0f,
                       /*attn_factor*/ 1.0f, p.rope_beta_fast, p.rope_beta_slow);
-    K = ggml_rope_ext(ctx0, K, positions, nullptr, hd, p.rope_type, p.n_ctx_orig, p.rope_theta, 1.0f, 0.0f, 1.0f,
+    K = ggml_rope_ext(ctx0, K, positions, nullptr, n_rot, p.rope_type, p.n_ctx_orig, p.rope_theta, 1.0f, 0.0f, 1.0f,
                       p.rope_beta_fast, p.rope_beta_slow);
 
     // ---- Permute new K/V to (hd, T, n_kv) for cache write ----

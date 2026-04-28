@@ -543,13 +543,11 @@ static ggml_cgraph* g4e_build_graph_llm_kv(gemma4_e2b_context* ctx, int n_past, 
     // fraction of the head dimension is rotated.
     const int hd_full = (int)lhp.global_head_dim;
     const float attn_scale_full = 1.0f / std::sqrt((float)hd_full);
-    // TODO(PLAN #50): full-attention layers should rotate only the first
-    // `lhp.partial_rotary_factor * hd_full` dims (25%), but the shared
-    // core_attn::kv_self_attn helper rotates the whole head_dim. Adding
-    // a `n_rot` field to KvSelfAttnParams is a follow-up; for now full
-    // layers run with full-dim RoPE which is mathematically wrong but
-    // matches what the tensors line up with at the mul_mat level.
-    (void)lhp.partial_rotary_factor;
+    // Gemma4's full-attention layers use partial-rotary RoPE: only
+    // the first `partial_rotary_factor * head_dim` entries are
+    // rotated, the rest pass through. Sliding layers use full-dim
+    // RoPE (n_rot = 0 → core_attn defaults to head_dim).
+    const int n_rot_full = std::max(1, (int)std::round(hd_full * lhp.partial_rotary_factor));
 
     const core_attn::KvSelfAttnParams kvp_local = {
         /*n_heads*/ n_q,
@@ -564,7 +562,7 @@ static ggml_cgraph* g4e_build_graph_llm_kv(gemma4_e2b_context* ctx, int n_past, 
         /*qk_norm_eps*/ eps,
         /*gqa_mode*/ core_attn::GQA_MANUAL_CONT,
     };
-    const core_attn::KvSelfAttnParams kvp_full = {
+    core_attn::KvSelfAttnParams kvp_full = {
         /*n_heads*/ n_q,
         /*n_kv_heads*/ n_kv,
         /*head_dim*/ hd_full,
@@ -577,6 +575,7 @@ static ggml_cgraph* g4e_build_graph_llm_kv(gemma4_e2b_context* ctx, int n_past, 
         /*qk_norm_eps*/ eps,
         /*gqa_mode*/ core_attn::GQA_MANUAL_CONT,
     };
+    kvp_full.n_rot = n_rot_full;
 
     auto is_full_layer = [&](uint32_t il) -> bool {
         return il < lhp.layer_full_mask.size() && lhp.layer_full_mask[il];
