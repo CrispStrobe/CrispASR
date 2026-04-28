@@ -621,15 +621,202 @@ static std::vector<ggml_fp16_t> g4e_build_audio_attn_mask(int T, int chunk_size,
     return mask;
 }
 
-// ── Conformer self-attention ────────────────────────────────────────────────
-// Approximates HF Gemma4AudioAttention via chunked-local attention via mask
-// (without the relative position bias). For short audio the mask captures
-// the dominant attention pattern; the rel_pos_bias contribution is a
-// follow-up — see Gemma4AudioRelPositionalEncoding + the matrix_bd term
-// in Gemma4AudioAttention.forward.
+// HF Gemma4AudioRelPositionalEncoding-style sinusoidal pos enc.
+// Produces (hidden_size, n_pos=13) row-major where n_pos is the number
+// of relative-position bias positions (== chunk_size + 1 in HF). The
+// position ids are arange(12, -1, -1) = [12, 11, ..., 1, 0].
+static std::vector<float> g4e_make_audio_pos_enc(int hidden_size, int chunk_size) {
+    const int n_pos = chunk_size + 1; // 13 for chunk_size=12
+    const int half = hidden_size / 2;
+    std::vector<float> pe((size_t)hidden_size * n_pos, 0.0f);
+    const float min_t = 1.0f, max_t = 10000.0f;
+    const float log_inc = std::log(max_t / min_t) / std::max(half - 1, 1);
+    for (int p = 0; p < n_pos; p++) {
+        const float pos_id = (float)(chunk_size - p);  // arange(12, -1, -1)[p]
+        for (int i = 0; i < half; i++) {
+            const float inv_t = min_t * std::exp(-i * log_inc);
+            const float scaled = pos_id * inv_t;
+            // HF concat layout: [sin..., cos...] with n_timescales=hidden/2 each.
+            pe[(size_t)p * hidden_size + i] = std::sin(scaled);
+            pe[(size_t)p * hidden_size + half + i] = std::cos(scaled);
+        }
+    }
+    return pe;
+}
+
+// ── Conformer self-attention with chunked-local + relative position bias ──
+// HF-faithful implementation of Gemma4AudioAttention.forward. Block-wise
+// manual attention because the rel_pos_bias is a per-block computation
+// that doesn't fit ggml's flash_attn_ext mask interface (the mask is
+// computed from Q via the relative_k_proj, not a static tensor).
+//
+// pos_enc: ne=(hidden_size, n_pos=13). Same for every layer.
+// pad_mask: ne=(context_size, num_blocks). Per-block boundary mask
+//   marking K positions outside [0, T) as -inf, others 0.
 
 static ggml_tensor* build_conformer_self_attn(ggml_context* ctx, ggml_tensor* x, const g4e_audio_layer& L,
-                                              const g4e_audio_hp& hp, ggml_tensor* attn_mask) {
+                                              const g4e_audio_hp& hp, ggml_tensor* pos_enc,
+                                              ggml_tensor* pad_mask) {
+    const int hd = (int)hp.head_dim;
+    const int n_h = (int)hp.num_heads;
+    const int hidden = (int)hp.hidden_size;
+    const int T = (int)x->ne[1];
+    const int chunk_size = (int)hp.chunk_size;
+    const int max_past = (int)hp.context_left - 1;
+    const int max_future = 0; // E2B: attention_context_right=0
+    const int context_size = chunk_size + max_past + max_future; // 24
+    const int n_pos = chunk_size + 1; // 13
+    const int num_blocks = (T + chunk_size - 1) / chunk_size;
+    const int T_padded = num_blocks * chunk_size;
+    const float eps = 1e-6f;
+    const float softcap = hp.attention_logit_cap;
+
+    ggml_tensor* residual = x;
+    ggml_tensor* h = ggml_rms_norm(ctx, x, eps);
+    h = ggml_mul(ctx, h, L.attn_pre_ln);
+
+    // Q/K/V projections + scaling.
+    ggml_tensor* Q = ggml_mul_mat(ctx, L.attn_q_w, h); // (hd*n_h, T)
+    ggml_tensor* K = ggml_mul_mat(ctx, L.attn_k_w, h);
+    ggml_tensor* V = ggml_mul_mat(ctx, L.attn_v_w, h);
+
+    Q = ggml_reshape_3d(ctx, Q, hd, n_h, T);
+    K = ggml_reshape_3d(ctx, K, hd, n_h, T);
+    V = ggml_reshape_3d(ctx, V, hd, n_h, T);
+
+    if (L.attn_per_dim_scale) {
+        ggml_tensor* scale = ggml_reshape_3d(ctx, L.attn_per_dim_scale, hd, 1, 1);
+        Q = ggml_mul(ctx, Q, scale);
+    }
+    {
+        const float k_scale = std::log1p(std::exp(1.0f)) / std::log(2.0f);
+        K = ggml_scale(ctx, K, k_scale);
+    }
+
+    // Permute (D, H, T) → (D, T, H) for time-axis chunking.
+    // ggml_permute(a, p0, p1, p2, p3): pN = output axis for input axis N.
+    // input 0 (D)→0; input 1 (H)→2; input 2 (T)→1; input 3→3.
+    Q = ggml_cont(ctx, ggml_permute(ctx, Q, 0, 2, 1, 3)); // (D, T, H)
+    K = ggml_cont(ctx, ggml_permute(ctx, K, 0, 2, 1, 3));
+    V = ggml_cont(ctx, ggml_permute(ctx, V, 0, 2, 1, 3));
+
+    // Pad along T axis: Q gets end-padding to T_padded; K/V get max_past
+    // at start and (T_padded - T) + max_future + chunk_size - 1 at end.
+    // ggml_pad_ext args: (ctx, x, l0, r0, l1, r1, l2, r2, l3, r3).
+    if (T_padded > T) {
+        Q = ggml_pad_ext(ctx, Q, 0, 0, 0, T_padded - T, 0, 0, 0, 0);
+    }
+    const int K_pad_start = max_past;
+    const int K_pad_end   = (T_padded - T) + max_future + chunk_size - 1;
+    K = ggml_pad_ext(ctx, K, 0, 0, K_pad_start, K_pad_end, 0, 0, 0, 0);
+    V = ggml_pad_ext(ctx, V, 0, 0, K_pad_start, K_pad_end, 0, 0, 0, 0);
+
+    // Compute relative_k_states: rel_K_proj(pos_enc) → (hd*n_h, n_pos).
+    // pos_enc ne=(hidden, n_pos). rel_k weight is HF (hidden, n_h*hd) →
+    // ggml ne=(hidden, n_h*hd). mul_mat gives (n_h*hd, n_pos).
+    ggml_tensor* rel_K = ggml_mul_mat(ctx, L.attn_rel_k_w, pos_enc); // (hd*n_h, n_pos)
+    rel_K = ggml_reshape_3d(ctx, rel_K, hd, n_h, n_pos);             // (D, H, n_pos)
+    // Permute to (D, n_pos, H) for matmul with Q_block.
+    // input 0 (D)→0; input 1 (H)→2; input 2 (n_pos)→1.
+    rel_K = ggml_cont(ctx, ggml_permute(ctx, rel_K, 0, 2, 1, 3));    // (D, n_pos, H)
+
+    // Per-block manual attention.
+    std::vector<ggml_tensor*> block_outs;
+    block_outs.reserve(num_blocks);
+    for (int b = 0; b < num_blocks; b++) {
+        // Q_block view: (D, chunk_size, H) at q_offset = b*chunk_size frames.
+        const size_t q_off = (size_t)b * chunk_size * Q->nb[1];
+        ggml_tensor* Qb = ggml_view_3d(ctx, Q, hd, chunk_size, n_h, Q->nb[1], Q->nb[2], q_off);
+        Qb = ggml_cont(ctx, Qb);
+
+        // K_window view: (D, context_size, H) at k_offset = b*chunk_size frames in padded K.
+        const size_t k_off = (size_t)b * chunk_size * K->nb[1];
+        ggml_tensor* Kw = ggml_view_3d(ctx, K, hd, context_size, n_h, K->nb[1], K->nb[2], k_off);
+        Kw = ggml_cont(ctx, Kw);
+
+        ggml_tensor* Vw = ggml_view_3d(ctx, V, hd, context_size, n_h, V->nb[1], V->nb[2], k_off);
+        Vw = ggml_cont(ctx, Vw);
+
+        // matrix_ac = K_window^T @ Q_block via mul_mat(Kw, Qb).
+        // ggml_mul_mat(A, B) where A and B share ne[0] as contracted dim:
+        //   A=(D, ctx, H), B=(D, chunk, H) → C=(ctx, chunk, H).
+        ggml_tensor* matrix_ac = ggml_mul_mat(ctx, Kw, Qb); // (ctx_size, chunk, H)
+
+        // matrix_bd_raw = rel_K^T @ Q_block: rel_K=(D, n_pos, H), Q=(D, chunk, H)
+        //   → (n_pos, chunk, H).
+        ggml_tensor* bd_raw = ggml_mul_mat(ctx, rel_K, Qb); // (n_pos, chunk, H)
+
+        // rel_shift: input (n_pos=13, chunk_size, H) → output (context_size=24, chunk_size, H).
+        // PyTorch shift on (chunk, n_pos): pad last dim to (chunk, ctx_size+1=25), flatten,
+        // trim to chunk*ctx_size, reshape (chunk, ctx_size).
+        // In ggml with (n_pos, chunk, H): pad ne[0] from n_pos to ctx_size+1=25:
+        ggml_tensor* bd_pad = ggml_pad_ext(ctx, bd_raw,
+                                           0, (context_size + 1) - n_pos, 0, 0, 0, 0, 0, 0);
+        // ne=(ctx_size+1, chunk, H). Total elem per head: (ctx_size+1)*chunk = 25*12 = 300.
+        // Reshape to flat (ctx_size+1)*chunk per head, take first ctx_size*chunk = 24*12 = 288.
+        // Then reshape to (ctx_size, chunk, H).
+        ggml_tensor* bd_flat = ggml_reshape_2d(ctx, bd_pad, (context_size + 1) * chunk_size, n_h);
+        ggml_tensor* bd_trim = ggml_view_2d(ctx, bd_flat, context_size * chunk_size, n_h,
+                                            bd_flat->nb[1], 0);
+        bd_trim = ggml_cont(ctx, bd_trim);
+        ggml_tensor* matrix_bd = ggml_reshape_3d(ctx, bd_trim, context_size, chunk_size, n_h);
+
+        // Sum + softcap + boundary mask.
+        ggml_tensor* scores = ggml_add(ctx, matrix_ac, matrix_bd);
+        scores = ggml_scale(ctx, scores, 1.0f / softcap);
+        scores = ggml_tanh(ctx, scores);
+        scores = ggml_scale(ctx, scores, softcap);
+
+        // Boundary mask for this block: (context_size, 1, 1) view of pad_mask
+        // at column b. ggml_add_inplace can broadcast across (chunk, H).
+        ggml_tensor* mask_b = ggml_view_1d(ctx, pad_mask, context_size,
+                                           (size_t)b * pad_mask->nb[1]);
+        // Convert F16 to F32 for adding to scores. Use ggml_cast or ggml_cpy.
+        // Simpler: cast via ggml_cpy to a new f32 tensor of same shape.
+        ggml_tensor* mask_b_f32 = ggml_cast(ctx, mask_b, GGML_TYPE_F32);
+        // Broadcast add: (ctx, 1, 1) + (ctx, chunk, H) → (ctx, chunk, H).
+        ggml_tensor* mask_b_3d = ggml_reshape_3d(ctx, mask_b_f32, context_size, 1, 1);
+        scores = ggml_add(ctx, scores, mask_b_3d);
+
+        // Softmax along ne[0] = context_size (the K dim).
+        scores = ggml_soft_max(ctx, scores);
+
+        // attn_block = V_window @ scores along ctx_size.
+        // V_window=(D, ctx, H). To contract along ctx, permute V to (ctx, D, H).
+        // ggml_permute: input 0 (D)→1; input 1 (ctx)→0; input 2 (H)→2.
+        ggml_tensor* Vw_p = ggml_cont(ctx, ggml_permute(ctx, Vw, 1, 0, 2, 3)); // (ctx, D, H)
+        // mul_mat(Vw_p, scores): Vw_p=(ctx, D, H), scores=(ctx, chunk, H) → (D, chunk, H).
+        ggml_tensor* attn_block = ggml_mul_mat(ctx, Vw_p, scores); // (D, chunk, H)
+        block_outs.push_back(attn_block);
+    }
+
+    // Concat blocks along T (ne[1]).
+    ggml_tensor* attn_out = block_outs[0];
+    for (int b = 1; b < num_blocks; b++)
+        attn_out = ggml_concat(ctx, attn_out, block_outs[b], 1);
+    // attn_out ne=(D, T_padded, H). Trim to T frames.
+    if (T_padded > T) {
+        attn_out = ggml_view_3d(ctx, attn_out, hd, T, n_h,
+                                attn_out->nb[1], attn_out->nb[2], 0);
+        attn_out = ggml_cont(ctx, attn_out);
+    }
+    // Permute back (D, T, H) → (D, H, T): input 0→0; input 1 (T)→2; input 2 (H)→1.
+    attn_out = ggml_cont(ctx, ggml_permute(ctx, attn_out, 0, 2, 1, 3)); // (D, H, T)
+    attn_out = ggml_reshape_2d(ctx, attn_out, hd * n_h, T);
+
+    // Output projection.
+    attn_out = ggml_mul_mat(ctx, L.attn_o_w, attn_out);
+
+    // Post-norm + residual.
+    attn_out = ggml_rms_norm(ctx, attn_out, eps);
+    attn_out = ggml_mul(ctx, attn_out, L.attn_post_ln);
+    (void)hidden;
+    return ggml_add(ctx, residual, attn_out);
+}
+
+// Old signature for compatibility — DEAD (replaced by the rel_pos version).
+static ggml_tensor* build_conformer_self_attn_legacy(ggml_context* ctx, ggml_tensor* x, const g4e_audio_layer& L,
+                                                     const g4e_audio_hp& hp, ggml_tensor* attn_mask) {
     const int hd = (int)hp.head_dim;
     const int n_h = (int)hp.num_heads;
     const int T = (int)x->ne[1];
@@ -1558,12 +1745,18 @@ extern "C" char* gemma4_e2b_transcribe(struct gemma4_e2b_context* ctx, const flo
 
     int hidden = (int)ahp.hidden_size;
 
-    // Build the chunked-local attention mask (graph input). Shape (T_sub, T_sub),
-    // F16, with -inf at masked positions and 0 at attended ones. Same mask for
-    // every audio layer. ggml_flash_attn_ext expects mask along (Lk, Lq).
-    ggml_tensor* audio_attn_mask = ggml_new_tensor_2d(ectx, GGML_TYPE_F16, T_sub, T_sub);
-    ggml_set_name(audio_attn_mask, "audio_attn_mask");
-    ggml_set_input(audio_attn_mask);
+    // Audio attention inputs: pos_enc (constant) + per-block boundary mask.
+    const int chunk_size_a = (int)ahp.chunk_size;
+    const int max_past_a = (int)ahp.context_left - 1;
+    const int n_pos_a = chunk_size_a + 1;
+    const int context_size_a = chunk_size_a + max_past_a;
+    const int num_blocks_a = (T_sub + chunk_size_a - 1) / chunk_size_a;
+    ggml_tensor* audio_pos_enc = ggml_new_tensor_2d(ectx, GGML_TYPE_F32, hidden, n_pos_a);
+    ggml_set_name(audio_pos_enc, "audio_pos_enc");
+    ggml_set_input(audio_pos_enc);
+    ggml_tensor* audio_pad_mask = ggml_new_tensor_2d(ectx, GGML_TYPE_F16, context_size_a, num_blocks_a);
+    ggml_set_name(audio_pad_mask, "audio_pad_mask");
+    ggml_set_input(audio_pad_mask);
 
     // ── Conformer encoder (12 layers) ──
     for (uint32_t il = 0; il < ahp.num_layers; il++) {
@@ -1574,8 +1767,8 @@ extern "C" char* gemma4_e2b_transcribe(struct gemma4_e2b_context* ctx, const flo
             h = build_macaron_ffn(ectx, h, L.ffn1_pre_ln, L.ffn1_up_w, L.ffn1_down_w, L.ffn1_post_ln,
                                   ahp.residual_weight, eps);
 
-        // Self-attention (chunked-local with attn_mask)
-        h = build_conformer_self_attn(ectx, h, L, ahp, audio_attn_mask);
+        // Self-attention (chunked-local + relative position bias).
+        h = build_conformer_self_attn(ectx, h, L, ahp, audio_pos_enc, audio_pad_mask);
 
         // LightConv1d
         if (L.conv_gate_w)
@@ -1623,12 +1816,34 @@ extern "C" char* gemma4_e2b_transcribe(struct gemma4_e2b_context* ctx, const flo
     ggml_tensor* mel_t = ggml_graph_get_tensor(enc_gf, "mel");
     ggml_backend_tensor_set(mel_t, mel.data(), 0, (size_t)T_mel * n_mels * sizeof(float));
 
-    // Audio chunked-local mask. T_sub is on the mask tensor shape (square).
-    ggml_tensor* mask_t = ggml_graph_get_tensor(enc_gf, "audio_attn_mask");
-    if (mask_t) {
-        const int T_sub_mask = (int)mask_t->ne[0];
-        auto mask_buf = g4e_build_audio_attn_mask(T_sub_mask, (int)ahp.chunk_size, (int)ahp.context_left, 0);
-        ggml_backend_tensor_set(mask_t, mask_buf.data(), 0, mask_buf.size() * sizeof(ggml_fp16_t));
+    // Audio attention inputs: pos_enc (constant per encoder, shape
+    // (hidden, n_pos)) and per-block pad_mask (shape (context_size, num_blocks)).
+    {
+        ggml_tensor* pe = ggml_graph_get_tensor(enc_gf, "audio_pos_enc");
+        if (pe) {
+            const int hidden_a = (int)pe->ne[0];
+            const int chunk_a = (int)ahp.chunk_size;
+            auto pe_buf = g4e_make_audio_pos_enc(hidden_a, chunk_a);
+            ggml_backend_tensor_set(pe, pe_buf.data(), 0, pe_buf.size() * sizeof(float));
+        }
+        ggml_tensor* pm = ggml_graph_get_tensor(enc_gf, "audio_pad_mask");
+        if (pm) {
+            const int context_size_a = (int)pm->ne[0];
+            const int num_blocks_a = (int)pm->ne[1];
+            const int chunk_a = (int)ahp.chunk_size;
+            const int max_past_a = (int)ahp.context_left - 1;
+            const ggml_fp16_t zero_h = ggml_fp32_to_fp16(0.0f);
+            const ggml_fp16_t neginf_h = ggml_fp32_to_fp16(-INFINITY);
+            std::vector<ggml_fp16_t> pm_buf((size_t)context_size_a * num_blocks_a);
+            for (int b = 0; b < num_blocks_a; b++) {
+                for (int k = 0; k < context_size_a; k++) {
+                    int abs_k = b * chunk_a - max_past_a + k;
+                    pm_buf[(size_t)b * context_size_a + k] =
+                        (abs_k >= 0 && abs_k < T_sub) ? zero_h : neginf_h;
+                }
+            }
+            ggml_backend_tensor_set(pm, pm_buf.data(), 0, pm_buf.size() * sizeof(ggml_fp16_t));
+        }
     }
 
     if (ggml_backend_sched_graph_compute(ctx->sched, enc_gf) != GGML_STATUS_SUCCESS) {
@@ -1926,17 +2141,25 @@ extern "C" float* gemma4_e2b_run_encoder(struct gemma4_e2b_context* ctx, const f
     ggml_set_name(h, "audio_subsample_output");
     ggml_set_output(h);
 
-    ggml_tensor* audio_attn_mask = ggml_new_tensor_2d(ectx, GGML_TYPE_F16, T_sub, T_sub);
-    ggml_set_name(audio_attn_mask, "audio_attn_mask");
-    ggml_set_input(audio_attn_mask);
-
     int hidden = (int)ahp.hidden_size;
+    const int chunk_size_a = (int)ahp.chunk_size;
+    const int max_past_a = (int)ahp.context_left - 1;
+    const int n_pos_a = chunk_size_a + 1;
+    const int context_size_a = chunk_size_a + max_past_a;
+    const int num_blocks_a = (T_sub + chunk_size_a - 1) / chunk_size_a;
+    ggml_tensor* audio_pos_enc = ggml_new_tensor_2d(ectx, GGML_TYPE_F32, hidden, n_pos_a);
+    ggml_set_name(audio_pos_enc, "audio_pos_enc");
+    ggml_set_input(audio_pos_enc);
+    ggml_tensor* audio_pad_mask = ggml_new_tensor_2d(ectx, GGML_TYPE_F16, context_size_a, num_blocks_a);
+    ggml_set_name(audio_pad_mask, "audio_pad_mask");
+    ggml_set_input(audio_pad_mask);
+
     for (uint32_t il = 0; il < ahp.num_layers; il++) {
         const auto& L = m.audio_layers[il];
         if (L.ffn1_up_w)
             h = build_macaron_ffn(ectx, h, L.ffn1_pre_ln, L.ffn1_up_w, L.ffn1_down_w, L.ffn1_post_ln,
                                   ahp.residual_weight, eps);
-        h = build_conformer_self_attn(ectx, h, L, ahp, audio_attn_mask);
+        h = build_conformer_self_attn(ectx, h, L, ahp, audio_pos_enc, audio_pad_mask);
         if (L.conv_gate_w)
             h = build_light_conv1d(ectx, h, L, T_sub, hidden, eps);
         if (L.ffn2_up_w)
@@ -1981,11 +2204,32 @@ extern "C" float* gemma4_e2b_run_encoder(struct gemma4_e2b_context* ctx, const f
     }
     ggml_tensor* mel_t = ggml_graph_get_tensor(enc_gf, "mel");
     ggml_backend_tensor_set(mel_t, mel, 0, (size_t)T_mel * n_mels * sizeof(float));
-    ggml_tensor* mask_t = ggml_graph_get_tensor(enc_gf, "audio_attn_mask");
-    if (mask_t) {
-        const int T_sub_mask = (int)mask_t->ne[0];
-        auto mask_buf = g4e_build_audio_attn_mask(T_sub_mask, (int)ahp.chunk_size, (int)ahp.context_left, 0);
-        ggml_backend_tensor_set(mask_t, mask_buf.data(), 0, mask_buf.size() * sizeof(ggml_fp16_t));
+    {
+        ggml_tensor* pe = ggml_graph_get_tensor(enc_gf, "audio_pos_enc");
+        if (pe) {
+            const int hidden_a = (int)pe->ne[0];
+            const int chunk_a = (int)ahp.chunk_size;
+            auto pe_buf = g4e_make_audio_pos_enc(hidden_a, chunk_a);
+            ggml_backend_tensor_set(pe, pe_buf.data(), 0, pe_buf.size() * sizeof(float));
+        }
+        ggml_tensor* pm = ggml_graph_get_tensor(enc_gf, "audio_pad_mask");
+        if (pm) {
+            const int context_size_a = (int)pm->ne[0];
+            const int num_blocks_a = (int)pm->ne[1];
+            const int chunk_a = (int)ahp.chunk_size;
+            const int max_past_a = (int)ahp.context_left - 1;
+            const ggml_fp16_t zero_h = ggml_fp32_to_fp16(0.0f);
+            const ggml_fp16_t neginf_h = ggml_fp32_to_fp16(-INFINITY);
+            std::vector<ggml_fp16_t> pm_buf((size_t)context_size_a * num_blocks_a);
+            for (int b = 0; b < num_blocks_a; b++) {
+                for (int k = 0; k < context_size_a; k++) {
+                    int abs_k = b * chunk_a - max_past_a + k;
+                    pm_buf[(size_t)b * context_size_a + k] =
+                        (abs_k >= 0 && abs_k < T_sub) ? zero_h : neginf_h;
+                }
+            }
+            ggml_backend_tensor_set(pm, pm_buf.data(), 0, pm_buf.size() * sizeof(ggml_fp16_t));
+        }
     }
     if (ggml_backend_sched_graph_compute(ctx->sched, enc_gf) != GGML_STATUS_SUCCESS) {
         ggml_free(ectx);
