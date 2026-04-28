@@ -43,7 +43,13 @@ import numpy as np
 DEFAULT_STAGES = [
     "raw_audio",
     "mel_spectrogram",
-    "encoder_output",
+    "audio_subsample_output",       # post-conv2d subsample (pre-conformer)
+    "audio_layer_0",                # post-conformer-layer-0 (pre-output_proj)
+    "audio_layer_1",
+    "audio_layer_5",
+    "audio_layer_11",               # last conformer layer output
+    "audio_tower_output",           # post-output_proj (pre-adapter)
+    "encoder_output",               # post-adapter (final, fed to LLM)
     "llm_hidden_layer_0",
     "llm_hidden_layer_1",
     "llm_hidden_layer_8",
@@ -145,26 +151,55 @@ def _dump_audio_only(model_dir: Path, audio: np.ndarray, stages: Set[str]) -> Di
             m = m.T  # only flip if FE returned (n_mels, T_mel)
         out["mel_spectrogram"] = np.ascontiguousarray(m)
 
-    # --- Encoder forward ---
+    # --- Encoder forward with per-stage hooks ---
+    capture: Dict[str, "torch.Tensor"] = {}
+    handles = []
+
+    def make_hook(name):
+        def hook(_m, _i, output):
+            t = output[0] if isinstance(output, tuple) else output
+            if hasattr(t, "last_hidden_state"):
+                t = t.last_hidden_state
+            capture[name] = t.detach().clone()
+        return hook
+
+    # Hook the subsample (full block) and selected conformer layers.
+    if hasattr(audio_tower, "subsample_conv_projection"):
+        handles.append(audio_tower.subsample_conv_projection.register_forward_hook(
+            make_hook("audio_subsample_output")))
+    if hasattr(audio_tower, "layers"):
+        n_audio_layers = len(audio_tower.layers)
+        for idx, label in [(0, "audio_layer_0"), (1, "audio_layer_1"),
+                           (5, "audio_layer_5"), (n_audio_layers - 1, "audio_layer_11")]:
+            if 0 <= idx < n_audio_layers:
+                handles.append(audio_tower.layers[idx].register_forward_hook(
+                    make_hook(label)))
+
     with torch.no_grad():
-        # Gemma4AudioModel.forward expects (input_features, attention_mask)
-        # and returns Gemma4AudioModelOutput(last_hidden_state, attention_mask).
         audio_features = input_features.to(dtype)
         if input_features_mask.dtype != torch.bool:
             input_features_mask = input_features_mask.to(torch.bool)
         try:
             audio_out = audio_tower(input_features=audio_features, attention_mask=input_features_mask)
         except TypeError:
-            # Older transformers: positional
             audio_out = audio_tower(audio_features, input_features_mask)
         last_hidden = audio_out.last_hidden_state if hasattr(audio_out, "last_hidden_state") else audio_out[0]
-        # Adapter: pre_projection_norm + projection
+        capture["audio_tower_output"] = last_hidden.detach().clone()
         adapted = embed_audio(inputs_embeds=last_hidden)
+        capture["encoder_output"] = adapted.detach().clone()
 
-    if "encoder_output" in stages:
-        # adapted shape: (batch, seq_len, llm_hidden_size)
-        e = adapted[0].detach().cpu().float().numpy()
-        out["encoder_output"] = np.ascontiguousarray(e)
+    for h in handles:
+        h.remove()
+
+    for name, tens in capture.items():
+        if name in stages:
+            t = tens
+            if t.dim() >= 3 and t.shape[0] == 1:
+                t = t[0]
+            elif t.dim() == 4 and t.shape[0] == 1:
+                t = t[0]  # subsample output: (B, C, H, W) → (C, H, W) — leave as 3D
+            arr = t.cpu().float().numpy()
+            out[name] = np.ascontiguousarray(arr)
 
     return out
 

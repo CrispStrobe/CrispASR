@@ -1545,16 +1545,19 @@ extern "C" char* gemma4_e2b_transcribe(struct gemma4_e2b_context* ctx, const flo
 
     // Flatten: [OW2, OH2, 32, 1] → [32*OH2, OW2] = [1024, T_sub]
     int T_sub = (int)h->ne[0];
-    int feat_dim = (int)h->ne[1] * (int)h->ne[2]; // OH2 * 32 = 32*32 = 1024
-    // Need to reshape: permute to channel-first then flatten
-    // h is [OW2, OH2, 32, 1]. We want [OH2*32, OW2] = [feat, T].
-    // Reshape to [OW2, OH2*32, 1, 1] then transpose to [OH2*32, OW2]
-    h = ggml_reshape_2d(ectx, h, T_sub, feat_dim);
-    h = ggml_cont(ectx, ggml_transpose(ectx, h)); // [feat_dim, T_sub]
+    // h ne=(T_sub, M_sub, C_out, 1). HF's flatten produces per-frame
+    // features in (M, C) ordering with C as the FAST inner axis (after
+    // `permute(0, 2, 3, 1).reshape(B, T, -1)`). Our ggml axis order is
+    // (T, M, C) so we need to permute (M, C) → (C, M) before flatten so
+    // the C dim is the fast axis of the flattened feature vector.
+    h = ggml_cont(ectx, ggml_permute(ectx, h, 0, 2, 1, 3)); // (T_sub, C, M, 1)
+    int feat_dim = (int)h->ne[1] * (int)h->ne[2]; // = C * M = 32*32 = 1024
+    h = ggml_reshape_2d(ectx, h, T_sub, feat_dim);   // (T_sub, feat_dim)
+    h = ggml_cont(ectx, ggml_transpose(ectx, h));     // (feat_dim, T_sub)
 
     // Input projection: Linear(1024→1024)
     if (m.sub_input_proj_w) {
-        h = ggml_mul_mat(ectx, m.sub_input_proj_w, h); // [1024, T_sub]
+        h = ggml_mul_mat(ectx, m.sub_input_proj_w, h); // (1024, T_sub)
     }
 
     int hidden = (int)ahp.hidden_size;
@@ -1914,11 +1917,18 @@ extern "C" float* gemma4_e2b_run_encoder(struct gemma4_e2b_context* ctx, const f
     }
 
     int T_sub = (int)h->ne[0];
+    // Flatten with C-fast, M-slow ordering to match HF's permute+reshape.
+    h = ggml_cont(ectx, ggml_permute(ectx, h, 0, 2, 1, 3)); // (T_sub, C, M, 1)
     int feat_dim = (int)h->ne[1] * (int)h->ne[2];
     h = ggml_reshape_2d(ectx, h, T_sub, feat_dim);
     h = ggml_cont(ectx, ggml_transpose(ectx, h));
     if (m.sub_input_proj_w)
         h = ggml_mul_mat(ectx, m.sub_input_proj_w, h);
+
+    // Stage tap: post-subsample features (post input_proj). Used by the
+    // diff harness to localise audio-encoder bugs layer by layer.
+    ggml_set_name(h, "audio_subsample_output");
+    ggml_set_output(h);
 
     ggml_tensor* audio_attn_mask = ggml_new_tensor_2d(ectx, GGML_TYPE_F16, T_sub, T_sub);
     ggml_set_name(audio_attn_mask, "audio_attn_mask");
@@ -1940,12 +1950,23 @@ extern "C" float* gemma4_e2b_run_encoder(struct gemma4_e2b_context* ctx, const f
             h = ggml_rms_norm(ectx, h, eps);
             h = ggml_mul(ectx, h, L.out_ln);
         }
+        // Per-layer stage tap. Names align with the HF reference dump's
+        // forward-hook on audio_tower.layers[il].
+        char layer_name[64];
+        snprintf(layer_name, sizeof(layer_name), "audio_layer_%u", il);
+        ggml_set_name(h, layer_name);
+        ggml_set_output(h);
     }
     if (m.audio_output_proj_w) {
         h = ggml_mul_mat(ectx, m.audio_output_proj_w, h);
         if (m.audio_output_proj_b)
             h = ggml_add(ectx, h, m.audio_output_proj_b);
     }
+    // Stage tap: post-output_proj, pre-adapter. Matches HF
+    // audio_tower.last_hidden_state.
+    ggml_set_name(h, "audio_tower_output");
+    ggml_set_output(h);
+
     // Audio→LLM adapter: RMSNorm(no-weight) then Linear(no-bias)
     // matching HF Gemma4MultimodalEmbedder.forward L1973-1974.
     if (m.audio_embed_proj_w) {
@@ -1985,6 +2006,43 @@ extern "C" float* gemma4_e2b_run_encoder(struct gemma4_e2b_context* ctx, const f
         return nullptr;
     }
     ggml_backend_tensor_get(enc_out_t, out, 0, n_floats * sizeof(float));
+
+    // Optional intermediate-stage dump for the diff harness. When
+    // CRISPASR_DUMP_DIR is set, write each named stage (audio_subsample
+    // _output, audio_layer_<il>, audio_tower_output) to <dir>/<name>.bin
+    // as raw F32. The diff harness then compares per-stage cos against
+    // the python reference.
+    if (const char* dump_dir = std::getenv("CRISPASR_DUMP_DIR")) {
+        auto dump = [&](const char* name) {
+            ggml_tensor* t = ggml_graph_get_tensor(enc_gf, name);
+            if (!t) return;
+            const size_t nb = ggml_nbytes(t);
+            std::vector<uint8_t> buf(nb);
+            ggml_backend_tensor_get(t, buf.data(), 0, nb);
+            char path[512];
+            snprintf(path, sizeof(path), "%s/%s.bin", dump_dir, name);
+            FILE* f = fopen(path, "wb");
+            if (f) {
+                // Header: magic 'G4DR', n_dims, ne[0..n_dims-1] as int32.
+                int32_t hdr[6] = {0x52443447, 0, (int32_t)t->ne[0], (int32_t)t->ne[1],
+                                   (int32_t)t->ne[2], (int32_t)t->ne[3]};
+                int n_dims = 1;
+                for (int d = 1; d < 4; d++) if (t->ne[d] > 1) n_dims = d + 1;
+                hdr[1] = n_dims;
+                fwrite(hdr, sizeof(int32_t), 6, f);
+                fwrite(buf.data(), 1, nb, f);
+                fclose(f);
+            }
+        };
+        dump("audio_subsample_output");
+        for (int il = 0; il < (int)ahp.num_layers; il++) {
+            char nm[32];
+            snprintf(nm, sizeof(nm), "audio_layer_%d", il);
+            dump(nm);
+        }
+        dump("audio_tower_output");
+    }
+
     ggml_free(ectx);
 
     *out_T_enc = N_audio;
