@@ -380,10 +380,11 @@ static void g4e_gen_mel_filterbank(int n_mels, int n_fft, int sr, std::vector<fl
     for (int i = 0; i < n_freqs; i++)
         fft_freqs[i] = (double)sr * i / n_fft;
 
-    // Triangular filters with slaney normalization (2 / (f_hi - f_lo))
+    // HTK triangular filters. Gemma4AudioFeatureExtractor uses
+    // norm=None (no Slaney area-normalization). We had Slaney enabled
+    // before — that's wrong for Gemma4.
     for (int m = 0; m < n_mels; m++) {
         double lo = mel_pts[m], ctr = mel_pts[m + 1], hi = mel_pts[m + 2];
-        double enorm = (hi > lo) ? 2.0 / (hi - lo) : 0.0;
         for (int f = 0; f < n_freqs; f++) {
             double val = 0.0;
             if (fft_freqs[f] >= lo && fft_freqs[f] <= ctr && ctr > lo)
@@ -391,9 +392,76 @@ static void g4e_gen_mel_filterbank(int n_mels, int n_fft, int sr, std::vector<fl
             else if (fft_freqs[f] > ctr && fft_freqs[f] <= hi && hi > ctr)
                 val = (hi - fft_freqs[f]) / (hi - ctr);
             // fb layout: (n_freqs, n_mels) for FbLayout::FreqsMels
-            fb[(size_t)f * n_mels + m] = (float)(val * enorm);
+            fb[(size_t)f * n_mels + m] = (float)val;
         }
     }
+}
+
+// HF-faithful Gemma4 mel computation. Bypasses core_mel because the
+// HF FE uses a unique combination of:
+//   - semicausal padding (frame_length//2 zeros at start, no end pad)
+//   - unfold with size=frame_length+1 (then drop last sample → 320)
+//   - magnitude (|stft|) projection through HTK no-norm filterbank
+//   - log(mel + mel_floor) (additive epsilon, natural log)
+//
+// Output layout: (n_mels, T_mel) row-major — i.e. data[m*T + t] —
+// matches what the encoder graph expects (ggml ne=(T_mel, n_mels)
+// memory layout). The crispasr-diff hook applies a transpose to
+// convert to HF's (T_mel, n_mels) reference layout.
+static std::vector<float> g4e_compute_mel_hf_faithful(
+    const float* pcm, int n_samples, int n_fft, int win_length, int hop_length, int n_mels,
+    const float* window /* size win_length */, const float* mel_filters /* (n_freqs, n_mels) */,
+    float mel_floor, int& out_T_mel) {
+    const int n_freqs = n_fft / 2 + 1;
+    const int pad_left = win_length / 2;
+    const int total = n_samples + pad_left;
+    const int frame_size = win_length + 1; // unfold size; drop last sample later
+    if (total < frame_size) {
+        out_T_mel = 0;
+        return {};
+    }
+    const int T = (total - frame_size) / hop_length + 1;
+
+    std::vector<float> mel_out((size_t)n_mels * T, 0.0f);
+    std::vector<float> frame(n_fft, 0.0f);
+    std::vector<float> fft_buf((size_t)n_fft * 2, 0.0f);
+    std::vector<float> magnitude((size_t)n_freqs);
+    std::vector<float> mel_row((size_t)n_mels);
+
+    for (int t = 0; t < T; t++) {
+        // Frame range in padded signal: [t*hop, t*hop + frame_size).
+        // Read pad_left zeros from the implicit padding, rest from pcm.
+        std::fill(frame.begin(), frame.end(), 0.0f);
+        for (int s = 0; s < win_length; s++) {
+            const int abs_idx = t * hop_length + s;       // in padded coord
+            const int pcm_idx = abs_idx - pad_left;        // in pcm coord
+            const float v = (pcm_idx >= 0 && pcm_idx < n_samples) ? pcm[pcm_idx] : 0.0f;
+            frame[s] = v * window[s];
+        }
+        // Right-pad to n_fft is implicit (frame buffer is zero-initialised).
+        g4e_fft_wrapper(frame.data(), n_fft, fft_buf.data());
+
+        for (int k = 0; k < n_freqs; k++) {
+            const float re = fft_buf[2 * k];
+            const float im = fft_buf[2 * k + 1];
+            magnitude[k] = std::sqrt(re * re + im * im);
+        }
+
+        // Mel projection: mel[m] = sum_k magnitude[k] * fb[k * n_mels + m]
+        for (int m = 0; m < n_mels; m++)
+            mel_row[m] = 0.0f;
+        for (int k = 0; k < n_freqs; k++) {
+            const float* fb_row = mel_filters + (size_t)k * n_mels;
+            const float mag = magnitude[k];
+            for (int m = 0; m < n_mels; m++)
+                mel_row[m] += mag * fb_row[m];
+        }
+        // log(mel + mel_floor) — store in (n_mels, T_mel) row-major.
+        for (int m = 0; m < n_mels; m++)
+            mel_out[(size_t)m * T + t] = std::log(mel_row[m] + mel_floor);
+    }
+    out_T_mel = T;
+    return mel_out;
 }
 
 static void g4e_gen_hann_window(int n_fft, std::vector<float>& win) {
@@ -1401,30 +1469,16 @@ extern "C" char* gemma4_e2b_transcribe(struct gemma4_e2b_context* ctx, const flo
     const int win_length = 320;
     const int n_freqs = n_fft / 2 + 1;
 
-    // Use runtime-generated mel resources (the GGUF-stored ones from older
-    // converters were sized for n_fft=400 which is wrong — Gemma4 uses
-    // fft_length=512 with frame_length=320). The runtime-generated ones
-    // already match the new params (regen happens in init).
-    const float* hann_ptr = ctx->mel_window.data();
-    const float* filt_ptr = ctx->mel_filterbank.data();
-
-    core_mel::Params mp;
-    mp.n_fft = n_fft;
-    mp.hop_length = hop;
-    mp.win_length = win_length;        // 320 (Hann window length); core_mel pads to n_fft internally
-    mp.n_mels = n_mels;
-    mp.log_base = core_mel::LogBase::Log10;
-    mp.log_guard = core_mel::LogGuard::MaxClip;
-    mp.norm = core_mel::Normalization::None;
-    mp.layout = core_mel::Layout::MelsTime;
-    mp.fb_layout = core_mel::FbLayout::FreqsMels;
-    mp.matmul = core_mel::MatmulPrecision::Double;
-    mp.log_eps = 1e-3f; // HF Gemma4AudioFeatureExtractor.mel_floor = 0.001
-    mp.center_pad = true;
-    mp.drop_last_frame = true;
+    // HF-faithful mel: bypasses core_mel because Gemma4's FE uses
+    // semicausal padding + unfold(size=frame_length+1) which doesn't fit
+    // core_mel's API. See g4e_compute_mel_hf_faithful for details.
+    const float* hann_ptr = ctx->mel_window.data();    // length win_length
+    const float* filt_ptr = ctx->mel_filterbank.data(); // (n_freqs, n_mels) FreqsMels layout
 
     int T_mel = 0;
-    auto mel = core_mel::compute(pcm, n_samples, hann_ptr, win_length, filt_ptr, n_freqs, g4e_fft_wrapper, mp, T_mel);
+    const float mel_floor = 0.001f; // HF default
+    auto mel = g4e_compute_mel_hf_faithful(pcm, n_samples, n_fft, win_length, hop, n_mels,
+                                           hann_ptr, filt_ptr, mel_floor, T_mel);
     if (mel.empty()) {
         fprintf(stderr, "gemma4_e2b: mel computation failed\n");
         return nullptr;
@@ -1432,6 +1486,7 @@ extern "C" char* gemma4_e2b_transcribe(struct gemma4_e2b_context* ctx, const flo
     // Cap to 30s
     if (T_mel > 3000)
         T_mel = 3000;
+    (void)n_freqs;
 
     if (verbose)
         fprintf(stderr, "gemma4_e2b: mel %dx%d (%.1f ms)\n", n_mels, T_mel, (ggml_time_us() - t0) / 1000.0);
@@ -1781,43 +1836,30 @@ extern "C" float* gemma4_e2b_compute_mel(struct gemma4_e2b_context* ctx, const f
     if (!ctx || !pcm || n_samples <= 0 || !out_n_mels || !out_T_mel)
         return nullptr;
 
-    // Match Gemma4AudioFeatureExtractor: fft_length=512, frame_length=320,
-    // hop_length=160, feature_size=128, sampling_rate=16000.
+    // Match Gemma4AudioFeatureExtractor exactly via g4e_compute_mel_hf_faithful.
     const int n_fft = 512, hop = 160, n_mels = 128, win_length = 320;
-    const int n_freqs = n_fft / 2 + 1;
-
-    // Use runtime-generated resources (init regenerates them with the
-    // correct sizes; older GGUF-stored tables would be wrong-sized).
-    const float* hann_ptr = ctx->mel_window.data();
-    const float* filt_ptr = ctx->mel_filterbank.data();
-
-    core_mel::Params mp;
-    mp.n_fft = n_fft;
-    mp.hop_length = hop;
-    mp.win_length = win_length;
-    mp.n_mels = n_mels;
-    mp.log_base = core_mel::LogBase::Log10;
-    mp.log_guard = core_mel::LogGuard::MaxClip;
-    mp.norm = core_mel::Normalization::None;
-    mp.layout = core_mel::Layout::MelsTime;
-    mp.fb_layout = core_mel::FbLayout::FreqsMels;
-    mp.matmul = core_mel::MatmulPrecision::Double;
-    mp.log_eps = 1e-3f; // HF Gemma4AudioFeatureExtractor.mel_floor = 0.001
-    mp.center_pad = true;
-    mp.drop_last_frame = true;
+    const float* hann_ptr = ctx->mel_window.data();    // length win_length
+    const float* filt_ptr = ctx->mel_filterbank.data(); // (n_freqs, n_mels) FreqsMels
 
     int T_mel = 0;
-    auto mel = core_mel::compute(pcm, n_samples, hann_ptr, win_length, filt_ptr, n_freqs, g4e_fft_wrapper, mp, T_mel);
+    auto mel = g4e_compute_mel_hf_faithful(pcm, n_samples, n_fft, win_length, hop, n_mels,
+                                           hann_ptr, filt_ptr, /*mel_floor=*/0.001f, T_mel);
     if (mel.empty())
         return nullptr;
     if (T_mel > 3000)
         T_mel = 3000;
 
+    // core_mel returns MelsTime layout: (n_mels, T_mel) row-major. The HF
+    // reference dump emits (T_mel, n_mels) row-major (HF FE's natural
+    // output). Transpose at the hook so the diff harness's per-frame
+    // cos comparison aligns one row per frame.
     const size_t n = (size_t)n_mels * (size_t)T_mel;
     float* out = (float*)malloc(n * sizeof(float));
     if (!out)
         return nullptr;
-    std::memcpy(out, mel.data(), std::min((size_t)mel.size(), n) * sizeof(float));
+    for (int t = 0; t < T_mel; t++)
+        for (int mi = 0; mi < n_mels; mi++)
+            out[(size_t)t * n_mels + mi] = mel[(size_t)mi * T_mel + t];
     *out_n_mels = n_mels;
     *out_T_mel = T_mel;
     return out;

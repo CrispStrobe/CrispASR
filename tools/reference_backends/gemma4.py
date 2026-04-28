@@ -1,23 +1,29 @@
 """Google Gemma-4-E2B reference dump backend.
 
 Loads `google/gemma-4-E2B-it` via HuggingFace Transformers and captures
-mel features, encoder output, and per-layer LLM hidden states for
-crispasr-diff comparison against the C++ runtime.
+mel features and encoder output for crispasr-diff comparison against the
+C++ runtime.
+
+Memory note: the full Gemma4ForConditionalGeneration model is ~9.6 GB
+(F32) / ~5 GB (bf16). On 8 GB RAM machines, loading it triggers heavy
+swap thrashing. We default to AUDIO-ONLY mode that loads just the
+audio_tower submodule (~1 GB in bf16) and the feature extractor — that
+fits comfortably and produces the activations the audio-side diff
+actually needs.
+
+Set CRISPASR_REF_FULL=1 to load the full model and capture LLM hidden
+states as well (only useful on machines with ≥16 GB RAM or after the
+diff harness verifies the encoder is correct).
 
 Stages:
 
   raw_audio                 (N,)            input PCM
-  mel_spectrogram           (n_mels, T_mel) audio_features from the processor
-  encoder_output            (T_enc, d_model) USM Conformer encoder output
-  llm_input_embeds          (T_total, d)    embeddings going into the LLM
-                                            (audio + text prompt, after Gemma's
-                                            sqrt(d_model) embedding scaling)
-  llm_hidden_layer_{0,1,8,mid,last}
-                            (T_total, d)    selected per-layer outputs
-                                            (PLE + attention + FFN applied)
-  llm_logits                (T_last, V)     final lm_head logits
-  llm_argmax                (1,)            greedy first-token id
-  generated_text            (string)        decoded transcript
+  mel_spectrogram           (n_mels, T_mel) Gemma4AudioFeatureExtractor output
+  encoder_output            (T_enc, d_llm)  audio_tower → embed_audio output
+                                            (i.e. post audio_embed_proj.norm + linear)
+
+Audio-only mode skips the LLM hidden states. Use the full mode flag
+when you need them.
 
 Usage:
 
@@ -38,7 +44,6 @@ DEFAULT_STAGES = [
     "raw_audio",
     "mel_spectrogram",
     "encoder_output",
-    "llm_input_embeds",
     "llm_hidden_layer_0",
     "llm_hidden_layer_1",
     "llm_hidden_layer_8",
@@ -50,32 +55,134 @@ DEFAULT_STAGES = [
 ]
 
 
-def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
-         max_new_tokens: int) -> Dict[str, np.ndarray]:
-    """Run Gemma-4-E2B reference forward and return stage captures."""
+def _dump_audio_only(model_dir: Path, audio: np.ndarray, stages: Set[str]) -> Dict[str, np.ndarray]:
+    """Audio-tower-only dump — fits in <2 GB RAM."""
     import os, torch
-    try:
-        from transformers import AutoProcessor, AutoModelForImageTextToText
-    except ImportError as e:
-        raise SystemExit(
-            "transformers required. Install: pip install -U transformers\n"
-            f"(import error: {e})")
+    from transformers import AutoProcessor, Gemma4AudioModel
+    from transformers.models.gemma4.modeling_gemma4 import Gemma4MultimodalEmbedder
+    from transformers.models.gemma4.configuration_gemma4 import Gemma4AudioConfig, Gemma4TextConfig
 
     pretrained = str(model_dir)
-    print(f"  loading Gemma-4-E2B from {pretrained}")
+    print(f"  loading audio_tower only from {pretrained}")
     processor = AutoProcessor.from_pretrained(pretrained, trust_remote_code=True)
-    # bfloat16 keeps the 9.6 GB model around 5 GB in RAM — fits on the M1
-    # without swap thrashing. The diff comparison is cosine, not absolute,
-    # so the 8-bit mantissa loss vs F32 is ~0.001 cos at most.
+
+    # Build the audio config (and the text config we need for the embed_audio
+    # adapter's text_hidden_size). These are small — just metadata.
+    from transformers import AutoConfig
+    full_cfg = AutoConfig.from_pretrained(pretrained, trust_remote_code=True)
+    audio_cfg = full_cfg.audio_config
+    text_cfg = full_cfg.text_config
+
+    # Allocate the audio_tower + the audio→LLM adapter only.
     dtype = torch.bfloat16 if os.environ.get("CRISPASR_REF_DTYPE", "bf16") in ("bf16", "bfloat16") else torch.float32
+    audio_tower = Gemma4AudioModel(audio_cfg)
+    embed_audio = Gemma4MultimodalEmbedder(audio_cfg, text_cfg)
+
+    # Load only the audio_tower / embed_audio shards. safetensors are
+    # already split per-tensor name, so we filter on prefix.
+    from safetensors import safe_open
+    import json
+    snap_dir = None
+    for p in Path(pretrained).rglob("config.json"):
+        snap_dir = p.parent
+        break
+    if snap_dir is None:
+        # processor.save_pretrained may have downloaded to HF cache; resolve via HF
+        from huggingface_hub import snapshot_download
+        snap = snapshot_download(pretrained, allow_patterns=["*.safetensors", "config.json"])
+        snap_dir = Path(snap)
+
+    safetensor_files = sorted(snap_dir.glob("*.safetensors"))
+    print(f"  loading audio weights from {len(safetensor_files)} safetensor file(s) at {snap_dir}")
+
+    audio_state, embed_audio_state = {}, {}
+    for f in safetensor_files:
+        with safe_open(str(f), framework="pt") as h:
+            for k in h.keys():
+                if k.startswith("model.audio_tower."):
+                    short = k.replace("model.audio_tower.", "")
+                    audio_state[short] = h.get_tensor(k).to(dtype)
+                elif k.startswith("model.embed_audio."):
+                    short = k.replace("model.embed_audio.", "")
+                    embed_audio_state[short] = h.get_tensor(k).to(dtype)
+
+    print(f"  audio_tower tensors: {len(audio_state)}, embed_audio tensors: {len(embed_audio_state)}")
+    # Some tensor keys in HF state_dict have a `.linear.weight` indirection
+    # for Gemma4ClippableLinear; the modeling code maps to plain `.weight`
+    # via _post_load. Just load with strict=False and warn on missing.
+    missing, unexpected = audio_tower.load_state_dict(audio_state, strict=False)
+    if missing:
+        print(f"  audio_tower missing keys: {len(missing)} (first 3: {missing[:3]})")
+    if unexpected:
+        print(f"  audio_tower unexpected keys: {len(unexpected)} (first 3: {unexpected[:3]})")
+    missing, unexpected = embed_audio.load_state_dict(embed_audio_state, strict=False)
+    if missing:
+        print(f"  embed_audio missing: {len(missing)}")
+    audio_tower = audio_tower.to(dtype).eval()
+    embed_audio = embed_audio.to(dtype).eval()
+
+    out: Dict[str, np.ndarray] = {}
+    if "raw_audio" in stages:
+        out["raw_audio"] = audio.astype(np.float32)
+
+    # --- Mel features via the processor's feature extractor ---
+    fe = processor.feature_extractor
+    # Pass as a list of arrays: HF FE's `is_batched` path skips the extra
+    # wrapping that confuses the spectrogram squeeze on a single 1-D input.
+    feat_inputs = fe([audio.astype(np.float32)], sampling_rate=fe.sampling_rate, return_tensors="pt")
+    input_features = feat_inputs["input_features"]
+    input_features_mask = feat_inputs.get("input_features_mask",
+                                          feat_inputs.get("attention_mask"))
+    if input_features_mask is None:
+        input_features_mask = torch.ones(input_features.shape[:2], dtype=torch.bool)
+
+    if "mel_spectrogram" in stages:
+        # HF FE returns (seq_len, n_mels) per item. We store it AS-IS
+        # (frame-major, mel-fast) so the diff harness's per-row cos
+        # comparison aligns one row per frame (row_w = n_mels = 128).
+        m = input_features[0].detach().cpu().float().numpy()
+        if m.ndim == 2 and m.shape[1] != 128 and m.shape[0] == 128:
+            m = m.T  # only flip if FE returned (n_mels, T_mel)
+        out["mel_spectrogram"] = np.ascontiguousarray(m)
+
+    # --- Encoder forward ---
+    with torch.no_grad():
+        # Gemma4AudioModel.forward expects (input_features, attention_mask)
+        # and returns Gemma4AudioModelOutput(last_hidden_state, attention_mask).
+        audio_features = input_features.to(dtype)
+        if input_features_mask.dtype != torch.bool:
+            input_features_mask = input_features_mask.to(torch.bool)
+        try:
+            audio_out = audio_tower(input_features=audio_features, attention_mask=input_features_mask)
+        except TypeError:
+            # Older transformers: positional
+            audio_out = audio_tower(audio_features, input_features_mask)
+        last_hidden = audio_out.last_hidden_state if hasattr(audio_out, "last_hidden_state") else audio_out[0]
+        # Adapter: pre_projection_norm + projection
+        adapted = embed_audio(inputs_embeds=last_hidden)
+
+    if "encoder_output" in stages:
+        # adapted shape: (batch, seq_len, llm_hidden_size)
+        e = adapted[0].detach().cpu().float().numpy()
+        out["encoder_output"] = np.ascontiguousarray(e)
+
+    return out
+
+
+def _dump_full(model_dir: Path, audio: np.ndarray, stages: Set[str], max_new_tokens: int) -> Dict[str, np.ndarray]:
+    """Full-model dump — needs ≥10 GB RAM for bf16."""
+    import os, torch
+    from transformers import AutoProcessor, AutoModelForImageTextToText
+
+    pretrained = str(model_dir)
+    dtype = torch.bfloat16 if os.environ.get("CRISPASR_REF_DTYPE", "bf16") in ("bf16", "bfloat16") else torch.float32
+    print(f"  loading full Gemma-4-E2B (dtype={dtype}) from {pretrained}")
+    processor = AutoProcessor.from_pretrained(pretrained, trust_remote_code=True)
     model = AutoModelForImageTextToText.from_pretrained(
         pretrained, torch_dtype=dtype, trust_remote_code=True,
     ).eval()
     dev = next(model.parameters()).device
-    print(f"  loaded in {dtype} on {dev}")
 
-    # Build the chat-style prompt: an `<audio>` placeholder followed by the
-    # user instruction. The exact template lives on the processor.
     chat = [{"role": "user", "content": [
         {"type": "audio", "audio": audio.astype(np.float32)},
         {"type": "text", "text": "Transcribe this audio."},
@@ -86,29 +193,24 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
     ).to(dev)
 
     out: Dict[str, np.ndarray] = {}
-
     if "raw_audio" in stages:
         out["raw_audio"] = audio.astype(np.float32)
     if "mel_spectrogram" in stages and "input_features" in inputs:
-        out["mel_spectrogram"] = inputs["input_features"][0].detach().cpu().float().numpy()
+        m = inputs["input_features"][0].detach().cpu().float().numpy()
+        if m.ndim == 2 and m.shape[0] != getattr(model.config.audio_config, "feature_size", 128):
+            m = m.T
+        out["mel_spectrogram"] = np.ascontiguousarray(m)
 
-    # ---- Encoder hook ----
     enc_out = {}
     def enc_hook(_m, _i, output):
         t = output[0] if isinstance(output, tuple) else output
         enc_out["v"] = t.detach().clone()
-    enc_handle = model.audio_tower.register_forward_hook(enc_hook) \
-        if hasattr(model, "audio_tower") else None
+    enc_handle = model.model.audio_tower.register_forward_hook(enc_hook) if hasattr(model.model, "audio_tower") else None
 
-    # ---- LLM per-layer hooks ----
     layer_outputs: Dict[int, torch.Tensor] = {}
     handles = []
-    if hasattr(model, "language_model"):
-        layers = model.language_model.model.layers
-    elif hasattr(model, "model") and hasattr(model.model, "layers"):
-        layers = model.model.layers
-    else:
-        layers = []
+    layers = getattr(getattr(getattr(model, "model", model), "language_model", None), "layers", []) \
+             or getattr(getattr(model, "model", model), "layers", [])
     for i, layer in enumerate(layers):
         def make(idx):
             def h(_m, _i, output):
@@ -117,7 +219,6 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
             return h
         handles.append(layer.register_forward_hook(make(i)))
 
-    # ---- Forward (prefill + 1 generated token to stay cheap) ----
     with torch.no_grad():
         gen = model.generate(
             **inputs, max_new_tokens=max(1, max_new_tokens),
@@ -149,7 +250,6 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
             if name in stages and idx in layer_outputs:
                 out[name] = layer_outputs[idx][0].detach().cpu().float().numpy()
 
-    # ---- Generated text ----
     if "generated_text" in stages or "llm_argmax" in stages:
         seq = gen.sequences if hasattr(gen, "sequences") else gen
         n_in = inputs["input_ids"].shape[-1]
@@ -161,3 +261,16 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
             out["generated_text"] = np.array([ord(c) for c in text], dtype=np.int32)
 
     return out
+
+
+def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
+         max_new_tokens: int) -> Dict[str, np.ndarray]:
+    """Run Gemma-4-E2B reference forward and return stage captures.
+
+    Defaults to audio-only (fits on 8 GB RAM). Set CRISPASR_REF_FULL=1
+    to load the full model and capture LLM hidden states.
+    """
+    import os
+    if os.environ.get("CRISPASR_REF_FULL", "0") == "1":
+        return _dump_full(model_dir, audio, stages, max_new_tokens)
+    return _dump_audio_only(model_dir, audio, stages)

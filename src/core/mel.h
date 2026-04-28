@@ -37,6 +37,10 @@ using FftR2C = void (*)(const float* in, int N, float* out);
 
 enum class LogBase { Ln, Log10 };
 
+// What to project through the mel filterbank: |X|^2 (power) — Whisper /
+// most encoders — or |X| (magnitude) — HF Gemma4AudioFeatureExtractor.
+enum class SpecKind { Power, Magnitude };
+
 enum class Normalization {
     // Per-mel band z-score across time: (x - mean) / sqrt(var + 1e-5).
     // Used by parakeet / canary / canary_ctc / cohere.
@@ -103,6 +107,7 @@ struct Params {
 
     LogBase log_base = LogBase::Log10;
     LogGuard log_guard = LogGuard::AddEpsilon;
+    SpecKind spec_kind = SpecKind::Power;
     Normalization norm = Normalization::GlobalClipMax;
     Layout layout = Layout::MelsTime;
     FbLayout fb_layout = FbLayout::MelsFreqs;

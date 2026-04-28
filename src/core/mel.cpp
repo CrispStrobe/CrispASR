@@ -70,6 +70,7 @@ std::vector<float> compute(const float* samples, int n_samples, const float* win
     {
         std::vector<float> fft_in((size_t)n_fft);
         std::vector<float> fft_out((size_t)n_fft * 2);
+        const bool use_magnitude = (p.spec_kind == SpecKind::Magnitude);
         for (int t = 0; t < T; t++) {
             const float* frame = in_ptr + (size_t)(t + t_start) * hop;
             for (int n = 0; n < n_fft; n++)
@@ -78,7 +79,8 @@ std::vector<float> compute(const float* samples, int n_samples, const float* win
             for (int k = 0; k < n_freqs; k++) {
                 const float re = fft_out[2 * k];
                 const float im = fft_out[2 * k + 1];
-                power[(size_t)t * n_freqs + k] = re * re + im * im;
+                const float pw = re * re + im * im;
+                power[(size_t)t * n_freqs + k] = use_magnitude ? std::sqrt(pw) : pw;
             }
         }
     }
