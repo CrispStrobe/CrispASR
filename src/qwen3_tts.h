@@ -117,6 +117,14 @@ int32_t* qwen3_tts_synthesize_codes(struct qwen3_tts_context* ctx, const char* t
 
 void qwen3_tts_codes_free(int32_t* codes);
 
+// Decode a flat code array (T_frames * 16 codes, row-major [T, 16]) to
+// 24 kHz mono float32 PCM. Requires `qwen3_tts_set_codec_path` to have
+// been called first. Caller frees with `qwen3_tts_pcm_free`.
+// *out_n_samples is set on success; returns nullptr on failure.
+float* qwen3_tts_decode_codes(struct qwen3_tts_context* ctx,
+                              const int32_t* codes, int n_codes,
+                              int* out_n_samples);
+
 // Synthesise text → 24 kHz mono float32 PCM. Caller frees with
 // `qwen3_tts_pcm_free`. *out_n_samples is set on success.
 //
