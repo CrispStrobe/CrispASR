@@ -271,10 +271,10 @@ struct gemma4_e2b_context {
 // for one-off uses where the caller doesn't want to manage the copy
 // (e.g. ffn1.up only uses h once).
 static inline ggml_tensor* g4e_clipped_mul_mat(ggml_context* ctx, ggml_tensor* w, ggml_tensor* x, const g4e_clip& c,
-                                              bool private_input = false) {
+                                               bool private_input = false) {
     if (std::isfinite(c.in_min) || std::isfinite(c.in_max)) {
         if (!private_input)
-            x = ggml_cont(ctx, x);                // private copy
+            x = ggml_cont(ctx, x); // private copy
         x = ggml_clamp(ctx, x, c.in_min, c.in_max);
     }
     ggml_tensor* y = ggml_mul_mat(ctx, w, x);

@@ -48,6 +48,7 @@ Duration Transducer (TDT) decoder. Chosen because:
 - 600M params vs 2B for Cohere → ~400 MB Q4_K, ~3× faster.
 - 25 EU languages with automatic detection.
 - CC-BY-4.0.
+
 - ~80% of encoder code reusable from cohere.cpp (both use the same
   FastConformer).
 
@@ -693,3 +694,10 @@ autoregressive LLM decode. `--gpu-backend` already exists and
 granite uses `ggml_backend_init_best()` — no code change moves the
 needle without GPU hardware. Tracked in TODO under per-model
 follow-ups for OpenMP encoder annotations as a CPU-only nibble.
+
+### 53. Qwen3-TTS — codec encoder repair (April 2026)
+Fixed a critical memory layout bug in the `qwen3_tts` codec encoder. The
+CPU-side RVQ loop was assuming channels-first indexing while the SEANet
+output was transposed to row-major `[T, 512]`. This fix restored clear
+voice cloning in the end-to-end CLI, eliminating the garbled artifacts.
+Verified at `cos_mean=0.998` against the Python reference.

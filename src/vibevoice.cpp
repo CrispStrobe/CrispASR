@@ -1611,8 +1611,8 @@ static ddim_schedule make_ddim_schedule(int num_inference_steps) {
     // sigma=0 (final_sigmas_type="zero"); see dpm_first_order_update for that path.
     s.timesteps.resize(num_inference_steps);
     for (int i = 0; i < num_inference_steps; i++) {
-        s.timesteps[i] = (int)roundf((float)(s.num_train_steps - 1) * (float)(num_inference_steps - i) /
-                                     (float)num_inference_steps);
+        s.timesteps[i] =
+            (int)roundf((float)(s.num_train_steps - 1) * (float)(num_inference_steps - i) / (float)num_inference_steps);
     }
 
     return s;
@@ -3553,9 +3553,8 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
             return nullptr;
         }
         if (verbosity >= 2 || getenv("VIBEVOICE_TTS_TRACE")) {
-            float rms = sqrtf(std::inner_product(neg_condition.begin(), neg_condition.end(), neg_condition.begin(),
-                                                 0.0f) /
-                              d_lm);
+            float rms = sqrtf(
+                std::inner_product(neg_condition.begin(), neg_condition.end(), neg_condition.begin(), 0.0f) / d_lm);
             fprintf(stderr, "  neg_condition prefill (IMAGE_PAD): rms=%.4f\n", rms);
         }
     }
@@ -3612,7 +3611,7 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
             return nullptr;
         }
         n_past = prefix_len;
-        text_cursor = (int)text_ids.size();   // skip subsequent text windows
+        text_cursor = (int)text_ids.size(); // skip subsequent text windows
     }
     vibevoice_dump_f32(dump_dir, "tts_prefill_hidden", hidden.data(), hidden.size());
     vibevoice_dump_f32(dump_dir, "tts_neg_condition_frame0", neg_condition.data(), neg_condition.size());
@@ -3632,8 +3631,8 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
         if (bf)
             ggml_backend_tensor_get(bf, &bias_factor, 0, sizeof(float));
         if (verbosity >= 2 || getenv("VIBEVOICE_TTS_TRACE"))
-            fprintf(stderr, "  speech_scaling=%g speech_bias=%g  (sf=%p bf=%p)\n",
-                    scaling_factor, bias_factor, (void*)sf, (void*)bf);
+            fprintf(stderr, "  speech_scaling=%g speech_bias=%g  (sf=%p bf=%p)\n", scaling_factor, bias_factor,
+                    (void*)sf, (void*)bf);
     }
 
     // Extract speech type embedding (type=0) for AR feedback
@@ -4059,7 +4058,7 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
     //               the noise-floor heuristic on the remainder so we still
     //               include the attack of the first phoneme.
     const int decoder_warmup_samples = 2400; // 100 ms @ 24 kHz
-    const float noise_floor          = 0.005f;
+    const float noise_floor = 0.005f;
     int trim_start = std::min(decoder_warmup_samples, total_audio);
     for (int i = decoder_warmup_samples; i < total_audio; i++) {
         if (fabsf(raw_audio[i]) > noise_floor) {
@@ -4077,8 +4076,8 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
     //              mid-tail. Find the last sample above a slightly
     //              stricter floor and keep ~50ms of silence margin after
     //              it; drop the rest.
-    const float tail_floor          = 0.01f;
-    const int   tail_margin_samples = 1200; // 50 ms @ 24 kHz
+    const float tail_floor = 0.01f;
+    const int tail_margin_samples = 1200; // 50 ms @ 24 kHz
     int trim_end = total_audio;
     for (int i = total_audio - 1; i > trim_start; i--) {
         if (fabsf(raw_audio[i]) > tail_floor) {

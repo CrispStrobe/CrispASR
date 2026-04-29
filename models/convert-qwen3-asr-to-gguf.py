@@ -406,14 +406,16 @@ def convert(input_dir: Path, out_path: Path) -> None:
             str(input_dir), dtype="float32", device_map="cpu"
         )
         fe = wrapper.processor.feature_extractor
-    mel_filters = np.asarray(fe.mel_filters, dtype=np.float32)  # (n_freqs, n_mels)
+    mel_filters = np.ascontiguousarray(np.asarray(fe.mel_filters, dtype=np.float32))  # (n_freqs, n_mels)
     print(f"  mel_filters shape: {mel_filters.shape}")
     writer.add_tensor("audio.mel_filters", mel_filters)
     # WhisperFeatureExtractor uses scipy/librosa periodic hann of length n_fft=400.
     # Equivalent to torch.hann_window(400, periodic=True) = 0.5 - 0.5*cos(2*pi*n/N).
     n_fft_w = 400
-    win = (0.5 - 0.5 * np.cos(2.0 * np.pi * np.arange(n_fft_w) / n_fft_w)).astype(
-        np.float32
+    win = np.ascontiguousarray(
+        (0.5 - 0.5 * np.cos(2.0 * np.pi * np.arange(n_fft_w) / n_fft_w)).astype(
+            np.float32
+        )
     )
     writer.add_tensor("audio.mel_window", win)
     print(f"  mel_window shape: {win.shape}")
@@ -453,6 +455,10 @@ def convert(input_dir: Path, out_path: Path) -> None:
                 else:
                     arr = arr.astype(np.float16)
                     n_f16 += 1
+
+                # FIX: Ensure contiguous memory layout for Vulkan GPU
+                if not arr.flags["C_CONTIGUOUS"]:
+                    arr = np.ascontiguousarray(arr)
 
                 writer.add_tensor(gguf_name, arr)
                 n_written += 1

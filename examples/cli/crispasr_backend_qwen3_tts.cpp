@@ -67,9 +67,7 @@ public:
 
     const char* name() const override { return "qwen3-tts"; }
 
-    uint32_t capabilities() const override {
-        return CAP_TTS | CAP_AUTO_DOWNLOAD | CAP_TEMPERATURE | CAP_FLASH_ATTN;
-    }
+    uint32_t capabilities() const override { return CAP_TTS | CAP_AUTO_DOWNLOAD | CAP_TEMPERATURE | CAP_FLASH_ATTN; }
 
     std::vector<crispasr_segment> transcribe(const float* /*samples*/, int /*n_samples*/, int64_t /*t_offset_cs*/,
                                              const whisper_params& /*params*/) override {
@@ -94,9 +92,8 @@ public:
         if (codec_path.empty())
             codec_path = discover_codec(p.model);
         if (codec_path.empty()) {
-            fprintf(stderr,
-                    "crispasr[qwen3-tts]: no codec model found. Pass --codec-model PATH or place "
-                    "qwen3-tts-tokenizer-12hz.gguf next to the talker.\n");
+            fprintf(stderr, "crispasr[qwen3-tts]: no codec model found. Pass --codec-model PATH or place "
+                            "qwen3-tts-tokenizer-12hz.gguf next to the talker.\n");
             return false;
         }
         if (qwen3_tts_set_codec_path(ctx_, codec_path.c_str()) != 0) {
@@ -119,9 +116,8 @@ public:
             const std::string& v = params.tts_voice;
             if (ends_with_ci(v, ".wav")) {
                 if (params.tts_ref_text.empty()) {
-                    fprintf(stderr,
-                            "crispasr[qwen3-tts]: --voice is a WAV but --ref-text was not set. "
-                            "Provide the reference transcription so the talker can match it.\n");
+                    fprintf(stderr, "crispasr[qwen3-tts]: --voice is a WAV but --ref-text was not set. "
+                                    "Provide the reference transcription so the talker can match it.\n");
                     return {};
                 }
                 if (qwen3_tts_set_voice_prompt_with_text(ctx_, v.c_str(), params.tts_ref_text.c_str()) != 0) {

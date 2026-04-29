@@ -689,8 +689,7 @@ CA_EXPORT int crispasr_detect_backend_from_gguf(const char* path, char* out_name
         backend = "canary-ctc";
     else if (strcmp(arch, "wav2vec2") == 0)
         backend = "wav2vec2";
-    else if (strcmp(arch, "vibevoice-asr") == 0 || strcmp(arch, "vibevoice") == 0 ||
-             strcmp(arch, "vibevoice-tts") == 0)
+    else if (strcmp(arch, "vibevoice-asr") == 0 || strcmp(arch, "vibevoice") == 0 || strcmp(arch, "vibevoice-tts") == 0)
         backend = "vibevoice";
     else if (strcmp(arch, "qwen3-tts") == 0 || strcmp(arch, "qwen3_tts") == 0)
         backend = "qwen3-tts";

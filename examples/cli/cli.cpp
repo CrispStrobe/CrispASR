@@ -644,12 +644,14 @@ static void whisper_print_usage(int /*argc*/, char** argv, const whisper_params&
     fprintf(stderr, "             -m auto                        download a default model for the chosen backend\n");
     // Text-To-Speech (TTS) parameters — vibevoice and qwen3-tts backends
     fprintf(stderr, "\nText-to-speech (TTS) options:\n");
-    fprintf(stderr, "             --tts \"TEXT\"            synthesise TEXT and write WAV to --tts-output (24 kHz mono)\n");
+    fprintf(stderr,
+            "             --tts \"TEXT\"            synthesise TEXT and write WAV to --tts-output (24 kHz mono)\n");
     fprintf(stderr, "             --tts-output FNAME      [%-7s] output WAV path (default: tts_output.wav)\n",
             params.tts_output.c_str());
     fprintf(stderr, "             --voice PATH            [%-7s] voice prompt: GGUF voice pack OR reference WAV\n",
             params.tts_voice.c_str());
-    fprintf(stderr, "             --ref-text \"TEXT\"        reference transcription (qwen3-tts; required when --voice is a WAV)\n");
+    fprintf(stderr, "             --ref-text \"TEXT\"        reference transcription (qwen3-tts; required when --voice "
+                    "is a WAV)\n");
     fprintf(stderr, "             --codec-model FNAME      qwen3-tts codec GGUF (defaults to sibling of -m)\n");
     fprintf(stderr, "             --tts-steps N            [%-7d] DPM-Solver++ steps (10-20, vibevoice only)\n",
             params.tts_steps);

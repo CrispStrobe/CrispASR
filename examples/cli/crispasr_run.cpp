@@ -662,9 +662,9 @@ int crispasr_run_backend(const whisper_params& params_in) {
         // opens, then back off 50 ms so we don't clip the consonant onset.
         if (params.tts_trim_silence) {
             const int sr_in = 24000;
-            const int win = sr_in / 50;          // 20 ms
-            const int headroom = sr_in / 20;     // 50 ms
-            const float rms_thresh = 0.0032f;    // ≈ -50 dBFS
+            const int win = sr_in / 50;       // 20 ms
+            const int headroom = sr_in / 20;  // 50 ms
+            const float rms_thresh = 0.0032f; // ≈ -50 dBFS
             size_t cut = 0;
             for (size_t i = 0; i + (size_t)win < audio.size(); i += (size_t)win) {
                 double e = 0.0;
@@ -678,8 +678,7 @@ int crispasr_run_backend(const whisper_params& params_in) {
             }
             if (cut > 0) {
                 if (!params.no_prints)
-                    fprintf(stderr, "crispasr: trimmed %.2fs of leading silence\n",
-                            (double)cut / (double)sr_in);
+                    fprintf(stderr, "crispasr: trimmed %.2fs of leading silence\n", (double)cut / (double)sr_in);
                 audio.erase(audio.begin(), audio.begin() + (std::ptrdiff_t)cut);
             }
         }

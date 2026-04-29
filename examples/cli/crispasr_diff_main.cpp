@@ -422,7 +422,8 @@ int main(int argc, char** argv) {
         fprintf(stderr,
                 "usage: %s <backend> <model.gguf> <reference.gguf> <audio.wav>\n"
                 "\n"
-                "  backend       one of: voxtral, voxtral4b, qwen3, qwen3-tts, qwen3-tts-codec, granite, parakeet, canary, cohere, gemma4\n"
+                "  backend       one of: voxtral, voxtral4b, qwen3, qwen3-tts, qwen3-tts-codec, granite, parakeet, "
+                "canary, cohere, gemma4\n"
                 "  model.gguf    crispasr-compatible model weights\n"
                 "  reference.gguf  archive produced by tools/dump_reference.py\n"
                 "  audio.wav     16 kHz mono WAV\n",
@@ -695,7 +696,8 @@ int main(int argc, char** argv) {
                             if (diff > max_pre)
                                 max_pre = diff;
                         }
-                        printf("[INFO] icl_prefill_vs_ref     max_abs=%.4e (over T=%d × d=%d)\n", max_pre, Tprefill, dd);
+                        printf("[INFO] icl_prefill_vs_ref     max_abs=%.4e (over T=%d × d=%d)\n", max_pre, Tprefill,
+                               dd);
                     }
                     auto tl_r = qwen3_tts_talker_logits_r(ctx, my_prefill, Tprefill);
                     free(my_prefill);
@@ -754,7 +756,8 @@ int main(int argc, char** argv) {
         } else {
             int rc = qwen3_tts_set_voice_prompt_with_text(ctx, audio_path.c_str(), ref_text.c_str());
             if (rc != 0) {
-                printf("[SKIP] runtime_voice_prompt    set_voice_prompt_with_text failed on '%s'\n", audio_path.c_str());
+                printf("[SKIP] runtime_voice_prompt    set_voice_prompt_with_text failed on '%s'\n",
+                       audio_path.c_str());
                 n_skip++;
             } else {
                 auto ref_codes_pair = ref.get_f32("ref_codes");
@@ -767,7 +770,8 @@ int main(int argc, char** argv) {
                     print_row("runtime_spk_emb", rep, COS_THRESHOLD);
                     record(rep);
                 } else {
-                    printf("[SKIP] runtime_spk_emb       ref_spk_embedding missing or runtime speaker emb unavailable\n");
+                    printf(
+                        "[SKIP] runtime_spk_emb       ref_spk_embedding missing or runtime speaker emb unavailable\n");
                     n_skip++;
                 }
                 int n_codes = 0;
@@ -799,7 +803,8 @@ int main(int argc, char** argv) {
                             if (diff > max_pre)
                                 max_pre = diff;
                         }
-                        printf("[INFO] runtime_icl_vs_ref     max_abs=%.4e (over T=%d × d=%d)\n", max_pre, Tprefill_rt, dd);
+                        printf("[INFO] runtime_icl_vs_ref     max_abs=%.4e (over T=%d × d=%d)\n", max_pre, Tprefill_rt,
+                               dd);
                     }
                     auto tl_r = qwen3_tts_talker_logits_r(ctx, rt_prefill, Tprefill_rt);
                     free(rt_prefill);
@@ -850,13 +855,18 @@ int main(int argc, char** argv) {
 
         qwen3_tts_free(ctx);
 
-    // ---- qwen3-tts-spk (ECAPA speaker encoder) ----
-    // Uses the same 440 Hz sine wave as the Python reference backend.
+        // ---- qwen3-tts-spk (ECAPA speaker encoder) ----
+        // Uses the same 440 Hz sine wave as the Python reference backend.
     } else if (backend_name == "qwen3-tts-spk") {
         auto cp = qwen3_tts_context_default_params();
-        cp.n_threads = 4; cp.verbosity = 0; cp.use_gpu = false;
+        cp.n_threads = 4;
+        cp.verbosity = 0;
+        cp.use_gpu = false;
         qwen3_tts_context* ctx = qwen3_tts_init_from_file(model_path.c_str(), cp);
-        if (!ctx) { fprintf(stderr, "failed to load model\n"); return 4; }
+        if (!ctx) {
+            fprintf(stderr, "failed to load model\n");
+            return 4;
+        }
 
         // Generate the same 440 Hz sine the Python backend uses
         const int sr = 24000, n = sr * 3;
@@ -868,7 +878,8 @@ int main(int argc, char** argv) {
         int T_mel = 0, n_mels = 0;
         float* mel = qwen3_tts_compute_speaker_mel(ctx, audio.data(), n, &T_mel, &n_mels);
         if (!mel) {
-            printf("[ERR ] spk_mel  mel computation failed\n"); n_fail++;
+            printf("[ERR ] spk_mel  mel computation failed\n");
+            n_fail++;
         } else {
             // Python stores (T, 128) time-first, C++ also (T, 128) — compare flat
             auto rep = ref.compare("spk_mel", mel, (size_t)T_mel * n_mels);
@@ -907,7 +918,8 @@ int main(int argc, char** argv) {
         int dim = 0;
         float* emb = qwen3_tts_compute_speaker_embedding(ctx, audio.data(), n, &dim);
         if (!emb) {
-            fprintf(stderr, "[ERR ] spk_emb  ECAPA forward failed\n"); n_fail++;
+            fprintf(stderr, "[ERR ] spk_emb  ECAPA forward failed\n");
+            n_fail++;
         } else {
             auto rep = ref.compare("spk_emb", emb, (size_t)dim);
             print_row("spk_emb(cpp_mel)", rep, COS_THRESHOLD, "  full pipeline");
@@ -916,8 +928,8 @@ int main(int argc, char** argv) {
         }
         qwen3_tts_free(ctx);
 
-    // ---- qwen3-tts-cenc (codec ENCODER: audio → codes) ----
-    // Uses the same fixed 3s slice of clone.wav as the Python reference.
+        // ---- qwen3-tts-cenc (codec ENCODER: audio → codes) ----
+        // Uses the same fixed 3s slice of clone.wav as the Python reference.
     } else if (backend_name == "qwen3-tts-cenc") {
         const char* codec_gguf = std::getenv("QWEN3_TTS_CODEC_GGUF");
         if (!codec_gguf) {
@@ -925,32 +937,34 @@ int main(int argc, char** argv) {
             return 4;
         }
         auto cp = qwen3_tts_context_default_params();
-        cp.n_threads = 4; cp.verbosity = 0; cp.use_gpu = false;
+        cp.n_threads = 4;
+        cp.verbosity = 0;
+        cp.use_gpu = false;
         qwen3_tts_context* qctx = qwen3_tts_init_from_file(model_path.c_str(), cp);
-        if (!qctx) { fprintf(stderr, "failed to load talker\n"); return 4; }
+        if (!qctx) {
+            fprintf(stderr, "failed to load talker\n");
+            return 4;
+        }
         if (qwen3_tts_set_codec_path(qctx, codec_gguf) != 0) {
-            fprintf(stderr, "failed to load codec\n"); qwen3_tts_free(qctx); return 4;
+            fprintf(stderr, "failed to load codec\n");
+            qwen3_tts_free(qctx);
+            return 4;
         }
 
         // Read input audio from the reference (cenc_input_audio is the fixed 3s slice)
         auto audio_pair = ref.get_f32("cenc_input_audio");
         if (!audio_pair.first) {
             printf("[ERR ] cenc_input_audio not in reference\n");
-            qwen3_tts_free(qctx); return 5;
+            qwen3_tts_free(qctx);
+            return 5;
         }
         const int n_samp = (int)audio_pair.second;
         std::vector<float> audio_buf(audio_pair.first, audio_pair.first + n_samp);
 
         // Compare each stage (intra-SEANet first to localize drift)
         static const char* stages[] = {
-            "cenc_se_init",
-            "cenc_se_s0",
-            "cenc_se_s1",
-            "cenc_se_s2",
-            "cenc_se_s3",
-            "cenc_seanet_out",
-            "cenc_xfmr_out",
-            "cenc_ds_out",
+            "cenc_se_init", "cenc_se_s0",      "cenc_se_s1",    "cenc_se_s2",
+            "cenc_se_s3",   "cenc_seanet_out", "cenc_xfmr_out", "cenc_ds_out",
         };
         for (const char* s : stages) {
             int n = 0;
@@ -1013,8 +1027,8 @@ int main(int argc, char** argv) {
         }
 
         qwen3_tts_free(qctx);
-    // Runs the codec decoder on T=10 all-zero codes and compares
-    // each named intermediate tensor against the Python reference dump.
+        // Runs the codec decoder on T=10 all-zero codes and compares
+        // each named intermediate tensor against the Python reference dump.
     } else if (backend_name == "qwen3-tts-codec") {
         const char* codec_gguf = std::getenv("QWEN3_TTS_CODEC_GGUF");
         if (!codec_gguf) {
@@ -1044,14 +1058,9 @@ int main(int argc, char** argv) {
 
         // Stage list matches DEFAULT_STAGES in qwen3_tts_codec.py
         static const char* codec_stages[] = {
-            "codec_rvq_out",
-            "codec_pre_conv_out",
-            "codec_xfmr_out",
-            "codec_up0_out",
-            "codec_up1_out",
-            "codec_in_conv_out",
-            "codec_blk0_out",
-            "pcm",   // full PCM — matches "codec_pcm" in Python (renamed to "pcm" internally)
+            "codec_rvq_out", "codec_pre_conv_out", "codec_xfmr_out", "codec_up0_out",
+            "codec_up1_out", "codec_in_conv_out",  "codec_blk0_out",
+            "pcm", // full PCM — matches "codec_pcm" in Python (renamed to "pcm" internally)
         };
         // The Python dump names the final output "codec_pcm", but internally it's "pcm".
         // We compare "pcm" (C++ graph name) against "codec_pcm" (Python dump name).
@@ -1065,8 +1074,7 @@ int main(int argc, char** argv) {
             const char* ref_name = ref_name_override[si] ? ref_name_override[si] : stage;
 
             int n_stage = 0;
-            float* our_data = qwen3_tts_codec_extract_stage(ctx, codes.data(), T_codec * N_Q,
-                                                             stage, &n_stage);
+            float* our_data = qwen3_tts_codec_extract_stage(ctx, codes.data(), T_codec * N_Q, stage, &n_stage);
             if (!our_data) {
                 printf("[ERR ] %-22s  extract returned null\n", ref_name);
                 n_fail++;
@@ -1155,17 +1163,15 @@ int main(int argc, char** argv) {
                 // Predict T_enc as ceil_div(T_mel, 8) for sizing buffers — the
                 // exact value comes back from the runner. Allocate generous.
                 const int T_enc_max = (T_mel + 7) / 8 + 4;
-                std::vector<std::vector<float>> bufs(n_layers + 1,
-                                                     std::vector<float>((size_t)d_model * T_enc_max));
+                std::vector<std::vector<float>> bufs(n_layers + 1, std::vector<float>((size_t)d_model * T_enc_max));
                 std::vector<float*> ptrs(n_layers + 1);
                 for (int i = 0; i < n_layers + 1; i++)
                     ptrs[i] = bufs[i].data();
                 int T_enc = 0, d_out = 0;
-                int rc = parakeet_run_encoder_dump(ctx, mel_pair.first, n_mels, T_mel, ptrs.data(),
-                                                   (int)ptrs.size(), &T_enc, &d_out);
+                int rc = parakeet_run_encoder_dump(ctx, mel_pair.first, n_mels, T_mel, ptrs.data(), (int)ptrs.size(),
+                                                   &T_enc, &d_out);
                 if (rc == 0 && T_enc > 0) {
-                    auto rep0 = ref.compare("pre_encode_output", ptrs[0],
-                                            (size_t)T_enc * d_out);
+                    auto rep0 = ref.compare("pre_encode_output", ptrs[0], (size_t)T_enc * d_out);
                     print_row("pre_encode_output", rep0, COS_THRESHOLD);
                     for (int il = 0; il < n_layers; il++) {
                         char nm[64];

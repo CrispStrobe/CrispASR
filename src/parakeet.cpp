@@ -1605,8 +1605,7 @@ extern "C" struct parakeet_result* parakeet_transcribe_ex(struct parakeet_contex
                 } else if (c == 0xE3 && p[1] == 0x83 && p[2] == 0xBB) {
                     // U+30FB ・ (katakana middle dot)
                     p += 3;
-                } else if (c == 0xEF && p[1] == 0xBC &&
-                           ((p[2] >= 0x81 && p[2] <= 0x8F) || p[2] == 0x9F)) {
+                } else if (c == 0xEF && p[1] == 0xBC && ((p[2] >= 0x81 && p[2] <= 0x8F) || p[2] == 0x9F)) {
                     // U+FF01–U+FF0F (full-width !"#$%&'()*+,-./) and U+FF1F (？)
                     p += 3;
                 } else {

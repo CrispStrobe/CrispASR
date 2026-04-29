@@ -4008,6 +4008,15 @@ was finding the specific layer in one diff run.
    For our T_enc=75 → 38 downsample, `extra=1`. Forgetting this gave
    37 frames instead of 38 and silently truncated downstream
    comparisons.
+4. **Memory Layout Bug in CPU RVQ.** The `enc_emb` tensor was correctly
+   transposed to `[T, 512]` before output, but the manually implemented
+   CPU loop for `cpu_k1_proj`, `rvq_nearest_neighbor`, and `rvq_subtract`
+   was still using channels-first indexing (`ci * T + t`). This scrambled
+   the embeddings before they even hit the quantizer.
+   Fix: Rewrite the helpers to use standard row-major `[T, C]` indexing
+   (`t * IC + ci`). This fix was the "silver bullet" that moved
+   `cenc_codes` from cos_min=0.77 (garbage) to 0.998+ and restored
+   perfectly clear voice cloning in the end-to-end CLI.
 
 The complete recipe — for any future audio codec port — is:
 **dump after every stride-changing layer, not just at module
