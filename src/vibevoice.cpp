@@ -3942,30 +3942,78 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
     std::vector<float> raw_audio((size_t)total_audio);
     ggml_backend_tensor_get(audio_out, raw_audio.data(), 0, (size_t)total_audio * sizeof(float));
 
-    // Trim causal decoder delay from the start.
-    // The σ-VAE decoder's causal convolutions introduce a fixed delay.
-    // The streaming decoder handles this by buffering; our batch decoder
-    // includes the delay as leading silence. Trim based on the total
-    // causal padding accumulated through the decoder (empirically ~4-5 frames).
-    int trim_start = 0;
-    // Find first sample above noise floor (auto-detect leading silence)
-    float noise_floor = 0.005f;
-    for (int i = 0; i < total_audio; i++) {
+    // ── Start trim: the σ-VAE decoder's first ~100ms is a deterministic
+    //               warmup transient from zero-pad propagation through 7
+    //               cascaded causal-conv stages. With the GELU FFN fix
+    //               (#39) the transient peaks reach ~0.18 — well above any
+    //               sensible noise floor — so the previous "find first
+    //               sample > 0.005, back up 800" heuristic kept the
+    //               transient in the output. Issue #40: that came out as
+    //               an audible click at the start.
+    //
+    //               Always skip at least the warmup samples; THEN apply
+    //               the noise-floor heuristic on the remainder so we still
+    //               include the attack of the first phoneme.
+    const int decoder_warmup_samples = 2400; // 100 ms @ 24 kHz
+    const float noise_floor          = 0.005f;
+    int trim_start = std::min(decoder_warmup_samples, total_audio);
+    for (int i = decoder_warmup_samples; i < total_audio; i++) {
         if (fabsf(raw_audio[i]) > noise_floor) {
-            // Back up slightly to include attack transient
-            trim_start = std::max(0, i - 800); // ~33ms before first sound
+            trim_start = std::max(decoder_warmup_samples, i - 800); // ~33ms attack margin
             break;
         }
     }
 
-    int trimmed_len = total_audio - trim_start;
+    // ── End trim: the EOS classifier (sigmoid > 0.5) is sensitive to
+    //              accumulated F16 drift in the conditions. We sometimes
+    //              fire EOS 1-2 frames after the official model would,
+    //              and those extra frames contain residual speech instead
+    //              of the clean trailing silence the official produces.
+    //              Issue #40: that came out as the audio "ending abruptly"
+    //              mid-tail. Find the last sample above a slightly
+    //              stricter floor and keep ~50ms of silence margin after
+    //              it; drop the rest.
+    const float tail_floor          = 0.01f;
+    const int   tail_margin_samples = 1200; // 50 ms @ 24 kHz
+    int trim_end = total_audio;
+    for (int i = total_audio - 1; i > trim_start; i--) {
+        if (fabsf(raw_audio[i]) > tail_floor) {
+            trim_end = std::min(total_audio, i + tail_margin_samples + 1);
+            break;
+        }
+    }
+
+    int trimmed_len = trim_end - trim_start;
+    if (trimmed_len <= 0) {
+        // Pathological case: no audio above floor (e.g. very short input).
+        // Fall back to the full decoder output minus the warmup, no tail trim.
+        trim_start = std::min(decoder_warmup_samples, total_audio);
+        trim_end = total_audio;
+        trimmed_len = trim_end - trim_start;
+    }
+
     float* out_buf = (float*)malloc((size_t)trimmed_len * sizeof(float));
     if (!out_buf)
         return nullptr;
     memcpy(out_buf, raw_audio.data() + trim_start, (size_t)trimmed_len * sizeof(float));
 
-    if (verbosity >= 1 && trim_start > 0)
-        fprintf(stderr, "vibevoice TTS: trimmed %d leading silence samples\n", trim_start);
+    // Linear fade-out over the last `fade_samples` to ensure a clean end.
+    // The EOS classifier is sensitive to F16 drift in the conditions and can
+    // fire 1-2 frames late vs the F32 reference, so the last decoded frame
+    // sometimes still carries speech-level audio (the official model would
+    // have stopped already). Fading to zero matches the perceptual quality
+    // the user gets from the upstream model where the streaming decoder's
+    // tail naturally lands at silence.
+    const int fade_samples = 1200; // 50ms @ 24 kHz
+    int n_fade = std::min(fade_samples, trimmed_len);
+    for (int i = 0; i < n_fade; i++) {
+        float t = (float)(n_fade - i) / (float)n_fade; // 1.0 → 0.0
+        out_buf[trimmed_len - n_fade + i] *= t;
+    }
+
+    if (verbosity >= 1 && (trim_start > 0 || trim_end < total_audio))
+        fprintf(stderr, "vibevoice TTS: trimmed %d leading + %d trailing samples (kept %d / %d), %d-sample fade-out\n",
+                trim_start, total_audio - trim_end, trimmed_len, total_audio, n_fade);
 
     if (out_n_samples)
         *out_n_samples = trimmed_len;
