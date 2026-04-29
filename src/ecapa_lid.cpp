@@ -536,7 +536,7 @@ extern "C" const char* ecapa_lid_detect(struct ecapa_lid_context* ctx, const flo
         else if (t->type == GGML_TYPE_F16) {
             std::vector<uint16_t> tmp(n);
             ggml_backend_tensor_get(t, tmp.data(), 0, n * sizeof(uint16_t));
-            ggml_fp16_to_fp32_row((const ggml_fp16_t*)tmp.data(), out.data(), n);
+            ggml_fp16_to_fp32_row(reinterpret_cast<const ggml_fp16_t*>(tmp.data()), out.data(), n);
         }
     };
 

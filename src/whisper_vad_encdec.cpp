@@ -272,6 +272,7 @@ extern "C" struct whisper_vad_encdec_context* whisper_vad_encdec_init(const char
         ggml_tallocr_alloc(&alloc, t);
         size_t off = gguf_get_data_offset(gctx2) + gguf_get_tensor_offset(gctx2, gguf_find_tensor(gctx2, t->name));
         FILE* fp = fopen(path, "rb");
+        if (!fp) return nullptr;
         fseek(fp, (long)off, SEEK_SET);
         std::vector<uint8_t> buf(ggml_nbytes(t));
         size_t nr = fread(buf.data(), 1, buf.size(), fp);

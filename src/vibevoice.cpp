@@ -3296,7 +3296,7 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
                         size_t dst_head_off = layer_off + (size_t)ih * head_dst_stride;
                         if (dst->type == GGML_TYPE_F32) {
                             std::vector<float> tmp_f32(head_src_elems);
-                            const ggml_fp16_t* src_h = (const ggml_fp16_t*)(tmp.data() + src_head_off);
+                            const ggml_fp16_t* src_h = reinterpret_cast<const ggml_fp16_t*>(tmp.data() + src_head_off);
                             for (size_t i = 0; i < head_src_elems; i++)
                                 tmp_f32[i] = ggml_fp16_to_fp32(src_h[i]);
                             ggml_backend_tensor_set(dst, tmp_f32.data(), dst_head_off, head_dst_bytes);
@@ -3330,7 +3330,7 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
                 memcpy(kv_f32.data(), kv_dump.data(), kv_f32.size() * sizeof(float));
             } else {
                 for (size_t i = 0; i < kv_f32.size(); i++)
-                    kv_f32[i] = ggml_fp16_to_fp32(((ggml_fp16_t*)kv_dump.data())[i]);
+                    kv_f32[i] = ggml_fp16_to_fp32(reinterpret_cast<ggml_fp16_t*>(kv_dump.data())[i]);
             }
             vibevoice_dump_f32(dump_dir, "kv_cache_l0_h0_first5pos", kv_f32.data(), kv_f32.size());
         }

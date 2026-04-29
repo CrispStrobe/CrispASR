@@ -104,8 +104,15 @@ public:
 
     Ref(const Ref&) = delete;
     Ref& operator=(const Ref&) = delete;
-    Ref(Ref&&) = default;
-    Ref& operator=(Ref&&) = default;
+    Ref(Ref&& other) noexcept : impl_(other.impl_) { other.impl_ = nullptr; }
+    Ref& operator=(Ref&& other) noexcept {
+        if (this != &other) {
+            delete impl_;
+            impl_ = other.impl_;
+            other.impl_ = nullptr;
+        }
+        return *this;
+    }
 
     // Load the GGUF archive. Returns false with stderr on failure.
     bool load(const std::string& path);

@@ -1030,7 +1030,7 @@ static void ct_f16_to_f32(const uint16_t* src, float* dst, int n) {
 #ifdef CT_HAVE_F16C
     int i = 0;
     for (; i + 8 <= n; i += 8) {
-        __m128i h = _mm_loadu_si128((const __m128i*)(src + i));
+        __m128i h = _mm_loadu_si128(reinterpret_cast<const __m128i*>(src + i));
         __m256 f = _mm256_cvtph_ps(h);
         _mm256_storeu_ps(dst + i, f);
     }

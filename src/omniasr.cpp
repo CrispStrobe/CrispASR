@@ -169,7 +169,7 @@ static void dump_tensor(ggml_tensor* t, const char* name, const char* dir) {
     } else if (t->type == GGML_TYPE_F16) {
         std::vector<uint16_t> tmp(n);
         ggml_backend_tensor_get(t, tmp.data(), 0, n * sizeof(uint16_t));
-        ggml_fp16_to_fp32_row((const ggml_fp16_t*)tmp.data(), data.data(), n);
+        ggml_fp16_to_fp32_row(reinterpret_cast<const ggml_fp16_t*>(tmp.data()), data.data(), n);
     }
     FILE* f = fopen(path, "wb");
     if (f) {

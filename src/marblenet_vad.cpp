@@ -224,6 +224,7 @@ extern "C" struct marblenet_vad_context* marblenet_vad_init(const char* path) {
         ggml_tallocr_alloc(&alloc, t);
         size_t off = gguf_get_data_offset(gctx2) + gguf_get_tensor_offset(gctx2, gguf_find_tensor(gctx2, t->name));
         FILE* fp = fopen(path, "rb");
+        if (!fp) return nullptr;
         fseek(fp, (long)off, SEEK_SET);
         std::vector<uint8_t> tmp(ggml_nbytes(t));
         size_t nr = fread(tmp.data(), 1, tmp.size(), fp);
