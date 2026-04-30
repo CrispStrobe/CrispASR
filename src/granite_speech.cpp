@@ -1728,6 +1728,12 @@ extern "C" float* granite_speech_run_encoder(struct granite_speech_context* ctx,
     // For the PLUS variant, capture intermediate hidden states at the
     // configured cat_layers indices. After the last layer we concatenate
     // them along the feature dim with the final encoder output.
+    //
+    // INDEXING CONVENTION: cat_layers indices follow HuggingFace's
+    // `output_hidden_states` tuple — index 0 is the *input embedding*
+    // (after input_linear, before any encoder block), index N is the
+    // output of encoder block N-1. So `cat_layers: [3]` captures after
+    // the 3rd encoder block, which is `il == 2` in our 0-indexed loop.
     const bool do_cat_concat = !ctx->proj_cat_layers_parsed.empty();
     std::vector<std::vector<float>> cat_layer_outputs;
     if (do_cat_concat)
@@ -1736,6 +1742,15 @@ extern "C" float* granite_speech_run_encoder(struct granite_speech_context* ctx,
     // Input linear: mel (160, T) → hidden (d, T)
     std::vector<float> hidden((size_t)d * T);
     run_matmul(ctx, hidden.data(), mel, n_mels, T, ctx->model.encoder.input_w, ctx->model.encoder.input_b, d);
+
+    // PLUS: snapshot the input embedding for any cat_layer index 0.
+    if (do_cat_concat) {
+        for (size_t k = 0; k < ctx->proj_cat_layers_parsed.size(); k++) {
+            if (ctx->proj_cat_layers_parsed[k] == 0) {
+                cat_layer_outputs[k].assign(hidden.begin(), hidden.end());
+            }
+        }
+    }
 
     if (ctx->params.verbosity >= 2) {
         float mn = 1e30, mx = -1e30, s = 0;
@@ -1868,11 +1883,13 @@ extern "C" float* granite_speech_run_encoder(struct granite_speech_context* ctx,
         }
 
         // PLUS: snapshot the post-norm hidden state at any cat_layer index.
-        // Done before mid-CTC residual so we capture the same tensor the
-        // upstream HF model puts in its `output_hidden_states[il+1]`.
+        // HF convention: `output_hidden_states[il + 1]` is the output of
+        // encoder block `il`. So a config index of N corresponds to our
+        // `il == N - 1`. Done before mid-CTC residual so the snapshot
+        // matches what HF stores in its hidden_states tuple.
         if (do_cat_concat) {
             for (size_t k = 0; k < ctx->proj_cat_layers_parsed.size(); k++) {
-                if (ctx->proj_cat_layers_parsed[k] == il) {
+                if (ctx->proj_cat_layers_parsed[k] == il + 1) {
                     cat_layer_outputs[k].assign(hidden.begin(), hidden.end());
                 }
             }

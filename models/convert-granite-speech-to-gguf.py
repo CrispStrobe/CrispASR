@@ -617,17 +617,57 @@ def convert(input_dir: Path, out_path: Path) -> None:
     print(f"  eos_token_id={eos_id}  bos_token_id={bos_id}")
 
     # Tokenizer vocab (GPT-2 BPE — store token strings for detokenization)
+    n_vocab = text_cfg.get("vocab_size", 100353)
     vocab_path = input_dir / "vocab.json"
+    merges_path = input_dir / "merges.txt"
+    tokenizer_json_path = input_dir / "tokenizer.json"
+
+    vocab_dict = None  # {token_str: id}
+    merges_list = None  # list of "left right"
+
     if vocab_path.exists():
         with open(vocab_path) as f:
-            vocab_json = json.load(f)  # {token_str: id}
-        # Build id→token list
-        n_vocab = text_cfg.get("vocab_size", 100353)
+            vocab_dict = json.load(f)
+        if merges_path.exists():
+            with open(merges_path, encoding="utf-8") as f:
+                merges_list = []
+                for line in f:
+                    line = line.rstrip("\n")
+                    if not line or line.startswith("#"):
+                        continue
+                    merges_list.append(line)
+    elif tokenizer_json_path.exists():
+        # Modern unified tokenizer.json format (granite-speech-4.1-2b-plus
+        # ships only this — no separate vocab.json / merges.txt). Extract
+        # the BPE vocab + merges from `model.vocab` and `model.merges`.
+        with open(tokenizer_json_path, encoding="utf-8") as f:
+            tj = json.load(f)
+        model = tj.get("model", {})
+        if model.get("type") == "BPE":
+            vocab_dict = model.get("vocab", {})
+            raw_merges = model.get("merges", [])
+            # Newer tokenizer.json files store merges as [[left, right], ...];
+            # older ones use ["left right"] strings. Handle both.
+            merges_list = []
+            for m in raw_merges:
+                if isinstance(m, list):
+                    merges_list.append(" ".join(m))
+                elif isinstance(m, str):
+                    merges_list.append(m)
+            # tokenizer.json's `added_tokens` covers special tokens at any
+            # vocab id — including ones above model.vocab's range.
+            for at in tj.get("added_tokens", []):
+                tid = at.get("id")
+                content = at.get("content")
+                if tid is not None and content is not None:
+                    vocab_dict[content] = tid
+
+    if vocab_dict is not None:
         tokens = [""] * n_vocab
-        for tok_str, tok_id in vocab_json.items():
-            if tok_id < n_vocab:
+        for tok_str, tok_id in vocab_dict.items():
+            if 0 <= tok_id < n_vocab:
                 tokens[tok_id] = tok_str
-        # Add special tokens from tokenizer_config.json
+        # Add special tokens from tokenizer_config.json (overrides vocab)
         tok_cfg_path = input_dir / "tokenizer_config.json"
         if tok_cfg_path.exists():
             with open(tok_cfg_path) as f:
@@ -636,26 +676,12 @@ def convert(input_dir: Path, out_path: Path) -> None:
                 tid = int(tid_str)
                 if tid < n_vocab:
                     tokens[tid] = info["content"]
-        # Store as GGUF string array
         writer.add_array("tokenizer.ggml.tokens", tokens)
         print(f"  tokenizer: {len(tokens)} tokens")
 
-    # BPE merges — required by the C++ encoder side (granite_speech_tokenize)
-    # for arbitrary text input. Older converted GGUFs will lack this key
-    # and the C++ side falls back gracefully (single-token vocab lookup
-    # only). Format: each line is "left right" — exactly the same content
-    # as the original merges.txt minus the leading "#version" comment.
-    merges_path = input_dir / "merges.txt"
-    if merges_path.exists():
-        with open(merges_path, encoding="utf-8") as f:
-            merges = []
-            for line in f:
-                line = line.rstrip("\n")
-                if not line or line.startswith("#"):
-                    continue
-                merges.append(line)
-        writer.add_array("tokenizer.ggml.merges", merges)
-        print(f"  merges:    {len(merges)} BPE merges")
+    if merges_list is not None:
+        writer.add_array("tokenizer.ggml.merges", merges_list)
+        print(f"  merges:    {len(merges_list)} BPE merges")
 
     # Mel filterbank (80 bins)
     mel_filters = build_htk_mel_filters(sr=16000, n_fft=512, n_mels=80)
