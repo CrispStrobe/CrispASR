@@ -271,7 +271,7 @@ flight.
 |---|---|---|---|---|
 | `granite-speech-4.1-2b` (base) | Granite-1B AR | none | text | DONE — 4 GGUFs on HF, encoder cos 0.999908, transcribes JFK at 2.1× realtime on M1 Q4K |
 | `granite-speech-4.1-2b-plus` | Granite-1B AR | `cat_hidden_layers: [3]` | text + speaker labels + word-level timestamps | DONE — f16 GGUF on HF, transcribes JFK with punctuation/capitalisation by default; speaker labels + word timestamps in template work pending |
-| `granite-speech-4.1-2b-nar` | non-autoregressive (`NLENARDecoder`) | self-conditioning at L8 + BPE aux head + 4-layer hidden capture | text | encoder forward DONE (mel `cos_min=0.999997`, encoder_output (T,4096) `cos_min=0.999852`, encoder_logits `cos_min=0.999675`); projector + LLM editing forward pending |
+| `granite-speech-4.1-2b-nar` | non-autoregressive (`NLENARDecoder`) | self-conditioning at L8 + BPE aux head + 4-layer hidden capture | text | encoder + projector forward DONE (mel `cos_min=0.999997`, encoder_output (T,4096) `cos_min=0.999852`, encoder_logits `cos_min=0.999675`, projector_output (111,2048) `cos_min=0.999999`); LLM editing forward pending |
 
 ### Base 4.1-2b (DONE)
 
@@ -305,7 +305,7 @@ timestamps are not yet in the output; investigating the upstream
 Commits: `f298818` (cat_layer + tokenizer fix), `ed0e5ac` (backend
 alias + registry), `a3147b6` (HF README).
 
-### NAR variant — encoder DONE; projector + LLM editing pending
+### NAR variant — encoder + projector DONE; LLM editing pending
 
 1. **Encoder forward** (`granite_nle_run_encoder`). DONE. Same
    Conformer block as base; self-conditioning at layer 8 (the running
@@ -319,26 +319,24 @@ alias + registry), `a3147b6` (HF README).
    `run_encoder` — it's only needed by the LLM editing pass's text-init
    step, where it's faster to run on the posterior-pooled features.
 2. **Windowed Q-Former projector**
-   (`granite_nle_run_projector`). 4 per-encoder-layer LayerNorms +
-   `layer_proj` (4096 → 2048) + 32-head SDPA cross-attention + learned
-   `query` and `window_positions`. ~250 LOC. Reference in
-   `ref/granite-speech-4.1-2b-nar/modeling_projector.py`. Tensor names
-   in the GGUF are flat (`proj.layer_norm.{0..3}.{weight,bias}`,
-   `proj.layer_proj.{weight,bias}`, `proj.query`,
-   `proj.window_positions`, `proj.blk.{0,1}.{attn,mlp}_*`,
-   `proj.out_norm/out_linear.{weight,bias}`). The forward windows the
-   encoder output into block_size=15-frame blocks, mean-pools each
-   block down to query_length=3 query slots, and runs 2 layers of
-   simplified Q-Former cross-attention (queries attend to encoder
-   features). Output rate: 3 audio tokens per 15 encoder frames.
+   (`granite_nle_run_projector`). DONE. Two-pass implementation: (A)
+   one ggml graph for the per-encoder-layer LayerNorms + concat +
+   `layer_proj` (4096 → 2048) + GELU; (B) one Q-Former graph per
+   block (`block_size=15`, `downsample_rate=5`, `query_length=3`)
+   with mean-pool over downsample groups, additive `query` and
+   `window_positions`, two 32-head SDPA cross-attention + SiLU-MLP
+   layers, and a final `out_norm`+`out_linear`. Output rate: 3 audio
+   tokens per 15 encoder frames. Validated against PyTorch on JFK at
+   `projector_output cos_min=0.999999` (T_out=111 × llm_dim=2048).
 3. **Non-causal LLM editing pass** (`granite_nle_run_llm_editing`).
    Single forward over flat `[audio_embs, text_with_eos_slots]`. Every
    self-attention layer runs `is_causal=False`. Argmax +
    `unique_consecutive` + drop-EOS on slot positions gives the
    transcript. Reuses `core_attn::kv_self_attn`. ~150 LOC.
 
-**Effort remaining:** ~400 LOC for the projector + LLM editing pass.
-Both converters and the runtime scaffolds + encoder are now in tree.
+**Effort remaining:** ~150 LOC for the LLM editing pass.
+Both converters and the runtime scaffolds + encoder + projector are
+now in tree.
 
 ---
 

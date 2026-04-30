@@ -552,13 +552,15 @@ each backend. High-value gaps to close:
   encoder_logits (T=550, 348) `cos_min=0.999675`. BPE auxiliary
   head (`enc.bpe_out`) is intentionally not wired here — it's only
   needed by the LLM editing pass's text-init step.
-- **[next] NAR variant — windowed Q-Former projector.** Different
-  tensor naming and structure from base 4.1's BLIP-2 Q-Former: 4
-  per-encoder-layer LayerNorms, a `layer_proj` (4096 → 2048), 32-head
-  flat-named cross-attention, learned `query` (1, 3, 2048) +
-  learned `window_positions` (1, 15, 2048), final `out_norm` +
-  `out_linear`. ~250 LOC. Reference in
-  `ref/granite-speech-4.1-2b-nar/modeling_projector.py`.
+- **[done] NAR variant — windowed Q-Former projector.** Two-pass
+  implementation: pass A is one ggml graph for the per-encoder-layer
+  LayerNorms + concat + `layer_proj` (4096 → 2048) + GELU; pass B is
+  one Q-Former graph per block (block_size=15, downsample_rate=5,
+  query_length=3) with mean-pool over downsample groups, additive
+  `query` and `window_positions`, two 32-head SDPA cross-attention
+  + SiLU-MLP layers, and a final `out_norm`+`out_linear`. Output
+  rate: 3 audio tokens per 15 encoder frames. Validated on JFK at
+  `projector_output cos_min=0.999999` (T_out=111 × llm_dim=2048).
 - **[next] NAR variant — non-causal LLM editing pass.** The LLM
   runs ONCE over the flat `[audio_embs, text_with_eos_slots]`
   sequence (every self-attention layer patched to `is_causal=False`).

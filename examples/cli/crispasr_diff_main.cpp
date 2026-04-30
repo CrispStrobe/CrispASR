@@ -1176,6 +1176,18 @@ int main(int argc, char** argv) {
                     print_row("encoder_logits", rep3, COS_THRESHOLD);
                     record(rep3);
                 }
+
+                int proj_T = 0, proj_dim = 0;
+                float* proj_out = granite_nle_run_projector(ctx, enc_out, enc_T, enc_dim, &proj_T, &proj_dim);
+                if (proj_out && proj_T > 0 && proj_dim > 0) {
+                    auto rep4 = ref.compare("projector_output", proj_out, (size_t)proj_T * proj_dim);
+                    print_row("projector_output", rep4, COS_THRESHOLD);
+                    record(rep4);
+                    free(proj_out);
+                } else {
+                    printf("[ERR ] projector_output        granite_nle_run_projector returned null\n");
+                    n_fail++;
+                }
                 free(enc_out);
             } else {
                 printf("[ERR ] encoder_output          granite_nle_run_encoder returned null\n");

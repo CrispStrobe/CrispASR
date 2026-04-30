@@ -1381,16 +1381,283 @@ extern "C" const float* granite_nle_last_bpe_logits(struct granite_nle_context* 
     return ctx->last_bpe_logits.data();
 }
 
-extern "C" float* granite_nle_run_projector(struct granite_nle_context* ctx, const float* /*enc_concat*/, int /*T*/,
-                                            int /*dim*/, int* out_T, int* out_dim) {
-    if (!ctx)
+// ===========================================================================
+// Projector — windowed simplified Q-Former
+// ===========================================================================
+//
+// Two-pass implementation:
+//   pass A — full sequence:
+//             per-encoder-layer LayerNorm + concat → layer_proj → GELU
+//             input  (T, K*D) F32       (K=4, D=1024 → 4096-wide)
+//             output (T, hidden_size)  F32 (hidden_size=2048)
+//   pass B — per-block (block_size=15 frames) graph, repeated nblocks times:
+//             query_embeds = query_template + mean_pool(block, downsample=5)
+//             enc_kv       = block + window_positions
+//             for each of 2 Q-Former layers:
+//                cur = q + cross_attn(attn_norm(q), enc_kv)
+//                cur = cur + mlp(mlp_norm(cur))   (fc1 → SiLU → fc2)
+//             out = out_linear(out_norm(cur))     (hidden_size → llm_dim)
+//
+// All compute lives inside ggml graphs so the GPU backend can pick them up
+// (the small per-block dispatch is the same pattern used by the base
+// granite_speech projector and is fast enough in practice).
+
+static bool nle_proj_layer_proj(granite_nle_context* ctx, std::vector<float>& out, const float* enc, int T, int wide_d,
+                                int hidden) {
+    // pass A: per-layer LayerNorm + concat → layer_proj → GELU
+    const auto& m = ctx->model;
+    const auto& hp = m.hparams;
+    const int K = (int)hp.proj_num_encoder_layers;
+    const int D = (int)hp.proj_encoder_dim;
+    if (K * D != wide_d) {
+        fprintf(stderr, "granite_nle: proj input dim %d != K*D=%d\n", wide_d, K * D);
+        return false;
+    }
+
+    ggml_init_params ip = {ctx->compute_meta.size(), ctx->compute_meta.data(), true};
+    ggml_context* ctx0 = ggml_init(ip);
+    ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 256, false);
+
+    ggml_tensor* inp = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, wide_d, T);
+    ggml_set_name(inp, "proj_a_in");
+    ggml_set_input(inp);
+
+    // Slice each per-layer (D, T) chunk via view_2d, normalize, then concat.
+    std::vector<ggml_tensor*> normed(K);
+    for (int k = 0; k < K; k++) {
+        ggml_tensor* slice = ggml_view_2d(ctx0, inp, D, T, inp->nb[1], (size_t)k * D * sizeof(float));
+        // ggml_norm requires contiguous input on most backends.
+        ggml_tensor* s = ggml_cont(ctx0, slice);
+        s = ggml_norm(ctx0, s, hp.proj_layernorm_eps);
+        if (m.projector.layer_norm_w[k])
+            s = ggml_mul(ctx0, s, m.projector.layer_norm_w[k]);
+        if (m.projector.layer_norm_b[k])
+            s = ggml_add(ctx0, s, m.projector.layer_norm_b[k]);
+        normed[k] = s;
+    }
+    ggml_tensor* cat = normed[0];
+    for (int k = 1; k < K; k++)
+        cat = ggml_concat(ctx0, cat, normed[k], 0);
+
+    // layer_proj: (4096 → 2048), then GELU (exact-erf, matching nn.GELU()).
+    ggml_tensor* y = ggml_mul_mat(ctx0, m.projector.layer_proj_w, cat);
+    if (m.projector.layer_proj_b)
+        y = ggml_add(ctx0, y, m.projector.layer_proj_b);
+    y = ggml_gelu_erf(ctx0, y);
+
+    ggml_set_name(y, "proj_a_out");
+    ggml_build_forward_expand(gf, y);
+    ggml_free(ctx0);
+
+    ggml_backend_sched_reset(ctx->sched);
+    if (!ggml_backend_sched_alloc_graph(ctx->sched, gf))
+        return false;
+    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "proj_a_in"), enc, 0, (size_t)wide_d * T * sizeof(float));
+    if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS)
+        return false;
+    out.assign((size_t)hidden * T, 0.0f);
+    ggml_backend_tensor_get(ggml_graph_get_tensor(gf, "proj_a_out"), out.data(), 0,
+                            (size_t)hidden * T * sizeof(float));
+    return true;
+}
+
+static ggml_cgraph* nle_proj_build_block(granite_nle_context* ctx) {
+    const auto& m = ctx->model;
+    const auto& hp = m.hparams;
+    const int hidden = (int)hp.proj_hidden_size;          // 2048
+    const int llm_d = (int)hp.proj_llm_dim;               // 2048
+    const int n_heads = (int)hp.proj_n_heads;             // 32
+    const int hd = hidden / n_heads;                      // 64
+    const int n_layers = (int)hp.proj_n_layers;           // 2
+    const int block_size = (int)hp.proj_block_size;       // 15
+    const int down = (int)hp.proj_downsample_rate;        // 5
+    const int q_len = block_size / down;                  // 3
+    const int mlp_h = hidden * (int)hp.proj_mlp_ratio;    // 4096
+    const float eps = hp.proj_layernorm_eps;
+    const float attn_scale = 1.0f / std::sqrt((float)hd);
+
+    ggml_init_params ip = {ctx->compute_meta.size(), ctx->compute_meta.data(), true};
+    ggml_context* ctx0 = ggml_init(ip);
+    ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 4096, false);
+
+    // Block features: (hidden, block_size) — caller fills with the padded
+    // window slice from pass A.
+    ggml_tensor* blk = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, hidden, block_size);
+    ggml_set_name(blk, "proj_b_blk");
+    ggml_set_input(blk);
+
+    // mean_pool over downsample groups: reshape (hidden, 15) to (hidden, 5, 3),
+    // permute to (5, hidden, 3), ggml_cont, ggml_mean → (1, hidden, 3),
+    // reshape to (hidden, 3).
+    ggml_tensor* pooled = ggml_reshape_3d(ctx0, blk, hidden, down, q_len);
+    pooled = ggml_cont(ctx0, ggml_permute(ctx0, pooled, 1, 0, 2, 3));
+    pooled = ggml_mean(ctx0, pooled);
+    pooled = ggml_reshape_2d(ctx0, pooled, hidden, q_len);
+
+    // query_embeds = query (1, q_len, hidden) + pooled (hidden, q_len)
+    ggml_tensor* qbase = ggml_reshape_2d(ctx0, m.projector.query, hidden, q_len);
+    ggml_tensor* qcur = ggml_add(ctx0, qbase, pooled);
+
+    // enc_kv = block + window_positions (1, block_size, hidden)
+    ggml_tensor* wpos = ggml_reshape_2d(ctx0, m.projector.window_pos, hidden, block_size);
+    ggml_tensor* enc = ggml_add(ctx0, blk, wpos);
+
+    // 2 Q-Former layers (cross-attention only + MLP)
+    for (int il = 0; il < n_layers; il++) {
+        const auto& b = m.projector.blocks[il];
+
+        // cross-attention
+        {
+            ggml_tensor* qn = ggml_norm(ctx0, qcur, eps);
+            if (b.attn_norm_w)
+                qn = ggml_mul(ctx0, qn, b.attn_norm_w);
+            if (b.attn_norm_b)
+                qn = ggml_add(ctx0, qn, b.attn_norm_b);
+
+            ggml_tensor* Q = ggml_mul_mat(ctx0, b.attn_q_w, qn);
+            if (b.attn_q_b)
+                Q = ggml_add(ctx0, Q, b.attn_q_b);
+            ggml_tensor* K = ggml_mul_mat(ctx0, b.attn_k_w, enc);
+            if (b.attn_k_b)
+                K = ggml_add(ctx0, K, b.attn_k_b);
+            ggml_tensor* V = ggml_mul_mat(ctx0, b.attn_v_w, enc);
+            if (b.attn_v_b)
+                V = ggml_add(ctx0, V, b.attn_v_b);
+
+            Q = ggml_reshape_3d(ctx0, Q, hd, n_heads, q_len);
+            K = ggml_reshape_3d(ctx0, K, hd, n_heads, block_size);
+            V = ggml_reshape_3d(ctx0, V, hd, n_heads, block_size);
+            Q = ggml_cont(ctx0, ggml_permute(ctx0, Q, 0, 2, 1, 3));
+            K = ggml_cont(ctx0, ggml_permute(ctx0, K, 0, 2, 1, 3));
+            V = ggml_cont(ctx0, ggml_permute(ctx0, V, 0, 2, 1, 3));
+
+            ggml_tensor* a = ggml_flash_attn_ext(ctx0, Q, K, V, nullptr, attn_scale, 0.0f, 0.0f);
+            a = ggml_reshape_2d(ctx0, a, hidden, q_len);
+            a = ggml_mul_mat(ctx0, b.attn_o_w, a);
+            if (b.attn_o_b)
+                a = ggml_add(ctx0, a, b.attn_o_b);
+
+            qcur = ggml_add(ctx0, qcur, a);
+        }
+
+        // MLP (fc1 → SiLU → fc2)
+        {
+            ggml_tensor* xn = ggml_norm(ctx0, qcur, eps);
+            if (b.mlp_norm_w)
+                xn = ggml_mul(ctx0, xn, b.mlp_norm_w);
+            if (b.mlp_norm_b)
+                xn = ggml_add(ctx0, xn, b.mlp_norm_b);
+
+            ggml_tensor* h = ggml_mul_mat(ctx0, b.mlp_fc1_w, xn);
+            if (b.mlp_fc1_b)
+                h = ggml_add(ctx0, h, b.mlp_fc1_b);
+            h = ggml_silu(ctx0, h);
+            h = ggml_mul_mat(ctx0, b.mlp_fc2_w, h);
+            if (b.mlp_fc2_b)
+                h = ggml_add(ctx0, h, b.mlp_fc2_b);
+
+            qcur = ggml_add(ctx0, qcur, h);
+            (void)mlp_h;
+        }
+    }
+
+    // out_norm + out_linear
+    {
+        ggml_tensor* xn = ggml_norm(ctx0, qcur, eps);
+        if (m.projector.out_norm_w)
+            xn = ggml_mul(ctx0, xn, m.projector.out_norm_w);
+        if (m.projector.out_norm_b)
+            xn = ggml_add(ctx0, xn, m.projector.out_norm_b);
+        ggml_tensor* y = ggml_mul_mat(ctx0, m.projector.out_linear_w, xn);
+        if (m.projector.out_linear_b)
+            y = ggml_add(ctx0, y, m.projector.out_linear_b);
+        ggml_set_name(y, "proj_b_out");
+        ggml_build_forward_expand(gf, y);
+        (void)llm_d;
+    }
+
+    ggml_free(ctx0);
+    return gf;
+}
+
+extern "C" float* granite_nle_run_projector(struct granite_nle_context* ctx, const float* enc_concat, int T, int dim,
+                                            int* out_T, int* out_dim) {
+    if (!ctx || !enc_concat || T <= 0 || dim <= 0)
         return nullptr;
-    fprintf(stderr, "granite_nle: run_projector not yet implemented\n");
+    granite_nle_bench_stage _b("run_projector");
+
+    const auto& hp = ctx->model.hparams;
+    const int hidden = (int)hp.proj_hidden_size;
+    const int llm_d = (int)hp.proj_llm_dim;
+    const int block_size = (int)hp.proj_block_size;
+    const int down = (int)hp.proj_downsample_rate;
+    const int q_len = block_size / down;
+
+    if (!ctx->model.projector.layer_proj_w || !ctx->model.projector.query || !ctx->model.projector.window_pos ||
+        !ctx->model.projector.out_linear_w) {
+        fprintf(stderr, "granite_nle: projector tensors not loaded\n");
+        return nullptr;
+    }
+
+    // pass A: layer-norm-per-layer + concat + layer_proj + GELU
+    std::vector<float> after_proj;
+    if (!nle_proj_layer_proj(ctx, after_proj, enc_concat, T, dim, hidden)) {
+        fprintf(stderr, "granite_nle: projector pass A failed\n");
+        return nullptr;
+    }
+
+    // Pad to multiple of block_size on the time axis (zeros at the tail).
+    const int nblocks = (T + block_size - 1) / block_size;
+    const int T_pad = nblocks * block_size;
+    std::vector<float> padded((size_t)T_pad * hidden, 0.0f);
+    std::memcpy(padded.data(), after_proj.data(), (size_t)T * hidden * sizeof(float));
+
+    if (ctx->params.verbosity >= 1)
+        fprintf(stderr, "  projector: T=%d nblocks=%d q_len=%d hidden=%d → %d × %d\n", T, nblocks, q_len, hidden,
+                nblocks * q_len, llm_d);
+
+    // pass B: one Q-Former graph per block. Same shape every block, so we
+    // could batch via ne[3]; per-block keeps it simple and is fast enough.
+    const int total = nblocks * q_len;
+    std::vector<float> all_out((size_t)total * llm_d, 0.0f);
+
+    for (int blk = 0; blk < nblocks; blk++) {
+        const float* blk_data = padded.data() + (size_t)blk * block_size * hidden;
+        ggml_cgraph* gf = nle_proj_build_block(ctx);
+        ggml_backend_sched_reset(ctx->sched);
+        if (!ggml_backend_sched_alloc_graph(ctx->sched, gf))
+            return nullptr;
+        ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "proj_b_blk"), blk_data, 0,
+                                (size_t)hidden * block_size * sizeof(float));
+        if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS)
+            return nullptr;
+        ggml_backend_tensor_get(ggml_graph_get_tensor(gf, "proj_b_out"),
+                                all_out.data() + (size_t)blk * q_len * llm_d, 0,
+                                (size_t)q_len * llm_d * sizeof(float));
+    }
+
+    if (ctx->params.verbosity >= 2) {
+        float mn = 1e30f, mx = -1e30f, s = 0;
+        for (size_t i = 0; i < all_out.size(); i++) {
+            if (all_out[i] < mn)
+                mn = all_out[i];
+            if (all_out[i] > mx)
+                mx = all_out[i];
+            s += all_out[i];
+        }
+        fprintf(stderr, "  projector out: (%d, %d) min=%.6f max=%.6f mean=%.6f\n", total, llm_d, mn, mx,
+                s / all_out.size());
+    }
+
+    float* result = (float*)malloc(all_out.size() * sizeof(float));
+    if (!result)
+        return nullptr;
+    std::memcpy(result, all_out.data(), all_out.size() * sizeof(float));
     if (out_T)
-        *out_T = 0;
+        *out_T = total;
     if (out_dim)
-        *out_dim = 0;
-    return nullptr;
+        *out_dim = llm_d;
+    return result;
 }
 
 extern "C" float* granite_nle_run_llm_editing(struct granite_nle_context* ctx, const float* /*audio_embs*/,

@@ -15,10 +15,11 @@ N == self_conditioning_layer).
 
 Stages exposed:
 
-  raw_audio          (N,)            F32 PCM samples
-  mel_spectrogram    (T, 160)        F32 stacked log-mel input_features
-  encoder_output     (T, 4*D)        F32 concatenated 4-layer hidden state
-  encoder_logits     (T, ctc_vocab)  F32 char-level CTC logits
+  raw_audio          (N,)             F32 PCM samples
+  mel_spectrogram    (T, 160)         F32 stacked log-mel input_features
+  encoder_output     (T, 4*D)         F32 concatenated 4-layer hidden state
+  encoder_logits     (T, ctc_vocab)   F32 char-level CTC logits
+  projector_output   (T_out, llm_dim) F32 windowed Q-Former output
 """
 
 from __future__ import annotations
@@ -34,6 +35,7 @@ DEFAULT_STAGES = [
     "mel_spectrogram",
     "encoder_output",
     "encoder_logits",
+    "projector_output",
 ]
 
 
@@ -92,6 +94,8 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
     sys.modules[f"{pkg_root}.modeling_conformer"] = conf_mod
     ctc_mod = _load_local("modeling_ctc")
     sys.modules[f"{pkg_root}.modeling_ctc"] = ctc_mod
+    proj_mod = _load_local("modeling_projector")
+    sys.modules[f"{pkg_root}.modeling_projector"] = proj_mod
     feat_mod = _load_local("feature_extraction_nle")
 
     # Build encoder config from the JSON config. NLEConfig stores its
@@ -141,7 +145,8 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
     if "encoder_logits" in stages and enc_out.logits is not None:
         out["encoder_logits"] = enc_out.logits[0].detach().cpu().float().numpy()
 
-    if "encoder_output" in stages:
+    enc_concat = None
+    if "encoder_output" in stages or "projector_output" in stages:
         all_h = enc_out.all_hidden_states
         if all_h is None:
             raise RuntimeError(
@@ -151,9 +156,28 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
         # block N. Negative indices count from the end of the tuple.
         sel = [all_h[idx] for idx in indices]
         # cat along feature dim → (B, T, K * D)
-        cat = torch.cat(sel, dim=-1)
-        out["encoder_output"] = cat[0].detach().cpu().float().numpy()
+        enc_concat = torch.cat(sel, dim=-1)
+
+    if "encoder_output" in stages:
+        out["encoder_output"] = enc_concat[0].detach().cpu().float().numpy()
         print(f"  encoder_output shape={tuple(out['encoder_output'].shape)} "
               f"(K={len(indices)} layers)")
+
+    if "projector_output" in stages:
+        # Build the projector and load its safetensors weights from the same
+        # snapshot. Same trick as the encoder: bypass the full NLE constructor.
+        proj_cfg = cfg_mod.NLEProjectorConfig(**full_cfg.get("projector_config", {}))
+        projector = proj_mod.EncoderProjectorQFormer(proj_cfg).to(torch.float32).eval()
+        sd_proj = {k[len("projector."):]: v for k, v in sd_full.items()
+                   if k.startswith("projector.")}
+        miss_p, unex_p = projector.load_state_dict(sd_proj, strict=False)
+        if miss_p:
+            print(f"  warning: projector missing keys: {miss_p[:5]} ({len(miss_p)} total)")
+        if unex_p:
+            print(f"  warning: projector unexpected keys: {unex_p[:5]} ({len(unex_p)} total)")
+        with torch.no_grad():
+            proj_out = projector(enc_concat)
+        out["projector_output"] = proj_out[0].detach().cpu().float().numpy()
+        print(f"  projector_output shape={tuple(out['projector_output'].shape)}")
 
     return out
