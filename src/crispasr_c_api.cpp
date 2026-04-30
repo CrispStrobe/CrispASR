@@ -874,7 +874,7 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
     }
 #endif
 #ifdef CA_HAVE_GRANITE
-    if (s->backend == "granite" || s->backend == "granite-4.1") {
+    if (s->backend == "granite" || s->backend == "granite-4.1" || s->backend == "granite-4.1-plus") {
         granite_speech_context_params p = granite_speech_context_default_params();
         p.n_threads = s->n_threads;
         p.verbosity = 0;
@@ -1101,7 +1101,7 @@ CA_EXPORT int crispasr_session_available_backends(char* out_csv, int out_cap) {
     list += ",cohere";
 #endif
 #ifdef CA_HAVE_GRANITE
-    list += ",granite,granite-4.1";
+    list += ",granite,granite-4.1,granite-4.1-plus";
 #endif
 #ifdef CA_HAVE_CTC
     list += ",fastconformer-ctc,canary-ctc";
@@ -1433,7 +1433,8 @@ CA_EXPORT crispasr_session_result* crispasr_session_transcribe_lang(crispasr_ses
     }
 #endif
 #ifdef CA_HAVE_GRANITE
-    if ((s->backend == "granite" || s->backend == "granite-4.1") && s->granite_ctx) {
+    if ((s->backend == "granite" || s->backend == "granite-4.1" || s->backend == "granite-4.1-plus") &&
+        s->granite_ctx) {
         return run_char_transcribe(granite_speech_transcribe(s->granite_ctx, pcm, n_samples));
     }
 #endif

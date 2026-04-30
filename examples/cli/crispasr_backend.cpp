@@ -48,7 +48,7 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& name
         return crispasr_make_canary_backend();
     if (name == "cohere")
         return crispasr_make_cohere_backend();
-    if (name == "granite" || name == "granite-4.1")
+    if (name == "granite" || name == "granite-4.1" || name == "granite-4.1-plus")
         return crispasr_make_granite_backend();
     if (name == "voxtral")
         return crispasr_make_voxtral_backend();
@@ -85,11 +85,11 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& name
 
 std::vector<std::string> crispasr_list_backends() {
     return {
-        "whisper",     "parakeet",   "canary",      "cohere",    "granite",
-        "granite-4.1", "voxtral",    "voxtral4b",   "qwen3",     "fastconformer-ctc",
-        "wav2vec2",    "hubert",     "data2vec",    "vibevoice", "qwen3-tts",
-        "glm-asr",     "kyutai-stt", "firered-asr", "moonshine", "moonshine-streaming",
-        "gemma4-e2b",  "omniasr",    "omniasr-llm",
+        "whisper",          "parakeet",   "canary",      "cohere",    "granite",
+        "granite-4.1",      "granite-4.1-plus", "voxtral",    "voxtral4b",   "qwen3",
+        "fastconformer-ctc", "wav2vec2",  "hubert",      "data2vec",  "vibevoice",
+        "qwen3-tts",        "glm-asr",    "kyutai-stt",  "firered-asr", "moonshine",
+        "moonshine-streaming", "gemma4-e2b", "omniasr",  "omniasr-llm",
     };
 }
 
