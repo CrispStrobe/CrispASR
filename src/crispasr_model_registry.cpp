@@ -89,12 +89,14 @@ constexpr Entry k_registry[] = {
      "https://huggingface.co/cstr/parakeet-tdt-0.6b-ja-GGUF/resolve/main/parakeet-tdt-0.6b-ja.gguf",
      "~1.24 GB", nullptr, nullptr},
     // Qwen3-TTS: the talker LM and the codec live in two separate HF
-    // repos. The runtime is still being written (PLAN #52); these
-    // entries are ready for `crispasr --backend qwen3-tts -m auto
-    // --auto-download` once the runtime lands.
-    {"qwen3-tts", "qwen3-tts-12hz-0.6b-base.gguf",
-     "https://huggingface.co/cstr/qwen3-tts-0.6b-base-GGUF/resolve/main/qwen3-tts-12hz-0.6b-base.gguf",
-     "~1.7 GB",
+    // repos. Default download is Q8_0 talker (the LEARNINGS-recommended
+    // deployment quant — Q4_K drifts noticeably in strict diffs) paired
+    // with F16 codec (quantising the codec hurts earlier than the talker
+    // — the runtime_ref_codes path is sensitive). Q4_K talker is on the
+    // same repo for users who pin disk space; pass `-m <path>` to use it.
+    {"qwen3-tts", "qwen3-tts-12hz-0.6b-base-q8_0.gguf",
+     "https://huggingface.co/cstr/qwen3-tts-0.6b-base-GGUF/resolve/main/qwen3-tts-12hz-0.6b-base-q8_0.gguf",
+     "~986 MB",
      "qwen3-tts-tokenizer-12hz.gguf",
      "https://huggingface.co/cstr/qwen3-tts-tokenizer-12hz-GGUF/resolve/main/qwen3-tts-tokenizer-12hz.gguf"},
 };

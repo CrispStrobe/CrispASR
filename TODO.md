@@ -138,18 +138,26 @@ direction; do not interleave.
 - **MiMo-V2.5-ASR** — **[IN PROGRESS]** Converters done, F16+Q4_K on HF.
   Runtime is scaffolded (loads cleanly) but `mimo_asr_transcribe` is
   a stub. Forward pass is PLAN #51. MIT.
-- **Qwen3-TTS** — **[IN PROGRESS]** Both converters done (LM + RVQ codec).
-  Runtime is scaffolded (loads cleanly) but `qwen3_tts_synthesise`
-  returns nullptr with "not implemented". Forward pass is PLAN #52. Apache 2.0.
-  Speed work (2026-04-30): Q8_0/Q4_K talker GGUFs converted; fused Q+K+V
-  in talker landed (env-gated `QWEN3_TTS_NO_FUSED_QKV=1` to skip);
-  contiguity bug in `core_attn::kv_self_attn` fused path fixed (T>1
-  needed `ggml_cont`); `QWEN3_TTS_MAX_FRAMES=N` bench cap added; A/B
-  harness at `.local/bench-qwen3/run_all.sh`. Fused-QKV may regress at
-  T=1 on M1 Metal (one noisy run showed ~15% slower) — needs a quiet-
-  machine re-run before flipping the default. See LEARNINGS.md
-  "Qwen3-TTS speed optimization tracking" for the full roadmap (Lk
-  bucketing, Q8_0 KV cache, Q4_K fused-QKV remaining).
+- **Qwen3-TTS** — **[WORKS]** End-to-end synthesis working. HF release
+  `cstr/qwen3-tts-0.6b-base-GGUF` ships F16 + Q8_0 + Q4_K talker;
+  `cstr/qwen3-tts-tokenizer-12hz-GGUF` ships F16 + Q8_0 codec. Default
+  auto-download is Q8_0 talker + F16 codec (LEARNINGS-recommended
+  deployment quant). `crispasr --backend qwen3-tts -m auto
+  --auto-download --tts "..." --voice <ref.wav> --ref-text "..."`
+  works out of the box. PLAN #52 still has open items: ECAPA
+  speaker_encoder forward (PLAN #52 step 4) to remove the
+  `bake-qwen3-tts-voice-pack.py` dependency for new voices. Apache 2.0.
+
+  Speed work (2026-04-30): Q8_0/Q4_K talker GGUFs converted and shipped;
+  fused Q+K+V in talker landed (off by default, opt-in
+  `QWEN3_TTS_FUSED_QKV=1`); contiguity bug in
+  `core_attn::kv_self_attn` fused path fixed (T>1 needed `ggml_cont`);
+  `QWEN3_TTS_MAX_FRAMES=N` bench cap added; A/B harness at
+  `.local/bench-qwen3/run_all.sh`. Fused-QKV may regress at T=1 on
+  M1 Metal (one noisy run showed ~15% slower) — needs a quiet-machine
+  re-run before flipping the default. See LEARNINGS.md "Qwen3-TTS
+  speed optimization tracking" for the full roadmap (Lk bucketing,
+  Q8_0 KV cache, Q4_K fused-QKV remaining).
 - **VibeVoice-ASR 7B** — blocked on ≥16 GB RAM for conversion
 - ~~**VibeVoice TTS**~~ — **DONE**: Realtime-0.5B (17 bugs, perfect round-trip) + 1.5B base model (voice cloning). HF: `cstr/vibevoice-realtime-0.5b-GGUF`, `cstr/vibevoice-1.5b-GGUF`
 
@@ -637,6 +645,8 @@ Full tracking is in `UPSTREAM.md`. Short summary:
 | `cstr/wav2vec2-large-xlsr-53-english-GGUF` | ✅ shipped (f16, q4_k, q5_0, q8_0) |
 | `cstr/wav2vec2-large-xlsr-53-german-GGUF` | ✅ shipped (q4_k) |
 | `cstr/gemma4-e2b-it-GGUF` | ✅ shipped (f16, q8_0, q4_k, q2_k — 4 quants with QAT clip scalars) |
+| `cstr/qwen3-tts-0.6b-base-GGUF` | ✅ shipped (f16, q8_0, q4_k — talker; pair with the codec repo below) |
+| `cstr/qwen3-tts-tokenizer-12hz-GGUF` | ✅ shipped (f16, q8_0 — RVQ codec) |
 
 ---
 

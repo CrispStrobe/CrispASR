@@ -887,6 +887,33 @@ is consistent with Apple's M1 having 8 GPU cores that benefit from
 finer kernel granularity at low T. **Re-run on a quiet machine before
 making the fused path the default.** Until then, keep the env switch.
 
+**What we did learn (confirmed via byte-identical WAV output):** the
+F16 fused-QKV path produces **bit-identical** output to the unfused
+3-matmul path on M1 Metal at seed=42, JFK voice prompt, 100-frame
+synthesis (`md5(f16_fused.wav) == md5(f16_nofuse.wav)`). This means
+the fusion is mathematically correct — any future speedup observed is
+pure performance, never a quality regression. (Bit-identity surprises
+because reordering associative ops typically perturbs FP rounding.
+On M1 Metal at this scale, the matmul kernels evidently produce the
+same accumulation order regardless of whether QKV is one fused
+4096-wide matmul or three independent matmuls.)
+
+**Quantization quality A/B (2026-04-30, JFK voice prompt, fixed seed
+42, 100 frames, prompt "Hello world, this is a quick speed benchmark
+for the qwen three TTS pipeline"):**
+
+| variant | Qwen3-ASR-0.6B transcript                            |
+|---------|------------------------------------------------------|
+| F16     | "Hello world. This is a quick three bench vlog."     |
+| Q8_0    | "Hello world. This is a friend of yours."            |
+| Q4_K    | *language=None — ASR could not classify as English*  |
+
+The earlier LEARNINGS note that lower-bit talker quants "can still
+sound usable" was optimistic for short utterances. Q4_K appears
+unusable at this prompt length / frame budget — it may recover with
+longer warmup, but for short TTS workloads Q8_0 is the floor and Q4_K
+is "ship only when disk space is the binding constraint."
+
 **Still on the optimization roadmap (not yet implemented):**
 
 - **Talker Lk bucketing.** Pre-build talker graphs at `Lk ∈ {256, 512,
