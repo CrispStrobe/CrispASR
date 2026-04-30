@@ -26,21 +26,25 @@ GGUF conversions of [ibm-granite/granite-speech-4.1-2b](https://huggingface.co/i
 |---|---|---|---|
 | `granite-speech-4.1-2b-f16.gguf` | F16 | ~5.2 GB | Encoder + projector in F32, LLM weights in F16 — full parity reference |
 | `granite-speech-4.1-2b-q4_k.gguf` | Q4_K | ~2.94 GB | **Recommended.** LLM layers Q4_K; encoder + projector kept F32 (precision-sensitive). Bit-identical-quality to F16 on encoder + projector |
+| `granite-speech-4.1-2b-q4_k-f16enc.gguf` | Q4_K + F16 encoder | ~2.07 GB | LLM Q4_K, encoder + projector F16 (norms / biases / BN stats stay F32). Sweet spot: ~1 GB smaller than the recommended Q4_K with virtually no parity loss |
 | `granite-speech-4.1-2b-q4_k-mini.gguf` | Q4_K (aggressive) | ~1.7 GB | Encoder, projector and LLM all Q4_K. Smaller / faster to download but lower cosine parity (~0.93). Still produces correct transcriptions on JFK and similar clips, but expect quality regressions on harder material |
 
 ## Cosine parity (vs PyTorch BF16 reference, JFK 11 s clip)
 
-| Stage | F16 cos_min | Q4_K cos_min | Q4_K-mini cos_min |
-|---|---|---|---|
-| mel_spectrogram | 0.999997 | 0.999997 | 0.999997 |
-| encoder_out | 0.999908 | 0.999908 | 0.929 |
-| projector_out | 0.999995 | 0.999995 | 0.922 |
+| Stage | F16 cos_min | Q4_K cos_min | Q4_K-f16enc cos_min | Q4_K-mini cos_min |
+|---|---|---|---|---|
+| mel_spectrogram | 0.999997 | 0.999997 | 0.999997 | 0.999997 |
+| encoder_out | 0.999908 | 0.999908 | 0.999855 | 0.929 |
+| projector_out | 0.999995 | 0.999995 | 0.999993 | 0.922 |
 
 The encoder is a 16-layer Conformer where Q4_K rounding error compounds
 across layers; the recommended Q4_K file pins those weights at F32 to
-preserve numerical fidelity. The `-mini` file applies Q4_K to every
-quantisable 2D weight including the encoder — useful when disk or
-download size matters more than transcript quality.
+preserve numerical fidelity. The `-f16enc` file relaxes that to F16 and
+ships ~1 GB smaller while keeping cosine essentially indistinguishable
+from F16 (every Whisper / Llama / parakeet GGUF in the wild already
+runs F16 weights). The `-mini` file applies Q4_K to every quantisable
+2D weight including the encoder — useful when disk or download size
+matters more than transcript quality.
 
 _Tested with `crispasr-diff granite-4.1 <model.gguf> <ref.gguf> samples/jfk.wav`_
 
