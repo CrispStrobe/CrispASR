@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.10...3.29)
-project("whisper.cpp" C CXX)
-project("whisper.cpp" VERSION 0.5.4)
+
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" PROJECT_VERSION_CONTENT)
+string(STRIP "${PROJECT_VERSION_CONTENT}" PROJECT_VERSION_CONTENT)
+
+project(crispasr VERSION ${PROJECT_VERSION_CONTENT} LANGUAGES C CXX)
 include(CheckIncludeFileCXX)
 
 set(SOVERSION 1)
@@ -21,14 +24,14 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
-    set(WHISPER_STANDALONE ON)
+    set(CRISPASR_STANDALONE ON)
 
     include(git-vars)
 
     # configure project version
     configure_file(${CMAKE_SOURCE_DIR}/bindings/javascript/package-tmpl.json ${CMAKE_SOURCE_DIR}/bindings/javascript/package.json @ONLY)
 else()
-    set(WHISPER_STANDALONE OFF)
+    set(CRISPASR_STANDALONE OFF)
 endif()
 
 # Always populate GIT_SHA1 / GIT_DATE / GIT_COMMIT_SUBJECT — the CLI
@@ -43,10 +46,10 @@ if (EMSCRIPTEN)
     set(CMAKE_CXX_STANDARD 17)
     set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-    option(WHISPER_WASM_SINGLE_FILE "whisper: embed WASM inside the generated whisper.js" ON)
+    option(CRISPASR_WASM_SINGLE_FILE "crispasr: embed WASM inside the generated crispasr.js" ON)
 
     # TODO: without these, we get the following error:
-    #       wasm-ld: error: --shared-memory is disallowed by whisper.cpp.o because it was not compiled with 'atomics' or 'bulk-memory' features.
+    #       wasm-ld: error: --shared-memory is disallowed by crispasr.o because it was not compiled with 'atomics' or 'bulk-memory' features.
     set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -pthread")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
 
@@ -69,39 +72,39 @@ option(BUILD_SHARED_LIBS "build shared libraries" ${BUILD_SHARED_LIBS_DEFAULT})
 #
 
 # debug
-option(WHISPER_ALL_WARNINGS           "whisper: enable all compiler warnings"                   ON)
-option(WHISPER_ALL_WARNINGS_3RD_PARTY "whisper: enable all compiler warnings in 3rd party libs" OFF)
+option(CRISPASR_ALL_WARNINGS           "crispasr: enable all compiler warnings"                   ON)
+option(CRISPASR_ALL_WARNINGS_3RD_PARTY "crispasr: enable all compiler warnings in 3rd party libs" OFF)
 
 # build
-option(WHISPER_FATAL_WARNINGS  "whisper: enable -Werror flag"               OFF)
-option(WHISPER_USE_SYSTEM_GGML "whisper: use system-installed GGML library" OFF)
+option(CRISPASR_FATAL_WARNINGS  "crispasr: enable -Werror flag"               OFF)
+option(CRISPASR_USE_SYSTEM_GGML "crispasr: use system-installed GGML library" OFF)
 
 # sanitizers
-option(WHISPER_SANITIZE_THREAD    "whisper: enable thread sanitizer"    OFF)
-option(WHISPER_SANITIZE_ADDRESS   "whisper: enable address sanitizer"   OFF)
-option(WHISPER_SANITIZE_UNDEFINED "whisper: enable undefined sanitizer" OFF)
+option(CRISPASR_SANITIZE_THREAD    "crispasr: enable thread sanitizer"    OFF)
+option(CRISPASR_SANITIZE_ADDRESS   "crispasr: enable address sanitizer"   OFF)
+option(CRISPASR_SANITIZE_UNDEFINED "crispasr: enable undefined sanitizer" OFF)
 
 # extra artifacts
-option(WHISPER_BUILD_TESTS    "whisper: build tests"          ${WHISPER_STANDALONE})
-option(WHISPER_BUILD_EXAMPLES "whisper: build examples"       ${WHISPER_STANDALONE})
-option(WHISPER_BUILD_SERVER   "whisper: build server example" ${WHISPER_STANDALONE})
+option(CRISPASR_BUILD_TESTS    "crispasr: build tests"          ${CRISPASR_STANDALONE})
+option(CRISPASR_BUILD_EXAMPLES "crispasr: build examples"       ${CRISPASR_STANDALONE})
+option(CRISPASR_BUILD_SERVER   "crispasr: build server example" ${CRISPASR_STANDALONE})
 
 # 3rd party libs
-option(WHISPER_CURL "whisper: use libcurl to download model from an URL" OFF)
-option(WHISPER_SDL2 "whisper: support for libSDL2" OFF)
+option(CRISPASR_CURL "crispasr: use libcurl to download model from an URL" OFF)
+option(CRISPASR_SDL2 "crispasr: support for libSDL2" OFF)
 
-if (WHISPER_CURL)
+if (CRISPASR_CURL)
     find_package(CURL REQUIRED)
     message(STATUS "libcurl found: ${CURL_VERSION_STRING} (${CURL_LIBRARIES})")
 endif()
 
 if (CMAKE_SYSTEM_NAME MATCHES "Linux")
-    option(WHISPER_FFMPEG "whisper: support building and linking with ffmpeg libs (avcodec, swresample, ...)" OFF)
+    option(CRISPASR_FFMPEG "crispasr: support building and linking with ffmpeg libs (avcodec, swresample, ...)" OFF)
 endif()
 
-option(WHISPER_COREML                "whisper: enable Core ML framework"  OFF)
-option(WHISPER_COREML_ALLOW_FALLBACK "whisper: allow non-CoreML fallback" OFF)
-option(WHISPER_OPENVINO              "whisper: support for OpenVINO"      OFF)
+option(CRISPASR_COREML                "crispasr: enable Core ML framework"  OFF)
+option(CRISPASR_COREML_ALLOW_FALLBACK "crispasr: allow non-CoreML fallback" OFF)
+option(CRISPASR_OPENVINO              "crispasr: support for OpenVINO"      OFF)
 
 # ---------------------------------------------------------------------------
 # Cohere Transcribe options
@@ -127,31 +130,31 @@ if (COHERE_MKL)
 endif()
 
 # override ggml options
-set(GGML_SANITIZE_THREAD    ${WHISPER_SANITIZE_THREAD})
-set(GGML_SANITIZE_ADDRESS   ${WHISPER_SANITIZE_ADDRESS})
-set(GGML_SANITIZE_UNDEFINED ${WHISPER_SANITIZE_UNDEFINED})
-set(GGML_ALL_WARNINGS       ${WHISPER_ALL_WARNINGS})
-set(GGML_FATAL_WARNINGS     ${WHISPER_FATAL_WARNINGS})
+set(GGML_SANITIZE_THREAD    ${CRISPASR_SANITIZE_THREAD})
+set(GGML_SANITIZE_ADDRESS   ${CRISPASR_SANITIZE_ADDRESS})
+set(GGML_SANITIZE_UNDEFINED ${CRISPASR_SANITIZE_UNDEFINED})
+set(GGML_ALL_WARNINGS       ${CRISPASR_ALL_WARNINGS})
+set(GGML_FATAL_WARNINGS     ${CRISPASR_FATAL_WARNINGS})
 
 # transition helpers
-function (whisper_option_depr TYPE OLD NEW)
+function (crispasr_option_depr TYPE OLD NEW)
     if (${OLD})
         message(${TYPE} "${OLD} is deprecated and will be removed in the future.\nUse ${NEW} instead\n")
         set(${NEW} ON)
     endif()
 endfunction()
 
-whisper_option_depr(FATAL_ERROR WHISPER_CUBLAS              GGML_CUDA)
-whisper_option_depr(WARNING     WHISPER_CUDA                GGML_CUDA)
-whisper_option_depr(WARNING     WHISPER_KOMPUTE             GGML_KOMPUTE)
-whisper_option_depr(WARNING     WHISPER_METAL               GGML_METAL)
-whisper_option_depr(WARNING     WHISPER_METAL_EMBED_LIBRARY GGML_METAL_EMBED_LIBRARY)
-whisper_option_depr(WARNING     WHISPER_NATIVE              GGML_NATIVE)
-whisper_option_depr(WARNING     WHISPER_OPENMP              GGML_OPENMP)
-whisper_option_depr(WARNING     WHISPER_RPC                 GGML_RPC)
-whisper_option_depr(WARNING     WHISPER_SYCL                GGML_SYCL)
-whisper_option_depr(WARNING     WHISPER_SYCL_F16            GGML_SYCL_F16)
-whisper_option_depr(WARNING     WHISPER_CCACHE              GGML_CCACHE)
+crispasr_option_depr(FATAL_ERROR CRISPASR_CUBLAS              GGML_CUDA)
+crispasr_option_depr(WARNING     CRISPASR_CUDA                GGML_CUDA)
+crispasr_option_depr(WARNING     CRISPASR_KOMPUTE             GGML_KOMPUTE)
+crispasr_option_depr(WARNING     CRISPASR_METAL               GGML_METAL)
+crispasr_option_depr(WARNING     CRISPASR_METAL_EMBED_LIBRARY GGML_METAL_EMBED_LIBRARY)
+crispasr_option_depr(WARNING     CRISPASR_NATIVE              GGML_NATIVE)
+crispasr_option_depr(WARNING     CRISPASR_OPENMP              GGML_OPENMP)
+crispasr_option_depr(WARNING     CRISPASR_RPC                 GGML_RPC)
+crispasr_option_depr(WARNING     CRISPASR_SYCL                GGML_SYCL)
+crispasr_option_depr(WARNING     CRISPASR_SYCL_F16            GGML_SYCL_F16)
+crispasr_option_depr(WARNING     CRISPASR_CCACHE              GGML_CCACHE)
 
 if (GGML_CUDA AND NOT MSVC)
     #GGML_CUDA enabled, add the necessary compile options -Wno-deprecated-gpu-targets
@@ -163,7 +166,7 @@ endif()
 #
 
 if (NOT TARGET ggml)
-    if (WHISPER_USE_SYSTEM_GGML)
+    if (CRISPASR_USE_SYSTEM_GGML)
         find_package(ggml REQUIRED)
         if (NOT ggml_FOUND)
             message(FATAL_ERROR "System-installed GGML library not found.")
@@ -183,7 +186,7 @@ if (NOT TARGET ggml)
             #  must be at least as new as the latest toolset used by any app component.
             #  You can define _DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR as an escape hatch.
             #
-            # Specifically to whisper.cpp this would cause a crash when using the Java bindings.
+            # Specifically to crispasr this would cause a crash when using the Java bindings.
             # resulting in a Invalid memory access error.
             target_compile_definitions(ggml-base PRIVATE _DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR)
         endif()
@@ -199,46 +202,46 @@ add_subdirectory(src)
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 
-set(WHISPER_BUILD_NUMBER        ${BUILD_NUMBER})
-set(WHISPER_BUILD_COMMIT        ${BUILD_COMMIT})
-set(WHISPER_INSTALL_VERSION     ${CMAKE_PROJECT_VERSION})
+set(CRISPASR_BUILD_NUMBER        ${BUILD_NUMBER})
+set(CRISPASR_BUILD_COMMIT        ${BUILD_COMMIT})
+set(CRISPASR_INSTALL_VERSION     ${CMAKE_PROJECT_VERSION})
 
-set(WHISPER_INCLUDE_INSTALL_DIR ${CMAKE_INSTALL_INCLUDEDIR} CACHE PATH "Location of header  files")
-set(WHISPER_LIB_INSTALL_DIR     ${CMAKE_INSTALL_LIBDIR}     CACHE PATH "Location of library files")
-set(WHISPER_BIN_INSTALL_DIR     ${CMAKE_INSTALL_BINDIR}     CACHE PATH "Location of binary  files")
+set(CRISPASR_INCLUDE_INSTALL_DIR ${CMAKE_INSTALL_INCLUDEDIR} CACHE PATH "Location of header  files")
+set(CRISPASR_LIB_INSTALL_DIR     ${CMAKE_INSTALL_LIBDIR}     CACHE PATH "Location of library files")
+set(CRISPASR_BIN_INSTALL_DIR     ${CMAKE_INSTALL_BINDIR}     CACHE PATH "Location of binary  files")
 
-get_directory_property(WHISPER_TRANSIENT_DEFINES COMPILE_DEFINITIONS)
+get_directory_property(CRISPASR_TRANSIENT_DEFINES COMPILE_DEFINITIONS)
 
-set_target_properties(whisper PROPERTIES PUBLIC_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/include/whisper.h)
-install(TARGETS whisper LIBRARY PUBLIC_HEADER)
+set_target_properties(crispasr PROPERTIES PUBLIC_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/include/crispasr.h)
+install(TARGETS crispasr LIBRARY PUBLIC_HEADER)
 
-target_compile_definitions(whisper PRIVATE
-    WHISPER_VERSION="${PROJECT_VERSION}"
+target_compile_definitions(crispasr PRIVATE
+    CRISPASR_VERSION="${PROJECT_VERSION}"
 )
 
 configure_package_config_file(
-        ${CMAKE_CURRENT_SOURCE_DIR}/cmake/whisper-config.cmake.in
-        ${CMAKE_CURRENT_BINARY_DIR}/whisper-config.cmake
-    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/whisper
+        ${CMAKE_CURRENT_SOURCE_DIR}/cmake/crispasr-config.cmake.in
+        ${CMAKE_CURRENT_BINARY_DIR}/crispasr-config.cmake
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/crispasr
     PATH_VARS
-    WHISPER_INCLUDE_INSTALL_DIR
-    WHISPER_LIB_INSTALL_DIR
-    WHISPER_BIN_INSTALL_DIR )
+    CRISPASR_INCLUDE_INSTALL_DIR
+    CRISPASR_LIB_INSTALL_DIR
+    CRISPASR_BIN_INSTALL_DIR )
 
 write_basic_package_version_file(
-    ${CMAKE_CURRENT_BINARY_DIR}/whisper-version.cmake
-    VERSION ${WHISPER_INSTALL_VERSION}
+    ${CMAKE_CURRENT_BINARY_DIR}/crispasr-version.cmake
+    VERSION ${CRISPASR_INSTALL_VERSION}
     COMPATIBILITY SameMajorVersion)
 
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/whisper-config.cmake
-              ${CMAKE_CURRENT_BINARY_DIR}/whisper-version.cmake
-        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/whisper)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/crispasr-config.cmake
+              ${CMAKE_CURRENT_BINARY_DIR}/crispasr-version.cmake
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/crispasr)
 
-configure_file(cmake/whisper.pc.in
-        "${CMAKE_CURRENT_BINARY_DIR}/whisper.pc"
+configure_file(cmake/crispasr.pc.in
+        "${CMAKE_CURRENT_BINARY_DIR}/crispasr.pc"
         @ONLY)
 
-install(FILES "${CMAKE_CURRENT_BINARY_DIR}/whisper.pc"
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/crispasr.pc"
         DESTINATION lib/pkgconfig)
 
 #
@@ -247,12 +250,12 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/whisper.pc"
 
 add_subdirectory(crisp_audio)
 
-if (WHISPER_BUILD_TESTS AND NOT CMAKE_JS_VERSION)
+if (CRISPASR_BUILD_TESTS AND NOT CMAKE_JS_VERSION)
     include(CTest)
     add_subdirectory(tests)
 endif ()
 
-if (WHISPER_BUILD_EXAMPLES)
+if (CRISPASR_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()
 
@@ -273,18 +276,18 @@ if (MSVC)
         endif()
     endfunction()
 
-    if (WHISPER_BUILD_EXAMPLES)
-        disable_msvc_warnings(whisper)
+    if (CRISPASR_BUILD_EXAMPLES)
+        disable_msvc_warnings(crispasr)
         disable_msvc_warnings(common)
         disable_msvc_warnings(common-sdl)
         disable_msvc_warnings(lsp)
         disable_msvc_warnings(wchess-core)
-        disable_msvc_warnings(whisper-command)
-        disable_msvc_warnings(crispasr)
-        disable_msvc_warnings(whisper-server)
-        disable_msvc_warnings(whisper-stream)
-        disable_msvc_warnings(whisper-talk-llama)
-        disable_msvc_warnings(whisper-bench)
+        disable_msvc_warnings(crispasr-command)
+        disable_msvc_warnings(crispasr-cli)
+        disable_msvc_warnings(crispasr-server)
+        disable_msvc_warnings(crispasr-stream)
+        disable_msvc_warnings(crispasr-talk-llama)
+        disable_msvc_warnings(crispasr-bench)
         disable_msvc_warnings(quantize)
         disable_msvc_warnings(vad-speech-segments)
     endif()

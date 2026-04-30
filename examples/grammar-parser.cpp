@@ -8,7 +8,7 @@
 
 namespace grammar_parser {
     // NOTE: assumes valid utf8 (but checks for overrun)
-    // copied from whisper.cpp
+    // copied from crispasr
     static std::pair<uint32_t, const char *> decode_utf8(const char * src) {
         static const int lookup[] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 3, 4 };
         uint8_t  first_byte = static_cast<uint8_t>(*src);
@@ -144,29 +144,29 @@ namespace grammar_parser {
                 while (*pos != '"') {
                     auto char_pair = parse_char(pos);
                          pos       = char_pair.second;
-                    out_elements.push_back({WHISPER_GRETYPE_CHAR, char_pair.first});
+                    out_elements.push_back({CRISPASR_GRETYPE_CHAR, char_pair.first});
                 }
                 pos = parse_space(pos + 1, is_nested);
             } else if (*pos == '[') { // char range(s)
                 pos++;
-                enum whisper_gretype start_type = WHISPER_GRETYPE_CHAR;
+                enum whisper_gretype start_type = CRISPASR_GRETYPE_CHAR;
                 if (*pos == '^') {
                     pos++;
-                    start_type = WHISPER_GRETYPE_CHAR_NOT;
+                    start_type = CRISPASR_GRETYPE_CHAR_NOT;
                 }
                 last_sym_start = out_elements.size();
                 while (*pos != ']') {
                     auto char_pair = parse_char(pos);
                          pos       = char_pair.second;
                     enum whisper_gretype type = last_sym_start < out_elements.size()
-                        ? WHISPER_GRETYPE_CHAR_ALT
+                        ? CRISPASR_GRETYPE_CHAR_ALT
                         : start_type;
 
                     out_elements.push_back({type, char_pair.first});
                     if (pos[0] == '-' && pos[1] != ']') {
                         auto endchar_pair = parse_char(pos + 1);
                              pos          = endchar_pair.second;
-                        out_elements.push_back({WHISPER_GRETYPE_CHAR_RNG_UPPER, endchar_pair.first});
+                        out_elements.push_back({CRISPASR_GRETYPE_CHAR_RNG_UPPER, endchar_pair.first});
                     }
                 }
                 pos = parse_space(pos + 1, is_nested);
@@ -175,7 +175,7 @@ namespace grammar_parser {
                 uint32_t     ref_rule_id = get_symbol_id(state, pos, name_end - pos);
                 pos = parse_space(name_end, is_nested);
                 last_sym_start = out_elements.size();
-                out_elements.push_back({WHISPER_GRETYPE_RULE_REF, ref_rule_id});
+                out_elements.push_back({CRISPASR_GRETYPE_RULE_REF, ref_rule_id});
             } else if (*pos == '(') { // grouping
                 // parse nested alternates into synthesized rule
                 pos = parse_space(pos + 1, true);
@@ -183,7 +183,7 @@ namespace grammar_parser {
                 pos = parse_alternates(state, pos, rule_name, sub_rule_id, true);
                 last_sym_start = out_elements.size();
                 // output reference to synthesized rule
-                out_elements.push_back({WHISPER_GRETYPE_RULE_REF, sub_rule_id});
+                out_elements.push_back({CRISPASR_GRETYPE_RULE_REF, sub_rule_id});
                 if (*pos != ')') {
                     throw std::runtime_error(std::string("expecting ')' at ") + pos);
                 }
@@ -205,21 +205,21 @@ namespace grammar_parser {
                     sub_rule.end(), out_elements.begin() + last_sym_start, out_elements.end());
                 if (*pos == '*' || *pos == '+') {
                     // cause generated rule to recurse
-                    sub_rule.push_back({WHISPER_GRETYPE_RULE_REF, sub_rule_id});
+                    sub_rule.push_back({CRISPASR_GRETYPE_RULE_REF, sub_rule_id});
                 }
                 // mark start of alternate def
-                sub_rule.push_back({WHISPER_GRETYPE_ALT, 0});
+                sub_rule.push_back({CRISPASR_GRETYPE_ALT, 0});
                 if (*pos == '+') {
                     // add preceding symbol as alternate only for '+' (otherwise empty)
                     sub_rule.insert(
                         sub_rule.end(), out_elements.begin() + last_sym_start, out_elements.end());
                 }
-                sub_rule.push_back({WHISPER_GRETYPE_END, 0});
+                sub_rule.push_back({CRISPASR_GRETYPE_END, 0});
                 add_rule(state, sub_rule_id, sub_rule);
 
                 // in original rule, replace previous symbol with reference to generated rule
                 out_elements.resize(last_sym_start);
-                out_elements.push_back({WHISPER_GRETYPE_RULE_REF, sub_rule_id});
+                out_elements.push_back({CRISPASR_GRETYPE_RULE_REF, sub_rule_id});
 
                 pos = parse_space(pos + 1, is_nested);
             } else {
@@ -238,11 +238,11 @@ namespace grammar_parser {
         std::vector<whisper_grammar_element> rule;
         const char * pos = parse_sequence(state, src, rule_name, rule, is_nested);
         while (*pos == '|') {
-            rule.push_back({WHISPER_GRETYPE_ALT, 0});
+            rule.push_back({CRISPASR_GRETYPE_ALT, 0});
             pos = parse_space(pos + 1, true);
             pos = parse_sequence(state, pos, rule_name, rule, is_nested);
         }
-        rule.push_back({WHISPER_GRETYPE_END, 0});
+        rule.push_back({CRISPASR_GRETYPE_END, 0});
         add_rule(state, rule_id, rule);
         return pos;
     }
@@ -296,10 +296,10 @@ namespace grammar_parser {
 
     static bool is_char_element(whisper_grammar_element elem) {
         switch (elem.type) {
-            case WHISPER_GRETYPE_CHAR:           return true;
-            case WHISPER_GRETYPE_CHAR_NOT:       return true;
-            case WHISPER_GRETYPE_CHAR_ALT:       return true;
-            case WHISPER_GRETYPE_CHAR_RNG_UPPER: return true;
+            case CRISPASR_GRETYPE_CHAR:           return true;
+            case CRISPASR_GRETYPE_CHAR_NOT:       return true;
+            case CRISPASR_GRETYPE_CHAR_ALT:       return true;
+            case CRISPASR_GRETYPE_CHAR_RNG_UPPER: return true;
             default:                           return false;
         }
     }
@@ -307,24 +307,24 @@ namespace grammar_parser {
     static void print_rule_binary(FILE * file, const std::vector<whisper_grammar_element> & rule) {
         for (auto elem : rule) {
             switch (elem.type) {
-                case WHISPER_GRETYPE_END:            fprintf(file, "END");            break;
-                case WHISPER_GRETYPE_ALT:            fprintf(file, "ALT");            break;
-                case WHISPER_GRETYPE_RULE_REF:       fprintf(file, "RULE_REF");       break;
-                case WHISPER_GRETYPE_CHAR:           fprintf(file, "CHAR");           break;
-                case WHISPER_GRETYPE_CHAR_NOT:       fprintf(file, "CHAR_NOT");       break;
-                case WHISPER_GRETYPE_CHAR_RNG_UPPER: fprintf(file, "CHAR_RNG_UPPER"); break;
-                case WHISPER_GRETYPE_CHAR_ALT:       fprintf(file, "CHAR_ALT");       break;
+                case CRISPASR_GRETYPE_END:            fprintf(file, "END");            break;
+                case CRISPASR_GRETYPE_ALT:            fprintf(file, "ALT");            break;
+                case CRISPASR_GRETYPE_RULE_REF:       fprintf(file, "RULE_REF");       break;
+                case CRISPASR_GRETYPE_CHAR:           fprintf(file, "CHAR");           break;
+                case CRISPASR_GRETYPE_CHAR_NOT:       fprintf(file, "CHAR_NOT");       break;
+                case CRISPASR_GRETYPE_CHAR_RNG_UPPER: fprintf(file, "CHAR_RNG_UPPER"); break;
+                case CRISPASR_GRETYPE_CHAR_ALT:       fprintf(file, "CHAR_ALT");       break;
             }
             switch (elem.type) {
-                case WHISPER_GRETYPE_END:
-                case WHISPER_GRETYPE_ALT:
-                case WHISPER_GRETYPE_RULE_REF:
+                case CRISPASR_GRETYPE_END:
+                case CRISPASR_GRETYPE_ALT:
+                case CRISPASR_GRETYPE_RULE_REF:
                     fprintf(file, "(%u) ", elem.value);
                     break;
-                case WHISPER_GRETYPE_CHAR:
-                case WHISPER_GRETYPE_CHAR_NOT:
-                case WHISPER_GRETYPE_CHAR_RNG_UPPER:
-                case WHISPER_GRETYPE_CHAR_ALT:
+                case CRISPASR_GRETYPE_CHAR:
+                case CRISPASR_GRETYPE_CHAR_NOT:
+                case CRISPASR_GRETYPE_CHAR_RNG_UPPER:
+                case CRISPASR_GRETYPE_CHAR_ALT:
                     fprintf(file, "(\"");
                     print_grammar_char(file, elem.value);
                     fprintf(file, "\") ");
@@ -339,45 +339,45 @@ namespace grammar_parser {
             uint32_t   rule_id,
             const std::vector<whisper_grammar_element> & rule,
             const std::map<uint32_t, std::string>    & symbol_id_names) {
-        if (rule.empty() || rule.back().type != WHISPER_GRETYPE_END) {
+        if (rule.empty() || rule.back().type != CRISPASR_GRETYPE_END) {
             throw std::runtime_error(
-                "malformed rule, does not end with WHISPER_GRETYPE_END: " + std::to_string(rule_id));
+                "malformed rule, does not end with CRISPASR_GRETYPE_END: " + std::to_string(rule_id));
         }
         fprintf(file, "%s ::= ", symbol_id_names.at(rule_id).c_str());
         for (size_t i = 0, end = rule.size() - 1; i < end; i++) {
             whisper_grammar_element elem = rule[i];
             switch (elem.type) {
-                case WHISPER_GRETYPE_END:
+                case CRISPASR_GRETYPE_END:
                     throw std::runtime_error(
                         "unexpected end of rule: " + std::to_string(rule_id) + "," +
                         std::to_string(i));
-                case WHISPER_GRETYPE_ALT:
+                case CRISPASR_GRETYPE_ALT:
                     fprintf(file, "| ");
                     break;
-                case WHISPER_GRETYPE_RULE_REF:
+                case CRISPASR_GRETYPE_RULE_REF:
                     fprintf(file, "%s ", symbol_id_names.at(elem.value).c_str());
                     break;
-                case WHISPER_GRETYPE_CHAR:
+                case CRISPASR_GRETYPE_CHAR:
                     fprintf(file, "[");
                     print_grammar_char(file, elem.value);
                     break;
-                case WHISPER_GRETYPE_CHAR_NOT:
+                case CRISPASR_GRETYPE_CHAR_NOT:
                     fprintf(file, "[^");
                     print_grammar_char(file, elem.value);
                     break;
-                case WHISPER_GRETYPE_CHAR_RNG_UPPER:
+                case CRISPASR_GRETYPE_CHAR_RNG_UPPER:
                     if (i == 0 || !is_char_element(rule[i - 1])) {
                         throw std::runtime_error(
-                            "WHISPER_GRETYPE_CHAR_RNG_UPPER without preceding char: " +
+                            "CRISPASR_GRETYPE_CHAR_RNG_UPPER without preceding char: " +
                             std::to_string(rule_id) + "," + std::to_string(i));
                     }
                     fprintf(file, "-");
                     print_grammar_char(file, elem.value);
                     break;
-                case WHISPER_GRETYPE_CHAR_ALT:
+                case CRISPASR_GRETYPE_CHAR_ALT:
                     if (i == 0 || !is_char_element(rule[i - 1])) {
                         throw std::runtime_error(
-                            "WHISPER_GRETYPE_CHAR_ALT without preceding char: " +
+                            "CRISPASR_GRETYPE_CHAR_ALT without preceding char: " +
                             std::to_string(rule_id) + "," + std::to_string(i));
                     }
                     print_grammar_char(file, elem.value);
@@ -385,8 +385,8 @@ namespace grammar_parser {
             }
             if (is_char_element(elem)) {
                 switch (rule[i + 1].type) {
-                    case WHISPER_GRETYPE_CHAR_ALT:
-                    case WHISPER_GRETYPE_CHAR_RNG_UPPER:
+                    case CRISPASR_GRETYPE_CHAR_ALT:
+                    case CRISPASR_GRETYPE_CHAR_RNG_UPPER:
                         break;
                     default:
                         fprintf(file, "] ");

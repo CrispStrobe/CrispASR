@@ -32,7 +32,7 @@ class Dependencies
   private
 
   def dot_path
-    File.join(__dir__, "build", "whisper.cpp.dot")
+    File.join(__dir__, "build", "crispasr.dot")
   end
 
   def generate_dot

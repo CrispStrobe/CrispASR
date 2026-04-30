@@ -11,7 +11,7 @@ dependencies:
   crispasr: ^0.4.9
 ```
 
-This package is **pure Dart FFI** and does **not** bundle the native library — install `libcrispasr` separately, the same way `whisper.cpp`'s bindings work:
+This package is **pure Dart FFI** and does **not** bundle the native library — install `libcrispasr` separately, the same way `crispasr`'s bindings work:
 
 ```bash
 git clone https://github.com/CrispStrobe/CrispASR

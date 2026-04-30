@@ -1,10 +1,10 @@
-# whisper.cpp/examples/talk-llama
+# crispasr/examples/talk-llama
 
 Talk with an LLaMA AI in your terminal
 
 *Latest perf as of 2 Nov 2023 using Whisper Medium + LLaMA v2 13B Q8_0 on M2 Ultra:*
 
-https://github.com/ggerganov/whisper.cpp/assets/1991296/d97a3788-bf2a-4756-9a43-60c6b391649e
+Demo video: see the project history and upstream example documentation.
 
 *Previous demo running on CPUs*
 
@@ -12,7 +12,7 @@ https://github.com/ggerganov/whisper.cpp/assets/1991296/d97a3788-bf2a-4756-9a43-
 
 ## Building
 
-The `whisper-talk-llama` tool depends on SDL2 library to capture audio from the microphone. You can build it like this:
+The `crispasr-talk-llama` tool depends on SDL2 library to capture audio from the microphone. You can build it like this:
 
 ```bash
 # Install SDL2
@@ -25,12 +25,12 @@ sudo dnf install SDL2 SDL2-devel
 # Install SDL2 on Mac OS
 brew install sdl2
 
-# Build the "whisper-talk-llama" executable
-cmake -B build -S . -DWHISPER_SDL2=ON
+# Build the "crispasr-talk-llama" executable
+cmake -B build -S . -DCRISPASR_SDL2=ON
 cmake --build build --config Release
 
 # Run it
-./build/bin/whisper-talk-llama -mw ./models/ggml-small.en.bin -ml ../llama.cpp/models/llama-13b/ggml-model-q4_0.gguf -p "Georgi" -t 8
+./build/bin/crispasr-talk-llama -mw ./models/ggml-small.en.bin -ml ../llama.cpp/models/llama-13b/ggml-model-q4_0.gguf -p "Georgi" -t 8
 ```
 
 - The `-mw` argument specifies the Whisper model that you would like to use. Recommended `base` or `small` for real-time experience
@@ -38,16 +38,16 @@ cmake --build build --config Release
 
 ## Session
 
-The `whisper-talk-llama` tool supports session management to enable more coherent and continuous conversations. By maintaining context from previous interactions, it can better understand and respond to user requests in a more natural way.
+The `crispasr-talk-llama` tool supports session management to enable more coherent and continuous conversations. By maintaining context from previous interactions, it can better understand and respond to user requests in a more natural way.
 
-To enable session support, use the `--session FILE` command line option when running the program. The `whisper-talk-llama` model state will be saved to the specified file after each interaction. If the file does not exist, it will be created. If the file exists, the model state will be loaded from it, allowing you to resume a previous session.
+To enable session support, use the `--session FILE` command line option when running the program. The `crispasr-talk-llama` model state will be saved to the specified file after each interaction. If the file does not exist, it will be created. If the file exists, the model state will be loaded from it, allowing you to resume a previous session.
 
 This feature is especially helpful for maintaining context in long conversations or when interacting with the AI assistant across multiple sessions. It ensures that the assistant remembers the previous interactions and can provide more relevant and contextual responses.
 
 Example usage:
 
 ```bash
-./build/bin/whisper-talk-llama --session ./my-session-file -mw ./models/ggml-small.en.bin -ml ../llama.cpp/models/llama-13b/ggml-model-q4_0.gguf -p "Georgi" -t 8
+./build/bin/crispasr-talk-llama --session ./my-session-file -mw ./models/ggml-small.en.bin -ml ../llama.cpp/models/llama-13b/ggml-model-q4_0.gguf -p "Georgi" -t 8
 ```
 
 ## TTS
@@ -58,4 +58,4 @@ By default, it is configured to use MacOS's `say` or Windows SpeechSynthesizer, 
 
 ## Discussion
 
-If you have any feedback, please let "us" know in the following discussion: https://github.com/ggerganov/whisper.cpp/discussions/672?converting=1
+If you have feedback, the historical upstream discussion is here: https://github.com/ggml-org/whisper.cpp/discussions/672

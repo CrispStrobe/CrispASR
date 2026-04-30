@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build CrispASR (whisper.cpp) for iOS (xcframework with Metal GPU).
+# Build CrispASR (crispasr) for iOS (xcframework with Metal GPU).
 #
 # Usage:
 #   ./build-ios.sh              # arm64 device + simulator
@@ -12,8 +12,8 @@ BUILD_DIR="$SCRIPT_DIR/build-ios"
 CMAKE_COMMON=(
     -DCMAKE_BUILD_TYPE=Release
     -DBUILD_SHARED_LIBS=OFF
-    -DWHISPER_BUILD_EXAMPLES=OFF
-    -DWHISPER_BUILD_TESTS=OFF
+    -DCRISPASR_BUILD_EXAMPLES=OFF
+    -DCRISPASR_BUILD_TESTS=OFF
     -DGGML_METAL=ON
     -DGGML_METAL_EMBED_LIBRARY=ON
 )

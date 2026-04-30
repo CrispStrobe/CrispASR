@@ -3,8 +3,8 @@ if (EMSCRIPTEN)
 
     add_custom_command(
         OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/javascript/publish.log
-        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/javascript/whisper.js
-        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/javascript/libwhisper.worker.js
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/javascript/crispasr.js
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/javascript/crispasr.worker.js
         DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/javascript/package.json
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/javascript
         COMMAND npm publish

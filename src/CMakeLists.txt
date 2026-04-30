@@ -8,7 +8,7 @@ if (WIN32)
 endif()
 
 
-if (WHISPER_ALL_WARNINGS)
+if (CRISPASR_ALL_WARNINGS)
     if (NOT MSVC)
         list(APPEND WARNING_FLAGS -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function)
         list(APPEND C_FLAGS       -Wshadow -Wstrict-prototypes -Wpointer-arith -Wmissing-prototypes
@@ -27,24 +27,24 @@ if (WHISPER_ALL_WARNINGS)
     endif()
 endif()
 
-if (WHISPER_COREML)
+if (CRISPASR_COREML)
     find_library(FOUNDATION_FRAMEWORK Foundation)
     find_library(COREML_FRAMEWORK CoreML)
 
     if (COREML_FRAMEWORK)
         message(STATUS "CoreML framework found")
 
-        set(WHISPER_EXTRA_FLAGS ${WHISPER_EXTRA_FLAGS} -DWHISPER_USE_COREML)
+        set(CRISPASR_EXTRA_FLAGS ${CRISPASR_EXTRA_FLAGS} -DCRISPASR_USE_COREML)
     else()
         message(FATAL_ERROR "CoreML framework not found")
     endif()
 
-    if (WHISPER_COREML_ALLOW_FALLBACK)
-        set(WHISPER_EXTRA_FLAGS ${WHISPER_EXTRA_FLAGS} -DWHISPER_COREML_ALLOW_FALLBACK)
+    if (CRISPASR_COREML_ALLOW_FALLBACK)
+        set(CRISPASR_EXTRA_FLAGS ${CRISPASR_EXTRA_FLAGS} -DCRISPASR_COREML_ALLOW_FALLBACK)
     endif()
 endif()
 
-if (WHISPER_OPENVINO)
+if (CRISPASR_OPENVINO)
     find_package(OpenVINO REQUIRED COMPONENTS Runtime)
 endif()
 
@@ -52,10 +52,10 @@ endif()
 # libraries
 #
 
-# whisper.coreml
+# crispasr.coreml
 
-if (WHISPER_COREML)
-    set(TARGET whisper.coreml)
+if (CRISPASR_COREML)
+    set(TARGET crispasr.coreml)
 
     add_library(${TARGET}
         coreml/whisper-compat.m
@@ -82,8 +82,8 @@ if (WHISPER_COREML)
     install(TARGETS ${TARGET} LIBRARY)
 endif()
 
-if (WHISPER_OPENVINO)
-    set(TARGET whisper.openvino)
+if (CRISPASR_OPENVINO)
+    set(TARGET crispasr.openvino)
 
     add_library(${TARGET} OBJECT
         openvino/whisper-openvino-encoder.h
@@ -95,27 +95,27 @@ if (WHISPER_OPENVINO)
         )
 
     set_property(TARGET ${TARGET} PROPERTY POSITION_INDEPENDENT_CODE ON)
-    set(WHISPER_EXTRA_FLAGS ${WHISPER_EXTRA_FLAGS} -DWHISPER_USE_OPENVINO)
+    set(CRISPASR_EXTRA_FLAGS ${CRISPASR_EXTRA_FLAGS} -DCRISPASR_USE_OPENVINO)
 
     target_link_libraries(${TARGET} PRIVATE ggml openvino::runtime)
     set_target_properties(${TARGET} PROPERTIES FOLDER "libs")
 endif()
 
-# whisper
+# crispasr (formerly whisper)
 
-add_library(whisper
-            ../include/whisper.h
-            whisper-arch.h
-            whisper.cpp
+add_library(crispasr
+            ../include/crispasr.h
+            crispasr-arch.h
+            crispasr.cpp
             # C-ABI shared by every CrispASR consumer (CLI, Dart, Python,
             # Rust). Declared extern "C" with `crispasr_*` prefixes so they
-            # don't collide with upstream whisper.h identifiers.
+            # don't collide with upstream crispasr.h identifiers.
             crispasr_c_api.cpp
             # Audio file decoder (WAV / MP3 / FLAC via miniaudio).
             # Lets language wrappers feed `crispasr_session_transcribe`
             # any audio format without bundling an external ffmpeg.
             crispasr_audio.cpp
-            # Silero-VAD-driven segmentation + whisper.cpp-style stitching.
+            # Silero-VAD-driven segmentation + crispasr.cpp-style stitching.
             # Consumed by the CLI and by the C-ABI `crispasr_session_transcribe_vad`
             # wrapper so every language binding benefits without re-implementing.
             crispasr_vad.cpp
@@ -123,7 +123,7 @@ add_library(whisper
             # Consumed by the CLI and by the C-ABI `crispasr_diarize_segments`.
             # The sherpa-ONNX subprocess method stays in the CLI shim.
             crispasr_diarize.cpp
-            # Shared language identification (whisper-tiny + native silero).
+            # Shared language identification (crispasr-tiny + native silero).
             # Consumed by the CLI and by the C-ABI
             # `crispasr_detect_language_pcm`. The sherpa-ONNX subprocess
             # method stays in the CLI shim.
@@ -141,9 +141,44 @@ add_library(whisper
             # non-interactive resolve.
             crispasr_model_registry.cpp
             )
-# Non-Whisper backends reachable through crispasr_c_api.cpp are linked
-# into libwhisper further down in this file, once those targets have been
-# declared. See the "multi-backend linkage" section near the bottom.
+add_library(whisper ALIAS crispasr)
+
+set_target_properties(crispasr PROPERTIES
+    VERSION ${PROJECT_VERSION}
+    SOVERSION ${SOVERSION}
+    OUTPUT_NAME crispasr
+)
+
+target_include_directories(crispasr PUBLIC . ../include)
+target_compile_features   (crispasr PUBLIC cxx_std_11) # don't bump
+
+if (CMAKE_CXX_BYTE_ORDER STREQUAL "BIG_ENDIAN")
+    target_compile_definitions(crispasr PRIVATE CRISPASR_BIG_ENDIAN)
+endif()
+
+if (CRISPASR_EXTRA_FLAGS)
+    target_compile_options(crispasr PRIVATE ${CRISPASR_EXTRA_FLAGS})
+endif()
+
+find_package(Threads REQUIRED)
+target_link_libraries(crispasr PUBLIC ggml Threads::Threads)
+
+if (CRISPASR_COREML)
+    target_link_libraries(crispasr PRIVATE crispasr.coreml)
+endif()
+
+if (CRISPASR_OPENVINO)
+    target_link_libraries(crispasr PRIVATE crispasr.openvino)
+endif()
+
+if (CRISPASR_MKL)
+    target_link_libraries(crispasr PRIVATE MKL::MKL)
+endif()
+
+if (BUILD_SHARED_LIBS)
+    set_target_properties(crispasr PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    target_compile_definitions(crispasr PRIVATE CRISPASR_SHARED CRISPASR_BUILD)
+endif()
 
 # Cohere Transcribe library (Conformer encoder + transformer decoder)
 add_library(cohere STATIC
@@ -528,12 +563,12 @@ target_include_directories(marblenet-vad PUBLIC .)
 target_compile_features   (marblenet-vad PUBLIC cxx_std_17)
 target_link_libraries     (marblenet-vad PUBLIC ggml ggml-base ggml-cpu)
 
-# whisper-vad-encdec — Whisper-encoder + TransformerDecoder VAD
-add_library(whisper-vad-encdec STATIC whisper_vad_encdec.h whisper_vad_encdec.cpp)
-set_target_properties(whisper-vad-encdec PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_include_directories(whisper-vad-encdec PUBLIC .)
-target_compile_features   (whisper-vad-encdec PUBLIC cxx_std_17)
-target_link_libraries     (whisper-vad-encdec PUBLIC ggml ggml-base ggml-cpu)
+# crispasr-vad-encdec — Whisper-encoder + TransformerDecoder VAD
+add_library(crispasr-vad-encdec STATIC crispasr_vad_encdec.h crispasr_vad_encdec.cpp)
+set_target_properties(crispasr-vad-encdec PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(crispasr-vad-encdec PUBLIC .)
+target_compile_features   (crispasr-vad-encdec PUBLIC cxx_std_17)
+target_link_libraries     (crispasr-vad-encdec PUBLIC ggml ggml-base ggml-cpu)
 
 # ---------------------------------------------------------------------------
 # firered-lid — FireRedLID (120-language identification)
@@ -564,11 +599,6 @@ target_link_libraries     (wav2vec2-ggml PUBLIC ggml ggml-base ggml-cpu)
 if(OpenMP_CXX_FOUND)
     target_link_libraries(wav2vec2-ggml PUBLIC OpenMP::OpenMP_CXX)
 endif()
-# PIC required so we can link this static lib into the whisper shared
-# library (libwhisper.so) on ELF platforms. Without it, ld fails with
-# "relocation R_X86_64_PC32 ... can not be used when making a shared
-# object; recompile with -fPIC". macOS / Windows don't care but setting
-# it everywhere is harmless.
 set_target_properties(wav2vec2-ggml PROPERTIES POSITION_INDEPENDENT_CODE ON)
 if(NOT MSVC)
     target_compile_options(wav2vec2-ggml PRIVATE -O3)
@@ -582,8 +612,6 @@ set_target_properties(pyannote-seg PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(pyannote-seg PUBLIC .)
 target_compile_features   (pyannote-seg PUBLIC cxx_std_17)
 target_link_libraries     (pyannote-seg PUBLIC crispasr-core ggml ggml-base ggml-cpu)
-# PIC required so this static lib can be PUBLIC-linked into libwhisper.so
-# on ELF (Linux/Android). Same rationale as wav2vec2-ggml above.
 set_target_properties(pyannote-seg PROPERTIES POSITION_INDEPENDENT_CODE ON)
 if(NOT MSVC)
     target_compile_options(pyannote-seg PRIVATE -O3)
@@ -597,8 +625,6 @@ set_target_properties(silero-lid PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(silero-lid PUBLIC .)
 target_compile_features   (silero-lid PUBLIC cxx_std_17)
 target_link_libraries     (silero-lid PUBLIC crispasr-core ggml ggml-base ggml-cpu)
-# PIC required so this static lib can be PUBLIC-linked into libwhisper.so
-# on ELF (Linux/Android). Same rationale as wav2vec2-ggml / pyannote-seg.
 set_target_properties(silero-lid PROPERTIES POSITION_INDEPENDENT_CODE ON)
 if(NOT MSVC)
     target_compile_options(silero-lid PRIVATE -O3)
@@ -626,173 +652,138 @@ target_compile_features   (ctc-align PUBLIC cxx_std_17)
 if(NOT MSVC)
     target_compile_options(ctc-align PRIVATE -O3)
 endif()
-
-# Set the version numbers
-set_target_properties(whisper PROPERTIES
-    VERSION ${PROJECT_VERSION}
-    SOVERSION ${SOVERSION}
-)
-
-target_include_directories(whisper PUBLIC . ../include)
-target_compile_features   (whisper PUBLIC cxx_std_11) # don't bump
-
-if (CMAKE_CXX_BYTE_ORDER STREQUAL "BIG_ENDIAN")
-    set(WHISPER_EXTRA_FLAGS ${WHISPER_EXTRA_FLAGS} -DWHISPER_BIG_ENDIAN)
-endif()
-
-if (WHISPER_EXTRA_FLAGS)
-    target_compile_options(whisper PRIVATE ${WHISPER_EXTRA_FLAGS})
-endif()
-
-find_package(Threads REQUIRED)
-target_link_libraries(whisper PUBLIC ggml Threads::Threads)
-
-if (WHISPER_COREML)
-    target_link_libraries(whisper PRIVATE whisper.coreml)
-endif()
-
-if (WHISPER_OPENVINO)
-    target_link_libraries(whisper PRIVATE whisper.openvino)
-endif()
-
-if (WHISPER_MKL)
-    target_link_libraries(whisper PRIVATE MKL::MKL)
-endif()
-
-if (BUILD_SHARED_LIBS)
-    set_target_properties(whisper PROPERTIES POSITION_INDEPENDENT_CODE ON)
-    target_compile_definitions(whisper PRIVATE WHISPER_SHARED WHISPER_BUILD)
-endif()
-
 # ---------------------------------------------------------------------------
 # Multi-backend linkage (consumed by CLI + Dart + Python + Rust)
 #
 # Non-Whisper CrispASR backends become reachable through the `crispasr_*`
 # C-ABI wrappers in crispasr_c_api.cpp. Each backend header is #included
 # under `#if __has_include(...)`, and when the corresponding CMake target
-# exists we PUBLIC-link it into libwhisper so the resulting shared library
+# exists we PUBLIC-link it into libcrispasr so the resulting shared library
 # carries a DT_NEEDED on its sibling dylib. Consumers only have to open
-# libwhisper; the platform loader pulls the rest automatically.
+# libcrispasr; the platform loader pulls the rest automatically.
 #
 # Adding a new backend is a three-line change here: (1) build the
 # backend target as usual elsewhere in this file, (2) add
-# `target_link_libraries(whisper PUBLIC <target>)` below, (3) add the
+# `target_link_libraries(crispasr PUBLIC <target>)` below, (3) add the
 # `crispasr_<backend>_*` wrappers to crispasr_c_api.cpp.
 # ---------------------------------------------------------------------------
 if (TARGET parakeet)
-    target_link_libraries(whisper PUBLIC parakeet)
+    target_link_libraries(crispasr PUBLIC parakeet)
 endif()
 if (TARGET canary)
-    target_link_libraries(whisper PUBLIC canary)
+    target_link_libraries(crispasr PUBLIC canary)
 endif()
 if (TARGET qwen3_asr)
-    target_link_libraries(whisper PUBLIC qwen3_asr)
+    target_link_libraries(crispasr PUBLIC qwen3_asr)
 endif()
 if (TARGET cohere)
-    target_link_libraries(whisper PUBLIC cohere)
+    target_link_libraries(crispasr PUBLIC cohere)
 endif()
 if (TARGET granite_speech)
-    target_link_libraries(whisper PUBLIC granite_speech)
+    target_link_libraries(crispasr PUBLIC granite_speech)
 endif()
 if (TARGET canary_ctc)
-    target_link_libraries(whisper PUBLIC canary_ctc)
+    target_link_libraries(crispasr PUBLIC canary_ctc)
 endif()
 if (TARGET voxtral)
-    target_link_libraries(whisper PUBLIC voxtral)
+    target_link_libraries(crispasr PUBLIC voxtral)
 endif()
 if (TARGET voxtral4b)
-    target_link_libraries(whisper PUBLIC voxtral4b)
+    target_link_libraries(crispasr PUBLIC voxtral4b)
 endif()
 if (TARGET wav2vec2-ggml)
-    target_link_libraries(whisper PUBLIC wav2vec2-ggml)
+    target_link_libraries(crispasr PUBLIC wav2vec2-ggml)
 endif()
 if (TARGET glm-asr)
-    target_link_libraries(whisper PUBLIC glm-asr)
+    target_link_libraries(crispasr PUBLIC glm-asr)
 endif()
 if (TARGET kyutai-stt)
-    target_link_libraries(whisper PUBLIC kyutai-stt)
+    target_link_libraries(crispasr PUBLIC kyutai-stt)
 endif()
 if (TARGET firered-asr)
-    target_link_libraries(whisper PUBLIC firered-asr)
+    target_link_libraries(crispasr PUBLIC firered-asr)
 endif()
 if (TARGET firered-vad)
-    target_link_libraries(whisper PUBLIC firered-vad)
+    target_link_libraries(crispasr PUBLIC firered-vad)
 endif()
 if (TARGET marblenet-vad)
-    target_link_libraries(whisper PUBLIC marblenet-vad)
+    target_link_libraries(crispasr PUBLIC marblenet-vad)
 endif()
-if (TARGET whisper-vad-encdec)
-    target_link_libraries(whisper PUBLIC whisper-vad-encdec)
+if (TARGET crispasr-vad-encdec)
+    target_link_libraries(crispasr PUBLIC crispasr-vad-encdec)
 endif()
 if (TARGET firered-lid)
-    target_link_libraries(whisper PUBLIC firered-lid)
+    target_link_libraries(crispasr PUBLIC firered-lid)
 endif()
 if (TARGET omniasr)
-    target_link_libraries(whisper PUBLIC omniasr)
+    target_link_libraries(crispasr PUBLIC omniasr)
 endif()
 if (TARGET vibevoice)
-    target_link_libraries(whisper PUBLIC vibevoice)
+    target_link_libraries(crispasr PUBLIC vibevoice)
 endif()
 if (TARGET ecapa-lid)
-    target_link_libraries(whisper PUBLIC ecapa-lid)
+    target_link_libraries(crispasr PUBLIC ecapa-lid)
 endif()
 if (TARGET moonshine)
-    target_link_libraries(whisper PUBLIC moonshine)
+    target_link_libraries(crispasr PUBLIC moonshine)
 endif()
 if (TARGET moonshine_streaming)
-    target_link_libraries(whisper PUBLIC moonshine_streaming)
+    target_link_libraries(crispasr PUBLIC moonshine_streaming)
 endif()
 if (TARGET gemma4_e2b)
-    target_link_libraries(whisper PUBLIC gemma4_e2b)
+    target_link_libraries(crispasr PUBLIC gemma4_e2b)
 endif()
 if (TARGET mimo_asr)
-    target_link_libraries(whisper PUBLIC mimo_asr)
+    target_link_libraries(crispasr PUBLIC mimo_asr)
 endif()
 if (TARGET qwen3_tts)
-    target_link_libraries(whisper PUBLIC qwen3_tts)
+    target_link_libraries(crispasr PUBLIC qwen3_tts)
 endif()
 if (TARGET fireredpunc)
-    target_link_libraries(whisper PUBLIC fireredpunc)
+    target_link_libraries(crispasr PUBLIC fireredpunc)
 endif()
 # Pyannote segmentation is not a backend; it's consumed by
 # crispasr_diarize.cpp for the "pyannote" method. Still needs linking in
-# so the native diarizer's symbols resolve at libwhisper load time.
+# so the native diarizer's symbols resolve at libcrispasr load time.
 if (TARGET pyannote-seg)
-    target_link_libraries(whisper PUBLIC pyannote-seg)
+    target_link_libraries(crispasr PUBLIC pyannote-seg)
 endif()
 # Silero LID engine used by crispasr_lid.cpp's native Silero path.
 if (TARGET silero-lid)
-    target_link_libraries(whisper PUBLIC silero-lid)
+    target_link_libraries(crispasr PUBLIC silero-lid)
 endif()
 
-# Convenience alias: produce `libcrispasr.{dylib,so,dll}` as a symlink (or
-# copy on Windows) next to `libwhisper`, pointing at the same file. Lets
-# downstream consumers that know CrispASR as a project — not as a
-# whisper.cpp fork — open the library under its "real" name. Existing
-# `libwhisper` consumers are unaffected.
+install(TARGETS crispasr LIBRARY)
+
+# Convenience alias: produce `libwhisper.{dylib,so,dll}` as a symlink (or
+# copy on Windows) next to `libcrispasr`, pointing at the same file. Lets
+# legacy consumers that know the project as crispasr — not as
+# CrispASR — open the library under its old name.
 if (BUILD_SHARED_LIBS)
+    set_target_properties(crispasr PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    target_compile_definitions(crispasr PRIVATE CRISPASR_SHARED CRISPASR_BUILD)
     if (APPLE)
-        add_custom_command(TARGET whisper POST_BUILD
+        add_custom_command(TARGET crispasr POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E create_symlink
-                $<TARGET_FILE_NAME:whisper>
-                libcrispasr.dylib
-            WORKING_DIRECTORY $<TARGET_FILE_DIR:whisper>
-            COMMENT "Creating libcrispasr.dylib -> $<TARGET_FILE_NAME:whisper> alias"
+                $<TARGET_FILE_NAME:crispasr>
+                libwhisper.dylib
+            WORKING_DIRECTORY $<TARGET_FILE_DIR:crispasr>
+            COMMENT "Creating libwhisper.dylib -> $<TARGET_FILE_NAME:crispasr> alias"
         )
     elseif (UNIX)
-        add_custom_command(TARGET whisper POST_BUILD
+        add_custom_command(TARGET crispasr POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E create_symlink
-                $<TARGET_FILE_NAME:whisper>
-                libcrispasr.so
-            WORKING_DIRECTORY $<TARGET_FILE_DIR:whisper>
-            COMMENT "Creating libcrispasr.so -> $<TARGET_FILE_NAME:whisper> alias"
+                $<TARGET_FILE_NAME:crispasr>
+                libwhisper.so
+            WORKING_DIRECTORY $<TARGET_FILE_DIR:crispasr>
+            COMMENT "Creating libwhisper.so -> $<TARGET_FILE_NAME:crispasr> alias"
         )
     elseif (WIN32)
-        add_custom_command(TARGET whisper POST_BUILD
+        add_custom_command(TARGET crispasr POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                $<TARGET_FILE:whisper>
-                $<TARGET_FILE_DIR:whisper>/crispasr.dll
-            COMMENT "Copying $<TARGET_FILE:whisper> to crispasr.dll alias"
+                $<TARGET_FILE:crispasr>
+                $<TARGET_FILE_DIR:crispasr>/whisper.dll
+            COMMENT "Copying $<TARGET_FILE:crispasr> to whisper.dll alias"
         )
     endif()
 endif()

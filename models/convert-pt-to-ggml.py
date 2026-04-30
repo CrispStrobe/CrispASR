@@ -1,10 +1,10 @@
 # Convert Whisper transformer model from PyTorch to ggml format
 #
-# Usage: python convert-pt-to-ggml.py ~/.cache/whisper/medium.pt ~/path/to/repo/whisper/ ./models/whisper-medium
+# Usage: python convert-pt-to-ggml.py ~/.cache/whisper/medium.pt ~/path/to/repo/openai-whisper/ ./models/whisper-medium
 #
-# You need to clone the original repo in ~/path/to/repo/whisper/
+# You need to clone the original repo in ~/path/to/repo/openai-whisper/
 #
-#  git clone https://github.com/openai/whisper ~/path/to/repo/whisper/
+#  git clone https://github.com/openai/whisper ~/path/to/repo/openai-whisper/
 #
 # It is used to various assets needed by the algorithm:
 #
@@ -273,7 +273,7 @@ elif tokenizer_type == "hf_transformers":
         _tokens_raw = json.load(f)
         if "<|endoftext|>" in _tokens_raw:
             # ensures exact same model as tokenizer_type == tiktoken
-            # details: https://github.com/ggerganov/whisper.cpp/pull/725
+            # details: https://github.com/ggml-org/whisper.cpp/pull/725
             del _tokens_raw["<|endoftext|>"]
         tokens = {
             bytes([byte_decoder[c] for c in token]): int(idx)

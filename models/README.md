@@ -17,7 +17,7 @@ models/ggml-base.en.bin          100%[==========================================
 Done! Model 'base.en' saved in 'models/ggml-base.en.bin'
 You can now use it like this:
 
-  $ ./build/bin/whisper-cli -m models/ggml-base.en.bin -f samples/jfk.wav
+  $ ./build/bin/crispasr -m models/ggml-base.en.bin -f samples/jfk.wav
 ```
 
 ### 2. Manually download pre-converted models
@@ -30,11 +30,11 @@ You can now use it like this:
 
 Download one of the [models provided by OpenAI](https://github.com/openai/whisper/blob/main/whisper/__init__.py#L17-L30) and generate the `ggml` files using the [convert-pt-to-ggml.py](convert-pt-to-ggml.py) script.
 
-Example conversion, assuming the original PyTorch files have been downloaded into `~/.cache/whisper`. Change `~/path/to/repo/whisper/` to the location for your copy of the Whisper source:
+Example conversion, assuming the original PyTorch files have been downloaded into `~/.cache/whisper`. Change `~/path/to/repo/openai-whisper/` to the location for your copy of the Whisper source:
 
 ```bash
 mkdir models/whisper-medium
-python models/convert-pt-to-ggml.py ~/.cache/whisper/medium.pt ~/path/to/repo/whisper/ ./models/whisper-medium
+python models/convert-pt-to-ggml.py ~/.cache/whisper/medium.pt ~/path/to/repo/openai-whisper/ ./models/whisper-medium
 mv ./models/whisper-medium/ggml-model.bin models/ggml-medium.bin
 rmdir models/whisper-medium
 ```
@@ -77,35 +77,35 @@ OpenAI format. To read the HF models you can use the [convert-h5-to-ggml.py](con
 
 ```bash
 git clone https://github.com/openai/whisper
-git clone https://github.com/ggml-org/whisper.cpp
+git clone https://github.com/CrispStrobe/CrispASR
 
 # clone HF fine-tuned model (this is just an example)
 git clone https://huggingface.co/openai/whisper-medium
 
 # convert the model to ggml
-python3 ./whisper.cpp/models/convert-h5-to-ggml.py ./whisper-medium/ ./whisper .
+python3 ./crispasr/models/convert-h5-to-ggml.py ./whisper-medium/ ./openai-whisper .
 ```
 
 ## Distilled models
 
 Initial support for https://huggingface.co/distil-whisper is available.
 
-Currently, the chunk-based transcription strategy is not implemented, so there can be sub-optimal quality when using the distilled models with `whisper.cpp`.
+Currently, the chunk-based transcription strategy is not implemented, so there can be sub-optimal quality when using the distilled models with `crispasr`.
 
 ```bash
-# clone OpenAI whisper and whisper.cpp
+# clone OpenAI whisper and crispasr
 git clone https://github.com/openai/whisper
-git clone https://github.com/ggml-org/whisper.cpp
+git clone https://github.com/CrispStrobe/CrispASR
 
 # get the models
-cd whisper.cpp/models
+cd crispasr/models
 git clone https://huggingface.co/distil-whisper/distil-medium.en
 git clone https://huggingface.co/distil-whisper/distil-large-v2
 
 # convert to ggml
-python3 ./convert-h5-to-ggml.py ./distil-medium.en/ ../../whisper .
+python3 ./convert-h5-to-ggml.py ./distil-medium.en/ ../../openai-whisper .
 mv ggml-model.bin ggml-medium.en-distil.bin
 
-python3 ./convert-h5-to-ggml.py ./distil-large-v2/ ../../whisper .
+python3 ./convert-h5-to-ggml.py ./distil-large-v2/ ../../openai-whisper .
 mv ggml-model.bin ggml-large-v2-distil.bin
 ```

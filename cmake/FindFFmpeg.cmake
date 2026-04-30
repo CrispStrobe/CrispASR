@@ -147,7 +147,7 @@ if (NOT FFMPEG_LIBRARIES)
 endif ()
 
 # Now set the noncached _FOUND vars for the components.
-# whisper.cpp does not need SWSCALE
+# crispasr does not need SWSCALE
 foreach (_component AVCODEC AVDEVICE AVFORMAT AVRESAMPLE AVUTIL POSTPROCESS)
   set_component_found(${_component})
 endforeach ()

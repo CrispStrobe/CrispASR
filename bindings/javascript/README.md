@@ -1,16 +1,16 @@
-# whisper.cpp
+# crispasr
 
-Node.js package for Whisper speech recognition
+Node.js package for CrispASR speech recognition
 
-Package: https://www.npmjs.com/package/whisper.cpp
+Package: https://www.npmjs.com/package/crispasr
 
 ## Details
 
-The performance is comparable to when running `whisper.cpp` in the browser via WASM.
+The performance is comparable to when running `crispasr` in the browser via WASM.
 
 The API is currently very rudimentary: [bindings/javascript/emscripten.cpp](/bindings/javascript/emscripten.cpp)
 
-For sample usage check [tests/test-whisper.js](/tests/test-whisper.js)
+For sample usage check [tests/test-crispasr.js](/Users/christianstrobele/code/CrispASR/tests/test-crispasr.js)
 
 ## Package building + test
 
@@ -19,8 +19,8 @@ For sample usage check [tests/test-whisper.js](/tests/test-whisper.js)
 source /path/to/emsdk/emsdk_env.sh
 
 # clone repo
-git clone https://github.com/ggerganov/whisper.cpp
-cd whisper.cpp
+git clone https://github.com/CrispStrobe/CrispASR
+cd crispasr
 
 # grab base.en model
 ./models/download-ggml-model.sh base.en
@@ -33,10 +33,10 @@ mkdir build-em && cd build-em
 emcmake cmake .. && make -j
 
 # run test
-node ../tests/test-whisper.js
+node ../tests/test-crispasr.js
 
 # For Node.js versions prior to v16.4.0, experimental features need to be enabled:
-node --experimental-wasm-threads --experimental-wasm-simd ../tests/test-whisper.js
+node --experimental-wasm-threads --experimental-wasm-simd ../tests/test-crispasr.js
 
 # publish npm package
 make publish-npm
@@ -45,7 +45,7 @@ make publish-npm
 ## Sample run
 
 ```text
-$ node --experimental-wasm-threads --experimental-wasm-simd ../tests/test-whisper.js
+$ node --experimental-wasm-threads --experimental-wasm-simd ../tests/test-crispasr.js
 
 whisper_model_load: loading model from 'whisper.bin'
 whisper_model_load: n_vocab       = 51864

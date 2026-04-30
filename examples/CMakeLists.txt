@@ -4,7 +4,7 @@ find_package(Threads REQUIRED)
 
 # third-party
 
-if (WHISPER_SDL2)
+if (CRISPASR_SDL2)
     # SDL2
     find_package(SDL2 REQUIRED)
 
@@ -20,13 +20,7 @@ set(TARGET common)
 
 unset(COMMON_EXTRA_LIBS)
 
-if (WHISPER_FFMPEG)
-    # As of cmake 3.27, there is no official cmake support for FindFFmpeg.
-    # Consequnelty we added a FindFFmpeg.cmake script the cmake subfolder:
-    # whisper.cpp does not need the full ffmpeg libs, just AVFORMAT AVCODEC AVUTIL SWRESAMPLE
-    # libswresample  performs highly optimized audio resampling, rematrixing and sample format conversion operations
-    # libavcodec provides a generic encoding/decoding framework and contains multiple decoders and encoders for audio, video and subtitle streams, and several bitstream filters.
-    # libavformat provides a generic framework for multiplexing and demultiplexing (muxing and demuxing) audio, video and subtitle streams.
+if (CRISPASR_FFMPEG)
     find_package(FFmpeg REQUIRED)
 
     if (NOT ${FFMPEG_FOUND})
@@ -39,7 +33,7 @@ if (WHISPER_FFMPEG)
     message(STATUS "Found avformat           ${AVFORMAT_VERSION}")
 
     include_directories(${FFMPEG_INCLUDE_DIRS})
-    add_compile_definitions(WHISPER_FFMPEG)
+    add_compile_definitions(CRISPASR_FFMPEG)
 
     list(APPEND COMMON_EXTRA_LIBS ${FFMPEG_LIBRARIES})
 
@@ -52,8 +46,8 @@ add_library(${TARGET} STATIC
     common.cpp
     common-ggml.h
     common-ggml.cpp
-    common-whisper.h
-    common-whisper.cpp
+    common-crispasr.h
+    common-crispasr.cpp
     grammar-parser.h
     grammar-parser.cpp
     ${COMMON_SOURCES_FFMPEG}
@@ -61,12 +55,12 @@ add_library(${TARGET} STATIC
 
 include(DefaultTargetOptions)
 
-target_link_libraries(${TARGET} PRIVATE whisper ${COMMON_EXTRA_LIBS} ${CMAKE_DL_LIBS})
+target_link_libraries(${TARGET} PRIVATE crispasr ${COMMON_EXTRA_LIBS} ${CMAKE_DL_LIBS})
 
 set_target_properties(${TARGET} PROPERTIES POSITION_INDEPENDENT_CODE ON)
 set_target_properties(${TARGET} PROPERTIES FOLDER "libs")
 
-if (WHISPER_SDL2)
+if (CRISPASR_SDL2)
     # common-sdl
 
     set(TARGET common-sdl)
@@ -94,7 +88,7 @@ target_include_directories(json_cpp INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 if (EMSCRIPTEN)
-    add_subdirectory(whisper.wasm)
+    add_subdirectory(crispasr.wasm)
     add_subdirectory(stream.wasm)
     add_subdirectory(command.wasm)
     add_subdirectory(bench.wasm)
@@ -105,7 +99,7 @@ else()
     # ------------------------------------------------------------------
     # Unified CrispASR binary + support tools
     # ------------------------------------------------------------------
-    add_subdirectory(cli)               # the `crispasr` / `whisper-cli` binary
+    add_subdirectory(cli)               # the `crispasr` binary
     add_subdirectory(bench)
     add_subdirectory(server)
     add_subdirectory(quantize)
@@ -131,12 +125,7 @@ else()
     add_subdirectory(voxtral-test-e2e)
     add_subdirectory(vibevoice-test-stages)
 
-    # NOTE: per-model user-facing CLIs (cohere-main, parakeet-main,
-    # canary-main, qwen3-asr-main, voxtral-main, voxtral4b-main,
-    # granite-main) have been consolidated into the unified `crispasr`
-    # binary under examples/cli/. Invoke via --backend NAME or let the
-    # GGUF metadata pick the backend automatically. See README.md.
-    if (WHISPER_SDL2)
+    if (CRISPASR_SDL2)
         add_subdirectory(stream)
         add_subdirectory(command)
         add_subdirectory(talk-llama)
@@ -144,11 +133,11 @@ else()
         if (GGML_SYCL)
             add_subdirectory(sycl)
         endif()
-    endif (WHISPER_SDL2)
+    endif (CRISPASR_SDL2)
 
     add_subdirectory(deprecation-warning)
 endif()
 
-if (WHISPER_SDL2)
+if (CRISPASR_SDL2)
     add_subdirectory(wchess)
-endif (WHISPER_SDL2)
+endif (CRISPASR_SDL2)

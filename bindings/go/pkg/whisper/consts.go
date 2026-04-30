@@ -4,7 +4,7 @@ import (
 	"errors"
 
 	// Bindings
-	whisper "github.com/ggerganov/whisper.cpp/bindings/go"
+	whisper "github.com/CrispStrobe/CrispASR/bindings/go"
 )
 
 ///////////////////////////////////////////////////////////////////////////////

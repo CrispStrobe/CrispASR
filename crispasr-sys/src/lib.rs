@@ -1,4 +1,4 @@
-//! Raw FFI bindings to CrispASR (whisper.cpp fork).
+//! Raw FFI bindings to CrispASR.
 //! Mirrors the public C API in include/whisper.h.
 
 use std::ffi::{c_char, c_float, c_int, c_void};
@@ -20,8 +20,8 @@ pub struct WhisperFullParams(c_void);
 pub struct WhisperContextParams(c_void);
 
 /// Sampling strategy.
-pub const WHISPER_SAMPLING_GREEDY: c_int = 0;
-pub const WHISPER_SAMPLING_BEAM_SEARCH: c_int = 1;
+pub const CRISPASR_SAMPLING_GREEDY: c_int = 0;
+pub const CRISPASR_SAMPLING_BEAM_SEARCH: c_int = 1;
 
 extern "C" {
     // --- Lifecycle ---
@@ -119,7 +119,7 @@ pub struct CrispasrSessionResult(c_void);
 #[repr(C)]
 pub struct CrispasrAlignResult(c_void);
 
-/// Tunables for [`crispasr_session_transcribe_vad`]. Mirrors whisper.cpp's
+/// Tunables for [`crispasr_session_transcribe_vad`]. Mirrors crispasr's
 /// `whisper_vad_params` plus the max-chunk fallback used to bound encoder
 /// cost on long audio. Pass a null pointer to use defaults.
 #[repr(C)]
@@ -216,7 +216,7 @@ extern "C" {
     /// positions.
     ///
     /// `vad_model_path` must point to a Silero GGUF on disk. Pass a null
-    /// or empty `opts` pointer to use defaults (mirrors whisper.cpp's
+    /// or empty `opts` pointer to use defaults (mirrors crispasr's
     /// `whisper_vad_default_params`).
     pub fn crispasr_session_transcribe_vad(
         s: *mut CrispasrSession,

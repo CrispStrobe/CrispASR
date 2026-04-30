@@ -1,5 +1,5 @@
-#include "whisper.h"
-#include "common-whisper.h"
+#include "crispasr.h"
+#include "common-crispasr.h"
 
 #include <cstdio>
 #include <string>

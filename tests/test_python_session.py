@@ -25,7 +25,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "python"))
 
 REPO_ROOT = os.path.join(os.path.dirname(__file__), "..")
 JFK_WAV = os.path.join(REPO_ROOT, "samples", "jfk.wav")
-WHISPER_TINY = os.path.join(REPO_ROOT, "models", "ggml-tiny.en.bin")
+CRISPASR_TINY = os.path.join(REPO_ROOT, "models", "ggml-tiny.en.bin")
 PARAKEET_MODEL = os.environ.get(
     "PARAKEET_MODEL",
     os.path.join(os.path.dirname(__file__), "..", "..", "test_cohere", "parakeet-tdt-0.6b-v3.gguf"),
@@ -62,11 +62,11 @@ class TestWhisperSession(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        if not os.path.exists(WHISPER_TINY):
-            raise unittest.SkipTest(f"Model not found: {WHISPER_TINY}")
+        if not os.path.exists(CRISPASR_TINY):
+            raise unittest.SkipTest(f"Model not found: {CRISPASR_TINY}")
         from crispasr import Session
         # Whisper GGML files are auto-detected via magic bytes fallback
-        cls.session = Session(WHISPER_TINY, lib_path=LIB_PATH, n_threads=2)
+        cls.session = Session(CRISPASR_TINY, lib_path=LIB_PATH, n_threads=2)
 
     @classmethod
     def tearDownClass(cls):

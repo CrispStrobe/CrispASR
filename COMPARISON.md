@@ -6,7 +6,7 @@ Comparison of CrispASR with other ggml-based ASR implementations.
 
 | Model | CrispASR | llama.cpp (MIT) | koboldcpp (AGPL3) |
 |---|---|---|---|
-| OpenAI Whisper (all sizes) | ✔ native | via mtmd | via whisper.cpp |
+| OpenAI Whisper (all sizes) | ✔ native | via mtmd | via crispasr |
 | Parakeet TDT v3 | ✔ native | — | — |
 | Canary (NeMo) | ✔ native | — | — |
 | Cohere Transcribe | ✔ native | — | — |

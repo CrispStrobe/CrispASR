@@ -134,9 +134,9 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# Check if 'whisper-cli' is available in the system PATH
+# Check if 'crispasr' is available in the system PATH
 if command -v crispasr >/dev/null 2>&1; then
-    # If found, use 'whisper-cli' (relying on PATH resolution)
+    # If found, use 'crispasr' (relying on PATH resolution)
     whisper_cmd="crispasr"
 else
     # If not found, use the local build version

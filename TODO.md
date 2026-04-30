@@ -82,7 +82,7 @@ direction; do not interleave.
 ## Pending features (v0.5.x)
 
 - **WebSocket streaming server** — `/ws` endpoint for real-time transcription
-- ~~**Audio format support**~~ **FIXED** — `common-whisper.cpp` now falls back to an
+- ~~**Audio format support**~~ **FIXED** — `common-crispasr` now falls back to an
   `ffmpeg` subprocess (`ffmpeg -loglevel error -i <file> -f s16le -ar 16000 -ac 1 -`)
   when miniaudio fails to open the input. Handles m4a/mp4/webm/aac/opus when the
   user has ffmpeg installed. The previous `ma_decoder_init_memory(fname.c_str(),
@@ -287,8 +287,8 @@ Remaining extraction opportunities (each saves ~30-60 LOC but has only 1-2 consu
   produced once by `cli_whisper_collect_segments(ctx)`. Byte-identical
   regression verified on all 7 output formats.
 
-- **[done]** ~~**`backend-whisper.cpp` wrapper (task #15).**~~
-  Done in e120103. `crispasr_backend_whisper.cpp` implements the
+- **[done]** ~~**`backend-crispasr` wrapper (task #15).**~~
+  Done in e120103. `crispasr_backend_crispasr` implements the
   CrispasrBackend interface on top of whisper.h. `--backend whisper`
   now routes through the unified dispatch like every other backend,
   and the `--list-backends` matrix reads the wrapper's capability
@@ -316,7 +316,7 @@ Remaining extraction opportunities (each saves ~30-60 LOC but has only 1-2 consu
   tools, still useful when the transcript is pre-existing) and the
   `{qwen3,voxtral}-test-*` differential fixtures.
 
-- **[later]** `tests/CMakeLists.txt` uses `whisper-cli` as the test
+- **[later]** `tests/CMakeLists.txt` uses `crispasr` as the test
   target. Keep that target name (we already preserve it) but move the
   tests over to `$<TARGET_FILE:crispasr>` once the rename has propagated.
 
@@ -325,6 +325,15 @@ Remaining extraction opportunities (each saves ~30-60 LOC but has only 1-2 consu
 ## Feature parity gaps (non-whisper backends vs whisper)
 
 The whisper backend in CrispASR is the most feature-complete. The
+
+## Rename plan
+
+- Keep `whisper` when it denotes the real Whisper backend, Whisper-specific models, compatibility APIs, or Whisper-only tests and fixtures.
+- Rename stale project branding from `whisper*` to `crispasr*` when it is acting as the overall project, package, app, framework, or example identity.
+- Prefer compatibility aliases over hard breaks where external consumers may still load `libwhisper.*` or import old wrapper names.
+- Treat `tests/` conservatively: keep `whisper` in backend-specific tests, model names like `whisper-tiny`, and compatibility expectations; rename only generic CrispASR-level test and example naming.
+- Rename generated Apple artifacts and package metadata to `crispasr` while keeping the Whisper backend available as one backend inside CrispASR.
+- Finish remaining cleanup in wrapper docs, example file names, and validation scripts only after confirming they are branding-only and not backend/API semantics.
 capability matrix in the README shows which features are missing on
 each backend. High-value gaps to close:
 
@@ -584,7 +593,7 @@ contributor-facing path for adding backends with confidence. Status:
 
 Full tracking is in `UPSTREAM.md`. Short summary:
 
-- **[upstream]** whisper.cpp `examples/ffmpeg-transcode.cpp` mp4-family
+- **[upstream]** crispasr `examples/ffmpeg-transcode.cpp` mp4-family
   container crash. Workaround: pre-convert with ffmpeg one-liner.
 - **[upstream]** ggml x86 AVX-VNNI / AVX512-VNNI dispatch for Q8_0 dot
   products. Closes the 5-second gap to ONNX INT8 on x86 servers.

@@ -1,6 +1,6 @@
-# Java JNI bindings for Whisper
+# Java JNI bindings for CrispASR
 
-This package provides Java JNI bindings for whisper.cpp. They have been tested on:
+This package provides Java JNI bindings for crispasr. They have been tested on:
 
   * <strike>Darwin (OS X) 12.6 on x64_64</strike>
   * Ubuntu on x86_64
@@ -29,7 +29,7 @@ public class Example {
             // By default, models are loaded from ~/.cache/whisper/ and are usually named "ggml-${name}.bin"
             // or you can provide the absolute path to the model file.
             whisper.initContext("../ggml-base.en.bin"); 
-            WhisperFullParams.ByValue whisperParams = whisper.getFullDefaultParams(WhisperSamplingStrategy.WHISPER_SAMPLING_BEAM_SEARCH); 
+            WhisperFullParams.ByValue whisperParams = whisper.getFullDefaultParams(WhisperSamplingStrategy.CRISPASR_SAMPLING_BEAM_SEARCH); 
             
             // custom configuration if required      
             //whisperParams.n_threads = 8;
@@ -68,20 +68,19 @@ public class Example {
 In order to build, you need to have the JDK 8 or higher installed. Run the tests with:
 
 ```bash
-git clone https://github.com/ggml-org/whisper.cpp.git
-cd whisper.cpp/bindings/java
+git clone https://github.com/ggml-org/crispasr.git
+cd crispasr/bindings/java
 
 ./gradlew build
 ```
 
-You need to have the `whisper` library in your [JNA library path](https://java-native-access.github.io/jna/4.2.1/com/sun/jna/NativeLibrary.html). On Windows the dll is included in the jar and you can update it:
+You need to have the `crispasr` library in your [JNA library path](https://java-native-access.github.io/jna/4.2.1/com/sun/jna/NativeLibrary.html). On Windows the dll is included in the jar and you can update it:
 
 ```bash
-copy /y ..\..\build\bin\Release\whisper.dll build\generated\resources\main\win32-x86-64\whisper.dll
+copy /y ..\..\build\bin\Release\crispasr.dll build\generated\resources\main\win32-x86-64\crispasr.dll
 ```
 
 
 ## License
 
-The license for the Java bindings is the same as the license for the rest of the whisper.cpp project, which is the MIT License. See the `LICENSE` file for more details.
-
+The license for the Java bindings is the same as the license for the rest of the crispasr project, which is the MIT License. See the `LICENSE` file for more details.

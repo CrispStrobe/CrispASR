@@ -1,0 +1,10 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: crispasr
+Description: Port of OpenAI's Whisper model in C/C++
+Version: @PROJECT_VERSION@
+Libs: -L${libdir} -lggml  -lggml-base -lcrispasr
+Cflags: -I${includedir}

@@ -1,4 +1,4 @@
-if (WHISPER_SDL2)
+if (CRISPASR_SDL2)
     set(TARGET wchess)
     add_executable(${TARGET} wchess.cmd.cpp)
 

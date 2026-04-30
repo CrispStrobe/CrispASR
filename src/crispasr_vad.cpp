@@ -10,13 +10,13 @@
 #include "crispasr_vad.h"
 
 #include "firered_vad.h" // FireRedVAD (DFSMN) — alternative to Silero
-#include "whisper.h"     // whisper_vad_* API (Silero VAD)
+#include "crispasr.h"     // whisper_vad_* API (Silero VAD)
 #if __has_include("marblenet_vad.h")
 #include "marblenet_vad.h" // NVIDIA MarbleNet VAD (1D separable CNN)
 #define CA_HAVE_MARBLENET_VAD 1
 #endif
 #if __has_include("whisper_vad_encdec.h")
-#include "whisper_vad_encdec.h" // Whisper-encoder + decoder VAD (ONNX-converted)
+#include "crispasr_vad_encdec.h" // Whisper-encoder + decoder VAD (ONNX-converted)
 #define CA_HAVE_WVAD_ENCDEC 1
 #endif
 
@@ -131,7 +131,7 @@ std::vector<crispasr_audio_slice> crispasr_compute_vad_slices(const float* sampl
     }
 #endif
     else {
-        // Default: Silero VAD via whisper.cpp API
+        // Default: Silero VAD via crispasr API
         whisper_vad_context_params vcp = whisper_vad_default_context_params();
         vcp.n_threads = opts.n_threads;
         whisper_vad_context* vctx = whisper_vad_init_from_file_with_params(vad_model_path, vcp);

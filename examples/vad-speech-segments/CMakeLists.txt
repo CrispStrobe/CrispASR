@@ -1,4 +1,4 @@
-set(TARGET whisper-vad-speech-segments)
+set(TARGET crispasr-vad-speech-segments)
 add_executable(${TARGET} speech.cpp)
 
 include(DefaultTargetOptions)

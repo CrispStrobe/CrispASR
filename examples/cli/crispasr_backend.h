@@ -21,7 +21,7 @@
 // Forward declaration — defined in cli.cpp. We intentionally reuse the
 // existing whisper_params struct (extended with a few new fields) instead of
 // introducing a parallel crispasr_params, so users keep the same interface
-// they already know from whisper-cli.
+// they already know from crispasr.
 struct whisper_params;
 
 // ---------------------------------------------------------------------------

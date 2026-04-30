@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Transcribe twitch.tv livestream by feeding audio input to whisper.cpp at regular intervals
+# Transcribe twitch.tv livestream by feeding audio input to crispasr at regular intervals
 # Thanks to @keyehzy
 # ref: https://github.com/ggml-org/whisper.cpp/issues/209
 #
@@ -30,7 +30,7 @@ help()
 check_requirements()
 {
     if ! command -v ./build/bin/crispasr &>/dev/null; then
-        echo "whisper.cpp main executable is required (make)"
+        echo "crispasr main executable is required (make)"
         exit 1
     fi
 
@@ -72,7 +72,7 @@ if [ -z $url ]; then
 fi
 
 echo "Piping from streamlink url=$url model=$model step=$step threads=$threads"
-streamlink $url best -O 2>/dev/null | ffmpeg -loglevel quiet -i - -y -probesize 32 -y -ar 16000 -ac 1 -acodec pcm_s16le /tmp/whisper-live0.wav &
+streamlink $url best -O 2>/dev/null | ffmpeg -loglevel quiet -i - -y -probesize 32 -y -ar 16000 -ac 1 -acodec pcm_s16le /tmp/crispasr-live0.wav &
 
 if [ $? -ne 0 ]; then
     printf "error: ffmpeg failed\n"
@@ -93,14 +93,14 @@ do
     err=1
     while [ $err -ne 0 ]; do
         if [ $i -gt 0 ]; then
-            ffmpeg -loglevel quiet -v error -noaccurate_seek -i /tmp/whisper-live0.wav -y -ss $(($i*$step-1)).5 -t $step -c copy /tmp/whisper-live.wav 2> /tmp/whisper-live.err
+            ffmpeg -loglevel quiet -v error -noaccurate_seek -i /tmp/crispasr-live0.wav -y -ss $(($i*$step-1)).5 -t $step -c copy /tmp/crispasr-live.wav 2> /tmp/crispasr-live.err
         else
-            ffmpeg -loglevel quiet -v error -noaccurate_seek -i /tmp/whisper-live0.wav -y -ss $(($i*$step)) -t $step -c copy /tmp/whisper-live.wav 2> /tmp/whisper-live.err
+            ffmpeg -loglevel quiet -v error -noaccurate_seek -i /tmp/crispasr-live0.wav -y -ss $(($i*$step)) -t $step -c copy /tmp/crispasr-live.wav 2> /tmp/crispasr-live.err
         fi
-        err=$(cat /tmp/whisper-live.err | wc -l)
+        err=$(cat /tmp/crispasr-live.err | wc -l)
     done
 
-    ./build/bin/crispasr -t $threads -m ./models/ggml-$model.bin -f /tmp/whisper-live.wav --no-timestamps -otxt 2> /tmp/whispererr | tail -n 1
+    ./build/bin/crispasr -t $threads -m ./models/ggml-$model.bin -f /tmp/crispasr-live.wav --no-timestamps -otxt 2> /tmp/crispasr.err | tail -n 1
 
     while [ $SECONDS -lt $((($i+1)*$step)) ]; do
         sleep 1

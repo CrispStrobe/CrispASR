@@ -1,12 +1,12 @@
 PYTHON = python
 
-WHISPER_PREFIX = ../../
-WHISPER_MODEL = tiny
+CRISPASR_PREFIX = ../../
+CRISPASR_MODEL = tiny
 
-WHISPER_CLI = $(WHISPER_PREFIX)build/bin/whisper-cli
-WHISPER_FLAGS = --no-prints --language en --output-txt
+CRISPASR_CLI = $(CRISPASR_PREFIX)build/bin/crispasr
+CRISPASR_FLAGS = --no-prints --language en --output-txt
 
-# You can create eval.conf to override the WHISPER_* variables
+# You can create eval.conf to override the CRISPASR_* variables
 # defined above.
 -include eval.conf
 
@@ -34,7 +34,7 @@ endif
 TRANS_TXTS = $(addsuffix .txt, $(AUDIO_SRCS))
 
 # We output the evaluation result to this file.
-DONE = $(WHISPER_MODEL).txt
+DONE = $(CRISPASR_MODEL).txt
 
 all: $(DONE)
 
@@ -45,11 +45,11 @@ $(DONE): $(TRANS_TXTS)
 # Note: This task writes to a temporary file first to
 # create the target file atomically.
 %.mp3.txt: %.mp3
-	$(WHISPER_CLI) $(WHISPER_FLAGS) --model $(WHISPER_PREFIX)models/ggml-$(WHISPER_MODEL).bin --file $^ --output-file $^.tmp
+	$(CRISPASR_CLI) $(CRISPASR_FLAGS) --model $(CRISPASR_PREFIX)models/ggml-$(CRISPASR_MODEL).bin --file $^ --output-file $^.tmp
 	mv $^.tmp.txt $^.txt
 
 archive:
-	tar -czf $(WHISPER_MODEL).tar.gz --exclude="*.mp3" speech-datasets/earnings21/media $(DONE)
+	tar -czf $(CRISPASR_MODEL).tar.gz --exclude="*.mp3" speech-datasets/earnings21/media $(DONE)
 
 clean:
 	@rm -f $(TRANS_TXTS)

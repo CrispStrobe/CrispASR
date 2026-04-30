@@ -1,14 +1,14 @@
-# whisper.cpp/examples/command
+# crispasr/examples/command
 
 This is a basic Voice Assistant example that accepts voice commands from the microphone.
-More info is available in [issue #171](https://github.com/ggerganov/whisper.cpp/issues/171).
+More info is available in [issue #171](https://github.com/ggml-org/whisper.cpp/issues/171).
 
 ```bash
 # Run with default arguments and small model
-./whisper-command -m ./models/ggml-small.en.bin -t 8
+./crispasr-command -m ./models/ggml-small.en.bin -t 8
 
 # On Raspberry Pi, use tiny or base models + "-ac 768" for better performance
-./whisper-command -m ./models/ggml-tiny.en.bin -ac 768 -t 3 -c 0
+./crispasr-command -m ./models/ggml-tiny.en.bin -ac 768 -t 3 -c 0
 ```
 
 https://user-images.githubusercontent.com/1991296/204038393-2f846eae-c255-4099-a76d-5735c25c49da.mp4
@@ -23,10 +23,10 @@ Initial tests show that this approach might be extremely efficient in terms of p
 
 ```bash
 # Run in guided mode, the list of allowed commands is in commands.txt
-./whisper-command -m ./models/ggml-base.en.bin -cmd ./examples/command/commands.txt
+./crispasr-command -m ./models/ggml-base.en.bin -cmd ./examples/command/commands.txt
 
 # On Raspberry Pi, in guided mode you can use "-ac 128" for extra performance
-./whisper-command -m ./models/ggml-tiny.en.bin -cmd ./examples/command/commands.txt -ac 128 -t 3 -c 0
+./crispasr-command -m ./models/ggml-tiny.en.bin -cmd ./examples/command/commands.txt -ac 128 -t 3 -c 0
 ```
 
 https://user-images.githubusercontent.com/1991296/207435352-8fc4ed3f-bde5-4555-9b8b-aeeb76bee969.mp4
@@ -34,7 +34,7 @@ https://user-images.githubusercontent.com/1991296/207435352-8fc4ed3f-bde5-4555-9
 
 ## Building
 
-The `whisper-command` tool depends on SDL2 library to capture audio from the microphone. You can build it like this:
+The `crispasr-command` tool depends on SDL2 library to capture audio from the microphone. You can build it like this:
 
 ```bash
 # Install SDL2
@@ -47,6 +47,6 @@ sudo dnf install SDL2 SDL2-devel
 # Install SDL2 on Mac OS
 brew install sdl2
 
-cmake -B build -DWHISPER_SDL2=ON
+cmake -B build -DCRISPASR_SDL2=ON
 cmake --build build --config Release
 ```

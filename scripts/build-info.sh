@@ -24,7 +24,7 @@ if out=$($CC -dumpmachine); then
     build_target=$out
 fi
 
-echo "int WHISPER_BUILD_NUMBER = ${build_number};"
-echo "char const *WHISPER_COMMIT = \"${build_commit}\";"
-echo "char const *WHISPER_COMPILER = \"${build_compiler}\";"
-echo "char const *WHISPER_BUILD_TARGET = \"${build_target}\";"
+echo "int CRISPASR_BUILD_NUMBER = ${build_number};"
+echo "char const *CRISPASR_COMMIT = \"${build_commit}\";"
+echo "char const *CRISPASR_COMPILER = \"${build_compiler}\";"
+echo "char const *CRISPASR_BUILD_TARGET = \"${build_target}\";"

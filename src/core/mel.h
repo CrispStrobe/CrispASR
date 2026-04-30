@@ -3,7 +3,7 @@
 // Replaces the 9 copy-pasted mel spectrogram implementations across the
 // src/ model files (parakeet.cpp, canary.cpp, canary_ctc.cpp, cohere.cpp,
 // qwen3_asr.cpp, voxtral.cpp, voxtral4b.cpp, granite_speech.cpp,
-// whisper.cpp). Two algorithm clusters are supported via enums:
+// crispasr). Two algorithm clusters are supported via enums:
 //
 //   NeMo / Conformer style  — ln + per-mel z-score, (T, n_mels) output
 //       used by parakeet, canary, canary_ctc, cohere

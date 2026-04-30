@@ -18,83 +18,83 @@ include(Catch)
 
 if (EMSCRIPTEN)
     #
-    # test-whisper-js
+    # test-crispasr-js
 
-    set(TEST_TARGET test-whisper-js)
+    set(TEST_TARGET test-crispasr-js)
 
     add_test(NAME ${TEST_TARGET}
-        COMMAND node test-whisper.js --experimental-wasm-threads
+        COMMAND node test-crispasr.js --experimental-wasm-threads
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         )
 
     return()
 endif()
 
-set(TEST_TARGET test-whisper-cli-tiny)
+set(TEST_TARGET test-crispasr-cli-tiny)
 add_test(NAME ${TEST_TARGET}
     COMMAND $<TARGET_FILE:crispasr>
     -m ${PROJECT_SOURCE_DIR}/models/for-tests-ggml-tiny.bin -l fr
     -f ${PROJECT_SOURCE_DIR}/samples/jfk.wav)
 set_tests_properties(${TEST_TARGET} PROPERTIES LABELS "tiny;gh")
 
-set(TEST_TARGET test-whisper-cli-tiny.en)
+set(TEST_TARGET test-crispasr-cli-tiny.en)
 add_test(NAME ${TEST_TARGET}
     COMMAND $<TARGET_FILE:crispasr>
     -m ${PROJECT_SOURCE_DIR}/models/for-tests-ggml-tiny.en.bin
     -f ${PROJECT_SOURCE_DIR}/samples/jfk.wav)
 set_tests_properties(${TEST_TARGET} PROPERTIES LABELS "tiny;en")
 
-set(TEST_TARGET test-whisper-cli-base)
+set(TEST_TARGET test-crispasr-cli-base)
 add_test(NAME ${TEST_TARGET}
     COMMAND $<TARGET_FILE:crispasr>
     -m ${PROJECT_SOURCE_DIR}/models/for-tests-ggml-base.bin -l fr
     -f ${PROJECT_SOURCE_DIR}/samples/jfk.wav)
 set_tests_properties(${TEST_TARGET} PROPERTIES LABELS "base")
 
-set(TEST_TARGET test-whisper-cli-base.en)
+set(TEST_TARGET test-crispasr-cli-base.en)
 add_test(NAME ${TEST_TARGET}
     COMMAND $<TARGET_FILE:crispasr>
     -m ${PROJECT_SOURCE_DIR}/models/for-tests-ggml-base.en.bin
     -f ${PROJECT_SOURCE_DIR}/samples/jfk.wav)
 set_tests_properties(${TEST_TARGET} PROPERTIES LABELS "base;en")
 
-set(TEST_TARGET test-whisper-cli-small)
+set(TEST_TARGET test-crispasr-cli-small)
 add_test(NAME ${TEST_TARGET}
     COMMAND $<TARGET_FILE:crispasr>
     -m ${PROJECT_SOURCE_DIR}/models/for-tests-ggml-small.bin -l fr
     -f ${PROJECT_SOURCE_DIR}/samples/jfk.wav)
 set_tests_properties(${TEST_TARGET} PROPERTIES LABELS "small")
 
-set(TEST_TARGET test-whisper-cli-small.en)
+set(TEST_TARGET test-crispasr-cli-small.en)
 add_test(NAME ${TEST_TARGET}
     COMMAND $<TARGET_FILE:crispasr>
     -m ${PROJECT_SOURCE_DIR}/models/for-tests-ggml-small.en.bin
     -f ${PROJECT_SOURCE_DIR}/samples/jfk.wav)
 set_tests_properties(${TEST_TARGET} PROPERTIES LABELS "small;en")
 
-set(TEST_TARGET test-whisper-cli-medium)
+set(TEST_TARGET test-crispasr-cli-medium)
 add_test(NAME ${TEST_TARGET}
     COMMAND $<TARGET_FILE:crispasr>
     -m ${PROJECT_SOURCE_DIR}/models/for-tests-ggml-medium.bin -l fr
     -f ${PROJECT_SOURCE_DIR}/samples/jfk.wav)
 set_tests_properties(${TEST_TARGET} PROPERTIES LABELS "medium")
 
-set(TEST_TARGET test-whisper-cli-medium.en)
+set(TEST_TARGET test-crispasr-cli-medium.en)
 add_test(NAME ${TEST_TARGET}
     COMMAND $<TARGET_FILE:crispasr>
     -m ${PROJECT_SOURCE_DIR}/models/for-tests-ggml-medium.en.bin
     -f ${PROJECT_SOURCE_DIR}/samples/jfk.wav)
 set_tests_properties(${TEST_TARGET} PROPERTIES LABELS "medium;en")
 
-set(TEST_TARGET test-whisper-cli-large)
+set(TEST_TARGET test-crispasr-cli-large)
 add_test(NAME ${TEST_TARGET}
     COMMAND $<TARGET_FILE:crispasr>
     -m ${PROJECT_SOURCE_DIR}/models/for-tests-ggml-large.bin
     -f ${PROJECT_SOURCE_DIR}/samples/jfk.wav)
 set_tests_properties(${TEST_TARGET} PROPERTIES LABELS "large")
 
-if (WHISPER_FFMPEG)
-    set(TEST_TARGET test-whisper-cli-tiny-mp3)
+if (CRISPASR_FFMPEG)
+    set(TEST_TARGET test-crispasr-cli-tiny-mp3)
     # Check with reviewers: any way to check the output transcription via ctest (diff, ...)?
     add_test(NAME ${TEST_TARGET}
       COMMAND $<TARGET_FILE:crispasr>
@@ -114,13 +114,13 @@ target_compile_definitions(${VAD_TEST} PRIVATE
 add_test(NAME ${VAD_TEST} COMMAND ${VAD_TEST})
 set_tests_properties(${VAD_TEST} PROPERTIES LABELS "unit")
 
-# VAD test full uses whisper_full with VAD enabled
+# VAD test full uses crispasr_full with VAD enabled
 set(VAD_TEST test-vad-full)
 add_executable(${VAD_TEST} ${VAD_TEST}.cpp)
 target_include_directories(${VAD_TEST} PRIVATE ../include ../ggml/include ../examples)
 target_link_libraries(${VAD_TEST} PRIVATE common)
 target_compile_definitions(${VAD_TEST} PRIVATE
-    WHISPER_MODEL_PATH="${PROJECT_SOURCE_DIR}/models/ggml-base.en.bin"
+    CRISPASR_MODEL_PATH="${PROJECT_SOURCE_DIR}/models/ggml-base.en.bin"
     VAD_MODEL_PATH="${PROJECT_SOURCE_DIR}/models/for-tests-silero-v6.2.0-ggml.bin"
     SAMPLE_PATH="${PROJECT_SOURCE_DIR}/samples/jfk.wav")
 add_test(NAME ${VAD_TEST} COMMAND ${VAD_TEST})
@@ -142,7 +142,7 @@ target_link_libraries(test-crispasr-cache PRIVATE
     Catch2::Catch2WithMain
     $<$<BOOL:${WIN32}>:winhttp>
 )
-if (WHISPER_CURL)
+if (CRISPASR_CURL)
     target_compile_definitions(test-crispasr-cache PRIVATE CRISPASR_USE_LIBCURL)
     target_link_libraries(test-crispasr-cache PRIVATE CURL::libcurl)
 endif()
@@ -152,11 +152,11 @@ catch_discover_tests(test-crispasr-cache
     PROPERTIES LABELS "unit"
 )
 
-# ─── test-params — Catch2 unit tests for whisper_params struct defaults ────────
+# ─── test-params — Catch2 unit tests for crispasr_params struct defaults ────────
 #
-# Default-constructs whisper_params and checks every crispasr-specific field
-# carries the right initial value.  Links whisper + common because
-# whisper_params inlines calls to whisper_full_default_params() in its field
+# Default-constructs crispasr_params and checks every crispasr-specific field
+# carries the right initial value.  Links crispasr + common because
+# crispasr_params inlines calls to crispasr_full_default_params() in its field
 # initialisers.
 add_executable(test-params
     test-params.cpp
@@ -169,7 +169,7 @@ target_include_directories(test-params PRIVATE
 )
 target_link_libraries(test-params PRIVATE
     Catch2::Catch2WithMain
-    whisper
+    crispasr
     common
 )
 catch_discover_tests(test-params

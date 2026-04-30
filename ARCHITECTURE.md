@@ -15,7 +15,7 @@ For the reasoning behind design choices see `LEARNINGS.md`.
 ┌───────────────────────────────────────────────────────────────────┐
 │ examples/cli/  — the crispasr binary                              │
 │ ──────────────────────────────────────────────────────────────── │
-│   cli.cpp                   whisper-cli entry + --backend branch  │
+│   cli.cpp                   crispasr entry + --backend branch  │
 │   whisper_params.h          shared params struct                  │
 │                                                                    │
 │   crispasr_backend.{h,cpp}  interface + factory + GGUF detect     │
@@ -107,7 +107,7 @@ has a minimal model structure and hasn't been worth migrating.
     │                              ├─→ granite_speech.*─ ┘       │
     │                              └─→ canary_ctc (aligner)      │
     │                                                             │
-    ├─→ common (whisper.cpp example lib)                          │
+    ├─→ common (crispasr example lib)                          │
     ├─→ whisper (for the whisper-backend path)                    │
     └─→ crispasr_{vad,output,model_mgr,aligner,run}               │
                                                                    │

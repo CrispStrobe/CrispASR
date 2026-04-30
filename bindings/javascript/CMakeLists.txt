@@ -10,15 +10,29 @@ target_link_libraries(${TARGET} PRIVATE
 
 unset(EXTRA_FLAGS)
 
-if (WHISPER_WASM_SINGLE_FILE)
+if (CRISPASR_WASM_SINGLE_FILE)
     set(EXTRA_FLAGS "-s SINGLE_FILE=1")
-    message(STATUS "Embedding WASM inside whisper.js")
+    message(STATUS "Embedding WASM inside crispasr.js")
+
+    add_custom_command(
+        TARGET ${TARGET} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy
+        ${CMAKE_BINARY_DIR}/bin/libwhisper.js
+        ${CMAKE_CURRENT_SOURCE_DIR}/crispasr.js
+        )
 
     add_custom_command(
         TARGET ${TARGET} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy
         ${CMAKE_BINARY_DIR}/bin/libwhisper.js
         ${CMAKE_CURRENT_SOURCE_DIR}/whisper.js
+        )
+
+    add_custom_command(
+        TARGET ${TARGET} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy
+        ${CMAKE_BINARY_DIR}/bin/libwhisper.worker.js
+        ${CMAKE_CURRENT_SOURCE_DIR}/crispasr.worker.js
         )
 
     add_custom_command(

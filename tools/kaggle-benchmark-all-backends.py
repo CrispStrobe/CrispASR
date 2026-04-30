@@ -160,7 +160,7 @@ generator = ["-G", "Ninja"] if has_ninja else []
 # Common cmake flags (match Docker/dev-build.sh patterns)
 common_flags = [
     "-DCMAKE_BUILD_TYPE=Release",
-    "-DWHISPER_BUILD_TESTS=OFF",  # skip test binaries — saves ~30% build time
+    "-DCRISPASR_BUILD_TESTS=OFF",  # skip test binaries — saves ~30% build time
     "-DCMAKE_C_FLAGS=-fopenmp",
     "-DCMAKE_CXX_FLAGS=-fopenmp",
 ]
@@ -222,7 +222,7 @@ os.makedirs(CACHE_DIR, exist_ok=True)
 
 # Pre-download shared models (whisper-tiny for LID, silero for VAD) — kept across tests
 for local_name, repo, hf_name in [
-    ("ggml-tiny.bin", "ggerganov/whisper.cpp", "ggml-tiny.bin"),
+    ("ggml-tiny.bin", "ggerganov/crispasr", "ggml-tiny.bin"),
     ("ggml-silero-v5.1.2.bin", "ggml-org/whisper-vad", "ggml-silero-v5.1.2.bin"),
 ]:
     dst = os.path.join(CACHE_DIR, local_name)
@@ -235,7 +235,7 @@ for local_name, repo, hf_name in [
 
 # Per-backend model registry: backend_name → (local_filename, hf_repo, hf_filename)
 MODEL_REGISTRY = {
-    "whisper":           ("ggml-base.bin",               "ggerganov/whisper.cpp",                    "ggml-base.bin"),
+    "whisper":           ("ggml-base.bin",               "ggerganov/crispasr",                    "ggml-base.bin"),
     "parakeet":          ("parakeet-tdt-0.6b-v3-q4_k.gguf","cstr/parakeet-tdt-0.6b-v3-GGUF",       "parakeet-tdt-0.6b-v3-q4_k.gguf"),
     "moonshine":         ("moonshine-tiny-q4_k.gguf",    "cstr/moonshine-tiny-GGUF",                "moonshine-tiny-q4_k.gguf"),
     "moonshine-streaming":("moonshine-streaming-tiny-q4_k.gguf","cstr/moonshine-streaming-tiny-GGUF","moonshine-streaming-tiny-q4_k.gguf"),

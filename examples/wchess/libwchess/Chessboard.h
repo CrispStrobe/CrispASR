@@ -16,6 +16,7 @@ public:
     const std::string& grammar() { return m_grammar; }
     const std::string& prompt() { return m_prompt; }
     void setPrompt(const std::string& prompt);
+
 private:
     bool parseCommand(const std::string& command, Piece*& piece, char& pos_to);
     bool move(Piece& piece, char pos);

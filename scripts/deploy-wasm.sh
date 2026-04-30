@@ -21,11 +21,11 @@ if [ $? -ne 0 ]; then
 fi
 
 # copy all wasm files to the node
-scp bin/whisper.wasm/* root@linode0:/var/www/html/whisper/         && scp bin/libmain.worker.js    root@linode0:/var/www/html/whisper/
-scp bin/stream.wasm/*  root@linode0:/var/www/html/whisper/stream/  && scp bin/libstream.worker.js  root@linode0:/var/www/html/whisper/stream/
-scp bin/command.wasm/* root@linode0:/var/www/html/whisper/command/ && scp bin/libcommand.worker.js root@linode0:/var/www/html/whisper/command/
-scp bin/talk.wasm/*    root@linode0:/var/www/html/whisper/talk/    && scp bin/libtalk.worker.js    root@linode0:/var/www/html/whisper/talk/
-scp bin/bench.wasm/*   root@linode0:/var/www/html/whisper/bench/   && scp bin/libbench.worker.js   root@linode0:/var/www/html/whisper/bench/
+scp bin/crispasr.wasm/* root@linode0:/var/www/html/crispasr/          && scp bin/libmain.worker.js    root@linode0:/var/www/html/crispasr/
+scp bin/stream.wasm/*   root@linode0:/var/www/html/crispasr/stream/   && scp bin/libstream.worker.js  root@linode0:/var/www/html/crispasr/stream/
+scp bin/command.wasm/*  root@linode0:/var/www/html/crispasr/command/  && scp bin/libcommand.worker.js root@linode0:/var/www/html/crispasr/command/
+scp bin/talk.wasm/*     root@linode0:/var/www/html/crispasr/talk/     && scp bin/libtalk.worker.js    root@linode0:/var/www/html/crispasr/talk/
+scp bin/bench.wasm/*    root@linode0:/var/www/html/crispasr/bench/    && scp bin/libbench.worker.js   root@linode0:/var/www/html/crispasr/bench/
 
 echo "Done"
 exit

@@ -149,6 +149,143 @@ void dump_i32(const char* dir, const char* name, const int32_t* data, size_t n) 
     fprintf(stderr, "qwen3_tts: dumped %s (%zu i32)\n", path, n);
 }
 
+struct qwen3_op_prof {
+    int64_t t_us = 0;
+    int count = 0;
+};
+
+struct qwen3_prof_state {
+    qwen3_op_prof mul_mat;
+    qwen3_op_prof flash_attn;
+    qwen3_op_prof norm;
+    qwen3_op_prof rope;
+    qwen3_op_prof add;
+    qwen3_op_prof unary;
+    qwen3_op_prof cpy;
+    qwen3_op_prof cont;
+    qwen3_op_prof get_rows;
+    qwen3_op_prof repeat;
+    qwen3_op_prof other;
+    int64_t t_node_start = 0;
+};
+
+static bool qwen3_prof_eval_cb(struct ggml_tensor* t, bool ask, void* user_data) {
+    auto* ps = (qwen3_prof_state*)user_data;
+    if (ask) {
+        ps->t_node_start = ggml_time_us();
+        return true;
+    }
+    const int64_t dt = ggml_time_us() - ps->t_node_start;
+    switch (t->op) {
+    case GGML_OP_MUL_MAT:
+        ps->mul_mat.t_us += dt;
+        ps->mul_mat.count++;
+        break;
+    case GGML_OP_FLASH_ATTN_EXT:
+        ps->flash_attn.t_us += dt;
+        ps->flash_attn.count++;
+        break;
+    case GGML_OP_NORM:
+    case GGML_OP_RMS_NORM:
+        ps->norm.t_us += dt;
+        ps->norm.count++;
+        break;
+    case GGML_OP_ROPE:
+    case GGML_OP_ROPE_BACK:
+        ps->rope.t_us += dt;
+        ps->rope.count++;
+        break;
+    case GGML_OP_ADD:
+    case GGML_OP_MUL:
+    case GGML_OP_SCALE:
+        ps->add.t_us += dt;
+        ps->add.count++;
+        break;
+    case GGML_OP_UNARY:
+        ps->unary.t_us += dt;
+        ps->unary.count++;
+        break;
+    case GGML_OP_CPY:
+        ps->cpy.t_us += dt;
+        ps->cpy.count++;
+        break;
+    case GGML_OP_CONT:
+        ps->cont.t_us += dt;
+        ps->cont.count++;
+        break;
+    case GGML_OP_GET_ROWS:
+        ps->get_rows.t_us += dt;
+        ps->get_rows.count++;
+        break;
+    case GGML_OP_REPEAT:
+        ps->repeat.t_us += dt;
+        ps->repeat.count++;
+        break;
+    default:
+        ps->other.t_us += dt;
+        ps->other.count++;
+        break;
+    }
+    return true;
+}
+
+static void qwen3_prof_add(qwen3_prof_state& dst, const qwen3_prof_state& src) {
+    dst.mul_mat.t_us += src.mul_mat.t_us;
+    dst.mul_mat.count += src.mul_mat.count;
+    dst.flash_attn.t_us += src.flash_attn.t_us;
+    dst.flash_attn.count += src.flash_attn.count;
+    dst.norm.t_us += src.norm.t_us;
+    dst.norm.count += src.norm.count;
+    dst.rope.t_us += src.rope.t_us;
+    dst.rope.count += src.rope.count;
+    dst.add.t_us += src.add.t_us;
+    dst.add.count += src.add.count;
+    dst.unary.t_us += src.unary.t_us;
+    dst.unary.count += src.unary.count;
+    dst.cpy.t_us += src.cpy.t_us;
+    dst.cpy.count += src.cpy.count;
+    dst.cont.t_us += src.cont.t_us;
+    dst.cont.count += src.cont.count;
+    dst.get_rows.t_us += src.get_rows.t_us;
+    dst.get_rows.count += src.get_rows.count;
+    dst.repeat.t_us += src.repeat.t_us;
+    dst.repeat.count += src.repeat.count;
+    dst.other.t_us += src.other.t_us;
+    dst.other.count += src.other.count;
+}
+
+static void qwen3_prof_print(const char* tag, const qwen3_prof_state& ps, int n_calls) {
+    auto pct = [&](int64_t v, int64_t total) { return total > 0 ? 100.0 * v / total : 0.0; };
+    const int64_t total = ps.mul_mat.t_us + ps.flash_attn.t_us + ps.norm.t_us + ps.rope.t_us + ps.add.t_us +
+                          ps.unary.t_us + ps.cpy.t_us + ps.cont.t_us + ps.get_rows.t_us + ps.repeat.t_us +
+                          ps.other.t_us;
+    fprintf(stderr, "qwen3_tts: ---- %s op profile (QWEN3_TTS_PROF, %d calls) ----\n", tag, n_calls);
+    fprintf(stderr, "qwen3_tts:  %-12s %7.1f ms %5.1f%% n=%d\n", "mul_mat", ps.mul_mat.t_us / 1e3,
+            pct(ps.mul_mat.t_us, total), ps.mul_mat.count);
+    fprintf(stderr, "qwen3_tts:  %-12s %7.1f ms %5.1f%% n=%d\n", "flash_attn", ps.flash_attn.t_us / 1e3,
+            pct(ps.flash_attn.t_us, total), ps.flash_attn.count);
+    fprintf(stderr, "qwen3_tts:  %-12s %7.1f ms %5.1f%% n=%d\n", "norm", ps.norm.t_us / 1e3,
+            pct(ps.norm.t_us, total), ps.norm.count);
+    fprintf(stderr, "qwen3_tts:  %-12s %7.1f ms %5.1f%% n=%d\n", "rope", ps.rope.t_us / 1e3,
+            pct(ps.rope.t_us, total), ps.rope.count);
+    fprintf(stderr, "qwen3_tts:  %-12s %7.1f ms %5.1f%% n=%d\n", "add/mul/sc", ps.add.t_us / 1e3,
+            pct(ps.add.t_us, total), ps.add.count);
+    fprintf(stderr, "qwen3_tts:  %-12s %7.1f ms %5.1f%% n=%d\n", "unary", ps.unary.t_us / 1e3,
+            pct(ps.unary.t_us, total), ps.unary.count);
+    fprintf(stderr, "qwen3_tts:  %-12s %7.1f ms %5.1f%% n=%d\n", "cpy", ps.cpy.t_us / 1e3, pct(ps.cpy.t_us, total),
+            ps.cpy.count);
+    fprintf(stderr, "qwen3_tts:  %-12s %7.1f ms %5.1f%% n=%d\n", "cont", ps.cont.t_us / 1e3,
+            pct(ps.cont.t_us, total), ps.cont.count);
+    fprintf(stderr, "qwen3_tts:  %-12s %7.1f ms %5.1f%% n=%d\n", "get_rows", ps.get_rows.t_us / 1e3,
+            pct(ps.get_rows.t_us, total), ps.get_rows.count);
+    fprintf(stderr, "qwen3_tts:  %-12s %7.1f ms %5.1f%% n=%d\n", "repeat", ps.repeat.t_us / 1e3,
+            pct(ps.repeat.t_us, total), ps.repeat.count);
+    fprintf(stderr, "qwen3_tts:  %-12s %7.1f ms %5.1f%% n=%d\n", "other", ps.other.t_us / 1e3,
+            pct(ps.other.t_us, total), ps.other.count);
+    fprintf(stderr, "qwen3_tts:  %-12s %7.1f ms\n", "TOTAL", total / 1e3);
+    fprintf(stderr, "qwen3_tts: -----------------------------------------------\n");
+}
+
 struct g3t_hp {
     // Talker (Qwen3 backbone)
     uint32_t n_layers = 28;
@@ -203,6 +340,7 @@ struct g3t_layer {
     ggml_tensor* attn_q_w = nullptr;
     ggml_tensor* attn_k_w = nullptr;
     ggml_tensor* attn_v_w = nullptr;
+    ggml_tensor* attn_qkv_w = nullptr; // fused Q+K+V (F16/F32 talker only)
     ggml_tensor* attn_output_w = nullptr;
     ggml_tensor* attn_q_norm_w = nullptr;
     ggml_tensor* attn_k_norm_w = nullptr;
@@ -534,6 +672,19 @@ struct qwen3_tts_context {
     ggml_tensor* cp_kv_v = nullptr;
     int cp_kv_max_ctx = 0;
 
+    // O15: persistent T=1 code_pred graph. cp_lm_head_slot is a writable Metal
+    // buffer into which we blit lm_head[i] before each T=1 step, allowing all
+    // 13 skip steps per frame to reuse the cached graph (no reset/alloc).
+    ggml_context*         cp_lm_slot_ctx  = nullptr;
+    ggml_backend_buffer_t cp_lm_slot_buf  = nullptr;
+    ggml_tensor*          cp_lm_head_slot = nullptr;
+    ggml_cgraph*          cp_t1_gf        = nullptr;
+
+    // Fused Q+K+V weights for the talker (F16/F32 only, runtime-built from
+    // the unfused tensors so Q4_K/Q8_0 talkers fall back to the 3-matmul path).
+    ggml_context*         fused_ctx = nullptr;
+    ggml_backend_buffer_t fused_buf = nullptr;
+
     // Loaded voice pack (zero-copy: `vp_tensors` references the
     // weight context's tensors directly).
     std::vector<std::string> vp_names;
@@ -780,6 +931,8 @@ ggml_cgraph* build_graph_embed_audio(qwen3_tts_context* c, int n_tokens) {
     return gf;
 }
 
+ggml_cgraph* build_graph_talker_kv(qwen3_tts_context* c, int n_past, int n_tokens);
+
 // Code-predictor forward with persistent KV cache.
 //
 // Same Qwen3 backbone as the talker (Q/K-norm + SwiGLU + flash-attn +
@@ -800,7 +953,11 @@ ggml_cgraph* build_graph_code_pred_kv(qwen3_tts_context* c, int n_past, int n_to
     const float theta = hp.rope_theta;
     const float attn_scale = 1.0f / std::sqrt((float)hd);
     const int T = n_tokens;
-    const int Lk = n_past + T;
+    // Use a fixed Lk = cp_kv_max_ctx for all code_pred graphs so that all
+    // T=1 steps share the same tensor topology.  The gallocr plan is computed
+    // once (at init reservation) and reused for every subsequent alloc,
+    // eliminating per-step re-planning overhead (~7 ms/frame for Q8_0).
+    const int Lk = c->cp_kv_max_ctx;
 
     ggml_init_params ip = {c->compute_meta.size(), c->compute_meta.data(), true};
     ggml_context* ctx0 = ggml_init(ip);
@@ -814,12 +971,13 @@ ggml_cgraph* build_graph_code_pred_kv(qwen3_tts_context* c, int n_past, int n_to
     ggml_set_name(positions, "positions");
     ggml_set_input(positions);
 
-    ggml_tensor* causal_mask = nullptr;
-    if (T > 1) {
-        causal_mask = ggml_new_tensor_2d(ctx0, GGML_TYPE_F16, Lk, T);
-        ggml_set_name(causal_mask, "causal_mask");
-        ggml_set_input(causal_mask);
-    }
+    // Always provide a causal mask (even for T=1 decode steps) so that
+    // positions beyond the actual context window are masked to -inf.
+    // This keeps the (Lk, T) mask shape fixed across all calls with the
+    // same T, enabling gallocr plan reuse.
+    ggml_tensor* causal_mask = ggml_new_tensor_2d(ctx0, GGML_TYPE_F16, Lk, T);
+    ggml_set_name(causal_mask, "causal_mask");
+    ggml_set_input(causal_mask);
 
     const core_attn::KvSelfAttnParams kvp = {
         n_q, n_kv, hd, n_kv_grp, (int)hp.max_pos, theta, 32.0f, 1.0f, attn_scale, eps, core_attn::GQA_MANUAL_CONT,
@@ -833,9 +991,13 @@ ggml_cgraph* build_graph_code_pred_kv(qwen3_tts_context* c, int n_past, int n_to
         ggml_tensor* x = ggml_rms_norm(ctx0, cur, eps);
         x = ggml_mul(ctx0, x, b.attn_norm_w);
 
+        // For T=1 graphs, fix the KV-read length to cp_kv_max_ctx so that all
+        // T=1 steps share the same graph topology (enabling graph reuse in O15).
+        const int fixed_kv = (T == 1) ? c->cp_kv_max_ctx : 0;
         ggml_tensor* attn = core_attn::kv_self_attn(
             ctx0, gf, x, b.attn_q_w, b.attn_k_w, b.attn_v_w, b.attn_output_w, b.attn_q_norm_w, b.attn_k_norm_w,
-            positions, (T == 1) ? nullptr : causal_mask, c->cp_kv_k, c->cp_kv_v, (int)il, n_past, kvp);
+            positions, causal_mask, c->cp_kv_k, c->cp_kv_v, (int)il, n_past, kvp,
+            /*qkv_w=*/nullptr, /*fixed_kv_len=*/fixed_kv);
         cur = ggml_add(ctx0, residual, attn);
 
         residual = cur;
@@ -851,7 +1013,10 @@ ggml_cgraph* build_graph_code_pred_kv(qwen3_tts_context* c, int n_past, int n_to
     if (T > 1) {
         cur = ggml_view_2d(ctx0, cur, d, 1, cur->nb[1], (size_t)(T - 1) * cur->nb[1]);
     }
-    ggml_tensor* logits = ggml_mul_mat(ctx0, lm_head, cur);
+    // For T=1 graphs, use the writable slot so we can reuse the graph across
+    // steps by blitting different lm_head weights in before each compute.
+    ggml_tensor* eff_lm = (T == 1 && c->cp_lm_head_slot) ? c->cp_lm_head_slot : lm_head;
+    ggml_tensor* logits = ggml_mul_mat(ctx0, eff_lm, cur);
     ggml_set_name(logits, "logits");
     ggml_build_forward_expand(gf, logits);
     ggml_free(ctx0);
@@ -859,11 +1024,15 @@ ggml_cgraph* build_graph_code_pred_kv(qwen3_tts_context* c, int n_past, int n_to
 }
 
 static ggml_backend_sched_t code_pred_pick_sched(qwen3_tts_context* c) {
+    const char* cp_be = env_str("QWEN3_TTS_CP_BACKEND");
+    if (cp_be && std::strncmp(cp_be, "cpu", 3) == 0 && c->cp_cpu_pinned && c->cp_sched) {
+        return c->cp_sched;
+    }
     return c->sched;
 }
 
 static bool code_pred_reserve_sched(qwen3_tts_context* c, ggml_backend_sched_t sched) {
-    if (sched != c->sched || c->cp_sched_reserved || !c->code_pred.lm_head[0]) {
+    if (c->cp_sched_reserved || !c->code_pred.lm_head[0]) {
         return true;
     }
     ggml_cgraph* gf = build_graph_code_pred_kv(c, /*n_past=*/0, /*n_tokens=*/2, c->code_pred.lm_head[0]);
@@ -940,7 +1109,7 @@ ggml_cgraph* build_graph_talker_kv(qwen3_tts_context* c, int n_past, int n_token
 
         ggml_tensor* attn = core_attn::kv_self_attn(
             ctx0, gf, x, b.attn_q_w, b.attn_k_w, b.attn_v_w, b.attn_output_w, b.attn_q_norm_w, b.attn_k_norm_w,
-            positions, (T == 1) ? nullptr : causal_mask, c->kv_k, c->kv_v, (int)il, n_past, kvp);
+            positions, (T == 1) ? nullptr : causal_mask, c->kv_k, c->kv_v, (int)il, n_past, kvp, b.attn_qkv_w);
         cur = ggml_add(ctx0, residual, attn);
 
         residual = cur;
@@ -1046,11 +1215,20 @@ float* run_talker_kv(qwen3_tts_context* c, const float* embeds, int n_tokens, in
         }
     }
 
+    // Invalidate any cached T=1 code_pred graph — build_graph_talker_kv will
+    // overwrite compute_meta, making cp_t1_gf stale.
+    c->cp_t1_gf = nullptr;
+
+    const bool bench = env_bool("QWEN3_TTS_BENCH");
+    const bool prof = env_bool("QWEN3_TTS_PROF");
+    const double t_build0 = bench ? now_ms() : 0.0;
     ggml_cgraph* gf = build_graph_talker_kv(c, n_past, n_tokens);
+    const double t_build1 = bench ? now_ms() : 0.0;
     ggml_backend_sched_reset(c->sched);
     if (!ggml_backend_sched_alloc_graph(c->sched, gf)) {
         return nullptr;
     }
+    const double t_alloc1 = bench ? now_ms() : 0.0;
     ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "inputs_embeds"), embeds, 0,
                             (size_t)d * n_tokens * sizeof(float));
     ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "positions"), positions.data(), 0,
@@ -1059,10 +1237,21 @@ float* run_talker_kv(qwen3_tts_context* c, const float* embeds, int n_tokens, in
         ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "causal_mask"), mask.data(), 0,
                                 mask.size() * sizeof(ggml_fp16_t));
     }
+    qwen3_prof_state prof_state;
+    if (prof) {
+        ggml_backend_sched_set_eval_callback(c->sched, qwen3_prof_eval_cb, &prof_state);
+    }
     if (ggml_backend_sched_graph_compute(c->sched, gf) != GGML_STATUS_SUCCESS) {
+        if (prof) {
+            ggml_backend_sched_set_eval_callback(c->sched, nullptr, nullptr);
+        }
         fprintf(stderr, "qwen3_tts: talker compute failed\n");
         return nullptr;
     }
+    if (prof) {
+        ggml_backend_sched_set_eval_callback(c->sched, nullptr, nullptr);
+    }
+    const double t_compute1 = bench ? now_ms() : 0.0;
     ggml_tensor* out = ggml_graph_get_tensor(gf, "logits");
     float* r = (float*)malloc((size_t)vocab * sizeof(float));
     ggml_backend_tensor_get(out, r, 0, (size_t)vocab * sizeof(float));
@@ -1072,6 +1261,33 @@ float* run_talker_kv(qwen3_tts_context* c, const float* embeds, int n_tokens, in
             float* h = (float*)malloc((size_t)d * sizeof(float));
             ggml_backend_tensor_get(hid, h, 0, (size_t)d * sizeof(float));
             *out_hidden_d = h;
+        }
+    }
+    if (bench) {
+        static double sum_build = 0.0, sum_alloc = 0.0, sum_compute = 0.0, sum_read = 0.0;
+        static int count = 0;
+        sum_build += t_build1 - t_build0;
+        sum_alloc += t_alloc1 - t_build1;
+        sum_compute += t_compute1 - t_alloc1;
+        sum_read += now_ms() - t_compute1;
+        count++;
+        if (count == 14) {
+            fprintf(stderr,
+                    "qwen3_tts: talker_kv    (%d calls): build=%.1f ms  alloc=%.1f ms  compute=%.1f ms  read=%.1f ms\n",
+                    count, sum_build, sum_alloc, sum_compute, sum_read);
+            sum_build = sum_alloc = sum_compute = sum_read = 0.0;
+            count = 0;
+        }
+    }
+    if (prof) {
+        static qwen3_prof_state sum_prof;
+        static int count = 0;
+        qwen3_prof_add(sum_prof, prof_state);
+        count++;
+        if (count == 14) {
+            qwen3_prof_print("talker_kv", sum_prof, count);
+            sum_prof = {};
+            count = 0;
         }
     }
     return r;
@@ -1177,7 +1393,8 @@ float* lookup_rows(qwen3_tts_context* c, ggml_tensor* weight, const int32_t* ids
 // One step of the code-predictor AR loop. Builds + runs the graph
 // against a caller-supplied (T, d) embedding tensor and the lm_head
 // for the current generation step. Returns logits (cp_vocab,).
-float* run_code_pred_kv(qwen3_tts_context* c, const float* embeds, int n_tokens, int n_past, ggml_tensor* lm_head) {
+float* run_code_pred_kv(qwen3_tts_context* c, const float* embeds, int n_tokens, int n_past, ggml_tensor* lm_head,
+                        bool skip_plan = false) {
     if (!lm_head) {
         return nullptr;
     }
@@ -1188,68 +1405,119 @@ float* run_code_pred_kv(qwen3_tts_context* c, const float* embeds, int n_tokens,
     const auto& hp = c->hp;
     const int d = (int)hp.cp_d_model;
     const int vocab = (int)hp.cp_vocab_size;
-    const int Lk = n_past + n_tokens;
+    const int actual_Lk = n_past + n_tokens;
+    const int fixed_Lk = c->cp_kv_max_ctx;  // matches build_graph_code_pred_kv
 
     std::vector<int32_t> positions(n_tokens);
     for (int i = 0; i < n_tokens; i++) {
         positions[i] = n_past + i;
     }
 
-    std::vector<ggml_fp16_t> mask;
-    if (n_tokens > 1) {
-        const ggml_fp16_t zero_h = ggml_fp32_to_fp16(0.0f);
-        const ggml_fp16_t neginf_h = ggml_fp32_to_fp16(-INFINITY);
-        mask.assign((size_t)Lk * n_tokens, zero_h);
-        for (int q = 0; q < n_tokens; q++) {
-            for (int k = n_past + q + 1; k < Lk; k++) {
-                mask[(size_t)q * Lk + k] = neginf_h;
-            }
+    // Build causal mask for every call (T=1 or T=2).  Size is (fixed_Lk, T).
+    // Positions [0 .. n_past+q] are 0; positions [n_past+q+1 .. fixed_Lk-1] are -inf.
+    const ggml_fp16_t zero_h = ggml_fp32_to_fp16(0.0f);
+    const ggml_fp16_t neginf_h = ggml_fp32_to_fp16(-INFINITY);
+    std::vector<ggml_fp16_t> mask((size_t)fixed_Lk * n_tokens, neginf_h);
+    for (int q = 0; q < n_tokens; q++) {
+        for (int k = 0; k <= n_past + q; k++) {
+            mask[(size_t)q * fixed_Lk + k] = zero_h;
         }
+    }
+    (void)actual_Lk;
+
+    // For T=1 steps: blit current lm_head[i] into the slot so the persistent
+    // graph always reads from cp_lm_head_slot regardless of which step i we're on.
+    const bool use_slot = (n_tokens == 1 && c->cp_lm_head_slot && !c->cp_cpu_pinned);
+    if (use_slot) {
+        ggml_backend_tensor_copy(lm_head, c->cp_lm_head_slot);
     }
 
     const bool bench = env_bool("QWEN3_TTS_BENCH");
+    const bool prof = env_bool("QWEN3_TTS_PROF");
     const double t_build0 = bench ? now_ms() : 0.0;
-    ggml_cgraph* gf = build_graph_code_pred_kv(c, n_past, n_tokens, lm_head);
+
+    // skip_plan=true: reuse the cached T=1 graph — no rebuild, no reset, no alloc.
+    // The graph is valid because compute_meta wasn't touched since it was built.
+    const bool can_skip = skip_plan && use_slot && (c->cp_t1_gf != nullptr);
+    ggml_cgraph* gf;
+    if (can_skip) {
+        gf = c->cp_t1_gf;
+    } else {
+        gf = build_graph_code_pred_kv(c, n_past, n_tokens, lm_head);
+        if (!gf) {
+            return nullptr;
+        }
+        if (use_slot) {
+            c->cp_t1_gf = gf;  // cache for future skip_plan calls within this frame
+        }
+    }
+
     const double t_build1 = bench ? now_ms() : 0.0;
     ggml_backend_sched_t sched = code_pred_pick_sched(c);
     if (!code_pred_reserve_sched(c, sched)) {
         return nullptr;
     }
-    ggml_backend_sched_reset(sched);
-    if (!ggml_backend_sched_alloc_graph(sched, gf)) {
-        return nullptr;
+    const double t_reset0 = bench ? now_ms() : 0.0;
+    if (!can_skip) {
+        ggml_backend_sched_reset(sched);
+    }
+    const double t_reset1 = bench ? now_ms() : 0.0;
+    if (!can_skip) {
+        if (!ggml_backend_sched_alloc_graph(sched, gf)) {
+            return nullptr;
+        }
     }
     const double t_alloc1 = bench ? now_ms() : 0.0;
     ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "inputs_embeds"), embeds, 0,
                             (size_t)d * n_tokens * sizeof(float));
     ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "positions"), positions.data(), 0,
                             positions.size() * sizeof(int32_t));
-    if (n_tokens > 1) {
-        ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "causal_mask"), mask.data(), 0,
-                                mask.size() * sizeof(ggml_fp16_t));
+    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "causal_mask"), mask.data(), 0,
+                            mask.size() * sizeof(ggml_fp16_t));
+    qwen3_prof_state prof_state;
+    if (prof) {
+        ggml_backend_sched_set_eval_callback(sched, qwen3_prof_eval_cb, &prof_state);
     }
     if (ggml_backend_sched_graph_compute(sched, gf) != GGML_STATUS_SUCCESS) {
+        if (prof) {
+            ggml_backend_sched_set_eval_callback(sched, nullptr, nullptr);
+        }
         fprintf(stderr, "qwen3_tts: code_pred compute failed\n");
         return nullptr;
+    }
+    if (prof) {
+        ggml_backend_sched_set_eval_callback(sched, nullptr, nullptr);
     }
     const double t_compute1 = bench ? now_ms() : 0.0;
     ggml_tensor* out = ggml_graph_get_tensor(gf, "logits");
     float* r = (float*)malloc((size_t)vocab * sizeof(float));
     ggml_backend_tensor_get(out, r, 0, (size_t)vocab * sizeof(float));
     if (bench) {
-        static double sum_build = 0.0, sum_alloc = 0.0, sum_compute = 0.0, sum_read = 0.0;
+        static double sum_build = 0.0, sum_reset = 0.0, sum_alloc = 0.0, sum_compute = 0.0, sum_read = 0.0;
         static int count = 0;
         sum_build += t_build1 - t_build0;
-        sum_alloc += t_alloc1 - t_build1;
+        sum_reset += t_reset1 - t_reset0;
+        sum_alloc += t_alloc1 - t_reset1;   // alloc_graph only (excludes reset)
         sum_compute += t_compute1 - t_alloc1;
         sum_read += now_ms() - t_compute1;
         count++;
         if (count == 15) {
             fprintf(stderr,
-                    "qwen3_tts: code_pred_kv bench (%d calls): build=%.1f ms  alloc=%.1f ms  compute=%.1f ms  "
-                    "read=%.1f ms\n",
-                    count, sum_build, sum_alloc, sum_compute, sum_read);
-            sum_build = sum_alloc = sum_compute = sum_read = 0.0;
+                    "qwen3_tts: code_pred_kv bench (%d calls): build=%.2f ms  reset=%.2f ms  alloc=%.2f ms  "
+                    "compute=%.1f ms  read=%.2f ms\n",
+                    count, sum_build, sum_reset, sum_alloc, sum_compute, sum_read);
+            sum_build = sum_reset = sum_alloc = sum_compute = sum_read = 0.0;
+            count = 0;
+        }
+    }
+    if (prof) {
+        static qwen3_prof_state sum_prof;
+        static int count = 0;
+        qwen3_prof_add(sum_prof, prof_state);
+        count++;
+        if (count == 15) {
+            qwen3_prof_print("code_pred_kv", sum_prof, count);
+            sum_prof = {};
             count = 0;
         }
     }
@@ -1266,13 +1534,14 @@ float* run_code_pred_kv(qwen3_tts_context* c, const float* embeds, int n_tokens,
 // argmax produces a degenerate silent codec output, verified against
 // the official qwen-tts reference. Defaults: top_k=50, temperature=0.9.
 bool code_pred_generate_15(qwen3_tts_context* c, const float* past_hidden_d, const float* last_id_hidden_d,
-                           int32_t* out_codes15, uint64_t* rng_state) {
+                           int32_t* out_codes15, uint64_t* rng_state, int frame_idx = -1) {
     auto& cp = c->code_pred;
     const auto& hp = c->hp;
     const int d = (int)hp.cp_d_model;
     const int n_groups = (int)hp.cp_n_code_groups; // 16
     const int top_k = 50;
     const float temperature = 0.9f;
+    const char* dump_dir = env_str("QWEN3_TTS_DUMP_DIR");
 
     // ---- step 0: inputs_embeds = (past_hidden, last_id_hidden), n_past=0 ----
     std::vector<float> step0((size_t)2 * d);
@@ -1299,6 +1568,13 @@ bool code_pred_generate_15(qwen3_tts_context* c, const float* past_hidden_d, con
     if (!logits0) {
         return false;
     }
+    if (dump_dir && frame_idx >= 0) {
+        char name[64];
+        snprintf(name, sizeof(name), "cp_f%03d_step00_embed", frame_idx);
+        dump_f32(dump_dir, name, step0.data(), step0.size());
+        snprintf(name, sizeof(name), "cp_f%03d_step00_logits", frame_idx);
+        dump_f32(dump_dir, name, logits0, hp.cp_vocab_size);
+    }
     if (getenv("QWEN3_TTS_EMBD_CHECK")) {
         float l1 = 0.0f;
         int top_idx = 0;
@@ -1314,6 +1590,11 @@ bool code_pred_generate_15(qwen3_tts_context* c, const float* past_hidden_d, con
                 (unsigned long long)*rng_state);
     }
     out_codes15[0] = top_k_sample(logits0, (int)hp.cp_vocab_size, top_k, temperature, rng_state);
+    if (dump_dir && frame_idx >= 0) {
+        char name[64];
+        snprintf(name, sizeof(name), "cp_f%03d_step00_id", frame_idx);
+        dump_i32(dump_dir, name, &out_codes15[0], 1);
+    }
     free(logits0);
 
     int n_past = 2;
@@ -1346,11 +1627,26 @@ bool code_pred_generate_15(qwen3_tts_context* c, const float* past_hidden_d, con
         if (!ok) {
             return false;
         }
-        float* logits = run_code_pred_kv(c, emb_buf.data(), 1, n_past, cp.lm_head[i]);
+        if (dump_dir && frame_idx >= 0) {
+            char name[64];
+            snprintf(name, sizeof(name), "cp_f%03d_step%02d_embed", frame_idx, i);
+            dump_f32(dump_dir, name, emb_buf.data(), d);
+        }
+        float* logits = run_code_pred_kv(c, emb_buf.data(), 1, n_past, cp.lm_head[i], /*skip_plan=*/i >= 2);
         if (!logits) {
             return false;
         }
+        if (dump_dir && frame_idx >= 0) {
+            char name[64];
+            snprintf(name, sizeof(name), "cp_f%03d_step%02d_logits", frame_idx, i);
+            dump_f32(dump_dir, name, logits, hp.cp_vocab_size);
+        }
         out_codes15[i] = top_k_sample(logits, (int)hp.cp_vocab_size, top_k, temperature, rng_state);
+        if (dump_dir && frame_idx >= 0) {
+            char name[64];
+            snprintf(name, sizeof(name), "cp_f%03d_step%02d_id", frame_idx, i);
+            dump_i32(dump_dir, name, &out_codes15[i], 1);
+        }
         free(logits);
         n_past += 1;
     }
@@ -1367,7 +1663,7 @@ bool cp_kv_alloc(qwen3_tts_context* c) {
     const int hd = (int)hp.head_dim;
     const int n_kv = (int)hp.cp_n_kv_heads;
     const int n_lay = (int)hp.cp_n_layers;
-    const int max_ctx = 32;
+    const int max_ctx = 16; // 2 prefill + 14 code steps; exactly fills one frame
 
     ggml_init_params kp = {ggml_tensor_overhead() * 4 + 1024, nullptr, true};
     c->cp_kv_ctx = ggml_init(kp);
@@ -1376,7 +1672,8 @@ bool cp_kv_alloc(qwen3_tts_context* c) {
     ggml_set_name(c->cp_kv_k, "cp_kv_k");
     ggml_set_name(c->cp_kv_v, "cp_kv_v");
     const size_t kb = ggml_nbytes(c->cp_kv_k), vb = ggml_nbytes(c->cp_kv_v);
-    c->cp_kv_buf = ggml_backend_alloc_buffer(c->backend, kb + vb);
+    ggml_backend_t cp_backend = c->cp_cpu_pinned ? c->backend_cpu : c->backend;
+    c->cp_kv_buf = ggml_backend_alloc_buffer(cp_backend, kb + vb);
     if (!c->cp_kv_buf) {
         return false;
     }
@@ -1628,11 +1925,92 @@ static float* run_codec_embed_sum_ar(qwen3_tts_context* c, const int32_t* codes1
     return result;
 }
 
+static bool materialize_tensor_copy(ggml_tensor* dst, ggml_tensor* src, std::vector<uint8_t>& src_buf,
+                                    std::vector<uint8_t>& dst_buf, std::vector<float>& row_f32) {
+    if (!dst || !src) {
+        return false;
+    }
+
+    const size_t src_bytes = ggml_nbytes(src);
+    if (src_buf.size() < src_bytes) {
+        src_buf.resize(src_bytes);
+    }
+    ggml_backend_tensor_get(src, src_buf.data(), 0, src_bytes);
+
+    if (dst->type == src->type) {
+        ggml_backend_tensor_set(dst, src_buf.data(), 0, src_bytes);
+        return true;
+    }
+
+    const int64_t row_len = src->ne[0];
+    if (row_len <= 0) {
+        return false;
+    }
+    const int64_t n_rows = ggml_nelements(src) / row_len;
+    const size_t src_row_bytes = ggml_row_size(src->type, row_len);
+    const size_t dst_row_bytes = ggml_row_size(dst->type, row_len);
+    if ((size_t)n_rows * src_row_bytes != src_bytes) {
+        return false;
+    }
+
+    const ggml_to_float_t to_float = ggml_get_type_traits(src->type)->to_float;
+    ggml_from_float_t from_float = nullptr;
+    const auto* dst_cpu_traits = ggml_get_type_traits_cpu(dst->type);
+    if (dst_cpu_traits) {
+        from_float = dst_cpu_traits->from_float;
+    }
+    if (!from_float) {
+        from_float = ggml_get_type_traits(dst->type)->from_float_ref;
+    }
+    if ((src->type != GGML_TYPE_F32 && !to_float) || (dst->type != GGML_TYPE_F32 && !from_float)) {
+        return false;
+    }
+
+    if (row_f32.size() < (size_t)row_len) {
+        row_f32.resize((size_t)row_len);
+    }
+    const size_t dst_bytes = ggml_nbytes(dst);
+    if (dst_buf.size() < dst_bytes) {
+        dst_buf.resize(dst_bytes);
+    }
+
+    for (int64_t row = 0; row < n_rows; row++) {
+        const uint8_t* src_row = src_buf.data() + (size_t)row * src_row_bytes;
+        uint8_t* dst_row = dst_buf.data() + (size_t)row * dst_row_bytes;
+        if (src->type == GGML_TYPE_F32) {
+            std::memcpy(row_f32.data(), src_row, (size_t)row_len * sizeof(float));
+        } else {
+            to_float(src_row, row_f32.data(), row_len);
+        }
+        if (dst->type == GGML_TYPE_F32) {
+            std::memcpy(dst_row, row_f32.data(), (size_t)row_len * sizeof(float));
+        } else {
+            from_float(row_f32.data(), dst_row, row_len);
+        }
+    }
+
+    ggml_backend_tensor_set(dst, dst_buf.data(), 0, dst_bytes);
+    return true;
+}
+
+static enum ggml_type code_pred_cpu_copy_type_from_env(const char* cp_be) {
+    if (!cp_be || std::strncmp(cp_be, "cpu", 3) != 0) {
+        return GGML_TYPE_COUNT;
+    }
+    if (std::strcmp(cp_be, "cpu-f32") == 0) {
+        return GGML_TYPE_F32;
+    }
+    if (std::strcmp(cp_be, "cpu-f16") == 0) {
+        return GGML_TYPE_F16;
+    }
+    return GGML_TYPE_COUNT; // "cpu" = keep original tensor types
+}
+
 // Copy code_pred transformer weights (lm_head + blocks + output_norm) and a
 // copy of talker.token_embd_w to the CPU backend so that code_pred forward
 // passes run on c->cp_sched (CPU-only) instead of Metal.  codec_embd tables
 // are left on Metal because sum_codec_embeds() uses them on c->sched.
-static bool copy_cp_weights_to_cpu(qwen3_tts_context* c) {
+static bool copy_cp_weights_to_cpu(qwen3_tts_context* c, enum ggml_type dst_type) {
     if (!c->backend_cpu || !c->cp_sched) {
         return false;
     }
@@ -1661,17 +2039,32 @@ static bool copy_cp_weights_to_cpu(qwen3_tts_context* c) {
         ptrs.push_back(&b.ffn_down_w);
     }
 
-    // Calculate total bytes (cp transformer weights only)
+    auto copy_type_for = [&](ggml_tensor* orig) -> enum ggml_type {
+        return dst_type == GGML_TYPE_COUNT ? orig->type : dst_type;
+    };
+    auto tensor_nbytes_for_type = [&](ggml_tensor* orig, enum ggml_type type) -> size_t {
+        const int64_t row_len = orig->ne[0];
+        const int64_t n_rows = ggml_nelements(orig) / row_len;
+        return ggml_row_size(type, row_len) * (size_t)n_rows;
+    };
+
+    // Calculate total bytes for the destination tensors, not the source
+    // tensors. For cpu-f16 / cpu-f32 the CPU copies are larger than the
+    // original q8/qk weights.
     size_t total_bytes = 0;
     size_t n_tensors = 0;
     for (auto* pp : ptrs) {
         if (*pp) {
-            total_bytes += ggml_nbytes(*pp);
+            ggml_tensor* orig = *pp;
+            total_bytes += tensor_nbytes_for_type(orig, copy_type_for(orig));
             n_tensors++;
         }
     }
     // talker.token_embd_w copy (kept separately, doesn't overwrite original)
-    const size_t embd_bytes = c->talker.token_embd_w ? ggml_nbytes(c->talker.token_embd_w) : 0;
+    const size_t embd_bytes = c->talker.token_embd_w
+                                  ? tensor_nbytes_for_type(c->talker.token_embd_w,
+                                                           copy_type_for(c->talker.token_embd_w))
+                                  : 0;
     total_bytes += embd_bytes;
     n_tensors += (embd_bytes > 0) ? 1 : 0;
 
@@ -1688,7 +2081,9 @@ static bool copy_cp_weights_to_cpu(qwen3_tts_context* c) {
     }
 
     ggml_tallocr talloc = ggml_tallocr_new(c->cp_cpu_buf);
-    std::vector<uint8_t> tmp;
+    std::vector<uint8_t> tmp_src;
+    std::vector<uint8_t> tmp_dst;
+    std::vector<float> row_f32;
 
     // Copy transformer weights and update pointers
     for (auto* pp : ptrs) {
@@ -1696,33 +2091,42 @@ static bool copy_cp_weights_to_cpu(qwen3_tts_context* c) {
             continue;
         }
         ggml_tensor* orig = *pp;
-        ggml_tensor* cpu_t = ggml_dup_tensor(c->cp_cpu_ctx, orig);
-        ggml_tallocr_alloc(&talloc, cpu_t);
-        const size_t nb = ggml_nbytes(orig);
-        if (tmp.size() < nb) {
-            tmp.resize(nb);
+        const enum ggml_type cpu_type = copy_type_for(orig);
+        ggml_tensor* cpu_t = ggml_new_tensor(c->cp_cpu_ctx, cpu_type, GGML_MAX_DIMS, orig->ne);
+        if (ggml_tallocr_alloc(&talloc, cpu_t) != GGML_STATUS_SUCCESS) {
+            fprintf(stderr, "qwen3_tts: copy_cp_to_cpu: alloc failed for tensor %s\n",
+                    orig->name[0] ? orig->name : "(unnamed)");
+            return false;
         }
-        ggml_backend_tensor_get(orig, tmp.data(), 0, nb);
-        ggml_backend_tensor_set(cpu_t, tmp.data(), 0, nb);
+        if (!materialize_tensor_copy(cpu_t, orig, tmp_src, tmp_dst, row_f32)) {
+            fprintf(stderr, "qwen3_tts: copy_cp_to_cpu: copy failed for tensor %s (%s -> %s)\n",
+                    orig->name[0] ? orig->name : "(unnamed)", ggml_type_name(orig->type), ggml_type_name(cpu_type));
+            return false;
+        }
         *pp = cpu_t;
     }
     // Copy talker.token_embd_w without overwriting the original (Metal) pointer
     if (c->talker.token_embd_w && embd_bytes > 0) {
         ggml_tensor* orig = c->talker.token_embd_w;
-        ggml_tensor* cpu_t = ggml_dup_tensor(c->cp_cpu_ctx, orig);
-        ggml_tallocr_alloc(&talloc, cpu_t);
-        const size_t nb = embd_bytes;
-        if (tmp.size() < nb) {
-            tmp.resize(nb);
+        const enum ggml_type cpu_type = copy_type_for(orig);
+        ggml_tensor* cpu_t = ggml_new_tensor(c->cp_cpu_ctx, cpu_type, GGML_MAX_DIMS, orig->ne);
+        if (ggml_tallocr_alloc(&talloc, cpu_t) != GGML_STATUS_SUCCESS) {
+            fprintf(stderr, "qwen3_tts: copy_cp_to_cpu: alloc failed for talker.token_embd_w\n");
+            return false;
         }
-        ggml_backend_tensor_get(orig, tmp.data(), 0, nb);
-        ggml_backend_tensor_set(cpu_t, tmp.data(), 0, nb);
+        if (!materialize_tensor_copy(cpu_t, orig, tmp_src, tmp_dst, row_f32)) {
+            fprintf(stderr, "qwen3_tts: copy_cp_to_cpu: copy failed for talker.token_embd_w (%s -> %s)\n",
+                    ggml_type_name(orig->type), ggml_type_name(cpu_type));
+            return false;
+        }
         c->talker_embd_cpu = cpu_t;
     }
 
     c->cp_cpu_pinned = true;
     if (c->params.verbosity >= 1) {
-        fprintf(stderr, "qwen3_tts: code_pred CPU-pinned (%zu tensors, %zu MB)\n", n_tensors, total_bytes >> 20);
+        const char* type_name = (dst_type == GGML_TYPE_F16) ? "f16" : (dst_type == GGML_TYPE_F32) ? "f32" : "native";
+        fprintf(stderr, "qwen3_tts: code_pred CPU-pinned (%zu tensors, %zu MB, copy=%s)\n", n_tensors,
+                total_bytes >> 20, type_name);
     }
     return true;
 }
@@ -3691,6 +4095,52 @@ extern "C" struct qwen3_tts_context* qwen3_tts_init_from_file(const char* path_m
     load_spk_enc(c);        // soft — logs a warning if tensors are missing but doesn't fail
     build_embd_caches(c);   // CPU copies for AR-loop embed lookups
 
+    // Fuse Q+K+V weights for the talker so each layer's attention does a
+    // single mul_mat instead of three. Only applies to F16/F32 talkers —
+    // quantized formats (Q8_0/Q4_K) keep the 3-matmul path because their
+    // block layout would need a converter-side fuse to be safe.
+    // Set QWEN3_TTS_NO_FUSED_QKV=1 to skip (for A/B benchmarking).
+    if (!env_bool("QWEN3_TTS_NO_FUSED_QKV")) {
+        auto& blocks = c->talker.blocks;
+        if (!blocks.empty() && blocks[0].attn_q_w && blocks[0].attn_k_w && blocks[0].attn_v_w &&
+            (blocks[0].attn_q_w->type == GGML_TYPE_F32 || blocks[0].attn_q_w->type == GGML_TYPE_F16)) {
+            const int q_out = (int)blocks[0].attn_q_w->ne[1];
+            const int k_out = (int)blocks[0].attn_k_w->ne[1];
+            const int hidden = (int)blocks[0].attn_q_w->ne[0];
+            const int qkv_out = q_out + 2 * k_out;
+            ggml_init_params fgp = {ggml_tensor_overhead() * blocks.size() + 256, nullptr, true};
+            c->fused_ctx = ggml_init(fgp);
+            if (c->fused_ctx) {
+                for (auto& b : blocks) {
+                    b.attn_qkv_w = ggml_new_tensor_2d(c->fused_ctx, b.attn_q_w->type, hidden, qkv_out);
+                }
+                c->fused_buf =
+                    ggml_backend_alloc_ctx_tensors_from_buft(c->fused_ctx, ggml_backend_cpu_buffer_type());
+                if (c->fused_buf) {
+                    for (auto& b : blocks) {
+                        const size_t qb = ggml_nbytes(b.attn_q_w);
+                        const size_t kb = ggml_nbytes(b.attn_k_w);
+                        std::vector<uint8_t> tmp(qb + 2 * kb);
+                        ggml_backend_tensor_get(b.attn_q_w, tmp.data(), 0, qb);
+                        ggml_backend_tensor_get(b.attn_k_w, tmp.data() + qb, 0, kb);
+                        ggml_backend_tensor_get(b.attn_v_w, tmp.data() + qb + kb, 0, kb);
+                        ggml_backend_tensor_set(b.attn_qkv_w, tmp.data(), 0, tmp.size());
+                    }
+                    if (params.verbosity >= 1) {
+                        fprintf(stderr, "qwen3_tts: fused QKV for %zu talker layers (%d+%d+%d→%d)\n",
+                                blocks.size(), q_out, k_out, k_out, qkv_out);
+                    }
+                } else {
+                    for (auto& b : blocks) {
+                        b.attn_qkv_w = nullptr;
+                    }
+                    ggml_free(c->fused_ctx);
+                    c->fused_ctx = nullptr;
+                }
+            }
+        }
+    }
+
     // Scheduler
     {
         int n_be = 0;
@@ -3707,6 +4157,13 @@ extern "C" struct qwen3_tts_context* qwen3_tts_init_from_file(const char* path_m
     }
     c->compute_meta.resize(ggml_tensor_overhead() * 16384 + ggml_graph_overhead_custom(16384, false));
 
+    const char* cp_be = env_str("QWEN3_TTS_CP_BACKEND");
+    if (cp_be && std::strncmp(cp_be, "cpu", 3) == 0) {
+        if (!copy_cp_weights_to_cpu(c, code_pred_cpu_copy_type_from_env(cp_be))) {
+            fprintf(stderr, "qwen3_tts: code_pred CPU pin requested but copy failed; using main backend\n");
+        }
+    }
+
     // Eagerly reserve the code_pred scheduler with a clean (empty) scheduler
     // state so the memory layout is deterministic regardless of subsequent
     // lookup_rows calls.  Must happen after compute_meta is sized, cp_kv is
@@ -3716,12 +4173,30 @@ extern "C" struct qwen3_tts_context* qwen3_tts_init_from_file(const char* path_m
         qwen3_tts_free(c);
         return nullptr;
     }
-    if (!code_pred_reserve_sched(c, c->sched)) {
+    ggml_backend_sched_t cp_sched = code_pred_pick_sched(c);
+    if (!code_pred_reserve_sched(c, cp_sched)) {
         fprintf(stderr, "qwen3_tts: code_pred sched reserve failed\n");
         qwen3_tts_free(c);
         return nullptr;
     }
-    ggml_backend_sched_reset(c->sched);
+    ggml_backend_sched_reset(cp_sched);
+
+    // O15: allocate the T=1 lm_head slot on the same backend as the model
+    // weights so we can blit different lm_head[i] into it before each step,
+    // enabling graph reuse without reset/alloc for steps i=2..14.
+    if (!c->code_pred.lm_head.empty() && c->code_pred.lm_head[0] && !c->cp_cpu_pinned) {
+        ggml_tensor* proto = c->code_pred.lm_head[0];
+        const size_t slot_bytes = ggml_nbytes(proto);
+        c->cp_lm_slot_buf = ggml_backend_alloc_buffer(c->backend, slot_bytes);
+        if (c->cp_lm_slot_buf) {
+            ggml_init_params sp = {ggml_tensor_overhead(), nullptr, /*no_alloc=*/true};
+            c->cp_lm_slot_ctx = ggml_init(sp);
+            c->cp_lm_head_slot = ggml_new_tensor_2d(c->cp_lm_slot_ctx, proto->type,
+                                                     proto->ne[0], proto->ne[1]);
+            void* base = ggml_backend_buffer_get_base(c->cp_lm_slot_buf);
+            ggml_backend_tensor_alloc(c->cp_lm_slot_buf, c->cp_lm_head_slot, base);
+        }
+    }
 
     if (!kv_alloc(c, /*max_ctx=*/4096)) {
         fprintf(stderr, "qwen3_tts: kv allocation failed\n");
@@ -4171,7 +4646,11 @@ extern "C" int32_t* qwen3_tts_synthesize_codes(struct qwen3_tts_context* ctx, co
     const auto& hp = ctx->hp;
     const int d = (int)hp.d_model;
     const int n_groups = (int)hp.n_code_groups; // 16
-    const int max_frames = ctx->params.max_codec_steps > 0 ? ctx->params.max_codec_steps : 1500;
+    int max_frames = ctx->params.max_codec_steps > 0 ? ctx->params.max_codec_steps : 1500;
+    if (const char* mf = getenv("QWEN3_TTS_MAX_FRAMES")) {
+        const int v = std::atoi(mf);
+        if (v > 0) max_frames = v;
+    }
     const int eos = (int)hp.codec_eos_id;
 
     // PRNG seed — env-overridable for reproducibility. Default seed
@@ -4314,7 +4793,7 @@ extern "C" int32_t* qwen3_tts_synthesize_codes(struct qwen3_tts_context* ctx, co
         // 3. Code predictor AR loop → 15 more codebook ids (sampled).
         int32_t cb1_15[15];
         const double t_cp = bench ? now_ms() : 0.0;
-        if (!code_pred_generate_15(ctx, past_hidden, last_id_hidden_buf.data(), cb1_15, &rng)) {
+        if (!code_pred_generate_15(ctx, past_hidden, last_id_hidden_buf.data(), cb1_15, &rng, frame)) {
             free(past_hidden);
             return nullptr;
         }
@@ -4604,6 +5083,18 @@ extern "C" void qwen3_tts_free(struct qwen3_tts_context* ctx) {
     }
     if (ctx->kv_ctx) {
         ggml_free(ctx->kv_ctx);
+    }
+    if (ctx->cp_lm_slot_buf) {
+        ggml_backend_buffer_free(ctx->cp_lm_slot_buf);
+    }
+    if (ctx->cp_lm_slot_ctx) {
+        ggml_free(ctx->cp_lm_slot_ctx);
+    }
+    if (ctx->fused_buf) {
+        ggml_backend_buffer_free(ctx->fused_buf);
+    }
+    if (ctx->fused_ctx) {
+        ggml_free(ctx->fused_ctx);
     }
     if (ctx->cp_kv_buf) {
         ggml_backend_buffer_free(ctx->cp_kv_buf);

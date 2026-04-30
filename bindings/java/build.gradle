@@ -5,7 +5,7 @@ plugins {
     id 'signing'
 }
 
-archivesBaseName = 'whispercpp'
+archivesBaseName = 'crispasr-java'
 group = 'io.github.ggerganov'
 version = '1.4.0'
 
@@ -106,16 +106,16 @@ repositories {
 publishing {
     publications {
         mavenJava(MavenPublication) {
-            artifactId = 'whispercpp'
+            artifactId = 'crispasr-java'
             from components.java
             pom {
-                name = 'whispercpp'
-                description = "Java JNA bindings for OpenAI's Whisper model, implemented in C/C++"
-                url = 'https://github.com/ggerganov/whisper.cpp'
+                name = 'crispasr-java'
+                description = "Java JNA bindings for CrispASR"
+                url = 'https://github.com/ggerganov/crispasr'
                 licenses {
                     license {
                         name = 'MIT licence'
-                        url = 'https://raw.githubusercontent.com/ggerganov/whisper.cpp/master/LICENSE'
+                        url = 'https://raw.githubusercontent.com/ggerganov/crispasr/master/LICENSE'
                     }
                 }
                 developers {
@@ -131,8 +131,8 @@ publishing {
                     }
                 }
                 scm {
-                    connection = 'scm:git:git://github.com/ggerganov/whisper.cpp.git'
-                    url = 'https://github.com/ggerganov/whisper.cpp'
+                    connection = 'scm:git:git://github.com/ggerganov/crispasr.git'
+                    url = 'https://github.com/ggerganov/crispasr'
                 }
             }
         }

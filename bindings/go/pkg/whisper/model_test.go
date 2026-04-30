@@ -3,7 +3,7 @@ package whisper_test
 import (
 	"testing"
 
-	"github.com/ggerganov/whisper.cpp/bindings/go/pkg/whisper"
+	"github.com/CrispStrobe/CrispASR/bindings/go/pkg/whisper"
 	assert "github.com/stretchr/testify/assert"
 )
 

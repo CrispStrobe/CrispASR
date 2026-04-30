@@ -316,17 +316,21 @@ struct KvSelfAttnParams {
 // Output:
 //   attn         [d_model, T] — post-output-projection tensor. Caller adds
 //                                it to the residual.
+// fixed_kv_len > 0: override the KV-read length (Lk) to a constant, keeping
+// topology identical across calls with different n_past.  Unwritten slots are
+// masked to -inf by causal_mask so they never affect output.
 static inline ggml_tensor* kv_self_attn(ggml_context* ctx0, ggml_cgraph* gf, ggml_tensor* x, ggml_tensor* q_w,
                                         ggml_tensor* k_w, ggml_tensor* v_w, ggml_tensor* o_w, ggml_tensor* q_norm_w,
                                         ggml_tensor* k_norm_w, ggml_tensor* positions, ggml_tensor* causal_mask,
                                         ggml_tensor* kv_k, ggml_tensor* kv_v, int il, int n_past,
-                                        const KvSelfAttnParams& p, ggml_tensor* qkv_w = nullptr) {
+                                        const KvSelfAttnParams& p, ggml_tensor* qkv_w = nullptr,
+                                        int fixed_kv_len = 0) {
     const int hd = p.head_dim;
     const int n_q = p.n_heads;
     const int n_kv = p.n_kv_heads;
     const int grp = p.n_kv_grp;
     const int T = (int)x->ne[1];
-    const int Lk = n_past + T;
+    const int Lk = fixed_kv_len > 0 ? fixed_kv_len : (n_past + T);
 
     // ---- Q/K/V projections ----
     ggml_tensor* Q;
@@ -334,13 +338,23 @@ static inline ggml_tensor* kv_self_attn(ggml_context* ctx0, ggml_cgraph* gf, ggm
     ggml_tensor* V;
 
     if (qkv_w) {
-        // Fused: one matmul, then split output
+        // Fused: one matmul, then split output. The 2D views below are
+        // strided (each T-row leaves gaps for the other Q/K/V), so for T>1
+        // the downstream ggml_reshape_3d would fail its contiguity assert.
+        // ggml_cont materialises each into its own contiguous buffer; for
+        // T=1 the cont is a no-op (single row is already contiguous).
         ggml_tensor* qkv = ggml_mul_mat(ctx0, qkv_w, x);
         const int q_dim = n_q * hd;
         const int kv_dim = n_kv * hd;
+        const size_t ts = ggml_type_size(qkv->type);
         Q = ggml_view_2d(ctx0, qkv, q_dim, T, qkv->nb[1], 0);
-        K = ggml_view_2d(ctx0, qkv, kv_dim, T, qkv->nb[1], q_dim * ggml_type_size(qkv->type));
-        V = ggml_view_2d(ctx0, qkv, kv_dim, T, qkv->nb[1], (q_dim + kv_dim) * ggml_type_size(qkv->type));
+        K = ggml_view_2d(ctx0, qkv, kv_dim, T, qkv->nb[1], q_dim * ts);
+        V = ggml_view_2d(ctx0, qkv, kv_dim, T, qkv->nb[1], (q_dim + kv_dim) * ts);
+        if (T > 1) {
+            Q = ggml_cont(ctx0, Q);
+            K = ggml_cont(ctx0, K);
+            V = ggml_cont(ctx0, V);
+        }
     } else {
         Q = ggml_mul_mat(ctx0, q_w, x);
         K = ggml_mul_mat(ctx0, k_w, x);

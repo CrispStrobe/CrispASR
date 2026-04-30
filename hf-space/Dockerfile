@@ -14,7 +14,7 @@ RUN git clone --depth 1 "${CRISPASR_REPO}" /src/CrispASR && \
 WORKDIR /src/CrispASR
 ARG CRISPASR_BUILD_JOBS
 RUN jobs="${CRISPASR_BUILD_JOBS:-$(nproc)}" && \
-  cmake -S . -B build -G Ninja -DWHISPER_BUILD_TESTS=OFF && \
+  cmake -S . -B build -G Ninja -DCRISPASR_BUILD_TESTS=OFF && \
   cmake --build build -j"${jobs}" --target crispasr
 
 FROM ubuntu:22.04 AS runtime

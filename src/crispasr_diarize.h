@@ -9,7 +9,7 @@
 //
 //   * Energy    — stereo only. Compares |L| vs |R| per segment; the
 //                 louder channel wins. Matches the historical
-//                 whisper-cli `(speaker 0/1)` labelling.
+//                 crispasr `(speaker 0/1)` labelling.
 //   * Xcorr     — stereo only. TDOA on L/R via cross-correlation with
 //                 ±5 ms search window; the sign of the peak lag picks
 //                 the channel.

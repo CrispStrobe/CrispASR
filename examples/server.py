@@ -10,7 +10,7 @@ DIRECTORY = os.path.join(SCRIPT_DIR, "../build-em/bin")
 DIRECTORY = os.path.abspath(DIRECTORY)
 
 # The context root we want for all applications
-CONTEXT_ROOT = "/whisper.cpp"
+CONTEXT_ROOT = "/crispasr"
 
 class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
@@ -46,7 +46,7 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     print(f"Worker file not found: {worker_path}")
 
             elif actual_path == '/':
-                self.path = '/whisper.wasm/index.html'
+                self.path = '/crispasr.wasm/index.html'
             elif any(actual_path.startswith(prefix) for prefix in (
                 '/bench.wasm/',
                 '/command.wasm/',
@@ -57,10 +57,10 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.path = actual_path
             # For all other paths under the context root
             else:
-                # Check if this is a request to a file in whisper.wasm
-                potential_file = os.path.join(DIRECTORY, 'whisper.wasm', actual_path.lstrip('/'))
+                # Check if this is a request to a file in crispasr.wasm
+                potential_file = os.path.join(DIRECTORY, 'crispasr.wasm', actual_path.lstrip('/'))
                 if os.path.exists(potential_file) and not os.path.isdir(potential_file):
-                    self.path = '/whisper.wasm' + actual_path
+                    self.path = '/crispasr.wasm' + actual_path
                 else:
                     # Try to resolve the file from the base directory
                     potential_file = os.path.join(DIRECTORY, actual_path.lstrip('/'))

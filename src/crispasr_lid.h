@@ -2,7 +2,7 @@
 //
 // Two in-process backends:
 //
-//   * `CrispasrLidMethod::Whisper` — uses the whisper.cpp encoder +
+//   * `CrispasrLidMethod::Whisper` — uses the crispasr encoder +
 //     language head on a multilingual ggml-*.bin model. Typically
 //     `ggml-tiny.bin` (75 MB, fast, covers the languages whisper was
 //     trained on). Process-wide caching keeps the context alive across

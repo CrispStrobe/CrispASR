@@ -36,7 +36,7 @@ module Whisper
                else
                  ENV.key?("XDG_CACHE_HOME") ? Pathname(ENV["XDG_CACHE_HOME"]) : Pathname(Dir.home)/".cache"
                end
-        base/"whisper.cpp"
+        base/"crispasr"
       end
 
       def cache

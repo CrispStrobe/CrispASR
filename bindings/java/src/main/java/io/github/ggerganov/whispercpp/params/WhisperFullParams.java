@@ -12,7 +12,7 @@ import java.util.List;
 
 /**
  * Parameters for the whisper_full() function.
- * If you change the order or add new parameters, make sure to update the default values in whisper.cpp:
+ * If you change the order or add new parameters, make sure to update the default values in crispasr:
  * whisper_full_default_params()
  */
 public class WhisperFullParams extends Structure {
@@ -88,10 +88,10 @@ public class WhisperFullParams extends Structure {
         print_progress = enable ? CBool.TRUE : CBool.FALSE;
     }
 
-    /** Flag to print results from within whisper.cpp (avoid it, use callback instead). (default = true) */
+    /** Flag to print results from within crispasr (avoid it, use callback instead). (default = true) */
     public CBool print_realtime;
 
-    /** Flag to print results from within whisper.cpp (avoid it, use callback instead). (default = true) */
+    /** Flag to print results from within crispasr (avoid it, use callback instead). (default = true) */
     public void printRealtime(boolean enable) {
         print_realtime = enable ? CBool.TRUE : CBool.FALSE;
     }

@@ -1,7 +1,7 @@
-set(TARGET whisper-quantize)
+set(TARGET crispasr-legacy-quantize)
 add_executable(${TARGET} quantize.cpp)
 
 include(DefaultTargetOptions)
 
-target_link_libraries(${TARGET} PRIVATE common whisper ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(${TARGET} PRIVATE common crispasr ${CMAKE_THREAD_LIBS_INIT})
 install(TARGETS ${TARGET} RUNTIME BUNDLE DESTINATION bin)

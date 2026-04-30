@@ -1,18 +1,17 @@
 #include "models.h"
 
 
-
-llm_build_glm4::llm_build_glm4(const llama_model & model, const llm_graph_params & params) : llm_graph_context(params) {
+llm_build_glm4::llm_build_glm4(const llama_model& model, const llm_graph_params& params) : llm_graph_context(params) {
     const int64_t n_embd_head = hparams.n_embd_head_v();
-    const int64_t n_embd_gqa  = hparams.n_embd_v_gqa();
+    const int64_t n_embd_gqa = hparams.n_embd_v_gqa();
 
     GGML_ASSERT(n_embd_head == hparams.n_embd_head_k());
 
     int sections[4];
     std::copy(std::begin(hparams.rope_sections), std::begin(hparams.rope_sections) + 4, sections);
 
-    ggml_tensor * cur;
-    ggml_tensor * inpL;
+    ggml_tensor* cur;
+    ggml_tensor* inpL;
 
     inpL = build_inp_embd(model.tok_embd);
 
@@ -23,17 +22,17 @@ llm_build_glm4::llm_build_glm4(const llama_model & model, const llm_graph_params
     }
 
     // inp_pos - contains the positions
-    ggml_tensor * inp_pos = build_inp_pos();
+    ggml_tensor* inp_pos = build_inp_pos();
 
-    auto * inp_attn = build_attn_inp_kv();
+    auto* inp_attn = build_attn_inp_kv();
 
-    ggml_tensor * inp_out_ids = build_inp_out_ids();
+    ggml_tensor* inp_out_ids = build_inp_out_ids();
 
     // Only process up to last layer (skip final NextN layer)
     // Final layer tensors are loaded but not processed in forward pass
     const int n_transformer_layers = n_layer - hparams.nextn_predict_layers;
     for (int il = 0; il < n_transformer_layers; ++il) {
-        ggml_tensor * inpSA = inpL;
+        ggml_tensor* inpSA = inpL;
 
         // Pre-attention norm
         cur = build_norm(inpL, model.layers[il].attn_norm, NULL, LLM_NORM_RMS, il);
@@ -41,9 +40,9 @@ llm_build_glm4::llm_build_glm4(const llama_model & model, const llm_graph_params
 
         // self-attention
         {
-            ggml_tensor * Qcur = nullptr;
-            ggml_tensor * Kcur = nullptr;
-            ggml_tensor * Vcur = nullptr;
+            ggml_tensor* Qcur = nullptr;
+            ggml_tensor* Kcur = nullptr;
+            ggml_tensor* Vcur = nullptr;
 
             if (model.layers[il].wqkv == nullptr) {
                 Qcur = build_lora_mm(model.layers[il].wq, cur);
@@ -77,34 +76,29 @@ llm_build_glm4::llm_build_glm4(const llama_model & model, const llm_graph_params
             }
 
             if (use_mrope) {
-                Qcur = ggml_rope_multi(ctx0, Qcur, inp_pos, nullptr,
-                            n_rot, sections, rope_type, n_ctx_orig, freq_base, freq_scale,
-                            ext_factor, attn_factor, beta_fast, beta_slow);
+                Qcur = ggml_rope_multi(ctx0, Qcur, inp_pos, nullptr, n_rot, sections, rope_type, n_ctx_orig, freq_base,
+                                       freq_scale, ext_factor, attn_factor, beta_fast, beta_slow);
 
-                Kcur = ggml_rope_multi(ctx0, Kcur, inp_pos, nullptr,
-                            n_rot, sections, rope_type, n_ctx_orig, freq_base, freq_scale,
-                            ext_factor, attn_factor, beta_fast, beta_slow);
+                Kcur = ggml_rope_multi(ctx0, Kcur, inp_pos, nullptr, n_rot, sections, rope_type, n_ctx_orig, freq_base,
+                                       freq_scale, ext_factor, attn_factor, beta_fast, beta_slow);
             } else {
                 // Normal RoPE
-                Qcur = ggml_rope_ext(ctx0, Qcur, inp_pos, nullptr, n_rot,
-                                    rope_type, n_ctx_orig, freq_base, freq_scale,
-                                    ext_factor, attn_factor, beta_fast, beta_slow);
+                Qcur = ggml_rope_ext(ctx0, Qcur, inp_pos, nullptr, n_rot, rope_type, n_ctx_orig, freq_base, freq_scale,
+                                     ext_factor, attn_factor, beta_fast, beta_slow);
 
-                Kcur = ggml_rope_ext(ctx0, Kcur, inp_pos, nullptr, n_rot,
-                                    rope_type, n_ctx_orig, freq_base, freq_scale,
-                                    ext_factor, attn_factor, beta_fast, beta_slow);
+                Kcur = ggml_rope_ext(ctx0, Kcur, inp_pos, nullptr, n_rot, rope_type, n_ctx_orig, freq_base, freq_scale,
+                                     ext_factor, attn_factor, beta_fast, beta_slow);
             }
 
             cb(Qcur, "Qcur", il);
             cb(Kcur, "Kcur", il);
             cb(Vcur, "Vcur", il);
 
-            cur = build_attn(inp_attn,
-                    model.layers[il].wo, NULL,
-                    Qcur, Kcur, Vcur, nullptr, nullptr, nullptr, 1.0f / sqrtf(float(n_embd_head)), il);
+            cur = build_attn(inp_attn, model.layers[il].wo, NULL, Qcur, Kcur, Vcur, nullptr, nullptr, nullptr,
+                             1.0f / sqrtf(float(n_embd_head)), il);
         }
         if (il == n_transformer_layers - 1 && inp_out_ids) {
-            cur   = ggml_get_rows(ctx0, cur, inp_out_ids);
+            cur = ggml_get_rows(ctx0, cur, inp_out_ids);
             inpSA = ggml_get_rows(ctx0, inpSA, inp_out_ids);
         }
         // Post-attention norm (new!)
@@ -112,7 +106,7 @@ llm_build_glm4::llm_build_glm4(const llama_model & model, const llm_graph_params
         cb(cur, "post_attn_norm", il);
 
         // Add the input (residual connection after post-attention norm)
-        ggml_tensor * ffn_inp = ggml_add(ctx0, cur, inpSA);
+        ggml_tensor* ffn_inp = ggml_add(ctx0, cur, inpSA);
         cb(ffn_inp, "ffn_inp", il);
 
         // FF
@@ -122,11 +116,8 @@ llm_build_glm4::llm_build_glm4(const llama_model & model, const llm_graph_params
             cb(cur, "ffn_norm", il);
 
             // MLP
-            cur = build_ffn(cur,
-                    model.layers[il].ffn_up, NULL, NULL,
-                    NULL, NULL, NULL,
-                    model.layers[il].ffn_down, NULL, NULL,
-                    NULL, LLM_FFN_SWIGLU, LLM_FFN_SEQ, il);
+            cur = build_ffn(cur, model.layers[il].ffn_up, NULL, NULL, NULL, NULL, NULL, model.layers[il].ffn_down, NULL,
+                            NULL, NULL, LLM_FFN_SWIGLU, LLM_FFN_SEQ, il);
             cb(cur, "ffn_out", il);
 
             // Post-MLP norm

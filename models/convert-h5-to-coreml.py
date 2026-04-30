@@ -14,7 +14,7 @@ import torch  # noqa: E402
 from transformers import WhisperForConditionalGeneration  # noqa: E402
 
 # https://github.com/bayartsogt-ya/whisper-multiple-hf-datasets/blob/main/src/multiple_datasets/hub_default_utils.py
-WHISPER_MAPPING = {
+CRISPASR_MAPPING = {
     "layers": "blocks",
     "fc1": "mlp.0",
     "fc2": "mlp.2",
@@ -43,7 +43,7 @@ def rename_keys(s_dict):
     keys = list(s_dict.keys())
     for key in keys:
         new_key = key
-        for k, v in WHISPER_MAPPING.items():
+        for k, v in CRISPASR_MAPPING.items():
             if k in key:
                 new_key = new_key.replace(k, v)
 

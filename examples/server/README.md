@@ -1,15 +1,15 @@
-# whisper.cpp/examples/server
+# crispasr/examples/server
 
 Simple http server. WAV Files are passed to the inference model via http requests.
 
-https://github.com/ggerganov/whisper.cpp/assets/1991296/e983ee53-8741-4eb5-9048-afe5e4594b8f
+Demo video: see the project history and upstream example documentation.
 
 ## Usage
 
 ```
-./build/bin/whisper-server -h
+./build/bin/crispasr-server -h
 
-usage: ./build/bin/whisper-server [options]
+usage: ./build/bin/crispasr-server [options]
 
 options:
   -h,        --help              [default] show this help message and exit

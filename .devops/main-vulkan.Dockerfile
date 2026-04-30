@@ -6,7 +6,7 @@ RUN apt-get update && \
   && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
 COPY . .
-RUN cmake -B build -DWHISPER_BUILD_TESTS=OFF -DGGML_VULKAN=1 && \
+RUN cmake -B build -DCRISPASR_BUILD_TESTS=OFF -DGGML_VULKAN=1 && \
   cmake --build build -j"$(nproc)" --target crispasr
 
 FROM ubuntu:24.04 AS runtime

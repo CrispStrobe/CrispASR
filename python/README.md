@@ -10,7 +10,7 @@ Supports 17 ASR backends including Whisper, Qwen3-ASR, FastConformer, Canary, Pa
 pip install crispasr
 ```
 
-This wheel is **pure Python** and does **not** bundle the native library — install `libcrispasr` separately, the same way `whisper.cpp`'s Python bindings work:
+This wheel is **pure Python** and does **not** bundle the native library — install `libcrispasr` separately, the same way `crispasr`'s Python bindings work:
 
 **macOS**
 ```bash

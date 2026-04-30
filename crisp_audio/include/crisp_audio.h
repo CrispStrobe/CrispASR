@@ -41,7 +41,7 @@ struct crisp_audio_context;
 enum crisp_audio_dialect {
     CRISP_AUDIO_DIALECT_AUTO = 0,      // resolve from GGUF
     CRISP_AUDIO_DIALECT_QWEN_OMNI = 1, // Conv2D-3x s=2 + sinusoidal + pre-LN + proj1/GELU/proj2
-    // Future: WHISPER_CLASSIC, MOONSHINE, MODERNBERT_AUDIO, ...
+    // Future: CRISPASR_CLASSIC, MOONSHINE, MODERNBERT_AUDIO, ...
 };
 
 // Hyper-parameters caller can override at runtime. Static model params

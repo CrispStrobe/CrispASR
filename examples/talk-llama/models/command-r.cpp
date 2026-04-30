@@ -1,50 +1,49 @@
 #include "models.h"
 
 
-
-llm_build_command_r::llm_build_command_r(const llama_model & model, const llm_graph_params & params) :
-    llm_graph_context(params) {
+llm_build_command_r::llm_build_command_r(const llama_model& model, const llm_graph_params& params)
+    : llm_graph_context(params) {
     const int64_t n_embd_head = hparams.n_embd_head_v();
 
     GGML_ASSERT(n_embd_head == hparams.n_embd_head_k());
 
     const float f_logit_scale = hparams.f_logit_scale;
 
-    ggml_tensor * cur;
-    ggml_tensor * inpL;
+    ggml_tensor* cur;
+    ggml_tensor* inpL;
 
     inpL = build_inp_embd(model.tok_embd);
 
     // inp_pos - contains the positions
-    ggml_tensor * inp_pos = build_inp_pos();
+    ggml_tensor* inp_pos = build_inp_pos();
 
-    auto * inp_attn = build_attn_inp_kv();
+    auto* inp_attn = build_attn_inp_kv();
 
-    ggml_tensor * inp_out_ids = build_inp_out_ids();
+    ggml_tensor* inp_out_ids = build_inp_out_ids();
 
     for (int il = 0; il < n_layer; ++il) {
         // norm
         cur = build_norm(inpL, model.layers[il].attn_norm, NULL, LLM_NORM, il);
         cb(cur, "attn_norm", il);
 
-        ggml_tensor * ffn_inp = cur;
+        ggml_tensor* ffn_inp = cur;
 
         // self-attention
         {
             // compute Q and K and RoPE them
-            ggml_tensor * Qcur = build_lora_mm(model.layers[il].wq, cur);
+            ggml_tensor* Qcur = build_lora_mm(model.layers[il].wq, cur);
             cb(Qcur, "Qcur", il);
             if (model.layers[il].bq) {
                 Qcur = ggml_add(ctx0, Qcur, model.layers[il].bq);
                 cb(Qcur, "Qcur", il);
             }
-            ggml_tensor * Kcur = build_lora_mm(model.layers[il].wk, cur);
+            ggml_tensor* Kcur = build_lora_mm(model.layers[il].wk, cur);
             cb(Kcur, "Kcur", il);
             if (model.layers[il].bk) {
                 Kcur = ggml_add(ctx0, Kcur, model.layers[il].bk);
                 cb(Kcur, "Kcur", il);
             }
-            ggml_tensor * Vcur = build_lora_mm(model.layers[il].wv, cur);
+            ggml_tensor* Vcur = build_lora_mm(model.layers[il].wv, cur);
             cb(Vcur, "Vcur", il);
             if (model.layers[il].bv) {
                 Vcur = ggml_add(ctx0, Vcur, model.layers[il].bv);
@@ -72,24 +71,20 @@ llm_build_command_r::llm_build_command_r(const llama_model & model, const llm_gr
             cb(Kcur, "Kcur", il);
             cb(Vcur, "Vcur", il);
 
-            cur = build_attn(inp_attn,
-                    model.layers[il].wo, model.layers[il].bo,
-                    Qcur, Kcur, Vcur, nullptr, nullptr, nullptr, 1.0f / sqrtf(float(n_embd_head)), il);
+            cur = build_attn(inp_attn, model.layers[il].wo, model.layers[il].bo, Qcur, Kcur, Vcur, nullptr, nullptr,
+                             nullptr, 1.0f / sqrtf(float(n_embd_head)), il);
         }
         if (il == n_layer - 1 && inp_out_ids) {
-            cur     = ggml_get_rows(ctx0, cur, inp_out_ids);
-            inpL    = ggml_get_rows(ctx0, inpL, inp_out_ids);
+            cur = ggml_get_rows(ctx0, cur, inp_out_ids);
+            inpL = ggml_get_rows(ctx0, inpL, inp_out_ids);
             ffn_inp = ggml_get_rows(ctx0, ffn_inp, inp_out_ids);
         }
-        ggml_tensor * attn_out = cur;
+        ggml_tensor* attn_out = cur;
 
         // feed-forward network
         {
-            cur = build_ffn(ffn_inp,
-                    model.layers[il].ffn_up, NULL, NULL,
-                    model.layers[il].ffn_gate, NULL, NULL,
-                    model.layers[il].ffn_down, NULL, NULL,
-                    NULL, LLM_FFN_SILU, LLM_FFN_PAR, il);
+            cur = build_ffn(ffn_inp, model.layers[il].ffn_up, NULL, NULL, model.layers[il].ffn_gate, NULL, NULL,
+                            model.layers[il].ffn_down, NULL, NULL, NULL, LLM_FFN_SILU, LLM_FFN_PAR, il);
             cb(cur, "ffn_out", il);
         }
         // add together residual + FFN + self-attention

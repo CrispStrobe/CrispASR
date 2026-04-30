@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build CrispASR (whisper.cpp) for Android via NDK.
+# Build CrispASR (crispasr) for Android via NDK.
 #
 # Usage:
 #   ./build-android.sh                      # All ABIs
@@ -40,8 +40,8 @@ for ABI in "${ABIS[@]}"; do
         -DANDROID_NATIVE_API_LEVEL="$API_LEVEL" \
         -DCMAKE_BUILD_TYPE=Release \
         -DBUILD_SHARED_LIBS=ON \
-        -DWHISPER_BUILD_EXAMPLES=OFF \
-        -DWHISPER_BUILD_TESTS=OFF \
+        -DCRISPASR_BUILD_EXAMPLES=OFF \
+        -DCRISPASR_BUILD_TESTS=OFF \
         -DGGML_VULKAN="$VULKAN"
 
     cmake --build "$BUILD_DIR/$ABI" -j"$(nproc 2>/dev/null || echo 4)"

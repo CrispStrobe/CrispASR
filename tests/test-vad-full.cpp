@@ -1,5 +1,5 @@
-#include "whisper.h"
-#include "common-whisper.h"
+#include "crispasr.h"
+#include "common-crispasr.h"
 
 #include <cstdio>
 #include <cfloat>
@@ -13,7 +13,7 @@
 #include <cassert>
 
 int main() {
-    std::string whisper_model_path = WHISPER_MODEL_PATH;
+    std::string whisper_model_path = CRISPASR_MODEL_PATH;
     std::string vad_model_path     = VAD_MODEL_PATH;
     std::string sample_path        = SAMPLE_PATH;
 
@@ -27,7 +27,7 @@ int main() {
             whisper_model_path.c_str(),
             cparams);
 
-    struct whisper_full_params wparams = whisper_full_default_params(WHISPER_SAMPLING_BEAM_SEARCH);
+    struct whisper_full_params wparams = whisper_full_default_params(CRISPASR_SAMPLING_BEAM_SEARCH);
     wparams.vad            = true;
     wparams.vad_model_path = vad_model_path.c_str();
 

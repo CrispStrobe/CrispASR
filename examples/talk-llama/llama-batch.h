@@ -13,9 +13,7 @@
 
 // keep this struct lightweight
 struct llama_ubatch {
-    bool equal_seqs() const {
-        return b_equal_seqs != 0;
-    }
+    bool equal_seqs() const { return b_equal_seqs != 0; }
 
     // typical for M-RoPE cases:
     //   0 - sequantial position of the tokens/embeddings in the sequence
@@ -42,24 +40,24 @@ struct llama_ubatch {
     //             used for extracting sequence pooled embeddings
 
     //                          // size               | idx | val
-    llama_token  *  token;      // [n_tokens]         | i   | id, token
-    float        *  embd;       // [n_embd, n_tokens] | i   | embd
-    llama_pos    *  pos;        // [n_tokens*n_pos]   | i   | pos
-    int32_t      *  n_seq_id;   // [n_tokens]         | i   | -
-    llama_seq_id ** seq_id;     // [n_tokens]         | s   | s0, s1, seq_id
-    llama_seq_id *  seq_id_unq; // [n_seqs_unq]       | s   | seq_id
-    int32_t      *  seq_idx;    // [LLAMA_MAX_SEQ]    | -   | seq_idx
-    int8_t       *  output;     // [n_tokens]         | i   | -
+    llama_token* token;       // [n_tokens]         | i   | id, token
+    float* embd;              // [n_embd, n_tokens] | i   | embd
+    llama_pos* pos;           // [n_tokens*n_pos]   | i   | pos
+    int32_t* n_seq_id;        // [n_tokens]         | i   | -
+    llama_seq_id** seq_id;    // [n_tokens]         | s   | s0, s1, seq_id
+    llama_seq_id* seq_id_unq; // [n_seqs_unq]       | s   | seq_id
+    int32_t* seq_idx;         // [LLAMA_MAX_SEQ]    | -   | seq_idx
+    int8_t* output;           // [n_tokens]         | i   | -
 
     struct data_t {
-        std::vector<llama_token>    token;
-        std::vector<float>          embd;
-        std::vector<llama_pos>      pos;
-        std::vector<int32_t>        n_seq_id;
-        std::vector<llama_seq_id *> seq_id;      // these point into the seq_id_data below
-        std::vector<llama_seq_id>   seq_id_unq;
-        std::vector<int32_t>        seq_idx;
-        std::vector<int8_t>         output;
+        std::vector<llama_token> token;
+        std::vector<float> embd;
+        std::vector<llama_pos> pos;
+        std::vector<int32_t> n_seq_id;
+        std::vector<llama_seq_id*> seq_id; // these point into the seq_id_data below
+        std::vector<llama_seq_id> seq_id_unq;
+        std::vector<int32_t> seq_idx;
+        std::vector<int8_t> output;
 
         std::vector<llama_seq_id> seq_id_data;
     };
@@ -75,22 +73,17 @@ public:
 
     // sanitize and auto-gen missing data in the input batch
     // memory is optional. if provided will be used to check for sequence continuity and to determine the positions
-    bool init(
-            const llama_batch & batch_inp,
-            const llama_vocab & vocab,
-            const llama_memory_i * memory,
-            uint32_t n_embd,
-            uint32_t n_seq_max,
-            bool output_all);
+    bool init(const llama_batch& batch_inp, const llama_vocab& vocab, const llama_memory_i* memory, uint32_t n_embd,
+              uint32_t n_seq_max, bool output_all);
 
-    const llama_batch & get_batch() const;
+    const llama_batch& get_batch() const;
 
-    uint32_t get_n_tokens()  const;
+    uint32_t get_n_tokens() const;
     uint32_t get_n_outputs() const;
-    uint32_t get_n_used()    const;
+    uint32_t get_n_used() const;
 
     // the array of output indices in the order they were encountered during the ubatch splitting
-    std::vector<int32_t> & get_out_ids();
+    std::vector<int32_t>& get_out_ids();
 
     // min/max positions of each sequence in the current ubatch
     llama_pos seq_pos_min(llama_seq_id seq_id) const;
@@ -118,15 +111,15 @@ private:
 
     // create the next ubatch based on the provided batch indices (idxs) and the number of sequence sets (n_seqs)
     // return llama_ubatch.n_tokens == 0 if the entire batch was consumed
-    llama_ubatch ubatch_add(const std::vector<int32_t> & idxs, uint32_t n_seqs, bool equal_seqs);
+    llama_ubatch ubatch_add(const std::vector<int32_t>& idxs, uint32_t n_seqs, bool equal_seqs);
 
     // for debugging, start with LLAMA_BATCH_DEBUG=2
-    void ubatch_print(const llama_ubatch & ubatch, int debug);
+    void ubatch_print(const llama_ubatch& ubatch, int debug);
 
     llama_batch batch;
 
     // only for debugging purposes
-    const llama_vocab * vocab;
+    const llama_vocab* vocab;
 
     // TODO: this is more of a temporary solution until we have a better way to handle multiple positions per token/embd
     //       ref: https://github.com/ggml-org/llama.cpp/issues/13694#issuecomment-2983871762
@@ -136,14 +129,14 @@ private:
     uint32_t n_seq_max;
     uint32_t n_outputs;
 
-    std::array<llama_seq_id, 1> seq_id_0 = {{ 0 }}; // default sequence id
+    std::array<llama_seq_id, 1> seq_id_0 = {{0}}; // default sequence id
 
-    std::vector<llama_pos>      pos;
-    std::vector<int32_t>        n_seq_id;
-    std::vector<llama_seq_id *> seq_id;
-    std::vector<llama_seq_id>   seq_id_unq;
-    std::vector<int32_t>        seq_idx;
-    std::vector<int8_t>         output;
+    std::vector<llama_pos> pos;
+    std::vector<int32_t> n_seq_id;
+    std::vector<llama_seq_id*> seq_id;
+    std::vector<llama_seq_id> seq_id_unq;
+    std::vector<int32_t> seq_idx;
+    std::vector<int8_t> output;
 
     using pos_set_t = std::set<llama_pos>;
     using seq_cpl_t = std::vector<bool>;

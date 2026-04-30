@@ -27,7 +27,7 @@ struct whisper_params; // fwd decl
 //
 // Both the unified slicer and the whisper backend call this so users
 // get the same auto-download UX whether their model uses whisper-internal
-// VAD (whisper.cpp's `wparams.vad_model_path`) or the unified slicer
+// VAD (crispasr's `wparams.vad_model_path`) or the unified slicer
 // (which everything else uses).
 std::string crispasr_resolve_vad_model(const whisper_params& p);
 

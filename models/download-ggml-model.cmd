@@ -88,14 +88,14 @@ if %ERRORLEVEL% neq 0 (
   goto :eof
 )
 
-rem Check if 'whisper-cli' is available in the system PATH
-where whisper-cli >nul 2>&1
+rem Check if 'crispasr' is available in the system PATH
+where crispasr >nul 2>&1
 if %ERRORLEVEL%==0 (
-  rem If found, suggest 'whisper-cli' (relying on PATH resolution)
-  set "whisper_cmd=whisper-cli"
+  rem If found, suggest 'crispasr' (relying on PATH resolution)
+  set "whisper_cmd=crispasr"
 ) else (
   rem If not found, suggest the local build version
-  set "whisper_cmd=%root_path%\build\bin\Release\whisper-cli.exe"
+  set "whisper_cmd=%root_path%\build\bin\Release\crispasr.exe"
 )
 
 echo Done! Model %model% saved in %models_path%\ggml-%model%.bin

@@ -17,7 +17,7 @@ const commonParams = {
   max_len: 0
 };
 
-describe('Whisper.cpp Node.js addon with VAD support', () => {
+describe('CrispASR Node.js addon with VAD support', () => {
   test('Basic whisper transcription without VAD', async () => {
     const params = {
       ...commonParams,

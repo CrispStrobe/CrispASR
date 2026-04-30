@@ -80,7 +80,7 @@ if File.exist? TEST_FIXTURE_AUDIO_SRC
 else
   require "open-uri"
   file TEST_FIXTURE_AUDIO => TEST_FIXTURE_AUDIO_DIR do |t|
-    File.write t.name, URI("https://github.com/ggml-org/whisper.cpp/raw/refs/heads/master/samples/jfk.wav").read
+    File.write t.name, URI("https://raw.githubusercontent.com/CrispStrobe/CrispASR/main/samples/jfk.wav").read
   end
 end
 

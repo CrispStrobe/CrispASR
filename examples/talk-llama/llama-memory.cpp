@@ -4,37 +4,31 @@ llama_memory_status llama_memory_status_combine(llama_memory_status s0, llama_me
     bool has_update = false;
 
     switch (s0) {
-        case LLAMA_MEMORY_STATUS_SUCCESS:
-            {
-                has_update = true;
-                break;
-            }
-        case LLAMA_MEMORY_STATUS_NO_UPDATE:
-            {
-                break;
-            }
-        case LLAMA_MEMORY_STATUS_FAILED_PREPARE:
-        case LLAMA_MEMORY_STATUS_FAILED_COMPUTE:
-            {
-                return s0;
-            }
+    case LLAMA_MEMORY_STATUS_SUCCESS: {
+        has_update = true;
+        break;
+    }
+    case LLAMA_MEMORY_STATUS_NO_UPDATE: {
+        break;
+    }
+    case LLAMA_MEMORY_STATUS_FAILED_PREPARE:
+    case LLAMA_MEMORY_STATUS_FAILED_COMPUTE: {
+        return s0;
+    }
     }
 
     switch (s1) {
-        case LLAMA_MEMORY_STATUS_SUCCESS:
-            {
-                has_update = true;
-                break;
-            }
-        case LLAMA_MEMORY_STATUS_NO_UPDATE:
-            {
-                break;
-            }
-        case LLAMA_MEMORY_STATUS_FAILED_PREPARE:
-        case LLAMA_MEMORY_STATUS_FAILED_COMPUTE:
-            {
-                return s1;
-            }
+    case LLAMA_MEMORY_STATUS_SUCCESS: {
+        has_update = true;
+        break;
+    }
+    case LLAMA_MEMORY_STATUS_NO_UPDATE: {
+        break;
+    }
+    case LLAMA_MEMORY_STATUS_FAILED_PREPARE:
+    case LLAMA_MEMORY_STATUS_FAILED_COMPUTE: {
+        return s1;
+    }
     }
 
     // if either status has an update, then the combined status has an update
@@ -43,16 +37,14 @@ llama_memory_status llama_memory_status_combine(llama_memory_status s0, llama_me
 
 bool llama_memory_status_is_fail(llama_memory_status status) {
     switch (status) {
-        case LLAMA_MEMORY_STATUS_SUCCESS:
-        case LLAMA_MEMORY_STATUS_NO_UPDATE:
-            {
-                return false;
-            }
-        case LLAMA_MEMORY_STATUS_FAILED_PREPARE:
-        case LLAMA_MEMORY_STATUS_FAILED_COMPUTE:
-            {
-                return true;
-            }
+    case LLAMA_MEMORY_STATUS_SUCCESS:
+    case LLAMA_MEMORY_STATUS_NO_UPDATE: {
+        return false;
+    }
+    case LLAMA_MEMORY_STATUS_FAILED_PREPARE:
+    case LLAMA_MEMORY_STATUS_FAILED_COMPUTE: {
+        return true;
+    }
     }
 
     return false;

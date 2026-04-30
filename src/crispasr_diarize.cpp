@@ -33,7 +33,7 @@ inline int64_t cs_to_sample_in_slice(int64_t cs_abs, int64_t slice_t0_cs) {
 //
 // For each segment, sum |L[i]| and |R[i]| across the segment's sample
 // range and pick the louder channel. Margin = 1.1× to avoid flapping
-// on near-equal energy. Same threshold the historical whisper-cli
+// on near-equal energy. Same threshold the historical crispasr
 // `--diarize` path uses.
 void apply_energy(const float* left, const float* right, int n_samples, int64_t slice_t0_cs,
                   std::vector<CrispasrDiarizeSegment>& segs) {

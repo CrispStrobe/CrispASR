@@ -10,7 +10,7 @@
 // space ::= [ \t\n]*
 
 #pragma once
-#include "whisper.h"
+#include "crispasr.h"
 #include <vector>
 #include <map>
 #include <cstdint>

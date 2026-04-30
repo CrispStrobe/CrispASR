@@ -38,13 +38,13 @@ if [ "$encoder_only" -eq 0 ]; then
     printf "Running memcpy benchmark\n"
     printf "\n"
 
-    ./build/bin/whisper-bench -w 1 -t $n_threads 2>&1
+    ./build/bin/crispasr-bench -w 1 -t $n_threads 2>&1
 
     printf "\n"
     printf "Running ggml_mul_mat benchmark with $n_threads threads\n"
     printf "\n"
 
-    ./build/bin/whisper-bench -w 2 -t $n_threads 2>&1
+    ./build/bin/crispasr-bench -w 2 -t $n_threads 2>&1
 
     printf "\n"
     printf "Running benchmark for all models\n"
@@ -64,7 +64,7 @@ printf "| %6s | %6s | %16s | %13s | %3s | %3s | %7s | %7s | %7s | %7s | %7s |\n"
 for model in "${models[@]}"; do
     # actual run
     # store stderr output in a variable in order to parse it later
-    output=$(./build/bin/whisper-bench -m ./models/ggml-$model.bin -t $n_threads $fattn 2>&1)
+    output=$(./build/bin/crispasr-bench -m ./models/ggml-$model.bin -t $n_threads $fattn 2>&1)
     ret=$?
 
     # parse the output:

@@ -3,7 +3,7 @@
 # Simple tool to record audio from the microphone and generate a karaoke video
 # Usage:
 #
-#  cd whisper.cpp
+#  cd crispasr
 #  make
 #
 #  ./examples/generate-karaoke.sh [model] [step_ms]

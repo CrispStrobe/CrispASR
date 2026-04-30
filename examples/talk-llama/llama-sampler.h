@@ -18,7 +18,7 @@ struct llama_sampler_chain {
     struct info {
         bool is_backend;
 
-        llama_sampler * ptr;
+        llama_sampler* ptr;
     };
 
     std::vector<info> samplers;
@@ -33,10 +33,6 @@ struct llama_sampler_chain {
     mutable int32_t n_sample;
 };
 
-struct llama_sampler * llama_sampler_init_dry_testing(
-        int32_t context_size,
-        float   dry_multiplier,
-        float   dry_base,
-        int32_t dry_allowed_length,
-        int32_t dry_penalty_last_n,
-        const std::vector<std::vector<llama_token>> & seq_breakers);
+struct llama_sampler* llama_sampler_init_dry_testing(int32_t context_size, float dry_multiplier, float dry_base,
+                                                     int32_t dry_allowed_length, int32_t dry_penalty_last_n,
+                                                     const std::vector<std::vector<llama_token>>& seq_breakers);

@@ -1,11 +1,11 @@
 # CI
 
-In addition to [Github Actions](https://github.com/ggerganov/whisper.cpp/actions) `whisper.cpp` uses a custom CI framework:
+In addition to [Github Actions](https://github.com/CrispStrobe/CrispASR/actions) `crispasr` uses a custom CI framework:
 
 https://github.com/ggml-org/ci
 
 It monitors the `master` branch for new commits and runs the
-[ci/run.sh](https://github.com/ggerganov/whisper.cpp/blob/master/ci/run.sh) script on dedicated cloud instances. This allows us
+[ci/run.sh](https://github.com/CrispStrobe/CrispASR/blob/main/ci/run.sh) script on dedicated cloud instances. This allows us
 to execute heavier workloads compared to just using Github Actions. Also with time, the cloud instances will be scaled
 to cover various hardware architectures, including GPU and Apple Silicon instances.
 

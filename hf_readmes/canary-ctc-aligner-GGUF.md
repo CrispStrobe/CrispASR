@@ -77,7 +77,7 @@ The original model card, paper, and license are at:
 - NeMo Forced Aligner (the tool that uses this model): https://github.com/NVIDIA-NeMo/NeMo
 - NVIDIA NeMo: https://github.com/NVIDIA-NeMo/NeMo
 
-The `.nemo` extraction + GGUF conversion + ggml runtime in this repo are MIT-licensed (matching the [whisper.cpp](https://github.com/ggml-org/whisper.cpp) base they extend), but **the model weights themselves are CC-BY-4.0 from NVIDIA**.
+The `.nemo` extraction + GGUF conversion + ggml runtime in this repo are MIT-licensed (matching the [CrispASR](https://github.com/CrispStrobe/CrispASR) base they extend), but **the model weights themselves are CC-BY-4.0 from NVIDIA**.
 
 ## Files
 
@@ -251,4 +251,4 @@ Same coverage as Canary-1B-v2 and Parakeet-TDT-0.6B-v3, since this is the same G
 
 **CC-BY-4.0**, inherited from `nvidia/canary-1b-v2`. Use of these GGUF files **must** comply with the CC-BY-4.0 license including attribution to NVIDIA's NeMo team. See [the license](https://creativecommons.org/licenses/by/4.0/) for full terms.
 
-The conversion + runtime code is MIT-licensed (matching the whisper.cpp base), but the model weights themselves are NVIDIA's CC-BY-4.0 work.
+The conversion + runtime code is MIT-licensed (matching the crispasr base), but the model weights themselves are NVIDIA's CC-BY-4.0 work.

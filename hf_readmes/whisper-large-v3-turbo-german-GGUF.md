@@ -18,7 +18,7 @@ base_model: primeline/whisper-large-v3-turbo-german
 
 # whisper-large-v3-turbo-german — GGUF
 
-GGML conversions and quantisations of [`primeline/whisper-large-v3-turbo-german`](https://huggingface.co/primeline/whisper-large-v3-turbo-german) for use with **[CrispStrobe/CrispASR](https://github.com/CrispStrobe/CrispASR)** or any whisper.cpp-compatible tool.
+GGML conversions and quantisations of [`primeline/whisper-large-v3-turbo-german`](https://huggingface.co/primeline/whisper-large-v3-turbo-german) for use with **[CrispStrobe/CrispASR](https://github.com/CrispStrobe/CrispASR)** or any crispasr-compatible tool.
 
 ## Available variants
 
@@ -56,10 +56,10 @@ cmake -S . -B build && cmake --build build -j8
 
 ## Conversion
 
-Converted from the original HuggingFace model using whisper.cpp's `convert-h5-to-ggml.py`, then quantised with `whisper-quantize`:
+Converted from the original HuggingFace model using crispasr's `convert-h5-to-ggml.py`, then quantised with `crispasr-legacy-quantize`:
 
 ```bash
 python models/convert-h5-to-ggml.py primeline/whisper-large-v3-turbo-german . models
-whisper-quantize ggml-model.bin ggml-model-q5_0.bin q5_0
-whisper-quantize ggml-model.bin ggml-model-q4_k.bin q4_k
+crispasr-legacy-quantize ggml-model.bin ggml-model-q5_0.bin q5_0
+crispasr-legacy-quantize ggml-model.bin ggml-model-q4_k.bin q4_k
 ```

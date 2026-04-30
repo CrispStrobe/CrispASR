@@ -1,14 +1,14 @@
 # Upstream issues / patches we depend on
 
 This file tracks fixes and features that this fork would benefit from
-upstream (whisper.cpp / ggml / NeMo / etc.). Each entry has the issue,
+upstream (crispasr / ggml / NeMo / etc.). Each entry has the issue,
 the impact on this fork, and the workaround we currently apply.
 
-## whisper.cpp — `examples/ffmpeg-transcode.cpp` mp4-container handling
+## crispasr — `examples/ffmpeg-transcode.cpp` mp4-container handling
 
 **Status:** ⏳ pending upstream
 
-**Issue.** When this fork is built with `-DWHISPER_FFMPEG=ON`, all five CLIs
+**Issue.** When this fork is built with `-DCRISPASR_FFMPEG=ON`, all five CLIs
 (`cohere-main`, `parakeet-main`, `canary-main`, `cohere-align`, `nfa-align`)
 inherit `read_audio_data()`'s ffmpeg fallback path. That path correctly
 decodes bare-codec files like `.opus` (verified, perfect transcript on
@@ -30,12 +30,12 @@ opus / mp3 / flac).
 **Impact on this fork.** The audio-formats section of the main README has
 to recommend pre-conversion via `ffmpeg -i in.X -ar 16000 -ac 1 -c:a
 pcm_s16le out.wav` for `.m4a` / `.mp4` / `.webm` / `.mov` even when the
-`WHISPER_FFMPEG=ON` build is used. The in-process path is only safe for
+`CRISPASR_FFMPEG=ON` build is used. The in-process path is only safe for
 bare codecs.
 
 **Workaround we apply.** Document the limitation in the README's
 "Measured results" table and tell users to pre-convert. The
-`WHISPER_FFMPEG=ON` build is positioned as "in-process Opus support",
+`CRISPASR_FFMPEG=ON` build is positioned as "in-process Opus support",
 not as a complete substitute for pre-conversion.
 
 **What an upstream fix would look like.** A patch to
@@ -49,13 +49,13 @@ not as a complete substitute for pre-conversion.
 3. Handles the EOF / drain frames cleanly to avoid the `munmap_chunk`
    double-free signature
 
-This needs an MR to ggml-org/whisper.cpp. Once merged, this fork will
+This needs an MR to ggml-org/crispasr. Once merged, this fork will
 pick it up automatically on the next ggml subtree update.
 
 **Reproduction:**
 
 ```bash
-cmake -B build-ffmpeg -DCMAKE_BUILD_TYPE=Release -DWHISPER_FFMPEG=ON
+cmake -B build-ffmpeg -DCMAKE_BUILD_TYPE=Release -DCRISPASR_FFMPEG=ON
 cmake --build build-ffmpeg -j --target parakeet-main
 
 ffmpeg -y -i samples/jfk.wav -c:a aac -b:a 64k /tmp/jfk.m4a

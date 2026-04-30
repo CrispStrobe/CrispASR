@@ -1,6 +1,6 @@
 # Go bindings for Whisper
 
-This package provides Go bindings for whisper.cpp. They have been tested on:
+This package provides Go bindings for crispasr. They have been tested on:
 
   * Darwin (OS X) 12.6 on x64_64
   * Debian Linux on arm64
@@ -12,7 +12,7 @@ is as follows:
 
 ```go
 import (
-	"github.com/ggerganov/whisper.cpp/bindings/go/pkg/whisper"
+	"github.com/CrispStrobe/CrispASR/bindings/go/pkg/whisper"
 )
 
 func main() {
@@ -51,8 +51,8 @@ func main() {
 In order to build, you need to have the Go compiler installed. You can get it from [here](https://golang.org/dl/). Run the tests with:
 
 ```bash
-git clone https://github.com/ggml-org/whisper.cpp.git
-cd whisper.cpp/bindings/go
+git clone https://github.com/CrispStrobe/CrispASR.git
+cd crispasr/bindings/go
 make test
 ```
 
@@ -84,7 +84,7 @@ And you can then test a model against samples with the following command:
 
 To use the bindings in your own software,
 
-  1. Import `github.com/ggerganov/whisper.cpp/bindings/go/pkg/whisper` (or `github.com/ggerganov/whisper.cpp/bindings/go` into your package;
+  1. Import `github.com/CrispStrobe/CrispASR/bindings/go/pkg/whisper` (or `github.com/CrispStrobe/CrispASR/bindings/go` into your package;
   2. Compile `libwhisper.a` (you can use `make whisper` in the `bindings/go` directory);
   3. Link your go binary against whisper by setting the environment variables `C_INCLUDE_PATH` and `LIBRARY_PATH`
      to point to the `whisper.h` file directory and `libwhisper.a` file directory respectively.
@@ -93,14 +93,13 @@ Look at the `Makefile` in the `bindings/go` directory for an example.
 
 The API Documentation:
 
-  * https://pkg.go.dev/github.com/ggerganov/whisper.cpp/bindings/go
-  * https://pkg.go.dev/github.com/ggerganov/whisper.cpp/bindings/go/pkg/whisper
+  * https://pkg.go.dev/github.com/CrispStrobe/CrispASR/bindings/go
+  * https://pkg.go.dev/github.com/CrispStrobe/CrispASR/bindings/go/pkg/whisper
 
 Getting help:
 
-  * Follow the discussion for the go bindings [here](https://github.com/ggml-org/whisper.cpp/discussions/312)
+  * Follow the discussion for the go bindings [here](https://github.com/CrispStrobe/CrispASR/discussions/312)
 
 ## License
 
-The license for the Go bindings is the same as the license for the rest of the whisper.cpp project, which is the MIT License. See the `LICENSE` file for more details.
-
+The license for the Go bindings is the same as the license for the rest of the crispasr project, which is the MIT License. See the `LICENSE` file for more details.

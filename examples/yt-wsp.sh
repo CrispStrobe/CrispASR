@@ -25,13 +25,13 @@
 # SOFTWARE.
 
 # Small shell script to more easily automatically download and transcribe live stream VODs.
-# This uses YT-DLP, ffmpeg and the CPP version of Whisper: https://github.com/ggml-org/whisper.cpp
+# This uses YT-DLP, ffmpeg and CrispASR's Whisper backend: https://github.com/CrispStrobe/CrispASR
 # Use `./examples/yt-wsp.sh help` to print help info.
 #
 # Sample usage:
 #
-#   git clone https://github.com/ggml-org/whisper.cpp
-#   cd whisper.cpp
+#   git clone https://github.com/CrispStrobe/CrispASR
+#   cd crispasr
 #   make
 #   ./examples/yt-wsp.sh https://www.youtube.com/watch?v=1234567890
 #
@@ -43,25 +43,25 @@ SCRIPT_PATH="$(realpath -e ${BASH_SOURCE[0]})";
 SCRIPT_DIR="${SCRIPT_PATH%/*}"
 
 ################################################################################
-# Documentation on downloading models can be found in the whisper.cpp repo:
-# https://github.com/ggml-org/whisper.cpp/#usage
+# Documentation on downloading models can be found in the CrispASR repo:
+# https://github.com/CrispStrobe/CrispASR#quick-start
 #
-# note: unless a multilingual model is specified, WHISPER_LANG will be ignored
+# note: unless a multilingual model is specified, CRISPASR_LANG will be ignored
 # and the video will be transcribed as if the audio were in the English language
 ################################################################################
 MODEL_PATH="${MODEL_PATH:-${SCRIPT_DIR}/../models/ggml-base.en.bin}"
 
 ################################################################################
-# Where to find the whisper.cpp executable.  default to the examples directory
+# Where to find the crispasr executable.  default to the examples directory
 # which holds this script in source control
 ################################################################################
-WHISPER_EXECUTABLE="${WHISPER_EXECUTABLE:-${SCRIPT_DIR}/../build/bin/crispasr}";
+CRISPASR_EXECUTABLE="${CRISPASR_EXECUTABLE:-${SCRIPT_DIR}/../build/bin/crispasr}";
 
 # Set to desired language to be translated into english
-WHISPER_LANG="${WHISPER_LANG:-en}";
+CRISPASR_LANG="${CRISPASR_LANG:-en}";
 
 # Default to 4 threads (this was most performant on my 2020 M1 MBP)
-WHISPER_THREAD_COUNT="${WHISPER_THREAD_COUNT:-4}";
+CRISPASR_THREAD_COUNT="${CRISPASR_THREAD_COUNT:-4}";
 
 msg() {
     echo >&2 -e "${1-}"
@@ -83,9 +83,9 @@ print_help() {
     cat << 'EOF'
 Usage:
   MODEL_PATH=<model> \
-  WHISPER_EXECUTABLE=<whisper-cli> \
-  WHISPER_LANG=en \
-  WHISPER_THREAD_COUNT=<int> \
+  CRISPASR_EXECUTABLE=<crispasr> \
+  CRISPASR_LANG=en \
+  CRISPASR_THREAD_COUNT=<int> \
   ./examples/yt-wsp.sh <video_url>
 
 Description:
@@ -102,13 +102,13 @@ Output:
 Requirements:
   - ffmpeg
   - yt-dlp
-  - whisper.cpp
+  - crispasr
 
 Environment Variables:
   MODEL_PATH            Path to the Whisper model (e.g., models/ggml-base.en.bin)
-  WHISPER_EXECUTABLE    Path to the Whisper CLI executable
-  WHISPER_LANG          Language code (e.g., 'en' for English)
-  WHISPER_THREAD_COUNT  Number of CPU threads to use
+  CRISPASR_EXECUTABLE    Path to the Whisper CLI executable
+  CRISPASR_LANG          Language code (e.g., 'en' for English)
+  CRISPASR_THREAD_COUNT  Number of CPU threads to use
 
 Tip:
   The script has many configurable environment variables.
@@ -128,12 +128,12 @@ check_requirements() {
         exit 1;
     fi;
 
-    if ! command -v "${WHISPER_EXECUTABLE}" &>/dev/null; then
-        echo "The C++ implementation of Whisper is required: https://github.com/ggml-org/whisper.cpp"
+    if ! command -v "${CRISPASR_EXECUTABLE}" &>/dev/null; then
+        echo "CrispASR is required: https://github.com/CrispStrobe/CrispASR"
         echo "Sample usage:";
         echo "";
-        echo "  git clone https://github.com/ggml-org/whisper.cpp";
-        echo "  cd whisper.cpp";
+        echo "  git clone https://github.com/CrispStrobe/CrispASR";
+        echo "  cd crispasr";
         echo "  make";
         echo "  ./examples/yt-wsp.sh https://www.youtube.com/watch?v=1234567890";
         echo "";
@@ -202,13 +202,13 @@ ffmpeg -i "${temp_dir}/${title_name}.vod.mp4"  \
     "${temp_dir}/${title_name}.vod-resampled.wav";
 
 msg "Transcribing to subtitle file...";
-msg "Whisper specified at: '${WHISPER_EXECUTABLE}'";
+msg "Whisper specified at: '${CRISPASR_EXECUTABLE}'";
 
-"${WHISPER_EXECUTABLE}" \
+"${CRISPASR_EXECUTABLE}" \
     -m "${MODEL_PATH}" \
-    -l "${WHISPER_LANG}" \
+    -l "${CRISPASR_LANG}" \
     -f "${temp_dir}/${title_name}.vod-resampled.wav" \
-    -t "${WHISPER_THREAD_COUNT}" \
+    -t "${CRISPASR_THREAD_COUNT}" \
     -osrt \
     --translate;
 

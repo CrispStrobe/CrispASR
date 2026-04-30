@@ -58,8 +58,8 @@ jobs:
           cmake -S . -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_PLATFORM_NO_VERSIONED_SONAME=ON \
-            -DWHISPER_BUILD_TESTS=OFF \
-            -DWHISPER_BUILD_EXAMPLES=OFF
+            -DCRISPASR_BUILD_TESTS=OFF \
+            -DCRISPASR_BUILD_EXAMPLES=OFF
           cmake --build build -j$(nproc)
 
       - name: Build Python ctypes helpers library

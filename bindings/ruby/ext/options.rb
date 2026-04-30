@@ -62,9 +62,9 @@ class Options
 
   # See src/CmakeLists.txt
   def configure_coreml
-    if enabled?("WHISPER_COREML")
+    if enabled?("CRISPASR_COREML")
       $LDFLAGS << " -framework Foundation -framework CoreML"
-      $defs << "-DRUBY_WHISPER_USE_COREML"
+      $defs << "-DRUBY_CRISPASR_USE_COREML"
     end
   end
 

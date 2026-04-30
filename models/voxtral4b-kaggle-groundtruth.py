@@ -84,7 +84,7 @@ model_dir = snapshot_download(
 print(f"Model downloaded to: {model_dir}")
 
 # Download jfk.wav (the standard Whisper test audio)
-audio_url = "https://github.com/ggerganov/whisper.cpp/raw/master/samples/jfk.wav"
+audio_url = "https://raw.githubusercontent.com/CrispStrobe/CrispASR/main/samples/jfk.wav"
 audio_path = "/tmp/jfk.wav"
 if not os.path.exists(audio_path):
     import urllib.request

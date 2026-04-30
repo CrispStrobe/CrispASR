@@ -371,7 +371,7 @@ enum llm_tensor {
     LLM_TENSOR_FFN_DOWN,
     LLM_TENSOR_FFN_UP,
     LLM_TENSOR_FFN_ACT,
-    LLM_TENSOR_FFN_DOWN_EXP,  // split experts for backward compatibility
+    LLM_TENSOR_FFN_DOWN_EXP, // split experts for backward compatibility
     LLM_TENSOR_FFN_GATE_EXP,
     LLM_TENSOR_FFN_UP_EXP,
     LLM_TENSOR_FFN_NORM_EXPS,
@@ -415,23 +415,23 @@ enum llm_tensor {
     LLM_TENSOR_SSM_DT,
     LLM_TENSOR_SSM_DT_NORM,
     LLM_TENSOR_SSM_A,
-    LLM_TENSOR_SSM_A_NOSCAN,        // qwen3next special case with MUL instead of SSM_SCAN
+    LLM_TENSOR_SSM_A_NOSCAN, // qwen3next special case with MUL instead of SSM_SCAN
     LLM_TENSOR_SSM_B_NORM,
     LLM_TENSOR_SSM_C_NORM,
     LLM_TENSOR_SSM_D,
     LLM_TENSOR_SSM_NORM,
     LLM_TENSOR_SSM_OUT,
-    LLM_TENSOR_SSM_BETA_ALPHA,      // qwen3next
-    LLM_TENSOR_SSM_ALPHA,           // qwen3.5
+    LLM_TENSOR_SSM_BETA_ALPHA, // qwen3next
+    LLM_TENSOR_SSM_ALPHA,      // qwen3.5
     // Kimi Linear KDA (using SSM_ prefix for consistency)
-    LLM_TENSOR_SSM_CONV1D_Q,        // kimi: Q conv1d weight
-    LLM_TENSOR_SSM_CONV1D_K,        // kimi: K conv1d weight
-    LLM_TENSOR_SSM_CONV1D_V,        // kimi: V conv1d weight
-    LLM_TENSOR_SSM_F_A,             // kimi: forget gate projection A
-    LLM_TENSOR_SSM_F_B,             // kimi: forget gate projection B
-    LLM_TENSOR_SSM_BETA,            // kimi: beta mixing coefficient and qwen3.5
-    LLM_TENSOR_SSM_G_A,             // kimi: output gate projection A
-    LLM_TENSOR_SSM_G_B,             // kimi: output gate projection B
+    LLM_TENSOR_SSM_CONV1D_Q, // kimi: Q conv1d weight
+    LLM_TENSOR_SSM_CONV1D_K, // kimi: K conv1d weight
+    LLM_TENSOR_SSM_CONV1D_V, // kimi: V conv1d weight
+    LLM_TENSOR_SSM_F_A,      // kimi: forget gate projection A
+    LLM_TENSOR_SSM_F_B,      // kimi: forget gate projection B
+    LLM_TENSOR_SSM_BETA,     // kimi: beta mixing coefficient and qwen3.5
+    LLM_TENSOR_SSM_G_A,      // kimi: output gate projection A
+    LLM_TENSOR_SSM_G_B,      // kimi: output gate projection B
     LLM_TENSOR_TIME_MIX_W0,
     LLM_TENSOR_TIME_MIX_W1,
     LLM_TENSOR_TIME_MIX_W2,
@@ -552,10 +552,10 @@ enum llm_tensor_layer {
 };
 
 struct LLM_KV {
-    LLM_KV(llm_arch arch, const char * suffix = nullptr);
+    LLM_KV(llm_arch arch, const char* suffix = nullptr);
 
     llm_arch arch;
-    const char * suffix;
+    const char* suffix;
 
     std::string operator()(llm_kv kv) const;
 };
@@ -572,27 +572,21 @@ struct LLM_KV {
 struct LLM_TN_IMPL {
     const llm_arch arch;
     const llm_tensor tensor;
-    const char * const suffix;
+    const char* const suffix;
     const int bid;
     const int xid;
 
     const std::set<llm_tensor> model_tensors;
 
-    LLM_TN_IMPL(llm_arch arch, llm_tensor tensor, const char * suffix, int bid, int xid);
+    LLM_TN_IMPL(llm_arch arch, llm_tensor tensor, const char* suffix, int bid, int xid);
 
     std::string str() const;
 
-    operator std::string() const {
-        return str();
-    }
+    operator std::string() const { return str(); }
 
-    friend bool operator==(const std::string & str, const LLM_TN_IMPL & tn) {
-        return str == tn.str();
-    }
+    friend bool operator==(const std::string& str, const LLM_TN_IMPL& tn) { return str == tn.str(); }
 
-    friend bool operator!=(const std::string & str, const LLM_TN_IMPL & tn) {
-        return str != tn.str();
-    }
+    friend bool operator!=(const std::string& str, const LLM_TN_IMPL& tn) { return str != tn.str(); }
 };
 
 struct LLM_TN {
@@ -600,7 +594,7 @@ struct LLM_TN {
 
     llm_arch arch;
 
-    LLM_TN_IMPL operator()(llm_tensor tensor, const char * suffix, int bid = -1, int xid = -1) const {
+    LLM_TN_IMPL operator()(llm_tensor tensor, const char* suffix, int bid = -1, int xid = -1) const {
         return LLM_TN_IMPL(arch, tensor, suffix, bid, xid);
     }
 
@@ -617,12 +611,12 @@ struct llm_tensor_info {
 
 std::vector<llm_arch> llm_arch_all();
 
-const char * llm_arch_name(llm_arch arch);
+const char* llm_arch_name(llm_arch arch);
 
-llm_arch llm_arch_from_string(const std::string & name);
+llm_arch llm_arch_from_string(const std::string& name);
 
-const llm_tensor_info & llm_tensor_info_for(llm_tensor tensor);
+const llm_tensor_info& llm_tensor_info_for(llm_tensor tensor);
 
-bool llm_arch_is_recurrent(const llm_arch & arch);
-bool llm_arch_is_hybrid   (const llm_arch & arch);
-bool llm_arch_is_diffusion(const llm_arch & arch);
+bool llm_arch_is_recurrent(const llm_arch& arch);
+bool llm_arch_is_hybrid(const llm_arch& arch);
+bool llm_arch_is_diffusion(const llm_arch& arch);

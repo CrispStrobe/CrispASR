@@ -28,7 +28,7 @@ struct whisper_params; // fwd decl
 /// subprocess fallback. Handles auto-download of the pyannote GGUF
 /// when `--diarize-method pyannote` was passed without `--sherpa-segment-model`.
 /// Mutates each `seg.speaker` in-place, formatting the result as
-/// `"(speaker N) "` to match the historical whisper-cli convention.
+/// `"(speaker N) "` to match the historical crispasr convention.
 ///
 /// `left` and `right` are per-channel slice buffers when stereo is
 /// available. For mono input, both vectors point at the same data and

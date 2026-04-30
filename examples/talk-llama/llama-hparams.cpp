@@ -52,14 +52,14 @@ uint32_t llama_hparams::n_ff(uint32_t il) const {
 }
 
 uint32_t llama_hparams::n_gqa(uint32_t il) const {
-    const uint32_t n_head    = this->n_head(il);
+    const uint32_t n_head = this->n_head(il);
     const uint32_t n_head_kv = this->n_head_kv(il);
 
     if (n_head_kv == 0) {
         return 0;
     }
 
-    return n_head/n_head_kv;
+    return n_head / n_head_kv;
 }
 
 uint32_t llama_hparams::n_rot(uint32_t il) const {
@@ -166,14 +166,14 @@ uint32_t llama_hparams::n_embd_r() const {
     if (n_embd_head_kda != 0) {
         // for Kimi KDA layers
         // Conv state for Q, K, V: 3 * (d_conv - 1) * n_head * head_dim
-        const uint32_t d_inner = n_head() * n_embd_head_kda;  // 32 * 128 = 4096
+        const uint32_t d_inner = n_head() * n_embd_head_kda; // 32 * 128 = 4096
         return 3 * (ssm_d_conv > 0 ? ssm_d_conv - 1 : 3) * d_inner;
     }
 
     // TODO: maybe support other convolution strides than 1
     // NOTE: since the first column of the conv_state is shifted out each time, it's not actually needed
     // Corresponds to Mamba's conv_states size
-    return (ssm_d_conv > 0 ? ssm_d_conv - 1 : 0) * (ssm_d_inner + 2*ssm_n_group*ssm_d_state);
+    return (ssm_d_conv > 0 ? ssm_d_conv - 1 : 0) * (ssm_d_inner + 2 * ssm_n_group * ssm_d_state);
 }
 
 uint32_t llama_hparams::n_embd_s() const {
@@ -186,7 +186,7 @@ uint32_t llama_hparams::n_embd_s() const {
         // for Kimi KDA layers
         // Full recurrent state: head_dim * head_dim * n_head
         // h tensor shape for delta attention: [head_dim, head_dim, n_head]
-        return n_embd_head_kda * n_embd_head_kda * n_head();  // 128 * 128 * 32 = 524288
+        return n_embd_head_kda * n_embd_head_kda * n_head(); // 128 * 128 * 32 = 524288
     }
 
     // corresponds to Mamba's ssm_states size
@@ -230,7 +230,7 @@ uint32_t llama_hparams::n_embd_head_v_mla() const {
 
 bool llama_hparams::has_kv(uint32_t il) const {
     if (n_layer_kv_from_start >= 0) {
-        if (il < (uint32_t) n_layer_kv_from_start) {
+        if (il < (uint32_t)n_layer_kv_from_start) {
             return true;
         }
 

@@ -6,10 +6,10 @@ ignored_dirs = %w[
   .github
   ci
   examples/wchess/wchess.wasm
-  examples/whisper.android
-  examples/whisper.android.java
-  examples/whisper.objc
-  examples/whisper.swiftui
+  examples/crispasr.android
+  examples/crispasr.android.java
+  examples/crispasr.objc
+  examples/crispasr.swiftui
   grammars
   models
   samples
@@ -23,7 +23,7 @@ ignored_files = %w[
   .gitignore
   .gitmodules
   .dockerignore
-  whisper.nvim
+  crispasr.nvim
   twitch.sh
   yt-wsp.sh
   close-issue.yml

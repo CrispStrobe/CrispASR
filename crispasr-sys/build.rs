@@ -2,7 +2,7 @@
 //
 // This crate is a thin FFI shim — it does NOT build the native library.
 // The user is expected to have `libcrispasr.{so,dylib,dll}` installed
-// (Homebrew, apt, or built from source). Same pattern as whisper.cpp's
+// (Homebrew, apt, or built from source). Same pattern as crispasr's
 // language bindings, the Python wrapper in this repo, and the Dart
 // wrapper in `flutter/crispasr/`.
 //

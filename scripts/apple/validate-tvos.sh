@@ -1,5 +1,5 @@
 #!/bin/bash
-# validate-tvos.sh - Validate tvOS Application with embedded whisper.xcframework using SwiftUI
+# validate-tvos.sh - Validate tvOS Application with embedded crispasr.xcframework using SwiftUI
 
 # Authentication options (optional) (can be set via environment variables)
 # To use: export APPLE_ID=your.email@example.com
@@ -71,7 +71,7 @@ BUILD_DIR="${ROOT_DIR}/validation-builds/ios"
 # Configuration
 APP_NAME="TVOSWhisperTest"
 BUNDLE_ID="org.ggml.TVOSWhisperTest"
-XCFRAMEWORK_PATH="${ROOT_DIR}/build-apple/whisper.xcframework"
+XCFRAMEWORK_PATH="${ROOT_DIR}/build-apple/crispasr.xcframework"
 TEMP_DIR="${BUILD_DIR}/temp"
 ARCHIVE_PATH="${BUILD_DIR}/${APP_NAME}.xcarchive"
 IPA_PATH="${BUILD_DIR}/${APP_NAME}.ipa"
@@ -186,8 +186,8 @@ cat > "${TEMP_DIR}/${APP_NAME}/${APP_NAME}.xcodeproj/project.pbxproj" << 'EOF'
 /* Begin PBXBuildFile section */
         11111111111111111111111 /* App.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22222222222222222222222; };
         33333333333333333333333 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44444444444444444444444; };
-        55555555555555555555555 /* whisper.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 66666666666666666666666; };
-        77777777777777777777777 /* whisper.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 66666666666666666666666; };
+        55555555555555555555555 /* crispasr.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 66666666666666666666666; };
+        77777777777777777777777 /* crispasr.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 66666666666666666666666; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -197,7 +197,7 @@ cat > "${TEMP_DIR}/${APP_NAME}/${APP_NAME}.xcodeproj/project.pbxproj" << 'EOF'
             dstPath = "";
             dstSubfolderSpec = 10;
             files = (
-                77777777777777777777777 /* whisper.xcframework in Embed Frameworks */,
+                77777777777777777777777 /* crispasr.xcframework in Embed Frameworks */,
             );
             name = "Embed Frameworks";
             runOnlyForDeploymentPostprocessing = 0;
@@ -213,7 +213,7 @@ cat >> "${TEMP_DIR}/${APP_NAME}/${APP_NAME}.xcodeproj/project.pbxproj" << EOF
         22222222222222222222222 /* App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
         44444444444444444444444 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
         AAAAAAAAAAAAAAAAAAAAAAA /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-        66666666666666666666666 /* whisper.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = whisper.xcframework; sourceTree = "<group>"; };
+        66666666666666666666666 /* crispasr.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = crispasr.xcframework; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 EOF
 
@@ -224,7 +224,7 @@ cat >> "${TEMP_DIR}/${APP_NAME}/${APP_NAME}.xcodeproj/project.pbxproj" << 'EOF'
             isa = PBXFrameworksBuildPhase;
             buildActionMask = 2147483647;
             files = (
-                55555555555555555555555 /* whisper.xcframework in Frameworks */,
+                55555555555555555555555 /* crispasr.xcframework in Frameworks */,
             );
             runOnlyForDeploymentPostprocessing = 0;
         };
@@ -249,7 +249,7 @@ cat >> "${TEMP_DIR}/${APP_NAME}/${APP_NAME}.xcodeproj/project.pbxproj" << 'EOF'
         DDDDDDDDDDDDDDDDDDDDDDDD /* Frameworks */ = {
             isa = PBXGroup;
             children = (
-                66666666666666666666666 /* whisper.xcframework */,
+                66666666666666666666666 /* crispasr.xcframework */,
             );
             name = Frameworks;
             sourceTree = "<group>";
@@ -729,19 +729,19 @@ if grep -q "No suitable application records were found" "${VALIDATION_OUTPUT}"; 
     fi
 
     # Check if framework was properly embedded
-    if [ -d "${TEMP_DIR}/Payload/${APP_NAME}.app/Frameworks/whisper.framework" ]; then
-        echo "✅ whisper.framework properly embedded"
+    if [ -d "${TEMP_DIR}/Payload/${APP_NAME}.app/Frameworks/crispasr.framework" ]; then
+        echo "✅ crispasr.framework properly embedded"
     else
-        echo "❌ whisper.framework not properly embedded"
+        echo "❌ crispasr.framework not properly embedded"
         FINAL_VALIDATION_RESULT=1
     fi
 
     # Check if framework binary exists
-    if [ -f "${TEMP_DIR}/Payload/${APP_NAME}.app/Frameworks/whisper.framework/whisper" ]; then
+    if [ -f "${TEMP_DIR}/Payload/${APP_NAME}.app/Frameworks/crispasr.framework/crispasr" ]; then
         echo "✅ Framework binary exists"
 
         # Further validate framework by checking architecture
-        ARCHS=$(lipo -info "${TEMP_DIR}/Payload/${APP_NAME}.app/Frameworks/whisper.framework/whisper" 2>/dev/null | grep -o "arm64\\|x86_64" | tr '\n' ' ')
+        ARCHS=$(lipo -info "${TEMP_DIR}/Payload/${APP_NAME}.app/Frameworks/crispasr.framework/crispasr" 2>/dev/null | grep -o "arm64\\|x86_64" | tr '\n' ' ')
         if [ -n "$ARCHS" ]; then
             echo "✅ Framework architecture(s): $ARCHS"
         else

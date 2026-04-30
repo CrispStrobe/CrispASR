@@ -16,9 +16,7 @@ struct llama_kv_cell_ext {
     llama_pos y = 0;
 
     // return true if the current 2D spatial position is greater than other
-    bool is_2d_gt(llama_pos ox, llama_pos oy) const {
-        return (y > oy) || (y == oy && x > ox);
-    }
+    bool is_2d_gt(llama_pos ox, llama_pos oy) const { return (y > oy) || (y == oy && x > ox); }
 
     void reset() {
         static_assert(std::is_trivially_copyable_v<llama_kv_cell_ext>);
@@ -33,9 +31,9 @@ class llama_kv_cells {
 public:
     void reset() {
         for (uint32_t i = 0; i < pos.size(); ++i) {
-            pos[i]   = -1;
+            pos[i] = -1;
             ext[i].reset();
-            shift[i] =  0;
+            shift[i] = 0;
             seq[i].reset();
         }
 
@@ -56,9 +54,7 @@ public:
         }
     }
 
-    uint32_t size() const {
-        return pos.size();
-    }
+    uint32_t size() const { return pos.size(); }
 
     void resize(uint32_t n) {
         pos.resize(n);
@@ -76,25 +72,17 @@ public:
         return pos[i] == -1;
     }
 
-    uint32_t get_used() const {
-        return used.size();
-    }
+    uint32_t get_used() const { return used.size(); }
 
     // the index of the first cell that is used
     // return 0 if no cells are used
-    uint32_t used_min() const {
-        return used.empty() ? 0 : *used.begin();
-    }
+    uint32_t used_min() const { return used.empty() ? 0 : *used.begin(); }
 
     // the index of the last cell that is used + 1
     // return 0 if no cells are used
-    uint32_t used_max_p1() const {
-        return used.empty() ? 0 : *used.rbegin() + 1;
-    }
+    uint32_t used_max_p1() const { return used.empty() ? 0 : *used.rbegin() + 1; }
 
-    bool get_has_shift() const {
-        return has_shift;
-    }
+    bool get_has_shift() const { return has_shift; }
 
     // move cell isrc to idst (used during defrag)
     //void mv(uint32_t isrc, uint32_t idst) {
@@ -138,7 +126,7 @@ public:
     }
 
     // copy the state of cells [idxs[0], idxs[1], ..., idxs[idxs.size() - 1])
-    llama_kv_cells cp(const std::vector<uint32_t> & idxs) const {
+    llama_kv_cells cp(const std::vector<uint32_t>& idxs) const {
         llama_kv_cells res;
 
         res.resize(idxs.size());
@@ -157,7 +145,7 @@ public:
     }
 
     // set the state of cells [i, i + other.pos.size()) (used for save/restore the state of the cells)
-    void set(uint32_t i, const llama_kv_cells & other) {
+    void set(uint32_t i, const llama_kv_cells& other) {
         assert(i + other.pos.size() <= pos.size());
 
         for (uint32_t j = 0; j < other.pos.size(); ++j) {
@@ -188,7 +176,7 @@ public:
     }
 
     // set the state of cells [idxs[0], idxs[1], ..., idxs[idxs.size() - 1])
-    void set(const std::vector<uint32_t> & idxs, const llama_kv_cells & other) {
+    void set(const std::vector<uint32_t>& idxs, const llama_kv_cells& other) {
         assert(idxs.size() == other.pos.size());
 
         for (uint32_t j = 0; j < other.pos.size(); ++j) {
@@ -367,7 +355,7 @@ public:
         return pos[i];
     }
 
-    const llama_kv_cell_ext & ext_get(uint32_t i) const {
+    const llama_kv_cell_ext& ext_get(uint32_t i) const {
         assert(i < pos.size());
         assert(pos[i] != -1);
 
@@ -416,7 +404,7 @@ public:
 
         seq_pos_rm(i);
 
-        pos[i]   += d;
+        pos[i] += d;
         shift[i] += d;
 
         has_shift = true;
@@ -447,7 +435,7 @@ public:
 
         seq_pos_rm(i);
 
-        pos[i]   /= d;
+        pos[i] /= d;
         shift[i] += p_old - pos[i];
 
         seq_pos_add(i);
@@ -509,9 +497,7 @@ private:
         }
     }
 
-    void seq_pos_inc(llama_seq_id s, llama_pos p) {
-        seq_pos[s][p]++;
-    }
+    void seq_pos_inc(llama_seq_id s, llama_pos p) { seq_pos[s][p]++; }
 
     // remove cell i
     void seq_pos_rm(uint32_t i) {

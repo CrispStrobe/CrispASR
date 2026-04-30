@@ -1,0 +1,50 @@
+#!/bin/bash
+
+# INSTRUCTIONS
+#
+# This simple script is called by Neovim to capture audio from the microphone and transcribe it with Whisper.
+# In order for this to work, you need to clone the crispasr repo and build the 'stream' tool
+#
+#   git clone https://github.com/CrispStrobe/CrispASR
+#   cd crispasr
+#   make stream
+#
+# Also, make sure the current script is in your PATH env variable. You should be able to run the following command:
+#
+#   crispasr.nvim
+#
+# Next, export the path to the crispasr repository via the CRISPASR_CPP_HOME env variable:
+#
+#   export CRISPASR_CPP_HOME=/path/to/crispasr
+#
+# Finally, add the following lines to your ~/.config/nvim/init.vim:
+#
+#   inoremap <C-G>  <C-O>:!crispasr.nvim<CR><C-O>:let @a = system("cat /tmp/crispasr.nvim \| tail -n 1 \| xargs -0 \| tr -d '\\n' \| sed -e 's/^[[:space:]]*//'")<CR><C-R>a
+#   nnoremap <C-G>       :!crispasr.nvim<CR>:let @a = system("cat /tmp/crispasr.nvim \| tail -n 1 \| xargs -0 \| tr -d '\\n' \| sed -e 's/^[[:space:]]*//'")<CR>"ap
+#   vnoremap <C-G> c<C-O>:!crispasr.nvim<CR><C-O>:let @a = system("cat /tmp/crispasr.nvim \| tail -n 1 \| xargs -0 \| tr -d '\\n' \| sed -e 's/^[[:space:]]*//'")<CR><C-R>a
+#
+# This allows you to press Ctrl-G in order to capture audio from the microphone and transcribe it.
+# When you are done speaking - press Ctrl-C
+#
+
+# the Whisper model to use
+model="base.en"
+
+# export the path to the crispasr repo in the CRISPASR_CPP_HOME env variable
+# https://github.com/CrispStrobe/CrispASR
+cd "${CRISPASR_CPP_HOME}"
+
+if [ ! -f ./stream ] ; then
+    echo "crispasr.nvim: the 'stream' executable was not found! CRISPASR_CPP_HOME=${CRISPASR_CPP_HOME}" > /tmp/crispasr.nvim
+    exit 1
+fi
+
+if [ ! -f ./models/ggml-${model}.bin ] ; then
+    echo "crispasr.nvim: the '$model' model was not found! CRISPASR_CPP_HOME=${CRISPASR_CPP_HOME}" > /tmp/crispasr.nvim
+    exit 2
+fi
+
+# fine-tune the parameters according to your machine specs
+./stream -t 8 -m models/ggml-${model}.bin --step 350 --length 10000 -f /tmp/crispasr.nvim 2> /dev/null
+
+exit 0

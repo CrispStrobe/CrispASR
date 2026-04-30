@@ -77,16 +77,16 @@ type (
 // GLOBALS
 
 const (
-	SAMPLING_GREEDY      SamplingStrategy = C.WHISPER_SAMPLING_GREEDY
-	SAMPLING_BEAM_SEARCH SamplingStrategy = C.WHISPER_SAMPLING_BEAM_SEARCH
+	SAMPLING_GREEDY      SamplingStrategy = C.CRISPASR_SAMPLING_GREEDY
+	SAMPLING_BEAM_SEARCH SamplingStrategy = C.CRISPASR_SAMPLING_BEAM_SEARCH
 )
 
 const (
-	SampleRate = C.WHISPER_SAMPLE_RATE                 // Expected sample rate, samples per second
+	SampleRate = C.CRISPASR_SAMPLE_RATE                 // Expected sample rate, samples per second
 	SampleBits = uint16(unsafe.Sizeof(C.float(0))) * 8 // Sample size in bits
-	NumFFT     = C.WHISPER_N_FFT
-	HopLength  = C.WHISPER_HOP_LENGTH
-	ChunkSize  = C.WHISPER_CHUNK_SIZE
+	NumFFT     = C.CRISPASR_N_FFT
+	HopLength  = C.CRISPASR_HOP_LENGTH
+	ChunkSize  = C.CRISPASR_CHUNK_SIZE
 )
 
 var (
@@ -340,8 +340,8 @@ func (ctx *Context) Whisper_full_parallel(params Params, samples []float32, proc
 }
 
 // Return the id of the autodetected language, returns -1 if not found
-// Added to whisper.cpp in
-// https://github.com/ggerganov/whisper.cpp/commit/a1c1583cc7cd8b75222857afc936f0638c5683d6
+// Added to crispasr in
+// https://github.com/CrispStrobe/CrispASR/commit/a1c1583cc7cd8b75222857afc936f0638c5683d6
 //
 // Examples:
 //

@@ -61,11 +61,9 @@ enum llm_chat_template {
 
 struct llama_chat_message;
 
-llm_chat_template llm_chat_template_from_str(const std::string & name);
+llm_chat_template llm_chat_template_from_str(const std::string& name);
 
-llm_chat_template llm_chat_detect_template(const std::string & tmpl);
+llm_chat_template llm_chat_detect_template(const std::string& tmpl);
 
-int32_t llm_chat_apply_template(
-    llm_chat_template tmpl,
-    const std::vector<const llama_chat_message *> & chat,
-    std::string & dest, bool add_ass);
+int32_t llm_chat_apply_template(llm_chat_template tmpl, const std::vector<const llama_chat_message*>& chat,
+                                std::string& dest, bool add_ass);

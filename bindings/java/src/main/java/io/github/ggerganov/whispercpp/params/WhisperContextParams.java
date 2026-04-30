@@ -5,7 +5,7 @@ import java.util.List;
 
 /**
  * Parameters for the whisper_init_from_file_with_params() function.
- * If you change the order or add new parameters, make sure to update the default values in whisper.cpp:
+ * If you change the order or add new parameters, make sure to update the default values in crispasr:
  * whisper_context_default_params()
  */
 public class WhisperContextParams extends Structure {
@@ -32,7 +32,7 @@ public class WhisperContextParams extends Structure {
     /** [EXPERIMENTAL] Alignment heads preset for DTW */
     public int dtw_aheads_preset;
 
-    /** Number of top layers to use for DTW when using WHISPER_AHEADS_N_TOP_MOST preset */
+    /** Number of top layers to use for DTW when using CRISPASR_AHEADS_N_TOP_MOST preset */
     public int dtw_n_top;
 
     public WhisperAheads.ByValue dtw_aheads;

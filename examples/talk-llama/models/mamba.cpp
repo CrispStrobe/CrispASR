@@ -1,15 +1,16 @@
 #include "models.h"
 
-llm_build_mamba::llm_build_mamba(const llama_model & model, const llm_graph_params & params) : llm_build_mamba_base(params) {
-    ggml_tensor * cur;
-    ggml_tensor * inpL;
+llm_build_mamba::llm_build_mamba(const llama_model& model, const llm_graph_params& params)
+    : llm_build_mamba_base(params) {
+    ggml_tensor* cur;
+    ggml_tensor* inpL;
 
     // {n_embd, n_tokens}
     inpL = build_inp_embd(model.tok_embd);
 
-    auto * rs_inp = build_rs_inp();
+    auto* rs_inp = build_rs_inp();
 
-    ggml_tensor * inp_out_ids = build_inp_out_ids();
+    ggml_tensor* inp_out_ids = build_inp_out_ids();
 
     for (int il = 0; il < n_layer; ++il) {
         // norm
@@ -23,7 +24,7 @@ llm_build_mamba::llm_build_mamba(const llama_model & model, const llm_graph_para
         }
 
         if (il == n_layer - 1 && inp_out_ids) {
-            cur  = ggml_get_rows(ctx0, cur, inp_out_ids);
+            cur = ggml_get_rows(ctx0, cur, inp_out_ids);
             inpL = ggml_get_rows(ctx0, inpL, inp_out_ids);
         }
 
@@ -51,4 +52,3 @@ llm_build_mamba::llm_build_mamba(const llama_model & model, const llm_graph_para
 
     ggml_build_forward_expand(gf, cur);
 }
-

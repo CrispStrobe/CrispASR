@@ -19,14 +19,14 @@ Gem::Specification.new do |s|
                 end
               }
 
-  s.summary = %q{Ruby whisper.cpp bindings}
+  s.summary = %q{Ruby crispasr bindings}
   s.test_files = s.files.select {|file| file.start_with? "test/"}
 
   s.extensions << 'ext/extconf.rb'
   s.required_ruby_version = '>= 3.1.0'
 
   #### Documentation and testing.
-  s.homepage = 'https://github.com/ggml-org/whisper.cpp'
+  s.homepage = 'https://github.com/CrispStrobe/CrispASR'
   s.rdoc_options = ['--main', 'README.md']
 
 

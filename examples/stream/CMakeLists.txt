@@ -1,5 +1,5 @@
-if (WHISPER_SDL2)
-    set(TARGET whisper-stream)
+if (CRISPASR_SDL2)
+    set(TARGET crispasr-stream)
     add_executable(${TARGET} stream.cpp)
 
     include(DefaultTargetOptions)

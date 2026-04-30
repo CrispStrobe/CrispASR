@@ -29,8 +29,8 @@ class WhisperCppTest {
             WhisperContextParams.ByValue contextParams = whisper.getContextDefaultParams();
             contextParams.useFlashAttn(false);  // Disable flash attention
             whisper.initContext(modelName, contextParams);
-            //whisper.getFullDefaultParams(WhisperSamplingStrategy.WHISPER_SAMPLING_GREEDY);
-            //whisper.getJavaDefaultParams(WhisperSamplingStrategy.WHISPER_SAMPLING_BEAM_SEARCH);
+            //whisper.getFullDefaultParams(WhisperSamplingStrategy.CRISPASR_SAMPLING_GREEDY);
+            //whisper.getJavaDefaultParams(WhisperSamplingStrategy.CRISPASR_SAMPLING_BEAM_SEARCH);
             modelInitialised = true;
         } catch (FileNotFoundException ex) {
             System.out.println("Model " + modelName + " not found");
@@ -40,10 +40,10 @@ class WhisperCppTest {
     @Test
     void testGetDefaultFullParams_BeamSearch() {
         // When
-        WhisperFullParams params = whisper.getFullDefaultParams(WhisperSamplingStrategy.WHISPER_SAMPLING_BEAM_SEARCH);
+        WhisperFullParams params = whisper.getFullDefaultParams(WhisperSamplingStrategy.CRISPASR_SAMPLING_BEAM_SEARCH);
 
         // Then
-        assertEquals(WhisperSamplingStrategy.WHISPER_SAMPLING_BEAM_SEARCH.ordinal(), params.strategy);
+        assertEquals(WhisperSamplingStrategy.CRISPASR_SAMPLING_BEAM_SEARCH.ordinal(), params.strategy);
         assertNotEquals(0, params.n_threads);
         assertEquals(16384, params.n_max_text_ctx);
         assertFalse(params.translate);
@@ -55,10 +55,10 @@ class WhisperCppTest {
     @Test
     void testGetDefaultFullParams_Greedy() {
         // When
-        WhisperFullParams params = whisper.getFullDefaultParams(WhisperSamplingStrategy.WHISPER_SAMPLING_GREEDY);
+        WhisperFullParams params = whisper.getFullDefaultParams(WhisperSamplingStrategy.CRISPASR_SAMPLING_GREEDY);
 
         // Then
-        assertEquals(WhisperSamplingStrategy.WHISPER_SAMPLING_GREEDY.ordinal(), params.strategy);
+        assertEquals(WhisperSamplingStrategy.CRISPASR_SAMPLING_GREEDY.ordinal(), params.strategy);
         assertNotEquals(0, params.n_threads);
         assertEquals(16384, params.n_max_text_ctx);
         assertEquals(5, params.greedy.best_of);
@@ -78,8 +78,8 @@ class WhisperCppTest {
         byte[] b = new byte[audioInputStream.available()];
         float[] floats = new float[b.length / 2];
 
-        //WhisperFullParams params = whisper.getFullDefaultParams(WhisperSamplingStrategy.WHISPER_SAMPLING_GREEDY);
-        WhisperFullParams.ByValue params = whisper.getFullDefaultParams(WhisperSamplingStrategy.WHISPER_SAMPLING_BEAM_SEARCH);
+        //WhisperFullParams params = whisper.getFullDefaultParams(WhisperSamplingStrategy.CRISPASR_SAMPLING_GREEDY);
+        WhisperFullParams.ByValue params = whisper.getFullDefaultParams(WhisperSamplingStrategy.CRISPASR_SAMPLING_BEAM_SEARCH);
         params.setProgressCallback((ctx, state, progress, user_data) -> System.out.println("progress: " + progress));
         params.print_progress = CBool.FALSE;
         //params.initial_prompt = "and so my fellow Americans um, like";
@@ -120,8 +120,8 @@ class WhisperCppTest {
         byte[] b = new byte[audioInputStream.available()];
         float[] floats = new float[b.length / 2];
 
-        //WhisperFullParams params = whisper.getFullDefaultParams(WhisperSamplingStrategy.WHISPER_SAMPLING_GREEDY);
-        WhisperFullParams.ByValue params = whisper.getFullDefaultParams(WhisperSamplingStrategy.WHISPER_SAMPLING_BEAM_SEARCH);
+        //WhisperFullParams params = whisper.getFullDefaultParams(WhisperSamplingStrategy.CRISPASR_SAMPLING_GREEDY);
+        WhisperFullParams.ByValue params = whisper.getFullDefaultParams(WhisperSamplingStrategy.CRISPASR_SAMPLING_BEAM_SEARCH);
         params.setProgressCallback((ctx, state, progress, user_data) -> System.out.println("progress: " + progress));
         params.print_progress = CBool.FALSE;
         //params.initial_prompt = "and so my fellow Americans um, like";

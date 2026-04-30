@@ -1,10 +1,10 @@
-if (WHISPER_SDL2)
+if (CRISPASR_SDL2)
     set(CMAKE_CXX_STANDARD 17)
     set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
     file(GLOB SRC_MODELS models/*.cpp)
 
-    set(TARGET whisper-talk-llama)
+    set(TARGET crispasr-talk-llama)
     add_executable(${TARGET} talk-llama.cpp
         llama.cpp
         llama-adapter.cpp

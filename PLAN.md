@@ -395,7 +395,7 @@ is complete.
    tag pattern `v{{version}}`. Alternatively for the first publish,
    run `dart pub publish` locally with the package owner's credentials.
 
-### Pattern (matches whisper.cpp approach)
+### Pattern (matches crispasr approach)
 
 All three wrappers are thin FFI/ctypes shims over the C ABI in
 `src/crispasr_c_api.cpp`. They do **not** bundle the native library — the

@@ -111,8 +111,8 @@ jobs:
             -DCMAKE_C_COMPILER=clang \
             -DCMAKE_CXX_COMPILER=clang++ \
             -G Ninja \
-            -DWHISPER_BUILD_TESTS=OFF \
-            -DWHISPER_BUILD_EXAMPLES=ON
+            -DCRISPASR_BUILD_TESTS=OFF \
+            -DCRISPASR_BUILD_EXAMPLES=ON
 
       - name: Build (clang-tidy fires on each TU)
         # tee the output so the full tidy log is visible in the Actions UI even

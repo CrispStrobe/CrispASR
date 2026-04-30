@@ -1,4 +1,4 @@
 /*
-This is the higher-level speech-to-text whisper.cpp API for go
+This is the higher-level speech-to-text crispasr API for go
 */
 package whisper

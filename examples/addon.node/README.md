@@ -1,7 +1,7 @@
-# whisper.cpp Node.js addon
+# crispasr Node.js addon
 
 This is an addon demo that can **perform whisper model reasoning in `node` and `electron` environments**, based on [cmake-js](https://github.com/cmake-js/cmake-js).
-It can be used as a reference for using the whisper.cpp project in other node projects.
+It can be used as a reference for using the crispasr project in other node projects.
 
 This addon now supports **Voice Activity Detection (VAD)** for improved transcription performance.
 
@@ -53,7 +53,7 @@ VAD can significantly improve transcription performance by only processing speec
 Before using VAD, download a VAD model:
 
 ```shell
-# From the whisper.cpp root directory
+# From the crispasr root directory
 ./models/download-vad-model.sh silero-v6.2.0
 ```
 
@@ -95,7 +95,7 @@ whisperAsync(vadParams).then(result => console.log(result));
 
 ## Supported Parameters
 
-Both traditional whisper.cpp parameters and new VAD parameters are supported:
+Both traditional crispasr parameters and new VAD parameters are supported:
 
 - `language`: Language code (e.g., "en", "es", "fr")
 - `model`: Path to whisper model file

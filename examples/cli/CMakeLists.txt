@@ -1,20 +1,20 @@
 #
-# crispasr — unified ASR CLI (formerly whisper-cli).
+# crispasr — unified ASR CLI (formerly crispasr).
 #
-# Drives all model backends in src/ (whisper, parakeet, canary, cohere,
+# Drives all model backends in src/ (crispasr, parakeet, canary, cohere,
 # qwen3, voxtral, voxtral4b, granite) from a single binary via the
 # --backend flag. When --backend is omitted or set to "whisper" the
-# historical whisper-cli code path is used unchanged.
+# historical crispasr code path is used unchanged.
 #
-# The CMake target was renamed from `whisper-cli` to `crispasr`.
-# A backward-compat `whisper-cli` symlink is created for legacy scripts.
+# The CMake target is named `crispasr-cli`, but the shipped binary stays
+# `crispasr` via OUTPUT_NAME for user-facing compatibility.
 
-set(TARGET crispasr)
+set(TARGET crispasr-cli)
 
 add_executable(${TARGET}
     cli.cpp
     crispasr_backend.cpp
-    crispasr_backend_whisper.cpp
+    crispasr_backend_crispasr.cpp
     crispasr_backend_parakeet.cpp
     crispasr_backend_canary.cpp
     crispasr_backend_cohere.cpp
@@ -128,7 +128,7 @@ add_executable(crispasr-diff
 )
 target_link_libraries(crispasr-diff PRIVATE
     common
-    whisper
+    crispasr
     parakeet
     canary
     cohere
@@ -153,7 +153,7 @@ include(DefaultTargetOptions)
 
 target_link_libraries(${TARGET} PRIVATE
     common
-    whisper
+    crispasr
     parakeet
     canary
     cohere
@@ -170,56 +170,11 @@ target_link_libraries(${TARGET} PRIVATE
     ${FFMPEG_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}
     $<$<BOOL:${WIN32}>:winhttp>
-    $<$<BOOL:${WHISPER_CURL}>:CURL::libcurl>
+    $<$<BOOL:${CRISPASR_CURL}>:CURL::libcurl>
 )
 
-if (WHISPER_CURL)
+if (CRISPASR_CURL)
     target_compile_definitions(${TARGET} PRIVATE CRISPASR_USE_LIBCURL)
 endif()
 
 install(TARGETS ${TARGET} RUNTIME BUNDLE DESTINATION bin)
-
-# ---------------------------------------------------------------------------
-# Backward-compat alias: `whisper-cli` binary name -> `crispasr`.
-# ---------------------------------------------------------------------------
-
-# 1) Build-tree alias so ./build/bin/whisper-cli works during development.
-#
-#    Some storage backends (network mounts, sandbox overlays) don't support
-#    symlinks. We try symlink first, then fall back to hardlink, then to a
-#    plain file copy. Any of these produces a usable whisper-cli binary.
-if (UNIX)
-    add_custom_command(TARGET ${TARGET} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E rm -f $<TARGET_FILE_DIR:${TARGET}>/whisper-cli
-        COMMAND ${CMAKE_COMMAND} -E create_symlink
-            crispasr $<TARGET_FILE_DIR:${TARGET}>/whisper-cli
-            || ${CMAKE_COMMAND} -E create_hardlink
-                $<TARGET_FILE_DIR:${TARGET}>/crispasr
-                $<TARGET_FILE_DIR:${TARGET}>/whisper-cli
-            || ${CMAKE_COMMAND} -E copy
-                $<TARGET_FILE_DIR:${TARGET}>/crispasr
-                $<TARGET_FILE_DIR:${TARGET}>/whisper-cli
-        VERBATIM USES_TERMINAL)
-endif()
-
-# 2) Install-tree alias (symlink preferred, hardlink/copy fallback).
-if (UNIX)
-    install(CODE "
-        set(_alias \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/bin/whisper-cli\")
-        file(REMOVE \"\${_alias}\")
-        execute_process(
-            COMMAND \${CMAKE_COMMAND} -E create_symlink crispasr \"\${_alias}\"
-            RESULT_VARIABLE _rc OUTPUT_QUIET ERROR_QUIET)
-        if (NOT _rc EQUAL 0)
-            execute_process(
-                COMMAND \${CMAKE_COMMAND} -E create_hardlink
-                    \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/bin/crispasr\" \"\${_alias}\"
-                RESULT_VARIABLE _rc OUTPUT_QUIET ERROR_QUIET)
-        endif()
-        if (NOT _rc EQUAL 0)
-            execute_process(
-                COMMAND \${CMAKE_COMMAND} -E copy
-                    \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/bin/crispasr\" \"\${_alias}\")
-        endif()
-    ")
-endif()

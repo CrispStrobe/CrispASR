@@ -14,12 +14,12 @@
 #include <vector>
 
 size_t unicode_len_utf8(char src) {
-    const size_t lookup[] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 3, 4 };
+    const size_t lookup[] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 3, 4};
     uint8_t highbits = static_cast<uint8_t>(src) >> 4;
     return lookup[highbits];
 }
 
-static std::string unicode_cpts_to_utf8(const std::vector<uint32_t> & cps) {
+static std::string unicode_cpts_to_utf8(const std::vector<uint32_t>& cps) {
     std::string result;
     for (size_t i = 0; i < cps.size(); ++i) {
         result.append(unicode_cpt_to_utf8(cps[i]));
@@ -27,7 +27,7 @@ static std::string unicode_cpts_to_utf8(const std::vector<uint32_t> & cps) {
     return result;
 }
 
-uint32_t unicode_cpt_from_utf8(const std::string & utf8, size_t & offset) {
+uint32_t unicode_cpt_from_utf8(const std::string& utf8, size_t& offset) {
     assert(offset < utf8.size());
     if (!(utf8[offset + 0] & 0x80)) {
         auto result = utf8[offset + 0];
@@ -38,7 +38,7 @@ uint32_t unicode_cpt_from_utf8(const std::string & utf8, size_t & offset) {
         throw std::invalid_argument("invalid character");
     }
     if (!(utf8[offset + 0] & 0x20)) {
-        if (offset + 1 >= utf8.size() || ! ((utf8[offset + 1] & 0xc0) == 0x80)) {
+        if (offset + 1 >= utf8.size() || !((utf8[offset + 1] & 0xc0) == 0x80)) {
             throw std::invalid_argument("invalid character");
         }
         auto result = ((utf8[offset + 0] & 0x1f) << 6) | (utf8[offset + 1] & 0x3f);
@@ -46,7 +46,7 @@ uint32_t unicode_cpt_from_utf8(const std::string & utf8, size_t & offset) {
         return result;
     }
     if (!(utf8[offset + 0] & 0x10)) {
-        if (offset + 2 >= utf8.size() || ! ((utf8[offset + 1] & 0xc0) == 0x80) || ! ((utf8[offset + 2] & 0xc0) == 0x80)) {
+        if (offset + 2 >= utf8.size() || !((utf8[offset + 1] & 0xc0) == 0x80) || !((utf8[offset + 2] & 0xc0) == 0x80)) {
             throw std::invalid_argument("invalid character");
         }
         auto result = ((utf8[offset + 0] & 0x0f) << 12) | ((utf8[offset + 1] & 0x3f) << 6) | (utf8[offset + 2] & 0x3f);
@@ -54,10 +54,12 @@ uint32_t unicode_cpt_from_utf8(const std::string & utf8, size_t & offset) {
         return result;
     }
     if (!(utf8[offset + 0] & 0x08)) {
-        if (offset + 3 >= utf8.size() || ! ((utf8[offset + 1] & 0xc0) == 0x80) || ! ((utf8[offset + 2] & 0xc0) == 0x80) || !((utf8[offset + 3] & 0xc0) == 0x80)) {
+        if (offset + 3 >= utf8.size() || !((utf8[offset + 1] & 0xc0) == 0x80) || !((utf8[offset + 2] & 0xc0) == 0x80) ||
+            !((utf8[offset + 3] & 0xc0) == 0x80)) {
             throw std::invalid_argument("invalid character");
         }
-        auto result = ((utf8[offset + 0] & 0x07) << 18) | ((utf8[offset + 1] & 0x3f) << 12) | ((utf8[offset + 2] & 0x3f) << 6) | (utf8[offset + 3] & 0x3f);
+        auto result = ((utf8[offset + 0] & 0x07) << 18) | ((utf8[offset + 1] & 0x3f) << 12) |
+                      ((utf8[offset + 2] & 0x3f) << 6) | (utf8[offset + 3] & 0x3f);
         offset += 4;
         return result;
     }
@@ -116,11 +118,11 @@ uint32_t unicode_cpt_from_utf8(const std::string & utf8, size_t & offset) {
 static std::vector<unicode_cpt_flags> unicode_cpt_flags_array() {
     std::vector<unicode_cpt_flags> cpt_flags(MAX_CODEPOINTS, unicode_cpt_flags::UNDEFINED);
 
-    assert (unicode_ranges_flags.begin()[0].first == 0);
-    assert (unicode_ranges_flags.begin()[unicode_ranges_flags.size()-1].first == MAX_CODEPOINTS);
+    assert(unicode_ranges_flags.begin()[0].first == 0);
+    assert(unicode_ranges_flags.begin()[unicode_ranges_flags.size() - 1].first == MAX_CODEPOINTS);
     for (size_t i = 1; i < unicode_ranges_flags.size(); ++i) {
-        const auto range_ini = unicode_ranges_flags.begin()[i-1];  // codepoint_ini, flags
-        const auto range_end = unicode_ranges_flags.begin()[i];    // codepoint_end, flags
+        const auto range_ini = unicode_ranges_flags.begin()[i - 1]; // codepoint_ini, flags
+        const auto range_end = unicode_ranges_flags.begin()[i];     // codepoint_end, flags
         for (uint32_t cpt = range_ini.first; cpt < range_end.first; ++cpt) {
             cpt_flags[cpt] = range_ini.second;
         }
@@ -138,7 +140,7 @@ static std::vector<unicode_cpt_flags> unicode_cpt_flags_array() {
         cpt_flags[p.second].is_uppercase = true;
     }
 
-    for (auto &range : unicode_ranges_nfd) {  // start, last, nfd
+    for (auto& range : unicode_ranges_nfd) { // start, last, nfd
         cpt_flags[range.nfd].is_nfd = true;
     }
 
@@ -147,15 +149,15 @@ static std::vector<unicode_cpt_flags> unicode_cpt_flags_array() {
 
 static std::unordered_map<uint8_t, std::string> unicode_byte_to_utf8_map() {
     std::unordered_map<uint8_t, std::string> map;
-    for (int ch = 0x21; ch <= 0x7E; ++ch) {  // u'!' to u'~'
+    for (int ch = 0x21; ch <= 0x7E; ++ch) { // u'!' to u'~'
         assert(0 <= ch && ch < 256);
         map[ch] = unicode_cpt_to_utf8(ch);
     }
-    for (int ch = 0xA1; ch <= 0xAC; ++ch) {  // u'¡' to u'¬'
+    for (int ch = 0xA1; ch <= 0xAC; ++ch) { // u'¡' to u'¬'
         assert(0 <= ch && ch < 256);
         map[ch] = unicode_cpt_to_utf8(ch);
     }
-    for (int ch = 0xAE; ch <= 0xFF; ++ch) {  // u'®' to u'ÿ'
+    for (int ch = 0xAE; ch <= 0xFF; ++ch) { // u'®' to u'ÿ'
         assert(0 <= ch && ch < 256);
         map[ch] = unicode_cpt_to_utf8(ch);
     }
@@ -171,15 +173,15 @@ static std::unordered_map<uint8_t, std::string> unicode_byte_to_utf8_map() {
 
 static std::unordered_map<std::string, uint8_t> unicode_utf8_to_byte_map() {
     std::unordered_map<std::string, uint8_t> map;
-    for (int ch = 0x21; ch <= 0x7E; ++ch) {  // u'!' to u'~'
+    for (int ch = 0x21; ch <= 0x7E; ++ch) { // u'!' to u'~'
         assert(0 <= ch && ch < 256);
         map[unicode_cpt_to_utf8(ch)] = ch;
     }
-    for (int ch = 0xA1; ch <= 0xAC; ++ch) {  // u'¡' to u'¬'
+    for (int ch = 0xA1; ch <= 0xAC; ++ch) { // u'¡' to u'¬'
         assert(0 <= ch && ch < 256);
         map[unicode_cpt_to_utf8(ch)] = ch;
     }
-    for (int ch = 0xAE; ch <= 0xFF; ++ch) {  // u'®' to u'ÿ'
+    for (int ch = 0xAE; ch <= 0xFF; ++ch) { // u'®' to u'ÿ'
         assert(0 <= ch && ch < 256);
         map[unicode_cpt_to_utf8(ch)] = ch;
     }
@@ -193,17 +195,17 @@ static std::unordered_map<std::string, uint8_t> unicode_utf8_to_byte_map() {
     return map;
 }
 
-static std::vector<std::string> unicode_byte_encoding_process(const std::vector<std::string> & bpe_words) {
+static std::vector<std::string> unicode_byte_encoding_process(const std::vector<std::string>& bpe_words) {
     std::vector<std::string> bpe_encoded_words;
-    for (const auto & word : bpe_words) {
+    for (const auto& word : bpe_words) {
         std::string text_utf;
-        auto utf_word =  unicode_cpts_from_utf8(word);
+        auto utf_word = unicode_cpts_from_utf8(word);
         for (size_t i = 0; i < utf_word.size(); ++i) {
             text_utf += unicode_cpt_to_utf8(utf_word[i]);
         }
 
         std::string encoded_token;
-        for (char & c : text_utf) {
+        for (char& c : text_utf) {
             encoded_token += unicode_byte_to_utf8(c);
         }
         bpe_encoded_words.emplace_back(encoded_token);
@@ -212,8 +214,9 @@ static std::vector<std::string> unicode_byte_encoding_process(const std::vector<
 }
 
 // GPT2 system regex:  's|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+
-static std::vector<size_t> unicode_regex_split_custom_gpt2(const std::string & text, const std::vector<size_t> & offsets) {
-    std::vector<size_t> bpe_offsets; // store the offset of each word
+static std::vector<size_t> unicode_regex_split_custom_gpt2(const std::string& text,
+                                                           const std::vector<size_t>& offsets) {
+    std::vector<size_t> bpe_offsets;     // store the offset of each word
     bpe_offsets.reserve(offsets.size()); // Reserve memory for the approximate size
 
     const auto cpts = unicode_cpts_from_utf8(text);
@@ -226,16 +229,17 @@ static std::vector<size_t> unicode_regex_split_custom_gpt2(const std::string & t
         start = offset_end;
 
         static const uint32_t OUT_OF_RANGE = 0xFFFFFFFF;
-        auto _get_cpt = [&] (const size_t pos) -> uint32_t {
+        auto _get_cpt = [&](const size_t pos) -> uint32_t {
             return (offset_ini <= pos && pos < offset_end) ? cpts[pos] : OUT_OF_RANGE;
         };
 
-        auto _get_flags = [&] (const size_t pos) -> unicode_cpt_flags {
-            return (offset_ini <= pos && pos < offset_end) ? unicode_cpt_flags_from_cpt(cpts[pos]) : unicode_cpt_flags{};
+        auto _get_flags = [&](const size_t pos) -> unicode_cpt_flags {
+            return (offset_ini <= pos && pos < offset_end) ? unicode_cpt_flags_from_cpt(cpts[pos])
+                                                           : unicode_cpt_flags{};
         };
 
         size_t _prev_end = offset_ini;
-        auto _add_token = [&] (const size_t end) -> size_t {
+        auto _add_token = [&](const size_t end) -> size_t {
             assert(_prev_end <= end && end <= offset_end);
             size_t len = end - _prev_end;
             if (len > 0) {
@@ -251,29 +255,28 @@ static std::vector<size_t> unicode_regex_split_custom_gpt2(const std::string & t
             return len;
         };
 
-        for (size_t pos = offset_ini; pos < offset_end; /*pos++*/ ) {
+        for (size_t pos = offset_ini; pos < offset_end; /*pos++*/) {
             const uint32_t cpt = _get_cpt(pos);
             const auto flags = _get_flags(pos);
 
             // regex: 's|'t|'re|'ve|'m|'ll|'d
-            if (cpt == '\'' && pos+1 < offset_end) {
-                uint32_t cpt_next = _get_cpt(pos+1);
+            if (cpt == '\'' && pos + 1 < offset_end) {
+                uint32_t cpt_next = _get_cpt(pos + 1);
                 if (cpt_next == 's' || cpt_next == 't' || cpt_next == 'm' || cpt_next == 'd') {
-                    pos += _add_token(pos+2);
+                    pos += _add_token(pos + 2);
                     continue;
                 }
-                if (pos+2 < offset_end) {
-                    uint32_t cpt_next_next = _get_cpt(pos+2);
-                    if ((cpt_next == 'r' && cpt_next_next == 'e') ||
-                        (cpt_next == 'v' && cpt_next_next == 'e') ||
+                if (pos + 2 < offset_end) {
+                    uint32_t cpt_next_next = _get_cpt(pos + 2);
+                    if ((cpt_next == 'r' && cpt_next_next == 'e') || (cpt_next == 'v' && cpt_next_next == 'e') ||
                         (cpt_next == 'l' && cpt_next_next == 'l')) {
-                        pos += _add_token(pos+3);
+                        pos += _add_token(pos + 3);
                         continue;
                     }
                 }
             }
 
-            auto flags2 = (cpt == ' ' ? _get_flags(pos+1) : flags);
+            auto flags2 = (cpt == ' ' ? _get_flags(pos + 1) : flags);
             // regex: <space>?\p{L}+
             if (flags2.is_letter) {
                 pos += (cpt == ' ');
@@ -303,12 +306,12 @@ static std::vector<size_t> unicode_regex_split_custom_gpt2(const std::string & t
             }
 
             size_t num_whitespaces = 0;
-            while (_get_flags(pos+num_whitespaces).is_whitespace) {
+            while (_get_flags(pos + num_whitespaces).is_whitespace) {
                 num_whitespaces++;
             }
 
             // regex: \s+(?!\S)
-            if (num_whitespaces > 1 && _get_cpt(pos+num_whitespaces) != OUT_OF_RANGE) {
+            if (num_whitespaces > 1 && _get_cpt(pos + num_whitespaces) != OUT_OF_RANGE) {
                 pos += num_whitespaces - 1;
                 _add_token(pos);
                 continue;
@@ -330,8 +333,9 @@ static std::vector<size_t> unicode_regex_split_custom_gpt2(const std::string & t
 }
 
 // LLAMA3 system regex: "(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+"
-static std::vector<size_t> unicode_regex_split_custom_llama3(const std::string & text, const std::vector<size_t> & offsets) {
-    std::vector<size_t> bpe_offsets; // store the offset of each word
+static std::vector<size_t> unicode_regex_split_custom_llama3(const std::string& text,
+                                                             const std::vector<size_t>& offsets) {
+    std::vector<size_t> bpe_offsets;     // store the offset of each word
     bpe_offsets.reserve(offsets.size()); // Reserve memory for the approximate size
 
     const auto cpts = unicode_cpts_from_utf8(text);
@@ -344,16 +348,17 @@ static std::vector<size_t> unicode_regex_split_custom_llama3(const std::string &
         start = offset_end;
 
         static const uint32_t OUT_OF_RANGE = 0xFFFFFFFF;
-        auto _get_cpt = [&] (const size_t pos) -> uint32_t {
+        auto _get_cpt = [&](const size_t pos) -> uint32_t {
             return (offset_ini <= pos && pos < offset_end) ? cpts[pos] : OUT_OF_RANGE;
         };
 
-        auto _get_flags = [&] (const size_t pos) -> unicode_cpt_flags {
-            return (offset_ini <= pos && pos < offset_end) ? unicode_cpt_flags_from_cpt(cpts[pos]) : unicode_cpt_flags{};
+        auto _get_flags = [&](const size_t pos) -> unicode_cpt_flags {
+            return (offset_ini <= pos && pos < offset_end) ? unicode_cpt_flags_from_cpt(cpts[pos])
+                                                           : unicode_cpt_flags{};
         };
 
         size_t _prev_end = offset_ini;
-        auto _add_token = [&] (const size_t end) -> size_t {
+        auto _add_token = [&](const size_t end) -> size_t {
             assert(_prev_end <= end && end <= offset_end);
             size_t len = end - _prev_end;
             if (len > 0) {
@@ -369,23 +374,22 @@ static std::vector<size_t> unicode_regex_split_custom_llama3(const std::string &
             return len;
         };
 
-        for (size_t pos = offset_ini; pos < offset_end; /*pos++*/ ) {
+        for (size_t pos = offset_ini; pos < offset_end; /*pos++*/) {
             const uint32_t cpt = _get_cpt(pos);
             const auto flags = _get_flags(pos);
 
             // regex: (?i:'s|'t|'re|'ve|'m|'ll|'d) // case insensitive
-            if (cpt == '\'' && pos+1 < offset_end) {
-                uint32_t cpt_next = unicode_tolower(_get_cpt(pos+1));
+            if (cpt == '\'' && pos + 1 < offset_end) {
+                uint32_t cpt_next = unicode_tolower(_get_cpt(pos + 1));
                 if (cpt_next == 's' || cpt_next == 't' || cpt_next == 'm' || cpt_next == 'd') {
-                    pos += _add_token(pos+2);
+                    pos += _add_token(pos + 2);
                     continue;
                 }
-                if (pos+2 < offset_end) {
-                    uint32_t cpt_next_next = unicode_tolower(_get_cpt(pos+2));
-                    if ((cpt_next == 'r' && cpt_next_next == 'e') ||
-                        (cpt_next == 'v' && cpt_next_next == 'e') ||
+                if (pos + 2 < offset_end) {
+                    uint32_t cpt_next_next = unicode_tolower(_get_cpt(pos + 2));
+                    if ((cpt_next == 'r' && cpt_next_next == 'e') || (cpt_next == 'v' && cpt_next_next == 'e') ||
                         (cpt_next == 'l' && cpt_next_next == 'l')) {
-                        pos += _add_token(pos+3);
+                        pos += _add_token(pos + 3);
                         continue;
                     }
                 }
@@ -393,7 +397,7 @@ static std::vector<size_t> unicode_regex_split_custom_llama3(const std::string &
 
             // regex: [^\r\n\p{L}\p{N}]?\p{L}+
             if (!(cpt == '\r' || cpt == '\n' || flags.is_number)) {
-                if (flags.is_letter || _get_flags(pos+1).is_letter) {  // one or more letters
+                if (flags.is_letter || _get_flags(pos + 1).is_letter) { // one or more letters
                     pos++;
                     while (_get_flags(pos).is_letter) {
                         pos++;
@@ -407,7 +411,7 @@ static std::vector<size_t> unicode_regex_split_custom_llama3(const std::string &
             if (flags.is_number) {
                 size_t ini = pos;
                 while (_get_flags(pos).is_number) {
-                    if (++pos - ini >= 3 ) {
+                    if (++pos - ini >= 3) {
                         _add_token(pos);
                         ini = pos;
                     }
@@ -417,7 +421,7 @@ static std::vector<size_t> unicode_regex_split_custom_llama3(const std::string &
             }
 
             // regex: <space>?[^\s\p{L}\p{N}]+[\r\n]*
-            auto flags2 = (cpt == ' ' ? _get_flags(pos+1) : flags);
+            auto flags2 = (cpt == ' ' ? _get_flags(pos + 1) : flags);
             if (!(flags2.is_whitespace | flags2.is_letter | flags2.is_number) && flags.as_uint()) {
                 pos += (cpt == ' ');
                 while (!(flags2.is_whitespace | flags2.is_letter | flags2.is_number) && flags2.as_uint()) {
@@ -433,8 +437,8 @@ static std::vector<size_t> unicode_regex_split_custom_llama3(const std::string &
 
             size_t num_whitespaces = 0;
             size_t last_end_r_or_n = 0;
-            while (_get_flags(pos+num_whitespaces).is_whitespace) {
-                uint32_t cpt2 = _get_cpt(pos+num_whitespaces);
+            while (_get_flags(pos + num_whitespaces).is_whitespace) {
+                uint32_t cpt2 = _get_cpt(pos + num_whitespaces);
                 if (cpt2 == '\r' || cpt2 == '\n') {
                     last_end_r_or_n = pos + num_whitespaces + 1;
                 }
@@ -449,7 +453,7 @@ static std::vector<size_t> unicode_regex_split_custom_llama3(const std::string &
             }
 
             // regex: \s+(?!\S)
-            if (num_whitespaces > 1 && _get_cpt(pos+num_whitespaces) != OUT_OF_RANGE) {
+            if (num_whitespaces > 1 && _get_cpt(pos + num_whitespaces) != OUT_OF_RANGE) {
                 pos += num_whitespaces - 1;
                 _add_token(pos);
                 continue;
@@ -471,7 +475,9 @@ static std::vector<size_t> unicode_regex_split_custom_llama3(const std::string &
 }
 
 template <typename CharT>
-static std::vector<size_t> unicode_regex_split_stl(const std::basic_string<CharT> & text, const std::basic_string<CharT> & regex, const std::vector<size_t> & offsets) {
+static std::vector<size_t> unicode_regex_split_stl(const std::basic_string<CharT>& text,
+                                                   const std::basic_string<CharT>& regex,
+                                                   const std::vector<size_t>& offsets) {
     using BidirIt = typename std::basic_string<CharT>::const_iterator;
 #ifdef _MSC_VER
     // Bypass bug in MSVC: https://github.com/ggml-org/llama.cpp/issues/17830
@@ -480,7 +486,7 @@ static std::vector<size_t> unicode_regex_split_stl(const std::basic_string<CharT
     constexpr auto regex_flags = std::regex_constants::optimize | std::regex_constants::nosubs;
 #endif
     std::basic_regex<CharT> expr(regex, regex_flags);
-    std::vector<size_t> bpe_offsets; // store the offset of each word
+    std::vector<size_t> bpe_offsets;     // store the offset of each word
     bpe_offsets.reserve(offsets.size()); // Reserve memory for the approximate size
     size_t start = 0;
     for (auto offset : offsets) {
@@ -498,7 +504,7 @@ static std::vector<size_t> unicode_regex_split_stl(const std::basic_string<CharT
             ++it;
         }
 
-        if (start_idx < (int64_t) offset) {
+        if (start_idx < (int64_t)offset) {
             bpe_offsets.emplace_back(offset - start_idx);
         }
         start += offset;
@@ -509,7 +515,8 @@ static std::vector<size_t> unicode_regex_split_stl(const std::basic_string<CharT
 
 // K2 system regex patterns (from tokenization_kimi.py):
 // [\p{Han}]+|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}&&[^\p{Han}]]*[\p{Ll}\p{Lm}\p{Lo}\p{M}&&[^\p{Han}]]+(?i:'s|'t|'re|'ve|'m|'ll|'d)?|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}&&[^\p{Han}]]+[\p{Ll}\p{Lm}\p{Lo}\p{M}&&[^\p{Han}]]*(?i:'s|'t|'re|'ve|'m|'ll|'d)?|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+
-static std::vector<size_t> unicode_regex_split_custom_kimi_k2(const std::string & text, const std::vector<size_t> & offsets) {
+static std::vector<size_t> unicode_regex_split_custom_kimi_k2(const std::string& text,
+                                                              const std::vector<size_t>& offsets) {
     std::vector<size_t> bpe_offsets;
     bpe_offsets.reserve(offsets.size());
 
@@ -523,16 +530,17 @@ static std::vector<size_t> unicode_regex_split_custom_kimi_k2(const std::string 
         start = offset_end;
 
         static const uint32_t OUT_OF_RANGE = 0xFFFFFFFF;
-        auto _get_cpt = [&] (const size_t pos) -> uint32_t {
+        auto _get_cpt = [&](const size_t pos) -> uint32_t {
             return (offset_ini <= pos && pos < offset_end) ? cpts[pos] : OUT_OF_RANGE;
         };
 
-        auto _get_flags = [&] (const size_t pos) -> unicode_cpt_flags {
-            return (offset_ini <= pos && pos < offset_end) ? unicode_cpt_flags_from_cpt(cpts[pos]) : unicode_cpt_flags{};
+        auto _get_flags = [&](const size_t pos) -> unicode_cpt_flags {
+            return (offset_ini <= pos && pos < offset_end) ? unicode_cpt_flags_from_cpt(cpts[pos])
+                                                           : unicode_cpt_flags{};
         };
 
         size_t _prev_end = offset_ini;
-        auto _add_token = [&] (const size_t end) -> size_t {
+        auto _add_token = [&](const size_t end) -> size_t {
             assert(_prev_end <= end && end <= offset_end);
             size_t len = end - _prev_end;
             if (len > 0) {
@@ -542,7 +550,7 @@ static std::vector<size_t> unicode_regex_split_custom_kimi_k2(const std::string 
             return len;
         };
 
-        for (size_t pos = offset_ini; pos < offset_end; /*pos++*/ ) {
+        for (size_t pos = offset_ini; pos < offset_end; /*pos++*/) {
             const uint32_t cpt = _get_cpt(pos);
             const auto flags = _get_flags(pos);
 
@@ -579,8 +587,10 @@ static std::vector<size_t> unicode_regex_split_custom_kimi_k2(const std::string 
                 }
 
                 // Only proceed if we found letters (after potentially skipping leading char)
-                if (has_letters || (!has_leading_char && _get_flags(pos).is_letter && !unicode_cpt_is_han(_get_cpt(pos)))) {
-                    if (!has_letters) pos++; // consume the first letter if we didn't already
+                if (has_letters ||
+                    (!has_leading_char && _get_flags(pos).is_letter && !unicode_cpt_is_han(_get_cpt(pos)))) {
+                    if (!has_letters)
+                        pos++; // consume the first letter if we didn't already
 
                     // Continue consuming letters
                     while (_get_flags(pos).is_letter && !unicode_cpt_is_han(_get_cpt(pos))) {
@@ -680,7 +690,8 @@ static std::vector<size_t> unicode_regex_split_custom_kimi_k2(const std::string 
 }
 
 // AFMOE digit handling: splits digits with leading 1-2 based on total length modulo 3
-static std::vector<size_t> unicode_regex_split_custom_afmoe(const std::string & text, const std::vector<size_t> & offsets) {
+static std::vector<size_t> unicode_regex_split_custom_afmoe(const std::string& text,
+                                                            const std::vector<size_t>& offsets) {
     std::vector<size_t> bpe_offsets;
     bpe_offsets.reserve(offsets.size());
 
@@ -693,12 +704,13 @@ static std::vector<size_t> unicode_regex_split_custom_afmoe(const std::string & 
         assert(offset_end <= cpts.size());
         start = offset_end;
 
-        auto _get_flags = [&] (const size_t pos) -> unicode_cpt_flags {
-            return (offset_ini <= pos && pos < offset_end) ? unicode_cpt_flags_from_cpt(cpts[pos]) : unicode_cpt_flags{};
+        auto _get_flags = [&](const size_t pos) -> unicode_cpt_flags {
+            return (offset_ini <= pos && pos < offset_end) ? unicode_cpt_flags_from_cpt(cpts[pos])
+                                                           : unicode_cpt_flags{};
         };
 
         size_t _prev_end = offset_ini;
-        auto _add_token = [&] (const size_t end) -> size_t {
+        auto _add_token = [&](const size_t end) -> size_t {
             assert(_prev_end <= end && end <= offset_end);
             size_t len = end - _prev_end;
             if (len > 0) {
@@ -708,7 +720,7 @@ static std::vector<size_t> unicode_regex_split_custom_afmoe(const std::string & 
             return len;
         };
 
-        for (size_t pos = offset_ini; pos < offset_end; ) {
+        for (size_t pos = offset_ini; pos < offset_end;) {
             const auto flags = _get_flags(pos);
 
             // Handle digit sequences with special splitting logic
@@ -753,15 +765,16 @@ static std::vector<size_t> unicode_regex_split_custom_afmoe(const std::string & 
     return bpe_offsets;
 }
 
-static std::vector<size_t> unicode_regex_split_custom(const std::string & text, const std::string & regex_expr, const std::vector<size_t> & offsets) {
+static std::vector<size_t> unicode_regex_split_custom(const std::string& text, const std::string& regex_expr,
+                                                      const std::vector<size_t>& offsets) {
     std::vector<size_t> bpe_offsets;
 
     if (regex_expr == "'s|'t|'re|'ve|'m|'ll|'d| ?\\p{L}+| ?\\p{N}+| ?[^\\s\\p{L}\\p{N}]+|\\s+(?!\\S)") {
         bpe_offsets = unicode_regex_split_custom_gpt2(text, offsets);
-    } else if (
-            regex_expr == "(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}{1,3}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+" ||
-            regex_expr == "(?:'[sS]|'[tT]|'[rR][eE]|'[vV][eE]|'[mM]|'[lL][lL]|'[dD])|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}{1,3}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+") {
-
+    } else if (regex_expr == "(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}{1,3}| "
+                             "?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+" ||
+               regex_expr == "(?:'[sS]|'[tT]|'[rR][eE]|'[vV][eE]|'[mM]|'[lL][lL]|'[dD])|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|"
+                             "\\p{N}{1,3}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+") {
         bpe_offsets = unicode_regex_split_custom_llama3(text, offsets);
     } else if (regex_expr == "\\p{Han}+") {
         // K2's first pattern - handle all K2 patterns together
@@ -813,10 +826,8 @@ std::string unicode_cpt_to_utf8(uint32_t cpt) {
     throw std::invalid_argument("invalid codepoint");
 }
 
-std::vector<uint32_t> unicode_cpts_normalize_nfd(const std::vector<uint32_t> & cpts) {
-    auto comp = [] (const uint32_t cpt, const range_nfd & range) {
-        return cpt < range.first;
-    };
+std::vector<uint32_t> unicode_cpts_normalize_nfd(const std::vector<uint32_t>& cpts) {
+    auto comp = [](const uint32_t cpt, const range_nfd& range) { return cpt < range.first; };
     std::vector<uint32_t> result(cpts.size());
     for (size_t i = 0; i < cpts.size(); ++i) {
         const uint32_t cpt = cpts[i];
@@ -826,15 +837,14 @@ std::vector<uint32_t> unicode_cpts_normalize_nfd(const std::vector<uint32_t> & c
     return result;
 }
 
-std::vector<uint32_t> unicode_cpts_from_utf8(const std::string & utf8) {
+std::vector<uint32_t> unicode_cpts_from_utf8(const std::string& utf8) {
     std::vector<uint32_t> result;
     result.reserve(utf8.size());
     size_t offset = 0;
     while (offset < utf8.size()) {
         try {
             result.push_back(unicode_cpt_from_utf8(utf8, offset));
-        }
-        catch (const std::invalid_argument & /*ex*/) {
+        } catch (const std::invalid_argument& /*ex*/) {
             // Silently ignore invalid UTF-8 input to avoid leaking the exception beyond llama_tokenize
             ++offset;
             result.emplace_back(0xFFFD); // replacement character
@@ -849,10 +859,10 @@ unicode_cpt_flags unicode_cpt_flags_from_cpt(const uint32_t cpt) {
     return cpt < cpt_flags.size() ? cpt_flags[cpt] : undef;
 }
 
-unicode_cpt_flags unicode_cpt_flags_from_utf8(const std::string & utf8) {
+unicode_cpt_flags unicode_cpt_flags_from_utf8(const std::string& utf8) {
     static const unicode_cpt_flags undef(unicode_cpt_flags::UNDEFINED);
     if (utf8.empty()) {
-        return undef;  // undefined
+        return undef; // undefined
     }
     size_t offset = 0;
     return unicode_cpt_flags_from_cpt(unicode_cpt_from_utf8(utf8, offset));
@@ -863,91 +873,95 @@ std::string unicode_byte_to_utf8(uint8_t byte) {
     return map.at(byte);
 }
 
-uint8_t unicode_utf8_to_byte(const std::string & utf8) {
+uint8_t unicode_utf8_to_byte(const std::string& utf8) {
     static std::unordered_map<std::string, uint8_t> map = unicode_utf8_to_byte_map();
     return map.at(utf8);
 }
 
 uint32_t unicode_tolower(uint32_t cpt) {
     // binary search
-    auto it = std::lower_bound(unicode_map_lowercase.begin(), unicode_map_lowercase.end(), cpt,
-        [](const std::pair<uint32_t, uint32_t> & pair, uint32_t value) {
-            return pair.first < value;
-        });
+    auto it =
+        std::lower_bound(unicode_map_lowercase.begin(), unicode_map_lowercase.end(), cpt,
+                         [](const std::pair<uint32_t, uint32_t>& pair, uint32_t value) { return pair.first < value; });
     if (it != unicode_map_lowercase.end() && it->first == cpt) {
         return it->second;
     }
-    return cpt;  // Return the original code point if no lowercase mapping is found
+    return cpt; // Return the original code point if no lowercase mapping is found
 }
 
 bool unicode_cpt_is_han(uint32_t cpt) {
     // Han character ranges (Chinese/CJK characters)
     // CJK Unified Ideographs (most common)
-    if (cpt >= 0x4E00 && cpt <= 0x9FFF) return true;
+    if (cpt >= 0x4E00 && cpt <= 0x9FFF)
+        return true;
 
     // CJK Extension A
-    if (cpt >= 0x3400 && cpt <= 0x4DBF) return true;
+    if (cpt >= 0x3400 && cpt <= 0x4DBF)
+        return true;
 
     // CJK Extension B
-    if (cpt >= 0x20000 && cpt <= 0x2A6DF) return true;
+    if (cpt >= 0x20000 && cpt <= 0x2A6DF)
+        return true;
 
     // CJK Extension C
-    if (cpt >= 0x2A700 && cpt <= 0x2B73F) return true;
+    if (cpt >= 0x2A700 && cpt <= 0x2B73F)
+        return true;
 
     // CJK Extension D
-    if (cpt >= 0x2B740 && cpt <= 0x2B81F) return true;
+    if (cpt >= 0x2B740 && cpt <= 0x2B81F)
+        return true;
 
     // CJK Extension E
-    if (cpt >= 0x2B820 && cpt <= 0x2CEAF) return true;
+    if (cpt >= 0x2B820 && cpt <= 0x2CEAF)
+        return true;
 
     // CJK Extension F
-    if (cpt >= 0x2CEB0 && cpt <= 0x2EBEF) return true;
+    if (cpt >= 0x2CEB0 && cpt <= 0x2EBEF)
+        return true;
 
     // CJK Compatibility Ideographs
-    if (cpt >= 0xF900 && cpt <= 0xFAFF) return true;
+    if (cpt >= 0xF900 && cpt <= 0xFAFF)
+        return true;
 
     // CJK Compatibility Ideographs Supplement
-    if (cpt >= 0x2F800 && cpt <= 0x2FA1F) return true;
+    if (cpt >= 0x2F800 && cpt <= 0x2FA1F)
+        return true;
 
     return false;
 }
 
-std::vector<std::string> unicode_regex_split(const std::string & text, const std::vector<std::string> & regex_exprs) {
+std::vector<std::string> unicode_regex_split(const std::string& text, const std::vector<std::string>& regex_exprs) {
     // unicode categories
     static const std::map<std::string, int> k_ucat_enum = {
-        { "\\p{N}", unicode_cpt_flags::NUMBER },
-        { "\\p{L}", unicode_cpt_flags::LETTER },
-        { "\\p{P}", unicode_cpt_flags::PUNCTUATION },
-        { "\\p{M}", unicode_cpt_flags::ACCENT_MARK },
-        { "\\p{S}", unicode_cpt_flags::SYMBOL },
-        { "\\p{Lu}", unicode_cpt_flags::LETTER }, // Uppercase letter
-        { "\\p{Ll}", unicode_cpt_flags::LETTER }, // Lowercase letter
-        { "\\p{Lt}", unicode_cpt_flags::LETTER }, // Titlecase letter
-        { "\\p{Lm}", unicode_cpt_flags::LETTER }, // Modifier letter
-        { "\\p{Lo}", unicode_cpt_flags::LETTER }, // Other letter
+        {"\\p{N}", unicode_cpt_flags::NUMBER},      {"\\p{L}", unicode_cpt_flags::LETTER},
+        {"\\p{P}", unicode_cpt_flags::PUNCTUATION}, {"\\p{M}", unicode_cpt_flags::ACCENT_MARK},
+        {"\\p{S}", unicode_cpt_flags::SYMBOL},      {"\\p{Lu}", unicode_cpt_flags::LETTER}, // Uppercase letter
+        {"\\p{Ll}", unicode_cpt_flags::LETTER},                                             // Lowercase letter
+        {"\\p{Lt}", unicode_cpt_flags::LETTER},                                             // Titlecase letter
+        {"\\p{Lm}", unicode_cpt_flags::LETTER},                                             // Modifier letter
+        {"\\p{Lo}", unicode_cpt_flags::LETTER},                                             // Other letter
     };
 
     static const std::map<int, int> k_ucat_cpt = {
-        { unicode_cpt_flags::NUMBER,      0xD1 },
-        { unicode_cpt_flags::LETTER,      0xD2 },
-        { unicode_cpt_flags::PUNCTUATION, 0xD3 },
-        { unicode_cpt_flags::ACCENT_MARK, 0xD4 },
-        { unicode_cpt_flags::SYMBOL,      0xD5 },
+        {unicode_cpt_flags::NUMBER, 0xD1},      {unicode_cpt_flags::LETTER, 0xD2},
+        {unicode_cpt_flags::PUNCTUATION, 0xD3}, {unicode_cpt_flags::ACCENT_MARK, 0xD4},
+        {unicode_cpt_flags::SYMBOL, 0xD5},
     };
 
     static const std::map<int, std::string> k_ucat_map = {
-        { unicode_cpt_flags::NUMBER,      "\x30-\x39" }, // 0-9
-        { unicode_cpt_flags::LETTER,      "\x41-\x5A\x61-\x7A" }, // A-Za-z
-        { unicode_cpt_flags::PUNCTUATION, "\x21-\x23\x25-\x2A\x2C-\x2F\x3A-\x3B\x3F-\x40\\\x5B-\\\x5D\x5F\\\x7B\\\x7D" }, // !-#%-*,-/:-;?-@\[-\]_\{\}
-        { unicode_cpt_flags::ACCENT_MARK, "" }, // no sub-128 codepoints
-        { unicode_cpt_flags::SYMBOL,      "\\\x24\\\x2B\x3C-\x3E\x5E\x60\\\x7C" }, // $+<=>^`|
+        {unicode_cpt_flags::NUMBER, "\x30-\x39"},          // 0-9
+        {unicode_cpt_flags::LETTER, "\x41-\x5A\x61-\x7A"}, // A-Za-z
+        {unicode_cpt_flags::PUNCTUATION,
+         "\x21-\x23\x25-\x2A\x2C-\x2F\x3A-\x3B\x3F-\x40\\\x5B-\\\x5D\x5F\\\x7B\\\x7D"}, // !-#%-*,-/:-;?-@\[-\]_\{\}
+        {unicode_cpt_flags::ACCENT_MARK, ""},                                           // no sub-128 codepoints
+        {unicode_cpt_flags::SYMBOL, "\\\x24\\\x2B\x3C-\x3E\x5E\x60\\\x7C"},             // $+<=>^`|
     };
 
     // compute collapsed codepoints only if needed by at least one regex
     bool need_collapse = false;
-    for (const auto & regex_expr : regex_exprs) {
+    for (const auto& regex_expr : regex_exprs) {
         // search for unicode categories
-        for (const auto & ucat : k_ucat_enum) {
+        for (const auto& ucat : k_ucat_enum) {
             if (std::string::npos != regex_expr.find(ucat.first)) {
                 need_collapse = true;
                 break;
@@ -976,18 +990,18 @@ std::vector<std::string> unicode_regex_split(const std::string & text, const std
             if (flags.is_whitespace) {
                 //NOTE: C++ std::regex \s does not mach 0x85, Rust and Python regex does.
                 //text_collapsed[i] = (char) 0x85;  // <Next Line> as whitespace fallback
-                text_collapsed[i] = (char) 0x0B;    // <vertical tab> as whitespace fallback
+                text_collapsed[i] = (char)0x0B; // <vertical tab> as whitespace fallback
             } else if (k_ucat_cpt.find(flags.category_flag()) != k_ucat_cpt.end()) {
                 text_collapsed[i] = k_ucat_cpt.at(flags.category_flag());
             } else {
-                text_collapsed[i] = (char) 0xD0; // fallback
+                text_collapsed[i] = (char)0xD0; // fallback
             }
         }
     }
 
-    std::vector<size_t> bpe_offsets = { cpts.size() };
+    std::vector<size_t> bpe_offsets = {cpts.size()};
 
-    for (const auto & regex_expr : regex_exprs) {
+    for (const auto& regex_expr : regex_exprs) {
         // first, see if we have an efficient custom regex implementation
         auto tmp = unicode_regex_split_custom(text, regex_expr, bpe_offsets);
 
@@ -1001,7 +1015,7 @@ std::vector<std::string> unicode_regex_split(const std::string & text, const std
             // if a unicode category is used in the regex, we use the collapsed text and replace the unicode category
             // with the corresponding collapsed representation
             bool use_collapsed = false;
-            for (const auto & ucat : k_ucat_enum) {
+            for (const auto& ucat : k_ucat_enum) {
                 if (std::string::npos != regex_expr.find(ucat.first)) {
                     use_collapsed = true;
                     break;
@@ -1013,7 +1027,8 @@ std::vector<std::string> unicode_regex_split(const std::string & text, const std
                 // sanity-check that the original regex does not contain any non-ASCII characters
                 for (size_t i = 0; i < cpts_regex.size(); ++i) {
                     if (cpts_regex[i] >= 128) {
-                        throw std::runtime_error("Regex includes both unicode categories and non-ASCII characters - not supported");
+                        throw std::runtime_error(
+                            "Regex includes both unicode categories and non-ASCII characters - not supported");
                     }
                 }
 
@@ -1036,8 +1051,7 @@ std::vector<std::string> unicode_regex_split(const std::string & text, const std
                     }
 
                     // Match \p{...} Unicode properties of varying lengths
-                    if (regex_expr[i + 0] == '\\' && i + 3 < regex_expr.size() &&
-                        regex_expr[i + 1] == 'p' &&
+                    if (regex_expr[i + 0] == '\\' && i + 3 < regex_expr.size() && regex_expr[i + 1] == 'p' &&
                         regex_expr[i + 2] == '{') {
                         // Find the closing brace
                         size_t closing_brace = regex_expr.find('}', i + 3);
@@ -1080,7 +1094,7 @@ std::vector<std::string> unicode_regex_split(const std::string & text, const std
                 //printf("regex_expr: %s\n", regex_expr.c_str());
                 bpe_offsets = unicode_regex_split_stl(wtext, wregex_expr, bpe_offsets);
             }
-        } catch (std::regex_error & e) {
+        } catch (std::regex_error& e) {
             fprintf(stderr, "Failed to process regex: '%s'\n", regex_expr.c_str());
             fprintf(stderr, "Regex error: %s\n", e.what());
             throw std::runtime_error("Failed to process regex");
@@ -1091,7 +1105,7 @@ std::vector<std::string> unicode_regex_split(const std::string & text, const std
     bpe_words.reserve(bpe_offsets.size()); // reserve memory for the approximate size
 
     size_t start = 0;
-    for (size_t & offset : bpe_offsets) {
+    for (size_t& offset : bpe_offsets) {
         bpe_words.emplace_back();
         for (size_t i = start; i < start + offset; ++i) {
             bpe_words.back() += unicode_cpt_to_utf8(cpts[i]);

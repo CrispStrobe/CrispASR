@@ -1,14 +1,14 @@
 {
-  "name": "whisper.cpp",
+  "name": "crispasr",
   "version": "@PROJECT_VERSION@",
-  "description": "Whisper speech recognition",
-  "main": "whisper.js",
+  "description": "CrispASR speech recognition",
+  "main": "crispasr.js",
   "scripts": {
     "test": "echo \"todo: add tests\" && exit 0"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ggerganov/whisper.cpp"
+    "url": "git+https://github.com/CrispStrobe/CrispASR"
   },
   "keywords": [
     "openai",
@@ -20,7 +20,7 @@
   "author": "Georgi Gerganov",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/ggerganov/whisper.cpp/issues"
+    "url": "https://github.com/CrispStrobe/CrispASR/issues"
   },
-  "homepage": "https://github.com/ggerganov/whisper.cpp#readme"
+  "homepage": "https://github.com/CrispStrobe/CrispASR#readme"
 }

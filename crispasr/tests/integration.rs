@@ -1,7 +1,7 @@
 //! Integration tests for the CrispASR Rust wrapper.
 //!
 //! Requires:
-//!   - whisper-tiny model at WHISPER_MODEL env var (or ../models/ggml-tiny.en.bin)
+//!   - whisper-tiny model at CRISPASR_MODEL env var (or ../models/ggml-tiny.en.bin)
 //!   - parakeet model at PARAKEET_MODEL env var (optional, skipped if absent)
 //!   - jfk.wav at ../samples/jfk.wav
 
@@ -17,7 +17,7 @@ fn jfk_pcm() -> Vec<f32> {
 }
 
 fn whisper_model() -> String {
-    std::env::var("WHISPER_MODEL").unwrap_or_else(|_| {
+    std::env::var("CRISPASR_MODEL").unwrap_or_else(|_| {
         concat!(env!("CARGO_MANIFEST_DIR"), "/../models/ggml-tiny.en.bin").to_string()
     })
 }

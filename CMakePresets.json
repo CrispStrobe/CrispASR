@@ -4,12 +4,13 @@
     {
       "name": "default",
       "displayName": "Default",
-      "description": "Default build — Release, no ccache warning, OpenMP optional",
+      "description": "Default build — Release, no ccache warning, tests off, OpenMP optional",
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "GGML_CCACHE":      "OFF",
-        "GGML_OPENMP":      "OFF"
+        "GGML_OPENMP":      "OFF",
+        "CRISPASR_BUILD_TESTS": "OFF"
       }
     },
     {
@@ -40,9 +41,9 @@
       "inherits": "debug",
       "binaryDir": "${sourceDir}/build-asan",
       "cacheVariables": {
-        "WHISPER_SANITIZE_ADDRESS":   "ON",
-        "WHISPER_SANITIZE_UNDEFINED": "OFF",
-        "WHISPER_SANITIZE_THREAD":    "OFF"
+        "CRISPASR_SANITIZE_ADDRESS":   "ON",
+        "CRISPASR_SANITIZE_UNDEFINED": "OFF",
+        "CRISPASR_SANITIZE_THREAD":    "OFF"
       }
     },
     {
@@ -52,9 +53,9 @@
       "inherits": "debug",
       "binaryDir": "${sourceDir}/build-ubsan",
       "cacheVariables": {
-        "WHISPER_SANITIZE_ADDRESS":   "OFF",
-        "WHISPER_SANITIZE_UNDEFINED": "ON",
-        "WHISPER_SANITIZE_THREAD":    "OFF"
+        "CRISPASR_SANITIZE_ADDRESS":   "OFF",
+        "CRISPASR_SANITIZE_UNDEFINED": "ON",
+        "CRISPASR_SANITIZE_THREAD":    "OFF"
       }
     },
     {
@@ -64,9 +65,9 @@
       "inherits": "debug",
       "binaryDir": "${sourceDir}/build-sanitize",
       "cacheVariables": {
-        "WHISPER_SANITIZE_ADDRESS":   "ON",
-        "WHISPER_SANITIZE_UNDEFINED": "ON",
-        "WHISPER_SANITIZE_THREAD":    "OFF"
+        "CRISPASR_SANITIZE_ADDRESS":   "ON",
+        "CRISPASR_SANITIZE_UNDEFINED": "ON",
+        "CRISPASR_SANITIZE_THREAD":    "OFF"
       }
     },
     {
@@ -76,9 +77,9 @@
       "inherits": "debug",
       "binaryDir": "${sourceDir}/build-tsan",
       "cacheVariables": {
-        "WHISPER_SANITIZE_ADDRESS":   "OFF",
-        "WHISPER_SANITIZE_UNDEFINED": "OFF",
-        "WHISPER_SANITIZE_THREAD":    "ON"
+        "CRISPASR_SANITIZE_ADDRESS":   "OFF",
+        "CRISPASR_SANITIZE_UNDEFINED": "OFF",
+        "CRISPASR_SANITIZE_THREAD":    "ON"
       }
     },
     {

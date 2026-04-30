@@ -76,7 +76,7 @@ SLOW_BACKENDS = [
 # Per-backend model registry: (local_filename, hf_repo, hf_filename)
 # local_filename is what we look for on disk; download saves under same name.
 MODEL_REGISTRY = {
-    "whisper":           ("ggml-base.bin",                       "ggerganov/whisper.cpp",                     "ggml-base.bin"),
+    "whisper":           ("ggml-base.bin",                       "ggerganov/crispasr",                     "ggml-base.bin"),
     "parakeet":          ("parakeet-tdt-0.6b-v3-q4_k.gguf",      "cstr/parakeet-tdt-0.6b-v3-GGUF",            "parakeet-tdt-0.6b-v3-q4_k.gguf"),
     "moonshine":         ("moonshine-tiny-q4_k.gguf",            "cstr/moonshine-tiny-GGUF",                  "moonshine-tiny-q4_k.gguf"),
     "wav2vec2":          ("wav2vec2-xlsr-en-q4_k.gguf",          "cstr/wav2vec2-large-xlsr-53-english-GGUF",  "wav2vec2-xlsr-en-q4_k.gguf"),

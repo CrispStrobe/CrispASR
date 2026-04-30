@@ -2,7 +2,7 @@
 //
 // Requires CRISPASR_LIB pointing at the built libwhisper and model files:
 //   CRISPASR_LIB=../../../build-shared/src/libwhisper.so \
-//   WHISPER_MODEL=../../../models/ggml-tiny.en.bin \
+//   CRISPASR_MODEL=../../../models/ggml-tiny.en.bin \
 //   dart test/transcription_test.dart
 
 import 'dart:ffi';
@@ -39,7 +39,7 @@ void main() {
   });
 
   test('session open + transcribe whisper-tiny', () {
-    final modelPath = Platform.environment['WHISPER_MODEL'] ??
+    final modelPath = Platform.environment['CRISPASR_MODEL'] ??
         '${Directory.current.parent.parent.path}/models/ggml-tiny.en.bin';
     if (!File(modelPath).existsSync()) {
       print('SKIP: whisper model not found at $modelPath');

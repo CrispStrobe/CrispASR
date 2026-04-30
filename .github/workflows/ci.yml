@@ -25,7 +25,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y cmake g++ libopenblas-dev
 
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGGML_OPENBLAS=ON -DWHISPER_BUILD_TESTS=OFF -DGGML_NATIVE=OFF
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGGML_OPENBLAS=ON -DCRISPASR_BUILD_TESTS=OFF -DGGML_NATIVE=OFF
 
       - name: Build
         run: cmake --build build --target crispasr crispasr-diff crispasr-quantize -j $(nproc)
@@ -58,7 +58,7 @@ jobs:
           sudo apt-get install -y cmake g++ libvulkan-dev spirv-headers shaderc
 
       - name: Configure with Vulkan
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGGML_VULKAN=ON -DWHISPER_BUILD_TESTS=OFF
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGGML_VULKAN=ON -DCRISPASR_BUILD_TESTS=OFF
 
       - name: Build
         run: cmake --build build --target crispasr -j $(nproc)
@@ -77,7 +77,7 @@ jobs:
           submodules: recursive
 
       - name: Configure with Metal
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGGML_METAL=ON -DWHISPER_BUILD_TESTS=OFF
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGGML_METAL=ON -DCRISPASR_BUILD_TESTS=OFF
 
       - name: Build
         run: cmake --build build --target crispasr -j $(sysctl -n hw.logicalcpu)
@@ -96,7 +96,7 @@ jobs:
           submodules: recursive
 
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DWHISPER_BUILD_TESTS=OFF
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCRISPASR_BUILD_TESTS=OFF
 
       - name: Build
         run: cmake --build build --config Release --target crispasr -j $env:NUMBER_OF_PROCESSORS
@@ -122,10 +122,10 @@ jobs:
             -DCMAKE_OSX_ARCHITECTURES=arm64 \
             -DGGML_METAL=OFF \
             -DBUILD_SHARED_LIBS=OFF \
-            -DWHISPER_BUILD_TESTS=OFF
+            -DCRISPASR_BUILD_TESTS=OFF
 
       - name: Build
-        run: cmake --build build-ios --target whisper -j $(sysctl -n hw.logicalcpu)
+        run: cmake --build build-ios --target crispasr -j $(sysctl -n hw.logicalcpu)
 
   # ===========================================================================
   # Android (cross-compile gate — no runtime test)
@@ -149,7 +149,7 @@ jobs:
             -DANDROID_ABI=arm64-v8a \
             -DANDROID_PLATFORM=android-24 \
             -DBUILD_SHARED_LIBS=OFF \
-            -DWHISPER_BUILD_TESTS=OFF
+            -DCRISPASR_BUILD_TESTS=OFF
 
       - name: Build
-        run: cmake --build build-android --target whisper -j $(nproc)
+        run: cmake --build build-android --target crispasr -j $(nproc)

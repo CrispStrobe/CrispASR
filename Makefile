@@ -57,10 +57,10 @@ RM = /usr/bin/cmake -E rm -f
 EQUALS = =
 
 # The top-level source directory on which CMake was run.
-CMAKE_SOURCE_DIR = /mnt/akademie_storage/whisper.cpp
+CMAKE_SOURCE_DIR = /mnt/akademie_storage/crispasr
 
 # The top-level build directory on which CMake was run.
-CMAKE_BINARY_DIR = /mnt/akademie_storage/whisper.cpp
+CMAKE_BINARY_DIR = /mnt/akademie_storage/crispasr
 
 #=============================================================================
 # Targets provided globally by CMake.
@@ -142,9 +142,9 @@ install/strip/fast: preinstall/fast
 
 # The main all target
 all: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /mnt/akademie_storage/whisper.cpp/CMakeFiles /mnt/akademie_storage/whisper.cpp//CMakeFiles/progress.marks
+	$(CMAKE_COMMAND) -E cmake_progress_start /mnt/akademie_storage/crispasr/CMakeFiles /mnt/akademie_storage/crispasr//CMakeFiles/progress.marks
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 all
-	$(CMAKE_COMMAND) -E cmake_progress_start /mnt/akademie_storage/whisper.cpp/CMakeFiles 0
+	$(CMAKE_COMMAND) -E cmake_progress_start /mnt/akademie_storage/crispasr/CMakeFiles 0
 .PHONY : all
 
 # The main clean target
@@ -757,17 +757,17 @@ common/fast:
 .PHONY : common/fast
 
 #=============================================================================
-# Target rules for targets named whisper-cli
+# Target rules for targets named crispasr
 
 # Build rule for target.
-whisper-cli: cmake_check_build_system
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 whisper-cli
-.PHONY : whisper-cli
+crispasr: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 crispasr
+.PHONY : crispasr
 
 # fast build rule for target.
-whisper-cli/fast:
-	$(MAKE) $(MAKESILENT) -f examples/cli/CMakeFiles/whisper-cli.dir/build.make examples/cli/CMakeFiles/whisper-cli.dir/build
-.PHONY : whisper-cli/fast
+crispasr/fast:
+	$(MAKE) $(MAKESILENT) -f examples/cli/CMakeFiles/crispasr.dir/build.make examples/cli/CMakeFiles/crispasr.dir/build
+.PHONY : crispasr/fast
 
 #=============================================================================
 # Target rules for targets named whisper-bench
@@ -1132,7 +1132,7 @@ help:
 	@echo "... wav2vec2-ggml"
 	@echo "... whisper"
 	@echo "... whisper-bench"
-	@echo "... whisper-cli"
+	@echo "... crispasr"
 	@echo "... whisper-quantize"
 	@echo "... whisper-server"
 	@echo "... whisper-vad-speech-segments"

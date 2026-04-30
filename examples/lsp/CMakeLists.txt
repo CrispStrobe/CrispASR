@@ -1,6 +1,6 @@
-if (WHISPER_SDL2)
+if (CRISPASR_SDL2)
     # stream
-    set(TARGET whisper-lsp)
+    set(TARGET crispasr-lsp)
     add_executable(${TARGET} lsp.cpp)
 
     include(DefaultTargetOptions)

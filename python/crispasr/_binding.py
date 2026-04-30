@@ -1,7 +1,7 @@
 """CrispASR Python wrapper via ctypes.
 
 Provides speech-to-text transcription using ggml inference.
-Wraps the whisper.h C API from whisper.cpp / CrispASR.
+Wraps the whisper.h C API from crispasr / CrispASR.
 """
 
 import ctypes
@@ -28,7 +28,7 @@ def _find_lib():
     """Locate the crispasr / whisper shared library.
 
     The wheel is pure-Python and does not bundle the native library —
-    matches whisper.cpp's binding pattern. The user is expected to have
+    matches crispasr's binding pattern. The user is expected to have
     `libcrispasr.{so,dylib,dll}` on their system, either installed by
     a package manager (Homebrew, apt) or built from source.
 
@@ -83,8 +83,8 @@ def _find_lib():
 
 
 # Whisper sampling strategies
-WHISPER_SAMPLING_GREEDY = 0
-WHISPER_SAMPLING_BEAM_SEARCH = 1
+CRISPASR_SAMPLING_GREEDY = 0
+CRISPASR_SAMPLING_BEAM_SEARCH = 1
 
 
 class CrispASR:
@@ -211,14 +211,14 @@ class CrispASR:
         self,
         audio_path: str,
         language: str = "auto",
-        strategy: int = WHISPER_SAMPLING_GREEDY,
+        strategy: int = CRISPASR_SAMPLING_GREEDY,
     ) -> List[Segment]:
         """Transcribe an audio file (WAV, 16kHz mono recommended).
 
         Args:
             audio_path: Path to audio file.
             language: Language code (e.g. "en", "de") or "auto" for detection.
-            strategy: WHISPER_SAMPLING_GREEDY or WHISPER_SAMPLING_BEAM_SEARCH.
+            strategy: CRISPASR_SAMPLING_GREEDY or CRISPASR_SAMPLING_BEAM_SEARCH.
 
         Returns:
             List of Segment objects with text and timing.
@@ -231,7 +231,7 @@ class CrispASR:
         pcm: np.ndarray,
         sample_rate: int = 16000,
         language: str = "auto",
-        strategy: int = WHISPER_SAMPLING_GREEDY,
+        strategy: int = CRISPASR_SAMPLING_GREEDY,
         vad: bool = False,
         vad_model_path: Optional[str] = None,
         vad_threshold: float = 0.5,
@@ -972,7 +972,7 @@ class Session:
         n_threads: int = 4,
         language: Optional[str] = None,
     ) -> List[SessionSegment]:
-        """Transcribe with Silero VAD segmentation + whisper.cpp-style stitching.
+        """Transcribe with Silero VAD segmentation + crispasr-style stitching.
 
         Runs VAD on ``pcm``, merges short / overlong speech slices into usable
         chunks, stitches them into a single buffer with 0.1s silence gaps,

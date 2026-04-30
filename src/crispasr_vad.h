@@ -2,14 +2,14 @@
 //
 // Consumed by both the CLI (`examples/cli/`) and the C-ABI wrapper
 // `crispasr_session_transcribe_vad` in crispasr_c_api.cpp. The Silero
-// VAD pipeline from whisper.cpp is the underlying engine; this header
+// VAD pipeline from crispasr is the underlying engine; this header
 // adds the downstream gluing every ASR pipeline ends up needing:
 //
 //   - compute slices at speech boundaries
 //   - merge short/close slices into usable chunks (ASR needs context)
 //   - split overlong slices to bound encoder O(T^2) cost
 //   - stitch the retained slices into one contiguous PCM buffer with
-//     0.1s silence gaps (whisper.cpp-style), so any backend can be
+//     0.1s silence gaps (crispasr-style), so any backend can be
 //     driven by a single transcribe() call
 //   - remap resulting timestamps from stitched-buffer space back to
 //     original-audio positions via linear interpolation
@@ -29,7 +29,7 @@ struct crispasr_audio_slice {
 };
 
 // Stitched VAD result: VAD segments concatenated into a single buffer
-// with 0.1s silence gaps (matching whisper.cpp's approach). The mapping
+// with 0.1s silence gaps (matching crispasr's approach). The mapping
 // table allows remapping timestamps from stitched-buffer positions back
 // to original-audio positions.
 struct crispasr_vad_mapping {
@@ -43,7 +43,7 @@ struct crispasr_stitched_audio {
     int64_t total_duration_cs = 0;             // total duration in centiseconds
 };
 
-// Plain options struct — no CLI dependency. Mirrors the whisper.cpp
+// Plain options struct — no CLI dependency. Mirrors the crispasr
 // VAD tunables plus the chunk fallback used by long-audio encoders.
 // Zero-initialising yields a sensible default configuration.
 struct crispasr_vad_options {

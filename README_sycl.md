@@ -1,4 +1,4 @@
-# whisper.cpp for SYCL
+# crispasr for SYCL
 
 [Background](#background)
 
@@ -24,9 +24,9 @@ Intel uses the SYCL as direct programming language to support CPU, GPUs and FPGA
 
 To avoid  re-inventing the wheel, this code refers other code paths in llama.cpp (like OpenBLAS, cuBLAS, CLBlast). We use a open-source tool [SYCLomatic](https://github.com/oneapi-src/SYCLomatic) (Commercial release [Intel® DPC++ Compatibility Tool](https://www.intel.com/content/www/us/en/developer/tools/oneapi/dpc-compatibility-tool.html)) migrate to SYCL.
 
-The whisper.cpp for SYCL is used to support Intel GPUs.
+The crispasr for SYCL is used to support Intel GPUs.
 
-For Intel CPU, recommend to use whisper.cpp for X86 (Intel MKL build).
+For Intel CPU, recommend to use crispasr for X86 (Intel MKL build).
 
 ## OS
 
@@ -120,10 +120,10 @@ cd build
 source /opt/intel/oneapi/setvars.sh
 
 #for FP16
-#cmake .. -DWHISPER_SYCL=ON -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icpx -DWHISPER_SYCL_F16=ON 
+#cmake .. -DCRISPASR_SYCL=ON -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icpx -DCRISPASR_SYCL_F16=ON 
 
 #for FP32
-cmake .. -DWHISPER_SYCL=ON -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icpx
+cmake .. -DCRISPASR_SYCL=ON -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icpx
 
 #build example/main only
 #cmake --build . --config Release --target main
@@ -185,7 +185,7 @@ found 4 SYCL devices:
 |compute capability 1.3|Level-zero running time, recommended |
 |compute capability 3.0|OpenCL running time, slower than level-zero in most cases|
 
-4. Set device ID and execute whisper.cpp
+4. Set device ID and execute crispasr
 
 Set device ID = 0 by **GGML_SYCL_DEVICE=0**
 
@@ -214,8 +214,8 @@ Using device **0** (Intel(R) Arc(TM) A770 Graphics) as main device
 
 |Name|Value|Function|
 |-|-|-|
-|WHISPER_SYCL|ON (mandatory)|Enable build with SYCL code path. <br>For FP32/FP16, WHISPER_SYCL=ON is mandatory.|
-|WHISPER_SYCL_F16|ON (optional)|Enable FP16 build with SYCL code path.For FP32, do not set it.|
+|CRISPASR_SYCL|ON (mandatory)|Enable build with SYCL code path. <br>For FP32/FP16, CRISPASR_SYCL=ON is mandatory.|
+|CRISPASR_SYCL_F16|ON (optional)|Enable FP16 build with SYCL code path.For FP32, do not set it.|
 |CMAKE_C_COMPILER|icx|Use icx compiler for SYCL code path|
 |CMAKE_CXX_COMPILER|icpx|use icpx for SYCL code path|
 

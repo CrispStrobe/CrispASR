@@ -11,7 +11,7 @@ Supports 17 ASR backends including Whisper, Qwen3-ASR, FastConformer, Canary, Pa
 crispasr = "0.1"
 ```
 
-You also need `libcrispasr` installed on the system — this crate is a thin wrapper around `libcrispasr` and does **not** build it. Same pattern as `whisper.cpp`'s language bindings.
+You also need `libcrispasr` installed on the system — this crate is a thin wrapper around `libcrispasr` and does **not** build it. Same pattern as CrispASR's other language bindings.
 
 ```bash
 git clone https://github.com/CrispStrobe/CrispASR

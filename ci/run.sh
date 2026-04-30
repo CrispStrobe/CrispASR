@@ -48,7 +48,7 @@ else
     fi
 fi
 
-CMAKE_EXTRA="-DWHISPER_FATAL_WARNINGS=ON"
+CMAKE_EXTRA="-DCRISPASR_FATAL_WARNINGS=ON"
 
 if [ ! -z ${GG_BUILD_METAL} ]; then
     CMAKE_EXTRA="${CMAKE_EXTRA} -DGGML_METAL=ON"
@@ -254,11 +254,11 @@ function gg_run_bench {
     # run memcpy benchmark if not encoder-only mode
     if [ "$BENCH_ENCODER_ONLY" -eq 0 ]; then
         echo "Running memcpy benchmark"
-        (time ./build-ci-release/bin/whisper-bench -w 1 -t $BENCH_N_THREADS 2>&1) | tee -a $OUT/${ci}-memcpy.log
+        (time ./build-ci-release/bin/crispasr-bench -w 1 -t $BENCH_N_THREADS 2>&1) | tee -a $OUT/${ci}-memcpy.log
         gg_check_last_command_status "$OUT/${ci}-memcpy.exit" "memcpy benchmark"
 
         echo "Running ggml_mul_mat benchmark with $BENCH_N_THREADS threads"
-        (time ./build-ci-release/bin/whisper-bench -w 2 -t $BENCH_N_THREADS 2>&1) | tee -a $OUT/${ci}-mul_mat.log
+        (time ./build-ci-release/bin/crispasr-bench -w 2 -t $BENCH_N_THREADS 2>&1) | tee -a $OUT/${ci}-mul_mat.log
         gg_check_last_command_status "$OUT/${ci}-mul_mat.exit" "ggml_mul_mat benchmark"
     fi
 
@@ -277,7 +277,7 @@ function gg_run_bench {
         echo "Benchmarking model: $model"
 
         # run the benchmark and capture output
-        output=$(./build-ci-release/bin/whisper-bench -m $MNT/models/ggml-$model.bin -t $BENCH_N_THREADS $fattn 2>&1)
+        output=$(./build-ci-release/bin/crispasr-bench -m $MNT/models/ggml-$model.bin -t $BENCH_N_THREADS $fattn 2>&1)
         ret=$?
 
         # save the raw output

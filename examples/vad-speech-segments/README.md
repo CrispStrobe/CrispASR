@@ -1,4 +1,4 @@
-# whisper.cpp/examples/vad-speech-segments
+# crispasr/examples/vad-speech-segments
 
 This examples demonstrates how to use a VAD (Voice Activity Detection) model to
 segment an audio file into speech segments.
@@ -26,7 +26,7 @@ Speech segment 2: start = 4.00, end = 4.35
 Speech segment 3: start = 5.38, end = 7.65
 Speech segment 4: start = 8.16, end = 10.59
 ```
-To see more output from whisper.cpp remove the `--no-prints` argument.
+To see more output from crispasr remove the `--no-prints` argument.
 
 
 ### Command line options

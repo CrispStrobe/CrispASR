@@ -1,7 +1,7 @@
 if !exists("g:whisper_dir")
-    let g:whisper_dir = expand($WHISPER_CPP_HOME)
+    let g:whisper_dir = expand($CRISPASR_CPP_HOME)
     if g:whisper_dir == ""
-        echoerr "Please provide a path to the whisper.cpp repo in either the $WHISPER_CPP_HOME environment variable, or g:whisper_dir"
+        echoerr "Please provide a path to the crispasr repo in either the $CRISPASR_CPP_HOME environment variable, or g:whisper_dir"
     endif
 endif
 if !exists("g:whisper_lsp_path")

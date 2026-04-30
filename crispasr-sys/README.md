@@ -2,7 +2,7 @@
 
 Raw FFI bindings for [CrispASR](https://github.com/CrispStrobe/CrispASR) — lightweight on-device speech recognition via ggml.
 
-This crate is a thin `extern "C"` shim and **does not** build the native library. Users install `libcrispasr.{so,dylib,dll}` separately — same pattern as `whisper.cpp`'s language bindings.
+This crate is a thin `extern "C"` shim and **does not** build the native library. Users install `libcrispasr.{so,dylib,dll}` separately — same pattern as CrispASR's other language bindings.
 
 ## Install
 

@@ -243,9 +243,9 @@ jobs:
           cmake -B build -G Xcode \
             -DGGML_METAL_USE_BF16=ON \
             -DGGML_METAL_EMBED_LIBRARY=ON \
-            -DWHISPER_BUILD_EXAMPLES=OFF \
-            -DWHISPER_BUILD_TESTS=OFF \
-            -DWHISPER_BUILD_SERVER=OFF \
+            -DCRISPASR_BUILD_EXAMPLES=OFF \
+            -DCRISPASR_BUILD_TESTS=OFF \
+            -DCRISPASR_BUILD_SERVER=OFF \
             -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
           cmake --build build --config Release -j $(sysctl -n hw.logicalcpu)
 
@@ -633,7 +633,7 @@ jobs:
           cmake -S . -B ./build -A ${{ matrix.arch }}
           -DCMAKE_BUILD_TYPE=${{ matrix.build }}
           -DBUILD_SHARED_LIBS=ON
-          -DWHISPER_BUILD_TESTS=OFF
+          -DCRISPASR_BUILD_TESTS=OFF
           -DWHISPER_SDL2=${{ matrix.sdl2 }}
 
       - name: Build
@@ -652,10 +652,10 @@ jobs:
           name: ${{ matrix.s2arc }}_SDL2.dll
           path: build/bin/${{ matrix.build }}/SDL2.dll
 
-      - name: Upload whisper dll
+      - name: Upload crispasr dll
         uses: actions/upload-artifact@v6
         with:
-          name: whisper_${{ matrix.arch }}.dll
+          name: crispasr_${{ matrix.arch }}.dll
           path: build/bin/${{ matrix.build }}/whisper.dll
 
       - name: Upload ggml dll
@@ -679,14 +679,14 @@ jobs:
       - name: Pack bin artifacts
         shell: pwsh
         run: |
-              Compress-Archive -Path "build/bin/${{ matrix.build }}" -DestinationPath "whisper-bin-${{ matrix.arch }}.zip"
+              Compress-Archive -Path "build/bin/${{ matrix.build }}" -DestinationPath "crispasr-bin-${{ matrix.arch }}.zip"
 
       - name: Upload binaries
         if: matrix.sdl2 == 'ON' && ${{ needs.determine-tag.outputs.should_release }}
         uses: actions/upload-artifact@v6
         with:
-          name: whisper-bin-${{ matrix.arch }}.zip
-          path: whisper-bin-${{ matrix.arch }}.zip
+          name: crispasr-bin-${{ matrix.arch }}.zip
+          path: crispasr-bin-${{ matrix.arch }}.zip
 
   windows-blas:
     if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' ||
@@ -747,7 +747,7 @@ jobs:
           -DGGML_BLAS_VENDOR=OpenBLAS
           -DBLAS_LIBRARIES="$env:GITHUB_WORKSPACE/OpenBLAS-${{matrix.blasver}}/lib/libopenblas.lib"
           -DBLAS_INCLUDE_DIRS="$env:GITHUB_WORKSPACE/OpenBLAS-${{matrix.blasver}}/include"
-          -DWHISPER_BUILD_TESTS=OFF
+          -DCRISPASR_BUILD_TESTS=OFF
           -DWHISPER_SDL2=${{ matrix.sdl2 }}
 
       - name: Build
@@ -766,14 +766,14 @@ jobs:
       - name: Pack bin artifacts
         shell: pwsh
         run: |
-              Compress-Archive -Path "build/bin/${{ matrix.build }}" -DestinationPath "whisper-blas-bin-${{ matrix.arch }}.zip"
+              Compress-Archive -Path "build/bin/${{ matrix.build }}" -DestinationPath "crispasr-blas-bin-${{ matrix.arch }}.zip"
 
       - name: Upload binaries
         if: matrix.blas == 'ON' && matrix.sdl2 == 'ON' && ${{ needs.determine-tag.outputs.should_release }}
         uses: actions/upload-artifact@v6
         with:
-          name: whisper-blas-bin-${{ matrix.arch }}.zip
-          path: whisper-blas-bin-${{ matrix.arch }}.zip
+          name: crispasr-blas-bin-${{ matrix.arch }}.zip
+          path: crispasr-blas-bin-${{ matrix.arch }}.zip
 
   windows-cublas:
     if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' ||
@@ -952,7 +952,7 @@ jobs:
           cmake -S . -B build -G "Ninja Multi-Config" ^
             -DCMAKE_BUILD_TYPE=${{ matrix.build }} ^
             -DGGML_CUDA=${{ matrix.cublas }} ^
-            -DWHISPER_BUILD_TESTS=OFF ^
+            -DCRISPASR_BUILD_TESTS=OFF ^
             -DWHISPER_SDL2=${{ matrix.sdl2 }} ^
             -DSDL2_DIR="%SDL2_DIR%" ^
             -DCMAKE_POLICY_VERSION_MINIMUM=3.5 ^
@@ -976,14 +976,14 @@ jobs:
       - name: Pack bin artifacts
         shell: pwsh
         run: |
-              Compress-Archive -Path "build/bin/${{ matrix.build }}" -DestinationPath "whisper-cublas-${{ matrix.cuda-toolkit }}-bin-${{ matrix.arch }}.zip"
+              Compress-Archive -Path "build/bin/${{ matrix.build }}" -DestinationPath "crispasr-cublas-${{ matrix.cuda-toolkit }}-bin-${{ matrix.arch }}.zip"
 
       - name: Upload binaries
         if: ${{ needs.determine-tag.outputs.should_release }}
         uses: actions/upload-artifact@v6
         with:
-          name: whisper-cublas-${{ matrix.cuda-toolkit }}-bin-${{ matrix.arch }}.zip
-          path: whisper-cublas-${{ matrix.cuda-toolkit }}-bin-${{ matrix.arch }}.zip
+          name: crispasr-cublas-${{ matrix.cuda-toolkit }}-bin-${{ matrix.arch }}.zip
+          path: crispasr-cublas-${{ matrix.cuda-toolkit }}-bin-${{ matrix.arch }}.zip
 
   emscripten:
     if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' ||
@@ -1035,9 +1035,9 @@ jobs:
           cmake -G Xcode .. \
             -DGGML_METAL_USE_BF16=ON \
             -DGGML_METAL_EMBED_LIBRARY=ON \
-            -DWHISPER_BUILD_EXAMPLES=OFF \
-            -DWHISPER_BUILD_TESTS=OFF \
-            -DWHISPER_BUILD_SERVER=OFF \
+            -DCRISPASR_BUILD_EXAMPLES=OFF \
+            -DCRISPASR_BUILD_TESTS=OFF \
+            -DCRISPASR_BUILD_SERVER=OFF \
             -DCMAKE_SYSTEM_NAME=iOS \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 \
             -DCMAKE_XCODE_ATTRIBUTE_DEVELOPMENT_TEAM=ggml
@@ -1049,22 +1049,22 @@ jobs:
           ./build-xcframework.sh
 
       - name: Build objc example
-        run: xcodebuild -project examples/whisper.objc/whisper.objc.xcodeproj -scheme whisper.objc -configuration ${{ matrix.build }} -sdk iphoneos CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO FRAMEWORK_FOLDER_PATH=./build-ios build
+        run: xcodebuild -project examples/crispasr.objc/crispasr.objc.xcodeproj -scheme crispasr.objc -configuration ${{ matrix.build }} -sdk iphoneos CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO FRAMEWORK_FOLDER_PATH=./build-ios build
 
       - name: Build swiftui example
-        run: xcodebuild -project examples/whisper.swiftui/whisper.swiftui.xcodeproj -scheme WhisperCppDemo -configuration ${{ matrix.build }} -sdk iphoneos CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY= -destination 'generic/platform=iOS' FRAMEWORK_FOLDER_PATH=./build-ios build
+        run: xcodebuild -project examples/crispasr.swiftui/crispasr.swiftui.xcodeproj -scheme CrispASRDemo -configuration ${{ matrix.build }} -sdk iphoneos CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY= -destination 'generic/platform=iOS' FRAMEWORK_FOLDER_PATH=./build-ios build
 
       - name: Pack artifacts
         id: pack_artifacts
         run: |
-          zip --symlinks -r whisper-${{ needs.determine-tag.outputs.tag_name }}-xcframework.zip build-apple/whisper.xcframework
+          zip --symlinks -r crispasr-${{ needs.determine-tag.outputs.tag_name }}-xcframework.zip build-apple/crispasr.xcframework
 
       - name: Upload artifacts
         if: ${{ needs.determine-tag.outputs.should_release }}
         uses: actions/upload-artifact@v6
         with:
-          path: whisper-${{ needs.determine-tag.outputs.tag_name }}-xcframework.zip
-          name: whisper-${{ needs.determine-tag.outputs.tag_name }}-xcframework.zip
+          path: crispasr-${{ needs.determine-tag.outputs.tag_name }}-xcframework.zip
+          name: crispasr-${{ needs.determine-tag.outputs.tag_name }}-xcframework.zip
 
   android:
     if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' ||
@@ -1075,7 +1075,7 @@ jobs:
       - name: Clone
         uses: actions/checkout@v6
         with:
-          path: whisper
+          path: crispasr
 
       - name: Install Java
         uses: actions/setup-java@v5
@@ -1088,13 +1088,13 @@ jobs:
 
       - name: Build
         run: |
-          cd whisper/examples/whisper.android
+          cd crispasr/examples/crispasr.android
           ./gradlew assembleRelease --no-daemon
 
       - name: Build with external ggml
         run: |
           export PATH_TO_GGML=$PWD/ggml
-          cd whisper/examples/whisper.android
+          cd crispasr/examples/crispasr.android
           ./gradlew assembleRelease --no-daemon
 
   android_java:
@@ -1118,7 +1118,7 @@ jobs:
 
       - name: Build
         run: |
-          cd examples/whisper.android.java
+          cd examples/crispasr.android.java
           chmod +x ./gradlew
           ./gradlew assembleRelease
 
@@ -1136,10 +1136,10 @@ jobs:
           distribution: zulu
           java-version: 20
 
-      - name: Download Whisper Windows lib
+      - name: Download CrispASR Windows lib
         uses: actions/download-artifact@v7
         with:
-          name: whisper_x64.dll
+          name: crispasr_x64.dll
 
       - name: Download GGML Windows lib
         uses: actions/download-artifact@v7
@@ -1235,7 +1235,7 @@ jobs:
           ./models/download-ggml-model.sh tiny.en
           cmake -B build
           cmake --build build --config Release
-          ./build/bin/whisper-quantize models/ggml-tiny.en.bin models/ggml-tiny.en-q4_0.bin q4_0
+          ./build/bin/crispasr-legacy-quantize models/ggml-tiny.en.bin models/ggml-tiny.en-q4_0.bin q4_0
 
   release:
     if: ${{ github.event.inputs.create_release == 'true' || github.event.inputs.pre_release_tag != '' || startsWith(github.ref, 'refs/tags/v') }}

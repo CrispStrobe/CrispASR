@@ -1,12 +1,12 @@
-# whisper.cpp/examples/cli
+# crispasr/examples/cli
 
 This is the main example demonstrating most of the functionality of the Whisper model.
-It can be used as a reference for using the `whisper.cpp` library in other projects.
+It can be used as a reference for using the `crispasr` library in other projects.
 
 ```
-./build/bin/whisper-cli -h
+./build/bin/crispasr -h
 
-usage: ./build/bin/whisper-cli [options] file0 file1 ...
+usage: ./build/bin/crispasr [options] file0 file1 ...
 supported audio formats: flac, mp3, ogg, wav
 
 options:

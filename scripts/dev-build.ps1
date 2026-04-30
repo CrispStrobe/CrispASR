@@ -21,7 +21,7 @@ Set-Location -Path (Join-Path $PSScriptRoot "..")
 $args = @(
     "-G", "Ninja",
     "-DCMAKE_BUILD_TYPE=Release",
-    "-DWHISPER_BUILD_TESTS=OFF"
+    "-DCRISPASR_BUILD_TESTS=OFF"
 )
 
 # ccache integration is auto-detected by ggml's CMakeLists when the

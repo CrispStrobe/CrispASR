@@ -50,8 +50,8 @@ if %ERRORLEVEL% neq 0 (
 )
 
 :: Build
-echo [INFO] Building whisper-cli...
-cmake --build build-vulkan --target whisper-cli
+echo [INFO] Building crispasr...
+cmake --build build-vulkan --target crispasr
 
 if %ERRORLEVEL% neq 0 (
     echo [ERROR] Build failed.

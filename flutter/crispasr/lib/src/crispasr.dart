@@ -477,11 +477,11 @@ LidResult detectLanguagePcm({
 }
 
 /// Tunables for [CrispasrSession.transcribeVad]. Field names and defaults
-/// mirror whisper.cpp's `whisper_vad_params` plus the max-chunk fallback
+/// mirror crispasr's `whisper_vad_params` plus the max-chunk fallback
 /// the shared library uses to bound encoder cost on long audio.
 class SessionVadOptions {
   /// Silero VAD decision threshold (0..1). Higher = fewer / shorter
-  /// speech regions. whisper.cpp ships 0.5.
+  /// speech regions. crispasr ships 0.5.
   final double threshold;
   /// Shortest run of voiced frames (ms) kept as a speech segment.
   final int minSpeechDurationMs;
@@ -598,7 +598,7 @@ class TranscribeOptions {
   /// Silence the library's own stdout output.
   final bool silent;
 
-  // --- VAD (Silero, built into whisper.cpp). Set [vad] + [vadModelPath]
+  // --- VAD (Silero, built into crispasr). Set [vad] + [vadModelPath]
   // to have whisper skip silent regions automatically; the rest are
   // fine-tuning knobs. ---
   final bool vad;
@@ -1170,7 +1170,7 @@ class CrispASR {
   /// arrive and poll each [StreamingSession.feed] return value for new
   /// text.
   ///
-  /// Uses whisper.cpp's sliding-window trick: every [stepMs] of fresh
+  /// Uses crispasr's sliding-window trick: every [stepMs] of fresh
   /// audio triggers a decode over the last [lengthMs], carrying
   /// [keepMs] of context from the previous window. Good first defaults
   /// are the CLI's own (3000 / 10000 / 200 ms). No threads are spawned —
@@ -1279,7 +1279,7 @@ class CrispASR {
 /// `null` — the caller is still buffering.
 ///
 /// Close the session explicitly with [close] to free the native state —
-/// there is no Dart finalizer hooking libwhisper.
+/// there is no Dart finalizer hooking the native library.
 class StreamingSession {
   StreamingSession._({
     required Pointer<Void> handle,
@@ -1543,7 +1543,7 @@ class CrispasrSession {
     }
   }
 
-  /// Transcribe with Silero VAD segmentation + whisper.cpp-style stitching.
+  /// Transcribe with Silero VAD segmentation + crispasr-style stitching.
   ///
   /// Runs VAD on [pcm], merges short / overlong speech slices into usable
   /// chunks, stitches them into a single buffer with 0.1s silence gaps,

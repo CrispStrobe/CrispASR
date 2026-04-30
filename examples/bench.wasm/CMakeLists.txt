@@ -16,7 +16,7 @@ target_link_libraries(${TARGET} PRIVATE
 
 unset(EXTRA_FLAGS)
 
-if (WHISPER_WASM_SINGLE_FILE)
+if (CRISPASR_WASM_SINGLE_FILE)
     set(EXTRA_FLAGS "-s SINGLE_FILE=1")
     message(STATUS "Embedding WASM inside bench.js")
 

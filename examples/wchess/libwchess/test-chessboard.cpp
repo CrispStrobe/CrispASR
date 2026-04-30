@@ -1,12 +1,12 @@
 #include "Chessboard.h"
 
-#define ASSERT(x) \
-    do { \
-        if (!(x)) { \
-            fprintf(stderr, "ASSERT: %s:%d: %s\n", __FILE__, __LINE__, #x); \
-            fflush(stderr); \
-            exit(1); \
-        } \
+#define ASSERT(x)                                                                                                      \
+    do {                                                                                                               \
+        if (!(x)) {                                                                                                    \
+            fprintf(stderr, "ASSERT: %s:%d: %s\n", __FILE__, __LINE__, #x);                                            \
+            fflush(stderr);                                                                                            \
+            exit(1);                                                                                                   \
+        }                                                                                                              \
     } while (0)
 
 

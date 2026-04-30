@@ -10,7 +10,7 @@
 #include "ecapa_lid.h"
 #include "firered_lid.h"
 #include "silero_lid.h"
-#include "whisper.h"
+#include "crispasr.h"
 
 #include <algorithm>
 #include <cstdio>

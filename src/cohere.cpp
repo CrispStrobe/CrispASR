@@ -288,7 +288,7 @@ static void cohere_prof_print(const cohere_prof_state& ps) {
 // ---------------------------------------------------------------------------
 // Helpers
 
-// Like whisper.cpp's ggml_graph_compute_helper: set n_threads on every backend
+// Like crispasr's ggml_graph_compute_helper: set n_threads on every backend
 // in the scheduler (via registry proc address) before each compute call.
 // This ensures the thread count is applied correctly even after sched resets.
 static bool cohere_sched_graph_compute(ggml_backend_sched_t sched, struct ggml_cgraph* gf, int n_threads) {

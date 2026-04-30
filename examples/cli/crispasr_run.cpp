@@ -5,7 +5,7 @@
 // segment via VAD (or fixed chunks) -> transcribe -> print + write outputs.
 //
 // The whisper code path in cli.cpp is left completely untouched so the
-// historical whisper-cli behaviour is bit-identical.
+// historical crispasr behaviour is bit-identical.
 
 #include "crispasr_backend.h"
 #include "crispasr_cache.h"
@@ -21,7 +21,7 @@
 #include "whisper_params.h"
 #include "fireredpunc.h"
 
-#include "common-whisper.h" // read_audio_data
+#include "common-crispasr.h" // read_audio_data
 
 #include <algorithm>
 #include <atomic>
@@ -225,7 +225,7 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, wh
 
     auto t_start = std::chrono::steady_clock::now();
 
-    // --------------- VAD stitching path (whisper.cpp-style) ---------------
+    // --------------- VAD stitching path (crispasr-style) ---------------
     // When VAD produces multiple slices, stitch them into one contiguous
     // buffer (with 0.1s silence gaps) and process as a single transcribe()
     // call. This preserves cross-segment context and avoids boundary

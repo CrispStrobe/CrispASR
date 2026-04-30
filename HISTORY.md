@@ -231,7 +231,7 @@ Two-phase refactor that reshaped the repo.
 **Phase 1 — Unified CLI.** Extended `examples/cli/cli.cpp` with a
 backend dispatch layer (`crispasr_backend.*`, backend adapters, VAD,
 output writers, model manager, CTC aligner, run loop). Whisper code
-path preserved byte-identical to upstream `whisper-cli`. 7 non-whisper
+path preserved byte-identical to upstream `crispasr`. 7 non-whisper
 backends wired up. `-m auto` auto-download via `curl`/`wget` shell-out
 (no Python, no libcurl link). `--list-backends` prints the capability
 matrix. GGUF-based backend auto-detection with filename heuristic
@@ -261,7 +261,7 @@ shared code in `src/core/`.
 
 Whisper is **intentionally not migrated** to `src/core/` — it's the
 battle-tested reference and the `crispasr -m ggml-base.en.bin …` path
-stays byte-identical to upstream `whisper-cli`.
+stays byte-identical to upstream `crispasr`.
 
 ---
 
@@ -304,7 +304,7 @@ Moved here once shipped. See git history for code diffs.
 - **#8 voxtral audio Q&A** — `--ask "question"` flag for audio understanding.
 - **#10 Granite encoder ggml graph** — `GRANITE_ENCODER_GRAPH=1` env var. CPU-verified identical.
 - **#13 canary_ctc CPU fallback** — already implemented (2-backend GPU+CPU pattern).
-- **#17 VAD stitching** — stitch + remap matching whisper.cpp. C-ABI: `crispasr_session_transcribe_vad`.
+- **#17 VAD stitching** — stitch + remap matching crispasr. C-ABI: `crispasr_session_transcribe_vad`.
 - **#21 CLI→library DRY refactor** — VAD, diarize, LID, aligner, cache, registry promoted to `src/` behind shared C-ABI (v0.4.4–v0.4.8).
 - **#24 Wrapper test suites** — Python (13), Rust (5+3), Dart (9) tests.
 
@@ -348,7 +348,7 @@ Moved here once shipped. See git history for code diffs.
 - **#37** Progressive SRT (`--flush-after N`) — streaming subtitles for media players
 - **#38** Fullstop-punc multilingual — XLM-RoBERTa-large, MIT, EN/DE/FR/IT. HF: `cstr/fullstop-punc-multilang-GGUF`
 - **#39** Session API — all 18 backends wired in C-ABI + Python/Rust/Dart
-- **#15** CMake rename — whisper-cli → crispasr in CMake, CI, Dockerfiles, scripts
+- **#15** CMake rename — crispasr → crispasr in CMake, CI, Dockerfiles, scripts
 - **#18** Aligner LIS — Longest Increasing Subsequence monotonicity fix
 - **#40** Moonshine converter — multilingual variants (ja, ko, zh, ar, vi, uk)
 

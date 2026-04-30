@@ -1,5 +1,5 @@
-if (WHISPER_SDL2)
-    set(TARGET whisper-command)
+if (CRISPASR_SDL2)
+    set(TARGET crispasr-command)
     add_executable(${TARGET} command.cpp)
 
     include(DefaultTargetOptions)

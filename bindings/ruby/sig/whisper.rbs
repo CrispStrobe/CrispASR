@@ -241,7 +241,7 @@ module Whisper
 
     def print_realtime=: (boolish) -> boolish
 
-    # If true, prints results from within whisper.cpp. (avoid it, use callback instead)
+    # If true, prints results from within crispasr. (avoid it, use callback instead)
     #
     def print_realtime: () -> (true | false)
 

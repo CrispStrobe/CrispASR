@@ -35,7 +35,7 @@ done
 ARGS=(
   -G Ninja
   -DCMAKE_BUILD_TYPE=Release
-  -DWHISPER_BUILD_TESTS=OFF
+  -DCRISPASR_BUILD_TESTS=OFF
 )
 
 case "$OS" in

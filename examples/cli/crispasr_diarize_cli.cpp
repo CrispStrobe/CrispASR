@@ -40,7 +40,7 @@ static int mkstemps(char* t, int s) {
 namespace {
 
 // Map the library's integer speaker index to the `"(speaker N) "` string
-// shape CLI consumers have relied on since the original whisper-cli
+// shape CLI consumers have relied on since the original crispasr
 // `--diarize` flag. -1 (method had no info) leaves the field empty.
 void apply_int_speakers_to_crispasr_segments(const std::vector<CrispasrDiarizeSegment>& in,
                                              std::vector<crispasr_segment>& out) {

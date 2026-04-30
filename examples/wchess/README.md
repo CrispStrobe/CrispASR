@@ -2,15 +2,15 @@
 
 Voice-controlled chess using Whisper
 
-Online demo: https://ggml.ai/whisper.cpp/wchess.wasm/
+Online demo: https://ggml.ai/crispasr/wchess.wasm/
 
-https://github.com/ggerganov/whisper.cpp/assets/1991296/c2b2f03c-9684-49f3-8106-357d2d4e67fa
+Demo video: see the project history and upstream example documentation.
 
 ## Command-line tool
 
 ```bash
 mkdir build && cd build
-cmake -DWHISPER_SDL2=1 ..
+cmake -DCRISPASR_SDL2=1 ..
 make -j
 
 ./bin/wchess -m ../models/ggml-base.en.bin

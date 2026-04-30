@@ -1,7 +1,7 @@
 #include "common.h"
-#include "common-whisper.h"
+#include "common-crispasr.h"
 
-#include "whisper.h"
+#include "crispasr.h"
 #include "grammar-parser.h"
 #include "whisper_params.h"       // struct whisper_params (shared with crispasr_*)
 #include "crispasr_backend.h"     // crispasr_run_backend() dispatch entry point
@@ -51,8 +51,8 @@ struct whisper_params {
     int32_t max_context   = -1;
     int32_t max_len       = 0;
     bool    split_on_punct = false;
-    int32_t best_of       = whisper_full_default_params(WHISPER_SAMPLING_GREEDY).greedy.best_of;
-    int32_t beam_size     = whisper_full_default_params(WHISPER_SAMPLING_BEAM_SEARCH).beam_search.beam_size;
+    int32_t best_of       = whisper_full_default_params(CRISPASR_SAMPLING_GREEDY).greedy.best_of;
+    int32_t beam_size     = whisper_full_default_params(CRISPASR_SAMPLING_BEAM_SEARCH).beam_search.beam_size;
     int32_t audio_ctx     = 0;
 
     float word_thold      =  0.01f;
@@ -141,7 +141,7 @@ static char* requires_value_error(const std::string& arg) {
 }
 
 static bool whisper_params_parse(int argc, char** argv, whisper_params& params) {
-    if (const char* env_device = std::getenv("WHISPER_ARG_DEVICE")) {
+    if (const char* env_device = std::getenv("CRISPASR_ARG_DEVICE")) {
         params.gpu_device = std::stoi(env_device);
     }
 
@@ -693,8 +693,8 @@ static std::string estimate_diarization_speaker(const std::vector<std::vector<fl
     std::string speaker = "";
     const int64_t n_samples = pcmf32s[0].size();
 
-    const int64_t is0 = timestamp_to_sample(t0, n_samples, WHISPER_SAMPLE_RATE);
-    const int64_t is1 = timestamp_to_sample(t1, n_samples, WHISPER_SAMPLE_RATE);
+    const int64_t is0 = timestamp_to_sample(t0, n_samples, CRISPASR_SAMPLE_RATE);
+    const int64_t is1 = timestamp_to_sample(t1, n_samples, CRISPASR_SAMPLE_RATE);
 
     double energy0 = 0.0f;
     double energy1 = 0.0f;
@@ -1313,7 +1313,7 @@ static bool output_wts(const std::vector<crispasr_segment>& segs, std::ofstream&
 
 static void output_lrc(const std::vector<crispasr_segment>& segs, std::ofstream& fout, const whisper_params& params,
                        const std::vector<std::vector<float>>& pcmf32s) {
-    fout << "[by:whisper.cpp]\n";
+    fout << "[by:crispasr]\n";
 
     const int n_segments = (int)segs.size();
     for (int i = 0; i < n_segments; ++i) {
@@ -1502,34 +1502,34 @@ int main(int argc, char** argv) {
 
     if (!params.dtw.empty()) {
         cparams.dtw_token_timestamps = true;
-        cparams.dtw_aheads_preset = WHISPER_AHEADS_NONE;
+        cparams.dtw_aheads_preset = CRISPASR_AHEADS_NONE;
 
         if (params.dtw == "tiny")
-            cparams.dtw_aheads_preset = WHISPER_AHEADS_TINY;
+            cparams.dtw_aheads_preset = CRISPASR_AHEADS_TINY;
         if (params.dtw == "tiny.en")
-            cparams.dtw_aheads_preset = WHISPER_AHEADS_TINY_EN;
+            cparams.dtw_aheads_preset = CRISPASR_AHEADS_TINY_EN;
         if (params.dtw == "base")
-            cparams.dtw_aheads_preset = WHISPER_AHEADS_BASE;
+            cparams.dtw_aheads_preset = CRISPASR_AHEADS_BASE;
         if (params.dtw == "base.en")
-            cparams.dtw_aheads_preset = WHISPER_AHEADS_BASE_EN;
+            cparams.dtw_aheads_preset = CRISPASR_AHEADS_BASE_EN;
         if (params.dtw == "small")
-            cparams.dtw_aheads_preset = WHISPER_AHEADS_SMALL;
+            cparams.dtw_aheads_preset = CRISPASR_AHEADS_SMALL;
         if (params.dtw == "small.en")
-            cparams.dtw_aheads_preset = WHISPER_AHEADS_SMALL_EN;
+            cparams.dtw_aheads_preset = CRISPASR_AHEADS_SMALL_EN;
         if (params.dtw == "medium")
-            cparams.dtw_aheads_preset = WHISPER_AHEADS_MEDIUM;
+            cparams.dtw_aheads_preset = CRISPASR_AHEADS_MEDIUM;
         if (params.dtw == "medium.en")
-            cparams.dtw_aheads_preset = WHISPER_AHEADS_MEDIUM_EN;
+            cparams.dtw_aheads_preset = CRISPASR_AHEADS_MEDIUM_EN;
         if (params.dtw == "large.v1")
-            cparams.dtw_aheads_preset = WHISPER_AHEADS_LARGE_V1;
+            cparams.dtw_aheads_preset = CRISPASR_AHEADS_LARGE_V1;
         if (params.dtw == "large.v2")
-            cparams.dtw_aheads_preset = WHISPER_AHEADS_LARGE_V2;
+            cparams.dtw_aheads_preset = CRISPASR_AHEADS_LARGE_V2;
         if (params.dtw == "large.v3")
-            cparams.dtw_aheads_preset = WHISPER_AHEADS_LARGE_V3;
+            cparams.dtw_aheads_preset = CRISPASR_AHEADS_LARGE_V3;
         if (params.dtw == "large.v3.turbo")
-            cparams.dtw_aheads_preset = WHISPER_AHEADS_LARGE_V3_TURBO;
+            cparams.dtw_aheads_preset = CRISPASR_AHEADS_LARGE_V3_TURBO;
 
-        if (cparams.dtw_aheads_preset == WHISPER_AHEADS_NONE) {
+        if (cparams.dtw_aheads_preset == CRISPASR_AHEADS_NONE) {
             fprintf(stderr, "error: unknown DTW preset '%s'\n", params.dtw.c_str());
             return 3;
         }
@@ -1542,7 +1542,7 @@ int main(int argc, char** argv) {
         return 3;
     }
 
-    // initialize openvino encoder. this has no effect on whisper.cpp builds that don't have OpenVINO configured
+    // initialize openvino encoder. this has no effect on crispasr builds that don't have OpenVINO configured
     whisper_ctx_init_openvino_encoder(ctx, nullptr, params.openvino_encode_device.c_str(), nullptr);
 
     if (!params.grammar.empty()) {
@@ -1649,7 +1649,7 @@ int main(int argc, char** argv) {
             fprintf(stderr,
                     "%s: processing '%s' (%d samples, %.1f sec), %d threads, %d processors, %d beams + best of %d, "
                     "lang = %s, task = %s, %stimestamps = %d ...\n",
-                    __func__, fname_inp.c_str(), int(pcmf32.size()), float(pcmf32.size()) / WHISPER_SAMPLE_RATE,
+                    __func__, fname_inp.c_str(), int(pcmf32.size()), float(pcmf32.size()) / CRISPASR_SAMPLE_RATE,
                     params.n_threads, params.n_processors, params.beam_size, params.best_of, params.language.c_str(),
                     params.translate ? "translate" : "transcribe", params.tinydiarize ? "tdrz = 1, " : "",
                     params.no_timestamps ? 0 : 1);
@@ -1667,11 +1667,11 @@ int main(int argc, char** argv) {
 
         // run the inference
         {
-            whisper_full_params wparams = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
+            whisper_full_params wparams = whisper_full_default_params(CRISPASR_SAMPLING_GREEDY);
 
             const bool use_grammar = (!params.grammar_parsed.rules.empty() && !params.grammar_rule.empty());
             wparams.strategy =
-                (params.beam_size > 1 || use_grammar) ? WHISPER_SAMPLING_BEAM_SEARCH : WHISPER_SAMPLING_GREEDY;
+                (params.beam_size > 1 || use_grammar) ? CRISPASR_SAMPLING_BEAM_SEARCH : CRISPASR_SAMPLING_GREEDY;
 
             wparams.print_realtime = false;
             wparams.print_progress = params.print_progress;
@@ -1837,7 +1837,7 @@ int main(int argc, char** argv) {
             output_ext(txt, pcmf32s);
             output_ext(vtt, pcmf32s);
             output_ext(srt, pcmf32s);
-            output_ext(wts, pcmf32s, fname_inp.c_str(), float(pcmf32.size() + 1000) / WHISPER_SAMPLE_RATE,
+            output_ext(wts, pcmf32s, fname_inp.c_str(), float(pcmf32.size() + 1000) / CRISPASR_SAMPLE_RATE,
                        fout_factory.fname_out.c_str());
             output_ext(csv, pcmf32s);
             output_func(output_json, ".json", params.output_jsn, pcmf32s, ctx);

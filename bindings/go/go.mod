@@ -1,4 +1,4 @@
-module github.com/ggerganov/whisper.cpp/bindings/go
+module github.com/CrispStrobe/CrispASR/bindings/go
 
 go 1.23
 

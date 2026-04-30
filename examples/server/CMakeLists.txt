@@ -1,7 +1,7 @@
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(TARGET whisper-server)
+set(TARGET crispasr-server)
 add_executable(${TARGET} server.cpp httplib.h)
 
 include(DefaultTargetOptions)

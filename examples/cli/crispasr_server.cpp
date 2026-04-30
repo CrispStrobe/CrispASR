@@ -22,7 +22,7 @@
 #include "crispasr_vad_cli.h"
 #include "whisper_params.h"
 
-#include "common-whisper.h" // read_audio_data
+#include "common-crispasr.h" // read_audio_data
 #include "../server/httplib.h"
 
 #include <atomic>

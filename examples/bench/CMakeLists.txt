@@ -1,4 +1,4 @@
-set(TARGET whisper-bench)
+set(TARGET crispasr-bench)
 add_executable(${TARGET} bench.cpp)
 
 include(DefaultTargetOptions)

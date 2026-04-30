@@ -1,27 +1,27 @@
 #include "models.h"
 
-llm_build_granite_hybrid::llm_build_granite_hybrid(const llama_model & model, const llm_graph_params & params) :
-    llm_build_mamba_base(params) {
+llm_build_granite_hybrid::llm_build_granite_hybrid(const llama_model& model, const llm_graph_params& params)
+    : llm_build_mamba_base(params) {
     const int64_t n_embd_head = hparams.n_embd_head_v();
     GGML_ASSERT(n_embd_head == hparams.n_embd_head_k());
 
-    ggml_tensor * cur;
-    ggml_tensor * inpL;
+    ggml_tensor* cur;
+    ggml_tensor* inpL;
 
     inpL = build_inp_embd(model.tok_embd);
 
-    auto * inp = build_inp_mem_hybrid();
+    auto* inp = build_inp_mem_hybrid();
 
-    ggml_tensor * inp_out_ids = build_inp_out_ids();
+    ggml_tensor* inp_out_ids = build_inp_out_ids();
 
     // Positional embeddings populated if rope enabled
-    ggml_tensor * inp_pos = nullptr;
+    ggml_tensor* inp_pos = nullptr;
     if (hparams.rope_finetuned) {
         inp_pos = build_inp_pos();
     }
 
     for (int il = 0; il < n_layer; ++il) {
-        struct ggml_tensor * inpSA = inpL;
+        struct ggml_tensor* inpSA = inpL;
 
         // norm
         cur = build_norm(inpL, model.layers[il].attn_norm, NULL, LLM_NORM_RMS, il);
@@ -36,7 +36,7 @@ llm_build_granite_hybrid::llm_build_granite_hybrid(const llama_model & model, co
         }
 
         if (il == n_layer - 1 && inp_out_ids) {
-            cur   = ggml_get_rows(ctx0, cur, inp_out_ids);
+            cur = ggml_get_rows(ctx0, cur, inp_out_ids);
             inpSA = ggml_get_rows(ctx0, inpSA, inp_out_ids);
         }
 
@@ -67,28 +67,26 @@ llm_build_granite_hybrid::llm_build_granite_hybrid(const llama_model & model, co
     ggml_build_forward_expand(gf, cur);
 }
 
-ggml_tensor * llm_build_granite_hybrid::build_attention_layer(ggml_tensor *             cur,
-                                                              ggml_tensor *             inp_pos,
-                                                              llm_graph_input_attn_kv * inp_attn,
-                                                              const llama_model &       model,
-                                                              const int64_t             n_embd_head,
-                                                              const int                 il) {
+ggml_tensor* llm_build_granite_hybrid::build_attention_layer(ggml_tensor* cur, ggml_tensor* inp_pos,
+                                                             llm_graph_input_attn_kv* inp_attn,
+                                                             const llama_model& model, const int64_t n_embd_head,
+                                                             const int il) {
     // compute Q and K and (optionally) RoPE them
-    ggml_tensor * Qcur = build_lora_mm(model.layers[il].wq, cur);
+    ggml_tensor* Qcur = build_lora_mm(model.layers[il].wq, cur);
     cb(Qcur, "Qcur", il);
     if (model.layers[il].bq) {
         Qcur = ggml_add(ctx0, Qcur, model.layers[il].bq);
         cb(Qcur, "Qcur", il);
     }
 
-    ggml_tensor * Kcur = build_lora_mm(model.layers[il].wk, cur);
+    ggml_tensor* Kcur = build_lora_mm(model.layers[il].wk, cur);
     cb(Kcur, "Kcur", il);
     if (model.layers[il].bk) {
         Kcur = ggml_add(ctx0, Kcur, model.layers[il].bk);
         cb(Kcur, "Kcur", il);
     }
 
-    ggml_tensor * Vcur = build_lora_mm(model.layers[il].wv, cur);
+    ggml_tensor* Vcur = build_lora_mm(model.layers[il].wv, cur);
     cb(Vcur, "Vcur", il);
     if (model.layers[il].bv) {
         Vcur = ggml_add(ctx0, Vcur, model.layers[il].bv);
@@ -101,7 +99,7 @@ ggml_tensor * llm_build_granite_hybrid::build_attention_layer(ggml_tensor *     
 
     const bool use_rope = hparams.rope_finetuned;
     if (use_rope) {
-        ggml_tensor * rope_factors = model.get_rope_factors(cparams, il);
+        ggml_tensor* rope_factors = model.get_rope_factors(cparams, il);
         Qcur = ggml_rope_ext(ctx0, Qcur, inp_pos, rope_factors, n_rot, rope_type, n_ctx_orig, freq_base, freq_scale,
                              ext_factor, attn_factor, beta_fast, beta_slow);
 
@@ -115,22 +113,19 @@ ggml_tensor * llm_build_granite_hybrid::build_attention_layer(ggml_tensor *     
 
     const float kq_scale =
         hparams.f_attention_scale == 0.0f ? 1.0f / sqrtf(float(n_embd_head)) : hparams.f_attention_scale;
-    cur = build_attn(inp_attn,
-            model.layers[il].wo, model.layers[il].bo,
-            Qcur, Kcur, Vcur, nullptr, nullptr, nullptr, kq_scale, il);
+    cur = build_attn(inp_attn, model.layers[il].wo, model.layers[il].bo, Qcur, Kcur, Vcur, nullptr, nullptr, nullptr,
+                     kq_scale, il);
     cb(cur, "attn_out", il);
     return cur;
 }
 
-ggml_tensor * llm_build_granite_hybrid::build_layer_ffn(ggml_tensor *       cur,
-                                                        ggml_tensor *       inpSA,
-                                                        const llama_model & model,
-                                                        const int           il) {
+ggml_tensor* llm_build_granite_hybrid::build_layer_ffn(ggml_tensor* cur, ggml_tensor* inpSA, const llama_model& model,
+                                                       const int il) {
     // For Granite architectures - scale residual
     if (hparams.f_residual_scale) {
         cur = ggml_scale(ctx0, cur, hparams.f_residual_scale);
     }
-    ggml_tensor * ffn_inp = ggml_add(ctx0, cur, inpSA);
+    ggml_tensor* ffn_inp = ggml_add(ctx0, cur, inpSA);
     cb(ffn_inp, "ffn_inp", il);
 
     // feed-forward network (non-MoE)
@@ -138,11 +133,9 @@ ggml_tensor * llm_build_granite_hybrid::build_layer_ffn(ggml_tensor *       cur,
         cur = build_norm(ffn_inp, model.layers[il].ffn_norm, NULL, LLM_NORM_RMS, il);
         cb(cur, "ffn_norm", il);
 
-        cur = build_ffn(cur,
-                model.layers[il].ffn_up, model.layers[il].ffn_up_b, NULL,
-                model.layers[il].ffn_gate, model.layers[il].ffn_gate_b, NULL,
-                model.layers[il].ffn_down, model.layers[il].ffn_down_b, NULL,
-                NULL, LLM_FFN_SILU, LLM_FFN_PAR, il);
+        cur = build_ffn(cur, model.layers[il].ffn_up, model.layers[il].ffn_up_b, NULL, model.layers[il].ffn_gate,
+                        model.layers[il].ffn_gate_b, NULL, model.layers[il].ffn_down, model.layers[il].ffn_down_b, NULL,
+                        NULL, LLM_FFN_SILU, LLM_FFN_PAR, il);
         cb(cur, "ffn_out", il);
 
     } else {
@@ -150,28 +143,17 @@ ggml_tensor * llm_build_granite_hybrid::build_layer_ffn(ggml_tensor *       cur,
         cur = build_norm(ffn_inp, model.layers[il].ffn_norm, NULL, LLM_NORM_RMS, il);
         cb(cur, "ffn_norm", il);
 
-        ggml_tensor * moe_out =
-            build_moe_ffn(cur,
-                model.layers[il].ffn_gate_inp,
-                model.layers[il].ffn_up_exps,
-                model.layers[il].ffn_gate_exps,
-                model.layers[il].ffn_down_exps,
-                nullptr,
-                n_expert, n_expert_used,
-                LLM_FFN_SILU, true,
-                hparams.expert_weights_scale,
-                LLAMA_EXPERT_GATING_FUNC_TYPE_SOFTMAX,
-                il);
+        ggml_tensor* moe_out = build_moe_ffn(cur, model.layers[il].ffn_gate_inp, model.layers[il].ffn_up_exps,
+                                             model.layers[il].ffn_gate_exps, model.layers[il].ffn_down_exps, nullptr,
+                                             n_expert, n_expert_used, LLM_FFN_SILU, true, hparams.expert_weights_scale,
+                                             LLAMA_EXPERT_GATING_FUNC_TYPE_SOFTMAX, il);
         cb(moe_out, "ffn_moe_out", il);
 
         // For Granite MoE Shared
         if (hparams.n_ff_shexp > 0) {
-            ggml_tensor * ffn_shexp =
-                build_ffn(cur,
-                    model.layers[il].ffn_up_shexp, NULL, NULL,
-                    model.layers[il].ffn_gate_shexp, NULL, NULL,
-                    model.layers[il].ffn_down_shexp, NULL, NULL,
-                    NULL, LLM_FFN_SILU, LLM_FFN_PAR, il);
+            ggml_tensor* ffn_shexp =
+                build_ffn(cur, model.layers[il].ffn_up_shexp, NULL, NULL, model.layers[il].ffn_gate_shexp, NULL, NULL,
+                          model.layers[il].ffn_down_shexp, NULL, NULL, NULL, LLM_FFN_SILU, LLM_FFN_PAR, il);
             cb(ffn_shexp, "ffn_shexp", il);
 
             cur = ggml_add(ctx0, moe_out, ffn_shexp);

@@ -7,9 +7,9 @@ VISIONOS_MIN_OS_VERSION=1.0
 TVOS_MIN_OS_VERSION=16.4
 
 BUILD_SHARED_LIBS=OFF
-WHISPER_BUILD_EXAMPLES=OFF
-WHISPER_BUILD_TESTS=OFF
-WHISPER_BUILD_SERVER=OFF
+CRISPASR_BUILD_EXAMPLES=OFF
+CRISPASR_BUILD_TESTS=OFF
+CRISPASR_BUILD_SERVER=OFF
 GGML_METAL=ON
 GGML_METAL_EMBED_LIBRARY=ON
 GGML_BLAS_DEFAULT=ON
@@ -31,9 +31,9 @@ COMMON_CMAKE_ARGS=(
     -DCMAKE_XCODE_ATTRIBUTE_STRIP_INSTALLED_PRODUCT=NO
     -DCMAKE_XCODE_ATTRIBUTE_DEVELOPMENT_TEAM=ggml
     -DBUILD_SHARED_LIBS=${BUILD_SHARED_LIBS}
-    -DWHISPER_BUILD_EXAMPLES=${WHISPER_BUILD_EXAMPLES}
-    -DWHISPER_BUILD_TESTS=${WHISPER_BUILD_TESTS}
-    -DWHISPER_BUILD_SERVER=${WHISPER_BUILD_SERVER}
+    -DCRISPASR_BUILD_EXAMPLES=${CRISPASR_BUILD_EXAMPLES}
+    -DCRISPASR_BUILD_TESTS=${CRISPASR_BUILD_TESTS}
+    -DCRISPASR_BUILD_SERVER=${CRISPASR_BUILD_SERVER}
     -DGGML_METAL_EMBED_LIBRARY=${GGML_METAL_EMBED_LIBRARY}
     -DGGML_BLAS_DEFAULT=${GGML_BLAS_DEFAULT}
     -DGGML_METAL=${GGML_METAL}
@@ -80,7 +80,7 @@ setup_framework_structure() {
     local build_dir=$1
     local min_os_version=$2
     local platform=$3  # "ios", "macos", "visionos", or "tvos"
-    local framework_name="whisper"
+    local framework_name="crispasr"
 
     echo "Creating ${platform}-style framework structure for ${build_dir}"
 
@@ -114,7 +114,7 @@ setup_framework_structure() {
     fi
 
     # Copy all required headers (common for all platforms)
-    cp include/whisper.h           ${header_path}
+    cp include/crispasr.h          ${header_path}
     cp ggml/include/ggml.h         ${header_path}
     cp ggml/include/ggml-alloc.h   ${header_path}
     cp ggml/include/ggml-backend.h ${header_path}
@@ -125,8 +125,8 @@ setup_framework_structure() {
 
     # Create module map (common for all platforms)
     cat > ${module_path}module.modulemap << EOF
-framework module whisper {
-    header "whisper.h"
+framework module crispasr {
+    header "crispasr.h"
     header "ggml.h"
     header "ggml-alloc.h"
     header "ggml-backend.h"
@@ -196,13 +196,13 @@ EOF
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleExecutable</key>
-    <string>whisper</string>
+    <string>crispasr</string>
     <key>CFBundleIdentifier</key>
-    <string>org.ggml.whisper</string>
+    <string>org.ggml.crispasr</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>whisper</string>
+    <string>crispasr</string>
     <key>CFBundlePackageType</key>
     <string>FMWK</string>
     <key>CFBundleShortVersionString</key>
@@ -231,7 +231,7 @@ combine_static_libraries() {
     local platform="$3"  # "ios", "macos", "visionos", or "tvos"
     local is_simulator="$4"
     local base_dir="$(pwd)"
-    local framework_name="whisper"
+    local framework_name="crispasr"
 
     # Determine output path based on platform
     local output_lib=""
@@ -244,7 +244,7 @@ combine_static_libraries() {
     fi
 
     local libs=(
-        "${base_dir}/${build_dir}/src/${release_dir}/libwhisper.a"
+        "${base_dir}/${build_dir}/src/${release_dir}/libcrispasr.a"
         "${base_dir}/${build_dir}/ggml/src/${release_dir}/libggml.a"
         "${base_dir}/${build_dir}/ggml/src/${release_dir}/libggml-base.a"
         "${base_dir}/${build_dir}/ggml/src/${release_dir}/libggml-cpu.a"
@@ -252,9 +252,9 @@ combine_static_libraries() {
         "${base_dir}/${build_dir}/ggml/src/ggml-blas/${release_dir}/libggml-blas.a"
     )
     if [[ "$platform" == "macos" || "$platform" == "ios" ]]; then
-        echo "Adding libwhisper.coreml library to the build."
+        echo "Adding libcrispasr.coreml library to the build."
         libs+=(
-            "${base_dir}/${build_dir}/src/${release_dir}/libwhisper.coreml.a"
+            "${base_dir}/${build_dir}/src/${release_dir}/libcrispasr.coreml.a"
         )
     fi
 
@@ -285,14 +285,14 @@ combine_static_libraries() {
                 archs="arm64"
                 min_version_flag="-mios-version-min=${IOS_MIN_OS_VERSION}"
             fi
-            install_name="@rpath/whisper.framework/whisper"
+            install_name="@rpath/crispasr.framework/crispasr"
             frameworks+=" -framework CoreML"
             ;;
         "macos")
             sdk="macosx"
             archs="arm64 x86_64"
             min_version_flag="-mmacosx-version-min=${MACOS_MIN_OS_VERSION}"
-            install_name="@rpath/whisper.framework/Versions/Current/whisper"
+            install_name="@rpath/crispasr.framework/Versions/Current/crispasr"
             frameworks+=" -framework CoreML"
             ;;
         "visionos")
@@ -306,7 +306,7 @@ combine_static_libraries() {
                 min_version_flag="-mtargetos=xros${VISIONOS_MIN_OS_VERSION}"
             fi
             # Use flat structure for visionOS, same as iOS
-            install_name="@rpath/whisper.framework/whisper"
+            install_name="@rpath/crispasr.framework/crispasr"
             ;;
         "tvos")
             if [[ "$is_simulator" == "true" ]]; then
@@ -318,7 +318,7 @@ combine_static_libraries() {
                 archs="arm64"
                 min_version_flag="-mtvos-version-min=${TVOS_MIN_OS_VERSION}"
             fi
-            install_name="@rpath/whisper.framework/whisper"
+            install_name="@rpath/crispasr.framework/crispasr"
             ;;
     esac
 
@@ -387,7 +387,7 @@ combine_static_libraries() {
     # iOS and visionOS style dSYM (flat structure)
     if [[ "$platform" == "ios" || "$platform" == "visionos" || "$platform" == "tvos" ]]; then
         # Generate dSYM in the dSYMs directory
-        xcrun dsymutil "${base_dir}/${output_lib}" -o "${base_dir}/${build_dir}/dSYMs/whisper.dSYM"
+        xcrun dsymutil "${base_dir}/${output_lib}" -o "${base_dir}/${build_dir}/dSYMs/crispasr.dSYM"
 
         # Create a copy of the binary that will be stripped
         cp "${base_dir}/${output_lib}" "${temp_dir}/binary_to_strip"
@@ -403,7 +403,7 @@ combine_static_libraries() {
         xcrun strip -S "${base_dir}/${output_lib}" -o "${temp_dir}/stripped_lib"
 
         # Generate dSYM in the dSYMs directory
-        xcrun dsymutil "${base_dir}/${output_lib}" -o "${base_dir}/${build_dir}/dSYMs/whisper.dSYM"
+        xcrun dsymutil "${base_dir}/${output_lib}" -o "${base_dir}/${build_dir}/dSYMs/crispasr.dSYM"
 
         # Replace original binary with stripped version
         mv "${temp_dir}/stripped_lib" "${base_dir}/${output_lib}"
@@ -431,8 +431,8 @@ cmake -B build-ios-sim -G Xcode \
     -DCMAKE_XCODE_ATTRIBUTE_SUPPORTED_PLATFORMS=iphonesimulator \
     -DCMAKE_C_FLAGS="${COMMON_C_FLAGS}" \
     -DCMAKE_CXX_FLAGS="${COMMON_CXX_FLAGS}" \
-    -DWHISPER_COREML="ON" \
-    -DWHISPER_COREML_ALLOW_FALLBACK="ON" \
+    -DCRISPASR_COREML="ON" \
+    -DCRISPASR_COREML_ALLOW_FALLBACK="ON" \
     -S .
 cmake --build build-ios-sim --config Release -- -quiet
 
@@ -445,8 +445,8 @@ cmake -B build-ios-device -G Xcode \
     -DCMAKE_XCODE_ATTRIBUTE_SUPPORTED_PLATFORMS=iphoneos \
     -DCMAKE_C_FLAGS="${COMMON_C_FLAGS}" \
     -DCMAKE_CXX_FLAGS="${COMMON_CXX_FLAGS}" \
-    -DWHISPER_COREML="ON" \
-    -DWHISPER_COREML_ALLOW_FALLBACK="ON" \
+    -DCRISPASR_COREML="ON" \
+    -DCRISPASR_COREML_ALLOW_FALLBACK="ON" \
     -S .
 cmake --build build-ios-device --config Release -- -quiet
 
@@ -457,8 +457,8 @@ cmake -B build-macos -G Xcode \
     -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
     -DCMAKE_C_FLAGS="${COMMON_C_FLAGS}" \
     -DCMAKE_CXX_FLAGS="${COMMON_CXX_FLAGS}" \
-    -DWHISPER_COREML="ON" \
-    -DWHISPER_COREML_ALLOW_FALLBACK="ON" \
+    -DCRISPASR_COREML="ON" \
+    -DCRISPASR_COREML_ALLOW_FALLBACK="ON" \
     -S .
 cmake --build build-macos --config Release -- -quiet
 
@@ -542,30 +542,30 @@ echo "Creating XCFramework..."
 
 if [[ "${BUILD_STATIC_XCFRAMEWORK}" == "ON" ]]; then
     xcodebuild -create-xcframework \
-        -framework $(pwd)/build-ios-sim/framework/whisper.framework \
-        -framework $(pwd)/build-ios-device/framework/whisper.framework \
-        -framework $(pwd)/build-macos/framework/whisper.framework \
-        -framework $(pwd)/build-visionos/framework/whisper.framework \
-        -framework $(pwd)/build-visionos-sim/framework/whisper.framework \
-        -framework $(pwd)/build-tvos-device/framework/whisper.framework \
-        -framework $(pwd)/build-tvos-sim/framework/whisper.framework \
-        -output $(pwd)/build-apple/whisper.xcframework
+        -framework $(pwd)/build-ios-sim/framework/crispasr.framework \
+        -framework $(pwd)/build-ios-device/framework/crispasr.framework \
+        -framework $(pwd)/build-macos/framework/crispasr.framework \
+        -framework $(pwd)/build-visionos/framework/crispasr.framework \
+        -framework $(pwd)/build-visionos-sim/framework/crispasr.framework \
+        -framework $(pwd)/build-tvos-device/framework/crispasr.framework \
+        -framework $(pwd)/build-tvos-sim/framework/crispasr.framework \
+        -output $(pwd)/build-apple/crispasr.xcframework
     exit 0
 fi
 
 xcodebuild -create-xcframework \
-    -framework $(pwd)/build-ios-sim/framework/whisper.framework \
-    -debug-symbols $(pwd)/build-ios-sim/dSYMs/whisper.dSYM \
-    -framework $(pwd)/build-ios-device/framework/whisper.framework \
-    -debug-symbols $(pwd)/build-ios-device/dSYMs/whisper.dSYM \
-    -framework $(pwd)/build-macos/framework/whisper.framework \
-    -debug-symbols $(pwd)/build-macos/dSYMs/whisper.dSYM \
-    -framework $(pwd)/build-visionos/framework/whisper.framework \
-    -debug-symbols $(pwd)/build-visionos/dSYMs/whisper.dSYM \
-    -framework $(pwd)/build-visionos-sim/framework/whisper.framework \
-    -debug-symbols $(pwd)/build-visionos-sim/dSYMs/whisper.dSYM \
-    -framework $(pwd)/build-tvos-device/framework/whisper.framework \
-    -debug-symbols $(pwd)/build-tvos-device/dSYMs/whisper.dSYM \
-    -framework $(pwd)/build-tvos-sim/framework/whisper.framework \
-    -debug-symbols $(pwd)/build-tvos-sim/dSYMs/whisper.dSYM \
-    -output $(pwd)/build-apple/whisper.xcframework
+    -framework $(pwd)/build-ios-sim/framework/crispasr.framework \
+    -debug-symbols $(pwd)/build-ios-sim/dSYMs/crispasr.dSYM \
+    -framework $(pwd)/build-ios-device/framework/crispasr.framework \
+    -debug-symbols $(pwd)/build-ios-device/dSYMs/crispasr.dSYM \
+    -framework $(pwd)/build-macos/framework/crispasr.framework \
+    -debug-symbols $(pwd)/build-macos/dSYMs/crispasr.dSYM \
+    -framework $(pwd)/build-visionos/framework/crispasr.framework \
+    -debug-symbols $(pwd)/build-visionos/dSYMs/crispasr.dSYM \
+    -framework $(pwd)/build-visionos-sim/framework/crispasr.framework \
+    -debug-symbols $(pwd)/build-visionos-sim/dSYMs/crispasr.dSYM \
+    -framework $(pwd)/build-tvos-device/framework/crispasr.framework \
+    -debug-symbols $(pwd)/build-tvos-device/dSYMs/crispasr.dSYM \
+    -framework $(pwd)/build-tvos-sim/framework/crispasr.framework \
+    -debug-symbols $(pwd)/build-tvos-sim/dSYMs/crispasr.dSYM \
+    -output $(pwd)/build-apple/crispasr.xcframework

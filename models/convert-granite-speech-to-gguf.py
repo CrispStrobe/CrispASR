@@ -514,6 +514,25 @@ def convert(input_dir: Path, out_path: Path) -> None:
     writer.add_uint32(
         "granite_speech.proj.ff_dim", proj_cfg.get("intermediate_size", 4096)
     )
+    # granite-speech-4.1-2b-plus: encoder feeds the projector a
+    # concatenation of [layer_i for i in cat_hidden_layers] + final.
+    # encoder_hidden_size in projector_config is the resulting width
+    # (= hidden_dim * (len(cat_hidden_layers) + 1)).
+    cat_layers = enc_cfg.get("cat_hidden_layers", [])
+    proj_enc_hidden = proj_cfg.get(
+        "encoder_hidden_size", enc_cfg.get("hidden_dim", 1024)
+    )
+    if cat_layers:
+        # gguf doesn't have add_array_uint32 — pack as a length-prefixed list
+        # via a single key per index. Keep it simple: ship the indices as
+        # a comma-separated string. The runtime parses on load.
+        writer.add_string(
+            "granite_speech.proj.cat_layers",
+            ",".join(str(i) for i in cat_layers),
+        )
+    writer.add_uint32(
+        "granite_speech.proj.encoder_hidden_size", int(proj_enc_hidden)
+    )
 
     writer.add_uint32(
         "granite_speech.llm.n_layers", text_cfg.get("num_hidden_layers", 40)
