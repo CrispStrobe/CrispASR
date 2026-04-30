@@ -361,6 +361,52 @@ def convert(input_dir: Path, out_path: Path) -> None:
         # string instead. The runtime splits on '\n'.
         writer.add_string("granite_nle.ctc.vocab", "\n".join(chars))
 
+    # LLM tokenizer — same names as base granite_speech for consistency
+    # (the runtime reads these via core_gguf::open_metadata).
+    n_vocab_llm = llm_cfg.get("vocab_size", 100352)
+    vocab_path = input_dir / "vocab.json"
+    merges_path = input_dir / "merges.txt"
+    tokenizer_json_path = input_dir / "tokenizer.json"
+    vocab_dict = None
+    merges_list = None
+    if vocab_path.exists():
+        with open(vocab_path) as f:
+            vocab_dict = json.load(f)
+        if merges_path.exists():
+            with open(merges_path, encoding="utf-8") as f:
+                merges_list = [
+                    line.rstrip("\n") for line in f
+                    if line.strip() and not line.startswith("#")
+                ]
+    elif tokenizer_json_path.exists():
+        with open(tokenizer_json_path, encoding="utf-8") as f:
+            tj = json.load(f)
+        model = tj.get("model", {})
+        if model.get("type") == "BPE":
+            vocab_dict = model.get("vocab", {})
+            raw_merges = model.get("merges", [])
+            merges_list = []
+            for m in raw_merges:
+                if isinstance(m, list):
+                    merges_list.append(" ".join(m))
+                elif isinstance(m, str):
+                    merges_list.append(m)
+            for at in tj.get("added_tokens", []):
+                tid = at.get("id")
+                content = at.get("content")
+                if tid is not None and content is not None:
+                    vocab_dict[content] = tid
+    if vocab_dict is not None:
+        tokens = [""] * n_vocab_llm
+        for tok_str, tok_id in vocab_dict.items():
+            if 0 <= tok_id < n_vocab_llm:
+                tokens[tok_id] = tok_str
+        writer.add_array("tokenizer.ggml.tokens", tokens)
+        print(f"  tokenizer: {len(tokens)} tokens")
+    if merges_list is not None:
+        writer.add_array("tokenizer.ggml.merges", merges_list)
+        print(f"  merges:    {len(merges_list)} BPE merges")
+
     # ----- Tensor data -----
     skipped = []
     unmapped = []
