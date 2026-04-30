@@ -407,6 +407,34 @@ def convert(input_dir: Path, out_path: Path) -> None:
         writer.add_array("tokenizer.ggml.merges", merges_list)
         print(f"  merges:    {len(merges_list)} BPE merges")
 
+    # Mel filterbank (80 bins, HTK-style — same as base granite-speech).
+    # Written into the GGUF so the runtime can compute the log-mel
+    # spectrogram without re-deriving the filter weights.
+    def _build_htk_mel_filters(sr=16000, n_fft=512, n_mels=80, f_min=0.0, f_max=8000.0):
+        n_freqs = n_fft // 2 + 1
+        def hz_to_mel(f):
+            return 2595.0 * np.log10(1.0 + np.asarray(f, dtype=np.float64) / 700.0)
+        def mel_to_hz(m):
+            return 700.0 * (10.0 ** (np.asarray(m, dtype=np.float64) / 2595.0) - 1.0)
+        fft_freqs = np.linspace(0, sr / 2, n_freqs)
+        mel_min = hz_to_mel(f_min)
+        mel_max = hz_to_mel(f_max)
+        mel_pts = np.linspace(mel_min, mel_max, n_mels + 2)
+        hz_pts = mel_to_hz(mel_pts)
+        fb = np.zeros((n_freqs, n_mels), dtype=np.float64)
+        for m in range(1, n_mels + 1):
+            f_l, f_c, f_r = hz_pts[m - 1], hz_pts[m], hz_pts[m + 1]
+            for k in range(n_freqs):
+                f = fft_freqs[k]
+                if f_l <= f <= f_c:
+                    fb[k, m - 1] = (f - f_l) / max(f_c - f_l, 1e-12)
+                elif f_c <= f <= f_r:
+                    fb[k, m - 1] = (f_r - f) / max(f_r - f_c, 1e-12)
+        return fb.astype(np.float32)
+
+    mel_filters = _build_htk_mel_filters(sr=16000, n_fft=512, n_mels=80)
+    writer.add_tensor("audio.mel_filters", mel_filters)
+
     # ----- Tensor data -----
     skipped = []
     unmapped = []
