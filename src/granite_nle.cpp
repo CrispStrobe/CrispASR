@@ -31,8 +31,11 @@
 #include "ggml-cpu.h"
 #include "gguf.h"
 #include "core/gguf_loader.h"
+#include "core/mel.h"
 
+#include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <map>
@@ -289,6 +292,63 @@ struct granite_nle_bench_stage {
         fprintf(stderr, "  bench: %-22s %.2f ms\n", name, ms);
     }
 };
+
+// ===========================================================================
+// FFT helpers (radix-2 Cooley-Tukey, recursive, in-place). Identical to
+// granite_speech's FFT — promoted to a shared interface in a future cleanup.
+// ===========================================================================
+
+static void granite_nle_fft(float* in, int N, float* out) {
+    if (N <= 1) {
+        out[0] = in[0];
+        out[1] = 0;
+        return;
+    }
+    if (N % 2 != 0) {
+        for (int k = 0; k < N; k++) {
+            double re = 0, im = 0;
+            for (int n = 0; n < N; n++) {
+                double a = -2.0 * M_PI * k * n / N;
+                re += in[n] * cos(a);
+                im += in[n] * sin(a);
+            }
+            out[2 * k] = (float)re;
+            out[2 * k + 1] = (float)im;
+        }
+        return;
+    }
+    int half = N / 2;
+    std::vector<float> even(half), odd(half);
+    for (int i = 0; i < half; i++) {
+        even[i] = in[2 * i];
+        odd[i] = in[2 * i + 1];
+    }
+    std::vector<float> E(2 * half), O(2 * half);
+    granite_nle_fft(even.data(), half, E.data());
+    granite_nle_fft(odd.data(), half, O.data());
+    for (int k = 0; k < half; k++) {
+        double a = -2.0 * M_PI * k / N;
+        float wr = (float)cos(a), wi = (float)sin(a);
+        float tre = wr * O[2 * k] - wi * O[2 * k + 1];
+        float tim = wr * O[2 * k + 1] + wi * O[2 * k];
+        out[2 * k] = E[2 * k] + tre;
+        out[2 * k + 1] = E[2 * k + 1] + tim;
+        out[2 * (k + half)] = E[2 * k] - tre;
+        out[2 * (k + half) + 1] = E[2 * k + 1] - tim;
+    }
+}
+
+static void granite_nle_fft_wrapper(const float* in, int N, float* out) {
+    static thread_local std::vector<float> scratch_in;
+    static thread_local std::vector<float> scratch_out;
+    if ((int)scratch_in.size() < 4 * N)
+        scratch_in.assign((size_t)4 * N, 0.0f);
+    if ((int)scratch_out.size() < 8 * N)
+        scratch_out.assign((size_t)8 * N, 0.0f);
+    std::memcpy(scratch_in.data(), in, (size_t)N * sizeof(float));
+    granite_nle_fft(scratch_in.data(), N, scratch_out.data());
+    std::memcpy(out, scratch_out.data(), (size_t)(2 * N) * sizeof(float));
+}
 
 // ===========================================================================
 // GGUF loading
@@ -602,16 +662,72 @@ extern "C" void granite_nle_free(struct granite_nle_context* ctx) {
 // They print a one-line warning and return nullptr / 0 so callers can
 // build and link against the API while the math is filled in.
 
-extern "C" float* granite_nle_compute_mel(struct granite_nle_context* ctx, const float* /*samples*/, int /*n_samples*/,
+extern "C" float* granite_nle_compute_mel(struct granite_nle_context* ctx, const float* samples, int n_samples,
                                           int* out_n_mels, int* out_T_mel) {
-    if (!ctx)
+    if (!ctx || !samples || n_samples <= 0)
         return nullptr;
-    fprintf(stderr, "granite_nle: compute_mel not yet implemented\n");
+    granite_nle_bench_stage _b("compute_mel");
+    const int n_fft = 512, win_length = 400, hop = 160, n_mels = 80, n_freqs = n_fft / 2 + 1;
+
+    // Mel filter bank: ne[0]=n_freqs (257), ne[1]=n_mels (80) — HF FreqsMels
+    // layout. Written into the GGUF by the converter.
+    if (!ctx->model.encoder.mel_filters)
+        return nullptr;
+    std::vector<float> filt((size_t)n_freqs * n_mels);
+    ggml_backend_tensor_get(ctx->model.encoder.mel_filters, filt.data(), 0, filt.size() * sizeof(float));
+
+    // Hann window over win_length=400 samples; core_mel::compute() handles
+    // the centre-pad to n_fft=512.
+    std::vector<float> hann((size_t)win_length);
+    for (int i = 0; i < win_length; i++)
+        hann[i] = 0.5f * (1.0f - std::cos(2.0f * (float)M_PI * i / win_length));
+
+    // Same parameters as base granite_speech: HF / Whisper cluster with
+    // log10 + GlobalClipMax normalisation and stacked_frames=2 to fold
+    // each consecutive pair of 80-mel rows into a 160-column row.
+    core_mel::Params p;
+    p.n_fft = n_fft;
+    p.hop_length = hop;
+    p.win_length = win_length;
+    p.n_mels = n_mels;
+    p.log_base = core_mel::LogBase::Log10;
+    p.log_guard = core_mel::LogGuard::MaxClip;
+    p.norm = core_mel::Normalization::GlobalClipMax;
+    p.layout = core_mel::Layout::TimeMels;
+    p.fb_layout = core_mel::FbLayout::FreqsMels;
+    p.matmul = core_mel::MatmulPrecision::Double;
+    p.log_eps = 1e-10f;
+    p.center_pad = true;
+    p.drop_last_frame = false;
+    p.stacked_frames = 2;
+
+    int T_stacked = 0;
+    auto stacked = core_mel::compute(samples, n_samples, hann.data(), win_length, filt.data(), n_freqs,
+                                     granite_nle_fft_wrapper, p, T_stacked);
+    if (stacked.empty())
+        return nullptr;
+
+    if (ctx->params.verbosity >= 2) {
+        float mn = 1e30f, mx = -1e30f, sum = 0;
+        for (size_t i = 0; i < stacked.size(); i++) {
+            mn = std::min(mn, stacked[i]);
+            mx = std::max(mx, stacked[i]);
+            sum += stacked[i];
+        }
+        fprintf(stderr, "  granite_nle mel: (%d, 160) min=%.4f max=%.4f mean=%.6f\n", T_stacked, mn, mx,
+                sum / stacked.size());
+    }
+
     if (out_n_mels)
-        *out_n_mels = 0;
+        *out_n_mels = 160;
     if (out_T_mel)
-        *out_T_mel = 0;
-    return nullptr;
+        *out_T_mel = T_stacked;
+
+    float* result = (float*)malloc(stacked.size() * sizeof(float));
+    if (!result)
+        return nullptr;
+    std::memcpy(result, stacked.data(), stacked.size() * sizeof(float));
+    return result;
 }
 
 extern "C" float* granite_nle_run_encoder(struct granite_nle_context* ctx, const float* /*mel*/, int /*n_mels*/,
