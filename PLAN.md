@@ -17,6 +17,7 @@ All backends support `-m auto --auto-download`. Three new ggml ops
 |---|---|---|---|
 | **HIGH** | [#52 Qwen3-TTS](#52-qwen3-tts) — speaker_encoder forward | Medium | talker + code_predictor + codec done; ECAPA next |
 | **HIGH** | [#51 MiMo-V2.5-ASR runtime](#51-mimo-v25-asr-runtime) | Large | converters done; runtime is a stub |
+| **HIGH** | [#54 granite-speech-4.1 plus / nar](#54-granite-speech-41-plus--nar-variants) | Medium | base 4.1 done + 4 GGUFs published; plus/nar converters done; runtimes pending |
 | **MEDIUM** | [#5 Reference backends](#5-reference-backends-for-parakeetcanarycohere) | Medium | parakeet/cohere DONE; canary remaining |
 | **MEDIUM** | [#53 core/audio_decoder.h](#53-coreaudio_decoderh--dry-across-tts--codec-backends) | Medium | DRY across qwen3-tts/mimo/vibevoice |
 | **LOW** | #41 Moonshine IPA / phoneme | High | Deferred |
@@ -256,6 +257,67 @@ collection: [Qwen/Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS),
 **Effort:** Large. ~1500 LOC across runtime + codec + reference
 backend. The two TTS targets (Qwen3-TTS and any future expansion)
 share enough that landing one substantially de-risks the other.
+
+---
+
+## 54. granite-speech-4.1 plus / nar variants
+
+The `ibm-granite/granite-speech-4.1-2b` family ships three variants
+with significantly different decoders despite the shared "4.1-2b"
+naming. The base variant is fully supported; plus and nar are in
+flight.
+
+| Variant | Decoder | Encoder change | Outputs | Status |
+|---|---|---|---|---|
+| `granite-speech-4.1-2b` (base) | Granite-1B AR | none | text | DONE — 4 GGUFs on HF, encoder cos 0.999908, transcribes JFK at 2.1× realtime on M1 Q4K |
+| `granite-speech-4.1-2b-plus` | Granite-1B AR | `cat_hidden_layers: [3]` | text + speaker labels + word-level timestamps | converter DONE; runtime LOADS but transcript empty — needs cat_layer index verification (off-by-one suspected: HF's `output_hidden_states[3]` includes input embedding at index 0) |
+| `granite-speech-4.1-2b-nar` | non-autoregressive (`NLENARDecoder`) | self-conditioning at L8 + BPE aux head + 4-layer hidden capture | text | converter DONE; runtime scaffold loads tensors but `run_encoder` / `run_projector` / `run_llm_editing` are stubs |
+
+### Base 4.1-2b (DONE)
+
+- `granite-4.1` backend alias of `granite`
+- 4 GGUF variants on `cstr/granite-speech-4.1-2b-GGUF`: F16 (5.58 GB),
+  Q4K with F32 encoder (2.94 GB, recommended), Q4K with F16 encoder
+  (2.07 GB, sweet spot), Q4K everywhere (1.7 GB, mini)
+- 3.7× total speedup from norm + QKV graph fusion (commit `796824f`)
+- `GRANITE_BENCH=1` per-stage timer
+- New GGUF keys: `enc.context_size`, `enc.max_pos_emb`,
+  `proj.encoder_hidden_size`, `proj.cat_layers`. Old values default
+  in for legacy GGUFs.
+
+### Plus variant — pending
+
+1. Verify cat_layer index against a Python reference dump
+   (`tools/dump_reference.py`). Most likely fix: capture after
+   `il == 2` instead of `il == 3` to match
+   `output_hidden_states[3]` which includes the input embedding at
+   index 0. ~10 LOC plus a diff-harness validation.
+2. Decode the structured-output tokens upstream emits — speaker
+   labels and word-level timing markers. Template-only change in
+   `examples/cli/crispasr_backend_granite.cpp`.
+
+### NAR variant — pending
+
+1. **Encoder forward** (`granite_nle_run_encoder`). Same Conformer
+   block as base; add self-conditioning at layer 8 (the running CTC
+   logits feed back through `out_mid`) + BPE auxiliary head with
+   posterior-weighted-pool window=4 + capture intermediate hidden
+   states at indices `[4, 8, 12, -1]`. Most of this can be lifted
+   from `granite_speech.cpp`. ~600 LOC.
+2. **Windowed Q-Former projector**
+   (`granite_nle_run_projector`). 4 per-encoder-layer LayerNorms +
+   `layer_proj` (4096 → 2048) + 32-head SDPA cross-attention + learned
+   `query` and `window_positions`. ~250 LOC. Reference at
+   `ref/granite-speech-4.1-2b-nar/modeling_projector.py`.
+3. **Non-causal LLM editing pass** (`granite_nle_run_llm_editing`).
+   Single forward over flat `[audio_embs, text_with_eos_slots]`. Every
+   self-attention layer runs `is_causal=False`. Argmax + 
+   `unique_consecutive` + drop-EOS on slot positions gives the
+   transcript. Reuses `core_attn::kv_self_attn`. ~150 LOC.
+
+**Effort:** Medium. ~1000 LOC for the NAR runtime; plus is ~10 LOC
+plus validation. Both converters and the runtime scaffolds are
+already in tree as of commits `d6ddad0` / `eb78a59`.
 
 ---
 

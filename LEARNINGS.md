@@ -4387,3 +4387,102 @@ which stage dominates after future changes.
 is cheap to add and pays for itself the first time you need to compare
 two implementation paths. Add it to every new model runtime up front,
 not retroactively when you're trying to debug a regression.
+
+### Encoder norm + QKV fusion: 3.7× total speedup, math unchanged
+
+Per-layer attention used to be three operations:
+
+```cpp
+cpu_layernorm(normed, hidden);        // CPU pass over (d * T) floats
+run_matmul(Q, normed, W_q);           // Metal dispatch #1
+run_matmul(KV, normed, W_kv);         // Metal dispatch #2
+```
+
+Three problems compound:
+
+1. **Two Metal command-buffer round-trips per layer** — each
+   `ggml_backend_sched_graph_compute` is ~1 ms on M1, so 2 × 16 = 32 ms
+   of pure dispatch overhead per encoder forward.
+2. **A CPU layernorm pass per layer** that allocates fresh `nw[d]`,
+   `nb[d]` buffers and runs single-threaded over T frames each call.
+3. **A CPU ↔ GPU round-trip on the `normed` tensor** — written by the
+   CPU, immediately fed back to the GPU as a graph input.
+
+Folded into a single `run_norm_matmul_pair` graph that does
+`ggml_norm` + `mul_mat W_q` + `mul_mat W_kv` on the same input. Both
+matmuls are parallel branches. Numbers on M1 / Q4_K (F32 encoder),
+JFK 11 s clip:
+
+| Metric              | Before     | After      | Speedup |
+|---------------------|-----------:|-----------:|--------:|
+| `run_encoder`       | 12,624 ms  |  2,972 ms  | 4.2×    |
+| `run_projector`     |  1,038 ms  |    234 ms  | 4.4×    |
+| Total transcribe    |    19.6 s  |     5.3 s  | 3.7×    |
+| Realtime            |    0.6×    | **2.1×**   |         |
+
+The math is the same so encoder cosine vs PyTorch BF16 reference
+stays at ~0.999855 (was 0.999908 — drift of 5e-5 from running the
+norm in F32 ggml on Metal vs the previous F32 CPU code path).
+Projector dropped 4× too as a side effect of the warmer Metal
+kernel pipeline cache after the encoder fusion.
+
+**Lesson.** When a runtime mixes CPU and GPU work in tight loops, the
+per-layer CPU ↔ GPU boundary is usually a 5–10× cost compared to the
+actual compute. Folding the mixed-mode boundary into a single graph
+dispatch is the highest-leverage optimization available — bigger than
+micro-optimizing the matmul kernels. The trick is finding ops that
+share an input (here: norm + Q + KV all consume the same `hidden`);
+ggml schedules them as parallel branches so you also save matmul
+wall time on top of the dispatch savings.
+
+### Quantizer F16-encoder downcast: bias and conv_bn caveats
+
+`CRISPASR_GRANITE_ENC_F16=1` for the granite quantizer downcasts
+`enc.*` weights from F32 → F16, halving the encoder footprint and
+landing at ~2.07 GB instead of 2.94 GB (Q4K with F32 encoder) with
+encoder cos_min still 0.999855. Two bugs found during integration:
+
+- **`conv_bn.weight` / `conv_bn.bias` must stay F32.** The runtime
+  does in-place BN folding at load time, writing the precomputed
+  scale/shift back into the conv_bn tensors via
+  `ggml_backend_tensor_set(b.conv_bn_w, scale.data(), 0,
+   inner * sizeof(float))`. With F16 storage the request size doesn't
+  match `ggml_nbytes(t)` and the call aborts. Fix: skip `conv_bn` in
+  the downcast pattern alongside the existing `norm` /
+  `running_mean` / `running_var` / `rel_pos` exclusions.
+- **1D bias tensors must stay F32.** Metal's
+  `ggml_add(matmul_out_f32, bias)` asserts `src[1]->type ==
+   GGML_TYPE_F32` (in `ggml-metal-ops.cpp:3074`). Restricting the
+  downcast to 2D weight matrices (`ggml_n_dims(t) == 2`) covers both
+  this and any future 1D parameter that finds its way into the
+  encoder.
+
+**Lesson.** "Quantize / downcast everything that's a weight" is the
+right starting point but every special tensor (BN stats, biases,
+RPE tables, learned positional embeds) needs an explicit
+exclusion. Match the converter's `is_f32_tensor` policy when you
+write a quantizer's downcast path — they encode the same domain
+knowledge.
+
+### `cat_hidden_layers` indexing: `output_hidden_states` includes the input embedding
+
+When implementing the granite-speech-4.1-2b-plus runtime support,
+the encoder loads cleanly, the projector accepts the wider 2048-dim
+input, and the LLM runs to completion — but the transcript is empty.
+Most likely cause: the upstream `cat_hidden_layers: [3]` in the
+config indexes into HuggingFace's `output_hidden_states` tuple, and
+that tuple's index 0 is the *input embedding*, not the first layer's
+output. So `[3]` means "after layer 2" in our 0-indexed encoder
+loop, not "after layer 3".
+
+This is the kind of off-by-one that is impossible to detect from
+the encoder cosine alone (the captured tensor still has the right
+shape and reasonable magnitudes — it's just one layer off, which
+slightly degrades the projector's K/V quality, which is enough to
+push the LLM into degenerate decode).
+
+**Lesson.** Whenever a model config's "layer index" refers into HF's
+`output_hidden_states` API, expect the +1 offset for the embedding
+slot. Confirm with a per-layer dump
+(`tools/dump_reference.py` extended with the variant) before
+trusting the runtime output.

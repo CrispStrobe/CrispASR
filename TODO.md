@@ -434,8 +434,7 @@ each backend. High-value gaps to close:
   `#pragma omp parallel for` on the per-layer encoder hot loops
   would deliver a measurable speedup on CPU but shifts the float
   reduction order, so the change needs its own regression gate
-  (allow small float drift; transcript must stay correct). Encoder
-  Conformer is the dominant cost today (~22.5s on jfk.wav).
+  (allow small float drift; transcript must stay correct).
 - **[done]** ~~Consider porting the per-layer CPU encoder to a single
   ggml graph.~~ Done: `granite_build_encoder()` wired with runner
   function, enable via `GRANITE_ENCODER_GRAPH=1`. Identical output on
@@ -443,6 +442,91 @@ each backend. High-value gaps to close:
   issues surface on other test cases.
 - **[done]** ~~Remove dead ggml graph encoder `granite_build_encoder`.~~
   Resurrected — now used by the graph encoder path (`GRANITE_ENCODER_GRAPH=1`).
+- **[done]** ~~Encoder norm + QKV fusion.~~ The CPU per-layer attention
+  used to do `cpu_layernorm(normed)` + `run_matmul(Q)` + `run_matmul(KV)`
+  as three separate operations (one CPU pass + two Metal dispatches).
+  Now folded into a single ggml graph via `run_norm_matmul_pair()`.
+  **3.7× total speedup** on M1 Q4K (encoder 12.6s → 3.0s, total
+  19.6s → 5.3s, 0.6× → **2.1× realtime**). Math unchanged so cosines
+  still pass. Commit `796824f`.
+
+### granite-4.1 (4.1-2b family)
+- **[done]** ~~Base 4.1-2b backend.~~ `granite-4.1` registered as a
+  backend alias of `granite`; auto-download from
+  `cstr/granite-speech-4.1-2b-GGUF`. F16 (5.58 GB), Q4K (2.94 GB) and
+  Q4K-mini (1.7 GB) GGUFs published. Diff against PyTorch BF16 ref:
+  encoder cos_min 0.999908, projector cos_min 0.999995 (3/3 PASS).
+- **[done]** ~~Q4K with F16 encoder variant.~~ New `q4_k-f16enc.gguf`
+  (~2.07 GB) — LLM Q4K, encoder + projector F16 (norms / biases / BN
+  stats stay F32). 3/3 PASS at encoder cos_min 0.999855. ~1 GB smaller
+  than recommended Q4K. Quantizer flag: `CRISPASR_GRANITE_ENC_F16=1`.
+- **[done]** ~~Q4K dequantize OOM root cause.~~ Tiny `tctx` for
+  `ggml_new_graph` in the RPE init path; replaced with
+  `ggml_get_type_traits()->to_float`. Same fix in CPU encoder loop.
+  Committed `031d676`.
+- **[done]** ~~De-hardcode block-attention `context_size` (200) and
+  `max_pos_emb` (512).~~ Now read from new GGUF keys
+  `granite_speech.enc.{context_size,max_pos_emb}` with old values as
+  defaults so legacy GGUFs keep loading.
+- **[done]** ~~`GRANITE_BENCH=1` per-stage timer.~~ RAII wrapper that
+  prints elapsed wall-clock for compute_mel / run_encoder /
+  run_projector. Useful for A/B-ing the encoder paths.
+- **[next] PLUS variant — verify cat_layer index against upstream.**
+  `granite-speech-4.1-2b-plus-f16.gguf` is converted (5.6 GB) and the
+  runtime parses `granite_speech.proj.cat_layers`, captures the
+  intermediate hidden state, concatenates with the final encoder output
+  and feeds the wider 2048-dim into the projector — but the LLM
+  produces empty transcripts on JFK. Most likely cause: HF's
+  `cat_hidden_layers: [3]` indexes into `output_hidden_states` (which
+  starts with the input embedding at index 0), so we should be
+  capturing **after layer 2** in our 0-indexed loop, not after layer 3.
+  Need a Python reference dump (`tools/dump_reference.py` for the
+  plus model) to verify the layer-3 hidden state numerically and
+  flip the index off-by-one if needed. Files:
+  `src/granite_speech.cpp` (capture in encoder loop, lines around
+  `proj_cat_layers_parsed`); `tools/reference_backends/granite.py`
+  (would need a `granite_speech_plus` variant). Commit `eb78a59`.
+- **[next] PLUS variant — speaker labels + word timestamps.** Once
+  the cat_layer index is verified the LLM should emit the structured
+  output upstream advertises (per the IBM model card). The decoder
+  template / output parsing for those structured tokens lives in
+  `examples/cli/crispasr_backend_granite.cpp` — most of the work is
+  template-only.
+- **[next] NAR variant — encoder forward.** Converter (`models/convert-granite-nle-to-gguf.py`)
+  done; produces `granite-speech-4.1-2b-nar-f16.gguf` (5.36 GB, 930
+  tensors). Runtime (`src/granite_nle.{h,cpp}`) loads the model and
+  wires the CTC + LLM tokenizers but `run_encoder` returns nullptr.
+  Encoder is the **same 16-layer Conformer as the base** plus:
+  (a) self-conditioning at layer 8 — the running CTC logits feed
+  back via `out_mid` into the hidden state; (b) BPE auxiliary head
+  (`out_bpe`, 100353 vocab) computed only on posterior-weighted-pooled
+  hidden states (window=4); (c) capture hidden states at indices
+  `[4, 8, 12, -1]` for the projector's 4-encoder-layer concat.
+  Most of (a) and (c) can be lifted from `granite_speech.cpp`'s
+  encoder forward; (b) is a fresh ~80 LOC. Commit `d6ddad0`.
+- **[next] NAR variant — windowed Q-Former projector.** Different
+  tensor naming and structure from base 4.1's BLIP-2 Q-Former: 4
+  per-encoder-layer LayerNorms, a `layer_proj` (4096 → 2048), 32-head
+  flat-named cross-attention, learned `query` (1, 3, 2048) +
+  learned `window_positions` (1, 15, 2048), final `out_norm` +
+  `out_linear`. ~250 LOC. Reference in
+  `ref/granite-speech-4.1-2b-nar/modeling_projector.py`.
+- **[next] NAR variant — non-causal LLM editing pass.** The LLM
+  runs ONCE over the flat `[audio_embs, text_with_eos_slots]`
+  sequence (every self-attention layer patched to `is_causal=False`).
+  Then argmax + `unique_consecutive` + drop EOS on the slot positions
+  gives the transcript. Editing logits + insertion-slot builder are
+  ~150 LOC; reuses `core_attn::kv_self_attn` for the LLM forward.
+- **[later] Shaw RPE in graph path — make graph path the default.**
+  `GRANITE_ENCODER_GRAPH=1` runs the encoder as a single Metal-accel
+  graph (used to be 4× faster than the CPU loop; norm+QKV fusion has
+  closed most of that gap). Still missing: query-dependent Shaw RPE
+  bias. flash_attn_ext can't handle it; needs manual `Q@K.T + Q@R.T`
+  attention. Once added, drop the CPU loop entirely.
+- **[later] PLUS / NAR HF uploads.** After the runtimes are
+  verified, upload the converted GGUFs to
+  `cstr/granite-speech-4.1-2b-plus-GGUF` and
+  `cstr/granite-speech-4.1-2b-nar-GGUF` and add registry entries.
 
 ### gemma4-e2b
 - **[later]** Speed — now **1.4× realtime** after the `end_of_turn`
