@@ -333,6 +333,19 @@ struct g3t_hp {
     uint32_t codec_nothink_id = 2155;
     uint32_t codec_think_bos_id = 2156;
     uint32_t codec_think_eos_id = 2157;
+
+    // Model variant ("base" | "custom_voice" | "voice_design"). Drives
+    // the prefill path: Base does ICL voice cloning from a reference
+    // WAV; CustomVoice picks a row from talker.token_embd by spk_id.
+    std::string tts_model_type = "base";
+
+    // CustomVoice: parallel arrays of speaker name → codec token id
+    // (used to lift speaker_embed from talker.token_embd) and an optional
+    // Chinese-dialect override (0 = no dialect; >0 = codec_language_id
+    // token for the dialect).
+    std::vector<std::string> spk_names;
+    std::vector<uint32_t> spk_token_ids;
+    std::vector<uint32_t> spk_dialect_token_ids;
 };
 
 struct g3t_layer {
@@ -2434,6 +2447,178 @@ bool build_icl_prefill_embeds(qwen3_tts_context* c, const std::string& syn_text,
     return true;
 }
 
+// CustomVoice prefill builder. Mirrors the non_streaming_mode block of
+// `Qwen3TTSForConditionalGeneration.generate` (modeling_qwen3_tts.py
+// ~lines 2166-2227) for the speaker-by-name path: no ref WAV, no ref
+// codes, no ICL fusion. The "speaker embedding" is one row from
+// `talker.token_embd` selected via spk_id (already loaded into
+// `c->runtime_spk_emb` by qwen3_tts_set_speaker_by_name).
+//
+// Layout (per upstream):
+//   [role(3)]                                                  <|im_start|>assistant\n
+//   [bridge(L_codec-1)]: tts_pad×(L_codec-2)+tts_bos | codec_in_emb[:-1]
+//   [text_block(N+1)]:   text_proj(text_content)+tts_eos | codec_pad×(N+1)
+//   [final(1)]:          tts_pad | codec_bos_emb
+//
+// where L_codec = 6 (auto language: 3 sentinels + spk + pad + bos)
+// or 7 (lang-set: 4 sentinels + spk + pad + bos), and N is the
+// length of `syn_ids[3:-5]` (the actual text content between role
+// and turn-end sentinels).
+bool build_customvoice_prefill_embeds(qwen3_tts_context* c, const std::string& syn_text,
+                                      std::vector<float>& prefill_embeds, int& T_prefill,
+                                      std::vector<float>& trailing_text_hidden, int& M_trailing) {
+    const auto& hp = c->hp;
+    const int d = (int)hp.d_model;
+
+    if ((int)c->runtime_spk_emb.size() != d) {
+        fprintf(stderr, "qwen3_tts[customvoice]: no speaker — call qwen3_tts_set_speaker_by_name first\n");
+        return false;
+    }
+
+    auto syn_ids = tokenise_assistant_text(c, syn_text);
+    if ((int)syn_ids.size() < 9) {
+        fprintf(stderr, "qwen3_tts[customvoice]: prompt too short (%zu)\n", syn_ids.size());
+        return false;
+    }
+
+    // ---- tts_bos / tts_eos / tts_pad embeds via text_proj ----
+    int32_t tts_special[3] = {(int32_t)hp.tts_bos_id, (int32_t)hp.tts_eos_id, (int32_t)hp.tts_pad_id};
+    float* tts_special_emb = run_embed_text(c, tts_special, 3);
+    if (!tts_special_emb) {
+        return false;
+    }
+    const float* tts_bos = tts_special_emb;                 // (d,)
+    const float* tts_eos = tts_special_emb + d;             // (d,)
+    const float* tts_pad = tts_special_emb + (size_t)2 * d; // (d,)
+
+    // ---- codec_input_emb: [codec_prefill | spk | pad | bos] ----
+    std::vector<int32_t> codec_prefill;
+    if (c->language_id <= 0) {
+        codec_prefill = {(int32_t)hp.codec_nothink_id, (int32_t)hp.codec_think_bos_id, (int32_t)hp.codec_think_eos_id};
+    } else {
+        codec_prefill = {(int32_t)hp.codec_think_id, (int32_t)hp.codec_think_bos_id, (int32_t)c->language_id,
+                         (int32_t)hp.codec_think_eos_id};
+    }
+    int32_t codec_pad_bos[2] = {(int32_t)hp.codec_pad_id, (int32_t)hp.codec_bos_id};
+
+    float* codec_pre_emb = lookup_rows(c, c->talker.token_embd_w, codec_prefill.data(), (int)codec_prefill.size());
+    float* codec_pb_emb = lookup_rows(c, c->talker.token_embd_w, codec_pad_bos, 2);
+    if (!codec_pre_emb || !codec_pb_emb) {
+        free(tts_special_emb);
+        free(codec_pre_emb);
+        free(codec_pb_emb);
+        return false;
+    }
+
+    const int L_codec = (int)codec_prefill.size() + 1 /*spk*/ + 2 /*pad,bos*/;
+    std::vector<float> codec_input_emb((size_t)L_codec * d);
+    {
+        size_t pos = 0;
+        const size_t bytes_pre = (size_t)codec_prefill.size() * d * sizeof(float);
+        std::memcpy(codec_input_emb.data() + pos, codec_pre_emb, bytes_pre);
+        pos += codec_prefill.size() * d;
+        std::memcpy(codec_input_emb.data() + pos, c->runtime_spk_emb.data(), (size_t)d * sizeof(float));
+        pos += d;
+        std::memcpy(codec_input_emb.data() + pos, codec_pb_emb, (size_t)2 * d * sizeof(float));
+    }
+    free(codec_pre_emb);
+    free(codec_pb_emb);
+
+    // ---- role embed: text_proj(text_embd(syn_ids[:3])) ----
+    std::vector<int32_t> role_ids(syn_ids.begin(), syn_ids.begin() + 3);
+    float* role_emb = run_embed_text(c, role_ids.data(), 3);
+    if (!role_emb) {
+        free(tts_special_emb);
+        return false;
+    }
+
+    // ---- bridge: cat(tts_pad×(L_codec-2), tts_bos) + codec_input_emb[:-1] ----
+    const int L_bridge = L_codec - 1;
+    std::vector<float> bridge((size_t)L_bridge * d);
+    for (int i = 0; i < L_bridge; i++) {
+        const float* left = (i < L_bridge - 1) ? tts_pad : tts_bos;
+        const float* right = codec_input_emb.data() + (size_t)i * d;
+        for (int j = 0; j < d; j++) {
+            bridge[(size_t)i * d + j] = left[j] + right[j];
+        }
+    }
+
+    // ---- text block: text_proj(text_content) + tts_eos | codec_pad×(N+1) ----
+    // text_content = syn_ids[3:-5]
+    std::vector<int32_t> text_content(syn_ids.begin() + 3, syn_ids.end() - 5);
+    const int N = (int)text_content.size();
+    if (N <= 0) {
+        fprintf(stderr, "qwen3_tts[customvoice]: empty text content\n");
+        free(tts_special_emb);
+        free(role_emb);
+        return false;
+    }
+    float* text_emb = run_embed_text(c, text_content.data(), N);
+    if (!text_emb) {
+        free(tts_special_emb);
+        free(role_emb);
+        return false;
+    }
+    int32_t codec_pad = (int32_t)hp.codec_pad_id;
+    float* codec_pad_emb = lookup_rows(c, c->talker.token_embd_w, &codec_pad, 1);
+    if (!codec_pad_emb) {
+        free(tts_special_emb);
+        free(role_emb);
+        free(text_emb);
+        return false;
+    }
+    const int L_text = N + 1; // +1 for tts_eos
+    std::vector<float> text_block((size_t)L_text * d);
+    for (int i = 0; i < L_text; i++) {
+        const float* left = (i < N) ? text_emb + (size_t)i * d : tts_eos;
+        for (int j = 0; j < d; j++) {
+            text_block[(size_t)i * d + j] = left[j] + codec_pad_emb[j];
+        }
+    }
+    free(text_emb);
+
+    // ---- final row: tts_pad + codec_bos_emb ----
+    int32_t codec_bos = (int32_t)hp.codec_bos_id;
+    float* codec_bos_emb = lookup_rows(c, c->talker.token_embd_w, &codec_bos, 1);
+    if (!codec_bos_emb) {
+        free(tts_special_emb);
+        free(role_emb);
+        free(codec_pad_emb);
+        return false;
+    }
+    std::vector<float> final_row((size_t)d);
+    for (int j = 0; j < d; j++) {
+        final_row[j] = tts_pad[j] + codec_bos_emb[j];
+    }
+    free(codec_bos_emb);
+    free(codec_pad_emb);
+
+    // ---- concat: role(3) + bridge(L_bridge) + text_block(L_text) + final(1) ----
+    T_prefill = 3 + L_bridge + L_text + 1;
+    prefill_embeds.assign((size_t)T_prefill * d, 0.0f);
+    size_t off = 0;
+    std::memcpy(prefill_embeds.data() + off, role_emb, (size_t)3 * d * sizeof(float));
+    off += (size_t)3 * d;
+    std::memcpy(prefill_embeds.data() + off, bridge.data(), bridge.size() * sizeof(float));
+    off += bridge.size();
+    std::memcpy(prefill_embeds.data() + off, text_block.data(), text_block.size() * sizeof(float));
+    off += text_block.size();
+    std::memcpy(prefill_embeds.data() + off, final_row.data(), (size_t)d * sizeof(float));
+
+    // ---- trailing_text_hidden = tts_pad_embed (1 row) ----
+    trailing_text_hidden.assign(tts_pad, tts_pad + d);
+    M_trailing = 1;
+
+    if (c->params.verbosity >= 1) {
+        fprintf(stderr, "qwen3_tts[customvoice]: prefill role=3 + bridge=%d + text=%d + final=1 = T=%d trailing=1\n",
+                L_bridge, L_text, T_prefill);
+    }
+
+    free(tts_special_emb);
+    free(role_emb);
+    return true;
+}
+
 // ============================================================================
 // Codec decoder implementation (PLAN #52 step 3)
 // ============================================================================
@@ -3913,6 +4098,12 @@ static ggml_cgraph* build_graph_spk_enc(qwen3_tts_context* c, int T_mel) {
 }
 
 static bool load_spk_enc(qwen3_tts_context* c) {
+    // CustomVoice variants ship with no speaker_encoder — the
+    // "speaker embedding" is just talker.token_embd[spk_id]. Skip the
+    // load (and the warnings it would emit) entirely.
+    if (c->hp.tts_model_type == "custom_voice") {
+        return true;
+    }
     auto& spk = c->spk_enc;
     char buf[256];
     auto req = [&](const char* n) { return require(c, n); };
@@ -4076,6 +4267,24 @@ extern "C" struct qwen3_tts_context* qwen3_tts_init_from_file(const char* path_m
         hp.codec_nothink_id = kv_u32(g, "qwen3tts.talker.codec_nothink_id", hp.codec_nothink_id);
         hp.codec_think_bos_id = kv_u32(g, "qwen3tts.talker.codec_think_bos_id", hp.codec_think_bos_id);
         hp.codec_think_eos_id = kv_u32(g, "qwen3tts.talker.codec_think_eos_id", hp.codec_think_eos_id);
+
+        // Model variant + CustomVoice speaker table (Phase 1 of PLAN #57).
+        hp.tts_model_type = core_gguf::kv_str(g, "qwen3tts.tts_model_type", "base");
+        hp.spk_names = core_gguf::kv_str_array(g, "qwen3tts.spk_names");
+        {
+            int64_t k = gguf_find_key(g, "qwen3tts.spk_token_ids");
+            if (k >= 0) {
+                int n = gguf_get_arr_n(g, k);
+                const auto* d = (const uint32_t*)gguf_get_arr_data(g, k);
+                hp.spk_token_ids.assign(d, d + n);
+            }
+            k = gguf_find_key(g, "qwen3tts.spk_dialect_token_ids");
+            if (k >= 0) {
+                int n = gguf_get_arr_n(g, k);
+                const auto* d = (const uint32_t*)gguf_get_arr_data(g, k);
+                hp.spk_dialect_token_ids.assign(d, d + n);
+            }
+        }
 
         auto tok = core_gguf::kv_str_array(g, "tokenizer.ggml.tokens");
         if (!tok.empty()) {
@@ -4588,6 +4797,96 @@ extern "C" int qwen3_tts_set_language(struct qwen3_tts_context* ctx, int codec_l
     return 0;
 }
 
+extern "C" int qwen3_tts_is_custom_voice(struct qwen3_tts_context* ctx) {
+    return (ctx && ctx->hp.tts_model_type == "custom_voice") ? 1 : 0;
+}
+
+extern "C" int qwen3_tts_n_speakers(struct qwen3_tts_context* ctx) {
+    if (!ctx) {
+        return 0;
+    }
+    return (int)ctx->hp.spk_names.size();
+}
+
+extern "C" const char* qwen3_tts_get_speaker_name(struct qwen3_tts_context* ctx, int i) {
+    if (!ctx || i < 0 || i >= (int)ctx->hp.spk_names.size()) {
+        return nullptr;
+    }
+    return ctx->hp.spk_names[i].c_str();
+}
+
+extern "C" int qwen3_tts_set_speaker_by_name(struct qwen3_tts_context* ctx, const char* name) {
+    if (!ctx || !name) {
+        return -1;
+    }
+    if (ctx->hp.tts_model_type != "custom_voice" || ctx->hp.spk_names.empty()) {
+        fprintf(stderr, "qwen3_tts: model is not CustomVoice — set_speaker_by_name not applicable\n");
+        return -1;
+    }
+    // Case-insensitive lookup.
+    auto lower = [](std::string s) {
+        for (auto& c : s) {
+            c = (char)std::tolower((unsigned char)c);
+        }
+        return s;
+    };
+    const std::string want = lower(name);
+    int idx = -1;
+    for (size_t i = 0; i < ctx->hp.spk_names.size(); i++) {
+        if (lower(ctx->hp.spk_names[i]) == want) {
+            idx = (int)i;
+            break;
+        }
+    }
+    if (idx < 0) {
+        fprintf(stderr, "qwen3_tts: unknown speaker '%s'. Available: ", name);
+        for (size_t i = 0; i < ctx->hp.spk_names.size(); i++) {
+            fprintf(stderr, "%s%s", i ? ", " : "", ctx->hp.spk_names[i].c_str());
+        }
+        fprintf(stderr, "\n");
+        return -2;
+    }
+    if (idx >= (int)ctx->hp.spk_token_ids.size()) {
+        fprintf(stderr, "qwen3_tts: spk_token_ids array malformed in GGUF\n");
+        return -1;
+    }
+
+    int32_t spk_id = (int32_t)ctx->hp.spk_token_ids[idx];
+    float* row = lookup_rows(ctx, ctx->talker.token_embd_w, &spk_id, 1);
+    if (!row) {
+        return -1;
+    }
+    const int d = (int)ctx->hp.d_model;
+    ctx->runtime_spk_emb.assign(row, row + d);
+    free(row);
+
+    // Dialect override: if this speaker carries one and the active
+    // synthesis language is auto OR Chinese, route to the dialect's
+    // codec_language_id token. Mirrors modeling_qwen3_tts.py:2118-2122.
+    if (idx < (int)ctx->hp.spk_dialect_token_ids.size()) {
+        uint32_t dialect_tok = ctx->hp.spk_dialect_token_ids[idx];
+        if (dialect_tok > 0) {
+            // Only override when language is auto or Chinese (id≈2055).
+            // We don't have a name→id map at runtime, so check
+            // language_id <= 0 (auto) — Chinese override happens in
+            // a follow-up if the user explicitly set Chinese.
+            if (ctx->language_id <= 0) {
+                ctx->language_id = (int)dialect_tok;
+                if (ctx->params.verbosity >= 1) {
+                    fprintf(stderr, "qwen3_tts: speaker '%s' carries dialect override → language_id=%d\n",
+                            ctx->hp.spk_names[idx].c_str(), ctx->language_id);
+                }
+            }
+        }
+    }
+
+    if (ctx->params.verbosity >= 1) {
+        fprintf(stderr, "qwen3_tts: selected CustomVoice speaker '%s' (spk_id=%d)\n",
+                ctx->hp.spk_names[idx].c_str(), spk_id);
+    }
+    return 0;
+}
+
 extern "C" float* qwen3_tts_run_text_proj(struct qwen3_tts_context* ctx, const int32_t* ids, int n_tokens, int* out_T,
                                           int* out_d) {
     if (out_T) {
@@ -4694,10 +4993,19 @@ extern "C" int32_t* qwen3_tts_synthesize_codes(struct qwen3_tts_context* ctx, co
         fprintf(stderr, "qwen3_tts: vocab empty — re-convert with the updated converter\n");
         return nullptr;
     }
-    // Need either a voice pack OR a runtime voice prompt (set_voice_prompt).
-    if (ctx->vp_active < 0 && ctx->runtime_ref_codes.empty()) {
-        fprintf(stderr, "qwen3_tts: no voice — call qwen3_tts_load_voice_pack or qwen3_tts_set_voice_prompt\n");
-        return nullptr;
+    const bool is_custom_voice = (ctx->hp.tts_model_type == "custom_voice");
+    if (is_custom_voice) {
+        // CustomVoice: need a fixed speaker selected via set_speaker_by_name.
+        if ((int)ctx->runtime_spk_emb.size() != (int)ctx->hp.d_model) {
+            fprintf(stderr, "qwen3_tts: no speaker — call qwen3_tts_set_speaker_by_name\n");
+            return nullptr;
+        }
+    } else {
+        // Base: need either a voice pack OR a runtime voice prompt.
+        if (ctx->vp_active < 0 && ctx->runtime_ref_codes.empty()) {
+            fprintf(stderr, "qwen3_tts: no voice — call qwen3_tts_load_voice_pack or qwen3_tts_set_voice_prompt\n");
+            return nullptr;
+        }
     }
 
     const bool bench = env_bool("QWEN3_TTS_BENCH");
@@ -4721,28 +5029,33 @@ extern "C" int32_t* qwen3_tts_synthesize_codes(struct qwen3_tts_context* ctx, co
         rng = (uint64_t)std::strtoull(s, nullptr, 10);
     }
 
-    // ---- ref_text: runtime voice prompt overrides voice pack ----
-    std::string ref_text;
-    if (!ctx->runtime_ref_text.empty()) {
-        ref_text = ctx->runtime_ref_text;
-    } else if (ctx->vp_active >= 0) {
-        ref_text = ctx->vp_ref_texts[ctx->vp_active];
-    }
-    if (ref_text.empty()) {
-        fprintf(stderr,
-                "qwen3_tts: no ref_text — call qwen3_tts_set_voice_prompt with ref_text or load a voice pack\n");
-        return nullptr;
-    }
-
-    // ---- ICL prefill builder (matches PyTorch's generate_icl_prompt) ----
+    // ---- prefill builder: CustomVoice (no ref) or Base ICL (ref WAV) ----
     double t0 = bench ? now_ms() : 0.0;
     std::vector<float> prefill, trailing;
     int T_pre = 0, M_trail = 0;
-    if (!build_icl_prefill_embeds(ctx, text, ref_text, prefill, T_pre, trailing, M_trail)) {
-        return nullptr;
+    if (is_custom_voice) {
+        if (!build_customvoice_prefill_embeds(ctx, text, prefill, T_pre, trailing, M_trail)) {
+            return nullptr;
+        }
+    } else {
+        std::string ref_text;
+        if (!ctx->runtime_ref_text.empty()) {
+            ref_text = ctx->runtime_ref_text;
+        } else if (ctx->vp_active >= 0) {
+            ref_text = ctx->vp_ref_texts[ctx->vp_active];
+        }
+        if (ref_text.empty()) {
+            fprintf(stderr,
+                    "qwen3_tts: no ref_text — call qwen3_tts_set_voice_prompt with ref_text or load a voice pack\n");
+            return nullptr;
+        }
+        if (!build_icl_prefill_embeds(ctx, text, ref_text, prefill, T_pre, trailing, M_trail)) {
+            return nullptr;
+        }
     }
     if (bench) {
-        fprintf(stderr, "qwen3_tts: icl_prefill %7.1f ms (T=%d)\n", now_ms() - t0, T_pre);
+        fprintf(stderr, "qwen3_tts: prefill %7.1f ms (T=%d, %s)\n", now_ms() - t0, T_pre,
+                is_custom_voice ? "customvoice" : "icl");
     }
     if (dump_dir) {
         dump_f32(dump_dir, "icl_prefill", prefill.data(), prefill.size());

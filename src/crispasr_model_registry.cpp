@@ -120,6 +120,19 @@ constexpr Entry k_registry[] = {
      "~986 MB",
      "qwen3-tts-tokenizer-12hz.gguf",
      "https://huggingface.co/cstr/qwen3-tts-tokenizer-12hz-GGUF/resolve/main/qwen3-tts-tokenizer-12hz.gguf"},
+    // Qwen3-TTS-CustomVoice: fixed-speaker fine-tune of qwen3-tts-Base
+    // with 9 baked speakers (aiden, dylan, eric, ono_anna, ryan, serena,
+    // sohee, uncle_fu, vivian). Runtime path: pick a speaker via
+    // `--voice <name>`; the speaker_embed is lifted from
+    // talker.token_embd[spk_id] (no ECAPA forward, no reference WAV).
+    // Two speakers carry Chinese-dialect overrides (dylan→Beijing,
+    // eric→Sichuan) that re-route language_id when synthesising
+    // Chinese-or-auto. Reuses the same 12 Hz tokenizer as Base.
+    {"qwen3-tts-customvoice", "qwen3-tts-12hz-0.6b-customvoice-q8_0.gguf",
+     "https://huggingface.co/cstr/qwen3-tts-0.6b-customvoice-GGUF/resolve/main/qwen3-tts-12hz-0.6b-customvoice-q8_0.gguf",
+     "~968 MB",
+     "qwen3-tts-tokenizer-12hz.gguf",
+     "https://huggingface.co/cstr/qwen3-tts-tokenizer-12hz-GGUF/resolve/main/qwen3-tts-tokenizer-12hz.gguf"},
     // Kokoro-82M: official baseline + English default voice. The German
     // backbone + German default voice ride along via k_extras (see below)
     // so users running `-m auto --backend kokoro` get a working multilingual

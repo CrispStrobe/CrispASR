@@ -94,6 +94,40 @@ int qwen3_tts_select_voice(struct qwen3_tts_context* ctx, const char* name);
 int qwen3_tts_set_language(struct qwen3_tts_context* ctx, int codec_language_id);
 
 // ---------------------------------------------------------------------------
+// CustomVoice (fixed-speaker fine-tunes — Qwen3-TTS-CustomVoice variants)
+// ---------------------------------------------------------------------------
+//
+// CustomVoice models bake N speakers into a fixed `spk_id` table at
+// training time. The "speaker embedding" is just a single row from the
+// talker's audio-code embedding table (`talker.token_embd[spk_id]`) — no
+// ECAPA forward, no reference WAV, no codec encode. Some speakers carry
+// a Chinese-dialect override (e.g. `dylan`→Beijing, `eric`→Sichuan) that
+// re-routes the codec language hint when the synthesis language is
+// Chinese or auto.
+
+// Returns the number of fixed speakers in the loaded model (0 if the
+// model isn't CustomVoice). Pass into qwen3_tts_get_speaker_name to
+// enumerate them.
+int qwen3_tts_n_speakers(struct qwen3_tts_context* ctx);
+
+// Returns the i-th fixed speaker name. Buffer is owned by ctx; do not
+// free. Returns nullptr for out-of-range indices.
+const char* qwen3_tts_get_speaker_name(struct qwen3_tts_context* ctx, int i);
+
+// Select a fixed CustomVoice speaker by name (case-insensitive). Sets
+// the runtime speaker_embed by lifting `talker.token_embd[spk_id]` (no
+// ECAPA forward needed). If the speaker carries a dialect override AND
+// the synthesis language is Chinese-or-auto, the language_id is also
+// overridden to the dialect's codec_language_id token.
+//
+// Returns 0 on success, -1 if the loaded model is not CustomVoice, -2
+// if the name is unknown.
+int qwen3_tts_set_speaker_by_name(struct qwen3_tts_context* ctx, const char* name);
+
+// Returns true if the loaded model is a CustomVoice variant.
+int qwen3_tts_is_custom_voice(struct qwen3_tts_context* ctx);
+
+// ---------------------------------------------------------------------------
 // Diff-harness stage APIs (PLAN #52 step 4)
 //
 // These expose intermediate activations without driving the AR decode

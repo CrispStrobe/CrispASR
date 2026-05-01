@@ -18,6 +18,7 @@ All backends support `-m auto --auto-download`. Three new ggml ops
 | **HIGH** | [#52 Qwen3-TTS](#52-qwen3-tts) — speaker_encoder forward | Medium | talker + code_predictor + codec done; ECAPA next |
 | **HIGH** | [#51 MiMo-V2.5-ASR runtime](#51-mimo-v25-asr-runtime) | Large | converters done; runtime is a stub |
 | **HIGH** | [#54 granite-speech-4.1 plus / nar](#54-granite-speech-41-plus--nar-variants) | Small | base + plus + nar runtimes all DONE; only NAR quant + HF upload remain |
+| **HIGH** | [#57 Commercial-friendly TTS expansion](#57-commercial-friendly-tts-backend-expansion) | Phased | Phase 1 (Qwen3-TTS-CustomVoice) in progress; phases 2-5 queued |
 | **MEDIUM** | [#5 Reference backends](#5-reference-backends-for-parakeetcanarycohere) | Medium | parakeet/cohere DONE; canary remaining |
 | **MEDIUM** | [#53 core/audio_decoder.h](#53-coreaudio_decoderh--dry-across-tts--codec-backends) | Medium | DRY across qwen3-tts/mimo/vibevoice |
 | **MEDIUM** | [#56 Kokoro multilingual phonemizer](#56-kokoro-multilingual-phonemizer-espeak-ng) | Small | espeak-ng + DE backbone shipped; HF GGUFs published 2026-05-01; auto-download wired; only Mandarin tones / JA kanji + diff-harness phonemizer-step polish remain |
@@ -25,7 +26,7 @@ All backends support `-m auto --auto-download`. Three new ggml ops
 | **LOW** | [#7 voxtral4b streaming](#7-native-voxtral4b-streaming) | High | |
 | **LOW** | [#9 Parakeet TDT GPU](#9-parakeet-tdt-decoder-gpu) | Medium | |
 | **LOW** | [#11 WebSocket server](#11-websocket-streaming-server) | High | |
-| **MEDIUM** | [#16 Shaw RPE](#16-shaw-rpe-for-granite-graph) | Medium | unblocks `GRANITE_ENCODER_GRAPH=1` as default → ~4× encoder, ~2× total realtime |
+| **DONE** | [#16 Shaw RPE](#16-shaw-rpe-for-granite-graph) | Medium | graph encoder path now default — ~2.3× total realtime; per-layer RPE fix landed |
 | **BLOCKED** | [#42 VibeVoice-ASR 7B](#42-vibevoice-asr-7b) | High | Needs ≥16 GB RAM |
 | **BLOCKED** | [#43 Fun-ASR-Nano](#43-fun-asr-nano) | Medium | License unclear |
 
@@ -152,44 +153,35 @@ current per-op path. Math is bit-identical to the CPU loop.
 ### Plan
 
 1. **DONE (prototype, May 2026):** per-block subgraph attention with
-   Shaw RPE wired up behind `GRANITE_ENCODER_GRAPH_RPE=1`. Compiles
-   clean; the new path measures encoder = ~1.18 s vs CPU baseline
-   ~3.6 s (≈3× speedup) on M1+Q4_K. Math derivation lives in the
-   source comments. **BLOCKER:** the existing `GRANITE_ENCODER_GRAPH=1`
-   baseline (no-RPE flash-attn path) is itself broken on JFK in the
-   current tree — produces only the back half of the quote ("ask what
-   you can do for your country"). My RPE addition produces the same
-   wrong output, so end-to-end validation is blocked: cannot
-   distinguish "RPE math correct" from "RPE math wrong" while the
-   no-RPE baseline is also wrong. LEARNINGS-recorded JFK accuracy on
-   the no-RPE path was "still good" at the time of writing — at some
-   point between then and now the path silently regressed.
-2. **NEXT:** debug the encoder-graph regression. Bisect granite_speech.cpp
-   commits or compare per-stage cosine against the Python reference
-   (`tools/dump_reference.py --backend granite-speech`) to localise
-   where the graph-path output starts diverging. Suspects: (a) ggml
-   flash-attn semantics changed across the recent ggml bump, (b) one
-   of the non-attention encoder ops (input_linear, FFN, conv module,
-   BN folding, mid-CTC residual) drifted, (c) the `rpe_lookup` tensor
-   was originally declared but unused — now feeding zeros may matter
-   on the no-RPE path if a graph optimisation depends on it.
-3. Once the no-RPE baseline transcribes JFK correctly, validate the
-   RPE prototype: transcripts must match the CPU path byte-for-byte;
-   `crispasr-diff granite-speech` cosine numbers must stay ≥ 0.99.
-4. Once green, promote `GRANITE_ENCODER_GRAPH_RPE=1` to default and
-   retire `GRANITE_ENCODER_GRAPH` (the approximate path).
-5. Keep `GRANITE_DISABLE_ENCODER_GRAPH=1` as the escape hatch back to
-   CPU loops (slower but bit-identical to today's behaviour).
-
-**Effort:** ~150–250 LOC in `granite_run_encoder_graph` (granite_speech)
-plus one mirror in granite_nle. Most of the per-layer Shaw RPE
-plumbing is already shared via `core/conformer_ibm.h` after PLAN #55
-step 3, so the lift can stay small.
+   Shaw RPE wired up behind `GRANITE_ENCODER_GRAPH_RPE=1`.
+2. **DONE (May 2026):** root-caused the regression — the loader built
+   only layer 0's RPE lookup (`ctx->rpe_lookup`) and the graph builder
+   reused it for all 16 layers, on the assumption that
+   granite-speech ties RPE across layers. granite-speech-4.1-2b in
+   fact stores **distinct** `attn_rel_pos.weight` per encoder block
+   (verified: layer 0 mean 0.00004, layer 1 mean -0.003, layer 2 mean
+   -0.002). Fix: precompute `rpe_per_layer[il]` at load time, declare
+   the graph's `rpe_lookup` input with shape
+   `(ctx_size*hd, ctx_size, n_layers)`, and slice per-layer via
+   `ggml_view_3d` on the layer axis. CPU loop now uses the same
+   per-layer lookups. Stage-by-stage taps confirm bit-near-identical
+   output between graph and CPU paths through all 16 layers (within
+   float precision).
+3. **DONE:** with-RPE graph path transcribes JFK byte-for-byte
+   identical to CPU loop on `granite-speech-4.1-2b-q4_k`. Encoder
+   runs at ~2.1 s vs ~4.9 s CPU baseline (≈2.3× speedup, end-to-end).
+4. **DONE:** `GRANITE_ENCODER_GRAPH_RPE=1` retired in favour of the
+   graph path being on by default. The PLUS variant (cat_layers) and
+   any model whose `attn_rel_pos.weight` type is unsupported by
+   `core_conformer_ibm::build_shaw_rpe_lookup` automatically fall back
+   to the CPU loop.
+5. **DONE:** `GRANITE_DISABLE_ENCODER_GRAPH=1` is the escape hatch
+   back to the CPU loop (slower but kept around for debugging).
 
 **Validation gate (per the methodology in LEARNINGS):** stage-by-stage
-diff, encoder_layer_K cos_min ≥ 0.999 against the Python reference
-on JFK. The approximate path's drift is what we're fixing; the new
-path must be bit-identical to the CPU loop.
+diff. With per-layer RPE, every sub-stage of layer 0 and layer 1
+matches CPU within ~1e-3, and the final encoder output matches within
+the same tolerance — well above the cos_min ≥ 0.999 bar.
 
 ---
 
@@ -768,6 +760,232 @@ Small individually. Open items 2 + 3 are each an afternoon if we
 go the pre-processing route. Open item 1 is "policy" — a one-line
 fallback in the backend or a docs change. Open item 4 is ~150 LOC.
 Open item 5 is ~20 LOC if asked.
+
+---
+
+## 57. Commercial-friendly TTS backend expansion
+
+May 2026 sweep through high-traffic HF TTS models. Filter is **permissive
+license + reusable architecture + reasonable effort**. Sequenced so each
+phase unlocks a family of finetunes — finishing Phase 3 (Chatterbox stack)
+also unlocks Phase 5's CFM solver, etc.
+
+License triage that drives the ordering:
+
+| ✅ Permissive (commercial OK) | ⚠️ Llama-3.2 community (commercial OK with attribution) | ❌ Non-commercial — defer |
+|---|---|---|
+| Qwen3-TTS-{Base,CustomVoice} (Apache 2.0) | Orpheus-3B family + Kartoffel_Orpheus (llama3.2) | SebastianBodza/Kartoffelbox-v0.1 (CC-BY-NC-ND) |
+| ResembleAI/chatterbox base (MIT) | HumeAI/tada-3b-ml (llama3.2) | marduk-ra/F5-TTS-German (CC-BY-NC) |
+| SebastianBodza/Kartoffelbox_Turbo (CC-BY-4.0, gated) | | mlx-community/fish-audio-s2-pro (Fish-Audio Research) |
+| oddadmix/lahgtna-chatterbox-v0/v1 (MIT) | | amphion/Vevo1.5 (CC-BY-NC-ND) |
+| openbmb/VoxCPM2 (Apache 2.0) | | mlx-community/Voxtral-4B-TTS-2603 (CC-BY-NC; upstream Mistral Apache OK) |
+| FINAL-Bench/Darwin-TTS-1.7B-Cross (Apache 2.0) | | |
+| AMAImedia Qwen3-1.7B-TTS-Cross-Darwin AWQ (Apache 2.0) | | |
+| g-group-ai-lab/gwen-tts-0.6B (MIT) | | |
+| kugelaudio/kugelaudio-0-open (MIT) | | |
+
+License gaps to resolve before depending on a model: CosyVoice 3
+(`FunAudioLLM/Fun-CosyVoice3-0.5B-2512` — model card silent;
+v1/v2 were Apache 2.0 but v3 not yet confirmed).
+
+### Phase 1 — small code change (was "drop-in" — corrected May 2026 after smoke-test)
+
+- **Qwen3-TTS-CustomVoice (0.6B)** — converted cleanly (402 tensors,
+  F16 1.82 GB → Q8_0 968 MB, sitting in
+  `/Volumes/backups/ai/crispasr-models/qwen3-tts-12hz-0.6b-customvoice-{f16,q8_0}.gguf`).
+  **Smoke-test surfaced a contract mismatch:** CustomVoice has **no
+  `speaker_encoder_config` / no ECAPA tensors** (76 tensors fewer
+  than Base), and the runtime errors out with `no voice — call
+  qwen3_tts_load_voice_pack or qwen3_tts_set_voice_prompt`.
+  CustomVoice expects a **fixed speaker_id token** prepended to the
+  talker prefill instead. Verified from `config.json` diff:
+
+  ```
+  spk_id: { aiden:2861, dylan:2878, eric:2875, ono_anna:2873,
+            ryan:3061, serena:3066, sohee:2864, uncle_fu:3010,
+            vivian:3065 }
+  spk_is_dialect: { dylan:beijing_dialect(2074),
+                    eric:sichuan_dialect(2062), ... }
+  ```
+
+  **Good news from `ref/Qwen3-TTS/qwen_tts/core/models/modeling_qwen3_tts.py:2091`:**
+  the CustomVoice "speaker embedding" is just
+  `talker.get_input_embeddings()(spk_id)` — a single 1024-d row from
+  the codec embedding table the GGUF already contains. No extra
+  weights, no codec encoder, no ECAPA. The contract is just "swap
+  the ECAPA output for this row, and override `language_id` to the
+  dialect token when applicable." Revised estimate ~150 LOC.
+
+  **Status (May 2026): SHIPPED.**
+  1. ✓ Converter emits `qwen3tts.tts_model_type` (string) +
+     `qwen3tts.spk_names` (array<string>) + `qwen3tts.spk_token_ids`
+     (array<u32>) + `qwen3tts.spk_dialect_token_ids` (array<u32>; 0
+     means no dialect override).
+  2. ✓ Runtime (`src/qwen3_tts.cpp`):
+     - `load_spk_enc()` short-circuits to `true` for CustomVoice
+       (no warnings about missing ECAPA tensors).
+     - New `build_customvoice_prefill_embeds()` mirrors the
+       non-streaming-mode block of `Qwen3TTSForConditionalGeneration.generate`
+       (modeling_qwen3_tts.py:2166-2227): role(3) + bridge(L_codec-1)
+       + text(N+1) + final(1).
+     - New API: `qwen3_tts_is_custom_voice`, `qwen3_tts_n_speakers`,
+       `qwen3_tts_get_speaker_name`, `qwen3_tts_set_speaker_by_name`.
+       Set-by-name lifts the row from `talker.token_embd[spk_id]`
+       and applies the dialect override to `language_id` when one
+       exists and the active language is auto.
+     - `qwen3_tts_synthesize_codes` branches on `tts_model_type`,
+       skipping the "no voice"/"no ref_text" guards in CustomVoice
+       mode.
+  3. ✓ CLI (`crispasr_backend_qwen3_tts.cpp`): when
+     `qwen3_tts_is_custom_voice`, `--voice` is a speaker name
+     (defaults to first speaker if omitted). Backend factory now
+     accepts `qwen3-tts-customvoice` / `qwen3-tts-cv` aliases so the
+     auto-download registry can point at a separate variant.
+  4. ✓ Registry: `qwen3-tts-customvoice` entry added pointing at
+     `cstr/qwen3-tts-0.6b-customvoice-GGUF` (URL is the planned
+     upload target — user uploads, no code change needed once
+     pushed).
+  5. ✓ Validation: 4 ASR roundtrips passed against parakeet-tdt-v3:
+     - **vivian (English):** "Hello, this is a CustomVoice test using
+       the vivian speaker." → "Hello! This is a custom voice test
+       using the Vivian speaker." (verbatim modulo punctuation/case)
+     - **aiden (English, default):** "The quick brown fox jumps over
+       the lazy dog." → "The quick brown fox jumps over the lazy dog."
+       (verbatim).
+     - **serena (English, alias backend):** "Testing the new backend
+       alias and the serena speaker." → "Testing the new back end
+       Ilias and the Serena speaker." (1 ASR misrecognition of "alias",
+       audio is clean).
+     - **dylan (Beijing dialect):** "你好，今天天气真不错。" →
+       dialect override to `language_id=2074` correctly engaged;
+       3.28s clean audio (no Chinese ASR available locally for
+       text-side verification, peak/RMS healthy at 0.37/0.040).
+
+  6. **Pending (small, non-blocking):**
+     - Reference backend extension (`tools/reference_backends/qwen3_tts.py`)
+       so `crispasr-diff qwen3-tts` covers the CustomVoice prefill
+       path. Diff coverage today is ICL/Base only.
+     - HF upload + visible registry URL.
+
+- **havok2/Kartoffelbox-v0.1_0.65h2** — checkpoint variant of the
+  blocked Kartoffelbox-v0.1; inherits the same NC license. **Skip.**
+- **SebastianBodza/Kartoffel_Orpheus_*** family + **lex-au/Orpheus-3b-German-FT-Q8_0.gguf**
+  → land once Phase 2 Orpheus base is in.
+
+### Phase 2 — talker pattern (qwen3_tts.cpp reuse)
+
+Models with a Llama/Qwen-style AR talker + a small audio-token codec.
+The talker forward fits directly into the `core_attn::kv_self_attn` +
+`core_ffn::swiglu` pattern that #52 already uses.
+
+- **Orpheus-3B backbone** (`canopylabs/orpheus-3b-0.1-ft`,
+  llama3.2 license) — Llama-3.2-3B + SNAC codec. New backend
+  `orpheus`. Effort: talker is ~80% reuse of qwen3_tts; SNAC is a
+  small published RVQ codec (4 codebooks × 4096 @ 24 kHz). Once
+  this lands, Kartoffel_Orpheus + lex-au + the various Orpheus
+  finetunes are checkpoint swaps.
+- **g-group-ai-lab/gwen-tts-0.6B** (MIT) — likely a Qwen3-TTS-style
+  talker variant; need a weight inspection before sizing. If the
+  shape matches, it's a #52 registry add.
+- **HumeAI/tada-3b-ml** (llama3.2) — 3B Llama backbone + custom
+  codec. Talker reuse high; codec is a new component. Defer until
+  Orpheus lands so the SNAC vs Hume-codec contrast informs whether
+  a `core_audio_codec` helper makes sense (overlaps with #53).
+
+### Phase 3 — Chatterbox stack (CFM solver)
+
+This is the family-unlock phase. Building a flow-matching (CFM) ODE
+solver in ggml is the gating piece; once it's in, three commercial-OK
+models become checkpoint-only adds.
+
+- **ResembleAI/chatterbox** (MIT) — full pipeline: BPE tokenizer →
+  T3 (0.5B Llama AR) → S3Gen (CosyVoice-style CFM, ~12 ODE steps)
+  → HiFT-GAN-style vocoder → 24 kHz PCM. Plus voice encoder for
+  cloning. New backend `chatterbox`.
+- **SebastianBodza/Kartoffelbox_Turbo** (CC-BY-4.0, gated) — German
+  t3 patch on Chatterbox-Turbo (350M, smaller). Drop-in once base
+  lands. **Caveat from model card: training loss diverged late;
+  paralinguistic tags (laugh/sigh/breath) likely non-functional.**
+  Validate via #56-style ASR roundtrip before declaring usable.
+- **oddadmix/lahgtna-chatterbox-v1** (MIT) — Arabic t3 patch.
+  Drop-in once base lands.
+
+The CFM solver landed here is **also** the gating piece for Phase 4
+CosyVoice 3 (license permitting) and partially for Fish-Speech S2
+(blocked on license anyway). Ship it once, three families light up.
+
+### Phase 4 — codec-head additions to existing audio LMs
+
+Already-supported encoder/decoders in the tree get a TTS direction by
+adding a codec head + sampling path. Cheaper than a full new backend.
+
+- **Voxtral-TTS** — Mistral's Voxtral with a TTS head. Both
+  `mlx-community/Voxtral-4B-TTS-2603-mlx-4bit` (CC-BY-NC, the MLX
+  converter relicensed) and `TrevorJS/voxtral-tts-q4-gguf` exist;
+  use the upstream Apache 2.0 weights from Mistral, NOT the MLX
+  variant. The voxtral4b ASR backend supplies the encoder/decoder;
+  the TTS path needs a codec decode + new sampling. Estimate ~300 LOC.
+- **FINAL-Bench/Darwin-TTS-1.7B-Cross** (Apache 2.0) + AWQ
+  variant `AMAImedia/Qwen3-1.7B-TTS-Cross-Darwin-NOESIS-AWQ-INT4` —
+  Qwen3-1.7B talker + "Darwin" codec. The 1.7B talker is a #52
+  shape bump; the AWQ INT4 path is not currently supported and
+  should not block (use bf16/fp16). Codec is new — assess after
+  Orpheus's SNAC integration.
+
+### Phase 5 — new architectures (medium-large, standalone value)
+
+- **openbmb/VoxCPM2** (Apache 2.0, 1.26k likes) — CPM-backbone TTS
+  with diffusion/flow head. Entirely new arch family in the tree.
+  High user demand → worth the spend after Chatterbox lands so we
+  can reuse whatever flow-matching utilities the CFM solver
+  produces. Estimate: comparable to VibeVoice work (~1.5k LOC).
+- **kugelaudio/kugelaudio-0-open** (MIT) — multi-component pipeline,
+  needs deeper config read before sizing. Defer.
+
+### Deferred / explicitly skipped
+
+| Model | Reason |
+|---|---|
+| SebastianBodza/Kartoffelbox-v0.1 + havok2 derivative | CC-BY-NC-ND-4.0 — can't ship and can't even fine-tune. Recommend Kartoffelbox_Turbo (CC-BY-4.0) as the German Chatterbox path. |
+| marduk-ra/F5-TTS-German | CC-BY-NC. F5-TTS arch is a DiT — would need new ggml ops, not worth the spend on an NC model. |
+| mlx-community/fish-audio-s2-pro-* | Fish-Audio Research license — commercial requires separate Fish Audio license. |
+| amphion/Vevo1.5 | CC-BY-NC-ND. Also voice conversion, different I/O contract. |
+| mlx-community/Voxtral-4B-TTS-2603-mlx-4bit | MLX converter slapped CC-BY-NC on top. Use Mistral upstream Apache 2.0 weights via Phase 4 instead. |
+| KevinAHM/pocket-tts-onnx, Pendrokar/xvapitch_nvidia | ONNX-only, niche, no clear demand. |
+| NeuralAudioAI/NA_base, tokenaii/horus | Insufficient public info — re-evaluate if asked. |
+| FunAudioLLM/Fun-CosyVoice3-* + ayousanz/cosy-voice3-onnx | License unverified on v3. Earlier CosyVoice generations were Apache 2.0; needs confirmation before committing to CFM solver work for it. |
+
+### Per-model status
+
+| Phase | Model | License | Status | Effort |
+|---|---|---|---|---|
+| 1 | Qwen3-TTS-CustomVoice 0.6B | Apache 2.0 | **DONE — runtime spk_id path landed; 4 ASR roundtrips passed (vivian / aiden / serena / dylan-dialect). Registry line added; HF upload pending.** | S |
+| 1 | Qwen3-TTS-CustomVoice 1.7B | Apache 2.0 | queued | XS |
+| 2 | Orpheus-3B base | llama3.2 | queued | M |
+| 2 | Kartoffel_Orpheus DE (natural+synthetic) | llama3.2 | blocked on Orpheus base | XS |
+| 2 | lex-au Orpheus-3B-DE-Q8 | llama3.2 | blocked on Orpheus base (already GGUF) | XS |
+| 2 | gwen-tts-0.6B | MIT | queued — needs weight inspection first | S–M |
+| 2 | tada-3b-ml | llama3.2 | queued | M |
+| 3 | Chatterbox base | MIT | queued — CFM solver gating | L |
+| 3 | Kartoffelbox_Turbo DE | CC-BY-4.0 (gated) | blocked on Chatterbox base | XS |
+| 3 | lahgtna-chatterbox-v1 AR | MIT | blocked on Chatterbox base | XS |
+| 4 | Voxtral-TTS (Mistral upstream) | Apache 2.0 | queued | M |
+| 4 | Darwin-TTS-1.7B-Cross | Apache 2.0 | queued | M |
+| 5 | VoxCPM2 | Apache 2.0 | queued — large new arch | L |
+| 5 | kugelaudio-0-open | MIT | needs scoping | TBD |
+
+### Effort
+
+Phase 1 is hours. Phase 2 is one new backend (Orpheus) + N
+checkpoint adds. Phase 3 is the CFM solver + Chatterbox runtime —
+the largest single piece, but unlocks Phase 5's VoxCPM2 partially.
+Phase 4 is bolt-ons. Phase 5 is standalone large.
+
+Sequencing rationale: do Phase 1 immediately (free coverage), then
+Phase 2 because Orpheus reuses #52's talker code most directly,
+then Phase 3 because CFM is the biggest force-multiplier, then
+Phase 4 (codec heads) as opportunistic, then Phase 5 (VoxCPM2) once
+flow-matching utilities exist.
 
 ---
 

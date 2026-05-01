@@ -109,25 +109,58 @@ public:
         if (!ctx_ || text.empty())
             return {};
 
-        // Voice prompt: load once on first synthesise call. Two paths:
-        //   --voice X.gguf       → baked voice pack
-        //   --voice X.wav --ref-text "..." → runtime ECAPA + codec encoder
-        if (!voice_loaded_ && !params.tts_voice.empty()) {
-            const std::string& v = params.tts_voice;
-            if (ends_with_ci(v, ".wav")) {
-                if (params.tts_ref_text.empty()) {
-                    fprintf(stderr, "crispasr[qwen3-tts]: --voice is a WAV but --ref-text was not set. "
-                                    "Provide the reference transcription so the talker can match it.\n");
+        // Voice prompt: load once on first synthesise call. Three paths:
+        //   --voice <name>       → CustomVoice fixed-speaker selection
+        //                          (only when the loaded model is CustomVoice)
+        //   --voice X.gguf       → baked voice pack (Base)
+        //   --voice X.wav --ref-text "..." → runtime ECAPA + codec encoder (Base)
+        if (!voice_loaded_) {
+            if (qwen3_tts_is_custom_voice(ctx_)) {
+                // CustomVoice: --voice is a speaker NAME (e.g. "vivian").
+                // If absent, default to the first speaker in the table.
+                std::string spk_name = params.tts_voice;
+                if (spk_name.empty() || ends_with_ci(spk_name, ".wav") || ends_with_ci(spk_name, ".gguf")) {
+                    if (!spk_name.empty() && !params.no_prints) {
+                        fprintf(stderr, "crispasr[qwen3-tts]: CustomVoice expects a speaker NAME for --voice, "
+                                        "got '%s' — falling back to first speaker.\n",
+                                spk_name.c_str());
+                    }
+                    const char* first = qwen3_tts_get_speaker_name(ctx_, 0);
+                    if (!first) {
+                        fprintf(stderr,
+                                "crispasr[qwen3-tts]: CustomVoice model has no speakers in the GGUF metadata\n");
+                        return {};
+                    }
+                    spk_name = first;
+                }
+                if (qwen3_tts_set_speaker_by_name(ctx_, spk_name.c_str()) != 0) {
                     return {};
                 }
-                if (qwen3_tts_set_voice_prompt_with_text(ctx_, v.c_str(), params.tts_ref_text.c_str()) != 0) {
-                    fprintf(stderr, "crispasr[qwen3-tts]: failed to set voice prompt from '%s'\n", v.c_str());
-                    return {};
+                if (!params.no_prints) {
+                    fprintf(stderr, "crispasr[qwen3-tts]: CustomVoice speaker = '%s' (available: ", spk_name.c_str());
+                    int n = qwen3_tts_n_speakers(ctx_);
+                    for (int i = 0; i < n; i++) {
+                        fprintf(stderr, "%s%s", i ? ", " : "", qwen3_tts_get_speaker_name(ctx_, i));
+                    }
+                    fprintf(stderr, ")\n");
                 }
-            } else {
-                if (qwen3_tts_load_voice_pack(ctx_, v.c_str()) != 0) {
-                    fprintf(stderr, "crispasr[qwen3-tts]: failed to load voice pack '%s'\n", v.c_str());
-                    return {};
+            } else if (!params.tts_voice.empty()) {
+                const std::string& v = params.tts_voice;
+                if (ends_with_ci(v, ".wav")) {
+                    if (params.tts_ref_text.empty()) {
+                        fprintf(stderr, "crispasr[qwen3-tts]: --voice is a WAV but --ref-text was not set. "
+                                        "Provide the reference transcription so the talker can match it.\n");
+                        return {};
+                    }
+                    if (qwen3_tts_set_voice_prompt_with_text(ctx_, v.c_str(), params.tts_ref_text.c_str()) != 0) {
+                        fprintf(stderr, "crispasr[qwen3-tts]: failed to set voice prompt from '%s'\n", v.c_str());
+                        return {};
+                    }
+                } else {
+                    if (qwen3_tts_load_voice_pack(ctx_, v.c_str()) != 0) {
+                        fprintf(stderr, "crispasr[qwen3-tts]: failed to load voice pack '%s'\n", v.c_str());
+                        return {};
+                    }
                 }
             }
             voice_loaded_ = true;

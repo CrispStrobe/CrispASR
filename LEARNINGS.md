@@ -4436,7 +4436,7 @@ was much smaller in the quantized case, so we read random uninitialised
 bytes off the end of the device buffer and they tokenised to noise.
 The fix is the same dispatch on `rpe_w->type`.
 
-### Granite encoder graph path is ~4× faster than the CPU loop
+### Granite encoder graph path is ~2.3× faster end-to-end (default since PLAN #16)
 
 The CPU per-layer loop in `granite_speech_run_encoder` dispatches
 ~96 small ggml graphs (one per matmul / per layer) to the scheduler.
@@ -4444,42 +4444,53 @@ Each dispatch carries scheduler overhead — `ggml_backend_sched_reset`,
 `ggml_backend_sched_alloc_graph`, kernel pipeline lookup. With Metal
 that's a full command-buffer round-trip per matmul.
 
-The opt-in `GRANITE_ENCODER_GRAPH=1` path builds the **entire 16-layer
-encoder as a single ggml graph** and dispatches it once. Numbers on
-M1 / Q4_K (encoder kept F32) for an 11s JFK clip:
+The graph path now builds the **entire 16-layer encoder as a single
+ggml graph** with per-block manual attention that includes Shaw RPE
+bias (bit-near-identical to the CPU loop, well above
+`cos_min ≥ 0.999` on JFK). Numbers on M1 / Q4_K (encoder F32) for
+an 11 s JFK clip:
 
-| Path                       | run_encoder | total      | realtime |
-|----------------------------|------------:|-----------:|---------:|
-| CPU loops (default)        |  12,624 ms  |  19.6 s    | 0.6×     |
-| `GRANITE_ENCODER_GRAPH=1`  |   3,110 ms  |   7.55 s   | **1.5×** |
+| Path                                         | total   | realtime |
+|----------------------------------------------|--------:|---------:|
+| CPU loops (`GRANITE_DISABLE_ENCODER_GRAPH=1`)|  4.85 s |   2.3×   |
+| Graph (default)                              |  2.11 s | **5.2×** |
 
-The graph path currently omits Shaw relative position embeddings
-(`flash_attn_ext` can't ingest a Q-dependent additive bias), so
-output is approximate. Accuracy on JFK is still good but for harder
-material the missing RPE bias matters.
+**Per-block subgraph shape.** Mirrors the projector's windowed
+dispatch: `ctx_size=200` blocks, `ceil(T/200)` blocks per layer, all
+emitted into one big graph. Per block the graph computes
+`scores = Q · K^T + Q · RPE_block` → `softmax · V`. The RPE bias
+table is precomputed once per layer at load time
+(`core_conformer_ibm::build_shaw_rpe_lookup`) and uploaded into a
+single stacked input tensor of shape
+`(ctx_size*hd, ctx_size, n_layers)`, sliced per-layer via
+`ggml_view_3d` on the layer axis.
 
-**Path forward.** To make the graph path the default and drop the
-CPU loop, attention must be implemented manually as
-`Q @ K^T + Q @ R^T → softmax → @ V` instead of via `flash_attn_ext`.
-The RPE lookup tensor (`rpe_lookup`, declared as graph input but
-unused) is the seam.
+**Regression that motivated this** *(May 2026, fixed in this commit).*
+The earlier `GRANITE_ENCODER_GRAPH=1` baseline silently produced
+"ask what you can do for your country" on JFK — only the back half
+of the quote — because `ctx->rpe_lookup` was built from **layer 0's**
+`attn_rel_pos.weight` and reused for all 16 layers. The "RPE is tied
+across layers" assumption was wrong for granite-speech-4.1-2b: each
+block stores a distinct table (layer 0 mean ≈ 0.00004, layer 1 mean
+≈ -0.003, layer 2 mean ≈ -0.002). Layer 0 still matched the CPU
+loop bit-for-bit, but layer 1 diverged immediately in the attention
+output, and the drift compounded so badly by layer 16 that the LLM
+only latched onto the back half of the audio. The CPU loop was
+unaffected because it was already building per-layer RPE locally
+inside the encoder forward.
 
-**Per-block subgraph plan (May 2026, post-PLAN #55 refactor).** The
-preferred shape mirrors the projector's windowed dispatch:
-`ctx_size=200` blocks, ceil(T/200) blocks per layer, build a tiny
-graph per block per layer. RPE bias is precomputed once at load
-time (`core_conformer_ibm::build_shaw_rpe_lookup`, now shared
-between granite_speech and granite_nle after step 3). Math is
-bit-identical to the CPU loop — no flash-attn fusion, but ~16×
-fewer scheduler dispatches than the per-op CPU-loop path. First
-landing gated by `GRANITE_ENCODER_GRAPH_RPE=1`; full plan in
-PLAN.md §16.
-
-**Lesson.** A "single big graph" is almost always faster than many
-small graphs on GPU backends because the per-dispatch cost dwarfs
-the per-op cost for our typical layer sizes. When porting a new
-encoder, default to the graph path and only fall back to per-op
-loops if a specific op isn't fusable.
+**Lessons.**
+1. A "single big graph" is almost always faster than many small
+   graphs on GPU backends because the per-dispatch cost dwarfs the
+   per-op cost for our typical layer sizes.
+2. When two paths share a precomputed table (here: RPE lookup),
+   make sure they share the *same* table builder — duplicate
+   per-layer logic is a divergence that hides until model weights
+   stop being uniform across layers.
+3. "Approximate path matches reference on JFK" is only as durable
+   as the assumptions baked into the reference. Re-validate
+   approximations against ground truth whenever upstream weights
+   change shape or stop being tied.
 
 ### Quantizer encoder skip rule for Granite Speech
 
@@ -5293,4 +5304,85 @@ when the input was German). Bake "voice failed to load → refuse to
 synthesise" into every TTS adapter; never paper over a missing
 voice prompt by feeding the model defaults.
 
+# Qwen3-TTS-CustomVoice "speaker_embed = token_embd[spk_id]" — session 2026-05-01
 
+PLAN #57 Phase 1: adding `Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice` looked
+like a registry-only drop-in (same architecture as the already-shipped
+Base) but the smoke test failed with `no voice — call
+qwen3_tts_load_voice_pack or qwen3_tts_set_voice_prompt`.
+
+## Lesson 1 — "same architecture" doesn't mean "same contract"
+
+The CustomVoice GGUF has 402 tensors vs Base's 478 — 76 tensors fewer
+because there's *no speaker_encoder section at all*. The runtime
+expected ECAPA output and bailed.
+
+The fix isn't "make the runtime tolerate missing speaker_encoder" —
+that's papering over the contract. The actual contract from upstream
+`modeling_qwen3_tts.py:2091-2101` is simpler: CustomVoice ships with
+a fixed `spk_id` table (9 speakers), and the "speaker embedding" for
+synthesis is one row from `talker.token_embd[spk_id]` — the codec
+embedding table the GGUF already contains. **No new weights, no
+ECAPA forward, no codec encoder.** The runtime just has to know
+which row to pull.
+
+Lesson: when a fine-tune drops weights you expected, read the
+upstream `generate()` before designing your fix. The path that pulls
+fewer weights at training time is usually the one that *also* pulls
+fewer weights at inference — but via a different mechanism (here, a
+table lookup in place of a forward pass).
+
+## Lesson 2 — dispatch on GGUF metadata, not filename
+
+We added `qwen3tts.tts_model_type` (string: "base" | "custom_voice" |
+"voice_design") to the GGUF metadata so the runtime branches on what
+it actually loaded, not on the filename or the CLI flags. The same
+backend factory (`qwen3-tts`) handles both variants; the same `--voice`
+flag has different semantics depending on the loaded GGUF (speaker
+NAME vs WAV/voicepack path).
+
+Existing Base flows are untouched — the CustomVoice path skips the
+speaker_encoder load, the ref_text guard, and the ICL fusion in the
+prefill builder, all keyed off `hp.tts_model_type == "custom_voice"`.
+
+## Lesson 3 — fixed-speaker dialect override is a `language_id` swap
+
+Two of the 9 speakers carry Chinese-dialect tags (`dylan`→Beijing,
+`eric`→Sichuan). Upstream re-routes `language_id` to the dialect's
+`codec_language_id` token (Beijing=2074, Sichuan=2062) only when the
+synthesis language is Chinese-or-auto. The runtime hook is the
+existing `qwen3_tts_set_language` — set_speaker_by_name calls it
+when a dialect is bound and the user hasn't explicitly chosen a
+non-Chinese language. No prefill changes needed for the dialect
+case; just `language_id <= 0` → dialect token.
+
+## Lesson 4 — the prefill builder difference is small but precise
+
+Side-by-side, the CustomVoice prefill (modeling_qwen3_tts.py:2174-2227,
+non_streaming_mode) is almost identical to the ICL prefill, *minus*
+the ref_code fusion and *plus* a separate text+codec_pad block. Shape:
+
+```
+[role(3)]                                        # <|im_start|>assistant\n
+[bridge(L_codec-1)]: tts_pad×(L_codec-2)+tts_bos | codec_in_emb[:-1]
+[text_block(N+1)]:   text_proj(text_content)+tts_eos | codec_pad×(N+1)
+[final(1)]:          tts_pad | codec_bos_emb
+```
+
+trailing_text_hidden = tts_pad_emb (1 row).
+
+A separate `build_customvoice_prefill_embeds` is cleaner than trying
+to make the existing ICL builder skip stages — the trailing semantics
+differ (single tts_pad row, never the ICL's variable-length
+text-overhang case). Keep them as parallel builders.
+
+## Lesson 5 — ASR roundtrip is the unit test (again)
+
+Per `feedback_tts_validation.md`, every TTS output gets ASR-roundtripped.
+Four roundtrips covered the implementation: 3 English speakers
+(vivian / aiden / serena) all produced verbatim parakeet-v3
+transcriptions; the dialect speaker (dylan, Mandarin) produced clean
+audio with the runtime correctly logging the `language_id=2074`
+override. Catching a regression in this path without ASR roundtrip
+would mean noticing wrong-prosody Chinese audio by ear — a much
+weaker gate.

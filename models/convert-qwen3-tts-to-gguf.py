@@ -245,9 +245,47 @@ def main():
     u32("qwen3tts.code_pred.vocab_size",   cp.get("vocab_size", 2048))
     u32("qwen3tts.code_pred.max_length",   cp.get("max_length", 20))
 
-    # speaker encoder
-    u32("qwen3tts.speaker.enc_dim",     speaker.get("enc_dim", 1024))
-    u32("qwen3tts.speaker.sample_rate", speaker.get("sample_rate", 24000))
+    # speaker encoder (only present for tts_model_type=base; CustomVoice
+    # has no ECAPA — speaker_embed comes from talker.token_embd[spk_id])
+    if speaker:
+        u32("qwen3tts.speaker.enc_dim",     speaker.get("enc_dim", 1024))
+        u32("qwen3tts.speaker.sample_rate", speaker.get("sample_rate", 24000))
+
+    # tts_model_type — drives the runtime prefill path (base = ICL/voice
+    # cloning, custom_voice = fixed-speaker token lookup, voice_design =
+    # instruct-tuned text-to-voice)
+    w.add_string("qwen3tts.tts_model_type", str(cfg.get("tts_model_type", "base")))
+
+    # CustomVoice: fixed speakers + optional dialect overrides
+    spk_id_map = talker.get("spk_id", {}) or {}
+    if spk_id_map:
+        spk_dialect_map = talker.get("spk_is_dialect", {}) or {}
+        codec_lang_id = talker.get("codec_language_id", {}) or {}
+        names = sorted(spk_id_map.keys())
+        spk_token_ids = [int(spk_id_map[n]) for n in names]
+        # 0 = no dialect override; otherwise = the codec_language_id
+        # token for the dialect (e.g. beijing_dialect=2074, sichuan=2062).
+        spk_dialect_token_ids = []
+        for n in names:
+            d = spk_dialect_map.get(n)
+            if d and d in codec_lang_id:
+                spk_dialect_token_ids.append(int(codec_lang_id[d]))
+            else:
+                spk_dialect_token_ids.append(0)
+        w.add_array("qwen3tts.spk_names", names)
+        w.add_array("qwen3tts.spk_token_ids", spk_token_ids)
+        w.add_array("qwen3tts.spk_dialect_token_ids", spk_dialect_token_ids)
+        print(f"  Speakers:      {len(names)} fixed ({', '.join(names)})")
+
+    # codec_language_id map — useful for `--language` CLI flag (Base
+    # already uses qwen3_tts_set_language with a raw int; this lets the
+    # runtime resolve names like "english"/"chinese" too).
+    codec_lang_id = talker.get("codec_language_id", {}) or {}
+    if codec_lang_id:
+        lang_names = sorted(codec_lang_id.keys())
+        lang_ids = [int(codec_lang_id[n]) for n in lang_names]
+        w.add_array("qwen3tts.codec_language_names", lang_names)
+        w.add_array("qwen3tts.codec_language_ids", lang_ids)
 
     # token sentinels
     u32("qwen3tts.tts_bos_token_id", cfg.get("tts_bos_token_id", 151672))
