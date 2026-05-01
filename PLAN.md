@@ -169,25 +169,11 @@ across the existing weight-binding loop. Effort: **Medium**.
 
 ### ~~51b. Step-decode KV cache reuse~~ — **DONE (May 2026)**
 
-Both wins shipped in HISTORY section 60. JFK transcript still
-matches gold byte-for-byte; per-step decode 1.46× faster
-(1.15 s → 0.79 s on M1+Metal+Q4_K).
-
-- **Step-only graph variant** — `mimo_asr_build_step_graph`
-  feeds `embed_w[next]` straight into the 36L LM trunk; the
-  6L input_local_transformer + group_proj + fusion are skipped
-  (their decode-time output is provably zero per the masks).
-- **Cached graph + KV reuse** — `ctx->step_t1_gf` mirrors the
-  qwen3-tts O15 path (`fixed_kv_len = kv_max_ctx`,
-  `kv_indices = lm_positions`, `ggml_set_rows`-keyed K/V scatter).
-  Plan reused across all decode steps; invalidated at every
-  transcribe entry and after `extract_stage` rebuilds the prefill
-  graph.
-
-Plus a diag-capture gate: production transcribe drops 4
-`ggml_set_output` calls + 2 `ggml_cont` clones, diff harness
-keeps them. `MIMO_ASR_BENCH=1` env exposes prefill/decode
-timing.
+Step-only graph variant + cached step graph + diag-capture gate
+shipped — JFK transcript still gold byte-for-byte; per-step
+decode 1.46× faster (1.15 s → 0.79 s on M1+Metal+Q4_K). Full
+write-up in [HISTORY.md §60](HISTORY.md). `MIMO_ASR_BENCH=1`
+env exposes prefill/decode timing.
 
 ### 51c. F16 step decode
 
@@ -221,82 +207,17 @@ collection: [Qwen/Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS),
   with a 16-codebook output head. No DiT; direct AR generation of
   RVQ codes. ~97ms end-to-end latency, 10 languages incl.
   en/de/zh/ja/ko/it.
-- **Status (April 2026):** **talker + ICL prefill + code_predictor live; intelligible synthesis verified (codec via Python)**.
-  - Converter (`models/convert-qwen3-tts-to-gguf.py`) maps the
-    actual HF tensor namespace (`talker.model.codec_embedding` →
-    `talker.token_embd`, `talker.codec_head` → `talker.output`,
-    `talker.text_projection.linear_fc{1,2}` → `talker.text_proj.fc{1,2}`,
-    speaker_encoder + 15-CB code-predictor likewise). Writes BPE
-    merges so subword tokenisation works. **Verified** end-to-end:
-    478 tensors, 0 unmapped, `qwen3-tts-0.6b-base.gguf` loads.
-  - Runtime: 28L Qwen3 talker forward via `core_attn::kv_self_attn`
-    + `core_ffn::swiglu` (single-axis NEOX RoPE — text-only collapse,
-    swap to `ggml_rope_multi` once codec splice lands). F16 KV cache.
-    `qwen3_tts_synthesize_codes(text)` AR-decodes codebook-0 from
-    `codec_head`. Empirically produces 923 codes for "Hello, this
-    is a test." on Metal.
-  - Diff harness wired: `tools/reference_backends/qwen3_tts.py`
-    drives the qwen-tts pip package on CPU and dumps stage tensors
-    to a GGUF archive. `crispasr-diff qwen3-tts` reads `text_input_ids`
-    from the archive and runs `qwen3_tts_run_text_proj` against
-    `text_proj_out` → **PASS at cos_min=1.000000** for the
-    text_embedding + resize-MLP path on the "Hello world." prompt.
-  - Debug knobs: `QWEN3_TTS_{BENCH,DEBUG,DUMP_DIR}` env vars in the
-    style of `GEMMA4_E2B_BENCH` / `OMNIASR_DUMP_DIR`.
-  - **Verified milestones (in landed order):**
-    1. ✓ Talker forward (28L Qwen3 + Q/K-norm + flash-attn + F16 KV
-       cache). `talker_logits` PASS at cos_min=1.000000 against
-       PyTorch when fed the same prefill (commit `2b85b78`).
-    2. ✓ ICL prefill builder. Independent C++ implementation of
-       `Qwen3TTSForConditionalGeneration.generate_icl_prompt` —
-       chat-template prompt + codec sentinels + speaker_embed (from
-       voice pack) + per-frame summed 16-codebook ref_code embeddings
-       + tts_pad/bos/eos splice. `talker_logits_via_icl` PASS at
-       cos_min=1.000000 (commit `b939d4f`).
-    3. ✓ Code predictor (5L Qwen3, 15 separate codec_embedding +
-       lm_head pairs, top-k=50 + temperature=0.9 sampling). Greedy
-       was a silent-output trap; sampling matches the reference
-       `subtalker_dosample=True` default (commit `9608202`,
-       `69c135c`).
-    4. ✓ Roundtrip: TTS-out → ASR-in. Our pipeline synthesises
-       "The quick brown fox jumps over the lazy dog." → 55 frames
-       × 16 codebooks → Python codec decode → 4.4s audio →
-       parakeet ASR transcribes back verbatim.
-  - **Open** (in priority order):
-    1. ✓ **Codec decoder** (Tokenizer-12Hz, commits `d1f47b1`, `48c6c1a`).
-       Converter rewritten (0 unmapped, 253 tensors, 0.25 GB F16 GGUF).
-       C++ decoder: SplitRVQ → pre_conv → 8L XFMR(512d, sliding-window=72)
-       → 2× ConvNeXt upsample → 4× SnakeBeta+tconv DecoderBlock → PCM.
-       Diff harness: 8/8 stages PASS (cos_min ≥ 0.999983) end-to-end
-       on Metal with `use_gpu=true`. The original M1 hang
-       (`kIOGPUCommandBufferCallbackErrorImpactingInteractivity`) was
-       fixed in our ggml fork — `kernel_conv_transpose_1d` was
-       iterating all IL input positions and filtering with an `if`,
-       doing ~160× wasted work which crossed the macOS GPU watchdog
-       (~5 sec). Patched to iterate only the
-       `i ∈ [ceil((j-K+1)/s0), floor(j/s0)] ∩ [0, IL-1]` range that
-       actually contributes. See LEARNINGS.md "Metal
-       conv_transpose_1d input range tightening" — MUST RE-APPLY
-       after every ggml bump. The runtime CPU-pin (`codec_sched`)
-       is kept as a safety net.
-    2. ✓ **Runtime ECAPA speaker_encoder forward** (commits `c0a9cb3`,
-       `8a4c49e`, `38040b4`). mel(24kHz) → TDNN → 3 SE-Res2Net → MFA →
-       ASP → Conv1×1 → `spk_enc_dim` (1024 for 0.6B, 2048 for 1.7B).
-       Diff harness PASS at cos_min=0.999999. Public C ABI:
-       `qwen3_tts_compute_speaker_embedding(audio, n, sr)` and
-       `qwen3_tts_set_voice_prompt[_with_text]`.
-    3. ✓ **Runtime codec encoder forward** (commits `ef11c01`,
-       `10302b4`). SEANet (init + 4 resblocks + 4 downsample) + 8L
-       transformer + downsample + RVQ encode. Diff harness 3 stages
-       at cos_min ≥ 0.999. Closes the bake-qwen3-tts-voice-pack.py
-       loop — `qwen3_tts_set_voice_prompt(wav)` now produces both
-       spk_emb and ref_codes purely in C++.
-    4. **Performance pass.** Current AR step is ~137 ms/frame on
-       M1 Metal — 1.7× slower than real-time at 12.5 fps. Bottleneck
-       is the 15 sequential code_predictor graph builds per frame.
-       Fuse them into a single graph with all 15 lm_heads and KV
-       writes baked in. Also: fused QKV in talker (qwen3_asr has
-       this; qwen3_tts could too), Q4_K weights (1.83 GB → 480 MB).
+- **Status (May 2026):** **base + CustomVoice + VoiceDesign 0.6B/1.7B all live** — talker forward, ICL prefill, code-predictor sampling, codec decoder, ECAPA speaker_encoder forward, codec encoder forward all DONE. ASR roundtrip word-exact across all variants. Open: only the **performance pass** below.
+- **Shipped milestones** (commit references in HISTORY §57/§58 + per-model status table under #57):
+  1. ✓ Talker forward (28L Qwen3 + Q/K-norm + flash-attn + F16 KV cache) — `talker_logits` cos=1.000000 (`2b85b78`).
+  2. ✓ ICL prefill builder — `talker_logits_via_icl` cos=1.000000 (`b939d4f`).
+  3. ✓ Code predictor with sampling — fixed silent-output trap (`9608202`, `69c135c`).
+  4. ✓ TTS→ASR roundtrip on parakeet-v3.
+  5. ✓ Codec decoder (Tokenizer-12Hz) — diff harness 8/8 PASS at cos≥0.999983 (`d1f47b1`, `48c6c1a`). Required a Metal `kernel_conv_transpose_1d` patch in our ggml fork (input-range tightening — see LEARNINGS, MUST RE-APPLY on every ggml bump).
+  6. ✓ ECAPA speaker_encoder runtime forward — cos=0.999999 (`c0a9cb3`, `8a4c49e`, `38040b4`). C ABI: `qwen3_tts_compute_speaker_embedding(audio, n, sr)` + `qwen3_tts_set_voice_prompt[_with_text]`.
+  7. ✓ Codec encoder runtime forward — diff 3 stages cos≥0.999 (`ef11c01`, `10302b4`). Closes the bake-script loop.
+- **Open: performance pass.** Current AR step is ~137 ms/frame on M1 Metal — 1.7× slower than real-time at 12.5 fps. Bottleneck is the 15 sequential code_predictor graph builds per frame. Fuse them into a single graph with all 15 lm_heads and KV writes baked in. Also: fused QKV in talker (qwen3_asr has this), Q4_K weights (1.83 GB → 480 MB).
+- Debug knobs: `QWEN3_TTS_{BENCH,DEBUG,DUMP_DIR}` env vars; diff harness via `tools/reference_backends/qwen3_tts.py` + `crispasr-diff qwen3-tts`.
 - **Reuse:** the talker is essentially Qwen3-0.6B/1.7B with a
   multi-codebook output head — `core_attn::kv_self_attn` +
   `core_ffn::swiglu` again. The codec needs new code for RVQ
@@ -310,12 +231,21 @@ share enough that landing one substantially de-risks the other.
 
 ---
 
-## 54. granite-speech-4.1 plus / nar variants
+## ~~54. granite-speech-4.1 plus / nar variants~~ — **DONE (May 2026)**
+
+All three variants (`granite-4.1`, `granite-4.1-plus`, `granite-4.1-nar`)
+shipped with bit-exact JFK transcription; full pipeline writeup +
+quant table + HF URLs in [HISTORY.md §61](HISTORY.md). Speaker labels
++ word-level timestamps for the `plus` variant remain queued as a
+~50 LOC chat-template follow-up.
+
+<details>
+<summary>Old per-variant breakdown (kept for reference)</summary>
 
 The `ibm-granite/granite-speech-4.1-2b` family ships three variants
 with significantly different decoders despite the shared "4.1-2b"
 naming. All three runtimes are now fully supported and bit-exact on
-JFK; only the NAR quantization + HF upload remain.
+JFK; HF upload landed.
 
 | Variant | Decoder | Encoder change | Outputs | Status |
 |---|---|---|---|---|
@@ -417,6 +347,8 @@ alias + registry), `a3147b6` (HF README).
 
 **Effort remaining:** none — encoder, projector, LLM editing, and
 transcribe are all bit-exact end-to-end on JFK.
+
+</details>
 
 ---
 
@@ -765,90 +697,32 @@ License gaps to resolve before depending on a model: CosyVoice 3
 (`FunAudioLLM/Fun-CosyVoice3-0.5B-2512` — model card silent;
 v1/v2 were Apache 2.0 but v3 not yet confirmed).
 
-### Phase 1 — small code change (was "drop-in" — corrected May 2026 after smoke-test)
+### Phase 1 — DONE
 
-- **Qwen3-TTS-CustomVoice (0.6B)** — converted cleanly (402 tensors,
-  F16 1.82 GB → Q8_0 968 MB, sitting in
-  `/Volumes/backups/ai/crispasr-models/qwen3-tts-12hz-0.6b-customvoice-{f16,q8_0}.gguf`).
-  **Smoke-test surfaced a contract mismatch:** CustomVoice has **no
-  `speaker_encoder_config` / no ECAPA tensors** (76 tensors fewer
-  than Base), and the runtime errors out with `no voice — call
-  qwen3_tts_load_voice_pack or qwen3_tts_set_voice_prompt`.
-  CustomVoice expects a **fixed speaker_id token** prepended to the
-  talker prefill instead. Verified from `config.json` diff:
+All four Phase 1 variants shipped to HF and registered as backend
+aliases:
 
-  ```
-  spk_id: { aiden:2861, dylan:2878, eric:2875, ono_anna:2873,
-            ryan:3061, serena:3066, sohee:2864, uncle_fu:3010,
-            vivian:3065 }
-  spk_is_dialect: { dylan:beijing_dialect(2074),
-                    eric:sichuan_dialect(2062), ... }
-  ```
+| Variant | Backend alias | HF repo | HISTORY |
+|---|---|---|---|
+| Qwen3-TTS-CustomVoice 0.6B | `qwen3-tts-customvoice` | [`cstr/qwen3-tts-0.6b-customvoice-GGUF`](https://huggingface.co/cstr/qwen3-tts-0.6b-customvoice-GGUF) | per-model status table below |
+| Qwen3-TTS-CustomVoice 1.7B | `qwen3-tts-1.7b-customvoice` | [`cstr/qwen3-tts-1.7b-customvoice-GGUF`](https://huggingface.co/cstr/qwen3-tts-1.7b-customvoice-GGUF) | — |
+| Qwen3-TTS-Base 1.7B | `qwen3-tts-1.7b-base` | [`cstr/qwen3-tts-1.7b-base-GGUF`](https://huggingface.co/cstr/qwen3-tts-1.7b-base-GGUF) | [§57](HISTORY.md) |
+| Qwen3-TTS-VoiceDesign 1.7B | `qwen3-tts-1.7b-voicedesign` | [`cstr/qwen3-tts-1.7b-voicedesign-GGUF`](https://huggingface.co/cstr/qwen3-tts-1.7b-voicedesign-GGUF) | [§58](HISTORY.md) |
 
-  **Good news from `ref/Qwen3-TTS/qwen_tts/core/models/modeling_qwen3_tts.py:2091`:**
-  the CustomVoice "speaker embedding" is just
-  `talker.get_input_embeddings()(spk_id)` — a single 1024-d row from
-  the codec embedding table the GGUF already contains. No extra
-  weights, no codec encoder, no ECAPA. The contract is just "swap
-  the ECAPA output for this row, and override `language_id` to the
-  dialect token when applicable." Revised estimate ~150 LOC.
+The CustomVoice contract surfaced from a config.json diff: a fixed
+`spk_id` token (e.g. `vivian:3065`, `dylan:2878`) is prepended to the
+talker prefill instead of an ECAPA forward; the speaker embedding is
+just `talker.get_input_embeddings()(spk_id)`. Dialect override on the
+`spk_is_dialect` table swaps `language_id` (e.g. dylan → beijing 2074).
+Pending: extend `tools/reference_backends/qwen3_tts.py` so
+`crispasr-diff qwen3-tts` covers the CustomVoice prefill path
+(today's diff coverage is ICL/Base only).
 
-  **Status (May 2026): SHIPPED.**
-  1. ✓ Converter emits `qwen3tts.tts_model_type` (string) +
-     `qwen3tts.spk_names` (array<string>) + `qwen3tts.spk_token_ids`
-     (array<u32>) + `qwen3tts.spk_dialect_token_ids` (array<u32>; 0
-     means no dialect override).
-  2. ✓ Runtime (`src/qwen3_tts.cpp`):
-     - `load_spk_enc()` short-circuits to `true` for CustomVoice
-       (no warnings about missing ECAPA tensors).
-     - New `build_customvoice_prefill_embeds()` mirrors the
-       non-streaming-mode block of `Qwen3TTSForConditionalGeneration.generate`
-       (modeling_qwen3_tts.py:2166-2227): role(3) + bridge(L_codec-1)
-       + text(N+1) + final(1).
-     - New API: `qwen3_tts_is_custom_voice`, `qwen3_tts_n_speakers`,
-       `qwen3_tts_get_speaker_name`, `qwen3_tts_set_speaker_by_name`.
-       Set-by-name lifts the row from `talker.token_embd[spk_id]`
-       and applies the dialect override to `language_id` when one
-       exists and the active language is auto.
-     - `qwen3_tts_synthesize_codes` branches on `tts_model_type`,
-       skipping the "no voice"/"no ref_text" guards in CustomVoice
-       mode.
-  3. ✓ CLI (`crispasr_backend_qwen3_tts.cpp`): when
-     `qwen3_tts_is_custom_voice`, `--voice` is a speaker name
-     (defaults to first speaker if omitted). Backend factory now
-     accepts `qwen3-tts-customvoice` / `qwen3-tts-cv` aliases so the
-     auto-download registry can point at a separate variant.
-  4. ✓ Registry: `qwen3-tts-customvoice` entry added pointing at
-     `cstr/qwen3-tts-0.6b-customvoice-GGUF` (URL is the planned
-     upload target — user uploads, no code change needed once
-     pushed).
-  5. ✓ Validation: 4 ASR roundtrips passed against parakeet-tdt-v3:
-     - **vivian (English):** "Hello, this is a CustomVoice test using
-       the vivian speaker." → "Hello! This is a custom voice test
-       using the Vivian speaker." (verbatim modulo punctuation/case)
-     - **aiden (English, default):** "The quick brown fox jumps over
-       the lazy dog." → "The quick brown fox jumps over the lazy dog."
-       (verbatim).
-     - **serena (English, alias backend):** "Testing the new backend
-       alias and the serena speaker." → "Testing the new back end
-       Ilias and the Serena speaker." (1 ASR misrecognition of "alias",
-       audio is clean).
-     - **dylan (Beijing dialect):** "你好，今天天气真不错。" →
-       dialect override to `language_id=2074` correctly engaged;
-       3.28s clean audio (no Chinese ASR available locally for
-       text-side verification, peak/RMS healthy at 0.37/0.040).
+Skipped: **havok2/Kartoffelbox-v0.1_0.65h2** (checkpoint variant of
+CC-BY-NC-ND blocked Kartoffelbox-v0.1).
 
-  6. **Pending (small, non-blocking):**
-     - Reference backend extension (`tools/reference_backends/qwen3_tts.py`)
-       so `crispasr-diff qwen3-tts` covers the CustomVoice prefill
-       path. Diff coverage today is ICL/Base only.
-     - HF upload + visible registry URL.
-
-- **havok2/Kartoffelbox-v0.1_0.65h2** — checkpoint variant of the
-  blocked Kartoffelbox-v0.1; inherits the same NC license. **Skip.**
-- **SebastianBodza/Kartoffel_Orpheus_*** family + **lex-au/Orpheus-3b-German-FT-Q8_0.gguf**
-  → unblocked now that Phase 2 Orpheus base shipped (commit `a0982d3`); queue as
-  checkpoint-swap registry adds.
+The Kartoffel_Orpheus DE + lex-au-orpheus-de checkpoints rolled into
+Phase 2 (per-model status table).
 
 ### Phase 2 — talker pattern (qwen3_tts.cpp reuse)
 

@@ -1159,3 +1159,100 @@ and needs the full diff-harness gauntlet); 51c (F16 step decode,
 trivial after 51a); fused QKV per LM layer (saves 2 matmuls per
 layer × 36 layers × N steps, but the converter has to be updated
 to fuse + write a single `attn_qkv.weight` tensor).
+
+### 61. granite-speech-4.1 — plus + nar variants — PLAN #54 (May 2026)
+
+The `ibm-granite/granite-speech-4.1-2b` family ships three variants
+with significantly different decoders despite the shared "4.1-2b"
+naming. Base shipped in HISTORY §54 of the granite-family DRY refactor;
+this entry records the **plus** + **nar** variants reaching bit-exact
+JFK transcription and HF release.
+
+| Variant | Decoder | Encoder change | Outputs |
+|---|---|---|---|
+| `granite-speech-4.1-2b-plus` | Granite-1B AR | `cat_hidden_layers: [3]` | text + speaker labels + word-level timestamps |
+| `granite-speech-4.1-2b-nar` | non-autoregressive (`NLENARDecoder`) | self-conditioning at L8 + BPE aux head + 4-layer hidden capture | text |
+
+**Plus variant.** Backend alias `granite-4.1-plus` registered with the
+unified Session API; PLUS GGUF (5.6 GB f16) is converted and the
+runtime concatenates encoder layer 3 with the final layer output
+(`il + 1 == cat_index`, matching HF's `output_hidden_states`
+convention). Punctuation + capitalisation come for free from the
+PLUS training default. End-to-end JFK transcript:
+
+```
+And so my fellow Americans, ask not what your country can do for you,
+ask what you can do for your country.
+```
+
+Speaker labels + word-level timestamps remain queued (template-only
+~50 LOC follow-up). Commits: `f298818` (cat_layer + tokenizer fix),
+`ed0e5ac` (backend alias + registry), `a3147b6` (HF README).
+
+**NAR variant.** Backend alias `granite-4.1-nar` registered. Three
+stages, all bit-exact on JFK:
+
+1. **Encoder forward** (`granite_nle_run_encoder`). Same Conformer
+   block as base; self-conditioning at layer 8 (running char-level
+   CTC logits feed back through `out_mid`); 4-layer hidden state
+   capture at the indices listed in `proj.encoder_layer_indices`
+   (default `[4, 8, 12, -1]`). The capture obeys HF tuple semantics:
+   `-1` resolves to `n_layers`, and the snapshot at the
+   self-conditioning layer is taken AFTER the residual is added.
+   Validated against PyTorch on JFK at cos_min ≥ 0.999. The BPE
+   auxiliary head (`enc.bpe_out`) is intentionally not wired through
+   `run_encoder` — it's only needed by the LLM editing pass's
+   text-init step, where it's faster to run on the posterior-pooled
+   features.
+2. **Windowed Q-Former projector** (`granite_nle_run_projector`).
+   Two-pass: (A) one ggml graph for the per-encoder-layer LayerNorms
+   + concat + `layer_proj` (4096 → 2048) + GELU; (B) one Q-Former
+   graph per block (`block_size=15`, `downsample_rate=5`,
+   `query_length=3`) with mean-pool over downsample groups, additive
+   `query` and `window_positions`, two 32-head SDPA cross-attention
+   + SiLU-MLP layers, and a final `out_norm` + `out_linear`. Output
+   rate: 3 audio tokens per 15 encoder frames. PyTorch JFK match at
+   `projector_output cos_min=0.999999` (T_out=111 × llm_dim=2048).
+3. **Non-causal LLM editing pass** (`granite_nle_run_llm_editing`).
+   Single graph over the flat `[audio_embs, text_embs_with_slots]`
+   sequence with µP scaling (embedding_multiplier=12,
+   attention_multiplier=1/128, residual_multiplier=0.22). 40 layers
+   of RMSNorm + non-causal `flash_attn_ext` (mask=nullptr, GQA 16/4
+   native) + SwiGLU. Tied LM head. The caller passes audio_embs
+   pre-divided by `embedding_multiplier` so the uniform downstream
+   scale-up recovers the original projector output for audio while
+   still scaling text by 12× — mirrors `_build_flat_llm_inputs`.
+   Validated bit-exact: `editing_logits cos_min=0.999999` and 47/47
+   top-1 match on JFK.
+
+**Reference dump pitfall.** `GraniteModel.forward` unconditionally
+builds an upper-triangular causal mask and passes it to SDPA, which
+then enforces causality regardless of `self_attn.is_causal=False`.
+The upstream "flash_attention_2 required" assertion is real — only
+FA2 reads `is_causal` directly without using the mask. The
+`tools/reference_backends/granite_nle.py` dumper monkey-patches
+`transformers.models.granite.modeling_granite.create_causal_mask` to
+return None to get true non-causal attention via SDPA.
+
+**Transcribe orchestration** (`granite_nle_transcribe`) wires
+together: encoder (with BPE auxiliary head:
+`posterior_weighted_pool` window=4 driven by `1 - blank_prob_mid`
+from the L8 self-conditioning softmax, populating `last_bpe_logits`)
+→ BPE-CTC greedy decode (`unique_consecutive` → drop blank label 0
+→ shift to LLM IDs by -1) → `core_bpe::detokenize` (GPT-2 byte-level
+reverse, lifted into shared `core_bpe::token_bytes_to_utf8`) → strip
++ lowercase + " "-fallback → re-tokenize via
+`core_bpe::tokenize_simple` → `add_insertion_slots` (`max(2n+1, 8)`,
+EOS-padded) → `run_projector` divided by `embedding_multiplier=12`
+and sliced to `enc_T // downsample_rate=5` audio frames →
+`run_llm_editing` → per-row argmax + unique_consecutive + drop EOS +
+detokenize. JFK end-to-end output matches reference `final_text`
+exactly.
+
+**HF release.** All three variants live on
+[`cstr/granite-speech-4.1-2b-GGUF`](https://huggingface.co/cstr/granite-speech-4.1-2b-GGUF) (base, 4 quants: F16
+5.58 GB, Q4K F32-enc 2.94 GB, Q4K F16-enc 2.07 GB, Q4K mini 1.7 GB),
+[`cstr/granite-speech-4.1-2b-plus-GGUF`](https://huggingface.co/cstr/granite-speech-4.1-2b-plus-GGUF) (plus, F16 5.6 GB),
+and [`cstr/granite-speech-4.1-2b-nar-GGUF`](https://huggingface.co/cstr/granite-speech-4.1-2b-nar-GGUF) (nar, 4 quants:
+F16 5.8 GB, Q4K 3.4 GB, Q4K f16enc 2.5 GB, Q4K mini 1.6 GB). Registry
+aliases `granite`, `granite-4.1`, `granite-4.1-plus`, `granite-4.1-nar`.
