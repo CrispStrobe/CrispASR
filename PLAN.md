@@ -426,7 +426,7 @@ known-good baselines.
 | `nle_cpu_layernorm` / `nle_run_matmul` (CPU fallbacks) | both granite | ~30 each | Yes | `core/cpu_ops.h` |
 | Macaron Conformer block (FFN1 + Shaw-RPE attn + conv module + FFN2 + post-norm) — `nle_run_ffn`, `nle_run_conv_module`, `nle_shaw_block_attention_cpu`, `nle_run_norm_matmul_pair` | both granite | ~600 each | Yes (different from parakeet's FastConformer in `core/fastconformer.h`) | `core/conformer_ibm.h` (sibling of fastconformer.h; do NOT merge — Shaw RPE / fused conv layout / BN folding differ) |
 | Granite-1B LLM forward (40 layers, GQA 16/4, µP multipliers, RoPE θ=10000, optional `is_causal=False`) — `nle_llm_attn_noncausal` + `nle_build_llm` | both granite (causal in granite_speech, non-causal in granite_nle) | ~250 each | Same shape, different `is_causal` | `core/granite_llm.h` taking an `is_causal` flag |
-| Window-based simplified Q-Former projector (layer_proj + N×{cross-attn + MLP} + out_norm + out_linear) — `nle_proj_layer_proj` + `nle_proj_build_block` | both granite | ~300 each | Yes; only the # of input encoder layer concat'd differs | `core/qformer.h` |
+| Window-based simplified Q-Former projector (layer_proj + N×{cross-attn + MLP} + out_norm + out_linear) — `nle_proj_layer_proj` + `nle_proj_build_block` | granite-nle only | ~190 | n/a (granite-speech's Q-Former is structurally different — full BLIP-2 with self-attn + cross-attn + FFN per layer, no pass A, no mean-pool. Originally listed as "both granite"; that was incorrect — confirmed during step 5) | `core/qformer.h` (NAR-only; co-located for any future simplified-windowed-Q-Former backend) |
 | Posterior-weighted pool (used by NAR's BPE aux head) | granite_nle only today | ~25 | n/a | `core/ctc.h` (next to existing `greedy_decode.h`) — generic CTC trick, useful for any aux-head variant |
 | BN-folding-at-load + Shaw RPE lookup-table builder | both granite | ~80 each | Yes | already-marginal; bundle with `conformer_ibm.h` |
 
@@ -628,10 +628,9 @@ so existing builds don't regress.
    `i` (it), `j` (ja), `p` (pt), `z` (zh). No `d_*` (de), no `r_*` (ru),
    no Korean/Arabic. Three options ordered by effort:
 
-   **Option 1 — Closer-language voice fallback (DONE measurement,
-   SHIP wiring).**
-   Tested 2026-05-01 with the same long German phrase ("Guten Tag,
-   dies ist ein Test des deutschen Phonemizers."):
+   **Option 1 — Closer-language voice fallback (SHIPPED 2026-05-01).**
+   Measured against the long German phrase ("Guten Tag, dies ist ein
+   Test des deutschen Phonemizers."):
 
    | voice | peak | RMS | duration | verdict |
    |---|---:|---:|---:|---|
@@ -642,69 +641,88 @@ so existing builds don't regress.
    `ff_siwis` is the strongest non-native fallback by RMS. Both are
    converted and live at
    `/Volumes/backups/ai/crispasr-models/kokoro-voice-{ff_siwis,ef_dora}.gguf`.
-   **Speaker timbre + prosody will sound French/Spanish, not German**
-   — the duration predictor was trained on those distributions, not
-   on German. Acceptable as a non-silence baseline; not production
-   quality.
+   Wired into `examples/cli/crispasr_backend_kokoro.cpp` as an
+   auto-fallback: when `-l` is for a language without a native pack
+   (de, ru, ko, ar, …) and `--voice` is not set, the backend looks
+   for `kokoro-voice-ff_siwis.gguf` next to the model file and loads
+   it with a one-line warning. Explicit `--voice` overrides the
+   fallback. **Speaker timbre + prosody sound French, not German** —
+   acceptable as a non-silence baseline; not production quality.
+   Replaced once Option 2a / 2b lands.
 
-   *Wiring task* (~30 LOC): in
-   `examples/cli/crispasr_backend_kokoro.cpp`, when `-l` is one of the
-   languages without a native voice pack (de, ru, ko, ar, …) and the
-   user did not pass `--voice`, auto-select `ff_siwis` and emit one
-   warning line ("kokoro: no native voice for 'de', falling back to
-   'ff_siwis' (French speaker, French-accented prosody) — see PLAN
-   #56"). Document in README. Do **not** override an explicit
-   `--voice` argument.
+   **Option 2a — Recover Tundragoon's German voice packs from
+   downstream wrappers (try first; cheapest).**
+   The only public German Kokoro voice pack on HF
+   (`Tundragoon/Kokoro-German` with `df_eva.pt` / `dm_bernd.pt`,
+   Apache-2.0) was deleted in early 2026 — the user account is gone.
+   Two downstream projects depend on it and may have cached the
+   files in their release assets / git LFS:
+   - `r1di/kokoro-fastapi-german` (GitHub)
+   - `Thomcle/kokoro_german` (GitHub)
+   Probe their releases / LFS / Docker images for `df_eva.pt` and
+   `dm_bernd.pt`. If found: convert via existing
+   `models/convert-kokoro-voice-to-gguf.py`, drop in
+   `/Volumes/backups/ai/crispasr-models/`, quality-check (peak ≥ 8000,
+   RMS ≥ 1000 against the long German phrase). 10 minutes if
+   recoverable. **However:** these were extracted via the original
+   *English-trained* StyleEncoder, so the same caveat as Option 3
+   applies — predictor/decoder weights weren't German-fine-tuned.
+   Single-speaker training with `bernd`/`eva` reference; quality is
+   reportedly usable but limited.
 
-   **Option 2 — Community-trained German voice pack (preferred for
-   real production quality).**
-   Kokoro has an active fine-tuning community; some have published
-   German + other-language voices to HF as `.pt` style packs
-   compatible with the official `Kokoro-82M` checkpoint. Search HF
-   for tags like `kokoro german`, `kokoro-de`, `kokoro-multilingual`.
-   If found:
-   - download the `.pt`,
-   - run `models/convert-kokoro-voice-to-gguf.py --input X.pt
-     --output kokoro-voice-X.gguf` (already shape-validates [510, 1,
-     256]),
-   - drop into `/Volumes/backups/ai/crispasr-models/`,
-   - quality-check with the same long-German phrase + `python -c
-     "import wave …"` RMS gate (peak ≥ 8000, RMS ≥ 1000 = passes;
-     anything lower means the German didn't actually train well).
+   **Option 2b — Use `dida-80b/kokoro-german-hui-multispeaker-base`
+   as the German backbone (best path to real native quality).**
+   <https://huggingface.co/dida-80b/kokoro-german-hui-multispeaker-base>
+   — a true Stage-1 multispeaker base fine-tune of Kokoro-82M on
+   the HUI-Audio-Corpus-German (51 speakers, 51 h, 10 epochs A40).
+   Apache-2.0 weights + CC0 training data. **This is a separate
+   model from Kokoro-82M, not a voice pack:** ships only
+   `first_stage.pth` + `config.json`. Why it helps:
+   - StyleEncoder, predictor, and decoder are all trained on
+     German — solves the root cause of the silence collapse.
+   - Style embeddings extracted from German speakers will be
+     in-distribution.
+   - HUI corpus is open, so we can pick any speaker as reference.
 
-   Quality risk: the `.pt` is just a style embedding — it doesn't
-   change the model's predictor/decoder weights. If a community
-   "voice" was extracted from German speech without any model
-   fine-tuning, the duration predictor still sees German-IPA-with-
-   English-statistics, and quality will be limited by the base model's
-   German latent capacity. Worth trying, but verify with a listening
-   test, not just RMS.
+   Steps:
+   1. Convert `first_stage.pth` to GGUF. Verify the converter at
+      `models/convert-kokoro-to-gguf.py` handles dida-80b's tensor
+      names — it's a fine-tune of Kokoro-82M so layout *should*
+      match, but spot-check first. Output:
+      `kokoro-de-hui-base-f16.gguf` (~163 MB at F16).
+   2. Extract a German voice pack: pick one speaker from HUI
+      (file IDs are public), run a 10 s reference mel through the
+      *German-fine-tuned* StyleEncoder, save as a `.pt` shaped
+      `[510, 1, 256]`, convert via existing
+      `convert-kokoro-voice-to-gguf.py`.
+   3. Dispatcher logic: when `-l de` is set, load
+      `kokoro-de-hui-base-f16.gguf` instead of `kokoro-82m-f16.gguf`
+      (and the matching German voice). Implement as a per-language
+      model-routing table in `crispasr_backend_kokoro.cpp` or the
+      auto-download manifest.
 
-   **Option 3 — Extract our own German style embedding from a
-   reference recording.**
-   Kokoro voice packs are `[max_phonemes=510, 1, 256]` style tensors,
-   produced by running a clean reference mel through the StyleEncoder
-   in StyleTTS2. Recipe:
-   1. Source a clean German speaker recording (Common Voice DE,
-      Mozilla TTS dataset, or a public-domain audiobook). Need
-      ~10 sec at 24 kHz mono.
-   2. In Python with the official `kokoro` package (or its underlying
-      `models.py`), call the StyleEncoder forward to get a
-      `[1, 1, 256]` style vector. Repeat across 510 rows (or extract
-      per-utterance-length variants if we want length-conditioned
-      style — the official voice packs vary along axis 0).
-   3. Save as a torch `.pt` matching the official voice format, then
-      run our existing converter.
-   Same caveat as option 2: the model predictor wasn't trained on
-   German duration/F0 distributions, so style alone may not unlock
-   fluent German. Test with the same RMS gate + listening pass before
-   shipping.
+   For deployable single-voice production quality, run Stage-2
+   fine-tuning on one HUI speaker (~half-day on an A40) — out of
+   scope of this PLAN item; track separately if needed.
 
-   **Recommended order:** ship Option 1's auto-fallback wiring now
-   (it's a one-liner in the backend), then in parallel pursue Option 2
-   (search HF) — if a usable community pack exists, it's the cheapest
-   path to native quality. Option 3 is the fallback if neither of the
-   above gives acceptable results.
+   **Option 3 — Extract a style embedding via the English-trained
+   StyleEncoder (only if 2a + 2b are blocked).**
+   Same recipe as Option 2a's recovery effort but starting from a
+   fresh German recording (Common Voice DE, public-domain
+   audiobook). `[max_phon=510, 1, 256]` style tensor through
+   StyleTTS2's StyleEncoder, save as `.pt`, convert. Strictly worse
+   than Option 2b because the predictor/decoder aren't German-aware;
+   keep as last-resort.
+
+   **Recommended order:**
+   1. ✓ Option 1 shipped — non-silence baseline live.
+   2. Try Option 2a (probe r1di / Thomcle for cached Tundragoon
+      voices) — 10-minute task. Best case: drop-in upgrade today.
+   3. If 2a is dry, take Option 2b (dida-80b) — half-day task for
+      true German quality. Adds a second Kokoro GGUF variant to the
+      auto-download manifest.
+   4. Option 3 is the fallback if a HUI-speaker source recording
+      can't be obtained.
 2. **Mandarin tone numbers.** espeak-ng outputs digit-suffixed
    tone markers (`ni2χˈɑu2`) that aren't in the kokoro-82m IPA vocab
    (178 symbols) and likely get dropped at tokenization, losing tone
