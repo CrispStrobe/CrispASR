@@ -4165,9 +4165,10 @@ static ggml_cgraph* build_graph_spk_enc(qwen3_tts_context* c, int T_mel) {
     ggml_set_output(h);
     h = spk_asp_block(ctx0, h, spk.asp); // [3072, 1]
 
+    const int enc_dim = (int)c->hp.spk_enc_dim;
     auto fcw = ggml_reshape_2d(ctx0, spk.fc_w, spk.fc_w->ne[1], spk.fc_w->ne[2]);
-    h = ggml_add(ctx0, ggml_mul_mat(ctx0, fcw, h), spk.fc_b); // [1024, 1]
-    h = ggml_reshape_1d(ctx0, h, 1024);
+    h = ggml_add(ctx0, ggml_mul_mat(ctx0, fcw, h), spk.fc_b); // [enc_dim, 1]
+    h = ggml_reshape_1d(ctx0, h, enc_dim);
     ggml_set_name(h, "spk_emb");
     ggml_build_forward_expand(gf, h);
     ggml_free(ctx0);
@@ -4229,12 +4230,13 @@ static bool load_spk_enc(qwen3_tts_context* c) {
     c->spk_compute_meta.resize(ggml_tensor_overhead() * 4096 + ggml_graph_overhead_custom(4096, false));
     spk.loaded = true;
     if (c->params.verbosity >= 1) {
-        fprintf(stderr, "qwen3_tts: speaker encoder loaded (ECAPA-TDNN 128→1024)\n");
+        fprintf(stderr, "qwen3_tts: speaker encoder loaded (ECAPA-TDNN 128→%u)\n", c->hp.spk_enc_dim);
     }
     return true;
 }
 
-// Run speaker encoder on mel (T, 128) row-major → (1024,) embedding.
+// Run speaker encoder on mel (T, 128) row-major → (enc_dim,) embedding.
+// enc_dim is 1024 for 0.6B-Base and 2048 for 1.7B-Base — read from hp.spk_enc_dim.
 static std::vector<float> run_spk_enc(qwen3_tts_context* c, const float* mel_TC, int T_mel) {
     // Convert mel (T, 128) row-major → ggml [C=128, T] flat layout.
     // ggml ne[0]=128 (C innermost), ne[1]=T → position of (c, t) is c + t*128.
@@ -4254,8 +4256,9 @@ static std::vector<float> run_spk_enc(qwen3_tts_context* c, const float* mel_TC,
     if (ggml_backend_sched_graph_compute(c->sched, gf) != GGML_STATUS_SUCCESS) {
         return {};
     }
-    std::vector<float> emb(1024);
-    ggml_backend_tensor_get(ggml_graph_get_tensor(gf, "spk_emb"), emb.data(), 0, 1024 * sizeof(float));
+    const int enc_dim = (int)c->hp.spk_enc_dim;
+    std::vector<float> emb(enc_dim);
+    ggml_backend_tensor_get(ggml_graph_get_tensor(gf, "spk_emb"), emb.data(), 0, (size_t)enc_dim * sizeof(float));
     return emb;
 }
 
@@ -5642,13 +5645,14 @@ extern "C" float* qwen3_tts_run_speaker_enc_on_mel(struct qwen3_tts_context* ctx
     if (emb.empty()) {
         return nullptr;
     }
-    float* buf = (float*)malloc(1024 * sizeof(float));
+    const int enc_dim = (int)ctx->hp.spk_enc_dim;
+    float* buf = (float*)malloc((size_t)enc_dim * sizeof(float));
     if (!buf) {
         return nullptr;
     }
-    std::memcpy(buf, emb.data(), 1024 * sizeof(float));
+    std::memcpy(buf, emb.data(), (size_t)enc_dim * sizeof(float));
     if (out_dim) {
-        *out_dim = 1024;
+        *out_dim = enc_dim;
     }
     return buf;
 }
@@ -5674,13 +5678,14 @@ extern "C" float* qwen3_tts_compute_speaker_embedding(struct qwen3_tts_context* 
     if (emb.empty()) {
         return nullptr;
     }
-    float* buf = (float*)malloc(1024 * sizeof(float));
+    const int enc_dim = (int)ctx->hp.spk_enc_dim;
+    float* buf = (float*)malloc((size_t)enc_dim * sizeof(float));
     if (!buf) {
         return nullptr;
     }
-    std::memcpy(buf, emb.data(), 1024 * sizeof(float));
+    std::memcpy(buf, emb.data(), (size_t)enc_dim * sizeof(float));
     if (out_dim) {
-        *out_dim = 1024;
+        *out_dim = enc_dim;
     }
     return buf;
 }
