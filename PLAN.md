@@ -17,7 +17,7 @@ All backends support `-m auto --auto-download`. Three new ggml ops
 |---|---|---|---|
 | **HIGH** | [#52 Qwen3-TTS](#52-qwen3-tts) — speaker_encoder forward | Medium | talker + code_predictor + codec done; ECAPA next |
 | **HIGH** | [#51 MiMo-V2.5-ASR runtime](#51-mimo-v25-asr-runtime) | Large | converters done; runtime is a stub |
-| **HIGH** | [#54 granite-speech-4.1 plus / nar](#54-granite-speech-41-plus--nar-variants) | Medium | base 4.1 done + 4 GGUFs published; plus/nar converters done; runtimes pending |
+| **HIGH** | [#54 granite-speech-4.1 plus / nar](#54-granite-speech-41-plus--nar-variants) | Small | base + plus + nar runtimes all DONE; only NAR quant + HF upload remain |
 | **MEDIUM** | [#5 Reference backends](#5-reference-backends-for-parakeetcanarycohere) | Medium | parakeet/cohere DONE; canary remaining |
 | **MEDIUM** | [#53 core/audio_decoder.h](#53-coreaudio_decoderh--dry-across-tts--codec-backends) | Medium | DRY across qwen3-tts/mimo/vibevoice |
 | **LOW** | #41 Moonshine IPA / phoneme | High | Deferred |
@@ -264,8 +264,8 @@ share enough that landing one substantially de-risks the other.
 
 The `ibm-granite/granite-speech-4.1-2b` family ships three variants
 with significantly different decoders despite the shared "4.1-2b"
-naming. The base variant is fully supported; plus and nar are in
-flight.
+naming. All three runtimes are now fully supported and bit-exact on
+JFK; only the NAR quantization + HF upload remain.
 
 | Variant | Decoder | Encoder change | Outputs | Status |
 |---|---|---|---|---|

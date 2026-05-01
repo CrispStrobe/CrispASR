@@ -738,10 +738,25 @@ each backend. High-value gaps to close:
   closed most of that gap). Still missing: query-dependent Shaw RPE
   bias. flash_attn_ext can't handle it; needs manual `Q@K.T + Q@R.T`
   attention. Once added, drop the CPU loop entirely.
-- **[later] PLUS / NAR HF uploads.** After the runtimes are
-  verified, upload the converted GGUFs to
-  `cstr/granite-speech-4.1-2b-plus-GGUF` and
-  `cstr/granite-speech-4.1-2b-nar-GGUF` and add registry entries.
+- **[next] NAR HF upload.** PLUS is already shipped (F16 + 3× Q4_K
+  variants on `cstr/granite-speech-4.1-2b-plus-GGUF`). NAR runtime is
+  bit-exact end-to-end on JFK as of commit `d4b892f`, and we have the
+  F16 GGUF locally at
+  `/Volumes/backups/ai/crispasr-models/granite-speech-4.1-2b-nar-f16.gguf`.
+  Outstanding:
+  - Quantize: `crispasr-quantize` produces Q4_K (q4_k=12). Build the
+    same set the base/plus families ship — Q4_K (full), Q4_K-f16enc
+    (encoder kept F16), Q4_K-mini (everything quantized; expect cos
+    ≈ 0.6–0.9 on encoder per the PLUS lessons because of the 4-layer
+    hidden-state concat).
+  - Validate each quant via `crispasr-diff granite-nle` against
+    `/tmp/nle-ref.gguf` — the new `transcribe` stage gives a single
+    pass/fail signal end-to-end. Threshold: transcribe must match the
+    reference `final_text` for Q4_K and Q4_K-f16enc; Q4_K-mini may
+    drop a punctuation token.
+  - Upload to `cstr/granite-speech-4.1-2b-nar-GGUF` (mirror the PLUS
+    repo layout: F16 + 3× Q4_K + README) and add a registry entry +
+    auto-download default (Q4_K-f16enc, mirroring PLUS).
 
 ### gemma4-e2b
 - **[later]** Speed — now **1.4× realtime** after the `end_of_turn`
