@@ -285,7 +285,11 @@ def main():
     print(f"  Safetensors:   {len(name_to_idx)} tensors in {len(st_files)} file(s)")
 
     out_path = Path(args.output)
-    w = GGUFWriter(str(out_path), arch="orpheus", use_temp_file=True)
+    # use_temp_file=False holds tensor bytes in RAM until write_tensors_to_file
+    # so the conversion only needs ~6.6 GB of free disk at the output path
+    # (instead of 13 GB temp+output). Llama-3.2-3B at f16 fits comfortably in
+    # the ~16-32 GB RAM available on Apple Silicon dev machines.
+    w = GGUFWriter(str(out_path), arch="orpheus", use_temp_file=False)
 
     # ----- metadata -----------------------------------------------------
     w.add_name(f"orpheus-{args.variant}")
