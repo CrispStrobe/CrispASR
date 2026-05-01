@@ -709,3 +709,48 @@ CPU-side RVQ loop was assuming channels-first indexing while the SEANet
 output was transposed to row-major `[T, 512]`. This fix restored clear
 voice cloning in the end-to-end CLI, eliminating the garbled artifacts.
 Verified at `cos_mean=0.998` against the Python reference.
+
+### 54. granite-family DRY refactor — PLAN #55 (May 2026)
+Five-step lift of duplicated math out of `granite_speech.cpp` (base +
+plus, causal + KV-cached) and `granite_nle.cpp` (NAR, non-causal
+single-pass) into shared `src/core/` headers. Each step gated by JFK
+smoke tests on all three variants — every commit kept transcripts
+identical.
+
+| Step | Header | Risk | LOC moved | Commit |
+|---|---|---|---:|---|
+| 1 | `core/fft.h` + `core/cpu_ops.h` (FFT, layernorm, matmul fallbacks) | very low | ~250 | `5f4b5ae` + `b343a17` |
+| 2 | `core/ctc.h` (posterior-weighted pool + greedy decode w/ blank) | very low | ~60 | `65ef44c` |
+| 3 | `core/conformer_ibm.h` (Macaron block helpers + Shaw RPE lookup) | medium | ~600 | `0f72391` |
+| 4 | `core/granite_llm.h` (40-block backbone, `is_causal` flag) | medium | ~250 | `372a5f7` |
+| 5 | `core/qformer.h` (NAR simplified Q-Former) | low | ~190 | `ed80fb0` |
+
+**Step 5 — plan correction:** the duplication-map row originally
+listed the windowed Q-Former as shared by both granite TUs. The code
+disagreed: granite-speech (base/plus) uses the full BLIP-2 Q-Former
+(self-attn + cross-attn + FFN per layer, no pass A, no window-mean-pool)
+while granite-nle uses a "simplified" variant (cross-attn-only + MLP).
+The block weight structs (`granite_proj_block` with `sa_*`/`ca_*`/`ffn_*`
+vs `granite_nle_proj_block` with `attn_*` + `mlp_*`) made the divergence
+explicit. Step 5 was rescoped to NAR-only — `core/qformer.h` is co-located
+for any future simplified-windowed-Q-Former backend; granite_speech
+stays untouched. PLAN.md was updated mid-step to reflect this.
+
+`core_granite_llm::build_decoder` is the most reusable lift — it composes
+40 layers of pre-RMSNorm + GQA(16/4) flash-attn + RoPE + SwiGLU + residual
+×0.22 with an `is_causal` flag that picks `core_attn::kv_self_attn` (KV-cached
+prefill+decode) or an inline non-causal flash path (whole-sequence editing).
+Both granite TUs collapse from a per-layer hand-written loop to a single
+function call.
+
+`core_conformer_ibm` is a sibling-not-merge with `core/fastconformer.h`:
+parakeet/canary use NeMo's Conformer dialect (conv subsampling, MHA RPE)
+while granite uses the IBM dialect (Shaw RPE, fused conv layout, BN
+folding-at-load) — keeping them separate avoids muddying both.
+
+**Net effect:** `granite_speech.cpp` 2570 → 2113 LOC (−457); `granite_nle.cpp`
+2096 → 1615 LOC (−481); combined drop ~940 LOC. New `core/*.h` files
+total ~1070 LOC (fft 93 + cpu_ops 98 + ctc 129 + conformer_ibm 336 +
+granite_llm 162 + qformer 255). Roughly half of those core LOC are
+deduplicated math (the rest is comments + struct/API plumbing). Plus a
+clean separation of "backbone" (in core) from "plumbing" (in TUs).

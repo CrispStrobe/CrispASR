@@ -4802,3 +4802,103 @@ also has its own language-level limits worth knowing:
   needs an external Japanese frontend (`pyopenjtalk` / `mecab` +
   `kakasi`) to convert to kana before espeak.
 
+# granite-family DRY refactor — session 2026-05-01
+
+## Lesson 1 — read the structs, not the duplication map
+
+PLAN #55 step 5 listed the windowed Q-Former as shared by both
+granite_speech and granite_nle. The actual block weight structs proved
+the row was wrong:
+
+| TU | Block struct | Per-layer ops |
+|---|---|---|
+| `granite_speech.cpp` | `granite_proj_block` (`sa_q/k/v/out_w`, `ca_q/k/v/out_w`, `ffn_up/down_w`) | self-attn + cross-attn + FFN |
+| `granite_nle.cpp`    | `granite_nle_proj_block` (`attn_q/k/v/o_w`, `mlp_fc1/fc2_w`)            | cross-attn-only + MLP |
+
+A duplication map written from one TU's vocabulary ("we have a Q-Former
+projector here, and granite_speech has one too") will quietly conflate
+two different architectures. The fast check is to look at the per-layer
+weight struct field names — if `sa_*` / `ca_*` / `ffn_*` does not match
+`attn_*` / `mlp_*` 1:1, the architectures are not the same Q-Former.
+Don't trust the lift target until both structs have been read.
+
+## Lesson 2 — `is_causal` is a clean axis for KV-cached vs whole-sequence
+
+The Granite-1B body is identical between the autoregressive
+(granite_speech, KV-cached, causal mask) and the editing pass
+(granite_nle, single non-causal forward over (audio | text_with_slots)).
+A single `core_granite_llm::build_decoder(..., bool is_causal)` dispatches
+to `core_attn::kv_self_attn` (causal+KV) or an inline non-causal flash
+helper. The KV-cache tensor handles + n_past + causal_mask are passed
+through as nullptr/0 on the non-causal side.
+
+This works because the backbone math (RMSNorm + GQA flash-attn + RoPE +
+SwiGLU + µP residual ×0.22 + final RMSNorm) is identical. The differences
+that DON'T fit the flag are kept at the call site:
+
+- LM head: NAR uses tied `token_embd_w` and skips the `1/logits_scaling`
+  divide; granite_speech uses a separate `output_w` and applies the divide
+  for sampling-correctness.
+- Slicing: NAR slices the text portion `[n_audio, N)`; granite_speech
+  slices the last token in prefill mode.
+- Inputs: NAR builds `inputs_embeds` inside the graph (cast + concat of
+  audio + `embed_tokens(text_ids)`); granite_speech receives `inputs_embeds`
+  pre-built by the caller.
+
+Trying to push these into the same builder with more flags would make
+the helper unreadable. Keep the lift to "the backbone every variant
+agrees on" and let plumbing diverge.
+
+## Lesson 3 — sibling-not-merge for Conformer dialects
+
+`core/fastconformer.h` (NeMo: conv subsampling + MHA RPE, used by
+parakeet/canary) and `core/conformer_ibm.h` (IBM: Shaw RPE + fused conv
+layout + BN folding-at-load, used by granite) are **siblings, NOT a merge
+target.** Three structural divergences would force the merged helper into
+unreadable conditional branches:
+
+- **Position encoding**: MHA RPE (additive bias on QK) vs Shaw RPE
+  (per-position lookup table indexed by relative position, applied
+  inside the score sum).
+- **Conv module**: full pre-norm + GLU + dw conv + post-norm vs the
+  IBM fused layout with BN folded into conv at load time.
+- **BN folding**: granite folds BatchNorm into the depthwise conv at
+  weight-load (saves a runtime op); fastconformer does not.
+
+The duplication-map row called this out explicitly ("do NOT merge —
+Shaw RPE / fused conv layout / BN folding differ") and the refactor
+honoured it. Future Conformer variants should pick one sibling or
+create a third — never collapse the two.
+
+## Lesson 4 — JFK smoke is faster than the diff harness for incremental refactors
+
+The PLAN #55 acceptance criterion was `crispasr-diff` cosine numbers,
+but for a structural-rename refactor (same ggml ops, same order, same
+tensor handles) the cheaper proxy is just `crispasr -nt -f samples/jfk.wav`
+on the three variants. If the transcript matches byte-for-byte, the
+math survived. Steps 3, 4, 5 all gated on JFK smoke — total validation
+budget per step was ~10 seconds × 3 variants = ~30s. The full diff
+harness would have meant dumping a fresh reference GGUF (minutes) for
+no extra signal on a pure rename. Reserve the diff harness for steps
+where math actually changes.
+
+## Lesson 5 — parallel workers in the working tree
+
+The mid-step-4 build broke not on the granite refactor but on
+`src/mimo_asr.cpp`, which a parallel agent was actively editing
+(PLAN #51 in-flight Qwen2 LLM build-out). The honest move is:
+
+- Do not `git stash`, `git checkout`, or `git restore` files outside
+  your scope — even briefly. Parallel workers depend on those file
+  states being preserved.
+- Stage commits with explicit pathspecs (`git add src/...specific/file.cpp`),
+  never `git add -A` or `git add .`.
+- If the working tree becomes uncompilable due to another worker's WIP,
+  wait it out rather than fix-and-revert. The parallel worker is the
+  one who knows what they meant.
+
+This bit during step 4 — the build failed with `member access into
+incomplete type 'ggml_cgraph'` in mimo_asr.cpp; reverting the granite
+refactor wouldn't have fixed it. Waited ~5 minutes, the parallel agent
+landed their fix, and the rebuild worked clean.
+

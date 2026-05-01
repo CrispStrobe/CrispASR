@@ -20,7 +20,6 @@ All backends support `-m auto --auto-download`. Three new ggml ops
 | **HIGH** | [#54 granite-speech-4.1 plus / nar](#54-granite-speech-41-plus--nar-variants) | Small | base + plus + nar runtimes all DONE; only NAR quant + HF upload remain |
 | **MEDIUM** | [#5 Reference backends](#5-reference-backends-for-parakeetcanarycohere) | Medium | parakeet/cohere DONE; canary remaining |
 | **MEDIUM** | [#53 core/audio_decoder.h](#53-coreaudio_decoderh--dry-across-tts--codec-backends) | Medium | DRY across qwen3-tts/mimo/vibevoice |
-| **MEDIUM** | [#55 granite-family DRY refactor](#55-granite-family-dry-refactor) | Medium | ~1500 LOC duplicated between granite_speech and granite_nle; ~5 lifts gated by diff harness |
 | **MEDIUM** | [#56 Kokoro multilingual phonemizer](#56-kokoro-multilingual-phonemizer-espeak-ng) | Small | espeak-ng linkage + LRU + `-l/--language` wired; pending: kokoro-82m.gguf for end-to-end synth + diff-harness reference backend |
 | **LOW** | #41 Moonshine IPA / phoneme | High | Deferred |
 | **LOW** | [#7 voxtral4b streaming](#7-native-voxtral4b-streaming) | High | |
@@ -396,172 +395,13 @@ upward rather than design forward.
 
 ---
 
-## 55. granite-family DRY refactor
 
-`src/granite_speech.cpp` (2570 LOC) and `src/granite_nle.cpp` (2096
-LOC) share roughly 1500 LOC of near-identical math. Both ship the
-same 16-layer Macaron Conformer encoder, the same windowed simplified
-Q-Former projector, and the same 40-layer Granite-1B LLM with µP
-multipliers + RoPE — only the *plumbing* (autoregressive generate vs.
-non-autoregressive single-pass; 2-layer hidden-concat in PLUS vs.
-4-layer in NAR; BPE auxiliary head only in NAR) differs. PLUS is also
-shipped via the same `granite_speech.cpp` runtime + a `cat_hidden_layers`
-config knob, so the refactor benefits all three variants at once.
+## ~~55. granite-family DRY refactor~~ — **DONE (May 2026)**
 
-This is a pure refactor — no math changes, no tensor renames, no
-behaviour changes. Each step lands behind the diff harness:
-`crispasr-diff granite-speech` (base + plus, JFK transcribes ✅) and
-`crispasr-diff granite-nle` (transcribe == ref ✅) must both stay
-green after every commit. Reference: the granite-speech-4.1 family
-just landed in this state in commits `a03c529` (LLM editing bit-exact)
-and `d4b892f` (NAR transcribe end-to-end), so the harness gates are
-known-good baselines.
-
-### Duplication map (observed during the NAR transcribe work)
-
-| What | Lives in | LOC | Identical? | Where to lift |
-|---|---|---|---|---|
-| Radix-2 Cooley-Tukey FFT | `granite_speech.cpp` + `granite_nle.cpp:316` (comment notes future cleanup) + `kokoro.cpp` + `mimo_tokenizer.cpp` | ~80 each | Yes (granite/granite_nle); mostly yes (kokoro/mimo) | `core/fft.h` |
-| 80-bin log-mel pipeline (FFT → 512 mel filterbank → 8-frame stack → log-clip) | both granite | ~150 each | Yes | extend existing `core/mel.{h,cpp}` (already used by parakeet/canary) |
-| `nle_cpu_layernorm` / `nle_run_matmul` (CPU fallbacks) | both granite | ~30 each | Yes | `core/cpu_ops.h` |
-| Macaron Conformer block (FFN1 + Shaw-RPE attn + conv module + FFN2 + post-norm) — `nle_run_ffn`, `nle_run_conv_module`, `nle_shaw_block_attention_cpu`, `nle_run_norm_matmul_pair` | both granite | ~600 each | Yes (different from parakeet's FastConformer in `core/fastconformer.h`) | `core/conformer_ibm.h` (sibling of fastconformer.h; do NOT merge — Shaw RPE / fused conv layout / BN folding differ) |
-| Granite-1B LLM forward (40 layers, GQA 16/4, µP multipliers, RoPE θ=10000, optional `is_causal=False`) — `nle_llm_attn_noncausal` + `nle_build_llm` | both granite (causal in granite_speech, non-causal in granite_nle) | ~250 each | Same shape, different `is_causal` | `core/granite_llm.h` taking an `is_causal` flag |
-| Window-based simplified Q-Former projector (layer_proj + N×{cross-attn + MLP} + out_norm + out_linear) — `nle_proj_layer_proj` + `nle_proj_build_block` | granite-nle only | ~190 | n/a (granite-speech's Q-Former is structurally different — full BLIP-2 with self-attn + cross-attn + FFN per layer, no pass A, no mean-pool. Originally listed as "both granite"; that was incorrect — confirmed during step 5) | `core/qformer.h` (NAR-only; co-located for any future simplified-windowed-Q-Former backend) |
-| Posterior-weighted pool (used by NAR's BPE aux head) | granite_nle only today | ~25 | n/a | `core/ctc.h` (next to existing `greedy_decode.h`) — generic CTC trick, useful for any aux-head variant |
-| BN-folding-at-load + Shaw RPE lookup-table builder | both granite | ~80 each | Yes | already-marginal; bundle with `conformer_ibm.h` |
-
-GPT-2 byte-level detokenize (`core_bpe::detokenize` /
-`token_bytes_to_utf8`) was already lifted in commit `d4b892f`; the
-encode side (`core_bpe::tokenize_simple` + `bpe_one`) was lifted
-earlier. That work proves the lift pattern works — all three granite
-variants ship the same byte-decoder now, with no diff regressions.
-
-### Five-step refactor (in landing order)
-
-Each step is independently committable + reverentible. Diff-harness
-green is the gate; do not move to step N+1 until step N's commit
-passes both granite-speech (base/plus) and granite-nle.
-
-**Step 1 — `core/fft.h` + `core/cpu_ops.h`. Risk: very low.**
-
-Lift `granite_nle_fft` + `granite_nle_fft_wrapper` into
-`core/fft.h` as `core_fft::fft_radix2(...)` and a thread-local-scratch
-helper. Lift `nle_cpu_layernorm` + `nle_run_matmul` (and the matching
-`granite_speech` copies) into `core/cpu_ops.h` as
-`core_cpu::layernorm` and `core_cpu::matmul_F32` (or `matmul` taking
-either F32/F16 weights via overload). Update both granite TUs to
-include the new headers and call through; delete the old static
-helpers. **LOC saved:** ~250. **Validation:** the first lift that
-exercises both granite_speech and granite_nle in one PR — both diff
-harnesses must report identical numbers (cos values shouldn't even
-shift in the LSB; this is a pure rename).
-
-**Step 2 — `core/ctc.h` (posterior-weighted pool + greedy decode helpers). Risk: very low.**
-
-Add `core_ctc::posterior_weighted_pool(hidden, importance, window)`
-to a new `core/ctc.h`. Move the BPE-CTC greedy decode from
-`granite_nle_transcribe` (the unique_consecutive → drop-blank →
-shift-by-K loop) into `core_ctc::greedy_decode_with_blank(logits, T,
-V, blank_id, shift)`. parakeet/canary's CTC paths already use
-`core/greedy_decode.h`; co-locate. **LOC saved:** ~60.
-**Validation:** `crispasr-diff granite-nle` transcribe == ref.
-
-**Step 3 — `core/conformer_ibm.h` (Macaron block forward). Risk: medium.**
-
-Lift `nle_run_ffn`, `nle_run_conv_module`,
-`nle_shaw_block_attention_cpu`, `nle_run_norm_matmul_pair`, and the
-per-layer Shaw RPE lookup-table builder into `core/conformer_ibm.h`
-behind a `core_conformer_ibm::block(ctx, hidden, T, d, n_heads, hd,
-ctx_size, ...)` API. The encoder forward in both granite TUs becomes
-a 16-iteration loop calling `core_conformer_ibm::block`. Keep
-`core/fastconformer.h` (NeMo style) untouched — the Shaw RPE +
-fused conv layout + BN folding diverge enough that merging the two
-would obscure both. **LOC saved:** ~600. **Validation:** the encoder
-forward is the most cosine-sensitive lift; expect drift in the LSB
-only. encoder_output cos_min must remain ≥ 0.999852 for granite-nle
-and ≥ 0.99 for granite-speech base/plus.
-
-**Step 4 — `core/granite_llm.h` (40-layer forward, causal toggle). Risk: medium.**
-
-Lift `nle_llm_attn_noncausal` + `nle_build_llm` and the matching
-causal `granite_speech` LLM forward into `core/granite_llm.h` as
-`core_granite_llm::build_graph(ctx, embed_inputs, n_tokens,
-position_ids, params, is_causal)`. Both granite TUs now compose
-projector_out + (audio + text_with_slots OR audio + prompt) into a
-single embedding tensor and hand it to the same builder. The µP
-multipliers (`embedding_multiplier=12`, `attention_multiplier=
-0.0078125`, `residual_multiplier=0.22`, `logits_scaling=8`) live in
-the params struct. The only behavioural difference from the existing
-two paths is the `is_causal` flag and whether `lm_head` divides by
-`logits_scaling` (NAR bypasses it; base/plus uses it for sampling
-correctness). **LOC saved:** ~250. **Validation:** editing_logits
-cos_min must stay at 0.999999 for granite-nle; base/plus must keep
-transcribing JFK identically.
-
-**Step 5 — `core/qformer.h` (windowed simplified Q-Former). Risk: low.**
-
-Lift `nle_proj_layer_proj` + `nle_proj_build_block` into
-`core/qformer.h` as `core_qformer::run_layer_proj(...)` (pass A,
-LayerNorm + concat + linear + GELU, full graph dispatch) and
-`core_qformer::build_block(...)` (returns a per-window cgraph).
-NAR-only — granite-speech (base/plus) uses a STRUCTURALLY DIFFERENT
-Q-Former (full BLIP-2 with self-attn + cross-attn + FFN per layer,
-no pass A, no window-mean-pool) and does not share these helpers;
-it stays untouched. The original duplication-map row claimed both
-TUs share this projector — that was inaccurate, confirmed when
-reading the speech `granite_proj_block` struct (sa_*, ca_*, ffn_*
-weight names) against the NAR `granite_nle_proj_block` (cross-attn
-+ MLP only). **LOC moved:** ~190 (no net dedup; a co-location for
-any future simplified-windowed-Q-Former backend). **Validation:**
-JFK transcribes identically on granite-nle; granite-speech base/plus
-unchanged (no edits to that TU).
-
-### Non-goals
-
-- **No graph-mode encoder.** `GRANITE_ENCODER_GRAPH=1` (the
-  experimental Metal-accel encoder graph) is gated by §16 (Shaw RPE
-  in graph path) and stays out of this refactor.
-- **No FastConformer merge.** parakeet/canary use a different
-  Conformer dialect (NeMo's, with conv subsampling and MHA RPE);
-  forcing both into one header would muddy both. Keep
-  `core/fastconformer.h` and `core/conformer_ibm.h` separate.
-- **No tensor renames.** GGUF on-disk names stay identical; existing
-  cstr/* HF GGUFs continue to load.
-- **No new µP knobs.** Multipliers move to a struct, but their
-  values stay hardcoded as defaults from `granite-1b-base` config.
-
-### Acceptance criteria
-
-After all five steps:
-- `crispasr-diff granite-speech` (base) — JFK transcribes identically.
-- `crispasr-diff granite-speech` (plus, F16 + 3× Q4_K) — same.
-- `crispasr-diff granite-nle` — all 6 stages PASS, transcribe matches
-  reference `final_text` exactly.
-- `granite_speech.cpp` + `granite_nle.cpp` total LOC drops by ~1100
-  (from ~4670 to ~3570; the originally-projected ~300 LOC step-5 dedup
-  did not materialise — the two projectors are structurally different).
-  New `core/*.h` files add ~700 LOC. Net win: ~700 LOC of duplicated
-  math removed.
-- No regression in encoder/projector/LLM cosine numbers (allow LSB
-  drift only; reject anything that moves cos_min by ≥ 1e-5).
-
-### Effort
-
-Medium. Step 1 is an afternoon. Steps 2–5 are each a session.
-Total: ~5 focused sessions. The diff harness gates make each step
-zero-risk to land independently — the project never goes through a
-"refactor in progress, please don't touch granite" window.
-
-### Why now (this is the optimal moment)
-
-1. All three runtimes (base, plus, nar) just hit bit-exact diff
-   parity (commits `a03c529` + `d4b892f`). Any future feature work
-   would need to be implemented twice if we don't lift first.
-2. The user just asked the DRY question — duplication is recent +
-   visible in the working set, easy to see. Six months from now the
-   same lift would require re-discovery.
-3. `core_bpe` lift in `d4b892f` proved the pattern + the harness
-   gate workflow works on the granite family.
+All five steps landed. See `HISTORY.md` §54 for the full table of commits,
+LOC moved, and the step-5 plan correction (the speech / NAR Q-Formers
+turned out to be structurally different — `core/qformer.h` shipped as a
+NAR-only co-location rather than a both-TUs unification).
 
 ---
 
@@ -648,37 +488,53 @@ so existing builds don't regress.
    | `ff_siwis` (French)  | 20577 | 2318 | 4.22 s | healthy, French-accented |
    | `ef_dora` (Spanish)  | 15036 | 1613 | 3.35 s | healthy, Spanish-accented |
 
-   `ff_siwis` is the strongest non-native fallback by RMS. Both are
-   converted and live at
-   `/Volumes/backups/ai/crispasr-models/kokoro-voice-{ff_siwis,ef_dora}.gguf`.
    Wired into `examples/cli/crispasr_backend_kokoro.cpp` as an
-   auto-fallback: when `-l` is for a language without a native pack
-   (de, ru, ko, ar, …) and `--voice` is not set, the backend looks
-   for `kokoro-voice-ff_siwis.gguf` next to the model file and loads
-   it with a one-line warning. Explicit `--voice` overrides the
-   fallback. **Speaker timbre + prosody sound French, not German** —
-   acceptable as a non-silence baseline; not production quality.
-   Replaced once Option 2a / 2b lands.
+   auto-fallback. Selection table:
 
-   **Option 2a — Recover Tundragoon's German voice packs from
-   downstream wrappers (try first; cheapest).**
-   The only public German Kokoro voice pack on HF
-   (`Tundragoon/Kokoro-German` with `df_eva.pt` / `dm_bernd.pt`,
-   Apache-2.0) was deleted in early 2026 — the user account is gone.
-   Two downstream projects depend on it and may have cached the
-   files in their release assets / git LFS:
-   - `r1di/kokoro-fastapi-german` (GitHub)
-   - `Thomcle/kokoro_german` (GitHub)
-   Probe their releases / LFS / Docker images for `df_eva.pt` and
-   `dm_bernd.pt`. If found: convert via existing
-   `models/convert-kokoro-voice-to-gguf.py`, drop in
-   `/Volumes/backups/ai/crispasr-models/`, quality-check (peak ≥ 8000,
-   RMS ≥ 1000 against the long German phrase). 10 minutes if
-   recoverable. **However:** these were extracted via the original
-   *English-trained* StyleEncoder, so the same caveat as Option 3
-   applies — predictor/decoder weights weren't German-fine-tuned.
-   Single-speaker training with `bernd`/`eva` reference; quality is
-   reportedly usable but limited.
+   | `-l` value | preferred voice | rationale |
+   |---|---|---|
+   | `de`, `de-*`, `de_*` | `df_eva` (Option 2a — Tundragoon, Apache-2.0) | German speaker timbre, healthy synth |
+   | everything else without a native pack (ru, ko, ar, …) | `ff_siwis` (French) | non-silence baseline |
+
+   Resolution: `--voice` (explicit) → preferred per language → ff_siwis
+   if preferred missing → empty (helpful error). Explicit `--voice`
+   always wins. All three voice GGUFs (`af_heart`, `ff_siwis`,
+   `ef_dora`, `df_eva`, `dm_bernd`) live at
+   `/Volumes/backups/ai/crispasr-models/`.
+
+   **Option 2a — Recovered Tundragoon's German voice packs (DONE,
+   SHIPPED 2026-05-01).**
+   The only public German Kokoro voice pack on HF was
+   `Tundragoon/Kokoro-German` (Apache-2.0) — the user account was
+   deleted in early 2026 and the HF repo is 404. **Voices recovered**
+   from `r1di/kokoro-fastapi-german`'s Git LFS (`api/src/voices/v1_0/
+   {df_eva,dm_bernd}.pt`, sparse + LFS pull). They are
+   `[512, 1, 256]` F32 (vs the 510 of official Kokoro voices —
+   Tundragoon's fine-tune used a slightly larger max_phonemes; the
+   GGUF voice loader reads max_phonemes from the file so this is fine).
+
+   End-to-end synth with the **official** Kokoro-82M model on the
+   long German phrase ("Guten Tag, dies ist ein Test des deutschen
+   Phonemizers."):
+
+   | voice | peak | RMS | duration | note |
+   |---|---:|---:|---:|---|
+   | `df_eva` (German F)  | 14716 | 1648 | 3.50 s | healthy, German speaker |
+   | `dm_bernd` (German M)| 19185 | 2374 | 3.88 s | healthy, German speaker |
+
+   Both produce non-silent, German-timbred audio with the official
+   Kokoro-82M weights — **the matching Tundragoon model fine-tune
+   (`kokoro-german-v1_1-de.pth`) is not required.** That model is
+   *unrecovered* (only available from the deleted HF repo per
+   `r1di/docker/scripts/download_model.py`), but voices alone are
+   sufficient for this fallback path. Caveat: predictor + decoder
+   weights are still the official English-trained Kokoro-82M's, so
+   prosody is not fully native German. Better than ff_siwis (German
+   speaker timbre instead of French), worse than Option 2b.
+
+   GGUF artefacts at
+   `/Volumes/backups/ai/crispasr-models/kokoro-voice-{df_eva,dm_bernd}.gguf`.
+   Wired as the German auto-fallback (Option 1 table above).
 
    **Option 2b — Use `dida-80b/kokoro-german-hui-multispeaker-base`
    as the German backbone (best path to real native quality).**
@@ -724,15 +580,14 @@ so existing builds don't regress.
    than Option 2b because the predictor/decoder aren't German-aware;
    keep as last-resort.
 
-   **Recommended order:**
-   1. ✓ Option 1 shipped — non-silence baseline live.
-   2. Try Option 2a (probe r1di / Thomcle for cached Tundragoon
-      voices) — 10-minute task. Best case: drop-in upgrade today.
-   3. If 2a is dry, take Option 2b (dida-80b) — half-day task for
-      true German quality. Adds a second Kokoro GGUF variant to the
-      auto-download manifest.
-   4. Option 3 is the fallback if a HUI-speaker source recording
-      can't be obtained.
+   **Status:**
+   1. ✓ Option 1 shipped (auto-fallback table per-language).
+   2. ✓ Option 2a shipped (df_eva + dm_bernd recovered from r1di's
+      Git LFS, Apache-2.0; sufficient with official Kokoro-82M).
+   3. Open: Option 2b (dida-80b) for true native German prosody —
+      adds a second Kokoro GGUF variant. Track parallel to this
+      under "Native German backbone via dida-80b".
+   4. Option 3 only if 2b is blocked (it isn't — model is on HF).
 2. **Mandarin tone numbers.** espeak-ng outputs digit-suffixed
    tone markers (`ni2χˈɑu2`) that aren't in the kokoro-82m IPA vocab
    (178 symbols) and likely get dropped at tokenization, losing tone

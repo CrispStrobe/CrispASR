@@ -11,6 +11,27 @@ are in `LEARNINGS.md`. Full roadmap in `PLAN.md`.
 
 ---
 
+## Granite-family DRY refactor (PLAN #55) **[done]** — May 2026
+
+All five steps shipped behind JFK smoke tests on granite-4.1, granite-4.1-plus,
+and granite-4.1-nar. See `HISTORY.md` §54 for the table.
+
+New shared headers landed in `src/core/`:
+- `core/fft.h` (radix-2 FFT, replaces inline copies in granite + future kokoro/mimo)
+- `core/cpu_ops.h` (CPU layernorm + matmul fallbacks)
+- `core/ctc.h` (posterior-weighted pool + greedy-decode-with-blank)
+- `core/conformer_ibm.h` (IBM-flavour Macaron block + Shaw RPE — sibling of `core/fastconformer.h`, NOT a merge target)
+- `core/granite_llm.h` (40-block backbone, `is_causal` flag selects KV-cached vs non-causal flash)
+- `core/qformer.h` (NAR-only simplified windowed Q-Former)
+
+Step 5 plan correction: the duplication map originally claimed both
+granite TUs share the windowed Q-Former. They don't — granite_speech
+runs a full BLIP-2 Q-Former (sa+ca+ffn per layer) while granite_nle
+runs a simplified one (cross-attn-only + MLP). `core/qformer.h` shipped
+as NAR-only co-location.
+
+---
+
 ## Kokoro / StyleTTS2 (iSTFTNet) backend **[done]**
 
 Plan file: `/Users/christianstrobele/.claude/plans/sprightly-enchanting-dahl.md`.
