@@ -36,6 +36,7 @@
 #include "core/ctc.h"
 #include "core/fft.h"
 #include "core/granite_llm.h"
+#include "core/qformer.h"
 #include "core/ffn.h"
 #include "core/gguf_loader.h"
 #include "core/mel.h"
@@ -1117,9 +1118,12 @@ extern "C" const float* granite_nle_last_bpe_logits(struct granite_nle_context* 
 // (the small per-block dispatch is the same pattern used by the base
 // granite_speech projector and is fast enough in practice).
 
+// Per-window simplified Q-Former forward + pass-A LayerNorm/GELU helper now
+// live in core/qformer.h. The wrappers below build the core_qformer structs
+// from this TU's projector weights and delegate.
+
 static bool nle_proj_layer_proj(granite_nle_context* ctx, std::vector<float>& out, const float* enc, int T, int wide_d,
                                 int hidden) {
-    // pass A: per-layer LayerNorm + concat → layer_proj → GELU
     const auto& m = ctx->model;
     const auto& hp = m.hparams;
     const int K = (int)hp.proj_num_encoder_layers;
@@ -1128,170 +1132,37 @@ static bool nle_proj_layer_proj(granite_nle_context* ctx, std::vector<float>& ou
         fprintf(stderr, "granite_nle: proj input dim %d != K*D=%d\n", wide_d, K * D);
         return false;
     }
-
-    ggml_init_params ip = {ctx->compute_meta.size(), ctx->compute_meta.data(), true};
-    ggml_context* ctx0 = ggml_init(ip);
-    ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 256, false);
-
-    ggml_tensor* inp = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, wide_d, T);
-    ggml_set_name(inp, "proj_a_in");
-    ggml_set_input(inp);
-
-    // Slice each per-layer (D, T) chunk via view_2d, normalize, then concat.
-    std::vector<ggml_tensor*> normed(K);
-    for (int k = 0; k < K; k++) {
-        ggml_tensor* slice = ggml_view_2d(ctx0, inp, D, T, inp->nb[1], (size_t)k * D * sizeof(float));
-        // ggml_norm requires contiguous input on most backends.
-        ggml_tensor* s = ggml_cont(ctx0, slice);
-        s = ggml_norm(ctx0, s, hp.proj_layernorm_eps);
-        if (m.projector.layer_norm_w[k])
-            s = ggml_mul(ctx0, s, m.projector.layer_norm_w[k]);
-        if (m.projector.layer_norm_b[k])
-            s = ggml_add(ctx0, s, m.projector.layer_norm_b[k]);
-        normed[k] = s;
-    }
-    ggml_tensor* cat = normed[0];
-    for (int k = 1; k < K; k++)
-        cat = ggml_concat(ctx0, cat, normed[k], 0);
-
-    // layer_proj: (4096 → 2048), then GELU (exact-erf, matching nn.GELU()).
-    ggml_tensor* y = ggml_mul_mat(ctx0, m.projector.layer_proj_w, cat);
-    if (m.projector.layer_proj_b)
-        y = ggml_add(ctx0, y, m.projector.layer_proj_b);
-    y = ggml_gelu_erf(ctx0, y);
-
-    ggml_set_name(y, "proj_a_out");
-    ggml_build_forward_expand(gf, y);
-    ggml_free(ctx0);
-
-    ggml_backend_sched_reset(ctx->sched);
-    if (!ggml_backend_sched_alloc_graph(ctx->sched, gf))
-        return false;
-    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "proj_a_in"), enc, 0, (size_t)wide_d * T * sizeof(float));
-    if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS)
-        return false;
-    out.assign((size_t)hidden * T, 0.0f);
-    ggml_backend_tensor_get(ggml_graph_get_tensor(gf, "proj_a_out"), out.data(), 0, (size_t)hidden * T * sizeof(float));
-    return true;
+    return core_qformer::run_layer_proj(ctx->compute_meta, ctx->sched, out, enc, T, wide_d, hidden, K, D,
+                                        hp.proj_layernorm_eps, m.projector.layer_norm_w, m.projector.layer_norm_b,
+                                        m.projector.layer_proj_w, m.projector.layer_proj_b);
 }
 
 static ggml_cgraph* nle_proj_build_block(granite_nle_context* ctx) {
     const auto& m = ctx->model;
     const auto& hp = m.hparams;
-    const int hidden = (int)hp.proj_hidden_size;       // 2048
-    const int llm_d = (int)hp.proj_llm_dim;            // 2048
-    const int n_heads = (int)hp.proj_n_heads;          // 32
-    const int hd = hidden / n_heads;                   // 64
-    const int n_layers = (int)hp.proj_n_layers;        // 2
-    const int block_size = (int)hp.proj_block_size;    // 15
-    const int down = (int)hp.proj_downsample_rate;     // 5
-    const int q_len = block_size / down;               // 3
-    const int mlp_h = hidden * (int)hp.proj_mlp_ratio; // 4096
-    const float eps = hp.proj_layernorm_eps;
-    const float attn_scale = 1.0f / std::sqrt((float)hd);
+    const int n_layers = (int)hp.proj_n_layers;
 
-    ggml_init_params ip = {ctx->compute_meta.size(), ctx->compute_meta.data(), true};
-    ggml_context* ctx0 = ggml_init(ip);
-    ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 4096, false);
+    core_qformer::Hparams qhp = {};
+    qhp.hidden = (int)hp.proj_hidden_size;
+    qhp.llm_d = (int)hp.proj_llm_dim;
+    qhp.n_heads = (int)hp.proj_n_heads;
+    qhp.n_layers = n_layers;
+    qhp.block_size = (int)hp.proj_block_size;
+    qhp.downsample = (int)hp.proj_downsample_rate;
+    qhp.eps = hp.proj_layernorm_eps;
 
-    // Block features: (hidden, block_size) — caller fills with the padded
-    // window slice from pass A.
-    ggml_tensor* blk = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, hidden, block_size);
-    ggml_set_name(blk, "proj_b_blk");
-    ggml_set_input(blk);
-
-    // mean_pool over downsample groups: reshape (hidden, 15) to (hidden, 5, 3),
-    // permute to (5, hidden, 3), ggml_cont, ggml_mean → (1, hidden, 3),
-    // reshape to (hidden, 3).
-    ggml_tensor* pooled = ggml_reshape_3d(ctx0, blk, hidden, down, q_len);
-    pooled = ggml_cont(ctx0, ggml_permute(ctx0, pooled, 1, 0, 2, 3));
-    pooled = ggml_mean(ctx0, pooled);
-    pooled = ggml_reshape_2d(ctx0, pooled, hidden, q_len);
-
-    // query_embeds = query (1, q_len, hidden) + pooled (hidden, q_len)
-    ggml_tensor* qbase = ggml_reshape_2d(ctx0, m.projector.query, hidden, q_len);
-    ggml_tensor* qcur = ggml_add(ctx0, qbase, pooled);
-
-    // enc_kv = block + window_positions (1, block_size, hidden)
-    ggml_tensor* wpos = ggml_reshape_2d(ctx0, m.projector.window_pos, hidden, block_size);
-    ggml_tensor* enc = ggml_add(ctx0, blk, wpos);
-
-    // 2 Q-Former layers (cross-attention only + MLP)
+    std::vector<core_qformer::BlockWeights> blocks(n_layers);
     for (int il = 0; il < n_layers; il++) {
         const auto& b = m.projector.blocks[il];
-
-        // cross-attention
-        {
-            ggml_tensor* qn = ggml_norm(ctx0, qcur, eps);
-            if (b.attn_norm_w)
-                qn = ggml_mul(ctx0, qn, b.attn_norm_w);
-            if (b.attn_norm_b)
-                qn = ggml_add(ctx0, qn, b.attn_norm_b);
-
-            ggml_tensor* Q = ggml_mul_mat(ctx0, b.attn_q_w, qn);
-            if (b.attn_q_b)
-                Q = ggml_add(ctx0, Q, b.attn_q_b);
-            ggml_tensor* K = ggml_mul_mat(ctx0, b.attn_k_w, enc);
-            if (b.attn_k_b)
-                K = ggml_add(ctx0, K, b.attn_k_b);
-            ggml_tensor* V = ggml_mul_mat(ctx0, b.attn_v_w, enc);
-            if (b.attn_v_b)
-                V = ggml_add(ctx0, V, b.attn_v_b);
-
-            Q = ggml_reshape_3d(ctx0, Q, hd, n_heads, q_len);
-            K = ggml_reshape_3d(ctx0, K, hd, n_heads, block_size);
-            V = ggml_reshape_3d(ctx0, V, hd, n_heads, block_size);
-            Q = ggml_cont(ctx0, ggml_permute(ctx0, Q, 0, 2, 1, 3));
-            K = ggml_cont(ctx0, ggml_permute(ctx0, K, 0, 2, 1, 3));
-            V = ggml_cont(ctx0, ggml_permute(ctx0, V, 0, 2, 1, 3));
-
-            ggml_tensor* a = ggml_flash_attn_ext(ctx0, Q, K, V, nullptr, attn_scale, 0.0f, 0.0f);
-            a = ggml_reshape_2d(ctx0, a, hidden, q_len);
-            a = ggml_mul_mat(ctx0, b.attn_o_w, a);
-            if (b.attn_o_b)
-                a = ggml_add(ctx0, a, b.attn_o_b);
-
-            qcur = ggml_add(ctx0, qcur, a);
-        }
-
-        // MLP (fc1 → SiLU → fc2)
-        {
-            ggml_tensor* xn = ggml_norm(ctx0, qcur, eps);
-            if (b.mlp_norm_w)
-                xn = ggml_mul(ctx0, xn, b.mlp_norm_w);
-            if (b.mlp_norm_b)
-                xn = ggml_add(ctx0, xn, b.mlp_norm_b);
-
-            ggml_tensor* h = ggml_mul_mat(ctx0, b.mlp_fc1_w, xn);
-            if (b.mlp_fc1_b)
-                h = ggml_add(ctx0, h, b.mlp_fc1_b);
-            h = ggml_silu(ctx0, h);
-            h = ggml_mul_mat(ctx0, b.mlp_fc2_w, h);
-            if (b.mlp_fc2_b)
-                h = ggml_add(ctx0, h, b.mlp_fc2_b);
-
-            qcur = ggml_add(ctx0, qcur, h);
-            (void)mlp_h;
-        }
+        blocks[il] = {b.attn_norm_w, b.attn_norm_b, b.attn_q_w,   b.attn_q_b,   b.attn_k_w,   b.attn_k_b,
+                      b.attn_v_w,    b.attn_v_b,    b.attn_o_w,   b.attn_o_b,   b.mlp_norm_w, b.mlp_norm_b,
+                      b.mlp_fc1_w,   b.mlp_fc1_b,   b.mlp_fc2_w,  b.mlp_fc2_b};
     }
 
-    // out_norm + out_linear
-    {
-        ggml_tensor* xn = ggml_norm(ctx0, qcur, eps);
-        if (m.projector.out_norm_w)
-            xn = ggml_mul(ctx0, xn, m.projector.out_norm_w);
-        if (m.projector.out_norm_b)
-            xn = ggml_add(ctx0, xn, m.projector.out_norm_b);
-        ggml_tensor* y = ggml_mul_mat(ctx0, m.projector.out_linear_w, xn);
-        if (m.projector.out_linear_b)
-            y = ggml_add(ctx0, y, m.projector.out_linear_b);
-        ggml_set_name(y, "proj_b_out");
-        ggml_build_forward_expand(gf, y);
-        (void)llm_d;
-    }
+    core_qformer::OuterWeights outer = {m.projector.query,       m.projector.window_pos,  m.projector.out_norm_w,
+                                        m.projector.out_norm_b,  m.projector.out_linear_w, m.projector.out_linear_b};
 
-    ggml_free(ctx0);
-    return gf;
+    return core_qformer::build_block(ctx->compute_meta, blocks, outer, qhp);
 }
 
 extern "C" float* granite_nle_run_projector(struct granite_nle_context* ctx, const float* enc_concat, int T, int dim,
@@ -1341,12 +1212,13 @@ extern "C" float* granite_nle_run_projector(struct granite_nle_context* ctx, con
         ggml_backend_sched_reset(ctx->sched);
         if (!ggml_backend_sched_alloc_graph(ctx->sched, gf))
             return nullptr;
-        ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "proj_b_blk"), blk_data, 0,
+        ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "qformer_blk_in"), blk_data, 0,
                                 (size_t)hidden * block_size * sizeof(float));
         if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS)
             return nullptr;
-        ggml_backend_tensor_get(ggml_graph_get_tensor(gf, "proj_b_out"), all_out.data() + (size_t)blk * q_len * llm_d,
-                                0, (size_t)q_len * llm_d * sizeof(float));
+        ggml_backend_tensor_get(ggml_graph_get_tensor(gf, "qformer_blk_out"),
+                                all_out.data() + (size_t)blk * q_len * llm_d, 0,
+                                (size_t)q_len * llm_d * sizeof(float));
     }
 
     if (ctx->params.verbosity >= 2) {

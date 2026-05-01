@@ -498,15 +498,23 @@ correctness). **LOC saved:** ~250. **Validation:** editing_logits
 cos_min must stay at 0.999999 for granite-nle; base/plus must keep
 transcribing JFK identically.
 
-**Step 5 — `core/qformer.h` (windowed simplified Q-Former). Risk: low-medium.**
+**Step 5 — `core/qformer.h` (windowed simplified Q-Former). Risk: low.**
 
 Lift `nle_proj_layer_proj` + `nle_proj_build_block` into
-`core/qformer.h` as `core_qformer::run_windowed(...)`. Parameters: #
-input encoder-layer concat (2 in PLUS, 4 in NAR, 1 in base),
-block_size, downsample_rate, n_layers, n_heads, mlp_ratio. The
-runtime call sites in both granite TUs collapse to a single function
-call. **LOC saved:** ~300. **Validation:** projector_output cos_min
-must stay at 0.999999.
+`core/qformer.h` as `core_qformer::run_layer_proj(...)` (pass A,
+LayerNorm + concat + linear + GELU, full graph dispatch) and
+`core_qformer::build_block(...)` (returns a per-window cgraph).
+NAR-only — granite-speech (base/plus) uses a STRUCTURALLY DIFFERENT
+Q-Former (full BLIP-2 with self-attn + cross-attn + FFN per layer,
+no pass A, no window-mean-pool) and does not share these helpers;
+it stays untouched. The original duplication-map row claimed both
+TUs share this projector — that was inaccurate, confirmed when
+reading the speech `granite_proj_block` struct (sa_*, ca_*, ffn_*
+weight names) against the NAR `granite_nle_proj_block` (cross-attn
++ MLP only). **LOC moved:** ~190 (no net dedup; a co-location for
+any future simplified-windowed-Q-Former backend). **Validation:**
+JFK transcribes identically on granite-nle; granite-speech base/plus
+unchanged (no edits to that TU).
 
 ### Non-goals
 
@@ -529,9 +537,11 @@ After all five steps:
 - `crispasr-diff granite-speech` (plus, F16 + 3× Q4_K) — same.
 - `crispasr-diff granite-nle` — all 6 stages PASS, transcribe matches
   reference `final_text` exactly.
-- `granite_speech.cpp` + `granite_nle.cpp` total LOC drops by ~1500
-  (from ~4670 to ~3170). New `core/*.h` files add ~600 LOC. Net win:
-  ~900 LOC of duplicated math removed.
+- `granite_speech.cpp` + `granite_nle.cpp` total LOC drops by ~1100
+  (from ~4670 to ~3570; the originally-projected ~300 LOC step-5 dedup
+  did not materialise — the two projectors are structurally different).
+  New `core/*.h` files add ~700 LOC. Net win: ~700 LOC of duplicated
+  math removed.
 - No regression in encoder/projector/LLM cosine numbers (allow LSB
   drift only; reject anything that moves cos_min by ≥ 1e-5).
 
