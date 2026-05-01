@@ -4644,8 +4644,19 @@ blocks) is depthwise: kernel ne=`(K=3, 1, C)` with `groups=in_C` and
 
 ```
 y[c, 2t]   = w[c, 1] * x[c, t]
-y[c, 2t+1] = w[c, 0] * x[c, t] + w[c, 2] * x[c, t+1]    (x[c, T]=0 boundary)
+y[c, 2t+1] = w[c, 2] * x[c, t] + w[c, 0] * x[c, t+1]    (x[c, T]=0 boundary)
 ```
+
+**Derivation** (worth memorising — the M11 diff caught a swapped-end
+bug here that survived audio QA because the envelope/energy looked
+right): PyTorch ConvTranspose1d emits `y[i] = sum input[j]·weight[k]`
+over (j, k) satisfying `j·stride + k − padding = i`. For our
+`(s=2, p=1, k=3)` config and `i = 2t+1`, the valid (j, k) pairs are
+`(t, 2)` and `(t+1, 0)`. Hence `w[2]·x[t] + w[0]·x[t+1]` — NOT
+`w[0]·x[t] + w[2]·x[t+1]`. Initial implementation had the kernel ends
+swapped; commit `448c1af` fixed it after the M11 dumper made the bug
+visible (every `dec_decode_3_out` channel diverged at the upsample
+boundaries even though the C++ produced plausible audio).
 
 Implementation in `kokoro_pool_2x_depthwise` (src/kokoro.cpp): permute
 the kernel from `(K, 1, C)` to `(C, K)`, cast to F32 (the F16 view +

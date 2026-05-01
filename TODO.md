@@ -11,46 +11,39 @@ are in `LEARNINGS.md`. Full roadmap in `PLAN.md`.
 
 ---
 
-## Kokoro / StyleTTS2 (iSTFTNet) backend **[next]**
+## Kokoro / StyleTTS2 (iSTFTNet) backend **[done]**
 
 Plan file: `/Users/christianstrobele/.claude/plans/sprightly-enchanting-dahl.md`.
-Detailed handoff: `HANDOFF_NEXT_SESSION.md`. Lessons: `LEARNINGS.md`
-"Kokoro / StyleTTS2 lessons".
+Lessons: `LEARNINGS.md` "Kokoro / StyleTTS2 lessons".
 
-Status as of 2026-05-01: **M1, M2, M3, M4, M5a, M5b, M6, M7a/b shipped
-and stage-validated**. Working tree has uncommitted work (see
-`HANDOFF_NEXT_SESSION.md` "Files in flight"). 11 stages exposed via
-`kokoro_extract_stage()`: token_ids, bert_pooler_out, bert_proj_out,
-text_enc_out, dur_enc_out, durations, pred_lstm_out, align_out,
-f0_curve, n_curve, dec_encode_out, dec_decode_3_out — all finite,
-shapes validated, magnitudes plausible.
+Status as of 2026-05-01: **M1–M9 + M11 + M12 shipped**. End-to-end
+synthesis works; the M12 diff harness validates 16 stages against the
+official PyTorch reference at `cos_min ≥ 0.999` for all deterministic
+stages and `≥ 0.95` for the four RNG-divergent generator stages
+(`gen_pre_post_out`, `mag`, `phase`, `audio_out` — Python `torch.rand`
+vs C++ `std::mt19937` cannot match exactly; current floor is cos≈0.99
+on `audio_out`).
 
-**Remaining:**
+**Closed bug from the M11/M12 work** (commit `448c1af`): the
+`kokoro_pool_2x_depthwise` ConvTranspose1d had `w[0]` and `w[2]`
+swapped in the odd-output formula. Affected predictor F0[1] / N[1]
+and decoder.decode[3]. Fix: `y[2t+1] = w[2]·x[t] + w[0]·x[t+1]` per
+PyTorch indexing. Hidden by overall envelope/energy looking right.
 
-1. **Commit** the working state as a clean checkpoint. Use explicit
-   paths in `git add` — do NOT `-A` (working tree has unrelated
-   pre-existing changes).
-2. **M7c — Generator** (~600 LOC). Snake-α activation + AdaINResBlock1
-   (different class from `kokoro_adain_resblk`, uses Snake-α not
-   LeakyReLU) + CPU-side SineGen+STFT for `har` + 2× ConvTranspose1d
-   upsample loop with noise injection + 3-kernel-averaged resblocks.
-   Conv_post split: `spec=exp(x[:11])`, `phase=sin(x[11:])`.
-   Keep on `gen_sched` (CPU-pinned) until validated; `ups[0]` is the
-   same Metal-hang shape (k=20, s=10) as the qwen3-tts codec.
-3. **M8 — iSTFT** (~150 LOC C). Direct DFT, n_fft=20 → 11 bins, hop=5,
-   hann periodic window. Pure CPU.
-4. **M9 — Wire `kokoro_synthesize`** to call BERT → text_enc →
-   predictor → align → F0Ntrain → decoder → generator → iSTFT and
-   return malloc'd `float*` PCM. The CLI adapter
-   (`crispasr_backend_kokoro.cpp`) is already plumbed.
-5. **M11 — Reference dumper** at `tools/reference_backends/kokoro.py`.
-   Hooks at every stage. Must replicate the 9 corrected behaviours
-   from the source-comparison work — pad-wrap, drop-unknown-phoneme,
-   banker's rounding, exp/sin on conv_post split, etc. — or the diff
-   will spuriously fail.
-6. **M12 — Validation** via `crispasr-diff kokoro …`. Need to register
-   `kokoro` in `examples/cli/crispasr_diff_main.cpp`. Target
-   `cos_min ≥ 0.999` per stage; end-to-end audio xcorr peak ≥ 0.999.
+Stages exposed via `kokoro_extract_stage()`: token_ids,
+bert_pooler_out, bert_proj_out, text_enc_out, dur_enc_out,
+pred_lstm_out, durations, align_out, f0_curve, n_curve,
+dec_encode_out, dec_decode_3_out, gen_pre_post_out, mag, phase,
+audio_out (16 total). Reference dumper at
+`tools/reference_backends/kokoro.py` mirrors the 9 corrections
+(pad-wrap, drop-unknown, AdaIN affine override, banker's rounding,
+voice-pack split, conv_post exp/sin, etc.).
+
+**Polish (later):**
+- Tighten generator-stage cos floor by intercepting SineGen's RNG in
+  the Python hook to feed the same uniform/normal sequence as
+  `std::mt19937(0x12345)` produces. Currently accepted at cos≈0.99.
+- CLI wrappers / Python bindings (parallels qwen3-tts CLI work below).
 
 ---
 

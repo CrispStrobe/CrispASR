@@ -51,7 +51,8 @@ voice come from env vars:
                     stages 12–15 only diff at looser tolerance).
 
 Critical reference-side behaviours that must match the C++ runtime
-(see HANDOFF_NEXT_SESSION.md "Plan/briefing errors caught"):
+(see LEARNINGS.md "Kokoro / StyleTTS2 lessons" for the full
+catalogue of plan/source divergences caught during M3-M9):
 
   1. Pad-wrap input ids `[0, *raw, 0]` — KModel.forward does this.
   2. Drop unknown phonemes — KModel.forward filters None vocab lookups.
@@ -189,9 +190,9 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
     import torch
 
     # Banker's rounding alignment: torch.round on float32 is round-half-
-    # to-even (R5 in HANDOFF_NEXT_SESSION). Setting the default dtype
-    # ensures the duration tensor stays float32 through the
-    # sigmoid+sum+round pipeline, matching the C++ nearbyintf path.
+    # to-even, matching the C++ side's nearbyintf with FE_TONEAREST.
+    # Setting the default dtype ensures the duration tensor stays
+    # float32 through the sigmoid+sum+round pipeline.
     torch.set_default_dtype(torch.float32)
 
     from kokoro.model import KModel
