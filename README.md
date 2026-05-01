@@ -462,20 +462,35 @@ WAV via `--tts-output`.
 
 **VibeVoice realtime** (`vibevoice-tts`, preset voice GGUF):
 ```bash
+# First run downloads ~636 MB to ~/.cache/crispasr/ (Q4_K talker + emma
+# voice from cstr/vibevoice-realtime-0.5b-GGUF), then runs from cache.
 ./build/bin/crispasr \
-    --backend vibevoice-tts \
-    -m ~/.cache/crispasr/vibevoice-realtime-0.5b-q4_k.gguf \
-    --voice ~/.cache/crispasr/vibevoice-voice-emma.gguf \
+    --backend vibevoice-tts -m auto \
     --tts "Hello, how are you today?" \
     --tts-output hello.wav
 ```
 
-**Qwen3-TTS** (`qwen3-tts`, runtime WAV clone):
+**Qwen3-TTS** (`qwen3-tts`, auto-download, runtime WAV clone):
 ```bash
+# First run downloads ~1.3 GB to ~/.cache/crispasr/ (Q8_0 talker + F16 codec
+# from cstr/qwen3-tts-0.6b-base-GGUF and cstr/qwen3-tts-tokenizer-12hz-GGUF),
+# then runs from cache on subsequent invocations.
+./build/bin/crispasr \
+    --backend qwen3-tts -m auto \
+    --voice samples/qwen3_tts/clone.wav \
+    --ref-text "Okay, yeah. I resent you, I love you, I respect you. But you know what - You blew it, and thanks to you." \
+    --tts "Hello there" \
+    --tts-output hello.wav
+```
+
+**Qwen3-TTS** (`qwen3-tts`, F16 reference baseline, explicit paths):
+```bash
+# F16 talker (1.83 GB) is the strict-fidelity baseline. The CLI auto-discovers
+# the codec when qwen3-tts-tokenizer-12hz.gguf sits next to the talker,
+# otherwise pass --codec-model.
 ./build/bin/crispasr \
     --backend qwen3-tts \
-    -m /Volumes/backups/ai/crispasr-models/qwen3-tts-0.6b-talker.gguf \
-    --codec-model /Volumes/backups/ai/crispasr-models/qwen3-tts-tokenizer-12hz.gguf \
+    -m ~/.cache/crispasr/qwen3-tts-12hz-0.6b-base.gguf \
     --voice samples/qwen3_tts/clone.wav \
     --ref-text "Okay, yeah. I resent you, I love you, I respect you. But you know what - You blew it, and thanks to you." \
     --tts "Hello there" \
@@ -485,9 +500,7 @@ WAV via `--tts-output`.
 **Qwen3-TTS** (`qwen3-tts`, baked voice-pack GGUF):
 ```bash
 ./build/bin/crispasr \
-    --backend qwen3-tts \
-    -m /Volumes/backups/ai/crispasr-models/qwen3-tts-0.6b-talker.gguf \
-    --codec-model /Volumes/backups/ai/crispasr-models/qwen3-tts-tokenizer-12hz.gguf \
+    --backend qwen3-tts -m auto \
     --voice /tmp/qwen3-tts-voice-pack.gguf \
     --tts "Hello there" \
     --tts-output hello.wav
@@ -495,12 +508,16 @@ WAV via `--tts-output`.
 
 **Kokoro** (`kokoro`, multilingual, voice + language flag drive routing):
 
+Kokoro does not currently support `-m auto`. Drop the GGUFs into a
+directory of your choice (`~/.cache/crispasr/` works) and pass
+explicit paths.
+
 ```bash
 # English — uses the official Kokoro-82M with the bundled af_heart voice.
 ./build/bin/crispasr \
     --backend kokoro \
-    -m /Volumes/backups/ai/crispasr-models/kokoro-82m-f16.gguf \
-    --voice /Volumes/backups/ai/crispasr-models/kokoro-voice-af_heart.gguf \
+    -m ~/.cache/crispasr/kokoro-82m-f16.gguf \
+    --voice ~/.cache/crispasr/kokoro-voice-af_heart.gguf \
     --tts "Hello, how are you today?" -l en \
     --tts-output hello.wav
 
@@ -515,7 +532,7 @@ WAV via `--tts-output`.
 #      model directory; the first that exists wins.
 ./build/bin/crispasr \
     --backend kokoro \
-    -m /Volumes/backups/ai/crispasr-models/kokoro-82m-f16.gguf \
+    -m ~/.cache/crispasr/kokoro-82m-f16.gguf \
     --tts "Guten Tag, dies ist ein Test des deutschen Phonemizers." \
     -l de --tts-output guten_tag.wav
 ```
@@ -539,39 +556,40 @@ Notes:
 
 - `vibevoice-tts` uses `--voice` for its voice prompt or preset. The realtime
   `0.5B` flow is typically driven by a voice GGUF.
-- `qwen3-tts` always needs the separate codec GGUF. Pass it explicitly with
-  `--codec-model`, or place `qwen3-tts-tokenizer-12hz.gguf` next to the
-  talker model so the CLI can auto-discover it.
+- `qwen3-tts` needs both the talker GGUF and the codec/tokenizer GGUF. With
+  `-m auto` both are pulled into `~/.cache/crispasr/` on first run (Q8_0
+  talker + F16 codec by default). With an explicit `-m`, the CLI auto-
+  discovers the codec when `qwen3-tts-tokenizer-12hz.gguf` sits next to
+  the talker model; otherwise pass `--codec-model` explicitly.
 - When `qwen3-tts --voice` points to a `.wav`, `--ref-text` is required.
-- When `qwen3-tts --voice` points to a `.gguf`, it is treated as a baked voice
-  pack and `--ref-text` is ignored.
-- `qwen3-tts` quantization is not quality-equivalent across variants. Treat
-  `f16` talker + `f16` codec as the reference baseline.
-- Recommended quantized deployment today: `q8_0` talker with the `f16` codec.
-- Lower-bit talker quants such as `q6_k`, `q5_k`, and `q4_k` can still produce
-  usable audio, but they drift noticeably in intermediate tensor checks. Voice
-  similarity, prompt adherence, prosody, and multilingual robustness may
-  change. Use them only when memory matters more than strict fidelity.
-- Quantizing the tokenizer / codec hurts `qwen3-tts` earlier than talker-only
-  quantization. Prefer keeping `qwen3-tts-tokenizer-12hz.gguf` at `f16`.
+- When `qwen3-tts --voice` points to a `.gguf`, it is treated as a baked
+  voice pack and `--ref-text` is ignored.
+- `qwen3-tts` quantization is not quality-equivalent across variants. The
+  reference baseline is `f16` talker + `f16` codec. The recommended
+  deployment quant is `q8_0` talker + `f16` codec — used by `-m auto`,
+  ~986 MB, audibly indistinguishable from F16 on the test prompts in
+  LEARNINGS.md. Lower-bit talker quants (`q6_k`, `q5_k`, `q4_k`) drift
+  noticeably in strict tensor diffs; voice similarity, prosody, and
+  multilingual robustness can change. Use them only when memory matters
+  more than strict fidelity. Quantizing the codec hurts earlier than
+  quantizing the talker — keep `qwen3-tts-tokenizer-12hz.gguf` at `f16`.
+
+GGUF downloads: [`cstr/vibevoice-realtime-0.5b-GGUF`](https://huggingface.co/cstr/vibevoice-realtime-0.5b-GGUF), [`cstr/vibevoice-1.5b-GGUF`](https://huggingface.co/cstr/vibevoice-1.5b-GGUF), [`cstr/qwen3-tts-0.6b-base-GGUF`](https://huggingface.co/cstr/qwen3-tts-0.6b-base-GGUF), [`cstr/qwen3-tts-tokenizer-12hz-GGUF`](https://huggingface.co/cstr/qwen3-tts-tokenizer-12hz-GGUF)
 
 #### qwen3-tts environment switches
 
-These knobs gate experimental code paths added during the v0.5.x speed
-work. Defaults reproduce the original (pre-optimization) graph
-topology, so unset is the safe choice if you hit unexpected output.
+Diagnostic / experimental knobs. Leave them unset for normal use — the
+defaults reproduce the validated, end-to-end-tested code path.
 
 | Variable | Default | Effect when set |
 | --- | --- | --- |
-| `QWEN3_TTS_O15` | unset | Pin code-predictor `Lk = cp_kv_max_ctx` and reuse one cached T=1 graph across steps 2..14 (saves ~7 ms/frame on Mac/Metal). With it unset, the per-step graph uses the original dynamic `Lk = n_past + T`. The graph-cache reuse path went through one regression — a static `n_past` byte-offset in the K/V write — that's now fixed by routing the scatter through `ggml_set_rows` with `positions` as the runtime indices; both default and O15 pass the per-step cp diff at cos≥0.999 and produce the same end-to-end output. Still default-off pending a clean A/B on Metal speed. |
-| `QWEN3_TTS_FUSED_QKV` | unset | Concatenate Q+K+V weights into one `attn_qkv_w` per talker layer at load time (F16/F32 talker only; auto-skipped for quantized talkers). Bit-identical output on M1 Metal but a contended-machine bench was inconclusive on speed; leave unset until you have a clean A/B. |
-| `QWEN3_TTS_MAX_FRAMES` | `1500` | Hard cap on AR decode steps. Useful for benchmarks where short prompts would otherwise run to the default 1500-frame ceiling without emitting `codec_eos`. |
+| `QWEN3_TTS_MAX_FRAMES` | `1500` | Hard cap on AR decode steps. Short prompts that fail to sample `codec_eos` would otherwise run to the 1500-frame ceiling. |
+| `QWEN3_TTS_O15` | unset | Pin code-predictor `Lk = cp_kv_max_ctx` and reuse one cached T=1 graph across AR steps 2..14 (saves ~7 ms/frame on Mac/Metal). End-to-end output matches the dynamic-Lk default; flag stays opt-in pending a clean speed A/B. |
+| `QWEN3_TTS_FUSED_QKV` | unset | Fuse Q+K+V weights into one matmul per talker layer at load time (F16/F32 talker only; auto-skipped for Q8_0/Q4_K). Bit-identical to the unfused path on M1 Metal; speed effect is machine-dependent. |
 | `QWEN3_TTS_BENCH` | unset | Print per-call build/alloc/compute/read timings for `talker_kv` and `code_pred_kv`. |
 | `QWEN3_TTS_PROF` | unset | Per-op profiler (more granular than `BENCH`). |
-| `QWEN3_TTS_CP_BACKEND` | unset | Set to `cpu` to pin the code predictor to the CPU backend (debug aid). |
-| `QWEN3_TTS_DUMP_DIR` | unset | Write per-frame intermediate tensors into the named directory (large; for diff-harness work). |
-
-GGUF downloads: [`cstr/vibevoice-realtime-0.5b-GGUF`](https://huggingface.co/cstr/vibevoice-realtime-0.5b-GGUF), [`cstr/vibevoice-1.5b-GGUF`](https://huggingface.co/cstr/vibevoice-1.5b-GGUF), [`cstr/qwen3-tts-0.6b-base-GGUF`](https://huggingface.co/cstr/qwen3-tts-0.6b-base-GGUF), [`cstr/qwen3-tts-tokenizer-12hz-GGUF`](https://huggingface.co/cstr/qwen3-tts-tokenizer-12hz-GGUF)
+| `QWEN3_TTS_CP_BACKEND` | unset | Pin the code predictor to a chosen backend. `cpu`, `cpu-f16`, `cpu-f32` keep its weights on the CPU backend — useful when isolating bugs to the talker vs. code-predictor or when comparing CPU and Metal end-to-end. |
+| `QWEN3_TTS_DUMP_DIR` | unset | Write per-frame intermediate tensors into the named directory. Bulky; intended for diff-harness work (`tools/dump_reference.py --backend qwen3-tts`). |
 
 ### Server mode (persistent model, HTTP API)
 
