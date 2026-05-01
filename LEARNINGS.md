@@ -4767,3 +4767,38 @@ have espeak-ng-data at the default location; export
 `CRISPASR_ESPEAK_DATA_PATH=/path/to/espeak-ng-data` to override it
 without recompiling.
 
+**Phonemizer language ≠ model voice language.** Kokoro-82M's IPA vocab
+(178 symbols) covers a superset of the languages the bundled voice
+packs were trained on. The voice prefix tells you what's actually
+supported at the model level: `a/b` (en US/UK), `e` (es), `f` (fr),
+`h` (hi), `i` (it), `j` (ja), `p` (pt), `z` (zh). **No** German (`d_*`),
+Russian (`r_*`), Korean, or Arabic voices ship with the official
+release. End-to-end synth on de/ru/etc. *will* run — espeak-ng emits
+correct IPA and the model accepts it through an English voice — but
+quality degrades the further the phoneme distribution drifts. Concrete
+M1 measurement on 2026-05-01 with `af_heart`:
+- Healthy synth (peak ~12000, RMS ~1500): en, fr, ru on 3-4 s
+  utterances. Short de works too ("Hallo Welt." peak=11919; "Guten
+  Morgen." peak=11418).
+- Silence collapse (peak 541, RMS 44): a longer German phrase with
+  unusual diphthongs (`dˈɔøtʃən fˈoːneːmˌiːtsɜs`) — the model's
+  duration predictor evidently produces near-zero envelopes for
+  out-of-distribution phoneme sequences. The phonemes printed
+  correctly; only the audio collapsed.
+
+For full multilingual quality, either ship language-matched voice
+packs (the project's voice GGUF format is documented in
+`models/convert-kokoro-voice-to-gguf.py`) or auto-fall back to a
+phonologically-close trained language (e.g. `ff_siwis` for German —
+French's nasal vowels are a closer match than English's). espeak-ng
+also has its own language-level limits worth knowing:
+
+- **Mandarin** comes back with espeak's tone-number IPA
+  (`ni2χˈɑu2 …` — digits 1-5 mark tones). The kokoro vocab has no
+  tone digits, so the tokenizer drops them and tone is lost.
+- **Japanese kanji** triggers espeak's English fallback —
+  日本語 → `(en)tʃˈaɪniːz(ja)…` ("Chinese letter") with explicit
+  voice-switch markers that aren't IPA. Kana works fine; kanji
+  needs an external Japanese frontend (`pyopenjtalk` / `mecab` +
+  `kakasi`) to convert to kana before espeak.
+

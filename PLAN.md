@@ -604,30 +604,62 @@ so existing builds don't regress.
 - Build verified: `otool -L libcrispasr.dylib` shows
   `libespeak-ng.1.dylib`; `nm libkokoro.a` has the three espeak
   symbols.
+- **End-to-end synth check** (against
+  `/Volumes/backups/ai/crispasr-models/kokoro-82m-f16.gguf` +
+  `kokoro-voice-af_heart.gguf`):
+  | lang | phonemes | duration | peak | RMS | verdict |
+  |---|---|---:|---:|---:|---|
+  | en  | clean | 3.45 s | 11443 | 1545 | ✅ healthy |
+  | de  | clean | 4.08 s |   541 |   44 | ❌ near-silence on long phrases (no German voice — see open #1) |
+  | fr  | clean | 3.40 s | 12374 | 1434 | ✅ healthy |
+  | ru  | clean | 3.38 s | 11375 | 1506 | ✅ healthy |
+  | cmn | espeak tone numbers (`ni2χˈɑu2…`) | 3.20 s | 11731 | 1627 | ⚠️ audio plays but tones unmodelled — open #2 |
+  | ja  | kanji fallback (`(en)tʃˈaɪniːz(ja)…`) | 8.38 s | 15460 | 1581 | ⚠️ partial — kana works, kanji becomes English — open #3 |
+
+  Short German phrases ("Hallo Welt.", "Guten Morgen.") synthesize
+  fine with `af_heart`; the silence collapse only triggers on longer
+  out-of-distribution phoneme sequences. See LEARNINGS.md "Kokoro
+  phonemizer: libespeak-ng vs popen divergence" for full results.
 
 ### Open
 
-1. **End-to-end synth check.** No `kokoro-82m.gguf` is present
-   under `/Volumes/backups/ai/crispasr-models/` or
-   `~/.cache/crispasr/`, so the pipeline is library-linkage-tested
-   only. Convert (or download) a Kokoro-82M GGUF and run a
-   per-language synth pass on the same six languages exercised in
-   the standalone test. Verify the LRU cache hit rate via a small
-   bench (re-synthesize the same text twice).
-2. **Diff harness reference backend.** No `crispasr-diff kokoro`
+1. **Native voices for languages outside the kokoro-82m voice pack
+   set.** Kokoro-82M ships voices only for `a/b` (en US/UK), `e`
+   (es), `f` (fr), `h` (hi), `i` (it), `j` (ja), `p` (pt), `z` (zh).
+   No `d_*` (de), no `r_*` (ru), no Korean/Arabic. Phonemization
+   works for those via espeak-ng but synth quality degrades on
+   longer utterances because the English voice (`af_heart`) is
+   off-distribution. Either (a) document this in the README + CLI
+   help, (b) auto-pick a closer-language voice when `-l` is unsupported
+   (e.g. fall back to `ff_siwis` for German), or (c) train/source a
+   German voice pack — out of scope here.
+2. **Mandarin tone numbers.** espeak-ng outputs digit-suffixed
+   tone markers (`ni2χˈɑu2`) that aren't in the kokoro-82m IPA vocab
+   (178 symbols) and likely get dropped at tokenization, losing tone
+   info. Investigate whether `--ipa=2` (without tone numbers) plus a
+   separate tone embedding would work, or whether to switch to a
+   different Mandarin G2P (e.g. `pypinyin`).
+3. **Japanese kanji.** espeak-ng falls back to English pronunciation
+   for kanji (e.g. 日本語 → "Chinese letter"), inserting `(en)…(ja)`
+   voice-switch markers that aren't IPA. For full Japanese support,
+   pre-process input with a Japanese frontend (`pyopenjtalk` /
+   `mecab` + `kakasi`) to convert kanji → kana before espeak.
+4. **Diff harness reference backend.** No `crispasr-diff kokoro`
    today. The reference dumper at
    `tools/reference_backends/kokoro.py` already exists for the
    model side (16 stages); extend it (or add a sibling) so the
    phonemizer step itself is also diffed — guard against future
    drift between popen / lib / future Python G2P.
-3. **Optional polish.** A `kokoro_phoneme_cache_clear()` C ABI
+5. **Optional polish.** A `kokoro_phoneme_cache_clear()` C ABI
    for long-running daemons that resynthesize across many speakers.
    Low priority.
 
 ### Effort
 
-Small. Open items 1 + 2 are each an afternoon. Open item 3 is
-~20 LOC if asked.
+Small individually. Open items 2 + 3 are each an afternoon if we
+go the pre-processing route. Open item 1 is "policy" — a one-line
+fallback in the backend or a docs change. Open item 4 is ~150 LOC.
+Open item 5 is ~20 LOC if asked.
 
 ---
 
