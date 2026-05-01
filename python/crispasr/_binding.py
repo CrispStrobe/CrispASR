@@ -489,6 +489,86 @@ def _registry_call(sym: str, key: str, lib_path: Optional[str]) -> Optional[Regi
     )
 
 
+@dataclass
+class KokoroResolved:
+    """Result of :func:`kokoro_resolve_for_lang` — see that function."""
+    model_path: str
+    voice_path: Optional[str]
+    voice_name: Optional[str]
+    backbone_swapped: bool
+
+
+def kokoro_resolve_for_lang(
+    model_path: str,
+    lang: str,
+    *,
+    lib_path: Optional[str] = None,
+) -> KokoroResolved:
+    """Resolve the kokoro model + fallback voice for ``lang``.
+
+    Mirrors what the CLI does for ``--backend kokoro -l <lang>`` — see
+    PLAN #56 opt 2b. Returns:
+
+    - ``model_path``: the path to actually load (may differ from input
+      when a German backbone sibling, ``kokoro-de-hui-base-f16.gguf``,
+      sits next to the official Kokoro-82M baseline).
+    - ``voice_path``/``voice_name``: the per-language fallback voice
+      path + basename. ``None`` if the language has a native Kokoro-82M
+      voice or no candidate exists in the model directory.
+    - ``backbone_swapped``: True iff the model path was rewritten.
+
+    Wrappers should call this *before* opening the Session so the
+    routing kicks in even outside the CLI entry point.
+    """
+    lib = ctypes.CDLL(lib_path or _find_lib())
+    out_model = ctypes.create_string_buffer(1024)
+    out_voice = ctypes.create_string_buffer(1024)
+    out_picked = ctypes.create_string_buffer(64)
+
+    swapped = False
+    if hasattr(lib, "crispasr_kokoro_resolve_model_for_lang_abi"):
+        lib.crispasr_kokoro_resolve_model_for_lang_abi.argtypes = [
+            ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int,
+        ]
+        lib.crispasr_kokoro_resolve_model_for_lang_abi.restype = ctypes.c_int
+        rc = lib.crispasr_kokoro_resolve_model_for_lang_abi(
+            model_path.encode("utf-8"), (lang or "").encode("utf-8"),
+            out_model, 1024,
+        )
+        if rc == 0:
+            swapped = True
+        elif rc < 0:
+            raise RuntimeError("kokoro_resolve_model_for_lang: buffer too small")
+        # rc == 1 => no swap; out_model is the original path
+
+    voice_path: Optional[str] = None
+    voice_name: Optional[str] = None
+    if hasattr(lib, "crispasr_kokoro_resolve_fallback_voice_abi"):
+        lib.crispasr_kokoro_resolve_fallback_voice_abi.argtypes = [
+            ctypes.c_char_p, ctypes.c_char_p,
+            ctypes.c_char_p, ctypes.c_int,
+            ctypes.c_char_p, ctypes.c_int,
+        ]
+        lib.crispasr_kokoro_resolve_fallback_voice_abi.restype = ctypes.c_int
+        rc = lib.crispasr_kokoro_resolve_fallback_voice_abi(
+            model_path.encode("utf-8"), (lang or "").encode("utf-8"),
+            out_voice, 1024, out_picked, 64,
+        )
+        if rc == 0:
+            voice_path = out_voice.value.decode("utf-8")
+            voice_name = out_picked.value.decode("utf-8")
+        elif rc < 0:
+            raise RuntimeError("kokoro_resolve_fallback_voice: buffer too small")
+        # rc == 1 (native voice) or 2 (no candidate) => leave voice_* as None
+
+    return KokoroResolved(
+        model_path=out_model.value.decode("utf-8") or model_path,
+        voice_path=voice_path,
+        voice_name=voice_name,
+        backbone_swapped=swapped,
+    )
+
+
 def cache_ensure_file(
     filename: str,
     url: str,

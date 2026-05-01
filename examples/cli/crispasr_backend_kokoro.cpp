@@ -22,53 +22,38 @@
 
 namespace {
 
-// Prefix → has-native-Kokoro-82M-voice. The official voice packs cover
-// a/b (en US/UK), e (es), f (fr), h (hi), i (it), j (ja), p (pt), z (zh).
-// Languages outside this set need either a community-trained voice (see
-// PLAN #56 option 2) or a closer-language fallback (option 1).
-bool kokoro_lang_has_native_voice(const std::string& lang) {
-    static const char* kNative[] = {"en", "es", "fr", "hi", "it", "ja", "pt", "cmn", "zh"};
-    for (const char* p : kNative) {
-        size_t n = std::strlen(p);
-        if (lang.size() >= n && lang.compare(0, n, p) == 0
-            && (lang.size() == n || lang[n] == '-' || lang[n] == '_'))
-            return true;
+// Per-language model + voice routing lives in src/kokoro.cpp behind the
+// crispasr_kokoro_* C ABI so wrappers (Python, Rust, Go, ...) can reuse
+// the same policy. The CLI just shells out to those helpers and prints
+// friendly messages on the side.
+
+std::string kokoro_resolve_model(const std::string& lang, const std::string& model_path) {
+    char out[1024] = {0};
+    int rc = crispasr_kokoro_resolve_model_for_lang(model_path.c_str(), lang.c_str(),
+                                                    out, (int)sizeof(out));
+    if (rc == 0) {
+        fprintf(stderr,
+                "crispasr[kokoro]: language 'de' — preferring German-trained "
+                "backbone '%s' over '%s' (dida-80b/kokoro-german-hui-"
+                "multispeaker-base, Apache-2.0; HUI corpus, CC0; see PLAN "
+                "#56 opt 2b)\n",
+                out, model_path.c_str());
+        return out;
     }
-    return false;
+    return model_path;
 }
 
-// Pick the preferred fallback voice for a non-native language. df_eva
-// (Tundragoon German, Apache-2.0) for German; ff_siwis (French) as the
-// generic fallback for everything else (Russian, Korean, Arabic, etc.).
-const char* kokoro_preferred_fallback_voice(const std::string& lang) {
-    if (lang.size() >= 2 && lang.compare(0, 2, "de") == 0
-        && (lang.size() == 2 || lang[2] == '-' || lang[2] == '_'))
-        return "df_eva";
-    return "ff_siwis";
-}
-
-// Derive the fallback voice path from the model path: same directory,
-// filename `kokoro-voice-<preferred>.gguf`. Falls back to ff_siwis if
-// the language-preferred voice isn't on disk. Returns empty if neither
-// file exists.
-std::string kokoro_resolve_fallback_voice(const std::string& lang, const std::string& model_path) {
-    auto slash = model_path.find_last_of("/\\");
-    std::string dir = (slash == std::string::npos) ? "." : model_path.substr(0, slash);
-    auto try_voice = [&](const char* name) -> std::string {
-        std::string candidate = dir + "/kokoro-voice-" + name + ".gguf";
-        if (FILE* f = std::fopen(candidate.c_str(), "rb")) {
-            std::fclose(f);
-            return candidate;
-        }
-        return {};
-    };
-    const char* preferred = kokoro_preferred_fallback_voice(lang);
-    std::string p = try_voice(preferred);
-    if (!p.empty())
-        return p;
-    if (std::strcmp(preferred, "ff_siwis") != 0)
-        return try_voice("ff_siwis");
-    return {};
+std::string kokoro_resolve_fallback_voice(const std::string& lang,
+                                          const std::string& model_path,
+                                          std::string* out_picked_name = nullptr) {
+    char path[1024] = {0};
+    char picked[64] = {0};
+    int rc = crispasr_kokoro_resolve_fallback_voice(model_path.c_str(), lang.c_str(),
+                                                    path, (int)sizeof(path),
+                                                    picked, (int)sizeof(picked));
+    if (rc != 0) return {};
+    if (out_picked_name) *out_picked_name = picked;
+    return path;
 }
 
 class KokoroBackend : public CrispasrBackend {
@@ -97,9 +82,11 @@ public:
             std::strncpy(cp.espeak_lang, p.language.c_str(), sizeof(cp.espeak_lang) - 1);
             cp.espeak_lang[sizeof(cp.espeak_lang) - 1] = '\0';
         }
-        ctx_ = kokoro_init_from_file(p.model.c_str(), cp);
+        std::string resolved_model = kokoro_resolve_model(p.language, p.model);
+        is_german_backbone_ = (resolved_model != p.model);
+        ctx_ = kokoro_init_from_file(resolved_model.c_str(), cp);
         if (!ctx_) {
-            fprintf(stderr, "crispasr[kokoro]: failed to load model '%s'\n", p.model.c_str());
+            fprintf(stderr, "crispasr[kokoro]: failed to load model '%s'\n", resolved_model.c_str());
             return false;
         }
         return true;
@@ -115,29 +102,37 @@ public:
         // languages → empty (synthesis will fail with a clear error).
         std::string voice_path = params.tts_voice;
         if (voice_path.empty() && !params.language.empty() && params.language != "auto"
-            && !kokoro_lang_has_native_voice(params.language)) {
-            voice_path = kokoro_resolve_fallback_voice(params.language, params.model);
-            if (!voice_path.empty()) {
-                const char* picked = kokoro_preferred_fallback_voice(params.language);
-                bool is_de = std::strcmp(picked, "df_eva") == 0
-                             && voice_path.find("df_eva") != std::string::npos;
-                if (is_de) {
+            && !crispasr_kokoro_lang_has_native_voice(params.language.c_str())) {
+            std::string picked;
+            voice_path = kokoro_resolve_fallback_voice(params.language, params.model, &picked);
+            if (!voice_path.empty() && crispasr_kokoro_lang_is_german(params.language.c_str())) {
+                const bool is_kikiri = picked == "df_victoria";
+                if (is_german_backbone_) {
                     fprintf(stderr,
-                            "crispasr[kokoro]: language 'de' — using df_eva (Tundragoon "
-                            "German speaker, Apache-2.0). Predictor weights are still the "
-                            "official Kokoro-82M's, so prosody may not be fully native. "
-                            "See PLAN #56.\n");
+                            "crispasr[kokoro]: language 'de' — using %s voicepack on the "
+                            "dida-80b German-trained backbone (Apache-2.0%s) — fully native "
+                            "German signal path. See PLAN #56 opt 2b.\n",
+                            picked.c_str(),
+                            is_kikiri ? "; voicepack from kikiri-tts/kikiri-german-victoria"
+                                      : "; voicepack from Tundragoon German fine-tune");
                 } else {
                     fprintf(stderr,
-                            "crispasr[kokoro]: no native Kokoro-82M voice for language '%s'; "
-                            "using ff_siwis fallback (French speaker — prosody will sound "
-                            "French-accented). See PLAN #56.\n",
-                            params.language.c_str());
+                            "crispasr[kokoro]: language 'de' — using %s voicepack on the "
+                            "official Kokoro-82M backbone. Predictor weights are still the "
+                            "English-trained ones; for fully native German prosody, drop "
+                            "kokoro-de-hui-base-f16.gguf next to the model. See PLAN #56.\n",
+                            picked.c_str());
                 }
+            } else if (!voice_path.empty()) {
+                fprintf(stderr,
+                        "crispasr[kokoro]: no native Kokoro-82M voice for language '%s'; "
+                        "using %s fallback (French speaker — prosody will sound "
+                        "French-accented). See PLAN #56.\n",
+                        params.language.c_str(), picked.empty() ? "ff_siwis" : picked.c_str());
             } else {
                 fprintf(stderr,
                         "crispasr[kokoro]: no native Kokoro-82M voice for language '%s' "
-                        "and no fallback at '<model_dir>/kokoro-voice-{df_eva,ff_siwis}.gguf'. "
+                        "and no fallback found at '<model_dir>/kokoro-voice-*.gguf'. "
                         "Pass --voice <path> or convert one via "
                         "models/convert-kokoro-voice-to-gguf.py. See PLAN #56.\n",
                         params.language.c_str());
@@ -171,6 +166,7 @@ public:
 private:
     kokoro_context* ctx_ = nullptr;
     bool voice_loaded_ = false;
+    bool is_german_backbone_ = false;
 };
 
 } // namespace

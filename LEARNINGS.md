@@ -1029,43 +1029,68 @@ This patch must be re-applied after every ggml version bump. It's marked
 with a `CrispASR patch` comment in the file. First applied in commit
 `1552434`, lost in the 0.9.8→0.10.0 bump, re-applied in the current fix.
 
-### F16 vec_dot accumulator overflow on ARM NEON FP16 (MUST RE-APPLY after every ggml bump)
+### F16 mul_mat input saturation on ARM NEON CPU (MUST RE-APPLY after every ggml bump)
 
-ggml-cpu's `ggml_vec_dot_f16` uses an **F16 accumulator** when
-`__ARM_FEATURE_FP16_VECTOR_ARITHMETIC` is defined (Apple M1+ and most
-recent ARM cores). Path: `simd-mappings.h` line ~365 maps
-`GGML_F16_VEC_FMA → vfmaq_f16` (`float16x8_t` register, F16 multiply-
-add). For long-row matmuls (e.g. 3072-wide FFN `ffn_down`), the running
-sum exceeds F16 max (65504) and saturates to ±Inf even when the final
-F32 reduction would have been a normal small number. The Inf then
-propagates through the next layer's RMSNorm → NaN.
+ggml-cpu's `ggml_compute_forward_mul_mat` for an F16 weight × F32 input
+first converts src1 (F32) to F16 via the type's `from_float` =
+`ggml_cpu_fp32_to_fp16` (= `__fp16 tmp = f` on ARM NEON). That cast
+**saturates F32 values above 65504 to ±Inf**. The Inf then propagates
+through the dot product and the next layer's RMSNorm produces NaN —
+even with a corrected F32 accumulator. The actual root cause of issue
+#38 is this input saturation, not the (also-buggy) F16 accumulator in
+`ggml_vec_dot_f16`.
 
-**Symptom we hit (issue #38):** `qwen3-tts` F16 talker GGUF on CPU-only
-backend produces only noise — the code_predictor's `ffn_down` matmul at
-block 2 returns Inf for one of the T=2 prefill positions, which makes
-the next block's K projection NaN; from there `top_k_sample` argmaxes
-into garbage and the AR loop never emits `codec_eos`, running to
-the 1500-frame cap. Q8_0 talker is unaffected because Q8_0's vec_dot
-uses `float sumf = 0` (F32 scalar accumulator). Apple Metal matmul
-kernels also accumulate in F32 — that's why the bug only shows up on
-CPU and in #38 it took a while for the user (geneing) to bisect to
-"F16 fails but Q8_0 works." Same accumulator overflow likely affects
-*every* F16 GGUF run on CPU, just with model-dependent severity (longer
-FFN dims and larger activations make it more likely).
+**Affects any F16 GGUF on the CPU backend** whenever an intermediate
+activation exceeds 65504. Most commonly the FFN `silu(gate) * up`
+element-wise product, which in a 3072-wide FFN can reach 1e5 even
+when the individual mul_mat outputs are 200–400 in magnitude.
 
-**Fix (file: `ggml/src/ggml-cpu/simd-mappings.h`):** disable the
-`vfmaq_f16` path for F16 SIMD on ARM. Both the `__ARM_FEATURE_SVE` and
-`__ARM_NEON` outer arms of the file have a nested
-`#if defined(__ARM_FEATURE_FP16_VECTOR_ARITHMETIC)` block — wrap each
-in `#if 0 && defined(...)` so the compiler picks the F32-accumulator
-fallback (vcvt_f32_f16 on load + vfmaq_f32 in the inner loop). Bit-
-correct, ~2× slower per element on F16 hot paths but those rarely
-dominate end-to-end CPU runtime since FFN dims are bounded.
+**Symptom we hit (issue #38):** `qwen3-tts` F16 talker on
+`--gpu-backend cpu` produces only noise — code_predictor block 2's
+`ffn_down` sees `silu(gate)*up` with `max_abs ≈ 1.4e5`, the F32→F16
+quantize turns ~half the lanes into Inf, the dot product's F32 output
+then has ~50% Inf elements, the next block's RMSNorm makes those NaN,
+and the AR loop never samples `codec_eos` — runs to the 1500-frame
+cap. Q8_0 talker is unaffected because Q8_0's mul_mat path keeps src1
+as F32 in its inner loop. Apple Metal matmul kernels also operate in
+F32 with the F32 src kept native — that's why the bug only shows up
+on CPU and "F16 fails but Q8_0 works on the same input" (geneing's
+bisection) was the deciding clue.
 
-Marked with `// CrispASR patch (issue #38)`. **MUST RE-APPLY after every
-ggml bump.** Verification: `qwen3-tts` F16 talker on `--gpu-backend cpu`
-must hit `codec_eos` for short prompts (e.g. ~50 frames for a one-line
-test sentence) instead of the 1500-frame cap.
+**Fix:** add `ggml_vec_dot_f16_f32(F16 weight × F32 input → F32 sum)`
+and route the F16 type through it instead of pre-converting src1.
+Three files:
+
+1. `ggml/src/ggml-cpu/vec.h` — declare
+   `void ggml_vec_dot_f16_f32(int n, float *s, size_t bs, ggml_fp16_t *x,
+   size_t bx, float *y, size_t by, int nrc);`
+2. `ggml/src/ggml-cpu/vec.cpp` — implement: NEON path uses
+   `vcvt_f32_f16(vld1_f16(...))` to load F16 weights as F32 and
+   `vfmaq_f32` for the FMA; AVX2+F16C path uses `_mm256_cvtph_ps` +
+   `_mm256_fmadd_ps`; scalar fallback `GGML_CPU_FP16_TO_FP32(x[i]) * y[i]`.
+3. `ggml/src/ggml-cpu/ggml-cpu.c` — change the F16 type-traits row:
+   `vec_dot = ggml_vec_dot_f16_f32` and `vec_dot_type = GGML_TYPE_F32`.
+   `ggml_compute_forward_mul_mat` then sees `src1->type == vec_dot_type`
+   and skips the F32→F16 convert step entirely.
+
+Defence-in-depth: also patch `ggml/src/ggml-cpu/simd-mappings.h` (both
+the SVE arm at ~line 248 and the NEON arm at ~line 363) to wrap
+`#if defined(__ARM_FEATURE_FP16_VECTOR_ARITHMETIC)` in `#if 0 && ...`
+so `ggml_vec_dot_f16` (still called directly by `conv_transpose_1d_f16`
+and a few other ops, separate from the type-traits dispatch above)
+accumulates in F32 instead of `float16x8_t`. Without this defence-
+in-depth, the matmul fix alone is enough for qwen3-tts but a future
+F16×F16 hot path with similar magnitudes would surface the same
+overflow.
+
+All four edits marked with `// CrispASR patch (issue #38)`. **MUST
+RE-APPLY after every ggml bump.** Verification: the public F16 GGUF
+`cstr/qwen3-tts-0.6b-base-GGUF/qwen3-tts-12hz-0.6b-base.gguf`
+(SHA256 `9b719418cf9d31fc8472a60ecdab3553280d4b15a9cbfc1363ce9352d64af6dc`)
+on `--gpu-backend cpu` with `samples/jfk_24k.wav` + `Hello world.`
+must hit `codec_eos` at ~30 frames (1500 frames pre-fix). The same
+GGUF on Metal already worked end-to-end so it's a useful Metal-vs-CPU
+regression baseline.
 
 ### ggml version bumps: conv_1d_dw shape change (0.9.8 → 0.10.0)
 
@@ -4950,4 +4975,130 @@ This bit during step 4 — the build failed with `member access into
 incomplete type 'ggml_cgraph'` in mimo_asr.cpp; reverting the granite
 refactor wouldn't have fixed it. Waited ~5 minutes, the parallel agent
 landed their fix, and the rebuild worked clean.
+
+# Kokoro German backbone via dida-80b — session 2026-05-01
+
+PLAN #56 Option 2b: ship a German-trained Kokoro variant whose
+predictor + decoder + StyleEncoder were all trained on German, so
+prosody on long German phrases sounds native (the existing Option 2a
+df_eva fallback uses the official English-trained predictor; speaker
+timbre is German, prosody isn't).
+
+## Lesson 1 — modern PyTorch parametrize WeightNorm vs the legacy form
+
+`models/convert-kokoro-to-gguf.py`'s `fuse_weight_norm()` was originally
+written against `torch.nn.utils.weight_norm` (PyTorch <2.1 default),
+which stores the reparameterisation as `X.weight_g` and `X.weight_v`.
+PyTorch ≥2.1 deprecated this in favour of `torch.nn.utils.parametrize.
+register_parametrization(X, 'weight', WeightNorm(...))`, which writes
+the same two tensors as `X.parametrizations.weight.original0` (g) and
+`X.parametrizations.weight.original1` (v). The fusion math is
+identical: `w = v · (g / ||v||)` over all-dims-except-0.
+
+The official `hexgrad/Kokoro-82M` checkpoint and StyleTTS2-LJSpeech
+both use the legacy form. Re-trains by community contributors
+(dida-80b/kokoro-german-hui-multispeaker-base) use the modern form.
+Same architecture, same weight values, different on-disk naming —
+hard to spot until the converter silently maps zero `weight_g/_v`
+pairs and the resulting GGUF has incomplete weights.
+
+Make weight-norm fusion accept both naming conventions (handle either
+suffix → same `(g, v)` pair → same fused `weight`). One small chunk
+in `fuse_weight_norm()` keeps both Kokoro variants and any future
+PyTorch ≥2.1 re-trains usable by the same converter.
+
+## Lesson 2 — distinguish "checkpoint stub config" from "missing config"
+
+dida-80b's HF model dir ships only a placeholder config.json:
+
+```json
+{"model_type":"kokoro","architectures":["KModel"],"language":["de"],
+ "custom_pipeline":"text-to-speech"}
+```
+
+No vocab, no architecture sizes — the converter would have to fall
+back to defaults. But dida-80b was trained with semidark's
+`training/kokoro_symbols.py` which is *byte-identical* to Kokoro-82M's
+sparse 178-symbol IPA vocab (gaps filled with PUA placeholders so
+embedding indices match). Falling back to a *dense* 178-symbol vocab
+(which `STYLETTS2_DEFAULT_VOCAB` is) would shift every token id by
+the placeholder offsets and the model's embedding rows would line up
+with the wrong phonemes — silent quality regression.
+
+Lesson: when a downstream re-train ships a stub config, the cleanest
+fix is to let the user point the converter at the upstream's
+config.json (`--config /path/to/hexgrad/Kokoro-82M/config.json`). The
+vocab IDs are guaranteed to match because the re-train was done
+against the same symbol table (`kokoro_symbols.py` makes that
+explicit). Defaults that "look right" may quietly poison embedding
+indexing.
+
+## Lesson 3 — gated HF datasets sometimes have a sibling that isn't
+
+The user-pointed dataset `dida-80b/hui-german-51speakers` returns 401
+even with a valid HF token (private/gated/not-listed-publicly). The
+original CC0 source `iisys-hof/HUI-Audio-Corpus-German` is downloadable
+only via their LibriVox-pulling pipeline (multi-step). Both blocked
+the "extract a fresh voicepack" plan.
+
+Then the user pointed to `kikiri-tts/kikiri-german-{martin,victoria}` —
+*same maintainer's* TTS org, which ships pre-extracted `voices/*.pt`
+voicepacks alongside the Stage-2 single-speaker fine-tunes
+(`kikiri_german_*_ep10.pth`). Apache-2.0, in-distribution to the
+dida-80b lineage (kikiri's StyleEncoder shares ancestry with dida-80b's
+backbone). Saved a half-day of HUI corpus reconstruction.
+
+Lesson: when a HF resource is gated, look for the *publishing org's
+sibling repos* before falling back to a multi-step recreate path. TTS
+maintainers often ship "deployable" assets in a separate org from
+"research" datasets — kikiri-tts vs dida-80b in this case.
+
+## Lesson 4 — ASR roundtrip beats RMS as a TTS quality gate
+
+Peak/RMS gates catch silence collapse but pass through "loud
+gibberish" or wrong-language audio. For PLAN #56 Option 2b we ran
+parakeet-v3 (`-l de`) over every (backbone × voice) combination on
+the long German phrase. Results separated four voices that all
+*passed* the peak/RMS gate (≥ 8000 / ≥ 1000) into a clear quality
+ranking by edit-distance to the reference text:
+
+| voice (with dida-80b backbone) | ASR roundtrip                                      | failure mode                  |
+|---|---|---|
+| dm_martin                      | "...Phonemizers."                                  | none — perfect                |
+| df_victoria                    | "...Tester des Deutschen Phonemizers."             | "Test" → "Tester" boundary    |
+| dm_bernd                       | "...Phonemetzers."                                 | "izers" → "etzers" 1 phoneme  |
+| df_eva                         | "...Phonemetzes."                                  | "izers" → "etzes" 1 phoneme   |
+
+Without ASR roundtrip, the four would have looked equivalent. With it,
+dm_martin is byte-perfect and df_victoria recovers "Phonemizers"
+correctly — both kikiri voicepacks (in-distribution to the dida-80b
+StyleEncoder lineage). The Tundragoon voicepacks lose the trailing
+"-izers" suffix even on the German backbone, suggesting the prosody
+predictor and the style embedding need to come from the same lineage
+to nail unfamiliar suffixes.
+
+Bake this into the methodology: every TTS output that matters gets
+ASR-roundtripped. Energy gates are a necessary precondition, not a
+sufficient quality signal.
+
+## Lesson 5 — single source of truth for per-language routing
+
+The first cut put `kokoro_resolve_model` and
+`kokoro_resolve_fallback_voice` directly in
+`examples/cli/crispasr_backend_kokoro.cpp`. That works for the CLI but
+duplicates policy if a wrapper (Python, Rust, ...) wants the same
+auto-routing for `crispasr.Session(model_path, backend='kokoro')` —
+the wrapper would have to re-implement the cascade.
+
+Move resolvers into `src/kokoro.cpp` behind a C ABI
+(`crispasr_kokoro_resolve_model_for_lang`,
+`crispasr_kokoro_resolve_fallback_voice`), declared in `src/kokoro.h`.
+Re-export them with a `_abi` suffix from `src/crispasr_c_api.cpp` so
+they're visible in `libcrispasr.dylib` (static-archive symbols are
+LTO-pruned otherwise — every public ABI function must be touched by
+something the dylib link references). Have the CLI delegate to the C
+ABI rather than keep its own copy. Now wrappers call one function and
+get identical behaviour — Python's `crispasr.kokoro_resolve_for_lang()`
+verified against the CLI by running both on the same model + language
+pair and comparing.
 

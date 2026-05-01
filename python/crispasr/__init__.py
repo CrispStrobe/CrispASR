@@ -5,6 +5,7 @@ from ._binding import (
     CrispASR,
     DiarizeMethod,
     DiarizeSegment,
+    KokoroResolved,
     LidMethod,
     LidResult,
     RegistryEntry,
@@ -17,6 +18,7 @@ from ._binding import (
     cache_ensure_file,
     detect_language_pcm,
     diarize_segments,
+    kokoro_resolve_for_lang,
     registry_lookup,
     registry_lookup_by_filename,
 )
@@ -26,6 +28,7 @@ __all__ = [
     "CrispASR",
     "DiarizeMethod",
     "DiarizeSegment",
+    "KokoroResolved",
     "LidMethod",
     "LidResult",
     "RegistryEntry",
@@ -38,6 +41,7 @@ __all__ = [
     "cache_ensure_file",
     "detect_language_pcm",
     "diarize_segments",
+    "kokoro_resolve_for_lang",
     "registry_lookup",
     "registry_lookup_by_filename",
 ]

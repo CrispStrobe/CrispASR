@@ -2992,3 +2992,158 @@ extern "C" void kokoro_free(struct kokoro_context* ctx) {
         ggml_backend_free(ctx->backend_cpu);
     delete ctx;
 }
+
+// ---------------------------------------------------------------------------
+// Per-language model + voice routing (PLAN #56 opt 2b)
+// ---------------------------------------------------------------------------
+//
+// These helpers implement the policy table described in kokoro.h. They are
+// pure (no kokoro_context required) so wrappers can call them before
+// opening a session.
+
+namespace {
+
+bool kokoro_starts_with(const char* s, const char* prefix) {
+    if (!s || !prefix) return false;
+    while (*prefix) {
+        if (*s++ != *prefix++) return false;
+    }
+    return true;
+}
+
+const char* kokoro_basename(const char* path) {
+    if (!path) return path;
+    const char* last = path;
+    for (const char* p = path; *p; ++p) {
+        if (*p == '/' || *p == '\\') last = p + 1;
+    }
+    return last;
+}
+
+// Copy `s` (full string) into `out[out_len]` with NUL-termination. Returns
+// 0 on success, -1 if `out_len` cannot hold s + '\0'.
+int kokoro_copy_str(char* out, int out_len, const char* s) {
+    if (!out || out_len <= 0) return -1;
+    int n = 0;
+    while (s[n]) ++n;
+    if (n + 1 > out_len) return -1;
+    for (int i = 0; i <= n; ++i) out[i] = s[i];
+    return 0;
+}
+
+// Build "<dir(model_path)>/<filename>" into `out`.
+int kokoro_join_dir(char* out, int out_len, const char* model_path, const char* filename) {
+    if (!model_path || !filename || out_len <= 0) return -1;
+    const char* base = kokoro_basename(model_path);
+    int dir_len = (int)(base - model_path);   // includes trailing slash, or 0
+    int file_len = 0;
+    while (filename[file_len]) ++file_len;
+    int needed = dir_len + file_len + 1;
+    if (needed > out_len) return -1;
+    for (int i = 0; i < dir_len; ++i) out[i] = model_path[i];
+    if (dir_len == 0) {
+        // No directory component: write "./<filename>"
+        if (file_len + 3 > out_len) return -1;
+        out[0] = '.'; out[1] = '/';
+        for (int i = 0; i < file_len; ++i) out[2 + i] = filename[i];
+        out[2 + file_len] = '\0';
+        return 0;
+    }
+    for (int i = 0; i < file_len; ++i) out[dir_len + i] = filename[i];
+    out[dir_len + file_len] = '\0';
+    return 0;
+}
+
+bool kokoro_file_exists(const char* path) {
+    if (!path) return false;
+    FILE* f = std::fopen(path, "rb");
+    if (!f) return false;
+    std::fclose(f);
+    return true;
+}
+
+}  // namespace
+
+extern "C" bool crispasr_kokoro_lang_is_german(const char* lang) {
+    if (!lang) return false;
+    if (lang[0] != 'd' || lang[1] != 'e') return false;
+    char c = lang[2];
+    return c == '\0' || c == '-' || c == '_';
+}
+
+extern "C" bool crispasr_kokoro_lang_has_native_voice(const char* lang) {
+    if (!lang || !*lang) return false;
+    static const char* kNative[] = {"en", "es", "fr", "hi", "it", "ja", "pt", "cmn", "zh"};
+    for (const char* p : kNative) {
+        int n = 0;
+        while (p[n]) ++n;
+        bool match = true;
+        for (int i = 0; i < n; ++i) {
+            if (lang[i] != p[i]) { match = false; break; }
+        }
+        if (!match) continue;
+        char tail = lang[n];
+        if (tail == '\0' || tail == '-' || tail == '_') return true;
+    }
+    return false;
+}
+
+extern "C" int crispasr_kokoro_resolve_model_for_lang(const char* model_path, const char* lang,
+                                                      char* out_path, int out_path_len) {
+    auto pass_through = [&](int rc) {
+        if (out_path && out_path_len > 0 && model_path) {
+            if (kokoro_copy_str(out_path, out_path_len, model_path) != 0) return -1;
+        }
+        return rc;
+    };
+    if (!model_path || !lang) return pass_through(1);
+    if (!crispasr_kokoro_lang_is_german(lang)) return pass_through(1);
+    const char* base = kokoro_basename(model_path);
+    if (!kokoro_starts_with(base, "kokoro-82m")) return pass_through(1);
+    char candidate[1024];
+    if (kokoro_join_dir(candidate, (int)sizeof(candidate), model_path, "kokoro-de-hui-base-f16.gguf") != 0)
+        return pass_through(1);
+    if (!kokoro_file_exists(candidate)) return pass_through(1);
+    if (out_path && out_path_len > 0) {
+        if (kokoro_copy_str(out_path, out_path_len, candidate) != 0) return -1;
+    }
+    return 0;
+}
+
+extern "C" int crispasr_kokoro_resolve_fallback_voice(const char* model_path, const char* lang,
+                                                      char* out_path, int out_path_len,
+                                                      char* out_picked, int out_picked_len) {
+    if (!model_path || !lang) return 2;
+    if (crispasr_kokoro_lang_has_native_voice(lang)) return 1;
+    // Per-language candidate cascade.
+    static const char* kGerman[]  = {"df_victoria", "df_eva", "ff_siwis", nullptr};
+    static const char* kGeneric[] = {"ff_siwis", nullptr};
+    const char** cascade = crispasr_kokoro_lang_is_german(lang) ? kGerman : kGeneric;
+    char fname[256];
+    char candidate[1024];
+    for (int i = 0; cascade[i]; ++i) {
+        const char* name = cascade[i];
+        // fname = "kokoro-voice-<name>.gguf"
+        int nlen = 0;
+        while (name[nlen]) ++nlen;
+        if ((int)sizeof(fname) < 13 + nlen + 5 + 1) continue;
+        const char* prefix = "kokoro-voice-";
+        int j = 0;
+        while (prefix[j]) { fname[j] = prefix[j]; ++j; }
+        for (int k = 0; k < nlen; ++k) fname[j + k] = name[k];
+        const char* suffix = ".gguf";
+        int k = j + nlen;
+        for (int s = 0; suffix[s]; ++s) fname[k++] = suffix[s];
+        fname[k] = '\0';
+        if (kokoro_join_dir(candidate, (int)sizeof(candidate), model_path, fname) != 0) continue;
+        if (!kokoro_file_exists(candidate)) continue;
+        if (out_path && out_path_len > 0) {
+            if (kokoro_copy_str(out_path, out_path_len, candidate) != 0) return -1;
+        }
+        if (out_picked && out_picked_len > 0) {
+            if (kokoro_copy_str(out_picked, out_picked_len, name) != 0) return -1;
+        }
+        return 0;
+    }
+    return 2;
+}

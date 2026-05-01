@@ -74,6 +74,10 @@
 #include "qwen3_tts.h"
 #define CA_HAVE_QWEN3_TTS 1
 #endif
+#if __has_include("kokoro.h")
+#include "kokoro.h"
+#define CA_HAVE_KOKORO 1
+#endif
 #if __has_include("glm_asr.h")
 #include "glm_asr.h"
 #define CA_HAVE_GLMASR 1
@@ -2216,3 +2220,36 @@ CA_EXPORT const char* crispasr_c_api_version(void) {
 CA_EXPORT const char* crispasr_dart_helpers_version(void) {
     return crispasr_c_api_version();
 }
+
+// =========================================================================
+// Kokoro per-language model + voice routing — re-exports of the
+// crispasr_kokoro_* helpers from src/kokoro.cpp so they're visible to
+// every wrapper. See src/kokoro.h for full semantics. (PLAN #56 opt 2b)
+// =========================================================================
+
+#ifdef CA_HAVE_KOKORO
+CA_EXPORT bool crispasr_kokoro_lang_is_german_abi(const char* lang) {
+    return crispasr_kokoro_lang_is_german(lang);
+}
+
+CA_EXPORT bool crispasr_kokoro_lang_has_native_voice_abi(const char* lang) {
+    return crispasr_kokoro_lang_has_native_voice(lang);
+}
+
+CA_EXPORT int crispasr_kokoro_resolve_model_for_lang_abi(const char* model_path, const char* lang,
+                                                         char* out_path, int out_path_len) {
+    return crispasr_kokoro_resolve_model_for_lang(model_path, lang, out_path, out_path_len);
+}
+
+CA_EXPORT int crispasr_kokoro_resolve_fallback_voice_abi(const char* model_path, const char* lang,
+                                                         char* out_path, int out_path_len,
+                                                         char* out_picked, int out_picked_len) {
+    return crispasr_kokoro_resolve_fallback_voice(model_path, lang, out_path, out_path_len,
+                                                  out_picked, out_picked_len);
+}
+#else
+CA_EXPORT bool crispasr_kokoro_lang_is_german_abi(const char*) { return false; }
+CA_EXPORT bool crispasr_kokoro_lang_has_native_voice_abi(const char*) { return false; }
+CA_EXPORT int crispasr_kokoro_resolve_model_for_lang_abi(const char*, const char*, char*, int) { return 1; }
+CA_EXPORT int crispasr_kokoro_resolve_fallback_voice_abi(const char*, const char*, char*, int, char*, int) { return 2; }
+#endif

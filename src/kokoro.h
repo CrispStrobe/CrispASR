@@ -98,6 +98,59 @@ float* kokoro_extract_stage(struct kokoro_context* ctx, const char* phonemes, co
 
 void kokoro_pcm_free(float* pcm);
 
+// ---------------------------------------------------------------------------
+// Per-language model + voice routing (PLAN #56 opt 2b).
+//
+// Kokoro-82M ships voice packs only for {a/b, e, f, h, i, j, p, z}. For the
+// languages without a native voice (de, ru, ko, ar, ...) we keep a small
+// policy table here so every wrapper can reuse it instead of re-implementing
+// the CLI's logic.
+//
+// Two layers of routing:
+//
+//  1. Backbone swap (German only).  When `lang` starts with "de" AND
+//     `model_path` is the official kokoro-82m baseline (basename starts with
+//     "kokoro-82m"), and a sibling `kokoro-de-hui-base-f16.gguf` exists,
+//     callers should prefer it. The German backbone is a Stage-1 fine-tune
+//     of Kokoro-82M on HUI-Audio-Corpus-German
+//     (dida-80b/kokoro-german-hui-multispeaker-base, Apache-2.0; HUI corpus
+//     CC0).
+//
+//  2. Voice fallback.  Returns the first existing
+//     `<model_dir>/kokoro-voice-<name>.gguf` from the per-language candidate
+//     cascade. German tries `df_victoria` (kikiri-tts/kikiri-german-victoria
+//     voicepack — Apache-2.0, in-distribution to the dida-80b lineage) ->
+//     `df_eva` (Tundragoon German, Apache-2.0) -> `ff_siwis` (French —
+//     non-silence baseline). Other unsupported langs fall through to
+//     `ff_siwis` directly.
+
+// True iff `lang` begins with "de" followed by '\0', '-' or '_'.
+bool crispasr_kokoro_lang_is_german(const char* lang);
+
+// True iff `lang` is one of the languages Kokoro-82M ships native voice packs
+// for: en, es, fr, hi, it, ja, pt, cmn, zh.
+bool crispasr_kokoro_lang_has_native_voice(const char* lang);
+
+// Resolve the model path to load for `lang` given `model_path` as the
+// user-provided baseline. Writes the result into `out_path` if non-NULL.
+// Returns: 0 if a German backbone swap was applied (path rewritten),
+// 1 if no swap is applicable (caller should keep `model_path` — also
+// copied into `out_path` for convenience), -1 on buffer-too-small.
+int crispasr_kokoro_resolve_model_for_lang(const char* model_path, const char* lang,
+                                           char* out_path, int out_path_len);
+
+// Resolve the fallback voice path for `lang`. Walks the per-language voice
+// cascade and returns the first existing
+// `<dirname(model_path)>/kokoro-voice-<name>.gguf`. Writes the path into
+// `out_path` and the picked basename ("df_victoria", "df_eva", "ff_siwis",
+// ...) into `out_picked` (both optional).
+// Returns: 0 if a fallback was found and written, 1 if `lang` already has a
+// native voice (no fallback needed), 2 if no candidate file exists,
+// -1 on buffer-too-small.
+int crispasr_kokoro_resolve_fallback_voice(const char* model_path, const char* lang,
+                                           char* out_path, int out_path_len,
+                                           char* out_picked, int out_picked_len);
+
 #ifdef __cplusplus
 }
 #endif

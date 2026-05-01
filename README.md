@@ -85,6 +85,7 @@ No Python. No PyTorch. No separate per-model binary. No `pip install`. Just one 
 | **vibevoice-tts** | [`VibeVoice-Realtime-0.5B`](https://huggingface.co/cstr/vibevoice-realtime-0.5b-GGUF) | 4L base + 20L TTS LM + DPM-Solver++ + σ-VAE decoder; pre-computed voice presets | en | MIT |
 | **vibevoice-tts** | [`VibeVoice-1.5B`](https://huggingface.co/cstr/vibevoice-1.5b-GGUF) | 28L Qwen2 LM + DPM-Solver++ + σ-VAE decoder; voice cloning from audio | en, zh | MIT |
 | **qwen3-tts** | [`Qwen3-TTS-12Hz-0.6B-Base`](https://huggingface.co/cstr/qwen3-tts-0.6b-base-GGUF) | Qwen3 talker LM + 12 Hz RVQ speech tokenizer; baked voice pack GGUF or runtime WAV + `--ref-text` | multilingual, per base model | Apache-2.0 |
+| **kokoro** | [`hexgrad/Kokoro-82M`](https://huggingface.co/hexgrad/Kokoro-82M) + [`dida-80b/kokoro-german-hui-multispeaker-base`](https://huggingface.co/dida-80b/kokoro-german-hui-multispeaker-base) (German backbone) + [`kikiri-tts/kikiri-german-{victoria,martin}`](https://huggingface.co/kikiri-tts) (German voicepacks) | StyleTTS2 / iSTFTNet (BERT + ProsodyPredictor + iSTFTNet decoder, 82M params); per-voice GGUF; in-process libespeak-ng phonemizer with LRU cache; auto-routing for `-l de` swaps in the German-trained backbone + cascading voice fallback | en, es, fr, hi, it, ja, pt, zh native + de via Option 2b (PLAN §56) + others through espeak-ng with French/German voice fallback | Apache-2.0 (model + German backbone + kikiri voicepacks); HUI corpus CC0 |
 
 **Post-processing models** (work with all backends):
 
@@ -455,9 +456,9 @@ Streaming works with all backends. The `--stream-step` (default 3s), `--stream-l
 
 ### Text-to-Speech (TTS)
 
-CrispASR currently exposes two TTS backends through the unified CLI:
-`vibevoice-tts` and `qwen3-tts`. Both write 24 kHz mono WAV via
-`--tts-output`.
+CrispASR currently exposes three TTS backends through the unified CLI:
+`vibevoice-tts`, `qwen3-tts`, and `kokoro`. All three write 24 kHz mono
+WAV via `--tts-output`.
 
 **VibeVoice realtime** (`vibevoice-tts`, preset voice GGUF):
 ```bash
@@ -491,6 +492,48 @@ CrispASR currently exposes two TTS backends through the unified CLI:
     --tts "Hello there" \
     --tts-output hello.wav
 ```
+
+**Kokoro** (`kokoro`, multilingual, voice + language flag drive routing):
+
+```bash
+# English — uses the official Kokoro-82M with the bundled af_heart voice.
+./build/bin/crispasr \
+    --backend kokoro \
+    -m /Volumes/backups/ai/crispasr-models/kokoro-82m-f16.gguf \
+    --voice /Volumes/backups/ai/crispasr-models/kokoro-voice-af_heart.gguf \
+    --tts "Hello, how are you today?" -l en \
+    --tts-output hello.wav
+
+# German — pass `-l de` and the CLI auto-routes:
+#   1. If kokoro-de-hui-base-f16.gguf sits next to kokoro-82m-f16.gguf,
+#      the German-trained backbone (dida-80b/kokoro-german-hui-
+#      multispeaker-base, Apache-2.0; HUI corpus CC0) is loaded instead
+#      of the official one.
+#   2. If --voice is omitted, a per-language fallback voice is picked
+#      from <model_dir>/kokoro-voice-<name>.gguf in the cascade
+#      df_victoria → df_eva → ff_siwis. Drop any of these into the
+#      model directory; the first that exists wins.
+./build/bin/crispasr \
+    --backend kokoro \
+    -m /Volumes/backups/ai/crispasr-models/kokoro-82m-f16.gguf \
+    --tts "Guten Tag, dies ist ein Test des deutschen Phonemizers." \
+    -l de --tts-output guten_tag.wav
+```
+
+| Voice (German) | Source | License | Roundtrip on the test phrase (parakeet-v3, -l de) |
+|---|---|---|---|
+| `dm_martin` | [`kikiri-tts/kikiri-german-martin`](https://huggingface.co/kikiri-tts/kikiri-german-martin) | Apache-2.0 | "...Phonemizers." (perfect) |
+| `df_victoria` | [`kikiri-tts/kikiri-german-victoria`](https://huggingface.co/kikiri-tts/kikiri-german-victoria) | Apache-2.0 | "...Tester des Deutschen Phonemizers." (1 word boundary err) |
+| `dm_bernd` | Tundragoon (recovered from `r1di/kokoro-fastapi-german`'s Git LFS) | Apache-2.0 | "...Phonemetzers." (1 word boundary err) |
+| `df_eva` | Tundragoon (recovered from `r1di/kokoro-fastapi-german`'s Git LFS) | Apache-2.0 | "...Phonemetzes." (1 word boundary err) |
+
+All four voices clear the gate (peak ≥ 8000, RMS ≥ 1000) on the
+dida-80b backbone — see `PLAN.md` §56 Option 2b for the full
+methodology. The `crispasr_kokoro_resolve_*_abi` C ABI in `src/kokoro.h`
+exposes the same routing logic to wrappers; from Python it surfaces
+as `crispasr.kokoro_resolve_for_lang(model_path, lang)` returning a
+`KokoroResolved(model_path, voice_path, voice_name, backbone_swapped)`
+record.
 
 Notes:
 

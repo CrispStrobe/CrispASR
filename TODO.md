@@ -78,7 +78,7 @@ languages, and (b) per-language voice fallback table for languages
 Kokoro-82M doesn't ship voices for (de, ru, ko, ar, …).
 
 **Shipped (commits `6d6e978`, `ad7dac5`, `7615005`, `65be09d`,
-`<this commit>`):**
+`2215996`, `<this commit>`):**
 
 - *Phonemizer layer.* `CRISPASR_WITH_ESPEAK_NG` AUTO probe (pkg-config
   + Homebrew/Linux fallback). In-process `espeak_TextToPhonemes()`
@@ -87,32 +87,54 @@ Kokoro-82M doesn't ship voices for (de, ru, ko, ar, …).
   retained as runtime fallback. CLI `-l/--language` → `cp.espeak_lang`.
 - *End-to-end synth verified.* Six languages (en, de, fr, ru, cmn, ja)
   exercised. en/fr/ru clean; cmn loses tone numbers; ja kanji falls
-  back to English. de needed a voice fix — see below.
-- *Voice fallback table.* Per-language preferred voice in
-  `examples/cli/crispasr_backend_kokoro.cpp`:
-  - `de` → `df_eva` (Tundragoon German, Apache-2.0 — recovered from
-    `r1di/kokoro-fastapi-german`'s Git LFS after the original HF repo
-    was deleted; `dm_bernd` also available).
-  - everything else without a native pack → `ff_siwis` (French,
-    non-silence baseline).
-  - Resolution order: explicit `--voice` → preferred → ff_siwis →
-    helpful error. RMS-verified on the long German phrase: df_eva
-    peak=14716, dm_bernd peak=19185 (vs af_heart's 541 silence
-    collapse).
+  back to English. de needed a voice + backbone fix — see below.
+- *German backbone + voice routing (PLAN §56 opt 2b).* When `-l de*`
+  AND the user-passed model is the official `kokoro-82m-*.gguf`, the
+  CLI silently swaps to a sibling `kokoro-de-hui-base-f16.gguf` if
+  present (dida-80b/kokoro-german-hui-multispeaker-base, Apache-2.0;
+  HUI corpus CC0; predictor + decoder + StyleEncoder all German-
+  trained). Voice cascade for German: `df_victoria`
+  (kikiri-tts/kikiri-german-victoria voicepack, Apache-2.0,
+  in-distribution to dida-80b lineage) → `df_eva` (Tundragoon
+  Apache-2.0) → `ff_siwis` (French baseline). Everything else without
+  a native pack still falls back to `ff_siwis`. Resolution order:
+  explicit `--voice` → cascade → empty (helpful error). C ABI
+  exposed for wrappers: `crispasr_kokoro_resolve_model_for_lang_abi`
+  + `crispasr_kokoro_resolve_fallback_voice_abi` re-exported from
+  `src/crispasr_c_api.cpp`; Python surface
+  `crispasr.kokoro_resolve_for_lang()` returns `KokoroResolved`.
+- *ASR-validated end-to-end.* Long German phrase ("Guten Tag, dies
+  ist ein Test des deutschen Phonemizers."), parakeet-v3 roundtrip
+  on each model + voice combo:
+  - `dida-80b + dm_martin` → "...Phonemizers." (perfect)
+  - `dida-80b + df_victoria` → "...Phonemizers." (1 word boundary err)
+  - `dida-80b + dm_bernd` → "...Phonemetzers." (1 word boundary err)
+  - `dida-80b + df_eva` → "...Phonemetzes." (1 word boundary err)
+  - `official + df_eva` (pre-2b baseline) → "...Phonemizer." (lost s)
+  All four voices clear the gate (peak ≥ 8000, RMS ≥ 1000).
 
 **Open:**
-1. **Native German backbone.** `dida-80b/kokoro-german-hui-multispeaker-base`
-   (Stage-1 German fine-tune of Kokoro-82M, Apache-2.0) +
-   `semidark/kokoro-deutsch` (recipe with `extract_voicepack.py`).
-   Convert + extract one HUI speaker → ship as the *real* German
-   default once it's on disk. ~half-day. See PLAN §56 Option 2b.
+1. **Auto-download manifest for kokoro.** Add `kokoro-82m-f16`,
+   `kokoro-de-hui-base-f16`, and the four voicepack rows to
+   `src/crispasr_model_registry.cpp`. Blocks on publishing GGUF
+   mirrors to HF (e.g. `cstr/kokoro-82m-GGUF`,
+   `cstr/kokoro-de-hui-base-GGUF`, `cstr/kokoro-voices-GGUF`) since
+   no public mirrors exist yet — `hexgrad/Kokoro-82M` ships only
+   `.pth`. Today users drop the GGUFs into the model dir manually
+   or run `models/convert-kokoro*.py`.
 2. **Mandarin tones / Japanese kanji.** espeak-ng tone numbers and
    CJK fallback both lose information at the kokoro vocab level.
    For tones: try `--ipa=2` or pypinyin. For Japanese: pyopenjtalk
    pre-process. See PLAN §56 open #2 / #3.
 3. **`crispasr-diff kokoro` reference backend** covering the
    phonemizer step too. PLAN §56 open #4.
-4. Optional `kokoro_phoneme_cache_clear()` C ABI. PLAN §56 open #5.
+4. **Wrapper TTS surface beyond Python.** Rust/Go/Java/JS/Ruby
+   bindings don't yet expose the TTS API. Once they do they can
+   adopt `crispasr_kokoro_resolve_*_abi` (already in the dylib;
+   verified via Python). Trivial — same ctypes-style pattern.
+5. **Stage-2 fine-tune on one HUI speaker** (~half-day A40) for
+   deployable single-voice production quality. Out of scope here.
+6. Optional `kokoro_phoneme_cache_clear()` C ABI. PLAN §56 open #5.
 
 ---
 
