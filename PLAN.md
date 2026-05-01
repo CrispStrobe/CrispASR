@@ -22,6 +22,7 @@ All backends support `-m auto --auto-download`. Three new ggml ops
 | **MEDIUM** | [#5 Reference backends](#5-reference-backends-for-parakeetcanarycohere) | Medium | parakeet/cohere DONE; canary remaining |
 | **MEDIUM** | [#53 core/audio_decoder.h](#53-coreaudio_decoderh--dry-across-tts--codec-backends) | Medium | DRY across qwen3-tts/mimo/vibevoice |
 | **MEDIUM** | [#56 Kokoro multilingual phonemizer](#56-kokoro-multilingual-phonemizer-espeak-ng) | Small | espeak-ng + DE backbone shipped; HF GGUFs published 2026-05-01; auto-download wired; only Mandarin tones / JA kanji + diff-harness phonemizer-step polish remain |
+| **MEDIUM** | [#58 MOSS-Audio-4B-Instruct](#58-moss-audio-4b-instruct) | Large | first audio-understanding (not just ASR) backend; introduces DeepStack cross-layer feature injection |
 | **LOW** | #41 Moonshine IPA / phoneme | High | Deferred |
 | **LOW** | [#7 voxtral4b streaming](#7-native-voxtral4b-streaming) | High | |
 | **LOW** | [#9 Parakeet TDT GPU](#9-parakeet-tdt-decoder-gpu) | Medium | |
@@ -958,6 +959,124 @@ Phase 2 because Orpheus reuses #52's talker code most directly,
 then Phase 3 because CFM is the biggest force-multiplier, then
 Phase 4 (codec heads) as opportunistic, then Phase 5 (VoxCPM2) once
 flow-matching utilities exist.
+
+---
+
+## 58. MOSS-Audio-4B-Instruct
+
+[`OpenMOSS-Team/MOSS-Audio-4B-Instruct`](https://huggingface.co/OpenMOSS-Team/MOSS-Audio-4B-Instruct)
+— Apache-2.0, ~4 B params, released 2026-04. First **audio-
+understanding** model in the queue (not just ASR): speech, music,
+environmental sounds, scene QA, time-aware ASR, multi-step
+reasoning. Mandarin + English. The Instruct variant is the entry
+point; the family also has 8B and Thinking (CoT) variants sharing
+the same architecture.
+
+### Architecture summary (from `config.json`)
+
+- **Audio encoder** — 32-layer Whisper-style transformer trained
+  from scratch (not a stock Whisper checkpoint). 1280 d / 20 heads,
+  GELU FFN 5120 d, 128 mel bins, max 1500 source positions, sliding-
+  window attention with window=100. Output rate 12.5 Hz after
+  downsample (rate=8). The novel bit: **cross-layer feature taps**
+  at layers 8, 16, 24 (in addition to the final 32) — these are
+  carried through the adapter into the LM via DeepStack injection
+  (see below).
+- **DeepStack adapter** — adapter MLP (8192 d hidden) projects each
+  of the 4 encoder taps into LM-embedding space (2560 d) with
+  independent weights. The 4 projections are added as residuals
+  into LM block inputs at indices 0, 1, 2, 3 (so the encoder's
+  multi-resolution features inject continuously through the LM's
+  early layers). This preserves low-level prosody / transients
+  alongside high-level semantics in a way single-tap projectors
+  (qwen3-asr / voxtral / granite-speech) can't.
+- **Time-aware tokens** — explicit time-marker tokens are inserted
+  between audio frame embeddings at fixed intervals. The LM learns
+  "what happened when" natively; supports word-level + sentence-
+  level timestamp ASR + time-based QA without a separate aligner.
+- **LM** — 36-layer Qwen3 (hidden=2560, 32 Q / 8 KV head_dim=128,
+  SwiGLU, RMSNorm, RoPE θ=1 M, max_pos=40 960, vocab=151 936,
+  untied lm_head). No sliding window; full attention.
+
+### Effort breakdown
+
+| Component | LOC | Reuse |
+|---|---:|---|
+| Audio mel front-end (128-bin) | ~50 | `core_mel` |
+| 32-layer Whisper-style encoder | ~150 | ~70 % from `qwen3_asr.cpp` encoder |
+| Encoder sliding-window attention | ~50 | reuse pattern from `voxtral4b` |
+| **DeepStack 4-tap output capture** | ~80 | **new** — needs encoder builder hooks at L8/16/24/32 |
+| **DeepStack 4-projection adapter** | ~60 | **new** — 4× MLP, run once after encoder |
+| **DeepStack injection into LM blocks 0–3** | ~120 | **new** — adds a fixed-shape residual at `cur` before block-N's first norm |
+| Time-marker tokenization | ~100 | **new** — chat template builder + per-frame interval logic |
+| Qwen3 LM body | ~50 | full reuse (`core_attn::kv_self_attn` + `core_ffn::swiglu`) |
+| Greedy / sampler decode | ~80 | `core_bpe::tokenize_with_specials` + step builder pattern from `mimo_asr.cpp` |
+| Converter (HF → GGUF) | ~250 | `models/convert-mimo-asr-to-gguf.py` template |
+| Diff harness reference + 6 stages | ~200 | `tools/reference_backends/mimo_asr.py` template |
+| Backend wrapper for main CLI | ~120 | `crispasr_backend_mimo_asr.cpp` template |
+| **Total** | ~**1200–1500 LOC** | comparable to PLAN #51 |
+
+Headline new helper: a **DeepStack injection block** (probably
+`core_deepstack::inject(ctx, cur, projector_w, projector_b,
+encoder_tap)`) that's reusable for any future model adopting this
+pattern. The 4 projection heads are independent matmul + bias adds
+applied to the captured encoder taps; injection is a residual add
+at the input of LM blocks 0..3.
+
+### What we'd need to dump from the Python ref
+
+Stage taps for the diff harness:
+- `mel_in` `[T_mel, 128]`
+- `enc_l8` / `enc_l16` / `enc_l24` / `enc_l32` `[T_enc, 1280]`
+  (the four DeepStack taps)
+- `adapter_proj_{0,1,2,3}` `[T_enc, 2560]` (post-projection)
+- `lm_inputs_embeds` `[T_total, 2560]` (pre-block-0)
+- `lm_block_3_in` `[T_total, 2560]` (after the last DeepStack
+  injection — this is where a multi-tap bug would show up)
+- `lm_last_hidden` + `lm_logits_step0` (standard tail)
+
+Six-to-eight stages, similar to mimo-asr's prefill captures.
+
+### Risks / open questions
+
+1. **DeepStack injection point semantics** — does the projection
+   replace the LM block's input or get added as a residual? Need
+   to read `processing_moss_audio.py` + the model's `forward()` to
+   confirm. If it's a *replace* (not residual), the injection
+   builder is simpler but the math is more sensitive.
+2. **Time-marker token vocab** — are these dedicated special tokens
+   in the Qwen3 BPE, or are they synthesized in the embedding
+   space? The vocab=151 936 has slots beyond Qwen3's 151 643 BPE +
+   30 special — likely the extra ~263 are time markers.
+3. **Sliding-window encoder attention with mask=100** — already a
+   pattern (`voxtral4b`), but interacts non-trivially with the
+   12.5 Hz downsample. Confirm causal vs bidirectional via Python
+   ref hook.
+4. **Family extensibility** — 8B variant has the same architecture
+   per the README, just bigger LM hidden + layer count. If we
+   parameterize by config, all four (4B/8B × Instruct/Thinking)
+   share one runtime. Worth doing up front.
+
+### Why "audio understanding, not just ASR" matters here
+
+The 24 ASR-style backends in CrispASR all map audio → text
+transcription. None handle "describe the music in this clip", "is
+the speaker happy", "summarise this 10-minute meeting", or
+"transcribe with word-level timestamps". MOSS-Audio is the first
+candidate that covers that ground with an open license (Apache-2.0)
+and a reasonable size (4 B → ~2.5 GB Q4_K). Adding it expands
+CrispASR's surface meaningfully — analogous to how qwen3-tts
+expanded scope to TTS.
+
+### Sequencing
+
+Don't start until:
+- mimo-asr perf follow-ups (51a/b/c) are at least scoped — they'll
+  inform DeepStack's KV-reuse strategy.
+- Orpheus / Qwen3-TTS-1.7B (PLAN #57 phases 1–2) finish — those are
+  active sessions and the parallel-worker contention is high.
+
+Probable kickoff: mid-to-late May 2026 if the queue clears.
 
 ---
 
