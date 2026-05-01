@@ -31,6 +31,8 @@
 #include "ggml-cpu.h"
 #include "gguf.h"
 #include "core/bpe.h"
+#include "core/cpu_ops.h"
+#include "core/fft.h"
 #include "core/ffn.h"
 #include "core/gguf_loader.h"
 #include "core/mel.h"
@@ -309,63 +311,7 @@ struct granite_nle_bench_stage {
 };
 
 // ===========================================================================
-// FFT helpers (radix-2 Cooley-Tukey, recursive, in-place). Identical to
-// granite_speech's FFT — promoted to a shared interface in a future cleanup.
-// ===========================================================================
-
-static void granite_nle_fft(float* in, int N, float* out) {
-    if (N <= 1) {
-        out[0] = in[0];
-        out[1] = 0;
-        return;
-    }
-    if (N % 2 != 0) {
-        for (int k = 0; k < N; k++) {
-            double re = 0, im = 0;
-            for (int n = 0; n < N; n++) {
-                double a = -2.0 * M_PI * k * n / N;
-                re += in[n] * cos(a);
-                im += in[n] * sin(a);
-            }
-            out[2 * k] = (float)re;
-            out[2 * k + 1] = (float)im;
-        }
-        return;
-    }
-    int half = N / 2;
-    std::vector<float> even(half), odd(half);
-    for (int i = 0; i < half; i++) {
-        even[i] = in[2 * i];
-        odd[i] = in[2 * i + 1];
-    }
-    std::vector<float> E(2 * half), O(2 * half);
-    granite_nle_fft(even.data(), half, E.data());
-    granite_nle_fft(odd.data(), half, O.data());
-    for (int k = 0; k < half; k++) {
-        double a = -2.0 * M_PI * k / N;
-        float wr = (float)cos(a), wi = (float)sin(a);
-        float tre = wr * O[2 * k] - wi * O[2 * k + 1];
-        float tim = wr * O[2 * k + 1] + wi * O[2 * k];
-        out[2 * k] = E[2 * k] + tre;
-        out[2 * k + 1] = E[2 * k + 1] + tim;
-        out[2 * (k + half)] = E[2 * k] - tre;
-        out[2 * (k + half) + 1] = E[2 * k + 1] - tim;
-    }
-}
-
-static void granite_nle_fft_wrapper(const float* in, int N, float* out) {
-    static thread_local std::vector<float> scratch_in;
-    static thread_local std::vector<float> scratch_out;
-    if ((int)scratch_in.size() < 4 * N)
-        scratch_in.assign((size_t)4 * N, 0.0f);
-    if ((int)scratch_out.size() < 8 * N)
-        scratch_out.assign((size_t)8 * N, 0.0f);
-    std::memcpy(scratch_in.data(), in, (size_t)N * sizeof(float));
-    granite_nle_fft(scratch_in.data(), N, scratch_out.data());
-    std::memcpy(out, scratch_out.data(), (size_t)(2 * N) * sizeof(float));
-}
-
-// ===========================================================================
+// FFT lives in core/fft.h (shared with granite_speech).
 // GGUF loading
 // ===========================================================================
 
@@ -852,7 +798,7 @@ extern "C" float* granite_nle_compute_mel(struct granite_nle_context* ctx, const
 
     int T_stacked = 0;
     auto stacked = core_mel::compute(samples, n_samples, hann.data(), win_length, filt.data(), n_freqs,
-                                     granite_nle_fft_wrapper, p, T_stacked);
+                                     core_fft::fft_radix2_wrapper, p, T_stacked);
     if (stacked.empty())
         return nullptr;
 
@@ -886,33 +832,12 @@ extern "C" float* granite_nle_compute_mel(struct granite_nle_context* ctx, const
 // fused-norm-then-matmul trick, and Shaw block attention all carry over.
 // ===========================================================================
 
-// Apply: out = W @ x [+ bias]. x is (d_in, T), W is the GGUF tensor, out is
-// (d_out, T).
-static bool nle_run_matmul(granite_nle_context* ctx, float* out, const float* x, int d_in, int T, ggml_tensor* W,
-                           ggml_tensor* bias, int d_out) {
-    ggml_init_params ip = {ctx->compute_meta.size(), ctx->compute_meta.data(), true};
-    ggml_context* ctx0 = ggml_init(ip);
-    ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 64, false);
-
-    ggml_tensor* inp = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, d_in, T);
-    ggml_set_name(inp, "mm_in");
-    ggml_set_input(inp);
-
-    ggml_tensor* r = ggml_mul_mat(ctx0, W, inp);
-    if (bias)
-        r = ggml_add(ctx0, r, bias);
-    ggml_set_name(r, "mm_out");
-    ggml_build_forward_expand(gf, r);
-    ggml_free(ctx0);
-
-    ggml_backend_sched_reset(ctx->sched);
-    if (!ggml_backend_sched_alloc_graph(ctx->sched, gf))
-        return false;
-    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "mm_in"), x, 0, (size_t)d_in * T * sizeof(float));
-    if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS)
-        return false;
-    ggml_backend_tensor_get(ggml_graph_get_tensor(gf, "mm_out"), out, 0, (size_t)d_out * T * sizeof(float));
-    return true;
+// Single-matmul dispatcher (out = W @ x [+ bias]) lives in
+// core/cpu_ops.h::matmul. Local wrapper that adapts the call to take
+// `ctx` so existing call sites stay readable.
+static inline bool nle_run_matmul(granite_nle_context* ctx, float* out, const float* x, int d_in, int T,
+                                  ggml_tensor* W, ggml_tensor* bias, int d_out) {
+    return core_cpu::matmul(ctx->compute_meta, ctx->sched, out, x, d_in, T, W, bias, d_out);
 }
 
 // Fused norm + Q/KV pair: layernorm(x) then split-feed into two matmuls in
@@ -1069,26 +994,7 @@ static bool nle_run_conv_module(granite_nle_context* ctx, float* out, const floa
     return true;
 }
 
-// CPU LayerNorm in (d, T) layout. Parallel over time frames.
-static void nle_cpu_layernorm(float* out, const float* x, const float* w, const float* b, int d, int T, float eps) {
-#pragma omp parallel for schedule(static)
-    for (int t = 0; t < T; t++) {
-        const float* xt = x + (size_t)t * d;
-        float* ot = out + (size_t)t * d;
-        float mean = 0, var = 0;
-        for (int i = 0; i < d; i++)
-            mean += xt[i];
-        mean /= d;
-        for (int i = 0; i < d; i++) {
-            float v = xt[i] - mean;
-            var += v * v;
-        }
-        var /= d;
-        float inv = 1.0f / std::sqrt(var + eps);
-        for (int i = 0; i < d; i++)
-            ot[i] = (xt[i] - mean) * inv * (w ? w[i] : 1.0f) + (b ? b[i] : 0.0f);
-    }
-}
+// CPU LayerNorm lives in core/cpu_ops.h::layernorm.
 
 // Block-local Shaw RPE attention on CPU.
 //   attn[c,r] = (Q[c]·K[r] + Q[c]·RPE[c,r]) * scale, softmax along r,
@@ -1509,22 +1415,23 @@ static bool nle_proj_layer_proj(granite_nle_context* ctx, std::vector<float>& ou
     if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS)
         return false;
     out.assign((size_t)hidden * T, 0.0f);
-    ggml_backend_tensor_get(ggml_graph_get_tensor(gf, "proj_a_out"), out.data(), 0, (size_t)hidden * T * sizeof(float));
+    ggml_backend_tensor_get(ggml_graph_get_tensor(gf, "proj_a_out"), out.data(), 0,
+                            (size_t)hidden * T * sizeof(float));
     return true;
 }
 
 static ggml_cgraph* nle_proj_build_block(granite_nle_context* ctx) {
     const auto& m = ctx->model;
     const auto& hp = m.hparams;
-    const int hidden = (int)hp.proj_hidden_size;       // 2048
-    const int llm_d = (int)hp.proj_llm_dim;            // 2048
-    const int n_heads = (int)hp.proj_n_heads;          // 32
-    const int hd = hidden / n_heads;                   // 64
-    const int n_layers = (int)hp.proj_n_layers;        // 2
-    const int block_size = (int)hp.proj_block_size;    // 15
-    const int down = (int)hp.proj_downsample_rate;     // 5
-    const int q_len = block_size / down;               // 3
-    const int mlp_h = hidden * (int)hp.proj_mlp_ratio; // 4096
+    const int hidden = (int)hp.proj_hidden_size;          // 2048
+    const int llm_d = (int)hp.proj_llm_dim;               // 2048
+    const int n_heads = (int)hp.proj_n_heads;             // 32
+    const int hd = hidden / n_heads;                      // 64
+    const int n_layers = (int)hp.proj_n_layers;           // 2
+    const int block_size = (int)hp.proj_block_size;       // 15
+    const int down = (int)hp.proj_downsample_rate;        // 5
+    const int q_len = block_size / down;                  // 3
+    const int mlp_h = hidden * (int)hp.proj_mlp_ratio;    // 4096
     const float eps = hp.proj_layernorm_eps;
     const float attn_scale = 1.0f / std::sqrt((float)hd);
 
@@ -1683,8 +1590,9 @@ extern "C" float* granite_nle_run_projector(struct granite_nle_context* ctx, con
                                 (size_t)hidden * block_size * sizeof(float));
         if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS)
             return nullptr;
-        ggml_backend_tensor_get(ggml_graph_get_tensor(gf, "proj_b_out"), all_out.data() + (size_t)blk * q_len * llm_d,
-                                0, (size_t)q_len * llm_d * sizeof(float));
+        ggml_backend_tensor_get(ggml_graph_get_tensor(gf, "proj_b_out"),
+                                all_out.data() + (size_t)blk * q_len * llm_d, 0,
+                                (size_t)q_len * llm_d * sizeof(float));
     }
 
     if (ctx->params.verbosity >= 2) {
@@ -1742,10 +1650,8 @@ static ggml_tensor* nle_llm_attn_noncausal(ggml_context* ctx0, ggml_tensor* x, g
     K = ggml_reshape_3d(ctx0, K, hd, n_kv, T);
     V = ggml_reshape_3d(ctx0, V, hd, n_kv, T);
 
-    Q = ggml_rope_ext(ctx0, Q, positions, nullptr, hd, GGML_ROPE_TYPE_NEOX, 0, rope_theta, 1.0f, 0.0f, 1.0f, 0.0f,
-                      0.0f);
-    K = ggml_rope_ext(ctx0, K, positions, nullptr, hd, GGML_ROPE_TYPE_NEOX, 0, rope_theta, 1.0f, 0.0f, 1.0f, 0.0f,
-                      0.0f);
+    Q = ggml_rope_ext(ctx0, Q, positions, nullptr, hd, GGML_ROPE_TYPE_NEOX, 0, rope_theta, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f);
+    K = ggml_rope_ext(ctx0, K, positions, nullptr, hd, GGML_ROPE_TYPE_NEOX, 0, rope_theta, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f);
 
     Q = ggml_cont(ctx0, ggml_permute(ctx0, Q, 0, 2, 1, 3));
     K = ggml_cont(ctx0, ggml_permute(ctx0, K, 0, 2, 1, 3));
@@ -2036,8 +1942,8 @@ extern "C" char* granite_nle_transcribe(struct granite_nle_context* ctx, const f
 
     // 9. LLM editing forward.
     int edit_n = 0, edit_V = 0;
-    float* edit_logits =
-        granite_nle_run_llm_editing(ctx, audio_embs.data(), n_audio_kept, text_ids.data(), total_len, &edit_n, &edit_V);
+    float* edit_logits = granite_nle_run_llm_editing(ctx, audio_embs.data(), n_audio_kept, text_ids.data(), total_len,
+                                                     &edit_n, &edit_V);
     if (!edit_logits) {
         fprintf(stderr, "granite_nle: llm_editing failed\n");
         return nullptr;

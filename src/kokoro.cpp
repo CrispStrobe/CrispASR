@@ -2669,7 +2669,14 @@ extern "C" float* kokoro_synthesize(struct kokoro_context* ctx, const char* text
     }
     cmd += "'";
 
-    FILE* f = popen(cmd.c_str(), "r");
+#ifdef _WIN32
+#define CRISPASR_POPEN _popen
+#define CRISPASR_PCLOSE _pclose
+#else
+#define CRISPASR_POPEN popen
+#define CRISPASR_PCLOSE pclose
+#endif
+    FILE* f = CRISPASR_POPEN(cmd.c_str(), "r");
     if (!f) {
         fprintf(stderr, "kokoro: failed to popen espeak-ng — is it installed?\n");
         return nullptr;
@@ -2678,7 +2685,7 @@ extern "C" float* kokoro_synthesize(struct kokoro_context* ctx, const char* text
     char buf[1024];
     while (size_t n = std::fread(buf, 1, sizeof(buf), f))
         phonemes.append(buf, n);
-    pclose(f);
+    CRISPASR_PCLOSE(f);
     // Strip leading/trailing whitespace.
     size_t b = 0, e = phonemes.size();
     while (b < e && std::isspace((unsigned char)phonemes[b]))
