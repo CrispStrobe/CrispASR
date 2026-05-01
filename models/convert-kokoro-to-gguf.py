@@ -182,10 +182,18 @@ def load_model_dir(model_id: str) -> Path:
 # ---------------------------------------------------------------------------
 
 def fuse_weight_norm(state: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
-    """Replace every (X.weight_g, X.weight_v) pair with a single X.weight,
-    matching ``torch.nn.utils.weight_norm``'s reparameterisation:
+    """Replace weight_norm reparameterisations with a single fused X.weight,
+    matching ``torch.nn.utils.weight_norm``'s definition:
 
         weight = v * (g / ||v||)   (||·|| computed over all dims except 0)
+
+    Handles BOTH naming conventions:
+    - Legacy ``torch.nn.utils.weight_norm`` (PyTorch <2.1 default):
+      ``X.weight_g`` / ``X.weight_v``  (Kokoro-82M, StyleTTS2-LJSpeech).
+    - Modern ``torch.nn.utils.parametrize.register_parametrization`` with
+      ``WeightNorm`` (PyTorch ≥2.1, used by recent re-trains like
+      dida-80b/kokoro-german-hui-multispeaker-base):
+      ``X.parametrizations.weight.original0`` (g) / ``original1`` (v).
 
     Operates in-place semantics — returns a new dict with fused entries.
     """
@@ -196,6 +204,12 @@ def fuse_weight_norm(state: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
             pairs.setdefault(k[: -len(".weight_g")], {})["g"] = v
         elif k.endswith(".weight_v"):
             pairs.setdefault(k[: -len(".weight_v")], {})["v"] = v
+        elif k.endswith(".parametrizations.weight.original0"):
+            stem = k[: -len(".parametrizations.weight.original0")]
+            pairs.setdefault(stem, {})["g"] = v
+        elif k.endswith(".parametrizations.weight.original1"):
+            stem = k[: -len(".parametrizations.weight.original1")]
+            pairs.setdefault(stem, {})["v"] = v
         else:
             out[k] = v
     fused = 0
@@ -373,11 +387,16 @@ def main():
     ap.add_argument("--outtype", default="f16", choices=["f32", "f16"])
     ap.add_argument("--checkpoint", default=None,
                     help="Override the .pth filename (default: auto-detect)")
+    ap.add_argument("--config", default=None,
+                    help="Override config.json (useful when the model dir ships only "
+                         "a HF-hub stub config without vocab/architecture, e.g. "
+                         "dida-80b/kokoro-german-hui-multispeaker-base — point this at "
+                         "hexgrad/Kokoro-82M's config.json since the vocab IDs match)")
     args = ap.parse_args()
 
     model_dir = load_model_dir(args.input)
 
-    json_cfg = model_dir / "config.json"
+    json_cfg = Path(args.config) if args.config else (model_dir / "config.json")
     yml_cfg = next(
         (p for p in (model_dir / "config.yml", model_dir / "config.yaml")
          if p.is_file()),
@@ -491,9 +510,17 @@ def main():
     w.add_array("kokoro.istft.resblock_dilation_sizes",
                 [d for row in rd for d in row])
 
-    # PL-BERT (custom ALBERT) — parameter-shared across layers
-    u32("kokoro.plbert.embedding_size",
-        state["bert"]["module.embeddings.word_embeddings.weight"].shape[1])
+    # PL-BERT (custom ALBERT) — parameter-shared across layers.
+    # Word-embedding tensor lives at "module.embeddings.word_embeddings.weight"
+    # in DataParallel-wrapped checkpoints (Kokoro-82M, StyleTTS2-LJSpeech) and
+    # at the unprefixed key for non-DataParallel re-trains (dida-80b).
+    bert_emb = (
+        state["bert"].get("module.embeddings.word_embeddings.weight")
+        or state["bert"].get("embeddings.word_embeddings.weight")
+    )
+    if bert_emb is None:
+        sys.exit("bert state has no embeddings.word_embeddings.weight tensor")
+    u32("kokoro.plbert.embedding_size",     bert_emb.shape[1])
     u32("kokoro.plbert.hidden_size",        plbert.get("hidden_size", 768))
     u32("kokoro.plbert.num_hidden_layers",  plbert.get("num_hidden_layers", 12))
     u32("kokoro.plbert.num_attention_heads",
@@ -501,8 +528,7 @@ def main():
     u32("kokoro.plbert.intermediate_size",  plbert.get("intermediate_size", 2048))
     u32("kokoro.plbert.max_position_embeddings",
         plbert.get("max_position_embeddings", 512))
-    u32("kokoro.plbert.vocab_size",
-        state["bert"]["module.embeddings.word_embeddings.weight"].shape[0])
+    u32("kokoro.plbert.vocab_size",         bert_emb.shape[0])
 
     # Vocab — Kokoro embeds {phoneme: id} in config.json. Build a flat
     # token list of size (max_id + 1); empty slots stay "".
