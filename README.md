@@ -19,7 +19,7 @@ No Python. No PyTorch. No separate per-model binary. No `pip install`. Just one 
 
 | Project | What it does |
 |---|---|
-| **[CrispASR](https://github.com/CrispStrobe/CrispASR)** | This repo — C++ speech recognition engine. 24 ASR backends + 3 TTS backends, CLI + HTTP server + C-ABI + Python/Rust/Dart bindings. |
+| **[CrispASR](https://github.com/CrispStrobe/CrispASR)** | This repo — C++ speech recognition engine. 24 ASR backends + 4 TTS backends, CLI + HTTP server + C-ABI + Python/Rust/Dart bindings. |
 | **[CrisperWeaver](https://github.com/CrispStrobe/CrisperWeaver)** | Cross-platform Flutter transcription app built on CrispASR. Desktop + mobile, all 10 backends, model browser with download queue, mic capture, SRT/VTT/JSON export, diarization, batch processing. Fully offline. |
 | **[CrispEmbed](https://github.com/CrispStrobe/CrispEmbed)** | Text embedding engine via ggml — same philosophy as CrispASR but for retrieval. 10 architectures (XLM-R, Qwen3-Embed, Gemma3, ModernBERT, ...), dense + sparse + ColBERT + reranking. 9.5x faster than ONNX on CPU, GPU via CUDA/Metal/Vulkan. Python/Rust/Dart bindings. |
 | **[Susurrus](https://github.com/CrispStrobe/Susurrus)** | Python ASR GUI with 9 backends (faster-whisper, mlx-whisper, voxtral, insanely-fast-whisper, ...). The Python counterpart to CrispASR's C++ approach. |
@@ -102,6 +102,7 @@ quick-start commands and engine selection guidance.
 | **vibevoice-tts** | [`VibeVoice-1.5B`](https://huggingface.co/cstr/vibevoice-1.5b-GGUF) | 28L Qwen2 LM + DPM-Solver++ + σ-VAE decoder; voice cloning from audio | en, zh | MIT |
 | **qwen3-tts** | [`Qwen3-TTS-12Hz-0.6B-Base`](https://huggingface.co/cstr/qwen3-tts-0.6b-base-GGUF), [`Qwen3-TTS-12Hz-1.7B-Base`](https://huggingface.co/cstr/qwen3-tts-1.7b-base-GGUF), [`Qwen3-TTS-12Hz-1.7B-VoiceDesign`](https://huggingface.co/cstr/qwen3-tts-1.7b-voicedesign-GGUF) | Qwen3 talker LM + 12 Hz RVQ speech tokenizer; baked voice pack GGUF or runtime WAV + `--ref-text`. Pick `--backend qwen3-tts-1.7b-base` for the larger talker, or `--backend qwen3-tts-1.7b-voicedesign` to describe the voice in natural language via `--instruct`. | multilingual, per base model | Apache-2.0 |
 | **kokoro** | [`hexgrad/Kokoro-82M`](https://huggingface.co/hexgrad/Kokoro-82M) + [`dida-80b/kokoro-german-hui-multispeaker-base`](https://huggingface.co/dida-80b/kokoro-german-hui-multispeaker-base) (German backbone) + [`kikiri-tts/kikiri-german-{victoria,martin}`](https://huggingface.co/kikiri-tts) (German voicepacks) | StyleTTS2 / iSTFTNet (BERT + ProsodyPredictor + iSTFTNet decoder, 82M params); per-voice GGUF; in-process libespeak-ng phonemizer with LRU cache; auto-routing for `-l de` swaps in the German-trained backbone + cascading voice fallback | en, es, fr, hi, it, ja, pt, zh native + de via Option 2b (PLAN §56) + others through espeak-ng with French/German voice fallback | Apache-2.0 (model + German backbone + kikiri voicepacks); HUI corpus CC0 |
+| **orpheus** | [`Orpheus-3B-FT`](https://huggingface.co/cstr/orpheus-3b-base-GGUF) + [`SNAC 24 kHz`](https://huggingface.co/cstr/snac-24khz-GGUF) | Llama-3.2-3B-Instruct talker (28L, 3072 d) + SNAC RVQ codec (3 codebooks × 4096 @ 24 kHz); 8 baked English speakers (`tara`/`leah`/`leo`/...). Pick the speaker with `--voice <name>` and pass `--temperature 0.6` (engine_class.py default — greedy loops). Drop-in checkpoint variants land later: `Kartoffel_Orpheus` DE finetunes (26 speakers) + lex-au's locale Q8s. | en (canopylabs); de (Kartoffel_Orpheus, queued) | llama3.2 community ("Built with Llama") for talker; MIT for SNAC |
 
 ### Post-processing models
 
@@ -513,6 +514,7 @@ CrispASR ships **three open-weights TTS engines** behind the same
 | **`kokoro`** | Smallest + fastest. 82M-param StyleTTS2-derived model. Multilingual via espeak-ng + native German backbone. | No (preset voice packs) | Manual `wget` (no `-m auto`) |
 | **`qwen3-tts`** | Highest fidelity / strongest cloning. Speech-LLM (talker + code predictor + 12 Hz codec). | Yes (WAV + ref-text or baked voice GGUF) | ~1.3 GB via `-m auto` |
 | **`vibevoice-tts`** | Lowest-latency streaming TTS, designed for realtime. | Preset voice packs (and a 1.5B-base WAV cloning path) | ~636 MB via `-m auto` |
+| **`orpheus`** | Llama-3.2-3B talker + SNAC 24 kHz codec. 8 baked English speakers; expressive output. Greedy loops — pass `--temperature 0.6`. | Preset names via `--voice tara/leah/...` | ~3.5 GB via `-m auto` (talker Q8 + 26 MB SNAC) |
 
 All three write 24 kHz mono WAV via `--tts-output`.
 
@@ -644,6 +646,31 @@ preset; the realtime `0.5B` flow is typically driven by a voice GGUF.
     --tts-output hello.wav
 ```
 
+### Orpheus — Llama-3.2-3B + SNAC codec
+
+Llama-3.2-3B-Instruct talker emitting `<custom_token_N>` LM tokens that
+SNAC decodes to 24 kHz PCM. 8 baked English speakers (`tara`, `leah`,
+`jess`, `leo`, `dan`, `mia`, `zac`, `zoe`). The talker GGUF and the
+SNAC codec live in two separate HF repos and download together via
+`-m auto`.
+
+```bash
+# First run pulls ~3.5 GB (Q8_0 talker) + 26 MB (SNAC codec) into
+# ~/.cache/crispasr/.  --temperature 0.6 is the upstream
+# engine_class.py default — DO NOT skip it. Greedy (--temperature 0)
+# enters a 7-slot loop after a few super-frames and produces unusable
+# audio.
+./build/bin/crispasr \
+    --backend orpheus -m auto \
+    --voice tara --temperature 0.6 \
+    --tts "Hello, my name is Tara." \
+    --tts-output hello.wav
+```
+
+Drop-in checkpoint variants land later: `Kartoffel_Orpheus` DE
+finetunes (26 speakers) and lex-au's locale Q8s reuse the same
+runtime + SNAC codec.
+
 ### TTS GGUF downloads
 
 [`cstr/vibevoice-realtime-0.5b-GGUF`](https://huggingface.co/cstr/vibevoice-realtime-0.5b-GGUF) ·
@@ -651,7 +678,9 @@ preset; the realtime `0.5B` flow is typically driven by a voice GGUF.
 [`cstr/qwen3-tts-0.6b-base-GGUF`](https://huggingface.co/cstr/qwen3-tts-0.6b-base-GGUF) ·
 [`cstr/qwen3-tts-1.7b-base-GGUF`](https://huggingface.co/cstr/qwen3-tts-1.7b-base-GGUF) ·
 [`cstr/qwen3-tts-1.7b-voicedesign-GGUF`](https://huggingface.co/cstr/qwen3-tts-1.7b-voicedesign-GGUF) ·
-[`cstr/qwen3-tts-tokenizer-12hz-GGUF`](https://huggingface.co/cstr/qwen3-tts-tokenizer-12hz-GGUF)
+[`cstr/qwen3-tts-tokenizer-12hz-GGUF`](https://huggingface.co/cstr/qwen3-tts-tokenizer-12hz-GGUF) ·
+[`cstr/orpheus-3b-base-GGUF`](https://huggingface.co/cstr/orpheus-3b-base-GGUF) ·
+[`cstr/snac-24khz-GGUF`](https://huggingface.co/cstr/snac-24khz-GGUF)
 
 ### qwen3-tts environment switches
 

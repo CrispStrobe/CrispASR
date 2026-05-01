@@ -143,6 +143,18 @@ constexpr Entry k_registry[] = {
      "~1.9 GB",
      "qwen3-tts-tokenizer-12hz.gguf",
      "https://huggingface.co/cstr/qwen3-tts-tokenizer-12hz-GGUF/resolve/main/qwen3-tts-tokenizer-12hz.gguf"},
+    // Qwen3-TTS-CustomVoice 1.7B: same fixed-speaker pattern as 0.6B-CV
+    // (9 baked speakers, `--voice <name>`, no ECAPA / no reference WAV)
+    // but on the 1.7B talker. Runtime applies small_to_mtp_projection
+    // to per-step code_pred embeddings (steps 1..14, fix in commit
+    // `2cc7aeb`). Reuses the 12 Hz tokenizer. URL points at planned
+    // `cstr/qwen3-tts-1.7b-customvoice-GGUF`; flagged "(publish pending)"
+    // until the upload lands.
+    {"qwen3-tts-1.7b-customvoice", "qwen3-tts-12hz-1.7b-customvoice-q8_0.gguf",
+     "https://huggingface.co/cstr/qwen3-tts-1.7b-customvoice-GGUF/resolve/main/qwen3-tts-12hz-1.7b-customvoice-q8_0.gguf",
+     "~2.0 GB (publish pending)",
+     "qwen3-tts-tokenizer-12hz.gguf",
+     "https://huggingface.co/cstr/qwen3-tts-tokenizer-12hz-GGUF/resolve/main/qwen3-tts-tokenizer-12hz.gguf"},
     // Qwen3-TTS-VoiceDesign 1.7B: instruct-tuned variant that picks a
     // voice from a natural-language description ("--instruct \"young
     // female with British accent, energetic\"") — no reference WAV,
@@ -166,7 +178,18 @@ constexpr Entry k_registry[] = {
     // alongside the talker GGUF.
     {"orpheus", "orpheus-3b-base-q8_0.gguf",
      "https://huggingface.co/cstr/orpheus-3b-base-GGUF/resolve/main/orpheus-3b-base-q8_0.gguf",
-     "~3.4 GB (publish pending)",
+     "~3.5 GB",
+     "snac-24khz.gguf",
+     "https://huggingface.co/cstr/snac-24khz-GGUF/resolve/main/snac-24khz.gguf"},
+    // lex-au's German Orpheus-3B fine-tune. Already published as a Q8_0
+    // GGUF on HF (`lex-au/Orpheus-3b-German-FT-Q8_0.gguf`, 3.52 GB) — the
+    // repo name itself ends in `.gguf`, lex-au's convention. License
+    // tagged Apache-2.0 on HF; underlying weights are llama3.2 community
+    // (Llama-3.2-3B fine-tune), so attribution still applies in practice.
+    // Same SNAC codec as the base orpheus row.
+    {"lex-au-orpheus-de", "Orpheus-3b-German-FT-Q8_0.gguf",
+     "https://huggingface.co/lex-au/Orpheus-3b-German-FT-Q8_0.gguf/resolve/main/Orpheus-3b-German-FT-Q8_0.gguf",
+     "~3.5 GB",
      "snac-24khz.gguf",
      "https://huggingface.co/cstr/snac-24khz-GGUF/resolve/main/snac-24khz.gguf"},
     // Kokoro-82M: official baseline + English default voice. The German
