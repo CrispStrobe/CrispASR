@@ -82,6 +82,10 @@
 #include "orpheus.h"
 #define CA_HAVE_ORPHEUS 1
 #endif
+#if __has_include("mimo_asr.h")
+#include "mimo_asr.h"
+#define CA_HAVE_MIMO_ASR 1
+#endif
 #if __has_include("glm_asr.h")
 #include "glm_asr.h"
 #define CA_HAVE_GLMASR 1
@@ -796,6 +800,12 @@ struct crispasr_session {
     orpheus_context* orpheus_ctx = nullptr;
     bool orpheus_codec_loaded = false;
 #endif
+#ifdef CA_HAVE_KOKORO
+    kokoro_context* kokoro_ctx = nullptr;
+#endif
+#ifdef CA_HAVE_MIMO_ASR
+    mimo_asr_context* mimo_asr_ctx = nullptr;
+#endif
 };
 
 struct crispasr_session_seg {
@@ -1078,6 +1088,38 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
         return s;
     }
 #endif
+#ifdef CA_HAVE_KOKORO
+    if (s->backend == "kokoro" || s->backend == "kokoro-tts") {
+        s->backend = "kokoro";
+        kokoro_context_params p = kokoro_context_default_params();
+        s->kokoro_ctx = kokoro_init_from_file(model_path, p);
+        if (!s->kokoro_ctx) {
+            delete s;
+            return nullptr;
+        }
+        kokoro_set_n_threads(s->kokoro_ctx, s->n_threads);
+        // Voicepack must be loaded before synthesise. Caller does so via
+        // `crispasr_session_set_voice` after open.
+        return s;
+    }
+#endif
+#ifdef CA_HAVE_MIMO_ASR
+    if (s->backend == "mimo-asr" || s->backend == "mimo_asr" || s->backend == "mimo") {
+        s->backend = "mimo-asr";
+        mimo_asr_context_params p = mimo_asr_context_default_params();
+        p.n_threads = s->n_threads;
+        s->mimo_asr_ctx = mimo_asr_init_from_file(model_path, p);
+        if (!s->mimo_asr_ctx) {
+            delete s;
+            return nullptr;
+        }
+        // mimo_tokenizer companion must be loaded before transcribe.
+        // Caller does so via `crispasr_session_set_codec_path` after open
+        // (we route the tokenizer through that setter — same shape as
+        // qwen3-tts/orpheus's codec companion).
+        return s;
+    }
+#endif
 
     // Unknown or unsupported-in-this-build backend.
     delete s;
@@ -1167,6 +1209,12 @@ CA_EXPORT int crispasr_session_available_backends(char* out_csv, int out_cap) {
 #endif
 #ifdef CA_HAVE_ORPHEUS
     list += ",orpheus";
+#endif
+#ifdef CA_HAVE_KOKORO
+    list += ",kokoro";
+#endif
+#ifdef CA_HAVE_MIMO_ASR
+    list += ",mimo-asr";
 #endif
     std::strncpy(out_csv, list.c_str(), out_cap - 1);
     out_csv[out_cap - 1] = '\0';
@@ -1614,6 +1662,14 @@ CA_EXPORT crispasr_session_result* crispasr_session_transcribe_lang(crispasr_ses
         if (!text && (s->backend == "omniasr" || s->backend == "omniasr-ctc" || s->backend == "omniasr-llm") &&
             s->omniasr_ctx)
             text = omniasr_transcribe((omniasr_context*)s->omniasr_ctx, pcm, n_samples);
+#endif
+#ifdef CA_HAVE_MIMO_ASR
+        // mimo_asr_transcribe returns null + logs to stderr if the
+        // tokenizer companion wasn't set via crispasr_session_set_codec_path.
+        // The if (text) check below skips silently in that case so we
+        // surface a clean "no transcription" error rather than hanging.
+        if (!text && s->backend == "mimo-asr" && s->mimo_asr_ctx)
+            text = mimo_asr_transcribe(s->mimo_asr_ctx, pcm, n_samples);
 #endif
         if (text) {
             crispasr_session_seg seg;
@@ -2065,6 +2121,13 @@ CA_EXPORT int crispasr_session_set_codec_path(crispasr_session* s, const char* p
         return rc;
     }
 #endif
+#ifdef CA_HAVE_MIMO_ASR
+    // mimo-asr needs the mimo_tokenizer companion before transcribe
+    // can run. Reuse the same setter the other companion-needing
+    // backends do — call right after open(), pass mimo-tokenizer-*.gguf.
+    if (s->mimo_asr_ctx)
+        return mimo_asr_set_tokenizer_path(s->mimo_asr_ctx, path);
+#endif
     return 0; // not applicable
 }
 
@@ -2098,6 +2161,13 @@ CA_EXPORT int crispasr_session_set_voice(crispasr_session* s, const char* path, 
         if (rc == 0)
             s->qwen3_tts_voice_loaded = true;
         return rc;
+    }
+#endif
+#ifdef CA_HAVE_KOKORO
+    if (s->kokoro_ctx) {
+        // Kokoro voicepacks are GGUF only; .wav reference audio is not
+        // a thing for this backend. ref_text_or_null is ignored.
+        return kokoro_load_voice_pack(s->kokoro_ctx, path);
     }
 #endif
     return -3;
@@ -2235,6 +2305,14 @@ CA_EXPORT float* crispasr_session_synthesize(crispasr_session* s, const char* te
         return orpheus_synthesize(s->orpheus_ctx, text, out_n_samples);
     }
 #endif
+#ifdef CA_HAVE_KOKORO
+    if (s->kokoro_ctx) {
+        // Kokoro malloc's its PCM via the same allocator as
+        // crispasr_pcm_free. Output is 24 kHz mono float — same
+        // convention as vibevoice / qwen3-tts / orpheus.
+        return kokoro_synthesize(s->kokoro_ctx, text, out_n_samples);
+    }
+#endif
     return nullptr;
 }
 
@@ -2323,6 +2401,14 @@ CA_EXPORT void crispasr_session_close(crispasr_session* s) {
 #ifdef CA_HAVE_ORPHEUS
     if (s->orpheus_ctx)
         orpheus_free(s->orpheus_ctx);
+#endif
+#ifdef CA_HAVE_KOKORO
+    if (s->kokoro_ctx)
+        kokoro_free(s->kokoro_ctx);
+#endif
+#ifdef CA_HAVE_MIMO_ASR
+    if (s->mimo_asr_ctx)
+        mimo_asr_free(s->mimo_asr_ctx);
 #endif
     delete s;
 }
