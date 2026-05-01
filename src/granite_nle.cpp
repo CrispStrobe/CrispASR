@@ -30,6 +30,8 @@
 #include "ggml-backend.h"
 #include "ggml-cpu.h"
 #include "gguf.h"
+#include "core/bpe.h"
+#include "core/ffn.h"
 #include "core/gguf_loader.h"
 #include "core/mel.h"
 
@@ -1660,17 +1662,212 @@ extern "C" float* granite_nle_run_projector(struct granite_nle_context* ctx, con
     return result;
 }
 
-extern "C" float* granite_nle_run_llm_editing(struct granite_nle_context* ctx, const float* /*audio_embs*/,
-                                              int /*n_audio*/, const int32_t* /*text_ids*/, int /*n_text*/, int* out_n,
-                                              int* out_vocab) {
-    if (!ctx)
+// ===========================================================================
+// Non-causal LLM editing forward (Granite 4.0-1B, 40 layers, GQA 16/4)
+// ===========================================================================
+//
+// Input layout: [audio_embs (D, n_audio), text_embs (D, n_text)] concatenated
+// along time. The text_embs come from `embed_tokens(text_ids_with_slots)`.
+// Audio is pre-divided by `embedding_multiplier` so the LLM's uniform
+// embedding scale recovers the original projector output, while text gets
+// the standard µP scale-up.
+//
+// Every layer runs flash-attn-ext WITHOUT a causal mask — this is the
+// distinguishing feature of the NAR pipeline.
+//
+// The graph slices the last n_text positions before the LM head so the
+// output is exactly (vocab, n_text). LM head is tied to embed_tokens
+// (`tie_word_embeddings = True` in the NAR config), so we matmul against
+// the same `token_embd_w` tensor used for the lookup.
+
+static ggml_tensor* nle_llm_attn_noncausal(ggml_context* ctx0, ggml_tensor* x, ggml_tensor* q_w, ggml_tensor* k_w,
+                                           ggml_tensor* v_w, ggml_tensor* o_w, ggml_tensor* positions, int n_q,
+                                           int n_kv, int hd, float rope_theta, float attn_scale) {
+    const int T = (int)x->ne[1];
+
+    ggml_tensor* Q = ggml_mul_mat(ctx0, q_w, x);
+    ggml_tensor* K = ggml_mul_mat(ctx0, k_w, x);
+    ggml_tensor* V = ggml_mul_mat(ctx0, v_w, x);
+
+    Q = ggml_reshape_3d(ctx0, Q, hd, n_q, T);
+    K = ggml_reshape_3d(ctx0, K, hd, n_kv, T);
+    V = ggml_reshape_3d(ctx0, V, hd, n_kv, T);
+
+    Q = ggml_rope_ext(ctx0, Q, positions, nullptr, hd, GGML_ROPE_TYPE_NEOX, 0, rope_theta, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f);
+    K = ggml_rope_ext(ctx0, K, positions, nullptr, hd, GGML_ROPE_TYPE_NEOX, 0, rope_theta, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f);
+
+    Q = ggml_cont(ctx0, ggml_permute(ctx0, Q, 0, 2, 1, 3));
+    K = ggml_cont(ctx0, ggml_permute(ctx0, K, 0, 2, 1, 3));
+    V = ggml_cont(ctx0, ggml_permute(ctx0, V, 0, 2, 1, 3));
+
+    // Non-causal: mask=nullptr; flash_attn_ext handles GQA natively
+    // (n_q heads broadcast over n_kv KV heads, ratio n_q/n_kv).
+    ggml_tensor* attn = ggml_flash_attn_ext(ctx0, Q, K, V, nullptr, attn_scale, 0.0f, 0.0f);
+    attn = ggml_reshape_2d(ctx0, attn, hd * n_q, T);
+
+    return ggml_mul_mat(ctx0, o_w, attn);
+}
+
+static ggml_cgraph* nle_build_llm(granite_nle_context* ctx, int n_audio, int n_text) {
+    const auto& m = ctx->model;
+    const auto& hp = m.hparams;
+    const int d = (int)hp.llm_d_model;
+    const int n_q = (int)hp.llm_n_heads;
+    const int n_kv = (int)hp.llm_n_kv_heads;
+    const int hd = (int)hp.llm_head_dim;
+    const int n_layers = (int)hp.llm_n_layers;
+    const int N = n_audio + n_text;
+
+    ggml_init_params ip = {ctx->compute_meta.size(), ctx->compute_meta.data(), true};
+    ggml_context* ctx0 = ggml_init(ip);
+    ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 16384, false);
+
+    ggml_tensor* audio_in = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, d, n_audio);
+    ggml_set_name(audio_in, "audio_embs");
+    ggml_set_input(audio_in);
+
+    ggml_tensor* text_ids = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, n_text);
+    ggml_set_name(text_ids, "text_ids");
+    ggml_set_input(text_ids);
+
+    ggml_tensor* positions = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, N);
+    ggml_set_name(positions, "positions");
+    ggml_set_input(positions);
+
+    // The caller passes audio_embs already in LLM-ready form: the upstream
+    // `_build_flat_llm_inputs` divides projector output by
+    // embedding_multiplier BEFORE concatenation so the uniform downstream
+    // `inputs_embeds * embedding_multiplier` recovers the original
+    // projector output for audio while still scaling text embeds by 12×.
+    // Mirror that contract — caller does the divide; we do not divide
+    // again here.
+    ggml_tensor* audio = audio_in;
+
+    // Embed text_ids via tied token_embd_w. Output is F32 regardless of
+    // the embedding table's storage type.
+    ggml_tensor* text_embs = ggml_get_rows(ctx0, m.llm.token_embd_w, text_ids);
+    if (text_embs->type != GGML_TYPE_F32)
+        text_embs = ggml_cast(ctx0, text_embs, GGML_TYPE_F32);
+
+    // [audio | text] along the time axis.
+    ggml_tensor* cur = ggml_concat(ctx0, audio, text_embs, 1);
+    cur = ggml_scale(ctx0, cur, hp.embedding_multiplier);
+    ggml_set_name(cur, "emb_scaled");
+
+    for (int il = 0; il < n_layers; il++) {
+        const auto& b = m.llm.blocks[il];
+        ggml_tensor* residual = cur;
+
+        cur = ggml_rms_norm(ctx0, cur, hp.llm_rms_eps);
+        cur = ggml_mul(ctx0, cur, b.attn_norm_w);
+
+        ggml_tensor* attn = nle_llm_attn_noncausal(ctx0, cur, b.attn_q_w, b.attn_k_w, b.attn_v_w, b.attn_o_w, positions,
+                                                   n_q, n_kv, hd, hp.llm_rope_theta, hp.attention_multiplier);
+
+        cur = ggml_add(ctx0, residual, ggml_scale(ctx0, attn, hp.residual_multiplier));
+
+        residual = cur;
+        cur = ggml_rms_norm(ctx0, cur, hp.llm_rms_eps);
+        cur = ggml_mul(ctx0, cur, b.ffn_norm_w);
+        cur = core_ffn::swiglu(ctx0, cur, b.ffn_gate_w, b.ffn_up_w, b.ffn_down_w);
+        cur = ggml_add(ctx0, residual, ggml_scale(ctx0, cur, hp.residual_multiplier));
+    }
+
+    cur = ggml_rms_norm(ctx0, cur, hp.llm_rms_eps);
+    cur = ggml_mul(ctx0, cur, m.llm.norm_w);
+
+    // Slice the text portion: positions [n_audio, N) → (d, n_text).
+    ggml_tensor* text_h = ggml_view_2d(ctx0, cur, d, n_text, cur->nb[1], (size_t)n_audio * cur->nb[1]);
+    text_h = ggml_cont(ctx0, text_h);
+
+    // LM head, tied to token_embd_w. Output is (vocab, n_text).
+    //
+    // Note: NO `1/logits_scaling` divide here. The upstream NLE forward
+    // (modeling_nle.py L242) calls `self.llm.lm_head(...)` directly,
+    // which is just an nn.Linear — the µP `/logits_scaling` divide that
+    // `GraniteForCausalLM.forward` would normally apply is bypassed.
+    // Argmax (and therefore the slot-decoded transcript) is identical
+    // either way; the raw logit values must match the bypassed path so
+    // diff comparisons stay tight.
+    ggml_tensor* logits = ggml_mul_mat(ctx0, m.llm.token_embd_w, text_h);
+    (void)hp;
+
+    ggml_set_name(logits, "logits");
+    ggml_build_forward_expand(gf, logits);
+    ggml_free(ctx0);
+    return gf;
+}
+
+extern "C" float* granite_nle_run_llm_editing(struct granite_nle_context* ctx, const float* audio_embs, int n_audio,
+                                              const int32_t* text_ids, int n_text, int* out_n, int* out_vocab) {
+    if (!ctx || !audio_embs || !text_ids || n_audio <= 0 || n_text <= 0)
         return nullptr;
-    fprintf(stderr, "granite_nle: run_llm_editing not yet implemented\n");
+    granite_nle_bench_stage _b("run_llm_editing");
+
+    const auto& hp = ctx->model.hparams;
+    const int d = (int)hp.llm_d_model;
+    const int vocab = (int)hp.llm_vocab_size;
+    const int N = n_audio + n_text;
+
+    if (!ctx->model.llm.token_embd_w || !ctx->model.llm.norm_w) {
+        fprintf(stderr, "granite_nle: LLM weights not loaded\n");
+        return nullptr;
+    }
+
+    if (ctx->params.verbosity >= 1)
+        fprintf(stderr, "  llm_editing: n_audio=%d n_text=%d N=%d → (vocab=%d, %d)\n", n_audio, n_text, N, vocab,
+                n_text);
+
+    std::vector<int32_t> positions(N);
+    for (int i = 0; i < N; i++)
+        positions[i] = i;
+
+    ggml_cgraph* gf = nle_build_llm(ctx, n_audio, n_text);
+    ggml_backend_sched_reset(ctx->sched);
+    if (!ggml_backend_sched_alloc_graph(ctx->sched, gf))
+        return nullptr;
+
+    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "audio_embs"), audio_embs, 0,
+                            (size_t)d * n_audio * sizeof(float));
+    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "text_ids"), text_ids, 0, (size_t)n_text * sizeof(int32_t));
+    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "positions"), positions.data(), 0,
+                            positions.size() * sizeof(int32_t));
+
+    if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS)
+        return nullptr;
+
+    float* result = (float*)malloc((size_t)vocab * n_text * sizeof(float));
+    if (!result)
+        return nullptr;
+    ggml_backend_tensor_get(ggml_graph_get_tensor(gf, "logits"), result, 0, (size_t)vocab * n_text * sizeof(float));
+
+    if (ctx->params.verbosity >= 2) {
+        float mn = 1e30f, mx = -1e30f, s = 0;
+        for (int i = 0; i < n_text * vocab; i++) {
+            if (result[i] < mn)
+                mn = result[i];
+            if (result[i] > mx)
+                mx = result[i];
+            s += result[i];
+        }
+        fprintf(stderr, "  editing logits: (%d, %d) min=%.4f max=%.4f mean=%.6f\n", n_text, vocab, mn, mx,
+                s / (n_text * vocab));
+    }
+
+    if (const char* p = std::getenv("GRANITE_NLE_EDIT_DUMP")) {
+        FILE* fp = std::fopen(p, "wb");
+        if (fp) {
+            std::fwrite(result, sizeof(float), (size_t)vocab * n_text, fp);
+            std::fclose(fp);
+            fprintf(stderr, "  edit logits dumped to %s\n", p);
+        }
+    }
+
     if (out_n)
-        *out_n = 0;
+        *out_n = n_text;
     if (out_vocab)
-        *out_vocab = 0;
-    return nullptr;
+        *out_vocab = vocab;
+    return result;
 }
 
 extern "C" char* granite_nle_transcribe(struct granite_nle_context* ctx, const float* /*samples*/, int /*n_samples*/) {
@@ -1686,11 +1883,17 @@ extern "C" int32_t* granite_nle_tokenize(struct granite_nle_context* ctx, const 
             *out_n = 0;
         return nullptr;
     }
-    // Stub: defer to core_bpe once wired up. For now return empty so the
-    // CLI can detect "unsupported" and skip.
+    auto ids = core_bpe::tokenize_simple(ctx->token_to_id, ctx->merge_rank, std::string(text));
+    int32_t* arr = (int32_t*)malloc(ids.size() * sizeof(int32_t));
+    if (!arr) {
+        if (out_n)
+            *out_n = 0;
+        return nullptr;
+    }
+    std::memcpy(arr, ids.data(), ids.size() * sizeof(int32_t));
     if (out_n)
-        *out_n = 0;
-    return nullptr;
+        *out_n = (int)ids.size();
+    return arr;
 }
 
 extern "C" char* granite_nle_detokenize(struct granite_nle_context* ctx, const int32_t* ids, int n) {

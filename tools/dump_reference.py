@@ -326,6 +326,12 @@ def main() -> None:
         "sample_rate": 16000,
         "generated_text": str(captures.pop("generated_text", "")) if "generated_text" in captures else "",
     }
+    # Any other str-typed captures get routed into metadata too so the
+    # C++ diff harness can read them via the GGUF kv table without
+    # tripping `_to_contig_f32`'s "must be numeric ndarray" check.
+    for name in list(captures.keys()):
+        if isinstance(captures[name], str):
+            meta[name] = captures.pop(name)
     # Pass through env-configurable prompt/text/voice metadata so diff
     # harnesses on the C++ side can replay the exact synthesis context.
     for env_key in ("QWEN3_TTS_SYN_TEXT", "QWEN3_TTS_REF_TEXT", "QWEN3_TTS_LANG", "QWEN3_TTS_VOICE"):

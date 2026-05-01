@@ -1241,9 +1241,11 @@ int main(int argc, char** argv) {
                 auto audio_pair = ref.get_f32("audio_embs_for_llm");
                 auto ids_pair = ref.get_f32("text_ids_with_slots");
                 if (audio_pair.first && ids_pair.first) {
+                    // ggml shape convention: ne[0] = feature dim (innermost
+                    // in memory), ne[1] = sequence length.
                     auto audio_shape = ref.shape("audio_embs_for_llm");
-                    int n_audio = audio_shape.size() >= 1 ? (int)audio_shape[audio_shape.size() - 2] : 0;
-                    int audio_d = audio_shape.empty() ? 0 : (int)audio_shape.back();
+                    int audio_d = audio_shape.empty() ? 0 : (int)audio_shape[0];
+                    int n_audio = audio_shape.size() >= 2 ? (int)audio_shape[1] : 0;
                     int n_text = (int)ids_pair.second;
 
                     std::vector<int32_t> text_ids((size_t)n_text);

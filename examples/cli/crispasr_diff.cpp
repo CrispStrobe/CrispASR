@@ -287,7 +287,11 @@ Report Ref::compare_argmax(const std::string& name, const float* data, size_t n_
     if (ref.empty())
         return r;
 
-    const int vocab = (int)r.shape.back();
+    // ggml convention: ne[0] is the innermost (fastest-changing) dim. For
+    // an (T, V) logits tensor that's V — first entry of `shape`, NOT the
+    // numpy-style last entry. shape.back() would pick the outer dim
+    // (T_text), giving meaningless argmax-over-T comparisons.
+    const int vocab = (int)r.shape.front();
     if (vocab <= 0)
         return r;
 
