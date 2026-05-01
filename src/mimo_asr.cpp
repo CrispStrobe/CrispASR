@@ -470,17 +470,18 @@ static ggml_tensor* build_input_local_block(ggml_context* ctx0, ggml_cgraph* gf,
     K = ggml_reshape_4d(ctx0, K, hd, n_h, gs, ng);
     V = ggml_reshape_4d(ctx0, V, hd, n_h, gs, ng);
 
-    // Permute (hd, n_h, gs, ng) → (hd, gs, n_h, ng) so RoPE's time dim
-    // (ne[2]) lines up with `positions` of length gs.
-    Q = ggml_cont(ctx0, ggml_permute(ctx0, Q, 0, 2, 1, 3));
-    K = ggml_cont(ctx0, ggml_permute(ctx0, K, 0, 2, 1, 3));
-
+    // RoPE expects (hd, n_h, T, B) — exactly the post-reshape layout, with
+    // T=gs at ne[2] matching positions->ne[0]=gs. Apply rotation BEFORE
+    // permuting to flash_attn_ext's layout.
     Q = ggml_rope_ext(ctx0, Q, positions, nullptr, hd, GGML_ROPE_TYPE_NEOX, (int)hp.llm_max_pos, hp.llm_rope_theta,
                       1.0f, 0.0f, 1.0f, 0.0f, 0.0f);
     K = ggml_rope_ext(ctx0, K, positions, nullptr, hd, GGML_ROPE_TYPE_NEOX, (int)hp.llm_max_pos, hp.llm_rope_theta,
                       1.0f, 0.0f, 1.0f, 0.0f, 0.0f);
 
-    // V also needs the (hd, gs, n_h, ng) layout for flash_attn_ext.
+    // Permute (hd, n_h, gs, ng) → (hd, gs, n_h, ng) so flash_attn_ext sees
+    // T=gs at ne[1] (its expected layout for n_tokens).
+    Q = ggml_cont(ctx0, ggml_permute(ctx0, Q, 0, 2, 1, 3));
+    K = ggml_cont(ctx0, ggml_permute(ctx0, K, 0, 2, 1, 3));
     V = ggml_cont(ctx0, ggml_permute(ctx0, V, 0, 2, 1, 3));
 
     // ggml_flash_attn_ext expects (hd, T, n_h, B). We have exactly that.
@@ -491,8 +492,10 @@ static ggml_tensor* build_input_local_block(ggml_context* ctx0, ggml_cgraph* gf,
     // (hd, n_h, T, B) per ggml convention. Reshape to [d, gs*ng].
     attn = ggml_reshape_2d(ctx0, attn, hd * n_h, gs * ng);
 
-    // Output projection (no bias).
+    // Output projection (no bias). Reshape back to [d, gs, ng] so the
+    // residual add and downstream FFN see the same 3D layout as the input.
     attn = ggml_mul_mat(ctx0, b.attn_o_w, attn);
+    attn = ggml_reshape_3d(ctx0, attn, d, gs, ng);
     ggml_tensor* y = ggml_add(ctx0, residual, attn);
 
     // FFN
@@ -600,8 +603,16 @@ static ggml_cgraph* mimo_asr_build_prefill_graph(mimo_asr_context* ctx, int T_gr
     x = ggml_mul(ctx0, x, speech_active_mask);
 
     // ---- Capture: prefill_audio_features (the speech_grouped before fusion) ----
+    // ggml_set_output is mandatory on every named capture tensor: without
+    // it, the backend scheduler treats the cont/add nodes as ordinary
+    // intermediates and may reuse their buffers when allocating later
+    // ops (e.g. inputs_embeds), so the values read back via
+    // ggml_graph_get_tensor end up clobbered. Symptom: the per-stage
+    // cosine looks fine in isolation but inputs_embeds collapses to
+    // ~0 against the ref.
     ggml_tensor* audio_features = ggml_cont(ctx0, x);
     ggml_set_name(audio_features, "prefill_audio_features");
+    ggml_set_output(audio_features);
     ggml_build_forward_expand(gf, audio_features);
 
     // ---- Text embedding lookup + zero mask + fusion ----
@@ -616,8 +627,16 @@ static ggml_cgraph* mimo_asr_build_prefill_graph(mimo_asr_context* ctx, int T_gr
     ggml_set_name(text_zero_mask, "text_zero_mask");
     text_embeds = ggml_mul(ctx0, text_embeds, text_zero_mask);
 
+    // Capture post-mask text_embeds in isolation, so we can bisect
+    // text-vs-audio-vs-fusion when inputs_embeds drifts.
+    ggml_tensor* dbg_text_embeds = ggml_cont(ctx0, text_embeds);
+    ggml_set_name(dbg_text_embeds, "prefill_text_embeds");
+    ggml_set_output(dbg_text_embeds); // see prefill_audio_features comment
+    ggml_build_forward_expand(gf, dbg_text_embeds);
+
     ggml_tensor* inputs_embeds = ggml_add(ctx0, text_embeds, x); // [d, T]
     ggml_set_name(inputs_embeds, "prefill_inputs_embeds");
+    ggml_set_output(inputs_embeds);
     // Mark as build-target so it survives optimisation.
     ggml_build_forward_expand(gf, inputs_embeds);
 
@@ -685,11 +704,13 @@ static ggml_cgraph* mimo_asr_build_prefill_graph(mimo_asr_context* ctx, int T_gr
     }
     last_hidden = ggml_cont(ctx0, last_hidden);
     ggml_set_name(last_hidden, "prefill_last_hidden");
+    ggml_set_output(last_hidden);
     ggml_build_forward_expand(gf, last_hidden);
 
     // lm_head on last position.
     ggml_tensor* logits = ggml_mul_mat(ctx0, m.llm.lm_head_w, last_hidden);
     ggml_set_name(logits, "prefill_text_logits_step0");
+    ggml_set_output(logits);
     ggml_build_forward_expand(gf, logits);
 
     ggml_free(ctx0);
@@ -782,9 +803,12 @@ extern "C" float* mimo_asr_extract_stage(struct mimo_asr_context* ctx, const int
     if (!mimo_asr_kv_init(ctx, std::max(Tg + 256, 4096)))
         return nullptr;
 
-    // Look up empty-token id from vocab. Falls back to 151643 (Qwen2's
-    // <|endoftext|>) which is `pad_token_id` in MiMo's tokenizer config.
-    uint32_t empty_id = 151643;
+    // Look up empty-token id from vocab. The on-disk Q4_K shipped with a
+    // truncated vocab (151643 entries) where `<|empty|>` is missing — we
+    // fall back to its known id (151667) so prefill works against the
+    // stale GGUF. Once step 9 re-converts with the padded vocab, the
+    // search hits and the fallback path is dead code.
+    uint32_t empty_id = 151667;
     for (size_t i = 0; i < ctx->vocab.size(); i++) {
         if (ctx->vocab[i] == "<|empty|>") {
             empty_id = (uint32_t)i;

@@ -72,6 +72,7 @@ DEFAULT_STAGES = [
     "prefill_input_ids",
     "prefill_audio_codes",
     "prefill_audio_features",
+    "prefill_text_embeds",
     "prefill_inputs_embeds",
     "prefill_last_hidden",
     "prefill_text_logits_step0",
@@ -81,9 +82,16 @@ DEFAULT_STAGES = [
 
 
 def _ensure_upstream_on_path():
-    """Make `from mimo_audio ...` and `from mimo_audio_tokenizer ...` resolve
-    to the local upstream tree under ref/mimo/github/src/."""
-    ref_path = Path(__file__).resolve().parents[2] / "ref" / "mimo" / "github" / "src"
+    """Make `from src.mimo_audio ...` and `from src.mimo_audio_tokenizer ...`
+    resolve to the local upstream tree under ref/mimo/github/.
+
+    We need `src` itself to be importable as a (namespace) package — not
+    just have its children on sys.path — because mimo_audio.mimo_audio
+    does `from ..mimo_audio_tokenizer import MiMoAudioTokenizer`, which
+    requires `mimo_audio` to live two levels deep inside an importable
+    parent (`src`). So we put the parent of `src` on sys.path and import
+    via the `src.` prefix throughout."""
+    ref_path = Path(__file__).resolve().parents[2] / "ref" / "mimo" / "github"
     if ref_path.is_dir() and str(ref_path) not in sys.path:
         sys.path.insert(0, str(ref_path))
 
@@ -112,8 +120,8 @@ def _patch_tokenizer_attention_for_no_flash_attn():
     tokenizer can run on macOS / CPU."""
     import torch
     from torch.nn import functional as F
-    from mimo_audio_tokenizer.modeling_audio_tokenizer import Attention
-    from mimo_audio_tokenizer.modeling_rope_utils import apply_rotary_pos_emb
+    from src.mimo_audio_tokenizer.modeling_audio_tokenizer import Attention
+    from src.mimo_audio_tokenizer.modeling_rope_utils import apply_rotary_pos_emb
 
     def forward(self, hidden_states, seq_len, rope_position_embeddings=None):
         bsz = hidden_states.shape[0]
@@ -167,21 +175,32 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
 
     # Construct via the upstream MimoAudio wrapper — gives us the right
     # tokenizer setup, special-token IDs, and audio preprocessing.
-    from mimo_audio.mimo_audio import MimoAudio
-    from mimo_audio.modeling_mimo_audio import MiMoAudioOutput
-    from mimo_audio.process_speechdata import InputSegment
+    from src.mimo_audio.mimo_audio import MimoAudio
+    from src.mimo_audio.modeling_mimo_audio import MiMoAudioOutput
+    from src.mimo_audio.process_speechdata import InputSegment
 
-    # Force CPU + fp32 so cosine compares are deterministic against the
-    # ggml runtime (which is also CPU/fp32 on the diff harness path).
+    # Dtype: the upstream MimoAudio loads in bf16. On a 16 GB Mac, the .float()
+    # cast doubles RAM to ~28 GB and triggers heavy swap. Default to bf16 here
+    # (matches upstream) and let users with more RAM opt into fp32 via
+    # MIMO_ASR_REF_DTYPE. The C++ runtime is fp32, so bf16 ref vs fp32 C++ will
+    # not bit-match — expect cos≥0.99 (not 0.999) on the deeper LM stages.
+    ref_dtype_str = os.environ.get("MIMO_ASR_REF_DTYPE", "bf16").lower()
+    if ref_dtype_str in ("fp32", "float32", "float"):
+        ref_dtype = torch.float32
+    elif ref_dtype_str in ("bf16", "bfloat16"):
+        ref_dtype = torch.bfloat16
+    else:
+        raise ValueError(f"MIMO_ASR_REF_DTYPE must be bf16 or fp32, got {ref_dtype_str!r}")
+    print(f"  ref dtype: {ref_dtype} (override via MIMO_ASR_REF_DTYPE)")
+
     wrap = MimoAudio(
         model_path=str(asr_dir),
         mimo_audio_tokenizer_path=str(tok_dir),
         device="cpu",
     )
-    # The MimoAudio constructor calls .bfloat16().to(device) on the tokenizer
-    # and torch_dtype=bfloat16 on the LM — override to fp32.
-    wrap.model = wrap.model.float()
-    wrap.mimo_audio_tokenizer = wrap.mimo_audio_tokenizer.float()
+    if ref_dtype == torch.float32:
+        wrap.model = wrap.model.float()
+        wrap.mimo_audio_tokenizer = wrap.mimo_audio_tokenizer.float()
     wrap.model.eval()
     wrap.mimo_audio_tokenizer.eval()
 
@@ -204,7 +223,7 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
     # we pin the template to `asr_en_templates[0]` for determinism (the
     # upstream picks one at random, which would change the input_ids every
     # run). The C++ harness uses the same fixed template.
-    from mimo_audio.templates import asr_en_templates
+    from src.mimo_audio.templates import asr_en_templates
     template_str = asr_en_templates[0]
 
     lm_prompt = [
@@ -272,36 +291,43 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
         )                                                           # [B, T_groups, 8, gs]
         is_speech = text_input_ids == model.args.empty_idx          # [B, T_groups]
 
+        # All intermediate activations live in `ref_dtype` so they match the
+        # bf16/fp32 weights of the underlying nn.Linear modules. Capturing
+        # always casts to fp32 at the end.
         speech_embeds = torch.zeros(
             (B, is_speech.shape[1], gs, model.input_local_config.hidden_size),
-            dtype=torch.float32,
+            dtype=ref_dtype,
         )
         for idx in range(model.audio_channels):
             cur_empty = model.speech_empty_ids[idx]
             cur_embed = model.speech_embeddings[idx]
             cur_speech_ids = speech_input_ids[:, :, idx, :]
-            cur_speech_embeds = cur_embed(cur_speech_ids).float()
+            cur_speech_embeds = cur_embed(cur_speech_ids).to(ref_dtype)
             cur_mask = cur_speech_ids == cur_empty
             cur_speech_embeds.masked_fill_(cur_mask.unsqueeze(-1), 0.0)
             speech_embeds = speech_embeds + cur_speech_embeds
 
         speech_embeds = speech_embeds * is_speech.unsqueeze(-1).unsqueeze(-1)
         # Run the input_local_transformer.
-        speech_embeds = model.apply_input_local_transformer(speech_embeds.float())
+        speech_embeds = model.apply_input_local_transformer(speech_embeds.to(ref_dtype))
         speech_embeds = speech_embeds * is_speech.unsqueeze(-1).unsqueeze(-1)
 
         T_groups = speech_embeds.shape[1]
         speech_grouped = model.speech_group_downcast(
-            speech_embeds.view(B, T_groups, -1).float()
+            speech_embeds.view(B, T_groups, -1).to(ref_dtype)
         )  # [B, T_groups, hidden=4096]
 
         if "prefill_audio_features" in stages:
             captures["prefill_audio_features"] = (
                 speech_grouped[0].detach().cpu().float().numpy())
 
-        text_embeds = model.model.embed_tokens(text_input_ids).float()
+        text_embeds = model.model.embed_tokens(text_input_ids).to(ref_dtype)
         text_zero_mask = text_input_ids == model.args.empty_idx
         text_embeds = text_embeds.masked_fill(text_zero_mask.unsqueeze(-1), 0.0)
+
+        if "prefill_text_embeds" in stages:
+            captures["prefill_text_embeds"] = (
+                text_embeds[0].detach().cpu().float().numpy())
 
         inputs_embeds = text_embeds + speech_grouped  # [B, T_groups, hidden]
 

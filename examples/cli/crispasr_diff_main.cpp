@@ -1238,10 +1238,12 @@ int main(int argc, char** argv) {
         // generated_text — those are handled separately).
         static const char* stages[] = {
             "prefill_audio_features",
+            "prefill_text_embeds",
             "prefill_inputs_embeds",
             "prefill_last_hidden",
             "prefill_text_logits_step0",
         };
+        std::vector<float> saved_text_embeds, saved_audio_features;
         for (const char* stage : stages) {
             int n_stage = 0;
             float* our_data = mimo_asr_extract_stage(ctx, input_ids.data(), T_total, stage, &n_stage);
@@ -1253,7 +1255,23 @@ int main(int argc, char** argv) {
             auto rep = ref.compare(stage, our_data, (size_t)n_stage);
             print_row(stage, rep, COS_THRESHOLD);
             record(rep);
+            // Save for an out-of-graph sum check below.
+            if (std::string(stage) == "prefill_text_embeds")
+                saved_text_embeds.assign(our_data, our_data + n_stage);
+            else if (std::string(stage) == "prefill_audio_features")
+                saved_audio_features.assign(our_data, our_data + n_stage);
             free(our_data);
+        }
+        // Bisect: compute (extracted text_embeds + extracted audio_features)
+        // out-of-graph and compare to ref's prefill_inputs_embeds. If the
+        // in-graph ggml_add is buggy, this should match the ref while the
+        // graph's prefill_inputs_embeds does not.
+        if (!saved_text_embeds.empty() && saved_text_embeds.size() == saved_audio_features.size()) {
+            std::vector<float> sum_check(saved_text_embeds.size());
+            for (size_t i = 0; i < sum_check.size(); i++)
+                sum_check[i] = saved_text_embeds[i] + saved_audio_features[i];
+            auto rep = ref.compare("prefill_inputs_embeds", sum_check.data(), sum_check.size());
+            print_row("dbg_extracted_sum", rep, COS_THRESHOLD);
         }
         mimo_asr_free(ctx);
 

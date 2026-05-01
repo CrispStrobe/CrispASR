@@ -348,22 +348,67 @@ direction; do not interleave.
      via `mimo_asr_extract_stage`, compares cos against the ref.
 
   **What's left:**
-  7. **First ref dump + diff** to validate the cos≥0.999 gate across
-     all 4 stages on jfk.wav. If anything's off, debug per-stage (the
-     audio path → LM input → LM body → logits ladder is exactly the
-     order to bisect). Command sketch:
+  7. ~~**First ref dump + diff**~~ **DONE (within Q4_K + bf16
+     tolerance)** — JFK pass on the existing on-disk Q4_K with bf16
+     PyTorch ref:
+     - `prefill_audio_features`     cos_mean=0.998
+     - `prefill_text_embeds`        cos_mean=0.996  (added stage)
+     - `prefill_inputs_embeds`      cos_mean=0.998
+     - `prefill_last_hidden`        cos=0.963
+     - `prefill_text_logits_step0`  cos=0.981  (argmax = 1597 = ' And',
+                                                matches Python ref)
+     The ≥0.999 gate is the F16/F32 path; under Q4_K weights + bf16 ref
+     the residual is quantisation noise, with the deepest-stack drop
+     (last_hidden) limited by the 36L Q4_K LM body. Bugs fixed along
+     the way (all in `src/mimo_asr.cpp`):
+       a. `build_input_local_block` permuted `(hd,n_h,gs,ng) →
+          (hd,gs,n_h,ng)` BEFORE `ggml_rope_ext`, putting `n_h` at
+          ne[2] where positions[gs] expected — assertion
+          `a->ne[2] == b->ne[0]` failed. Fix: rope-then-permute, so
+          rope sees `[hd,n_h,gs,ng]` (gs at ne[2]) and flash_attn_ext
+          sees `[hd,gs,n_h,ng]` (gs at ne[1]).
+       b. After o-projection, `attn` was 2D `[d, gs*ng]` while the
+          residual was 3D `[d, gs, ng]` — `ggml_add` broadcast assert
+          failed. Fix: `ggml_reshape_3d(attn, d, gs, ng)` before
+          residual add.
+       c. Stale on-disk Q4_K has only 151643 vocab entries, missing
+          `<|empty|>` (id 151667). `mimo_asr_extract_stage` fell back
+          to 151643 (Qwen2 `<|endoftext|>`), which never appears in
+          the prompt → all positions were treated as non-empty,
+          zeroing the audio path entirely and blanket-keeping text
+          embeds. Fix: bumped fallback to 151667 (the real id).
+          Step 9 reconversion supersedes this when the vocab is
+          padded to vocab_size.
+       d. **Buffer-aliasing root cause for inputs_embeds drift to
+          cos≈0.003.** The capture tensors (`prefill_audio_features`,
+          `prefill_inputs_embeds`, etc.) had `ggml_set_name` but not
+          `ggml_set_output`. The backend scheduler treated them as
+          plain intermediates and reused their buffers when
+          allocating later ops in the same graph (e.g. inputs_embeds
+          consuming the same `x` post-mul tensor as the audio
+          capture). The values read back via `ggml_graph_get_tensor`
+          were post-clobber. Fix: `ggml_set_output(...)` on every
+          named capture; per-stage cosines snapped to their real
+          values immediately. Recipe: any tensor we plan to read out
+          of the graph must be `set_output`, not just `set_name`.
+     Command (from CrispASR/):
      ```
      HF_HOME=/Volumes/backups/ai/huggingface-hub \
      HUGGINGFACE_HUB_CACHE=/Volumes/backups/ai/huggingface-hub \
+     TRANSFORMERS_OFFLINE=1 \
      MIMO_ASR_DIR=/Volumes/backups/ai/huggingface-hub/models--XiaomiMiMo--MiMo-V2.5-ASR/snapshots/<hash> \
      MIMO_TOKENIZER_DIR=/Volumes/backups/ai/huggingface-hub/models--XiaomiMiMo--MiMo-Audio-Tokenizer/snapshots/<hash> \
      python tools/dump_reference.py --backend mimo-asr \
-       --model-dir <unused-but-required> --audio samples/jfk.wav \
+       --model-dir <same-as-MIMO_ASR_DIR> --audio samples/jfk.wav \
        --output /tmp/mimo-asr-ref.gguf
-     build/bin/crispasr-diff mimo-asr \
+     build-ninja-compile/bin/crispasr-diff mimo-asr \
        /Volumes/backups/ai/crispasr-models/mimo/mimo-asr-q4_k.gguf \
        /tmp/mimo-asr-ref.gguf samples/jfk.wav
      ```
+     The dumper defaults to bf16 (env `MIMO_ASR_REF_DTYPE=fp32`
+     overrides — needs ~28 GB RAM for the LM half, swap-thrashes a
+     16 GB box). Re-run with F16 GGUF + fp32 ref after step 9 to
+     confirm the cos≥0.999 gate.
   8. **Decode loop + prompt construction** (C++ side). Build the
      asr_sft prompt input_ids in C++ (BPE encode chat template +
      splice audio codes) and run greedy decode. Reuses the prefill
