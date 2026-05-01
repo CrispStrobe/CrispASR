@@ -89,4 +89,24 @@ static inline ggml_tensor* silu_ffn(ggml_context* ctx, ggml_tensor* x, ggml_tens
     return h;
 }
 
+// Plain two-linear GELU FFN with optional biases. Uses the exact
+// erf-based GELU (matches PyTorch `nn.GELU()` default, i.e.
+// `approximate='none'`):
+//
+//   out = W2 @ gelu_erf(W1 @ x + b1) + b2
+//
+// Used by Whisper-style audio encoders (voxtral 3B audio encoder) and
+// the MiMo-Audio-Tokenizer encoder. Biases are optional.
+static inline ggml_tensor* gelu_erf_ffn(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w1, ggml_tensor* b1,
+                                        ggml_tensor* w2, ggml_tensor* b2) {
+    ggml_tensor* h = ggml_mul_mat(ctx, w1, x);
+    if (b1)
+        h = ggml_add(ctx, h, b1);
+    h = ggml_gelu_erf(ctx, h);
+    h = ggml_mul_mat(ctx, w2, h);
+    if (b2)
+        h = ggml_add(ctx, h, b2);
+    return h;
+}
+
 } // namespace core_ffn

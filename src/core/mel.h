@@ -189,4 +189,22 @@ std::vector<float> compute(const float* samples, int n_samples,
                            const float* mel_fb, // [n_mels, n_freqs]
                            int n_freqs, FftR2C fft, const Params& params, int& T_out);
 
+// HTK-mel-scale triangular filterbank builder. Matches torchaudio's
+// MelSpectrogram defaults (mel_scale='htk', norm=None) and the inline
+// builders that ecapa_lid / firered_vad / firered_asr / mimo_tokenizer
+// have copies of.
+//
+//   sr      : sample rate
+//   n_fft   : STFT size
+//   n_mels  : number of mel bands
+//   fmin    : low edge in Hz (use 0)
+//   fmax    : high edge in Hz; pass <= 0 for sr/2 (Nyquist)
+//   layout  : MelsFreqs ([n_mels, n_freqs] row-major) or
+//             FreqsMels ([n_freqs, n_mels] row-major).
+//
+// Returns a flat float32 vector with the requested layout, sized
+// n_mels * (n_fft/2+1).
+std::vector<float> build_htk_fb(int sr, int n_fft, int n_mels, float fmin, float fmax,
+                                FbLayout layout = FbLayout::MelsFreqs);
+
 } // namespace core_mel

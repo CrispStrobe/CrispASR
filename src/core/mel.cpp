@@ -277,4 +277,39 @@ std::vector<float> compute(const float* samples, int n_samples, const float* win
     return out;
 }
 
+std::vector<float> build_htk_fb(int sr, int n_fft, int n_mels, float fmin, float fmax, FbLayout layout) {
+    const int n_freqs = n_fft / 2 + 1;
+    if (fmax <= 0.0f)
+        fmax = (float)sr * 0.5f;
+    auto hz2mel = [](float hz) { return 2595.0f * std::log10(1.0f + hz / 700.0f); };
+    auto mel2hz = [](float m) { return 700.0f * (std::pow(10.0f, m / 2595.0f) - 1.0f); };
+    const float ml = hz2mel(fmin);
+    const float mh = hz2mel(fmax);
+    std::vector<float> centers((size_t)n_mels + 2);
+    for (int i = 0; i < n_mels + 2; i++)
+        centers[i] = mel2hz(ml + (mh - ml) * (float)i / (float)(n_mels + 1));
+
+    std::vector<float> fb((size_t)n_mels * n_freqs, 0.0f);
+    for (int m = 0; m < n_mels; m++) {
+        const float lo = centers[m];
+        const float md = centers[m + 1];
+        const float hi = centers[m + 2];
+        for (int k = 0; k < n_freqs; k++) {
+            const float f = (float)k * (float)sr / (float)n_fft;
+            float w = 0.0f;
+            if (f >= lo && f <= md && md > lo)
+                w = (f - lo) / (md - lo);
+            else if (f >= md && f <= hi && hi > md)
+                w = (hi - f) / (hi - md);
+            if (w < 0.0f)
+                w = 0.0f;
+            if (layout == FbLayout::MelsFreqs)
+                fb[(size_t)m * n_freqs + k] = w;
+            else
+                fb[(size_t)k * n_mels + m] = w;
+        }
+    }
+    return fb;
+}
+
 } // namespace core_mel
