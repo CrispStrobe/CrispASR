@@ -328,12 +328,19 @@ struct KvSelfAttnParams {
 // n_past=B; the dynamic-index path makes the destination a runtime input. Pass
 // the same `positions` tensor that's already populated with [n_past, n_past+T)
 // for RoPE — the indices required for set_rows are bit-equivalent.
+//
+// q_b/k_b/v_b/o_b: optional projection biases. Qwen2 (mimo-asr LM) sets
+// `attention_bias=true` and ships per-layer Q/K/V biases; Qwen3 / Llama /
+// granite / voxtral / gemma4 do not. Default nullptr keeps the graph
+// bit-identical for those callers.
 static inline ggml_tensor* kv_self_attn(ggml_context* ctx0, ggml_cgraph* gf, ggml_tensor* x, ggml_tensor* q_w,
                                         ggml_tensor* k_w, ggml_tensor* v_w, ggml_tensor* o_w, ggml_tensor* q_norm_w,
                                         ggml_tensor* k_norm_w, ggml_tensor* positions, ggml_tensor* causal_mask,
                                         ggml_tensor* kv_k, ggml_tensor* kv_v, int il, int n_past,
                                         const KvSelfAttnParams& p, ggml_tensor* qkv_w = nullptr, int fixed_kv_len = 0,
-                                        ggml_tensor* kv_indices = nullptr) {
+                                        ggml_tensor* kv_indices = nullptr, ggml_tensor* q_b = nullptr,
+                                        ggml_tensor* k_b = nullptr, ggml_tensor* v_b = nullptr,
+                                        ggml_tensor* o_b = nullptr) {
     const int hd = p.head_dim;
     const int n_q = p.n_heads;
     const int n_kv = p.n_kv_heads;
@@ -369,6 +376,15 @@ static inline ggml_tensor* kv_self_attn(ggml_context* ctx0, ggml_cgraph* gf, ggm
         K = ggml_mul_mat(ctx0, k_w, x);
         V = ggml_mul_mat(ctx0, v_w, x);
     }
+
+    // Optional Q/K/V projection biases (Qwen2). Applied before reshape so
+    // the bias broadcasts along the time dim; q_b/k_b/v_b are 1D.
+    if (q_b)
+        Q = ggml_add(ctx0, Q, q_b);
+    if (k_b)
+        K = ggml_add(ctx0, K, k_b);
+    if (v_b)
+        V = ggml_add(ctx0, V, v_b);
 
     Q = ggml_reshape_3d(ctx0, Q, hd, n_q, T);
     K = ggml_reshape_3d(ctx0, K, hd, n_kv, T);
@@ -460,7 +476,10 @@ static inline ggml_tensor* kv_self_attn(ggml_context* ctx0, ggml_cgraph* gf, ggm
                                             /*logit_softcap*/ 0.0f);
     attn = ggml_reshape_2d(ctx0, attn, hd * n_q, T);
 
-    return ggml_mul_mat(ctx0, o_w, attn);
+    ggml_tensor* out = ggml_mul_mat(ctx0, o_w, attn);
+    if (o_b)
+        out = ggml_add(ctx0, out, o_b);
+    return out;
 }
 
 } // namespace core_attn
