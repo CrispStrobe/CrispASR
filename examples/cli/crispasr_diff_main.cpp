@@ -44,6 +44,7 @@
 #include "canary.h"
 #include "cohere.h"
 #include "gemma4_e2b.h"
+#include "mimo_asr.h"
 #include "mimo_tokenizer.h"
 
 #include "common-crispasr.h"
@@ -446,7 +447,7 @@ int main(int argc, char** argv) {
                 "  backend       one of: voxtral, voxtral4b, qwen3, qwen3-tts, qwen3-tts-codec, kokoro, granite, "
                 "granite-4.1, "
                 "granite-nle, parakeet, "
-                "canary, cohere, gemma4, mimo-tokenizer\n"
+                "canary, cohere, gemma4, mimo-tokenizer, mimo-asr\n"
                 "  model.gguf    crispasr-compatible model weights\n"
                 "  reference.gguf  archive produced by tools/dump_reference.py\n"
                 "  audio.wav     16 kHz mono WAV\n",
@@ -1187,6 +1188,75 @@ int main(int argc, char** argv) {
         }
         mimo_tokenizer_free(ctx);
 
+    } else if (backend_name == "mimo-asr") {
+        // MiMo-V2.5-ASR LM-half: pulls input_ids from the ref GGUF (the
+        // Python dumper saved the full [9, T_total] prompt under
+        // `prefill_input_ids` as F32). Casts to int32 and runs the C++
+        // prefill graph stage-by-stage. The audio tokenizer GGUF path is
+        // optional for the diff harness — the ref input_ids already
+        // capture the codes the Python tokenizer produced, and the C++
+        // LM-half graph reads them directly. Set MIMO_TOKENIZER_GGUF to
+        // also exercise the codes-side bit-equality check.
+        auto cp = mimo_asr_context_default_params();
+        cp.n_threads = 4;
+        cp.verbosity = 0;
+        cp.use_gpu = std::getenv("MIMO_ASR_GPU") != nullptr;
+        mimo_asr_context* ctx = mimo_asr_init_from_file(model_path.c_str(), cp);
+        if (!ctx) {
+            fprintf(stderr, "failed to load mimo-asr model '%s'\n", model_path.c_str());
+            return 4;
+        }
+
+        // Pull the [9, T_total] input_ids tensor from the ref archive.
+        auto ids_pair = ref.get_f32("prefill_input_ids");
+        auto ids_shape = ref.shape("prefill_input_ids");
+        if (!ids_pair.first || ids_shape.empty()) {
+            fprintf(stderr, "mimo-asr: ref archive missing 'prefill_input_ids' — re-dump with the mimo-asr backend\n");
+            mimo_asr_free(ctx);
+            return 4;
+        }
+        // Shape is [9, T_total] (gguf row-major == ne=[T_total, 9] in ggml's
+        // column-major ne convention). The dumper writes via
+        // `out["prefill_input_ids"] = input_ids.detach().cpu().numpy().astype(int32).astype(float32)`
+        // where input_ids is shape [9, T_total]. Numpy default order is C,
+        // so the data lays out as 9 rows × T_total cols row-major. GGUF
+        // stores ne[0]=T_total, ne[1]=9, which matches what we read here.
+        const int T_total = (int)ids_shape[0];
+        const int n_chan = ids_shape.size() >= 2 ? (int)ids_shape[1] : 9;
+        if (n_chan != 9) {
+            fprintf(stderr, "mimo-asr: prefill_input_ids has %d channels, expected 9\n", n_chan);
+            mimo_asr_free(ctx);
+            return 4;
+        }
+        std::vector<int32_t> input_ids((size_t)9 * T_total);
+        for (size_t i = 0; i < input_ids.size(); i++) {
+            input_ids[i] = (int32_t)std::lround(ids_pair.first[i]);
+        }
+
+        // Stage list matches DEFAULT_STAGES in tools/reference_backends/mimo_asr.py
+        // (skipping the ones that require running the wrapper.asr_sft like
+        // generated_text — those are handled separately).
+        static const char* stages[] = {
+            "prefill_audio_features",
+            "prefill_inputs_embeds",
+            "prefill_last_hidden",
+            "prefill_text_logits_step0",
+        };
+        for (const char* stage : stages) {
+            int n_stage = 0;
+            float* our_data = mimo_asr_extract_stage(ctx, input_ids.data(), T_total, stage, &n_stage);
+            if (!our_data) {
+                printf("[ERR ] %-26s  extract returned null\n", stage);
+                n_fail++;
+                continue;
+            }
+            auto rep = ref.compare(stage, our_data, (size_t)n_stage);
+            print_row(stage, rep, COS_THRESHOLD);
+            record(rep);
+            free(our_data);
+        }
+        mimo_asr_free(ctx);
+
     } else if (backend_name == "granite" || backend_name == "granite-4.1") {
         auto cp = granite_speech_context_default_params();
         cp.n_threads = 4;
@@ -1616,7 +1686,7 @@ int main(int argc, char** argv) {
         fprintf(stderr,
                 "crispasr-diff: backend '%s' is not recognised. "
                 "Supported: voxtral, voxtral4b, qwen3, qwen3-tts, qwen3-tts-codec, kokoro, granite, granite-4.1, "
-                "granite-nle, parakeet, canary, cohere, gemma4.\n",
+                "granite-nle, parakeet, canary, cohere, gemma4, mimo-tokenizer, mimo-asr.\n",
                 backend_name.c_str());
         return 5;
     }

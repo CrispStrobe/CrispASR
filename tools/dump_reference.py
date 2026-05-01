@@ -129,6 +129,10 @@ REGISTERED_BACKENDS: Dict[str, str] = {
     # model_dir = the MiMo-Audio-Tokenizer HF snapshot. 16 kHz mono PCM is
     # resampled to 24 kHz internally.
     "mimo-tokenizer": "reference_backends.mimo_tokenizer",
+    # MiMo-V2.5-ASR LM-half: input_local_transformer + 36L Qwen2 LLM.
+    # model_dir = the MiMo-V2.5-ASR HF snapshot. The audio-tokenizer path
+    # is read from MIMO_TOKENIZER_DIR (or auto-derived from a sibling dir).
+    "mimo-asr":   "reference_backends.mimo_asr",
     # Kokoro / StyleTTS2 (iSTFTNet). Text-driven; the audio arg is a
     # placeholder. Phonemes + voice come from KOKORO_PHONEMES / KOKORO_VOICE
     # env vars (see reference_backends/kokoro.py for the full list).

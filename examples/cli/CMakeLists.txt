@@ -143,6 +143,7 @@ target_link_libraries(crispasr-diff PRIVATE
     kokoro
     gemma4_e2b
     mimo_tokenizer
+    mimo_asr
     crispasr-diff-lib
     ${FFMPEG_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}

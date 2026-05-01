@@ -47,6 +47,42 @@ voice-pack split, conv_post exp/sin, etc.).
 
 ---
 
+## Kokoro multilingual phonemizer (espeak-ng) **[next]**
+
+Full plan: `PLAN.md` → §56. Lessons: `LEARNINGS.md` "Kokoro phonemizer:
+libespeak-ng vs popen divergence".
+
+Replaces the popen("espeak-ng …") shell-out with an in-process
+`libespeak-ng` call (behind CMake AUTO probe) while keeping popen as a
+runtime fallback. Adds a 1024-entry LRU phoneme cache and routes the
+CLI's `-l/--language` flag to `cp.espeak_lang`.
+
+**Done this session** (uncommitted):
+- `src/CMakeLists.txt` — `CRISPASR_WITH_ESPEAK_NG` cache string
+  (AUTO/ON/OFF, default AUTO; pkg-config first, Homebrew/Linux
+  fallback).
+- `src/kokoro.cpp` — `kokoro_phoneme_cache` (bounded LRU, mutex),
+  `phonemize_espeak_lib()` (gated on `CRISPASR_HAVE_ESPEAK_NG`,
+  process-global mutex, sticky init/voice, `CRISPASR_ESPEAK_DATA_PATH`
+  override), `phonemize_popen()` (kept as fallback),
+  `phonemize_cached()` (cache → lib → popen).
+- `src/kokoro.h` — docstring updates.
+- `examples/cli/crispasr_backend_kokoro.cpp` — `-l/--language` →
+  `cp.espeak_lang`.
+- Build: `otool -L libcrispasr.dylib` shows `libespeak-ng.1.dylib`;
+  `nm libkokoro.a` has `espeak_{Initialize,SetVoiceByName,
+  TextToPhonemes}` references.
+
+**Open:**
+1. End-to-end synth check — blocked on a `kokoro-82m.gguf` under
+   `/Volumes/backups/ai/crispasr-models/` or `~/.cache/crispasr/`
+   (neither has one today).
+2. `crispasr-diff kokoro` reference backend covering the
+   phonemizer step too.
+3. Optional `kokoro_phoneme_cache_clear()` C ABI.
+
+---
+
 ## Qwen3-TTS CLI/wrapper integration **[next]**
 
 Bring qwen3-tts up to feature parity with vibevoice's `--tts` mode and
@@ -216,37 +252,83 @@ direction; do not interleave.
   written and re-upload the four GGUFs.
 
   **What's left for the runtime (in order):**
-  1. **Bind tensors** into a typed model struct (mirror qwen3_asr):
-     LM = 36×{q,k,v,o weights + q,k,v biases + ffn_{gate,up,down,_norm}
-     + attn_norm}, embed/final_norm/lm_head; audio = 6× same set at
-     1024d, plus speech_embeddings ×8 + group_proj + audio.norm.
-     `audio.hidden_proj` is loaded but unused by ASR.
-  2. **Input local transformer** (audio path): 6L bidirectional Qwen2
-     (hidden=1024, 64 heads × head_dim=16, intermediate=4096, full RoPE
-     θ=640000) over group_size=4 sequences; no KV cache (each call is
-     independent). speech_embeddings sum (mask zero rows where channel
-     code == speech_zeroemb_idx) → input_local_transformer →
-     speech_group_downcast (1024×4 → 4096) → text-channel mask, add to
-     Qwen2 token embed for text positions.
-  3. **LM forward** (prefill + decode): 36L Qwen2 via the new biased
-     `kv_self_attn`. Each step advances by 1 along the group axis.
-     Greedy argmax on text logits at last group position; stop on
-     `<|im_end|>` or `eos_token_id`; skip `<|empty|>` / `<|eot|>` /
-     `<|eostm|>` in the output.
-  4. **Prompt construction**: `<|im_start|>user\n` + audio (T_audio_groups
-     of `<|empty|>` text + 8-channel codes) + ASR template +
-     `<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n<english>`.
-     Blocked on (4) above (BPE merges).
-  5. **Python ref dumper for LM half** (`tools/reference_backends/
-     mimo_asr.py`): the 14 GB LM safetensors are at
-     `/Volumes/backups/ai/huggingface-hub/models--XiaomiMiMo--MiMo-V2.5-ASR/`
-     — already downloaded. Stages: `prefill_audio_features`,
-     `prefill_inputs_embeds`, `prefill_last_hidden`,
-     `prefill_text_logits_step0`. Cos ≥ 0.999 gate per existing
-     methodology.
-  6. **Diff harness branch** for `mimo-asr` (pattern after the qwen3-tts
-     code-pred block — multi-stage extract).
-  7. **End-to-end JFK test** once the above gates are green.
+  1. ~~**Bind tensors**~~ **DONE** — typed `mimo_asr_qwen2_block` /
+     `audio_tower` / `llm` populated after weight load with require()-
+     or-fail per tensor. LM at `model.layers.{0..35}.*`, audio at
+     `audio.blk.{0..5}.*` + `audio.emb.{0..7}` + `audio.group_proj` +
+     `audio.norm`. `llm.blk.*` / `llm.codebook_head.*` / `llm.norm.*` /
+     `audio.hidden_proj` ignored as TTS-direction junk for ASR.
+  2. ~~**Input local transformer**~~ **DONE** — 6L bidirectional Qwen2
+     built per-group (gs=4 along T, T_groups along batch dim) in
+     `build_input_local_block`. Biased Q/K/V matmul + RoPE θ=640000 on
+     each layer's 4-position window + `flash_attn_ext` with no mask
+     (full attention within each group). 6 layers chained then
+     `audio.norm` RMSNorm.
+  3. ~~**_prepare_input_embeds**~~ **DONE** — per-channel
+     `ggml_get_rows` lookup of speech_embeddings, masked by precomputed
+     "(text==empty AND code!=zeroemb_idx)" gate, summed across 8
+     channels. Reshape to `[ad, gs, T_groups]`, run input_local
+     transformer, reshape to `[ad*gs, T_groups]`, group_proj matmul to
+     `[llm_hidden, T_groups]`, mask non-speech positions, add to
+     text_embeds (zero where text==empty). Captured as
+     `prefill_audio_features` (post group_proj+mask) and
+     `prefill_inputs_embeds` (final LM input).
+  4. ~~**LM forward (prefill)**~~ **DONE** — full 36L Qwen2 with biased
+     Q/K/V via `core_attn::kv_self_attn(..., q_b/k_b/v_b)`. KV cache
+     allocated lazily on first prefill via `mimo_asr_kv_init` (F16,
+     hd*max_ctx*n_kv*36 layers). Final RMSNorm + lm_head on the last
+     position only — captured as `prefill_last_hidden` and
+     `prefill_text_logits_step0`. Decode (T=1) reuses the same builder
+     with n_past advance, but the actual decode loop is not wired yet.
+  5. ~~**Python ref dumper for LM half**~~ **DONE** —
+     `tools/reference_backends/mimo_asr.py`, registered in
+     `tools/dump_reference.py`. Mirrors `MimoAudio.preprocess_input` +
+     `_prepare_input_embeds` + `model.model(...)` + `lm_head` exactly.
+     Pinned to `asr_en_templates[0]` for determinism; force-CPU+fp32.
+     Captures the 4 prefill stages plus `prefill_input_ids` (so the
+     C++ harness reads the same tokenized prompt the ref ran on).
+  6. ~~**Diff harness branch**~~ **DONE** — `mimo-asr` branch in
+     `examples/cli/crispasr_diff_main.cpp`. Reads `prefill_input_ids`
+     from the ref archive, casts F32→I32, runs each of the 4 stages
+     via `mimo_asr_extract_stage`, compares cos against the ref.
+
+  **What's left:**
+  7. **First ref dump + diff** to validate the cos≥0.999 gate across
+     all 4 stages on jfk.wav. If anything's off, debug per-stage (the
+     audio path → LM input → LM body → logits ladder is exactly the
+     order to bisect). Command sketch:
+     ```
+     HF_HOME=/Volumes/backups/ai/huggingface-hub \
+     HUGGINGFACE_HUB_CACHE=/Volumes/backups/ai/huggingface-hub \
+     MIMO_ASR_DIR=/Volumes/backups/ai/huggingface-hub/models--XiaomiMiMo--MiMo-V2.5-ASR/snapshots/<hash> \
+     MIMO_TOKENIZER_DIR=/Volumes/backups/ai/huggingface-hub/models--XiaomiMiMo--MiMo-Audio-Tokenizer/snapshots/<hash> \
+     python tools/dump_reference.py --backend mimo-asr \
+       --model-dir <unused-but-required> --audio samples/jfk.wav \
+       --output /tmp/mimo-asr-ref.gguf
+     build/bin/crispasr-diff mimo-asr \
+       /Volumes/backups/ai/crispasr-models/mimo/mimo-asr-q4_k.gguf \
+       /tmp/mimo-asr-ref.gguf samples/jfk.wav
+     ```
+  8. **Decode loop + prompt construction** (C++ side). Build the
+     asr_sft prompt input_ids in C++ (BPE encode chat template +
+     splice audio codes) and run greedy decode. Reuses the prefill
+     graph builder with T=1 and advancing n_past. Stop on `<|im_end|>`
+     or `eos_token_id`; skip `<|empty|>` / `<|eot|>` / `<|eostm|>` in
+     the output.
+     **Blocked on reconverting the GGUF with merges** — the existing
+     `mimo-asr-q4_k.gguf` has `tokenizer.ggml.tokens` but no
+     `tokenizer.ggml.merges` (the converter was fixed in commit
+     2191a70 but the GGUF wasn't regenerated). Without merges,
+     `core_bpe::tokenize_simple` can only resolve complete-token
+     vocab lookups and falls back to per-byte for sub-words, which
+     won't match the upstream tokenizer's BPE merges.
+  9. **Reconvert F16 + Q4_K** (cautious — last session ran into OOM).
+     Skip Q8_0 / Q4_K_M for now; only Q4_K is needed for the e2e test.
+     Safetensors at `/Volumes/backups/ai/huggingface-hub/models--XiaomiMiMo--MiMo-V2.5-ASR/`.
+     Re-upload to `cstr/mimo-asr-GGUF`.
+  10. **End-to-end JFK test**: `crispasr --backend mimo-asr -f
+      samples/jfk.wav` should produce roughly "And so, my fellow
+      Americans, ask not what your country can do for you...".
 
   Upstream Python source for reference is at
   `ref/mimo/github/src/mimo_audio_tokenizer/` and
