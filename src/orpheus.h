@@ -33,7 +33,7 @@ struct orpheus_context_params {
     int n_threads;
     int verbosity; // 0=silent, 1=normal, 2=verbose
     bool use_gpu;
-    float temperature;   // 0 = greedy
+    float temperature;    // 0 = greedy
     int max_audio_tokens; // upper bound on AR decode steps; 0 = use built-in default (8192)
 };
 

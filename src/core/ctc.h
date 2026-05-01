@@ -54,9 +54,8 @@ static inline int num_windows_for(int T_in, int pool_window) {
 //                 Caller sizes the buffer.
 //
 // Returns num_windows.
-static inline int posterior_weighted_pool(const float* hidden, const float* importance,
-                                          int T_in, int d, int pool_window,
-                                          float* out) {
+static inline int posterior_weighted_pool(const float* hidden, const float* importance, int T_in, int d,
+                                          int pool_window, float* out) {
     const int pad_len = (pool_window - T_in % pool_window) % pool_window;
     const int T_pad = T_in + pad_len;
     const int num_windows = T_pad / pool_window;
@@ -95,8 +94,8 @@ static inline int posterior_weighted_pool(const float* hidden, const float* impo
 //              are already LM-aligned.
 //
 // Returns the decoded id sequence (may be empty).
-static inline std::vector<int32_t> greedy_decode_with_blank(const float* logits, int T, int V,
-                                                            int blank_id, int shift) {
+static inline std::vector<int32_t> greedy_decode_with_blank(const float* logits, int T, int V, int blank_id,
+                                                            int shift) {
     std::vector<int32_t> argmax((size_t)T);
     for (int t = 0; t < T; t++) {
         const float* row = logits + (size_t)t * V;

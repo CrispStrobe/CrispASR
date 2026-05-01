@@ -36,10 +36,8 @@ namespace core_conformer_ibm {
 //
 //   x   : (d, T) F32, row-major
 //   out : (d, T) F32
-static inline bool run_ffn(std::vector<uint8_t>& compute_meta, ggml_backend_sched_t sched,
-                           float* out, const float* x, int d, int T,
-                           ggml_tensor* norm_w, ggml_tensor* norm_b,
-                           ggml_tensor* up_w, ggml_tensor* up_b,
+static inline bool run_ffn(std::vector<uint8_t>& compute_meta, ggml_backend_sched_t sched, float* out, const float* x,
+                           int d, int T, ggml_tensor* norm_w, ggml_tensor* norm_b, ggml_tensor* up_w, ggml_tensor* up_b,
                            ggml_tensor* down_w, ggml_tensor* down_b) {
     ggml_init_params ip = {compute_meta.size(), compute_meta.data(), true};
     ggml_context* ctx0 = ggml_init(ip);
@@ -85,11 +83,10 @@ static inline bool run_ffn(std::vector<uint8_t>& compute_meta, ggml_backend_sche
 //   W_b    : (d_in, d_out_b) GGUF tensor
 //   out_a  : (d_out_a, T) F32
 //   out_b  : (d_out_b, T) F32
-static inline bool run_norm_matmul_pair(std::vector<uint8_t>& compute_meta, ggml_backend_sched_t sched,
-                                        float* out_a, ggml_tensor* W_a, int d_out_a,
-                                        float* out_b, ggml_tensor* W_b, int d_out_b,
-                                        const float* x, int d_in, int T,
-                                        ggml_tensor* norm_w, ggml_tensor* norm_b, float eps) {
+static inline bool run_norm_matmul_pair(std::vector<uint8_t>& compute_meta, ggml_backend_sched_t sched, float* out_a,
+                                        ggml_tensor* W_a, int d_out_a, float* out_b, ggml_tensor* W_b, int d_out_b,
+                                        const float* x, int d_in, int T, ggml_tensor* norm_w, ggml_tensor* norm_b,
+                                        float eps) {
     ggml_init_params ip = {compute_meta.size(), compute_meta.data(), true};
     ggml_context* ctx0 = ggml_init(ip);
     ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 64, false);
@@ -140,13 +137,10 @@ static inline bool run_norm_matmul_pair(std::vector<uint8_t>& compute_meta, ggml
 // Tensors are passed individually so the helper has no dependency on
 // the caller's per-block struct shape (granite_enc_block vs
 // granite_nle_enc_block — same fields but distinct types).
-static inline bool run_conv_module(std::vector<uint8_t>& compute_meta, ggml_backend_sched_t sched,
-                                   float* out, const float* x, int d, int T,
-                                   ggml_tensor* norm_w, ggml_tensor* norm_b,
-                                   ggml_tensor* up_w, ggml_tensor* up_b,
-                                   ggml_tensor* dw_w,
-                                   ggml_tensor* bn_w, ggml_tensor* bn_b,
-                                   ggml_tensor* down_w, ggml_tensor* down_b) {
+static inline bool run_conv_module(std::vector<uint8_t>& compute_meta, ggml_backend_sched_t sched, float* out,
+                                   const float* x, int d, int T, ggml_tensor* norm_w, ggml_tensor* norm_b,
+                                   ggml_tensor* up_w, ggml_tensor* up_b, ggml_tensor* dw_w, ggml_tensor* bn_w,
+                                   ggml_tensor* bn_b, ggml_tensor* down_w, ggml_tensor* down_b) {
     const int inner = d * 2;
     ggml_init_params ip = {compute_meta.size(), compute_meta.data(), true};
     ggml_context* ctx0 = ggml_init(ip);
@@ -226,11 +220,9 @@ static inline bool run_conv_module(std::vector<uint8_t>& compute_meta, ggml_back
 //   rpe       : (ctx_size, ctx_size, hd) precomputed lookup, or nullptr
 //               (granite-nle's per-layer table may be empty if the
 //               layer's attn_rel_pos_w had an unsupported quant type)
-static inline void shaw_block_attention_cpu(float* out,
-                                            const float* Q_data, const float* K_data, const float* V_data,
-                                            const float* rpe,
-                                            int T, int n_heads, int hd, int ctx_size,
-                                            float scale, int remainder) {
+static inline void shaw_block_attention_cpu(float* out, const float* Q_data, const float* K_data, const float* V_data,
+                                            const float* rpe, int T, int n_heads, int hd, int ctx_size, float scale,
+                                            int remainder) {
     const int d = n_heads * hd;
     const int n_blocks = (T + ctx_size - 1) / ctx_size;
 

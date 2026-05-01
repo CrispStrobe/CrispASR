@@ -252,4 +252,4 @@ static inline ggml_cgraph* build_block(std::vector<uint8_t>& compute_meta, const
     return gf;
 }
 
-}  // namespace core_qformer
+} // namespace core_qformer

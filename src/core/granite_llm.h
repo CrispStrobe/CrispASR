@@ -57,10 +57,9 @@ struct LayerWeights {
 // Non-causal flash attention, no KV cache. Mirrors `nle_llm_attn_noncausal`:
 // flash_attn_ext over the full (T, T) tile with mask=nullptr; native GQA
 // expansion is handled by flash. Used by granite-nle's editing pass.
-static inline ggml_tensor* attn_noncausal(ggml_context* ctx0, ggml_tensor* x,
-                                          const LayerWeights& b, ggml_tensor* positions,
-                                          int n_q, int n_kv, int hd,
-                                          float rope_theta, float attn_scale) {
+static inline ggml_tensor* attn_noncausal(ggml_context* ctx0, ggml_tensor* x, const LayerWeights& b,
+                                          ggml_tensor* positions, int n_q, int n_kv, int hd, float rope_theta,
+                                          float attn_scale) {
     const int T = (int)x->ne[1];
 
     ggml_tensor* Q = ggml_mul_mat(ctx0, b.attn_q_w, x);
@@ -104,11 +103,10 @@ static inline ggml_tensor* attn_noncausal(ggml_context* ctx0, ggml_tensor* x,
 //
 // Returns the post-final-RMSNorm hidden tensor (d, T). Caller is responsible
 // for slicing + applying its LM head + any logits scaling.
-static inline ggml_tensor* build_decoder(ggml_context* ctx0, ggml_cgraph* gf,
-                                         ggml_tensor* inputs_embeds, ggml_tensor* positions,
-                                         ggml_tensor* causal_mask, ggml_tensor* kv_k, ggml_tensor* kv_v, int n_past,
-                                         const std::vector<LayerWeights>& blocks, ggml_tensor* output_norm_w,
-                                         const Hparams& hp, bool is_causal) {
+static inline ggml_tensor* build_decoder(ggml_context* ctx0, ggml_cgraph* gf, ggml_tensor* inputs_embeds,
+                                         ggml_tensor* positions, ggml_tensor* causal_mask, ggml_tensor* kv_k,
+                                         ggml_tensor* kv_v, int n_past, const std::vector<LayerWeights>& blocks,
+                                         ggml_tensor* output_norm_w, const Hparams& hp, bool is_causal) {
     const int n_q = hp.n_heads;
     const int n_kv = hp.n_kv_heads;
     const int hd = hp.head_dim;
@@ -159,4 +157,4 @@ static inline ggml_tensor* build_decoder(ggml_context* ctx0, ggml_cgraph* gf,
     return cur;
 }
 
-}  // namespace core_granite_llm
+} // namespace core_granite_llm
