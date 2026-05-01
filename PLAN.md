@@ -25,7 +25,7 @@ All backends support `-m auto --auto-download`. Three new ggml ops
 | **LOW** | [#7 voxtral4b streaming](#7-native-voxtral4b-streaming) | High | |
 | **LOW** | [#9 Parakeet TDT GPU](#9-parakeet-tdt-decoder-gpu) | Medium | |
 | **LOW** | [#11 WebSocket server](#11-websocket-streaming-server) | High | |
-| **LOW** | [#16 Shaw RPE](#16-shaw-rpe-for-granite-graph) | Medium | |
+| **MEDIUM** | [#16 Shaw RPE](#16-shaw-rpe-for-granite-graph) | Medium | unblocks `GRANITE_ENCODER_GRAPH=1` as default → ~4× encoder, ~2× total realtime |
 | **BLOCKED** | [#42 VibeVoice-ASR 7B](#42-vibevoice-asr-7b) | High | Needs ≥16 GB RAM |
 | **BLOCKED** | [#43 Fun-ASR-Nano](#43-fun-asr-nano) | Medium | License unclear |
 
@@ -105,11 +105,72 @@ support WebSocket — need custom protocol or library.
 
 ## 16. Shaw RPE for granite graph
 
-Add query-dependent Shaw RPE to granite ggml encoder graph (currently
-uses flash_attn_ext without RPE). Manual attention: QK^T + RPE bias +
-softmax + V matmul.
+Today the encoder runs as ~96 small ggml graphs (one per matmul / per
+layer) dispatched serially through `ggml_backend_sched`. With Metal
+each dispatch is a full command-buffer round-trip — encoder time
+dominates at ~3.6 s of a ~5 s total on M1 + Q4_K. The opt-in
+`GRANITE_ENCODER_GRAPH=1` path builds the whole 16-layer encoder as
+ONE graph; numbers from LEARNINGS:
 
-**Effort:** ~80 LOC.
+| Path                       | run_encoder | total      | realtime |
+|----------------------------|------------:|-----------:|---------:|
+| CPU loops (default)        |  12,624 ms  |  19.6 s    | 0.6×     |
+| `GRANITE_ENCODER_GRAPH=1`  |   3,110 ms  |   7.55 s   | **1.5×** |
+
+It's not the default because the graph path uses
+`ggml_flash_attn_ext`, which can't ingest a Q-dependent additive
+bias — so Shaw RPE is silently omitted and encoder output drifts
+from the CPU path. Accuracy on JFK is fine; harder material (long
+context, dense overlap) likely degrades.
+
+### Two viable approaches
+
+**Option A — flash-attn with Q-dependent bias.** Compute the
+`Q · RPE` term inside the graph (each Q row vs each precomputed
+per-position embedding row → a (T, ctx_size, hd) tensor reduced to
+(T, ctx_size) per head), feed it to `flash_attn_ext`'s mask slot as
+an additive bias. Keeps flash-attn's I/O fusion. Tricky because the
+mask slot is currently F16 and broadcastable but not per-Q-vector;
+needs either a flash-attn op extension or a manual `mul_mat`-then-
+softmax-then-`mul_mat` chain in place of flash-attn.
+
+**Option B — block-attention via per-block subgraphs (preferred for
+the prototype).** Reuse the same windowed-dispatch pattern the
+projector already uses (`ctx_size=200`, ceil(T/200) blocks). Per
+block per layer, build a small graph that does:
+
+  scores = Q · K^T  +  Q · RPE_block      // (block_len × block_len)
+  attn   = softmax(scores · attn_scale) · V
+
+The RPE bias is precomputed once per layer at load time
+(`core_conformer_ibm::build_shaw_rpe_lookup`, already lifted) and fed
+in as a static F32 input tensor. No flash-attn fusion, but the Q/K/V
+projections, ffn1/ffn2, conv module, and Shaw scoring all live in
+one graph per block per layer — still ~16× fewer dispatches than the
+current per-op path. Math is bit-identical to the CPU loop.
+
+### Plan
+
+1. Land the prototype gated by a new env var
+   `GRANITE_ENCODER_GRAPH_RPE=1` (sibling of `GRANITE_ENCODER_GRAPH`).
+   Keeps the existing approximate path available for A/B comparison.
+2. Validate end-to-end on JFK: transcripts must match the CPU path
+   byte-for-byte; `crispasr-diff granite-speech` cosine numbers must
+   stay ≥ 0.99 (the existing CPU baseline).
+3. Once green, promote `GRANITE_ENCODER_GRAPH_RPE=1` to default and
+   retire `GRANITE_ENCODER_GRAPH` (the approximate path).
+4. Keep `GRANITE_DISABLE_ENCODER_GRAPH=1` as the escape hatch back to
+   CPU loops (slower but bit-identical to today's behaviour).
+
+**Effort:** ~150–250 LOC in `granite_run_encoder_graph` (granite_speech)
+plus one mirror in granite_nle. Most of the per-layer Shaw RPE
+plumbing is already shared via `core/conformer_ibm.h` after PLAN #55
+step 3, so the lift can stay small.
+
+**Validation gate (per the methodology in LEARNINGS):** stage-by-stage
+diff, encoder_layer_K cos_min ≥ 0.999 against the Python reference
+on JFK. The approximate path's drift is what we're fixing; the new
+path must be bit-identical to the CPU loop.
 
 ---
 

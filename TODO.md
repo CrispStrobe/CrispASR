@@ -860,12 +860,20 @@ each backend. High-value gaps to close:
   frames → `run_llm_editing` → per-row argmax + uniq + drop EOS +
   detokenize. JFK end-to-end output matches reference `final_text`
   exactly via `crispasr-diff granite-nle ... transcribe` PASS.
-- **[later] Shaw RPE in graph path — make graph path the default.**
+- **[next] Shaw RPE in graph path — prototype via per-block subgraphs.**
   `GRANITE_ENCODER_GRAPH=1` runs the encoder as a single Metal-accel
-  graph (used to be 4× faster than the CPU loop; norm+QKV fusion has
-  closed most of that gap). Still missing: query-dependent Shaw RPE
-  bias. flash_attn_ext can't handle it; needs manual `Q@K.T + Q@R.T`
-  attention. Once added, drop the CPU loop entirely.
+  graph at ~4× the CPU-loop speed but silently drops Shaw RPE
+  (flash_attn_ext can't ingest a Q-dependent additive bias). Fixing
+  that = enabling the 4× encoder speedup as default → ~2× total
+  realtime on M1+Q4_K. **Approach (option B per PLAN #16):**
+  per-block subgraph mirroring the projector's windowed dispatch
+  (`ctx_size=200` blocks). Per block per layer, do
+  `scores = Q·K^T + Q·RPE_block`, `softmax`, then `·V` — RPE bias
+  precomputed at load time via the now-shared
+  `core_conformer_ibm::build_shaw_rpe_lookup`. Math bit-identical to
+  the CPU loop. Gated for first landing by a new env var
+  `GRANITE_ENCODER_GRAPH_RPE=1`; promote to default after JFK +
+  diff-harness validation. Full plan in PLAN #16.
 - **[done] NAR HF upload — F16 + 3× Q4_K.** All four GGUFs published
   to [`cstr/granite-speech-4.1-2b-nar-GGUF`](https://huggingface.co/cstr/granite-speech-4.1-2b-nar-GGUF):
   F16 (5.4 GB), Q4_K (3.2 GB; encoder F32, recommended), Q4_K-f16enc

@@ -1029,6 +1029,44 @@ This patch must be re-applied after every ggml version bump. It's marked
 with a `CrispASR patch` comment in the file. First applied in commit
 `1552434`, lost in the 0.9.8→0.10.0 bump, re-applied in the current fix.
 
+### F16 vec_dot accumulator overflow on ARM NEON FP16 (MUST RE-APPLY after every ggml bump)
+
+ggml-cpu's `ggml_vec_dot_f16` uses an **F16 accumulator** when
+`__ARM_FEATURE_FP16_VECTOR_ARITHMETIC` is defined (Apple M1+ and most
+recent ARM cores). Path: `simd-mappings.h` line ~365 maps
+`GGML_F16_VEC_FMA → vfmaq_f16` (`float16x8_t` register, F16 multiply-
+add). For long-row matmuls (e.g. 3072-wide FFN `ffn_down`), the running
+sum exceeds F16 max (65504) and saturates to ±Inf even when the final
+F32 reduction would have been a normal small number. The Inf then
+propagates through the next layer's RMSNorm → NaN.
+
+**Symptom we hit (issue #38):** `qwen3-tts` F16 talker GGUF on CPU-only
+backend produces only noise — the code_predictor's `ffn_down` matmul at
+block 2 returns Inf for one of the T=2 prefill positions, which makes
+the next block's K projection NaN; from there `top_k_sample` argmaxes
+into garbage and the AR loop never emits `codec_eos`, running to
+the 1500-frame cap. Q8_0 talker is unaffected because Q8_0's vec_dot
+uses `float sumf = 0` (F32 scalar accumulator). Apple Metal matmul
+kernels also accumulate in F32 — that's why the bug only shows up on
+CPU and in #38 it took a while for the user (geneing) to bisect to
+"F16 fails but Q8_0 works." Same accumulator overflow likely affects
+*every* F16 GGUF run on CPU, just with model-dependent severity (longer
+FFN dims and larger activations make it more likely).
+
+**Fix (file: `ggml/src/ggml-cpu/simd-mappings.h`):** disable the
+`vfmaq_f16` path for F16 SIMD on ARM. Both the `__ARM_FEATURE_SVE` and
+`__ARM_NEON` outer arms of the file have a nested
+`#if defined(__ARM_FEATURE_FP16_VECTOR_ARITHMETIC)` block — wrap each
+in `#if 0 && defined(...)` so the compiler picks the F32-accumulator
+fallback (vcvt_f32_f16 on load + vfmaq_f32 in the inner loop). Bit-
+correct, ~2× slower per element on F16 hot paths but those rarely
+dominate end-to-end CPU runtime since FFN dims are bounded.
+
+Marked with `// CrispASR patch (issue #38)`. **MUST RE-APPLY after every
+ggml bump.** Verification: `qwen3-tts` F16 talker on `--gpu-backend cpu`
+must hit `codec_eos` for short prompts (e.g. ~50 frames for a one-line
+test sentence) instead of the 1500-frame cap.
+
 ### ggml version bumps: conv_1d_dw shape change (0.9.8 → 0.10.0)
 
 In ggml 0.9.8, `ggml_conv_1d_dw` returned `[OL, 1, channels, 1]` (4D).
@@ -4365,6 +4403,17 @@ CPU loop, attention must be implemented manually as
 `Q @ K^T + Q @ R^T → softmax → @ V` instead of via `flash_attn_ext`.
 The RPE lookup tensor (`rpe_lookup`, declared as graph input but
 unused) is the seam.
+
+**Per-block subgraph plan (May 2026, post-PLAN #55 refactor).** The
+preferred shape mirrors the projector's windowed dispatch:
+`ctx_size=200` blocks, ceil(T/200) blocks per layer, build a tiny
+graph per block per layer. RPE bias is precomputed once at load
+time (`core_conformer_ibm::build_shaw_rpe_lookup`, now shared
+between granite_speech and granite_nle after step 3). Math is
+bit-identical to the CPU loop — no flash-attn fusion, but ~16×
+fewer scheduler dispatches than the per-op CPU-loop path. First
+landing gated by `GRANITE_ENCODER_GRAPH_RPE=1`; full plan in
+PLAN.md §16.
 
 **Lesson.** A "single big graph" is almost always faster than many
 small graphs on GPU backends because the per-dispatch cost dwarfs
