@@ -623,16 +623,88 @@ so existing builds don't regress.
 
 ### Open
 
-1. **Native voices for languages outside the kokoro-82m voice pack
-   set.** Kokoro-82M ships voices only for `a/b` (en US/UK), `e`
-   (es), `f` (fr), `h` (hi), `i` (it), `j` (ja), `p` (pt), `z` (zh).
-   No `d_*` (de), no `r_*` (ru), no Korean/Arabic. Phonemization
-   works for those via espeak-ng but synth quality degrades on
-   longer utterances because the English voice (`af_heart`) is
-   off-distribution. Either (a) document this in the README + CLI
-   help, (b) auto-pick a closer-language voice when `-l` is unsupported
-   (e.g. fall back to `ff_siwis` for German), or (c) train/source a
-   German voice pack — out of scope here.
+1. **German voice pack — DE is a primary target language.** Kokoro-82M
+   ships voices only for `a/b` (en US/UK), `e` (es), `f` (fr), `h` (hi),
+   `i` (it), `j` (ja), `p` (pt), `z` (zh). No `d_*` (de), no `r_*` (ru),
+   no Korean/Arabic. Three options ordered by effort:
+
+   **Option 1 — Closer-language voice fallback (DONE measurement,
+   SHIP wiring).**
+   Tested 2026-05-01 with the same long German phrase ("Guten Tag,
+   dies ist ein Test des deutschen Phonemizers."):
+
+   | voice | peak | RMS | duration | verdict |
+   |---|---:|---:|---:|---|
+   | `af_heart` (English) |   541 |   44 | 4.08 s | silence collapse |
+   | `ff_siwis` (French)  | 20577 | 2318 | 4.22 s | healthy, French-accented |
+   | `ef_dora` (Spanish)  | 15036 | 1613 | 3.35 s | healthy, Spanish-accented |
+
+   `ff_siwis` is the strongest non-native fallback by RMS. Both are
+   converted and live at
+   `/Volumes/backups/ai/crispasr-models/kokoro-voice-{ff_siwis,ef_dora}.gguf`.
+   **Speaker timbre + prosody will sound French/Spanish, not German**
+   — the duration predictor was trained on those distributions, not
+   on German. Acceptable as a non-silence baseline; not production
+   quality.
+
+   *Wiring task* (~30 LOC): in
+   `examples/cli/crispasr_backend_kokoro.cpp`, when `-l` is one of the
+   languages without a native voice pack (de, ru, ko, ar, …) and the
+   user did not pass `--voice`, auto-select `ff_siwis` and emit one
+   warning line ("kokoro: no native voice for 'de', falling back to
+   'ff_siwis' (French speaker, French-accented prosody) — see PLAN
+   #56"). Document in README. Do **not** override an explicit
+   `--voice` argument.
+
+   **Option 2 — Community-trained German voice pack (preferred for
+   real production quality).**
+   Kokoro has an active fine-tuning community; some have published
+   German + other-language voices to HF as `.pt` style packs
+   compatible with the official `Kokoro-82M` checkpoint. Search HF
+   for tags like `kokoro german`, `kokoro-de`, `kokoro-multilingual`.
+   If found:
+   - download the `.pt`,
+   - run `models/convert-kokoro-voice-to-gguf.py --input X.pt
+     --output kokoro-voice-X.gguf` (already shape-validates [510, 1,
+     256]),
+   - drop into `/Volumes/backups/ai/crispasr-models/`,
+   - quality-check with the same long-German phrase + `python -c
+     "import wave …"` RMS gate (peak ≥ 8000, RMS ≥ 1000 = passes;
+     anything lower means the German didn't actually train well).
+
+   Quality risk: the `.pt` is just a style embedding — it doesn't
+   change the model's predictor/decoder weights. If a community
+   "voice" was extracted from German speech without any model
+   fine-tuning, the duration predictor still sees German-IPA-with-
+   English-statistics, and quality will be limited by the base model's
+   German latent capacity. Worth trying, but verify with a listening
+   test, not just RMS.
+
+   **Option 3 — Extract our own German style embedding from a
+   reference recording.**
+   Kokoro voice packs are `[max_phonemes=510, 1, 256]` style tensors,
+   produced by running a clean reference mel through the StyleEncoder
+   in StyleTTS2. Recipe:
+   1. Source a clean German speaker recording (Common Voice DE,
+      Mozilla TTS dataset, or a public-domain audiobook). Need
+      ~10 sec at 24 kHz mono.
+   2. In Python with the official `kokoro` package (or its underlying
+      `models.py`), call the StyleEncoder forward to get a
+      `[1, 1, 256]` style vector. Repeat across 510 rows (or extract
+      per-utterance-length variants if we want length-conditioned
+      style — the official voice packs vary along axis 0).
+   3. Save as a torch `.pt` matching the official voice format, then
+      run our existing converter.
+   Same caveat as option 2: the model predictor wasn't trained on
+   German duration/F0 distributions, so style alone may not unlock
+   fluent German. Test with the same RMS gate + listening pass before
+   shipping.
+
+   **Recommended order:** ship Option 1's auto-fallback wiring now
+   (it's a one-liner in the backend), then in parallel pursue Option 2
+   (search HF) — if a usable community pack exists, it's the cheapest
+   path to native quality. Option 3 is the fallback if neither of the
+   above gives acceptable results.
 2. **Mandarin tone numbers.** espeak-ng outputs digit-suffixed
    tone markers (`ni2χˈɑu2`) that aren't in the kokoro-82m IPA vocab
    (178 symbols) and likely get dropped at tokenization, losing tone
