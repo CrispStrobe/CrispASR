@@ -764,30 +764,29 @@ each backend. High-value gaps to close:
   PLUS-mini — the 4-layer hidden-state concat amplifies Q4_K rounding
   error) but still transcribes correctly because the LLM's argmax
   recovers the right token.
-- **[next] NAR — wire `granite-4.1-nar` into the main `crispasr`
-  CLI.** Today the runtime is only reachable via `crispasr-diff` and
-  the `granite_nle` library; `crispasr -m granite-4.1-nar audio.wav`
-  has no dispatch path. Required:
-  1. New `examples/cli/crispasr_backend_granite_nle.cpp` adapter
-     mirroring `crispasr_backend_granite.cpp` but calling the
-     `granite_nle_*` functions. The transcribe path is already
-     end-to-end via `granite_nle_transcribe`, so the adapter is mostly
-     plumbing: load → transcribe → free.
-  2. Backend dispatch in `src/crispasr_c_api.cpp` (3 places: init at
-     L877, list at L1104, mode-aware route at L1436) — add a
-     `s->backend == "granite-4.1-nar"` branch that routes to
-     `granite_nle_init_from_file` instead of `granite_speech_*`.
-  3. CLI registration in `examples/cli/crispasr_backend.cpp` (L52
-     and L97) — add `"granite-4.1-nar"` to the alias list.
-  4. Re-instate the registry entry in
-     `src/crispasr_model_registry.cpp` (placeholder comment marks
-     where) so `crispasr -m granite-4.1-nar` auto-downloads
-     `granite-speech-4.1-2b-nar-q4_k.gguf` on first run.
-  5. Smoke-test `./build/bin/crispasr -m granite-4.1-nar samples/jfk.wav`
-     end-to-end. The expected transcript is the same as
-     `crispasr-diff granite-nle ... transcribe`: "and so, my fellow
-     americans, ask not what your country can do for you. ask what
-     you can do for your country."
+- **[done] NAR — wire `granite-4.1-nar` into the main `crispasr` CLI**
+  (commit `2174b51`). Components:
+  1. `examples/cli/crispasr_backend_granite_nle.cpp` adapter — modelled
+     on the gemma4-e2b adapter (one-shot `granite_nle_transcribe` call),
+     not on the granite-speech adapter (which builds prompts + runs a
+     KV-cached greedy decode by hand). NAR has no AR loop, so the
+     runtime call returns the final UTF-8 transcript directly.
+  2. Backend factory + auto-detect in `examples/cli/crispasr_backend.cpp`
+     ("granite-4.1-nar" / "granite-nar" alias; arch="granite_nle"
+     auto-detect maps to "granite-4.1-nar").
+  3. Re-instated registry entry in `src/crispasr_model_registry.cpp`
+     pointing at `cstr/granite-speech-4.1-2b-nar-q4_k.gguf` (~3.2 GB).
+  4. CMake wiring in `examples/cli/CMakeLists.txt` (source list +
+     granite_nle in crispasr-cli's link libraries).
+  5. Smoke test PASS on JFK with Q4_K — output matches
+     `crispasr-diff granite-nle` transcribe stage exactly.
+
+  `src/crispasr_c_api.cpp` (the C-library API for embedding consumers,
+  separate from the CLI) is NOT yet wired — the CLI uses
+  `crispasr_create_backend` from `crispasr_backend.cpp` directly. Add
+  a `s->backend == "granite-4.1-nar"` branch in `crispasr_c_api.cpp`'s
+  init / list / dispatch sites (currently around L877, L1104, L1436)
+  if/when an external library consumer needs NAR.
 
 ### gemma4-e2b
 - **[later]** Speed — now **1.4× realtime** after the `end_of_turn`
