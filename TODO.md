@@ -718,12 +718,20 @@ each backend. High-value gaps to close:
   passes an upper-triangular mask to SDPA, defeating
   `self_attn.is_causal=False`. The upstream `flash_attention_2`
   assertion is real, not paranoia.
-- **[next] NAR variant — transcribe orchestration.** Wires encoder
-  (needs BPE auxiliary head w/ posterior-pool window=4 in run_encoder
-  populating last_bpe_logits) → BPE-CTC greedy decode → BPE detokenize
-  (GPT-2 byte-level reverse) → re-tokenize via core_bpe →
-  add_insertion_slots → run_llm_editing → argmax + uniq + drop EOS +
-  detokenize. ~200-300 LOC.
+- **[done] NAR variant — transcribe orchestration.** `run_encoder`
+  now populates `last_bpe_logits` via `posterior_weighted_pool`
+  (window=4, importance = 1 - blank_prob_mid captured at the L8
+  self-conditioning softmax) → 100353-vocab `enc.bpe_out` linear.
+  `granite_nle_transcribe` ties the full pipeline: BPE-CTC greedy
+  decode (`unique_consecutive` then drop blanks then -1 shift) →
+  `core_bpe::detokenize` (now shared with `granite_speech`; the
+  GPT-2 byte-level reverse lives in `core_bpe::token_bytes_to_utf8`)
+  → strip+lowercase+" "-fallback → `core_bpe::tokenize_simple` →
+  `add_insertion_slots` (`max(2n+1, 8)`, EOS-padded) → `run_projector`
+  with `/= embedding_multiplier=12` and slice to `enc_T // 5` audio
+  frames → `run_llm_editing` → per-row argmax + uniq + drop EOS +
+  detokenize. JFK end-to-end output matches reference `final_text`
+  exactly via `crispasr-diff granite-nle ... transcribe` PASS.
 - **[later] Shaw RPE in graph path — make graph path the default.**
   `GRANITE_ENCODER_GRAPH=1` runs the encoder as a single Metal-accel
   graph (used to be 4× faster than the CPU loop; norm+QKV fusion has

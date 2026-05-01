@@ -1270,6 +1270,33 @@ int main(int argc, char** argv) {
                 } else {
                     printf("[SKIP] editing_logits          ref missing audio_embs_for_llm/text_ids_with_slots\n");
                 }
+
+                // ---- end-to-end transcribe ----
+                // Runs the full pipeline (mel → encoder → BPE-CTC → projector
+                // → LLM editing → slot decode) from raw samples and compares
+                // against the upstream `final_text` metadata string.
+                {
+                    std::string ref_text = ref.meta("final_text");
+                    if (ref_text.empty())
+                        ref_text = ref.meta("generated_text");
+                    char* my_text = granite_nle_transcribe(ctx, samples.data(), (int)samples.size());
+                    if (my_text) {
+                        bool match = (!ref_text.empty()) && (ref_text == std::string(my_text));
+                        if (match) {
+                            printf("[PASS] transcribe              %s\n", my_text);
+                        } else if (ref_text.empty()) {
+                            printf("[INFO] transcribe              %s (no ref)\n", my_text);
+                        } else {
+                            printf("[FAIL] transcribe              cpp: %s\n", my_text);
+                            printf("                              ref: %s\n", ref_text.c_str());
+                            n_fail++;
+                        }
+                        free(my_text);
+                    } else {
+                        printf("[ERR ] transcribe              granite_nle_transcribe returned null\n");
+                        n_fail++;
+                    }
+                }
             } else {
                 printf("[ERR ] encoder_output          granite_nle_run_encoder returned null\n");
                 n_fail++;

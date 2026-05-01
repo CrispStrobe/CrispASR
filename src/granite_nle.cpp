@@ -1184,6 +1184,11 @@ extern "C" float* granite_nle_run_encoder(struct granite_nle_context* ctx, const
     const auto& want = ctx->enc_layer_indices_parsed;
     std::vector<std::vector<float>> snapshots(want.size());
 
+    // Captured at the self-conditioning layer for the BPE auxiliary head:
+    // softmax(mid_logits)[:, 0] is the per-frame blank probability, which
+    // becomes the importance weight (1 - blank_prob) for posterior_weighted_pool.
+    std::vector<float> blank_prob_mid;
+
     // Input linear: mel (160, T) → hidden (d, T)
     std::vector<float> hidden((size_t)d * T);
     nle_run_matmul(ctx, hidden.data(), mel, n_mels, T, ctx->model.encoder.input_w, ctx->model.encoder.input_b, d);
@@ -1287,6 +1292,12 @@ extern "C" float* granite_nle_run_encoder(struct granite_nle_context* ctx, const
                            ctx->model.encoder.ctc_mid_b, d);
             for (size_t i = 0; i < (size_t)d * T; i++)
                 hidden[i] += mid_back[i];
+
+            // Capture per-frame blank prob for the posterior-weighted pool
+            // used by the BPE auxiliary head after the final layer.
+            blank_prob_mid.assign(T, 0.0f);
+            for (int t = 0; t < T; t++)
+                blank_prob_mid[t] = mid_out[(size_t)t * ctc_dim + 0];
         }
 
         // Snapshot at HF tuple index il+1.
@@ -1306,15 +1317,55 @@ extern "C" float* granite_nle_run_encoder(struct granite_nle_context* ctx, const
         }
     }
 
-    // Final CTC head — cache logits for the BPE editing path. We only run
-    // the char-vocab head here; the BPE auxiliary head (out_bpe) is needed
-    // only for run_llm_editing's text-init step and is added later.
+    // Final CTC head — cache logits for the BPE editing path.
     if (ctx->model.encoder.ctc_out_w) {
         const int ctc_dim = (int)hp.enc_ctc_vocab;
         ctx->last_ctc_logits.assign((size_t)ctc_dim * T, 0.0f);
         nle_run_matmul(ctx, ctx->last_ctc_logits.data(), hidden.data(), d, T, ctx->model.encoder.ctc_out_w,
                        ctx->model.encoder.ctc_out_b, ctc_dim);
         ctx->last_ctc_T = T;
+    }
+
+    // BPE auxiliary head: posterior-weighted pool of the final hidden_states
+    // with importance = 1 - blank_prob_mid (computed at the self-conditioning
+    // layer), then linear → 100353-vocab logits. See modeling_ctc.py
+    // posterior_weighted_pool. Pad T to a multiple of pool_window with zeros;
+    // pooled rows = ceil(T / pool_window).
+    ctx->last_bpe_logits.clear();
+    ctx->last_bpe_T = 0;
+    if (ctx->model.encoder.bpe_out_w && !blank_prob_mid.empty()) {
+        const int pool_window = (int)hp.enc_bpe_pooling_window;
+        const int pad_len = (pool_window - T % pool_window) % pool_window;
+        const int T_pad = T + pad_len;
+        const int num_windows = T_pad / pool_window;
+        const int bpe_dim = (int)hp.enc_bpe_vocab;
+
+        std::vector<float> pooled((size_t)num_windows * d, 0.0f);
+        for (int w = 0; w < num_windows; w++) {
+            // Sum of importance over the window (zero for padded slots).
+            float sum_imp = 0.0f;
+            for (int j = 0; j < pool_window; j++) {
+                int t = w * pool_window + j;
+                if (t < T)
+                    sum_imp += 1.0f - blank_prob_mid[t];
+            }
+            const float denom = sum_imp + 1e-8f;
+            float* dst = pooled.data() + (size_t)w * d;
+            for (int j = 0; j < pool_window; j++) {
+                int t = w * pool_window + j;
+                if (t >= T)
+                    break;
+                const float weight = (1.0f - blank_prob_mid[t]) / denom;
+                const float* src = hidden.data() + (size_t)t * d;
+                for (int i = 0; i < d; i++)
+                    dst[i] += weight * src[i];
+            }
+        }
+
+        ctx->last_bpe_logits.assign((size_t)bpe_dim * num_windows, 0.0f);
+        nle_run_matmul(ctx, ctx->last_bpe_logits.data(), pooled.data(), d, num_windows, ctx->model.encoder.bpe_out_w,
+                       ctx->model.encoder.bpe_out_b, bpe_dim);
+        ctx->last_bpe_T = num_windows;
     }
 
     // Build the final concatenated encoder output.
@@ -1870,11 +1921,165 @@ extern "C" float* granite_nle_run_llm_editing(struct granite_nle_context* ctx, c
     return result;
 }
 
-extern "C" char* granite_nle_transcribe(struct granite_nle_context* ctx, const float* /*samples*/, int /*n_samples*/) {
-    if (!ctx)
+extern "C" char* granite_nle_transcribe(struct granite_nle_context* ctx, const float* samples, int n_samples) {
+    if (!ctx || !samples || n_samples <= 0)
         return nullptr;
-    fprintf(stderr, "granite_nle: transcribe not yet implemented\n");
-    return nullptr;
+    granite_nle_bench_stage _b("transcribe");
+
+    const auto& hp = ctx->model.hparams;
+    const int down = (int)hp.proj_downsample_rate;
+    const int eos_id = (int)hp.eos_token_id;
+
+    // 1. Mel
+    int n_mels = 0, T_mel = 0;
+    float* mel = granite_nle_compute_mel(ctx, samples, n_samples, &n_mels, &T_mel);
+    if (!mel) {
+        fprintf(stderr, "granite_nle: compute_mel failed\n");
+        return nullptr;
+    }
+
+    // 2. Encoder (also fills last_bpe_logits)
+    int enc_T = 0, enc_dim = 0;
+    float* enc_out = granite_nle_run_encoder(ctx, mel, n_mels, T_mel, &enc_T, &enc_dim);
+    free(mel);
+    if (!enc_out) {
+        fprintf(stderr, "granite_nle: encoder failed\n");
+        return nullptr;
+    }
+
+    // 3+4. BPE-CTC greedy decode → LLM token IDs.
+    // argmax → unique_consecutive → drop blanks (id 0) → shift -1.
+    std::string ctc_text;
+    {
+        const float* bpe = ctx->last_bpe_logits.data();
+        const int bpe_T = ctx->last_bpe_T;
+        const int bpe_V = (int)hp.enc_bpe_vocab;
+        std::vector<int32_t> argmax(bpe_T);
+        for (int t = 0; t < bpe_T; t++) {
+            const float* row = bpe + (size_t)t * bpe_V;
+            int best = 0;
+            float bestv = row[0];
+            for (int v = 1; v < bpe_V; v++) {
+                if (row[v] > bestv) {
+                    bestv = row[v];
+                    best = v;
+                }
+            }
+            argmax[t] = best;
+        }
+        // Upstream _decode_bpe_ctc_greedy: unique_consecutive first, then
+        // drop blanks (label 0), then shift to LLM token IDs (id - 1).
+        std::vector<int32_t> collapsed;
+        for (size_t i = 0; i < argmax.size(); i++) {
+            if (i == 0 || argmax[i] != argmax[i - 1])
+                collapsed.push_back(argmax[i]);
+        }
+        std::vector<int32_t> ids;
+        ids.reserve(collapsed.size());
+        for (int32_t id : collapsed) {
+            if (id == 0)
+                continue;
+            ids.push_back(id - 1);
+        }
+        if (!ids.empty())
+            ctc_text = core_bpe::detokenize(ctx->id_to_token, ids.data(), ids.size());
+        else
+            ctc_text = " ";
+        // Match upstream: strip + lowercase + fall back to " " if empty.
+        size_t a = ctc_text.find_first_not_of(" \t\n\r");
+        size_t b2 = ctc_text.find_last_not_of(" \t\n\r");
+        if (a == std::string::npos)
+            ctc_text = " ";
+        else
+            ctc_text = ctc_text.substr(a, b2 - a + 1);
+        for (char& c : ctc_text)
+            if (c >= 'A' && c <= 'Z')
+                c = (char)(c + ('a' - 'A'));
+        if (ctc_text.empty())
+            ctc_text = " ";
+    }
+
+    if (ctx->params.verbosity >= 1)
+        fprintf(stderr, "  transcribe: ctc_text=%.200s\n", ctc_text.c_str());
+
+    // 6. Re-tokenize the CTC text with the LLM tokenizer.
+    auto llm_ids = core_bpe::tokenize_simple(ctx->token_to_id, ctx->merge_rank, ctc_text);
+
+    // 7. add_insertion_slots: total_len = max(2*n+1, 8); positions
+    //    [eos, t0, eos, t1, ..., t_{n-1}, eos, ..., eos].
+    const int n = (int)llm_ids.size();
+    const int total_len = std::max(2 * n + 1, 8);
+    std::vector<int32_t> text_ids((size_t)total_len, (int32_t)eos_id);
+    for (int i = 0; i < n; i++)
+        text_ids[(size_t)(2 * i + 1)] = llm_ids[(size_t)i];
+
+    // 8. Projector → divide by embedding_multiplier, slice to n_audio_kept.
+    int proj_T = 0, proj_dim = 0;
+    float* proj_out = granite_nle_run_projector(ctx, enc_out, enc_T, enc_dim, &proj_T, &proj_dim);
+    free(enc_out);
+    if (!proj_out) {
+        fprintf(stderr, "granite_nle: projector failed\n");
+        return nullptr;
+    }
+    const int n_audio_kept = enc_T / down;
+    const int llm_d = (int)hp.llm_d_model;
+    if (n_audio_kept > proj_T) {
+        free(proj_out);
+        fprintf(stderr, "granite_nle: n_audio_kept=%d > proj_T=%d\n", n_audio_kept, proj_T);
+        return nullptr;
+    }
+    std::vector<float> audio_embs((size_t)n_audio_kept * llm_d);
+    const float scale = 1.0f / hp.embedding_multiplier;
+    for (size_t i = 0; i < audio_embs.size(); i++)
+        audio_embs[i] = proj_out[i] * scale;
+    free(proj_out);
+
+    // 9. LLM editing forward.
+    int edit_n = 0, edit_V = 0;
+    float* edit_logits = granite_nle_run_llm_editing(ctx, audio_embs.data(), n_audio_kept, text_ids.data(), total_len,
+                                                     &edit_n, &edit_V);
+    if (!edit_logits) {
+        fprintf(stderr, "granite_nle: llm_editing failed\n");
+        return nullptr;
+    }
+
+    // 10. Slot decode: per-row argmax → unique_consecutive → drop EOS → detokenize.
+    std::vector<int32_t> slot_argmax((size_t)edit_n);
+    for (int t = 0; t < edit_n; t++) {
+        const float* row = edit_logits + (size_t)t * edit_V;
+        int best = 0;
+        float bestv = row[0];
+        for (int v = 1; v < edit_V; v++) {
+            if (row[v] > bestv) {
+                bestv = row[v];
+                best = v;
+            }
+        }
+        slot_argmax[t] = best;
+    }
+    free(edit_logits);
+
+    std::vector<int32_t> uniq;
+    for (size_t i = 0; i < slot_argmax.size(); i++) {
+        if (i == 0 || slot_argmax[i] != slot_argmax[i - 1])
+            uniq.push_back(slot_argmax[i]);
+    }
+    std::vector<int32_t> kept;
+    kept.reserve(uniq.size());
+    for (int32_t id : uniq)
+        if (id != eos_id)
+            kept.push_back(id);
+
+    std::string text;
+    if (!kept.empty())
+        text = core_bpe::detokenize(ctx->id_to_token, kept.data(), kept.size());
+
+    char* result = (char*)malloc(text.size() + 1);
+    if (!result)
+        return nullptr;
+    std::memcpy(result, text.data(), text.size());
+    result[text.size()] = '\0';
+    return result;
 }
 
 extern "C" int32_t* granite_nle_tokenize(struct granite_nle_context* ctx, const char* text, int* out_n) {
@@ -1899,13 +2104,7 @@ extern "C" int32_t* granite_nle_tokenize(struct granite_nle_context* ctx, const 
 extern "C" char* granite_nle_detokenize(struct granite_nle_context* ctx, const int32_t* ids, int n) {
     if (!ctx || !ids || n <= 0)
         return nullptr;
-    std::string out;
-    for (int i = 0; i < n; i++) {
-        int32_t id = ids[i];
-        if (id < 0 || id >= (int32_t)ctx->id_to_token.size())
-            continue;
-        out += ctx->id_to_token[(size_t)id];
-    }
+    std::string out = core_bpe::detokenize(ctx->id_to_token, ids, (size_t)n);
     char* r = (char*)malloc(out.size() + 1);
     if (!r)
         return nullptr;

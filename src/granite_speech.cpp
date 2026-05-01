@@ -2489,58 +2489,10 @@ extern "C" const char* granite_speech_token_text(struct granite_speech_context* 
     return ctx->id_to_token[id].c_str();
 }
 
-// GPT-2 byte→unicode mapping for decoding BPE tokens
-static std::string granite_gpt2_bytes_to_utf8(const std::string& token) {
-    // GPT-2 maps bytes 33-126, 161-172, 174-255 to unicode as-is (shifted),
-    // and maps bytes 0-32, 127-160, 173 to unicode 256-288.
-    // We reverse this: each unicode codepoint in the token → one byte.
-    std::string out;
-    size_t i = 0;
-    while (i < token.size()) {
-        uint32_t cp;
-        uint8_t b = (uint8_t)token[i];
-        if (b < 0x80) {
-            cp = b;
-            i++;
-        } else if ((b & 0xE0) == 0xC0 && i + 1 < token.size()) {
-            cp = ((b & 0x1F) << 6) | (token[i + 1] & 0x3F);
-            i += 2;
-        } else if ((b & 0xF0) == 0xE0 && i + 2 < token.size()) {
-            cp = ((b & 0x0F) << 12) | ((token[i + 1] & 0x3F) << 6) | (token[i + 2] & 0x3F);
-            i += 3;
-        } else {
-            i++;
-            continue;
-        }
-
-        // Reverse GPT-2 byte encoding
-        if (cp >= 256 && cp <= 288) {
-            // Mapped special bytes: 256→0, 257→1, ..., 288→32
-            // Actually the mapping is: byte n → cp n+256 for bytes [0..32, 127..160, 173]
-            // Let's just use a lookup for the 33 special chars
-            static const uint8_t special[] = {0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15, 16,
-                                              17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32};
-            if (cp - 256 < 33)
-                out += (char)special[cp - 256];
-        } else if (cp < 256) {
-            out += (char)(uint8_t)cp;
-        }
-        // codepoints > 288 that aren't < 256 are unusual; skip them
-    }
-    return out;
-}
-
 extern "C" char* granite_speech_decode_tokens(struct granite_speech_context* ctx, const int32_t* ids, int n_ids) {
     if (!ctx || !ids || n_ids <= 0)
         return nullptr;
-    std::string result;
-    for (int i = 0; i < n_ids; i++) {
-        const char* tok = granite_speech_token_text(ctx, ids[i]);
-        if (tok && tok[0]) {
-            std::string decoded = granite_gpt2_bytes_to_utf8(tok);
-            result += decoded;
-        }
-    }
+    std::string result = core_bpe::detokenize(ctx->id_to_token, ids, (size_t)n_ids);
     char* out = (char*)malloc(result.size() + 1);
     std::memcpy(out, result.c_str(), result.size() + 1);
     return out;

@@ -271,7 +271,7 @@ flight.
 |---|---|---|---|---|
 | `granite-speech-4.1-2b` (base) | Granite-1B AR | none | text | DONE — 4 GGUFs on HF, encoder cos 0.999908, transcribes JFK at 2.1× realtime on M1 Q4K |
 | `granite-speech-4.1-2b-plus` | Granite-1B AR | `cat_hidden_layers: [3]` | text + speaker labels + word-level timestamps | DONE — f16 GGUF on HF, transcribes JFK with punctuation/capitalisation by default; speaker labels + word timestamps in template work pending |
-| `granite-speech-4.1-2b-nar` | non-autoregressive (`NLENARDecoder`) | self-conditioning at L8 + BPE aux head + 4-layer hidden capture | text | encoder + projector + LLM editing DONE (mel `cos_min=0.999997`, encoder_output `cos_min=0.999852`, encoder_logits `cos_min=0.999675`, projector_output `cos_min=0.999999`, editing_logits `cos_min=0.999999` 47/47 top-1); transcribe orchestration + BPE-CTC text init pending |
+| `granite-speech-4.1-2b-nar` | non-autoregressive (`NLENARDecoder`) | self-conditioning at L8 + BPE aux head + 4-layer hidden capture | text | DONE — full pipeline bit-exact on JFK (mel `cos_min=0.999997`, encoder_output `cos_min=0.999852`, encoder_logits `cos_min=0.999675`, projector_output `cos_min=0.999999`, editing_logits `cos_min=0.999999` 47/47 top-1; transcribe matches reference `final_text` exactly) |
 
 ### Base 4.1-2b (DONE)
 
@@ -305,7 +305,7 @@ timestamps are not yet in the output; investigating the upstream
 Commits: `f298818` (cat_layer + tokenizer fix), `ed0e5ac` (backend
 alias + registry), `a3147b6` (HF README).
 
-### NAR variant — encoder + projector + LLM editing DONE; transcribe orchestration pending
+### NAR variant — DONE
 
 1. **Encoder forward** (`granite_nle_run_encoder`). DONE. Same
    Conformer block as base; self-conditioning at layer 8 (the running
@@ -350,19 +350,23 @@ alias + registry), `a3147b6` (HF README).
    `transformers.models.granite.modeling_granite.create_causal_mask`
    to return None to get true non-causal attention via SDPA.
 
-4. **Transcribe orchestration** (`granite_nle_transcribe`). PENDING.
-   Wires together: encoder (with BPE auxiliary head — needs a
-   posterior-pool window=4 stage in `run_encoder` populating
-   `last_bpe_logits`) → BPE-CTC greedy decode (argmax →
-   `unique_consecutive` → drop blank → shift to LLM IDs) → BPE
-   detokenize (GPT-2 byte-level reverse) → re-tokenize via
-   `core_bpe::tokenize_simple` → `add_insertion_slots` →
-   `run_llm_editing` → argmax + unique_consecutive + drop EOS +
-   detokenize. ~200-300 LOC.
+4. **Transcribe orchestration** (`granite_nle_transcribe`). DONE.
+   Wires together: encoder (with BPE auxiliary head:
+   `posterior_weighted_pool` window=4 driven by `1 - blank_prob_mid`
+   from the L8 self-conditioning softmax, populating `last_bpe_logits`)
+   → BPE-CTC greedy decode (`unique_consecutive` → drop blank label 0
+   → shift to LLM IDs by -1) → `core_bpe::detokenize` (GPT-2 byte-level
+   reverse, now shared with `granite_speech` and lifted into
+   `core_bpe::token_bytes_to_utf8`) → strip + lowercase + " "-fallback
+   → re-tokenize via `core_bpe::tokenize_simple` → `add_insertion_slots`
+   (`max(2n+1, 8)`, EOS-padded) → `run_projector` divided by
+   `embedding_multiplier=12` and sliced to `enc_T // downsample_rate=5`
+   audio frames → `run_llm_editing` → per-row argmax + unique_consecutive
+   + drop EOS + detokenize. JFK end-to-end output matches reference
+   `final_text` exactly.
 
-**Effort remaining:** transcribe orchestration only (~200-300 LOC).
-The forward path (encoder + projector + LLM editing) is now bit-exact
-end-to-end.
+**Effort remaining:** none — encoder, projector, LLM editing, and
+transcribe are all bit-exact end-to-end on JFK.
 
 ---
 

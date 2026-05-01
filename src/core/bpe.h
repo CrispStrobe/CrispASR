@@ -182,6 +182,80 @@ inline void bpe_one(const std::unordered_map<std::string, int32_t>& token_to_id,
     }
 }
 
+// Inverse of byte_encoder(): codepoint → original byte. Built lazily on
+// first call. The forward map sends each of the 256 raw bytes to a
+// printable Unicode codepoint; this reverses it. Codepoints not in the
+// table (e.g. real Unicode in synthesised text) are skipped.
+inline const std::unordered_map<uint32_t, uint8_t>& byte_decoder() {
+    static std::unordered_map<uint32_t, uint8_t> table;
+    static bool initialized = false;
+    if (initialized)
+        return table;
+    auto& enc = byte_encoder();
+    table.reserve(256);
+    for (int b = 0; b < 256; b++) {
+        table[(uint32_t)enc[b]] = (uint8_t)b;
+    }
+    initialized = true;
+    return table;
+}
+
+// Decode one BPE token's textual form (a UTF-8 string of byte-encoded
+// codepoints) back to the raw byte sequence it represents. Codepoints
+// that don't appear in the byte_decoder() map are skipped silently —
+// this matches HuggingFace's `errors="replace"` decode behaviour for
+// the "didn't see this in training" tail.
+inline std::string token_bytes_to_utf8(const std::string& token) {
+    auto& dec = byte_decoder();
+    std::string out;
+    out.reserve(token.size());
+    size_t i = 0;
+    while (i < token.size()) {
+        unsigned char c = (unsigned char)token[i];
+        uint32_t cp;
+        size_t len;
+        if (c < 0x80) {
+            cp = c;
+            len = 1;
+        } else if ((c & 0xE0) == 0xC0 && i + 1 < token.size()) {
+            cp = ((c & 0x1F) << 6) | ((unsigned char)token[i + 1] & 0x3F);
+            len = 2;
+        } else if ((c & 0xF0) == 0xE0 && i + 2 < token.size()) {
+            cp = ((c & 0x0F) << 12) | (((unsigned char)token[i + 1] & 0x3F) << 6) |
+                 ((unsigned char)token[i + 2] & 0x3F);
+            len = 3;
+        } else if ((c & 0xF8) == 0xF0 && i + 3 < token.size()) {
+            cp = ((c & 0x07) << 18) | (((unsigned char)token[i + 1] & 0x3F) << 12) |
+                 (((unsigned char)token[i + 2] & 0x3F) << 6) | ((unsigned char)token[i + 3] & 0x3F);
+            len = 4;
+        } else {
+            i++;
+            continue;
+        }
+        i += len;
+        auto it = dec.find(cp);
+        if (it != dec.end())
+            out.push_back((char)it->second);
+    }
+    return out;
+}
+
+// Decode a sequence of BPE token IDs to a UTF-8 string. Pass an
+// id_to_token vector (the GGUF `tokenizer.ggml.tokens` table) and the
+// id sequence; out-of-range / negative IDs are silently skipped (the
+// caller is responsible for special-token filtering).
+inline std::string detokenize(const std::vector<std::string>& id_to_token, const int32_t* ids, size_t n) {
+    std::string out;
+    out.reserve(n * 4);
+    for (size_t i = 0; i < n; i++) {
+        int32_t id = ids[i];
+        if (id < 0 || (size_t)id >= id_to_token.size())
+            continue;
+        out += token_bytes_to_utf8(id_to_token[(size_t)id]);
+    }
+    return out;
+}
+
 // Whitespace-split pre-tokenizer + BPE merge pass for arbitrary text.
 // Pre-tokenization: collect runs of non-whitespace, prepend a leading
 // space to all but the first run (matches GPT-2's "treat space as part
