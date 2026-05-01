@@ -1078,15 +1078,12 @@ static ggml_cgraph* granite_build_encoder(granite_speech_context* ctx, int T, bo
                     const int blk_len = std::min(ctx_size, T - blk_start);
 
                     // Slice Q/K/V over the time axis [blk_start, blk_start+blk_len).
-                    ggml_tensor* Q_blk = ggml_cont(
-                        ctx0, ggml_view_3d(ctx0, Q, hd, blk_len, n_heads, Q->nb[1], Q->nb[2],
-                                           (size_t)blk_start * Q->nb[1]));
-                    ggml_tensor* K_blk = ggml_cont(
-                        ctx0, ggml_view_3d(ctx0, K, hd, blk_len, n_heads, K->nb[1], K->nb[2],
-                                           (size_t)blk_start * K->nb[1]));
-                    ggml_tensor* V_blk = ggml_cont(
-                        ctx0, ggml_view_3d(ctx0, V, hd, blk_len, n_heads, V->nb[1], V->nb[2],
-                                           (size_t)blk_start * V->nb[1]));
+                    ggml_tensor* Q_blk = ggml_cont(ctx0, ggml_view_3d(ctx0, Q, hd, blk_len, n_heads, Q->nb[1], Q->nb[2],
+                                                                      (size_t)blk_start * Q->nb[1]));
+                    ggml_tensor* K_blk = ggml_cont(ctx0, ggml_view_3d(ctx0, K, hd, blk_len, n_heads, K->nb[1], K->nb[2],
+                                                                      (size_t)blk_start * K->nb[1]));
+                    ggml_tensor* V_blk = ggml_cont(ctx0, ggml_view_3d(ctx0, V, hd, blk_len, n_heads, V->nb[1], V->nb[2],
+                                                                      (size_t)blk_start * V->nb[1]));
 
                     // QK^T: (blk_len_r=K, blk_len_c=Q, nh)
                     ggml_tensor* scores = ggml_mul_mat(ctx0, K_blk, Q_blk);
@@ -1288,9 +1285,8 @@ static float* granite_run_encoder_graph(granite_speech_context* ctx, const float
         with_rpe = (e[0] != '0' && e[0] != '\0');
 
     if (with_rpe && ctx->rpe_lookup.empty()) {
-        fprintf(stderr,
-                "granite_encoder_graph: GRANITE_ENCODER_GRAPH_RPE=1 requested but rpe_lookup is empty — "
-                "falling back to no-RPE path\n");
+        fprintf(stderr, "granite_encoder_graph: GRANITE_ENCODER_GRAPH_RPE=1 requested but rpe_lookup is empty — "
+                        "falling back to no-RPE path\n");
         with_rpe = false;
     }
 
@@ -1492,10 +1488,9 @@ extern "C" float* granite_speech_run_encoder(struct granite_speech_context* ctx,
             ggml_tensor* rpe_w = ctx->model.encoder.blocks[il].attn_rel_pos_w;
             if (!rpe_w)
                 continue;
-            if (!core_conformer_ibm::build_shaw_rpe_lookup(rpe_w, ctx_size, hd, max_pos,
-                                                           rpe_per_layer[il])) {
-                fprintf(stderr, "granite_speech: unsupported RPE type %s at layer %d\n",
-                        ggml_type_name(rpe_w->type), il);
+            if (!core_conformer_ibm::build_shaw_rpe_lookup(rpe_w, ctx_size, hd, max_pos, rpe_per_layer[il])) {
+                fprintf(stderr, "granite_speech: unsupported RPE type %s at layer %d\n", ggml_type_name(rpe_w->type),
+                        il);
                 rpe_per_layer[il].clear();
             }
         }
@@ -1505,10 +1500,8 @@ extern "C" float* granite_speech_run_encoder(struct granite_speech_context* ctx,
         const auto& b = ctx->model.encoder.blocks[il];
 
         // --- FFN1 (Macaron half-step) ---
-        core_conformer_ibm::run_ffn(ctx->compute_meta, ctx->sched,
-                                    ffn_out.data(), hidden.data(), d, T,
-                                    b.ff1_norm_w, b.ff1_norm_b, b.ff1_up_w, b.ff1_up_b,
-                                    b.ff1_down_w, b.ff1_down_b);
+        core_conformer_ibm::run_ffn(ctx->compute_meta, ctx->sched, ffn_out.data(), hidden.data(), d, T, b.ff1_norm_w,
+                                    b.ff1_norm_b, b.ff1_up_w, b.ff1_up_b, b.ff1_down_w, b.ff1_down_b);
         for (size_t i = 0; i < (size_t)d * T; i++)
             hidden[i] += 0.5f * ffn_out[i];
 
@@ -1519,11 +1512,9 @@ extern "C" float* granite_speech_run_encoder(struct granite_speech_context* ctx,
         // The norm + Q + KV go in a single graph dispatch: the layernorm
         // runs on the same backend as the matmuls (Metal-accelerated when
         // available) and we skip the CPU normalisation pass.
-        core_conformer_ibm::run_norm_matmul_pair(ctx->compute_meta, ctx->sched,
-                                                 Q.data(), b.attn_q_w, d,
-                                                 KV.data(), b.attn_kv_w, d * 2,
-                                                 hidden.data(), d, T,
-                                                 b.attn_norm_w, b.attn_norm_b, 1e-5f);
+        core_conformer_ibm::run_norm_matmul_pair(ctx->compute_meta, ctx->sched, Q.data(), b.attn_q_w, d, KV.data(),
+                                                 b.attn_kv_w, d * 2, hidden.data(), d, T, b.attn_norm_w, b.attn_norm_b,
+                                                 1e-5f);
 
         // Split KV: KV layout is (2*d, T) — ne[0]=2*d per frame
         // First d values = K, next d values = V
@@ -1534,10 +1525,9 @@ extern "C" float* granite_speech_run_encoder(struct granite_speech_context* ctx,
         }
 
         // Shaw block attention on CPU
-        core_conformer_ibm::shaw_block_attention_cpu(
-            attn_out.data(), Q.data(), K.data(), V.data(),
-            rpe_per_layer[il].empty() ? nullptr : rpe_per_layer[il].data(),
-            T, n_heads, hd, ctx_size, attn_scale, remainder);
+        core_conformer_ibm::shaw_block_attention_cpu(attn_out.data(), Q.data(), K.data(), V.data(),
+                                                     rpe_per_layer[il].empty() ? nullptr : rpe_per_layer[il].data(), T,
+                                                     n_heads, hd, ctx_size, attn_scale, remainder);
 
         if (ctx->params.verbosity >= 2 && il == 0) {
             fprintf(stderr, "  L0 after attn[0][:4] = %.4f %.4f %.4f %.4f\n", attn_out[0], attn_out[1], attn_out[2],
@@ -1554,13 +1544,9 @@ extern "C" float* granite_speech_run_encoder(struct granite_speech_context* ctx,
             fprintf(stderr, "  L0 after attn: [%.4f,%.4f,%.4f,%.4f]\n", hidden[0], hidden[1], hidden[2], hidden[3]);
 
         // --- Conv module ---
-        core_conformer_ibm::run_conv_module(ctx->compute_meta, ctx->sched,
-                                            conv_out.data(), hidden.data(), d, T,
-                                            b.conv_norm_w, b.conv_norm_b,
-                                            b.conv_up_w, b.conv_up_b,
-                                            b.conv_dw_w,
-                                            b.conv_bn_w, b.conv_bn_b,
-                                            b.conv_down_w, b.conv_down_b);
+        core_conformer_ibm::run_conv_module(ctx->compute_meta, ctx->sched, conv_out.data(), hidden.data(), d, T,
+                                            b.conv_norm_w, b.conv_norm_b, b.conv_up_w, b.conv_up_b, b.conv_dw_w,
+                                            b.conv_bn_w, b.conv_bn_b, b.conv_down_w, b.conv_down_b);
         for (size_t i = 0; i < (size_t)d * T; i++)
             hidden[i] += conv_out[i];
 
@@ -1568,10 +1554,8 @@ extern "C" float* granite_speech_run_encoder(struct granite_speech_context* ctx,
             fprintf(stderr, "  L0 after conv: [%.4f,%.4f,%.4f,%.4f]\n", hidden[0], hidden[1], hidden[2], hidden[3]);
 
         // --- FFN2 (Macaron half-step) ---
-        core_conformer_ibm::run_ffn(ctx->compute_meta, ctx->sched,
-                                    ffn_out.data(), hidden.data(), d, T,
-                                    b.ff2_norm_w, b.ff2_norm_b, b.ff2_up_w, b.ff2_up_b,
-                                    b.ff2_down_w, b.ff2_down_b);
+        core_conformer_ibm::run_ffn(ctx->compute_meta, ctx->sched, ffn_out.data(), hidden.data(), d, T, b.ff2_norm_w,
+                                    b.ff2_norm_b, b.ff2_up_w, b.ff2_up_b, b.ff2_down_w, b.ff2_down_b);
         for (size_t i = 0; i < (size_t)d * T; i++)
             hidden[i] += 0.5f * ffn_out[i];
 
@@ -1958,7 +1942,7 @@ extern "C" void granite_speech_kv_reset(struct granite_speech_context* ctx) {
 static ggml_cgraph* granite_build_llm_kv(granite_speech_context* ctx, int n_past, int n_tokens) {
     const auto& m = ctx->model;
     const auto& hp = m.hparams;
-    const int d = (int)hp.llm_d_model;       // 2048
+    const int d = (int)hp.llm_d_model; // 2048
     const int n_layers = (int)hp.llm_n_layers;
 
     ggml_init_params ip = {ctx->compute_meta.size(), ctx->compute_meta.data(), true};
@@ -1995,13 +1979,12 @@ static ggml_cgraph* granite_build_llm_kv(granite_speech_context* ctx, int n_past
     std::vector<core_granite_llm::LayerWeights> blocks(n_layers);
     for (int il = 0; il < n_layers; il++) {
         const auto& b = m.llm.blocks[il];
-        blocks[il] = {b.attn_norm_w, b.attn_q_w,    b.attn_k_w, b.attn_v_w,    b.attn_out_w,
+        blocks[il] = {b.attn_norm_w, b.attn_q_w,   b.attn_k_w, b.attn_v_w,  b.attn_out_w,
                       b.ffn_norm_w,  b.ffn_gate_w, b.ffn_up_w, b.ffn_down_w};
     }
 
-    ggml_tensor* cur =
-        core_granite_llm::build_decoder(ctx0, gf, embeds, positions, causal_mask, ctx->kv_k, ctx->kv_v, n_past, blocks,
-                                        m.llm.output_norm_w, llm_hp, /*is_causal*/ true);
+    ggml_tensor* cur = core_granite_llm::build_decoder(ctx0, gf, embeds, positions, causal_mask, ctx->kv_k, ctx->kv_v,
+                                                       n_past, blocks, m.llm.output_norm_w, llm_hp, /*is_causal*/ true);
 
     // LM head (separate, not tied) with μP logits scaling
     if (n_tokens > 1) {

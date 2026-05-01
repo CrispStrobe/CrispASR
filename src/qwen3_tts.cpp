@@ -2084,7 +2084,7 @@ static bool copy_cp_weights_to_cpu(qwen3_tts_context* c, enum ggml_type dst_type
         ptrs.push_back(&b.ffn_down_w);
     }
 
-    auto copy_type_for = [&](ggml_tensor * orig) -> enum ggml_type {
+    auto copy_type_for = [&](ggml_tensor * orig)->enum ggml_type {
         return dst_type == GGML_TYPE_COUNT ? orig->type : dst_type;
     };
     auto tensor_nbytes_for_type = [&](ggml_tensor* orig, enum ggml_type type) -> size_t {
@@ -4881,8 +4881,8 @@ extern "C" int qwen3_tts_set_speaker_by_name(struct qwen3_tts_context* ctx, cons
     }
 
     if (ctx->params.verbosity >= 1) {
-        fprintf(stderr, "qwen3_tts: selected CustomVoice speaker '%s' (spk_id=%d)\n",
-                ctx->hp.spk_names[idx].c_str(), spk_id);
+        fprintf(stderr, "qwen3_tts: selected CustomVoice speaker '%s' (spk_id=%d)\n", ctx->hp.spk_names[idx].c_str(),
+                spk_id);
     }
     return 0;
 }

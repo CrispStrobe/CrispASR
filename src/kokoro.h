@@ -136,8 +136,7 @@ bool crispasr_kokoro_lang_has_native_voice(const char* lang);
 // Returns: 0 if a German backbone swap was applied (path rewritten),
 // 1 if no swap is applicable (caller should keep `model_path` — also
 // copied into `out_path` for convenience), -1 on buffer-too-small.
-int crispasr_kokoro_resolve_model_for_lang(const char* model_path, const char* lang,
-                                           char* out_path, int out_path_len);
+int crispasr_kokoro_resolve_model_for_lang(const char* model_path, const char* lang, char* out_path, int out_path_len);
 
 // Resolve the fallback voice path for `lang`. Walks the per-language voice
 // cascade and returns the first existing
@@ -147,8 +146,7 @@ int crispasr_kokoro_resolve_model_for_lang(const char* model_path, const char* l
 // Returns: 0 if a fallback was found and written, 1 if `lang` already has a
 // native voice (no fallback needed), 2 if no candidate file exists,
 // -1 on buffer-too-small.
-int crispasr_kokoro_resolve_fallback_voice(const char* model_path, const char* lang,
-                                           char* out_path, int out_path_len,
+int crispasr_kokoro_resolve_fallback_voice(const char* model_path, const char* lang, char* out_path, int out_path_len,
                                            char* out_picked, int out_picked_len);
 
 #ifdef __cplusplus
