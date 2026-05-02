@@ -6042,3 +6042,93 @@ quant noise), and isn't a real bug as long as the runtime transcribes
 correctly. F16 GGUFs are required for strict cos≥0.999 validation;
 on storage-tight machines that's not always feasible (PLAN #5 canary
 diff was left at the Q4_K + functional-transcribe gate for that reason).
+
+### Quantised KV cache: write needs `ggml_set_rows`, read needs `Q*→F32` cast (PLAN #60e)
+
+Two CPU-backend mismatches surfaced when first wiring
+`CRISPASR_KV_QUANT=q8_0` into `core_attn::kv_self_attn`. Recording
+both because the rules generalise to any quantised-cache work:
+
+**1. `ggml_cpy(F32_src, slice-of-Q*-cache)` is not legal — use
+`ggml_set_rows` instead.** The CPU backend's `dup_to_q<float>`
+(`ggml/src/ggml-cpu/ops.cpp:292-322`) requires
+`ggml_is_contiguous(dst)` AND `nb00 == sizeof(src_t)`; otherwise it
+hits `GGML_ABORT("not implemented")`. A per-token slice into a
+`max_ctx`-strided 4D KV cache is **never** contiguous (the
+sub-row stride leaves gaps for the rest of `max_ctx`). Metal's CPY
+also rejects non-contig quant dst. The only path that works on
+both backends for `F32→Q*` is `ggml_set_rows` — it accepts a
+strided dst directly because the row-id tensor encodes destination
+offsets explicitly. The `positions` tensor (already populated with
+`[n_past..n_past+T)` for RoPE) is exactly the row-id list set_rows
+wants, so re-use it as the synthetic kv_indices when the caller
+didn't supply one.
+
+**2. CPU `compute_forward_dup` only implements `Q*→F32`, not
+`Q*→F16`** (`ops.cpp:560-572`: the switch falls through to "fatal
+error" when `src->type` is quantised and `dst->type != F32`).
+Metal supports both, but the scheduler can route the cast op to
+CPU and that backend then aborts. So when dequantising a quant KV
+view on the read path, **always cast to F32**, never F16. F32 K/V
+costs marginal extra bandwidth on read (the cache *storage* is
+still half-bytes for Q8_0), and `flash_attn_ext` on Metal accepts
+F32 K/V natively (`ggml-metal-device.m:1165`).
+
+**Diagnostic signature:** `ggml_compute_forward_dup_to_q<float>` /
+`ggml_compute_forward_dup` aborts in the backtrace, with frames
+running through `ggml_backend_sched_graph_compute_async`. The
+op-source-and-target types tell you which mismatch you hit.
+
+### GGUF in-place patcher beats fresh re-conversion when only layout changes (PLAN #60d)
+
+When a port adds a tensor-layout change (e.g. fusing per-LM-layer
+Q/K/V into one `attn.qkv.{weight,bias}` per layer), the natural
+instinct is to update the converter and re-run BF16→F16. On a
+contested external disk this can be infeasible — the PLAN #60d
+attempt sustained ~0.8 MB/min and was killed after 22 min with
+~100 MB temp written (same disk-thrash signature as PLAN #51c F16).
+
+The shortcut: write a small python patcher that loads the existing
+GGUF via `gguf.GGUFReader`, byte-concat's the per-row Q/K/V data
+along axis=0, and re-emits via `gguf.GGUFWriter`. **Bit-identical
+to a fresh-from-converter result** because:
+
+- F16/F32 weights: numpy `concatenate(axis=0)` is element concat;
+  trivially equivalent to writing rows in the new order.
+- Q4_K / Q8_0 weights: each row is independently quantised (no
+  super-block ever crosses row boundaries, given `ne[0]` is a
+  multiple of the block size — 256 for Q4_K, 32 for Q8_0). So
+  byte-concat along axis=0 (the row dim in `GGUFReader.data`'s
+  numpy memmap) is bit-identical to re-quantising a fresh fused
+  F16 with the same source values.
+- F32 biases: trivial element concat.
+
+The patcher runs in ~5 min on the same contested disk because it
+only reads the already-quantised GGUF (4.2 GB) instead of the
+14 GB BF16 safetensors. See `tools/patch_mimo_asr_fuse_qkv.py` for
+the pattern. Quirk: pass `data` (the numpy buffer) without
+`raw_shape` to `GGUFWriter.add_tensor` — for `np.uint8` quant
+data it correctly interprets the array shape as the byte-shape and
+calls `quant_shape_from_byte_shape` to derive the logical shape;
+explicit `raw_shape` confuses that branch.
+
+### HF `upload-large-folder` rename-before-replace beats replace-then-re-upload
+
+When you want to keep the old GGUF as an A/B reference under a new
+name AND replace the canonical-name file with a new variant, the
+**only efficient order** is rename-first, upload-second:
+
+1. `HfApi.move_files(repo_id, ['mimo-asr-q4_k.gguf' →
+   'mimo-asr-q4_k-unfused.gguf'], ...)` — server-side metadata
+   move, instant, zero bytes transferred.
+2. `hf upload-large-folder` of the new file as `mimo-asr-q4_k.gguf`
+   — uploads only the new bytes once.
+
+Replace-first is wrong: the original bytes are no longer accessible
+by path on HF (only the latest revision per path is served), and
+re-uploading the local copy of the original bytes under the new
+name re-incurs the full 4.5 GB hash + pre-upload cost. In this
+session, three kill+restart cycles all stalled in the pre-upload
+phase (no xet activity logged after the initial config dump);
+local A/B copy ended up being the practical fallback. Lesson learnt
+post-fact — apply for any future variant-rotation publish.

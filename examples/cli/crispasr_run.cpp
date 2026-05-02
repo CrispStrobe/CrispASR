@@ -119,8 +119,17 @@ std::mutex g_stdout_mutex;
 // state, so multiple workers can run concurrently against pre-loaded
 // per-thread backend instances. Returns 0 on success, non-zero on
 // failure.
-int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, whisper_params params,
-                      fireredpunc_context* punc_ctx = nullptr) {
+int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, const std::string& fname_out,
+                      whisper_params params, fireredpunc_context* punc_ctx = nullptr) {
+    // Resolve the output path base for this input. -of FNAME (passed via
+    // `fname_out`) wins; otherwise we strip the audio extension off the
+    // input path and append the format extension. Mirrors the whisper
+    // path's `fout_factory` resolution at cli.cpp:1586-1587.
+    auto out_path = [&](const char* ext) -> std::string {
+        if (!fname_out.empty())
+            return fname_out + ext;
+        return crispasr_make_out_path(fname_inp, ext);
+    };
     std::vector<float> samples;
     std::vector<std::vector<float>> stereo;
     const bool want_stereo = params.diarize;
@@ -314,19 +323,18 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, wh
                 crispasr_print_alternatives(all_segs, params.n_alternatives);
         }
         if (params.output_txt)
-            crispasr_write_txt(crispasr_make_out_path(fname_inp, ".txt"), disp);
+            crispasr_write_txt(out_path(".txt"), disp);
         if (params.output_srt)
-            crispasr_write_srt(crispasr_make_out_path(fname_inp, ".srt"), disp);
+            crispasr_write_srt(out_path(".srt"), disp);
         if (params.output_vtt)
-            crispasr_write_vtt(crispasr_make_out_path(fname_inp, ".vtt"), disp);
+            crispasr_write_vtt(out_path(".vtt"), disp);
         if (params.output_csv)
-            crispasr_write_csv(crispasr_make_out_path(fname_inp, ".csv"), disp);
+            crispasr_write_csv(out_path(".csv"), disp);
         if (params.output_lrc)
-            crispasr_write_lrc(crispasr_make_out_path(fname_inp, ".lrc"), disp);
+            crispasr_write_lrc(out_path(".lrc"), disp);
         if (params.output_jsn)
-            crispasr_write_json(crispasr_make_out_path(fname_inp, ".json"), all_segs, backend.name(), params.model,
-                                params.language, params.output_jsn_full,
-                                lid_info.lang_code.empty() ? nullptr : &lid_info);
+            crispasr_write_json(out_path(".json"), all_segs, backend.name(), params.model, params.language,
+                                params.output_jsn_full, lid_info.lang_code.empty() ? nullptr : &lid_info);
         return 0;
     }
 
@@ -490,19 +498,18 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, wh
             auto disp_all = crispasr_make_disp_segments(all_segs, params.max_len, params.split_on_punct);
 
             if (params.output_txt)
-                crispasr_write_txt(crispasr_make_out_path(fname_inp, ".txt"), disp_all);
+                crispasr_write_txt(out_path(".txt"), disp_all);
             if (params.output_srt)
-                crispasr_write_srt(crispasr_make_out_path(fname_inp, ".srt"), disp_all);
+                crispasr_write_srt(out_path(".srt"), disp_all);
             if (params.output_vtt)
-                crispasr_write_vtt(crispasr_make_out_path(fname_inp, ".vtt"), disp_all);
+                crispasr_write_vtt(out_path(".vtt"), disp_all);
             if (params.output_csv)
-                crispasr_write_csv(crispasr_make_out_path(fname_inp, ".csv"), disp_all);
+                crispasr_write_csv(out_path(".csv"), disp_all);
             if (params.output_lrc)
-                crispasr_write_lrc(crispasr_make_out_path(fname_inp, ".lrc"), disp_all);
+                crispasr_write_lrc(out_path(".lrc"), disp_all);
             if (params.output_jsn)
-                crispasr_write_json(crispasr_make_out_path(fname_inp, ".json"), all_segs, backend.name(), params.model,
-                                    params.language, params.output_jsn_full,
-                                    lid_info.lang_code.empty() ? nullptr : &lid_info);
+                crispasr_write_json(out_path(".json"), all_segs, backend.name(), params.model, params.language,
+                                    params.output_jsn_full, lid_info.lang_code.empty() ? nullptr : &lid_info);
         }
         return 0;
     } else {
@@ -542,18 +549,18 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, wh
     }
 
     if (params.output_txt)
-        crispasr_write_txt(crispasr_make_out_path(fname_inp, ".txt"), disp);
+        crispasr_write_txt(out_path(".txt"), disp);
     if (params.output_srt)
-        crispasr_write_srt(crispasr_make_out_path(fname_inp, ".srt"), disp);
+        crispasr_write_srt(out_path(".srt"), disp);
     if (params.output_vtt)
-        crispasr_write_vtt(crispasr_make_out_path(fname_inp, ".vtt"), disp);
+        crispasr_write_vtt(out_path(".vtt"), disp);
     if (params.output_csv)
-        crispasr_write_csv(crispasr_make_out_path(fname_inp, ".csv"), disp);
+        crispasr_write_csv(out_path(".csv"), disp);
     if (params.output_lrc)
-        crispasr_write_lrc(crispasr_make_out_path(fname_inp, ".lrc"), disp);
+        crispasr_write_lrc(out_path(".lrc"), disp);
     if (params.output_jsn)
-        crispasr_write_json(crispasr_make_out_path(fname_inp, ".json"), all_segs, backend.name(), params.model,
-                            params.language, params.output_jsn_full, lid_info.lang_code.empty() ? nullptr : &lid_info);
+        crispasr_write_json(out_path(".json"), all_segs, backend.name(), params.model, params.language,
+                            params.output_jsn_full, lid_info.lang_code.empty() ? nullptr : &lid_info);
 
     return 0;
 }
@@ -938,7 +945,9 @@ int crispasr_run_backend(const whisper_params& params_in) {
                     const int idx = next_idx.fetch_add(1);
                     if (idx >= n_files)
                         break;
-                    const int file_rc = process_one_input(be, params.fname_inp[idx], params, punc_ctx);
+                    const std::string fout =
+                        (idx < (int)params.fname_out.size()) ? params.fname_out[idx] : std::string{};
+                    const int file_rc = process_one_input(be, params.fname_inp[idx], fout, params, punc_ctx);
                     if (file_rc != 0)
                         agg_rc.store(file_rc);
                 }
@@ -952,8 +961,10 @@ int crispasr_run_backend(const whisper_params& params_in) {
         return agg_rc.load();
     }
 
-    for (const auto& fname_inp : params.fname_inp) {
-        const int file_rc = process_one_input(*backend, fname_inp, params, punc_ctx);
+    for (size_t i = 0; i < params.fname_inp.size(); i++) {
+        const std::string& fname_inp = params.fname_inp[i];
+        const std::string fout = (i < params.fname_out.size()) ? params.fname_out[i] : std::string{};
+        const int file_rc = process_one_input(*backend, fname_inp, fout, params, punc_ctx);
         if (file_rc != 0)
             rc = file_rc;
     }
@@ -1152,18 +1163,18 @@ int crispasr_run_backend(const whisper_params& params_in) {
 
         // Write output files.
         if (params.output_txt)
-            crispasr_write_txt(crispasr_make_out_path(fname_inp, ".txt"), disp);
+            crispasr_write_txt(out_path(".txt"), disp);
         if (params.output_srt)
-            crispasr_write_srt(crispasr_make_out_path(fname_inp, ".srt"), disp);
+            crispasr_write_srt(out_path(".srt"), disp);
         if (params.output_vtt)
-            crispasr_write_vtt(crispasr_make_out_path(fname_inp, ".vtt"), disp);
+            crispasr_write_vtt(out_path(".vtt"), disp);
         if (params.output_csv)
-            crispasr_write_csv(crispasr_make_out_path(fname_inp, ".csv"), disp);
+            crispasr_write_csv(out_path(".csv"), disp);
         if (params.output_lrc)
-            crispasr_write_lrc(crispasr_make_out_path(fname_inp, ".lrc"), disp);
+            crispasr_write_lrc(out_path(".lrc"), disp);
         if (params.output_jsn)
             crispasr_write_json(
-                crispasr_make_out_path(fname_inp, ".json"),
+                out_path(".json"),
                 all_segs, backend->name(), params.model, params.language,
                 params.output_jsn_full, nullptr);
     }
