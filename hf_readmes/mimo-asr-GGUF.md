@@ -26,9 +26,8 @@ The runtime is functional end-to-end: greedy decode through the 36-layer Qwen2 L
 |---|---|---|---|---|
 | `mimo-asr-f16.gguf` | F16 | 14.9 GB | separate Q/K/V | Full precision; needs ~16 GB RAM during inference |
 | `mimo-asr-q4_k.gguf` | Q4_K | 4.2 GB | **fused QKV** | **Default** — fits in 8 GB RAM, no quality loss visible on JFK |
-| `mimo-asr-q4_k-unfused.gguf` | Q4_K | 4.5 GB | separate Q/K/V | A/B-test baseline only; pre-PLAN-#60d layout, kept for regression checks |
 
-The default `mimo-asr-q4_k.gguf` (re-uploaded May 2026, PLAN #60d) ships with per-LM-layer Q/K/V projections fused into a single `model.layers.{i}.attn.qkv.{weight,bias}` tensor pair, yielding ~1.7× faster per-step decode on M1 vs the unfused layout (3058 ms/step → 1806 ms/step on a contended-disk run; ~1.1-1.2× pure-compute on a quiet box). The CrispASR runtime auto-detects either layout: the F16 file and the `-unfused` Q4_K both keep working via the separate-Q/K/V fallback path. Re-upload of a fused F16 is queued behind disk-headroom availability.
+The default `mimo-asr-q4_k.gguf` (re-uploaded May 2026, PLAN #60d) ships with per-LM-layer Q/K/V projections fused into a single `model.layers.{i}.attn.qkv.{weight,bias}` tensor pair, yielding ~1.7× faster per-step decode on M1 vs the prior unfused layout (3058 ms/step → 1806 ms/step on a contended-disk run; ~1.1-1.2× pure-compute on a quiet box). The CrispASR runtime auto-detects either layout: the F16 file above keeps working unchanged via the separate-Q/K/V fallback path. Re-upload of a fused F16 is queued behind disk-headroom availability.
 
 Pair with **[`cstr/mimo-tokenizer-GGUF`](https://huggingface.co/cstr/mimo-tokenizer-GGUF)** — the audio tokenizer is a separate model that converts 16 kHz PCM → 8-channel RVQ codes that this LM consumes.
 
