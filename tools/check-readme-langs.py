@@ -47,23 +47,20 @@ LANG_CELL_RE = re.compile(r"^([a-z]{2,3}(?:-[A-Z]{2})?)(?:\s+[a-z]{2,3}(?:-[A-Z]
 
 
 def parse_table_rows(text: str) -> list[dict]:
-    """Yield rows that look like model entries: have an HF link and a
-    plausible language column. Each row -> {hf_repo, langs, line_no}."""
+    """Yield (repo, langs, line_no) for every HF link in every model row.
+    A row may list multiple upstream models that share the same language
+    column — each is checked separately. Skips cstr/* mirrors (downstream,
+    not source of truth)."""
     rows = []
     for i, line in enumerate(text.splitlines(), 1):
         if not line.startswith("| "):
             continue
-        m = HF_LINK_RE.search(line)
-        if not m:
+        repos = [m.group(1).rstrip("/") for m in HF_LINK_RE.finditer(line)]
+        repos = [r for r in repos if not r.lower().startswith("cstr/")]
+        if not repos:
             continue
-        repo = m.group(1).rstrip("/")
-        # Skip table rows that link to our own GGUF mirrors — those are
-        # not the source-of-truth for language support, the upstream is.
-        if repo.lower().startswith("cstr/"):
-            continue
-        # Split into cells; markdown tables have leading + trailing |.
+        # Find the rightmost cell matching the language pattern.
         cells = [c.strip() for c in line.split("|")[1:-1]]
-        # Find the rightmost cell that matches the language pattern.
         lang_cell = None
         for c in reversed(cells):
             if LANG_CELL_RE.match(c):
@@ -71,8 +68,10 @@ def parse_table_rows(text: str) -> list[dict]:
                 break
         if not lang_cell:
             continue
-        rows.append({"hf_repo": repo, "langs": lang_cell.split(),
-                     "line_no": i, "raw": line})
+        # De-dup repos in case the same URL appears twice in one row.
+        for repo in dict.fromkeys(repos):
+            rows.append({"hf_repo": repo, "langs": lang_cell.split(),
+                         "line_no": i, "raw": line})
     return rows
 
 
@@ -129,33 +128,63 @@ def main() -> int:
         print(f"no model rows found in {args.readme}", file=sys.stderr)
         return 0
 
-    print(f"checking {len(rows)} model rows in {args.readme}")
-    mismatches = 0
-    skipped = 0
-    for row in rows:
-        readme_langs = normalize(row["langs"])
-        upstream_raw = fetch_upstream_langs(row["hf_repo"])
-        if upstream_raw is None:
-            print(f"  skip  {row['hf_repo']:50}  (no upstream language metadata)")
-            skipped += 1
+    # Group by source line so multi-URL rows get aggregate semantics:
+    #   single URL → README must match upstream exactly
+    #   multi URL  → README must equal UNION(each upstream's langs)
+    # The aggregate "granite" row is the prototypical example: each
+    # granite model supports a subset, our README claims the union.
+    by_line: dict[int, list[dict]] = {}
+    for r in rows:
+        by_line.setdefault(r["line_no"], []).append(r)
+
+    print(f"checking {len(by_line)} model rows ({len(rows)} HF links) in {args.readme}")
+    ok = mismatch = skip = 0
+
+    for line_no, group in sorted(by_line.items()):
+        readme_langs = normalize(group[0]["langs"])
+        # Fetch each upstream; missing metadata → skip the row (don't FAIL
+        # the lint on a flaky / removed repo).
+        per_repo: dict[str, set[str] | None] = {}
+        for r in group:
+            up = fetch_upstream_langs(r["hf_repo"])
+            per_repo[r["hf_repo"]] = normalize(up) if up else None
+        if any(v is None for v in per_repo.values()):
+            unreachable = [k for k, v in per_repo.items() if v is None]
+            print(f"  skip  line {line_no}  (no upstream metadata: {', '.join(unreachable)})")
+            skip += 1
             continue
-        upstream_langs = normalize(upstream_raw)
-        if readme_langs == upstream_langs:
-            print(f"  ok    {row['hf_repo']:50}  {' '.join(sorted(readme_langs))}")
+
+        union = set()
+        for v in per_repo.values():
+            assert v is not None
+            union |= v
+
+        if len(group) == 1:
+            label = group[0]["hf_repo"]
+        else:
+            label = f"AGG[{', '.join(r['hf_repo'].split('/')[-1] for r in group)}]"
+
+        if readme_langs == union:
+            print(f"  ok    {label:60}  {' '.join(sorted(readme_langs))}")
+            ok += 1
             continue
-        mismatches += 1
-        only_readme = readme_langs - upstream_langs
-        only_upstream = upstream_langs - readme_langs
-        print(f"  DIFF  {row['hf_repo']:50}  README:{sorted(readme_langs)}  upstream:{sorted(upstream_langs)}")
+        mismatch += 1
+        only_readme = readme_langs - union
+        only_upstream = union - readme_langs
+        print(f"  DIFF  {label:60}  README:{sorted(readme_langs)}  upstream:{sorted(union)}")
         if only_readme:
-            print(f"        README has but upstream doesn't:  {sorted(only_readme)}  (line {row['line_no']})")
+            print(f"        README has but no upstream supports:  {sorted(only_readme)}  (line {line_no})")
         if only_upstream:
-            print(f"        upstream has but README doesn't:  {sorted(only_upstream)}")
+            print(f"        ≥1 upstream supports but README missing:  {sorted(only_upstream)}")
+        if len(group) > 1:
+            for repo, langs in per_repo.items():
+                assert langs is not None
+                print(f"          {repo}: {sorted(langs)}")
 
     print()
-    print(f"summary: {len(rows) - mismatches - skipped} ok, {mismatches} mismatch, {skipped} skipped")
+    print(f"summary: {ok} ok, {mismatch} mismatch, {skip} skipped")
 
-    if mismatches and not args.warn:
+    if mismatch and not args.warn:
         return 1
     return 0
 
