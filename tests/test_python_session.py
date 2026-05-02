@@ -352,5 +352,82 @@ class TestKokoroPhonemizerParityHarness(unittest.TestCase):
             self.assertIsNone(fn(None, b"hello"), f"{name}(None, 'hello') should return nullptr")
 
 
+VOXTRAL4B_MODEL = os.environ.get(
+    "VOXTRAL4B_MODEL", "/Volumes/backups/ai/crispasr-models/voxtral-mini-4b-realtime-q4_k.gguf"
+)
+
+
+@unittest.skipUnless(LIB_PATH, "libwhisper not built")
+class TestVoxtral4bStreamingABI(unittest.TestCase):
+    """PLAN #7: voxtral4b native streaming ABI is exposed and the
+    null-handle paths return cleanly. Doesn't require the model — pure
+    symbol + null-arg lifecycle checks."""
+
+    def test_symbols_exported(self):
+        import ctypes
+        lib = ctypes.CDLL(LIB_PATH)
+        for name in (
+            "voxtral4b_stream_open",
+            "voxtral4b_stream_feed",
+            "voxtral4b_stream_get_text",
+            "voxtral4b_stream_flush",
+            "voxtral4b_stream_close",
+        ):
+            self.assertTrue(hasattr(lib, name), f"missing symbol: {name}")
+
+    def test_null_handle_returns_null(self):
+        import ctypes
+        lib = ctypes.CDLL(LIB_PATH)
+        fn = lib.voxtral4b_stream_open
+        fn.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int]
+        fn.restype = ctypes.c_void_p
+        self.assertIsNone(fn(ctypes.c_void_p(0), 0, 0))
+
+
+@unittest.skipUnless(LIB_PATH and os.path.exists(VOXTRAL4B_MODEL),
+                     "voxtral4b model not configured (set VOXTRAL4B_MODEL)")
+class TestVoxtral4bStreamingBitExact(unittest.TestCase):
+    """PLAN #7 phase 1.5+2+3 regression test: streaming output on JFK
+    must match the CLI batch transcribe byte-for-byte.
+
+    Skipped in CI (model not present); runs locally where the
+    voxtral4b GGUF is available. Validates the full pipeline:
+    incremental encoder + speculative prefill + combined-chunk flush
+    + decode + tokenize. Catches regressions in any of the phase 1+2+3
+    perf changes.
+    """
+
+    EXPECTED_TRANSCRIPT = (
+        "And so, my fellow Americans, ask not what your country can do "
+        "for you. Ask what you can do for your country."
+    )
+
+    def test_streaming_jfk_matches_batch(self):
+        # Use the bench harness directly. It opens a session, streams
+        # the audio in 80ms chunks, flushes, and reads the transcript.
+        import ctypes
+        # Set up the lib path so the python binding can find it.
+        os.environ.setdefault("CRISPASR_LIB_PATH", LIB_PATH)
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "python"))
+        import crispasr  # noqa: F401 — import side-effect
+        sess = crispasr.Session(backend="voxtral4b", model_path=VOXTRAL4B_MODEL)
+        try:
+            stream = sess.stream_open(step_ms=80, length_ms=15000)
+            try:
+                pcm = load_jfk_pcm()
+                # Feed in 80ms chunks (1280 samples at 16kHz)
+                chunk_n = 1280
+                for i in range(0, len(pcm), chunk_n):
+                    stream.feed(pcm[i:i + chunk_n])
+                stream.flush()
+                got = stream.get_text()["text"].strip()
+            finally:
+                stream.close()
+        finally:
+            sess.close()
+        self.assertEqual(got, self.EXPECTED_TRANSCRIPT,
+                         f"streaming transcript diverged from batch:\n  got:    {got!r}\n  want:   {self.EXPECTED_TRANSCRIPT!r}")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
