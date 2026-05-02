@@ -162,7 +162,9 @@ Kokoro-82M doesn't ship voices for (de, ru, ko, ar, …).
    §56 open #4.
 3. **Stage-2 fine-tune on one HUI speaker** (~half-day A40) for
    deployable single-voice production quality. Out of scope here.
-4. Optional `kokoro_phoneme_cache_clear()` C ABI. PLAN §56 open #5.
+4. ~~Optional `kokoro_phoneme_cache_clear()` C ABI.~~ **DONE
+   (May 2026, commits `9bffb0f` / `6cabefa` / `d022bff` / `603f47e`)** —
+   shipped across all 7 wrappers + no-model tests. PLAN §56 #5 closed.
 
 ---
 
@@ -1245,19 +1247,15 @@ contributor-facing path for adding backends with confidence. Status:
   Each backend now exposes `<name>_compute_mel` and
   `<name>_run_encoder` alongside the existing `<name>_transcribe_ex`
   batch entry point. `crispasr_diff_main.cpp` gained the matching
-  dispatch branches. What's still missing is
-  `tools/reference_backends/{parakeet,canary,cohere}.py` — those
-  backends aren't in REGISTERED_BACKENDS yet because loading NeMo
-  checkpoints from PyTorch is non-trivial (needs either
-  `nemo_toolkit` or direct .nemo unpacking following the pattern
-  in `models/convert-parakeet-to-gguf.py`). Follow-up below.
-- **[later]** Write `tools/reference_backends/parakeet.py`,
+  dispatch branches.
+- **[done]** ~~Write `tools/reference_backends/parakeet.py`,
   `canary.py`, `cohere.py` so the crispasr-diff harness has
-  references to compare against. Each follows the pattern already
-  in tools/reference_backends/{qwen3,voxtral,voxtral4b,granite}.py.
-  Parakeet and canary load .nemo tarballs via torch + tarfile
-  (mirroring models/convert-parakeet-to-gguf.py's unpack_nemo()).
-  Cohere loads a HF transformers checkpoint.
+  references to compare against.~~ All three shipped: `parakeet.py`
+  (April 2026, used to diagnose the JA xscaling bug), `cohere.py`
+  (HF `transformers` + trust_remote_code), `canary.py` (May 2026
+  commit `63f708e`, NeMo `from_pretrained` + TimeMels-layout
+  transpose + 32 per-layer encoder hooks). PLAN #5 closed; see
+  HISTORY §63.
 - **[done]** ~~Migrate `examples/{qwen3,voxtral}-test-*/main.cpp`
   drivers to load their reference data from a crispasr-diff GGUF
   archive via `crispasr_diff::Ref` instead of the inline NPY parser.~~
