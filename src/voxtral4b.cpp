@@ -1966,10 +1966,27 @@ extern "C" int voxtral4b_stream_flush(struct voxtral4b_stream* s) {
     // Right-pad the user audio: align to a SAMPLES_PER_TOKEN boundary, then
     // append kRightPadTokens worth of trailing zeros. Internal padding —
     // not counted toward total_samples_fed.
+    //
+    // PLAN #7 phase 3: append the right-pad zeros directly to pcm_with_pad
+    // WITHOUT triggering encoder chunks per-feed. The right-pad's ~80 mel
+    // frames + any residual are then encoded in a single larger combined
+    // chunk below, saving ~6 kernel launches (3 encoder + 3 projector) vs
+    // the previous "feed-and-chunk" path that ran 3-4 separate encoder
+    // chunks during the right-pad feed.
     const int64_t user_samples = s->total_samples_fed;
     const int right_align = (kSamplesPerToken - (int)(user_samples % kSamplesPerToken)) % kSamplesPerToken;
     const int right_pad_total = right_align + kRightPadTokens * kSamplesPerToken;
-    if (right_pad_total > 0) {
+    if (use_incremental && right_pad_total > 0) {
+        // Direct append, bypassing voxtral4b_stream_feed's encoder loop.
+        if (!s->mel_primed) {
+            const int n_fft = 400;
+            s->pcm_with_pad.assign((size_t)(n_fft / 2), 0.0f);
+            s->pcm_next_frame_start = 0;
+            s->mel_primed = true;
+        }
+        const size_t prev = s->pcm_with_pad.size();
+        s->pcm_with_pad.resize(prev + right_pad_total, 0.0f);
+    } else if (right_pad_total > 0) {
         std::vector<float> zeros((size_t)right_pad_total, 0.0f);
         if (voxtral4b_stream_feed(s, zeros.data(), right_pad_total) != 0)
             return -2;
@@ -1983,26 +2000,33 @@ extern "C" int voxtral4b_stream_flush(struct voxtral4b_stream* s) {
         const int n_mels = (int)hp.n_mels;
         if (vox_stream_advance_mel(s) < 0)
             return -3;
-        while ((int)(s->mel_pending.size() / n_mels) >= s->chunk_mel_frames) {
-            if (vox_stream_run_encoder_chunk(s) <= 0)
-                break;
-        }
-        if ((int)s->mel_pending.size() / n_mels > 0 &&
-            s->enc_T_so_far + s->chunk_mel_frames / 2 <= s->enc_max_T) {
-            // Tail-pad mel_pending up to chunk_mel_frames frames per band,
-            // preserving the (n_mels, T) layout (zero-fill at the end of
-            // each band's row).
-            const int T_pre = (int)(s->mel_pending.size() / (size_t)n_mels);
-            const int T_post = s->chunk_mel_frames;
-            std::vector<float> padded((size_t)n_mels * T_post, 0.0f);
-            for (int m = 0; m < n_mels; m++) {
-                std::memcpy(padded.data() + (size_t)m * T_post,
-                            s->mel_pending.data() + (size_t)m * T_pre,
-                            (size_t)T_pre * sizeof(float));
+        // PLAN #7 phase 3: run all remaining mel through ONE larger combined
+        // encoder chunk. mel_pending now holds (residual from feed) +
+        // (right-pad's mel frames). Round up to a multiple of 8 so the
+        // projector's stack-4 alignment works (8 mel = 4 enc = 1 projector
+        // group). One graph build instead of N saves ~6 kernel launches
+        // (3 encoder + 3 projector) and amortises Metal launch overhead
+        // across one larger matmul per layer.
+        const int T_pending = (int)(s->mel_pending.size() / (size_t)n_mels);
+        if (T_pending > 0) {
+            const int T_padded = ((T_pending + 7) / 8) * 8; // round up to multiple of 8
+            if (T_padded > T_pending) {
+                std::vector<float> padded((size_t)n_mels * T_padded, 0.0f);
+                for (int m = 0; m < n_mels; m++) {
+                    std::memcpy(padded.data() + (size_t)m * T_padded,
+                                s->mel_pending.data() + (size_t)m * T_pending,
+                                (size_t)T_pending * sizeof(float));
+                }
+                s->mel_pending = std::move(padded);
             }
-            s->mel_pending = std::move(padded);
-            if (vox_stream_run_encoder_chunk(s) < 0)
-                return -4;
+            if (s->enc_T_so_far + T_padded / 2 <= s->enc_max_T) {
+                const int saved_chunk = s->chunk_mel_frames;
+                s->chunk_mel_frames = T_padded;
+                const int rc = vox_stream_run_encoder_chunk(s);
+                s->chunk_mel_frames = saved_chunk;
+                if (rc < 0)
+                    return -4;
+            }
         }
         if (vox_stream_advance_projector(s) < 0)
             return -5;
