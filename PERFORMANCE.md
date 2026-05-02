@@ -48,7 +48,7 @@ Commit: `b9fd8eb`. **All 19 backends pass.**
 | OmniASR LLM 300M | 1.6B | 1018 | 4.5% | 1.7x | 6.4s | LLaMA 1.3B dec |
 | Granite Speech 1B | 2.9B | 2805 | 0.0% | 1.7x | 6.4s | Granite LLM |
 | VibeVoice ASR | 4.5B | 4589 | 4.5% | 1.2x | 8.8s | ~4B LLM, JSON output |
-| Voxtral 4B Realtime | 4B | 2407 | 0.0% | 0.9x | 12.8s | Causal streaming arch |
+| Voxtral 4B Realtime | 4B | 2407 | 0.0% | 0.9x | 12.8s | Causal streaming arch (PLAN #7 streaming API; 1.6s first-text-token) |
 
 ### Speed ranking
 
@@ -179,6 +179,38 @@ Applies to wav2vec2, data2vec, and hubert.
 | Baseline (manual C++) | 95.2s | 108.4s | 1.0x |
 | ggml F32 im2col | 2.4s | 15.5s | 7.0x |
 | + OpenMP pos_conv | 2.3s | 9.9s | 10.9x |
+
+### voxtral4b streaming — 2026-05 (PLAN #7 phases 1+1.5+2+3+4)
+
+Native incremental encoder + streaming-prompt decode + speculative
+prefill + combined-chunk flush + live captions + decoder thread.
+M1 Q4_K JFK 11 s baseline, all variants bit-exact-batch:
+
+| Stage / phase | Metric | Before | After | Δ |
+|---|---|---|---|---|
+| Phase 1 (initial) | first-text-token | n/a | 2674ms | — |
+| + 240ms chunks (phase 2) | feed total | 23s | 9.1s | 2.5× faster |
+| + default-unification fix | encoder drain | 2064ms | 1016ms | -1.0s |
+| + fused QKV (Q4_K) | per-decode-step | 56ms | 50.4ms | -10% |
+| + combined-chunk flush (phase 3) | encoder drain | 990ms | 307ms | -683ms |
+| + speculative prefill (phase 3) | first-text-token | 921ms | **650ms** | -271ms |
+
+**Final**: first-text-token 2674ms → **650ms (4.1× faster)**;
+sequential live decode (phase 3); decoder thread for non-blocking
+feed (phase 4, gated on `CRISPASR_VOXTRAL4B_STREAM_DECODER_THREAD=1`).
+
+The remaining ~410ms gap to the model's ≤240ms target is the
+architectural floor: 8 streaming-pad warmup steps × 50.4ms + LLM
+prefill = 655ms minimum on M1 Q4_K. Cross that floor only via a
+faster Q4_K Metal kernel or a model with a different prompt
+convention (no streaming-pad warmup).
+
+Cross-backend portability of the fused-QKV Q4_K pattern:
+- qwen3-asr Q4_K: default-on (transcript correct; perf within
+  noise on JFK's short-decode shape)
+- voxtral 3B Q4_K: opt-in (`CRISPASR_VOXTRAL_FUSED_QKV=1`); A/B
+  showed no measurable speedup on JFK
+- qwen3-tts: opt-in (existing convention)
 
 ---
 

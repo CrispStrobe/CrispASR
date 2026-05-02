@@ -138,6 +138,9 @@ not, by design.
 | Shared SwiGLU FFN helper | `src/core/ffn.h` |
 | Shared Llama self-attention helper | `src/core/attention.h` |
 | Shared GGUF loading + weight map | `src/core/gguf_loader.{h,cpp}` |
+| Streaming session API (whisper / kyutai-stt / moonshine-streaming) | `src/crispasr_c_api.cpp` → `crispasr_session_stream_open` + `crispasr_stream_*` dispatch |
+| Native voxtral4b streaming (PLAN #7: incremental encoder + speculative prefill + live captions + decoder thread) | `src/voxtral4b.cpp` → `voxtral4b_stream_*` |
+| Mic capture (cross-platform via miniaudio) | `src/crispasr_mic.{h,cpp}` |
 
 ---
 
