@@ -212,8 +212,56 @@ def main():
 
     # Map and write tensors — stream one-at-a-time to minimize RAM.
     # BF16→F16 via torch (numpy can't handle BF16); delete immediately after writing.
+    #
+    # PLAN #60d: per-LM-layer Q/K/V projections (weights and biases) are
+    # fused into a single `model.layers.{i}.attn.qkv.{weight,bias}` tensor
+    # at convert time. This halves the matmul count in the LM hot path
+    # (one fused mul_mat instead of three) and removes two ggml_add bias
+    # ops per layer. The audio.blk.* path keeps separate Q/K/V — its
+    # bidirectional attention reads them directly outside core_attn.
+    fused_lm: set = set()  # (layer_idx, suffix) marks already emitted as fused
     mapped = 0
     for hf_name in sorted(tensor_names.keys()):
+        parts = hf_name.split(".")
+        is_lm_qkv = (
+            len(parts) >= 6
+            and parts[0] == "model"
+            and parts[1] == "layers"
+            and parts[3] == "self_attn"
+            and parts[4] in ("q_proj", "k_proj", "v_proj")
+            and parts[5] in ("weight", "bias")
+        )
+        if is_lm_qkv:
+            layer_idx = int(parts[2])
+            suffix = parts[5]
+            key = (layer_idx, suffix)
+            if key in fused_lm:
+                continue  # already emitted via the fused tensor
+            q_name = f"model.layers.{layer_idx}.self_attn.q_proj.{suffix}"
+            k_name = f"model.layers.{layer_idx}.self_attn.k_proj.{suffix}"
+            v_name = f"model.layers.{layer_idx}.self_attn.v_proj.{suffix}"
+            q_t = handles[tensor_names[q_name]].get_tensor(q_name)
+            k_t = handles[tensor_names[k_name]].get_tensor(k_name)
+            v_t = handles[tensor_names[v_name]].get_tensor(v_name)
+            # weight: [out, in] → cat dim=0 → [q_out + 2*kv_out, in]
+            # bias:   [out]     → cat dim=0 → [q_out + 2*kv_out]
+            fused = torch.cat([q_t, k_t, v_t], dim=0)
+            gguf_name = f"model.layers.{layer_idx}.attn.qkv.{suffix}"
+            if suffix == "bias":
+                data = np.ascontiguousarray(fused.to(torch.float32).numpy())
+                writer.add_tensor(gguf_name, data, raw_dtype=GGMLQuantizationType.F32)
+            else:
+                data = np.ascontiguousarray(
+                    fused.to(torch.float16 if args.outtype == "f16" else torch.float32).numpy()
+                )
+                writer.add_tensor(gguf_name, data, raw_dtype=ggml_type)
+            fused_lm.add(key)
+            del q_t, k_t, v_t, fused, data
+            mapped += 1
+            if mapped % 50 == 0:
+                print(f"  [{mapped}] {gguf_name} (fused)")
+            continue
+
         gguf_name = map_tensor_name(hf_name)
         t = handles[tensor_names[hf_name]].get_tensor(hf_name)
 

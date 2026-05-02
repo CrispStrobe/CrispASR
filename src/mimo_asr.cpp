@@ -100,6 +100,15 @@ struct mimo_asr_hp {
 // and no per-head Q/K RMSNorm (those are Qwen3-only).
 struct mimo_asr_qwen2_block {
     ggml_tensor* attn_norm_w = nullptr; // RMSNorm γ, no bias
+    // Either separate Q/K/V (legacy GGUFs) or a fused `attn.qkv` pair
+    // (post-PLAN #60d). When `attn_qkv_w` is non-null, the LM forward
+    // takes the fused single-matmul path through `core_attn::kv_self_attn`
+    // and the per-projection q/k/v_w/_b are nullptr. The 6L audio
+    // input_local_transformer always uses the separate path (the converter
+    // only fuses LM layers, and the audio bidirectional graph reads
+    // attn_q_w/k_w/v_w directly).
+    ggml_tensor* attn_qkv_w = nullptr; // fused [d, q_dim + 2*kv_dim], or nullptr
+    ggml_tensor* attn_qkv_b = nullptr; // fused [q_dim + 2*kv_dim] F32, or nullptr
     ggml_tensor* attn_q_w = nullptr;
     ggml_tensor* attn_q_b = nullptr;
     ggml_tensor* attn_k_w = nullptr;
@@ -342,19 +351,29 @@ extern "C" struct mimo_asr_context* mimo_asr_init_from_file(const char* path_mod
 
     auto bind_qwen2_block = [&](mimo_asr_qwen2_block& b, const std::string& prefix) -> bool {
         b.attn_norm_w = require_t(prefix + ".attn_norm.weight");
-        b.attn_q_w = require_t(prefix + ".attn.q.weight");
-        b.attn_q_b = require_t(prefix + ".attn.q.bias");
-        b.attn_k_w = require_t(prefix + ".attn.k.weight");
-        b.attn_k_b = require_t(prefix + ".attn.k.bias");
-        b.attn_v_w = require_t(prefix + ".attn.v.weight");
-        b.attn_v_b = require_t(prefix + ".attn.v.bias");
+        // PLAN #60d: prefer the fused `attn.qkv.{weight,bias}` pair when
+        // present; fall back to separate Q/K/V tensors so legacy GGUFs
+        // (and the audio.blk.* path, which the converter never fuses) keep
+        // working unchanged.
+        b.attn_qkv_w = try_t(prefix + ".attn.qkv.weight");
+        b.attn_qkv_b = try_t(prefix + ".attn.qkv.bias");
+        if (!b.attn_qkv_w) {
+            b.attn_q_w = require_t(prefix + ".attn.q.weight");
+            b.attn_q_b = require_t(prefix + ".attn.q.bias");
+            b.attn_k_w = require_t(prefix + ".attn.k.weight");
+            b.attn_k_b = require_t(prefix + ".attn.k.bias");
+            b.attn_v_w = require_t(prefix + ".attn.v.weight");
+            b.attn_v_b = require_t(prefix + ".attn.v.bias");
+        }
         b.attn_o_w = require_t(prefix + ".attn.o.weight");
         b.ffn_norm_w = require_t(prefix + ".ffn_norm.weight");
         b.ffn_gate_w = require_t(prefix + ".ffn.gate.weight");
         b.ffn_up_w = require_t(prefix + ".ffn.up.weight");
         b.ffn_down_w = require_t(prefix + ".ffn.down.weight");
-        return b.attn_norm_w && b.attn_q_w && b.attn_q_b && b.attn_k_w && b.attn_k_b && b.attn_v_w && b.attn_v_b &&
-               b.attn_o_w && b.ffn_norm_w && b.ffn_gate_w && b.ffn_up_w && b.ffn_down_w;
+        const bool qkv_ok = b.attn_qkv_w
+                                ? (b.attn_qkv_b != nullptr)
+                                : (b.attn_q_w && b.attn_q_b && b.attn_k_w && b.attn_k_b && b.attn_v_w && b.attn_v_b);
+        return b.attn_norm_w && qkv_ok && b.attn_o_w && b.ffn_norm_w && b.ffn_gate_w && b.ffn_up_w && b.ffn_down_w;
     };
 
     auto& a = ctx->model.audio;
@@ -435,6 +454,24 @@ extern "C" struct mimo_asr_context* mimo_asr_init_from_file(const char* path_mod
 //   prefill_text_logits_step0   [vocab]                   F32
 // ===========================================================================
 
+// PLAN #60e: KV cache dtype is configurable via CRISPASR_KV_QUANT.
+// Default F16 keeps bit-identity with previous behaviour; q8_0/q4_0
+// halve / quarter the cache footprint at the cost of a dequant step
+// on read (handled centrally in core_attn::kv_self_attn).
+static ggml_type mimo_asr_kv_dtype_from_env() {
+    const char* s = std::getenv("CRISPASR_KV_QUANT");
+    if (!s || !*s)
+        return GGML_TYPE_F16;
+    if (std::strcmp(s, "f16") == 0)
+        return GGML_TYPE_F16;
+    if (std::strcmp(s, "q8_0") == 0)
+        return GGML_TYPE_Q8_0;
+    if (std::strcmp(s, "q4_0") == 0)
+        return GGML_TYPE_Q4_0;
+    fprintf(stderr, "mimo_asr: CRISPASR_KV_QUANT='%s' unrecognised, defaulting to f16\n", s);
+    return GGML_TYPE_F16;
+}
+
 static bool mimo_asr_kv_init(mimo_asr_context* ctx, int max_ctx) {
     if (ctx->kv_k && ctx->kv_max_ctx >= max_ctx)
         return true;
@@ -450,10 +487,11 @@ static bool mimo_asr_kv_init(mimo_asr_context* ctx, int max_ctx) {
     const int hd = (int)hp.llm_head_dim;
     const int n_kv = (int)hp.llm_kv_heads;
     const int n_lay = (int)hp.llm_layers;
+    const ggml_type kv_dtype = mimo_asr_kv_dtype_from_env();
     ggml_init_params kp = {ggml_tensor_overhead() * 4 + 1024, nullptr, true};
     ctx->kv_ctx = ggml_init(kp);
-    ctx->kv_k = ggml_new_tensor_4d(ctx->kv_ctx, GGML_TYPE_F16, hd, max_ctx, n_kv, n_lay);
-    ctx->kv_v = ggml_new_tensor_4d(ctx->kv_ctx, GGML_TYPE_F16, hd, max_ctx, n_kv, n_lay);
+    ctx->kv_k = ggml_new_tensor_4d(ctx->kv_ctx, kv_dtype, hd, max_ctx, n_kv, n_lay);
+    ctx->kv_v = ggml_new_tensor_4d(ctx->kv_ctx, kv_dtype, hd, max_ctx, n_kv, n_lay);
     ggml_set_name(ctx->kv_k, "mimo_kv_k");
     ggml_set_name(ctx->kv_v, "mimo_kv_v");
     const size_t kbytes = ggml_nbytes(ctx->kv_k);
@@ -471,8 +509,8 @@ static bool mimo_asr_kv_init(mimo_asr_context* ctx, int max_ctx) {
     ctx->kv_max_ctx = max_ctx;
     ctx->kv_n_used = 0;
     if (ctx->params.verbosity >= 1) {
-        fprintf(stderr, "mimo_asr: kv cache %d MiB (head_dim=%d max_ctx=%d n_kv=%d n_layers=%d)\n",
-                (int)((kbytes + vbytes) / 1048576), hd, max_ctx, n_kv, n_lay);
+        fprintf(stderr, "mimo_asr: kv cache %d MiB %s (head_dim=%d max_ctx=%d n_kv=%d n_layers=%d)\n",
+                (int)((kbytes + vbytes) / 1048576), ggml_type_name(kv_dtype), hd, max_ctx, n_kv, n_lay);
     }
     return true;
 }
@@ -764,13 +802,16 @@ static ggml_cgraph* mimo_asr_build_prefill_graph(mimo_asr_context* ctx, int T_gr
         ggml_tensor* h = ggml_rms_norm(ctx0, cur, eps);
         h = ggml_mul(ctx0, h, b.attn_norm_w);
 
-        // KV-cached self-attn with Qwen2 Q/K/V biases (no o-bias).
+        // KV-cached self-attn with Qwen2 Q/K/V biases (no o-bias). When
+        // the GGUF stores fused `attn.qkv.{weight,bias}` (PLAN #60d),
+        // pass them through; the per-projection Q/K/V tensors are nullptr
+        // in that case and the helper takes the single-matmul path.
         ggml_tensor* attn = core_attn::kv_self_attn(
             ctx0, gf, h, b.attn_q_w, b.attn_k_w, b.attn_v_w, b.attn_o_w,
             /*q_norm_w*/ nullptr, /*k_norm_w*/ nullptr, positions, causal_mask, ctx->kv_k, ctx->kv_v, (int)il,
             /*n_past*/ n_past, kvp,
-            /*qkv_w*/ nullptr, /*fixed_kv_len*/ 0, /*kv_indices*/ nullptr, b.attn_q_b, b.attn_k_b, b.attn_v_b,
-            /*o_b*/ nullptr);
+            /*qkv_w*/ b.attn_qkv_w, /*fixed_kv_len*/ 0, /*kv_indices*/ nullptr, b.attn_q_b, b.attn_k_b, b.attn_v_b,
+            /*o_b*/ nullptr, /*qkv_b*/ b.attn_qkv_b);
         cur = ggml_add(ctx0, residual, attn);
 
         residual = cur;
@@ -897,8 +938,8 @@ static ggml_cgraph* mimo_asr_build_step_graph(mimo_asr_context* ctx, int n_past,
             ctx0, gf, h, b.attn_q_w, b.attn_k_w, b.attn_v_w, b.attn_o_w,
             /*q_norm_w*/ nullptr, /*k_norm_w*/ nullptr, positions, causal_mask, ctx->kv_k, ctx->kv_v, (int)il,
             /*n_past*/ n_past, kvp,
-            /*qkv_w*/ nullptr, /*fixed_kv_len*/ fixed_kv_len, /*kv_indices*/ eff_kv_indices, b.attn_q_b, b.attn_k_b,
-            b.attn_v_b, /*o_b*/ nullptr);
+            /*qkv_w*/ b.attn_qkv_w, /*fixed_kv_len*/ fixed_kv_len, /*kv_indices*/ eff_kv_indices, b.attn_q_b,
+            b.attn_k_b, b.attn_v_b, /*o_b*/ nullptr, /*qkv_b*/ b.attn_qkv_b);
         cur = ggml_add(ctx0, residual, attn);
 
         residual = cur;

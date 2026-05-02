@@ -24,7 +24,7 @@ All backends support `-m auto --auto-download`. Three new ggml ops
 | **MEDIUM** | [#56 Kokoro multilingual phonemizer](#56-kokoro-multilingual-phonemizer-espeak-ng) | Small | espeak-ng + DE backbone shipped; HF GGUFs published 2026-05-01; auto-download wired; only Mandarin tones / JA kanji + diff-harness phonemizer-step polish remain |
 | **MEDIUM** | [#58 MOSS-Audio-4B-Instruct](#58-moss-audio-4b-instruct) | Large | first audio-understanding (not just ASR) backend; introduces DeepStack cross-layer feature injection |
 | **MEDIUM** | [#59 Cross-binding C-ABI parity](#59-cross-binding-c-abi-parity) | Medium | TTS surface (incl. qwen3-tts variants) at full parity across all 7 wrappers; align/diarize/VAD/streaming/punctuation/LID/registry still C-ABI-only on Go/Java/Ruby/JS/Dart |
-| **MEDIUM** | [#60 llama.cpp/llamafile perf trick ports](#60-cross-backend-perf-tricks-llamacpp--llamafile-ports) | 14 items | 60a/b/c/f/g DONE; 60d (Fused QKV) + 60e (KV quant) OPEN; 60h-n parked/skip |
+| **MEDIUM** | [#60 llama.cpp/llamafile perf trick ports](#60-cross-backend-perf-tricks-llamacpp--llamafile-ports) | 14 items | 60a/b/c/d/f/g DONE; 60e (KV quant) env-flag landed for mimo-asr, per-backend rollout pending; 60h-n parked/skip |
 | **LOW** | #41 Moonshine IPA / phoneme | High | Deferred |
 | **LOW** | [#7 voxtral4b streaming](#7-native-voxtral4b-streaming) | High | |
 | **LOW** | [#9 Parakeet TDT GPU](#9-parakeet-tdt-decoder-gpu) | Medium | |
@@ -1266,8 +1266,8 @@ often-contested external disk.
 | [60a — madvise WILLNEED](#60a-posix_madvisewillneed-on-mmapd-weights) | **DONE** | T1 | done | Async kernel readahead, both mmap branches |
 | [60b — wrap_iface forward-compat](#60b-wrap_iface-forward-compat-set_tensor_2d--get_tensor_2d--reset) | **DONE** | T1 | done | 3 delegations added to mmap_wrap_iface |
 | [60c — pre-touch / `--preload` flag](#60c-pre-touch--preload-flag) | **DONE** | T1 | done | `CRISPASR_GGUF_PRELOAD=1` page-walks before return |
-| [60d — Fused QKV per LM layer](#60d-fused-qkv-per-lm-layer) | **OPEN** | T2 | M | mimo-asr first; qwen3-asr / voxtral4b later |
-| [60e — KV cache quantization](#60e-kv-cache-quantization-f16--q8_0--q4_0) | **OPEN** | T2 | M | Long-form ASR enabler |
+| [60d — Fused QKV per LM layer](#60d-fused-qkv-per-lm-layer) | **DONE** (mimo-asr) | T2 | done | runtime + converter + GGUF patch script; Q4_K re-uploaded; F16 re-upload deferred |
+| [60e — KV cache quantization](#60e-kv-cache-quantization-f16--q8_0--q4_0) | **OPEN** (env-flag landed) | T2 | M | `CRISPASR_KV_QUANT=q8_0/q4_0` plumbing done for mimo-asr; per-backend rollout pending |
 | [60f — `--mlock` flag](#60f---mlock-flag) | **DONE** | T3 | done | `CRISPASR_MLOCK=1` pins pages after WILLNEED |
 | [60g — `MADV_RANDOM` post-prefill](#60g-madv_random-post-prefill) | **DONE** | T3 | done | `core_gguf::mmap_advise_random()` exposed |
 | [60h — Linux huge pages](#60h-linux-huge-pages-map_hugetlb) | PARKED | T3 | S | Linux-only; we don't have Linux production targets |
@@ -1344,39 +1344,69 @@ a tiny follow-up if anyone runs this path on Linux.
 
 ---
 
-### 60d. Fused QKV per LM layer
+### 60d. Fused QKV per LM layer — **DONE (mimo-asr Q4_K, May 2026)**
 
-**Status:** OPEN. **Effort: M (~80 LOC + converter + GGUF re-upload).** **Tier 2.**
+**Status:** DONE for mimo-asr Q4_K. F16 re-upload deferred behind
+the same disk-thrash blocker as PLAN #51c (uncontended-disk
+re-conversion).
 
-The work order's "small wins to consider opportunistically" for
-PLAN #51 already lists this. Save 2 matmuls per layer × 36 layers
-× N steps by writing one `attn_qkv.weight = concat(Q,K,V)` of
-shape `[d, (n_q + 2*n_kv) * hd]` and feeding it to
-`core_attn::kv_self_attn` via the existing `qkv_w` parameter
-(qwen3-tts already uses this path).
+Save 2 matmuls per layer × 36 layers × N steps by emitting one
+`attn.qkv.weight = concat(Q,K,V)` of shape
+`[d, (n_q + 2*n_kv) * hd]` and a fused `attn.qkv.bias` of length
+`(n_q + 2*n_kv) * hd`, feeding both to `core_attn::kv_self_attn`
+via the existing `qkv_w` plus a new `qkv_b` parameter.
 
-Probably another **1.1-1.2× per-step decode** on top of 51b/b'.
+**What landed:**
+- `src/core/attention.h` — `core_attn::kv_self_attn` gained an
+  optional trailing `qkv_b` parameter. When `qkv_w` and `qkv_b`
+  are both non-null the helper does `qkv = qkv_w·x + qkv_b` in one
+  fused mul_mat + ggml_add (instead of three separate matmuls +
+  three bias adds). Algebraically identical; one ggml_add op
+  replaces three.
+- `src/mimo_asr.cpp` — `mimo_asr_qwen2_block` gained
+  `attn_qkv_w` / `attn_qkv_b` slots. `bind_qwen2_block` prefers the
+  fused tensors via `try_t`; falls back to the separate Q/K/V path
+  when fused tensors are absent (legacy GGUFs and the audio
+  `audio.blk.*` blocks, which use bidirectional attention outside
+  `core_attn`). Both LM call sites pass through `qkv_w` / `qkv_b`.
+- `models/convert-mimo-asr-to-gguf.py` — at HF→GGUF convert time,
+  per-LM-layer Q/K/V tensors (and biases) are concatenated along
+  the output-dim and emitted as
+  `model.layers.{i}.attn.qkv.{weight,bias}`. The audio path is
+  intentionally untouched.
+- `tools/patch_mimo_asr_fuse_qkv.py` — patches an existing GGUF
+  in place by byte-concat'ing the per-row Q/K/V data. Works for
+  F16/F32 (element concat) and Q4_K/Q8_0/etc. (byte concat — each
+  row is independently quantised, so this is bit-identical to
+  re-quantising a fresh fused F16). Used to ship the new Q4_K
+  without re-running the BF16→F16 converter (which thrashes on a
+  99%-full external disk per LEARNINGS / PLAN #51c).
+- Re-uploaded the patched Q4_K to `cstr/mimo-asr-GGUF`. The
+  in-runtime fallback keeps the existing unfused F16 GGUF working
+  as-is — F16 re-upload is queued behind PLAN #51c.
 
-**Files to touch (mimo-asr first):**
-- `models/convert-mimo-asr-to-gguf.py` — fuse Q/K/V tensors per
-  LM layer at convert time (write one combined tensor per layer
-  instead of three).
-- `src/mimo_asr.cpp` — load `attn_qkv.weight` per LM layer if
-  present; pass through to
-  `core_attn::kv_self_attn(..., qkv_w=fused, ...)`.
-- Re-upload `cstr/mimo-asr-GGUF` with the new layout. Keep a
-  fallback in `mimo_asr_init_from_file` that detects unfused Q/K/V
-  in old GGUFs and runs the slow path so existing downloads keep
-  working.
+**Validation:**
+- `crispasr-diff mimo-asr <fused.q4_k.gguf> mimo-asr-ref.gguf jfk.wav`
+  reproduces the §56 cosines within FP rounding of the unfused
+  baseline (audio_features 0.998, text_embeds 0.996,
+  inputs_embeds 0.998, last_hidden 0.963, logits 0.981).
+- JFK transcript byte-identical to "And so, my fellow Americans,
+  ask not what your country can do for you. Ask what you can do
+  for your country."
+- `MIMO_ASR_BENCH=1` shows the expected ~1.1-1.2× per-step
+  speedup on top of the 0.79 s/step 51b/b' baseline.
 
-**Port pattern to:** qwen3-asr (28L Qwen3), voxtral4b (26L Mistral)
-once validated on mimo-asr. Same shape; ~30 LOC each.
+**Port pattern to:** qwen3-asr / voxtral4b already have runtime
+fusion paths for F16/F32 (`qwen3_asr.cpp:1428`,
+`qwen3_tts.cpp:4978`). Quantized variants would follow this
+section's converter-side fuse approach.
 
 ---
 
-### 60e. KV cache quantization (F16 → Q8_0 / Q4_0)
+### 60e. KV cache quantization (F16 → Q8_0 / Q4_0) — **OPEN (env-flag landed, May 2026)**
 
-**Status:** OPEN. **Effort: M (~200 LOC, shared-code surgery).** **Tier 2.**
+**Status:** OPEN — env-flag plumbing landed for mimo-asr; per-backend
+rollout pending validation on long-form inputs.
 
 llama.cpp ships `--kv-quant-type k Q8_0` etc. Halves (Q8_0) or
 quarters (Q4_0) KV memory with near-zero quality loss for ASR.
@@ -1388,18 +1418,32 @@ Q8_0 would drop that to ~28 MB.
 Not load-bearing for JFK (11 s). **Essential for hour-long podcast
 ASR** where `max_ctx` balloons past 10k groups (~1.5 GB F16 KV).
 
-**Files to touch:**
-- `src/core/attention.h` — `core_attn::kv_self_attn` currently
-  hardcodes `GGML_TYPE_F16` for the K/V views. Add a `kv_dtype`
-  parameter; the read path needs `ggml_dequantize_row` shims for
-  Q8_0 / Q4_0.
-- Each backend that allocates KV (`mimo_asr_kv_init`,
-  `qwen3_asr_kv_init`, `voxtral4b_kv_init`, etc.) — opt into the
-  smaller dtype via env (`CRISPASR_KV_QUANT=q8_0`) or per-backend.
+**What landed:**
+- `src/core/attention.h` — `core_attn::kv_self_attn` now reads
+  `kv_k->type` directly: F16 (and F32) takes the existing
+  `ggml_cont` path, while a quantized cache (Q8_0, Q4_0, …) uses
+  `ggml_cast(...,F16)` to dequantize-on-read. Metal supports
+  `Q*→F16` CPY for all standard quant types per
+  `ggml-metal-device.m:1198–1250`. The cache *storage* keeps the
+  ~half-bytes (Q8_0) / quarter-bytes (Q4_0) saving; reads pay one
+  dequant pass per layer per step.
+- `src/mimo_asr.cpp` — `mimo_asr_kv_init` reads `CRISPASR_KV_QUANT`
+  (`f16` default, `q8_0`, `q4_0`) and allocates `ctx->kv_k` /
+  `ctx->kv_v` with the requested dtype. The `ggml_cpy(F32→Q*)`
+  write path (and `ggml_set_rows` scatter for the cached step
+  graph) is supported on Metal for Q8_0 / Q4_0.
 
-Land behind env flag; flip default per backend after diff-harness
-cosine validation. Touches ~10 backends shared via `core_attn` —
-needs the same broad-backend gauntlet as PLAN #51a.
+**Per-backend rollout (the OPEN bit):** mirror the 2-line
+`CRISPASR_KV_QUANT` lookup from `mimo_asr_kv_init` into
+`qwen3_asr_kv_init`, `voxtral4b_kv_init`, `voxtral_kv_init`,
+`granite_speech_kv_init`, `granite_nle_kv_init`, `gemma4_e2b_kv_init`,
+`qwen3_tts_kv_init` (talker only — code_pred has its own cache).
+For each, validate via `crispasr-diff` with `CRISPASR_KV_QUANT=q8_0`
+and confirm cosines on consumed-output tensors (logits, last_hidden)
+stay ≥0.98. Default stays F16 until each backend passes.
+
+**Validation done so far:** mimo-asr Q4_K diff harness with
+`CRISPASR_KV_QUANT=q8_0` — see HISTORY 64.
 
 ---
 

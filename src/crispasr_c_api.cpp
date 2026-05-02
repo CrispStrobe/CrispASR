@@ -1465,7 +1465,9 @@ CA_EXPORT crispasr_session_result* crispasr_session_transcribe_lang(crispasr_ses
                 w.text = pr->words[i].text;
                 w.t0 = pr->words[i].t0;
                 w.t1 = pr->words[i].t1;
-                w.p = 1.0f;
+                // Mean of sub-word token softmax probs (parakeet.cpp word
+                // grouping). 0 if the word came from no-token source.
+                w.p = pr->words[i].p > 0.0f ? pr->words[i].p : 1.0f;
                 seg.words.push_back(std::move(w));
             }
         }
@@ -2081,6 +2083,17 @@ CA_EXPORT int64_t crispasr_session_result_word_t1(crispasr_session_result* r, in
         return 0;
     auto& ws = r->segments[i_seg].words;
     return (i_word >= 0 && i_word < (int)ws.size()) ? ws[i_word].t1 : 0;
+}
+// Per-word probability (confidence) in [0, 1]. Backends that don't
+// emit per-word probabilities populate this with 1.0 at construction
+// time, so consumers can render uniformly when the backend is silent.
+// Returns -1.0 on out-of-range so callers can distinguish "no data"
+// from "100% confident".
+CA_EXPORT float crispasr_session_result_word_p(crispasr_session_result* r, int i_seg, int i_word) {
+    if (!r || i_seg < 0 || i_seg >= (int)r->segments.size())
+        return -1.0f;
+    auto& ws = r->segments[i_seg].words;
+    return (i_word >= 0 && i_word < (int)ws.size()) ? ws[i_word].p : -1.0f;
 }
 
 CA_EXPORT void crispasr_session_result_free(crispasr_session_result* r) {

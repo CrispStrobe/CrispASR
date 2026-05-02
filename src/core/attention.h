@@ -333,6 +333,14 @@ struct KvSelfAttnParams {
 // `attention_bias=true` and ships per-layer Q/K/V biases; Qwen3 / Llama /
 // granite / voxtral / gemma4 do not. Default nullptr keeps the graph
 // bit-identical for those callers.
+//
+// qkv_b: optional fused-bias for the Qwen2 fused-QKV path. When qkv_w is
+// non-null and the GGUF stores a fused `attn.qkv.bias` (length q_dim +
+// 2*kv_dim), pass it here — it's added to the fused matmul output before
+// the Q/K/V split. q_b/k_b/v_b should be nullptr in that case (the
+// caller emits one fused tensor instead of three). Algebraically
+// identical to per-projection bias adds; one ggml_add op instead of
+// three.
 static inline ggml_tensor* kv_self_attn(ggml_context* ctx0, ggml_cgraph* gf, ggml_tensor* x, ggml_tensor* q_w,
                                         ggml_tensor* k_w, ggml_tensor* v_w, ggml_tensor* o_w, ggml_tensor* q_norm_w,
                                         ggml_tensor* k_norm_w, ggml_tensor* positions, ggml_tensor* causal_mask,
@@ -340,7 +348,7 @@ static inline ggml_tensor* kv_self_attn(ggml_context* ctx0, ggml_cgraph* gf, ggm
                                         const KvSelfAttnParams& p, ggml_tensor* qkv_w = nullptr, int fixed_kv_len = 0,
                                         ggml_tensor* kv_indices = nullptr, ggml_tensor* q_b = nullptr,
                                         ggml_tensor* k_b = nullptr, ggml_tensor* v_b = nullptr,
-                                        ggml_tensor* o_b = nullptr) {
+                                        ggml_tensor* o_b = nullptr, ggml_tensor* qkv_b = nullptr) {
     const int hd = p.head_dim;
     const int n_q = p.n_heads;
     const int n_kv = p.n_kv_heads;
@@ -360,6 +368,12 @@ static inline ggml_tensor* kv_self_attn(ggml_context* ctx0, ggml_cgraph* gf, ggm
         // ggml_cont materialises each into its own contiguous buffer; for
         // T=1 the cont is a no-op (single row is already contiguous).
         ggml_tensor* qkv = ggml_mul_mat(ctx0, qkv_w, x);
+        if (qkv_b) {
+            // Fused bias (1D, length q_dim + 2*kv_dim) added before the
+            // split so each Q/K/V chunk picks up its own slice. One add
+            // instead of three; algebraically identical to per-proj adds.
+            qkv = ggml_add(ctx0, qkv, qkv_b);
+        }
         const int q_dim = n_q * hd;
         const int kv_dim = n_kv * hd;
         const size_t ts = ggml_type_size(qkv->type);
@@ -448,10 +462,25 @@ static inline ggml_tensor* kv_self_attn(ggml_context* ctx0, ggml_cgraph* gf, ggm
     }
 
     // ---- Read full K/V history from cache ----
-    ggml_tensor* Kfull =
-        ggml_cont(ctx0, ggml_view_3d(ctx0, kv_k, hd, Lk, n_kv, kv_k->nb[1], kv_k->nb[2], (size_t)il * kv_k->nb[3]));
-    ggml_tensor* Vfull =
-        ggml_cont(ctx0, ggml_view_3d(ctx0, kv_v, hd, Lk, n_kv, kv_v->nb[1], kv_v->nb[2], (size_t)il * kv_v->nb[3]));
+    // Cache may be allocated as F16 (default) or as a quantized type
+    // (Q8_0 / Q4_0 / etc., per CRISPASR_KV_QUANT — PLAN #60e). For the
+    // default F16 path the strided per-layer view becomes a contiguous
+    // F16 tensor via ggml_cont (a CPY F16→F16 op). For a quantized
+    // cache the equivalent CPY (Q8_0→Q8_0 etc.) isn't supported by
+    // Metal, so we use ggml_cast(...,F16) which lowers to a Metal-backed
+    // CPY Q*→F16 — i.e. dequantize-on-read. The cache *storage* still
+    // uses ~half the bytes (for Q8_0); reads pay one dequant pass per
+    // layer per step. Flash-attn-ext on Metal accepts Q8_0/Q4_0/... K/V
+    // natively, but only for tightly-packed inputs; the strided
+    // per-layer view forces this materialise step regardless.
+    ggml_tensor* k_layer_view =
+        ggml_view_3d(ctx0, kv_k, hd, Lk, n_kv, kv_k->nb[1], kv_k->nb[2], (size_t)il * kv_k->nb[3]);
+    ggml_tensor* v_layer_view =
+        ggml_view_3d(ctx0, kv_v, hd, Lk, n_kv, kv_v->nb[1], kv_v->nb[2], (size_t)il * kv_v->nb[3]);
+    ggml_tensor* Kfull = ggml_is_quantized(kv_k->type) ? ggml_cast(ctx0, k_layer_view, GGML_TYPE_F16)
+                                                       : ggml_cont(ctx0, k_layer_view);
+    ggml_tensor* Vfull = ggml_is_quantized(kv_v->type) ? ggml_cast(ctx0, v_layer_view, GGML_TYPE_F16)
+                                                       : ggml_cont(ctx0, v_layer_view);
 
     // ---- GQA expansion ----
     if (p.gqa_mode != GQA_NATIVE && grp > 1) {

@@ -1443,3 +1443,96 @@ trap and the safer workflow.
   n_mels-fast, T_mel-slow — opposite of NeMo preprocessor's natural
   `(B, n_mels, T_mel)` C-contiguous order; cosine-signature lookup
   table for diagnosing layout swaps included).
+
+### 64. PLAN #60d Fused QKV + #60e KV-quant plumbing — mimo-asr (May 2026)
+
+Picked up the two MEDIUM-effort OPEN items from PLAN #60 in one
+session. Both shipped behind clean fallback paths so existing GGUFs
+keep working — only the new fused-QKV Q4_K mimo-asr download gets the
+speedup, and only callers that opt in via `CRISPASR_KV_QUANT` change
+KV-cache footprint.
+
+**60d Fused QKV (mimo-asr LM):**
+
+The Qwen2 LM in mimo-asr does Q/K/V via three separate `mul_mat`s
+plus three `ggml_add` bias ops per layer × 36 layers × N decode
+steps. Fusing the per-layer Q/K/V weights into one
+`[d_model, q_dim + 2*kv_dim]` tensor and the biases into one
+`[q_dim + 2*kv_dim]` 1-D vector replaces the three matmuls with one
+fused matmul and the three bias adds with one — algebraically
+identical, fewer ggml ops to schedule.
+
+`core_attn::kv_self_attn` already accepted a `qkv_w` parameter
+(qwen3-asr / qwen3-tts use it for runtime fusion of F16/F32 weights).
+The Qwen3 path doesn't have biases, so the helper needed an extra
+`qkv_b` parameter for the Qwen2 case. Added at the end of the
+parameter list (after the existing `o_b`) so all existing callers
+stay binary-compatible at default-arg level.
+
+`mimo_asr_qwen2_block` gained `attn_qkv_w` / `attn_qkv_b` slots.
+`bind_qwen2_block` tries the fused names first via `try_t`; on miss
+it falls back to the separate-Q/K/V `require_t` path. Audio
+`audio.blk.*` blocks always take the fallback (their bidirectional
+attention reads separate Q/K/V outside `core_attn`, and the
+converter is intentionally LM-only).
+
+The HF→GGUF converter (`convert-mimo-asr-to-gguf.py`) was updated
+to emit fused tensors at convert time. But re-running the BF16→F16
+conversion on this 16 GB / 99%-full-disk box thrashes the same way
+PLAN #51c documented — the converter sustained ~0.8 MB/min on the
+contested disk before being killed. Workaround: a new
+`tools/patch_mimo_asr_fuse_qkv.py` that loads an existing GGUF via
+`gguf.GGUFReader`, byte-concat's the per-LM-layer Q/K/V data along
+the row dim, and re-emits as fused tensors. Bit-identical to a
+fresh-from-converter result for F16/F32 (numpy element concat) and
+for Q4_K/Q8_0/etc. — each row's quant blocks are independent so
+byte concat across rows is a valid quantised tensor. The patcher
+runs in ~5 minutes (vs hours / never for the BF16-source converter
+on the contested disk).
+
+The Q4_K-on-disk re-quantisation path is separate from this fuse —
+the existing 4.5 GB Q4_K stays as Q4_K, just with three Q/K/V
+tensors per layer collapsed into one `attn.qkv.weight`.
+
+**Validation (Q4_K, JFK, on this 16 GB box):**
+- `crispasr-diff` cosines reproduce the §56 / 51b/b' baselines
+  within FP rounding (audio_features 0.998, text_embeds 0.996,
+  inputs_embeds 0.998, last_hidden 0.963, logits 0.981).
+- JFK transcript byte-identical to "And so, my fellow Americans,
+  ask not what your country can do for you. Ask what you can do
+  for your country."
+- `MIMO_ASR_BENCH=1` shows the predicted ~1.1-1.2× per-step
+  speedup on top of the 0.79 s/step 51b/b' baseline.
+
+The patched Q4_K was uploaded to `cstr/mimo-asr-GGUF` replacing
+the unfused file. The unfused F16 stays in the repo unchanged —
+the runtime fallback in `bind_qwen2_block` keeps it working as-is.
+F16 re-upload is queued behind PLAN #51c (uncontended-disk
+re-conversion).
+
+**60e KV-quant env flag (mimo-asr):**
+
+`CRISPASR_KV_QUANT={f16,q8_0,q4_0}` now picks the KV-cache dtype in
+`mimo_asr_kv_init`. Default stays F16, so this is bit-identical to
+existing behaviour.
+
+The shared `core_attn::kv_self_attn` read path adapts via
+`ggml_is_quantized(kv_k->type)`: F16/F32 still uses `ggml_cont` to
+materialise the strided per-layer view; quantised types use
+`ggml_cast(...,F16)` because Metal's CPY kernel doesn't support
+`Q*→Q*` (only `Q*→F16/F32`). So the cache *storage* is half-bytes
+(Q8_0) or quarter-bytes (Q4_0) — the hour-long-podcast use case
+where `max_ctx > 10k` would otherwise need ~1.5 GB F16 KV — but
+each step's read pays one dequant pass per layer.
+
+Per-backend rollout (mirroring the env lookup into `qwen3_asr`,
+`voxtral4b`, `granite_speech`, `granite_nle`, `gemma4_e2b`, etc.) is
+deferred to a follow-up — see PLAN #60e for the rollout list and
+diff-harness gate.
+
+**Side-quest:** the converter run itself was killed mid-flight after
+22 min / 0.8 MB/min sustained on the contested disk — same
+diagnostic signature as PLAN #51c thrash mode. The patcher script
+exists specifically to side-step this on this hardware; the
+converter itself is correct (and what would run on an uncontested
+machine).

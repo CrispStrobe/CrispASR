@@ -1654,6 +1654,17 @@ class CrispasrSession {
     final wordT1 = _lib.lookupFunction<
         Int64 Function(Pointer<Void>, Int32, Int32),
         int Function(Pointer<Void>, int, int)>('crispasr_session_result_word_t1');
+    // crispasr_session_result_word_p was added 2026-05-02 to surface
+    // per-word probabilities for backends that emit them. Older
+    // libwhisper builds don't have the symbol — probe and fall back to
+    // 1.0 (the documented "uniform confidence" default) so this
+    // binding stays loadable against pre-2026-05 dylibs.
+    final wordPFn = _lib.providesSymbol('crispasr_session_result_word_p')
+        ? _lib.lookupFunction<
+            Float Function(Pointer<Void>, Int32, Int32),
+            double Function(Pointer<Void>, int, int)>(
+            'crispasr_session_result_word_p')
+        : null;
 
     final out = <SessionSegment>[];
     for (var i = 0; i < nSegs; i++) {
@@ -1666,11 +1677,16 @@ class CrispasrSession {
       for (var k = 0; k < wc; k++) {
         final wp = wordText(res, i, k);
         final wt = wp == nullptr ? '' : wp.toDartString();
+        // -1.0 from the C side means "no per-word probability for this
+        // backend" — clamp to 1.0 so the UI renders neutrally rather
+        // than treating it as zero confidence.
+        var p = wordPFn == null ? 1.0 : wordPFn(res, i, k);
+        if (p < 0) p = 1.0;
         words.add(Word(
           text: wt,
           start: wordT0(res, i, k) / 100.0,
           end:   wordT1(res, i, k) / 100.0,
-          p: 1.0,
+          p: p,
         ));
       }
       out.add(SessionSegment(text: text.trim(), start: t0, end: t1, words: words));
