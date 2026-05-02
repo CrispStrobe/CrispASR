@@ -20,7 +20,7 @@ All backends support `-m auto --auto-download`. Three new ggml ops
 | **DONE** | [#54 granite-speech-4.1 plus / nar](#54-granite-speech-41-plus--nar-variants) | Small | base + plus + nar runtimes all DONE; F16 + 3 Q4_K variants shipped to [`cstr/granite-speech-4.1-2b-nar-GGUF`](https://huggingface.co/cstr/granite-speech-4.1-2b-nar-GGUF); registry wired |
 | **HIGH** | [#57 Commercial-friendly TTS expansion](#57-commercial-friendly-tts-backend-expansion) | Phased | Phase 1 (Qwen3-TTS-{CustomVoice 0.6B/1.7B, Base 1.7B, VoiceDesign 1.7B}) DONE; Phase 2 Orpheus-3B base + lex-au-orpheus-de DONE; Kartoffel_Orpheus DE checkpoint swap pending (safetensors → GGUF conversion); phases 3-5 queued |
 | **MEDIUM** | [#5 Reference backends](#5-reference-backends-for-parakeetcanarycohere) | Medium | parakeet/cohere DONE; canary remaining |
-| **MEDIUM** | [#53 core/audio_decoder.h](#53-coreaudio_decoderh--dry-across-tts--codec-backends) | Medium | DRY across qwen3-tts/mimo/vibevoice |
+| **LOW** | [#53 Two narrow extractions](#53-two-narrow-extractions-for-shared-tts-codec-patterns) | Small | Snake activations + causal tconv1d wrapper across qwen3-tts + SNAC |
 | **MEDIUM** | [#56 Kokoro multilingual phonemizer](#56-kokoro-multilingual-phonemizer-espeak-ng) | Small | espeak-ng + DE backbone shipped; HF GGUFs published 2026-05-01; auto-download wired; only Mandarin tones / JA kanji + diff-harness phonemizer-step polish remain |
 | **MEDIUM** | [#58 MOSS-Audio-4B-Instruct](#58-moss-audio-4b-instruct) | Large | first audio-understanding (not just ASR) backend; introduces DeepStack cross-layer feature injection |
 | **MEDIUM** | [#59 Cross-binding C-ABI parity](#59-cross-binding-c-abi-parity) | Medium | TTS surface (incl. qwen3-tts variants) at full parity across all 7 wrappers; align/diarize/VAD/streaming/punctuation/LID/registry still C-ABI-only on Go/Java/Ruby/JS/Dart |
@@ -352,27 +352,54 @@ transcribe are all bit-exact end-to-end on JFK.
 
 ---
 
-## 53. `core/audio_decoder.h` — DRY across TTS / codec backends
+## 53. Two narrow extractions for shared TTS-codec patterns
 
-VibeVoice TTS (σ-VAE), Qwen3-TTS (RVQ codec) and MiMo
-(MiMo-Audio-Tokenizer) all share the "discrete codes → 24 kHz
-waveform" shape: a stack of 1D conv up-sampling blocks driven by a
-small transformer or directly by quantised codes. Pull the recurring
-patterns into `src/core/audio_decoder.h`:
+Originally scoped (April 2026) as a broad `core/audio_decoder.h` that
+would unify VibeVoice (σ-VAE), Qwen3-TTS (RVQ codec) and MiMo's
+audio-tokeniser decode path. After Orpheus / SNAC and the qwen3-tts
+codec both shipped (May 2026), a re-read of all four backends shows
+the convergence isn't there:
 
-- RVQ codebook lookup (multi-stage residual) — same in MiMo and
-  Qwen3-TTS, plus their semantic-quantiser variant.
-- 1D-conv up-sampling stack (`ggml_conv_1d_cf` already there from
-  vibevoice work — reuse).
-- Optional small transformer on the latent stream (Qwen3-TTS has 8L
-  decoder transformer).
+- **VibeVoice σ-VAE** is continuous (no RVQ); upsampling is
+  ConvNeXt-style (depthwise conv + LN + FFN). 0 % overlap with the
+  RVQ backends.
+- **MiMo-Tokenizer** in our tree is encoder-only (`core_rvq::
+  encode_euclidean`). No decoder code lives here — not a third
+  client.
+- **Kokoro** is istftnet (style-conditioned, F0/noise-driven); 0 %
+  overlap.
+- **Only Qwen3-TTS codec + SNAC actually share shape** — and even
+  there qwen3-tts splits codebook-0 from rest-15 and runs an 8-layer
+  transformer on the latent, while SNAC sums all codebooks equally
+  and has no transformer. Stride patterns differ ([8,5,4,3] vs
+  [8,8,4,2]). RVQ-decode lookup is `ggml_get_rows` + sum, not the
+  Euclidean nearest-neighbour pattern that already lives in
+  `core/rvq.h` (encoder-only).
 
-Same layering pattern as `core_conformer` / `core_attn` /
-`core_ffn`. ~200-300 LOC in headers; payoff is two new TTS backends
-plus future ones (e.g. Mimi/Encodec) sharing the same decode path.
+A full audio-decoder helper would force divergent shapes through a
+generic interface for ~110 LOC saved across just two clients. Not
+worth it. Two narrow extractions are worth doing — both pure utility,
+both reusable by the upcoming Phase-3 (Chatterbox) / Phase-5
+(VoxCPM2 / Darwin-TTS) backends:
 
-**Effort:** Medium. Easier *after* one TTS runtime exists — extract
-upward rather than design forward.
+1. **Snake activations** → `core/activation.h`.
+   `codec_snake_beta` (qwen3-tts) and `snake1d` (orpheus_snac) are
+   nearly the same math. Pure, reusable, ~30 LOC saved.
+2. **Causal transposed-conv-1D wrapper** → `core/conv.h`.
+   Both qwen3-tts and SNAC repeat the same stride-aware padding /
+   cropping dance around `ggml_conv_transpose_1d`. ~50 LOC saved,
+   used by both clients.
+
+Explicitly **not** extracting:
+- RVQ decode lookup — the codebook-0-vs-rest split in qwen3-tts vs
+  the equal-sum in SNAC makes a generic helper more complex than
+  inline code; `core/rvq.h` stays encoder-only.
+- Residual units — short (~40 LOC each) and tied to per-backend
+  dilation patterns.
+- Any cross-cut with VibeVoice / MiMo / Kokoro decoders.
+
+**Effort:** Small. Two files, ~80 LOC of new helpers, replace at most
+~80 LOC of inline duplication.
 
 ---
 

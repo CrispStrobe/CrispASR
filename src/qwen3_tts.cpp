@@ -65,8 +65,10 @@
 #define M_PI 3.14159265358979323846
 #endif
 
+#include "core/activation.h"
 #include "core/attention.h"
 #include "core/bpe.h"
+#include "core/conv.h"
 #include "core/ffn.h"
 #include "core/gguf_loader.h"
 #include "core/mel.h"
@@ -2977,45 +2979,18 @@ static ggml_tensor* codec_dw_causal_conv1d(ggml_context* ctx, ggml_tensor* x, gg
     return x;
 }
 
-// ---------------------------------------------------------------------------
-// Causal transposed conv1d for upsampling.
-// Input/output: [C, T] channels-first.
-// Trims right by (K - stride) samples for causality.
-// ---------------------------------------------------------------------------
-static ggml_tensor* codec_transposed_conv1d(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w, ggml_tensor* b,
-                                            int stride) {
+// Causal transposed conv1d for upsampling — thin wrapper that trims the
+// right tail by (K - stride) samples so T_out = T_in · stride.
+static inline ggml_tensor* codec_transposed_conv1d(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w, ggml_tensor* b,
+                                                   int stride) {
     const int K = (int)w->ne[0];
-    const int T_in = (int)x->ne[1];
-    x = ggml_cont(ctx, ggml_transpose(ctx, x)); // [T, C_in]
-    x = ggml_conv_transpose_1d(ctx, w, x, stride, 0, 1);
-    x = ggml_reshape_2d(ctx, x, x->ne[0], x->ne[1]); // [T_raw, C_out]
-    const int T_raw = (T_in - 1) * stride + K;
-    const int T_target = T_in * stride;
-    if (T_raw > T_target) {
-        const int C_out = (int)x->ne[1];
-        x = ggml_view_2d(ctx, x, T_target, C_out, x->nb[1], 0);
-        x = ggml_cont(ctx, x);
-    }
-    x = ggml_cont(ctx, ggml_transpose(ctx, x)); // [C_out, T_out]
-    if (b) {
-        x = ggml_add(ctx, x, b);
-    }
-    return x;
+    const int crop_right = (K > stride) ? (K - stride) : 0;
+    return core_convt::convt1d_crop(ctx, x, w, b, stride, /*crop_left=*/0, crop_right);
 }
 
-// ---------------------------------------------------------------------------
-// SnakeBeta activation: x + exp(-beta) * sin²(x * exp(alpha))
-// Input/output: [C, T]. alpha, beta: [C].
-// ---------------------------------------------------------------------------
-static ggml_tensor* codec_snake_beta(ggml_context* ctx, ggml_tensor* x, ggml_tensor* alpha, ggml_tensor* beta) {
-    ggml_tensor* ea = ggml_exp(ctx, alpha);          // [C]
-    ggml_tensor* neg_eb = ggml_neg(ctx, beta);       // [C]
-    ggml_tensor* inv_eb = ggml_exp(ctx, neg_eb);     // [C] = 1/exp(beta)
-    ggml_tensor* xa = ggml_mul(ctx, x, ea);          // [C, T]
-    ggml_tensor* s = ggml_sin(ctx, xa);              // [C, T]
-    ggml_tensor* s2 = ggml_mul(ctx, s, s);           // [C, T]
-    ggml_tensor* scaled = ggml_mul(ctx, s2, inv_eb); // [C, T]
-    return ggml_add(ctx, x, scaled);
+// SnakeBeta activation — see core_act::snake_beta in core/activation.h.
+static inline ggml_tensor* codec_snake_beta(ggml_context* ctx, ggml_tensor* x, ggml_tensor* alpha, ggml_tensor* beta) {
+    return core_act::snake_beta(ctx, x, alpha, beta);
 }
 
 // ---------------------------------------------------------------------------

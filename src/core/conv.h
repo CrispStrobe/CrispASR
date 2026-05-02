@@ -11,6 +11,11 @@
 //                              stride=2, padding=1, output_padding=1.
 //                              Used for 2× upsamples in iSTFTNet-style
 //                              vocoder pool layers.
+//   convt1d_crop             — channels-first ConvTranspose1d wrapper
+//                              that handles the (C,T) ↔ (T,C) transpose
+//                              dance and lets the caller specify how
+//                              many time samples to crop from each end
+//                              (causal vs symmetric padding).
 
 #pragma once
 
@@ -82,6 +87,49 @@ static inline ggml_tensor* convt1d_depthwise_2x_k3(ggml_context* ctx, ggml_tenso
 
     if (w_bias)
         y = ggml_add(ctx, y, w_bias);
+    return y;
+}
+
+// Channels-first ConvTranspose1d (groups=1) with caller-controlled
+// time-axis cropping.
+//
+// ggml_conv_transpose_1d expects (T, Cin) input and emits T_unpad =
+// (T_in - 1)·stride + K samples; it has no padding parameter. Most
+// callers want a smaller T_out and crop the excess from the ends:
+//
+//   - **Causal upsamplers** (qwen3-tts codec) trim the right tail only:
+//     `crop_left=0, crop_right=K-stride` so T_out = T_in · stride.
+//   - **Symmetric-pad upsamplers** (SNAC, with k=2s, p=s/2) crop the
+//     same amount from each end: `crop_left=crop_right=stride/2`,
+//     giving T_out = T_in · stride.
+//
+// Inputs:
+//   x         : (Cin, T_in)   F32, channel-major.
+//   w         : (K, Cout, Cin) F16/F32, ggml weight layout (PyTorch
+//               numpy `(Cin, Cout, K)` transposed by the converter).
+//   b         : (Cout,)       F32 or nullptr.
+//   stride    : positive integer.
+//   crop_left : samples to crop from the start of the time axis (≥ 0).
+//   crop_right: samples to crop from the end of the time axis (≥ 0).
+//
+// Output: (Cout, T_unpad - crop_left - crop_right) F32.
+static inline ggml_tensor* convt1d_crop(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w, ggml_tensor* b, int stride,
+                                        int crop_left, int crop_right) {
+    const int Cout = (int)w->ne[1];
+    ggml_tensor* xT = ggml_cont(ctx, ggml_transpose(ctx, x));          // (T_in, Cin)
+    ggml_tensor* y = ggml_conv_transpose_1d(ctx, w, xT, stride, 0, 1); // (T_unpad, Cout, 1, 1)
+    const int T_unpad = (int)y->ne[0];
+    const int T_out = T_unpad - crop_left - crop_right;
+    y = ggml_reshape_2d(ctx, y, T_unpad, Cout);
+    if (crop_left > 0 || crop_right > 0) {
+        y = ggml_view_2d(ctx, y, T_out, Cout, (size_t)T_unpad * sizeof(float),
+                         (size_t)crop_left * sizeof(float));
+        y = ggml_cont(ctx, y); // (T_out, Cout)
+    }
+    y = ggml_cont(ctx, ggml_transpose(ctx, y)); // (Cout, T_out)
+    if (b) {
+        y = ggml_add(ctx, y, b);
+    }
     return y;
 }
 

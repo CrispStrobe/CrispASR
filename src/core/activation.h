@@ -7,8 +7,11 @@
 //
 // Currently:
 //   snake_alpha  — Snake-α activation, used by BigVGAN-family vocoders
-//                  (Kokoro generator, future iSTFTNet / ConvNeXt-vocoder
-//                  ports). Per-channel learnable α, init=1.
+//                  (Kokoro generator, SNAC decoder, future iSTFTNet /
+//                  ConvNeXt-vocoder ports). Per-channel learnable α, init=1.
+//   snake_beta   — SnakeBeta activation, used by the qwen3-tts codec
+//                  decoder (BigVGAN-style with separate α frequency and
+//                  β amplitude scales).
 
 #pragma once
 
@@ -36,6 +39,26 @@ static inline ggml_tensor* snake_alpha(ggml_context* ctx, ggml_tensor* x, ggml_t
     ggml_tensor* sin_sq = ggml_sqr(ctx, ggml_sin(ctx, ax));
     ggml_tensor* div = ggml_div(ctx, sin_sq, a); // sin²(α·x) / α
     return ggml_add(ctx, x, div);
+}
+
+// SnakeBeta activation: y = x + exp(-β) · sin²(x · exp(α)).
+//
+// BigVGAN's two-parameter variant — α controls the frequency, β the
+// amplitude, both per-channel. Used by the qwen3-tts codec decoder
+// (and likely by Chatterbox / VoxCPM2 when those land).
+//
+// Input  x:     (C, T)  F32, channel-major.
+// Input  alpha: (C,)    F32, per-channel frequency log-scale.
+// Input  beta:  (C,)    F32, per-channel amplitude log-scale.
+// Output:       (C, T)  F32.
+static inline ggml_tensor* snake_beta(ggml_context* ctx, ggml_tensor* x, ggml_tensor* alpha, ggml_tensor* beta) {
+    ggml_tensor* ea = ggml_exp(ctx, alpha);              // (C,)
+    ggml_tensor* inv_eb = ggml_exp(ctx, ggml_neg(ctx, beta)); // (C,) = 1 / exp(β)
+    ggml_tensor* xa = ggml_mul(ctx, x, ea);              // (C, T)
+    ggml_tensor* s = ggml_sin(ctx, xa);
+    ggml_tensor* s2 = ggml_mul(ctx, s, s);               // (C, T)
+    ggml_tensor* scaled = ggml_mul(ctx, s2, inv_eb);
+    return ggml_add(ctx, x, scaled);
 }
 
 } // namespace core_act

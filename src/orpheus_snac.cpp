@@ -53,6 +53,7 @@
 
 #include "orpheus_snac.h"
 #include "core/activation.h"
+#include "core/conv.h"
 #include "core/gguf_loader.h"
 
 #include "ggml-backend.h"
@@ -335,32 +336,12 @@ static ggml_tensor* conv1d_k(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w, 
     return y;
 }
 
-// PyTorch ConvTranspose1d wrapper (groups=1).
-//   T_out = (T_in - 1) · s + k - 2p + op
-//
-// For SNAC strides [8,8,4,2]: k = 2s, p = s/2, op = 0 (s%2 == 0 always).
-// → T_out = (T_in - 1)·s + 2s - s = T_in · s.
-//
-// ggml_conv_transpose_1d supports only p=0; we pass p=0 and crop `p`
-// samples from each end. Weight ne=[K, Cout, Cin] from PyTorch's
-// (Cin, Cout, K) numpy layout. Input (Cin, T) → output (Cout, T·s).
-static ggml_tensor* convt1d_pad(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w, ggml_tensor* b, int stride,
-                                int pad) {
-    const int Cout = (int)w->ne[1];
-    ggml_tensor* xT = ggml_cont(ctx, ggml_transpose(ctx, x));          // (T, Cin)
-    ggml_tensor* y = ggml_conv_transpose_1d(ctx, w, xT, stride, 0, 1); // (T_unpad, Cout, 1, 1)
-    const int T_unpad = (int)y->ne[0];
-    const int T_out = T_unpad - 2 * pad;
-    y = ggml_reshape_2d(ctx, y, T_unpad, Cout);
-    if (pad > 0) {
-        y = ggml_view_2d(ctx, y, T_out, Cout, (size_t)T_unpad * sizeof(float), (size_t)pad * sizeof(float));
-        y = ggml_cont(ctx, y); // (T_out, Cout)
-    }
-    y = ggml_cont(ctx, ggml_transpose(ctx, y)); // (Cout, T_out)
-    if (b) {
-        y = ggml_add(ctx, y, b);
-    }
-    return y;
+// PyTorch ConvTranspose1d wrapper (groups=1) with symmetric cropping —
+// thin wrapper around core_convt::convt1d_crop. For SNAC strides
+// [8,8,4,2]: k = 2s, p = s/2, op = 0 → T_out = T_in · s.
+static inline ggml_tensor* convt1d_pad(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w, ggml_tensor* b, int stride,
+                                       int pad) {
+    return core_convt::convt1d_crop(ctx, x, w, b, stride, /*crop_left=*/pad, /*crop_right=*/pad);
 }
 
 // SNAC Snake1d: y = x + (1/(α + 1e-9)) · sin²(α · x). α stored as (1,C,1)
