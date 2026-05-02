@@ -107,6 +107,11 @@ REGISTERED_BACKENDS: Dict[str, str] = {
     # logits" entry point the way the speech-LLMs do.
     "cohere":     "reference_backends.cohere",
     "parakeet":   "reference_backends.parakeet",
+    # NeMo Canary (FastConformer + Transformer decoder). model_dir may be
+    # the HF id "nvidia/canary-1b-v2" or a local .nemo path. The C++ diff
+    # branch ("canary") compares mel_spectrogram + encoder_output; the
+    # per-layer captures listed in DEFAULT_STAGES are diagnostic-only.
+    "canary":     "reference_backends.canary",
     "gemma4":     "reference_backends.gemma4",
     # Qwen3-TTS-12Hz Base. The audio arg is the voice-clone reference WAV
     # (16 kHz mono); synth text + ref text come from env vars. See
