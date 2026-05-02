@@ -32,12 +32,20 @@
 #include <vector>
 
 // Temperature-aware token selection: argmax when temp<=0, softmax sampling otherwise.
-static int sample_token(const float* logits, int vocab, float temperature) {
+// When `out_prob` is non-null, also returns the softmax probability of the picked token.
+static int sample_token(const float* logits, int vocab, float temperature, float* out_prob = nullptr) {
     if (temperature <= 0.0f) {
         int best = 0;
         for (int i = 1; i < vocab; i++)
             if (logits[i] > logits[best])
                 best = i;
+        if (out_prob) {
+            float maxv = logits[best];
+            float s = 0.f;
+            for (int i = 0; i < vocab; i++)
+                s += expf(logits[i] - maxv);
+            *out_prob = 1.0f / s;
+        }
         return best;
     }
     // Softmax with temperature
@@ -51,14 +59,22 @@ static int sample_token(const float* logits, int vocab, float temperature) {
         probs[i] = expf((logits[i] - maxv) / temperature);
         sum += probs[i];
     }
-    float r = ((float)rand() / (float)RAND_MAX) * sum;
+    const float inv_sum = 1.0f / sum;
+    for (int i = 0; i < vocab; i++)
+        probs[i] *= inv_sum;
+    float r = ((float)rand() / (float)RAND_MAX);
     float acc = 0;
+    int picked = vocab - 1;
     for (int i = 0; i < vocab; i++) {
         acc += probs[i];
-        if (acc >= r)
-            return i;
+        if (acc >= r) {
+            picked = i;
+            break;
+        }
     }
-    return vocab - 1;
+    if (out_prob)
+        *out_prob = probs[picked];
+    return picked;
 }
 
 // ===========================================================================
@@ -985,7 +1001,13 @@ static void resample_16k_to_24k(const float* in, int n_in, std::vector<float>& o
 // High-level transcribe
 // ===========================================================================
 
-extern "C" char* kyutai_stt_transcribe(struct kyutai_stt_context* ctx, const float* samples, int n_samples) {
+// Internal: transcribe and (optionally) capture per-token ids + softmax probs.
+// The decoded text fragment per emitted text token (excluding pad/special) is
+// appended to `result`; ids/probs are appended in lock-step when out vectors
+// are non-null.
+static char* kyutai_stt_transcribe_impl(struct kyutai_stt_context* ctx, const float* samples, int n_samples,
+                                        std::vector<int32_t>* out_token_ids, std::vector<float>* out_token_probs,
+                                        std::vector<int32_t>* out_frame_indices = nullptr) {
     if (!ctx || !samples || n_samples <= 0)
         return nullptr;
 
@@ -1110,11 +1132,12 @@ extern "C" char* kyutai_stt_transcribe(struct kyutai_stt_context* ctx, const flo
             break;
         }
 
-        // Read logits and argmax (greedy decode, temp=0)
+        // Read logits and pick (greedy or sampled per ctx->params.temperature)
         std::vector<float> logits_data(hp.text_card);
         ggml_backend_tensor_get(logits, logits_data.data(), 0, hp.text_card * sizeof(float));
 
-        text_token = sample_token(logits_data.data(), hp.text_card, ctx->params.temperature);
+        float picked_prob = 0.0f;
+        text_token = sample_token(logits_data.data(), hp.text_card, ctx->params.temperature, &picked_prob);
         n_past++;
 
         if (ctx->params.verbosity >= 2 && (t < 5 || t % 20 == 0)) {
@@ -1136,6 +1159,13 @@ extern "C" char* kyutai_stt_transcribe(struct kyutai_stt_context* ctx, const flo
                 }
             }
             result += decoded;
+            if (out_token_ids && out_token_probs) {
+                out_token_ids->push_back(text_token);
+                out_token_probs->push_back(picked_prob);
+            }
+            if (out_frame_indices) {
+                out_frame_indices->push_back(t);
+            }
 
             if (ctx->params.verbosity >= 2) {
                 fprintf(stderr, "  [%d] token=%d piece='%s'\n", t, text_token, decoded.c_str());
@@ -1164,8 +1194,194 @@ extern "C" char* kyutai_stt_transcribe(struct kyutai_stt_context* ctx, const flo
     return out;
 }
 
+extern "C" char* kyutai_stt_transcribe(struct kyutai_stt_context* ctx, const float* samples, int n_samples) {
+    return kyutai_stt_transcribe_impl(ctx, samples, n_samples, nullptr, nullptr);
+}
+
+extern "C" struct kyutai_stt_result* kyutai_stt_transcribe_with_probs(struct kyutai_stt_context* ctx,
+                                                                      const float* samples, int n_samples) {
+    std::vector<int32_t> ids;
+    std::vector<float> probs;
+    char* text = kyutai_stt_transcribe_impl(ctx, samples, n_samples, &ids, &probs);
+    if (!text)
+        return nullptr;
+    auto* r = (kyutai_stt_result*)calloc(1, sizeof(kyutai_stt_result));
+    r->text = text;
+    r->n_tokens = (int)ids.size();
+    if (r->n_tokens > 0) {
+        r->token_ids = (int*)malloc(sizeof(int) * (size_t)r->n_tokens);
+        r->token_probs = (float*)malloc(sizeof(float) * (size_t)r->n_tokens);
+        for (int i = 0; i < r->n_tokens; i++) {
+            r->token_ids[i] = ids[i];
+            r->token_probs[i] = probs[i];
+        }
+    }
+    return r;
+}
+
+extern "C" void kyutai_stt_result_free(struct kyutai_stt_result* r) {
+    if (!r)
+        return;
+    free(r->text);
+    free(r->token_ids);
+    free(r->token_probs);
+    free(r);
+}
+
 extern "C" const char* kyutai_stt_token_text(struct kyutai_stt_context* ctx, int id) {
     if (!ctx || id < 0 || id >= (int)ctx->model.vocab.size())
         return nullptr;
     return ctx->model.vocab[id].c_str();
+}
+
+// ---------------------------------------------------------------------------
+// PLAN #61c — per-token + word-level timing.
+//
+// Each emitted text token is bound to the LM frame index that produced
+// it. We subtract the training-time `audio_delay_seconds` lookahead
+// (typically 0.5 s = 6.25 frames) to recover the audio time the token
+// actually corresponds to. Frame duration is 8 cs (12.5 Hz Mimi rate).
+// ---------------------------------------------------------------------------
+
+namespace {
+// Decode one SentencePiece vocab piece into its visible text + a flag
+// for whether it starts a new word (▁ U+2581 prefix). The piece may be
+// longer than the buffer — caller already truncates.
+struct DecodedPiece {
+    std::string text;
+    bool starts_word;
+};
+
+DecodedPiece decode_piece(const std::string& piece) {
+    DecodedPiece out{"", false};
+    if (piece.size() >= 3 && (unsigned char)piece[0] == 0xE2 && (unsigned char)piece[1] == 0x96 &&
+        (unsigned char)piece[2] == 0x81) {
+        out.starts_word = true;
+        out.text.assign(piece.begin() + 3, piece.end());
+    } else {
+        out.text = piece;
+    }
+    return out;
+}
+
+void copy_text_truncating(char* dst, size_t cap, const std::string& src) {
+    const size_t n = std::min(src.size(), cap - 1);
+    memcpy(dst, src.data(), n);
+    dst[n] = '\0';
+}
+} // namespace
+
+extern "C" struct kyutai_stt_result_ex* kyutai_stt_transcribe_ex(struct kyutai_stt_context* ctx, const float* samples,
+                                                                 int n_samples, int64_t t_offset_cs) {
+    if (!ctx || !samples || n_samples <= 0)
+        return nullptr;
+
+    std::vector<int32_t> ids;
+    std::vector<float> probs;
+    std::vector<int32_t> frame_indices;
+    char* text = kyutai_stt_transcribe_impl(ctx, samples, n_samples, &ids, &probs, &frame_indices);
+    if (!text)
+        return nullptr;
+
+    auto& hp = ctx->model.hp;
+    const int delay_frames = (int)(hp.audio_delay_seconds * hp.frame_rate);
+    // Frame duration in centiseconds: 12.5 Hz → 8 cs/frame. Round to
+    // nearest cs from the float frame_rate to handle non-12.5 rates.
+    const double cs_per_frame = 100.0 / hp.frame_rate;
+
+    auto* r = (kyutai_stt_result_ex*)calloc(1, sizeof(kyutai_stt_result_ex));
+    if (!r) {
+        free(text);
+        return nullptr;
+    }
+    r->text = text;
+    r->n_tokens = (int)ids.size();
+
+    if (r->n_tokens > 0) {
+        r->tokens = (kyutai_stt_token_data*)calloc((size_t)r->n_tokens, sizeof(kyutai_stt_token_data));
+        if (!r->tokens) {
+            kyutai_stt_result_ex_free(r);
+            return nullptr;
+        }
+
+        // Word grouping: open a new word at every ▁-prefixed piece.
+        std::vector<kyutai_stt_word_data> words;
+        std::string current_text;
+        int64_t current_t0 = 0;
+        int64_t current_t1 = 0;
+        double current_p_sum = 0.0;
+        int current_n = 0;
+
+        auto flush_word = [&]() {
+            if (current_n == 0)
+                return;
+            kyutai_stt_word_data w{};
+            copy_text_truncating(w.text, sizeof(w.text), current_text);
+            w.t0 = current_t0;
+            w.t1 = current_t1;
+            w.p = (float)(current_p_sum / current_n);
+            words.push_back(w);
+            current_text.clear();
+            current_p_sum = 0.0;
+            current_n = 0;
+        };
+
+        for (int i = 0; i < r->n_tokens; i++) {
+            const int id = ids[i];
+            const int frame_lm = frame_indices[i];
+            const int frame_audio = std::max(0, frame_lm - delay_frames);
+            const int64_t t0 = t_offset_cs + (int64_t)std::llround(frame_audio * cs_per_frame);
+            const int64_t t1 = t_offset_cs + (int64_t)std::llround((frame_audio + 1) * cs_per_frame);
+
+            // Per-token entry
+            kyutai_stt_token_data& td = r->tokens[i];
+            td.id = id;
+            td.t0 = t0;
+            td.t1 = t1;
+            td.p = probs[i];
+
+            std::string piece;
+            if (id >= 0 && id < (int)ctx->model.vocab.size())
+                piece = ctx->model.vocab[id];
+            DecodedPiece dp = decode_piece(piece);
+            // Token text: prefix with a space if this token starts a new word
+            // (mirrors parakeet's per-token `text` field which also includes the
+            // leading space for word-starting subwords).
+            std::string td_text = dp.starts_word ? (" " + dp.text) : dp.text;
+            copy_text_truncating(td.text, sizeof(td.text), td_text);
+
+            // Word grouping
+            if (dp.starts_word)
+                flush_word();
+            if (current_n == 0)
+                current_t0 = t0;
+            current_t1 = t1;
+            current_text += dp.text;
+            current_p_sum += probs[i];
+            current_n++;
+        }
+        flush_word();
+
+        if (!words.empty()) {
+            r->n_words = (int)words.size();
+            r->words = (kyutai_stt_word_data*)calloc(words.size(), sizeof(kyutai_stt_word_data));
+            if (!r->words) {
+                kyutai_stt_result_ex_free(r);
+                return nullptr;
+            }
+            for (size_t i = 0; i < words.size(); i++)
+                r->words[i] = words[i];
+        }
+    }
+
+    return r;
+}
+
+extern "C" void kyutai_stt_result_ex_free(struct kyutai_stt_result_ex* r) {
+    if (!r)
+        return;
+    free(r->text);
+    free(r->tokens);
+    free(r->words);
+    free(r);
 }

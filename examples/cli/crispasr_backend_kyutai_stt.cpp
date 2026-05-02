@@ -16,7 +16,13 @@ public:
 
     const char* name() const override { return "kyutai-stt"; }
 
-    uint32_t capabilities() const override { return CAP_AUTO_DOWNLOAD; }
+    uint32_t capabilities() const override {
+        // PLAN #61c: kyutai's "delayed-streams" architecture aligns each
+        // emitted text token to its source audio frame at zero extra cost,
+        // so both segment and word timestamps are native (no DTW or CTC
+        // aligner needed).
+        return CAP_AUTO_DOWNLOAD | CAP_TOKEN_CONFIDENCE | CAP_TEMPERATURE | CAP_TIMESTAMPS_NATIVE | CAP_WORD_TIMESTAMPS;
+    }
 
     bool init(const whisper_params& params) override {
         kyutai_stt_context_params cp = kyutai_stt_context_default_params();
@@ -30,25 +36,57 @@ public:
 
     std::vector<crispasr_segment> transcribe(const float* samples, int n_samples, int64_t t_offset_cs,
                                              const whisper_params& params) override {
+        (void)params;
         std::vector<crispasr_segment> out;
         if (!ctx_)
             return out;
 
-        char* text = kyutai_stt_transcribe(ctx_, samples, n_samples);
-        if (!text)
+        // PLAN #61c: use the _ex API to get per-token + word-level
+        // timestamps. The kyutai LM emits one text token per Mimi frame
+        // (12.5 Hz = 8 cs/frame) with the audio_delay correction baked in.
+        kyutai_stt_result_ex* r = kyutai_stt_transcribe_ex(ctx_, samples, n_samples, t_offset_cs);
+        if (!r || !r->text)
             return out;
 
         crispasr_segment seg;
-        seg.t0 = t_offset_cs;
-        seg.t1 = t_offset_cs + (int64_t)((double)n_samples / 16000.0 * 100.0);
-        seg.text = text;
-        free(text);
-
-        // Trim leading/trailing whitespace
+        seg.text = r->text;
         while (!seg.text.empty() && (seg.text.front() == ' ' || seg.text.front() == '\n'))
             seg.text.erase(seg.text.begin());
         while (!seg.text.empty() && (seg.text.back() == ' ' || seg.text.back() == '\n'))
             seg.text.pop_back();
+
+        // Segment span: prefer the actual word range; fall back to the
+        // full audio buffer when no words emitted.
+        if (r->n_words > 0) {
+            seg.t0 = r->words[0].t0;
+            seg.t1 = r->words[r->n_words - 1].t1;
+        } else {
+            seg.t0 = t_offset_cs;
+            seg.t1 = t_offset_cs + (int64_t)((double)n_samples / 16000.0 * 100.0);
+        }
+
+        seg.tokens.reserve((size_t)r->n_tokens);
+        for (int i = 0; i < r->n_tokens; i++) {
+            const kyutai_stt_token_data& src = r->tokens[i];
+            crispasr_token tok;
+            tok.id = src.id;
+            tok.confidence = src.p;
+            tok.t0 = src.t0;
+            tok.t1 = src.t1;
+            tok.text = src.text;
+            seg.tokens.push_back(std::move(tok));
+        }
+
+        seg.words.reserve((size_t)r->n_words);
+        for (int i = 0; i < r->n_words; i++) {
+            crispasr_word w;
+            w.text = r->words[i].text;
+            w.t0 = r->words[i].t0;
+            w.t1 = r->words[i].t1;
+            seg.words.push_back(std::move(w));
+        }
+
+        kyutai_stt_result_ex_free(r);
 
         if (!seg.text.empty())
             out.push_back(std::move(seg));

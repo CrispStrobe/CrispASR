@@ -35,8 +35,68 @@ void kyutai_stt_free(struct kyutai_stt_context* ctx);
 // Returns malloc'd UTF-8 string, caller frees with free().
 char* kyutai_stt_transcribe(struct kyutai_stt_context* ctx, const float* samples, int n_samples);
 
+// Variant returning per-emitted-token ids + softmax probs alongside the text.
+// All pointers are malloc'd; free with kyutai_stt_result_free.
+struct kyutai_stt_result {
+    char* text;
+    int* token_ids;
+    float* token_probs;
+    int n_tokens;
+};
+
+struct kyutai_stt_result* kyutai_stt_transcribe_with_probs(struct kyutai_stt_context* ctx, const float* samples,
+                                                           int n_samples);
+void kyutai_stt_result_free(struct kyutai_stt_result* r);
+
 // Token text lookup.
 const char* kyutai_stt_token_text(struct kyutai_stt_context* ctx, int id);
+
+// ---- Per-token + word-level timing (PLAN #61c) ----
+//
+// Kyutai's "delayed-streams" architecture aligns each emitted text
+// token to the audio frame that produced it. Frame rate is 12.5 Hz
+// (80 ms per frame); the LM emits one text token per Mimi frame.
+// `audio_delay_seconds` (typically 0.5s) is the training-time
+// lookahead the LM was given — we subtract it from the LM frame index
+// to recover the audio time the token actually corresponds to.
+
+struct kyutai_stt_token_data {
+    int id;        // SentencePiece token id
+    char text[48]; // decoded text (▁ → space)
+    int64_t t0;    // start time, centiseconds (audio-relative, includes t_offset_cs)
+    int64_t t1;    // end time,   centiseconds (= t0 + 8, one Mimi frame)
+    float p;       // softmax probability of the emitted token [0,1]
+};
+
+// Word-level data: sub-tokens grouped at SentencePiece '▁' boundaries.
+struct kyutai_stt_word_data {
+    char text[64]; // word text (no leading space)
+    int64_t t0;    // start time, centiseconds (from first sub-token)
+    int64_t t1;    // end time,   centiseconds (from last sub-token)
+    float p;       // mean softmax probability across the word's sub-tokens
+};
+
+struct kyutai_stt_result_ex {
+    char* text;                           // full transcript (malloc'd)
+    struct kyutai_stt_token_data* tokens; // per-token timing (malloc'd)
+    int n_tokens;
+    struct kyutai_stt_word_data* words; // grouped word timings (malloc'd)
+    int n_words;
+};
+
+void kyutai_stt_result_ex_free(struct kyutai_stt_result_ex* r);
+
+// Like kyutai_stt_transcribe but returns per-token + word-level timing.
+//
+// `t_offset_cs`: absolute start of this audio slice in centiseconds.
+//   Token t0/t1 = t_offset_cs + (audio_frame * 8). For long audio with
+//   VAD slicing, pass (vad_segment_t0_seconds * 100).
+//
+// Timestamps are accurate to one Mimi frame (80 ms) by construction —
+// the kyutai LM's frame-aligned emission means no DTW or auxiliary
+// duration head is needed.
+struct kyutai_stt_result_ex* kyutai_stt_transcribe_ex(struct kyutai_stt_context* ctx, const float* samples,
+                                                      int n_samples, int64_t t_offset_cs);
 
 #ifdef __cplusplus
 }
