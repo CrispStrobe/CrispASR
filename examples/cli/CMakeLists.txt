@@ -196,6 +196,15 @@ target_link_libraries(${TARGET} PRIVATE
     ${FFMPEG_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}
     $<$<BOOL:${WIN32}>:winhttp>
+    # Winsock + crypto for httplib.h (transitively pulled in by
+    # crispasr_server.cpp). MSVC auto-links these via #pragma comment
+    # but MinGW (msys2 UCRT64 / CLANG64) ignores those pragmas, so the
+    # link fails with __imp_freeaddrinfo / WSASocketW / etc. undefined.
+    # Listing them unconditionally is harmless on MSVC.
+    $<$<BOOL:${WIN32}>:ws2_32>
+    $<$<BOOL:${WIN32}>:crypt32>
+    $<$<BOOL:${WIN32}>:bcrypt>
+    $<$<BOOL:${WIN32}>:iphlpapi>
     $<$<BOOL:${CRISPASR_CURL}>:CURL::libcurl>
 )
 

@@ -31,6 +31,13 @@
 //   [FAIL] encoder_output      shape=[375,1280]  cos_min=0.92     max_abs=0.87
 //   [SKIP] projector_output    (stage not exposed by backend API)
 
+// MSVC's <cmath> doesn't define M_PI unless _USE_MATH_DEFINES is set
+// BEFORE the first include. We use M_PI in the synthetic-audio test
+// path (line ~944). MinGW + Linux + macOS toolchains define it
+// unconditionally, so this is a Windows-build-only nudge.
+#define _USE_MATH_DEFINES
+#include <cmath>
+
 #include "crispasr_diff.h"
 
 #include "voxtral.h"
