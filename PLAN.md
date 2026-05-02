@@ -1514,15 +1514,20 @@ pattern (~120 LOC in `src/moonshine_streaming.{h,cpp}` +
 dispatch branches). E2E validated word-perfect against batch on
 JFK using `moonshine-streaming-tiny-f32.gguf`.
 
-**Found in passing — `moonshine-streaming` F16 batch crash.** The
-F16 GGUF (`moonshine-streaming-tiny-f16.gguf`, 84 MB) crashes
-inside `moonshine_streaming_transcribe_impl` with `tensor read out
-of bounds` in `ggml_backend_tensor_set_2d_async`. The F32 GGUF
-(168 MB) works fine via both batch and streaming. Likely an F16
-tensor stride/dtype path inside the batch transcribe — unrelated
-to the streaming wrapper, which only calls `_transcribe` in a
-loop. Open as a separate item once a consumer needs the F16
-size on this backend.
+**Found + fixed in passing — `moonshine-streaming` F16 batch crash.**
+The F16 GGUF (`moonshine-streaming-tiny-f16.gguf`, 84 MB) crashed
+inside `audio_frontend_cpu` with "tensor read out of bounds":
+`ggml_backend_tensor_get(t, dst, 0, n_elems * sizeof(float))`
+overflowed by 2× when reading 2D weights stored as F16
+(`ggml_nbytes(t) == n_elems * sizeof(ggml_fp16_t)`). The CPU
+frontend hard-coded F32 byte counts; the converter quantizes 2D+
+weights to F16 in F16 mode, so the read size mismatched. Fix:
+new `tensor_get_as_f32` helper in `src/moonshine_streaming.cpp`
+that branches on `t->type` and dequantizes if F16, applied at the
+3 weight-read sites (linear_w / conv1_w / conv2_w). Biases +
+scalar `log_k` are always F32 per the converter's 1D path.
+F16 batch + streaming + F32 regression all word-perfect on JFK
+post-fix.
 
 **Voxtral4b native streaming** — see #62e / PLAN #7.
 

@@ -391,6 +391,28 @@ extern "C" struct moonshine_streaming_context* moonshine_streaming_init_from_fil
 // Linear(80→hidden)+SiLU → CausalConv1d(hidden→2*hidden,k=5,s=2)+SiLU →
 // CausalConv1d(2*hidden→hidden,k=5,s=2) → [hidden, T_enc]
 
+// Read an F32-or-F16 tensor as F32 into a host buffer. The F16 GGUF
+// stores 2D+ weights as F16 to save space; the CPU audio frontend
+// here works in F32 throughout. Without this dtype branch the F16
+// GGUF crashes with "tensor read out of bounds" when ggml_backend_tensor_get
+// is asked for `n_elems * sizeof(float)` bytes from a tensor whose
+// `ggml_nbytes()` is `n_elems * sizeof(ggml_fp16_t)`.
+static void tensor_get_as_f32(const ggml_tensor* t, float* dst, size_t n_elems) {
+    if (!t)
+        return;
+    if (t->type == GGML_TYPE_F32) {
+        ggml_backend_tensor_get(t, dst, 0, n_elems * sizeof(float));
+    } else if (t->type == GGML_TYPE_F16) {
+        std::vector<ggml_fp16_t> tmp(n_elems);
+        ggml_backend_tensor_get(t, tmp.data(), 0, n_elems * sizeof(ggml_fp16_t));
+        for (size_t i = 0; i < n_elems; i++)
+            dst[i] = ggml_fp16_to_fp32(tmp[i]);
+    } else {
+        fprintf(stderr, "moonshine_streaming: unsupported tensor dtype %d for CPU frontend\n", (int)t->type);
+        memset(dst, 0, n_elems * sizeof(float));
+    }
+}
+
 static void audio_frontend_cpu(const float* pcm, int n_samples, const ms_model& m, std::vector<float>& out,
                                int& T_out) {
     const auto& hp = m.hp;
@@ -434,7 +456,7 @@ static void audio_frontend_cpu(const float* pcm, int n_samples, const ms_model& 
     // Step 2: Linear(80 → enc_hidden) + SiLU
     // linear_w: [enc_hidden, 80] in ggml = [80, enc_hidden] row-major
     std::vector<float> linear_w(enc_h * frame_size);
-    ggml_backend_tensor_get(m.embedder_linear_w, linear_w.data(), 0, enc_h * frame_size * sizeof(float));
+    tensor_get_as_f32(m.embedder_linear_w, linear_w.data(), (size_t)enc_h * frame_size);
 
     std::vector<float> linear_out(n_frames * enc_h);
     for (int t = 0; t < n_frames; t++) {
@@ -458,7 +480,7 @@ static void audio_frontend_cpu(const float* pcm, int n_samples, const ms_model& 
 
     std::vector<float> conv1_w(conv1_oc * conv1_ic * conv1_k);
     std::vector<float> conv1_b(conv1_oc);
-    ggml_backend_tensor_get(m.embedder_conv1_w, conv1_w.data(), 0, conv1_w.size() * sizeof(float));
+    tensor_get_as_f32(m.embedder_conv1_w, conv1_w.data(), conv1_w.size());
     ggml_backend_tensor_get(m.embedder_conv1_b, conv1_b.data(), 0, conv1_b.size() * sizeof(float));
 
     // Padded input: [conv1_pad + n_frames, conv1_ic]
@@ -492,7 +514,7 @@ static void audio_frontend_cpu(const float* pcm, int n_samples, const ms_model& 
 
     std::vector<float> conv2_w(conv2_oc * conv2_ic * conv2_k);
     std::vector<float> conv2_b(conv2_oc);
-    ggml_backend_tensor_get(m.embedder_conv2_w, conv2_w.data(), 0, conv2_w.size() * sizeof(float));
+    tensor_get_as_f32(m.embedder_conv2_w, conv2_w.data(), conv2_w.size());
     ggml_backend_tensor_get(m.embedder_conv2_b, conv2_b.data(), 0, conv2_b.size() * sizeof(float));
 
     int padded_len2 = conv2_pad + T_conv1;
