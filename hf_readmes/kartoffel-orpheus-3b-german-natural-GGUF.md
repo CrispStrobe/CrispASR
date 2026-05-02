@@ -77,6 +77,27 @@ For **auto-download** simply pass `-m auto`:
     --tts-output out.wav
 ```
 
+## Quality verification
+
+ASR roundtrip via [`cstr/parakeet-tdt-0.6b-v3-GGUF`](https://huggingface.co/cstr/parakeet-tdt-0.6b-v3-GGUF) on Q8_0, voice `Julian`:
+
+| Synthesised text | parakeet-v3 -l de output |
+|---|---|
+| `"Hallo, ich heiße Julian und das ist ein Kartoffel-Orpheus Test."` | `"Hallo, ich heiße Julian und das ist ein Kartoffel-Orpheus-Test."` (verbatim, only minor hyphenation drift) |
+
+Validation script:
+
+```bash
+crispasr --backend kartoffel-orpheus-de-natural \
+    -m kartoffel-orpheus-de-natural-q8_0.gguf \
+    --codec-model snac-24khz.gguf --voice Julian --temperature 0.6 \
+    --tts "Hallo, ich heiße Julian und das ist ein Kartoffel-Orpheus Test." \
+    --tts-output kartoffel_test.wav
+crispasr --backend parakeet -m parakeet-tdt-0.6b-v3-q4_k.gguf -l de \
+    -f kartoffel_test.wav --no-prints
+# → Hallo, ich heiße Julian und das ist ein Kartoffel-Orpheus-Test.
+```
+
 ## Architecture
 
 Identical to Orpheus 3B — see [`cstr/orpheus-3b-base-GGUF`](https://huggingface.co/cstr/orpheus-3b-base-GGUF) for the full architecture writeup. The CrispASR `orpheus` runtime is checkpoint-agnostic; this GGUF is loaded by the same `orpheus_init_from_file` path with no source-code changes.
