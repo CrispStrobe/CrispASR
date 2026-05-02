@@ -5949,3 +5949,96 @@ fast next time): `ps -p <pid> -o %cpu,%mem,rss,etime,state` shows
 as the OS pages out the process under memory pressure, while
 `vm_stat` reports very low `Pages free`. Don't wait it out —
 either move to a larger-RAM box or switch dtype.
+
+# Cross-cutting lessons — session 2026-05-02
+
+## Lesson — `clang-format -i` is destructive when local version ≠ CI version
+
+CI runs `clang-format-18` on Ubuntu (per `.github/workflows/lint.yml`).
+Local Homebrew clang-format on macOS is `v22+` and disagrees with v18 on
+many wrapping rules. Running `clang-format -i src/...` locally to "be
+safe" pulls in v22's preferences across every previously-conformant
+line, producing a diff like:
+
+```
+ bindings/javascript/emscripten.cpp        | 146 +++++++++++++++---------------
+ bindings/ruby/ext/ruby_crispasr_session.c | 130 ++++++++++++++------------
+```
+
+— hundreds of whitespace-only changes for a 3-line addition. CI v18
+will then *also* refuse the result because v22's reformat doesn't match
+v18's style either. Net result: pollutes blame, creates merge conflict
+risk with parallel agents, and **doesn't fix what CI is checking**.
+
+The right workflow:
+
+1. Add your code in the existing file's hand-aligned style. Match
+   neighbouring lines visually rather than running `-i`.
+2. Verify only with `clang-format-18 --dry-run --Werror <files>` if you
+   have v18 (Linux), or accept that **only the lines you added** can
+   trigger violations and the rest are pre-existing.
+3. If v18 ever flags lines you added (CI annotation), reproduce locally
+   with `clang-format <newer-version> --dry-run --Werror` — the violations
+   that BOTH versions agree on are the real ones to fix. Apply the fix
+   manually to those specific lines, never `-i` the whole file.
+
+This bit during the PLAN #56 #5 wrapper sweep — auto-formatting
+`emscripten.cpp` and `ruby_crispasr_session.c` produced 276 lines of
+whitespace churn for a 17-line logical addition. Reverted with
+`git checkout HEAD -- <files>` and re-applied only the new lines by
+hand; net diff went from 276 → 17 lines.
+
+Earlier same session (`d393a43` PLAN #53), the inverse trap also
+fired: 4 lines I added to `core/activation.h` and `core/conv.h` happened
+to be v18-non-conformant *and* not flagged by v22. CI failed; fix
+shipped as `21464e3`. So the rule is symmetric: trust neither
+"local says clean" nor "auto-format made it clean" — only CI v18 is
+authoritative, and the safest local shortcut is just to align by eye.
+
+## Lesson — NeMo ref dumpers must transpose to TimeMels for parakeet / canary
+
+`tools/reference_backends/{parakeet,canary}.py` both use NeMo's
+`model.preprocessor(input_signal=sig, length=sig_len)`, which returns
+mel features as `(B=1, n_mels, T_mel)` PyTorch tensors. The C++ runtime
+side, in turn, uses `core_mel::Layout::TimeMels` — flat ordering with
+`n_mels` as the fast (innermost) axis and `T_mel` as the slow axis.
+
+Numpy `(B, n_mels, T_mel)` → after `[0]` strip → `(n_mels, T_mel)`
+C-contiguous = n_mels-major flat. That is the OPPOSITE of what the C++
+side returns from `<backend>_compute_mel`. Without a transpose, the
+diff harness compares `mel_ref[i_mel, t]` against `mel_cpp[t, i_mel]`
+element-wise, producing cosine values typically in `[-0.95, 0.95]`
+depending on signal symmetry — looks "broken" but with no obvious
+arithmetic cause.
+
+The `parakeet.py` template gets it right with:
+
+```python
+m = feats[0].transpose(0, 1).contiguous()  # (T_mel, n_mels) — TimeMels
+out["mel_spectrogram"] = m.detach().cpu().float().numpy()
+```
+
+The `canary.py` initial draft (commit `63f708e`) omitted the transpose
+on the assumption that `canary_compute_mel`'s return shape comment
+`(n_mels, T_mel)` meant n_mels-major flat. It does NOT — `core_mel`'s
+internal layout enum overrides the doc comment. Diagnostic signature:
+
+| stage | cos_min | cos_mean | meaning |
+|---|---:|---:|---|
+| `mel_spectrogram` | -0.83 | 0.002 | layout swap (or fully unrelated tensors) |
+| `mel_spectrogram` | 0.94 | 0.9995 | layout correct, small boundary diff (frame-level outlier) |
+| `mel_spectrogram` | 0.999 | 0.9999 | layout correct, F32 ↔ F32 numerical match |
+
+**Rule of thumb:** any new NeMo-backed reference backend should mirror
+parakeet.py's transpose unless the C++ side explicitly uses
+`Layout::MelsTime`. When in doubt, dump both shapes from a tiny script
+and compare against a diff harness PASS on a known-good neighbour
+(parakeet's mel diff is the canonical reference).
+
+Encoder cos divergences downstream of a layout-clean mel are then a
+separate question — for Q4_K models a cos_min in `[0.3, 0.5]` range
+on the encoder output is expected (low-magnitude frames dominated by
+quant noise), and isn't a real bug as long as the runtime transcribes
+correctly. F16 GGUFs are required for strict cos≥0.999 validation;
+on storage-tight machines that's not always feasible (PLAN #5 canary
+diff was left at the Q4_K + functional-transcribe gate for that reason).

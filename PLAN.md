@@ -733,10 +733,15 @@ so existing builds don't regress.
    model side (16 stages); extend it (or add a sibling) so the
    phonemizer step itself is also diffed — guard against future
    drift between popen / lib / future Python G2P.
-5. ~~**Optional polish.**~~ **DONE.** `kokoro_phoneme_cache_clear()` +
-   session-scoped `crispasr_session_kokoro_clear_phoneme_cache()` ABI
-   exports for long-running daemons that resynthesize across many
-   speakers.
+5. ~~**Optional polish.**~~ **DONE + CROSS-BINDING.**
+   `kokoro_phoneme_cache_clear()` + session-scoped
+   `crispasr_session_kokoro_clear_phoneme_cache()` ABI exports for
+   long-running daemons that resynthesize across many speakers. Wrappers
+   landed across all 7 bindings (Python `Session.clear_phoneme_cache()`,
+   Rust `Session::clear_phoneme_cache()`, Dart `clearPhonemeCache()`,
+   Go `Session.ClearPhonemeCache()`, Java `clearPhonemeCache()`, JS
+   `Module.ttsClearPhonemeCache()`, Ruby `Session.clear_phoneme_cache()`).
+   No-model unit tests cover the symbol export + null-handle return path.
 
 ### Effort
 
