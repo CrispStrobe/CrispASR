@@ -2415,7 +2415,7 @@ chunks, decoder thread overlap with next-chunk encode). Phase 2 work.
 Phase 1+1.5 ships the streaming API + bit-exact correctness; the
 realtime-feed property is the remaining work.
 
-**Phase 2 partial — chunk-size + timing instrumentation + default-unification (May 2026).**
+**Phase 2 SHIPPED — chunk-size + fused QKV + default-unification + timing instrumentation (May 2026).**
 - Default internal encoder chunk bumped 80 ms → 240 ms
   (`CRISPASR_VOXTRAL4B_STREAM_CHUNK_MS` env-var override). 2.6× feed
   speedup on JFK 11 s (24 s → 9.3 s); bit-exact-batch unaffected.
@@ -2431,6 +2431,31 @@ realtime-feed property is the remaining work.
   on both paths (`CRISPASR_VOXTRAL4B_STREAM_BATCH_ENCODER=1` to opt out).
   Wins: encoder drain at flush 2064 ms → 1016 ms; first-text-token
   2674 ms → 1646 ms.
+- Runtime fused QKV for the LLM. Concat each layer's q/k/v weights
+  along the output axis at load time into a single (d_model,
+  q_dim+2*kv_dim) tensor; route through `core_attn::kv_self_attn`'s
+  `qkv_w` path. Extends the qwen3_asr precedent to handle Q4_K (and
+  any row-wise quantized format) by byte-concat — each output row is
+  a self-contained block group, so concatenation along the output axis
+  is a pure memcpy. ~7-8 % decode speedup (56 → 50.4 ms per step).
+  `CRISPASR_VOXTRAL4B_FUSED_QKV=0` to opt out.
+- FFN gate+up fuse was tried and reverted — Metal's Q4_K matmul kernel
+  for (3072 × 9216) is already memory-bandwidth-bound, so combining
+  two of those into (3072 × 18432) didn't help the per-step decode
+  budget. The `core_ffn::swiglu_fused_gate_up` helper stays in place
+  for any future caller where the ratio is more favourable (e.g. a
+  larger model where the gate-up matmul time dwarfs the overhead, or
+  a different backend with different kernel characteristics).
+
+**Final phase 2 numbers** (M1 Q4_K JFK 11 s, all phase 1+1.5+2 wins):
+
+| Metric | Phase 1 | Phase 1.5 | Phase 2 |
+|---|---|---|---|
+| feed total | 23 s | 24 s | **9.1 s** |
+| flush total | 8.5 s (batch encoder at flush) | 11.4 s (incremental + waste) | **8.3 s** |
+| per-decode-step | 56 ms | 56 ms | **50.4 ms** |
+| first-text-token | n/a (no live data) | 2.7 s | **1.6 s** |
+| bit-exact-batch | PASS | PASS | PASS |
 
 **Architectural floor for first-text-token latency** (revealed by
 the timing pass on M1 Q4_K JFK 11 s):
