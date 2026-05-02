@@ -51,6 +51,11 @@ void kyutai_stt_result_free(struct kyutai_stt_result* r);
 // Token text lookup.
 const char* kyutai_stt_token_text(struct kyutai_stt_context* ctx, int id);
 
+// Sticky seed for the multinomial sampler (best-of-N). 0 = leave libc RNG
+// state alone; non-zero = `srand(seed)`. Process-global; serialize best-of-N
+// at the adapter level.
+void kyutai_stt_set_seed(struct kyutai_stt_context* ctx, unsigned int seed);
+
 // ---- Per-token + word-level timing (PLAN #61c) ----
 //
 // Kyutai's "delayed-streams" architecture aligns each emitted text

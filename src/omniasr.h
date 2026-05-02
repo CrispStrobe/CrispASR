@@ -54,6 +54,11 @@ void omniasr_result_free(struct omniasr_result* r);
 // Token text lookup (id → vocab piece, no detokenisation).
 const char* omniasr_token_text(struct omniasr_context* ctx, int id);
 
+// Sticky per-call seed for the multinomial sampler. 0 (default) = derive
+// deterministically from the encoder output. Non-zero values let
+// best-of-N callers draw independent samples from the same audio.
+void omniasr_set_seed(struct omniasr_context* ctx, uint64_t seed);
+
 #ifdef __cplusplus
 }
 #endif

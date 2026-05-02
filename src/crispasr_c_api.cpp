@@ -2486,8 +2486,40 @@ CA_EXPORT crispasr_session_result* crispasr_session_transcribe_lang(crispasr_ses
         }
 #endif
 #ifdef CA_HAVE_GEMMA4_E2B
-        if (!text && s->backend == "gemma4-e2b" && s->gemma4_e2b_ctx)
-            text = gemma4_e2b_transcribe((gemma4_e2b_context*)s->gemma4_e2b_ctx, pcm, n_samples);
+        if (!text && s->backend == "gemma4-e2b" && s->gemma4_e2b_ctx) {
+            gemma4_e2b_result* gr =
+                gemma4_e2b_transcribe_with_probs((gemma4_e2b_context*)s->gemma4_e2b_ctx, pcm, n_samples);
+            if (gr && gr->text) {
+                std::vector<ca_token_record> toks;
+                toks.reserve((size_t)gr->n_tokens);
+                for (int i = 0; i < gr->n_tokens; i++) {
+                    ca_token_record tk;
+                    const char* piece = gemma4_e2b_token_text((gemma4_e2b_context*)s->gemma4_e2b_ctx, gr->token_ids[i]);
+                    if (piece && piece[0]) {
+                        // Gemma uses SentencePiece-style ▁ markers (U+2581).
+                        std::string p = piece;
+                        for (size_t ci = 0; ci < p.size(); ci++) {
+                            if ((unsigned char)p[ci] == 0xE2 && ci + 2 < p.size() &&
+                                (unsigned char)p[ci + 1] == 0x96 && (unsigned char)p[ci + 2] == 0x81) {
+                                tk.text += ' ';
+                                ci += 2;
+                            } else {
+                                tk.text += p[ci];
+                            }
+                        }
+                    }
+                    tk.t0 = -1;
+                    tk.t1 = -1;
+                    tk.p = gr->token_probs[i];
+                    toks.push_back(std::move(tk));
+                }
+                char* dup = strdup(gr->text);
+                gemma4_e2b_result_free(gr);
+                return package_with_tokens(dup, std::move(toks));
+            }
+            if (gr)
+                gemma4_e2b_result_free(gr);
+        }
 #endif
 #ifdef CA_HAVE_MIMO_ASR
         if (!text && s->backend == "mimo-asr" && s->mimo_asr_ctx) {

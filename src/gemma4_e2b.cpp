@@ -1719,7 +1719,11 @@ extern "C" struct gemma4_e2b_context* gemma4_e2b_init_from_file(const char* path
     return ctx;
 }
 
-extern "C" char* gemma4_e2b_transcribe(struct gemma4_e2b_context* ctx, const float* pcm, int n_samples) {
+// Internal: shared implementation. When `out_token_ids` and `out_token_probs`
+// are non-null, both are populated in lock-step with the emitted (non-special)
+// tokens. The legacy `gemma4_e2b_transcribe` calls this with nullptr out.
+static char* gemma4_e2b_transcribe_impl(struct gemma4_e2b_context* ctx, const float* pcm, int n_samples,
+                                        std::vector<int32_t>* out_token_ids, std::vector<float>* out_token_probs) {
     if (!ctx || !pcm || n_samples <= 0)
         return nullptr;
 
@@ -2093,6 +2097,8 @@ extern "C" char* gemma4_e2b_transcribe(struct gemma4_e2b_context* ctx, const flo
 
     int vocab = (int)lhp.vocab_size;
     int first_token = core_greedy_decode::argmax(prefill_logits, vocab);
+    const float first_p =
+        core_greedy_decode::softmax_of(prefill_logits, vocab, first_token, prefill_logits[first_token]);
     std::free(prefill_logits);
 
     if (verbose)
@@ -2106,21 +2112,32 @@ extern "C" char* gemma4_e2b_transcribe(struct gemma4_e2b_context* ctx, const flo
     cfg.vocab_size = vocab;
     cfg.temperature = ctx->temperature;
 
-    auto gen = core_greedy_decode::run(ctx, first_token, T_total, g4e_embed_tokens, g4e_run_llm_kv, cfg);
+    // Always run with probs — the helper threads through to the same KV /
+    // embedding callbacks; capturing the per-step softmax adds one O(V) pass
+    // per token (cheap at gemma4-e2b's vocab) and keeps the public greedy
+    // entry pristine for non-prob callers.
+    const bool capture_probs = (out_token_ids && out_token_probs);
+    auto dec = core_greedy_decode::run_with_probs(ctx, first_token, first_p, T_total, g4e_embed_tokens,
+                                                  g4e_run_llm_kv, cfg);
 
     if (verbose)
-        fprintf(stderr, "gemma4_e2b: decoded %d tokens (%.1f ms total)\n", (int)gen.size(),
+        fprintf(stderr, "gemma4_e2b: decoded %d tokens (%.1f ms total)\n", (int)dec.tokens.size(),
                 (ggml_time_us() - t0) / 1000.0);
 
     // ── Step 8: Detokenize ──────────────────────────────────────────────
     std::string result;
-    for (int tid : gen) {
+    for (size_t i = 0; i < dec.tokens.size(); i++) {
+        const int tid = dec.tokens[i];
         if (tid == ctx->bos_id || tid == ctx->eos_id)
             continue;
         if (tid == ctx->start_of_turn_id || tid == ctx->end_of_turn_id)
             continue;
         if (tid >= 0 && tid < (int)m.vocab.size())
             result += m.vocab[tid];
+        if (capture_probs) {
+            out_token_ids->push_back(tid);
+            out_token_probs->push_back(i < dec.probs.size() ? dec.probs[i] : 0.0f);
+        }
     }
 
     // Strip leading/trailing whitespace
@@ -2130,6 +2147,46 @@ extern "C" char* gemma4_e2b_transcribe(struct gemma4_e2b_context* ctx, const flo
         result = result.substr(s, e - s + 1);
 
     return strdup(result.c_str());
+}
+
+extern "C" char* gemma4_e2b_transcribe(struct gemma4_e2b_context* ctx, const float* pcm, int n_samples) {
+    return gemma4_e2b_transcribe_impl(ctx, pcm, n_samples, nullptr, nullptr);
+}
+
+extern "C" struct gemma4_e2b_result* gemma4_e2b_transcribe_with_probs(struct gemma4_e2b_context* ctx, const float* pcm,
+                                                                      int n_samples) {
+    std::vector<int32_t> ids;
+    std::vector<float> probs;
+    char* text = gemma4_e2b_transcribe_impl(ctx, pcm, n_samples, &ids, &probs);
+    if (!text)
+        return nullptr;
+    auto* r = (gemma4_e2b_result*)calloc(1, sizeof(gemma4_e2b_result));
+    r->text = text;
+    r->n_tokens = (int)ids.size();
+    if (r->n_tokens > 0) {
+        r->token_ids = (int*)malloc(sizeof(int) * (size_t)r->n_tokens);
+        r->token_probs = (float*)malloc(sizeof(float) * (size_t)r->n_tokens);
+        for (int i = 0; i < r->n_tokens; i++) {
+            r->token_ids[i] = ids[i];
+            r->token_probs[i] = probs[i];
+        }
+    }
+    return r;
+}
+
+extern "C" void gemma4_e2b_result_free(struct gemma4_e2b_result* r) {
+    if (!r)
+        return;
+    free(r->text);
+    free(r->token_ids);
+    free(r->token_probs);
+    free(r);
+}
+
+extern "C" const char* gemma4_e2b_token_text(struct gemma4_e2b_context* ctx, int id) {
+    if (!ctx || id < 0 || id >= (int)ctx->model.vocab.size())
+        return "";
+    return ctx->model.vocab[id].c_str();
 }
 
 // ── Stage hooks for crispasr-diff ──────────────────────────────────────────

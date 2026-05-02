@@ -103,6 +103,12 @@ struct omniasr_context {
     // nullptr by the public greedy entry.
     std::vector<int32_t>* capture_token_ids = nullptr;
     std::vector<float>* capture_token_probs = nullptr;
+
+    // Sticky per-call seed override for best-of-N sampling. 0 = derive
+    // deterministically from the encoder output (repeated calls with the
+    // same audio give identical samples). Non-zero lets the caller inject
+    // run-index salt to draw N independent samples.
+    uint64_t seed_override = 0;
 };
 
 struct omniasr_perf {
@@ -1282,10 +1288,14 @@ static char* omniasr_transcribe_llm(omniasr_context* ctx, const std::vector<floa
     std::vector<float> step_logits;
 
     // Per-call seed: derive deterministically from the audio buffer so
-    // repeated calls with the same input give the same trajectory while
-    // different inputs (or different runs of best-of-N) diverge.
+    // repeated calls with the same input give the same trajectory. The
+    // sticky `seed_override` (set via omniasr_set_seed for best-of-N) is
+    // mixed in so callers can draw N independent samples from the same audio.
     uint64_t rng_state = 0x9E3779B97F4A7C15ull ^ (uint64_t)(uintptr_t)encoder_out.data() ^
-                         (uint64_t)(encoder_out.size() ^ 0xDEADBEEFCAFEBABEull);
+                         (uint64_t)(encoder_out.size() ^ 0xDEADBEEFCAFEBABEull) ^
+                         (ctx->seed_override * 0xBF58476D1CE4E5B9ull);
+    if (rng_state == 0)
+        rng_state = 0x9E3779B97F4A7C15ull;
     auto rand_uniform = [&]() -> float {
         rng_state ^= rng_state << 13;
         rng_state ^= rng_state >> 7;
@@ -1499,4 +1509,9 @@ extern "C" const char* omniasr_token_text(struct omniasr_context* ctx, int id) {
     if (!ctx || id < 0 || id >= (int)ctx->model.vocab.size())
         return "";
     return ctx->model.vocab[id].c_str();
+}
+
+extern "C" void omniasr_set_seed(struct omniasr_context* ctx, uint64_t seed) {
+    if (ctx)
+        ctx->seed_override = seed;
 }

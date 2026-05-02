@@ -33,14 +33,42 @@ public:
 
     std::vector<crispasr_segment> transcribe(const float* samples, int n_samples, int64_t t_offset_cs,
                                              const whisper_params& params) override {
-        (void)params;
         std::vector<crispasr_segment> out;
         if (!ctx_)
             return out;
 
-        glm_asr_result* r = glm_asr_transcribe_with_probs(ctx_, samples, n_samples);
+        // Best-of-N: when temperature > 0 and best_of > 1, run N seeded
+        // decodes (process-global libc rand reseeded per run) and keep the
+        // highest mean prob.
+        const int n_runs = (params.temperature > 0.0f && params.best_of > 1) ? params.best_of : 1;
+        glm_asr_result* r = nullptr;
+        double best_score = -1.0;
+        for (int run = 0; run < n_runs; run++) {
+            if (n_runs > 1)
+                glm_asr_set_seed(ctx_, (unsigned int)(run * 0x9E3779B9u + 1u));
+            glm_asr_result* cand = glm_asr_transcribe_with_probs(ctx_, samples, n_samples);
+            if (!cand)
+                continue;
+            double sum = 0.0;
+            int cnt = 0;
+            for (int i = 0; i < cand->n_tokens; i++) {
+                sum += (double)cand->token_probs[i];
+                cnt++;
+            }
+            double score = (cnt > 0) ? (sum / cnt) : 0.0;
+            if (!r || score > best_score) {
+                if (r)
+                    glm_asr_result_free(r);
+                r = cand;
+                best_score = score;
+            } else {
+                glm_asr_result_free(cand);
+            }
+        }
         if (!r || !r->text)
             return out;
+        if (!params.no_prints && n_runs > 1)
+            fprintf(stderr, "crispasr[glm-asr]: best-of-%d picked score=%.4f\n", n_runs, best_score);
 
         crispasr_segment seg;
         seg.t0 = t_offset_cs;

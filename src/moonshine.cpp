@@ -31,6 +31,12 @@ struct moonshine_context {
 
     int n_threads = 4;
     float temperature = 0.0f; // 0 = greedy argmax; > 0 = multinomial sampling
+    // Sticky per-call seed override for best-of-N. 0 = derive deterministically
+    // from the input audio buffer (the historical default — repeated calls
+    // with the same input give identical samples). Non-zero values let the
+    // caller inject run-index salt to draw N independent samples from the
+    // same audio.
+    uint64_t seed_override = 0;
     moonshine_timing timing = {};
 };
 
@@ -994,8 +1000,13 @@ static int moonshine_transcribe_impl(struct moonshine_context* ctx, const float*
     const bool sample = (T > 0.0f);
 
     // Per-call seed: derive from samples + audio length so repeated runs are
-    // deterministic but different from each other.
-    uint64_t rng_state = 0x9E3779B97F4A7C15ull ^ (uint64_t)(uintptr_t)audio ^ (uint64_t)n_samples;
+    // deterministic but different from each other. When the caller has
+    // injected a sticky `seed_override` (best-of-N), mix it in too so each
+    // run draws an independent sample from the same audio.
+    uint64_t rng_state = 0x9E3779B97F4A7C15ull ^ (uint64_t)(uintptr_t)audio ^ (uint64_t)n_samples ^
+                         (ctx->seed_override * 0xBF58476D1CE4E5B9ull);
+    if (rng_state == 0)
+        rng_state = 0x9E3779B97F4A7C15ull;
     auto rand_uniform = [&]() -> float {
         // xorshift64
         rng_state ^= rng_state << 13;
@@ -1135,6 +1146,11 @@ extern "C" void moonshine_result_free(struct moonshine_result* r) {
 extern "C" void moonshine_set_temperature(struct moonshine_context* ctx, float temperature) {
     if (ctx)
         ctx->temperature = (temperature > 0.0f) ? temperature : 0.0f;
+}
+
+extern "C" void moonshine_set_seed(struct moonshine_context* ctx, uint64_t seed) {
+    if (ctx)
+        ctx->seed_override = seed;
 }
 
 extern "C" const char* moonshine_token_text(struct moonshine_context* ctx, int token_id) {

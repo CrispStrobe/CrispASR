@@ -18,6 +18,9 @@ public:
 
     uint32_t capabilities() const override {
         return CAP_AUTO_DOWNLOAD | CAP_TOKEN_CONFIDENCE | CAP_TEMPERATURE | CAP_PUNCTUATION_TOGGLE;
+        // Best-of-N is implemented in transcribe() as a sequential loop over
+        // _transcribe_with_probs with a sticky seed. There's no CAP_BEST_OF_N
+        // bit today; the matrix tracks it via README + adapter behaviour.
     }
 
     bool init(const whisper_params& params) override {
@@ -36,12 +39,44 @@ public:
             return out;
 
         moonshine_set_temperature(ctx_, params.temperature);
-        moonshine_result* r = moonshine_transcribe_with_probs(ctx_, samples, n_samples);
+
+        // Best-of-N: when temperature > 0 and best_of > 1, run N seeded
+        // decodes and keep the one with highest mean per-token softmax prob.
+        // Sequential — moonshine's RNG is per-context so threads are
+        // independent across sessions but not across runs of the same session.
+        const int n_runs = (params.temperature > 0.0f && params.best_of > 1) ? params.best_of : 1;
+        moonshine_result* r = nullptr;
+        double best_score = -1.0;
+        for (int run = 0; run < n_runs; run++) {
+            // Mix run index into the sticky seed override. Run 0 keeps
+            // historical behaviour (seed_override=0 → audio-derived seed).
+            moonshine_set_seed(ctx_, run == 0 ? 0 : ((uint64_t)run * 0x9E3779B97F4A7C15ULL));
+            moonshine_result* cand = moonshine_transcribe_with_probs(ctx_, samples, n_samples);
+            if (!cand)
+                continue;
+            double sum = 0.0;
+            int cnt = 0;
+            for (int i = 0; i < cand->n_tokens; i++) {
+                sum += (double)cand->token_probs[i];
+                cnt++;
+            }
+            double score = (cnt > 0) ? (sum / cnt) : 0.0;
+            if (!r || score > best_score) {
+                if (r)
+                    moonshine_result_free(r);
+                r = cand;
+                best_score = score;
+            } else {
+                moonshine_result_free(cand);
+            }
+        }
         if (!r || !r->text || !r->text[0]) {
             if (r)
                 moonshine_result_free(r);
             return out;
         }
+        if (!params.no_prints && n_runs > 1)
+            fprintf(stderr, "crispasr[moonshine]: best-of-%d picked score=%.4f\n", n_runs, best_score);
 
         crispasr_segment seg;
         seg.t0 = t_offset_cs;

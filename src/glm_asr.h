@@ -35,6 +35,14 @@ void glm_asr_free(struct glm_asr_context* ctx);
 // Returns malloc'd UTF-8 string, caller frees with free().
 char* glm_asr_transcribe(struct glm_asr_context* ctx, const float* samples, int n_samples);
 
+// Sticky per-call seed for the multinomial sampler. 0 (default) = use the
+// process-global libc RNG state at its current position. Non-zero values
+// reseed via `srand(seed)` so best-of-N callers can draw N independent
+// samples from the same audio. Caveat: `srand` is process-global, so
+// concurrent best-of-N from multiple threads would race; serialize the
+// best-of-N loop in the adapter (the existing pattern).
+void glm_asr_set_seed(struct glm_asr_context* ctx, unsigned int seed);
+
 // Same as above but additionally returns per-token ids + softmax probs.
 // Free with glm_asr_result_free.
 struct glm_asr_result {

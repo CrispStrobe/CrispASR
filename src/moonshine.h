@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -30,6 +32,12 @@ void moonshine_free(struct moonshine_context* ctx);
 // Sticky sampling temperature. 0 = greedy argmax (default). > 0 enables
 // multinomial sampling from softmax(logits/temperature).
 void moonshine_set_temperature(struct moonshine_context* ctx, float temperature);
+
+// Sticky per-call seed for the multinomial sampler. 0 (default) = derive
+// deterministically from the input audio (repeated calls give identical
+// samples). Non-zero values let best-of-N callers draw independent samples
+// from the same audio by injecting a run-index salt.
+void moonshine_set_seed(struct moonshine_context* ctx, uint64_t seed);
 
 // Single-token piece lookup. The returned pointer is owned by the context
 // and stable until the next call to this function. Returns empty string

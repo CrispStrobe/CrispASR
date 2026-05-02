@@ -671,6 +671,15 @@ extern "C" struct glm_asr_result* glm_asr_transcribe_with_probs(struct glm_asr_c
     return r;
 }
 
+extern "C" void glm_asr_set_seed(struct glm_asr_context* ctx, unsigned int seed) {
+    (void)ctx;
+    // glm-asr uses libc rand() in its multinomial sampler. Reseed only when
+    // a non-zero salt is supplied so the legacy non-best-of-N path keeps
+    // its historical (process-position-dependent) behaviour.
+    if (seed != 0)
+        srand(seed);
+}
+
 extern "C" void glm_asr_result_free(struct glm_asr_result* r) {
     if (!r)
         return;

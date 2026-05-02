@@ -38,14 +38,40 @@ public:
 
     std::vector<crispasr_segment> transcribe(const float* samples, int n_samples, int64_t t_offset_cs,
                                              const whisper_params& params) override {
-        (void)params;
         std::vector<crispasr_segment> out;
         if (!ctx_)
             return out;
 
         // LLM variant: capture per-token confidence. CTC variant returns
         // nullptr from the with_probs path — fall back to the plain entry.
-        omniasr_result* r = omniasr_transcribe_with_probs(ctx_, samples, n_samples);
+        // Best-of-N: when temperature > 0 and best_of > 1, run N seeded
+        // decodes via the sticky seed override and keep the highest mean prob.
+        const int n_runs = (params.temperature > 0.0f && params.best_of > 1) ? params.best_of : 1;
+        omniasr_result* r = nullptr;
+        double best_score = -1.0;
+        for (int run = 0; run < n_runs; run++) {
+            omniasr_set_seed(ctx_, run == 0 ? 0 : ((uint64_t)run * 0x9E3779B97F4A7C15ULL));
+            omniasr_result* cand = omniasr_transcribe_with_probs(ctx_, samples, n_samples);
+            if (!cand)
+                continue;
+            double sum = 0.0;
+            int cnt = 0;
+            for (int i = 0; i < cand->n_tokens; i++) {
+                sum += (double)cand->token_probs[i];
+                cnt++;
+            }
+            double score = (cnt > 0) ? (sum / cnt) : 0.0;
+            if (!r || score > best_score) {
+                if (r)
+                    omniasr_result_free(r);
+                r = cand;
+                best_score = score;
+            } else {
+                omniasr_result_free(cand);
+            }
+        }
+        if (!params.no_prints && n_runs > 1 && r)
+            fprintf(stderr, "crispasr[omniasr]: best-of-%d picked score=%.4f\n", n_runs, best_score);
         crispasr_segment seg;
         seg.t0 = t_offset_cs;
         seg.t1 = t_offset_cs + (int64_t)(n_samples * 100 / 16000);

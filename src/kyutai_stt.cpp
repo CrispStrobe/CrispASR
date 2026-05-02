@@ -1219,6 +1219,12 @@ extern "C" struct kyutai_stt_result* kyutai_stt_transcribe_with_probs(struct kyu
     return r;
 }
 
+extern "C" void kyutai_stt_set_seed(struct kyutai_stt_context* ctx, unsigned int seed) {
+    (void)ctx;
+    if (seed != 0)
+        srand(seed);
+}
+
 extern "C" void kyutai_stt_result_free(struct kyutai_stt_result* r) {
     if (!r)
         return;
