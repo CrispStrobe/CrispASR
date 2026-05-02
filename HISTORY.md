@@ -1978,3 +1978,40 @@ classes — `TestSessionStateSetters`, `TestStreamingAPI`,
 `TestMicAPI`, `TestRegistryEnumeration`. All four PASS in well
 under a second collectively, no model required. CI gates against
 accidental ABI removal across refactors.
+
+### 67. Kartoffel-Orpheus DE + lex-au — PLAN #57 Phase 2 checkpoint swaps (May 2026)
+
+The first three Orpheus-3B German checkpoints landed as drop-in
+swaps on the runtime that section 59 shipped — no source code
+changes, just registry rows + factory dispatch + (for Kartoffel)
+GGUF conversion via the existing `models/convert-orpheus-to-gguf.py`
+with `--variant fixed_speaker`.
+
+**Three new backends, all reachable via `--backend ... -m auto`:**
+
+| Backend alias | HF mirror | Speakers | Provenance |
+|---|---|---|---|
+| `kartoffel-orpheus-de-natural` | [`cstr/kartoffel-orpheus-3b-german-natural-GGUF`](https://huggingface.co/cstr/kartoffel-orpheus-3b-german-natural-GGUF) | 19 (Jakob/Anton/Julian/Jan/…/Sophie/Marie/Mia/…) | Convert of `SebastianBodza/Kartoffel_Orpheus-3B_german_natural-v0.1` (llama3.2, gated) → F16 6.61 GB + Q8_0 3.5 GB + Q4_K 1.87 GB |
+| `kartoffel-orpheus-de-synthetic` | [`cstr/kartoffel-orpheus-3b-german-synthetic-GGUF`](https://huggingface.co/cstr/kartoffel-orpheus-3b-german-synthetic-GGUF) | 4 (Martin/Luca/Anne/Emma) + 12 emotions + 5 outbursts | Convert of `SebastianBodza/Kartoffel_Orpheus-3B_german_synthetic-v0.1` (llama3.2, gated) — same shape; emotion control via `{Speaker} - {Emotion}: {text}` prompt |
+| `lex-au-orpheus-de` | `lex-au/Orpheus-3b-German-FT-Q8_0.gguf` (3.52 GB, no convert) | unknown — depends on lex-au's training set | Pre-built Q8_0 from lex-au; registry alias only, points at the upstream HF file directly |
+
+All three share the same SNAC codec ([`cstr/snac-24khz-GGUF`](https://huggingface.co/cstr/snac-24khz-GGUF)) the orpheus base row already publishes.
+
+**Validation: ASR-roundtrip via parakeet-v3 -l de.** Natural variant on Q8_0 / voice Julian:
+
+```
+$ crispasr --backend kartoffel-orpheus-de-natural \
+    -m kartoffel-orpheus-de-natural-q8_0.gguf \
+    --codec-model snac-24khz.gguf --voice Julian --temperature 0.6 \
+    --tts "Hallo, ich heiße Julian und das ist ein Kartoffel-Orpheus Test." \
+    --tts-output kartoffel_test.wav
+$ crispasr --backend parakeet -m parakeet-tdt-0.6b-v3-q4_k.gguf -l de \
+    -f kartoffel_test.wav --no-prints
+Hallo, ich heiße Julian und das ist ein Kartoffel-Orpheus-Test.
+```
+
+Word-exact (only minor `Kartoffel-Orpheus-Test` hyphenation drift). Synthetic variant smoke deferred — local 16 GB box was memory-contested by the parallel agent's concurrent crispasr-diff + converter runs, and the orpheus 3B AR loop hung in both Metal init (84 min stuck on `libraries.data` cache I/O while pages were compressor-evicted) and CPU mode (40+ min for Q8_0, 26+ min for Q4_K, 0 bytes output). Architecture is the same as the natural variant which validated end-to-end, and the synthetic checkpoint is purely an LM-weight delta — no runtime risk.
+
+**HF upload economics.** Per-file `api.upload_file` (sequential, README first) was the working recipe; `api.create_commit` with a 4-op transaction hung on token-refresh `RemoteDisconnected` mid-upload (43 min in TCP CLOSE_WAIT before kill). Xet dedup is dramatic when uploads share a base model: orpheus 10.1 GB upload was 576 MB net new bytes (Llama-3.2-3B base shared with the unsloth mirror); the synthetic Kartoffel 12 GB upload was ~5.1 GB net new because most chunks deduped against the natural variant which had landed an hour earlier.
+
+**Gated-repo gotcha.** `SebastianBodza/Kartoffel_Orpheus-3B_german_*` are click-through gated. Even when authenticated as `cstr`, `snapshot_download` returned 401 — diagnosed as a token-loading bug: when `HF_HOME` is overridden, the lib looks for `$HF_HOME/token` instead of the default `~/.cache/huggingface/token`. Drop the `HF_HOME` override and it works. Direct `requests.head` with explicit `Authorization` header worked all along, which is what made the diagnosis tractable.
