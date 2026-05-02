@@ -710,6 +710,18 @@ struct qwen3_tts_context {
     ggml_tensor* cp_lm_head_slot = nullptr;
     ggml_cgraph* cp_t1_gf = nullptr;
 
+    // Step-0 graph cache (PLAN #52 step 4 follow-on). The first cp_pred call
+    // per frame is T=2 with lm_head[0]; the existing cp_t1_gf cache only
+    // handles T=1. Caching step-0 in its own arena + sched lets all 15 steps
+    // skip rebuild/reset/alloc on cache hits. Gated on QWEN3_TTS_O15 (default
+    // ON since 2026-05-02) since the cache requires fixed_kv_len and
+    // kv_indices=positions, which are O15-only conditions.
+    ggml_context* cp_step0_ctx = nullptr;
+    std::vector<uint8_t> cp_step0_compute_meta;
+    ggml_cgraph* cp_step0_gf = nullptr;
+    ggml_backend_sched_t cp_step0_sched = nullptr;
+    bool cp_step0_reserved = false;
+
     // Fused Q+K+V weights for the talker (F16/F32 only, runtime-built from
     // the unfused tensors so Q4_K/Q8_0 talkers fall back to the 3-matmul path).
     ggml_context* fused_ctx = nullptr;
@@ -1001,7 +1013,12 @@ ggml_cgraph* build_graph_talker_kv(qwen3_tts_context* c, int n_past, int n_token
 // the last hidden state to the 2048-codebook vocab. The graph builder
 // takes the lm_head tensor as a parameter so we can rebuild a fresh
 // graph per step without conditionals inside.
-ggml_cgraph* build_graph_code_pred_kv(qwen3_tts_context* c, int n_past, int n_tokens, ggml_tensor* lm_head) {
+//
+// `arena_ctx` (default null): when provided, build into the caller's
+// per-bucket arena instead of the shared `c->compute_meta`. Used by
+// the step-0 cache (T=2 graph survives across frames).
+ggml_cgraph* build_graph_code_pred_kv(qwen3_tts_context* c, int n_past, int n_tokens, ggml_tensor* lm_head,
+                                      ggml_context* arena_ctx = nullptr) {
     const auto& hp = c->hp;
     const int d = (int)hp.cp_d_model;
     const int n_q = (int)hp.cp_n_heads;
@@ -1023,8 +1040,11 @@ ggml_cgraph* build_graph_code_pred_kv(qwen3_tts_context* c, int n_past, int n_to
     const bool o15 = env_bool_default("QWEN3_TTS_O15", true);
     const int Lk = o15 ? c->cp_kv_max_ctx : (n_past + T);
 
-    ggml_init_params ip = {c->compute_meta.size(), c->compute_meta.data(), true};
-    ggml_context* ctx0 = ggml_init(ip);
+    ggml_context* ctx0 = arena_ctx;
+    if (!ctx0) {
+        ggml_init_params ip = {c->compute_meta.size(), c->compute_meta.data(), true};
+        ctx0 = ggml_init(ip);
+    }
     ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 4096, false);
 
     ggml_tensor* embeds = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, d, T);
@@ -1092,7 +1112,9 @@ ggml_cgraph* build_graph_code_pred_kv(qwen3_tts_context* c, int n_past, int n_to
     ggml_tensor* logits = ggml_mul_mat(ctx0, eff_lm, cur);
     ggml_set_name(logits, "logits");
     ggml_build_forward_expand(gf, logits);
-    ggml_free(ctx0);
+    if (!arena_ctx) {
+        ggml_free(ctx0);
+    }
     return gf;
 }
 
@@ -1671,6 +1693,45 @@ bool apply_small_to_mtp(qwen3_tts_context* c, const float* in, float* out);
 // One step of the code-predictor AR loop. Builds + runs the graph
 // against a caller-supplied (T, d) embedding tensor and the lm_head
 // for the current generation step. Returns logits (cp_vocab,).
+// CP step-0 cache: build the T=2 step-0 graph once in its own arena +
+// dedicated sched, then reuse forever. Only valid in O15 mode (the
+// graph relies on fixed_kv_len + kv_indices=positions to be n_past-
+// invariant). Returns false on init failure; caller falls back to
+// the rebuild path. Uses cp.lm_head[0] directly (persistent weight,
+// safe to bake into the cached graph).
+static ggml_cgraph* cp_step0_get_or_build(qwen3_tts_context* c) {
+    if (c->cp_step0_gf) {
+        return c->cp_step0_gf;
+    }
+    if (c->compute_meta.empty() || !c->code_pred.lm_head[0]) {
+        return nullptr;
+    }
+    c->cp_step0_compute_meta.assign(c->compute_meta.size(), 0);
+    ggml_init_params ip = {c->cp_step0_compute_meta.size(), c->cp_step0_compute_meta.data(), true};
+    c->cp_step0_ctx = ggml_init(ip);
+    if (!c->cp_step0_ctx) {
+        return nullptr;
+    }
+    c->cp_step0_gf =
+        build_graph_code_pred_kv(c, /*n_past=*/0, /*n_tokens=*/2, c->code_pred.lm_head[0], c->cp_step0_ctx);
+    if (!c->cp_step0_gf) {
+        ggml_free(c->cp_step0_ctx);
+        c->cp_step0_ctx = nullptr;
+        c->cp_step0_compute_meta.clear();
+    }
+    return c->cp_step0_gf;
+}
+
+static ggml_backend_sched_t cp_step0_pick_sched(qwen3_tts_context* c) {
+    if (c->cp_step0_sched) {
+        return c->cp_step0_sched;
+    }
+    ggml_backend_t backends[2] = {c->backend, c->backend_cpu};
+    int n_be = (c->backend && c->backend != c->backend_cpu) ? 2 : 1;
+    c->cp_step0_sched = ggml_backend_sched_new(backends, nullptr, n_be, 4096, false, false);
+    return c->cp_step0_sched;
+}
+
 float* run_code_pred_kv(qwen3_tts_context* c, const float* embeds, int n_tokens, int n_past, ggml_tensor* lm_head,
                         bool skip_plan = false) {
     if (!lm_head) {
@@ -1718,6 +1779,61 @@ float* run_code_pred_kv(qwen3_tts_context* c, const float* embeds, int n_tokens,
     const bool use_slot = (o15 && n_tokens == 1 && c->cp_lm_head_slot && !c->cp_cpu_pinned);
     if (use_slot) {
         ggml_backend_tensor_copy(lm_head, c->cp_lm_head_slot);
+    }
+
+    // Step-0 cache (PLAN #52 step 4 follow-on, gated QWEN3_TTS_CP_STEP0_CACHE=1):
+    // T=2 prefill on lm_head[0] in a dedicated sched/arena, persistent across
+    // frames. Requires O15 (mask + kv_indices path). Eliminates the per-frame
+    // build+reset+alloc for step 0 (~0.5-3 ms/frame depending on contention).
+    const bool use_step0_cache =
+        (o15 && n_tokens == 2 && n_past == 0 && !c->cp_cpu_pinned && env_bool("QWEN3_TTS_CP_STEP0_CACHE"));
+    if (use_step0_cache) {
+        ggml_cgraph* s0_gf = cp_step0_get_or_build(c);
+        ggml_backend_sched_t s0_sched = cp_step0_pick_sched(c);
+        if (s0_gf && s0_sched) {
+            const bool bench_s0 = env_bool("QWEN3_TTS_BENCH");
+            const double t0 = bench_s0 ? now_ms() : 0.0;
+            if (!c->cp_step0_reserved) {
+                ggml_backend_sched_reset(s0_sched);
+                if (!ggml_backend_sched_alloc_graph(s0_sched, s0_gf)) {
+                    fprintf(stderr, "qwen3_tts: cp_step0 alloc_graph failed\n");
+                    return nullptr;
+                }
+                c->cp_step0_reserved = true;
+            }
+            const double t_alloc = bench_s0 ? now_ms() : 0.0;
+            ggml_backend_tensor_set(ggml_graph_get_tensor(s0_gf, "inputs_embeds"), embeds, 0,
+                                    (size_t)d * 2 * sizeof(float));
+            ggml_backend_tensor_set(ggml_graph_get_tensor(s0_gf, "positions"), positions.data(), 0,
+                                    positions.size() * sizeof(int32_t));
+            ggml_backend_tensor_set(ggml_graph_get_tensor(s0_gf, "causal_mask"), mask.data(), 0,
+                                    mask.size() * sizeof(ggml_fp16_t));
+            if (ggml_backend_sched_graph_compute(s0_sched, s0_gf) != GGML_STATUS_SUCCESS) {
+                fprintf(stderr, "qwen3_tts: cp_step0 compute failed\n");
+                return nullptr;
+            }
+            const double t_compute = bench_s0 ? now_ms() : 0.0;
+            ggml_tensor* out0 = ggml_graph_get_tensor(s0_gf, "logits");
+            float* r0 = (float*)malloc((size_t)vocab * sizeof(float));
+            ggml_backend_tensor_get(out0, r0, 0, (size_t)vocab * sizeof(float));
+            if (bench_s0) {
+                static double sum_alloc = 0.0, sum_compute = 0.0, sum_read = 0.0;
+                static int count = 0;
+                sum_alloc += t_alloc - t0;
+                sum_compute += t_compute - t_alloc;
+                sum_read += now_ms() - t_compute;
+                count++;
+                if (count == 14) {
+                    fprintf(stderr,
+                            "qwen3_tts: cp_step0_cache (%d calls): alloc=%.2f ms  compute=%.1f ms  read=%.2f ms\n",
+                            count, sum_alloc, sum_compute, sum_read);
+                    sum_alloc = sum_compute = sum_read = 0.0;
+                    count = 0;
+                }
+            }
+            return r0;
+        }
+        // Fall through to default path on init failure.
     }
 
     const bool bench = env_bool("QWEN3_TTS_BENCH");
@@ -6003,6 +6119,12 @@ extern "C" void qwen3_tts_free(struct qwen3_tts_context* ctx) {
         if (bk.ctx) {
             ggml_free(bk.ctx);
         }
+    }
+    if (ctx->cp_step0_sched) {
+        ggml_backend_sched_free(ctx->cp_step0_sched);
+    }
+    if (ctx->cp_step0_ctx) {
+        ggml_free(ctx->cp_step0_ctx);
     }
     if (ctx->sched) {
         ggml_backend_sched_free(ctx->sched);
