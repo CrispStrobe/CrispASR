@@ -196,5 +196,27 @@ class TestRegistryAndCache(unittest.TestCase):
             self.assertGreater(len(entry.filename), 0)
 
 
+@unittest.skipUnless(LIB_PATH, "libwhisper not built")
+class TestKokoroPhonemeCacheClear(unittest.TestCase):
+    """PLAN #56 #5: kokoro_phoneme_cache_clear C ABI is exposed and callable.
+
+    Doesn't require a kokoro model — only verifies the symbol export and
+    the null-handle return path.
+    """
+
+    def test_symbol_exported(self):
+        import ctypes
+        lib = ctypes.CDLL(LIB_PATH)
+        self.assertTrue(hasattr(lib, "crispasr_session_kokoro_clear_phoneme_cache"))
+
+    def test_null_handle_returns_neg_one(self):
+        import ctypes
+        lib = ctypes.CDLL(LIB_PATH)
+        fn = lib.crispasr_session_kokoro_clear_phoneme_cache
+        fn.argtypes = [ctypes.c_void_p]
+        fn.restype = ctypes.c_int
+        self.assertEqual(fn(ctypes.c_void_p(0)), -1)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
