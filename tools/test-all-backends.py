@@ -95,9 +95,9 @@ CAPABILITIES_KNOWN = (
 
 
 REGISTRY: tuple[Backend, ...] = (
-    Backend("whisper",    "Whisper (base)",      "ggml-base.bin",
-            "ggerganov/crispasr", "ggml-base.bin",
-            timeout_s=60, approx_size_mb=150,
+    Backend("whisper",    "Whisper (tiny)",      "ggml-tiny.bin",
+            "ggerganov/crispasr", "ggml-tiny.bin",
+            timeout_s=60, approx_size_mb=80,
             capabilities=("transcribe", "json-output", "stream", "lid", "vad")),
     Backend("parakeet",   "Parakeet TDT 0.6B",   "parakeet-tdt-0.6b-v3-q4_k.gguf",
             "cstr/parakeet-tdt-0.6b-v3-GGUF", "parakeet-tdt-0.6b-v3-q4_k.gguf",
@@ -414,17 +414,23 @@ wav = sys.argv[3]
 s = Session(model, backend=backend)
 with wave.open(wav,'rb') as w:
     pcm = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).astype(np.float32) / 32768.0
-out=''; lc=0
-with s.stream_open(step_ms=2000, length_ms=15000) as st:
+out=''; lc=0; n_decodes=0
+kwargs = {'step_ms': 2000, 'length_ms': 15000}
+# Whisper streaming needs an explicit language to bypass per-decode LID.
+if backend == 'whisper':
+    kwargs['language'] = 'en'
+with s.stream_open(**kwargs) as st:
     for i in range(0, len(pcm), 1600):
         rc = st.feed(pcm[i:i+1600])
         if rc == 1:
             d = st.get_text()
-            if d['counter'] != lc: lc=d['counter']; out=d['text']
+            if d['counter'] != lc: lc=d['counter']; out=d['text']; n_decodes += 1
     st.flush()
     d = st.get_text()
-    if d['counter'] != lc: out=d['text']
-print(out)
+    if d['counter'] != lc: out=d['text']; n_decodes += 1
+# Print as: "<n_decodes>|<final_transcript>" so the parent can verify
+# we got incremental emission, not just one decode at the end.
+sys.stdout.write(f'{n_decodes}|{out}')
 """
 
 
@@ -452,18 +458,39 @@ def test_stream(b: Backend, tier: str, ctx: dict) -> TestOutcome:
     if r.returncode != 0:
         return TestOutcome(b.name, "stream", tier, "CRASH",
                            (r.stderr or "")[-300:], elapsed)
-    transcript = r.stdout.strip()
+    raw = r.stdout.strip()
+    # Parse "<n_decodes>|<final>" from _STREAM_PY.
+    n_decodes, _, transcript = raw.partition("|")
+    try:
+        n_decodes = int(n_decodes)
+    except ValueError:
+        return TestOutcome(b.name, "stream", tier, "FAIL",
+                           f"unparseable stream output: {raw[:80]!r}", elapsed)
     if not transcript:
         return TestOutcome(b.name, "stream", tier, "EMPTY",
-                           "stream produced empty transcript", elapsed)
+                           f"stream produced empty transcript ({n_decodes} decodes)",
+                           elapsed)
     werv = wer(JFK_REF, transcript)
-    extra = {"transcript": transcript[:120], "wer": werv}
+    extra = {"transcript": transcript[:120], "wer": werv, "n_decodes": n_decodes}
+    # Smoke: counter must have advanced at least once (incremental emission)
+    # and final transcript must be reasonable.
+    if n_decodes < 1:
+        return TestOutcome(b.name, "stream", tier, "FAIL",
+                           "no decode events fired during streaming feed", elapsed, extra)
     if werv is not None and werv > 0.30:
         return TestOutcome(b.name, "stream", tier, "FAIL",
                            f"stream WER {werv:.1%} > 30%", elapsed, extra)
-    return TestOutcome(b.name, "stream", tier, "PASS",
-                       f"stream WER={werv:.1%}" if werv is not None else "stream OK",
-                       elapsed, extra)
+    if tier == "full":
+        # Full tier: for an 11s clip with step_ms=2000, expect at least 3
+        # decode events (chunks at ~2/4/6/8/10s + flush). Below that, the
+        # streaming nature isn't really being exercised.
+        expected_min = max(2, int(ctx["audio_duration"] // 3))
+        if n_decodes < expected_min:
+            return TestOutcome(b.name, "stream", tier, "FAIL",
+                               f"only {n_decodes} decode events (expected >= {expected_min})",
+                               elapsed, extra)
+    detail = f"WER={werv:.1%}, {n_decodes} decodes" if werv is not None else f"{n_decodes} decodes"
+    return TestOutcome(b.name, "stream", tier, "PASS", detail, elapsed, extra)
 
 
 # ---- beam -----------------------------------------------------------------
@@ -577,10 +604,164 @@ RUNNERS = {
     "beam":         test_beam,
     "best-of-n":    test_best_of_n,
     "punctuation":  test_punctuation,
-    # Future: word-timestamps (needs aligner model + parakeet ground truth),
-    # vad (needs multi-segment clip + adjustable threshold), lid (needs
-    # non-English samples).
+    "word-timestamps": None,  # filled in below
+    "vad":          None,
+    "lid":          None,
 }
+
+
+# ---- word-timestamps -------------------------------------------------------
+
+
+def test_word_timestamps(b: Backend, tier: str, ctx: dict) -> TestOutcome:
+    """Smoke: -ojf produces JSON whose first segment has a `words` array
+    with >= 5 entries. Each word entry should have time offsets.
+    Full: each word's t0 < t1, t1 monotonically non-decreasing across
+    the array, last t1 within audio duration + 500ms."""
+    crispasr, model, audio, use_gpu = (
+        ctx["crispasr"], ctx["model"], ctx["audio"], ctx["use_gpu"])
+    rc, out, err, w = _run_cli(crispasr, b, model, audio, ["-ojf"], use_gpu)
+    if rc != 0:
+        return TestOutcome(b.name, "word-timestamps", tier, "CRASH",
+                           (err or "")[-200:], w)
+    json_path = audio.with_suffix(".json")
+    try:
+        d = _json.loads(json_path.read_text())
+    except Exception as e:
+        return TestOutcome(b.name, "word-timestamps", tier, "FAIL",
+                           f"-ojf JSON unreadable: {e}", w)
+    segs = d.get("transcription") or []
+    if not segs:
+        return TestOutcome(b.name, "word-timestamps", tier, "FAIL",
+                           "no segments in -ojf JSON", w)
+    words = segs[0].get("words")
+    if not isinstance(words, list) or len(words) < 5:
+        return TestOutcome(b.name, "word-timestamps", tier, "FAIL",
+                           f"first segment has {len(words) if isinstance(words, list) else 0} word entries (need >= 5)",
+                           w)
+    if tier == "full":
+        # Word-entry schema varies: parakeet uses flat t0/t1 in centiseconds;
+        # whisper-style word lists use nested offsets.from/to in ms.
+        last_t1_ms = -1
+        for i, wd in enumerate(words):
+            t0_ms = t1_ms = None
+            if "t0" in wd and "t1" in wd:
+                # parakeet: cs → ms
+                t0_ms, t1_ms = wd["t0"] * 10, wd["t1"] * 10
+            elif "offsets" in wd:
+                off = wd["offsets"] or {}
+                t0_ms, t1_ms = off.get("from"), off.get("to")
+            if t0_ms is None or t1_ms is None or t0_ms > t1_ms:
+                return TestOutcome(b.name, "word-timestamps", tier, "FAIL",
+                                   f"word[{i}] bad timestamps: {wd}", w)
+            if t1_ms < last_t1_ms:
+                return TestOutcome(b.name, "word-timestamps", tier, "FAIL",
+                                   f"word[{i}] t1={t1_ms}ms < prev {last_t1_ms}ms (non-monotonic)",
+                                   w)
+            last_t1_ms = t1_ms
+        audio_ms = int(ctx["audio_duration"] * 1000) + 500
+        if last_t1_ms > audio_ms:
+            return TestOutcome(b.name, "word-timestamps", tier, "FAIL",
+                               f"last word t1={last_t1_ms}ms > audio {audio_ms}ms", w)
+    return TestOutcome(b.name, "word-timestamps", tier, "PASS",
+                       f"{len(words)} word entries", w,
+                       {"n_words": len(words)})
+
+
+# ---- vad -------------------------------------------------------------------
+
+
+# silero VAD model can live in a few places; the test runner probes them.
+def _find_silero(models_dir: Path) -> Path | None:
+    for cand in (
+        models_dir / "ggml-silero-v5.1.2.bin",
+        models_dir / "silero-v5.1.2.bin",
+        Path.home() / ".cache" / "crispasr" / "ggml-silero-v5.1.2.bin",
+    ):
+        if cand.is_file():
+            return cand
+    return None
+
+
+def test_vad(b: Backend, tier: str, ctx: dict) -> TestOutcome:
+    """Smoke: --vad on JFK produces N speech segments where 1 <= N <= 8.
+    Counts the 'Final speech segments after filtering: N' log line.
+    Full: same range, plus the resulting transcript still has WER <= 0.20.
+    """
+    crispasr, model, audio, use_gpu, models_dir = (
+        ctx["crispasr"], ctx["model"], ctx["audio"], ctx["use_gpu"],
+        ctx["models_dir"])
+    silero = _find_silero(models_dir)
+    if not silero:
+        return TestOutcome(b.name, "vad", tier, "SKIP",
+                           "silero VAD model not found in --models or "
+                           "~/.cache/crispasr/ — download "
+                           "ggml-silero-v5.1.2.bin from ggml-org/whisper-vad")
+    rc, out, err, w = _run_cli(crispasr, b, model, audio,
+                               ["--vad", "-vm", str(silero)], use_gpu)
+    if rc != 0:
+        return TestOutcome(b.name, "vad", tier, "CRASH",
+                           (err or "")[-200:], w)
+    m = re.search(r"Final speech segments after filtering:\s*(\d+)", err or "")
+    if not m:
+        return TestOutcome(b.name, "vad", tier, "FAIL",
+                           "no VAD segment-count log line", w)
+    n_segs = int(m.group(1))
+    if n_segs < 1 or n_segs > 8:
+        return TestOutcome(b.name, "vad", tier, "FAIL",
+                           f"VAD produced {n_segs} segments (expected 1-8)",
+                           w, {"n_segments": n_segs})
+    if tier == "full":
+        transcript = parse_transcript(out)
+        werv = wer(JFK_REF, transcript)
+        if werv is not None and werv > 0.20:
+            return TestOutcome(b.name, "vad", tier, "FAIL",
+                               f"VAD-sliced transcript WER {werv:.1%} > 20%",
+                               w, {"n_segments": n_segs, "wer": werv})
+    return TestOutcome(b.name, "vad", tier, "PASS",
+                       f"{n_segs} segments", w, {"n_segments": n_segs})
+
+
+# ---- lid -------------------------------------------------------------------
+
+
+def test_lid(b: Backend, tier: str, ctx: dict) -> TestOutcome:
+    """Smoke: stderr contains 'auto-detected language: en' or
+    'detected ... language = en' (parakeet+others route LID through
+    whisper). Full: detected probability > 0.5.
+    """
+    crispasr, model, audio, use_gpu = (
+        ctx["crispasr"], ctx["model"], ctx["audio"], ctx["use_gpu"])
+    rc, out, err, w = _run_cli(crispasr, b, model, audio, [], use_gpu)
+    if rc != 0:
+        return TestOutcome(b.name, "lid", tier, "CRASH",
+                           (err or "")[-200:], w)
+    # Whisper-style: "auto-detected language: en (p = 0.976672)"
+    # crispasr-LID-helper:  "crispasr[lid]: detected 'en' (p=0.977) via whisper"
+    m = re.search(
+        r"(?:auto-detected language:\s*|crispasr\[lid\][^\n]*detected\s*['\"]?)"
+        r"([a-z]{2,3})['\"]?[^\n]*?p\s*=\s*([\d.]+)",
+        err or "", re.IGNORECASE)
+    if not m:
+        return TestOutcome(b.name, "lid", tier, "FAIL",
+                           "no LID stderr log line", w)
+    lang, prob = m.group(1).lower(), float(m.group(2))
+    if lang != "en":
+        return TestOutcome(b.name, "lid", tier, "FAIL",
+                           f"detected language '{lang}' (expected 'en' on JFK)",
+                           w, {"lang": lang, "p": prob})
+    if tier == "full" and prob < 0.5:
+        return TestOutcome(b.name, "lid", tier, "FAIL",
+                           f"LID confidence {prob:.3f} < 0.5", w,
+                           {"lang": lang, "p": prob})
+    return TestOutcome(b.name, "lid", tier, "PASS",
+                       f"detected '{lang}' p={prob:.3f}", w,
+                       {"lang": lang, "p": prob})
+
+
+RUNNERS["word-timestamps"] = test_word_timestamps
+RUNNERS["vad"] = test_vad
+RUNNERS["lid"] = test_lid
 
 
 # ---------------------------------------------------------------------------
@@ -708,7 +889,7 @@ def main() -> int:
               flush=True)
         ctx = {
             "crispasr": crispasr, "model": model, "audio": audio,
-            "audio_duration": audio_duration,
+            "audio_duration": audio_duration, "models_dir": models_dir,
             "use_gpu": not args.cpu, "wer_threshold": args.wer_threshold,
         }
         # Run each advertised capability whose tier != ignore.
