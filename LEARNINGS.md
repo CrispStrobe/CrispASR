@@ -1026,16 +1026,11 @@ prompt against the JFK 24 kHz voice prompt.
   (no per-step diff yet that tests their interaction across the 4
   variants).
 
-**Still on the optimization roadmap (not yet implemented):**
+**Still on the optimization roadmap:**
 
-- **Talker Lk bucketing.** Pre-build talker graphs at `Lk ∈ {256, 512,
-  1024, 2048, 4096}`, dispatch each AR step to the smallest bucket
-  where `n_past + T ≤ Lk_bucket`, mask the unfilled slots to `-∞` via
-  the existing `causal_mask` input. Each bucket allocs once, computes
-  many times — eliminates the per-frame Metal command-buffer rebuild.
-  Naive "fixed Lk = max_ctx" is a net loss: every step would do
-  17-50× more KV traffic. Bucketing keeps the worst-case overhead at
-  2× current.
+- ~~**Talker Lk bucketing.**~~ Implemented and benched 2026-05-02 (see
+  next section). Net loss on M1 Metal Q8_0 across three system-load
+  conditions; kept gated behind `QWEN3_TTS_LK_BUCKET=1`, default OFF.
 - **F16 → Q8_0 KV cache.** Halve KV bandwidth for free precision-wise
   (the helper writes via `ggml_cpy(F16 → Q8_0_view)`); needs the read
   path to `ggml_cont` Q8_0 → F16 before flash_attn (currently
@@ -1044,6 +1039,62 @@ prompt against the JFK 24 kHz voice prompt.
 - **Q4_K talker fused QKV.** Converter-side concat respects the Q4_K
   block boundary (rows of size `q_dim=2048`, `kv_dim=1024` divide by
   256 cleanly). Worth doing once the F16 fused-QKV win is established.
+
+### Qwen3-TTS Lk bucketing — net loss on M1 Metal (2026-05-02)
+
+Implemented `QWEN3_TTS_LK_BUCKET=1`: pre-built talker step graphs at
+`Lk ∈ {256, 512, 1024, 2048, 4096}` in dedicated per-bucket arenas,
+dispatched to the smallest fitting bucket per AR step, K/V scatter
+indexed at runtime via `kv_indices=positions` (same `ggml_set_rows`
+trick the cp O15 path uses), causal_mask pre-shaped at bucket Lk and
+filled at the host with `-∞` past `n_past`. Cached graph plans live
+in a dedicated `talker_step_sched` so prefill / embed_text / embed_audio
+(which share `c->sched`) don't invalidate the cached step plans.
+`kv_alloc` now zero-clears the buffer to keep the masked tail safe on
+backends that don't pre-zero (cf. cp_kv fix from commit 7298dd5).
+
+**Correctness (3 runs, very different system loads):** `md5(default.wav)
+== md5(lkbucket.wav)` in every pair (`b6fb616...`). The runtime-indexed
+scatter + masked-Lk path is byte-identical to the static-offset write
++ no-mask T=1 path. Useful confirmation that `set_rows`+masked-Lk on
+Metal preserves softmax semantics exactly.
+
+**Performance (Q8_0 0.6B talker, 100-frame bench, talker_kv vs
+talker_bucket compute, first-window — most reproducible measure since
+both runs see identical conditions within a back-to-back pair):**
+
+| bench | default ms/call | LK_BUCKET ms/call | delta | load context |
+|-------|-----------------|-------------------|-------|--------------|
+| 1     | 49              | 58                | +18%  | quiet, load ~3-5 |
+| 2     | 79              | 103               | +30%  | HF upload, load 8.85 |
+| 3     | 80              | 125               | +56%  | mixed, load 1.98→9.58 |
+
+LK_BUCKET regresses on M1 Metal across all three conditions. Under
+sustained contention default's compute *degrades* across windows
+(80→90→95→121→112→118→122 ms/call in bench 3) while bucket's stays
+flatter — across-pair averages can therefore look like near-parity
+(bench 2: 102 vs 101 ms/call avg), but that's default getting slower,
+not bucket getting faster. First-window-only is the honest measure.
+
+**Why bucket compute is slower than dynamic at T=1 on M1 Metal**:
+1. Bucket reads `Lk_bucket` (256+) K/V positions per layer; dynamic
+   reads only `n_past+1` (148→248 over a 100-frame run). 1.05–1.7×
+   more F16 KV traffic depending on where in the bucket window we are.
+2. Bucket mode requires a `causal_mask` add at every layer; the
+   dynamic T=1 path skips the mask entirely (`(T == 1) ? nullptr : mask`).
+3. `ggml_set_rows` scatter is slower than the static-offset
+   `ggml_cpy(K_new_perm → view_with_baked_offset)` write on Metal —
+   indirect index lookup costs more than a constant.
+4. The intended win (skip per-step Metal command-buffer rebuild) is
+   only ~1 ms/call on quiet M1 Metal — Metal's planner is already fast.
+   Under contention alloc costs rise but compute costs rise even
+   more, so the win never catches up.
+
+**Decision:** kept gated, default OFF. The implementation is a clean
+A/B platform — `QWEN3_TTS_LK_BUCKET=1` enables it for anyone
+investigating future variants (e.g. removing the mask cost, or a
+`set_rows` Metal kernel improvement). `talker_bucket` bench label is
+distinct from `talker_kv` so on/off comparisons stay readable.
 
 ### CUDA im2col grid overflow (MUST RE-APPLY after every ggml bump)
 

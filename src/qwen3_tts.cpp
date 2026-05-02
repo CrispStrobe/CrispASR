@@ -79,6 +79,7 @@
 #include "gguf.h"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -705,6 +706,22 @@ struct qwen3_tts_context {
     ggml_context* fused_ctx = nullptr;
     ggml_backend_buffer_t fused_buf = nullptr;
 
+    // Lk bucketing for talker AR steps (PLAN #52 step 4). Each bucket caches a
+    // graph plan at fixed Lk; AR step picks the smallest bucket where
+    // n_past + T <= Lk_bucket, eliminating per-step graph rebuild + sched
+    // reset/alloc on cache hits. Gated on QWEN3_TTS_LK_BUCKET=1. Uses a
+    // dedicated `talker_step_sched` so prefill / embed_text / embed_audio
+    // (which share `sched`) don't invalidate cached step plans.
+    struct TalkerBucket {
+        int lk = 0;
+        ggml_context* ctx = nullptr;
+        std::vector<uint8_t> compute_meta;
+        ggml_cgraph* gf = nullptr;
+    };
+    std::array<TalkerBucket, 5> talker_buckets;
+    ggml_backend_sched_t talker_step_sched = nullptr;
+    int talker_active_bucket = -1;
+
     // Loaded voice pack (zero-copy: `vp_tensors` references the
     // weight context's tensors directly).
     std::vector<std::string> vp_names;
@@ -909,6 +926,11 @@ bool kv_alloc(qwen3_tts_context* c, int max_ctx) {
     char* base = (char*)ggml_backend_buffer_get_base(c->kv_buf);
     ggml_backend_tensor_alloc(c->kv_buf, c->kv_k, base);
     ggml_backend_tensor_alloc(c->kv_buf, c->kv_v, base + kb);
+    // Zero-init so Lk-bucketed talker steps (which read past the written
+    // range and mask the tail with -inf) don't see uninitialised F16 NaN
+    // bytes on backends where ggml_backend_alloc_buffer doesn't clear
+    // (CUDA, parts of CPU). Mirrors the cp_kv_alloc fix from commit 7298dd5.
+    ggml_backend_buffer_clear(c->kv_buf, 0);
     c->kv_max_ctx = max_ctx;
     if (c->params.verbosity >= 1) {
         fprintf(stderr, "qwen3_tts: kv cache %d MiB (head_dim=%d max_ctx=%d n_kv=%d n_layers=%d)\n",
@@ -958,7 +980,8 @@ ggml_cgraph* build_graph_embed_audio(qwen3_tts_context* c, int n_tokens) {
     return gf;
 }
 
-ggml_cgraph* build_graph_talker_kv(qwen3_tts_context* c, int n_past, int n_tokens);
+ggml_cgraph* build_graph_talker_kv(qwen3_tts_context* c, int n_past, int n_tokens, int fixed_kv_len = 0,
+                                   ggml_context* arena_ctx = nullptr);
 
 // Code-predictor forward with persistent KV cache.
 //
@@ -1088,7 +1111,8 @@ static bool code_pred_reserve_sched(qwen3_tts_context* c, ggml_backend_sched_t s
 }
 
 // Talker forward with persistent KV cache.
-ggml_cgraph* build_graph_talker_kv(qwen3_tts_context* c, int n_past, int n_tokens) {
+ggml_cgraph* build_graph_talker_kv(qwen3_tts_context* c, int n_past, int n_tokens, int fixed_kv_len,
+                                   ggml_context* arena_ctx) {
     const auto& hp = c->hp;
     const int d = (int)hp.d_model;
     const int n_q = (int)hp.n_heads;
@@ -1099,10 +1123,15 @@ ggml_cgraph* build_graph_talker_kv(qwen3_tts_context* c, int n_past, int n_token
     const float theta = hp.rope_theta;
     const float attn_scale = 1.0f / std::sqrt((float)hd);
     const int T = n_tokens;
-    const int Lk = n_past + T;
+    const int Lk = fixed_kv_len > 0 ? fixed_kv_len : (n_past + T);
 
-    ggml_init_params ip = {c->compute_meta.size(), c->compute_meta.data(), true};
-    ggml_context* ctx0 = ggml_init(ip);
+    // Per-bucket arena when arena_ctx supplied; otherwise the shared
+    // c->compute_meta (last-write-wins, matches every existing caller).
+    ggml_context* ctx0 = arena_ctx;
+    if (!ctx0) {
+        ggml_init_params ip = {c->compute_meta.size(), c->compute_meta.data(), true};
+        ctx0 = ggml_init(ip);
+    }
     ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 16384, false);
 
     ggml_tensor* embeds = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, d, T);
@@ -1113,8 +1142,11 @@ ggml_cgraph* build_graph_talker_kv(qwen3_tts_context* c, int n_past, int n_token
     ggml_set_name(positions, "positions");
     ggml_set_input(positions);
 
+    // Bucketed mode (fixed_kv_len > 0) always declares causal_mask even at
+    // T=1 because Lk > n_past+T leaves uninitialised tail slots that must
+    // be masked to -inf. Non-bucketed T=1 path is unchanged (no mask).
     ggml_tensor* causal_mask = nullptr;
-    if (T > 1) {
+    if (T > 1 || fixed_kv_len > 0) {
         causal_mask = ggml_new_tensor_2d(ctx0, GGML_TYPE_F16, Lk, T);
         ggml_set_name(causal_mask, "causal_mask");
         ggml_set_input(causal_mask);
@@ -1139,6 +1171,12 @@ ggml_cgraph* build_graph_talker_kv(qwen3_tts_context* c, int n_past, int n_token
         /*gqa_mode*/ core_attn::GQA_MANUAL_CONT,
     };
 
+    // Bucketed mode: pin K/V cache write index to runtime `positions` (via
+    // ggml_set_rows) so the cached graph is correct across n_past values.
+    // Non-bucketed mode keeps the static-offset write path (n_past baked in).
+    ggml_tensor* eff_kv_indices = (fixed_kv_len > 0) ? positions : nullptr;
+    ggml_tensor* eff_mask = (T == 1 && fixed_kv_len == 0) ? nullptr : causal_mask;
+
     ggml_tensor* cur = embeds;
     for (uint32_t il = 0; il < hp.n_layers; il++) {
         const auto& b = c->talker.blocks[il];
@@ -1149,7 +1187,7 @@ ggml_cgraph* build_graph_talker_kv(qwen3_tts_context* c, int n_past, int n_token
 
         ggml_tensor* attn = core_attn::kv_self_attn(
             ctx0, gf, x, b.attn_q_w, b.attn_k_w, b.attn_v_w, b.attn_output_w, b.attn_q_norm_w, b.attn_k_norm_w,
-            positions, (T == 1) ? nullptr : causal_mask, c->kv_k, c->kv_v, (int)il, n_past, kvp, b.attn_qkv_w);
+            positions, eff_mask, c->kv_k, c->kv_v, (int)il, n_past, kvp, b.attn_qkv_w, fixed_kv_len, eff_kv_indices);
         cur = ggml_add(ctx0, residual, attn);
 
         residual = cur;
@@ -1177,7 +1215,11 @@ ggml_cgraph* build_graph_talker_kv(qwen3_tts_context* c, int n_past, int n_token
     ggml_tensor* logits = ggml_mul_mat(ctx0, c->talker.codec_head_w, cur);
     ggml_set_name(logits, "logits");
     ggml_build_forward_expand(gf, logits);
-    ggml_free(ctx0);
+    // Caller-supplied arena (bucket cache) outlives this function; only free
+    // the locally-init'd context.
+    if (!arena_ctx) {
+        ggml_free(ctx0);
+    }
     return gf;
 }
 
@@ -1221,11 +1263,86 @@ float* run_embed_audio(qwen3_tts_context* c, const int32_t* ids, int n) {
     return r;
 }
 
+// Lk bucketing helpers (PLAN #52 step 4). Gated on QWEN3_TTS_LK_BUCKET=1.
+// Pre-built talker step graphs at fixed Lk buckets eliminate per-step
+// graph rebuild + sched alloc on cache hits — same cached-graph trick the
+// code_predictor's QWEN3_TTS_O15 path already uses.
+static const int kTalkerBucketLks[5] = {256, 512, 1024, 2048, 4096};
+
+static int talker_pick_bucket(int needed_lk) {
+    for (int i = 0; i < 5; i++) {
+        if (kTalkerBucketLks[i] >= needed_lk) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static ggml_backend_sched_t talker_step_pick_sched(qwen3_tts_context* c) {
+    if (c->talker_step_sched) {
+        return c->talker_step_sched;
+    }
+    // Lazy-create on first bucket use. Uses the same backend list as c->sched.
+    // Buffer size mirrors the existing talker sched (16384 nodes is plenty
+    // for the 28L step graph: ~8 nodes/layer + I/O = ~250 nodes).
+    ggml_backend_t backends[2] = {c->backend, c->backend_cpu};
+    int n_be = (c->backend && c->backend != c->backend_cpu) ? 2 : 1;
+    c->talker_step_sched = ggml_backend_sched_new(backends, nullptr, n_be, 16384, false, false);
+    return c->talker_step_sched;
+}
+
+static ggml_cgraph* talker_bucket_get_or_build(qwen3_tts_context* c, int idx) {
+    auto& bk = c->talker_buckets[idx];
+    if (bk.gf) {
+        return bk.gf;
+    }
+    bk.lk = kTalkerBucketLks[idx];
+    // Per-bucket arena: graph nodes outlive any other compute_meta usage.
+    // Sized like the shared compute_meta (sufficient for the 28L step graph).
+    bk.compute_meta.assign(c->compute_meta.size(), 0);
+    ggml_init_params ip = {bk.compute_meta.size(), bk.compute_meta.data(), true};
+    bk.ctx = ggml_init(ip);
+    if (!bk.ctx) {
+        fprintf(stderr, "qwen3_tts: bucket[%d] arena init failed\n", idx);
+        return nullptr;
+    }
+    // n_past=0 is intentional: kv_indices=positions controls the K/V
+    // scatter row at runtime, so the cached graph is correct for any n_past.
+    bk.gf = build_graph_talker_kv(c, /*n_past=*/0, /*n_tokens=*/1, /*fixed_kv_len=*/bk.lk, /*arena_ctx=*/bk.ctx);
+    if (!bk.gf) {
+        fprintf(stderr, "qwen3_tts: bucket[%d] build_graph failed\n", idx);
+        ggml_free(bk.ctx);
+        bk.ctx = nullptr;
+        bk.compute_meta.clear();
+        return nullptr;
+    }
+    return bk.gf;
+}
+
 // Run the talker prefill / decode step, returning logits at position[-1]
 // and (optionally) the corresponding last hidden state. Pass `out_hidden_d`
 // non-null to receive a malloc'd float buffer of length `hp.d_model`
 // — caller frees with free().
+static float* run_talker_kv_bucket(qwen3_tts_context* c, const float* embeds, int n_past, float** out_hidden_d);
+static float* run_talker_kv_dynamic(qwen3_tts_context* c, const float* embeds, int n_tokens, int n_past,
+                                    float** out_hidden_d);
+
 float* run_talker_kv(qwen3_tts_context* c, const float* embeds, int n_tokens, int n_past, float** out_hidden_d) {
+    // Bucketed AR-step path: T=1 only (prefill stays on the dynamic-Lk path).
+    // Dispatched only when env opt-in and a bucket fits the current n_past.
+    if (n_tokens == 1 && env_bool("QWEN3_TTS_LK_BUCKET")) {
+        const int needed = n_past + 1;
+        const int idx = talker_pick_bucket(needed);
+        if (idx >= 0) {
+            return run_talker_kv_bucket(c, embeds, n_past, out_hidden_d);
+        }
+        // No bucket fits (n_past+1 > 4096); fall through to dynamic path.
+    }
+    return run_talker_kv_dynamic(c, embeds, n_tokens, n_past, out_hidden_d);
+}
+
+static float* run_talker_kv_dynamic(qwen3_tts_context* c, const float* embeds, int n_tokens, int n_past,
+                                    float** out_hidden_d) {
     if (out_hidden_d) {
         *out_hidden_d = nullptr;
     }
@@ -1327,6 +1444,116 @@ float* run_talker_kv(qwen3_tts_context* c, const float* embeds, int n_tokens, in
         if (count == 14) {
             qwen3_prof_print("talker_kv", sum_prof, count);
             sum_prof = {};
+            count = 0;
+        }
+    }
+    return r;
+}
+
+// Bucketed talker step path — see run_talker_kv() dispatch above.
+// Caches one graph plan per Lk bucket; switching buckets pays one
+// reset+alloc, in-bucket steps reuse the cached plan (no rebuild,
+// no reset, no alloc — matches the cp_t1_gf O15 pattern).
+static float* run_talker_kv_bucket(qwen3_tts_context* c, const float* embeds, int n_past, float** out_hidden_d) {
+    if (out_hidden_d) {
+        *out_hidden_d = nullptr;
+    }
+    if (n_past + 1 > c->kv_max_ctx) {
+        fprintf(stderr, "qwen3_tts: kv overflow (%d+1 > %d)\n", n_past, c->kv_max_ctx);
+        return nullptr;
+    }
+    const auto& hp = c->hp;
+    const int d = (int)hp.d_model;
+    const int vocab = (int)hp.vocab_size;
+
+    const int idx = talker_pick_bucket(n_past + 1);
+    if (idx < 0) {
+        return nullptr; // caller already filtered, but guard anyway.
+    }
+    const int Lk = kTalkerBucketLks[idx];
+
+    // Mask: shape (Lk, 1). Visible positions [0..n_past], -inf beyond.
+    std::vector<ggml_fp16_t> mask((size_t)Lk);
+    const ggml_fp16_t z = ggml_fp32_to_fp16(0.0f);
+    const ggml_fp16_t ninf = ggml_fp32_to_fp16(-INFINITY);
+    for (int k = 0; k < Lk; k++) {
+        mask[k] = (k <= n_past) ? z : ninf;
+    }
+    int32_t pos = n_past;
+
+    // The cp_t1_gf cache references the shared compute_meta which is NOT
+    // touched by the bucket path (each bucket uses its own arena). So
+    // unlike run_talker_kv_dynamic we do NOT invalidate cp_t1_gf here.
+    // Likewise, ICL prefill / embed_text / embed_audio (which DO write
+    // compute_meta) run only outside the AR loop, so cp_t1_gf invalidation
+    // for them is handled at their own call sites if/when needed.
+
+    const bool bench = env_bool("QWEN3_TTS_BENCH");
+    const double t_build0 = bench ? now_ms() : 0.0;
+    ggml_cgraph* gf = talker_bucket_get_or_build(c, idx);
+    if (!gf) {
+        return nullptr;
+    }
+    const double t_build1 = bench ? now_ms() : 0.0;
+
+    ggml_backend_sched_t sched = talker_step_pick_sched(c);
+    if (!sched) {
+        return nullptr;
+    }
+
+    const bool reuse = (c->talker_active_bucket == idx);
+    const double t_reset0 = bench ? now_ms() : 0.0;
+    if (!reuse) {
+        ggml_backend_sched_reset(sched);
+    }
+    const double t_reset1 = bench ? now_ms() : 0.0;
+    if (!reuse) {
+        if (!ggml_backend_sched_alloc_graph(sched, gf)) {
+            fprintf(stderr, "qwen3_tts: bucket[%d] alloc_graph failed\n", idx);
+            return nullptr;
+        }
+        c->talker_active_bucket = idx;
+    }
+    const double t_alloc1 = bench ? now_ms() : 0.0;
+
+    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "inputs_embeds"), embeds, 0, (size_t)d * sizeof(float));
+    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "positions"), &pos, 0, sizeof(pos));
+    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "causal_mask"), mask.data(), 0,
+                            mask.size() * sizeof(ggml_fp16_t));
+
+    if (ggml_backend_sched_graph_compute(sched, gf) != GGML_STATUS_SUCCESS) {
+        fprintf(stderr, "qwen3_tts: talker bucket compute failed\n");
+        return nullptr;
+    }
+    const double t_compute1 = bench ? now_ms() : 0.0;
+
+    ggml_tensor* out = ggml_graph_get_tensor(gf, "logits");
+    float* r = (float*)malloc((size_t)vocab * sizeof(float));
+    ggml_backend_tensor_get(out, r, 0, (size_t)vocab * sizeof(float));
+    if (out_hidden_d) {
+        ggml_tensor* hid = ggml_graph_get_tensor(gf, "hidden_last");
+        if (hid) {
+            float* h = (float*)malloc((size_t)d * sizeof(float));
+            ggml_backend_tensor_get(hid, h, 0, (size_t)d * sizeof(float));
+            *out_hidden_d = h;
+        }
+    }
+
+    if (bench) {
+        static double sum_build = 0.0, sum_reset = 0.0, sum_alloc = 0.0, sum_compute = 0.0, sum_read = 0.0;
+        static int count = 0;
+        sum_build += t_build1 - t_build0;
+        sum_reset += t_reset1 - t_reset0;
+        sum_alloc += t_alloc1 - t_reset1;
+        sum_compute += t_compute1 - t_alloc1;
+        sum_read += now_ms() - t_compute1;
+        count++;
+        if (count == 14) {
+            fprintf(stderr,
+                    "qwen3_tts: talker_bucket (%d calls): build=%.1f ms  reset=%.1f ms  alloc=%.1f ms  "
+                    "compute=%.1f ms  read=%.1f ms\n",
+                    count, sum_build, sum_reset, sum_alloc, sum_compute, sum_read);
+            sum_build = sum_reset = sum_alloc = sum_compute = sum_read = 0.0;
             count = 0;
         }
     }
@@ -5758,6 +5985,14 @@ extern "C" void qwen3_tts_free(struct qwen3_tts_context* ctx) {
     }
     if (ctx->cp_sched) {
         ggml_backend_sched_free(ctx->cp_sched);
+    }
+    if (ctx->talker_step_sched) {
+        ggml_backend_sched_free(ctx->talker_step_sched);
+    }
+    for (auto& bk : ctx->talker_buckets) {
+        if (bk.ctx) {
+            ggml_free(bk.ctx);
+        }
     }
     if (ctx->sched) {
         ggml_backend_sched_free(ctx->sched);
