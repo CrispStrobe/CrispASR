@@ -24,7 +24,7 @@ All backends support `-m auto --auto-download`. Three new ggml ops
 | **HIGH** | [#62 Streaming + mic library API](#62-streaming--mic-library-api) | M-L | crispasr_stream_* whisper-only; needs Python/Rust wrappers (Dart has), generalize to session handle, library-level mic via miniaudio, native streaming for moonshine-streaming + kyutai-stt + voxtral4b |
 | **MEDIUM** | [#60 llama.cpp/llamafile perf trick ports](#60-cross-backend-perf-tricks-llamacpp--llamafile-ports) | 14 items | 60a/b/c/d/f/g DONE; 60e env-flag wired across 9 backends (mimo-asr validated, others awaiting per-backend cosine pass); 60h-n parked/skip |
 | **LOW** | #41 Moonshine IPA / phoneme | High | Deferred |
-| **LOW** | [#7 voxtral4b streaming](#7-native-voxtral4b-streaming) | High | phase 1 + 1.5 + 2 + 3-partial SHIPPED (incremental encoder, bit-exact-batch, 240ms chunks, fused QKV LLM, combined-chunk flush, speculative prefill during feed → 4.1× first-text-token speedup: 2.67s → 650ms); phase 3 remainder (live captions during speech) deferred |
+| **LOW** | [#7 voxtral4b streaming](#7-native-voxtral4b-streaming) | High | phase 1 + 1.5 + 2 + 3 SHIPPED (incremental encoder, bit-exact-batch, 240ms chunks, fused QKV LLM, combined-chunk flush, speculative prefill, **live captions during speech** with progressive get_text); phase 4 (decoder thread) deferred |
 | **LOW** | [#9 Parakeet TDT GPU](#9-parakeet-tdt-decoder-gpu) | Medium | |
 | **LOW** | [#11 WebSocket server](#11-websocket-streaming-server) | High | |
 | **BLOCKED** | [#42 VibeVoice-ASR 7B](#42-vibevoice-asr-7b) | High | Needs ≥16 GB RAM |
@@ -228,26 +228,61 @@ floor of `~400 ms warmup + first-decode` means ≤240 ms first-text
 remains out of reach without retraining the model with a different
 prompt convention.
 
-### Phase 3 — remaining work (deferred)
+### Phase 3 — SHIPPED — live captions during speech (May 2026)
 
-- **Right-pad encoder pipelining (full speculative).** Currently the
-  speculative path covers the LLM prefill. Extending it to also run
-  the right-pad zeros through the encoder during feed (with state
-  save / restore so re-feeding more audio invalidates the
-  speculation) could shave another ~290 ms off first-text-token.
-  ~150 LOC of careful state management.
-- **Decoder thread overlapping audio injection.** Live-captions
-  oriented; runs decoder while next chunk's encoder is still running.
-  Not a first-token win for PTT but enables realtime live-caption
-  decode.
-- **Live captions during speech** with stable-prefix commit. The
-  synchronous incremental encoder already supports it — needs a
-  periodic auto-decode + commit heuristic on top of the existing
-  feed/get_text API. With current 50.4 ms/decode-step + 240 ms chunk
-  size, sequential live decode would fall behind realtime audio
-  (3 audio_embeds × 50.4 ms = 151 ms decode + ~200 ms encoder = 351 ms
-  per 240 ms chunk = 1.5× realtime). Decoder-thread parallelism would
-  fix this.
+**Live captions with no stable-prefix heuristic.** Once feed has
+produced ≥39 audio_embeds (after ~3.1 s of audio), every new
+audio_embed during subsequent feeds drives one greedy decode step;
+tokens commit immediately to `out_text` / `out_text_unread`, so
+`get_text()` polled during feed returns progressive transcript.
+
+**Why no stable-prefix needed:** voxtral4b's audio-injection
+pre_hook makes each decoded token a deterministic function of the
+audio context up to that point. Tokens commit immediately — no
+retraction. This is the key architectural difference from
+encoder-decoder ASR (whisper / parakeet / canary) where the
+encoder's bidirectional context shifts as more audio arrives,
+making mid-decode tokens unstable and requiring a stable-prefix
+commit heuristic.
+
+**API:** `voxtral4b_stream_set_live_decode(stream*, int enabled)`
+toggles per-stream. Generic dispatch via
+`crispasr_stream_set_live_decode` for use through the unified
+`crispasr_stream*` handle. Python: `Session.stream_open(live=True)`.
+Default off (PTT semantics preserved).
+
+**Smoke result on JFK 11 s with `live=True`:**
+```
++ 1280ms: ' And'
++ 1760ms: ' so,'
++ 2000ms: ' my'
++ 2240ms: ' fellow'
++ 3200ms: ' Americans,'
+...
+flush:   ' country.'
+```
+Final concatenated transcript matches batch byte-for-byte.
+
+**Limitation:** sequential live decode is ~1.5× realtime on M1 Q4_K
+(50 ms decode + 100 ms encoder per 100 ms audio chunk = 150 ms
+processing per 100 ms audio). Falls behind realtime audio when fed
+from a live mic at audio rate — phase 4 (decoder thread parallel
+to encoder) would fix this. Today's path is useful for:
+faster-than-realtime offline streaming, post-utterance live
+caption rendering, and as the substrate for phase 4.
+
+### Phase 4 (deferred) — decoder thread for true realtime live captions
+
+- **Decoder thread overlapping audio injection.** Encoder runs on
+  one thread; decoder consumes audio_embeds from a queue on another.
+  Total per-100ms-chunk wall-clock = max(100ms encoder, 50ms decode)
+  = 100ms = 1.0× realtime. Enables live captions on live mic input.
+  ~200 LOC of cross-thread sync (audio-thread → encode-thread →
+  decode-thread → main-thread for get_text).
+- **Right-pad encoder pipelining (full speculative).** Pre-encode
+  right-pad zeros during user idle time with state save/restore.
+  Could shave another ~290 ms off first-text-token but interacts
+  with phase 4's queue.
 
 ---
 

@@ -2491,6 +2491,53 @@ plus the first text decode step). Below that requires either a
 different prompt convention (model retrain) or substantially faster
 Q4_K Metal kernels.
 
+**Phase 3 finale — live captions during speech (May 2026).** Once
+feed has produced ≥39 audio_embeds (~3.1 s of audio), every new
+audio_embed during subsequent feeds drives one greedy decode step;
+tokens commit immediately to `out_text` / `out_text_unread`, so
+`get_text()` polled during feed returns progressive transcript.
+
+No stable-prefix heuristic needed: voxtral4b's audio-injection
+pre_hook makes each decoded token a deterministic function of the
+audio context up to that point. Tokens commit immediately — no
+retraction. This is the key architectural difference from
+encoder-decoder ASR (whisper / parakeet / canary) where the encoder's
+bidirectional context shifts as more audio arrives, making mid-decode
+tokens unstable.
+
+API: `voxtral4b_stream_set_live_decode(stream*, int)` toggles per-
+stream. Generic dispatch via `crispasr_stream_set_live_decode` for
+use through the unified `crispasr_stream*` handle. Python:
+`Session.stream_open(live=True)`. Default OFF (PTT semantics
+preserved).
+
+Refactor extracted the inline decode loop into `vox_stream_drain_decode`
+shared between feed (live mode) and flush (PTT + final drain). A
+3-step state machine (argmax → stop-check → inject+forward) with a
+`decode_logits_committed` flag prevents double-emission across
+multiple drain calls — the bug pattern is "argmax + emit at top of
+loop, return without forward, next drain re-argmaxes the same logits
+and re-emits."
+
+Smoke on JFK 11 s with `live=True`:
+```
++ 1280ms: ' And'
++ 1760ms: ' so,'
++ 2000ms: ' my'
+...
++10880ms: ' your'
+flush:   ' country.'
+```
+Cumulative transcript matches batch byte-for-byte.
+
+Limitation: sequential live decode is ~1.5× realtime on M1 Q4_K
+(50 ms decode + 100 ms encoder per 100 ms audio chunk). Falls behind
+realtime audio when fed from a live mic. Phase 4 (decoder thread
+parallel to encoder) would fix this.
+
+**PLAN #7 closed at phase 3.** Phase 4 deferred to when a consumer
+actually needs realtime-mic live captions on M1 Q4_K voxtral4b.
+
 **Architectural floor for first-text-token latency** (revealed by
 the timing pass on M1 Q4_K JFK 11 s):
 

@@ -7182,6 +7182,51 @@ model where matmul time dwarfs launch overhead, or a smaller-quant
 weight where the input re-read becomes proportionally significant
 might still benefit.
 
+## Lesson — audio-injection prompt models give live captions for free; encoder-decoder models don't
+
+PLAN #7 phase 3 shipped voxtral4b live captions in ~150 LOC with no
+stable-prefix-commit heuristic. The two-line summary: voxtral4b
+*injects* each audio embedding into the next-token's input embedding
+during decode, so each emitted token is a deterministic function of
+audio context [0..N] only. Token N never depends on audio[N+1..],
+so tokens are *immediately commit-safe* the moment they're decoded.
+
+This is the architectural property that distinguishes the two
+classes of streaming ASR:
+
+| Class | Examples | Token stability |
+|---|---|---|
+| **Audio-injection prompt LLM** | voxtral4b, future MoE-of-streaming-LLMs | Each token depends only on past audio. **Tokens commit immediately, no retraction.** |
+| **Encoder-decoder ASR** | whisper, parakeet, canary, qwen3-asr (cross-attention path) | Encoder's bidirectional context shifts as more audio arrives. **Mid-stream tokens may be revised.** |
+
+The class on the left is fundamentally simpler for live captions —
+no stability heuristic, no retraction logic, no "stable prefix"
+commit window. The class on the right requires either chunked-batch
+(re-decode-the-whole-window-on-each-step, what PLAN #62c shipped) or
+a real stable-prefix algorithm (longest common prefix across N
+consecutive decode trials, with retraction when it breaks).
+
+**Generalisable rule.** Before designing live-caption infra for a
+new audio-LLM, check the prompt convention: does it inject audio
+*per-decode-step* (via a pre_hook adding audio embeds to the next
+token's embedding before LLM forward), or does it splice audio into
+a static prompt and decode against that frozen context? Per-step
+injection → tokens commit immediately. Static splice + cross-
+attention → stable-prefix needed.
+
+**Implementation gotcha** (caught during phase 3): when extracting
+the decode loop into a helper that's called multiple times during
+feed (live mode), the natural "argmax at top of loop, forward at
+bottom" pattern emits each token TWICE — once at the bottom of
+drain-call N, once at the top of drain-call N+1 (which re-argmaxes
+the same logits). Fix: track a `decode_logits_committed` flag on
+the stream. The 3-step state machine (argmax+emit → stop-check →
+inject+forward) with the flag set after step 1 and cleared after
+step 3 ensures one emission per logits.
+
+Reference: `src/voxtral4b.cpp` `vox_stream_drain_decode`, PLAN #7
+phase 3, HISTORY §71 final paragraph.
+
 ## Lesson — per-stage timing instrumentation reveals architectural latency floors that kernel optimisation can't break
 
 PLAN #7 phase 2 set out to hit a ≤240 ms first-text-token target on
