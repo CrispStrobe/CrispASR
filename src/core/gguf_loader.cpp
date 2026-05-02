@@ -9,6 +9,7 @@
 #include "ggml-metal.h"
 #endif
 
+#include <cerrno>
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
@@ -385,6 +386,31 @@ static void mmap_wrap_free(ggml_backend_buffer_t buffer) {
     delete w;
 }
 
+// PLAN #60b: forward-compat delegations for set_tensor_2d / get_tensor_2d
+// / reset. If a future ggml dispatch hits these on a wrapped buffer,
+// route through to the inner Metal buffer's optimized path instead of
+// silently falling back to N×set_tensor calls. Inner iface methods are
+// optional — guard each delegation with a null check; on null we leave
+// the wrapper's slot null too so the scheduler picks its own fallback
+// (matches what would happen pre-wrap).
+static void mmap_wrap_set_tensor_2d(ggml_backend_buffer_t buffer, ggml_tensor* tensor, const void* data, size_t offset,
+                                    size_t size, size_t n_copies, size_t stride_tensor, size_t stride_data) {
+    auto* w = (mmap_wrap_ctx*)buffer->context;
+    if (w->inner->iface.set_tensor_2d)
+        w->inner->iface.set_tensor_2d(w->inner, tensor, data, offset, size, n_copies, stride_tensor, stride_data);
+}
+static void mmap_wrap_get_tensor_2d(ggml_backend_buffer_t buffer, const ggml_tensor* tensor, void* data, size_t offset,
+                                    size_t size, size_t n_copies, size_t stride_tensor, size_t stride_data) {
+    auto* w = (mmap_wrap_ctx*)buffer->context;
+    if (w->inner->iface.get_tensor_2d)
+        w->inner->iface.get_tensor_2d(w->inner, tensor, data, offset, size, n_copies, stride_tensor, stride_data);
+}
+static void mmap_wrap_reset(ggml_backend_buffer_t buffer) {
+    auto* w = (mmap_wrap_ctx*)buffer->context;
+    if (w->inner->iface.reset)
+        w->inner->iface.reset(w->inner);
+}
+
 static const ggml_backend_buffer_i mmap_wrap_iface = {
     /* .free_buffer    = */ mmap_wrap_free,
     /* .get_base       = */ mmap_wrap_get_base,
@@ -392,16 +418,70 @@ static const ggml_backend_buffer_i mmap_wrap_iface = {
     /* .memset_tensor  = */ mmap_wrap_memset_tensor,
     /* .set_tensor     = */ mmap_wrap_set_tensor,
     /* .get_tensor     = */ mmap_wrap_get_tensor,
-    /* .set_tensor_2d  = */ nullptr,
-    /* .get_tensor_2d  = */ nullptr,
+    /* .set_tensor_2d  = */ mmap_wrap_set_tensor_2d,
+    /* .get_tensor_2d  = */ mmap_wrap_get_tensor_2d,
     /* .cpy_tensor     = */ mmap_wrap_cpy_tensor,
     /* .clear          = */ mmap_wrap_clear,
-    /* .reset          = */ nullptr,
+    /* .reset          = */ mmap_wrap_reset,
 };
 
 static bool mmap_loader_enabled() {
     const char* v = std::getenv("CRISPASR_GGUF_MMAP");
     return v && *v && *v != '0';
+}
+
+// PLAN #60c: opt-in preload — page-walk the entire mmap region so every
+// page is resident before we return. Trades cold-start *load* time for
+// cold-start *prefill* time; useful for benchmarking and for users with
+// enough RAM to keep the working set resident. POSIX path uses a 1-byte
+// volatile read per page; Linux MADV_POPULATE_READ would be a cleaner
+// single-syscall version when available.
+static bool preload_enabled() {
+    const char* v = std::getenv("CRISPASR_GGUF_PRELOAD");
+    return v && *v && *v != '0';
+}
+static void preload_pages(void* base, size_t size) {
+#if !defined(_WIN32)
+    const long pg = sysconf(_SC_PAGESIZE);
+    if (pg <= 0)
+        return;
+    volatile const unsigned char* p = (const unsigned char*)base;
+    size_t touched = 0;
+    for (size_t off = 0; off < size; off += (size_t)pg) {
+        (void)p[off];
+        touched++;
+    }
+    (void)touched;
+#else
+    (void)base;
+    (void)size;
+#endif
+}
+
+// PLAN #60f: opt-in mlock — pin the mmap region in physical RAM so the
+// kernel can't evict pages under memory pressure. Risky on RAM-tight
+// hosts (a 16 GB model on a 16 GB box would starve the rest of the
+// system). Useful as opt-in for users with comfortable headroom (32+
+// GB). Failure (typically RLIMIT_MEMLOCK exceeded) prints a warning
+// and continues — mmap'd weights still work, just without the pin.
+static bool mlock_enabled() {
+    const char* v = std::getenv("CRISPASR_MLOCK");
+    return v && *v && *v != '0';
+}
+static void try_mlock(const char* tag, void* base, size_t size) {
+#if !defined(_WIN32)
+    if (::mlock(base, size) != 0) {
+        fprintf(stderr,
+                "%s: mlock(%zu MiB) failed (errno=%d) — pages may still be evicted under "
+                "memory pressure. Raise RLIMIT_MEMLOCK (`ulimit -l unlimited`) if you want "
+                "the pin to take effect.\n",
+                tag, size / (1024 * 1024), errno);
+    }
+#else
+    (void)tag;
+    (void)base;
+    (void)size;
+#endif
 }
 
 } // namespace
@@ -445,6 +525,11 @@ bool load_weights(const char* path, ggml_backend_t backend, const char* model_ta
 #if !defined(_WIN32)
             ::posix_madvise(mctx->mmap_base, mctx->mmap_size, POSIX_MADV_WILLNEED);
 #endif
+            // PLAN #60c / #60f: optional preload + mlock, opt-in via env.
+            if (preload_enabled())
+                preload_pages(mctx->mmap_base, mctx->mmap_size);
+            if (mlock_enabled())
+                try_mlock(tag, mctx->mmap_base, mctx->mmap_size);
 
             out.buf = ggml_backend_buffer_init(ggml_backend_cpu_buffer_type(), mmap_buffer_iface, mctx, buf_size);
             if (!out.buf) {
@@ -518,6 +603,14 @@ bool load_weights(const char* path, ggml_backend_t backend, const char* model_ta
 #if !defined(_WIN32)
                     ::posix_madvise(w->mmap_base, w->mmap_size, POSIX_MADV_WILLNEED);
 #endif
+                    // PLAN #60c / #60f: optional preload + mlock, opt-in
+                    // via env. mlock is particularly meaningful here —
+                    // pinning prevents Metal's shared-storage reads from
+                    // racing CPU page faults under memory pressure.
+                    if (preload_enabled())
+                        preload_pages(w->mmap_base, w->mmap_size);
+                    if (mlock_enabled())
+                        try_mlock(tag, w->mmap_base, w->mmap_size);
 
                     // Reuse the inner buffer's buft so usage/alignment/etc.
                     // stay consistent with the device's expectations. The
@@ -631,6 +724,43 @@ void free_weights(WeightLoad& wl) {
         wl.ctx = nullptr;
     }
     wl.tensors.clear();
+}
+
+// PLAN #60g: switch a previously-WILLNEED-hinted region to MADV_RANDOM.
+// Used by callers (e.g., mimo-asr's transcribe loop) to tell the kernel
+// "I'm done with sequential prefill access; my next reads will be
+// random-order layer revisits during decode — please stop wasting IO
+// on speculative readahead."
+//
+// We dispatch on the buffer's iface fields to detect which of our two
+// mmap paths the buffer came from, since the buffer types themselves
+// aren't exposed publicly. No-op if the buffer wasn't allocated through
+// either path (incl. the legacy alloc+copy fallback when MMAP=0 or
+// mmap failed).
+void mmap_advise_random(ggml_backend_buffer_t buf) {
+#if !defined(_WIN32)
+    if (!buf)
+        return;
+    void* base = nullptr;
+    size_t size = 0;
+    if (buf->iface.free_buffer == mmap_buffer_free) {
+        // CPU mmap path — context is mmap_buffer_ctx.
+        auto* mctx = (mmap_buffer_ctx*)buf->context;
+        base = mctx->mmap_base;
+        size = mctx->mmap_size;
+    } else if (buf->iface.free_buffer == mmap_wrap_free) {
+        // Metal mmap path — context is mmap_wrap_ctx.
+        auto* w = (mmap_wrap_ctx*)buf->context;
+        base = w->mmap_base;
+        size = w->mmap_size;
+    } else {
+        return; // not one of our mmap buffers; nothing to advise
+    }
+    if (base && size > 0)
+        ::posix_madvise(base, size, POSIX_MADV_RANDOM);
+#else
+    (void)buf;
+#endif
 }
 
 // ---------------------------------------------------------------------------

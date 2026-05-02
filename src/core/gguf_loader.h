@@ -105,6 +105,16 @@ bool load_weights(const char* path, ggml_backend_t backend, const char* model_ta
 // and the buffer/context are not held elsewhere.
 void free_weights(WeightLoad& wl);
 
+// PLAN #60g: hint the kernel that the mmap'd weight region is now being
+// accessed in random order (e.g., the per-layer KV revisit pattern of
+// decode steps), and that readahead is therefore wasted IO. No-op if
+// the buffer wasn't allocated through one of our mmap paths or if
+// CRISPASR_GGUF_MMAP wasn't set. Safe to call multiple times.
+//
+// Recommended use: after prefill completes, before entering the decode
+// loop. See PLAN #60g for the rationale.
+void mmap_advise_random(ggml_backend_buffer_t buf);
+
 // ---------------------------------------------------------------------------
 // Tensor lookup helpers
 // ---------------------------------------------------------------------------

@@ -24,7 +24,7 @@ All backends support `-m auto --auto-download`. Three new ggml ops
 | **MEDIUM** | [#56 Kokoro multilingual phonemizer](#56-kokoro-multilingual-phonemizer-espeak-ng) | Small | espeak-ng + DE backbone shipped; HF GGUFs published 2026-05-01; auto-download wired; only Mandarin tones / JA kanji + diff-harness phonemizer-step polish remain |
 | **MEDIUM** | [#58 MOSS-Audio-4B-Instruct](#58-moss-audio-4b-instruct) | Large | first audio-understanding (not just ASR) backend; introduces DeepStack cross-layer feature injection |
 | **MEDIUM** | [#59 Cross-binding C-ABI parity](#59-cross-binding-c-abi-parity) | Medium | TTS surface (incl. qwen3-tts variants) at full parity across all 7 wrappers; align/diarize/VAD/streaming/punctuation/LID/registry still C-ABI-only on Go/Java/Ruby/JS/Dart |
-| **MEDIUM** | [#60 llama.cpp/llamafile perf trick ports](#60-cross-backend-perf-tricks-llamacpp--llamafile-ports) | 14 items | 60a madvise WILLNEED DONE; 60b/c/d/e/f/g OPEN; 60h-n parked/skip — see sub-table |
+| **MEDIUM** | [#60 llama.cpp/llamafile perf trick ports](#60-cross-backend-perf-tricks-llamacpp--llamafile-ports) | 14 items | 60a/b/c/f/g DONE; 60d (Fused QKV) + 60e (KV quant) OPEN; 60h-n parked/skip |
 | **LOW** | #41 Moonshine IPA / phoneme | High | Deferred |
 | **LOW** | [#7 voxtral4b streaming](#7-native-voxtral4b-streaming) | High | |
 | **LOW** | [#9 Parakeet TDT GPU](#9-parakeet-tdt-decoder-gpu) | Medium | |
@@ -1291,12 +1291,12 @@ often-contested external disk.
 | Item | Status | Tier | Effort | Notes |
 |---|---|---|---|---|
 | [60a — madvise WILLNEED](#60a-posix_madvisewillneed-on-mmapd-weights) | **DONE** | T1 | done | Async kernel readahead, both mmap branches |
-| [60b — wrap_iface forward-compat](#60b-wrap_iface-forward-compat-set_tensor_2d--get_tensor_2d--reset) | **OPEN** | T1 | XS | 3 missing iface delegations |
-| [60c — pre-touch / `--preload` flag](#60c-pre-touch--preload-flag) | **OPEN** | T1 | S | Force pages resident at load |
+| [60b — wrap_iface forward-compat](#60b-wrap_iface-forward-compat-set_tensor_2d--get_tensor_2d--reset) | **DONE** | T1 | done | 3 delegations added to mmap_wrap_iface |
+| [60c — pre-touch / `--preload` flag](#60c-pre-touch--preload-flag) | **DONE** | T1 | done | `CRISPASR_GGUF_PRELOAD=1` page-walks before return |
 | [60d — Fused QKV per LM layer](#60d-fused-qkv-per-lm-layer) | **OPEN** | T2 | M | mimo-asr first; qwen3-asr / voxtral4b later |
 | [60e — KV cache quantization](#60e-kv-cache-quantization-f16--q8_0--q4_0) | **OPEN** | T2 | M | Long-form ASR enabler |
-| [60f — `--mlock` flag](#60f---mlock-flag) | **OPEN** | T3 | XS | Opt-in for users with headroom |
-| [60g — `MADV_RANDOM` post-prefill](#60g-madv_random-post-prefill) | **OPEN** | T3 | XS | Disable readahead during decode |
+| [60f — `--mlock` flag](#60f---mlock-flag) | **DONE** | T3 | done | `CRISPASR_MLOCK=1` pins pages after WILLNEED |
+| [60g — `MADV_RANDOM` post-prefill](#60g-madv_random-post-prefill) | **DONE** | T3 | done | `core_gguf::mmap_advise_random()` exposed |
 | [60h — Linux huge pages](#60h-linux-huge-pages-map_hugetlb) | PARKED | T3 | S | Linux-only; we don't have Linux production targets |
 | [60i — Read-only mmap mode](#60i-read-only-mmap-mode) | PARKED | T3 | XS | Per-backend; safety net not yet needed |
 | [60j — Speculative decoding](#60j-speculative-decoding) | PARKED | T3 | L | No obvious draft model in our family |
@@ -1308,9 +1308,10 @@ often-contested external disk.
 **Tiers:** T1 = directly attacks cold-start / loader. T2 = decode-time
 speedup, work-order calls out. T3 = situational / parked / skip.
 
-**Suggested order if asked to ship "the next batch":**
-60d (Fused QKV) → 60b (iface forward-compat) → 60e (KV quant) →
-60c (preload flag) → 60f (--mlock) → 60g (MADV_RANDOM).
+**Suggested order for remaining OPEN items:**
+60d (Fused QKV, mimo-asr LM) → 60e (KV cache quantization,
+shared `core_attn` surgery). Both want a fresh session — see the
+hand-off prompt at the end of the May 2026 perf-wave session.
 
 ---
 
@@ -1330,54 +1331,43 @@ F16 testing). Mirrors llama.cpp's `llama_mmap` populate path.
 
 ---
 
-### 60b. wrap_iface forward-compat: `set_tensor_2d` / `get_tensor_2d` / `reset`
+### 60b. wrap_iface forward-compat: `set_tensor_2d` / `get_tensor_2d` / `reset` — **DONE (May 2026)**
 
-**Status:** OPEN. **Effort: XS (~15 LOC).** **Tier 1.**
+**Status:** DONE.
 
-The Metal mmap path's `mmap_wrap_iface` in `src/core/gguf_loader.cpp`
-delegates `free_buffer` / `get_base` / `init_tensor` / `memset_tensor`
-/ `set_tensor` / `get_tensor` / `cpy_tensor` / `clear` to the inner
-Metal buffer, but leaves three optional iface methods as `nullptr`:
-
-- `set_tensor_2d`
-- `get_tensor_2d`
-- `reset`
-
-If ggml ever dispatches these on a wrapped buffer (e.g., a future
-Metal kernel that batches strided 2D uploads more efficiently), the
-scheduler silently falls back to N×`set_tensor` calls instead of
-the optimized inner path. Forward-compat fix: add three delegating
-shims in the same shape as the existing wrappers.
-
-**Files to touch:** `src/core/gguf_loader.cpp` (one new function each
-+ wire into `mmap_wrap_iface` struct).
+Added three delegating shims to `mmap_wrap_iface` in
+`src/core/gguf_loader.cpp` so any future ggml dispatch through
+`set_tensor_2d` / `get_tensor_2d` / `reset` on a wrapped Metal mmap
+buffer routes to the inner buffer's optimized path instead of
+silently falling back. Each shim guards on the inner iface method
+being non-null (all three are optional in the buffer-iface
+contract).
 
 ---
 
-### 60c. Pre-touch / `--preload` flag
+### 60c. Pre-touch / `--preload` flag — **DONE (May 2026)**
 
-**Status:** OPEN. **Effort: S (~10 LOC + CLI plumbing).** **Tier 1.**
+**Status:** DONE (env-gated; no CLI flag yet).
 
-The next step beyond 60a's `WILLNEED` hint: an opt-in mode that
-*forces* every page resident before `load_weights` returns, so
-prefill never blocks on a page fault.
+`CRISPASR_GGUF_PRELOAD=1` triggers a page-walk loop right after
+the WILLNEED hint in both mmap branches. Each page is touched
+through a `volatile` byte read so the kernel faults it in
+synchronously; by the time `load_weights` returns, every weight
+page is resident.
 
-Two implementation paths:
+Trade-off acknowledged: on a 16 GB box loading a 16 GB F16,
+preload just *moves* the wait from compute time to load time and
+may evict everything else from cache. Useful for benchmarking and
+for users with comfortable RAM headroom — see 60f for the
+stronger pin form.
 
-- **Linux `MADV_POPULATE_READ`** — single syscall, kernel walks
-  the region for us. Doesn't exist on macOS.
-- **Page-walk read loop** (portable) — `for (off = 0; off < size; off += pagesize) { volatile char x = base[off]; }`. Blocks the
-  loader until everything is paged in.
+**CLI flag deferred.** Add `--preload` to
+`examples/cli/whisper_params.h` later if a user actually asks; for
+now the env var is the surface.
 
-Trade-off: on a 16 GB box loading a 16 GB F16, preloading just
-*moves* the wait from compute time to load time and may evict
-everything else from cache. Useful for benchmarking and for users
-with comfortable headroom (mlock — see 60f — is the stronger
-version).
-
-**Files to touch:** `src/core/gguf_loader.cpp` (mmap branches),
-gated on `CRISPASR_GGUF_PRELOAD=1`. Add CLI `--preload` flag in
-`examples/cli/whisper_params.h` later if usage justifies it.
+Linux `MADV_POPULATE_READ` (single-syscall kernel-walk) would be a
+tighter implementation than the per-page volatile read; queued as
+a tiny follow-up if anyone runs this path on Linux.
 
 ---
 
@@ -1440,46 +1430,51 @@ needs the same broad-backend gauntlet as PLAN #51a.
 
 ---
 
-### 60f. `--mlock` flag
+### 60f. `--mlock` flag — **DONE (May 2026)**
 
-**Status:** OPEN. **Effort: XS (~15 LOC).** **Tier 3.**
+**Status:** DONE (env-gated; no CLI flag yet).
 
-Not just "preload pages" (60c) — actually call `mlock()` to pin
-weights in physical RAM, preventing eviction under memory pressure.
-The strongest form of the cold-start mitigation chain
-(WILLNEED → preload → mlock).
+`CRISPASR_MLOCK=1` runs `mlock()` on the mmap region right after
+the WILLNEED hint (and after preload, when both are set) in both
+mmap branches. Failure (typically `RLIMIT_MEMLOCK` exceeded)
+prints an actionable warning and continues — pages are still
+mapped, just unpinned.
 
-Risky on 16 GB with a 16 GB model — would starve the rest of the
-system. Useful as opt-in for users with 32+ GB. Add `--mlock` CLI
-flag mapped to `CRISPASR_MLOCK=1` env.
+Risky on RAM-tight hosts — pinning a 16 GB model on a 16 GB box
+would starve the rest of the system. The opt-in env makes the
+sharp edge explicit.
 
-**Files to touch:** `src/core/gguf_loader.cpp` (mmap branches, after
-WILLNEED), `examples/cli/whisper_params.h` (`--mlock` flag).
+**CLI flag deferred.** Same shape as 60c — add `--mlock` to
+`examples/cli/whisper_params.h` if a user actually asks.
 
 ---
 
-### 60g. `MADV_RANDOM` post-prefill
+### 60g. `MADV_RANDOM` post-prefill — **DONE (May 2026)**
 
-**Status:** OPEN. **Effort: XS (~5 LOC + plumbing for the hook).** **Tier 3.**
+**Status:** DONE (helper exposed; per-backend wiring follow-up).
 
-`WILLNEED` (60a) hints "I'll need this soon" — good for prefill which
-walks weights layer-by-layer. After prefill, decode is small (T=1)
-but revisits all 36 layers per step in a non-sequential access
-pattern. `MADV_RANDOM` would tell the kernel to disable readahead,
-so it doesn't waste IO speculatively prefetching pages we won't
-sequentially access.
+`core_gguf::mmap_advise_random(ggml_backend_buffer_t)` is now
+public in `src/core/gguf_loader.h`. It detects whether the buffer
+came from either of our mmap branches (CPU `mmap_buffer_iface` or
+Metal `mmap_wrap_iface`) by comparing iface function pointers,
+extracts the mmap region, and calls
+`posix_madvise(MADV_RANDOM)`. No-op on non-mmap buffers and on
+Windows.
 
-Diminishing returns: if all weights are already resident after
-prefill (for models that fit in RAM), readahead doesn't matter.
-If they're not (16 GB model on 16 GB box), pages get evicted
-between layer accesses anyway, and `MADV_RANDOM` hints the kernel
-toward a different (possibly worse) eviction policy. Worth
-benchmarking before enabling by default.
+**Per-backend wiring deferred.** Backends that want the hint can
+add a single call between prefill and the decode loop:
 
-**Files to touch:** new method on `mmap_buffer_ctx` /
-`mmap_wrap_ctx` that callers can invoke after prefill completes.
-Mimo-asr would call it from `mimo_asr_transcribe` between prefill
-and the decode loop.
+```cpp
+core_gguf::mmap_advise_random(ctx->buf_w);
+```
+
+mimo-asr would call it from `mimo_asr_transcribe` between
+prefill and the decode loop; same shape applies to qwen3-asr,
+voxtral, voxtral4b, granite-speech, etc. Skipped from this batch
+because the perf delta is marginal on Q4_K (weights fit; readahead
+cost is small) and impossible to measure on F16 in the current
+RAM-tight environment (see PLAN #51c). Land per-backend when a
+benchmark on a larger box demonstrates measurable benefit.
 
 ---
 
