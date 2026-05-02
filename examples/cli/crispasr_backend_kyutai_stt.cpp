@@ -21,7 +21,8 @@ public:
         // emitted text token to its source audio frame at zero extra cost,
         // so both segment and word timestamps are native (no DTW or CTC
         // aligner needed).
-        return CAP_AUTO_DOWNLOAD | CAP_TOKEN_CONFIDENCE | CAP_TEMPERATURE | CAP_TIMESTAMPS_NATIVE | CAP_WORD_TIMESTAMPS;
+        return CAP_AUTO_DOWNLOAD | CAP_TOKEN_CONFIDENCE | CAP_TEMPERATURE | CAP_TIMESTAMPS_NATIVE |
+               CAP_WORD_TIMESTAMPS | CAP_PUNCTUATION_TOGGLE;
     }
 
     bool init(const whisper_params& params) override {
@@ -87,6 +88,22 @@ public:
         }
 
         kyutai_stt_result_ex_free(r);
+
+        // --no-punctuation: post-strip ASCII punctuation + lowercase. Kyutai
+        // emits punctuated mixed-case English by default; the toggle gives
+        // the historical CTC-style "lowercase, no punc" surface.
+        if (!params.punctuation) {
+            crispasr_strip_ascii_punctuation(seg.text);
+            crispasr_lowercase_ascii(seg.text);
+            for (auto& tok : seg.tokens) {
+                crispasr_strip_ascii_punctuation(tok.text);
+                crispasr_lowercase_ascii(tok.text);
+            }
+            for (auto& w : seg.words) {
+                crispasr_strip_ascii_punctuation(w.text);
+                crispasr_lowercase_ascii(w.text);
+            }
+        }
 
         if (!seg.text.empty())
             out.push_back(std::move(seg));

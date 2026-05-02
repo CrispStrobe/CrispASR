@@ -15,13 +15,14 @@ public:
     OmniasrBackend() = default;
 
     const char* name() const override { return "omniasr"; }
-    uint32_t capabilities() const override { return CAP_TOKEN_CONFIDENCE; }
+    uint32_t capabilities() const override { return CAP_TOKEN_CONFIDENCE | CAP_TEMPERATURE | CAP_PUNCTUATION_TOGGLE; }
 
     bool init(const whisper_params& params) override {
         omniasr_context_params cp = omniasr_context_default_params();
         cp.n_threads = params.n_threads;
         cp.max_new_tokens = params.max_new_tokens > 0 ? params.max_new_tokens : cp.max_new_tokens;
         cp.verbosity = params.no_prints ? 0 : 1;
+        cp.temperature = params.temperature;
         cp.use_gpu = crispasr_backend_should_use_gpu(params);
         if (getenv("OMNIASR_DEBUG"))
             cp.verbosity = 2;
@@ -82,6 +83,18 @@ public:
             seg.text = text;
             free(text);
         }
+        // --no-punctuation: post-strip ASCII punctuation + lowercase. The
+        // omniasr-llm variant emits mixed-case punctuated text; CTC variant
+        // is already lowercase no-punc, so the strip is a no-op there.
+        if (!params.punctuation) {
+            crispasr_strip_ascii_punctuation(seg.text);
+            crispasr_lowercase_ascii(seg.text);
+            for (auto& tok : seg.tokens) {
+                crispasr_strip_ascii_punctuation(tok.text);
+                crispasr_lowercase_ascii(tok.text);
+            }
+        }
+
         if (!seg.text.empty())
             out.push_back(std::move(seg));
         return out;

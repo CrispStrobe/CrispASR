@@ -1,6 +1,7 @@
 // crispasr_backend_moonshine.cpp — Moonshine ASR backend adapter.
 
 #include "crispasr_backend.h"
+#include "crispasr_backend_utils.h"
 #include "moonshine.h"
 #include "whisper_params.h"
 
@@ -15,7 +16,9 @@ public:
 
     const char* name() const override { return "moonshine"; }
 
-    uint32_t capabilities() const override { return CAP_AUTO_DOWNLOAD | CAP_TOKEN_CONFIDENCE | CAP_TEMPERATURE; }
+    uint32_t capabilities() const override {
+        return CAP_AUTO_DOWNLOAD | CAP_TOKEN_CONFIDENCE | CAP_TEMPERATURE | CAP_PUNCTUATION_TOGGLE;
+    }
 
     bool init(const whisper_params& params) override {
         struct moonshine_init_params mp = {};
@@ -65,6 +68,16 @@ public:
         }
 
         moonshine_result_free(r);
+
+        // --no-punctuation: post-strip ASCII punctuation + lowercase.
+        if (!params.punctuation) {
+            crispasr_strip_ascii_punctuation(seg.text);
+            crispasr_lowercase_ascii(seg.text);
+            for (auto& tok : seg.tokens) {
+                crispasr_strip_ascii_punctuation(tok.text);
+                crispasr_lowercase_ascii(tok.text);
+            }
+        }
 
         if (!seg.text.empty())
             out.push_back(std::move(seg));

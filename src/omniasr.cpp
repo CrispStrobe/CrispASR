@@ -1272,24 +1272,86 @@ static char* omniasr_transcribe_llm(omniasr_context* ctx, const std::vector<floa
         ggml_backend_buffer_clear(ctx->kv_buf, 0);
     ctx->kv_n_used = 0;
     // 4. Prefill decoder with entire prefix. Capture logits when the caller
-    // wants per-token confidence so the first token's prob can be recorded.
+    // wants per-token confidence OR when temperature sampling is requested
+    // (we need raw logits to draw a multinomial sample).
     int cur_token = 0;
     float cur_prob = 0.0f;
     const bool want_probs = (out_token_ids && out_token_probs);
+    const bool sampling = (ctx->params.temperature > 0.0f);
+    const bool capture_logits = (want_probs || sampling);
     std::vector<float> step_logits;
+
+    // Per-call seed: derive deterministically from the audio buffer so
+    // repeated calls with the same input give the same trajectory while
+    // different inputs (or different runs of best-of-N) diverge.
+    uint64_t rng_state = 0x9E3779B97F4A7C15ull ^ (uint64_t)(uintptr_t)encoder_out.data() ^
+                         (uint64_t)(encoder_out.size() ^ 0xDEADBEEFCAFEBABEull);
+    auto rand_uniform = [&]() -> float {
+        rng_state ^= rng_state << 13;
+        rng_state ^= rng_state >> 7;
+        rng_state ^= rng_state << 17;
+        return (float)((rng_state >> 11) & 0x1FFFFF) / (float)(1 << 21);
+    };
+
+    // Pick token from logits: argmax (temp == 0) or multinomial-from-softmax
+    // (temp > 0). Always populates picked_prob with the softmax probability
+    // of the picked token (with temperature applied when sampling).
+    auto pick_from_logits = [&](const std::vector<float>& logits, int& picked, float& picked_prob) {
+        const int V = (int)logits.size();
+        if (V == 0) {
+            picked = 0;
+            picked_prob = 0.0f;
+            return;
+        }
+        int argmax_idx = 0;
+        float mx = logits[0];
+        for (int i = 1; i < V; i++)
+            if (logits[i] > mx) {
+                mx = logits[i];
+                argmax_idx = i;
+            }
+        if (!sampling) {
+            picked = argmax_idx;
+            float s = 0.f;
+            for (int i = 0; i < V; i++)
+                s += expf(logits[i] - mx);
+            picked_prob = 1.0f / s;
+            return;
+        }
+        const float inv_T = 1.0f / ctx->params.temperature;
+        std::vector<float> probs((size_t)V);
+        float s = 0.f;
+        for (int i = 0; i < V; i++) {
+            probs[i] = expf((logits[i] - mx) * inv_T);
+            s += probs[i];
+        }
+        const float inv_s = 1.0f / s;
+        for (int i = 0; i < V; i++)
+            probs[i] *= inv_s;
+        float u = rand_uniform();
+        float c = 0.f;
+        picked = V - 1;
+        for (int i = 0; i < V; i++) {
+            c += probs[i];
+            if (u <= c) {
+                picked = i;
+                break;
+            }
+        }
+        picked_prob = probs[picked];
+    };
+
     if (!omniasr_run_prefill(ctx, encoder_out, d_enc, T_enc, use_lang, lang_id, lid_marker_id, prefix_len, cur_token,
-                             perf, want_probs ? &step_logits : nullptr)) {
+                             perf, capture_logits ? &step_logits : nullptr)) {
         fprintf(stderr, "omniasr-llm: prefill failed\n");
         return nullptr;
     }
     ctx->kv_n_used = prefix_len;
-    if (want_probs && !step_logits.empty()) {
-        const int V = (int)step_logits.size();
-        float mx = step_logits[cur_token];
-        float s = 0.f;
-        for (int i = 0; i < V; i++)
-            s += expf(step_logits[i] - mx);
-        cur_prob = 1.0f / s;
+    if (capture_logits && !step_logits.empty()) {
+        // Override the helper's CPU-argmax cur_token with our pick (which
+        // may be a sampled token when temperature > 0). The captured prob
+        // is the softmax-with-temperature of whichever token we picked.
+        pick_from_logits(step_logits, cur_token, cur_prob);
     }
 
     if (ctx->params.verbosity >= 1)
@@ -1316,23 +1378,24 @@ static char* omniasr_transcribe_llm(omniasr_context* ctx, const std::vector<floa
         }
 
         int n_past = prefix_len + step;
-        if (!omniasr_run_dec_token(ctx, cur_token, n_past, cur_token, perf, want_probs ? &step_logits : nullptr)) {
+        if (!omniasr_run_dec_token(ctx, cur_token, n_past, cur_token, perf,
+                                   capture_logits ? &step_logits : nullptr)) {
             fprintf(stderr, "omniasr-llm: decode step %d failed\n", step);
             break;
+        }
+        if (capture_logits && !step_logits.empty()) {
+            // Same override as the prefill step — sampling when temp > 0,
+            // otherwise the run helper's argmax pick stands.
+            pick_from_logits(step_logits, cur_token, cur_prob);
         }
 
         if (cur_token == hp.eos_id)
             break;
         output_tokens.push_back(cur_token);
-        if (want_probs && !step_logits.empty()) {
-            const int V = (int)step_logits.size();
-            float mx = step_logits[cur_token];
-            float s = 0.f;
-            for (int i = 0; i < V; i++)
-                s += expf(step_logits[i] - mx);
+        if (want_probs)
+            out_token_probs->push_back(cur_prob);
+        if (want_probs)
             out_token_ids->push_back(cur_token);
-            out_token_probs->push_back(1.0f / s);
-        }
 
         if (ctx->params.verbosity >= 2 && step < 5)
             fprintf(stderr, "  gen %d: token=%d (%s)\n", step, cur_token,

@@ -17,7 +17,8 @@ public:
     const char* name() const override { return "glm-asr"; }
 
     uint32_t capabilities() const override {
-        return CAP_TIMESTAMPS_CTC | CAP_TEMPERATURE | CAP_LANGUAGE_DETECT | CAP_AUTO_DOWNLOAD | CAP_TOKEN_CONFIDENCE;
+        return CAP_TIMESTAMPS_CTC | CAP_TEMPERATURE | CAP_LANGUAGE_DETECT | CAP_AUTO_DOWNLOAD | CAP_TOKEN_CONFIDENCE |
+               CAP_PUNCTUATION_TOGGLE;
     }
 
     bool init(const whisper_params& params) override {
@@ -90,6 +91,19 @@ public:
             seg.tokens.push_back(std::move(tok));
         }
         glm_asr_result_free(r);
+
+        // --no-punctuation: strip ASCII punctuation from segment text and per-token
+        // pieces. GLM-ASR's LLM produces punctuated, capitalised English by
+        // default; this matches the historical CTC-style "lowercase, no punc"
+        // output users expect when they pass the toggle.
+        if (!params.punctuation) {
+            crispasr_strip_ascii_punctuation(seg.text);
+            crispasr_lowercase_ascii(seg.text);
+            for (auto& tok : seg.tokens) {
+                crispasr_strip_ascii_punctuation(tok.text);
+                crispasr_lowercase_ascii(tok.text);
+            }
+        }
 
         if (!seg.text.empty())
             out.push_back(std::move(seg));
