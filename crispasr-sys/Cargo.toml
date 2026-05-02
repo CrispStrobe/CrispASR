@@ -2,7 +2,7 @@
 name = "crispasr-sys"
 version = "0.5.4"
 edition = "2021"
-description = "Raw FFI bindings to CrispASR — links to a pre-installed libcrispasr."
+description = "Raw FFI bindings to CrispASR — auto-builds libcrispasr from source via cmake, or links a pre-installed copy if CRISPASR_LIB_DIR is set."
 license = "MIT"
 repository = "https://github.com/CrispStrobe/CrispASR"
 homepage = "https://github.com/CrispStrobe/CrispASR"
@@ -14,15 +14,19 @@ links = "crispasr"
 
 # The crate is a pure FFI shim — only the .rs sources, build.rs, README,
 # LICENSE, and Cargo.toml ship to crates.io. The native library is not
-# vendored; users install `libcrispasr.{so,dylib,dll}` separately, same
-# as CrispASR's bindings.
+# vendored; build.rs locates an existing build, runs cmake on the parent
+# repo, or (legacy) links a system-installed `libcrispasr.{so,dylib,dll}`
+# when `CRISPASR_LIB_DIR` is set. The crates.io publish is a no-op for
+# the cmake path: it requires the parent CrispASR sources, which only
+# exist in a git checkout — that's the same trade-off CrispEmbed makes.
 include = ["src/**/*.rs", "build.rs", "Cargo.toml", "README.md", "LICENSE"]
 
 [features]
 default = []
-# Feature flags are accepted for forward-compat but are no-ops at the
-# sys level — the installed `libcrispasr` already includes whichever
-# backends it was built with.
+# When build.rs runs cmake itself (decision tree in build.rs), these
+# features map to `-DGGML_{CUDA,METAL,VULKAN}=ON`. For the legacy
+# CRISPASR_LIB_DIR path they're inert — the system-installed
+# `libcrispasr` already encodes whichever backends it was built with.
 cuda = []
 metal = []
 vulkan = []
