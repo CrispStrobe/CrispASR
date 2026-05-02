@@ -6233,26 +6233,39 @@ Symptom: `GGML_ASSERT(src_backend_id != -1) failed` inside
 `ggml-backend.cpp:1328`) on a *second* invocation of a graph that was
 built once and re-run via `ggml_backend_sched_reset()`.
 
-Reproduced so far on Metal (commit `e586f5e`, original VibeVoice TTS
-fix) and Vulkan (issue #47, May 2026). Both are multi-backend ggml
+Reproduced on Metal (commit `e586f5e`, original VibeVoice TTS fix)
+and Vulkan (issue #47, May 2026). Both are multi-backend ggml
 schedulers — they assign every tensor a backend-id by walking the
 op tree, and that id mapping for *view* tensors does not survive
 `sched_reset()`. On the second invocation the scheduler can't
 resolve the parent buffer for the cached view, the assert fires, and
 synthesis crashes.
 
-The proper fix is upstream — make
-`ggml_backend_sched_split_graph` recompute view→backend mapping
-from `view_src->buffer` rather than relying on cached ids. Until
-that lands, the per-backend workaround is to rebuild the graph
-every call (the cache becomes a no-op, costs ~30% per inference
-that the cache otherwise saves). Implementation pattern in
-`src/vibevoice.cpp` `backend_needs_fresh_pred_graph()` —
-prefix-match the backend name and bail to rebuild for the affected
-families.
+CUDA almost certainly has the same shape bug — same scheduler
+architecture, same `sched_reset` semantics — even though no CUDA
+user has reported the assert yet. After the Vulkan disprove we
+decided to **assume CUDA is broken** rather than wait for a crash
+report; the cost (giving up the speculative ~30% cache-reuse
+speedup) is preferable to shipping the known-pattern crash to a
+user.
 
-CUDA / SYCL / HIP almost certainly have the same bug since they
-share the multi-backend scheduler architecture, but there's no
-user report yet, so we leave them on the cache-fast-path until
-someone hits the assert. Add the prefix to the workaround name
-list as reports come in.
+**Workaround pattern** (see `backend_needs_fresh_pred_graph()` in
+`src/vibevoice.cpp`):
+
+1. Prefix-match the backend name and bail to rebuild-each-call for
+   any backend on the bypass list (Metal, Vulkan, CUDA today).
+2. Provide an env escape hatch (`CRISPASR_VIBEVOICE_REUSE_PRED_GRAPH=1`
+   for vibevoice) that forces the cache-reuse fast path regardless
+   of backend. This is the path you flip on once a kernel
+   maintainer confirms the upstream scheduler has been fixed for a
+   given GPU backend, or to benchmark the speedup the cache would
+   save if the bug weren't there.
+
+SYCL / HIP / ROCm aren't in the list yet — add the prefix when
+either a report comes in or someone audits the upstream
+`sched.cpp` `src_backend_id` reset path and confirms the shape.
+
+The proper long-term fix is upstream ggml — make
+`ggml_backend_sched_split_graph` recompute view→backend mapping
+from `view_src->buffer` rather than relying on cached ids. Once
+that lands, the bypass list collapses back to empty.

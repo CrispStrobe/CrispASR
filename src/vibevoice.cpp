@@ -1696,21 +1696,40 @@ static bool backend_is_metal(ggml_backend_t b) {
 // when the cached pred-head graph is reused across `sched_reset()` — see
 // issue #47 (geneing). Both schedulers rebuild the view→buffer-id mapping
 // on reset and lose track of view tensors created against the previous
-// build. Fall back to rebuild-each-call for both, same as the Metal path.
+// build. Fall back to rebuild-each-call for the affected backends.
 //
-// CUDA / SYCL / HIP likely have the same bug — they're multi-backend
-// schedulers with the same view→buffer-id-on-reset behaviour — but no
-// CUDA / SYCL / HIP user has reported the assert yet. Until the bug is
-// repro'd on those backends we keep them on the cache-reuse fast path
-// (the original commit `e586f5e` noted ~30% per-synthesis savings on
-// "CPU/CUDA/Vulkan" — Vulkan was just disproven, so the CUDA half of
-// that claim is now also untested). Add the relevant prefix to the name
-// check below if a CUDA / SYCL / HIP report comes in.
+// CUDA almost certainly has the same bug by construction — it's a
+// multi-backend scheduler with the same view→buffer-id-on-reset
+// behaviour — even though no CUDA user has reported the assert yet.
+// We're defensively in the bypass list. The original commit `e586f5e`
+// claimed ~30% per-synthesis savings on "CPU/CUDA/Vulkan"; Vulkan was
+// just disproven (issue #47), so the CUDA half of that claim is now
+// also presumed untested. Better to give up the speculative speedup
+// than ship a known-pattern crash to CUDA users.
+//
+// SYCL / HIP / ROCm: not in the list yet because their scheduler
+// integration is less battle-tested in this repo. Add the prefix here
+// if a report comes in (or if a kernel maintainer audits the
+// upstream sched.cpp `src_backend_id` reset path and confirms the
+// shape).
+//
+// Escape hatch: `CRISPASR_VIBEVOICE_REUSE_PRED_GRAPH=1` forces the
+// cache-reuse fast path regardless of backend. Use this to A/B-test
+// whether the upstream scheduler bug has been fixed for a given GPU
+// backend, or to benchmark the cache-reuse savings on a known-good
+// backend. Default off → safe path on all GPU backends.
 static bool backend_needs_fresh_pred_graph(ggml_backend_t b) {
     if (!b)
         return false;
+    const char* override_str = std::getenv("CRISPASR_VIBEVOICE_REUSE_PRED_GRAPH");
+    if (override_str && (override_str[0] == '1' || override_str[0] == 't' || override_str[0] == 'T'))
+        return false;
     const char* name = ggml_backend_name(b);
-    return name && (std::strncmp(name, "MTL", 3) == 0 || std::strncmp(name, "Vulkan", 6) == 0);
+    if (!name)
+        return false;
+    return std::strncmp(name, "MTL", 3) == 0       // Metal (commit e586f5e)
+           || std::strncmp(name, "Vulkan", 6) == 0 // Vulkan (issue #47)
+           || std::strncmp(name, "CUDA", 4) == 0;  // CUDA (defensive, untested in this state)
 }
 
 // Get or build the cached prediction head graph.
