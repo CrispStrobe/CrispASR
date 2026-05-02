@@ -8,8 +8,8 @@ if not exist "!vswhere!" (
     exit /b 1
 )
 
-:: Find VS Installation Path
-for /f "usebackq tokens=*" %%i in (`"!vswhere!" -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do (
+:: Find VS Installation Path (-products * includes Build Tools installations)
+for /f "usebackq tokens=*" %%i in (`"!vswhere!" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do (
     set "vs_path=%%i"
 )
 
@@ -39,10 +39,15 @@ if %ERRORLEVEL% neq 0 (
 
 :: Build
 echo [INFO] Building crispasr...
-cmake --build build --target crispasr
+cmake --build build --target crispasr-cli
 
 if %ERRORLEVEL% neq 0 (
     echo [ERROR] Build failed.
+    exit /b 1
+)
+
+if not exist "build\bin\crispasr.exe" (
+    echo [ERROR] Build succeeded but build\bin\crispasr.exe not found.
     exit /b 1
 )
 
