@@ -1731,6 +1731,126 @@ class CrispasrSession {
     if (rc != 0) throw Exception('clearPhonemeCache failed (rc=$rc)');
   }
 
+  // ---------------------------------------------------------------------------
+  // Sticky session-state setters (PLAN #59 partial unblock).
+  // ---------------------------------------------------------------------------
+
+  /// Sticky source-language hint (canary, cohere, voxtral, whisper).
+  /// Empty string clears. Per-call language arg passed to transcribe
+  /// methods still wins.
+  void setSourceLanguage(String lang) {
+    if (_closed) throw StateError('CrispasrSession is closed');
+    if (!_lib.providesSymbol('crispasr_session_set_source_language')) {
+      throw UnsupportedError('session-state API not present in this libcrispasr build');
+    }
+    final fn = _lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Utf8>),
+        int Function(Pointer<Void>, Pointer<Utf8>)>('crispasr_session_set_source_language');
+    final p = lang.toNativeUtf8();
+    try {
+      final rc = fn(_handle, p);
+      if (rc != 0) throw Exception('setSourceLanguage failed (rc=$rc)');
+    } finally {
+      calloc.free(p);
+    }
+  }
+
+  /// Sticky target-language. When set ≠ source on canary/cohere, the backend
+  /// emits a translation. For whisper, pair with [setTranslate]`(true)`.
+  void setTargetLanguage(String lang) {
+    if (_closed) throw StateError('CrispasrSession is closed');
+    if (!_lib.providesSymbol('crispasr_session_set_target_language')) {
+      throw UnsupportedError('session-state API not present in this libcrispasr build');
+    }
+    final fn = _lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Utf8>),
+        int Function(Pointer<Void>, Pointer<Utf8>)>('crispasr_session_set_target_language');
+    final p = lang.toNativeUtf8();
+    try {
+      final rc = fn(_handle, p);
+      if (rc != 0) throw Exception('setTargetLanguage failed (rc=$rc)');
+    } finally {
+      calloc.free(p);
+    }
+  }
+
+  /// Toggle punctuation + capitalisation in the output (canary/cohere
+  /// natively; LLM backends via post-process strip). Default true.
+  void setPunctuation(bool enable) {
+    if (_closed) throw StateError('CrispasrSession is closed');
+    if (!_lib.providesSymbol('crispasr_session_set_punctuation')) {
+      throw UnsupportedError('session-state API not present in this libcrispasr build');
+    }
+    final fn = _lib.lookupFunction<Int32 Function(Pointer<Void>, Int32),
+        int Function(Pointer<Void>, int)>('crispasr_session_set_punctuation');
+    final rc = fn(_handle, enable ? 1 : 0);
+    if (rc != 0) throw Exception('setPunctuation failed (rc=$rc)');
+  }
+
+  /// Whisper sticky `--translate`. For canary/cohere/voxtral the equivalent
+  /// is [setTargetLanguage] ≠ source.
+  void setTranslate(bool enable) {
+    if (_closed) throw StateError('CrispasrSession is closed');
+    if (!_lib.providesSymbol('crispasr_session_set_translate')) {
+      throw UnsupportedError('session-state API not present in this libcrispasr build');
+    }
+    final fn = _lib.lookupFunction<Int32 Function(Pointer<Void>, Int32),
+        int Function(Pointer<Void>, int)>('crispasr_session_set_translate');
+    final rc = fn(_handle, enable ? 1 : 0);
+    if (rc != 0) throw Exception('setTranslate failed (rc=$rc)');
+  }
+
+  /// Set decoder temperature on backends that support runtime control
+  /// (canary, cohere, parakeet, moonshine). Other backends silently no-op.
+  /// `seed` is the RNG seed; pass 0 for time-based.
+  void setTemperature(double temperature, {int seed = 0}) {
+    if (_closed) throw StateError('CrispasrSession is closed');
+    if (!_lib.providesSymbol('crispasr_session_set_temperature')) {
+      throw UnsupportedError('session-state API not present in this libcrispasr build');
+    }
+    final fn = _lib.lookupFunction<Int32 Function(Pointer<Void>, Float, Uint64),
+        int Function(Pointer<Void>, double, int)>('crispasr_session_set_temperature');
+    final rc = fn(_handle, temperature, seed);
+    // rc == -2 means no backend in this session supports temperature — soft no-op.
+    if (rc != 0 && rc != -2) {
+      throw Exception('setTemperature failed (rc=$rc)');
+    }
+  }
+
+  /// Auto-detect spoken language on raw 16 kHz mono PCM.
+  ///
+  /// `method`: 0=Whisper, 1=Silero (default), 2=Firered, 3=Ecapa.
+  /// Returns a record `(lang, confidence)`.
+  ({String lang, double confidence}) detectLanguage(
+    Float32List pcm,
+    String lidModelPath, {
+    int method = 1,
+  }) {
+    if (_closed) throw StateError('CrispasrSession is closed');
+    if (!_lib.providesSymbol('crispasr_session_detect_language')) {
+      throw UnsupportedError('session-state API not present in this libcrispasr build');
+    }
+    final fn = _lib.lookupFunction<
+        Int32 Function(Pointer<Void>, Pointer<Float>, Int32, Pointer<Utf8>, Int32, Pointer<Utf8>, Int32, Pointer<Float>),
+        int Function(Pointer<Void>, Pointer<Float>, int, Pointer<Utf8>, int, Pointer<Utf8>, int,
+            Pointer<Float>)>('crispasr_session_detect_language');
+    final pcmPtr = calloc<Float>(pcm.length);
+    final pathPtr = lidModelPath.toNativeUtf8();
+    final outBuf = calloc<Uint8>(16);
+    final probPtr = calloc<Float>(1);
+    try {
+      for (var i = 0; i < pcm.length; i++) {
+        pcmPtr[i] = pcm[i];
+      }
+      final rc = fn(_handle, pcmPtr, pcm.length, pathPtr, method, outBuf.cast<Utf8>(), 16, probPtr);
+      if (rc != 0) throw Exception('detectLanguage failed (rc=$rc)');
+      return (lang: outBuf.cast<Utf8>().toDartString(), confidence: probPtr[0]);
+    } finally {
+      calloc.free(pcmPtr);
+      calloc.free(pathPtr);
+      calloc.free(outBuf);
+      calloc.free(probPtr);
+    }
+  }
+
   /// Load a voice prompt: a baked GGUF voice pack OR a *.wav reference audio.
   ///
   /// For qwen3-tts a WAV reference requires [refText] (the transcription of

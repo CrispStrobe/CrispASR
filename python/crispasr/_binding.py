@@ -370,6 +370,7 @@ class SessionWord:
     text: str
     start: float  # seconds
     end: float    # seconds
+    confidence: float = 1.0  # softmax probability in [0, 1]; 1.0 if backend doesn't emit one
 
 
 @dataclass
@@ -970,6 +971,11 @@ class Session:
         lib.crispasr_session_result_word_t0.restype = ctypes.c_int64
         lib.crispasr_session_result_word_t1.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int]
         lib.crispasr_session_result_word_t1.restype = ctypes.c_int64
+        # word_p was added 2026-05-02. Older libcrispasr builds don't export it
+        # — probe with hasattr below and fall back to 1.0 when missing.
+        if hasattr(lib, "crispasr_session_result_word_p"):
+            lib.crispasr_session_result_word_p.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int]
+            lib.crispasr_session_result_word_p.restype = ctypes.c_float
         lib.crispasr_session_result_free.argtypes = [ctypes.c_void_p]
         lib.crispasr_session_result_free.restype = None
         lib.crispasr_session_close.argtypes = [ctypes.c_void_p]
@@ -1026,12 +1032,17 @@ class Session:
                 t1 = self._lib.crispasr_session_result_segment_t1(res, i) / 100.0
                 wn = self._lib.crispasr_session_result_n_words(res, i)
                 words: List[SessionWord] = []
+                has_word_p = hasattr(self._lib, "crispasr_session_result_word_p")
                 for j in range(wn):
                     wt = self._lib.crispasr_session_result_word_text(res, i, j)
+                    raw_p = self._lib.crispasr_session_result_word_p(res, i, j) if has_word_p else 1.0
                     words.append(SessionWord(
                         text=wt.decode("utf-8") if wt else "",
                         start=self._lib.crispasr_session_result_word_t0(res, i, j) / 100.0,
                         end=self._lib.crispasr_session_result_word_t1(res, i, j) / 100.0,
+                        # -1.0 from C means "no per-word p for this backend";
+                        # surface 1.0 so callers can render uniformly.
+                        confidence=1.0 if raw_p < 0 else raw_p,
                     ))
                 out.append(SessionSegment(text=text.strip(), start=t0, end=t1, words=words))
             return out
@@ -1134,12 +1145,17 @@ class Session:
                 t1 = self._lib.crispasr_session_result_segment_t1(res, i) / 100.0
                 wn = self._lib.crispasr_session_result_n_words(res, i)
                 words: List[SessionWord] = []
+                has_word_p = hasattr(self._lib, "crispasr_session_result_word_p")
                 for j in range(wn):
                     wt = self._lib.crispasr_session_result_word_text(res, i, j)
+                    raw_p = self._lib.crispasr_session_result_word_p(res, i, j) if has_word_p else 1.0
                     words.append(SessionWord(
                         text=wt.decode("utf-8") if wt else "",
                         start=self._lib.crispasr_session_result_word_t0(res, i, j) / 100.0,
                         end=self._lib.crispasr_session_result_word_t1(res, i, j) / 100.0,
+                        # -1.0 from C means "no per-word p for this backend";
+                        # surface 1.0 so callers can render uniformly.
+                        confidence=1.0 if raw_p < 0 else raw_p,
                     ))
                 out.append(SessionSegment(text=text.strip(), start=t0, end=t1, words=words))
             return out
@@ -1249,6 +1265,108 @@ class Session:
         rc = self._lib.crispasr_session_kokoro_clear_phoneme_cache(self._handle)
         if rc != 0:
             raise RuntimeError(f"clear_phoneme_cache failed (rc={rc})")
+
+    # ------------------------------------------------------------------
+    # Sticky session-state setters (PLAN #59 partial unblock).
+    # ------------------------------------------------------------------
+
+    def set_source_language(self, lang: str) -> None:
+        """Sticky source-language hint (canary, cohere, voxtral, whisper).
+
+        Empty string clears. Per-call ``language`` arg passed to
+        :meth:`transcribe` still wins.
+        """
+        if not hasattr(self._lib, "crispasr_session_set_source_language"):
+            raise RuntimeError("session-state API not present in this libcrispasr build")
+        self._lib.crispasr_session_set_source_language.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+        self._lib.crispasr_session_set_source_language.restype = ctypes.c_int
+        rc = self._lib.crispasr_session_set_source_language(self._handle, lang.encode("utf-8"))
+        if rc != 0:
+            raise RuntimeError(f"set_source_language failed (rc={rc})")
+
+    def set_target_language(self, lang: str) -> None:
+        """Sticky target-language. When set ≠ source on canary/cohere, the
+        backend emits a translation. For whisper, pair with
+        :meth:`set_translate` ``(True)``.
+        """
+        if not hasattr(self._lib, "crispasr_session_set_target_language"):
+            raise RuntimeError("session-state API not present in this libcrispasr build")
+        self._lib.crispasr_session_set_target_language.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+        self._lib.crispasr_session_set_target_language.restype = ctypes.c_int
+        rc = self._lib.crispasr_session_set_target_language(self._handle, lang.encode("utf-8"))
+        if rc != 0:
+            raise RuntimeError(f"set_target_language failed (rc={rc})")
+
+    def set_punctuation(self, enable: bool) -> None:
+        """Toggle punctuation + capitalisation in the output (canary/cohere
+        natively; LLM backends via post-process strip). Default True."""
+        if not hasattr(self._lib, "crispasr_session_set_punctuation"):
+            raise RuntimeError("session-state API not present in this libcrispasr build")
+        self._lib.crispasr_session_set_punctuation.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        self._lib.crispasr_session_set_punctuation.restype = ctypes.c_int
+        rc = self._lib.crispasr_session_set_punctuation(self._handle, 1 if enable else 0)
+        if rc != 0:
+            raise RuntimeError(f"set_punctuation failed (rc={rc})")
+
+    def set_translate(self, enable: bool) -> None:
+        """Whisper sticky ``--translate``. For canary/cohere/voxtral the
+        equivalent is :meth:`set_target_language` ≠ source."""
+        if not hasattr(self._lib, "crispasr_session_set_translate"):
+            raise RuntimeError("session-state API not present in this libcrispasr build")
+        self._lib.crispasr_session_set_translate.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        self._lib.crispasr_session_set_translate.restype = ctypes.c_int
+        rc = self._lib.crispasr_session_set_translate(self._handle, 1 if enable else 0)
+        if rc != 0:
+            raise RuntimeError(f"set_translate failed (rc={rc})")
+
+    def set_temperature(self, temperature: float, seed: int = 0) -> None:
+        """Set decoder temperature on backends that support runtime control
+        (canary, cohere, parakeet, moonshine). Other backends silently no-op.
+
+        ``seed`` is the RNG seed for sampling; pass 0 for time-based.
+        Returns silently when no backend in the session honours the
+        setter (so it's safe to call for any session)."""
+        if not hasattr(self._lib, "crispasr_session_set_temperature"):
+            raise RuntimeError("session-state API not present in this libcrispasr build")
+        self._lib.crispasr_session_set_temperature.argtypes = [ctypes.c_void_p, ctypes.c_float, ctypes.c_uint64]
+        self._lib.crispasr_session_set_temperature.restype = ctypes.c_int
+        rc = self._lib.crispasr_session_set_temperature(self._handle, float(temperature), int(seed))
+        # rc == -2 means no backend in this session supports temperature
+        # — treat as a soft no-op so it's safe to call for any session.
+        if rc not in (0, -2):
+            raise RuntimeError(f"set_temperature failed (rc={rc})")
+
+    def detect_language(self, pcm, lid_model_path: str, method: int = 1) -> tuple:
+        """Auto-detect spoken language on raw 16 kHz mono PCM.
+
+        ``method``: 0=Whisper, 1=Silero (default), 2=Firered, 3=Ecapa.
+        Returns ``(lang_iso2, confidence_in_0_to_1)``. Raises
+        :class:`RuntimeError` on failure.
+        """
+        if not hasattr(self._lib, "crispasr_session_detect_language"):
+            raise RuntimeError("session-state API not present in this libcrispasr build")
+        import numpy as np
+        pcm_arr = np.ascontiguousarray(pcm, dtype=np.float32)
+        self._lib.crispasr_session_detect_language.argtypes = [
+            ctypes.c_void_p, ctypes.POINTER(ctypes.c_float), ctypes.c_int,
+            ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.POINTER(ctypes.c_float),
+        ]
+        self._lib.crispasr_session_detect_language.restype = ctypes.c_int
+        out_buf = ctypes.create_string_buffer(16)
+        out_prob = ctypes.c_float(0.0)
+        rc = self._lib.crispasr_session_detect_language(
+            self._handle,
+            pcm_arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            int(pcm_arr.size),
+            lid_model_path.encode("utf-8"),
+            int(method),
+            out_buf,
+            16,
+            ctypes.byref(out_prob),
+        )
+        if rc != 0:
+            raise RuntimeError(f"detect_language failed (rc={rc})")
+        return out_buf.value.decode("utf-8"), float(out_prob.value)
 
     def is_voice_design(self) -> bool:
         """Return True iff the loaded model is a qwen3-tts VoiceDesign variant.

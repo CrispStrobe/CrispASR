@@ -219,6 +219,43 @@ class TestKokoroPhonemeCacheClear(unittest.TestCase):
 
 
 @unittest.skipUnless(LIB_PATH, "libwhisper not built")
+class TestSessionStateSetters(unittest.TestCase):
+    """PLAN #59 partial unblock: session-level setters for source_language,
+    target_language, punctuation, translate, temperature, detect_language.
+
+    Symbol-level + null-handle return path checks. No model needed.
+    """
+
+    def test_all_symbols_exported(self):
+        import ctypes
+        lib = ctypes.CDLL(LIB_PATH)
+        for name in (
+            "crispasr_session_set_source_language",
+            "crispasr_session_set_target_language",
+            "crispasr_session_set_punctuation",
+            "crispasr_session_set_translate",
+            "crispasr_session_set_temperature",
+            "crispasr_session_detect_language",
+        ):
+            self.assertTrue(hasattr(lib, name), f"missing symbol: {name}")
+
+    def test_null_handle_returns_neg_one(self):
+        import ctypes
+        lib = ctypes.CDLL(LIB_PATH)
+        for name, argtypes, args in [
+            ("crispasr_session_set_source_language", [ctypes.c_void_p, ctypes.c_char_p], [None, b"en"]),
+            ("crispasr_session_set_target_language", [ctypes.c_void_p, ctypes.c_char_p], [None, b"de"]),
+            ("crispasr_session_set_punctuation", [ctypes.c_void_p, ctypes.c_int], [None, 1]),
+            ("crispasr_session_set_translate", [ctypes.c_void_p, ctypes.c_int], [None, 1]),
+            ("crispasr_session_set_temperature", [ctypes.c_void_p, ctypes.c_float, ctypes.c_uint64], [None, 0.5, 0]),
+        ]:
+            fn = getattr(lib, name)
+            fn.argtypes = argtypes
+            fn.restype = ctypes.c_int
+            self.assertEqual(fn(*args), -1, f"{name}(null, ...) should return -1")
+
+
+@unittest.skipUnless(LIB_PATH, "libwhisper not built")
 class TestKokoroPhonemizerParityHarness(unittest.TestCase):
     """PLAN #56 #4: phonemizer-diff harness ABI is exposed.
 

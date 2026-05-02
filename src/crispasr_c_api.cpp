@@ -734,6 +734,14 @@ struct crispasr_session {
     std::string model_path;
     int n_threads = 4;
 
+    // Sticky session-level state (PLAN #59 partial unblock — the
+    // capabilities matrix items that were previously CLI-only). Per-call
+    // args still win when supplied; these are the fallback.
+    std::string source_language; // canary/cohere/voxtral source-lang hint
+    std::string target_language; // canary/cohere/voxtral target-lang (≠ source ⇒ translate)
+    bool punctuation = true;     // canary/cohere per-call arg + post-process gate
+    bool translate = false;      // whisper sticky --translate (others: use src/tgt mismatch)
+
     // Exactly one of these pointers is non-null based on `backend`.
     whisper_context* whisper_ctx = nullptr;
 #ifdef CA_HAVE_PARAKEET
@@ -1424,8 +1432,16 @@ CA_EXPORT crispasr_session_result* crispasr_session_transcribe_lang(crispasr_ses
         wparams.print_timestamps = false;
         wparams.print_special = false;
         wparams.n_threads = s->n_threads;
+        // Per-call language hint wins; sticky source_language is the
+        // fallback (PLAN #59 unblock).
         if (lang_set)
             wparams.language = lang.c_str();
+        else if (!s->source_language.empty())
+            wparams.language = s->source_language.c_str();
+        // Sticky --translate toggle (PLAN #59 unblock); whisper's
+        // wparams.translate also activates the EN target language.
+        if (s->translate)
+            wparams.translate = true;
 
         if (whisper_full(s->whisper_ctx, wparams, pcm, n_samples) != 0) {
             delete r;
@@ -1497,11 +1513,15 @@ CA_EXPORT crispasr_session_result* crispasr_session_transcribe_lang(crispasr_ses
 
 #ifdef CA_HAVE_CANARY
     if (s->backend == "canary" && s->canary_ctx) {
-        // Canary supports source/target language explicitly; when the
-        // caller hasn't supplied a language the historical default of
-        // en→en is preserved. Full translation control (src != tgt)
-        // still needs the backend-specific helpers.
-        return run_char_transcribe(canary_transcribe(s->canary_ctx, pcm, n_samples, lang.c_str(), lang.c_str(), true));
+        // Canary supports source/target language + punctuation explicitly.
+        // Resolution order (most specific wins): per-call `language` arg
+        // → sticky `s->source_language` / `s->target_language` → historical
+        // default of en→en. Same for punctuation: sticky `s->punctuation`
+        // (default true). (PLAN #59 unblock — was hardcoded en→en/true.)
+        const std::string src = lang_set ? lang : (!s->source_language.empty() ? s->source_language : "en");
+        const std::string tgt = !s->target_language.empty() ? s->target_language : src;
+        return run_char_transcribe(
+            canary_transcribe(s->canary_ctx, pcm, n_samples, src.c_str(), tgt.c_str(), s->punctuation));
     }
 #endif
 #ifdef CA_HAVE_QWEN3
@@ -1511,7 +1531,9 @@ CA_EXPORT crispasr_session_result* crispasr_session_transcribe_lang(crispasr_ses
 #endif
 #ifdef CA_HAVE_COHERE
     if (s->backend == "cohere" && s->cohere_ctx) {
-        return run_char_transcribe(cohere_transcribe(s->cohere_ctx, pcm, n_samples, lang.c_str()));
+        // Cohere takes a single `lang` (source); per-call wins, sticky next.
+        const std::string src = lang_set ? lang : (!s->source_language.empty() ? s->source_language : "en");
+        return run_char_transcribe(cohere_transcribe(s->cohere_ctx, pcm, n_samples, src.c_str()));
     }
 #endif
 #ifdef CA_HAVE_GRANITE
@@ -2528,3 +2550,118 @@ CA_EXPORT int crispasr_session_kokoro_clear_phoneme_cache(crispasr_session*) {
     return 0;
 }
 #endif
+
+// =========================================================================
+// Sticky session-state setters (PLAN #59 partial unblock).
+//
+// These close gaps between CLI flags and what wrappers can reach.
+// Per-call args (e.g. transcribe_lang's `language`) still win when
+// supplied; these are the fallback. Returns 0 on success, -1 on null
+// session, -2 if backend doesn't accept the value at runtime.
+// =========================================================================
+
+// Sticky source-language hint. Used by canary, cohere, voxtral, voxtral4b,
+// whisper. Empty string clears.
+CA_EXPORT int crispasr_session_set_source_language(crispasr_session* s, const char* lang) {
+    if (!s)
+        return -1;
+    s->source_language = (lang ? lang : "");
+    return 0;
+}
+
+// Sticky target-language. When set and ≠ source_language, canary/cohere
+// emit a translation instead of an ASR transcript. Whisper uses
+// translate=true with target=en. Empty string clears.
+CA_EXPORT int crispasr_session_set_target_language(crispasr_session* s, const char* lang) {
+    if (!s)
+        return -1;
+    s->target_language = (lang ? lang : "");
+    return 0;
+}
+
+// Sticky punctuation toggle. canary/cohere honour it natively (per-call
+// arg); LLM-style backends rely on the post-process strip. Default true.
+CA_EXPORT int crispasr_session_set_punctuation(crispasr_session* s, int enable) {
+    if (!s)
+        return -1;
+    s->punctuation = (enable != 0);
+    return 0;
+}
+
+// Sticky --translate toggle (whisper). For canary/cohere/voxtral the
+// equivalent is set_target_language() ≠ source. Default false.
+CA_EXPORT int crispasr_session_set_translate(crispasr_session* s, int enable) {
+    if (!s)
+        return -1;
+    s->translate = (enable != 0);
+    return 0;
+}
+
+// Set decoder temperature on backends that expose runtime control:
+// canary, cohere, parakeet, moonshine. Other backends silently no-op.
+// `seed` is used by the temperature-sampling RNG; pass 0 for time-based.
+CA_EXPORT int crispasr_session_set_temperature(crispasr_session* s, float temperature, uint64_t seed) {
+    if (!s)
+        return -1;
+    int touched = 0;
+#ifdef CA_HAVE_CANARY
+    if (s->canary_ctx) {
+        canary_set_temperature(s->canary_ctx, temperature, seed);
+        touched++;
+    }
+#endif
+#ifdef CA_HAVE_COHERE
+    if (s->cohere_ctx) {
+        cohere_set_temperature(s->cohere_ctx, temperature, seed);
+        touched++;
+    }
+#endif
+#ifdef CA_HAVE_PARAKEET
+    if (s->parakeet_ctx) {
+        parakeet_set_temperature(s->parakeet_ctx, temperature, seed);
+        touched++;
+    }
+#endif
+#ifdef CA_HAVE_MOONSHINE
+    if (s->moonshine_ctx) {
+        // moonshine's setter takes (ctx, temperature) — no seed parameter.
+        moonshine_set_temperature((moonshine_context*)s->moonshine_ctx, temperature);
+        touched++;
+    }
+#endif
+    return touched > 0 ? 0 : -2;
+}
+
+// Auto-detect spoken language on raw 16 kHz mono PCM. Wraps the
+// standalone crispasr_detect_language() from src/crispasr_lid.h so
+// wrappers can invoke LID via their session handle.
+//
+// `lid_model_path` is the LID GGUF (whisper-tiny for the whisper
+// method, silero-lid for silero). `method`: 0=Whisper, 1=Silero,
+// 2=Firered, 3=Ecapa.
+//
+// `out_lang` receives a NUL-terminated ISO 639-1 code; `out_lang_cap`
+// must be ≥ 8. `out_prob` (optional) gets the model's confidence.
+//
+// Returns 0 on success, -1 on null args / buffer too small, -2 if LID
+// failed.
+CA_EXPORT int crispasr_session_detect_language(crispasr_session* s, const float* pcm, int n_samples,
+                                               const char* lid_model_path, int method, char* out_lang, int out_lang_cap,
+                                               float* out_prob) {
+    if (!s || !pcm || n_samples <= 0 || !lid_model_path || !out_lang || out_lang_cap < 8)
+        return -1;
+    CrispasrLidOptions opts;
+    opts.n_threads = s->n_threads;
+    opts.model_path = lid_model_path;
+    opts.method = (CrispasrLidMethod)method;
+    CrispasrLidResult lid_out;
+    if (!::crispasr_detect_language(pcm, n_samples, opts, lid_out) || lid_out.lang_code.empty())
+        return -2;
+    if ((int)lid_out.lang_code.size() + 1 > out_lang_cap)
+        return -1;
+    std::memcpy(out_lang, lid_out.lang_code.data(), lid_out.lang_code.size());
+    out_lang[lid_out.lang_code.size()] = '\0';
+    if (out_prob)
+        *out_prob = lid_out.confidence;
+    return 0;
+}

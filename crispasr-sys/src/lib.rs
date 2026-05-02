@@ -357,6 +357,11 @@ extern "C" {
         i_seg: c_int,
         i_word: c_int,
     ) -> i64;
+    pub fn crispasr_session_result_word_p(
+        r: *mut CrispasrSessionResult,
+        i_seg: c_int,
+        i_word: c_int,
+    ) -> f32;
 
     pub fn crispasr_session_result_free(r: *mut CrispasrSessionResult);
     pub fn crispasr_session_close(s: *mut CrispasrSession);
@@ -394,6 +399,27 @@ extern "C" {
     // Drop the kokoro per-session phoneme cache. No-op for non-kokoro
     // backends. Returns 0 on success, -1 if `s` is null. (PLAN #56 #5)
     pub fn crispasr_session_kokoro_clear_phoneme_cache(s: *mut CrispasrSession) -> c_int;
+
+    // --- Sticky session-state setters (PLAN #59 partial unblock) ---
+    pub fn crispasr_session_set_source_language(s: *mut CrispasrSession, lang: *const c_char) -> c_int;
+    pub fn crispasr_session_set_target_language(s: *mut CrispasrSession, lang: *const c_char) -> c_int;
+    pub fn crispasr_session_set_punctuation(s: *mut CrispasrSession, enable: c_int) -> c_int;
+    pub fn crispasr_session_set_translate(s: *mut CrispasrSession, enable: c_int) -> c_int;
+    pub fn crispasr_session_set_temperature(
+        s: *mut CrispasrSession,
+        temperature: c_float,
+        seed: u64,
+    ) -> c_int;
+    pub fn crispasr_session_detect_language(
+        s: *mut CrispasrSession,
+        pcm: *const c_float,
+        n_samples: c_int,
+        lid_model_path: *const c_char,
+        method: c_int,
+        out_lang: *mut c_char,
+        out_lang_cap: c_int,
+        out_prob: *mut c_float,
+    ) -> c_int;
 
     pub fn crispasr_detect_backend_from_gguf(
         path: *const c_char,

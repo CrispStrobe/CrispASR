@@ -230,6 +230,11 @@ pub struct SessionWord {
     pub text: String,
     pub start: f64,
     pub end: f64,
+    /// Per-word probability in `[0, 1]`. Backends that don't emit a real
+    /// per-word probability fall through to `1.0` so consumers can render
+    /// uniformly. The C-side `crispasr_session_result_word_p` returns
+    /// `-1.0` for "no data" — that case is folded to `1.0` here.
+    pub confidence: f32,
 }
 
 /// A segment of a unified-session transcription.
@@ -393,12 +398,14 @@ impl Session {
                     } else {
                         CStr::from_ptr(wtp).to_string_lossy().into_owned()
                     };
+                    let raw_p = crispasr_sys::crispasr_session_result_word_p(res, i, j);
                     words.push(SessionWord {
                         text: wt,
                         start: crispasr_sys::crispasr_session_result_word_t0(res, i, j) as f64
                             / 100.0,
                         end: crispasr_sys::crispasr_session_result_word_t1(res, i, j) as f64
                             / 100.0,
+                        confidence: if raw_p < 0.0 { 1.0 } else { raw_p },
                     });
                 }
                 out.push(SessionSegment {
@@ -511,12 +518,14 @@ impl Session {
                     } else {
                         CStr::from_ptr(wtp).to_string_lossy().into_owned()
                     };
+                    let raw_p = crispasr_sys::crispasr_session_result_word_p(res, i, j);
                     words.push(SessionWord {
                         text: wt,
                         start: crispasr_sys::crispasr_session_result_word_t0(res, i, j) as f64
                             / 100.0,
                         end: crispasr_sys::crispasr_session_result_word_t1(res, i, j) as f64
                             / 100.0,
+                        confidence: if raw_p < 0.0 { 1.0 } else { raw_p },
                     });
                 }
                 out.push(SessionSegment {
@@ -624,6 +633,98 @@ impl Session {
             return Err(format!("clear_phoneme_cache failed (rc={})", rc));
         }
         Ok(())
+    }
+
+    // -----------------------------------------------------------------
+    // Sticky session-state setters (PLAN #59 partial unblock).
+    // -----------------------------------------------------------------
+
+    /// Sticky source-language hint (canary, cohere, voxtral, whisper).
+    /// Empty string clears. Per-call language arg passed to transcribe
+    /// methods still wins.
+    pub fn set_source_language(&self, lang: &str) -> Result<(), String> {
+        let c = CString::new(lang).map_err(|e| e.to_string())?;
+        let rc = unsafe { crispasr_sys::crispasr_session_set_source_language(self.handle, c.as_ptr()) };
+        if rc != 0 {
+            return Err(format!("set_source_language failed (rc={})", rc));
+        }
+        Ok(())
+    }
+
+    /// Sticky target-language. When set ≠ source on canary/cohere, the
+    /// backend emits a translation. For whisper, pair with
+    /// [`set_translate(true)`](Session::set_translate).
+    pub fn set_target_language(&self, lang: &str) -> Result<(), String> {
+        let c = CString::new(lang).map_err(|e| e.to_string())?;
+        let rc = unsafe { crispasr_sys::crispasr_session_set_target_language(self.handle, c.as_ptr()) };
+        if rc != 0 {
+            return Err(format!("set_target_language failed (rc={})", rc));
+        }
+        Ok(())
+    }
+
+    /// Toggle punctuation + capitalisation in the output (canary/cohere
+    /// natively; LLM backends via post-process strip). Default true.
+    pub fn set_punctuation(&self, enable: bool) -> Result<(), String> {
+        let rc = unsafe { crispasr_sys::crispasr_session_set_punctuation(self.handle, if enable { 1 } else { 0 }) };
+        if rc != 0 {
+            return Err(format!("set_punctuation failed (rc={})", rc));
+        }
+        Ok(())
+    }
+
+    /// Whisper sticky `--translate`. For canary/cohere/voxtral the
+    /// equivalent is `set_target_language` ≠ source.
+    pub fn set_translate(&self, enable: bool) -> Result<(), String> {
+        let rc = unsafe { crispasr_sys::crispasr_session_set_translate(self.handle, if enable { 1 } else { 0 }) };
+        if rc != 0 {
+            return Err(format!("set_translate failed (rc={})", rc));
+        }
+        Ok(())
+    }
+
+    /// Set decoder temperature on backends that support runtime control
+    /// (canary, cohere, parakeet, moonshine). Other backends silently
+    /// no-op. `seed` is the RNG seed; pass 0 for time-based.
+    pub fn set_temperature(&self, temperature: f32, seed: u64) -> Result<(), String> {
+        let rc = unsafe { crispasr_sys::crispasr_session_set_temperature(self.handle, temperature, seed) };
+        // rc == -2 means no backend supports it — soft no-op.
+        if rc != 0 && rc != -2 {
+            return Err(format!("set_temperature failed (rc={})", rc));
+        }
+        Ok(())
+    }
+
+    /// Auto-detect spoken language on raw 16 kHz mono PCM.
+    ///
+    /// `method`: 0=Whisper, 1=Silero (default), 2=Firered, 3=Ecapa.
+    /// Returns `(iso2_code, confidence_in_0_to_1)`.
+    pub fn detect_language(
+        &self,
+        pcm: &[f32],
+        lid_model_path: &str,
+        method: i32,
+    ) -> Result<(String, f32), String> {
+        let cpath = CString::new(lid_model_path).map_err(|e| e.to_string())?;
+        let mut buf = [0u8; 16];
+        let mut prob: c_float = 0.0;
+        let rc = unsafe {
+            crispasr_sys::crispasr_session_detect_language(
+                self.handle,
+                pcm.as_ptr(),
+                pcm.len() as c_int,
+                cpath.as_ptr(),
+                method as c_int,
+                buf.as_mut_ptr() as *mut c_char,
+                buf.len() as c_int,
+                &mut prob as *mut c_float,
+            )
+        };
+        if rc != 0 {
+            return Err(format!("detect_language failed (rc={})", rc));
+        }
+        let cstr = unsafe { CStr::from_ptr(buf.as_ptr() as *const c_char) };
+        Ok((cstr.to_string_lossy().into_owned(), prob))
     }
 }
 
