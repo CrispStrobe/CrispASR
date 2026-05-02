@@ -6,7 +6,6 @@ language:
 - de
 - es
 - pt
-- ja
 base_model:
 - ibm-granite/granite-speech-4.1-2b-nar
 tags:
@@ -102,7 +101,7 @@ it returns a malloc'd UTF-8 string with the final transcript. There
 are also fine-grained accessors (`compute_mel`, `run_encoder`,
 `run_projector`, `run_llm_editing`) for partial-pipeline use.
 
-Supported languages: English, French, German, Spanish, Portuguese, Japanese.
+Supported languages: English, French, German, Spanish, Portuguese.
 
 ## Architecture
 
