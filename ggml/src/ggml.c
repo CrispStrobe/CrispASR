@@ -4587,12 +4587,28 @@ struct ggml_tensor * ggml_conv_2d(
         int                   p1,
         int                   d0,
         int                   d1) {
-    struct ggml_tensor * im2col = ggml_im2col(ctx, a, b, s0, s1, p0, p1, d0, d1, true, a->type); // [N, OH, OW, IC * KH * KW]
+    // CrispASR fork: pick im2col output type the same way ggml_conv_1d does.
+    // Upstream uses `a->type` unconditionally, which forces im2col output to
+    // F16 when the kernel is F16 even if the input is F32. The CPU MUL_MAT
+    // would then see src0=F16, src1=F16, which our issue #38 patch
+    // (vec_dot_type=F32 for F16) no longer supports.
+    //
+    // Note about operand ordering: conv_2d puts the activations (im2col) as
+    // src0 and the kernel as src1, which is reversed from the typical
+    // weights-first layout. After our patch CPU only supports F16 src0 with
+    // F32 src1 — and Metal exposes mul_mv_<src0>_<src1> kernels with F32×F16
+    // missing — so when im2col is F32 we must also cast the kernel to F32.
+    // The bandwidth cost is real but mirrors what conv_1d already does.
+    const enum ggml_type im2col_type = (a->type == GGML_TYPE_F32 || b->type == GGML_TYPE_F32) ? GGML_TYPE_F32 : GGML_TYPE_F16;
+    struct ggml_tensor * im2col = ggml_im2col(ctx, a, b, s0, s1, p0, p1, d0, d1, true, im2col_type); // [N, OH, OW, IC * KH * KW]
+
+    struct ggml_tensor * a_mat = (im2col_type == GGML_TYPE_F32 && a->type != GGML_TYPE_F32) ?
+                                     ggml_cast(ctx, a, GGML_TYPE_F32) : a;
 
     struct ggml_tensor * result =
         ggml_mul_mat(ctx,
                 ggml_reshape_2d(ctx, im2col, im2col->ne[0],  im2col->ne[3] * im2col->ne[2] * im2col->ne[1]), // [N, OH, OW, IC * KH * KW] => [N*OH*OW, IC * KH * KW]
-                ggml_reshape_2d(ctx, a, (a->ne[0] * a->ne[1] * a->ne[2]),  a->ne[3]));                       // [OC，IC, KH, KW] => [OC, IC * KH * KW]
+                ggml_reshape_2d(ctx, a_mat, (a_mat->ne[0] * a_mat->ne[1] * a_mat->ne[2]),  a_mat->ne[3]));   // [OC，IC, KH, KW] => [OC, IC * KH * KW]
 
     result = ggml_reshape_4d(ctx, result, im2col->ne[1], im2col->ne[2], im2col->ne[3], a->ne[3]); // [OC, N, OH, OW]
     result = ggml_cont(ctx, ggml_permute(ctx, result, 0, 1, 3, 2)); // [N, OC, OH, OW]
@@ -4716,14 +4732,22 @@ struct ggml_tensor * ggml_conv_2d_dw(
         int                   p1,
         int                   d0,
         int                   d1) {
+    // CrispASR fork: same im2col-type handling as ggml_conv_2d. Upstream
+    // hardcodes F16; the CPU MUL_MAT path can no longer pair F16 src0 with
+    // F16 src1 after issue #38 (vec_dot_type=F32 for F16). Pick F32 when
+    // either side is F32, F16 otherwise; cast the kernel to F32 when im2col
+    // is F32. See ggml_conv_2d for the operand-ordering rationale.
+    const enum ggml_type im2col_type = (a->type == GGML_TYPE_F32 || b->type == GGML_TYPE_F32) ? GGML_TYPE_F32 : GGML_TYPE_F16;
     struct ggml_tensor * new_a = ggml_reshape_4d(ctx, a, a->ne[0], a->ne[1], 1, a->ne[2] * a->ne[3]);
     struct ggml_tensor * im2col = ggml_im2col(ctx, new_a,
                                         ggml_reshape_4d(ctx, b, b->ne[0], b->ne[1], 1, b->ne[2] * b->ne[3]),
-                                        s0, s1, p0, p1, d0, d1, true, GGML_TYPE_F16); // [N * IC, OH, OW, KH * KW]
+                                        s0, s1, p0, p1, d0, d1, true, im2col_type); // [N * IC, OH, OW, KH * KW]
     struct ggml_tensor * new_b = ggml_reshape_4d(ctx, im2col, im2col->ne[0], im2col->ne[2] * im2col->ne[1], b->ne[2], b->ne[3]); // [N * IC, OH, OW, KH * KW] => [N, IC, OH * OW, KH * KW]
 
     new_a = ggml_reshape_4d(ctx, new_a, (new_a->ne[0] * new_a->ne[1]), new_a->ne[2],  new_a->ne[3], 1);                       // [OC，1, KH, KW] => [1, OC, 1, KH * KW]
-    struct ggml_tensor * result = ggml_mul_mat(ctx, new_a, new_b);
+    struct ggml_tensor * new_a_mat = (im2col_type == GGML_TYPE_F32 && new_a->type != GGML_TYPE_F32) ?
+                                         ggml_cast(ctx, new_a, GGML_TYPE_F32) : new_a;
+    struct ggml_tensor * result = ggml_mul_mat(ctx, new_a_mat, new_b);
     result = ggml_reshape_4d(ctx, result, im2col->ne[1], im2col->ne[2], b->ne[2], b->ne[3]); // [N, OC, OH, OW]
 
     return result;
