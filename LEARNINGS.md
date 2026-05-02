@@ -7031,3 +7031,61 @@ Reference: `src/crispasr_cache.cpp::well_known_search_dirs`,
 `examples/cli/crispasr_run.cpp:215` (LID-failed branch),
 `examples/cli/crispasr_backend_canary.cpp:65` (defensive layer),
 `src/canary.cpp:944` (improved error message), commit `f2d5ecb`.
+
+## Lesson — Q4_K is too lossy as the default for CTC-decoded ASR
+
+Discovered May 2026 via `tools/test-all-backends.py` smoke run:
+omniasr-ctc-1b-v2-q4_k.gguf produced "fello americas as for your
+coutry" (single-char drops on multiple words, 22.7% WER on JFK).
+Three-way comparison clinched it:
+
+| Reference | Output | WER |
+|---|---|---|
+| Python `transformers` (FP32) | "and so my fellow americans ask not …" | 0% (ground truth) |
+| Our **Q8_0 GGUF** | identical to Python ref, byte-perfect | 0% |
+| Our **Q4_K GGUF** | "and so my fello americas as … or your coutry" | 22.7% |
+
+**Not a runtime / conversion bug.** Q8_0 proves the encoder, CTC
+decoder, audio frontend, and ggml ops are all correct.
+
+**Per-tensor sensitivity (all 289 Q4_K-quantized tensors against
+Q8_0 ground truth, dequantized to F32):**
+
+  median cosine: 0.99743
+  min cosine:    0.99667  (enc.0.attn.out.weight)
+  median relRMS: ~0.075   (~7.5 % relative drift per matmul)
+
+The drift is **uniform** across the 48 transformer layers — there's
+no single tensor to "promote" to higher precision. Layer 0 has the
+worst loss (errors compound through subsequent layers) but every
+encoder layer drifts in the same range. Mixed quant won't help
+unless you bump the entire encoder up — which is essentially Q8_0.
+
+**Why CTC suffers when seq2seq doesn't.** A CTC head does an argmax
+per encoder frame; small logit drift can flip frames at boundaries
+between a real character and the blank token, manifesting as
+*missing characters* (not substitutions). Seq2seq with internal LM
+smoothing (BPE + autoregressive decoder) absorbs the same drift —
+the decoder's language model "rescues" borderline frames.
+
+**Generalisable rule:**
+
+| Backend type | Default quantization safe at |
+|---|---|
+| CTC-decoded (no internal LM) | **Q8_0** — Q4_K is too lossy |
+| Seq2seq encoder-decoder (BPE + AR decoder) | Q4_K usually fine |
+| LLM-style audio (qwen3, granite, voxtral) | Q4_K usually fine |
+
+**Action taken.** Switched omniasr-ctc shipping default to Q8_0 in
+`tools/test-all-backends.py` registry. Q4_K stays available on HF
+(551 MB vs 1.0 GB) but is no longer the smoke-test default.
+
+**Diagnostic recipe for next CTC quant question.** Run the model
+through Python `transformers` to establish FP32 ground truth, then
+A/B Q8_0 vs Q4_K via `tools/test-all-backends.py --backends X
+--models <dir>`. If Q8_0 == ref and Q4_K diverges, it's quant
+sensitivity, not a code regression — don't bisect git history.
+
+Reference: per-tensor analysis script `/tmp/q4k_sensitivity.py`
+(local, one-off — uses `gguf.dequantize` to compare both quants
+vs each other). Commit `6df9129`.
