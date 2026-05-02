@@ -412,6 +412,14 @@ struct crispasr_stream {
     int64_t decode_counter = 0;
 
     double stream_time_s = 0.0; // total audio fed, in seconds
+
+    // PLAN #62c — opaque kyutai_stt_stream*; when set, all crispasr_stream_*
+    // functions route to the kyutai backend instead of whisper. Mutually
+    // exclusive with `ctx`.
+    void* kyutai_stream_state = nullptr;
+
+    // PLAN #62c follow-on — opaque moonshine_streaming_stream*; same pattern.
+    void* moonshine_streaming_state = nullptr;
 };
 
 CA_EXPORT crispasr_stream* crispasr_stream_open(whisper_context* ctx, int n_threads, int step_ms, int length_ms,
@@ -438,6 +446,18 @@ CA_EXPORT crispasr_stream* crispasr_stream_open(whisper_context* ctx, int n_thre
 CA_EXPORT void crispasr_stream_close(crispasr_stream* s) {
     if (!s)
         return;
+#if __has_include("kyutai_stt.h")
+    if (s->kyutai_stream_state) {
+        kyutai_stt_stream_close((kyutai_stt_stream*)s->kyutai_stream_state);
+        s->kyutai_stream_state = nullptr;
+    }
+#endif
+#if __has_include("moonshine_streaming.h")
+    if (s->moonshine_streaming_state) {
+        moonshine_streaming_stream_close((moonshine_streaming_stream*)s->moonshine_streaming_state);
+        s->moonshine_streaming_state = nullptr;
+    }
+#endif
     delete s;
 }
 
@@ -519,6 +539,17 @@ static int crispasr_stream_run_decode(crispasr_stream* s) {
 CA_EXPORT int crispasr_stream_feed(crispasr_stream* s, const float* pcm, int n_samples) {
     if (!s || !pcm || n_samples <= 0)
         return -1;
+#if __has_include("kyutai_stt.h")
+    if (s->kyutai_stream_state) {
+        return kyutai_stt_stream_feed((kyutai_stt_stream*)s->kyutai_stream_state, pcm, n_samples);
+    }
+#endif
+#if __has_include("moonshine_streaming.h")
+    if (s->moonshine_streaming_state) {
+        return moonshine_streaming_stream_feed((moonshine_streaming_stream*)s->moonshine_streaming_state, pcm,
+                                               n_samples);
+    }
+#endif
     s->accum.insert(s->accum.end(), pcm, pcm + n_samples);
     s->stream_time_s += (double)n_samples / 16000.0;
 
@@ -535,6 +566,18 @@ CA_EXPORT int crispasr_stream_get_text(crispasr_stream* s, char* out_text, int o
                                        double* out_t1_s, int64_t* out_counter) {
     if (!s || !out_text || out_cap <= 0)
         return -1;
+#if __has_include("kyutai_stt.h")
+    if (s->kyutai_stream_state) {
+        return kyutai_stt_stream_get_text((kyutai_stt_stream*)s->kyutai_stream_state, out_text, out_cap, out_t0_s,
+                                          out_t1_s, out_counter);
+    }
+#endif
+#if __has_include("moonshine_streaming.h")
+    if (s->moonshine_streaming_state) {
+        return moonshine_streaming_stream_get_text((moonshine_streaming_stream*)s->moonshine_streaming_state, out_text,
+                                                   out_cap, out_t0_s, out_t1_s, out_counter);
+    }
+#endif
     if (!s->has_output) {
         out_text[0] = '\0';
         if (out_t0_s)
@@ -562,6 +605,16 @@ CA_EXPORT int crispasr_stream_get_text(crispasr_stream* s, char* out_text, int o
 CA_EXPORT int crispasr_stream_flush(crispasr_stream* s) {
     if (!s)
         return -1;
+#if __has_include("kyutai_stt.h")
+    if (s->kyutai_stream_state) {
+        return kyutai_stt_stream_flush((kyutai_stt_stream*)s->kyutai_stream_state);
+    }
+#endif
+#if __has_include("moonshine_streaming.h")
+    if (s->moonshine_streaming_state) {
+        return moonshine_streaming_stream_flush((moonshine_streaming_stream*)s->moonshine_streaming_state);
+    }
+#endif
     if (s->accum.empty())
         return 0;
     return crispasr_stream_run_decode(s) == 0 ? 1 : -2;
@@ -742,6 +795,13 @@ struct crispasr_session {
     std::string target_language; // canary/cohere/voxtral target-lang (≠ source ⇒ translate)
     bool punctuation = true;     // canary/cohere per-call arg + post-process gate
     bool translate = false;      // whisper sticky --translate (others: use src/tgt mismatch)
+    // Free-form audio Q&A prompt for instruct-tuned audio-LLM backends
+    // (voxtral / voxtral4b / qwen3-asr). When non-empty, replaces the
+    // standard "lang:<X>[TRANSCRIBE]" suffix with `[/INST]<prompt>`,
+    // causing the LLM to answer the question instead of transcribing
+    // verbatim. Empty means "transcribe normally" — the historical
+    // default.
+    std::string ask;
 
     // Exactly one of these pointers is non-null based on `backend`.
     whisper_context* whisper_ctx = nullptr;
@@ -1421,7 +1481,8 @@ template <typename Ctx> struct VoxtralFamilyOps {
 
 template <typename Ctx>
 static crispasr_session_result* run_voxtral_family(Ctx* ctx, const VoxtralFamilyOps<Ctx>& ops, const float* pcm,
-                                                   int n_samples, const std::string& language) {
+                                                   int n_samples, const std::string& language,
+                                                   const std::string& ask = std::string()) {
     auto* r = new crispasr_session_result();
     r->segments.reserve(1);
 
@@ -1443,8 +1504,17 @@ static crispasr_session_result* run_voxtral_family(Ctx* ctx, const VoxtralFamily
     }
 
     // 3. Tokenize prefix + build audio-pad run + tokenize suffix.
+    //
+    // Suffix branches on whether the user set a Q&A prompt via
+    // `crispasr_session_set_ask`. With it: `[/INST]<question>` so the
+    // audio-LLM answers free-form ("Summarize the speaker's tone",
+    // "What did they say about Z"). Without it: the historical
+    // `[/INST]lang:<X>[TRANSCRIBE]` template that asks for a verbatim
+    // transcript in the target language.
     const char* prefix = "<s>[INST][BEGIN_AUDIO]";
-    const std::string suffix = std::string("[/INST]lang:") + (language.empty() ? "en" : language) + "[TRANSCRIBE]";
+    const std::string suffix = !ask.empty()
+        ? std::string("[/INST]") + ask
+        : std::string("[/INST]lang:") + (language.empty() ? "en" : language) + "[TRANSCRIBE]";
 
     int n_pref = 0;
     int32_t* pref_ids = ops.tokenize(ctx, prefix, &n_pref);
@@ -1743,12 +1813,23 @@ CA_EXPORT crispasr_session_result* crispasr_session_transcribe_lang(crispasr_ses
         }
 
         // ChatML prompt: <|im_start|>system\n<|im_end|>\n<|im_start|>user\n
-        // <|audio_start|><|audio_pad|>×N<|audio_end|><|im_end|>\n<|im_start|>assistant\n
+        // <|audio_start|><|audio_pad|>×N<|audio_end|>{question}<|im_end|>\n
+        // <|im_start|>assistant\n
+        //
+        // When `s->ask` is set, inject the question between the audio
+        // close token and the user-turn end so the LLM answers it
+        // instead of producing a verbatim transcript. Empty ask keeps
+        // the historical transcribe-only template.
         std::string text = "<|im_start|>system\n<|im_end|>\n<|im_start|>user\n<|audio_start|>";
-        text.reserve(text.size() + (size_t)N_enc * 13 + 64);
+        text.reserve(text.size() + (size_t)N_enc * 13 + 64 + s->ask.size());
         for (int i = 0; i < N_enc; i++)
             text += "<|audio_pad|>";
-        text += "<|audio_end|><|im_end|>\n<|im_start|>assistant\n";
+        text += "<|audio_end|>";
+        if (!s->ask.empty()) {
+            text += '\n';
+            text += s->ask;
+        }
+        text += "<|im_end|>\n<|im_start|>assistant\n";
 
         int n_prompt = 0;
         int32_t* raw_ids = qwen3_asr_tokenize(s->qwen3_ctx, text.c_str(), &n_prompt);
@@ -2075,7 +2156,7 @@ CA_EXPORT crispasr_session_result* crispasr_session_transcribe_lang(crispasr_ses
         ops.token_text = &voxtral_token_text;
         ops.audio_pad_id = 24; // Tekken <audio_pad>
         ops.eos_id = 2;        // Tekken </s>
-        return run_voxtral_family(s->voxtral_ctx, ops, pcm, n_samples, lang);
+        return run_voxtral_family(s->voxtral_ctx, ops, pcm, n_samples, lang, s->ask);
     }
 #endif
 #ifdef CA_HAVE_VOXTRAL4B
@@ -2092,7 +2173,7 @@ CA_EXPORT crispasr_session_result* crispasr_session_transcribe_lang(crispasr_ses
         ops.token_text = &voxtral4b_token_text;
         ops.audio_pad_id = 24;
         ops.eos_id = 2;
-        return run_voxtral_family(s->voxtral4b_ctx, ops, pcm, n_samples, lang);
+        return run_voxtral_family(s->voxtral4b_ctx, ops, pcm, n_samples, lang, s->ask);
     }
 #endif
 #ifdef CA_HAVE_WAV2VEC2
@@ -3265,8 +3346,42 @@ CA_EXPORT crispasr_stream* crispasr_session_stream_open(crispasr_session* s, int
         return nullptr;
     if (s->whisper_ctx)
         return crispasr_stream_open(s->whisper_ctx, n_threads, step_ms, length_ms, keep_ms, language, translate);
-    // Future: route to moonshine_streaming / kyutai_stt native streaming
-    // engines here when 62c lands. For now, only whisper streams.
+#if __has_include("kyutai_stt.h")
+    if (s->kyutai_ctx) {
+        // Chunked-batch over a rolling window — see PLAN #62c.
+        // n_threads/keep_ms/language/translate are unused here: kyutai
+        // doesn't have language/translate flags, threads are configured at
+        // model init, and the rolling window already carries left context.
+        (void)n_threads;
+        (void)keep_ms;
+        (void)language;
+        (void)translate;
+        kyutai_stt_stream* ks = kyutai_stt_stream_open((kyutai_stt_context*)s->kyutai_ctx, step_ms, length_ms);
+        if (!ks)
+            return nullptr;
+        auto* w               = new crispasr_stream();
+        w->kyutai_stream_state = ks;
+        return w;
+    }
+#endif
+#if __has_include("moonshine_streaming.h")
+    if (s->moonshine_streaming_ctx) {
+        // Same chunked-batch pattern as kyutai (PLAN #62c follow-on).
+        // Despite the backend name, moonshine_streaming_transcribe is single-shot
+        // — the "streaming" refers to the model architecture, not the API.
+        (void)n_threads;
+        (void)keep_ms;
+        (void)language;
+        (void)translate;
+        moonshine_streaming_stream* ms = moonshine_streaming_stream_open(
+            (moonshine_streaming_context*)s->moonshine_streaming_ctx, step_ms, length_ms);
+        if (!ms)
+            return nullptr;
+        auto* w                       = new crispasr_stream();
+        w->moonshine_streaming_state = ms;
+        return w;
+    }
+#endif
     return nullptr;
 }
 
@@ -3509,6 +3624,17 @@ CA_EXPORT int crispasr_session_set_translate(crispasr_session* s, int enable) {
     if (!s)
         return -1;
     s->translate = (enable != 0);
+    return 0;
+}
+
+// Sticky audio Q&A prompt for instruct-tuned audio-LLM backends
+// (voxtral / voxtral4b / qwen3-asr). Pass an empty string to clear
+// and resume verbatim transcription. Other backends ignore — set is
+// cheap so we don't error.
+CA_EXPORT int crispasr_session_set_ask(crispasr_session* s, const char* prompt) {
+    if (!s)
+        return -1;
+    s->ask = prompt ? prompt : "";
     return 0;
 }
 

@@ -47,6 +47,26 @@ void moonshine_streaming_free(struct moonshine_streaming_context* ctx);
 // Set thread count after init.
 void moonshine_streaming_set_n_threads(struct moonshine_streaming_context* ctx, int n_threads);
 
+// ---- Streaming API (PLAN #62c follow-on) ----
+//
+// Despite the backend name, `moonshine_streaming_transcribe` is single-shot
+// (the "streaming" refers to the model's sliding-window encoder
+// architecture, not its API). The wrapper buffers 16 kHz PCM into a
+// rolling window and re-runs the batch transcribe every `step_ms`.
+// Same trade-off as kyutai-stt: bit-exact-batch per window, latency
+// >= step_ms; for audio longer than `length_ms` only the last
+// `length_ms` is transcribed.
+struct moonshine_streaming_stream;
+
+struct moonshine_streaming_stream* moonshine_streaming_stream_open(struct moonshine_streaming_context* ctx, int step_ms,
+                                                                   int length_ms);
+
+int  moonshine_streaming_stream_feed(struct moonshine_streaming_stream* s, const float* pcm_16k, int n_samples);
+int  moonshine_streaming_stream_get_text(struct moonshine_streaming_stream* s, char* out, int cap, double* t0_s,
+                                         double* t1_s, int64_t* counter);
+int  moonshine_streaming_stream_flush(struct moonshine_streaming_stream* s);
+void moonshine_streaming_stream_close(struct moonshine_streaming_stream* s);
+
 #ifdef __cplusplus
 }
 #endif

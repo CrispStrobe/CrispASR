@@ -1086,3 +1086,116 @@ extern "C" const char* moonshine_streaming_token_text(struct moonshine_streaming
     scratch = ctx->tokenizer.token_to_piece(id);
     return scratch.c_str();
 }
+
+// ---------------------------------------------------------------------------
+// Streaming API (PLAN #62c follow-on) — chunked-batch over a rolling window.
+// Same shape as kyutai_stt_stream_*; see src/kyutai_stt.cpp for the
+// design rationale.
+// ---------------------------------------------------------------------------
+
+struct moonshine_streaming_stream {
+    moonshine_streaming_context* ctx; // not owned
+    int step_samples_16k;
+    int length_samples_16k;
+
+    std::vector<float> rolling;
+    int64_t total_fed_samples;
+    int samples_since_last_decode;
+
+    std::string out_text;
+    double out_t0_s;
+    double out_t1_s;
+    bool has_output;
+    int64_t decode_counter;
+};
+
+static int moonshine_streaming_stream_run_decode(moonshine_streaming_stream* s) {
+    if (s->rolling.empty())
+        return 0;
+    char* text = moonshine_streaming_transcribe(s->ctx, s->rolling.data(), (int)s->rolling.size());
+    s->out_text = text ? text : "";
+    free(text);
+    const int64_t window_start_samples = s->total_fed_samples - (int64_t)s->rolling.size();
+    s->out_t0_s      = (double)window_start_samples / 16000.0;
+    s->out_t1_s      = (double)s->total_fed_samples / 16000.0;
+    s->has_output    = true;
+    s->decode_counter += 1;
+    return 0;
+}
+
+extern "C" struct moonshine_streaming_stream* moonshine_streaming_stream_open(struct moonshine_streaming_context* ctx,
+                                                                              int step_ms, int length_ms) {
+    if (!ctx)
+        return nullptr;
+    auto* s = new moonshine_streaming_stream();
+    s->ctx                       = ctx;
+    s->step_samples_16k          = (step_ms > 0 ? step_ms : 3000) * 16;
+    s->length_samples_16k        = (length_ms > 0 ? length_ms : 10000) * 16;
+    s->total_fed_samples         = 0;
+    s->samples_since_last_decode = 0;
+    s->out_t0_s                  = 0.0;
+    s->out_t1_s                  = 0.0;
+    s->has_output                = false;
+    s->decode_counter            = 0;
+    return s;
+}
+
+extern "C" int moonshine_streaming_stream_feed(struct moonshine_streaming_stream* s, const float* pcm, int n_samples) {
+    if (!s || !pcm || n_samples <= 0)
+        return -1;
+    s->rolling.insert(s->rolling.end(), pcm, pcm + n_samples);
+    if ((int)s->rolling.size() > s->length_samples_16k) {
+        const int drop = (int)s->rolling.size() - s->length_samples_16k;
+        s->rolling.erase(s->rolling.begin(), s->rolling.begin() + drop);
+    }
+    s->total_fed_samples += n_samples;
+    s->samples_since_last_decode += n_samples;
+    if (s->samples_since_last_decode < s->step_samples_16k) {
+        return 0;
+    }
+    s->samples_since_last_decode = 0;
+    if (moonshine_streaming_stream_run_decode(s) != 0)
+        return -2;
+    return 1;
+}
+
+extern "C" int moonshine_streaming_stream_get_text(struct moonshine_streaming_stream* s, char* out, int cap,
+                                                   double* t0_s, double* t1_s, int64_t* counter) {
+    if (!s || !out || cap <= 0)
+        return -1;
+    if (!s->has_output) {
+        out[0] = '\0';
+        if (t0_s)
+            *t0_s = 0.0;
+        if (t1_s)
+            *t1_s = 0.0;
+        if (counter)
+            *counter = 0;
+        return 0;
+    }
+    const size_t n = std::min((size_t)(cap - 1), s->out_text.size());
+    memcpy(out, s->out_text.data(), n);
+    out[n] = '\0';
+    if (t0_s)
+        *t0_s = s->out_t0_s;
+    if (t1_s)
+        *t1_s = s->out_t1_s;
+    if (counter)
+        *counter = s->decode_counter;
+    return (int)n;
+}
+
+extern "C" int moonshine_streaming_stream_flush(struct moonshine_streaming_stream* s) {
+    if (!s)
+        return -1;
+    if (s->rolling.empty())
+        return 0;
+    s->samples_since_last_decode = 0;
+    return moonshine_streaming_stream_run_decode(s) == 0 ? 1 : -2;
+}
+
+extern "C" void moonshine_streaming_stream_close(struct moonshine_streaming_stream* s) {
+    if (!s)
+        return;
+    delete s;
+}

@@ -1432,8 +1432,8 @@ subprocess hacks.
 | Dart `Session.stream*()` | ✅ via `_StreamOpen/_StreamFeed/...` | ✅ unchanged |
 | Library mic API (`crispasr_mic_*`) | ❌ (CLI subprocess only) | ✅ via miniaudio `ma_device` |
 | Mic in Python/Rust/Dart | ❌ | ✅ — `Session.start_mic_streaming(callback)` |
-| moonshine-streaming wired to stream API | ❌ | optional follow-up |
-| kyutai-stt wired to stream API | ❌ | optional follow-up |
+| moonshine-streaming wired to stream API | ✅ chunked-batch over rolling window (build-clean, E2E pending GGUF) | shipped, see #62c below |
+| kyutai-stt wired to stream API | ✅ chunked-batch over rolling window | shipped, see #62c below |
 | voxtral4b native streaming | ❌ (PLAN #7) | unchanged — separate item |
 
 ### Sub-items
@@ -1482,32 +1482,47 @@ consumers get raw f32 PCM frames in their callback; combine with
 Effort: ~150 LOC. Wrappers add `Session.start_mic_streaming(cb)`
 helper that sets up mic + stream + per-callback feed wiring.
 
-#### 62c (deferred). Native streaming for moonshine-streaming + kyutai-stt
+#### 62c. kyutai-stt streaming — SHIPPED via chunked-batch
 
-**Effort estimate revised after deeper survey (May 2026):** the
-original "~80 LOC each" was wrong. Both backends today expose only
-single-shot `<backend>_transcribe(ctx, pcm, n_samples)` — the
-"streaming" in moonshine-streaming refers to the model architecture
-(sliding-window attention), not the API. The kyutai 12.5 Hz
-frame-alignment is ideal architecturally but the impl resamples to
-24 kHz and runs Mimi-encode + LM in one shot.
+**Original scope** assumed true incremental encoding (refactor SEANet
+conv chain for per-conv left-context state + per-call KV carry-over).
+Pre-impl exploration surfaced a second trap: the Mimi encoder
+transformer (`src/kyutai_stt.cpp:660`) calls `ggml_flash_attn_ext(...,
+nullptr, ...)` — **fully non-causal**, every frame attends to every
+other. True incremental encoding therefore can't bit-match batch
+without either re-encoding the growing audio (O(n²) per session) or
+replacing the encoder transformer with sliding-window attention
+(~500–700 LOC, deviates from training).
 
-To wire into the stream API requires:
-- **Refactor `_transcribe` into incremental encode + decode + state
-  carry-over.** Mimi codec needs sliding-window context for stable
-  frame boundaries; kyutai LM has a delay_frames lookahead that
-  needs to know about partial input.
-- **Per-backend stream state struct + dispatch** in
-  `crispasr_session_stream_feed`. The current `crispasr_stream`
-  struct is whisper-coupled; either generalise it (discriminated
-  union) or add separate per-backend handles wrapped in a common
-  opaque type.
-- **Numerical regression risk**: chunked encoder ≠ batch encoder
-  bit-for-bit. Need `crispasr-diff` round-trip on JFK to gate.
+**Chosen path: chunked-batch over a rolling window** (~200 LOC, no
+encoder refactor). Mirrors whisper's `crispasr_stream_*`: each
+`step_ms` re-runs the existing single-shot `kyutai_stt_transcribe_ex`
+over the last `length_ms` of audio. Bit-exact match to batch on each
+window. Latency ≥ `step_ms`; for audio longer than `length_ms` the
+window only holds the tail (same trade-off whisper streaming already
+accepts). Validated end-to-end on JFK: final stream output matches
+single-shot batch byte-for-byte after stripping the leading
+SentencePiece `▁ → space`.
 
-Realistic effort: **~300 LOC per backend + 1-2 days of debugging
-encoder boundary effects**. Not a "quick PR." Defer until a
-consumer explicitly needs sub-second-latency for one of these.
+Wired into `crispasr_session_stream_open` via a new optional
+`kyutai_stream_state` field on `crispasr_stream`; the four
+whisper-typed `crispasr_stream_*` functions branch on it.
+
+**Moonshine-streaming** also shipped via the same chunked-batch
+pattern (~120 LOC in `src/moonshine_streaming.{h,cpp}` +
+`moonshine_streaming_state` field on `crispasr_stream` + four
+dispatch branches). Build-clean and symbols exported; end-to-end
+JFK validation deferred until a moonshine-streaming GGUF is
+available locally (only the non-streaming `moonshine` variant is
+on disk today).
+
+**Voxtral4b native streaming** — see #62e / PLAN #7.
+
+Sub-second latency for kyutai/moonshine via true incremental
+encoding remains the deferred path. The new `kyutai_stt_stream`
+struct in `src/kyutai_stt.cpp` is the adapter layer; the internals
+get swapped without ABI breaks if a consumer eventually hits the
+latency wall.
 
 #### 62e (deferred). Voxtral4b native streaming — see PLAN #7
 

@@ -103,6 +103,38 @@ void kyutai_stt_result_ex_free(struct kyutai_stt_result_ex* r);
 struct kyutai_stt_result_ex* kyutai_stt_transcribe_ex(struct kyutai_stt_context* ctx, const float* samples,
                                                       int n_samples, int64_t t_offset_cs);
 
+// ---- Streaming API (PLAN #62c) ----
+//
+// Mimi's encoder transformer uses non-causal full-sequence attention,
+// so true incremental encoding can't bit-match batch. Instead, the
+// streaming wrapper buffers 16 kHz PCM into a rolling window and
+// re-runs `kyutai_stt_transcribe_ex` over the window every `step_ms`.
+// Each decode is bit-exact-batch for its window. Latency >= step_ms;
+// for audio longer than `length_ms` only the last `length_ms` is
+// transcribed (mirrors whisper's `crispasr_stream_*` semantics).
+struct kyutai_stt_stream;
+
+struct kyutai_stt_stream* kyutai_stt_stream_open(struct kyutai_stt_context* ctx, int step_ms, int length_ms);
+
+// Push 16 kHz mono float32 PCM. Returns:
+//   0  = still buffering (no new transcript yet)
+//   1  = new transcript ready (call kyutai_stt_stream_get_text)
+//  <0  = error
+int kyutai_stt_stream_feed(struct kyutai_stt_stream* s, const float* pcm_16k, int n_samples);
+
+// Pull the latest decode. `out` receives a NUL-terminated UTF-8 string.
+// `*t0_s` / `*t1_s` get the transcribed window's absolute time bounds.
+// `*counter` increments per decode; same value = no new text.
+// Returns byte count copied (not including NUL), 0 if no output yet, <0 on error.
+int kyutai_stt_stream_get_text(struct kyutai_stt_stream* s, char* out, int cap, double* t0_s, double* t1_s,
+                               int64_t* counter);
+
+// Force a decode of whatever audio is currently buffered, regardless of
+// step boundary. Returns 1 on success, 0 if nothing was buffered, <0 on error.
+int kyutai_stt_stream_flush(struct kyutai_stt_stream* s);
+
+void kyutai_stt_stream_close(struct kyutai_stt_stream* s);
+
 #ifdef __cplusplus
 }
 #endif
