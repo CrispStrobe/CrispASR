@@ -21,6 +21,20 @@
 // helpers) is still safe to keep.
 #define MA_NO_GENERATION
 
+// On iOS / tvOS / watchOS, miniaudio's CoreAudio backend pulls in
+// AVFoundation Objective-C headers from a .cpp TU, which the C++
+// front-end can't parse (NSString, etc., need Objective-C++ → .mm).
+// The static-lib build artifact for those platforms is consumed by
+// host apps that handle mic capture themselves, so we drop device IO
+// here. The crispasr_mic_* C ABI is stubbed out to return failure on
+// the same platforms (see crispasr_mic.cpp). macOS keeps device IO.
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#if TARGET_OS_IOS || TARGET_OS_TV || TARGET_OS_WATCH
+#define MA_NO_DEVICE_IO
+#endif
+#endif
+
 #include "miniaudio.h"
 
 #undef STB_VORBIS_HEADER_ONLY

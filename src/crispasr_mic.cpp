@@ -5,6 +5,23 @@
 // just consumes the API.
 
 #include "crispasr_mic.h"
+
+// On iOS / tvOS / watchOS, miniaudio's CoreAudio backend pulls in
+// AVFoundation Objective-C headers from a .cpp TU which the C++
+// front-end can't parse (NSString etc. need .mm). The
+// crispasr_audio.cpp companion already drops MA_NO_DEVICE_IO on these
+// platforms, so the ma_device_* symbols don't exist in libcrispasr
+// there. Stub out the C ABI to return failure / empty so language
+// wrappers can still link.
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#if TARGET_OS_IOS || TARGET_OS_TV || TARGET_OS_WATCH
+#define CRISPASR_MIC_STUB_ONLY 1
+#endif
+#endif
+
+#ifndef CRISPASR_MIC_STUB_ONLY
+
 #include "miniaudio.h"
 
 #include <cstring>
@@ -117,3 +134,28 @@ extern "C" const char* crispasr_mic_default_device_name(void) {
     ma_context_uninit(&ctx);
     return name;
 }
+
+#else // CRISPASR_MIC_STUB_ONLY — iOS / tvOS / watchOS
+
+// Stub the C ABI so libcrispasr links on iOS / tvOS / watchOS. Host
+// apps that need mic capture on these platforms call AVAudioEngine
+// directly and hand PCM into `crispasr_stream_feed`. The host has the
+// AVAudioSession / privacy-prompt context the static lib wouldn't.
+struct crispasr_mic {};
+
+extern "C" struct crispasr_mic* crispasr_mic_open(int /*sample_rate*/, int /*channels*/, crispasr_mic_callback /*cb*/,
+                                                  void* /*userdata*/) {
+    return nullptr;
+}
+extern "C" int crispasr_mic_start(struct crispasr_mic* /*m*/) {
+    return -1;
+}
+extern "C" int crispasr_mic_stop(struct crispasr_mic* /*m*/) {
+    return -1;
+}
+extern "C" void crispasr_mic_close(struct crispasr_mic* /*m*/) {}
+extern "C" const char* crispasr_mic_default_device_name(void) {
+    return "";
+}
+
+#endif // CRISPASR_MIC_STUB_ONLY
