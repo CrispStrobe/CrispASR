@@ -16,7 +16,7 @@ All backends support `-m auto --auto-download`. Three new ggml ops
 | Priority | Item | Effort | Status |
 |---|---|---|---|
 | **MEDIUM** | [#52 Qwen3-TTS](#52-qwen3-tts) — perf pass | Medium | talker + code_predictor + codec + ECAPA + codec_encoder all done; only step-4 perf pass open (~137 ms/frame → real-time) |
-| **DONE** | [#51 MiMo-V2.5-ASR runtime](#51-mimo-v25-asr-runtime--done-may-2026) | Large | end-to-end JFK matches reference; F16+Q4_K on HF; 51b/b' shipped (step-only + cached step graph, 1.46× decode); 51a mmap loader + 51c F16 step still LOW |
+| **DONE** | [#51 MiMo-V2.5-ASR runtime](#51-mimo-v25-asr-runtime--done-may-2026) | Large | end-to-end JFK matches reference; F16+Q4_K on HF; 51b/b' shipped (step-only + cached step graph, 1.46× decode); 51a mmap loader landed behind `CRISPASR_GGUF_MMAP=1` (default-flip + 51c F16 step pending) |
 | **DONE** | [#54 granite-speech-4.1 plus / nar](#54-granite-speech-41-plus--nar-variants) | Small | base + plus + nar runtimes all DONE; F16 + 3 Q4_K variants shipped to [`cstr/granite-speech-4.1-2b-nar-GGUF`](https://huggingface.co/cstr/granite-speech-4.1-2b-nar-GGUF); registry wired |
 | **HIGH** | [#57 Commercial-friendly TTS expansion](#57-commercial-friendly-tts-backend-expansion) | Phased | Phase 1 (Qwen3-TTS-{CustomVoice 0.6B/1.7B, Base 1.7B, VoiceDesign 1.7B}) DONE; Phase 2 Orpheus-3B base + lex-au-orpheus-de DONE; Kartoffel_Orpheus DE checkpoint swap pending (safetensors → GGUF conversion); phases 3-5 queued |
 | **MEDIUM** | [#5 Reference backends](#5-reference-backends-for-parakeetcanarycohere) | Medium | parakeet/cohere DONE; canary remaining |
@@ -150,22 +150,28 @@ End-to-end JFK transcription matches the upstream Python
 with corrected vocab (151680) + merges (151291). See HISTORY entry
 56 for the full bug post-mortem. Remaining (low-priority) follow-ups:
 
-### 51a. mmap-style GGUF loader for large F16 models
+### 51a. mmap-style GGUF loader for large F16 models — env-flag SHIPPED
 
-`core_gguf::load_weights` currently `memmove`s tensor data from the
-mmap'd source into a freshly allocated CPU backend buffer. For the
-14.9 GB F16 mimo-asr GGUF this peaks at ~13 GB resident, so the
-diff harness can't run on a 16 GB Mac without 25+ minutes of swap
-thrashing. Q4_K (4.5 GB) fits fine, so the symptom is hidden on
-production paths — but blocks F16 + fp32-ref strict cos≥0.999
-validation that the rest of the diff harness flow assumes.
+Zero-copy CPU path landed in commit `9710f80` behind
+`CRISPASR_GGUF_MMAP=1`: a custom `ggml_backend_buffer_t` wraps the
+mmap'd file region, tensors bind directly into mmap offsets via
+`ggml_backend_tensor_alloc`, and the buffer's `free_buffer` callback
+munmaps when the model is freed. Mmap is `MAP_PRIVATE +
+PROT_READ|PROT_WRITE` (Win32 `FILE_MAP_COPY`) so backends that mutate
+weights post-load (parakeet's BN-into-conv fold, etc.) get COW pages
+instead of SIGBUS. See HISTORY §62 for the implementation walkthrough.
 
-Options: (a) ggml backend-buffer mmap support — the cleanest fix,
-plumbs through to MTLBuffer-newBufferWithBytesNoCopy on Metal,
-zero-copy on CPU, and is already a pattern in upstream llama.cpp;
-(b) per-tensor on-demand loading where weights are `mmap`'d once
-and just held by reference — also clean but needs lifecycle care
-across the existing weight-binding loop. Effort: **Medium**.
+Validated on parakeet Q4_K (Metal default + CPU default + CPU+mmap, all
+correct JFK transcripts) and mimo-asr Q4_K (5.5 GB peak RSS baseline →
+761 MB working set with mmap, zero-copy mechanism confirmed). Default
+remains the legacy copy path; flip is queued for after the F16
+motivating case is timed end-to-end and the diff harness on F16 GGUFs
+has been exercised. Metal path is untouched (Metal's
+`MTLBuffer-newBufferWithBytesNoCopy` plumbing is a separate, larger
+follow-up that's not needed for the diff-harness blocker).
+
+**Pending follow-up:** F16 mimo-asr RSS measurement, default-flip
+commit, then PLAN #51c can land.
 
 ### ~~51b. Step-decode KV cache reuse~~ — **DONE (May 2026)**
 

@@ -1277,3 +1277,67 @@ exactly.
 and [`cstr/granite-speech-4.1-2b-nar-GGUF`](https://huggingface.co/cstr/granite-speech-4.1-2b-nar-GGUF) (nar, 4 quants:
 F16 5.8 GB, Q4K 3.4 GB, Q4K f16enc 2.5 GB, Q4K mini 1.6 GB). Registry
 aliases `granite`, `granite-4.1`, `granite-4.1-plus`, `granite-4.1-nar`.
+
+### 62. Zero-copy mmap GGUF loader — PLAN #51a env-flag (May 2026)
+
+`core_gguf::load_weights` previously did mmap-then-`tensor_set` into a
+freshly allocated CPU backend buffer. For the 14.9 GB F16 mimo-asr GGUF
+that peaked at ~13 GB resident on a 16 GB Mac and thrashed swap for
+25+ minutes, blocking the F16 + fp32-ref strict cos≥0.999 diff harness
+gauntlet that section 60 had to defer. Q4_K (4.5 GB) hid the symptom
+on production paths.
+
+**Implementation** (commit `9710f80`, `src/core/gguf_loader.cpp` +
+`src/CMakeLists.txt`). Skip `ggml_backend_alloc_ctx_tensors` on the
+CPU path when `CRISPASR_GGUF_MMAP=1`; mmap the file with
+`MAP_PRIVATE | PROT_READ|PROT_WRITE` (Win32 `FILE_MAP_COPY`); wrap the
+data section in a custom `ggml_backend_buffer_t` whose `free_buffer`
+callback munmaps; bind each tensor with `ggml_backend_tensor_alloc`
+into the mmap'd offsets. Mmap lifetime is owned by `model.buf` so the
+existing 24 caller pattern (move `wl.buf` → `model.buf`, drop the
+`WeightLoad`) is unchanged. The CMake target adds `../ggml/src` as a
+private include for `ggml-backend-impl.h`.
+
+**Copy-on-write was load-bearing.** First validation pass used
+`MAP_SHARED + PROT_READ` and parakeet immediately faulted with SIGBUS
+in its BN-into-conv fold path (`src/parakeet.cpp:535`,
+`ggml_backend_tensor_set` on read-only mmap'd pages). MAP_PRIVATE gives
+COW: pages a backend never touches stay shared with the file's page
+cache (the RSS win), pages it mutates get a private anon copy.
+Backends with similar post-load weight surgery (vibevoice, …) inherit
+the fix for free.
+
+**Validated.** parakeet Q4_K — Metal default, CPU default, and CPU +
+`CRISPASR_GGUF_MMAP=1` all produce the gold JFK transcript.
+mimo-asr Q4_K baseline peaks at 5.5 GB RSS; with `CRISPASR_GGUF_MMAP=1`
+the working set drops to 761 MB while the model loads — the zero-copy
+mechanism is confirmed. End-to-end mimo-asr Q4_K + mmap timing and the
+F16 motivating case are deferred to a quieter machine (this run was
+heavily contended by parallel HF uploads + an unrelated mimo F16
+test on the same external disk).
+
+**Default still legacy.** The env flag remains opt-in. Flip the
+default in a follow-up commit once the F16 RSS savings are measured
+end-to-end and the diff harness on F16 GGUFs has been exercised across
+the qwen3-tts and granite-speech families.
+
+**Side-quest fix: parakeet `--no-gpu` crash** (commit `b85f56c`,
+`ggml/src/ggml.c`). Pre-existing assertion failure
+`GGML_ASSERT(*cur_backend_id != -1)` in
+`ggml_backend_sched_split_graph` whenever parakeet's encoder ran on
+the CPU backend. Root cause: `ggml_conv_2d` and `ggml_conv_2d_dw` set
+their im2col output type to `a->type` (the kernel) unconditionally,
+producing `MUL_MAT(F16 im2col, F16 kernel)`. The CrispASR fork's
+issue-#38 patch (F16 `vec_dot_type=F32` +
+`ggml_vec_dot_f16_f32`) doesn't support F16×F16. Fix mirrors
+`ggml_conv_1d`: pick F32 im2col when either operand is F32, cast the
+kernel to F32 when the chosen path needs it. Conv_2d puts activations
+as src0 and kernel as src1 (reversed from typical); Metal's kernel
+table has `mul_mv_f16_f32` but not `mul_mv_f32_f16`, so the kernel
+cast is needed for both backends. Slight Metal slowdown
+(13.3× → 7.5× realtime on parakeet-tdt-0.6b-v3 Q4_K JFK) is the same
+trade-off `ggml_conv_1d` already makes upstream.
+
+**Out of scope, queued for follow-up:** measuring the F16 mimo-asr
+RSS win end-to-end; flipping the env-flag default; PLAN #51c (F16
+step decode) which the HANDOFF flagged as "trivial" once #51a lands.
