@@ -11,9 +11,19 @@ if (NOT GIT_SHA1_RC EQUAL 0 OR GIT_SHA1 STREQUAL "")
     set(GIT_SHA1 "unknown")
 endif()
 
-# the date of the commit
+# the date of the commit. Use ISO-8601 STRICT — `--date=local` produces
+# "Sat May 2 22:41:36 2026 +0200" which has spaces AND localised English
+# month names. When that value gets embedded as -DCRISPASR_GIT_DATE="..."
+# and the build runs through Windows MSVC's link.exe, the value gets
+# split at the first space and "May" is interpreted as a filename:
+#
+#   LINK : fatal error LNK1181: cannot open input file 'May.obj'
+#
+# CMake's quoting on the cmake side IS correct, but link.exe re-parses
+# /D values when expanding command files. ISO-8601 strict has no spaces
+# and no localized substrings, so it survives the round-trip.
 execute_process(COMMAND
-    "${GIT_EXECUTABLE}" log -1 --format=%ad --date=local
+    "${GIT_EXECUTABLE}" log -1 --format=%ad --date=iso-strict
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
     OUTPUT_VARIABLE GIT_DATE
     RESULT_VARIABLE GIT_DATE_RC
@@ -21,6 +31,10 @@ execute_process(COMMAND
 if (NOT GIT_DATE_RC EQUAL 0 OR GIT_DATE STREQUAL "")
     set(GIT_DATE "unknown")
 endif()
+# Defensive: even if some future caller sets a custom format with
+# spaces, replace them with underscores so the value remains a single
+# token. Same defense pattern the COMMIT_SUBJECT sanitiser uses below.
+string(REPLACE " " "_" GIT_DATE "${GIT_DATE}")
 
 # the subject of the commit. Sanitize for safe embedding in a -D define:
 # CMake treats ";" as a list separator and a literal ";" inside the value
