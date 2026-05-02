@@ -113,6 +113,15 @@ bool env_bool(const char* k) {
     const char* v = std::getenv(k);
     return v && *v && std::strcmp(v, "0") != 0;
 }
+// Returns the env var as bool when set; falls back to `dflt` when unset/empty.
+// Use this for env-overridable knobs whose default is ON.
+bool env_bool_default(const char* k, bool dflt) {
+    const char* v = std::getenv(k);
+    if (!v || !*v) {
+        return dflt;
+    }
+    return std::strcmp(v, "0") != 0;
+}
 const char* env_str(const char* k) {
     const char* v = std::getenv(k);
     return (v && *v) ? v : nullptr;
@@ -1003,14 +1012,15 @@ ggml_cgraph* build_graph_code_pred_kv(qwen3_tts_context* c, int n_past, int n_to
     const float theta = hp.rope_theta;
     const float attn_scale = 1.0f / std::sqrt((float)hd);
     const int T = n_tokens;
-    // O15 (default OFF; opt-in with QWEN3_TTS_O15=1): use a fixed
-    // Lk = cp_kv_max_ctx for all code_pred graphs so all T=1 steps share
-    // the same tensor topology and gallocr can reuse the plan. This is
-    // a perf win on Mac/Metal but in early field reports has produced
-    // garbled output on other backends (suspected NaN propagation from
-    // never-written KV slots). Until validated cross-platform, the
-    // default reproduces the original dynamic-Lk graph.
-    const bool o15 = env_bool("QWEN3_TTS_O15");
+    // O15 (default ON since 2026-05-02; opt-out with QWEN3_TTS_O15=0):
+    // pin Lk = cp_kv_max_ctx for all code_pred graphs so all T=1 steps
+    // share the same tensor topology and gallocr can reuse the plan.
+    // Validated bit-identical (md5-equal WAV) across multiple benches;
+    // saves ~14-19 ms/frame on cp_pred (alloc+build collapse from
+    // ~20 ms/frame to ~1.6 ms/frame). The earlier NaN-on-non-Metal
+    // bug from uninitialised KV slots was fixed in commit 7298dd5
+    // (cp_kv_alloc zero-clears the buffer).
+    const bool o15 = env_bool_default("QWEN3_TTS_O15", true);
     const int Lk = o15 ? c->cp_kv_max_ctx : (n_past + T);
 
     ggml_init_params ip = {c->compute_meta.size(), c->compute_meta.data(), true};
@@ -1674,7 +1684,7 @@ float* run_code_pred_kv(qwen3_tts_context* c, const float* embeds, int n_tokens,
     const int d = (int)hp.cp_d_model;
     const int vocab = (int)hp.cp_vocab_size;
 
-    const bool o15 = env_bool("QWEN3_TTS_O15");
+    const bool o15 = env_bool_default("QWEN3_TTS_O15", true);
     const int actual_Lk = n_past + n_tokens;
     const int mask_Lk = o15 ? c->cp_kv_max_ctx : actual_Lk;
 
