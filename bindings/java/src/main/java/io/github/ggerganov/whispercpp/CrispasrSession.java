@@ -1,9 +1,12 @@
 package io.github.ggerganov.whispercpp;
 
+import com.sun.jna.Callback;
 import com.sun.jna.Library;
 import com.sun.jna.Native;
 import com.sun.jna.Pointer;
+import com.sun.jna.ptr.DoubleByReference;
 import com.sun.jna.ptr.IntByReference;
+import com.sun.jna.ptr.LongByReference;
 
 /**
  * Minimal TTS surface for the Java binding. Exposes the unified
@@ -55,6 +58,38 @@ public final class CrispasrSession implements AutoCloseable {
                 String modelPath, String lang,
                 byte[] outPath, int outPathLen,
                 byte[] outPicked, int outPickedLen);
+
+        // --- Streaming (PLAN #62b) — rolling-window decoder, whisper-only today.
+        Pointer crispasr_session_stream_open(Pointer session, int nThreads, int stepMs,
+                                             int lengthMs, int keepMs, String language, int translate);
+        int     crispasr_stream_feed(Pointer stream, float[] pcm, int nSamples);
+        int     crispasr_stream_get_text(Pointer stream, byte[] outText, int outCap,
+                                         DoubleByReference outT0, DoubleByReference outT1,
+                                         LongByReference outCounter);
+        int     crispasr_stream_flush(Pointer stream);
+        void    crispasr_stream_close(Pointer stream);
+
+        // --- Microphone capture (PLAN #62d) — miniaudio-backed cross-platform.
+        Pointer crispasr_mic_open(int sampleRate, int channels, MicCallback cb, Pointer userdata);
+        int     crispasr_mic_start(Pointer mic);
+        int     crispasr_mic_stop(Pointer mic);
+        void    crispasr_mic_close(Pointer mic);
+        String  crispasr_mic_default_device_name();
+    }
+
+    /**
+     * JNA callback for {@code crispasr_mic_callback}. Fired on
+     * miniaudio's audio thread. Keep it short and non-blocking — the
+     * driver reuses {@code pcm} after this returns. Copy out before
+     * any heavy work.
+     *
+     * <p>Important: a strong reference to the {@code MicCallback}
+     * instance must be held by the caller (i.e. the {@link Mic}
+     * class) for as long as the device is open. JNA's GC has no idea
+     * the C side is holding it.
+     */
+    public interface MicCallback extends Callback {
+        void invoke(Pointer pcm, int nSamples, Pointer userdata);
     }
 
     private Pointer handle;
@@ -232,6 +267,105 @@ public final class CrispasrSession implements AutoCloseable {
             return pcm.getFloatArray(0, n.getValue());
         } finally {
             Lib.INSTANCE.crispasr_pcm_free(pcm);
+        }
+    }
+
+    /**
+     * Open a rolling-window streaming decoder for this session. Mirrors
+     * Go's {@code Session.StreamOpen} and the Python {@code Session.stream_open}.
+     * Currently whisper-only at the C-ABI level (PLAN #62b).
+     *
+     * @param stepMs   commit interval — how often to emit a partial transcript (default 3000)
+     * @param lengthMs rolling window in ms (default 10000)
+     * @param keepMs   trailing audio carried between commits (default 200)
+     * @param language ISO code, "" for auto-detect
+     * @param translate whisper {@code --translate} flag
+     * @throws IllegalStateException if the active backend doesn't support streaming
+     */
+    public Stream streamOpen(int stepMs, int lengthMs, int keepMs, String language, boolean translate) {
+        Pointer p = Lib.INSTANCE.crispasr_session_stream_open(
+                handle, 4, stepMs, lengthMs, keepMs, language == null ? "" : language, translate ? 1 : 0);
+        if (p == null) {
+            throw new IllegalStateException(
+                    "crispasr_session_stream_open failed (whisper-only today)");
+        }
+        return new Stream(p);
+    }
+
+    /**
+     * Per-commit update from a streaming session — concatenated text +
+     * absolute audio-time bounds. {@code counter} increments per commit;
+     * same value = no new text.
+     */
+    public static final class StreamingUpdate {
+        public final String text;
+        public final double t0;
+        public final double t1;
+        public final long counter;
+
+        StreamingUpdate(String text, double t0, double t1, long counter) {
+            this.text = text;
+            this.t0 = t0;
+            this.t1 = t1;
+            this.counter = counter;
+        }
+    }
+
+    /**
+     * Streaming-decoder handle. Feed PCM, pull text. Whisper-only at
+     * the C-ABI level today; future backends (moonshine-streaming,
+     * kyutai-stt) plug in here when 62c lands.
+     */
+    public static final class Stream implements AutoCloseable {
+        private Pointer handle;
+
+        Stream(Pointer handle) {
+            this.handle = handle;
+        }
+
+        /**
+         * Push 16 kHz mono float32 PCM. Returns {@code 0} if still
+         * buffering, {@code 1} if a new partial transcript is ready
+         * (call {@link #getText()} to fetch it).
+         *
+         * @throws IllegalStateException on decode failure (negative rc from C-ABI)
+         */
+        public int feed(float[] pcm) {
+            if (handle == null) throw new IllegalStateException("stream is closed");
+            if (pcm == null || pcm.length == 0) return 0;
+            int rc = Lib.INSTANCE.crispasr_stream_feed(handle, pcm, pcm.length);
+            if (rc < 0) throw new IllegalStateException("crispasr_stream_feed failed (rc=" + rc + ")");
+            return rc;
+        }
+
+        /** Latest committed transcript + absolute audio-time bounds. */
+        public StreamingUpdate getText() {
+            if (handle == null) throw new IllegalStateException("stream is closed");
+            byte[] buf = new byte[8192];
+            DoubleByReference t0 = new DoubleByReference(0.0);
+            DoubleByReference t1 = new DoubleByReference(0.0);
+            LongByReference counter = new LongByReference(0L);
+            int rc = Lib.INSTANCE.crispasr_stream_get_text(handle, buf, buf.length, t0, t1, counter);
+            if (rc < 0) throw new IllegalStateException("crispasr_stream_get_text failed (rc=" + rc + ")");
+            int n = 0;
+            while (n < buf.length && buf[n] != 0) n++;
+            String text = new String(buf, 0, n, java.nio.charset.StandardCharsets.UTF_8);
+            return new StreamingUpdate(text, t0.getValue(), t1.getValue(), counter.getValue());
+        }
+
+        /** Force a decode on whatever is buffered. Useful when the audio has ended. */
+        public void flush() {
+            if (handle == null) throw new IllegalStateException("stream is closed");
+            int rc = Lib.INSTANCE.crispasr_stream_flush(handle);
+            if (rc < 0) throw new IllegalStateException("crispasr_stream_flush failed (rc=" + rc + ")");
+        }
+
+        @Override
+        public void close() {
+            if (handle != null) {
+                Lib.INSTANCE.crispasr_stream_close(handle);
+                handle = null;
+            }
         }
     }
 
