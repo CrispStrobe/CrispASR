@@ -7089,3 +7089,119 @@ sensitivity, not a code regression — don't bisect git history.
 Reference: per-tensor analysis script `/tmp/q4k_sensitivity.py`
 (local, one-off — uses `gguf.dequantize` to compare both quants
 vs each other). Commit `6df9129`.
+
+## Lesson — runtime QKV/MLP fusion on row-wise quantized weights is just byte-concat
+
+PLAN #7 phase 2. The qwen3_asr fused-QKV path (`qwen3_asr.cpp:1430`)
+gates its runtime fuse on `attn_q_w->type == GGML_TYPE_F32 ||
+GGML_TYPE_F16` — assuming concatenation along the output axis only
+makes sense for floating-point types. **That gate is overly
+conservative for row-wise quantized formats.**
+
+Q4_K, Q4_0, Q5_K, Q8_0 etc. all encode each *row* (along the output
+dimension) as a self-contained block group: scales + minimums + 4-bit
+or 8-bit packed values. Concatenating two Q4_K tensors of shape
+`(d_in, n_out_a)` and `(d_in, n_out_b)` along the output axis is the
+**same operation** as for F32 — append the bytes. No requantization,
+no rebalancing, no rebake.
+
+`voxtral4b.cpp` LLM fused-QKV builds `(d_model=3072, q+2*kv=6144)`
+from three separate `(3072, 4096|1024|1024)` Q4_K tensors purely via
+`ggml_backend_tensor_get` + `set` byte-copies. Adding the type-gate
+extension was a 1-line change relative to the qwen3_asr precedent and
+delivered ~7-8 % decode speedup on M1 (56 → 50.4 ms/step on
+voxtral4b LLM Q4_K).
+
+**Generalisable rule.** When you see a fused-QKV (or fused gate+up)
+runtime path gated only on F16/F32, that's an artifact of the
+original author's caution, not a real correctness boundary for
+Q-formats. Verify by checking that `ggml_new_tensor_2d` accepts the
+quantized type at the fused output shape, then drop the gate.
+
+## Lesson — not every matmul fusion is a win on Metal Q4_K — measure ROI in saved kernel launches, not saved input reads
+
+Same phase 2 pass, FFN gate+up fuse: combine the per-layer
+`(3072, 9216)` gate and up matmuls into a single `(3072, 18432)`
+matmul, then split via `ggml_view_2d`. Saves 1 matmul/layer × 26
+layers = 26 fewer matmul ops/decode-step. Predicted ~4 % speedup
+based on the QKV fuse precedent (which saved 2 matmuls/layer × 26 =
+52 ops for ~7-8 %).
+
+**Measured: zero speedup** (per-decode-step 50.4 ms unchanged within
+run-to-run noise; prefill marginally slower). Rolled back the fuse
+runtime path; left the `core_ffn::swiglu_fused_gate_up` helper in
+place for any future caller.
+
+Reason: Metal's Q4_K matmul kernel for the gate/up shape
+`(3072, 9216)` is already memory-bandwidth-bound — the kernel reads
+~21 MB of Q4_K weights per matmul, computes a 1-vector × 9216-output
+matmul, and writes 9216 floats. Reducing two reads of the same
+3072-float input vector into one was below the noise floor. The
+QKV-fuse win came from saving *two* full Metal kernel launches
+(higher fixed-cost amortisation), not from saving the small input
+re-read.
+
+**Generalisable rule.** Matmul-fusion ROI is roughly proportional to
+`(saved_kernel_launches × per-kernel-overhead)`, not to
+`saved_input_reads × input_bytes`. On Metal at 4B-param scale:
+per-kernel-overhead ≈ 10-30 µs, the saved input re-read is ≈ free
+when input fits in L2. So:
+
+- **Fusing 3-into-1** saves 2 kernel-launches and 2 small input
+  re-reads → measurable win.
+- **Fusing 2-into-1** saves 1 kernel-launch and 1 small input
+  re-read → below noise.
+
+Don't fuse "because you can"; measure ROI first.
+
+The `core_ffn::swiglu_fused_gate_up` helper stays in `core/ffn.h` for
+any future caller — a different backend (CPU, CUDA), a much larger
+model where matmul time dwarfs launch overhead, or a smaller-quant
+weight where the input re-read becomes proportionally significant
+might still benefit.
+
+## Lesson — per-stage timing instrumentation reveals architectural latency floors that kernel optimisation can't break
+
+PLAN #7 phase 2 set out to hit a ≤240 ms first-text-token target on
+voxtral4b streaming. After 240 ms chunks (2.6× feed speedup),
+default-unification (~1 s flush save), and runtime fused QKV (~8 %
+decode speedup) — first-text-token went 2.7 s → 1.6 s. Still ≥ 4×
+the target.
+
+`CRISPASR_VOXTRAL4B_STREAM_TIMING=1` instrumentation revealed the
+breakdown (M1 Q4_K JFK 11 s):
+
+| Stage | ms |
+|---|---|
+| Encoder drain at flush (right-pad encoder + projector) | ~990 |
+| LLM prefill (39-token streaming-prompt) | 252 |
+| 8 streaming-pad warmup steps × 50.4 ms each | ~403 |
+| First text-emitting decode step | ~50 |
+
+Even with a *fully warm encoder* (drain → 0), the prompt convention
+forces ≥ prefill (252 ms) + 8 × decode (403 ms) = **655 ms before the
+first text token can emit**. The 8-step streaming-pad warmup is part
+of the model's training distribution — the model emits id=32
+STREAMING_PAD for the first 8 decode steps before producing text, no
+matter how much audio context is available.
+
+**Generalisable rule.** "X ms latency" claims in audio-LLM model
+cards can be misleading on a different inference stack. Read the
+prompt convention and per-token decode cost FIRST, multiply, and
+compare to the target *before* costing perf work. If the
+architectural floor exceeds the target, kernel optimisation can only
+get you so close — the rest requires either a different prompt
+template (model retrain) or a fundamentally different decoder
+(different quant, different architecture, different backend).
+
+For voxtral4b-realtime, the model card claims ~97 ms end-to-end
+latency — likely measured on a specific Mistral inference stack with
+some combination of (much faster Q4_K matmul, smaller warmup, or
+parallel decode). A community ggml implementation on M1 Q4_K Metal
+at 50.4 ms/step is fundamentally bounded above the marketing number.
+Saying so explicitly in `PLAN.md` / `HISTORY.md` saves the next
+perf-pass engineer a multi-day chase.
+
+The instrumentation cost was ~30 LOC and the diagnostic value was
+~3 days of avoided guessing. Reference: `PLAN.md` §7 phase 2,
+`HISTORY.md` §71, `CRISPASR_VOXTRAL4B_STREAM_TIMING=1` env var.
