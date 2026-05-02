@@ -62,3 +62,12 @@ string(REPLACE "\"" "'"  GIT_COMMIT_SUBJECT "${GIT_COMMIT_SUBJECT}")
 string(REPLACE "("  "["  GIT_COMMIT_SUBJECT "${GIT_COMMIT_SUBJECT}")
 string(REPLACE ")"  "]"  GIT_COMMIT_SUBJECT "${GIT_COMMIT_SUBJECT}")
 string(REPLACE ":"  "-"  GIT_COMMIT_SUBJECT "${GIT_COMMIT_SUBJECT}")
+# `=` makes Windows link.exe split the value when it spills onto the
+# linker command line — `GIT_DATE = ISO-8601` becomes positional arg
+# `GIT_DATE` → `LNK1181: cannot open input file 'GIT_DATE.obj'`. The
+# previous landmine of this kind ("May 02") was cleared by switching
+# the date format; this one came from a commit message containing `=`.
+# Bracket sanitisation is defensive — even though the broken behaviour
+# only manifested under MSVC's dependency-scan path with a CUDA-archs
+# quoting bug nearby, future shells may surface other splits.
+string(REPLACE "="  "-"  GIT_COMMIT_SUBJECT "${GIT_COMMIT_SUBJECT}")

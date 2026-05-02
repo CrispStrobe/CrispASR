@@ -70,10 +70,19 @@ target_compile_definitions(${TARGET} PRIVATE
     CRISPASR_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
 )
 if (GGML_CUDA)
+    # CMAKE_CUDA_ARCHITECTURES is a CMake list ("75-real;86-real;..."). When
+    # fed into target_compile_definitions, CMake's command-line generator
+    # treats list items as SEPARATE arguments — the cl.exe line ends up as
+    # `-DCRISPASR_CUDA_ARCHS="75-real -D86-real -D120-virtual"` which has
+    # an unbalanced quote and then leftover `-D120-virtual"` confuses
+    # link.exe into trying to open random tokens as .obj files
+    # ("LNK1181: cannot open input file 'GIT_DATE.obj'"). Convert the
+    # separator to "," before embedding so it remains a single token.
+    string(REPLACE ";" "," CRISPASR_CUDA_ARCHS_STR "${CMAKE_CUDA_ARCHITECTURES}")
     target_compile_definitions(${TARGET} PRIVATE
         CRISPASR_HAVE_CUDA=1
         CRISPASR_CUDA_VERSION="${CUDAToolkit_VERSION}"
-        CRISPASR_CUDA_ARCHS="${CMAKE_CUDA_ARCHITECTURES}"
+        CRISPASR_CUDA_ARCHS="${CRISPASR_CUDA_ARCHS_STR}"
     )
 endif()
 if (GGML_METAL)
