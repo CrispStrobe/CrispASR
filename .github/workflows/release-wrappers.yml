@@ -6,14 +6,30 @@ name: Release language wrappers
 # matching whisper.cpp's binding pattern. Users install `libcrispasr` separately
 # (Homebrew, apt, or build from source).
 #
+# IMPORTANT: registries reject the very first publish from a CI flow because
+# they have no prior owner to verify against — the first version of each
+# package must be uploaded manually. Bootstrap procedure + per-registry
+# config requirements are documented in PLAN.md §66. After bootstrap, every
+# tag push auto-publishes via this workflow.
+#
 # Prerequisites (one-time setup before the first tag):
 #   - PyPI:     configure a trusted publisher at
 #               https://pypi.org/manage/account/publishing/ pointing to this repo
 #               + workflow file + the `pypi` environment.
-#   - crates.io: add `CARGO_REGISTRY_TOKEN` repo secret (cargo login token).
-#   - pub.dev:  configure automated publishing at
+#   - crates.io: add `CARGO_REGISTRY_TOKEN` repo secret (cargo login token)
+#               AND manually `cargo publish` v0 of crispasr-sys + crispasr
+#               from a workstation first.
+#   - pub.dev:  manually `dart pub publish` v0 from `flutter/crispasr`
+#               (interactive: browser login + accept). Then enable
+#               automated publishing at
 #               https://pub.dev/packages/crispasr/admin pointing to this repo
 #               + tag pattern `v{{version}}`.
+#
+# Each job below uses `continue-on-error: true` so a single misconfigured
+# registry doesn't fail the whole workflow — the others still attempt to
+# publish. Each job also runs a fast precheck that prints a clear
+# "skipping: <registry> not configured" message instead of letting `cargo`
+# / `twine` emit cryptic auth errors deep in the log.
 
 on:
   push:
@@ -29,6 +45,7 @@ jobs:
   publish-pypi:
     name: Publish Python wrapper to PyPI
     runs-on: ubuntu-latest
+    continue-on-error: true
     environment:
       name: pypi
       url: https://pypi.org/p/crispasr
@@ -38,6 +55,24 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.tag || github.ref }}
+
+      # Probe whether the trusted publisher is configured AND the package
+      # exists. Brand-new packages need either a "pending publisher"
+      # bootstrap on PyPI's side (https://pypi.org/manage/account/publishing/)
+      # or an existing package with a publisher mapping. We can't check the
+      # OIDC config from inside the job, but we CAN check whether the
+      # package exists; if it 404s the bootstrap is missing.
+      - name: PyPI bootstrap check
+        id: pypi_check
+        run: |
+          if curl -sf -o /dev/null https://pypi.org/pypi/crispasr/json; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "::warning::PyPI package 'crispasr' does not exist yet."
+            echo "::warning::See PLAN.md §66 for bootstrap steps."
+            echo "::warning::Note: a configured pending-publisher CAN bootstrap PyPI; this run will still try."
+          fi
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -58,10 +93,29 @@ jobs:
   publish-crates-io:
     name: Publish Rust wrapper to crates.io
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.tag || github.ref }}
+
+      # Fail fast (and clearly) if the token isn't set, instead of letting
+      # cargo emit the obscure "please provide a non-empty token" message.
+      - name: crates.io config check
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          if [ -z "$CARGO_REGISTRY_TOKEN" ]; then
+            echo "::warning::CARGO_REGISTRY_TOKEN secret not set — see PLAN.md §66 for setup."
+            echo "skipping crates.io publish."
+            exit 78  # neutral exit (some setups treat as 'skipped')
+          fi
+          if ! curl -sf -o /dev/null https://crates.io/api/v1/crates/crispasr-sys; then
+            echo "::warning::crates.io package 'crispasr-sys' does not exist yet."
+            echo "::warning::First publish must be manual (see PLAN.md §66 bootstrap)."
+            echo "skipping crates.io publish."
+            exit 78
+          fi
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
@@ -85,12 +139,26 @@ jobs:
   publish-pub-dev:
     name: Publish Dart wrapper to pub.dev
     runs-on: ubuntu-latest
+    continue-on-error: true
     permissions:
       id-token: write  # for pub.dev OIDC publishing
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.tag || github.ref }}
+
+      # pub.dev's automated publishing requires the package to already
+      # exist (the very first `dart pub publish` for a brand-new package
+      # is interactive only). Probe and bail fast if the package is
+      # missing.
+      - name: pub.dev bootstrap check
+        run: |
+          if ! curl -sf -o /dev/null https://pub.dev/api/packages/crispasr; then
+            echo "::warning::pub.dev package 'crispasr' does not exist yet."
+            echo "::warning::First publish must be manual + interactive (see PLAN.md §66)."
+            echo "skipping pub.dev publish."
+            exit 78
+          fi
 
       - name: Set up Dart
         uses: dart-lang/setup-dart@v1

@@ -1537,3 +1537,162 @@ Realistic effort: ~50 LOC per backend × 14 backends = ~700 LOC
 mechanical, but each one needs a regression test that the new flag
 actually changes output. **Defer until a consumer asks for a
 specific flag on a specific backend** (per PLAN #59 policy).
+
+---
+
+## 66. Wrapper publishing bootstrap — required before language registries can ship
+
+**Status:** OPEN — blocks `release-wrappers.yml` on every tag push;
+has been failing on every release since v0.5.0 (the workflow is
+correctly written but the registries reject the publish because
+the packages have never been registered there). Confirmed on v0.5.4
+(`gh run view 25248028443`).
+
+The CI workflow pushes to three registries automatically on every
+`v*` tag, but **none of the packages currently exist on those
+registries**:
+
+- crates.io: `crispasr-sys` and `crispasr` do not exist (404).
+- PyPI: `crispasr` does not exist (404).
+- pub.dev: `crispasr` does not exist.
+
+All three registries require **manual bootstrap** — the first
+version of any package can't be published by an OIDC / token CI
+flow because the registry has no prior owner record to verify
+against. After the first manual publish, automated publishing
+takes over via the existing workflow.
+
+### Bootstrap steps (one-time, requires repo admin credentials)
+
+1. **crates.io** (Rust, simplest):
+   ```bash
+   cargo login   # paste API token from https://crates.io/me
+   cargo publish --manifest-path crispasr-sys/Cargo.toml --allow-dirty
+   sleep 30   # wait for crates.io index
+   cargo publish --manifest-path crispasr/Cargo.toml --allow-dirty
+   ```
+   Then add `CARGO_REGISTRY_TOKEN` repo secret (Settings → Secrets
+   → Actions). Subsequent tag pushes auto-publish.
+
+2. **PyPI** (uses trusted publishing / OIDC):
+   - Visit https://pypi.org/manage/account/publishing/ and create a
+     pending publisher with:
+     - Owner: `CrispStrobe` (or org owning the repo)
+     - Repository: `CrispASR`
+     - Workflow: `release-wrappers.yml`
+     - Environment: `pypi`
+   - Push a `v*` tag and the OIDC handshake creates the package.
+     (No manual `twine upload` needed — the pending-publisher
+     mechanism IS the bootstrap path.)
+
+3. **pub.dev** (Dart, hardest — `dart pub publish` requires a
+   logged-in interactive shell for the first version):
+   ```bash
+   cd flutter/crispasr
+   dart pub get
+   dart pub publish   # interactive: confirm, log in via browser,
+                      # accept the package contents
+   ```
+   Then visit https://pub.dev/packages/crispasr/admin and enable
+   "Automated publishing" with:
+   - Repository: `CrispStrobe/CrispASR`
+   - Tag pattern: `v{{version}}`
+
+### Resilience improvements landed alongside this entry
+
+`release-wrappers.yml` is updated so a single registry's
+misconfiguration doesn't fail the whole workflow:
+
+- Each job runs a fast secret/config presence check at the top and
+  echoes a clear "skipping: registry X not configured" instead of
+  letting `cargo` / `twine` emit cryptic auth errors deep in the
+  log.
+- Each job uses `continue-on-error: true` so the others still try.
+- Workflow comment block updated to reference this PLAN section.
+
+After bootstrap completes, the next tag push (v0.5.5+) should
+publish all three wrappers cleanly.
+
+---
+
+## 67. Deferred follow-ups carry-over (mid-May 2026 session)
+
+Captured here so they don't get lost between sessions.
+
+### 60d F16 mimo-asr re-upload (HF)
+
+The Q4_K fused-QKV file is on HF
+(`cstr/mimo-asr-GGUF/mimo-asr-q4_k.gguf`, 4.2 GB). The F16 variant
+on HF is still the legacy unfused layout — the runtime fallback
+keeps it working but it doesn't get the 1.7× per-step decode that
+fused QKV unlocks. Re-conversion needs a fresh BF16→F16 run,
+which on this 16 GB / 99%-full-disk box sustained ~0.8 MB/min and
+was killed at 22 min (PLAN #51c disk-thrash signature). Run on a
+32+ GB box with non-99%-full external. Then
+`tools/patch_mimo_asr_fuse_qkv.py` patches it to the fused layout
+(~5 min vs hours for a fresh quantize).
+
+### 60e per-backend Q8_0 KV cosine validation
+
+Env wiring (`CRISPASR_KV_QUANT={f16,q8_0,q4_0}`) landed across 9
+backends (mimo_asr, qwen3_asr, voxtral, voxtral4b, granite_speech,
+gemma4_e2b, glm_asr, omniasr, orpheus, qwen3_tts) — defaults stay
+F16 so it's bit-identical until opted in. **Only mimo-asr has been
+diff-harness validated at q8_0** (last_hidden 0.963031 vs F16
+0.963177; logits 0.981454 vs 0.981261, both ≥0.98 gate). The
+remaining 8 backends need their own
+`CRISPASR_KV_QUANT=q8_0 crispasr-diff <backend>` pass before any
+default-flip per backend.
+
+Effort: ~1 diff-harness run per backend, ~5 min each on warm
+cache. Zero code work — wiring is in place.
+
+### Vibevoice CUDA cache reuse re-test
+
+`backend_needs_fresh_pred_graph()` defensively bypasses the
+pred-head graph cache on Metal + Vulkan + CUDA (CUDA added on the
+"shape suggests it's broken too" presumption). When a CUDA box is
+available, run `CRISPASR_VIBEVOICE_REUSE_PRED_GRAPH=1` and confirm
+TTS runs without `GGML_ASSERT(src_backend_id != -1)`. If the cache
+works there, drop the `CUDA` prefix from the bypass list and
+recover the ~30% per-synthesis caching speedup.
+
+If the assert fires, the env hatch stays disabled by default and
+the proper upstream-ggml fix (recompute view→backend mapping
+from `view_src->buffer` in `ggml_backend_sched_split_graph`)
+becomes the next step.
+
+### SYCL / HIP / ROCm cache-bypass extension
+
+Same shape as CUDA — these multi-backend GPU schedulers probably
+need the bypass too but no user has reported. Extend
+`backend_needs_fresh_pred_graph()` prefix list when a report comes
+in or when a kernel maintainer audits the upstream
+`ggml_backend_sched_split_graph` reset path on those backends.
+
+### Per-backend `MADV_RANDOM` post-prefill wiring (PLAN #60g)
+
+`core_gguf::mmap_advise_random()` is exposed but no backend calls
+it yet. Add a single call between prefill and the decode loop in
+`mimo_asr_transcribe`, `qwen3_asr_transcribe`, `voxtral_transcribe`,
+etc. when a 32+ GB-box benchmark demonstrates measurable benefit
+(on Q4_K the readahead delta is marginal; F16 is where it would
+matter, and we can't reliably measure F16 on 16 GB).
+
+### Disk5 cleanup
+
+`/Volumes/backups` sits at 99% full, 30 GB free. The
+`/Volumes/backups/ai/crispasr-models/mimo/mimo-asr-q4_k.gguf`
+unfused (4.2 GB) is now superseded by `mimo-asr-q4_k.fused.gguf`
+and the HF copy of the fused. Safe to delete the local unfused
+once future A/B testing isn't needed.
+
+### CI: legacy `build.yml`
+
+`.github/workflows/build.yml` is the legacy whisper.cpp CI matrix
+(triggers on `branches: [master]` which doesn't exist + `tags: v*`).
+Has been failing on every tag push since v0.4.x. Doesn't block
+releases (the new `ci.yml` / `release.yml` are the actual gates).
+Either delete or repair when convenient — pending audit on whether
+any build-matrix combination there isn't covered by the new
+`ci.yml` matrix.
