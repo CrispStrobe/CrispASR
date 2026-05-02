@@ -685,12 +685,20 @@ so existing builds don't regress.
    voice-switch markers that aren't IPA. For full Japanese support,
    pre-process input with a Japanese frontend (`pyopenjtalk` /
    `mecab` + `kakasi`) to convert kanji → kana before espeak.
-4. **Diff harness reference backend.** No `crispasr-diff kokoro`
-   today. The reference dumper at
-   `tools/reference_backends/kokoro.py` already exists for the
-   model side (16 stages); extend it (or add a sibling) so the
-   phonemizer step itself is also diffed — guard against future
-   drift between popen / lib / future Python G2P.
+4. ~~**Diff harness reference backend.**~~ **DONE — phonemizer-step
+   diff (May 2026).** The model-side reference dumper at
+   `tools/reference_backends/kokoro.py` already covered the 16 model
+   stages; the phonemizer step is now covered by a separate sibling
+   tool `tools/check_kokoro_phonemizer_parity.py` that exercises the
+   newly-exposed `kokoro_phonemize_text_{lib,popen}` C ABI on a fixed
+   `(lang, text)` suite (en / de / fr / ru / cmn / ja / it / es / pt)
+   and reports drift between the two paths. Default mode normalises
+   away the documented benign U+200D ZWJ tie chars (LEARNINGS §6);
+   `--strict` does byte-exact comparison. Initial run surfaces 1 real
+   substantive divergence in cmn (`ni2χˈɑu2` vs `niɜχˈɑ‍u2`) — that's
+   #56 #2's symptom, captured automatically now. No-model unit tests
+   in `tests/test_python_session.py` cover the symbol export +
+   null-args return path.
 5. ~~**Optional polish.**~~ **DONE + CROSS-BINDING.**
    `kokoro_phoneme_cache_clear()` + session-scoped
    `crispasr_session_kokoro_clear_phoneme_cache()` ABI exports for

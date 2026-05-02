@@ -60,6 +60,20 @@ int kokoro_set_language(struct kokoro_context* ctx, const char* espeak_lang);
 // across many speakers and want bounded memory.
 void kokoro_phoneme_cache_clear(struct kokoro_context* ctx);
 
+// Diff-harness entry points (PLAN #56 #4). Both return malloc'd UTF-8
+// IPA strings — caller frees with free(). Stateless, no kokoro_context
+// needed.
+//
+// Lib path is gated on CRISPASR_HAVE_ESPEAK_NG at compile time and on
+// successful runtime init; returns nullptr if the lib isn't compiled
+// in or its in-process init fails. Popen path shells out to
+// `espeak-ng` on PATH; returns nullptr if the binary isn't available.
+//
+// `lang` is an espeak-ng voice (e.g. "en-us", "de", "fr", "cmn", "ja").
+// `text` is UTF-8 plain text — pre-phonemizer raw input.
+char* kokoro_phonemize_text_lib(const char* lang, const char* text);
+char* kokoro_phonemize_text_popen(const char* lang, const char* text);
+
 // Tokenise a phoneme string (already-IPA) into the model's vocab.
 // Returns malloc'd int32_t[*out_n] — caller frees with free().
 int32_t* kokoro_phonemes_to_ids(struct kokoro_context* ctx, const char* phonemes, int* out_n);

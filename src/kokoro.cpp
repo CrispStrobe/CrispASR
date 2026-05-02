@@ -2826,6 +2826,49 @@ bool phonemize_cached(kokoro_context* ctx, const std::string& lang, const std::s
 
 } // namespace
 
+// Phonemize via the in-process libespeak-ng path. Returns malloc'd UTF-8
+// IPA (caller frees) or nullptr if (a) libespeak-ng isn't compiled in,
+// (b) espeak_Initialize failed, (c) voice switch failed, or (d) the
+// engine returned no output. Stateless — no kokoro_context needed.
+// Exposed for the diff-harness to compare against the popen path.
+// (PLAN #56 #4)
+extern "C" char* kokoro_phonemize_text_lib(const char* lang, const char* text) {
+    if (!lang || !text)
+        return nullptr;
+#ifdef CRISPASR_HAVE_ESPEAK_NG
+    std::string out;
+    if (!phonemize_espeak_lib(lang, text, out))
+        return nullptr;
+    char* buf = (char*)malloc(out.size() + 1);
+    if (!buf)
+        return nullptr;
+    memcpy(buf, out.data(), out.size());
+    buf[out.size()] = '\0';
+    return buf;
+#else
+    return nullptr;
+#endif
+}
+
+// Phonemize via popen("espeak-ng …"). Returns malloc'd UTF-8 IPA (caller
+// frees) or nullptr if espeak-ng isn't on PATH or returned no output.
+// Always available regardless of CRISPASR_HAVE_ESPEAK_NG. Exposed for
+// the diff-harness to detect drift between the two phonemizer paths.
+// (PLAN #56 #4)
+extern "C" char* kokoro_phonemize_text_popen(const char* lang, const char* text) {
+    if (!lang || !text)
+        return nullptr;
+    std::string out;
+    if (!phonemize_popen(lang, text, out))
+        return nullptr;
+    char* buf = (char*)malloc(out.size() + 1);
+    if (!buf)
+        return nullptr;
+    memcpy(buf, out.data(), out.size());
+    buf[out.size()] = '\0';
+    return buf;
+}
+
 extern "C" float* kokoro_synthesize(struct kokoro_context* ctx, const char* text, int* out_n_samples) {
     if (out_n_samples)
         *out_n_samples = 0;

@@ -218,5 +218,33 @@ class TestKokoroPhonemeCacheClear(unittest.TestCase):
         self.assertEqual(fn(ctypes.c_void_p(0)), -1)
 
 
+@unittest.skipUnless(LIB_PATH, "libwhisper not built")
+class TestKokoroPhonemizerParityHarness(unittest.TestCase):
+    """PLAN #56 #4: phonemizer-diff harness ABI is exposed.
+
+    Both kokoro_phonemize_text_lib and kokoro_phonemize_text_popen
+    must be present for `tools/check_kokoro_phonemizer_parity.py` to
+    work. Doesn't require espeak-ng to be installed — only checks the
+    symbols are exported.
+    """
+
+    def test_symbols_exported(self):
+        import ctypes
+        lib = ctypes.CDLL(LIB_PATH)
+        self.assertTrue(hasattr(lib, "kokoro_phonemize_text_lib"))
+        self.assertTrue(hasattr(lib, "kokoro_phonemize_text_popen"))
+
+    def test_null_args_return_nullptr(self):
+        import ctypes
+        lib = ctypes.CDLL(LIB_PATH)
+        for name in ("kokoro_phonemize_text_lib", "kokoro_phonemize_text_popen"):
+            fn = getattr(lib, name)
+            fn.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
+            fn.restype = ctypes.c_void_p
+            self.assertIsNone(fn(None, None), f"{name}(None, None) should return nullptr")
+            self.assertIsNone(fn(b"en-us", None), f"{name}('en-us', None) should return nullptr")
+            self.assertIsNone(fn(None, b"hello"), f"{name}(None, 'hello') should return nullptr")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
