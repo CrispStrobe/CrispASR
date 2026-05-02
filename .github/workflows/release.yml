@@ -132,6 +132,67 @@ jobs:
           name: crispasr-macos
           path: release/crispasr-macos.tar.gz
 
+  # ── Shared-library bundle for macOS arm64 (Metal) ────────────────────────────
+  #
+  # Mirrors what llama.cpp's release artifacts do: ship a per-platform
+  # tarball with libcrispasr.dylib + ggml backend libs + headers so any
+  # downstream binding (Rust crispasr-sys, Dart crispasr, future Node/Go
+  # wrappers, …) can `tar -xzf` instead of cmake-building from source.
+  #
+  # Layout inside the tarball matches what `crispasr-sys/build.rs`'s
+  # `try_existing_build` looks for (`<bundle>/src/lib*` and
+  # `<bundle>/ggml/src/libggml*`), so consumers point CRISPASR_SYS_LIB_DIR
+  # at the extracted dir and the cmake-build fallback is bypassed.
+  build-libs-macos-arm64:
+    runs-on: macos-latest # arm64 since macos-13 was retired
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Build (shared libs, Metal)
+        run: |
+          cmake -S . -B build-libs \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=ON \
+            -DGGML_METAL=ON \
+            -DGGML_METAL_EMBED_LIBRARY=ON \
+            -DCRISPASR_BUILD_TESTS=OFF \
+            -DCRISPASR_BUILD_EXAMPLES=OFF \
+            -DCRISPASR_BUILD_SERVER=OFF
+          cmake --build build-libs --config Release \
+            -j $(sysctl -n hw.logicalcpu) --target crispasr
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          OUT=release/libcrispasr-macos-arm64
+          # Match the CrispASR build-tree layout that downstream wrappers
+          # already auto-discover (build-flutter-bundle / build / etc.).
+          mkdir -p "$OUT/src" "$OUT/ggml/src" "$OUT/include" "$OUT/ggml/include"
+          # Core libs — preserve symlinks so SOVERSION-1 alias works.
+          cp -P build-libs/src/libcrispasr*.dylib "$OUT/src/"
+          [ -e build-libs/src/libwhisper.dylib ] && cp -P build-libs/src/libwhisper.dylib "$OUT/src/"
+          # Backend libs — flat collection from every ggml subdir
+          # (ggml-metal, ggml-blas, ggml-cpu …). Put them under
+          # ggml/src/ at the bundle root so downstream tools that find
+          # ggml libs via that path keep working.
+          find build-libs/ggml/src -name 'libggml*.dylib' \( -type f -o -type l \) \
+            -exec cp -P {} "$OUT/ggml/src/" \;
+          # Headers so binding authors can extend the FFI without
+          # vendoring the whole CrispASR repo.
+          cp include/crispasr.h "$OUT/include/"
+          cp ggml/include/*.h   "$OUT/ggml/include/" 2>/dev/null || true
+          cp LICENSE "$OUT/"
+          cd release && tar czf libcrispasr-macos-arm64.tar.gz libcrispasr-macos-arm64/
+          ls -lh libcrispasr-macos-arm64.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libcrispasr-macos-arm64
+          path: release/libcrispasr-macos-arm64.tar.gz
+
   # ── Windows CPU (AVX2 — Haswell/2013+ baseline) ──────────────────────────────
   build-windows-cpu:
     runs-on: windows-latest
@@ -298,7 +359,7 @@ jobs:
           path: release/crispasr-windows-x86_64-vulkan.zip
 
   publish:
-    needs: [build-linux, build-python-linux, build-macos, build-windows-cpu, build-windows-cpu-legacy, build-windows-cuda, build-windows-vulkan]
+    needs: [build-linux, build-python-linux, build-macos, build-libs-macos-arm64, build-windows-cpu, build-windows-cpu-legacy, build-windows-cuda, build-windows-vulkan]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -313,6 +374,7 @@ jobs:
             artifacts/crispasr-linux-x86_64/crispasr-linux-x86_64.tar.gz
             artifacts/crispasr-python-linux-x86_64/crispasr-python-linux-x86_64.tar.gz
             artifacts/crispasr-macos/crispasr-macos.tar.gz
+            artifacts/libcrispasr-macos-arm64/libcrispasr-macos-arm64.tar.gz
             artifacts/crispasr-windows-x86_64-cpu/crispasr-windows-x86_64-cpu.zip
             artifacts/crispasr-windows-x86_64-cpu-legacy/crispasr-windows-x86_64-cpu-legacy.zip
             artifacts/crispasr-windows-x86_64-cuda/crispasr-windows-x86_64-cuda.zip
