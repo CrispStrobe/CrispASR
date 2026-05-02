@@ -1592,6 +1592,15 @@ struct voxtral4b_stream {
     bool kv_initialised;
     int n_past;
 
+    // ── Speculative prefill (PLAN #7 phase 3) ──────────────────────────────
+    // Once we have ≥ kStreamingPromptLen audio_embeds during feed(), run
+    // the LLM prefill speculatively so flush() only does the decode loop.
+    // Saves ~250ms off first-text-token wall-clock at flush time.
+    bool prefill_done;
+    std::vector<float> prefill_logits; // vocab_size × 1 (last position's logits)
+    int prefill_n_past;
+    int prefill_out_vocab;
+
     // ── Output ────────────────────────────────────────────────────────────
     std::string out_text;
     std::string out_text_unread;
@@ -1845,6 +1854,69 @@ static constexpr int kLeftPadTokens = 32;
 static constexpr int kRightPadTokens = 10;
 static constexpr int kStreamingPromptLen = 39; // 1 BOS + 32 STREAMING_PAD + 6 delay
 
+namespace {
+// PLAN #7 phase 3: speculative LLM prefill during feed.
+// Once feed has produced ≥ kStreamingPromptLen audio_embeds, run the
+// streaming-prompt prefill once and stash the resulting last-position
+// logits + n_past on the stream. Flush then skips the prefill (a
+// ~250 ms cost) and jumps straight to the decode loop. Idempotent —
+// only runs once per stream lifetime.
+//
+// Returns 0 on success / not-yet-ready, <0 on error.
+static int vox_stream_maybe_prefill(voxtral4b_stream* s) {
+    if (s->prefill_done)
+        return 0;
+    const auto& hp = s->ctx->model.hparams;
+    const int proj_out = (int)hp.proj_out_dim;
+    const int N_audio = (int)(s->audio_embeds.size() / proj_out);
+    if (N_audio < kStreamingPromptLen)
+        return 0;
+
+    // Build streaming-prompt: BOS + 38 × STREAMING_PAD = 39 tokens.
+    std::vector<int32_t> prompt_ids((size_t)kStreamingPromptLen);
+    prompt_ids[0] = 1;
+    for (int i = 1; i < kStreamingPromptLen; i++)
+        prompt_ids[i] = 32;
+
+    float* prompt_emb = voxtral4b_embed_tokens(s->ctx, prompt_ids.data(), kStreamingPromptLen);
+    if (!prompt_emb)
+        return -1;
+    // Element-wise add the first kStreamingPromptLen audio embeds to the prompt.
+    for (int i = 0; i < kStreamingPromptLen; i++) {
+        const float* src = s->audio_embeds.data() + (size_t)i * proj_out;
+        float* dst = prompt_emb + (size_t)i * proj_out;
+        for (int j = 0; j < proj_out; j++)
+            dst[j] += src[j];
+    }
+
+    constexpr int kMaxNewTokens = 512;
+    if (!s->kv_initialised) {
+        if (!voxtral4b_kv_init(s->ctx, kStreamingPromptLen + kMaxNewTokens + 16)) {
+            std::free(prompt_emb);
+            return -2;
+        }
+        s->kv_initialised = true;
+    }
+    voxtral4b_kv_reset(s->ctx);
+
+    int out_n_tok = 0, out_vocab = 0;
+    float* logits =
+        voxtral4b_run_llm_kv(s->ctx, prompt_emb, kStreamingPromptLen, 0, &out_n_tok, &out_vocab);
+    std::free(prompt_emb);
+    if (!logits || out_vocab <= 0)
+        return -3;
+
+    // Stash the last position's logits — that's the input to decode step 0.
+    const float* last = logits + (size_t)(out_n_tok - 1) * (size_t)out_vocab;
+    s->prefill_logits.assign(last, last + out_vocab);
+    std::free(logits);
+    s->prefill_n_past = kStreamingPromptLen;
+    s->prefill_out_vocab = out_vocab;
+    s->prefill_done = true;
+    return 0;
+}
+} // namespace
+
 extern "C" struct voxtral4b_stream* voxtral4b_stream_open(struct voxtral4b_context* ctx, int /*step_ms*/,
                                                           int /*length_ms*/) {
     if (!ctx)
@@ -1875,6 +1947,9 @@ extern "C" struct voxtral4b_stream* voxtral4b_stream_open(struct voxtral4b_conte
     s->enc_frames_pending_count = 0;
     s->kv_initialised = false;
     s->n_past = 0;
+    s->prefill_done = false;
+    s->prefill_n_past = 0;
+    s->prefill_out_vocab = 0;
     s->out_t0_s = 0.0;
     s->out_t1_s = 0.0;
     s->has_output = false;
@@ -1941,6 +2016,11 @@ extern "C" int voxtral4b_stream_feed(struct voxtral4b_stream* s, const float* pc
     // Project any complete groups of 4 enc frames.
     if (vox_stream_advance_projector(s) < 0)
         return -3;
+
+    // PLAN #7 phase 3: speculative prefill once we have enough audio_embeds.
+    // Skipped here on negative return to avoid masking errors.
+    if (vox_stream_maybe_prefill(s) < 0)
+        return -4;
     return 0;
 }
 
@@ -2110,49 +2190,66 @@ extern "C" int voxtral4b_stream_flush(struct voxtral4b_stream* s) {
         return 1;
     }
 
-    // Build the streaming-prompt: BOS=1, then 38 × STREAMING_PAD=32. 39 tokens total.
-    std::vector<int32_t> prompt_ids((size_t)kStreamingPromptLen);
-    prompt_ids[0] = 1;
-    for (int i = 1; i < kStreamingPromptLen; i++)
-        prompt_ids[i] = 32;
-
-    float* prompt_emb = voxtral4b_embed_tokens(s->ctx, prompt_ids.data(), kStreamingPromptLen);
-    if (!prompt_emb)
-        return -6;
-
-    // Add the first kStreamingPromptLen audio embeds to the prompt embeds element-wise.
-    for (int i = 0; i < kStreamingPromptLen && i < N_audio; i++) {
-        const float* src = audio_src + (size_t)i * proj_out;
-        float* dst = prompt_emb + (size_t)i * proj_out;
-        for (int j = 0; j < proj_out; j++)
-            dst[j] += src[j];
-    }
-
-    constexpr int kMaxNewTokens = 512;
-    if (!s->kv_initialised) {
-        if (!voxtral4b_kv_init(s->ctx, kStreamingPromptLen + kMaxNewTokens + 16)) {
-            std::free(prompt_emb);
-            return -7;
-        }
-        s->kv_initialised = true;
-    }
-    voxtral4b_kv_reset(s->ctx);
-
     if (timing)
         fprintf(stderr, "voxtral4b_stream timing: encoder+projector drain @ %.1f ms\n", elapsed_ms());
 
+    // PLAN #7 phase 3: prefer the speculative prefill stashed during feed.
+    // Falls back to running prefill here if (a) we're in batch-encoder mode,
+    // (b) feed never reached kStreamingPromptLen audio_embeds (very short
+    // utterance), or (c) batch path produced different audio embeds than the
+    // streaming path so the stashed prefill is stale.
     int out_n_tok = 0, out_vocab = 0;
-    auto t_pre = std::chrono::steady_clock::now();
-    float* logits =
-        voxtral4b_run_llm_kv(s->ctx, prompt_emb, kStreamingPromptLen, 0, &out_n_tok, &out_vocab);
-    std::free(prompt_emb);
-    if (!logits || out_vocab <= 0)
-        return -8;
-    if (timing)
-        fprintf(stderr, "voxtral4b_stream timing: prefill (39 tokens) %.1f ms; total @ %.1f ms\n",
-                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t_pre).count(),
-                elapsed_ms());
-    int n_past = kStreamingPromptLen;
+    int n_past;
+    float* logits = nullptr;
+    constexpr int kMaxNewTokens = 512;
+
+    if (s->prefill_done && use_incremental) {
+        // Reuse stashed prefill: avoids re-running the 39-token forward
+        // (~250 ms wall-clock).
+        out_n_tok = 1;
+        out_vocab = s->prefill_out_vocab;
+        logits = (float*)std::malloc((size_t)out_vocab * sizeof(float));
+        if (!logits)
+            return -7;
+        std::memcpy(logits, s->prefill_logits.data(), (size_t)out_vocab * sizeof(float));
+        n_past = s->prefill_n_past;
+        if (timing)
+            fprintf(stderr, "voxtral4b_stream timing: prefill REUSED (saved ~250 ms); total @ %.1f ms\n",
+                    elapsed_ms());
+    } else {
+        // Build streaming-prompt + run prefill now.
+        std::vector<int32_t> prompt_ids((size_t)kStreamingPromptLen);
+        prompt_ids[0] = 1;
+        for (int i = 1; i < kStreamingPromptLen; i++)
+            prompt_ids[i] = 32;
+        float* prompt_emb = voxtral4b_embed_tokens(s->ctx, prompt_ids.data(), kStreamingPromptLen);
+        if (!prompt_emb)
+            return -6;
+        for (int i = 0; i < kStreamingPromptLen && i < N_audio; i++) {
+            const float* src = audio_src + (size_t)i * proj_out;
+            float* dst = prompt_emb + (size_t)i * proj_out;
+            for (int j = 0; j < proj_out; j++)
+                dst[j] += src[j];
+        }
+        if (!s->kv_initialised) {
+            if (!voxtral4b_kv_init(s->ctx, kStreamingPromptLen + kMaxNewTokens + 16)) {
+                std::free(prompt_emb);
+                return -7;
+            }
+            s->kv_initialised = true;
+        }
+        voxtral4b_kv_reset(s->ctx);
+        auto t_pre = std::chrono::steady_clock::now();
+        logits = voxtral4b_run_llm_kv(s->ctx, prompt_emb, kStreamingPromptLen, 0, &out_n_tok, &out_vocab);
+        std::free(prompt_emb);
+        if (!logits || out_vocab <= 0)
+            return -8;
+        if (timing)
+            fprintf(stderr, "voxtral4b_stream timing: prefill (39 tokens) %.1f ms; total @ %.1f ms\n",
+                    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t_pre).count(),
+                    elapsed_ms());
+        n_past = kStreamingPromptLen;
+    }
 
     const int eos_id = 2;
     int adapter_pos = kStreamingPromptLen; // next audio embed to inject
