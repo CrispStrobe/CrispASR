@@ -115,6 +115,11 @@ struct voxtral_llm_block {
     ggml_tensor* attn_q_w = nullptr;
     ggml_tensor* attn_k_w = nullptr;
     ggml_tensor* attn_v_w = nullptr;
+    // PLAN #60d: optional fused QKV. Built at load time if all q/k/v
+    // weights share a quantization-compatible type. Routes through
+    // core_attn::kv_self_attn's qkv_w branch for one matmul/layer instead
+    // of three. ~7-8 % decode speedup on M1 Q4_K.
+    ggml_tensor* attn_qkv_w = nullptr;
     ggml_tensor* attn_output_w = nullptr;
     ggml_tensor* ffn_norm_w = nullptr;
     ggml_tensor* ffn_gate_w = nullptr;
@@ -187,6 +192,10 @@ struct voxtral_context {
     ggml_tensor* kv_v = nullptr;
     int kv_max_ctx = 0;
     int kv_n_used = 0;
+
+    // PLAN #60d: fused QKV buffer (allocated at load time).
+    ggml_context* fused_ctx = nullptr;
+    ggml_backend_buffer_t fused_buf = nullptr;
 
     int n_threads = 4;
 };
@@ -789,6 +798,76 @@ extern "C" voxtral_context* voxtral_init_from_file(const char* path, voxtral_con
     }
     ctx->compute_meta.resize(ggml_tensor_overhead() * 16384 + ggml_graph_overhead_custom(16384, false));
 
+    // PLAN #60d — runtime fused QKV for the LLM. Concat each layer's
+    // q/k/v along the output axis at load time. Works for F16/F32 and
+    // for row-wise quantized formats (Q4_K, Q4_0, Q5_K, Q8_0, ...) via
+    // byte-concat. Routes through core_attn::kv_self_attn's qkv_w branch
+    // for one matmul/layer instead of three.
+    //
+    // **Opt-in** (CRISPASR_VOXTRAL_FUSED_QKV=1) because A/B measurement on
+    // JFK 11 s with Q4_K showed no measurable speedup vs the unfused path
+    // (mean 16.37 s vs 16.43 s, within run-to-run noise). The voxtral4b
+    // fuse delivered 7-8 % because its decode loop is much longer
+    // (141 tokens incl. streaming-pad warmup) so the saved kernel-launch
+    // overhead per step compounds. Voxtral-3B's normal-prompt decode is
+    // ~30 tokens — the fuse savings disappear into the noise. Cost when
+    // enabled: ~500 MB extra for the duplicated fused weights. Kept
+    // opt-in so memory-tight deployments aren't penalised, but available
+    // for long-form workloads where decode dominates.
+    {
+        const char* fuse_env = getenv("CRISPASR_VOXTRAL_FUSED_QKV");
+        const bool fuse_enabled = (fuse_env != nullptr) && (atoi(fuse_env) != 0);
+        auto& blocks = ctx->model.llm.blocks;
+        bool can_fuse = fuse_enabled && !blocks.empty();
+        if (can_fuse) {
+            const ggml_type t0 = blocks[0].attn_q_w ? blocks[0].attn_q_w->type : GGML_TYPE_F32;
+            for (auto& b : blocks) {
+                if (!b.attn_q_w || !b.attn_k_w || !b.attn_v_w || b.attn_q_w->type != t0 ||
+                    b.attn_k_w->type != t0 || b.attn_v_w->type != t0 ||
+                    b.attn_q_w->ne[0] != b.attn_k_w->ne[0] || b.attn_q_w->ne[0] != b.attn_v_w->ne[0]) {
+                    can_fuse = false;
+                    break;
+                }
+            }
+        }
+        if (can_fuse) {
+            const int hidden = (int)blocks[0].attn_q_w->ne[0];
+            const int q_out = (int)blocks[0].attn_q_w->ne[1];
+            const int kv_out = (int)blocks[0].attn_k_w->ne[1];
+            const int qkv_out = q_out + 2 * kv_out;
+            const ggml_type t0 = blocks[0].attn_q_w->type;
+            ggml_init_params fgp = {ggml_tensor_overhead() * blocks.size() + 256, nullptr, true};
+            ctx->fused_ctx = ggml_init(fgp);
+            if (ctx->fused_ctx) {
+                for (auto& b : blocks) {
+                    b.attn_qkv_w = ggml_new_tensor_2d(ctx->fused_ctx, t0, hidden, qkv_out);
+                }
+                ctx->fused_buf = ggml_backend_alloc_ctx_tensors_from_buft(
+                    ctx->fused_ctx, ggml_backend_get_default_buffer_type(ctx->backend));
+                if (ctx->fused_buf) {
+                    for (auto& b : blocks) {
+                        const size_t qb = ggml_nbytes(b.attn_q_w);
+                        const size_t kb = ggml_nbytes(b.attn_k_w);
+                        const size_t vb = ggml_nbytes(b.attn_v_w);
+                        std::vector<uint8_t> tmp(qb + kb + vb);
+                        ggml_backend_tensor_get(b.attn_q_w, tmp.data(), 0, qb);
+                        ggml_backend_tensor_get(b.attn_k_w, tmp.data() + qb, 0, kb);
+                        ggml_backend_tensor_get(b.attn_v_w, tmp.data() + qb + kb, 0, vb);
+                        ggml_backend_tensor_set(b.attn_qkv_w, tmp.data(), 0, tmp.size());
+                    }
+                    if (params.verbosity >= 1)
+                        fprintf(stderr, "voxtral: fused QKV for %zu LLM layers (%d+%d+%d→%d, type=%s)\n",
+                                blocks.size(), q_out, kv_out, kv_out, qkv_out, ggml_type_name(t0));
+                } else {
+                    ggml_free(ctx->fused_ctx);
+                    ctx->fused_ctx = nullptr;
+                    for (auto& b : blocks)
+                        b.attn_qkv_w = nullptr;
+                }
+            }
+        }
+    }
+
     if (params.verbosity >= 1) {
         fprintf(stderr,
                 "voxtral: loaded %s  (audio %u layers, llm %u layers, vocab %u, "
@@ -808,6 +887,10 @@ extern "C" void voxtral_free(voxtral_context* ctx) {
         ggml_backend_buffer_free(ctx->kv_buf);
     if (ctx->kv_ctx)
         ggml_free(ctx->kv_ctx);
+    if (ctx->fused_buf)
+        ggml_backend_buffer_free(ctx->fused_buf);
+    if (ctx->fused_ctx)
+        ggml_free(ctx->fused_ctx);
     if (ctx->model.buf)
         ggml_backend_buffer_free(ctx->model.buf);
     if (ctx->model.ctx)
@@ -919,7 +1002,8 @@ static ggml_cgraph* voxtral_build_graph_llm_kv(voxtral_context* ctx, int n_past,
         ggml_tensor* attn =
             core_attn::kv_self_attn(ctx0, gf, x, b.attn_q_w, b.attn_k_w, b.attn_v_w, b.attn_output_w,
                                     /*q_norm_w*/ nullptr, /*k_norm_w*/ nullptr, positions,
-                                    (T == 1) ? nullptr : causal_mask, ctx->kv_k, ctx->kv_v, (int)il, n_past, kvp);
+                                    (T == 1) ? nullptr : causal_mask, ctx->kv_k, ctx->kv_v, (int)il, n_past, kvp,
+                                    /*qkv_w*/ b.attn_qkv_w);
         cur = ggml_add(ctx0, residual, attn);
 
         residual = cur;

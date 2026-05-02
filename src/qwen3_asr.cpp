@@ -1426,11 +1426,30 @@ extern "C" qwen3_asr_context* qwen3_asr_init_from_file(const char* path, qwen3_a
     }
 
     // ---- Fuse Q+K+V weights for single-matmul LLM attention ----
+    // PLAN #60d: type gate dropped May 2026 — concatenating along the
+    // output axis is byte-concat for any row-wise quantized format
+    // (Q4_K, Q4_0, Q5_K, Q8_0, ...) just as it is for F16/F32.
+    // Each output row is a self-contained block group; no requantization.
+    // Buffer allocation switched from CPU to default-backend buffer:
+    // for Q-format weights on Metal the CPU-buffer path would pay a
+    // backend-transfer cost per matmul. See LEARNINGS § "runtime
+    // QKV/MLP fusion on row-wise quantized weights is just byte-concat".
     {
         auto& hp = ctx->model.hparams;
         auto& blocks = ctx->model.llm.blocks;
-        if (!blocks.empty() && blocks[0].attn_q_w && blocks[0].attn_k_w && blocks[0].attn_v_w &&
-            (blocks[0].attn_q_w->type == GGML_TYPE_F32 || blocks[0].attn_q_w->type == GGML_TYPE_F16)) {
+        bool can_fuse = !blocks.empty() && blocks[0].attn_q_w && blocks[0].attn_k_w && blocks[0].attn_v_w;
+        if (can_fuse) {
+            const ggml_type t0 = blocks[0].attn_q_w->type;
+            for (auto& b : blocks) {
+                if (!b.attn_q_w || !b.attn_k_w || !b.attn_v_w || b.attn_q_w->type != t0 ||
+                    b.attn_k_w->type != t0 || b.attn_v_w->type != t0 ||
+                    b.attn_q_w->ne[0] != b.attn_k_w->ne[0] || b.attn_q_w->ne[0] != b.attn_v_w->ne[0]) {
+                    can_fuse = false;
+                    break;
+                }
+            }
+        }
+        if (can_fuse) {
             int q_out = (int)blocks[0].attn_q_w->ne[1];
             int k_out = (int)blocks[0].attn_k_w->ne[1];
             int hidden = (int)blocks[0].attn_q_w->ne[0];
@@ -1442,8 +1461,8 @@ extern "C" qwen3_asr_context* qwen3_asr_init_from_file(const char* path, qwen3_a
                 for (auto& b : blocks) {
                     b.attn_qkv_w = ggml_new_tensor_2d(ctx->fused_ctx, b.attn_q_w->type, hidden, qkv_out);
                 }
-                ctx->fused_buf =
-                    ggml_backend_alloc_ctx_tensors_from_buft(ctx->fused_ctx, ggml_backend_cpu_buffer_type());
+                ctx->fused_buf = ggml_backend_alloc_ctx_tensors_from_buft(
+                    ctx->fused_ctx, ggml_backend_get_default_buffer_type(ctx->backend));
                 if (ctx->fused_buf) {
                     for (auto& b : blocks) {
                         size_t qb = ggml_nbytes(b.attn_q_w), kb = ggml_nbytes(b.attn_k_w);
@@ -1454,8 +1473,13 @@ extern "C" qwen3_asr_context* qwen3_asr_init_from_file(const char* path, qwen3_a
                         ggml_backend_tensor_set(b.attn_qkv_w, tmp.data(), 0, tmp.size());
                     }
                     if (params.verbosity >= 1)
-                        fprintf(stderr, "qwen3_asr: fused QKV for %zu LLM layers (%d+%d+%d→%d)\n", blocks.size(), q_out,
-                                k_out, k_out, qkv_out);
+                        fprintf(stderr, "qwen3_asr: fused QKV for %zu LLM layers (%d+%d+%d→%d, type=%s)\n",
+                                blocks.size(), q_out, k_out, k_out, qkv_out, ggml_type_name(blocks[0].attn_q_w->type));
+                } else {
+                    ggml_free(ctx->fused_ctx);
+                    ctx->fused_ctx = nullptr;
+                    for (auto& b : blocks)
+                        b.attn_qkv_w = nullptr;
                 }
             }
         }

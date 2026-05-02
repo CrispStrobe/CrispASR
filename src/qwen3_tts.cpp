@@ -4982,8 +4982,22 @@ extern "C" struct qwen3_tts_context* qwen3_tts_init_from_file(const char* path_m
     // QWEN3_TTS_FUSED_QKV=1 to A/B test on a quiet machine.
     if (env_bool("QWEN3_TTS_FUSED_QKV")) {
         auto& blocks = c->talker.blocks;
-        if (!blocks.empty() && blocks[0].attn_q_w && blocks[0].attn_k_w && blocks[0].attn_v_w &&
-            (blocks[0].attn_q_w->type == GGML_TYPE_F32 || blocks[0].attn_q_w->type == GGML_TYPE_F16)) {
+        // PLAN #60d: type gate dropped May 2026 — Q-format byte-concat
+        // works the same as F16/F32. Buffer switched from CPU to default-
+        // backend buffer for Q-format perf.
+        bool can_fuse = !blocks.empty() && blocks[0].attn_q_w && blocks[0].attn_k_w && blocks[0].attn_v_w;
+        if (can_fuse) {
+            const ggml_type t0 = blocks[0].attn_q_w->type;
+            for (auto& b : blocks) {
+                if (!b.attn_q_w || !b.attn_k_w || !b.attn_v_w || b.attn_q_w->type != t0 ||
+                    b.attn_k_w->type != t0 || b.attn_v_w->type != t0 ||
+                    b.attn_q_w->ne[0] != b.attn_k_w->ne[0] || b.attn_q_w->ne[0] != b.attn_v_w->ne[0]) {
+                    can_fuse = false;
+                    break;
+                }
+            }
+        }
+        if (can_fuse) {
             const int q_out = (int)blocks[0].attn_q_w->ne[1];
             const int k_out = (int)blocks[0].attn_k_w->ne[1];
             const int hidden = (int)blocks[0].attn_q_w->ne[0];
@@ -4994,7 +5008,8 @@ extern "C" struct qwen3_tts_context* qwen3_tts_init_from_file(const char* path_m
                 for (auto& b : blocks) {
                     b.attn_qkv_w = ggml_new_tensor_2d(c->fused_ctx, b.attn_q_w->type, hidden, qkv_out);
                 }
-                c->fused_buf = ggml_backend_alloc_ctx_tensors_from_buft(c->fused_ctx, ggml_backend_cpu_buffer_type());
+                c->fused_buf = ggml_backend_alloc_ctx_tensors_from_buft(
+                    c->fused_ctx, ggml_backend_get_default_buffer_type(c->backend));
                 if (c->fused_buf) {
                     for (auto& b : blocks) {
                         const size_t qb = ggml_nbytes(b.attn_q_w);
@@ -5006,8 +5021,9 @@ extern "C" struct qwen3_tts_context* qwen3_tts_init_from_file(const char* path_m
                         ggml_backend_tensor_set(b.attn_qkv_w, tmp.data(), 0, tmp.size());
                     }
                     if (params.verbosity >= 1) {
-                        fprintf(stderr, "qwen3_tts: fused QKV for %zu talker layers (%d+%d+%d→%d)\n", blocks.size(),
-                                q_out, k_out, k_out, qkv_out);
+                        fprintf(stderr, "qwen3_tts: fused QKV for %zu talker layers (%d+%d+%d→%d, type=%s)\n",
+                                blocks.size(), q_out, k_out, k_out, qkv_out,
+                                ggml_type_name(blocks[0].attn_q_w->type));
                     }
                 } else {
                     for (auto& b : blocks) {
