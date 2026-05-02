@@ -1,6 +1,6 @@
 [package]
 name = "crispasr"
-version = "0.5.4"
+version = "0.5.5"
 edition = "2021"
 description = "Safe Rust wrapper for CrispASR — lightweight on-device speech recognition (Whisper, Qwen3-ASR, FastConformer, and more)."
 license = "MIT"
@@ -15,7 +15,7 @@ categories = ["multimedia::audio", "api-bindings"]
 # crates.io ignores the path and resolves from the registry, so this works
 # both for cargo workspaces and for downstream consumers.
 [dependencies]
-crispasr-sys = { path = "../crispasr-sys", version = "0.5.4" }
+crispasr-sys = { path = "../crispasr-sys", version = "0.5.5" }
 
 [features]
 default = []
