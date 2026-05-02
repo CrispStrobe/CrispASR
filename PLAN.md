@@ -24,7 +24,7 @@ All backends support `-m auto --auto-download`. Three new ggml ops
 | **HIGH** | [#62 Streaming + mic library API](#62-streaming--mic-library-api) | M-L | crispasr_stream_* whisper-only; needs Python/Rust wrappers (Dart has), generalize to session handle, library-level mic via miniaudio, native streaming for moonshine-streaming + kyutai-stt + voxtral4b |
 | **MEDIUM** | [#60 llama.cpp/llamafile perf trick ports](#60-cross-backend-perf-tricks-llamacpp--llamafile-ports) | 14 items | 60a/b/c/d/f/g DONE; 60e env-flag wired across 9 backends (mimo-asr validated, others awaiting per-backend cosine pass); 60h-n parked/skip |
 | **LOW** | #41 Moonshine IPA / phoneme | High | Deferred |
-| **LOW** | [#7 voxtral4b streaming](#7-native-voxtral4b-streaming) | High | phase 1 + 1.5 + 2 SHIPPED (incremental encoder, bit-exact-batch, 240ms chunks, fused QKV LLM, 2.5× feed + 7-8% decode speedup); phase 3 (live captions) deferred |
+| **LOW** | [#7 voxtral4b streaming](#7-native-voxtral4b-streaming) | High | phase 1 + 1.5 + 2 + 3-partial SHIPPED (incremental encoder, bit-exact-batch, 240ms chunks, fused QKV LLM, combined-chunk flush, speculative prefill during feed → 4.1× first-text-token speedup: 2.67s → 650ms); phase 3 remainder (live captions during speech) deferred |
 | **LOW** | [#9 Parakeet TDT GPU](#9-parakeet-tdt-decoder-gpu) | Medium | |
 | **LOW** | [#11 WebSocket server](#11-websocket-streaming-server) | High | |
 | **BLOCKED** | [#42 VibeVoice-ASR 7B](#42-vibevoice-asr-7b) | High | Needs ≥16 GB RAM |
@@ -186,15 +186,56 @@ before the first text token can emit**. Beating 240 ms requires
 either a different prompt convention (model retraining) or a
 substantially faster Q4_K Metal kernel — neither is a quick win.
 
-### Phase 3 (deferred) — sub-second first-text-token + live captions
+### Phase 3 partial — combined-chunk flush + speculative prefill (May 2026)
 
-- **Right-pad encoder pipelining at flush.** The 990 ms encoder drain
-  at flush is mostly the right-pad zeros being encoded (10 right-pad
-  tokens × 1280 samples = 12800 zero samples → ~80 mel frames →
-  3-4 internal encoder chunks). A speculative-flush approach (snapshot
-  encoder K/V + conv lctx state, run right-pad encoder, decode, roll
-  back state) could overlap this work with user idle time between
-  feeds, dropping first-text-token latency by ~700 ms.
+**Shipped May 2026.**
+- **Combined-chunk flush.** The right-pad zeros at flush were being
+  fed through `voxtral4b_stream_feed` which ran 3-4 separate 240 ms
+  encoder chunks (plus tail-pad + per-chunk projector). On M1 Q4_K
+  the per-chunk Metal kernel-launch overhead doesn't amortise well
+  for the small final chunks. Refactored: append right-pad zeros
+  directly to `pcm_with_pad` without triggering the per-feed encoder
+  loop; then drain all pending mel (residual + right-pad's ~80
+  frames) via one larger combined chunk (~96 mel frames = 48 enc
+  frames = 12 projector groups). Saves ~6 kernel launches.
+  **Encoder drain at flush: 990 ms → 307 ms; first-text-token: 1646 ms
+  → 921 ms.**
+- **Speculative LLM prefill during feed.** Once feed has produced ≥
+  39 audio_embeds (after ~3.1 s of audio at 240 ms chunks), run the
+  streaming-prompt prefill speculatively and stash the resulting
+  last-position logits + n_past on the stream. Flush then skips the
+  prefill (~250 ms cost) and jumps straight to the decode loop.
+  No correctness risk: the LLM's KV cache state at position 39 is
+  identical regardless of when prefill runs.
+  **First-text-token: 921 ms → 650 ms.**
+
+**Final phase 1+1.5+2+3-partial numbers (M1 Q4_K JFK 11 s):**
+
+| Metric | Start | End | Δ |
+|---|---|---|---|
+| feed total | 24 s | 9.4 s | 2.5× faster |
+| flush total | 10 s+ | 7.5 s | -2.5 s+ |
+| per-decode-step | 56 ms | 50.4 ms | -10 % |
+| **first-text-token** | **2674 ms** | **650 ms** | **4.1× faster** |
+| bit-exact-batch | PASS | PASS | unchanged |
+
+The 650 ms first-text-token is now within 2.7× of the ≤240 ms target.
+Remaining gap is the model's 8-step streaming-pad warmup × 50.4 ms =
+~400 ms (architectural — model needs to "buffer" enough audio
+context before emitting text), plus the encoder drain at flush
+(~290 ms, dominated by right-pad encoder work). The architectural
+floor of `~400 ms warmup + first-decode` means ≤240 ms first-text
+remains out of reach without retraining the model with a different
+prompt convention.
+
+### Phase 3 — remaining work (deferred)
+
+- **Right-pad encoder pipelining (full speculative).** Currently the
+  speculative path covers the LLM prefill. Extending it to also run
+  the right-pad zeros through the encoder during feed (with state
+  save / restore so re-feeding more audio invalidates the
+  speculation) could shave another ~290 ms off first-text-token.
+  ~150 LOC of careful state management.
 - **Decoder thread overlapping audio injection.** Live-captions
   oriented; runs decoder while next chunk's encoder is still running.
   Not a first-token win for PTT but enables realtime live-caption

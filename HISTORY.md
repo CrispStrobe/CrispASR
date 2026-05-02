@@ -2457,6 +2457,40 @@ realtime-feed property is the remaining work.
 | first-text-token | n/a (no live data) | 2.7 s | **1.6 s** |
 | bit-exact-batch | PASS | PASS | PASS |
 
+**Phase 3 partial — combined-chunk flush + speculative LLM prefill (May 2026).**
+- **Combined-chunk flush.** Right-pad feed at flush previously ran
+  3-4 separate 240 ms encoder chunks plus tail-pad + per-chunk
+  projector. Refactored to append right-pad zeros directly to
+  `pcm_with_pad` and drain all pending mel via one larger combined
+  chunk (~96 mel frames = 48 enc frames = 12 projector groups). Saves
+  ~6 Metal kernel launches. Encoder drain at flush: 990 ms → 307 ms;
+  first-text-token: 1646 ms → 921 ms.
+- **Speculative LLM prefill during feed.** Once feed has produced ≥
+  39 audio_embeds (after ~3.1 s of audio at 240 ms chunks), run the
+  streaming-prompt prefill speculatively and stash the resulting
+  last-position logits + n_past on the stream. Flush skips prefill
+  (~250 ms saved) and jumps straight to the decode loop. No
+  correctness risk: the LLM's KV cache state at position 39 is
+  identical regardless of when prefill runs. First-text-token:
+  921 ms → 650 ms.
+
+**Final phase 1+1.5+2+3-partial numbers (M1 Q4_K JFK 11 s):**
+
+| Metric | Phase 1 | Phase 2 | Phase 3-partial |
+|---|---|---|---|
+| feed total | 23 s | 9.1 s | **9.4 s** |
+| flush total | 8.5 s | 8.3 s | **7.5 s** |
+| per-decode-step | 56 ms | 50.4 ms | **50.4 ms** |
+| **first-text-token** | n/a | 1.6 s | **650 ms** |
+| bit-exact-batch | PASS | PASS | PASS |
+
+Total session: first-text-token 2674 ms → 650 ms = **4.1× faster**.
+The remaining ~410 ms gap to the ≤240 ms model-card target is the
+architectural floor (8-step streaming-pad warmup × 50.4 ms = ~400 ms
+plus the first text decode step). Below that requires either a
+different prompt convention (model retrain) or substantially faster
+Q4_K Metal kernels.
+
 **Architectural floor for first-text-token latency** (revealed by
 the timing pass on M1 Q4_K JFK 11 s):
 
