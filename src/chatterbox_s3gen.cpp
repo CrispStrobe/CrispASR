@@ -1076,8 +1076,13 @@ static std::vector<float> hift_vocoder_cpu(
                 ggml_tensor* alpha1 = T(c, key);
                 if (alpha1) {
                     // Snake: x + (1/alpha) * sin²(alpha * x)
-                    // SiLU (x * sigmoid(x)) is a close approximation when alpha ≈ 1
-                    x = ggml_silu(ctx0, x);
+                    ggml_tensor* a = ggml_reshape_2d(ctx0, alpha1, 1, (int)alpha1->ne[0]);
+                    ggml_tensor* ax = ggml_mul(ctx0, x, a);
+                    ggml_tensor* sin_ax = ggml_sin(ctx0, ax);
+                    ggml_tensor* sin2 = ggml_mul(ctx0, sin_ax, sin_ax);
+                    // sin²(ax) / alpha
+                    ggml_tensor* sin2_over_a = ggml_div(ctx0, sin2, a);
+                    x = ggml_add(ctx0, x, sin2_over_a);
                 }
 
                 // Conv1d with dilation
@@ -1090,11 +1095,16 @@ static std::vector<float> hift_vocoder_cpu(
                     if (c1b) x = ggml_add(ctx0, x, ggml_reshape_2d(ctx0, c1b, 1, (int)c1b->ne[0]));
                 }
 
-                // Snake activation 2
+                // Snake activation 2: same as activation 1
                 std::snprintf(key, sizeof(key), "s3.v.rb.%d.a2.%d.alpha", rb_idx, d);
                 ggml_tensor* alpha2 = T(c, key);
                 if (alpha2) {
-                    x = ggml_silu(ctx0, x); // SiLU approximation of Snake
+                    ggml_tensor* a2 = ggml_reshape_2d(ctx0, alpha2, 1, (int)alpha2->ne[0]);
+                    ggml_tensor* ax2 = ggml_mul(ctx0, x, a2);
+                    ggml_tensor* sin_ax2 = ggml_sin(ctx0, ax2);
+                    ggml_tensor* sin2_2 = ggml_mul(ctx0, sin_ax2, sin_ax2);
+                    ggml_tensor* sin2_over_a2 = ggml_div(ctx0, sin2_2, a2);
+                    x = ggml_add(ctx0, x, sin2_over_a2);
                 }
 
                 // Conv2 (dilation=1)
