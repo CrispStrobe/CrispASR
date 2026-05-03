@@ -1017,6 +1017,8 @@ static std::vector<float> hift_vocoder_cpu(
         x = ggml_conv_1d(ctx0, cpre_w, x, 1, 3, 1);
         if (cpre_b) x = ggml_add(ctx0, x, ggml_reshape_2d(ctx0, cpre_b, 1, (int)cpre_b->ne[0]));
     }
+    ggml_set_name(x, "voc_conv_pre_out");
+    ggml_set_output(x);
 
     // Source STFT input (from SineGen → STFT): 18 channels (real + imag)
     // Total audio length = T_mel * 120 (upsample) * 4 (iSTFT hop)
@@ -1282,6 +1284,23 @@ static std::vector<float> hift_vocoder_cpu(
     if (ggml_backend_sched_graph_compute(c->sched, gf) != GGML_STATUS_SUCCESS) {
         fprintf(stderr, "s3gen: vocoder compute failed\n");
         return std::vector<float>(T_mel * 480, 0.0f);
+    }
+
+    // Read conv_pre diagnostic
+    ggml_tensor* cpre_out = ggml_graph_get_tensor(gf, "voc_conv_pre_out");
+    if (cpre_out && c->verbosity >= 1) {
+        size_t nb = ggml_nbytes(cpre_out);
+        std::vector<float> cpre_data(nb / sizeof(float));
+        ggml_backend_tensor_get(cpre_out, cpre_data.data(), 0, nb);
+        float rms = 0;
+        for (auto v : cpre_data) rms += v*v;
+        rms = std::sqrt(rms / cpre_data.size());
+        int T_cpre = (int)cpre_out->ne[0];
+        // Read (t=0, c=0..4): ggml stores as ne[0]=T, ne[1]=C → data[c * T + t]
+        fprintf(stderr, "s3gen: conv_pre ne=(%d,%d) rms=%.3f (t=0,c=0..4)=[%.3f %.3f %.3f %.3f %.3f] (ref: rms=5.50, [0.204 1.674 1.600 3.275 1.361])\n",
+                T_cpre, (int)cpre_out->ne[1], rms,
+                cpre_data[0*T_cpre+0], cpre_data[1*T_cpre+0], cpre_data[2*T_cpre+0],
+                cpre_data[3*T_cpre+0], cpre_data[4*T_cpre+0]);
     }
 
     // Read STFT output
