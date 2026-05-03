@@ -2,11 +2,12 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(TARGET crispasr-server)
-add_executable(${TARGET} server.cpp httplib.h)
+add_executable(${TARGET} server.cpp ws_stream.cpp httplib.h ws_stream.h)
 
 include(DefaultTargetOptions)
 
-target_link_libraries(${TARGET} PRIVATE common json_cpp whisper ${CMAKE_THREAD_LIBS_INIT})
+target_include_directories(${TARGET} PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_link_libraries(${TARGET} PRIVATE common json_cpp whisper crispasr ${CMAKE_THREAD_LIBS_INIT})
 
 if (WIN32)
     target_link_libraries(${TARGET} PRIVATE ws2_32)

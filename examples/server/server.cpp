@@ -4,6 +4,7 @@
 #include "crispasr.h"
 #include "httplib.h"
 #include "json.hpp"
+#include "ws_stream.h"
 
 #include <cfloat>
 #include <chrono>
@@ -62,6 +63,7 @@ struct server_params {
     std::string tmp_dir = ".";
 
     int32_t port = 8080;
+    int32_t ws_port = 0;  // 0 = port+1; -1 = disabled
     int32_t read_timeout = 600;
     int32_t write_timeout = 600;
 
@@ -328,6 +330,8 @@ bool whisper_params_parse(int argc, char** argv, whisper_params& params, server_
         // server params
         else if (arg == "--port") {
             sparams.port = std::stoi(argv[++i]);
+        } else if (arg == "--ws-port") {
+            sparams.ws_port = std::stoi(argv[++i]);
         } else if (arg == "--host") {
             sparams.hostname = argv[++i];
         } else if (arg == "--public") {
@@ -1257,6 +1261,14 @@ int main(int argc, char** argv) {
     // Set the base directory for serving static files
     svr->set_base_dir(sparams.public_path);
 
+    // WebSocket streaming server (PLAN #11)
+    int ws_port_actual = sparams.ws_port == 0 ? sparams.port + 1 : sparams.ws_port;
+    if (ws_port_actual > 0) {
+        if (ws_stream_start(params.model.c_str(), ws_port_actual, params.n_threads) == 0) {
+            printf("WebSocket streaming at ws://%s:%d\n", sparams.hostname.c_str(), ws_port_actual);
+        }
+    }
+
     // to make it ctrl+clickable:
     printf("\nwhisper server listening at http://%s:%d\n\n", sparams.hostname.c_str(), sparams.port);
 
@@ -1282,6 +1294,7 @@ int main(int argc, char** argv) {
 
     // clean up function, to be called before exit
     auto clean_up = [&]() {
+        ws_stream_stop();
         whisper_print_timings(ctx);
         whisper_free(ctx);
     };
