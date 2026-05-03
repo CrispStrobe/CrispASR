@@ -15,7 +15,7 @@ public:
 
     const char* name() const override { return "moonshine-streaming"; }
 
-    uint32_t capabilities() const override { return CAP_AUTO_DOWNLOAD; }
+    uint32_t capabilities() const override { return CAP_AUTO_DOWNLOAD | CAP_TIMESTAMPS_CTC; }
 
     bool init(const whisper_params& params) override {
         moonshine_streaming_context_params cp = moonshine_streaming_context_default_params();

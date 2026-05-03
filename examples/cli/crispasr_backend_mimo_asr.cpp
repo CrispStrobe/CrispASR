@@ -51,7 +51,7 @@ public:
     ~MimoAsrBackend() override { MimoAsrBackend::shutdown(); }
 
     const char* name() const override { return "mimo-asr"; }
-    uint32_t capabilities() const override { return CAP_AUTO_DOWNLOAD | CAP_TOKEN_CONFIDENCE; }
+    uint32_t capabilities() const override { return CAP_AUTO_DOWNLOAD | CAP_TOKEN_CONFIDENCE | CAP_TIMESTAMPS_CTC; }
 
     bool init(const whisper_params& params) override {
         auto cp = mimo_asr_context_default_params();

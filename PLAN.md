@@ -2081,7 +2081,7 @@ registry entry in `src/crispasr_model_registry.cpp`. Then set
 
 **Effort:** Trivial, ~1 hour for all four.
 
-### Phase 3 — Flash attention audit (MEDIUM)
+### Phase 3 — Flash attention audit — DONE
 
 Backends claiming flash attention in `--list-backends`:
 whisper, parakeet, canary, cohere, granite, voxtral, voxtral4b, qwen3,
@@ -2102,11 +2102,12 @@ For each backend: check if the attention implementation uses manual
 matmul chains or already calls `ggml_flash_attn_ext`. If manual,
 refactor to use `ggml_flash_attn_ext` behind a `flash_attn` flag.
 
-**Effort:** Medium — ~2 hours per backend for the refactor + validation.
-glm-asr and kyutai-stt are the highest-priority targets (largest models,
-most benefit from flash attn memory savings).
+All 6 backends (glm-asr, kyutai-stt, firered-asr, moonshine, omniasr,
+omniasr-llm) already call `ggml_flash_attn_ext` in their source — they
+just didn't declare `CAP_FLASH_ATTN`. Added the flag to each CLI
+adapter. No code changes to the attention implementations needed.
 
-### Phase 4 — Word timestamps via CTC aligner for all backends (SMALL)
+### Phase 4 — Word timestamps via CTC aligner for all backends — DONE
 
 The `-am` (alignment model) flag works with any backend that produces
 text output. Currently documented for: granite, voxtral, voxtral4b,
@@ -2121,7 +2122,9 @@ independently on (text, audio) pairs. Just needs:
 2. Add `-am` to the feature matrix if it works
 3. Update test-all-backends.py capabilities
 
-**Effort:** Trivial validation, ~1 hour.
+Added `CAP_TIMESTAMPS_CTC` to moonshine, moonshine-streaming, omniasr,
+omniasr-llm, mimo-asr. The `-am` aligner flag now accepts these backends
+(gated by `CAP_TIMESTAMPS_CTC` in `crispasr_run.cpp:292`).
 
 ### Phase 5 — Punctuation for CTC backends via auto-punc (LOW)
 

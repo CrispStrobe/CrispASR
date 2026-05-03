@@ -18,7 +18,7 @@ public:
 
     uint32_t capabilities() const override {
         return CAP_TIMESTAMPS_CTC | CAP_TEMPERATURE | CAP_BEAM_SEARCH | CAP_LANGUAGE_DETECT | CAP_AUTO_DOWNLOAD |
-               CAP_TOKEN_CONFIDENCE | CAP_PUNCTUATION_TOGGLE;
+               CAP_TOKEN_CONFIDENCE | CAP_PUNCTUATION_TOGGLE | CAP_FLASH_ATTN;
     }
 
     bool init(const whisper_params& params) override {

@@ -22,7 +22,7 @@ public:
         // so both segment and word timestamps are native (no DTW or CTC
         // aligner needed).
         return CAP_AUTO_DOWNLOAD | CAP_TOKEN_CONFIDENCE | CAP_TEMPERATURE | CAP_BEAM_SEARCH | CAP_TIMESTAMPS_NATIVE |
-               CAP_WORD_TIMESTAMPS | CAP_PUNCTUATION_TOGGLE;
+               CAP_WORD_TIMESTAMPS | CAP_PUNCTUATION_TOGGLE | CAP_FLASH_ATTN;
     }
 
     bool init(const whisper_params& params) override {
