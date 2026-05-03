@@ -17,6 +17,7 @@
 #include "crispasr_backend_utils.h"
 #include "whisper_params.h"
 #include "core/greedy_decode.h"
+#include "core/beam_decode.h"
 
 #include "granite_speech.h"
 
@@ -60,7 +61,8 @@ public:
 
     uint32_t capabilities() const override {
         return CAP_TIMESTAMPS_CTC | CAP_AUTO_DOWNLOAD | CAP_TEMPERATURE | CAP_PUNCTUATION_TOGGLE | CAP_FLASH_ATTN |
-               CAP_TOKEN_CONFIDENCE | CAP_TRANSLATE | CAP_SRC_TGT_LANGUAGE | CAP_DIARIZE | CAP_PARALLEL_PROCESSORS;
+               CAP_TOKEN_CONFIDENCE | CAP_TRANSLATE | CAP_SRC_TGT_LANGUAGE | CAP_DIARIZE | CAP_PARALLEL_PROCESSORS |
+               CAP_BEAM_SEARCH;
     }
 
     bool init(const whisper_params& p) override {
@@ -277,8 +279,79 @@ public:
             return out;
         }
 
+        const int max_new = params.max_new_tokens > 0 ? params.max_new_tokens : 200;
+
+        // ---- Beam search path ----
+        if (params.beam_size > 1) {
+            granite_speech_kv_reset(ctx_);
+            int vocab = 0;
+            float* logits = granite_speech_run_llm_kv(ctx_, all_embeds, total_prompt, 0, nullptr, &vocab);
+            if (!logits) {
+                fprintf(stderr, "crispasr[granite]: prefill failed\n");
+                free(all_embeds);
+                return out;
+            }
+            free(all_embeds);
+
+            auto replay = [this](granite_speech_context* /*ctx*/, const int32_t* toks, int n, int prompt_len) -> float* {
+                float* emb = granite_speech_embed_tokens(ctx_, toks, n);
+                if (!emb) return nullptr;
+                int v = 0;
+                float* lg = granite_speech_run_llm_kv(ctx_, emb, n, prompt_len, nullptr, &v);
+                std::free(emb);
+                return lg;
+            };
+
+            core_beam_decode::Config cfg;
+            cfg.max_new_tokens = max_new;
+            cfg.eos_id = eos_tok;
+            cfg.vocab_size = vocab;
+            cfg.beam_size = params.beam_size;
+            cfg.prompt_len = total_prompt;
+
+            auto beam_r = core_beam_decode::run_with_probs(ctx_, logits, replay, cfg);
+            free(logits);
+
+            // Convert beam result to greedy result format for shared detokenize path
+            core_greedy_decode::Result best_dec;
+            best_dec.tokens.assign(beam_r.tokens.begin(), beam_r.tokens.end());
+            best_dec.probs = std::move(beam_r.probs);
+
+            const std::vector<int32_t>& gen_ids = best_dec.tokens;
+            const std::vector<float>& probs = best_dec.probs;
+            // fall through to detokenize below via goto-equivalent scope
+            // (duplicated for clarity — the alternative is a lambda)
+            std::vector<int32_t> text_ids;
+            text_ids.reserve(gen_ids.size());
+            for (int32_t id : gen_ids)
+                if (id != eos_tok)
+                    text_ids.push_back(id);
+
+            char* text = granite_speech_decode_tokens(ctx_, text_ids.data(), (int)text_ids.size());
+            std::string transcript = text ? text : "";
+            if (text) free(text);
+
+            crispasr_segment seg;
+            // Strip leading space
+            size_t start = 0;
+            while (start < transcript.size() && transcript[start] == ' ') start++;
+            seg.text = transcript.substr(start);
+            if (!params.punctuation) {
+                crispasr_strip_ascii_punctuation(seg.text);
+                crispasr_lowercase_ascii(seg.text);
+                for (auto& tk : seg.tokens) {
+                    crispasr_strip_ascii_punctuation(tk.text);
+                    crispasr_lowercase_ascii(tk.text);
+                }
+            }
+            if (!seg.text.empty())
+                out.push_back(std::move(seg));
+            return out;
+        }
+
+        // ---- Greedy / best-of-N path ----
         core_greedy_decode::Config dec_cfg;
-        dec_cfg.max_new_tokens = params.max_new_tokens > 0 ? params.max_new_tokens : 200;
+        dec_cfg.max_new_tokens = max_new;
         dec_cfg.eos_id = eos_tok;
         dec_cfg.temperature = params.temperature;
 

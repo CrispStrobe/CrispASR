@@ -16,6 +16,7 @@
 #include "crispasr_backend_utils.h"
 #include "whisper_params.h"
 #include "core/greedy_decode.h"
+#include "core/beam_decode.h"
 
 #include "qwen3_asr.h"
 
@@ -117,7 +118,7 @@ public:
     uint32_t capabilities() const override {
         return CAP_TIMESTAMPS_CTC | CAP_LANGUAGE_DETECT | CAP_AUTO_DOWNLOAD | CAP_TEMPERATURE | CAP_PUNCTUATION_TOGGLE |
                CAP_FLASH_ATTN | CAP_TOKEN_CONFIDENCE | CAP_TRANSLATE | CAP_SRC_TGT_LANGUAGE | CAP_DIARIZE |
-               CAP_PARALLEL_PROCESSORS;
+               CAP_PARALLEL_PROCESSORS | CAP_BEAM_SEARCH;
     }
 
     bool init(const whisper_params& p) override {
@@ -284,8 +285,93 @@ public:
             eos_id = eos_arr[0];
         free(eos_arr);
 
+        const int prompt_len = (int)ids.size();
+        const int max_new = params.max_new_tokens > 0 ? params.max_new_tokens : 256;
+
+        // ---- Beam search path ----
+        if (params.beam_size > 1) {
+            qwen3_asr_kv_reset(ctx_);
+            int n_t = 0, vocab = 0;
+            float* logits = qwen3_asr_run_llm_kv(ctx_, text_embeds, prompt_len, 0, &n_t, &vocab);
+            free(text_embeds);
+            if (!logits) {
+                fprintf(stderr, "crispasr[qwen3]: prefill failed\n");
+                return out;
+            }
+            const float* last_logits = logits + (n_t - 1) * vocab;
+
+            auto replay = [this](qwen3_asr_context* /*ctx*/, const int32_t* toks, int n, int pl) -> float* {
+                float* emb = qwen3_asr_embed_tokens(ctx_, toks, n);
+                if (!emb) return nullptr;
+                int nt2 = 0, v2 = 0;
+                float* lg = qwen3_asr_run_llm_kv(ctx_, emb, n, pl, &nt2, &v2);
+                std::free(emb);
+                return lg;
+            };
+
+            core_beam_decode::Config cfg;
+            cfg.max_new_tokens = max_new;
+            cfg.eos_id = eos_id;
+            cfg.vocab_size = vocab;
+            cfg.beam_size = params.beam_size;
+            cfg.prompt_len = prompt_len;
+
+            auto beam_r = core_beam_decode::run_with_probs(ctx_, last_logits, replay, cfg);
+            free(logits);
+
+            // Feed beam result into the shared detokenize path below
+            core_greedy_decode::Result best_dec;
+            best_dec.tokens.assign(beam_r.tokens.begin(), beam_r.tokens.end());
+            best_dec.probs = std::move(beam_r.probs);
+
+            const std::vector<int32_t>& gen = best_dec.tokens;
+            const std::vector<float>& probs = best_dec.probs;
+
+            std::string transcript;
+            std::string detected_language;
+            bool capture_language = false;
+            std::vector<crispasr_token> out_tokens;
+            out_tokens.reserve(gen.size());
+            for (size_t i = 0; i < gen.size(); i++) {
+                const int32_t id = gen[i];
+                if (id == eos_id) break;
+                const char* raw_piece = qwen3_asr_token_text(ctx_, id);
+                if (!raw_piece || !*raw_piece) continue;
+                std::string raw = raw_piece;
+                if (raw.size() >= 2 && raw[0] == '<' && raw[1] == '|') continue;
+                if (raw.size() >= 2 && raw[0] == '<' && raw.back() == '>') continue;
+                if (raw.size() >= 5 && raw[0] == '[' && raw[1] == 'P' && raw[2] == 'A' && raw[3] == 'D') continue;
+                std::string txt = decode_token(raw);
+                if (raw == "language") { capture_language = true; continue; }
+                if (capture_language) { detected_language = txt; capture_language = false; continue; }
+                transcript += txt;
+                crispasr_token tk;
+                tk.text = txt;
+                tk.confidence = (i < probs.size()) ? probs[i] : 1.0f;
+                out_tokens.push_back(std::move(tk));
+            }
+
+            crispasr_segment seg;
+            size_t start = 0;
+            while (start < transcript.size() && transcript[start] == ' ') start++;
+            seg.text = transcript.substr(start);
+            seg.tokens = std::move(out_tokens);
+            if (!params.punctuation) {
+                crispasr_strip_ascii_punctuation(seg.text);
+                crispasr_lowercase_ascii(seg.text);
+                for (auto& tk : seg.tokens) {
+                    crispasr_strip_ascii_punctuation(tk.text);
+                    crispasr_lowercase_ascii(tk.text);
+                }
+            }
+            if (!seg.text.empty())
+                out.push_back(std::move(seg));
+            return out;
+        }
+
+        // ---- Greedy / best-of-N path ----
         core_greedy_decode::Config dec_cfg;
-        dec_cfg.max_new_tokens = params.max_new_tokens > 0 ? params.max_new_tokens : 256;
+        dec_cfg.max_new_tokens = max_new;
         dec_cfg.eos_id = eos_id;
         dec_cfg.temperature = params.temperature;
 
@@ -297,7 +383,7 @@ public:
             qwen3_asr_kv_reset(ctx_);
 
             int n_t = 0, vocab = 0;
-            float* logits = qwen3_asr_run_llm_kv(ctx_, text_embeds, (int)ids.size(), 0, &n_t, &vocab);
+            float* logits = qwen3_asr_run_llm_kv(ctx_, text_embeds, prompt_len, 0, &n_t, &vocab);
             if (!logits) {
                 fprintf(stderr, "crispasr[qwen3]: prefill failed (run %d/%d)\n", run + 1, n_runs);
                 free(text_embeds);

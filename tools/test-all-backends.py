@@ -149,8 +149,8 @@ REGISTRY: tuple[Backend, ...] = (
             capabilities=("transcribe", "json-output", "temperature")),
     Backend("qwen3",      "Qwen3 ASR 0.6B",      "qwen3-asr-0.6b-q4_k.gguf",
             "cstr/qwen3-asr-0.6b-GGUF", "qwen3-asr-0.6b-q4_k.gguf",
-            timeout_s=60, approx_size_mb=400,
-            capabilities=("transcribe", "json-output")),
+            timeout_s=120, approx_size_mb=400,
+            capabilities=("transcribe", "json-output", "beam")),
     # OmniASR CTC Q4_K now uses mixed quantization (head=4 encoder layers
     # at F16, rest at Q4_K) by default in crispasr-quantize. Recovers
     # nearly all of Q8_0's quality (5% WER on JFK from 1-word "americas"→
@@ -185,11 +185,11 @@ REGISTRY: tuple[Backend, ...] = (
     Backend("granite",    "Granite Speech 1B",   "granite-speech-4.0-1b-q4_k.gguf",
             "cstr/granite-speech-4.0-1b-GGUF", "granite-speech-4.0-1b-q4_k.gguf",
             timeout_s=300, approx_size_mb=1700,
-            capabilities=("transcribe", "json-output")),
+            capabilities=("transcribe", "json-output", "beam")),
     Backend("granite-4.1", "Granite Speech 4.1 2B", "granite-speech-4.1-2b-q4_k.gguf",
             "cstr/granite-speech-4.1-2b-GGUF", "granite-speech-4.1-2b-q4_k.gguf",
             timeout_s=300, approx_size_mb=1500,
-            capabilities=("transcribe", "json-output")),
+            capabilities=("transcribe", "json-output", "beam")),
     Backend("vibevoice",  "VibeVoice ASR",       "vibevoice-asr-7b-q4_k-fixed.gguf",
             "cstr/vibevoice-asr-GGUF", "vibevoice-asr-q4_k.gguf",
             timeout_s=600, approx_size_mb=4500,

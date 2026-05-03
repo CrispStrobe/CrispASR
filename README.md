@@ -132,7 +132,7 @@ Run `crispasr --list-backends` to see it live. Each backend declares capabilitie
 | Speaker diarization | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | all | all | all | all | all | all | all | all | all | all | | |
 | Grammar (GBNF) | ✔ | | | | | | | | | | | | | | | | | | | | |
 | Temperature sampling | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | | | ✔ | ✔ | | ✔ | | ✔ | ✔ | ✔ | | |
-| Beam search | ✔ | | | | | | ✔ | | | | | ✔ | ✔ | ✔ | ✔ | | ✔ | ✔ | | | |
+| Beam search | ✔ | | | | ✔ | ✔ | ✔ | | ✔ | | | ✔ | ✔ | ✔ | ✔ | | ✔ | ✔ | | | |
 | Flash attention | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | | | | | | | | | | ✔ | | |
 | Punctuation toggle | | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | | | ✔ | ✔ | | ✔ | | ✔ | ✔ | | | |
 | Punc restoration | pp | pp | pp | pp | pp | pp | pp | pp | pp | pp | pp | pp | pp | pp | pp | pp | pp | pp | pp | | |
