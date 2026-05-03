@@ -1,8 +1,13 @@
 FROM ubuntu:22.04 AS build
 WORKDIR /app
 
-RUN apt-get update && \
-  apt-get install -y build-essential wget cmake git ninja-build \
+# archive.ubuntu.com flakes intermittently from CI runners; retries +
+# longer timeouts let transient connection failures resolve themselves
+# rather than failing the whole build.
+RUN printf 'Acquire::Retries "5";\nAcquire::http::Timeout "30";\nAcquire::https::Timeout "30";\n' \
+      > /etc/apt/apt.conf.d/80-retries && \
+  apt-get update && \
+  apt-get install -y --fix-missing build-essential wget cmake git ninja-build \
   && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
 COPY . .
@@ -14,8 +19,10 @@ RUN jobs="${CRISPASR_BUILD_JOBS:-$(nproc)}" && \
 FROM ubuntu:22.04 AS runtime
 WORKDIR /app
 
-RUN apt-get update && \
-  apt-get install -y curl ffmpeg libsdl2-dev wget cmake git \
+RUN printf 'Acquire::Retries "5";\nAcquire::http::Timeout "30";\nAcquire::https::Timeout "30";\n' \
+      > /etc/apt/apt.conf.d/80-retries && \
+  apt-get update && \
+  apt-get install -y --fix-missing curl ffmpeg libsdl2-dev wget cmake git \
   && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
 COPY --from=build /app /app

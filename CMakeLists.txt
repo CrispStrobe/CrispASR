@@ -4,6 +4,16 @@ file(READ "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" PROJECT_VERSION_CONTENT)
 string(STRIP "${PROJECT_VERSION_CONTENT}" PROJECT_VERSION_CONTENT)
 
 project(crispasr VERSION ${PROJECT_VERSION_CONTENT} LANGUAGES C CXX)
+
+# src/CMakeLists.txt promotes crispasr_audio.cpp and crispasr_mic.cpp to
+# LANGUAGE OBJCXX on Apple so miniaudio's CoreAudio backend can include
+# <AVFoundation/AVFoundation.h>. CMake refuses to honor that property
+# unless the language is enabled at project scope.
+if(APPLE)
+    enable_language(OBJC)
+    enable_language(OBJCXX)
+endif()
+
 include(CheckIncludeFileCXX)
 
 set(SOVERSION 1)
