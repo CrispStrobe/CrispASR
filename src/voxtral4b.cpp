@@ -1262,6 +1262,14 @@ extern "C" float* voxtral4b_embed_tokens(voxtral4b_context* ctx, const int32_t* 
 extern "C" bool voxtral4b_kv_init(voxtral4b_context* ctx, int max_ctx) {
     if (!ctx || max_ctx <= 0)
         return false;
+    // Idempotent: callers (notably crispasr_backend_voxtral4b's
+    // per-chunk transcribe path) re-init on every audio chunk. Without
+    // this guard, each call replaces ctx->kv_buf with a fresh backend
+    // allocation while leaking the previous one — ~256-512 MiB of
+    // VRAM per chunk depending on KV dtype, n_layers, and max_ctx
+    // (issue #54: voxtral4b OOMs after ~49 chunks of 30 s audio).
+    if (ctx->kv_k)
+        return true;
     const auto& hp = ctx->model.hparams;
     const int hd = (int)hp.llm_head_dim;
     const int n_kv = (int)hp.llm_n_kv_heads;

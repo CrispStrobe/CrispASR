@@ -1980,6 +1980,12 @@ extern "C" float* granite_speech_run_projector(struct granite_speech_context* ct
 extern "C" bool granite_speech_kv_init(struct granite_speech_context* ctx, int max_ctx) {
     if (!ctx || max_ctx <= 0)
         return false;
+    // Idempotent: same per-chunk re-init pattern as voxtral4b (issue
+    // #54). Without this guard, the per-transcribe call in
+    // crispasr_backend_granite leaks the entire KV backend buffer
+    // every chunk.
+    if (ctx->kv_k)
+        return true;
     const auto& hp = ctx->model.hparams;
     const int hd = (int)hp.llm_head_dim;
     const int n_kv = (int)hp.llm_n_kv_heads;
