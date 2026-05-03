@@ -398,6 +398,211 @@ jobs:
           name: libcrispasr-windows-x86_64-vulkan
           path: release/libcrispasr-windows-x86_64-vulkan.tar.gz
 
+  # ── Linux x86_64 shared libs + headers (CUDA) ────────────────────────────────
+  # CUDA 12.8 toolkit (sm_75…sm_120 incl. RTX 50xx Blackwell). Bundles
+  # libggml-cuda.so alongside the standard libs/headers. Consumers must
+  # have a matching CUDA driver + runtime installed on the host
+  # (cudart / cublas) — we don't bundle those, since dev hosts that
+  # link against a libcrispasr-cuda tarball typically have CUDA
+  # already.
+  build-libs-linux-x86_64-cuda:
+    runs-on: ubuntu-latest
+    env:
+      CUDA_VERSION: "12.8.0"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Install deps
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ patchelf
+
+      - name: Install CUDA Toolkit 12.8.0
+        uses: Jimver/cuda-toolkit@v0.2.35
+        with:
+          cuda: '12.8.0'
+          method: 'network'
+          sub-packages: '["nvcc", "cudart", "cublas", "cublas_dev", "nvrtc", "nvrtc_dev"]'
+
+      - name: Build (shared libs, CUDA)
+        run: |
+          cmake -S . -B build-libs \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=ON \
+            -DGGML_CUDA=ON \
+            -DCMAKE_CUDA_ARCHITECTURES="75-real;86-real;89-real;120-real;120-virtual" \
+            -DCRISPASR_BUILD_TESTS=OFF \
+            -DCRISPASR_BUILD_EXAMPLES=OFF \
+            -DCRISPASR_BUILD_SERVER=OFF
+          cmake --build build-libs --config Release -j $(nproc) --target crispasr
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          OUT=release/libcrispasr-linux-x86_64-cuda
+          mkdir -p "$OUT/src" "$OUT/ggml/src" "$OUT/include" "$OUT/ggml/include"
+          cp -P build-libs/src/libcrispasr*.so* "$OUT/src/"
+          [ -e build-libs/src/libwhisper.so ] && cp -P build-libs/src/libwhisper.so* "$OUT/src/"
+          find build-libs/src -maxdepth 1 -name 'lib*.so*' \( -type f -o -type l \) \
+            ! -name 'libcrispasr*' ! -name 'libwhisper*' \
+            -exec cp -P {} "$OUT/src/" \;
+          # ggml-cuda.so + ggml-base.so + ggml-cpu.so all live under ggml/src
+          find build-libs/ggml/src -name 'libggml*.so*' \( -type f -o -type l \) \
+            -exec cp -P {} "$OUT/ggml/src/" \;
+          for f in "$OUT"/src/*.so* "$OUT"/ggml/src/*.so*; do
+            [ -L "$f" ] && continue
+            patchelf --set-rpath '$ORIGIN:$ORIGIN/../../ggml/src' "$f" 2>/dev/null || true
+          done
+          cp include/crispasr.h "$OUT/include/"
+          cp ggml/include/*.h   "$OUT/ggml/include/" 2>/dev/null || true
+          cp LICENSE "$OUT/"
+          cd release && tar czf libcrispasr-linux-x86_64-cuda.tar.gz libcrispasr-linux-x86_64-cuda/
+          ls -lh libcrispasr-linux-x86_64-cuda.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libcrispasr-linux-x86_64-cuda
+          path: release/libcrispasr-linux-x86_64-cuda.tar.gz
+
+  # ── Windows x86_64 shared libs + headers (CUDA) ──────────────────────────────
+  # CUDA 12.8 toolkit (Blackwell-aware). Unlike the Linux CUDA tarball,
+  # we bundle the CUDA runtime DLLs (cudart / cublas / cublasLt) so the
+  # tarball is self-contained for downstream Windows consumers — matches
+  # the existing build-windows-cuda EXE bundle's pattern.
+  build-libs-windows-x86_64-cuda:
+    runs-on: windows-latest
+    env:
+      CUDA_VERSION: "12.8.0"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Install CUDA Toolkit 12.8.0
+        uses: Jimver/cuda-toolkit@v0.2.35
+        with:
+          cuda: '12.8.0'
+          method: 'network'
+          sub-packages: '["nvcc", "cudart", "cublas", "cublas_dev", "nvrtc", "nvrtc_dev", "nvtx", "cuda_profiler_api", "visual_studio_integration"]'
+
+      - name: Build (shared libs, CUDA)
+        shell: cmd
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          cmake -S . -B build-libs -G Ninja ^
+            -DCMAKE_BUILD_TYPE=Release ^
+            -DBUILD_SHARED_LIBS=ON ^
+            -DCRISPASR_BUILD_TESTS=OFF ^
+            -DCRISPASR_BUILD_EXAMPLES=OFF ^
+            -DCRISPASR_BUILD_SERVER=OFF ^
+            -DGGML_CUDA=ON ^
+            -DCMAKE_CUDA_ARCHITECTURES="75-real;86-real;89-real;120-real;120-virtual" ^
+            -DGGML_NATIVE=OFF ^
+            -DGGML_AVX2=ON -DGGML_FMA=ON -DGGML_F16C=ON
+          cmake --build build-libs --config Release -j %NUMBER_OF_PROCESSORS% --target crispasr
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $OUT = "release\libcrispasr-windows-x86_64-cuda"
+          New-Item -ItemType Directory -Force "$OUT\bin","$OUT\src\Release","$OUT\ggml\src\Release","$OUT\ggml\bin","$OUT\include","$OUT\ggml\include" | Out-Null
+          # Ninja flat layout: dlls in build-libs\bin, libs in build-libs\src
+          $BIN_DIRS = @("build-libs\bin\Release","build-libs\bin")
+          foreach ($d in $BIN_DIRS) {
+            if (Test-Path $d) {
+              Get-ChildItem "$d\*.dll" -ErrorAction SilentlyContinue |
+                Copy-Item -Destination "$OUT\bin\"
+              Get-ChildItem "$d\ggml*.dll" -ErrorAction SilentlyContinue |
+                Copy-Item -Destination "$OUT\ggml\bin\"
+            }
+          }
+          $LIB_DIRS = @("build-libs\src\Release","build-libs\src")
+          foreach ($d in $LIB_DIRS) {
+            if (Test-Path $d) {
+              Get-ChildItem "$d\*.lib" -ErrorAction SilentlyContinue |
+                Copy-Item -Destination "$OUT\src\Release\"
+            }
+          }
+          $GGML_LIB_DIRS = @("build-libs\ggml\src\Release","build-libs\ggml\src")
+          foreach ($d in $GGML_LIB_DIRS) {
+            if (Test-Path $d) {
+              Get-ChildItem "$d\*.lib" -ErrorAction SilentlyContinue |
+                Copy-Item -Destination "$OUT\ggml\src\Release\"
+            }
+          }
+          # CUDA runtime DLLs — bundled so the tarball is self-contained
+          # on Windows hosts that haven't added CUDA bin to PATH.
+          Copy-Item "$env:CUDA_PATH\bin\cudart64_*.dll"   "$OUT\bin\" -ErrorAction SilentlyContinue
+          Copy-Item "$env:CUDA_PATH\bin\cublas64_*.dll"   "$OUT\bin\" -ErrorAction SilentlyContinue
+          Copy-Item "$env:CUDA_PATH\bin\cublasLt64_*.dll" "$OUT\bin\" -ErrorAction SilentlyContinue
+          Copy-Item include\crispasr.h "$OUT\include\"
+          Get-ChildItem ggml\include\*.h -ErrorAction SilentlyContinue |
+            Copy-Item -Destination "$OUT\ggml\include\"
+          Copy-Item LICENSE "$OUT\"
+          cd release
+          tar -czf libcrispasr-windows-x86_64-cuda.tar.gz libcrispasr-windows-x86_64-cuda
+          Get-Item libcrispasr-windows-x86_64-cuda.tar.gz | Format-List Name,Length
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libcrispasr-windows-x86_64-cuda
+          path: release/libcrispasr-windows-x86_64-cuda.tar.gz
+
+  # ── Windows x86_64 shared libs + headers (CPU legacy SSE4.2) ─────────────────
+  # For dev hosts on pre-Haswell CPUs (Sandy/Ivy Bridge i5/i7-3xxx, AMD
+  # pre-Excavator). Same layout as build-libs-windows-x86_64 but built
+  # with -DGGML_AVX2=OFF -DGGML_FMA=OFF -DGGML_F16C=OFF. Symptoms of
+  # using the wrong build on a legacy host: silent instant exit
+  # (STATUS_ILLEGAL_INSTRUCTION) with no error message.
+  build-libs-windows-x86_64-cpu-legacy:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Build (shared libs, CPU legacy SSE4.2)
+        run: |
+          cmake -S . -B build-libs `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DBUILD_SHARED_LIBS=ON `
+            -DCRISPASR_BUILD_TESTS=OFF `
+            -DCRISPASR_BUILD_EXAMPLES=OFF `
+            -DCRISPASR_BUILD_SERVER=OFF `
+            -DGGML_NATIVE=OFF `
+            -DGGML_AVX2=OFF -DGGML_FMA=OFF -DGGML_F16C=OFF `
+            -DGGML_AVX=ON
+          cmake --build build-libs --config Release -j $env:NUMBER_OF_PROCESSORS --target crispasr
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $OUT = "release\libcrispasr-windows-x86_64-cpu-legacy"
+          New-Item -ItemType Directory -Force "$OUT\bin","$OUT\src\Release","$OUT\ggml\src\Release","$OUT\ggml\bin","$OUT\include","$OUT\ggml\include" | Out-Null
+          Get-ChildItem build-libs\bin\Release\*.dll -ErrorAction SilentlyContinue |
+            Copy-Item -Destination "$OUT\bin\"
+          Get-ChildItem build-libs\bin\Release\ggml*.dll -ErrorAction SilentlyContinue |
+            Copy-Item -Destination "$OUT\ggml\bin\"
+          Get-ChildItem build-libs\src\Release\*.lib -ErrorAction SilentlyContinue |
+            Copy-Item -Destination "$OUT\src\Release\"
+          Get-ChildItem build-libs\ggml\src\Release\*.lib -ErrorAction SilentlyContinue |
+            Copy-Item -Destination "$OUT\ggml\src\Release\"
+          Copy-Item include\crispasr.h "$OUT\include\"
+          Get-ChildItem ggml\include\*.h -ErrorAction SilentlyContinue |
+            Copy-Item -Destination "$OUT\ggml\include\"
+          Copy-Item LICENSE "$OUT\"
+          cd release
+          tar -czf libcrispasr-windows-x86_64-cpu-legacy.tar.gz libcrispasr-windows-x86_64-cpu-legacy
+          Get-Item libcrispasr-windows-x86_64-cpu-legacy.tar.gz | Format-List Name,Length
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libcrispasr-windows-x86_64-cpu-legacy
+          path: release/libcrispasr-windows-x86_64-cpu-legacy.tar.gz
+
   # ── Windows CPU (AVX2 — Haswell/2013+ baseline) ──────────────────────────────
   build-windows-cpu:
     runs-on: windows-latest
@@ -564,7 +769,7 @@ jobs:
           path: release/crispasr-windows-x86_64-vulkan.zip
 
   publish:
-    needs: [build-linux, build-python-linux, build-macos, build-libs-macos-arm64, build-libs-linux-x86_64, build-libs-windows-x86_64, build-libs-windows-x86_64-vulkan, build-windows-cpu, build-windows-cpu-legacy, build-windows-cuda, build-windows-vulkan]
+    needs: [build-linux, build-python-linux, build-macos, build-libs-macos-arm64, build-libs-linux-x86_64, build-libs-linux-x86_64-cuda, build-libs-windows-x86_64, build-libs-windows-x86_64-vulkan, build-libs-windows-x86_64-cuda, build-libs-windows-x86_64-cpu-legacy, build-windows-cpu, build-windows-cpu-legacy, build-windows-cuda, build-windows-vulkan]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -581,8 +786,11 @@ jobs:
             artifacts/crispasr-macos/crispasr-macos.tar.gz
             artifacts/libcrispasr-macos-arm64/libcrispasr-macos-arm64.tar.gz
             artifacts/libcrispasr-linux-x86_64/libcrispasr-linux-x86_64.tar.gz
+            artifacts/libcrispasr-linux-x86_64-cuda/libcrispasr-linux-x86_64-cuda.tar.gz
             artifacts/libcrispasr-windows-x86_64/libcrispasr-windows-x86_64.tar.gz
             artifacts/libcrispasr-windows-x86_64-vulkan/libcrispasr-windows-x86_64-vulkan.tar.gz
+            artifacts/libcrispasr-windows-x86_64-cuda/libcrispasr-windows-x86_64-cuda.tar.gz
+            artifacts/libcrispasr-windows-x86_64-cpu-legacy/libcrispasr-windows-x86_64-cpu-legacy.tar.gz
             artifacts/crispasr-windows-x86_64-cpu/crispasr-windows-x86_64-cpu.zip
             artifacts/crispasr-windows-x86_64-cpu-legacy/crispasr-windows-x86_64-cpu-legacy.zip
             artifacts/crispasr-windows-x86_64-cuda/crispasr-windows-x86_64-cuda.zip
