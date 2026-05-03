@@ -1410,6 +1410,7 @@ often-contested external disk.
 | [60l — tinyBLAS x86 kernels](#60l-tinyblas-llamafile-specific) | SKIP | T3 | — | Not relevant on Apple Silicon |
 | [60m — APE multi-arch binary](#60m-ape-multi-arch-binary-llamafile-specific) | SKIP | T3 | — | Distribution, not perf |
 | [60n — CUDA graphs](#60n-cuda-graphs--cuda-specific) | SKIP | T3 | — | We don't ship a CUDA backend |
+| [60o — MTLBinaryArchive pipeline cache](#60o-mtlbinaryarchive-metal-pipeline-cache) | **OPEN** | T1 | M | Save 30–60 s per cold start on every Apple Silicon consumer |
 
 **Tiers:** T1 = directly attacks cold-start / loader. T2 = decode-time
 speedup, work-order calls out. T3 = situational / parked / skip.
@@ -1639,6 +1640,55 @@ source + per-platform builds in CI).
 Doesn't apply to Metal. If we ever ship a CUDA backend (not
 currently a target — we use ggml-cuda for build-time only),
 revisit.
+
+### 60o. MTLBinaryArchive Metal pipeline cache
+
+**Status:** OPEN. **Tier 1.** **Effort:** M (~half day source patch
+in upstream `ggml/src/ggml-metal/`). **Source:** raised by CrisperWeaver
+PLAN §5.18 — the highest-leverage perf item the Flutter app's CI
+sweep is currently waiting on.
+
+**Problem.** ggml-metal compiles MSL pipelines lazily for each unique
+tensor shape on first use, then caches them in-memory only. Every
+fresh process pays 30–60 s of MTLLibrary + MTLComputePipelineState
+JIT before the first `ggml_metal_encode` lands. Affects:
+
+* Every `flutter test` / `crispasr` CLI invocation on the dev box
+  (~30–60 s startup tax per run).
+* Every CI sweep — measured at ~25 min for the single-process
+  multi-backend pass; projected ~5 min if pipelines were warm.
+* Every end-user app launch on macOS / iOS / iPadOS where pipelines
+  are recompiled across the whole loaded model on first transcribe.
+
+**Fix.** Use Apple's first-party `MTLBinaryArchive` API to write
+freshly-compiled pipeline state objects to a per-device disk cache
+on shutdown and reload them on startup. Same pattern Apple's own
+MPS / MLX use. Sketch:
+
+* Patch `ggml/src/ggml-metal/ggml-metal-device.m`:
+  - On `ggml_metal_device_init`, attempt
+    `[device newBinaryArchiveWithDescriptor:]` from
+    `${GGML_METAL_PIPELINE_CACHE}` (default
+    `~/Library/Caches/ggml-metal/<device-name>.archive`).
+  - When `ggml_metal_compile_pipeline` produces a new
+    `id<MTLComputePipelineState>`, also call
+    `[archive addComputePipelineFunctionsWithDescriptor:]` so the
+    next process can rehydrate it.
+  - On exit (or via an explicit `ggml_metal_pipeline_cache_save`),
+    `[archive serializeToURL:]` flushes to disk.
+* Joins the existing `// CrispASR patch` set in ggml-metal — same
+  rebase discipline as the conv_transpose_1d perf patch.
+* Cache invalidation: include device name + ggml-metal source
+  hash in the archive path so a kernel change auto-busts the cache.
+
+**Risk.** Low — Apple's API is stable since iOS 14 / macOS 11. Worst
+case the archive fails to load and we fall back to the existing JIT
+path, exactly today's behaviour.
+
+**Why Tier 1.** The 30–60 s saved compounds across every consumer
+of CrispASR (CLI, CrisperWeaver, the wrapper bindings, CI). Same
+order-of-magnitude impact as 60a (madvise WILLNEED) had on cold-mmap
+weight loads.
 
 ---
 
@@ -2189,11 +2239,36 @@ Best-of-N (`-bo N`) runs N independent decodes at temperature > 0 and
 picks the highest-scoring result. Currently times out on CPU for large
 models (omniasr-llm 300s, glm-asr 300s, kyutai-stt 90s).
 
-**Not a code issue** — the feature works, it's just too slow on CPU
-with Q4_K models > 500 MB. On GPU or with smaller models it completes.
-No code changes needed; just document the GPU requirement.
+**CLI side:** not a code issue — the feature works, it's just too slow
+on CPU with Q4_K models > 500 MB. On GPU or with smaller models it
+completes. No code changes needed; just document the GPU requirement.
 
-**Effort:** None (documentation only).
+**SDK side (gap discovered 2026-05-03 by CrisperWeaver §5.8):**
+There is **no runtime knob** for best-of-N exposed to library
+consumers. To wire a UI slider against it we would need:
+
+- `crispasr_session_set_best_of(handle, int n) → int rc` in
+  `include/crispasr.h` + `src/crispasr_c_api.cpp` — modeled exactly on
+  the existing `crispasr_session_set_temperature` pattern (returns
+  `rc=-2` when no backend in the session honours it, so the binding
+  can map that to a silent no-op the way `setTemperature` already
+  does in `flutter/crispasr/lib/src/crispasr.dart::setTemperature`).
+- A matching `int bestOf` field on `TranscribeOptions` in
+  `flutter/crispasr/lib/src/crispasr.dart` so Whisper consumers can
+  set it via the standard options struct (whisper.cpp already supports
+  it via `whisper_full_params.greedy.best_of` / `beam_search.beam_size`,
+  it's just not surfaced through TranscribeOptions today).
+- Per-backend wiring under `crispasr_session_set_best_of` for the
+  backends that actually accept it: voxtral, voxtral4b, qwen3-asr,
+  granite-speech (via their per-token sampling params).
+
+CrisperWeaver shipped temperature without best-of-N at v0.4.0
+because of this gap; the slider is one ARB string + one method
+binding away on the consumer side once the C ABI exists.
+
+**Effort:** ~half day to add the C ABI + Dart binding + Whisper
+TranscribeOptions field, then per-backend dispatch arms (probably
+another half day to wire all four LLM backends).
 
 ### Phase 7 — Capability declaration fixes — DONE
 
