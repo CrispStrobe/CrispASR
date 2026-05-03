@@ -1347,7 +1347,16 @@ Every `src/core/` migration commit includes a `md5sum`-level regression test aga
 
 Adding a new ASR model to CrispASR is a focused exercise in five files. The worked examples to copy from are the existing `crispasr_backend_*.cpp` adapters.
 
-> **Heads-up on `clang-format`** — CI pins `clang-format-18`. Homebrew's default `clang-format` keg is on v22+, which formats some constructs differently and will fail the lint job. Pin it locally with `pip install 'clang-format==18.1.8'` and put `~/Library/Python/3.11/bin` (or your equivalent pip user-bin) ahead of `/opt/homebrew/bin` on `PATH`. One pip install, no LLVM toolchain needed.
+> **‼️ `clang-format` MUST be v18 — never use v22 (Homebrew's default `clang-format` keg, or Xcode's bundled clang-format, both currently ship v22).** CI pins `clang-format-18` (`.github/workflows/lint.yml`); v22 silently re-wraps lines and fails the lint job with ~80+ violations across the project's C++ files. Anyone formatting with v22 will produce a commit that breaks CI even though the code "looks formatted" locally.
+>
+> **Use `./tools/format.sh`** — it locates clang-format-18 via Homebrew's `llvm@18` keg or apt's `clang-format-18` and refuses to run any other version. `./tools/format.sh` checks; `./tools/format.sh --fix` rewrites in place. The script's scope mirrors `lint.yml` exactly so local check ≡ CI check.
+>
+> **Install** clang-format-18:
+> - macOS: `brew install llvm@18` (binary lands at `/opt/homebrew/opt/llvm@18/bin/clang-format`)
+> - Ubuntu / Debian: `sudo apt install clang-format-18`
+> - Cross-platform via pip: `pip install 'clang-format==18.1.8'` (puts `clang-format` v18 on `PATH`; works as long as your pip user-bin precedes Homebrew's bin)
+>
+> **Do NOT** put `/opt/homebrew/bin/clang-format` (currently v22) on `PATH` for this project; it will silently mis-format. The wrapper script defends against this by hardcoded version-check.
 
 ### 1. Land the model's C API in `src/yourmodel.{h,cpp}`
 

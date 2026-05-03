@@ -11,6 +11,15 @@ All backends support `-m auto --auto-download`. Three new ggml ops
 Feature matrix expanded to 21 backends (README). test-all-backends.py
 passes 18/18 transcribe + 51/54 feature tests (3 stream skips, no failures).
 
+> **‼️ Tooling pin: `clang-format` MUST be v18.** CI pins it
+> (`.github/workflows/lint.yml`). Homebrew's default `clang-format` and
+> Xcode's bundled `clang-format` both ship v22, which silently
+> re-wraps lines and breaks CI lint. Use `./tools/format.sh` (refuses
+> non-v18) or the explicit path
+> `/opt/homebrew/opt/llvm@18/bin/clang-format`. Never `clang-format`
+> bare from `PATH`. See `CLAUDE.md` + `LEARNINGS.md` for the full
+> lesson.
+
 ---
 
 ## Priority ordering

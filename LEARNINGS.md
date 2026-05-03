@@ -7543,3 +7543,46 @@ References: `cmake/git-vars.cmake`, `examples/cli/CMakeLists.txt`,
 `.github/workflows/release.yml`. Commits: `4d4eef9`, `5771566`,
 `cf24ef0`, `e6e8fcd`, `b288283`. v0.5.5 first clean release; v0.5.4
 backfilled at the v0.5.5 commit.
+
+## Lesson — clang-format MAJOR-version drift silently breaks CI; pin it via a wrapper that refuses other versions
+
+clang-format keeps adding heuristics for line-wrapping, brace-placement,
+parameter-pack alignment, etc. Major versions ship with different
+defaults. Running v22 on a project formatted with v18 produces ~80
+violations across files that "look formatted" — the format passes
+locally, fails the lint job's `clang-format-18 --dry-run --Werror`.
+
+**Concrete cost paid in this repo:** a session's worth of work landed
+through CI red because the developer's `PATH` had `/opt/homebrew/bin/
+clang-format` (v22 from Homebrew's default keg / Xcode's bundle)
+ahead of any v18. Required a follow-up commit to re-format every
+file touched in the session through `clang-format-18` to clear lint.
+
+**The fix is a wrapper script that refuses non-v18:** `tools/format.sh`
+locates clang-format-18 at three known paths
+(`/opt/homebrew/opt/llvm@18/bin/clang-format`, `clang-format-18` on
+PATH, or any `clang-format` whose `--version` reports v18) and exits
+non-zero with a remediation message if none is present. The script's
+file scope mirrors `lint.yml` exactly, so local `./tools/format.sh
+--check` is bit-equivalent to the CI step.
+
+**Generalisable rule.** For any CI step that pins a tool version
+(clang-format, ruff, mypy, prettier, rustfmt …), there's a 1:1 risk
+that a developer's bare-PATH binary is a different version. The
+defensive pattern: a project-owned wrapper script that asserts the
+expected version and exits with a remediation message when wrong.
+The wrapper costs ~80 LOC; saves a CI-red-fix-amend-push cycle the
+first time it bites.
+
+**Why not just remove the bad version from the system?** Because
+`clang-format` (v22 in this case) is also the binary that Xcode /
+Homebrew installs as a hard dependency for other dev tools, IDE
+integrations, and unrelated projects. Deleting it ripples beyond
+the one repo. The wrapper-and-document approach is the lowest-risk
+fix that doesn't externalise costs to the rest of the dev environment.
+
+References: `tools/format.sh`, `.github/workflows/lint.yml:62`
+(the `apt install clang-format-18` pin), `CLAUDE.md` "clang-format
+MUST be v18" section, README.md "Adding a new backend" heads-up.
+Commits `7ab5dab` (the 80-violation reformat) + `5711931` (the
+follow-up cppcheck fix once v18-format stopped masking it).
