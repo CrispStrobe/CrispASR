@@ -193,6 +193,211 @@ jobs:
           name: libcrispasr-macos-arm64
           path: release/libcrispasr-macos-arm64.tar.gz
 
+  # ── Linux x86_64 shared libs + headers (CPU baseline) ────────────────────────
+  # Mirror of build-libs-macos-arm64 for Linux: ship libcrispasr.so + ggml
+  # backend libs + headers so downstream FFI consumers (Rust crispasr-sys,
+  # Dart, Go, Java, Ruby) can `tar -xzf` and point CRISPASR_SYS_LIB_DIR
+  # at the extract dir instead of cmake-building from source. CPU + OpenBLAS
+  # only — GPU-aware variants (CUDA/Vulkan) are a separate matrix slot.
+  build-libs-linux-x86_64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Install deps
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ libopenblas-dev patchelf
+
+      - name: Build (shared libs, CPU + OpenBLAS)
+        run: |
+          cmake -S . -B build-libs \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=ON \
+            -DGGML_OPENBLAS=ON \
+            -DCRISPASR_BUILD_TESTS=OFF \
+            -DCRISPASR_BUILD_EXAMPLES=OFF \
+            -DCRISPASR_BUILD_SERVER=OFF
+          cmake --build build-libs --config Release -j $(nproc) --target crispasr
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          OUT=release/libcrispasr-linux-x86_64
+          mkdir -p "$OUT/src" "$OUT/ggml/src" "$OUT/include" "$OUT/ggml/include"
+          # Core libs — preserve symlinks so SOVERSION-1 alias works.
+          cp -P build-libs/src/libcrispasr*.so* "$OUT/src/"
+          [ -e build-libs/src/libwhisper.so ] && cp -P build-libs/src/libwhisper.so* "$OUT/src/"
+          # Per-backend shared libs (parakeet, canary, voxtral, qwen3_asr, …).
+          find build-libs/src -maxdepth 1 -name 'lib*.so*' \( -type f -o -type l \) \
+            ! -name 'libcrispasr*' ! -name 'libwhisper*' \
+            -exec cp -P {} "$OUT/src/" \;
+          # Backend libs — flat collection from every ggml subdir.
+          find build-libs/ggml/src -name 'libggml*.so*' \( -type f -o -type l \) \
+            -exec cp -P {} "$OUT/ggml/src/" \;
+          # Patch RPATH to $ORIGIN so libs resolve siblings without
+          # LD_LIBRARY_PATH (matches build-python-linux convention).
+          for f in "$OUT"/src/*.so* "$OUT"/ggml/src/*.so*; do
+            [ -L "$f" ] && continue
+            patchelf --set-rpath '$ORIGIN:$ORIGIN/../../ggml/src' "$f" 2>/dev/null || true
+          done
+          # Headers so binding authors can extend the FFI without
+          # vendoring the whole CrispASR repo.
+          cp include/crispasr.h "$OUT/include/"
+          cp ggml/include/*.h   "$OUT/ggml/include/" 2>/dev/null || true
+          cp LICENSE "$OUT/"
+          cd release && tar czf libcrispasr-linux-x86_64.tar.gz libcrispasr-linux-x86_64/
+          ls -lh libcrispasr-linux-x86_64.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libcrispasr-linux-x86_64
+          path: release/libcrispasr-linux-x86_64.tar.gz
+
+  # ── Windows x86_64 shared libs + headers (CPU baseline) ──────────────────────
+  # Windows tarball includes BOTH the runtime DLLs (under bin/) and the MSVC
+  # import .lib files (under src/Release/ — this matches what
+  # crispasr-sys/build.rs::try_existing_build looks for on Windows). Consumers
+  # extract the tarball, set CRISPASR_SYS_LIB_DIR, and link against the .lib
+  # at build time while loading the .dll at runtime.
+  build-libs-windows-x86_64:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Build (shared libs, CPU)
+        run: |
+          cmake -S . -B build-libs `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DBUILD_SHARED_LIBS=ON `
+            -DCRISPASR_BUILD_TESTS=OFF `
+            -DCRISPASR_BUILD_EXAMPLES=OFF `
+            -DCRISPASR_BUILD_SERVER=OFF `
+            -DGGML_NATIVE=OFF `
+            -DGGML_AVX2=ON -DGGML_FMA=ON -DGGML_F16C=ON
+          cmake --build build-libs --config Release -j $env:NUMBER_OF_PROCESSORS --target crispasr
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $OUT = "release\libcrispasr-windows-x86_64"
+          New-Item -ItemType Directory -Force "$OUT\bin","$OUT\src\Release","$OUT\ggml\src\Release","$OUT\ggml\bin","$OUT\include","$OUT\ggml\include" | Out-Null
+          # Runtime DLLs (loaded at runtime, must be on PATH or alongside the EXE)
+          Get-ChildItem build-libs\bin\Release\*.dll -ErrorAction SilentlyContinue |
+            Copy-Item -Destination "$OUT\bin\"
+          Get-ChildItem build-libs\bin\Release\ggml*.dll -ErrorAction SilentlyContinue |
+            Copy-Item -Destination "$OUT\ggml\bin\"
+          # Import libs (.lib — what the linker uses; mirrors the layout
+          # crispasr-sys/build.rs probes for: <dir>/src/Release/*.lib)
+          Get-ChildItem build-libs\src\Release\*.lib -ErrorAction SilentlyContinue |
+            Copy-Item -Destination "$OUT\src\Release\"
+          Get-ChildItem build-libs\ggml\src\Release\*.lib -ErrorAction SilentlyContinue |
+            Copy-Item -Destination "$OUT\ggml\src\Release\"
+          # Headers
+          Copy-Item include\crispasr.h "$OUT\include\"
+          Get-ChildItem ggml\include\*.h -ErrorAction SilentlyContinue |
+            Copy-Item -Destination "$OUT\ggml\include\"
+          Copy-Item LICENSE "$OUT\"
+          # Tar.gz (Windows 10+ ships tar; downstream tooling already
+          # expects .tar.gz to mirror the macos-arm64 / linux artifacts).
+          cd release
+          tar -czf libcrispasr-windows-x86_64.tar.gz libcrispasr-windows-x86_64
+          Get-Item libcrispasr-windows-x86_64.tar.gz | Format-List Name,Length
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libcrispasr-windows-x86_64
+          path: release/libcrispasr-windows-x86_64.tar.gz
+
+  # ── Windows x86_64 shared libs + headers (Vulkan) ────────────────────────────
+  # Same layout as build-libs-windows-x86_64 but with GGML_VULKAN=ON so the
+  # produced ggml-vulkan.dll/.lib are bundled. Downstream consumers that
+  # need GPU-accelerated FFI on Windows (Flutter desktop, Rust crispasr-sys
+  # with --features=vulkan, etc.) point CRISPASR_SYS_LIB_DIR here.
+  build-libs-windows-x86_64-vulkan:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Install Vulkan SDK
+        shell: pwsh
+        run: |
+          $ver = (Invoke-RestMethod -Uri "https://vulkan.lunarg.com/sdk/latest.json").windows
+          $url = "https://sdk.lunarg.com/sdk/download/$ver/windows/vulkan_sdk.exe"
+          Invoke-WebRequest -Uri $url -OutFile vulkan_sdk.exe
+          Start-Process -FilePath .\vulkan_sdk.exe -ArgumentList "--accept-licenses","--default-answer","--confirm-command","install" -Wait
+          $sdk = "C:\VulkanSDK\$ver"
+          echo "VULKAN_SDK=$sdk" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          echo "$sdk\Bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
+      - name: Build (shared libs, Vulkan)
+        shell: cmd
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          cmake -S . -B build-libs ^
+            -DCMAKE_BUILD_TYPE=Release ^
+            -DBUILD_SHARED_LIBS=ON ^
+            -DCRISPASR_BUILD_TESTS=OFF ^
+            -DCRISPASR_BUILD_EXAMPLES=OFF ^
+            -DCRISPASR_BUILD_SERVER=OFF ^
+            -DGGML_VULKAN=ON ^
+            -DGGML_CUDA=OFF ^
+            -DGGML_NATIVE=OFF ^
+            -DGGML_AVX2=ON -DGGML_FMA=ON -DGGML_F16C=ON
+          cmake --build build-libs --config Release -j %NUMBER_OF_PROCESSORS% --target crispasr
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $OUT = "release\libcrispasr-windows-x86_64-vulkan"
+          New-Item -ItemType Directory -Force "$OUT\bin","$OUT\src\Release","$OUT\ggml\src\Release","$OUT\ggml\bin","$OUT\include","$OUT\ggml\include" | Out-Null
+          # Runtime DLLs — Vulkan build keeps things in build-libs\bin\
+          # (Ninja flat layout) rather than build-libs\bin\Release.
+          $BIN_DIRS = @("build-libs\bin\Release","build-libs\bin")
+          foreach ($d in $BIN_DIRS) {
+            if (Test-Path $d) {
+              Get-ChildItem "$d\*.dll" -ErrorAction SilentlyContinue |
+                Copy-Item -Destination "$OUT\bin\"
+              Get-ChildItem "$d\ggml*.dll" -ErrorAction SilentlyContinue |
+                Copy-Item -Destination "$OUT\ggml\bin\"
+            }
+          }
+          # Import libs
+          $LIB_DIRS = @("build-libs\src\Release","build-libs\src")
+          foreach ($d in $LIB_DIRS) {
+            if (Test-Path $d) {
+              Get-ChildItem "$d\*.lib" -ErrorAction SilentlyContinue |
+                Copy-Item -Destination "$OUT\src\Release\"
+            }
+          }
+          $GGML_LIB_DIRS = @("build-libs\ggml\src\Release","build-libs\ggml\src")
+          foreach ($d in $GGML_LIB_DIRS) {
+            if (Test-Path $d) {
+              Get-ChildItem "$d\*.lib" -ErrorAction SilentlyContinue |
+                Copy-Item -Destination "$OUT\ggml\src\Release\"
+            }
+          }
+          # Headers
+          Copy-Item include\crispasr.h "$OUT\include\"
+          Get-ChildItem ggml\include\*.h -ErrorAction SilentlyContinue |
+            Copy-Item -Destination "$OUT\ggml\include\"
+          Copy-Item LICENSE "$OUT\"
+          cd release
+          tar -czf libcrispasr-windows-x86_64-vulkan.tar.gz libcrispasr-windows-x86_64-vulkan
+          Get-Item libcrispasr-windows-x86_64-vulkan.tar.gz | Format-List Name,Length
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libcrispasr-windows-x86_64-vulkan
+          path: release/libcrispasr-windows-x86_64-vulkan.tar.gz
+
   # ── Windows CPU (AVX2 — Haswell/2013+ baseline) ──────────────────────────────
   build-windows-cpu:
     runs-on: windows-latest
@@ -359,7 +564,7 @@ jobs:
           path: release/crispasr-windows-x86_64-vulkan.zip
 
   publish:
-    needs: [build-linux, build-python-linux, build-macos, build-libs-macos-arm64, build-windows-cpu, build-windows-cpu-legacy, build-windows-cuda, build-windows-vulkan]
+    needs: [build-linux, build-python-linux, build-macos, build-libs-macos-arm64, build-libs-linux-x86_64, build-libs-windows-x86_64, build-libs-windows-x86_64-vulkan, build-windows-cpu, build-windows-cpu-legacy, build-windows-cuda, build-windows-vulkan]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -375,6 +580,9 @@ jobs:
             artifacts/crispasr-python-linux-x86_64/crispasr-python-linux-x86_64.tar.gz
             artifacts/crispasr-macos/crispasr-macos.tar.gz
             artifacts/libcrispasr-macos-arm64/libcrispasr-macos-arm64.tar.gz
+            artifacts/libcrispasr-linux-x86_64/libcrispasr-linux-x86_64.tar.gz
+            artifacts/libcrispasr-windows-x86_64/libcrispasr-windows-x86_64.tar.gz
+            artifacts/libcrispasr-windows-x86_64-vulkan/libcrispasr-windows-x86_64-vulkan.tar.gz
             artifacts/crispasr-windows-x86_64-cpu/crispasr-windows-x86_64-cpu.zip
             artifacts/crispasr-windows-x86_64-cpu-legacy/crispasr-windows-x86_64-cpu-legacy.zip
             artifacts/crispasr-windows-x86_64-cuda/crispasr-windows-x86_64-cuda.zip
