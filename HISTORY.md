@@ -2668,3 +2668,52 @@ Files: `glm_asr.h` (translate + target_lang fields), `glm_asr.cpp`
 **Test results** (`test-all-backends.py --profile=feature`): 51 PASS,
 0 FAIL, 3 SKIP (stream needs shared lib build). All 18 backends pass
 transcribe smoke.
+
+### 73. PLAN #59 Cross-binding C-ABI parity — Go/Java/Ruby ASR surface (May 2026)
+
+**Scope.** The Go/Java/Ruby bindings could only do TTS — the most
+critical ASR operation (`Transcribe`) was unwrapped. This session
+added the full ASR pipeline surface to all three bindings.
+
+**Go binding (14% → 35%):** Now wraps the complete user-facing surface:
+- `Transcribe`, `TranscribeLang`, `TranscribeVAD` — full Session ASR
+- `VADSegments` — standalone speech detection
+- `DiarizeSegments` — speaker label assignment
+- `AlignWords` — CTC forced alignment
+- `DetectLanguagePCM` — standalone language detection
+- `PuncModel` — FireRedPunc punctuation restoration
+- `RegistryLookup`, `CacheEnsureFile`, `CacheDir` — model management
+
+All with idiomatic Go types (`TranscribeResult`, `TranscribeSegment`,
+`TranscribeWord`, `VADSpan`, `DiarizeSeg`, `AlignedWord`, etc.).
+
+**Java binding (13% → 30%):** `transcribe()`, `transcribeLang()`,
+`transcribeVad()`, `vadSegments()`, `alignWords()`,
+`detectLanguagePcm()` + JNA declarations for punc/registry/cache.
+Result types: `Segment`, `Word`, `AlignedWord`, `VADSpan`.
+
+**Ruby binding (15% → 24%):** `transcribe(handle, pcm)`,
+`vad_segments(path, pcm, ...)`, `align_words(model, text, pcm, threads)`.
+Returns Ruby hashes with `:text`, `:t0`, `:t1`, `:words`, `:p` keys.
+
+JS/emscripten skipped — WebAssembly binding needs a different approach
+(can't do cgo-style FFI). Dart already had transcribe from a prior
+session.
+
+### 74. Issue fixes — gemma4-e2b #49, Docker diagnostics #31 (May 2026)
+
+**gemma4-e2b assertion crash (#49).** `ggml_backend_sched` hash set
+was sized to 16384 but the audio encoder graph uses up to 32768 nodes.
+Increased to 40960. Also fixed SentencePiece `▁` (U+2581) not being
+replaced with space during detokenization — raw vocab tokens were
+concatenated with visible `▁` markers.
+
+Added gemma4-e2b to test-all-backends.py registry: **PASS, WER=0.0%**.
+
+**Docker diagnostics env var (#31).** Users hitting CUDA driver
+mismatches couldn't run `--diagnostics` because `run-server.sh`
+required a model. Added `CRISPASR_DIAGNOSTICS=1` env var that runs
+diagnostics and exits without touching `/models`:
+```
+docker run --rm --gpus all -e CRISPASR_DIAGNOSTICS=1 crispasr:main-cuda
+```
