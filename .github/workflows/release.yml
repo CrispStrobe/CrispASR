@@ -423,12 +423,15 @@ jobs:
         with:
           cuda: '12.8.0'
           method: 'network'
-          # Linux deb names use dashes, not underscores. NVIDIA's apt repo
-          # publishes meta-packages cuda-cublas-dev-12-8 + cuda-nvrtc-dev-12-8
-          # (matching the working llama.cpp release pipeline) — the underscore
-          # variants Windows accepts (cublas_dev / nvrtc_dev) don't exist on
-          # Linux.
-          sub-packages: '["nvcc", "cudart", "cublas-dev", "nvrtc-dev"]'
+          # Jimver/cuda-toolkit's `sub-packages` prepends `cuda-` and
+          # appends `-12-8`. That works for cuda-nvcc / cuda-cudart /
+          # cuda-nvrtc / cuda-nvrtc-dev which all exist as that exact
+          # name in NVIDIA's Ubuntu 24.04 apt repo. cuBLAS is the
+          # exception: NVIDIA publishes it as `libcublas-dev-12-8`
+          # (lib- prefix, not cuda-), so it has to go through
+          # `non-cuda-sub-packages` instead.
+          sub-packages: '["nvcc", "cudart", "nvrtc-dev"]'
+          non-cuda-sub-packages: '["libcublas-dev"]'
 
       - name: Build (shared libs, CUDA)
         run: |
