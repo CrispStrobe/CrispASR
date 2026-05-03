@@ -120,101 +120,253 @@ extern "C" struct chatterbox_s3gen_context* chatterbox_s3gen_init_from_file(
     return c;
 }
 
-// ── Conformer encoder forward (CPU fallback) ────────────────────
+// ── Conformer encoder via ggml graph ────────────────────────────
 //
-// The conformer encoder is complex (relative positional attention,
-// feedforward, pre-lookahead conv). For the initial implementation,
-// we run it on CPU using direct weight reads, similar to how the T3
-// prefill embeddings are built.
+// UpsampleConformerEncoder from CosyVoice/ESPnet:
+//   embed → pre-lookahead → 6 conformer blocks → upsample 2x →
+//   re-embed → 4 conformer blocks → final LayerNorm → project to 80D
 //
-// This is simpler than building a full ggml graph for the conformer
-// but slower. A ggml graph version is a follow-up optimization.
+// Each conformer block:
+//   x = x + self_attn(norm_mha(x))   [rel-pos attention, 8 heads]
+//   x = x + ffn(norm_ff(x))          [w_1(512→2048) → SiLU → w_2(2048→512)]
 
-static std::vector<float> run_conformer_encoder_cpu(
+// Build one conformer block as ggml ops.
+// x: (D, T), returns: (D, T)
+static ggml_tensor* build_conformer_block(
+    ggml_context* ctx, ggml_cgraph* gf,
+    chatterbox_s3gen_context* c,
+    ggml_tensor* x, int seq_len, const char* prefix,
+    int n_heads, int head_dim, int D, int ff_dim
+) {
+    const int TT = seq_len; // renamed to avoid shadowing
+    char key[64];
+    auto W = [&](const char* suffix) -> ggml_tensor* {
+        std::snprintf(key, sizeof(key), "%s.%s", prefix, suffix);
+        return core_gguf::try_get(c->tensors, key);
+    };
+
+    // ---- Self-attention with LayerNorm ----
+    ggml_tensor* nmha_w = W("nmha.weight");
+    ggml_tensor* nmha_b = W("nmha.bias");
+
+    ggml_tensor* residual = x;
+    // LayerNorm
+    ggml_tensor* xn = ggml_norm(ctx, x, 1e-5f);
+    if (nmha_w) xn = ggml_mul(ctx, xn, nmha_w);
+    if (nmha_b) xn = ggml_add(ctx, xn, nmha_b);
+
+    // Q/K/V projections
+    ggml_tensor* Q = ggml_mul_mat(ctx, W("sa.lq.weight"), xn);
+    ggml_tensor* qb = W("sa.lq.bias");
+    if (qb) Q = ggml_add(ctx, Q, qb);
+    ggml_tensor* K = ggml_mul_mat(ctx, W("sa.lk.weight"), xn);
+    ggml_tensor* kb = W("sa.lk.bias");
+    if (kb) K = ggml_add(ctx, K, kb);
+    ggml_tensor* V = ggml_mul_mat(ctx, W("sa.lv.weight"), xn);
+    ggml_tensor* vb = W("sa.lv.bias");
+    if (vb) V = ggml_add(ctx, V, vb);
+
+    // Reshape for multi-head: (D, TT) → (hd, H, TT)
+    Q = ggml_reshape_3d(ctx, Q, head_dim, n_heads, TT);
+    K = ggml_reshape_3d(ctx, K, head_dim, n_heads, TT);
+    V = ggml_reshape_3d(ctx, V, head_dim, n_heads, TT);
+
+    // Simple scaled dot-product attention (without relative position for now)
+    // TODO: add relative position encoding with pos_bias_u/v and linear_pos
+    Q = ggml_cont(ctx, ggml_permute(ctx, Q, 0, 2, 1, 3)); // (hd, TT, H)
+    K = ggml_cont(ctx, ggml_permute(ctx, K, 0, 2, 1, 3));
+    V = ggml_cont(ctx, ggml_permute(ctx, V, 0, 2, 1, 3));
+
+    float scale = 1.0f / std::sqrt((float)head_dim);
+    ggml_tensor* attn = ggml_flash_attn_ext(ctx, Q, K, V, nullptr, scale, 0.0f, 0.0f);
+    attn = ggml_reshape_2d(ctx, attn, D, TT);
+
+    // Output projection
+    ggml_tensor* attn_out = ggml_mul_mat(ctx, W("sa.lo.weight"), attn);
+    ggml_tensor* lo_b = W("sa.lo.bias");
+    if (lo_b) attn_out = ggml_add(ctx, attn_out, lo_b);
+
+    x = ggml_add(ctx, residual, attn_out);
+
+    // ---- Feedforward with LayerNorm ----
+    residual = x;
+    ggml_tensor* nff_w = W("nff.weight");
+    ggml_tensor* nff_b = W("nff.bias");
+    xn = ggml_norm(ctx, x, 1e-5f);
+    if (nff_w) xn = ggml_mul(ctx, xn, nff_w);
+    if (nff_b) xn = ggml_add(ctx, xn, nff_b);
+
+    // FFN: w_1 (512→2048) → SiLU → w_2 (2048→512)
+    ggml_tensor* ff = ggml_mul_mat(ctx, W("ff.w_1.weight"), xn);
+    ggml_tensor* ff_b1 = W("ff.w_1.bias");
+    if (ff_b1) ff = ggml_add(ctx, ff, ff_b1);
+    ff = ggml_silu(ctx, ff);
+    ff = ggml_mul_mat(ctx, W("ff.w_2.weight"), ff);
+    ggml_tensor* ff_b2 = W("ff.w_2.bias");
+    if (ff_b2) ff = ggml_add(ctx, ff, ff_b2);
+
+    x = ggml_add(ctx, residual, ff);
+    return x;
+}
+
+// Build the full conformer encoder graph.
+// Returns a ggml_cgraph* with "encoder_out" as the output tensor.
+static ggml_cgraph* build_graph_conformer_encoder(
+    chatterbox_s3gen_context* c, int n_tokens_total
+) {
+    const int D = 512;
+    const int H = 8;
+    const int HD = 64;
+    const int FF = 2048;
+    const int Tin = n_tokens_total;
+
+    ggml_init_params ip = {c->compute_meta.size(), c->compute_meta.data(), true};
+    ggml_context* ctx0 = ggml_init(ip);
+    ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 16384, false);
+
+    // Input: token IDs
+    ggml_tensor* token_ids = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, Tin);
+    ggml_set_name(token_ids, "token_ids");
+    ggml_set_input(token_ids);
+
+    // Token embedding lookup
+    ggml_tensor* emb_w = TR(c, "s3.flow.input_embedding.weight");
+    ggml_tensor* x = ggml_get_rows(ctx0, emb_w, token_ids); // (D, Tin)
+
+    // Linear embed: out.0 (512→512) + LayerNorm out.1
+    ggml_tensor* lin_w = T(c, "s3.fe.embed.out.0.weight");
+    ggml_tensor* lin_b = T(c, "s3.fe.embed.out.0.bias");
+    if (lin_w) {
+        x = ggml_mul_mat(ctx0, lin_w, x);
+        if (lin_b) x = ggml_add(ctx0, x, lin_b);
+    }
+    // LayerNorm (embed.out.1)
+    ggml_tensor* ln_w = T(c, "s3.fe.embed.out.1.weight");
+    ggml_tensor* ln_b = T(c, "s3.fe.embed.out.1.bias");
+    if (ln_w) {
+        x = ggml_norm(ctx0, x, 1e-5f);
+        x = ggml_mul(ctx0, x, ln_w);
+        if (ln_b) x = ggml_add(ctx0, x, ln_b);
+    }
+
+    // Pre-lookahead conv (causal): conv1(k=4, pad_left=3) + LeakyReLU + conv2(k=3, pad_left=2) + residual
+    // Skip for now — the causal convs need special handling in ggml
+    // TODO: implement pre-lookahead conv
+
+    // 6 conformer blocks (pre-upsample)
+    for (int i = 0; i < 6; i++) {
+        char prefix[32];
+        std::snprintf(prefix, sizeof(prefix), "s3.fe.enc.%d", i);
+        x = build_conformer_block(ctx0, gf, c, x, Tin, prefix, H, HD, D, FF);
+    }
+
+    // Upsample 2x: interpolate → pad → conv
+    // Nearest-neighbor upsample: (D, T) → (D, 2T)
+    int T2 = Tin * 2;
+    // ggml doesn't have a direct upsample op, so we use repeat
+    // Reshape (D, T) → (D, T, 1) → repeat along dim 2 → (D, T, 2) → reshape (D, 2T)
+    ggml_tensor* x_3d = ggml_reshape_3d(ctx0, x, D, Tin, 1);
+    ggml_tensor* x_up = ggml_repeat_4d(ctx0, x_3d, D, Tin, 2, 1);
+    // Interleave: need to transpose the last two dims then flatten
+    x_up = ggml_permute(ctx0, x_up, 0, 2, 1, 3); // (D, 2, T)
+    x_up = ggml_cont(ctx0, x_up);
+    x = ggml_reshape_2d(ctx0, x_up, D, T2);
+
+    // Upsample conv: ul.conv (512, 512, 5) with left-padding
+    // For now, skip the upsample conv — just use the interpolated values
+    // TODO: implement up_layer.conv
+
+    // Re-embed: up_embed.out.0 (Linear) + up_embed.out.1 (LayerNorm)
+    ggml_tensor* uemb_w = T(c, "s3.fe.uemb.out.0.weight");
+    ggml_tensor* uemb_b = T(c, "s3.fe.uemb.out.0.bias");
+    if (uemb_w) {
+        x = ggml_mul_mat(ctx0, uemb_w, x);
+        if (uemb_b) x = ggml_add(ctx0, x, uemb_b);
+    }
+    ggml_tensor* uln_w = T(c, "s3.fe.uemb.out.1.weight");
+    ggml_tensor* uln_b = T(c, "s3.fe.uemb.out.1.bias");
+    if (uln_w) {
+        x = ggml_norm(ctx0, x, 1e-5f);
+        x = ggml_mul(ctx0, x, uln_w);
+        if (uln_b) x = ggml_add(ctx0, x, uln_b);
+    }
+
+    // 4 conformer blocks (post-upsample)
+    for (int i = 0; i < 4; i++) {
+        char prefix[32];
+        std::snprintf(prefix, sizeof(prefix), "s3.fe.ue.%d", i);
+        x = build_conformer_block(ctx0, gf, c, x, T2, prefix, H, HD, D, FF);
+    }
+
+    // Final LayerNorm
+    ggml_tensor* an_w = T(c, "s3.fe.an.weight");
+    ggml_tensor* an_b = T(c, "s3.fe.an.bias");
+    if (an_w) {
+        x = ggml_norm(ctx0, x, 1e-5f);
+        x = ggml_mul(ctx0, x, an_w);
+        if (an_b) x = ggml_add(ctx0, x, an_b);
+    }
+
+    // Project to 80D: encoder_proj (80, 512)
+    ggml_tensor* proj_w = TR(c, "s3.flow.encoder_proj.weight");
+    ggml_tensor* proj_b = T(c, "s3.flow.encoder_proj.bias");
+    x = ggml_mul_mat(ctx0, proj_w, x);
+    if (proj_b) x = ggml_add(ctx0, x, proj_b);
+
+    ggml_set_name(x, "encoder_out");
+    ggml_build_forward_expand(gf, x);
+    ggml_free(ctx0);
+    return gf;
+}
+
+// Run the conformer encoder via ggml graph.
+// Returns (80, T_mel) channel-first mel-space encoder output.
+static std::vector<float> run_conformer_encoder(
     chatterbox_s3gen_context* c,
     const int32_t* speech_tokens, int n_tokens,
     const int32_t* prompt_tokens, int n_prompt
 ) {
-    const int D = 512;  // encoder hidden dim
     const int total = n_prompt + n_tokens;
+    const int T_mel = total * 2; // 2x upsample
 
-    // 1. Embed all tokens: flow.input_embedding (6561, 512)
-    ggml_tensor* emb_w = TR(c, "s3.flow.input_embedding.weight");
-    std::vector<float> emb_table(6561 * D);
-    ggml_backend_tensor_get(emb_w, emb_table.data(), 0, emb_table.size() * sizeof(float));
+    // Build token ID array: [prompt | speech]
+    std::vector<int32_t> all_tokens(total);
+    if (n_prompt > 0) std::memcpy(all_tokens.data(), prompt_tokens, n_prompt * sizeof(int32_t));
+    std::memcpy(all_tokens.data() + n_prompt, speech_tokens, n_tokens * sizeof(int32_t));
 
-    std::vector<float> input(total * D, 0.0f);
-    // Prompt tokens first, then speech tokens
-    for (int i = 0; i < n_prompt; i++) {
-        int tok = prompt_tokens[i];
-        if (tok >= 0 && tok < 6561) {
-            std::memcpy(&input[i * D], &emb_table[tok * D], D * sizeof(float));
-        }
-    }
-    for (int i = 0; i < n_tokens; i++) {
-        int tok = speech_tokens[i];
-        if (tok >= 0 && tok < 6561) {
-            std::memcpy(&input[(n_prompt + i) * D], &emb_table[tok * D], D * sizeof(float));
-        }
+    // Build and run graph
+    ggml_cgraph* gf = build_graph_conformer_encoder(c, total);
+    ggml_backend_sched_reset(c->sched);
+    if (!ggml_backend_sched_alloc_graph(c->sched, gf)) {
+        fprintf(stderr, "s3gen: failed to alloc conformer graph\n");
+        return {};
     }
 
-    // 2. Linear embed layer: embed.out.0 (Linear 512→512) + embed.out.1 (LayerNorm)
-    // For simplicity in this initial version, we skip the full conformer
-    // forward and just do: embed → linear → project to 80D.
-    // This won't produce correct results but lets us test the pipeline.
-    // TODO: implement full conformer forward with relative attention.
+    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "token_ids"),
+                            all_tokens.data(), 0, total * sizeof(int32_t));
 
-    // Linear: embed.out.0 (512, 512)
-    ggml_tensor* lin_w = T(c, "s3.fe.embed.out.0.weight");
-    ggml_tensor* lin_b = T(c, "s3.fe.embed.out.0.bias");
-    if (lin_w && lin_b) {
-        std::vector<float> w(D * D);
-        std::vector<float> b(D);
-        ggml_backend_tensor_get(lin_w, w.data(), 0, w.size() * sizeof(float));
-        ggml_backend_tensor_get(lin_b, b.data(), 0, b.size() * sizeof(float));
-
-        std::vector<float> out(total * D, 0.0f);
-        for (int t = 0; t < total; t++) {
-            for (int i = 0; i < D; i++) {
-                float sum = b[i];
-                for (int j = 0; j < D; j++) {
-                    sum += w[i * D + j] * input[t * D + j];
-                }
-                out[t * D + i] = sum;
-            }
-        }
-        input = std::move(out);
+    if (ggml_backend_sched_graph_compute(c->sched, gf) != GGML_STATUS_SUCCESS) {
+        fprintf(stderr, "s3gen: conformer compute failed\n");
+        return {};
     }
 
-    // 3. Upsample 2x: nearest-neighbor interpolation + conv
-    int up_len = total * 2;
-    std::vector<float> upsampled(up_len * D, 0.0f);
-    for (int t = 0; t < total; t++) {
-        std::memcpy(&upsampled[(t * 2) * D], &input[t * D], D * sizeof(float));
-        std::memcpy(&upsampled[(t * 2 + 1) * D], &input[t * D], D * sizeof(float));
-    }
+    ggml_tensor* out = ggml_graph_get_tensor(gf, "encoder_out");
+    // out shape: (80, T_mel)
+    std::vector<float> h(80 * T_mel);
+    ggml_backend_tensor_get(out, h.data(), 0, h.size() * sizeof(float));
 
-    // 4. Project encoder output to 80D: encoder_proj (80, 512)
-    ggml_tensor* proj_w = TR(c, "s3.flow.encoder_proj.weight");
-    ggml_tensor* proj_b = T(c, "s3.flow.encoder_proj.bias");
-    std::vector<float> pw(80 * D);
-    std::vector<float> pb(80, 0.0f);
-    ggml_backend_tensor_get(proj_w, pw.data(), 0, pw.size() * sizeof(float));
-    if (proj_b) ggml_backend_tensor_get(proj_b, pb.data(), 0, pb.size() * sizeof(float));
-
-    // Output: (up_len, 80) stored as (80, up_len) for channel-first layout
-    std::vector<float> h(80 * up_len, 0.0f);
-    for (int t = 0; t < up_len; t++) {
-        for (int i = 0; i < 80; i++) {
-            float sum = pb[i];
-            for (int j = 0; j < D; j++) {
-                sum += pw[i * D + j] * upsampled[t * D + j];
-            }
-            h[i * up_len + t] = sum;
+    // Convert from (80, T_mel) row-major to (80, T_mel) channel-first
+    // ggml stores as ne[0]=80 (fast), ne[1]=T_mel (slow)
+    // We need (80, T_mel) where element [ch][t] = h[t * 80 + ch]
+    // Transpose to get channel-first
+    std::vector<float> h_cf(80 * T_mel);
+    for (int t = 0; t < T_mel; t++) {
+        for (int ch = 0; ch < 80; ch++) {
+            h_cf[ch * T_mel + t] = h[t * 80 + ch];
         }
     }
 
-    return h; // (80, up_len) channel-first
+    return h_cf;
 }
 
 // ── Sinusoidal positional embedding ──────────────────────────────
@@ -361,7 +513,7 @@ extern "C" float* chatterbox_s3gen_synthesize(
     }
 
     // 1. Conformer encoder: tokens → (80, T_mel)
-    std::vector<float> h = run_conformer_encoder_cpu(
+    std::vector<float> h = run_conformer_encoder(
         ctx, speech_tokens, n_speech_tokens,
         prompt_tokens, n_prompt_tokens);
 
