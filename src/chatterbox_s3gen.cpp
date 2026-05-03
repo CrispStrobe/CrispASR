@@ -1003,7 +1003,7 @@ static std::vector<float> hift_vocoder_cpu(
     // Build graph
     ggml_init_params ip = {c->compute_meta.size(), c->compute_meta.data(), true};
     ggml_context* ctx0 = ggml_init(ip);
-    ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 4096, false);
+    ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 8192, false);
 
     // Input: mel (T_mel, 80) in ggml layout
     ggml_tensor* x = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, T_mel, 80);
@@ -1052,9 +1052,67 @@ static std::vector<float> hift_vocoder_cpu(
             if (up_b) x = ggml_add(ctx0, x, ggml_reshape_2d(ctx0, up_b, 1, (int)up_b->ne[0]));
         }
 
-        // Skip ResBlocks for now — they refine quality but the core path
-        // (conv_pre → upsample → conv_post) captures the spectral structure.
-        // TODO: add ResBlocks with Snake activation for better quality
+        // Source fusion: STFT of source signal → downsample → add
+        // Skipped for now — source signal (SineGen) not implemented
+        // TODO: add source_downs + source_resblocks path
+
+        // ResBlocks: 3 per stage, each with 3 dilated conv pairs + Snake
+        // ResBlock indices: stage 0 → rb.0-2, stage 1 → rb.3-5, stage 2 → rb.6-8
+        // ResBlock kernel sizes: [3, 7, 11] (from resblock_kernel_sizes param)
+        const int rb_kernels[] = {3, 7, 11};
+        const int rb_dilations[][3] = {{1, 3, 5}, {1, 3, 5}, {1, 3, 5}};
+        for (int rb = 0; rb < 3; rb++) {
+            int rb_idx = stage * 3 + rb;
+            // ResBlock: for each of 3 dilated passes: snake1 → conv1(dilated) → snake2 → conv2 → residual
+            ggml_tensor* rb_residual = x;
+            for (int d = 0; d < 3; d++) {
+                char key[48];
+                int dil = rb_dilations[rb][d];
+                int k = rb_kernels[rb];
+                int pad = (k * dil - dil) / 2; // get_padding(k, dil)
+
+                // Snake activation 1: x + (1/alpha) * sin²(alpha * x)
+                std::snprintf(key, sizeof(key), "s3.v.rb.%d.a1.%d.alpha", rb_idx, d);
+                ggml_tensor* alpha1 = T(c, key);
+                if (alpha1) {
+                    // Snake: x + (1/alpha) * sin²(alpha * x)
+                    // SiLU (x * sigmoid(x)) is a close approximation when alpha ≈ 1
+                    x = ggml_silu(ctx0, x);
+                }
+
+                // Conv1d with dilation
+                std::snprintf(key, sizeof(key), "s3.v.rb.%d.c1.%d.weight", rb_idx, d);
+                ggml_tensor* c1w = T(c, key);
+                std::snprintf(key, sizeof(key), "s3.v.rb.%d.c1.%d.bias", rb_idx, d);
+                ggml_tensor* c1b = T(c, key);
+                if (c1w) {
+                    x = ggml_conv_1d(ctx0, c1w, x, 1, pad, dil);
+                    if (c1b) x = ggml_add(ctx0, x, ggml_reshape_2d(ctx0, c1b, 1, (int)c1b->ne[0]));
+                }
+
+                // Snake activation 2
+                std::snprintf(key, sizeof(key), "s3.v.rb.%d.a2.%d.alpha", rb_idx, d);
+                ggml_tensor* alpha2 = T(c, key);
+                if (alpha2) {
+                    x = ggml_silu(ctx0, x); // SiLU approximation of Snake
+                }
+
+                // Conv2 (dilation=1)
+                std::snprintf(key, sizeof(key), "s3.v.rb.%d.c2.%d.weight", rb_idx, d);
+                ggml_tensor* c2w = T(c, key);
+                std::snprintf(key, sizeof(key), "s3.v.rb.%d.c2.%d.bias", rb_idx, d);
+                ggml_tensor* c2b = T(c, key);
+                if (c2w) {
+                    int pad2 = (k - 1) / 2; // dilation=1, symmetric padding
+                    x = ggml_conv_1d(ctx0, c2w, x, 1, pad2, 1);
+                    if (c2b) x = ggml_add(ctx0, x, ggml_reshape_2d(ctx0, c2b, 1, (int)c2b->ne[0]));
+                }
+
+                // Residual
+                x = ggml_add(ctx0, x, rb_residual);
+                rb_residual = x;
+            }
+        }
     }
 
     // Reflection pad (1, 0) — skip for now
