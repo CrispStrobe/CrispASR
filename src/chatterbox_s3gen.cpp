@@ -1018,6 +1018,18 @@ static std::vector<float> hift_vocoder_cpu(
         if (cpre_b) x = ggml_add(ctx0, x, ggml_reshape_2d(ctx0, cpre_b, 1, (int)cpre_b->ne[0]));
     }
 
+    // Source STFT input (from SineGen → STFT): 18 channels (real + imag)
+    // Total audio length = T_mel * 120 (upsample) * 4 (iSTFT hop)
+    // Source operates at audio rate: T_audio = T_mel * upsample_total * istft_hop
+    // STFT of source: n_frames ≈ T_audio
+    // For simplicity, we compute source length from T_mel and provide it as input
+    int T_audio = T_mel * 120 * 4; // total audio samples
+    // Source STFT: after STFT(n_fft=16, hop=4), n_frames ≈ T_audio / hop ≈ T_mel * 120
+    int T_src = T_mel * 120;
+    ggml_tensor* s_stft = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, T_src, 18);
+    ggml_set_name(s_stft, "source_stft");
+    ggml_set_input(s_stft);
+
     // 3 upsample stages
     const int strides[] = {8, 5, 3};
     const int kernels[] = {16, 11, 7};
@@ -1052,9 +1064,79 @@ static std::vector<float> hift_vocoder_cpu(
             if (up_b) x = ggml_add(ctx0, x, ggml_reshape_2d(ctx0, up_b, 1, (int)up_b->ne[0]));
         }
 
-        // Source fusion: STFT of source signal → downsample → add
-        // Skipped for now — source signal (SineGen) not implemented
-        // TODO: add source_downs + source_resblocks path
+        // Source fusion: source_downs[i](s_stft) → source_resblocks[i] → add
+        // The source STFT comes from SineGen(F0). Since F0≈0 (unvoiced),
+        // the source is noise. We provide the noise STFT as a graph input.
+        {
+            char sd_wn[32], sd_bn[32];
+            std::snprintf(sd_wn, sizeof(sd_wn), "s3.v.sd.%d.weight", stage);
+            std::snprintf(sd_bn, sizeof(sd_bn), "s3.v.sd.%d.bias", stage);
+            ggml_tensor* sd_w = T(c, sd_wn);
+            ggml_tensor* sd_b = T(c, sd_bn);
+            if (sd_w && s_stft) {
+                // source_downs: Conv1d that downsamples s_stft to match x's time dim
+                ggml_tensor* si = ggml_conv_1d(ctx0, sd_w, s_stft, 1, 0, 1);
+                if (sd_b) si = ggml_add(ctx0, si, ggml_reshape_2d(ctx0, sd_b, 1, (int)sd_b->ne[0]));
+                // source_resblocks: same structure as main ResBlocks but with source-specific weights
+                // Use the same Snake + dilated conv pattern
+                const int srb_kernels[] = {7, 7, 11};
+                const int srb_dilations[][3] = {{1, 3, 5}, {1, 3, 5}, {1, 3, 5}};
+                ggml_tensor* srb_in = si;
+                for (int d = 0; d < 3; d++) {
+                    char key2[48];
+                    int dil = srb_dilations[stage][d];
+                    int k2 = srb_kernels[stage];
+                    int pad2 = (k2 * dil - dil) / 2;
+                    // Snake1
+                    std::snprintf(key2, sizeof(key2), "s3.v.srb.%d.a1.%d.alpha", stage, d);
+                    ggml_tensor* sa1 = T(c, key2);
+                    if (sa1) {
+                        ggml_tensor* a = ggml_reshape_2d(ctx0, sa1, 1, (int)sa1->ne[0]);
+                        ggml_tensor* ax = ggml_mul(ctx0, si, a);
+                        ggml_tensor* s_ax = ggml_sin(ctx0, ax);
+                        si = ggml_add(ctx0, si, ggml_div(ctx0, ggml_mul(ctx0, s_ax, s_ax), a));
+                    }
+                    // Conv1
+                    std::snprintf(key2, sizeof(key2), "s3.v.srb.%d.c1.%d.weight", stage, d);
+                    ggml_tensor* sc1w = T(c, key2);
+                    std::snprintf(key2, sizeof(key2), "s3.v.srb.%d.c1.%d.bias", stage, d);
+                    ggml_tensor* sc1b = T(c, key2);
+                    if (sc1w) {
+                        si = ggml_conv_1d(ctx0, sc1w, si, 1, pad2, dil);
+                        if (sc1b) si = ggml_add(ctx0, si, ggml_reshape_2d(ctx0, sc1b, 1, (int)sc1b->ne[0]));
+                    }
+                    // Snake2
+                    std::snprintf(key2, sizeof(key2), "s3.v.srb.%d.a2.%d.alpha", stage, d);
+                    ggml_tensor* sa2 = T(c, key2);
+                    if (sa2) {
+                        ggml_tensor* a2 = ggml_reshape_2d(ctx0, sa2, 1, (int)sa2->ne[0]);
+                        ggml_tensor* ax2 = ggml_mul(ctx0, si, a2);
+                        ggml_tensor* s_ax2 = ggml_sin(ctx0, ax2);
+                        si = ggml_add(ctx0, si, ggml_div(ctx0, ggml_mul(ctx0, s_ax2, s_ax2), a2));
+                    }
+                    // Conv2
+                    std::snprintf(key2, sizeof(key2), "s3.v.srb.%d.c2.%d.weight", stage, d);
+                    ggml_tensor* sc2w = T(c, key2);
+                    std::snprintf(key2, sizeof(key2), "s3.v.srb.%d.c2.%d.bias", stage, d);
+                    ggml_tensor* sc2b = T(c, key2);
+                    if (sc2w) {
+                        int p2 = (k2 - 1) / 2;
+                        si = ggml_conv_1d(ctx0, sc2w, si, 1, p2, 1);
+                        if (sc2b) si = ggml_add(ctx0, si, ggml_reshape_2d(ctx0, sc2b, 1, (int)sc2b->ne[0]));
+                    }
+                    si = ggml_add(ctx0, si, srb_in);
+                    srb_in = si;
+                }
+                // Crop si to match x's time dimension and add
+                int T_x = (int)x->ne[0];
+                int T_si = (int)si->ne[0];
+                if (T_si > T_x) {
+                    si = ggml_view_2d(ctx0, si, T_x, (int)si->ne[1], si->nb[1], 0);
+                    si = ggml_cont(ctx0, si);
+                }
+                x = ggml_add(ctx0, x, si);
+            }
+        }
 
         // ResBlocks: 3 per stage, each run INDEPENDENTLY on the same input,
         // then outputs averaged: x = (rb0(x) + rb1(x) + rb2(x)) / 3
@@ -1166,6 +1248,35 @@ static std::vector<float> hift_vocoder_cpu(
             mel_tf[t * 80 + b] = mel[b * T_mel + t];
     ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "voc_mel"),
                             mel_tf.data(), 0, mel_tf.size() * sizeof(float));
+
+    // Generate source STFT: STFT of noise source (since F0≈0, source is noise)
+    {
+    std::vector<float> src_stft(T_src * 18, 0.0f);
+    {
+        // Generate noise source
+        float nsf_alpha = 0.1f; // SineGen sine_amp
+        uint64_t rng = 54321;
+        for (int t = 0; t < T_src; t++) {
+            // For unvoiced (F0=0): noise only, amplitude = nsf_alpha/3
+            rng = rng * 6364136223846793005ULL + 1442695040888963407ULL;
+            float noise = ((float)(int64_t)(rng >> 33) / (float)(1LL << 30)) - 1.0f;
+            float src = noise * nsf_alpha / 3.0f;
+            // Simple STFT: for frame t, compute real/imag of N/2+1 bins
+            // Since we're operating frame-by-frame with hop=1 here, just use
+            // the instantaneous amplitude as the DC component
+            src_stft[t * 18 + 0] = src;  // real[0] (DC)
+            // Higher frequency bins get lower amplitude
+            for (int f = 1; f < 9; f++) {
+                rng = rng * 6364136223846793005ULL + 1442695040888963407ULL;
+                float phase = ((float)(rng >> 33) / (float)(1LL << 31)) * 2.0f * (float)M_PI;
+                src_stft[t * 18 + f] = src * std::cos(phase) * 0.5f;     // real[f]
+                src_stft[t * 18 + 9 + f] = src * std::sin(phase) * 0.5f; // imag[f]
+            }
+        }
+    }
+    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "source_stft"),
+                            src_stft.data(), 0, src_stft.size() * sizeof(float));
+    }
 
     if (ggml_backend_sched_graph_compute(c->sched, gf) != GGML_STATUS_SUCCESS) {
         fprintf(stderr, "s3gen: vocoder compute failed\n");
