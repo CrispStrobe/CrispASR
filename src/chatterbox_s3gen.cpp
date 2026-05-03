@@ -43,6 +43,7 @@
 struct chatterbox_s3gen_context {
     int n_threads = 4;
     int verbosity = 1;
+    bool istft_full_idft = false; // CRISPASR_HIFT_FULL_IDFT=1 → torch.istft-compatible path
 
     ggml_backend_t backend = nullptr;
     ggml_backend_t backend_cpu = nullptr;
@@ -84,6 +85,10 @@ extern "C" struct chatterbox_s3gen_context* chatterbox_s3gen_init_from_file(cons
     auto* c = new chatterbox_s3gen_context();
     c->n_threads = n_threads > 0 ? n_threads : 4;
     c->verbosity = verbosity;
+    {
+        const char* env = std::getenv("CRISPASR_HIFT_FULL_IDFT");
+        c->istft_full_idft = env && (env[0] == '1' || env[0] == 'y' || env[0] == 'Y');
+    }
 
     // Backend
     c->backend_cpu = ggml_backend_cpu_init();
@@ -1562,34 +1567,54 @@ static std::vector<float> hift_vocoder_cpu(chatterbox_s3gen_context* c,
             ph[f] = std::sin(stft_data[(n_freq + f) * T_stft + frame]);
         }
 
-        // Build complex STFT frame: real = mag * cos(phase), imag = mag * sin(phase)
-        // Then iDFT: x[n] = (1/N) * sum_k (real[k]*cos(2πkn/N) - imag[k]*sin(2πkn/N))
-        // For real signal: use Hermitian symmetry
+        // Build complex STFT bins: X[f] = mag[f] * (cos(ph[f]) + j*sin(ph[f]))
+        float re[9], im[9];
+        for (int f = 0; f < n_freq; f++) {
+            re[f] = mag[f] * std::cos(ph[f]);
+            im[f] = mag[f] * std::sin(ph[f]);
+        }
+
         int start = frame * istft_hop;
-        for (int n = 0; n < istft_nfft && (start + n) < n_samples; n++) {
-            float sample = 0.0f;
-
-            // DC component (f=0)
-            sample += mag[0] * std::cos(ph[0]);
-
-            // Positive frequencies + their conjugate (Hermitian)
-            for (int f = 1; f < n_freq - 1; f++) {
-                float real_f = mag[f] * std::cos(ph[f]);
-                float imag_f = mag[f] * std::sin(ph[f]);
-                float angle = 2.0f * (float)M_PI * f * n / (float)istft_nfft;
-                // Positive frequency + conjugate = 2 * Re(X[f] * e^{j*angle})
-                sample += 2.0f * (real_f * std::cos(angle) - imag_f * std::sin(angle));
+        if (c->istft_full_idft) {
+            // Full N-point iDFT matching torch.istft: build the complete
+            // spectrum via Hermitian symmetry, then standard inverse DFT.
+            // X_full[0..N-1] where X_full[k] = conj(X_full[N-k]) for real signals.
+            float re_full[16], im_full[16];
+            for (int f = 0; f < n_freq; f++) {
+                re_full[f] = re[f];
+                im_full[f] = im[f];
             }
-
-            // Nyquist (f=n_freq-1 = N/2)
-            sample += mag[n_freq - 1] * std::cos(ph[n_freq - 1]) *
-                      std::cos(2.0f * (float)M_PI * (n_freq - 1) * n / (float)istft_nfft);
-
-            sample /= (float)istft_nfft;
-
-            // Overlap-add with Hann window
-            wav[start + n] += sample * win[n];
-            win_sum[start + n] += win[n] * win[n];
+            // Mirror: X[N-f] = conj(X[f]) for f = 1..N/2-1
+            for (int f = 1; f < n_freq - 1; f++) {
+                re_full[istft_nfft - f] = re[f];
+                im_full[istft_nfft - f] = -im[f];
+            }
+            // iDFT: x[n] = (1/N) * sum_{k=0}^{N-1} X[k] * e^{j*2π*k*n/N}
+            for (int n = 0; n < istft_nfft && (start + n) < n_samples; n++) {
+                float sample = 0.0f;
+                for (int k = 0; k < istft_nfft; k++) {
+                    float angle = 2.0f * (float)M_PI * k * n / (float)istft_nfft;
+                    sample += re_full[k] * std::cos(angle) - im_full[k] * std::sin(angle);
+                }
+                sample /= (float)istft_nfft;
+                wav[start + n] += sample * win[n];
+                win_sum[start + n] += win[n] * win[n];
+            }
+        } else {
+            // Default: Hermitian-optimized iDFT (fewer ops, same result for real signals)
+            for (int n = 0; n < istft_nfft && (start + n) < n_samples; n++) {
+                float sample = re[0]; // DC: real part only (imag=0 for real signal at DC)
+                for (int f = 1; f < n_freq - 1; f++) {
+                    float angle = 2.0f * (float)M_PI * f * n / (float)istft_nfft;
+                    sample += 2.0f * (re[f] * std::cos(angle) - im[f] * std::sin(angle));
+                }
+                // Nyquist (f=N/2): real only, no conjugate pair
+                float angle_ny = 2.0f * (float)M_PI * (n_freq - 1) * n / (float)istft_nfft;
+                sample += re[n_freq - 1] * std::cos(angle_ny) - im[n_freq - 1] * std::sin(angle_ny);
+                sample /= (float)istft_nfft;
+                wav[start + n] += sample * win[n];
+                win_sum[start + n] += win[n] * win[n];
+            }
         }
     }
 
