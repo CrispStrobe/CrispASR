@@ -30,7 +30,7 @@ No Python. No PyTorch. No separate per-model binary. No `pip install`. Just one 
 
 - [Supported backends](#supported-backends) — [ASR](#asr-backends) + [TTS](#text-to-speech-models) + [post-processing](#post-processing-models)
 - [Feature matrix](#feature-matrix)
-- [Install & build](#install--build)
+- [Install & build](#install--build) — quick install (full guide in [docs/install.md](docs/install.md))
 - [Quick start — ASR](#quick-start)
 - [**Text-to-Speech (TTS)**](#text-to-speech-tts) — Kokoro, Qwen3-TTS, VibeVoice
 - [Streaming & live transcription](#streaming--live-transcription)
@@ -43,7 +43,7 @@ No Python. No PyTorch. No separate per-model binary. No `pip install`. Just one 
 - [Audio formats](#audio-formats)
 - [Architecture](#architecture)
 - [Adding a new backend](#adding-a-new-backend)
-- [HOWTO Quantize](#howto-quantize)
+- [Quantize models](docs/quantize.md) — `crispasr-quantize` for all backends
 - [Branch state & roadmap](#branch-state--roadmap)
 - [GPU backend selection](#gpu-backend-selection)
 - [Debugging & profiling](#debugging--profiling)
@@ -258,114 +258,29 @@ Pass `--lid-backend off` to skip LID entirely.
 
 ## Install & build
 
-### Prerequisites
-
-- C++17 compiler (GCC 10+, Clang 12+, MSVC 19.30+)
-- CMake 3.14+
-- Optional: `libavformat`/`libavcodec`/`libavutil`/`libswresample` for Opus/M4A ingestion (`CRISPASR_FFMPEG=ON`)
-- Optional: `libopenblas`/MKL/Accelerate — speeds up CPU-side matmuls for the Conformer-based encoders (parakeet, canary, cohere, granite, fastconformer-ctc). The ggml CPU backend picks up BLAS automatically when it's present at build time; no CrispASR configure flag needed.
-- Optional: CUDA/Metal/Vulkan GPU backend — enabled via ggml's standard flags (`GGML_CUDA=ON`, `GGML_METAL=ON`, etc.). On CUDA you can set `GGML_CUDA_ENABLE_UNIFIED_MEMORY=1` to allow swapping to system RAM when VRAM is exhausted.
-- `curl` or `wget` on `$PATH` if you want to use `-m auto` auto-download
-- Optional: `sherpa-onnx` binaries on `$PATH` if you want `--diarize-method sherpa` with ONNX models
-
-No Python, PyTorch, or pip required at runtime.
-
-### Build
-
 ```bash
 git clone https://github.com/CrispStrobe/CrispASR
 cd CrispASR
-
 cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j$(nproc) --target crispasr
+cmake --build build -j$(nproc)
 ```
 
-The produced binary is `build/bin/crispasr`.
+Produces `build/bin/crispasr` (main CLI), `build/bin/crispasr-quantize`,
+and `build/bin/crispasr-diff`. No Python, PyTorch, or pip required at
+runtime — just a C++17 compiler and CMake 3.14+.
 
-For the repo's default local preset, which already disables tests and ccache-related friction:
-
-```bash
-cmake --preset default
-cmake --build build -j$(nproc) --target crispasr
-```
-
-### Windows (convenience scripts)
-
-Two batch scripts handle the Windows build without requiring a pre-opened Developer Command Prompt. They use `vswhere.exe` to locate Visual Studio 2022 automatically, call `vcvars64.bat`, then drive CMake + Ninja.
-
-#### `build-windows.bat` — CPU build
-
-```cmd
-build-windows.bat
-```
-
-Produces `build\bin\crispasr.exe`. Extra CMake flags can be appended:
-
-```cmd
-build-windows.bat -DCRISPASR_CURL=ON          :: enable libcurl fallback
-build-windows.bat -DGGML_CUDA=ON             :: NVIDIA GPU (CUDA must be installed)
-```
-
-What it does:
-1. Locates `vswhere.exe` under `%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\`
-2. Finds the latest VS 2022 installation that includes the VC++ toolchain
-3. Calls `vcvars64.bat` to initialize the 64-bit MSVC environment
-4. Runs `cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release [extra flags]`
-5. Builds the `crispasr` target → `build\bin\crispasr.exe`
-
-#### `build-vulkan.bat` — Vulkan GPU build
-
-```cmd
-build-vulkan.bat
-```
-
-Produces `build-vulkan\bin\crispasr.exe` with the Vulkan compute backend enabled. In addition to the VS detection above, it:
-
-1. Checks `%VULKAN_SDK%`. If unset, scans `C:\VulkanSDK\` for the newest installed version and sets `VULKAN_SDK` accordingly.
-2. Adds `-DGGML_VULKAN=ON -DGGML_CUDA=OFF` so CUDA is not accidentally pulled in if the CUDA toolkit is also installed.
-3. Writes the build into a separate `build-vulkan\` directory so it coexists with a CPU build.
-
-Important:
-- `build-windows.bat -DGGML_CUDA=ON` produces a CUDA build, not a Vulkan build.
-- `--gpu-backend vulkan` only works if the binary was actually built with Vulkan support.
-- On hybrid laptops, Vulkan device `0` may be the integrated GPU. Use `-dev N` to pin the discrete GPU if needed.
-
-```cmd
-:: Typical usage — VULKAN_SDK is picked up automatically
-build-vulkan.bat
-
-:: Override Vulkan SDK location explicitly
-set VULKAN_SDK=C:\VulkanSDK\1.4.304.1
-build-vulkan.bat
-
-:: Run on Vulkan, pinned to GPU 1 (for example: NVIDIA on a hybrid laptop)
-build-vulkan\bin\crispasr.exe --gpu-backend vulkan -dev 1 -m model.gguf -f audio.wav
-```
-
-Both scripts exit with a non-zero code and a `[ERROR]` message if any step fails (VS not found, CMake configure error, build error).
-
-### With GPU backends
+For GPU acceleration, add the matching ggml flag at configure time:
 
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_CUDA=ON     # NVIDIA
 cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_METAL=ON    # Apple Silicon
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_VULKAN=ON   # cross-vendor
 ```
 
-### With ffmpeg ingestion (Opus, M4A, WebM, …)
-
-```bash
-# Install ffmpeg dev libs first:
-#   apt install libavformat-dev libavcodec-dev libavutil-dev libswresample-dev
-
-cmake -B build-ffmpeg -DCMAKE_BUILD_TYPE=Release -DCRISPASR_FFMPEG=ON
-cmake --build build-ffmpeg -j$(nproc) --target crispasr
-```
-
-> **Upstream bug warning.** `.m4a` / `.mp4` / `.webm` containers currently crash `crispasr`'s ffmpeg integration. For those formats, pre-convert to WAV:
-> ```bash
-> ffmpeg -i input.opus -ar 16000 -ac 1 -c:a pcm_s16le -y /tmp/audio.wav
-> ```
-> Bare-codec `.opus` files work fine with `CRISPASR_FFMPEG=ON`.
+**See [`docs/install.md`](docs/install.md)** for the full guide:
+all GPU backends (CUDA / Metal / Vulkan / MUSA / SYCL), Windows
+convenience scripts, ffmpeg ingestion, optional BLAS, glibc notes,
+and the `scripts/dev-build.sh` wrapper.
 
 ---
 
@@ -1622,60 +1537,20 @@ the disk.
 
 ---
 
-## HOWTO Quantize
+## Quantize models
 
-CrispASR includes a unified GGUF re-quantization tool, `crispasr-quantize`, that works across all supported model families (Whisper, Parakeet, Canary, Cohere, Voxtral, Qwen3, Granite, Wav2Vec2, etc.).
-
-It is a model-agnostic tool that iterates through the GGUF tensor list and re-quantizes eligible 2D weight matrices while preserving metadata and non-quantizable tensors (norms, positional embeddings, biases) in their original types.
-
-### Building
-
-`crispasr-quantize` is built automatically as part of the normal CMake build:
+`build/bin/crispasr-quantize` is a single, model-agnostic GGUF
+re-quantization tool that works across all supported model families
+(Whisper, Parakeet, Canary, Cohere, Voxtral, Qwen3, Granite, Wav2Vec2,
+MiMo-ASR, GLM-ASR, Moonshine, VibeVoice, Kokoro, Qwen3-TTS, …):
 
 ```bash
-git clone https://github.com/CrispStrobe/CrispASR.git
-cd CrispASR
-cmake -B build
-cmake --build build -j$(nproc)
-
-# The binary is now at:
-ls build/bin/crispasr-quantize
+./build/bin/crispasr-quantize input.gguf output.gguf q4_k
 ```
 
-> **Note:** The pre-built `bin/cohere-quantize` binary that some HuggingFace model cards reference is a legacy artifact from an earlier naming scheme. It may fail on older glibc systems (requires glibc 2.38+). Building from source as shown above avoids this and works on any system with a C++17 compiler.
-
-### Usage
-
-```bash
-./build/bin/crispasr-quantize model-f16.gguf model-quant.gguf <type>
-```
-
-### Supported types
-
-| Type | Description |
-|---|---|
-| `q4_0` | 4-bit (scale only) |
-| `q4_1` | 4-bit (scale + minimum; slightly higher accuracy than q4_0) |
-| `q5_0` | 5-bit (scale only) |
-| `q5_1` | 5-bit (scale + minimum; slightly higher accuracy than q5_0) |
-| `q8_0` | 8-bit (scale only) |
-| `q2_k` | 2-bit K-quant |
-| `q3_k` | 3-bit K-quant |
-| `q4_k` | 4-bit K-quant (generally preferred over legacy Q4) |
-| `q5_k` | 5-bit K-quant (generally preferred over legacy Q5) |
-| `q6_k` | 6-bit K-quant |
-
-### Examples
-
-```bash
-# Quantize a Parakeet F16 model to Q4_K
-./build/bin/crispasr-quantize parakeet-f16.gguf parakeet-q4_k.gguf q4_k
-
-# Quantize a Voxtral model to Q5_0
-./build/bin/crispasr-quantize voxtral-f16.gguf voxtral-q5_0.gguf q5_0
-```
-
-> **Note on alignment.** K-quants (`q2_k` through `q6_k`) require tensor row sizes to be multiples of 256. If a tensor does not meet this requirement (e.g., the 896-wide tensors in some Qwen3-ASR layers), the tool automatically falls back to a compatible legacy quantization type (like `q4_0` or `q8_0`) to ensure the entire model is quantized.
+**See [`docs/quantize.md`](docs/quantize.md)** for the full guide:
+supported quant types, K-quant alignment fallback, recommended quant
+per backend, and worked examples for each architecture.
 
 ---
 
