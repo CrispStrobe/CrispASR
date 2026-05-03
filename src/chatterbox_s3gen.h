@@ -33,6 +33,13 @@ float* chatterbox_s3gen_synthesize(
     int n_cfm_steps, // 0 = default (10)
     int* out_n_samples);
 
+// Run only the vocoder on externally-provided mel.
+// mel_cf: channel-first (80 * T_mel) float array.
+float* chatterbox_s3gen_vocode(
+    struct chatterbox_s3gen_context* ctx,
+    const float* mel_cf, int T_mel,
+    int* out_n_samples);
+
 void chatterbox_s3gen_pcm_free(float* pcm);
 void chatterbox_s3gen_free(struct chatterbox_s3gen_context* ctx);
 

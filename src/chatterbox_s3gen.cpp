@@ -1487,6 +1487,24 @@ extern "C" float* chatterbox_s3gen_synthesize(
     return out;
 }
 
+extern "C" float* chatterbox_s3gen_vocode(
+    struct chatterbox_s3gen_context* ctx,
+    const float* mel_cf, int T_mel,
+    int* out_n_samples
+) {
+    if (!ctx || !mel_cf || T_mel <= 0 || !out_n_samples) return nullptr;
+    *out_n_samples = 0;
+
+    std::vector<float> mel(mel_cf, mel_cf + 80 * T_mel);
+    std::vector<float> wav = hift_vocoder_cpu(ctx, mel, T_mel);
+
+    if (wav.empty()) return nullptr;
+    float* out = (float*)malloc(wav.size() * sizeof(float));
+    std::memcpy(out, wav.data(), wav.size() * sizeof(float));
+    *out_n_samples = (int)wav.size();
+    return out;
+}
+
 extern "C" void chatterbox_s3gen_pcm_free(float* pcm) {
     free(pcm);
 }
