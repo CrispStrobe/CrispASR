@@ -1721,6 +1721,61 @@ static bool backend_is_metal(ggml_backend_t b) {
     return name && std::strncmp(name, "MTL", 3) == 0;
 }
 
+static bool backend_is_vulkan(ggml_backend_t b) {
+    if (!b)
+        return false;
+    const char* name = ggml_backend_name(b);
+    return name && std::strncmp(name, "Vulkan", 6) == 0;
+}
+
+// Issue #52 (geneing): some Vulkan devices have lower
+// `maxComputeWorkGroupCount` limits than the σ-VAE decoder's largest
+// dispatches need (the 6-stage transposed-conv stack with 3200x
+// upsample produces wg counts that exceed ~1024 on Intel Arc / Iris
+// iGPUs after ~180 frames of input). NVIDIA RTX 4060 has 65535 and
+// works. Detect by device name — Intel integrated GPUs tend to surface
+// as "Intel(R) Arc(TM) Graphics", "Intel(R) Iris(R) Xe Graphics",
+// "Intel(R) UHD Graphics", etc. False positives are fine: the worst
+// case is "we run VAE on CPU when GPU would have worked", which is
+// the same fall-back path Metal already uses for Apple's GPU
+// watchdog.
+static bool backend_is_vulkan_intel_igpu(ggml_backend_t b) {
+    if (!backend_is_vulkan(b))
+        return false;
+    ggml_backend_dev_t dev = ggml_backend_get_device(b);
+    if (!dev)
+        return false;
+    const char* dev_name = ggml_backend_dev_name(dev);
+    if (!dev_name)
+        return false;
+    // Match any Intel GPU naming pattern. Discrete Intel Arc dGPUs
+    // (Alchemist series) also match — they have higher limits than
+    // iGPUs but reports of the same assert haven't been ruled out, so
+    // we err conservative.
+    return std::strstr(dev_name, "Intel") != nullptr;
+}
+
+// Centralised decision for whether the σ-VAE decoder graph should run
+// on CPU instead of the active backend. Used by both the realtime and
+// the non-realtime TTS paths. See call sites for the per-backend
+// rationale.
+//
+//   VIBEVOICE_VAE_BACKEND=cpu  → always CPU
+//   VIBEVOICE_VAE_BACKEND=gpu  → always GPU (even if known to fail)
+//   VIBEVOICE_VAE_BACKEND=auto (default) → CPU on Metal + Vulkan-Intel
+static bool vibevoice_vae_should_use_cpu(ggml_backend_t backend, ggml_backend_t backend_cpu) {
+    if (!backend_cpu)
+        return false; // no CPU backend wired — can't fallback
+    const char* env = std::getenv("VIBEVOICE_VAE_BACKEND");
+    if (env && std::strcmp(env, "cpu") == 0)
+        return true;
+    if (env && std::strcmp(env, "gpu") == 0)
+        return false;
+    // auto / unset: fallback for backends with known issues running the
+    // 7-stage σ-VAE decoder graph as a single command buffer.
+    return backend_is_metal(backend) || backend_is_vulkan_intel_igpu(backend);
+}
+
 // Vulkan hits the same `GGML_ASSERT(src_backend_id != -1)` failure as Metal
 // when the cached pred-head graph is reused across `sched_reset()` — see
 // issue #47 (geneing). Both schedulers rebuild the view→buffer-id mapping
@@ -2889,29 +2944,16 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
 
         ggml_cgraph* dec_gf = build_vae_decoder_graph(ctx, actual_frames);
         ggml_backend_sched_reset(ctx->sched);
-        // See realtime VAE-decoder call site for why this is forced to CPU
-        // on Metal — Apple's GPU watchdog kills the single-buffer compute.
-        {
-            // Default: route VAE decoder to CPU on Metal only — that's the
-            // backend where we've reproduced Apple's interactivity watchdog.
-            // CUDA/Vulkan on systems where the GPU also drives the display
-            // can hit a similar driver TDR (NVIDIA Windows TDR ~2s by default,
-            // Wayland on Linux varies). Override with VIBEVOICE_VAE_BACKEND:
-            //   auto (default) → CPU on Metal, GPU elsewhere
-            //   cpu            → always CPU (safe choice for desktop NVIDIA)
-            //   gpu            → always GPU (servers, datacenter NVIDIA, etc)
-            const char* vae_be = getenv("VIBEVOICE_VAE_BACKEND");
-            bool force_cpu;
-            if (vae_be && std::strcmp(vae_be, "cpu") == 0)
-                force_cpu = true;
-            else if (vae_be && std::strcmp(vae_be, "gpu") == 0)
-                force_cpu = false;
-            else
-                force_cpu = backend_is_metal(ctx->backend);
-            if (force_cpu && ctx->backend_cpu) {
-                for (int i = 0; i < ggml_graph_n_nodes(dec_gf); i++) {
-                    ggml_backend_sched_set_tensor_backend(ctx->sched, ggml_graph_node(dec_gf, i), ctx->backend_cpu);
-                }
+        // VAE decoder is a 7-stage σ-VAE conv stack with 3200x upsample.
+        // Per-backend issues running it as a single graph:
+        //   - Metal: Apple's GPU interactivity watchdog kills the command
+        //     buffer when it exceeds ~5s.
+        //   - Vulkan on Intel iGPUs: the largest dispatches exceed
+        //     `maxComputeWorkGroupCount` (issue #52).
+        // Override via VIBEVOICE_VAE_BACKEND={auto|cpu|gpu}.
+        if (vibevoice_vae_should_use_cpu(ctx->backend, ctx->backend_cpu)) {
+            for (int i = 0; i < ggml_graph_n_nodes(dec_gf); i++) {
+                ggml_backend_sched_set_tensor_backend(ctx->sched, ggml_graph_node(dec_gf, i), ctx->backend_cpu);
             }
         }
         if (!ggml_backend_sched_alloc_graph(ctx->sched, dec_gf))
@@ -4051,16 +4093,21 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
     auto t_vae_alloc0 = std::chrono::high_resolution_clock::now();
     ggml_backend_sched_reset(ctx->sched);
 
-    // On Metal: force the entire VAE decoder graph onto CPU. The decoder
-    // is one large σ-VAE conv stack (7 stages, 6 transposed convs, 3200x
-    // upsample) that runs as a single Metal command buffer; whatever it
-    // takes >5s on M1 trips Apple's interactivity watchdog
-    // (kIOGPUCommandBufferCallbackErrorImpactingInteractivity, observed
-    // even with n_cb bumped to 4). Encoders, LM, diffusion all stay on
-    // Metal — only this one graph runs CPU. Net cost on M1: ~10-15% of
-    // TTS time (was ~29% of compute on CPU before recent VAE
-    // optimizations); the alternative is the entire process aborting.
-    if (backend_is_metal(ctx->backend) && ctx->backend_cpu) {
+    // Force the entire VAE decoder graph onto CPU on backends with
+    // known issues running it as a single command buffer. The decoder
+    // is a 7-stage σ-VAE conv stack (6 transposed convs, 3200x upsample);
+    // depending on hardware it can:
+    //   - Metal: trip Apple's interactivity watchdog
+    //     (kIOGPUCommandBufferCallbackErrorImpactingInteractivity) when
+    //     compute exceeds ~5s, even with n_cb bumped to 4.
+    //   - Vulkan on Intel iGPUs (Arc/Iris/UHD): exceed
+    //     `maxComputeWorkGroupCount` for the largest transposed-conv
+    //     dispatches and abort with the assertion at
+    //     ggml-vulkan.cpp:6612 (issue #52, geneing).
+    // Encoders / LM / diffusion stay on the active backend — only this
+    // one graph runs CPU. Net cost on M1: ~10-15% of TTS time. Override
+    // via VIBEVOICE_VAE_BACKEND={auto|cpu|gpu}.
+    if (vibevoice_vae_should_use_cpu(ctx->backend, ctx->backend_cpu)) {
         for (int i = 0; i < ggml_graph_n_nodes(dec_gf); i++) {
             ggml_backend_sched_set_tensor_backend(ctx->sched, ggml_graph_node(dec_gf, i), ctx->backend_cpu);
         }
