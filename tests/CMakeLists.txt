@@ -177,6 +177,25 @@ catch_discover_tests(test-params
     PROPERTIES LABELS "unit"
 )
 
+# ─── test-registry — Catch2 unit tests for crispasr_model_registry
+#
+# Verifies registry lookup by backend name, reverse lookup by filename,
+# and that all expected entries exist. No network, no models.
+add_executable(test-registry test-registry.cpp
+    ${PROJECT_SOURCE_DIR}/src/crispasr_model_registry.cpp
+    ${PROJECT_SOURCE_DIR}/src/crispasr_cache.cpp
+)
+target_include_directories(test-registry PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-registry PRIVATE
+    Catch2::Catch2WithMain
+)
+catch_discover_tests(test-registry
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit"
+)
+
 # ─── test-core-decode — Catch2 unit tests for core_greedy_decode + core_beam_decode
 #
 # Tests the shared decode helpers in isolation with a mock LLM. No models
