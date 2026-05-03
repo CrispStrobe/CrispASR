@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "crispasr"
-version = "0.5.4"
+version = "0.5.7"
 description = "Lightweight on-device speech recognition via ggml — Python bindings for CrispASR (Whisper, Qwen3-ASR, FastConformer, Canary, Parakeet, Cohere, Granite, Voxtral, wav2vec2, and more)."
 readme = "README.md"
 license = { file = "LICENSE" }

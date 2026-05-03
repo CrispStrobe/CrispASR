@@ -746,8 +746,8 @@ static std::vector<float> cfm_euler_solve(chatterbox_s3gen_context* c,
         std::vector<float> unet_input(T_mel * 320, 0.0f);
         for (int ch = 0; ch < 80; ch++) {
             for (int t = 0; t < T_mel; t++) {
-                unet_input[(ch +   0) * T_mel + t] = x[ch * T_mel + t];
-                unet_input[(ch +  80) * T_mel + t] = mu[ch * T_mel + t];
+                unet_input[(ch + 0) * T_mel + t] = x[ch * T_mel + t];
+                unet_input[(ch + 80) * T_mel + t] = mu[ch * T_mel + t];
                 unet_input[(ch + 160) * T_mel + t] = spk_emb[ch]; // broadcast over T
                 unet_input[(ch + 240) * T_mel + t] = cond[ch * T_mel + t];
             }
