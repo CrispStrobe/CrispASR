@@ -728,10 +728,167 @@ static std::vector<float> build_prefill_embeds(
         }
     }
 
-    // 2. Perceiver: for now, skip and just use speaker projection as cond
-    // TODO: implement perceiver cross-attention on CPU
-    // Cond tokens: [spkr_proj(1)] for now (should be [spkr, perceiver(32), emotion(1)])
-    int cond_len = 1;
+    // 2. Perceiver: cross-attend from 32 learned queries to 150 speech prompt embeddings
+    // Output: 32 conditioning tokens of dimension D
+    std::vector<float> perceiver_out; // (32 * D) if perceiver is available
+    int perceiver_len = 0;
+    if (c->conds.speech_prompt_tokens && m.perceiver_query &&
+        m.perceiver_q_w && m.perceiver_k_w && m.perceiver_v_w) {
+
+        int n_prompt = (int)c->conds.speech_prompt_tokens->ne[0];
+        int n_q = (int)c->hp.perceiver_n_queries; // 32
+        int n_heads = 4;
+        int hd = D / n_heads; // 256
+
+        // Read embedding tables
+        std::vector<float> speech_emb_tab(c->hp.speech_vocab_size * D);
+        ggml_backend_tensor_get(m.speech_emb_w, speech_emb_tab.data(), 0,
+                                speech_emb_tab.size() * sizeof(float));
+        std::vector<float> speech_pos_tab(c->hp.speech_pos_emb_size * D);
+        ggml_backend_tensor_get(m.speech_pos_emb_w, speech_pos_tab.data(), 0,
+                                speech_pos_tab.size() * sizeof(float));
+
+        // Read prompt token IDs
+        std::vector<int32_t> prompt_ids(n_prompt);
+        ggml_backend_tensor_get(c->conds.speech_prompt_tokens, prompt_ids.data(), 0,
+                                n_prompt * sizeof(int32_t));
+
+        // Embed prompt: speech_emb(tok) + speech_pos_emb(pos)
+        std::vector<float> prompt_emb(n_prompt * D, 0.0f);
+        for (int i = 0; i < n_prompt; i++) {
+            int tok = prompt_ids[i];
+            if (tok < 0 || tok >= (int)c->hp.speech_vocab_size) tok = 0;
+            for (int j = 0; j < D; j++) {
+                prompt_emb[i * D + j] = speech_emb_tab[tok * D + j] + speech_pos_tab[i * D + j];
+            }
+        }
+
+        // Read perceiver weights
+        std::vector<float> query(n_q * D);
+        ggml_backend_tensor_get(m.perceiver_query, query.data(), 0, n_q * D * sizeof(float));
+
+        // Helper: read Linear weight (out_dim, in_dim) and optional bias (out_dim)
+        auto read_linear = [&](ggml_tensor* w_t, ggml_tensor* b_t, int out_d, int in_d) {
+            std::vector<float> w(out_d * in_d);
+            std::vector<float> b(out_d, 0.0f);
+            ggml_backend_tensor_get(w_t, w.data(), 0, w.size() * sizeof(float));
+            if (b_t) ggml_backend_tensor_get(b_t, b.data(), 0, b.size() * sizeof(float));
+            return std::make_pair(w, b);
+        };
+
+        auto [qw, qb] = read_linear(m.perceiver_q_w, m.perceiver_q_b, D, D);
+        auto [kw, kb] = read_linear(m.perceiver_k_w, m.perceiver_k_b, D, D);
+        auto [vw, vb] = read_linear(m.perceiver_v_w, m.perceiver_v_b, D, D);
+        auto [ow, ob] = read_linear(m.perceiver_out_w, m.perceiver_out_b, D, D);
+
+        // Read LayerNorm
+        std::vector<float> norm_w(D, 1.0f), norm_b(D, 0.0f);
+        if (m.perceiver_norm_w) ggml_backend_tensor_get(m.perceiver_norm_w, norm_w.data(), 0, D * sizeof(float));
+        if (m.perceiver_norm_b) ggml_backend_tensor_get(m.perceiver_norm_b, norm_b.data(), 0, D * sizeof(float));
+
+        // LayerNorm helper (eps=1e-5)
+        auto layer_norm = [&](const float* in, float* out, int len) {
+            float mean = 0.0f;
+            for (int i = 0; i < len; i++) mean += in[i];
+            mean /= len;
+            float var = 0.0f;
+            for (int i = 0; i < len; i++) { float d = in[i] - mean; var += d * d; }
+            var /= len;
+            float inv_std = 1.0f / std::sqrt(var + 1e-5f);
+            for (int i = 0; i < len; i++) {
+                out[i] = (in[i] - mean) * inv_std * norm_w[i] + norm_b[i];
+            }
+        };
+
+        // Matrix multiply: out[M,N] = W[M,K] × in[K,N] + bias[M]
+        auto matmul_bias = [](const float* W, const float* in, const float* bias,
+                              float* out, int M, int K, int N) {
+            for (int n = 0; n < N; n++) {
+                for (int m = 0; m < M; m++) {
+                    float sum = bias ? bias[m] : 0.0f;
+                    for (int k = 0; k < K; k++) {
+                        sum += W[m * K + k] * in[n * K + k];
+                    }
+                    out[n * M + m] = sum;
+                }
+            }
+        };
+
+        // Multi-head attention: Q(n_q, D) × K(n_kv, D)^T → softmax → × V(n_kv, D) → O
+        auto mha = [&](const float* Q_in, int n_q_len,
+                        const float* KV_in, int n_kv_len,
+                        float* out_buf) {
+            // Project Q, K, V
+            std::vector<float> Q_proj(n_q_len * D), K_proj(n_kv_len * D), V_proj(n_kv_len * D);
+            std::vector<float> Q_norm(n_q_len * D), KV_norm(n_kv_len * D);
+
+            // LayerNorm both inputs
+            for (int i = 0; i < n_q_len; i++) layer_norm(&Q_in[i * D], &Q_norm[i * D], D);
+            for (int i = 0; i < n_kv_len; i++) layer_norm(&KV_in[i * D], &KV_norm[i * D], D);
+
+            matmul_bias(qw.data(), Q_norm.data(), qb.data(), Q_proj.data(), D, D, n_q_len);
+            matmul_bias(kw.data(), KV_norm.data(), kb.data(), K_proj.data(), D, D, n_kv_len);
+            matmul_bias(vw.data(), KV_norm.data(), vb.data(), V_proj.data(), D, D, n_kv_len);
+
+            float scale = 1.0f / std::sqrt((float)hd);
+
+            // Per-head attention
+            std::vector<float> attn_out(n_q_len * D, 0.0f);
+            for (int h = 0; h < n_heads; h++) {
+                // QK^T
+                for (int qi = 0; qi < n_q_len; qi++) {
+                    // Softmax numerator
+                    std::vector<float> scores(n_kv_len);
+                    float max_s = -1e30f;
+                    for (int ki = 0; ki < n_kv_len; ki++) {
+                        float dot = 0.0f;
+                        for (int d = 0; d < hd; d++) {
+                            dot += Q_proj[qi * D + h * hd + d] * K_proj[ki * D + h * hd + d];
+                        }
+                        scores[ki] = dot * scale;
+                        if (scores[ki] > max_s) max_s = scores[ki];
+                    }
+                    // Softmax
+                    float sum_exp = 0.0f;
+                    for (int ki = 0; ki < n_kv_len; ki++) {
+                        scores[ki] = std::exp(scores[ki] - max_s);
+                        sum_exp += scores[ki];
+                    }
+                    for (int ki = 0; ki < n_kv_len; ki++) scores[ki] /= sum_exp;
+                    // Attention × V
+                    for (int d = 0; d < hd; d++) {
+                        float val = 0.0f;
+                        for (int ki = 0; ki < n_kv_len; ki++) {
+                            val += scores[ki] * V_proj[ki * D + h * hd + d];
+                        }
+                        attn_out[qi * D + h * hd + d] = val;
+                    }
+                }
+            }
+
+            // Output projection + residual
+            std::vector<float> proj(n_q_len * D);
+            matmul_bias(ow.data(), attn_out.data(), ob.data(), proj.data(), D, D, n_q_len);
+            for (int i = 0; i < n_q_len * D; i++) {
+                out_buf[i] = Q_in[i] + proj[i];
+            }
+        };
+
+        // Pass 1: cross-attention (query attends to prompt_emb)
+        std::vector<float> cross_out(n_q * D);
+        mha(query.data(), n_q, prompt_emb.data(), n_prompt, cross_out.data());
+
+        // Pass 2: self-attention (cross_out attends to itself)
+        perceiver_out.resize(n_q * D);
+        mha(cross_out.data(), n_q, cross_out.data(), n_q, perceiver_out.data());
+
+        perceiver_len = n_q;
+        if (c->params.verbosity >= 2) {
+            fprintf(stderr, "chatterbox: perceiver → %d conditioning tokens\n", perceiver_len);
+        }
+    }
+
+    int cond_len = 1 + perceiver_len; // spkr(1) + perceiver(32)
 
     // 3. Emotion adversarial: emotion_adv_fc(emotion_scalar) → (D,)
     std::vector<float> emotion_proj(D, 0.0f);
@@ -753,10 +910,15 @@ static std::vector<float> build_prefill_embeds(
     int total_len = cond_len + text_len + speech_start_len;
     std::vector<float> embeds(total_len * D, 0.0f);
 
-    // Place conditioning
+    // Place conditioning: [spkr(1), perceiver(32), emotion(1)]
     int pos = 0;
     std::memcpy(&embeds[pos * D], spkr_proj.data(), D * sizeof(float));
     pos++;
+    // Perceiver output
+    if (perceiver_len > 0) {
+        std::memcpy(&embeds[pos * D], perceiver_out.data(), perceiver_len * D * sizeof(float));
+        pos += perceiver_len;
+    }
     if (m.cond_emotion_w) {
         std::memcpy(&embeds[pos * D], emotion_proj.data(), D * sizeof(float));
         pos++;
