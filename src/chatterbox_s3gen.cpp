@@ -994,78 +994,168 @@ static std::vector<float> hift_vocoder_cpu(
         fprintf(stderr, "s3gen: vocoder mel T=%d rms=%.3f max=%.3f\n", T_mel, mel_rms, mel_max);
     }
 
-    // HiFTGenerator: mel → conv_pre → upsample stages → conv_post → iSTFT
-    // The upsample rates are [8, 5, 3] giving total 120x
-    // With iSTFT hop_len=4, total hop per mel frame = 120 * 4 = 480
-    const int upsample_total = 120; // 8 * 5 * 3
-    const int istft_hop = 4;
+    // Build and run HiFTGenerator ggml graph:
+    // conv_pre(80→512,k=7) → 3× [LeakyReLU → ConvTranspose1d(↑) → skip ResBlocks]
+    // → LeakyReLU → conv_post(64→18,k=7) → split mag(9)/phase(9) → iSTFT
     const int istft_nfft = 16;
-    const int T_upsampled = T_mel * upsample_total;
-    const int n_samples = T_upsampled * istft_hop;
+    const int istft_hop = 4;
 
-    // For the simplified vocoder: use mel energy to generate a waveform
-    // that sounds more natural by using the mel band energies directly
-    // as a spectral envelope for noise excitation.
-    //
-    // This is a "mel inversion" approach that produces intelligible
-    // speech-like audio from correct mel features.
+    // Build graph
+    ggml_init_params ip = {c->compute_meta.size(), c->compute_meta.data(), true};
+    ggml_context* ctx0 = ggml_init(ip);
+    ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 4096, false);
 
-    std::vector<float> wav(n_samples, 0.0f);
+    // Input: mel (T_mel, 80) in ggml layout
+    ggml_tensor* x = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, T_mel, 80);
+    ggml_set_name(x, "voc_mel");
+    ggml_set_input(x);
 
-    // Convert mel from channel-first (80, T) to (T, 80)
+    // conv_pre: Conv1d(80→512, k=7, padding=3)
+    ggml_tensor* cpre_w = T(c, "s3.v.cpre.weight");
+    ggml_tensor* cpre_b = T(c, "s3.v.cpre.bias");
+    if (cpre_w) {
+        x = ggml_conv_1d(ctx0, cpre_w, x, 1, 3, 1);
+        if (cpre_b) x = ggml_add(ctx0, x, ggml_reshape_2d(ctx0, cpre_b, 1, (int)cpre_b->ne[0]));
+    }
+
+    // 3 upsample stages
+    const int strides[] = {8, 5, 3};
+    const int kernels[] = {16, 11, 7};
+    for (int stage = 0; stage < 3; stage++) {
+        // LeakyReLU(0.1)
+        x = ggml_leaky_relu(ctx0, x, 0.1f, false);
+
+        // ConvTranspose1d
+        char wn[32], bn[32];
+        std::snprintf(wn, sizeof(wn), "s3.v.ups.%d.weight", stage);
+        std::snprintf(bn, sizeof(bn), "s3.v.ups.%d.bias", stage);
+        ggml_tensor* up_w = T(c, wn);
+        ggml_tensor* up_b = T(c, bn);
+        if (up_w) {
+            int s = strides[stage];
+            int k = kernels[stage];
+            int p = (k - s) / 2;
+            // ggml_conv_transpose_1d doesn't support non-zero padding
+            // Run with p=0, then crop (k-s)/2 from each side
+            int T_in = (int)x->ne[0];
+            x = ggml_conv_transpose_1d(ctx0, up_w, x, s, 0, 1);
+            // Output length with p=0: (T_in - 1) * s + k
+            // Expected with p: (T_in - 1) * s + k - 2*p = T_in * s
+            if (p > 0) {
+                int T_out = (int)((T_in - 1) * s + k);
+                int T_want = T_in * s; // expected output length
+                int C_out = (int)x->ne[1];
+                // Crop p from left: view starting at offset p
+                x = ggml_view_2d(ctx0, x, T_want, C_out, x->nb[1], p * x->nb[0]);
+                x = ggml_cont(ctx0, x);
+            }
+            if (up_b) x = ggml_add(ctx0, x, ggml_reshape_2d(ctx0, up_b, 1, (int)up_b->ne[0]));
+        }
+
+        // Skip ResBlocks for now — they refine quality but the core path
+        // (conv_pre → upsample → conv_post) captures the spectral structure.
+        // TODO: add ResBlocks with Snake activation for better quality
+    }
+
+    // Reflection pad (1, 0) — skip for now
+    // LeakyReLU
+    x = ggml_leaky_relu(ctx0, x, 0.1f, false);
+
+    // conv_post: Conv1d(64→18, k=7, padding=3)
+    ggml_tensor* cpost_w = T(c, "s3.v.cpost.weight");
+    ggml_tensor* cpost_b = T(c, "s3.v.cpost.bias");
+    if (cpost_w) {
+        x = ggml_conv_1d(ctx0, cpost_w, x, 1, 3, 1);
+        if (cpost_b) x = ggml_add(ctx0, x, ggml_reshape_2d(ctx0, cpost_b, 1, (int)cpost_b->ne[0]));
+    }
+
+    ggml_set_name(x, "voc_stft");
+    ggml_build_forward_expand(gf, x);
+    ggml_free(ctx0);
+
+    // Execute graph
+    ggml_backend_sched_reset(c->sched);
+    if (!ggml_backend_sched_alloc_graph(c->sched, gf)) {
+        fprintf(stderr, "s3gen: failed to alloc vocoder graph\n");
+        // Fallback to noise
+        return std::vector<float>(T_mel * 480, 0.0f);
+    }
+
+    // Set mel input (convert from channel-first to ggml (T, C))
     std::vector<float> mel_tf(T_mel * 80);
     for (int t = 0; t < T_mel; t++)
         for (int b = 0; b < 80; b++)
             mel_tf[t * 80 + b] = mel[b * T_mel + t];
+    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "voc_mel"),
+                            mel_tf.data(), 0, mel_tf.size() * sizeof(float));
 
-    // For each mel frame, generate hop_length=480 samples
-    // using overlap-add with random phase excitation
-    const int hop_length = 480;
-    const int win_length = 960; // 2x hop for overlap
+    if (ggml_backend_sched_graph_compute(c->sched, gf) != GGML_STATUS_SUCCESS) {
+        fprintf(stderr, "s3gen: vocoder compute failed\n");
+        return std::vector<float>(T_mel * 480, 0.0f);
+    }
 
-    // Hann window
-    std::vector<float> window(win_length);
-    for (int i = 0; i < win_length; i++)
-        window[i] = 0.5f * (1.0f - std::cos(2.0f * (float)M_PI * i / (float)win_length));
+    // Read STFT output
+    ggml_tensor* stft_out = ggml_graph_get_tensor(gf, "voc_stft");
+    int T_stft = (int)stft_out->ne[0];
+    int C_stft = (int)stft_out->ne[1]; // should be 18
+    if (c->verbosity >= 1) {
+        fprintf(stderr, "s3gen: vocoder STFT output (%d, %d)\n", T_stft, C_stft);
+    }
 
-    uint64_t rng = 12345;
-    for (int t = 0; t < T_mel; t++) {
-        // Get mel band energies for this frame
-        // Mel values are in log scale — convert to linear power
-        float total_power = 0.0f;
-        std::vector<float> band_power(80);
-        for (int b = 0; b < 80; b++) {
-            float m = mel_tf[t * 80 + b];
-            // Mel values range roughly [-12, 2] based on reference
-            band_power[b] = std::exp(m * 0.5f); // softer exponential
-            total_power += band_power[b];
+    std::vector<float> stft_data(T_stft * C_stft);
+    ggml_backend_tensor_get(stft_out, stft_data.data(), 0, ggml_nbytes(stft_out));
+
+    // iSTFT: split into magnitude (first 9 bins) and phase (last 9 bins)
+    // n_fft = 16, so n_fft/2+1 = 9 frequency bins
+    int n_freq = istft_nfft / 2 + 1; // 9
+    int n_samples = T_stft * istft_hop;
+
+    std::vector<float> wav(n_samples, 0.0f);
+    std::vector<float> win_sum(n_samples, 0.0f);
+
+    // Hann window for iSTFT
+    std::vector<float> win(istft_nfft);
+    for (int i = 0; i < istft_nfft; i++)
+        win[i] = 0.5f * (1.0f - std::cos(2.0f * (float)M_PI * i / (float)istft_nfft));
+
+    for (int frame = 0; frame < T_stft; frame++) {
+        // Extract magnitude and phase
+        float mag[9], phase[9];
+        for (int f = 0; f < n_freq && f < C_stft / 2; f++) {
+            mag[f] = std::exp(std::min(stft_data[frame * C_stft + f], 4.6f)); // clip exp
+            phase[f] = std::sin(stft_data[frame * C_stft + n_freq + f]); // sin of phase
         }
 
-        float energy = std::sqrt(total_power / 80.0f) * 0.15f;
-        if (energy < 1e-6f) energy = 1e-6f;
-
-        // Generate random-phase noise shaped by mel envelope
-        int start = t * hop_length;
-        int len = std::min(win_length, n_samples - start);
-        for (int s = 0; s < len; s++) {
-            // Simple noise excitation
-            rng = rng * 6364136223846793005ULL + 1442695040888963407ULL;
-            float noise = ((float)(int64_t)(rng >> 33) / (float)(1LL << 30)) - 1.0f;
-            wav[start + s] += energy * noise * window[s];
+        // Inverse DFT for this frame
+        int start = frame * istft_hop;
+        for (int n = 0; n < istft_nfft && (start + n) < n_samples; n++) {
+            float sample = 0.0f;
+            for (int f = 0; f < n_freq; f++) {
+                float real = mag[f] * std::cos(phase[f]);
+                float imag = mag[f] * std::sin(phase[f]);
+                float angle = 2.0f * (float)M_PI * f * n / (float)istft_nfft;
+                sample += real * std::cos(angle) - imag * std::sin(angle);
+            }
+            // Mirror frequencies
+            for (int f = 1; f < n_freq - 1; f++) {
+                float real = mag[f] * std::cos(phase[f]);
+                float imag = mag[f] * std::sin(phase[f]);
+                float angle = 2.0f * (float)M_PI * (istft_nfft - f) * n / (float)istft_nfft;
+                sample += real * std::cos(angle) + imag * std::sin(angle);
+            }
+            sample /= (float)istft_nfft;
+            wav[start + n] += sample * win[n];
+            win_sum[start + n] += win[n] * win[n];
         }
     }
 
-    // Normalize
-    float max_val = 0.0f;
-    for (float v : wav) if (std::abs(v) > max_val) max_val = std::abs(v);
-    if (max_val > 0.01f) {
-        float scale = 0.8f / max_val;
-        for (float& v : wav) v *= scale;
+    // Normalize by window overlap
+    for (int i = 0; i < n_samples; i++) {
+        if (win_sum[i] > 1e-8f) wav[i] /= win_sum[i];
     }
 
-    // Trim to expected length
-    int final_len = T_mel * hop_length;
-    wav.resize(final_len);
+    // Clamp
+    for (float& v : wav) v = std::max(-0.99f, std::min(0.99f, v));
 
     return wav;
 }
