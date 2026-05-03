@@ -791,19 +791,25 @@ static std::vector<float> cfm_euler_solve(
             break;
         }
 
-        // Read velocity output
+        // Read velocity output — actual shape may differ from expected
         ggml_tensor* out = ggml_graph_get_tensor(gf, "denoiser_out");
-        std::vector<float> velocity(80 * T_mel);
-        ggml_backend_tensor_get(out, velocity.data(), 0, velocity.size() * sizeof(float));
-
-        // With CFG: velocity = (1 + cfg_rate) * cond_velocity - cfg_rate * uncond_velocity
-        // For now, single batch (no CFG)
+        int out_T = (int)out->ne[0];
+        int out_C = (out->ne[1] > 1) ? (int)out->ne[1] : 1;
+        if (step == 0 && c->verbosity >= 1) {
+            fprintf(stderr, "s3gen: denoiser out ne=(%d, %d) expected (%d, 80)\n",
+                    out_T, out_C, T_mel);
+        }
+        size_t out_bytes = ggml_nbytes(out);
+        std::vector<float> velocity(out_bytes / sizeof(float));
+        ggml_backend_tensor_get(out, velocity.data(), 0, out_bytes);
 
         // Euler step: x = x + dt * velocity
-        // velocity is (T, 80) from ggml, need to transpose to (80, T) channel-first
-        for (int ch = 0; ch < 80; ch++) {
-            for (int t = 0; t < T_mel; t++) {
-                float v = velocity[t * 80 + ch];
+        // Map denoiser output (out_T, out_C) → update x (80, T_mel) channel-first
+        int use_T = std::min(out_T, T_mel);
+        int use_C = std::min(out_C, 80);
+        for (int ch = 0; ch < use_C; ch++) {
+            for (int t = 0; t < use_T; t++) {
+                float v = velocity[t * out_C + ch];
                 x[ch * T_mel + t] += dt * v;
             }
         }

@@ -222,7 +222,10 @@ def choose_dtype(name: str, shape: list, t: torch.Tensor):
         'cond.' in name or 'conds.' in name or
         'perceiver.' in name or 've.' in name or
         'input_embedding' in name or 'embed_affine' in name or
-        'encoder_proj' in name or 'embed.out' in name
+        'encoder_proj' in name or 'embed.out' in name or
+        # Keep time MLP weights as F32 since they're read on CPU
+        'time_mlp' in name or 'time_emb' in name or
+        'tm.linear' in name
     )
     if keep_f32:
         return to_f32(t), GGMLQuantizationType.F32
