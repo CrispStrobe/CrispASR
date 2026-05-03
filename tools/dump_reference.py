@@ -147,6 +147,12 @@ REGISTERED_BACKENDS: Dict[str, str] = {
     # Driven by ORPHEUS_SNAC_T_SUPER (default 4) + ORPHEUS_SNAC_CODE
     # (default 0); see reference_backends/orpheus_snac.py.
     "orpheus":    "reference_backends.orpheus_snac",
+    # Chatterbox TTS: T3 (Llama AR) → S3Gen (CFM) → HiFTGenerator.
+    # model_dir = ResembleAI/chatterbox snapshot (or local with
+    # t3_cfg.safetensors + s3gen.safetensors + ve.safetensors + conds.pt).
+    # audio arg is a reference voice WAV for cloning (16 kHz); when conds.pt
+    # exists the built-in voice is used and audio is ignored.
+    "chatterbox": "reference_backends.chatterbox",
 }
 
 DEFAULT_STAGES_BY_BACKEND: Dict[str, List[str]] = {}  # populated at import
