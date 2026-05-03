@@ -35,7 +35,7 @@ passes 18/18 transcribe + 51/54 feature tests (3 stream skips, no failures).
 | **DONE** | [#60 llama.cpp/llamafile perf trick ports](#60-cross-backend-perf-tricks-llamacpp--llamafile-ports) | 14 items | 60a-g DONE; 60e Q8_0 KV validated on 7 backends (all bit-exact or WER=0%); 60h-n parked/skip |
 | **DONE** | #41 Moonshine IPA / phoneme | — | Superseded by kokoro espeak-ng phonemizer (#56) |
 | **PARKED** | [#9 Parakeet TDT GPU](#9-parakeet-tdt-decoder-gpu) | Medium | Encoder 85%+ of time; LSTM+joint <0.7s; sequential steps limit GPU benefit |
-| **LOW** | [#11 WebSocket server](#11-websocket-streaming-server) | High | Not started |
+| **DONE** | [#11 WebSocket server](#11-websocket-streaming-server) | Medium | RFC 6455 WS on port+1, binary PCM in, JSON text out |
 | **DONE** | [#7 voxtral4b streaming](#7-native-voxtral4b-streaming) | High | Phases 1-4 shipped → HISTORY §71 |
 | **DONE** | [#62 Streaming + mic library API](#62-streaming--mic-library-api) | M-L | All wrappers ship it |
 | **DONE** | [#63 Feature matrix parity](#63-feature-matrix-parity) | Phased | All 9 phases → HISTORY §72 |
@@ -350,12 +350,23 @@ speedup from GPU is already the dominant improvement.
 
 ---
 
-## 11. WebSocket streaming server
+## ~~11. WebSocket streaming server~~ — DONE (May 2026)
 
-Add `/ws` endpoint for real-time streaming over HTTP. httplib doesn't
-support WebSocket — need custom protocol or library.
+Minimal RFC 6455 WebSocket server running on `--ws-port` (default:
+HTTP port + 1). ~300 LOC in `examples/server/ws_stream.{h,cpp}`.
 
-**Effort:** ~200-300 LOC.
+**Protocol:**
+- Client connects to `ws://host:port`
+- Server sends `{"status":"ready"}`
+- Client sends binary frames (16kHz mono float32 PCM chunks)
+- Server sends JSON `{"text":"...","t0":0.0,"t1":1.5,"counter":1}`
+  on each streaming decoder commit
+- Client sends text `"flush"` to finalize remaining audio
+- Server responds with `{"text":"...","final":true}`
+
+One thread per connection, each with its own crispasr session +
+streaming decoder. No TLS (use reverse proxy for wss://). No
+fragmented frames. Integrated into `crispasr-server` build.
 
 ---
 
