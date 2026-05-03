@@ -740,24 +740,25 @@ static std::vector<float> cfm_euler_solve(chatterbox_s3gen_context* c,
         float r_val = t_span[step + 1];
         float dt = r_val - t_val;
 
-        // Build conditioned input: [x, mu, spks, cond]
-        std::vector<float> unet_input(T_mel * 320);
-        for (int t = 0; t < T_mel; t++) {
-            for (int ch = 0; ch < 80; ch++) {
-                unet_input[t * 320 + ch] = x[ch * T_mel + t];
-                unet_input[t * 320 + 80 + ch] = mu[ch * T_mel + t];
-                unet_input[t * 320 + 160 + ch] = spk_emb[ch];
-                unet_input[t * 320 + 240 + ch] = cond[ch * T_mel + t];
+        // Build conditioned input: [x, mu, spks, cond] concatenated along channels
+        // ggml tensor ne=(T_mel, 320): data stored as data[ch * T_mel + t]
+        // (channel-first, T is fast axis)
+        std::vector<float> unet_input(T_mel * 320, 0.0f);
+        for (int ch = 0; ch < 80; ch++) {
+            for (int t = 0; t < T_mel; t++) {
+                unet_input[(ch +   0) * T_mel + t] = x[ch * T_mel + t];
+                unet_input[(ch +  80) * T_mel + t] = mu[ch * T_mel + t];
+                unet_input[(ch + 160) * T_mel + t] = spk_emb[ch]; // broadcast over T
+                unet_input[(ch + 240) * T_mel + t] = cond[ch * T_mel + t];
             }
         }
 
         // Build unconditioned input for CFG: [x, 0, 0, 0]
         std::vector<float> unet_uncond(T_mel * 320, 0.0f);
         if (cfg_rate > 0.0f) {
-            for (int t = 0; t < T_mel; t++) {
-                for (int ch = 0; ch < 80; ch++) {
-                    unet_uncond[t * 320 + ch] = x[ch * T_mel + t]; // x stays
-                    // mu, spks, cond are all zeros (unconditional)
+            for (int ch = 0; ch < 80; ch++) {
+                for (int t = 0; t < T_mel; t++) {
+                    unet_uncond[ch * T_mel + t] = x[ch * T_mel + t];
                 }
             }
         }
@@ -849,12 +850,13 @@ static std::vector<float> cfm_euler_solve(chatterbox_s3gen_context* c,
 
         // Euler step with CFG blending:
         // v = (1 + cfg_rate) * v_cond - cfg_rate * v_uncond
+        // Denoiser output is ggml (ne[0]=T, ne[1]=C) → data[ch * T + t] (channel-first)
         for (int ch = 0; ch < use_C; ch++) {
             for (int t = 0; t < use_T; t++) {
-                float vc = v_cond[t * out_C + ch];
+                float vc = v_cond[ch * out_T + t];
                 float v;
                 if (cfg_rate > 0.0f && !v_uncond.empty()) {
-                    float vu = v_uncond[t * out_C + ch];
+                    float vu = v_uncond[ch * out_T + t];
                     v = (1.0f + cfg_rate) * vc - cfg_rate * vu;
                 } else {
                     v = vc;
