@@ -7446,3 +7446,100 @@ opposite profile.
 
 Reference: `tools/test-all-backends.py` `FetchedModel` /
 `cleanup_downloaded` / `Backend.is_reference`, commit `0c90209`.
+
+## Lesson — five Windows release-pipeline bugs masked each other for 5 days
+
+v0.5.4's release page never published. Every retry failed at a
+different layer; fixing one bug exposed the next. Five fixes in
+total to get v0.5.5 + v0.5.4 (backfilled) shipping clean. All five
+were Windows MSVC or Docker specific — Linux + macOS sailed through
+the whole time, which is why the failure went undetected so long.
+
+### The cascade
+
+| # | Bug | Manifested as | Fix |
+|---|-----|---------------|------|
+| 1 | `release.yml` built `crispasr` (library) target, not `crispasr-cli` (binary). Renamed silently in `examples/cli/CMakeLists.txt:12 set(TARGET crispasr-cli)` with `OUTPUT_NAME=crispasr` keeping the binary name unchanged. | Linux/macOS/Windows Package step: `cp build/bin/crispasr` → "No such file or directory". | `4d4eef9`: change all 6 `--target crispasr` → `--target crispasr-cli`. |
+| 2 | `cmake/git-vars.cmake` used `git log --date=local` → `Sat May 2 22:41:36 2026 +0200`. Spaces + English month names. | Windows MSVC link.exe re-parsed the `-DCRISPASR_GIT_DATE` value when expanding command files; "May" became `May.obj` → `LNK1181: cannot open input file 'May.obj'`. | `5771566`: switch to `--date=iso-strict` + defensive `string(REPLACE " " "_")`. |
+| 3 | `CMAKE_CUDA_ARCHITECTURES="75-real;80-real;..."` propagated as a CMake LIST into `target_compile_definitions` → cl.exe got it as separate `-D` args (`-D80-real -D86-real -D120-virtual"`) with one orphan quote. | Mangled cl.exe line bled into link.exe's argv; the FIRST loose token from the SUBJECT define ("GIT_DATE = ISO-8601") became `GIT_DATE.obj` → `LNK1181: cannot open input file 'GIT_DATE.obj'`. | `cf24ef0`: `string(REPLACE ";" "," ...)` before embedding in the `-D` define + extend GIT_COMMIT_SUBJECT sanitiser to neutralise `=`. |
+| 4 | `crispasr_diff_main.cpp:944` used `M_PI`. MSVC's `<cmath>` doesn't define it without `_USE_MATH_DEFINES` set BEFORE the first include. | windows-blas matrix in `build.yml`: `error C2065: 'M_PI': undeclared identifier`. (Different workflow from release.yml; symptomatic side-finding.) | `e6e8fcd`: `#define _USE_MATH_DEFINES` + `#include <cmath>` at top of crispasr_diff_main.cpp. |
+| 5 | `libggml-cuda.so` links against `libcuda.so.1` (CUDA driver). Docker base images ship the stub `libcuda.so` (no `.1` suffix); `.1` gets mounted in by host's nvidia container runtime at exec time, not build time. | Both cuda Dockerfiles: `cuMem* / cuDevice*` undefined references at the final crispasr exe link. | `b288283`: `-DCMAKE_EXE_LINKER_FLAGS="-Wl,--allow-shlib-undefined"` for runtime-resolved transitively-undefined symbols. |
+
+### Common pattern
+
+Four of the five (1, 2, 3, 5) are **toolchain-string-injection** bugs:
+something user-controlled (a target name, a date, a CUDA arch list,
+a commit subject) gets embedded into a build command line, then a
+later layer (link.exe, ld, the second-pass arg parser) re-parses
+that line on different rules than the first. Anywhere you put a
+*value* into a *flag* there's a quoting boundary, and on Windows the
+boundary multiplies — cmd.exe, vcvars64.bat, ninja, cl.exe, link.exe
+each parse arguments slightly differently.
+
+### Generalisable rules
+
+1. **Sanitise everything that lands in `target_compile_definitions`.**
+   The `git-vars.cmake` SUBJECT block already neutralised `;`, `\`, `"`,
+   `(`, `)`, `:` — but missed `=` and (via the DATE) spaces +
+   localised month names. The defensive list to ALWAYS strip from
+   any toolchain-injected string:
+
+   | char | breaks | replace with |
+   |------|--------|--------------|
+   | `;` | CMake list separator | `,` |
+   | space | shell word boundary | `_` |
+   | `=` | linker positional split | `-` |
+   | `(` `)` | MSVC `/D` and POSIX sh subshell | `[` `]` |
+   | `:` | target separator (some shells) | `-` |
+   | `\` | escape character | `/` |
+   | `"` | quote nesting | `'` |
+   | localised words | non-ASCII shell parsers | `_`-prefix or skip |
+
+2. **CMake list variables NEED explicit `;` → `,` before embedding.**
+   `target_compile_definitions(... "${CMAKE_CUDA_ARCHITECTURES}")` is
+   wrong — CMake lists propagate into the build command line as
+   separate arguments. Always `string(REPLACE ";" "," X "${X}")`
+   before the `-D` boundary if the value happens to be a list type.
+
+3. **Test what `release.yml` builds before tagging.** The `--target`
+   bug had been silently latent since the binary rename. A `make
+   release-dry-run` Makefile target that runs the same `cmake --build
+   ... --target X` invocation as release.yml would have caught it
+   immediately. (Open follow-up: add such a target.)
+
+4. **Docker linker flags for runtime-mounted libs.**
+   `-Wl,--allow-shlib-undefined` is the correct posture for any
+   driver/runtime lib (CUDA, ROCm, OpenCL) that the host injects at
+   container exec time. The stubs dir resolves at build time but
+   doesn't carry `SONAME`-suffixed names; the flag tells ld to trust
+   that `libfoo.so.1` will appear later.
+
+### Why it took five days
+
+v0.5.4 shipped on April 27. Six retries between then and the
+backfill on May 3. Each retry surfaced a different bug because:
+
+- The matrix is large (Linux × macOS × Windows × CPU/CUDA/Vulkan/MSYS2
+  + Docker × main/cuda/cuda-12/vulkan/musa/intel = ~16 build paths).
+- Failure messages were misleading. "May.obj" sounds like a missing
+  file; "GIT_DATE.obj" sounds like a CMake variable issue. Neither
+  hint at the actual quoting boundary that's being violated.
+- Some bugs only fire on commits whose date or message contains
+  specific shell metacharacters. The "May.obj" bug was dormant in
+  April (when month abbreviation was "Apr" — link.exe happened to
+  not error on `Apr.obj` for reasons I haven't traced). The
+  `GIT_DATE.obj` bug only fired because my own commit message
+  happened to contain "GIT_DATE = ISO-8601 strict".
+
+The lesson on the human side: when a release pipeline breaks, the
+first instinct is to suspect a recent code change. In this case the
+breakage was 5 latent bugs, none of which was triggered by a single
+change. Always look at *what's different about the inputs to the
+pipeline* (commit messages, dates, tag names) — those are the values
+that actually cross the toolchain-string-injection boundary.
+
+References: `cmake/git-vars.cmake`, `examples/cli/CMakeLists.txt`,
+`examples/cli/crispasr_diff_main.cpp`, `.devops/main-cuda*.Dockerfile`,
+`.github/workflows/release.yml`. Commits: `4d4eef9`, `5771566`,
+`cf24ef0`, `e6e8fcd`, `b288283`. v0.5.5 first clean release; v0.5.4
+backfilled at the v0.5.5 commit.
