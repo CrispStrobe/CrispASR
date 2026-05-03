@@ -2717,3 +2717,29 @@ diagnostics and exits without touching `/models`:
 ```
 docker run --rm --gpus all -e CRISPASR_DIAGNOSTICS=1 crispasr:main-cuda
 ```
+
+### 75. Unit test expansion — core decode + registry (May 2026)
+
+**test-core-decode.cpp** (8 Catch2 cases, 27 assertions): Tests the
+shared `core_greedy_decode` and `core_beam_decode` infrastructure used
+by granite, qwen3, glm-asr, kyutai-stt, moonshine, omniasr backends.
+Uses a mock LLM (no models, no GPU, sub-millisecond). Covers: argmax,
+softmax_of, greedy sequence generation with EOS, beam search at
+beam_size=1 (greedy equivalence) and beam_size=4, max_new_tokens cap,
+multi-EOS termination, probability bounds.
+
+**test-registry.cpp** (9 Catch2 cases, 14 assertions): Verifies the
+model registry lookup for 8 backends (whisper, parakeet, mimo-asr,
+omniasr, omniasr-llm, granite-4.1, gemma4-e2b, vibevoice) plus unknown
+backend returns false. Pure in-memory queries, no network.
+
+**#60e KV cache Q8_0 validation.** Transcript comparison F16 vs Q8_0
+across 7 backends: granite, granite-4.1, glm-asr, omniasr-llm, voxtral
+all bit-exact; qwen3 minor punctuation diff (WER=0%); mimo-asr
+validated previously (cosine ≥0.98). `CRISPASR_KV_QUANT=q8_0` safe
+for all tested backends.
+
+**PLAN cleanup.** #41 (Moonshine IPA) superseded by kokoro espeak-ng
+phonemizer. #9 (Parakeet TDT GPU) parked — encoder dominates, LSTM
+decoder <0.7s. #60 marked DONE. #62 already done (stale PLAN entry).
+Priority table deduplicated.

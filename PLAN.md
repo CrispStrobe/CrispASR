@@ -42,7 +42,7 @@ passes 18/18 transcribe + 51/54 feature tests (3 stream skips, no failures).
 | **BLOCKED** | [#42 VibeVoice-ASR 7B](#42-vibevoice-asr-7b) | High | Needs ≥16 GB RAM |
 | **BLOCKED** | [#43 Fun-ASR-Nano](#43-fun-asr-nano) | Medium | License unclear |
 
-**Recently completed** (full write-ups in HISTORY.md): #5 reference backends → §63, #16 Shaw RPE → §55, #51 MiMo-V2.5-ASR runtime → §56, #51b step-decode KV cache reuse → §60, #53 narrow core helper extractions → §63, #54 granite-speech-4.1 plus/nar → §61, #55 granite-family DRY refactor → §54, #56 Kokoro phonemizer-step diff harness + cache_clear ABI → §63, #60d Fused QKV mimo-asr Q4_K → §64, **#63 Feature matrix parity → §72** (beam search granite/qwen3, flash attn 6 backends, CTC timestamps 5 backends, auto-punc CTC, auto-download omniasr/mimo, glm-asr translate infra).
+**Recently completed** (full write-ups in HISTORY.md): #63 Feature matrix parity → §72, #59 binding parity Go/Java/Ruby → §73, gemma4-e2b #49 + Docker #31 → §74, unit tests + KV Q8_0 validation + PLAN cleanup → §75. Earlier: #5→§63, #16→§55, #51→§56, #51b→§60, #53→§63, #54→§61, #55→§54, #56→§63, #60d→§64.
 
 ---
 
