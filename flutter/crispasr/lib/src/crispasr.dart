@@ -697,6 +697,11 @@ class TranscribeOptions {
   final int maxLen;
   /// Split segments on word boundaries when [maxLen] is set.
   final bool splitOnWord;
+  /// Best-of-N greedy sampling for whisper. 0 or 1 = disabled (single pass).
+  /// Whisper runs N internal greedy decodes and picks the highest-scoring
+  /// one — quality goes up at ~Nx CPU cost. Maps to
+  /// `whisper_full_params.greedy.best_of`.
+  final int bestOf;
   /// Thread count. 0 = whisper default (usually 4).
   final int nThreads;
   /// An initial text prompt to condition the decoder on.
@@ -726,6 +731,7 @@ class TranscribeOptions {
     this.wordTimestamps = false,
     this.maxLen = 0,
     this.splitOnWord = false,
+    this.bestOf = 0,
     this.nThreads = 0,
     this.initialPrompt,
     this.silent = true,
@@ -871,6 +877,7 @@ class CrispASR {
   _ParamsSetBool?   _paramsSetTokenTimestamps;
   _ParamsSetInt?    _paramsSetNThreads;
   _ParamsSetInt?    _paramsSetMaxLen;
+  _ParamsSetInt?    _paramsSetBestOf;
   _ParamsSetBool?   _paramsSetSplitOnWord;
   _ParamsSetBool?   _paramsSetPrintRealtime;
   _ParamsSetBool?   _paramsSetPrintProgress;
@@ -965,6 +972,9 @@ class CrispASR {
     }
     if (_lib.providesSymbol('crispasr_params_set_max_len')) {
       _paramsSetMaxLen = _lib.lookupFunction<_ParamsSetIntNative, _ParamsSetInt>('crispasr_params_set_max_len');
+    }
+    if (_lib.providesSymbol('crispasr_params_set_best_of')) {
+      _paramsSetBestOf = _lib.lookupFunction<_ParamsSetIntNative, _ParamsSetInt>('crispasr_params_set_best_of');
     }
     if (_lib.providesSymbol('crispasr_params_set_split_on_word')) {
       _paramsSetSplitOnWord = _lib.lookupFunction<_ParamsSetBoolNative, _ParamsSetBool>('crispasr_params_set_split_on_word');
@@ -1093,6 +1103,7 @@ class CrispASR {
       if (opts.detectLanguage) _paramsSetDetectLanguage?.call(params, 1);
       if (opts.wordTimestamps) _paramsSetTokenTimestamps?.call(params, 1);
       if (opts.maxLen > 0) _paramsSetMaxLen?.call(params, opts.maxLen);
+      if (opts.bestOf > 1) _paramsSetBestOf?.call(params, opts.bestOf);
       if (opts.splitOnWord) _paramsSetSplitOnWord?.call(params, 1);
       if (opts.initialPrompt != null) {
         promptPtr = opts.initialPrompt!.toNativeUtf8();

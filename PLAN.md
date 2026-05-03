@@ -2243,32 +2243,24 @@ models (omniasr-llm 300s, glm-asr 300s, kyutai-stt 90s).
 on CPU with Q4_K models > 500 MB. On GPU or with smaller models it
 completes. No code changes needed; just document the GPU requirement.
 
-**SDK side (gap discovered 2026-05-03 by CrisperWeaver §5.8):**
-There is **no runtime knob** for best-of-N exposed to library
-consumers. To wire a UI slider against it we would need:
+**SDK side (gap discovered 2026-05-03 by CrisperWeaver §5.8) — DONE:**
 
-- `crispasr_session_set_best_of(handle, int n) → int rc` in
-  `include/crispasr.h` + `src/crispasr_c_api.cpp` — modeled exactly on
-  the existing `crispasr_session_set_temperature` pattern (returns
-  `rc=-2` when no backend in the session honours it, so the binding
-  can map that to a silent no-op the way `setTemperature` already
-  does in `flutter/crispasr/lib/src/crispasr.dart::setTemperature`).
-- A matching `int bestOf` field on `TranscribeOptions` in
-  `flutter/crispasr/lib/src/crispasr.dart` so Whisper consumers can
-  set it via the standard options struct (whisper.cpp already supports
-  it via `whisper_full_params.greedy.best_of` / `beam_search.beam_size`,
-  it's just not surfaced through TranscribeOptions today).
-- Per-backend wiring under `crispasr_session_set_best_of` for the
-  backends that actually accept it: voxtral, voxtral4b, qwen3-asr,
-  granite-speech (via their per-token sampling params).
+- `crispasr_session_set_best_of(session, n) → int rc` shipped in
+  `src/crispasr_c_api.cpp` (commit 62be9b1, 2026-05-03). Whisper
+  wires directly to `greedy.best_of`; all other session backends use
+  an external N-pass wrapper in `transcribe_lang` that picks the
+  candidate with the highest average per-word confidence — backends
+  emitting word-level probs (canary, qwen3, voxtral, granite, cohere)
+  benefit most.
+- `crispasr_params_set_best_of(params, n)` added to the legacy
+  `whisper_full_params` path so the Dart wrapper (which uses
+  `whisper_full` directly, not the session API) can set it too.
+- `int bestOf` field on `TranscribeOptions` in
+  `flutter/crispasr/lib/src/crispasr.dart`, default 0 (disabled);
+  values > 1 call through to the new params setter.
 
-CrisperWeaver shipped temperature without best-of-N at v0.4.0
-because of this gap; the slider is one ARB string + one method
-binding away on the consumer side once the C ABI exists.
-
-**Effort:** ~half day to add the C ABI + Dart binding + Whisper
-TranscribeOptions field, then per-backend dispatch arms (probably
-another half day to wire all four LLM backends).
+CrisperWeaver can now expose the slider against `TranscribeOptions.bestOf`
+for whisper sessions and `crispasr_session_set_best_of` for everything else.
 
 ### Phase 7 — Capability declaration fixes — DONE
 

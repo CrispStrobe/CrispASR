@@ -159,6 +159,10 @@ CA_EXPORT void crispasr_params_set_max_len(whisper_full_params* p, int n) {
     if (p)
         p->max_len = n;
 }
+CA_EXPORT void crispasr_params_set_best_of(whisper_full_params* p, int n) {
+    if (p && n > 0)
+        p->greedy.best_of = n;
+}
 CA_EXPORT void crispasr_params_set_split_on_word(whisper_full_params* p, int v) {
     if (p)
         p->split_on_word = v != 0;
