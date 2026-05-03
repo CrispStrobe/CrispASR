@@ -47,6 +47,37 @@ int crispasr_kokoro_resolve_fallback_voice_abi(const char* model_path, const cha
                                                char* out_path, int out_path_len,
                                                char* out_picked, int out_picked_len);
 
+// --- ASR transcription (PLAN #59) ---
+typedef struct crispasr_session_result crispasr_session_result;
+crispasr_session_result* crispasr_session_transcribe(CrispasrSession* s, const float* pcm, int n_samples);
+crispasr_session_result* crispasr_session_transcribe_lang(CrispasrSession* s, const float* pcm, int n_samples,
+                                                          const char* language);
+crispasr_session_result* crispasr_session_transcribe_vad(CrispasrSession* s, const float* pcm, int n_samples,
+                                                         int sample_rate, const char* vad_model_path, void* opts);
+int          crispasr_session_result_n_segments(crispasr_session_result* r);
+const char*  crispasr_session_result_segment_text(crispasr_session_result* r, int i);
+long long    crispasr_session_result_segment_t0(crispasr_session_result* r, int i);
+long long    crispasr_session_result_segment_t1(crispasr_session_result* r, int i);
+int          crispasr_session_result_n_words(crispasr_session_result* r, int i_seg);
+const char*  crispasr_session_result_word_text(crispasr_session_result* r, int i_seg, int i_word);
+long long    crispasr_session_result_word_t0(crispasr_session_result* r, int i_seg, int i_word);
+long long    crispasr_session_result_word_t1(crispasr_session_result* r, int i_seg, int i_word);
+float        crispasr_session_result_word_p(crispasr_session_result* r, int i_seg, int i_word);
+void         crispasr_session_result_free(crispasr_session_result* r);
+
+// --- Punctuation (PLAN #59) ---
+void*        crispasr_punc_init(const char* model_path);
+const char*  crispasr_punc_process(void* ctx, const char* text);
+void         crispasr_punc_free_text(const char* text);
+void         crispasr_punc_free(void* ctx);
+
+// --- Registry + cache (PLAN #59) ---
+int crispasr_registry_lookup_abi(const char* backend, char* out_filename, int filename_cap,
+                                 char* out_url, int url_cap, char* out_size, int size_cap);
+int crispasr_cache_ensure_file_abi(const char* filename, const char* url, int quiet,
+                                   const char* cache_dir_override, char* out_buf, int out_cap);
+int crispasr_cache_dir_abi(const char* cache_dir_override, char* out_buf, int out_cap);
+
 // --- Streaming (PLAN #62) ---
 typedef struct CrispasrStream CrispasrStream;
 CrispasrStream* crispasr_session_stream_open(CrispasrSession* s, int n_threads, int step_ms,
@@ -398,6 +429,197 @@ type KokoroResolved struct {
 	VoicePath       string // fallback voice path; empty if not applicable
 	VoiceName       string // basename of the picked voice (e.g. "df_victoria")
 	BackboneSwapped bool   // true iff the model path was rewritten
+}
+
+// ---------------------------------------------------------------------------
+// ASR Transcription (PLAN #59 — the most critical missing capability).
+// ---------------------------------------------------------------------------
+
+// TranscribeResult holds the output of a transcription call.
+type TranscribeResult struct {
+	Segments []TranscribeSegment
+}
+
+// TranscribeSegment is one segment from a transcription.
+type TranscribeSegment struct {
+	Text  string
+	T0    int64 // centiseconds
+	T1    int64
+	Words []TranscribeWord
+}
+
+// TranscribeWord is one word with timing and confidence.
+type TranscribeWord struct {
+	Text string
+	T0   int64   // centiseconds
+	T1   int64
+	P    float32 // confidence
+}
+
+// Transcribe runs ASR on 16 kHz mono float32 PCM.
+func (s *CrispasrSession) Transcribe(pcm []float32) (*TranscribeResult, error) {
+	return s.TranscribeLang(pcm, "")
+}
+
+// TranscribeLang transcribes with an explicit language hint (e.g. "en", "de").
+// Pass empty string for auto-detect.
+func (s *CrispasrSession) TranscribeLang(pcm []float32, lang string) (*TranscribeResult, error) {
+	if s.handle == nil {
+		return nil, errors.New("session is closed")
+	}
+	pcmPtr := (*C.float)(nil)
+	if len(pcm) > 0 {
+		pcmPtr = (*C.float)(unsafe.Pointer(&pcm[0]))
+	}
+	var clang *C.char
+	if lang != "" {
+		clang = C.CString(lang)
+		defer C.free(unsafe.Pointer(clang))
+	}
+	r := C.crispasr_session_transcribe_lang(s.handle, pcmPtr, C.int(len(pcm)), clang)
+	if r == nil {
+		return nil, errors.New("transcription failed")
+	}
+	defer C.crispasr_session_result_free(r)
+	return extractResult(r), nil
+}
+
+// TranscribeVAD transcribes with VAD segmentation.
+// vadModelPath can be empty for auto-download of default Silero model.
+func (s *CrispasrSession) TranscribeVAD(pcm []float32, sampleRate int, vadModelPath string) (*TranscribeResult, error) {
+	if s.handle == nil {
+		return nil, errors.New("session is closed")
+	}
+	pcmPtr := (*C.float)(nil)
+	if len(pcm) > 0 {
+		pcmPtr = (*C.float)(unsafe.Pointer(&pcm[0]))
+	}
+	cvad := C.CString(vadModelPath)
+	defer C.free(unsafe.Pointer(cvad))
+	r := C.crispasr_session_transcribe_vad(s.handle, pcmPtr, C.int(len(pcm)), C.int(sampleRate), cvad, nil)
+	if r == nil {
+		return nil, errors.New("transcription with VAD failed")
+	}
+	defer C.crispasr_session_result_free(r)
+	return extractResult(r), nil
+}
+
+func extractResult(r *C.crispasr_session_result) *TranscribeResult {
+	nSegs := int(C.crispasr_session_result_n_segments(r))
+	result := &TranscribeResult{Segments: make([]TranscribeSegment, nSegs)}
+	for i := 0; i < nSegs; i++ {
+		seg := &result.Segments[i]
+		seg.Text = C.GoString(C.crispasr_session_result_segment_text(r, C.int(i)))
+		seg.T0 = int64(C.crispasr_session_result_segment_t0(r, C.int(i)))
+		seg.T1 = int64(C.crispasr_session_result_segment_t1(r, C.int(i)))
+		nWords := int(C.crispasr_session_result_n_words(r, C.int(i)))
+		seg.Words = make([]TranscribeWord, nWords)
+		for j := 0; j < nWords; j++ {
+			w := &seg.Words[j]
+			w.Text = C.GoString(C.crispasr_session_result_word_text(r, C.int(i), C.int(j)))
+			w.T0 = int64(C.crispasr_session_result_word_t0(r, C.int(i), C.int(j)))
+			w.T1 = int64(C.crispasr_session_result_word_t1(r, C.int(i), C.int(j)))
+			w.P = float32(C.crispasr_session_result_word_p(r, C.int(i), C.int(j)))
+		}
+	}
+	return result
+}
+
+// ---------------------------------------------------------------------------
+// Punctuation restoration (FireRedPunc post-processor)
+// ---------------------------------------------------------------------------
+
+// PuncModel wraps a loaded FireRedPunc punctuation restoration model.
+type PuncModel struct {
+	handle unsafe.Pointer
+}
+
+// PuncInit loads a FireRedPunc GGUF model. Pass "auto" to auto-download.
+func PuncInit(modelPath string) (*PuncModel, error) {
+	cpath := C.CString(modelPath)
+	defer C.free(unsafe.Pointer(cpath))
+	h := C.crispasr_punc_init(cpath)
+	if h == nil {
+		return nil, errors.New("crispasr_punc_init failed for " + modelPath)
+	}
+	return &PuncModel{handle: h}, nil
+}
+
+// Process restores punctuation + capitalization to the input text.
+func (p *PuncModel) Process(text string) (string, error) {
+	ctext := C.CString(text)
+	defer C.free(unsafe.Pointer(ctext))
+	result := C.crispasr_punc_process(p.handle, ctext)
+	if result == nil {
+		return text, errors.New("crispasr_punc_process failed")
+	}
+	out := C.GoString(result)
+	C.crispasr_punc_free_text(result)
+	return out, nil
+}
+
+// Close frees the punctuation model.
+func (p *PuncModel) Close() {
+	if p != nil && p.handle != nil {
+		C.crispasr_punc_free(p.handle)
+		p.handle = nil
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Model registry + cache
+// ---------------------------------------------------------------------------
+
+// RegistryEntry holds the auto-download metadata for a backend.
+type RegistryEntry struct {
+	Filename string
+	URL      string
+	Size     string
+}
+
+// RegistryLookup returns the default model filename + download URL for a backend.
+func RegistryLookup(backend string) (RegistryEntry, error) {
+	cb := C.CString(backend)
+	defer C.free(unsafe.Pointer(cb))
+	var fname, url, sz [512]C.char
+	rc := C.crispasr_registry_lookup_abi(cb, &fname[0], 512, &url[0], 512, &sz[0], 512)
+	if rc != 0 {
+		return RegistryEntry{}, fmt.Errorf("no registry entry for backend %q", backend)
+	}
+	return RegistryEntry{
+		Filename: C.GoString(&fname[0]),
+		URL:      C.GoString(&url[0]),
+		Size:     C.GoString(&sz[0]),
+	}, nil
+}
+
+// CacheEnsureFile downloads a file into the model cache if not already present.
+// Returns the local path. cacheDirOverride can be empty for the default.
+func CacheEnsureFile(filename, url, cacheDirOverride string) (string, error) {
+	cf := C.CString(filename)
+	defer C.free(unsafe.Pointer(cf))
+	cu := C.CString(url)
+	defer C.free(unsafe.Pointer(cu))
+	cdir := C.CString(cacheDirOverride)
+	defer C.free(unsafe.Pointer(cdir))
+	var out [1024]C.char
+	rc := C.crispasr_cache_ensure_file_abi(cf, cu, 0, cdir, &out[0], 1024)
+	if rc != 0 {
+		return "", fmt.Errorf("cache_ensure_file failed for %q", filename)
+	}
+	return C.GoString(&out[0]), nil
+}
+
+// CacheDir returns the resolved model cache directory path.
+func CacheDir(override string) (string, error) {
+	co := C.CString(override)
+	defer C.free(unsafe.Pointer(co))
+	var out [1024]C.char
+	rc := C.crispasr_cache_dir_abi(co, &out[0], 1024)
+	if rc != 0 {
+		return "", errors.New("crispasr_cache_dir_abi failed")
+	}
+	return C.GoString(&out[0]), nil
 }
 
 // KokoroResolveForLang returns the kokoro model + fallback voice that

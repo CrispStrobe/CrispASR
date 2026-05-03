@@ -59,6 +59,30 @@ extern int                     crispasr_kokoro_resolve_fallback_voice_abi(const 
                                                                           char* out_path, int out_path_len,
                                                                           char* out_picked, int out_picked_len);
 
+// --- ASR transcription (PLAN #59) ---
+struct crispasr_session_result;
+extern struct crispasr_session_result* crispasr_session_transcribe(struct CrispasrSession* s,
+                                                                    const float* pcm, int n_samples);
+extern struct crispasr_session_result* crispasr_session_transcribe_lang(struct CrispasrSession* s,
+                                                                        const float* pcm, int n_samples,
+                                                                        const char* language);
+extern int          crispasr_session_result_n_segments(struct crispasr_session_result* r);
+extern const char*  crispasr_session_result_segment_text(struct crispasr_session_result* r, int i);
+extern int64_t      crispasr_session_result_segment_t0(struct crispasr_session_result* r, int i);
+extern int64_t      crispasr_session_result_segment_t1(struct crispasr_session_result* r, int i);
+extern int          crispasr_session_result_n_words(struct crispasr_session_result* r, int i_seg);
+extern const char*  crispasr_session_result_word_text(struct crispasr_session_result* r, int i_seg, int i_word);
+extern int64_t      crispasr_session_result_word_t0(struct crispasr_session_result* r, int i_seg, int i_word);
+extern int64_t      crispasr_session_result_word_t1(struct crispasr_session_result* r, int i_seg, int i_word);
+extern float        crispasr_session_result_word_p(struct crispasr_session_result* r, int i_seg, int i_word);
+extern void         crispasr_session_result_free(struct crispasr_session_result* r);
+
+// --- Punctuation (PLAN #59) ---
+extern void*        crispasr_punc_init(const char* model_path);
+extern const char*  crispasr_punc_process(void* ctx, const char* text);
+extern void         crispasr_punc_free_text(const char* text);
+extern void         crispasr_punc_free(void* ctx);
+
 // --- Streaming (PLAN #62b): rolling-window decoder. Whisper-only at the C-ABI today.
 struct CrispasrStream;
 extern struct CrispasrStream* crispasr_session_stream_open(struct CrispasrSession* s, int n_threads,
@@ -234,6 +258,46 @@ static VALUE rb_session_synthesize(VALUE self, VALUE handle, VALUE text) {
     for (int i = 0; i < n; i++) rb_ary_push(arr, DBL2NUM((double)pcm[i]));
     crispasr_pcm_free(pcm);
     return arr;
+}
+
+// --- ASR transcription (PLAN #59) ---
+// CrispASR::Session.transcribe(handle, pcm_array) -> [{text:, t0:, t1:, words: [{text:, t0:, t1:, p:}]}]
+static VALUE rb_session_transcribe(VALUE self, VALUE handle, VALUE pcm_arr) {
+    struct CrispasrSession* s = (struct CrispasrSession*)NUM2ULL(handle);
+    long n = RARRAY_LEN(pcm_arr);
+    float* pcm = (float*)malloc(sizeof(float) * (size_t)n);
+    for (long i = 0; i < n; i++)
+        pcm[i] = (float)NUM2DBL(rb_ary_entry(pcm_arr, i));
+
+    struct crispasr_session_result* r = crispasr_session_transcribe(s, pcm, (int)n);
+    free(pcm);
+    if (!r) rb_raise(rb_eRuntimeError, "transcription failed");
+
+    int n_segs = crispasr_session_result_n_segments(r);
+    VALUE segments = rb_ary_new_capa(n_segs);
+    for (int i = 0; i < n_segs; i++) {
+        VALUE seg = rb_hash_new();
+        const char* text = crispasr_session_result_segment_text(r, i);
+        rb_hash_aset(seg, ID2SYM(rb_intern("text")), rb_utf8_str_new_cstr(text ? text : ""));
+        rb_hash_aset(seg, ID2SYM(rb_intern("t0")), LL2NUM(crispasr_session_result_segment_t0(r, i)));
+        rb_hash_aset(seg, ID2SYM(rb_intern("t1")), LL2NUM(crispasr_session_result_segment_t1(r, i)));
+
+        int n_words = crispasr_session_result_n_words(r, i);
+        VALUE words = rb_ary_new_capa(n_words);
+        for (int j = 0; j < n_words; j++) {
+            VALUE w = rb_hash_new();
+            const char* wt = crispasr_session_result_word_text(r, i, j);
+            rb_hash_aset(w, ID2SYM(rb_intern("text")), rb_utf8_str_new_cstr(wt ? wt : ""));
+            rb_hash_aset(w, ID2SYM(rb_intern("t0")), LL2NUM(crispasr_session_result_word_t0(r, i, j)));
+            rb_hash_aset(w, ID2SYM(rb_intern("t1")), LL2NUM(crispasr_session_result_word_t1(r, i, j)));
+            rb_hash_aset(w, ID2SYM(rb_intern("p")), DBL2NUM((double)crispasr_session_result_word_p(r, i, j)));
+            rb_ary_push(words, w);
+        }
+        rb_hash_aset(seg, ID2SYM(rb_intern("words")), words);
+        rb_ary_push(segments, seg);
+    }
+    crispasr_session_result_free(r);
+    return segments;
 }
 
 static VALUE rb_kokoro_resolve_for_lang(VALUE self, VALUE model_path, VALUE lang) {
@@ -541,6 +605,7 @@ void init_ruby_crispasr_session(VALUE* mWhisper) {
     rb_define_singleton_method(mSession, "is_custom_voice",      rb_session_is_custom_voice,  1);
     rb_define_singleton_method(mSession, "is_voice_design",      rb_session_is_voice_design,  1);
     rb_define_singleton_method(mSession, "synthesize",           rb_session_synthesize,       2);
+    rb_define_singleton_method(mSession, "transcribe",           rb_session_transcribe,       2);
     rb_define_singleton_method(mSession, "clear_phoneme_cache",  rb_session_clear_phoneme_cache, 1);
     rb_define_singleton_method(mSession, "set_source_language",  rb_session_set_source_language, 2);
     rb_define_singleton_method(mSession, "set_target_language",  rb_session_set_target_language, 2);

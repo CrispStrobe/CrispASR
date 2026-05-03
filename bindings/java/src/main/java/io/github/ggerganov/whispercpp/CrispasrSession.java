@@ -59,6 +59,35 @@ public final class CrispasrSession implements AutoCloseable {
                 byte[] outPath, int outPathLen,
                 byte[] outPicked, int outPickedLen);
 
+        // --- ASR transcription (PLAN #59) ---
+        Pointer crispasr_session_transcribe(Pointer session, float[] pcm, int nSamples);
+        Pointer crispasr_session_transcribe_lang(Pointer session, float[] pcm, int nSamples, String language);
+        Pointer crispasr_session_transcribe_vad(Pointer session, float[] pcm, int nSamples,
+                                                 int sampleRate, String vadModelPath, Pointer opts);
+        int          crispasr_session_result_n_segments(Pointer result);
+        String       crispasr_session_result_segment_text(Pointer result, int i);
+        long         crispasr_session_result_segment_t0(Pointer result, int i);
+        long         crispasr_session_result_segment_t1(Pointer result, int i);
+        int          crispasr_session_result_n_words(Pointer result, int iSeg);
+        String       crispasr_session_result_word_text(Pointer result, int iSeg, int iWord);
+        long         crispasr_session_result_word_t0(Pointer result, int iSeg, int iWord);
+        long         crispasr_session_result_word_t1(Pointer result, int iSeg, int iWord);
+        float        crispasr_session_result_word_p(Pointer result, int iSeg, int iWord);
+        void         crispasr_session_result_free(Pointer result);
+
+        // --- Punctuation (PLAN #59) ---
+        Pointer crispasr_punc_init(String modelPath);
+        String  crispasr_punc_process(Pointer ctx, String text);
+        void    crispasr_punc_free_text(String text);
+        void    crispasr_punc_free(Pointer ctx);
+
+        // --- Registry + cache (PLAN #59) ---
+        int crispasr_registry_lookup_abi(String backend, byte[] outFilename, int filenameCap,
+                                         byte[] outUrl, int urlCap, byte[] outSize, int sizeCap);
+        int crispasr_cache_ensure_file_abi(String filename, String url, int quiet,
+                                           String cacheDirOverride, byte[] outBuf, int outCap);
+        int crispasr_cache_dir_abi(String cacheDirOverride, byte[] outBuf, int outCap);
+
         // --- Streaming (PLAN #62b) — rolling-window decoder, whisper-only today.
         Pointer crispasr_session_stream_open(Pointer session, int nThreads, int stepMs,
                                              int lengthMs, int keepMs, String language, int translate);
@@ -375,6 +404,72 @@ public final class CrispasrSession implements AutoCloseable {
             Lib.INSTANCE.crispasr_session_close(handle);
             handle = null;
         }
+    }
+
+    // -----------------------------------------------------------------
+    // -----------------------------------------------------------------
+    // ASR Transcription (PLAN #59)
+    // -----------------------------------------------------------------
+
+    /** One word with timing and confidence from a transcription result. */
+    public static final class Word {
+        public final String text;
+        public final long t0, t1; // centiseconds
+        public final float p;     // confidence
+        Word(String text, long t0, long t1, float p) {
+            this.text = text; this.t0 = t0; this.t1 = t1; this.p = p;
+        }
+    }
+
+    /** One segment from a transcription result. */
+    public static final class Segment {
+        public final String text;
+        public final long t0, t1; // centiseconds
+        public final Word[] words;
+        Segment(String text, long t0, long t1, Word[] words) {
+            this.text = text; this.t0 = t0; this.t1 = t1; this.words = words;
+        }
+    }
+
+    /** Transcribe 16 kHz mono float32 PCM. */
+    public Segment[] transcribe(float[] pcm) {
+        return transcribeLang(pcm, null);
+    }
+
+    /** Transcribe with explicit language hint. */
+    public Segment[] transcribeLang(float[] pcm, String lang) {
+        Pointer r = Lib.INSTANCE.crispasr_session_transcribe_lang(handle, pcm, pcm.length, lang);
+        if (r == null) throw new RuntimeException("transcription failed");
+        try { return extractSegments(r); } finally { Lib.INSTANCE.crispasr_session_result_free(r); }
+    }
+
+    /** Transcribe with VAD segmentation. */
+    public Segment[] transcribeVad(float[] pcm, int sampleRate, String vadModelPath) {
+        Pointer r = Lib.INSTANCE.crispasr_session_transcribe_vad(
+                handle, pcm, pcm.length, sampleRate, vadModelPath, null);
+        if (r == null) throw new RuntimeException("transcription with VAD failed");
+        try { return extractSegments(r); } finally { Lib.INSTANCE.crispasr_session_result_free(r); }
+    }
+
+    private static Segment[] extractSegments(Pointer r) {
+        int nSegs = Lib.INSTANCE.crispasr_session_result_n_segments(r);
+        Segment[] segs = new Segment[nSegs];
+        for (int i = 0; i < nSegs; i++) {
+            String text = Lib.INSTANCE.crispasr_session_result_segment_text(r, i);
+            long t0 = Lib.INSTANCE.crispasr_session_result_segment_t0(r, i);
+            long t1 = Lib.INSTANCE.crispasr_session_result_segment_t1(r, i);
+            int nWords = Lib.INSTANCE.crispasr_session_result_n_words(r, i);
+            Word[] words = new Word[nWords];
+            for (int j = 0; j < nWords; j++) {
+                words[j] = new Word(
+                    Lib.INSTANCE.crispasr_session_result_word_text(r, i, j),
+                    Lib.INSTANCE.crispasr_session_result_word_t0(r, i, j),
+                    Lib.INSTANCE.crispasr_session_result_word_t1(r, i, j),
+                    Lib.INSTANCE.crispasr_session_result_word_p(r, i, j));
+            }
+            segs[i] = new Segment(text, t0, t1, words);
+        }
+        return segs;
     }
 
     // -----------------------------------------------------------------
