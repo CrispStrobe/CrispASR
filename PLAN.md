@@ -912,12 +912,16 @@ models become checkpoint-only adds.
   → HiFT-GAN-style vocoder → 24 kHz PCM. Plus voice encoder for
   cloning. New backend `chatterbox`.
 - **SebastianBodza/Kartoffelbox_Turbo** (CC-BY-4.0, gated) — German
-  t3 patch on Chatterbox-Turbo (350M, smaller). Drop-in once base
-  lands. **Caveat from model card: training loss diverged late;
-  paralinguistic tags (laugh/sigh/breath) likely non-functional.**
-  Validate via #56-style ASR roundtrip before declaring usable.
-- **oddadmix/lahgtna-chatterbox-v1** (MIT) — Arabic t3 patch.
-  Drop-in once base lands.
+  TTS. **NOT a Chatterbox checkpoint swap** — inspection (2026-05-04)
+  revealed GPT-2 architecture (`tfmr.h.N`, fused `c_attn` QKV,
+  LayerNorm+bias, learned `wpe` positional embeddings, standard MLP
+  `c_fc`/`c_proj`). This is a Tortoise-TTS variant, not Chatterbox
+  Llama T3. Needs its own runtime or a GPT-2 adapter in chatterbox.cpp.
+  Re-scoped from XS to M effort. **Caveat from model card: training
+  loss diverged late; paralinguistic tags likely non-functional.**
+- **oddadmix/lahgtna-chatterbox-v1** (MIT) — Arabic T3 variant.
+  **DONE** — same Llama architecture as base, T3 converted to GGUF,
+  shares S3Gen. Published [`cstr/lahgtna-chatterbox-v1-GGUF`](https://huggingface.co/cstr/lahgtna-chatterbox-v1-GGUF).
 
 #### Phase 3 implementation status (May 2026)
 
@@ -946,11 +950,16 @@ Bugs fixed (2026-05-03):
 3. **Ad-hoc source STFT** → proper SineGen + windowed DFT (Box-Muller + Hann + center)
 4. **Nyquist term** in Hermitian iDFT missing imaginary component
 
+GGUFs shipped (2026-05-04):
+- [`cstr/chatterbox-GGUF`](https://huggingface.co/cstr/chatterbox-GGUF) — T3 F16/Q8_0/Q4_K (1.1G/542M/287M) + S3Gen F16/Q8_0/Q4_K (548M/342M/237M). All quants ASR-verified "Hello world."
+- [`cstr/lahgtna-chatterbox-v1-GGUF`](https://huggingface.co/cstr/lahgtna-chatterbox-v1-GGUF) — Arabic T3 F16 (1.1 GB), shares S3Gen with base
+
 Remaining for production quality:
 1. **C API integration** — register in crispasr_c_api.cpp, CLI adapter (`--backend chatterbox`)
 2. **F0 predictor** — currently source fusion assumes F0≈0 (unvoiced); voiced speech needs F0 net
 3. **Conformer relative position attention** — pos_bias_u/v + linear_pos (encoder quality)
 4. **Voice cloning** — VoiceEncoder LSTM + S3Tokenizer + CAMPPlus
+5. **Kartoffelbox_Turbo** — needs GPT-2 T3 runtime (see Phase 3 prose)
 
 The CFM solver landed here is **also** the gating piece for Phase 4
 CosyVoice 3 (license permitting) and partially for Fish-Speech S2
