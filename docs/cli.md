@@ -353,14 +353,21 @@ Per-backend coverage:
 |---|:-:|
 | voxtral / voxtral4b | ✔ |
 | qwen3-asr | ✔ |
-| granite / granite-4.1 / granite-4.1-plus / granite-4.1-nar | ✔ |
+| granite / granite-4.1 / granite-4.1-plus | ✔ |
 | glm-asr | ✔ |
 | mimo-asr | ✔ |
 | omniasr-llm | ✔ |
 | gemma4-e2b | ✔ |
+| canary | ✔ (cast-on-read fallback for read path; flash_attn_ext on for self-attn since §73) |
+| cohere | ✔ (same — §73 flash_attn_ext shipped; +11 % regression on JFK quant K/V vs cast, see PERFORMANCE.md) |
+| kyutai-stt | ✔ (native flash_attn_ext, quant-safe by construction) |
 | orpheus | ✔ |
 | qwen3-tts | ✔ (talker only) |
-| whisper / parakeet / canary / cohere / fc-ctc / wav2vec2 / firered-asr / moonshine / kyutai-stt | — (no KV cache or model-specific path) |
+| chatterbox / chatterbox-turbo / kartoffelbox-turbo / lahgtna-chatterbox | ✔ (T3 LM side; S3Gen Conformer attention is F32 by design) |
+| vibevoice | F16-only — flag is read but the σ-VAE attention path uses `ggml_cpy(K_perm, view)` write that's incompatible with quant K/V. Migration recipe is the canary/cohere flash_attn_ext port (see PERFORMANCE.md "Where the gaps are"). |
+| granite-4.1-nar | — (non-autoregressive variant, no LLM decode path) |
+| whisper / parakeet / fc-ctc / wav2vec2 / hubert / data2vec / firered-asr / moonshine / moonshine-streaming / omniasr-CTC | — (no KV cache: CTC / transducer / encoder-only) |
+| kokoro | — (single-shot StyleTTS2 / iSTFTNet, no KV cache) |
 
 The flag is read once per session via
 `core_attn::kv_dtype_from_env(<backend_name>)`; subsequent
@@ -573,7 +580,7 @@ Differences worth flagging:
 
 - [`docs/streaming.md`](streaming.md) — `--stream`, `--mic`, `--live`,
   sliding-window flags, per-token confidence
-- [`docs/tts.md`](tts.md) — Kokoro / Qwen3-TTS / VibeVoice / Orpheus
+- [`docs/tts.md`](tts.md) — Kokoro / Qwen3-TTS / VibeVoice / Orpheus / Chatterbox
   + every TTS-side env var (`QWEN3_TTS_CODEC_GPU`,
   `QWEN3_TTS_SKIP_REF_DECODE`, `QWEN3_TTS_O15`, `KOKORO_GEN_GPU`,
   `VIBEVOICE_VAE_BACKEND`, …)
