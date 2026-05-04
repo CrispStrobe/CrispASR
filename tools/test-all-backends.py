@@ -116,7 +116,7 @@ REGISTRY: tuple[Backend, ...] = (
             "cstr/parakeet-tdt-0.6b-v3-GGUF", "parakeet-tdt-0.6b-v3-q4_k.gguf",
             timeout_s=60, approx_size_mb=420,
             capabilities=("transcribe", "json-output", "word-timestamps",
-                          "temperature", "lid", "punctuation"),
+                          "temperature", "punctuation"),
             # Pinned: TTS-roundtrip uses parakeet ASR as ground truth.
             is_reference=True),
     Backend("moonshine",  "Moonshine Tiny",      "moonshine-tiny-q4_k.gguf",
@@ -156,7 +156,7 @@ REGISTRY: tuple[Backend, ...] = (
             "cstr/qwen3-asr-0.6b-GGUF", "qwen3-asr-0.6b-q4_k.gguf",
             timeout_s=120, approx_size_mb=400,
             capabilities=("transcribe", "json-output", "beam",
-                          "temperature", "lid", "word-timestamps", "punctuation")),
+                          "temperature", "word-timestamps", "punctuation")),
     # OmniASR CTC Q4_K now uses mixed quantization (head=4 encoder layers
     # at F16, rest at Q4_K) by default in crispasr-quantize. Recovers
     # nearly all of Q8_0's quality (5% WER on JFK from 1-word "americas"→
@@ -179,7 +179,7 @@ REGISTRY: tuple[Backend, ...] = (
             "cstr/glm-asr-nano-GGUF", "glm-asr-nano-q4_k.gguf",
             timeout_s=300, approx_size_mb=900,
             capabilities=("transcribe", "json-output", "beam",
-                          "temperature", "punctuation", "lid", "word-timestamps")),
+                          "temperature", "punctuation", "word-timestamps")),
     Backend("firered-asr", "FireRed ASR2 AED",   "firered-asr2-aed-q4_k.gguf",
             "cstr/firered-asr2-aed-GGUF", "firered-asr2-aed-q4_k.gguf",
             timeout_s=300, approx_size_mb=600,
@@ -462,9 +462,18 @@ def wer(ref: str, hyp: str) -> float | None:
 
 def _run_cli(crispasr: Path, b: Backend, model: Path, audio: Path,
              extra_args: list[str], use_gpu: bool,
-             timeout_override: int | None = None) -> tuple[int, str, str, float]:
-    cmd = [str(crispasr), "--backend", b.name, "-m", str(model),
-           "-f", str(audio), "--no-prints", *extra_args]
+             timeout_override: int | None = None,
+             quiet: bool = True) -> tuple[int, str, str, float]:
+    # Most tests want --no-prints to keep output predictable. test_lid
+    # is the exception: the framework's LID line + the qwen3 native-LID
+    # line are gated on `!no_prints`, so the test would never see them
+    # (whisper's LID uses CRISPASR_LOG_INFO and ignores the gate, which
+    # is why we got away with --no-prints for whisper-only LID before).
+    base = [str(crispasr), "--backend", b.name, "-m", str(model),
+            "-f", str(audio)]
+    if quiet:
+        base.append("--no-prints")
+    cmd = base + list(extra_args)
     if not use_gpu:
         cmd.append("-ng")
     timeout = timeout_override or b.timeout_s
@@ -949,14 +958,16 @@ def test_lid(b: Backend, tier: str, ctx: dict) -> TestOutcome:
     """
     crispasr, model, audio, use_gpu = (
         ctx["crispasr"], ctx["model"], ctx["audio"], ctx["use_gpu"])
-    rc, out, err, w = _run_cli(crispasr, b, model, audio, ["-dl"], use_gpu)
+    rc, out, err, w = _run_cli(crispasr, b, model, audio, ["-dl"], use_gpu,
+                               quiet=False)
     if rc != 0:
         return TestOutcome(b.name, "lid", tier, "CRASH",
                            (err or "")[-200:], w)
-    # Three log line shapes we accept:
+    # Four log line shapes we accept:
     #   whisper:               "auto-detected language: en (p = 0.976672)"
     #   crispasr LID helper:   "crispasr[lid]: detected 'en' (p=0.977) via whisper"
     #   framework pre-step:    "crispasr: LID -> language = 'en' (..., p=0.977)"
+    #   qwen3 native LID:      "crispasr[qwen3]: detected 'en' (p=1.000) via model output"
     m = re.search(
         r"(?:auto-detected language:\s*|"
         r"crispasr\[lid\][^\n]*detected\s*['\"]?|"

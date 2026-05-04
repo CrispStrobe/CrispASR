@@ -20,6 +20,7 @@
 
 #include "qwen3_asr.h"
 
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -116,9 +117,16 @@ public:
     const char* name() const override { return "qwen3"; }
 
     uint32_t capabilities() const override {
-        return CAP_TIMESTAMPS_CTC | CAP_LANGUAGE_DETECT | CAP_AUTO_DOWNLOAD | CAP_TEMPERATURE | CAP_PUNCTUATION_TOGGLE |
-               CAP_FLASH_ATTN | CAP_TOKEN_CONFIDENCE | CAP_TRANSLATE | CAP_SRC_TGT_LANGUAGE | CAP_DIARIZE |
-               CAP_PARALLEL_PROCESSORS | CAP_BEAM_SEARCH;
+        // CAP_LANGUAGE_DETECT intentionally NOT declared. The transcribe
+        // path scrapes a "language <name>" prefix off the model output
+        // when the system prompt asks for translation, but the default
+        // ASR system prompt is empty — so qwen3 emits no language tag
+        // for plain `-dl` and the cap would be dishonest. With it
+        // absent, `-dl` correctly routes through the framework's
+        // whisper-tiny pre-step LID.
+        return CAP_TIMESTAMPS_CTC | CAP_AUTO_DOWNLOAD | CAP_TEMPERATURE | CAP_PUNCTUATION_TOGGLE | CAP_FLASH_ATTN |
+               CAP_TOKEN_CONFIDENCE | CAP_TRANSLATE | CAP_SRC_TGT_LANGUAGE | CAP_DIARIZE | CAP_PARALLEL_PROCESSORS |
+               CAP_BEAM_SEARCH;
     }
 
     bool init(const whisper_params& p) override {
@@ -504,7 +512,44 @@ public:
         }
 
         if (!params.no_prints && !detected_language.empty()) {
-            fprintf(stderr, "crispasr[qwen3]: detected language: %s\n", detected_language.c_str());
+            // Map qwen3's English-name back to ISO-639-1 so downstream
+            // tooling (test_lid regex, JSON output) sees a stable code.
+            // p=1.000 because qwen3's LID is a deterministic LLM-output
+            // capture, not a probabilistic classifier — there's no real
+            // confidence to report.
+            auto english_to_iso = [](const std::string& n) -> std::string {
+                std::string s;
+                s.reserve(n.size());
+                for (char c : n)
+                    s += (char)std::tolower((unsigned char)c);
+                if (s == "english")
+                    return "en";
+                if (s == "german")
+                    return "de";
+                if (s == "french")
+                    return "fr";
+                if (s == "spanish")
+                    return "es";
+                if (s == "italian")
+                    return "it";
+                if (s == "portuguese")
+                    return "pt";
+                if (s == "russian")
+                    return "ru";
+                if (s == "japanese")
+                    return "ja";
+                if (s == "korean")
+                    return "ko";
+                if (s == "chinese")
+                    return "zh";
+                if (s == "dutch")
+                    return "nl";
+                if (s == "polish")
+                    return "pl";
+                return s; // fall through — caller tolerates unknown
+            };
+            const std::string code = english_to_iso(detected_language);
+            fprintf(stderr, "crispasr[qwen3]: detected '%s' (p=1.000) via model output\n", code.c_str());
         }
 
         crispasr_segment seg;

@@ -2648,14 +2648,19 @@ each cap), but enough data landed to triage every advertised cap.
 
 ### Open work
 
-- **CAP_LANGUAGE_DETECT honesty across non-whisper backends** —
-  parakeet, qwen3, glm-asr declare the cap but `-dl` produces no LID
-  stderr line in any of their transcribe paths. Same pattern as the
-  omniasr punctuation drift; either (a) the framework should print
-  the LID line on behalf of native-LID backends, or (b) the cap
-  should be removed from backends without an actual stderr-printing
-  LID path. Read each backend's transcribe() and decide per-backend
-  before changing anything. (Task #24)
+- **CAP_LANGUAGE_DETECT honesty across non-whisper backends** — DONE.
+  Read parakeet, qwen3, glm-asr, gemma4-e2b transcribe paths; only
+  qwen3 had any LID-related code (a "language <name>" prefix scrape
+  off the model output, fired only when the system prompt asks for
+  translation), and it didn't fire on plain `-dl`. Dropped the cap
+  from all four backends so `-dl` correctly routes through the
+  framework's whisper-tiny pre-step LID. qwen3's stderr line was
+  also tightened (ISO code + p=1.000 format) for the cases where it
+  does fire — it's no longer cap-claimed but remains informational.
+  test_lid runner now invokes without `--no-prints` because the
+  framework + qwen3 LID lines are gated on it (whisper's path uses
+  CRISPASR_LOG_INFO and ignores the gate, which is why the original
+  whisper-only test ran with --no-prints).
 - **Wire a default CTC aligner into `test_word_timestamps`** — the
   current SKIP is honest but it under-tests 15 backends that all
   declare `CAP_TIMESTAMPS_CTC`. Pick a small, English-friendly

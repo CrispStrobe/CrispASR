@@ -17,8 +17,11 @@ public:
     const char* name() const override { return "glm-asr"; }
 
     uint32_t capabilities() const override {
-        return CAP_TIMESTAMPS_CTC | CAP_TEMPERATURE | CAP_BEAM_SEARCH | CAP_LANGUAGE_DETECT | CAP_AUTO_DOWNLOAD |
-               CAP_TOKEN_CONFIDENCE | CAP_PUNCTUATION_TOGGLE | CAP_FLASH_ATTN | CAP_DIARIZE;
+        // CAP_LANGUAGE_DETECT intentionally NOT declared: glm-asr has no
+        // native LID. Declaring it would disable the framework pre-step
+        // — see crispasr_backend_parakeet.cpp for the same reasoning.
+        return CAP_TIMESTAMPS_CTC | CAP_TEMPERATURE | CAP_BEAM_SEARCH | CAP_AUTO_DOWNLOAD | CAP_TOKEN_CONFIDENCE |
+               CAP_PUNCTUATION_TOGGLE | CAP_FLASH_ATTN | CAP_DIARIZE;
     }
 
     bool init(const whisper_params& params) override {

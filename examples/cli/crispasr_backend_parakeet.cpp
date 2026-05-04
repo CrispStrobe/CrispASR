@@ -24,9 +24,14 @@ public:
     const char* name() const override { return "parakeet"; }
 
     uint32_t capabilities() const override {
+        // CAP_LANGUAGE_DETECT intentionally NOT declared: the parakeet
+        // backend has no native LID code path. Declaring the cap would
+        // disable the framework's pre-step LID gate
+        // (crispasr_run.cpp:`!has_native_lid`), so users wanting LID
+        // get nothing. With the cap absent, `-dl` correctly routes
+        // through the whisper-tiny pre-step.
         return CAP_TIMESTAMPS_NATIVE | CAP_WORD_TIMESTAMPS | CAP_TOKEN_CONFIDENCE | CAP_FLASH_ATTN |
-               CAP_LANGUAGE_DETECT | CAP_PUNCTUATION_TOGGLE | CAP_TEMPERATURE | CAP_DIARIZE | CAP_PARALLEL_PROCESSORS |
-               CAP_AUTO_DOWNLOAD;
+               CAP_PUNCTUATION_TOGGLE | CAP_TEMPERATURE | CAP_DIARIZE | CAP_PARALLEL_PROCESSORS | CAP_AUTO_DOWNLOAD;
     }
 
     bool init(const whisper_params& p) override {

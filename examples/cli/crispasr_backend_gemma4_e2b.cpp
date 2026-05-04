@@ -17,7 +17,6 @@ public:
 
     uint32_t capabilities() const override {
         // Verified against src/gemma4_e2b.{h,cpp} as of v0.5.7:
-        //   CAP_LANGUAGE_DETECT      framework LID pre-step (no native API)
         //   CAP_AUTO_DOWNLOAD        registry entry in src/crispasr_model_registry.cpp
         //   CAP_DIARIZE              framework post-step on segment list
         //   CAP_TIMESTAMPS_CTC       framework post-step via -am aligner.gguf
@@ -25,14 +24,21 @@ public:
         //   CAP_PARALLEL_PROCESSORS  shared session-level dispatcher
         //   CAP_TEMPERATURE          params.temperature → ctx->temperature → decode cfg
         //
+        // CAP_LANGUAGE_DETECT intentionally NOT declared: gemma4_e2b has no
+        // native LID code path. The cap is a "this backend handles LID
+        // itself" signal — declaring it would disable the framework's
+        // pre-step LID gate (crispasr_run.cpp:`!has_native_lid`), so users
+        // wanting LID would get nothing. With the cap absent, `-dl`
+        // routes through the whisper-tiny pre-step.
+        //
         // Not yet declared (would need code changes elsewhere):
         //   CAP_TOKEN_CONFIDENCE — gemma4_e2b_transcribe_with_probs exists in
         //     the C-ABI but transcribe() below only calls the plain text variant
         //   CAP_BEAM_SEARCH      — not implemented in the gemma4_e2b decode loop
         //   CAP_TRANSLATE        — no source/target plumbing
         //   CAP_PUNCTUATION_TOGGLE — no toggle exposed
-        return CAP_LANGUAGE_DETECT | CAP_AUTO_DOWNLOAD | CAP_DIARIZE | CAP_TIMESTAMPS_CTC | CAP_FLASH_ATTN |
-               CAP_PARALLEL_PROCESSORS | CAP_TEMPERATURE;
+        return CAP_AUTO_DOWNLOAD | CAP_DIARIZE | CAP_TIMESTAMPS_CTC | CAP_FLASH_ATTN | CAP_PARALLEL_PROCESSORS |
+               CAP_TEMPERATURE;
     }
 
     bool init(const whisper_params& params) override {
