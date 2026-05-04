@@ -212,6 +212,68 @@ void crispasr_print_backend_matrix() {
     printf("--lid-backend whisper|silero (whisper-tiny is the default).\n");
 }
 
+// Stable cap-name slugs for JSON output. These map to the kFeatures
+// table above but use long, kebab-cased names that are nicer for
+// machine consumers (test-all-backends.py, etc.) than the table
+// labels which are tuned for terminal-column-width.
+struct cap_slug {
+    const char* slug;
+    uint32_t flag;
+};
+static constexpr cap_slug kCapSlugs[] = {
+    {"timestamps-native", CAP_TIMESTAMPS_NATIVE},
+    {"timestamps-ctc", CAP_TIMESTAMPS_CTC},
+    {"word-timestamps", CAP_WORD_TIMESTAMPS},
+    {"token-confidence", CAP_TOKEN_CONFIDENCE},
+    {"language-detect", CAP_LANGUAGE_DETECT},
+    {"translate", CAP_TRANSLATE},
+    {"diarize", CAP_DIARIZE},
+    {"grammar", CAP_GRAMMAR},
+    {"temperature", CAP_TEMPERATURE},
+    {"beam-search", CAP_BEAM_SEARCH},
+    {"flash-attn", CAP_FLASH_ATTN},
+    {"punctuation-toggle", CAP_PUNCTUATION_TOGGLE},
+    {"src-tgt-language", CAP_SRC_TGT_LANGUAGE},
+    {"auto-download", CAP_AUTO_DOWNLOAD},
+    {"parallel-processors", CAP_PARALLEL_PROCESSORS},
+    {"vad-internal", CAP_VAD_INTERNAL},
+    {"tts", CAP_TTS},
+};
+
+void crispasr_print_backend_matrix_json() {
+    const auto backends = crispasr_list_backends();
+
+    printf("{\n  \"backends\": [\n");
+    bool first_backend = true;
+    for (const auto& name : backends) {
+        uint32_t caps = 0;
+        auto be = crispasr_create_backend(name);
+        if (be)
+            caps = be->capabilities();
+        // backend destroyed when unique_ptr goes out of scope
+
+        if (!first_backend)
+            printf(",\n");
+        first_backend = false;
+        printf("    {\n");
+        printf("      \"name\": \"%s\",\n", name.c_str());
+        printf("      \"caps_bitmask\": %u,\n", caps);
+        printf("      \"caps\": [");
+        bool first_cap = true;
+        for (const auto& c : kCapSlugs) {
+            if (caps & c.flag) {
+                if (!first_cap)
+                    printf(", ");
+                first_cap = false;
+                printf("\"%s\"", c.slug);
+            }
+        }
+        printf("]\n");
+        printf("    }");
+    }
+    printf("\n  ]\n}\n");
+}
+
 // ---------------------------------------------------------------------------
 // GGUF auto-detection
 // ---------------------------------------------------------------------------

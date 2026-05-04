@@ -160,6 +160,15 @@ std::vector<std::string> crispasr_list_backends();
 // Called by --list-backends in cli.cpp.
 void crispasr_print_backend_matrix();
 
+// Print the same capability matrix as JSON for tooling consumption.
+// Called by --list-backends-json. Output shape:
+//   {"backends":[
+//     {"name":"voxtral4b",
+//      "caps_bitmask":12345,
+//      "caps":["timestamps-ctc","auto-download","temperature",...]},
+//     ...]}
+void crispasr_print_backend_matrix_json();
+
 // ---------------------------------------------------------------------------
 // Top-level entry point
 // ---------------------------------------------------------------------------

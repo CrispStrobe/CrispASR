@@ -419,6 +419,9 @@ static bool whisper_params_parse(int argc, char** argv, whisper_params& params) 
         } else if (arg == "--list-backends") {
             crispasr_print_backend_matrix();
             exit(0);
+        } else if (arg == "--list-backends-json") {
+            crispasr_print_backend_matrix_json();
+            exit(0);
         }
         // Voice Activity Detection (VAD)
         else if (arg == "--vad") {
@@ -574,6 +577,7 @@ static void whisper_print_usage(int /*argc*/, char** argv, const whisper_params&
             "whisper|parakeet|canary|cohere|qwen3|voxtral|voxtral4b|granite\n",
             params.backend.c_str());
     fprintf(stderr, "  --list-backends                   list backends compiled into this binary and exit\n");
+    fprintf(stderr, "  --list-backends-json              same as --list-backends but JSON-formatted, for tooling\n");
     fprintf(stderr, "  -sl LANG,  --source-lang LANG     [%-7s] source language (canary AST)\n",
             params.source_lang.c_str());
     fprintf(stderr, "  -tl LANG,  --target-lang LANG     [%-7s] target language (canary AST)\n",
