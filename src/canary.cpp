@@ -736,6 +736,17 @@ static ggml_cgraph* canary_build_graph_decoder(canary_context* ctx, int n_tokens
     ggml_context* ctx0 = ggml_init(ip);
     ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 4096, false);
 
+    // PLAN #73: causal mask input for ggml_flash_attn_ext on the
+    // self-attention path. Created here once and reused by every layer.
+    // Shape [L, n_tokens] F16: 0 = unmasked, -INF = masked. Only needed
+    // for prefill (n_tokens > 1); decode steps (n_tokens=1) pass nullptr.
+    const int L = offset + n_tokens;
+    ggml_tensor* sa_mask = nullptr;
+    if (n_tokens > 1) {
+        sa_mask = ggml_new_tensor_2d(ctx0, GGML_TYPE_F16, L, n_tokens);
+        ggml_set_name(sa_mask, "sa_mask");
+        ggml_set_input(sa_mask);
+    }
     ggml_tensor* embd = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, n_tokens);
     ggml_set_name(embd, "embd");
     ggml_set_input(embd);
@@ -786,40 +797,23 @@ static ggml_cgraph* canary_build_graph_decoder(canary_context* ctx, int n_tokens
             core_attn::kv_cache_write(ctx0, gf, K_perm, V_perm, ctx->kv_k, ctx->kv_v, il, offset, n_tokens, position);
         }
 
-        // Q/K/V attention
+        // PLAN #73: ggml_flash_attn_ext fuses K-mul-Q + softmax + V-mul
+        // into one op and natively handles quant K/V (no cast tax). Mask
+        // is the shared `sa_mask` graph input populated host-side per
+        // call. For decode steps (n_tokens=1) mask is nullptr — the
+        // causal constraint is trivially satisfied since there's only
+        // one query position.
         ggml_tensor* Q = ggml_permute(ctx0, ggml_reshape_3d(ctx0, Qcur, head_dim, n_heads, n_tokens), 0, 2, 1, 3);
-
-        const int L = offset + n_tokens;
-        // PLAN #73 read-path: when the cache is quant, dequantise to
-        // F32 before the permute+cont chain. ggml_cont of a permuted
-        // quant tensor only flips the strides flag (no data move), so
-        // the downstream ggml_mul_mat asserts on `is_transposed`.
-        // Casting to F32 first materialises the data and lets the rest
-        // of the chain run unchanged. Trades read-bandwidth saving for
-        // quant correctness; memory + write-bandwidth savings retained.
-        const bool kv_is_quant = ggml_is_quantized(ctx->kv_k->type) || ggml_is_quantized(ctx->kv_v->type);
         ggml_tensor* K_full = ggml_view_3d(ctx0, ctx->kv_k, head_dim, L, n_heads, ctx->kv_k->nb[1], ctx->kv_k->nb[2],
                                            il * ctx->kv_k->nb[3]);
-        if (kv_is_quant)
-            K_full = ggml_cast(ctx0, K_full, GGML_TYPE_F32);
-        K_full = ggml_cont(ctx0, K_full);
-
-        ggml_tensor* KQ = ggml_mul_mat(ctx0, K_full, Q);
-        if (n_tokens > 1) {
-            KQ = ggml_diag_mask_inf(ctx0, KQ, offset);
-        }
-        KQ = ggml_soft_max_ext(ctx0, KQ, nullptr, 1.0f / sqrtf((float)head_dim), 0.0f);
-
         ggml_tensor* V_full = ggml_view_3d(ctx0, ctx->kv_v, head_dim, L, n_heads, ctx->kv_v->nb[1], ctx->kv_v->nb[2],
                                            il * ctx->kv_v->nb[3]);
-        if (kv_is_quant)
-            V_full = ggml_cast(ctx0, V_full, GGML_TYPE_F32);
-        ggml_tensor* V_trans = ggml_cont(ctx0, ggml_permute(ctx0, V_full, 1, 0, 2, 3));
-        ggml_tensor* sa_out = ggml_mul_mat(ctx0, V_trans, KQ);
-
-        sa_out = ggml_permute(ctx0, sa_out, 0, 2, 1, 3);
-        sa_out = ggml_cont(ctx0, sa_out);
-        cur = ggml_reshape_2d(ctx0, sa_out, d, n_tokens);
+        ggml_tensor* sa_out = ggml_flash_attn_ext(ctx0, ggml_cont(ctx0, Q), K_full, V_full, sa_mask,
+                                                  1.0f / sqrtf((float)head_dim), 0.0f, 0.0f);
+        // Output: [hd, n_heads, n_tokens] — already in the layout the
+        // legacy code produced after its trailing permute(0,2,1,3).
+        sa_out = ggml_reshape_2d(ctx0, sa_out, d, n_tokens);
+        cur = sa_out;
 
         cur = ggml_add(ctx0, ggml_mul_mat(ctx0, dl.sa_out_w, cur), dl.sa_out_b);
         cur = ggml_add(ctx0, cur, inpL);
@@ -900,6 +894,24 @@ static std::vector<float> canary_decode_step(canary_context* ctx, const int* tok
         pos[i] = offset + i;
     ggml_tensor* pos_in = ggml_graph_get_tensor(gf, "position");
     ggml_backend_tensor_set(pos_in, pos.data(), 0, n_tokens * sizeof(int));
+
+    // PLAN #73: populate causal mask for ggml_flash_attn_ext. Only built
+    // for prefill (n_tokens > 1); decode steps pass nullptr mask.
+    if (n_tokens > 1) {
+        const int L = offset + n_tokens;
+        const ggml_fp16_t zero = ggml_fp32_to_fp16(0.0f);
+        const ggml_fp16_t neg_inf = ggml_fp32_to_fp16(-INFINITY);
+        std::vector<ggml_fp16_t> mask((size_t)n_tokens * L, zero);
+        for (int q = 0; q < n_tokens; q++) {
+            // q-th query at absolute position offset+q. Mask out keys
+            // with absolute index > offset+q (i.e. future positions).
+            for (int k = offset + q + 1; k < L; k++)
+                mask[(size_t)q * L + k] = neg_inf;
+        }
+        ggml_tensor* mask_in = ggml_graph_get_tensor(gf, "sa_mask");
+        if (mask_in)
+            ggml_backend_tensor_set(mask_in, mask.data(), 0, mask.size() * sizeof(ggml_fp16_t));
+    }
 
     if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS) {
         fprintf(stderr, "canary: decoder compute failed\n");

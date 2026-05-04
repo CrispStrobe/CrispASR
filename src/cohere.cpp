@@ -1251,6 +1251,17 @@ static struct ggml_cgraph* cohere_build_graph_decoder(struct cohere_context* ctx
     ggml_set_name(position, "position");
     ggml_set_input(position);
 
+    // PLAN #73: causal mask input for ggml_flash_attn_ext on the
+    // self-attention path. Built only for prefill (n_tokens > 1);
+    // decode steps pass nullptr.
+    const int sa_L = offset + n_tokens;
+    struct ggml_tensor* sa_mask = nullptr;
+    if (n_tokens > 1) {
+        sa_mask = ggml_new_tensor_2d(ctx0, GGML_TYPE_F16, sa_L, n_tokens);
+        ggml_set_name(sa_mask, "sa_mask");
+        ggml_set_input(sa_mask);
+    }
+
     // [d, n_tokens]
     struct ggml_tensor* cur =
         ggml_add(ctx0, ggml_get_rows(ctx0, model.dec_emb_w, embd), ggml_get_rows(ctx0, model.dec_pos_w, position));
@@ -1299,36 +1310,20 @@ static struct ggml_cgraph* cohere_build_graph_decoder(struct cohere_context* ctx
         struct ggml_tensor* Q = ggml_permute(ctx0, ggml_reshape_3d(ctx0, Qcur, head_dim, n_heads, n_tokens), 0, 2, 1,
                                              3); // [hd, n_tok, n_heads]
 
-        // PLAN #73 read-path: when the cache is quant, dequantise to
-        // F32 before the permute+cont chain. ggml_cont of a permuted
-        // quant tensor only flips strides — the downstream mul_mat
-        // would assert on `is_transposed`. F16 path is unchanged.
-        const bool kv_is_quant = ggml_is_quantized(ctx->kv_k->type) || ggml_is_quantized(ctx->kv_v->type);
+        // PLAN #73: ggml_flash_attn_ext fuses K-mul-Q + softmax + V-mul
+        // into one op and natively handles quant K/V (no cast tax).
         struct ggml_tensor* K =
-            ggml_view_3d(ctx0, ctx->kv_k, head_dim, offset + n_tokens, n_heads, ctx->kv_k->nb[1], ctx->kv_k->nb[2],
+            ggml_view_3d(ctx0, ctx->kv_k, head_dim, sa_L, n_heads, ctx->kv_k->nb[1], ctx->kv_k->nb[2],
                          il * ctx->kv_k->nb[3]); // [hd, L, n_heads]
-        if (kv_is_quant)
-            K = ggml_cast(ctx0, K, GGML_TYPE_F32);
-        K = ggml_cont(ctx0, K);
-
-        struct ggml_tensor* KQ = ggml_mul_mat(ctx0, K, Q); // [L, n_tok, n_heads]
-        KQ = ggml_scale_inplace(ctx0, KQ, 1.0f / sqrtf((float)head_dim));
-        if (n_tokens > 1) {
-            KQ = ggml_diag_mask_inf_inplace(ctx0, KQ, offset);
-        }
-        KQ = ggml_soft_max_inplace(ctx0, KQ);
-
         struct ggml_tensor* V =
-            ggml_view_3d(ctx0, ctx->kv_v, head_dim, offset + n_tokens, n_heads, ctx->kv_v->nb[1], ctx->kv_v->nb[2],
+            ggml_view_3d(ctx0, ctx->kv_v, head_dim, sa_L, n_heads, ctx->kv_v->nb[1], ctx->kv_v->nb[2],
                          il * ctx->kv_v->nb[3]); // [hd, L, n_heads]
-        if (kv_is_quant)
-            V = ggml_cast(ctx0, V, GGML_TYPE_F32);
-
-        struct ggml_tensor* V_trans = ggml_cont(ctx0, ggml_permute(ctx0, V, 1, 0, 2, 3)); // [L, hd, n_heads]
-        struct ggml_tensor* sa_out = ggml_mul_mat(ctx0, V_trans, KQ);                     // [hd, n_tok, n_heads]
-
-        sa_out = ggml_permute(ctx0, sa_out, 0, 2, 1, 3); // [hd, n_heads, n_tok]
-        sa_out = ggml_cont(ctx0, sa_out);
+        struct ggml_tensor* sa_out = ggml_flash_attn_ext(ctx0, ggml_cont(ctx0, Q), K, V, sa_mask,
+                                                         1.0f / sqrtf((float)head_dim), 0.0f, 0.0f);
+        // flash_attn_ext output is [hd, n_heads, n_tokens] — same layout
+        // as the legacy ggml_permute(sa_out, 0,2,1,3), so the additional
+        // permute+cont is gone. reshape_2d packs the inner two dims into
+        // d = hd * n_heads.
         cur = ggml_reshape_2d(ctx0, sa_out, d, n_tokens);
 
         // out projection
@@ -1450,6 +1445,21 @@ static std::vector<float> cohere_decode_step(struct cohere_context* ctx, int T_e
         pos_data[i] = offset + i;
     ggml_backend_tensor_set(position, pos_data.data(), 0, n_tok * sizeof(int));
 
+    // PLAN #73: populate causal mask for ggml_flash_attn_ext. Built only
+    // for prefill (n_tok > 1); decode steps pass nullptr mask.
+    if (n_tok > 1) {
+        const int L = offset + n_tok;
+        const ggml_fp16_t zero = ggml_fp32_to_fp16(0.0f);
+        const ggml_fp16_t neg_inf = ggml_fp32_to_fp16(-INFINITY);
+        std::vector<ggml_fp16_t> mask((size_t)n_tok * L, zero);
+        for (int q = 0; q < n_tok; q++) {
+            for (int k = offset + q + 1; k < L; k++)
+                mask[(size_t)q * L + k] = neg_inf;
+        }
+        struct ggml_tensor* mask_in = ggml_graph_get_tensor(gf, "sa_mask");
+        if (mask_in)
+            ggml_backend_tensor_set(mask_in, mask.data(), 0, mask.size() * sizeof(ggml_fp16_t));
+    }
 
     t0 = ggml_time_us();
     if (!cohere_sched_graph_compute(ctx->ggml_alloc, gf, ctx->params.n_threads)) {
