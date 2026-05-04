@@ -598,6 +598,18 @@ if(NOT MSVC)
 endif()
 
 # ---------------------------------------------------------------------------
+# m2m100 — Facebook M2M-100 multilingual machine translation
+# ---------------------------------------------------------------------------
+add_library(m2m100 STATIC m2m100.h m2m100.cpp)
+set_target_properties(m2m100 PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(m2m100 PUBLIC .)
+target_compile_features   (m2m100 PUBLIC cxx_std_17)
+target_link_libraries     (m2m100 PUBLIC crispasr-core ggml ggml-base ggml-cpu)
+if(NOT MSVC)
+    target_compile_options(m2m100 PRIVATE -O3)
+endif()
+
+# ---------------------------------------------------------------------------
 # omniasr — Facebook OmniASR-CTC (wav2vec2-style, 1600+ languages)
 # ---------------------------------------------------------------------------
 add_library(omniasr STATIC omniasr.h omniasr.cpp)
@@ -898,6 +910,9 @@ if (TARGET orpheus)
 endif()
 if (TARGET chatterbox)
     target_link_libraries(crispasr PUBLIC chatterbox)
+endif()
+if (TARGET m2m100)
+    target_link_libraries(crispasr PUBLIC m2m100)
 endif()
 if (TARGET kokoro)
     target_link_libraries(crispasr PUBLIC kokoro)

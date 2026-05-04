@@ -388,8 +388,8 @@ static bool granite_speech_load_model(granite_speech_model& model, const char* p
         n_gpu_layers_env = std::atoi(s);
     }
     const int total_layers = (int)model.hparams.llm_n_layers;
-    const bool do_split = backend_cpu && backend_cpu != backend && n_gpu_layers_env >= 0 &&
-                          n_gpu_layers_env < total_layers;
+    const bool do_split =
+        backend_cpu && backend_cpu != backend && n_gpu_layers_env >= 0 && n_gpu_layers_env < total_layers;
     if (do_split) {
         int threshold = n_gpu_layers_env;
         if (!core_gguf::load_weights_split(path, backend, backend_cpu, core_gguf::is_gpu_tensor_blk, &threshold,
@@ -2039,8 +2039,7 @@ extern "C" bool granite_speech_kv_init(struct granite_speech_context* ctx, int m
 
     if (ctx->params.verbosity >= 1)
         fprintf(stderr, "granite_speech: kv cache %.0f MiB k=%s v=%s (on %s)\n", (k_size + v_size) / 1048576.0,
-                ggml_type_name(kv_pair.k), ggml_type_name(kv_pair.v),
-                kv_backend == ctx->backend_cpu ? "cpu" : "gpu");
+                ggml_type_name(kv_pair.k), ggml_type_name(kv_pair.v), kv_backend == ctx->backend_cpu ? "cpu" : "gpu");
     return true;
 }
 

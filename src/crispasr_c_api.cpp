@@ -79,6 +79,14 @@
 #include "kokoro.h"
 #define CA_HAVE_KOKORO 1
 #endif
+#if __has_include("chatterbox.h")
+#include "chatterbox.h"
+#define CA_HAVE_CHATTERBOX 1
+#endif
+#if __has_include("m2m100.h")
+#include "m2m100.h"
+#define CA_HAVE_M2M100 1
+#endif
 #if __has_include("orpheus.h")
 #include "orpheus.h"
 #define CA_HAVE_ORPHEUS 1
@@ -808,6 +816,11 @@ CA_EXPORT int crispasr_detect_backend_from_gguf(const char* path, char* out_name
         backend = "qwen3-tts";
     else if (strcmp(arch, "orpheus") == 0)
         backend = "orpheus";
+    else if (strcmp(arch, "chatterbox") == 0 || strcmp(arch, "chatterbox_turbo") == 0 ||
+             strcmp(arch, "kartoffelbox") == 0)
+        backend = "chatterbox";
+    else if (strcmp(arch, "m2m100") == 0)
+        backend = "m2m100";
 
     std::strncpy(out_name, backend, out_cap - 1);
     out_name[out_cap - 1] = '\0';
@@ -921,6 +934,12 @@ struct crispasr_session {
 #endif
 #ifdef CA_HAVE_KOKORO
     kokoro_context* kokoro_ctx = nullptr;
+#endif
+#ifdef CA_HAVE_CHATTERBOX
+    chatterbox_context* chatterbox_ctx = nullptr;
+#endif
+#ifdef CA_HAVE_M2M100
+    m2m100_context* m2m100_ctx = nullptr;
 #endif
 #ifdef CA_HAVE_MIMO_ASR
     mimo_asr_context* mimo_asr_ctx = nullptr;
@@ -1375,6 +1394,36 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
         return s;
     }
 #endif
+#ifdef CA_HAVE_CHATTERBOX
+    if (s->backend == "chatterbox" || s->backend == "chatterbox-tts" || s->backend == "kartoffelbox" ||
+        s->backend == "chatterbox_turbo") {
+        s->backend = "chatterbox";
+        chatterbox_context_params p = chatterbox_context_default_params();
+        p.n_threads = s->n_threads;
+        p.verbosity = 1;
+        s->chatterbox_ctx = chatterbox_init_from_file(model_path, p);
+        if (!s->chatterbox_ctx) {
+            delete s;
+            return nullptr;
+        }
+        // S3Gen GGUF must be loaded via crispasr_session_set_s3gen_path
+        return s;
+    }
+#endif
+#ifdef CA_HAVE_M2M100
+    if (s->backend == "m2m100" || s->backend == "m2m-100" || s->backend == "translate") {
+        s->backend = "m2m100";
+        m2m100_context_params p = m2m100_context_default_params();
+        p.n_threads = s->n_threads;
+        p.verbosity = 1;
+        s->m2m100_ctx = m2m100_init_from_file(model_path, p);
+        if (!s->m2m100_ctx) {
+            delete s;
+            return nullptr;
+        }
+        return s;
+    }
+#endif
 #ifdef CA_HAVE_MIMO_ASR
     if (s->backend == "mimo-asr" || s->backend == "mimo_asr" || s->backend == "mimo") {
         s->backend = "mimo-asr";
@@ -1484,6 +1533,12 @@ CA_EXPORT int crispasr_session_available_backends(char* out_csv, int out_cap) {
 #endif
 #ifdef CA_HAVE_KOKORO
     list += ",kokoro";
+#endif
+#ifdef CA_HAVE_CHATTERBOX
+    list += ",chatterbox";
+#endif
+#ifdef CA_HAVE_M2M100
+    list += ",m2m100";
 #endif
 #ifdef CA_HAVE_MIMO_ASR
     list += ",mimo-asr";
@@ -3250,6 +3305,10 @@ CA_EXPORT int crispasr_session_set_codec_path(crispasr_session* s, const char* p
     if (s->mimo_asr_ctx)
         return mimo_asr_set_tokenizer_path(s->mimo_asr_ctx, path);
 #endif
+#ifdef CA_HAVE_CHATTERBOX
+    if (s->chatterbox_ctx)
+        return chatterbox_set_s3gen_path(s->chatterbox_ctx, path);
+#endif
     return 0; // not applicable
 }
 
@@ -3435,11 +3494,32 @@ CA_EXPORT float* crispasr_session_synthesize(crispasr_session* s, const char* te
         return kokoro_synthesize(s->kokoro_ctx, text, out_n_samples);
     }
 #endif
+#ifdef CA_HAVE_CHATTERBOX
+    if (s->chatterbox_ctx) {
+        return chatterbox_synthesize(s->chatterbox_ctx, text, out_n_samples);
+    }
+#endif
     return nullptr;
 }
 
 CA_EXPORT void crispasr_pcm_free(float* pcm) {
     free(pcm);
+}
+
+// =========================================================================
+// Translation API — M2M-100 text-to-text translation
+// =========================================================================
+
+CA_EXPORT char* crispasr_session_translate_text(crispasr_session* s, const char* text, const char* src_lang,
+                                                const char* tgt_lang, int max_tokens) {
+    if (!s || !text || !src_lang || !tgt_lang)
+        return nullptr;
+#ifdef CA_HAVE_M2M100
+    if (s->m2m100_ctx)
+        return m2m100_translate(s->m2m100_ctx, text, src_lang, tgt_lang, max_tokens > 0 ? max_tokens : 200);
+#endif
+    (void)max_tokens;
+    return nullptr;
 }
 
 // =========================================================================
@@ -3602,6 +3682,14 @@ CA_EXPORT void crispasr_session_close(crispasr_session* s) {
 #ifdef CA_HAVE_KOKORO
     if (s->kokoro_ctx)
         kokoro_free(s->kokoro_ctx);
+#endif
+#ifdef CA_HAVE_CHATTERBOX
+    if (s->chatterbox_ctx)
+        chatterbox_free(s->chatterbox_ctx);
+#endif
+#ifdef CA_HAVE_M2M100
+    if (s->m2m100_ctx)
+        m2m100_free(s->m2m100_ctx);
 #endif
 #ifdef CA_HAVE_MIMO_ASR
     if (s->mimo_asr_ctx)

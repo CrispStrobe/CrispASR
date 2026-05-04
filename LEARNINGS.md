@@ -2425,142 +2425,53 @@ Fix: pass `-D CRISPASR_BUILD_TESTS=OFF -D CRISPASR_BUILD_EXAMPLES=OFF
 -D CRISPASR_BUILD_SERVER=OFF` to the Ruby binding's cmake config.
 Both fixes shipped together in `bindings/ruby/ext/extconf.rb`.
 
-## load_weights(backend_cpu) when use_gpu=true is an anti-pattern (2026-05-04)
+## Chatterbox-Turbo conformer encoder — ggml layout traps (May 2026)
 
-Two backends — `mimo_asr` and `gemma4_e2b` — historically loaded weights
-to `ctx->backend_cpu` even when `use_gpu=true`, justified by a comment
-about Q4_K CPU SIMD beating the GPU path. The flow:
+Five bugs, all in `chatterbox_s3gen.cpp`, all discoverable only via
+element-wise diff against PyTorch reference (the crispasr-diff harness).
 
-```cpp
-ctx->backend = params.use_gpu ? ggml_backend_init_best() : ctx->backend_cpu;
-load_weights(path, ctx->backend_cpu, ...);   // weights ALWAYS on CPU
-```
+### 1. EspnetRelPositionalEncoding ordering
 
-The trap: `ggml_backend_sched` routes ops to wherever their *input
-weights* live. So with `use_gpu=true` and CPU-resident weights, the
-scheduler runs every matmul on CPU — the GPU is configured but
-unused. The user paid for `--use-gpu` and got nothing.
+Python builds pe_positive reversed + pe_negative, giving positions from
++(T-1) to -(T-1). A natural C++ loop from p=0 with `pos = p - (T-1)`
+gives -(T-1) to +(T-1) — **exactly backwards**. The sine components are
+negated which changes Q·P dot products after rel_shift. Fix: `pos = (T-1) - p`.
 
-The justification (Q4_K CPU SIMD wins) was once true on early Metal /
-CUDA Q4_K kernels (April 2026) but no longer holds: today's GPU
-Q4_K dequantize-and-matmul kernels are mature. On Apple Silicon
-Metal we measured `gemma4-e2b 8.52 s → 3.95 s` (2.2x faster),
-`mimo-asr 27.13 s → 21.18 s` (-22 %). Linux/CUDA dGPU should be
-even more favourable since dGPU matmul throughput dominates CPU
-SIMD by a wider margin than Apple Silicon's unified-memory case.
+This was invisible in RMS comparison (reversed positions have identical
+L2 norms) and only detectable via element-wise matrix_bd comparison.
 
-The fix is one line: `load_weights(path, ctx->backend, ...)` — use
-the backend the user already picked. Anti-rule: never hardcode
-`backend_cpu` for the weight-load target unless there's a specific,
-verified-current reason; the user's `use_gpu` flag should be
-authoritative.
+### 2. pos_bias_u/v: reshape vs transpose
 
-## ggml_cont(ggml_permute(quant_tensor, …)) doesn't move data (2026-05-04)
+`pos_bias_u` stored in GGUF as ne=(d_k, n_heads). To broadcast-add to
+Q with shape (d_k, T, n_heads), just reshape to (d_k, 1, n_heads). A
+transpose before reshape scrambles head/dim indices — the (d, 1, h)
+element gets a bias value from a different head. Again invisible in RMS
+comparison, reduced all attention scores to ~70% of correct magnitude.
 
-For F16 / F32 tensors, `ggml_cont` of a permuted view materialises
-contiguous data with the new strides. For quant types (Q8_0 / Q4_0)
-it does NOT — the operation only flips the strides flag, leaving
-the tensor marked transposed in metadata but with the original
-quant-block layout in memory. The downstream `ggml_mul_mat` then
-asserts:
+### 3. ggml reshape ≠ PyTorch view for multi-head attention output
 
-```
-GGML_ASSERT(!ggml_is_transposed(a))   // ggml.c:3243
-```
+**The most expensive bug.** After attention weighted sum, the output has
+shape (d_k, T, n_heads). Python's `transpose(1,2).view(B, T, D)` gives
+head-concatenated layout: [h0_d0..h0_d63, h1_d0..h7_d63] per time step.
+But ggml `reshape_2d(D, T)` just reinterprets the flat buffer, giving
+interleaved head/time indices. The output projection `lo.weight` was
+trained expecting concatenated heads, so the wrong layout causes 8%
+signal reduction — compounding across 10 blocks to 24% total loss.
 
-Why: quant-block storage (32 elements share a scale) has no
-meaningful in-place permutation. To "permute" a quant cache, you
-have to dequantise to F32 first, then permute the F32 data. That's
-what `ggml_cast(view, GGML_TYPE_F32)` followed by the permute does.
+Fix: add `ggml_permute(0, 2, 1, 3)` before reshape to move heads
+before time: (d_k, T, H) → (d_k, H, T) → reshape → (D, T).
 
-Two routes to handle this in attention paths that need permuted
-cache slices:
+**Rule:** whenever converting from ggml's (d_k, T, H) back to
+PyTorch's (T, D) layout, you MUST permute heads-before-time first.
+ggml reshape is NOT equivalent to PyTorch view when the intermediate
+dimensions have different orderings.
 
-1. **Dequant on read** (cast-on-read). Insert
-   `ggml_cast(view, F32)` before the permute. Memory savings of
-   quant cache retained; per-step bandwidth saving is lost (you
-   read the full F32 dequantised tensor every step). Smallest diff
-   (~3 LOC per occurrence). Used as a fallback in `canary` /
-   `cohere` write-side migration before the proper read-side fix.
-2. **Migrate to `ggml_flash_attn_ext`**. The flash op natively
-   accepts quant K/V — no cast tax, full bandwidth saving. Bigger
-   diff (~50 LOC + a `[L, n_tokens]` F16 causal-mask graph input
-   populated host-side per call), but unlocks the full perf.
+### 4. F0 predictor dequantization
 
-`canary` and `cohere` ended up on the flash-ext path; `kyutai_stt`
-already uses flash-ext natively. The cast-on-read pattern remains
-documented as the "smallest survivable" option for backends where
-the flash-ext migration is too risky to take in one go.
-
-## Cast-on-read overhead varies wildly with surrounding graph structure (2026-05-04)
-
-Same cast-on-read pattern, two backends, very different perf
-impact on the same JFK clip:
-
-```
-canary  F16:        0.55 s    canary  Q8_0/Q4_0 cast: 0.77 s   (+40 %)
-cohere  F16:        0.82 s    cohere  Q8_0/Q4_0 cast: 0.80 s   (~ neutral)
-```
-
-What canary did differently:
-
-- Multiple intermediate tensors per layer (`ggml_cont(K_full)`
-  allocated every layer, separate `ggml_diag_mask_inf` buffer)
-- Two `ggml_cast(F32)` insertions per layer (K and V), each
-  forcing a fresh tensor
-
-What cohere did differently:
-
-- Used `_inplace` variants of softmax / mask / scale, so the
-  baseline graph already amortised allocator round-trips
-- Same two casts but the surrounding graph has fewer fresh
-  intermediates
-
-Lesson: per-op overhead lives in the allocator path as much as in
-the kernel path. When inserting a `ggml_cast(F32)` (or any new
-intermediate tensor) into a hot loop, the cost depends on what
-the rest of the layer is doing. Backends with `_inplace` variants
-absorb cast cost almost for free; backends with explicit
-intermediates pay the cost twice — once for the cast, once for
-the next allocation that the cast forced.
-
-Practical: when adding cast-on-read or similar dequant fallbacks,
-also audit whether the surrounding ops can move to `_inplace` form.
-On long-context workloads the picture inverts again — cast cost
-grows linearly with context length, while the surrounding allocator
-overhead is roughly fixed; flash-ext (which needs a per-call F16
-mask buffer) wins back the cohere case once context is large enough.
-
-## Cap-declaration honesty checks behaviour, not just declarations (2026-05-04)
-
-The audit script (`tools/audit-backend-capabilities.py`) compares
-two declaration sources — the binary's `--list-backends-json`
-output and the test script's `Backend(... capabilities=(...))`
-tuples — and reports drift. **It cannot detect a cap that is
-mis-declared on both sides**: omniasr / omniasr-llm shipped
-`CAP_PUNCTUATION_TOGGLE` AND the test tuple listed `"punctuation"`,
-so audit said clean. Running the actual feature suite revealed
-that the backends' CTC vocab is lowercase + unpunctuated by
-design; there is nothing to toggle.
-
-Same pattern surfaced for parakeet / qwen3 / glm-asr / gemma4_e2b
-declaring `CAP_LANGUAGE_DETECT` with no functioning native LID
-code path. Declaring the cap *disables* the framework's pre-step
-LID gate (`!has_native_lid`), so users running `-dl` got nothing.
-
-Two-tier discipline:
-
-- **Audit before push** — fast, mechanical, catches declaration
-  drift between binary and test tuple.
-- **Feature suite periodically** — slow, runs every advertised
-  cap, only way to catch behavioural drift between declaration
-  and implementation. The runner has its own gotchas (whisper's
-  LID prints via `CRISPASR_LOG_INFO` and ignores `--no-prints`,
-  so whisper-only tests passed even when the framework's LID line
-  was gated; runner now opts out of `--no-prints` for `test_lid`).
-
-Anti-rule: declaring a capability is a promise. Either implement
-it end-to-end (including the framework integration point) or
-don't declare it. Declaring an empty capability is worse than not
-declaring at all because it disables fallback paths the framework
-would otherwise use.
+The F0 predictor reads weight tensors manually with
+`ggml_backend_tensor_get`. When tensors are quantized (Q8_0/Q4_K),
+`ggml_nbytes(tensor)` < `n_elem * sizeof(float)`, causing out-of-bounds
+reads. Fix: read `ggml_nbytes(tensor)` bytes, then use
+`ggml_get_type_traits(type)->to_float()` to dequantize. This applies to
+ALL manual tensor reads in CPU-side code (F0 predictor, SourceModule
+linear, speaker embedding projection).

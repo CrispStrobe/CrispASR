@@ -347,12 +347,12 @@ extern "C" struct orpheus_context* orpheus_init_from_file(const char* path_model
         n_gpu_layers_env = std::atoi(s);
     }
     const int total_layers = (int)c->hp.n_layers;
-    const bool do_split = c->backend_cpu && c->backend_cpu != c->backend && n_gpu_layers_env >= 0 &&
-                          n_gpu_layers_env < total_layers;
+    const bool do_split =
+        c->backend_cpu && c->backend_cpu != c->backend && n_gpu_layers_env >= 0 && n_gpu_layers_env < total_layers;
     if (do_split) {
         core_gguf::LayerSplitConfig cfg{"talker.blk.", n_gpu_layers_env};
-        if (!core_gguf::load_weights_split(path_model, c->backend, c->backend_cpu,
-                                           core_gguf::is_gpu_tensor_with_prefix, &cfg, "orpheus", wl)) {
+        if (!core_gguf::load_weights_split(path_model, c->backend, c->backend_cpu, core_gguf::is_gpu_tensor_with_prefix,
+                                           &cfg, "orpheus", wl)) {
             fprintf(stderr, "orpheus: split load failed from '%s'\n", path_model);
             delete c;
             return nullptr;

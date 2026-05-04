@@ -1318,8 +1318,8 @@ static struct ggml_cgraph* cohere_build_graph_decoder(struct cohere_context* ctx
         struct ggml_tensor* V =
             ggml_view_3d(ctx0, ctx->kv_v, head_dim, sa_L, n_heads, ctx->kv_v->nb[1], ctx->kv_v->nb[2],
                          il * ctx->kv_v->nb[3]); // [hd, L, n_heads]
-        struct ggml_tensor* sa_out = ggml_flash_attn_ext(ctx0, ggml_cont(ctx0, Q), K, V, sa_mask,
-                                                         1.0f / sqrtf((float)head_dim), 0.0f, 0.0f);
+        struct ggml_tensor* sa_out =
+            ggml_flash_attn_ext(ctx0, ggml_cont(ctx0, Q), K, V, sa_mask, 1.0f / sqrtf((float)head_dim), 0.0f, 0.0f);
         // flash_attn_ext output is [hd, n_heads, n_tokens] — same layout
         // as the legacy ggml_permute(sa_out, 0,2,1,3), so the additional
         // permute+cont is gone. reshape_2d packs the inner two dims into
@@ -1643,8 +1643,7 @@ struct cohere_context* cohere_init_from_file(const char* path_model, struct cohe
         ctx->kv_v = ggml_new_tensor_4d(ctx->kv_ctx, kv_pair.v, hp.dec_head_dim, hp.dec_max_ctx, hp.dec_n_heads,
                                        hp.dec_n_layers);
         // PLAN #69b: optional KV-on-CPU spill for VRAM-tight users.
-        ggml_backend_t kv_backend =
-            core_attn::kv_backend_from_env(ctx->ggml_backend, ctx->ggml_backend_cpu, "cohere");
+        ggml_backend_t kv_backend = core_attn::kv_backend_from_env(ctx->ggml_backend, ctx->ggml_backend_cpu, "cohere");
         ctx->kv_buf = ggml_backend_alloc_buffer(kv_backend, ggml_nbytes(ctx->kv_k) + ggml_nbytes(ctx->kv_v));
         ggml_backend_buffer_t kv_buf = ctx->kv_buf;
         char* base = (char*)ggml_backend_buffer_get_base(kv_buf);

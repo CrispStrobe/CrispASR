@@ -121,6 +121,7 @@ ASR backends.
 | kokoro (TTS)        | ✓     | ✓     | —     | —     | Q5_K and below break the German backbone — ship F16 + Q8_0 only.         |
 | qwen3-tts           | ✓     | ✓     | ✓     | ✓     |                                                                          |
 | vibevoice (TTS)     | ✓     | ✓     | ✓     | ✓     | F16 + Q4_K shipped.                                                      |
+| chatterbox (TTS)    | ✓     | ✓     | ✓     | ✓     | Vocoder/F0/embeddings auto-skipped. F16 + Q8_0 + Q4_K shipped.           |
 
 > The cells marked `—` are not just "untested" — they have a known
 > quality regression. See [`PERFORMANCE.md`](../PERFORMANCE.md) for

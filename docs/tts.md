@@ -261,13 +261,22 @@ Sampling controls:
 | `--tts-steps` | 10 (base/lahgtna) / 2 (turbo/kartoffelbox-turbo meanflow) | CFM Euler steps |
 | `--codec-model` | sibling autodetect | explicit S3Gen GGUF path (overrides `-m auto` companion) |
 
-**Status — known parity gap:** the Conformer encoder still has an
-open ~30 % rel-pos attention magnitude gap vs the Python reference
-(matrix_bd rms 7.08 vs 10.06 — see commits `b4f4afe`, `8dc8bc6`).
-The vocoder side is bit-tight (per-stage cosine 1.000, waveform
-cosine 0.93). Audio synthesizes end-to-end and is intelligible, but
-voice fidelity / prosody may differ from the Python reference until
-the rel-pos gap closes.
+**Quantized variants** (Q8_0, Q4_K) are supported — the
+`crispasr-quantize` tool skips vocoder, F0-predictor, and embedding
+tensors automatically (see [docs/quantize.md](quantize.md)). Turbo
+size table for the alternate quants:
+
+| Variant | T3 | S3Gen | Total |
+|---|---:|---:|---:|
+| Turbo F16  | 964 MB | 628 MB | 1,592 MB |
+| Turbo Q8_0 | 629 MB | 350 MB |   979 MB |
+| Turbo Q4_K | 457 MB | 245 MB |   702 MB |
+
+The Conformer rel-pos parity gap that previously affected the C++
+encoder closed in §80 (5 fixes: PE ordering, pos_bias_u/v transpose,
+missing up_layer.conv, missing xscale-after-up_embed, attention
+output head layout). encoder_out is now bit-exact to the Python
+reference.
 
 ## TTS GGUF downloads
 

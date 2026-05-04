@@ -3089,3 +3089,36 @@ multi-minute clip rerun. flash_attn_ext stays the default in code
 (canary wins, cohere short-form regression is small) but
 PERFORMANCE.md and PLAN now reflect the data instead of the prior
 "flash drops the cast tax universally" claim.
+
+### §80 — Chatterbox-Turbo full pipeline (2026-05-04)
+
+**Chatterbox-Turbo (350M GPT-2 T3 + meanflow S3Gen) now produces
+intelligible speech.** ASR roundtrip: "Hello world" (p=0.939).
+
+5 bugs found and fixed in the S3Gen conformer encoder via crispasr-diff
+per-stage protocol:
+
+1. **PE ordering reversed**: `fill_pos_enc` generated positions -(T-1) to
+   +(T-1) but Python's EspnetRelPositionalEncoding uses +(T-1) to -(T-1).
+   This negated the sine components of the positional encoding.
+2. **pos_bias_u/v spurious transpose**: reshape(hd, 1, H) is correct —
+   the transpose was scrambling head/dim indices, reducing all attention
+   scores to ~70% of correct magnitude.
+3. **Missing up_layer.conv**: Conv1d(512,512,k=5) with left-pad(4) after
+   nearest-neighbor 2x upsample. Weight existed in GGUF but was skipped.
+4. **Missing xscale after up_embed**: sqrt(512) scaling needed after
+   post-upsample re-embed LayerNorm.
+5. **Attention output head layout wrong** (critical): ggml
+   reshape(hd,TT,H → D,TT) interleaves head/time indices instead of
+   concatenating heads per timestep. Added permute(0,2,1,3) before
+   reshape. This single fix brought encoder_out from 94% → 100% match.
+
+Additional improvements:
+- F0 predictor wired into vocoder (SineGen 9-harmonic + SourceModuleHnNSF)
+- Reflection pad at last vocoder upsample stage
+- Encoder attn/FFN weights kept as F32 in converter (closes precision gap)
+- Reference backend: `tools/reference_backends/chatterbox_turbo.py`
+- T3 arch renamed from "kartoffelbox" to "chatterbox_turbo"
+
+Final metrics: encoder_out rms=0.4602 (exact match to Python), all per-stage
+values match Python reference to 2+ decimal places.

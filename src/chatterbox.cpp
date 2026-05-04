@@ -40,7 +40,7 @@ namespace {
 // ── Hyperparameters ──────────────────────────────────────────────
 
 struct cb_t3_hp {
-    std::string arch = "chatterbox"; // "chatterbox" (Llama) or "kartoffelbox" (GPT-2)
+    std::string arch = "chatterbox"; // "chatterbox" (Llama) or "chatterbox_turbo"/"kartoffelbox" (GPT-2)
     uint32_t n_layers = 30;
     uint32_t hidden_size = 1024;
     uint32_t n_heads = 16;
@@ -1584,7 +1584,7 @@ extern "C" struct chatterbox_context* chatterbox_init_from_file(const char* path
         core_gguf::free_metadata(g);
     }
 
-    const bool is_gpt2 = (c->hp.arch == "kartoffelbox");
+    const bool is_gpt2 = (c->hp.arch == "chatterbox_turbo" || c->hp.arch == "kartoffelbox");
 
     if (params.verbosity >= 1) {
         fprintf(stderr, "chatterbox: arch=%s T3 %uL d=%u h=%u hd=%u ff=%u text_vocab=%u speech_vocab=%u\n",
@@ -1675,7 +1675,7 @@ extern "C" int32_t* chatterbox_synthesize_tokens(struct chatterbox_context* ctx,
         return nullptr;
     *out_n = 0;
 
-    const bool is_gpt2 = (ctx->hp.arch == "kartoffelbox");
+    const bool is_gpt2 = (ctx->hp.arch == "chatterbox_turbo" || ctx->hp.arch == "kartoffelbox");
 
     if (!is_gpt2 && !ctx->conds.loaded) {
         fprintf(stderr, "chatterbox: no conditioning loaded. Call chatterbox_set_voice_from_wav first.\n");

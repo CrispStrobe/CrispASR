@@ -140,7 +140,7 @@ VE_HPARAMS = dict(
 )
 
 KARTOFFELBOX_T3_HPARAMS = dict(
-    arch="kartoffelbox",
+    arch="chatterbox_turbo",
     n_layers=24,
     n_heads=16,
     hidden_size=1024,
@@ -248,6 +248,10 @@ def choose_dtype(name: str, shape: list, t: torch.Tensor):
         'tm.linear' in name or 'tmx.' in name or
         'pla.' in name or  # pre-lookahead conv
         'sa.lp' in name or 'sa.pb' in name or  # relative position attention weights
+        'sa.lq' in name or 'sa.lk' in name or  # Q/K/V/O projections — F16 causes
+        'sa.lv' in name or 'sa.lo' in name or   # cumulative error across 10 blocks
+        'ff.w_1' in name or 'ff.w_2' in name or # FFN weights (same reason)
+        'uemb.' in name or 'ul.' in name or     # upsample re-embed + conv
 
         # Keep vocoder conv weights as F32 for precision
         'cpre' in name or 'cpost' in name or
@@ -730,6 +734,7 @@ def write_turbo_t3_gguf(
 def write_kartoffelbox_t3_gguf(
     model_dir: Path,
     output_path: Path,
+    conds_path: Path | None = None,
 ):
     print(f"\n=== Writing Kartoffelbox T3 GGUF: {output_path} ===")
 
@@ -812,6 +817,39 @@ def write_kartoffelbox_t3_gguf(
         writer.add_tensor(gguf_name, data, raw_dtype=dtype)
         n_t3 += 1
     print(f"  T3 (Kartoffelbox GPT-2): {n_t3} tensors")
+
+    # ── Precomputed conditioning (shared with turbo base) ──
+    if conds_path and conds_path.exists():
+        conds = torch.load(conds_path, map_location='cpu', weights_only=True)
+        t3_cond = conds['t3']
+        gen_cond = conds['gen']
+        if t3_cond.get('speaker_emb') is not None:
+            writer.add_tensor("conds.t3.speaker_emb",
+                              to_f32(t3_cond['speaker_emb']),
+                              raw_dtype=GGMLQuantizationType.F32)
+        if t3_cond.get('cond_prompt_speech_tokens') is not None:
+            tokens = t3_cond['cond_prompt_speech_tokens'].to(torch.int32).numpy()
+            writer.add_tensor("conds.t3.speech_prompt_tokens", tokens,
+                              raw_dtype=GGMLQuantizationType.I32)
+        if t3_cond.get('emotion_adv') is not None:
+            writer.add_float32("chatterbox.conds.emotion_adv",
+                               float(t3_cond['emotion_adv'].item()))
+        if gen_cond.get('prompt_token') is not None:
+            tokens = gen_cond['prompt_token'].to(torch.int32).numpy()
+            writer.add_tensor("conds.gen.prompt_token", tokens,
+                              raw_dtype=GGMLQuantizationType.I32)
+        if gen_cond.get('prompt_token_len') is not None:
+            writer.add_uint32("chatterbox.conds.gen_prompt_token_len",
+                              int(gen_cond['prompt_token_len'].item()))
+        if gen_cond.get('prompt_feat') is not None:
+            writer.add_tensor("conds.gen.prompt_feat",
+                              to_f32(gen_cond['prompt_feat']),
+                              raw_dtype=GGMLQuantizationType.F32)
+        if gen_cond.get('embedding') is not None:
+            writer.add_tensor("conds.gen.embedding",
+                              to_f32(gen_cond['embedding']),
+                              raw_dtype=GGMLQuantizationType.F32)
+        print(f"  Precomputed conds loaded")
 
     writer.write_header_to_file()
     writer.write_kv_data_to_file()
@@ -896,9 +934,16 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
 
     if args.variant == "kartoffelbox":
+        # Kartoffelbox shares conds with turbo base — check both locations
+        conds_path = model_dir / "conds.pt"
+        if not conds_path.exists():
+            turbo_base = model_dir.parent / "chatterbox_turbo_base" / "conds.pt"
+            if turbo_base.exists():
+                conds_path = turbo_base
         write_kartoffelbox_t3_gguf(
             model_dir,
             out_dir / "kartoffelbox-turbo-t3-f16.gguf",
+            conds_path if conds_path.exists() else None,
         )
         print("\nDone!")
         return

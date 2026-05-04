@@ -57,8 +57,7 @@ namespace core_attn {
 // `backend_tag` is the prefix on the warning line so a misconfigured
 // env var points at a specific backend rather than a generic message.
 // Parse a single KV-quant string. Internal helper.
-inline ggml_type kv_dtype_parse(const char* s, const char* backend_tag,
-                                const char* env_name, ggml_type fallback) {
+inline ggml_type kv_dtype_parse(const char* s, const char* backend_tag, const char* env_name, ggml_type fallback) {
     if (!s || !*s)
         return fallback;
     if (std::strcmp(s, "f16") == 0)
@@ -174,10 +173,10 @@ inline bool kv_cache_write(ggml_context* ctx, ggml_cgraph* gf, ggml_tensor* K_pe
     GGML_ASSERT(indices && "kv_cache_write: quant cache requires indices tensor");
     const int hd = (int)kv_k->ne[0];
     const int nh = (int)kv_k->ne[2];
-    ggml_tensor* k_layer = ggml_view_3d(ctx, kv_k, hd, (int)kv_k->ne[1], nh, kv_k->nb[1], kv_k->nb[2],
-                                        (size_t)layer_idx * kv_k->nb[3]);
-    ggml_tensor* v_layer = ggml_view_3d(ctx, kv_v, hd, (int)kv_v->ne[1], nh, kv_v->nb[1], kv_v->nb[2],
-                                        (size_t)layer_idx * kv_v->nb[3]);
+    ggml_tensor* k_layer =
+        ggml_view_3d(ctx, kv_k, hd, (int)kv_k->ne[1], nh, kv_k->nb[1], kv_k->nb[2], (size_t)layer_idx * kv_k->nb[3]);
+    ggml_tensor* v_layer =
+        ggml_view_3d(ctx, kv_v, hd, (int)kv_v->ne[1], nh, kv_v->nb[1], kv_v->nb[2], (size_t)layer_idx * kv_v->nb[3]);
     ggml_build_forward_expand(gf, ggml_set_rows(ctx, k_layer, K_perm, indices));
     ggml_build_forward_expand(gf, ggml_set_rows(ctx, v_layer, V_perm, indices));
     (void)n_past; // unused on quant path; indices carries position info

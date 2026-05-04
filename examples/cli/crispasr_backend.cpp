@@ -21,6 +21,7 @@ std::unique_ptr<CrispasrBackend> crispasr_make_vibevoice_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_qwen3_tts_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_orpheus_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_chatterbox_backend();
+std::unique_ptr<CrispasrBackend> crispasr_make_m2m100_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_kokoro_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_glm_asr_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_kyutai_stt_backend();
@@ -86,6 +87,8 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& name
         return crispasr_make_chatterbox_backend();
     if (name == "kokoro" || name == "styletts2" || name == "styletts2-ljspeech" || name == "kokoro-tts")
         return crispasr_make_kokoro_backend();
+    if (name == "m2m100" || name == "m2m-100" || name == "translate")
+        return crispasr_make_m2m100_backend();
     if (name == "glm-asr" || name == "glmasr" || name == "glm" || name == "glm_asr")
         return crispasr_make_glm_asr_backend();
     if (name == "kyutai-stt" || name == "kyutai" || name == "moshi-stt")
@@ -139,6 +142,7 @@ std::vector<std::string> crispasr_list_backends() {
         "kartoffelbox-turbo",
         "lahgtna-chatterbox",
         "kokoro",
+        "m2m100",
         "glm-asr",
         "kyutai-stt",
         "firered-asr",
@@ -355,8 +359,10 @@ std::string crispasr_detect_backend_from_gguf(const std::string& model_path) {
         return "qwen3-tts";
     if (contains_ci("orpheus") || contains_ci("kartoffel-orpheus") || contains_ci("kartoffel_orpheus"))
         return "orpheus";
-    if (contains_ci("kartoffelbox") || contains_ci("lahgtna") || contains_ci("chatterbox"))
+    if (contains_ci("chatterbox") || contains_ci("kartoffelbox") || contains_ci("lahgtna"))
         return "chatterbox";
+    if (contains_ci("m2m100") || (contains_ci("m2m") && contains_ci("100")))
+        return "m2m100";
     if (contains_ci("kokoro"))
         return "kokoro";
     if (contains_ci("styletts") && contains_ci("ljspeech"))
@@ -419,6 +425,10 @@ std::string crispasr_detect_backend_from_gguf(const std::string& model_path) {
                 result = "orpheus";
             else if (a == "kokoro" || a == "styletts2" || a == "styletts2-ljspeech")
                 result = "kokoro";
+            else if (a == "chatterbox" || a == "chatterbox_turbo" || a == "kartoffelbox")
+                result = "chatterbox";
+            else if (a == "m2m100" || a == "m2m_100")
+                result = "m2m100";
             else if (a == "voxtral")
                 result = "voxtral";
             else if (a == "voxtral4b" || a == "voxtral-4b" || a == "voxtral_4b")

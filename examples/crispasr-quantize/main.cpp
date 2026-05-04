@@ -89,6 +89,7 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
     }
     const bool is_firered = (arch.find("firered") != std::string::npos);
     const bool is_ecapa = (arch.find("ecapa") != std::string::npos);
+    const bool is_chatterbox = (arch.find("chatterbox") != std::string::npos || arch.find("kartoffelbox") != std::string::npos);
     // The granite-speech 4.1 family ("granite_speech" base + plus, "granite_nle"
     // for the non-autoregressive variant) all share the same 16-layer Conformer
     // encoder + Q-Former projector + Granite-1B LLM, so the same quantization
@@ -236,6 +237,19 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
                         // Skip OmniASR-LLM bridging tensors (enc_proj, lm_head, tok_emb, lang_emb)
                         (sname.find("enc_proj.") != 0) && (sname.find("lm_head.") != 0) &&
                         (sname.find("tok_emb.") != 0) && (sname.find("lang_emb.") != 0) &&
+                        // Skip chatterbox tensors that are read manually via
+                        // ggml_backend_tensor_get — vocoder, embeddings, conditioning, VE.
+                        // Only T3 block weights (t3.blk.*) and S3Gen encoder/denoiser
+                        // weights use the ggml graph and are safe to quantize.
+                        !(is_chatterbox && (sname.find("s3.v.") == 0 ||
+                                            sname.find("conds.") == 0 ||
+                                            sname.find("ve.") == 0 ||
+                                            sname.find("t3.text_emb") == 0 ||
+                                            sname.find("t3.speech_emb") == 0 ||
+                                            sname.find("t3.wpe") == 0 ||
+                                            sname.find("t3.text_pos_emb") == 0 ||
+                                            sname.find("t3.speech_pos_emb") == 0 ||
+                                            sname.find("t3.cond.") == 0)) &&
                         // Skip OmniASR-CTC encoder layers in head/tail bands.
                         // Names look like "enc.<idx>.attn.*" / "enc.<idx>.ffn.*";
                         // skip if idx in [0, head_cutoff) ∪ [tail_cutoff, n_enc).

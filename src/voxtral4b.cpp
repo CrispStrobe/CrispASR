@@ -271,8 +271,8 @@ static bool voxtral4b_load_model(voxtral4b_model& model, voxtral4b_vocab& vocab,
         n_gpu_layers_env = std::atoi(s);
     }
     const int total_layers = (int)model.hparams.llm_n_layers;
-    const bool do_split = backend_cpu && backend_cpu != backend && n_gpu_layers_env >= 0 &&
-                          n_gpu_layers_env < total_layers;
+    const bool do_split =
+        backend_cpu && backend_cpu != backend && n_gpu_layers_env >= 0 && n_gpu_layers_env < total_layers;
     if (do_split) {
         int threshold = n_gpu_layers_env;
         if (!core_gguf::load_weights_split(path, backend, backend_cpu, core_gguf::is_gpu_tensor_blk, &threshold,

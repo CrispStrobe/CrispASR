@@ -30,6 +30,8 @@ add_executable(${TARGET}
     crispasr_backend_orpheus.cpp
     crispasr_backend_chatterbox.cpp
     crispasr_backend_kokoro.cpp
+    crispasr_backend_chatterbox.cpp
+    crispasr_backend_m2m100.cpp
     crispasr_backend_glm_asr.cpp
     crispasr_backend_kyutai_stt.cpp
     crispasr_backend_firered_asr.cpp
@@ -154,6 +156,8 @@ target_link_libraries(crispasr-diff PRIVATE
     qwen3_tts
     orpheus
     kokoro
+    chatterbox
+    m2m100
     gemma4_e2b
     mimo_tokenizer
     mimo_asr
@@ -199,6 +203,8 @@ target_link_libraries(${TARGET} PRIVATE
     orpheus
     chatterbox
     kokoro
+    chatterbox
+    m2m100
     canary_ctc
     wav2vec2-ggml
     vibevoice

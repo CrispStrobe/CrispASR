@@ -38,6 +38,39 @@
 #define M_PI 3.14159265358979323846
 #endif
 
+// Read tensor data into float buffer, dequantizing if needed.
+static void tensor_get_f32(ggml_tensor* t, float* out, size_t offset_bytes, size_t n_elem) {
+    if (t->type == GGML_TYPE_F32) {
+        ggml_backend_tensor_get(t, out, offset_bytes, n_elem * sizeof(float));
+    } else {
+        size_t raw_bytes = ggml_nbytes(t);
+        if (offset_bytes > 0) {
+            // Partial read: dequantize entire tensor then copy the slice
+            std::vector<char> raw(raw_bytes);
+            ggml_backend_tensor_get(t, raw.data(), 0, raw_bytes);
+            size_t total_elem = ggml_nelements(t);
+            std::vector<float> all(total_elem);
+            const auto* tt = ggml_get_type_traits(t->type);
+            if (tt && tt->to_float) {
+                tt->to_float(raw.data(), all.data(), (int64_t)total_elem);
+            } else {
+                std::memset(all.data(), 0, total_elem * sizeof(float));
+            }
+            size_t start_elem = offset_bytes / sizeof(float);
+            std::memcpy(out, all.data() + start_elem, n_elem * sizeof(float));
+        } else {
+            std::vector<char> raw(raw_bytes);
+            ggml_backend_tensor_get(t, raw.data(), 0, raw_bytes);
+            const auto* tt = ggml_get_type_traits(t->type);
+            if (tt && tt->to_float) {
+                tt->to_float(raw.data(), out, (int64_t)n_elem);
+            } else {
+                std::memset(out, 0, n_elem * sizeof(float));
+            }
+        }
+    }
+}
+
 // ── Context ──────────────────────────────────────────────────────
 
 struct chatterbox_s3gen_context {
@@ -218,11 +251,18 @@ static ggml_tensor* build_conformer_block(ggml_context* ctx, ggml_cgraph* gf, ch
             ggml_build_forward_expand(gf, p_dump);
         }
 
-        // pos_bias_u/v: (H, hd) → reshape to (hd, 1, H) for broadcast add to q
-        ggml_tensor* pbu = ggml_cont(ctx, ggml_transpose(ctx, pos_bias_u)); // (hd, H)
-        pbu = ggml_reshape_3d(ctx, pbu, head_dim, 1, n_heads);              // (hd, 1, H)
-        ggml_tensor* pbv = ggml_cont(ctx, ggml_transpose(ctx, pos_bias_v));
-        pbv = ggml_reshape_3d(ctx, pbv, head_dim, 1, n_heads);
+        // pos_bias_u/v: stored as (hd, H) in GGUF (ne[0]=hd, ne[1]=H).
+        // Element (d, h) = PyTorch pbu[h][d]. Just reshape to (hd, 1, H)
+        // for broadcast add — NO transpose (transpose scrambles head/dim).
+        // Cast to F32 if stored as F16 (base chatterbox S3Gen uses F16).
+        ggml_tensor* pbu_src = pos_bias_u;
+        ggml_tensor* pbv_src = pos_bias_v;
+        if (pbu_src->type != GGML_TYPE_F32)
+            pbu_src = ggml_cast(ctx, pbu_src, GGML_TYPE_F32);
+        if (pbv_src->type != GGML_TYPE_F32)
+            pbv_src = ggml_cast(ctx, pbv_src, GGML_TYPE_F32);
+        ggml_tensor* pbu = ggml_reshape_3d(ctx, pbu_src, head_dim, 1, n_heads);
+        ggml_tensor* pbv = ggml_reshape_3d(ctx, pbv_src, head_dim, 1, n_heads);
 
         // q_with_bias_u = q + pos_bias_u: (hd, TT, H) + (hd, 1, H) broadcast
         ggml_tensor* q_u = ggml_add(ctx, q_t, pbu);
@@ -331,6 +371,10 @@ static ggml_tensor* build_conformer_block(ggml_context* ctx, ggml_cgraph* gf, ch
         ggml_tensor* v_p = ggml_cont(ctx, ggml_permute(ctx, v_t, 1, 0, 2, 3)); // (TT, hd, H)
         // ggml_mul_mat(v_p, scores): contracts ne[0]=TT. Output: (hd, TT_q, H). Correct!
         attn = ggml_mul_mat(ctx, v_p, scores); // (hd, TT, H)
+        // Permute to head-concatenated layout: (hd, TT, H) → (hd, H, TT)
+        // so reshape to (D, TT) gives [h0_d0..h0_d63, h1_d0..h7_d63] per time step,
+        // matching Python's transpose(1,2).view(B, T, D) which concatenates heads.
+        attn = ggml_cont(ctx, ggml_permute(ctx, attn, 0, 2, 1, 3)); // (hd, H, TT)
         attn = ggml_reshape_2d(ctx, attn, D, TT);
     } else {
         // Fallback: simple scaled dot-product without relative position
@@ -514,9 +558,26 @@ static ggml_cgraph* build_graph_conformer_encoder(chatterbox_s3gen_context* c, i
     x_up = ggml_cont(ctx0, x_up);
     x = ggml_reshape_2d(ctx0, x_up, D, T2);
 
-    // Upsample conv: ul.conv (512, 512, 5) with left-padding
-    // For now, skip the upsample conv — just use the interpolated values
-    // TODO: implement up_layer.conv
+    // Upsample1D conv: left-pad(4) → Conv1d(512, 512, k=5, s=1, pad=0)
+    // Python: F.pad(x, (stride*2, 0)) → conv → output same length as input
+    {
+        ggml_tensor* ul_w = T(c, "s3.fe.ul.conv.weight");
+        ggml_tensor* ul_b = T(c, "s3.fe.ul.conv.bias");
+        if (ul_w) {
+            // x is (D, T2). Conv1d expects (T, C) → transpose
+            ggml_tensor* xt = ggml_cont(ctx0, ggml_transpose(ctx0, x)); // (T2, D)
+            // Left-pad by 4 zeros
+            ggml_tensor* pad_view = ggml_cont(ctx0, ggml_view_2d(ctx0, xt, 4, (int)xt->ne[1], xt->nb[1], 0));
+            ggml_tensor* zeros = ggml_scale(ctx0, pad_view, 0.0f);
+            ggml_tensor* padded = ggml_concat(ctx0, zeros, xt, 0); // (T2+4, D)
+            // Conv1d(k=5, s=1, pad=0): output length = T2+4-5+1 = T2
+            ggml_tensor* conv_out = ggml_conv_1d(ctx0, ul_w, padded, 1, 0, 1);
+            if (ul_b)
+                conv_out = ggml_add(ctx0, conv_out, ggml_reshape_2d(ctx0, ul_b, 1, (int)ul_b->ne[0]));
+            // conv_out is (T2, D) — transpose back to (D, T2)
+            x = ggml_cont(ctx0, ggml_transpose(ctx0, conv_out)); // (D, T2)
+        }
+    }
 
     // Re-embed: up_embed.out.0 (Linear) + up_embed.out.1 (LayerNorm)
     ggml_tensor* uemb_w = T(c, "s3.fe.uemb.out.0.weight");
@@ -534,6 +595,10 @@ static ggml_cgraph* build_graph_conformer_encoder(chatterbox_s3gen_context* c, i
         if (uln_b)
             x = ggml_add(ctx0, x, uln_b);
     }
+
+    // xscale — same as pre-embed path; Python's up_embed uses RelPositionalEncoding
+    // which multiplies x * sqrt(d_model) inside its forward()
+    x = ggml_scale(ctx0, x, std::sqrt((float)D));
 
     // Generate pos encoding for upsampled sequence
     int T_pos_post = 2 * T2 - 1;
@@ -594,9 +659,10 @@ static std::vector<float> run_conformer_encoder(chatterbox_s3gen_context* c, con
 
     ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "token_ids"), all_tokens.data(), 0, total * sizeof(int32_t));
 
-    // Fill sinusoidal relative positional encodings
-    // Espnet: pe[pos, 2i] = sin(pos / 10000^(2i/D)), pe[pos, 2i+1] = cos(pos / 10000^(2i/D))
-    // pos ranges from -(T-1) to +(T-1), total 2T-1 positions
+    // Fill sinusoidal relative positional encodings (EspnetRelPositionalEncoding).
+    // Python builds pe_positive[0..T-1] = sin/cos(pos*freq), flips it, then
+    // appends pe_negative[1..T-1]. Result: index 0 = position +(T-1) (most
+    // positive), index T-1 = position 0, index 2T-2 = position -(T-1).
     // In ggml layout: (D, 2T-1) with ne[0]=D, ne[1]=2T-1
     auto fill_pos_enc = [&](const char* name, int T) {
         ggml_tensor* pe_t = ggml_graph_get_tensor(gf, name);
@@ -606,7 +672,7 @@ static std::vector<float> run_conformer_encoder(chatterbox_s3gen_context* c, con
         const int D = 512;
         std::vector<float> pe_data((size_t)D * T_pos);
         for (int p = 0; p < T_pos; p++) {
-            float pos = (float)(p - (T - 1)); // -(T-1) to +(T-1)
+            float pos = (float)((T - 1) - p); // +(T-1) to -(T-1), matching Python
             for (int i = 0; i < D / 2; i++) {
                 float freq = 1.0f / std::pow(10000.0f, (float)(2 * i) / (float)D);
                 pe_data[p * D + 2 * i] = std::sin(pos * freq);
@@ -1133,12 +1199,12 @@ static std::vector<float> cfm_euler_solve(chatterbox_s3gen_context* c,
                 return;
             std::vector<float> w1(1024 * 320), b1(1024, 0.0f);
             std::vector<float> w2(1024 * 1024), b2(1024, 0.0f);
-            ggml_backend_tensor_get(tm1_w, w1.data(), 0, w1.size() * sizeof(float));
+            tensor_get_f32(tm1_w, w1.data(), 0, w1.size());
             if (tm1_b)
-                ggml_backend_tensor_get(tm1_b, b1.data(), 0, b1.size() * sizeof(float));
-            ggml_backend_tensor_get(tm2_w, w2.data(), 0, w2.size() * sizeof(float));
+                tensor_get_f32(tm1_b, b1.data(), 0, b1.size());
+            tensor_get_f32(tm2_w, w2.data(), 0, w2.size());
             if (tm2_b)
-                ggml_backend_tensor_get(tm2_b, b2.data(), 0, b2.size() * sizeof(float));
+                tensor_get_f32(tm2_b, b2.data(), 0, b2.size());
             std::vector<float> h1(1024);
             for (int i = 0; i < 1024; i++) {
                 float sum = b1[i];
@@ -1173,7 +1239,7 @@ static std::vector<float> cfm_euler_solve(chatterbox_s3gen_context* c,
             ggml_tensor* tmx_w = T(c, "s3.fd.tmx.weight");
             if (tmx_w) {
                 std::vector<float> w(1024 * 2048);
-                ggml_backend_tensor_get(tmx_w, w.data(), 0, w.size() * sizeof(float));
+                tensor_get_f32(tmx_w, w.data(), 0, w.size());
                 for (int i = 0; i < 1024; i++) {
                     float sum = 0.0f;
                     for (int j = 0; j < 2048; j++)
@@ -1312,18 +1378,26 @@ static std::vector<float> run_f0_predictor(chatterbox_s3gen_context* c,
         int C_in = (layer == 0) ? 80 : C;
         int C_out = C;
 
-        // Read weights, handling F16→F32 conversion
+        // Read weights with automatic dequantization (handles F32/F16/Q8_0/Q4_K/etc)
         size_t n_elem = (size_t)K * C_in * C_out;
         std::vector<float> w_f32(n_elem);
         std::vector<float> b(C_out, 0.0f);
-        if (wt->type == GGML_TYPE_F16) {
+        {
             std::vector<char> raw(ggml_nbytes(wt));
             ggml_backend_tensor_get(wt, raw.data(), 0, raw.size());
-            const ggml_fp16_t* w16 = (const ggml_fp16_t*)raw.data();
-            for (size_t i = 0; i < n_elem; i++)
-                w_f32[i] = ggml_fp16_to_fp32(w16[i]);
-        } else {
-            ggml_backend_tensor_get(wt, w_f32.data(), 0, n_elem * sizeof(float));
+            if (wt->type == GGML_TYPE_F32) {
+                std::memcpy(w_f32.data(), raw.data(), n_elem * sizeof(float));
+            } else {
+                // Use ggml's built-in dequantize for any quantized type
+                const auto* type_traits = ggml_get_type_traits(wt->type);
+                if (type_traits && type_traits->to_float) {
+                    type_traits->to_float(raw.data(), w_f32.data(), (int)n_elem);
+                } else if (wt->type == GGML_TYPE_F16) {
+                    const ggml_fp16_t* w16 = (const ggml_fp16_t*)raw.data();
+                    for (size_t i = 0; i < n_elem; i++)
+                        w_f32[i] = ggml_fp16_to_fp32(w16[i]);
+                }
+            }
         }
         if (bt)
             ggml_backend_tensor_get(bt, b.data(), 0, C_out * sizeof(float));
@@ -1362,14 +1436,21 @@ static std::vector<float> run_f0_predictor(chatterbox_s3gen_context* c,
     std::vector<float> f0(T_mel, 0.0f);
     if (cls_w) {
         std::vector<float> cw_f32(C);
-        if (cls_w->type == GGML_TYPE_F16) {
+        {
             std::vector<char> raw(ggml_nbytes(cls_w));
             ggml_backend_tensor_get(cls_w, raw.data(), 0, raw.size());
-            const ggml_fp16_t* cw16 = (const ggml_fp16_t*)raw.data();
-            for (int i = 0; i < C; i++)
-                cw_f32[i] = ggml_fp16_to_fp32(cw16[i]);
-        } else {
-            ggml_backend_tensor_get(cls_w, cw_f32.data(), 0, C * sizeof(float));
+            if (cls_w->type == GGML_TYPE_F32) {
+                std::memcpy(cw_f32.data(), raw.data(), C * sizeof(float));
+            } else {
+                const auto* type_traits = ggml_get_type_traits(cls_w->type);
+                if (type_traits && type_traits->to_float) {
+                    type_traits->to_float(raw.data(), cw_f32.data(), C);
+                } else if (cls_w->type == GGML_TYPE_F16) {
+                    const ggml_fp16_t* cw16 = (const ggml_fp16_t*)raw.data();
+                    for (int i = 0; i < C; i++)
+                        cw_f32[i] = ggml_fp16_to_fp32(cw16[i]);
+                }
+            }
         }
         float cb = 0.0f;
         if (cls_b)
@@ -1491,6 +1572,19 @@ static std::vector<float> hift_vocoder_cpu(chatterbox_s3gen_context* c,
             std::snprintf(uname, sizeof(uname), "voc_ups_%d", stage);
             ggml_set_name(x, uname);
             ggml_set_output(x);
+        }
+
+        // Reflection pad at last upsample stage: ReflectionPad1d((1, 0))
+        // Python: if i == num_upsamples - 1: x = self.reflection_pad(x)
+        if (stage == 2) {
+            // Reflect-pad 1 sample on left: x[-1] is prepended
+            // x has ne=(T, C). Take the second sample (index 1), prepend it.
+            int T_x = (int)x->ne[0];
+            int C_x = (int)x->ne[1];
+            // reflection pad left=1: new[0] = x[1], new[1..T] = x[0..T-1]
+            ggml_tensor* pad_sample = ggml_view_2d(ctx0, x, 1, C_x, x->nb[1], 1 * x->nb[0]); // x[:,1]
+            pad_sample = ggml_cont(ctx0, pad_sample);
+            x = ggml_concat(ctx0, pad_sample, x, 0); // prepend → (T+1, C)
         }
 
         // Source fusion: source_downs[i](s_stft) → source_resblocks[i] → add
@@ -1727,66 +1821,116 @@ static std::vector<float> hift_vocoder_cpu(chatterbox_s3gen_context* c,
     // Our mel is already channel-first (80, T) → no conversion needed!
     ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "voc_mel"), mel.data(), 0, mel.size() * sizeof(float));
 
-    // Generate source STFT: SineGen(F0) → STFT
-    // For unvoiced (F0≈0): noise * (sine_amp / 3), then proper windowed STFT.
+    // Generate source STFT: F0 prediction → SineGen(9 harmonics) → Linear+tanh → STFT
+    // Python: f0 = f0_predictor(mel) → upsample(120x) → SineGen → SourceModuleHnNSF → STFT
     {
         ggml_tensor* src_t = ggml_graph_get_tensor(gf, "source_stft");
         if (src_t) {
             std::vector<float> src_stft(T_src * 18, 0.0f);
             if (!stage_dump) {
                 const float sine_amp = 0.1f;
-                const float noise_amp = sine_amp / 3.0f; // unvoiced amplitude
-                const int stft_nfft = istft_nfft;        // 16
-                const int stft_hop = istft_hop;          // 4
-                const int n_freq = stft_nfft / 2 + 1;    // 9
+                const float noise_std = 0.003f;
+                const int n_harm_plus1 = 9; // fundamental + 8 overtones
+                const float sr = 24000.0f;
+                const int stft_nfft = istft_nfft;     // 16
+                const int stft_hop = istft_hop;       // 4
+                const int n_freq = stft_nfft / 2 + 1; // 9
+                const int upsample_factor = 120;      // 8*5*3
 
-                // 1. Generate noise waveform at audio rate
-                // T_audio matches what torch.stft with center=True expects to produce T_src frames:
-                // T_src = floor(T_audio / stft_hop) + 1  →  T_audio = (T_src - 1) * stft_hop
-                int T_audio = (T_src - 1) * stft_hop;
-                std::vector<float> source(T_audio, 0.0f);
-                {
-                    // Gaussian-like noise via Box-Muller (matches torch.randn distribution)
-                    uint64_t rng = 54321;
-                    auto next_u = [&]() -> float {
-                        rng = rng * 6364136223846793005ULL + 1442695040888963407ULL;
-                        return ((float)(rng >> 33) + 0.5f) / (float)(1ULL << 31);
-                    };
-                    for (int i = 0; i < T_audio; i += 2) {
-                        float u1 = next_u(), u2 = next_u();
-                        // Clamp u1 away from 0 for log safety
-                        if (u1 < 1e-7f)
-                            u1 = 1e-7f;
-                        float r = std::sqrt(-2.0f * std::log(u1));
-                        float theta = 2.0f * (float)M_PI * u2;
-                        source[i] = noise_amp * r * std::cos(theta);
-                        if (i + 1 < T_audio)
-                            source[i + 1] = noise_amp * r * std::sin(theta);
+                // 1. Predict F0 from mel
+                std::vector<float> f0 = run_f0_predictor(c, mel, T_mel);
+                if (c->verbosity >= 2) {
+                    float f0_mean = 0, f0_max = 0;
+                    int f0_voiced = 0;
+                    for (int t = 0; t < T_mel; t++) {
+                        f0_mean += f0[t];
+                        if (f0[t] > f0_max)
+                            f0_max = f0[t];
+                        if (f0[t] > 0)
+                            f0_voiced++;
+                    }
+                    f0_mean /= T_mel;
+                    fprintf(stderr, "s3gen: F0 mean=%.1f max=%.1f voiced=%d/%d\n", f0_mean, f0_max, f0_voiced, T_mel);
+                }
+
+                // 2. Upsample F0 to audio rate (nearest-neighbor)
+                int T_audio = T_mel * upsample_factor;
+                std::vector<float> f0_up(T_audio);
+                for (int t = 0; t < T_audio; t++)
+                    f0_up[t] = f0[t / upsample_factor];
+
+                // 3. SineGen: 9 harmonics with phase accumulation
+                uint64_t rng = 54321;
+                auto next_u = [&]() -> float {
+                    rng = rng * 6364136223846793005ULL + 1442695040888963407ULL;
+                    return ((float)(rng >> 33) + 0.5f) / (float)(1ULL << 31);
+                };
+                auto next_gauss = [&]() -> float {
+                    float u1 = next_u(), u2 = next_u();
+                    if (u1 < 1e-7f)
+                        u1 = 1e-7f;
+                    return std::sqrt(-2.0f * std::log(u1)) * std::cos(2.0f * (float)M_PI * u2);
+                };
+
+                // Random initial phase per harmonic (fundamental=0)
+                std::vector<float> phase_offset(n_harm_plus1, 0.0f);
+                for (int h = 1; h < n_harm_plus1; h++)
+                    phase_offset[h] = (next_u() * 2.0f - 1.0f) * (float)M_PI;
+
+                // Generate sine waves: (T_audio, 9) → voiced: sine+noise, unvoiced: noise
+                std::vector<float> sine_waves((size_t)T_audio * n_harm_plus1, 0.0f);
+                std::vector<float> cumphase(n_harm_plus1, 0.0f);
+                for (int t = 0; t < T_audio; t++) {
+                    float f0_val = f0_up[t];
+                    bool voiced = (f0_val > 0.0f);
+                    float noise_amp = voiced ? noise_std : (sine_amp / 3.0f);
+                    for (int h = 0; h < n_harm_plus1; h++) {
+                        float freq_norm = f0_val * (float)(h + 1) / sr;
+                        cumphase[h] += freq_norm;
+                        cumphase[h] -= std::floor(cumphase[h]);
+                        float theta = 2.0f * (float)M_PI * cumphase[h] + phase_offset[h];
+                        float sine_val = sine_amp * std::sin(theta);
+                        float noise_val = noise_amp * next_gauss();
+                        sine_waves[(size_t)t * n_harm_plus1 + h] = voiced ? (sine_val + noise_val) : noise_val;
                     }
                 }
 
-                // 2. Hann window for STFT
+                // 4. SourceModuleHnNSF: Linear(9→1) + tanh
+                ggml_tensor* ms_w = T(c, "s3.v.ms.ll.weight");
+                ggml_tensor* ms_b = T(c, "s3.v.ms.ll.bias");
+                std::vector<float> ll_w(n_harm_plus1, 0.0f);
+                float ll_b = 0.0f;
+                if (ms_w)
+                    tensor_get_f32(ms_w, ll_w.data(), 0, n_harm_plus1);
+                if (ms_b)
+                    tensor_get_f32(ms_b, &ll_b, 0, 1);
+
+                std::vector<float> source(T_audio, 0.0f);
+                for (int t = 0; t < T_audio; t++) {
+                    float val = ll_b;
+                    for (int h = 0; h < n_harm_plus1; h++)
+                        val += ll_w[h] * sine_waves[(size_t)t * n_harm_plus1 + h];
+                    source[t] = std::tanh(val);
+                }
+
+                // 5. STFT of source signal (center=True, Hann window)
                 std::vector<float> stft_win(stft_nfft);
                 for (int i = 0; i < stft_nfft; i++)
                     stft_win[i] = 0.5f * (1.0f - std::cos(2.0f * (float)M_PI * i / stft_nfft));
 
-                // 3. Windowed DFT: center=True → pad n_fft/2 on each side
                 int pad = stft_nfft / 2;
                 for (int frame = 0; frame < T_src; frame++) {
-                    int center = frame * stft_hop; // center sample in original signal
-                    // For each frequency bin, compute real and imag via DFT
+                    int center = frame * stft_hop;
                     for (int f = 0; f < n_freq; f++) {
                         float re = 0.0f, im = 0.0f;
                         for (int n = 0; n < stft_nfft; n++) {
-                            int src_idx = center - pad + n; // with center padding
+                            int src_idx = center - pad + n;
                             float s = (src_idx >= 0 && src_idx < T_audio) ? source[src_idx] : 0.0f;
                             float w = stft_win[n] * s;
                             float angle = -2.0f * (float)M_PI * f * n / stft_nfft;
                             re += w * std::cos(angle);
                             im += w * std::sin(angle);
                         }
-                        // ggml layout: ne[0]=T_src (fast), ne[1]=18 (slow)
-                        // Channel f is real, channel (n_freq+f) is imag
                         src_stft[f * T_src + frame] = re;
                         src_stft[(n_freq + f) * T_src + frame] = im;
                     }
@@ -2093,9 +2237,9 @@ extern "C" float* chatterbox_s3gen_synthesize(struct chatterbox_s3gen_context* c
         ggml_tensor* spk_b = T(ctx, "s3.flow.spk_embed_affine_layer.bias");
         std::vector<float> sw(80 * 192);
         std::vector<float> sb(80, 0.0f);
-        ggml_backend_tensor_get(spk_w, sw.data(), 0, sw.size() * sizeof(float));
+        tensor_get_f32(spk_w, sw.data(), 0, sw.size());
         if (spk_b)
-            ggml_backend_tensor_get(spk_b, sb.data(), 0, sb.size() * sizeof(float));
+            tensor_get_f32(spk_b, sb.data(), 0, sb.size());
 
         // Normalize embedding (L2 norm)
         float norm = 0.0f;
