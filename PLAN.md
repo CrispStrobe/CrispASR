@@ -2399,3 +2399,122 @@ running on main pushes — accumulated work since the rename was
 never validated. After `b553546` flipped it to `main`, those builds
 will surface whatever has accumulated. Track follow-ups under #67
 or as additional sub-items here once the Ruby fix lands.
+
+---
+
+## 69. Layer + KV CPU-offload knobs (llama.cpp parity)
+
+**Effort:** Medium per backend (~50-80 LOC), times the backends that
+want it. Track here, schedule per-backend on demand.
+
+**Background.** External feature request via #60: Voxtral 4B
+specifically needs the ability to offload N transformer blocks to
+CPU and / or pin the KV cache to CPU on GPU-weight builds. llama.cpp
+exposes `--n-gpu-layers N` for this; we currently have no
+equivalent. Today's escape hatches against VRAM pressure are:
+
+- `CRISPASR_KV_QUANT=q8_0|q4_0` — halve / quarter the KV cache
+  (already shipped, PLAN #60e, 9+ backends incl. voxtral4b)
+- `CRISPASR_GGUF_MMAP=1` — don't double-allocate weights on load
+  (already shipped, PLAN #51a / HISTORY §62)
+
+That covers steady-state footprint, but not the case where the
+model itself doesn't fit in VRAM. For that we'd need per-block
+placement.
+
+### 69a. N-layer CPU offload — `--n-gpu-layers` / env equivalent
+
+The pattern to mirror is `src/kokoro.cpp:2174`'s per-op CPU pinning,
+generalised to "first N transformer blocks":
+
+```cpp
+const int n_gpu_layers = env_int_default("CRISPASR_N_GPU_LAYERS", -1);  // -1 = all
+if (n_gpu_layers >= 0 && n_gpu_layers < (int)hp.n_layers) {
+    for (int il = n_gpu_layers; il < (int)hp.n_layers; il++) {
+        // Pin block `il`'s Q/K/V/O/FFN tensors to backend_cpu via
+        // ggml_backend_sched_set_tensor_backend().
+    }
+}
+```
+
+Where: per-backend graph builder (`build_graph_llm_kv` for voxtral4b,
+analogous for voxtral / qwen3_asr / glm_asr / granite_speech /
+gemma4_e2b / orpheus / mimo_asr / omniasr-llm). Tag the layer index
+on each block's tensors when constructing the graph; the loop above
+walks them and CPU-pins at sched-alloc time.
+
+CLI plumbing: `whisper_params.n_gpu_layers` (already exists from
+upstream whisper at `examples/common.h:25`!) → forward into each
+backend's `init()` path, threaded through to the graph builder.
+
+Per-backend implementation list (rough order: highest-VRAM first):
+
+1. **voxtral4b** (3.4 B LLM) — direct request from #60. Largest VRAM
+   footprint of the LLM-decode backends.
+2. **voxtral** (3 B Mistral)
+3. **qwen3_asr** (0.6 B Qwen3)
+4. **granite_speech** + granite-4.1 / 4.1-plus / 4.1-nar
+5. **gemma4_e2b** (E2B = ~5 B effective; widening capabilities just
+   landed in cf20c08, layer offload would be the natural follow-up)
+6. **glm_asr**
+7. **orpheus** (Llama 3.2 3 B talker)
+8. **mimo_asr**
+9. **omniasr-llm**
+10. **vibevoice-tts** — Qwen2 7B; may need the most help on VRAM
+
+Skip: ASR-only encoders (parakeet, canary, cohere, fc-ctc, wav2vec2,
+firered-asr, moonshine) — encoder graphs aren't layered the same way
+and the VRAM footprint isn't a problem.
+
+### 69b. KV-only CPU offload (`CRISPASR_KV_ON_CPU=1`)
+
+Allocate `ctx->kv_buf` on `ctx->backend_cpu` instead of `ctx->backend`
+even when GPU weights are active. Implementation: change one line
+per backend's `kv_init`:
+
+```cpp
+ctx->kv_buf = ggml_backend_alloc_buffer(ctx->backend, k_size + v_size);
+// →
+ggml_backend_t kv_backend = env_bool("CRISPASR_KV_ON_CPU")
+                              ? ctx->backend_cpu : ctx->backend;
+ctx->kv_buf = ggml_backend_alloc_buffer(kv_backend, k_size + v_size);
+```
+
+The expensive part isn't the alloc — it's that every attention step
+copies the KV slice GPU↔CPU↔GPU. Typically slower than just using
+`KV_QUANT=q4_0` to fit KV in VRAM. Land it for users who legitimately
+need it (very long context, very small VRAM headroom) but document
+that `KV_QUANT` should be tried first.
+
+### Approach (do these in order)
+
+1. Land `CRISPASR_N_GPU_LAYERS` for voxtral4b (the requesting user's
+   target). Validate against #60's reproducer.
+2. Land `CRISPASR_KV_ON_CPU` for voxtral4b — same backend, ~5 LOC.
+3. If validation passes and there's pull, replicate to the rest of
+   the LLM-decode backends one at a time. Don't preemptively roll
+   it out everywhere — the per-backend test surface (each one's
+   layer-tagging needs verifying) doesn't scale linearly.
+
+### Files touched (per backend, approximate)
+
+```
+include/crispasr.h                       — public API tweak (n_gpu_layers field)
+src/<backend>.{h,cpp}                    — graph builder layer tag
+                                            + kv_init backend pick
+examples/cli/whisper_params.h            — already has n_gpu_layers
+examples/cli/cli.cpp                     — surface --n-gpu-layers flag
+                                            (or rely on env var only)
+examples/cli/crispasr_backend_<name>.cpp — forward params.n_gpu_layers
+                                            into init()
+docs/cli.md                              — document the new flag(s)
+```
+
+### Out of scope
+
+- A `--cpu-mask` style fine-grained tensor offload (per-tensor CPU
+  pinning across the whole graph): too much UI surface for the
+  user-side win.
+- Per-tensor mmap-from-disk inference (`memory-mapped weights` with
+  cold-loaded tensors): that's a separate, larger feature — track as
+  its own item if it ever becomes a priority.
