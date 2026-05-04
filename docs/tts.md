@@ -60,6 +60,13 @@ Python it surfaces as
 `KokoroResolved(model_path, voice_path, voice_name, backbone_swapped)`
 record.
 
+### Kokoro environment switches
+
+| Variable | Default | Effect when set |
+|---|---|---|
+| `KOKORO_GEN_GPU` | unset | Route the iSTFTNet generator (the vocoder) onto the main GPU backend instead of the Metal-hang-workaround CPU pin. Use on CUDA / Vulkan where the stride-10 ConvTranspose1d M1 hang doesn't apply and CPU vocoder is the bottleneck. Mirrors `QWEN3_TTS_CODEC_GPU`. |
+| `KOKORO_GEN_FORCE_METAL` | unset | Same effect as `KOKORO_GEN_GPU`, but the name carries the original "reproduce the M1 hang" debug intent. Kept for back-compat; new deployments should prefer `KOKORO_GEN_GPU`. |
+
 ## Qwen3-TTS — voice cloning, highest fidelity
 
 Speech-LLM (talker + code predictor + 12 Hz codec). Needs both a

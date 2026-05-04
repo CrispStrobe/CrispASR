@@ -2354,7 +2354,15 @@ extern "C" struct kokoro_context_params kokoro_context_default_params(void) {
     p.n_threads = 4;
     p.verbosity = 1;
     p.use_gpu = true;
-    p.gen_force_metal = env_bool("KOKORO_GEN_FORCE_METAL");
+    // Two env vars route the generator onto the main GPU backend instead of
+    // the Metal-hang-workaround CPU backend. Same effect, different audience:
+    //   KOKORO_GEN_FORCE_METAL=1 — debug-named, used to reproduce the M1
+    //                              ConvTranspose1d hang for instrumentation.
+    //   KOKORO_GEN_GPU=1         — clean-named for CUDA / Vulkan users where
+    //                              the M1 hang doesn't apply and CPU path
+    //                              is dramatically slower than the GPU.
+    // Mirrors the QWEN3_TTS_CODEC_GPU pattern from the qwen3-tts codec.
+    p.gen_force_metal = env_bool("KOKORO_GEN_FORCE_METAL") || env_bool("KOKORO_GEN_GPU");
     std::strncpy(p.espeak_lang, "en-us", sizeof(p.espeak_lang) - 1);
     return p;
 }
@@ -2506,9 +2514,12 @@ extern "C" struct kokoro_context* kokoro_init_from_file(const char* path_model, 
         // because the generator weights live on `c->backend` and the sched
         // needs cross-backend access. The Metal-hang workaround is enforced
         // at graph build time: every conv_transpose_1d output is pinned to
-        // CPU via ggml_backend_sched_set_tensor_backend (unless
-        // KOKORO_GEN_FORCE_METAL=1, in which case nothing is pinned and the
-        // sched picks freely — useful for repro'ing the hang).
+        // CPU via ggml_backend_sched_set_tensor_backend. Two env vars skip
+        // the pin and let the sched pick freely:
+        //   KOKORO_GEN_FORCE_METAL=1 — debug-only, used to reproduce the
+        //                              stride-10 ConvTranspose1d M1 hang.
+        //   KOKORO_GEN_GPU=1         — clean GPU path on CUDA / Vulkan,
+        //                              where the M1 hang does not apply.
         ggml_backend_t gen_backends[2];
         int n_gb = 0;
         gen_backends[n_gb++] = c->backend;
@@ -2524,8 +2535,17 @@ extern "C" struct kokoro_context* kokoro_init_from_file(const char* path_model, 
     c->compute_meta.resize(ggml_tensor_overhead() * 262144 + ggml_graph_overhead_custom(262144, false));
 
     if (params.verbosity >= 1) {
+        const char* gpu_label = "GPU (KOKORO_GEN_FORCE_METAL or KOKORO_GEN_GPU)";
+        if (c->gen_backend != c->backend_cpu) {
+            // Disambiguate which env var was set so the log line tells the
+            // operator which knob is in effect.
+            if (env_bool("KOKORO_GEN_GPU"))
+                gpu_label = "GPU (KOKORO_GEN_GPU)";
+            else if (env_bool("KOKORO_GEN_FORCE_METAL"))
+                gpu_label = "GPU (KOKORO_GEN_FORCE_METAL)";
+        }
         fprintf(stderr, "kokoro: loaded %zu tensors from '%s'  gen=%s\n", c->tensors.size(), path_model,
-                c->gen_backend == c->backend_cpu ? "CPU (Metal-hang workaround)" : "GPU (KOKORO_GEN_FORCE_METAL)");
+                c->gen_backend == c->backend_cpu ? "CPU (Metal-hang workaround)" : gpu_label);
     }
     return c;
 }
