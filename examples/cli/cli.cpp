@@ -406,6 +406,11 @@ static bool whisper_params_parse(int argc, char** argv, whisper_params& params) 
             params.tts_ref_text = ARGV_NEXT;
         } else if (arg == "--instruct") {
             params.tts_instruct = ARGV_NEXT;
+        } else if (arg == "--voice-dir") {
+            // Server mode: directory of <name>.wav (+ <name>.txt) or
+            // <name>.gguf voice profiles. Used by POST /v1/audio/speech
+            // to resolve the request's "voice" field.
+            params.tts_voice_dir = ARGV_NEXT;
         } else if (arg == "--tts-trim-silence") {
             params.tts_trim_silence = true;
         } else if (arg == "--text") {
@@ -688,6 +693,8 @@ static void whisper_print_usage(int /*argc*/, char** argv, const whisper_params&
     fprintf(stderr, "             --instruct \"TEXT\"        natural-language voice description "
                     "(qwen3-tts VoiceDesign only; replaces --voice)\n");
     fprintf(stderr, "             --codec-model FNAME      qwen3-tts codec GGUF (defaults to sibling of -m)\n");
+    fprintf(stderr, "             --voice-dir PATH         server: dir of <name>.wav (+ <name>.txt) or "
+                    "<name>.gguf voice profiles for POST /v1/audio/speech\n");
     fprintf(stderr, "             --tts-steps N            [%-7d] DPM-Solver++ steps (10-20, vibevoice only)\n",
             params.tts_steps);
     fprintf(stderr, "             --tts-trim-silence       [%-7s] trim leading silence from TTS output\n",

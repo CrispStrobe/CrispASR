@@ -109,14 +109,28 @@ public:
         if (!ctx_ || text.empty())
             return {};
 
-        // Voice prompt: load once on first synthesise call. Four paths:
+        // Voice prompt: re-load only when the requested identity changes.
+        // Four mutually-exclusive paths (gated by the loaded model variant):
         //   --voice <name>       → CustomVoice fixed-speaker selection
         //                          (only when the loaded model is CustomVoice)
         //   --voice X.gguf       → baked voice pack (Base)
         //   --voice X.wav --ref-text "..." → runtime ECAPA + codec encoder (Base)
         //   --instruct "..."     → VoiceDesign natural-language description
         //                          (only when the loaded model is VoiceDesign)
-        if (!voice_loaded_) {
+        //
+        // Cache the composite identity in `last_voice_key_` so the CLI's
+        // single-shot use case still pays the load cost only once, while
+        // server-mode callers can switch voice per request just by changing
+        // `params.tts_voice` (or `params.tts_ref_text` / `params.tts_instruct`).
+        std::string voice_key;
+        if (qwen3_tts_is_voice_design(ctx_)) {
+            voice_key = "vd:" + params.tts_instruct;
+        } else if (qwen3_tts_is_custom_voice(ctx_)) {
+            voice_key = "cv:" + params.tts_voice;
+        } else {
+            voice_key = "base:" + params.tts_voice + "\x01" + params.tts_ref_text;
+        }
+        if (voice_key != last_voice_key_) {
             if (qwen3_tts_is_voice_design(ctx_)) {
                 // VoiceDesign: --instruct is required, --voice has no role.
                 if (!params.tts_voice.empty() && !params.no_prints) {
@@ -183,7 +197,7 @@ public:
                     }
                 }
             }
-            voice_loaded_ = true;
+            last_voice_key_ = voice_key;
         }
 
         int n = 0;
@@ -200,12 +214,12 @@ public:
             qwen3_tts_free(ctx_);
             ctx_ = nullptr;
         }
-        voice_loaded_ = false;
+        last_voice_key_.clear();
     }
 
 private:
     qwen3_tts_context* ctx_ = nullptr;
-    bool voice_loaded_ = false;
+    std::string last_voice_key_;
 };
 
 } // namespace

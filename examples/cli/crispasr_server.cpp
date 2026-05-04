@@ -9,10 +9,12 @@
 // Endpoints:
 //   POST /inference                   — transcribe (native JSON)
 //   POST /v1/audio/transcriptions     — OpenAI-compatible endpoint
+//   POST /v1/audio/speech             — TTS (OpenAI-compatible; CAP_TTS only)
 //   POST /load                        — hot-swap model
 //   GET  /health                      — server status
 //   GET  /backends                    — list available backends
 //   GET  /v1/models                   — OpenAI-compatible model list
+//   GET  /v1/voices                   — list voices in --voice-dir (CAP_TTS only)
 //
 // Adapted from examples/server/server.cpp for multi-backend support.
 
@@ -24,13 +26,17 @@
 
 #include "common-crispasr.h" // read_audio_data
 #include "../server/httplib.h"
+#include "../server/json.hpp"
 
 #include <atomic>
 #include <cerrno>
 #include <chrono>
+#include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <memory>
 #include <mutex>
@@ -276,6 +282,100 @@ static transcription_result do_transcribe(const httplib::MultipartFormData& audi
 
     result.ok = true;
     return result;
+}
+
+// ---------------------------------------------------------------------------
+// TTS helpers
+// ---------------------------------------------------------------------------
+
+// Read a whole file into a string. Returns empty string on failure.
+static std::string read_text_file(const std::string& path) {
+    std::ifstream f(path);
+    if (!f.good())
+        return "";
+    std::stringstream ss;
+    ss << f.rdbuf();
+    return ss.str();
+}
+
+// Resolve a voice request name to an absolute path (and optional ref-text)
+// from the configured voice-dir. Looks for <name>.wav (paired with
+// <name>.txt for the reference transcription used by Qwen3-TTS ICL
+// prefill) or <name>.gguf (baked voice pack). Returns true on hit;
+// sets out_path and out_ref_text.
+static bool resolve_voice(const std::string& voice_dir, const std::string& name, std::string& out_path,
+                          std::string& out_ref_text) {
+    if (voice_dir.empty() || name.empty())
+        return false;
+    const std::string wav = voice_dir + "/" + name + ".wav";
+    const std::string txt = voice_dir + "/" + name + ".txt";
+    const std::string gguf = voice_dir + "/" + name + ".gguf";
+    {
+        std::ifstream f(wav);
+        if (f.good()) {
+            out_path = wav;
+            out_ref_text = read_text_file(txt);
+            return true;
+        }
+    }
+    {
+        std::ifstream f(gguf);
+        if (f.good()) {
+            out_path = gguf;
+            out_ref_text.clear();
+            return true;
+        }
+    }
+    return false;
+}
+
+// Build a 16-bit PCM RIFF WAV from float32 samples in [-1, 1].
+// Mono, sample_rate Hz. Header is the standard 44-byte PCM-fmt RIFF.
+// Returned buffer is contiguous and safe to pass to res.set_content().
+static std::string make_wav_int16(const float* pcm, int n_samples, int sample_rate) {
+    const uint16_t num_channels = 1;
+    const uint16_t bits_per_sample = 16;
+    const uint32_t byte_rate = sample_rate * num_channels * (bits_per_sample / 8);
+    const uint16_t block_align = num_channels * (bits_per_sample / 8);
+    const uint32_t data_size = (uint32_t)n_samples * block_align;
+    const uint32_t riff_size = 36 + data_size;
+
+    std::string out;
+    out.reserve(44 + (size_t)data_size);
+    auto put_u32 = [&](uint32_t v) {
+        out.push_back((char)(v & 0xff));
+        out.push_back((char)((v >> 8) & 0xff));
+        out.push_back((char)((v >> 16) & 0xff));
+        out.push_back((char)((v >> 24) & 0xff));
+    };
+    auto put_u16 = [&](uint16_t v) {
+        out.push_back((char)(v & 0xff));
+        out.push_back((char)((v >> 8) & 0xff));
+    };
+    out.append("RIFF", 4);
+    put_u32(riff_size);
+    out.append("WAVE", 4);
+    out.append("fmt ", 4);
+    put_u32(16); // PCM fmt chunk size
+    put_u16(1);  // PCM format
+    put_u16(num_channels);
+    put_u32(sample_rate);
+    put_u32(byte_rate);
+    put_u16(block_align);
+    put_u16(bits_per_sample);
+    out.append("data", 4);
+    put_u32(data_size);
+    out.resize(out.size() + (size_t)data_size);
+    int16_t* dst = reinterpret_cast<int16_t*>(&out[out.size() - data_size]);
+    for (int i = 0; i < n_samples; i++) {
+        float s = pcm[i];
+        if (s > 1.0f)
+            s = 1.0f;
+        if (s < -1.0f)
+            s = -1.0f;
+        dst[i] = (int16_t)std::lround(s * 32767.0f);
+    }
+    return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -564,6 +664,149 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
     });
 
     // -----------------------------------------------------------------------
+    // POST /v1/audio/speech — OpenAI-compatible TTS endpoint
+    //
+    // Body: application/json
+    //   {
+    //     "input":           "TEXT to synthesize",       (required)
+    //     "voice":           "<name in --voice-dir>",    (optional)
+    //     "response_format": "wav" | "pcm"               (optional, default "wav")
+    //   }
+    //
+    // Returns:
+    //   200 audio/wav   — 16-bit PCM int16, 24 kHz mono
+    //   200 application/octet-stream — raw float32 PCM (response_format=pcm)
+    //
+    //   400 — backend lacks CAP_TTS, missing input, malformed body
+    //   422 — voice name not found in --voice-dir
+    //   500 — backend->synthesize returned empty
+    //   503 — model still loading
+    //
+    // Voice resolution: <voice-dir>/<name>.wav (paired with <name>.txt
+    // for ref-text) or <voice-dir>/<name>.gguf (baked pack). When
+    // "voice" is omitted the request inherits whatever was set at server
+    // startup via --voice / --instruct.
+    // -----------------------------------------------------------------------
+    svr.Post("/v1/audio/speech", [&](const Request& req, Response& res) {
+        if (!require_auth(req, res))
+            return;
+        if (!ready.load()) {
+            json_error(res, 503, "model is still loading");
+            return;
+        }
+        if (!(backend->capabilities() & CAP_TTS)) {
+            json_error(res, 400,
+                       "loaded backend '" + backend_name +
+                           "' does not support TTS (no CAP_TTS); load a TTS backend "
+                           "(e.g. qwen3-tts, kokoro, vibevoice, orpheus) via POST /load");
+            return;
+        }
+
+        nlohmann::json body;
+        try {
+            body = nlohmann::json::parse(req.body);
+        } catch (...) {
+            json_error(res, 400, "invalid JSON body");
+            return;
+        }
+
+        std::string text = body.value("input", "");
+        if (text.empty()) {
+            json_error(res, 400, "missing or empty 'input' field");
+            return;
+        }
+
+        std::string voice_name = body.value("voice", "");
+        std::string response_format = body.value("response_format", std::string("wav"));
+        if (response_format != "wav" && response_format != "pcm") {
+            json_error(res, 400, "response_format must be 'wav' or 'pcm'");
+            return;
+        }
+
+        // Per-request param overrides — copy then mutate.
+        whisper_params rp = params;
+        if (!voice_name.empty()) {
+            if (rp.tts_voice_dir.empty()) {
+                json_error(res, 400,
+                           "server has no --voice-dir configured; "
+                           "cannot resolve voice '" + voice_name + "'");
+                return;
+            }
+            std::string voice_path, ref_text;
+            if (!resolve_voice(rp.tts_voice_dir, voice_name, voice_path, ref_text)) {
+                json_error(res, 422, "voice '" + voice_name + "' not found in --voice-dir");
+                return;
+            }
+            rp.tts_voice = voice_path;
+            if (!ref_text.empty())
+                rp.tts_ref_text = ref_text;
+        }
+
+        auto t0 = std::chrono::steady_clock::now();
+        std::vector<float> pcm;
+        {
+            std::lock_guard<std::mutex> lock(model_mutex);
+            pcm = backend->synthesize(text, rp);
+        }
+        auto t1 = std::chrono::steady_clock::now();
+
+        if (pcm.empty()) {
+            json_error(res, 500, "synthesis failed (backend returned empty audio)");
+            return;
+        }
+
+        const double elapsed_s = std::chrono::duration<double>(t1 - t0).count();
+        const double audio_s = (double)pcm.size() / 24000.0;
+        fprintf(stderr,
+                "crispasr-server: synthesized %.1fs audio in %.2fs (RTF=%.2f) "
+                "voice='%s' format=%s\n",
+                audio_s, elapsed_s, elapsed_s > 0 ? elapsed_s / audio_s : 0.0,
+                voice_name.empty() ? "<startup>" : voice_name.c_str(), response_format.c_str());
+
+        if (response_format == "pcm") {
+            std::string buf((const char*)pcm.data(), pcm.size() * sizeof(float));
+            res.set_content(std::move(buf), "application/octet-stream");
+        } else {
+            std::string wav = make_wav_int16(pcm.data(), (int)pcm.size(), 24000);
+            res.set_content(std::move(wav), "audio/wav");
+        }
+    });
+
+    // -----------------------------------------------------------------------
+    // GET /v1/voices — list voices in --voice-dir (CAP_TTS only)
+    // Returns: {"voices": [{"name": "<stem>", "format": "wav"|"gguf"}, ...]}
+    // -----------------------------------------------------------------------
+    svr.Get("/v1/voices", [&](const Request& req, Response& res) {
+        if (!require_auth(req, res))
+            return;
+
+        std::ostringstream js;
+        js << "{\"voices\": [";
+        bool first = true;
+        if (!params.tts_voice_dir.empty()) {
+            std::error_code ec;
+            for (const auto& entry : std::filesystem::directory_iterator(params.tts_voice_dir, ec)) {
+                if (ec)
+                    break;
+                if (!entry.is_regular_file())
+                    continue;
+                const auto& path = entry.path();
+                const std::string ext = path.extension().string();
+                if (ext != ".wav" && ext != ".gguf")
+                    continue;
+                const std::string stem = path.stem().string();
+                const char* fmt = (ext == ".wav") ? "wav" : "gguf";
+                if (!first)
+                    js << ", ";
+                js << "{\"name\": \"" << crispasr_json_escape(stem) << "\", \"format\": \"" << fmt << "\"}";
+                first = false;
+            }
+        }
+        js << "]}";
+        res.set_content(js.str(), "application/json");
+    });
+
+    // -----------------------------------------------------------------------
     // Log unmatched requests (helps debug wrong endpoints like /audio/transcriptions)
     svr.set_error_handler([&](const Request& req, Response& res) {
         fprintf(stderr, "crispasr-server: %s %s → 404 (no matching route)\n", req.method.c_str(), req.path.c_str());
@@ -572,13 +815,25 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
 
     // Start
     // -----------------------------------------------------------------------
+    const bool tts = (backend->capabilities() & CAP_TTS) != 0;
     fprintf(stderr, "\ncrispasr-server: listening on %s:%d\n", host.c_str(), port);
     fprintf(stderr, "  POST /inference                  — upload audio (native JSON)\n");
     fprintf(stderr, "  POST /v1/audio/transcriptions    — OpenAI-compatible API\n");
+    if (tts) {
+        fprintf(stderr, "  POST /v1/audio/speech            — TTS (OpenAI-compatible)\n");
+    }
     fprintf(stderr, "  POST /load                       — hot-swap model\n");
     fprintf(stderr, "  GET  /health                     — server status\n");
     fprintf(stderr, "  GET  /backends                   — list backends\n");
-    fprintf(stderr, "  GET  /v1/models                  — model info\n\n");
+    fprintf(stderr, "  GET  /v1/models                  — model info\n");
+    if (tts) {
+        fprintf(stderr, "  GET  /v1/voices                  — list voices in --voice-dir\n");
+        if (params.tts_voice_dir.empty()) {
+            fprintf(stderr, "crispasr-server: warning: --voice-dir not set; /v1/voices will return empty "
+                            "and /v1/audio/speech will reject requests with a 'voice' field\n");
+        }
+    }
+    fprintf(stderr, "\n");
     if (!api_keys.empty())
         fprintf(stderr, "crispasr-server: API key authentication enabled\n");
 
