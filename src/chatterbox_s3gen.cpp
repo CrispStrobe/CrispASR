@@ -165,6 +165,12 @@ static ggml_tensor* build_conformer_block(ggml_context* ctx, ggml_cgraph* gf, ch
     if (nmha_b)
         xn = ggml_add(ctx, xn, nmha_b);
 
+    // Mark pre-attention norm for first block dump
+    if (std::strstr(prefix, ".0") && !std::strstr(prefix, "10")) {
+        ggml_set_name(xn, "dump_enc0_pre_attn_norm");
+        ggml_set_output(xn);
+    }
+
     // Q/K/V projections: (D, TT) → (D, TT)
     ggml_tensor* Q = ggml_mul_mat(ctx, W("sa.lq.weight"), xn);
     ggml_tensor* qb = W("sa.lq.bias");
@@ -261,6 +267,7 @@ static ggml_tensor* build_conformer_block(ggml_context* ctx, ggml_cgraph* gf, ch
         }
 
         // scores = (matrix_ac + matrix_bd) / sqrt(d_k)
+        // scores = (matrix_ac + matrix_bd) / sqrt(d_k)
         float scale = 1.0f / std::sqrt((float)head_dim);
         ggml_tensor* scores = ggml_add(ctx, matrix_ac, matrix_bd);
         scores = ggml_scale(ctx, scores, scale);
@@ -310,11 +317,22 @@ static ggml_tensor* build_conformer_block(ggml_context* ctx, ggml_cgraph* gf, ch
         attn = ggml_reshape_2d(ctx, attn, D, TT);
     }
 
+    // Mark raw attention output (before output proj)
+    if (std::strstr(prefix, ".0") && !std::strstr(prefix, "10")) {
+        ggml_set_name(attn, "dump_enc0_raw_attn");
+        ggml_set_output(attn);
+    }
+
     // Output projection
     ggml_tensor* attn_out = ggml_mul_mat(ctx, W("sa.lo.weight"), attn);
     ggml_tensor* lo_b = W("sa.lo.bias");
     if (lo_b)
         attn_out = ggml_add(ctx, attn_out, lo_b);
+
+    if (std::strstr(prefix, ".0") && !std::strstr(prefix, "10")) {
+        ggml_set_name(attn_out, "dump_enc0_attn_out");
+        ggml_set_output(attn_out);
+    }
 
     x = ggml_add(ctx, residual, attn_out);
 
@@ -591,6 +609,9 @@ static std::vector<float> run_conformer_encoder(chatterbox_s3gen_context* c, con
             dump_rms("dump_after_embed");
             dump_rms("dump_pla_conv1");
             dump_rms("dump_after_pla");
+            dump_rms("dump_enc0_pre_attn_norm");
+            dump_rms("dump_enc0_raw_attn");
+            dump_rms("dump_enc0_attn_out");
             for (int i = 0; i < 6; i++) {
                 char dn[32];
                 std::snprintf(dn, sizeof(dn), "dump_enc_%d", i);
