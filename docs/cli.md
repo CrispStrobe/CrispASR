@@ -423,6 +423,42 @@ voxtral4b: kv cache 169 MiB k=q8_0 v=q4_0 (on cpu, ...)
 Same per-backend coverage as `KV_QUANT` (voxtral, voxtral4b,
 omniasr, qwen3_asr, granite_speech, orpheus).
 
+### `CRISPASR_N_GPU_LAYERS=N` — layer-residency offload (voxtral4b)
+
+llama.cpp `--n-gpu-layers` parity. Default `-1` keeps legacy
+single-backend behaviour (everything on GPU, or CPU if `-ng`).
+Setting `N` in `[0, total_layers)` puts the first N transformer
+blocks on GPU and spills the rest to system RAM, so models larger
+than VRAM can still run end-to-end.
+
+```bash
+# Voxtral4b has 26 transformer blocks. Half on GPU, half on CPU.
+CRISPASR_N_GPU_LAYERS=13 \
+  ./build/bin/crispasr --backend voxtral4b -m auto -f audio.wav
+
+# Tight VRAM: only audio encoder + projection + embeddings on GPU,
+# all 26 transformer blocks on CPU.
+CRISPASR_N_GPU_LAYERS=0 \
+  ./build/bin/crispasr --backend voxtral4b -m auto -f audio.wav
+```
+
+Verbose log shows weight residency and the layer split:
+
+```
+voxtral4b: weight residency: gpu=1585 MiB (571 tensors), cpu=821 MiB (143 tensors)
+voxtral4b: layer offload: gpu=[0,13), cpu=[13,26) (CRISPASR_N_GPU_LAYERS=13)
+```
+
+Coverage: voxtral4b only as of 2026-05-04. The plumbing
+(`core_gguf::load_weights_split` in `src/core/gguf_loader.h`)
+generalises to other LLM-decode backends; each is a small
+mechanical port — open issues if your target backend needs it.
+
+**Stacks with `KV_ON_CPU` and `KV_QUANT_K/_V`** — set all three for
+the most aggressive memory footprint reduction. `KV_QUANT` is
+cheaper than layer offload; reach for `N_GPU_LAYERS` only when the
+*model* doesn't fit, not the cache.
+
 ### `CRISPASR_GGUF_MMAP=1` — zero-copy weight load
 
 Map the GGUF file directly into the model's backend buffer instead

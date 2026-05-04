@@ -90,6 +90,9 @@ std::vector<std::string> kv_str_array(gguf_context* gctx, const char* key);
 struct WeightLoad {
     ggml_context* ctx = nullptr;
     ggml_backend_buffer_t buf = nullptr;
+    // PLAN #69a layer offload: optional second backend buffer for tensors
+    // routed off-GPU. Non-null only when load_weights_split() was used.
+    ggml_backend_buffer_t buf_cpu = nullptr;
     std::map<std::string, ggml_tensor*> tensors;
 };
 
@@ -100,6 +103,27 @@ struct WeightLoad {
 //
 // model_tag is used only in error messages ("parakeet: ...").
 bool load_weights(const char* path, ggml_backend_t backend, const char* model_tag, WeightLoad& out);
+
+// PLAN #69a: layer-residency-aware weight loader. Tensors for which
+// `is_gpu(tensor_name, user) == true` go on the GPU backend; the rest
+// go on the CPU backend. ggml_backend_sched then auto-routes ops to
+// follow weight residency, giving llama.cpp's `--n-gpu-layers` behaviour.
+//
+// Caller takes ownership of `out.ctx`, `out.buf` (gpu partition), and
+// `out.buf_cpu` (cpu partition). All three must be freed by the caller
+// or via free_weights() / free_weights_split() at shutdown.
+//
+// Falls back to the legacy alloc+copy path internally — the mmap
+// optimisations in load_weights() require contiguous tensor regions
+// that the split partition can't satisfy. Acceptable trade-off: users
+// who set N_GPU_LAYERS are accepting the extra RAM hit to fit the
+// model at all.
+//
+// Returns false on any allocation / load failure with a logged
+// stderr message; partial state is freed before returning.
+using IsGpuTensor = bool (*)(const char* tensor_name, void* user);
+bool load_weights_split(const char* path, ggml_backend_t gpu_backend, ggml_backend_t cpu_backend, IsGpuTensor is_gpu,
+                        void* user, const char* model_tag, WeightLoad& out);
 
 // Free a WeightLoad's resources. Call when the model is being destroyed
 // and the buffer/context are not held elsewhere.

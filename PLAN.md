@@ -2324,7 +2324,7 @@ That covers steady-state footprint, but not the case where the
 model itself doesn't fit in VRAM. For that we'd need per-block
 placement.
 
-### 69a. N-layer CPU offload — `--n-gpu-layers` / env equivalent
+### 69a. N-layer CPU offload — `--n-gpu-layers` / env equivalent — VOXTRAL4B SHIPPED 2026-05-04, REST OPEN
 
 The pattern to mirror is `src/kokoro.cpp:2174`'s per-op CPU pinning,
 generalised to "first N transformer blocks":
@@ -2367,6 +2367,52 @@ Per-backend implementation list (rough order: highest-VRAM first):
 Skip: ASR-only encoders (parakeet, canary, cohere, fc-ctc, wav2vec2,
 firered-asr, moonshine) — encoder graphs aren't layered the same way
 and the VRAM footprint isn't a problem.
+
+#### Voxtral4b status (2026-05-04)
+
+Shipped end-to-end:
+
+- New `core_gguf::load_weights_split(path, gpu, cpu, is_gpu_fn,
+  user, tag, &out)` in `src/core/gguf_loader.{h,cpp}` partitions
+  tensors into two backend buffers by predicate. Manual per-tensor
+  alignment + offset; no mmap on the split path (the mmap fast paths
+  in load_weights() require contiguous tensor regions, which the
+  partition can't satisfy — acceptable, users hitting VRAM pressure
+  are accepting the alloc-and-copy hit to fit at all).
+- voxtral4b reads `CRISPASR_N_GPU_LAYERS=N` (default -1 = legacy
+  single-backend load). When N is in [0, 26), tensors named
+  `blk.<il>.*` go to GPU iff `il < N`; everything else (audio enc,
+  projection, embeddings, output_norm) stays on GPU.
+- ggml_backend_sched picks up the per-tensor backend assignment
+  automatically and routes compute to follow weights — no graph-
+  builder changes needed.
+
+Validated on JFK (11 s / 26 layers / Q4_K weights):
+
+```
+N=-1 default :  weight residency: legacy GPU buffer
+N=0          :  gpu=763 MiB (428 tensors), cpu=1643 MiB (286 tensors)
+N=13         :  gpu=1585 MiB (571 tensors), cpu=821 MiB (143 tensors)
+N=26         :  legacy single-backend load (not split)
+```
+
+All four configs produce bit-identical correct transcripts.
+
+#### Remaining work for #69a
+
+Same plumbing applied to the other 9 LLM-decode backends from the
+list above. Each backend needs:
+
+1. A small `<backend>_layer_of(tensor_name)` helper to extract the
+   layer index from its naming scheme (most use `blk.<N>.*`).
+2. The split-load env-var dispatch in its `load_model` path.
+3. The `model.buf_cpu` field + free-on-shutdown.
+4. Pass `backend_cpu` through to the load_model signature.
+
+Mechanical and bounded. Worth doing per-backend on demand rather
+than preemptively — voxtral4b was the requesting user's actual ask
+(#60), and the test surface for each backend's layered tensor
+naming + `backend_cpu` setup is its own verification.
 
 ### ~~69b. KV-only CPU offload (`CRISPASR_KV_ON_CPU=1`)~~ — SHIPPED 2026-05-04
 
@@ -2483,8 +2529,11 @@ parity table.
 
 ### Approach (do these in order)
 
-1. Land `CRISPASR_N_GPU_LAYERS` for voxtral4b (the requesting user's
-   target). Validate against #60's reproducer. *(#69a — still open)*
+1. ~~Land `CRISPASR_N_GPU_LAYERS` for voxtral4b~~ — DONE 2026-05-04.
+   New `core_gguf::load_weights_split()` helper + voxtral4b dispatch.
+   Validated bit-identical on JFK at N=-1, 0, 13, 26. Other 9
+   LLM-decode backends remain — track per-backend, not preemptive.
+   *(#69a)*
 2. ~~Land `CRISPASR_KV_ON_CPU`~~ — DONE 2026-05-04, shipped across
    all 6 LLM-decode backends in one go alongside #69e. Helper
    `core_attn::kv_backend_from_env(gpu, cpu, tag)` lives in

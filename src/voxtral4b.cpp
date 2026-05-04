@@ -155,6 +155,9 @@ struct voxtral4b_model {
 
     ggml_context* ctx = nullptr;
     ggml_backend_buffer_t buf = nullptr;
+    // PLAN #69a: optional second buffer for layers spilled to CPU.
+    // Non-null only when CRISPASR_N_GPU_LAYERS triggered a split load.
+    ggml_backend_buffer_t buf_cpu = nullptr;
     std::map<std::string, ggml_tensor*> tensors;
 };
 
@@ -205,8 +208,37 @@ struct voxtral4b_context {
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
+// Parse a transformer-block layer index out of a tensor name. Returns
+// -1 if the name is not a layered tensor (audio encoder, projection,
+// embeddings, output norm). Layered tensors look like "blk.<N>.<field>".
+static int voxtral4b_layer_of(const char* name) {
+    if (!name)
+        return -1;
+    constexpr const char* kPfx = "blk.";
+    constexpr size_t kPfxLen = 4;
+    if (std::strncmp(name, kPfx, kPfxLen) != 0)
+        return -1;
+    char* end = nullptr;
+    long il = std::strtol(name + kPfxLen, &end, 10);
+    if (!end || *end != '.' || il < 0)
+        return -1;
+    return (int)il;
+}
+
+struct voxtral4b_split_ctx {
+    int n_gpu_layers; // layers [0..n_gpu_layers) on GPU; rest on CPU
+};
+
+static bool voxtral4b_is_gpu_tensor(const char* tensor_name, void* user) {
+    auto* sc = static_cast<voxtral4b_split_ctx*>(user);
+    const int il = voxtral4b_layer_of(tensor_name);
+    if (il < 0)
+        return true; // non-layered tensors (audio enc, proj, embd, output_norm) stay on GPU
+    return il < sc->n_gpu_layers;
+}
+
 static bool voxtral4b_load_model(voxtral4b_model& model, voxtral4b_vocab& vocab, const char* path,
-                                 ggml_backend_t backend) {
+                                 ggml_backend_t backend, ggml_backend_t backend_cpu) {
     // Pass 1: metadata
     {
         gguf_context* gctx = core_gguf::open_metadata(path);
@@ -257,13 +289,35 @@ static bool voxtral4b_load_model(voxtral4b_model& model, voxtral4b_vocab& vocab,
         core_gguf::free_metadata(gctx);
     }
 
-    // Pass 2: load tensors via shared helper
+    // Pass 2: load tensors via shared helper.
+    // PLAN #69a: when CRISPASR_N_GPU_LAYERS is set and < total layers,
+    // route layers [N..total) onto the CPU backend so VRAM-tight users
+    // can fit models larger than their GPU. -1 (default) or any value
+    // >= n_layers preserves the legacy single-backend load.
     core_gguf::WeightLoad wl;
-    if (!core_gguf::load_weights(path, backend, "voxtral4b", wl)) {
-        return false;
+    int n_gpu_layers_env = -1;
+    if (const char* s = std::getenv("CRISPASR_N_GPU_LAYERS")) {
+        n_gpu_layers_env = std::atoi(s);
+    }
+    const int total_layers = (int)model.hparams.llm_n_layers;
+    const bool do_split = backend_cpu && backend_cpu != backend && n_gpu_layers_env >= 0 &&
+                          n_gpu_layers_env < total_layers;
+    if (do_split) {
+        voxtral4b_split_ctx sc{n_gpu_layers_env};
+        if (!core_gguf::load_weights_split(path, backend, backend_cpu, voxtral4b_is_gpu_tensor, &sc, "voxtral4b",
+                                           wl)) {
+            return false;
+        }
+        fprintf(stderr, "voxtral4b: layer offload: gpu=[0,%d), cpu=[%d,%d) (CRISPASR_N_GPU_LAYERS=%d)\n",
+                n_gpu_layers_env, n_gpu_layers_env, total_layers, n_gpu_layers_env);
+    } else {
+        if (!core_gguf::load_weights(path, backend, "voxtral4b", wl)) {
+            return false;
+        }
     }
     model.ctx = wl.ctx;
     model.buf = wl.buf;
+    model.buf_cpu = wl.buf_cpu;
     model.tensors = std::move(wl.tensors);
 
     // Bind tensors
@@ -874,7 +928,7 @@ extern "C" struct voxtral4b_context* voxtral4b_init_from_file(const char* path,
     if (ggml_backend_is_cpu(ctx->backend))
         ggml_backend_cpu_set_n_threads(ctx->backend, ctx->n_threads);
 
-    if (!voxtral4b_load_model(ctx->model, ctx->vocab, path, ctx->backend)) {
+    if (!voxtral4b_load_model(ctx->model, ctx->vocab, path, ctx->backend, ctx->backend_cpu)) {
         delete ctx;
         return nullptr;
     }
@@ -992,6 +1046,8 @@ extern "C" void voxtral4b_free(voxtral4b_context* ctx) {
         ggml_free(ctx->fused_ctx);
     if (ctx->model.buf)
         ggml_backend_buffer_free(ctx->model.buf);
+    if (ctx->model.buf_cpu)
+        ggml_backend_buffer_free(ctx->model.buf_cpu);
     if (ctx->model.ctx)
         ggml_free(ctx->model.ctx);
     if (ctx->backend_cpu && ctx->backend_cpu != ctx->backend)
