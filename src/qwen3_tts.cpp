@@ -6099,7 +6099,25 @@ extern "C" float* qwen3_tts_synthesize(struct qwen3_tts_context* ctx, const char
     const int T_gen = n_codes / n_q;
     float* pcm = nullptr;
 
-    if (!ref_codes.empty()) {
+    // QWEN3_TTS_SKIP_REF_DECODE=1 — opt-in perf knob from issue #58
+    // (vkrmch's Jetson Orin AGX measurement). The default path
+    // concatenates ref_codes + gen_codes into one codec_decode_codes
+    // call and trims the ref portion off the output. With a 26 s
+    // reference (~334 codec frames at 12 Hz codec rate), the ref half
+    // adds a roughly constant ~16 s of codec compute on Orin AGX
+    // regardless of how much new audio is generated. The codec is a
+    // straight-line forward pass without rolling state — decoding
+    // gen_codes alone is mathematically equivalent to "decode
+    // ref+gen, trim ref." Skipping the ref decode is therefore safe
+    // on hosts where the codec compute is the bottleneck.
+    //
+    // Default OFF for now (validate broadly first); flip to default
+    // ON once we've confirmed bit-identity across qwen3-tts variants
+    // (0.6B / 1.7B-base / 1.7B-voicedesign) and platforms (Metal /
+    // CUDA / CPU).
+    const bool skip_ref = std::getenv("QWEN3_TTS_SKIP_REF_DECODE") != nullptr;
+
+    if (!ref_codes.empty() && !skip_ref) {
         std::vector<int32_t> codes_for_decode;
         codes_for_decode.reserve(ref_codes.size() + (size_t)n_codes);
         codes_for_decode.insert(codes_for_decode.end(), ref_codes.begin(), ref_codes.end());
