@@ -1,6 +1,6 @@
 # CrispASR
 
-**One C++ binary, twenty-four ASR backends + five TTS engines, zero Python dependencies.**
+**One C++ binary, twenty-four ASR backends + five TTS engines + multilingual text translation, zero Python dependencies.**
 
 CrispASR started as a fork of [whisper.cpp](https://github.com/ggml-org/whisper.cpp) and extends that base into a **unified speech engine** called `crispasr`, backed by full ggml C++ runtimes for major open-weights ASR *and* TTS architectures. One build, one binary, one consistent CLI — pick the backend at the command line or let CrispASR auto-detect it from your GGUF file. See [Text-to-Speech](#text-to-speech-tts) for the TTS side.
 
@@ -28,7 +28,7 @@ No Python. No PyTorch. No separate per-model binary. No `pip install`. Just one 
 
 ## Table of contents
 
-- [Supported backends](#supported-backends) — [ASR](#asr-backends) + [TTS](#text-to-speech-models) + [post-processing](#post-processing-models)
+- [Supported backends](#supported-backends) — [ASR](#asr-backends) + [TTS](#text-to-speech-models) + [translation](#translation) + [post-processing](#post-processing-models)
 - [Feature matrix](#feature-matrix)
 - [Install & build](#install--build) — quick install (full guide in [docs/install.md](docs/install.md))
 - [Quick start — ASR](#quick-start)
@@ -100,6 +100,27 @@ quick-start commands and engine selection guidance.
 | **kokoro** | [`hexgrad/Kokoro-82M`](https://huggingface.co/hexgrad/Kokoro-82M) + [`dida-80b/kokoro-german-hui-multispeaker-base`](https://huggingface.co/dida-80b/kokoro-german-hui-multispeaker-base) (German backbone) + [`kikiri-tts/kikiri-german-{victoria,martin}`](https://huggingface.co/kikiri-tts) (German voicepacks) | StyleTTS2 / iSTFTNet (BERT + ProsodyPredictor + iSTFTNet decoder, 82M params); per-voice GGUF; in-process libespeak-ng phonemizer with LRU cache; auto-routing for `-l de` swaps in the German-trained backbone + cascading voice fallback | en, es, fr, hi, it, ja, pt, zh native + de via Option 2b (PLAN §56) + others through espeak-ng with French/German voice fallback | Apache-2.0 (model + German backbone + kikiri voicepacks); HUI corpus CC0 |
 | **orpheus** | [`Orpheus-3B-FT`](https://huggingface.co/cstr/orpheus-3b-base-GGUF) + [`SNAC 24 kHz`](https://huggingface.co/cstr/snac-24khz-GGUF) | Llama-3.2-3B-Instruct talker (28L, 3072 d) + SNAC RVQ codec (3 codebooks × 4096 @ 24 kHz); 8 baked English speakers (`tara`/`leah`/`leo`/...). Pick the speaker with `--voice <name>` and pass `--temperature 0.6` (engine_class.py default — greedy loops). Drop-in DE checkpoint variants shipped: `--backend kartoffel-orpheus-de-natural` ([`cstr/kartoffel-orpheus-3b-german-natural-GGUF`](https://huggingface.co/cstr/kartoffel-orpheus-3b-german-natural-GGUF), 19 speakers, ASR-roundtrip word-exact via parakeet-v3 -l de), `--backend kartoffel-orpheus-de-synthetic` ([`cstr/kartoffel-orpheus-3b-german-synthetic-GGUF`](https://huggingface.co/cstr/kartoffel-orpheus-3b-german-synthetic-GGUF), 4 speakers + 12 emotions + 5 outbursts via `{Speaker} - {Emotion}: {text}` syntax), `--backend lex-au-orpheus-de` (`lex-au/Orpheus-3b-German-FT-Q8_0.gguf`). | en (canopylabs); de (Kartoffel_Orpheus + lex-au) | llama3.2 community ("Built with Llama") for talker; MIT for SNAC |
 | **chatterbox** | [`cstr/chatterbox-GGUF`](https://huggingface.co/cstr/chatterbox-GGUF) (base, EN) + [`cstr/chatterbox-turbo-GGUF`](https://huggingface.co/cstr/chatterbox-turbo-GGUF) (`--backend chatterbox-turbo`, 350M distilled, meanflow) + [`cstr/kartoffelbox-turbo-GGUF`](https://huggingface.co/cstr/kartoffelbox-turbo-GGUF) (`--backend kartoffelbox-turbo`, German fine-tune of turbo) + [`cstr/lahgtna-chatterbox-v1-GGUF`](https://huggingface.co/cstr/lahgtna-chatterbox-v1-GGUF) (`--backend lahgtna-chatterbox`, Arabic fine-tune of base) | Two-GGUF runtime: T3 AR text→speech-tokens (Llama-30L for base/lahgtna, GPT-2-24L for turbo/kartoffelbox-turbo) + S3Gen flow-matching speech-tokens→24 kHz (UpsampleConformerEncoder + UNet1D CFM + HiFTGenerator vocoder). Turbo uses 2-step meanflow CFM (vs 10-step cosine for base). Default voice baked into T3 (`conds.*`); `--voice <wav>` switches to clone mode via VoiceEncoder LSTM + CAMPPlus x-vector. S3Gen GGUF auto-discovered next to T3 or passed via `--codec-model`. (Conformer rel-pos parity gap closed in §80 — encoder_out now bit-exact to Python reference.) | en (base + turbo); ar (lahgtna); de (kartoffelbox-turbo) | MIT (all variants) |
+
+### Translation
+
+Text-to-text translation, distinct from the audio-side `--translate`
+flag (which routes audio → English text on whisper / canary / etc.).
+Drives the m2m100 backend with `--text "..." -sl <src> -tl <tgt>`.
+
+| Backend | Models | Architecture | Languages | License |
+|---|---|---|---|---|
+| **m2m100** | [`facebook/m2m100_418M`](https://huggingface.co/cstr/m2m100-418m-GGUF) | 12L encoder + 12L decoder transformer (d=1024, 16 heads, FFN=4096, ReLU, pre-norm) + SentencePiece BPE (128K vocab, 100 lang codes) + sinusoidal pos-emb + cross-attn KV cache + greedy decode. en→de exact match to the Python reference; Q8_0 (~502 MB) preserves quality on the test set. | 100 languages, any-to-any (no English pivot) | MIT |
+
+```bash
+./build/bin/crispasr --backend m2m100 -m auto \
+    --text "Hello world, how are you today?" \
+    -sl en -tl de
+# Hallo Welt, wie bist du heute?
+```
+
+For 2-stage pipelines (e.g., ASR → m2m100), use the dedicated
+`--tr-sl` / `--tr-tl` flags; they fall back to `-sl` / `-tl` when
+unset, so single-stage standalone usage is just `-sl/-tl`.
 
 ### Post-processing models
 

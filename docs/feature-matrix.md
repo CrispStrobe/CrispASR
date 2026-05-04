@@ -3,7 +3,7 @@
 
 # Feature matrix
 
-All 39 backends compiled into the `crispasr` binary, with their declared capability bits. For an interactive sortable/filterable view, open [`feature-matrix.html`](feature-matrix.html).
+All 40 backends compiled into the `crispasr` binary, with their declared capability bits. For an interactive sortable/filterable view, open [`feature-matrix.html`](feature-matrix.html).
 
 | Backend | TTS | Voice cloning | Translate | Src/Tgt language | Language detect | Auto-download | Timestamps (native) | Timestamps (CTC) | Word timestamps | Token confidence | Temperature | Beam search | Punctuation toggle | Flash attention | Diarize | GBNF grammar | VAD (internal) | Parallel processors |
 |---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
@@ -37,6 +37,7 @@ All 39 backends compiled into the `crispasr` binary, with their declared capabil
 | `kartoffelbox-turbo` | ✓ | ✓ |  |  |  | ✓ |  |  |  |  | ✓ |  |  | ✓ |  |  |  |  |
 | `lahgtna-chatterbox` | ✓ | ✓ |  |  |  | ✓ |  |  |  |  | ✓ |  |  | ✓ |  |  |  |  |
 | `kokoro` | ✓ |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |
+| `m2m100` |  |  | ✓ | ✓ |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |
 | `glm-asr` |  |  |  |  |  | ✓ |  | ✓ |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |  |  |
 | `kyutai-stt` |  |  |  |  |  | ✓ | ✓ |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |  |  |
 | `firered-asr` |  |  |  |  |  | ✓ |  | ✓ |  | ✓ |  | ✓ |  | ✓ | ✓ |  |  |  |

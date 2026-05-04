@@ -178,16 +178,18 @@ FastConformer + CTC head that works on any transcript + audio pair
 in 25+ European languages.
 
 ```bash
-# Grab the aligner once (~400 MB)
-curl -L -o canary-ctc-aligner.gguf \
-    https://huggingface.co/cstr/canary-ctc-aligner-GGUF/resolve/main/canary-ctc-aligner-q5_0.gguf
-
-# Now any LLM backend can produce word-level SRT output
+# Auto-download the aligner — Q4_K (~442 MB) lives in the registry.
 ./build/bin/crispasr --backend voxtral -m auto -f samples/jfk.wav \
-    -am canary-ctc-aligner.gguf -osrt -ml 1
+    -am auto -osrt -ml 1
 # [00:00:00.240 --> 00:00:00.640]  And
 # [00:00:00.640 --> 00:00:00.880]  so,
 # [00:00:00.880 --> 00:00:01.040]  my
+
+# …or grab it once manually (Q4_K / Q5_0 / Q8_0 / F16 all on the same repo):
+curl -L -o canary-ctc-aligner.gguf \
+    https://huggingface.co/cstr/canary-ctc-aligner-GGUF/resolve/main/canary-ctc-aligner-q4_k.gguf
+./build/bin/crispasr --backend voxtral -m auto -f samples/jfk.wav \
+    -am canary-ctc-aligner.gguf -osrt -ml 1
 ```
 
 Alignment granularity is one encoder frame (~80 ms).
@@ -199,13 +201,35 @@ For subtitle output, prefer adding `--vad --split-on-punct`:
     -am canary-ctc-aligner.gguf --vad -osrt --split-on-punct
 ```
 
+### `--force-aligner` / `-falign` — override native timestamps (issue #62)
+
+By default the CTC aligner is a **fallback** — it only runs when the
+backend doesn't already produce word-level timestamps natively.
+`--force-aligner` flips that: even when the backend has native
+timing (whisper, parakeet, canary, cohere, kyutai-stt), the aligner
+runs and replaces the native words with CTC-derived ones. Useful
+when the user trusts the aligner's word-onset accuracy more than
+the backend's native timing.
+
+```bash
+# Parakeet's native word ts replaced with canary-ctc-aligner output:
+./build/bin/crispasr --backend parakeet -m auto -f samples/jfk.wav \
+    -am auto --force-aligner -ojf
+```
+
+The flag also lifts the `CAP_TIMESTAMPS_CTC` capability gate, so
+backends that don't formally advertise CTC alignment compatibility
+(whisper, parakeet, kyutai-stt — they only declare native timing)
+can still use it once the user explicitly asks. Short alias is
+`-falign`, NOT `-fa` (already taken by `--flash-attn`).
+
 Notes:
-- The aligner path is a fallback for backends that lack native
-  timestamps.
+- Without `--force-aligner`, the aligner path is a fallback for
+  backends that lack native timestamps.
 - `qwen3-forced-aligner` is more sensitive to leading silence;
   `--vad` is strongly recommended with it.
 - Parakeet remains the better choice when timestamp quality is the
-  top priority.
+  top priority and you don't want to pay for a second forward pass.
 
 ## Sampling / decoding (whisper + LLM backends)
 
@@ -235,12 +259,47 @@ Notes:
 
 ## Multi-language / translation
 
+There are **three distinct translation paths**, each with its own
+flags. Pick by what you have for input and what you need out:
+
+| You have | You want | Use |
+|---|---|---|
+| Audio in language X | Translated text in English | `-tr` / `--translate` (audio→EN-text on whisper, canary, granite, voxtral, qwen3) |
+| Audio in language X | Translated text in language Y | `-sl X -tl Y` (audio AST on canary, granite-4.1, qwen3) |
+| Plain text in language X | Translated text in language Y | `--text "..." -sl X -tl Y --backend m2m100` (text→text only) |
+
+### Audio-side translate (`--translate`, `-sl`/`-tl`)
+
 | Flag | Meaning |
 |---|---|
-| `-sl LANG`, `--source-lang LANG` | Source language (canary) |
-| `-tl LANG`, `--target-lang LANG` | Target language (canary; set different from `-sl` for X→Y translation) |
-| `-tr`, `--translate` | Translate to English (whisper, canary) |
+| `-sl LANG`, `--source-lang LANG` | Source language (canary AST source; explicit pin overrides LID) |
+| `-tl LANG`, `--target-lang LANG` | Target language (canary AST; set different from `-sl` for X→Y translation) |
+| `-tr`, `--translate` | Translate to English (whisper, canary) — boolean toggle, no string arg |
 | `--no-punctuation` | Disable punctuation in the output. Native for cohere/canary, post-processed for everyone else |
+
+### Text-to-text translate (m2m100, 100 languages)
+
+[`facebook/m2m100_418M`](https://huggingface.co/cstr/m2m100-418m-GGUF) —
+multilingual encoder-decoder, ISO-639-1 codes, any direction (no
+English pivot required). Auto-download via `-m auto`:
+
+```bash
+./build/bin/crispasr --backend m2m100 -m auto \
+    --text "Hello world, how are you today?" \
+    -sl en -tl de
+# Hallo Welt, wie bist du heute?
+
+./build/bin/crispasr --backend m2m100 -m auto \
+    --text "Bonjour le monde." \
+    -sl fr -tl ja
+```
+
+| Flag | Meaning |
+|---|---|
+| `--text "TEXT"` | Plain text to translate (m2m100 only). Output goes to stdout. |
+| `-sl LANG`, `-tl LANG` | Source / target — same flags as audio AST; ISO-639-1 codes. |
+| `--translate-max-tokens N` | Max output tokens (default 256). |
+| `--tr-sl LANG`, `--tr-tl LANG` (long: `--translate-source-lang` / `--translate-target-lang`) | Translator-stage source/target. Falls back to `-sl`/`-tl`. Only matters in 2-stage pipelines where the primary backend's `-sl`/`-tl` mean something else (the primary's AST source/target). 2-stage piping (ASR → m2m100) needs `--translate-model PATH` — that's a follow-up; the override flags are plumbed but the standalone path is what's exercised today. |
 
 ## Threading / processors
 

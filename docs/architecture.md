@@ -67,7 +67,7 @@ all consume the same symbols.
 |---|---|
 | `cli.cpp` | crispasr entry point, extended with `--backend` dispatch branch. |
 | `crispasr_backend.{h,cpp}` | `CrispasrBackend` abstract class, capability bitmask, factory, GGUF auto-detect. |
-| `crispasr_backend_{parakeet,canary,cohere,granite,granite_nle,voxtral,voxtral4b,qwen3,fastconformer_ctc,wav2vec2,glm_asr,kyutai_stt,firered_asr,moonshine,moonshine_streaming,omniasr,gemma4_e2b,mimo_asr,vibevoice,qwen3_tts,orpheus,kokoro,chatterbox}.cpp` | Per-backend thin wrapper over each model's C API. ASR backends emit `crispasr_segment`s; TTS backends (`vibevoice`, `qwen3_tts`, `orpheus`, `kokoro`, `chatterbox`) implement `synthesize(text)` instead and write 24 kHz mono WAV via `--tts-output`. |
+| `crispasr_backend_{parakeet,canary,cohere,granite,granite_nle,voxtral,voxtral4b,qwen3,fastconformer_ctc,wav2vec2,glm_asr,kyutai_stt,firered_asr,moonshine,moonshine_streaming,omniasr,gemma4_e2b,mimo_asr,vibevoice,qwen3_tts,orpheus,kokoro,chatterbox,m2m100}.cpp` | Per-backend thin wrapper over each model's C API. ASR backends emit `crispasr_segment`s; TTS backends (`vibevoice`, `qwen3_tts`, `orpheus`, `kokoro`, `chatterbox`) implement `synthesize(text)` instead and write 24 kHz mono WAV via `--tts-output`; the translation backend (`m2m100`) implements `translate_text(text, src, tgt)` and writes UTF-8 to stdout. |
 | `crispasr_output.{h,cpp}` | TXT / SRT / VTT / CSV / JSON / LRC writers on `crispasr_segment`. |
 | `crispasr_vad_cli.{h,cpp}` | Delegates to `src/crispasr_vad`; adds auto-download for the Silero GGUF. |
 | `crispasr_lid_cli.{h,cpp}` | Delegates to `src/crispasr_lid`; adds auto-download + sherpa-ONNX subprocess fallback. |
@@ -170,6 +170,7 @@ regression test against `samples/jfk.wav`:
 | qwen3-tts | Qwen3 talker + 12 Hz codec + code-predictor | ✔ | ✔ | ✔ | CUDA / Metal | gguf_loader, kv_self_attn, swiglu |
 | orpheus | Llama-3.2 talker + SNAC RVQ codec | ✔ | ✔ | ✔ | CUDA / Metal | gguf_loader, kv_self_attn, swiglu |
 | chatterbox | T3 (Llama / GPT-2) + S3Gen (Conformer + UNet1D CFM + HiFTGen) | ✔ | ✔ | ✔ | CUDA / Metal | gguf_loader, kv_self_attn, swiglu, fft |
+| m2m100 | facebook/m2m100 12L+12L transformer (text-to-text translation) | ✔ | — | ✔ (cross-attn) | CUDA / Metal | gguf_loader, kv_self_attn |
 
 ### Architecture families
 
@@ -200,6 +201,11 @@ regression test against `samples/jfk.wav`:
     LM + DPM-Solver++ + σ-VAE decoder.
   - **StyleTTS2 / iSTFTNet** (kokoro): BERT + ProsodyPredictor
     + iSTFTNet decoder, single-shot (no AR).
+- **Text-to-text translation** (m2m100): SentencePiece BPE
+  + transformer encoder + transformer decoder (with cross-attn
+  KV cache) + greedy decode. Source/target language codes prefix
+  the encoder/decoder input streams. No audio path; driven by
+  `--text "..." -sl <src> -tl <tgt>`.
 
 ### Optimization opportunities
 
