@@ -126,13 +126,14 @@ bool load_weights_split(const char* path, ggml_backend_t gpu_backend, ggml_backe
                         void* user, const char* model_tag, WeightLoad& out);
 
 // PLAN #69a — generic predicate for the "blk.<N>." tensor naming used
-// by every LLM-decode backend in src/. Pass a pointer to the layer
-// threshold as `user`; tensors whose layer index >= *threshold are
-// routed to CPU, everything else (audio enc, projection, embeddings,
-// output_norm, blk.<n>.* with n < threshold) stays on GPU.
+// by voxtral, voxtral4b, qwen3_asr, granite_speech. Pass a pointer to
+// the layer threshold as `user`; tensors whose layer index >= *threshold
+// are routed to CPU, everything else (audio enc, projection,
+// embeddings, output_norm, blk.<n>.* with n < threshold) stays on GPU.
 //
-// Returns -1 for non-layered tensors so backends with a different
-// naming scheme can build their own predicate around this primitive.
+// Backends with different naming schemes (glm_asr "llm.blk.<N>.",
+// orpheus "talker.blk.<N>.", omniasr "dec.<N>.") need their own
+// predicate — defer until those backends are ported.
 int blk_layer_of(const char* tensor_name);
 
 // Convenience predicate: true if `tensor_name` should live on GPU,

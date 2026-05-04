@@ -142,6 +142,8 @@ struct voxtral_model {
 
     ggml_context* ctx = nullptr;
     ggml_backend_buffer_t buf = nullptr;
+    // PLAN #69a: optional second buffer for layers spilled to CPU.
+    ggml_backend_buffer_t buf_cpu = nullptr;
     std::map<std::string, ggml_tensor*> tensors;
 };
 
@@ -221,7 +223,8 @@ static ggml_tensor* require(voxtral_model& m, const char* name) {
 // Model loading
 // ===========================================================================
 
-static bool voxtral_load_model(voxtral_model& model, voxtral_vocab& vocab, const char* path, ggml_backend_t backend) {
+static bool voxtral_load_model(voxtral_model& model, voxtral_vocab& vocab, const char* path, ggml_backend_t backend,
+                               ggml_backend_t backend_cpu) {
     // ---- pass 1: read hparams + vocab via metadata-only context ----
     {
         gguf_context* gctx = core_gguf::open_metadata(path);
@@ -279,12 +282,32 @@ static bool voxtral_load_model(voxtral_model& model, voxtral_vocab& vocab, const
     }
 
     // ---- pass 2: tensor data via shared helper ----
+    // PLAN #69a: when CRISPASR_N_GPU_LAYERS is set and < total layers,
+    // route layers [N..total) onto the CPU backend.
     core_gguf::WeightLoad wl;
-    if (!core_gguf::load_weights(path, backend, "voxtral", wl)) {
-        return false;
+    int n_gpu_layers_env = -1;
+    if (const char* s = std::getenv("CRISPASR_N_GPU_LAYERS")) {
+        n_gpu_layers_env = std::atoi(s);
+    }
+    const int total_layers = (int)model.hparams.llm_n_layers;
+    const bool do_split = backend_cpu && backend_cpu != backend && n_gpu_layers_env >= 0 &&
+                          n_gpu_layers_env < total_layers;
+    if (do_split) {
+        int threshold = n_gpu_layers_env;
+        if (!core_gguf::load_weights_split(path, backend, backend_cpu, core_gguf::is_gpu_tensor_blk, &threshold,
+                                           "voxtral", wl)) {
+            return false;
+        }
+        fprintf(stderr, "voxtral: layer offload: gpu=[0,%d), cpu=[%d,%d) (CRISPASR_N_GPU_LAYERS=%d)\n",
+                n_gpu_layers_env, n_gpu_layers_env, total_layers, n_gpu_layers_env);
+    } else {
+        if (!core_gguf::load_weights(path, backend, "voxtral", wl)) {
+            return false;
+        }
     }
     model.ctx = wl.ctx;
     model.buf = wl.buf;
+    model.buf_cpu = wl.buf_cpu;
     model.tensors = std::move(wl.tensors);
 
     // ---- bind named tensors into the per-layer structs ----
@@ -782,7 +805,7 @@ extern "C" voxtral_context* voxtral_init_from_file(const char* path, voxtral_con
         ggml_backend_cpu_set_n_threads(ctx->backend, ctx->n_threads);
     }
 
-    if (!voxtral_load_model(ctx->model, ctx->vocab, path, ctx->backend)) {
+    if (!voxtral_load_model(ctx->model, ctx->vocab, path, ctx->backend, ctx->backend_cpu)) {
         delete ctx;
         return nullptr;
     }
@@ -893,6 +916,8 @@ extern "C" void voxtral_free(voxtral_context* ctx) {
         ggml_free(ctx->fused_ctx);
     if (ctx->model.buf)
         ggml_backend_buffer_free(ctx->model.buf);
+    if (ctx->model.buf_cpu)
+        ggml_backend_buffer_free(ctx->model.buf_cpu);
     if (ctx->model.ctx)
         ggml_free(ctx->model.ctx);
     if (ctx->backend_cpu)
