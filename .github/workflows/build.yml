@@ -3,7 +3,7 @@ name: CI
 on:
   push:
     branches:
-      - master
+      - main
     tags:
       - 'v*'
     paths: ['.github/workflows/build.yml',

@@ -1,7 +1,7 @@
 name: Examples WASM
 on:
   push:
-    branches: ["master"]
+    branches: ["main"]
 
   workflow_dispatch:
 
