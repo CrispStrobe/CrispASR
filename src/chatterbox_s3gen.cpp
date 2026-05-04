@@ -453,28 +453,33 @@ static ggml_cgraph* build_graph_conformer_encoder(chatterbox_s3gen_context* c, i
             // x is (D=512, Tin) from embedding. Conv1d expects (T, C_in) → transpose.
             x = ggml_cont(ctx0, ggml_transpose(ctx0, x)); // now (Tin, D=512)
 
-            // Conv1d(k=4, causal pad_left=3): use symmetric pad=3, crop LAST Tin elements
-            x = ggml_conv_1d(ctx0, pla_c1_w, x, 1, 3, 1);
-            if ((int)x->ne[0] > Tin) {
-                int excess = (int)x->ne[0] - Tin;
-                x = ggml_view_2d(ctx0, x, Tin, (int)x->ne[1], x->nb[1], (size_t)excess * x->nb[0]);
-                x = ggml_cont(ctx0, x);
-            }
-            if (pla_c1_b)
-                x = ggml_add(ctx0, x, ggml_reshape_2d(ctx0, pla_c1_b, 1, (int)pla_c1_b->ne[0]));
+            // Helper: pad one side (left or right) with zeros from x via scale(0),
+            // then conv with pad=0
+            auto padded_conv1d = [&](ggml_tensor* input, ggml_tensor* w, ggml_tensor* b, int pad_size,
+                                     bool pad_right) -> ggml_tensor* {
+                ggml_tensor* pad_view =
+                    ggml_cont(ctx0, ggml_view_2d(ctx0, input, pad_size, (int)input->ne[1], input->nb[1], 0));
+                ggml_tensor* zeros = ggml_scale(ctx0, pad_view, 0.0f);
+                ggml_tensor* padded;
+                if (pad_right) {
+                    padded = ggml_concat(ctx0, input, zeros, 0); // [x, zeros]
+                } else {
+                    padded = ggml_concat(ctx0, zeros, input, 0); // [zeros, x]
+                }
+                ggml_tensor* out = ggml_conv_1d(ctx0, w, padded, 1, 0, 1);
+                if (b)
+                    out = ggml_add(ctx0, out, ggml_reshape_2d(ctx0, b, 1, (int)b->ne[0]));
+                return out;
+            };
+
+            // Conv1(k=4, RIGHT-pad 3): lookahead conv — looks 3 steps into the future
+            x = padded_conv1d(x, pla_c1_w, pla_c1_b, 3, /*pad_right=*/true);
             ggml_set_name(x, "dump_pla_conv1");
             ggml_set_output(x);
-            x = ggml_leaky_relu(ctx0, x, 0.1f, false);
+            x = ggml_leaky_relu(ctx0, x, 0.01f, false); // Python default slope=0.01
 
-            // Conv2(k=3, causal pad_left=2): same approach
-            x = ggml_conv_1d(ctx0, pla_c2_w, x, 1, 2, 1);
-            if ((int)x->ne[0] > Tin) {
-                int excess = (int)x->ne[0] - Tin;
-                x = ggml_view_2d(ctx0, x, Tin, (int)x->ne[1], x->nb[1], (size_t)excess * x->nb[0]);
-                x = ggml_cont(ctx0, x);
-            }
-            if (pla_c2_b)
-                x = ggml_add(ctx0, x, ggml_reshape_2d(ctx0, pla_c2_b, 1, (int)pla_c2_b->ne[0]));
+            // Conv2(k=3, LEFT-pad 2): causal conv
+            x = padded_conv1d(x, pla_c2_w, pla_c2_b, 2, /*pad_right=*/false);
             // Transpose back to (D, Tin) to match residual layout
             x = ggml_cont(ctx0, ggml_transpose(ctx0, x)); // (D, Tin)
             // Residual
