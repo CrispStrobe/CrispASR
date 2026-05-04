@@ -2866,7 +2866,7 @@ the same 22%–220% range. If a platform regresses, add a
 `CRISPASR_FORCE_CPU_WEIGHTS=1` escape hatch — none seen yet on
 Apple Silicon, so deferred.
 
-## 73. Quant-safe KV cache write for canary / cohere / kyutai_stt — KYUTAI SHIPPED 2026-05-04, REST OPEN
+## ~~73. Quant-safe KV cache write for canary / cohere / kyutai_stt~~ — SHIPPED 2026-05-04
 
 Tier-2 K/V split (#69e) shipped KV-on-CPU spill (#69b) on canary,
 cohere, kyutai_stt but NOT asymmetric K/V quant — because their
@@ -2959,45 +2959,39 @@ write path. Migration was a clean 12-line replacement of the inline
 identically (legacy strided-view path); Q8_0/Q8_0 and Q8_0/Q4_0
 now work end-to-end, validated on JFK.
 
-**canary write path — DONE 2026-05-04.** Already had a `position` I32
-graph input populated with `[offset, offset+1, …, offset+n_tokens-1]`
-for the embedding-table lookup, so it doubled as the row-index input
-for the new quant write path. F16 fast path preserved; helper
-migration verified on JFK at 16.7x realtime, correct transcript.
+**canary — DONE 2026-05-04.** Already had a `position` I32 graph
+input populated with `[offset, offset+1, …, offset+n_tokens-1]` for
+the dec_pos_enc lookup, so it doubled as the row-index input. Write
+path migrated to `kv_cache_write`; read path got a `ggml_cast(F32)`
+before the `ggml_permute(V, 1,0,2,3) → ggml_cont` chain when the
+cache is quant. F16 path preserved bit-identical.
 
-**canary quant K/V (read path) — STILL OPEN.** Enabling
-`CRISPASR_KV_QUANT_K=q8_0` (or `_V=q4_0`) on canary crashes in the
-cache *read* pipeline:
+**cohere — DONE 2026-05-04.** Same pattern as canary, same fix.
 
-```cpp
-ggml_tensor* V_full = ggml_view_3d(ctx0, ctx->kv_v, ...);
-ggml_tensor* V_trans = ggml_cont(ctx0, ggml_permute(V_full, 1, 0, 2, 3));
-ggml_tensor* sa_out = ggml_mul_mat(ctx0, V_trans, KQ);  // GGML_ASSERT(!ggml_is_transposed(a))
-```
+The read-path workaround: `ggml_cont` of a permuted quant tensor
+just flips the strides flag, leaving the tensor marked transposed —
+downstream `ggml_mul_mat` then asserts `!ggml_is_transposed(a)`.
+F16 doesn't trip this because element-wise re-strided cont
+materialises data. The 5-LOC fix is to insert `ggml_cast(view, F32)`
+before the permute when the cache is quant; that materialises the
+data and lets the rest of the chain run unchanged.
 
-`ggml_cont` of a permuted quant tensor doesn't materialise the new
-strides — it just flips the strides flag, leaving the tensor marked
-transposed. The downstream `mul_mat` rejects it. F16 doesn't trip
-this because element-wise re-strided cont works for F16.
+Trade-off: dequant-on-read loses the per-step KV-read bandwidth
+savings (the biggest perf win of quant V on long context). Memory
+savings + cache-write bandwidth savings are retained. A future
+follow-up could migrate the read path to `ggml_flash_attn_ext`
+(which natively handles quant K/V) for the full perf benefit —
+~50 LOC + careful F16 bit-equivalence validation, deferred.
 
-Two routes to fix:
+Validated on JFK:
+  canary  F16:        0.55 s (20.0x realtime)
+  canary  Q8_0/Q4_0:  0.77 s (14.2x realtime)  — ~40 % slower from cast tax, transcript bit-identical
+  cohere  F16:        0.82 s (13.5x realtime)
+  cohere  Q8_0/Q4_0:  0.80 s (13.8x realtime)  — neutral / slightly faster, transcript bit-identical
 
-1. **Dequant on read** — insert `ggml_cast(view, F32)` before the
-   permute. Loses the per-step KV-read bandwidth saving (the
-   biggest perf win of quant V on long context), but the memory
-   savings + cache-write bandwidth saving still apply. Smallest
-   diff. ~3 LOC per occurrence.
-2. **Migrate to `ggml_flash_attn_ext`** like kyutai_stt — that
-   function natively handles quant K/V without the
-   permute+cont+mul_mat chain. Much bigger diff but unlocks the
-   full perf benefit. ~50 LOC plus careful F16 bit-equivalence
-   validation.
-
-Option 1 is the right next step — ship the memory savings, defer
-the bandwidth-saving migration to a separate work item.
-
-**cohere — STILL OPEN.** Same pattern as canary's read path
-(view → permute(1,0,2,3) → cont → mul_mat). Same fix paths apply.
+Cohere doesn't show the cast tax on JFK; canary does. Probably depends on
+context length — cast cost is constant-per-step, scales worse on short
+clips. Both produce correct transcripts, both save the documented memory.
 
 ### New helper (shipped)
 

@@ -601,19 +601,14 @@ static void canary_alloc_kv(canary_context* ctx) {
     };
     ctx->kv_ctx = ggml_init(p);
 
-    // KV dtype stays F16 here. The PLAN #73 cache-write helper
-    // migration (line ~775 in build_graph_decoder) made the WRITE
-    // side quant-compatible, but the cache READ path
-    // (ggml_view → ggml_cont → ggml_mul_mat) hits
-    // `!ggml_is_transposed(a)` when V is quant — `ggml_cont` of
-    // a permuted quant tensor doesn't fully materialise the new
-    // strides, so the downstream mul_mat assertion fires. Migrating
-    // the read path (e.g. via ggml_cast(F32) before the permute, or
-    // restructuring to use ggml_flash_attn_ext like kyutai_stt
-    // already does) would unblock CRISPASR_KV_QUANT_K/_V on canary.
-    // Tracked in PLAN #73 follow-ups.
-    ctx->kv_k = ggml_new_tensor_4d(ctx->kv_ctx, GGML_TYPE_F16, head_dim, max_ctx, n_heads, n_layers);
-    ctx->kv_v = ggml_new_tensor_4d(ctx->kv_ctx, GGML_TYPE_F16, head_dim, max_ctx, n_heads, n_layers);
+    // PLAN #60e + #69e: per-half KV dtype. Canary's per-step write
+    // goes through core_attn::kv_cache_write (PLAN #73), and the
+    // read path adds a ggml_cast(F32) before the permute+cont chain
+    // when the cache is quant — keeps memory savings, gives up some
+    // read-bandwidth savings.
+    const auto kv_pair = core_attn::kv_dtype_pair_from_env("canary");
+    ctx->kv_k = ggml_new_tensor_4d(ctx->kv_ctx, kv_pair.k, head_dim, max_ctx, n_heads, n_layers);
+    ctx->kv_v = ggml_new_tensor_4d(ctx->kv_ctx, kv_pair.v, head_dim, max_ctx, n_heads, n_layers);
     ggml_set_name(ctx->kv_k, "kv_k");
     ggml_set_name(ctx->kv_v, "kv_v");
 
@@ -795,8 +790,18 @@ static ggml_cgraph* canary_build_graph_decoder(canary_context* ctx, int n_tokens
         ggml_tensor* Q = ggml_permute(ctx0, ggml_reshape_3d(ctx0, Qcur, head_dim, n_heads, n_tokens), 0, 2, 1, 3);
 
         const int L = offset + n_tokens;
+        // PLAN #73 read-path: when the cache is quant, dequantise to
+        // F32 before the permute+cont chain. ggml_cont of a permuted
+        // quant tensor only flips the strides flag (no data move), so
+        // the downstream ggml_mul_mat asserts on `is_transposed`.
+        // Casting to F32 first materialises the data and lets the rest
+        // of the chain run unchanged. Trades read-bandwidth saving for
+        // quant correctness; memory + write-bandwidth savings retained.
+        const bool kv_is_quant = ggml_is_quantized(ctx->kv_k->type) || ggml_is_quantized(ctx->kv_v->type);
         ggml_tensor* K_full = ggml_view_3d(ctx0, ctx->kv_k, head_dim, L, n_heads, ctx->kv_k->nb[1], ctx->kv_k->nb[2],
                                            il * ctx->kv_k->nb[3]);
+        if (kv_is_quant)
+            K_full = ggml_cast(ctx0, K_full, GGML_TYPE_F32);
         K_full = ggml_cont(ctx0, K_full);
 
         ggml_tensor* KQ = ggml_mul_mat(ctx0, K_full, Q);
@@ -807,6 +812,8 @@ static ggml_cgraph* canary_build_graph_decoder(canary_context* ctx, int n_tokens
 
         ggml_tensor* V_full = ggml_view_3d(ctx0, ctx->kv_v, head_dim, L, n_heads, ctx->kv_v->nb[1], ctx->kv_v->nb[2],
                                            il * ctx->kv_v->nb[3]);
+        if (kv_is_quant)
+            V_full = ggml_cast(ctx0, V_full, GGML_TYPE_F32);
         ggml_tensor* V_trans = ggml_cont(ctx0, ggml_permute(ctx0, V_full, 1, 0, 2, 3));
         ggml_tensor* sa_out = ggml_mul_mat(ctx0, V_trans, KQ);
 

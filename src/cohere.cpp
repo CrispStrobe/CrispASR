@@ -1281,32 +1281,34 @@ static struct ggml_cgraph* cohere_build_graph_decoder(struct cohere_context* ctx
             cohere_log_tensor("Vcur", Vcur);
         }
 
-        // Store current K, V into cache
+        // Store current K, V into cache.
+        // PLAN #73: cache write via core_attn helper. F16/F32 caches go
+        // the legacy ggml_cpy(view) path (bit-identical); Q8_0/Q4_0
+        // caches go ggml_set_rows(position). Cohere already has the
+        // `position` I32 graph input populated with [offset, offset+1,
+        // …, offset+n_tokens-1] for the dec_pos_w lookup, so it
+        // doubles as the row-index input.
         {
-            struct ggml_tensor* k_view =
-                ggml_view_4d(ctx0, ctx->kv_k, head_dim, n_tokens, n_heads, 1, ctx->kv_k->nb[1], ctx->kv_k->nb[2],
-                             ctx->kv_k->nb[3], il * ctx->kv_k->nb[3] + offset * ctx->kv_k->nb[1]);
-
-            struct ggml_tensor* v_view =
-                ggml_view_4d(ctx0, ctx->kv_v, head_dim, n_tokens, n_heads, 1, ctx->kv_v->nb[1], ctx->kv_v->nb[2],
-                             ctx->kv_v->nb[3], il * ctx->kv_v->nb[3] + offset * ctx->kv_v->nb[1]);
-
             struct ggml_tensor* K_perm =
                 ggml_permute(ctx0, ggml_reshape_3d(ctx0, Kcur, head_dim, n_heads, n_tokens), 0, 2, 1, 3);
             struct ggml_tensor* V_perm =
                 ggml_permute(ctx0, ggml_reshape_3d(ctx0, Vcur, head_dim, n_heads, n_tokens), 0, 2, 1, 3);
-
-
-            ggml_build_forward_expand(gf, ggml_cpy(ctx0, K_perm, k_view));
-            ggml_build_forward_expand(gf, ggml_cpy(ctx0, V_perm, v_view));
+            core_attn::kv_cache_write(ctx0, gf, K_perm, V_perm, ctx->kv_k, ctx->kv_v, il, offset, n_tokens, position);
         }
 
         struct ggml_tensor* Q = ggml_permute(ctx0, ggml_reshape_3d(ctx0, Qcur, head_dim, n_heads, n_tokens), 0, 2, 1,
                                              3); // [hd, n_tok, n_heads]
 
+        // PLAN #73 read-path: when the cache is quant, dequantise to
+        // F32 before the permute+cont chain. ggml_cont of a permuted
+        // quant tensor only flips strides — the downstream mul_mat
+        // would assert on `is_transposed`. F16 path is unchanged.
+        const bool kv_is_quant = ggml_is_quantized(ctx->kv_k->type) || ggml_is_quantized(ctx->kv_v->type);
         struct ggml_tensor* K =
             ggml_view_3d(ctx0, ctx->kv_k, head_dim, offset + n_tokens, n_heads, ctx->kv_k->nb[1], ctx->kv_k->nb[2],
                          il * ctx->kv_k->nb[3]); // [hd, L, n_heads]
+        if (kv_is_quant)
+            K = ggml_cast(ctx0, K, GGML_TYPE_F32);
         K = ggml_cont(ctx0, K);
 
         struct ggml_tensor* KQ = ggml_mul_mat(ctx0, K, Q); // [L, n_tok, n_heads]
@@ -1319,6 +1321,8 @@ static struct ggml_cgraph* cohere_build_graph_decoder(struct cohere_context* ctx
         struct ggml_tensor* V =
             ggml_view_3d(ctx0, ctx->kv_v, head_dim, offset + n_tokens, n_heads, ctx->kv_v->nb[1], ctx->kv_v->nb[2],
                          il * ctx->kv_v->nb[3]); // [hd, L, n_heads]
+        if (kv_is_quant)
+            V = ggml_cast(ctx0, V, GGML_TYPE_F32);
 
         struct ggml_tensor* V_trans = ggml_cont(ctx0, ggml_permute(ctx0, V, 1, 0, 2, 3)); // [L, hd, n_heads]
         struct ggml_tensor* sa_out = ggml_mul_mat(ctx0, V_trans, KQ);                     // [hd, n_tok, n_heads]
@@ -1619,14 +1623,14 @@ struct cohere_context* cohere_init_from_file(const char* path_model, struct cohe
             .no_alloc = true,
         };
         ctx->kv_ctx = ggml_init(kv_params);
-        // KV dtype stays F16 here — cohere's decoder writes via ggml_cpy()
-        // into a strided view of the cache, which is incompatible with
-        // quant types. Migration to core_attn::kv_self_attn would unlock
-        // CRISPASR_KV_QUANT_K/_V; until then only the on-CPU spill knob
-        // is wired.
-        ctx->kv_k = ggml_new_tensor_4d(ctx->kv_ctx, GGML_TYPE_F16, hp.dec_head_dim, hp.dec_max_ctx, hp.dec_n_heads,
+        // PLAN #60e + #69e: per-half KV dtype. Cohere's per-step
+        // write goes through core_attn::kv_cache_write (PLAN #73);
+        // the read path adds a ggml_cast(F32) before the permute+cont
+        // chain when the cache is quant.
+        const auto kv_pair = core_attn::kv_dtype_pair_from_env("cohere");
+        ctx->kv_k = ggml_new_tensor_4d(ctx->kv_ctx, kv_pair.k, hp.dec_head_dim, hp.dec_max_ctx, hp.dec_n_heads,
                                        hp.dec_n_layers);
-        ctx->kv_v = ggml_new_tensor_4d(ctx->kv_ctx, GGML_TYPE_F16, hp.dec_head_dim, hp.dec_max_ctx, hp.dec_n_heads,
+        ctx->kv_v = ggml_new_tensor_4d(ctx->kv_ctx, kv_pair.v, hp.dec_head_dim, hp.dec_max_ctx, hp.dec_n_heads,
                                        hp.dec_n_layers);
         // PLAN #69b: optional KV-on-CPU spill for VRAM-tight users.
         ggml_backend_t kv_backend =
