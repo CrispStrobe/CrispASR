@@ -65,15 +65,6 @@ argument order fixed for F16 kernels.
 
 ## ~~41. Moonshine phoneme / IPA output~~ — **SUPERSEDED by kokoro espeak-ng phonemizer (#56)**
 
-The original ask was G2P (text→IPA) from moonshine's pronunciation
-tables. This is now superseded by the espeak-ng phonemizer shipped in
-#56: `kokoro_phonemize_text_lib(lang, text)` and
-`kokoro_phonemize_text_popen(lang, text)` are general-purpose G2P
-covering 100+ languages via libespeak-ng. Any backend's transcript
-can be piped through them. Exposed as C ABI, usable from all wrappers.
-
-No moonshine-specific G2P port needed.
-
 ---
 
 ## ~~5. Reference backends for parakeet/canary/cohere~~ — **DONE → [HISTORY §63](HISTORY.md)**
@@ -350,23 +341,7 @@ speedup from GPU is already the dominant improvement.
 
 ---
 
-## ~~11. WebSocket streaming server~~ — DONE (May 2026)
-
-Minimal RFC 6455 WebSocket server running on `--ws-port` (default:
-HTTP port + 1). ~300 LOC in `examples/server/ws_stream.{h,cpp}`.
-
-**Protocol:**
-- Client connects to `ws://host:port`
-- Server sends `{"status":"ready"}`
-- Client sends binary frames (16kHz mono float32 PCM chunks)
-- Server sends JSON `{"text":"...","t0":0.0,"t1":1.5,"counter":1}`
-  on each streaming decoder commit
-- Client sends text `"flush"` to finalize remaining audio
-- Server responds with `{"text":"...","final":true}`
-
-One thread per connection, each with its own crispasr session +
-streaming decoder. No TLS (use reverse proxy for wss://). No
-fragmented frames. Integrated into `crispasr-server` build.
+## ~~11. WebSocket streaming server~~ — **DONE → [HISTORY §76](HISTORY.md)**
 
 ---
 
@@ -400,13 +375,11 @@ No response. HF model card has no license field.
 
 ## ~~51. MiMo-V2.5-ASR runtime~~ — **DONE → [HISTORY §56](HISTORY.md) + [§64](HISTORY.md)**
 
-Base runtime + Q4_K + fused-QKV layout shipped. Remaining follow-ups:
-
-### 51a. mmap-style GGUF loader for large F16 models — env-flag SHIPPED → [HISTORY §62](HISTORY.md)
-
-`CRISPASR_GGUF_MMAP=1` lands the zero-copy CPU + Metal mmap path; default-flip queued behind F16 RSS measurement on a 32+ GB box.
-
-### ~~51b. Step-decode KV cache reuse~~ — **DONE → [HISTORY §60](HISTORY.md)**
+Base runtime + Q4_K + fused-QKV layout shipped. Sub-items 51a (mmap
+loader → [HISTORY §62](HISTORY.md), env flag `CRISPASR_GGUF_MMAP=1`)
+and 51b (step-decode KV cache reuse → [HISTORY §60](HISTORY.md))
+also DONE. Only 51c (F16 step decode) is still open — blocked
+behind ≥32 GB RAM for end-to-end validation.
 
 ### 51c. F16 step decode
 
@@ -1706,25 +1679,13 @@ weight loads.
 
 ---
 
-## 65. Session-API word-confidence parity — **DONE → [HISTORY §65](HISTORY.md)**
+## ~~65. Session-API word-confidence parity~~ — **DONE → [HISTORY §65](HISTORY.md)**
 
-Sub-items 65 main batch + 65a vibevoice/moonshine-streaming all
-landed. Remaining open: gemma4-e2b token-prob API + Go/Java/Ruby/JS
-binding word accessors (the latter partially handled by parallel
-worker in `5534588`).
-
-### 65a-residue. gemma4-e2b session-API word probs — **DONE → [HISTORY §65](HISTORY.md)**
-
-Last text-only ASR backend closed. `gemma4_e2b_transcribe_impl` +
-`_with_probs` + `_token_text` shipped; session adapter wires
-through SentencePiece ▁→space + `emit_words_from_tokens`. Every
-ASR backend now has a token-prob path through the session API.
-
-### 65b-residue. Remaining bindings (JS only)
-
-Parallel-worker commits 5534588 + d963e3a brought Go/Java/Ruby up
-to parity. JS/emscripten still session-API-less for word access
-but is TTS-focused — leaving until a JS consumer asks.
+Main batch + 65a (vibevoice / moonshine-streaming) + 65a-residue
+(gemma4-e2b token-prob API) all landed. Go/Java/Ruby brought to
+parity in `5534588` + `d963e3a`. **Only residual:** JS / emscripten
+word-accessor surface — leaving until a JS consumer asks (the
+current JS binding is TTS-focused).
 
 ---
 
