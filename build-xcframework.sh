@@ -244,19 +244,43 @@ combine_static_libraries() {
     fi
 
     local libs=(
-        "${base_dir}/${build_dir}/src/${release_dir}/libcrispasr.a"
         "${base_dir}/${build_dir}/ggml/src/${release_dir}/libggml.a"
         "${base_dir}/${build_dir}/ggml/src/${release_dir}/libggml-base.a"
         "${base_dir}/${build_dir}/ggml/src/${release_dir}/libggml-cpu.a"
         "${base_dir}/${build_dir}/ggml/src/ggml-metal/${release_dir}/libggml-metal.a"
         "${base_dir}/${build_dir}/ggml/src/ggml-blas/${release_dir}/libggml-blas.a"
     )
-    if [[ "$platform" == "macos" || "$platform" == "ios" ]]; then
-        echo "Adding libcrispasr.coreml library to the build."
-        libs+=(
-            "${base_dir}/${build_dir}/src/${release_dir}/libcrispasr.coreml.a"
-        )
+
+    # Auto-discover every static library produced under src/. CrispASR
+    # has 25+ STATIC backend libraries (parakeet, canary, qwen3_asr,
+    # voxtral, voxtral4b, granite_speech, wav2vec2-ggml, glm-asr,
+    # kyutai-stt, firered-asr, omniasr, vibevoice, gemma4_e2b,
+    # mimo_tokenizer, mimo_asr, qwen3_tts, orpheus, chatterbox, …)
+    # that crispasr.a publicly depends on via target_link_libraries
+    # but does NOT statically embed. libtool -static needs every one
+    # of them on its command line, otherwise the xcframework consumer
+    # gets undefined symbols at app-link time
+    # (e.g. wav2vec2_load referenced from crispasr_c_api.cpp).
+    #
+    # Hardcoding the full list would drift the next time a backend
+    # lands; glob the build tree instead. Order doesn't matter to
+    # libtool -static.
+    local src_libs=()
+    while IFS= read -r -d '' lib; do
+        src_libs+=("$lib")
+    done < <(find "${base_dir}/${build_dir}/src" -path "*/${release_dir}/*.a" -print0 2>/dev/null)
+    if [ ${#src_libs[@]} -gt 0 ]; then
+        echo "Auto-discovered ${#src_libs[@]} static backend libraries under src/${release_dir}/"
+        libs+=("${src_libs[@]}")
+    else
+        # Fall back to the original explicit list if glob finds nothing
+        # (shouldn't happen — defensive).
+        echo "warning: glob found no static libs under src/${release_dir}/; falling back to libcrispasr.a only"
+        libs+=("${base_dir}/${build_dir}/src/${release_dir}/libcrispasr.a")
     fi
+    # Coreml lib lives under src/ as libcrispasr.coreml.a; the glob
+    # above will already have picked it up on macOS/iOS — no extra
+    # work needed.
 
     # Create temporary directory for processing
     local temp_dir="${base_dir}/${build_dir}/temp"
