@@ -1,8 +1,10 @@
 name: Examples WASM
 on:
-  push:
-    branches: ["main"]
-
+  # NOTE: push trigger intentionally absent. The whole job's purpose is
+  # to deploy the WASM examples as a GitHub Pages site, and Pages is
+  # not currently enabled on this repo. Re-add `push: branches: [main]`
+  # together with enabling Pages (Settings → Pages → "GitHub Actions"
+  # source) when there's a need for a hosted demo.
   workflow_dispatch:
 
 permissions:
