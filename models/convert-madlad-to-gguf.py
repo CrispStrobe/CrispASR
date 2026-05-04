@@ -170,8 +170,13 @@ def remap_name(pt_name: str) -> str | None:
     """
     n = pt_name
 
-    # Shared / global embeddings
-    if n == "decoder.embed_tokens.weight":
+    # Shared / global embeddings.
+    # MADLAD-400 (tie_word_embeddings=False) ships the shared encoder/
+    # decoder embedding under `decoder.embed_tokens.weight` and a
+    # separate `lm_head.weight`. flan-t5-small / -base / -large etc.
+    # (tie_word_embeddings=True) ship it under `shared.weight` instead;
+    # in both cases the runtime expects `shared.embed.weight`.
+    if n in ("decoder.embed_tokens.weight", "shared.weight", "encoder.embed_tokens.weight"):
         return "shared.embed.weight"
     if n == "lm_head.weight":
         return "lm_head.weight"

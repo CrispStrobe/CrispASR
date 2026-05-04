@@ -153,21 +153,31 @@ static ggml_tensor* TR(t5_translate_context* c, const char* name) {
 // Bucketed relative positions: maps (query_pos, key_pos) → bucket index
 // Used only in layer 0 attention, shared across all layers.
 
+// T5 relative-position bucketing — bit-equivalent port of canonical
+// HF transformers _relative_position_bucket.  Convention:
+//   rel_pos = key_pos - query_pos
+//   bidirectional (encoder): bucket [N/2..N-1] = future (rel_pos > 0),
+//     bucket [0..N/2-1] = past/self
+//   unidirectional (decoder self-attn): only past survives the causal
+//     mask; we work with |past distance|
+//
+// Earlier version had `int n = -rel_pos; ret += (n < 0) ? 0 : num_buckets`
+// which inverted the future/past halves vs canonical T5 — fixed.
 static int t5_relative_position_bucket(int rel_pos, bool bidirectional, int num_buckets, int max_dist) {
     int ret = 0;
-    int n = -rel_pos;
     if (bidirectional) {
         num_buckets /= 2;
-        ret += (n < 0) ? 0 : num_buckets;
-        n = abs(n);
+        if (rel_pos > 0)
+            ret += num_buckets;
+        rel_pos = std::abs(rel_pos);
     } else {
-        n = std::max(n, 0);
+        rel_pos = -std::min(rel_pos, 0);
     }
-    int max_exact = num_buckets / 2;
-    if (n < max_exact) {
-        ret += n;
+    const int max_exact = num_buckets / 2;
+    if (rel_pos < max_exact) {
+        ret += rel_pos;
     } else {
-        int val = (int)(max_exact + std::log((float)n / max_exact) / std::log((float)max_dist / max_exact) *
+        int val = (int)(max_exact + std::log((float)rel_pos / max_exact) / std::log((float)max_dist / max_exact) *
                                         (num_buckets - max_exact));
         val = std::min(val, num_buckets - 1);
         ret += val;
