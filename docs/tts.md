@@ -149,6 +149,7 @@ defaults reproduce the validated, end-to-end-tested code path.
 | `QWEN3_TTS_PROF` | unset | Per-op profiler (more granular than `BENCH`). |
 | `QWEN3_TTS_CP_BACKEND` | unset | Pin the code predictor to a chosen backend. `cpu`, `cpu-f16`, `cpu-f32` keep its weights on the CPU backend — useful when isolating bugs to the talker vs. code-predictor or when comparing CPU and Metal end-to-end. |
 | `QWEN3_TTS_DUMP_DIR` | unset | Write per-frame intermediate tensors into the named directory. Bulky; intended for diff-harness work (`tools/dump_reference.py --backend qwen3-tts`). |
+| `QWEN3_TTS_CODEC_GPU` | unset | Route the codec decode through the main GPU scheduler instead of the CPU-only `codec_sched`. The codec is pinned to CPU by default to dodge the M1 Metal hang; on CUDA / Vulkan / etc. the hang does not apply and CPU codec is dramatically slower. On Jetson Orin AGX, codec on CPU is ~50× slower than CUDA. Distinct from `QWEN3_TTS_CODEC_FORCE_METAL`, which also moves the codec to the main GPU sched but additionally enables a per-op `ggml_backend_synchronize` trace callback for reproducing the Metal hang — useful for debugging, not for production. |
 
 ## VibeVoice — realtime streaming TTS
 
