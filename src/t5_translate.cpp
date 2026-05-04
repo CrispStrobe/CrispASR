@@ -102,6 +102,21 @@ struct t5_model {
 struct t5_tokenizer {
     std::vector<std::string> id_to_token;
     std::map<std::string, int> token_to_id;
+    // SentencePiece unigram log-likelihoods. Loaded from
+    // `tokenizer.ggml.scores` in the GGUF; used by the Viterbi
+    // tokenizer to pick the highest-probability piece segmentation.
+    // Without scores the previous greedy-longest-match implementation
+    // would tokenize "<2de>" as ["▁<", "2", "de", ">"] (4 pieces)
+    // instead of the SP-correct ["▁", "<2de>"] (2 pieces) — special
+    // tokens have very high scores in the SP model so Viterbi picks
+    // them as single pieces.
+    std::vector<float> scores;
+    // Special token IDs — populated from GGUF metadata + vocab lookup
+    // at load time. Different T5 family models use different IDs:
+    //   flan-t5: <pad>=0, </s>=1, <unk>=2
+    //   MADLAD:  <unk>=0, <s>=1,  </s>=2
+    int eos_id = -1;
+    int unk_id = -1;
 };
 
 // ── Context ──────────────────────────────────────────────────────
@@ -262,6 +277,21 @@ static void load_metadata(t5_translate_context* c, gguf_context* g) {
                 c->tokenizer.token_to_id[c->tokenizer.id_to_token[i]] = i;
             }
         }
+        int sidx = gguf_find_key(g, "tokenizer.ggml.scores");
+        if (sidx >= 0) {
+            const int n = gguf_get_arr_n(g, sidx);
+            c->tokenizer.scores.resize(n);
+            const float* sp = (const float*)gguf_get_arr_data(g, sidx);
+            for (int i = 0; i < n; i++)
+                c->tokenizer.scores[i] = sp[i];
+        }
+        // Populate special-token IDs. eos comes from GGUF metadata
+        // (already loaded into hp.eos_token_id). unk comes from vocab
+        // lookup since different T5 family models put it at different
+        // IDs (flan-t5: 2, MADLAD: 0, mT5: ...).
+        c->tokenizer.eos_id = c->model.hp.eos_token_id;
+        auto unk_it = c->tokenizer.token_to_id.find("<unk>");
+        c->tokenizer.unk_id = (unk_it != c->tokenizer.token_to_id.end()) ? unk_it->second : 2;
     }
 }
 
@@ -362,50 +392,104 @@ static bool bind_model(t5_translate_context* c) {
 // ── Tokenizer ────────────────────────────────────────────────────
 
 static std::vector<int> tokenize_sp(const t5_tokenizer& tok, const std::string& text) {
-    std::vector<int> ids;
-    std::vector<std::string> words;
-    std::string cur;
-    for (char ch : text) {
-        if (ch == ' ' || ch == '\t' || ch == '\n') {
-            if (!cur.empty()) {
-                words.push_back(cur);
-                cur.clear();
-            }
-        } else {
-            cur += ch;
-        }
-    }
-    if (!cur.empty())
-        words.push_back(cur);
+    // Proper SentencePiece unigram tokenization via Viterbi best-segmentation.
+    // Earlier versions used greedy longest-prefix match which mis-tokenizes
+    // multi-byte special tokens — e.g. MADLAD's "<2de>" (id 33) would split
+    // as ["▁<"(4411), "2"(810), "de"(948), ">"(3048)] because "▁<" is a
+    // longer match than "▁" alone. SP picks ["▁"(805), "<2de>"(33)] because
+    // the special-token score dwarfs the per-byte-piece scores.
+    //
+    // Algorithm: replace spaces with ▁, then DP over byte positions:
+    //   dp[i] = (best total score to reach byte i, last_piece_id, prev_pos)
+    // For each position, try all piece lengths up to MAX_PIECE_LEN bytes
+    // forward, looking each substring up in token_to_id, scoring with
+    // tok.scores[id]. Backtrack through dp[] to recover the piece sequence.
+    //
+    // Pieces missing from the vocab fall through to <unk> as in standard SP.
+    constexpr int MAX_PIECE_LEN = 64;  // longest piece in any T5 vocab
+    constexpr float NEG_INF = -1e30f;
+    constexpr float UNK_PENALTY = -100.0f;  // pretend <unk> has very low score
 
-    for (size_t wi = 0; wi < words.size(); wi++) {
-        std::string word = "\xE2\x96\x81" + words[wi];
-        size_t start = 0;
-        while (start < word.size()) {
-            size_t end = word.size();
-            int best_id = -1;
-            while (end > start) {
-                std::string sub = word.substr(start, end - start);
-                auto it = tok.token_to_id.find(sub);
-                if (it != tok.token_to_id.end()) {
-                    best_id = it->second;
-                    break;
+    // Build the SP-style input: leading ▁ + replace spaces with ▁.
+    std::string s;
+    s.reserve(text.size() + 4);
+    s.append("\xE2\x96\x81");
+    for (char ch : text) {
+        if (ch == ' ' || ch == '\t' || ch == '\n')
+            s.append("\xE2\x96\x81");
+        else
+            s.push_back(ch);
+    }
+    const int n = (int)s.size();
+    if (n == 0) {
+        std::vector<int> ids;
+        ids.push_back(tok.eos_id);
+        return ids;
+    }
+
+    // dp[i] is the best total log-prob to reach byte position i; piece_id
+    // is the last piece used; prev is the byte position before it. dp[0]
+    // is the empty-prefix start state.
+    std::vector<float> dp(n + 1, NEG_INF);
+    std::vector<int> piece_id(n + 1, -1);
+    std::vector<int> prev(n + 1, -1);
+    dp[0] = 0.0f;
+
+    for (int i = 0; i < n; i++) {
+        if (dp[i] == NEG_INF)
+            continue;
+        const int max_j = std::min(n, i + MAX_PIECE_LEN);
+        for (int j = i + 1; j <= max_j; j++) {
+            // Avoid splitting in the middle of a UTF-8 codepoint — every
+            // continuation byte starts with 10xxxxxx. SP pieces are always
+            // codepoint-aligned, so a candidate substring whose end is a
+            // continuation byte can't be a vocab match anyway. Skip it.
+            if (j < n && (((unsigned char)s[j]) & 0xC0) == 0x80)
+                continue;
+            std::string sub = s.substr(i, j - i);
+            auto it = tok.token_to_id.find(sub);
+            float score;
+            if (it != tok.token_to_id.end()) {
+                int tid = it->second;
+                score = (tid >= 0 && tid < (int)tok.scores.size()) ? tok.scores[tid] : 0.0f;
+                const float cand = dp[i] + score;
+                if (cand > dp[j]) {
+                    dp[j] = cand;
+                    piece_id[j] = tid;
+                    prev[j] = i;
                 }
-                end--;
-                while (end > start && (word[end] & 0xC0) == 0x80)
-                    end--;
+            } else if (j == i + 1) {
+                // Single-byte fallback: pretend it tokenizes as <unk> with a
+                // heavy penalty so Viterbi only picks it when nothing else
+                // covers the byte. Same shape as SP's byte-fallback branch
+                // when byte_fallback is off.
+                const float cand = dp[i] + UNK_PENALTY;
+                if (cand > dp[j]) {
+                    dp[j] = cand;
+                    piece_id[j] = tok.unk_id;
+                    prev[j] = i;
+                }
             }
-            if (best_id < 0) {
-                ids.push_back(2);
-                break;
-            } // unk → eos as fallback
-            ids.push_back(best_id);
-            start = end;
         }
     }
-    ids.push_back(1); // T5 uses </s> = 1 as EOS
+
+    // Backtrack from position n to 0.
+    std::vector<int> ids;
+    int p_pos = n;
+    while (p_pos > 0) {
+        if (piece_id[p_pos] < 0) {
+            // Should be unreachable — UNK_PENALTY single-byte fallback is
+            // always available. If it happens, bail out gracefully.
+            break;
+        }
+        ids.push_back(piece_id[p_pos]);
+        p_pos = prev[p_pos];
+    }
+    std::reverse(ids.begin(), ids.end());
+    ids.push_back(tok.eos_id);
     return ids;
 }
+
 
 static std::string detokenize(const t5_tokenizer& tok, const std::vector<int>& ids) {
     std::string result;
@@ -940,8 +1024,11 @@ extern "C" char* t5_translate(struct t5_translate_context* ctx, const char* text
 
     // Tokenize (MADLAD: text already contains "<2xx> " prefix)
     std::vector<int> enc_ids = tokenize_sp(ctx->tokenizer, text);
-    if (ctx->params.verbosity >= 2) {
-        fprintf(stderr, "t5: input %zu tokens\n", enc_ids.size());
+    if (ctx->params.verbosity >= 1) {
+        fprintf(stderr, "t5: input %zu tokens [", enc_ids.size());
+        for (size_t i = 0; i < enc_ids.size(); i++)
+            fprintf(stderr, "%d%s", enc_ids[i], i + 1 < enc_ids.size() ? ", " : "");
+        fprintf(stderr, "]\n");
     }
 
     // Encode
