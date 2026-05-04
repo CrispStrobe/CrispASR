@@ -267,6 +267,16 @@ endif ()
 
 if (CRISPASR_BUILD_EXAMPLES)
     add_subdirectory(examples)
+else()
+    # The Ruby/Python/Rust/Dart bindings need the `common` static
+    # library (audio I/O helpers etc.) but NOT the example executables
+    # (cli, server) and not Catch2. examples/CMakeLists.txt has a
+    # `if (CRISPASR_BUILD_COMMON_ONLY)` early-return that builds just
+    # the common+common-crispasr libraries when CRISPASR_BUILD_EXAMPLES
+    # is OFF. Always include it — the early-return is cheap when no
+    # binding is consuming it.
+    set(CRISPASR_BUILD_COMMON_ONLY ON)
+    add_subdirectory(examples)
 endif()
 
 if (MSVC)

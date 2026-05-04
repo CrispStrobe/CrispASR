@@ -87,6 +87,15 @@ target_include_directories(json_cpp INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
+# Bindings (Ruby/Python/Rust/Dart) need just the `common` library —
+# not cli, server, bench, etc. Root CMakeLists.txt sets
+# CRISPASR_BUILD_COMMON_ONLY=ON when CRISPASR_BUILD_EXAMPLES is OFF
+# so the `common` target above gets built but the example
+# executables (which need Catch2 / SDL2 / etc.) don't.
+if (CRISPASR_BUILD_COMMON_ONLY)
+    return()
+endif()
+
 if (EMSCRIPTEN)
     add_subdirectory(crispasr.wasm)
     add_subdirectory(stream.wasm)
