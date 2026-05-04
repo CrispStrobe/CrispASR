@@ -2278,8 +2278,36 @@ No `CAP_TRANSLATE` declared for either — models can't actually translate.
 
 ## 69. Layer + KV CPU-offload knobs (llama.cpp parity)
 
-**Effort:** Medium per backend (~50-80 LOC), times the backends that
-want it. Track here, schedule per-backend on demand.
+**Effort:** Medium-large per backend (~150-200 LOC for the
+weight-residency-aware variant — see scope note below). Originally
+estimated at 50-80 LOC; that turned out to be the *compute-only*
+pattern, which doesn't actually solve the VRAM-pressure problem
+this PLAN entry exists for.
+
+**Two valid designs, only one is useful for #60's case.**
+
+**(a) Compute-only offload** (~50 LOC, kokoro / vibevoice pattern).
+Walk the built graph, call
+`ggml_backend_sched_set_tensor_backend(sched, node, backend_cpu)`
+on the output tensors of layers `il >= n_gpu_layers`. The sched
+handles GPU↔CPU transfers at the op boundary. Weights stay on
+GPU buffer; only the compute moves. Useful for "this op is broken
+on this GPU" (Metal conv_transpose_1d hang, Intel Vulkan workgroup
+limit), useless for "model doesn't fit."
+
+**(b) Weight-residency offload** (~150-200 LOC, llama.cpp's
+`--n-gpu-layers` pattern). Allocate two backend buffers at load
+time: first N layers go on `c->backend` (GPU), rest on
+`c->backend_cpu`. Each `voxtral4b_block` stores tensor pointers
+that already live on the right backend. Graph builder produces
+ops naturally placed by sched (each op's compute follows its
+input weights). Properly fits the VRAM use case — N can be tuned
+down until the GPU residence fits in available VRAM.
+
+**For #60's voxtral4b VRAM problem, only (b) is useful.** The user
+worked around it with `CRISPASR_KV_QUANT=q4_0 + CRISPASR_GGUF_MMAP=1`
+(both already shipped); that combo is the recommended interim
+answer until (b) lands.
 
 **Background.** External feature request via #60: Voxtral 4B
 specifically needs the ability to offload N transformer blocks to
