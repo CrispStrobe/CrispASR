@@ -4,6 +4,111 @@ Test audio: jfk.wav (11.0s), Q4_K quantization, greedy decode (`-bs 1`).
 
 ---
 
+## Backend × Optimization matrix
+
+At-a-glance view of which performance knobs each backend supports today,
+and where the gaps are. Last refresh: **2026-05-04** (after PLAN §79 —
+14-commit session that shipped #69a / #69b / #69e / #72 / #73).
+
+**Legend**: ✓ = supported, opt-in via env var · `F16` = stuck at F16
+(quant cache types unavailable; attention path needs migration) ·
+`—` = not applicable (no KV cache or no transformer blocks) ·
+`·` = applicable but not yet wired (port deferred).
+
+### LLM-decoder ASR (high VRAM, autoregressive)
+
+| backend | KV_QUANT | KV_QUANT_K/_V | KV_ON_CPU | N_GPU_LAYERS | weight residency |
+|---|:-:|:-:|:-:|:-:|:-:|
+| voxtral4b (4B) | ✓ | ✓ | ✓ | ✓ | gpu |
+| voxtral (3B) | ✓ | ✓ | ✓ | ✓ | gpu |
+| granite-speech (1B / 4.0 / 4.1 / 4.1-plus / 4.1-nar) | ✓ | ✓ | ✓ | ✓ | gpu |
+| gemma4-e2b (5B effective) | ✓ | ✓ | ✓ | ✓ | gpu (FLIPPED §72) |
+| mimo-asr (1.4B) | ✓ | ✓ | ✓ | ✓ | gpu (FLIPPED §72) |
+| qwen3-asr (0.6B) | ✓ | ✓ | ✓ | ✓ | gpu |
+| glm-asr (1B) | ✓ | ✓ | ✓ | ✓ | gpu |
+| omniasr-llm (300M) | ✓ | ✓ | ✓ | ✓ | gpu |
+| vibevoice (4B ASR mode) | F16 | F16 | F16 | · | gpu |
+
+### Encoder-decoder ASR (medium VRAM, autoregressive)
+
+| backend | KV_QUANT | KV_QUANT_K/_V | KV_ON_CPU | N_GPU_LAYERS | notes |
+|---|:-:|:-:|:-:|:-:|---|
+| canary (1B) | ✓ | ✓ | ✓ | · | flash_attn_ext shipped, no cast tax |
+| cohere (2B) | ✓ | ✓ | ✓ | · | flash_attn_ext shipped, no cast tax |
+| kyutai-stt (1B) | ✓ | ✓ | ✓ | · | flash_attn_ext native, quant-safe |
+| firered-asr (900M) | — | — | — | — | inline AED, no exposed transformer KV |
+| moonshine-tiny / streaming | — | — | — | — | tiny decoder, no exposed KV |
+
+### Encoder-only ASR (low VRAM, single forward)
+
+| backend | KV_QUANT | KV_QUANT_K/_V | KV_ON_CPU | N_GPU_LAYERS | notes |
+|---|:-:|:-:|:-:|:-:|---|
+| whisper (legacy) | ✓ | ✓ | ✓ | — | upstream loader, separate path |
+| parakeet (TDT) | — | — | — | — | RNN-T transducer, no KV cache |
+| fastconformer-ctc | — | — | — | — | CTC head |
+| wav2vec2 / hubert / data2vec | — | — | — | — | CTC heads |
+| omniasr (CTC variant) | — | — | — | — | CTC head |
+
+### TTS
+
+| backend | KV_QUANT | KV_QUANT_K/_V | KV_ON_CPU | N_GPU_LAYERS | notes |
+|---|:-:|:-:|:-:|:-:|---|
+| orpheus (3B + DE / lex-au variants) | ✓ | ✓ | ✓ | ✓ | shared Llama-3 path |
+| chatterbox (T3 + CFG cache) | ✓ | ✓ | ✓ | · | uses kv_self_attn natively |
+| qwen3-tts (0.6B + 1.7B variants) | ✓ talker | ✓ talker | ✓ talker | · | code-predictor cache stays F16 (separate path) |
+| vibevoice (4B TTS mode) | F16 | F16 | F16 | · | same migration block as ASR mode |
+| kokoro | — | — | — | — | non-AR vocoder, no transformer KV |
+
+### Where the gaps are
+
+1. **Layer offload (`N_GPU_LAYERS`) on encoder-decoder ASR** (canary,
+   cohere, kyutai-stt). Their cross-attention layout doesn't have the
+   `blk.<N>.*` block-tagged tensors that the layer-split predicate
+   recognises. Encoder-decoder offload is its own design problem —
+   probably want to offload only the LLM/decoder side, but the tensor
+   names (`<arch>.dec.<N>.*` etc.) need bespoke per-backend predicates.
+2. **vibevoice quant K/V (both modes)**. The attention path uses the
+   `ggml_cpy(K_perm, view_into_kv_k)` pattern that's incompatible with
+   quant K/V (see LEARNINGS.md "ggml_cont(ggml_permute(quant_tensor))
+   doesn't move data"). Migration recipe is the canary/cohere
+   `ggml_flash_attn_ext` port — ~50-80 LOC + F16 mask graph input.
+   Same recipe would unblock layer offload.
+3. **qwen3-tts code-predictor cache**. Talker KV is fully covered via
+   `core_attn::kv_self_attn`; the secondary code-predictor path
+   doesn't go through that helper, so its cache stays F16. Lower-
+   priority since the talker dominates per-frame cost.
+4. **Linux/CUDA validation of #72 GPU residency.** mimo-asr 22 % /
+   gemma4-e2b 2.2x speedups were measured on Apple Silicon Metal.
+   dGPU should be even more favourable; deferred until a CUDA host
+   is available. If a platform regresses, gate via env
+   (`CRISPASR_FORCE_CPU_WEIGHTS=1`).
+
+### Stacking the four knobs
+
+Each addresses an independent bottleneck:
+
+| knob | addresses | when to use |
+|---|---|---|
+| `CRISPASR_KV_QUANT_K=q8_0 / _V=q4_0` | KV size in VRAM | always reasonable for LLM-decode ASR; quartered V cache on long context |
+| `CRISPASR_KV_ON_CPU=1` | KV doesn't fit in VRAM at all | very long context with a tight VRAM budget |
+| `CRISPASR_N_GPU_LAYERS=N` | model itself doesn't fit in VRAM | model size > VRAM; spill the last (total-N) layers |
+| `CRISPASR_FORCE_CPU_WEIGHTS=1` (proposed) | platform regressed on §72 GPU residency | not yet wired — none seen on Apple Silicon |
+
+```bash
+# Maximum-memory-savings combo for a VRAM-tight host
+CRISPASR_N_GPU_LAYERS=10 \
+  CRISPASR_KV_ON_CPU=1 \
+  CRISPASR_KV_QUANT_K=q8_0 \
+  CRISPASR_KV_QUANT_V=q4_0 \
+  ./build/bin/crispasr --backend voxtral4b -m auto -f long.wav
+```
+
+See [`docs/cli.md`](docs/cli.md) "Memory footprint" for the full env-
+var reference and the llama.cpp parity comparison table; HISTORY §79
+for the implementation write-up.
+
+---
+
 ## Kaggle T4 GPU — 2026-04-26
 
 Platform: 2x Tesla T4 (15 GB VRAM each), 4 CPU threads, CUDA.
