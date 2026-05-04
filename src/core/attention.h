@@ -126,6 +126,64 @@ inline ggml_backend_t kv_backend_from_env(ggml_backend_t gpu_backend, ggml_backe
     return cpu_backend;
 }
 
+// PLAN #73 — quant-safe per-step KV cache write. Replaces the inline
+// `ggml_cpy(K_perm, ggml_view_4d(kv_k, …))` pattern that several
+// backends use (canary, cohere, kyutai_stt, …). Works for any cache
+// dtype: F16 / F32 take the strided-view + ggml_cpy path (preserved
+// for bit-exactness with the legacy code), Q8_0 / Q4_0 take a
+// ggml_set_rows path keyed by a runtime indices tensor.
+//
+// Caller responsibilities:
+//   * `K_perm` / `V_perm` shape: [head_dim, T, n_kv_heads], i.e.
+//     already permuted from the QKV layout into cache layout.
+//   * `kv_k` / `kv_v` shape: [head_dim, max_ctx, n_kv_heads, n_layers].
+//   * `indices` is an I32 tensor of length T containing the cache
+//     positions to write to (typically `[n_past, n_past+T)` — the
+//     same tensor used as RoPE positions). Required for quant cache;
+//     may be nullptr for F16/F32 (the fast static-offset path will
+//     be used).
+//
+// Adds the K and V writes to `gf` via ggml_build_forward_expand. The
+// returned bool is informational: true if the quant path was taken,
+// false for the F16 fast path.
+inline bool kv_cache_write(ggml_context* ctx, ggml_cgraph* gf, ggml_tensor* K_perm, ggml_tensor* V_perm,
+                           ggml_tensor* kv_k, ggml_tensor* kv_v, int layer_idx, int n_past, int T,
+                           ggml_tensor* indices) {
+    const bool quant_k = ggml_is_quantized(kv_k->type);
+    const bool quant_v = ggml_is_quantized(kv_v->type);
+    const bool quant_any = quant_k || quant_v;
+
+    if (!quant_any) {
+        // Legacy F16/F32 path: strided view + ggml_cpy. Bit-identical
+        // to the inline code that callers used to have.
+        const int hd = (int)kv_k->ne[0];
+        const int nh = (int)kv_k->ne[2];
+        ggml_tensor* k_dst = ggml_view_4d(ctx, kv_k, hd, T, nh, 1, kv_k->nb[1], kv_k->nb[2], kv_k->nb[3],
+                                          (size_t)layer_idx * kv_k->nb[3] + (size_t)n_past * kv_k->nb[1]);
+        ggml_build_forward_expand(gf, ggml_cpy(ctx, K_perm, k_dst));
+        ggml_tensor* v_dst = ggml_view_4d(ctx, kv_v, hd, T, nh, 1, kv_v->nb[1], kv_v->nb[2], kv_v->nb[3],
+                                          (size_t)layer_idx * kv_v->nb[3] + (size_t)n_past * kv_v->nb[1]);
+        ggml_build_forward_expand(gf, ggml_cpy(ctx, V_perm, v_dst));
+        return false;
+    }
+
+    // Quant path: ggml_set_rows expects rows along ne[0] of the dst.
+    // The cache layout is [hd, max_ctx, n_kv, n_layers]; rows are along
+    // max_ctx (dim 1). So we view the layer slice as [hd, max_ctx, nh],
+    // then ggml_set_rows writes T rows at positions given by `indices`.
+    GGML_ASSERT(indices && "kv_cache_write: quant cache requires indices tensor");
+    const int hd = (int)kv_k->ne[0];
+    const int nh = (int)kv_k->ne[2];
+    ggml_tensor* k_layer = ggml_view_3d(ctx, kv_k, hd, (int)kv_k->ne[1], nh, kv_k->nb[1], kv_k->nb[2],
+                                        (size_t)layer_idx * kv_k->nb[3]);
+    ggml_tensor* v_layer = ggml_view_3d(ctx, kv_v, hd, (int)kv_v->ne[1], nh, kv_v->nb[1], kv_v->nb[2],
+                                        (size_t)layer_idx * kv_v->nb[3]);
+    ggml_build_forward_expand(gf, ggml_set_rows(ctx, k_layer, K_perm, indices));
+    ggml_build_forward_expand(gf, ggml_set_rows(ctx, v_layer, V_perm, indices));
+    (void)n_past; // unused on quant path; indices carries position info
+    return true;
+}
+
 // Parameters that differ from call to call. Everything here is a plain
 // value type so the compiler can inline the caller's constants into the
 // helper's ggml_* op chain.

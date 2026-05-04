@@ -562,13 +562,13 @@ static bool kv_cache_init(kyutai_stt_context* ctx, int max_ctx) {
     if (!ctx->kv_ctx)
         return false;
 
-    // KV dtype stays F16 here — kyutai_stt's attention path writes via
-    // ggml_cpy() into a strided view of the cache, which is incompatible
-    // with quant types. Migration to core_attn::kv_self_attn would unlock
-    // CRISPASR_KV_QUANT_K/_V; until then only the on-CPU spill knob is
-    // wired.
-    ctx->kv_k = ggml_new_tensor_4d(ctx->kv_ctx, GGML_TYPE_F16, hp.head_dim, max_ctx, hp.num_heads, hp.num_layers);
-    ctx->kv_v = ggml_new_tensor_4d(ctx->kv_ctx, GGML_TYPE_F16, hp.head_dim, max_ctx, hp.num_heads, hp.num_layers);
+    // PLAN #60e + #69e: per-half KV dtype. kyutai_stt's per-step write
+    // goes through core_attn::kv_cache_write (added by PLAN #73), which
+    // dispatches to ggml_set_rows for quant types and the legacy
+    // ggml_cpy(view) path for F16/F32.
+    const auto kv_pair = core_attn::kv_dtype_pair_from_env("kyutai_stt");
+    ctx->kv_k = ggml_new_tensor_4d(ctx->kv_ctx, kv_pair.k, hp.head_dim, max_ctx, hp.num_heads, hp.num_layers);
+    ctx->kv_v = ggml_new_tensor_4d(ctx->kv_ctx, kv_pair.v, hp.head_dim, max_ctx, hp.num_heads, hp.num_layers);
 
     // PLAN #69b: optional KV-on-CPU spill for VRAM-tight users.
     ggml_backend_t kv_backend = core_attn::kv_backend_from_env(ctx->backend, ctx->backend_cpu, "kyutai_stt");
@@ -926,19 +926,12 @@ static ggml_tensor* build_lm_step(ggml_context* ctx, ggml_cgraph* gf, kyutai_stt
         ggml_tensor* K_perm = ggml_permute(ctx, K_cur, 0, 2, 1, 3); // [hd, 1, nh]
         ggml_tensor* V_perm = ggml_permute(ctx, V_cur, 0, 2, 1, 3);
 
-        // Write K, V into cache at position n_past
-        // KV cache shape: [head_dim, max_ctx, n_heads, n_layers]
-        {
-            ggml_tensor* k_dst =
-                ggml_view_4d(ctx, sctx->kv_k, hd, 1, nh, 1, sctx->kv_k->nb[1], sctx->kv_k->nb[2], sctx->kv_k->nb[3],
-                             (size_t)li * sctx->kv_k->nb[3] + (size_t)n_past * sctx->kv_k->nb[1]);
-            ggml_build_forward_expand(gf, ggml_cpy(ctx, K_perm, k_dst));
-
-            ggml_tensor* v_dst =
-                ggml_view_4d(ctx, sctx->kv_v, hd, 1, nh, 1, sctx->kv_v->nb[1], sctx->kv_v->nb[2], sctx->kv_v->nb[3],
-                             (size_t)li * sctx->kv_v->nb[3] + (size_t)n_past * sctx->kv_v->nb[1]);
-            ggml_build_forward_expand(gf, ggml_cpy(ctx, V_perm, v_dst));
-        }
+        // PLAN #73: cache write via core_attn helper. F16/F32 caches go
+        // the legacy ggml_cpy(view) path (bit-identical to before);
+        // Q8_0/Q4_0 caches go ggml_set_rows(positions). The `positions`
+        // tensor is already populated with [n_past] above, so it doubles
+        // as the row-index input.
+        core_attn::kv_cache_write(ctx, gf, K_perm, V_perm, sctx->kv_k, sctx->kv_v, li, n_past, /*T=*/1, positions);
 
         // Read full K, V from cache [head_dim, n_past+1, n_heads]
         int kv_len = n_past + 1;

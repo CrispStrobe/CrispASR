@@ -2866,7 +2866,7 @@ the same 22%–220% range. If a platform regresses, add a
 `CRISPASR_FORCE_CPU_WEIGHTS=1` escape hatch — none seen yet on
 Apple Silicon, so deferred.
 
-## 73. Migrate canary / cohere / kyutai_stt attention to `kv_self_attn`
+## 73. Quant-safe KV cache write for canary / cohere / kyutai_stt — KYUTAI SHIPPED 2026-05-04, REST OPEN
 
 Tier-2 K/V split (#69e) shipped KV-on-CPU spill (#69b) on canary,
 cohere, kyutai_stt but NOT asymmetric K/V quant — because their
@@ -2947,3 +2947,56 @@ kyutai-stt (longest decode, biggest KV-bandwidth bottleneck).
   (#69a) for these backends; that's the separate "different tensor
   naming scheme" issue (canary/cohere don't have `blk.` prefix; their
   cross-attention layout differs).
+
+### Status (2026-05-04)
+
+**kyutai_stt — DONE.** Single-token autoregressive decode with a
+runtime `lm_pos` tensor that's already populated with `[n_past]` for
+RoPE — same tensor doubles as the row-index input for the new quant
+write path. Migration was a clean 12-line replacement of the inline
+`ggml_cpy(view)` block with a call to the new
+`core_attn::kv_cache_write` helper. F16 baseline preserved bit-
+identically (legacy strided-view path); Q8_0/Q8_0 and Q8_0/Q4_0
+now work end-to-end, validated on JFK.
+
+**canary, cohere — STILL OPEN.** Both write multi-token slices to
+the cache (prefill batch of size N, then 1-token decode steps). The
+helper handles this — pass `T = n_tokens` and an indices tensor of
+length `n_tokens` containing `[offset, offset+1, …, offset+n_tokens-1)`.
+The complication: neither backend currently builds such a tensor as
+a graph input. Adding it is straightforward (~20 LOC per backend +
+host-side population of the indices buffer per call), but should be
+done with care:
+
+- canary's `offset` lives in the host integer state outside the
+  graph; the indices tensor needs to be a `ggml_set_input` populated
+  per call.
+- cohere has the same pattern (decoder offset + n_tokens variable).
+- Validation: F16 bit-identical first (legacy fast path is preserved
+  in the helper), then Q8_0 K, then Q8_0/Q4_0 asymmetric.
+
+### New helper (shipped)
+
+`src/core/attention.h` got a new free function:
+
+```cpp
+inline bool core_attn::kv_cache_write(
+    ggml_context*  ctx,
+    ggml_cgraph*   gf,
+    ggml_tensor*   K_perm,    // [head_dim, T, n_kv_heads]
+    ggml_tensor*   V_perm,    // [head_dim, T, n_kv_heads]
+    ggml_tensor*   kv_k,      // [head_dim, max_ctx, n_kv_heads, n_layers]
+    ggml_tensor*   kv_v,
+    int            layer_idx,
+    int            n_past,
+    int            T,
+    ggml_tensor*   indices    // I32 [T] — required for quant, may be nullptr for F16/F32
+);
+```
+
+Returns true if the quant `ggml_set_rows` path was taken, false for
+the legacy `ggml_cpy(view)` fast path. Designed to be a drop-in for
+existing inline cache-write code blocks; doesn't require migrating
+the QKV projection or read paths (which is what made the fuller
+`kv_self_attn` migration too risky for combined-QKV backends like
+kyutai_stt).
