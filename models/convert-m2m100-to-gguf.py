@@ -298,7 +298,7 @@ def is_f32_tensor(gguf_name: str, shape: tuple[int, ...]) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def build_vocab(model_dir: Path) -> tuple[list[str], list[float]]:
+def build_vocab(model_dir: Path) -> tuple[list[str], list[float], list[str]]:
     """
     Build the full M2M-100 vocabulary token list and score list.
 
@@ -360,37 +360,55 @@ def build_vocab(model_dir: Path) -> tuple[list[str], list[float]]:
             return sp.get_score(spm_id)
         return 0.0
 
-    # Determine total vocab size
-    vocab_size_base = len(inv_vj)   # 128004
-    n_lang = len(LANG_CODES)        # 100
-    # Target is 128112 (from config)
-    vocab_size = 128112
+    # Read lang codes from tokenizer_config.json (model-specific)
+    tok_cfg_path = model_dir / "tokenizer_config.json"
+    lang_codes_list: list[str] = []
+    if tok_cfg_path.exists():
+        with open(tok_cfg_path) as f:
+            tok_cfg = json.load(f)
+        for s in tok_cfg.get("additional_special_tokens", []):
+            if s.startswith("__") and s.endswith("__") and len(s) >= 5:
+                lang_codes_list.append(s[2:-2])  # strip __ ... __
+    if not lang_codes_list:
+        lang_codes_list = list(LANG_CODES)  # fallback to hardcoded 100
+    n_lang = len(lang_codes_list)
+
+    # Read target vocab_size from config.json
+    cfg_path = model_dir / "config.json"
+    target_vocab_size = None
+    if cfg_path.exists():
+        with open(cfg_path) as f:
+            target_vocab_size = json.load(f).get("vocab_size")
+
+    vocab_size_base = len(inv_vj)
+    vocab_size = target_vocab_size if target_vocab_size else (vocab_size_base + n_lang)
 
     tokens: list[str] = []
     scores: list[float] = []
 
-    # IDs 0 .. 128003 from vocab.json
+    # IDs 0 .. vocab_size_base-1 from vocab.json
     for i in range(vocab_size_base):
         tok = inv_vj.get(i, f"[UNK_{i}]")
         tokens.append(tok)
         scores.append(get_spm_score(i))
 
-    # IDs 128004 .. 128103 — language tokens
-    for code in LANG_CODES:
+    # Language tokens at IDs vocab_size_base .. vocab_size_base+n_lang-1
+    for code in lang_codes_list:
         tokens.append(f"__{code}__")
         scores.append(0.0)
 
-    # Pad to vocab_size with empty strings
+    # Pad to vocab_size with empty strings if needed
     while len(tokens) < vocab_size:
         tokens.append("")
         scores.append(0.0)
 
-    assert len(tokens) == vocab_size, f"expected {vocab_size}, got {len(tokens)}"
-    assert len(scores) == vocab_size
+    # Truncate if we overshot (shouldn't happen with correct config)
+    tokens = tokens[:vocab_size]
+    scores = scores[:vocab_size]
 
     print(f"  vocab:   {vocab_size} tokens ({vocab_size_base} from vocab.json, "
-          f"{n_lang} lang codes, {vocab_size - vocab_size_base - n_lang} padding)")
-    return tokens, scores
+          f"{n_lang} lang codes, {max(0, vocab_size - vocab_size_base - n_lang)} padding)")
+    return tokens, scores, lang_codes_list
 
 
 # ---------------------------------------------------------------------------
@@ -439,7 +457,7 @@ def convert(input_dir: Path, out_path: Path) -> None:
     print(f"  tensors: {len(sd)} in state dict")
 
     # ---- vocabulary ----
-    tokens, scores = build_vocab(input_dir)
+    tokens, scores, lang_codes_list = build_vocab(input_dir)
 
     # ---- sinusoidal positional embeddings ----
     # M2M-100 uses offset=2 (padding_idx=1); shape = (max_pos+2, d_model)
@@ -472,9 +490,13 @@ def convert(input_dir: Path, out_path: Path) -> None:
     writer.add_array("tokenizer.ggml.tokens", tokens)
     writer.add_array("tokenizer.ggml.scores", scores)
 
-    # Language codes and their token IDs
-    lang_token_ids = [LANG_TOKEN_ID_START + i for i in range(len(LANG_CODES))]
-    writer.add_array("m2m100.lang_codes",    LANG_CODES)
+    # Language codes and their token IDs (dynamic, read from tokenizer_config)
+    # Lang tokens start right after the base vocab from vocab.json
+    vj_path = input_dir / "vocab.json"
+    with open(vj_path) as f:
+        lang_start_id = len(json.load(f))
+    lang_token_ids = [lang_start_id + i for i in range(len(lang_codes_list))]
+    writer.add_array("m2m100.lang_codes",    lang_codes_list)
     writer.add_array("m2m100.lang_token_ids", lang_token_ids)
 
     n_written = 0

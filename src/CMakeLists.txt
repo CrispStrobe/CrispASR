@@ -610,6 +610,18 @@ if(NOT MSVC)
 endif()
 
 # ---------------------------------------------------------------------------
+# t5_translate — T5 encoder-decoder translation (MADLAD-400, mT5, Flan-T5)
+# ---------------------------------------------------------------------------
+add_library(t5_translate STATIC t5_translate.h t5_translate.cpp)
+set_target_properties(t5_translate PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(t5_translate PUBLIC .)
+target_compile_features   (t5_translate PUBLIC cxx_std_17)
+target_link_libraries     (t5_translate PUBLIC crispasr-core ggml ggml-base ggml-cpu)
+if(NOT MSVC)
+    target_compile_options(t5_translate PRIVATE -O3)
+endif()
+
+# ---------------------------------------------------------------------------
 # omniasr — Facebook OmniASR-CTC (wav2vec2-style, 1600+ languages)
 # ---------------------------------------------------------------------------
 add_library(omniasr STATIC omniasr.h omniasr.cpp)
