@@ -13,6 +13,7 @@
 
 #include "chatterbox.h"
 #include "chatterbox_s3gen.h"
+#include "core/bpe.h"
 #include "core/ffn.h"
 #include "core/gguf_loader.h"
 #include "core/attention.h"
@@ -39,6 +40,7 @@ namespace {
 // ── Hyperparameters ──────────────────────────────────────────────
 
 struct cb_t3_hp {
+    std::string arch = "chatterbox"; // "chatterbox" (Llama) or "kartoffelbox" (GPT-2)
     uint32_t n_layers = 30;
     uint32_t hidden_size = 1024;
     uint32_t n_heads = 16;
@@ -64,6 +66,9 @@ struct cb_t3_hp {
     uint32_t speech_cond_prompt_len = 150;
     uint32_t speaker_embed_size = 256;
     uint32_t perceiver_n_queries = 32;
+
+    // Kartoffelbox GPT-2 specific
+    uint32_t wpe_max_positions = 8196;
 };
 
 // ── Tensor structs ───────────────────────────────────────────────
@@ -80,6 +85,21 @@ struct cb_t3_layer {
     ggml_tensor* ffn_down_w = nullptr;
 };
 
+struct cb_t3_gpt2_block {
+    ggml_tensor* attn_norm_w = nullptr;   // ln_1.weight
+    ggml_tensor* attn_norm_b = nullptr;   // ln_1.bias
+    ggml_tensor* attn_qkv_w = nullptr;    // c_attn.weight (1024 -> 3072)
+    ggml_tensor* attn_qkv_b = nullptr;    // c_attn.bias
+    ggml_tensor* attn_output_w = nullptr; // c_proj.weight
+    ggml_tensor* attn_output_b = nullptr; // c_proj.bias
+    ggml_tensor* ffn_norm_w = nullptr;    // ln_2.weight
+    ggml_tensor* ffn_norm_b = nullptr;    // ln_2.bias
+    ggml_tensor* ffn_fc_w = nullptr;      // c_fc.weight (1024 -> 4096)
+    ggml_tensor* ffn_fc_b = nullptr;      // c_fc.bias
+    ggml_tensor* ffn_proj_w = nullptr;    // c_proj.weight (4096 -> 1024)
+    ggml_tensor* ffn_proj_b = nullptr;    // c_proj.bias
+};
+
 struct cb_t3_model {
     // Custom embeddings
     ggml_tensor* text_emb_w = nullptr;       // (text_vocab, hidden)
@@ -87,12 +107,18 @@ struct cb_t3_model {
     ggml_tensor* text_pos_emb_w = nullptr;   // (text_pos_size, hidden)
     ggml_tensor* speech_pos_emb_w = nullptr; // (speech_pos_size, hidden)
 
-    // Transformer blocks
+    // Transformer blocks (Llama path)
     std::vector<cb_t3_layer> blocks;
     ggml_tensor* output_norm_w = nullptr;
 
+    // GPT-2 blocks (Kartoffelbox path)
+    std::vector<cb_t3_gpt2_block> gpt2_blocks;
+    ggml_tensor* output_norm_b = nullptr; // ln_f.bias (GPT-2 only)
+    ggml_tensor* wpe_w = nullptr;         // wpe.weight (GPT-2 only)
+
     // Heads
     ggml_tensor* speech_head_w = nullptr; // (speech_vocab, hidden)
+    ggml_tensor* speech_head_b = nullptr; // (speech_vocab) — GPT-2 only
     ggml_tensor* text_head_w = nullptr;   // (text_vocab, hidden)
 
     // Conditioning encoder
@@ -144,6 +170,9 @@ struct cb_precomputed_conds {
 struct cb_tokenizer {
     std::unordered_map<std::string, int32_t> token_to_id;
     std::vector<std::string> id_to_token;
+    // GPT-2 BPE (Kartoffelbox only)
+    std::unordered_map<std::string, int32_t> merge_rank; // "left right" → rank
+    bool has_bpe = false;
 };
 
 // ── Punctuation normalization (from chatterbox/tts.py) ──────────
@@ -208,6 +237,73 @@ static std::vector<int32_t> tokenize_text(const cb_tokenizer& tok, const std::st
         }
     }
     return tokens;
+}
+
+// GPT-2 BPE tokenization (Kartoffelbox path)
+static std::vector<int32_t> tokenize_text_bpe(const cb_tokenizer& tok, const std::string& text) {
+    if (!tok.has_bpe) {
+        // Fallback to character-level if no merges loaded
+        return tokenize_text(tok, text);
+    }
+    const auto& be = core_bpe::byte_encoder();
+    std::vector<int32_t> result;
+
+    // GPT-2 pre-tokenizer: split on whitespace boundaries (simplified)
+    // Each word gets a leading Ġ (U+0120) if preceded by space
+    std::string buf;
+    for (size_t i = 0; i < text.size(); i++) {
+        if (i > 0 && text[i] != ' ' && text[i - 1] == ' ') {
+            // Encode accumulated word
+            if (!buf.empty()) {
+                std::string encoded;
+                for (uint8_t b : buf) {
+                    int cp = be[b];
+                    if (cp < 128)
+                        encoded += (char)cp;
+                    else {
+                        // UTF-8 encode the codepoint
+                        if (cp < 0x80)
+                            encoded += (char)cp;
+                        else if (cp < 0x800) {
+                            encoded += (char)(0xC0 | (cp >> 6));
+                            encoded += (char)(0x80 | (cp & 0x3F));
+                        } else {
+                            encoded += (char)(0xE0 | (cp >> 12));
+                            encoded += (char)(0x80 | ((cp >> 6) & 0x3F));
+                            encoded += (char)(0x80 | (cp & 0x3F));
+                        }
+                    }
+                }
+                core_bpe::bpe_one(tok.token_to_id, tok.merge_rank, encoded, result);
+                buf.clear();
+            }
+            // Start new word with Ġ prefix (byte 0x20 = space maps to Ġ = U+0120)
+        }
+        if (text[i] != ' ' || i == 0 || text[i - 1] != ' ') {
+            buf += text[i];
+        }
+    }
+    // Encode remaining
+    if (!buf.empty()) {
+        std::string encoded;
+        for (uint8_t b : buf) {
+            int cp = be[b];
+            if (cp < 128)
+                encoded += (char)cp;
+            else {
+                if (cp < 0x800) {
+                    encoded += (char)(0xC0 | (cp >> 6));
+                    encoded += (char)(0x80 | (cp & 0x3F));
+                } else {
+                    encoded += (char)(0xE0 | (cp >> 12));
+                    encoded += (char)(0x80 | ((cp >> 6) & 0x3F));
+                    encoded += (char)(0x80 | (cp & 0x3F));
+                }
+            }
+        }
+        core_bpe::bpe_one(tok.token_to_id, tok.merge_rank, encoded, result);
+    }
+    return result;
 }
 
 // ── Sampler ──────────────────────────────────────────────────────
@@ -312,6 +408,7 @@ static int32_t sample_token(const float* logits, int vocab_size, float temperatu
 // ── Bind T3 tensors ─────────────────────────────────────────────
 
 static bool bind_t3(chatterbox_context* c);
+static bool bind_t3_gpt2(chatterbox_context* c);
 static bool bind_ve(chatterbox_context* c);
 static void load_metadata(chatterbox_context* c, gguf_context* g);
 
@@ -389,6 +486,7 @@ namespace {
 
 static void load_metadata(chatterbox_context* c, gguf_context* g) {
     auto& hp = c->hp;
+    hp.arch = core_gguf::kv_str(g, "chatterbox.t3.arch", "chatterbox");
     hp.n_layers = core_gguf::kv_u32(g, "chatterbox.t3.n_layers", hp.n_layers);
     hp.hidden_size = core_gguf::kv_u32(g, "chatterbox.t3.hidden_size", hp.hidden_size);
     hp.n_heads = core_gguf::kv_u32(g, "chatterbox.t3.n_heads", hp.n_heads);
@@ -414,18 +512,39 @@ static void load_metadata(chatterbox_context* c, gguf_context* g) {
     hp.speech_cond_prompt_len = core_gguf::kv_u32(g, "chatterbox.t3.speech_cond_prompt_len", hp.speech_cond_prompt_len);
     hp.speaker_embed_size = core_gguf::kv_u32(g, "chatterbox.t3.speaker_embed_size", hp.speaker_embed_size);
     hp.perceiver_n_queries = core_gguf::kv_u32(g, "chatterbox.t3.perceiver_n_queries", hp.perceiver_n_queries);
+    hp.wpe_max_positions = core_gguf::kv_u32(g, "chatterbox.t3.wpe_max_positions", hp.wpe_max_positions);
 
     // Precomputed conds
     c->conds.emotion_adv = core_gguf::kv_f32(g, "chatterbox.conds.emotion_adv", c->conds.emotion_adv);
     c->conds.gen_prompt_token_len = core_gguf::kv_u32(g, "chatterbox.conds.gen_prompt_token_len", 0);
 
-    // Text tokenizer vocab
-    auto tok_array = core_gguf::kv_str_array(g, "chatterbox.t3.text_tokens");
-    if (!tok_array.empty()) {
-        c->tokenizer.id_to_token = std::move(tok_array);
+    // Text tokenizer vocab — try GPT-2 BPE first, then character-level
+    auto bpe_tokens = core_gguf::kv_str_array(g, "tokenizer.ggml.tokens");
+    if (!bpe_tokens.empty()) {
+        // GPT-2 BPE tokenizer (Kartoffelbox)
+        c->tokenizer.id_to_token = std::move(bpe_tokens);
         c->tokenizer.token_to_id.reserve(c->tokenizer.id_to_token.size());
         for (int i = 0; i < (int)c->tokenizer.id_to_token.size(); i++) {
             c->tokenizer.token_to_id[c->tokenizer.id_to_token[i]] = i;
+        }
+        auto merges = core_gguf::kv_str_array(g, "tokenizer.ggml.merges");
+        for (int i = 0; i < (int)merges.size(); i++) {
+            c->tokenizer.merge_rank[merges[i]] = i;
+        }
+        c->tokenizer.has_bpe = !merges.empty();
+        if (c->params.verbosity >= 1 && c->tokenizer.has_bpe) {
+            fprintf(stderr, "chatterbox: GPT-2 BPE tokenizer: %zu tokens, %zu merges\n",
+                    c->tokenizer.id_to_token.size(), c->tokenizer.merge_rank.size());
+        }
+    } else {
+        // Character-level tokenizer (base Chatterbox)
+        auto tok_array = core_gguf::kv_str_array(g, "chatterbox.t3.text_tokens");
+        if (!tok_array.empty()) {
+            c->tokenizer.id_to_token = std::move(tok_array);
+            c->tokenizer.token_to_id.reserve(c->tokenizer.id_to_token.size());
+            for (int i = 0; i < (int)c->tokenizer.id_to_token.size(); i++) {
+                c->tokenizer.token_to_id[c->tokenizer.id_to_token[i]] = i;
+            }
         }
     }
 }
@@ -496,6 +615,72 @@ static bool bind_t3(chatterbox_context* c) {
     }
 
     // Precomputed conds
+    c->conds.speaker_emb = core_gguf::try_get(ts, "conds.t3.speaker_emb");
+    c->conds.speech_prompt_tokens = core_gguf::try_get(ts, "conds.t3.speech_prompt_tokens");
+    c->conds.gen_prompt_token = core_gguf::try_get(ts, "conds.gen.prompt_token");
+    c->conds.gen_prompt_feat = core_gguf::try_get(ts, "conds.gen.prompt_feat");
+    c->conds.gen_embedding = core_gguf::try_get(ts, "conds.gen.embedding");
+    c->conds.loaded = (c->conds.speaker_emb != nullptr);
+
+    return true;
+}
+
+// ── Bind GPT-2 T3 tensors (Kartoffelbox) ────────────────────────
+
+static bool bind_t3_gpt2(chatterbox_context* c) {
+    auto& m = c->t3;
+    auto& ts = c->tensors;
+    const char* tag = "kartoffelbox";
+
+    m.text_emb_w = core_gguf::require(ts, "t3.text_emb.weight", tag);
+    m.speech_emb_w = core_gguf::require(ts, "t3.speech_emb.weight", tag);
+    m.wpe_w = core_gguf::require(ts, "t3.wpe.weight", tag);
+    m.output_norm_w = core_gguf::require(ts, "t3.output_norm.weight", tag);
+    m.output_norm_b = core_gguf::require(ts, "t3.output_norm.bias", tag);
+    m.speech_head_w = core_gguf::require(ts, "t3.speech_head.weight", tag);
+    m.speech_head_b = core_gguf::try_get(ts, "t3.speech_head.bias");
+    m.text_head_w = core_gguf::try_get(ts, "t3.text_head.weight");
+
+    // Conditioning
+    m.cond_spkr_w = core_gguf::try_get(ts, "t3.cond.spkr_enc.weight");
+    m.cond_spkr_b = core_gguf::try_get(ts, "t3.cond.spkr_enc.bias");
+
+    if (!m.text_emb_w || !m.speech_emb_w || !m.wpe_w || !m.output_norm_w || !m.output_norm_b || !m.speech_head_w) {
+        return false;
+    }
+
+    // GPT-2 transformer blocks
+    m.gpt2_blocks.resize(c->hp.n_layers);
+    for (uint32_t i = 0; i < c->hp.n_layers; i++) {
+        auto& b = m.gpt2_blocks[i];
+        char key[96];
+#define BIND_GPT2(fld, sub)                                                                                            \
+    do {                                                                                                               \
+        std::snprintf(key, sizeof(key), "t3.blk.%u." sub, i);                                                          \
+        b.fld = core_gguf::require(ts, key, tag);                                                                      \
+    } while (0)
+        BIND_GPT2(attn_norm_w, "attn_norm.weight");
+        BIND_GPT2(attn_norm_b, "attn_norm.bias");
+        BIND_GPT2(attn_qkv_w, "attn_qkv.weight");
+        BIND_GPT2(attn_qkv_b, "attn_qkv.bias");
+        BIND_GPT2(attn_output_w, "attn_output.weight");
+        BIND_GPT2(attn_output_b, "attn_output.bias");
+        BIND_GPT2(ffn_norm_w, "ffn_norm.weight");
+        BIND_GPT2(ffn_norm_b, "ffn_norm.bias");
+        BIND_GPT2(ffn_fc_w, "ffn_fc.weight");
+        BIND_GPT2(ffn_fc_b, "ffn_fc.bias");
+        BIND_GPT2(ffn_proj_w, "ffn_proj.weight");
+        BIND_GPT2(ffn_proj_b, "ffn_proj.bias");
+#undef BIND_GPT2
+        if (!b.attn_norm_w || !b.attn_norm_b || !b.attn_qkv_w || !b.attn_qkv_b || !b.attn_output_w ||
+            !b.attn_output_b || !b.ffn_norm_w || !b.ffn_norm_b || !b.ffn_fc_w || !b.ffn_fc_b || !b.ffn_proj_w ||
+            !b.ffn_proj_b) {
+            fprintf(stderr, "kartoffelbox: missing tensor in GPT-2 layer %u\n", i);
+            return false;
+        }
+    }
+
+    // Precomputed conds (optional for Kartoffelbox)
     c->conds.speaker_emb = core_gguf::try_get(ts, "conds.t3.speaker_emb");
     c->conds.speech_prompt_tokens = core_gguf::try_get(ts, "conds.t3.speech_prompt_tokens");
     c->conds.gen_prompt_token = core_gguf::try_get(ts, "conds.gen.prompt_token");
@@ -1015,6 +1200,293 @@ static std::vector<float> build_speech_token_embed(chatterbox_context* c, int32_
     return embed;
 }
 
+// ── GPT-2 T3 graph building (Kartoffelbox) ─────────────────────
+
+// GPT-2 transformer: inputs_embeds (D, T) → speech logits (speech_vocab,)
+// Uses KV cache for autoregressive decoding. Position comes from WPE lookup (no RoPE).
+static ggml_cgraph* build_graph_t3_gpt2_kv(chatterbox_context* c, int n_past, int n_tokens,
+                                           ggml_tensor* use_kv_k = nullptr, ggml_tensor* use_kv_v = nullptr) {
+    if (!use_kv_k)
+        use_kv_k = c->kv_k;
+    if (!use_kv_v)
+        use_kv_v = c->kv_v;
+    const auto& hp = c->hp;
+    const int D = (int)hp.hidden_size;
+    const int n_h = (int)hp.n_heads;
+    const int hd = (int)hp.head_dim;
+    const float attn_scale = 1.0f / std::sqrt((float)hd);
+    const float ln_eps = 1e-5f;
+    const int T = n_tokens;
+    const int Lk = n_past + T;
+
+    GGML_ASSERT(c->kv_k && c->kv_v && Lk <= c->kv_max_ctx);
+
+    ggml_init_params ip = {c->compute_meta.size(), c->compute_meta.data(), true};
+    ggml_context* ctx0 = ggml_init(ip);
+    ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 16384, false);
+
+    ggml_tensor* embeds = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, D, T);
+    ggml_set_name(embeds, "inputs_embeds");
+    ggml_set_input(embeds);
+
+    ggml_tensor* causal_mask = nullptr;
+    if (T > 1) {
+        causal_mask = ggml_new_tensor_2d(ctx0, GGML_TYPE_F16, Lk, T);
+        ggml_set_name(causal_mask, "causal_mask");
+        ggml_set_input(causal_mask);
+    }
+
+    ggml_tensor* cur = embeds;
+
+    for (uint32_t il = 0; il < hp.n_layers; il++) {
+        const auto& b = c->t3.gpt2_blocks[il];
+        ggml_tensor* residual = cur;
+
+        // Pre-attention LayerNorm
+        ggml_tensor* x = ggml_norm(ctx0, cur, ln_eps);
+        x = ggml_mul(ctx0, x, b.attn_norm_w);
+        x = ggml_add(ctx0, x, b.attn_norm_b);
+
+        // Fused QKV: x @ c_attn_w + c_attn_b → (3*D, T)
+        ggml_tensor* qkv = ggml_mul_mat(ctx0, b.attn_qkv_w, x);
+        qkv = ggml_add(ctx0, qkv, b.attn_qkv_b);
+
+        // Split into Q, K, V — each (D, T)
+        const size_t ts = ggml_type_size(qkv->type);
+        ggml_tensor* Q = ggml_view_2d(ctx0, qkv, D, T, qkv->nb[1], 0);
+        ggml_tensor* K = ggml_view_2d(ctx0, qkv, D, T, qkv->nb[1], D * ts);
+        ggml_tensor* V = ggml_view_2d(ctx0, qkv, D, T, qkv->nb[1], 2 * D * ts);
+        if (T > 1) {
+            Q = ggml_cont(ctx0, Q);
+            K = ggml_cont(ctx0, K);
+            V = ggml_cont(ctx0, V);
+        }
+
+        // Reshape to (hd, n_h, T)
+        Q = ggml_reshape_3d(ctx0, Q, hd, n_h, T);
+        K = ggml_reshape_3d(ctx0, K, hd, n_h, T);
+        V = ggml_reshape_3d(ctx0, V, hd, n_h, T);
+
+        // No RoPE for GPT-2 — positions encoded via WPE
+
+        // Permute new K/V to (hd, T, n_h) for cache write
+        ggml_tensor* K_new_perm = ggml_permute(ctx0, K, 0, 2, 1, 3);
+        ggml_tensor* V_new_perm = ggml_permute(ctx0, V, 0, 2, 1, 3);
+
+        // Write into KV cache at [n_past, n_past+T)
+        const int n_kv = n_h; // MHA — n_kv_heads == n_heads
+        ggml_tensor* k_view =
+            ggml_view_4d(ctx0, use_kv_k, hd, T, n_kv, 1, use_kv_k->nb[1], use_kv_k->nb[2], use_kv_k->nb[3],
+                         (size_t)il * use_kv_k->nb[3] + (size_t)n_past * use_kv_k->nb[1]);
+        ggml_tensor* v_view =
+            ggml_view_4d(ctx0, use_kv_v, hd, T, n_kv, 1, use_kv_v->nb[1], use_kv_v->nb[2], use_kv_v->nb[3],
+                         (size_t)il * use_kv_v->nb[3] + (size_t)n_past * use_kv_v->nb[1]);
+        ggml_build_forward_expand(gf, ggml_cpy(ctx0, K_new_perm, k_view));
+        ggml_build_forward_expand(gf, ggml_cpy(ctx0, V_new_perm, v_view));
+
+        // Read full K/V history
+        ggml_tensor* k_layer_view =
+            ggml_view_3d(ctx0, use_kv_k, hd, Lk, n_kv, use_kv_k->nb[1], use_kv_k->nb[2], (size_t)il * use_kv_k->nb[3]);
+        ggml_tensor* v_layer_view =
+            ggml_view_3d(ctx0, use_kv_v, hd, Lk, n_kv, use_kv_v->nb[1], use_kv_v->nb[2], (size_t)il * use_kv_v->nb[3]);
+        ggml_tensor* Kfull = ggml_cont(ctx0, k_layer_view);
+        ggml_tensor* Vfull = ggml_cont(ctx0, v_layer_view);
+
+        // Permute Q to (hd, T, n_h)
+        Q = ggml_cont(ctx0, ggml_permute(ctx0, Q, 0, 2, 1, 3));
+
+        // Flash attention
+        ggml_tensor* attn = ggml_flash_attn_ext(ctx0, Q, Kfull, Vfull, (T == 1) ? nullptr : causal_mask, attn_scale,
+                                                /*max_bias*/ 0.0f, /*logit_softcap*/ 0.0f);
+        attn = ggml_reshape_2d(ctx0, attn, D, T);
+
+        // Output projection + residual
+        attn = ggml_mul_mat(ctx0, b.attn_output_w, attn);
+        attn = ggml_add(ctx0, attn, b.attn_output_b);
+        cur = ggml_add(ctx0, residual, attn);
+
+        // FFN
+        residual = cur;
+        x = ggml_norm(ctx0, cur, ln_eps);
+        x = ggml_mul(ctx0, x, b.ffn_norm_w);
+        x = ggml_add(ctx0, x, b.ffn_norm_b);
+
+        // GELU FFN: c_fc → gelu → c_proj
+        ggml_tensor* mlp = ggml_mul_mat(ctx0, b.ffn_fc_w, x);
+        mlp = ggml_add(ctx0, mlp, b.ffn_fc_b);
+        mlp = ggml_gelu(ctx0, mlp);
+        mlp = ggml_mul_mat(ctx0, b.ffn_proj_w, mlp);
+        mlp = ggml_add(ctx0, mlp, b.ffn_proj_b);
+
+        cur = ggml_add(ctx0, residual, mlp);
+    }
+
+    // Final LayerNorm
+    cur = ggml_norm(ctx0, cur, ln_eps);
+    cur = ggml_mul(ctx0, cur, c->t3.output_norm_w);
+    cur = ggml_add(ctx0, cur, c->t3.output_norm_b);
+
+    // Take last token for prefill
+    if (T > 1) {
+        cur = ggml_view_2d(ctx0, cur, D, 1, cur->nb[1], (size_t)(T - 1) * cur->nb[1]);
+    }
+
+    // Speech head
+    cur = ggml_mul_mat(ctx0, c->t3.speech_head_w, cur);
+    if (c->t3.speech_head_b) {
+        cur = ggml_add(ctx0, cur, c->t3.speech_head_b);
+    }
+    ggml_set_name(cur, "logits");
+    ggml_build_forward_expand(gf, cur);
+    ggml_free(ctx0);
+    return gf;
+}
+
+// Run the GPT-2 T3 transformer. Returns logits (speech_vocab,).
+static float* run_t3_gpt2_kv(chatterbox_context* c, const float* embeds, int n_tokens, int n_past,
+                             ggml_tensor* use_kv_k = nullptr, ggml_tensor* use_kv_v = nullptr) {
+    if (n_past + n_tokens > c->kv_max_ctx) {
+        fprintf(stderr, "kartoffelbox: kv overflow (%d+%d > %d)\n", n_past, n_tokens, c->kv_max_ctx);
+        return nullptr;
+    }
+    const int D = (int)c->hp.hidden_size;
+    const int vocab = (int)c->hp.speech_vocab_size;
+    const int Lk = n_past + n_tokens;
+
+    std::vector<ggml_fp16_t> mask;
+    if (n_tokens > 1) {
+        mask.assign((size_t)Lk * n_tokens, ggml_fp32_to_fp16(0.0f));
+        const ggml_fp16_t neg_inf = ggml_fp32_to_fp16(-INFINITY);
+        for (int q = 0; q < n_tokens; q++) {
+            for (int k = n_past + q + 1; k < Lk; k++) {
+                mask[(size_t)q * Lk + k] = neg_inf;
+            }
+        }
+    }
+
+    ggml_cgraph* gf = build_graph_t3_gpt2_kv(c, n_past, n_tokens, use_kv_k, use_kv_v);
+    ggml_backend_sched_reset(c->sched);
+    if (!ggml_backend_sched_alloc_graph(c->sched, gf)) {
+        fprintf(stderr, "kartoffelbox: failed to alloc T3 GPT-2 graph\n");
+        return nullptr;
+    }
+    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "inputs_embeds"), embeds, 0,
+                            (size_t)D * n_tokens * sizeof(float));
+    if (n_tokens > 1) {
+        ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "causal_mask"), mask.data(), 0,
+                                mask.size() * sizeof(ggml_fp16_t));
+    }
+    if (ggml_backend_sched_graph_compute(c->sched, gf) != GGML_STATUS_SUCCESS) {
+        fprintf(stderr, "kartoffelbox: T3 GPT-2 compute failed\n");
+        return nullptr;
+    }
+    ggml_tensor* out = ggml_graph_get_tensor(gf, "logits");
+    float* r = (float*)malloc((size_t)vocab * sizeof(float));
+    ggml_backend_tensor_get(out, r, 0, (size_t)vocab * sizeof(float));
+    return r;
+}
+
+// Build the conditioning + text + speech_start embedding for Kartoffelbox (GPT-2).
+// WPE is added to token embeddings. No perceiver, no emotion.
+static std::vector<float> build_prefill_embeds_gpt2(chatterbox_context* c, const std::vector<int32_t>& text_tokens) {
+    const int D = (int)c->hp.hidden_size;
+    const auto& m = c->t3;
+
+    // Read WPE table
+    int wpe_size = (int)c->hp.wpe_max_positions;
+    std::vector<float> wpe_table((size_t)wpe_size * D);
+    ggml_backend_tensor_get(m.wpe_w, wpe_table.data(), 0, wpe_table.size() * sizeof(float));
+
+    // 1. Speaker embedding projection (if conditioning is available)
+    int cond_len = 0;
+    std::vector<float> spkr_proj(D, 0.0f);
+    if (c->conds.loaded && m.cond_spkr_w) {
+        std::vector<float> spkr_emb(c->hp.speaker_embed_size);
+        ggml_backend_tensor_get(c->conds.speaker_emb, spkr_emb.data(), 0, spkr_emb.size() * sizeof(float));
+
+        std::vector<float> w(D * c->hp.speaker_embed_size);
+        ggml_backend_tensor_get(m.cond_spkr_w, w.data(), 0, w.size() * sizeof(float));
+        for (int i = 0; i < D; i++) {
+            float sum = 0.0f;
+            for (int j = 0; j < (int)c->hp.speaker_embed_size; j++) {
+                sum += w[i * c->hp.speaker_embed_size + j] * spkr_emb[j];
+            }
+            spkr_proj[i] = sum;
+        }
+        if (m.cond_spkr_b) {
+            std::vector<float> bias(D);
+            ggml_backend_tensor_get(m.cond_spkr_b, bias.data(), 0, D * sizeof(float));
+            for (int i = 0; i < D; i++)
+                spkr_proj[i] += bias[i];
+        }
+        cond_len = 1;
+    }
+
+    int text_len = (int)text_tokens.size();
+    int speech_start_len = 1;
+    int total_len = cond_len + text_len + speech_start_len;
+
+    std::vector<float> embeds((size_t)total_len * D, 0.0f);
+
+    // Read embedding tables
+    std::vector<float> text_emb_table(c->hp.text_vocab_size * D);
+    ggml_backend_tensor_get(m.text_emb_w, text_emb_table.data(), 0, text_emb_table.size() * sizeof(float));
+    std::vector<float> speech_emb_table(c->hp.speech_vocab_size * D);
+    ggml_backend_tensor_get(m.speech_emb_w, speech_emb_table.data(), 0, speech_emb_table.size() * sizeof(float));
+
+    int pos = 0;
+    int wpe_pos = 0;
+
+    // Place speaker conditioning at position 0
+    if (cond_len > 0) {
+        for (int j = 0; j < D; j++) {
+            embeds[pos * D + j] = spkr_proj[j] + wpe_table[wpe_pos * D + j];
+        }
+        pos++;
+        wpe_pos++;
+    }
+
+    // Place text embeddings: text_emb(tok) + wpe(pos)
+    for (int i = 0; i < text_len; i++) {
+        int tok = text_tokens[i];
+        if (tok < 0 || tok >= (int)c->hp.text_vocab_size)
+            tok = 0;
+        for (int j = 0; j < D; j++) {
+            embeds[(pos + i) * D + j] = text_emb_table[tok * D + j] + wpe_table[(wpe_pos + i) * D + j];
+        }
+    }
+    pos += text_len;
+    wpe_pos += text_len;
+
+    // Place speech start embedding: speech_emb(start_token) + wpe(pos)
+    {
+        int start_tok = (int)c->hp.start_speech_token;
+        if (start_tok >= (int)c->hp.speech_vocab_size)
+            start_tok = 0;
+        for (int j = 0; j < D; j++) {
+            embeds[pos * D + j] = speech_emb_table[start_tok * D + j] + wpe_table[wpe_pos * D + j];
+        }
+    }
+
+    return embeds;
+}
+
+// Build embedding for a single speech token with WPE (GPT-2 Kartoffelbox).
+static std::vector<float> build_speech_token_embed_gpt2(chatterbox_context* c, int32_t token_id, int abs_pos) {
+    const int D = (int)c->hp.hidden_size;
+    std::vector<float> embed(D);
+
+    std::vector<float> tok_emb(D);
+    ggml_backend_tensor_get(c->t3.speech_emb_w, tok_emb.data(), (size_t)token_id * D * sizeof(float),
+                            D * sizeof(float));
+    std::vector<float> pos_emb(D);
+    ggml_backend_tensor_get(c->t3.wpe_w, pos_emb.data(), (size_t)abs_pos * D * sizeof(float), D * sizeof(float));
+    for (int j = 0; j < D; j++) {
+        embed[j] = tok_emb[j] + pos_emb[j];
+    }
+    return embed;
+}
+
 } // namespace
 
 // ── Public C ABI ────────────────────────────────────────────────
@@ -1052,12 +1524,19 @@ extern "C" struct chatterbox_context* chatterbox_init_from_file(const char* path
         core_gguf::free_metadata(g);
     }
 
+    const bool is_gpt2 = (c->hp.arch == "kartoffelbox");
+
     if (params.verbosity >= 1) {
-        fprintf(stderr, "chatterbox: T3 %uL d=%u h=%u hd=%u ff=%u text_vocab=%u speech_vocab=%u\n", c->hp.n_layers,
-                c->hp.hidden_size, c->hp.n_heads, c->hp.head_dim, c->hp.intermediate_size, c->hp.text_vocab_size,
-                c->hp.speech_vocab_size);
-        fprintf(stderr, "chatterbox: rope_theta=%.0f  tokenizer=%zu tokens  conds_emotion=%.2f\n",
-                (double)c->hp.rope_theta, c->tokenizer.id_to_token.size(), c->conds.emotion_adv);
+        fprintf(stderr, "chatterbox: arch=%s T3 %uL d=%u h=%u hd=%u ff=%u text_vocab=%u speech_vocab=%u\n",
+                c->hp.arch.c_str(), c->hp.n_layers, c->hp.hidden_size, c->hp.n_heads, c->hp.head_dim,
+                c->hp.intermediate_size, c->hp.text_vocab_size, c->hp.speech_vocab_size);
+        if (is_gpt2) {
+            fprintf(stderr, "chatterbox: GPT-2 wpe_max=%u  tokenizer=%zu tokens\n", c->hp.wpe_max_positions,
+                    c->tokenizer.id_to_token.size());
+        } else {
+            fprintf(stderr, "chatterbox: rope_theta=%.0f  tokenizer=%zu tokens  conds_emotion=%.2f\n",
+                    (double)c->hp.rope_theta, c->tokenizer.id_to_token.size(), c->conds.emotion_adv);
+        }
     }
 
     // Backend
@@ -1082,10 +1561,18 @@ extern "C" struct chatterbox_context* chatterbox_init_from_file(const char* path
     }
 
     // Bind tensors
-    if (!bind_t3(c)) {
-        fprintf(stderr, "chatterbox: failed to bind T3 tensors\n");
-        delete c;
-        return nullptr;
+    if (is_gpt2) {
+        if (!bind_t3_gpt2(c)) {
+            fprintf(stderr, "kartoffelbox: failed to bind GPT-2 T3 tensors\n");
+            delete c;
+            return nullptr;
+        }
+    } else {
+        if (!bind_t3(c)) {
+            fprintf(stderr, "chatterbox: failed to bind T3 tensors\n");
+            delete c;
+            return nullptr;
+        }
     }
     bind_ve(c); // optional
 
@@ -1128,17 +1615,25 @@ extern "C" int32_t* chatterbox_synthesize_tokens(struct chatterbox_context* ctx,
         return nullptr;
     *out_n = 0;
 
-    if (!ctx->conds.loaded) {
+    const bool is_gpt2 = (ctx->hp.arch == "kartoffelbox");
+
+    if (!is_gpt2 && !ctx->conds.loaded) {
         fprintf(stderr, "chatterbox: no conditioning loaded. Call chatterbox_set_voice_from_wav first.\n");
         return nullptr;
     }
 
     // 1. Normalize and tokenize text
     std::string norm_text = punc_norm(text);
-    std::vector<int32_t> text_tokens = tokenize_text(ctx->tokenizer, norm_text);
+    std::vector<int32_t> text_tokens;
+    if (is_gpt2 && ctx->tokenizer.has_bpe) {
+        text_tokens = tokenize_text_bpe(ctx->tokenizer, norm_text);
+    } else {
+        text_tokens = tokenize_text(ctx->tokenizer, norm_text);
+    }
 
     if (ctx->params.verbosity >= 1) {
-        fprintf(stderr, "chatterbox: text \"%s\" → %zu char tokens\n", norm_text.c_str(), text_tokens.size());
+        fprintf(stderr, "chatterbox: text \"%s\" → %zu %s tokens\n", norm_text.c_str(), text_tokens.size(),
+                (is_gpt2 && ctx->tokenizer.has_bpe) ? "BPE" : "char");
     }
 
     // 2. Add start/stop text tokens
@@ -1153,9 +1648,13 @@ extern "C" int32_t* chatterbox_synthesize_tokens(struct chatterbox_context* ctx,
         return nullptr;
     }
 
-    // 4. Build prefill embeddings on CPU:
-    //    [cond_spkr | cond_emotion | text_emb+pos | speech_start_emb+pos]
-    std::vector<float> prefill_embeds = build_prefill_embeds(ctx, text_tokens);
+    // 4. Build prefill embeddings on CPU
+    std::vector<float> prefill_embeds;
+    if (is_gpt2) {
+        prefill_embeds = build_prefill_embeds_gpt2(ctx, text_tokens);
+    } else {
+        prefill_embeds = build_prefill_embeds(ctx, text_tokens);
+    }
     int prefill_len = (int)(prefill_embeds.size() / ctx->hp.hidden_size);
 
     if (ctx->params.verbosity >= 1) {
@@ -1164,7 +1663,7 @@ extern "C" int32_t* chatterbox_synthesize_tokens(struct chatterbox_context* ctx,
 
     // 5. CFG setup: build unconditioned prefill if cfg_weight > 0
     const float cfg_w = ctx->params.cfg_weight;
-    const bool use_cfg = (cfg_w > 0.0f && ctx->kv_k_cfg);
+    const bool use_cfg = (!is_gpt2 && cfg_w > 0.0f && ctx->kv_k_cfg);
     std::vector<float> uncond_embeds;
     if (use_cfg) {
         // Unconditioned: zero out text embeddings, keep cond + speech_start
@@ -1180,12 +1679,17 @@ extern "C" int32_t* chatterbox_synthesize_tokens(struct chatterbox_context* ctx,
 
     // 6. Prefill: run the full prefix through the transformer
     int n_past = 0;
-    float* logits = run_t3_kv(ctx, prefill_embeds.data(), prefill_len, n_past);
+    float* logits = nullptr;
+    if (is_gpt2) {
+        logits = run_t3_gpt2_kv(ctx, prefill_embeds.data(), prefill_len, n_past);
+    } else {
+        logits = run_t3_kv(ctx, prefill_embeds.data(), prefill_len, n_past);
+    }
     if (!logits) {
         fprintf(stderr, "chatterbox: prefill failed\n");
         return nullptr;
     }
-    // Also prefill the unconditioned path
+    // Also prefill the unconditioned path (Llama CFG only)
     float* logits_uncond = nullptr;
     int n_past_cfg = 0;
     if (use_cfg) {
@@ -1236,18 +1740,28 @@ extern "C" int32_t* chatterbox_synthesize_tokens(struct chatterbox_context* ctx,
         speech_tokens.push_back(tok);
 
         // Build embedding for this token
-        std::vector<float> tok_embed = build_speech_token_embed(ctx, tok, speech_pos);
+        std::vector<float> tok_embed;
+        if (is_gpt2) {
+            // For GPT-2: absolute position = prefill_len + speech_pos - 1
+            tok_embed = build_speech_token_embed_gpt2(ctx, tok, prefill_len + speech_pos - 1);
+        } else {
+            tok_embed = build_speech_token_embed(ctx, tok, speech_pos);
+        }
         speech_pos++;
 
         // Conditioned forward step
-        logits = run_t3_kv(ctx, tok_embed.data(), 1, n_past);
+        if (is_gpt2) {
+            logits = run_t3_gpt2_kv(ctx, tok_embed.data(), 1, n_past);
+        } else {
+            logits = run_t3_kv(ctx, tok_embed.data(), 1, n_past);
+        }
         if (!logits) {
             fprintf(stderr, "chatterbox: decode step %d failed\n", step);
             break;
         }
         n_past++;
 
-        // Unconditioned forward step for CFG
+        // Unconditioned forward step for CFG (Llama only)
         if (use_cfg) {
             logits_uncond = run_t3_kv(ctx, tok_embed.data(), 1, n_past_cfg, ctx->kv_k_cfg, ctx->kv_v_cfg);
             n_past_cfg++;
@@ -1262,11 +1776,12 @@ extern "C" int32_t* chatterbox_synthesize_tokens(struct chatterbox_context* ctx,
         fprintf(stderr, "chatterbox: AR emitted %zu speech tokens\n", speech_tokens.size());
     }
 
-    // Filter to valid range (< 6561 as per Python code)
+    // Filter to valid range
+    const int max_valid_tok = is_gpt2 ? (int)ctx->hp.speech_vocab_size - 2 : 6561;
     std::vector<int32_t> valid;
     valid.reserve(speech_tokens.size());
     for (int32_t t : speech_tokens) {
-        if (t >= 0 && t < 6561)
+        if (t >= 0 && t < max_valid_tok)
             valid.push_back(t);
     }
 

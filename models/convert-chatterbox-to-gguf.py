@@ -139,6 +139,18 @@ VE_HPARAMS = dict(
     ve_sample_rate=16000,
 )
 
+KARTOFFELBOX_T3_HPARAMS = dict(
+    arch="kartoffelbox",
+    n_layers=24,
+    n_heads=16,
+    hidden_size=1024,
+    intermediate_size=4096,
+    head_dim=64,
+    text_vocab_size=50276,
+    speech_vocab_size=6563,
+    wpe_max_positions=8196,
+)
+
 
 # ── Helpers ─────────────────────────────────────────────────────────
 
@@ -270,6 +282,56 @@ def map_t3_name(hf_name: str) -> str | None:
     n = n.replace("cond_enc.spkr_enc.", "t3.cond.spkr_enc.")
     n = n.replace("cond_enc.emotion_adv_fc.", "t3.cond.emotion_adv.")
     n = n.replace("cond_enc.perceiver.", "t3.cond.perceiver.")
+
+    return n
+
+
+# ── Kartoffelbox T3 tensor name remapping ─────────────────────────
+
+def map_kartoffelbox_t3_name(hf_name: str) -> str | None:
+    """Map Kartoffelbox GPT-2 tensor name → GGUF tensor name."""
+    import re
+
+    n = hf_name
+
+    # Transformer backbone (GPT-2 naming)
+    n = n.replace("tfmr.wpe.weight", "t3.wpe.weight")
+    n = n.replace("tfmr.ln_f.weight", "t3.output_norm.weight")
+    n = n.replace("tfmr.ln_f.bias", "t3.output_norm.bias")
+
+    # Per-layer mappings
+    m = re.match(r'^tfmr\.h\.(\d+)\.(.+)$', n)
+    if m:
+        layer = m.group(1)
+        rest = m.group(2)
+        rest = rest.replace("ln_1.weight", "attn_norm.weight")
+        rest = rest.replace("ln_1.bias", "attn_norm.bias")
+        rest = rest.replace("attn.c_attn.weight", "attn_qkv.weight")
+        rest = rest.replace("attn.c_attn.bias", "attn_qkv.bias")
+        rest = rest.replace("attn.c_proj.weight", "attn_output.weight")
+        rest = rest.replace("attn.c_proj.bias", "attn_output.bias")
+        rest = rest.replace("ln_2.weight", "ffn_norm.weight")
+        rest = rest.replace("ln_2.bias", "ffn_norm.bias")
+        rest = rest.replace("mlp.c_fc.weight", "ffn_fc.weight")
+        rest = rest.replace("mlp.c_fc.bias", "ffn_fc.bias")
+        rest = rest.replace("mlp.c_proj.weight", "ffn_proj.weight")
+        rest = rest.replace("mlp.c_proj.bias", "ffn_proj.bias")
+        n = f"t3.blk.{layer}.{rest}"
+
+    # Custom embeddings
+    n = n.replace("text_emb.weight", "t3.text_emb.weight")
+    n = n.replace("speech_emb.weight", "t3.speech_emb.weight")
+
+    # Heads
+    n = n.replace("text_head.weight", "t3.text_head.weight")
+    if n == hf_name.replace("speech_head.weight", "t3.speech_head.weight"):
+        n = n  # already replaced or not matching
+    n = n.replace("speech_head.weight", "t3.speech_head.weight")
+    n = n.replace("speech_head.bias", "t3.speech_head.bias")
+
+    # Conditioning encoder
+    n = n.replace("cond_enc.spkr_enc.weight", "t3.cond.spkr_enc.weight")
+    n = n.replace("cond_enc.spkr_enc.bias", "t3.cond.spkr_enc.bias")
 
     return n
 
@@ -491,6 +553,88 @@ def write_t3_gguf(
     print(f"  Written: {output_path} ({output_path.stat().st_size / 1e6:.1f} MB)")
 
 
+# ── Write Kartoffelbox T3 GGUF ────────────────────────────────────
+
+def write_kartoffelbox_t3_gguf(
+    model_dir: Path,
+    output_path: Path,
+):
+    print(f"\n=== Writing Kartoffelbox T3 GGUF: {output_path} ===")
+
+    writer = GGUFWriter(str(output_path), "chatterbox")
+
+    # ── Hyperparameters ──
+    for k, v in KARTOFFELBOX_T3_HPARAMS.items():
+        key = f"chatterbox.t3.{k}"
+        if isinstance(v, int):
+            writer.add_uint32(key, v)
+        elif isinstance(v, float):
+            writer.add_float32(key, v)
+        elif isinstance(v, str):
+            writer.add_string(key, v)
+
+    # ── Embed GPT-2 BPE tokenizer ──
+    try:
+        from transformers import GPT2TokenizerFast
+        gpt2_tok = GPT2TokenizerFast.from_pretrained('gpt2')
+        vocab = gpt2_tok.get_vocab()
+        # Build token list ordered by ID
+        max_id = max(vocab.values())
+        tokens = [""] * (max_id + 1)
+        for tok_str, tok_id in vocab.items():
+            tokens[tok_id] = tok_str
+        writer.add_array("tokenizer.ggml.tokens", tokens)
+        # Get merges from the tokenizer's backend
+        merges = []
+        try:
+            import json as _json
+            tok_json = _json.loads(gpt2_tok.backend_tokenizer.to_str())
+            raw_merges = tok_json.get('model', {}).get('merges', [])
+            # Merges are [left, right] pairs — join to "left right" strings
+            for m in raw_merges:
+                if isinstance(m, list) and len(m) == 2:
+                    merges.append(f"{m[0]} {m[1]}")
+                elif isinstance(m, str):
+                    merges.append(m)
+        except Exception:
+            pass
+        if merges:
+            writer.add_array("tokenizer.ggml.merges", merges)
+            print(f"  GPT-2 tokenizer: {len(tokens)} tokens, {len(merges)} merges")
+        else:
+            print(f"  GPT-2 tokenizer: {len(tokens)} tokens (no merges — BPE will fall back to char-level)")
+    except ImportError:
+        print("  WARNING: transformers not installed — no GPT-2 tokenizer embedded")
+
+    # ── Load weights from model.pt ──
+    model_path = model_dir / "model.pt"
+    if not model_path.exists():
+        sys.exit(f"Missing {model_path}")
+
+    print(f"  Loading {model_path}...")
+    raw = torch.load(str(model_path), map_location='cpu', weights_only=True)
+
+    n_t3 = 0
+    for hf_name, tensor in sorted(raw.items()):
+        gguf_name = map_kartoffelbox_t3_name(hf_name)
+        if gguf_name is None:
+            continue
+        # Skip unmapped keys (still equal to original)
+        if gguf_name == hf_name:
+            print(f"  SKIP (unmapped): {hf_name}")
+            continue
+        data, dtype = choose_dtype(gguf_name, list(tensor.shape), tensor)
+        writer.add_tensor(gguf_name, data, raw_dtype=dtype)
+        n_t3 += 1
+    print(f"  T3 (Kartoffelbox GPT-2): {n_t3} tensors")
+
+    writer.write_header_to_file()
+    writer.write_kv_data_to_file()
+    writer.write_tensors_to_file()
+    writer.close()
+    print(f"  Written: {output_path} ({output_path.stat().st_size / 1e6:.1f} MB)")
+
+
 # ── Write S3Gen GGUF ──────────────────────────────────────────────
 
 def write_s3gen_gguf(
@@ -553,6 +697,8 @@ def main():
                         help="HF repo ID or local directory with safetensors")
     parser.add_argument("--output-dir", required=True,
                         help="Output directory for GGUF files")
+    parser.add_argument("--variant", default=None, choices=["kartoffelbox"],
+                        help="Model variant (kartoffelbox = GPT-2 T3)")
     parser.add_argument("--t3-only", action="store_true",
                         help="Only convert T3 model")
     parser.add_argument("--s3gen-only", action="store_true",
@@ -562,6 +708,14 @@ def main():
     model_dir = load_model_dir(args.input)
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    if args.variant == "kartoffelbox":
+        write_kartoffelbox_t3_gguf(
+            model_dir,
+            out_dir / "kartoffelbox-turbo-t3-f16.gguf",
+        )
+        print("\nDone!")
+        return
 
     conds_path = model_dir / "conds.pt"
     tokenizer_path = model_dir / "tokenizer.json"
