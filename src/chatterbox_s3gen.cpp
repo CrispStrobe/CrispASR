@@ -245,39 +245,31 @@ static ggml_tensor* build_conformer_block(ggml_context* ctx, ggml_cgraph* gf, ch
             ggml_build_forward_expand(gf, bd_raw_dump);
         }
 
+        // Rel_shift: matrix_bd_raw ne=(2T-1, T, H) → (T, T, H)
+        // ggml_reshape is a no-op on data (same flat bytes, different ne[]).
+        // This matches Python's view() semantics exactly.
         ggml_tensor* matrix_bd = matrix_bd_raw;
-
-        // Transformer-XL rel_shift: (2T-1, T, H) → (T, T, H)
-        // matrix_bd: ne[0]=2T-1 (positions), ne[1]=T (queries), ne[2]=H (heads)
-        // This implements the Espnet rel_shift which extracts causal relative positions.
         if ((int)matrix_bd->ne[0] != TT) {
-            int T_pos = (int)matrix_bd->ne[0]; // 2*TT - 1
-            // Step 1: Pad one zero on the left of ne[0] → (2T, T, H)
-            // Create zero column by scaling a cont view to zero
-            ggml_tensor* one_col =
-                ggml_cont(ctx, ggml_view_3d(ctx, matrix_bd, 1, TT, n_heads, matrix_bd->nb[1], matrix_bd->nb[2], 0));
-            ggml_tensor* zero_col = ggml_scale(ctx, one_col, 0.0f);
-            matrix_bd = ggml_concat(ctx, zero_col, matrix_bd, 0); // ne[0] = 2T
+            int T_pos = (int)matrix_bd->ne[0]; // 2T-1
+            // Step 1: Pad zero on LEFT of ne[0] → (2T, T, H)
+            ggml_tensor* zero_col = ggml_scale(
+                ctx,
+                ggml_cont(ctx, ggml_view_3d(ctx, matrix_bd, 1, TT, n_heads, matrix_bd->nb[1], matrix_bd->nb[2], 0)),
+                0.0f);
+            matrix_bd = ggml_concat(ctx, zero_col, matrix_bd, 0); // ne=(2T, T, H)
 
             // Step 2: Reshape (2T, T, H) → (T, 2T, H)
-            // The memory is the same (2T*T*H floats) just reinterpreted
             matrix_bd = ggml_reshape_3d(ctx, matrix_bd, TT, 2 * TT, n_heads);
 
-            // Step 3: Skip first "row" (offset ne[1] by 1) → view (T, 2T-1, H)
-            matrix_bd = ggml_view_3d(ctx, matrix_bd, TT, T_pos, n_heads, matrix_bd->nb[1], matrix_bd->nb[2],
-                                     1 * matrix_bd->nb[1]);
+            // Step 3: Skip first row → ne[1] offset by 1 → (T, 2T-1, H)
+            matrix_bd =
+                ggml_view_3d(ctx, matrix_bd, TT, T_pos, n_heads, matrix_bd->nb[1], matrix_bd->nb[2], matrix_bd->nb[1]);
             matrix_bd = ggml_cont(ctx, matrix_bd);
 
-            // Step 3.5: Reshape back to (2T-1, T, H) → same as view_as(x)
-            // Python: x_padded[:,:,1:].view_as(x) where x was (H, T, 2T-1)
-            // Our layout: (T, 2T-1, H) in ne terms. Need (2T-1, T, H) after view_as.
-            // Wait — view_as preserves total elements. (H, 2T-1, T).view_as(H, T, 2T-1) swaps last two dims.
-            // In ggml terms: (T, 2T-1, H) → (2T-1, T, H). This is a transpose of ne[0] and ne[1].
-            matrix_bd = ggml_cont(ctx, ggml_permute(ctx, matrix_bd, 1, 0, 2, 3)); // (2T-1, T, H)
+            // Step 4: Reshape (T, 2T-1, H) → (2T-1, T, H) — view_as, NOT transpose
+            matrix_bd = ggml_reshape_3d(ctx, matrix_bd, T_pos, TT, n_heads);
 
-            // Step 4: Slice ne[0] to keep positions 0..T (first T+1 positions)
-            // Python: x[:, :, :, :x.size(-1)//2 + 1] = [:, :, :, :T]
-            // In our layout ne[0] is the last Python dim, so slice ne[0] to T
+            // Step 5: Slice ne[0] to T → (T, T, H)
             if ((int)matrix_bd->ne[0] > TT) {
                 matrix_bd = ggml_view_3d(ctx, matrix_bd, TT, TT, n_heads, matrix_bd->nb[1], matrix_bd->nb[2], 0);
                 matrix_bd = ggml_cont(ctx, matrix_bd);
@@ -626,10 +618,15 @@ static std::vector<float> run_conformer_encoder(chatterbox_s3gen_context* c, con
     fill_pos_enc("pos_emb_pre", total);
     fill_pos_enc("pos_emb_post", T_mel);
 
+    // Two-pass execution: first compute to get matrix_bd_raw, then apply
+    // CPU-side rel_shift and re-run for the attention + FFN.
     if (ggml_backend_sched_graph_compute(c->sched, gf) != GGML_STATUS_SUCCESS) {
         fprintf(stderr, "s3gen: conformer compute failed\n");
         return {};
     }
+
+    // Single-pass: rel_shift is now computed in the ggml graph via
+    // pad+reshape+view+permute+slice (matching Python's view semantics).
 
     // Dump per-layer RMS if CRISPASR_S3GEN_DUMP=1
     {
@@ -656,7 +653,58 @@ static std::vector<float> run_conformer_encoder(chatterbox_s3gen_context* c, con
             dump_rms("dump_enc0_linear_pos_out");
             dump_rms("dump_enc0_bd_pre_shift");
             dump_rms("dump_enc0_matrix_ac");
+            dump_rms("dump_enc0_bd_pre_shift");
             dump_rms("dump_enc0_matrix_bd");
+            // Element-level dump: head 0, first 5x5 of matrix_bd for diff comparison
+            // matrix_bd: ne[0]=TT, ne[1]=TT, ne[2]=H. Element (k, q, h) at data[h*TT*TT + q*TT + k]
+            {
+                ggml_tensor* bd_t = ggml_graph_get_tensor(gf, "dump_enc0_matrix_bd");
+                if (bd_t) {
+                    int ne0 = (int)bd_t->ne[0];
+                    int ne1 = (int)bd_t->ne[1];
+                    int ne2 = (bd_t->ne[2] > 1) ? (int)bd_t->ne[2] : 1;
+                    size_t n = ggml_nelements(bd_t);
+                    std::vector<float> bd(n);
+                    ggml_backend_tensor_get(bd_t, bd.data(), 0, n * sizeof(float));
+                    fprintf(stderr, "s3gen[enc]: matrix_bd ne=(%d,%d,%d) total=%zu\n", ne0, ne1, ne2, n);
+                    // For head 0: data layout depends on ne ordering
+                    // ne[0]=key, ne[1]=query, ne[2]=head. Element (k,q,h) at h*ne1*ne0 + q*ne0 + k
+                    // Also dump pre-shift bd
+                    {
+                        ggml_tensor* bdr = ggml_graph_get_tensor(gf, "dump_enc0_bd_pre_shift");
+                        if (bdr) {
+                            int ne0r = (int)bdr->ne[0], ne1r = (int)bdr->ne[1];
+                            size_t nr = ggml_nelements(bdr);
+                            std::vector<float> bdr_d(nr);
+                            ggml_backend_tensor_get(bdr, bdr_d.data(), 0, nr * sizeof(float));
+                            fprintf(stderr, "s3gen[enc]: bd_pre_shift ne=(%d,%d,%lld) first 10: ", ne0r, ne1r,
+                                    (long long)bdr->ne[2]);
+                            for (int i = 0; i < 10 && i < (int)nr; i++)
+                                fprintf(stderr, "%.2f ", bdr_d[i]);
+                            fprintf(stderr, "\n");
+                        }
+                    }
+                    // Print first 5 values and a 5x5 block
+                    fprintf(stderr, "s3gen[enc]: matrix_bd first 10 raw: ");
+                    for (int i = 0; i < 10 && i < (int)n; i++)
+                        fprintf(stderr, "%.2f ", bd[i]);
+                    fprintf(stderr, "\n");
+                    fprintf(stderr, "s3gen[enc]: matrix_bd h0 [q=0:5, k=0:5]:\n");
+                    for (int q = 0; q < 5; q++) {
+                        fprintf(stderr, "s3gen[enc]:  ");
+                        for (int k = 0; k < 5; k++)
+                            fprintf(stderr, " %8.2f", bd[q * ne0 + k]);
+                        fprintf(stderr, "\n");
+                    }
+                    // Python reference h0 [0:5,0:5]:
+                    fprintf(stderr, "s3gen[enc]: Python ref h0 [0:5,0:5]:\n");
+                    fprintf(stderr, "s3gen[enc]:   [24.70, 23.75, 20.29, 15.85, 12.23]\n");
+                    fprintf(stderr, "s3gen[enc]:   [32.29, 50.34, 60.43, 60.74, 54.70]\n");
+                    fprintf(stderr, "s3gen[enc]:   [18.26, 38.67, 56.16, 64.84, 64.05]\n");
+                    fprintf(stderr, "s3gen[enc]:   [-1.14, 16.49, 39.36, 59.26, 69.95]\n");
+                    fprintf(stderr, "s3gen[enc]:   [-9.08, -1.82, 16.95, 41.58, 63.07]\n");
+                }
+            }
             dump_rms("dump_enc0_scores_pre_softmax");
             dump_rms("dump_enc0_raw_attn");
             dump_rms("dump_enc0_attn_out");
