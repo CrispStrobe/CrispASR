@@ -27,7 +27,7 @@ and where the gaps are. Last refresh: **2026-05-04** (after PLAN §79 —
 | qwen3-asr (0.6B) | ✓ | ✓ | ✓ | ✓ | gpu |
 | glm-asr (1B) | ✓ | ✓ | ✓ | ✓ | gpu |
 | omniasr-llm (300M) | ✓ | ✓ | ✓ | ✓ | gpu |
-| vibevoice (4B ASR mode) | F16 | F16 | F16 | · | gpu |
+| vibevoice (4B ASR mode) | F16 | F16 | F16 | ✓ | gpu |
 
 ### Encoder-decoder ASR (medium VRAM, autoregressive)
 
@@ -56,7 +56,7 @@ and where the gaps are. Last refresh: **2026-05-04** (after PLAN §79 —
 | orpheus (3B + DE / lex-au variants) | ✓ | ✓ | ✓ | ✓ | shared Llama-3 path |
 | chatterbox (T3 + CFG cache) | ✓ | ✓ | ✓ | · | uses kv_self_attn natively |
 | qwen3-tts (0.6B + 1.7B variants) | ✓ talker | ✓ talker | ✓ talker | · | code-predictor cache stays F16 (separate path) |
-| vibevoice (4B TTS mode) | F16 | F16 | F16 | · | same migration block as ASR mode |
+| vibevoice (4B TTS mode) | F16 | F16 | F16 | ✓ | KV migration still pending; layer offload routes `tts_lm.layers.<N>.*` |
 | kokoro | — | — | — | — | non-AR vocoder, no transformer KV |
 
 ### Where the gaps are
@@ -72,7 +72,8 @@ and where the gaps are. Last refresh: **2026-05-04** (after PLAN §79 —
    quant K/V (see LEARNINGS.md "ggml_cont(ggml_permute(quant_tensor))
    doesn't move data"). Migration recipe is the canary/cohere
    `ggml_flash_attn_ext` port — ~50-80 LOC + F16 mask graph input.
-   Same recipe would unblock layer offload.
+   Layer offload (`N_GPU_LAYERS`) is independently shipped and works
+   on F16 K/V; the migration only unlocks quant K/V on top.
 3. **qwen3-tts code-predictor cache**. Talker KV is fully covered via
    `core_attn::kv_self_attn`; the secondary code-predictor path
    doesn't go through that helper, so its cache stays F16. Lower-

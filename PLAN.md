@@ -42,12 +42,12 @@ passes 18/18 transcribe + 51/54 feature tests (3 stream skips, no failures).
 | **BLOCKED** | [#42 VibeVoice-ASR 7B](#42-vibevoice-asr-7b) | High | Needs ≥16 GB RAM |
 | **BLOCKED** | [#43 Fun-ASR-Nano](#43-fun-asr-nano) | Medium | License unclear |
 
-**Recently completed** (full write-ups in HISTORY.md): **#69 + #72 + #73 cap-honesty + KV/layer offload knobs → §79** (14-commit session shipping `CRISPASR_KV_QUANT_K/_V` + `KV_ON_CPU` on 14 backends, `N_GPU_LAYERS` on 9 backends, gemma4/mimo GPU-residency 2.2x / 22 % faster, plus cap-honesty cleanup on parakeet/glm-asr/qwen3/gemma4/omniasr). #78 Chatterbox vocoder → §78. #11 WebSocket server → §76, #63 Feature matrix parity → §72, #59 binding parity → §73, gemma4 #49 + Docker #31 → §74, tests + KV Q8_0 + cleanup → §75. Earlier: #5→§63, #16→§55, #51→§56, #51b→§60, #53→§63, #54→§61, #55→§54, #56→§63, #60d→§64.
+**Recently completed** (full write-ups in HISTORY.md): **#69 + #72 + #73 cap-honesty + KV/layer offload knobs → §79** (14-commit session shipping `CRISPASR_KV_QUANT_K/_V` + `KV_ON_CPU` on 14 backends, `N_GPU_LAYERS` on 10 backends, gemma4/mimo GPU-residency 2.2x / 22 % faster, plus cap-honesty cleanup on parakeet/glm-asr/qwen3/gemma4/omniasr). **vibevoice #69a follow-up → §79b** (mode-aware `tts_lm.layers.` / `lm.layers.` prefix predicate). #78 Chatterbox vocoder → §78. #11 WebSocket server → §76, #63 Feature matrix parity → §72, #59 binding parity → §73, gemma4 #49 + Docker #31 → §74, tests + KV Q8_0 + cleanup → §75. Earlier: #5→§63, #16→§55, #51→§56, #51b→§60, #53→§63, #54→§61, #55→§54, #56→§63, #60d→§64.
 
 **Open follow-ups from §79 — we want all of these:**
 - **#73 flash_attn_ext migration** for canary / cohere read path. Drops the `ggml_cast(F32)` tax that PLAN #73 cast-on-read currently pays. ~60-80 LOC each + causal-mask graph-input plumbing + careful F16 bit-equivalence validation. Worth doing for long-context workloads on those backends.
 - **#72 Linux/CUDA validation** of the gemma4_e2b / mimo_asr GPU-residency flip. Hardware-blocked from the dev host; expect even larger wins on dGPU than the 22 %–220 % observed on Apple Silicon Metal.
-- **#69a vibevoice port** — `hp.tts_n_layers` vs ASR-only-mode. Custom prefix predicate + careful path-per-mode validation.
+- **encoder-decoder #69a** (canary, cohere, kyutai-stt). Cross-attention layout has no `<prefix><N>.*` block-tagged tensors; needs bespoke per-backend predicates. Own design problem.
 
 ---
 
@@ -2283,7 +2283,7 @@ No `CAP_TRANSLATE` declared for either — models can't actually translate.
 
 ## ~~69. Layer + KV CPU-offload knobs (llama.cpp parity)~~ — FUNCTIONALLY SHIPPED 2026-05-04 → [HISTORY §79](HISTORY.md)
 
-#69b (KV-on-CPU) and #69e (asymmetric K/V quant) shipped on **14 backends**. #69a (layer offload) shipped on **9 backends**; vibevoice deferred. Three knobs stack — see §79 for the combined-config example.
+#69b (KV-on-CPU) and #69e (asymmetric K/V quant) shipped on **14 backends**. #69a (layer offload) shipped on **10 backends** (vibevoice closed via §79b — mode-aware prefix predicate). Three knobs stack — see §79 for the combined-config example.
 
 Original detailed write-up retained below for reference:
 

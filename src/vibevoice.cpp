@@ -75,6 +75,9 @@ struct vibevoice_context {
     ggml_backend_t backend = nullptr;
     ggml_backend_t backend_cpu = nullptr;
     ggml_backend_buffer_t buf = nullptr;
+    // PLAN #69a: optional second buffer for layers spilled to CPU.
+    // Non-null only when CRISPASR_N_GPU_LAYERS triggered a split load.
+    ggml_backend_buffer_t buf_cpu = nullptr;
     ggml_backend_sched_t sched = nullptr;
     ggml_context* weight_ctx = nullptr;
     // KV cache for LM decoder (positive path)
@@ -208,14 +211,43 @@ extern "C" struct vibevoice_context* vibevoice_init_from_file(const char* path_m
         return nullptr;
     }
 
+    // PLAN #69a: when CRISPASR_N_GPU_LAYERS is set and < the active LM
+    // layer count, route the heavy LM layers above N onto the CPU
+    // backend. Vibevoice has two modes — ASR-only (lm.layers.<N>.*,
+    // n_lm_layers) and TTS (tts_lm.layers.<N>.*, tts_n_layers); we pick
+    // the mode-appropriate prefix and threshold so the dominant decode
+    // path is what gets split. The light base-LM layers in TTS mode
+    // (4 layers used only for base-hidden splicing) stay on GPU.
     core_gguf::WeightLoad wl;
-    if (!core_gguf::load_weights(path_model, ctx->backend, "vibevoice", wl)) {
-        ggml_backend_free(ctx->backend);
-        delete ctx;
-        return nullptr;
+    int n_gpu_layers_env = -1;
+    if (const char* s = std::getenv("CRISPASR_N_GPU_LAYERS")) {
+        n_gpu_layers_env = std::atoi(s);
+    }
+    const bool tts_mode = hp.tts_n_layers > 0;
+    const char* split_prefix = tts_mode ? "tts_lm.layers." : "lm.layers.";
+    const int total_layers = tts_mode ? hp.tts_n_layers : hp.n_lm_layers;
+    const bool do_split = ctx->backend_cpu && ctx->backend_cpu != ctx->backend && n_gpu_layers_env >= 0 &&
+                          n_gpu_layers_env < total_layers;
+    if (do_split) {
+        core_gguf::LayerSplitConfig cfg{split_prefix, n_gpu_layers_env};
+        if (!core_gguf::load_weights_split(path_model, ctx->backend, ctx->backend_cpu,
+                                           core_gguf::is_gpu_tensor_with_prefix, &cfg, "vibevoice", wl)) {
+            ggml_backend_free(ctx->backend);
+            delete ctx;
+            return nullptr;
+        }
+        fprintf(stderr, "vibevoice: layer offload (%s): gpu=[0,%d), cpu=[%d,%d) (CRISPASR_N_GPU_LAYERS=%d)\n",
+                split_prefix, n_gpu_layers_env, n_gpu_layers_env, total_layers, n_gpu_layers_env);
+    } else {
+        if (!core_gguf::load_weights(path_model, ctx->backend, "vibevoice", wl)) {
+            ggml_backend_free(ctx->backend);
+            delete ctx;
+            return nullptr;
+        }
     }
     ctx->weight_ctx = wl.ctx;
     ctx->buf = wl.buf;
+    ctx->buf_cpu = wl.buf_cpu;
     m.tensors = wl.tensors;
 
     {
@@ -261,6 +293,8 @@ extern "C" void vibevoice_free(struct vibevoice_context* ctx) {
         ggml_free(ctx->voice.ctx);
     if (ctx->buf)
         ggml_backend_buffer_free(ctx->buf);
+    if (ctx->buf_cpu)
+        ggml_backend_buffer_free(ctx->buf_cpu);
     if (ctx->weight_ctx)
         ggml_free(ctx->weight_ctx);
     if (ctx->backend_cpu && ctx->backend_cpu != ctx->backend)

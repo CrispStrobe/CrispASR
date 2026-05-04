@@ -2998,8 +2998,8 @@ Each addresses an independent bottleneck:
   backends.
 - **#72 Linux/CUDA validation** of the GPU-residency flip — needs a
   CUDA host. Math is even more favourable on dGPUs.
-- **#69a vibevoice port** — complex ASR+TTS variants (`hp.tts_n_layers`
-  vs ASR-only mode). Deferred.
+- ~~**#69a vibevoice port** — complex ASR+TTS variants (`hp.tts_n_layers`
+  vs ASR-only mode). Deferred.~~ → shipped, see §79b below.
 
 #### Commits this session
 
@@ -3024,3 +3024,42 @@ c2e1829  feat(canary+cohere): full quant K/V via cast-on-read
 backends done, vibevoice deferred). PLAN #72 closed. PLAN #73 partial
 (write path closed everywhere, read-path optimization deferred for
 canary/cohere).
+
+### §79b — vibevoice #69a follow-up (2026-05-04)
+
+Closes the last LLM-decode backend on the offload matrix. Vibevoice
+is dual-mode (`hp.tts_n_layers == 0` ⇒ ASR-only, `> 0` ⇒ TTS-enabled
+with `lm.layers.<N>.*` for the 4-layer base path and
+`tts_lm.layers.<N>.*` for the dominant 20-layer TTS path), so the
+load-time predicate switches prefix per mode and thresholds the
+mode-appropriate layer count. The light base-LM layers in TTS mode
+stay on GPU.
+
+Wire-up: added `buf_cpu` to `vibevoice_context`, freed it in
+`vibevoice_free`, and gated `core_gguf::load_weights_split` on
+`backend_cpu` being non-null (same pattern as voxtral4b/gemma4_e2b).
+Predicate is `core_gguf::is_gpu_tensor_with_prefix` with a
+mode-selected `LayerSplitConfig{ "tts_lm.layers." | "lm.layers.", N }`.
+
+Validation (Apple M1, Q4_K-fixed for ASR + 0.5b-tts-f16-tokenizer
+for TTS):
+
+- ASR `vibevoice-asr-7b` (28 layers, ASR-only mode) at
+  `CRISPASR_N_GPU_LAYERS=14` — JFK transcript bit-identical to
+  legacy. Logs `layer offload (lm.layers.): gpu=[0,14), cpu=[14,28)`.
+- TTS `vibevoice-realtime-0.5b-tts` (20 tts_lm layers) at
+  `CRISPASR_N_GPU_LAYERS=10` — `Hello there.` → 21511 samples,
+  peak 21449/32767, RMS 4377; bit-identical to legacy WAV
+  (43066 bytes, same checksum). Logs
+  `layer offload (tts_lm.layers.): gpu=[0,10), cpu=[10,20)`.
+
+PERFORMANCE.md matrix vibevoice rows flipped from `·` → `✓` on
+the N_GPU_LAYERS column (both ASR and TTS rows). KV-quant migration
+note kept; the two knobs are independent — F16 K/V continues to
+work alongside layer offload.
+
+Open after this: encoder-decoder #69a (canary/cohere/kyutai-stt) is
+its own design problem (cross-attention layout, no `<prefix><N>.*`
+block-tagged tensors). #73 read-path optimization for canary/cohere
+still deferred without long-context perf evidence. Linux/CUDA
+validation of #72 still hardware-blocked.
