@@ -230,6 +230,33 @@ REGISTRY: tuple[Backend, ...] = (
             capabilities=("transcribe", "json-output", "temperature",
                           "word-timestamps")),
 
+    # granite-4.1-plus: 2B speech-LLM with translate + src/tgt language.
+    # Same runtime path as granite-4.1; -plus adds bigger LM head + extra
+    # capability declarations (translate, src-tgt-language).
+    Backend("granite-4.1-plus", "Granite Speech 4.1 2B Plus", "granite-speech-4.1-2b-plus-q4_k.gguf",
+            "cstr/granite-speech-4.1-2b-plus-GGUF", "granite-speech-4.1-2b-plus-q4_k.gguf",
+            timeout_s=300, approx_size_mb=2960,
+            capabilities=("transcribe", "json-output", "beam",
+                          "temperature", "word-timestamps", "punctuation")),
+    # granite-4.1-nar: non-autoregressive variant (encoder + projector
+    # only, no LLM decode). Smaller capability surface — no beam, no
+    # temperature; CTC-style decoding.
+    Backend("granite-4.1-nar", "Granite Speech 4.1 2B NAR", "granite-speech-4.1-2b-nar-q4_k.gguf",
+            "cstr/granite-speech-4.1-2b-nar-GGUF", "granite-speech-4.1-2b-nar-q4_k.gguf",
+            timeout_s=300, approx_size_mb=3200,
+            capabilities=("transcribe", "json-output", "word-timestamps")),
+    # hubert: HuBERT-large CTC ASR. wav2vec2-family runtime, ~200 MB.
+    Backend("hubert",    "HuBERT Large LS960-FT",  "hubert-large-ls960-ft-q4_k.gguf",
+            "cstr/hubert-large-ls960-ft-GGUF", "hubert-large-ls960-ft-q4_k.gguf",
+            timeout_s=120, approx_size_mb=200,
+            capabilities=("transcribe", "json-output", "word-timestamps")),
+    # data2vec: data2vec-audio CTC ASR, smallest (~60 MB) of the
+    # wav2vec2-family backends.
+    Backend("data2vec",  "Data2Vec Audio Base 960h", "data2vec-audio-base-960h-q4_k.gguf",
+            "cstr/data2vec-audio-960h-GGUF", "data2vec-audio-base-960h-q4_k.gguf",
+            timeout_s=120, approx_size_mb=60,
+            capabilities=("transcribe", "json-output", "word-timestamps")),
+
     # ---- TTS backends (tts-roundtrip capability) ----
     Backend("kokoro",     "Kokoro 82M (TTS)",    "kokoro-82m-q8_0.gguf",
             "cstr/kokoro-82m-GGUF", "kokoro-82m-q8_0.gguf",
@@ -246,10 +273,66 @@ REGISTRY: tuple[Backend, ...] = (
             "cstr/qwen3-tts-0.6b-base-GGUF", "qwen3-tts-12hz-0.6b-base-q8_0.gguf",
             timeout_s=300, approx_size_mb=1300,
             capabilities=("tts-roundtrip", "temperature")),
+    # qwen3-tts-customvoice: 0.6B fixed-speaker fine-tune (9 baked
+    # speakers via --voice <name>); same 12 Hz codec.
+    Backend("qwen3-tts-customvoice", "Qwen3-TTS 0.6B CustomVoice (TTS)",
+            "qwen3-tts-12hz-0.6b-customvoice-q8_0.gguf",
+            "cstr/qwen3-tts-0.6b-customvoice-GGUF",
+            "qwen3-tts-12hz-0.6b-customvoice-q8_0.gguf",
+            timeout_s=300, approx_size_mb=1280,
+            capabilities=("tts-roundtrip", "temperature")),
+    # qwen3-tts-1.7b-base: larger talker (~1.9 GB Q8_0); same ICL
+    # voice-clone path as 0.6B-Base.
+    Backend("qwen3-tts-1.7b-base", "Qwen3-TTS 1.7B (TTS)",
+            "qwen3-tts-12hz-1.7b-base-q8_0.gguf",
+            "cstr/qwen3-tts-1.7b-base-GGUF",
+            "qwen3-tts-12hz-1.7b-base-q8_0.gguf",
+            timeout_s=600, approx_size_mb=2200,
+            capabilities=("tts-roundtrip", "temperature")),
+    # qwen3-tts-1.7b-customvoice: 9 baked speakers on the 1.7B talker.
+    Backend("qwen3-tts-1.7b-customvoice", "Qwen3-TTS 1.7B CustomVoice (TTS)",
+            "qwen3-tts-12hz-1.7b-customvoice-q8_0.gguf",
+            "cstr/qwen3-tts-1.7b-customvoice-GGUF",
+            "qwen3-tts-12hz-1.7b-customvoice-q8_0.gguf",
+            timeout_s=600, approx_size_mb=2300,
+            capabilities=("tts-roundtrip", "temperature")),
+    # qwen3-tts-1.7b-voicedesign: instruct-tuned variant; pick voice via
+    # natural-language --instruct (no reference WAV, no preset speaker).
+    Backend("qwen3-tts-1.7b-voicedesign", "Qwen3-TTS 1.7B VoiceDesign (TTS)",
+            "qwen3-tts-12hz-1.7b-voicedesign-q8_0.gguf",
+            "cstr/qwen3-tts-1.7b-voicedesign-GGUF",
+            "qwen3-tts-12hz-1.7b-voicedesign-q8_0.gguf",
+            timeout_s=600, approx_size_mb=2200,
+            capabilities=("tts-roundtrip", "temperature")),
     # orpheus: Llama-3.2-3B talker + SNAC 24 kHz codec. Auto-download
     # pulls both. --voice tara is the default English speaker.
     Backend("orpheus",   "Orpheus 3B-FT (TTS)",  "orpheus-3b-0.1-ft-q8_0.gguf",
             "cstr/orpheus-3b-base-GGUF", "orpheus-3b-0.1-ft-q8_0.gguf",
+            timeout_s=600, approx_size_mb=3500,
+            capabilities=("tts-roundtrip", "temperature")),
+    # lex-au-orpheus-de: lex-au's German fine-tune of Orpheus-3B.
+    # Single-file repo (the .gguf is the repo name itself, lex-au's
+    # convention). Same SNAC codec as base orpheus.
+    Backend("lex-au-orpheus-de", "Orpheus-3b-German-FT (lex-au, TTS)",
+            "Orpheus-3b-German-FT-Q8_0.gguf",
+            "lex-au/Orpheus-3b-German-FT-Q8_0.gguf",
+            "Orpheus-3b-German-FT-Q8_0.gguf",
+            timeout_s=600, approx_size_mb=3500,
+            capabilities=("tts-roundtrip", "temperature")),
+    # kartoffel-orpheus-de-natural: 19-speaker German fine-tune.
+    # ASR-roundtrip word-exact via parakeet-v3 -l de (per README).
+    Backend("kartoffel-orpheus-de-natural", "Kartoffel-Orpheus 3B DE Natural (TTS)",
+            "kartoffel-orpheus-de-natural-q8_0.gguf",
+            "cstr/kartoffel-orpheus-3b-german-natural-GGUF",
+            "kartoffel-orpheus-de-natural-q8_0.gguf",
+            timeout_s=600, approx_size_mb=3500,
+            capabilities=("tts-roundtrip", "temperature")),
+    # kartoffel-orpheus-de-synthetic: 4-speaker variant with emotion +
+    # outburst control via "{Speaker} - {Emotion}: {text}" syntax.
+    Backend("kartoffel-orpheus-de-synthetic", "Kartoffel-Orpheus 3B DE Synthetic (TTS)",
+            "kartoffel-orpheus-de-synthetic-q8_0.gguf",
+            "cstr/kartoffel-orpheus-3b-german-synthetic-GGUF",
+            "kartoffel-orpheus-de-synthetic-q8_0.gguf",
             timeout_s=600, approx_size_mb=3500,
             capabilities=("tts-roundtrip", "temperature")),
     # chatterbox family: T3 (text->speech tokens) + S3Gen (tokens->24 kHz
