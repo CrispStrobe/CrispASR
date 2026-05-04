@@ -24,7 +24,7 @@ public:
 
     const char* name() const override { return "m2m100"; }
 
-    uint32_t capabilities() const override { return CAP_TRANSLATE; }
+    uint32_t capabilities() const override { return CAP_TRANSLATE | CAP_AUTO_DOWNLOAD; }
 
     std::vector<crispasr_segment> transcribe(const float* /*samples*/, int /*n_samples*/, int64_t /*t_offset_cs*/,
                                              const whisper_params& /*params*/) override {

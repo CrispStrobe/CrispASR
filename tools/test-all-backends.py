@@ -365,6 +365,19 @@ REGISTRY: tuple[Backend, ...] = (
             "cstr/lahgtna-chatterbox-v1-GGUF", "chatterbox-t3-f16.gguf",
             timeout_s=600, approx_size_mb=1400,
             capabilities=("tts-roundtrip", "temperature", "voice-cloning")),
+    # M2M-100 multilingual text-to-text translation (facebook/m2m100_418M).
+    # NOT an ASR or TTS backend — input is text, not audio. The test
+    # script's test_translate runs `--translate -tl de samples/jfk.wav`
+    # which doesn't apply (m2m100's transcribe() errors as "transcription
+    # not supported"). Empty capability tuple keeps the backend tracked
+    # by the audit (so drift is zero) without scheduling any audio-based
+    # test against it. Standalone-text-translate is exposed via
+    # crispasr_session_translate_text in the C ABI today; a CLI flag
+    # is a follow-up.
+    Backend("m2m100",   "M2M-100 418M (translate)", "m2m100-418m-q8_0.gguf",
+            "cstr/m2m100-418m-GGUF", "m2m100-418m-q8_0.gguf",
+            timeout_s=120, approx_size_mb=502,
+            capabilities=()),
 )
 
 

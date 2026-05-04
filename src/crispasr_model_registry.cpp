@@ -254,6 +254,17 @@ constexpr Entry k_registry[] = {
      "~1.4 GB",
      "chatterbox-s3gen-q8_0.gguf",
      "https://huggingface.co/cstr/chatterbox-GGUF/resolve/main/chatterbox-s3gen-q8_0.gguf"},
+    // M2M-100 (facebook/m2m100_418M, MIT) — multilingual text-to-text
+    // translation. 100 source/target languages via SentencePiece + lang
+    // codes prefix. Encoder-decoder transformer with cross-attention
+    // KV cache; en→de exact match to Python reference. Q8_0 (~502 MB)
+    // is the recommended deployment quant; Q4_K (~272 MB) and F16 are
+    // available on the same repo. The runtime is exposed today through
+    // crispasr_session_translate_text in the C ABI; the standalone CLI
+    // text-translate path is still pending — see PLAN.
+    {"m2m100", "m2m100-418m-q8_0.gguf",
+     "https://huggingface.co/cstr/m2m100-418m-GGUF/resolve/main/m2m100-418m-q8_0.gguf",
+     "~502 MB", nullptr, nullptr},
     // Kokoro-82M: official baseline + English default voice. The German
     // backbone + German default voice ride along via k_extras (see below)
     // so users running `-m auto --backend kokoro` get a working multilingual
