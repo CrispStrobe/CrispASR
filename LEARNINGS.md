@@ -2298,3 +2298,62 @@ commit on main is suspect for "did it actually run?", and every
 run after this commit is the new ground truth. Push the trigger
 fix on its own — its own push fires the corrected workflow on the
 new SHA, so any accumulated breakage surfaces on the same commit.
+
+### What surfaced when the triggers came back
+
+Three real breakages had accumulated under the silent triggers:
+
+1. **build.yml ubuntu-22-clang ×4** — clang-14 (Ubuntu 22.04 baseline)
+   refuses to capture C++17 structured-binding names in a `[&]`
+   lambda. gcc accepts it as an extension; clang rejects with
+   "reference to local binding 'qw' declared in enclosing function."
+   Fixed in C++20 (P1091) but our `cxx_std_11`-effective-C++17
+   baseline doesn't get that. **Fix:** plain locals + `const auto&`
+   aliases instead of `auto [a, b] = ...` whenever the names will be
+   captured by a lambda. Commit `053f41f`.
+
+2. **build.yml ios-xcode-build** — `build-xcframework.sh` was
+   hand-listing only 5 ggml libs + libcrispasr.a in the libs[] array
+   passed to `libtool -static -o combined.a`. CrispASR has 25+
+   STATIC backend libs that crispasr.a publicly depends on but does
+   NOT statically embed (parakeet, canary, voxtral, qwen3_asr,
+   wav2vec2-ggml, glm-asr, …). Every backend referenced from
+   `crispasr_c_api.cpp` would surface as "Undefined symbols"
+   eventually; wav2vec2_load was just the first. **Fix:** glob
+   `build_dir/src/*/release_dir/*.a` and append. Future-proof
+   against new backends. Commit `ee580f8`.
+
+3. **bindings-ruby.yml — `whisper` is an ALIAS target**. The Ruby
+   gem's `extconf.rb` ran `cmake --build build --target common
+   whisper` for years. After the upstream rename to crispasr,
+   `whisper` became an `add_library(whisper ALIAS crispasr)` for
+   back-compat in callers that hardcoded the name. **ALIAS targets
+   are linkable but not directly buildable** — `cmake --build
+   --target whisper` fails with "make: *** No rule to make target
+   'whisper'." (CMake forwards the target name to the underlying
+   build tool, which only sees the real `crispasr` rule.) **Fix:**
+   point the gem at the real target: `--target common crispasr`.
+   Commit `476c655`.
+
+The first two were pure code drift (compiler versions / new backend
+sources added without updating the xcframework lib list). The
+third was a rename gotcha. None would have made it past CI if
+build.yml + bindings-ruby.yml had been firing on main pushes.
+
+### Workflow auto-discovery — `actions/configure-pages` failure mode
+
+The `Examples WASM` workflow's whole purpose is `actions/upload-pages-artifact`
++ `actions/deploy-pages` to a GitHub Pages site. If Pages isn't
+enabled on the repo (Settings → Pages → "GitHub Actions" source),
+`actions/configure-pages` fails with:
+
+```
+##[error]Get Pages site failed. Please verify that the repository
+has Pages enabled... HttpError: Not Found
+```
+
+The build matrix in `build.yml` already validates that the WASM
+examples *compile* — that's the per-merge signal we want. The
+deploy is incidental and shouldn't gate main-push CI. Default the
+trigger to `workflow_dispatch:` only and re-add `push: branches:
+[main]` together with enabling Pages. Commit `476c655`.
