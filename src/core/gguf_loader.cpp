@@ -730,25 +730,36 @@ void free_weights(WeightLoad& wl) {
     wl.tensors.clear();
 }
 
-int blk_layer_of(const char* tensor_name) {
-    if (!tensor_name)
+int blk_layer_of_with_prefix(const char* tensor_name, const char* prefix) {
+    if (!tensor_name || !prefix)
         return -1;
-    constexpr const char* kPfx = "blk.";
-    constexpr size_t kPfxLen = 4;
-    if (std::strncmp(tensor_name, kPfx, kPfxLen) != 0)
+    const size_t plen = std::strlen(prefix);
+    if (std::strncmp(tensor_name, prefix, plen) != 0)
         return -1;
     char* end = nullptr;
-    long il = std::strtol(tensor_name + kPfxLen, &end, 10);
+    long il = std::strtol(tensor_name + plen, &end, 10);
     if (!end || *end != '.' || il < 0)
         return -1;
     return (int)il;
+}
+
+int blk_layer_of(const char* tensor_name) {
+    return blk_layer_of_with_prefix(tensor_name, "blk.");
+}
+
+bool is_gpu_tensor_with_prefix(const char* tensor_name, void* user) {
+    const auto* cfg = static_cast<const LayerSplitConfig*>(user);
+    const int il = blk_layer_of_with_prefix(tensor_name, cfg->prefix);
+    if (il < 0)
+        return true; // non-layered tensors stay on GPU
+    return il < cfg->threshold;
 }
 
 bool is_gpu_tensor_blk(const char* tensor_name, void* user) {
     const int threshold = *static_cast<const int*>(user);
     const int il = blk_layer_of(tensor_name);
     if (il < 0)
-        return true; // non-layered tensors stay on GPU
+        return true;
     return il < threshold;
 }
 

@@ -79,6 +79,8 @@ struct omniasr_context {
     ggml_backend_t backend = nullptr;
     ggml_backend_t backend_cpu = nullptr;
     ggml_backend_buffer_t buf = nullptr;
+    // PLAN #69a: optional second buffer for layers spilled to CPU.
+    ggml_backend_buffer_t buf_cpu = nullptr;
     ggml_backend_sched_t sched = nullptr;
     ggml_context* weight_ctx = nullptr;
     // LLM decoder
@@ -419,9 +421,32 @@ extern "C" struct omniasr_context* omniasr_init_from_file(const char* path_model
         ggml_backend_cpu_set_n_threads(ctx->backend, params.n_threads > 0 ? params.n_threads : 4);
     }
 
+    // PLAN #69a: when CRISPASR_N_GPU_LAYERS is set and < total decoder
+    // layers, route dec.<il>.* with il >= N onto the CPU backend.
+    // Only meaningful for omniasr-llm; the CTC variant's "dec." tensors
+    // are a fixed-depth post-encoder head, not transformer blocks.
     core_gguf::WeightLoad wl;
     const char* arch = hp.model_type == 1 ? "omniasr-llm" : "omniasr-ctc";
-    if (!core_gguf::load_weights(path_model, ctx->backend, arch, wl)) {
+    int n_gpu_layers_env = -1;
+    if (const char* s = std::getenv("CRISPASR_N_GPU_LAYERS")) {
+        n_gpu_layers_env = std::atoi(s);
+    }
+    const int total_layers = (int)hp.n_dec;
+    const bool do_split = hp.model_type == 1 && ctx->backend_cpu && ctx->backend_cpu != ctx->backend &&
+                          n_gpu_layers_env >= 0 && n_gpu_layers_env < total_layers;
+    bool ok;
+    if (do_split) {
+        core_gguf::LayerSplitConfig cfg{"dec.", n_gpu_layers_env};
+        ok = core_gguf::load_weights_split(path_model, ctx->backend, ctx->backend_cpu,
+                                           core_gguf::is_gpu_tensor_with_prefix, &cfg, arch, wl);
+        if (ok) {
+            fprintf(stderr, "%s: layer offload: gpu=[0,%d), cpu=[%d,%d) (CRISPASR_N_GPU_LAYERS=%d)\n", arch,
+                    n_gpu_layers_env, n_gpu_layers_env, total_layers, n_gpu_layers_env);
+        }
+    } else {
+        ok = core_gguf::load_weights(path_model, ctx->backend, arch, wl);
+    }
+    if (!ok) {
         if (ctx->backend_cpu && ctx->backend_cpu != ctx->backend)
             ggml_backend_free(ctx->backend_cpu);
         ggml_backend_free(ctx->backend);
@@ -430,6 +455,7 @@ extern "C" struct omniasr_context* omniasr_init_from_file(const char* path_model
     }
     ctx->weight_ctx = wl.ctx;
     ctx->buf = wl.buf;
+    ctx->buf_cpu = wl.buf_cpu;
     m.tensors = wl.tensors;
 
     // Backend scheduler: ggml requires the last backend to be CPU when a GPU
@@ -491,6 +517,8 @@ extern "C" void omniasr_free(struct omniasr_context* ctx) {
         ggml_free(ctx->weight_ctx);
     if (ctx->buf)
         ggml_backend_buffer_free(ctx->buf);
+    if (ctx->buf_cpu)
+        ggml_backend_buffer_free(ctx->buf_cpu);
     if (ctx->backend_cpu && ctx->backend_cpu != ctx->backend)
         ggml_backend_free(ctx->backend_cpu);
     if (ctx->backend)

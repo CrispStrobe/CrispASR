@@ -125,19 +125,33 @@ using IsGpuTensor = bool (*)(const char* tensor_name, void* user);
 bool load_weights_split(const char* path, ggml_backend_t gpu_backend, ggml_backend_t cpu_backend, IsGpuTensor is_gpu,
                         void* user, const char* model_tag, WeightLoad& out);
 
-// PLAN #69a — generic predicate for the "blk.<N>." tensor naming used
-// by voxtral, voxtral4b, qwen3_asr, granite_speech. Pass a pointer to
-// the layer threshold as `user`; tensors whose layer index >= *threshold
-// are routed to CPU, everything else (audio enc, projection,
-// embeddings, output_norm, blk.<n>.* with n < threshold) stays on GPU.
-//
-// Backends with different naming schemes (glm_asr "llm.blk.<N>.",
-// orpheus "talker.blk.<N>.", omniasr "dec.<N>.") need their own
-// predicate — defer until those backends are ported.
+// PLAN #69a — generic predicate for the "<prefix><N>." tensor naming
+// used by every LLM-decode backend in src/. Each backend has its own
+// prefix:
+//   "blk."          (voxtral, voxtral4b, qwen3_asr, granite_speech, gemma4_e2b, mimo_asr)
+//   "llm.blk."      (glm_asr)
+//   "talker.blk."   (orpheus)
+//   "dec."          (omniasr)
+// Returns -1 if the tensor name doesn't match `<prefix><integer>.`.
+int blk_layer_of_with_prefix(const char* tensor_name, const char* prefix);
+
+// Convenience for backends using bare "blk.<N>." (the most common
+// scheme). Equivalent to blk_layer_of_with_prefix(name, "blk.").
 int blk_layer_of(const char* tensor_name);
 
-// Convenience predicate: true if `tensor_name` should live on GPU,
-// given a threshold of N. `user` must point to an int holding N.
+// Configurable predicate: tensors named `<cfg.prefix><N>.<rest>` go to
+// CPU iff N >= cfg.threshold; anything else (different prefix, no
+// integer, threshold-violating layer) stays on GPU. Pass a pointer
+// to a LayerSplitConfig as `user`.
+struct LayerSplitConfig {
+    const char* prefix; // e.g. "blk.", "llm.blk.", "talker.blk.", "dec."
+    int threshold;      // N — first CPU-resident layer
+};
+bool is_gpu_tensor_with_prefix(const char* tensor_name, void* user);
+
+// Bare "blk." convenience: pass a pointer to an int (the threshold)
+// as `user`. Equivalent to is_gpu_tensor_with_prefix() with
+// LayerSplitConfig{ "blk.", *N }.
 bool is_gpu_tensor_blk(const char* tensor_name, void* user);
 
 // Free a WeightLoad's resources. Call when the model is being destroyed

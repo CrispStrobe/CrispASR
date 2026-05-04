@@ -152,6 +152,8 @@ struct g4e_model {
     // Weight context
     ggml_context* ctx_w = nullptr;
     ggml_backend_buffer_t buf_w = nullptr;
+    // PLAN #69a: optional second buffer for layers spilled to CPU.
+    ggml_backend_buffer_t buf_w_cpu = nullptr;
 
     // Mel resources (stored in GGUF, preferred over runtime generation)
     ggml_tensor* mel_window = nullptr;  // [n_fft] Hann window
@@ -1461,19 +1463,40 @@ extern "C" struct gemma4_e2b_context* gemma4_e2b_init_from_file(const char* path
     if (!ctx->backend)
         ctx->backend = ctx->backend_cpu;
 
-    // Load to CPU (same pattern as firered — allows native Q4_K SIMD for decoder)
-    core_gguf::WeightLoad wl;
     // PLAN #72: load weights onto the user-picked backend (GPU when
     // use_gpu=true). Was hardcoded to backend_cpu under the old
     // assumption that Q4_K CPU SIMD beat the Metal/CUDA path; today's
     // GPU Q4_K kernels are mature.
-    if (!core_gguf::load_weights(path_model, ctx->backend, "gemma4_e2b", wl)) {
-        fprintf(stderr, "gemma4_e2b: failed to load weights from '%s'\n", path_model);
-        delete ctx;
-        return nullptr;
+    // PLAN #69a: when CRISPASR_N_GPU_LAYERS is set and < total LLM
+    // layers, route llm.layers.<il>.* with il >= N onto the CPU backend.
+    core_gguf::WeightLoad wl;
+    int n_gpu_layers_env = -1;
+    if (const char* s = std::getenv("CRISPASR_N_GPU_LAYERS")) {
+        n_gpu_layers_env = std::atoi(s);
+    }
+    const int total_layers = (int)lhp.num_layers;
+    const bool do_split = ctx->backend_cpu && ctx->backend_cpu != ctx->backend && n_gpu_layers_env >= 0 &&
+                          n_gpu_layers_env < total_layers;
+    if (do_split) {
+        core_gguf::LayerSplitConfig cfg{"llm.layers.", n_gpu_layers_env};
+        if (!core_gguf::load_weights_split(path_model, ctx->backend, ctx->backend_cpu,
+                                           core_gguf::is_gpu_tensor_with_prefix, &cfg, "gemma4_e2b", wl)) {
+            fprintf(stderr, "gemma4_e2b: split load failed from '%s'\n", path_model);
+            delete ctx;
+            return nullptr;
+        }
+        fprintf(stderr, "gemma4_e2b: layer offload: gpu=[0,%d), cpu=[%d,%d) (CRISPASR_N_GPU_LAYERS=%d)\n",
+                n_gpu_layers_env, n_gpu_layers_env, total_layers, n_gpu_layers_env);
+    } else {
+        if (!core_gguf::load_weights(path_model, ctx->backend, "gemma4_e2b", wl)) {
+            fprintf(stderr, "gemma4_e2b: failed to load weights from '%s'\n", path_model);
+            delete ctx;
+            return nullptr;
+        }
     }
     m.ctx_w = wl.ctx;
     m.buf_w = wl.buf;
+    m.buf_w_cpu = wl.buf_cpu;
     auto& ts = wl.tensors;
 
     auto get = [&](const char* name) -> ggml_tensor* {
@@ -2473,6 +2496,8 @@ extern "C" void gemma4_e2b_free(struct gemma4_e2b_context* ctx) {
         ggml_backend_sched_free(ctx->sched);
     if (ctx->model.buf_w)
         ggml_backend_buffer_free(ctx->model.buf_w);
+    if (ctx->model.buf_w_cpu)
+        ggml_backend_buffer_free(ctx->model.buf_w_cpu);
     if (ctx->model.ctx_w)
         ggml_free(ctx->model.ctx_w);
     if (ctx->backend_cpu)

@@ -124,6 +124,8 @@ struct orpheus_context {
     ggml_backend_t backend_cpu = nullptr;
     ggml_context* ctx_w = nullptr;
     ggml_backend_buffer_t buf_w = nullptr;
+    // PLAN #69a: optional second buffer for layers spilled to CPU.
+    ggml_backend_buffer_t buf_w_cpu = nullptr;
     std::map<std::string, ggml_tensor*> tensors;
 
     // Compute scheduler — created once, reused across embed / talker_kv calls.
@@ -165,6 +167,9 @@ struct orpheus_context {
         }
         if (buf_w) {
             ggml_backend_buffer_free(buf_w);
+        }
+        if (buf_w_cpu) {
+            ggml_backend_buffer_free(buf_w_cpu);
         }
         if (backend && backend != backend_cpu) {
             ggml_backend_free(backend);
@@ -334,14 +339,36 @@ extern "C" struct orpheus_context* orpheus_init_from_file(const char* path_model
     }
 
     // Pass 2: weights.
+    // PLAN #69a: when CRISPASR_N_GPU_LAYERS is set and < total layers,
+    // route talker.blk.<il>.* with il >= N onto the CPU backend.
     core_gguf::WeightLoad wl;
-    if (!core_gguf::load_weights(path_model, c->backend, "orpheus", wl)) {
-        fprintf(stderr, "orpheus: failed to load weights from '%s'\n", path_model);
-        delete c;
-        return nullptr;
+    int n_gpu_layers_env = -1;
+    if (const char* s = std::getenv("CRISPASR_N_GPU_LAYERS")) {
+        n_gpu_layers_env = std::atoi(s);
+    }
+    const int total_layers = (int)c->hp.n_layers;
+    const bool do_split = c->backend_cpu && c->backend_cpu != c->backend && n_gpu_layers_env >= 0 &&
+                          n_gpu_layers_env < total_layers;
+    if (do_split) {
+        core_gguf::LayerSplitConfig cfg{"talker.blk.", n_gpu_layers_env};
+        if (!core_gguf::load_weights_split(path_model, c->backend, c->backend_cpu,
+                                           core_gguf::is_gpu_tensor_with_prefix, &cfg, "orpheus", wl)) {
+            fprintf(stderr, "orpheus: split load failed from '%s'\n", path_model);
+            delete c;
+            return nullptr;
+        }
+        fprintf(stderr, "orpheus: layer offload: gpu=[0,%d), cpu=[%d,%d) (CRISPASR_N_GPU_LAYERS=%d)\n",
+                n_gpu_layers_env, n_gpu_layers_env, total_layers, n_gpu_layers_env);
+    } else {
+        if (!core_gguf::load_weights(path_model, c->backend, "orpheus", wl)) {
+            fprintf(stderr, "orpheus: failed to load weights from '%s'\n", path_model);
+            delete c;
+            return nullptr;
+        }
     }
     c->ctx_w = wl.ctx;
     c->buf_w = wl.buf;
+    c->buf_w_cpu = wl.buf_cpu;
     c->tensors = std::move(wl.tensors);
 
     if (!bind_talker(c)) {
