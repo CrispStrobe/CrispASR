@@ -1,6 +1,6 @@
 # Text-to-Speech (TTS)
 
-CrispASR ships **four open-weights TTS engines** behind the same
+CrispASR ships **five open-weights TTS engines** behind the same
 `crispasr` binary, each with a distinct voice / quality / footprint
 trade-off:
 
@@ -10,8 +10,9 @@ trade-off:
 | **`qwen3-tts`** | Highest fidelity / strongest cloning. Speech-LLM (talker + code predictor + 12 Hz codec). | Yes (WAV + ref-text or baked voice GGUF) | ~1.3 GB via `-m auto` |
 | **`vibevoice-tts`** | Lowest-latency streaming TTS, designed for realtime. | Preset voice packs (and a 1.5 B-base WAV cloning path) | ~636 MB via `-m auto` |
 | **`orpheus`** | Llama-3.2-3B talker + SNAC 24 kHz codec. 8 baked English speakers; expressive output. Greedy loops — pass `--temperature 0.6`. | Preset names via `--voice tara/leah/...` | ~3.5 GB via `-m auto` (talker Q8 + 26 MB SNAC) |
+| **`chatterbox`** | T3 AR + S3Gen flow-matching + HiFTGenerator. Built-in voice baked into the T3 GGUF; clones from a reference WAV. EN/AR/DE variants share runtime. | Yes (`--voice <wav>` via VE/CAMPPlus) | ~880 MB via `-m auto` (T3 Q8 + S3Gen Q8) |
 
-All four write 24 kHz mono WAV via `--tts-output`.
+All five write 24 kHz mono WAV via `--tts-output`.
 
 ## Kokoro — multilingual, smallest
 
@@ -196,6 +197,78 @@ bin so traurig.`), or `--backend lex-au-orpheus-de` for lex-au's
 German Q8_0 mirror. All three reuse the same orpheus runtime + SNAC
 codec.
 
+## Chatterbox — flow-matching TTS, voice cloning + multilingual
+
+ResembleAI's chatterbox is a two-GGUF pipeline: **T3** (AR text →
+speech tokens) and **S3Gen** (flow-matching tokens → 24 kHz audio
+via Conformer encoder + UNet1D CFM denoiser + HiFTGenerator vocoder).
+The default voice is baked into the T3 GGUF (`conds.*` tensors); a
+reference WAV switches into voice-cloning mode through the VoiceEncoder
+LSTM + CAMPPlus x-vector.
+
+```bash
+# English base — auto-download pulls T3 + S3Gen (~880 MB) on first run.
+./build/bin/crispasr \
+    --backend chatterbox -m auto \
+    --tts "Hello there, this is chatterbox speaking." \
+    --tts-output out.wav
+```
+
+Four variants share the same runtime — the architecture flag in the
+T3 GGUF metadata switches between the Llama-T3 path (base/lahgtna)
+and the GPT-2-T3 path (turbo/kartoffelbox-turbo):
+
+```bash
+# Distilled English (350 M, 2-step meanflow S3Gen — faster than base):
+./build/bin/crispasr --backend chatterbox-turbo -m auto --tts "..." -ow out.wav
+
+# German fine-tune of Turbo (SebastianBodza/Kartoffelbox_Turbo):
+./build/bin/crispasr --backend kartoffelbox-turbo -m auto -l de \
+    --tts "Hallo, das ist Kartoffelbox-Turbo." -ow out-de.wav
+
+# Arabic Llama-T3 fine-tune (oddadmix/lahgtna-chatterbox-v1):
+./build/bin/crispasr --backend lahgtna-chatterbox -m auto -l ar \
+    --tts "مرحباً" -ow out-ar.wav
+```
+
+Voice cloning from a reference WAV (24 kHz mono, ~5–10 s):
+
+```bash
+./build/bin/crispasr --backend chatterbox -m auto \
+    --voice samples/jfk.wav \
+    --tts "Cloned voice synthesizing arbitrary text." \
+    --tts-output cloned.wav
+```
+
+Companion sharing — the registry deliberately points multiple variants
+at the same S3Gen file to avoid redundant downloads. Kartoffelbox-turbo
+and chatterbox-turbo share the meanflow S3Gen verbatim; lahgtna and
+chatterbox-base share the original S3Gen. Pulling any variant first
+warms the cache for the rest.
+
+| Variant | T3 default | S3Gen companion | Total |
+|---|---|---|---:|
+| `chatterbox`         | T3 Q8_0 (541 MB)  | base S3Gen Q8_0  (342 MB) | ~880 MB |
+| `chatterbox-turbo`   | T3 F16  (963 MB)  | turbo S3Gen F16  (627 MB) | ~1.6 GB |
+| `kartoffelbox-turbo` | T3 Q8_0 (623 MB)  | turbo S3Gen F16  (shared)  | ~1.25 GB |
+| `lahgtna-chatterbox` | T3 F16  (1059 MB) | base S3Gen Q8_0  (shared)  | ~1.4 GB |
+
+Sampling controls:
+
+| Flag | Default | Purpose |
+|---|---|---|
+| `--temperature` | runtime default 0.8 | AR sampling temperature (0 = greedy; runtime falls back to 0.8 when global default 0.0) |
+| `--tts-steps` | 10 (base/lahgtna) / 2 (turbo/kartoffelbox-turbo meanflow) | CFM Euler steps |
+| `--codec-model` | sibling autodetect | explicit S3Gen GGUF path (overrides `-m auto` companion) |
+
+**Status — known parity gap:** the Conformer encoder still has an
+open ~30 % rel-pos attention magnitude gap vs the Python reference
+(matrix_bd rms 7.08 vs 10.06 — see commits `b4f4afe`, `8dc8bc6`).
+The vocoder side is bit-tight (per-stage cosine 1.000, waveform
+cosine 0.93). Audio synthesizes end-to-end and is intelligible, but
+voice fidelity / prosody may differ from the Python reference until
+the rel-pos gap closes.
+
 ## TTS GGUF downloads
 
 [`cstr/vibevoice-realtime-0.5b-GGUF`](https://huggingface.co/cstr/vibevoice-realtime-0.5b-GGUF) ·
@@ -207,4 +280,8 @@ codec.
 [`cstr/orpheus-3b-base-GGUF`](https://huggingface.co/cstr/orpheus-3b-base-GGUF) ·
 [`cstr/kartoffel-orpheus-3b-german-natural-GGUF`](https://huggingface.co/cstr/kartoffel-orpheus-3b-german-natural-GGUF) ·
 [`cstr/kartoffel-orpheus-3b-german-synthetic-GGUF`](https://huggingface.co/cstr/kartoffel-orpheus-3b-german-synthetic-GGUF) ·
-[`cstr/snac-24khz-GGUF`](https://huggingface.co/cstr/snac-24khz-GGUF)
+[`cstr/snac-24khz-GGUF`](https://huggingface.co/cstr/snac-24khz-GGUF) ·
+[`cstr/chatterbox-GGUF`](https://huggingface.co/cstr/chatterbox-GGUF) ·
+[`cstr/chatterbox-turbo-GGUF`](https://huggingface.co/cstr/chatterbox-turbo-GGUF) ·
+[`cstr/kartoffelbox-turbo-GGUF`](https://huggingface.co/cstr/kartoffelbox-turbo-GGUF) ·
+[`cstr/lahgtna-chatterbox-v1-GGUF`](https://huggingface.co/cstr/lahgtna-chatterbox-v1-GGUF)

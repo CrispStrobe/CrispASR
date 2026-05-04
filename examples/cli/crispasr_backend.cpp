@@ -20,6 +20,7 @@ std::unique_ptr<CrispasrBackend> crispasr_make_wav2vec2_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_vibevoice_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_qwen3_tts_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_orpheus_backend();
+std::unique_ptr<CrispasrBackend> crispasr_make_chatterbox_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_kokoro_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_glm_asr_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_kyutai_stt_backend();
@@ -78,6 +79,11 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& name
         name == "kartoffel-orpheus-de-synthetic" || name == "kartoffel-orpheus-natural" ||
         name == "kartoffel-orpheus-synthetic" || name == "lex-au-orpheus-de" || name == "lex-au-orpheus")
         return crispasr_make_orpheus_backend();
+    if (name == "chatterbox" || name == "chatterbox-tts" || name == "chatterbox-base" ||
+        name == "chatterbox-turbo" || name == "chatterbox_turbo" || name == "kartoffelbox" ||
+        name == "kartoffelbox-turbo" || name == "kartoffelbox_turbo" || name == "lahgtna" ||
+        name == "lahgtna-chatterbox" || name == "lahgtna-chatterbox-v1")
+        return crispasr_make_chatterbox_backend();
     if (name == "kokoro" || name == "styletts2" || name == "styletts2-ljspeech" || name == "kokoro-tts")
         return crispasr_make_kokoro_backend();
     if (name == "glm-asr" || name == "glmasr" || name == "glm" || name == "glm_asr")
@@ -128,6 +134,10 @@ std::vector<std::string> crispasr_list_backends() {
         "lex-au-orpheus-de",
         "kartoffel-orpheus-de-natural",
         "kartoffel-orpheus-de-synthetic",
+        "chatterbox",
+        "chatterbox-turbo",
+        "kartoffelbox-turbo",
+        "lahgtna-chatterbox",
         "kokoro",
         "glm-asr",
         "kyutai-stt",
@@ -343,6 +353,8 @@ std::string crispasr_detect_backend_from_gguf(const std::string& model_path) {
         return "qwen3-tts";
     if (contains_ci("orpheus") || contains_ci("kartoffel-orpheus") || contains_ci("kartoffel_orpheus"))
         return "orpheus";
+    if (contains_ci("kartoffelbox") || contains_ci("lahgtna") || contains_ci("chatterbox"))
+        return "chatterbox";
     if (contains_ci("kokoro"))
         return "kokoro";
     if (contains_ci("styletts") && contains_ci("ljspeech"))
