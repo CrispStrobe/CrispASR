@@ -1034,15 +1034,20 @@ ggml_cgraph* build_graph_code_pred_kv(qwen3_tts_context* c, int n_past, int n_to
     const float theta = hp.rope_theta;
     const float attn_scale = 1.0f / std::sqrt((float)hd);
     const int T = n_tokens;
-    // O15 (default ON since 2026-05-02; opt-out with QWEN3_TTS_O15=0):
+    // O15 (default OFF since 2026-05-04; opt-in with QWEN3_TTS_O15=1):
     // pin Lk = cp_kv_max_ctx for all code_pred graphs so all T=1 steps
     // share the same tensor topology and gallocr can reuse the plan.
-    // Validated bit-identical (md5-equal WAV) across multiple benches;
-    // saves ~14-19 ms/frame on cp_pred (alloc+build collapse from
-    // ~20 ms/frame to ~1.6 ms/frame). The earlier NaN-on-non-Metal
-    // bug from uninitialised KV slots was fixed in commit 7298dd5
-    // (cp_kv_alloc zero-clears the buffer).
-    const bool o15 = env_bool_default("QWEN3_TTS_O15", true);
+    // Validated bit-identical (md5-equal WAV) on Metal/CPU; saves
+    // ~14-19 ms/frame on cp_pred (alloc+build collapse from ~20 ms/frame
+    // to ~1.6 ms/frame).
+    //
+    // Reverted from default-ON (5e21e4a) to default-OFF after issue #56:
+    // the ggml_set_rows-based cached-graph reuse (b3cd141) crashes on the
+    // CUDA backend with GGML_ASSERT in ggml_backend_tensor_set on the
+    // first call into code_pred_generate_15 (Jetson Orin AGX, sm_87).
+    // M1 Metal users who want the speedup should set QWEN3_TTS_O15=1.
+    // The flag will go back to default-ON once the CUDA path is fixed.
+    const bool o15 = env_bool_default("QWEN3_TTS_O15", false);
     const int Lk = o15 ? c->cp_kv_max_ctx : (n_past + T);
 
     ggml_context* ctx0 = arena_ctx;
@@ -1750,7 +1755,8 @@ float* run_code_pred_kv(qwen3_tts_context* c, const float* embeds, int n_tokens,
     const int d = (int)hp.cp_d_model;
     const int vocab = (int)hp.cp_vocab_size;
 
-    const bool o15 = env_bool_default("QWEN3_TTS_O15", true);
+    // Default OFF — see #56: ggml_set_rows-based reuse asserts on CUDA.
+    const bool o15 = env_bool_default("QWEN3_TTS_O15", false);
     const int actual_Lk = n_past + n_tokens;
     const int mask_Lk = o15 ? c->cp_kv_max_ctx : actual_Lk;
 
