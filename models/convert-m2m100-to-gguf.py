@@ -433,7 +433,7 @@ def convert(input_dir: Path, out_path: Path) -> None:
     if not weights_path.exists():
         sys.exit(f"Missing pytorch_model.bin at {weights_path}")
     print(f"  weights: {weights_path}")
-    sd = torch.load(str(weights_path), map_location="cpu", weights_only=True)
+    sd = torch.load(str(weights_path), map_location="cpu", weights_only=True, mmap=True)
     if isinstance(sd, dict) and "state_dict" in sd:
         sd = sd["state_dict"]
     print(f"  tensors: {len(sd)} in state dict")
