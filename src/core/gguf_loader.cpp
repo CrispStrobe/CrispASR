@@ -730,6 +730,28 @@ void free_weights(WeightLoad& wl) {
     wl.tensors.clear();
 }
 
+int blk_layer_of(const char* tensor_name) {
+    if (!tensor_name)
+        return -1;
+    constexpr const char* kPfx = "blk.";
+    constexpr size_t kPfxLen = 4;
+    if (std::strncmp(tensor_name, kPfx, kPfxLen) != 0)
+        return -1;
+    char* end = nullptr;
+    long il = std::strtol(tensor_name + kPfxLen, &end, 10);
+    if (!end || *end != '.' || il < 0)
+        return -1;
+    return (int)il;
+}
+
+bool is_gpu_tensor_blk(const char* tensor_name, void* user) {
+    const int threshold = *static_cast<const int*>(user);
+    const int il = blk_layer_of(tensor_name);
+    if (il < 0)
+        return true; // non-layered tensors stay on GPU
+    return il < threshold;
+}
+
 bool load_weights_split(const char* path, ggml_backend_t gpu_backend, ggml_backend_t cpu_backend, IsGpuTensor is_gpu,
                         void* user, const char* model_tag, WeightLoad& out) {
     const char* tag = model_tag ? model_tag : "core_gguf";

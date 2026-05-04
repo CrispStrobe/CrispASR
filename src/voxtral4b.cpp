@@ -208,35 +208,6 @@ struct voxtral4b_context {
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
-// Parse a transformer-block layer index out of a tensor name. Returns
-// -1 if the name is not a layered tensor (audio encoder, projection,
-// embeddings, output norm). Layered tensors look like "blk.<N>.<field>".
-static int voxtral4b_layer_of(const char* name) {
-    if (!name)
-        return -1;
-    constexpr const char* kPfx = "blk.";
-    constexpr size_t kPfxLen = 4;
-    if (std::strncmp(name, kPfx, kPfxLen) != 0)
-        return -1;
-    char* end = nullptr;
-    long il = std::strtol(name + kPfxLen, &end, 10);
-    if (!end || *end != '.' || il < 0)
-        return -1;
-    return (int)il;
-}
-
-struct voxtral4b_split_ctx {
-    int n_gpu_layers; // layers [0..n_gpu_layers) on GPU; rest on CPU
-};
-
-static bool voxtral4b_is_gpu_tensor(const char* tensor_name, void* user) {
-    auto* sc = static_cast<voxtral4b_split_ctx*>(user);
-    const int il = voxtral4b_layer_of(tensor_name);
-    if (il < 0)
-        return true; // non-layered tensors (audio enc, proj, embd, output_norm) stay on GPU
-    return il < sc->n_gpu_layers;
-}
-
 static bool voxtral4b_load_model(voxtral4b_model& model, voxtral4b_vocab& vocab, const char* path,
                                  ggml_backend_t backend, ggml_backend_t backend_cpu) {
     // Pass 1: metadata
@@ -303,9 +274,9 @@ static bool voxtral4b_load_model(voxtral4b_model& model, voxtral4b_vocab& vocab,
     const bool do_split = backend_cpu && backend_cpu != backend && n_gpu_layers_env >= 0 &&
                           n_gpu_layers_env < total_layers;
     if (do_split) {
-        voxtral4b_split_ctx sc{n_gpu_layers_env};
-        if (!core_gguf::load_weights_split(path, backend, backend_cpu, voxtral4b_is_gpu_tensor, &sc, "voxtral4b",
-                                           wl)) {
+        int threshold = n_gpu_layers_env;
+        if (!core_gguf::load_weights_split(path, backend, backend_cpu, core_gguf::is_gpu_tensor_blk, &threshold,
+                                           "voxtral4b", wl)) {
             return false;
         }
         fprintf(stderr, "voxtral4b: layer offload: gpu=[0,%d), cpu=[%d,%d) (CRISPASR_N_GPU_LAYERS=%d)\n",

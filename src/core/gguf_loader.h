@@ -125,6 +125,20 @@ using IsGpuTensor = bool (*)(const char* tensor_name, void* user);
 bool load_weights_split(const char* path, ggml_backend_t gpu_backend, ggml_backend_t cpu_backend, IsGpuTensor is_gpu,
                         void* user, const char* model_tag, WeightLoad& out);
 
+// PLAN #69a — generic predicate for the "blk.<N>." tensor naming used
+// by every LLM-decode backend in src/. Pass a pointer to the layer
+// threshold as `user`; tensors whose layer index >= *threshold are
+// routed to CPU, everything else (audio enc, projection, embeddings,
+// output_norm, blk.<n>.* with n < threshold) stays on GPU.
+//
+// Returns -1 for non-layered tensors so backends with a different
+// naming scheme can build their own predicate around this primitive.
+int blk_layer_of(const char* tensor_name);
+
+// Convenience predicate: true if `tensor_name` should live on GPU,
+// given a threshold of N. `user` must point to an int holding N.
+bool is_gpu_tensor_blk(const char* tensor_name, void* user);
+
 // Free a WeightLoad's resources. Call when the model is being destroyed
 // and the buffer/context are not held elsewhere.
 void free_weights(WeightLoad& wl);

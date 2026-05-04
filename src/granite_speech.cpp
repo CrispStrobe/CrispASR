@@ -252,6 +252,8 @@ struct granite_speech_model {
 
     ggml_context* ctx = nullptr;
     ggml_backend_buffer_t buf = nullptr;
+    // PLAN #69a: optional second buffer for layers spilled to CPU.
+    ggml_backend_buffer_t buf_cpu = nullptr;
     std::map<std::string, ggml_tensor*> tensors;
 };
 
@@ -320,7 +322,8 @@ struct granite_speech_context {
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
-static bool granite_speech_load_model(granite_speech_model& model, const char* path, ggml_backend_t backend) {
+static bool granite_speech_load_model(granite_speech_model& model, const char* path, ggml_backend_t backend,
+                                      ggml_backend_t backend_cpu) {
     // Pass 1: metadata
     {
         gguf_context* g = core_gguf::open_metadata(path);
@@ -373,13 +376,36 @@ static bool granite_speech_load_model(granite_speech_model& model, const char* p
         core_gguf::free_metadata(g);
     }
 
-    // Pass 2: tensor data via shared helper
+    // Pass 2: tensor data via shared helper.
+    // PLAN #69a: when CRISPASR_N_GPU_LAYERS is set and < total layers,
+    // route LLM layers [N..total) onto the CPU backend. Encoder blocks
+    // (`enc.blk.*`) stay on GPU — the shared predicate only matches
+    // `blk.<N>.*` (the LLM naming), treating encoder tensors as
+    // non-layered.
     core_gguf::WeightLoad wl;
-    if (!core_gguf::load_weights(path, backend, "granite_speech", wl)) {
-        return false;
+    int n_gpu_layers_env = -1;
+    if (const char* s = std::getenv("CRISPASR_N_GPU_LAYERS")) {
+        n_gpu_layers_env = std::atoi(s);
+    }
+    const int total_layers = (int)model.hparams.llm_n_layers;
+    const bool do_split = backend_cpu && backend_cpu != backend && n_gpu_layers_env >= 0 &&
+                          n_gpu_layers_env < total_layers;
+    if (do_split) {
+        int threshold = n_gpu_layers_env;
+        if (!core_gguf::load_weights_split(path, backend, backend_cpu, core_gguf::is_gpu_tensor_blk, &threshold,
+                                           "granite_speech", wl)) {
+            return false;
+        }
+        fprintf(stderr, "granite_speech: layer offload: gpu=[0,%d), cpu=[%d,%d) (CRISPASR_N_GPU_LAYERS=%d)\n",
+                n_gpu_layers_env, n_gpu_layers_env, total_layers, n_gpu_layers_env);
+    } else {
+        if (!core_gguf::load_weights(path, backend, "granite_speech", wl)) {
+            return false;
+        }
     }
     model.ctx = wl.ctx;
     model.buf = wl.buf;
+    model.buf_cpu = wl.buf_cpu;
     model.tensors = std::move(wl.tensors);
 
     // Bind tensors
@@ -617,7 +643,7 @@ extern "C" struct granite_speech_context* granite_speech_init_from_file(const ch
     if (ggml_backend_is_cpu(ctx->backend))
         ggml_backend_cpu_set_n_threads(ctx->backend, ctx->n_threads);
 
-    if (!granite_speech_load_model(ctx->model, path, ctx->backend)) {
+    if (!granite_speech_load_model(ctx->model, path, ctx->backend, ctx->backend_cpu)) {
         delete ctx;
         return nullptr;
     }
@@ -787,6 +813,8 @@ extern "C" void granite_speech_free(struct granite_speech_context* ctx) {
         ggml_free(ctx->kv_ctx);
     if (ctx->model.buf)
         ggml_backend_buffer_free(ctx->model.buf);
+    if (ctx->model.buf_cpu)
+        ggml_backend_buffer_free(ctx->model.buf_cpu);
     if (ctx->model.ctx)
         ggml_free(ctx->model.ctx);
     if (ctx->backend_cpu && ctx->backend_cpu != ctx->backend)
