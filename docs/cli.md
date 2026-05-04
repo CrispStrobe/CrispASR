@@ -277,26 +277,43 @@ flags. Pick by what you have for input and what you need out:
 | `-tr`, `--translate` | Translate to English (whisper, canary) — boolean toggle, no string arg |
 | `--no-punctuation` | Disable punctuation in the output. Native for cohere/canary, post-processed for everyone else |
 
-### Text-to-text translate (m2m100, 100 languages)
+### Text-to-text translate (m2m100, WMT21, MADLAD-400)
 
-[`facebook/m2m100_418M`](https://huggingface.co/cstr/m2m100-418m-GGUF) —
-multilingual encoder-decoder, ISO-639-1 codes, any direction (no
-English pivot required). Auto-download via `-m auto`:
+Three text-to-text translation backends, all driven by `--text "..."
+-sl <src> -tl <tgt>`:
+
+| Backend | Model | Languages | Status |
+|---|---|---|---|
+| `m2m100` | [`facebook/m2m100_418M`](https://huggingface.co/cstr/m2m100-418m-GGUF) — 12L+12L transformer, ~502 MB Q8_0 | 100, any-to-any | ✓ production-ready (en→de exact match to Python ref) |
+| `m2m100-wmt21` | [`facebook/wmt21-dense-24-wide-en-x`](https://huggingface.co/cstr/wmt21-dense-24-wide-en-x-GGUF) — 24L+24L wider, ~2.5 GB Q4_K | English → 7 target languages | ✓ runs on m2m100 runtime; vocab fix in 7f48bad |
+| `madlad` (alias `t5`) | [`google/madlad400-3b-mt`](https://huggingface.co/cstr/madlad400-3b-mt-GGUF) — T5 12L+12L, ~1.9 GB Q4_K | 419 | ⚠ WIP — T5 rel-pos bias loops on a repeating token (commit 1d9026c) |
 
 ```bash
+# m2m100 base — production
 ./build/bin/crispasr --backend m2m100 -m auto \
     --text "Hello world, how are you today?" \
     -sl en -tl de
-# Hallo Welt, wie bist du heute?
+# → Hallo Welt, wie bist du heute?
 
-./build/bin/crispasr --backend m2m100 -m auto \
-    --text "Bonjour le monde." \
-    -sl fr -tl ja
+# WMT21 (4.7B, English-to-X, auto-downloads ~2.5 GB)
+./build/bin/crispasr --backend m2m100-wmt21 -m auto \
+    --text "The president said he would not attend." \
+    -sl en -tl de
+
+# MADLAD-400 (419 languages — runtime WIP, output may be incorrect)
+./build/bin/crispasr --backend madlad -m auto \
+    --text "Hello world." \
+    -sl en -tl ta
 ```
+
+For MADLAD-400 the source-language tag is informational (T5 encoders
+are language-agnostic); the adapter synthesises the `<2xx>` target-
+language prefix from `-tl` automatically. m2m100 / WMT21 use both
+`-sl` and `-tl`.
 
 | Flag | Meaning |
 |---|---|
-| `--text "TEXT"` | Plain text to translate (m2m100 only). Output goes to stdout. |
+| `--text "TEXT"` | Plain text to translate. Output goes to stdout. |
 | `-sl LANG`, `-tl LANG` | Source / target — same flags as audio AST; ISO-639-1 codes. |
 | `--translate-max-tokens N` | Max output tokens (default 256). |
 | `--tr-sl LANG`, `--tr-tl LANG` (long: `--translate-source-lang` / `--translate-target-lang`) | Translator-stage source/target. Falls back to `-sl`/`-tl`. Only matters in 2-stage pipelines where the primary backend's `-sl`/`-tl` mean something else (the primary's AST source/target). 2-stage piping (ASR → m2m100) needs `--translate-model PATH` — that's a follow-up; the override flags are plumbed but the standalone path is what's exercised today. |

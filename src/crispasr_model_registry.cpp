@@ -273,6 +273,29 @@ constexpr Entry k_registry[] = {
     {"m2m100", "m2m100-418m-q8_0.gguf",
      "https://huggingface.co/cstr/m2m100-418m-GGUF/resolve/main/m2m100-418m-q8_0.gguf",
      "~502 MB", nullptr, nullptr},
+    // WMT21 dense-24-wide-en-x (facebook, MIT) — same m2m100
+    // architecture as the 418M base, scaled up to 4.7B params and
+    // narrower in coverage (English → 7 target languages, won the
+    // WMT21 News competition). Runs through the m2m100 backend
+    // (same runtime, just a different scale + slightly different
+    // vocab — vocab fix landed in commit 7f48bad). Pass
+    // `--backend m2m100-wmt21` (alias for m2m100) to pick this row.
+    {"m2m100-wmt21", "wmt21-dense-24-wide-en-x-q4_k.gguf",
+     "https://huggingface.co/cstr/wmt21-dense-24-wide-en-x-GGUF/resolve/main/wmt21-dense-24-wide-en-x-q4_k.gguf",
+     "~2.5 GB", nullptr, nullptr},
+    // MADLAD-400 3B (google, Apache-2.0) — multilingual T5
+    // translation with 419 languages. T5 encoder-decoder (12L+12L,
+    // d=2048, gated-GELU FFN, RMSNorm, bucketed relative-position
+    // bias, SentencePiece 256K). Pass `--backend madlad` or
+    // `--backend t5` to dispatch to the t5_translate runtime.
+    // Status (2026-05-04): the t5_translate runtime is WIP — the
+    // rel-pos bias path produces a repeating-token loop in decode
+    // (see commit 1d9026c). The registry entry + adapter ship the
+    // wiring; output quality is not yet correct. Track the upstream
+    // T5 rel-pos debugging in PLAN.
+    {"madlad", "madlad400-3b-mt-q4_k.gguf",
+     "https://huggingface.co/cstr/madlad400-3b-mt-GGUF/resolve/main/madlad400-3b-mt-q4_k.gguf",
+     "~1.9 GB", nullptr, nullptr},
     // Kokoro-82M: official baseline + English default voice. The German
     // backbone + German default voice ride along via k_extras (see below)
     // so users running `-m auto --backend kokoro` get a working multilingual

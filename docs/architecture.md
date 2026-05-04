@@ -67,7 +67,7 @@ all consume the same symbols.
 |---|---|
 | `cli.cpp` | crispasr entry point, extended with `--backend` dispatch branch. |
 | `crispasr_backend.{h,cpp}` | `CrispasrBackend` abstract class, capability bitmask, factory, GGUF auto-detect. |
-| `crispasr_backend_{parakeet,canary,cohere,granite,granite_nle,voxtral,voxtral4b,qwen3,fastconformer_ctc,wav2vec2,glm_asr,kyutai_stt,firered_asr,moonshine,moonshine_streaming,omniasr,gemma4_e2b,mimo_asr,vibevoice,qwen3_tts,orpheus,kokoro,chatterbox,m2m100}.cpp` | Per-backend thin wrapper over each model's C API. ASR backends emit `crispasr_segment`s; TTS backends (`vibevoice`, `qwen3_tts`, `orpheus`, `kokoro`, `chatterbox`) implement `synthesize(text)` instead and write 24 kHz mono WAV via `--tts-output`; the translation backend (`m2m100`) implements `translate_text(text, src, tgt)` and writes UTF-8 to stdout. |
+| `crispasr_backend_{parakeet,canary,cohere,granite,granite_nle,voxtral,voxtral4b,qwen3,fastconformer_ctc,wav2vec2,glm_asr,kyutai_stt,firered_asr,moonshine,moonshine_streaming,omniasr,gemma4_e2b,mimo_asr,vibevoice,qwen3_tts,orpheus,kokoro,chatterbox,m2m100,t5}.cpp` | Per-backend thin wrapper over each model's C API. ASR backends emit `crispasr_segment`s; TTS backends (`vibevoice`, `qwen3_tts`, `orpheus`, `kokoro`, `chatterbox`) implement `synthesize(text)` instead and write 24 kHz mono WAV via `--tts-output`; the translation backends (`m2m100` for facebook m2m100 + WMT21, `t5` for MADLAD-400 / future T5 translation) implement `translate_text(text, src, tgt)` and write UTF-8 to stdout. |
 | `crispasr_output.{h,cpp}` | TXT / SRT / VTT / CSV / JSON / LRC writers on `crispasr_segment`. |
 | `crispasr_vad_cli.{h,cpp}` | Delegates to `src/crispasr_vad`; adds auto-download for the Silero GGUF. |
 | `crispasr_lid_cli.{h,cpp}` | Delegates to `src/crispasr_lid`; adds auto-download + sherpa-ONNX subprocess fallback. |
@@ -170,7 +170,8 @@ regression test against `samples/jfk.wav`:
 | qwen3-tts | Qwen3 talker + 12 Hz codec + code-predictor | ✔ | ✔ | ✔ | CUDA / Metal | gguf_loader, kv_self_attn, swiglu |
 | orpheus | Llama-3.2 talker + SNAC RVQ codec | ✔ | ✔ | ✔ | CUDA / Metal | gguf_loader, kv_self_attn, swiglu |
 | chatterbox | T3 (Llama / GPT-2) + S3Gen (Conformer + UNet1D CFM + HiFTGen) | ✔ | ✔ | ✔ | CUDA / Metal | gguf_loader, kv_self_attn, swiglu, fft |
-| m2m100 | facebook/m2m100 12L+12L transformer (text-to-text translation) | ✔ | — | ✔ (cross-attn) | CUDA / Metal | gguf_loader, kv_self_attn |
+| m2m100 | facebook/m2m100 12L+12L transformer (text-to-text translation; WMT21 4.7B variant via `--backend m2m100-wmt21`) | ✔ | — | ✔ (cross-attn) | CUDA / Metal | gguf_loader, kv_self_attn |
+| madlad / t5 | T5 encoder-decoder (MADLAD-400 12L+12L, gated-GELU, RMSNorm, bucketed rel-pos bias). **WIP — rel-pos decode currently loops, see commit 1d9026c.** | ✔ | — | ✔ (cross-attn) | CUDA / Metal | gguf_loader, ffn |
 
 ### Architecture families
 
@@ -201,11 +202,21 @@ regression test against `samples/jfk.wav`:
     LM + DPM-Solver++ + σ-VAE decoder.
   - **StyleTTS2 / iSTFTNet** (kokoro): BERT + ProsodyPredictor
     + iSTFTNet decoder, single-shot (no AR).
-- **Text-to-text translation** (m2m100): SentencePiece BPE
-  + transformer encoder + transformer decoder (with cross-attn
-  KV cache) + greedy decode. Source/target language codes prefix
-  the encoder/decoder input streams. No audio path; driven by
-  `--text "..." -sl <src> -tl <tgt>`.
+- **Text-to-text translation**:
+  - **m2m100** (also runs WMT21 dense-24-wide-en-x via the same
+    runtime — see `--backend m2m100-wmt21`): SentencePiece BPE
+    + transformer encoder + transformer decoder (with cross-attn
+    KV cache) + greedy decode. Source/target language codes prefix
+    the encoder/decoder input streams.
+  - **t5_translate / madlad** (MADLAD-400 3B-mt and any future
+    T5-family translation model): T5 encoder-decoder with gated-GELU
+    FFN, RMSNorm, bucketed relative-position bias, SentencePiece
+    256K. Target language as `<2xx>` input prefix; encoder is
+    language-agnostic. **Status (2026-05-04):** rel-pos decode
+    loops on a repeating token (see PLAN follow-up). Wired but
+    output not yet reliable.
+
+  Both are driven by `--text "..." -sl <src> -tl <tgt>`.
 
 ### Optimization opportunities
 

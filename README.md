@@ -105,17 +105,30 @@ quick-start commands and engine selection guidance.
 
 Text-to-text translation, distinct from the audio-side `--translate`
 flag (which routes audio → English text on whisper / canary / etc.).
-Drives the m2m100 backend with `--text "..." -sl <src> -tl <tgt>`.
+Driven by `--text "..." -sl <src> -tl <tgt>`.
 
 | Backend | Models | Architecture | Languages | License |
 |---|---|---|---|---|
 | **m2m100** | [`facebook/m2m100_418M`](https://huggingface.co/cstr/m2m100-418m-GGUF) | 12L encoder + 12L decoder transformer (d=1024, 16 heads, FFN=4096, ReLU, pre-norm) + SentencePiece BPE (128K vocab, 100 lang codes) + sinusoidal pos-emb + cross-attn KV cache + greedy decode. en→de exact match to the Python reference; Q8_0 (~502 MB) preserves quality on the test set. | 100 languages, any-to-any (no English pivot) | MIT |
+| **m2m100-wmt21** | [`facebook/wmt21-dense-24-wide-en-x`](https://huggingface.co/cstr/wmt21-dense-24-wide-en-x-GGUF) | Same m2m100 architecture as the 418M base, scaled to 4.7B parameters (24L encoder, wider). Won the WMT21 News competition. Routes through the m2m100 runtime; vocab fix landed in commit 7f48bad. | English → 7 target languages | MIT |
+| **madlad** | [`google/madlad400-3b-mt`](https://huggingface.co/cstr/madlad400-3b-mt-GGUF) | T5 encoder-decoder (12L+12L, d=2048, gated-GELU FFN, RMSNorm, bucketed relative-position bias) + SentencePiece (256K vocab). Target language as `<2xx>` input prefix. **Status (2026-05-04):** the C++ T5 runtime is WIP — rel-pos bias produces a repeating-token loop in decode (per upstream commit 1d9026c). Registry + `--backend madlad` ship the wiring; output quality is not yet correct. | 419 languages | Apache-2.0 |
 
 ```bash
+# m2m100 base (production-ready)
 ./build/bin/crispasr --backend m2m100 -m auto \
     --text "Hello world, how are you today?" \
     -sl en -tl de
-# Hallo Welt, wie bist du heute?
+# → Hallo Welt, wie bist du heute?
+
+# WMT21 dense (English-to-X, 4.7B — auto-downloads ~2.5 GB)
+./build/bin/crispasr --backend m2m100-wmt21 -m auto \
+    --text "The president said he would not attend." \
+    -sl en -tl de
+
+# MADLAD-400 3B (419 languages — T5 runtime WIP)
+./build/bin/crispasr --backend madlad -m auto \
+    --text "Hello world." \
+    -sl en -tl ta
 ```
 
 For 2-stage pipelines (e.g., ASR → m2m100), use the dedicated

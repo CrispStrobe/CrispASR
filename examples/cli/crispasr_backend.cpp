@@ -22,6 +22,7 @@ std::unique_ptr<CrispasrBackend> crispasr_make_qwen3_tts_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_orpheus_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_chatterbox_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_m2m100_backend();
+std::unique_ptr<CrispasrBackend> crispasr_make_t5_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_kokoro_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_glm_asr_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_kyutai_stt_backend();
@@ -87,8 +88,11 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& name
         return crispasr_make_chatterbox_backend();
     if (name == "kokoro" || name == "styletts2" || name == "styletts2-ljspeech" || name == "kokoro-tts")
         return crispasr_make_kokoro_backend();
-    if (name == "m2m100" || name == "m2m-100" || name == "translate")
+    if (name == "m2m100" || name == "m2m-100" || name == "translate" || name == "m2m100-wmt21" ||
+        name == "wmt21" || name == "m2m100-1.2b")
         return crispasr_make_m2m100_backend();
+    if (name == "madlad" || name == "madlad400" || name == "madlad-400" || name == "t5" || name == "t5-translate")
+        return crispasr_make_t5_backend();
     if (name == "glm-asr" || name == "glmasr" || name == "glm" || name == "glm_asr")
         return crispasr_make_glm_asr_backend();
     if (name == "kyutai-stt" || name == "kyutai" || name == "moshi-stt")
@@ -143,6 +147,8 @@ std::vector<std::string> crispasr_list_backends() {
         "lahgtna-chatterbox",
         "kokoro",
         "m2m100",
+        "m2m100-wmt21",
+        "madlad",
         "glm-asr",
         "kyutai-stt",
         "firered-asr",
@@ -361,8 +367,10 @@ std::string crispasr_detect_backend_from_gguf(const std::string& model_path) {
         return "orpheus";
     if (contains_ci("chatterbox") || contains_ci("kartoffelbox") || contains_ci("lahgtna"))
         return "chatterbox";
-    if (contains_ci("m2m100") || (contains_ci("m2m") && contains_ci("100")))
+    if (contains_ci("m2m100") || (contains_ci("m2m") && contains_ci("100")) || contains_ci("wmt21"))
         return "m2m100";
+    if (contains_ci("madlad"))
+        return "madlad";
     if (contains_ci("kokoro"))
         return "kokoro";
     if (contains_ci("styletts") && contains_ci("ljspeech"))

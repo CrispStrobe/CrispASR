@@ -378,6 +378,27 @@ REGISTRY: tuple[Backend, ...] = (
             "cstr/m2m100-418m-GGUF", "m2m100-418m-q8_0.gguf",
             timeout_s=120, approx_size_mb=502,
             capabilities=()),
+    # WMT21 dense-24-wide-en-x — same m2m100 runtime, scaled to 4.7B,
+    # English → 7 target languages. Empty caps tuple (text-to-text;
+    # the audio test harness doesn't apply); kept here to keep audit
+    # drift at zero.
+    Backend("m2m100-wmt21", "M2M-100 WMT21 4.7B (translate)",
+            "wmt21-dense-24-wide-en-x-q4_k.gguf",
+            "cstr/wmt21-dense-24-wide-en-x-GGUF",
+            "wmt21-dense-24-wide-en-x-q4_k.gguf",
+            timeout_s=300, approx_size_mb=2543,
+            capabilities=()),
+    # MADLAD-400 3B (Google, Apache-2.0) — multilingual T5 translation,
+    # 419 languages. Routes through the t5_translate runtime, which is
+    # WIP per upstream commit 1d9026c (rel-pos bias produces a
+    # repeating-token loop in decode). Empty caps tuple — audit drift
+    # zero, but no audio harness applies and the runtime isn't
+    # production-ready yet. Track the rel-pos debugging in PLAN.
+    Backend("madlad",   "MADLAD-400 3B-mt (translate, WIP)",
+            "madlad400-3b-mt-q4_k.gguf",
+            "cstr/madlad400-3b-mt-GGUF", "madlad400-3b-mt-q4_k.gguf",
+            timeout_s=300, approx_size_mb=1900,
+            capabilities=()),
 )
 
 
