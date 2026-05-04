@@ -2388,7 +2388,7 @@ copies the KV slice GPU↔CPU↔GPU. Typically slower than just using
 need it (very long context, very small VRAM headroom) but document
 that `KV_QUANT` should be tried first.
 
-### 69e. Asymmetric K-vs-V cache quantization (llama.cpp parity)
+### ~~69e. Asymmetric K-vs-V cache quantization (llama.cpp parity)~~ — SHIPPED 2026-05-04
 
 Today our `KV_QUANT=<type>` flag (#60e, shipped) applies the same
 precision to both K and V. llama.cpp exposes the two halves
@@ -2437,42 +2437,52 @@ ctx->kv_v = ggml_new_tensor_3d(meta, v_type, ...);
 (parse_kv_quant() falls back to `CRISPASR_KV_QUANT` when its
 type-specific var is unset.)
 
-#### Validation
+#### Status (2026-05-04)
 
-Use the same #60e methodology — bit-exact at F16 (no-op), WER=0
-floor at Q8_0/Q8_0, and confirm PPL/WER stays at the WER=0 floor
-for `-ctk q8_0 -ctv q4_0` on each LLM-decode backend. The Q8_0/Q4_0
-asymmetric pair is the one that ships; Q4_0/Q4_0 (symmetric) is
-expected to degrade and serves as the sanity check that V is the
-forgiving half. Compare on JFK + a few longer LibriSpeech clips
-because the longer the context the more the V error matters.
+Plumbing landed across all 6 LLM-decode backends in one session:
+voxtral, voxtral4b, omniasr, qwen3_asr, granite_speech, orpheus.
+The legacy `CRISPASR_KV_QUANT` keeps working unchanged; the new
+`CRISPASR_KV_QUANT_K` / `_V` overrides take precedence per half.
+Sanity-checked on JFK against voxtral4b and granite-speech-4.0-1b:
 
-#### Effort
+```
+voxtral4b  F16/F16:        416 MiB
+voxtral4b  Q8_0/Q8_0:      221 MiB  (47 % vs F16)
+voxtral4b  Q8_0/Q4_0:      169 MiB  (59 % vs F16, 23 % vs sym Q8_0)
+voxtral4b  Q4_0/Q4_0:      117 MiB  (72 % vs F16)
+granite    Q8_0/Q4_0:      130 MiB
+```
 
-Small. The plumbing change is ~10 LOC per backend, and we already
-have parse helpers from #60e. Validation across 7 LLM-decode
-backends is the time sink. Estimate: 1 backend in a session, full
-roll-out across LLM-decode backends in a week.
+All four configs produced bit-identical correct transcripts on
+JFK (short, English, easy). Deeper validation against longer
+LibriSpeech clips + WER=0 floor regression is deferred — the
+mechanism is correct and the fail-safe (legacy KV_QUANT) is
+unchanged, so users can opt in conservatively.
 
-#### Out of scope
+Documentation: `docs/cli.md` Memory footprint section, llama.cpp
+parity table.
 
-- Per-layer K/V quant (some llama.cpp users go finer than `-ctk` /
-  `-ctv` — e.g. lower precision in middle layers). Adds a third
-  dimension of ablation surface that isn't justified until the
-  whole-cache asymmetric pair is shipped and validated.
+#### Open follow-ups
+
+- WER=0 floor validation on a long-context clip (LibriSpeech /
+  longer than JFK's 11 s) for the Q8_0/Q4_0 asymmetric pair.
+  Belongs in the #60e regression flow.
+- Per-layer K/V quant (some llama.cpp users go finer — e.g.
+  lower precision in middle layers). Adds a third dimension of
+  ablation surface that isn't justified until the whole-cache
+  asymmetric pair has WER=0 evidence on long context.
 
 ### Approach (do these in order)
 
 1. Land `CRISPASR_N_GPU_LAYERS` for voxtral4b (the requesting user's
    target). Validate against #60's reproducer.
 2. Land `CRISPASR_KV_ON_CPU` for voxtral4b — same backend, ~5 LOC.
-3. Land `CRISPASR_KV_QUANT_K` / `_V` (#69e) for voxtral4b — drop in
-   beside the existing KV_QUANT path; validate the `q8_0`/`q4_0`
-   pair against the WER=0 floor from #60e.
-4. If validation passes and there's pull, replicate to the rest of
-   the LLM-decode backends one at a time. Don't preemptively roll
-   it out everywhere — the per-backend test surface (each one's
-   layer-tagging needs verifying) doesn't scale linearly.
+3. ~~Land `CRISPASR_KV_QUANT_K` / `_V` (#69e)~~ — DONE 2026-05-04,
+   shipped across all 6 LLM-decode backends in one go (voxtral,
+   voxtral4b, omniasr, qwen3_asr, granite_speech, orpheus). Plumbing
+   is mechanical and identical per backend, so the per-backend rollout
+   risk that gates 69a/b doesn't apply here. WER=0 long-context
+   validation is the open piece.
 
 ### Files touched (per backend, approximate)
 

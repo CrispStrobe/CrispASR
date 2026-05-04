@@ -1052,10 +1052,11 @@ extern "C" bool voxtral_kv_init(voxtral_context* ctx, int max_ctx) {
     const int hd = (int)hp.llm_head_dim, n_kv = (int)hp.llm_n_kv_heads, nl = (int)hp.llm_n_layers;
     ggml_init_params kp = {ggml_tensor_overhead() * 4 + 1024, nullptr, true};
     ctx->kv_ctx = ggml_init(kp);
-    // PLAN #60e: KV dtype from CRISPASR_KV_QUANT (default f16).
-    const ggml_type kv_dtype = core_attn::kv_dtype_from_env("voxtral");
-    ctx->kv_k = ggml_new_tensor_4d(ctx->kv_ctx, kv_dtype, hd, max_ctx, n_kv, nl);
-    ctx->kv_v = ggml_new_tensor_4d(ctx->kv_ctx, kv_dtype, hd, max_ctx, n_kv, nl);
+    // PLAN #60e + #69e: per-half KV dtype. CRISPASR_KV_QUANT sets both,
+    // CRISPASR_KV_QUANT_{K,V} override per half. Default f16/f16.
+    const auto kv_pair = core_attn::kv_dtype_pair_from_env("voxtral");
+    ctx->kv_k = ggml_new_tensor_4d(ctx->kv_ctx, kv_pair.k, hd, max_ctx, n_kv, nl);
+    ctx->kv_v = ggml_new_tensor_4d(ctx->kv_ctx, kv_pair.v, hd, max_ctx, n_kv, nl);
     ggml_set_name(ctx->kv_k, "kv_k");
     ggml_set_name(ctx->kv_v, "kv_v");
     size_t kb = ggml_nbytes(ctx->kv_k), vb = ggml_nbytes(ctx->kv_v);

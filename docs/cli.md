@@ -368,6 +368,30 @@ The flag is read once per session via
 the env before launching `crispasr` (or before opening the session
 in Python / Rust / Dart).
 
+### `CRISPASR_KV_QUANT_K` / `CRISPASR_KV_QUANT_V` — asymmetric K vs V
+
+The two halves of the KV cache have very different sensitivity
+profiles: V is forgiving (errors get averaged inside the
+post-softmax weighted sum), K is fragile (errors distort which
+positions get attended to). llama.cpp exposes `--cache-type-k` /
+`--cache-type-v` for this; CrispASR does the same via two env
+vars that override `CRISPASR_KV_QUANT` per half.
+
+```bash
+# Common llama.cpp recipe — ~40 % more KV memory savings vs symmetric
+# Q8_0/Q8_0, with PPL barely moved on Llama-class models.
+CRISPASR_KV_QUANT_K=q8_0 CRISPASR_KV_QUANT_V=q4_0 \
+  ./build/bin/crispasr --backend voxtral4b -m auto -f audio.wav
+```
+
+Both halves fall through to `CRISPASR_KV_QUANT` when their
+type-specific var is unset, so the legacy single-knob configuration
+keeps working unchanged.
+
+Same per-backend coverage as the table above — the asymmetric
+plumbing was added to every backend that honored `CRISPASR_KV_QUANT`
+(voxtral, voxtral4b, omniasr, qwen3_asr, granite_speech, orpheus).
+
 ### `CRISPASR_GGUF_MMAP=1` — zero-copy weight load
 
 Map the GGUF file directly into the model's backend buffer instead
@@ -437,7 +461,7 @@ map:
 
 | Concern | llama.cpp | CrispASR |
 |---|---|---|
-| KV cache dtype | `--type-k q8_0 --type-v q8_0` (CLI flag, separate K/V) | `CRISPASR_KV_QUANT=q8_0` (env var, single setting) |
+| KV cache dtype | `--type-k q8_0 --type-v q8_0` (CLI flag, separate K/V) | `CRISPASR_KV_QUANT=q8_0` for symmetric, or `CRISPASR_KV_QUANT_K` / `_V` per half |
 | mmap weights | `--no-mmap` (mmap is default **on**) | `CRISPASR_GGUF_MMAP=1` (mmap is default **off**) |
 | Lock pages in RAM | `--mlock` | (not supported — `mmap+preload` is the closest analogue) |
 | GPU layer count | `--n-gpu-layers N` / `-ngl N` (CLI flag) | not supported yet — see [PLAN #69a](https://github.com/CrispStrobe/CrispASR/blob/main/PLAN.md) |

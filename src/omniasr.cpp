@@ -513,10 +513,11 @@ static bool omniasr_alloc_kv_cache(omniasr_context* ctx, int max_ctx) {
     struct ggml_init_params kv_params = {mem, nullptr, true};
     ctx->kv_ctx = ggml_init(kv_params);
 
-    // PLAN #60e: KV dtype from CRISPASR_KV_QUANT (default f16).
-    const ggml_type kv_dtype = core_attn::kv_dtype_from_env("omniasr");
-    ctx->kv_k = ggml_new_tensor_4d(ctx->kv_ctx, kv_dtype, hd, max_ctx, nh, nl);
-    ctx->kv_v = ggml_new_tensor_4d(ctx->kv_ctx, kv_dtype, hd, max_ctx, nh, nl);
+    // PLAN #60e + #69e: per-half KV dtype. CRISPASR_KV_QUANT sets both,
+    // CRISPASR_KV_QUANT_{K,V} override per half. Default f16/f16.
+    const auto kv_pair = core_attn::kv_dtype_pair_from_env("omniasr");
+    ctx->kv_k = ggml_new_tensor_4d(ctx->kv_ctx, kv_pair.k, hd, max_ctx, nh, nl);
+    ctx->kv_v = ggml_new_tensor_4d(ctx->kv_ctx, kv_pair.v, hd, max_ctx, nh, nl);
     ggml_set_name(ctx->kv_k, "kv_k");
     ggml_set_name(ctx->kv_v, "kv_v");
 

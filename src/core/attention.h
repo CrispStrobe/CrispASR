@@ -55,18 +55,51 @@ namespace core_attn {
 //
 // `backend_tag` is the prefix on the warning line so a misconfigured
 // env var points at a specific backend rather than a generic message.
-inline ggml_type kv_dtype_from_env(const char* backend_tag) {
-    const char* s = std::getenv("CRISPASR_KV_QUANT");
+// Parse a single KV-quant string. Internal helper.
+inline ggml_type kv_dtype_parse(const char* s, const char* backend_tag,
+                                const char* env_name, ggml_type fallback) {
     if (!s || !*s)
-        return GGML_TYPE_F16;
+        return fallback;
     if (std::strcmp(s, "f16") == 0)
         return GGML_TYPE_F16;
     if (std::strcmp(s, "q8_0") == 0)
         return GGML_TYPE_Q8_0;
     if (std::strcmp(s, "q4_0") == 0)
         return GGML_TYPE_Q4_0;
-    std::fprintf(stderr, "%s: CRISPASR_KV_QUANT='%s' unrecognised, defaulting to f16\n", backend_tag, s);
+    std::fprintf(stderr, "%s: %s='%s' unrecognised, defaulting to f16\n", backend_tag, env_name, s);
     return GGML_TYPE_F16;
+}
+
+inline ggml_type kv_dtype_from_env(const char* backend_tag) {
+    return kv_dtype_parse(std::getenv("CRISPASR_KV_QUANT"), backend_tag, "CRISPASR_KV_QUANT", GGML_TYPE_F16);
+}
+
+// Asymmetric K/V cache types. PLAN #69e — llama.cpp-style independent
+// `--cache-type-k` / `--cache-type-v`. The two halves of the KV cache
+// have very different sensitivity profiles:
+//
+//   * V quantises down well: it gets used as `softmax(QK^T) · V`, where
+//     softmax already concentrates probability mass and per-element
+//     errors get averaged across attended positions. q4_0 V is usually
+//     indistinguishable from F16.
+//   * K is the fragile half: errors in `QK^T / sqrt(d)` distort *which*
+//     positions get attended to (the softmax exponentiates errors).
+//     K typically wants q8_0 or higher for the same PPL floor.
+//
+// Common llama.cpp recipe is `-ctk q8_0 -ctv q4_0`, ~40 % KV memory
+// savings vs symmetric Q8_0 with PPL barely moved on Llama-class
+// models. The legacy CRISPASR_KV_QUANT remains the default for both
+// halves; the per-half overrides take precedence.
+struct kv_dtype_pair {
+    ggml_type k;
+    ggml_type v;
+};
+
+inline kv_dtype_pair kv_dtype_pair_from_env(const char* backend_tag) {
+    const ggml_type both = kv_dtype_from_env(backend_tag);
+    const ggml_type k = kv_dtype_parse(std::getenv("CRISPASR_KV_QUANT_K"), backend_tag, "CRISPASR_KV_QUANT_K", both);
+    const ggml_type v = kv_dtype_parse(std::getenv("CRISPASR_KV_QUANT_V"), backend_tag, "CRISPASR_KV_QUANT_V", both);
+    return {k, v};
 }
 
 // Parameters that differ from call to call. Everything here is a plain

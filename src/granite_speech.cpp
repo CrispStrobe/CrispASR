@@ -1993,10 +1993,11 @@ extern "C" bool granite_speech_kv_init(struct granite_speech_context* ctx, int m
 
     ggml_init_params ip = {2 * ggml_tensor_overhead(), nullptr, true};
     ctx->kv_ctx = ggml_init(ip);
-    // PLAN #60e: KV dtype from CRISPASR_KV_QUANT (default f16).
-    const ggml_type kv_dtype = core_attn::kv_dtype_from_env("granite_speech");
-    ctx->kv_k = ggml_new_tensor_4d(ctx->kv_ctx, kv_dtype, hd, max_ctx, n_kv, nl);
-    ctx->kv_v = ggml_new_tensor_4d(ctx->kv_ctx, kv_dtype, hd, max_ctx, n_kv, nl);
+    // PLAN #60e + #69e: per-half KV dtype. CRISPASR_KV_QUANT sets both,
+    // CRISPASR_KV_QUANT_{K,V} override per half. Default f16/f16.
+    const auto kv_pair = core_attn::kv_dtype_pair_from_env("granite_speech");
+    ctx->kv_k = ggml_new_tensor_4d(ctx->kv_ctx, kv_pair.k, hd, max_ctx, n_kv, nl);
+    ctx->kv_v = ggml_new_tensor_4d(ctx->kv_ctx, kv_pair.v, hd, max_ctx, n_kv, nl);
     // Size the backend buffer from actual ggml_nbytes (was hardcoded F16
     // byte count, which over-allocated for quant types).
     const size_t k_size = ggml_nbytes(ctx->kv_k);
@@ -2007,8 +2008,8 @@ extern "C" bool granite_speech_kv_init(struct granite_speech_context* ctx, int m
     ggml_backend_tensor_alloc(ctx->kv_buf, ctx->kv_v, base + k_size);
 
     if (ctx->params.verbosity >= 1)
-        fprintf(stderr, "granite_speech: kv cache %.0f MiB %s\n", (k_size + v_size) / 1048576.0,
-                ggml_type_name(kv_dtype));
+        fprintf(stderr, "granite_speech: kv cache %.0f MiB k=%s v=%s\n", (k_size + v_size) / 1048576.0,
+                ggml_type_name(kv_pair.k), ggml_type_name(kv_pair.v));
     return true;
 }
 
