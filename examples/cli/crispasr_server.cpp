@@ -288,47 +288,6 @@ static transcription_result do_transcribe(const httplib::MultipartFormData& audi
 // TTS helpers
 // ---------------------------------------------------------------------------
 
-// Read a whole file into a string. Returns empty string on failure.
-static std::string read_text_file(const std::string& path) {
-    std::ifstream f(path);
-    if (!f.good())
-        return "";
-    std::stringstream ss;
-    ss << f.rdbuf();
-    return ss.str();
-}
-
-// Resolve a voice request name to an absolute path (and optional ref-text)
-// from the configured voice-dir. Looks for <name>.wav (paired with
-// <name>.txt for the reference transcription used by Qwen3-TTS ICL
-// prefill) or <name>.gguf (baked voice pack). Returns true on hit;
-// sets out_path and out_ref_text.
-static bool resolve_voice(const std::string& voice_dir, const std::string& name, std::string& out_path,
-                          std::string& out_ref_text) {
-    if (voice_dir.empty() || name.empty())
-        return false;
-    const std::string wav = voice_dir + "/" + name + ".wav";
-    const std::string txt = voice_dir + "/" + name + ".txt";
-    const std::string gguf = voice_dir + "/" + name + ".gguf";
-    {
-        std::ifstream f(wav);
-        if (f.good()) {
-            out_path = wav;
-            out_ref_text = read_text_file(txt);
-            return true;
-        }
-    }
-    {
-        std::ifstream f(gguf);
-        if (f.good()) {
-            out_path = gguf;
-            out_ref_text.clear();
-            return true;
-        }
-    }
-    return false;
-}
-
 // Build a 16-bit PCM RIFF WAV from float32 samples in [-1, 1].
 // Mono, sample_rate Hz. Header is the standard 44-byte PCM-fmt RIFF.
 // Returned buffer is contiguous and safe to pass to res.set_content().
@@ -678,14 +637,17 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
     //   200 application/octet-stream — raw float32 PCM (response_format=pcm)
     //
     //   400 — backend lacks CAP_TTS, missing input, malformed body
-    //   422 — voice name not found in --voice-dir
-    //   500 — backend->synthesize returned empty
+    //   500 — backend->synthesize returned empty (e.g. unknown voice)
     //   503 — model still loading
     //
-    // Voice resolution: <voice-dir>/<name>.wav (paired with <name>.txt
-    // for ref-text) or <voice-dir>/<name>.gguf (baked pack). When
-    // "voice" is omitted the request inherits whatever was set at server
-    // startup via --voice / --instruct.
+    // Voice handling: the `voice` field is passed through to
+    // params.tts_voice verbatim. Each backend interprets it on its
+    // own terms — qwen3-tts CustomVoice resolves it as a speaker
+    // name, orpheus resolves "tara"/"leah" as presets, qwen3-tts
+    // Base resolves it as a path or (with --voice-dir set) as a
+    // bare name relative to the voice-dir. When "voice" is omitted
+    // the request inherits whatever was set at server startup via
+    // --voice / --instruct.
     // -----------------------------------------------------------------------
     svr.Post("/v1/audio/speech", [&](const Request& req, Response& res) {
         if (!require_auth(req, res))
@@ -723,24 +685,15 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             return;
         }
 
-        // Per-request param overrides — copy then mutate.
+        // Per-request param overrides — copy then mutate. The voice
+        // string is passed through verbatim; the backend adapter owns
+        // the interpretation (speaker name, preset, path, or bare name
+        // relative to --voice-dir). rp.tts_voice_dir already carries
+        // the server's configured dir for adapters that want to do
+        // bare-name resolution.
         whisper_params rp = params;
-        if (!voice_name.empty()) {
-            if (rp.tts_voice_dir.empty()) {
-                json_error(res, 400,
-                           "server has no --voice-dir configured; "
-                           "cannot resolve voice '" + voice_name + "'");
-                return;
-            }
-            std::string voice_path, ref_text;
-            if (!resolve_voice(rp.tts_voice_dir, voice_name, voice_path, ref_text)) {
-                json_error(res, 422, "voice '" + voice_name + "' not found in --voice-dir");
-                return;
-            }
-            rp.tts_voice = voice_path;
-            if (!ref_text.empty())
-                rp.tts_ref_text = ref_text;
-        }
+        if (!voice_name.empty())
+            rp.tts_voice = voice_name;
 
         auto t0 = std::chrono::steady_clock::now();
         std::vector<float> pcm;

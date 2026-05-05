@@ -15,6 +15,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
+#include <sstream>
 #include <string>
 #include <vector>
 #include <sys/stat.h>
@@ -122,13 +124,58 @@ public:
         // single-shot use case still pays the load cost only once, while
         // server-mode callers can switch voice per request just by changing
         // `params.tts_voice` (or `params.tts_ref_text` / `params.tts_instruct`).
+        //
+        // For Base variants, when --voice is a bare name (no path
+        // separator, no extension) AND --voice-dir is set, resolve to
+        // <voice-dir>/<name>.wav (with companion <name>.txt for ref-text)
+        // or <voice-dir>/<name>.gguf. This is the convenience layer for
+        // server-mode callers.
+        std::string resolved_voice = params.tts_voice;
+        std::string resolved_ref_text = params.tts_ref_text;
+        if (!qwen3_tts_is_voice_design(ctx_) && !qwen3_tts_is_custom_voice(ctx_) && !params.tts_voice.empty() &&
+            !params.tts_voice_dir.empty()) {
+            const std::string& v = params.tts_voice;
+            const bool is_bare_name = v.find('/') == std::string::npos && v.find('\\') == std::string::npos &&
+                                      !ends_with_ci(v, ".wav") && !ends_with_ci(v, ".gguf");
+            if (is_bare_name) {
+                if (v.find("..") != std::string::npos || v.find('\0') != std::string::npos) {
+                    fprintf(stderr, "crispasr[qwen3-tts]: voice name '%s' contains illegal characters (.. or NUL)\n",
+                            v.c_str());
+                    return {};
+                }
+                const std::string wav_path = params.tts_voice_dir + "/" + v + ".wav";
+                const std::string gguf_path = params.tts_voice_dir + "/" + v + ".gguf";
+                const std::string txt_path = params.tts_voice_dir + "/" + v + ".txt";
+                if (file_exists(wav_path)) {
+                    resolved_voice = wav_path;
+                    if (resolved_ref_text.empty()) {
+                        std::ifstream f(txt_path);
+                        if (f.good()) {
+                            std::stringstream ss;
+                            ss << f.rdbuf();
+                            resolved_ref_text = ss.str();
+                            while (!resolved_ref_text.empty() &&
+                                   (resolved_ref_text.back() == '\n' || resolved_ref_text.back() == '\r' ||
+                                    resolved_ref_text.back() == ' ' || resolved_ref_text.back() == '\t')) {
+                                resolved_ref_text.pop_back();
+                            }
+                        }
+                    }
+                } else if (file_exists(gguf_path)) {
+                    resolved_voice = gguf_path;
+                }
+                // else: leave as bare name; the voice-pack loader below will
+                // surface a clearer "failed to load voice pack" error.
+            }
+        }
+
         std::string voice_key;
         if (qwen3_tts_is_voice_design(ctx_)) {
             voice_key = "vd:" + params.tts_instruct;
         } else if (qwen3_tts_is_custom_voice(ctx_)) {
             voice_key = "cv:" + params.tts_voice;
         } else {
-            voice_key = "base:" + params.tts_voice + "\x01" + params.tts_ref_text;
+            voice_key = "base:" + resolved_voice + "\x01" + resolved_ref_text;
         }
         if (voice_key != last_voice_key_) {
             if (qwen3_tts_is_voice_design(ctx_)) {
@@ -178,15 +225,15 @@ public:
                     }
                     fprintf(stderr, ")\n");
                 }
-            } else if (!params.tts_voice.empty()) {
-                const std::string& v = params.tts_voice;
+            } else if (!resolved_voice.empty()) {
+                const std::string& v = resolved_voice;
                 if (ends_with_ci(v, ".wav")) {
-                    if (params.tts_ref_text.empty()) {
+                    if (resolved_ref_text.empty()) {
                         fprintf(stderr, "crispasr[qwen3-tts]: --voice is a WAV but --ref-text was not set. "
                                         "Provide the reference transcription so the talker can match it.\n");
                         return {};
                     }
-                    if (qwen3_tts_set_voice_prompt_with_text(ctx_, v.c_str(), params.tts_ref_text.c_str()) != 0) {
+                    if (qwen3_tts_set_voice_prompt_with_text(ctx_, v.c_str(), resolved_ref_text.c_str()) != 0) {
                         fprintf(stderr, "crispasr[qwen3-tts]: failed to set voice prompt from '%s'\n", v.c_str());
                         return {};
                     }
