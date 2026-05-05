@@ -158,6 +158,7 @@ jobs:
             -i bindings \
             --suppress='*:examples/server/*' \
             --suppress='*:*httplib.h' \
+            --suppress='*:*json.hpp' \
             --suppress='*:src/miniaudio.h' \
             --suppress='*:*miniaudio.h' \
             --suppress='*:*stb_vorbis.c' \
