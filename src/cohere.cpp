@@ -2323,6 +2323,31 @@ struct cohere_result* cohere_transcribe_ex(struct cohere_context* ctx, const flo
 
         std::string t;
         if (tok.front() == '<' && tok.back() == '>') {
+            // SentencePiece byte-fallback pieces: "<0xE6>" → raw byte 0xE6.
+            // These appear for any codepoint that wasn't in the unigram
+            // vocab — most kanji compounds in Japanese (e.g. 漫画 → 漫
+            // is byte-fallback as <0xE6><0xBC><0xAB>, but 画 is a single
+            // piece). Without decoding, the byte sequence is dropped
+            // entirely and only the kanji that survived as single pieces
+            // remain in the transcript (issue #67).
+            if (tok.size() == 6 && tok[1] == '0' && tok[2] == 'x') {
+                auto hex = [](char c) -> int {
+                    if (c >= '0' && c <= '9')
+                        return c - '0';
+                    if (c >= 'A' && c <= 'F')
+                        return 10 + c - 'A';
+                    if (c >= 'a' && c <= 'f')
+                        return 10 + c - 'a';
+                    return -1;
+                };
+                int hi = hex(tok[3]), lo = hex(tok[4]);
+                if (hi >= 0 && lo >= 0) {
+                    t = std::string(1, (char)((hi << 4) | lo));
+                    // fall through: t now holds one raw byte; subsequent
+                    // tokens will append the rest of the UTF-8 codepoint.
+                    goto byte_fallback_decoded;
+                }
+            }
             // Render diarization tokens; drop all other special tokens
             if (id == tok_spkchange) {
                 t = " [SPEAKER_TURN]";
@@ -2334,6 +2359,7 @@ struct cohere_result* cohere_transcribe_ex(struct cohere_context* ctx, const flo
             } else {
                 continue;
             }
+        byte_fallback_decoded:;
         } else {
             t = tok;
             size_t pos;
