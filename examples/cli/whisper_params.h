@@ -151,6 +151,27 @@ struct whisper_params {
     // POST /v1/audio/speech `voice` field maps to a stem in this directory.
     std::string tts_voice_dir;
 
+    // Server mode: hard ceiling on /v1/audio/speech `input` length. Default
+    // matches OpenAI's documented limit (4096 chars). Set to 0 to disable
+    // the cap entirely (useful when long-form chunking is enabled and the
+    // caller explicitly wants the chunker to handle whatever they send).
+    // Above the cap, the route returns 400 with code="input_too_long".
+    int tts_max_input_chars = 4096;
+
+    // Server mode: speed multiplier (0.25 .. 4.0, OpenAI range). Applied
+    // by the route handler as a post-synth linear resampler — backends
+    // produce audio at their native rate, the server resamples before the
+    // WAV/PCM/f32 dispatch. Default 1.0 = no resample. The CLI ignores
+    // this; only the server route reads it.
+    float tts_speed = 1.0f;
+
+    // Server mode: when non-empty, every server response gets the
+    // Access-Control-Allow-* headers set so browser clients can call us
+    // cross-origin. Default empty = no CORS headers (server stays
+    // default-locked; a deployed instance opts in explicitly with
+    // --cors-origin '*' or a specific origin).
+    std::string server_cors_origin;
+
     // Text-to-text translation input (m2m100 + future translate-only
     // backends). When `--text` is set on a backend that declares
     // CAP_TRANSLATE and has no input audio, crispasr_run dispatches to

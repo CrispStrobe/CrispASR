@@ -66,6 +66,7 @@ echo "Starting crispasr-server on :$PORT (talker=qwen3-tts-customvoice 0.6B)…"
 "$CRISPASR" --server --backend qwen3-tts-customvoice \
     -m "$TALKER" --codec-model "$CODEC" \
     --voice-dir "$VOICE_DIR" \
+    --cors-origin '*' \
     --host 127.0.0.1 --port "$PORT" --no-prints \
     > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
@@ -127,6 +128,23 @@ assert_contains() {
     fi
 }
 
+# ───────────────────────────── CORS ──────────────────────────────────────
+echo
+echo "=== CORS (server started with --cors-origin '*') ==="
+
+# Preflight (OPTIONS) should return 204 with the CORS headers.
+resp=$(curl -s -i -X OPTIONS \
+    -H "Origin: http://example.test" \
+    -H "Access-Control-Request-Method: POST" \
+    "http://127.0.0.1:$PORT/v1/audio/speech")
+assert_contains "OPTIONS preflight returns 2xx" "HTTP/1.1 204" "$resp"
+assert_contains "Access-Control-Allow-Origin: *" "Access-Control-Allow-Origin: *" "$resp"
+assert_contains "Access-Control-Allow-Methods present" "Access-Control-Allow-Methods" "$resp"
+
+# Regular GET should also carry the Allow-Origin header.
+hdrs=$(curl -s -i "http://127.0.0.1:$PORT/health" | head -20)
+assert_contains "GET /health carries Allow-Origin" "Access-Control-Allow-Origin: *" "$hdrs"
+
 # ───────────────────────────── status routes ─────────────────────────────
 echo
 echo "=== status routes ==="
@@ -170,19 +188,41 @@ code=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
     -d '{"input":""}' "http://127.0.0.1:$PORT/v1/audio/speech")
 assert "empty input → 400" "400" "$code"
 
-# OpenAI's "pcm" should be rejected with helpful message
-out=$(curl -s -X POST \
-    -H 'Content-Type: application/json' \
-    -d '{"input":"x","response_format":"pcm"}' \
-    "http://127.0.0.1:$PORT/v1/audio/speech")
-assert_contains "response_format=pcm → 400 with 'wav' or 'f32' guidance" "f32" "$out"
-
 # Unknown format
-code=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+out=$(curl -s -X POST \
     -H 'Content-Type: application/json' \
     -d '{"input":"x","response_format":"mp3"}' \
     "http://127.0.0.1:$PORT/v1/audio/speech")
-assert "response_format=mp3 → 400" "400" "$code"
+assert_contains "response_format=mp3 → mentions 'wav', 'pcm', or 'f32'" "wav" "$out"
+
+# Out-of-range speed
+out=$(curl -s -X POST \
+    -H 'Content-Type: application/json' \
+    -d '{"input":"x","speed":5.0}' \
+    "http://127.0.0.1:$PORT/v1/audio/speech")
+assert_contains "speed=5.0 → 400 with 'invalid_speed' code" "invalid_speed" "$out"
+
+out=$(curl -s -X POST \
+    -H 'Content-Type: application/json' \
+    -d '{"input":"x","speed":0.1}' \
+    "http://127.0.0.1:$PORT/v1/audio/speech")
+assert_contains "speed=0.1 → 400 with 'invalid_speed' code" "invalid_speed" "$out"
+
+# Input too long
+LONG_INPUT=$(python -c 'print("a" * 5000)')
+out=$(curl -s -X POST \
+    -H 'Content-Type: application/json' \
+    -d "$(printf '{"input":"%s"}' "$LONG_INPUT")" \
+    "http://127.0.0.1:$PORT/v1/audio/speech")
+assert_contains "5000-char input → 400 with 'input_too_long'" "input_too_long" "$out"
+
+# Error shape: code and param fields land on the wire
+out=$(curl -s -X POST \
+    -H 'Content-Type: application/json' \
+    -d '{}' \
+    "http://127.0.0.1:$PORT/v1/audio/speech")
+assert_contains "missing input → 'code' field" "missing_required_field" "$out"
+assert_contains "missing input → 'param' field" '"param"' "$out"
 
 echo
 echo "=== POST /v1/audio/speech — happy path ==="
@@ -219,6 +259,78 @@ else
     FAILED_NAMES="$FAILED_NAMES\n    - response body present"
 fi
 rm -f "$TMPWAV"
+
+# OpenAI 'pcm' output: raw int16 LE, no header. Size should be exactly
+# 2 * n_samples (samples come from the synth at 24 kHz).
+TMPPCM=$(mktemp -t crispasr-out.XXXXXX.pcm)
+code=$(curl -s -X POST \
+    -H 'Content-Type: application/json' \
+    -d '{"input":"openai pcm test","response_format":"pcm"}' \
+    -o "$TMPPCM" -w "%{http_code}" \
+    "http://127.0.0.1:$PORT/v1/audio/speech")
+assert "OpenAI pcm synth → 200" "200" "$code"
+if [ -s "$TMPPCM" ]; then
+    SIZE=$(wc -c < "$TMPPCM" | tr -d ' ')
+    head4=$(dd if="$TMPPCM" bs=4 count=1 2>/dev/null)
+    if [ "$head4" != "RIFF" ]; then
+        echo "  ✓ pcm body has no RIFF header (raw int16, $SIZE bytes)"
+        PASS=$((PASS + 1))
+    else
+        echo "  ✗ pcm body unexpectedly starts with RIFF"
+        FAIL=$((FAIL + 1))
+    fi
+    if [ $((SIZE % 2)) -eq 0 ]; then
+        echo "  ✓ pcm body size $SIZE is int16-aligned"
+        PASS=$((PASS + 1))
+    else
+        echo "  ✗ pcm body size $SIZE not int16-aligned"
+        FAIL=$((FAIL + 1))
+    fi
+fi
+rm -f "$TMPPCM"
+
+# Speed parameter — speed=2.0 should produce roughly half the samples
+# of speed=1.0 for the same input (linear-resampler post-synth).
+TMPS1=$(mktemp -t crispasr-s1.XXXXXX.f32)
+TMPS2=$(mktemp -t crispasr-s2.XXXXXX.f32)
+curl -s -X POST -H 'Content-Type: application/json' \
+    -d '{"input":"speed test one","response_format":"f32","speed":1.0}' \
+    -o "$TMPS1" "http://127.0.0.1:$PORT/v1/audio/speech" >/dev/null
+curl -s -X POST -H 'Content-Type: application/json' \
+    -d '{"input":"speed test one","response_format":"f32","speed":2.0}' \
+    -o "$TMPS2" "http://127.0.0.1:$PORT/v1/audio/speech" >/dev/null
+S1=$(wc -c < "$TMPS1" | tr -d ' ')
+S2=$(wc -c < "$TMPS2" | tr -d ' ')
+RATIO=$(awk "BEGIN{print $S1/$S2}")
+# Tolerance: 1.7..2.3x. Synthesis isn't deterministic across runs of
+# qwen3-tts (sampling), so allow some slack — what we care about is
+# that speed=2.0 is meaningfully shorter than speed=1.0.
+if awk "BEGIN{exit !($S1 > $S2 * 1.7 && $S1 < $S2 * 2.3)}"; then
+    echo "  ✓ speed=2.0 is ~half the samples of speed=1.0 (ratio=$RATIO)"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ speed ratio out of bounds: $S1 / $S2 = $RATIO (want 1.7-2.3)"
+    FAIL=$((FAIL + 1))
+fi
+rm -f "$TMPS1" "$TMPS2"
+
+# OpenAI's 'model' field is accepted (not validated, just logged).
+TMPMODEL=$(mktemp -t crispasr-model.XXXXXX.wav)
+code=$(curl -s -X POST -H 'Content-Type: application/json' \
+    -d '{"input":"model test","model":"tts-1"}' \
+    -o "$TMPMODEL" -w "%{http_code}" \
+    "http://127.0.0.1:$PORT/v1/audio/speech")
+assert "model field accepted → 200" "200" "$code"
+rm -f "$TMPMODEL"
+
+# instructions field is accepted (silently ignored on CustomVoice).
+TMPINST=$(mktemp -t crispasr-inst.XXXXXX.wav)
+code=$(curl -s -X POST -H 'Content-Type: application/json' \
+    -d '{"input":"instructions test","instructions":"speak warmly and slowly"}' \
+    -o "$TMPINST" -w "%{http_code}" \
+    "http://127.0.0.1:$PORT/v1/audio/speech")
+assert "instructions field accepted → 200" "200" "$code"
+rm -f "$TMPINST"
 
 # f32 output should be raw float32 PCM (no header).
 TMPF32=$(mktemp -t crispasr-out.XXXXXX.f32)

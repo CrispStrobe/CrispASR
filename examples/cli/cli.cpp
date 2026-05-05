@@ -411,6 +411,14 @@ static bool whisper_params_parse(int argc, char** argv, whisper_params& params) 
             // <name>.gguf voice profiles. Used by POST /v1/audio/speech
             // to resolve the request's "voice" field.
             params.tts_voice_dir = ARGV_NEXT;
+        } else if (arg == "--tts-max-input-chars") {
+            // Server mode: cap on /v1/audio/speech `input` length.
+            // 0 disables (rely on the chunker / caller).
+            params.tts_max_input_chars = std::stoi(ARGV_NEXT);
+        } else if (arg == "--cors-origin") {
+            // Server mode: opt-in CORS support for browser clients.
+            // Use '*' to allow any origin, or a specific scheme://host[:port].
+            params.server_cors_origin = ARGV_NEXT;
         } else if (arg == "--tts-trim-silence") {
             params.tts_trim_silence = true;
         } else if (arg == "--text") {
@@ -695,6 +703,12 @@ static void whisper_print_usage(int /*argc*/, char** argv, const whisper_params&
     fprintf(stderr, "             --codec-model FNAME      qwen3-tts codec GGUF (defaults to sibling of -m)\n");
     fprintf(stderr, "             --voice-dir PATH         server: dir of <name>.wav (+ <name>.txt) or "
                     "<name>.gguf voice profiles for POST /v1/audio/speech\n");
+    fprintf(stderr,
+            "             --tts-max-input-chars N  [%-7d] server: cap on /v1/audio/speech `input` "
+            "length (0 = no cap)\n",
+            params.tts_max_input_chars);
+    fprintf(stderr, "             --cors-origin ORIGIN     server: opt-in CORS for browser clients "
+                    "('*' for any, or scheme://host[:port])\n");
     fprintf(stderr, "             --tts-steps N            [%-7d] DPM-Solver++ steps (10-20, vibevoice only)\n",
             params.tts_steps);
     fprintf(stderr, "             --tts-trim-silence       [%-7s] trim leading silence from TTS output\n",

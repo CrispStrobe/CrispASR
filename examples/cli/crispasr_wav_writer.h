@@ -1,9 +1,11 @@
-// crispasr_wav_writer.h — header-only WAV (16-bit PCM) serializer.
+// crispasr_wav_writer.h — header-only WAV (16-bit PCM) serializer
+// plus the matching headerless raw-int16-LE emitter.
 //
 // Used by the TTS server route handler to wrap synthesised float32
-// samples in a self-contained RIFF blob that browsers and OpenAI
-// clients can play directly. Header-only so the unit tests can
-// exercise it without linking the server translation unit.
+// samples in either a self-contained RIFF blob (browsers, OpenAI
+// `wav`) or a raw int16 LE byte stream (OpenAI `pcm`). Header-only
+// so the unit tests can exercise both without linking the server
+// translation unit.
 
 #pragma once
 
@@ -64,5 +66,31 @@ inline std::string crispasr_make_wav_int16(const float* pcm, int n_samples, int 
             s = -1.0f;
         dst[i] = (int16_t)std::lround(s * 32767.0f);
     }
+    return out;
+}
+
+// Headerless raw int16 little-endian PCM. Same clamp+round semantics
+// as the WAV writer above, just without the 44-byte RIFF prefix. This
+// is what OpenAI's spec means by `response_format=pcm`: 24 kHz signed
+// 16-bit LE mono raw bytes that the client interprets given out-of-band
+// metadata (Content-Type plus the documented sample rate). Caller is
+// responsible for passing the right sample rate semantics — the
+// function itself doesn't encode rate (there's nowhere to put it).
+inline std::string crispasr_make_pcm_int16_le(const float* pcm, int n_samples) {
+    std::string out;
+    if (n_samples <= 0)
+        return out;
+    out.resize((size_t)n_samples * 2);
+    int16_t* dst = reinterpret_cast<int16_t*>(&out[0]);
+    for (int i = 0; i < n_samples; i++) {
+        float s = pcm[i];
+        if (s > 1.0f)
+            s = 1.0f;
+        if (s < -1.0f)
+            s = -1.0f;
+        dst[i] = (int16_t)std::lround(s * 32767.0f);
+    }
+    // On a hypothetical big-endian host we'd byte-swap here; ggml only
+    // ships LE platforms today, so the bytes are already wire-correct.
     return out;
 }

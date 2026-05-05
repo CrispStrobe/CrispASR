@@ -185,12 +185,24 @@ static float form_float(const httplib::Request& req, const std::string& key, flo
     }
 }
 
-// JSON error response helper.
-static void json_error(httplib::Response& res, int status, const std::string& message) {
+// JSON error response helper. Shape matches OpenAI's:
+//   { "error": { "message": ..., "type": ..., "code": ..., "param": ... } }
+// `code` is a stable machine-readable enum-string the client can switch on
+// (e.g. "voice_not_found", "input_too_long"); `param` is the offending
+// request field name (e.g. "voice", "input"). Both default to "" and are
+// omitted from the JSON body when empty so the on-wire shape stays
+// minimal for non-OpenAI consumers.
+static void json_error(httplib::Response& res, int status, const std::string& message, const std::string& code = "",
+                       const std::string& param = "") {
     res.status = status;
-    res.set_content("{\"error\": {\"message\": \"" + crispasr_json_escape(message) +
-                        "\", \"type\": \"invalid_request_error\"}}",
-                    "application/json");
+    std::string body =
+        "{\"error\": {\"message\": \"" + crispasr_json_escape(message) + "\", \"type\": \"invalid_request_error\"";
+    if (!code.empty())
+        body += ", \"code\": \"" + crispasr_json_escape(code) + "\"";
+    if (!param.empty())
+        body += ", \"param\": \"" + crispasr_json_escape(param) + "\"";
+    body += "}}";
+    res.set_content(body, "application/json");
 }
 
 static void auth_error(httplib::Response& res) {
@@ -344,6 +356,29 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
     }
 
     Server svr;
+
+    // CORS support — opt-in via --cors-origin. Browser clients calling our
+    // /v1/* endpoints from a different origin need:
+    //   1. Access-Control-Allow-Origin on every response (set on each route)
+    //   2. A 204 reply to OPTIONS preflights with Allow-{Methods,Headers}
+    // The pre-routing handler runs on every request before route dispatch;
+    // we use it to attach the response headers and short-circuit the
+    // OPTIONS preflight without touching individual routes.
+    if (!params.server_cors_origin.empty()) {
+        const std::string cors_origin = params.server_cors_origin;
+        svr.set_pre_routing_handler([cors_origin](const Request& req, Response& res) {
+            res.set_header("Access-Control-Allow-Origin", cors_origin);
+            res.set_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+            res.set_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key");
+            res.set_header("Access-Control-Max-Age", "86400");
+            if (req.method == "OPTIONS") {
+                res.status = 204;
+                return Server::HandlerResponse::Handled;
+            }
+            return Server::HandlerResponse::Unhandled;
+        });
+        fprintf(stderr, "crispasr-server: CORS enabled (Allow-Origin: %s)\n", cors_origin.c_str());
+    }
 
     auto require_auth = [&](const Request& req, Response& res) -> bool {
         if (is_authorized(req, api_keys))
@@ -579,25 +614,35 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
     // Body: application/json
     //   {
     //     "input":           "TEXT to synthesize",       (required)
+    //     "model":           "<model id>",               (optional, ignored — we serve the loaded one)
     //     "voice":           "<name in --voice-dir>",    (optional)
-    //     "response_format": "wav" | "f32"               (optional, default "wav")
+    //     "instructions":    "<voice direction prose>",  (optional, applied via params.tts_instruct)
+    //     "speed":           0.25 .. 4.0,                (optional, default 1.0)
+    //     "response_format": "wav" | "pcm" | "f32"       (optional, default "wav")
     //   }
     //
     // Returns:
-    //   200 audio/wav                 — 16-bit PCM int16, 24 kHz mono
-    //   200 application/octet-stream  — raw float32 PCM (response_format=f32)
+    //   200 audio/wav                 — 16-bit PCM int16 RIFF, 24 kHz mono (default)
+    //   200 audio/pcm                 — raw int16 LE PCM, 24 kHz mono (OpenAI spec)
+    //   200 application/octet-stream  — raw float32 PCM (crispasr-specific f32)
     //
-    //   400 — backend lacks CAP_TTS, missing input, malformed body
+    //   400 — backend lacks CAP_TTS, missing/empty input, input too long,
+    //         malformed body, unknown response_format, speed out of range
     //   500 — backend->synthesize returned empty (e.g. unknown voice)
     //   503 — model still loading
     //
-    // Note on response_format: OpenAI's spec uses `pcm` to mean
-    // 24 kHz signed 16-bit LE mono raw PCM, NOT float32. To avoid
-    // confusing OpenAI clients we expose the raw float32 path under
-    // the name `f32` and reject `pcm` with a 400 pointing at `wav`
-    // (which is the right choice for OpenAI clients anyway). The
-    // `f32` format is a convenience for downstream DSP that wants
-    // to skip the int16 round-trip.
+    // OpenAI compatibility notes:
+    //   - `model` is read but not validated — clients always send it; we
+    //     serve whatever was loaded via -m or POST /load. Surfaced in
+    //     the synth log line for diagnostics.
+    //   - `pcm` is OpenAI's 24 kHz signed 16-bit LE mono raw byte
+    //     stream (no header). `f32` is the crispasr extension that
+    //     emits raw float32 for downstream DSP.
+    //   - `instructions` maps to params.tts_instruct (qwen3-tts
+    //     VoiceDesign). On non-VoiceDesign backends it's silently
+    //     ignored — OpenAI clients don't expect it to ever 4xx.
+    //   - `speed` is applied as a post-synth linear resampler. Native
+    //     backend duration knobs are a future improvement.
     //
     // Voice handling: the `voice` field is passed through to
     // params.tts_voice verbatim. Each backend interprets it on its
@@ -627,27 +672,41 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         try {
             body = nlohmann::json::parse(req.body);
         } catch (...) {
-            json_error(res, 400, "invalid JSON body");
+            json_error(res, 400, "invalid JSON body", "invalid_json");
             return;
         }
 
         std::string text = body.value("input", "");
         if (text.empty()) {
-            json_error(res, 400, "missing or empty 'input' field");
+            json_error(res, 400, "missing or empty 'input' field", "missing_required_field", "input");
+            return;
+        }
+        if (params.tts_max_input_chars > 0 && (int)text.size() > params.tts_max_input_chars) {
+            json_error(res, 400,
+                       "'input' length " + std::to_string(text.size()) + " exceeds the configured limit of " +
+                           std::to_string(params.tts_max_input_chars) +
+                           " chars; raise --tts-max-input-chars or split the input client-side",
+                       "input_too_long", "input");
             return;
         }
 
+        // Read but don't validate `model` — we serve whatever was loaded.
+        // Surfaced in the log line below for diagnostics.
+        std::string requested_model = body.value("model", "");
+
         std::string voice_name = body.value("voice", "");
+        std::string instructions = body.value("instructions", "");
         std::string response_format = body.value("response_format", std::string("wav"));
-        if (response_format == "pcm") {
-            json_error(res, 400,
-                       "response_format 'pcm' is reserved for OpenAI's 24 kHz signed 16-bit LE "
-                       "PCM and is not currently emitted; use 'wav' (same audio, with header) "
-                       "or 'f32' (raw float32, crispasr-specific)");
+        if (response_format != "wav" && response_format != "pcm" && response_format != "f32") {
+            json_error(res, 400, "response_format must be one of 'wav', 'pcm', or 'f32'", "unsupported_response_format",
+                       "response_format");
             return;
         }
-        if (response_format != "wav" && response_format != "f32") {
-            json_error(res, 400, "response_format must be 'wav' or 'f32'");
+
+        float speed = body.value("speed", 1.0f);
+        if (!(speed >= 0.25f && speed <= 4.0f)) {
+            json_error(res, 400, "'speed' must be between 0.25 and 4.0 (got " + std::to_string(speed) + ")",
+                       "invalid_speed", "speed");
             return;
         }
 
@@ -657,9 +716,17 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         // relative to --voice-dir). rp.tts_voice_dir already carries
         // the server's configured dir for adapters that want to do
         // bare-name resolution.
+        //
+        // `instructions` maps to params.tts_instruct (qwen3-tts
+        // VoiceDesign). Non-VoiceDesign backends silently ignore it;
+        // we don't 4xx because OpenAI clients always include the field
+        // when they're using gpt-4o-mini-tts and shouldn't see errors
+        // when pointed at a base TTS server.
         whisper_params rp = params;
         if (!voice_name.empty())
             rp.tts_voice = voice_name;
+        if (!instructions.empty())
+            rp.tts_instruct = instructions;
 
         auto t0 = std::chrono::steady_clock::now();
         std::vector<float> pcm;
@@ -670,21 +737,47 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         auto t1 = std::chrono::steady_clock::now();
 
         if (pcm.empty()) {
-            json_error(res, 500, "synthesis failed (backend returned empty audio)");
+            json_error(res, 500, "synthesis failed (backend returned empty audio)", "synthesis_failed");
             return;
+        }
+
+        // Apply speed via linear-interpolation resampler. speed=1.0 is a
+        // no-op. Quality loss vs a sinc resampler is minimal at modest
+        // speeds (0.5x .. 2.0x) for speech; backends that grow native
+        // duration knobs will plumb through `rp.tts_speed` directly and
+        // bypass this path.
+        if (speed != 1.0f) {
+            const int in_n = (int)pcm.size();
+            const int out_n = std::max(1, (int)((float)in_n / speed));
+            std::vector<float> resampled((size_t)out_n);
+            for (int i = 0; i < out_n; i++) {
+                const float src = (float)i * speed;
+                const int s0 = (int)src;
+                const int s1 = std::min(s0 + 1, in_n - 1);
+                const float frac = src - (float)s0;
+                resampled[i] = pcm[s0] * (1.0f - frac) + pcm[s1] * frac;
+            }
+            pcm = std::move(resampled);
         }
 
         const double elapsed_s = std::chrono::duration<double>(t1 - t0).count();
         const double audio_s = (double)pcm.size() / 24000.0;
         fprintf(stderr,
                 "crispasr-server: synthesized %.1fs audio in %.2fs (RTF=%.2f) "
-                "voice='%s' format=%s\n",
+                "voice='%s' speed=%.2f format=%s model='%s'\n",
                 audio_s, elapsed_s, elapsed_s > 0 ? elapsed_s / audio_s : 0.0,
-                voice_name.empty() ? "<startup>" : voice_name.c_str(), response_format.c_str());
+                voice_name.empty() ? "<startup>" : voice_name.c_str(), speed, response_format.c_str(),
+                requested_model.empty() ? "<unset>" : requested_model.c_str());
 
         if (response_format == "f32") {
             std::string buf((const char*)pcm.data(), pcm.size() * sizeof(float));
             res.set_content(std::move(buf), "application/octet-stream");
+        } else if (response_format == "pcm") {
+            // OpenAI's pcm: 24 kHz signed 16-bit LE mono raw bytes, no
+            // header. Content-Type is documented as audio/pcm; clients
+            // know the rate out-of-band from the spec.
+            std::string raw = crispasr_make_pcm_int16_le(pcm.data(), (int)pcm.size());
+            res.set_content(std::move(raw), "audio/pcm");
         } else {
             std::string wav = crispasr_make_wav_int16(pcm.data(), (int)pcm.size(), 24000);
             res.set_content(std::move(wav), "audio/wav");
