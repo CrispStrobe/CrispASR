@@ -797,6 +797,7 @@ static ggml_tensor* ct_get_tensor_fmt(cohere_model& model, const char* fmt, int 
 // ---------------------------------------------------------------------------
 
 #include "core/attention.h"
+#include "core/audio_chunking.h"
 #include "core/gguf_loader.h"
 
 #ifndef M_PI
@@ -1823,17 +1824,25 @@ struct cohere_result* cohere_transcribe_ex(struct cohere_context* ctx, const flo
     COHERE_VLOG2(vb, "cohere: transcribe started   n_samples=%d  audio=%.2fs\n", n_samples,
                  (double)n_samples / hp.sample_rate);
 
-    // --- Long-audio chunking: encode AND decode each 30s window independently ---
+    // --- Long-audio chunking: encode AND decode each <=30s window independently ---
     //
     // The previous approach assembled a single giant cross-KV for all chunks and ran
     // the decoder once. This is out-of-distribution for a model trained on ≤30s windows
     // and causes the decoder to predict EOS far too early (e.g. ~70 words for a 2-min clip).
     //
-    // Correct approach (same as Whisper): each 30s chunk is fully encode+decoded on its own.
+    // Correct approach (same as Whisper): each chunk is fully encode+decoded on its own.
     // Results are concatenated with per-chunk t_offset_cs so timestamps remain absolute.
+    //
+    // Boundaries are chosen by RMS-minimum within the last 5 s of each
+    // 30 s window so cuts land at quiet points instead of slicing
+    // mid-word (PLAN #80b, ported from nano-cohere-transcribe).
     {
         const int CHUNK_S = 30 * hp.sample_rate;
         if (n_samples > CHUNK_S) {
+            const size_t search_window_samples = (size_t)5 * (size_t)hp.sample_rate;
+            const size_t energy_win_samples = 1600; // 100 ms at 16 kHz
+            auto chunks = audio_chunking::split_at_energy_minima(samples, (size_t)n_samples, (size_t)CHUNK_S,
+                                                                 search_window_samples, energy_win_samples);
             // Merge helper: append src into dst
             auto merge_results = [](cohere_result* dst, cohere_result* src) -> bool {
                 if (!src)
@@ -1881,21 +1890,19 @@ struct cohere_result* cohere_transcribe_ex(struct cohere_context* ctx, const flo
                 return nullptr;
             }
 
-            int offset = 0;
-            int chunk_idx = 0;
-            while (offset < n_samples) {
-                int chunk_end = std::min(offset + CHUNK_S, n_samples);
+            for (size_t chunk_idx = 0; chunk_idx < chunks.size(); ++chunk_idx) {
+                const int offset = (int)chunks[chunk_idx].first;
+                const int chunk_end = (int)chunks[chunk_idx].second;
                 int64_t chunk_t0_cs = t_offset_cs + (int64_t)((double)offset / hp.sample_rate * 100.0);
-                COHERE_VLOG(vb, "cohere: chunk %d  samples [%d, %d)  t0=%.1fs\n", chunk_idx, offset, chunk_end,
-                            chunk_t0_cs / 100.0);
+                COHERE_VLOG(vb, "cohere: chunk %zu/%zu  samples [%d, %d)  t0=%.1fs  dur=%.2fs\n", chunk_idx + 1,
+                            chunks.size(), offset, chunk_end, chunk_t0_cs / 100.0,
+                            (double)(chunk_end - offset) / hp.sample_rate);
                 cohere_result* chunk_r =
                     cohere_transcribe_ex(ctx, samples + offset, chunk_end - offset, lang, chunk_t0_cs);
                 if (!merge_results(full, chunk_r)) {
                     cohere_result_free(full);
                     return nullptr;
                 }
-                offset = chunk_end;
-                chunk_idx++;
             }
             return full;
         }

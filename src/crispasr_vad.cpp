@@ -9,6 +9,8 @@
 
 #include "crispasr_vad.h"
 
+#include "core/audio_chunking.h"
+
 #include "firered_vad.h" // FireRedVAD (DFSMN) — alternative to Silero
 #include "crispasr.h"    // whisper_vad_* API (Silero VAD)
 #if __has_include("marblenet_vad.h")
@@ -230,6 +232,33 @@ std::vector<crispasr_audio_slice> crispasr_fixed_chunk_slices(int n_samples, int
     }
     for (int s = 0; s < n_samples; s += chunk_samples) {
         const int e = std::min(n_samples, s + chunk_samples);
+        slices.push_back({
+            s,
+            e,
+            (int64_t)((double)s / sample_rate * 100.0),
+            (int64_t)((double)e / sample_rate * 100.0),
+        });
+    }
+    return slices;
+}
+
+std::vector<crispasr_audio_slice> crispasr_energy_chunk_slices(const float* samples, int n_samples, int sample_rate,
+                                                               int chunk_seconds, float search_window_seconds) {
+    std::vector<crispasr_audio_slice> slices;
+    if (n_samples <= 0 || !samples)
+        return slices;
+    if (chunk_seconds <= 0 || search_window_seconds <= 0.0f)
+        return crispasr_fixed_chunk_slices(n_samples, sample_rate, chunk_seconds);
+    const size_t chunk_samples = (size_t)chunk_seconds * (size_t)sample_rate;
+    const size_t search_window_samples = (size_t)(search_window_seconds * (float)sample_rate);
+    const size_t energy_win_samples = (size_t)((double)sample_rate * 0.1); // 100 ms
+
+    auto ranges = audio_chunking::split_at_energy_minima(samples, (size_t)n_samples, chunk_samples,
+                                                         search_window_samples, energy_win_samples);
+    slices.reserve(ranges.size());
+    for (auto& r : ranges) {
+        const int s = (int)r.first;
+        const int e = (int)r.second;
         slices.push_back({
             s,
             e,

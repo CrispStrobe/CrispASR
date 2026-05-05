@@ -40,6 +40,8 @@ public:
         cp.no_punctuation = !p.punctuation;
         cp.diarize = p.diarize;
         cp.verbosity = p.no_prints ? 0 : 1;
+        if (getenv("CRISPASR_VERBOSE") || getenv("COHERE_BENCH"))
+            cp.verbosity = 2;
 
         ctx_ = cohere_init_from_file(p.model.c_str(), cp);
         if (!ctx_) {

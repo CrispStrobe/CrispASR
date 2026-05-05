@@ -89,5 +89,8 @@ std::vector<crispasr_audio_slice> crispasr_compute_audio_slices(const float* sam
         // to fixed chunking so the CLI still produces output.
     }
 
-    return crispasr_fixed_chunk_slices(n_samples, sample_rate, chunk_seconds);
+    // VAD-free fallback: cut at lowest-RMS 100 ms within the last 5 s of
+    // each `chunk_seconds` window so chunk boundaries don't slice
+    // mid-word (PLAN #80b).
+    return crispasr_energy_chunk_slices(samples, n_samples, sample_rate, chunk_seconds);
 }

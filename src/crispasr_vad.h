@@ -73,6 +73,16 @@ std::vector<crispasr_audio_slice> crispasr_compute_vad_slices(const float* sampl
 // Useful as a fallback when no VAD model is available.
 std::vector<crispasr_audio_slice> crispasr_fixed_chunk_slices(int n_samples, int sample_rate, int chunk_seconds);
 
+// Like `crispasr_fixed_chunk_slices` but cuts each window at the
+// lowest-RMS 100 ms inside the last `search_window_seconds` of a
+// `chunk_seconds` running window — avoids slicing mid-word at fixed
+// time boundaries. Pass `search_window_seconds <= 0` to fall back to a
+// fixed cut. Used as the VAD-free fallback in
+// `crispasr_compute_audio_slices`. Ported from
+// nano-cohere-transcribe's `_find_split_point_energy`.
+std::vector<crispasr_audio_slice> crispasr_energy_chunk_slices(const float* samples, int n_samples, int sample_rate,
+                                                               int chunk_seconds, float search_window_seconds = 5.0f);
+
 // Stitch VAD slices into one contiguous buffer with 0.1s silence gaps.
 // Produces a mapping table for timestamp remapping. The stitched buffer
 // is shorter than the original audio (silence removed), allowing backends

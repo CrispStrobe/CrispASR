@@ -42,6 +42,7 @@ passes 18/18 transcribe + 51/54 feature tests (3 stream skips, no failures).
 | **BLOCKED** | [#42 VibeVoice-ASR 7B](#42-vibevoice-asr-7b) | High | Needs ≥16 GB RAM |
 | **BLOCKED** | [#43 Fun-ASR-Nano](#43-fun-asr-nano) | Medium | License unclear |
 | **DONE** | [#75 /v1/audio/speech OpenAI parity round 1](#75-v1audiospeech-openai-feature-parity-round-1) | Small-Medium | PR #63 merged + corrective batch (`d35940b`…`85302c5`) + 75a/75b (`b932fa9`) + 75d chunking (`0bff2d7`) shipped 2026-05-05; 75c-opt-1 (server-side speed resampler) included in `b932fa9`. Pending: 75c-opt-2 native-backend duration knobs, 75e (streaming/mp3/upload) — each its own work item. |
+| **MEDIUM** | [#80 nano-cohere-transcribe-inspired tweaks](#80-nano-cohere-transcribe-inspired-perf--chunking-tweaks) | Small | 80c done; 80b energy chunker in progress; 80a parked (measurement: <1 % of wall on Metal); 80d/80e TODO |
 
 **Recently completed** (full write-ups in HISTORY.md): **#69 + #72 + #73 cap-honesty + KV/layer offload knobs → §79** (14-commit session shipping `CRISPASR_KV_QUANT_K/_V` + `KV_ON_CPU` on 14 backends, `N_GPU_LAYERS` on 10 backends, gemma4/mimo GPU-residency 2.2x / 22 % faster, plus cap-honesty cleanup on parakeet/glm-asr/qwen3/gemma4/omniasr). **vibevoice #69a follow-up → §79b** (mode-aware `tts_lm.layers.` / `lm.layers.` prefix predicate). #78 Chatterbox vocoder → §78. #11 WebSocket server → §76, #63 Feature matrix parity → §72, #59 binding parity → §73, gemma4 #49 + Docker #31 → §74, tests + KV Q8_0 + cleanup → §75. Earlier: #5→§63, #16→§55, #51→§56, #51b→§60, #53→§63, #54→§61, #55→§54, #56→§63, #60d→§64.
 
@@ -2961,3 +2962,119 @@ Files touched (75d):
 new ~15 assertions); a stock OpenAI Python SDK script can hit our
 server with a chat-completion-style synth call (no client-side
 patching) and get back a playable file.
+
+---
+
+## 80. nano-cohere-transcribe-inspired perf + chunking tweaks
+
+After studying [Deep-unlearning/nano-cohere-transcribe](https://github.com/Deep-unlearning/nano-cohere-transcribe)
+(pure-PyTorch port of `CohereLabs/cohere-transcribe-03-2026`, 1.5–3.6×
+faster than the native `transformers` path on CUDA), this entry surveys
+which of its tricks port to CrispASR. The headline trick — CUDA-graph
+capture of the per-token decoder step — turns out to be largely
+redundant on Metal+ggml because PR #73's `sched_reserve` already paid
+that bill. The smaller wins are still useful and are the focus here.
+
+### 80a. Decoder graph-once, replay-N — measurement, parked
+
+**Inspiration.** nano-cohere `_graph.py` pre-allocates fixed-shape KV
+buffers `[B, H, max_kv, Dh]`, writes new K/V at a runtime `pos_idx` via
+`index_copy_`, captures one CUDA graph per `(B, T_enc)`, and replays it
+per token. Eliminates per-step kernel-launch overhead (3.62× win at
+bs=1 on A100).
+
+**Mapped to ggml.** The structural blocker in CrispASR is
+`core/attention.h:148` — the F16 fast path bakes `n_past` into the
+view byte-offset (`n_past * kv_k->nb[1]`), so each step rebuilds the
+graph at a different topology. The quant path already uses
+`ggml_set_rows(indices)` (line 173), the same indirection nano uses;
+extending it to F16 is mechanical (verified: Metal/CUDA/Vulkan all
+support `ggml_set_rows` with F16 destination). With that change, the
+step graph could be built once and replayed N times, only updating
+`embd`/`position`/`indices`/`sa_mask` via `ggml_backend_tensor_set`.
+
+**Why this is parked.** Baseline measurement on cohere q4_k + Metal
+(MTL0):
+
+| clip            | total wall | enc compute  | dec build | dec alloc | dec compute | dec build+alloc / total |
+| --------------- | ---------- | ------------ | --------- | --------- | ----------- | ----------------------- |
+| JFK 11 s        | 1356.8 ms  | 1114.3 (82%) |   3.0 ms  |  14.8 ms  |  115.7 ms   | **1.31 %**              |
+| JFK ×3 = 30 s   | 3838.6 ms  | 3295.7 (86%) |   5.1 ms  |  28.4 ms  |  293.7 ms   | **0.87 %**              |
+
+The encoder dominates (82–86%). Per-step decoder CPU overhead is
+already in the noise on Metal because PR #73's
+`ggml_backend_sched_reserve(... max-size graph ...)` (cohere.cpp:2210)
+pre-sizes the gallocr so `gallocr_needs_realloc` returns false on
+every step. A graph-once-replay-N change would save at most ~1 % of
+total wall, with substantial code disruption (constant-shape K/V
+read views also need a per-step mask, since `sa_L = offset + n_tokens`
+also currently scales the read view).
+
+**Decision.** Park until a CUDA backend ships — at that point the win
+flips (CUDA per-kernel-launch overhead is exactly what nano fights),
+and the F16 `ggml_set_rows` path may be needed anyway. Cohere already
+has the `gf_decode_1` field declared (line 502) for that future
+change.
+
+### 80b. Energy-minimum chunk boundaries (in progress)
+
+Cohere's long-form path at `src/cohere.cpp:1834-1901` cuts at exactly
+`30 * sample_rate` samples — which slices mid-word. Port the
+`_find_split_point_energy` helper from nano-cohere `chunk.py:61-80`:
+within the last `boundary_context_seconds` (default 5 s) of each 30 s
+window, scan in `min_energy_window_samples` (default 1600 = 100 ms)
+non-overlapping slices and pick the lowest-RMS one as the cut point.
+
+**Files:**
+* `src/core/audio_chunking.h` — new header. Two functions:
+  `audio_chunking::find_energy_min_split(span, search_start,
+  search_end, win_samples) -> int` and
+  `audio_chunking::split_at_energy_minima(span, sample_rate,
+  max_chunk_s, search_window_s, win_samples) -> std::vector<std::pair<
+  size_t,size_t>>` returning [begin,end) sample ranges.
+* `src/cohere.cpp:1834-1901` — replace the fixed-step loop with a
+  call to `split_at_energy_minima`; iterate the returned ranges.
+
+**Acceptance:** JFK transcript byte-identical (single-chunk path
+unaffected); 60 s synthetic clip's chunk boundary lands within a
+quiet sub-window (verifiable by inspecting the cut-time printed by
+`COHERE_VLOG`).
+
+### 80c. CRISPASR_VERBOSE env override for cohere CLI (DONE this session)
+
+Aligns cohere with the gemma4 / granite / firered / omniasr /
+moonshine_streaming convention (env var or `-v` bumps backend
+verbosity to 2 to print the perf report). One line in
+`examples/cli/crispasr_backend_cohere.cpp`. Side benefit of the
+investigation; without it, 80a couldn't be measured from the CLI.
+
+### 80d. Cross-backend audit of fixed-time chunking (TODO)
+
+Survey the long-form chunking strategy in every AR-decoder backend
+(canary, voxtral, voxtral4b, vibevoice, kyutai-stt, gemma4_e2b,
+qwen3-tts-talker). Anything cutting at `N * sample_rate` boundaries
+inherits the same mid-word problem and gains from
+`audio_chunking::split_at_energy_minima`. Investigate-only here; each
+hit is its own one-line change.
+
+### 80e. Eager warmup follow-up (TODO, low priority)
+
+nano-cohere's `from_pretrained` does a 1 s silence transcribe on init
+to amortize Metal kernel compile / first-shape gallocr setup. Easy to
+add a `cohere_warmup(ctx)` call wired into model load. Worth ~50–
+150 ms saved on the first user-visible call but not on steady state.
+Leave for a later polish pass; if added, every backend gets its own
+warmup hook.
+
+### Out of scope (rejected ideas from nano)
+
+* **Meta-init + `assign=True`** — PyTorch trick. CrispASR's mmap'd
+  GGUF is already the moral equivalent.
+* **bf16 autoselect** — backend dtype is controlled by the GGUF
+  quant choice, not a runtime switch.
+* **Decoder-batched chunk packing** with longest-first sort — the
+  CrispASR cohere path already encodes-then-decodes per-chunk
+  serially (line 1834-1899 recurses); converting to batched chunks
+  needs a different graph shape and a real-world workload that hits
+  this regime (multi-file CLI calls). Investigate when the demand
+  appears.
