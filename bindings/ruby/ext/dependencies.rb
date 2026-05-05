@@ -1,4 +1,5 @@
 require "tsort"
+require "set"
 
 class Dependencies
   include TSort
@@ -15,7 +16,22 @@ class Dependencies
   end
 
   def libs
+    # Only include libraries reachable from the crispasr and common targets.
+    # Orphan static libs (e.g. granite_nle, ctc-align) that are defined but
+    # not linked into crispasr would otherwise appear in the link line and
+    # cause "cannot find" errors when CRISPASR_BUILD_EXAMPLES=OFF.
+    roots = @nodes.select {|_, (label, _)| label =~ /\Acrispasr\b/ || label == "common" }.keys
+    reachable = Set.new
+    queue = roots.dup
+    until queue.empty?
+      n = queue.shift
+      next if reachable.include?(n)
+      reachable << n
+      @graph[n].each {|child| queue << child }
+    end
+
     tsort.filter_map {|node|
+      next unless reachable.include?(node)
       label, shape = @nodes[node]
       if shape == @static_lib_shape
         label.gsub(/\\n\([^)]+\)/, '')
@@ -36,7 +52,11 @@ class Dependencies
   end
 
   def generate_dot
-    args = ["-S", "sources", "-B", "build", "--graphviz", dot_path, "-D", "BUILD_SHARED_LIBS=OFF"]
+    args = ["-S", "sources", "-B", "build", "--graphviz", dot_path,
+            "-D", "BUILD_SHARED_LIBS=OFF",
+            "-D", "CRISPASR_BUILD_TESTS=OFF",
+            "-D", "CRISPASR_BUILD_EXAMPLES=OFF",
+            "-D", "CRISPASR_BUILD_SERVER=OFF"]
     args << @options.to_s unless @options.to_s.empty?
     system @cmake, *args, exception: true
   end

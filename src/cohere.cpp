@@ -2347,6 +2347,21 @@ struct cohere_result* cohere_transcribe_ex(struct cohere_context* ctx, const flo
         td.t0 = 0;
         td.t1 = 0;
         snprintf(td.text, sizeof(td.text), "%s", t.c_str());
+        // Ensure truncation doesn't break a multi-byte UTF-8 codepoint.
+        // Walk back from the end if the last byte is an incomplete lead/continuation.
+        {
+            size_t len = strlen(td.text);
+            while (len > 0 && (td.text[len - 1] & 0xC0) == 0x80) {
+                len--; // skip continuation bytes
+            }
+            if (len > 0) {
+                unsigned char lead = (unsigned char)td.text[len - 1];
+                int expected = (lead >= 0xF0) ? 4 : (lead >= 0xE0) ? 3 : (lead >= 0xC0) ? 2 : 1;
+                if ((int)(strlen(td.text) - (len - 1)) < expected) {
+                    td.text[len - 1] = '\0'; // remove incomplete codepoint
+                }
+            }
+        }
         tok_data.push_back(td);
         tok_to_gen_idx.push_back(i);
         full_text += t;

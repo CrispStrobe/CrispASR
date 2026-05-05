@@ -18,7 +18,7 @@ class Options
 
     output = nil
     Dir.chdir __dir__ do
-      output = `#{@cmake.shellescape} -S sources -B build -L`
+      output = `#{@cmake.shellescape} -S sources -B build -D CRISPASR_BUILD_TESTS=OFF -D CRISPASR_BUILD_EXAMPLES=OFF -D CRISPASR_BUILD_SERVER=OFF -L`
     end
     @cmake_options = output.lines.drop_while {|line| line.chomp != "-- Cache values"}.drop(1)
                        .filter_map {|line|

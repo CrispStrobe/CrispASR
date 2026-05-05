@@ -51,7 +51,7 @@ void cohere_set_temperature(struct cohere_context* ctx, float temperature, uint6
 // Per-token data returned by cohere_transcribe_ex().
 struct cohere_token_data {
     int id;        // vocabulary token ID
-    char text[48]; // decoded text (SentencePiece '▁' already converted to ' ')
+    char text[64]; // decoded text (SentencePiece '▁' already converted to ' ')
     float p;       // softmax probability [0, 1]
     int64_t t0;    // start time, centiseconds (absolute, includes t_offset_cs)
     int64_t t1;    // end time, centiseconds
