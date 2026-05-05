@@ -1,6 +1,6 @@
 import Foundation
 import UIKit
-import whisper
+import crispasr
 
 enum WhisperError: Error {
     case couldNotInitializeContext
