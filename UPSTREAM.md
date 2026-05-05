@@ -138,22 +138,31 @@ here so the upstream-PR question stays visible.
 | # | File(s) | Symptom upstream | Status |
 | - | --- | --- | --- |
 | 1 | `ggml-cpu/{vec.cpp, vec.h, ggml-cpu.c, simd-mappings.h}` | `MUL_MAT(F16, F32)` quantises F32→F16 first; activations >65504 saturate to ±Inf and propagate NaN. Issue #38. | Carrying |
-| 2 | `ggml-cuda/im2col.cu` | `OW > 65535` aborts CUDA dispatch (e.g. SEANet at 11s × 16kHz → OW=176000). | Carrying |
+| 2 | `ggml-cuda/im2col.cu` | `OW > 65535` aborts CUDA dispatch (e.g. SEANet at 11s × 16kHz → OW=176000); applies to both 2D and 3D im2col kernels. | Carrying |
 | 3 | `ggml-cuda/cpy.cu` | `cpy_scalar_transpose` asserts `grid_y < USHRT_MAX`; qwen3-tts codec hits T_pcm=2.88M on CUDA. GH issue #65. | Carrying |
 | 4 | `ggml-metal/ggml-metal.metal` | `kernel_conv_transpose_1d` iterates full IL per output, ~64× wasted work; trips macOS GPU watchdog on long qwen3-tts graphs. | Carrying |
+| 5 | `ggml.c` (`ggml_conv_1d`, `ggml_conv_1d_dw`, `ggml_conv_2d`, `ggml_conv_2d_dw`) | After (1) sets `vec_dot_type=F32` for F16, conv graph builders that hardcode F16 im2col + F16 weight produce `MUL_MAT(F16, F16)` which the CPU backend rejects. Cast kernel to F32 when im2col is F32. | Carrying |
 
-**Why these aren't upstream yet.** All four were found while shipping a
+**Why these aren't upstream yet.** All five were found while shipping a
 specific CrispASR backend and were applied as the smallest local change
 that unblocked us. None of them are CrispASR-specific in nature — any
 project using ggml with similar workloads will hit them. Sending each
-upstream is straightforward when we have time; until then they
-re-apply on every ggml bump (we've already lost #2 once during the
-0.9.8 → 0.10.0 subtree pull).
+upstream is straightforward when we have time; until then they re-apply
+on every ggml bump (we've already lost #2 once during the 0.9.8 → 0.10.0
+subtree pull, and #5 surfaced as missed inventory during the master bump
+test on 2026-05-05 because the original audit grep only matched
+`CrispASR patch` and not `CrispASR fork`).
 
-**Bump hygiene.** Before bumping ggml, snapshot `grep -rn "CrispASR
-patch" ggml/`; after the bump, diff against the snapshot. Anything
-missing is a patch upstream's master silently overwrote — find the
-original commit, cherry-pick the hunk.
+**(1) and (5) are coupled.** (1) sets `vec_dot_type=F32` for F16 weights
+and (5) makes the conv graph builders cast their F16 weights to F32 to
+match. Without (5), (1) crashes `kokoro --gpu-backend cpu` at
+`ggml_backend_sched_split_graph`. Either send them as a single PR
+upstream or design a single replacement that doesn't require splitting.
+
+**Bump hygiene.** Before bumping ggml, snapshot `grep -rnE "CrispASR
+(patch|fork)" ggml/`; after the bump, diff against the snapshot.
+Anything missing is a patch upstream's master silently overwrote — find
+the original commit, cherry-pick the hunk.
 
 ## Tracking
 

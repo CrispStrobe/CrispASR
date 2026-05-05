@@ -2584,13 +2584,17 @@ first.
 ## 2026-05-05 — ggml fork patches we carry (must re-apply on every ggml bump)
 
 Authoritative inventory of every CrispASR-local change to the vendored
-`ggml/` subtree. Each file has a `// CrispASR patch ...` marker so a
+`ggml/` subtree. Most files have a `// CrispASR patch ...` marker so a
 mechanical bump (`git subtree pull` or equivalent) won't silently lose
 them, but the marker is only a tripwire — the actual fixes are listed
-here. After every ggml bump, grep for `CrispASR patch` and verify each
-hunk is still present; ggml has lost ours twice already (commits
-`1552434` first added the im2col fix, `ca6c523` re-applied it after
-the 0.9.8 → 0.10.0 bump dropped it).
+here. **Grep for both `CrispASR patch` AND `CrispASR fork` after every
+bump** (the conv-graph patches in (5) below use the latter prefix; an
+inventory grep that misses them ships a half-applied F16 fix and crashes
+kokoro F16 CPU TTS at `ggml_backend_sched_split_graph`). ggml has lost
+our patches twice already: commit `1552434` first added the im2col fix,
+`ca6c523` re-applied it after the 0.9.8 → 0.10.0 bump dropped it; the
+master bump on 2026-05-05 surfaced (5) as a missed inventory item the
+same way.
 
 Mirror this list in `UPSTREAM.md` so future-us (or whoever bumps next)
 knows which of these are candidates to send upstream.
@@ -2689,21 +2693,62 @@ Metal triggers GPU watchdog and the command buffer is killed mid-graph.
 CUDA / CPU / Vulkan are unaffected — they don't have the same
 per-command-buffer watchdog.
 
+### 5. ggml conv graph builders F32 cast (`ggml/src/ggml.c`, issue #38 companion)
+
+Files: `ggml_conv_1d`, `ggml_conv_1d_dw`, `ggml_conv_2d`, `ggml_conv_2d_dw`
+in `ggml/src/ggml.c`. Marked `// CrispASR fork:` (different prefix from
+the others — this is what the original inventory grep missed).
+
+These four conv graph builders are the partner to (1). After (1) sets
+`vec_dot_type = F32` for `GGML_TYPE_F16`, the CPU MUL_MAT path can no
+longer accept F16 src1 — `ggml_compute_forward_mul_mat`'s line
+`GGML_ASSERT(src1->type == GGML_TYPE_F32)` fires when a non-matching
+src1 needs conversion. Upstream's conv graph builders hardcode
+`im2col_type = GGML_TYPE_F16` and feed the kernel weight in directly,
+producing `MUL_MAT(F16, F16)` — which `ggml_backend_cpu_device_supports_op`
+rejects under (1), causing `ggml_backend_sched_split_graph` to abort
+with `GGML_ASSERT(*cur_backend_id != -1)`.
+
+Fix: inside each conv builder, pick im2col output type by whether either
+side is F32; if im2col is F32 and the kernel is non-F32, `ggml_cast` the
+kernel to F32 so the resulting MUL_MAT has F32 src1.
+
+```c
+const enum ggml_type im2col_type =
+    (a->type == GGML_TYPE_F32 || b->type == GGML_TYPE_F32) ? GGML_TYPE_F32 : GGML_TYPE_F16;
+struct ggml_tensor * a_mat =
+    (im2col_type == GGML_TYPE_F32 && a->type != GGML_TYPE_F32) ? ggml_cast(ctx, a, GGML_TYPE_F32) : a;
+```
+
+Bandwidth cost is real (extra F16→F32 cast per inference pass) but
+mirrors what conv_1d already does and is the price of (1)'s correctness
+gain.
+
+Symptom if lost: kokoro F16 TTS on `--gpu-backend cpu` aborts at
+`ggml_backend_sched_split_graph: GGML_ASSERT(*cur_backend_id != -1)`,
+trying to schedule `MUL_MAT(F16 reshape, F16 conv1.weight)` from the
+F0N predictor. Also reproduces in any model whose graph runs
+`ggml_conv_1d`/`ggml_conv_2d` with F16 weights against F32 (or no-cast)
+input on the CPU backend with patch (1) applied.
+
 ### Bump procedure
 
 ```bash
-# Before the bump
-grep -rn "CrispASR patch" ggml/ > /tmp/patches-before.txt
+# Before the bump — grep BOTH marker prefixes
+grep -rnE "CrispASR (patch|fork)" ggml/ > /tmp/patches-before.txt
 
-# Do the bump
+# Do the bump (or replace ggml/{CMakeLists.txt,LICENSE,cmake,include,src} from
+# a fresh clone if the subtree wasn't originally added via `git subtree add`)
 git subtree pull --prefix=ggml https://github.com/ggml-org/ggml master --squash
 
 # After the bump
-grep -rn "CrispASR patch" ggml/ > /tmp/patches-after.txt
+grep -rnE "CrispASR (patch|fork)" ggml/ > /tmp/patches-after.txt
 diff /tmp/patches-before.txt /tmp/patches-after.txt
 # If any patch is missing, find the original commit and cherry-pick the hunk.
 ```
 
 Anything that disappears from the diff is a patch ggml's master
-silently overwrote — re-apply from this list. The four patches above
-are the full inventory as of 2026-05-05.
+silently overwrote — re-apply from this list. The five patches above
+are the full inventory as of 2026-05-05. Note that (1) and (5) are
+**coupled**: applying one without the other crashes kokoro F16 CPU at
+`ggml_backend_sched_split_graph`. Always re-apply them together.

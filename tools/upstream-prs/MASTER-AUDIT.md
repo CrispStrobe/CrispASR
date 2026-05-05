@@ -1,10 +1,15 @@
 # Upstream master audit (against ggml-org/ggml master, fetched 2026-05-05)
 
-Cross-checked our four patches against the current upstream
+Cross-checked our five patches against the current upstream
 `ggml-org/ggml` master to surface conflicts and any "already fixed
-upstream" cases. None of the four are already fixed; all still apply
-in shape. One patch (im2col) gained a second target site since
-v0.10.0 that needs the same fix.
+upstream" cases. None of the five are already fixed; all still apply
+in shape. Two notes worth keeping in mind:
+- `im2col` gained a second target site (`im2col_3d_kernel`) since
+  v0.10.0; both need the same fix.
+- (5) was missed by the original audit grep that only matched
+  `// CrispASR patch` (the conv builders use `// CrispASR fork`).
+  The bump test on 2026-05-05 surfaced this because kokoro F16 CPU
+  TTS aborts at `ggml_backend_sched_split_graph` without (5).
 
 | # | Patch | Master state | Action needed at PR time |
 | - | --- | --- | --- |
@@ -12,6 +17,7 @@ v0.10.0 that needs the same fix.
 | 02 | im2col grid_y > 65535 | Vulnerable, **two sites**. `im2col.cu:54` (existing 2D kernel — our patch). New since v0.10.0: `im2col_3d_kernel` at `im2col.cu:118` with `dim3 block_nums(num_blocks, OW, …)` at line 181 and unbounded `iow = blockIdx.y` at line 139. | Apply existing 2D fix **plus** mirror the same fix on `im2col_3d_kernel` and its dispatch. Send as one PR (same op, same bug class). |
 | 03 | cpy_scalar_transpose grid_y | Vulnerable. `cpy.cu:222` still has `GGML_ASSERT(grid_y < USHRT_MAX)`. | Apply as drafted (re-derive code first per AI policy). |
 | 04 | Metal conv_transpose_1d | Vulnerable / inefficient. `ggml-metal.metal:4860-4861` still iterates full IL with the in-loop `if`. | Apply as drafted. |
+| 05 | conv_1d / conv_1d_dw / conv_2d / conv_2d_dw F32 cast | Vulnerable. Master's `ggml.c:4471-4521` `ggml_conv_1d` and `ggml_conv_1d_dw` hardcode `im2col_type=GGML_TYPE_F16`, no kernel cast; ditto `ggml_conv_2d`/`ggml_conv_2d_dw` at `ggml.c:4575-4750`. | Apply paired with 01 — required to keep kokoro F16 CPU working under (1). |
 
 ## What changed in master since v0.10.0 (relevant to our patches)
 
@@ -34,7 +40,8 @@ mkdir -p /tmp/ggml-master
 for f in src/ggml-cuda/im2col.cu src/ggml-cuda/cpy.cu \
          src/ggml-metal/ggml-metal.metal \
          src/ggml-cpu/vec.cpp src/ggml-cpu/vec.h \
-         src/ggml-cpu/ggml-cpu.c src/ggml-cpu/simd-mappings.h; do
+         src/ggml-cpu/ggml-cpu.c src/ggml-cpu/simd-mappings.h \
+         src/ggml.c; do
   mkdir -p /tmp/ggml-master/$(dirname $f)
   curl -sL "https://raw.githubusercontent.com/ggml-org/ggml/master/$f" \
        -o /tmp/ggml-master/$f
@@ -47,6 +54,7 @@ grep -n "GGML_ASSERT(grid_y < USHRT_MAX)" /tmp/ggml-master/src/ggml-cuda/cpy.cu
 grep -n "block_nums(num_blocks, OW, "   /tmp/ggml-master/src/ggml-cuda/im2col.cu
 grep -n "tgpig\[0\] >= i \* args.s0"     /tmp/ggml-master/src/ggml-metal/ggml-metal.metal
 grep -n "vec_dot_type *= *GGML_TYPE_F16" /tmp/ggml-master/src/ggml-cpu/ggml-cpu.c
+grep -n "ggml_im2col(.*GGML_TYPE_F16)"   /tmp/ggml-master/src/ggml.c
 ```
 
 If any returns no matches, that fix landed upstream and the PR is
