@@ -15,7 +15,10 @@
 // wrappers can still link.
 #if defined(__APPLE__)
 #include <TargetConditionals.h>
-#if TARGET_OS_IOS || TARGET_OS_TV || TARGET_OS_WATCH
+// TARGET_OS_IPHONE is the iOS-family superset (iOS, tvOS, watchOS,
+// visionOS); macOS leaves it 0. Mirrors the gate in crispasr_audio.cpp
+// so both files agree on which platforms strip miniaudio device IO.
+#if TARGET_OS_IPHONE
 #define CRISPASR_MIC_STUB_ONLY 1
 #endif
 #endif
