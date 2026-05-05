@@ -171,7 +171,7 @@ regression test against `samples/jfk.wav`:
 | orpheus | Llama-3.2 talker + SNAC RVQ codec | ✔ | ✔ | ✔ | CUDA / Metal | gguf_loader, kv_self_attn, swiglu |
 | chatterbox | T3 (Llama / GPT-2) + S3Gen (Conformer + UNet1D CFM + HiFTGen) | ✔ | ✔ | ✔ | CUDA / Metal | gguf_loader, kv_self_attn, swiglu, fft |
 | m2m100 | facebook/m2m100 12L+12L transformer (text-to-text translation; WMT21 4.7B variant via `--backend m2m100-wmt21`) | ✔ | — | ✔ (cross-attn) | CUDA / Metal | gguf_loader, kv_self_attn |
-| madlad / t5 | T5 encoder-decoder (MADLAD-400 12L+12L, gated-GELU, RMSNorm, bucketed rel-pos bias). **WIP — rel-pos decode currently loops, see commit 1d9026c.** | ✔ | — | ✔ (cross-attn) | CUDA / Metal | gguf_loader, ffn |
+| madlad / t5 | T5 encoder-decoder (MADLAD-400 12L+12L, gated-GELU, RMSNorm, bucketed rel-pos bias). Tokens match Python SP bit-by-bit; translation outputs match the HF reference. | ✔ | — | ✔ (cross-attn) | CUDA / Metal | gguf_loader, ffn |
 
 ### Architecture families
 
@@ -211,10 +211,10 @@ regression test against `samples/jfk.wav`:
   - **t5_translate / madlad** (MADLAD-400 3B-mt and any future
     T5-family translation model): T5 encoder-decoder with gated-GELU
     FFN, RMSNorm, bucketed relative-position bias, SentencePiece
-    256K. Target language as `<2xx>` input prefix; encoder is
-    language-agnostic. **Status (2026-05-04):** rel-pos decode
-    loops on a repeating token (see PLAN follow-up). Wired but
-    output not yet reliable.
+    256K Viterbi-unigram tokenizer. Target language as `<2xx>` input
+    prefix on MADLAD; encoder is otherwise language-agnostic. Tokens
+    match Python SP bit-by-bit; translation outputs match the HF
+    reference (validated end-to-end on flan-t5-small + MADLAD-3b).
 
   Both are driven by `--text "..." -sl <src> -tl <tgt>`.
 

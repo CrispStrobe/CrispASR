@@ -2475,3 +2475,108 @@ reads. Fix: read `ggml_nbytes(tensor)` bytes, then use
 `ggml_get_type_traits(type)->to_float()` to dequantize. This applies to
 ALL manual tensor reads in CPU-side code (F0 predictor, SourceModule
 linear, speaker embedding projection).
+
+## T5-family translation runtime traps (May 2026, MADLAD-400 debugging)
+
+Bringing up the T5 encoder-decoder runtime (`src/t5_translate.cpp`)
+on MADLAD-400 surfaced four bugs in sequence. Each one looked like
+"the runtime is broken" until carefully diff-tested against a Python
+reference (flan-t5-small via `transformers.T5Tokenizer` +
+`T5ForConditionalGeneration`). Capturing here so the next T5 / SP
+port doesn't repeat them.
+
+### 1. Bidirectional rel-pos bucket: FUTURE/PAST halves swapped
+
+The encoder's bidirectional rel-pos bucketing has two halves —
+buckets `[0..N/2-1]` for past+self, `[N/2..N-1]` for future. Earlier
+C++:
+
+```cpp
+int n = -rel_pos;
+ret += (n < 0) ? 0 : num_buckets;   // adds num_buckets when n>=0
+                                    // (rel_pos<=0, PAST/SELF) — WRONG
+```
+
+Canonical T5 (HF):
+
+```python
+relative_buckets += (relative_position > 0) * num_buckets   # FUTURE
+```
+
+Symptoms: encoder output was wrong by a per-head learned-bias offset.
+Decoder cross-attention then had wrong keys at every position →
+degenerate loop on most-frequent tokens (the "rel-pos repeating-token
+loop" behavior). Fix: drop the sign flip, use `rel_pos > 0` directly.
+The unidirectional decoder branch (only past valid under the causal
+mask) was already correct — only the encoder's bidirectional path
+was wrong.
+
+### 2. Special-token IDs vary across T5-family models
+
+C++ tokenizer hardcoded `<unk>=2`, `</s>=1`. That's correct for
+flan-t5 / mT5, but MADLAD-400 has **different IDs**:
+
+```
+flan-t5: <pad>=0, </s>=1, <unk>=2
+MADLAD:  <unk>=0, <s>=1,  </s>=2
+```
+
+Hardcoded `ids.push_back(2)` as the unk-fallback in tokenize_sp
+emitted MADLAD's `</s>` (= EOS) instead of `<unk>`, prematurely
+terminating the encoder input. Hardcoded trailing `ids.push_back(1)`
+emitted MADLAD's `<s>` (= BOS) instead of `</s>` — model never saw
+EOS at end of input.
+
+Fix: read `t5.eos_token_id` from GGUF metadata (already in the
+loader) and propagate to `tokenizer.eos_id`; look up `<unk>` in
+the vocab to get `tokenizer.unk_id` dynamically. Both used in
+tokenize_sp instead of literal IDs.
+
+### 3. Greedy-longest-match ≠ SentencePiece Unigram
+
+Multi-byte special tokens like MADLAD's `<2de>` (id 33) get
+mis-tokenized by greedy:
+
+```
+input:  ▁<2de>▁Hello
+greedy: [▁<](4411) + [2](810) + [de](948) + [>](3048) + [▁Hello](88912)
+                                                        # 4 garbage tokens
+SP:     [▁](805) + [<2de>](33) + [▁Hello](88912)         # 2 + 1
+```
+
+Greedy picks `▁<` because it's a longer byte match than `▁` alone.
+SP unigram picks `<2de>` because that piece's score (lang tags have
+very high SP scores) dwarfs the per-byte fragment scores.
+
+Without the right `<2de>` token in the encoder input, MADLAD has no
+language signal and emits whatever its language prior dominates on
+(in our run: Hebrew when asked for German).
+
+Fix: load `tokenizer.ggml.scores` from the GGUF and replace greedy
+with Viterbi best-segmentation — DP over byte positions, keeping
+the highest total log-prob. Codepoint-aligned (skip end positions
+that fall on a UTF-8 continuation byte). Single-byte fallback to
+`<unk>` with a heavy penalty so Viterbi only chooses byte-fallback
+when no piece covers the byte.
+
+### 4. The `<2xx>` lang prefix is MADLAD-specific
+
+The CLI adapter unconditionally prepended `<2{tgt_lang}>` to every
+translation. MADLAD's vocab has all 419 lang tags as single-piece
+entries; flan-t5 / mT5 / etc. don't. Prepending the prefix on those
+tokenizes (after Viterbi) as `[▁, <unk>]` (= garbage) at the front
+of the encoder input.
+
+Fix: new `t5_has_token(ctx, "<2de>")` C ABI; the adapter probes the
+vocab and only prepends the tag when it's a real piece.
+
+### Validation methodology
+
+For each fix, the regression test was: tokens AND output text both
+bit-identical between C++ and Python reference. flan-t5-small is the
+ideal smoke target — same architecture as MADLAD (T5-1.1 + gated-GELU
++ RMSNorm + bucketed rel-pos + SentencePiece) but ~250 MB so it
+loads fast on tight memory. Once flan-t5-small matches, MADLAD
+matches by construction (same kernels, same algorithms, larger model).
+Save the next round of T5 debugging by validating on flan-t5-small
+first.

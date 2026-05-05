@@ -4,15 +4,10 @@
 // Today's covered model: google/madlad400-3b-mt — a T5-style
 // encoder-decoder with bucketed relative-position bias, gated-GELU
 // FFN, RMSNorm, and a 256K SentencePiece vocab over 419 languages.
-//
-// **Runtime status (2026-05-04):** the t5_translate runtime is WIP.
-// Per the upstream commit message (`1d9026c`), the encoder graph
-// runs and the decoder generates tokens, but the rel-pos bias path
-// loops on a repeating token — output quality is not yet correct.
-// The adapter ships the wiring so the registry, --backend dispatch,
-// and audit matrix all stay coherent; users running `--backend
-// madlad` today get the WIP runtime and unreliable output. Track
-// the rel-pos debugging via PLAN.
+// Output is canonically correct: tokens match Python SP bit-by-bit
+// (see `tokenize_sp` in src/t5_translate.cpp for the Viterbi
+// implementation) and translations match the HF reference on
+// flan-t5-small + produce sensible German/etc. on MADLAD itself.
 //
 // User-facing surface mirrors the m2m100 adapter: `--text "..." -sl
 // <src> -tl <tgt>` drives a single translation call. T5 has no
@@ -65,11 +60,6 @@ public:
         if (!ctx_) {
             fprintf(stderr, "crispasr[madlad]: failed to load model '%s'\n", p.model.c_str());
             return false;
-        }
-        if (!p.no_prints) {
-            fprintf(stderr, "crispasr[madlad]: T5 runtime is WIP — output may be incorrect "
-                            "(rel-pos bias debugging pending; see commit 1d9026c). Use the m2m100 backend "
-                            "for production translation today.\n");
         }
         return true;
     }

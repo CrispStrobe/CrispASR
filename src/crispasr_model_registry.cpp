@@ -288,11 +288,9 @@ constexpr Entry k_registry[] = {
     // d=2048, gated-GELU FFN, RMSNorm, bucketed relative-position
     // bias, SentencePiece 256K). Pass `--backend madlad` or
     // `--backend t5` to dispatch to the t5_translate runtime.
-    // Status (2026-05-04): the t5_translate runtime is WIP — the
-    // rel-pos bias path produces a repeating-token loop in decode
-    // (see commit 1d9026c). The registry entry + adapter ship the
-    // wiring; output quality is not yet correct. Track the upstream
-    // T5 rel-pos debugging in PLAN.
+    // Output is bit-token-identical to Python SP after the rel-pos
+    // FUTURE/PAST + Viterbi tokenizer + special-token-id fixes
+    // (commits 8c5818d / 04bd6ec / faf9f0a).
     {"madlad", "madlad400-3b-mt-q4_k.gguf",
      "https://huggingface.co/cstr/madlad400-3b-mt-GGUF/resolve/main/madlad400-3b-mt-q4_k.gguf",
      "~1.9 GB", nullptr, nullptr},
