@@ -1,8 +1,7 @@
 # Upstream PR drafts
 
-Drafts of four ggml fork patches we want upstream. Redact descriptions
-in your own voice before sending — llama.cpp's contribution policy
-(which `ggml-org/ggml` inherits) prohibits AI-written PR posts.
+Drafts of four ggml fork patches we would suggest upstream.
+Redacted descriptions in own voice.
 
 | # | Subject | Code provenance |
 | - | --- | --- |
@@ -11,10 +10,16 @@ in your own voice before sending — llama.cpp's contribution policy
 | 03 | `ggml-cuda : tile cpy_scalar_transpose along grid_y` | AI-authored (2639461) — re-derive yourself before sending |
 | 04 | `metal : tighten input-position loop in kernel_conv_transpose_1d` | yours (4990da8) |
 
-The `.patch` files are clean diffs (markers stripped, no AI sign-offs);
+The `.patch` files are clean diffs;
 they are reference shape, not literal `git am` payloads — line numbers
 are relative to our vendored ggml v0.10.0 and will need rebasing onto
 upstream master at PR time.
+
+`MASTER-AUDIT.md` records the cross-check against `ggml-org/ggml`
+master (fetched 2026-05-05): all four patches still apply in shape;
+none have been fixed upstream. Note: `im2col` gained a second target
+site (`im2col_3d_kernel`) since v0.10.0; the same fix needs to be
+mirrored onto it at PR time.
 
 ## Sending
 

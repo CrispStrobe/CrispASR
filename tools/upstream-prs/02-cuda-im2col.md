@@ -12,7 +12,10 @@ the kernel with stride `MAX_GRIDDIM_Y`. Same in-kernel stride pattern
 already used for the z axis in this kernel. Bit-identical for OW ≤
 65535 (single iteration of the new outer loop).
 
-Patch: `02-cuda-im2col.patch` (1 file, +20/-12).
+Patch: `02-cuda-im2col.patch` (1 file, +20/-12). **At PR time, mirror
+the same fix onto `im2col_3d_kernel` + `im2col_3d_cuda` dispatch
+(added upstream since v0.10.0; same bug class — `OW` used as grid Y
+unbounded).** See MASTER-AUDIT.md.
 
 **Verification.** Tested on T4 / Jetson Orin via downstream consumer
 (SEANet encoder at 11s/16kHz, codec graphs reaching T_out ≈ 176000).

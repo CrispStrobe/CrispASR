@@ -20,7 +20,7 @@ in the same order). Loop bound shrinks by `IL / ⌈K/s0⌉`.
 
 Patch: `04-metal-conv-transpose-1d.patch` (1 file, +29/-7).
 
-**Verification.** Tested on M1 / M3 Pro / M4 Pro via downstream
+**Verification.** Tested on M1 via downstream
 consumer (qwen3-tts codec at full T_codec). End-to-end codec decode
 ~3-4× faster on M1; zero watchdog hits across long synthesis runs vs.
 ~30% pre-patch. Recommend running existing `test-backend-ops`
