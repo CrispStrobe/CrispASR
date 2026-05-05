@@ -212,9 +212,15 @@ static const struct ggml_type_traits_cpu type_traits_cpu[GGML_TYPE_COUNT] = {
         .nrows                    = 1,
     },
     [GGML_TYPE_F16] = {
+        // CrispASR patch (issue #38): vec_dot_type=F32 + ggml_vec_dot_f16_f32
+        // avoids converting F32 src1 to F16 before the dot product. The
+        // upstream F32->F16 saturates values above 65504 to ±Inf, producing
+        // NaN matmul outputs for any model whose intermediate activations
+        // exceed 65504 (e.g. qwen3-tts code_pred ffn_down sees silu(gate)*up
+        // up to ~140000). MUST RE-APPLY after every ggml bump.
         .from_float               = (ggml_from_float_t) ggml_cpu_fp32_to_fp16,
-        .vec_dot                  = (ggml_vec_dot_t) ggml_vec_dot_f16,
-        .vec_dot_type             = GGML_TYPE_F16,
+        .vec_dot                  = (ggml_vec_dot_t) ggml_vec_dot_f16_f32,
+        .vec_dot_type             = GGML_TYPE_F32,
         .nrows                    = 1,
     },
     [GGML_TYPE_Q1_0] = {

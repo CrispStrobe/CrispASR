@@ -393,6 +393,58 @@ void ggml_vec_dot_f16(int n, float * GGML_RESTRICT s, size_t bs, ggml_fp16_t * G
     *s = sumf;
 }
 
+// CrispASR patch (issue #38): F16 weight × F32 input → F32 dot. Used by
+// MUL_MAT when src0 is F16 and src1 is F32; vec_dot_type for F16 is set
+// to F32 so the dispatch reaches this path without an intermediate F32
+// → F16 quantize that would saturate values above 65504.
+void ggml_vec_dot_f16_f32(int n, float * GGML_RESTRICT s, size_t bs, ggml_fp16_t * GGML_RESTRICT x, size_t bx, float * GGML_RESTRICT y, size_t by, int nrc) {
+    assert(nrc == 1);
+    GGML_UNUSED(nrc);
+    GGML_UNUSED(bx);
+    GGML_UNUSED(by);
+    GGML_UNUSED(bs);
+
+    ggml_float sumf = 0.0;
+
+#if defined(__ARM_NEON) && defined(__ARM_FEATURE_FMA)
+    const int np = n & ~7;
+    float32x4_t s0 = vdupq_n_f32(0.0f);
+    float32x4_t s1 = vdupq_n_f32(0.0f);
+    for (int i = 0; i < np; i += 8) {
+        float32x4_t xa = vcvt_f32_f16(vld1_f16((const __fp16 *)(x + i)));
+        float32x4_t xb = vcvt_f32_f16(vld1_f16((const __fp16 *)(x + i + 4)));
+        float32x4_t ya = vld1q_f32(y + i);
+        float32x4_t yb = vld1q_f32(y + i + 4);
+        s0 = vfmaq_f32(s0, xa, ya);
+        s1 = vfmaq_f32(s1, xb, yb);
+    }
+    sumf = (ggml_float)(vaddvq_f32(s0) + vaddvq_f32(s1));
+    for (int i = np; i < n; ++i) {
+        sumf += (ggml_float)(GGML_CPU_FP16_TO_FP32(x[i]) * y[i]);
+    }
+#elif defined(__AVX2__) && defined(__F16C__)
+    const int np = n & ~7;
+    __m256 acc = _mm256_setzero_ps();
+    for (int i = 0; i < np; i += 8) {
+        __m256 xv = _mm256_cvtph_ps(_mm_loadu_si128((const __m128i *)(x + i)));
+        __m256 yv = _mm256_loadu_ps(y + i);
+        acc = _mm256_fmadd_ps(xv, yv, acc);
+    }
+    float buf[8];
+    _mm256_storeu_ps(buf, acc);
+    sumf = buf[0]+buf[1]+buf[2]+buf[3]+buf[4]+buf[5]+buf[6]+buf[7];
+    for (int i = np; i < n; ++i) {
+        sumf += (ggml_float)(GGML_CPU_FP16_TO_FP32(x[i]) * y[i]);
+    }
+#else
+    for (int i = 0; i < n; ++i) {
+        sumf += (ggml_float)(GGML_CPU_FP16_TO_FP32(x[i]) * y[i]);
+    }
+#endif
+
+    *s = sumf;
+}
+
 void ggml_vec_silu_f32(const int n, float * y, const float * x) {
     int i = 0;
 #if defined(__AVX512F__) && defined(__AVX512DQ__)

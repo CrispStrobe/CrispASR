@@ -247,7 +247,12 @@ inline static float ggml_lookup_fp16_to_fp32(ggml_fp16_t f) {
 
 // F16 NEON
 
-#if defined(__ARM_FEATURE_FP16_VECTOR_ARITHMETIC)
+// CrispASR patch (issue #38): force F32 accumulator path. Upstream's
+// vfmaq_f16 (F16 register accumulator) overflows at 65504 on long F16xF16
+// dot products, producing Inf/NaN that propagates through the next layer.
+// Disabling this branch routes to the existing F32-accumulator fallback
+// (vcvt_f32_f16 + vfmaq_f32). MUST RE-APPLY after every ggml bump.
+#if 0 && defined(__ARM_FEATURE_FP16_VECTOR_ARITHMETIC)
     #define GGML_F16_STEP 32
     #define GGML_F16_EPR  8
 
@@ -362,7 +367,12 @@ inline static float ggml_lookup_fp16_to_fp32(ggml_fp16_t f) {
 
 // F16 NEON
 
-#if defined(__ARM_FEATURE_FP16_VECTOR_ARITHMETIC)
+// CrispASR patch (issue #38): force F32 accumulator path. Upstream's
+// vfmaq_f16 (F16 register accumulator) overflows at 65504 on long F16xF16
+// dot products, producing Inf/NaN that propagates through the next layer.
+// Disabling this branch routes to the existing F32-accumulator fallback
+// (vcvt_f32_f16 + vfmaq_f32). MUST RE-APPLY after every ggml bump.
+#if 0 && defined(__ARM_FEATURE_FP16_VECTOR_ARITHMETIC)
     #define GGML_F16_STEP 32
     #define GGML_F16_EPR  8
 
