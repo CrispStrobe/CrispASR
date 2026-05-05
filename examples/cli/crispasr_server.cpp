@@ -629,16 +629,24 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
     //   {
     //     "input":           "TEXT to synthesize",       (required)
     //     "voice":           "<name in --voice-dir>",    (optional)
-    //     "response_format": "wav" | "pcm"               (optional, default "wav")
+    //     "response_format": "wav" | "f32"               (optional, default "wav")
     //   }
     //
     // Returns:
-    //   200 audio/wav   — 16-bit PCM int16, 24 kHz mono
-    //   200 application/octet-stream — raw float32 PCM (response_format=pcm)
+    //   200 audio/wav                 — 16-bit PCM int16, 24 kHz mono
+    //   200 application/octet-stream  — raw float32 PCM (response_format=f32)
     //
     //   400 — backend lacks CAP_TTS, missing input, malformed body
     //   500 — backend->synthesize returned empty (e.g. unknown voice)
     //   503 — model still loading
+    //
+    // Note on response_format: OpenAI's spec uses `pcm` to mean
+    // 24 kHz signed 16-bit LE mono raw PCM, NOT float32. To avoid
+    // confusing OpenAI clients we expose the raw float32 path under
+    // the name `f32` and reject `pcm` with a 400 pointing at `wav`
+    // (which is the right choice for OpenAI clients anyway). The
+    // `f32` format is a convenience for downstream DSP that wants
+    // to skip the int16 round-trip.
     //
     // Voice handling: the `voice` field is passed through to
     // params.tts_voice verbatim. Each backend interprets it on its
@@ -680,8 +688,15 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
 
         std::string voice_name = body.value("voice", "");
         std::string response_format = body.value("response_format", std::string("wav"));
-        if (response_format != "wav" && response_format != "pcm") {
-            json_error(res, 400, "response_format must be 'wav' or 'pcm'");
+        if (response_format == "pcm") {
+            json_error(res, 400,
+                       "response_format 'pcm' is reserved for OpenAI's 24 kHz signed 16-bit LE "
+                       "PCM and is not currently emitted; use 'wav' (same audio, with header) "
+                       "or 'f32' (raw float32, crispasr-specific)");
+            return;
+        }
+        if (response_format != "wav" && response_format != "f32") {
+            json_error(res, 400, "response_format must be 'wav' or 'f32'");
             return;
         }
 
@@ -716,7 +731,7 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
                 audio_s, elapsed_s, elapsed_s > 0 ? elapsed_s / audio_s : 0.0,
                 voice_name.empty() ? "<startup>" : voice_name.c_str(), response_format.c_str());
 
-        if (response_format == "pcm") {
+        if (response_format == "f32") {
             std::string buf((const char*)pcm.data(), pcm.size() * sizeof(float));
             res.set_content(std::move(buf), "application/octet-stream");
         } else {
