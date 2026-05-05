@@ -14,6 +14,14 @@ trade-off:
 
 All five write 24 kHz mono WAV via `--tts-output`.
 
+For HTTP usage, see [`docs/server.md`](server.md) — `POST
+/v1/audio/speech` is the OpenAI-compatible TTS endpoint, available on
+any `crispasr --server` instance whose loaded backend declares
+`CAP_TTS`. Routes register on every backend; per-request `voice`,
+`speed`, and `instructions` pass through to the backend's
+`whisper_params`. Long-form input is auto-chunked on sentence
+boundaries.
+
 ## Kokoro — multilingual, smallest
 
 Kokoro is the 82 M-param StyleTTS2-derived model. It does not

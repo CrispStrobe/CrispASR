@@ -445,8 +445,11 @@ CrispASR has three feature areas that warrant their own docs pages:
   (flow-matching + HiFT vocoder, German via Kartoffelbox). Voice packs,
   language routing, and qwen3-tts environment switches.
 - **[Server mode (HTTP API)](docs/server.md)** — persistent model,
-  OpenAI-compatible `/v1/audio/transcriptions`, API keys, Docker
-  Compose, prebuilt CUDA images.
+  OpenAI-compatible `/v1/audio/transcriptions` (ASR) and
+  `/v1/audio/speech` + `/v1/voices` (TTS, automatic on any loaded
+  CAP_TTS backend), per-request voice + speed + instructions, CORS,
+  long-form sentence chunking, API keys, Docker Compose, prebuilt
+  CUDA images.
 
 Quickest taste of each:
 
@@ -460,6 +463,12 @@ crispasr --backend vibevoice-tts -m auto --tts "Hello world" --tts-output hello.
 # Persistent HTTP server, OpenAI-compatible
 crispasr --server -m model.gguf --port 8080
 curl -F "file=@audio.wav" http://localhost:8080/v1/audio/transcriptions
+
+# TTS over HTTP — load a TTS backend, hit /v1/audio/speech
+crispasr --server --backend qwen3-tts-customvoice -m auto --voice-dir ./voices --port 8080
+curl http://localhost:8080/v1/audio/speech \
+  -H 'Content-Type: application/json' \
+  -d '{"input":"Hello world","voice":"vivian"}' -o out.wav
 ```
 
 ---

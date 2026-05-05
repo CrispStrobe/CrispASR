@@ -94,6 +94,156 @@ curl http://localhost:8080/v1/audio/transcriptions \
 `GET /v1/models` returns an OpenAI-compatible model list with the
 currently loaded model.
 
+## Text-to-speech endpoint
+
+`POST /v1/audio/speech` is the OpenAI-compatible TTS counterpart to
+`/v1/audio/transcriptions`. Available whenever the loaded backend
+declares `CAP_TTS` (kokoro, qwen3-tts, vibevoice, orpheus,
+chatterbox). Routes register on every backend; non-TTS backends
+respond with a 400 pointing the caller at `POST /load`.
+
+```bash
+crispasr --server --backend qwen3-tts-customvoice \
+  -m qwen3-tts-12hz-1.7b-customvoice-q8_0.gguf \
+  --codec-model qwen3-tts-tokenizer-12hz.gguf \
+  --voice-dir ./voices \
+  --port 8080
+
+curl http://localhost:8080/v1/audio/speech \
+  -H "Authorization: Bearer $CRISPASR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"input": "Hello there.", "voice": "vivian"}' \
+  -o out.wav
+```
+
+**Body fields:**
+
+| Field | Default | Description |
+|---|---|---|
+| `input` | (required) | Text to synthesize. Capped at `--tts-max-input-chars` (default 4096); set to 0 to disable the cap. Long input is automatically split on sentence boundaries before synthesis (see [long-form chunking](#long-form-chunking-for-v1audiospeech) below). |
+| `model` | (ignored) | Read but not validated — we serve whatever was loaded via `-m` or `POST /load`. Surfaced in the synth log line. |
+| `voice` | server's `--voice` | Passed through verbatim to the backend's `params.tts_voice`. Each backend interprets it on its own terms — qwen3-tts CustomVoice as a speaker name (`vivian`, `ryan`); qwen3-tts Base as a path or (with `--voice-dir`) a bare name resolving to `<voice-dir>/<name>.{wav,gguf}`; orpheus as a preset (`tara`, `leah`). |
+| `instructions` | empty | Voice-direction prose for backends that support it (qwen3-tts VoiceDesign). Silently ignored on other backends so OpenAI clients targeting `gpt-4o-mini-tts` don't see 4xx errors. |
+| `speed` | `1.0` | Tempo multiplier `0.25 .. 4.0` (OpenAI range). Applied as a post-synth linear resampler. Out-of-range returns 400 with `code=invalid_speed`. |
+| `response_format` | `"wav"` | `wav` (16-bit PCM RIFF, 24 kHz mono — default), `pcm` (OpenAI spec: 24 kHz signed 16-bit LE raw, no header), or `f32` (crispasr-specific raw float32 for downstream DSP). |
+
+**Returns:**
+
+| Status | Content-Type | Body |
+|---|---|---|
+| 200 | `audio/wav` | RIFF WAV, 16-bit PCM int16, 24 kHz mono |
+| 200 | `audio/pcm` | Raw int16 LE bytes (OpenAI `pcm`) |
+| 200 | `application/octet-stream` | Raw float32 PCM (`f32`) |
+| 400 | `application/json` | OpenAI error shape: `{"error": {"message", "type", "code", "param"}}`. Codes: `missing_required_field`, `input_too_long`, `invalid_json`, `invalid_speed`, `unsupported_response_format`. |
+| 500 | `application/json` | Synthesis returned empty (e.g. unknown voice). `code=synthesis_failed`. |
+| 503 | `application/json` | Model still loading. |
+
+**Voice listing:**
+
+```bash
+curl http://localhost:8080/v1/voices
+# {"voices": [{"name": "vivian", "format": "wav"}, {"name": "ryan", "format": "gguf"}]}
+```
+
+`GET /v1/voices` enumerates `*.wav` and `*.gguf` stems in `--voice-dir`.
+The listing reflects the filesystem; whether a particular backend
+actually accepts a given voice depends on the backend's own resolution
+(e.g. CustomVoice models only accept names baked into the GGUF
+metadata — the `<voice-dir>` files are irrelevant to those).
+
+### Voice file conventions
+
+```
+voices/
+  vivian.wav        # reference audio for runtime voice cloning
+  vivian.txt        # transcription of vivian.wav (Qwen3-TTS ICL prefill)
+  ryan.gguf         # baked voice pack
+```
+
+For Qwen3-TTS Base variant: when `voice` is a bare name (no path
+separator, no extension), the backend looks for `<voice-dir>/<name>.wav`
++ `<voice-dir>/<name>.txt`, falling back to `<voice-dir>/<name>.gguf`.
+The `.txt` companion is auto-loaded as `tts_ref_text` if the request
+doesn't carry one. Path traversal in the name (`..`, `/`, `\\`, NUL) is
+rejected before the filesystem is touched.
+
+Other backends (kokoro, vibevoice, orpheus) interpret `voice` according
+to their own conventions — see `docs/tts.md` for per-backend specifics.
+
+### Long-form chunking for /v1/audio/speech
+
+The talker LM in every TTS backend has a finite training horizon
+(qwen3-tts-1.7b-base degrades past ~600 chars / 200 codec frames and
+silently truncates trailing text at MAX_FRAMES). The route
+auto-chunks `input` on sentence boundaries before dispatching to the
+backend, then concatenates per-chunk PCM with a 200 ms silence pad.
+
+- Recognises ASCII `.!?`, CJK ideographic full stop `。` (U+3002), and
+  Devanagari danda `।` (U+0964).
+- Decimal-aware: `1.5` stays intact (period is followed by a digit).
+- Run-on input with no punctuation falls back to whitespace-boundary
+  split at `--tts-max-input-chars`.
+- Voice consistency holds across chunks because the talker re-prefills
+  with the same ICL ref each call (and the per-call setup is amortised
+  by qwen3-tts's `last_voice_key_` cache).
+- Server log line reports `chunks=N` for observability.
+
+Single-sentence input is a 1-element vector — per-call overhead is
+one `std::vector<float>` move.
+
+### CORS
+
+Browser clients calling `/v1/*` from a different origin need the server
+to opt in via `--cors-origin`:
+
+```bash
+crispasr --server --backend qwen3-tts-customvoice -m model.gguf \
+  --cors-origin '*'   # any origin — for dev only
+# or:
+  --cors-origin 'https://app.example.com'   # specific origin — production
+```
+
+When set, every response carries `Access-Control-Allow-Origin`,
+`-Methods`, and `-Headers`; preflight `OPTIONS` requests get a 204 with
+the same. Default-empty stays default-locked.
+
+### Speed
+
+`speed` is applied at the server layer via linear-interpolation
+resampling of the synthesised float32 buffer — backends produce at
+their native rate, the server resamples before format dispatch.
+Quality loss vs. a sinc resampler is minimal at modest speeds
+(0.5x .. 2.0x) for speech. Backends that grow native duration knobs
+will plumb `params.tts_speed` through directly and bypass this path
+(future work).
+
+### Python OpenAI SDK example
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8080/v1", api_key="sk-anything")
+
+resp = client.audio.speech.create(
+    model="tts-1",          # ignored; we serve the loaded backend
+    voice="vivian",
+    input="The quick brown fox jumps over the lazy dog.",
+    speed=1.0,
+    response_format="wav",
+)
+resp.stream_to_file("out.wav")
+```
+
+### Deferred
+
+| Feature | Status |
+|---|---|
+| Streaming response (chunked / SSE) | Pending — see PLAN §70 (couples with chunked-VAE for the full latency win). |
+| `mp3` / `opus` / `aac` / `flac` encoding | Not implemented — needs lame/opusenc/etc. as build deps. |
+| `POST /v1/voices` (multipart upload for runtime provisioning) | Pending — security review (size limits, content-type validation, disk quota). |
+| `DELETE /v1/voices/{name}` | Pending alongside upload. |
+| Native-backend `speed` (duration knobs vs server-side resample) | Pending — backend-by-backend. |
+
 ## Docker Compose
 
 The repo includes a root-level
