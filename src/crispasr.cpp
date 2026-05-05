@@ -2337,7 +2337,11 @@ static bool whisper_model_load(struct whisper_model_loader* loader, whisper_cont
                 break;
             }
 
-            if (n_dims < 1 || n_dims > GGML_MAX_DIMS) {
+            // CWE-121 (upstream #3787) is about oversized n_dims overflowing
+            // the int32_t ne[4] stack array. n_dims = 0 is a legitimate
+            // scalar tensor (loop runs 0 times, ne stays {1,1,1,1}, nelements
+            // stays 1). The earlier `n_dims < 1` rejection was over-strict.
+            if (n_dims < 0 || n_dims > GGML_MAX_DIMS) {
                 CRISPASR_LOG_ERROR("%s: tensor has invalid n_dims = %d\n", __func__, n_dims);
                 return false;
             }
@@ -5295,7 +5299,9 @@ struct whisper_vad_context* whisper_vad_init_with_params(struct whisper_model_lo
                 break;
             }
 
-            if (n_dims < 1 || n_dims > GGML_MAX_DIMS) {
+            // CWE-121 (upstream #3787) — see whisper_model_load above for
+            // why n_dims = 0 is allowed (silero VAD ships a scalar tensor).
+            if (n_dims < 0 || n_dims > GGML_MAX_DIMS) {
                 CRISPASR_LOG_ERROR("%s: tensor has invalid n_dims = %d\n", __func__, n_dims);
                 return nullptr;
             }
