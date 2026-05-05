@@ -6,7 +6,7 @@
 //
 
 #import "ViewController.h"
-#import <whisper/whisper.h>
+#import <crispasr/crispasr.h>
 
 
 #define NUM_BYTES_PER_BUFFER 16*1024
