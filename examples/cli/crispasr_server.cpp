@@ -26,7 +26,7 @@
 
 #include "common-crispasr.h" // read_audio_data
 #include "../server/httplib.h"
-#include "../server/json.hpp"
+#include "../json.hpp"
 
 #include <atomic>
 #include <cerrno>
