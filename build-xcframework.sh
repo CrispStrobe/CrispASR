@@ -268,9 +268,10 @@ combine_static_libraries() {
     local src_libs=()
     while IFS= read -r -d '' lib; do
         src_libs+=("$lib")
-    done < <(find "${base_dir}/${build_dir}/src" -path "*/${release_dir}/*.a" -print0 2>/dev/null)
+    done < <(find "${base_dir}/${build_dir}/src" "${base_dir}/${build_dir}/crisp_audio" \
+                  -path "*/${release_dir}/*.a" -print0 2>/dev/null)
     if [ ${#src_libs[@]} -gt 0 ]; then
-        echo "Auto-discovered ${#src_libs[@]} static backend libraries under src/${release_dir}/"
+        echo "Auto-discovered ${#src_libs[@]} static backend libraries under src/${release_dir}/ + crisp_audio/${release_dir}/"
         libs+=("${src_libs[@]}")
     else
         # Fall back to the original explicit list if glob finds nothing
