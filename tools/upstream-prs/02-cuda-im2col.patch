@@ -1,0 +1,123 @@
+From ca6c52338f0c107c21b36e27def0ae7cee541e78 Mon Sep 17 00:00:00 2001
+From: crispasr integration <crispasr-dev@localhost>
+Date: Mon, 27 Apr 2026 09:32:17 +0000
+Subject: [PATCH] fix(cuda): re-apply im2col grid overflow fix (lost in ggml
+ 0.10.0 bump)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Upstream ggml uses OW directly as grid.y in CUDA im2col kernel launch.
+When OW > 65535 (e.g. SEANet encoder with T=176000), this exceeds CUDA
+grid dimension limits → "invalid configuration argument" crash.
+
+Fix: clamp grid.y to MAX_GRIDDIM_Y=65535 and loop inside the kernel.
+Fixes kyutai-stt and vibevoice CUDA crashes on Kaggle T4.
+
+This patch was originally in commit 1552434, lost during the ggml
+0.9.8→0.10.0 bump. Added comment + LEARNINGS.md entry to ensure
+re-application on future ggml bumps.
+---
+ LEARNINGS.md                 | 19 ++++++++++++++++
+ ggml/src/ggml-cuda/im2col.cu | 42 +++++++++++++++++++++---------------
+ 2 files changed, 44 insertions(+), 17 deletions(-)
+
+diff --git a/LEARNINGS.md b/LEARNINGS.md
+index 33ad4a1..feb682a 100644
+--- a/LEARNINGS.md
++++ b/LEARNINGS.md
+@@ -523,6 +523,25 @@ kernels with small spatial dimensions (k ≤ 5) and few channels (C < 256),
+ ship it F32. The 16 MB F32 Silero LID model is smaller than a single
+ layer of most ASR encoders — quantization is pointless.
+ 
++### CUDA im2col grid overflow (MUST RE-APPLY after every ggml bump)
++
++Upstream ggml's CUDA im2col kernel uses `OW` (output width) directly as
++`grid.y` in the kernel launch: `dim3 block_nums(num_blocks, OW, ...)`.
++CUDA grids are limited to 65535 in y and z dimensions. For models that
++process raw audio waveforms (kyutai-stt SEANet, vibevoice), the first
++convolution has T_out = 176000 — far exceeding 65535.
++
++**Symptom:** `CUDA error: invalid configuration argument` in IM2COL.
++
++**Fix (file: `ggml/src/ggml-cuda/im2col.cu`):**
++1. Add `#define MAX_GRIDDIM_Y 65535`
++2. Clamp grid.y: `dim3 block_nums(num_blocks, MIN(OW, MAX_GRIDDIM_Y), ...)`
++3. Loop inside kernel: `for (int64_t iow = blockIdx.y; iow < OW; iow += MAX_GRIDDIM_Y)`
++
++This patch must be re-applied after every ggml version bump. It's marked
++with a `CrispASR patch` comment in the file. First applied in commit
++`1552434`, lost in the 0.9.8→0.10.0 bump, re-applied in the current fix.
++
+ ### ggml version bumps: conv_1d_dw shape change (0.9.8 → 0.10.0)
+ 
+ In ggml 0.9.8, `ggml_conv_1d_dw` returned `[OL, 1, channels, 1]` (4D).
+diff --git a/ggml/src/ggml-cuda/im2col.cu b/ggml/src/ggml-cuda/im2col.cu
+index 56dc054..e21a82e 100644
+--- a/ggml/src/ggml-cuda/im2col.cu
++++ b/ggml/src/ggml-cuda/im2col.cu
+@@ -1,5 +1,10 @@
+ #include "im2col.cuh"
+ 
++// CrispASR patch: clamp grid.y to MAX_GRIDDIM_Y and loop inside kernel.
++// Upstream ggml uses OW directly as grid.y, which crashes when OW > 65535
++// (e.g. SEANet encoder with 176000 samples). Must be re-applied after
++// every ggml bump. See LEARNINGS.md "CUDA im2col grid overflow".
++#define MAX_GRIDDIM_Y 65535
+ #define MAX_GRIDDIM_Z 65535
+ 
+ template <typename T>
+@@ -18,22 +23,25 @@ static  __global__ void im2col_kernel(
+     const int64_t ikh = rem / KW;
+     const int64_t ikw = rem - ikh * KW;
+ 
+-    const int64_t  iow = blockIdx.y;
+-    for (int64_t iz = blockIdx.z; iz < N_OH; iz+=MAX_GRIDDIM_Z) {
+-        const int64_t  in = iz / OH;
+-        const int64_t  ioh = iz - in * OH;
+-
+-        const int64_t iiw = iow * s0 + ikw * d0 - p0;
+-        const int64_t iih = ioh * s1 + ikh * d1 - p1;
+-
+-        const int64_t offset_dst =
+-            ((in * OH + ioh) * OW + iow) * IC_KH_KW + iic * KH_KW + ikh * KW + ikw;
+-
+-        if (iih < 0 || iih >= IH || iiw < 0 || iiw >= IW) {
+-            dst[offset_dst] = 0.0f;
+-        } else {
+-            const int64_t offset_src = iic * IC_IH_IW + in * IH_IW;
+-            dst[offset_dst] = x[offset_src + iih * IW + iiw];
++    // Loop over OW with stride MAX_GRIDDIM_Y to handle OW > 65535
++    // (e.g. SEANet encoder with 176000 samples → T_out = 176000)
++    for (int64_t iow = blockIdx.y; iow < OW; iow += MAX_GRIDDIM_Y) {
++        for (int64_t iz = blockIdx.z; iz < N_OH; iz += MAX_GRIDDIM_Z) {
++            const int64_t  in = iz / OH;
++            const int64_t  ioh = iz - in * OH;
++
++            const int64_t iiw = iow * s0 + ikw * d0 - p0;
++            const int64_t iih = ioh * s1 + ikh * d1 - p1;
++
++            const int64_t offset_dst =
++                ((in * OH + ioh) * OW + iow) * IC_KH_KW + iic * KH_KW + ikh * KW + ikw;
++
++            if (iih < 0 || iih >= IH || iiw < 0 || iiw >= IW) {
++                dst[offset_dst] = 0.0f;
++            } else {
++                const int64_t offset_src = iic * IC_IH_IW + in * IH_IW;
++                dst[offset_dst] = x[offset_src + iih * IW + iiw];
++            }
+         }
+     }
+ 
+@@ -51,7 +59,7 @@ static void im2col_cuda(const float * x, T* dst,
+     const int64_t num_blocks = (IC_KH_KW + CUDA_IM2COL_BLOCK_SIZE - 1) / CUDA_IM2COL_BLOCK_SIZE;
+     const int64_t N_OH = N * OH;
+     const int64_t KH_KW = KW*KH;
+-    dim3 block_nums(num_blocks, OW, MIN(N_OH, MAX_GRIDDIM_Z));
++    dim3 block_nums(num_blocks, MIN(OW, MAX_GRIDDIM_Y), MIN(N_OH, MAX_GRIDDIM_Z));
+     im2col_kernel<<<block_nums, MIN(IC_KH_KW, CUDA_IM2COL_BLOCK_SIZE) , 0, stream>>>(x, dst, IC, IW, IH, OH, OW, KW, KH,
+                                                                                      IC_IH_IW, IH_IW, N_OH, KH_KW, IC_KH_KW,
+                                                                                      s0, s1, p0, p1, d0, d1);
+-- 
+2.50.1 (Apple Git-155)
+

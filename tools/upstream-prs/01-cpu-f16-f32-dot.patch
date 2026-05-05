@@ -1,0 +1,276 @@
+From 5eef4e2af9f69f7fa912c655258015eba2ae5e08 Mon Sep 17 00:00:00 2001
+From: CrispStrobe <cze+github@mailbox.org>
+Date: Fri, 1 May 2026 12:20:33 +0200
+Subject: [PATCH] fix(ggml-cpu): F16 mul_mat input saturation on ARM NEON
+ (issue #38)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Upstream ggml-cpu's mul_mat for F16 weights × F32 inputs first
+converts src1 (F32) to F16 via __fp16 cast, which saturates F32
+values above 65504 to ±Inf. The Inf propagates through the dot
+product and the next layer's RMSNorm produces NaN, even with an F32
+accumulator. This poisons any model whose intermediate activations
+exceed 65504 — most commonly an FFN's silu(gate)*up product, which
+in a 3072-wide block can reach ~1.4e5 even when individual mul_mat
+outputs are 200–400 in magnitude.
+
+Symptom (geneing's reproducer in #38): qwen3-tts F16 talker on
+--gpu-backend cpu emits NaN logits at code_predictor block 2's
+ffn_down, the talker AR loop never samples codec_eos, runs to the
+1500-frame cap and produces ~32 minutes of garbage. Q8_0 talker is
+unaffected because its vec_dot path keeps src1 as F32 in the inner
+loop. Apple Metal is unaffected for the same reason. Reproduced on
+M1 with the public F16 GGUF (SHA256 9b71...d4c, byte-identical to
+huggingface.co/cstr/qwen3-tts-0.6b-base-GGUF).
+
+Fix: add ggml_vec_dot_f16_f32 (F16 weight × F32 input → F32 sum, NEON
++ AVX2/F16C + scalar) and route the F16 type traits through it with
+vec_dot_type=F32. ggml_compute_forward_mul_mat then sees src1 already
+matches vec_dot_type and skips the saturating F32→F16 quantize step.
+
+Defence-in-depth: switch ggml_vec_dot_f16 (still called by
+conv_transpose_1d_f16 etc. outside the type-traits dispatch) from
+vfmaq_f16 to F32 accumulator via simd-mappings.h — the F16 register
+accumulator can also overflow 65504 on long F16×F16 dot products.
+
+Roundtrip (qwen3-asr-0.6b-q4_k transcribing post-fix F16 CPU TTS):
+  prompt "Hello world."          → "Hello world."   ✓
+  prompt "Hello world, this is …
+   a quick test of the qwen
+   three TTS model."             → "Hello world. This is a quick
+                                    test of the Quinn Free TTS
+                                    model."          ✓
+
+LEARNINGS.md "F16 mul_mat input saturation on ARM NEON CPU" carries
+the full diagnostic flow + verification recipe. Patches marked with
+// CrispASR patch (issue #38) — MUST RE-APPLY after every ggml bump.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+---
+ LEARNINGS.md                      | 35 ++++++++++++++++++++
+ ggml/src/ggml-cpu/ggml-cpu.c      | 11 +++++--
+ ggml/src/ggml-cpu/simd-mappings.h | 32 ++++++++++++++----
+ ggml/src/ggml-cpu/vec.cpp         | 55 +++++++++++++++++++++++++++++++
+ ggml/src/ggml-cpu/vec.h           |  5 +++
+ 5 files changed, 129 insertions(+), 9 deletions(-)
+
+diff --git a/LEARNINGS.md b/LEARNINGS.md
+index f1d8315..4b32d7f 100644
+--- a/LEARNINGS.md
++++ b/LEARNINGS.md
+@@ -62,6 +62,41 @@ you get a more memory-hungry but more forgiving path that works with
+ either layout. All three of voxtral, voxtral4b, qwen3, and granite LLM
+ blocks do the explicit expand for simplicity.
+ 
++### Capture tensors MUST call `ggml_set_output()`, not just `ggml_set_name()`
++
++Found while wiring stage-by-stage diff captures into the mimo-asr
++prefill graph. We had:
++
++```cpp
++ggml_tensor* audio_features = ggml_cont(ctx0, x);
++ggml_set_name(audio_features, "prefill_audio_features");
++ggml_build_forward_expand(gf, audio_features);  // not enough!
++// ... later in the same graph ...
++ggml_tensor* inputs_embeds = ggml_add(ctx0, text_embeds, x); // shares x with cont above
++```
++
++Both `audio_features` (cont of x) and `inputs_embeds` (consumes x)
++read from the same MUL output buffer. With only `set_name`, the
++backend scheduler treated audio_features as an ordinary intermediate
++and reused its buffer when allocating later ops in the same graph.
++By the time we read it back via `ggml_graph_get_tensor`, the values
++were post-clobber. Symptom: per-stage cosines look fine in isolation
++(audio_features cos≈0.998), but a downstream consumer's output
++collapses to ~0 against the reference (inputs_embeds cos≈0.003)
++even though both inputs to its `ggml_add` extracted at cos≥0.99
++individually.
++
++Fix: every tensor that the host plans to extract via
++`ggml_graph_get_tensor` (or via `ggml_backend_tensor_get` against a
++named graph node) must be marked `ggml_set_output(...)` in addition
++to `ggml_set_name(...)`. `set_output` tells the scheduler the buffer
++must persist past compute; `build_forward_expand` only marks the node
++as a graph target, not as a long-lived output.
++
++The same pattern applies to any backend that mixes "named capture
++points" with "downstream consumers of the same intermediate" in one
++forward graph.
++
+ ### `ggml_backend_sched` lifetime
+ 
+ Two common patterns, with very different performance:
+diff --git a/ggml/src/ggml-cpu/ggml-cpu.c b/ggml/src/ggml-cpu/ggml-cpu.c
+index 2b3eb5b..f1d5f20 100644
+--- a/ggml/src/ggml-cpu/ggml-cpu.c
++++ b/ggml/src/ggml-cpu/ggml-cpu.c
+@@ -212,9 +212,16 @@ static const struct ggml_type_traits_cpu type_traits_cpu[GGML_TYPE_COUNT] = {
+         .nrows                    = 1,
+     },
+     [GGML_TYPE_F16] = {
++        // CrispASR patch (issue #38): vec_dot_type=F32 + ggml_vec_dot_f16_f32
++        // avoids converting the F32 input to F16 before the dot product. The
++        // upstream F32→F16 saturates values above 65504 to ±Inf, which makes
++        // mul_mat outputs Inf/NaN when activations are large (e.g. qwen3-tts
++        // code_pred ffn_down sees silu(gate)*up values up to ~140000). The
++        // new vec_dot reads F16 weights via vcvt_f32_f16 and does a pure F32
++        // FMA so neither input saturation nor accumulator overflow can occur.
+         .from_float               = (ggml_from_float_t) ggml_cpu_fp32_to_fp16,
+-        .vec_dot                  = (ggml_vec_dot_t) ggml_vec_dot_f16,
+-        .vec_dot_type             = GGML_TYPE_F16,
++        .vec_dot                  = (ggml_vec_dot_t) ggml_vec_dot_f16_f32,
++        .vec_dot_type             = GGML_TYPE_F32,
+         .nrows                    = 1,
+     },
+     [GGML_TYPE_Q1_0] = {
+diff --git a/ggml/src/ggml-cpu/simd-mappings.h b/ggml/src/ggml-cpu/simd-mappings.h
+index 0deda93..c99d0b9 100644
+--- a/ggml/src/ggml-cpu/simd-mappings.h
++++ b/ggml/src/ggml-cpu/simd-mappings.h
+@@ -246,8 +246,13 @@ inline static float ggml_lookup_fp16_to_fp32(ggml_fp16_t f) {
+         GGML_F16xt_REDUCE_MIXED_IMPL(DEFAULT_PG16, res, sum1, sum2, sum3, sum4)
+ 
+ // F16 NEON
+-
+-#if defined(__ARM_FEATURE_FP16_VECTOR_ARITHMETIC)
++// CrispASR patch (issue #38): see notes on the duplicate block below in the
++// __ARM_NEON branch — same F16-accumulator overflow concern. SVE machines
++// (Graviton, Fugaku) aren't currently exercised by CrispASR so we leave the
++// SVE F16 vec_dot path in vec.cpp untouched, but if you reach this ifdef on
++// a system with FP16_VECTOR_ARITHMETIC the same fix applies. Kept inside an
++// `#if 0` for parity with the NEON branch.
++#if 0 /* CrispASR: force F32 accumulator path below */ && defined(__ARM_FEATURE_FP16_VECTOR_ARITHMETIC)
+     #define GGML_F16_STEP 32
+     #define GGML_F16_EPR  8
+ 
+@@ -288,8 +293,7 @@ inline static float ggml_lookup_fp16_to_fp32(ggml_fp16_t f) {
+     #define GGML_F16_VEC_MUL            GGML_F16x8_MUL
+     #define GGML_F16_VEC_REDUCE         GGML_F16x8_REDUCE
+ #else
+-    // if FP16 vector arithmetic is not supported, we use FP32 instead
+-    // and take advantage of the vcvt_ functions to convert to/from FP16
++    // F16 in memory, F32 accumulator (vcvt_f32_f16 on load, vfmaq_f32 inner).
+ 
+     #define GGML_F16_STEP 16
+     #define GGML_F16_EPR  4
+@@ -362,7 +366,21 @@ inline static float ggml_lookup_fp16_to_fp32(ggml_fp16_t f) {
+ 
+ // F16 NEON
+ 
+-#if defined(__ARM_FEATURE_FP16_VECTOR_ARITHMETIC)
++// CrispASR patch (issue #38): force F32 accumulator for F16 dot products on
++// ARM with FP16 vector arithmetic. Upstream uses `vfmaq_f16` (F16 multiply-
++// add into a float16x8_t register) which overflows at 65504 for long
++// accumulations. Symptom: an FFN ffn_down dot product (e.g. 3072-wide) with
++// F16 weights and moderate-magnitude F32 activations produces Inf, then NaN
++// propagates through the next layer. Q8_0 vec_dot uses an F32 scalar
++// accumulator and is unaffected; Apple Metal matmul kernels also accumulate
++// in F32. The workaround below short-circuits the FP16-FMA path and routes
++// to the existing F32-accumulator fallback (vcvt_f32_f16 + vfmaq_f32) — about
++// 2x slower per element but bit-correct. Reproduced via qwen3-tts code_pred
++// blk.2 ffn_down on Apple M1 CPU; a quick CPU-only synthesis of the F16
++// talker GGUF runs to the 1500-frame cap (no codec_eos) instead of the ~50
++// frames that Metal/CUDA produce. MUST RE-APPLY after every ggml bump (see
++// LEARNINGS.md "F16 vec_dot accumulator overflow on ARM NEON FP16").
++#if 0 /* CrispASR: force F32 accumulator path below */ && defined(__ARM_FEATURE_FP16_VECTOR_ARITHMETIC)
+     #define GGML_F16_STEP 32
+     #define GGML_F16_EPR  8
+ 
+@@ -403,8 +421,8 @@ inline static float ggml_lookup_fp16_to_fp32(ggml_fp16_t f) {
+     #define GGML_F16_VEC_MUL            GGML_F16x8_MUL
+     #define GGML_F16_VEC_REDUCE         GGML_F16x8_REDUCE
+ #else
+-    // if FP16 vector arithmetic is not supported, we use FP32 instead
+-    // and take advantage of the vcvt_ functions to convert to/from FP16
++    // F16 in memory, F32 accumulator: vcvt_f32_f16 on load, vfmaq_f32 in
++    // the inner loop. Same path as the !FP16_VECTOR_ARITHMETIC fallback.
+ 
+     #define GGML_F16_STEP 16
+     #define GGML_F16_EPR  4
+diff --git a/ggml/src/ggml-cpu/vec.cpp b/ggml/src/ggml-cpu/vec.cpp
+index d0e4001..346d537 100644
+--- a/ggml/src/ggml-cpu/vec.cpp
++++ b/ggml/src/ggml-cpu/vec.cpp
+@@ -393,6 +393,61 @@ void ggml_vec_dot_f16(int n, float * GGML_RESTRICT s, size_t bs, ggml_fp16_t * G
+     *s = sumf;
+ }
+ 
++// CrispASR patch (issue #38): F16 weight × F32 input → F32 dot.
++// Replaces the upstream behaviour of converting F32 src1 → F16 (which saturates
++// values >65504 to ±Inf and feeds NaN into the next layer) with a direct F16→F32
++// load on the weight side and an F32 multiply-accumulate. Used by MUL_MAT when
++// src0 is F16 and src1 is F32; vec_dot_type for F16 is set to F32 so this path
++// is taken without an intermediate quantize. See LEARNINGS.md
++// "F16 mul_mat input saturation on ARM NEON" for the qwen3-tts code_pred case.
++void ggml_vec_dot_f16_f32(int n, float * GGML_RESTRICT s, size_t bs, ggml_fp16_t * GGML_RESTRICT x, size_t bx, float * GGML_RESTRICT y, size_t by, int nrc) {
++    assert(nrc == 1);
++    GGML_UNUSED(nrc);
++    GGML_UNUSED(bx);
++    GGML_UNUSED(by);
++    GGML_UNUSED(bs);
++
++    ggml_float sumf = 0.0;
++
++#if defined(__ARM_NEON) && defined(__ARM_FEATURE_FMA)
++    const int np = n & ~7;
++    float32x4_t s0 = vdupq_n_f32(0.0f);
++    float32x4_t s1 = vdupq_n_f32(0.0f);
++    for (int i = 0; i < np; i += 8) {
++        float32x4_t xa = vcvt_f32_f16(vld1_f16((const __fp16 *)(x + i)));
++        float32x4_t xb = vcvt_f32_f16(vld1_f16((const __fp16 *)(x + i + 4)));
++        float32x4_t ya = vld1q_f32(y + i);
++        float32x4_t yb = vld1q_f32(y + i + 4);
++        s0 = vfmaq_f32(s0, xa, ya);
++        s1 = vfmaq_f32(s1, xb, yb);
++    }
++    sumf = (ggml_float)(vaddvq_f32(s0) + vaddvq_f32(s1));
++    for (int i = np; i < n; ++i) {
++        sumf += (ggml_float)(GGML_CPU_FP16_TO_FP32(x[i]) * y[i]);
++    }
++#elif defined(__AVX2__) && defined(__F16C__)
++    const int np = n & ~7;
++    __m256 acc = _mm256_setzero_ps();
++    for (int i = 0; i < np; i += 8) {
++        __m256 xv = _mm256_cvtph_ps(_mm_loadu_si128((const __m128i *)(x + i)));
++        __m256 yv = _mm256_loadu_ps(y + i);
++        acc = _mm256_fmadd_ps(xv, yv, acc);
++    }
++    float buf[8];
++    _mm256_storeu_ps(buf, acc);
++    sumf = buf[0]+buf[1]+buf[2]+buf[3]+buf[4]+buf[5]+buf[6]+buf[7];
++    for (int i = np; i < n; ++i) {
++        sumf += (ggml_float)(GGML_CPU_FP16_TO_FP32(x[i]) * y[i]);
++    }
++#else
++    for (int i = 0; i < n; ++i) {
++        sumf += (ggml_float)(GGML_CPU_FP16_TO_FP32(x[i]) * y[i]);
++    }
++#endif
++
++    *s = sumf;
++}
++
+ void ggml_vec_silu_f32(const int n, float * y, const float * x) {
+     int i = 0;
+ #if defined(__AVX512F__) && defined(__AVX512DQ__)
+diff --git a/ggml/src/ggml-cpu/vec.h b/ggml/src/ggml-cpu/vec.h
+index a0375a2..9e40956 100644
+--- a/ggml/src/ggml-cpu/vec.h
++++ b/ggml/src/ggml-cpu/vec.h
+@@ -42,6 +42,11 @@ extern ggml_fp16_t ggml_table_gelu_quick_f16[1 << 16];
+ void ggml_vec_dot_f32(int n, float * GGML_RESTRICT s, size_t bs, const float * GGML_RESTRICT x, size_t bx, const float * GGML_RESTRICT y, size_t by, int nrc);
+ void ggml_vec_dot_bf16(int n, float * GGML_RESTRICT s, size_t bs, ggml_bf16_t * GGML_RESTRICT x, size_t bx, ggml_bf16_t * GGML_RESTRICT y, size_t by, int nrc);
+ void ggml_vec_dot_f16(int n, float * GGML_RESTRICT s, size_t bs, ggml_fp16_t * GGML_RESTRICT x, size_t bx, ggml_fp16_t * GGML_RESTRICT y, size_t by, int nrc);
++// CrispASR patch (issue #38): F16 weight × F32 input → F32 dot, used by MUL_MAT
++// when src0 is F16 and src1 is F32. Avoids the upstream behaviour of pre-
++// converting src1 from F32 to F16 (which saturates values >65504 to ±Inf and
++// produces NaN matmul outputs). See LEARNINGS.md "F16 mul_mat input saturation".
++void ggml_vec_dot_f16_f32(int n, float * GGML_RESTRICT s, size_t bs, ggml_fp16_t * GGML_RESTRICT x, size_t bx, float * GGML_RESTRICT y, size_t by, int nrc);
+ 
+ void ggml_vec_silu_f32(const int n, float * y, const float * x);
+ ggml_float ggml_vec_cvar_f32(const int n, float * y, const float * x, const float mean); //it will also center y ( y = y - mean )
+-- 
+2.50.1 (Apple Git-155)
+
