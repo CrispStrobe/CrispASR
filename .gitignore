@@ -1,6 +1,7 @@
 *.o
 *.a
 *.d
+*.bak
 .cache/
 .coreml/
 .test/
@@ -87,6 +88,11 @@ SETUP.md
 .claude/scheduled_tasks.lock
 __pycache__/
 *.pyc
+*.egg-info/
+
+# Local TTS scratch outputs
+tts_output.wav
+tidy.log
 
 # Rust build output
 target/
