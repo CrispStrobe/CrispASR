@@ -144,6 +144,13 @@ struct whisper_params {
     std::string tts_instruct; // VoiceDesign: natural-language voice description
     bool tts_trim_silence = false;
 
+    // Server mode: directory containing voice profiles for /v1/audio/speech.
+    // Each profile is a sibling pair: <name>.wav + <name>.txt (the WAV is
+    // the reference audio, the TXT is its transcription used by Qwen3-TTS
+    // ICL prefill), or a baked voice pack <name>.gguf. The server's
+    // POST /v1/audio/speech `voice` field maps to a stem in this directory.
+    std::string tts_voice_dir;
+
     // Text-to-text translation input (m2m100 + future translate-only
     // backends). When `--text` is set on a backend that declares
     // CAP_TRANSLATE and has no input audio, crispasr_run dispatches to
