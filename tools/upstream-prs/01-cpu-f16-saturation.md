@@ -37,10 +37,10 @@ of (b) is real (extra F16 → F32 cast per inference pass) but
 unavoidable as long as upstream `mul_mat` rejects non-F32 src1 in the
 type-conversion path.
 
-Patch: `01-cpu-f16-saturation.patch` (5 files, +124/-15).
+Patch: `01-cpu-f16-saturation.patch` (5 files, +80/-16).
 
-**Verification.** Tested on M1 with kokoro F16 GGUF on
-`--gpu-backend cpu` and Qwen3-TTS F16 talker on `--gpu-backend cpu`;
+**Verification.** Tested on M1 with downstream consumer (crispasr with kokoro F16 GGUF on
+`--gpu-backend cpu` and Qwen3-TTS F16 talker on `--gpu-backend cpu`);
 talker emits valid logits and AR loop terminates on `codec_eos`
 instead of running to the cap. Without (b), kokoro F16 CPU TTS
 aborts at `ggml_backend_sched_split_graph` trying to schedule

@@ -18,10 +18,10 @@ Fix: compute `i_min, i_max` analytically before the inner loop, iterate
 only `[i_min, i_max]`. Bit-identical output (same multiplies and adds
 in the same order). Loop bound shrinks by `IL / ⌈K/s0⌉`.
 
-Patch: `04-metal-conv-transpose-1d.patch` (1 file, +29/-7).
+Patch: `04-metal-conv-transpose-1d.patch` (1 file, +18/-7).
 
 **Verification.** Tested on M1 via downstream
-consumer (qwen3-tts codec at full T_codec). End-to-end codec decode
+consumer (crispasr with qwen3-tts codec at full T_codec). End-to-end codec decode
 ~3-4× faster on M1; zero watchdog hits across long synthesis runs vs.
 ~30% pre-patch. Recommend running existing `test-backend-ops`
 conv_transpose_1d cases under Metal to confirm bit-identical output.

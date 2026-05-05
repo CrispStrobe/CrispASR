@@ -23,10 +23,10 @@ careful interaction with shared-memory state.
 the kernel's existing int-typed `y` / `tx` indexing would overflow
 first.
 
-Patch: `03-cuda-cpy.patch` (1 file, +43/-23).
+Patch: `03-cuda-cpy.patch` (1 file, +24/-16).
 
 **Verification.** Tested on Jetson Orin AGX (sm_87, CUDA 12.8) via
-downstream consumer (qwen3-tts codec at T_pcm = 2.88M). `_q*_cuda`
+downstream consumer (crispasr with qwen3-tts codec at T_pcm = 2.88M). `_q*_cuda`
 overloads not affected — they use 1D `num_blocks < UINT_MAX` grids.
 Recommend running existing `test-backend-ops` cpy cases (single chunk,
 unchanged path).
