@@ -10,10 +10,30 @@
 
 #include "vibevoice.h"
 
+#include <cctype>
 #include <cstdio>
+#include <string>
+#include <sys/stat.h>
 #include <vector>
 
 namespace {
+
+static bool ends_with_ci(const std::string& s, const std::string& suffix) {
+    if (s.size() < suffix.size())
+        return false;
+    for (size_t i = 0; i < suffix.size(); i++) {
+        char a = (char)std::tolower((unsigned char)s[s.size() - suffix.size() + i]);
+        char b = (char)std::tolower((unsigned char)suffix[i]);
+        if (a != b)
+            return false;
+    }
+    return true;
+}
+
+static bool file_exists(const std::string& path) {
+    struct stat st;
+    return stat(path.c_str(), &st) == 0;
+}
 
 static std::vector<float> resample_16k_to_24k(const float* in, int n_in) {
     std::vector<float> out;
@@ -85,22 +105,45 @@ public:
 
     std::vector<float> synthesize(const std::string& text, const whisper_params& params) override {
         // Voice resolution order:
-        //   1. Explicit --voice <path>
-        //   2. Per-language sibling pick (vibevoice-voice-<lang>-Spk1_woman.gguf
-        //      → vibevoice-voice-<lang>-Spk0_man.gguf), if -l <lang> is set
-        //   3. Sibling kokoro-voice-emma.gguf as English default (matches the
-        //      auto-download companion)
+        //   1. Bare-name in --voice-dir: <voice-dir>/<name>.gguf
+        //      (matches qwen3-tts post-d35940b — server-mode callers can
+        //       pass the same {"voice": "<name>"} request shape across all
+        //       TTS backends; the adapter does the filesystem lookup
+        //       against `params.tts_voice_dir`.)
+        //   2. Explicit --voice <path>: literal path to a voice GGUF.
+        //   3. Per-language sibling pick (vibevoice-voice-<lang>-Spk1_woman.gguf
+        //      → vibevoice-voice-<lang>-Spk0_man.gguf), if -l <lang> is set.
+        //   4. Sibling vibevoice-voice-emma.gguf as English default (matches
+        //      the auto-download companion).
         std::string voice_path = params.tts_voice;
+
+        // (1) Bare name → voice-dir lookup. A "bare name" is a token with
+        // no path separators and no `.gguf`/`.wav` extension — e.g.
+        // `voice: "vik"` from a /v1/audio/speech request. Path-traversal
+        // sanitization (reject `..` and NUL) mirrors the qwen3-tts adapter.
+        if (!voice_path.empty() && !params.tts_voice_dir.empty() && voice_path.find('/') == std::string::npos &&
+            voice_path.find('\\') == std::string::npos && !ends_with_ci(voice_path, ".gguf") &&
+            !ends_with_ci(voice_path, ".wav")) {
+            if (voice_path.find("..") != std::string::npos || voice_path.find('\0') != std::string::npos) {
+                fprintf(stderr, "crispasr[vibevoice-tts]: voice name '%s' contains illegal characters (.. or NUL)\n",
+                        voice_path.c_str());
+                return {};
+            }
+            const std::string gguf_path = params.tts_voice_dir + "/" + voice_path + ".gguf";
+            if (file_exists(gguf_path)) {
+                voice_path = gguf_path;
+            }
+            // else: leave bare name; vibevoice_load_voice will fail with a
+            // clearer "could not be loaded" path below.
+        }
+
         if (voice_path.empty()) {
             auto slash = params.model.find_last_of("/\\");
             std::string dir = (slash == std::string::npos) ? "." : params.model.substr(0, slash);
             auto try_sibling = [&](const std::string& fname) -> std::string {
                 std::string p = dir + "/" + fname;
-                FILE* f = fopen(p.c_str(), "rb");
-                if (f) {
-                    fclose(f);
+                if (file_exists(p))
                     return p;
-                }
                 return {};
             };
             const std::string& lang = params.language;
@@ -113,11 +156,17 @@ public:
             if (voice_path.empty())
                 voice_path = try_sibling("vibevoice-voice-emma.gguf");
         }
-        if (!voice_loaded_ && !voice_path.empty()) {
+
+        // Per-call voice-key cache. Replaces the previous `voice_loaded_`
+        // boolean so server callers can switch voice per request just by
+        // changing params.tts_voice. CLI single-shot behaviour is unchanged
+        // (first call still pays one load); vibevoice_load_voice() replaces
+        // the active voice when re-called.
+        if (!voice_path.empty() && voice_path != last_voice_key_) {
             if (vibevoice_load_voice(ctx_, voice_path.c_str()) == 0) {
-                voice_loaded_ = true;
-                if (params.tts_voice.empty())
-                    fprintf(stderr, "crispasr[vibevoice-tts]: auto-picked voice '%s'\n", voice_path.c_str());
+                last_voice_key_ = voice_path;
+                if (params.tts_voice.empty() || params.tts_voice != voice_path)
+                    fprintf(stderr, "crispasr[vibevoice-tts]: voice loaded '%s'\n", voice_path.c_str());
             } else {
                 fprintf(stderr,
                         "crispasr[vibevoice-tts]: voice '%s' could not be loaded; "
@@ -126,9 +175,10 @@ public:
                 return {};
             }
         }
-        if (!voice_loaded_) {
-            fprintf(stderr, "crispasr[vibevoice-tts]: no voice prompt resolved (pass --voice <path> "
-                            "or place a vibevoice-voice-*.gguf next to the model).\n");
+        if (last_voice_key_.empty()) {
+            fprintf(stderr, "crispasr[vibevoice-tts]: no voice prompt resolved (pass --voice <path>, "
+                            "drop a <name>.gguf into --voice-dir, or place a vibevoice-voice-*.gguf "
+                            "next to the model).\n");
             return {};
         }
         if (!ctx_ || text.empty())
@@ -147,11 +197,12 @@ public:
             vibevoice_free(ctx_);
             ctx_ = nullptr;
         }
+        last_voice_key_.clear();
     }
 
 private:
     vibevoice_context* ctx_ = nullptr;
-    bool voice_loaded_ = false;
+    std::string last_voice_key_;
 };
 
 } // namespace
