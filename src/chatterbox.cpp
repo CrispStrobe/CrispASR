@@ -713,6 +713,29 @@ static bool bind_ve(chatterbox_context* c) {
     return true; // VE is optional
 }
 
+// Read a tensor's data as float32, dequantizing on the fly if needed.
+// build_prefill_embeds reads weight tensors (spkr_proj, perceiver QKV, etc.)
+// directly on CPU. Those tensors may be F16 or Q8_0 in a quantized GGUF —
+// raw ggml_backend_tensor_get with sizeof(float) would then exceed ggml_nbytes
+// and trip the OOB assertion in ggml-backend.cpp.
+static void tensor_get_f32(ggml_tensor* t, float* out, size_t n) {
+    if (t->type == GGML_TYPE_F32) {
+        ggml_backend_tensor_get(t, out, 0, n * sizeof(float));
+    } else if (t->type == GGML_TYPE_F16) {
+        std::vector<ggml_fp16_t> tmp(n);
+        ggml_backend_tensor_get(t, tmp.data(), 0, n * sizeof(ggml_fp16_t));
+        ggml_fp16_to_fp32_row(tmp.data(), out, (int64_t)n);
+    } else {
+        // Quantized type — read raw bytes then dequantize via ggml CPU traits.
+        size_t raw = ggml_nbytes(t);
+        std::vector<uint8_t> tmp(raw);
+        ggml_backend_tensor_get(t, tmp.data(), 0, raw);
+        const ggml_type_traits* tt = ggml_get_type_traits(t->type);
+        GGML_ASSERT(tt && tt->to_float && "unsupported weight type in build_prefill_embeds");
+        tt->to_float(tmp.data(), out, (int64_t)n);
+    }
+}
+
 // ── KV cache allocation ─────────────────────────────────────────
 
 static bool kv_alloc(chatterbox_context* c, int max_ctx) {
@@ -939,7 +962,7 @@ static std::vector<float> build_prefill_embeds(chatterbox_context* c, const std:
     std::vector<float> spkr_proj(D, 0.0f);
     {
         std::vector<float> w(D * c->hp.speaker_embed_size);
-        ggml_backend_tensor_get(m.cond_spkr_w, w.data(), 0, w.size() * sizeof(float));
+        tensor_get_f32(m.cond_spkr_w, w.data(), w.size());
         for (int i = 0; i < D; i++) {
             float sum = 0.0f;
             for (int j = 0; j < (int)c->hp.speaker_embed_size; j++) {
@@ -949,7 +972,7 @@ static std::vector<float> build_prefill_embeds(chatterbox_context* c, const std:
         }
         if (m.cond_spkr_b) {
             std::vector<float> bias(D);
-            ggml_backend_tensor_get(m.cond_spkr_b, bias.data(), 0, D * sizeof(float));
+            tensor_get_f32(m.cond_spkr_b, bias.data(), D);
             for (int i = 0; i < D; i++)
                 spkr_proj[i] += bias[i];
         }
@@ -967,9 +990,9 @@ static std::vector<float> build_prefill_embeds(chatterbox_context* c, const std:
 
         // Read embedding tables
         std::vector<float> speech_emb_tab(c->hp.speech_vocab_size * D);
-        ggml_backend_tensor_get(m.speech_emb_w, speech_emb_tab.data(), 0, speech_emb_tab.size() * sizeof(float));
+        tensor_get_f32(m.speech_emb_w, speech_emb_tab.data(), speech_emb_tab.size());
         std::vector<float> speech_pos_tab(c->hp.speech_pos_emb_size * D);
-        ggml_backend_tensor_get(m.speech_pos_emb_w, speech_pos_tab.data(), 0, speech_pos_tab.size() * sizeof(float));
+        tensor_get_f32(m.speech_pos_emb_w, speech_pos_tab.data(), speech_pos_tab.size());
 
         // Read prompt token IDs
         std::vector<int32_t> prompt_ids(n_prompt);
@@ -988,15 +1011,15 @@ static std::vector<float> build_prefill_embeds(chatterbox_context* c, const std:
 
         // Read perceiver weights
         std::vector<float> query(n_q * D);
-        ggml_backend_tensor_get(m.perceiver_query, query.data(), 0, n_q * D * sizeof(float));
+        tensor_get_f32(m.perceiver_query, query.data(), query.size());
 
         // Helper: read Linear weight (out_dim, in_dim) and optional bias (out_dim)
         auto read_linear = [&](ggml_tensor* w_t, ggml_tensor* b_t, int out_d, int in_d) {
             std::vector<float> w(out_d * in_d);
             std::vector<float> b(out_d, 0.0f);
-            ggml_backend_tensor_get(w_t, w.data(), 0, w.size() * sizeof(float));
+            tensor_get_f32(w_t, w.data(), w.size());
             if (b_t)
-                ggml_backend_tensor_get(b_t, b.data(), 0, b.size() * sizeof(float));
+                tensor_get_f32(b_t, b.data(), b.size());
             return std::make_pair(w, b);
         };
 
@@ -1022,9 +1045,9 @@ static std::vector<float> build_prefill_embeds(chatterbox_context* c, const std:
         // Read LayerNorm
         std::vector<float> norm_w(D, 1.0f), norm_b(D, 0.0f);
         if (m.perceiver_norm_w)
-            ggml_backend_tensor_get(m.perceiver_norm_w, norm_w.data(), 0, D * sizeof(float));
+            tensor_get_f32(m.perceiver_norm_w, norm_w.data(), D);
         if (m.perceiver_norm_b)
-            ggml_backend_tensor_get(m.perceiver_norm_b, norm_b.data(), 0, D * sizeof(float));
+            tensor_get_f32(m.perceiver_norm_b, norm_b.data(), D);
 
         // LayerNorm helper (eps=1e-5)
         auto layer_norm = [&](const float* in, float* out, int len) {
@@ -1139,7 +1162,7 @@ static std::vector<float> build_prefill_embeds(chatterbox_context* c, const std:
     std::vector<float> emotion_proj(D, 0.0f);
     if (m.cond_emotion_w) {
         std::vector<float> w(D);
-        ggml_backend_tensor_get(m.cond_emotion_w, w.data(), 0, D * sizeof(float));
+        tensor_get_f32(m.cond_emotion_w, w.data(), D);
         for (int i = 0; i < D; i++) {
             emotion_proj[i] = w[i] * c->conds.emotion_adv;
         }
@@ -1172,9 +1195,9 @@ static std::vector<float> build_prefill_embeds(chatterbox_context* c, const std:
     // Place text embeddings: text_emb + text_pos_emb
     {
         std::vector<float> text_emb_table(c->hp.text_vocab_size * D);
-        ggml_backend_tensor_get(m.text_emb_w, text_emb_table.data(), 0, text_emb_table.size() * sizeof(float));
+        tensor_get_f32(m.text_emb_w, text_emb_table.data(), text_emb_table.size());
         std::vector<float> text_pos_table(c->hp.text_pos_emb_size * D);
-        ggml_backend_tensor_get(m.text_pos_emb_w, text_pos_table.data(), 0, text_pos_table.size() * sizeof(float));
+        tensor_get_f32(m.text_pos_emb_w, text_pos_table.data(), text_pos_table.size());
 
         for (int i = 0; i < text_len; i++) {
             int tok = text_tokens[i];
@@ -1190,10 +1213,9 @@ static std::vector<float> build_prefill_embeds(chatterbox_context* c, const std:
     // Place speech start embedding: speech_emb(start_token) + speech_pos_emb(0)
     {
         std::vector<float> speech_emb_table(c->hp.speech_vocab_size * D);
-        ggml_backend_tensor_get(m.speech_emb_w, speech_emb_table.data(), 0, speech_emb_table.size() * sizeof(float));
+        tensor_get_f32(m.speech_emb_w, speech_emb_table.data(), speech_emb_table.size());
         std::vector<float> speech_pos_table(c->hp.speech_pos_emb_size * D);
-        ggml_backend_tensor_get(m.speech_pos_emb_w, speech_pos_table.data(), 0,
-                                speech_pos_table.size() * sizeof(float));
+        tensor_get_f32(m.speech_pos_emb_w, speech_pos_table.data(), speech_pos_table.size());
 
         int start_tok = (int)c->hp.start_speech_token;
         for (int j = 0; j < D; j++) {
@@ -1212,15 +1234,15 @@ static std::vector<float> build_speech_token_embed(chatterbox_context* c, int32_
     std::vector<float> embed(D);
 
     // speech_emb(token) + speech_pos_emb(pos)
-    std::vector<float> tok_emb(D);
-    ggml_backend_tensor_get(c->t3.speech_emb_w, tok_emb.data(), (size_t)token_id * D * sizeof(float),
-                            D * sizeof(float));
-    std::vector<float> pos_emb(D);
-    ggml_backend_tensor_get(c->t3.speech_pos_emb_w, pos_emb.data(), (size_t)speech_pos * D * sizeof(float),
-                            D * sizeof(float));
-    for (int j = 0; j < D; j++) {
-        embed[j] = tok_emb[j] + pos_emb[j];
-    }
+    // Read full tables and index: partial byte-offset reads break on quantized tensors.
+    std::vector<float> emb_tab(c->hp.speech_vocab_size * D);
+    tensor_get_f32(c->t3.speech_emb_w, emb_tab.data(), emb_tab.size());
+    std::vector<float> pos_tab(c->hp.speech_pos_emb_size * D);
+    tensor_get_f32(c->t3.speech_pos_emb_w, pos_tab.data(), pos_tab.size());
+    int tid = (token_id >= 0 && token_id < (int)c->hp.speech_vocab_size) ? token_id : 0;
+    int pid = (speech_pos >= 0 && speech_pos < (int)c->hp.speech_pos_emb_size) ? speech_pos : 0;
+    for (int j = 0; j < D; j++)
+        embed[j] = emb_tab[tid * D + j] + pos_tab[pid * D + j];
     return embed;
 }
 
@@ -1419,7 +1441,7 @@ static std::vector<float> build_prefill_embeds_gpt2(chatterbox_context* c, const
     // Read WPE table
     int wpe_size = (int)c->hp.wpe_max_positions;
     std::vector<float> wpe_table((size_t)wpe_size * D);
-    ggml_backend_tensor_get(m.wpe_w, wpe_table.data(), 0, wpe_table.size() * sizeof(float));
+    tensor_get_f32(m.wpe_w, wpe_table.data(), wpe_table.size());
 
     // 1. Conditioning: speaker_emb projection + speech prompt token embeddings
     // Python: cond_enc(t3_cond) returns [spkr_proj, speech_emb(cond_tokens)]
@@ -1434,7 +1456,7 @@ static std::vector<float> build_prefill_embeds_gpt2(chatterbox_context* c, const
         ggml_backend_tensor_get(c->conds.speaker_emb, spkr_emb.data(), 0, spkr_emb.size() * sizeof(float));
 
         std::vector<float> w(D * c->hp.speaker_embed_size);
-        ggml_backend_tensor_get(m.cond_spkr_w, w.data(), 0, w.size() * sizeof(float));
+        tensor_get_f32(m.cond_spkr_w, w.data(), w.size());
         for (int i = 0; i < D; i++) {
             float sum = 0.0f;
             for (int j = 0; j < (int)c->hp.speaker_embed_size; j++) {
@@ -1444,7 +1466,7 @@ static std::vector<float> build_prefill_embeds_gpt2(chatterbox_context* c, const
         }
         if (m.cond_spkr_b) {
             std::vector<float> bias(D);
-            ggml_backend_tensor_get(m.cond_spkr_b, bias.data(), 0, D * sizeof(float));
+            tensor_get_f32(m.cond_spkr_b, bias.data(), D);
             for (int i = 0; i < D; i++)
                 spkr_proj[i] += bias[i];
         }
@@ -1457,8 +1479,7 @@ static std::vector<float> build_prefill_embeds_gpt2(chatterbox_context* c, const
             ggml_backend_tensor_get(c->conds.speech_prompt_tokens, prompt_toks.data(), 0, n_prompt * sizeof(int32_t));
 
             std::vector<float> speech_emb_table(c->hp.speech_vocab_size * D);
-            ggml_backend_tensor_get(m.speech_emb_w, speech_emb_table.data(), 0,
-                                    speech_emb_table.size() * sizeof(float));
+            tensor_get_f32(m.speech_emb_w, speech_emb_table.data(), speech_emb_table.size());
 
             cond_speech_embs.resize((size_t)n_prompt * D);
             for (int i = 0; i < n_prompt; i++) {
@@ -1479,9 +1500,9 @@ static std::vector<float> build_prefill_embeds_gpt2(chatterbox_context* c, const
 
     // Read embedding tables
     std::vector<float> text_emb_table(c->hp.text_vocab_size * D);
-    ggml_backend_tensor_get(m.text_emb_w, text_emb_table.data(), 0, text_emb_table.size() * sizeof(float));
+    tensor_get_f32(m.text_emb_w, text_emb_table.data(), text_emb_table.size());
     std::vector<float> speech_emb_table(c->hp.speech_vocab_size * D);
-    ggml_backend_tensor_get(m.speech_emb_w, speech_emb_table.data(), 0, speech_emb_table.size() * sizeof(float));
+    tensor_get_f32(m.speech_emb_w, speech_emb_table.data(), speech_emb_table.size());
 
     int pos = 0;
     int wpe_pos = 0;
@@ -1536,14 +1557,15 @@ static std::vector<float> build_speech_token_embed_gpt2(chatterbox_context* c, i
     const int D = (int)c->hp.hidden_size;
     std::vector<float> embed(D);
 
-    std::vector<float> tok_emb(D);
-    ggml_backend_tensor_get(c->t3.speech_emb_w, tok_emb.data(), (size_t)token_id * D * sizeof(float),
-                            D * sizeof(float));
-    std::vector<float> pos_emb(D);
-    ggml_backend_tensor_get(c->t3.wpe_w, pos_emb.data(), (size_t)abs_pos * D * sizeof(float), D * sizeof(float));
-    for (int j = 0; j < D; j++) {
-        embed[j] = tok_emb[j] + pos_emb[j];
-    }
+    // Read full tables and index: partial byte-offset reads break on quantized tensors.
+    std::vector<float> emb_tab(c->hp.speech_vocab_size * D);
+    tensor_get_f32(c->t3.speech_emb_w, emb_tab.data(), emb_tab.size());
+    std::vector<float> wpe_tab(c->hp.wpe_max_positions * D);
+    tensor_get_f32(c->t3.wpe_w, wpe_tab.data(), wpe_tab.size());
+    int tid = (token_id >= 0 && token_id < (int)c->hp.speech_vocab_size) ? token_id : 0;
+    int pid = (abs_pos >= 0 && abs_pos < (int)c->hp.wpe_max_positions) ? abs_pos : 0;
+    for (int j = 0; j < D; j++)
+        embed[j] = emb_tab[tid * D + j] + wpe_tab[pid * D + j];
     return embed;
 }
 
