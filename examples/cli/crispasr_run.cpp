@@ -924,7 +924,7 @@ int crispasr_run_backend(const whisper_params& params_in) {
 
     // Optional punctuation restoration post-processor.
     // `--punc-model auto` or `--punc-model firered` → auto-download Q4_K (~50 MB).
-    fireredpunc_context* punc_ctx = nullptr;
+    std::unique_ptr<fireredpunc_context, decltype(&fireredpunc_free)> punc_ctx(nullptr, fireredpunc_free);
     {
         std::string punc_path = params.punc_model;
         if (punc_path == "none" || punc_path == "off")
@@ -936,7 +936,7 @@ int crispasr_run_backend(const whisper_params& params_in) {
                 "crispasr[punc]", params.cache_dir);
         }
         if (!punc_path.empty()) {
-            punc_ctx = fireredpunc_init(punc_path.c_str());
+            punc_ctx.reset(fireredpunc_init(punc_path.c_str()));
             if (!punc_ctx) {
                 fprintf(stderr, "crispasr: warning: failed to load punc model '%s' — continuing without\n",
                         punc_path.c_str());
@@ -1055,7 +1055,7 @@ int crispasr_run_backend(const whisper_params& params_in) {
                 segs = backend->transcribe(pcm_window.data(), (int)pcm_window.size(), 0, params);
             }
 
-            apply_punc_model(punc_ctx, segs);
+            apply_punc_model(punc_ctx.get(), segs);
             if (!params.punctuation) {
                 for (auto& seg : segs) {
                     crispasr_strip_punctuation(seg);
@@ -1160,7 +1160,7 @@ int crispasr_run_backend(const whisper_params& params_in) {
                         break;
                     const std::string fout =
                         (idx < (int)params.fname_out.size()) ? params.fname_out[idx] : std::string{};
-                    const int file_rc = process_one_input(be, params.fname_inp[idx], fout, params, punc_ctx);
+                    const int file_rc = process_one_input(be, params.fname_inp[idx], fout, params, punc_ctx.get());
                     if (file_rc != 0)
                         agg_rc.store(file_rc);
                 }
@@ -1171,16 +1171,18 @@ int crispasr_run_backend(const whisper_params& params_in) {
 
         for (auto& be : pool)
             be->shutdown();
+        punc_ctx.reset();
         return agg_rc.load();
     }
 
     for (size_t i = 0; i < params.fname_inp.size(); i++) {
         const std::string& fname_inp = params.fname_inp[i];
         const std::string fout = (i < params.fname_out.size()) ? params.fname_out[i] : std::string{};
-        const int file_rc = process_one_input(*backend, fname_inp, fout, params, punc_ctx);
+        const int file_rc = process_one_input(*backend, fname_inp, fout, params, punc_ctx.get());
         if (file_rc != 0)
             rc = file_rc;
     }
+    punc_ctx.reset();
     backend->shutdown();
     return rc;
 }

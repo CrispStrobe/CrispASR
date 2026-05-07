@@ -283,13 +283,18 @@ static bool fireredpunc_load(fireredpunc_context& ctx, const char* path) {
             ctx.d_ffn, ctx.n_heads, ctx.vocab_size, ctx.n_classes);
 
     // Pass 2: weights
-    ctx.backend = ggml_backend_init_best();
+    // FireRedPunc normally uses ggml's best backend. For investigation or a
+    // local workaround, `FIREREDPUNC_BACKEND=cpu` forces CPU and
+    // `FIREREDPUNC_BACKEND=gpu` forces `init_best()`.
+    const char* punc_backend = getenv("FIREREDPUNC_BACKEND");
+    const bool force_cpu = punc_backend && strcmp(punc_backend, "cpu") == 0;
+    const bool force_gpu = punc_backend && strcmp(punc_backend, "gpu") == 0;
+    ctx.backend = (force_cpu && !force_gpu) ? ggml_backend_cpu_init() : ggml_backend_init_best();
     if (!ctx.backend)
         ctx.backend = ggml_backend_cpu_init();
     // Always have a separate CPU backend on hand for ggml_backend_sched
-    // to fall back to (issue #68). When init_best returned a CPU
-    // backend already, we still create a second one so the assert
-    // path is uniform.
+    // to fall back to (issue #68). Even though the primary backend is
+    // CPU here, we keep the two-backend shape uniform.
     ctx.backend_cpu = ggml_backend_cpu_init();
     core_gguf::WeightLoad wl;
     if (!core_gguf::load_weights(path, ctx.backend, "fireredpunc", wl))
