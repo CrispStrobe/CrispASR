@@ -337,8 +337,9 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             return 1;
         }
 
-        const std::string resolved = crispasr_resolve_model_cli(
-            params.model, backend_name, params.no_prints, params.cache_dir, params.auto_download || model_is_auto);
+        const std::string resolved =
+            crispasr_resolve_model_cli(params.model, backend_name, params.no_prints, params.cache_dir,
+                                       params.auto_download || model_is_auto, params.model_quant);
         if (resolved.empty()) {
             fprintf(stderr, "crispasr-server: failed to resolve model '%s' for backend '%s'\n", params.model.c_str(),
                     backend_name.c_str());
@@ -532,8 +533,9 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             return;
         }
 
-        const std::string resolved_model = crispasr_resolve_model_cli(
-            new_model, new_backend, params.no_prints, params.cache_dir, params.auto_download || new_model_is_auto);
+        const std::string resolved_model =
+            crispasr_resolve_model_cli(new_model, new_backend, params.no_prints, params.cache_dir,
+                                       params.auto_download || new_model_is_auto, params.model_quant);
         if (resolved_model.empty()) {
             ready.store(true);
             json_error(res, 500, "failed to resolve model '" + new_model + "' for backend '" + new_backend + "'");

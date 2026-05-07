@@ -68,3 +68,42 @@ TEST_CASE("registry: vibevoice has entry", "[unit][registry]") {
     bool found = crispasr_registry_lookup("vibevoice", e);
     REQUIRE(found);
 }
+
+TEST_CASE("registry: preferred quant rewrites primary filename", "[unit][registry]") {
+    CrispasrRegistryEntry e;
+    bool found = crispasr_registry_lookup("chatterbox", e, "q4_k");
+    REQUIRE(found);
+    REQUIRE(e.filename == "chatterbox-t3-q4_k.gguf");
+}
+
+TEST_CASE("registry: companion quant can be resolved independently", "[unit][registry]") {
+    CrispasrRegistryEntry e;
+    bool found = crispasr_registry_lookup("chatterbox", e, "q4_k");
+    REQUIRE(found);
+    REQUIRE(e.companion_filename == "chatterbox-s3gen-q4_k.gguf");
+}
+
+TEST_CASE("registry: non-quantized companion remains unchanged", "[unit][registry]") {
+    CrispasrRegistryEntry e;
+    bool found = crispasr_registry_lookup("qwen3-tts", e, "q4_k");
+    REQUIRE(found);
+    REQUIRE(e.companion_filename == "qwen3-tts-tokenizer-12hz.gguf");
+}
+
+TEST_CASE("registry: companion filename lookup resolves the companion entry", "[unit][registry]") {
+    CrispasrRegistryEntry e;
+    bool found = crispasr_registry_lookup_by_filename("qwen3-tts-tokenizer-12hz.gguf", e);
+    REQUIRE(found);
+    REQUIRE(e.backend == "qwen3-tts");
+    REQUIRE(e.filename == "qwen3-tts-tokenizer-12hz.gguf");
+    REQUIRE(e.url.find("qwen3-tts-tokenizer-12hz-GGUF") != std::string::npos);
+}
+
+TEST_CASE("registry: quantized companion filename lookup preserves the requested quant", "[unit][registry]") {
+    CrispasrRegistryEntry e;
+    bool found = crispasr_registry_lookup_by_filename("qwen3-tts-tokenizer-12hz-q8_0.gguf", e);
+    REQUIRE(found);
+    REQUIRE(e.backend == "qwen3-tts");
+    REQUIRE(e.filename == "qwen3-tts-tokenizer-12hz-q8_0.gguf");
+    REQUIRE(e.url.find("qwen3-tts-tokenizer-12hz-q8_0.gguf") != std::string::npos);
+}

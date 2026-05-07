@@ -630,7 +630,7 @@ int crispasr_run_backend(const whisper_params& params_in) {
             // who already have, say, a parakeet GGUF from a previous
             // session shouldn't trigger a fresh 147 MB whisper download.
             CrispasrRegistryEntry cached;
-            if (crispasr_find_cached_model(cached, params.cache_dir)) {
+            if (crispasr_find_cached_model(cached, params.cache_dir, params.model_quant)) {
                 backend_name = cached.backend;
                 params.model = crispasr_cache::dir(params.cache_dir) + "/" + cached.filename;
                 if (!params.no_prints) {
@@ -691,7 +691,7 @@ int crispasr_run_backend(const whisper_params& params_in) {
 
     // Resolve "-m auto" via the model registry + curl/wget download.
     const std::string resolved = crispasr_resolve_model_cli(params.model, backend_name, params.no_prints,
-                                                            params.cache_dir, params.auto_download);
+                                                            params.cache_dir, params.auto_download, params.model_quant);
     if (params.verbose) {
         fprintf(stderr, "crispasr[verbose]: resolved model     = '%s'\n", resolved.c_str());
     }
@@ -1046,8 +1046,8 @@ int crispasr_run_backend(const whisper_params& params_in) {
                 const auto slices = crispasr_compute_vad_slices(pcm_window.data(), (int)pcm_window.size(), SR,
                                                                 stream_vad_path.c_str(), stream_vad_opts);
                 for (const auto& sl : slices) {
-                    auto slice_segs = backend->transcribe(pcm_window.data() + sl.start, sl.end - sl.start, sl.t0_cs,
-                                                          params);
+                    auto slice_segs =
+                        backend->transcribe(pcm_window.data() + sl.start, sl.end - sl.start, sl.t0_cs, params);
                     segs.insert(segs.end(), std::make_move_iterator(slice_segs.begin()),
                                 std::make_move_iterator(slice_segs.end()));
                 }

@@ -11,6 +11,8 @@
 
 #include "crispasr_backend.h"
 #include "crispasr_backend_utils.h"
+#include "crispasr_model_mgr_cli.h"
+#include "crispasr_model_registry.h"
 #include "whisper_params.h"
 
 #include "orpheus.h"
@@ -88,8 +90,21 @@ public:
         // orpheus_synthesize_codes (raw codec token IDs) can render via
         // the python reference SNAC decoder.
         std::string codec_path = p.tts_codec_model;
+        if (!codec_path.empty() && codec_path != "auto" && codec_path != "default") {
+            codec_path = crispasr_resolve_model_cli(codec_path, p.backend, p.no_prints, p.cache_dir, p.auto_download,
+                                                    p.tts_codec_quant);
+        } else {
+            codec_path.clear();
+        }
         if (codec_path.empty()) {
             codec_path = discover_codec(p.model);
+        }
+        if (codec_path.empty()) {
+            CrispasrRegistryEntry entry;
+            if (crispasr_registry_lookup(p.backend, entry, p.tts_codec_quant) && !entry.companion_filename.empty()) {
+                codec_path = crispasr_resolve_model_cli(entry.companion_filename, p.backend, p.no_prints, p.cache_dir,
+                                                        p.auto_download, p.tts_codec_quant);
+            }
         }
         if (!codec_path.empty()) {
             orpheus_set_codec_path(ctx_, codec_path.c_str());

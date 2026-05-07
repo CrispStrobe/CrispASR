@@ -3,6 +3,8 @@
 #include "crispasr_model_registry.h"
 #include "crispasr_cache.h"
 
+#include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <vector>
 
@@ -370,11 +372,82 @@ const Entry* find_by_filename(const std::string& filename) {
     return nullptr;
 }
 
-void fill(CrispasrRegistryEntry& out, const Entry& e) {
+bool has_suffix_ci(const std::string& s, const std::string& suffix) {
+    if (s.size() < suffix.size())
+        return false;
+    for (size_t i = 0; i < suffix.size(); ++i) {
+        char a = (char)std::tolower((unsigned char)s[s.size() - suffix.size() + i]);
+        char b = (char)std::tolower((unsigned char)suffix[i]);
+        if (a != b)
+            return false;
+    }
+    return true;
+}
+
+std::string strip_known_quant_suffix(const std::string& filename) {
+    const std::string dot = ".gguf";
+    if (!has_suffix_ci(filename, dot))
+        return filename;
+
+    const size_t stem_end = filename.size() - dot.size();
+    const std::string stem = filename.substr(0, stem_end);
+    static const char* k_known_quants[] = {
+        "-q2_k", "-q3_k", "-q4_0", "-q4_1", "-q4_k", "-q4_k_m", "-q5_0",
+        "-q5_1", "-q5_k", "-q6_k", "-q8_0", "-f16",  "-bf16",
+    };
+    for (const char* q : k_known_quants) {
+        const std::string suffix = q;
+        if (has_suffix_ci(stem, suffix)) {
+            return stem.substr(0, stem.size() - suffix.size()) + dot;
+        }
+    }
+    return filename;
+}
+
+std::string apply_quant_to_filename(const std::string& filename, const std::string& preferred_quant) {
+    if (preferred_quant.empty())
+        return filename;
+
+    const std::string lower_quant = preferred_quant;
+    const std::string dot = ".gguf";
+    if (!has_suffix_ci(filename, dot))
+        return filename;
+
+    const size_t stem_end = filename.size() - dot.size();
+    const std::string stem = filename.substr(0, stem_end);
+    static const char* k_known_quants[] = {
+        "-q2_k", "-q3_k", "-q4_0", "-q4_1", "-q4_k", "-q4_k_m", "-q5_0",
+        "-q5_1", "-q5_k", "-q6_k", "-q8_0", "-f16",  "-bf16",
+    };
+    for (const char* q : k_known_quants) {
+        const std::string suffix = q;
+        if (has_suffix_ci(stem, suffix)) {
+            return stem.substr(0, stem.size() - suffix.size()) + "-" + lower_quant + dot;
+        }
+    }
+    return filename;
+}
+
+std::string replace_tail_filename(const std::string& url, const std::string& old_name, const std::string& new_name) {
+    const size_t pos = url.rfind(old_name);
+    if (pos == std::string::npos)
+        return url;
+    return url.substr(0, pos) + new_name + url.substr(pos + old_name.size());
+}
+
+void fill(CrispasrRegistryEntry& out, const Entry& e, const std::string& preferred_quant) {
+    const std::string filename = apply_quant_to_filename(e.filename, preferred_quant);
     out.backend = e.backend;
-    out.filename = e.filename;
-    out.url = e.url;
+    out.filename = filename;
+    out.url = replace_tail_filename(e.url, e.filename, filename);
     out.approx_size = e.approx_size;
+    if (e.companion_file && e.companion_url) {
+        out.companion_filename = apply_quant_to_filename(e.companion_file, preferred_quant);
+        out.companion_url = replace_tail_filename(e.companion_url, e.companion_file, out.companion_filename);
+    } else {
+        out.companion_filename.clear();
+        out.companion_url.clear();
+    }
 }
 
 const ExtraCompanion* find_extras(const char* backend) {
@@ -400,41 +473,62 @@ void download_extras(const Entry& e, bool quiet, const std::string& cache_dir_ov
 
 } // namespace
 
-bool crispasr_registry_lookup(const std::string& backend, CrispasrRegistryEntry& out) {
+bool crispasr_registry_lookup(const std::string& backend, CrispasrRegistryEntry& out,
+                              const std::string& preferred_quant) {
     const Entry* e = find_by_backend(backend);
     if (!e)
         return false;
-    fill(out, *e);
+    fill(out, *e, preferred_quant);
     return true;
 }
 
-bool crispasr_registry_lookup_by_filename(const std::string& filename, CrispasrRegistryEntry& out) {
+bool crispasr_registry_lookup_by_filename(const std::string& filename, CrispasrRegistryEntry& out,
+                                          const std::string& preferred_quant) {
     const Entry* e = find_by_filename(filename);
-    if (!e)
-        return false;
-    fill(out, *e);
-    return true;
+    if (e) {
+        fill(out, *e, preferred_quant);
+        return true;
+    }
+
+    const std::string base = basename_of(filename);
+    for (const auto& row : k_registry) {
+        if (!row.companion_file || !row.companion_url)
+            continue;
+        const std::string companion = apply_quant_to_filename(row.companion_file, preferred_quant);
+        if (strip_known_quant_suffix(base) == strip_known_quant_suffix(companion)) {
+            out.backend = row.backend;
+            out.filename = base;
+            out.url = replace_tail_filename(row.companion_url, row.companion_file, base);
+            out.approx_size = row.approx_size;
+            out.companion_filename.clear();
+            out.companion_url.clear();
+            return true;
+        }
+    }
+
+    return false;
 }
 
 int crispasr_registry_count() {
     return (int)(sizeof(k_registry) / sizeof(k_registry[0]));
 }
 
-bool crispasr_registry_get_at(int i, CrispasrRegistryEntry& out) {
+bool crispasr_registry_get_at(int i, CrispasrRegistryEntry& out, const std::string& preferred_quant) {
     if (i < 0 || i >= crispasr_registry_count())
         return false;
-    fill(out, k_registry[i]);
+    fill(out, k_registry[i], preferred_quant);
     return true;
 }
 
-bool crispasr_find_cached_model(CrispasrRegistryEntry& out, const std::string& cache_dir_override) {
+bool crispasr_find_cached_model(CrispasrRegistryEntry& out, const std::string& cache_dir_override,
+                                const std::string& preferred_quant) {
     // k_registry is already ordered whisper > parakeet > canary > ... —
     // first entry wins, which matches the documented preference.
     const std::string dir = crispasr_cache::dir(cache_dir_override);
     for (const auto& e : k_registry) {
-        const std::string path = dir + "/" + e.filename;
+        const std::string path = dir + "/" + apply_quant_to_filename(e.filename, preferred_quant);
         if (crispasr_cache::file_present(path)) {
-            fill(out, e);
+            fill(out, e, preferred_quant);
             return true;
         }
     }
@@ -442,7 +536,8 @@ bool crispasr_find_cached_model(CrispasrRegistryEntry& out, const std::string& c
 }
 
 std::string crispasr_resolve_model(const std::string& model_arg, const std::string& backend_name, bool quiet,
-                                   const std::string& cache_dir_override, bool allow_download) {
+                                   const std::string& cache_dir_override, bool allow_download,
+                                   const std::string& preferred_quant) {
     // Concrete path that exists on disk — pass through.
     if (model_arg != "auto" && model_arg != "default") {
         FILE* f = fopen(model_arg.c_str(), "rb");
@@ -452,22 +547,31 @@ std::string crispasr_resolve_model(const std::string& model_arg, const std::stri
         }
 
         // File not found — try registry-based download when permitted.
-        const Entry* match = find_by_filename(model_arg);
-        if (!match && !backend_name.empty())
-            match = find_by_backend(backend_name);
+        CrispasrRegistryEntry match;
+        bool have_match = crispasr_registry_lookup_by_filename(model_arg, match, preferred_quant);
+        if (!have_match && !backend_name.empty())
+            have_match = crispasr_registry_lookup(backend_name, match, preferred_quant);
 
-        if (match && allow_download) {
+        if (have_match) {
+            const std::string cached = crispasr_cache::dir(cache_dir_override) + "/" + match.filename;
+            if (crispasr_cache::file_present(cached))
+                return cached;
+        }
+
+        if (have_match && allow_download) {
             if (!quiet) {
                 fprintf(stderr, "crispasr: model '%s' not found locally — downloading %s (%s)\n", model_arg.c_str(),
-                        match->filename, match->approx_size);
+                        match.filename.c_str(), match.approx_size.c_str());
             }
             std::string dl =
-                crispasr_cache::ensure_cached_file(match->filename, match->url, quiet, "crispasr", cache_dir_override);
-            if (!dl.empty() && match->companion_file && match->companion_url)
-                crispasr_cache::ensure_cached_file(match->companion_file, match->companion_url, quiet, "crispasr",
+                crispasr_cache::ensure_cached_file(match.filename, match.url, quiet, "crispasr", cache_dir_override);
+            if (!dl.empty() && !match.companion_filename.empty() && !match.companion_url.empty())
+                crispasr_cache::ensure_cached_file(match.companion_filename, match.companion_url, quiet, "crispasr",
                                                    cache_dir_override);
             if (!dl.empty())
-                download_extras(*match, quiet, cache_dir_override);
+                if (const Entry* match_entry =
+                        !backend_name.empty() ? find_by_backend(backend_name) : find_by_filename(model_arg))
+                    download_extras(*match_entry, quiet, cache_dir_override);
             return dl;
         }
         // Either no registry match or caller didn't authorise download —
@@ -476,25 +580,27 @@ std::string crispasr_resolve_model(const std::string& model_arg, const std::stri
         return model_arg;
     }
 
-    const Entry* e = find_by_backend(backend_name);
-    if (!e) {
+    CrispasrRegistryEntry e;
+    if (!crispasr_registry_lookup(backend_name, e, preferred_quant)) {
         fprintf(stderr, "crispasr: -m auto not supported for backend '%s' (no default model registered)\n",
                 backend_name.c_str());
         return "";
     }
 
     if (!quiet)
-        fprintf(stderr, "crispasr: resolving %s (%s) via -m auto\n", e->filename, e->approx_size);
-    std::string result = crispasr_cache::ensure_cached_file(e->filename, e->url, quiet, "crispasr", cache_dir_override);
+        fprintf(stderr, "crispasr: resolving %s (%s) via -m auto\n", e.filename.c_str(), e.approx_size.c_str());
+    std::string result = crispasr_cache::ensure_cached_file(e.filename, e.url, quiet, "crispasr", cache_dir_override);
 
     // Download companion file (e.g. tokenizer.bin for moonshine) if needed
-    if (!result.empty() && e->companion_file && e->companion_url) {
-        crispasr_cache::ensure_cached_file(e->companion_file, e->companion_url, quiet, "crispasr", cache_dir_override);
+    if (!result.empty() && !e.companion_filename.empty() && !e.companion_url.empty()) {
+        crispasr_cache::ensure_cached_file(e.companion_filename, e.companion_url, quiet, "crispasr",
+                                           cache_dir_override);
     }
     // Backend-specific extras (e.g. kokoro German backbone + voice) — opt-in
     // per backend via k_extras.
     if (!result.empty())
-        download_extras(*e, quiet, cache_dir_override);
+        if (const Entry* entry = find_by_backend(backend_name))
+            download_extras(*entry, quiet, cache_dir_override);
 
     return result;
 }

@@ -6,6 +6,7 @@
 #include "crispasr_backend_utils.h"
 #include "crispasr_cache.h"
 #include "crispasr_model_mgr_cli.h"
+#include "crispasr_model_registry.h"
 #include "whisper_params.h"
 
 #include "chatterbox.h"
@@ -44,7 +45,16 @@ static bool contains_ci(const std::string& haystack, const std::string& needle) 
     return false;
 }
 
+static bool is_auto_companion_arg(const std::string& arg) {
+    return arg.empty() || arg == "auto" || arg == "default";
+}
+
 static std::string discover_s3gen(const whisper_params& p) {
+    if (!p.tts_codec_model.empty() && p.tts_codec_model != "auto" && p.tts_codec_model != "default") {
+        return crispasr_resolve_model_cli(p.tts_codec_model, p.backend, p.no_prints, p.cache_dir, p.auto_download,
+                                          p.tts_codec_quant);
+    }
+
     const bool turbo_like = contains_ci(p.backend, "turbo") || contains_ci(p.backend, "kartoffel") ||
                             contains_ci(p.model, "turbo") || contains_ci(p.model, "kartoffel");
     const char* const* candidates = nullptr;
@@ -79,9 +89,15 @@ static std::string discover_s3gen(const whisper_params& p) {
     if (!path.empty())
         return path;
 
-    if (p.auto_download) {
+    CrispasrRegistryEntry entry;
+    if (crispasr_registry_lookup(p.backend, entry, p.tts_codec_quant) && !entry.companion_filename.empty()) {
+        return crispasr_resolve_model_cli(entry.companion_filename, p.backend, p.no_prints, p.cache_dir,
+                                          p.auto_download, p.tts_codec_quant);
+    }
+    if (p.auto_download || !is_auto_companion_arg(p.tts_codec_model)) {
         const char* wanted = turbo_like ? "chatterbox-turbo-s3gen-f16.gguf" : "chatterbox-s3gen-q8_0.gguf";
-        return crispasr_resolve_model_cli(wanted, "", p.no_prints, p.cache_dir, true);
+        return crispasr_resolve_model_cli(wanted, p.backend, p.no_prints, p.cache_dir, p.auto_download,
+                                          p.tts_codec_quant);
     }
 
     return "";
@@ -114,10 +130,7 @@ public:
             fprintf(stderr, "crispasr[chatterbox]: failed to load T3 model '%s'\n", p.model.c_str());
             return false;
         }
-        std::string s3gen_path = p.tts_codec_model;
-        if (s3gen_path.empty()) {
-            s3gen_path = discover_s3gen(p);
-        }
+        std::string s3gen_path = discover_s3gen(p);
         if (!s3gen_path.empty()) {
             if (chatterbox_set_s3gen_path(ctx_, s3gen_path.c_str()) != 0) {
                 fprintf(stderr, "crispasr[chatterbox]: failed to load S3Gen '%s'\n", s3gen_path.c_str());

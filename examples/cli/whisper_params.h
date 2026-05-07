@@ -73,6 +73,7 @@ struct whisper_params {
     std::string ask;
     std::string font_path = "/System/Library/Fonts/Supplemental/Courier New Bold.ttf";
     std::string model = "auto";
+    std::string model_quant;
     std::string grammar;
     std::string grammar_rule;
 
@@ -144,12 +145,15 @@ struct whisper_params {
     int32_t stream_length_ms = 10000;
     int32_t stream_keep_ms = 200;
     bool auto_download = false;
+    bool dry_run_resolve = false;
+    bool dry_run_ignore_cache = false;
     std::string cache_dir;
     std::string tts_text;
     std::string tts_output;
     std::string tts_voice;
     int tts_steps = 20;
     std::string tts_codec_model;
+    std::string tts_codec_quant;
     std::string tts_ref_text;
     std::string tts_instruct; // VoiceDesign: natural-language voice description
     bool tts_trim_silence = false;

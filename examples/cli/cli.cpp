@@ -6,9 +6,11 @@
 #include "whisper_params.h"       // struct whisper_params (shared with crispasr_*)
 #include "crispasr_backend.h"     // crispasr_run_backend() dispatch entry point
 #include "crispasr_diagnostics.h" // --version / --diagnostics + verbose banner (#31)
-#include "crispasr_output.h"      // crispasr_make_disp_segments — split-on-punct (#29)
-#include "crispasr_server.h"      // crispasr_run_server()
-#include "crispasr_vad_cli.h"     // crispasr_resolve_vad_model — auto-DL silero (#33)
+#include "crispasr_model_mgr_cli.h"
+#include "crispasr_model_registry.h"
+#include "crispasr_output.h"  // crispasr_make_disp_segments — split-on-punct (#29)
+#include "crispasr_server.h"  // crispasr_run_server()
+#include "crispasr_vad_cli.h" // crispasr_resolve_vad_model — auto-DL silero (#33)
 
 #include <cmath>
 #include <algorithm>
@@ -138,6 +140,50 @@ static char* whisper_param_turn_lowercase(char* in) {
 static char* requires_value_error(const std::string& arg) {
     fprintf(stderr, "error: argument %s requires value\n", arg.c_str());
     exit(0);
+}
+
+static bool parse_auto_quant_spec(const std::string& spec, std::string& base, std::string& quant) {
+    const size_t pos = spec.find(':');
+    if (pos == std::string::npos)
+        return false;
+    const std::string prefix = spec.substr(0, pos);
+    if (prefix != "auto" && prefix != "default")
+        return false;
+    const std::string suffix = spec.substr(pos + 1);
+    if (suffix.empty())
+        return false;
+    base = prefix;
+    quant = suffix;
+    return true;
+}
+
+static bool is_auto_model_arg(const std::string& model) {
+    return model == "auto" || model == "default";
+}
+
+static void print_resolve_preview(const char* label, const CrispasrResolvePreview& preview) {
+    fprintf(stderr, "%s:\n", label);
+    fprintf(stderr, "  requested: %s\n", preview.requested.c_str());
+    if (!preview.backend.empty())
+        fprintf(stderr, "  backend:   %s\n", preview.backend.c_str());
+    if (preview.unresolved) {
+        fprintf(stderr, "  status:    unresolved\n");
+        return;
+    }
+    if (preview.matched_registry) {
+        fprintf(stderr, "  registry:  %s\n", preview.filename.c_str());
+        fprintf(stderr, "  url:       %s\n", preview.url.c_str());
+        if (!preview.approx_size.empty())
+            fprintf(stderr, "  size:      %s\n", preview.approx_size.c_str());
+    }
+    if (preview.exists_locally) {
+        fprintf(stderr, "  status:    cached/local\n");
+    } else if (preview.would_download) {
+        fprintf(stderr, "  status:    would download\n");
+    } else {
+        fprintf(stderr, "  status:    resolved\n");
+    }
+    fprintf(stderr, "  path:      %s\n", preview.resolved_path.c_str());
 }
 
 static bool whisper_params_parse(int argc, char** argv, whisper_params& params) {
@@ -283,6 +329,14 @@ static bool whisper_params_parse(int argc, char** argv, whisper_params& params) 
             params.carry_initial_prompt = true;
         } else if (arg == "-m" || arg == "--model") {
             params.model = ARGV_NEXT;
+            std::string auto_base;
+            std::string auto_quant;
+            if (params.model_quant.empty() && parse_auto_quant_spec(params.model, auto_base, auto_quant)) {
+                params.model = auto_base;
+                params.model_quant = auto_quant;
+            }
+        } else if (arg == "--model-quant") {
+            params.model_quant = ARGV_NEXT;
         } else if (arg == "-f" || arg == "--file") {
             params.fname_inp.emplace_back(ARGV_NEXT);
         } else if (arg == "-oved" || arg == "--ov-e-device") {
@@ -409,6 +463,15 @@ static bool whisper_params_parse(int argc, char** argv, whisper_params& params) 
                 params.tts_steps = 100;
         } else if (arg == "--codec-model") {
             params.tts_codec_model = ARGV_NEXT;
+            std::string auto_base;
+            std::string auto_quant;
+            if (params.tts_codec_quant.empty() &&
+                parse_auto_quant_spec(params.tts_codec_model, auto_base, auto_quant)) {
+                params.tts_codec_model = auto_base;
+                params.tts_codec_quant = auto_quant;
+            }
+        } else if (arg == "--codec-quant") {
+            params.tts_codec_quant = ARGV_NEXT;
         } else if (arg == "--ref-text") {
             params.tts_ref_text = ARGV_NEXT;
         } else if (arg == "--instruct") {
@@ -445,6 +508,10 @@ static bool whisper_params_parse(int argc, char** argv, whisper_params& params) 
             params.translate_target_lang = whisper_param_turn_lowercase(ARGV_NEXT);
         } else if (arg == "--auto-download") {
             params.auto_download = true;
+        } else if (arg == "--dry-run-resolve") {
+            params.dry_run_resolve = true;
+        } else if (arg == "--dry-run-ignore-cache") {
+            params.dry_run_ignore_cache = true;
         } else if (arg == "--server") {
             params.server = true;
         } else if (arg == "--host") {
@@ -588,6 +655,8 @@ static void whisper_print_usage(int /*argc*/, char** argv, const whisper_params&
     fprintf(stderr, "             --carry-initial-prompt [%-7s] always prepend initial prompt\n",
             params.carry_initial_prompt ? "true" : "false");
     fprintf(stderr, "  -m FNAME,  --model FNAME          [%-7s] model path\n", params.model.c_str());
+    fprintf(stderr, "             --model-quant Q        [%-7s] preferred quant for registry / auto model resolution\n",
+            params.model_quant.c_str());
     fprintf(stderr, "  -f FNAME,  --file FNAME           [%-7s] input audio file path\n", "");
     fprintf(stderr, "  -oved D,   --ov-e-device DNAME    [%-7s] the OpenVINO device used for encode inference\n",
             params.openvino_encode_device.c_str());
@@ -668,6 +737,10 @@ static void whisper_print_usage(int /*argc*/, char** argv, const whisper_params&
             params.cache_dir.empty() ? "default" : params.cache_dir.c_str());
     fprintf(stderr, "  --auto-download                   [%-7s] auto-download missing models without prompting\n",
             params.auto_download ? "true" : "false");
+    fprintf(stderr, "  --dry-run-resolve                 [%-7s] print resolved model / companion paths and exit\n",
+            params.dry_run_resolve ? "true" : "false");
+    fprintf(stderr, "  --dry-run-ignore-cache            [%-7s] dry-run as if cache were empty\n",
+            params.dry_run_ignore_cache ? "true" : "false");
     fprintf(stderr, "  --alt                             [%-7s] show alternative token candidates with probabilities\n",
             params.show_alternatives ? "true" : "false");
     fprintf(stderr, "  --alt-n N                         [%-7d] number of alternatives per token\n",
@@ -713,7 +786,10 @@ static void whisper_print_usage(int /*argc*/, char** argv, const whisper_params&
                     "is a WAV)\n");
     fprintf(stderr, "             --instruct \"TEXT\"        natural-language voice description "
                     "(qwen3-tts VoiceDesign only; replaces --voice)\n");
-    fprintf(stderr, "             --codec-model FNAME      qwen3-tts codec GGUF (defaults to sibling of -m)\n");
+    fprintf(stderr,
+            "             --codec-model FNAME      codec / companion GGUF (defaults to sibling/cache/registry)\n");
+    fprintf(stderr, "             --codec-quant Q          [%-7s] preferred quant for registry companion resolution\n",
+            params.tts_codec_quant.c_str());
     fprintf(stderr, "             --voice-dir PATH         server: dir of <name>.wav (+ <name>.txt) or "
                     "<name>.gguf voice profiles for POST /v1/audio/speech\n");
     fprintf(stderr,
@@ -1506,6 +1582,34 @@ int main(int argc, char** argv) {
         return crispasr_run_server(params, params.server_host, params.server_port);
     }
 
+    if (params.dry_run_resolve) {
+        std::string backend_name = params.backend == "auto" ? "" : params.backend;
+        if (backend_name.empty() && is_auto_model_arg(params.model)) {
+            backend_name = "whisper";
+        } else if (backend_name.empty() && !is_auto_model_arg(params.model)) {
+            backend_name = crispasr_detect_backend_from_gguf(params.model);
+        }
+
+        const CrispasrResolvePreview model_preview = crispasr_preview_model_cli(
+            params.model, backend_name, params.cache_dir, params.model_quant, params.dry_run_ignore_cache);
+        print_resolve_preview("model", model_preview);
+
+        bool ok = !model_preview.unresolved;
+        if (!backend_name.empty()) {
+            CrispasrRegistryEntry entry;
+            if (crispasr_registry_lookup(backend_name, entry, params.tts_codec_quant) &&
+                !entry.companion_filename.empty()) {
+                const std::string codec_arg =
+                    params.tts_codec_model.empty() ? entry.companion_filename : params.tts_codec_model;
+                const CrispasrResolvePreview companion_preview = crispasr_preview_model_cli(
+                    codec_arg, backend_name, params.cache_dir, params.tts_codec_quant, params.dry_run_ignore_cache);
+                print_resolve_preview("companion", companion_preview);
+                ok = ok && !companion_preview.unresolved;
+            }
+        }
+        return ok ? 0 : 1;
+    }
+
     if (params.fname_inp.empty() && !params.stream && params.tts_text.empty() && params.text_input.empty()) {
         fprintf(stderr, "error: no input files specified\n");
         whisper_print_usage(argc, argv, params);
@@ -1525,7 +1629,7 @@ int main(int argc, char** argv) {
     // grammar, n_processors, whisper-internal VAD and stereo diarize.
     {
         const bool explicit_backend = !params.backend.empty();
-        const bool model_is_auto = params.model == "auto" || params.model == "default";
+        const bool model_is_auto = is_auto_model_arg(params.model);
 
         bool auto_detected_non_whisper = false;
         if (!explicit_backend && !model_is_auto) {
