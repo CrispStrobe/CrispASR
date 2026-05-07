@@ -952,6 +952,16 @@ int crispasr_run_backend(const whisper_params& params_in) {
         const int step_samples = (params.stream_step_ms * SR) / 1000;
         const int length_samples = (params.stream_length_ms * SR) / 1000;
         const int keep_samples = (params.stream_keep_ms * SR) / 1000;
+        const std::string stream_vad_path = crispasr_resolve_vad_model(params);
+
+        crispasr_vad_options stream_vad_opts;
+        stream_vad_opts.threshold = params.vad_threshold;
+        stream_vad_opts.min_speech_duration_ms = params.vad_min_speech_duration_ms;
+        stream_vad_opts.min_silence_duration_ms = params.vad_min_silence_duration_ms;
+        stream_vad_opts.speech_pad_ms = params.vad_speech_pad_ms;
+        // Streaming windows are already bounded by --stream-length.
+        stream_vad_opts.chunk_seconds = 0;
+        stream_vad_opts.n_threads = params.n_threads;
 
         // If --mic, spawn a subprocess to capture audio from the default mic
         FILE* mic_pipe = nullptr;
@@ -1031,8 +1041,26 @@ int crispasr_run_backend(const whisper_params& params_in) {
                 fflush(stderr);
             }
 
-            // Transcribe the window
-            auto segs = backend->transcribe(pcm_window.data(), (int)pcm_window.size(), 0, params);
+            std::vector<crispasr_segment> segs;
+            if (!stream_vad_path.empty()) {
+                const auto slices = crispasr_compute_vad_slices(pcm_window.data(), (int)pcm_window.size(), SR,
+                                                                stream_vad_path.c_str(), stream_vad_opts);
+                for (const auto& sl : slices) {
+                    auto slice_segs = backend->transcribe(pcm_window.data() + sl.start, sl.end - sl.start, sl.t0_cs,
+                                                          params);
+                    segs.insert(segs.end(), std::make_move_iterator(slice_segs.begin()),
+                                std::make_move_iterator(slice_segs.end()));
+                }
+            } else {
+                segs = backend->transcribe(pcm_window.data(), (int)pcm_window.size(), 0, params);
+            }
+
+            apply_punc_model(punc_ctx, segs);
+            if (!params.punctuation) {
+                for (auto& seg : segs) {
+                    crispasr_strip_punctuation(seg);
+                }
+            }
 
             if (params.stream_monitor) {
                 if (segs.empty()) {

@@ -15,6 +15,18 @@ ffmpeg -i audio.wav -f s16le -ar 16000 -ac 1 - | \
 Sliding-window chunking, default 10 s window with 3 s step and 200 ms
 overlap. Tune via `--stream-step`, `--stream-length`, `--stream-keep`.
 
+Quality-control flags supported in streaming mode:
+
+- `--vad`, `--vad-model`, `--vad-threshold`, `--vad-min-speech-duration-ms`, `--vad-min-silence-duration-ms`, `--vad-speech-pad-ms`
+- `--punc-model` and `--no-punctuation`
+- `--alt` and `--alt-n`
+
+Notes:
+
+- With VAD enabled, each streaming window is segmented before ASR. Silent windows are skipped instead of being decoded.
+- `--punc-model` applies after streamed chunk transcription, matching file-mode post-processing.
+- File-oriented output flags such as `-osrt`, `-ovtt`, `-oj`, and `-of` do not apply to `--stream` / `--mic` / `--live`; streaming writes transcripts to stdout.
+
 ## Microphone (`--mic`)
 
 ```bash

@@ -17,7 +17,7 @@
 #include "marblenet_vad.h" // NVIDIA MarbleNet VAD (1D separable CNN)
 #define CA_HAVE_MARBLENET_VAD 1
 #endif
-#if __has_include("whisper_vad_encdec.h")
+#if __has_include("crispasr_vad_encdec.h")
 #include "crispasr_vad_encdec.h" // Whisper-encoder + decoder VAD (ONNX-converted)
 #define CA_HAVE_WVAD_ENCDEC 1
 #endif
