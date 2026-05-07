@@ -705,7 +705,9 @@ static void whisper_print_usage(int /*argc*/, char** argv, const whisper_params&
             "             --tts \"TEXT\"            synthesise TEXT and write WAV to --tts-output (24 kHz mono)\n");
     fprintf(stderr, "             --tts-output FNAME      [%-7s] output WAV path (default: tts_output.wav)\n",
             params.tts_output.c_str());
-    fprintf(stderr, "             --voice PATH            [%-7s] voice prompt: GGUF voice pack OR reference WAV\n",
+    fprintf(stderr,
+            "             --voice PATH            [%-7s] voice prompt: GGUF voice pack or reference WAV\n"
+            "                                                 (.wav → 1.5B WAV cloning; .gguf → voice pack)\n",
             params.tts_voice.c_str());
     fprintf(stderr, "             --ref-text \"TEXT\"        reference transcription (qwen3-tts; required when --voice "
                     "is a WAV)\n");

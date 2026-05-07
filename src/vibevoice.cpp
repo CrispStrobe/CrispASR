@@ -2545,17 +2545,17 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
         const int SPEECH_END = 151653;       // <|vision_end|>
         const int EOS_TOKEN = 151643;
 
-        // Build TTS prompt:
-        // "{system_prompt} Voice input:\n <speech_start> [voice_embeds] <speech_end>
-        //  Text input:\n Speaker 1: {text} Speech output:\n <speech_start>"
+        // Microsoft's _create_voice_prompt format (with voice ref):
+        //   {sys} Voice input:\n Speaker 0:<speech_start>[embeds]<speech_end>\n Text input:\n Speaker 0: {text}\n
         std::string sys = " Transform the text provided by various speakers into speech output, utilizing the distinct "
                           "voice of each respective speaker.\n";
-        std::string voice_prefix = " Voice input:\n";
-        std::string text_prefix = " Text input:\n Speaker 1: ";
+        std::string voice_prefix = " Voice input:\n Speaker 0:";
+        std::string text_prefix = " Text input:\n Speaker 0:";
         std::string speech_prefix = " Speech output:\n";
 
         auto sys_ids = tokenize_text_greedy(m, sys.c_str());
         auto vp_ids = tokenize_text_greedy(m, voice_prefix.c_str());
+        auto nl_ids = tokenize_text_greedy(m, "\n");
         auto tp_ids = tokenize_text_greedy(m, (text_prefix + text_with_nl).c_str());
         auto sp_ids = tokenize_text_greedy(m, speech_prefix.c_str());
 
@@ -2583,10 +2583,20 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
                     size_t rd = fread(raw16.data(), 2, n_samples_ref, fv);
                     fclose(fv);
                     (void)rd;
-                    // Convert to float and resample to 24kHz if needed
+                    // Convert to float
                     std::vector<float> ref_pcm(n_samples_ref);
                     for (int i = 0; i < n_samples_ref; i++)
                         ref_pcm[i] = (float)raw16[i] / 32767.0f;
+
+                    // Normalize to -25 dB FS (matches Microsoft's AudioNormalizer default)
+                    float rms = 0.0f;
+                    for (int i = 0; i < n_samples_ref; i++)
+                        rms += ref_pcm[i] * ref_pcm[i];
+                    rms = sqrtf(rms / (float)n_samples_ref);
+                    float target_rms = powf(10.0f, -25.0f / 20.0f); // ~0.05623
+                    float scalar = target_rms / (rms + 1e-6f);
+                    for (int i = 0; i < n_samples_ref; i++)
+                        ref_pcm[i] = std::max(-1.0f, std::min(1.0f, ref_pcm[i] * scalar));
 
                     // Encode through acoustic + semantic encoders + connectors
                     float* speech_feat =
@@ -2608,13 +2618,14 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
 
         int voice_embed_start = -1;
         if (n_voice_frames > 0) {
-            // Voice section: " Voice input:\n" + <speech_start> + [placeholders] + <speech_end>
+            // Voice section: " Voice input:\n Speaker 0:" + <speech_start> + [placeholders] + <speech_end> + \n
             prompt.insert(prompt.end(), vp_ids.begin(), vp_ids.end());
             prompt.push_back(SPEECH_START);
             voice_embed_start = (int)prompt.size();
             for (int i = 0; i < n_voice_frames; i++)
                 prompt.push_back(SPEECH_DIFFUSION); // placeholder tokens for voice frames
             prompt.push_back(SPEECH_END);
+            prompt.insert(prompt.end(), nl_ids.begin(), nl_ids.end());
         }
 
         prompt.insert(prompt.end(), tp_ids.begin(), tp_ids.end());
@@ -3010,7 +3021,15 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
                 break;
             }
         }
-        int trimmed_len = total_audio - trim_start;
+        // Trim trailing silence (mirrors leading trim; prevents loose EOS generating extra frames)
+        int trim_end = total_audio;
+        for (int i = total_audio - 1; i >= trim_start; i--) {
+            if (fabsf(raw_audio[i]) > 0.005f) {
+                trim_end = std::min(total_audio, i + 800);
+                break;
+            }
+        }
+        int trimmed_len = trim_end - trim_start;
 
         if (verbosity >= 1)
             fprintf(stderr, "vibevoice TTS (base): %d frames → %d samples (%.2f sec)\n", actual_frames, trimmed_len,
