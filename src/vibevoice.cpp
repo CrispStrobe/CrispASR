@@ -2565,48 +2565,86 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
         int n_voice_frames = 0;
 
         // Try loading voice audio from the voice GGUF path (reused as audio path for 1.5B)
-        // For the 1.5B, --voice points to a reference .wav (not a .gguf KV cache)
+        // For the Base models, --voice points to a reference .wav
         if (ctx->voice.tts_seq_len == 0) {
-            // No voice GGUF loaded — check VIBEVOICE_VOICE_AUDIO env for a reference wav
             const char* voice_wav = getenv("VIBEVOICE_VOICE_AUDIO");
             if (voice_wav && voice_wav[0]) {
-                // Load 24kHz mono PCM from WAV file
                 FILE* fv = fopen(voice_wav, "rb");
+                std::vector<float> ref_pcm;
                 if (fv) {
-                    // Skip 44-byte WAV header, read as int16
-                    fseek(fv, 44, SEEK_SET);
                     fseek(fv, 0, SEEK_END);
-                    long fsize = ftell(fv) - 44;
-                    fseek(fv, 44, SEEK_SET);
-                    int n_samples_ref = (int)(fsize / 2);
-                    std::vector<int16_t> raw16(n_samples_ref);
-                    size_t rd = fread(raw16.data(), 2, n_samples_ref, fv);
+                    long fsize = ftell(fv);
+                    fseek(fv, 0, SEEK_SET);
+                    
+                    if (fsize > 12) {
+                        std::vector<uint8_t> buf(fsize);
+                        fread(buf.data(), 1, fsize, fv);
+                        uint32_t offset = 12; // skip RIFF, size, WAVE
+                        int data_offset = -1;
+                        uint32_t data_size = 0;
+                        
+                        // Robustly scan for the "data" chunk (skips FFmpeg metadata tags)
+                        while (offset + 8 <= fsize) {
+                            if (memcmp(buf.data() + offset, "data", 4) == 0) {
+                                data_offset = offset + 8;
+                                memcpy(&data_size, buf.data() + offset + 4, 4);
+                                break;
+                            }
+                            uint32_t chunk_sz;
+                            memcpy(&chunk_sz, buf.data() + offset + 4, 4);
+                            offset += 8 + chunk_sz;
+                            if (chunk_sz % 2 != 0) offset++; 
+                        }
+                        
+                        if (data_offset > 0 && data_offset + data_size <= fsize) {
+                            int n_samples_ref = data_size / 2;
+                            ref_pcm.resize(n_samples_ref);
+                            const int16_t* pcm16 = reinterpret_cast<const int16_t*>(buf.data() + data_offset);
+                            for (int i = 0; i < n_samples_ref; i++) {
+                                ref_pcm[i] = pcm16[i] / 32768.0f;
+                            }
+                        }
+                    }
                     fclose(fv);
-                    (void)rd;
-                    // Convert to float
-                    std::vector<float> ref_pcm(n_samples_ref);
-                    for (int i = 0; i < n_samples_ref; i++)
-                        ref_pcm[i] = (float)raw16[i] / 32767.0f;
+                }
 
-                    // Normalize to -25 dB FS (matches Microsoft's AudioNormalizer default)
+                int n_samples_ref = ref_pcm.size();
+                if (n_samples_ref > 0) {
+                    // Normalize to -25 dB FS (matches Microsoft's default)
                     float rms = 0.0f;
-                    for (int i = 0; i < n_samples_ref; i++)
-                        rms += ref_pcm[i] * ref_pcm[i];
+                    for (int i = 0; i < n_samples_ref; i++) rms += ref_pcm[i] * ref_pcm[i];
                     rms = sqrtf(rms / (float)n_samples_ref);
-                    float target_rms = powf(10.0f, -25.0f / 20.0f); // ~0.05623
+                    float target_rms = powf(10.0f, -25.0f / 20.0f);
                     float scalar = target_rms / (rms + 1e-6f);
-                    for (int i = 0; i < n_samples_ref; i++)
-                        ref_pcm[i] = std::max(-1.0f, std::min(1.0f, ref_pcm[i] * scalar));
+                    
+                    float max_val = 0.0f;
+                    for (int i = 0; i < n_samples_ref; i++) {
+                        ref_pcm[i] *= scalar;
+                        if (fabsf(ref_pcm[i]) > max_val) max_val = fabsf(ref_pcm[i]);
+                    }
+                    
+                    // Uniform scaling to prevent hard-clipping distortion
+                    if (max_val > 1.0f) {
+                        float clip_scalar = max_val + 1e-6f;
+                        for (int i = 0; i < n_samples_ref; i++) ref_pcm[i] /= clip_scalar;
+                    }
 
-                    // Encode through acoustic + semantic encoders + connectors
-                    float* speech_feat =
-                        vibevoice_encode_speech(ctx, ref_pcm.data(), n_samples_ref, &n_voice_frames, nullptr);
-                    if (speech_feat && n_voice_frames > 0) {
-                        voice_embeds.assign(speech_feat, speech_feat + n_voice_frames * d_lm);
-                        free(speech_feat);
-                        if (verbosity >= 1)
-                            fprintf(stderr, "  encoded voice reference: %d frames from %s\n", n_voice_frames,
-                                    voice_wav);
+                    // TTS Voice Cloning uses ONLY the acoustic encoder and applies scaling
+                    float sf = 0.196f, bf = -0.049f;
+                    auto* tsf = G("speech_scaling_factor");
+                    auto* tbf = G("speech_bias_factor");
+                    if (tsf) ggml_backend_tensor_get(tsf, &sf, 0, sizeof(float));
+                    if (tbf) ggml_backend_tensor_get(tbf, &bf, 0, sizeof(float));
+
+                    int T_at = 0, vd_at = 0;
+                    auto at_mean = run_encoder_stage(ctx, "at_enc", ref_pcm.data(), n_samples_ref, &T_at, &vd_at);
+
+                    if (!at_mean.empty()) {
+                        n_voice_frames = T_at;
+                        for (int i = 0; i < T_at * vd_at; i++) at_mean[i] = (at_mean[i] + bf) * sf;
+
+                        auto at_feat = run_connector_stage(ctx, "at_conn", at_mean.data(), T_at, vd_at);
+                        if (!at_feat.empty()) voice_embeds = at_feat;
                     }
                 }
             }
@@ -2850,6 +2888,24 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
             return nullptr;
         }
         int n_past = prefix_len;
+        const auto t_pure_infer_start = std::chrono::high_resolution_clock::now();
+
+        // --- NEW: Calculate True Negative Condition for CFG ---
+        // Pass the <|vision_start|> token through the LM to get the baseline "bland voice" vector
+        std::vector<float> neg_cond(hp.d_lm, 0.0f);
+        {
+            int32_t bos_id = SPEECH_START;
+            std::vector<float> neg_emb = run_token_embedding_lookup(ctx, &bos_id, 1);
+            if (!neg_emb.empty()) {
+                std::vector<float> neg_hidden = run_qwen2_prefill_no_kv(
+                    ctx, neg_emb.data(), 1, "lm", hp.n_lm_layers, true, false
+                );
+                if (!neg_hidden.empty()) {
+                    neg_cond = neg_hidden;
+                }
+            }
+        }
+        // ------------------------------------------------------
 
         // Autoregressive generation
         ddim_schedule sched = make_ddim_schedule(20);
@@ -2903,8 +2959,8 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
                 std::vector<float> prev_x0(vae_dim, 0.0f);
                 fill_gaussian_noise(z.data(), vae_dim, rng);
 
-                // Simple CFG with zero negative condition (no separate neg LM for base model)
-                std::vector<float> neg_cond(d_lm, 0.0f);
+                // Use the VibeVoice-API default CFG scale
+                float base_cfg_scale = 1.3f;
 
                 for (int si = 0; si < 20; si++) {
                     float t = (float)sched.timesteps[si];
@@ -2922,19 +2978,27 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
                                             vae_dim * 2 * sizeof(float));
                     ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "pred_t_sin"), t_sin.data(), 0,
                                             256 * sizeof(float));
-                    std::vector<float> cond_pair((size_t)d_lm * 2);
-                    memcpy(cond_pair.data(), hidden_v.data(), d_lm * sizeof(float));
-                    memcpy(cond_pair.data() + d_lm, neg_cond.data(), d_lm * sizeof(float));
+                    
+                    // Pass BOTH our positive hidden state and our calculated neg_cond
+                    std::vector<float> cond_pair((size_t)hp.d_lm * 2);
+                    memcpy(cond_pair.data(), hidden_v.data(), hp.d_lm * sizeof(float));
+                    memcpy(cond_pair.data() + hp.d_lm, neg_cond.data(), hp.d_lm * sizeof(float));
                     ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "pred_condition"), cond_pair.data(), 0,
-                                            (size_t)d_lm * 2 * sizeof(float));
+                                            (size_t)hp.d_lm * 2 * sizeof(float));
+                    
                     if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS)
                         break;
                     std::vector<float> v_both(vae_dim * 2);
                     ggml_backend_tensor_get(ggml_graph_get_tensor(gf, "pred_output"), v_both.data(), 0,
                                             vae_dim * 2 * sizeof(float));
+
+                    // CFG interpolation: v = uncond + cfg_scale * (cond - uncond)
                     std::vector<float> v_cfg(vae_dim);
-                    for (int i = 0; i < vae_dim; i++)
-                        v_cfg[i] = v_both[vae_dim + i] + cfg_scale * (v_both[i] - v_both[vae_dim + i]);
+                    for (int i = 0; i < vae_dim; i++) {
+                        float v_cond = v_both[i];             // positive
+                        float v_uncond = v_both[vae_dim + i]; // negative
+                        v_cfg[i] = v_uncond + base_cfg_scale * (v_cond - v_uncond);
+                    }
 
                     int t_cur = sched.timesteps[si];
                     std::vector<float> x0(vae_dim);
@@ -2950,9 +3014,6 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
 
                 all_latents.insert(all_latents.end(), z.begin(), z.end());
                 speech_frames++;
-
-                if (verbosity >= 1 && (speech_frames <= 3 || speech_frames % 5 == 0))
-                    fprintf(stderr, "  frame %d (step %d)\n", speech_frames, step);
 
                 // Feed speech latent back via acoustic connector
                 auto speech_embed = run_connector_stage(ctx, "at_conn", z.data(), 1, vae_dim);
@@ -3041,6 +3102,13 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
         memcpy(out_buf, raw_audio.data() + trim_start, (size_t)trimmed_len * sizeof(float));
         if (out_n_samples)
             *out_n_samples = trimmed_len;
+        // --- RTF Calc ---
+        const auto t_pure_infer_end = std::chrono::high_resolution_clock::now();
+        double infer_sec = std::chrono::duration<double>(t_pure_infer_end - t_pure_infer_start).count();
+        double audio_sec = trimmed_len / 24000.0;
+        fprintf(stderr, "\n[BENCH] Pure Inference RTF: %.3f (Audio: %.2fs | Compute: %.2fs)\n\n", 
+                infer_sec / audio_sec, audio_sec, infer_sec);
+
         return out_buf;
     }
 
@@ -3826,8 +3894,8 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
         }
     }
 
-    // neg_condition is computed inside process_text_window
-    float cfg_scale = 3.0f;
+    // Use 1.3 for Base models (prevents static drift), 3.0 for Realtime models
+    float cfg_scale = is_base_model ? 1.3f : 3.0f;
 
     std::vector<float> all_latents;
     mt19937_state rng;
