@@ -1492,7 +1492,8 @@ static std::vector<float> run_f0_predictor(chatterbox_s3gen_context* c,
 // stage_dump: if non-null, map is filled with named stage outputs after graph compute.
 static std::vector<float> hift_vocoder_cpu(chatterbox_s3gen_context* c,
                                            const std::vector<float>& mel, // (80, T_mel) channel-first
-                                           int T_mel, std::map<std::string, std::vector<float>>* stage_dump = nullptr) {
+                                           int T_mel, const float* source_stft_cf = nullptr, int T_src_ext = 0,
+                                           std::map<std::string, std::vector<float>>* stage_dump = nullptr) {
     if (c->verbosity >= 1) {
         float mel_rms = 0, mel_max = 0;
         for (size_t i = 0; i < mel.size(); i++) {
@@ -1537,8 +1538,11 @@ static std::vector<float> hift_vocoder_cpu(chatterbox_s3gen_context* c,
     // STFT of source: n_frames ≈ T_audio
     // For simplicity, we compute source length from T_mel and provide it as input
     int T_audio = T_mel * 120 * 4; // total audio samples
-    // Source STFT: after STFT(n_fft=16, hop=4), n_frames ≈ T_audio / hop ≈ T_mel * 120
-    int T_src = T_mel * 120;
+    // Upstream torch.stft runs with center=True and pad_mode='reflect',
+    // which yields floor(T_audio / hop) + 1 frames.
+    int T_src = T_audio / istft_hop + 1;
+    if (source_stft_cf && T_src_ext > 0)
+        T_src = T_src_ext;
     ggml_tensor* s_stft = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, T_src, 18);
     ggml_set_name(s_stft, "source_stft");
     ggml_set_input(s_stft);
@@ -1577,13 +1581,6 @@ static std::vector<float> hift_vocoder_cpu(chatterbox_s3gen_context* c,
             if (up_b)
                 x = ggml_add(ctx0, x, ggml_reshape_2d(ctx0, up_b, 1, (int)up_b->ne[0]));
         }
-        {
-            char uname[32];
-            std::snprintf(uname, sizeof(uname), "voc_ups_%d", stage);
-            ggml_set_name(x, uname);
-            ggml_set_output(x);
-        }
-
         // Reflection pad at last upsample stage: ReflectionPad1d((1, 0))
         // Python: if i == num_upsamples - 1: x = self.reflection_pad(x)
         if (stage == 2) {
@@ -1596,82 +1593,84 @@ static std::vector<float> hift_vocoder_cpu(chatterbox_s3gen_context* c,
             pad_sample = ggml_cont(ctx0, pad_sample);
             x = ggml_concat(ctx0, pad_sample, x, 0); // prepend → (T+1, C)
         }
+        {
+            char uname[32];
+            std::snprintf(uname, sizeof(uname), "voc_ups_%d", stage);
+            ggml_set_name(x, uname);
+            ggml_set_output(x);
+        }
 
         // Source fusion: source_downs[i](s_stft) → source_resblocks[i] → add
-        // The source STFT comes from SineGen(F0). Since F0≈0 (unvoiced),
-        // the source is noise. We provide the noise STFT as a graph input.
-        // When stage_dump is active, skip source fusion entirely to match
-        // the Python reference which was captured without it.
-        if (!stage_dump) {
-            char sd_wn[32], sd_bn[32];
-            std::snprintf(sd_wn, sizeof(sd_wn), "s3.v.sd.%d.weight", stage);
-            std::snprintf(sd_bn, sizeof(sd_bn), "s3.v.sd.%d.bias", stage);
-            ggml_tensor* sd_w = T(c, sd_wn);
-            ggml_tensor* sd_b = T(c, sd_bn);
-            if (sd_w && s_stft) {
-                ggml_tensor* si = ggml_conv_1d(ctx0, sd_w, s_stft, 1, 0, 1);
-                if (sd_b)
-                    si = ggml_add(ctx0, si, ggml_reshape_2d(ctx0, sd_b, 1, (int)sd_b->ne[0]));
-                const int srb_kernels[] = {7, 7, 11};
-                const int srb_dilations[][3] = {{1, 3, 5}, {1, 3, 5}, {1, 3, 5}};
-                ggml_tensor* srb_in = si;
-                for (int d = 0; d < 3; d++) {
-                    char key2[48];
-                    int dil = srb_dilations[stage][d];
-                    int k2 = srb_kernels[stage];
-                    int pad2 = (k2 * dil - dil) / 2;
-                    std::snprintf(key2, sizeof(key2), "s3.v.srb.%d.a1.%d.alpha", stage, d);
-                    ggml_tensor* sa1 = T(c, key2);
-                    if (sa1) {
-                        ggml_tensor* a = ggml_reshape_2d(ctx0, sa1, 1, (int)sa1->ne[0]);
-                        ggml_tensor* ax = ggml_mul(ctx0, si, a);
-                        ggml_tensor* s_ax = ggml_sin(ctx0, ax);
-                        si = ggml_add(ctx0, si, ggml_div(ctx0, ggml_mul(ctx0, s_ax, s_ax), a));
-                    }
-                    std::snprintf(key2, sizeof(key2), "s3.v.srb.%d.c1.%d.weight", stage, d);
-                    ggml_tensor* sc1w = T(c, key2);
-                    std::snprintf(key2, sizeof(key2), "s3.v.srb.%d.c1.%d.bias", stage, d);
-                    ggml_tensor* sc1b = T(c, key2);
-                    if (sc1w) {
-                        si = ggml_conv_1d(ctx0, sc1w, si, 1, pad2, dil);
-                        if (sc1b)
-                            si = ggml_add(ctx0, si, ggml_reshape_2d(ctx0, sc1b, 1, (int)sc1b->ne[0]));
-                    }
-                    std::snprintf(key2, sizeof(key2), "s3.v.srb.%d.a2.%d.alpha", stage, d);
-                    ggml_tensor* sa2 = T(c, key2);
-                    if (sa2) {
-                        ggml_tensor* a2 = ggml_reshape_2d(ctx0, sa2, 1, (int)sa2->ne[0]);
-                        ggml_tensor* ax2 = ggml_mul(ctx0, si, a2);
-                        ggml_tensor* s_ax2 = ggml_sin(ctx0, ax2);
-                        si = ggml_add(ctx0, si, ggml_div(ctx0, ggml_mul(ctx0, s_ax2, s_ax2), a2));
-                    }
-                    std::snprintf(key2, sizeof(key2), "s3.v.srb.%d.c2.%d.weight", stage, d);
-                    ggml_tensor* sc2w = T(c, key2);
-                    std::snprintf(key2, sizeof(key2), "s3.v.srb.%d.c2.%d.bias", stage, d);
-                    ggml_tensor* sc2b = T(c, key2);
-                    if (sc2w) {
-                        int p2 = (k2 - 1) / 2;
-                        si = ggml_conv_1d(ctx0, sc2w, si, 1, p2, 1);
-                        if (sc2b)
-                            si = ggml_add(ctx0, si, ggml_reshape_2d(ctx0, sc2b, 1, (int)sc2b->ne[0]));
-                    }
-                    si = ggml_add(ctx0, si, srb_in);
-                    srb_in = si;
+        char sd_wn[32], sd_bn[32];
+        std::snprintf(sd_wn, sizeof(sd_wn), "s3.v.sd.%d.weight", stage);
+        std::snprintf(sd_bn, sizeof(sd_bn), "s3.v.sd.%d.bias", stage);
+        ggml_tensor* sd_w = T(c, sd_wn);
+        ggml_tensor* sd_b = T(c, sd_bn);
+        if (sd_w && s_stft) {
+            const int sd_strides[] = {15, 3, 1};
+            const int sd_pads[] = {7, 1, 0};
+            ggml_tensor* si = ggml_conv_1d(ctx0, sd_w, s_stft, sd_strides[stage], sd_pads[stage], 1);
+            if (sd_b)
+                si = ggml_add(ctx0, si, ggml_reshape_2d(ctx0, sd_b, 1, (int)sd_b->ne[0]));
+            const int srb_kernels[] = {7, 7, 11};
+            const int srb_dilations[][3] = {{1, 3, 5}, {1, 3, 5}, {1, 3, 5}};
+            ggml_tensor* srb_in = si;
+            for (int d = 0; d < 3; d++) {
+                char key2[48];
+                int dil = srb_dilations[stage][d];
+                int k2 = srb_kernels[stage];
+                int pad2 = (k2 * dil - dil) / 2;
+                std::snprintf(key2, sizeof(key2), "s3.v.srb.%d.a1.%d.alpha", stage, d);
+                ggml_tensor* sa1 = T(c, key2);
+                if (sa1) {
+                    ggml_tensor* a = ggml_reshape_2d(ctx0, sa1, 1, (int)sa1->ne[0]);
+                    ggml_tensor* ax = ggml_mul(ctx0, si, a);
+                    ggml_tensor* s_ax = ggml_sin(ctx0, ax);
+                    si = ggml_add(ctx0, si, ggml_div(ctx0, ggml_mul(ctx0, s_ax, s_ax), a));
                 }
-                int T_x = (int)x->ne[0];
-                int T_si = (int)si->ne[0];
-                int T_min = std::min(T_x, T_si);
-                if (T_si > T_min) {
-                    si = ggml_view_2d(ctx0, si, T_min, (int)si->ne[1], si->nb[1], 0);
-                    si = ggml_cont(ctx0, si);
+                std::snprintf(key2, sizeof(key2), "s3.v.srb.%d.c1.%d.weight", stage, d);
+                ggml_tensor* sc1w = T(c, key2);
+                std::snprintf(key2, sizeof(key2), "s3.v.srb.%d.c1.%d.bias", stage, d);
+                ggml_tensor* sc1b = T(c, key2);
+                if (sc1w) {
+                    si = ggml_conv_1d(ctx0, sc1w, si, 1, pad2, dil);
+                    if (sc1b)
+                        si = ggml_add(ctx0, si, ggml_reshape_2d(ctx0, sc1b, 1, (int)sc1b->ne[0]));
                 }
-                if (T_x > T_min) {
-                    x = ggml_view_2d(ctx0, x, T_min, (int)x->ne[1], x->nb[1], 0);
-                    x = ggml_cont(ctx0, x);
+                std::snprintf(key2, sizeof(key2), "s3.v.srb.%d.a2.%d.alpha", stage, d);
+                ggml_tensor* sa2 = T(c, key2);
+                if (sa2) {
+                    ggml_tensor* a2 = ggml_reshape_2d(ctx0, sa2, 1, (int)sa2->ne[0]);
+                    ggml_tensor* ax2 = ggml_mul(ctx0, si, a2);
+                    ggml_tensor* s_ax2 = ggml_sin(ctx0, ax2);
+                    si = ggml_add(ctx0, si, ggml_div(ctx0, ggml_mul(ctx0, s_ax2, s_ax2), a2));
                 }
-                x = ggml_add(ctx0, x, si);
+                std::snprintf(key2, sizeof(key2), "s3.v.srb.%d.c2.%d.weight", stage, d);
+                ggml_tensor* sc2w = T(c, key2);
+                std::snprintf(key2, sizeof(key2), "s3.v.srb.%d.c2.%d.bias", stage, d);
+                ggml_tensor* sc2b = T(c, key2);
+                if (sc2w) {
+                    int p2 = (k2 - 1) / 2;
+                    si = ggml_conv_1d(ctx0, sc2w, si, 1, p2, 1);
+                    if (sc2b)
+                        si = ggml_add(ctx0, si, ggml_reshape_2d(ctx0, sc2b, 1, (int)sc2b->ne[0]));
+                }
+                si = ggml_add(ctx0, si, srb_in);
+                srb_in = si;
             }
-        } // end if (!stage_dump)
+            int T_x = (int)x->ne[0];
+            int T_si = (int)si->ne[0];
+            int T_min = std::min(T_x, T_si);
+            if (T_si > T_min) {
+                si = ggml_view_2d(ctx0, si, T_min, (int)si->ne[1], si->nb[1], 0);
+                si = ggml_cont(ctx0, si);
+            }
+            if (T_x > T_min) {
+                x = ggml_view_2d(ctx0, x, T_min, (int)x->ne[1], x->nb[1], 0);
+                x = ggml_cont(ctx0, x);
+            }
+            x = ggml_add(ctx0, x, si);
+        }
 
         // ResBlocks: 3 per stage, each run INDEPENDENTLY on the same input,
         // then outputs averaged: x = (rb0(x) + rb1(x) + rb2(x)) / 3
@@ -1808,11 +1807,6 @@ static std::vector<float> hift_vocoder_cpu(chatterbox_s3gen_context* c,
             x = ggml_add(ctx0, x, ggml_reshape_2d(ctx0, cpost_b, 1, (int)cpost_b->ne[0]));
     }
 
-    // Clamp STFT output to match Python reference range [-1.1, 1.7]
-    // with some headroom. Without source fusion providing stability,
-    // ResBlock outputs can exceed the expected range.
-    x = ggml_clamp(ctx0, x, -2.0f, 2.0f);
-
     ggml_set_name(x, "voc_conv_post");
     ggml_set_output(x);
     ggml_build_forward_expand(gf, x);
@@ -1836,8 +1830,10 @@ static std::vector<float> hift_vocoder_cpu(chatterbox_s3gen_context* c,
     {
         ggml_tensor* src_t = ggml_graph_get_tensor(gf, "source_stft");
         if (src_t) {
-            std::vector<float> src_stft(T_src * 18, 0.0f);
-            if (!stage_dump) {
+            std::vector<float> src_stft((size_t)T_src * 18, 0.0f);
+            if (source_stft_cf && T_src_ext > 0) {
+                std::memcpy(src_stft.data(), source_stft_cf, src_stft.size() * sizeof(float));
+            } else {
                 const float sine_amp = 0.1f;
                 const float noise_std = 0.003f;
                 const int n_harm_plus1 = 9; // fundamental + 8 overtones
@@ -1864,7 +1860,7 @@ static std::vector<float> hift_vocoder_cpu(chatterbox_s3gen_context* c,
                 }
 
                 // 2. Upsample F0 to audio rate (nearest-neighbor)
-                int T_audio = T_mel * upsample_factor;
+                int T_audio = T_mel * upsample_factor * stft_hop;
                 std::vector<float> f0_up(T_audio);
                 for (int t = 0; t < T_audio; t++)
                     f0_up[t] = f0[t / upsample_factor];
@@ -1923,7 +1919,7 @@ static std::vector<float> hift_vocoder_cpu(chatterbox_s3gen_context* c,
                     source[t] = std::tanh(val);
                 }
 
-                // 5. STFT of source signal (center=True, Hann window)
+                // 5. STFT of source signal (center=True, pad_mode='reflect', Hann window)
                 std::vector<float> stft_win(stft_nfft);
                 for (int i = 0; i < stft_nfft; i++)
                     stft_win[i] = 0.5f * (1.0f - std::cos(2.0f * (float)M_PI * i / stft_nfft));
@@ -1935,7 +1931,12 @@ static std::vector<float> hift_vocoder_cpu(chatterbox_s3gen_context* c,
                         float re = 0.0f, im = 0.0f;
                         for (int n = 0; n < stft_nfft; n++) {
                             int src_idx = center - pad + n;
-                            float s = (src_idx >= 0 && src_idx < T_audio) ? source[src_idx] : 0.0f;
+                            if (src_idx < 0)
+                                src_idx = -src_idx;
+                            else if (src_idx >= T_audio)
+                                src_idx = 2 * T_audio - src_idx - 2;
+                            src_idx = std::max(0, std::min(src_idx, T_audio - 1));
+                            float s = source[src_idx];
                             float w = stft_win[n] * s;
                             float angle = -2.0f * (float)M_PI * f * n / stft_nfft;
                             re += w * std::cos(angle);
@@ -2166,30 +2167,32 @@ static std::vector<float> hift_vocoder_cpu(chatterbox_s3gen_context* c,
             wav[i] /= win_sum[i];
     }
 
-    // Clamp to [-0.99, 0.99]
-    for (float& v : wav)
-        v = std::max(-0.99f, std::min(0.99f, v));
-
-    // Trim to expected length
+    // torch.istft(center=True) removes the n_fft/2 padding implied by
+    // centered frames, returning exactly hop * (n_frames - 1) samples.
+    const int center_pad = istft_nfft / 2;
     int final_len = T_mel * 480;
-    if ((int)wav.size() > final_len)
-        wav.resize(final_len);
-    else if ((int)wav.size() < final_len)
-        wav.resize(final_len, 0.0f);
+    std::vector<float> wav_trimmed;
+    wav_trimmed.reserve((size_t)final_len);
+    for (int i = 0; i < final_len; ++i) {
+        int src = center_pad + i;
+        float v = (src >= 0 && src < (int)wav.size()) ? wav[src] : 0.0f;
+        wav_trimmed.push_back(std::max(-0.99f, std::min(0.99f, v)));
+    }
 
-    return wav;
+    return wav_trimmed;
 }
 
 // ── Full pipeline ───────────────────────────────────────────────
 
-extern "C" float* chatterbox_s3gen_synthesize(struct chatterbox_s3gen_context* ctx, const int32_t* speech_tokens,
-                                              int n_speech_tokens, const int32_t* prompt_tokens, int n_prompt_tokens,
-                                              const float* prompt_feat, int prompt_feat_len, const float* spk_embedding,
-                                              int n_cfm_steps, int* out_n_samples) {
-    if (!ctx || !speech_tokens || n_speech_tokens <= 0 || !out_n_samples)
-        return nullptr;
-    *out_n_samples = 0;
-
+static bool chatterbox_s3gen_compute_gen_mel(struct chatterbox_s3gen_context* ctx, const int32_t* speech_tokens,
+                                             int n_speech_tokens, const int32_t* prompt_tokens, int n_prompt_tokens,
+                                             const float* prompt_feat, int prompt_feat_len,
+                                             const float* spk_embedding, int n_cfm_steps,
+                                             std::vector<float>& gen_mel_out, int* out_T_mel) {
+    if (!ctx || !speech_tokens || n_speech_tokens <= 0)
+        return false;
+    if (out_T_mel)
+        *out_T_mel = 0;
     if (n_cfm_steps <= 0)
         n_cfm_steps = 10;
 
@@ -2323,8 +2326,65 @@ extern "C" float* chatterbox_s3gen_synthesize(struct chatterbox_s3gen_context* c
         fprintf(stderr, "\n");
     }
 
+    gen_mel_out = std::move(gen_mel);
+    if (out_T_mel)
+        *out_T_mel = T_mel_gen;
+    return true;
+}
+
+extern "C" float* chatterbox_s3gen_synthesize_mel(struct chatterbox_s3gen_context* ctx, const int32_t* speech_tokens,
+                                                  int n_speech_tokens, const int32_t* prompt_tokens,
+                                                  int n_prompt_tokens, const float* prompt_feat, int prompt_feat_len,
+                                                  const float* spk_embedding, int n_cfm_steps, int* out_T_mel) {
+    if (!ctx || !speech_tokens || n_speech_tokens <= 0 || !out_T_mel)
+        return nullptr;
+    *out_T_mel = 0;
+    std::vector<float> gen_mel;
+    if (!chatterbox_s3gen_compute_gen_mel(ctx, speech_tokens, n_speech_tokens, prompt_tokens, n_prompt_tokens,
+                                          prompt_feat, prompt_feat_len, spk_embedding, n_cfm_steps, gen_mel,
+                                          out_T_mel)) {
+        return nullptr;
+    }
+    float* out = (float*)malloc(gen_mel.size() * sizeof(float));
+    if (!out)
+        return nullptr;
+    std::memcpy(out, gen_mel.data(), gen_mel.size() * sizeof(float));
+    return out;
+}
+
+static void apply_trim_fade(std::vector<float>& wav) {
+    const int n_trim = 24000 / 50; // 20 ms = half of a frame
+    const int fade_len = 2 * n_trim;
+    const int n = std::min<int>((int)wav.size(), fade_len);
+    for (int i = 0; i < n; ++i) {
+        float mul = 0.0f;
+        if (i >= n_trim) {
+            const float x = (float)(i - n_trim) / (float)std::max(1, n_trim - 1);
+            mul = (std::cos((1.0f - x) * (float)M_PI) + 1.0f) * 0.5f;
+        }
+        wav[(size_t)i] *= mul;
+    }
+}
+
+extern "C" float* chatterbox_s3gen_synthesize(struct chatterbox_s3gen_context* ctx, const int32_t* speech_tokens,
+                                              int n_speech_tokens, const int32_t* prompt_tokens, int n_prompt_tokens,
+                                              const float* prompt_feat, int prompt_feat_len, const float* spk_embedding,
+                                              int n_cfm_steps, int* out_n_samples) {
+    if (!ctx || !speech_tokens || n_speech_tokens <= 0 || !out_n_samples)
+        return nullptr;
+    *out_n_samples = 0;
+
+    std::vector<float> gen_mel;
+    int T_mel_gen = 0;
+    if (!chatterbox_s3gen_compute_gen_mel(ctx, speech_tokens, n_speech_tokens, prompt_tokens, n_prompt_tokens,
+                                          prompt_feat, prompt_feat_len, spk_embedding, n_cfm_steps, gen_mel,
+                                          &T_mel_gen)) {
+        return nullptr;
+    }
+
     // 6. Vocoder: mel → waveform
     std::vector<float> wav = hift_vocoder_cpu(ctx, gen_mel, T_mel_gen);
+    apply_trim_fade(wav);
 
     if (ctx->verbosity >= 1) {
         fprintf(stderr, "s3gen: generated %zu samples (%.2f sec @ 24kHz)\n", wav.size(), (float)wav.size() / 24000.0f);
@@ -2341,12 +2401,19 @@ extern "C" float* chatterbox_s3gen_synthesize(struct chatterbox_s3gen_context* c
 
 extern "C" float* chatterbox_s3gen_vocode(struct chatterbox_s3gen_context* ctx, const float* mel_cf, int T_mel,
                                           int* out_n_samples) {
+    return chatterbox_s3gen_vocode_with_source_stft(ctx, mel_cf, T_mel, nullptr, 0, out_n_samples);
+}
+
+extern "C" float* chatterbox_s3gen_vocode_with_source_stft(struct chatterbox_s3gen_context* ctx, const float* mel_cf,
+                                                           int T_mel, const float* source_stft_cf, int T_src,
+                                                           int* out_n_samples) {
     if (!ctx || !mel_cf || T_mel <= 0 || !out_n_samples)
         return nullptr;
     *out_n_samples = 0;
 
     std::vector<float> mel(mel_cf, mel_cf + 80 * T_mel);
-    std::vector<float> wav = hift_vocoder_cpu(ctx, mel, T_mel);
+    std::vector<float> wav = hift_vocoder_cpu(ctx, mel, T_mel, source_stft_cf, T_src);
+    apply_trim_fade(wav);
 
     if (wav.empty())
         return nullptr;
@@ -2359,13 +2426,22 @@ extern "C" float* chatterbox_s3gen_vocode(struct chatterbox_s3gen_context* ctx, 
 extern "C" float* chatterbox_s3gen_vocode_dump(struct chatterbox_s3gen_context* ctx, const float* mel_cf, int T_mel,
                                                int* out_n_samples, const char** stage_names, float** stage_data,
                                                int* stage_sizes, int n_stages) {
+    return chatterbox_s3gen_vocode_dump_with_source_stft(ctx, mel_cf, T_mel, nullptr, 0, out_n_samples, stage_names,
+                                                         stage_data, stage_sizes, n_stages);
+}
+
+extern "C" float* chatterbox_s3gen_vocode_dump_with_source_stft(struct chatterbox_s3gen_context* ctx, const float* mel_cf,
+                                                                int T_mel, const float* source_stft_cf, int T_src,
+                                                                int* out_n_samples, const char** stage_names,
+                                                                float** stage_data, int* stage_sizes, int n_stages) {
     if (!ctx || !mel_cf || T_mel <= 0 || !out_n_samples)
         return nullptr;
     *out_n_samples = 0;
 
     std::map<std::string, std::vector<float>> dump;
     std::vector<float> mel(mel_cf, mel_cf + 80 * T_mel);
-    std::vector<float> wav = hift_vocoder_cpu(ctx, mel, T_mel, &dump);
+    std::vector<float> wav = hift_vocoder_cpu(ctx, mel, T_mel, source_stft_cf, T_src, &dump);
+    apply_trim_fade(wav);
 
     // Fill caller's stage arrays
     for (int i = 0; i < n_stages; i++) {

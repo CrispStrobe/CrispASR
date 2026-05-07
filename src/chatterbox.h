@@ -72,6 +72,24 @@ int32_t* chatterbox_synthesize_tokens(struct chatterbox_context* ctx, const char
 float* chatterbox_synthesize_from_tokens(struct chatterbox_context* ctx, const int32_t* speech_tokens,
                                          int n_speech_tokens, int* out_n_samples);
 
+// Run S3Gen only on pre-generated speech tokens and return the
+// generated mel-spectrogram (channel-first, 80 * T_mel).
+float* chatterbox_synthesize_mel_from_tokens(struct chatterbox_context* ctx, const int32_t* speech_tokens,
+                                             int n_speech_tokens, int* out_T_mel);
+
+// Run only the HiFT vocoder on a channel-first mel tensor (80 * T_mel).
+float* chatterbox_vocode_mel(struct chatterbox_context* ctx, const float* mel_cf, int T_mel, int* out_n_samples);
+
+// Run the HiFT vocoder on a channel-first mel tensor with an externally
+// supplied upstream source STFT (18 * T_src, channel-first).
+float* chatterbox_vocode_mel_with_source_stft(struct chatterbox_context* ctx, const float* mel_cf, int T_mel,
+                                              const float* source_stft_cf, int T_src, int* out_n_samples);
+
+float* chatterbox_vocode_mel_dump_with_source_stft(struct chatterbox_context* ctx, const float* mel_cf, int T_mel,
+                                                   const float* source_stft_cf, int T_src, int* out_n_samples,
+                                                   const char** stage_names, float** stage_data, int* stage_sizes,
+                                                   int n_stages);
+
 // Set voice from a reference WAV path for voice cloning.
 // Requires VE (in T3 GGUF) + S3Tokenizer + CAMPPlus (in S3Gen GGUF).
 // Returns 0 on success.

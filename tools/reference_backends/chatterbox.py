@@ -24,6 +24,9 @@ Usage:
 
 from __future__ import annotations
 
+import os
+import sys
+import inspect
 from pathlib import Path
 from typing import Dict, Set
 
@@ -36,8 +39,25 @@ DEFAULT_STAGES = [
     "s3gen_token_emb",
     "s3gen_encoder_out",
     "s3gen_mel",
+    "hift_source",
+    "hift_source_stft",
+    "voc_conv_pre",
+    "voc_ups_0",
+    "voc_rb_0",
+    "voc_ups_1",
+    "voc_rb_1",
+    "voc_ups_2",
+    "voc_rb_2",
+    "voc_conv_post",
     "hift_pcm",
 ]
+
+DEFAULT_SYN_TEXT = "Hello world."
+DEFAULT_CFG_WEIGHT = 0.5
+DEFAULT_TEMPERATURE = 0.8
+DEFAULT_REPETITION_PENALTY = 1.2
+DEFAULT_MIN_P = 0.05
+DEFAULT_TOP_P = 1.0
 
 
 def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
@@ -47,11 +67,16 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
 
     out: Dict[str, np.ndarray] = {}
 
+    upstream_src = os.environ.get("RESEMBLE_CHATTERBOX_SRC")
+    if upstream_src:
+        src_path = str(Path(upstream_src).resolve())
+        if src_path not in sys.path:
+            sys.path.insert(0, src_path)
+
     # ── Load Chatterbox ──
     from chatterbox.tts import ChatterboxTTS, punc_norm
     from chatterbox.models.s3gen import S3GEN_SR
-    from chatterbox.models.s3tokenizer import S3_SR
-    from chatterbox.models.t3.modules.cond_enc import T3Cond
+    from chatterbox.models.s3tokenizer import S3_SR, drop_invalid_tokens
 
     print(f"  loading Chatterbox from {model_dir}")
     model = ChatterboxTTS.from_local(model_dir, device="cpu")
@@ -60,15 +85,20 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
     assert model.conds is not None, "conds.pt not found in model_dir"
 
     # ── Text tokenization ──
-    test_text = "Hello world."
+    test_text = os.environ.get("CHATTERBOX_SYN_TEXT", DEFAULT_SYN_TEXT)
     text_norm = punc_norm(test_text)
     text_tokens = model.tokenizer.text_to_tokens(text_norm).to("cpu")
+    text_tokens_infer = text_tokens
+    if DEFAULT_CFG_WEIGHT > 0.0:
+        text_tokens_infer = torch.cat([text_tokens_infer, text_tokens_infer], dim=0)
 
     import torch.nn.functional as F
     sot = model.t3.hp.start_text_token
     eot = model.t3.hp.stop_text_token
     text_tokens = F.pad(text_tokens, (1, 0), value=sot)
     text_tokens = F.pad(text_tokens, (0, 1), value=eot)
+    text_tokens_infer = F.pad(text_tokens_infer, (1, 0), value=sot)
+    text_tokens_infer = F.pad(text_tokens_infer, (0, 1), value=eot)
 
     # ── T3 conditioning ──
     t3_cond = model.conds.t3
@@ -77,32 +107,31 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
         out["t3_cond_emb"] = t3_cond_emb.detach().squeeze(0).cpu().float().numpy()
 
     # ── T3 prefill embeddings ──
-    speech_start = model.t3.hp.start_speech_token * torch.ones_like(text_tokens[:, :1])
+    speech_start = model.t3.hp.start_speech_token * torch.ones_like(text_tokens_infer[:, :1])
     embeds, len_cond = model.t3.prepare_input_embeds(
         t3_cond=t3_cond,
-        text_tokens=text_tokens,
+        text_tokens=text_tokens_infer,
         speech_tokens=speech_start,
-        cfg_weight=0.0,  # no CFG for diff testing
+        cfg_weight=DEFAULT_CFG_WEIGHT,
     )
     if "t3_prefill_emb" in stages:
-        out["t3_prefill_emb"] = embeds.detach().squeeze(0).cpu().float().numpy()
+        out["t3_prefill_emb"] = embeds.detach().cpu().float().numpy()
 
-    # ── T3 AR decode (greedy, no CFG for reproducibility) ──
+    # ── T3 AR decode — exact upstream path ──
     with torch.inference_mode():
-        speech_tokens = model.t3.inference_turbo(
+        speech_tokens = model.t3.inference(
             t3_cond=t3_cond,
-            text_tokens=text_tokens,
-            temperature=0.0,  # greedy for reproducibility
-            top_k=1,
-            repetition_penalty=1.0,
-            max_gen_len=max_new_tokens,
+            text_tokens=text_tokens_infer,
+            max_new_tokens=max_new_tokens,
+            temperature=DEFAULT_TEMPERATURE,
+            cfg_weight=DEFAULT_CFG_WEIGHT,
+            repetition_penalty=DEFAULT_REPETITION_PENALTY,
+            min_p=DEFAULT_MIN_P,
+            top_p=DEFAULT_TOP_P,
         )
-    # Remove EOS
-    if speech_tokens.size(1) > 0 and speech_tokens[0, -1] == model.t3.hp.stop_speech_token:
-        speech_tokens = speech_tokens[:, :-1]
-    # Filter to valid range
-    valid_mask = speech_tokens[0] < 6561
-    speech_tokens_valid = speech_tokens[0][valid_mask]
+    speech_tokens = speech_tokens[0]
+    speech_tokens = drop_invalid_tokens(speech_tokens)
+    speech_tokens_valid = speech_tokens[speech_tokens < 6561]
 
     if "t3_speech_tokens" in stages:
         out["t3_speech_tokens"] = speech_tokens_valid.cpu().float().numpy()
@@ -118,22 +147,26 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
     if "s3gen_token_emb" in stages:
         out["s3gen_token_emb"] = token_emb.detach().squeeze(0).cpu().float().numpy()
 
-    # Full S3Gen inference
-    with torch.inference_mode():
-        wav, _ = model.s3gen.inference(
-            speech_tokens=speech_tokens_2d,
-            ref_dict=model.conds.gen,
-            n_cfm_timesteps=10,
-        )
+    s3gen_infer_sig = inspect.signature(model.s3gen.inference)
+    s3gen_flow_sig = inspect.signature(model.s3gen.flow_inference)
+
+    infer_kwargs = {
+        "speech_tokens": speech_tokens_2d,
+        "ref_dict": model.conds.gen,
+    }
+    flow_kwargs = {
+        "speech_tokens": speech_tokens_2d,
+        "ref_dict": model.conds.gen,
+        "finalize": True,
+    }
+    if "n_cfm_timesteps" in s3gen_infer_sig.parameters:
+        infer_kwargs["n_cfm_timesteps"] = 10
+    if "n_cfm_timesteps" in s3gen_flow_sig.parameters:
+        flow_kwargs["n_cfm_timesteps"] = 10
 
     # Extract mel from flow_inference
     with torch.inference_mode():
-        mel = model.s3gen.flow_inference(
-            speech_tokens=speech_tokens_2d,
-            ref_dict=model.conds.gen,
-            n_cfm_timesteps=10,
-            finalize=True,
-        )
+        mel = model.s3gen.flow_inference(**flow_kwargs)
     if "s3gen_mel" in stages:
         # mel shape: (B, 80, T) → (T, 80)
         out["s3gen_mel"] = mel.detach().squeeze(0).permute(1, 0).contiguous().cpu().float().numpy()
@@ -156,14 +189,63 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
     if "s3gen_encoder_out" in stages:
         out["s3gen_encoder_out"] = h.detach().squeeze(0).cpu().float().numpy()
 
-    # ── HiFT vocoder ──
+    # ── HiFT vocoder — exact upstream decode path ──
+    hift = model.s3gen.mel2wav
+    with torch.inference_mode():
+        f0 = hift.f0_predictor(mel)
+        s = hift.f0_upsamp(f0[:, None]).transpose(1, 2)
+        s, _, _ = hift.m_source(s)
+        s = s.transpose(1, 2)
+
+        if "hift_source" in stages:
+            out["hift_source"] = s.detach().squeeze(0).transpose(0, 1).contiguous().cpu().float().numpy()
+
+        s_stft_real, s_stft_imag = hift._stft(s.squeeze(1))
+        s_stft = torch.cat([s_stft_real, s_stft_imag], dim=1)
+        if "hift_source_stft" in stages:
+            out["hift_source_stft"] = s_stft.detach().squeeze(0).permute(1, 0).contiguous().cpu().float().numpy()
+
+        x = hift.conv_pre(mel)
+        if "voc_conv_pre" in stages:
+            out["voc_conv_pre"] = x.detach().squeeze(0).permute(1, 0).contiguous().cpu().float().numpy()
+
+        for i in range(hift.num_upsamples):
+            x = torch.nn.functional.leaky_relu(x, hift.lrelu_slope)
+            x = hift.ups[i](x)
+            if i == hift.num_upsamples - 1:
+                x = hift.reflection_pad(x)
+            if f"voc_ups_{i}" in stages:
+                out[f"voc_ups_{i}"] = x.detach().squeeze(0).permute(1, 0).contiguous().cpu().float().numpy()
+
+            si = hift.source_downs[i](s_stft)
+            si = hift.source_resblocks[i](si)
+            x = x + si
+
+            xs = None
+            for j in range(hift.num_kernels):
+                rb = hift.resblocks[i * hift.num_kernels + j](x)
+                xs = rb if xs is None else xs + rb
+            x = xs / hift.num_kernels
+            if f"voc_rb_{i}" in stages:
+                out[f"voc_rb_{i}"] = x.detach().squeeze(0).permute(1, 0).contiguous().cpu().float().numpy()
+
+        x = torch.nn.functional.leaky_relu(x)
+        x = hift.conv_post(x)
+        if "voc_conv_post" in stages:
+            out["voc_conv_post"] = x.detach().squeeze(0).permute(1, 0).contiguous().cpu().float().numpy()
+
+        magnitude = torch.exp(x[:, :hift.istft_params["n_fft"] // 2 + 1, :])
+        phase = torch.sin(x[:, hift.istft_params["n_fft"] // 2 + 1:, :])
+        wav = hift._istft(magnitude, phase)
+        wav = torch.clamp(wav, -hift.audio_limit, hift.audio_limit)
+        trim_fade = model.s3gen.trim_fade.to(device=wav.device, dtype=wav.dtype)
+        wav = wav.clone()
+        wav[:, :trim_fade.numel()] *= trim_fade
+
     if "hift_pcm" in stages:
         out["hift_pcm"] = wav.detach().squeeze(0).cpu().float().numpy()
 
-    # F0 prediction
     if "hift_f0" in stages:
-        with torch.inference_mode():
-            f0 = model.s3gen.mel2wav.f0_predictor(mel)
         out["hift_f0"] = f0.detach().squeeze(0).cpu().float().numpy()
 
     return out

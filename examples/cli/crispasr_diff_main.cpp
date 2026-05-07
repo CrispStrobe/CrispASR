@@ -54,6 +54,7 @@
 #include "mimo_asr.h"
 #include "mimo_tokenizer.h"
 #include "orpheus_snac.h"
+#include "chatterbox.h"
 
 #include "common-crispasr.h"
 
@@ -64,6 +65,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <sys/stat.h>
 #include <string>
 #include <vector>
 
@@ -426,6 +428,189 @@ static StageResult qwen3_tts_talker_logits_r(qwen3_tts_context* ctx, const float
     return r;
 }
 
+// ---- chatterbox ----
+
+static StageResult chatterbox_tokens_r(chatterbox_context* ctx, const char* text) {
+    StageResult r;
+    int n = 0;
+    int32_t* tokens = chatterbox_synthesize_tokens(ctx, text, &n);
+    if (!tokens) {
+        r.note = "chatterbox_synthesize_tokens returned null";
+        return r;
+    }
+    r.shape = {n};
+    r.data.resize((size_t)n);
+    for (int i = 0; i < n; ++i)
+        r.data[(size_t)i] = (float)tokens[i];
+    chatterbox_tokens_free(tokens);
+    r.ok = true;
+    return r;
+}
+
+static StageResult chatterbox_mel_r(chatterbox_context* ctx, const char* text) {
+    StageResult r;
+    int T_mel = 0;
+    float* mel_cf = chatterbox_synthesize_mel(ctx, text, &T_mel);
+    if (!mel_cf) {
+        r.note = "chatterbox_synthesize_mel returned null";
+        return r;
+    }
+    r.shape = {T_mel, 80};
+    r.data.resize((size_t)T_mel * 80);
+    for (int t = 0; t < T_mel; ++t) {
+        for (int c = 0; c < 80; ++c) {
+            r.data[(size_t)t * 80 + c] = mel_cf[(size_t)c * T_mel + t];
+        }
+    }
+    free(mel_cf);
+    r.ok = true;
+    return r;
+}
+
+static StageResult chatterbox_mel_from_tokens_r(chatterbox_context* ctx, const int32_t* tokens, int n_tokens) {
+    StageResult r;
+    int T_mel = 0;
+    float* mel_cf = chatterbox_synthesize_mel_from_tokens(ctx, tokens, n_tokens, &T_mel);
+    if (!mel_cf) {
+        r.note = "chatterbox_synthesize_mel_from_tokens returned null";
+        return r;
+    }
+    r.shape = {T_mel, 80};
+    r.data.resize((size_t)T_mel * 80);
+    for (int t = 0; t < T_mel; ++t) {
+        for (int c = 0; c < 80; ++c) {
+            r.data[(size_t)t * 80 + c] = mel_cf[(size_t)c * T_mel + t];
+        }
+    }
+    free(mel_cf);
+    r.ok = true;
+    return r;
+}
+
+static StageResult chatterbox_pcm_r(chatterbox_context* ctx, const char* text) {
+    StageResult r;
+    int n = 0;
+    float* pcm = chatterbox_synthesize(ctx, text, &n);
+    if (!pcm) {
+        r.note = "chatterbox_synthesize returned null";
+        return r;
+    }
+    r.shape = {n};
+    r.data.assign(pcm, pcm + n);
+    chatterbox_pcm_free(pcm);
+    r.ok = true;
+    return r;
+}
+
+static StageResult chatterbox_pcm_from_tokens_r(chatterbox_context* ctx, const int32_t* tokens, int n_tokens) {
+    StageResult r;
+    int n = 0;
+    float* pcm = chatterbox_synthesize_from_tokens(ctx, tokens, n_tokens, &n);
+    if (!pcm) {
+        r.note = "chatterbox_synthesize_from_tokens returned null";
+        return r;
+    }
+    r.shape = {n};
+    r.data.assign(pcm, pcm + n);
+    chatterbox_pcm_free(pcm);
+    r.ok = true;
+    return r;
+}
+
+static StageResult chatterbox_vocode_mel_with_source_stft_r(chatterbox_context* ctx, const float* mel_cf, int T_mel,
+                                                            const float* source_stft_cf, int T_src);
+
+static StageResult chatterbox_vocode_mel_r(chatterbox_context* ctx, const float* mel_cf, int T_mel) {
+    return chatterbox_vocode_mel_with_source_stft_r(ctx, mel_cf, T_mel, nullptr, 0);
+}
+
+static StageResult chatterbox_vocode_mel_with_source_stft_r(chatterbox_context* ctx, const float* mel_cf, int T_mel,
+                                                            const float* source_stft_cf, int T_src) {
+    StageResult r;
+    int n = 0;
+    float* pcm = chatterbox_vocode_mel_with_source_stft(ctx, mel_cf, T_mel, source_stft_cf, T_src, &n);
+    if (!pcm) {
+        r.note = "chatterbox_vocode_mel_with_source_stft returned null";
+        return r;
+    }
+    r.shape = {n};
+    r.data.assign(pcm, pcm + n);
+    chatterbox_pcm_free(pcm);
+    r.ok = true;
+    return r;
+}
+
+static StageResult chatterbox_vocode_dump_stage_r(chatterbox_context* ctx, const float* mel_cf, int T_mel,
+                                                  const float* source_stft_cf, int T_src, const char* stage_name,
+                                                  int row_width) {
+    StageResult r;
+    int n = 0;
+    const char* stage_names[1] = {stage_name};
+    float* stage_data[1] = {nullptr};
+    int stage_sizes[1] = {0};
+    float* pcm = chatterbox_vocode_mel_dump_with_source_stft(ctx, mel_cf, T_mel, source_stft_cf, T_src, &n, stage_names,
+                                                             stage_data, stage_sizes, 1);
+    if (!pcm) {
+        r.note = "chatterbox_vocode_mel_dump_with_source_stft returned null";
+        return r;
+    }
+    chatterbox_pcm_free(pcm);
+    if (!stage_data[0] || stage_sizes[0] <= 0) {
+        r.note = "requested stage missing from dump";
+        return r;
+    }
+    const int n_rows = row_width > 0 ? (stage_sizes[0] / row_width) : stage_sizes[0];
+    if (row_width > 0 && n_rows * row_width != stage_sizes[0]) {
+        free(stage_data[0]);
+        r.note = "stage size is not divisible by row width";
+        return r;
+    }
+    r.shape = row_width > 0 ? std::vector<int>{n_rows, row_width} : std::vector<int>{stage_sizes[0]};
+    if (row_width > 0) {
+        r.data.resize((size_t)stage_sizes[0]);
+        for (int t = 0; t < n_rows; ++t) {
+            for (int c = 0; c < row_width; ++c) {
+                r.data[(size_t)t * row_width + (size_t)c] = stage_data[0][(size_t)c * n_rows + (size_t)t];
+            }
+        }
+    } else {
+        r.data.assign(stage_data[0], stage_data[0] + stage_sizes[0]);
+    }
+    free(stage_data[0]);
+    r.ok = true;
+    return r;
+}
+
+static bool file_exists(const std::string& path) {
+    struct stat st;
+    return stat(path.c_str(), &st) == 0;
+}
+
+static std::string chatterbox_find_s3gen(const std::string& model_path) {
+    const bool turbo_like = model_path.find("turbo") != std::string::npos ||
+                            model_path.find("kartoffel") != std::string::npos;
+    const char* const* candidates = nullptr;
+    static const char* turbo_candidates[] = {
+        "chatterbox-turbo-s3gen-f16.gguf",
+        nullptr,
+    };
+    static const char* base_candidates[] = {
+        "chatterbox-s3gen-q8_0.gguf",
+        "chatterbox-s3gen-f16.gguf",
+        nullptr,
+    };
+    candidates = turbo_like ? turbo_candidates : base_candidates;
+
+    const size_t sep = model_path.find_last_of("/\\");
+    const std::string dir = (sep == std::string::npos) ? "." : model_path.substr(0, sep);
+    for (const char* const* it = candidates; *it; ++it) {
+        const std::string path = dir + "/" + *it;
+        if (file_exists(path))
+            return path;
+    }
+    return "";
+}
+
 } // namespace
 
 
@@ -447,6 +632,56 @@ static void print_row(const char* name, const crispasr_diff::Report& r, float co
            shape_str.c_str(), r.cos_min, r.cos_mean, r.max_abs, r.rms, *extra ? "  " : "", extra);
 }
 
+static crispasr_diff::Report compare_with_row_width(const crispasr_diff::Ref& ref, const std::string& name,
+                                                    const float* data, size_t n_elem, int row_w) {
+    crispasr_diff::Report r;
+    auto pair = ref.get_f32(name);
+    if (!pair.first || pair.second == 0 || row_w <= 0)
+        return r;
+    r.found = true;
+    r.shape = ref.shape(name);
+    const size_t n = std::min(n_elem, pair.second);
+    r.n_elem = n;
+    if (n == 0)
+        return r;
+    double sum_abs = 0.0, sum_sq = 0.0;
+    for (size_t i = 0; i < n; ++i) {
+        const float d = data[i] - pair.first[i];
+        const float ad = std::fabs(d);
+        if (ad > r.max_abs)
+            r.max_abs = ad;
+        sum_abs += ad;
+        sum_sq += (double)d * (double)d;
+    }
+    r.mean_abs = (float)(sum_abs / n);
+    r.rms = (float)std::sqrt(sum_sq / n);
+    const size_t n_rows = n / (size_t)row_w;
+    r.cos_min = 1.0f;
+    double cos_sum = 0.0;
+    size_t cos_rows = 0;
+    for (size_t i = 0; i < n_rows; ++i) {
+        double dot = 0.0, na = 0.0, nb = 0.0;
+        for (int k = 0; k < row_w; ++k) {
+            const float a = data[i * (size_t)row_w + (size_t)k];
+            const float b = pair.first[i * (size_t)row_w + (size_t)k];
+            dot += (double)a * b;
+            na += (double)a * a;
+            nb += (double)b * b;
+        }
+        const double denom = std::sqrt(na) * std::sqrt(nb);
+        if (denom > 1e-12) {
+            const float cs = (float)(dot / denom);
+            if (cs < r.cos_min)
+                r.cos_min = cs;
+            cos_sum += cs;
+            cos_rows++;
+        }
+    }
+    if (cos_rows > 0)
+        r.cos_mean = (float)(cos_sum / cos_rows);
+    return r;
+}
+
 
 int main(int argc, char** argv) {
     if (argc < 5) {
@@ -455,7 +690,7 @@ int main(int argc, char** argv) {
                 "\n"
                 "  backend       one of: voxtral, voxtral4b, qwen3, qwen3-tts, qwen3-tts-codec, kokoro, granite, "
                 "granite-4.1, "
-                "granite-nle, parakeet, "
+                "granite-nle, parakeet, chatterbox, "
                 "canary, cohere, gemma4, mimo-tokenizer, mimo-asr, orpheus\n"
                 "  model.gguf    crispasr-compatible model weights\n"
                 "  reference.gguf  archive produced by tools/dump_reference.py\n"
@@ -559,6 +794,157 @@ int main(int argc, char** argv) {
             n_fail++;
         }
         voxtral4b_free(ctx);
+    } else if (backend_name == "chatterbox") {
+        constexpr float CHATTERBOX_MEAN_THRESHOLD = 0.95f;
+        auto print_row_mean = [&](const char* name, const crispasr_diff::Report& r, float cos_threshold,
+                                  const char* extra = "") {
+            const bool pass = r.found && r.cos_mean >= cos_threshold;
+            const char* tag = r.found ? (pass ? "[PASS]" : "[FAIL]") : "[SKIP]";
+            std::string shape_str = "[";
+            for (size_t i = 0; i < r.shape.size(); i++) {
+                shape_str += std::to_string(r.shape[i]);
+                if (i + 1 < r.shape.size())
+                    shape_str += ",";
+            }
+            shape_str += "]";
+            if (!r.found) {
+                printf("%s %-22s %s  (reference not in archive)%s%s\n", tag, name, shape_str.c_str(),
+                       *extra ? "  " : "", extra);
+                return pass;
+            }
+            printf("%s %-22s shape=%-16s cos_min=%.6f  cos_mean=%.6f  max_abs=%.2e  rms=%.2e%s%s\n", tag, name,
+                   shape_str.c_str(), r.cos_min, r.cos_mean, r.max_abs, r.rms, *extra ? "  " : "", extra);
+            return pass;
+        };
+        auto record_mean = [&](const crispasr_diff::Report& r, float cos_threshold) {
+            if (!r.found) {
+                n_skip++;
+            } else if (r.cos_mean >= cos_threshold) {
+                n_pass++;
+            } else {
+                n_fail++;
+            }
+        };
+
+        auto cp = chatterbox_context_default_params();
+        cp.n_threads = 4;
+        cp.verbosity = 0;
+        cp.use_gpu = false;
+        chatterbox_context* ctx = chatterbox_init_from_file(model_path.c_str(), cp);
+        if (!ctx) {
+            fprintf(stderr, "failed to load chatterbox model\n");
+            return 4;
+        }
+        const std::string s3gen_path = chatterbox_find_s3gen(model_path);
+        if (s3gen_path.empty() || chatterbox_set_s3gen_path(ctx, s3gen_path.c_str()) != 0) {
+            fprintf(stderr, "failed to load chatterbox companion S3Gen model\n");
+            chatterbox_free(ctx);
+            return 4;
+        }
+        auto ref_tok_pair = ref.get_f32("t3_speech_tokens");
+        if (!ref_tok_pair.first || ref_tok_pair.second == 0) {
+            printf("[SKIP] t3_speech_tokens       exact upstream T3 path is stochastic; replaying downstream stages "
+                   "from reference tokens requires t3_speech_tokens in the archive\n");
+            n_skip++;
+        } else {
+            std::vector<int32_t> ref_tokens(ref_tok_pair.second);
+            for (size_t i = 0; i < ref_tok_pair.second; ++i)
+                ref_tokens[i] = (int32_t)std::lrint(ref_tok_pair.first[i]);
+
+            printf("[SKIP] t3_speech_tokens       exact upstream T3 path is stochastic; comparing S3Gen/HiFT using "
+                   "reference tokens from the official path\n");
+            n_skip++;
+
+            auto mel_r = chatterbox_mel_from_tokens_r(ctx, ref_tokens.data(), (int)ref_tokens.size());
+            if (mel_r.ok) {
+                auto rep = compare_with_row_width(ref, "s3gen_mel", mel_r.data.data(), mel_r.data.size(), 80);
+                print_row_mean("s3gen_mel", rep, CHATTERBOX_MEAN_THRESHOLD, "criterion=cos_mean>=0.95");
+                record_mean(rep, CHATTERBOX_MEAN_THRESHOLD);
+            } else {
+                printf("[ERR ] s3gen_mel              %s\n", mel_r.note.c_str());
+                n_fail++;
+            }
+
+            printf("[SKIP] hift_pcm               compounded token->mel + mel->wave drift; use s3gen_mel and "
+                   "hift_pcm(ref_mel) for apples-to-apples parity\n");
+            n_skip++;
+
+            auto ref_mel_pair = ref.get_f32("s3gen_mel");
+            auto ref_mel_shape = ref.shape("s3gen_mel");
+            if (ref_mel_pair.first && ref_mel_shape.size() >= 2) {
+                const int T_mel = (int)ref_mel_shape[1];
+                const int C_mel = (int)ref_mel_shape[0];
+                if (C_mel == 80) {
+                    std::vector<float> mel_cf((size_t)T_mel * 80);
+                    for (int t = 0; t < T_mel; ++t) {
+                        for (int c = 0; c < 80; ++c) {
+                            mel_cf[(size_t)c * T_mel + (size_t)t] = ref_mel_pair.first[(size_t)t * 80 + (size_t)c];
+                        }
+                    }
+
+                    const float* ref_source_stft = nullptr;
+                    int T_src = 0;
+                    auto ref_source_pair = ref.get_f32("hift_source_stft");
+                    auto ref_source_shape = ref.shape("hift_source_stft");
+                    if (ref_source_pair.first && ref_source_shape.size() >= 2 && (int)ref_source_shape[0] == 18) {
+                        ref_source_stft = ref_source_pair.first;
+                        T_src = (int)ref_source_shape[1];
+                    }
+
+                    if (ref_source_stft && T_src > 0) {
+                        struct VocStage {
+                            const char* name;
+                            int row_width;
+                        };
+                        static const VocStage voc_stages[] = {
+                            {"voc_conv_pre", 512},
+                            {"voc_ups_0", 256},
+                            {"voc_rb_0", 256},
+                            {"voc_ups_1", 128},
+                            {"voc_rb_1", 128},
+                            {"voc_ups_2", 64},
+                            {"voc_rb_2", 64},
+                            {"voc_conv_post", 18},
+                        };
+                        for (const auto& s : voc_stages) {
+                            if (ref.shape(s.name).empty()) {
+                                printf("[SKIP] %-20s missing from reference archive\n", s.name);
+                                n_skip++;
+                                continue;
+                            }
+                            auto stage_r = chatterbox_vocode_dump_stage_r(ctx, mel_cf.data(), T_mel, ref_source_stft,
+                                                                          T_src, s.name, s.row_width);
+                            if (!stage_r.ok) {
+                                printf("[ERR ] %-20s %s\n", s.name, stage_r.note.c_str());
+                                n_fail++;
+                                continue;
+                            }
+                            auto rep = compare_with_row_width(ref, s.name, stage_r.data.data(), stage_r.data.size(),
+                                                              s.row_width);
+                            print_row_mean(s.name, rep, CHATTERBOX_MEAN_THRESHOLD, "criterion=cos_mean>=0.95");
+                            record_mean(rep, CHATTERBOX_MEAN_THRESHOLD);
+                        }
+                    } else {
+                        printf("[SKIP] hift_source_stft      not in reference archive; re-dump with latest "
+                               "tools/reference_backends/chatterbox.py\n");
+                        n_skip++;
+                    }
+
+                    auto voc_r = chatterbox_vocode_mel_with_source_stft_r(ctx, mel_cf.data(), T_mel, ref_source_stft,
+                                                                          T_src);
+                    if (voc_r.ok) {
+                        auto rep = ref.compare("hift_pcm", voc_r.data.data(), voc_r.data.size());
+                        print_row_mean("hift_pcm(ref_mel)", rep, CHATTERBOX_MEAN_THRESHOLD,
+                                       "criterion=cos_mean>=0.95");
+                        record_mean(rep, CHATTERBOX_MEAN_THRESHOLD);
+                    } else {
+                        printf("[ERR ] hift_pcm(ref_mel)      %s\n", voc_r.note.c_str());
+                        n_fail++;
+                    }
+                }
+            }
+        }
+        chatterbox_free(ctx);
     } else if (backend_name == "qwen3") {
         auto cp = qwen3_asr_context_default_params();
         cp.n_threads = 4;

@@ -1928,30 +1928,32 @@ static std::vector<float> synthesize_mel_internal(chatterbox_context* ctx, const
         spk_emb = se_buf.data();
     }
 
-    // Run S3Gen to get mel (this calls the encoder + CFM denoiser)
-    // We need to refactor s3gen to return mel instead of PCM, but for now
-    // we'll use the existing synthesize and ignore the PCM, re-running encoder+CFM.
-    // TODO: refactor to avoid double computation
-    int n_samples = 0;
-    float* pcm = chatterbox_s3gen_synthesize(ctx->s3gen_ctx, speech_tokens, n_tokens, prompt_tokens, n_prompt,
-                                             prompt_feat, prompt_feat_len, spk_emb, ctx->params.cfm_steps, &n_samples);
-
+    float* mel_cf = chatterbox_s3gen_synthesize_mel(ctx->s3gen_ctx, speech_tokens, n_tokens, prompt_tokens, n_prompt,
+                                                    prompt_feat, prompt_feat_len, spk_emb, ctx->params.cfm_steps,
+                                                    out_T_mel);
     chatterbox_tokens_free(speech_tokens);
-    if (pcm)
-        chatterbox_s3gen_pcm_free(pcm);
-
-    // For now, return empty — the proper implementation needs S3Gen
-    // to expose the mel before vocoding.
-    return {};
+    if (!mel_cf || *out_T_mel <= 0) {
+        if (mel_cf)
+            chatterbox_s3gen_pcm_free(mel_cf);
+        return {};
+    }
+    std::vector<float> mel(mel_cf, mel_cf + (size_t)80 * (size_t)(*out_T_mel));
+    chatterbox_s3gen_pcm_free(mel_cf);
+    return mel;
 }
 
 extern "C" float* chatterbox_synthesize_mel(struct chatterbox_context* ctx, const char* text, int* out_T_mel) {
     if (!ctx || !text || !out_T_mel)
         return nullptr;
     *out_T_mel = 0;
-    // TODO: implement properly by having S3Gen return mel
-    fprintf(stderr, "chatterbox: synthesize_mel not yet fully implemented\n");
-    return nullptr;
+    std::vector<float> mel = synthesize_mel_internal(ctx, text, out_T_mel);
+    if (mel.empty() || *out_T_mel <= 0)
+        return nullptr;
+    float* out = (float*)malloc(mel.size() * sizeof(float));
+    if (!out)
+        return nullptr;
+    std::memcpy(out, mel.data(), mel.size() * sizeof(float));
+    return out;
 }
 
 extern "C" float* chatterbox_synthesize(struct chatterbox_context* ctx, const char* text, int* out_n_samples) {
@@ -2053,6 +2055,78 @@ extern "C" float* chatterbox_synthesize_from_tokens(struct chatterbox_context* c
     }
     return chatterbox_s3gen_synthesize(ctx->s3gen_ctx, speech_tokens, n_speech_tokens, prompt_tokens, n_prompt,
                                        prompt_feat, prompt_feat_len, spk_emb, ctx->params.cfm_steps, out_n_samples);
+}
+
+extern "C" float* chatterbox_synthesize_mel_from_tokens(struct chatterbox_context* ctx, const int32_t* speech_tokens,
+                                                        int n_speech_tokens, int* out_T_mel) {
+    if (!ctx || !speech_tokens || n_speech_tokens <= 0 || !out_T_mel)
+        return nullptr;
+    *out_T_mel = 0;
+    if (!ctx->s3gen_ctx) {
+        fprintf(stderr, "chatterbox: S3Gen not loaded.\n");
+        return nullptr;
+    }
+    const int32_t* prompt_tokens = nullptr;
+    int n_prompt = 0;
+    const float* prompt_feat = nullptr;
+    int prompt_feat_len = 0;
+    const float* spk_emb = nullptr;
+    std::vector<int32_t> pt_buf;
+    std::vector<float> pf_buf;
+    std::vector<float> se_buf;
+    if (ctx->conds.gen_prompt_token) {
+        n_prompt = (int)ctx->conds.gen_prompt_token->ne[0];
+        pt_buf.resize(n_prompt);
+        ggml_backend_tensor_get(ctx->conds.gen_prompt_token, pt_buf.data(), 0, n_prompt * sizeof(int32_t));
+        prompt_tokens = pt_buf.data();
+    }
+    if (ctx->conds.gen_prompt_feat) {
+        prompt_feat_len = (int)ctx->conds.gen_prompt_feat->ne[1];
+        pf_buf.resize(prompt_feat_len * 80);
+        ggml_backend_tensor_get(ctx->conds.gen_prompt_feat, pf_buf.data(), 0, pf_buf.size() * sizeof(float));
+        prompt_feat = pf_buf.data();
+    }
+    if (ctx->conds.gen_embedding) {
+        se_buf.resize(192);
+        ggml_backend_tensor_get(ctx->conds.gen_embedding, se_buf.data(), 0, 192 * sizeof(float));
+        spk_emb = se_buf.data();
+    }
+    return chatterbox_s3gen_synthesize_mel(ctx->s3gen_ctx, speech_tokens, n_speech_tokens, prompt_tokens, n_prompt,
+                                           prompt_feat, prompt_feat_len, spk_emb, ctx->params.cfm_steps, out_T_mel);
+}
+
+extern "C" float* chatterbox_vocode_mel(struct chatterbox_context* ctx, const float* mel_cf, int T_mel,
+                                        int* out_n_samples) {
+    return chatterbox_vocode_mel_with_source_stft(ctx, mel_cf, T_mel, nullptr, 0, out_n_samples);
+}
+
+extern "C" float* chatterbox_vocode_mel_with_source_stft(struct chatterbox_context* ctx, const float* mel_cf, int T_mel,
+                                                         const float* source_stft_cf, int T_src,
+                                                         int* out_n_samples) {
+    if (!ctx || !mel_cf || T_mel <= 0 || !out_n_samples)
+        return nullptr;
+    *out_n_samples = 0;
+    if (!ctx->s3gen_ctx) {
+        fprintf(stderr, "chatterbox: S3Gen not loaded.\n");
+        return nullptr;
+    }
+    return chatterbox_s3gen_vocode_with_source_stft(ctx->s3gen_ctx, mel_cf, T_mel, source_stft_cf, T_src,
+                                                    out_n_samples);
+}
+
+extern "C" float* chatterbox_vocode_mel_dump_with_source_stft(struct chatterbox_context* ctx, const float* mel_cf,
+                                                              int T_mel, const float* source_stft_cf, int T_src,
+                                                              int* out_n_samples, const char** stage_names,
+                                                              float** stage_data, int* stage_sizes, int n_stages) {
+    if (!ctx || !mel_cf || T_mel <= 0 || !out_n_samples)
+        return nullptr;
+    *out_n_samples = 0;
+    if (!ctx->s3gen_ctx) {
+        fprintf(stderr, "chatterbox: S3Gen not loaded.\n");
+        return nullptr;
+    }
+    return chatterbox_s3gen_vocode_dump_with_source_stft(ctx->s3gen_ctx, mel_cf, T_mel, source_stft_cf, T_src,
+                                                         out_n_samples, stage_names, stage_data, stage_sizes, n_stages);
 }
 
 extern "C" int chatterbox_set_voice_from_wav(struct chatterbox_context* ctx, const char* wav_path) {
