@@ -131,6 +131,45 @@ static void unary_cuda(const T * x, T * dst, const int k, cudaStream_t stream) {
     unary_op_kernel<op><<<num_blocks, CUDA_NEG_BLOCK_SIZE, 0, stream>>>(x, dst, k);
 }
 
+#ifdef GGML_CUDA_CRISPASR_UNARY_ROWS
+// CrispASR patch (issue #81 A1000 Phase 1): strided-rows variant.
+// The original kernel above treats the input as a flat array; relaxing the
+// is_contiguous() guard alone produces wrong output for views with non-
+// canonical row stride (e.g. the GLU gate half of a (2*d, T) matmul output).
+// This kernel iterates by destination element and decomposes the linear
+// index into a (i0, i1, i2, i3) coordinate, then loads from src via per-dim
+// strides. dst is always contiguous (caller-allocated). Used only when the
+// source is row-contiguous but not fully contiguous.
+template <float (*op)(float), typename T>
+static __global__ void unary_op_kernel_strided(
+        const char * __restrict__ x_bytes, T * __restrict__ dst,
+        const int64_t k,
+        const int64_t ne00, const int64_t ne01, const int64_t ne02,
+        const int64_t nb01, const int64_t nb02, const int64_t nb03) {
+    const int64_t i = (int64_t)blockDim.x * blockIdx.x + threadIdx.x;
+    if (i >= k) {
+        return;
+    }
+    const int64_t i00 =  i                                    % ne00;
+    const int64_t i01 = (i / ne00)                            % ne01;
+    const int64_t i02 = (i / (ne00 * ne01))                   % ne02;
+    const int64_t i03 =  i / (ne00 * ne01 * ne02);
+    const T * x = (const T *)(x_bytes + i03 * nb03 + i02 * nb02 + i01 * nb01);
+    dst[i] = (T)op((float)x[i00]);
+}
+
+template <float (*op)(float), typename T>
+static void unary_strided_cuda(
+        const char * x_bytes, T * dst, const int64_t k,
+        const int64_t ne00, const int64_t ne01, const int64_t ne02,
+        const int64_t nb01, const int64_t nb02, const int64_t nb03,
+        cudaStream_t stream) {
+    const int64_t num_blocks = (k + CUDA_NEG_BLOCK_SIZE - 1) / CUDA_NEG_BLOCK_SIZE;
+    unary_op_kernel_strided<op, T><<<num_blocks, CUDA_NEG_BLOCK_SIZE, 0, stream>>>(
+        x_bytes, dst, k, ne00, ne01, ne02, nb01, nb02, nb03);
+}
+#endif // GGML_CUDA_CRISPASR_UNARY_ROWS
+
 template <float (*op)(float)>
 void ggml_cuda_op_unary(ggml_backend_cuda_context & ctx, ggml_tensor * dst) {
     const ggml_tensor * src0 = dst->src[0];
@@ -138,17 +177,49 @@ void ggml_cuda_op_unary(ggml_backend_cuda_context & ctx, ggml_tensor * dst) {
     void * dst_d = dst->data;
     cudaStream_t stream = ctx.stream();
 
+#ifdef GGML_CUDA_CRISPASR_UNARY_ROWS
+    // CrispASR patch (issue #81 A1000 Phase 1): accept row-contiguous src.
+    GGML_ASSERT(ggml_is_contiguous(dst));
+    GGML_ASSERT(ggml_is_contiguous_rows(src0));
+#else
     GGML_ASSERT(ggml_is_contiguous(src0));
+#endif
 
     GGML_ASSERT(src0->type == GGML_TYPE_F32 || src0->type == GGML_TYPE_F16);
     GGML_ASSERT( dst->type == GGML_TYPE_F32 ||  dst->type == GGML_TYPE_F16);
     GGML_ASSERT(src0->type == dst->type);
 
+#ifdef GGML_CUDA_CRISPASR_UNARY_ROWS
+    // CrispASR patch (issue #81 A1000 Phase 1): pick the strided kernel when
+    // the source row stride is non-canonical. The fully-contiguous path stays
+    // bit-identical (single linear-index kernel, no extra arithmetic).
+    if (ggml_is_contiguous(src0)) {
+        if (src0->type == GGML_TYPE_F16) {
+            unary_cuda<op>((const half *)src0_d, (half *)dst_d, ggml_nelements(dst), stream);
+        } else {
+            unary_cuda<op>((const float *)src0_d, (float *)dst_d, ggml_nelements(dst), stream);
+        }
+    } else {
+        const int64_t k = ggml_nelements(dst);
+        if (src0->type == GGML_TYPE_F16) {
+            unary_strided_cuda<op, half>(
+                (const char *)src0_d, (half *)dst_d, k,
+                src0->ne[0], src0->ne[1], src0->ne[2],
+                src0->nb[1], src0->nb[2], src0->nb[3], stream);
+        } else {
+            unary_strided_cuda<op, float>(
+                (const char *)src0_d, (float *)dst_d, k,
+                src0->ne[0], src0->ne[1], src0->ne[2],
+                src0->nb[1], src0->nb[2], src0->nb[3], stream);
+        }
+    }
+#else
     if (src0->type == GGML_TYPE_F16) {
         unary_cuda<op>((const half *)src0_d, (half *)dst_d, ggml_nelements(src0), stream);
     } else {
         unary_cuda<op>((const float *)src0_d, (float *)dst_d, ggml_nelements(src0), stream);
     }
+#endif
 }
 
 void ggml_cuda_op_abs(ggml_backend_cuda_context & ctx, ggml_tensor * dst) {

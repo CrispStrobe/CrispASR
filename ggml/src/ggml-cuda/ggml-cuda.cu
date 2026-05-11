@@ -4882,9 +4882,18 @@ static bool ggml_backend_cuda_device_supports_op(ggml_backend_dev_t dev, const g
                 case GGML_UNARY_OP_CEIL:
                 case GGML_UNARY_OP_ROUND:
                 case GGML_UNARY_OP_TRUNC:
+#ifdef GGML_CUDA_CRISPASR_UNARY_ROWS
+                    // CrispASR patch (issue #81 A1000 Phase 1): pair with
+                    // strided kernel in unary.cu. Matches the TODO directly
+                    // above. Keeps FastConformer's GLU gate (strided view of
+                    // a (2*d, T) matmul output) on CUDA instead of falling
+                    // back to CPU and forcing 24 H<->D round-trips per chunk.
+                    return ggml_is_contiguous_rows(op->src[0]);
+#else
                     // TODO: should become:
                     //return ggml_is_contiguous_rows(op->src[0]);
                     return ggml_is_contiguous(op->src[0]);
+#endif
                 default:
                     return false;
             }

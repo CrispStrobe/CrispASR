@@ -208,6 +208,10 @@ option(GGML_CUDA_FA                         "ggml: compile ggml FlashAttention C
 option(GGML_CUDA_FA_ALL_QUANTS              "ggml: compile all quants for FlashAttention"     OFF)
 option(GGML_CUDA_GRAPHS                     "ggml: use CUDA graphs (llama.cpp only)"          ${GGML_CUDA_GRAPHS_DEFAULT})
 option(GGML_CUDA_NCCL                       "ggml: use NVIDIA Collective Comm. Library"       ON)
+# CrispASR knobs (issue #81, A1000 Phase 1). Default OFF for safety;
+# each is independently A/B-tested in PERFORMANCE.md "A1000 Ampere CUDA A/B".
+option(GGML_CUDA_CRISPASR_UNARY_ROWS        "CrispASR: allow strided-row unary ops on CUDA"   OFF)
+option(GGML_CUDA_CRISPASR_FA_PERHEAD_MASK   "CrispASR: allow per-head mask in flash-attn-ext" OFF)
 set   (GGML_CUDA_COMPRESSION_MODE "size" CACHE STRING
                                             "ggml: cuda link binary compression mode; requires cuda 12.8+")
 set_property(CACHE GGML_CUDA_COMPRESSION_MODE PROPERTY STRINGS "none;speed;balance;size")
