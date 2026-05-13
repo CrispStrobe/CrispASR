@@ -39,8 +39,45 @@ import shutil
 import subprocess
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
+
+# ── Unbuffered I/O + step checkpointing ──────────────────────────────
+# Kaggle persists logs only at cell/process end, so a hang past stdout
+# buffer fill is invisible until termination. Line-buffer stdio +
+# write a per-step JSONL to /kaggle/working/progress.jsonl so even
+# when the run hangs we can fetch progress.jsonl (tiny file) and see
+# the last completed step. Mirrors the helper in
+# tools/kaggle/crispasr-regression.py.
+os.environ["PYTHONUNBUFFERED"] = "1"
+try:
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr.reconfigure(line_buffering=True)
+except (AttributeError, ValueError):
+    pass
+
+_PROGRESS_PATH = Path("/kaggle/working/progress.jsonl")
+_T0 = time.time()
+
+
+def step(name: str, **extra) -> None:
+    rec = {
+        "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "elapsed_s": round(time.time() - _T0, 2),
+        "step": name,
+        **extra,
+    }
+    try:
+        _PROGRESS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with _PROGRESS_PATH.open("a") as f:
+            f.write(json.dumps(rec) + "\n")
+    except Exception:
+        pass
+    print(f"[step {rec['elapsed_s']:>7.1f}s] {name}" +
+          (f"  {extra}" if extra else ""), flush=True)
+
+
+step("script.start")
 
 WORK = Path("/kaggle/working")
 REPO = WORK / "CrispASR"
@@ -62,7 +99,7 @@ POST_SHA = "d758fe69"    # "perf(ggml): fused norm_affine + siglu ops for FastCo
 RUNS = 10
 WARMUPS = 1
 WINDOW_S = 4.0
-GGUF_QUANTS = "q8_0"           # match the reporter's setup
+GGUF_QUANTS = "q4_k,q5_0,q8_0,f16"   # sweep all parakeet-tdt-0.6b-v3 quants
 ONNX_QUANTS = "int8,fp32"      # int8 is the reporter's; fp32 for context
 AUDIOS = "both"                # short (jfk 11s) + long (60s tiled)
 MODES = "chunked"              # streaming-relevant shape; matches reporter
@@ -110,6 +147,7 @@ else:
           "subject to anonymous rate limits")
 
 # ─────────────────────────── cell 2 (code) ───────────────────────────
+step("cell_2_begin")
 # ── Install deps ──────────────────────────────────────────────────────────
 # onnxruntime-gpu wheel selection: Kaggle T4/P100 images currently ship
 # CUDA 12.x; the default `onnxruntime-gpu` wheel matches. If you see
@@ -131,6 +169,7 @@ os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
 print("✓ deps installed")
 
 # ─────────────────────────── cell 3 (code) ───────────────────────────
+step("cell_3_begin")
 # ── Clone repo (full history — we need to check out two SHAs) ──────────────
 if REPO.is_dir():
     subprocess.run("git fetch --all --tags", cwd=REPO, shell=True, check=True)
@@ -151,6 +190,7 @@ for sha in (PRE_SHA, POST_SHA):
     print(f"  {sha:14s} → {r.stdout.strip()[:12]}")
 
 # ─────────────────────────── cell 4 (code) ───────────────────────────
+step("cell_4_begin")
 # ── Detect GPU + install fast build toolchain (ninja, ccache, mold) ────────
 HAS_GPU = Path("/usr/local/cuda/bin/nvcc").is_file()
 if not HAS_GPU:
@@ -307,6 +347,7 @@ def build_at(sha: str, out_lib: Path) -> None:
 
 
 # ─────────────────────────── cell 5 (code) ───────────────────────────
+step("cell_5_begin")
 # ── Build PRE then POST (incremental) ──────────────────────────────────────
 build_at(PRE_SHA, LIB_PRE)
 build_at(POST_SHA, LIB_POST)
@@ -329,12 +370,15 @@ for p in (LIB_PRE, LIB_POST):
     print(f"  {p.name:24s} {p.stat().st_size // (1024*1024):4d} MB")
 
 # ─────────────────────────── cell 6 (code) ───────────────────────────
+step("cell_6_begin")
 # ── Pre-download GGUF + ONNX models ────────────────────────────────────────
 from huggingface_hub import hf_hub_download, snapshot_download  # noqa: E402
 
 GGUF_FILES = {
+    "q4_k": "parakeet-tdt-0.6b-v3-q4_k.gguf",
+    "q5_0": "parakeet-tdt-0.6b-v3-q5_0.gguf",
     "q8_0": "parakeet-tdt-0.6b-v3-q8_0.gguf",
-    "f16":  "parakeet-tdt-0.6b-v3.gguf",  # only if --gguf-quants includes f16
+    "f16":  "parakeet-tdt-0.6b-v3.gguf",
 }
 for q in GGUF_QUANTS.split(","):
     fname = GGUF_FILES[q.strip()]
@@ -353,6 +397,7 @@ snapshot_download("istupakov/parakeet-tdt-0.6b-v3-onnx",
 print("✓ models ready")
 
 # ─────────────────────────── cell 7 (code) ───────────────────────────
+step("cell_7_begin")
 # ── Sanity: confirm onnxruntime sees CUDA ──────────────────────────────────
 import onnxruntime as ort  # noqa: E402
 avail = ort.get_available_providers()
@@ -365,6 +410,7 @@ if "CUDAExecutionProvider" not in avail:
     print("  and pin onnxruntime-gpu to the matching wheel.")
 
 # ─────────────────────────── cell 8 (code) ───────────────────────────
+step("cell_8_begin")
 # ── Run the three benchmarks ───────────────────────────────────────────────
 BENCH = REPO / "tools" / "benchmark_asr_engines.py"
 assert BENCH.is_file(), f"{BENCH} not present at HEAD; check POST_SHA"
@@ -421,6 +467,7 @@ j_onnx = run_bench("onnx-cuda",     None,     "onnx",
                    ["--providers", ",".join(PROVIDERS_CUDA)])
 
 # ─────────────────────────── cell 9 (code) ───────────────────────────
+step("cell_9_begin")
 # ── Aggregate ──────────────────────────────────────────────────────────────
 def load(json_path: Path) -> dict:
     with json_path.open() as f:
@@ -520,6 +567,7 @@ for (audio, mode, quant), r in post.items():
           f"(last/first = {runs[-1] / runs[0]:.2f}×)")
 
 # ─────────────────────────── cell 10 (code) ───────────────────────────
+step("cell_10_begin")
 # ── Persist + (optional) gist ──────────────────────────────────────────────
 combined = {
     "host": {

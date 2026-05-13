@@ -55,8 +55,47 @@ import shutil
 import subprocess
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
+
+# ── Unbuffered I/O + step checkpointing ──────────────────────────────
+# Kaggle persists logs only at cell/process end, so a hang past stdout
+# buffer fill is invisible until the kernel actually terminates. Force
+# line-buffered stdout/stderr and write a per-step JSONL checkpoint to
+# /kaggle/working/progress.jsonl. Even when a run hangs, fetching the
+# tiny progress.jsonl via `kaggle kernels output --file-pattern
+# 'progress.jsonl'` shows the last completed step.
+os.environ["PYTHONUNBUFFERED"] = "1"
+try:
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr.reconfigure(line_buffering=True)
+except (AttributeError, ValueError):
+    pass
+
+_PROGRESS_PATH = Path("/kaggle/working/progress.jsonl")
+_T0 = time.time()
+
+
+def step(name: str, **extra) -> None:
+    """Append one progress checkpoint. Cheap (one JSONL write); call
+    liberally — before/after heavy operations, around subprocess.run."""
+    rec = {
+        "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "elapsed_s": round(time.time() - _T0, 2),
+        "step": name,
+        **extra,
+    }
+    try:
+        _PROGRESS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with _PROGRESS_PATH.open("a") as f:
+            f.write(json.dumps(rec) + "\n")
+    except Exception:
+        pass
+    print(f"[step {rec['elapsed_s']:>7.1f}s] {name}" +
+          (f"  {extra}" if extra else ""), flush=True)
+
+
+step("script.start")
 
 MODE = os.environ.get("CRISPASR_REGRESSION_MODE", "validate")  # or "rebake"
 
@@ -96,6 +135,7 @@ print(f"  BACKEND_FILTER   = {BACKEND_FILTER or '(all)'}")
 print(f"  UPLOAD           = {UPLOAD}")
 
 # ─────────────────────────── cell 2 (code) ───────────────────────────
+step("cell_2_begin")
 # ── Wire HF auth, install Python deps ─────────────────────────────────────
 def kaggle_secret(name: str) -> str | None:
     """Pull a Kaggle secret if available, with verbose diagnostics if
@@ -275,6 +315,7 @@ if MODE == "rebake":
     ])
 
 # ─────────────────────────── cell 3 (code) ───────────────────────────
+step("cell_3_begin")
 # ── Clone + build CrispASR ────────────────────────────────────────────────
 def sh(cmd: str, cwd: Path | None = None) -> None:
     print(f"$ {cmd}")
@@ -355,6 +396,7 @@ if HAS_CCACHE:
                    shell=True)
 
 # ─────────────────────────── cell 4 (code) ───────────────────────────
+step("cell_4_begin")
 # ── Load manifest + backend filter ────────────────────────────────────────
 MANIFEST_PATH = REPO / "tests" / "regression" / "manifest.json"
 with MANIFEST_PATH.open() as f:
@@ -377,6 +419,7 @@ for b in BACKENDS:
 
 
 # ─────────────────────────── cell 5 (code) ───────────────────────────
+step("cell_5_begin")
 # ── VALIDATE mode: download pinned artifacts, run regression ──────────────
 def run_validate() -> list[dict]:
     """Per-backend validate. Returns one result dict per backend."""
@@ -446,6 +489,7 @@ def run_validate() -> list[dict]:
 
 
 # ─────────────────────────── cell 6 (code) ───────────────────────────
+step("cell_6_begin")
 # ── REBAKE mode: run real Python references, stage new ref.gguf files ────
 def run_rebake() -> list[dict]:
     """Per-backend re-bake. Writes new ref.gguf files into REBAKE_STAGE
@@ -523,6 +567,7 @@ def run_rebake() -> list[dict]:
 
 
 # ─────────────────────────── cell 7 (code) ───────────────────────────
+step("cell_7_begin")
 # ── Dispatch + upload ─────────────────────────────────────────────────────
 if MODE == "validate":
     RESULTS_DATA = run_validate()
