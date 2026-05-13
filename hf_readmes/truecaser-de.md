@@ -59,11 +59,12 @@ Trained on 245K sentences of WMT News Crawl German using [python-crfsuite](https
 
 ## Statistical Truecaser
 
-Simple word-frequency lookup trained on 3M lines of German Wikipedia.
+Simple word-frequency lookup trained on WMT News Crawl 2023 German.
 
-- **Entries**: 375,283 unique words
+- **Entries**: 71,142 unique words
+- **Size**: 1.7 MB
 - **Approach**: for each word, pick the casing variant (lowercase/capitalize/uppercase) seen most often
-- **Training data**: German Wikipedia (CC-BY-SA), model released under MIT
+- **Training data**: WMT News Crawl 2023 German (278K sentences), MIT license
 
 ## Usage with CrispASR
 
