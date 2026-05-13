@@ -6421,7 +6421,9 @@ void ggml_compute_forward_aa_snake_beta(
     float * padded     = tl_padded.data();
     float * upsampled  = tl_upsampled.data();
     float * ds_padded  = tl_ds_padded.data();
+#ifdef GGML_USE_ACCELERATE
     float * snake_tmp  = tl_snake.data();
+#endif
 
     // Channel-split parallelism — matches the worker layout of the legacy
     // map_custom1 path so n_tasks-by-channel scaling carries over.
