@@ -59,6 +59,45 @@ except (AttributeError, ValueError):
 _PROGRESS_PATH = Path("/kaggle/working/progress.jsonl")
 _T0 = time.time()
 
+# Live HF progress push — see the helper in
+# tools/kaggle/crispasr-regression.py for the full rationale.
+# Rolls the local progress.jsonl up to cstr/crispasr-kaggle-progress
+# (rate-limited to every 30s) so mid-run state is fetchable via
+# `huggingface.co/datasets/cstr/crispasr-kaggle-progress` even
+# while the Kaggle kernel is mid-execution / hung / crashed.
+_HF_PROGRESS_REPO = "cstr/crispasr-kaggle-progress"
+_HF_PROGRESS_PATH = (
+    f"runs/{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+    f"-{os.environ.get('KAGGLE_KERNEL_RUN_TYPE', 'local').lower()}"
+    f"-{os.environ.get('KAGGLE_KERNEL_REF', 'unknown').split('/')[-1] or 'unknown'}"
+    f".jsonl"
+)
+_HF_PUSH_INTERVAL_S = 30.0
+_HF_LAST_PUSH = 0.0
+
+
+def _push_progress_to_hf(force: bool = False) -> None:
+    global _HF_LAST_PUSH
+    now = time.time()
+    if not force and (now - _HF_LAST_PUSH) < _HF_PUSH_INTERVAL_S:
+        return
+    if not os.environ.get("HF_TOKEN"):
+        return
+    if not _PROGRESS_PATH.exists():
+        return
+    try:
+        from huggingface_hub import HfApi
+        HfApi(token=os.environ["HF_TOKEN"]).upload_file(
+            path_or_fileobj=str(_PROGRESS_PATH),
+            path_in_repo=_HF_PROGRESS_PATH,
+            repo_id=_HF_PROGRESS_REPO,
+            repo_type="dataset",
+            commit_message=f"progress @ {now - _T0:.0f}s",
+        )
+        _HF_LAST_PUSH = now
+    except Exception:
+        pass
+
 
 def step(name: str, **extra) -> None:
     rec = {
@@ -75,6 +114,7 @@ def step(name: str, **extra) -> None:
         pass
     print(f"[step {rec['elapsed_s']:>7.1f}s] {name}" +
           (f"  {extra}" if extra else ""), flush=True)
+    _push_progress_to_hf()
 
 
 step("script.start")

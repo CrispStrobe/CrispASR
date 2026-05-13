@@ -75,10 +75,63 @@ except (AttributeError, ValueError):
 _PROGRESS_PATH = Path("/kaggle/working/progress.jsonl")
 _T0 = time.time()
 
+# Live progress push to HF — `kaggle kernels output` gates
+# /kaggle/working/ access until the run terminates, so a stuck run is
+# only diagnosable via the browser UI's websocket. To get
+# *programmatic* mid-run visibility, every step() also rolls the
+# local JSONL file up to a fixed path in a dedicated public HF
+# dataset (`cstr/crispasr-kaggle-progress`). Anyone with HF read
+# access can poll `huggingface.co/datasets/cstr/crispasr-kaggle-progress`
+# and see live progress, including after the kernel hangs / crashes.
+#
+# Rate-limited to one HF push every 30 s (or on the first step
+# after that interval) so a fast script doesn't spam 50 commits.
+# Skips silently if HF_TOKEN isn't available (batch-mode kernels
+# without secret access just rely on the local JSONL post-mortem
+# fallback — same as before this change).
+_HF_PROGRESS_REPO = "cstr/crispasr-kaggle-progress"
+_HF_PROGRESS_PATH = (
+    f"runs/{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+    f"-{os.environ.get('KAGGLE_KERNEL_RUN_TYPE', 'local').lower()}"
+    f"-{os.environ.get('KAGGLE_KERNEL_REF', 'unknown').split('/')[-1] or 'unknown'}"
+    f".jsonl"
+)
+_HF_PUSH_INTERVAL_S = 30.0
+_HF_LAST_PUSH = 0.0
+
+
+def _push_progress_to_hf(force: bool = False) -> None:
+    """Best-effort upload of the local progress.jsonl to HF. Returns
+    silently on any failure — we never want progress reporting to
+    crash the run itself."""
+    global _HF_LAST_PUSH
+    now = time.time()
+    if not force and (now - _HF_LAST_PUSH) < _HF_PUSH_INTERVAL_S:
+        return
+    if not os.environ.get("HF_TOKEN"):
+        return
+    if not _PROGRESS_PATH.exists():
+        return
+    try:
+        from huggingface_hub import HfApi
+        HfApi(token=os.environ["HF_TOKEN"]).upload_file(
+            path_or_fileobj=str(_PROGRESS_PATH),
+            path_in_repo=_HF_PROGRESS_PATH,
+            repo_id=_HF_PROGRESS_REPO,
+            repo_type="dataset",
+            commit_message=f"progress @ {now - _T0:.0f}s",
+        )
+        _HF_LAST_PUSH = now
+    except Exception:
+        # network flake, transient 429, anything — ignore
+        pass
+
 
 def step(name: str, **extra) -> None:
-    """Append one progress checkpoint. Cheap (one JSONL write); call
-    liberally — before/after heavy operations, around subprocess.run."""
+    """Append one progress checkpoint to the local JSONL AND push the
+    rolling file to HF (rate-limited). Cheap on the local side
+    (single JSONL write); HF push runs at most once every
+    _HF_PUSH_INTERVAL_S seconds and is best-effort."""
     rec = {
         "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "elapsed_s": round(time.time() - _T0, 2),
@@ -93,6 +146,7 @@ def step(name: str, **extra) -> None:
         pass
     print(f"[step {rec['elapsed_s']:>7.1f}s] {name}" +
           (f"  {extra}" if extra else ""), flush=True)
+    _push_progress_to_hf()
 
 
 step("script.start")
