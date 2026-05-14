@@ -1424,15 +1424,20 @@ int crispasr_run_backend(const whisper_params& params_in) {
                 // machine *after* this loop runs, so it reflects the
                 // upper bound of all utterances finalized before this step.
                 const int64_t window_start_sample_now = cumulative_samples - (int64_t)pcm_window.size();
+                constexpr int kStraddleMinSamples = 32000; // 2 s @ 16 kHz; backend-safe tail decode floor.
                 for (const auto& sl : slices) {
-                    auto slice_segs =
-                        backend->transcribe(pcm_window.data() + sl.start, sl.end - sl.start, sl.t0_cs, params);
+                    const int64_t s_start_abs = window_start_sample_now + (int64_t)sl.start;
+                    const int64_t s_end_abs = window_start_sample_now + (int64_t)sl.end;
+                    if (params.stream_json && s_end_abs <= finalized_until_sample)
+                        continue;
+
+                    std::vector<crispasr_segment> slice_segs;
                     if (params.stream_json) {
                         // Apply punc/strip on a copy so the per-slice text
                         // is in its final form before we hand it to the
-                        // utterance state machine. The aggregate gets the
-                        // same treatment after the loop, so plain-text
-                        // mode behavior is unchanged.
+                        // utterance state machine. JSON mode can filter or
+                        // trim finalized rolling-window slices before decode;
+                        // plain-text mode below still decodes full slices.
                         std::vector<crispasr_segment> sl_for_text;
 
                         // Round 3 (CKwasd #1 corner): if the VAD slice
@@ -1441,14 +1446,9 @@ int crispasr_run_backend(const whisper_params& params_in) {
                         // full-slice decode covers audio that belongs to
                         // the prior utterance — emitting it as a partial
                         // for the new utterance_id leaks prior text into
-                        // the live stream. Re-decode just the post-
-                        // finalized subrange so partial.text describes
-                        // only the new utterance's interval. This costs
-                        // one extra encoder pass per straddling slice
-                        // (bounded to ~window_length / stream_step steps
-                        // after a finalize, until the rolling window
-                        // evicts the old audio).
-                        const int64_t s_start_abs = window_start_sample_now + (int64_t)sl.start;
+                        // the live stream. Decode just the post-finalized
+                        // subrange so partial.text describes only the new
+                        // utterance's interval.
                         // Some backends (moonshine's stacked conv1d
                         // encoder, for example) abort on inputs shorter
                         // than a few hundred ms — `OW > 0` from
@@ -1459,7 +1459,6 @@ int crispasr_run_backend(const whisper_params& params_in) {
                         // 32000 samples = 2 s @ 16 kHz, comfortably
                         // above every supported backend's encoder
                         // minimum.
-                        constexpr int kStraddleMinSamples = 32000;
                         if (s_start_abs < finalized_until_sample) {
                             const int sub_start = (int)(finalized_until_sample - window_start_sample_now);
                             const int sub_end = (int)sl.end;
@@ -1470,6 +1469,7 @@ int crispasr_run_backend(const whisper_params& params_in) {
                                 decode_params.vad_model.clear();
                                 sl_for_text =
                                     backend->transcribe(pcm_window.data() + sub_start, sub_len, 0, decode_params);
+                                slice_segs = sl_for_text;
                             }
                             // else: sl_for_text stays empty → empty
                             // partial text for this slice, which
@@ -1479,6 +1479,8 @@ int crispasr_run_backend(const whisper_params& params_in) {
                             // new audio will be picked up on a later
                             // step once the subrange exceeds the min.
                         } else {
+                            slice_segs =
+                                backend->transcribe(pcm_window.data() + sl.start, sl.end - sl.start, sl.t0_cs, params);
                             sl_for_text = slice_segs;
                         }
                         apply_punc_model(punc_ctx.get(), sl_for_text);
@@ -1494,6 +1496,9 @@ int crispasr_run_backend(const whisper_params& params_in) {
                         for (const auto& s : sl_for_text)
                             sl_text += s.text;
                         step_slice_text.emplace_back(sl, std::move(sl_text));
+                    } else {
+                        slice_segs =
+                            backend->transcribe(pcm_window.data() + sl.start, sl.end - sl.start, sl.t0_cs, params);
                     }
                     segs.insert(segs.end(), std::make_move_iterator(slice_segs.begin()),
                                 std::make_move_iterator(slice_segs.end()));
