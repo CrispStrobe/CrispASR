@@ -319,6 +319,26 @@ if (APPLE AND GGML_METAL)
     )
 endif()
 
+# ─── test_chunk_context — Catch2 unit tests for chunk boundary context (issue #89)
+#
+# Covers: audio_chunking::split_at_energy_minima slice coverage, ctx_l/ctx_r
+# expansion math at slice boundaries, and segment-timestamp filtering.
+# Pure CPU, no model load.
+add_executable(test_chunk_context
+    test_chunk_context.cpp
+)
+target_include_directories(test_chunk_context PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/examples/cli
+)
+target_link_libraries(test_chunk_context PRIVATE
+    Catch2::Catch2WithMain
+)
+catch_discover_tests(test_chunk_context
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit;chunk-context"
+)
+
 # ─── test - math - consistency — Catch2 unit tests for math constants ────────
 add_executable(test-math-consistency
     test-math-consistency.cpp

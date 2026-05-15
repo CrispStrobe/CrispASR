@@ -472,10 +472,67 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, co
     // Process VAD slices — parallel when multiple slices AND n_processors > 1
     std::vector<std::vector<crispasr_segment>> per_slice(slices.size());
 
+    // Chunk boundary context: extend each slice left/right by up to 2 s so the
+    // bidirectional encoder has context for boundary frames (issue #89).
+    // After transcribing we trim segments that fall outside the original slice
+    // window — those frames are re-decoded with better context by the adjacent
+    // slice.  Only applied when there are multiple slices; the VAD-stitch path
+    // (above) already handles this case via the stitched buffer.
+    const int ctx_samples = 2 * SR; // 2 s each side
+
     auto process_slice = [&](size_t i, CrispasrBackend& be) {
         const auto& sl = slices[i];
+
+        // Expand slice with left and right context (clamped to audio bounds).
+        const int ctx_l = (i > 0) ? std::min(ctx_samples, sl.start) : 0;
+        const int ctx_r = (i + 1 < slices.size()) ? std::min(ctx_samples, (int)samples.size() - sl.end) : 0;
+        const int effective_start = sl.start - ctx_l;
+        const int effective_len = sl.end - effective_start + ctx_r;
+        // t_offset for the expanded slice (absolute, centiseconds)
+        const int64_t effective_t0_cs = sl.t0_cs - (int64_t)((double)ctx_l / SR * 100.0);
+
         std::vector<crispasr_segment> segs =
-            be.transcribe(samples.data() + sl.start, sl.end - sl.start, sl.t0_cs, params);
+            be.transcribe(samples.data() + effective_start, effective_len, effective_t0_cs, params);
+
+        // Trim words/segments that fall outside the original slice window.
+        // Each word is assigned to the slice it STARTS in ([sl.t0_cs, sl.t1_cs))
+        // so every word appears in exactly one slice and boundary words are never
+        // duplicated.  Text is rebuilt from the surviving words, handling both
+        // space-prefix tokens (SentencePiece: " hello") and plain tokens ("hello").
+        // For backends without word timestamps we keep the segment unconditionally
+        // when left context was added (can't tell where it falls) and fall back to
+        // segment-level filtering for right-context-only trimming.
+        if (ctx_l > 0 || ctx_r > 0) {
+            for (auto& seg : segs) {
+                if (!seg.words.empty()) {
+                    seg.words.erase(
+                        std::remove_if(seg.words.begin(), seg.words.end(),
+                                       [&sl](const crispasr_word& w) { return w.t0 < sl.t0_cs || w.t0 >= sl.t1_cs; }),
+                        seg.words.end());
+                    if (seg.words.empty()) {
+                        seg.text = "";
+                    } else {
+                        std::string rebuilt;
+                        for (const auto& w : seg.words) {
+                            if (!rebuilt.empty() && !w.text.empty() && w.text[0] != ' ')
+                                rebuilt += ' ';
+                            rebuilt += w.text;
+                        }
+                        seg.text = rebuilt;
+                        seg.t0 = seg.words.front().t0;
+                        seg.t1 = seg.words.back().t1;
+                    }
+                } else if (ctx_l == 0) {
+                    // Only right context added; safe to filter by segment start.
+                    if (seg.t0 >= sl.t1_cs)
+                        seg.text = "";
+                }
+                // ctx_l > 0 && no words: keep as-is (cannot trim without timestamps).
+            }
+            segs.erase(
+                std::remove_if(segs.begin(), segs.end(), [](const crispasr_segment& s) { return s.text.empty(); }),
+                segs.end());
+        }
 
         if (params.diarize && !segs.empty()) {
             if (have_stereo) {
