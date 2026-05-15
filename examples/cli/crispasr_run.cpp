@@ -1461,15 +1461,14 @@ int crispasr_run_backend(const whisper_params& params_in) {
             }
 
             std::vector<crispasr_segment> segs;
-            // Per-slice text, kept alongside the aggregate `segs` for the
-            // round-2 JSON state machine. Each entry is `(slice, text)`
+            // Per-slice text for the JSON state machine.
+            // Each entry is `(slice, text)`
             // where the text has had `apply_punc_model` + (optionally)
-            // strip-punctuation applied, matching what the aggregate
-            // `segs` will look like after the post-loop processing —
-            // the aggregate is the source of truth for the legacy plain
-            // text path; this side-channel exists so the JSON path can
-            // attribute each slice's text to the right utterance.
+            // strip-punctuation applied. In VAD+JSON mode this is the
+            // stream output path; the legacy aggregate `segs` is left
+            // empty because JSON does not read it.
             std::vector<std::pair<crispasr_audio_slice, std::string>> step_slice_text;
+            bool decoded_segments_this_step = false;
             if (!stream_vad_path.empty()) {
                 const auto slices = crispasr_compute_vad_slices(pcm_window.data(), (int)pcm_window.size(), SR,
                                                                 stream_vad_path.c_str(), stream_vad_opts);
@@ -1483,7 +1482,6 @@ int crispasr_run_backend(const whisper_params& params_in) {
                 const int64_t window_start_sample_now = cumulative_samples - (int64_t)pcm_window.size();
                 constexpr int kStraddleMinSamples = 32000; // 2 s @ 16 kHz; backend-safe tail decode floor.
                 for (const auto& sl : slices) {
-                    std::vector<crispasr_segment> slice_segs;
                     if (params.stream_json) {
                         const int64_t s_start_abs = window_start_sample_now + (int64_t)sl.start;
                         const int64_t s_end_abs = window_start_sample_now + (int64_t)sl.end;
@@ -1525,7 +1523,6 @@ int crispasr_run_backend(const whisper_params& params_in) {
                                 decode_params.vad_model.clear();
                                 sl_for_text =
                                     backend->transcribe(pcm_window.data() + sub_start, sub_len, 0, decode_params);
-                                slice_segs = sl_for_text;
                             }
                             // else: sl_for_text stays empty → empty
                             // partial text for this slice, which
@@ -1535,10 +1532,11 @@ int crispasr_run_backend(const whisper_params& params_in) {
                             // new audio will be picked up on a later
                             // step once the subrange exceeds the min.
                         } else {
-                            slice_segs =
+                            sl_for_text =
                                 backend->transcribe(pcm_window.data() + sl.start, sl.end - sl.start, sl.t0_cs, params);
-                            sl_for_text = slice_segs;
                         }
+                        if (!sl_for_text.empty())
+                            decoded_segments_this_step = true;
                         apply_punc_model(punc_ctx.get(), sl_for_text);
                         apply_truecase_model(tc_ctx.get(), sl_for_text);
                         apply_truecase_crf_model(tc_crf_ctx.get(), sl_for_text);
@@ -1553,24 +1551,31 @@ int crispasr_run_backend(const whisper_params& params_in) {
                             sl_text += s.text;
                         step_slice_text.emplace_back(sl, std::move(sl_text));
                     } else {
-                        slice_segs =
+                        auto slice_segs =
                             backend->transcribe(pcm_window.data() + sl.start, sl.end - sl.start, sl.t0_cs, params);
+                        if (!slice_segs.empty())
+                            decoded_segments_this_step = true;
+                        segs.insert(segs.end(), std::make_move_iterator(slice_segs.begin()),
+                                    std::make_move_iterator(slice_segs.end()));
                     }
-                    segs.insert(segs.end(), std::make_move_iterator(slice_segs.begin()),
-                                std::make_move_iterator(slice_segs.end()));
                 }
             } else {
                 segs = backend->transcribe(pcm_window.data(), (int)pcm_window.size(), 0, params);
+                if (!segs.empty())
+                    decoded_segments_this_step = true;
             }
 
-            apply_punc_model(punc_ctx.get(), segs);
-            apply_truecase_model(tc_ctx.get(), segs);
-            apply_truecase_crf_model(tc_crf_ctx.get(), segs);
-            apply_truecase_lstm_model(tc_lstm_ctx.get(), segs);
-            apply_pcs_model(pcs_ctx.get(), segs);
-            if (!params.punctuation) {
-                for (auto& seg : segs) {
-                    crispasr_strip_punctuation(seg);
+            const bool json_vad_path = params.stream_json && !stream_vad_path.empty();
+            if (!json_vad_path) {
+                apply_punc_model(punc_ctx.get(), segs);
+                apply_truecase_model(tc_ctx.get(), segs);
+                apply_truecase_crf_model(tc_crf_ctx.get(), segs);
+                apply_truecase_lstm_model(tc_lstm_ctx.get(), segs);
+                apply_pcs_model(pcs_ctx.get(), segs);
+                if (!params.punctuation) {
+                    for (auto& seg : segs) {
+                        crispasr_strip_punctuation(seg);
+                    }
                 }
             }
             // No-VAD JSON path: synthesize a single "slice" covering
@@ -1584,7 +1589,7 @@ int crispasr_run_backend(const whisper_params& params_in) {
                 step_slice_text.emplace_back(fake_sl, std::move(all_text));
             }
 
-            if (params.stream_monitor && segs.empty()) {
+            if (params.stream_monitor && !decoded_segments_this_step) {
                 fprintf(stderr, "\xC2\xB7"); // · = silence
                 fflush(stderr);
             }
