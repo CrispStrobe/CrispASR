@@ -42,6 +42,7 @@ DEFAULT_STAGES = [
     # HiFT per-stage capture so crispasr-diff can localise vocoder
     # divergence (issue #94 follow-up — hift_pcm(ref_mel) reported
     # cos=0.21 against Python's mel2wav output).
+    "hift_f0",
     "hift_source",
     "hift_source_stft",
     "voc_conv_pre",
@@ -238,6 +239,12 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
     if mel is not None and any_hift_stage:
         with torch.inference_mode():
             f0 = hift.f0_predictor(mel)
+            if "hift_f0" in stages:
+                # f0 shape: (B, T_mel) — capture the per-frame F0 in Hz so the
+                # C++ side can do a direct cosine compare on the F0 predictor
+                # output (next divergence candidate after the source-STFT
+                # itself per crispasr-diff localisation).
+                out["hift_f0"] = f0.detach().squeeze(0).cpu().float().numpy()
             s = hift.f0_upsamp(f0[:, None]).transpose(1, 2)
             s, _, _ = hift.m_source(s)
             s = s.transpose(1, 2)

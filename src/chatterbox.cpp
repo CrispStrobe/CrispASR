@@ -2077,6 +2077,21 @@ extern "C" struct chatterbox_context* chatterbox_init_from_file(const char* path
 
     const bool is_gpt2 = (c->hp.arch == "chatterbox_turbo" || c->hp.arch == "kartoffelbox");
 
+    // Issue #94 follow-up: chatterbox-turbo's Python tts_turbo.generate()
+    // explicitly disables CFG (cfg_weight=0.0 default, plus a log line
+    // "CFG, min_p and exaggeration are not supported by Turbo version"
+    // when set). The C++ default of 0.5 was fine because the !is_gpt2
+    // guard at the use site disables CFG branching anyway, but it's
+    // tidier to make the defaults match Python here. We do NOT touch
+    // top_p / min_p — Python turbo's `top_p=0.95 + top_k=1000` combo is
+    // not safely reproducible without adding top_k support (which we
+    // don't have today); the base-style defaults `min_p=0.05 + top_p=1.0`
+    // empirically produce closer audio than top_p=0.95 alone, which
+    // lets too many low-probability garbage tokens through.
+    if (is_gpt2) {
+        c->params.cfg_weight = 0.0f;
+    }
+
     if (params.verbosity >= 1) {
         fprintf(stderr, "chatterbox: arch=%s T3 %uL d=%u h=%u hd=%u ff=%u text_vocab=%u speech_vocab=%u\n",
                 c->hp.arch.c_str(), c->hp.n_layers, c->hp.hidden_size, c->hp.n_heads, c->hp.head_dim,
@@ -2451,6 +2466,31 @@ extern "C" int32_t* chatterbox_synthesize_tokens(struct chatterbox_context* ctx,
 
     if (valid.empty()) {
         return nullptr;
+    }
+
+    // Issue #94 follow-up: chatterbox-turbo's Python implementation appends
+    // 3 S3GEN_SIL silence tokens after the AR output before handing tokens
+    // to s3gen (chatterbox/tts_turbo.py:286-287). Without this padding the
+    // generated mel cuts off abruptly — the last-frame silence is what
+    // chatterbox-turbo's meanflow s3gen was trained on. S3GEN_SIL=4299
+    // comes from chatterbox/models/s3gen/const.py. Base chatterbox doesn't
+    // do this (chatterbox/tts.py path).
+    if (is_gpt2) {
+        constexpr int32_t S3GEN_SIL = 4299;
+        valid.push_back(S3GEN_SIL);
+        valid.push_back(S3GEN_SIL);
+        valid.push_back(S3GEN_SIL);
+    }
+
+    if (ctx->params.verbosity >= 2 || std::getenv("CHATTERBOX_DEBUG")) {
+        fprintf(stderr, "chatterbox: speech_tokens(%zu) first=[", valid.size());
+        for (size_t i = 0; i < valid.size() && i < 12; ++i)
+            fprintf(stderr, "%d%s", (int)valid[i], i + 1 == valid.size() || i == 11 ? "" : ",");
+        fprintf(stderr, "] last=[");
+        size_t tail_start = valid.size() > 6 ? valid.size() - 6 : 0;
+        for (size_t i = tail_start; i < valid.size(); ++i)
+            fprintf(stderr, "%d%s", (int)valid[i], i + 1 == valid.size() ? "" : ",");
+        fprintf(stderr, "]\n");
     }
 
     int32_t* out = (int32_t*)malloc(valid.size() * sizeof(int32_t));
