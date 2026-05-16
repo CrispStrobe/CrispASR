@@ -520,6 +520,12 @@ static bool whisper_params_parse_arg_streaming_tts(int argc, char** argv, int& i
         params.stream_json = true;
     } else if (arg == "--stream-final-on-silence-ms") {
         params.stream_final_silence_ms = std::stoi(ARGV_NEXT);
+    } else if (arg == "--stream-vad-merge-gap-ms") {
+        params.stream_vad_merge_gap_ms = std::stoi(ARGV_NEXT);
+        if (params.stream_vad_merge_gap_ms < 0) {
+            fprintf(stderr, "crispasr: --stream-vad-merge-gap-ms must be >= 0\n");
+            exit(2);
+        }
     } else if (arg == "--stream-final-mode") {
         std::string mode = ARGV_NEXT;
         if (mode != "redecode" && mode != "prefix") {
@@ -848,6 +854,9 @@ static void whisper_print_usage(int /*argc*/, char** argv, const whisper_params&
     fprintf(stderr,
             "  --stream-final-on-silence-ms N    [%-7d] trailing silence (ms) that promotes a partial to final\n",
             params.stream_final_silence_ms);
+    fprintf(stderr,
+            "  --stream-vad-merge-gap-ms N       [%-7d] JSON+VAD close-gap merge in ms; clamped below final silence\n",
+            params.stream_vad_merge_gap_ms);
     fprintf(stderr,
             "  --stream-final-mode MODE          [%-7s] final.text source: 'redecode' (re-runs on the utterance "
             "PCM, best quality) or 'prefix' (LCP-accumulated, no extra encoder pass)\n",

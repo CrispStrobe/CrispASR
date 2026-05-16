@@ -220,6 +220,21 @@ catch_discover_tests(test-stream-vad-skip
     PROPERTIES LABELS "unit;stream-json"
 )
 
+# JSON streaming VAD post-merge policy. Pure arithmetic, no model load.
+add_executable(test-stream-vad-merge-policy
+    test-stream-vad-merge-policy.cpp
+)
+target_include_directories(test-stream-vad-merge-policy PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-stream-vad-merge-policy PRIVATE
+    Catch2::Catch2WithMain
+)
+catch_discover_tests(test-stream-vad-merge-policy
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit;stream-json"
+)
+
 # ─── test - punctuation - policy — Catch2 unit tests for punctuation auto - enable
 #policy.Pure logic, no model load.
 add_executable(test-punctuation-policy

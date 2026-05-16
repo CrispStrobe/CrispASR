@@ -1288,6 +1288,11 @@ int crispasr_run_backend(const whisper_params& params_in) {
         // Streaming windows are already bounded by --stream-length.
         stream_vad_opts.chunk_seconds = 0;
         stream_vad_opts.n_threads = params.n_threads;
+        if (params.stream_json) {
+            stream_vad_opts.post_merge_policy = crispasr_vad_post_merge_policy::streaming_json;
+            stream_vad_opts.stream_close_gap_ms = params.stream_vad_merge_gap_ms;
+            stream_vad_opts.stream_final_silence_ms = params.stream_final_silence_ms;
+        }
 
         // If --mic, spawn a subprocess to capture audio from the default mic
         FILE* mic_pipe = nullptr;

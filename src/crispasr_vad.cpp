@@ -180,28 +180,10 @@ std::vector<crispasr_audio_slice> crispasr_compute_vad_slices(const float* sampl
         whisper_vad_free(vctx);
     }
 
-    // Post-merge: combine adjacent VAD segments that are too short
-    // or too close together. ASR models need at least a few seconds
-    // of audio context to produce reliable output; tiny VAD segments
-    // (< 2s) and short inter-segment gaps (< 1s) degrade quality.
-    if (slices.size() > 1) {
-        const int min_dur_samples = 3 * sample_rate;   // 3 s minimum
-        const int merge_gap_samples = 1 * sample_rate; // merge if gap < 1 s
-        std::vector<crispasr_audio_slice> merged;
-        merged.push_back(slices[0]);
-        for (size_t i = 1; i < slices.size(); i++) {
-            auto& prev = merged.back();
-            const int gap = slices[i].start - prev.end;
-            const int prev_dur = prev.end - prev.start;
-            if (gap < merge_gap_samples || prev_dur < min_dur_samples) {
-                prev.end = slices[i].end;
-                prev.t1_cs = slices[i].t1_cs;
-            } else {
-                merged.push_back(slices[i]);
-            }
-        }
-        slices = std::move(merged);
-    }
+    // Post-merge: offline/file callers keep the historical short/close merge.
+    // JSON streaming can request a narrower close-gap-only policy so VAD never
+    // hides a silence gap that should finalize an utterance.
+    slices = crispasr_post_merge_vad_slices(slices, sample_rate, opts);
 
     // Post-split: break any VAD segment that exceeds chunk_seconds into
     // sub-segments. Prevents OOM on very long continuous speech (10+ min

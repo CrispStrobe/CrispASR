@@ -174,6 +174,10 @@ struct whisper_params {
     // pause length for live captions / translation handoff and matches
     // the example in the issue. Only relevant with --stream-json.
     int32_t stream_final_silence_ms = 800;
+    // JSON streaming + VAD only: merge adjacent VAD slices across tiny
+    // detector jitter gaps, but never across --stream-final-on-silence-ms.
+    // 0 disables streaming-specific post-merge.
+    int32_t stream_vad_merge_gap_ms = 250;
     // Issue #84 round 2 (CKwasd retest): how to compute `final.text`
     // when an utterance closes. The round-1 design just echoed the
     // last rolling-window partial — wrong because the rolling window

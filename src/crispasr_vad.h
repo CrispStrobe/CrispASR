@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -43,9 +44,13 @@ struct crispasr_stitched_audio {
     int64_t total_duration_cs = 0;             // total duration in centiseconds
 };
 
-// Plain options struct — no CLI dependency. Mirrors the crispasr
-// VAD tunables plus the chunk fallback used by long-audio encoders.
-// Zero-initialising yields a sensible default configuration.
+enum class crispasr_vad_post_merge_policy {
+    offline = 0,
+    streaming_json = 1,
+};
+
+// Plain options struct: no CLI dependency. Mirrors the VAD tunables plus the
+// chunk fallback used by long-audio encoders.
 struct crispasr_vad_options {
     // whisper_vad_params
     float threshold = 0.5f;
@@ -55,6 +60,9 @@ struct crispasr_vad_options {
     // Post-VAD clean-up
     int chunk_seconds = 30; // split any merged slice longer than this; 0 = no split
     int n_threads = 4;      // VAD inference threads
+    crispasr_vad_post_merge_policy post_merge_policy = crispasr_vad_post_merge_policy::offline;
+    int stream_close_gap_ms = 250;
+    int stream_final_silence_ms = 0;
     // Issue #83 follow-up: distinguish "user passed -vt explicitly" from
     // "default 0.5 was inherited." VAD models with non-Silero probability
     // calibration (currently whisper-vad-encdec) use this to auto-lower
@@ -64,6 +72,60 @@ struct crispasr_vad_options {
     // to opt into per-model auto-tuning.
     bool threshold_explicit = false;
 };
+
+inline int crispasr_stream_vad_effective_merge_gap_ms(int configured_gap_ms, int final_silence_ms) {
+    if (configured_gap_ms <= 0)
+        return 0;
+    if (final_silence_ms <= 0)
+        return configured_gap_ms;
+    const int hard_max = final_silence_ms - 1;
+    if (hard_max <= 0)
+        return 0;
+    return configured_gap_ms < hard_max ? configured_gap_ms : hard_max;
+}
+
+inline std::vector<crispasr_audio_slice> crispasr_post_merge_vad_slices(const std::vector<crispasr_audio_slice>& slices,
+                                                                        int sample_rate,
+                                                                        const crispasr_vad_options& opts) {
+    if (slices.size() <= 1 || sample_rate <= 0)
+        return slices;
+
+    std::vector<crispasr_audio_slice> merged;
+    merged.push_back(slices[0]);
+
+    if (opts.post_merge_policy == crispasr_vad_post_merge_policy::streaming_json) {
+        const int effective_gap_ms =
+            crispasr_stream_vad_effective_merge_gap_ms(opts.stream_close_gap_ms, opts.stream_final_silence_ms);
+        if (effective_gap_ms <= 0)
+            return slices;
+        for (std::size_t i = 1; i < slices.size(); i++) {
+            auto& prev = merged.back();
+            const int gap = slices[i].start - prev.end;
+            if ((int64_t)gap * 1000 < (int64_t)effective_gap_ms * sample_rate) {
+                prev.end = slices[i].end;
+                prev.t1_cs = slices[i].t1_cs;
+            } else {
+                merged.push_back(slices[i]);
+            }
+        }
+        return merged;
+    }
+
+    const int min_dur_samples = 3 * sample_rate;
+    const int merge_gap_samples = 1 * sample_rate;
+    for (std::size_t i = 1; i < slices.size(); i++) {
+        auto& prev = merged.back();
+        const int gap = slices[i].start - prev.end;
+        const int prev_dur = prev.end - prev.start;
+        if (gap < merge_gap_samples || prev_dur < min_dur_samples) {
+            prev.end = slices[i].end;
+            prev.t1_cs = slices[i].t1_cs;
+        } else {
+            merged.push_back(slices[i]);
+        }
+    }
+    return merged;
+}
 
 // Load Silero VAD, emit one slice per speech segment, then merge
 // short/adjacent slices and split overlong ones. Returns an empty
