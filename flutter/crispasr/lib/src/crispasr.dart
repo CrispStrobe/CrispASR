@@ -2081,6 +2081,65 @@ class CrispasrSession {
     if (rc != 0) throw Exception('setBeamSize failed (rc=$rc)');
   }
 
+  /// GBNF grammar-constrained sampling (whisper only — other backends
+  /// silently ignore; the whisper transcribe path auto-switches to
+  /// beam search when grammar is active because the constrained sampler
+  /// requires beam ≥ 2).
+  ///
+  /// Pass an empty `text` to disable the grammar and resume verbatim
+  /// decoding. `rootRule` is the symbol name to start parsing from
+  /// (the GBNF convention is "root"). `penalty` is whisper's
+  /// `grammar_penalty` scalar — the upstream default is 100.0.
+  ///
+  /// Throws [ArgumentError] when the GBNF source is invalid or the
+  /// root rule isn't present, and [UnsupportedError] when the loaded
+  /// dylib predates 0.5.9 (no `crispasr_session_set_grammar_text`
+  /// symbol). Catch the latter for graceful fallback to unconstrained
+  /// decoding on older builds.
+  ///
+  /// Example — force a JSON-shaped output:
+  /// ```dart
+  /// session.setGrammar(
+  ///   'root ::= "{" key ":" value "}"\n'
+  ///   'key   ::= "\\"" [a-zA-Z]+ "\\""\n'
+  ///   'value ::= [0-9]+\n',
+  ///   rootRule: 'root',
+  /// );
+  /// ```
+  void setGrammar(String text,
+      {String rootRule = 'root', double penalty = 100.0}) {
+    if (_closed) throw StateError('CrispasrSession is closed');
+    if (!_lib.providesSymbol('crispasr_session_set_grammar_text')) {
+      throw UnsupportedError(
+          'crispasr_session_set_grammar_text not present in this libcrispasr build — '
+          'rebuild against CrispASR 0.5.9+');
+    }
+    final fn = _lib.lookupFunction<
+        Int32 Function(Pointer<Void>, Pointer<Utf8>, Pointer<Utf8>, Float),
+        int Function(Pointer<Void>, Pointer<Utf8>, Pointer<Utf8>,
+            double)>('crispasr_session_set_grammar_text');
+    final textPtr =
+        text.isEmpty ? Pointer<Utf8>.fromAddress(0) : text.toNativeUtf8();
+    final rulePtr =
+        rootRule.isEmpty ? Pointer<Utf8>.fromAddress(0) : rootRule.toNativeUtf8();
+    try {
+      final rc = fn(_handle, textPtr, rulePtr, penalty);
+      if (rc == -1) throw StateError('session is null');
+      if (rc == -2) {
+        throw ArgumentError(
+            'invalid GBNF source or root rule "$rootRule" not found in grammar');
+      }
+      if (rc != 0) throw Exception('setGrammar failed (rc=$rc)');
+    } finally {
+      if (textPtr != Pointer<Utf8>.fromAddress(0)) calloc.free(textPtr);
+      if (rulePtr != Pointer<Utf8>.fromAddress(0)) calloc.free(rulePtr);
+    }
+  }
+
+  /// Convenience: clear any previously-set grammar so the next
+  /// transcribe call decodes unconstrained again.
+  void clearGrammar() => setGrammar('');
+
   /// Set decoder temperature on backends that support runtime control
   /// (canary, cohere, parakeet, moonshine). Other backends silently no-op.
   /// `seed` is the RNG seed; pass 0 for time-based.

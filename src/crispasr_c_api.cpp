@@ -28,6 +28,7 @@
 #include "crispasr_cache.h"          // HF download + filesystem cache (shared with CLI)
 #include "crispasr_model_registry.h" // Known-model lookup (shared with CLI)
 #include "core/greedy_decode.h"      // Shared autoregressive greedy decode helper
+#include "grammar-parser.h"          // GBNF parser for grammar-constrained sampling
 // Non-Whisper backend headers. Each of these lives in `src/` and is built as
 // its own shared library — we link them into libwhisper privately so Dart
 // only has to open one library to reach every backend. Any missing header
@@ -921,6 +922,27 @@ struct crispasr_session {
     // Wiring each into the session dispatch is tracked as PLAN
     // follow-up: "expose per-call beam_size on session-API backends."
     int beam_size = 1;
+
+    // GBNF grammar-constrained sampling state (whisper backend only —
+    // wparams.grammar_rules lives in whisper_full_params, no analog
+    // on other backends today).
+    //
+    // Lifecycle:
+    //   * `crispasr_session_set_grammar_text(s, "<gbnf>", "root", 100.0f)`
+    //     re-parses the source, populates `grammar_parsed` + the cached
+    //     `grammar_rules_ptrs` vector, and stores the root rule name.
+    //   * An empty `grammar_text` means "no grammar"; the transcribe
+    //     path skips the rules-wiring branch and runs unconstrained.
+    //   * `grammar_rules_ptrs` is a vector of POINTERS into
+    //     `grammar_parsed.rules`. Both must outlive the transcribe call,
+    //     so they're members of the session, not stack locals.
+    std::string grammar_text;
+    std::string grammar_root_rule;
+    float grammar_penalty = 100.0f; // whisper.cpp default
+    grammar_parser::parse_state grammar_parsed;
+    std::vector<const whisper_grammar_element*> grammar_rules_ptrs;
+    uint32_t grammar_root_rule_id = 0;
+    bool grammar_active = false;
 
     // Exactly one of these pointers is non-null based on `backend`.
     whisper_context* whisper_ctx = nullptr;
@@ -2018,7 +2040,11 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
         // breadth (best_of and beam_size are alternative knobs in
         // upstream whisper.cpp — beam search uses `beam_search.beam_size`,
         // greedy uses `greedy.best_of`).
-        const bool use_beam = s->beam_size > 1;
+        // GBNF grammar-constrained sampling requires beam search per
+        // whisper.cpp — fall back to beam=5 when the user enabled
+        // grammar but left beam_size at its default 1. Otherwise use
+        // beam search only when the user explicitly asked for it.
+        const bool use_beam = s->beam_size > 1 || s->grammar_active;
         whisper_full_params wparams =
             whisper_full_default_params(use_beam ? CRISPASR_SAMPLING_BEAM_SEARCH : CRISPASR_SAMPLING_GREEDY);
         wparams.print_progress = false;
@@ -2027,7 +2053,10 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
         wparams.print_special = false;
         wparams.n_threads = s->n_threads;
         if (use_beam) {
-            wparams.beam_search.beam_size = s->beam_size;
+            // Honour the user's explicit beam_size when set; otherwise
+            // pick a sensible default (5) so grammar-constrained
+            // sampling has enough beam width to be useful.
+            wparams.beam_search.beam_size = s->beam_size > 1 ? s->beam_size : 5;
         } else if (s->best_of > 1) {
             // Best-of-N for whisper greedy sampling.
             wparams.greedy.best_of = s->best_of;
@@ -2042,6 +2071,16 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
         // wparams.translate also activates the EN target language.
         if (s->translate)
             wparams.translate = true;
+        // GBNF grammar-constrained sampling (whisper-only). The
+        // `grammar_rules_ptrs` vector and the parsed rules it points
+        // into both live on the session struct so they outlive the
+        // whisper_full call.
+        if (s->grammar_active) {
+            wparams.grammar_rules = s->grammar_rules_ptrs.data();
+            wparams.n_grammar_rules = s->grammar_rules_ptrs.size();
+            wparams.i_start_rule = s->grammar_root_rule_id;
+            wparams.grammar_penalty = s->grammar_penalty;
+        }
 
         if (whisper_full(s->whisper_ctx, wparams, pcm, n_samples) != 0) {
             delete r;
@@ -4397,6 +4436,68 @@ CA_EXPORT int crispasr_session_set_beam_size(crispasr_session* s, int n) {
     if (!s)
         return -1;
     s->beam_size = n > 0 ? n : 1;
+    return 0;
+}
+
+// GBNF grammar-constrained sampling (whisper-only — wparams.grammar_rules
+// has no analog on other backends today).
+//
+// Pass `gbnf_text == nullptr` (or empty) to disable grammar constraints
+// and resume unconstrained decoding. Otherwise the GBNF source is parsed
+// once at setter-time and the resulting whisper_grammar_element graph is
+// stored on the session for reuse across every subsequent transcribe call.
+//
+// `root_rule` is the symbol name to start parsing from (typically "root");
+// `penalty` is whisper's grammar_penalty scalar (the CLI default is 100.0).
+//
+// When grammar is active, the whisper transcribe path automatically
+// switches to beam search (grammar-constrained sampling requires beam ≥ 2);
+// a beam_size left at the default 1 gets bumped to 5.
+//
+// Return codes:
+//    0 = grammar parsed and stored (or cleared, when text was empty)
+//   -1 = null session
+//   -2 = parse failed (invalid GBNF) or root_rule not found in parsed grammar
+CA_EXPORT int crispasr_session_set_grammar_text(crispasr_session* s,
+                                                const char* gbnf_text,
+                                                const char* root_rule,
+                                                float penalty) {
+    if (!s)
+        return -1;
+    // Clear-grammar path: empty text disables grammar-constrained
+    // sampling for subsequent transcribe calls.
+    if (!gbnf_text || gbnf_text[0] == '\0') {
+        s->grammar_text.clear();
+        s->grammar_root_rule.clear();
+        s->grammar_parsed = grammar_parser::parse_state{};
+        s->grammar_rules_ptrs.clear();
+        s->grammar_root_rule_id = 0;
+        s->grammar_active = false;
+        return 0;
+    }
+    // Parse the GBNF. The parser writes to stderr on syntax errors but
+    // doesn't throw; we detect failure by checking the resulting
+    // rules vector + symbol table.
+    grammar_parser::parse_state parsed = grammar_parser::parse(gbnf_text);
+    if (parsed.rules.empty()) {
+        return -2;
+    }
+    const std::string root = (root_rule && root_rule[0]) ? root_rule : "root";
+    auto it = parsed.symbol_ids.find(root);
+    if (it == parsed.symbol_ids.end()) {
+        return -2;
+    }
+    // Commit to the session. `c_rules()` materialises a fresh vector
+    // of pointers into `parsed.rules`; both the vector and the
+    // underlying rules must outlive the next transcribe call, which
+    // is why both fields live on the session.
+    s->grammar_text = gbnf_text;
+    s->grammar_root_rule = root;
+    s->grammar_parsed = std::move(parsed);
+    s->grammar_rules_ptrs = s->grammar_parsed.c_rules();
+    s->grammar_root_rule_id = it->second;
+    s->grammar_penalty = penalty > 0.0f ? penalty : 100.0f;
+    s->grammar_active = true;
     return 0;
 }
 

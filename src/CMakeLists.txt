@@ -150,6 +150,13 @@ add_library(crispasr
             # POD structs + opaque handles — no llama.h types leak out.
             chat.cpp
             ../include/crispasr_chat.h
+            # GBNF grammar parser — moved out of examples/ so the library
+            # can expose grammar-constrained sampling via
+            # `crispasr_session_set_grammar_text`. The CLI examples now
+            # depend on libcrispasr for grammar parsing too instead of
+            # building their own copy.
+            grammar-parser.h
+            grammar-parser.cpp
             )
 add_library(whisper ALIAS crispasr)
 

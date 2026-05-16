@@ -48,8 +48,9 @@ add_library(${TARGET} STATIC
     common-ggml.cpp
     common-crispasr.h
     common-crispasr.cpp
-    grammar-parser.h
-    grammar-parser.cpp
+    # grammar-parser.{h,cpp} moved to src/ so the library exposes
+    # GBNF parsing via the public C ABI. The common target still
+    # gets it transitively via `target_link_libraries(... crispasr)`.
     ${COMMON_SOURCES_FFMPEG}
     )
 

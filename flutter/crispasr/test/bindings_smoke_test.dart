@@ -192,6 +192,17 @@ void main() {
     }
   });
 
+  test('0.5.9 grammar-constrained sampling helpers resolve', () {
+    // crispasr_session_set_grammar_text was added in 0.5.9 — it
+    // threads a parsed GBNF graph through wparams.grammar_rules
+    // on the whisper transcribe dispatch. Symbol-presence test;
+    // the real parse-and-bind path is exercised by the
+    // CrispasrSession.setGrammar() Dart smoke below.
+    expect(() => lib.lookup('crispasr_session_set_grammar_text'),
+        returnsNormally,
+        reason: 'rebuild libcrispasr — 0.5.9 grammar setter is missing');
+  });
+
   test('LidMethod enum indexes match the C-side CrispasrLidMethod', () {
     // crispasr_detect_language_pcm dispatches on the int value of
     // `method.index`; the C side's `enum class CrispasrLidMethod`
