@@ -53,6 +53,43 @@
   per-call so worker isolates can run enhancement concurrently
   without coordination.
 
+## 0.5.11
+
+- **Whisper text-suppression + prompt-carry extras** — three
+  more whisper-only `wparams` knobs the CLI surfaces
+  (`--suppress-nst`, `--suppress-regex`,
+  `--carry-initial-prompt`) now have Dart bindings. New
+  sticky setter
+  `CrispasrSession.setWhisperDecodeExtras(suppressNonSpeechTokens:,
+  suppressRegex:, carryInitialPrompt:)`. Empty regex clears
+  any prior pattern (passes `nullptr` to wparams =
+  whisper's "no suppression" sentinel). Pre-0.5.11 dylibs
+  raise `UnsupportedError` so callers can graceful-degrade.
+- Underlying C-ABI: `crispasr_session_set_whisper_decode_extras`;
+  three new sticky session fields default to whisper's
+  upstream values so an unmodified session matches stock
+  whisper.cpp.
+
+## 0.5.10
+
+- **Whisper decoder-fallback thresholds** — `wparams`
+  knobs that decide when the decoder falls back to a higher
+  temperature pass (hard audio, low logprob) or treats a
+  segment as silence are now exposed via the session API:
+  `CrispasrSession.setFallbackThresholds(entropyThold:,
+  logprobThold:, noSpeechThold:, temperatureInc:)`. Mirrors
+  the CLI's `--entropy-thold` / `--logprob-thold` /
+  `--no-speech-thold` / `--temperature-inc` / `--no-fallback`
+  flags. `temperatureInc` is clamped to `[0, 1]`; setting
+  `0.0` disables the temperature-fallback loop entirely
+  (= the CLI's `--no-fallback`). Defaults match
+  `whisper_full_default_params` so an unmodified session
+  behaves bit-identical to stock whisper.cpp.
+- Underlying C-ABI: `crispasr_session_set_fallback_thresholds`.
+  Pre-0.5.10 dylibs raise `UnsupportedError`. Non-whisper
+  backends silently ignore — none have an analog for these
+  fields today.
+
 ## 0.4.9
 
 - Initial pub.dev release.
