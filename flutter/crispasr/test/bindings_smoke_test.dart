@@ -203,6 +203,18 @@ void main() {
         reason: 'rebuild libcrispasr — 0.5.9 grammar setter is missing');
   });
 
+  test('0.5.12 audio enhancement helper resolves', () {
+    // crispasr_enhance_audio_rnnoise runs RNNoise on a 16 kHz mono
+    // float32 buffer (upsample → denoise frames → downsample) as a
+    // transcribe pre-step. Pre-0.5.12 dylibs don't have the symbol;
+    // the Dart wrapper raises UnsupportedError so apps can
+    // graceful-degrade to the un-enhanced PCM.
+    expect(() => lib.lookup('crispasr_enhance_audio_rnnoise'),
+        returnsNormally,
+        reason: 'rebuild libcrispasr — 0.5.12 audio enhancement '
+            'helper is missing');
+  });
+
   test('0.5.11 whisper decode-extras setter resolves', () {
     // crispasr_session_set_whisper_decode_extras writes
     // wparams.suppress_nst + suppress_regex + carry_initial_prompt

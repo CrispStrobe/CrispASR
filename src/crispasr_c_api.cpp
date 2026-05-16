@@ -23,6 +23,7 @@
 #include "crispasr_vad.h"            // VAD slicing + stitching (shared with CLI)
 #include "crispasr_diarize.h"        // Speaker diarization (shared with CLI)
 #include "crispasr_lid.h"            // Language identification (shared with CLI)
+#include "crispasr_enhance.h"        // RNNoise audio enhancement (shared with CLI)
 #include "text_lid_dispatch.h"       // Text-LID backend-agnostic façade (CLD3 + fastText)
 #include "crispasr_aligner.h"        // CTC / forced-aligner word timings (shared with CLI)
 #include "crispasr_cache.h"          // HF download + filesystem cache (shared with CLI)
@@ -3364,6 +3365,34 @@ CA_EXPORT int crispasr_detect_language_pcm(const float* samples, int32_t n_sampl
     out_lang_buf[r.lang_code.size()] = '\0';
     if (out_confidence)
         *out_confidence = r.confidence;
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// RNNoise audio enhancement (transcribe pre-step).
+//
+// Takes a 16 kHz mono float32 PCM buffer in [-1, 1] and writes the
+// denoised result into a caller-allocated output buffer of the same
+// length. Internally upsamples to 48 kHz, runs RNNoise's 480-sample
+// frame loop, and downsamples back. State is allocated and freed per
+// call so concurrent worker isolates can invoke this safely.
+//
+// Returns:
+//   *  0 — success; out_pcm populated with denoised samples.
+//   * -1 — invalid args (null pointer, n_samples <= 0, out_cap < n_samples).
+//   * -2 — RNNoise init / processing failure (resampler init, etc).
+// ---------------------------------------------------------------------------
+CA_EXPORT int crispasr_enhance_audio_rnnoise(const float* in_pcm, int32_t n_samples, float* out_pcm,
+                                             int32_t out_cap) {
+    if (!in_pcm || !out_pcm || n_samples <= 0 || out_cap < n_samples)
+        return -1;
+
+    CrispasrEnhanceOptions opts;
+    opts.method = CrispasrEnhanceMethod::Rnnoise;
+    opts.verbose = false;
+
+    if (!crispasr_enhance_audio(in_pcm, n_samples, out_pcm, opts))
+        return -2;
     return 0;
 }
 

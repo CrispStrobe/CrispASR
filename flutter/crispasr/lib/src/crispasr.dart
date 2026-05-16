@@ -596,6 +596,53 @@ LidResult detectLanguagePcm({
   return LidResult(langCode: code, confidence: conf);
 }
 
+/// RNNoise-based audio enhancement (transcribe pre-step).
+///
+/// Returns a fresh [Float32List] of the same length as [pcm] with the
+/// denoiser applied. [pcm] must be 16 kHz mono float32 in `[-1, 1]`;
+/// the wrapper upsamples to 48 kHz internally to run RNNoise's
+/// 480-sample frame loop and downsamples back. State is allocated
+/// per call inside libcrispasr, so this is safe to invoke from
+/// concurrent worker isolates.
+///
+/// Throws [UnsupportedError] when the loaded dylib predates 0.5.12
+/// (i.e. doesn't expose `crispasr_enhance_audio_rnnoise`), letting
+/// callers graceful-degrade to the un-enhanced PCM.
+Float32List enhanceAudioRnnoise(
+  Float32List pcm, {
+  DynamicLibrary? lib,
+}) {
+  if (pcm.isEmpty) return Float32List(0);
+
+  lib ??= DynamicLibrary.open(CrispASR.defaultLibName());
+  if (!lib.providesSymbol('crispasr_enhance_audio_rnnoise')) {
+    throw UnsupportedError(
+        'crispasr_enhance_audio_rnnoise not present in this libcrispasr build — '
+        'rebuild against CrispASR 0.5.12+');
+  }
+
+  final fn = lib.lookupFunction<
+      Int32 Function(Pointer<Float>, Int32, Pointer<Float>, Int32),
+      int Function(Pointer<Float>, int, Pointer<Float>, int)>(
+      'crispasr_enhance_audio_rnnoise');
+
+  final inBuf = calloc<Float>(pcm.length);
+  final outBuf = calloc<Float>(pcm.length);
+  try {
+    for (var i = 0; i < pcm.length; i++) inBuf[i] = pcm[i];
+    final rc = fn(inBuf, pcm.length, outBuf, pcm.length);
+    if (rc != 0) {
+      throw StateError('crispasr_enhance_audio_rnnoise failed (rc=$rc)');
+    }
+    final out = Float32List(pcm.length);
+    for (var i = 0; i < pcm.length; i++) out[i] = outBuf[i];
+    return out;
+  } finally {
+    calloc.free(inBuf);
+    calloc.free(outBuf);
+  }
+}
+
 /// Tunables for [CrispasrSession.transcribeVad]. Field names and defaults
 /// mirror crispasr's `whisper_vad_params` plus the max-chunk fallback
 /// the shared library uses to bound encoder cost on long audio.
