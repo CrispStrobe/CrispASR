@@ -1301,17 +1301,31 @@ static ggml_cgraph* kokoro_build_graph_f0n(kokoro_context* c, int T_frames, int 
         return w;
     };
 
+    // Opt-in op-level bisect for the F0[0] / N[0] AdainResBlk1d. When
+    // KOKORO_DEBUG_INTERMEDIATES=1, every sub-op output inside the
+    // first block (AdaIN1d → LeakyReLU → Conv1d → AdaIN1d → LeakyReLU
+    // → Conv1d → residual) is named "dbg_pred_{f0,n}_0_…" and marked
+    // as a graph output so KOKORO_DUMP_STAGES (see crispasr-diff) can
+    // write each one to disk for GPU-vs-CPU comparison. Unset (the
+    // default) and the block runs with no extra ops or outputs, so
+    // production builds pay zero cost. Used to bisect the ggml_norm
+    // Metal regression — keep available for the next per-op-level bug.
+    static const bool s_dbg = []() {
+        const char* v = std::getenv("KOKORO_DEBUG_INTERMEDIATES");
+        return v && *v && *v != '0';
+    }();
     auto run_stack = [&](const char* prefix, const char* stage_branch, ggml_tensor* in) -> ggml_tensor* {
         // F0/N stacks all share: idx 0 (no upsample, dim 512→512), idx 1 (upsample, 512→256), idx 2 (no upsample, 256→256).
         ggml_tensor* y = in;
         auto w0 = load_resblk(prefix, 0, /*has_pool=*/false);
         auto w1 = load_resblk(prefix, 1, /*has_pool=*/true);
         auto w2 = load_resblk(prefix, 2, /*has_pool=*/false);
-        // Debug bisect: expose every intermediate of the F0[0] block so
-        // crispasr-diff can dump GPU vs CPU values side by side and
-        // identify the first op whose Metal output diverges from CPU.
-        char dbg0[64];
-        std::snprintf(dbg0, sizeof(dbg0), "dbg_pred_%s_0", stage_branch);
+        char dbg0_buf[64];
+        const char* dbg0 = nullptr;
+        if (s_dbg) {
+            std::snprintf(dbg0_buf, sizeof(dbg0_buf), "dbg_pred_%s_0", stage_branch);
+            dbg0 = dbg0_buf;
+        }
         y = kokoro_adain_resblk(ctx0, y, style_pred, w0.a1w, w0.a1b, w0.a2w, w0.a2b, w0.c1w, w0.c1b, w0.c2w, w0.c2b,
                                 /*pool*/ nullptr, nullptr, /*conv1x1*/ nullptr, dbg0);
         // Tag each AdainResBlk1d output as `pred_{f0,n}_{k}_out` so
@@ -1462,7 +1476,12 @@ static float* kokoro_run_f0n(kokoro_context* c, const int32_t* raw_ids, int n_ra
     const char* tname = stage_name; // "f0_curve" or "n_curve" — names match graph
     ggml_tensor* out = ggml_graph_get_tensor(gf, tname);
     if (!out) {
-        fprintf(stderr, "kokoro: F0Ntrain graph missing output '%s'\n", tname);
+        // dbg_* stages are opt-in (KOKORO_DEBUG_INTERMEDIATES=1); when
+        // that's unset they're never tagged into the graph. Silently
+        // return null so crispasr-diff can route them to SKIP rather
+        // than flooding stderr in normal runs.
+        if (std::strncmp(tname, "dbg_", 4) != 0)
+            fprintf(stderr, "kokoro: F0Ntrain graph missing output '%s'\n", tname);
         return nullptr;
     }
     const size_t n_floats = (size_t)out->ne[0] * (size_t)out->ne[1];
@@ -3124,7 +3143,12 @@ extern "C" float* kokoro_extract_stage(struct kokoro_context* ctx, const char* p
         std::strcmp(stage_name, "n_curve") == 0 || std::strcmp(stage_name, "pred_shared_out") == 0 ||
         std::strcmp(stage_name, "pred_f0_0_out") == 0 || std::strcmp(stage_name, "pred_f0_1_out") == 0 ||
         std::strcmp(stage_name, "pred_f0_2_out") == 0 || std::strcmp(stage_name, "pred_n_0_out") == 0 ||
-        std::strcmp(stage_name, "pred_n_1_out") == 0 || std::strcmp(stage_name, "pred_n_2_out") == 0) {
+        std::strcmp(stage_name, "pred_n_1_out") == 0 || std::strcmp(stage_name, "pred_n_2_out") == 0 ||
+        // Opt-in op-level bisect inside F0[0] / N[0] AdainResBlk1d.
+        // Only valid when KOKORO_DEBUG_INTERMEDIATES=1 was set at the
+        // time kokoro_init_from_file ran — otherwise the named tensors
+        // aren't in the graph and kokoro_run_f0n returns nullptr.
+        std::strncmp(stage_name, "dbg_pred_", 9) == 0) {
         int n_ids = 0;
         int32_t* ids = kokoro_phonemes_to_ids(ctx, phonemes, &n_ids);
         if (!ids || n_ids == 0) {

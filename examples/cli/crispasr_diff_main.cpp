@@ -2470,6 +2470,29 @@ int main(int argc, char** argv) {
             {"pred_n_0_out", COS_THRESHOLD},
             {"pred_n_1_out", COS_THRESHOLD},
             {"pred_n_2_out", COS_THRESHOLD},
+            // Opt-in op-level intermediates inside the F0[0] / N[0]
+            // AdainResBlk1d. Only populated when the kokoro context was
+            // built with KOKORO_DEBUG_INTERMEDIATES=1; otherwise
+            // kokoro_extract_stage returns null and the diff prints
+            // [ERR ] / [SKIP] (both harmless). Used to bisect the
+            // ggml_norm Metal regression; kept for the next per-op
+            // Metal kernel issue. Pair with KOKORO_USE_GPU=0 (CPU
+            // baseline) and KOKORO_DUMP_STAGES=<dir> to capture the
+            // tensor values for side-by-side numerical comparison.
+            {"dbg_pred_f0_0_adain1_pre_norm_TC", COS_THRESHOLD},
+            {"dbg_pred_f0_0_adain1_post_norm_TC", COS_THRESHOLD},
+            {"dbg_pred_f0_0_adain1_normed", COS_THRESHOLD},
+            {"dbg_pred_f0_0_adain1_h", COS_THRESHOLD},
+            {"dbg_pred_f0_0_adain1_xgamma", COS_THRESHOLD},
+            {"dbg_pred_f0_0_adain1_normed_plus_xgamma", COS_THRESHOLD},
+            {"dbg_pred_f0_0_adain1_out", COS_THRESHOLD},
+            {"dbg_pred_f0_0_after_lr1", COS_THRESHOLD},
+            {"dbg_pred_f0_0_after_conv1", COS_THRESHOLD},
+            {"dbg_pred_f0_0_adain2_pre_norm_TC", COS_THRESHOLD},
+            {"dbg_pred_f0_0_adain2_post_norm_TC", COS_THRESHOLD},
+            {"dbg_pred_f0_0_adain2_out", COS_THRESHOLD},
+            {"dbg_pred_f0_0_after_lr2", COS_THRESHOLD},
+            {"dbg_pred_f0_0_after_conv2", COS_THRESHOLD},
             {"f0_curve", COS_THRESHOLD},
             {"n_curve", COS_THRESHOLD},
             {"dec_encode_out", COS_THRESHOLD},
@@ -2487,10 +2510,18 @@ int main(int argc, char** argv) {
             int n_stage = 0;
             float* mine = kokoro_extract_stage(ctx, phonemes.c_str(), s.name, &n_stage);
             if (!mine || n_stage <= 0) {
-                printf("[ERR ] %-22s kokoro_extract_stage returned null\n", s.name);
+                // dbg_* stages are opt-in (KOKORO_DEBUG_INTERMEDIATES=1);
+                // unset means the named tensor was never added to the
+                // graph — count as SKIP, not FAIL, so the normal diff
+                // output isn't cluttered with [ERR ] for opt-in stages.
+                if (std::strncmp(s.name, "dbg_", 4) == 0) {
+                    n_skip++;
+                } else {
+                    printf("[ERR ] %-22s kokoro_extract_stage returned null\n", s.name);
+                    n_fail++;
+                }
                 if (mine)
                     free(mine);
-                n_fail++;
                 continue;
             }
             if (dump_dir && *dump_dir) {
