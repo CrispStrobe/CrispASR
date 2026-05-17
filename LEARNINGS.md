@@ -4849,3 +4849,91 @@ Lesson: when adding a fast-exit inside a loop with an existing
 post-loop "fix up" step, audit the post-loop for redundancy with the
 fast-exit. The most defensive-looking version is the most likely to
 double-count.
+
+
+## VibeVoice 1.5B TTS voice cloning: acoustic + semantic dual encoder (May 2026)
+
+### Root cause: TTS clone used acoustic-only, not acoustic+semantic
+
+Microsoft's VibeVoice architecture uses two parallel σ-VAE encoders for
+speech representation:
+
+- **Acoustic encoder** (`at_enc`): vae_dim=64, captures spectral/timbre info
+- **Semantic encoder** (`st_enc`): vae_dim=128, captures linguistic/prosodic info
+
+Both go through separate connectors (`at_conn` → d_lm, `se_conn` → d_lm) and
+are **element-wise summed** before being injected as voice conditioning tokens.
+
+The TTS voice clone code only used the acoustic encoder (comment said "uses
+ONLY the acoustic encoder"). The ASR path correctly used both. The assumption
+was wrong — Microsoft's `modeling_vibevoice.py` forward() at line 372-375:
+
+```python
+x[acoustic_input_mask] = (
+    speech_all_connect_features[speech_masks]       # acoustic
+    + semantic_speech_all_connect_features[speech_masks]  # semantic
+)
+```
+
+**Scaling asymmetry**: only the acoustic path gets `(x + bias_factor) *
+scaling_factor`. The semantic encoder output goes directly to the connector
+with no scaling. In the Python reference, scaling is inside
+`forward_speech_features()` which only processes acoustic tokens. The semantic
+path is a separate `self.model.semantic_connector(speech_semantic_tensors)`
+call with raw encoder output.
+
+**RMS ratio**: acoustic connector RMS ≈ 0.245, semantic connector RMS ≈ 0.034
+(ratio ~14%). The semantic contribution is small but structurally important for
+speaker identity transfer — without it the model produces generic-sounding
+speech.
+
+### WAV sample rate: parser must check, not assume 24 kHz
+
+The σ-VAE encoders expect 24 kHz input (3200× total downsample ratio). The
+RIFF WAV fmt chunk stores sample rate at byte offset +4, but the parser
+(`vibevoice_wav_ref.h`) skipped that field. A 16 kHz reference WAV feeds
+176000 samples → 55 frames instead of the correct 264000 → 83 frames.
+
+Fix: read `sample_rate` from fmt chunk, add linear-interpolation resample
+when ≠ 24 kHz. This is simpler than the Kaiser-windowed sinc resampler used
+in chatterbox (voice-clone quality doesn't need it — the σ-VAE encoder is
+robust to interpolation artifacts in the conditioning path).
+
+### C ABI env-var pattern for WAV voice reference
+
+VibeVoice's WAV clone path uses `VIBEVOICE_VOICE_AUDIO` env var because the
+core engine reads it in `vibevoice_synthesize()`. The CLI adapter already
+mapped `--voice <path.wav>` → env var, but the C ABI
+(`crispasr_session_set_voice`) went straight to `vibevoice_load_voice()` which
+only handles GGUF voice packs. The fix detects `.wav` suffix and calls
+`setenv("VIBEVOICE_VOICE_AUDIO", ...)` instead. This is the same
+pattern used by the CLI adapter — the C ABI just didn't replicate it.
+
+Implication: any new backend that accepts WAV references via env vars needs
+the same suffix detection in the C ABI, not just in the CLI adapter.
+
+### Python reference verification approach
+
+The `vibevoice` pip package has circular import issues with newer
+`transformers` versions (`tokenization_qwen2_fast` moved, `AutoModel.register`
+rejects duplicate config registrations). Workaround:
+
+1. Monkey-patch `_LazyAutoMapping.register` to accept `exist_ok=True` before
+   any vibevoice imports
+2. Create a compatibility stub at
+   `transformers/models/qwen2/tokenization_qwen2_fast.py` that re-exports from
+   the top-level `transformers.Qwen2TokenizerFast`
+3. Use `importlib.util.spec_from_file_location` to load specific submodules
+   without triggering the package's `__init__.py` import chain
+
+For the voice-clone reference, we only need the encoder + connector weights
+(not the full LM), so loading individual components from safetensors is
+both faster and avoids the 3 GB LM weight overhead.
+
+### Static library relinking trap (cmake)
+
+When a `.cpp` change only updates a static `.a` library, cmake's incremental
+build may report `Built target X` without actually relinking the final
+executable — the `.a` timestamp doesn't trigger the exe's link step. The
+binary stays stale. Workaround: `rm build/bin/crispasr` then rebuild, or
+touch the exe's own `.o` dependency.

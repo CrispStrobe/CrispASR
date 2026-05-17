@@ -4173,3 +4173,73 @@ absence is documented in the binding's source comment; closing it
 properly needs an ABI tweak so `on_token` pointers stay valid past
 the C callback's return (e.g. malloc-per-chunk + Dart-side
 `crispasr_chat_string_free`).
+
+
+### §91 — VibeVoice 1.5B voice clone fidelity fix (issue #74) (2026-05-17)
+
+Root cause of VibeVoice 1.5B TTS voice clone not carrying speaker
+identity (reported by vkrmch in #74): the TTS voice-ref path only
+used the **acoustic** σ-VAE encoder, but Microsoft's Python reference
+combines **both** acoustic and semantic encoder outputs via element-wise
+sum before embedding them as voice conditioning tokens.
+
+**The fix** (`src/vibevoice.cpp`, ~30 LOC net):
+
+1. Run both `at_enc` (acoustic) and `st_enc` (semantic) on the
+   reference WAV.
+2. Scale acoustic output: `(x + bias_factor) * scaling_factor` —
+   semantic gets NO scaling (matches Python).
+3. Run both through their respective connectors (`at_conn`, `se_conn`).
+4. Element-wise sum → `voice_embeds[i] = at_feat[i] + st_feat[i]`.
+5. Graceful fallback to acoustic-only if semantic path fails (old
+   GGUFs without `st_enc` tensors).
+
+All encoder/connector tensors were already in the 1.5B GGUF
+(converter always included them) and the C++ runtime already had
+`run_encoder_stage` + `run_connector_stage` for both prefixes (used
+by the ASR path). The TTS clone path simply wasn't calling them.
+
+**24 kHz resample fix** (`src/vibevoice_wav_ref.h`):
+
+The WAV parser was ignoring the sample rate field from the fmt chunk.
+A 16 kHz reference WAV would produce 55 frames instead of the correct
+83, because the σ-VAE expects 24 kHz input (3200× downsample). Fix:
+parse `sample_rate` from fmt chunk offset +4, add
+`vibevoice_resample_linear()` (simple linear interpolation), apply
+automatically when the WAV rate ≠ 24 kHz. Log line confirms:
+`resampled voice ref 16000 Hz → 24000 Hz (176000 → 264000 samples)`.
+
+**C ABI `.wav` voice path** (`src/crispasr_c_api.cpp`):
+
+`crispasr_session_set_voice()` unconditionally called
+`vibevoice_load_voice()` for all paths including `.wav` references,
+which only works for pre-baked GGUF voice packs. Fix: detect `.wav`
+suffix and set `VIBEVOICE_VOICE_AUDIO` env var instead, matching the
+CLI adapter's existing logic. Python and Dart bindings (which wrap the
+C ABI) now support `.wav` voice cloning for vibevoice-1.5b sessions.
+
+**Verification:**
+
+| Metric | Value |
+|---|---|
+| cos(C++ F16, Python F32) | 0.999884 |
+| cos(C++ Q8_0, Python F32) | 0.999229 |
+| ASR roundtrip (parakeet-ctc q4_k) | "Hello, this is the voice scone test of j. F. K." |
+| Peak | 7940 (no clipping) |
+| Nonzero samples | 99.9% |
+
+Python reference script: `tools/vibevoice_tts_ref_voice_clone.py` —
+loads encoder + connector weights from safetensors, dumps per-stage
+intermediates (`voice_at_enc_mean`, `voice_at_conn`, `voice_st_conn`,
+`voice_combined`) for comparison via `crispasr-diff` or manual cosine.
+C++ dump via `VIBEVOICE_TTS_DUMP=<dir>` writes `tts_voice_embeds.bin`.
+
+**Wiring audit** (status after this session):
+
+| Layer | `.gguf` voice | `.wav` clone | Notes |
+|---|---|---|---|
+| CLI (`--voice`) | ✓ | ✓ + resample | env var path |
+| C ABI | ✓ | ✓ (NEW) | detects `.wav` suffix |
+| Python | ✓ | ✓ (inherited) | via C ABI |
+| Dart/Flutter | ✓ | ✓ (inherited) | via C ABI |
+| Server `/v1/audio/speech` | ✓ | ✓ | via CLI adapter |
