@@ -507,7 +507,7 @@ catch_discover_tests(test_vibevoice_wav_ref
 #Tests the shared decode helpers in isolation with a mock LLM.No models
 #loaded, no GPU — pure CPU, sub - millisecond.Covers : argmax, softmax_of,
 #greedy run_with_probs, beam run_with_probs(beam_size = 1, 4), max_new_tokens
-#cap, multi - EOS termination.
+#cap, multi-EOS termination, token-id invariant (PR #97).
 add_executable(test-core-decode test-core-decode.cpp)
 target_include_directories(test-core-decode PRIVATE
     ${PROJECT_SOURCE_DIR}/src
@@ -518,6 +518,26 @@ target_link_libraries(test-core-decode PRIVATE
 catch_discover_tests(test-core-decode
     TEST_SPEC "[unit]"
     PROPERTIES LABELS "unit"
+)
+
+# ─── test_slice_timestamps — Catch2 unit tests for crispasr_fixed_chunk_slices
+# t0_cs / t1_cs timestamp math.  Pins the invariant that PR #96 depends on:
+# each slice's t0_cs = start_sample / SR * 100, with no gaps between adjacent
+# slices.  Links libcrispasr for crispasr_fixed_chunk_slices.  Pure CPU, no
+# model load.
+add_executable(test_slice_timestamps
+    test_slice_timestamps.cpp
+)
+target_include_directories(test_slice_timestamps PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test_slice_timestamps PRIVATE
+    Catch2::Catch2WithMain
+    crispasr
+)
+catch_discover_tests(test_slice_timestamps
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit;slice-ts"
 )
 
 # ─── test_qwen3_audio_tower — pre - refactor numeric baseline for the audio

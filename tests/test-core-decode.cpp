@@ -214,3 +214,67 @@ TEST_CASE("beam_decode: multi-EOS stops on any", "[unit][decode]") {
     bool is_eos = (last == 5 || last == 6 || last == 7);
     REQUIRE(is_eos);
 }
+
+// ---------------------------------------------------------------------------
+// Token-ID invariant — pins the contract that PR #97 fixes at the consumer
+// (qwen3 backend) level.
+//
+// core_beam_decode::run_with_probs returns result.tokens as raw int32_t ids.
+// Backends MUST copy those ids into crispasr_token::id (default -1) when
+// assembling the output token list. The qwen3 beam-search path was missing
+// this assignment; leaving id=-1 broke downstream consumers (native JSON
+// "tokens" array, whisper-compat "id" field in -ojf output).
+//
+// These tests verify:
+//   1. Beam result tokens are non-negative (they are valid vocab ids, not -1).
+//   2. The values match what the mock LLM emits (hot_tok=3 for first 3 calls,
+//      then EOS=5) — so a consumer that copies result.tokens[i] → crispasr_token.id
+//      gets a meaningful id, not the sentinel -1.
+// ---------------------------------------------------------------------------
+
+TEST_CASE("beam_decode: returned token ids are non-negative", "[unit][decode]") {
+    MockCtx ctx;
+    float prefill[8];
+    for (int i = 0; i < 8; i++) prefill[i] = -10.0f;
+    prefill[3] = 5.0f;
+
+    core_beam_decode::Config cfg;
+    cfg.max_new_tokens = 10;
+    cfg.eos_id = 5;
+    cfg.vocab_size = 8;
+    cfg.beam_size = 4;
+    cfg.prompt_len = 0;
+
+    auto result = core_beam_decode::run_with_probs(&ctx, prefill, mock_replay, cfg);
+
+    REQUIRE(!result.tokens.empty());
+    for (int32_t id : result.tokens)
+        REQUIRE(id >= 0);
+}
+
+TEST_CASE("beam_decode: token ids match expected hot_tok sequence", "[unit][decode]") {
+    // The mock emits hot_tok=3 for the first 3 steps, then EOS=5.
+    // Verifying the exact ids guarantees that a backend copying
+    // result.tokens[i] → crispasr_token.id gets the correct vocabulary
+    // index (not the -1 sentinel left when the assignment is absent).
+    MockCtx ctx;
+    float prefill[8];
+    for (int i = 0; i < 8; i++) prefill[i] = -10.0f;
+    prefill[3] = 5.0f;
+
+    core_beam_decode::Config cfg;
+    cfg.max_new_tokens = 10;
+    cfg.eos_id = 5;
+    cfg.vocab_size = 8;
+    cfg.beam_size = 1; // beam_size=1 → deterministic, same as greedy
+    cfg.prompt_len = 0;
+
+    auto result = core_beam_decode::run_with_probs(&ctx, prefill, mock_replay, cfg);
+
+    REQUIRE(result.tokens.size() >= 3);
+    REQUIRE(result.tokens[0] == 3);
+    REQUIRE(result.tokens[1] == 3);
+    REQUIRE(result.tokens[2] == 3);
+    // EOS terminates the sequence
+    REQUIRE(result.tokens.back() == 5);
+}
