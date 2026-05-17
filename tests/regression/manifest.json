@@ -143,7 +143,7 @@
       "name": "firered-asr2-aed",
       "backend_id": "firered-asr",
       "skip_diff": true,
-      "_skip_diff_note": "firered-asr not yet in crispasr-diff backend list. Needs backend integration before diff can run.",
+      "_skip_diff_note": "firered-asr IS in crispasr-diff, but Kaldi fbank mel diverges (cos_min=-0.525) and encoder (cos_min=-0.197). Likely a C++ fbank parameter or CMVN mismatch vs Python kaldi_native_fbank. Needs investigation.",
       "gguf": {
         "repo": "cstr/firered-asr2-aed-GGUF",
         "revision": "076633a711b3b0f1a5e04ee43b2a9748cde253bd",
@@ -180,7 +180,7 @@
       "name": "cohere-transcribe",
       "backend_id": "cohere",
       "skip_diff": true,
-      "_skip_diff_note": "Awaiting Kaggle rebake. cohere also affected by drop_last_frame fix.",
+      "_skip_diff_note": "mel passes (cos=0.999638) after transpose + drop_last_frame fix, but encoder_output fails (cos_min=-0.253) — 48-layer conformer diverges, needs investigation.",
       "skip_preflight": true,
       "_skip_preflight_note": "cstr/cohere-transcribe-GGUF is private and HF account has hit private-repo storage limit (403). Remove skip_preflight once repo is made public or space freed.",
       "gguf": {

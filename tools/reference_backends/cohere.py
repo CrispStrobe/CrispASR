@@ -37,7 +37,7 @@ DEFAULT_STAGES = [
     "enc_blk00_out",
     "enc_blk_mid_out",
     "enc_blk_last_out",
-    "encoder_out",         # final encoder hidden state (post enc→dec proj)
+    "encoder_output",      # final encoder hidden state (post enc→dec proj)
     "llm_argmax",          # greedy decoded token IDs from model.generate()
     "generated_text",      # decoded transcript (special tokens stripped)
 ]
@@ -107,8 +107,9 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
 
     out: Dict[str, np.ndarray] = {}
     if "mel_spectrogram" in stages and "input_features" in inputs:
-        mel = inputs["input_features"][0]           # drop batch
-        out["mel_spectrogram"] = mel.detach().cpu().float().numpy()
+        mel = inputs["input_features"][0]           # drop batch → (n_mels, T)
+        # Transpose to (T, n_mels) matching C++ Layout::TimeMels convention.
+        out["mel_spectrogram"] = mel.transpose(0, 1).contiguous().detach().cpu().float().numpy()
 
     # ---- Resolve the encoder and register hooks ----
     encoder, enc_path = _resolve_encoder(model)
@@ -162,8 +163,8 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
 
     for k, v in captures.items():
         out[k] = v[0].detach().cpu().float().numpy()
-    if "encoder_out" in stages and enc_hidden is not None:
-        out["encoder_out"] = enc_hidden[0].detach().cpu().float().numpy()
+    if "encoder_output" in stages and enc_hidden is not None:
+        out["encoder_output"] = enc_hidden[0].detach().cpu().float().numpy()
 
     # ---- Generation (greedy) ----
     want_argmax = "llm_argmax" in stages
