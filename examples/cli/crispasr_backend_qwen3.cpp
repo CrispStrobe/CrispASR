@@ -367,6 +367,7 @@ public:
                 }
                 transcript += txt;
                 crispasr_token tk;
+                tk.id = id;
                 tk.text = txt;
                 tk.confidence = (i < probs.size()) ? probs[i] : 1.0f;
                 out_tokens.push_back(std::move(tk));
