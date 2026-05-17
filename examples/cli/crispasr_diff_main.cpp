@@ -2419,6 +2419,14 @@ int main(int argc, char** argv) {
         auto cp = kokoro_context_default_params();
         cp.n_threads = 4;
         cp.verbosity = 0;
+        // KOKORO_USE_GPU=0 forces the CPU backend (default is GPU so the
+        // diff matches what the runtime binary uses by default). Used
+        // to bisect Metal-specific kokoro regressions by running the
+        // same per-stage diff in both modes and comparing where each
+        // first diverges from the PyTorch reference.
+        const char* gpu_env = std::getenv("KOKORO_USE_GPU");
+        if (gpu_env && (*gpu_env == '0' || *gpu_env == 0))
+            cp.use_gpu = false;
         kokoro_context* ctx = kokoro_init_from_file(model_path.c_str(), cp);
         if (!ctx) {
             fprintf(stderr, "failed to load kokoro model '%s'\n", model_path.c_str());
@@ -2450,6 +2458,16 @@ int main(int argc, char** argv) {
             {"pred_lstm_out", COS_THRESHOLD},
             {"durations", COS_THRESHOLD},
             {"align_out", COS_THRESHOLD},
+            // F0Ntrain intermediates (kokoro Metal short-input bisect).
+            // Optional in reference dumps — older fixture archives won't
+            // have them and the diff will print [SKIP] (rep.found=false).
+            {"pred_shared_out", COS_THRESHOLD},
+            {"pred_f0_0_out", COS_THRESHOLD},
+            {"pred_f0_1_out", COS_THRESHOLD},
+            {"pred_f0_2_out", COS_THRESHOLD},
+            {"pred_n_0_out", COS_THRESHOLD},
+            {"pred_n_1_out", COS_THRESHOLD},
+            {"pred_n_2_out", COS_THRESHOLD},
             {"f0_curve", COS_THRESHOLD},
             {"n_curve", COS_THRESHOLD},
             {"dec_encode_out", COS_THRESHOLD},

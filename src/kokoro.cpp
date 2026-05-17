@@ -878,8 +878,19 @@ static ggml_tensor* kokoro_voice_style_slice(ggml_context* ctx, kokoro_context* 
         idx = (int)max_phon;
     }
     idx -= 1;
-    ggml_tensor* slice = ggml_view_2d(ctx, pack, /*ne0*/ 256, /*ne1*/ 1, pack->nb[1], (size_t)idx * pack->nb[2]);
-    return ggml_view_2d(ctx, slice, /*ne0*/ 128, /*ne1*/ 1, slice->nb[1], (size_t)byte_offset);
+    // Single ggml_view_2d at the combined absolute offset. The previous
+    // view-of-view (pack → idx slice → 128-channel half) hit a Metal-
+    // specific bug where short utterances on GPU read the wrong slice
+    // of the voice pack — the first divergent stages in the per-stage
+    // diff (`f0_curve`, `n_curve`) showed amplitude ~15× the PyTorch
+    // reference, cascading to dec_encode_out cos=0.27 and
+    // dec_decode_3_out cos=-0.30. Folding the two offsets into one
+    // view restores the cascade. Note ggml view tensors are named
+    // "<parent> (view)" by default — the original logs flagged
+    // "voice.pack (view) (view)" which is the symptom of this
+    // double-view path.
+    return ggml_view_2d(ctx, pack, /*ne0*/ 128, /*ne1*/ 1, pack->nb[1],
+                        (size_t)idx * pack->nb[2] + (size_t)byte_offset);
 }
 
 // Predictor style: back half (offset 128*F32). model.py:104 → ref_s[:, 128:]
@@ -1147,6 +1158,13 @@ static ggml_cgraph* kokoro_build_graph_f0n(kokoro_context* c, int T_frames, int 
     ggml_tensor* shared_out = core_lstm::lstm_bidir(ctx0, gf, en, sh_W_ih_f, sh_W_hh_f, sh_b_ih_f, sh_b_hh_f, sh_W_ih_r,
                                                     sh_W_hh_r, sh_b_ih_r, sh_b_hh_r,
                                                     H_lstm); // (512, T_frames)
+    // Tag the shared LSTM output so kokoro_extract_stage can surface it
+    // via "pred_shared_out". Used to bisect Metal-specific kokoro
+    // regressions inside F0Ntrain (the LSTM is between pred_lstm_out and
+    // f0_curve in the per-stage diff cascade).
+    ggml_set_name(shared_out, "pred_shared_out");
+    ggml_set_output(shared_out);
+    ggml_build_forward_expand(gf, shared_out);
 
     // Helper to load AdainResBlk1d weights for prefix "pred.X.{idx}".
     auto load_resblk = [&](const char* prefix, int idx, bool has_pool) {
@@ -1193,7 +1211,7 @@ static ggml_cgraph* kokoro_build_graph_f0n(kokoro_context* c, int T_frames, int 
         return w;
     };
 
-    auto run_stack = [&](const char* prefix, ggml_tensor* in) -> ggml_tensor* {
+    auto run_stack = [&](const char* prefix, const char* stage_branch, ggml_tensor* in) -> ggml_tensor* {
         // F0/N stacks all share: idx 0 (no upsample, dim 512→512), idx 1 (upsample, 512→256), idx 2 (no upsample, 256→256).
         ggml_tensor* y = in;
         auto w0 = load_resblk(prefix, 0, /*has_pool=*/false);
@@ -1201,15 +1219,42 @@ static ggml_cgraph* kokoro_build_graph_f0n(kokoro_context* c, int T_frames, int 
         auto w2 = load_resblk(prefix, 2, /*has_pool=*/false);
         y = kokoro_adain_resblk(ctx0, y, style_pred, w0.a1w, w0.a1b, w0.a2w, w0.a2b, w0.c1w, w0.c1b, w0.c2w, w0.c2b,
                                 /*pool*/ nullptr, nullptr, /*conv1x1*/ nullptr);
+        // Tag each AdainResBlk1d output as `pred_{f0,n}_{k}_out` so
+        // crispasr-diff can compare them against the Python reference
+        // and pinpoint the first stage that diverges on Metal.
+        {
+            char nm[32];
+            std::snprintf(nm, sizeof(nm), "pred_%s_0_out", stage_branch);
+            y = ggml_cont(ctx0, y);
+            ggml_set_name(y, nm);
+            ggml_set_output(y);
+            ggml_build_forward_expand(gf, y);
+        }
         y = kokoro_adain_resblk(ctx0, y, style_pred, w1.a1w, w1.a1b, w1.a2w, w1.a2b, w1.c1w, w1.c1b, w1.c2w, w1.c2b,
                                 w1.poolw, w1.poolb, w1.sc);
+        {
+            char nm[32];
+            std::snprintf(nm, sizeof(nm), "pred_%s_1_out", stage_branch);
+            y = ggml_cont(ctx0, y);
+            ggml_set_name(y, nm);
+            ggml_set_output(y);
+            ggml_build_forward_expand(gf, y);
+        }
         y = kokoro_adain_resblk(ctx0, y, style_pred, w2.a1w, w2.a1b, w2.a2w, w2.a2b, w2.c1w, w2.c1b, w2.c2w, w2.c2b,
                                 /*pool*/ nullptr, nullptr, /*conv1x1*/ nullptr);
+        {
+            char nm[32];
+            std::snprintf(nm, sizeof(nm), "pred_%s_2_out", stage_branch);
+            y = ggml_cont(ctx0, y);
+            ggml_set_name(y, nm);
+            ggml_set_output(y);
+            ggml_build_forward_expand(gf, y);
+        }
         return y; // (256, 2*T_frames)
     };
 
     // F0 stack
-    ggml_tensor* F0 = run_stack("pred.F0", shared_out);
+    ggml_tensor* F0 = run_stack("pred.F0", "f0", shared_out);
     // F0_proj: Conv1d(256 → 1, k=1).
     ggml_tensor* fp_w = require(c, "pred.F0_proj.weight"); // ne=(1, 256, 1)
     ggml_tensor* fp_b = require(c, "pred.F0_proj.bias");   // ne=(1,)
@@ -1228,7 +1273,7 @@ static ggml_cgraph* kokoro_build_graph_f0n(kokoro_context* c, int T_frames, int 
     ggml_build_forward_expand(gf, F0);
 
     // N stack (mirror)
-    ggml_tensor* N = run_stack("pred.N", shared_out);
+    ggml_tensor* N = run_stack("pred.N", "n", shared_out);
     ggml_tensor* np_w = require(c, "pred.N_proj.weight");
     ggml_tensor* np_b = require(c, "pred.N_proj.bias");
     {
@@ -1304,7 +1349,24 @@ static float* kokoro_run_f0n(kokoro_context* c, const int32_t* raw_ids, int n_ra
         std::free(en);
         return nullptr;
     }
+    // KOKORO_F0N_FORCE_CPU=1: pin every node of the F0/N graph to the
+    // CPU backend via the scheduler. Diagnostic for the short-input
+    // Metal regression where pred_f0_0_out + downstream collapse —
+    // bisect localized the divergence to inside this graph. Forcing
+    // CPU here while leaving the predictor + decoder on Metal isolates
+    // whether the bug lives in F0Ntrain specifically or in the
+    // scheduler's handling of the F0Ntrain → decoder boundary.
+    static const bool s_f0n_cpu = []() {
+        const char* v = std::getenv("KOKORO_F0N_FORCE_CPU");
+        return v && *v && *v != '0';
+    }();
     ggml_backend_sched_reset(c->sched);
+    if (s_f0n_cpu && c->backend_cpu && c->backend_cpu != c->backend) {
+        for (int i = 0; i < ggml_graph_n_nodes(gf); i++) {
+            ggml_tensor* t = ggml_graph_node(gf, i);
+            ggml_backend_sched_set_tensor_backend(c->sched, t, c->backend_cpu);
+        }
+    }
     if (!ggml_backend_sched_alloc_graph(c->sched, gf)) {
         fprintf(stderr, "kokoro: sched_alloc_graph failed for F0Ntrain\n");
         std::free(en);
@@ -1566,6 +1628,21 @@ static float* kokoro_run_decoder_body(kokoro_context* c, const int32_t* raw_ids,
         return nullptr;
     }
     ggml_backend_sched_reset(c->sched);
+    // KOKORO_DEC_FORCE_CPU=1: pin every node of the decoder-body graph
+    // to CPU. Twin of KOKORO_F0N_FORCE_CPU — same AdainResBlk1d bug on
+    // Metal hits the decoder too for short utterances. Both env vars
+    // together form a temporary workaround for the kokoro short-input
+    // Metal regression until the underlying kernel bug is fixed.
+    static const bool s_dec_cpu = []() {
+        const char* v = std::getenv("KOKORO_DEC_FORCE_CPU");
+        return v && *v && *v != '0';
+    }();
+    if (s_dec_cpu && c->backend_cpu && c->backend_cpu != c->backend) {
+        for (int i = 0; i < ggml_graph_n_nodes(gf); i++) {
+            ggml_tensor* t = ggml_graph_node(gf, i);
+            ggml_backend_sched_set_tensor_backend(c->sched, t, c->backend_cpu);
+        }
+    }
     if (!ggml_backend_sched_alloc_graph(c->sched, gf)) {
         fprintf(stderr, "kokoro: sched_alloc_graph failed for decoder body\n");
         std::free(asr);
@@ -2981,7 +3058,10 @@ extern "C" float* kokoro_extract_stage(struct kokoro_context* ctx, const char* p
     }
 
     if (std::strcmp(stage_name, "align_out") == 0 || std::strcmp(stage_name, "f0_curve") == 0 ||
-        std::strcmp(stage_name, "n_curve") == 0) {
+        std::strcmp(stage_name, "n_curve") == 0 || std::strcmp(stage_name, "pred_shared_out") == 0 ||
+        std::strcmp(stage_name, "pred_f0_0_out") == 0 || std::strcmp(stage_name, "pred_f0_1_out") == 0 ||
+        std::strcmp(stage_name, "pred_f0_2_out") == 0 || std::strcmp(stage_name, "pred_n_0_out") == 0 ||
+        std::strcmp(stage_name, "pred_n_1_out") == 0 || std::strcmp(stage_name, "pred_n_2_out") == 0) {
         int n_ids = 0;
         int32_t* ids = kokoro_phonemes_to_ids(ctx, phonemes, &n_ids);
         if (!ids || n_ids == 0) {

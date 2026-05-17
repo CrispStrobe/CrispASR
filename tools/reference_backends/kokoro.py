@@ -87,6 +87,17 @@ DEFAULT_STAGES = [
     "pred_lstm_out",
     "durations",
     "align_out",
+    # F0Ntrain intermediates (PLAN — kokoro Metal short-input bisect):
+    # cascade from f0_curve / n_curve back into the shared LSTM and the
+    # 3 AdainResBlk1d stages per branch. Lets the per-stage diff find
+    # the FIRST op in F0Ntrain whose Metal output diverges from PyTorch.
+    "pred_shared_out",
+    "pred_f0_0_out",
+    "pred_f0_1_out",
+    "pred_f0_2_out",
+    "pred_n_0_out",
+    "pred_n_1_out",
+    "pred_n_2_out",
     "f0_curve",
     "n_curve",
     "dec_encode_out",
@@ -295,6 +306,16 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
         handles.append(kmodel.predictor.F0_proj.register_forward_hook(post_hook("f0_curve")))
     if "n_curve" in stages:
         handles.append(kmodel.predictor.N_proj.register_forward_hook(post_hook("n_curve")))
+    # F0Ntrain intermediates (kokoro Metal short-input bisect).
+    if "pred_shared_out" in stages:
+        handles.append(kmodel.predictor.shared.register_forward_hook(post_hook("pred_shared_out")))
+    for i in range(3):
+        sname_f = f"pred_f0_{i}_out"
+        sname_n = f"pred_n_{i}_out"
+        if sname_f in stages:
+            handles.append(kmodel.predictor.F0[i].register_forward_hook(post_hook(sname_f)))
+        if sname_n in stages:
+            handles.append(kmodel.predictor.N[i].register_forward_hook(post_hook(sname_n)))
     # gen_pre_post_out is the input to generator.conv_post (= the last
     # LeakyReLU(0.01) output). Pre-hook captures it before conv_post runs.
     if "gen_pre_post_out" in stages:
@@ -338,6 +359,20 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
     # pred_lstm_out: LSTM output (B, L, 512) → (L, 512) ✓
     if "pred_lstm_out" in captures:
         out["pred_lstm_out"] = first_batch(captures["pred_lstm_out"]).contiguous().numpy().astype(np.float32)
+    # pred_shared_out: shared LSTM in F0Ntrain. Input is (B, T_frames, 640)
+    # (= en.transpose(-1, -2)); output (B, T_frames, 512). Keep as (T, D)
+    # to match the C++ ggml layout (ggml ne=[D=512, T_frames]).
+    if "pred_shared_out" in captures:
+        out["pred_shared_out"] = first_batch(captures["pred_shared_out"]).contiguous().numpy().astype(np.float32)
+    # pred_f0_K_out / pred_n_K_out: each AdainResBlk1d returns (B, C, T) —
+    # transpose to (T, C). The 3 blocks have C = 512, 256, 256 and the
+    # K=1 block also doubles T (upsample=True).
+    for k in range(3):
+        for branch in ("f0", "n"):
+            key = f"pred_{branch}_{k}_out"
+            if key in captures:
+                t = first_batch(captures[key]).transpose(0, 1).contiguous().numpy().astype(np.float32)
+                out[key] = t
     # decoder body: (B, C, T) → (T, C)
     if "dec_encode_out" in captures:
         t = first_batch(captures["dec_encode_out"]).transpose(0, 1).contiguous().numpy().astype(np.float32)
