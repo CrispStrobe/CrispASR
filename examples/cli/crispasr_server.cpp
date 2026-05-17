@@ -335,8 +335,7 @@ static transcription_result do_transcribe(const httplib::MultipartFormData& audi
         if (rp.verbose) {
             fprintf(stderr,
                     "crispasr-server[verbose]: align: need_ts=%d aligner='%s' caps_ctc=%d force=%d -> want=%d\n",
-                    need_timestamps ? 1 : 0,
-                    rp.aligner_model.c_str(), !!(backend->capabilities() & CAP_TIMESTAMPS_CTC),
+                    need_timestamps ? 1 : 0, rp.aligner_model.c_str(), !!(backend->capabilities() & CAP_TIMESTAMPS_CTC),
                     rp.force_aligner ? 1 : 0, want_align ? 1 : 0);
         }
 
@@ -365,8 +364,8 @@ static transcription_result do_transcribe(const httplib::MultipartFormData& audi
             if (!rp.no_prints && slices.size() > 1) {
                 auto tc1 = std::chrono::steady_clock::now();
                 double slice_s = std::chrono::duration<double>(tc1 - tc0).count();
-                fprintf(stderr, "crispasr-server: slice %zu/%zu done (%.1fs audio in %.1fs)\n", i + 1,
-                        slices.size(), (sl.end - sl.start) / (double)SR, slice_s);
+                fprintf(stderr, "crispasr-server: slice %zu/%zu done (%.1fs audio in %.1fs)\n", i + 1, slices.size(),
+                        (sl.end - sl.start) / (double)SR, slice_s);
             }
         }
 
