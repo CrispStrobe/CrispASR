@@ -1924,10 +1924,30 @@ static ggml_cgraph* build_graph_t3_gpt2_kv(chatterbox_context* c, int n_past, in
         // Permute Q to (hd, T, n_h)
         Q = ggml_cont(ctx0, ggml_permute(ctx0, Q, 0, 2, 1, 3));
 
-        // Flash attention
-        ggml_tensor* attn = ggml_flash_attn_ext(ctx0, Q, Kfull, Vfull, (T == 1) ? nullptr : causal_mask, attn_scale,
-                                                /*max_bias*/ 0.0f, /*logit_softcap*/ 0.0f);
-        attn = ggml_reshape_2d(ctx0, attn, D, T);
+        // Attention. CRISPASR_CHATTERBOX_NAIVE_ATTN=1 swaps ggml_flash_attn_ext
+        // for an explicit softmax(QK^T)V path. Useful for isolating flash_attn
+        // accumulator-order differences from other bugs. Layout follows
+        // src/qwen3_asr.cpp:895-924: scores = mul_mat(K, Q); soft_max_ext
+        // (fused scale + mask + softmax); V is permuted (Lk, hd, n_h) for the
+        // attn = mul_mat(V', scores) step that contracts over Lk. The result
+        // is (hd, T, n_h) which must be permuted (0, 2, 1, 3) to (hd, n_h, T)
+        // before reshape_2d(D, T) so the head dim packs correctly for the WO
+        // projection — flash_attn_ext outputs (hd, n_h, T) natively per its
+        // ggml.h docs, so skipping the permute here gave wrong outputs in an
+        // earlier attempt.
+        ggml_tensor* attn;
+        if (std::getenv("CRISPASR_CHATTERBOX_NAIVE_ATTN")) {
+            ggml_tensor* scores = ggml_mul_mat(ctx0, Kfull, Q);
+            scores = ggml_soft_max_ext(ctx0, scores, (T > 1) ? causal_mask : nullptr, attn_scale, 0.0f);
+            ggml_tensor* Vp = ggml_cont(ctx0, ggml_permute(ctx0, Vfull, 1, 0, 2, 3));
+            attn = ggml_mul_mat(ctx0, Vp, scores);
+            attn = ggml_cont(ctx0, ggml_permute(ctx0, attn, 0, 2, 1, 3));
+            attn = ggml_reshape_2d(ctx0, attn, D, T);
+        } else {
+            attn = ggml_flash_attn_ext(ctx0, Q, Kfull, Vfull, (T == 1) ? nullptr : causal_mask, attn_scale,
+                                       /*max_bias*/ 0.0f, /*logit_softcap*/ 0.0f);
+            attn = ggml_reshape_2d(ctx0, attn, D, T);
+        }
 
         // Output projection + residual
         attn = ggml_mul_mat(ctx0, b.attn_output_w, attn);

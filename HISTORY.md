@@ -113,15 +113,49 @@ which prefill position is attended to.
 
 Ruled out so far: speech_head bias missing, WPE double-add, attention
 scale, GPT-2 LayerNorm scale/bias loading, GELU variant, `scale_attn_
-by_inverse_layer_idx` (False on this config), `scale_attn_weights`
-(True on both sides), prefill length mismatch, Q8_0 vs F16 weight
-precision, F32 KV cache (read as F32 or stored as F32 — neither
-helps). The naive `softmax(QK^T)V` replacement isn't viable yet —
-my first cut produced wrong outputs from L00 (layout bug), so the
-flash-attn vs naive comparison is still open. Suspects remaining:
-(a) `ggml_flash_attn_ext` numerics at `T == 1` with the GPT-2 head
-geometry, (b) accumulated drift in earlier layers that just happens
-to cross a softmax boundary at L05.
+by_inverse_layer_idx` (False on this config — verified by loading the
+GPT2Config from Python), `scale_attn_weights` (True on both sides),
+prefill length mismatch, Q8_0 vs F16 weight precision (F16 model
+reproduces the same step-1 max logit 12.37 vs 12.39 for Q8_0), F32
+KV cache (cache stored as F32 or read as F32 — neither helps).
+Verified independently: the C++ input embed fed to the GPT-2 forward
+at step 1 (`speech_emb(4024) + wpe(383)`) matches the Python ref to 5
+decimal places, so the divergence is in the transformer forward, not
+the input.
+
+Outlier analysis on the L00 post-attn diff: the maximum-absolute-diff
+element is at dim 265, which is head 4 / hd-position 9. This same
+dim 265 is the largest outlier through L01-L04 with the diff growing
+slowly (−0.21 → −0.91), then at L05 the outlier jumps to dim 659
+(head 10) with diff -2.36. Suggests a specific head-4 attention
+pattern at L00 produces a head-4-localized numerical difference that
+propagates into the residual stream and is then amplified by a sharp
+attention pattern at head 10 of L05.
+
+**Flash_attn ruled out** (added 2026-05-17): added a naive
+softmax(QK^T)V code path behind `CRISPASR_CHATTERBOX_NAIVE_ATTN=1`
+following the qwen3_asr.cpp layout (with the post-mul_mat
+`permute(0, 2, 1, 3)` so the head dim packs correctly for the WO
+projection). Naive attention produces essentially identical bisect
+results: L05_post_attn cos 0.94421 with naive vs 0.94450 with
+flash_attn. The divergence is therefore **not** in the attention
+compute — it's accumulated drift from `ggml_mul_mat` (QKV / WO /
+FFN projections), `ggml_norm` (LayerNorm), or some other per-layer
+op whose F32 accumulator order differs from PyTorch's CPU path.
+Q8_0 weight quant noise (~0.4%/dot) is consistent with the L00 cos
+0.999 baseline but is *not* the dominant source — F16 weights
+reproduce the same L05 divergence.
+
+Suspect remaining: per-op CPU numerics differences between ggml's
+F32 mul_mat / norm and PyTorch's. Hard to fix without bit-exact
+op replacements. The diagnostic infrastructure
+(`CRISPASR_CHATTERBOX_DUMP_GPT2_LAYERS=1`,
+`CRISPASR_CHATTERBOX_NAIVE_ATTN=1`,
+`tools/cb_turbo_perlayer_dump_pyref.py`,
+`tools/cb_turbo_perlayer_diff.py`) is in place so future attempts
+(e.g., dumping per-position K/V at the prefill end and diffing
+against Python's cache, or trying a bit-exact F32 mul_mat) can
+keep narrowing the locus.
 
 ---
 
