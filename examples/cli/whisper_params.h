@@ -179,6 +179,10 @@ struct whisper_params {
     // detector jitter gaps, but never across --stream-final-on-silence-ms.
     // 0 disables streaming-specific post-merge.
     int32_t stream_vad_merge_gap_ms = 250;
+    // JSON streaming + VAD only: control FireRedPunc placement when
+    // --punc-model is loaded. "final" avoids the high-frequency partial
+    // punc path; "partial" preserves the older partial+final behavior.
+    std::string stream_punc = "final"; // off|final|partial
     // Issue #84 round 2 (CKwasd retest): how to compute `final.text`
     // when an utterance closes. The round-1 design just echoed the
     // last rolling-window partial — wrong because the rolling window

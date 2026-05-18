@@ -64,6 +64,25 @@ static void apply_punc_model(fireredpunc_context* punc_ctx, std::vector<crispasr
     }
 }
 
+static std::string apply_punc_text(fireredpunc_context* punc_ctx, const std::string& text) {
+    if (!punc_ctx || text.empty())
+        return text;
+    char* result = fireredpunc_process(punc_ctx, text.c_str());
+    if (!result)
+        return text;
+    std::string out = result;
+    free(result);
+    return out;
+}
+
+static bool stream_punc_partials_enabled(const whisper_params& params) {
+    return params.stream_punc == "partial";
+}
+
+static bool stream_punc_finals_enabled(const whisper_params& params) {
+    return params.stream_punc == "final" || params.stream_punc == "partial";
+}
+
 // Apply PCS (punctuation + capitalization + segmentation) to all segments.
 static void apply_pcs_model(pcs_context* pcs_ctx, std::vector<crispasr_segment>& segs) {
     if (!pcs_ctx)
@@ -1501,7 +1520,8 @@ int crispasr_run_backend(const whisper_params& params_in) {
                         }
                         if (!sl_for_text.empty())
                             decoded_segments_this_step = true;
-                        apply_punc_model(punc_ctx.get(), sl_for_text);
+                        if (stream_punc_partials_enabled(params))
+                            apply_punc_model(punc_ctx.get(), sl_for_text);
                         apply_truecase_model(tc_ctx.get(), sl_for_text);
                         apply_truecase_crf_model(tc_crf_ctx.get(), sl_for_text);
                         apply_truecase_lstm_model(tc_lstm_ctx.get(), sl_for_text);
@@ -1605,6 +1625,7 @@ int crispasr_run_backend(const whisper_params& params_in) {
                     // replaced by an empty final. (Round 4 of #84: CKwasd
                     // report 2026-05-11 "empty finals on sub-2-s utterances".)
                     std::string final_text;
+                    bool final_text_from_redecode = false;
                     if (params.stream_final_mode == "redecode") {
                         if ((int)utterance_pcm.size() >= crispasr::kStreamRedecodeMinSamples) {
                             // Disable nested VAD: utterance_pcm is already
@@ -1616,7 +1637,8 @@ int crispasr_run_backend(const whisper_params& params_in) {
                             decode_params.vad_model.clear();
                             auto utt_segs =
                                 backend->transcribe(utterance_pcm.data(), (int)utterance_pcm.size(), 0, decode_params);
-                            apply_punc_model(punc_ctx.get(), utt_segs);
+                            if (stream_punc_finals_enabled(params))
+                                apply_punc_model(punc_ctx.get(), utt_segs);
                             apply_truecase_model(tc_ctx.get(), utt_segs);
                             apply_truecase_crf_model(tc_crf_ctx.get(), utt_segs);
                             apply_truecase_lstm_model(tc_lstm_ctx.get(), utt_segs);
@@ -1627,6 +1649,7 @@ int crispasr_run_backend(const whisper_params& params_in) {
                             }
                             for (const auto& s : utt_segs)
                                 final_text += s.text;
+                            final_text_from_redecode = !final_text.empty();
                         }
                         if (final_text.empty())
                             final_text = crispasr::stitch_partial_accumulator(prefix_committed, last_partial_text);
@@ -1634,6 +1657,8 @@ int crispasr_run_backend(const whisper_params& params_in) {
                         // prefix mode: stitch committed prefix + last partial tail
                         final_text = crispasr::stitch_partial_accumulator(prefix_committed, last_partial_text);
                     }
+                    if (stream_punc_finals_enabled(params) && !final_text_from_redecode)
+                        final_text = apply_punc_text(punc_ctx.get(), final_text);
                     const double t0 = (double)utterance_start_sample / (double)SR;
                     const double t1 = (double)last_speech_end_sample / (double)SR;
                     fprintf(stdout,
@@ -1903,6 +1928,7 @@ int crispasr_run_backend(const whisper_params& params_in) {
             // EOF path: identical redecode→stitch-fallback contract to the
             // in-loop finalize_utterance. See crispasr_stream_finalize.h.
             std::string final_text;
+            bool final_text_from_redecode = false;
             if (params.stream_final_mode == "redecode") {
                 if ((int)utterance_pcm.size() >= crispasr::kStreamRedecodeMinSamples) {
                     whisper_params decode_params = params;
@@ -1910,7 +1936,8 @@ int crispasr_run_backend(const whisper_params& params_in) {
                     decode_params.vad_model.clear();
                     auto utt_segs =
                         backend->transcribe(utterance_pcm.data(), (int)utterance_pcm.size(), 0, decode_params);
-                    apply_punc_model(punc_ctx.get(), utt_segs);
+                    if (stream_punc_finals_enabled(params))
+                        apply_punc_model(punc_ctx.get(), utt_segs);
                     apply_truecase_model(tc_ctx.get(), utt_segs);
                     apply_truecase_crf_model(tc_crf_ctx.get(), utt_segs);
                     apply_truecase_lstm_model(tc_lstm_ctx.get(), utt_segs);
@@ -1921,12 +1948,15 @@ int crispasr_run_backend(const whisper_params& params_in) {
                     }
                     for (const auto& s : utt_segs)
                         final_text += s.text;
+                    final_text_from_redecode = !final_text.empty();
                 }
                 if (final_text.empty())
                     final_text = crispasr::stitch_partial_accumulator(prefix_committed, last_partial_text);
             } else {
                 final_text = crispasr::stitch_partial_accumulator(prefix_committed, last_partial_text);
             }
+            if (stream_punc_finals_enabled(params) && !final_text_from_redecode)
+                final_text = apply_punc_text(punc_ctx.get(), final_text);
             const double t0 = (double)utterance_start_sample / (double)SR;
             const double t1 = last_speech_end_sample > 0 ? (double)last_speech_end_sample / (double)SR
                                                          : (double)cumulative_samples / (double)SR;
