@@ -142,10 +142,17 @@ jobs:
           # synthesises a fixed phrase via the TTS backend, transcribes
           # it back with parakeet, and asserts WER under the manifest's
           # wer_max. Catches silent decode regressions the diff harness
-          # can miss (e.g. the voxcpm2 BF16 noise bug). Cheap-tier:
-          # kokoro is ~90 MB + the 466 MB parakeet ground-truth model;
-          # roundtrip wall-clock is ~30 s on the GH runner.
+          # can miss (e.g. the voxcpm2 BF16 noise bug).
+          #
+          # Cheap tier (~600 MB - 1.8 GB download per slot, fits GitHub
+          # free-tier 14 GB runner scratch comfortably):
           - kokoro-82m-en
+          - qwen3-tts-0.6b-customvoice-eric
+          # Heavier TTS backends (orpheus 3B at 3.5 GB; vibevoice 7 GB;
+          # qwen3-tts-1.7b 2.4 GB; voxcpm2 ~3 GB) stay manual via
+          # `tools/test-all-backends.py --tts-roundtrip=full`. They
+          # need 4+ GB per slot once you add parakeet on top, and
+          # nightly traffic at that size adds up on free tier.
     steps:
       - uses: actions/checkout@v4
 

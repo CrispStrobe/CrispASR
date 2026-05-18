@@ -242,6 +242,29 @@
       "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
       "wer_max": 0.10,
       "wer_max_note": "Kokoro 82M Q8_0 on a clean pangram routinely lands at WER 0.0 in local roundtrip via parakeet. 10% gives headroom for prosody artefacts + parakeet's own ~0% baseline drift on the CI runner image."
+    },
+    {
+      "name": "qwen3-tts-0.6b-customvoice-eric",
+      "backend_id": "qwen3-tts",
+      "gguf": {
+        "repo": "cstr/qwen3-tts-0.6b-customvoice-GGUF",
+        "revision": "bb17332887c5d7fa68c58ce1812ff609c7cb9a94",
+        "file": "qwen3-tts-12hz-0.6b-customvoice-q8_0.gguf",
+        "approx_size_mb": 970
+      },
+      "codec": {
+        "repo": "cstr/qwen3-tts-tokenizer-12hz-GGUF",
+        "revision": "198f2d9c39eb366b2f98af977bcb63168fdad6ad",
+        "file": "qwen3-tts-tokenizer-12hz.gguf",
+        "_size_mb": 360
+      },
+      "voice_preset": "eric",
+      "voice_preset_note": "qwen3-tts-CustomVoice has 9 baked speakers selectable by name (aiden, dylan, eric, ono_anna, ryan, serena, sohee, uncle_fu, vivian). `eric` is a clear male voice — best fit for the pangram phrase + parakeet transcription. No separate voice GGUF needed; the speaker embed lives inside the customvoice model.",
+      "tts_phrase": "The quick brown fox jumps over the lazy dog",
+      "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
+      "wer_max": 0.10,
+      "wer_max_note": "Local roundtrip lands at WER 0.0 (parakeet adds a trailing '.' which normalisation strips). The Q8_0 model is used here; Q4_K has a documented quality regression on this same repo (see its README) so we pin Q8_0 explicitly. Total download per nightly slot: 970 MB talker + 360 MB tokenizer + 466 MB parakeet = ~1.8 GB.",
+      "_total_download_mb": 1796
     }
   ]
 }

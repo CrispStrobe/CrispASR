@@ -397,17 +397,22 @@ def tts_roundtrip_for(name: str, manifest: dict, work_dir: Path,
     if entry is None:
         die(f"tts backend '{name}' not in manifest.tts_backends")
 
-    # ---- 1. Download TTS GGUF + voice GGUF ----
+    # ---- 1. Download TTS GGUF + voice GGUF (or use a baked voice preset) ----
     gguf_local = hf_download(
         entry["gguf"]["repo"],
         entry["gguf"]["file"],
         entry["gguf"]["revision"],
         work_dir,
     )
-    # `voice` is its own pinned-repo block (kokoro voices live in
-    # cstr/kokoro-voices-GGUF, not the kokoro-82m repo). Backends that
-    # have no separate voice asset can omit the block entirely.
+    # Two voice paths:
+    #   * `voice` block: download a separate voice GGUF (kokoro pattern —
+    #     voices live in a sibling repo).
+    #   * `voice_preset`: a name like "eric" baked into the TTS model
+    #     (qwen3-tts-CustomVoice pattern — speaker embeds inside the
+    #     model). Passed to `--voice <name>` without a path.
+    # Exactly one of these must be set.
     voice_local: Path | None = None
+    voice_preset: str | None = entry.get("voice_preset")
     if "voice" in entry:
         voice_local = hf_download(
             entry["voice"]["repo"],
@@ -416,9 +421,19 @@ def tts_roundtrip_for(name: str, manifest: dict, work_dir: Path,
             work_dir,
         )
 
+    # Optional `codec` block — separate codec/tokenizer GGUF passed via
+    # `--codec-model` (qwen3-tts needs this; kokoro doesn't).
+    codec_local: Path | None = None
+    if "codec" in entry:
+        codec_local = hf_download(
+            entry["codec"]["repo"],
+            entry["codec"]["file"],
+            entry["codec"]["revision"],
+            work_dir,
+        )
+
     # Optional `companion_files` for backends whose voice / codec is in
-    # the same repo as the main GGUF. Place each next to gguf_local so
-    # the backend can resolve them by sibling path.
+    # the same repo as the main GGUF.
     for companion in entry["gguf"].get("companion_files", []):
         c_local = hf_download(
             entry["gguf"]["repo"],
@@ -430,8 +445,9 @@ def tts_roundtrip_for(name: str, manifest: dict, work_dir: Path,
         if not dest.exists():
             shutil.copy2(c_local, dest)
 
-    if voice_local is None or not voice_local.is_file():
-        die(f"{name}: no voice file resolved (entry needs a `voice` block)")
+    if voice_local is None and not voice_preset:
+        die(f"{name}: no voice resolved (entry needs either a `voice` block "
+            f"or a `voice_preset` name)")
 
     # ---- 2. Download ASR ground-truth model ----
     asr_name = entry["roundtrip_asr_backend"]
@@ -452,11 +468,19 @@ def tts_roundtrip_for(name: str, manifest: dict, work_dir: Path,
     print(f"  synth     {asr_name} -> {tts_phrase!r}")
     syn_cmd = [
         str(crispasr_bin), "-m", str(gguf_local),
-        "--voice", str(voice_local),
         "--tts", tts_phrase,
         "--tts-output", str(out_wav),
         "--no-prints",
     ]
+    # `--voice` takes either a path (voice GGUF) or a name (baked
+    # preset like qwen3-tts's `eric`).
+    if voice_preset:
+        syn_cmd += ["--voice", voice_preset]
+    elif voice_local is not None:
+        syn_cmd += ["--voice", str(voice_local)]
+    # `--codec-model` for backends with a separate tokenizer GGUF.
+    if codec_local is not None:
+        syn_cmd += ["--codec-model", str(codec_local)]
     syn_cmd += list(entry.get("tts_extra_args", []))
     try:
         proc = subprocess.run(syn_cmd, capture_output=True, text=True,
@@ -624,11 +648,26 @@ def dry_run(manifest: dict, backend_filter: str | None = None) -> int:
         all_ok &= _check_pinned_file(
             "tts gguf", name, entry["gguf"]["repo"],
             entry["gguf"]["revision"], entry["gguf"]["file"])
-        # Optional voice GGUF in its own pinned repo.
-        if all_ok and "voice" in entry:
+        # Voice can be either a `voice` block (separate GGUF) or a
+        # `voice_preset` name (baked into the TTS model). Exactly one
+        # must be set.
+        has_voice_block = "voice" in entry
+        has_voice_preset = "voice_preset" in entry
+        if has_voice_block == has_voice_preset:
+            print(f"  \033[31mFAIL\033[0m {name}: must set exactly one of "
+                  f"`voice` (block) or `voice_preset` (name); got "
+                  f"voice={has_voice_block} voice_preset={has_voice_preset}")
+            failures += 1
+            continue
+        if has_voice_block and all_ok:
             v = entry["voice"]
             all_ok &= _check_pinned_file(
                 "voice gguf", name, v["repo"], v["revision"], v["file"])
+        # Optional codec/tokenizer GGUF in its own pinned repo.
+        if all_ok and "codec" in entry:
+            c = entry["codec"]
+            all_ok &= _check_pinned_file(
+                "codec gguf", name, c["repo"], c["revision"], c["file"])
         # Optional companion files in the same repo as the TTS GGUF.
         if all_ok:
             for cf in entry["gguf"].get("companion_files", []):

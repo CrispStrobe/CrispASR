@@ -559,10 +559,12 @@ class TtsBackendsSchemaTests(unittest.TestCase):
         self.assertIsInstance(section, list)
 
     def test_tts_entries_have_required_keys(self):
-        required = {"name", "backend_id", "gguf", "voice",
+        # `voice` (block) and `voice_preset` (name string) are
+        # mutually-exclusive — exactly one must be set. Verified after
+        # the per-entry required-keys check below.
+        required = {"name", "backend_id", "gguf",
                     "tts_phrase", "roundtrip_asr_backend", "wer_max"}
-        gguf_required = {"repo", "revision", "file"}
-        voice_required = {"repo", "revision", "file"}
+        pinned_required = {"repo", "revision", "file"}
         names_seen: set[str] = set()
         asr_names = {b["name"] for b in self.manifest["backends"]}
 
@@ -575,12 +577,27 @@ class TtsBackendsSchemaTests(unittest.TestCase):
                 f"duplicate tts backend name: {name}")
             names_seen.add(name)
 
+            # Exactly one of `voice` (block) or `voice_preset` (string).
+            has_voice = "voice" in entry
+            has_preset = "voice_preset" in entry
+            self.assertTrue(
+                has_voice ^ has_preset,
+                f"{name}: must set exactly one of `voice` block or "
+                f"`voice_preset` string (got voice={has_voice} preset={has_preset})")
+            if has_preset:
+                self.assertIsInstance(entry["voice_preset"], str,
+                    f"{name}.voice_preset must be a string")
+                self.assertGreater(len(entry["voice_preset"].strip()), 0,
+                    f"{name}.voice_preset must be non-empty")
+
             # Pinned revisions: SHA only, never a branch.
-            for label, block, req in [
-                ("gguf", entry["gguf"], gguf_required),
-                ("voice", entry["voice"], voice_required),
-            ]:
-                self.assertEqual(req - set(block), set(),
+            pinned_blocks: list[tuple[str, dict]] = [("gguf", entry["gguf"])]
+            if has_voice:
+                pinned_blocks.append(("voice", entry["voice"]))
+            if "codec" in entry:
+                pinned_blocks.append(("codec", entry["codec"]))
+            for label, block in pinned_blocks:
+                self.assertEqual(pinned_required - set(block), set(),
                     f"{name}.{label} missing keys")
                 self.assertRegex(
                     block["revision"], r"^[0-9a-f]{7,40}$",
