@@ -536,6 +536,14 @@ static bool whisper_params_parse_arg_streaming_tts(int argc, char** argv, int& i
             fprintf(stderr, "crispasr: --stream-vad-merge-gap-ms must be >= 0\n");
             exit(2);
         }
+    } else if (arg == "--stream-punc") {
+        std::string mode = ARGV_NEXT;
+        if (mode != "off" && mode != "final" && mode != "partial") {
+            fprintf(stderr, "crispasr: --stream-punc must be 'off', 'final', or 'partial' (got '%s')\n",
+                    mode.c_str());
+            exit(2);
+        }
+        params.stream_punc = mode;
     } else if (arg == "--stream-final-mode") {
         std::string mode = ARGV_NEXT;
         if (mode != "redecode" && mode != "prefix") {
@@ -888,6 +896,9 @@ static void whisper_print_usage(int /*argc*/, char** argv, const whisper_params&
     fprintf(stderr,
             "  --stream-vad-merge-gap-ms N       [%-7d] JSON+VAD close-gap merge in ms; clamped below final silence\n",
             params.stream_vad_merge_gap_ms);
+    fprintf(stderr,
+            "  --stream-punc MODE                [%-7s] JSON+VAD FireRedPunc mode: off, final, or partial\n",
+            params.stream_punc.c_str());
     fprintf(stderr,
             "  --stream-final-mode MODE          [%-7s] final.text source: 'redecode' (re-runs on the utterance "
             "PCM, best quality) or 'prefix' (LCP-accumulated, no extra encoder pass)\n",

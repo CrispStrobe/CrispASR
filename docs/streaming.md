@@ -135,6 +135,21 @@ seen in `partial` events, never an empty string blanking a
 previously-emitted partial. The fallback is internal; no flag, no
 event change.
 
+### Streaming punctuation (`--stream-punc`)
+
+When `--stream-json --vad` is used with `--punc-model`, FireRedPunc can be
+placed on different parts of the streaming path:
+
+| Mode | Effect |
+|---|---|
+| `off` | Do not run FireRedPunc on streaming partials or finals. |
+| `final` | Run FireRedPunc only when emitting `final` text. This is the default and the recommended realtime mode. |
+| `partial` | Run FireRedPunc on partials and finals. This preserves the older behavior but can add substantial latency when partials are frequent. |
+
+`final` keeps live partials cheap while still restoring punctuation on finalized
+utterances. Use `partial` only when punctuation on every partial is worth the
+extra compute.
+
 ## Microphone (`--mic`)
 
 ```bash
