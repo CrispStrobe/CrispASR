@@ -162,6 +162,7 @@ std::vector<crispasr_segment> crispasr_run_voxtral_style_pipeline(typename Ops::
     dec_cfg.eos_id = Ops::eos_id;
     dec_cfg.vocab_size = 0; // filled after first prefill
     dec_cfg.temperature = params.temperature;
+    dec_cfg.seed = params.seed;
 
     core_greedy_decode::Result best_dec;
     double best_score = -1.0;

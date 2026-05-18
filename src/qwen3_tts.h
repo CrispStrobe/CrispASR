@@ -30,6 +30,7 @@ struct qwen3_tts_context_params {
     int verbosity; // 0=silent, 1=normal, 2=verbose
     bool use_gpu;
     float temperature;   // 0 = greedy
+    uint64_t seed;       // RNG seed for sampling (0 = use default 42)
     int max_codec_steps; // upper bound on AR decode steps; 0 = use built-in default (1500)
     bool flash_attn;     // PLAN #89 plumbing — Qwen3 talker SA blocks.
 };

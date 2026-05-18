@@ -60,7 +60,7 @@ public:
         // re-pick it up. We zero it on the first temp==0 call so a user
         // who toggles --temperature back off doesn't keep the previous
         // sampling state from a prior file.
-        parakeet_set_temperature(ctx_, params.temperature, /*seed=*/0);
+        parakeet_set_temperature(ctx_, params.temperature, params.seed);
 
         parakeet_result* r = parakeet_transcribe_ex(ctx_, samples, n_samples, t_offset_cs);
         if (!r)

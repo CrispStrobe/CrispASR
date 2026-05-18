@@ -37,6 +37,7 @@ struct whisper_params {
     float grammar_penalty = 100.0f;
     float temperature = 0.0f;
     float temperature_inc = 0.2f;
+    uint64_t seed = 0; // RNG seed for sampling (0 = non-deterministic)
 
     bool debug_mode = false;
     bool translate = false;

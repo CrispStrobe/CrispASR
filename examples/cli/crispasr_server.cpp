@@ -811,6 +811,8 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             rp.tts_voice = voice_name;
         if (!instructions.empty())
             rp.tts_instruct = instructions;
+        if (body.contains("seed") && body["seed"].is_number_integer())
+            rp.seed = body["seed"].get<uint64_t>();
 
         // Long-form chunking (PLAN §75d / issue #66): split input on
         // sentence boundaries before dispatching to the backend so each

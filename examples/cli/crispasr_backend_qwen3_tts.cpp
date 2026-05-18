@@ -85,6 +85,7 @@ public:
         cp.verbosity = p.no_prints ? 0 : 1;
         cp.use_gpu = crispasr_backend_should_use_gpu(p);
         cp.temperature = p.temperature;
+        cp.seed = p.seed;
         ctx_ = qwen3_tts_init_from_file(p.model.c_str(), cp);
         if (!ctx_) {
             fprintf(stderr, "crispasr[qwen3-tts]: failed to load talker '%s'\n", p.model.c_str());

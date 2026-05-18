@@ -4856,6 +4856,7 @@ extern "C" struct qwen3_tts_context_params qwen3_tts_context_default_params(void
     p.verbosity = 1;
     p.use_gpu = true;
     p.temperature = 0.0f;
+    p.seed = 0;
     p.max_codec_steps = 0;
     p.flash_attn = true;
     return p;
@@ -5757,9 +5758,8 @@ extern "C" int32_t* qwen3_tts_synthesize_codes(struct qwen3_tts_context* ctx, co
     }
     const int eos = (int)hp.codec_eos_id;
 
-    // PRNG seed — env-overridable for reproducibility. Default seed
-    // matches PyTorch's behaviour with `torch.manual_seed(42)`.
-    uint64_t rng = 42;
+    // PRNG seed — context params take priority, then env, then default 42.
+    uint64_t rng = ctx->params.seed != 0 ? ctx->params.seed : 42;
     if (const char* s = env_str("QWEN3_TTS_SEED")) {
         rng = (uint64_t)std::strtoull(s, nullptr, 10);
     }

@@ -223,6 +223,8 @@ static bool whisper_params_parse_arg_general(int argc, char** argv, int& i, whis
         params.no_speech_thold = std::stof(ARGV_NEXT);
     } else if (arg == "-tp" || arg == "--temperature") {
         params.temperature = std::stof(ARGV_NEXT);
+    } else if (arg == "--seed") {
+        params.seed = (uint64_t)std::stoull(ARGV_NEXT);
     } else if (arg == "-tpi" || arg == "--temperature-inc") {
         params.temperature_inc = std::stof(ARGV_NEXT);
     } else if (arg == "-debug" || arg == "--debug-mode") {
@@ -670,6 +672,8 @@ static void whisper_print_usage(int /*argc*/, char** argv, const whisper_params&
     fprintf(stderr, "  -nth N,    --no-speech-thold N    [%-7.2f] no speech threshold\n", params.no_speech_thold);
     fprintf(stderr, "  -tp,       --temperature N        [%-7.2f] The sampling temperature, between 0 and 1\n",
             params.temperature);
+    fprintf(stderr, "             --seed N               [%-7d] RNG seed for sampling (0 = non-deterministic)\n",
+            (int)params.seed);
     fprintf(stderr, "  -tpi,      --temperature-inc N    [%-7.2f] The increment of temperature, between 0 and 1\n",
             params.temperature_inc);
     fprintf(stderr, "  -debug,    --debug-mode           [%-7s] enable debug mode (eg. dump log_mel)\n",
