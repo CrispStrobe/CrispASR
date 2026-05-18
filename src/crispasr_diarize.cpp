@@ -7,6 +7,7 @@
 // path stays in the CLI (external binary, CLI-shaped UX).
 
 #include "crispasr_diarize.h"
+#include "crispasr_diarize_internal.h"
 #include "pyannote_seg.h"
 
 #include <algorithm>
@@ -149,20 +150,36 @@ void apply_vad_turns(std::vector<CrispasrDiarizeSegment>& segs) {
 // For each ASR segment, count the dominant speaker across its frames
 // and assign the most-frequent one.
 //
-// Known limitations of this path (intentional, tracked in #107):
-//   * The pyannote-seg model emits LOCAL speaker activity tracks
-//     (spk0/spk1/spk2 within each forward pass). There is no speaker
-//     embedding or clustering step, so the track indices are NOT
-//     globally stable speaker identities. On long-form multi-speaker
-//     audio, labels will swap.
-//   * Overlap classes (3,5,6) are collapsed to a single speaker by the
-//     class_to_speaker[] LUT below — concurrent activity on the other
-//     speaker is dropped, which biases the dominant-count vote.
-//   * Each ASR segment is assigned ONE speaker. If a speaker change
-//     occurs inside a long ASR span, the minority speaker is lost
-//     rather than splitting the segment at the turn boundary.
-// For reliable multi-speaker diarization, use --diarize-method sherpa
-// (full segmentation + embedding + clustering pipeline).
+// What this path DOES handle correctly (post-#107 within-pass fixes):
+//   * Overlap classes (3 = spk0+spk1, 5 = spk0+spk2, 6 = spk1+spk2) now
+//     contribute activity to BOTH speakers they cover, instead of being
+//     collapsed onto one via a class→single-speaker LUT.
+//   * Per-frame, per-speaker activity is posterior-weighted (exp the
+//     log-softmax, sum the per-speaker masks) rather than one-hot
+//     argmax-then-count. Confident frames count more than uncertain
+//     ones.
+//   * Silence-dominated frames (p[silence] > 0.5) are gated out, so a
+//     pure-silence segment leaves speaker = -1 rather than spuriously
+//     picking spk0 from residual non-silence mass.
+//
+// What this path STILL does NOT handle (remaining work tracked in #107):
+//   * Cross-slice / cross-window stitching. pyannote-seg emits LOCAL
+//     speaker activity tracks (spk0/spk1/spk2 within ONE forward pass).
+//     The CLI runs apply_pyannote per ASR slice, so the local track
+//     indices reset / swap across slices and the "speaker 0" in slice
+//     A is unrelated to "speaker 0" in slice B. On multi-slice
+//     long-form audio you can therefore see consistent labels within
+//     a slice but inconsistent labels across slices.
+//   * ASR segment splitting at speaker-turn boundaries. Each ASR
+//     segment is assigned exactly ONE speaker; if a turn change occurs
+//     inside a long ASR span (e.g. cohere produces a single 27 s
+//     segment containing both speakers), the minority speaker is lost.
+// Fixing both requires (a) running pyannote ONCE over the whole audio
+// instead of per slice, and (b) a speaker embedding + clustering step
+// (TitaNet is already wired up; see src/titanet.h) to anchor IDs
+// globally. For reliable multi-speaker diarization on long-form audio
+// today, use --diarize-method sherpa (full segmentation + embedding +
+// clustering pipeline).
 bool apply_pyannote(const float* mono, int n_samples, int64_t slice_t0_cs, std::vector<CrispasrDiarizeSegment>& segs,
                     const std::string& model_path, int n_threads) {
     if (model_path.empty())
@@ -183,39 +200,90 @@ bool apply_pyannote(const float* mono, int n_samples, int64_t slice_t0_cs, std::
 
     // Frame duration: sinc(stride=10) × 3 maxpools(stride=3) = 270 samples = 16.875 ms
     const double frame_dur_s = 270.0 / 16000.0;
-    static const int class_to_speaker[] = {-1, 0, 1, 0, 2, 0, 1};
-
-    for (auto& seg : segs) {
-        double a0 = (double)(seg.t0_cs - slice_t0_cs) / 100.0;
-        double a1 = (double)(seg.t1_cs - slice_t0_cs) / 100.0;
-        int f0 = std::max(0, (int)(a0 / frame_dur_s));
-        int f1 = std::min(T_seg, (int)(a1 / frame_dur_s) + 1);
-        if (f0 >= f1)
-            continue;
-
-        int counts[3] = {0, 0, 0};
-        for (int f = f0; f < f1; f++) {
-            const float* lv = probs + f * 7;
-            int best = 0;
-            for (int i = 1; i < 7; i++)
-                if (lv[i] > lv[best])
-                    best = i;
-            int spk = class_to_speaker[best];
-            if (spk >= 0 && spk < 3)
-                counts[spk]++;
-        }
-        int best_spk = 0;
-        for (int i = 1; i < 3; i++)
-            if (counts[i] > counts[best_spk])
-                best_spk = i;
-        if (counts[best_spk] > 0)
-            seg.speaker = best_spk;
-    }
+    crispasr_diarize_internal::assign_speakers_from_log_posteriors(probs, T_seg, frame_dur_s, slice_t0_cs, segs);
     std::free(probs);
     return true;
 }
 
 } // namespace
+
+namespace crispasr_diarize_internal {
+
+// Class layout of pyannote-seg-3.0:
+//   0 = silence
+//   1 = spk0 only
+//   2 = spk1 only
+//   3 = spk0 + spk1
+//   4 = spk2 only
+//   5 = spk0 + spk2
+//   6 = spk1 + spk2
+// Per-speaker activity mask: which output classes include each speaker.
+// Used to sum per-frame activity probability across all classes that
+// involve a given speaker — overlap classes contribute to BOTH speakers
+// they cover, fixing the previous LUT collapse (#107).
+static const float SPK_MASK[3][7] = {
+    {0.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f}, // spk0 active: classes 1, 3, 5
+    {0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f}, // spk1 active: classes 2, 3, 6
+    {0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f}, // spk2 active: classes 4, 5, 6
+};
+
+void assign_speakers_from_log_posteriors(const float* log_probs, int T, double frame_dur_s, int64_t slice_t0_cs,
+                                         std::vector<CrispasrDiarizeSegment>& segs) {
+    if (!log_probs || T <= 0 || frame_dur_s <= 0.0)
+        return;
+
+    for (auto& seg : segs) {
+        const double a0 = (double)(seg.t0_cs - slice_t0_cs) / 100.0;
+        const double a1 = (double)(seg.t1_cs - slice_t0_cs) / 100.0;
+        const int f0 = std::max(0, (int)(a0 / frame_dur_s));
+        const int f1 = std::min(T, (int)(a1 / frame_dur_s) + 1);
+        if (f0 >= f1)
+            continue;
+
+        // Posterior-weighted per-speaker activity sum.
+        // For each non-silence-dominated frame: exp the 7 log-probs
+        // once, then add to each speaker's accumulator the sum of class
+        // probs covering that speaker (via SPK_MASK).
+        //
+        // Silence gating: when p[silence] > 0.5 the frame is dropped
+        // entirely (no speaker gets credit). This is what makes a
+        // pure-silence ASR segment end up with speaker == -1 rather
+        // than spuriously picking spk0 from residual non-silence mass.
+        // Without this gate, a 200-frame silence segment with p[0]≈0.99
+        // and the other six classes each at ~3e-4 still tallies
+        // ~0.12 per speaker.
+        double act[3] = {0.0, 0.0, 0.0};
+        int n_speech_frames = 0;
+        for (int f = f0; f < f1; f++) {
+            const float* lv = log_probs + f * 7;
+            float p[7];
+            for (int c = 0; c < 7; c++)
+                p[c] = std::exp(lv[c]);
+            if (p[0] > 0.5f)
+                continue; // silence-dominated frame
+            for (int s = 0; s < 3; s++) {
+                double sum = 0.0;
+                for (int c = 0; c < 7; c++)
+                    sum += SPK_MASK[s][c] * p[c];
+                act[s] += sum;
+            }
+            n_speech_frames++;
+        }
+        if (n_speech_frames == 0)
+            continue; // segment is pure silence per the seg net — leave speaker = -1
+
+        int best_spk = 0;
+        for (int s = 1; s < 3; s++)
+            if (act[s] > act[best_spk])
+                best_spk = s;
+        // Tiny floor so an early-exit "speech_frames == 1 but no speaker
+        // class fired" can't pick spk0 by index tie-break.
+        if (act[best_spk] > 0.05)
+            seg.speaker = best_spk;
+    }
+}
+
+} // namespace crispasr_diarize_internal
 
 bool crispasr_diarize_segments(const float* left, const float* right, int n_samples, bool is_stereo,
                                std::vector<CrispasrDiarizeSegment>& segs, const CrispasrDiarizeOptions& opts) {

@@ -236,6 +236,43 @@ catch_discover_tests(test-stream-vad-merge-policy
     PROPERTIES LABELS "unit;stream-json"
 )
 
+# Pyannote-seg → ASR-segment speaker scoring (issue #107). Drives the
+# internal helper with synthetic log-softmax posteriors; no model, no
+# audio. Links against libcrispasr so it tests the actually-shipped
+# logic rather than a fork of it.
+add_executable(test-diarize-pyannote
+    test-diarize-pyannote.cpp
+)
+target_include_directories(test-diarize-pyannote PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-diarize-pyannote PRIVATE
+    Catch2::Catch2WithMain
+    crispasr
+)
+catch_discover_tests(test-diarize-pyannote
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit;diarize"
+)
+
+# Live end-to-end check that --diarize-method pyannote produces ≥2
+# distinct speaker labels on a real multi-speaker WAV. Opt-in via
+# CRISPASR_TEST_DIARIZE_{WAV,MODEL} env vars; skips cleanly otherwise.
+add_executable(test-diarize-pyannote-live
+    test-diarize-pyannote-live.cpp
+)
+target_include_directories(test-diarize-pyannote-live PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-diarize-pyannote-live PRIVATE
+    Catch2::Catch2WithMain
+    crispasr
+)
+catch_discover_tests(test-diarize-pyannote-live
+    TEST_SPEC "[live]"
+    PROPERTIES LABELS "live;diarize"
+)
+
 # ─── test - punctuation - policy — Catch2 unit tests for punctuation auto - enable
 #policy.Pure logic, no model load.
 add_executable(test-punctuation-policy
