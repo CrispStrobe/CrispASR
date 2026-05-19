@@ -190,10 +190,17 @@ static bool is_cjk_codepoint(uint32_t cp) {
            (cp >= 0x20000 && cp <= 0x2FFFF);
 }
 
-// Subset of TextNormalizer.char_rep_map (front.py) covering CJK punctuation
-// that has an obvious ASCII counterpart. We skip the full wetext normalizer
-// (numbers→hanzi, English contractions, pinyin tones) — those need a real
-// rule engine and are not blocking the basic Chinese roundtrip.
+// TextNormalizer.char_rep_map (front.py) — CJK punctuation → ASCII. Critical:
+// 。 (U+3002, full-width period) is inside the CJK Unicode range used by
+// tokenize_by_CJK_char, so it MUST be mapped to "." BEFORE the range check
+// or the tokenizer splits it as a CJK character. With it mapped, the final
+// punct lands as SentencePiece piece "▁." (id 10203), matching upstream
+// behaviour and the model's expectation of a sentence-ending token. Without
+// it, the model produces an extra trailing syllable on Chinese inputs.
+//
+// We skip the full wetext normalizer (numbers→hanzi, English contractions,
+// pinyin tones) — that needs a real rule engine and is not blocking the
+// basic Chinese roundtrip.
 static uint32_t normalize_cjk_punct(uint32_t cp) {
     switch (cp) {
     case 0xFF1A:
@@ -202,6 +209,8 @@ static uint32_t normalize_cjk_punct(uint32_t cp) {
         return ','; // ；
     case 0xFF0C:
         return ','; // ，
+    case 0x3002:
+        return '.'; // 。
     case 0xFF01:
         return '!'; // ！
     case 0xFF1F:
@@ -244,8 +253,6 @@ static uint32_t normalize_cjk_punct(uint32_t cp) {
 }
 
 // Match Python upstream order: punct map → tokenize_by_CJK_char → upper().
-// Note: full-width period U+3002 (。) is inside the CJK range so it gets
-// split as a CJK char (not punct-mapped) — same as upstream.
 static std::string preprocess_indextts_text(const std::string& text) {
     std::string out;
     out.reserve(text.size() * 2);
@@ -2265,6 +2272,13 @@ extern "C" int32_t* indextts_generate_mel_codes(struct indextts_context* ctx, co
 
     if (ctx->params.verbosity >= 1) {
         fprintf(stderr, "indextts: text \"%s\" -> %zu tokens\n", text_prepped.c_str(), text_tokens.size());
+    }
+    if (ctx->params.verbosity >= 2) {
+        fprintf(stderr, "indextts: text_ids[");
+        for (size_t i = 0; i < text_tokens.size(); i++) {
+            fprintf(stderr, "%s%d", i == 0 ? "" : ",", (int)text_tokens[i]);
+        }
+        fprintf(stderr, "]\n");
     }
 
     // 2. Allocate KV cache
