@@ -33,23 +33,14 @@ test-all-backends.py passes 18/18 transcribe + 51/54 feature tests (3 stream ski
 | **MEDIUM** | [#56 Kokoro multilingual phonemizer](#56-kokoro-multilingual-phonemizer-espeak-ng) | Small | espeak-ng + DE backbone shipped; HF GGUFs published 2026-05-01; auto-download wired; only Mandarin tones / JA kanji + diff-harness phonemizer-step polish remain |
 | **MEDIUM** | [#58 MOSS-Audio-4B-Instruct](#58-moss-audio-4b-instruct) | Large | first audio-understanding (not just ASR) backend; introduces DeepStack cross-layer feature injection |
 | **MEDIUM** | [#59 Cross-binding C-ABI parity](#59-cross-binding-c-abi-parity) | Medium | Go now has full surface (✅ all 11 capabilities). Java has transcribe+align+LID. Ruby has transcribe. JS needs WebAssembly approach |
-| **DONE** | [#60 llama.cpp/llamafile perf trick ports](#60-cross-backend-perf-tricks-llamacpp--llamafile-ports) | 14 items | 60a-g DONE; 60e Q8_0 KV validated on 7 backends (all bit-exact or WER=0%); 60h-n parked/skip → HISTORY §63, §64, §71, §75 |
-| **DONE** | #41 Moonshine IPA / phoneme | — | Superseded by kokoro espeak-ng phonemizer (#56) |
 | **PARKED** | [#9 Parakeet TDT GPU](#9-parakeet-tdt-decoder-gpu) | Medium | Encoder 85%+ of time; LSTM+joint <0.7s; sequential steps limit GPU benefit |
-| **DONE** | [#11 WebSocket server](#11-websocket-streaming-server) | Medium | RFC 6455 WS on port+1, binary PCM in, JSON text out |
-| **DONE** | [#7 voxtral4b streaming](#7-native-voxtral4b-streaming) | High | Phases 1-4 shipped → HISTORY §71 |
-| **DONE** | [#62 Streaming + mic library API](#62-streaming--mic-library-api) | M-L | All wrappers ship it → HISTORY §73, §76 |
-| **DONE** | [#63 Feature matrix parity](#63-feature-matrix-parity) | Phased | All 9 phases → HISTORY §72 |
 | **BLOCKED** | [#42 VibeVoice-ASR 7B](#42-vibevoice-asr-7b) | High | Needs ≥16 GB RAM |
 | **BLOCKED** | [#43 Fun-ASR-Nano](#43-fun-asr-nano) | Medium | License unclear |
-| **DONE** | [#75 /v1/audio/speech OpenAI parity round 1](#75-v1audiospeech-openai-feature-parity-round-1) | Small-Medium | PR #63 merged + corrective batch (`d35940b`…`85302c5`) + 75a/75b (`b932fa9`) + 75d chunking (`0bff2d7`) shipped 2026-05-05; 75c-opt-1 (server-side speed resampler) included in `b932fa9`. Pending: 75c-opt-2 native-backend duration knobs, 75e (streaming/mp3/upload) — each its own work item. → HISTORY §81 |
 | **MEDIUM** | [#80 nano-cohere-transcribe-inspired tweaks](#80-nano-cohere-transcribe-inspired-perf--chunking-tweaks) | Small | 80c done; 80b energy chunker in progress; 80a parked (measurement: <1 % of wall on Metal); 80d/80e TODO |
 | **DEFERRED** | [#81 Nemotron-Speech-Streaming-EN-0.6B](#81-nemotron-speech-streaming-en-06b--first-cache-aware-streaming-native-asr) | M-L | NVOML license, ~60–75 % reuse from parakeet/canary; the new bit is cache-aware FastConformer streaming. Wait for `--stream-json` (issue #84) to settle + a second user request (only mention so far is issue #85) before starting. |
 | **MEDIUM** | [#86 Per-backend flash-attention wiring](#86-per-backend-flash-attention-wiring-crisperweaver-driven) | 2–3 days | Plumbing shipped 0.6.2; kernel-level wiring per backend is the remaining work. Whisper done; orpheus/chatterbox-T3 are the next-best pickings. |
 | **LOW** | [#87 `gpu_backend` runtime selector](#87-gpu_backend-runtime-selector-multi-backend-ggml-build) | ~1 week | Needs ggml-side multi-backend dispatch to land first. CrisperWeaver UI placeholder ready when the C-side is. |
-| **DONE** | #88 Kokoro length-scale + vibevoice diffusion steps | 1 day combined | Both backend-internal refactors shipped → [HISTORY §85](HISTORY.md). `kokoro_set_length_scale` + `vibevoice_set_tts_steps` runtime setters on the per-backend API; `crispasr_session_set_length_scale` + `_set_tts_steps` on the unified API. CrisperWeaver's TTS speed slider drives both. |
-| **DONE** | #89 Flash-attn field migration | ~2 hours | Mechanical plumbing across 12 backends shipped → [HISTORY §84](HISTORY.md). Prereq for #86 closed. |
-| **DONE** | #90 TitaNet speaker verification + speaker ID | 1 day | TitaNet-Large GGUF converter + pure-CPU runtime + speaker profile DB + CLI + C-ABI + wrappers. cos=0.9999 vs NeMo. → [HISTORY §89](HISTORY.md) |
+| **LOW** | [#95 IndexTTS Chinese TN binary alternative](#95-indextts-15-chinese-tn--binary-alternative-to-the-python-wetext-hook) | survey only | Python `INDEXTTS_TEXT_NORMALIZER` hook shipped 2026-05-19. Hand-roll (#95a) is the right next step *when* a user reports a digit/date prompt that breaks; OpenFST vendoring (#95b) only after #95a grows past ~5 cases. |
 
 **Recently completed** (full write-ups in HISTORY.md): **#57 chatterbox native voice clone → §82** (six-commit sprint shipping all four upstream cond extractors — VoiceEncoder LSTM, S3Tokenizer V2, CAMPPlus, 24 kHz Matcha mel — plus a Kaiser-windowed sinc resampler and atomic 5-cond install in `chatterbox_set_voice_from_wav`'s `.wav` branch; `--voice ref_24k.wav` produces real cloned speech without any python). **#69 + #72 + #73 cap-honesty + KV/layer offload knobs → §79** (14-commit session shipping `CRISPASR_KV_QUANT_K/_V` + `KV_ON_CPU` on 14 backends, `N_GPU_LAYERS` on 10 backends, gemma4/mimo GPU-residency 2.2x / 22 % faster, plus cap-honesty cleanup on parakeet/glm-asr/qwen3/gemma4/omniasr). **vibevoice #69a follow-up → §79b** (mode-aware `tts_lm.layers.` / `lm.layers.` prefix predicate). #78 Chatterbox vocoder → §78. #11 WebSocket server → §76, #63 Feature matrix parity → §72, #59 binding parity → §73, gemma4 #49 + Docker #31 → §74, tests + KV Q8_0 + cleanup → §75. Earlier: #5→§63, #16→§55, #51→§56, #51b→§60, #53→§63, #54→§61, #55→§54, #56→§63, #60d→§64.
 
@@ -1509,12 +1500,6 @@ any build-matrix combination there isn't covered by the new
 
 ---
 
-## ~~69. Layer + KV CPU-offload knobs (llama.cpp parity)~~ — FULLY SHIPPED 2026-05-04 → [HISTORY §79](HISTORY.md)
-
-#69b (KV-on-CPU) and #69e (asymmetric K/V quant) shipped on **14 backends**. #69a (layer offload) shipped on **10 backends** (vibevoice closed via §79b — mode-aware prefix predicate). Three knobs stack — see HISTORY §79 for the combined-config example, the original 300-line design write-up, and the (a) compute-only vs (b) weight-residency offload trade-off analysis.
-
----
-
 ## 70. Streaming TTS via chunked VAE decode (latency win, vibevoice / qwen3-tts)
 
 **Effort:** Medium-large.
@@ -2467,3 +2452,141 @@ least-intrusive path for Go consumers who pull via `go get`.
 **Tracking:** every commit message that fixes the next round
 of "missing -lX" should reference this section and cross-check
 whether the auto-gen is finally in place.
+
+---
+
+## 95. IndexTTS-1.5 Chinese TN — binary alternative to the Python `wetext` hook
+
+**Status: open.** Today CrispASR ships `INDEXTTS_TEXT_NORMALIZER=<shell
+cmd>` plus `tools/wetext-normalize.py` (commit `1bfe7c5a`,
+2026-05-19). That covers users who already have Python + wetext
+installed. Some deployments (single-binary distribution, Windows
+without Python, embedded) need a no-Python path. This section
+catalogs the realistic options so the next person doesn't have to
+re-do the survey.
+
+### The actual functionality gap
+
+Default in-process `preprocess_indextts_text()` handles:
+- CJK char split (port of upstream `tokenize_by_CJK_char`)
+- Subset of `char_rep_map`: `，。：；！？、…“”‘’（）《》【】「」—～·` → ASCII
+  before the CJK splitter
+- ASCII upper-case
+
+What it does NOT handle (full `wetext.Normalizer(lang='zh', operator='tn')`):
+- Arabic numeral → hanzi (`2025年` → `二零二五年`, `123` → `一百二十三`)
+- Pinyin tone-digit restoration (`xuan4`, `受不liao3` patterns)
+- Dates (`2025/01/11` → `二零二五年一月十一日`)
+- Times (`8:00` → `八点`)
+- Currency (`¥12999` → `一万二千九百九十九元`)
+- Phone numbers (`13800001234` digit-by-digit)
+- Math / measurements / fractions / percent
+- English contractions inside Chinese text
+
+The model itself can't pronounce raw digits cleanly — it often fails
+to emit `stop_mel_token` on un-pronounceable inputs and burns through
+`max_mel_tokens=600` before giving up. So this isn't pure cosmetics:
+TN is what makes digit-containing Chinese prompts actually work.
+
+### Options, in order of pragmatic preference
+
+**95a. Hand-roll the high-leverage rules in C++** (recommended first
+step). Target the failures that actually break TTS — start with
+digit-string → hanzi for the 1-billion range (`零一二三四五六七八九`
+plus units `十百千万亿`), the `年/月/日` pattern, the `点/分` time
+pattern, and pinyin tone-digit lookup. Estimated 300-600 LOC of
+focused C++, no external dependency. Covers ~90 % of real prompts.
+Edge cases (currency formats, mixed math, address parsing) silently
+stay un-normalized. Lives in `src/indextts.cpp:preprocess_indextts_text`
+or a sibling helper.
+
+Files:
+- `src/indextts.cpp` — extend the preprocessor with a
+  `normalize_chinese_numbers()` pass that runs before the existing
+  CJK split.
+- `tests/` — golden inputs for the digit/date/time cases (just
+  string-in, string-out; no model needed).
+- `LEARNINGS.md` — new sub-section once the first user-reported
+  edge-case lands so the next contributor knows what's covered.
+
+When to do it: when an issue lands like "我有 3 个苹果 → weird audio"
+or `2025年` produces a hang. Don't start it speculatively.
+
+**95b. Vendor `kaldifst` (the C++ WFST runtime) + OpenFST + ship the
+compiled `.fst` rule data.** The byte-identical-to-upstream path.
+
+Ingredients:
+- `kaldifst` C++ class `TextNormalizer` (k2-fsa/kaldifst on GitHub,
+  a few thousand LOC of C++ wrapped around OpenFST). Apache-2.0.
+- `OpenFST` (~30-50 K LOC of well-defined C++). Apache-2.0.
+  Builds cleanly as a CMake subproject but the build profile cost
+  is real — CrispASR today has no WFST dependency.
+- Chinese TN rule data from `pengzhendong/wetext`:
+  `fsts/zh/tn/tagger.fst` (812 KB) + `fsts/zh/tn/verbalizer.fst`
+  (88 KB) + optionally `verbalizer_remove_erhua.fst` (88 KB).
+  Plus the orchestration glue from `wetext.utils.normalize` (the
+  preprocess → tagger → token-parser → verbalizer → postprocess
+  flow) — `token_parser.py` is ~200 lines of recursive-descent
+  parsing of the tagger output that would need to be rewritten in
+  C++.
+
+Estimated effort: 3-5 days of focused work for someone comfortable
+with OpenFST. Result: same output as `wetext.Normalizer` byte for
+byte, no Python at runtime.
+
+When to do it: only after #95a has grown past ~5 hand-rolled cases
+and the maintenance burden becomes visible — or if a downstream
+deployment specifically can't take a Python dependency. Don't
+speculate.
+
+Files:
+- `third_party/openfst/` — submodule (~50 K LOC, large diff).
+- `third_party/kaldifst/` — submodule (~5 K LOC).
+- `models/indextts-zh-tn.fsts` or co-distributed via `-m auto` —
+  the ~1 MB of compiled FST data.
+- `src/indextts.cpp` — new `normalize_chinese_wetext()` function
+  invoked when `INDEXTTS_TEXT_NORMALIZER=wetext` (a sentinel
+  value) is set, alongside the existing shell-command form.
+- CMakeLists.txt — `add_subdirectory(third_party/openfst)` +
+  link against kaldifst.
+
+**95c. Static-bundle the Python sidecar via PyInstaller /
+cibuildwheel.** Ship Python + wetext + dependencies as a
+~50-80 MB single binary co-distributed with `crispasr`. Solves
+the "no Python on the box" use case without porting any code.
+
+Major downsides:
+- Build system gets meaningfully more complex (a separate Python
+  bundling pipeline per platform).
+- ~50-80 MB of bloat per release.
+- Not idiomatic for a C++ project; CrispASR's distribution story
+  today is "one binary + model files".
+
+Almost certainly **not** worth doing. Listed only so future
+contributors don't spend time discovering it independently.
+
+### What looks like an alternative but isn't
+
+- **ICU `Transliterator`** — does Unicode normalization (NFC, NFKC,
+  case folding) and pre-defined transforms like `Han-Latin`. No
+  number → hanzi, no date parsing, no rule set comparable to wetext.
+- **`libnumber2chinese` / `cn2an` / `pypinyin`** — Python libraries
+  with no coherent C/C++ port. Fragments exist, no drop-in.
+- **HuggingFace `tokenizers` normalizers** — tokenizer-side
+  normalization (lowercase, NFC, strip accents), nowhere near
+  wetext-equivalent rule coverage.
+
+### Trigger to start work
+
+This section sits idle until **one of**:
+
+1. A user files an issue with a digit/date/pinyin-tone-digit prompt
+   that produces broken audio. Then go to #95a; pick the smallest
+   rule set that fixes the reported case.
+2. The hand-rolled list grows past ~5 cases (track in
+   `src/indextts.cpp`). At that point the marginal cost of #95b
+   (vendoring OpenFST) becomes lower than continuing to grow the
+   hand-rolled rules. Cross the threshold deliberately.
+
+Don't pre-emptively vendor OpenFST. CrispASR's clean "ggml + minor
+deps" profile is a feature.
