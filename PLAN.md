@@ -212,7 +212,7 @@ share enough that landing one substantially de-risks the other.
 
 ---
 
-## 96. voxcpm2-tts perf — switch to per-step ggml graph (Metal-ready) — partial (LocDiT + TSLM done)
+## 96. voxcpm2-tts perf — switch to per-step ggml graph (Metal-ready) — CPU target met (LocDiT + TSLM cached)
 
 ### Where we are (2026-05-19)
 
@@ -352,18 +352,40 @@ are still net positive overall, and the per-step graph is the
 prerequisite for moving weights to Metal (where the GPU compute
 savings will dominate the build overhead).
 
+### Progress (2026-05-19 second follow-up)
+
+LocDiT graph cached across CFM Euler iterations (built once into a
+dedicated arena, gallocr-reserved once on first use); same pattern
+for TSLM step with a single qwen3-style bucket at `Lk=128`
+(`fixed_kv_len=128` + `kv_indices=positions` so the K/V scatter is
+runtime-indexed). Single bucket because all current synth paths fit
+under 128 (zero-shot ≪ 20 positions; "Hello world" + jfk.wav clone
+~80 positions). Longer prefills fall through to the dynamic per-call
+build automatically.
+
+Bench (M1 CPU, OMP=8, "Hello world" zero-shot, 6 AR steps):
+
+| Path                              | AR loop | cfm/step | tslm/step |
+| --------------------------------- | ------: | -------: | --------: |
+| legacy                            | 15.3 s  | 2398 ms  |    55 ms  |
+| graph, uncached                   |  6.8 s  | 1035 ms  |    38 ms  |
+| graph, cached (LocDiT)            |  8.0 s  |  837 ms  |    52 ms  |
+| graph, cached (LocDiT + TSLM)     |  6.0 s  |  625 ms  |   180 ms  |
+
+Steady-state CFM per step in the cached path: **~410 ms** (target
+~400 ms from the plan, met). Steady-state TSLM step: ~180 ms (par
+with legacy, vs ~1781 ms uncached). Voice cloning end-to-end (jfk
+ref + "Hello world") AR loop drops to **4.1 s**.
+
 ### Still TODO
 
-- Graph-cache the TSLM step graph across AR iterations (qwen3
-  bucketed pattern with `fixed_kv_len` + `kv_indices=positions` so
-  the graph topology is invariant across `n_past`). Estimated 4-10×
-  on the CPU `tslm_step` cost — should swing the metric from
-  "regression vs legacy" to "net win on CPU".
-- Graph-cache the LocDiT cgraph across CFM Euler iterations (same
-  pattern, simpler since LocDiT has no KV-cache state).
 - Load weights on `c->backend` (Metal-capable). Blocked on dropping
   the legacy CPU paths entirely — once both per-step graphs are on
   the backend, `matmul_mv_ggml` is dead.
+- Multi-bucket TSLM Lk (128 / 256 / 512 / 1024) so long-prefill
+  inputs (multi-sentence cloning, voice instructions) keep the
+  bucketed cache instead of falling back to dynamic. Mirror
+  `qwen3_tts.cpp talker_buckets`.
 - Once green on Metal, swap default to `VOXCPM2_USE_GRAPH=1` and
   remove the legacy path + this env gate.
 

@@ -328,6 +328,30 @@ struct voxcpm2_context {
     std::vector<uint8_t> compute_meta;
     ggml_gallocr_t galloc = nullptr;
 
+    // Cached LocDiT cgraph. LocDiT topology is constant across calls (no
+    // n_past or KV cache), so we build the graph once into a dedicated
+    // arena + reserve the gallocr layout once on first use; subsequent
+    // CFM Euler iterations just rebind inputs and compute. Saves the
+    // ~30+ ms / call cost of rebuilding the 12-layer graph + walking
+    // gallocr's planner.
+    std::vector<uint8_t> locdit_arena_meta;
+    ggml_context* locdit_arena_ctx = nullptr;
+    ggml_cgraph* locdit_gf = nullptr;
+    ggml_gallocr_t locdit_galloc = nullptr;
+
+    // Cached TSLM step graph (qwen3-style bucketed pattern). The graph
+    // is topology-invariant across n_past because we pin Lk to
+    // tslm_step_bucket_lk and pass positions as runtime kv_indices —
+    // the K/V cache write becomes a runtime-indexed scatter instead of
+    // a baked static offset. AR steps within the bucket reuse the
+    // cached gf; if n_past+1 outgrows the bucket we fall through to
+    // the dynamic build_tslm_step_graph path.
+    std::vector<uint8_t> tslm_step_arena_meta;
+    ggml_context* tslm_step_arena_ctx = nullptr;
+    ggml_cgraph* tslm_step_gf = nullptr;
+    ggml_gallocr_t tslm_step_galloc = nullptr;
+    int tslm_step_bucket_lk = 0;
+
     // Persistent KV cache as a backend tensor for VOXCPM2_USE_GRAPH=1 TSLM
     // step. Sized to match the legacy tslm_kv (max_ctx × n_kv × head_dim ×
     // n_layers). Populated lazily from tslm_kv before the AR loop's first
@@ -845,7 +869,8 @@ static void sync_tslm_kv_cpu_to_backend(voxcpm2_context* ctx) {
 // folded into the graph so the caller gets the already-normed hidden
 // state — same value that the legacy path produces after its post-loop
 // rms_norm_cpu(... tslm_output_norm ...).
-static ggml_cgraph* build_tslm_step_graph(voxcpm2_context* ctx, int n_past) {
+static ggml_cgraph* build_tslm_step_graph(voxcpm2_context* ctx, int n_past, int fixed_kv_len = 0,
+                                          ggml_context* arena_ctx = nullptr) {
     const vox_hparams& hp = ctx->hp;
     const vox_weights& W = ctx->weights;
     const int d = (int)hp.tslm_d_model;
@@ -856,9 +881,16 @@ static ggml_cgraph* build_tslm_step_graph(voxcpm2_context* ctx, int n_past) {
     const float eps = hp.rms_norm_eps;
     const float attn_scale = 1.0f / std::sqrt((float)hd);
     const int T = 1;
+    const int Lk = fixed_kv_len > 0 ? fixed_kv_len : (n_past + T);
 
-    ggml_init_params ip = {ctx->compute_meta.size(), ctx->compute_meta.data(), /*no_alloc=*/true};
-    ggml_context* ctx0 = ggml_init(ip);
+    // arena_ctx supplied → graph metadata persists across calls
+    // (qwen3-style bucket pattern); otherwise reuse compute_meta for a
+    // one-shot dynamic build.
+    ggml_context* ctx0 = arena_ctx;
+    if (!ctx0) {
+        ggml_init_params ip = {ctx->compute_meta.size(), ctx->compute_meta.data(), /*no_alloc=*/true};
+        ctx0 = ggml_init(ip);
+    }
     ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 4096, false);
 
     ggml_tensor* hidden_in = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, d, T);
@@ -868,6 +900,16 @@ static ggml_cgraph* build_tslm_step_graph(voxcpm2_context* ctx, int n_past) {
     ggml_tensor* positions = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, T);
     ggml_set_name(positions, "positions");
     ggml_set_input(positions);
+
+    // Bucketed (fixed_kv_len > 0) → causal_mask is required to hide the
+    // unwritten tail [n_past+1, Lk). Dynamic (fixed_kv_len == 0) → Lk
+    // tightly tracks n_past+T and the tail doesn't exist, so no mask.
+    ggml_tensor* causal_mask = nullptr;
+    if (fixed_kv_len > 0) {
+        causal_mask = ggml_new_tensor_2d(ctx0, GGML_TYPE_F16, Lk, T);
+        ggml_set_name(causal_mask, "causal_mask");
+        ggml_set_input(causal_mask);
+    }
 
     const core_attn::KvSelfAttnParams kvp = {
         /*n_heads*/ n_q,
@@ -887,6 +929,16 @@ static ggml_cgraph* build_tslm_step_graph(voxcpm2_context* ctx, int n_past) {
         /*rope_freq_factors*/ W.tslm_rope_short,
     };
 
+    // Bucketed path: K/V scatter via ggml_set_rows keyed on `positions`
+    // (runtime-indexed) so the graph topology is invariant across n_past
+    // — same trick as qwen3_tts' QWEN3_TTS_O15. Dynamic path: K/V scatter
+    // baked into the graph as a static offset using n_past.
+    ggml_tensor* eff_kv_indices = (fixed_kv_len > 0) ? positions : nullptr;
+    // n_past=0 in bucketed mode keeps the read view's starting offset at
+    // layer base; we still read all Lk slots and rely on causal_mask to
+    // suppress unwritten ones.
+    const int eff_n_past = (fixed_kv_len > 0) ? 0 : n_past;
+
     ggml_tensor* cur = hidden_in;
     for (uint32_t il = 0; il < hp.tslm_n_layers; il++) {
         const vox_lm_layer& L = W.tslm_layers[il];
@@ -896,11 +948,11 @@ static ggml_cgraph* build_tslm_step_graph(voxcpm2_context* ctx, int n_past) {
         ggml_tensor* x = ggml_rms_norm(ctx0, cur, eps);
         x = ggml_mul(ctx0, x, L.attn_norm_w);
 
-        ggml_tensor* attn =
-            core_attn::kv_self_attn(ctx0, gf, x, L.attn_q_w, L.attn_k_w, L.attn_v_w, L.attn_o_w,
-                                    /*q_norm_w*/ nullptr, /*k_norm_w*/ nullptr, positions,
-                                    /*causal_mask*/ nullptr, // T=1 — single new token attends to all history
-                                    ctx->tslm_kv_k, ctx->tslm_kv_v, (int)il, n_past, kvp);
+        ggml_tensor* attn = core_attn::kv_self_attn(ctx0, gf, x, L.attn_q_w, L.attn_k_w, L.attn_v_w, L.attn_o_w,
+                                                    /*q_norm_w*/ nullptr, /*k_norm_w*/ nullptr, positions, causal_mask,
+                                                    ctx->tslm_kv_k, ctx->tslm_kv_v, (int)il, eff_n_past, kvp,
+                                                    /*qkv_w=*/nullptr, /*fixed_kv_len=*/Lk,
+                                                    /*kv_indices=*/eff_kv_indices);
         cur = ggml_add(ctx0, residual, attn);
 
         // FFN block (RMSNorm × scale → SwiGLU → residual).
@@ -920,25 +972,123 @@ static ggml_cgraph* build_tslm_step_graph(voxcpm2_context* ctx, int n_past) {
     ggml_set_output(cur);
     ggml_build_forward_expand(gf, cur);
 
-    ggml_free(ctx0);
+    if (!arena_ctx) {
+        ggml_free(ctx0);
+    }
     return gf;
+}
+
+// Build / fetch the cached TSLM step cgraph at the chosen bucket Lk.
+// Topology is `n_past`-invariant because the K/V scatter index and the
+// causal mask are runtime inputs (qwen3 LK_BUCKET pattern). One bucket
+// covers all AR-step n_past values up to bucket_lk - 1; n_past+1 >
+// bucket_lk falls back to the dynamic graph in the caller.
+static ggml_cgraph* get_or_build_tslm_step_graph(voxcpm2_context* ctx, int bucket_lk) {
+    if (ctx->tslm_step_gf && ctx->tslm_step_bucket_lk == bucket_lk) {
+        return ctx->tslm_step_gf;
+    }
+    if (!ctx->backend || !ctx->tslm_kv_k) {
+        return nullptr;
+    }
+    // Free any prior bucket — uncommon (only fires if bucket_lk changes
+    // mid-process, which it does not in current flows).
+    if (ctx->tslm_step_galloc) {
+        ggml_gallocr_free(ctx->tslm_step_galloc);
+        ctx->tslm_step_galloc = nullptr;
+    }
+    if (ctx->tslm_step_arena_ctx) {
+        ggml_free(ctx->tslm_step_arena_ctx);
+        ctx->tslm_step_arena_ctx = nullptr;
+    }
+    ctx->tslm_step_arena_meta.assign(ctx->compute_meta.size(), 0);
+    ggml_init_params ip = {ctx->tslm_step_arena_meta.size(), ctx->tslm_step_arena_meta.data(), /*no_alloc=*/true};
+    ctx->tslm_step_arena_ctx = ggml_init(ip);
+    if (!ctx->tslm_step_arena_ctx) {
+        ctx->tslm_step_arena_meta.clear();
+        return nullptr;
+    }
+    ctx->tslm_step_gf = build_tslm_step_graph(ctx, /*n_past=*/0, /*fixed_kv_len=*/bucket_lk, ctx->tslm_step_arena_ctx);
+    if (!ctx->tslm_step_gf) {
+        ggml_free(ctx->tslm_step_arena_ctx);
+        ctx->tslm_step_arena_ctx = nullptr;
+        ctx->tslm_step_arena_meta.clear();
+        return nullptr;
+    }
+    ctx->tslm_step_galloc = ggml_gallocr_new(ggml_backend_get_default_buffer_type(ctx->backend));
+    if (!ctx->tslm_step_galloc || !ggml_gallocr_reserve(ctx->tslm_step_galloc, ctx->tslm_step_gf)) {
+        if (ctx->tslm_step_galloc) {
+            ggml_gallocr_free(ctx->tslm_step_galloc);
+            ctx->tslm_step_galloc = nullptr;
+        }
+        ggml_free(ctx->tslm_step_arena_ctx);
+        ctx->tslm_step_arena_ctx = nullptr;
+        ctx->tslm_step_gf = nullptr;
+        ctx->tslm_step_arena_meta.clear();
+        return nullptr;
+    }
+    ctx->tslm_step_bucket_lk = bucket_lk;
+    return ctx->tslm_step_gf;
 }
 
 // Run one TSLM step through the graph. Caller must have ensured
 // init_tslm_kv_backend + sync_tslm_kv_cpu_to_backend completed before the
-// first invocation. Returns the normed hidden state [d_model].
+// first invocation. Picks a cached bucket graph when pos+1 <= bucket_lk;
+// otherwise falls through to a one-shot dynamic build. Returns the
+// normed hidden state [d_model].
+//
+// Bucket policy: single bucket sized to typical zero-shot synth length
+// (3 text tokens + ~16 AR-step audio tokens ≪ 128). 128 covers short
+// prompts and voice-clone prefills up to ~120 positions; longer inputs
+// fall through to the dynamic per-call build. Per-call cost in the
+// bucketed path: tensor_set (hidden_in + positions + causal_mask) +
+// ggml_backend_graph_compute + tensor_get. Bigger bucket trades graph
+// build savings for wasted attention work on the masked tail —
+// flash-attn computes Q·K^T over the full Lk even when the tail is
+// -inf masked, so Lk=512 cost ~5× more on the attn matmul than the
+// actual needed positions on M1 CPU.
+static constexpr int kTslmBucketLk = 128;
+
 static std::vector<float> tslm_step_graph(voxcpm2_context* ctx, const float* hidden_in, int pos) {
     const int d = (int)ctx->hp.tslm_d_model;
     int32_t pos_i = pos;
 
-    ggml_cgraph* gf = build_tslm_step_graph(ctx, pos);
-    if (!ggml_gallocr_alloc_graph(ctx->galloc, gf)) {
+    ggml_cgraph* gf = nullptr;
+    ggml_gallocr_t galloc = nullptr;
+    int Lk = 0;
+    bool bucketed = false;
+    if (pos + 1 <= kTslmBucketLk) {
+        gf = get_or_build_tslm_step_graph(ctx, kTslmBucketLk);
+        if (gf) {
+            galloc = ctx->tslm_step_galloc;
+            Lk = kTslmBucketLk;
+            bucketed = true;
+        }
+    }
+    if (!gf) {
+        gf = build_tslm_step_graph(ctx, pos);
+        galloc = ctx->galloc;
+        Lk = pos + 1;
+    }
+    if (!ggml_gallocr_alloc_graph(galloc, gf)) {
         fprintf(stderr, "voxcpm2: tslm_step gallocr alloc failed\n");
         return std::vector<float>(d, 0.0f);
     }
 
     ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "hidden_in"), hidden_in, 0, (size_t)d * sizeof(float));
     ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "positions"), &pos_i, 0, sizeof(int32_t));
+    if (bucketed) {
+        // Mask: shape (Lk, 1). 0 for k <= pos (visible written slots);
+        // -inf for k > pos (unwritten tail). F16 to match the helper's
+        // declared mask type.
+        std::vector<ggml_fp16_t> mask((size_t)Lk);
+        const ggml_fp16_t z = ggml_fp32_to_fp16(0.0f);
+        const ggml_fp16_t ninf = ggml_fp32_to_fp16(-INFINITY);
+        for (int k = 0; k < Lk; k++) {
+            mask[k] = (k <= pos) ? z : ninf;
+        }
+        ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "causal_mask"), mask.data(), 0,
+                                mask.size() * sizeof(ggml_fp16_t));
+    }
 
     if (ggml_backend_is_cpu(ctx->backend)) {
         ggml_backend_cpu_set_n_threads(ctx->backend, g_cpu_n_threads);
@@ -1449,7 +1599,7 @@ static std::vector<float> locdit_forward(voxcpm2_context* ctx, const float* x_ra
 //   vel      [feat_dim=64, P=4]  F32  predicted velocity
 // ---------------------------------------------------------------------------
 
-static ggml_cgraph* build_locdit_graph(voxcpm2_context* ctx) {
+static ggml_cgraph* build_locdit_graph(voxcpm2_context* ctx, ggml_context* arena_ctx = nullptr) {
     const vox_hparams& hp = ctx->hp;
     const vox_weights& W = ctx->weights;
     const int d = (int)hp.locdit_d_model;
@@ -1465,8 +1615,14 @@ static ggml_cgraph* build_locdit_graph(voxcpm2_context* ctx) {
     const int T = mu_toks + 1 + P + P; // 11
     const int x_offset = mu_toks + 1 + P;
 
-    ggml_init_params ip = {ctx->compute_meta.size(), ctx->compute_meta.data(), /*no_alloc=*/true};
-    ggml_context* ctx0 = ggml_init(ip);
+    // When arena_ctx is supplied, build into the caller's persistent arena
+    // (the graph + tensor metadata outlive this call); otherwise fall back
+    // to the shared compute_meta (last-write-wins, single-call lifetime).
+    ggml_context* ctx0 = arena_ctx;
+    if (!ctx0) {
+        ggml_init_params ip = {ctx->compute_meta.size(), ctx->compute_meta.data(), /*no_alloc=*/true};
+        ctx0 = ggml_init(ip);
+    }
     ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 4096, false);
 
     // ── Inputs ───────────────────────────────────────────────────
@@ -1621,8 +1777,54 @@ static ggml_cgraph* build_locdit_graph(voxcpm2_context* ctx) {
     ggml_set_output(vel);
     ggml_build_forward_expand(gf, vel);
 
-    ggml_free(ctx0);
+    // Caller-supplied arena outlives this function; only free the local one.
+    if (!arena_ctx) {
+        ggml_free(ctx0);
+    }
     return gf;
+}
+
+// Build / fetch the cached LocDiT cgraph. Topology is invariant across
+// calls (no n_past, no KV cache), so the graph + gallocr layout live for
+// the lifetime of the context. Returns nullptr on failure (caller falls
+// back to the per-call build path).
+static ggml_cgraph* get_or_build_locdit_graph(voxcpm2_context* ctx) {
+    if (ctx->locdit_gf) {
+        return ctx->locdit_gf;
+    }
+    if (!ctx->backend) {
+        return nullptr;
+    }
+    // Dedicated arena — `ctx->compute_meta` is shared with other graphs
+    // (e.g. dynamic-path TSLM step) that would otherwise stomp on the
+    // cached LocDiT tensor metadata.
+    ctx->locdit_arena_meta.assign(ctx->compute_meta.size(), 0);
+    ggml_init_params ip = {ctx->locdit_arena_meta.size(), ctx->locdit_arena_meta.data(), /*no_alloc=*/true};
+    ctx->locdit_arena_ctx = ggml_init(ip);
+    if (!ctx->locdit_arena_ctx) {
+        ctx->locdit_arena_meta.clear();
+        return nullptr;
+    }
+    ctx->locdit_gf = build_locdit_graph(ctx, ctx->locdit_arena_ctx);
+    if (!ctx->locdit_gf) {
+        ggml_free(ctx->locdit_arena_ctx);
+        ctx->locdit_arena_ctx = nullptr;
+        ctx->locdit_arena_meta.clear();
+        return nullptr;
+    }
+    ctx->locdit_galloc = ggml_gallocr_new(ggml_backend_get_default_buffer_type(ctx->backend));
+    if (!ctx->locdit_galloc || !ggml_gallocr_reserve(ctx->locdit_galloc, ctx->locdit_gf)) {
+        if (ctx->locdit_galloc) {
+            ggml_gallocr_free(ctx->locdit_galloc);
+            ctx->locdit_galloc = nullptr;
+        }
+        ggml_free(ctx->locdit_arena_ctx);
+        ctx->locdit_arena_ctx = nullptr;
+        ctx->locdit_gf = nullptr;
+        ctx->locdit_arena_meta.clear();
+        return nullptr;
+    }
+    return ctx->locdit_gf;
 }
 
 // Run the LocDiT graph for one denoising step. Same signature as
@@ -1652,8 +1854,15 @@ static std::vector<float> locdit_forward_graph(voxcpm2_context* ctx, const float
     for (int i = 0; i < T; i++)
         positions[i] = i;
 
-    ggml_cgraph* gf = build_locdit_graph(ctx);
-    if (!ggml_gallocr_alloc_graph(ctx->galloc, gf)) {
+    // Cached graph + galloc — built once on first call, reused thereafter.
+    // Falls back to the per-call build path if the cache init fails.
+    ggml_cgraph* gf = get_or_build_locdit_graph(ctx);
+    ggml_gallocr_t galloc = ctx->locdit_galloc;
+    if (!gf) {
+        gf = build_locdit_graph(ctx);
+        galloc = ctx->galloc;
+    }
+    if (!ggml_gallocr_alloc_graph(galloc, gf)) {
         fprintf(stderr, "voxcpm2: locdit gallocr alloc failed\n");
         return std::vector<float>(feat_dim * P, 0.0f);
     }
@@ -3734,6 +3943,22 @@ struct voxcpm2_context* voxcpm2_init_from_file(const char* path_model, struct vo
 void voxcpm2_free(struct voxcpm2_context* ctx) {
     if (!ctx)
         return;
+    if (ctx->tslm_step_galloc) {
+        ggml_gallocr_free(ctx->tslm_step_galloc);
+        ctx->tslm_step_galloc = nullptr;
+    }
+    if (ctx->tslm_step_arena_ctx) {
+        ggml_free(ctx->tslm_step_arena_ctx);
+        ctx->tslm_step_arena_ctx = nullptr;
+    }
+    if (ctx->locdit_galloc) {
+        ggml_gallocr_free(ctx->locdit_galloc);
+        ctx->locdit_galloc = nullptr;
+    }
+    if (ctx->locdit_arena_ctx) {
+        ggml_free(ctx->locdit_arena_ctx);
+        ctx->locdit_arena_ctx = nullptr;
+    }
     if (ctx->tslm_kv_buf) {
         ggml_backend_buffer_free(ctx->tslm_kv_buf);
         ctx->tslm_kv_buf = nullptr;

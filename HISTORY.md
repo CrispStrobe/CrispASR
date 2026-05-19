@@ -6,6 +6,59 @@ technical deep-dives are in `LEARNINGS.md`.
 
 ---
 
+## 2026-05-19 voxcpm2-tts: graph caching — LocDiT one-shot + TSLM bucketed (PLAN #96 CPU target met)
+
+**Problem.** The per-call `build_*_graph` + `ggml_gallocr_alloc_graph`
+overhead dominated steady-state perf. LocDiT rebuilt the same
+12-layer cgraph on every one of ~19 CFM Euler iterations per AR step
+(~570 builds per synth). TSLM rebuilt the 28-layer step graph on
+every AR step (~6 builds per synth, but each is ~5× larger), and
+its `gallocr_alloc` walked a fresh plan every call.
+
+**Fix.** Two qwen3-style caches:
+
+- **LocDiT** — topology is constant (no `n_past`). Built once into a
+  dedicated arena (`locdit_arena_ctx`); `locdit_galloc` reserves the
+  plan once on first use. CFM Euler iterations rebind 6 input
+  tensors and recompute.
+- **TSLM** — topology depends on `n_past`. Made `n_past`-invariant
+  via `fixed_kv_len = kTslmBucketLk` + `kv_indices = positions`
+  (runtime-indexed K/V scatter via `ggml_set_rows`), with a
+  `causal_mask` input that masks the unwritten tail of the bucket.
+  Single bucket at `Lk=128` covers every current synth path
+  (zero-shot ≪ 20 positions, "Hello world" + jfk.wav clone ~80
+  positions). Longer prefills fall through to the dynamic per-call
+  build.
+
+**Validation.** Diff harness `voxcpm2-q4_k.gguf` zero-shot ref: 14
+pass / 0 fail / 3 skip (unchanged). Both zero-shot ("Hello world")
+and voice-clone ("Hello world" + jfk.wav) smoke tests
+ASR-roundtrip to "Hello world." correctly.
+
+**Bench** (M1 CPU, OMP=8, "Hello world" zero-shot, 6 AR steps):
+
+| Path                              | AR loop | cfm/step | tslm/step |
+| --------------------------------- | ------: | -------: | --------: |
+| legacy                            | 15.3 s  | 2398 ms  |    55 ms  |
+| graph, uncached                   |  6.8 s  | 1035 ms  |    38 ms  |
+| graph, cached (LocDiT only)       |  8.0 s  |  837 ms  |    52 ms  |
+| graph, cached (LocDiT + TSLM)     |  6.0 s  |  625 ms  |   180 ms  |
+
+Steady-state CFM **~410 ms / step** — meets the plan's ~400 ms CPU
+target. TSLM ~180 ms / step (par with legacy, vs ~1781 ms uncached
+TSLM graph). Voice-cloning AR loop drops to **4.1 s** for "Hello
+world" + jfk.wav. The Lk=128 bucket avoids the wasted flash-attn
+work that Lk=512 caused (flash-attn computes `Q·K^T` over the
+entire bucket regardless of the -inf-masked tail).
+
+**Next:** load weights on `c->backend` (Metal-capable). Blocked on
+dropping the legacy CPU paths entirely — once both step graphs are
+on the backend, `matmul_mv_ggml` is dead. Multi-bucket Lk (128 /
+256 / 512 / 1024) for long-prefill inputs is a follow-on.
+
+---
+
+
 ## 2026-05-19 voxcpm2-tts: TSLM per-step ggml graph + backend-resident KV (PLAN #96 partial)
 
 **Problem.** TSLM step (28 MiniCPM-4 layers, T=1) was the #2 AR-step
