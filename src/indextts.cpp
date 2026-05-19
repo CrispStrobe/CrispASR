@@ -2337,16 +2337,16 @@ extern "C" int32_t* indextts_generate_mel_codes(struct indextts_context* ctx, co
         fprintf(stderr, "\n");
     }
 
-    // 5. AR decode — beam search with per-beam KV snapshots and rep penalty.
-    // Matches Python's generate(num_beams=3, do_sample=False, repetition_penalty=10.0).
+    // 5. AR decode — beam search with rep penalty. Matches Python's
+    // generate(num_beams=3, do_sample=False, repetition_penalty=10.0).
     std::vector<int32_t> mel_codes;
     const int mel_vocab = (int)ctx->hp.mel_vocab_size;
     const int stop_token = (int)ctx->hp.stop_mel_token;
     const float rep_penalty = ctx->params.repetition_penalty;
-    // Beam size. Python uses 3 by default. Each step requires snapshotting and
-    // restoring the full KV cache (≈ 158 MiB) per beam — that round-trips through
-    // host memory and dominates wall time, especially on GPU backends. Greedy
-    // (B=1) skips the snapshot entirely. INDEXTTS_BEAM_SIZE overrides at runtime.
+
+    // Beam size. Python uses 3 by default. Each step snapshots+restores the
+    // full ~158 MiB KV cache per beam. INDEXTTS_BEAM_SIZE=1 skips the swap
+    // entirely (greedy, ~2× faster).
     int B = 3;
     if (const char* bs = getenv("INDEXTTS_BEAM_SIZE")) {
         int v = atoi(bs);
@@ -2355,23 +2355,93 @@ extern "C" int32_t* indextts_generate_mel_codes(struct indextts_context* ctx, co
         }
     }
 
+    // Two KV-snapshot modes:
+    //   - host get/set into std::vector<uint8_t> per beam (default — what
+    //     IndexTTS originally shipped). Measured fastest on Apple Silicon
+    //     Metal: unified memory means the "host round-trip" is already a
+    //     shared-RAM memcpy with no extra blit-encoder overhead.
+    //   - device tensor_copy into a pool of B same-backend slot tensors
+    //     (opt-in via INDEXTTS_KV_DEVICE_COPY=1). Expected to win on
+    //     CUDA/Vulkan with discrete VRAM where get/set traverses real
+    //     PCIe; needs measurement on those backends before flipping the
+    //     default. Refcount-recycles slots when beam candidates share
+    //     a parent (children inherit parent's KV, only spend a copy when
+    //     siblings split off the same parent).
+    bool use_device_kv = false;
+    if (const char* e = getenv("INDEXTTS_KV_DEVICE_COPY")) {
+        use_device_kv = (atoi(e) != 0);
+    }
+
     struct Beam {
         std::vector<int32_t> tokens;
-        double score = 0.0;              // cumulative log-probability
-        std::vector<uint8_t> kv_k, kv_v; // KV snapshot
+        double score = 0.0;
+        std::vector<uint8_t> kv_k, kv_v; // host snapshot (host mode)
+        int slot_idx = -1;               // pool slot index (device mode)
         bool finished = false;
     };
 
-    auto save_kv = [&](std::vector<uint8_t>& k, std::vector<uint8_t>& v) {
-        k.resize(ggml_nbytes(ctx->kv_k));
-        v.resize(ggml_nbytes(ctx->kv_v));
-        ggml_backend_tensor_get(ctx->kv_k, k.data(), 0, k.size());
-        ggml_backend_tensor_get(ctx->kv_v, v.data(), 0, v.size());
+    struct BeamPool {
+        ggml_context* ctx = nullptr;
+        ggml_backend_buffer_t buf = nullptr;
+        std::vector<ggml_tensor*> k, v;
+        ~BeamPool() {
+            if (buf) {
+                ggml_backend_buffer_free(buf);
+            }
+            if (ctx) {
+                ggml_free(ctx);
+            }
+        }
+    } beam_pool;
+    if (use_device_kv) {
+        const int hd = (int)ctx->hp.head_dim;
+        const int n_h = (int)ctx->hp.n_heads;
+        const int nl = (int)ctx->hp.n_layers;
+        struct ggml_init_params ip = {(size_t)(2 * B * ggml_tensor_overhead()), nullptr, true};
+        beam_pool.ctx = ggml_init(ip);
+        if (!beam_pool.ctx) {
+            fprintf(stderr, "indextts: failed to init beam KV pool\n");
+            return nullptr;
+        }
+        beam_pool.k.resize(B);
+        beam_pool.v.resize(B);
+        for (int i = 0; i < B; i++) {
+            beam_pool.k[i] = ggml_new_tensor_4d(beam_pool.ctx, GGML_TYPE_F32, hd, ctx->kv_max_ctx, n_h, nl);
+            beam_pool.v[i] = ggml_new_tensor_4d(beam_pool.ctx, GGML_TYPE_F32, hd, ctx->kv_max_ctx, n_h, nl);
+        }
+        beam_pool.buf = ggml_backend_alloc_ctx_tensors(beam_pool.ctx, ctx->backend);
+        if (!beam_pool.buf) {
+            fprintf(stderr, "indextts: failed to alloc beam KV pool buffer (B=%d, %d MiB)\n", B,
+                    (int)(B * (ggml_nbytes(ctx->kv_k) + ggml_nbytes(ctx->kv_v)) / 1048576));
+            return nullptr;
+        }
+        if (ctx->params.verbosity >= 1) {
+            size_t per_slot = ggml_nbytes(ctx->kv_k) + ggml_nbytes(ctx->kv_v);
+            fprintf(stderr, "indextts: beam KV pool: B=%d × %d MiB = %d MiB device-resident (device-copy mode)\n", B,
+                    (int)(per_slot / 1048576), (int)(B * per_slot / 1048576));
+        }
+    }
+
+    auto save_kv = [&](Beam& beam) {
+        if (use_device_kv) {
+            ggml_backend_tensor_copy(ctx->kv_k, beam_pool.k[beam.slot_idx]);
+            ggml_backend_tensor_copy(ctx->kv_v, beam_pool.v[beam.slot_idx]);
+        } else {
+            beam.kv_k.resize(ggml_nbytes(ctx->kv_k));
+            beam.kv_v.resize(ggml_nbytes(ctx->kv_v));
+            ggml_backend_tensor_get(ctx->kv_k, beam.kv_k.data(), 0, beam.kv_k.size());
+            ggml_backend_tensor_get(ctx->kv_v, beam.kv_v.data(), 0, beam.kv_v.size());
+        }
     };
 
-    auto restore_kv = [&](const std::vector<uint8_t>& k, const std::vector<uint8_t>& v) {
-        ggml_backend_tensor_set(ctx->kv_k, k.data(), 0, k.size());
-        ggml_backend_tensor_set(ctx->kv_v, v.data(), 0, v.size());
+    auto restore_kv = [&](const Beam& beam) {
+        if (use_device_kv) {
+            ggml_backend_tensor_copy(beam_pool.k[beam.slot_idx], ctx->kv_k);
+            ggml_backend_tensor_copy(beam_pool.v[beam.slot_idx], ctx->kv_v);
+        } else {
+            ggml_backend_tensor_set(ctx->kv_k, beam.kv_k.data(), 0, beam.kv_k.size());
+            ggml_backend_tensor_set(ctx->kv_v, beam.kv_v.data(), 0, beam.kv_v.size());
+        }
     };
 
     // Compute full log-softmax over vocabulary, then apply rep penalty to log-probs.
@@ -2407,18 +2477,28 @@ extern "C" int32_t* indextts_generate_mel_codes(struct indextts_context* ctx, co
         return log_probs;
     };
 
-    // Seed beams from prefill logits (no rep penalty — empty history at first step)
+    // Seed beams from prefill logits (no rep penalty — empty history at first step).
     std::vector<Beam> beams;
     {
-        // Save post-prefill KV
+        // Snapshot the post-prefill KV state. Host mode: one get to a shared
+        // scratch buffer reused by all initial beams; device mode: copy
+        // ctx->kv_k into every pool slot up front.
         std::vector<uint8_t> prompt_k, prompt_v;
-        save_kv(prompt_k, prompt_v);
+        if (!use_device_kv) {
+            prompt_k.resize(ggml_nbytes(ctx->kv_k));
+            prompt_v.resize(ggml_nbytes(ctx->kv_v));
+            ggml_backend_tensor_get(ctx->kv_k, prompt_k.data(), 0, prompt_k.size());
+            ggml_backend_tensor_get(ctx->kv_v, prompt_v.data(), 0, prompt_v.size());
+        } else {
+            for (int b = 0; b < B; b++) {
+                ggml_backend_tensor_copy(ctx->kv_k, beam_pool.k[b]);
+                ggml_backend_tensor_copy(ctx->kv_v, beam_pool.v[b]);
+            }
+        }
 
-        // Compute log-probs (no history for first step, so no penalty applied)
         std::vector<int32_t> empty_hist;
         auto lp = compute_log_probs(logits, empty_hist);
 
-        // Find top-B from log-probabilities
         std::vector<std::pair<double, int>> scored(mel_vocab);
         for (int i = 0; i < mel_vocab; i++)
             scored[i] = {lp[i], i};
@@ -2429,8 +2509,12 @@ extern "C" int32_t* indextts_generate_mel_codes(struct indextts_context* ctx, co
             Beam beam;
             beam.tokens.push_back(scored[b].second);
             beam.score = scored[b].first;
-            beam.kv_k = prompt_k;
-            beam.kv_v = prompt_v;
+            if (use_device_kv) {
+                beam.slot_idx = b;
+            } else {
+                beam.kv_k = prompt_k;
+                beam.kv_v = prompt_v;
+            }
             beam.finished = (scored[b].second == stop_token);
             beams.push_back(std::move(beam));
         }
@@ -2469,8 +2553,7 @@ extern "C" int32_t* indextts_generate_mel_codes(struct indextts_context* ctx, co
                 continue;
             }
 
-            // Restore KV and step with last token
-            restore_kv(beam.kv_k, beam.kv_v);
+            restore_kv(beam);
             // Python's GPT2InferenceModel uses mel_pos = attention_mask_len - mel_len.
             // start_mel gets mel_pos[0] at prefill, then mel_pos[1] is skipped,
             // and generated tokens get mel_pos[step+1] where step starts at 1.
@@ -2482,8 +2565,7 @@ extern "C" int32_t* indextts_generate_mel_codes(struct indextts_context* ctx, co
             if (!lg)
                 continue;
 
-            // Save post-step KV
-            save_kv(beam.kv_k, beam.kv_v);
+            save_kv(beam);
 
             // Compute log-probs then apply rep penalty (matching HF order)
             auto lp = compute_log_probs(lg, beam.tokens);
@@ -2504,20 +2586,67 @@ extern "C" int32_t* indextts_generate_mel_codes(struct indextts_context* ctx, co
                           [](auto& a, auto& b) { return a.score > b.score; });
         int keep = std::min((int)cands.size(), B);
 
+        // Build the next generation. In host mode each child gets a vector
+        // copy of its parent's snapshot. In device mode each child needs a
+        // pool slot, and we recycle: a slot that no surviving child still
+        // references becomes free, and siblings that all want the same
+        // parent slot duplicate via ggml_backend_tensor_copy into a free
+        // slot. Slot math: |children| == B, distinct parents referenced
+        // == P; free slots == B - P; sibling copies needed == B - P;
+        // balanced.
         std::vector<Beam> next;
-        for (int i = 0; i < keep; i++) {
-            auto& c = cands[i];
-            Beam nb;
-            nb.tokens = beams[c.parent].tokens;
-            nb.kv_k = beams[c.parent].kv_k;
-            nb.kv_v = beams[c.parent].kv_v;
-            nb.score = c.score;
-            if (c.token == stop_token) {
-                nb.finished = true;
-            } else {
-                nb.tokens.push_back(c.token);
+        if (use_device_kv) {
+            std::vector<int> slot_refs(B, 0);
+            for (int i = 0; i < keep; i++) {
+                slot_refs[beams[cands[i].parent].slot_idx]++;
             }
-            next.push_back(std::move(nb));
+            std::vector<int> free_slots;
+            for (int s = 0; s < B; s++) {
+                if (slot_refs[s] == 0) {
+                    free_slots.push_back(s);
+                }
+            }
+            std::vector<uint8_t> claimed(B, 0);
+            for (int i = 0; i < keep; i++) {
+                auto& c = cands[i];
+                int parent_slot = beams[c.parent].slot_idx;
+                int child_slot;
+                if (!claimed[parent_slot]) {
+                    child_slot = parent_slot;
+                    claimed[parent_slot] = 1;
+                } else {
+                    GGML_ASSERT(!free_slots.empty() && "beam KV slot accounting bug");
+                    child_slot = free_slots.back();
+                    free_slots.pop_back();
+                    ggml_backend_tensor_copy(beam_pool.k[parent_slot], beam_pool.k[child_slot]);
+                    ggml_backend_tensor_copy(beam_pool.v[parent_slot], beam_pool.v[child_slot]);
+                }
+                Beam nb;
+                nb.tokens = beams[c.parent].tokens;
+                nb.slot_idx = child_slot;
+                nb.score = c.score;
+                if (c.token == stop_token) {
+                    nb.finished = true;
+                } else {
+                    nb.tokens.push_back(c.token);
+                }
+                next.push_back(std::move(nb));
+            }
+        } else {
+            for (int i = 0; i < keep; i++) {
+                auto& c = cands[i];
+                Beam nb;
+                nb.tokens = beams[c.parent].tokens;
+                nb.kv_k = beams[c.parent].kv_k;
+                nb.kv_v = beams[c.parent].kv_v;
+                nb.score = c.score;
+                if (c.token == stop_token) {
+                    nb.finished = true;
+                } else {
+                    nb.tokens.push_back(c.token);
+                }
+                next.push_back(std::move(nb));
+            }
         }
         beams = std::move(next);
     }

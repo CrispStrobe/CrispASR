@@ -152,6 +152,54 @@ blocking for plain Chinese text and out of scope for this fix.
 
 ---
 
+## 2026-05-19 IndexTTS-1.5: device-resident beam KV pool, opt-in (issue #75 follow-up)
+
+The "proper fix" referenced in the May 19 spk-emb section: per-beam KV
+state lives in B same-backend tensors and gets swapped via
+`ggml_backend_tensor_copy` instead of `_get`/`_set` round-tripping
+through `std::vector<uint8_t>`. Slot recycling on candidate selection —
+free slots are exactly the parent slots that no surviving child
+references, so siblings that split off the same parent each get a
+fresh slot via `tensor_copy` with no extra allocation.
+
+Opt-in only: `INDEXTTS_KV_DEVICE_COPY=1`. Default stays on the host
+`_get`/`_set` path the original IndexTTS shipped. Reason for opt-in:
+
+Measured on M1 Metal, B=3, "Hello world..." (121 mel codes), 3 trials
+each, warm cache:
+
+| Trial | host (default) | device (opt-in) |
+| --- | --- | --- |
+| 1 | 61.25 s | 61.67 s |
+| 2 | 55.12 s | 72.73 s |
+| 3 | 70.32 s | 61.66 s |
+| median | **61.25 s** | **61.67 s** |
+
+Median delta < 1 % — within noise (each binary spans ~15 s trial-to-trial
+on this box). Apple Silicon unified memory makes `_get`/`_set` already
+a shared-RAM memcpy with no real "host round-trip" cost — the original
+LEARNINGS framing oversold the memcpy bottleneck. The 2.2× B=1 speedup
+came mostly from less GPT compute, not less memcpy.
+
+Audio output is byte-identical between the two modes on both the
+English test prompt and the issue-#75 Chinese prompt, and identical to
+the pre-refactor binary in default mode.
+
+Device path is expected to actually pay off on **CUDA / Vulkan** where
+`_get`/`_set` crosses real PCIe. That measurement is the next step;
+default will flip on those backends only when the numbers show a real
+win.
+
+### Files
+- `src/indextts.cpp` — dual KV-snapshot path: host buffers (default)
+  vs device tensor pool (`INDEXTTS_KV_DEVICE_COPY=1`). Refcount-based
+  slot recycling in the device path. `Beam` struct gained a
+  `slot_idx` field next to the existing `kv_k/kv_v` host vectors.
+- `LEARNINGS.md` — follow-up sub-section under the existing beam-KV
+  entry recording the M1 measurement and the misattribution lesson.
+
+---
+
 ## 2026-05-19 Chatterbox GPU bug localised to S3Gen + Metal default flipped
 
 Round 6 + 7 of the PLAN #57 / #83 GPU chase. The round-4 patches

@@ -4630,6 +4630,47 @@ Proper fix would be to keep B KV slots resident on the backend and
 swap them with `ggml_backend_tensor_copy` (device → device). Tracked
 as follow-up; not in this commit.
 
+### Follow-up: the "host round-trip" framing oversold the bottleneck on Apple Silicon (May 2026)
+
+Implemented the device-resident path: B per-beam KV slots allocated on
+the same backend as the active KV, swap via `ggml_backend_tensor_copy`,
+refcount-based slot recycling on candidate selection (siblings sharing a
+parent get a `tensor_copy` into a freed slot; only-children just inherit
+the parent's slot pointer). Opt-in via `INDEXTTS_KV_DEVICE_COPY=1`,
+default off.
+
+M1 Metal, B=3, "Hello world. This is a test of speech synthesis."
+(121 mel codes), 3 trials each, warm cache:
+
+| Trial | host (`_get`/`_set`) | device (`_copy`) |
+| --- | --- | --- |
+| 1 | 61.25 s | 61.67 s |
+| 2 | 55.12 s | 72.73 s |
+| 3 | 70.32 s | 61.66 s |
+| median | **61.25 s** | **61.67 s** |
+
+Median delta < 1 %, within noise (each binary has ~15 s trial-to-trial
+spread on this box, dominated by thermal / scheduler variance). Audio
+output is byte-identical between the two modes and against the
+pre-refactor binary across both English and Chinese prompts.
+
+The earlier "75.8 → 34.4 s with `INDEXTTS_BEAM_SIZE=1`" speedup we
+attributed mostly to "memcpy elimination" was in fact mostly **3× less
+GPT compute** (B=1 runs one forward per step vs B=3's three) — the
+snapshot traffic on Apple Silicon unified memory rides shared RAM and
+costs about as much as a same-backend Metal blit. The original framing
+oversold the memcpy cost.
+
+Device mode is kept as opt-in for the case it's actually load-bearing
+— discrete-GPU backends (CUDA, Vulkan) where `_get`/`_set` traverses
+real PCIe. Needs measurement on those backends before promoting the
+default; not flipping it on Metal alone.
+
+Lesson: when a "2.2× speedup" comes from a binary on/off comparison
+(B=3 vs B=1), the savings can be from any one of three sources —
+fewer forward passes, less per-step CPU work, less memcpy. Don't
+attribute the whole win to the one you happened to hypothesise about.
+
 ### Chinese requires `tokenize_by_CJK_char` before SentencePiece (Issue #75 follow-up, May 2026)
 
 The C++ text path passed raw text straight to its SentencePiece
