@@ -19,9 +19,11 @@ No Python. No PyTorch. No separate per-model binary. No `pip install`. Just one 
 
 | Project | What it does |
 |---|---|
-| **[CrispASR](https://github.com/CrispStrobe/CrispASR)** | This repo — C++ speech recognition engine. 24 ASR backends + 8 TTS backends, CLI + HTTP server + C-ABI + Python/Rust/Dart bindings. |
+| **[CrispASR](https://github.com/CrispStrobe/CrispASR)** | This repo — C++ speech recognition + NMT engine. 24 ASR backends + 8 TTS backends + 4 MT backends (m2m100 / wmt21 / madlad / gemma4-e2b). CLI + HTTP server + C-ABI + Python/Rust/Dart bindings. |
 | **[CrisperWeaver](https://github.com/CrispStrobe/CrisperWeaver)** | Cross-platform Flutter transcription app built on CrispASR. Desktop + mobile, all 10 backends, model browser with download queue, mic capture, SRT/VTT/JSON export, diarization, batch processing. Fully offline. |
-| **[CrispEmbed](https://github.com/CrispStrobe/CrispEmbed)** | Text embedding engine via ggml — same philosophy as CrispASR but for retrieval. 10 architectures (XLM-R, Qwen3-Embed, Gemma3, ModernBERT, ...), dense + sparse + ColBERT + reranking. 9.5x faster than ONNX on CPU, GPU via CUDA/Metal/Vulkan. Python/Rust/Dart bindings. |
+| **[CrispEmbed](https://github.com/CrispStrobe/CrispEmbed)** | Text embedding engine via ggml — same philosophy as CrispASR but for retrieval. 10 architectures (XLM-R, Qwen3-Embed, Gemma3, ModernBERT, ...), dense + sparse + ColBERT + reranking + per-token contextual embeddings for SimAlign. Python/Rust/Dart bindings. |
+| **[crisp-docx](https://github.com/CrispStrobe/crisp-docx)** | OOXML (`.docx`) surgery + LLM/NMT document translation pipeline. Uses CrispASR as its offline NMT backend (`Nmt` provider variant under `--features nmt`) and CrispEmbed for word alignment. |
+| **[CrispSorter](https://github.com/CrispStrobe/CrispSorter)** | Tauri 2 desktop document organiser. Uses CrispASR for audio L1/L2/L3 indexing, voice chat, and on-demand audio/video translation; uses CrispEmbed for the LanceDB embeddings. |
 | **[Susurrus](https://github.com/CrispStrobe/Susurrus)** | Python ASR GUI with 9 backends (faster-whisper, mlx-whisper, voxtral, insanely-fast-whisper, ...). The Python counterpart to CrispASR's C++ approach. |
 
 ---
