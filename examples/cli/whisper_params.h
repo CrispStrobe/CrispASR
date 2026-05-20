@@ -135,7 +135,16 @@ struct whisper_params {
     int32_t chunk_seconds = 30;
     bool chunk_seconds_explicit = false; // true when user passed --chunk-seconds
     float chunk_overlap_seconds = 3.0f;  // overlap context on each side of chunk boundary
-    std::string parakeet_decoder;        // "tdt" (default), "ctc" — selects parakeet decode head
+    // Issue #89 / #114 follow-up: NeMo-style LCS hypothesis stitching at
+    // chunk boundaries. "auto" fires when chunking with overlap is active,
+    // matching upstream BatchedFrameASRTDT. "on" forces it (e.g. for
+    // bindings testing); "off" disables for A/B comparison or debugging.
+    std::string lcs_dedup = "auto"; // {auto|on|off}
+    // Lower bound on LCS length to act on. NeMo's default is 1; raise to
+    // 3-4 if your audio has long-silence regions where blank tokens
+    // dominate the boundary token run (avoids over-slicing).
+    int lcs_min_length = 1;
+    std::string parakeet_decoder; // "tdt" (default), "ctc" — selects parakeet decode head
     std::string lid_backend;
     std::string lid_model;
     // Post-ASR text LID: when set, after transcription completes, run

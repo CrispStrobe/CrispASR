@@ -933,10 +933,17 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, co
     // and each frame can emit one TDT token, so `chunk_overlap_seconds *
     // 1000 / 80` is a safe upper bound on how far back in the previous
     // chunk we need to look.
-    const bool lcs_active = use_chunk_context && per_slice.size() > 1;
+    // CLI knob (--lcs-dedup): "auto" (default) follows use_chunk_context,
+    // "on" forces it even on bindings/test paths, "off" disables for A/B.
+    // --lcs-min-length raises the floor on what counts as a match — useful
+    // when audio has long-silence regions where blank tokens dominate the
+    // boundary run.
+    const bool lcs_default = use_chunk_context && per_slice.size() > 1;
+    const bool lcs_active =
+        (params.lcs_dedup == "on") ? (per_slice.size() > 1) : (params.lcs_dedup == "off" ? false : lcs_default);
     if (lcs_active) {
         const int delay_tokens = (int)(params.chunk_overlap_seconds * 1000.0f / 80.0f + 0.5f);
-        crispasr_lcs::apply_lcs_chunk_dedup(per_slice, delay_tokens > 0 ? delay_tokens : 1);
+        crispasr_lcs::apply_lcs_chunk_dedup(per_slice, delay_tokens > 0 ? delay_tokens : 1, params.lcs_min_length);
     }
 
     auto all_segs = merge_segments(std::move(per_slice), slices);

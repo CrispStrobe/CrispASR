@@ -98,8 +98,8 @@ token ids, with a leftmost-LCS heuristic and diagonal expansion to
 recover one-token gaps from TDT frame drift.
 
 This change ports that algorithm verbatim into
-`examples/cli/crispasr_lcs_merge.h` and wraps it with a segment-aware
-driver in `crispasr_lcs_dedup.h` that walks the per-slice
+`src/core/crispasr_lcs.h` and wraps it with a segment-aware driver in
+`examples/cli/crispasr_lcs_dedup.h` that walks the per-slice
 `vector<crispasr_segment>`, drops the duplicate leading tokens from
 `chunk[i]`, peels matching words, and rebuilds `seg.text`. The driver
 fires only when overlap-save was applied (`use_chunk_context`), so
@@ -108,16 +108,45 @@ VAD-derived multi-slice runs (#114 invariant) are untouched.
 The port was cross-checked against the upstream Python implementation
 on 8 cases (no overlap, perfect 3-/4-/5-token, subthreshold, leftmost
 preference, blanks-vs-content, partial alignment with gap) and
-matches bit-for-bit. The C++ unit tests (`test-lcs-chunk-merge` +
-`test-lcs-dedup-driver`) cover the algorithm and the driver
-separately — 37 assertions across 18 cases, pure CPU, no model load.
+matches bit-for-bit.
 
-On the issue #89 / #114 reproducer the algorithm doesn't change the
-emitted SRT because the cad4c28a word-level filter already removes
-most cross-chunk duplicates within its 200 ms tolerance window. The
-LCS path serves as defense in depth for wider `--chunk-overlap`
-configurations and for the not-yet-encountered edge case where the
-TDT emission-frame drift exceeds 200 ms.
+**CLI surface.** Two new flags expose the behaviour for tuning and
+A/B testing:
+
+- `--lcs-dedup {auto|on|off}` — `auto` (default) follows the
+  overlap-save gate; `on` forces dedup whenever there is more than
+  one chunk (useful for bindings testing); `off` disables it for
+  before/after comparison.
+- `--lcs-min-length N` — minimum LCS length to act on (default 1,
+  matching NeMo). Raise to 3-4 on audio with long-silence regions
+  where blank tokens dominate the boundary token run.
+
+**Public C ABI.** `crispasr_lcs_dedup_prefix_count(prev_tail_tokens,
+n_prev, curr_tokens, n_curr, min_lcs_length)` is exported from
+`libcrispasr` and declared in `include/crispasr.h`. Bindings (Go,
+Rust, Dart, Python, Java) that drive the library chunk-by-chunk can
+call it directly between adjacent chunks; it returns the number of
+leading tokens of `chunk[i]` to drop. The binding owns the actual
+slicing of its segment / word / text representation.
+
+The C++ unit tests cover three layers: the algorithm
+(`test-lcs-chunk-merge`, 10 cases / 15 assertions), the segment-
+aware driver (`test-lcs-dedup-driver`, 8 cases / 22 assertions), and
+the public C ABI symbol export (`test-lcs-c-abi`, 5 cases / 7
+assertions) — 50 assertions across 23 cases, pure CPU, no model load.
+
+Live runs on the issue #89 reproducer (Apple M1 Metal, 300 s clip):
+
+| `--lcs-dedup` | Coverage | Segments | Notes |
+| --- | --- | --- | --- |
+| `auto` (default) | 0 – 300 s | 7 | issue #89 fix output |
+| `off`            | 0 – 300 s | 7 | regresses to pre-LCS — duplicates re-appear at chunk boundaries (e.g. `なので` at 00:58 emitted twice) |
+| `on --lcs-min-length 3` | 0 – 300 s | 7 | matches `auto` except at one cross-chunk match where the LCS run was exactly length 2 |
+
+The "auto vs off" diff is ~6 chunk-boundary improvements on this
+clip; the "auto vs on min-3" diff is 1 segment where raising the
+floor leaves a 2-token cross-chunk run intact. Behaviour is exactly
+what NeMo's `MIN_MERGE_SUBSEQUENCE_LEN` describes.
 
 ---
 

@@ -5,6 +5,16 @@ All wrappers are thin shells over the same C-ABI surface in
 diarize, LID, align, download — is one function call in every
 language.
 
+> **Tip — chunk-boundary dedup for bindings.** When a binding drives a
+> CAP_UNBOUNDED_INPUT backend (parakeet, canary, …) chunk-by-chunk and
+> needs to stitch the output, call `crispasr_lcs_dedup_prefix_count`
+> between adjacent chunks. It returns the number of leading tokens of
+> `chunk[i]` that duplicate the tail of `chunk[i-1]` (NeMo-style
+> sub-word LCS over emitted token ids). The binding then drops that
+> many tokens from `chunk[i]` and rebuilds its own segment / word /
+> text representation. The C declaration lives in `include/crispasr.h`;
+> see also the `--lcs-dedup` / `--lcs-min-length` CLI flags.
+
 | Language | Status | Surface |
 |---|---|---|
 | C / C++ | ✓ | Full (the C-ABI is the source of truth) |

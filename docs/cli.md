@@ -128,6 +128,8 @@ per-token `tokens[]` arrays when the backend populates them.
 | `-vsd N` | VAD min silence duration (ms, default 100) |
 | `-ck N`, `--chunk-seconds N` | Fallback chunk size when VAD is off (default: 30 s for whisper, disabled for other backends) |
 | `--chunk-overlap F` | Overlap context (seconds) at chunk boundaries (default 3.0) |
+| `--lcs-dedup auto\|on\|off` | NeMo-style sub-word LCS dedup across chunk boundaries (default `auto` — fires when chunking with overlap) |
+| `--lcs-min-length N` | Minimum LCS length to act on (default 1; raise to 3-4 on long-silence audio where blank tokens dominate boundaries) |
 | `--parakeet-decoder ctc\|tdt` | Select CTC or TDT decode head for hybrid parakeet models |
 
 ### How VAD works
@@ -183,9 +185,13 @@ crispasr --backend parakeet -m parakeet.gguf -f long_audio.wav \
 - **If parakeet OOMs on very long audio:** cap memory with explicit
   chunking (`--chunk-seconds 60` or `120` recommended). When chunking
   is active, each chunk is extended by `--chunk-overlap` seconds
-  (default 3.0) on each side for encoder context. Avoid
-  `--chunk-seconds 30` — benchmarks show it is an anomalous worst
-  case (93% of full quality) while 60/120/180 stay within ±1%.
+  (default 3.0) on each side for encoder context, and a NeMo-style
+  sub-word LCS pass (`--lcs-dedup auto`) removes any duplicate token
+  runs that survive the boundary trim. Avoid `--chunk-seconds 30` —
+  benchmarks show it is an anomalous worst case (93% of full quality)
+  while 60/120/180 stay within ±1%. To disable the LCS pass for A/B
+  testing pass `--lcs-dedup off`; to raise the match-length floor on
+  audio with long silence regions pass `--lcs-min-length 3` or `4`.
 - **Hybrid TDT+CTC models** (e.g. `parakeet-tdt_ctc-0.6b-ja`): pass
   `--parakeet-decoder ctc` to use the CTC head. CTC decode is
   frame-synchronous and avoids TDT emission-frame-shift artifacts

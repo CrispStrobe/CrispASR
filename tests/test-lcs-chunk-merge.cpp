@@ -19,7 +19,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include "crispasr_lcs_merge.h"
+#include "core/crispasr_lcs.h"
 
 #include <vector>
 

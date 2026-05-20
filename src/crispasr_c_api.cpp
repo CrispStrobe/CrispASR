@@ -522,6 +522,33 @@ CA_EXPORT void crispasr_vad_free(float* spans) {
 }
 
 // =========================================================================
+// LCS chunk-boundary deduplication
+// =========================================================================
+//
+// Public-API entry point for the NeMo-style LCS hypothesis stitcher used
+// internally by the CLI's overlap-save chunking path. Exposed so bindings
+// that drive `libcrispasr` chunk-by-chunk (Go cgo, Rust, Dart FFI, Python
+// ctypes) can run the same dedup on their own per-chunk token streams
+// without re-implementing the algorithm.
+//
+// Pure function over the input arrays — no state, no thread safety
+// concerns. See `src/core/crispasr_lcs.h` for the algorithm itself; this
+// is a 4-line C-ABI wrapper that does input validation + namespace
+// stripping.
+
+#include "core/crispasr_lcs.h"
+
+CA_EXPORT int crispasr_lcs_dedup_prefix_count(const int32_t* prev_tail_tokens, int n_prev, const int32_t* curr_tokens,
+                                              int n_curr, int min_lcs_length) {
+    if (!prev_tail_tokens || !curr_tokens || n_prev <= 0 || n_curr <= 0)
+        return 0;
+    std::vector<int32_t> prev(prev_tail_tokens, prev_tail_tokens + n_prev);
+    std::vector<int32_t> curr(curr_tokens, curr_tokens + n_curr);
+    const int min_l = min_lcs_length > 0 ? min_lcs_length : crispasr_lcs::kMinMergeSubsequenceLen;
+    return crispasr_lcs::lcs_dedup_prefix_count(prev, curr, min_l);
+}
+
+// =========================================================================
 // Streaming transcription
 // =========================================================================
 //

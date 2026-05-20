@@ -393,6 +393,20 @@ static bool whisper_params_parse_arg_backend_vad(int argc, char** argv, int& i, 
         params.chunk_seconds_explicit = true;
     } else if (arg == "--chunk-overlap") {
         params.chunk_overlap_seconds = std::stof(ARGV_NEXT);
+    } else if (arg == "--lcs-dedup") {
+        std::string v = ARGV_NEXT;
+        if (v != "auto" && v != "on" && v != "off") {
+            fprintf(stderr, "crispasr: --lcs-dedup must be one of {auto|on|off} (got '%s')\n", v.c_str());
+            return false;
+        }
+        params.lcs_dedup = std::move(v);
+    } else if (arg == "--lcs-min-length") {
+        const int v = std::stoi(ARGV_NEXT);
+        if (v < 1) {
+            fprintf(stderr, "crispasr: --lcs-min-length must be >= 1 (got %d)\n", v);
+            return false;
+        }
+        params.lcs_min_length = v;
     } else if (arg == "--parakeet-decoder") {
         params.parakeet_decoder = ARGV_NEXT;
     } else if (arg == "--lid-backend") {
@@ -927,6 +941,12 @@ static void whisper_print_usage(int /*argc*/, char** argv, const whisper_params&
             params.chunk_seconds);
     fprintf(stderr, "             --chunk-overlap F      [%-7.1f] overlap context (sec) at chunk boundaries\n",
             params.chunk_overlap_seconds);
+    fprintf(stderr,
+            "             --lcs-dedup VAL        [%-7s] sub-word LCS dedup across chunk boundaries: auto|on|off\n",
+            params.lcs_dedup.c_str());
+    fprintf(stderr,
+            "             --lcs-min-length N     [%-7d] minimum LCS length to act on (raise on long-silence audio)\n",
+            params.lcs_min_length);
     fprintf(stderr, "             -m auto                        download a default model for the chosen backend\n");
     // Text-To-Speech (TTS) parameters — vibevoice and qwen3-tts backends
     fprintf(stderr, "\nText-to-speech (TTS) options:\n");

@@ -528,7 +528,7 @@ add_executable(test-lcs-chunk-merge
     test-lcs-chunk-merge.cpp
 )
 target_include_directories(test-lcs-chunk-merge PRIVATE
-    ${PROJECT_SOURCE_DIR}/examples/cli
+    ${PROJECT_SOURCE_DIR}/src
 )
 target_link_libraries(test-lcs-chunk-merge PRIVATE
     Catch2::Catch2WithMain
@@ -547,6 +547,7 @@ add_executable(test-lcs-dedup-driver
 )
 target_include_directories(test-lcs-dedup-driver PRIVATE
     ${PROJECT_SOURCE_DIR}/examples/cli
+    ${PROJECT_SOURCE_DIR}/src
 )
 target_link_libraries(test-lcs-dedup-driver PRIVATE
     Catch2::Catch2WithMain
@@ -554,6 +555,26 @@ target_link_libraries(test-lcs-dedup-driver PRIVATE
 catch_discover_tests(test-lcs-dedup-driver
     TEST_SPEC "[lcs-dedup]"
     PROPERTIES LABELS "unit;lcs;lcs-dedup"
+)
+
+# ─── test-lcs-c-abi — pin the public C ABI surface for the LCS dedup.
+# Verifies that `crispasr_lcs_dedup_prefix_count` is exported from
+# libcrispasr and agrees with the in-tree algorithm on the same
+# fixtures. Catches regressions where the symbol gets dropped from the
+# dynamic library (CMake link-order slip, missing CA_EXPORT).
+add_executable(test-lcs-c-abi
+    test-lcs-c-abi.cpp
+)
+target_include_directories(test-lcs-c-abi PRIVATE
+    ${PROJECT_SOURCE_DIR}/include
+)
+target_link_libraries(test-lcs-c-abi PRIVATE
+    crispasr
+    Catch2::Catch2WithMain
+)
+catch_discover_tests(test-lcs-c-abi
+    TEST_SPEC "[c-abi]"
+    PROPERTIES LABELS "unit;lcs;c-abi"
 )
 
 # ─── test - math - consistency — Catch2 unit tests for math constants ────────

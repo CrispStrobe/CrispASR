@@ -15,7 +15,7 @@
 #pragma once
 
 #include "crispasr_backend.h" // crispasr_segment / _word / _token
-#include "crispasr_lcs_merge.h"
+#include "core/crispasr_lcs.h"
 
 #include <algorithm>
 #include <cstddef>
