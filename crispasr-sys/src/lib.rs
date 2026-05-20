@@ -43,9 +43,7 @@ extern "C" {
         n_samples: c_int,
     ) -> c_int;
 
-    pub fn whisper_full_default_params_by_ref(
-        strategy: c_int,
-    ) -> *mut WhisperFullParams;
+    pub fn whisper_full_default_params_by_ref(strategy: c_int) -> *mut WhisperFullParams;
 
     // --- Results ---
     pub fn whisper_full_n_segments(ctx: *mut WhisperContext) -> c_int;
@@ -55,15 +53,9 @@ extern "C" {
         i_segment: c_int,
     ) -> *const c_char;
 
-    pub fn whisper_full_get_segment_t0(
-        ctx: *mut WhisperContext,
-        i_segment: c_int,
-    ) -> i64;
+    pub fn whisper_full_get_segment_t0(ctx: *mut WhisperContext, i_segment: c_int) -> i64;
 
-    pub fn whisper_full_get_segment_t1(
-        ctx: *mut WhisperContext,
-        i_segment: c_int,
-    ) -> i64;
+    pub fn whisper_full_get_segment_t1(ctx: *mut WhisperContext, i_segment: c_int) -> i64;
 
     pub fn whisper_full_get_segment_no_speech_prob(
         ctx: *mut WhisperContext,
@@ -77,22 +69,10 @@ extern "C" {
 
     // --- 0.4.2: VAD + tdrz setters on whisper_full_params ---
     pub fn crispasr_params_set_vad(p: *mut WhisperFullParams, v: c_int);
-    pub fn crispasr_params_set_vad_model_path(
-        p: *mut WhisperFullParams,
-        path: *const c_char,
-    );
-    pub fn crispasr_params_set_vad_threshold(
-        p: *mut WhisperFullParams,
-        threshold: c_float,
-    );
-    pub fn crispasr_params_set_vad_min_speech_ms(
-        p: *mut WhisperFullParams,
-        ms: c_int,
-    );
-    pub fn crispasr_params_set_vad_min_silence_ms(
-        p: *mut WhisperFullParams,
-        ms: c_int,
-    );
+    pub fn crispasr_params_set_vad_model_path(p: *mut WhisperFullParams, path: *const c_char);
+    pub fn crispasr_params_set_vad_threshold(p: *mut WhisperFullParams, threshold: c_float);
+    pub fn crispasr_params_set_vad_min_speech_ms(p: *mut WhisperFullParams, ms: c_int);
+    pub fn crispasr_params_set_vad_min_silence_ms(p: *mut WhisperFullParams, ms: c_int);
     pub fn crispasr_params_set_tdrz(p: *mut WhisperFullParams, v: c_int);
 }
 
@@ -197,10 +177,7 @@ extern "C" {
     /// Write a comma-separated list of backend names the loaded dylib
     /// was built with. Returns the number of bytes written (not counting
     /// NUL) or a negative error.
-    pub fn crispasr_session_available_backends(
-        out_csv: *mut c_char,
-        out_cap: c_int,
-    ) -> c_int;
+    pub fn crispasr_session_available_backends(out_csv: *mut c_char, out_cap: c_int) -> c_int;
 
     pub fn crispasr_session_transcribe(
         s: *mut CrispasrSession,
@@ -346,7 +323,11 @@ extern "C" {
         language: *const c_char,
         translate: c_int,
     ) -> *mut CrispasrStream;
-    pub fn crispasr_stream_feed(s: *mut CrispasrStream, pcm: *const c_float, n_samples: c_int) -> c_int;
+    pub fn crispasr_stream_feed(
+        s: *mut CrispasrStream,
+        pcm: *const c_float,
+        n_samples: c_int,
+    ) -> c_int;
     pub fn crispasr_stream_get_text(
         s: *mut CrispasrStream,
         out_text: *mut c_char,
@@ -418,26 +399,19 @@ extern "C" {
     pub fn crispasr_session_close(s: *mut CrispasrSession);
 
     // --- TTS synthesis (vibevoice, qwen3-tts, kokoro, orpheus) ---
-    pub fn crispasr_session_set_codec_path(
-        s: *mut CrispasrSession,
-        path: *const c_char,
-    ) -> c_int;
+    pub fn crispasr_session_set_codec_path(s: *mut CrispasrSession, path: *const c_char) -> c_int;
     pub fn crispasr_session_set_voice(
         s: *mut CrispasrSession,
         path: *const c_char,
         ref_text_or_null: *const c_char,
     ) -> c_int;
-    pub fn crispasr_session_set_speaker_name(
-        s: *mut CrispasrSession,
-        name: *const c_char,
-    ) -> c_int;
+    pub fn crispasr_session_set_speaker_name(s: *mut CrispasrSession, name: *const c_char)
+        -> c_int;
     pub fn crispasr_session_n_speakers(s: *mut CrispasrSession) -> c_int;
     pub fn crispasr_session_get_speaker_name(s: *mut CrispasrSession, i: c_int) -> *const c_char;
     // qwen3-tts VoiceDesign: natural-language voice description.
-    pub fn crispasr_session_set_instruct(
-        s: *mut CrispasrSession,
-        instruct: *const c_char,
-    ) -> c_int;
+    pub fn crispasr_session_set_instruct(s: *mut CrispasrSession, instruct: *const c_char)
+        -> c_int;
     // qwen3-tts variant detection (returns 0/1; 0 also covers "not qwen3-tts").
     pub fn crispasr_session_is_custom_voice(s: *mut CrispasrSession) -> c_int;
     pub fn crispasr_session_is_voice_design(s: *mut CrispasrSession) -> c_int;
@@ -452,8 +426,14 @@ extern "C" {
     pub fn crispasr_session_kokoro_clear_phoneme_cache(s: *mut CrispasrSession) -> c_int;
 
     // --- Sticky session-state setters (PLAN #59 partial unblock) ---
-    pub fn crispasr_session_set_source_language(s: *mut CrispasrSession, lang: *const c_char) -> c_int;
-    pub fn crispasr_session_set_target_language(s: *mut CrispasrSession, lang: *const c_char) -> c_int;
+    pub fn crispasr_session_set_source_language(
+        s: *mut CrispasrSession,
+        lang: *const c_char,
+    ) -> c_int;
+    pub fn crispasr_session_set_target_language(
+        s: *mut CrispasrSession,
+        lang: *const c_char,
+    ) -> c_int;
     pub fn crispasr_session_set_punctuation(s: *mut CrispasrSession, enable: c_int) -> c_int;
     pub fn crispasr_session_set_translate(s: *mut CrispasrSession, enable: c_int) -> c_int;
     // --- Text-to-text translation (m2m100 / m2m100-wmt21 / madlad / gemma4-e2b) ---

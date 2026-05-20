@@ -47,7 +47,10 @@ pub struct TranscribeOptions {
 /// abort the process. `Session` uses the C-ABI wrapper which catches exceptions.
 ///
 /// Not `Sync` — do not share between threads.
-#[deprecated(since = "0.1.6", note = "Use Session::open() instead — CrispASR can abort on C++ exceptions")]
+#[deprecated(
+    since = "0.1.6",
+    note = "Use Session::open() instead — CrispASR can abort on C++ exceptions"
+)]
 pub struct CrispASR {
     ctx: *mut crispasr_sys::WhisperContext,
 }
@@ -57,12 +60,10 @@ unsafe impl Send for CrispASR {}
 impl CrispASR {
     /// Load a GGUF/GGML whisper model file.
     pub fn new(model_path: &str) -> Result<Self, String> {
-        let path = CString::new(model_path)
-            .map_err(|e| format!("invalid path: {e}"))?;
+        let path = CString::new(model_path).map_err(|e| format!("invalid path: {e}"))?;
         let cparams = unsafe { crispasr_sys::whisper_context_default_params_by_ref() };
-        let ctx = unsafe {
-            crispasr_sys::whisper_init_from_file_with_params(path.as_ptr(), cparams)
-        };
+        let ctx =
+            unsafe { crispasr_sys::whisper_init_from_file_with_params(path.as_ptr(), cparams) };
         unsafe { crispasr_sys::whisper_free_context_params(cparams) };
         if ctx.is_null() {
             return Err(format!("failed to load model: {model_path}"));
@@ -100,10 +101,10 @@ impl CrispASR {
         pcm: &[f32],
         opts: &TranscribeOptions,
     ) -> Result<Vec<Segment>, String> {
-        let strategy = opts.strategy.unwrap_or(crispasr_sys::CRISPASR_SAMPLING_GREEDY);
-        let params = unsafe {
-            crispasr_sys::whisper_full_default_params_by_ref(strategy)
-        };
+        let strategy = opts
+            .strategy
+            .unwrap_or(crispasr_sys::CRISPASR_SAMPLING_GREEDY);
+        let params = unsafe { crispasr_sys::whisper_full_default_params_by_ref(strategy) };
 
         // VAD
         if opts.vad {
@@ -127,10 +128,7 @@ impl CrispASR {
                 .flatten();
             if let Some(cs) = &vad_path_cstr {
                 unsafe {
-                    crispasr_sys::crispasr_params_set_vad_model_path(
-                        params,
-                        cs.as_ptr(),
-                    );
+                    crispasr_sys::crispasr_params_set_vad_model_path(params, cs.as_ptr());
                 }
             }
             // vad_path_cstr stays in scope for the whisper_full call below.
@@ -149,14 +147,8 @@ impl CrispASR {
         params: *mut crispasr_sys::WhisperFullParams,
         _keep_alive_vad_path: Option<CString>,
     ) -> Result<Vec<Segment>, String> {
-        let ret = unsafe {
-            crispasr_sys::whisper_full(
-                self.ctx,
-                params,
-                pcm.as_ptr(),
-                pcm.len() as i32,
-            )
-        };
+        let ret =
+            unsafe { crispasr_sys::whisper_full(self.ctx, params, pcm.as_ptr(), pcm.len() as i32) };
         unsafe { crispasr_sys::whisper_free_params(params) };
 
         if ret != 0 {
@@ -167,9 +159,7 @@ impl CrispASR {
         let mut segments = Vec::with_capacity(n as usize);
 
         for i in 0..n {
-            let text_ptr = unsafe {
-                crispasr_sys::whisper_full_get_segment_text(self.ctx, i)
-            };
+            let text_ptr = unsafe { crispasr_sys::whisper_full_get_segment_text(self.ctx, i) };
             let text = if text_ptr.is_null() {
                 String::new()
             } else {
@@ -179,9 +169,7 @@ impl CrispASR {
             };
             let t0 = unsafe { crispasr_sys::whisper_full_get_segment_t0(self.ctx, i) };
             let t1 = unsafe { crispasr_sys::whisper_full_get_segment_t1(self.ctx, i) };
-            let nsp = unsafe {
-                crispasr_sys::whisper_full_get_segment_no_speech_prob(self.ctx, i)
-            };
+            let nsp = unsafe { crispasr_sys::whisper_full_get_segment_no_speech_prob(self.ctx, i) };
 
             segments.push(Segment {
                 text,
@@ -262,7 +250,11 @@ impl Session {
     }
 
     /// Open with an explicit backend (skips auto-detect).
-    pub fn open_with_backend(model_path: &str, backend: &str, n_threads: i32) -> Result<Self, String> {
+    pub fn open_with_backend(
+        model_path: &str,
+        backend: &str,
+        n_threads: i32,
+    ) -> Result<Self, String> {
         Self::open_inner(model_path, Some(backend), n_threads)
     }
 
@@ -271,7 +263,11 @@ impl Session {
         let handle = if let Some(be) = backend {
             let be_c = CString::new(be).map_err(|e| format!("invalid backend: {e}"))?;
             unsafe {
-                crispasr_sys::crispasr_session_open_explicit(path.as_ptr(), be_c.as_ptr(), n_threads)
+                crispasr_sys::crispasr_session_open_explicit(
+                    path.as_ptr(),
+                    be_c.as_ptr(),
+                    n_threads,
+                )
             }
         } else {
             unsafe { crispasr_sys::crispasr_session_open(path.as_ptr(), n_threads) }
@@ -350,9 +346,9 @@ impl Session {
             return Ok(Vec::new());
         }
         let lang_c = match language {
-            Some(l) if !l.is_empty() => Some(
-                CString::new(l).map_err(|e| format!("language NUL: {e}"))?,
-            ),
+            Some(l) if !l.is_empty() => {
+                Some(CString::new(l).map_err(|e| format!("language NUL: {e}"))?)
+            }
             _ => None,
         };
         let res = unsafe {
@@ -463,9 +459,9 @@ impl Session {
             .map_err(|e| format!("vad_model_path contains NUL byte: {e}"))?;
         let abi_opts = opts.unwrap_or_default().to_abi();
         let lang_c = match language {
-            Some(l) if !l.is_empty() => Some(
-                CString::new(l).map_err(|e| format!("language NUL: {e}"))?,
-            ),
+            Some(l) if !l.is_empty() => {
+                Some(CString::new(l).map_err(|e| format!("language NUL: {e}"))?)
+            }
             _ => None,
         };
 
@@ -548,7 +544,8 @@ impl Session {
     /// Load a separate codec GGUF (qwen3-tts only; no-op for others).
     pub fn set_codec_path(&self, path: &str) -> Result<(), String> {
         let cpath = CString::new(path).map_err(|e| e.to_string())?;
-        let rc = unsafe { crispasr_sys::crispasr_session_set_codec_path(self.handle, cpath.as_ptr()) };
+        let rc =
+            unsafe { crispasr_sys::crispasr_session_set_codec_path(self.handle, cpath.as_ptr()) };
         if rc != 0 {
             return Err(format!("set_codec_path failed (rc={})", rc));
         }
@@ -567,7 +564,9 @@ impl Session {
             None => None,
         };
         let rt_ptr = crt.as_ref().map(|c| c.as_ptr()).unwrap_or(std::ptr::null());
-        let rc = unsafe { crispasr_sys::crispasr_session_set_voice(self.handle, cpath.as_ptr(), rt_ptr) };
+        let rc = unsafe {
+            crispasr_sys::crispasr_session_set_voice(self.handle, cpath.as_ptr(), rt_ptr)
+        };
         if rc != 0 {
             return Err(format!("set_voice failed (rc={})", rc));
         }
@@ -580,10 +579,14 @@ impl Session {
     /// Use [`speakers`] to enumerate.
     pub fn set_speaker_name(&self, name: &str) -> Result<(), String> {
         let cname = CString::new(name).map_err(|e| e.to_string())?;
-        let rc = unsafe { crispasr_sys::crispasr_session_set_speaker_name(self.handle, cname.as_ptr()) };
+        let rc =
+            unsafe { crispasr_sys::crispasr_session_set_speaker_name(self.handle, cname.as_ptr()) };
         match rc {
             0 => Ok(()),
-            -2 => Err(format!("unknown speaker {:?}; call .speakers() to enumerate", name)),
+            -2 => Err(format!(
+                "unknown speaker {:?}; call .speakers() to enumerate",
+                name
+            )),
             -3 => Err("backend has no preset speakers; use set_voice() instead".to_string()),
             _ => Err(format!("set_speaker_name failed (rc={})", rc)),
         }
@@ -612,7 +615,11 @@ impl Session {
         let ctext = CString::new(text).map_err(|e| e.to_string())?;
         let mut n: c_int = 0;
         let ptr = unsafe {
-            crispasr_sys::crispasr_session_synthesize(self.handle, ctext.as_ptr(), &mut n as *mut c_int)
+            crispasr_sys::crispasr_session_synthesize(
+                self.handle,
+                ctext.as_ptr(),
+                &mut n as *mut c_int,
+            )
         };
         if ptr.is_null() || n <= 0 {
             return Err(format!(
@@ -645,7 +652,8 @@ impl Session {
     /// methods still wins.
     pub fn set_source_language(&self, lang: &str) -> Result<(), String> {
         let c = CString::new(lang).map_err(|e| e.to_string())?;
-        let rc = unsafe { crispasr_sys::crispasr_session_set_source_language(self.handle, c.as_ptr()) };
+        let rc =
+            unsafe { crispasr_sys::crispasr_session_set_source_language(self.handle, c.as_ptr()) };
         if rc != 0 {
             return Err(format!("set_source_language failed (rc={})", rc));
         }
@@ -657,7 +665,8 @@ impl Session {
     /// [`set_translate(true)`](Session::set_translate).
     pub fn set_target_language(&self, lang: &str) -> Result<(), String> {
         let c = CString::new(lang).map_err(|e| e.to_string())?;
-        let rc = unsafe { crispasr_sys::crispasr_session_set_target_language(self.handle, c.as_ptr()) };
+        let rc =
+            unsafe { crispasr_sys::crispasr_session_set_target_language(self.handle, c.as_ptr()) };
         if rc != 0 {
             return Err(format!("set_target_language failed (rc={})", rc));
         }
@@ -667,7 +676,9 @@ impl Session {
     /// Toggle punctuation + capitalisation in the output (canary/cohere
     /// natively; LLM backends via post-process strip). Default true.
     pub fn set_punctuation(&self, enable: bool) -> Result<(), String> {
-        let rc = unsafe { crispasr_sys::crispasr_session_set_punctuation(self.handle, if enable { 1 } else { 0 }) };
+        let rc = unsafe {
+            crispasr_sys::crispasr_session_set_punctuation(self.handle, if enable { 1 } else { 0 })
+        };
         if rc != 0 {
             return Err(format!("set_punctuation failed (rc={})", rc));
         }
@@ -677,7 +688,9 @@ impl Session {
     /// Whisper sticky `--translate`. For canary/cohere/voxtral the
     /// equivalent is `set_target_language` ≠ source.
     pub fn set_translate(&self, enable: bool) -> Result<(), String> {
-        let rc = unsafe { crispasr_sys::crispasr_session_set_translate(self.handle, if enable { 1 } else { 0 }) };
+        let rc = unsafe {
+            crispasr_sys::crispasr_session_set_translate(self.handle, if enable { 1 } else { 0 })
+        };
         if rc != 0 {
             return Err(format!("set_translate failed (rc={})", rc));
         }
@@ -807,7 +820,9 @@ impl Session {
     /// (canary, cohere, parakeet, moonshine). Other backends silently
     /// no-op. `seed` is the RNG seed; pass 0 for time-based.
     pub fn set_temperature(&self, temperature: f32, seed: u64) -> Result<(), String> {
-        let rc = unsafe { crispasr_sys::crispasr_session_set_temperature(self.handle, temperature, seed) };
+        let rc = unsafe {
+            crispasr_sys::crispasr_session_set_temperature(self.handle, temperature, seed)
+        };
         // rc == -2 means no backend supports it — soft no-op.
         if rc != 0 && rc != -2 {
             return Err(format!("set_temperature failed (rc={})", rc));
@@ -886,29 +901,46 @@ pub fn kokoro_resolve_for_lang(model_path: &str, lang: &str) -> Result<KokoroRes
     let mut backbone_swapped = false;
     unsafe {
         let rc = crispasr_sys::crispasr_kokoro_resolve_model_for_lang_abi(
-            cmodel.as_ptr(), clang.as_ptr(),
-            out_model.as_mut_ptr() as *mut c_char, out_model.len() as c_int,
+            cmodel.as_ptr(),
+            clang.as_ptr(),
+            out_model.as_mut_ptr() as *mut c_char,
+            out_model.len() as c_int,
         );
-        if rc < 0 { return Err("kokoro_resolve_model_for_lang: buffer too small".into()); }
-        if rc == 0 { backbone_swapped = true; }
+        if rc < 0 {
+            return Err("kokoro_resolve_model_for_lang: buffer too small".into());
+        }
+        if rc == 0 {
+            backbone_swapped = true;
+        }
     }
     let model_resolved = unsafe { std::ffi::CStr::from_ptr(out_model.as_ptr() as *const c_char) }
         .to_string_lossy()
         .into_owned();
-    let model_resolved = if model_resolved.is_empty() { model_path.to_string() } else { model_resolved };
+    let model_resolved = if model_resolved.is_empty() {
+        model_path.to_string()
+    } else {
+        model_resolved
+    };
 
     let (voice_path, voice_name) = unsafe {
         let rc = crispasr_sys::crispasr_kokoro_resolve_fallback_voice_abi(
-            cmodel.as_ptr(), clang.as_ptr(),
-            out_voice.as_mut_ptr() as *mut c_char, out_voice.len() as c_int,
-            out_picked.as_mut_ptr() as *mut c_char, out_picked.len() as c_int,
+            cmodel.as_ptr(),
+            clang.as_ptr(),
+            out_voice.as_mut_ptr() as *mut c_char,
+            out_voice.len() as c_int,
+            out_picked.as_mut_ptr() as *mut c_char,
+            out_picked.len() as c_int,
         );
-        if rc < 0 { return Err("kokoro_resolve_fallback_voice: buffer too small".into()); }
+        if rc < 0 {
+            return Err("kokoro_resolve_fallback_voice: buffer too small".into());
+        }
         if rc == 0 {
             let p = std::ffi::CStr::from_ptr(out_voice.as_ptr() as *const c_char)
-                .to_string_lossy().into_owned();
+                .to_string_lossy()
+                .into_owned();
             let n = std::ffi::CStr::from_ptr(out_picked.as_ptr() as *const c_char)
-                .to_string_lossy().into_owned();
+                .to_string_lossy()
+                .into_owned();
             (Some(p), Some(n))
         } else {
             (None, None)
@@ -1002,13 +1034,17 @@ impl Stream {
     /// transcript. Set BEFORE the first feed for clean semantics.
     /// No-op on backends without audio-injection prompt decode.
     pub fn set_live_decode(&self, enabled: bool) {
-        unsafe { crispasr_sys::crispasr_stream_set_live_decode(self.handle, if enabled { 1 } else { 0 }) };
+        unsafe {
+            crispasr_sys::crispasr_stream_set_live_decode(self.handle, if enabled { 1 } else { 0 })
+        };
     }
 
     /// Push 16 kHz mono float32 PCM. Returns 0 if still buffering, 1
     /// if a new partial transcript is ready (call [`get_text`](Stream::get_text)).
     pub fn feed(&self, pcm: &[f32]) -> Result<i32, String> {
-        let rc = unsafe { crispasr_sys::crispasr_stream_feed(self.handle, pcm.as_ptr(), pcm.len() as c_int) };
+        let rc = unsafe {
+            crispasr_sys::crispasr_stream_feed(self.handle, pcm.as_ptr(), pcm.len() as c_int)
+        };
         if rc < 0 {
             return Err(format!("stream_feed failed (rc={})", rc));
         }
@@ -1038,7 +1074,12 @@ impl Stream {
         let text = unsafe { CStr::from_ptr(buf.as_ptr() as *const c_char) }
             .to_string_lossy()
             .into_owned();
-        Ok(StreamingUpdate { text, t0, t1, counter })
+        Ok(StreamingUpdate {
+            text,
+            t0,
+            t1,
+            counter,
+        })
     }
 
     /// Finalize any remaining buffered audio.
@@ -1112,7 +1153,10 @@ impl Mic {
         if handle.is_null() {
             return Err("crispasr_mic_open failed".to_string());
         }
-        Ok(Mic { handle, _trampoline: trampoline })
+        Ok(Mic {
+            handle,
+            _trampoline: trampoline,
+        })
     }
 
     pub fn start(&self) -> Result<(), String> {
@@ -1170,7 +1214,10 @@ pub struct RegistryEntry {
 pub fn list_known_models() -> Vec<String> {
     let mut buf = vec![0u8; 8192];
     let n = unsafe {
-        crispasr_sys::crispasr_registry_list_backends_abi(buf.as_mut_ptr() as *mut c_char, buf.len() as c_int)
+        crispasr_sys::crispasr_registry_list_backends_abi(
+            buf.as_mut_ptr() as *mut c_char,
+            buf.len() as c_int,
+        )
     };
     if n < 0 {
         return Vec::new();
@@ -1204,16 +1251,22 @@ fn registry_call_inner(key: &str, by_backend: bool) -> Result<Option<RegistryEnt
         if by_backend {
             crispasr_sys::crispasr_registry_lookup_abi(
                 key_c.as_ptr(),
-                fn_buf.as_mut_ptr() as *mut c_char, fn_buf.len() as i32,
-                url_buf.as_mut_ptr() as *mut c_char, url_buf.len() as i32,
-                size_buf.as_mut_ptr() as *mut c_char, size_buf.len() as i32,
+                fn_buf.as_mut_ptr() as *mut c_char,
+                fn_buf.len() as i32,
+                url_buf.as_mut_ptr() as *mut c_char,
+                url_buf.len() as i32,
+                size_buf.as_mut_ptr() as *mut c_char,
+                size_buf.len() as i32,
             )
         } else {
             crispasr_sys::crispasr_registry_lookup_by_filename_abi(
                 key_c.as_ptr(),
-                fn_buf.as_mut_ptr() as *mut c_char, fn_buf.len() as i32,
-                url_buf.as_mut_ptr() as *mut c_char, url_buf.len() as i32,
-                size_buf.as_mut_ptr() as *mut c_char, size_buf.len() as i32,
+                fn_buf.as_mut_ptr() as *mut c_char,
+                fn_buf.len() as i32,
+                url_buf.as_mut_ptr() as *mut c_char,
+                url_buf.len() as i32,
+                size_buf.as_mut_ptr() as *mut c_char,
+                size_buf.len() as i32,
             )
         }
     };
@@ -1267,7 +1320,8 @@ pub fn cache_ensure_file(
 
 /// Return the CrispASR cache directory (creating it if missing).
 pub fn cache_dir(override_path: Option<&str>) -> Result<Option<String>, String> {
-    let ov_c = CString::new(override_path.unwrap_or("")).map_err(|e| format!("override NUL: {e}"))?;
+    let ov_c =
+        CString::new(override_path.unwrap_or("")).map_err(|e| format!("override NUL: {e}"))?;
     let mut buf = vec![0u8; 2048];
     let rc = unsafe {
         crispasr_sys::crispasr_cache_dir_abi(
@@ -1316,8 +1370,7 @@ pub fn align_words(
     if aligner_model.is_empty() || transcript.is_empty() || pcm.is_empty() {
         return Ok(Vec::new());
     }
-    let model_c =
-        CString::new(aligner_model).map_err(|e| format!("aligner_model NUL: {e}"))?;
+    let model_c = CString::new(aligner_model).map_err(|e| format!("aligner_model NUL: {e}"))?;
     let trans_c = CString::new(transcript).map_err(|e| format!("transcript NUL: {e}"))?;
 
     let res = unsafe {
@@ -1407,8 +1460,7 @@ pub fn detect_language_pcm(
             confidence: -1.0,
         });
     }
-    let path_c =
-        CString::new(model_path).map_err(|e| format!("model_path contains NUL: {e}"))?;
+    let path_c = CString::new(model_path).map_err(|e| format!("model_path contains NUL: {e}"))?;
 
     let mut buf = [0u8; 16];
     let mut conf: c_float = -1.0;
@@ -1488,8 +1540,7 @@ pub fn text_detect_language(
     n_threads: i32,
 ) -> Result<TextLidResult, String> {
     let ctext = CString::new(text).map_err(|e| format!("text contains NUL: {e}"))?;
-    let cmodel =
-        CString::new(model_path).map_err(|e| format!("model_path contains NUL: {e}"))?;
+    let cmodel = CString::new(model_path).map_err(|e| format!("model_path contains NUL: {e}"))?;
 
     // 256-byte buffer comfortably fits every label format the
     // dispatcher emits — CLD3's longest is ~10 bytes (`zh-Latn`),
@@ -1709,9 +1760,7 @@ impl SpeakerEmbedder {
             crispasr_sys::crispasr_speaker_embedder_make_abi(spec_c.as_ptr(), n_threads, cache_ptr)
         };
         if raw.is_null() {
-            return Err(format!(
-                "failed to build speaker embedder '{model_spec}'"
-            ));
+            return Err(format!("failed to build speaker embedder '{model_spec}'"));
         }
         Ok(Self { raw })
     }
@@ -1861,9 +1910,7 @@ impl PyannoteCache {
             )
         };
         if rc != 0 {
-            return Err(format!(
-                "crispasr_pyannote_cache_apply_abi returned {rc}"
-            ));
+            return Err(format!("crispasr_pyannote_cache_apply_abi returned {rc}"));
         }
         for (i, s) in segs.iter_mut().enumerate() {
             s.speaker = abi_segs[i].speaker;
@@ -1920,9 +1967,7 @@ impl PuncModel {
     /// Add punctuation to unpunctuated text.
     pub fn process(&self, text: &str) -> String {
         let c_text = CString::new(text).unwrap_or_default();
-        let result = unsafe {
-            crispasr_sys::crispasr_punc_process(self.handle, c_text.as_ptr())
-        };
+        let result = unsafe { crispasr_sys::crispasr_punc_process(self.handle, c_text.as_ptr()) };
         if result.is_null() {
             return text.to_string();
         }

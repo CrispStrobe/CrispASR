@@ -51,9 +51,20 @@ fn whisper_load_and_transcribe() {
     let pcm = jfk_pcm();
     let segs = model.transcribe_pcm(&pcm).expect("transcribe");
     assert!(!segs.is_empty(), "should produce segments");
-    let full = segs.iter().map(|s| s.text.as_str()).collect::<Vec<_>>().join(" ").to_lowercase();
-    assert!(full.contains("fellow americans"), "text should mention 'fellow americans': {full}");
-    assert!(full.contains("country"), "text should mention 'country': {full}");
+    let full = segs
+        .iter()
+        .map(|s| s.text.as_str())
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase();
+    assert!(
+        full.contains("fellow americans"),
+        "text should mention 'fellow americans': {full}"
+    );
+    assert!(
+        full.contains("country"),
+        "text should mention 'country': {full}"
+    );
 }
 
 #[test]
@@ -67,7 +78,12 @@ fn whisper_timestamps_valid() {
     let segs = model.transcribe_pcm(&jfk_pcm()).unwrap();
     for seg in &segs {
         assert!(seg.start >= 0.0, "start >= 0");
-        assert!(seg.end > seg.start, "end > start: {} vs {}", seg.end, seg.start);
+        assert!(
+            seg.end > seg.start,
+            "end > start: {} vs {}",
+            seg.end,
+            seg.start
+        );
         assert!(seg.end < 15.0, "end < 15s (audio is ~11s)");
     }
 }
@@ -98,7 +114,12 @@ fn session_whisper_auto_detect() {
     assert_eq!(sess.backend(), "whisper");
     let segs = sess.transcribe(&jfk_pcm()).expect("transcribe");
     assert!(!segs.is_empty());
-    let full = segs.iter().map(|s| s.text.as_str()).collect::<Vec<_>>().join(" ").to_lowercase();
+    let full = segs
+        .iter()
+        .map(|s| s.text.as_str())
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase();
     assert!(full.contains("country"));
 }
 
@@ -138,7 +159,9 @@ fn session_parakeet_word_timestamps() {
         assert!(
             w.start >= prev_end - 0.02,
             "word '{}' starts at {} before prev end {}",
-            w.text, w.start, prev_end
+            w.text,
+            w.start,
+            prev_end
         );
         prev_end = w.end;
     }

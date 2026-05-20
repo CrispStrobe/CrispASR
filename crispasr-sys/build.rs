@@ -141,9 +141,7 @@ fn try_existing_build(src_root: &Path, lib_name: &str) -> Option<PathBuf> {
         src_root.join("build-flutter-bundle"),
         src_root.join("build"),
     ];
-    candidates
-        .into_iter()
-        .find(|p| has_built_lib(p, lib_name))
+    candidates.into_iter().find(|p| has_built_lib(p, lib_name))
 }
 
 fn run(cmd: &mut Command, what: &str) {
