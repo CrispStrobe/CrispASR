@@ -416,12 +416,23 @@ the cached graph is already near optimal; the per-call shape (T=11,
 12 layers, n_q=16 GQA on n_kv=2) doesn't have enough independent work
 to shine on the GPU.
 
+### Progress (2026-05-20 follow-up)
+
+Multi-bucket TSLM Lk: 5-bucket array (128/256/512/1024/2048) replacing
+the single-bucket cache. `tslm_pick_bucket(needed_lk)` picks the
+smallest that fits; each bucket is built lazily on first hit via the
+existing `build_tslm_step_graph(fixed_kv_len, kv_indices=positions)`
+pattern. Long-prefill inputs (multi-sentence cloning, voice
+instructions) now stay on the cached path instead of falling through
+to the dynamic build at >127 positions.
+
+Validated: long-text clone exercising the 256-bucket
+(122 prefill + 81 AR = 203 positions) ASR-roundtrips correctly; both
+"built tslm step bucket Lk=128" and "Lk=256" fire in the log. Diff
+harness still 14 pass / 0 fail / 3 skip on `voxcpm2-q4_k.gguf`.
+
 ### Still TODO
 
-- Multi-bucket TSLM Lk (128 / 256 / 512 / 1024) so long-prefill
-  inputs (multi-sentence cloning, voice instructions) keep the
-  bucketed cache instead of falling back to dynamic. Mirror
-  `qwen3_tts.cpp talker_buckets`.
 - Graph-ify VAE encode + decode (the remaining big legacy
   paths — VAE decode is still ~8 s of the wall-clock).
 - Once all paths are graph, drop the legacy `matmul_mv_ggml` +

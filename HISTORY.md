@@ -6,6 +6,31 @@ technical deep-dives are in `LEARNINGS.md`.
 
 ---
 
+## 2026-05-20 voxcpm2-tts: multi-bucket TSLM step graph (PLAN #96 follow-on)
+
+**Change.** Replaced the single TSLM-step cgraph cache (Lk=128) with
+a 5-bucket array {128, 256, 512, 1024, 2048}. `tslm_pick_bucket`
+picks the smallest fitting bucket; each is built lazily via the
+existing bucketed `build_tslm_step_graph(fixed_kv_len,
+kv_indices=positions)` pattern. The struct now holds an
+`std::array<TslmBucket, 5>` with per-bucket arena_meta / arena_ctx /
+gf / galloc, freed together in `voxcpm2_free`.
+
+**Why.** Single-bucket Lk=128 covered short inputs but fell through
+to the slow dynamic per-call build on anything with prefill > 127
+positions (multi-sentence voice cloning, long voice instructions),
+losing 4-10× on `tslm_step`. Bigger buckets are paid only when
+needed — short prompts still use the cheapest Lk=128.
+
+**Validation.** Long-text clone exercising the 256-bucket
+("122 prefill + 81 AR = 203 positions") ASR-roundtrips correctly;
+log shows both "built tslm step bucket Lk=128" and "Lk=256" lazy
+fires. Short-prompt zero-shot only fires Lk=128 (unchanged). Diff
+harness `voxcpm2-q4_k.gguf` still 14 pass / 0 fail / 3 skip.
+
+---
+
+
 ## 2026-05-20 voxcpm2-tts: load weights on init_best — Metal live (PLAN #96 done)
 
 **Change.** Switched `voxcpm2_init_from_file` to set

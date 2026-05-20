@@ -30,6 +30,7 @@ static int g_cpu_n_threads = 4;
 #endif
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <chrono>
 #include <climits>
@@ -339,18 +340,24 @@ struct voxcpm2_context {
     ggml_cgraph* locdit_gf = nullptr;
     ggml_gallocr_t locdit_galloc = nullptr;
 
-    // Cached TSLM step graph (qwen3-style bucketed pattern). The graph
-    // is topology-invariant across n_past because we pin Lk to
-    // tslm_step_bucket_lk and pass positions as runtime kv_indices —
-    // the K/V cache write becomes a runtime-indexed scatter instead of
-    // a baked static offset. AR steps within the bucket reuse the
-    // cached gf; if n_past+1 outgrows the bucket we fall through to
-    // the dynamic build_tslm_step_graph path.
-    std::vector<uint8_t> tslm_step_arena_meta;
-    ggml_context* tslm_step_arena_ctx = nullptr;
-    ggml_cgraph* tslm_step_gf = nullptr;
-    ggml_gallocr_t tslm_step_galloc = nullptr;
-    int tslm_step_bucket_lk = 0;
+    // Cached TSLM step graphs (qwen3-style multi-bucket pattern). Each
+    // bucket is topology-invariant across n_past because Lk is pinned
+    // to bucket_lk and positions is passed as runtime kv_indices — the
+    // K/V cache write becomes a runtime-indexed scatter instead of a
+    // baked static offset. AR steps within the same bucket reuse its
+    // cached gf; switching buckets pays one build + reserve.
+    // Bucket sizes are powers-of-two (128, 256, 512, 1024, 2048) so
+    // small/typical inputs ("Hello world" zero-shot < 20 positions,
+    // jfk.wav clone ~80) keep the smallest bucket and pay the least
+    // attention overhead; longer prefills upgrade as needed.
+    struct TslmBucket {
+        int lk = 0;
+        std::vector<uint8_t> arena_meta;
+        ggml_context* arena_ctx = nullptr;
+        ggml_cgraph* gf = nullptr;
+        ggml_gallocr_t galloc = nullptr;
+    };
+    std::array<TslmBucket, 5> tslm_buckets;
 
     // Persistent KV cache as a backend tensor for VOXCPM2_USE_GRAPH=1 TSLM
     // step. Sized to match the legacy tslm_kv (max_ctx × n_kv × head_dim ×
@@ -978,76 +985,82 @@ static ggml_cgraph* build_tslm_step_graph(voxcpm2_context* ctx, int n_past, int 
     return gf;
 }
 
-// Build / fetch the cached TSLM step cgraph at the chosen bucket Lk.
-// Topology is `n_past`-invariant because the K/V scatter index and the
-// causal mask are runtime inputs (qwen3 LK_BUCKET pattern). One bucket
-// covers all AR-step n_past values up to bucket_lk - 1; n_past+1 >
-// bucket_lk falls back to the dynamic graph in the caller.
-static ggml_cgraph* get_or_build_tslm_step_graph(voxcpm2_context* ctx, int bucket_lk) {
-    if (ctx->tslm_step_gf && ctx->tslm_step_bucket_lk == bucket_lk) {
-        return ctx->tslm_step_gf;
+// Bucket policy: powers-of-two from 128 to 2048. Smallest fitting
+// bucket wins — short prompts pay only the 128-bucket attn cost,
+// longer ones upgrade as needed. Buckets are built lazily on first
+// hit (most synths touch one or two).
+static constexpr int kTslmBuckets[] = {128, 256, 512, 1024, 2048};
+static constexpr int kTslmNumBuckets = (int)(sizeof(kTslmBuckets) / sizeof(kTslmBuckets[0]));
+
+static int tslm_pick_bucket(int needed_lk) {
+    for (int i = 0; i < kTslmNumBuckets; i++) {
+        if (kTslmBuckets[i] >= needed_lk) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+// Build / fetch the cached TSLM step cgraph for the given bucket index.
+// Topology is `n_past`-invariant: K/V scatter index + causal mask are
+// runtime inputs (qwen3 LK_BUCKET pattern). One bucket covers all
+// AR-step n_past values up to its Lk - 1; needed_lk past the largest
+// bucket falls back to the dynamic graph in the caller.
+static ggml_cgraph* get_or_build_tslm_step_graph(voxcpm2_context* ctx, int bucket_idx) {
+    if (bucket_idx < 0 || bucket_idx >= kTslmNumBuckets) {
+        return nullptr;
+    }
+    auto& bk = ctx->tslm_buckets[bucket_idx];
+    if (bk.gf) {
+        return bk.gf;
     }
     if (!ctx->backend || !ctx->tslm_kv_k) {
         return nullptr;
     }
-    // Free any prior bucket — uncommon (only fires if bucket_lk changes
-    // mid-process, which it does not in current flows).
-    if (ctx->tslm_step_galloc) {
-        ggml_gallocr_free(ctx->tslm_step_galloc);
-        ctx->tslm_step_galloc = nullptr;
-    }
-    if (ctx->tslm_step_arena_ctx) {
-        ggml_free(ctx->tslm_step_arena_ctx);
-        ctx->tslm_step_arena_ctx = nullptr;
-    }
-    ctx->tslm_step_arena_meta.assign(ctx->compute_meta.size(), 0);
-    ggml_init_params ip = {ctx->tslm_step_arena_meta.size(), ctx->tslm_step_arena_meta.data(), /*no_alloc=*/true};
-    ctx->tslm_step_arena_ctx = ggml_init(ip);
-    if (!ctx->tslm_step_arena_ctx) {
-        ctx->tslm_step_arena_meta.clear();
+    const int bucket_lk = kTslmBuckets[bucket_idx];
+    bk.lk = bucket_lk;
+    bk.arena_meta.assign(ctx->compute_meta.size(), 0);
+    ggml_init_params ip = {bk.arena_meta.size(), bk.arena_meta.data(), /*no_alloc=*/true};
+    bk.arena_ctx = ggml_init(ip);
+    if (!bk.arena_ctx) {
+        bk.arena_meta.clear();
         return nullptr;
     }
-    ctx->tslm_step_gf = build_tslm_step_graph(ctx, /*n_past=*/0, /*fixed_kv_len=*/bucket_lk, ctx->tslm_step_arena_ctx);
-    if (!ctx->tslm_step_gf) {
-        ggml_free(ctx->tslm_step_arena_ctx);
-        ctx->tslm_step_arena_ctx = nullptr;
-        ctx->tslm_step_arena_meta.clear();
+    bk.gf = build_tslm_step_graph(ctx, /*n_past=*/0, /*fixed_kv_len=*/bucket_lk, bk.arena_ctx);
+    if (!bk.gf) {
+        ggml_free(bk.arena_ctx);
+        bk.arena_ctx = nullptr;
+        bk.arena_meta.clear();
         return nullptr;
     }
-    ctx->tslm_step_galloc = ggml_gallocr_new(ggml_backend_get_default_buffer_type(ctx->backend));
-    if (!ctx->tslm_step_galloc || !ggml_gallocr_reserve(ctx->tslm_step_galloc, ctx->tslm_step_gf)) {
-        if (ctx->tslm_step_galloc) {
-            ggml_gallocr_free(ctx->tslm_step_galloc);
-            ctx->tslm_step_galloc = nullptr;
+    bk.galloc = ggml_gallocr_new(ggml_backend_get_default_buffer_type(ctx->backend));
+    if (!bk.galloc || !ggml_gallocr_reserve(bk.galloc, bk.gf)) {
+        if (bk.galloc) {
+            ggml_gallocr_free(bk.galloc);
+            bk.galloc = nullptr;
         }
-        ggml_free(ctx->tslm_step_arena_ctx);
-        ctx->tslm_step_arena_ctx = nullptr;
-        ctx->tslm_step_gf = nullptr;
-        ctx->tslm_step_arena_meta.clear();
+        ggml_free(bk.arena_ctx);
+        bk.arena_ctx = nullptr;
+        bk.gf = nullptr;
+        bk.arena_meta.clear();
         return nullptr;
     }
-    ctx->tslm_step_bucket_lk = bucket_lk;
-    return ctx->tslm_step_gf;
+    if (ctx->verbosity >= 1) {
+        fprintf(stderr, "voxcpm2: built tslm step bucket Lk=%d\n", bucket_lk);
+    }
+    return bk.gf;
 }
 
 // Run one TSLM step through the graph. Caller must have ensured
-// init_tslm_kv_backend + sync_tslm_kv_cpu_to_backend completed before the
-// first invocation. Picks a cached bucket graph when pos+1 <= bucket_lk;
-// otherwise falls through to a one-shot dynamic build. Returns the
-// normed hidden state [d_model].
-//
-// Bucket policy: single bucket sized to typical zero-shot synth length
-// (3 text tokens + ~16 AR-step audio tokens ≪ 128). 128 covers short
-// prompts and voice-clone prefills up to ~120 positions; longer inputs
-// fall through to the dynamic per-call build. Per-call cost in the
-// bucketed path: tensor_set (hidden_in + positions + causal_mask) +
-// ggml_backend_graph_compute + tensor_get. Bigger bucket trades graph
-// build savings for wasted attention work on the masked tail —
-// flash-attn computes Q·K^T over the full Lk even when the tail is
-// -inf masked, so Lk=512 cost ~5× more on the attn matmul than the
-// actual needed positions on M1 CPU.
-static constexpr int kTslmBucketLk = 128;
-
+// init_tslm_kv_backend + sync_tslm_kv_cpu_to_backend completed before
+// the first invocation. Picks the smallest fitting bucket; falls
+// through to a one-shot dynamic build when n_past+1 outgrows the
+// largest bucket. Per-call cost in the bucketed path: tensor_set
+// (hidden_in + positions + causal_mask) + ggml_backend_graph_compute
+// + tensor_get. Bigger bucket trades graph-build savings for wasted
+// attention work on the masked tail — flash-attn computes Q·K^T over
+// the full Lk even when the tail is -inf masked, so 128 is meaningfully
+// cheaper than 2048 for short prompts; multi-bucket lets us pick.
 static std::vector<float> tslm_step_graph(voxcpm2_context* ctx, const float* hidden_in, int pos) {
     const int d = (int)ctx->hp.tslm_d_model;
     int32_t pos_i = pos;
@@ -1056,11 +1069,13 @@ static std::vector<float> tslm_step_graph(voxcpm2_context* ctx, const float* hid
     ggml_gallocr_t galloc = nullptr;
     int Lk = 0;
     bool bucketed = false;
-    if (pos + 1 <= kTslmBucketLk) {
-        gf = get_or_build_tslm_step_graph(ctx, kTslmBucketLk);
+    const int needed_lk = pos + 1;
+    const int bucket_idx = tslm_pick_bucket(needed_lk);
+    if (bucket_idx >= 0) {
+        gf = get_or_build_tslm_step_graph(ctx, bucket_idx);
         if (gf) {
-            galloc = ctx->tslm_step_galloc;
-            Lk = kTslmBucketLk;
+            galloc = ctx->tslm_buckets[bucket_idx].galloc;
+            Lk = kTslmBuckets[bucket_idx];
             bucketed = true;
         }
     }
@@ -3976,13 +3991,17 @@ struct voxcpm2_context* voxcpm2_init_from_file(const char* path_model, struct vo
 void voxcpm2_free(struct voxcpm2_context* ctx) {
     if (!ctx)
         return;
-    if (ctx->tslm_step_galloc) {
-        ggml_gallocr_free(ctx->tslm_step_galloc);
-        ctx->tslm_step_galloc = nullptr;
-    }
-    if (ctx->tslm_step_arena_ctx) {
-        ggml_free(ctx->tslm_step_arena_ctx);
-        ctx->tslm_step_arena_ctx = nullptr;
+    for (auto& bk : ctx->tslm_buckets) {
+        if (bk.galloc) {
+            ggml_gallocr_free(bk.galloc);
+            bk.galloc = nullptr;
+        }
+        if (bk.arena_ctx) {
+            ggml_free(bk.arena_ctx);
+            bk.arena_ctx = nullptr;
+        }
+        bk.gf = nullptr;
+        bk.arena_meta.clear();
     }
     if (ctx->locdit_galloc) {
         ggml_gallocr_free(ctx->locdit_galloc);
