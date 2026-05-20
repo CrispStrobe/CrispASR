@@ -92,9 +92,10 @@ class Thread:
 
     @property
     def url(self) -> str:
+        # HF Hub serves both discussions and PRs under the same /discussions/N
+        # path; the distinction is in the thread metadata, not the URL slug.
         prefix = "" if self.repo_type == "model" else f"{self.repo_type}s/"
-        kind = "discussions" if not self.is_pull_request else "discussions"
-        return f"https://huggingface.co/{prefix}{self.repo_id}/{kind}/{self.num}"
+        return f"https://huggingface.co/{prefix}{self.repo_id}/discussions/{self.num}"
 
     @property
     def key(self) -> str:
@@ -122,42 +123,92 @@ def collect_repos(api, user: str) -> list[tuple[str, str]]:
     return repos
 
 
-def collect_threads(api, repos: list[tuple[str, str]]) -> list[Thread]:
-    """Fetch all discussion threads across `repos`. Anonymous OK for public."""
+def _to_utc(dt: datetime) -> datetime:
+    """Normalise to tz-aware UTC. Some huggingface_hub versions return naive
+    datetimes that crash when compared against the script's tz-aware `since`.
+    """
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def collect_threads(api, repos: list[tuple[str, str]],
+                    include_prs: bool = False) -> list[Thread]:
+    """Fetch all discussion threads across `repos`. Anonymous OK for public.
+
+    `include_prs=False` passes `discussion_type='discussion'` to the HF API
+    so PRs are skipped server-side — saves one fetch per PR-heavy repo and
+    keeps the state file free of PR entries when the caller doesn't care
+    about them (which would otherwise hide them on a later opt-in).
+    """
     threads: list[Thread] = []
     for repo_id, repo_type in repos:
-        try:
-            discs = api.get_repo_discussions(
-                repo_id=repo_id, repo_type=repo_type)
-            for d in discs:
-                # `d` is a DiscussionWithDetails; HF's API exposes:
-                #   num, title, status, author, created_at, is_pull_request
-                last = d.created_at
-                # Some HF clients expose `events` with timestamps; if the
-                # discussion has any new events, take the max. Otherwise
-                # fall back to created_at.
-                events = getattr(d, "events", None)
-                if events:
+        # Tolerate transient HF rate-limit / network blips: one quick retry
+        # before giving up on the repo. The cron rerun will catch anything
+        # that still fails.
+        attempts = 0
+        while True:
+            attempts += 1
+            try:
+                kwargs = {"repo_id": repo_id, "repo_type": repo_type}
+                if not include_prs:
+                    kwargs["discussion_type"] = "discussion"
+                discs = list(api.get_repo_discussions(**kwargs))
+                break
+            except TypeError:
+                # Older huggingface_hub doesn't accept discussion_type. Retry
+                # without the filter — we'll post-filter in main().
+                if "discussion_type" in kwargs:
+                    del kwargs["discussion_type"]
                     try:
-                        last = max(getattr(ev, "created_at", d.created_at)
-                                   for ev in events)
-                    except Exception:
-                        pass
-                threads.append(Thread(
-                    repo_id=repo_id,
-                    repo_type=repo_type,
-                    num=d.num,
-                    title=d.title,
-                    author=getattr(d, "author", "?"),
-                    created_at=d.created_at,
-                    last_at=last,
-                    is_pull_request=getattr(d, "is_pull_request", False),
-                    status=getattr(d, "status", "open"),
-                ))
-        except Exception as exc:
-            # Some repos throw if discussions are disabled. Tolerate.
-            print(f"# warn: discussions for {repo_id} ({repo_type}): {exc}",
-                  file=sys.stderr)
+                        discs = list(api.get_repo_discussions(**kwargs))
+                        break
+                    except Exception as exc:
+                        print(f"# warn: discussions for {repo_id} ({repo_type}): {exc}",
+                              file=sys.stderr)
+                        discs = []
+                        break
+                else:
+                    raise
+            except Exception as exc:
+                if attempts < 2:
+                    print(f"# warn: retrying {repo_id} ({repo_type}) after: {exc}",
+                          file=sys.stderr)
+                    continue
+                # Some repos throw if discussions are disabled. Tolerate.
+                print(f"# warn: discussions for {repo_id} ({repo_type}): {exc}",
+                      file=sys.stderr)
+                discs = []
+                break
+
+        for d in discs:
+            # `d` is a DiscussionWithDetails; HF's API exposes:
+            #   num, title, status, author, created_at, is_pull_request
+            last = d.created_at
+            # Some HF clients expose `events` with timestamps; if the
+            # discussion has any new events, take the max. Otherwise
+            # fall back to created_at.
+            events = getattr(d, "events", None)
+            if events:
+                try:
+                    last = max(getattr(ev, "created_at", d.created_at)
+                               for ev in events)
+                except Exception:
+                    pass
+            threads.append(Thread(
+                repo_id=repo_id,
+                repo_type=repo_type,
+                num=d.num,
+                title=d.title,
+                # `author` may be missing (older HF API) or explicitly None
+                # (system events). Coerce both to "?" so markdown doesn't
+                # render `by \`None\``.
+                author=getattr(d, "author", None) or "?",
+                created_at=_to_utc(d.created_at),
+                last_at=_to_utc(last),
+                is_pull_request=getattr(d, "is_pull_request", False),
+                status=getattr(d, "status", "open"),
+            ))
     return threads
 
 
@@ -249,8 +300,11 @@ def main() -> int:
     repos = collect_repos(api, args.user)
     print(f"# {len(repos)} repos found", file=sys.stderr)
 
-    threads = collect_threads(api, repos)
+    threads = collect_threads(api, repos, include_prs=args.include_prs)
     if not args.include_prs:
+        # Defence-in-depth: older HfApi versions don't honour discussion_type,
+        # so post-filter here too. collect_threads already drops the kwarg on
+        # TypeError, so this catches the same case without an extra branch.
         threads = [t for t in threads if not t.is_pull_request]
     print(f"# {len(threads)} total discussions across them", file=sys.stderr)
 
@@ -284,9 +338,15 @@ def main() -> int:
         Path(args.out).expanduser().parent.mkdir(parents=True, exist_ok=True)
         Path(args.out).expanduser().write_text(rendered)
 
+    # Only persist what we'd surface under the SAME filter (`--include-prs`)
+    # on the next run. Saving PRs here when --include-prs was off would mark
+    # them seen forever, hiding them from a future opt-in.
     save_state(state_path, threads)
 
-    return len(new_threads)
+    # POSIX exit codes are 8-bit unsigned. Clamp so a flood of ≥256 new
+    # threads doesn't wrap to a falsy value and trick cron-style runners
+    # that gate on "is there anything new" via non-zero exit.
+    return min(len(new_threads), 255)
 
 
 if __name__ == "__main__":
