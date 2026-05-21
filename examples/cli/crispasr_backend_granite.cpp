@@ -335,11 +335,22 @@ public:
                 free(text);
 
             crispasr_segment seg;
+            seg.t0 = t_offset_cs;
+            seg.t1 = t_offset_cs + (int64_t)((double)n_samples / 16000.0 * 100.0);
             // Strip leading space
             size_t start = 0;
             while (start < transcript.size() && transcript[start] == ' ')
                 start++;
             seg.text = transcript.substr(start);
+            seg.tokens.reserve(gen_ids.size());
+            for (size_t i = 0; i < gen_ids.size(); i++) {
+                if (gen_ids[i] == eos_tok)
+                    break;
+                crispasr_token ct;
+                ct.id = gen_ids[i];
+                ct.confidence = (i < probs.size()) ? probs[i] : -1.0f;
+                seg.tokens.push_back(std::move(ct));
+            }
             if (!params.punctuation) {
                 crispasr_strip_ascii_punctuation(seg.text);
                 crispasr_lowercase_ascii(seg.text);

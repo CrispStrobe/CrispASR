@@ -194,6 +194,10 @@ std::vector<crispasr_segment> merge_segments(std::vector<std::vector<crispasr_se
     return out;
 }
 
+bool crispasr_words_have_positive_span(const std::vector<crispasr_word>& words) {
+    return !words.empty() && words.back().t1 > words.front().t0;
+}
+
 // Stdout serialization mutex. Used by the parallel-processors path to
 // keep stdout transcript lines from interleaving across worker threads.
 // The single-threaded path acquires it too — no measurable cost since
@@ -510,7 +514,7 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, co
                 if (e > s) {
                     auto words = crispasr_ctc_align(params.aligner_model, seg.text, samples.data() + s, e - s, seg.t0,
                                                     params.n_threads);
-                    if (!words.empty()) {
+                    if (crispasr_words_have_positive_span(words)) {
                         seg.t0 = words.front().t0;
                         seg.t1 = words.back().t1;
                         seg.words = std::move(words);
@@ -625,7 +629,8 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, co
     // unit test in tests/test-issue-114-chunk-context-gate.cpp can pin
     // it without spinning up a model. See the header for the rationale.
     const bool use_chunk_context =
-        crispasr_chunk_context::should_use_chunk_context(effective_chunk_seconds, slices.size(), kChunkContextS);
+        crispasr_chunk_context::should_use_chunk_context(effective_chunk_seconds, slices.size(), kChunkContextS,
+                                                         wants_vad);
 
     auto process_slice = [&](size_t i, CrispasrBackend& be) {
         const auto& sl = slices[i];
@@ -749,7 +754,7 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, co
                     continue;
                 auto words = crispasr_ctc_align(params.aligner_model, seg.text, samples.data() + sl.start,
                                                 sl.end - sl.start, sl.t0_cs, params.n_threads);
-                if (!words.empty()) {
+                if (crispasr_words_have_positive_span(words)) {
                     seg.t0 = words.front().t0;
                     seg.t1 = words.back().t1;
                     seg.words = std::move(words);
@@ -2466,7 +2471,7 @@ int crispasr_run_backend(const whisper_params& params_in) {
                         sl.end - sl.start,
                         sl.t0_cs,
                         params.n_threads);
-                    if (!words.empty()) {
+                    if (crispasr_words_have_positive_span(words)) {
                         seg.t0 = words.front().t0;
                         seg.t1 = words.back().t1;
                         seg.words = std::move(words);

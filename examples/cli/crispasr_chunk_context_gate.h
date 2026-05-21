@@ -15,8 +15,9 @@
 // on parakeet-tdt-0.6b-ja was kanji collapsing to bare hiragana plus
 // entire short slices being dropped.
 //
-// The fix is to gate overlap-save on `effective_chunk_seconds > 0`:
-// it's a chunking-only mitigation, and VAD slicing is not chunking.
+// The fix is to gate overlap-save on the actual slice source:
+// it's a chunking-only mitigation, and VAD slicing is not chunking even
+// when the CLI's fallback chunk_seconds value is non-zero.
 
 #pragma once
 
@@ -29,12 +30,15 @@ namespace crispasr_chunk_context {
 // sl.size + 2*ctx, ...)`), then trimmed back via word-level filtering.
 //
 // Returns false (no context, transcribe the bare slice) when:
+//   - the slices came from VAD. VAD-derived slices are already speech
+//     boundaries and must not pull neighbouring utterances into context.
 //   - chunking is not in effect (effective_chunk_seconds == 0). The
-//     CAP_UNBOUNDED_INPUT default; covers VAD-derived multi-slice runs.
+//     CAP_UNBOUNDED_INPUT default for non-VAD runs.
 //   - there is only one slice (no boundary to mitigate).
 //   - the user has set --chunk-overlap 0 explicitly.
-inline bool should_use_chunk_context(int effective_chunk_seconds, std::size_t n_slices, float chunk_overlap_seconds) {
-    return effective_chunk_seconds > 0 && n_slices > 1 && chunk_overlap_seconds > 0.0f;
+inline bool should_use_chunk_context(int effective_chunk_seconds, std::size_t n_slices, float chunk_overlap_seconds,
+                                     bool vad_slicing) {
+    return !vad_slicing && effective_chunk_seconds > 0 && n_slices > 1 && chunk_overlap_seconds > 0.0f;
 }
 
 } // namespace crispasr_chunk_context
