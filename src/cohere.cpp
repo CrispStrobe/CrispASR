@@ -2644,7 +2644,11 @@ struct cohere_result* cohere_transcribe_ex(struct cohere_context* ctx, const flo
     auto flush_pending_bytes = [&]() {
         if (pending_bytes.empty())
             return;
-        emit_token(pending_id, pending_p, pending_gen_idx, pending_bytes);
+        // If the decoder produced an incomplete byte-fallback sequence
+        // (for example a lone UTF-8 lead byte before a normal token), do
+        // not surface raw invalid UTF-8 into transcript/token text.
+        if (utf8_complete(pending_bytes))
+            emit_token(pending_id, pending_p, pending_gen_idx, pending_bytes);
         pending_bytes.clear();
         pending_id = -1;
         pending_gen_idx = -1;
