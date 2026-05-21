@@ -8,10 +8,10 @@
 //   → argmax over vocab (8404 characters)
 //
 // The encoder reuses core_sanm::build_block(). The decoder is new — each
-// block has three sub-layers:
-//   1. norm1 → FSMN depthwise conv (no Q/K/V self-attention)
-//   2. norm2 → cross-attention (Q from decoder, fused K+V from encoder)
-//   3. norm3 → FFN (w_1 → LayerNorm → w_2, note the internal LN)
+// block has three sub-layers (upstream order):
+//   1. norm1 → FFN (w_1 → ReLU → LayerNorm → w_2)
+//   2. norm2 → FSMN depthwise conv (no Q/K/V self-attention)
+//   3. norm3 → cross-attention (Q from decoder, fused K+V from encoder)
 
 #pragma once
 

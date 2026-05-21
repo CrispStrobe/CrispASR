@@ -481,7 +481,9 @@ static ggml_tensor* build_decoder_post(ggml_context* ctx0, ggml_tensor* cur,
 // Full inference
 // ===========================================================================
 
-static std::string paraformer_transcribe_impl(paraformer_context* ctx, const float* pcm, int n_samples) {
+static std::string paraformer_transcribe_impl(paraformer_context* ctx, const float* pcm, int n_samples,
+                                               std::vector<float>* staged_out = nullptr,
+                                               const char* stage = nullptr) {
     const auto& hp = ctx->model.hp;
     const int D = (int)hp.d_model;
 
@@ -507,6 +509,7 @@ static std::string paraformer_transcribe_impl(paraformer_context* ctx, const flo
     ggml_tensor* cur = inp;
 
     // Encoder: entry block(s)
+    int enc_layer_idx = 0;
     for (uint32_t i = 0; i < hp.n_enc_blocks0; i++) {
         core_sanm::BlockParams p;
         p.in_size = (i == 0) ? D_lfr_actual : D;
@@ -517,6 +520,11 @@ static std::string paraformer_transcribe_impl(paraformer_context* ctx, const flo
         p.ln_eps = hp.ln_eps;
         p.flash_attn = ctx->flash_attn;
         cur = core_sanm::build_block(ctx0, cur, T_lfr, ctx->model.enc0[i], p, /*apply_attn_residual=*/false);
+        if (stage) {
+            char nm[64]; std::snprintf(nm, sizeof(nm), "encoder_layer_%d", enc_layer_idx);
+            ggml_set_name(cur, nm); ggml_set_output(cur);
+        }
+        enc_layer_idx++;
     }
 
     // Encoder: main blocks
@@ -530,6 +538,11 @@ static std::string paraformer_transcribe_impl(paraformer_context* ctx, const flo
         p.ln_eps = hp.ln_eps;
         p.flash_attn = ctx->flash_attn;
         cur = core_sanm::build_block(ctx0, cur, T_lfr, ctx->model.enc[i], p, /*apply_attn_residual=*/true);
+        if (stage) {
+            char nm[64]; std::snprintf(nm, sizeof(nm), "encoder_layer_%d", enc_layer_idx);
+            ggml_set_name(cur, nm); ggml_set_output(cur);
+        }
+        enc_layer_idx++;
     }
 
     // Encoder: after_norm
@@ -582,6 +595,31 @@ static std::string paraformer_transcribe_impl(paraformer_context* ctx, const flo
     std::vector<float> enc_out((size_t)D * T_lfr);
     ggml_backend_tensor_get(enc_result, enc_out.data(), 0, enc_expect);
 
+    // Stage capture from encoder graph
+    if (stage && staged_out) {
+        std::string sn(stage);
+        if (sn == "mel_features") {
+            // lfr is the post-LFR feature vector (T_lfr, D_lfr=560) in row-major
+            *staged_out = lfr;
+            ggml_gallocr_free(alloc); ggml_free(ctx0);
+            return "";
+        }
+        if (sn == "encoder_output") {
+            *staged_out = enc_out;
+            ggml_gallocr_free(alloc); ggml_free(ctx0);
+            return "";
+        }
+        if (sn.rfind("encoder_layer_", 0) == 0) {
+            ggml_tensor* t = ggml_graph_get_tensor(gf, stage);
+            if (t) {
+                staged_out->resize(ggml_nelements(t));
+                ggml_backend_tensor_get(t, staged_out->data(), 0, ggml_nbytes(t));
+            }
+            ggml_gallocr_free(alloc); ggml_free(ctx0);
+            return "";
+        }
+    }
+
     ggml_gallocr_free(alloc);
     ggml_free(ctx0);
 
@@ -594,6 +632,12 @@ static std::string paraformer_transcribe_impl(paraformer_context* ctx, const flo
 
     fprintf(stderr, "paraformer: CIF predicted %d tokens from T_lfr=%d\n", N_tokens, T_lfr);
     if (N_tokens <= 0) return "";
+
+    // Stage capture: acoustic_embeds (row-major (N, D))
+    if (stage && staged_out && std::strcmp(stage, "acoustic_embeds") == 0) {
+        *staged_out = acoustic_embeds;
+        return "";
+    }
 
     // 4. Decoder graph
     ctx0 = ggml_init(ip);
@@ -615,6 +659,10 @@ static std::string paraformer_transcribe_impl(paraformer_context* ctx, const flo
     for (uint32_t i = 0; i < hp.n_dec_blocks; i++) {
         cur = build_decoder_block(ctx0, cur, enc_tensor, N_tokens, T_lfr,
                                    ctx->model.dec[i], D, n_heads, head_dim, hp.ln_eps, ctx->flash_attn);
+        if (stage) {
+            char nm[64]; std::snprintf(nm, sizeof(nm), "decoder_layer_%u", i);
+            ggml_set_name(cur, nm); ggml_set_output(cur);
+        }
     }
 
     // Post block
@@ -624,6 +672,9 @@ static std::string paraformer_transcribe_impl(paraformer_context* ctx, const flo
 
     // after_norm → output_layer
     cur = ggml_norm_affine(ctx0, cur, ctx->model.dec_after_norm_w, ctx->model.dec_after_norm_b, hp.ln_eps);
+    if (stage) {
+        ggml_set_name(cur, "decoder_output"); ggml_set_output(cur);
+    }
     cur = mm_bias(ctx0, ctx->model.dec_output_w, cur, ctx->model.dec_output_b);  // (vocab, N)
     ggml_set_name(cur, "logits");
     ggml_build_forward_expand(gf, cur);
@@ -639,6 +690,20 @@ static std::string paraformer_transcribe_impl(paraformer_context* ctx, const flo
     ggml_backend_tensor_set(enc_tensor, enc_out.data(), 0, enc_out.size() * sizeof(float));
     ggml_backend_cpu_set_n_threads(ctx->backend, ctx->n_threads);
     ggml_backend_graph_compute(ctx->backend, gf);
+
+    // Stage capture from decoder graph
+    if (stage && staged_out) {
+        std::string sn(stage);
+        if (sn == "decoder_output" || sn.rfind("decoder_layer_", 0) == 0) {
+            ggml_tensor* t = ggml_graph_get_tensor(gf, stage);
+            if (t) {
+                staged_out->resize(ggml_nelements(t));
+                ggml_backend_tensor_get(t, staged_out->data(), 0, ggml_nbytes(t));
+            }
+            ggml_gallocr_free(alloc); ggml_free(ctx0);
+            return "";
+        }
+    }
 
     // 5. Argmax decoding
     ggml_tensor* logits = ggml_graph_get_tensor(gf, "logits");
@@ -758,8 +823,27 @@ char* paraformer_transcribe(paraformer_context* ctx, const float* samples, int n
 
 float* paraformer_extract_stage(paraformer_context* ctx, const float* samples, int n_samples,
                                 const char* stage_name, int* n_out) {
-    // TODO: implement stage extraction for diff harness
-    (void)ctx; (void)samples; (void)n_samples; (void)stage_name;
     if (n_out) *n_out = 0;
-    return nullptr;
+    if (!ctx || !samples || n_samples <= 0 || !stage_name)
+        return nullptr;
+
+    if (std::strcmp(stage_name, "generated_text") == 0) {
+        std::string txt = paraformer_transcribe_impl(ctx, samples, n_samples);
+        char* buf = (char*)std::malloc(txt.size() + 1);
+        if (!buf) return nullptr;
+        std::memcpy(buf, txt.data(), txt.size());
+        buf[txt.size()] = '\0';
+        if (n_out) *n_out = (int)txt.size();
+        return (float*)buf;
+    }
+
+    std::vector<float> staged;
+    (void)paraformer_transcribe_impl(ctx, samples, n_samples, &staged, stage_name);
+    if (staged.empty())
+        return nullptr;
+    float* out = (float*)std::malloc(staged.size() * sizeof(float));
+    if (!out) return nullptr;
+    std::memcpy(out, staged.data(), staged.size() * sizeof(float));
+    if (n_out) *n_out = (int)staged.size();
+    return out;
 }

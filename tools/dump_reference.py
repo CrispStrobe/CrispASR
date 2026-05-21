@@ -202,6 +202,10 @@ REGISTERED_BACKENDS: Dict[str, str] = {
     # emotion + audio-event via CTC head). Same SANM encoder as Fun-ASR
     # but no LLM half. model_dir = FunAudioLLM/SenseVoiceSmall HF snapshot.
     "sensevoice": "reference_backends.sensevoice",
+    # FunASR Paraformer-zh: NAR encoder-decoder (50 SANM blocks + CIF
+    # predictor + 16 decoder blocks). model_dir = funasr/paraformer-zh
+    # HF snapshot or local dir with model.pt + config.yaml + tokens.json.
+    "paraformer": "reference_backends.paraformer",
     # VoxCPM2 TTS: diffusion AR TTS with 4 transformer sub-networks.
     # model_dir = openbmb/VoxCPM2 HF snapshot. Audio arg = reference WAV
     # for voice cloning (optional). Synth text from VOXCPM2_SYN_TEXT env.
