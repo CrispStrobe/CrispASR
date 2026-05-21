@@ -2,7 +2,7 @@
 //
 // Inference flow:
 //   Kaldi fbank (80-mel) → LFR(7,6) → CMVN → 50 SANM blocks → CIF predictor
-//   → 16 decoder blocks (FSMN + cross-attn + FFN) → argmax → characters
+//   → 16 decoder blocks (FFN → FSMN → cross-attn) → argmax → characters
 //
 // The encoder reuses core_sanm::build_block(). See paraformer.h for overview.
 
@@ -30,22 +30,23 @@
 // ===========================================================================
 
 struct paraformer_decoder_block {
-    // norm1 (before FSMN)
+    // Upstream order: norm1→FFN, norm2→FSMN, norm3→cross-attn
+    // norm1 (before FFN)
     ggml_tensor *norm1_w = nullptr, *norm1_b = nullptr;
+    // FFN: w_1 → relu → internal LN → w_2 (no w_2 bias)
+    ggml_tensor *ffn_l1_w = nullptr, *ffn_l1_b = nullptr;
+    ggml_tensor *ffn_norm_w = nullptr, *ffn_norm_b = nullptr;
+    ggml_tensor *ffn_l2_w = nullptr;
+    // norm2 (before FSMN)
+    ggml_tensor *norm2_w = nullptr, *norm2_b = nullptr;
     // FSMN depthwise conv (self-attn substitute)
     ggml_tensor *fsmn_w = nullptr;  // (n_feat, K)
-    // norm2 (before cross-attention)
-    ggml_tensor *norm2_w = nullptr, *norm2_b = nullptr;
+    // norm3 (before cross-attention)
+    ggml_tensor *norm3_w = nullptr, *norm3_b = nullptr;
     // Cross-attention: Q from decoder, fused K+V from encoder
     ggml_tensor *cross_q_w = nullptr, *cross_q_b = nullptr;
     ggml_tensor *cross_kv_w = nullptr, *cross_kv_b = nullptr;
     ggml_tensor *cross_out_w = nullptr, *cross_out_b = nullptr;
-    // norm3 (before FFN)
-    ggml_tensor *norm3_w = nullptr, *norm3_b = nullptr;
-    // FFN: w_1 → internal LN → w_2 (no w_2 bias in upstream model)
-    ggml_tensor *ffn_l1_w = nullptr, *ffn_l1_b = nullptr;
-    ggml_tensor *ffn_norm_w = nullptr, *ffn_norm_b = nullptr;
-    ggml_tensor *ffn_l2_w = nullptr;
 };
 
 struct paraformer_decoder_post {
@@ -389,32 +390,41 @@ static void cif_predict(paraformer_context* ctx, const float* enc_out, int T, in
 static ggml_tensor* build_decoder_block(ggml_context* ctx0, ggml_tensor* cur, ggml_tensor* enc_out,
                                          int N, int T_enc, const paraformer_decoder_block& b,
                                          int D, int n_heads, int head_dim, float eps, bool flash_attn) {
-    // 1. FSMN self-attention: norm1 → depthwise conv + residual
+    // Upstream order (DecoderLayerSANM.forward):
+    //   1. norm1 → FFN (no residual yet)
+    //   2. norm2 → FSMN (with internal conv+identity residual) → add original input
+    //   3. norm3 → cross-attn → add residual
+
+    // 1. FFN: norm1 → w_1 → relu → internal LN → w_2
     ggml_tensor* residual = cur;
     ggml_tensor* x = ggml_norm_affine(ctx0, cur, b.norm1_w, b.norm1_b, eps);
+    x = mm_bias(ctx0, b.ffn_l1_w, x, b.ffn_l1_b);     // (ffn_dim, N)
+    x = ggml_relu(ctx0, x);
+    x = ggml_norm_affine(ctx0, x, b.ffn_norm_w, b.ffn_norm_b, eps);  // internal LN after activation
+    x = ggml_mul_mat(ctx0, b.ffn_l2_w, x);              // no bias on w_2
+    // No residual addition here — residual spans FFN + FSMN together.
 
-    // FSMN: depthwise conv1d on x
+    // 2. FSMN self-attention: norm2 → depthwise conv + internal residual → add original input
+    ggml_tensor* ffn_out = x;
     {
-        const int K = (int)b.fsmn_w->ne[0]; // kernel width (after squeeze, ne = (K, D))
-        // Actually, fsmn_w was stored as (n_feat, K) in GGUF. Let me check.
-        // The FSMN weight from converter: squeeze(1) of (D, 1, K) → (D, K).
-        // In GGUF ne: [K, D]. So ne[0]=K, ne[1]=D.
-        // For depthwise conv: same as encoder FSMN.
+        ggml_tensor* normed = ggml_norm_affine(ctx0, ffn_out, b.norm2_w, b.norm2_b, eps);
+
+        const int K = (int)b.fsmn_w->ne[0]; // kernel width; ne = (K, D)
         ggml_tensor* w4 = ggml_cast(ctx0, b.fsmn_w, GGML_TYPE_F32);
         w4 = ggml_reshape_4d(ctx0, w4, K, 1, 1, D);
 
-        ggml_tensor* v4 = ggml_cont(ctx0, ggml_transpose(ctx0, x));  // (N, D)
+        ggml_tensor* v4 = ggml_cont(ctx0, ggml_transpose(ctx0, normed));  // (N, D)
         v4 = ggml_reshape_4d(ctx0, v4, N, 1, D, 1);
         ggml_tensor* y = ggml_conv_2d_dw_direct(ctx0, w4, v4, 1, 1, (K - 1) / 2, 0, 1, 1);
         y = ggml_cont(ctx0, ggml_permute(ctx0, y, 1, 2, 0, 3));
         y = ggml_reshape_2d(ctx0, y, D, N);
-        x = ggml_add(ctx0, y, x);  // FSMN residual (conv + identity)
+        x = ggml_add(ctx0, y, normed);  // FSMN internal residual: conv(normed) + normed
     }
-    cur = ggml_add(ctx0, residual, x);  // block residual
+    cur = ggml_add(ctx0, residual, x);  // add original input residual
 
-    // 2. Cross-attention: norm2 → Q from decoder, K+V from encoder
+    // 3. Cross-attention: norm3 → Q from decoder, K+V from encoder
     residual = cur;
-    x = ggml_norm_affine(ctx0, cur, b.norm2_w, b.norm2_b, eps);
+    x = ggml_norm_affine(ctx0, cur, b.norm3_w, b.norm3_b, eps);
 
     {
         // Q = linear_q(decoder_hidden): (D, N) → (D, N)
@@ -452,28 +462,19 @@ static ggml_tensor* build_decoder_block(ggml_context* ctx0, ggml_tensor* cur, gg
     }
     cur = ggml_add(ctx0, residual, x);
 
-    // 3. FFN: norm3 → w_1 → internal LN → relu → w_2
-    residual = cur;
-    x = ggml_norm_affine(ctx0, cur, b.norm3_w, b.norm3_b, eps);
-    x = mm_bias(ctx0, b.ffn_l1_w, x, b.ffn_l1_b);     // (ffn_dim, N)
-    x = ggml_norm_affine(ctx0, x, b.ffn_norm_w, b.ffn_norm_b, eps);  // internal LN
-    x = ggml_relu(ctx0, x);
-    x = ggml_mul_mat(ctx0, b.ffn_l2_w, x);              // no bias on w_2
-    cur = ggml_add(ctx0, residual, x);
-
     return cur;
 }
 
-// Post-processing block (decoders3): norm → w_1 → LN → relu → w_2
+// Post-processing block (decoders3): norm1 → w_1 → relu → LN → w_2
+// Upstream: self_attn=None, src_attn=None, so no residual addition.
 static ggml_tensor* build_decoder_post(ggml_context* ctx0, ggml_tensor* cur,
                                         const paraformer_decoder_post& b, float eps) {
-    ggml_tensor* residual = cur;
     ggml_tensor* x = ggml_norm_affine(ctx0, cur, b.norm1_w, b.norm1_b, eps);
     x = mm_bias(ctx0, b.ffn_l1_w, x, b.ffn_l1_b);
-    x = ggml_norm_affine(ctx0, x, b.ffn_norm_w, b.ffn_norm_b, eps);
     x = ggml_relu(ctx0, x);
+    x = ggml_norm_affine(ctx0, x, b.ffn_norm_w, b.ffn_norm_b, eps);  // LN after activation
     x = ggml_mul_mat(ctx0, b.ffn_l2_w, x);
-    return ggml_add(ctx0, residual, x);
+    return x;  // no residual — upstream decoders3 has no self_attn so residual is never added
 }
 
 // ===========================================================================
@@ -585,16 +586,11 @@ static std::string paraformer_transcribe_impl(paraformer_context* ctx, const flo
     ggml_free(ctx0);
 
     // 3. CIF predictor (CPU)
-    // enc_out is (D, T_lfr) in ggml col-major = (T_lfr, D) in row-major
-    // CIF expects row-major (T, D), so transpose:
-    std::vector<float> enc_row((size_t)T_lfr * D);
-    for (int t = 0; t < T_lfr; t++)
-        for (int d = 0; d < D; d++)
-            enc_row[(size_t)t * D + d] = enc_out[(size_t)d * T_lfr + t];
-
+    // enc_out flat storage: ggml tensor ne=(D, T_lfr), element (d,t) at
+    // flat index t*D + d.  This IS row-major (T, D), so no transpose needed.
     std::vector<float> acoustic_embeds;
     int N_tokens = 0;
-    cif_predict(ctx, enc_row.data(), T_lfr, D, acoustic_embeds, N_tokens);
+    cif_predict(ctx, enc_out.data(), T_lfr, D, acoustic_embeds, N_tokens);
 
     fprintf(stderr, "paraformer: CIF predicted %d tokens from T_lfr=%d\n", N_tokens, T_lfr);
     if (N_tokens <= 0) return "";
@@ -636,14 +632,10 @@ static std::string paraformer_transcribe_impl(paraformer_context* ctx, const flo
     alloc = ggml_gallocr_new(ggml_backend_get_default_buffer_type(ctx->backend));
     ggml_gallocr_alloc_graph(alloc, gf);
 
-    // Set decoder inputs: acoustic_embeds in ggml col-major (D, N)
-    {
-        std::vector<float> ae_col((size_t)D * N_tokens);
-        for (int n = 0; n < N_tokens; n++)
-            for (int d = 0; d < D; d++)
-                ae_col[(size_t)d * N_tokens + n] = acoustic_embeds[(size_t)n * D + d];
-        ggml_backend_tensor_set(dec_inp, ae_col.data(), 0, ae_col.size() * sizeof(float));
-    }
+    // Set decoder inputs: acoustic_embeds from CIF is row-major (N, D).
+    // ggml tensor ne=(D, N) stores element (d,n) at flat index n*D+d, which
+    // is the same layout. No transposition needed.
+    ggml_backend_tensor_set(dec_inp, acoustic_embeds.data(), 0, (size_t)D * N_tokens * sizeof(float));
     ggml_backend_tensor_set(enc_tensor, enc_out.data(), 0, enc_out.size() * sizeof(float));
     ggml_backend_cpu_set_n_threads(ctx->backend, ctx->n_threads);
     ggml_backend_graph_compute(ctx->backend, gf);
