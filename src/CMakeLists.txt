@@ -548,6 +548,26 @@ if(GGML_CUDA)
     target_link_libraries(funasr PUBLIC ggml-cuda)
 endif()
 
+add_library(paraformer STATIC
+            paraformer.h
+            paraformer.cpp
+            )
+target_include_directories(paraformer PUBLIC . ../include)
+target_compile_features   (paraformer PUBLIC cxx_std_17)
+set_target_properties(paraformer PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_link_libraries     (paraformer PUBLIC ggml ggml-base Threads::Threads crispasr-core)
+if(NOT MSVC)
+    target_compile_options(paraformer PRIVATE -O3)
+endif()
+if(GGML_METAL)
+    target_compile_definitions(paraformer PRIVATE GGML_USE_METAL)
+    target_link_libraries(paraformer PUBLIC ggml-metal)
+endif()
+if(GGML_CUDA)
+    target_compile_definitions(paraformer PRIVATE GGML_USE_CUDA)
+    target_link_libraries(paraformer PUBLIC ggml-cuda)
+endif()
+
 # ---------------------------------------------------------------------------
 # SenseVoice — FunAudioLLM/SenseVoiceSmall (encoder-only multi-task ASR:
 #              transcript + LID + emotion + audio-event via a single CTC head,

@@ -43,6 +43,7 @@ add_executable(${TARGET}
     crispasr_backend_omniasr.cpp
     crispasr_backend_mimo_asr.cpp
     crispasr_backend_funasr.cpp
+    crispasr_backend_paraformer.cpp
     crispasr_backend_sensevoice.cpp
     crispasr_aligner_cli.cpp
     crispasr_vad_cli.cpp
@@ -169,6 +170,7 @@ target_link_libraries(crispasr-diff PRIVATE
     mimo_asr
     voxcpm2_tts
     funasr
+    paraformer
     sensevoice
     crispasr-diff-lib
     ${FFMPEG_LIBRARIES}
@@ -255,6 +257,7 @@ target_link_libraries(${TARGET} PRIVATE
     silero-lid
     pyannote-seg
     funasr
+    paraformer
     sensevoice
     ${FFMPEG_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}
