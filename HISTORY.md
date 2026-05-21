@@ -6,6 +6,33 @@ technical deep-dives are in `LEARNINGS.md`.
 
 ---
 
+## 2026-05-21 funasr: fix MLT-Nano hallucination (PLAN #99)
+
+**Bug.** `cstr/funasr-mlt-nano-GGUF` produced hallucinated endings on
+English transcripts (e.g. "ask what your country can do for you"
+repeated instead of "ask what you can do for your country").  The
+`cstr/funasr-nano-GGUF` variant worked correctly on the same audio.
+
+**Root cause.** The C++ runtime hardcoded `use_low_frame_rate = true`.
+Fun-ASR-Nano-2512's `config.yaml` sets it to `true`, but
+Fun-ASR-MLT-Nano-2512 omits the key — the upstream Python default is
+`false`.  With `true` the prompt builder spliced only the first 23 of
+183 adaptor-output frames into the Qwen3-0.6B prompt, truncating 87 %
+of the audio context.  The LLM decoded correctly up to token ~20 and
+then hallucinated.
+
+**Fix (commit `4433216`).**
+
+| File | Change |
+|------|--------|
+| `models/convert-funasr-to-gguf.py` | Read `audio_adaptor_conf.use_low_frame_rate` from `config.yaml`; write as bool KV `funasr.use_low_frame_rate`. Also fixed `ada_n_heads` 16 → 8. |
+| `src/funasr.cpp` | Read KV at load time; fall back `true` for old GGUFs. |
+
+Both `cstr/funasr-nano-GGUF` and `cstr/funasr-mlt-nano-GGUF` GGUFs
+reconverted (F16 + Q4_K + Q8_0) and re-uploaded.
+
+---
+
 ## 2026-05-20 parakeet: 4 new variants — v2 + tdt-1.1b + tdt_ctc-{110m,1.1b}
 
 **Goal.** Bring NVIDIA's remaining Parakeet TDT / TDT+CTC variants
