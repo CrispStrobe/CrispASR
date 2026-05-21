@@ -314,6 +314,44 @@ session each when somebody wants to push the numbers:
    `CRISPASR_QWEN3_ASR_FUSED_QKV`; funasr would mirror with
    `CRISPASR_FUNASR_FUSED_QKV`. Expected savings: 5-10 % on decode.
 
+4. **Two-pass: SenseVoice CTC fast pass → Fun-ASR-Nano LLM rescore.**
+   RapidAI/RapidSpeech.cpp claims a "CTC fast pass + LLM rescoring" path
+   for FunASR-Nano. The Fun-ASR-Nano architecture itself is purely AR
+   (70-block SANM enc + 2-block Transformer adaptor + Qwen3-0.6B AR
+   decode — no usable CTC head on the adaptor; see `840e36dd` "no-CTC
+   finding"). But **SenseVoice-Small already ships in CrispASR with a
+   CTC head over the same SANM encoder family** (HISTORY 2026-05-20),
+   so the two-pass pattern is achievable cross-backend:
+
+   - **Pass 1 (fast):** SenseVoice CTC over the same audio → cheap
+     greedy hypothesis + per-frame token probs. Cost is ~5-10× faster
+     than Fun-ASR-Nano LLM decode.
+   - **Pass 2 (rescore):** Fun-ASR-Nano AR decode constrained to a
+     lattice / N-best list built from Pass 1, instead of unconstrained
+     beam. Targets: skip LLM entirely when CTC confidence is high
+     (>0.95 avg per-frame); otherwise use CTC top-K as decode prefix
+     candidates.
+
+   Two open questions before writing code:
+   - **Encoder reuse.** SenseVoice ships with its own encoder weights,
+     Fun-ASR-Nano with its (slightly different — adaptor, post-LN). Can
+     one encoder forward feed both heads? Compare tensor shapes /
+     `general.architecture` from the two GGUFs and see whether the
+     SenseVoice encoder output is a drop-in for the Fun-ASR adaptor
+     input. If not, two encoder forwards is still worth it if Pass-1
+     saves the LLM decode.
+   - **Quality bar.** Lattice-rescore approaches in K2/icefall give
+     <0.5 % WER regression in exchange for 2-3× speedup; verify on
+     internal Chinese + English samples before promoting.
+
+   Approach: opt-in flag `CRISPASR_FUNASR_TWOPASS=1` that requires
+   both `funasr-nano-*.gguf` and `sensevoice-small-*.gguf` to be
+   loadable (look up via the model registry); fall back to the
+   single-pass path when either is missing. New `--asr-rescore`
+   CLI flag for explicit selection. Expected savings: 2-4× on
+   high-confidence clips, neutral on hard audio (still pays both
+   passes).
+
 None of these affect correctness — they're pure throughput pickings.
 
 ---
@@ -1573,6 +1611,7 @@ Probable kickoff: mid-to-late May 2026 if the queue clears.
 | fullstop-multilingual | MIT | XLM-R punct (en/de/fr/it) | **DONE** — runtime in fireredpunc.cpp |
 | punctuate-all (kredor) | MIT | XLM-R-base punct (12 langs) | **DONE** — `--punc-model punctuate-all` |
 | 1-800-BAD-CODE PCS | Apache-2.0 | XLM-R punc+truecase+SBD (47 langs) | **DONE** — `--punc-model pcs` |
+| CT-Transformer (FunASR) | Apache-2.0 | SANM 3-layer (vocab 272727), Chinese+English; production-default in FunASR/RapidPunc | Medium — `modelscope/punc_ct-transformer_zh-cn-common-vadrealtime-vocab272727-pytorch`. SANM block primitives already in CrispASR (`src/core/sanm.h`, used by funasr + sensevoice). Adds a Chinese punc option distinct from BERT-style FireRedPunc; VAD-realtime variant emits punc per-segment for streaming. New backend alias `ct-punc`. |
 | truecaser-lstm (BiLSTM) | Apache-2.0 | mayhewsw char-level BiLSTM (3.2 MB, 97.9% F1) | **DONE** — `--truecase-model lstm` (recommended) |
 | truecaser-crf | MIT | CRF + context features (24 MB) | **DONE** — `--truecase-model crf` |
 | truecaser-de (statistical) | MIT | Wikipedia word-freq (375K entries, 9 MB) | **DONE** — `--truecase-model auto` |
@@ -3263,3 +3302,236 @@ This section sits idle until **one of**:
 
 Don't pre-emptively vendor OpenFST. CrispASR's clean "ggml + minor
 deps" profile is a feature.
+
+---
+
+## 100. MeloTTS + OpenVoice2 — multilingual TTS with native CJK + voice cloning
+
+Surveyed via RapidAI/RapidSpeech.cpp ("OpenVoice2: MeloTTS + voice
+cloning") and the upstream `myshell-ai/MeloTTS` + `myshell-ai/OpenVoice`
+repos. Both **MIT-licensed**.
+
+**Why it matters for CrispASR:** our current TTS lineup covers
+European languages well (Kokoro EN/ES/FR/HI/IT/PT/DE; VibeVoice EN/ZH;
+qwen3-tts multilingual; voxcpm2 30 langs) but the *native CJK
+pronunciation quality* gap is real — Kokoro's ZH/JA voicepacks
+are weaker than purpose-built CJK TTS (informal A/B from
+HISTORY: Kokoro ZH was the motivator for the IndexTTS port). MeloTTS
+ships **EN / ES / FR / ZH / JA / KO** as first-class targets, with
+proper g2p (Mandarin tones, kanji readings, Korean hangul). OpenVoice2
+adds zero-shot voice cloning on top — the cloner is a separate
+~30M tone-color converter run as a post-step on MeloTTS output.
+
+### Phase A — MeloTTS standalone (no cloning)
+
+**Architecture** (from upstream MeloTTS):
+- VITS-style: text encoder + flow + HiFi-GAN-style decoder
+- Per-language g2p: pypinyin (zh), pyopenjtalk (ja), g2pkk (ko),
+  English/Spanish/French via espeak-ng (we already vendor espeak-ng
+  for kokoro #56, so that path is free)
+- ~70M params; F16 ≈ 140 MB, Q4_K ≈ 50 MB per language pack
+- 44.1 kHz output
+
+**Ports needed:**
+- New backend `melotts`; new converter `models/convert-melotts-to-gguf.py`
+- Per-language g2p: zh + ja + ko need new code. zh and ja are blocked
+  by the same issue #95 (text normalization, but pure g2p — not
+  WFST-scale). Lightweight: vendor `cn2an` rules + a pinyin lookup
+  table for zh; ja kanji-reading needs pyopenjtalk or a stripped-down
+  C port (out of scope for first cut — start with **hiragana-only ja**
+  and document the limit).
+- VITS forward fits in existing primitives — text encoder is a
+  shallow transformer, flow uses a few coupling layers we don't yet
+  have but they're trivial (affine coupling). HiFi-GAN-style decoder
+  reuses what we built for chatterbox-S3Gen / indextts BigVGAN.
+
+**Effort:** Medium per language. EN/ES/FR ride free off espeak-ng;
+ZH ≈ 1 week; JA/KO ≈ 1-2 weeks each because of g2p.
+
+### Phase B — OpenVoice2 tone-color cloning
+
+**Architecture:** Separate `tone_color_converter.pth` (~30M) that
+takes a MeloTTS mel + a reference audio's tone-color embedding and
+warps the mel toward the reference voice. Extracted speaker
+embedding pipeline is similar to chatterbox-VoiceEncoder (already
+ported, `src/chatterbox_campplus.h`).
+
+**Ports needed:**
+- Reuse VoiceEncoder LSTM from chatterbox (HISTORY §82 sprint)
+- New small `tone_color_converter` graph — couple of conv blocks +
+  flow. Q4_K ≈ 15 MB.
+- Plumb `--voice <ref.wav>` through the melotts backend, run TCC as
+  a post-process before final iSTFT / vocoder pass.
+
+**Effort:** Small once Phase A is in — the chatterbox VoiceEncoder
+port did the hardest part.
+
+### Why this isn't redundant with our existing stack
+
+| Capability | Kokoro | qwen3-tts | voxcpm2 | indextts | melotts+openvoice2 |
+|---|:-:|:-:|:-:|:-:|:-:|
+| Native Mandarin g2p (pypinyin-equivalent) | ⚠ tones rough | ✔ | ✔ | ✔ | **✔** |
+| Native Japanese g2p (kanji) | ✗ | partial | ✔ | ✗ | **partial** (hiragana only at first) |
+| Native Korean g2p | ✗ | ✔ | ✔ | ✗ | **✔** |
+| Voice cloning | per-voicepack | ICL ref | ✔ | ✔ | **✔ (TCC)** |
+| Model size for one language | ~75 MB | ~500 MB | ~700 MB | ~1.2 GB | **~50 MB Q4_K** |
+| License | Apache-2.0 | Apache-2.0 | Apache-2.0 | Apache-2.0 | **MIT** |
+
+The size column is the unlock: MeloTTS Q4_K is **~10× smaller** than
+qwen3-tts and **~25× smaller** than voxcpm2, which puts CJK-quality
+TTS in reach on the HF free tier (#hf-space) and on mobile via
+CrisperWeaver (#86 / #87).
+
+### Triggers
+
+- A user requests Japanese / Korean TTS — current options are
+  qwen3-tts (heavy, ICL only) or nothing.
+- HF Space mobile demo needs sub-100 MB CJK TTS (#hf-space).
+
+Don't start until at least one trigger fires — current TTS coverage
+is broad and this is opt-in coverage depth.
+
+---
+
+## 101. OmniVoice — single-stage NAR diffusion TTS with voice cloning
+
+Surveyed via RapidAI/RapidSpeech.cpp ("single-stage non-autoregressive
+diffusion TTS, multilingual + voice cloning"). RapidSpeech ships a
+`convert_omnivoice_to_gguf.py` that merges an LLM component + audio
+tokenizer into one GGUF — same packaging pattern as our Fun-ASR-Nano
+and MiMo-ASR ports.
+
+### Open questions before scoping
+
+**Upstream source unclear.** RapidSpeech.cpp's README doesn't link
+the upstream OmniVoice repo or HF model card; my websearch hit a wall
+(the name collides with several other "Omni" projects). Before
+sizing the port we need:
+
+1. Confirm the upstream model identifier (likely on ModelScope or HF —
+   search for "OmniVoice" + "diffusion TTS"; check
+   `FunAudioLLM`/`ZAI`/`Beijing-Academy-of-AI` namespaces).
+2. License — Apache-2.0 / MIT / non-commercial? Skip if non-commercial.
+3. Parameter count and codec choice (RVQ? CFM target like voxcpm2?
+   raw mel like MeloTTS?).
+4. **Differentiation vs voxcpm2.** voxcpm2 is also CFM-diffusion with
+   voice cloning (Apache-2.0, 30 langs, native 48 kHz). If OmniVoice
+   doesn't bring something distinct — a different codec, better CJK,
+   smaller footprint, faster inference — it's redundant.
+
+### Conditional port plan (only if the upstream survey clears)
+
+Assume the model is **non-autoregressive diffusion** (per RapidSpeech's
+description). The likely shape based on the conversion script hint
+("LLM component + audio tokenizer"):
+
+- A text-conditioning LLM (likely 0.5-1B, similar to qwen3-tts talker)
+- An NAR diffusion head over a discrete audio codec (likely 12-25 Hz
+  RVQ like qwen3-tts or 48 Hz CFM-mel like voxcpm2)
+
+Reuse map:
+- Diffusion solver: voxcpm2's CFM solver (`src/voxcpm2_tts.cpp`) or
+  Chatterbox-S3Gen's CFM solver (HISTORY §82) — pick the one that
+  matches OmniVoice's solver type (DPM-Solver++ vs Euler vs HuangEuler)
+- Codec: if RVQ, reuse mimo-tokenizer (`src/mimo_audio_tokenizer.cpp`);
+  if mel-CFM, reuse voxcpm2 VAE
+- Talker: another qwen3-tts-style talker port (#52 family); no new
+  primitives needed
+
+### Triggers
+
+- Survey clears with a permissive license + measurable advantage over
+  voxcpm2 on one of {CJK quality, model size, latency}.
+- Otherwise this stays in survey-only mode — voxcpm2 + qwen3-tts +
+  the (planned) melotts/openvoice2 already cover the same space.
+
+---
+
+## 102. RapidTP-Aligns — dedicated NN timestamp predictor (survey)
+
+RapidAI ships `RapidTP-Aligns` ("语音的时间戳预测") as a standalone
+**timestamp-only model** that runs on raw audio independently of any
+ASR. CrispASR currently produces word-level timestamps via either:
+
+- **Native** (whisper, parakeet TDT, canary, cohere, kyutai-stt) —
+  emitted by the decoder
+- **CTC forced aligner** (`-am canary-ctc-aligner.gguf` or
+  `-am qwen3-forced-aligner.gguf`) for LLM-style backends that lack
+  native timestamps (granite, voxtral, qwen3, glm-asr, omniasr-llm,
+  funasr, etc.) — requires the *text* as input and aligns it back
+  to the audio
+
+A dedicated NN predictor would be a **third path**: predict timestamps
+**from audio alone**, without needing the ASR's text. Useful when:
+
+- We want timestamps independent of which ASR ran (cross-backend
+  consistency on the same audio).
+- The ASR's text is wrong but we still want trustworthy segment
+  boundaries — useful for diarization / VAD post-processing.
+- Streaming: predict end-of-utterance / silence boundaries one
+  forward pass instead of running a full CTC alignment.
+
+### Open questions
+
+1. **What architecture** does upstream RapidTP-Aligns ship? The repo
+   description is one line in Chinese; the README doesn't surface
+   model identifier or arch. Likely a small Conformer-CTC over
+   raw audio outputting frame-level boundary labels.
+2. **License + upstream weights.** ModelScope-hosted? FunASR derivative?
+   Confirm before starting.
+3. **Quality vs our CTC aligners.** Our `canary-ctc-aligner-q4_k.gguf`
+   (~80 MB) is fast and accurate enough that we haven't seen
+   complaints — without a clear improvement margin a dedicated NN
+   timestamp predictor is incremental.
+
+### Trigger
+
+- User reports CTC aligner failing on a specific audio class
+  (e.g. heavily code-switched, multi-speaker overlap, music behind
+  speech) that a dedicated timestamp predictor might handle better.
+- OR: we add streaming ASR endpoint that needs sub-100-ms
+  end-of-utterance prediction (currently we use VAD silence heuristic).
+
+Until then: stays survey-only. Existing CTC aligners are good enough
+for the dominant use cases.
+
+---
+
+## 103. Silero VAD version bump — verify and align with v6
+
+RapidSpeech.cpp documents shipping with Silero VAD **v6**. CrispASR
+ships Silero as the default VAD (`--vad`, auto-downloaded ~885 KB) —
+need to confirm which version is in the registry and bump if older.
+
+### Concrete steps
+
+1. **Identify current pinned version.** Find the Silero VAD URL in
+   `src/crispasr_model_registry.cpp` (registry key likely `silero-vad`
+   or under the moonshine/whisper companion-file lists). Note the
+   upstream commit / `silero-vad/silero_vad.onnx` filename revision.
+2. **Compare to upstream.** Check
+   [snakers4/silero-vad](https://github.com/snakers4/silero-vad)
+   releases — v6 was released early 2026 and improves on v5
+   short-segment latency + adds multilingual robustness fixes.
+3. **Convert + diff.** If v6 weights aren't already in our GGUF
+   form, port the upstream PyTorch state dict to GGUF following
+   the existing Silero VAD converter (path: `models/convert-silero-vad-to-gguf.py`
+   if it exists, otherwise mirror the FireRedVAD converter shape).
+4. **A/B on a multi-minute clip.** Compare segment boundaries from
+   v5 vs v6 on `samples/jfk.wav` and a longer real-world recording.
+   Expect a ~10-30 ms improvement on segment-end alignment and
+   slightly fewer false positives on breath noises.
+5. **Bump registry URL** in `src/crispasr_model_registry.cpp` to
+   point at the new GGUF; preserve the v5 download as a fallback
+   alias so existing user caches don't redownload.
+
+### Effort
+
+Small (~half day) **if** v6 PyTorch weights are openly downloadable
+(they are — Silero is MIT). Marginal if the existing pinned version
+is already v6.
+
+### Trigger
+
+- Any session that touches VAD code can do this opportunistically.
+  No standalone trigger needed.

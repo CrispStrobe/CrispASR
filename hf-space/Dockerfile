@@ -20,7 +20,7 @@ WORKDIR /src/CrispASR
 ARG CRISPASR_BUILD_JOBS
 RUN jobs="${CRISPASR_BUILD_JOBS:-$(nproc)}" && \
   cmake -S . -B build -G Ninja -DCRISPASR_BUILD_TESTS=OFF && \
-  cmake --build build -j"${jobs}" --target crispasr
+  cmake --build build -j"${jobs}" --target crispasr crispasr-lid
 
 FROM ubuntu:22.04 AS runtime
 WORKDIR /space
@@ -32,6 +32,7 @@ RUN printf 'Acquire::Retries "5";\nAcquire::http::Timeout "30";\nAcquire::https:
   rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
 COPY --from=build /src/CrispASR/build /opt/crispasr/build
+COPY --from=build /src/CrispASR/samples /space/samples
 COPY hf-space/requirements.txt /space/requirements.txt
 RUN pip3 install --no-cache-dir -r /space/requirements.txt
 RUN find /opt/crispasr/build -type f -name 'lib*.so*' -exec cp -a {} /usr/local/lib/ \; && ldconfig
@@ -45,6 +46,7 @@ RUN chmod +x /space/start.sh && \
 ENV PATH=/opt/crispasr/build/bin:$PATH
 ENV CRISPASR_SERVER_URL=http://127.0.0.1:8080
 ENV CRISPASR_CACHE_DIR=/cache
+ENV CRISPASR_SAMPLES_DIR=/space/samples
 ENV GRADIO_SERVER_NAME=0.0.0.0
 ENV GRADIO_SERVER_PORT=7860
 
