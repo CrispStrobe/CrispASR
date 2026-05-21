@@ -86,10 +86,27 @@ constexpr Entry k_registry[] = {
     // FunAudioLLM/SenseVoiceSmall: encoder-only multi-task ASR — same
     // SANM encoder body as Fun-ASR-Nano but with a CTC head emitting
     // language + emotion + audio-event tags alongside the transcript.
-    // 15× faster than Whisper-Large per upstream.
+    // 15× faster than Whisper-Large per upstream. Q4_K default: 70
+    // attn.fsmn + 2 attn.qkv tensors stay F16 (non-256-aligned ne[0]
+    // — kernel=11 and 560), all other weight matrices quantize cleanly;
+    // ASR-validated byte-identical to F16 on English (JFK) + Japanese
+    // (JSUT) clips on M1 Metal.
+    {"sensevoice", "sensevoice-small-q4_k.gguf",
+     "https://huggingface.co/cstr/sensevoice-small-GGUF/resolve/main/sensevoice-small-q4_k.gguf",
+     "~129 MB", nullptr, nullptr,
+     "FunASR Model License v1.1 (commercial use OK with attribution; see "
+     "https://huggingface.co/FunAudioLLM/SenseVoiceSmall/blob/main/LICENSE)"},
+    // F16 + Q8_0 lookups by canonical filename (auto-download resolver
+    // still routes here when the user passes the explicit filename or
+    // -m auto:variant).
     {"sensevoice", "sensevoice-small-f16.gguf",
      "https://huggingface.co/cstr/sensevoice-small-GGUF/resolve/main/sensevoice-small-f16.gguf",
-     "~0.47 GB", nullptr, nullptr,
+     "~448 MB", nullptr, nullptr,
+     "FunASR Model License v1.1 (commercial use OK with attribution; see "
+     "https://huggingface.co/FunAudioLLM/SenseVoiceSmall/blob/main/LICENSE)"},
+    {"sensevoice", "sensevoice-small-q8_0.gguf",
+     "https://huggingface.co/cstr/sensevoice-small-GGUF/resolve/main/sensevoice-small-q8_0.gguf",
+     "~240 MB", nullptr, nullptr,
      "FunASR Model License v1.1 (commercial use OK with attribution; see "
      "https://huggingface.co/FunAudioLLM/SenseVoiceSmall/blob/main/LICENSE)"},
     {"cohere", "cohere-transcribe-q4_k.gguf",

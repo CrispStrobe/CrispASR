@@ -6,6 +6,69 @@ technical deep-dives are in `LEARNINGS.md`.
 
 ---
 
+## 2026-05-21 sensevoice: Q4_K + Q8_0 quants + fix crispasr-quantize `.w` suffix gate
+
+**Outcome.** Published Q4_K (129 MB) + Q8_0 (240 MB) alongside the
+existing F16 (448 MB) at `cstr/sensevoice-small-GGUF`. Registry
+default flipped to Q4_K. All three produce byte-identical English
+(JFK) and Japanese (JSUT) transcripts on M1 Metal; Q4_K is ~3× faster
+end-to-end than F16, Q8_0 ~1.7×.
+
+**Bug found while quantising.** First attempt at `crispasr-quantize
+sensevoice-small-f16.gguf out.gguf q4_k` produced a file the same
+size as the input. Every tensor in the log said `copying...`
+instead of `quantizing to q4_K...`.
+
+`examples/crispasr-quantize/main.cpp:216` gates "is this a weight
+tensor" on either the substring `weight` OR the suffix `_w` (Kyutai
+STT convention). SenseVoice's converter uses the FunASR-style `.w`
+suffix (e.g. `sensevoice.enc.blk.0.attn.qkv.w`), which matches
+neither check. Every tensor fell through to the copy path.
+
+The same bug silently affected the FunASR encoder side too: FunASR's
+LLM half uses llama.cpp `weight` names and quantises fine, but the
+SANM encoder uses `.w`/`.b` and stayed F16. Older FunASR Q4_K files
+on HF are therefore larger than they could be — re-quantising +
+re-uploading them is queued as a follow-up but not blocking.
+
+**Fix.** Extend the gate to also accept `.w` as a weight suffix:
+
+```cpp
+bool is_weight = (sname.find("weight") != std::string::npos) ||
+                 (sname.size() >= 2 && sname.substr(sname.size() - 2) == "_w") ||
+                 // FunASR / SenseVoice converter convention: .w / .b suffixes
+                 (sname.size() >= 2 && sname.substr(sname.size() - 2) == ".w");
+```
+
+**72 tensors legitimately stay F16.** SenseVoice's `attn.fsmn.w` is
+the FSMN depthwise convolution kernel with `ne[0] = 11` (kernel
+size); `attn.qkv.w` has `ne[0] = 560` (encoder hidden 512 + SANM
+context 48). Neither divides any quant block size (256 for K-quants,
+32 for legacy), so the fallback chain rightly leaves them F16. The
+other ~280 weight matrices quantise cleanly.
+
+### Files
+
+- `examples/crispasr-quantize/main.cpp` — extend the weight-suffix gate.
+- `src/crispasr_model_registry.cpp` — Q4_K becomes the default;
+  F16 + Q8_0 lookupable by canonical filename.
+- `hf_readmes/sensevoice-small-GGUF.md` — quant table + default
+  switch + "all three byte-identical on tested clips" note.
+- `cstr/sensevoice-small-GGUF` HF repo — Q4_K + Q8_0 uploaded
+  alongside the existing F16.
+
+### Verification
+
+- `crispasr -m sensevoice-small-{f16,q8_0,q4_k}.gguf -f samples/jfk.wav`
+  → identical "And so my fellow Americans ask not what your
+  country can do for you, ask what you can do for your country."
+- `crispasr -m sensevoice-small-{f16,q8_0,q4_k}.gguf -f
+  samples/ja/jsut_water_3s.wav -l ja` → identical
+  "水をマレーシアから買わなくてはならないのです。"
+- `-l auto` correctly identifies Japanese on all three quants.
+
+---
+
 ## 2026-05-21 funasr: fix MLT-Nano hallucination (PLAN #99)
 
 **Bug.** `cstr/funasr-mlt-nano-GGUF` produced hallucinated endings on

@@ -36,7 +36,7 @@ SenseVoiceSmall is Alibaba's **multi-task encoder-only ASR**: one forward pass t
 - **4 query embeddings** (language / event / emotion / textnorm) prepended to the LFR fbank features so the encoder can emit rich annotations at those positions
 - **CTC head** (`ctc.ctc_lo`, 25055 SentencePiece pieces)
 - **50+ languages** with native LID (no whisper-tiny pre-step needed)
-- **F16 only** ship: 0.47 GB. Q8_0/Q4_K pending.
+- **Three quants shipped** (May 2026): F16 (448 MB), Q8_0 (240 MB), **Q4_K (129 MB — recommended default)**. All three produce byte-identical transcripts on English (JFK) and Japanese (JSUT) clips end-to-end on M1 Metal. 72 tensors stay F16 in the Q4_K/Q8_0 quants because their leading dim isn't quant-block-aligned: 70× `attn.fsmn.w` (kernel=11 depthwise convolution) and 2× `attn.qkv.w` (560-dim input from the SANM context concat); the other ~280 weight matrices quantize cleanly.
 
 ## What you get in the output
 
@@ -81,7 +81,9 @@ Tag value sets:
 
 | File | Size | Notes |
 | --- | ---: | --- |
-| `sensevoice-small-f16.gguf` | 0.47 GB | F16 reference weights |
+| `sensevoice-small-q4_k.gguf` | 129 MB | **Recommended default.** 2× faster on M1 vs F16; byte-identical transcript on tested clips. Auto-download target for `--backend sensevoice -m auto`. |
+| `sensevoice-small-q8_0.gguf` | 240 MB | Larger but slightly closer to F16 numerically on borderline emotion-tag argmax cases. |
+| `sensevoice-small-f16.gguf` | 448 MB | F16 reference weights. Use when you want bit-stability against the upstream PyTorch reference for diff testing. |
 
 ## Quick Start
 
@@ -93,8 +95,11 @@ cmake --build build --target crispasr-cli
 
 ./build/bin/crispasr \
     --backend sensevoice \
-    -m /path/to/sensevoice-small-f16.gguf \
+    -m /path/to/sensevoice-small-q4_k.gguf \
     -f samples/jfk.wav -l en
+
+# Or auto-download (resolves to Q4_K by default):
+./build/bin/crispasr --backend sensevoice -m auto -f samples/jfk.wav -l en
 ```
 
 ## Verification

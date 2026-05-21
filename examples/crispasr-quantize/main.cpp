@@ -215,7 +215,12 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
         std::string sname(name);
         bool is_weight = (sname.find("weight") != std::string::npos) ||
                          // Kyutai STT uses shortened names ending in _w
-                         (sname.size() >= 2 && sname.substr(sname.size() - 2) == "_w");
+                         (sname.size() >= 2 && sname.substr(sname.size() - 2) == "_w") ||
+                         // FunASR / SenseVoice converter convention: ".w" / ".b" suffixes
+                         // (e.g. sensevoice.enc.blk.0.attn.qkv.w, funasr.enc.blk.0.ffn.l1.w).
+                         // Without this branch, every encoder tensor falls through to the
+                         // copy path and the quant is silently identical to F16.
+                         (sname.size() >= 2 && sname.substr(sname.size() - 2) == ".w");
         // FireRedASR/LID: pw1/pw2 convs are stored as 3D [1,in,out] but are
         // effectively 2D matmuls — safe to quantize. Other architectures'
         // 3D conv weights may be actual spatial kernels, so keep the 2D-only
