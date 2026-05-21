@@ -393,22 +393,20 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, co
 
     // Issue #89: CAP_UNBOUNDED_INPUT backends are mathematically able to take
     // arbitrarily long audio, but in practice the FastConformer encoder + TDT
-    // decoder break down past ~30-60 s in a single pass — per-feature z-norm
-    // stats are computed across the whole input, so a long input shifts the
-    // distribution away from what the model was trained on and the TDT
-    // decoder stops emitting after a few seconds. On the issue #89 reporter's
-    // 300 s YouTube reproducer this collapsed to 35 tokens covering only the
-    // first 4.8 s, with the rest of the audio silently dropped.
+    // decoder break down past ~30 s in a single pass — per-feature z-norm
+    // stats drift from the training distribution (model trained on ~10-15 s
+    // utterances), the position encodings exit the trained range, and the TDT
+    // decoder starts emitting blanks.  On the reporter's 300 s YouTube clip
+    // with the original 60 s fallback, only 4 words survived in the first
+    // 60 s on Vulkan/AMD hardware due to z-norm drift at that length.
     //
-    // Fallback to fixed chunking when the user provided no VAD and no
-    // explicit --chunk-seconds and the audio is longer than the model's safe
-    // single-pass window. Chunking alone is sufficient (verified: 300 s
-    // audio with `--chunk-seconds 60` produces 7 segments covering the
-    // whole file); we don't need to silently auto-enable a VAD download.
-    // The overlap-save gate in `use_chunk_context` (issue #114) still
-    // applies here, so the chunk boundaries get the ± chunk_overlap_seconds
-    // context they need to span continuous-speech cuts.
-    constexpr int kLongAudioFallbackChunkSeconds = 60;
+    // Fallback to 30 s chunking when the user provided no VAD and no explicit
+    // --chunk-seconds and the audio is longer than the safe single-pass
+    // window.  30 s is short enough for stable z-norm but long enough to
+    // avoid excessive chunk boundaries.  The overlap-save gate in
+    // `use_chunk_context` (issue #114) still applies, so chunk boundaries
+    // get the ± chunk_overlap_seconds context they need.
+    constexpr int kLongAudioFallbackChunkSeconds = 30;
     const bool wants_vad = params.vad || !params.vad_model.empty();
     const bool long_audio_no_vad =
         crispasr_long_audio::should_auto_chunk_long(effective_chunk_seconds, wants_vad, backend.capabilities(),

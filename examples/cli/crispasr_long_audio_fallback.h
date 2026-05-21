@@ -17,10 +17,16 @@
 // the per-slice loop covers chunk boundaries — see the issue #114 gate in
 // `crispasr_chunk_context_gate.h` for the matching invariant.
 //
-// The threshold is conservative (60 s) so short utterances still go through
-// the full-audio path that produces best quality. Users who really want
-// full-audio encoding on a 5-minute file can pass `--chunk-seconds 0`
-// explicitly to opt out, or `--vad` for finer slicing.
+// The threshold is 30 s — the per-feature z-norm statistics computed across
+// the entire input start drifting from the training distribution past ~30 s,
+// causing the TDT decoder to emit blanks and silently lose content.  The
+// original 60 s threshold (30b47952) still lost the first ~58 s of each chunk
+// on the issue #89 reporter's Vulkan hardware (parakeet-tdt-0.6b-ja on a 300 s
+// clip: 4 words in the first 60 s).  30 s keeps z-norm close to the ~10-15 s
+// utterances the model was trained on while still being long enough that short
+// audio goes through the full-audio path.  Users who really want full-audio
+// encoding on a long file can pass `--chunk-seconds 0` explicitly to opt out,
+// or `--vad` for finer slicing.
 
 #pragma once
 

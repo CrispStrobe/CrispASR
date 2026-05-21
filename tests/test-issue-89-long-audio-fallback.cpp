@@ -27,7 +27,7 @@ constexpr uint32_t kBoundedBackendCaps = 0;
 // CAP_UNBOUNDED_INPUT alone — what parakeet / canary / etc. declare.
 constexpr uint32_t kUnboundedBackendCaps = CAP_UNBOUNDED_INPUT_FLAG;
 constexpr int kSR = 16000;
-constexpr int kThreshold = 60;
+constexpr int kThreshold = 30; // matches the 30 s fallback in crispasr_run.cpp
 } // namespace
 
 TEST_CASE("issue #89: 300s parakeet audio with no VAD/--chunk-seconds → fall back to chunked",
@@ -42,10 +42,18 @@ TEST_CASE("issue #89: 300s parakeet audio with no VAD/--chunk-seconds → fall b
     REQUIRE(should_auto_chunk_long(0, false, kUnboundedBackendCaps, n_samples, kSR, kThreshold));
 }
 
+TEST_CASE("60s audio also triggers auto-chunking at 30s threshold", "[unit][long-audio][issue-89]") {
+    // The reporter's 60 s test showed only 36 words (0-20 s) from a 60 s
+    // file — the TDT decoder loses content past ~20 s even at 60 s. With
+    // the new 30 s threshold, 60 s audio gets chunked into ~2 chunks.
+    constexpr int n_samples = 60 * kSR;
+    REQUIRE(should_auto_chunk_long(0, false, kUnboundedBackendCaps, n_samples, kSR, kThreshold));
+}
+
 TEST_CASE("short audio stays on full-audio path", "[unit][long-audio][issue-89]") {
     // Below threshold → no fallback → the original full-audio encoding
     // gives the best quality (no chunk boundaries to stitch).
-    REQUIRE_FALSE(should_auto_chunk_long(0, false, kUnboundedBackendCaps, 30 * kSR, kSR, kThreshold));
+    REQUIRE_FALSE(should_auto_chunk_long(0, false, kUnboundedBackendCaps, 20 * kSR, kSR, kThreshold));
     REQUIRE_FALSE(should_auto_chunk_long(0, false, kUnboundedBackendCaps, kThreshold * kSR, kSR, kThreshold));
 }
 
