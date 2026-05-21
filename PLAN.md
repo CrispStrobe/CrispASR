@@ -3277,6 +3277,95 @@ Major downsides:
 Almost certainly **not** worth doing. Listed only so future
 contributors don't spend time discovering it independently.
 
+**95d. Tiny FST reader in our own C++ — consume OpenFST's
+binary `.fst` directly without linking OpenFST.** Middle ground
+between #95a (hand-roll rules) and #95b (vendor 30-50 K LOC of
+OpenFST + kaldifst). Same upstream rule data as #95b — `.fst`
+files from `pengzhendong/wetext` — but skip the libraries.
+
+Why this might be the right shape: the wetext / kaldifst rule
+chain is small (one tagger + one verbalizer, no runtime
+composition needed if we pre-compose at build time), and
+OpenFST's `.fst` binary format is documented in the OpenFST
+manual. A single-pass interpreter that reads StdVectorFst
+(the variant the wetext compiler emits) and does deterministic
+traversal is genuinely small.
+
+Sketch:
+
+- **Parser** (~200 LOC). OpenFST `.fst` header is fixed-layout
+  (magic, version, fst-type, arc-type, properties, n_states,
+  flags); per-state records carry `final_weight` + arc lists;
+  per-arc records carry `ilabel`, `olabel`, `weight`,
+  `nextstate`. The wetext rule files use `StdVectorFst`
+  (TropicalArc) — uniform fixed-size records. Read once at
+  startup into a flat `std::vector<State>` with arc slices.
+- **Traverser** (~150 LOC). For each input UTF-8 token,
+  consume from the current state along matching `ilabel` arcs,
+  emitting `olabel` symbols and tracking weights. Use the
+  Tropical semiring (sum of weights along the path; pick the
+  min-weight path on ambiguity). Wetext's TN rules are
+  deterministic in practice — most input strings have a unique
+  matching path — so the traversal is essentially a DFA lookup
+  with epsilon transitions, not a full lattice search.
+- **Symbol table** (~50 LOC). Wetext ships `tokens.txt` /
+  `chars.txt` alongside the `.fst` files mapping symbol IDs to
+  UTF-8 strings. Load once, look up by ID during emission.
+- **Token-parser glue** (~200 LOC). Port wetext's
+  `token_parser.py` (the `tagger output → struct → verbalizer`
+  flow) into C++. This is independent of the FST library — same
+  ~200 LOC of recursive-descent parsing whether we use OpenFST
+  or roll our own.
+- **Build-time pre-composition** (optional, ~0 LOC at runtime if
+  we ship a pre-composed `.fst`). The tagger ∘ verbalizer
+  composition can be done once offline using upstream OpenFST
+  on the dev machine and the result checked in alongside the
+  rule data. Run-time then only needs the StdVectorFst
+  interpreter, not composition.
+
+Total: ~500-800 LOC of C++, zero new dependencies, ~1 MB of
+checked-in or auto-downloaded `.fst` data (same as #95b).
+
+Trade-offs vs #95b:
+
+- **Pro:** No third-party submodule. Build profile unchanged.
+  Easier to reason about (it's small enough to fit in one
+  reviewer's head). Cross-compilation footprint identical to
+  the rest of CrispASR.
+- **Con:** Not byte-identical to upstream wetext on edge cases
+  involving FST features we don't implement (composition
+  shortcuts, special weight semirings, on-the-fly relabeling).
+  Acceptable iff we pin to the specific wetext rule files and
+  treat them as a frozen artifact.
+
+Estimated effort: 2-4 days for someone who reads the OpenFST
+binary format spec end-to-end and can verify against
+upstream's `fstprint` output on a dozen small inputs. Strictly
+less effort than #95b (3-5 days + ongoing OpenFST submodule
+maintenance) and strictly more correct than #95a (hand-rolled
+rules will never catch up to wetext's coverage).
+
+Files:
+
+- `src/indextts_zh_tn.{h,cpp}` — the parser + traverser +
+  symbol-table loader; ~500-800 LOC.
+- `src/indextts.cpp` — invoke `normalize_chinese_wetext_native()`
+  when `INDEXTTS_TEXT_NORMALIZER=native` is set (third sentinel
+  alongside the existing shell-command form).
+- `models/indextts-zh-tn-{tagger,verbalizer}.fst` — checked in
+  (1 MB) or auto-downloaded via the model registry.
+- `tools/dump-openfst-text.py` — dev-time helper that reads a
+  `.fst` via upstream `pynini`/`openfst` Python bindings and
+  dumps the byte layout for verification.
+- `tests/indextts_zh_tn_test.cpp` — golden inputs (the same set
+  used in #95a) matched against `wetext` Python output byte for
+  byte.
+
+When to do it: after #95a's hand-rolled list passes 2-3 entries
+(confirming the use case is alive) but before contemplating
+#95b's OpenFST submodule. #95d is the "we want byte-stable
+behaviour without the dependency tax" sweet spot.
+
 ### What looks like an alternative but isn't
 
 - **ICU `Transliterator`** — does Unicode normalization (NFC, NFKC,
@@ -3295,10 +3384,13 @@ This section sits idle until **one of**:
 1. A user files an issue with a digit/date/pinyin-tone-digit prompt
    that produces broken audio. Then go to #95a; pick the smallest
    rule set that fixes the reported case.
-2. The hand-rolled list grows past ~5 cases (track in
-   `src/indextts.cpp`). At that point the marginal cost of #95b
-   (vendoring OpenFST) becomes lower than continuing to grow the
-   hand-rolled rules. Cross the threshold deliberately.
+2. The hand-rolled list reaches 2-3 entries (signal: the use case is
+   actually alive). At that point #95d (tiny FST reader, ~500-800
+   LOC, zero deps) becomes the right next step rather than letting
+   #95a grow into a pile of one-off rules.
+3. Only if #95d turns out to be wrong (FST features we don't
+   implement keep biting), fall back to #95b (vendor OpenFST + kaldifst).
+   Don't go to #95b speculatively.
 
 Don't pre-emptively vendor OpenFST. CrispASR's clean "ggml + minor
 deps" profile is a feature.
