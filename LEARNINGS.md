@@ -3830,23 +3830,73 @@ CPU**. `CRISPASR_CHATTERBOX_T3_GPU=1` opts back into T3-on-GPU; the
 non-Metal default (CUDA / Vulkan / etc.) is unchanged. Saves ~30 %
 wall time on M1.
 
-### CUDA / Vulkan caveats (untested, inferred)
+### Round 8 (2026-05-23) — CUDA P100 bisect confirms cross-backend compound drift
 
-Round 4–5's claim "affects Metal, Vulkan, and CUDA" was for the
-quantised-mat dot-product divergence (CPU's Q8_K-input path vs GPU's
-F32-input path). That class is genuinely cross-backend. Round 7's
-**compound** drift was only bisected on Metal — the simdgroup-half
-tile path is Metal-specific terminology, but the analogue (CUDA wmma
-F16 fragments, Vulkan cooperative-matrix F16 accumulators) likely
-has similar F16-intermediate roundings that compound the same way
-through the 10-step CFM solver. Until S3Gen-GPU is verified on CUDA
-or Vulkan, the S3Gen-CPU default ships on every GPU backend; T3 GPU
-stays on for non-Metal because Round 4–5's T3 patches handle the
-Q4_K T3 case (mul_mv_q4_K_q8_K kernel) and the AR-loop launch
-overhead is much smaller on discrete GPUs with hardware command
-queues than on M1's unified-memory dispatch path. CUDA + S3Gen-GPU
-re-bisect would tell us whether the same `UNET_PIN_CPU_OP=mul_mat`
-fix path applies there too.
+Ran the same `PIN_CPU_OP` / `KEEP_GPU_OP` sweep on Kaggle P100
+(Tesla P100-PCIE-16GB, compute capability 6.0 / sm_60, CUDA 12.8)
+using a self-contained Kaggle kernel that clones + builds CrispASR,
+generates a ref GGUF on-device, downloads Q8_0 GGUFs, then runs 21
+diff configs with `CRISPASR_DIFF_USE_GPU=1 CRISPASR_CHATTERBOX_FORCE_GPU=1`.
+
+| Config | s3gen_mel cos_min |
+|---|---|
+| Full CPU (control) | 0.999955 |
+| S3Gen on CUDA P100 baseline (no pin) | **0.858455** |
+| `PIN_CPU_OP=mul_mat` | **1.000000** ← FIXES |
+| `PIN_CPU_OP=flash_attn_ext` | **1.000000** ← FIXES |
+| `PIN_CPU_OP=norm` | **1.000000** ← FIXES |
+| `PIN_CPU_OP=add` | **1.000000** ← FIXES |
+| `PIN_CPU_OP=concat` | **1.000000** ← FIXES |
+| `PIN_CPU_OP=unary_gelu` | **1.000000** ← FIXES |
+| `PIN_CPU_OP=unary_tanh` | **1.000000** ← FIXES |
+| `PIN_CPU_OP=unary_softplus` | **1.000000** ← FIXES |
+| `PIN_CPU_OP=unary_mish` | 0.858542 (no effect) |
+| `PIN_CPU_OP=conv_1d` | 0.858348 (no effect) |
+| `KEEP_GPU_OP=<any>` | None (crash — ggml tensor type constraint) |
+
+**Conclusions:**
+
+1. **The compound FP16 drift is not Metal-specific.** CUDA P100
+   shows the same pattern (cos_min 0.858, worse than Metal's 0.923),
+   with the same 8 ops fixing it when individually pinned to CPU.
+
+2. **The fix is cross-backend.** Pinning `mul_mat` (or any of the 7
+   other high-frequency FP16 op types) to CPU forces a dtype
+   round-trip that breaks the drift chain through the 10-step CFM
+   solver. The same `CRISPASR_S3GEN_UNET_PIN_CPU_OP=mul_mat`
+   workaround that restores cos=1.000 on M1 works identically on
+   CUDA P100.
+
+3. **unary_mish and conv_1d are not the drift source.** Consistent
+   with Metal — the mish op was replaced with
+   `softplus+tanh+mul` in Round 6, so there are no `GGML_UNARY_OP_MISH`
+   nodes in the UNet graph; conv_1d's fp32 path on CUDA is already
+   exact.
+
+4. **KEEP_GPU_OP all crash.** Running only one op type on GPU with
+   the rest pinned to CPU triggers a ggml type-constraint violation
+   (GPU output tensors can't feed CPU op inputs without explicit
+   view/copy nodes that the UNet graph doesn't insert). Not a useful
+   fix path.
+
+5. **Next step for a real fix:** Instead of per-op CPU pinning (which
+   adds round-trip overhead), promote the S3Gen UNet1D graph to
+   FP32 on GPU (force `GGML_TYPE_F32` weight loading and remove the
+   FP16 intermediate casts). This matches what PyTorch does on CUDA
+   by default and avoids the compound rounding entirely. Alternatively,
+   enable `GGML_SCHED_MAX_COPIES=1` with an explicit F32-accum
+   prefix on each UNet block's matmul — whichever is cheaper.
+
+6. **Per-op CPU pinning causes NaN in full-pipeline runs.** Attempting
+   to auto-pin `mul_mat` to CPU via `ggml_backend_sched_set_tensor_backend`
+   in a GPU-backed scheduler works correctly in the diff harness (small T=102,
+   no prompt tokens: cos_min=1.0) but produces NaN in the full production
+   pipeline (T≥392, 157 prompt tokens). Any mix of CPU and GPU compute ops
+   in a GPU-backed scheduler causes GPU→CPU tensor copy synchronization
+   failures for large graphs — the NaN appears at denoiser step 0.
+   Per-op CPU pinning is therefore not safe for production. The production
+   fix remains S3Gen on CPU (current default); the mathematically correct
+   fix (UNet FP32 promotion) requires GPU-side kernel changes.
 
 2. **T3 sampling can drift on long technical prompts**. The seed=0
    default is deterministic, but particular prompts produce

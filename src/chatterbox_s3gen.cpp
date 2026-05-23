@@ -247,6 +247,19 @@ struct chatterbox_s3gen_context {
     int n_threads = 4;
     int verbosity = 1;
     bool istft_full_idft = false; // CRISPASR_HIFT_FULL_IDFT=1 → torch.istft-compatible path
+    // When true, UNet mul_mat compute nodes are automatically routed to CPU to
+    // prevent compound FP16 rounding through the 10-step CFM Euler solver.
+    // Bisected cross-backend: Metal (round 7) + CUDA P100 (round 8, 2026-05-23).
+    // GPU mul_mat kernels accumulate in F16 even for F32-type inputs (Metal
+    // simdgroup tiles, CUDA wmma fragments); CPU mul_mat uses genuine F32 dequant
+    // + F32 accumulation and fully restores s3gen_mel cos_min from 0.858→1.000.
+    //
+    // NOT auto-enabled: the ggml GPU-backed scheduler + CPU-pinned compute
+    // produces NaN in full-pipeline runs at large T_mel (≥392) due to Metal/CUDA
+    // synchronization issues with GPU→CPU tensor copies. The fix is mathematically
+    // correct (diff harness cos_min=1.000 at T=102) but not yet safe for production.
+    // Use CRISPASR_S3GEN_UNET_PIN_CPU_OP=mul_mat to opt in for testing.
+    bool unet_pin_mm_cpu = false;
 
     ggml_backend_t backend = nullptr;
     ggml_backend_t backend_cpu = nullptr;
@@ -363,13 +376,29 @@ static bool s3gen_match_keep_op(const ggml_tensor* node, const char* keep) {
 static void s3gen_maybe_pin_graph_to_cpu(chatterbox_s3gen_context* c, ggml_cgraph* gf, s3gen_subgraph which) {
     if (c->backend == c->backend_cpu)
         return; // already on CPU — no-op
-    const char* keep_env = (which == s3gen_subgraph::unet) ? std::getenv("CRISPASR_S3GEN_UNET_KEEP_GPU_OP") : nullptr;
-    const char* pin_only_env =
-        (which == s3gen_subgraph::unet) ? std::getenv("CRISPASR_S3GEN_UNET_PIN_CPU_OP") : nullptr;
+
+    const bool is_unet = (which == s3gen_subgraph::unet);
+    const char* keep_env = is_unet ? std::getenv("CRISPASR_S3GEN_UNET_KEEP_GPU_OP") : nullptr;
+    const char* pin_only_env = is_unet ? std::getenv("CRISPASR_S3GEN_UNET_PIN_CPU_OP") : nullptr;
     const bool keep_mode = keep_env && *keep_env;
     const bool pin_only_mode = pin_only_env && *pin_only_env;
-    if (!s3gen_env_force_cpu(which) && !keep_mode && !pin_only_mode)
+
+    // Auto-pin mul_mat to CPU for the UNet when on GPU unless the user has
+    // explicitly opted into a KEEP_GPU or PIN_CPU env override, or force-CPU is set.
+    // GPU mul_mat kernels (Metal simdgroup tiles, CUDA wmma fragments) accumulate
+    // in F16 and introduce ~1e-4 per-element drift that compounds 1000x through
+    // the 10-step CFM Euler solver → cos_min 0.858 on both M1 and CUDA P100.
+    // CPU mul_mat uses genuine F32 dequant + F32 accumulation and restores
+    // cos_min = 1.000 (bisected rounds 7 + 8, 2026-05-23).
+    // Override: set CRISPASR_S3GEN_UNET_PIN_CPU_OP, CRISPASR_S3GEN_UNET_KEEP_GPU_OP,
+    // or CRISPASR_S3GEN_UNET_CPU=1 to take manual control.
+    // force_cpu takes full priority — auto_pin_mm does not apply when UNET_CPU=1.
+    const bool force_cpu = s3gen_env_force_cpu(which);
+    const bool auto_pin_mm = is_unet && c->unet_pin_mm_cpu && !keep_mode && !pin_only_mode && !force_cpu;
+
+    if (!force_cpu && !keep_mode && !pin_only_mode && !auto_pin_mm)
         return;
+
     if (c->verbosity >= 1) {
         const char* tag = which == s3gen_subgraph::encoder ? "ENCODER"
                           : which == s3gen_subgraph::unet  ? "UNET"
@@ -377,7 +406,12 @@ static void s3gen_maybe_pin_graph_to_cpu(chatterbox_s3gen_context* c, ggml_cgrap
         static int log_seen[3] = {0, 0, 0};
         int idx = which == s3gen_subgraph::encoder ? 0 : which == s3gen_subgraph::unet ? 1 : 2;
         if (!log_seen[idx]) {
-            if (keep_mode) {
+            if (auto_pin_mm) {
+                fprintf(stderr,
+                        "s3gen: [%s] auto-pinning mul_mat to CPU (GPU FP16 compound drift fix; "
+                        "override with CRISPASR_S3GEN_UNET_PIN_CPU_OP or CRISPASR_S3GEN_UNET_KEEP_GPU_OP)\n",
+                        tag);
+            } else if (keep_mode) {
                 fprintf(stderr, "s3gen: [%s] keeping op type \"%s\" on GPU; pinning all other compute nodes to CPU\n",
                         tag, keep_env);
             } else {
@@ -386,6 +420,7 @@ static void s3gen_maybe_pin_graph_to_cpu(chatterbox_s3gen_context* c, ggml_cgrap
             log_seen[idx] = 1;
         }
     }
+
     const int n_nodes = ggml_graph_n_nodes(gf);
     int n_pinned = 0;
     int n_kept_gpu = 0;
@@ -395,6 +430,15 @@ static void s3gen_maybe_pin_graph_to_cpu(chatterbox_s3gen_context* c, ggml_cgrap
             continue;
         if (node->op == GGML_OP_NONE)
             continue;
+        if (auto_pin_mm) {
+            if (node->op == GGML_OP_MUL_MAT) {
+                ggml_backend_sched_set_tensor_backend(c->sched, node, c->backend_cpu);
+                n_pinned++;
+            } else {
+                n_kept_gpu++;
+            }
+            continue;
+        }
         if (pin_only_mode) {
             // Inverse bisect: pin only the named op type to CPU; leave
             // everything else on GPU (default backend). Identifies the
@@ -421,7 +465,10 @@ static void s3gen_maybe_pin_graph_to_cpu(chatterbox_s3gen_context* c, ggml_cgrap
         static int logged_count[3] = {0, 0, 0};
         int idx = which == s3gen_subgraph::encoder ? 0 : which == s3gen_subgraph::unet ? 1 : 2;
         if (logged_count[idx] < 1) {
-            if (keep_mode) {
+            if (auto_pin_mm) {
+                fprintf(stderr, "s3gen: [%s] pinned %d mul_mat nodes to CPU, %d other nodes on GPU\n", tag, n_pinned,
+                        n_kept_gpu);
+            } else if (keep_mode) {
                 fprintf(stderr, "s3gen: [%s] pinned %d nodes to CPU, kept %d nodes on GPU (filter \"%s\")\n", tag,
                         n_pinned, n_kept_gpu, keep_env);
             } else {
@@ -477,6 +524,8 @@ extern "C" struct chatterbox_s3gen_context* chatterbox_s3gen_init_from_file(cons
         }
         c->backend = c->backend_cpu;
     }
+    // unet_pin_mm_cpu intentionally left false: partial GPU→CPU pinning causes
+    // NaN via ggml scheduler sync issues at large T_mel. See unet_pin_mm_cpu comment.
 
     // Load weights — issue #94: print before the load too, since the
     // 366 MB chatterbox-turbo s3gen-q8_0 file can take 10-30 s on slow

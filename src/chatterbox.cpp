@@ -2363,8 +2363,8 @@ extern "C" struct chatterbox_context* chatterbox_init_from_file(const char* path
             t3_use_gpu = false;
             s3gen_use_gpu = false;
         } else if (force_gpu) {
-            fprintf(stderr, "chatterbox: T3+s3gen forced to GPU (CRISPASR_CHATTERBOX_FORCE_GPU=1) — S3Gen GPU "
-                            "path is currently broken; expect garbled audio.\n");
+            fprintf(stderr, "chatterbox: T3+s3gen forced to GPU (CRISPASR_CHATTERBOX_FORCE_GPU=1) — "
+                            "S3Gen GPU path is broken; expect garbled audio.\n");
             if (s3gen_cpu_override) {
                 fprintf(stderr,
                         "chatterbox: s3gen forced to CPU (CRISPASR_CHATTERBOX_S3GEN_CPU=1) — T3 stays on GPU.\n");
