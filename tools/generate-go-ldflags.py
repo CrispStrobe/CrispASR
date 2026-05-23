@@ -28,10 +28,14 @@ SKIP = {
 # ggml libraries handled separately at the end of the link line
 GGML_LIBS = ["ggml", "ggml-base", "ggml-cpu"]
 
-# Transitive dependencies that backends link but crispasr doesn't
-# link directly. Must be in the Go link group because Go links all
-# static libs flat (no CMake transitive resolution).
-TRANSITIVE = ["crispasr-core", "crisp_audio", "moonshine_tokenizer"]
+# Transitive dependencies: libraries linked by backends (or their deps)
+# that aren't direct crispasr deps. Go links all static libs flat — no
+# CMake transitive resolution. Auto-detected from CMakeLists.txt with
+# manual additions for second-level transitive deps.
+_TRANSITIVE_MANUAL = ["crispasr-core", "crisp_audio", "moonshine_tokenizer"]
+
+# GPU-specific libs that only exist when CUDA/Metal is enabled
+_GPU_ONLY = {"ggml-cuda", "ggml-metal", "ggml-blas", "ggml-vulkan"}
 
 
 def extract_libs() -> list[str]:
@@ -64,10 +68,33 @@ def extract_libs() -> list[str]:
     return unique
 
 
+def extract_transitive() -> list[str]:
+    """Find libraries linked by backends but not by crispasr directly."""
+    text = CMAKE.read_text()
+    direct = set(extract_libs())
+    all_linked = set()
+    lib_re = re.compile(r'^[a-zA-Z][a-zA-Z0-9_-]*$')
+    for m in re.finditer(
+        r"target_link_libraries\(\s*\w+\s+PUBLIC\s+([^)]+)\)", text
+    ):
+        for token in m.group(1).split():
+            token = token.strip()
+            if token and lib_re.match(token) and token not in SKIP:
+                all_linked.add(token)
+    # Transitive = linked somewhere but not a direct crispasr dep
+    transitive = sorted(all_linked - direct - set(GGML_LIBS) - _GPU_ONLY - {"crispasr"})
+    # Add manual entries that auto-detection misses (2nd-level deps)
+    for m in _TRANSITIVE_MANUAL:
+        if m not in transitive:
+            transitive.append(m)
+    return transitive
+
+
 def format_ldflags(libs: list[str], platform: str) -> str:
     """Format as a CGO LDFLAGS line."""
+    trans = extract_transitive()
     flags = [f"-l{lib}" for lib in libs]
-    flags.extend(f"-l{lib}" for lib in TRANSITIVE)
+    flags.extend(f"-l{lib}" for lib in trans)
     flags.extend(f"-l{lib}" for lib in GGML_LIBS)
     if platform == "linux":
         return (
