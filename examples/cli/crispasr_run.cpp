@@ -1197,6 +1197,18 @@ int crispasr_run_backend(const whisper_params& params_in) {
         fprintf(stderr, "crispasr[verbose]: backend '%s' initialised OK\n", backend_name.c_str());
     }
 
+    // #80e: optional warmup — transcribe a short silence buffer to
+    // amortize first-call overhead (graph alloc, GPU kernel compile).
+    // Enabled via --warmup or CRISPASR_WARMUP=1.
+    if (params.warmup || getenv("CRISPASR_WARMUP")) {
+        auto t_warmup_start = std::chrono::steady_clock::now();
+        backend->warmup();
+        if (params.verbose || !params.no_prints) {
+            auto dt = std::chrono::duration<double>(std::chrono::steady_clock::now() - t_warmup_start).count();
+            fprintf(stderr, "crispasr: warmup completed in %.0f ms\n", dt * 1000.0);
+        }
+    }
+
     // SubtitleEdit #10775: when a user explicitly passes --aligner-model
     // for a backend that already produces native word timestamps, the
     // alignment dispatch loop (crispasr_run.cpp:305 / :398 / :1252)

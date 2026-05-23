@@ -61,6 +61,17 @@ public:
         return true;
     }
 
+    void warmup() override {
+        if (!ctx_)
+            return;
+        // 0.5 s of silence at 16 kHz — touches mel, encoder, and decoder
+        // graphs once so subsequent calls hit pre-allocated buffers.
+        std::vector<float> silence(8000, 0.0f);
+        parakeet_result* r = parakeet_transcribe_ex(ctx_, silence.data(), (int)silence.size(), 0);
+        if (r)
+            parakeet_result_free(r);
+    }
+
     std::vector<crispasr_segment> transcribe(const float* samples, int n_samples, int64_t t_offset_cs,
                                              const whisper_params& params) override {
         std::vector<crispasr_segment> out;

@@ -168,6 +168,14 @@ public:
         return {};
     }
 
+    // Warmup: run a short dummy transcribe to amortize first-call
+    // overhead (graph allocation, GPU kernel compilation, gallocr shape
+    // setup).  Called once after init(), before the first real audio.
+    // Default is a no-op.  Backends override when the first-call cost
+    // is user-visible (50-200 ms on GPU, <5 ms on CPU — worth it for
+    // server mode and the Python Session API).  PLAN #80e.
+    virtual void warmup() {}
+
     // Release all resources.
     virtual void shutdown() = 0;
 };

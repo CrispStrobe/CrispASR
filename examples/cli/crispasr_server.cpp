@@ -474,6 +474,15 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             fprintf(stderr, "crispasr-server: failed to init backend '%s'\n", backend_name.c_str());
             return 1;
         }
+        // #80e: warmup in server mode — always enabled (amortized over
+        // many requests).  Skipped if --no-prints is set and warmup takes
+        // < 10 ms (no point logging a trivial warmup).
+        {
+            auto t0 = std::chrono::steady_clock::now();
+            backend->warmup();
+            auto dt = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+            fprintf(stderr, "crispasr-server: warmup completed in %.0f ms\n", dt * 1000.0);
+        }
         ready.store(true);
         fprintf(stderr, "crispasr-server: backend '%s' loaded, model '%s'\n", backend_name.c_str(),
                 params.model.c_str());

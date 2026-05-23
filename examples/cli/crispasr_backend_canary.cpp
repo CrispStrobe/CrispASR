@@ -55,6 +55,15 @@ public:
         return true;
     }
 
+    void warmup() override {
+        if (!ctx_)
+            return;
+        std::vector<float> silence(8000, 0.0f);
+        canary_result* r = canary_transcribe_ex(ctx_, silence.data(), (int)silence.size(), "en", "en", true, 0);
+        if (r)
+            canary_result_free(r);
+    }
+
     std::vector<crispasr_segment> transcribe(const float* samples, int n_samples, int64_t t_offset_cs,
                                              const whisper_params& params) override {
         std::vector<crispasr_segment> out;

@@ -435,6 +435,8 @@ static bool whisper_params_parse_arg_backend_vad(int argc, char** argv, int& i, 
         }
     } else if (arg == "--hotwords-boost") {
         params.hotwords_boost = std::stof(ARGV_NEXT);
+    } else if (arg == "--warmup") {
+        params.warmup = true;
     } else if (arg == "--parakeet-decoder") {
         params.parakeet_decoder = ARGV_NEXT;
     } else if (arg == "--lid-backend") {

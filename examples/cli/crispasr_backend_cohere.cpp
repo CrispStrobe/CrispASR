@@ -52,6 +52,15 @@ public:
         return true;
     }
 
+    void warmup() override {
+        if (!ctx_)
+            return;
+        std::vector<float> silence(8000, 0.0f);
+        cohere_result* r = cohere_transcribe_ex(ctx_, silence.data(), (int)silence.size(), "en", 0);
+        if (r)
+            cohere_result_free(r);
+    }
+
     std::vector<crispasr_segment> transcribe(const float* samples, int n_samples, int64_t t_offset_cs,
                                              const whisper_params& params) override {
         std::vector<crispasr_segment> out;
