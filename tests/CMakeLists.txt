@@ -568,6 +568,26 @@ catch_discover_tests(test-issue-89-long-audio-fallback
     PROPERTIES LABELS "unit;long-audio;issue-89"
 )
 
+# ─── test-internal-chunking-gate — CAP_INTERNAL_CHUNKING regression guard
+#
+# Pins the auto-chunk fallback skip for backends that declare
+# CAP_INTERNAL_CHUNKING (parakeet, canary, fastconformer-ctc).
+# These backends handle their own long-audio chunking internally via
+# parakeet_transcribe_streamed or single-pass encoding.
+add_executable(test-internal-chunking-gate
+    test-internal-chunking-gate.cpp
+)
+target_include_directories(test-internal-chunking-gate PRIVATE
+    ${PROJECT_SOURCE_DIR}/examples/cli
+)
+target_link_libraries(test-internal-chunking-gate PRIVATE
+    Catch2::Catch2WithMain
+)
+catch_discover_tests(test-internal-chunking-gate
+    TEST_SPEC "[internal-chunking]"
+    PROPERTIES LABELS "unit;internal-chunking;issue-89"
+)
+
 # ─── test-lcs-chunk-merge — Catch2 unit tests for LCS chunk-merge dedup
 #
 # Ports of NeMo's `longest_common_subsequence_merge` test cases
