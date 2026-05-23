@@ -62,7 +62,7 @@ all consume the same symbols.
 |---|---|
 | `crispasr_c_api.cpp` | The C-ABI. Exports session open/close/transcribe, VAD, diarize, LID, alignment, cache, registry — everything a wrapper needs. |
 | `crispasr_vad.{h,cpp}` | Silero VAD slicing + whisper-style stitching with timestamp remapping. Used by `crispasr_session_transcribe_vad`. |
-| `crispasr_diarize.{h,cpp}` | Four diarizers: energy (stereo), xcorr (stereo, TDOA), vad-turns (mono, timing), pyannote (mono, GGUF; #107 added cross-slice cache + segment splitting + overlap-aware scoring). |
+| `crispasr_diarize.{h,cpp}` | Four diarizers: energy (stereo), xcorr (stereo, TDOA), vad-turns (mono, timing), pyannote (mono, GGUF; #107 added cross-slice cache + segment splitting + overlap-aware scoring). Both pyannote and sherpa/ecapa now run once globally on the full audio (#110), producing consistent speaker IDs across VAD slices. |
 | `crispasr_speaker_embedder.{h,cpp}` | Pluggable speaker-embedding interface (`CrispasrSpeakerEmbedder` base class + factory). Concrete adapters: TitaNet-Large (192-d, 16 kHz) and IndexTTS-BigVGAN ECAPA-TDNN (512-d, internally resamples 16→24 kHz). Add a third by subclassing and extending the factory dispatch. |
 | `crispasr_speaker_cluster.{h,cpp}` | Agglomerative single-linkage cosine clustering on speaker embeddings, with both a similarity-threshold stop and a hard `max_speakers` cap. Drives `--diarize-embedder`'s remap of pyannote-local track IDs into globally stable speaker IDs. |
 | `crispasr_lid.{h,cpp}` | whisper-tiny + silero-native **audio**-LID with process-wide whisper-context cache. |
@@ -80,11 +80,11 @@ all consume the same symbols.
 |---|---|
 | `cli.cpp` | crispasr entry point, extended with `--backend` dispatch branch. |
 | `crispasr_backend.{h,cpp}` | `CrispasrBackend` abstract class, capability bitmask, factory, GGUF auto-detect. |
-| `crispasr_backend_{parakeet,canary,cohere,granite,granite_nle,voxtral,voxtral4b,qwen3,fastconformer_ctc,wav2vec2,glm_asr,kyutai_stt,firered_asr,moonshine,moonshine_streaming,omniasr,gemma4_e2b,mimo_asr,vibevoice,qwen3_tts,orpheus,kokoro,chatterbox,m2m100,t5}.cpp` | Per-backend thin wrapper over each model's C API. ASR backends emit `crispasr_segment`s; TTS backends (`vibevoice`, `qwen3_tts`, `orpheus`, `kokoro`, `chatterbox`) implement `synthesize(text)` instead and write 24 kHz mono WAV via `--tts-output`; the translation backends (`m2m100` for facebook m2m100 + WMT21, `t5` for MADLAD-400 / future T5 translation) implement `translate_text(text, src, tgt)` and write UTF-8 to stdout. |
+| `crispasr_backend_{parakeet,canary,cohere,granite,granite_nle,voxtral,voxtral4b,qwen3,fastconformer_ctc,wav2vec2,glm_asr,kyutai_stt,firered_asr,moonshine,moonshine_streaming,omniasr,gemma4_e2b,mimo_asr,vibevoice,qwen3_tts,orpheus,kokoro,chatterbox,paraformer,sensevoice,funasr,m2m100,t5}.cpp` | Per-backend thin wrapper over each model's C API. ASR backends emit `crispasr_segment`s; TTS backends (`vibevoice`, `qwen3_tts`, `orpheus`, `kokoro`, `chatterbox`) implement `synthesize(text)` instead and write 24 kHz mono WAV via `--tts-output`; the translation backends (`m2m100` for facebook m2m100 + WMT21, `t5` for MADLAD-400 / future T5 translation) implement `translate_text(text, src, tgt)` and write UTF-8 to stdout. |
 | `crispasr_output.{h,cpp}` | TXT / SRT / VTT / CSV / JSON / LRC writers on `crispasr_segment`. |
 | `crispasr_vad_cli.{h,cpp}` | Delegates to `src/crispasr_vad`; adds auto-download for the Silero GGUF. |
 | `crispasr_lid_cli.{h,cpp}` | Delegates to `src/crispasr_lid`; adds auto-download + sherpa-ONNX subprocess fallback. |
-| `crispasr_diarize_cli.{h,cpp}` | Delegates to `src/crispasr_diarize`; adds sherpa subprocess fallback + pyannote GGUF auto-download. |
+| `crispasr_diarize_cli.{h,cpp}` | Delegates to `src/crispasr_diarize`; adds sherpa subprocess fallback + pyannote GGUF auto-download. `CrispasrSherpaCache` (#110) pre-computes the global sherpa timeline; `assign_speakers_from_global_sherpa()` assigns + splits segments at speaker turns. |
 | `crispasr_model_mgr_cli.{h,cpp}` | Delegates to `src/crispasr_model_registry`; adds "Download now? [Y/n]" prompt on TTY. |
 | `crispasr_aligner_cli.{h,cpp}` | Adapter converting `CrispasrAlignedWord` → the CLI's `crispasr_word` shape. |
 | `crispasr_server.cpp` | HTTP server for the persistent-model mode + OpenAI-compatible endpoints. |
@@ -111,6 +111,8 @@ Duplicated scaffolding is bundled in a single static library,
 | `core/qformer.h` | Windowed simplified Q-Former: pass A (LayerNorm + concat + linear + GELU) and per-window cross-attn + MLP cgraph builder | granite_nle (NAR-only — granite_speech uses a different full BLIP-2 Q-Former) |
 | `core/bpe.h` | GPT-2 byte-level BPE encode + decode | granite_speech, granite_nle, voxtral, qwen3, glm-asr |
 | `core/greedy_decode.h` | Autoregressive greedy decode loop with EOS handling | qwen3, voxtral, voxtral4b, granite, glm-asr |
+| `core/sanm.h` | FunASR SANM encoder block (MHA + FSMN depthwise conv) | funasr, sensevoice, paraformer |
+| `core/asr_context_bias.h` | Aho-Corasick CTC-WS phrase-boost trie for `--hotwords` (#98) | parakeet (CTC + TDT); extensible to any CTC/TDT backend |
 
 `core_mel::Params` spans both algorithm clusters: the NeMo family
 (`ln` + per-mel z-score + `(T, n_mels)` layout) and the HF/Whisper
@@ -413,6 +415,44 @@ runtime. **Two separate checkpoints**: `en-x` for English-source
 translation, `x-en` for English-target. Pick whichever matches your
 direction (`-sl`/`-tl`) — the auto-download path picks `en-x` by
 default; load `x-en` explicitly with `-m <path>` for X→English.
+
+### paraformer
+
+FunASR Paraformer-zh — non-autoregressive (single-pass decode). 220M
+params, character-level tokenizer (8404 vocab), primarily Mandarin
+Chinese + English.
+
+```
+Audio → Kaldi fbank (80 mel) → LFR(7,6) → CMVN → 50 SANM encoder blocks
+      → CIF predictor (Conv1d + sigmoid → fire-when-alpha≥1.0)
+      → 16 NAR decoder blocks (FFN → FSMN → cross-attn)
+      → decoders3 post block → after_norm → output_layer → argmax
+```
+
+Key architectural points:
+- Encoder reuses `core_sanm::build_block()` (shared with funasr + sensevoice)
+- Decoder block order is **FFN → FSMN → cross-attn** (not the typical self-attn → cross-attn → FFN)
+- FSMN = depthwise conv (no Q/K/V self-attention in the decoder)
+- CIF predictor is CPU-only (sequential accumulation loop)
+- Output: character sequence with `@@` BPE continuation markers; space insertion between consecutive Latin-script word tokens
+
+F16 (421 MB), Q4_K (123 MB), Q8_0 (227 MB) at `cstr/paraformer-zh-GGUF`.
+All three produce byte-identical transcripts on Chinese + English test clips.
+
+### funasr / fun-asr-mlt-nano
+
+FunAudioLLM Fun-ASR-Nano-2512 — 70 SANM encoder blocks + 2-block
+Transformer adaptor + Qwen3-0.6B LLM AR decoder. Uses the same SANM
+encoder primitive as paraformer + sensevoice (`core_sanm::build_block`).
+ChatML prompt template; audio embedded at `<|startofspeech|>` slot.
+
+### sensevoice
+
+FunAudioLLM SenseVoice-Small — encoder-only multi-task ASR. Same 70-block
+SANM encoder as funasr, but paired with a CTC head (25K SentencePiece
+vocab) instead of an LLM. One forward pass emits transcript + language
+ID + emotion + audio-event tags. Non-autoregressive, 15× faster than
+Whisper-Large.
 
 ### madlad
 

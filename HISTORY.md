@@ -6,6 +6,83 @@ technical deep-dives are in `LEARNINGS.md`.
 
 ---
 
+## 2026-05-23 Global diarization timeline (issue #110)
+
+**Problem.** The `sherpa`/`ecapa` diarization path ran the subprocess
+once per VAD slice, producing local speaker IDs that reset or swapped
+across slices. Long-file diarization was unreliable — `speaker_00` in
+slice 1 might be a different person from `speaker_00` in slice 3.
+
+**Fix.** Mirror the pyannote global-cache pattern (issue #107):
+
+1. New `CrispasrSherpaCache` struct holds the pre-computed global
+   speaker-turn timeline with absolute timestamps.
+2. `crispasr_compute_sherpa_cache()` writes the full mono audio to
+   one temp WAV, runs the sherpa subprocess once, parses all speaker
+   regions.
+3. `crispasr_run.cpp` pre-computes the cache alongside the existing
+   pyannote cache block and threads it through every `process_slice`.
+4. `assign_speakers_from_global_sherpa()` assigns each ASR segment
+   its dominant speaker from the global timeline AND splits segments
+   at speaker-turn boundaries using per-word timestamp overlap scoring.
+   Segments without word timestamps get a single dominant-speaker label.
+
+**Tests.** 13 Catch2 unit tests (38 assertions) + 8-assertion live
+integration test suite (`test_diarize_live.sh`). All pass.
+
+### Files
+
+| File | Change |
+|------|--------|
+| `examples/cli/crispasr_diarize_cli.{h,cpp}` | `CrispasrSherpaCache` + `crispasr_compute_sherpa_cache()` + `assign_speakers_from_global_sherpa()` with word-level splitting |
+| `examples/cli/crispasr_run.cpp` | Global sherpa pre-compute block + cache threading |
+| `tests/test_diarize_global.cpp` | 13 Catch2 unit tests |
+| `tests/test_diarize_live.sh` | 8-assertion live integration suite |
+
+---
+
+## 2026-05-23 Hotwords / contextual biasing (PLAN #98)
+
+**Phase A — CTC-WS phrase-boost trie.** New shared helper
+`src/core/asr_context_bias.h` implements an Aho-Corasick multi-pattern
+trie over token-ID sequences. During CTC/TDT decode, tokens that
+continue an active hotword prefix match get a configurable log-prob
+boost (shallow fusion). Wired into parakeet CTC decode + TDT decode
+paths. CLI flags: `--hotwords "word1,word2"`, `--hotwords-file <path>`,
+`--hotwords-boost <float>` (default 2.0). Per-word boost suffix
+supported: `"Berenz^5.0"`.
+
+**Phase B — LLM prompt injection.** For LLM-based ASR backends that
+accept free-text instructions, `--hotwords` appends a hint to the
+system/instruction prompt:
+- **qwen3-asr:** appends to ChatML system instruction
+- **voxtral:** inserts into `[INST]` turn before `[TRANSCRIBE]`
+
+Not wired (architecture reasons): voxtral4b (fixed streaming prompt),
+granite-nle (non-autoregressive, no text prompt), funasr (prompt
+hardcoded in library).
+
+**Phase C** (TDT joint-net boost) deferred — Phase A on TDT already
+covers the path via shallow fusion.
+
+**Tests.** 13 Catch2 unit tests (34 assertions) for the trie +
+4 paraformer integration tests (init, Chinese byte-match, English
+byte-match, Q4_K==F16 parity).
+
+### Files
+
+| File | Change |
+|------|--------|
+| `src/core/asr_context_bias.h` | 182-LOC Aho-Corasick trie (insert, build failure links, apply_bias, advance, parse_hotwords, build_trie) |
+| `src/parakeet.{h,cpp}` | `parakeet_set_hotwords()` API + CTC/TDT decode wiring |
+| `examples/cli/cli.cpp` | `--hotwords`, `--hotwords-file`, `--hotwords-boost` |
+| `examples/cli/whisper_params.h` | `hotwords` + `hotwords_boost` fields |
+| `examples/cli/crispasr_backend_{parakeet,qwen3,voxtral}.cpp` | Wire hotwords into each backend |
+| `tests/test_context_bias.cpp` | 13 unit tests |
+| `tests/test_paraformer.cpp` | 4 live integration tests |
+
+---
+
 ## 2026-05-23 Issue #89 cross-backend validation + PLAN #80d/#105 closure
 
 **Validated** the NeMo-style streamed pipeline on current main

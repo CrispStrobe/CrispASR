@@ -232,7 +232,7 @@ The matrix above covers ASR backends. **TTS-only backends** (`kokoro`, `qwen3-tt
 **Speaker diarization** as a post-processing step via `--diarize`:
 - `energy` / `xcorr` — stereo-only, no extra deps
 - `pyannote` — native GGUF (no Python, no sherpa-onnx); add `--diarize-embedder auto` (TitaNet) or `--diarize-embedder indextts` (ECAPA-TDNN) for globally stable speaker IDs across long files
-- `sherpa` / `ecapa` — external [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) subprocess
+- `sherpa` / `ecapa` — external [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) subprocess; runs once globally on full audio for consistent speaker IDs (#110)
 - `vad-turns` — mono-friendly gap-based proxy
 
 Full reference + tuning knobs (cluster threshold, max speakers, pluggable embedder adapters): see [`docs/cli.md#diarization`](docs/cli.md#diarization).
@@ -592,6 +592,7 @@ crispasr -m auto --backend parakeet -f audio.wav --vad -osrt --split-on-punct
 | `-tp F` / `-bs N` | Sampling temperature / beam search width |
 | `-n N` / `--frequency-penalty F` | Generated-token cap / opt-in repeated-token penalty for supported autoregressive ASR backends |
 | `-l auto` / `--detect-language` | LID pre-step for backends without native lang detect |
+| `--hotwords "A,B,C"` | Contextual biasing — boost named terms during CTC/TDT decode or LLM prompt |
 | `-ck N` | Fallback chunk size when VAD is off (default 30 s) |
 | `--list-backends` | Print the capability matrix and exit |
 
