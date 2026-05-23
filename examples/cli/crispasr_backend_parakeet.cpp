@@ -78,7 +78,8 @@ public:
         if (!params.hotwords.empty()) {
             auto hw = core_context_bias::parse_hotwords(params.hotwords);
             std::vector<const char*> ptrs;
-            for (auto& s : hw) ptrs.push_back(s.c_str());
+            for (auto& s : hw)
+                ptrs.push_back(s.c_str());
             parakeet_set_hotwords(ctx_, ptrs.data(), (int)ptrs.size(), params.hotwords_boost);
         }
 

@@ -1123,8 +1123,8 @@ static std::vector<parakeet_emitted_token> parakeet_tdt_decode(parakeet_context*
 
             // CTC-WS phrase boost on vocab logits (not duration logits)
             if (has_hotwords)
-                core_context_bias::apply_bias(ctx->hotword_trie, hw_state,
-                                              logits.data(), n_vocab_blk, ctx->hotword_boost);
+                core_context_bias::apply_bias(ctx->hotword_trie, hw_state, logits.data(), n_vocab_blk,
+                                              ctx->hotword_boost);
 
             if (getenv("PARAKEET_DEBUG") && total_steps < 5) {
                 // Show first few logits
@@ -1323,8 +1323,7 @@ static std::vector<parakeet_emitted_token> parakeet_ctc_decode(parakeet_context*
         }
         // CTC-WS phrase boost (PLAN #98): bias logits toward hotword tokens
         if (has_hotwords)
-            core_context_bias::apply_bias(ctx->hotword_trie, hw_state,
-                                          logits.data(), ctc_vocab, ctx->hotword_boost);
+            core_context_bias::apply_bias(ctx->hotword_trie, hw_state, logits.data(), ctc_vocab, ctx->hotword_boost);
         // Argmax
         int tok = 0;
         float tok_lp = logits[0];
@@ -1449,10 +1448,10 @@ extern "C" bool parakeet_has_ctc(struct parakeet_context* ctx) {
     return ctx && ctx->model.has_ctc;
 }
 
-extern "C" void parakeet_set_hotwords(struct parakeet_context* ctx,
-                                      const char** hotwords, int n_hotwords,
+extern "C" void parakeet_set_hotwords(struct parakeet_context* ctx, const char** hotwords, int n_hotwords,
                                       float boost) {
-    if (!ctx || !hotwords || n_hotwords <= 0) return;
+    if (!ctx || !hotwords || n_hotwords <= 0)
+        return;
     // Build a tokenizer that maps strings to SentencePiece token IDs
     // using the already-loaded vocab.
     auto tokenize = [&](const std::string& word) -> std::vector<int32_t> {
@@ -1477,9 +1476,12 @@ extern "C" void parakeet_set_hotwords(struct parakeet_context* ctx,
                 size_t skip = 1;
                 if ((unsigned char)remaining[0] >= 0x80) {
                     // UTF-8 multi-byte
-                    if ((unsigned char)remaining[0] >= 0xF0) skip = 4;
-                    else if ((unsigned char)remaining[0] >= 0xE0) skip = 3;
-                    else skip = 2;
+                    if ((unsigned char)remaining[0] >= 0xF0)
+                        skip = 4;
+                    else if ((unsigned char)remaining[0] >= 0xE0)
+                        skip = 3;
+                    else
+                        skip = 2;
                 }
                 remaining.erase(0, std::min(skip, remaining.size()));
             } else {
@@ -1492,7 +1494,8 @@ extern "C" void parakeet_set_hotwords(struct parakeet_context* ctx,
 
     std::vector<std::string> hw_list;
     for (int i = 0; i < n_hotwords; i++)
-        if (hotwords[i]) hw_list.push_back(hotwords[i]);
+        if (hotwords[i])
+            hw_list.push_back(hotwords[i]);
 
     ctx->hotword_boost = boost;
     ctx->hotword_trie = core_context_bias::build_trie(hw_list, tokenize, boost);

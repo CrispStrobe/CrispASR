@@ -420,9 +420,11 @@ static bool whisper_params_parse_arg_backend_vad(int argc, char** argv, int& i, 
             std::string acc;
             while (fgets(line, sizeof(line), f)) {
                 std::string s(line);
-                while (!s.empty() && (s.back() == '\n' || s.back() == '\r')) s.pop_back();
+                while (!s.empty() && (s.back() == '\n' || s.back() == '\r'))
+                    s.pop_back();
                 if (!s.empty()) {
-                    if (!acc.empty()) acc += ",";
+                    if (!acc.empty())
+                        acc += ",";
                     acc += s;
                 }
             }

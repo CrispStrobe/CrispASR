@@ -30,9 +30,9 @@ namespace core_context_bias {
 // A single node in the Aho-Corasick trie.
 struct TrieNode {
     std::unordered_map<int32_t, int> children; // token_id → child node index
-    int fail = 0;        // failure link (index into nodes[])
-    float boost = 0.0f;  // accumulated boost at this node (>0 if a hotword ends here)
-    int depth = 0;       // number of tokens from root to this node
+    int fail = 0;                              // failure link (index into nodes[])
+    float boost = 0.0f;                        // accumulated boost at this node (>0 if a hotword ends here)
+    int depth = 0;                             // number of tokens from root to this node
 };
 
 struct Trie {
@@ -68,7 +68,8 @@ struct Trie {
             q.push(child);
         }
         while (!q.empty()) {
-            int u = q.front(); q.pop();
+            int u = q.front();
+            q.pop();
             for (auto& [tid, v] : nodes[u].children) {
                 int f = nodes[u].fail;
                 while (f != 0 && nodes[f].children.find(tid) == nodes[f].children.end())
@@ -108,9 +109,9 @@ inline void advance(const Trie& trie, MatchState& st, int32_t token_id) {
 //
 // This is the "shallow fusion" step: tokens that continue a hotword
 // prefix get a log-prob boost, making them more likely to win argmax.
-inline void apply_bias(const Trie& trie, const MatchState& st,
-                       float* logits, int n_vocab, float default_boost) {
-    if (trie.empty()) return;
+inline void apply_bias(const Trie& trie, const MatchState& st, float* logits, int n_vocab, float default_boost) {
+    if (trie.empty())
+        return;
 
     // Walk from current node + all failure-chain nodes, collect valid next tokens
     int cur = st.node;
@@ -125,7 +126,8 @@ inline void apply_bias(const Trie& trie, const MatchState& st,
                 logits[tid] += b;
             }
         }
-        if (cur == 0) break;
+        if (cur == 0)
+            break;
         cur = trie.nodes[cur].fail;
     }
 }
@@ -134,12 +136,12 @@ inline void apply_bias(const Trie& trie, const MatchState& st,
 // tokenizer function. The tokenizer converts a string to token IDs.
 using Tokenizer = std::function<std::vector<int32_t>(const std::string&)>;
 
-inline Trie build_trie(const std::vector<std::string>& hotwords,
-                       const Tokenizer& tokenize,
+inline Trie build_trie(const std::vector<std::string>& hotwords, const Tokenizer& tokenize,
                        float boost_per_word = 2.0f) {
     Trie trie;
     for (const auto& hw : hotwords) {
-        if (hw.empty()) continue;
+        if (hw.empty())
+            continue;
         // Parse optional boost suffix: "word^5.0"
         float boost = boost_per_word;
         std::string word = hw;
@@ -164,16 +166,21 @@ inline Trie build_trie(const std::vector<std::string>& hotwords,
 // Parse a comma-separated hotword string into a vector.
 inline std::vector<std::string> parse_hotwords(const std::string& s) {
     std::vector<std::string> result;
-    if (s.empty()) return result;
+    if (s.empty())
+        return result;
     size_t start = 0;
     while (start < s.size()) {
         size_t end = s.find(',', start);
-        if (end == std::string::npos) end = s.size();
+        if (end == std::string::npos)
+            end = s.size();
         // Trim whitespace
         size_t a = start, b = end;
-        while (a < b && (s[a] == ' ' || s[a] == '\t')) a++;
-        while (b > a && (s[b-1] == ' ' || s[b-1] == '\t')) b--;
-        if (b > a) result.push_back(s.substr(a, b - a));
+        while (a < b && (s[a] == ' ' || s[a] == '\t'))
+            a++;
+        while (b > a && (s[b - 1] == ' ' || s[b - 1] == '\t'))
+            b--;
+        if (b > a)
+            result.push_back(s.substr(a, b - a));
         start = end + 1;
     }
     return result;
