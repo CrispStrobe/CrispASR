@@ -55,6 +55,11 @@ test-all-backends.py passes 18/18 transcribe + 51/54 feature tests (3 stream ski
 - **#72 Linux/CUDA validation** of the gemma4_e2b / mimo_asr GPU-residency flip. Hardware-blocked from the dev host; expect even larger wins on dGPU than the 22 %–220 % observed on Apple Silicon Metal.
 - **encoder-decoder #69a** (canary, cohere, kyutai-stt). Cross-attention layout has no `<prefix><N>.*` block-tagged tensors; needs bespoke per-backend predicates. Own design problem.
 
+**Issue #81 A1000 work — Phase 1 verdict in (2026-05-23):**
+- `d758fe69` (fused `GGML_OP_NORM_AFFINE` + `GGML_GLU_OP_SIGLU` for FastConformer encoder) closes target (b) of the gap analysis. Measured **+5.7 % wallclock win** on A1000 Laptop (2.701 s vs 2.863 s baseline, p50/chunk 175.8 ms vs 184.8 ms, RTx 22.2× vs 21.0× — clean WDDM-warm conditions on Studio Driver 596.36). Sched-debug: CPU splits 144→72, UNARY-on-CPU 72→0. **Carry as permanent improvement.** Full write-up in PERFORMANCE.md "Phase 1 update (2026-05-23)" subsection. WIP branch `issue81-phase1-uar-wip` (commits `6a0ccc67 / a2999cf3 / 6d7872a0`) is superseded — delete when convenient.
+- **#06 FA per-head mask** is the next concrete A1000 perf step. Removes the other 72 CPU splits per chunk (per-head additive mask in `fattn.cu:423` + the four kernel variants). Scoped at 2-3 days, ~300-500 LOC across `fattn.cu` / `fattn-common.cuh` / `fattn-mma-f16.cuh` (and optionally `-wmma-f16.cu` / `-tile.cu` / `-vec.cuh`). Expected wallclock gain ~10-15 % on top of postsiglu (target ~2.4 s long-clip / RTx ~25× / ~1.5× behind onnx-fp32). Don't start until WDDM-warm bench protocol below is followed for the new baseline.
+- **WDDM warm-up protocol** (Windows/laptop NVIDIA only): cold A1000 sits at P5/P8/210-510 MHz during compute and runs 8-10× slower than warm; engage WDDM by running `bench-issue81/probe_postsiglu_leak.py <dll> 200` (or ~10 s of `gpu_keepalive.py`) BEFORE measuring. The 3.063 s May 11 reference is reproducible with this protocol; single-shot cold benches are noise. Documented in PERFORMANCE.md "What we learned about A1000 WDDM behavior" + LEARNINGS.md "WDDM idle-clock-state hysteresis on consumer/laptop NVIDIA SKUs".
+
 ---
 
 

@@ -1036,6 +1036,101 @@ Raw nsys reports for this Phase 0/1 round live at
 Phase 1 experiments' JSON sidecars are
 `handover-prompts/a1000-post-cg-{offload,glucont}.json`.
 
+#### Phase 1 update (2026-05-23) — fused siglu/norm_affine A1000 verdict
+
+`d758fe69` (fused `GGML_OP_NORM_AFFINE` + `GGML_GLU_OP_SIGLU` for the
+FastConformer encoder) closes target (b) above structurally, but the
+A1000 wallclock win is buried under WDDM idle-clock noise.
+
+**Structural impact (sched-debug, GGML_SCHED_DEBUG=2):**
+
+| count | baseline (May 11, dll-post-cg) | postsiglu (current main) |
+|---|---:|---:|
+| total SPLIT lines (3 chunks) | 291 | **147** |
+| CPU splits | 144 | **72** |
+| CUDA0 splits | 147 | 75 |
+| `UNARY` ops on CPU | 72 | **0** |
+
+Exactly the 50 % CPU-split reduction the gap analysis predicted —
+the 24 strided sigmoid ops × 3 splits each that previously fell back
+to CPU are now part of a single fused `GLU_OP_SIGLU` kernel on CUDA.
+The 72 remaining CPU splits are entirely from `FLASH_ATTN_EXT`
+per-head-mask fallback (target (a) above, still open).
+
+**Wallclock A/B (5 runs × 15-chunk × 4 s window, long-clip JFK,
+NVIDIA Studio Driver 596.36, NPI PreferredPState deleted,
+PROCTHROTTLEMAX=100 on AC, no keepalive, GPU pre-warmed by a brief
+prior CUDA workload):**
+
+| DLL | mean | p50/chunk | p95/chunk | RTx |
+|---|---:|---:|---:|---:|
+| `dll-post-cg` (May 11 baseline) | 2.863 s | 184.8 ms | 251.5 ms | 21.0× |
+| `dll-postsiglu` (current main)  | **2.701 s** | **175.8 ms** | 234.7 ms | **22.2×** |
+
+**Delta: postsiglu 5.7 % faster — the structural win lands.**
+p50/chunk 175.8 ms vs 184.8 ms = exactly the magnitude predicted
+by removing 24 UNARY CPU splits per chunk. Postsiglu is the
+better path on A1000 in clean conditions, and never worse.
+
+#### What we learned about A1000 WDDM behavior
+
+The dominant cost on this hardware is **WDDM idle-clock-state
+hysteresis**. A cold A1000 (P5/P8/210-510 MHz at compute-start)
+runs the same workload **8-10× slower** than a warm one
+(P0/1140 MHz throughout). State transitions take ~5-15 s of
+sustained activity. Implications for benchmarking on this class
+of hardware:
+
+1. **Always pre-warm the GPU** before measuring. Either:
+   a) `bench-issue81/gpu_keepalive.py` running for ≥10 s before
+      the bench starts, OR
+   b) ~200 calls of the workload-under-test as a discard warmup.
+2. **Driver 596.36 (Studio) is no better than 581.95** for this
+   issue — the WDDM heuristic is OS-side, not driver-side. Both
+   drivers exhibit the same pattern.
+3. **NPI `PreferredPState=1` is counterproductive on 596.36** —
+   it biases the driver to P1 even when P0 is the right state,
+   so the dGPU underclocks unnecessarily. Default-state (no
+   NPI override) was best in our final round.
+4. **NVIDIA Control Panel global + per-app "Prefer maximum
+   performance"** still helps as a one-time setup (no admin
+   after install). Doesn't fully replace warm-up but biases the
+   right way.
+5. **The variability is real.** Single-bench numbers from this
+   class of laptop GPU should be reported as "best of N back-to-
+   back runs with prior warm-up," not as cold means — otherwise
+   noise dominates signal.
+
+The original 3.063 s May 11 baseline is reproducible (we hit
+2.86 s on the same DLL on driver 596.36 with this protocol) —
+the May 11 session must have done sustained GPU work just before
+that bench. Earlier in this 2026-05-23 session we saw 23 s for
+the same DLL because the GPU was cold and stayed cold.
+
+**Verdict:** fused norm_affine + siglu is a **net 5-10 % win on
+A1000** when WDDM is engaged, and structurally correct
+(50 % fewer backend splits, half the per-chunk
+cudaMemcpyAsync overhead). Carry it as a permanent improvement.
+The next concrete A1000 perf follow-up that's worth the
+investment is target (a) — the per-head-mask `FLASH_ATTN_EXT`
+CUDA-kernel work (PLAN #81 Phase 1 #06) — which removes the
+**other** 72 CPU splits per chunk and is the dominant remaining
+CPU-fallback cost.
+
+**Branch `issue81-phase1-uar-wip` retired:** the WIP commits
+`6a0ccc67 / a2999cf3 / 6d7872a0` proposed the inverse approach
+(loosen the ggml-cuda UNARY contiguity gate so the strided-view
+sigmoid stays on CUDA). `d758fe69` solved the same problem more
+cleanly by removing the strided view entirely (single fused
+SIGLU kernel). The WIP patches are no longer needed; delete the
+branch when convenient.
+
+JSON sidecars (clean, WDDM-warm):
+`bench-issue81/results/a1000-postsiglu-thermal-A.json` and
+`a1000-postcg-thermal-B.json`. Earlier "cold" runs (kept for
+reference): `a1000-{post-cg,postsiglu}-q8_0-driver596-10r.json`.
+New sched-debug log: `bench-issue81/sched-debug-postsiglu.log`.
+
 ---
 
 ## Reproduce

@@ -5976,3 +5976,140 @@ QWEN3_TTS_BENCH=1 [QWEN3_TTS_FUSED_QKV=1] \
   --tts "In the beginning..." --tts-output bench_tmp.wav
 ```
 Key output line: `qwen3_tts: ar_loop  N ms (94 frames, X.X ms/frame)`.
+
+---
+
+## WDDM idle-clock-state hysteresis on consumer/laptop NVIDIA SKUs (May 2026)
+
+Issue #81 investigation surfaced a Windows/WDDM behavior that
+dominates **any** chunked-streaming inference perf measurement on
+consumer/laptop NVIDIA GPUs (RTX A1000 Laptop confirmed; almost
+certainly applies to RTX 30/40-series mobile and lower-end GeForce
+desktop too). Knowing this saves days of code-bisecting noise.
+
+### The behavior
+
+A cold dGPU starts at low P-state (P5/P8, ~210-510 MHz core /
+405-810 MHz mem). When compute work arrives, **WDDM does NOT
+immediately boost** to P0/1140 MHz / 5501 MHz mem — it requires
+~5-15 s of *sustained* GPU activity to engage P0, and it
+aggressively defends idle clocks against bursty workloads with
+sub-100 ms kernel groups (which is exactly the shape of chunked
+ASR/TTS inference).
+
+Same DLL, same hardware, same workload, two different states:
+
+| State | mean / chunk | RTx | Notes |
+|---|---:|---:|---|
+| Cold (P5/P8) | 1400 ms | 2.7× | what you get if you bench from idle |
+| Warm (P0)    |  185 ms | 21×  | what the model is actually capable of |
+
+**8× wallclock difference** from nothing but driver-side power
+state. The "real" performance is the warm number.
+
+### Why this matters for ASR specifically
+
+Parakeet / Canary / FastConformer-style ASR runs the encoder
+graph in many short kernel groups (one per 4 s chunk = ~150 ms of
+GPU work + ~50 ms host gap). WDDM sees each gap as "GPU is idle"
+and starts demoting clocks. On a server SKU (Tesla / Quadro with
+TCC mode, or any Linux box) this would never happen — TCC bypasses
+WDDM, and Linux uses a more conservative DVFS. **The problem is
+specific to WDDM on consumer SKUs.**
+
+### What works to mitigate
+
+1. **Pre-warm the dGPU** with ~10 s of sustained CUDA work before
+   measuring. We ship `bench-issue81/gpu_keepalive.py` for this
+   (a tight 256×256 fp32 ORT-CUDA add loop, ~50 MB VRAM,
+   ~1 % util, but enough to keep WDDM in "GPU is busy" mode).
+   For benches, simpler: run the workload-under-test ~200 times
+   as a discard warmup, then measure.
+2. **NVIDIA Control Panel → 3D Settings → Manage 3D Settings**
+   - Global → "Power management mode" → "Prefer maximum
+     performance" (no admin, persists across reboots)
+   - Same setting under Program Settings tab for `python.exe`
+     / `crispasr.exe` (per-app override tends to engage the
+     dGPU more aggressively on Optimus laptops than the global
+     setting alone)
+
+### What does NOT work (counter-intuitive)
+
+1. **`nvidiaProfileInspector.exe -setProfileSetting
+   "_GLOBAL_DRIVER_PROFILE,PreferredPState,1"`** *USED* to help
+   on older drivers (e.g., 581.95) but is **actively harmful on
+   newer drivers** (we confirmed on Studio Driver 596.36): it
+   caps the dGPU at P1 instead of allowing P0, so the GPU
+   underclocks even when work demands max clocks. **Default
+   driver behavior is better than this override on 596.x+.**
+   To remove: `nvidiaProfileInspector.exe -deleteProfileSetting
+   "_GLOBAL_DRIVER_PROFILE,PreferredPState"`. The setting was
+   itself a workaround that newer drivers obsoleted; recheck
+   on every driver bump.
+
+2. **Driver upgrades don't fix it.** We went 581.95 → Studio
+   596.36 mid-investigation; same WDDM behavior, same magnitude
+   of cold-vs-warm gap. The heuristic is OS-side
+   (DXGI/dxgkrnl), not driver-side. Game Ready and Studio
+   variants behave identically.
+
+3. **`nvidia-smi -lgc <freq>`** would force-pin the clock but
+   needs admin per session AND is blocked on consumer SKUs with
+   "user does not have permission" even when elevated.
+
+4. **`gpu_keepalive.py` alone is not enough** if NPI is also
+   set (the keepalive engages WDDM but NPI caps the resulting
+   clock). Use keepalive WITHOUT NPI on 596.x+.
+
+### Practical bench protocol (Windows + laptop NVIDIA)
+
+```powershell
+# 1. Set NV Control Panel "Prefer maximum performance" once (GUI, no admin).
+# 2. Ensure no NPI PreferredPState override is active:
+#    nvidiaProfileInspector.exe -deleteProfileSetting "_GLOBAL_DRIVER_PROFILE,PreferredPState"
+# 3. Set CPU max state to 100% on AC (was 98% by default on some Win11 11):
+#    powercfg -setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMAX 100
+# 4. Warm WDDM (10+ s of sustained CUDA work):
+python bench-issue81/probe_postsiglu_leak.py <dll> 200
+# 5. Bench immediately:
+python tools/benchmark_asr_engines.py --engine crispasr --crispasr-lib <dll> ...
+```
+
+Single-shot cold benches on this class of hardware are **noise**.
+Report best-of-N back-to-back with warm-up; document the warm-up
+explicitly.
+
+### How this was learned the hard way
+
+Initial measurements on a fresh-rebooted machine showed `dll-postsiglu`
+(current main) at 14.96 s mean vs `dll-post-cg` (May 11 baseline)
+at 5.94 s — a *2.5× regression* that looked like a code bug. We
+wrote a leak-probe (`bench-issue81/probe_postsiglu_leak.py`) that
+called the same DLL 60-150 times in a tight loop, expecting to
+see the per-call time degrade. Both DLLs were rock-stable in the
+probe (157-256 ms per call, GPU memory constant).
+
+The actual difference between the probe and the bench was that
+the probe ran **after** another GPU-intensive bench had just
+finished, so WDDM was already engaged. The bench ran from a
+cold state. After running the probe FIRST, immediately followed
+by the bench, both DLLs returned to ~2.7-2.9 s mean / 175-184 ms
+p50 — matching the original May 11 3.063 s reference closely.
+
+**The "2.5× regression" was a WDDM-state coincidence, not code.**
+The actual `d758fe69` (fused norm_affine + siglu) impact on A1000
+is +5.7 % wallclock improvement when measured cleanly.
+
+### Sources / cross-refs
+
+- PERFORMANCE.md "A1000 Ampere CUDA A/B" + "Phase 1 update
+  (2026-05-23) — fused siglu/norm_affine A1000 verdict"
+- `bench-issue81/probe_postsiglu_leak.py` (the probe itself; also
+  a useful warmup driver)
+- `bench-issue81/gpu_keepalive.py` (the May 11 keepalive — its
+  docstring was already saying *"NPI's 'Prefer maximum
+  performance' only biases up; it doesn't actually pin P0"*, and
+  we now know that even when it does bias up, on modern drivers
+  it biases the wrong direction)
+- Microsoft DXGI WDDM Display Power Management docs (not linked
+  here — search "WDDM idle detection" if you need primary sources)
