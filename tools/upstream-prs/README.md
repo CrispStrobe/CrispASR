@@ -9,8 +9,8 @@ Redacted descriptions in own voice.
 | 02 | `CUDA: handle OW > 65535 in im2col (2D and 3D)` | yours (1552434, re-applied in ca6c523) | ggml-org/ggml#1485 closed (wrong repo); refiled at [ggml-org/llama.cpp#22944](https://github.com/ggml-org/llama.cpp/pull/22944) 2026-05-11 |
 | 03 | `CUDA: tile cpy_scalar_transpose along grid_y` | AI-authored (2639461) — re-derive yourself before sending | gated on llama.cpp#22944 merge |
 | 04 | `metal : tighten input-position loop in kernel_conv_transpose_1d` | yours (4990da8) | ✅ merged [#1477](https://github.com/ggml-org/ggml/pull/1477) 2026-05-10 |
-| 05 | `ggml-cuda : per-row-contiguous unary (Phase 1 UAR)` | WIP on branch `issue81-phase1-uar-wip` | drafted, not yet filed |
-| 06 | `ggml-cuda : per-head mask in flash_attn_ext` | WIP on branch `issue81-phase1-uar-wip` | drafted, not yet filed |
+| 05 | `ggml-cuda : per-row-contiguous unary (Phase 1 UAR)` | superseded by `d758fe69` on main (fused norm_affine + siglu removes the strided view entirely) | retired 2026-05-23, WIP branch deleted |
+| 06 | `ggml-cuda : per-head mask in flash_attn_ext (MMA-F16 path)` | design + kernel-level patch sketch in `06-cuda-fa-perhead-mask.md` (~45 LOC across `fattn.cu` + `fattn-mma-f16.cuh` + test-backend-ops) | drafted on main 2026-05-23, not yet implemented |
 | 07 | `metal : kernel_aa_snake_beta — fused AA SnakeBeta for BigVGAN v2` | drafted from upstream IndexTTS CUDA reference (Apache 2.0) — needs implementation | RFC scope only; new ggml op |
 | 08 | `metal : fix cross-simdgroup reduction in kernel_norm / kernel_rms_norm / kernel_l2_norm` | yours — bisected from kokoro short-input audio regression; see [`tests/test_metal_norm_repro.cpp`](../../tests/test_metal_norm_repro.cpp) | drafted, not yet filed |
 
