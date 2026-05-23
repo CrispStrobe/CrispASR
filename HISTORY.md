@@ -6,6 +6,33 @@ technical deep-dives are in `LEARNINGS.md`.
 
 ---
 
+## 2026-05-23 PLAN #52 — Qwen3-TTS perf bench (FUSED_QKV Q8_0 decision)
+
+Ran interleaved A/B bench for `QWEN3_TTS_FUSED_QKV=1` on M1 Metal,
+Q8_0 0.6B CustomVoice, 94-frame synthesis:
+
+| Condition | ms/frame |
+|---|---|
+| Baseline (normal load) | ~129 |
+| `FUSED_QKV=1` Q8_0 (interleaved A/B) | ~129 — **neutral** |
+| `CP_STEP0_CACHE=1` (normal load) | ~128 — **neutral** |
+| Baseline (quiet window) | ~79 — already under 80 ms/frame RT budget |
+
+**Decision:** `FUSED_QKV` stays default-OFF for Q8_0 — confirmed
+neutral, not beneficial on Metal. The first bench in the PLAN history
+was a cold-cache artifact (model warmed into RAM by the preceding run,
+making the FUSED_QKV run appear faster). `CP_STEP0_CACHE` also neutral
+at normal load; quiet-machine confirmation still pending.
+
+**Still open:** F16 FUSED_QKV bench (needs F16 talker GGUF locally);
+Q4_K bench; fusing 15 cp steps into one graph; Q8_0 KV cache (blocked
+on Metal `cont(Q8_0)` kernel patch).
+
+Updated: PLAN.md #52 perf notes + `src/qwen3_tts.cpp:5023` comment.
+See LEARNINGS.md §Qwen3-TTS FUSED_QKV.
+
+---
+
 ## 2026-05-23 Global diarization timeline (issue #110)
 
 **Problem.** The `sherpa`/`ecapa` diarization path ran the subprocess

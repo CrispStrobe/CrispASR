@@ -5884,3 +5884,45 @@ doesn't through the same code, compare the config files first.
 **Fix:** Converter reads `audio_adaptor_conf.use_low_frame_rate` from
 `config.yaml` and writes it as a bool GGUF KV. Runtime reads the KV
 at load time, falling back to `true` for pre-fix GGUFs.
+
+### Qwen3-TTS FUSED_QKV bench — cold-cache trap + Q8_0 is neutral on Metal
+
+**Trap:** A naive A/B test of `QWEN3_TTS_FUSED_QKV=1` appeared to show
+a 1.83× speedup (144.7 → 79.0 ms/frame). The "improvement" was a
+**cold-cache artifact**: the baseline run loaded the Q8_0 GGUF from
+`/Volumes/backups/ai/` (external disk) into unified memory and macOS's
+file-page cache. The immediately following FUSED_QKV run benefited
+from those warm pages and appeared faster. Running both cold, or
+properly interleaving the two conditions in sequence, gives:
+~129 ms/frame for baseline, ~129 ms/frame for FUSED_QKV — neutral.
+
+**Rule:** Always interleave conditions (A B A B A B) and discard the
+first cold run of a new binary invocation when benching on macOS.
+The first invocation loads the GGUF from disk; subsequent invocations
+reuse page-cached pages. Alternating order eliminates this confound.
+
+**Why FUSED_QKV is neutral for Q8_0 on Metal:** The optimization
+byte-concatenates Q + K + V weight rows into a single fused tensor so
+one `ggml_mul_mat` replaces three. For F16 weights this reduces Metal
+kernel-launch overhead (three small dispatches → one larger one). For
+Q8_0, Metal's Q8_0 dequant dispatch already launches a GPU threadgroup
+that spans the full head_dim×head_dim tile; fusing to a 4096-output
+tensor doesn't improve parallelism and may slightly hurt cache
+utilization. The net effect on M1 Metal Q8_0 (28L, 1024 d, 8 KV
+heads): no measurable difference.
+
+**F16 case still open:** FUSED_QKV for F16 talkers is untested locally
+(no F16 talker GGUF on this Mac). The expected benefit is real for
+F16 (fewer kernel launches, larger tiles map better to the GPU
+scheduler) — but requires a dedicated bench on a machine with the F16
+GGUF and enough RAM to hold it warm.
+
+**Bench setup used (2026-05-23, M1, build-ninja-compile):**
+```
+QWEN3_TTS_BENCH=1 [QWEN3_TTS_FUSED_QKV=1] \
+  crispasr --backend qwen3-tts-customvoice \
+  -m .../qwen3-tts-12hz-0.6b-customvoice-q8_0.gguf \
+  --codec-model .../qwen3-tts-tokenizer-12hz.gguf \
+  --tts "In the beginning..." --tts-output bench_tmp.wav
+```
+Key output line: `qwen3_tts: ar_loop  N ms (94 frames, X.X ms/frame)`.

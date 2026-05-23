@@ -5021,12 +5021,11 @@ extern "C" struct qwen3_tts_context* qwen3_tts_init_from_file(const char* path_m
     build_embd_caches(c);   // CPU copies for AR-loop embed lookups
 
     // Fuse Q+K+V weights for the talker so each layer's attention does a
-    // single mul_mat instead of three. Only applies to F16/F32 talkers —
-    // quantized formats (Q8_0/Q4_K) keep the 3-matmul path because their
-    // block layout would need a converter-side fuse to be safe.
-    // Off by default: a first (contended-machine) bench suggested the
-    // fused path regresses at T=1 on M1 Metal; flip on with
-    // QWEN3_TTS_FUSED_QKV=1 to A/B test on a quiet machine.
+    // single mul_mat instead of three. Type gate dropped (PLAN #60d) —
+    // Q8_0/Q4_K byte-concat is safe; buffer on default backend.
+    // Off by default: interleaved A/B bench 2026-05-23 (M1, Q8_0 0.6B,
+    // 94 frames) shows neutral for Q8_0 — ~129 ms/frame with and without.
+    // F16 case untested locally; flip with QWEN3_TTS_FUSED_QKV=1 to bench.
     if (env_bool("QWEN3_TTS_FUSED_QKV")) {
         auto& blocks = c->talker.blocks;
         // PLAN #60d: type gate dropped May 2026 — Q-format byte-concat
