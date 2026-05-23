@@ -90,6 +90,7 @@ struct whisper_params {
     float temperature = 0.00f;
     float frequency_penalty = 0.00f;
     float temperature_inc = 0.20f;
+    uint64_t seed = 0;
     float no_speech_thold = 0.6f;
 
     bool debug_mode = false;
