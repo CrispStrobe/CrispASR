@@ -8,6 +8,7 @@
 #include "crispasr_backend.h"
 #include "crispasr_backend_utils.h"
 #include "whisper_params.h"
+#include "core/asr_context_bias.h"
 
 #include "parakeet.h"
 
@@ -72,6 +73,14 @@ public:
         // who toggles --temperature back off doesn't keep the previous
         // sampling state from a prior file.
         parakeet_set_temperature(ctx_, params.temperature, params.seed);
+
+        // PLAN #98: CTC-WS hotword phrase boost
+        if (!params.hotwords.empty()) {
+            auto hw = core_context_bias::parse_hotwords(params.hotwords);
+            std::vector<const char*> ptrs;
+            for (auto& s : hw) ptrs.push_back(s.c_str());
+            parakeet_set_hotwords(ctx_, ptrs.data(), (int)ptrs.size(), params.hotwords_boost);
+        }
 
         // Issue #89 / PLAN #104: encoding path selection.
         //

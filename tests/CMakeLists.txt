@@ -345,6 +345,38 @@ catch_discover_tests(test-punctuation-policy
     PROPERTIES LABELS "unit"
 )
 
+# ─── test - paraformer — live integration tests for paraformer backend
+add_executable(test-paraformer
+    test_paraformer.cpp
+)
+target_include_directories(test-paraformer PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/examples
+)
+target_link_libraries(test-paraformer PRIVATE
+    Catch2::Catch2WithMain
+    paraformer
+)
+catch_discover_tests(test-paraformer
+    TEST_SPEC "[paraformer]"
+    PROPERTIES LABELS "live;paraformer"
+)
+
+# ─── test - context - bias — Catch2 unit tests for CTC-WS phrase-boost trie (PLAN #98)
+add_executable(test-context-bias
+    test_context_bias.cpp
+)
+target_include_directories(test-context-bias PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-context-bias PRIVATE
+    Catch2::Catch2WithMain
+)
+catch_discover_tests(test-context-bias
+    TEST_SPEC "[context_bias]"
+    PROPERTIES LABELS "unit"
+)
+
 # ─── test - windows - mic — regression test for Windows dshow mic selection
 add_executable(test-windows-mic
     test_windows_mic.cpp

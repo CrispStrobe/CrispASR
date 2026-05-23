@@ -409,6 +409,30 @@ static bool whisper_params_parse_arg_backend_vad(int argc, char** argv, int& i, 
             return false;
         }
         params.lcs_min_length = v;
+    } else if (arg == "--hotwords") {
+        params.hotwords = ARGV_NEXT;
+    } else if (arg == "--hotwords-file") {
+        // Read one hotword per line from a file
+        std::string path = ARGV_NEXT;
+        FILE* f = fopen(path.c_str(), "r");
+        if (f) {
+            char line[1024];
+            std::string acc;
+            while (fgets(line, sizeof(line), f)) {
+                std::string s(line);
+                while (!s.empty() && (s.back() == '\n' || s.back() == '\r')) s.pop_back();
+                if (!s.empty()) {
+                    if (!acc.empty()) acc += ",";
+                    acc += s;
+                }
+            }
+            fclose(f);
+            params.hotwords = acc;
+        } else {
+            fprintf(stderr, "warning: cannot open hotwords file '%s'\n", path.c_str());
+        }
+    } else if (arg == "--hotwords-boost") {
+        params.hotwords_boost = std::stof(ARGV_NEXT);
     } else if (arg == "--parakeet-decoder") {
         params.parakeet_decoder = ARGV_NEXT;
     } else if (arg == "--lid-backend") {

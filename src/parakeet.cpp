@@ -26,6 +26,7 @@
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
+#include "core/asr_context_bias.h"
 #include "core/fastconformer.h"
 
 #ifndef M_PI
@@ -197,6 +198,10 @@ struct parakeet_context {
     // Set via parakeet_set_temperature(); the field is sticky on the ctx.
     float decode_temperature = 0.0f;
     uint64_t decode_seed = 0;
+
+    // CTC-WS phrase-boost trie (PLAN #98). Set via parakeet_set_hotwords().
+    core_context_bias::Trie hotword_trie;
+    float hotword_boost = 2.0f; // per-frame prefix continuation boost
 };
 
 // ---------------------------------------------------------------------------
@@ -1295,6 +1300,8 @@ static std::vector<parakeet_emitted_token> parakeet_ctc_decode(parakeet_context*
     // For each encoder frame: logits = w @ enc[t] + b, then argmax.
     std::vector<float> logits((size_t)ctc_vocab);
     int prev_tok = ctc_blank;
+    const bool has_hotwords = !ctx->hotword_trie.empty();
+    core_context_bias::MatchState hw_state;
     for (int t = 0; t < T_enc; t++) {
         const float* e = enc + (size_t)t * d_model;
         for (int v = 0; v < ctc_vocab; v++) {
@@ -1304,6 +1311,10 @@ static std::vector<parakeet_emitted_token> parakeet_ctc_decode(parakeet_context*
                 s += wv[k] * e[k];
             logits[v] = s;
         }
+        // CTC-WS phrase boost (PLAN #98): bias logits toward hotword tokens
+        if (has_hotwords)
+            core_context_bias::apply_bias(ctx->hotword_trie, hw_state,
+                                          logits.data(), ctc_vocab, ctx->hotword_boost);
         // Argmax
         int tok = 0;
         float tok_lp = logits[0];
@@ -1324,6 +1335,9 @@ static std::vector<parakeet_emitted_token> parakeet_ctc_decode(parakeet_context*
                 tok_p = sum > 0.0 ? (float)(1.0 / sum) : 0.0f;
             }
             emitted.push_back({tok, t, t, tok_p});
+            // Advance hotword trie state on non-blank, non-repeat tokens
+            if (has_hotwords)
+                core_context_bias::advance(ctx->hotword_trie, hw_state, tok);
         }
         prev_tok = tok;
     }
@@ -1423,6 +1437,55 @@ extern "C" void parakeet_set_ctc_mode(struct parakeet_context* ctx, bool ctc) {
 
 extern "C" bool parakeet_has_ctc(struct parakeet_context* ctx) {
     return ctx && ctx->model.has_ctc;
+}
+
+extern "C" void parakeet_set_hotwords(struct parakeet_context* ctx,
+                                      const char** hotwords, int n_hotwords,
+                                      float boost) {
+    if (!ctx || !hotwords || n_hotwords <= 0) return;
+    // Build a tokenizer that maps strings to SentencePiece token IDs
+    // using the already-loaded vocab.
+    auto tokenize = [&](const std::string& word) -> std::vector<int32_t> {
+        // Simple: look up each SentencePiece token. For multi-token words,
+        // we do a greedy forward-maximum-match against the vocab.
+        // This is good enough for hotwords (typically 1-3 tokens each).
+        std::vector<int32_t> ids;
+        const auto& pieces = ctx->vocab.id_to_token;
+        std::string remaining = word;
+        while (!remaining.empty()) {
+            int best_len = 0;
+            int32_t best_id = -1;
+            for (int i = 0; i < (int)pieces.size(); i++) {
+                const auto& p = pieces[i];
+                if ((int)p.size() > best_len && remaining.compare(0, p.size(), p) == 0) {
+                    best_len = (int)p.size();
+                    best_id = i;
+                }
+            }
+            if (best_id < 0) {
+                // Skip unknown character
+                size_t skip = 1;
+                if ((unsigned char)remaining[0] >= 0x80) {
+                    // UTF-8 multi-byte
+                    if ((unsigned char)remaining[0] >= 0xF0) skip = 4;
+                    else if ((unsigned char)remaining[0] >= 0xE0) skip = 3;
+                    else skip = 2;
+                }
+                remaining.erase(0, std::min(skip, remaining.size()));
+            } else {
+                ids.push_back(best_id);
+                remaining.erase(0, best_len);
+            }
+        }
+        return ids;
+    };
+
+    std::vector<std::string> hw_list;
+    for (int i = 0; i < n_hotwords; i++)
+        if (hotwords[i]) hw_list.push_back(hotwords[i]);
+
+    ctx->hotword_boost = boost;
+    ctx->hotword_trie = core_context_bias::build_trie(hw_list, tokenize, boost);
 }
 
 extern "C" float* parakeet_compute_mel(struct parakeet_context* ctx, const float* samples, int n_samples,

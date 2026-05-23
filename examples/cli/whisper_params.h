@@ -146,6 +146,8 @@ struct whisper_params {
     // dominate the boundary token run (avoids over-slicing).
     int lcs_min_length = 1;
     std::string parakeet_decoder; // "tdt" (default), "ctc" — selects parakeet decode head
+    std::string hotwords;         // comma-separated hotword list (PLAN #98)
+    float hotwords_boost = 2.0f;  // per-token log-prob boost for hotword prefix matches
     std::string lid_backend;
     std::string lid_model;
     // Post-ASR text LID: when set, after transcription completes, run
