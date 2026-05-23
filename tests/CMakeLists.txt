@@ -619,6 +619,27 @@ target_link_libraries(test-issue-79 PRIVATE
 #Note : No add_test() here as it requires a large VibeVoice GGUF model path as an argument.
 #Usage :./ bin / test - issue - 79 / path / to / vibevoice - asr - 7b.gguf
 
+# ─── test-session-setters — Catch2 unit tests for every generation-control
+# session setter declared in include/crispasr.h (PLAN §88 parity sweep).
+#
+# Verifies the null-handle guard (return -1) for all 19 setters.
+# No model loaded — pure null-arg path, sub-millisecond.
+add_executable(test-session-setters
+    test-session-setters.cpp
+)
+target_include_directories(test-session-setters PRIVATE
+    ${PROJECT_SOURCE_DIR}/include
+    ${PROJECT_SOURCE_DIR}/ggml/include
+)
+target_link_libraries(test-session-setters PRIVATE
+    Catch2::Catch2WithMain
+    crispasr
+)
+catch_discover_tests(test-session-setters
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit"
+)
+
 # ─── test - registry — Catch2 unit tests for crispasr_model_registry
 #
 #Verifies registry lookup by backend name, reverse lookup by filename,
