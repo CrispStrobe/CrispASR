@@ -252,6 +252,42 @@ curl -L -o canary-ctc-aligner.gguf \
 
 Alignment granularity is one encoder frame (~80 ms).
 
+### Language-specific wav2vec2 aligners (WhisperX parity)
+
+For non-English audio, use a language-matched wav2vec2 CTC aligner
+instead of the multilingual canary-ctc model. These are the same models
+WhisperX uses for word alignment, converted to GGUF and available via
+auto-download:
+
+| Alias | Language | Source model |
+|---|---|---|
+| `-am wav2vec2-aligner` | English (default) | wav2vec2-xlsr-en |
+| `-am wav2vec2-aligner-de` | German | jonatasgrosman/xlsr-53-german |
+| `-am wav2vec2-aligner-fr` | French | jonatasgrosman/xlsr-53-french |
+| `-am wav2vec2-aligner-es` | Spanish | jonatasgrosman/xlsr-53-spanish |
+| `-am wav2vec2-aligner-it` | Italian | jonatasgrosman/xlsr-53-italian |
+| `-am wav2vec2-aligner-ja` | Japanese | jonatasgrosman/xlsr-53-japanese |
+| `-am wav2vec2-aligner-zh` | Chinese | jonatasgrosman/xlsr-53-chinese-zh-cn |
+| `-am wav2vec2-aligner-nl` | Dutch | jonatasgrosman/xlsr-53-dutch |
+| `-am wav2vec2-aligner-pt` | Portuguese | jonatasgrosman/xlsr-53-portuguese |
+| `-am wav2vec2-aligner-ar` | Arabic | jonatasgrosman/xlsr-53-arabic |
+| `-am wav2vec2-aligner-uk` | Ukrainian | Yehor/xls-r-300m-uk-with-small-lm |
+| `-am wav2vec2-aligner-cs` | Czech | comodoro/xls-r-300m-cs-250 |
+
+```bash
+# Japanese word timestamps with the JA-specific aligner:
+crispasr --backend cohere -m cohere.gguf -f japanese.wav \
+    -am wav2vec2-aligner-ja --auto-download -osrt -ml 1
+
+# French with Voxtral:
+crispasr --backend voxtral -m auto -f french.wav \
+    -am wav2vec2-aligner-fr --auto-download -osrt -ml 1
+```
+
+All models are Q4_K-quantized (~200 MB each) and auto-download on first
+use. The canary-ctc aligner remains the default (`-am auto`) because
+it covers 25+ languages in one model.
+
 For subtitle output, prefer adding `--vad --split-on-punct`:
 
 ```bash

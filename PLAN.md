@@ -45,7 +45,7 @@ test-all-backends.py passes 18/18 transcribe + 51/54 feature tests (3 stream ski
 | **LOW** | [#97 More Parakeet variants](#97-more-parakeet-variants) | Small per-variant | Converter-only for TDT / TDT+CTC variants (v2, tdt-1.1b, tdt_ctc-{110m,1.1b}); RNNT / realtime-EOU / unified-en deferred (need new decoder code or arch survey). |
 | **DONE** | [#98 Hotwords / contextual biasing](#98-hotwords--contextual-biasing) | Phased | **Phase A DONE:** CTC-WS Aho-Corasick trie in `core/asr_context_bias.h`, wired into parakeet CTC + TDT decode. `--hotwords` / `--hotwords-file` / `--hotwords-boost` CLI. 13 unit tests + 4 paraformer live tests. **Phase B DONE:** prompt injection for qwen3-asr + voxtral. Phase C (TDT joint-net boost) deferred. |
 | **LOW** | [#106 TEN-VAD](#106-ten-vad--low-latency-cross-platform-vad) | Small | Technically feasible VAD backend: C-compatible, 16 kHz / 10-16 ms frames, prebuilt libs + ONNX path. License is the gate: Apache 2.0 plus extra no-compete / own-app-only conditions from Agora. |
-| **MEDIUM** | [#105 WhisperX word alignment models](#105-whisperx-word-alignment-models-wav2vec2-ctc-zoo) | Phased | WhisperX ships a language-keyed wav2vec2 CTC aligner zoo. CrispASR currently covers canary/qwen3 CTC aligners only; add a generic wav2vec2-aligner family + registry aliases for the common HF/torchaudio defaults. |
+| **DONE** | [#105 WhisperX word alignment models](#105-whisperx-word-alignment-models-wav2vec2-ctc-zoo) | Phased | **DONE 2026-05-23.** All 10 WhisperX common languages (fr/es/it/ja/zh/nl/uk/pt/ar/cs) converted, uploaded to `cstr/*-GGUF`, registry aliases wired. Only benchmarking + docs remain. |
 
 **Recently completed** (full write-ups in HISTORY.md): **#90 Session beam_size all backends → HISTORY 2026-05-23** (qwen3-asr, granite, voxtral wired via `core_beam_decode::run_with_probs`; commit `0c24178e`). **#74 Feature-matrix uplift round 2 → HISTORY 2026-05-23** (74a chatterbox lang routing, 74b cap regression tests, 74c qwen3-tts base voice-cloning cap, 74d matrix regen; commit `b848152a`). **#111 TTS `--seed` parity → HISTORY 2026-05-23** (qwen3-tts, chatterbox, vibevoice realtime/base all show same-seed reproducibility and different-seed divergence on the local backup models; qwen3 env precedence fixed so CLI/request seed wins; IndexTTS stays effectively deterministic on the tested prompt/reference). **#99 funasr MLT-Nano hallucination fix → HISTORY 2026-05-21** (root cause: `use_low_frame_rate` hardcoded true in C++, but MLT-Nano's upstream config omits it (default false) — only 23/183 adaptor frames were spliced into the LLM prompt, truncating 87% of audio context; fix: converter reads the flag from config.yaml into a GGUF KV, runtime reads it at load time; also fixed `ada_n_heads` 16→8 in converter; GGUFs re-uploaded to `cstr/funasr-{nano,mlt-nano}-GGUF`). **SenseVoiceSmall → HISTORY 2026-05-20** (encoder-only multi-task ASR: transcript + LID + emotion + audio-event in one CTC pass; 50+ langs; 9.8-21.8× realtime on M1 Metal; reuses the SANM block helper from the funasr port unchanged; `cstr/sensevoice-small-GGUF` 0.47 GB F16, wired into `-m auto`). **Fun-ASR-Nano + MLT-Nano → HISTORY 2026-05-20** (full LLM-decoder runtime — 70-block SANM encoder + 2-block Transformer adaptor + Qwen3-0.6B AR decode; 77/77 PASS byte-identical on Chinese + English diffs; ~9× realtime on M1 Metal with FA-default-on; both GGUFs at `cstr/funasr-{nano,mlt-nano}-GGUF`). **#57 chatterbox native voice clone → §82** (six-commit sprint shipping all four upstream cond extractors — VoiceEncoder LSTM, S3Tokenizer V2, CAMPPlus, 24 kHz Matcha mel — plus a Kaiser-windowed sinc resampler and atomic 5-cond install in `chatterbox_set_voice_from_wav`'s `.wav` branch; `--voice ref_24k.wav` produces real cloned speech without any python). **#69 + #72 + #73 cap-honesty + KV/layer offload knobs → §79** (14-commit session shipping `CRISPASR_KV_QUANT_K/_V` + `KV_ON_CPU` on 14 backends, `N_GPU_LAYERS` on 10 backends, gemma4/mimo GPU-residency 2.2x / 22 % faster, plus cap-honesty cleanup on parakeet/glm-asr/qwen3/gemma4/omniasr). **vibevoice #69a follow-up → §79b** (mode-aware `tts_lm.layers.` / `lm.layers.` prefix predicate). #78 Chatterbox vocoder → §78. #11 WebSocket server → §76, #63 Feature matrix parity → §72, #59 binding parity → §73, gemma4 #49 + Docker #31 → §74, tests + KV Q8_0 + cleanup → §75. Earlier: #5→§63, #16→§55, #51→§56, #51b→§60, #53→§63, #54→§61, #55→§54, #56→§63, #60d→§64.
 
@@ -3791,17 +3791,14 @@ into two cases:
    and C-ABI path so `-am` can dispatch beyond canary/qwen3.
 2. DONE: Add initial aliases for `en` and `de` using the already-hosted
    wav2vec2 GGUFs.
-3. QUEUED: Batch-convert / quantize / upload the remaining WhisperX
-   common languages: `fr`, `es`, `it`, `ja`, `zh`, `nl`, `uk`, `pt`,
-   `ar`, `cs` via `tools/wav2vec2-aligner-queue.py`.
-4. Decide per model whether it lands as a native GGUF aligner or as a
-   converter-backed checkpoint, depending on whether the upstream source
-   is a torchaudio bundle or a HF checkpoint.
-5. Benchmark the new aligners against `canary-ctc-aligner.gguf` on the
-   same mixed clean/noisy alignment set we already use for word
-   timestamps.
-6. Document which WhisperX aligner models are supported natively, which
-   ones need conversion, and which ones are intentionally skipped.
+3. DONE: All 10 WhisperX common languages converted, quantized, and
+   uploaded to `cstr/*-GGUF` HF repos: `fr`, `es`, `it`, `ja`, `zh`,
+   `nl`, `uk`, `pt`, `ar`, `cs`. Registry entries and auto-download
+   wired. Verified 2026-05-23.
+4. DONE: All models are native HF wav2vec2 checkpoints converted via
+   `models/convert-wav2vec2-to-gguf.py`. Torchaudio bundles not needed.
+5. TODO: Benchmark the new aligners against `canary-ctc-aligner.gguf`.
+6. TODO: Document in docs/cli.md which `-am` aliases are available.
 
 ### Trigger
 
