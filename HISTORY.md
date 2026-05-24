@@ -6304,3 +6304,70 @@ C++ dump via `VIBEVOICE_TTS_DUMP=<dir>` writes `tts_voice_embeds.bin`.
 | Python | ✓ | ✓ (inherited) | via C ABI |
 | Dart/Flutter | ✓ | ✓ (inherited) | via C ABI |
 | Server `/v1/audio/speech` | ✓ | ✓ | via CLI adapter |
+
+### §92 — issue #81 Phase 1 #06: FA per-head mask lands on CUDA (2026-05-24)
+
+`tools/upstream-prs/06-cuda-fa-perhead-mask.md` implemented and
+validated on feature branch `issue81-fa-perhead-mask`
+(commit `60bc4294`, +87 LOC across 4 files). Closes the remaining
+72 CPU splits per chunk on parakeet / canary / FastConformer-CTC —
+the dominant CPU-fallback cost left after `d758fe69` cleared the
+UNARY splits (see PERFORMANCE.md "Phase 1 update (2026-05-23) —
+fused siglu/norm_affine A1000 verdict").
+
+**The patch:**
+
+| file | LOC | what |
+|---|---:|---|
+| `ggml/CMakeLists.txt` | 3 | `GGML_CUDA_CRISPASR_FA_PERHEAD_MASK` option (default OFF) |
+| `ggml/src/ggml-cuda/CMakeLists.txt` | 4 | wire option to `add_compile_definitions` |
+| `ggml/src/ggml-cuda/fattn-mma-f16.cuh` | 14 | consume `nb32` in `mask_h` offset at both kbc loop sites |
+| `ggml/src/ggml-cuda/fattn.cu` | 66 | gate relaxation: VEC/TILE/WMMA returns fall through to MMA-F16 for per-head masks; safety net + `gqa_ratio > 1` hard gate |
+
+The MMA-F16 kernel signature **already** took `nb32` as a parameter
+(the launcher plumbed all six mask dims/strides through) but the
+kernel body only offset by sequence (`nb33 * (sequence % ne33)`).
+The patch adds the missing per-head term `nb32 * (zt_Q % ne32)`.
+When `ne32 == 1` (broadcast mask — upstream's only supported case)
+`zt_Q % 1 == 0` and the result is byte-identical, so default-OFF
+builds stay bit-equal to upstream. Build with
+`cmake -DGGML_CUDA_CRISPASR_FA_PERHEAD_MASK=ON` to enable.
+
+**Validation (parakeet-tdt-0.6b-v3 q8_0 on A1000, sm_86, driver 596.36):**
+
+| check | OFF (`dll-postsiglu`) | ON (`dll-faon`) | verdict |
+|---|---|---|---|
+| JFK transcript | "And so, my fellow Americans, ask Not what your country can do for you. Ask what you can do for your country." | byte-identical | ✓ |
+| sched splits per chunk | 49 (24 CPU + 25 CUDA0) | **1 (0 CPU + 1 CUDA0)** | ✓ |
+| `FLASH_ATTN_EXT` on CPU | 24/chunk | **0/chunk** | ✓ |
+| short-clip mean (11 s JFK, 9 calls) | 2.526 s | **1.587 s** (−37 %) | ✓ |
+| long-clip mean (60 s tiled, 150 calls, cold-GPU) | 12.450 s | 12.204 s (−2 %) | partial — see caveat |
+
+**Cold-GPU caveat:** the long-clip A/B ran with the GPU stuck in
+P8 (315/405 MHz) for both runs — both numbers are ~4.6× slower
+than the postsiglu warm baseline (2.7 s mean). The
+probe-then-bench two-process warmup pattern doesn't keep WDDM in
+P0 across the second script's Python startup + model mmap + JIT
+prewarm phase. Short-clip is less sensitive because per-call
+overhead dominates; long-clip shows the cold-clock effect. The
+architectural and correctness signals are unambiguous. Warm-GPU
+wallclock target: ~2.4 s long-clip mean / ~150 ms p50 / RTx ~24×.
+
+**Deferred to follow-up PRs:**
+
+- `ncols2 > 1` GQA-folded mask case — current patch is correct
+  for `ncols2 == 1` only; safety gate at `gqa_ratio > 1` falls
+  back to CPU (== upstream pre-patch behaviour, no regression).
+  No current CrispASR model has GQA-conformer attention with
+  per-head masks.
+- VEC / TILE / WMMA-F16 kernel patches — these still don't
+  consume `nb32`; per-head masks force the MMA-F16 path or NONE.
+- `test-backend-ops` validation on sm_75 / sm_86 / sm_89 — only
+  `ggml/src/` is vendored in CrispASR (not `ggml/tests/`), so the
+  canonical FA backend test will run as part of the upstream
+  `ggml-org/llama.cpp` PR step rather than locally.
+- Upstream PR to `ggml-org/llama.cpp` — gated on the items above.
+
+Sidecars: `bench-issue81/results/wer-{off,on}.json` (correctness),
+`bench-issue81/results/a1000-fa-{off,on}.json` (wallclock cold-GPU),
+`bench-issue81/sched-debug-fa{off,on}.log` (split-count A/B).

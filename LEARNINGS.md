@@ -7018,3 +7018,126 @@ Likely next steps (none cheap):
   raw host write.
 
 **Bug B remains open.** Workaround is still shipping.
+
+---
+
+## FA per-head additive mask CUDA kernel — what the upstream signature already gave us (issue #81 #06, May 2026)
+
+### Read the kernel signature before estimating patch size
+
+The first design pass on the per-head FA mask patch (in the now-
+retired `issue81-phase1-uar-wip` branch) estimated ~300-500 LOC
+across 4-6 .cuh files — touching the launcher, the kernel-body
+mask load, the tile_mask broadcast, and possibly the
+quantization fast path. The actual minimal patch is **4 LOC of
+kernel-body code** (+ ~10 LOC of dispatch gate + CMake/CDef
+wiring) for a total of ~45 LOC.
+
+The difference is that the MMA-F16 kernel signature
+(`flash_attn_ext_f16` in `fattn-mma-f16.cuh`) **already took all
+six mask dims/strides as parameters** — the launcher plumbed
+`nb31`, `nb32`, `nb33`, `ne31`, `ne32`, `ne33` through. The
+kernel body just never offset by `nb32`:
+
+```cuda
+// before:
+const half * mask_h = ncols2 == 1 && !mask ? nullptr :
+    (const half *) (mask + nb33*(sequence % ne33));
+// after (gated by GGML_CUDA_CRISPASR_FA_PERHEAD_MASK):
+const half * mask_h = ncols2 == 1 && !mask ? nullptr :
+    (const half *) (mask + nb33*(sequence % ne33)
+                         + nb32*(zt_Q     % ne32));
+```
+
+For `ne32 == 1` (broadcast mask — upstream's only supported case)
+`zt_Q % 1 == 0` and the new term is zero, so default-OFF builds
+are bit-identical to upstream.
+
+**Lesson**: when sizing a kernel patch, grep for the strides
+you'll need in the kernel signature first. If they're already
+plumbed but unused (compiler probably already warns), the patch
+is a one-liner inside the kernel body; if they aren't, you have
+to widen the launcher too. The original 300-500 LOC estimate
+predated reading the signature carefully.
+
+### One CPU FA op per layer forces ≈2 scheduler splits, not 1
+
+Sched-debug A/B on the parakeet short clip (3 chunks, 24 layers,
+q8_0, GGML_SCHED_DEBUG=2):
+
+| | total splits | CPU splits | CUDA0 splits | `FLASH_ATTN_EXT` total |
+|---|---:|---:|---:|---:|
+| FA on CPU (pre-patch) | 147 | 72 | 75 | 72 |
+| FA on CUDA0 (post-patch) | 3 | 0 | 3 | 72 (all CUDA0) |
+
+Pre-patch: 24 FA ops/chunk × 3 chunks = 72 CPU FLASH_ATTN nodes.
+The *splits* they force are ~49 per chunk (147 / 3), not 24 —
+each CPU FA breaks the graph into a CPU split for the FA itself
+plus a CUDA0 split for the next layer's GPU work, and the inputs
+to the FA (KQV proj outputs straddling the boundary) often spawn
+their own splits. Post-patch: a single CUDA0 split per chunk
+swallows the whole encoder pass.
+
+**Lesson**: when planning a "move op X from CPU to CUDA" patch,
+the wallclock win comes from eliminating *the splits the CPU op
+forced around itself*, not just from running op X faster. Count
+splits, not ops, when estimating impact. The split-count
+difference (147 → 3) is also the cleanest correctness signal —
+if it doesn't drop near 1-per-chunk after the patch, the
+dispatch gate didn't relax the way you thought it did.
+
+### Per-tile mask offset is only correct for ncols2 == 1
+
+The clean 4-LOC mask offset above is mathematically correct when
+`ncols2 == 1` — one Q head per MMA tile. For `ncols2 > 1` (the
+GQA-folded path: `gqa_ratio > 1` and the launcher chose to fold
+multiple Q heads into one tile), the same expression reads
+head `zt_Q`'s mask and silently broadcasts it across the
+`ncols2` heads in the tile — **wrong outputs, no crash**.
+
+The fix-of-the-fix is a hard gate at dispatch (in `fattn.cu`):
+```cpp
+const bool mask_is_per_head = (mask && mask->ne[2] != 1);
+if (mask_is_per_head && gqa_ratio > 1) {
+    return BEST_FATTN_KERNEL_NONE;  // CPU fallback, no regression
+}
+```
+
+No current CrispASR model has both per-head masks *and*
+`gqa_ratio > 1` (parakeet / canary / FastConformer-CTC are all
+`gqa_ratio == 1`), so this gate is a no-op for the workloads we
+care about. But if a GQA-conformer ever lands, the gate prevents
+silent corruption — caller falls back to CPU FA, == upstream
+pre-patch behaviour.
+
+**Lesson**: when you patch a per-tile kernel offset under a
+broadcast assumption, audit the broadcast cases (`ncols2` here)
+and add a dispatch-level gate for the cases your offset doesn't
+cover. Silently-wrong-result kernels are the worst class of bug;
+crashing is a feature, not a bug, in patches gated default-OFF.
+
+### WDDM warmup doesn't survive a Python process boundary
+
+The published `dll-postsiglu` warmup protocol —
+`probe_postsiglu_leak.py <dll> 200` then
+`benchmark_asr_engines.py …` — keeps the A1000 warm only if the
+two scripts run back-to-back **with a previously hot GPU**. In a
+fresh shell on a cold A1000, the second script's Python startup
++ model mmap + JIT prewarm pass (~3-5 s) is enough idle time for
+WDDM to drop the GPU from P0 back to P8. Our FA per-head A/B
+captured both runs at P8 / 315 MHz the whole time, suppressing
+the expected 10-15 % wallclock win to 2 %.
+
+The clean fix is a single-process warmup driver: put the
+keepalive loop and the bench in **one** process so there's no
+idle gap between them. The probe-then-bench pattern works only
+when the GPU is *already* warm (e.g. when an earlier bench in
+the same shell session just finished pushing work). Documented
+above at "WDDM idle-clock-state hysteresis on consumer/laptop
+NVIDIA SKUs (May 2026)".
+
+**Lesson**: a warmup procedure that crosses a process boundary
+on Windows + laptop NVIDIA is racing the WDDM idle timer. Treat
+the cross-process probe-then-bench pattern as "works iff GPU was
+already warm", and use a single-process keepalive when starting
+cold.

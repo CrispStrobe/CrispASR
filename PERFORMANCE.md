@@ -1131,6 +1131,56 @@ JSON sidecars (clean, WDDM-warm):
 reference): `a1000-{post-cg,postsiglu}-q8_0-driver596-10r.json`.
 New sched-debug log: `bench-issue81/sched-debug-postsiglu.log`.
 
+#### Phase 1 update (2026-05-24) — FA per-head mask lands (#06)
+
+Per-head additive mask in `FLASH_ATTN_EXT` now runs on CUDA
+(MMA-F16 path) behind `GGML_CUDA_CRISPASR_FA_PERHEAD_MASK=ON`.
+Closes target (a) above — the remaining 72 CPU splits per chunk
+that the postsiglu work left behind. Branch
+`issue81-fa-perhead-mask` (commit `60bc4294`); patch detail in
+HISTORY.md §92 and `tools/upstream-prs/06-cuda-fa-perhead-mask.md`.
+
+**Structural impact (sched-debug, short clip / 3 chunks):**
+
+| count | postsiglu (FA OFF, May 23) | FA ON (May 24) |
+|---|---:|---:|
+| total SPLIT lines | 147 | **3** |
+| CPU splits | 72 | **0** |
+| CUDA0 splits | 75 | 3 |
+| `FLASH_ATTN_EXT` on CPU | 72 | **0** |
+| `FLASH_ATTN_EXT` total nodes | 72 | 72 (all CUDA0) |
+
+Each chunk now runs as a single CUDA0 split — no per-layer
+CPU↔GPU round trip, no per-FA scheduler break. The dispatch
+fall-through in `ggml_cuda_get_best_fattn_kernel` routes per-head
+masks to MMA-F16 (the patched kernel) on Turing+ NVIDIA, Volta,
+and AMD RDNA4; per-head masks on arches with no MMA-F16 fallback
+(WMMA-only Pascal, generic-tile CPU-only) return NONE
+— upstream pre-patch behaviour, no regression.
+
+**Wallclock A/B (this session — GPU stuck in P8 / 315 MHz both
+runs; treat as cold-GPU lower bound, not the warm-GPU target):**
+
+| audio | OFF (`dll-postsiglu`) | ON (`dll-faon`) | delta |
+|---|---:|---:|---:|
+| short clip (11 s JFK, 9 calls) | 2.526 s / 490.1 ms p50 | **1.587 s / 368.1 ms p50** | −37 % mean, −25 % p50 |
+| long clip (60 s tiled, 150 calls) | 12.450 s / 500.3 ms p50 | 12.204 s / 467.7 ms p50 | −2 % mean, −6.5 % p50 |
+
+The short-clip 37 % win and the structural 0-CPU-split result
+are unambiguous. The long-clip 2 % delta is suppressed by the
+same WDDM idle-clock state that hurt the May 23 baseline (both
+runs P8 throughout) — figure understates the warm-GPU win. The
+`probe_postsiglu_leak.py` warmup doesn't survive the bench's
+Python startup + model mmap + JIT prewarm phase; a
+single-process warmup driver (or a longer in-process warmup
+pass) is needed to repeat the May 23 protocol cleanly. Target
+on warm GPU: ~2.4 s long-clip mean / ~150 ms p50 / RTx ~24×.
+
+JSON sidecars: `bench-issue81/results/wer-{off,on}.json`
+(correctness), `bench-issue81/results/a1000-fa-{off,on}.json`
+(wallclock cold-GPU), `bench-issue81/sched-debug-fa{off,on}.log`
+(split-count A/B).
+
 ---
 
 ## Reproduce
