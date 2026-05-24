@@ -620,9 +620,10 @@ extern "C" struct chatterbox_s3gen_context* chatterbox_s3gen_init_from_file(cons
         // [cmd_buf_last waitUntilCompleted] which does NOT invalidate the
         // GPU's view of a shared-storage Metal buffer that was overwritten
         // by a CPU memcpy between consecutive command-buffer submissions.
-        // Verified no regression on CPU-residency (default production) smoke
-        // (rms=5.139 in both configurations).
-        c->sched = ggml_backend_sched_new(backends, nullptr, n_be, 32768, true, false);
+        // Gated on `c->unet_on_gpu` so CPU residency (production default)
+        // keeps the lower-overhead parallel=false path (Bug B is M1-Metal
+        // specific; CPU residency was never broken).
+        c->sched = ggml_backend_sched_new(backends, nullptr, n_be, 32768, c->unet_on_gpu, false);
         c->compute_meta.resize(ggml_tensor_overhead() * 32768 + ggml_graph_overhead_custom(32768, false));
     }
 
