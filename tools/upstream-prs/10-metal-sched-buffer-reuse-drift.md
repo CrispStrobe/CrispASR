@@ -74,43 +74,80 @@ that no single op kernel is the source:
    one specific tensor changes the allocator's reuse decisions
    downstream, and the new pattern produces *more* drift, not less.
 
+4. **`GGML_NO_INPLACE=1` global knob** (added experimentally to
+   `ggml_gallocr_allocate_node` to skip the in-place reuse path).
+   Result: `cos_min = -0.97` (sign-flipped garbage), worse than
+   baseline. Adding `GGML_METAL_CONCURRENCY_DISABLE=1` on top did
+   nothing. So a clean "no in-place reuse" knob doesn't work as a
+   drop-in fix — some downstream code expects in-place semantics in
+   ways we couldn't trace within the bisect session.
+
+5. **`kernel_norm` audit.** `kernel_norm_fuse_impl` uses `float sumf`
+   accumulators end-to-end, F32 `simd_shuffle_xor` reduction, F32
+   shmem. No silent downcast. Already has prior CrispASR patches for
+   cross-simdgroup reduction (separate issue) and serial-reduction
+   workaround. Not the source.
+
+6. **`kernel_flash_attn_ext` audit.** The F32 K/V family
+   (`FA_TYPES_F32`) keeps Q as `half` in shared memory (line 6430:
+   `sq4[j*DK4 + i] = (q4_t) q4[i]` where `q4_t = half4`). Tried
+   patching `FA_TYPES_F32`'s Q triple to
+   `float, float4, simdgroup_float8x8` — `cos_min` went from 0.940
+   to **0.860** (worse). So the F16 Q downcast IS happening, but
+   "fixing" it changes the numerical ordering in a way that doesn't
+   bit-match CPU either.
+
 ## What this means
 
-The chatterbox UNet output is correct with default GPU compute except
-for a path-dependent compounding effect that is sensitive to which
-buffers `ggml_gallocr` chooses to reuse in-place. There's no single
-buggy op — there's a combination of "approximate enough" GPU op
-outputs whose error trajectory through ~4000 GPU ops depends on the
-allocator's reuse decisions in a non-monotonic way.
+The chatterbox UNet output on Metal GPU drifts in a path-dependent
+way that depends on the `ggml_gallocr` buffer reuse pattern. No
+single op kernel is "the" bug. Six independent fix attempts
+(bit-match mul_mat, all 9 of the working PIN bisect ops to CPU,
+set_output on 1 vs 14 vs 62 tensors, GGML_NO_INPLACE,
+GGML_METAL_CONCURRENCY_DISABLE, F32 Q in flash_attn) either fail
+outright or work in some calling contexts and fail in others.
 
-Our production workaround is to load the UNet's weight tensors on the
-CPU backend (via `ggml_backend_sched`'s weight-residency routing) so
-the entire UNet executes on CPU. That's a 0% perf win for us (the
-encoder/vocoder around it stay on GPU). The whole-UNet `set_output`
-approach restores precision at small T but produces NaN at production
-T (see related issue on scheduler NaN at large T with mixed CPU+GPU
-ops).
+The cleanest empirical fix — `set_output` on all 62 UNet sub-block
+intermediates — restores bit-equivalence in the diff-harness call
+context but NaNs in the smoke call context with the *exact same*
+chatterbox model, same UNet graph topology, same CFM solver, same
+seed. The diff-vs-smoke divergence is invariant to: random seed,
+T_mel value, S3-tokenizer involvement, Metal concurrency on/off,
+in-place reuse on/off. Something structural in `ggml-alloc`'s state
+across multi-graph sched invocations differs between the two call
+paths in a way our bisect couldn't isolate.
+
+Our production workaround is to load the UNet's weight tensors on
+the CPU backend (via `ggml_backend_sched`'s weight-residency
+routing) so the entire UNet executes on CPU. That avoids the issue
+entirely — homogeneous backend, no in-place-reuse interaction with
+GPU command scheduling.
 
 ## Investigation pointers
 
-The two ggml entry points we could trace it to:
+The bisect points at `ggml-alloc.c` interaction with the Metal
+scheduler:
 
-- `ggml-alloc.c:622` `ggml_gallocr_allocate_node` — the in-place reuse
-  decision is made per node based on `n_children == 1 && n_views ==
-  0`. The reuse choice depends on traversal order, so adding an output
-  marker can flip cascading reuse decisions downstream.
+- `ggml-alloc.c:622` `ggml_gallocr_allocate_node` — the in-place
+  reuse decision is made per node based on `n_children == 1 &&
+  n_views == 0`. The reuse choice depends on traversal order, so
+  adding an output marker flips cascading reuse decisions
+  downstream. The single-`set_output`-makes-things-WORSE finding
+  confirms this is path-sensitive, not monotonic.
 
-- `ggml-metal/ggml-metal-ops.cpp:159` `ggml_metal_op_concurrency_check`
-  — the mem-range overlap check that adds Metal command-buffer
-  barriers. Looks correct on inspection (SRC/DST overlap detection
-  matches what you'd expect), but worth eyeballing for the case where
-  an op writes to a buffer in-place that was also read by an earlier
-  enqueued-but-not-yet-executed op.
+- `ggml-metal/ggml-metal-ops.cpp:159`
+  `ggml_metal_op_concurrency_check` — the mem-range overlap check
+  that adds Metal command-buffer barriers. Looks correct on
+  inspection. Disabling concurrency entirely
+  (`GGML_METAL_CONCURRENCY_DISABLE=1`) didn't change the drift, so
+  this isn't the source either.
 
 A "disable inplace reuse for graphs marked as F32-precision" knob
 in `ggml-alloc` would let applications opt into bit-equivalent GPU
-output at a memory cost, and would expose this issue for further
-study.
+output at a memory cost, but we tested a naive global no-inplace
+knob and it broke things — apparently some other downstream code
+relies on in-place reuse semantics. A real fix would need to know
+*which* downstream code depends on in-place and audit those.
 
 ## How to reproduce
 
