@@ -292,6 +292,10 @@ constexpr Entry k_registry[] = {
     {"parakeet-rnnt-0.6b", "parakeet-rnnt-0.6b-q4_k.gguf",
      "https://huggingface.co/cstr/parakeet-rnnt-0.6b-GGUF/resolve/main/parakeet-rnnt-0.6b-q4_k.gguf",
      "~447 MB", nullptr, nullptr},
+    // parakeet-rnnt-1.1b — larger standard RNN-Transducer, 42-layer encoder.
+    {"parakeet-rnnt-1.1b", "parakeet-rnnt-1.1b-q4_k.gguf",
+     "https://huggingface.co/cstr/parakeet-rnnt-1.1b-GGUF/resolve/main/parakeet-rnnt-1.1b-q4_k.gguf",
+     "~770 MB", nullptr, nullptr},
     // Qwen3-TTS: the talker LM and the codec live in two separate HF
     // repos. Default download is Q8_0 talker (the LEARNINGS-recommended
     // deployment quant — Q4_K drifts noticeably in strict diffs) paired
