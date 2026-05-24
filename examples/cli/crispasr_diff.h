@@ -95,9 +95,7 @@ struct Report {
     // silently scored as cos=1.000 max_abs=0 because IEEE-754 NaN comparisons
     // all return false. PLAN #83 r9 (May 2026): caught a Metal allocator bug
     // that was hidden behind these bogus PASSes.
-    bool is_pass(float cos_threshold = 0.999f) const {
-        return found && n_nonfinite == 0 && cos_min >= cos_threshold;
-    }
+    bool is_pass(float cos_threshold = 0.999f) const { return found && n_nonfinite == 0 && cos_min >= cos_threshold; }
 };
 
 // Ground-truth archive loaded from a crispasr reference GGUF.
