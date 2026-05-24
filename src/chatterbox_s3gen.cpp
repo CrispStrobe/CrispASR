@@ -1702,11 +1702,20 @@ static ggml_cgraph* build_graph_unet1d(chatterbox_s3gen_context* c, int T_mel) {
 
     // ---- Down blocks (1 block) ----
     const bool dump_unet = std::getenv("CRISPASR_S3GEN_DUMP_UNET") != nullptr;
+    // PLAN #83 r9 bisect: CRISPASR_S3GEN_UNET_PRESERVE_INTERMEDIATES=1
+    // forces ggml_set_output on per-block intermediates. Disables
+    // ggml-alloc in-place buffer reuse for those tensors.
+    // PRESERVE_INTERMEDIATES alone marks only block outputs (~14
+    // tensors). DUMP_UNET marks every per-resnet/transformer dump
+    // point (62) for the diff-bisect.
+    const bool preserve_intermediates = std::getenv("CRISPASR_S3GEN_UNET_PRESERVE_INTERMEDIATES") != nullptr;
+    const bool mark_output_all = dump_unet;  // every dump point
+    const bool mark_output_blocks = preserve_intermediates;  // block outputs only
     ggml_tensor* hidden = nullptr;
     {
         x = causal_resnet_block(ctx0, x, t_emb, c, "s3.fd.db.0.0", mask);
         ggml_set_name(x, "dump_db_resnet");
-        if (dump_unet) ggml_set_output(x);
+        if (mark_output_all) ggml_set_output(x);
         // 4 transformer blocks
         ggml_tensor* xt = ggml_cont(ctx0, ggml_transpose(ctx0, x));
         for (int j = 0; j < 4; j++) {
@@ -1716,7 +1725,7 @@ static ggml_cgraph* build_graph_unet1d(chatterbox_s3gen_context* c, int T_mel) {
             char dump_name[32];
             std::snprintf(dump_name, sizeof(dump_name), "dump_db_tb_%d", j);
             ggml_set_name(x, dump_name);
-            if (dump_unet) ggml_set_output(x);
+            if (mark_output_all) ggml_set_output(x);
         }
         hidden = x; // save for skip connection
         // Downsample: CausalConv1d(k=3) — halves T
@@ -1725,7 +1734,7 @@ static ggml_cgraph* build_graph_unet1d(chatterbox_s3gen_context* c, int T_mel) {
         if (ds_w)
             x = causal_conv1d(ctx0, x, ds_w, ds_b);
         ggml_set_name(x, "dump_db_out");
-        if (dump_unet) ggml_set_output(x);
+        if (mark_output_all || mark_output_blocks) ggml_set_output(x);
         // Note: the Python code uses Downsample1D which actually halves T
         // For CausalConv1d with stride=1, T stays the same
         // The actual downsample uses mask[:, :, ::2] to halve
@@ -1740,7 +1749,7 @@ static ggml_cgraph* build_graph_unet1d(chatterbox_s3gen_context* c, int T_mel) {
         char dump_resnet[32];
         std::snprintf(dump_resnet, sizeof(dump_resnet), "dump_mb_%d_resnet", i);
         ggml_set_name(x, dump_resnet);
-        if (dump_unet) ggml_set_output(x);
+        if (mark_output_all) ggml_set_output(x);
 
         for (int j = 0; j < 4; j++) {
             char tb_prefix[48];
@@ -1750,7 +1759,7 @@ static ggml_cgraph* build_graph_unet1d(chatterbox_s3gen_context* c, int T_mel) {
         char dump_block[32];
         std::snprintf(dump_block, sizeof(dump_block), "dump_mb_%d_out", i);
         ggml_set_name(x, dump_block);
-        if (dump_unet) ggml_set_output(x);
+        if (mark_output_all || mark_output_blocks) ggml_set_output(x);
     }
 
     // ---- Up blocks (1 block) ----
