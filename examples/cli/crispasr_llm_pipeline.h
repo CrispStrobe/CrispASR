@@ -403,17 +403,28 @@ std::vector<crispasr_segment> crispasr_run_voxtral_style_pipeline_streamed(typen
     }
 
     // ---- KV cache + decode budget proportional to audio duration ------------
-    // The single-chunk variant defaults to 512 new tokens, which is plenty
-    // for ≤30 s of Japanese / English speech. The streamed variant decodes
-    // all chunks in one AR pass — for 300 s of speech you need ~2 000
-    // tokens; for 600 s, ~4 000. Default 512 caps the decode mid-sentence
-    // and the user sees a truncated transcript. We scale the default with
-    // audio duration at ~8 tokens / second (generous; Japanese verbatim
-    // dictation runs ~5-6 tok/s, English ~4 tok/s). The user's explicit
-    // `--max-new-tokens N` still overrides if set.
+    // `whisper_params::max_new_tokens` defaults to 512 (whisper_params.h:134),
+    // plenty for ≤30 s of speech. The streamed variant decodes all chunks in
+    // one AR pass — 300 s needs ~2000 tokens, 600 s ~4000. If we honoured the
+    // 512 default verbatim the long-form transcript would cap mid-sentence
+    // (empirically confirmed on the 300 s lenhone clip: output capped at
+    // exactly 512 tokens at "...今年は4日が今年と言えば20" instead of running
+    // to the end).
+    //
+    // Heuristic: take the larger of the user-provided value and a
+    // duration-scaled budget at ~8 tokens / second (generous; Japanese
+    // verbatim runs ~5-6 tok/s, English ~4 tok/s). A user who really wants
+    // to cap below the scaled budget will need to bump the threshold via
+    // a future explicit flag — calling out the rare case in the message
+    // below if we extend the default. The KV cache is sized to match.
     const int audio_seconds = (n_samples + kSampleRate - 1) / kSampleRate;
-    const int max_new_default = std::max(512, audio_seconds * 8);
-    const int max_new = params.max_new_tokens > 0 ? params.max_new_tokens : max_new_default;
+    const int max_new_scaled = std::max(512, audio_seconds * 8);
+    const int max_new = std::max(params.max_new_tokens, max_new_scaled);
+    if (!params.no_prints && max_new > params.max_new_tokens) {
+        fprintf(stderr,
+                "crispasr[%s][streamed]: scaling max_new_tokens %d -> %d for %d s of audio\n",
+                BE, params.max_new_tokens, max_new, audio_seconds);
+    }
     const int kv_budget = T_prompt + max_new + 64;
     if (!Ops::kv_init(ctx, kv_budget)) {
         free(text_embeds);
