@@ -3,8 +3,8 @@
   "version": 1,
   "fixtures": {
     "repo": "cstr/crispasr-regression-fixtures",
-    "revision": "99f005d59a0f7f4915dea5faea4d2e17b2120268",
-    "_note": "Pinned. To re-bake, run `tools/kaggle-regression.py` with MODE=rebake UPLOAD=1; the new commit SHA gets pasted here as a reviewable diff."
+    "revision": "b61b03014bc99ecce18ac8f99988d5110c83f2d2",
+    "_note": "Pinned. To re-bake, run `tools/kaggle-regression.py` with MODE=rebake UPLOAD=1; the new commit SHA gets pasted here as a reviewable diff. Previous: 99f005d59a0f7f4915dea5faea4d2e17b2120268 (2026-05-17). Bumped 2026-05-25 after Kaggle rebake v13 published 9 ref archives — adds parakeet-tdt-1.1b, parakeet-tdt_ctc-1.1b, parakeet-rnnt-0.6b, parakeet-rnnt-1.1b (all NEW from handover-prompts/extend-coverage-via-kaggle.md realistic goal); refreshes canary-1b-v2, moonshine-tiny/base, parakeet-tdt-0.6b-{en,ja}."
   },
   "backends": [
     {
