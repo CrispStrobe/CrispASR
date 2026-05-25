@@ -32,13 +32,15 @@ namespace crispasr_chunk_context {
 // Returns false (no context, transcribe the bare slice) when:
 //   - the slices came from VAD. VAD-derived slices are already speech
 //     boundaries and must not pull neighbouring utterances into context.
+//   - the backend does not safely support external overlap-save context.
 //   - chunking is not in effect (effective_chunk_seconds == 0). The
 //     CAP_UNBOUNDED_INPUT default for non-VAD runs.
 //   - there is only one slice (no boundary to mitigate).
 //   - the user has set --chunk-overlap 0 explicitly.
 inline bool should_use_chunk_context(int effective_chunk_seconds, std::size_t n_slices, float chunk_overlap_seconds,
-                                     bool vad_slicing) {
-    return !vad_slicing && effective_chunk_seconds > 0 && n_slices > 1 && chunk_overlap_seconds > 0.0f;
+                                     bool vad_slicing, bool backend_allows_chunk_context = true) {
+    return backend_allows_chunk_context && !vad_slicing && effective_chunk_seconds > 0 && n_slices > 1 &&
+           chunk_overlap_seconds > 0.0f;
 }
 
 } // namespace crispasr_chunk_context
