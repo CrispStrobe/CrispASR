@@ -149,6 +149,50 @@ def step(name: str, **extra) -> None:
     _push_progress_to_hf()
 
 
+# Build-step heartbeat. The bootstrap's line-buffering only covers
+# Python-side stdout/stderr; child subprocess output (cmake/ninja/g++)
+# is pipe-buffered on the child side and gets dropped into Kaggle's
+# log capture in big chunks that may not flush for many minutes. A
+# build that's actually progressing can look identical to a true hang
+# in the kernel UI. Worse, `kaggle kernels output|files|logs` all
+# return empty mid-run, so there's no programmatic way to peek either.
+#
+# Fix: spawn a daemon heartbeat thread for the lifetime of a long
+# subprocess call that emits step("<label>.heartbeat") every 30 s.
+# That advances progress.jsonl + the HF rolling mirror at
+# `cstr/crispasr-kaggle-progress` regardless of compiler chatter, so
+# a real hang is visible within 30 s of going silent.
+import contextlib
+import threading
+
+
+@contextlib.contextmanager
+def build_heartbeat(label: str, interval_s: float = 30.0):
+    """Context manager that emits step("<label>.heartbeat") every
+    interval_s seconds until the block exits. Use around long
+    subprocess.check_call calls (cmake configure/build, pip install
+    of NeMo, etc.) so progress.jsonl + the HF mirror keep advancing
+    even when the child is silent."""
+    t_start = time.time()
+    stop_event = threading.Event()
+
+    def _ticker():
+        # First tick after one interval — the calling site already
+        # printed the command, no need to duplicate at t=0.
+        while not stop_event.wait(interval_s):
+            step(f"{label}.heartbeat",
+                 elapsed_in_block_s=round(time.time() - t_start, 1))
+
+    thread = threading.Thread(target=_ticker, daemon=True,
+                              name=f"hb-{label}")
+    thread.start()
+    try:
+        yield
+    finally:
+        stop_event.set()
+        thread.join(timeout=1.0)
+
+
 step("script.start")
 
 MODE = os.environ.get("CRISPASR_REGRESSION_MODE", "validate")  # or "rebake"
@@ -361,12 +405,15 @@ def preflight_hf() -> None:
 preflight_hf()
 if MODE == "rebake":
     # The heavy ML stack only matters when re-baking. validate mode
-    # never touches NeMo / transformers / torch.
-    subprocess.check_call([
-        sys.executable, "-m", "pip", "install", "--quiet",
-        "nemo_toolkit[asr]", "transformers", "torch", "torchaudio",
-        "numpy", "gguf",
-    ])
+    # never touches NeMo / transformers / torch. Wrap in heartbeat
+    # because `pip install nemo_toolkit[asr]` resolves a 5-10 min
+    # dependency tree with no incremental output.
+    with build_heartbeat("pip.install.rebake_deps"):
+        subprocess.check_call([
+            sys.executable, "-m", "pip", "install", "--quiet",
+            "nemo_toolkit[asr]", "transformers", "torch", "torchaudio",
+            "numpy", "gguf",
+        ])
 
 # ─────────────────────────── cell 3 (code) ───────────────────────────
 step("cell_3_begin")
@@ -429,20 +476,30 @@ if HAS_MOLD:
     for kind in ("EXE", "SHARED", "MODULE"):
         build_flags.append(f"-DCMAKE_{kind}_LINKER_FLAGS=-fuse-ld=mold")
 
-sh(
-    f"cmake -S {REPO} -B {BUILD} -G Ninja "
-    f"-DCMAKE_BUILD_TYPE=Release "
-    f"-DCRISPASR_BUILD_TESTS=OFF "
-    f"-DCRISPASR_BUILD_EXAMPLES=ON "
-    f"-DCRISPASR_BUILD_SERVER=OFF "
-    + " ".join(build_flags)
-)
+with build_heartbeat("cmake.configure"):
+    sh(
+        f"cmake -S {REPO} -B {BUILD} -G Ninja "
+        f"-DCMAKE_BUILD_TYPE=Release "
+        f"-DCRISPASR_BUILD_TESTS=OFF "
+        f"-DCRISPASR_BUILD_EXAMPLES=ON "
+        f"-DCRISPASR_BUILD_SERVER=OFF "
+        + " ".join(build_flags)
+    )
 # CMake target `crispasr-cli` produces bin/crispasr (target/output names
 # intentionally diverge per examples/cli/CMakeLists.txt:12). Asking for
 # target `crispasr` here builds only the library, leaving bin/crispasr
 # absent — exactly what burned the GH regression workflow on its first
 # run (commit 08d1872f) and what just burned this Kaggle one.
-sh(f"cmake --build {BUILD} --target crispasr-cli crispasr-diff -j$(nproc)")
+#
+# `stdbuf -oL -eL` forces line-buffered stdout/stderr in the cmake
+# child so ninja/g++ output reaches Kaggle's log capture promptly. The
+# heartbeat wrapper covers the case where the child legitimately
+# produces no output for minutes (which happens during long template
+# instantiations and link). The previous run hung between two
+# `t5_translate.cpp` warning lines for 90+ min with no log update.
+with build_heartbeat("cmake.build"):
+    sh(f"stdbuf -oL -eL cmake --build {BUILD} "
+       f"--target crispasr-cli crispasr-diff -j$(nproc)")
 
 if HAS_CCACHE:
     print("ccache stats after build:", flush=True)
