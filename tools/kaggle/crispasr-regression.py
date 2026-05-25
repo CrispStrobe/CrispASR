@@ -604,17 +604,37 @@ step("cell_6_begin")
 # ── REBAKE mode: run real Python references, stage new ref.gguf files ────
 def run_rebake() -> list[dict]:
     """Per-backend re-bake. Writes new ref.gguf files into REBAKE_STAGE
-    at the manifest's `fixture_path`. Does NOT upload — that's a
+    at the manifest's `fixture_ref_path`. Does NOT upload — that's a
     separate gated step.
+
+    Ordering: process backends WITHOUT an existing ref archive first.
+    The manifest naturally lists already-done entries near the top
+    (they were added earliest), which means if the kernel runs out of
+    time or disk before reaching the never-done entries we get zero
+    new coverage. Sorting by `bool(fixture_ref_path)` ascending puts
+    new entries first and re-bakes existing ones only after, so a
+    partial run still grows the fixtures repo for whatever ran.
     """
+    ordered = sorted(BACKENDS, key=lambda b: bool(b.get("fixture_ref_path")))
+    if ordered != BACKENDS:
+        n_new = sum(1 for b in ordered if not b.get("fixture_ref_path"))
+        print(f"\nRebake order: {n_new} never-done entries first, "
+              f"then {len(ordered) - n_new} existing.", flush=True)
+
     results = []
-    for entry in BACKENDS:
+    for entry in ordered:
         name = entry["name"]
         print(f"\n========== rebake :: {name} ==========")
         t0 = time.time()
         # `backend_id` is the registered name in tools/dump_reference.py;
-        # `fixture_path` is what `manifest.json` says we'll ship.
-        out_path = REBAKE_STAGE / entry["fixture_path"]
+        # `fixture_ref_path` is what `manifest.json` says we'll ship.
+        # Default for never-done entries (no fixture_ref_path field yet):
+        # use `<name>/ref.gguf`. When skip_diff flips to false the
+        # manifest must explicitly set fixture_ref_path matching the
+        # path validate will look up; this default exists only so a
+        # first rebake produces SOMETHING upload-able for new entries.
+        rel = entry.get("fixture_ref_path") or f"{name}/ref.gguf"
+        out_path = REBAKE_STAGE / rel
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Source-model spec. Per-backend modules know how to interpret
