@@ -137,6 +137,16 @@ constexpr Entry k_registry[] = {
      "https://huggingface.co/funasr/paraformer-zh)"},
     {"cohere", "cohere-transcribe-q4_k.gguf",
      "https://huggingface.co/cstr/cohere-transcribe-03-2026-GGUF/resolve/main/cohere-transcribe-q4_k.gguf", "~550 MB", nullptr, nullptr},
+    // cohere-asr-ja-v0.1 — Japanese fine-tune of CohereLabs/cohere-transcribe-03-2026
+    // (issue #123). Apache-2.0; tested by CKwasd in PR #124. Same backend
+    // code as the English variant. Upstream repo carries F16/Q8/Q6/Q5/Q4 quants;
+    // --model-quant resolves any of them from the same repo.
+    {"cohere", "cohere-asr-ja-v0.1-q4_k.gguf",
+     "https://huggingface.co/TransWithAI/cohere-transcribe-ja-v0.1-GGUF/resolve/main/cohere-asr-ja-v0.1-q4_k.gguf",
+     "~1.5 GB", nullptr, nullptr},
+    {"cohere", "cohere-asr-ja-v0.1-q8_0.gguf",
+     "https://huggingface.co/TransWithAI/cohere-transcribe-ja-v0.1-GGUF/resolve/main/cohere-asr-ja-v0.1-q8_0.gguf",
+     "~2.4 GB", nullptr, nullptr},
     {"wav2vec2", "wav2vec2-xlsr-en-q4_k.gguf",
      "https://huggingface.co/cstr/wav2vec2-large-xlsr-53-english-GGUF/resolve/main/wav2vec2-xlsr-en-q4_k.gguf",
      "~212 MB", nullptr, nullptr},
