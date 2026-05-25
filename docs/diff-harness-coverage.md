@@ -19,37 +19,37 @@ at `tools/reference_backends/<name>.py`, add an env spec at
 
 | backend | ref module | archive | mtime | harness | deps |
 |---|---|---|---|---|---|
-| `canary` | `tools/reference_backends/canary.py` | `/Volumes/backups/ai/canary-ref.gguf` | 2026-05-02 | yes | — |
+| `canary` | `tools/reference_backends/canary.py` | `/Volumes/backups/ai/canary-ref.gguf` | 2026-05-02 | yes | nemo, torch |
 | `chatterbox` | `tools/reference_backends/chatterbox.py` | `/Volumes/backups/ai/chatterbox-ref.gguf` | 2026-05-25 | yes | chatterbox, librosa, torch, torchaudio |
 | `chatterbox_turbo` | `tools/reference_backends/chatterbox_turbo.py` | — | — | **no** | chatterbox, torch |
 | `cohere` | `tools/reference_backends/cohere.py` | — | — | yes | safetensors, torch, transformers |
 | `firered-asr` | `tools/reference_backends/firered_asr.py` | — | — | yes | fireredasr, kaldi_native_fbank, torch |
 | `funasr` | `tools/reference_backends/funasr.py` | — | — | yes | funasr, torch |
-| `gemma4` | `tools/reference_backends/gemma4.py` | — | — | yes | safetensors, transformers |
+| `gemma4` | `tools/reference_backends/gemma4.py` | — | — | yes | safetensors, torch, transformers |
 | `glm-asr` | `tools/reference_backends/glm_asr.py` | — | — | yes | gguf, scipy |
 | `granite` | `tools/reference_backends/granite.py` | — | — | yes | torch, transformers |
 | `granite-4.1` | `tools/reference_backends/granite.py` | — | — | yes | torch, transformers |
 | `granite-nle` | `tools/reference_backends/granite_nle.py` | — | — | yes | safetensors, torch, transformers |
 | `indextts` | `tools/reference_backends/indextts.py` | — | — | **no** | torch |
 | `kokoro` | `tools/reference_backends/kokoro.py` | — | — | yes | kokoro, torch |
-| `lid-cld3` | `tools/reference_backends/lid_cld3.py` | — | — | yes | gguf |
+| `lid-cld3` | `tools/reference_backends/lid_cld3.py` | — | — | yes | gguf, pycld3 |
 | `lid-fasttext176` | `tools/reference_backends/lid_glotlid.py` | — | — | yes | fasttext |
 | `lid-glotlid` | `tools/reference_backends/lid_glotlid.py` | — | — | yes | fasttext |
 | `mimo-asr` | `tools/reference_backends/mimo_asr.py` | `/Volumes/backups/ai/mimo-asr-ref.gguf` | 2026-05-01 | yes | torch, torchaudio, transformers |
-| `mimo-tokenizer` | `tools/reference_backends/mimo_tokenizer.py` | — | — | yes | mimo_audio, torch, torchaudio |
+| `mimo-tokenizer` | `tools/reference_backends/mimo_tokenizer.py` | — | — | yes | torch, torchaudio |
 | `moonshine` | `tools/reference_backends/moonshine.py` | — | — | yes | torch, transformers |
 | `moonshine-base` | `tools/reference_backends/moonshine.py` | — | — | **no** | torch, transformers |
 | `moonshine-streaming` | `tools/reference_backends/moonshine_streaming.py` | — | — | yes | gguf, scipy |
 | `orpheus` | `tools/reference_backends/orpheus_snac.py` | `/Volumes/backups/ai/crispasr/orpheus-snac-ref.gguf` | 2026-05-01 | yes | snac, torch |
 | `paraformer` | `tools/reference_backends/paraformer.py` | — | — | yes | funasr, torch |
-| `parakeet` | `tools/reference_backends/parakeet.py` | — | — | yes | — |
+| `parakeet` | `tools/reference_backends/parakeet.py` | — | — | yes | nemo, torch |
 | `qwen3` | `tools/reference_backends/qwen3.py` | — | — | yes | torch |
 | `qwen3-tts` | `tools/reference_backends/qwen3_tts.py` | — | — | yes | soundfile, torch |
 | `qwen3-tts-cenc` | `tools/reference_backends/qwen3_tts_cenc.py` | — | — | yes | torch |
 | `qwen3-tts-codec` | `tools/reference_backends/qwen3_tts_codec.py` | — | — | yes | torch |
 | `qwen3-tts-spk` | `tools/reference_backends/qwen3_tts_spk.py` | — | — | yes | safetensors, torch, transformers |
 | `sensevoice` | `tools/reference_backends/sensevoice.py` | — | — | yes | funasr, torch |
-| `titanet` | `tools/reference_backends/titanet.py` | — | — | **no** | torch |
+| `titanet` | `tools/reference_backends/titanet.py` | — | — | **no** | nemo, torch |
 | `vibevoice` | `tools/reference_backends/vibevoice.py` | `/Volumes/backups/ai/vibevoice-ref-jfk.gguf` | 2026-04-24 | **no** | librosa, safetensors, torch |
 | `voxcpm2-tts` | `tools/reference_backends/voxcpm2_tts.py` | — | — | yes | torch, voxcpm |
 | `voxtral` | `tools/reference_backends/voxtral.py` | — | — | yes | torch, transformers |

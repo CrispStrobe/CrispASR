@@ -114,10 +114,26 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
 
     pretrained = str(model_dir)
     print(f"  loading NeMo Parakeet-TDT model from {pretrained}")
-    if pretrained.startswith("nvidia/") or "/" not in pretrained:
-        model = nemo_asr.models.ASRModel.from_pretrained(pretrained)
-    else:
-        model = nemo_asr.models.ASRModel.restore_from(pretrained)
+    # NeMo 1.x dispatched ASRModel.from_pretrained to the concrete class via the
+    # `target` field in model_config; NeMo 2.x dropped that path and now raises
+    # `TypeError: Can't instantiate abstract class ASRModel`. Fall back to the
+    # concrete TDT+CTC hybrid class explicitly. Other parakeet variants
+    # (rnnt-only / ctc-only) would need their own concrete class — extend here
+    # as we add backends for them.
+    HybridCls = getattr(nemo_asr.models, "EncDecHybridRNNTCTCBPEModel", None)
+    try:
+        if pretrained.startswith("nvidia/") or "/" not in pretrained:
+            model = nemo_asr.models.ASRModel.from_pretrained(pretrained)
+        else:
+            model = nemo_asr.models.ASRModel.restore_from(pretrained)
+    except TypeError as e:
+        if "abstract class ASRModel" not in str(e) or HybridCls is None:
+            raise
+        print(f"  NeMo 2.x dispatch dropped; falling back to {HybridCls.__name__}")
+        if pretrained.startswith("nvidia/") or "/" not in pretrained:
+            model = HybridCls.from_pretrained(pretrained)
+        else:
+            model = HybridCls.restore_from(pretrained)
     model.eval()
 
     # Disable dither for deterministic mel comparison against C++.

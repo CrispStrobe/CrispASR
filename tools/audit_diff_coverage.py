@@ -154,32 +154,49 @@ DEP_TO_PIP = {
 
 
 # Heavy-dep markers worth surfacing as install requirements.
+# Each pattern needs to catch four forms of import that show up in the
+# reference backends:
+#   1. `import X`              (top-level or lazy inside dump())
+#   2. `from X import ...`     (any submodule)
+#   3. `import X.sub`          (submodule form, NeMo uses this)
+#   4. `import a, X, b`        (comma-separated, parakeet has this)
+def _imp(name: str) -> str:
+    n = re.escape(name)
+    # The bare-`import X` form needs to match at line start, after a
+    # comma (`import a, X`), or after the literal word `import` itself
+    # (so `import nemo.collections.asr` is caught). The follow context
+    # allows `.`, whitespace, `,`, or end-of-line. The single (?m) flag
+    # at the start applies to the whole pattern (alternation included).
+    return (rf"(?m)(?:(?:^|[,;]|\bimport)\s*{n}(?=[.\s,]|$)"
+            rf"|\bfrom\s+{n}(?:\.\w+)*\s+import\b)")
+
+
 HEAVY_DEP_PATTERNS = [
-    ("torch", r"\b(?:import\s+torch\b|from\s+torch\b)"),
-    ("torchaudio", r"\b(?:import\s+torchaudio\b|from\s+torchaudio\b)"),
-    ("transformers", r"\b(?:import\s+transformers\b|from\s+transformers\b)"),
-    ("accelerate", r"\bfrom\s+accelerate\b"),
-    ("safetensors", r"\bfrom\s+safetensors\b"),
-    ("gguf", r"\b(?:import\s+gguf\b|from\s+gguf\b)"),
-    ("librosa", r"\b(?:import\s+librosa\b|from\s+librosa\b)"),
-    ("soundfile", r"\b(?:import\s+soundfile\b|from\s+soundfile\b)"),
-    ("scipy", r"\b(?:import\s+scipy\b|from\s+scipy\b)"),
-    ("onnxruntime", r"\b(?:import\s+onnxruntime\b|from\s+onnxruntime\b)"),
-    ("chatterbox", r"\bfrom\s+chatterbox\b"),
-    ("funasr", r"\b(?:import\s+funasr\b|from\s+funasr\b)"),
-    ("kaldi_native_fbank", r"\b(?:import\s+kaldi_native_fbank\b|from\s+kaldi_native_fbank\b)"),
-    ("snac", r"\bfrom\s+snac\b"),
-    ("nemo", r"\bfrom\s+nemo\b"),
-    ("kokoro", r"\bfrom\s+kokoro\b"),
-    ("voxcpm", r"\bfrom\s+voxcpm\b"),
-    ("vibevoice", r"\bfrom\s+vibevoice\b"),
-    ("indextts", r"\bfrom\s+indextts\b"),
-    ("mimo_audio", r"\bfrom\s+mimo\w*\b"),
-    ("fasttext", r"\b(?:import\s+fasttext\b|from\s+fasttext\b)"),
-    ("pycld3", r"\b(?:import\s+pycld3\b|import\s+cld3\b|from\s+pycld3\b)"),
-    ("fireredasr", r"\b(?:import\s+fireredasr\b|from\s+fireredasr\b)"),
-    ("moonshine_onnx", r"\bfrom\s+moonshine_onnx\b"),
-    ("openai_whisper", r"\b(?:import\s+whisper\b|from\s+whisper\b)"),
+    ("torch", _imp("torch")),
+    ("torchaudio", _imp("torchaudio")),
+    ("transformers", _imp("transformers")),
+    ("accelerate", _imp("accelerate")),
+    ("safetensors", _imp("safetensors")),
+    ("gguf", _imp("gguf")),
+    ("librosa", _imp("librosa")),
+    ("soundfile", _imp("soundfile")),
+    ("scipy", _imp("scipy")),
+    ("onnxruntime", _imp("onnxruntime")),
+    ("chatterbox", _imp("chatterbox")),
+    ("funasr", _imp("funasr")),
+    ("kaldi_native_fbank", _imp("kaldi_native_fbank")),
+    ("snac", _imp("snac")),
+    ("nemo", _imp("nemo")),
+    ("kokoro", _imp("kokoro")),
+    ("voxcpm", _imp("voxcpm")),
+    ("vibevoice", _imp("vibevoice")),
+    ("indextts", _imp("indextts")),
+    ("mimo_audio", _imp("mimo_audio")),
+    ("fasttext", _imp("fasttext")),
+    ("pycld3", _imp("pycld3")),
+    ("fireredasr", _imp("fireredasr")),
+    ("moonshine_onnx", _imp("moonshine_onnx")),
+    ("openai_whisper", _imp("whisper")),
 ]
 
 
