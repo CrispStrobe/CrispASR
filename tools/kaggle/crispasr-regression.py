@@ -747,6 +747,35 @@ def run_rebake() -> list[dict]:
                 "elapsed_s": round(time.time() - t0, 2),
                 "error": f"dump_reference exit={exc.returncode}",
             })
+        finally:
+            # Free source-model weights from disk before the next
+            # backend so cumulative downloads don't exhaust Kaggle's
+            # 20 GB. Without this, after 4 parakeet variants (~2 GB
+            # each) + the ccache + build artifacts (~5 GB) we ran out
+            # of disk mid-download on backend #8 in v10. Trade-off:
+            # loses cache benefit between two backends that share
+            # weights (rare — e.g. two parakeet variants are different
+            # checkpoints with no shared tensors), but caps peak disk
+            # to one backend's worth of source weights.
+            for cache_dir in (HF_CACHE,
+                              Path.home() / ".cache" / "torch",
+                              Path.home() / ".cache" / "huggingface",
+                              Path("/root/.cache/torch"),
+                              Path("/root/.cache/huggingface")):
+                if cache_dir.exists():
+                    try:
+                        shutil.rmtree(cache_dir, ignore_errors=True)
+                    except Exception:
+                        pass
+            HF_CACHE.mkdir(parents=True, exist_ok=True)
+            try:
+                stat = os.statvfs("/kaggle/working")
+                free_gb = (stat.f_bavail * stat.f_frsize) / (1024 ** 3)
+                step("rebake.cleanup",
+                     backend=name,
+                     free_gb_after=round(free_gb, 2))
+            except Exception:
+                pass
 
     return results
 
