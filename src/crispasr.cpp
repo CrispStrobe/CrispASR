@@ -6193,6 +6193,32 @@ struct whisper_full_params* whisper_full_default_params_by_ref(enum whisper_samp
     return result;
 }
 
+// ABI-stable pointer wrappers for FFI bindings (Dart, etc.) that cannot
+// pass `whisper_context_params` / `whisper_full_params` by value across
+// the C ABI. Without these, large-struct args silently corrupted on
+// platforms where the SysV / AAPCS rules differ from the FFI binding's
+// assumption — typically observed as garbage `use_gpu / gpu_device /
+// vad / vad_model_path` once Dart called whisper_init_from_file_with_params
+// or whisper_full directly. Each wrapper just dereferences the pointer
+// and forwards to the canonical by-value entry point, so the upstream
+// implementation stays untouched.
+struct whisper_context* whisper_init_from_file_with_params_by_ref(const char* path_model,
+                                                                   struct whisper_context_params* params) {
+    return whisper_init_from_file_with_params(path_model, *params);
+}
+
+struct whisper_context* whisper_init_from_file_with_params_no_state_by_ref(const char* path_model,
+                                                                            struct whisper_context_params* params) {
+    return whisper_init_from_file_with_params_no_state(path_model, *params);
+}
+
+int whisper_full_by_ref(struct whisper_context* ctx,
+                         struct whisper_full_params* params,
+                         const float* samples,
+                         int n_samples) {
+    return whisper_full(ctx, *params, samples, n_samples);
+}
+
 struct whisper_full_params whisper_full_default_params(enum whisper_sampling_strategy strategy) {
     struct whisper_full_params result = {
         /*.strategy          =*/strategy,

@@ -565,6 +565,17 @@ CRISPASR_API struct whisper_context_params whisper_context_default_params(void);
 
 CRISPASR_API struct whisper_full_params* whisper_full_default_params_by_ref(enum whisper_sampling_strategy strategy);
 CRISPASR_API struct whisper_full_params whisper_full_default_params(enum whisper_sampling_strategy strategy);
+
+// Pointer-arg wrappers for FFI bindings (Dart, etc.) — see crispasr.cpp.
+// Use these instead of the by-value variants when the binding cannot
+// reliably marshal a large struct across the C ABI on every target.
+CRISPASR_API struct whisper_context* whisper_init_from_file_with_params_by_ref(
+    const char* path_model, struct whisper_context_params* params);
+CRISPASR_API struct whisper_context* whisper_init_from_file_with_params_no_state_by_ref(
+    const char* path_model, struct whisper_context_params* params);
+CRISPASR_API int whisper_full_by_ref(struct whisper_context* ctx,
+                                      struct whisper_full_params* params,
+                                      const float* samples, int n_samples);
 CRISPASR_API void crispasr_params_set_max_tokens(struct whisper_full_params* p, int n);
 CRISPASR_API void crispasr_params_set_temperature(struct whisper_full_params* p, float t);
 

@@ -967,6 +967,7 @@ class CrispASR {
   bool _disposed = false;
 
   // 0.1.0 FFI handles
+  late final _WhisperInit     _initByRef;
   late final _WhisperFull     _full;
   late final _VoidPtr         _free;
   late final _DefaultParams   _defaultParams;
@@ -1035,10 +1036,7 @@ class CrispASR {
   CrispASR(String modelPath, {String? libPath}) {
     _lib = DynamicLibrary.open(libPath ?? _findLib());
 
-    final init = _lib.lookupFunction<_WhisperInitNative, _WhisperInit>(
-        'whisper_init_from_file_with_params');
     _free          = _lib.lookupFunction<_VoidPtr_C, _VoidPtr>('whisper_free');
-    _full          = _lib.lookupFunction<_WhisperFullNative, _WhisperFull>('whisper_full');
     _defaultParams = _lib.lookupFunction<_DefaultParamsNative, _DefaultParams>(
         'whisper_full_default_params_by_ref');
     _nSegments = _lib.lookupFunction<_IntPtr_C, _IntPtr>('whisper_full_n_segments');
@@ -1048,10 +1046,38 @@ class CrispASR {
     _getNSP    = _lib.lookupFunction<_GetNSPNative, _GetNSP>('whisper_full_get_segment_no_speech_prob');
     _freeParams = _lib.lookupFunction<_VoidPtr_C, _VoidPtr>('whisper_free_params');
 
+    // Prefer the *_by_ref wrappers (CrispASR ≥0.6.11) that take struct
+    // pointers — calling the canonical `whisper_init_from_file_with_params` /
+    // `whisper_full` directly fails on platforms where the C ABI passes
+    // large structs differently from how Dart marshals a `Pointer<Void>`.
+    // The historical (x86_64 Linux) symptom was a corrupt
+    // `whisper_full_params` reaching `whisper_full`, e.g. VAD enabled
+    // with a garbage `vad_model_path`, producing
+    //   `whisper_vad_init_from_file_with_params: failed to open VAD model '…'`
+    // even though the caller passed `vad: false`. Fall back to the
+    // by-value entry points when running against an older libwhisper so
+    // existing macOS / ARM64 builds keep loading.
+    final hasInitByRef =
+        _lib.providesSymbol('whisper_init_from_file_with_params_by_ref');
+    final hasFullByRef = _lib.providesSymbol('whisper_full_by_ref');
+    if (hasInitByRef) {
+      _initByRef = _lib.lookupFunction<_WhisperInitNative, _WhisperInit>(
+          'whisper_init_from_file_with_params_by_ref');
+    } else {
+      _initByRef = _lib.lookupFunction<_WhisperInitNative, _WhisperInit>(
+          'whisper_init_from_file_with_params');
+    }
+    if (hasFullByRef) {
+      _full = _lib
+          .lookupFunction<_WhisperFullNative, _WhisperFull>('whisper_full_by_ref');
+    } else {
+      _full = _lib.lookupFunction<_WhisperFullNative, _WhisperFull>('whisper_full');
+    }
+
     final ctxDefault = _lib.lookupFunction<_DefaultCtxParamsNative, _DefaultCtxParams>(
         'whisper_context_default_params_by_ref')();
     final pathPtr = modelPath.toNativeUtf8();
-    _ctx = init(pathPtr, ctxDefault);
+    _ctx = _initByRef(pathPtr, ctxDefault);
     calloc.free(pathPtr);
 
     if (_ctx == nullptr) {
