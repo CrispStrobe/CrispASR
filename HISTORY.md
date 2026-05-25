@@ -6,6 +6,55 @@ technical deep-dives are in `LEARNINGS.md`.
 
 ---
 
+## 2026-05-25 Long-form ASR — cross-backend survey and per-backend roadmap (PLAN #114)
+
+Follow-up to the 2026-05-24 "Issue #89 reopened" entry that made the streamed encode default for parakeet. The 120 s multi-backend sweep that came out of that work showed parakeet was the loudest failure on lenhone's audio but not the only one; this entry collects the empirical state across every multilingual / JA-capable ASR backend and the prioritised fix order.
+
+### What we measured (60 s and 120 s on lenhone's fresh `yt-dlp` clip)
+
+| backend | 60 s | 120 s | failure mode | classification |
+|---|---|---|---|---|
+| parakeet-tdt-0.6b-ja, default (streamed) | ✓ 7 segs, full speech | ✓ 12 segs, full speech to 1:37.84 | none | fixed 2026-05-24 |
+| parakeet-tdt-0.6b-ja, single-pass (`STREAM_THRESHOLD=999`) | ✗ stops at 0:20.08 | ✗ kana-by-kana past 1.2 s | TDT blank-runaway after attention amplifies codec noise | the issue #89 bug |
+| parakeet-tdt-0.6b-ja, CTC head | ✓ byte-identical to streamed | ✓ byte-identical to streamed | none — CTC is frame-synchronous | confirms encoder is fine |
+| parakeet-tdt-0.6b-ja + `--vad` | ✓ 14 segs, 93 % coverage | ✓ 14 segs, 0:00 → 1:58.39 | (VAD trims silence — by design) | alt path |
+| sensevoice-small + `--vad` | not in 60 s sweep | ✓ 13 segs, 0:00 → 2:00 | minor JA token glitches (`スピーク**ジャ**プネス`) | clean baseline |
+| voxtral-mini-3b | (not specifically measured at 60 s) | ✗ covers 0:00 → 0:27 then jumps to 1:47 → 2:00 | LLM AR loses ~80 s in the middle at chunk boundaries | LLM-decoder-chunking class |
+| cohere-transcribe | (not specifically measured at 60 s) | ✗ only ~4 segments across 120 s, multi-tens-of-seconds gaps | Conformer encoder hits the same long-attention regime as parakeet single-pass | Conformer-long-context class |
+| canary-1b-v2 | (not specifically measured at 60 s) | ✗ hallucinates English `"I am not aware of anything"` in a loop | AED decoder language-prompt wiring + no streamed path | multi-task-AED class |
+
+### Three failure classes, three fix shapes
+
+1. **Conformer long-attention amplification** (parakeet, cohere, canary): bidirectional self-attention over the full utterance amplifies codec-level audio perturbations into 10-15 % activation shifts that flip downstream decisions. Fix shape: global-z-norm + chunked-encode (8 s) + concat + single decode (the parakeet `transcribe_streamed` pattern). DONE for parakeet; canary needs the same port with AED prompt re-injection at boundaries; cohere's released weights aren't trained for long inputs, so the simpler fix is VAD-default like its hosted product does.
+
+2. **LLM autoregressive decoder loses track at chunk boundaries** (voxtral, qwen3-asr, granite-speech, mimo-asr): the energy chunker hands the LLM 30 s slices, the AR decoder either runs to `max_new_tokens` before catching up to the audio or its prompt conditioning misfires on the boundary, dropping the middle of long clips. Fix shape: chunk with overlap + LCS dedup. We already have `core_lcs::merge_overlapping_hypotheses` from PLAN #80c, just need to wire it as the default for LLM-AR backends.
+
+3. **Multi-task AED language-prompt wiring** (canary): a separate bug from the long-audio one. The JA hallucination loop suggests the language prompt isn't being threaded through the decoder correctly at all, not just at chunk boundaries. Needs short-audio validation first before the long-audio port can be tested cleanly.
+
+### Roadmap
+
+P0 (in progress): 60/120/300/600 s × all-multilingual-backends matrix on the VPS to extend this table to the longer durations and fill in qwen3 / granite / kyutai / gemma4 / firered / mimo / wav2vec2 cells (these weren't fully measured in the 120 s sweep). Pending; numbers update `PERFORMANCE.md` once they land.
+
+P1: cohere `CAP_LONGFORM_PREFERS_VAD` (or similar flag) → CLI auto-enables `--vad` past 30 s. Cheapest fix, faithful to the hosted product's behaviour.
+
+P2: voxtral / qwen3-asr / granite / mimo-asr — wire `core_lcs::merge_overlapping_hypotheses` as the default for LLM-AR chunked output with overlap ≥ 2 s.
+
+P3: canary — fix the JA prompt-wiring bug at short audio first, then implement `canary_transcribe_streamed` with AED prompt re-injection at chunk boundaries (parakeet pattern + extension).
+
+P4 (low): fastconformer-ctc optional streamed wrapper. CTC robustness makes this a portability improvement, not a correctness fix.
+
+### What stays as-is
+
+- **whisper** has its own internal 30 s seek loop in `whisper.cpp`. Untouched.
+- **firered-asr / wav2vec2** declare `CAP_UNBOUNDED_INPUT` and use single-pass CTC; CTC is robust to length. Verify in VPS matrix but no immediate change planned.
+- **kyutai-stt** is upstream-streaming-native. Should be fine on long audio by design; verify in matrix.
+
+### Tracking
+
+PLAN #114 carries the full per-backend status table and the file list for the four prioritised fixes. The VPS matrix script lives at `tools/longform_vps.sh` (`longform_test.sh` is the local-only variant kept for reference); results aggregate via `tools/analyze_longform.py` into the table format used in `PERFORMANCE.md`.
+
+---
+
 ## 2026-05-25 chatterbox hift_pcm(ref_mel) — diff harness layout bug, not vocoder drift
 
 `crispasr-diff chatterbox` had been reporting `[FAIL] hift_pcm(ref_mel) cos=0.879` since the May 2026 parity pass. Two prior investigations (May 8, May 25 addendum) concluded "fp accumulation-order divergence between ggml and torch, not fixable without rewriting ggml reduction order". Both were wrong — the bug was in the harness's input binding.

@@ -3870,122 +3870,70 @@ Main caveat:
 
 ## 114. Long-form transcribe — make chunking/streamed the default for all ASR backends (issue #89 follow-up)
 
-**Status (2026-05-24):** parakeet portion DONE via `33f9a162` —
-`CRISPASR_PARAKEET_STREAM_THRESHOLD` default 0 (always streamed), the
-old "single-pass ≤60 s" cliff retired. The remaining work below is
-for voxtral / cohere / canary, which the 120 s sweep showed hit the
-same long-form failure pattern with different per-backend symptoms.
+**Status (2026-05-25):** parakeet portion DONE 2026-05-24 via `33f9a162`. Remaining work is per-backend, prioritised below by failure severity from the 60 s + 120 s sweeps on lenhone's fresh `yt-dlp` audio. A 60/120/300/600 s × all-multilingual-backends matrix is running on the VPS to extend the data; numbers update PERFORMANCE.md as they land.
 
-The 120 s multi-backend sweep on lenhone's fresh `yt-dlp` extract of
-the issue #89 YouTube clip (see PERFORMANCE.md "Multi-backend long-
-form Japanese — 120 s sweep") shows the parakeet-TDT long-form failure
-is not unique to parakeet. **voxtral-mini-3b and cohere-transcribe
-both drop content on the same 120 s file**, with different symptoms:
+### Per-backend long-audio status
 
-- **voxtral-mini-3b** (LLM AR, multilingual): output covers 0:00 →
-  0:27 then jumps to 1:47 → 2:00. ~80 s of audio in the middle is
-  silently dropped. Looks like the energy chunker hands the AR decoder
-  a middle window the prompt-conditioning misfires on.
-- **cohere-transcribe** (Conformer, multilingual): only ~4 segments
-  across 120 s, with tens-of-seconds gaps between them. Cohere's
-  Conformer hits a similar long-bidirectional-attention regime as
-  parakeet single-pass.
-- **canary-1b-v2** (NeMo multilingual seq2seq): hallucinates English
-  `"I am not aware of anything"` in a loop. Different bug — likely
-  missing language-prompt wiring — but the headline is "default
-  transcribe doesn't survive this kind of audio either."
+Three columns: **CAP flag** = how it routes through `crispasr_run.cpp`'s auto-chunk gate (`crispasr_long_audio_fallback`), **path** = what the backend actually does for inputs > a few minutes, **status** = empirical result on lenhone's clip.
 
-Parakeet was the loudest because lenhone happened to hit it, not
-because the other backends are safe. Treating long-form as "the
-caller wraps with --vad or --chunk-seconds N" is a footgun: most
-users don't, and the failure modes are silent (no error, just missing
-text).
+| backend | CAP flag | path | status (lenhone audio, 60 s / 120 s) | NeMo / upstream equivalent |
+|---|---|---|---|---|
+| **parakeet** (tdt / tdt_ctc / rnnt) | `CAP_INTERNAL_CHUNKING` | `parakeet_transcribe_streamed`: global z-norm + 8 s overlapping encoder windows + concat + single TDT decode | **✓ DONE 2026-05-24 (`33f9a162`)** — 60 s: 7 segs, full speech; 120 s: 12 segs, full speech to 1:37.84 (clip's speech end) | matches `nemo.collections.asr.parts.utils.streaming_utils.BatchedFrameASRTDT` shape; we made it the default, NeMo's `transcribe()` defaults to single-pass and reproduces the same 20 s collapse |
+| **canary-1b-v2** (multi-task AED) | `CAP_INTERNAL_CHUNKING` declared but **no streamed path**; falls back to single-pass encoder | hallucinates English `"I am not aware of anything"` loop on the lenhone 120 s — root cause uncertain (likely missing `<lang>` / `<task>` prompt tokens at the boundary) | ✗ **broken on long JA** | NeMo: `FrameBatchMultiTaskAED` in `streaming_utils.py` |
+| **fastconformer-ctc** (en-only) | `CAP_INTERNAL_CHUNKING` declared, single-pass encoder | CTC argmax is frame-synchronous so doesn't have the TDT blank-runaway failure mode; full-pass works on moderate lengths | ~ "works in practice; not formally chunked" | NeMo: `FrameBatchChunkedCTC` |
+| **voxtral-mini-3b** (LLM AR) | no `CAP_UNBOUNDED_INPUT` → CLI auto-chunk fires at 30 s | energy chunker hands the LLM 30 s slices, no LCS dedup, AR decoder loses track at chunk boundaries | ✗ **120 s: 0:00→0:27 then jumps to 1:47→2:00** (~80 s dropped in the middle) | Mistral upstream: chunked at ~30 s **with overlap** + manual stitching |
+| **cohere-transcribe** (Conformer) | no `CAP_UNBOUNDED_INPUT` → CLI auto-chunk at 30 s | Conformer encoder hits a similar long-attention regime as parakeet single-pass on the chunk-context window | ✗ **120 s: only 4 segments across 120 s, multi-tens-of-seconds gaps** | Cohere hosted does server-side VAD + chunking; released weights aren't designed for long inputs |
+| **qwen3-asr** (LLM AR) | no `CAP_UNBOUNDED_INPUT`; CLI auto-chunk + LCS dedup (PLAN #80c) | chunked + LCS overlap merge | works on short clips, slow on long; unknown failure mode on 120 s+ (TBD by VPS matrix) | n/a (Alibaba upstream) |
+| **granite-speech** / **granite-4.1** (LLM AR) | no `CAP_UNBOUNDED_INPUT`; CLI auto-chunk | chunked, no LCS dedup yet | TBD by VPS matrix | n/a (IBM upstream) |
+| **gemma4_e2b** | no `CAP_UNBOUNDED_INPUT` | CLI auto-chunk | TBD | n/a (Google upstream) |
+| **kyutai-stt** | no `CAP_UNBOUNDED_INPUT` | CLI auto-chunk; streaming-native model | likely OK by design | upstream is cache-aware streaming |
+| **mimo-asr** (LLM AR, multilingual) | no `CAP_UNBOUNDED_INPUT` | CLI auto-chunk | TBD (4.5 GB model — heavy) | n/a (Xiaomi upstream) |
+| **sensevoice-small** (CTC) | no `CAP_UNBOUNDED_INPUT`; CLI auto-chunk; works well with `--vad` | CTC-style decode, robust to chunking | **✓ 120 s with `--vad`: 13 segs, 0:00 → 2:00, full speech** (minor glitches `スピーク**ジャ**プネス…`) | FunASR upstream |
+| **firered-asr** | `CAP_UNBOUNDED_INPUT` | full-audio encoder pass | untested at 120 s+ | n/a (XiaoMi/Xiaohongshu upstream) |
+| **wav2vec2** | `CAP_UNBOUNDED_INPUT` | full-audio encoder pass; CTC head | CTC is robust; tested up to 60 s | n/a (Meta upstream) |
+| **whisper-large/medium/small/base/tiny** | n/a (whisper has its own internal seek loop) | 30 s windows internal to `whisper.cpp` | ✓ designed for this | upstream is `whisper.cpp` itself |
 
-### What upstream does
+### Why parakeet was the loudest
 
-Same model, same long file, same problem upstream:
+Lenhone happened to use parakeet-tdt-0.6b-ja. The other backends are not safe — they just hadn't been reported. Treating long-form as "the caller wraps with `--vad` or `--chunk-seconds N`" is a footgun: most users don't, and the failure modes are silent (no error, just missing text). Stock `crispasr -m auto -f long.wav` should produce a *complete* transcript on any duration on any multilingual backend.
 
-- **NeMo parakeet / canary** — stock `model.transcribe()` does single-
-  pass. Verified locally: NeMo's own `transcribe()` produces 47 chars
-  and stops at ~20 s on lenhone's exact WAV, byte-equivalent
-  behaviour to our pre-fix single-pass. For long audio NeMo ships a
-  separate chunked-frame inference path:
-  `nemo.collections.asr.parts.utils.streaming_utils.
-  BatchedFrameASRTDT` / `BatchedFrameASRRNNT` /
-  `FrameBatchChunkedCTC` plus
-  `transcribe_utils.get_buffered_pred_feat_rnnt`, and an example at
-  `examples/asr/asr_chunked_inference/rnnt/
-  speech_to_text_buffered_infer_rnnt.py`. The user must invoke this
-  path explicitly. Our `parakeet_transcribe_streamed` (now the
-  default via commit `33f9a162`) is the same shape.
-- **Mistral voxtral** — reference HuggingFace integration chunks at
-  ~30 s with overlap. Our energy chunker hands the LLM differently-
-  shaped slices.
-- **Cohere Transcribe** — released weights aren't meant for long
-  audio; Cohere's hosted product does server-side VAD + chunking. We
-  ship the released weights, so the burden of "make it work on long
-  files" is on us.
+### Roadmap (priority order, empirical-data-driven)
 
-### Options on the table
+**P0 — Verify scope with the cross-length matrix (in progress).**
+Running the 60/120/300/600 s × multilingual-backend matrix on VPS (`/tmp/longform_vps.sh`, PID 3572547) to fill in the gaps in the table above (qwen3, granite, kyutai, gemma4 cells; verify voxtral/cohere/canary failure modes hold past 120 s; quantify sensevoice as the multilingual baseline winner). Results land in `PERFORMANCE.md` "Long-form ASR cross-backend matrix" once done. Without this we can't prioritise the fixes properly.
 
-1. **VAD-default for everyone**. Make `--vad` (silero) the default for
-   any input longer than the auto-fallback threshold across all ASR
-   backends. Cheap and uniform; the existing VAD-stitch path in
-   `crispasr_run.cpp` already handles this end-to-end. Trade-off:
-   slightly lower coverage on continuous speech (93 % vs 99 % on the
-   60 s clip per the existing benchmark) and per-utterance SRT entries
-   instead of paragraph-level. **Reversible per-call** with
-   `--chunk-seconds 0`.
-2. **Parakeet-style streamed-encode trick per backend**. Apply the
-   global-z-norm + chunked-encode + concatenate + single-decode trick
-   to canary / cohere / fastconformer-ctc. Works for backends where
-   the encoder is the unstable component and per-feature z-norm is
-   computed globally. Already done for parakeet; canary and
-   fastconformer-ctc declare `CAP_INTERNAL_CHUNKING` but currently
-   route through their own paths — they would need an
-   `XXX_transcribe_streamed` per-backend implementation.
-3. **LLM-decoder chunking with overlap** for voxtral / qwen3-asr /
-   granite-speech. Different fix: feed the AR decoder ≤30 s slices
-   with overlap and LCS-merge the outputs. We already have
-   `crispasr_lcs::merge_overlapping_hypotheses` from PLAN #80c —
-   wire it on as a default for LLM ASR backends.
-4. **Backend-specific defaults** instead of one global default.
-   parakeet → option 2, voxtral → option 3, cohere → option 1 (VAD)
-   since the released weights aren't well-suited to long inputs at
-   all. Most flexible but more code surface to keep aligned.
+**P1 — cohere-transcribe: default `--vad` for any input > 30 s.**
+Cheapest fix (one capability flag flip + one CLI gate in `crispasr_run.cpp`). The released Cohere weights aren't trained for long inputs in the first place; the hosted product does VAD on the server side. Doing the same on the client side is faithful to the release intent and produces full-coverage output in our 60 s and 120 s tests.
 
-### What to do first
+**P2 — voxtral / qwen3-asr / granite-speech / mimo-asr: chunk + LCS dedup.**
+We already have `crispasr_lcs::merge_overlapping_hypotheses` from PLAN #80c. Wire it as the default for LLM-AR backends with overlap ≥ 2 s. The 120 s voxtral mid-drop is the smoke test — if LCS+overlap fixes that cleanly, generalise to the other LLM-AR backends. Avoid the LCS-dedup-disabled case on `chunk-overlap 0` (the existing test #114 / #148 gate already covers this).
 
-1. Reproduce the voxtral mid-drop on a second long-form clip (German,
-   English) to confirm it isn't audio-specific. Same for cohere.
-2. Implement option 3 (LLM-decoder chunking + LCS dedup) for voxtral
-   as a smoke test; if that cleanly fixes the 120 s clip, generalise
-   to qwen3-asr and granite-speech.
-3. Decide between option 1 (VAD default) and option 4 (per-backend
-   defaults) for cohere. Probably option 1 — cohere's open weights
-   were not trained for this duration regime.
-4. Update CrispASR docs and `CAP_*` table to make the long-form story
-   per backend explicit, not implicit.
+**P3 — canary-1b-v2: implement `canary_transcribe_streamed` (parakeet-pattern port).**
+Same global-z-norm + chunked-encode + concat shape as parakeet, with the twist that canary's AED decoder needs `<lang>` / `<task>` prompt tokens at each chunk boundary. NeMo handles this in `FrameBatchMultiTaskAED`. Lift is ~1 day if the encoder is wired the same way as parakeet's; the JA hallucination loop suggests there's a separate language-prompt-wiring bug to fix first (independent of long-audio).
 
-### Trigger
+**P4 — fastconformer-ctc: optional streamed wrapper.**
+Lower priority. CTC's frame-synchronous decode doesn't fall into the TDT blank-runaway trap, so this is a portability improvement rather than a correctness fix. Defer until P1-P3 ship and a user reports a real failure on en-only long audio.
 
-- We see this fail on other audio (likely, just hasn't been reported).
-- A user asks why voxtral or cohere drops the middle of their file.
-- We want to give a single confident answer to "is CrispASR safe to
-  point at a 10-minute file on `crispasr -m auto -f file.wav`?" —
-  currently the answer is "for parakeet yes, for voxtral / cohere
-  maybe."
+### Decision: don't blanket-VAD everyone
+
+Considered earlier as Option 1. Rejected because:
+- VAD trims leading/trailing silence per segment → coverage on continuous speech drops 99 % → 93 % even on the audio where it works perfectly. Wrong default for narration-style content.
+- VAD output is per-utterance SRT entries, not paragraph-level. Worse for users who want one continuous transcription.
+- Per-backend defaults (P1: VAD for cohere, P2: chunk+LCS for LLM-AR, P3: streamed-encode for canary) match the actual failure mode and don't pay the VAD coverage cost on backends that don't need it.
+
+### Trigger conditions for completion
+
+- 60 s + 120 s + 300 s + 600 s VPS matrix shows full speech coverage on every multilingual backend (current parakeet bar)
+- `tests/test-issue-89-long-audio-fallback.cpp` extended with assertions for cohere VAD-default, voxtral LCS-default, canary streamed-encode
+- `PERFORMANCE.md` long-form section updated with the post-fix numbers per backend
+- `docs/cli.md` long-form recommendation table per backend (currently only parakeet has a per-backend story)
 
 ### Files (tentative)
 
-- `examples/cli/crispasr_backend_voxtral.cpp` — chunked + LCS path
-- `examples/cli/crispasr_backend_cohere.cpp` — VAD-default toggle (or
-  similar)
-- `examples/cli/crispasr_run.cpp` — auto-chunking gate refactored to
-  per-backend ladder
-- `tests/test-issue-89-long-audio-fallback.cpp` — extend with voxtral
-  and cohere assertions
-- `tests/benchmark_asr.py` — multi-backend long-form scoring against
-  the same 120 s / 300 s / 600 s fixtures
-- `PERFORMANCE.md` — multi-backend long-form table per duration
-  bucket
+- `examples/cli/crispasr_backend_cohere.cpp` — `CAP_LONGFORM_PREFERS_VAD` flag or similar
+- `examples/cli/crispasr_backend_voxtral.cpp` / `_granite.cpp` / `_qwen3.cpp` — wire `core_lcs::merge_overlapping_hypotheses` into the chunked output stitching path
+- `src/canary.cpp` — new `canary_transcribe_streamed` (parakeet pattern, with AED prompt re-injection at boundaries); `examples/cli/crispasr_backend_canary.cpp` route through it
+- `examples/cli/crispasr_run.cpp` — auto-chunking gate refactored to per-backend ladder; `CAP_LONGFORM_PREFERS_VAD` honored
+- `tests/test-issue-89-long-audio-fallback.cpp` — extend
+- `tests/benchmark_asr.py` — multi-backend long-form scoring against the same 60/120/300/600 s fixtures (`longform_vps.sh` is the prototype)
+- `PERFORMANCE.md` — per-duration cross-backend table

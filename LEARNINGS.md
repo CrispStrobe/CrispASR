@@ -7496,3 +7496,67 @@ The decoder still sees one contiguous encoder output (concatenated from all chun
 - HISTORY 2026-05-24 "Issue #89 reopened — parakeet streamed-encode is now the default for all audio"
 - PERFORMANCE.md "Multi-backend long-form Japanese — 120 s sweep" (voxtral/cohere/canary hit the same class of issue; PLAN #114 tracks the per-backend follow-up)
 - `[[feedback_methodology]]` — the diff-harness stage-by-stage protocol; this is exactly the use case it was built for
+
+---
+
+## Long-form ASR has three distinct failure classes, not one (2026-05-25, generalising issue #89)
+
+Follow-up to the issue #89 lesson above. The 120 s multi-backend sweep on the same audio (`PERFORMANCE.md` "Multi-backend long-form Japanese — 120 s sweep") confirmed that parakeet's TDT-single-pass-collapse is a member of a broader class. The fix shape differs by class, and applying the wrong fix to the wrong class is wasted effort. The three classes:
+
+### Class A — Conformer encoder long-attention amplification
+
+**Affects:** parakeet (TDT / RNNT / hybrid), canary (multi-task AED with FastConformer encoder), cohere-transcribe (Conformer), fastconformer-ctc (technically yes but CTC head is robust enough that it doesn't surface as a failure).
+
+**Mechanism:** bidirectional self-attention over the full utterance has unbounded receptive field. The pre-norm path through 24 Conformer blocks accumulates tiny input perturbations (codec-level audio differences, ~0.3 % RMS in normalised units) into 10-15 % shifts in encoder output activation magnitude. Downstream, that's enough to flip knife-edge decisions (TDT joint blank-vs-token argmax; AED decoder's `<eos>` probability; the joint network's logit ordering more generally).
+
+**Fix shape:** chunked encoder + globally-normalised input + single decode pass. Specifically:
+- **Compute mel with global per-feature z-norm** over the FULL audio (not per-chunk z-norm — that re-normalises away the codec stability margin the model was trained against and makes chunks inconsistent).
+- **Encode in overlapping ≤10 s windows** (we use 8 s + 2 s overlap). The attention receptive field is now bounded → no accumulating amplification.
+- **Concatenate encoder outputs**, skipping the overlap region of each chunk except the first.
+- **Decode in one pass** over the concatenated encoder output. Single-pass decode means the predictor LSTM / AED autoregressive state stays continuous across what used to be chunk boundaries — no cold-start mid-utterance.
+
+This is exactly the shape NeMo ships as `BatchedFrameASRTDT` / `BatchedFrameASRRNNT` / `FrameBatchChunkedCTC` / `FrameBatchMultiTaskAED` in `streaming_utils.py`. **Note: NeMo's stock `model.transcribe()` does NOT use this** — it does single-pass. Users have to opt in to the streaming utility explicitly. Ours is the default after `33f9a162`.
+
+### Class B — LLM autoregressive decoder loses track at chunk boundaries
+
+**Affects:** voxtral-mini-3b (Mistral LLM), qwen3-asr (Qwen3 LLM), granite-speech (IBM Granite LLM), mimo-asr (Xiaomi LLM).
+
+**Mechanism:** the AR decoder is given each audio chunk independently with a fresh prompt; its conditioning at the chunk boundary either misfires (drops the boundary tokens), hits `max_new_tokens` before catching up to the audio, or hallucinates a continuation that doesn't connect to the next chunk. Symptom: missing middle chunks in long audio (voxtral 120 s drops ~80 s in the middle).
+
+**Fix shape:** chunk with **explicit overlap (~2 s)** + **LCS dedup** on overlapping token sequences. CrispASR already has `core_lcs::merge_overlapping_hypotheses` from PLAN #80c; the missing piece is wiring it as a default for LLM-AR backends, not as an `--lcs-dedup on` flag the user has to know to flip. Mistral's voxtral reference HuggingFace integration does exactly this.
+
+Notable: this is NOT the same fix as Class A. Class A's "concatenate encoder outputs and single-decode" doesn't apply to LLM-AR backends because the encoder isn't the unstable component — the decoder is, and the decoder is the autoregressive LLM which can't be made stateless across chunks without losing context.
+
+### Class C — Multi-task AED / language-prompt wiring (canary-specific symptom, plausibly generalisable)
+
+**Affects:** canary-1b-v2 (NeMo multi-task AED model trained for ASR + translation + LID). Possibly others with explicit task tokens (kyutai-stt has language prefix tokens but is streaming-native).
+
+**Mechanism:** the AED decoder needs `<lang>` / `<task>` prompt tokens at the start of each decoding pass. Either (a) the wiring isn't passing the user's `-l ja` through to the decoder prompt at all, or (b) it's passing it once at t=0 but not re-injecting it at chunk boundaries when a Class A streamed path is added later. Symptom on canary-1b-v2 + lenhone JA 120 s: hallucinates English `"I am not aware of anything"` in a loop.
+
+**Fix shape:** verify the language-prompt path at short-audio first (does canary `-l ja` work on a 10 s JA clip?), fix that bug independently, then add the Class A streamed-encode port on top.
+
+### Diagnostic short-circuits
+
+When a long-audio failure is reported:
+
+1. **Same model, two perceptually-identical inputs, different outputs** → Class A. Run the diff harness against upstream on the bad input to confirm it's not us — if our encoder matches upstream bit-for-bit, the issue is model-level, not implementation.
+2. **Output covers the start and end of the clip but drops a middle chunk** → Class B. Look at the chunker output and the decoder's `<eos>` probability at the chunk boundary.
+3. **Output is the wrong language entirely / hallucinates a stock phrase** → Class C. Test at short audio first; long-audio is downstream.
+
+### Anti-pattern: blanket-VAD
+
+Tempting to make `--vad` the default for everyone past 30 s as a one-size-fits-all. Don't:
+
+- VAD trims leading/trailing silence per segment → coverage on continuous narration speech drops ~99 % → ~93 % even on audio where everything else works. Wrong default for narration / podcast / lecture content (which is exactly what long-form users care about).
+- VAD produces per-utterance SRT entries, not paragraph-level. Worse for continuous-transcription users.
+- VAD is a workaround for an encoder/decoder bug, not a fix. It just makes the encoder see ≤ ~3 s slices so it can't fall into the unstable regime. Real fix per backend class.
+
+VAD-default is the right answer only when the released model genuinely isn't designed for long inputs (cohere is in this bucket — its hosted product runs VAD on the server side; our open-weights release should match that behaviour).
+
+### Cross-refs
+
+- HISTORY 2026-05-25 "Long-form ASR — cross-backend survey and per-backend roadmap (PLAN #114)" — empirical table + roadmap
+- PLAN #114 — per-backend status table + prioritised fix order
+- PERFORMANCE.md "Multi-backend long-form Japanese — 120 s sweep" + the in-progress 60/120/300/600 s × all-backends matrix
+- HISTORY 2026-05-24 "Issue #89 reopened" — the parakeet Class A fix that started this
+- `core_lcs::merge_overlapping_hypotheses` (PLAN #80c) — the existing LCS-dedup helper for the Class B fix
