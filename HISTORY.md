@@ -6,6 +6,17 @@ technical deep-dives are in `LEARNINGS.md`.
 
 ---
 
+## 2026-05-26 (P6b + gemma4 chunking) PLAN #125 follow-on — kyutai-stt internal chunking + gemma4 env-gated auto-chunk
+
+Continuation of the same session as the P1-P6 fix train below; two more commits land on top:
+
+- **`043b3ae5` P6b kyutai-stt 30 s internal chunking.** Extracted the per-call transcribe logic into `transcribe_one()` and wrapped with a chunking loop in `crispasr_backend_kyutai_stt.cpp::transcribe()` that splits inputs > 30 s = 480 000 samples into 30 s windows. Each chunk gets its own P6a silence-tail flush; per-chunk `t_offset_cs` = `caller_offset + chunk_start / 16 kHz * 100 cs`. Validated locally on `first90.wav` (the 90 s Japanese clip from issue #89): 568 s wall = 6.3 s/s, finite and linear, vs the previously-reported 14 s/s degradation. Three chunks produced coherent Japanese hiragana output. JFK (11 s) stays on the single-chunk path unchanged. P6c (streaming-only design-limit guardrail) is now DEFERRED — with linear wallclock the "hung" appearance is gone, so the `--force-long-audio` cap is a UX nicety rather than a correctness fix.
+- **`9b5a0a2a` gemma4-e2b CRISPASR_GEMMA4_AUTO_CHUNK env-gated chunking.** PLAN #125 P4 left gemma4-e2b aborting on inputs > 30 s. Add an opt-in env var that chunks at the same 30 s boundary internally instead of aborting, same `t_offset_cs` arithmetic as kyutai-stt P6b. Default stays "abort with clear error" because we haven't validated chunk-boundary quality on long gemma4-e2b output; the env var lets users opt in to experimenting. JFK unchanged through the single-chunk path. Followup: long-audio quality validation → promote to default.
+
+**Recurring pattern:** every LLM-decoder backend that's trained on a fixed audio window (~30 s) ends up wanting the same shape — extract per-call logic into a helper, wrap with a chunking loop, per-chunk `t_offset_cs` arithmetic, optional per-chunk pre/post-processing (kyutai's silence tail, gemma4's prompt). When the third such backend appears the right move is probably to extract this into a shared helper rather than copy-paste again. Note: voxtral and parakeet already chunk through their own dedicated paths (`crispasr_run_voxtral_style_pipeline_streamed`, `parakeet streamed_threshold_s`), so a shared helper would have to abstract over two pre-existing dialects + this new one.
+
+---
+
 ## 2026-05-26 PLAN #115 — mimo-asr M1 Metal silent-empty fix (option A)
 
 Distinct bug from PLAN #125 P0 (montvid's Blackwell segfault), same backend. Discovered via the overlap-save A/B sweep two days earlier (mimo flagged `BOTH_EMPTY`, the only backend out of 16 that failed both arms — meaning the bug wasn't in the overlap-save path, it was in the backend itself).
