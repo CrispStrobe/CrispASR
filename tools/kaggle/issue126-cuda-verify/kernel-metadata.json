@@ -1,0 +1,14 @@
+{
+  "id": "chr1str/crispasr-issue126-cuda-verify",
+  "title": "CrispASR issue126 cuda verify",
+  "code_file": "crispasr-issue126-cuda-verify.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "true",
+  "dataset_sources": [],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}
