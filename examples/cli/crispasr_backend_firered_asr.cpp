@@ -17,8 +17,13 @@ public:
     const char* name() const override { return "firered-asr"; }
 
     uint32_t capabilities() const override {
+        // firered-asr's encoder uses relative positional encoding with
+        // pe_maxlen=5000 (~50 s of post-subsample frames). Do NOT declare
+        // CAP_UNBOUNDED_INPUT: the dispatcher's VAD/chunking path keeps
+        // each call well under that window. Reports from issue #125
+        // showed 50 min files going OOB through the PE buffer.
         return CAP_TIMESTAMPS_CTC | CAP_AUTO_DOWNLOAD | CAP_BEAM_SEARCH | CAP_TOKEN_CONFIDENCE | CAP_FLASH_ATTN |
-               CAP_DIARIZE | CAP_UNBOUNDED_INPUT;
+               CAP_DIARIZE;
     }
 
     bool init(const whisper_params& params) override {

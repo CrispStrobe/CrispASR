@@ -1718,6 +1718,14 @@ static char* firered_asr_transcribe_impl(struct firered_asr_context* ctx, const 
     if (T_sub <= 0)
         return nullptr;
 
+    if (T_sub > hp.pe_maxlen) {
+        fprintf(stderr,
+                "firered_asr: input too long (T_sub=%d > pe_maxlen=%d; ~%.1f s of audio after "
+                "subsampling). Split into <%.0f s segments or rely on --vad chunking. Aborting.\n",
+                T_sub, hp.pe_maxlen, (double)T_sub * 0.04, (double)hp.pe_maxlen * 0.04);
+        return nullptr;
+    }
+
     if (ctx->params.verbosity >= 1)
         fprintf(stderr, "firered_asr: subsampled to %d frames (608-dim)\n", T_sub);
 
