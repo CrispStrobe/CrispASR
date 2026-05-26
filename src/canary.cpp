@@ -1501,6 +1501,30 @@ extern "C" struct canary_result* canary_transcribe_streamed(struct canary_contex
             n_skip = crispasr_lcs::lcs_dedup_prefix_count(prev_tail, curr_ids);
         }
 
+        // PLAN #114 P3 polish — word-snap heuristic. The LCS operates on
+        // token ids and may drop a prefix that ends mid-word, because
+        // BPE-split points inside a duplicated word region don't always
+        // align between chunks (chunk 1 emits `[▁Geschirrt, uches]` for
+        // "Geschirrtuches"; chunk 2 emits `[▁tuch, ▁umfassen, ...]` for
+        // the same audio segment — only `▁umfassen` matches the LCS, so
+        // we drop 1 token and leave `▁tuch` as a stray word-fragment in
+        // the output). Extend the drop forward until the next token
+        // whose text starts with a space (sentencepiece convention:
+        // `▁X` decodes to ` X`, so a leading space marks a word start).
+        // Trades a few extra tokens for a clean prefix; bounded by
+        // n_tokens so we don't drop the whole chunk on a pathological
+        // mid-word run.
+        if (n_skip > 0 && n_skip < part->n_tokens) {
+            while (n_skip < part->n_tokens) {
+                const char* t = part->tokens[n_skip].text;
+                if (!t || !t[0])
+                    break;
+                if (t[0] == ' ')
+                    break;
+                n_skip++;
+            }
+        }
+
         // Rebuild text for this chunk from surviving tokens (so the
         // dedupe matches the token vector exactly; trusting part->text
         // would leak the dropped prefix as a string).
