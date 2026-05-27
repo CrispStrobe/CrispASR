@@ -520,11 +520,21 @@ work in 4 phases**.
   `weight_norm` parametrisations so the runtime side stays simple.
   All three GGUFs are at
   `/Volumes/backups/ai/crispasr-models/cosyvoice3-0.5b-2512/`.
-- **Phase 2 — LLM runtime (Qwen2 + speech heads + RAS sampling)**.
-  Open. Lift mimo_asr's Qwen2 step graph; add the speech_lm_head
-  + the 6761-vocab speech_embedding lookup; add RAS sampler.
-  Diff-gate: byte-identical speech-token sequence against upstream
-  given fixed text + temperature=0.
+- **Phase 2 — LLM runtime — scaffolded 2026-05-27.**
+  `src/cosyvoice3_tts.{h,cpp}` carries the loader, the Qwen2 step
+  graph (lifted from mimo_asr's pattern unchanged via
+  `core_attn::kv_self_attn`), the speech_embd + speech_lm_head
+  (6761-vocab) wiring, KV cache + cached T=1 step graph, embed-lookup
+  helpers, and a `prefill_with_embeds` + `step_speech` entry pair.
+  First-run diff via `tools/reference_backends/cosyvoice3_tts.py`
+  (HF Qwen2Model F32) + `tools/diff-cosyvoice3-lm.py` on "Hello, this
+  is a test." (7 tokens, no voice prompt, greedy):
+    `cosine = 1.000000`, `max |Δ| = 0.0149` (0.08% of max),
+    top-5 indices byte-exact `[4512, 2322, 2325, 0, 4916]` on both
+    sides — the delta is consistent with F16 weight storage vs F32
+    ref. **Remaining**: RAS sampler (~50 LOC, port
+    `CosyVoice/cosyvoice/utils/common.py::ras_sampling`) + seeded-RAS
+    diff parity. Greedy LLM diff gate is essentially passing.
 - **Phase 3 — DiT-based flow-matching estimator + CausalConditionalCFM**.
   Open. New AdaLN-Zero block (~150 LOC). Wire to
   `chatterbox_s3gen::cfm_euler_solve`. Diff-gate: mel cos ≥ 0.99

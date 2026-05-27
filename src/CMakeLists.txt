@@ -926,6 +926,19 @@ if(NOT MSVC)
 endif()
 
 # ---------------------------------------------------------------------------
+# cosyvoice3_tts — FunAudioLLM/Fun-CosyVoice3-0.5B-2512 (Qwen2-0.5B LLM +
+# DiT-CFM flow + HiFi-GAN-iSTFT vocoder). Phase 2 ships the LLM only.
+# ---------------------------------------------------------------------------
+add_library(cosyvoice3_tts STATIC cosyvoice3_tts.h cosyvoice3_tts.cpp)
+set_target_properties(cosyvoice3_tts PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(cosyvoice3_tts PUBLIC .)
+target_compile_features   (cosyvoice3_tts PUBLIC cxx_std_17)
+target_link_libraries     (cosyvoice3_tts PUBLIC crispasr-core ggml ggml-base ggml-cpu)
+if(NOT MSVC)
+    target_compile_options(cosyvoice3_tts PRIVATE -O3)
+endif()
+
+# ---------------------------------------------------------------------------
 # kokoro — hexgrad/Kokoro-82M + yl4579/StyleTTS2-LJSpeech (iSTFTNet TTS)
 # ---------------------------------------------------------------------------
 add_library(kokoro STATIC kokoro.h kokoro.cpp)
@@ -1336,6 +1349,9 @@ if (TARGET t5_translate)
 endif()
 if (TARGET voxcpm2_tts)
     target_link_libraries(crispasr PUBLIC voxcpm2_tts)
+endif()
+if (TARGET cosyvoice3_tts)
+    target_link_libraries(crispasr PUBLIC cosyvoice3_tts)
 endif()
 if (TARGET kokoro)
     target_link_libraries(crispasr PUBLIC kokoro)
