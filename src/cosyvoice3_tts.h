@@ -162,6 +162,25 @@ int cosyvoice3_tts_get_flow_hparams(struct cosyvoice3_tts_context* ctx, uint32_t
 float* cosyvoice3_tts_run_flow_dit_block(struct cosyvoice3_tts_context* ctx, int block_idx, const float* x, int T,
                                          const float* t_emb);
 
+// Solve the cosine-schedule CFM Euler ODE (`n_steps` steps, classifier-free
+// guidance at `cfg_rate`) that converts speech-token-derived `mu` + speaker
+// embedding into a mel spectrogram. Inputs are caller-supplied and post-
+// projection — see the corresponding extract_stage flow_euler doc-comment.
+//   mu          [T_mel, mel_dim]   F32 — pre_la + repeat_interleave output
+//   spks_proj   [spk_dim_out]      F32 — already through normalize + spk_affine
+//   cond        [T_mel, mel_dim]   F32 — prompt-prefix conditioning
+//                                          (zeros for zero-shot)
+//   x_init      [T_mel, mel_dim]   F32 — initial Euler noise (for bit-equivalence
+//                                          to upstream, pass
+//                                          `torch.manual_seed(0);
+//                                           randn([1, 80, 50*300])[:, :, :T_mel]`)
+//   n_steps                                — defaults to 10 upstream
+//   cfg_rate                                — defaults to 0.7 upstream
+// Returns malloc'd float[T_mel * mel_dim] (caller frees) with the final mel.
+float* cosyvoice3_tts_solve_flow_euler(struct cosyvoice3_tts_context* ctx, const float* mu, int T_mel,
+                                       const float* spks_proj, const float* cond, const float* x_init, int n_steps,
+                                       float cfg_rate);
+
 // Diff-harness stage extractor. Returns malloc'd float[*out_n].
 // Phase 2 supports:
 //   "lm_step0_logits"   — single-step logits after prefilling on

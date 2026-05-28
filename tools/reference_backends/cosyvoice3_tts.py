@@ -86,6 +86,13 @@ DEFAULT_STAGES = [
     "flow_dit_full_t_emb",      # time_mlp(sin_emb(t=0.5))            (1024,)
     "flow_dit_full_norm",       # after AdaLayerNormZero_Final        (T_mel, 1024)
     "flow_dit_full",            # final mel output (post proj_out)    (T_mel, 80)
+    # Phase 3d-B — CFM Euler ODE end-to-end (10-step cosine + CFG)
+    "flow_euler_mu_in",         # post pre_la + repeat_interleave    (T_mel, 80)
+    "flow_euler_spks_in",       # post normalize + spk_affine        (80,)
+    "flow_euler_cond_in",       # prompt-prefix conditioning         (T_mel, 80)
+    "flow_euler_x_init",        # seeded torch.manual_seed(0) randn  (T_mel, 80)
+    "flow_euler_dphi_step0",    # post-CFG dphi_dt at step 1         (T_mel, 80)
+    "flow_euler",               # final mel after 10 Euler steps     (T_mel, 80)
 ]
 
 # Fixed test-vector parameters for the Phase 3b dumps. Pinned so the
@@ -99,6 +106,17 @@ DIT_TIMESTEP = 0.5
 # >= 2 so RoPE rotates non-trivially.
 DIT_FULL_T_MEL = 12
 DIT_FULL_SEED = 30303
+
+# Phase 3d-B Euler fixture. T_tok=4 keeps the (T_mel=8) dump fast; the
+# spk-emb seed is separate so it deterministically advances the rng
+# state past the mu fixture. The init noise comes from upstream's
+# `set_all_random_seed(0); rand_noise = torch.randn([1, 80, 50*300])`
+# truncated to T_mel — that's the SAME state upstream uses, so the
+# diff is bit-equivalent on the noise input.
+EULER_T_TOK = 4
+EULER_SPK_SEED = 40404
+EULER_N_STEPS = 10
+EULER_CFG_RATE = 0.7
 
 # Phase 3c test vector — independent seeded fixture. T_tok small enough
 # to keep dumps fast; T_mel = 2 · T_tok per token_mel_ratio. Mel/spk dims
@@ -613,6 +631,185 @@ def _capture_dit_full_stages(model_dir: Path, T_mel: int = DIT_FULL_T_MEL,
 
 
 # ---------------------------------------------------------------------------
+# Phase 3d-B — CausalConditionalCFM Euler ODE capture
+# ---------------------------------------------------------------------------
+
+def _capture_euler_stages(model_dir: Path, T_tok: int = EULER_T_TOK,
+                          spk_seed: int = EULER_SPK_SEED,
+                          n_steps: int = EULER_N_STEPS,
+                          cfg_rate: float = EULER_CFG_RATE) -> Dict[str, "torch.Tensor"]:
+    """Build a CausalConditionalCFM with the upstream DiT estimator
+    (loaded from flow.pt), run a seeded forward + capture intermediates.
+
+    This is the full Euler ODE — 10 steps of CFG-guided cosine schedule
+    over the random init noise. Returns the final mel + the post-CFG
+    dphi_dt at step 1 (matches the C++ side's `euler_dphi_step0`).
+    """
+    _ensure_upstream_on_path()
+    import sys
+    import types
+    import torch
+    import torch.nn.functional as F
+    from cosyvoice.transformer.upsample_encoder import PreLookaheadLayer
+    from cosyvoice.flow.DiT.dit import DiT
+
+    # `cosyvoice.flow.flow_matching` imports `matcha.models.components.flow_matching::BASECFM`
+    # — a base nn.Module that contributes nothing to the inference path
+    # (ConditionalCFM's __init__ stores its args; forward + solve_euler are
+    # defined locally). Stub BASECFM so we can import without installing the
+    # full matcha package.
+    if "matcha" not in sys.modules:
+        stub_root = types.ModuleType("matcha")
+        stub_models = types.ModuleType("matcha.models")
+        stub_comp = types.ModuleType("matcha.models.components")
+        stub_fm = types.ModuleType("matcha.models.components.flow_matching")
+
+        class _StubBASECFM(torch.nn.Module):
+            def __init__(self, n_feats=None, cfm_params=None, n_spks=1, spk_emb_dim=64, *args, **kwargs):
+                super().__init__()
+                self.n_feats = n_feats
+                self.n_spks = n_spks
+                self.spk_emb_dim = spk_emb_dim
+                if cfm_params is not None:
+                    self.sigma_min = getattr(cfm_params, "sigma_min", 1e-06)
+                    self.solver = getattr(cfm_params, "solver", "euler")
+                    self.t_scheduler = getattr(cfm_params, "t_scheduler", "cosine")
+                    self.training_cfg_rate = getattr(cfm_params, "training_cfg_rate", 0.2)
+                    self.inference_cfg_rate = getattr(cfm_params, "inference_cfg_rate", 0.7)
+
+        stub_fm.BASECFM = _StubBASECFM
+        sys.modules["matcha"] = stub_root
+        sys.modules["matcha.models"] = stub_models
+        sys.modules["matcha.models.components"] = stub_comp
+        sys.modules["matcha.models.components.flow_matching"] = stub_fm
+
+    from cosyvoice.flow.flow_matching import CausalConditionalCFM
+    from omegaconf import DictConfig
+
+    sd = _load_flow_state(model_dir)
+    spk_dim_in = SPK_DIM_IN
+
+    # ---- Inputs: speech_tokens, spk_emb, cond=zeros ----
+    # Use the same speech-token rng as phase 3c so the pre_la output
+    # matches the existing flow_pre_la_* / flow_in_pipe_pre_la_in.
+    tok_gen = torch.Generator().manual_seed(PRE_LA_SEED)
+    speech_ids = torch.randint(0, 6561, (1, T_tok), generator=tok_gen, dtype=torch.long)
+    spk_gen = torch.Generator().manual_seed(spk_seed)
+    spks_raw = torch.randn(1, spk_dim_in, generator=spk_gen, dtype=torch.float32)
+
+    # ---- Pre-lookahead → mu ----
+    embed = torch.nn.Embedding(6561, MEL_DIM)
+    embed.weight.data.copy_(sd["input_embedding.weight"].float())
+    embed.eval()
+    pre_la = PreLookaheadLayer(in_channels=MEL_DIM, channels=1024, pre_lookahead_len=3)
+    pre_la.load_state_dict({k[len("pre_lookahead_layer."):]: v
+                            for k, v in sd.items() if k.startswith("pre_lookahead_layer.")}, strict=True)
+    pre_la.eval()
+    with torch.no_grad():
+        h_tok = pre_la(embed(speech_ids))               # (1, T_tok, mel)
+    h_mel = h_tok.repeat_interleave(2, dim=1)            # (1, T_mel=2*T_tok, mel)
+    T_mel = h_mel.shape[1]
+    mu = h_mel.transpose(1, 2).contiguous()              # (1, mel, T_mel) — channel-first for the CFM
+
+    # ---- spk projection ----
+    spk_affine = torch.nn.Linear(spk_dim_in, MEL_DIM)
+    spk_affine.load_state_dict({
+        "weight": sd["spk_embed_affine_layer.weight"],
+        "bias": sd["spk_embed_affine_layer.bias"],
+    }, strict=True)
+    spk_affine.eval()
+    with torch.no_grad():
+        spks_proj = spk_affine(F.normalize(spks_raw, dim=1))  # (1, mel)
+
+    # cond = zeros (no prompt for the test fixture)
+    cond = torch.zeros(1, MEL_DIM, T_mel, dtype=torch.float32)
+    mask = torch.ones(1, 1, T_mel, dtype=torch.float32)
+
+    # ---- Build the full DiT estimator from flow.pt ----
+    dit = DiT(
+        dim=DIT_DIM, depth=22, heads=16, dim_head=64, ff_mult=2,
+        mel_dim=MEL_DIM, mu_dim=MEL_DIM, spk_dim=MEL_DIM,
+        out_channels=MEL_DIM, dropout=0.0,
+    )
+    dit_prefix = "decoder.estimator."
+    dit_sd = {k[len(dit_prefix):]: v for k, v in sd.items() if k.startswith(dit_prefix)}
+    missing, unexpected = dit.load_state_dict(dit_sd, strict=False)
+    if missing:
+        print(f"  DiT load missing keys ({len(missing)}): {missing[:5]} ...")
+    dit.eval()
+
+    # ---- Build CausalConditionalCFM with the cv3 params ----
+    cfm_params = DictConfig({
+        "sigma_min": 1e-06,
+        "solver": "euler",
+        "t_scheduler": "cosine",
+        "training_cfg_rate": 0.2,
+        "inference_cfg_rate": cfg_rate,
+        "reg_loss_type": "l1",
+    })
+    cfm = CausalConditionalCFM(in_channels=240, cfm_params=cfm_params,
+                               n_spks=1, spk_emb_dim=MEL_DIM, estimator=dit)
+    cfm.eval()
+    # CausalConditionalCFM.__init__ sets the seeded rand_noise via
+    # set_all_random_seed(0) — that's the SAME noise upstream uses at
+    # runtime, so x_init below matches bit-for-bit.
+
+    # The seeded init noise that solve_euler consumes (and that we hand
+    # over to the C++ side via the GGUF).
+    z = cfm.rand_noise[:, :, :T_mel].clone()             # (1, mel, T_mel)
+    x_init = z.clone()                                    # save for the diff
+
+    # ---- Capture dphi_step0 by hooking solve_euler manually ----
+    # Replicate the first iteration of solve_euler so we can grab the
+    # CFG-combined dphi_dt at step 1 BEFORE the x update.
+    with torch.no_grad():
+        # Build the t-span the way upstream does.
+        n_timesteps = n_steps
+        t_span = torch.linspace(0, 1, n_timesteps + 1, dtype=mu.dtype)
+        t_span = 1 - torch.cos(t_span * 0.5 * torch.pi)
+        t0 = t_span[0].unsqueeze(0)
+
+        # First step's CFG-combined dphi_dt.
+        x_in = torch.zeros([2, MEL_DIM, T_mel], dtype=mu.dtype)
+        mask_in = torch.zeros([2, 1, T_mel], dtype=mu.dtype)
+        mu_in = torch.zeros([2, MEL_DIM, T_mel], dtype=mu.dtype)
+        t_in = torch.zeros([2], dtype=mu.dtype)
+        spks_in = torch.zeros([2, MEL_DIM], dtype=mu.dtype)
+        cond_in = torch.zeros([2, MEL_DIM, T_mel], dtype=mu.dtype)
+        x_in[:] = z
+        mask_in[:] = mask
+        mu_in[0] = mu
+        t_in[:] = t0.unsqueeze(0)
+        spks_in[0] = spks_proj
+        cond_in[0] = cond
+        dphi_dt_batched = dit(x_in, mask_in, mu_in, t_in, spks_in, cond_in, streaming=False)
+        dphi_cond, dphi_unc = torch.split(dphi_dt_batched, [1, 1], dim=0)
+        dphi_step1 = (1.0 + cfg_rate) * dphi_cond - cfg_rate * dphi_unc
+
+        # Full Euler forward (uses the same internal logic — solve_euler).
+        mel_final, _ = cfm(mu=mu, mask=mask, n_timesteps=n_timesteps,
+                           spks=spks_proj, cond=cond, streaming=False)
+
+    # Convert all to (T_mel, mel_dim) row-major (= ggml ne=(mel, T_mel) col-major byte-identical).
+    def tc(t):
+        # Inputs are (1, C, T) channel-first. Take .squeeze(0).transpose(0, 1) → (T, C).
+        if t.dim() == 3 and t.shape[1] == MEL_DIM:
+            return t.squeeze(0).transpose(0, 1).contiguous()
+        if t.dim() == 3 and t.shape[2] == MEL_DIM:
+            return t.squeeze(0).contiguous()
+        raise ValueError(f"unexpected shape {tuple(t.shape)}")
+
+    return {
+        "mu_in": tc(mu),
+        "spks_in": spks_proj.squeeze(0).contiguous(),
+        "cond_in": tc(cond),
+        "x_init": tc(x_init),
+        "dphi_step0": tc(dphi_step1),
+        "": tc(mel_final),
+    }
+
+
+# ---------------------------------------------------------------------------
 # dump_reference.py entry point.
 # ---------------------------------------------------------------------------
 
@@ -667,6 +864,15 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
         full_stages = _capture_dit_full_stages(model_dir)
         for short, t in full_stages.items():
             name = "flow_dit_full" + (("_" + short) if short else "")
+            if name not in requested:
+                continue
+            out[name] = t.detach().cpu().numpy().astype(np.float32)
+
+    # ---- Phase 3d-B CFM Euler ODE end-to-end stages ----
+    if any(s.startswith("flow_euler") for s in requested):
+        euler_stages = _capture_euler_stages(model_dir)
+        for short, t in euler_stages.items():
+            name = "flow_euler" + (("_" + short) if short else "")
             if name not in requested:
                 continue
             out[name] = t.detach().cpu().numpy().astype(np.float32)

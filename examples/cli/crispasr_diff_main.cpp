@@ -3987,6 +3987,59 @@ int main(int argc, char** argv) {
             }
         }
 
+        // ---- Phase 3d-B CFM Euler ODE end-to-end ----
+        // Inputs from ref: mu (T_mel, mel), spks_proj (mel), cond (T_mel, mel),
+        // x_init (T_mel, mel). All four come from the GGUF archive. Pack
+        // [mu | spks_proj | cond | x_init] (the layout flow_euler_* expects).
+        {
+            auto mu_pair = ref.get_f32("flow_euler_mu_in");
+            auto spks_pair = ref.get_f32("flow_euler_spks_in");
+            auto cond_pair = ref.get_f32("flow_euler_cond_in");
+            auto xi_pair = ref.get_f32("flow_euler_x_init");
+            uint32_t mel_dim = 0, spk_dim_out = 0;
+            cosyvoice3_tts_get_flow_hparams(ctx, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &mel_dim,
+                                            nullptr, &spk_dim_out, nullptr, nullptr);
+            if (mu_pair.first && spks_pair.first && cond_pair.first && xi_pair.first && mel_dim > 0 &&
+                spk_dim_out > 0 && mu_pair.second % mel_dim == 0 && spks_pair.second == spk_dim_out &&
+                cond_pair.second == mu_pair.second && xi_pair.second == mu_pair.second) {
+                const int T_mel = (int)(mu_pair.second / mel_dim);
+                const size_t mel_n = (size_t)mel_dim * T_mel;
+                std::vector<float> packed(mu_pair.second + spks_pair.second + cond_pair.second + xi_pair.second);
+                float* p = packed.data();
+                std::memcpy(p, mu_pair.first, mu_pair.second * sizeof(float));
+                p += mu_pair.second;
+                std::memcpy(p, spks_pair.first, spks_pair.second * sizeof(float));
+                p += spks_pair.second;
+                std::memcpy(p, cond_pair.first, cond_pair.second * sizeof(float));
+                p += cond_pair.second;
+                std::memcpy(p, xi_pair.first, xi_pair.second * sizeof(float));
+                static const char* euler_stages[] = {"flow_euler_dphi_step0", "flow_euler"};
+                for (const char* sname : euler_stages) {
+                    int n_out = 0;
+                    float* buf = cosyvoice3_tts_extract_stage(ctx, sname, /*ids*/ nullptr, /*n_ids*/ 0, packed.data(),
+                                                              /*n_embed_tokens*/ T_mel, &n_out);
+                    if (!buf || n_out <= 0) {
+                        printf("[SKIP] %-30s  cosyvoice3_tts_extract_stage returned no data\n", sname);
+                        if (buf)
+                            free(buf);
+                        n_skip++;
+                        continue;
+                    }
+                    auto rep = ref.compare(sname, buf, (size_t)n_out);
+                    // Euler accumulates F16 weight error across 10 steps × 22
+                    // blocks × CFG combine. Use the established phase-3 deep
+                    // threshold 0.99 (same as flow_dit_full).
+                    print_row(sname, rep, 0.99f);
+                    record(rep);
+                    free(buf);
+                }
+                (void)mel_n;
+            } else {
+                printf("[SKIP] %-30s  (euler inputs missing in reference)\n", "flow_euler_*");
+                n_skip++;
+            }
+        }
+
         cosyvoice3_tts_free(ctx);
     } else {
         fprintf(stderr,

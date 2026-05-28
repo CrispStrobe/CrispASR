@@ -1038,6 +1038,11 @@ float* cv3_extract_in_pipe_stage(cosyvoice3_tts_context* ctx, const float* pre_l
                                  const float* x_noisy, const float* cond, const char* tensor_name);
 float* cv3_extract_dit_full_stage(cosyvoice3_tts_context* ctx, const float* x, int T_mel, const float* t_emb,
                                   const char* tensor_name);
+float* cv3_extract_euler_stage(cosyvoice3_tts_context* ctx, const float* mu, int T_mel, const float* spks_proj,
+                               const float* cond, const float* x_init, int n_steps, float cfg_rate,
+                               const char* tensor_name);
+float* cv3_run_solve_euler(cosyvoice3_tts_context* ctx, const float* mu, int T_mel, const float* spks_proj,
+                           const float* cond, const float* x_init, int n_steps, float cfg_rate, float* dphi_step0_out);
 } // namespace
 
 extern "C" float* cosyvoice3_tts_extract_stage(struct cosyvoice3_tts_context* ctx, const char* stage_name,
@@ -1263,6 +1268,53 @@ extern "C" float* cosyvoice3_tts_extract_stage(struct cosyvoice3_tts_context* ct
             return nullptr;
         const int out_dim = (strcmp(tensor_name, "dit_full_out") == 0) ? mel : d;
         *out_n = T_mel * out_dim;
+        return out;
+    }
+    // Phase 3d-B — CFM Euler ODE driver. Inputs (packed in `embeds_in` in
+    // this order):
+    //   mu          [T_mel, mel_dim]   F32 — pre_la + repeat_interleave output
+    //   spks_proj   [spk_dim_out]      F32 — already through normalize +
+    //                                          spk_affine (caller-supplied)
+    //   cond        [T_mel, mel_dim]   F32 — prompt-prefix conditioning (zeros
+    //                                          for zero-shot)
+    //   x_init      [T_mel, mel_dim]   F32 — initial Euler noise (caller-supplied
+    //                                          so the diff harness can match
+    //                                          upstream's seeded `rand_noise`)
+    //
+    // n_embed_tokens = T_mel. Stage suffixes:
+    //   "flow_euler"            — final mel [T_mel, mel_dim] after 10 Euler steps
+    //   "flow_euler_dphi_step0" — dphi_dt at step 0 (after CFG combine), debug
+    //
+    // `n_steps` and `cfg_rate` are pinned to the upstream defaults (10, 0.7);
+    // exposing them on extract_stage would inflate the API for marginal gain.
+    if (strncmp(stage_name, "flow_euler", 10) == 0) {
+        if (!ctx->flow.loaded || !embeds_in || n_embed_tokens <= 0)
+            return nullptr;
+        const auto& fh = ctx->flow.hp;
+        const int mel = (int)fh.mel_dim;
+        const int spk_out = (int)fh.spk_dim_out;
+        const int T_mel = n_embed_tokens;
+        const char* sfx = stage_name + 10;
+        const char* tensor_name = nullptr;
+        if (*sfx == 0)
+            tensor_name = "euler_out";
+        else if (strcmp(sfx, "_dphi_step0") == 0)
+            tensor_name = "euler_dphi_step0";
+        else {
+            fprintf(stderr, "cosyvoice3_tts: unknown flow_euler stage suffix '%s'\n", sfx);
+            return nullptr;
+        }
+        // Unpack: mu | spks_proj | cond | x_init.
+        const float* mu = embeds_in;
+        const float* spks_proj = mu + (size_t)T_mel * mel;
+        const float* cond = spks_proj + (size_t)spk_out;
+        const float* x_init = cond + (size_t)T_mel * mel;
+        const int n_steps = (int)fh.cfm_n_steps;          // 10
+        const float cfg_rate = fh.cfm_inference_cfg_rate; // 0.7
+        float* out = cv3_extract_euler_stage(ctx, mu, T_mel, spks_proj, cond, x_init, n_steps, cfg_rate, tensor_name);
+        if (!out)
+            return nullptr;
+        *out_n = T_mel * mel;
         return out;
     }
     if (strcmp(stage_name, "flow_inventory") == 0) {
@@ -1688,6 +1740,12 @@ float* cv3_extract_flow_dit_stage(cosyvoice3_tts_context* ctx, int block_idx, co
 }
 
 } // namespace
+
+extern "C" float* cosyvoice3_tts_solve_flow_euler(struct cosyvoice3_tts_context* ctx, const float* mu, int T_mel,
+                                                  const float* spks_proj, const float* cond, const float* x_init,
+                                                  int n_steps, float cfg_rate) {
+    return cv3_run_solve_euler(ctx, mu, T_mel, spks_proj, cond, x_init, n_steps, cfg_rate, /*dphi_step0_out*/ nullptr);
+}
 
 extern "C" int cosyvoice3_tts_get_flow_hparams(struct cosyvoice3_tts_context* ctx, uint32_t* n_dit_layers,
                                                uint32_t* dit_dim, uint32_t* dit_heads, uint32_t* dit_head_dim,
@@ -2281,6 +2339,338 @@ float* cv3_extract_dit_full_stage(cosyvoice3_tts_context* ctx, const float* x, i
         return nullptr;
     ggml_backend_tensor_get(out_t, out, 0, n * sizeof(float));
     return out;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3d-B — CFM Euler ODE driver
+// ---------------------------------------------------------------------------
+//
+// Upstream refs (cosyvoice/flow/flow_matching.py):
+//
+//   CausalConditionalCFM.forward(mu, mask, n_timesteps, spks, cond):
+//     z = self.rand_noise[:, :, :mu.size(2)] * temperature
+//     t_span = linspace(0, 1, n_timesteps + 1)
+//     if t_scheduler == 'cosine':
+//         t_span = 1 - cos(t_span * pi/2)
+//     return solve_euler(z, t_span, mu, mask, spks, cond)
+//
+//   ConditionalCFM.solve_euler(x, t_span, mu, mask, spks, cond):
+//     t, dt = t_span[0], t_span[1] - t_span[0]
+//     for step in range(1, len(t_span)):
+//         # Classifier-Free Guidance with a batched (2, ...) call:
+//         x_in    = stack([x,    x])     # both identical
+//         mu_in   = stack([mu,   0])     # uncond branch zeroed
+//         spks_in = stack([spks, 0])
+//         cond_in = stack([cond, 0])
+//         t_in    = [t, t]
+//         dphi_dt = self.estimator(x_in, mask_in, mu_in, t_in, spks_in, cond_in)
+//         dphi_dt, cfg_dphi_dt = split(dphi_dt, [batch, batch])
+//         dphi_dt = (1 + cfg_rate) * dphi_dt - cfg_rate * cfg_dphi_dt
+//         x = x + dt * dphi_dt
+//         t = t + dt
+//         dt = t_span[step + 1] - t
+//     return x
+//
+// Our port runs the estimator TWICE per step (cond + uncond, both B=1)
+// rather than once with B=2; the numerical result is identical (the
+// estimator is deterministic and batch-wise independent) and the
+// per-call overhead is small compared to the 22-block forward itself.
+//
+// For diff parity, we accept `x_init` from the caller — generating
+// `torch.manual_seed(0); randn([1,80,15000])[:, :, :T_mel]` bit-exactly
+// in C++ would require porting torch's Mersenne-Twister + Box-Muller,
+// which is out of scope for the ODE driver. The Python ref harness
+// dumps the seeded noise into the GGUF archive and the diff harness
+// hands it in via extract_stage.
+
+// Sinusoidal positional embedding for the Euler time step. Mirrors
+// `SinusPositionEmbedding.forward(x, scale=1000)` in
+// cosyvoice/flow/DiT/modules.py l. 76-83. Returns a freshly allocated
+// vector of size `dim` (= time_mlp.0 input = 256).
+std::vector<float> cv3_compute_sin_emb(float t, int dim, float scale = 1000.0f) {
+    const int half = dim / 2;
+    std::vector<float> out((size_t)dim);
+    const double decay = std::log(10000.0) / (half - 1);
+    for (int i = 0; i < half; i++) {
+        const double freq = std::exp(-(double)i * decay);
+        const double pos = (double)scale * (double)t * freq;
+        out[(size_t)i] = (float)std::sin(pos);          // first half: sin
+        out[(size_t)(i + half)] = (float)std::cos(pos); // second half: cos
+    }
+    return out;
+}
+
+// Build the FULL estimator forward graph: time_mlp + InputEmbedding +
+// 22 DiT blocks + AdaLN-Final norm_out + proj_out.
+//
+// Inputs (set externally):
+//   "est_x_in"      [mel_dim, T_mel]    F32  current Euler iterate
+//   "est_mu_in"     [mel_dim, T_mel]    F32  pre_la output (post repeat-interleave)
+//   "est_spks_in"   [spk_dim_out]       F32  ALREADY projected (caller-supplied)
+//   "est_cond_in"   [mel_dim, T_mel]    F32  prompt-prefix conditioning
+//   "est_sin_emb"   [freq_embed=256]    F32  sinusoidal(t, 256)
+//
+// Output: "est_dphi" [mel_dim, T_mel]  F32  estimator velocity prediction.
+ggml_cgraph* cv3_build_estimator_full_graph(cosyvoice3_tts_context* ctx, int T_mel) {
+    const auto& fh = ctx->flow.hp;
+    const auto& f = ctx->flow;
+    const int mel = (int)fh.mel_dim;
+    const int spk_out = (int)fh.spk_dim_out;
+    const int dit_in_dim = (int)fh.dit_input_dim; // 320
+    const int dit_dim = (int)fh.dit_dim;          // 1024
+    const int n_h = (int)fh.dit_heads;
+    const int hd = (int)fh.dit_head_dim;
+    const int L = (int)fh.n_dit_layers;
+    const int freq_embed_dim = 256;
+    const float rope_theta = fh.rope_theta;
+    const float ln_eps = 1e-6f;
+    GGML_ASSERT(spk_out == mel);
+    GGML_ASSERT(dit_in_dim == 4 * mel);
+
+    ggml_init_params ip = {ctx->compute_meta.size(), ctx->compute_meta.data(), true};
+    ggml_context* ctx0 = ggml_init(ip);
+    ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 8192, false);
+
+    // ---- Inputs ----
+    ggml_tensor* x = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, mel, T_mel);
+    ggml_set_input(x);
+    ggml_set_name(x, "est_x_in");
+    ggml_tensor* mu = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, mel, T_mel);
+    ggml_set_input(mu);
+    ggml_set_name(mu, "est_mu_in");
+    ggml_tensor* spks_proj_in = ggml_new_tensor_1d(ctx0, GGML_TYPE_F32, spk_out);
+    ggml_set_input(spks_proj_in);
+    ggml_set_name(spks_proj_in, "est_spks_in");
+    ggml_tensor* cond = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, mel, T_mel);
+    ggml_set_input(cond);
+    ggml_set_name(cond, "est_cond_in");
+    ggml_tensor* sin_emb = ggml_new_tensor_1d(ctx0, GGML_TYPE_F32, freq_embed_dim);
+    ggml_set_input(sin_emb);
+    ggml_set_name(sin_emb, "est_sin_emb");
+    ggml_tensor* positions = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, T_mel);
+    ggml_set_input(positions);
+    ggml_set_name(positions, "est_positions");
+
+    // ---- TimestepEmbedding's time_mlp: Linear -> SiLU -> Linear ----
+    ggml_tensor* t_emb = ggml_mul_mat(ctx0, f.dit_time_mlp_0_w, sin_emb); // (dit_dim,)
+    t_emb = ggml_add(ctx0, t_emb, f.dit_time_mlp_0_b);
+    t_emb = ggml_silu(ctx0, t_emb);
+    t_emb = ggml_mul_mat(ctx0, f.dit_time_mlp_2_w, t_emb);
+    t_emb = ggml_add(ctx0, t_emb, f.dit_time_mlp_2_b);
+
+    // ---- Broadcast spks_proj over T_mel (shape (spk_out, T_mel)) ----
+    ggml_tensor* spk_template = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, spk_out, T_mel);
+    ggml_tensor* spk_bc = ggml_repeat(ctx0, spks_proj_in, spk_template);
+
+    // ---- InputEmbedding concat (cat dim = channels): [x, cond, mu, spk_bc] ----
+    ggml_tensor* cat01 = ggml_concat(ctx0, x, cond, 0);         // (2*mel, T)
+    ggml_tensor* cat012 = ggml_concat(ctx0, cat01, mu, 0);      // (3*mel, T)
+    ggml_tensor* catted = ggml_concat(ctx0, cat012, spk_bc, 0); // (4*mel = dit_input_dim, T)
+
+    // ---- in_proj: Linear(320, 1024) ----
+    ggml_tensor* proj = ggml_mul_mat(ctx0, f.dit_in_proj_w, catted); // (dit_dim, T)
+    proj = ggml_add(ctx0, proj, f.dit_in_proj_b);
+
+    // ---- conv_pos_embed: 2× grouped causal conv1d-31 + Mish, + residual ----
+    ggml_tensor* pos_h = cv3_causal_grouped_conv1d(ctx0, proj, f.dit_conv_pos_c1_w, f.dit_conv_pos_c1_b);
+    pos_h = cv3_mish(ctx0, pos_h);
+    pos_h = cv3_causal_grouped_conv1d(ctx0, pos_h, f.dit_conv_pos_c2_w, f.dit_conv_pos_c2_b);
+    pos_h = cv3_mish(ctx0, pos_h);
+    ggml_tensor* h = ggml_add(ctx0, pos_h, proj); // (dit_dim, T_mel) — input to first DiT block.
+
+    // ---- Shared silu(t_emb) for all 22 blocks + norm_out ----
+    ggml_tensor* t_silu = ggml_silu(ctx0, t_emb);
+
+    // ---- 22-block DiT stack ----
+    for (int il = 0; il < L; il++) {
+        h = cv3_dit_block_apply(ctx0, h, t_silu, positions, f.blocks[il], dit_dim, n_h, hd, rope_theta);
+    }
+
+    // ---- norm_out (AdaLN-Final, chunk order (scale, shift)) ----
+    ggml_tensor* nmod = ggml_mul_mat(ctx0, f.dit_norm_out_w, t_silu); // (2*dit_dim,)
+    nmod = ggml_add(ctx0, nmod, f.dit_norm_out_b);
+    const size_t fs = sizeof(float);
+    ggml_tensor* nscale = ggml_view_1d(ctx0, nmod, dit_dim, 0);
+    ggml_tensor* nshift = ggml_view_1d(ctx0, nmod, dit_dim, (size_t)dit_dim * fs);
+    ggml_tensor* lnx = ggml_norm(ctx0, h, ln_eps);
+    ggml_tensor* normed = ggml_add(ctx0, lnx, ggml_mul(ctx0, lnx, nscale));
+    normed = ggml_add(ctx0, normed, nshift);
+
+    // ---- proj_out: Linear(dit_dim, mel_dim) ----
+    ggml_tensor* dphi = ggml_mul_mat(ctx0, f.dit_proj_out_w, normed); // (mel, T_mel)
+    dphi = ggml_add(ctx0, dphi, f.dit_proj_out_b);
+    ggml_set_name(dphi, "est_dphi");
+    ggml_set_output(dphi);
+    ggml_build_forward_expand(gf, dphi);
+
+    ggml_free(ctx0);
+    return gf;
+}
+
+// Run the full-estimator graph once. Returns a malloc'd float[T_mel*mel_dim]
+// buffer (caller frees).
+float* cv3_run_estimator_full(cosyvoice3_tts_context* ctx, const float* x, int T_mel, const float* mu,
+                              const float* spks_proj, const float* cond, const float* sin_emb_t) {
+    const auto& fh = ctx->flow.hp;
+    const int mel = (int)fh.mel_dim;
+    const int spk_out = (int)fh.spk_dim_out;
+    const int freq_embed_dim = 256;
+
+    ctx->step_t1_gf = nullptr;
+    ctx->step_t1_fixed_kv_len = 0;
+
+    ggml_cgraph* gf = cv3_build_estimator_full_graph(ctx, T_mel);
+    if (!gf)
+        return nullptr;
+    ggml_backend_sched_reset(ctx->sched);
+    if (!ggml_backend_sched_alloc_graph(ctx->sched, gf))
+        return nullptr;
+
+    auto set_t = [&](const char* nm, const void* data, size_t bytes) {
+        ggml_tensor* t = ggml_graph_get_tensor(gf, nm);
+        if (!t)
+            return false;
+        ggml_backend_tensor_set(t, data, 0, bytes);
+        return true;
+    };
+    const size_t mel_bytes = (size_t)mel * T_mel * sizeof(float);
+    if (!set_t("est_x_in", x, mel_bytes))
+        return nullptr;
+    if (!set_t("est_mu_in", mu, mel_bytes))
+        return nullptr;
+    if (!set_t("est_spks_in", spks_proj, (size_t)spk_out * sizeof(float)))
+        return nullptr;
+    if (!set_t("est_cond_in", cond, mel_bytes))
+        return nullptr;
+    if (!set_t("est_sin_emb", sin_emb_t, (size_t)freq_embed_dim * sizeof(float)))
+        return nullptr;
+    std::vector<int32_t> pos((size_t)T_mel);
+    for (int i = 0; i < T_mel; i++)
+        pos[i] = i;
+    if (!set_t("est_positions", pos.data(), pos.size() * sizeof(int32_t)))
+        return nullptr;
+
+    if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS) {
+        fprintf(stderr, "cosyvoice3_tts: estimator_full compute failed\n");
+        return nullptr;
+    }
+    ggml_tensor* out_t = ggml_graph_get_tensor(gf, "est_dphi");
+    if (!out_t)
+        return nullptr;
+    const size_t n = (size_t)ggml_nelements(out_t);
+    float* out = (float*)malloc(n * sizeof(float));
+    if (!out)
+        return nullptr;
+    ggml_backend_tensor_get(out_t, out, 0, n * sizeof(float));
+    return out;
+}
+
+// 10-step (configurable) cosine-schedule Euler ODE with classifier-free
+// guidance. Inputs are caller-provided post-projection — `mu` is post
+// `pre_la + repeat_interleave`, `spks_proj` is post `F.normalize +
+// spk_affine`. `x_init` is the initial noise (caller matches upstream's
+// seeded `rand_noise[:, :, :T_mel]`).
+//
+// Returns malloc'd float[T_mel*mel_dim] with the final mel iterate.
+// If `dphi_step0_out` is non-null, also writes the post-CFG dphi_dt at
+// step 1 (the FIRST loop iteration — upstream's `step in range(1, ...)`)
+// there; the caller must pre-allocate T_mel*mel_dim floats.
+float* cv3_run_solve_euler(cosyvoice3_tts_context* ctx, const float* mu, int T_mel, const float* spks_proj,
+                           const float* cond, const float* x_init, int n_steps, float cfg_rate, float* dphi_step0_out) {
+    if (!ctx || !ctx->flow.loaded || !mu || !spks_proj || !cond || !x_init || T_mel <= 0 || n_steps <= 0)
+        return nullptr;
+    const auto& fh = ctx->flow.hp;
+    const int mel = (int)fh.mel_dim;
+    const int spk_out = (int)fh.spk_dim_out;
+    const size_t mel_n = (size_t)mel * T_mel;
+
+    // Cosine t-schedule: t_span[k] = 1 - cos(k/N * pi/2), k in [0, N+1].
+    std::vector<double> t_span((size_t)(n_steps + 1));
+    for (int k = 0; k <= n_steps; k++) {
+        const double u = (double)k / (double)n_steps; // linspace(0, 1, N+1)
+        t_span[(size_t)k] = 1.0 - std::cos(u * 0.5 * M_PI);
+    }
+
+    // x starts as the caller-supplied init noise.
+    std::vector<float> x(mel_n);
+    std::memcpy(x.data(), x_init, mel_n * sizeof(float));
+
+    // Pre-allocate the zero buffers used for the CFG uncond pass.
+    std::vector<float> mu_zero(mel_n, 0.0f);
+    std::vector<float> cond_zero(mel_n, 0.0f);
+    std::vector<float> spks_zero((size_t)spk_out, 0.0f);
+
+    double t = t_span[0];
+    double dt = t_span[1] - t_span[0];
+    for (int step = 1; step <= n_steps; step++) {
+        std::vector<float> sin_emb = cv3_compute_sin_emb((float)t, 256);
+
+        float* dphi_cond = cv3_run_estimator_full(ctx, x.data(), T_mel, mu, spks_proj, cond, sin_emb.data());
+        if (!dphi_cond)
+            return nullptr;
+        float* dphi_unc = cv3_run_estimator_full(ctx, x.data(), T_mel, mu_zero.data(), spks_zero.data(),
+                                                 cond_zero.data(), sin_emb.data());
+        if (!dphi_unc) {
+            free(dphi_cond);
+            return nullptr;
+        }
+
+        // CFG combine: dphi = (1 + cfg) * dphi_cond - cfg * dphi_unc.
+        const float w_cond = 1.0f + cfg_rate;
+        const float w_unc = cfg_rate;
+        for (size_t i = 0; i < mel_n; i++) {
+            dphi_cond[i] = w_cond * dphi_cond[i] - w_unc * dphi_unc[i];
+        }
+        free(dphi_unc);
+
+        if (step == 1 && dphi_step0_out) {
+            std::memcpy(dphi_step0_out, dphi_cond, mel_n * sizeof(float));
+        }
+
+        // Euler step: x = x + dt * dphi.
+        const float dtf = (float)dt;
+        for (size_t i = 0; i < mel_n; i++) {
+            x[i] += dtf * dphi_cond[i];
+        }
+        free(dphi_cond);
+
+        t = t + dt;
+        if (step < n_steps) {
+            dt = t_span[(size_t)(step + 1)] - t;
+        }
+    }
+
+    float* out = (float*)malloc(mel_n * sizeof(float));
+    if (!out)
+        return nullptr;
+    std::memcpy(out, x.data(), mel_n * sizeof(float));
+    return out;
+}
+
+float* cv3_extract_euler_stage(cosyvoice3_tts_context* ctx, const float* mu, int T_mel, const float* spks_proj,
+                               const float* cond, const float* x_init, int n_steps, float cfg_rate,
+                               const char* tensor_name) {
+    const auto& fh = ctx->flow.hp;
+    const int mel = (int)fh.mel_dim;
+    const size_t mel_n = (size_t)mel * T_mel;
+
+    if (strcmp(tensor_name, "euler_out") == 0) {
+        return cv3_run_solve_euler(ctx, mu, T_mel, spks_proj, cond, x_init, n_steps, cfg_rate, nullptr);
+    }
+    if (strcmp(tensor_name, "euler_dphi_step0") == 0) {
+        std::vector<float> dphi_buf(mel_n);
+        float* mel_out =
+            cv3_run_solve_euler(ctx, mu, T_mel, spks_proj, cond, x_init, n_steps, cfg_rate, dphi_buf.data());
+        if (!mel_out)
+            return nullptr;
+        free(mel_out);
+        float* out = (float*)malloc(mel_n * sizeof(float));
+        if (!out)
+            return nullptr;
+        std::memcpy(out, dphi_buf.data(), mel_n * sizeof(float));
+        return out;
+    }
+    return nullptr;
 }
 
 } // namespace

@@ -6,6 +6,87 @@ technical deep-dives are in `LEARNINGS.md`.
 
 ---
 
+## 2026-05-28 cosyvoice3: Phase 3d-B + 3e — CFM Euler ODE end-to-end (cos=1.0)
+
+The full mel generation path: 10-step cosine-schedule CFM Euler ODE
+with classifier-free guidance. Validates against upstream
+`CausalConditionalCFM.forward()` bit-equivalently on the seeded
+init-noise input.
+
+Result (25/25 stages PASS through `crispasr-diff cosyvoice3-tts`):
+
+  flow_euler_dphi_step0  cos=1.000000   max|Δ|=4.5e-03  (single post-CFG step)
+  flow_euler             cos=0.999997   max|Δ|=1.4e-02  (final mel, 10 steps)
+
+The final mel cos=0.999997 is well under the 0.99 phase-3e gate.
+Per-step error compounds for 10 iterations, yet stays at the F16
+weight floor — the input-pipeline + 22-block + CFG combine are
+each numerically stable.
+
+Implementation (src/cosyvoice3_tts.cpp + src/cosyvoice3_tts.h):
+
+- `cv3_compute_sin_emb(t, dim=256)` — pure-C++ port of
+  `SinusPositionEmbedding.forward(x, scale=1000)`. Computed per-step
+  outside the graph; fed in as an input tensor.
+- `cv3_build_estimator_full_graph` — single composed graph: time_mlp
+  (Linear→SiLU→Linear) + InputEmbedding (normalize-free spks pass-
+  through, concat[x, cond, mu, spk_bc], in_proj, grouped-conv
+  conv_pos_embed) + 22-block DiT + norm_out + proj_out. Output is
+  `dphi_dt` [T_mel, mel_dim].
+- `cv3_run_solve_euler` — Euler driver. Takes (mu, spks_proj, cond,
+  x_init, n_steps, cfg_rate). Builds the cosine t-span on the CPU,
+  loops:
+    - Compute `sin_emb_t` for current t.
+    - Call estimator with real (mu, spks, cond) → `dphi_cond`.
+    - Call estimator with zeros for (mu, spks, cond) → `dphi_unc`.
+    - CFG combine: `dphi = (1+cfg) * dphi_cond - cfg * dphi_unc`.
+    - Euler step: `x = x + dt * dphi`.
+- Public API `cosyvoice3_tts_solve_flow_euler` exposed in the header.
+- New extract_stage prefixes `flow_euler_*` (input layout packs
+  `[mu | spks_proj | cond | x_init]`).
+
+Why two B=1 estimator passes per step instead of upstream's B=2
+batched call: the estimator is deterministic and batch-wise
+independent, so the numerical result is identical, and the per-call
+overhead is small compared to the 22-block forward itself. Keeps
+the graph builder simple — no need to split a B=2 output back into
+batches inside ggml.
+
+Why `x_init` is a caller input (not generated inside the driver):
+upstream's `CausalConditionalCFM` sets `set_all_random_seed(0);
+rand_noise = torch.randn([1, 80, 50*300])` at module init, so the
+noise is fixed across calls. Porting torch's Mersenne-Twister +
+Box-Muller bit-exactly was out of scope. The Python ref harness
+dumps the seeded noise into the GGUF archive so the diff harness
+hands the same noise to both sides.
+
+Three new gotchas captured in code comments:
+
+1. **Stub `matcha.models.components.flow_matching::BASECFM`** before
+   importing `cosyvoice.flow.flow_matching`. BASECFM contributes
+   nothing to the inference path (`__init__` stores cfm_params;
+   `forward` + `solve_euler` are defined locally on ConditionalCFM /
+   CausalConditionalCFM). The Python ref harness monkey-patches
+   `sys.modules` with a `torch.nn.Module` stub so we don't have to
+   pip-install matcha just for an unused base class.
+2. **CFG zero pass uses zeros AFTER projection**, not raw zeros fed
+   through projection. Upstream's `solve_euler` sets
+   `spks_in[1] = 0; mu_in[1] = 0; cond_in[1] = 0` AFTER spk_affine,
+   so the unconditioned branch's spk_proj is genuinely zero (not
+   spk_affine.bias). The C++ driver takes `spks_proj` (already
+   projected) and passes a zero buffer for the uncond pass — matching
+   upstream exactly.
+3. **Single composed graph beats sequential** for the estimator call.
+   Inlining input-pipeline + 22-block stack + norm + proj into one
+   `cv3_build_estimator_full_graph` avoids the malloc + memcpy round-
+   trip between phases-3c/3d-A's per-stage extract calls (which
+   exist for diff convenience).
+
+Remaining phase 3 work: none — phase 3 is complete. Next phase 4
+is the HiFTGenerator vocoder (mel → 24 kHz waveform).
+
+---
+
 ## 2026-05-27 cosyvoice3: Phase 3d-A — full 22-block DiT estimator (cos=1.0)
 
 Composes the per-block forward (phase 3b) into the full 22-layer DiT
