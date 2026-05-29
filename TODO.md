@@ -1345,8 +1345,9 @@ contributor-facing path for adding backends with confidence. Status:
 
 Full tracking is in `UPSTREAM.md`. Short summary:
 
-- **[upstream]** crispasr `examples/ffmpeg-transcode.cpp` mp4-family
-  container crash. Workaround: pre-convert with ffmpeg one-liner.
+- ~~`examples/ffmpeg-transcode.cpp` mp4-family container crash~~ **FIXED**
+  (commit `da9338a4`): AVIO EOF, stream filtering, multi-frame decode,
+  ref-count hygiene, decoder drain, null-safe flush. Issue #129.
 - **[upstream]** ggml x86 AVX-VNNI / AVX512-VNNI dispatch for Q8_0 dot
   products. Closes the 5-second gap to ONNX INT8 on x86 servers.
 - **[upstream]** NeMo Forced Aligner auxiliary CTC model standalone

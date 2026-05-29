@@ -58,7 +58,14 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#endif
+
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 
 namespace {
 
@@ -4651,6 +4658,7 @@ std::string cv3_json_escape(const std::string& s) {
 }
 
 std::string cv3_temp_path(const char* suffix) {
+#ifndef _WIN32
     char tmpl[] = "/tmp/cv3_phase6_XXXXXX";
     int fd = mkstemp(tmpl);
     if (fd < 0)
@@ -4658,6 +4666,12 @@ std::string cv3_temp_path(const char* suffix) {
     close(fd);
     std::remove(tmpl);
     std::string path = tmpl;
+#else
+    char buf[L_tmpnam];
+    if (!std::tmpnam(buf))
+        return {};
+    std::string path = buf;
+#endif
     if (suffix && *suffix)
         path += suffix;
     return path;
@@ -4679,15 +4693,28 @@ bool cv3_bake_runtime_voice_bundle(const char* wav_path, const char* ref_text, s
         return false;
     }
 
+#if defined(__APPLE__) && defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
+    // system() is unavailable on iOS.
+    (void)upstream_base;
+    std::remove(manifest_path.c_str());
+    std::remove(gguf_path.c_str());
+    return false;
+#else
     const std::string cmd = "python models/convert-cosyvoice3-voices-to-gguf.py --manifest " +
                             cv3_shell_quote(manifest_path) + " --upstream-base " + cv3_shell_quote(upstream_base) +
-                            " --output " + cv3_shell_quote(gguf_path) + " >/dev/null 2>&1";
+                            " --output " + cv3_shell_quote(gguf_path) +
+#ifdef _WIN32
+                            " >NUL 2>&1";
+#else
+                            " >/dev/null 2>&1";
+#endif
     const int rc = std::system(cmd.c_str());
     std::remove(manifest_path.c_str());
     if (rc != 0) {
         std::remove(gguf_path.c_str());
         return false;
     }
+#endif
     out_gguf_path = gguf_path;
     return true;
 }
