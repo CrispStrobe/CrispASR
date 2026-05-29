@@ -1836,6 +1836,28 @@ up asking for, say, "Java VAD" or "Go streaming". Reference commits
 for the pattern: `4f476c3` (TTS surface sweep) and `65e0a61`
 (variant detection sweep). Same shape applies to every other capability.
 
+### Follow-up: Rust binding directory location (low priority)
+
+The Rust crates live at the repo root as `crispasr/` (high-level) +
+`crispasr-sys/` (FFI). The crate **names** are correct and idiomatic
+(`crispasr` / `crispasr-sys`, the `-sys` split, published on crates.io)
+— **do not rename them**. The smell is purely the top-level *directory*
+`crispasr/`, which visually collides with the repo/project name (a
+reader at the root can't tell it's specifically the Rust binding vs the
+core). It is, however, consistent with the repo's per-ecosystem
+top-level pattern (`python/`, `flutter/`).
+
+Optional cleanup: relocate **both** dirs (they're siblings; the
+inter-crate dep is a relative `path = "../crispasr-sys"` and there is no
+Cargo workspace, so moving them together preserves the link) under
+`bindings/rust/` to match the C-family bindings. **Consumer-safe**:
+crates.io consumers resolve by name+version, not in-repo path, so a
+move does not break them. Before moving, audit: (a) any downstream repo
+using a `git` + `path` dependency on the subdir (e.g. CrispEmbed /
+CrisperWeaver), (b) internal CI / `scripts/` / `build_go` refs, (c)
+docs path references. Do it deliberately in one commit — never a blind
+rename. Not worth churn unless the root-dir ambiguity actively bothers.
+
 ---
 
 ## 60o. MTLBinaryArchive Metal pipeline cache — open
