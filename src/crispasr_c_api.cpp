@@ -111,6 +111,10 @@
 #include "voxcpm2_tts.h"
 #define CA_HAVE_VOXCPM2 1
 #endif
+#if __has_include("indextts.h")
+#include "indextts.h"
+#define CA_HAVE_INDEXTTS 1
+#endif
 #if __has_include("m2m100.h")
 #include "m2m100.h"
 #define CA_HAVE_M2M100 1
@@ -1018,6 +1022,8 @@ CA_EXPORT int crispasr_detect_backend_from_gguf(const char* path, char* out_name
         backend = "chatterbox";
     else if (strcmp(arch, "voxcpm2") == 0 || strcmp(arch, "voxcpm2-tts") == 0)
         backend = "voxcpm2-tts";
+    else if (strcmp(arch, "indextts") == 0)
+        backend = "indextts";
     else if (strcmp(arch, "m2m100") == 0)
         backend = "m2m100";
 
@@ -1261,6 +1267,10 @@ struct crispasr_session {
 #endif
 #ifdef CA_HAVE_VOXCPM2
     voxcpm2_context* voxcpm2_ctx = nullptr;
+#endif
+#ifdef CA_HAVE_INDEXTTS
+    indextts_context* indextts_ctx = nullptr;
+    std::vector<float> indextts_ref_pcm; // 24 kHz mono cloning reference
 #endif
 #ifdef CA_HAVE_M2M100
     m2m100_context* m2m100_ctx = nullptr;
@@ -1869,6 +1879,25 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
         return s;
     }
 #endif
+#ifdef CA_HAVE_INDEXTTS
+    if (s->backend == "indextts" || s->backend == "indextts-1.5") {
+        s->backend = "indextts";
+        indextts_context_params p = indextts_context_default_params();
+        p.n_threads = s->n_threads;
+        p.verbosity = g_open_verbosity_tls;
+        p.use_gpu = g_open_use_gpu_tls;
+        s->indextts_ctx = indextts_init_from_file(model_path, p);
+        if (!s->indextts_ctx) {
+            delete s;
+            return nullptr;
+        }
+        // BigVGAN vocoder (indextts-bigvgan) MUST be loaded before the
+        // first synthesize — caller does so via
+        // crispasr_session_set_codec_path. The cloning reference (24 kHz)
+        // is supplied via crispasr_session_set_voice.
+        return s;
+    }
+#endif
 #ifdef CA_HAVE_M2M100
     if (s->backend == "m2m100" || s->backend == "m2m-100" || s->backend == "translate" ||
         s->backend == "m2m100-wmt21") {
@@ -2112,6 +2141,9 @@ CA_EXPORT int crispasr_session_available_backends(char* out_csv, int out_cap) {
 #endif
 #ifdef CA_HAVE_VOXCPM2
     list += ",voxcpm2-tts";
+#endif
+#ifdef CA_HAVE_INDEXTTS
+    list += ",indextts";
 #endif
 #ifdef CA_HAVE_M2M100
     // m2m100-wmt21 routes through the same m2m100 engine (WMT21 Dense
@@ -4283,8 +4315,41 @@ CA_EXPORT int crispasr_session_set_codec_path(crispasr_session* s, const char* p
     if (s->chatterbox_ctx)
         return chatterbox_set_s3gen_path(s->chatterbox_ctx, path);
 #endif
+#ifdef CA_HAVE_INDEXTTS
+    // indextts routes its BigVGAN vocoder companion (indextts-bigvgan)
+    // through the shared codec-path setter, same as qwen3-tts/orpheus.
+    if (s->indextts_ctx)
+        return indextts_set_vocoder_path(s->indextts_ctx, path);
+#endif
     return 0; // not applicable
 }
+
+#ifdef CA_HAVE_INDEXTTS
+// crispasr_audio_load lives in crispasr_audio.cpp (same shared lib);
+// forward-declare it so set_voice can decode an indextts reference WAV
+// without pulling in the audio header. Always returns 16 kHz mono f32.
+extern "C" int crispasr_audio_load(const char* path, float** out_pcm, int* out_samples, int* out_sample_rate);
+
+// Linear-resample 16 kHz → 24 kHz (3:2). indextts's ECAPA speaker
+// encoder + conditioning mel expect a 24 kHz reference ("resampled by
+// the backend caller", indextts_voc.cpp); the shared decoder only emits
+// 16 kHz, so upsample here before handing the clip to indextts.
+static std::vector<float> indextts_resample_16k_to_24k(const float* in, int n) {
+    std::vector<float> out;
+    if (!in || n <= 0)
+        return out;
+    const int outN = (int)((int64_t)n * 24000 / 16000);
+    out.resize(outN);
+    for (int j = 0; j < outN; ++j) {
+        const double srcPos = (double)j * 16000.0 / 24000.0;
+        const int i0 = (int)srcPos;
+        const int i1 = (i0 + 1 < n) ? i0 + 1 : n - 1;
+        const double frac = srcPos - (double)i0;
+        out[j] = (float)((double)in[i0] * (1.0 - frac) + (double)in[i1] * frac);
+    }
+    return out;
+}
+#endif
 
 CA_EXPORT int crispasr_session_set_voice(crispasr_session* s, const char* path, const char* ref_text_or_null) {
     if (!s || !path)
@@ -4332,6 +4397,26 @@ CA_EXPORT int crispasr_session_set_voice(crispasr_session* s, const char* path, 
         // Kokoro voicepacks are GGUF only; .wav reference audio is not
         // a thing for this backend. ref_text_or_null is ignored.
         return kokoro_load_voice_pack(s->kokoro_ctx, path);
+    }
+#endif
+#ifdef CA_HAVE_INDEXTTS
+    if (s->indextts_ctx) {
+        // indextts clones from a reference clip. Decode the WAV (16 kHz
+        // mono via the shared loader), upsample to the 24 kHz the encoder
+        // expects, and stash it for the next synthesize. ref_text is
+        // unused — indextts conditions on audio, not a transcript.
+        if (!ends_with_wav(path))
+            return -2;
+        float* pcm = nullptr;
+        int n = 0, sr = 0;
+        if (crispasr_audio_load(path, &pcm, &n, &sr) != 0 || !pcm || n <= 0) {
+            if (pcm)
+                free(pcm);
+            return -1;
+        }
+        s->indextts_ref_pcm = indextts_resample_16k_to_24k(pcm, n);
+        free(pcm);
+        return s->indextts_ref_pcm.empty() ? -1 : 0;
     }
 #endif
     return -3;
@@ -4507,6 +4592,19 @@ CA_EXPORT float* crispasr_session_synthesize(crispasr_session* s, const char* te
         if (out_n_samples)
             *out_n_samples = n24;
         return pcm24;
+    }
+#endif
+#ifdef CA_HAVE_INDEXTTS
+    if (s->indextts_ctx) {
+        // indextts outputs 24 kHz mono f32 (BigVGAN) — already the host's
+        // playback rate, no resample needed. The cloning reference (24 kHz,
+        // set via set_voice) is passed through; with none, indextts falls
+        // back to dummy conditioning. Buffer is malloc'd / crispasr_pcm_free
+        // compatible, same convention as kokoro / chatterbox.
+        const float* ref =
+            s->indextts_ref_pcm.empty() ? nullptr : s->indextts_ref_pcm.data();
+        const int refN = (int)s->indextts_ref_pcm.size();
+        return indextts_synthesize(s->indextts_ctx, text, ref, refN, out_n_samples);
     }
 #endif
     return nullptr;
@@ -4728,6 +4826,10 @@ CA_EXPORT void crispasr_session_close(crispasr_session* s) {
 #ifdef CA_HAVE_VOXCPM2
     if (s->voxcpm2_ctx)
         voxcpm2_free(s->voxcpm2_ctx);
+#endif
+#ifdef CA_HAVE_INDEXTTS
+    if (s->indextts_ctx)
+        indextts_free(s->indextts_ctx);
 #endif
 #ifdef CA_HAVE_M2M100
     if (s->m2m100_ctx)
@@ -5002,6 +5104,12 @@ CA_EXPORT int crispasr_session_set_tts_seed(crispasr_session* s, uint64_t seed) 
 #ifdef CA_HAVE_VOXCPM2
     if (s->voxcpm2_ctx) {
         voxcpm2_set_seed((voxcpm2_context*)s->voxcpm2_ctx, (uint32_t)seed);
+        touched++;
+    }
+#endif
+#ifdef CA_HAVE_INDEXTTS
+    if (s->indextts_ctx) {
+        indextts_set_seed((indextts_context*)s->indextts_ctx, seed);
         touched++;
     }
 #endif
