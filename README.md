@@ -42,11 +42,11 @@ No Python. No PyTorch. No separate per-model binary. No `pip install`. Just one 
 - [Feature matrix](#feature-matrix)
 - [Install & build](#install--build) — quick install (full guide in [docs/install.md](docs/install.md))
 - [Quick start — ASR](#quick-start)
-- [**Text-to-Speech (TTS)**](docs/tts.md) — Kokoro, Qwen3-TTS, VibeVoice, Orpheus, Chatterbox, IndexTTS, VoxCPM2 _(beta)_
+- [**Text-to-Speech (TTS)**](docs/tts.md) — Kokoro, Qwen3-TTS, VibeVoice, Orpheus, Chatterbox, IndexTTS, VoxCPM2 _(beta)_, CosyVoice3 (multilingual, baked-voice bank + WAV cloning)
 - [Streaming & live transcription](docs/streaming.md)
 - [Server mode (HTTP API)](docs/server.md)
 - [CLI reference](docs/cli.md) — flags, VAD, CTC alignment, output formats, auto-download, audio formats
-- [Language bindings](docs/bindings.md) — Python / Rust / Dart / Go / Java / Ruby / mobile
+- [Language bindings](docs/bindings.md) — Python / Rust / Dart / Go / Java / JavaScript / Ruby / mobile
 - [Architecture](docs/architecture.md) — layered layout, `src/core/` primitives, regression discipline
 - [Contributing — adding a new backend](docs/contributing.md) — 5-file recipe, ground-truth diff workflow
 - [Regression matrix](docs/regression-matrix.md) — `tools/test-all-backends.py` capability tiers
@@ -555,8 +555,10 @@ CrispASR has three feature areas that warrant their own docs pages:
 - **[Text-to-Speech (TTS)](docs/tts.md)** — Kokoro (multilingual,
   smallest), Qwen3-TTS (highest fidelity, voice cloning), VibeVoice
   (lowest-latency streaming), Orpheus (3 B Llama + SNAC), Chatterbox
-  (flow-matching + HiFT vocoder, German via Kartoffelbox). Voice packs,
-  language routing, and qwen3-tts environment switches.
+  (flow-matching + HiFT vocoder, German via Kartoffelbox), IndexTTS,
+  VoxCPM2, and CosyVoice3 (9 langs + 18 zh dialects; baked-voice bank +
+  arbitrary-WAV cloning). Voice packs, language routing, and qwen3-tts
+  environment switches.
 - **[Server mode (HTTP API)](docs/server.md)** — persistent model,
   OpenAI-compatible `/v1/audio/transcriptions` (ASR) and
   `/v1/audio/speech` + `/v1/voices` (TTS, automatic on any loaded
@@ -612,7 +614,7 @@ crispasr -m auto --backend parakeet -f audio.wav --vad -osrt --split-on-punct
 flag, VAD details, CTC alignment workflow, output JSON layout, the
 auto-download registry, and supported audio formats. **See
 [`docs/bindings.md`](docs/bindings.md)** for Python / Rust / Dart /
-Go / Java / Ruby / mobile.
+Go / Java / JavaScript / Ruby / mobile.
 
 ---
 

@@ -121,7 +121,8 @@ let labels = agglomerative_cluster(&flat, (flat.len() / emb.dim() as usize) as i
                                    emb.dim(), 0.5, 8)?;
 ```
 
-Crate: `bindings/rust/`.
+Crates: `crispasr-sys/` (raw FFI) + `crispasr/` (high-level) at the repo
+root; published as `crispasr-sys` / `crispasr` on crates.io.
 
 ## Dart / Flutter
 
@@ -198,3 +199,31 @@ The xcframework drops into a Swift/Objective-C app via `package add
 crispasr.xcframework`; the Android NDK build produces an `.so` that
 Flutter or native Android consumes through `package:crispasr`'s FFI
 layer.
+
+## Text-to-speech
+
+Every binding above (Python, Rust, Dart/Flutter, Go, Java, JavaScript,
+Ruby) reaches all TTS backends through the same two unified-C-API calls,
+so there is nothing TTS-specific per wrapper:
+
+- `synthesize(text) -> float32 PCM @ 24 kHz mono`
+  (`crispasr_session_synthesize`)
+- `set_voice(path, ref_text?)` — `path` is a preset/baked-voice name
+  **or** a `*.wav` clone reference (`ref_text` required for a WAV);
+  `set_instruct(...)` for qwen3-tts VoiceDesign.
+
+Open the TTS model GGUF like any other; the backend auto-detects from
+the GGUF architecture. Supported TTS backends: `kokoro`, `qwen3-tts`
+(+ customvoice), `vibevoice-tts` / `vibevoice-1.5b`, `orpheus`,
+`chatterbox`, `indextts`, `voxcpm2-tts`, and `cosyvoice3-tts`. See
+[`tts.md`](tts.md) for per-backend cloning + voice details.
+
+```python
+# Python (identical shape in every binding)
+s = crispasr.Session("cosyvoice3-llm-f16.gguf")   # backend auto-detected
+s.set_voice("fleurs-de")                          # baked-bank voice name
+pcm = s.synthesize("Hallo, das ist ein Test.")    # float32 @ 24 kHz
+# Voice cloning from a WAV:
+s.set_voice("ref.wav", ref_text="exact transcription of ref.wav")
+pcm = s.synthesize("Clone my voice.")
+```
