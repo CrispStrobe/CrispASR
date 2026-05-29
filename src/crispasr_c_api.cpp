@@ -1267,6 +1267,7 @@ struct crispasr_session {
 #endif
 #ifdef CA_HAVE_VOXCPM2
     voxcpm2_context* voxcpm2_ctx = nullptr;
+    std::vector<float> voxcpm2_ref_pcm; // 16 kHz mono cloning reference
 #endif
 #ifdef CA_HAVE_INDEXTTS
     indextts_context* indextts_ctx = nullptr;
@@ -1873,9 +1874,9 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
             delete s;
             return nullptr;
         }
-        // Zero-shot synthesis works immediately. Voice cloning
-        // (voxcpm2_synthesize_clone) needs a 16 kHz reference PCM, which
-        // the session API has no decode path for yet — a follow-up.
+        // Zero-shot synthesis works immediately; voice cloning kicks in
+        // when a 16 kHz reference is supplied via
+        // crispasr_session_set_voice (decoded from a WAV there).
         return s;
     }
 #endif
@@ -4324,12 +4325,16 @@ CA_EXPORT int crispasr_session_set_codec_path(crispasr_session* s, const char* p
     return 0; // not applicable
 }
 
-#ifdef CA_HAVE_INDEXTTS
+#if defined(CA_HAVE_INDEXTTS) || defined(CA_HAVE_VOXCPM2)
 // crispasr_audio_load lives in crispasr_audio.cpp (same shared lib);
-// forward-declare it so set_voice can decode an indextts reference WAV
-// without pulling in the audio header. Always returns 16 kHz mono f32.
+// forward-declare it so set_voice can decode a reference WAV without
+// pulling in the audio header. Always returns 16 kHz mono f32 — which is
+// exactly what voxcpm2's cloning reference wants (indextts needs 24 kHz,
+// upsampled below).
 extern "C" int crispasr_audio_load(const char* path, float** out_pcm, int* out_samples, int* out_sample_rate);
+#endif
 
+#ifdef CA_HAVE_INDEXTTS
 // Linear-resample 16 kHz → 24 kHz (3:2). indextts's ECAPA speaker
 // encoder + conditioning mel expect a 24 kHz reference ("resampled by
 // the backend caller", indextts_voc.cpp); the shared decoder only emits
@@ -4417,6 +4422,25 @@ CA_EXPORT int crispasr_session_set_voice(crispasr_session* s, const char* path, 
         s->indextts_ref_pcm = indextts_resample_16k_to_24k(pcm, n);
         free(pcm);
         return s->indextts_ref_pcm.empty() ? -1 : 0;
+    }
+#endif
+#ifdef CA_HAVE_VOXCPM2
+    if (s->voxcpm2_ctx) {
+        // VoxCPM2 zero-shot voice cloning: stash a 16 kHz mono reference
+        // clip (exactly what voxcpm2_synthesize_clone wants, so no
+        // resample) for the next synthesize. ref_text is unused.
+        if (!ends_with_wav(path))
+            return -2;
+        float* pcm = nullptr;
+        int n = 0, sr = 0;
+        if (crispasr_audio_load(path, &pcm, &n, &sr) != 0 || !pcm || n <= 0) {
+            if (pcm)
+                free(pcm);
+            return -1;
+        }
+        s->voxcpm2_ref_pcm.assign(pcm, pcm + n);
+        free(pcm);
+        return s->voxcpm2_ref_pcm.empty() ? -1 : 0;
     }
 #endif
     return -3;
@@ -4573,8 +4597,14 @@ CA_EXPORT float* crispasr_session_synthesize(crispasr_session* s, const char* te
         // backend (and the Dart `synthesize` contract) emits 24 kHz.
         // Decimate 2:1 with a pairwise average — a cheap half-band low
         // pass — so the host's fixed-24 kHz playback path stays correct.
+        // When a 16 kHz reference was set via set_voice, clone that voice;
+        // otherwise fall back to the zero-shot default speaker.
         int n48 = 0;
-        float* pcm48 = voxcpm2_synthesize(s->voxcpm2_ctx, text, &n48);
+        float* pcm48 = s->voxcpm2_ref_pcm.empty()
+            ? voxcpm2_synthesize(s->voxcpm2_ctx, text, &n48)
+            : voxcpm2_synthesize_clone(s->voxcpm2_ctx, text,
+                  s->voxcpm2_ref_pcm.data(), (int)s->voxcpm2_ref_pcm.size(),
+                  &n48);
         if (!pcm48 || n48 <= 0) {
             if (pcm48)
                 voxcpm2_pcm_free(pcm48);
