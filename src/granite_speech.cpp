@@ -2290,3 +2290,7 @@ extern "C" int granite_speech_eos_token_id(struct granite_speech_context* ctx) {
 extern "C" int granite_speech_vocab_size(struct granite_speech_context* ctx) {
     return ctx ? (int)ctx->model.hparams.llm_vocab_size : -1;
 }
+
+extern "C" bool granite_speech_is_plus(struct granite_speech_context* ctx) {
+    return ctx && !ctx->proj_cat_layers_parsed.empty();
+}

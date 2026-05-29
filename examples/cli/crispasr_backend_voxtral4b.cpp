@@ -210,15 +210,24 @@ public:
 
         // ---- Detokenize, filtering streaming control tokens (id < 1000) ----
         std::string transcript;
-        for (int32_t id : best_dec.tokens) {
+        std::vector<crispasr_token> tok_vec;
+        for (size_t i = 0; i < best_dec.tokens.size(); i++) {
+            int32_t id = best_dec.tokens[i];
             if (id == EOS)
                 break;
             if (id < 1000)
                 continue; // skip STREAMING_PAD / STREAMING_WORD / etc.
             int len = 0;
             const uint8_t* bytes = voxtral4b_token_text(ctx_, id, &len);
-            if (bytes && len > 0)
-                transcript.append((const char*)bytes, (size_t)len);
+            if (bytes && len > 0) {
+                std::string piece((const char*)bytes, (size_t)len);
+                transcript.append(piece);
+                crispasr_token tok;
+                tok.id = id;
+                tok.text = std::move(piece);
+                tok.confidence = (i < best_dec.probs.size()) ? best_dec.probs[i] : -1.0f;
+                tok_vec.push_back(std::move(tok));
+            }
         }
         while (!transcript.empty() && (transcript.front() == ' ' || transcript.front() == '\t')) {
             transcript.erase(transcript.begin());
@@ -231,6 +240,7 @@ public:
         seg.t0 = t_offset_cs;
         seg.t1 = t_offset_cs + (int64_t)((double)n_samples / 16000.0 * 100.0);
         seg.text = transcript;
+        seg.tokens = std::move(tok_vec);
         out.push_back(std::move(seg));
         return out;
     }

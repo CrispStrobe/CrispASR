@@ -95,6 +95,10 @@ int granite_speech_audio_token_id(struct granite_speech_context* ctx);
 int granite_speech_eos_token_id(struct granite_speech_context* ctx);
 int granite_speech_vocab_size(struct granite_speech_context* ctx);
 
+// Returns true if this GGUF is a granite-speech-plus variant (has encoder
+// hidden concatenation via proj_cat_layers, supports SAA + word timestamps).
+bool granite_speech_is_plus(struct granite_speech_context* ctx);
+
 #ifdef __cplusplus
 }
 #endif

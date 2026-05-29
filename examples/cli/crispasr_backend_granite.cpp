@@ -25,6 +25,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <random>
+#include <regex>
 #include <vector>
 
 namespace {
@@ -60,9 +61,9 @@ public:
     const char* name() const override { return "granite"; }
 
     uint32_t capabilities() const override {
-        return CAP_TIMESTAMPS_CTC | CAP_AUTO_DOWNLOAD | CAP_TEMPERATURE | CAP_PUNCTUATION_TOGGLE | CAP_FLASH_ATTN |
-               CAP_TOKEN_CONFIDENCE | CAP_TRANSLATE | CAP_SRC_TGT_LANGUAGE | CAP_DIARIZE | CAP_PARALLEL_PROCESSORS |
-               CAP_BEAM_SEARCH;
+        return CAP_TIMESTAMPS_CTC | CAP_WORD_TIMESTAMPS | CAP_AUTO_DOWNLOAD | CAP_TEMPERATURE | CAP_PUNCTUATION_TOGGLE |
+               CAP_FLASH_ATTN | CAP_TOKEN_CONFIDENCE | CAP_TRANSLATE | CAP_SRC_TGT_LANGUAGE | CAP_DIARIZE |
+               CAP_PARALLEL_PROCESSORS | CAP_BEAM_SEARCH;
     }
 
     bool init(const whisper_params& p) override {
@@ -208,24 +209,37 @@ public:
             } else if (a)
                 free(a);
         } else {
-            // granite-4.0-1b legacy prompt. Use the hardcoded kPrefix4/
-            // kSuffix4 arrays because tokenize_simple's whitespace-skip
-            // logic drops trailing spaces (losing token 220), which
-            // changes the prefix from 3 tokens to 2 and breaks decoding.
+            // granite-4.0/4.1 prompt: "USER: …\n ASSISTANT:"
             prefix_ids.assign(kPrefix4, kPrefix4 + kNumPrefix4);
-            if (!params.ask.empty()) {
-                const std::string instr = params.ask + "\n ASSISTANT:";
-                int n = 0;
-                int32_t* a = granite_speech_tokenize(ctx_, instr.c_str(), &n);
-                if (a && n > 0) {
-                    suffix_ids.assign(a, a + n);
-                    free(a);
-                } else if (a)
-                    free(a);
+
+            // PLUS variant supports SAA (speaker attribution) and word-level
+            // timestamps via mode-specific instruction strings.
+            const bool is_plus = granite_speech_is_plus(ctx_);
+            const bool want_saa = is_plus && params.diarize;
+            const bool want_ts = is_plus && (params.output_wts || params.output_jsn_full);
+
+            std::string user_content;
+            if (want_saa && want_ts) {
+                user_content = "Speaker attribution: Transcribe and denote who is speaking "
+                               "by adding [Speaker 1]: and [Speaker 2]: tags before speaker turns. "
+                               "After each word, add a timestamp tag showing the end time in "
+                               "centiseconds, e.g. hello [T:45] world [T:82]";
+            } else if (want_saa) {
+                user_content = "Speaker attribution: Transcribe and denote who is speaking "
+                               "by adding [Speaker 1]: and [Speaker 2]: tags before speaker turns.";
+            } else if (want_ts) {
+                user_content = "Timestamps: Transcribe the speech. After each word, add a timestamp "
+                               "tag showing the end time in centiseconds, e.g. hello [T:45] world [T:82]";
+            } else if (!params.ask.empty()) {
+                user_content = params.ask;
             } else if (params.translate) {
                 const std::string tgt =
                     params.target_lang.empty() ? std::string("English") : iso_to_eng(params.target_lang);
-                const std::string instr = "can you translate the speech to " + tgt + "?\n ASSISTANT:";
+                user_content = "can you translate the speech to " + tgt + "?";
+            }
+
+            if (!user_content.empty()) {
+                const std::string instr = user_content + "\n ASSISTANT:";
                 int n = 0;
                 int32_t* a = granite_speech_tokenize(ctx_, instr.c_str(), &n);
                 if (a && n > 0) {
@@ -234,6 +248,8 @@ public:
                 } else if (a)
                     free(a);
             } else {
+                // Default plain ASR — use hardcoded kSuffix4 for granite-4.0
+                // compatibility (avoids whitespace-skip tokenization bug).
                 suffix_ids.assign(kSuffix4, kSuffix4 + kNumSuffix4);
             }
         }
@@ -279,7 +295,10 @@ public:
             return out;
         }
 
-        const int max_new = params.max_new_tokens > 0 ? params.max_new_tokens : 200;
+        const bool is_plus = granite_speech_is_plus(ctx_);
+        const bool want_saa = is_plus && params.diarize;
+        const bool want_ts = is_plus && (params.output_wts || params.output_jsn_full);
+        const int max_new = params.max_new_tokens > 0 ? params.max_new_tokens : (want_ts ? 4096 : 200);
 
         // ---- Beam search path ----
         if (params.beam_size > 1) {
@@ -448,6 +467,89 @@ public:
         // Trim leading whitespace emitted by the chat template.
         while (!seg.text.empty() && (seg.text.front() == ' ' || seg.text.front() == '\n')) {
             seg.text.erase(seg.text.begin());
+        }
+
+        // ---- PLUS post-processing: parse structured output tags ----
+        if (want_saa && !seg.text.empty()) {
+            // Split on [Speaker N]: markers → one segment per speaker turn.
+            static const std::regex spk_re(R"(\[Speaker\s+(\d+)\]\s*:\s*)");
+            std::sregex_iterator it(seg.text.begin(), seg.text.end(), spk_re);
+            std::sregex_iterator end;
+            std::string current_spk;
+            size_t last_pos = 0;
+            std::vector<crispasr_segment> saa_segs;
+
+            for (; it != end; ++it) {
+                // Text before this speaker tag belongs to the previous speaker
+                size_t match_start = (size_t)it->position();
+                if (match_start > last_pos && !current_spk.empty()) {
+                    std::string chunk = seg.text.substr(last_pos, match_start - last_pos);
+                    while (!chunk.empty() && chunk.back() == ' ')
+                        chunk.pop_back();
+                    if (!chunk.empty()) {
+                        crispasr_segment s;
+                        s.t0 = seg.t0;
+                        s.t1 = seg.t1;
+                        s.speaker = current_spk;
+                        s.text = std::move(chunk);
+                        saa_segs.push_back(std::move(s));
+                    }
+                }
+                current_spk = "Speaker " + (*it)[1].str();
+                last_pos = (size_t)(it->position() + it->length());
+            }
+            // Remaining text after last speaker tag
+            if (last_pos < seg.text.size() && !current_spk.empty()) {
+                std::string chunk = seg.text.substr(last_pos);
+                while (!chunk.empty() && chunk.back() == ' ')
+                    chunk.pop_back();
+                if (!chunk.empty()) {
+                    crispasr_segment s;
+                    s.t0 = seg.t0;
+                    s.t1 = seg.t1;
+                    s.speaker = current_spk;
+                    s.text = std::move(chunk);
+                    saa_segs.push_back(std::move(s));
+                }
+            }
+            if (!saa_segs.empty()) {
+                out = std::move(saa_segs);
+                return out;
+            }
+        }
+
+        if (want_ts && !seg.text.empty()) {
+            // Parse [T:N] timestamp tags (N = centiseconds mod 1000).
+            // Unwrap the modulo rollover for absolute timestamps.
+            static const std::regex ts_re(R"((\S+)\s*\[T:(\d+)\])");
+            std::sregex_iterator it(seg.text.begin(), seg.text.end(), ts_re);
+            std::sregex_iterator end;
+            int64_t offset_cs = 0;
+            int64_t last_t = t_offset_cs;
+            std::string clean_text;
+
+            for (; it != end; ++it) {
+                std::string word = (*it)[1].str();
+                int64_t raw_cs = std::stoll((*it)[2].str());
+                int64_t abs_cs = raw_cs + offset_cs + t_offset_cs;
+                // Unwrap mod-1000 rollover
+                while (abs_cs < last_t)
+                    abs_cs += 1000, offset_cs += 1000;
+
+                if (word != "_") { // skip silence tokens
+                    crispasr_word w;
+                    w.text = word;
+                    w.t0 = last_t;
+                    w.t1 = abs_cs;
+                    seg.words.push_back(std::move(w));
+                    if (!clean_text.empty())
+                        clean_text += " ";
+                    clean_text += word;
+                }
+                last_t = abs_cs;
+            }
+            if (!seg.words.empty())
+                seg.text = std::move(clean_text);
         }
 
         // Per-token entries with decode-loop confidences. granite uses
