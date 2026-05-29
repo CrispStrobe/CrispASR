@@ -6,6 +6,49 @@ technical deep-dives are in `LEARNINGS.md`.
 
 ---
 
+## 2026-05-29 cosyvoice3: Phase 6 — native arbitrary-WAV cloning (s3tokenizer_v3 byte-exact)
+
+Adds runtime voice cloning from any 16 kHz WAV
+(`--voice ref.wav --ref-text "..."`), porting the three front-end
+extractors the Python voice-baker used to handle out-of-process. The
+Python shellout (`cv3_load_runtime_voice`) stays as a fallback; the
+native path is tried first.
+
+* **speech_tokenizer_v3 ggml port** (`models/convert-cosyvoice3-s3tok-to-gguf.py`
+  + `cosyvoice3_tts.cpp`): whisper-128 log-mel → 2× stride-2 conv
+  subsampler → 12 FSMN/attention blocks (d=1280, h=20, FFN 5120, FSMN
+  depthwise kernel 31, NEOX RoPE θ=10000) → FSQ head
+  (`round(tanh(z)·0.999)+1`, Σ·3^i, codebook 3^8=6561). No final
+  encoder norm — block-11 FFN residual feeds the FSQ proj directly.
+* **CAMPPlus** 192-D speaker encoder reused from
+  `chatterbox_campplus`; **matcha mel @ 24 kHz** for the flow ref_mel
+  prefix. `cosyvoice3_tts_synth_from_wav` + `extract_{speech_tokens,
+  spk_emb,ref_mel}` ABI; CLI dispatches `*.wav` voices to it.
+* **Byte-exact validation via crispasr-diff.** Extended the harness:
+  `_capture_s3tok_stages` (ONNX with post-subsample / blocks 0,11 /
+  FSQ-proj / indices edges exposed, whisper mel as `s3tok_mel_in`) +
+  `cosyvoice3_tts_extract_stage` s3tok stages + a diff-main loop. On
+  fleurs_10s all five stages hit cos=1.0 and `s3tok_tokens` is
+  byte-exact (max_abs=0, 264/264) vs the ONNX reference.
+* **Three bugs the first (uncommitted) draft had**, all caught by the
+  stage diff: (1) converter ggml-layout — gguf-py reverses the numpy
+  shape into ggml `ne`, so conv kernels ship onnx `(OC,IC,KW)` as-is
+  and 2D MatMul weights are transposed to `(out,in)`; the draft had
+  these inverted and crashed the first conv. (2) tanh-GELU instead of
+  ONNX erf-GELU. (3) the RoPE `positions` input was never filled.
+* **Runtime mel residual**: the full C++ path (own mel) matches
+  262/264 (99.24%); the 2 flips are a low-mel-bin **STFT** delta
+  between `core::build_slaney_fb`+core_mel and whisper's mel — not the
+  filterbank (embedding whisper's exact `mel_filters.npz` left it
+  unchanged) and not the tokenizer network. Left as-is: shared mel
+  infra, sub-1%, irrelevant to cloning (prompt tokens only condition
+  speaker/prosody).
+* **Quants/HF**: `crispasr-quantize` s3tok→Q4_K keeps `fsq.proj.w`
+  F16 (skip rule). s3tok-f16 (462 MB, byte-exact, what `-m auto`
+  pulls) + s3tok-q4_k (139 MB, cos 0.994, optional) + campplus-f16
+  (13 MB) uploaded to `cstr/cosyvoice3-0.5b-2512-GGUF`; registry
+  extras wired.
+
 ## 2026-05-28 cosyvoice3: Phase 5a + 5b — end-to-end synth + HF release
 
 Closes out the CosyVoice3-0.5B-2512 port: ships a working

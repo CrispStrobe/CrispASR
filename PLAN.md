@@ -431,60 +431,16 @@ None of these affect correctness — they're pure throughput pickings.
 
 ---
 
-## CosyVoice3-0.5B-2512 TTS — Phase 6 (open): C++ S3Tokenizer V3 + arbitrary-WAV cloning
+## CosyVoice3-0.5B-2512 TTS — DONE
 
-Phase 1 (converter) → HISTORY §"2026-05-20 cosyvoice3 phase-1".
-Phases 2 (LM), 3 (flow Euler), 4 (HiFT), 5a (CLI + voice bundle),
-5b (Q4_K + Q8_0 quants + HF upload + registry) → HISTORY
-§"2026-05-28 cosyvoice3 phase 5a + 5b". The CV3 backend ships
-end-to-end through `crispasr --backend cosyvoice3-tts` with
-ASR-roundtrip-validated quants on
-`cstr/cosyvoice3-0.5b-2512-GGUF`.
-
-**Phase 6 — open**: arbitrary-WAV runtime cloning. Today voice
-cloning uses baked bundles produced by
-`models/convert-cosyvoice3-voices-to-gguf.py` (Python). To accept a
-`--voice ref.wav --ref-text "..."` runtime path the three front-end
-extractors need C++ ports:
-
-1. **CAMPPlus 192-D speaker encoder.** Probably reusable from
-   `src/chatterbox_campplus.{h,cpp}` (same upstream model). Output:
-   `cosyvoice3_tts_extract_spk_emb(ctx, wav_16k_pcm, n_samples) →
-   float[192]`.
-2. **matcha mel @ 24 kHz** (n_fft=1920, hop=480, win=1920, 80-mel,
-   log-compressed). Standalone helper next to the wav reader; output:
-   `cosyvoice3_tts_extract_ref_mel(ctx, wav_24k_pcm, n_samples) →
-   float[T*80]`.
-3. **speech_tokenizer_v3** (port-strategy investigation done — option
-   A confirmed tractable). The ONNX is 969 MB; the architecture is:
-   - **Input** `(1, 128, T_mel)` log-mel-128 @ 16 kHz + `feats_length (1,)`.
-   - **Output** `(B, T_tok)` int speech-token indices in `[0, 6561)`.
-   - **Subsampler**: 14 `Conv` ops, T_mel→T_tok ≈ 4× downsample.
-   - **Encoder**: 12 transformer-style blocks at `d=1280`, `ff=5120`.
-     Each block carries one named tensor `blocks.K.attn.fsmn_block.weight`
-     shape `(1280, 1, 31)` — depthwise FSMN memory conv (kernel 31).
-     Per-block ops (anonymous in the ONNX as `onnx::MatMul_*`):
-     Q/K/V/O × 1280² + FFN 1280→5120→1280 + 2× LayerNorm + Mish/GELU.
-   - **FSQ head**: `Linear(1280, 8)` → per-axis 3-level quantisation
-     → index = `Σ 3^i · level_i ∈ [0, 6561)`. (3^8 = 6561 matches the
-     CV3 speech codebook exactly.)
-   - **Reuse opportunity**: `src/paraformer.cpp` + `src/funasr.cpp`
-     already implement FSMN blocks (`attn.fsmn.w` + the matching
-     forward); the primitive drops in directly. The 14-Conv subsampler
-     is the only genuinely new code (Conv1d stacks with stride patterns
-     and channel expansions to be read off `g.node` ordering).
-
-   Chosen path: **option (A) full ggml port** — matches the rest of the
-   codebase, no onnxruntime dependency, lets `crispasr-quantize`
-   shrink the encoder too. Estimated effort with paraformer FSMN
-   reuse: 1-2 days of focused porting (ONNX→GGUF converter + diff
-   harness + runtime forward + FSQ head). Out of scope for the
-   phase-5b session.
-
-Wire-up: `cosyvoice3_tts_synth_from_wav(ctx, text, wav_path,
-ref_text, *out_n)` + CLI `--voice <path>.wav --ref-text "..."`.
-Validate via ASR roundtrip on a fresh non-zero-shot WAV from
-`/Volumes/backups/code/audio_samples/`.
+Phases 1–5 → HISTORY. **Phase 6** (native arbitrary-WAV cloning:
+speech_tokenizer_v3 + CAMPPlus + matcha-mel ggml ports,
+`--voice ref.wav --ref-text "..."`) → HISTORY
+§"2026-05-29 cosyvoice3 Phase 6". s3tokenizer_v3 is byte-exact vs the
+ONNX reference (crispasr-diff `s3tok_tokens` max_abs=0). Open follow-up:
+multilingual voice bank (bake ~10 en/de/zh/ja voices into
+`cosyvoice3-voices.gguf`); the runtime mel has a sub-1% STFT delta vs
+whisper (2/264 token flips, cloning-irrelevant) if ever worth chasing.
 
 ## 51c. MiMo-V2.5-ASR F16 step decode — open
 

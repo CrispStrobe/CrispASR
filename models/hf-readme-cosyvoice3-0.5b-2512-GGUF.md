@@ -58,10 +58,15 @@ text (Qwen2 BPE) → CosyVoice3LM (Qwen2-0.5B + speech-token AR head)
 | `cosyvoice3-flow-q8_0.gguf` | Q8_0 (input_embd + spk_affine stay F16) | 361 MB |
 | `cosyvoice3-hift-f16.gguf` | F16 — too small to benefit from quant | 42 MB |
 | `cosyvoice3-voices.gguf` | F32 voice-clone bundle (1 baked voice today) | 57 KB |
+| `cosyvoice3-s3tok-f16.gguf` | F16 speech_tokenizer_v3 — **byte-exact vs ONNX** | 462 MB |
+| `cosyvoice3-s3tok-q4_k.gguf` | Q4_K s3tok (FSQ proj stays F16); ~0.6% token drift — optional smaller variant | 139 MB |
+| `cosyvoice3-campplus-f16.gguf` | F16 CAMPPlus 192-D speaker encoder | 13 MB |
 
 Pick **one LLM + one flow + HiFT + voices**. The smallest viable
 combo is `llm-q4_k + flow-q8_0 + hift-f16 + voices` at **745 MB
-total**; the F16 reference is 1.96 GB.
+total**; the F16 reference is 1.96 GB. The s3tok + campplus companions
+are only needed for **arbitrary-WAV runtime cloning** (below) — not for
+synthesis with a baked voice.
 
 ## Quant validation (ASR roundtrip on smoke prompt)
 
@@ -124,10 +129,28 @@ Each manifest entry is `{name, wav, prompt_text}`. The script needs
 `speech_tokenizer_v3.onnx` (CV3 token extractor); both auto-download
 from HF on first run.
 
-The native runtime companion set now includes
-`cosyvoice3-campplus-f16.gguf` and `cosyvoice3-s3tok-f16.gguf`, so
-arbitrary-WAV cloning can stay inside the C++ runtime without the
-Python pre-bake bridge when those companions are present.
+### Arbitrary-WAV cloning (native, no Python pre-bake)
+
+With the `cosyvoice3-s3tok-f16.gguf` + `cosyvoice3-campplus-f16.gguf`
+companions present (siblings of the LLM, or pulled by `-m auto`), you
+can clone from any 16 kHz WAV at runtime:
+
+```bash
+crispasr -m cosyvoice3-llm-q4_k.gguf \
+         --backend cosyvoice3-tts \
+         --voice my_reference.wav \
+         --ref-text "exact transcription of my_reference.wav" \
+         --tts "The text to speak in the cloned voice." \
+         --tts-output out.wav
+```
+
+The runtime ports all three front-end extractors to ggml: the
+**speech_tokenizer_v3** token extractor (12 FSMN/attention blocks +
+FSQ head — byte-exact vs the ONNX reference, validated stage-by-stage
+with `crispasr-diff`), the **CAMPPlus** 192-D speaker encoder, and the
+**matcha 24 kHz** reference mel. The legacy Python pre-bake bridge
+(`convert-cosyvoice3-voices-to-gguf.py`) remains as an automatic
+fallback when the companions are absent.
 
 ## Tensor naming
 
