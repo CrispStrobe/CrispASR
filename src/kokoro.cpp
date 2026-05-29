@@ -3075,6 +3075,40 @@ extern "C" float* kokoro_synthesize(struct kokoro_context* ctx, const char* text
     if (!ctx || !text || !*text)
         return nullptr;
 
+    // CJK quality warnings (one-shot per language, PLAN #56)
+    static bool warned_cmn = false, warned_ja_kanji = false;
+    if (!warned_cmn && is_cmn_lang(ctx->espeak_lang)) {
+        warned_cmn = true;
+        fprintf(stderr, "kokoro: WARNING — Mandarin tone information is lost (espeak-ng tone "
+                        "numbers stripped; the 178-symbol vocab has no tone slots). For tonal "
+                        "fidelity use a misaki-based phonemizer or a dedicated Mandarin TTS.\n");
+    }
+    if (!warned_ja_kanji && (ctx->espeak_lang == "ja" || ctx->espeak_lang == "jp")) {
+        // Check for CJK Unified Ideographs (U+4E00–U+9FFF)
+        const auto* p = (const unsigned char*)text;
+        while (*p) {
+            if (p[0] >= 0xE4 && p[0] <= 0xE9 && p[1] && p[2]) {
+                uint32_t cp = ((p[0] & 0x0F) << 12) | ((p[1] & 0x3F) << 6) | (p[2] & 0x3F);
+                if (cp >= 0x4E00 && cp <= 0x9FFF) {
+                    warned_ja_kanji = true;
+                    fprintf(stderr, "kokoro: WARNING — Japanese text contains kanji. espeak-ng's "
+                                    "kanji dictionary is incomplete; consider pre-converting to "
+                                    "hiragana for better phoneme accuracy.\n");
+                    break;
+                }
+                p += 3;
+            } else if (*p < 0x80) {
+                p++;
+            } else if (*p < 0xE0) {
+                p += 2;
+            } else if (*p < 0xF0) {
+                p += 3;
+            } else {
+                p += 4;
+            }
+        }
+    }
+
     std::string phonemes;
     if (!phonemize_cached(ctx, ctx->espeak_lang, text, phonemes)) {
         fprintf(stderr, "kokoro: phonemizer produced no output for '%s'\n", text);
