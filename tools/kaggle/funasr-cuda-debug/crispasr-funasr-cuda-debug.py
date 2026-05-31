@@ -130,7 +130,7 @@ step("cmake_done")
 
 with kh.build_heartbeat("cmake.build"):
     kh.sh_with_progress(
-        f"stdbuf -oL -eL cmake --build {BUILD} --target crispasr "
+        f"stdbuf -oL -eL cmake --build {BUILD} --target crispasr-cli "
         f"-j{kh.safe_build_jobs(gpu=True)}"
     )
 step("build_done")
