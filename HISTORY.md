@@ -6,6 +6,38 @@ technical deep-dives are in `LEARNINGS.md`.
 
 ---
 
+## 2026-05-31 Kaggle kernels: shared `kaggle_harness.py` (one gold standard)
+
+The all-backends benchmark OOM'd its CUDA build on a T4 (multi-arch nvcc
+× `-j4` on a ~16 GB box, died ~19 kernels into ggml-cuda). Diagnosing it
+was painful because the build was a silent `subprocess.run` and Kaggle
+only returns committed working-dir files, not stdout. Comparing all the
+kernels showed **none was complete**: `crispasr-regression.py` had the
+logging/heartbeat/ccache/mold/3-tier-auth but no CUDA arch pin;
+`fusion-ab` had auto-arch but no streaming/heartbeat/auth fallback;
+everyone else was a partial subset.
+
+Extracted the union into `tools/kaggle/kaggle_harness.py` — the single
+gold-standard helper module: `init_progress`/`step` (line-buffered I/O +
+progress.jsonl + best-effort HF mirror to `cstr/crispasr-kaggle-progress`
+for live mid-run visibility), `sh_with_progress` (Popen line-streamer
+with ninja [X/N] + TU tracking), `build_heartbeat` (30 s ticker now also
+reporting VmRSS + free-GB — the signal that would have *shown* the OOM
+climbing), `install_build_toolchain`/`cache_and_link_flags` (ninja +
+ccache at `/kaggle/working/.ccache` + mold), `detect_cuda_arch` (nvidia-
+smi compute_cap → pinned `CMAKE_CUDA_ARCHITECTURES`, ~5× less nvcc RAM/
+time), `cuda_build_flags`, `safe_build_jobs` (CUDA→-j2), and
+`resolve_hf_token` (3-tier env → Secret-with-retry → mounted dataset).
+
+Each kernel clones the repo early, so all six import the harness right
+after the clone. The two that had copy-pasted helpers (mimo-asr-cpu-vs-
+gpu, overlap-save-bug-check) drop them entirely (−453 lines net);
+regression rebinds names post-clone (its helpers run pre-clone too);
+benchmark + issue126 gain streaming/heartbeat/ccache/auto-arch they
+never had. Pure-stdlib at import, every external probe (nvidia-smi, apt,
+Secrets, /proc) has a safe fallback, and it imports cleanly off-Kaggle so
+kernels stay `py_compile`/import smoke-testable before push.
+
 ## 2026-05-31 VAD #132 cache concurrency fix + all-backends benchmark refresh
 
 Two follow-ups after fast-forwarding 35 commits (the F5-TTS / Piper /

@@ -156,35 +156,23 @@ print(f"runs={RUNS} warmups={WARMUPS} window={WINDOW_S}s quants={GGUF_QUANTS}")
 # ── Wire Kaggle secrets up front (HF_TOKEN before any hf_hub_download) ────
 # Without HF_TOKEN, huggingface_hub falls back to anonymous requests:
 # strict rate limits, slower downloads, and the warning
-# "You are sending unauthenticated requests to the HF Hub". Pull from
-# Kaggle's UserSecretsClient if available, then expose via every env var
-# huggingface_hub recognises so all of `hf_hub_download`, `snapshot_download`,
-# and the cli see it.
+# "You are sending unauthenticated requests to the HF Hub".
+#
+# HF_TOKEN itself is resolved AFTER the repo clone via the shared harness'
+# 3-tier auth (env → Kaggle Secret with retry → mounted dataset file) — see
+# `token = kh.resolve_hf_token()` below. Here we only pull GH_GIST_TOKEN,
+# which the harness doesn't cover.
 HF_TOKEN = ""
 GH_GIST_TOKEN = ""
 try:
     from kaggle_secrets import UserSecretsClient
     _secrets = UserSecretsClient()
     try:
-        HF_TOKEN = _secrets.get_secret("HF_TOKEN")
-    except Exception:
-        pass
-    try:
         GH_GIST_TOKEN = _secrets.get_secret("GH_GIST_TOKEN")
     except Exception:
         pass
 except Exception:
-    HF_TOKEN = os.environ.get("HF_TOKEN", "")
     GH_GIST_TOKEN = os.environ.get("GH_GIST_TOKEN", "")
-
-if HF_TOKEN:
-    os.environ["HF_TOKEN"] = HF_TOKEN
-    os.environ["HUGGING_FACE_HUB_TOKEN"] = HF_TOKEN
-    os.environ["HF_HUB_TOKEN"] = HF_TOKEN
-    print("✓ HF_TOKEN wired from Kaggle secrets")
-else:
-    print("⚠ no HF_TOKEN — model downloads will be unauthenticated and "
-          "subject to anonymous rate limits")
 
 # ─────────────────────────── cell 2 (code) ───────────────────────────
 step("cell_2_begin")
@@ -221,6 +209,28 @@ else:
         shell=True, check=True,
     )
     print("✓ repo cloned")
+
+# ── Adopt the shared Kaggle harness (now that REPO is on disk) ─────────
+# Gains real-time build streaming (sh_with_progress), a build heartbeat
+# (build_heartbeat), and 3-tier HF auth (resolve_hf_token: env → Kaggle
+# Secret with retry → mounted dataset file). The CUDA build config above
+# (ccache, nvidia-smi auto-arch, mold) stays exactly as-is.
+sys.path.insert(0, os.path.join(str(REPO), "tools", "kaggle"))
+import kaggle_harness as kh  # noqa: E402
+kh.init_progress()
+
+# ── HF auth via the harness' 3-tier resolver ──────────────────────────
+# env HF_TOKEN → Kaggle Secret (with retry) → mounted dataset file. Exports
+# HF_TOKEN + HUGGING_FACE_HUB_TOKEN + HF_HUB_ENABLE_HF_TRANSFER on success,
+# so every hf_hub_download / snapshot_download / cli call (and the progress
+# push above) sees it. Replaces the Secrets-only path that lived in cell 1b.
+HF_TOKEN = kh.resolve_hf_token() or ""
+if HF_TOKEN:
+    os.environ["HF_HUB_TOKEN"] = HF_TOKEN  # legacy var some hub versions read
+    print("✓ HF_TOKEN wired (env/secret/dataset)")
+else:
+    print("⚠ no HF_TOKEN — model downloads will be unauthenticated and "
+          "subject to anonymous rate limits")
 
 # Sanity: both SHAs reachable?
 for sha in (PRE_SHA, POST_SHA):
@@ -353,20 +363,24 @@ def build_at(sha: str, out_lib: Path) -> None:
     BUILD.mkdir(exist_ok=True)
     if not (BUILD / "CMakeCache.txt").is_file():
         t_cfg = time.time()
-        subprocess.run(
-            ["cmake", "-S", str(REPO), "-B", str(BUILD)] + GENERATOR + CMAKE_FLAGS,
-            check=True,
-        )
+        cfg_cmd = " ".join(
+            ["cmake", "-S", str(REPO), "-B", str(BUILD)] + GENERATOR + CMAKE_FLAGS)
+        # cmake configure is a long silent call (esp. the CUDA try_compile);
+        # heartbeat it so a hang/OOM is visible mid-configure.
+        with kh.build_heartbeat("cmake.configure"):
+            kh.sh_with_progress(f"stdbuf -oL -eL {cfg_cmd}")
         print(f"  cmake configure: {time.time() - t_cfg:.0f}s")
     t0 = time.time()
     # Ninja parallelises automatically; explicit -j$(nproc) is a no-op for
     # Ninja but matters for the Make fallback. CMAKE_BUILD_PARALLEL_LEVEL
     # gives the same effect cross-generator.
-    env = {**os.environ, "CMAKE_BUILD_PARALLEL_LEVEL": str(os.cpu_count() or 4)}
-    subprocess.run(
-        f"cmake --build {BUILD} --target crispasr -j$(nproc)",
-        shell=True, check=True, env=env,
-    )
+    os.environ["CMAKE_BUILD_PARALLEL_LEVEL"] = str(os.cpu_count() or 4)
+    # Stream the build line-by-line with a heartbeat: each tick carries
+    # ninja's [X/N] + last TU + VmRSS, so a CUDA-compile OOM is visible
+    # before the kill.
+    with kh.build_heartbeat("cmake.build"):
+        kh.sh_with_progress(
+            f"stdbuf -oL -eL cmake --build {BUILD} --target crispasr -j$(nproc)")
     el = time.time() - t0
     # Locate the .so. Layout differs between cmake/ninja generators slightly.
     candidates = list(BUILD.rglob("libcrispasr.so"))

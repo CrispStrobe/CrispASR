@@ -84,6 +84,13 @@ if REPO.exists():
     shutil.rmtree(REPO)
 run(["git", "clone", "--depth", "1", "--branch", CRISPASR_REF, "--recursive",
      CRISPASR_REPO, str(REPO)])
+
+# Harness lives in the cloned repo — import it now that the clone succeeded.
+sys.path.insert(0, os.path.join(str(REPO), "tools", "kaggle"))
+import kaggle_harness as kh  # noqa: E402
+
+kh.init_progress()
+
 step("cloned", sha=subprocess.check_output(
     ["git", "-C", str(REPO), "rev-parse", "HEAD"], text=True).strip())
 
@@ -93,19 +100,27 @@ gpu_name = subprocess.check_output(
     ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"], text=True).strip()
 step("gpu", name=gpu_name)
 
-# Build with CUDA
+# Build with CUDA. Install ninja/ccache/mold first so the cache + linker
+# launchers are available, then auto-detect the GPU arch (T4→75, A100→80…).
+kh.install_build_toolchain()
+arch = kh.detect_cuda_arch()
+step("cuda_arch", arch=arch)
+
 BUILD.mkdir(parents=True, exist_ok=True)
 cmake_args = [
     "cmake", "-S", str(REPO), "-B", str(BUILD),
     "-DCMAKE_BUILD_TYPE=Release",
-    "-DGGML_CUDA=ON",
     "-DBUILD_SHARED_LIBS=ON",
-]
+] + kh.cuda_build_flags(arch) + kh.cache_and_link_flags()
 run(cmake_args)
 step("cmake_done")
 
-# Just need crispasr CLI + libs; skip examples we don't use.
-run(["cmake", "--build", str(BUILD), "-j", "4", "--target", "crispasr"], timeout=2400)
+# Just need crispasr CLI + libs; skip examples we don't use. Stream the
+# build line-by-line with a heartbeat so a hang/OOM is visible mid-run.
+with kh.build_heartbeat("cmake.build"):
+    kh.sh_with_progress(
+        f"stdbuf -oL -eL cmake --build {BUILD} --target crispasr "
+        f"-j{kh.safe_build_jobs(gpu=True)}")
 step("build_done")
 
 CLI = BUILD / "examples" / "cli" / "crispasr"

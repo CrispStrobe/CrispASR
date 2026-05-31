@@ -32,19 +32,15 @@ SAMPLE_DIR = f"{WORK}/samples"
 os.makedirs(RESULTS_DIR, exist_ok=True)
 os.makedirs(SAMPLE_DIR, exist_ok=True)
 
-# Load secrets
+# GH gist token (optional, for publishing results). HF auth is resolved
+# post-clone via the shared harness (kh.resolve_hf_token) so it gets the
+# 3-tier env → Kaggle Secret(retry) → mounted-dataset fallback.
 try:
     from kaggle_secrets import UserSecretsClient
-    secrets = UserSecretsClient()
-    HF_TOKEN = secrets.get_secret("HF_TOKEN")
-    GH_GIST_TOKEN = secrets.get_secret("GH_GIST_TOKEN") if "GH_GIST_TOKEN" in dir(secrets) else None
+    _secrets = UserSecretsClient()
+    GH_GIST_TOKEN = _secrets.get_secret("GH_GIST_TOKEN") if "GH_GIST_TOKEN" in dir(_secrets) else None
 except Exception:
-    HF_TOKEN = os.environ.get("HF_TOKEN", "")
     GH_GIST_TOKEN = os.environ.get("GH_GIST_TOKEN", "")
-
-os.environ["HF_TOKEN"] = HF_TOKEN
-os.environ["HUGGING_FACE_HUB_TOKEN"] = HF_TOKEN
-os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
 
 # Reference transcript for jfk.wav
 JFK_REF = "and so my fellow americans ask not what your country can do for you ask what you can do for your country"
@@ -150,6 +146,14 @@ else:
                    shell=True, check=True)
     print("✓ CrispASR cloned")
 
+# Shared Kaggle harness (lives in the cloned repo) — build streaming,
+# heartbeat+RSS, ccache/mold, CUDA arch auto-detect, 3-tier HF auth.
+sys.path.insert(0, os.path.join(CRISPASR_DIR, "tools", "kaggle"))
+import kaggle_harness as kh  # noqa: E402
+kh.init_progress(progress_path=f"{WORK}/progress.jsonl")
+kh.resolve_hf_token()  # env → Kaggle Secret(retry) → mounted dataset
+kh.step("clone.done")
+
 # Detect GPU — try CUDA first, fall back to CPU if cmake fails
 has_gpu = os.path.exists("/usr/local/cuda/bin/nvcc")
 # Incremental build: keep build dir if cmake config matches, only rebuild changed source.
@@ -157,10 +161,10 @@ has_gpu = os.path.exists("/usr/local/cuda/bin/nvcc")
 os.makedirs(BUILD_DIR, exist_ok=True)
 need_reconfigure = not os.path.isfile(f"{BUILD_DIR}/CMakeCache.txt")
 
-# Install ninja for faster builds (2-3x faster than make)
-subprocess.run("apt-get install -y ninja-build 2>/dev/null || pip install -q ninja",
-               shell=True, capture_output=True)
-has_ninja = shutil.which("ninja") is not None
+# Install ninja + ccache + mold via the harness (primes the persistent
+# ccache at /kaggle/working/.ccache so re-run builds are near-free).
+_tc = kh.install_build_toolchain()
+has_ninja = _tc["ninja"]
 generator = ["-G", "Ninja"] if has_ninja else []
 
 # Common cmake flags (match Docker/dev-build.sh patterns)
@@ -173,42 +177,51 @@ common_flags = [
 
 cmake_ok = not need_reconfigure  # skip configure if cache exists
 if has_gpu and need_reconfigure:
-    # CUDA build — use LIBRARY_PATH for stubs (same as Docker) + NO_VMM fallback
-    cuda_stubs = "/usr/local/cuda/lib64/stubs"
-    if os.path.isdir(cuda_stubs):
-        os.environ["LIBRARY_PATH"] = f"{cuda_stubs}:{os.environ.get('LIBRARY_PATH', '')}"
-
-    print("GPU: CUDA detected, attempting CUDA build...")
-    r = subprocess.run(
-        ["cmake", "-S", CRISPASR_DIR, "-B", BUILD_DIR] + generator + common_flags + [
-            "-DGGML_CUDA=ON", "-DGGML_CUDA_NO_VMM=ON",
-            "-DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc",
-        ],
-        capture_output=True, text=True
-    )
+    # CUDA build. kh.cuda_build_flags auto-detects the GPU's compute
+    # capability (T4→75, P100→60, A100→80, L4→89) and pins it — without
+    # the pin, ggml builds every kernel for its full default arch list,
+    # which multiplies nvcc RAM+time and OOM'd the ~16 GB box ~19 kernels
+    # into ggml-cuda (2026-05-31). Plus ccache launchers + mold.
+    arch = kh.detect_cuda_arch()
+    kh.step("cuda.arch", arch=arch)
+    print(f"GPU: CUDA detected (sm_{arch}), attempting CUDA build...")
+    cuda_flags = kh.cuda_build_flags(arch) + kh.cache_and_link_flags()
+    with kh.build_heartbeat("cmake.configure.cuda"):
+        r = subprocess.run(
+            ["cmake", "-S", CRISPASR_DIR, "-B", BUILD_DIR] + generator + common_flags + cuda_flags,
+            capture_output=True, text=True
+        )
     if r.returncode == 0:
         cmake_ok = True
         print(f"✓ CUDA cmake configured ({'Ninja' if has_ninja else 'Make'})")
     else:
-        print(f"⚠ CUDA cmake failed, falling back to CPU build")
+        print("⚠ CUDA cmake failed, falling back to CPU build")
+        print((r.stdout or "")[-2000:]); print((r.stderr or "")[-2000:])
         shutil.rmtree(BUILD_DIR, ignore_errors=True)
         os.makedirs(BUILD_DIR, exist_ok=True)
         has_gpu = False
 
 if not cmake_ok and need_reconfigure:
     print("GPU: CPU-only build")
-    subprocess.run(
-        ["cmake", "-S", CRISPASR_DIR, "-B", BUILD_DIR] + generator + common_flags + [
-            "-DGGML_CUDA=OFF",
-        ],
-        check=True
-    )
+    with kh.build_heartbeat("cmake.configure.cpu"):
+        subprocess.run(
+            ["cmake", "-S", CRISPASR_DIR, "-B", BUILD_DIR] + generator + common_flags + [
+                "-DGGML_CUDA=OFF",
+            ] + kh.cache_and_link_flags(),
+            check=True
+        )
 elif cmake_ok and not need_reconfigure:
     print(f"✓ Using cached cmake config ({'GPU' if has_gpu else 'CPU'})")
 
-# Build only the main binary (not quantize, test tools, etc.)
-subprocess.run(f"cmake --build {BUILD_DIR} --target crispasr -j$(nproc)",
-               shell=True, check=True)
+# Build only the main binary (not quantize, test tools, etc.). Stream the
+# build through the harness (sh_with_progress + heartbeat) so ninja [X/N],
+# the current TU, and RSS are visible live — a silent subprocess.run here
+# is exactly why the first OOM was undiagnosable. CUDA nvcc is RAM-heavy,
+# so cap CUDA at -j2 (still parallel, fits memory); CPU keeps full -j.
+build_jobs = kh.safe_build_jobs(gpu=has_gpu)
+with kh.build_heartbeat("cmake.build"):
+    kh.sh_with_progress(f"stdbuf -oL -eL cmake --build {BUILD_DIR} "
+                        f"--target crispasr -j{build_jobs}")
 
 assert os.path.isfile(CRISPASR), f"Build failed: {CRISPASR} not found"
 

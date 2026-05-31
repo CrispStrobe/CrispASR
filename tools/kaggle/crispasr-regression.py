@@ -533,6 +533,24 @@ if not REPO.exists():
 sh(f"git fetch origin && git checkout {CRISPASR_REF}", cwd=REPO)
 sh("git submodule update --init --recursive", cwd=REPO)
 
+# ── Switch to the shared harness now that the repo (which carries it)
+#    is on disk. The local step()/sh()/sh_with_progress()/build_heartbeat()
+#    /kaggle_secret()/kaggle_token_from_dataset() defs above are byte-
+#    equivalent to the harness — they exist only so the pre-clone span
+#    (script.start, auth, rebake-deps pip install) works before the
+#    repo is cloned. From here on, rebind to the single shared source so
+#    the build path picks up the harness's CUDA-arch auto-detect. Point
+#    the harness at the same progress.jsonl + HF repo this kernel already
+#    used so the JSONL stream is continuous across the rebind.
+sys.path.insert(0, str(REPO / "tools" / "kaggle"))
+import kaggle_harness as kh  # noqa: E402 — added to path above
+kh.init_progress(progress_path=str(_PROGRESS_PATH),
+                 hf_progress_repo=_HF_PROGRESS_REPO)
+step = kh.step
+sh = kh.sh
+sh_with_progress = kh.sh_with_progress
+build_heartbeat = kh.build_heartbeat
+
 # ── Fast-build toolchain — match the perf-A/B kernel's pattern.
 #    ccache cuts re-build cost from ~5 min to ~30 s on cache-hot runs
 #    (cache survives across notebook re-runs because /kaggle/working/
@@ -567,7 +585,14 @@ print(f"  ninja={HAS_NINJA}  ccache={HAS_CCACHE}  mold={HAS_MOLD}  "
 
 build_flags = []
 if BUILD_FLAVOUR == "cuda":
-    build_flags.append("-DGGML_CUDA=ON")
+    # Was a bare `-DGGML_CUDA=ON`. The harness adds the missing pieces a
+    # CUDA build on the ~16 GB Kaggle box needs: a pinned, auto-detected
+    # CMAKE_CUDA_ARCHITECTURES (T4→75, A100→80, L4→89) so nvcc emits one
+    # SASS target instead of ggml's full fat-binary list (≈5× less
+    # compile RAM/time — the difference between fitting and OOMing),
+    # plus GGML_CUDA_NO_VMM, the explicit nvcc path, and the CUDA stubs
+    # on LIBRARY_PATH.
+    build_flags += kh.cuda_build_flags(kh.detect_cuda_arch())
 if HAS_CCACHE:
     build_flags += [
         "-DCMAKE_C_COMPILER_LAUNCHER=ccache",
@@ -610,7 +635,8 @@ with build_heartbeat("cmake.build"):
     # the pipe, ninja's own buffer can delay emission of those lines
     # by tens of seconds without it.
     sh_with_progress(f"stdbuf -oL -eL cmake --build {BUILD} "
-                     f"--target crispasr-cli crispasr-diff -j$(nproc)")
+                     f"--target crispasr-cli crispasr-diff "
+                     f"-j{kh.safe_build_jobs(gpu=(BUILD_FLAVOUR == 'cuda'))}")
 
 if HAS_CCACHE:
     print("ccache stats after build:", flush=True)
