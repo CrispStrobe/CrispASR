@@ -1056,6 +1056,15 @@ target_link_libraries     (parler-tts PUBLIC crispasr-core ggml ggml-base ggml-c
 if(NOT MSVC)
     target_compile_options(parler-tts PRIVATE -O3)
 endif()
+# fastpitch-tts — NVIDIA FastPitch parallel TTS (native ggml runtime)
+# ---------------------------------------------------------------------------
+add_library(fastpitch-tts STATIC fastpitch_tts.h fastpitch_tts.cpp)
+set_target_properties(fastpitch-tts PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(fastpitch-tts PUBLIC .)
+target_compile_features   (fastpitch-tts PUBLIC cxx_std_17)
+target_link_libraries     (fastpitch-tts PUBLIC crispasr-core ggml ggml-base ggml-cpu)
+if(NOT MSVC)
+    target_compile_options(fastpitch-tts PRIVATE -O3)
 endif()
 
 # piper-tts — rhasspy/piper VITS TTS (native ggml runtime)

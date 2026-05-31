@@ -50,6 +50,7 @@ std::unique_ptr<CrispasrBackend> crispasr_make_pocket_tts_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_speecht5_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_dia_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_parler_tts_backend();
+std::unique_ptr<CrispasrBackend> crispasr_make_fastpitch_backend();
 
 #include "ggml.h"
 #include "gguf.h"
@@ -123,6 +124,8 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& name
         return crispasr_make_f5_tts_backend();
     if (name == "pocket-tts" || name == "pocket_tts" || name == "pockettts" || name == "pocket")
         return crispasr_make_pocket_tts_backend();
+    if (name == "fastpitch" || name == "fastpitch-tts" || name == "fastpitch_tts")
+        return crispasr_make_fastpitch_backend();
     if (name == "voxcpm2-tts" || name == "voxcpm2" || name == "voxcpm" || name == "voxcpm2_tts")
         return crispasr_make_voxcpm2_tts_backend();
     if (name == "cosyvoice3" || name == "cosyvoice3-tts" || name == "cosyvoice3_tts" || name == "cv3" ||
@@ -205,6 +208,7 @@ std::vector<std::string> crispasr_list_backends() {
         "indextts",
         "f5-tts",
         "pocket-tts",
+        "fastpitch",
         "kokoro",
         "piper",
         "outetts",
