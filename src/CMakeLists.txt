@@ -1045,6 +1045,9 @@ target_compile_features   (pocket-tts PUBLIC cxx_std_17)
 target_link_libraries     (pocket-tts PUBLIC crispasr-core ggml ggml-base ggml-cpu)
 if(NOT MSVC)
     target_compile_options(pocket-tts PRIVATE -O3)
+endif()
+
+# ---------------------------------------------------------------------------
 # parler-tts — Parler TTS prompt-conditioned TTS (T5 + MusicGen decoder + DAC)
 # ---------------------------------------------------------------------------
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/parler_tts.cpp")
