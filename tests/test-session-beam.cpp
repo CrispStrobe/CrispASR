@@ -197,6 +197,7 @@ TEST_CASE("beam: whisper greedy no-regression (beam_size=1 == default)", "[beam]
     INFO("default:    " << text1);
     INFO("beam_size=1:" << text2);
     INFO("beam_size=0:" << text3);
+    REQUIRE_FALSE(text1.empty());  // stub-model guard: empty==empty must not pass vacuously
     REQUIRE(text1 == text2);
     REQUIRE(text1 == text3);
 }
@@ -277,6 +278,7 @@ TEST_CASE("beam: glm-asr greedy no-regression (beam_size=1 == default)", "[beam]
 
     INFO("default:    " << text1);
     INFO("beam_size=1:" << text2);
+    REQUIRE_FALSE(text1.empty());  // stub-model guard: empty==empty must not pass vacuously
     REQUIRE(text1 == text2);
 }
 
@@ -313,7 +315,7 @@ TEST_CASE("beam: qwen3-asr greedy no-regression (beam_size=1 == default)", "[bea
     REQUIRE(!pcm.empty());
 
     // Default (no setter call)
-    crispasr_session* s1 = crispasr_session_open_explicit(model.c_str(), "qwen3-asr", 2);
+    crispasr_session* s1 = crispasr_session_open_explicit(model.c_str(), "qwen3", 2);
     REQUIRE(s1 != nullptr);
     auto* r1 = crispasr_session_transcribe(s1, pcm.data(), (int)pcm.size());
     REQUIRE(r1 != nullptr);
@@ -322,7 +324,7 @@ TEST_CASE("beam: qwen3-asr greedy no-regression (beam_size=1 == default)", "[bea
     crispasr_session_close(s1);
 
     // Explicit beam_size=1
-    crispasr_session* s2 = crispasr_session_open_explicit(model.c_str(), "qwen3-asr", 2);
+    crispasr_session* s2 = crispasr_session_open_explicit(model.c_str(), "qwen3", 2);
     REQUIRE(s2 != nullptr);
     REQUIRE(crispasr_session_set_beam_size(s2, 1) == 0);
     auto* r2 = crispasr_session_transcribe(s2, pcm.data(), (int)pcm.size());
@@ -333,6 +335,7 @@ TEST_CASE("beam: qwen3-asr greedy no-regression (beam_size=1 == default)", "[bea
 
     INFO("default:    " << text1);
     INFO("beam_size=1:" << text2);
+    REQUIRE_FALSE(text1.empty());  // stub-model guard: empty==empty must not pass vacuously
     REQUIRE(text1 == text2);
 }
 
@@ -344,7 +347,7 @@ TEST_CASE("beam: qwen3-asr beam_size=2 produces non-empty output", "[beam][.live
     auto pcm = load_wav_16k_mono(audio);
     REQUIRE(!pcm.empty());
 
-    crispasr_session* s = crispasr_session_open_explicit(model.c_str(), "qwen3-asr", 2);
+    crispasr_session* s = crispasr_session_open_explicit(model.c_str(), "qwen3", 2);
     REQUIRE(s != nullptr);
     REQUIRE(crispasr_session_set_beam_size(s, 2) == 0);
     auto* r = crispasr_session_transcribe(s, pcm.data(), (int)pcm.size());
