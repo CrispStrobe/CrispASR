@@ -23,6 +23,8 @@
 //   CRISPASR_MODEL_WHISPER   — whisper GGUF path
 //   CRISPASR_MODEL_QWEN3_ASR — qwen3-asr GGUF path (optional, replay-helper)
 //   CRISPASR_MODEL_GLM_ASR   — glm-asr GGUF path (optional, per-backend setter)
+//   CRISPASR_MODEL_CANARY    — canary GGUF path (optional, AED branched-KV beam)
+//   CRISPASR_MODEL_COHERE    — cohere GGUF path (optional, AED branched-KV beam)
 //   CRISPASR_AUDIO_EN        — English test audio (default: samples/jfk.wav)
 
 #include <catch2/catch_test_macros.hpp>
@@ -356,6 +358,126 @@ TEST_CASE("beam: qwen3-asr beam_size=2 produces non-empty output", "[beam][.live
     std::string text = result_text(r);
     INFO("qwen3-asr beam=2: " << text);
     REQUIRE(!text.empty());
+
+    crispasr_session_result_free(r);
+    crispasr_session_close(s);
+}
+
+// --- canary (encoder-decoder AED, branched-KV beam — §61h/§90, 52cfec83) -
+// canary's beam path differs from the LLM backends above: it shares the
+// cross-attention KV across beams and snapshots only the self-attention KV
+// per beam (run_with_probs_branched). These cases confirm greedy stays
+// bit-identical and beam produces real output on the AED decoder.
+
+TEST_CASE("beam: canary greedy no-regression (beam_size=1 == default)", "[beam][.live]") {
+    std::string model = get_env("CRISPASR_MODEL_CANARY");
+    if (model.empty()) { SKIP("CRISPASR_MODEL_CANARY not set"); return; }
+
+    std::string audio = get_env("CRISPASR_AUDIO_EN", "samples/jfk.wav");
+    auto pcm = load_wav_16k_mono(audio);
+    REQUIRE(!pcm.empty());
+
+    // Default (no setter call)
+    crispasr_session* s1 = crispasr_session_open_explicit(model.c_str(), "canary", 2);
+    REQUIRE(s1 != nullptr);
+    auto* r1 = crispasr_session_transcribe(s1, pcm.data(), (int)pcm.size());
+    REQUIRE(r1 != nullptr);
+    std::string text1 = result_text(r1);
+    crispasr_session_result_free(r1);
+    crispasr_session_close(s1);
+
+    // Explicit beam_size=1
+    crispasr_session* s2 = crispasr_session_open_explicit(model.c_str(), "canary", 2);
+    REQUIRE(s2 != nullptr);
+    REQUIRE(crispasr_session_set_beam_size(s2, 1) == 0);
+    auto* r2 = crispasr_session_transcribe(s2, pcm.data(), (int)pcm.size());
+    REQUIRE(r2 != nullptr);
+    std::string text2 = result_text(r2);
+    crispasr_session_result_free(r2);
+    crispasr_session_close(s2);
+
+    INFO("default:    " << text1);
+    INFO("beam_size=1:" << text2);
+    REQUIRE_FALSE(text1.empty());  // stub-model guard: empty==empty must not pass vacuously
+    REQUIRE(text1 == text2);
+}
+
+TEST_CASE("beam: canary beam_size=2 produces non-empty output", "[beam][.live]") {
+    std::string model = get_env("CRISPASR_MODEL_CANARY");
+    if (model.empty()) { SKIP("CRISPASR_MODEL_CANARY not set"); return; }
+
+    std::string audio = get_env("CRISPASR_AUDIO_EN", "samples/jfk.wav");
+    auto pcm = load_wav_16k_mono(audio);
+    REQUIRE(!pcm.empty());
+
+    crispasr_session* s = crispasr_session_open_explicit(model.c_str(), "canary", 2);
+    REQUIRE(s != nullptr);
+    REQUIRE(crispasr_session_set_beam_size(s, 2) == 0);
+    auto* r = crispasr_session_transcribe(s, pcm.data(), (int)pcm.size());
+    REQUIRE(r != nullptr);
+
+    std::string text = result_text(r);
+    INFO("canary beam=2: " << text);
+    REQUIRE(!text.empty());
+    REQUIRE(crispasr_session_result_n_segments(r) > 0);
+
+    crispasr_session_result_free(r);
+    crispasr_session_close(s);
+}
+
+// --- cohere (encoder-decoder AED, branched-KV beam — §61h/§90, 52cfec83) -
+
+TEST_CASE("beam: cohere greedy no-regression (beam_size=1 == default)", "[beam][.live]") {
+    std::string model = get_env("CRISPASR_MODEL_COHERE");
+    if (model.empty()) { SKIP("CRISPASR_MODEL_COHERE not set"); return; }
+
+    std::string audio = get_env("CRISPASR_AUDIO_EN", "samples/jfk.wav");
+    auto pcm = load_wav_16k_mono(audio);
+    REQUIRE(!pcm.empty());
+
+    // Default (no setter call)
+    crispasr_session* s1 = crispasr_session_open_explicit(model.c_str(), "cohere", 2);
+    REQUIRE(s1 != nullptr);
+    auto* r1 = crispasr_session_transcribe(s1, pcm.data(), (int)pcm.size());
+    REQUIRE(r1 != nullptr);
+    std::string text1 = result_text(r1);
+    crispasr_session_result_free(r1);
+    crispasr_session_close(s1);
+
+    // Explicit beam_size=1
+    crispasr_session* s2 = crispasr_session_open_explicit(model.c_str(), "cohere", 2);
+    REQUIRE(s2 != nullptr);
+    REQUIRE(crispasr_session_set_beam_size(s2, 1) == 0);
+    auto* r2 = crispasr_session_transcribe(s2, pcm.data(), (int)pcm.size());
+    REQUIRE(r2 != nullptr);
+    std::string text2 = result_text(r2);
+    crispasr_session_result_free(r2);
+    crispasr_session_close(s2);
+
+    INFO("default:    " << text1);
+    INFO("beam_size=1:" << text2);
+    REQUIRE_FALSE(text1.empty());  // stub-model guard: empty==empty must not pass vacuously
+    REQUIRE(text1 == text2);
+}
+
+TEST_CASE("beam: cohere beam_size=2 produces non-empty output", "[beam][.live]") {
+    std::string model = get_env("CRISPASR_MODEL_COHERE");
+    if (model.empty()) { SKIP("CRISPASR_MODEL_COHERE not set"); return; }
+
+    std::string audio = get_env("CRISPASR_AUDIO_EN", "samples/jfk.wav");
+    auto pcm = load_wav_16k_mono(audio);
+    REQUIRE(!pcm.empty());
+
+    crispasr_session* s = crispasr_session_open_explicit(model.c_str(), "cohere", 2);
+    REQUIRE(s != nullptr);
+    REQUIRE(crispasr_session_set_beam_size(s, 2) == 0);
+    auto* r = crispasr_session_transcribe(s, pcm.data(), (int)pcm.size());
+    REQUIRE(r != nullptr);
+
+    std::string text = result_text(r);
+    INFO("cohere beam=2: " << text);
+    REQUIRE(!text.empty());
+    REQUIRE(crispasr_session_result_n_segments(r) > 0);
 
     crispasr_session_result_free(r);
     crispasr_session_close(s);
