@@ -847,6 +847,86 @@ catch_discover_tests(test-core-decode
     PROPERTIES LABELS "unit"
 )
 
+# ─── test-core-sentencepiece — core/sentencepiece.h Viterbi tokenizer ─────────
+# Verifies the extracted SentencePiece unigram tokenizer against an
+# independent brute-force Viterbi (fuzzed) + hand-computed segmentations.
+add_executable(test-core-sentencepiece test-core-sentencepiece.cpp)
+target_include_directories(test-core-sentencepiece PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-core-sentencepiece PRIVATE
+    Catch2::Catch2WithMain
+)
+catch_discover_tests(test-core-sentencepiece
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit"
+)
+
+# ─── test-core-istft — core/istft.h inverse-STFT overlap-add ──────────────────
+# Verifies the extracted iSTFT against an independent full-DFT reference
+# (fuzzed) + a forward-STFT→iSTFT sinusoid round-trip.
+add_executable(test-core-istft test-core-istft.cpp)
+target_include_directories(test-core-istft PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-core-istft PRIVATE
+    Catch2::Catch2WithMain
+)
+catch_discover_tests(test-core-istft
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit"
+)
+
+# ─── test-core-cross-attn — core/cross_attn.h manual path (ggml graph) ────────
+# Computes the header's cross-attention graph and compares to a plain-C++ MHA
+# reference (verifies the bug-fixed V-transpose + unscaled T5 contract).
+add_executable(test-core-cross-attn test-core-cross-attn.cpp)
+target_include_directories(test-core-cross-attn PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/ggml/include
+    ${PROJECT_SOURCE_DIR}/include
+)
+target_link_libraries(test-core-cross-attn PRIVATE
+    Catch2::Catch2WithMain
+    ggml ggml-base ggml-cpu
+)
+catch_discover_tests(test-core-cross-attn
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit"
+)
+
+# ─── test-core-adaln — core/adaln.h AdaLN-Zero modulation (ggml graph) ────────
+add_executable(test-core-adaln test-core-adaln.cpp)
+target_include_directories(test-core-adaln PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/ggml/include
+    ${PROJECT_SOURCE_DIR}/include
+)
+target_link_libraries(test-core-adaln PRIVATE
+    Catch2::Catch2WithMain
+    ggml ggml-base ggml-cpu
+)
+catch_discover_tests(test-core-adaln
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit"
+)
+
+# ─── test-core-seanet — core/seanet_decoder.h convt1d_crop fix (ggml graph) ───
+add_executable(test-core-seanet test-core-seanet.cpp)
+target_include_directories(test-core-seanet PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/ggml/include
+    ${PROJECT_SOURCE_DIR}/include
+)
+target_link_libraries(test-core-seanet PRIVATE
+    Catch2::Catch2WithMain
+    ggml ggml-base ggml-cpu
+)
+catch_discover_tests(test-core-seanet
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit"
+)
+
 # ─── test-audio-chunking — Catch2 unit tests for audio_chunking::find_energy_min_split
 #
 # Covers the energy-minimum detection helper directly: quiet window selection,
