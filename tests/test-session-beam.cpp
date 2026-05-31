@@ -7,7 +7,8 @@
 //
 //   [beam][.live] — requires model files + samples/jfk.wav on disk.
 //                   Gated on CRISPASR_MODEL_WHISPER (+ optionally
-//                   CRISPASR_MODEL_GLM_ASR) env vars. Tests:
+//                   CRISPASR_MODEL_QWEN3_ASR, CRISPASR_MODEL_GLM_ASR)
+//                   env vars. Tests:
 //                     1. beam_size=1 produces output byte-identical to
 //                        never calling the setter (no-regression contract).
 //                     2. beam_size=2..4 produces non-empty, well-formed
@@ -20,6 +21,7 @@
 //
 // Env vars:
 //   CRISPASR_MODEL_WHISPER   — whisper GGUF path
+//   CRISPASR_MODEL_QWEN3_ASR — qwen3-asr GGUF path (optional, replay-helper)
 //   CRISPASR_MODEL_GLM_ASR   — glm-asr GGUF path (optional, per-backend setter)
 //   CRISPASR_AUDIO_EN        — English test audio (default: samples/jfk.wav)
 
@@ -294,6 +296,62 @@ TEST_CASE("beam: glm-asr beam_size=2 produces non-empty output", "[beam][.live]"
 
     std::string text = result_text(r);
     INFO("glm-asr beam=2: " << text);
+    REQUIRE(!text.empty());
+
+    crispasr_session_result_free(r);
+    crispasr_session_close(s);
+}
+
+// --- qwen3-asr (replay-helper via core_beam_decode::run_with_probs) -------
+
+TEST_CASE("beam: qwen3-asr greedy no-regression (beam_size=1 == default)", "[beam][.live]") {
+    std::string model = get_env("CRISPASR_MODEL_QWEN3_ASR");
+    if (model.empty()) { SKIP("CRISPASR_MODEL_QWEN3_ASR not set"); return; }
+
+    std::string audio = get_env("CRISPASR_AUDIO_EN", "samples/jfk.wav");
+    auto pcm = load_wav_16k_mono(audio);
+    REQUIRE(!pcm.empty());
+
+    // Default (no setter call)
+    crispasr_session* s1 = crispasr_session_open_explicit(model.c_str(), "qwen3-asr", 2);
+    REQUIRE(s1 != nullptr);
+    auto* r1 = crispasr_session_transcribe(s1, pcm.data(), (int)pcm.size());
+    REQUIRE(r1 != nullptr);
+    std::string text1 = result_text(r1);
+    crispasr_session_result_free(r1);
+    crispasr_session_close(s1);
+
+    // Explicit beam_size=1
+    crispasr_session* s2 = crispasr_session_open_explicit(model.c_str(), "qwen3-asr", 2);
+    REQUIRE(s2 != nullptr);
+    REQUIRE(crispasr_session_set_beam_size(s2, 1) == 0);
+    auto* r2 = crispasr_session_transcribe(s2, pcm.data(), (int)pcm.size());
+    REQUIRE(r2 != nullptr);
+    std::string text2 = result_text(r2);
+    crispasr_session_result_free(r2);
+    crispasr_session_close(s2);
+
+    INFO("default:    " << text1);
+    INFO("beam_size=1:" << text2);
+    REQUIRE(text1 == text2);
+}
+
+TEST_CASE("beam: qwen3-asr beam_size=2 produces non-empty output", "[beam][.live]") {
+    std::string model = get_env("CRISPASR_MODEL_QWEN3_ASR");
+    if (model.empty()) { SKIP("CRISPASR_MODEL_QWEN3_ASR not set"); return; }
+
+    std::string audio = get_env("CRISPASR_AUDIO_EN", "samples/jfk.wav");
+    auto pcm = load_wav_16k_mono(audio);
+    REQUIRE(!pcm.empty());
+
+    crispasr_session* s = crispasr_session_open_explicit(model.c_str(), "qwen3-asr", 2);
+    REQUIRE(s != nullptr);
+    REQUIRE(crispasr_session_set_beam_size(s, 2) == 0);
+    auto* r = crispasr_session_transcribe(s, pcm.data(), (int)pcm.size());
+    REQUIRE(r != nullptr);
+
+    std::string text = result_text(r);
+    INFO("qwen3-asr beam=2: " << text);
     REQUIRE(!text.empty());
 
     crispasr_session_result_free(r);
