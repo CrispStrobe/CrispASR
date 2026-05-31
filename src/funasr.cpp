@@ -1761,10 +1761,20 @@ extern "C" funasr_context* funasr_init_from_file(const char* path, funasr_contex
     }
 
     {
+        // Use only the primary backend for the scheduler. When CUDA is
+        // the primary, adding a CPU fallback backend causes the sched to
+        // split some LLM ops across GPU↔CPU boundaries, which on certain
+        // architectures (P100 sm_60, Blackwell sm_120) produces all-NaN
+        // prefill logits — the exact funasr CUDA !-loop bug (issue #125).
+        // Single-backend sched keeps everything on CUDA and matches the
+        // cached-step path (which uses ggml_backend_graph_compute directly
+        // and never exhibits the bug).
         int n_be = 0;
         ggml_backend_t backends[2];
         backends[n_be++] = ctx->backend;
-        if (ctx->backend_cpu && ctx->backend_cpu != ctx->backend)
+        // Keep CPU as fallback only when the primary is CPU (no-op second
+        // backend would be a waste but harmless).
+        if (ggml_backend_is_cpu(ctx->backend) && ctx->backend_cpu && ctx->backend_cpu != ctx->backend)
             backends[n_be++] = ctx->backend_cpu;
         ctx->sched = ggml_backend_sched_new(backends, nullptr, n_be, 16384, false, false);
     }
