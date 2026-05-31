@@ -547,6 +547,13 @@ constexpr Entry k_registry[] = {
     // (community voices hosted on rhasspy/piper, not HuggingFace GGUF).
     {"piper", "piper-en_US-lessac-medium-f16.gguf", "", "~30 MB", nullptr, nullptr},
 
+    // Bark — suno/bark 3-stage hierarchical TTS (MIT). bark-small ~300M,
+    // 24 kHz, 10 DE speakers (v2/de_speaker_0..9). Single GGUF packs all
+    // 3 sub-models + EnCodec decoder. No companion needed.
+    {"bark", "bark-small-f16.gguf",
+     "https://huggingface.co/cstr/bark-small-GGUF/resolve/main/bark-small-f16.gguf",
+     "~809 MB", nullptr, nullptr},
+
     // Text-LID — three families, one auto-routing dispatcher
     // (`src/text_lid_dispatch.cpp`). `lid-cld3` is the default for
     // `crispasr-lid -m auto` because it's the smallest (440 KB F16),
