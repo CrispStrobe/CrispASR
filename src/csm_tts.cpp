@@ -249,6 +249,42 @@ struct csm_tts_context {
 namespace {
 
 // ===================================================================
+// Helper: read tensor data as F32 (handles F16/quantized tensors)
+// ===================================================================
+
+static void tensor_get_f32(ggml_tensor* t, float* out, size_t offset_bytes, size_t n_elem) {
+    if (t->type == GGML_TYPE_F32) {
+        ggml_backend_tensor_get(t, out, offset_bytes, n_elem * sizeof(float));
+    } else {
+        size_t raw_bytes = ggml_nbytes(t);
+        if (offset_bytes > 0) {
+            // Partial read: dequantize entire tensor then copy the slice
+            std::vector<char> raw(raw_bytes);
+            ggml_backend_tensor_get(t, raw.data(), 0, raw_bytes);
+            size_t total_elem = ggml_nelements(t);
+            std::vector<float> all(total_elem);
+            const auto* tt = ggml_get_type_traits(t->type);
+            if (tt && tt->to_float) {
+                tt->to_float(raw.data(), all.data(), (int64_t)total_elem);
+            } else {
+                std::memset(all.data(), 0, total_elem * sizeof(float));
+            }
+            size_t start_elem = offset_bytes / sizeof(float);
+            std::memcpy(out, all.data() + start_elem, n_elem * sizeof(float));
+        } else {
+            std::vector<char> raw(raw_bytes);
+            ggml_backend_tensor_get(t, raw.data(), 0, raw_bytes);
+            const auto* tt = ggml_get_type_traits(t->type);
+            if (tt && tt->to_float) {
+                tt->to_float(raw.data(), out, (int64_t)n_elem);
+            } else {
+                std::memset(out, 0, n_elem * sizeof(float));
+            }
+        }
+    }
+}
+
+// ===================================================================
 // xorshift64* sampler
 // ===================================================================
 
@@ -351,6 +387,7 @@ static ggml_tensor* conv1d_transpose(ggml_context* ctx, const seanet_conv& conv,
     if (actual_len > expected_len) {
         // Trim from the right
         out = ggml_view_2d(ctx, out, expected_len, out_channels, out->nb[1], 0);
+        out = ggml_cont(ctx, out);
     }
     out = ggml_reshape_2d(ctx, out, out->ne[0], out->ne[1]);
     if (conv.b) {
@@ -675,7 +712,7 @@ static bool rvq_dequantize(csm_tts_context* ctx, const int32_t* codes, int n_cod
     auto read_codebook = [](const rvq_codebook& cb, int cb_dim, int num_codes) -> std::vector<float> {
         std::vector<float> data(num_codes * cb_dim);
         if (cb.embedding) {
-            ggml_backend_tensor_get(cb.embedding, data.data(), 0, data.size() * sizeof(float));
+            tensor_get_f32(cb.embedding, data.data(), 0, data.size());
         }
         return data;
     };
@@ -685,7 +722,7 @@ static bool rvq_dequantize(csm_tts_context* ctx, const int32_t* codes, int n_cod
             return {};
         size_t n = ggml_nelements(w);
         std::vector<float> data(n);
-        ggml_backend_tensor_get(w, data.data(), 0, n * sizeof(float));
+        tensor_get_f32(w, data.data(), 0, n);
         return data;
     };
 
@@ -1089,9 +1126,9 @@ extern "C" float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx,
 
     // Read backbone embedding tables to CPU for embedding lookups
     std::vector<float> audio_embd_data((size_t)bb_d * avocab * n_cb);
-    ggml_backend_tensor_get(m.bb_audio_embd_w, audio_embd_data.data(), 0, audio_embd_data.size() * sizeof(float));
+    tensor_get_f32(m.bb_audio_embd_w, audio_embd_data.data(), 0, audio_embd_data.size());
     std::vector<float> text_embd_data((size_t)bb_d * hp.text_vocab_size);
-    ggml_backend_tensor_get(m.bb_text_embd_w, text_embd_data.data(), 0, text_embd_data.size() * sizeof(float));
+    tensor_get_f32(m.bb_text_embd_w, text_embd_data.data(), 0, text_embd_data.size());
 
     // Helper: embed a single token from the text vocab
     auto embed_text = [&](int32_t tok_id, float* out) {
@@ -1309,6 +1346,20 @@ extern "C" float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx,
             // Fallback for old behavior
             logits = ggml_mul_mat(ctx0, head_w, cur);
         }
+        // Project through codebooks head.
+        // Weight is stored as 3D [audio_vocab_size, dd_d_model, n_cb-1] in GGUF.
+        // Need to permute to [dd_d_model, audio_vocab_size*(n_cb-1)] for mul_mat.
+        ggml_tensor* head_w = m.dd_codebooks_head_w;
+        if (ggml_n_dims(head_w) == 3) {
+            // Permute dims 0,1 -> [dd_d_model, audio_vocab_size, n_cb-1]
+            head_w = ggml_permute(ctx0, head_w, 1, 0, 2, 3);
+            head_w = ggml_cont(ctx0, head_w);
+            // Reshape to 2D: [dd_d_model, audio_vocab_size * (n_cb-1)]
+            head_w = ggml_reshape_2d(ctx0, head_w, (int64_t)hp.dd_d_model,
+                                     (int64_t)hp.audio_vocab_size * ((int64_t)hp.audio_num_codebooks - 1));
+        }
+        ggml_tensor* logits = ggml_mul_mat(ctx0, head_w, cur);
+>>>>>>> b6773bb7 (fix(csm): three crashes in CSM-TTS runtime — F16 tensor reads, 3D head shape, SEANet cont)
         ggml_set_name(logits, "dd_logits");
         ggml_build_forward_expand(gf, logits);
 
@@ -1319,9 +1370,9 @@ extern "C" float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx,
     // Read depth decoder embeddings + projection to CPU
     int dd_d = (int)hp.dd_d_model;
     std::vector<float> dd_token_embd((size_t)dd_d * avocab);
-    ggml_backend_tensor_get(m.dd_token_embd_w, dd_token_embd.data(), 0, dd_token_embd.size() * sizeof(float));
+    tensor_get_f32(m.dd_token_embd_w, dd_token_embd.data(), 0, dd_token_embd.size());
     std::vector<float> dd_proj_data((size_t)hp.dd_backbone_hidden * dd_d);
-    ggml_backend_tensor_get(m.dd_projection_w, dd_proj_data.data(), 0, dd_proj_data.size() * sizeof(float));
+    tensor_get_f32(m.dd_projection_w, dd_proj_data.data(), 0, dd_proj_data.size());
 
     // Helper: project backbone hidden (bb_d) -> depth (dd_d) via dd_projection_w
     // projection_w is [bb_d, dd_d] in GGUF (ne[0]=bb_d, ne[1]=dd_d)
@@ -1590,13 +1641,23 @@ extern "C" float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx,
         ggml_set_name(inp, "mimi_dec_input");
         ggml_set_input(inp);
 
-        // Upsample: stride-2 transposed conv
-        ggml_tensor* x = ggml_cont(gctx, ggml_transpose(gctx, inp)); // [T_frames, mimi_dim]
-        if (m.mimi_upsample.w) {
+        // Upsample: stride-2 transposed conv (doubles time dimension)
+        // The weight should be [k, mimi_dim, mimi_dim] for channel-preserving upsample.
+        // If the GGUF has a malformed weight (e.g. [4, 1, 512]), fall back to ggml_upscale
+        // which does nearest-neighbor repeat along the time axis.
+        ggml_tensor* x;
+        if (m.mimi_upsample.w && (int)m.mimi_upsample.w->ne[1] == mdim) {
+            // Proper transposed conv upsample
+            x = ggml_cont(gctx, ggml_transpose(gctx, inp)); // [T_frames, mimi_dim]
             x = conv1d_transpose(gctx, m.mimi_upsample, x, 2);
+            // Back to [mimi_dim, T_up]
+            x = ggml_cont(gctx, ggml_transpose(gctx, x));
+        } else {
+            // Fallback: repeat each frame (nearest-neighbor x2 along time axis)
+            // inp is [mimi_dim, T_frames], we want [mimi_dim, 2*T_frames]
+            x = ggml_interpolate(gctx, inp, mdim, (int64_t)T_frames * 2, 1, 1,
+                                 (uint32_t)GGML_SCALE_MODE_NEAREST);
         }
-        // Back to [mimi_dim, T_up]
-        x = ggml_cont(gctx, ggml_transpose(gctx, x));
 
         // Transformer
         int mimi_head_dim = mdim / (int)hp.mimi_n_heads;
