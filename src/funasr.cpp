@@ -1363,9 +1363,11 @@ static bool funasr_nan_check_cb(struct ggml_tensor* t, bool ask, void* user_data
     }
 
     // Print every checked node (concise) so we can trace the full sequence.
-    std::fprintf(stderr, "funasr_nan_check: node#%-3d op=%-12s name=%-30s ne=[%lld,%lld,%lld,%lld] min=%.4g max=%.4g nan=%d inf=%d\n",
-                 st->node_idx, ggml_op_name(t->op), t->name, (long long)t->ne[0], (long long)t->ne[1],
-                 (long long)t->ne[2], (long long)t->ne[3], (double)mn, (double)mx, n_nan, n_inf);
+    std::fprintf(
+        stderr,
+        "funasr_nan_check: node#%-3d op=%-12s name=%-30s ne=[%lld,%lld,%lld,%lld] min=%.4g max=%.4g nan=%d inf=%d\n",
+        st->node_idx, ggml_op_name(t->op), t->name, (long long)t->ne[0], (long long)t->ne[1], (long long)t->ne[2],
+        (long long)t->ne[3], (double)mn, (double)mx, n_nan, n_inf);
 
     if (n_nan > 0 || n_inf > 0) {
         std::fprintf(stderr, "funasr_nan_check: *** FIRST BAD NODE ABOVE ***\n");
@@ -1390,20 +1392,29 @@ static bool funasr_nan_check_cb(struct ggml_tensor* t, bool ask, void* user_data
                 float smx = -1e30f, smn = 1e30f;
                 for (size_t i = 0; i < sn; i++) {
                     float v = sb[i];
-                    if (std::isnan(v)) { snan++; continue; }
-                    if (std::isinf(v)) { sinf++; continue; }
-                    if (v > smx) smx = v;
-                    if (v < smn) smn = v;
+                    if (std::isnan(v)) {
+                        snan++;
+                        continue;
+                    }
+                    if (std::isinf(v)) {
+                        sinf++;
+                        continue;
+                    }
+                    if (v > smx)
+                        smx = v;
+                    if (v < smn)
+                        smn = v;
                 }
                 std::fprintf(stderr,
                              "  src[%d]: op=%-12s name=%-30s type=%-4s ne=[%lld,%lld,%lld,%lld] "
                              "min=%.6g max=%.6g nan=%d inf=%d\n",
                              j, ggml_op_name(s->op), s->name, ggml_type_name(s->type), (long long)s->ne[0],
-                             (long long)s->ne[1], (long long)s->ne[2], (long long)s->ne[3], (double)smn,
-                             (double)smx, snan, sinf);
+                             (long long)s->ne[1], (long long)s->ne[2], (long long)s->ne[3], (double)smn, (double)smx,
+                             snan, sinf);
             } else {
-                std::fprintf(stderr, "  src[%d]: op=%-12s name=%-30s type=%-4s ne=[%lld,%lld,%lld,%lld] [not readable]\n",
-                             j, ggml_op_name(s->op), s->name, ggml_type_name(s->type), (long long)s->ne[0],
+                std::fprintf(stderr,
+                             "  src[%d]: op=%-12s name=%-30s type=%-4s ne=[%lld,%lld,%lld,%lld] [not readable]\n", j,
+                             ggml_op_name(s->op), s->name, ggml_type_name(s->type), (long long)s->ne[0],
                              (long long)s->ne[1], (long long)s->ne[2], (long long)s->ne[3]);
             }
         }
