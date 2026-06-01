@@ -8060,3 +8060,42 @@ encoder benefits from CUDA for longer audio.
 - `tools/kaggle/funasr-cuda-debug/` kernel (v3–v16)
 - PLAN §136
 - issue #125 (original report)
+
+## Round 10 — SpeechT5 + Dia TTS backend ports (2026-05-31/06-01)
+
+### SpeechT5 TTS
+- **Encoder cos > 0.999** against Python F32 reference (all 8 tokens, all 12 layers)
+- Key bugs fixed:
+  1. **Attention head interleave**: must `permute(0,2,1,3)` BEFORE `reshape_2d` when merging multi-head output
+  2. **Relative position bias batch dim**: the position_bias reshape must NOT permute — the get_rows flat lookup already produces `(hd, T_key, T_query)` with T_query as the batch dim
+  3. **HiFi-GAN conv bias**: reshape to `(1, C_out)` not `(C_out, 1)` for broadcast over T
+  4. **HiFi-GAN conv_transpose_1d**: ggml requires `padding=0` — trim output manually
+  5. **F16 biases**: 1D tensors (biases/norms) MUST be F32 in GGUF for ggml binary ops
+  6. **Decoder KV cache**: proper AR self-attention needs accumulated past K/V across steps
+- Pipeline runs end-to-end: encoder → decoder w/ KV cache → postnet → HiFi-GAN → 16kHz WAV
+- Decoder produces speech but wrong content — needs more investigation (likely the decoder also needs position bias batch dim fix)
+
+### Dia 1.6B TTS
+- **Encoder cos = 1.000000** all 12 layers against Python F32 reference
+- **Decoder layer 0 cos = 0.999** against Python F16 reference
+- Key bugs found and fixed:
+  1. **RoPE mode**: Dia uses first-half/second-half pairing = ggml mode=2 (NeoX), NOT mode=0 (interleaved). Mode=0 caused cos=0.11 at layer 2!
+  2. **Encoder attention V path**: head interleave bug (same as SpeechT5)
+  3. **Encoder batch order**: CFG convention is [uncond=batch0, cond=batch1] — was swapped
+  4. **Encoder padding mask**: needed 4D batch-aware mask (eventually solved by using T=prompt_size instead of 1024)
+  5. **Decoder attention scale**: Dia uses scale=1.0 (NO 1/sqrt(d)) — agent's code had wrong 1/sqrt(128)
+  6. **Decoder GQA repeat**: must use repeat_interleave pattern (insert unit dim before n_kv, repeat, flatten) — NOT modular repeat. `ggml_repeat_4d` gives modular (0,1,2,3,0,1,2,3) but Python needs consecutive (0,0,0,0,1,1,1,1)
+  7. **CFG filtering**: Python uses CFG logits ONLY for top-k selection, then samples from CONDITIONAL logits (not CFG-combined). This is NOT standard CFG — it's "CFG-guided conditional sampling"
+  8. **Logit masking**: channels 1-8 must not produce EOS/PAD/BOS tokens (codes must be < audio_vocab_size=1024)
+  9. **Tokenizer**: don't add trailing period after ? or ! punctuation
+  10. **Converter weight transposition**: DenseGeneral Q/K/V vs O_proj have different reshape+transpose patterns; wi_fused and logits_dense need special handling
+  11. **Cross-attention dim**: cross-attn is MHA (16q, 16kv) NOT GQA — kv_dim=2048 not 512
+- Full pipeline: encoder → cross-attn cache → decoder AR loop → CFG filter → delay revert → DAC decode → 44.1kHz WAV
+- Audio produced but ASR says "music" not speech — remaining issue is F16 precision accumulation across 18 decoder layers with scale=1.0 attention
+
+### General lessons
+- **ggml_rope mode**: mode=0 = consecutive pair rotation (0,1),(2,3)...; mode=2 = half-split rotation (0,n/2),(1,n/2+1)... ALWAYS check against the Python RoPE implementation
+- **ggml_repeat_4d for GQA**: gives MODULAR repeat (wrong for repeat_interleave). Use the pattern from core/attention.h: reshape(hd, 1, n_kv, T) → repeat(hd, n_rep, n_kv, T) → reshape(hd, n_heads, T)
+- **Attention output reshape**: ALWAYS permute heads before reshape: (hd, T, n_heads) → permute → (hd, n_heads, T) → reshape (hd*n_heads, T). Without this permute, head concatenation is scrambled
+- **ggml conv_1d**: expects (T, C_in) input — NOT channel-first. Conv bias: (1, C) for broadcast over T
+- **Agent-written code**: found 11 bugs in agent-generated Dia runtime. Agents cannot reliably write correct attention code — always validate every intermediate against ground truth

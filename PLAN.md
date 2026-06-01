@@ -4641,3 +4641,37 @@ See LEARNINGS §136 for the 16-version Kaggle investigation.
 **Future:** file upstream ggml issue with the minimal repro (funasr Q8_0
 model, dual-backend sched, all weights on GPU → Inf at LLM layer 2).
 If fixed upstream, revert the weight split via `FUNASR_LLM_GPU=1`.
+
+---
+
+## §138 SpeechT5 + Dia + Parler + FastPitch TTS stubs → working backends
+
+**Status (2026-06-01):**
+
+### SpeechT5 TTS (microsoft/speecht5_tts)
+- **Encoder**: cos > 0.999 all 12 layers ✅
+- **Converter**: `models/convert-speecht5-to-gguf.py` — F16 weights, F32 biases
+- **Runtime**: `src/speecht5_tts.cpp` — encoder + decoder w/ KV cache + postnet + HiFi-GAN
+- **GGUF**: `/mnt/storage/speecht5/speecht5-tts-f16.gguf` (300 MB)
+- **Status**: Pipeline runs e2e, produces audio. Decoder content mismatch needs investigation.
+- **Next**: validate decoder per-layer against Python reference
+
+### Dia 1.6B TTS (nari-labs/Dia-1.6B)
+- **Encoder**: cos = 1.000000 all 12 layers ✅
+- **Decoder layer 0**: cos = 0.999 ✅
+- **Decoder step 0 argmax**: channel 0 = 568, matches Python ✅
+- **Converter**: `models/convert-dia-to-gguf.py` — F32 weights (scale=1.0 attention sensitive)
+- **Runtime**: `src/dia_tts.cpp` — encoder + cross-attn + AR decoder (18L GQA CFG) + DAC decode
+- **DAC**: `models/convert-dac-to-gguf.py` + `/mnt/storage/dia/dac-44khz.gguf` (104 MB)
+- **GGUF**: `/mnt/storage/dia/dia-1.6b-f16.gguf` (3.2 GB F16)
+- **Status**: 11 bugs fixed. Audio produced (2.15s) but ASR says music/noise. Full 18-layer decoder precision needs validation. CFG filtering now matches Python blueprint.
+- **Next**: validate decoder layers 1-17, test with F32 GGUF, investigate DAC decode fidelity
+- **Key insight**: Dia's `scale=1.0` attention (no 1/sqrt(d)) makes softmax extremely sensitive to precision. Every computation must match Python exactly or codes diverge.
+
+### Parler TTS / FastPitch
+- Not started yet — Dia and SpeechT5 took priority
+- FastPitch has ~1000 LOC stub, converter exists, NeMo model needed
+- Parler has ~857 LOC stub with 3 TODOs, T5 encoder + DAC decoder
+
+**Files changed**: `src/dia_tts.cpp`, `src/speecht5_tts.cpp`, `src/core/hifigan.h`, `src/funasr.cpp`, `models/convert-dia-to-gguf.py`, `models/convert-speecht5-to-gguf.py`
+
