@@ -159,15 +159,20 @@ sensevoice, paraformer, mega-asr, granite-4.1, funasr, mimo-asr.
 | 24 | Gemma-4-E2B 2.3B | 0.8x | 13.6s | 0.0% | Encoder-LLM |
 | 25 | FireRed ASR2 AED | 0.6x | 19.2s | 0.0% | Encoder-AED |
 | 26 | MiMo-ASR † | 0.3x | 38.0s | 0.0% | Encoder-LLM (CPU-forced, #115) |
-| — | **funasr** † | 6.0x | 1.8s | **100% FAIL** | Encoder-LLM (qwen3 dec) |
+| 27 | FunASR Nano † | ~1.0x | ~10.6s | 0.0% | Encoder-LLM (enc GPU, LLM CPU) |
 
 ### Notes
 
-- **funasr is the lone failure.** It runs (6.0× RT, no crash) but emits a
-  wrong transcript (WER 100%) — a real GPU-path backend bug, not a
-  harness/quant issue. It's F16-only (~1.9 GB) and was flagged earlier
-  for a Blackwell-CUDA `!`-loop (guard `f72d3db1`); this confirms the bad
-  output reproduces on **P100 / sm_60** too. Needs a GPU-path fix.
+- **funasr is FIXED (§136, 2026-06-01).** The original benchmark showed
+  6.0× RT / 1.8s but **100% WER** — the `ggml_backend_sched` produced
+  all-NaN logits on CUDA (issue #125). The fix (`f94fec90`) splits
+  weights: encoder on GPU, LLM+KV on CPU. Now ~1.0× RT / 10.6s wall-clock
+  (including model load) with **0% WER**. Slower than the broken all-GPU
+  run because the Qwen2-0.6B decode is CPU-bound. The encoder (70 SANM
+  blocks) still benefits from GPU — for longer audio the encoder
+  dominates and the GPU speedup matters more. `FUNASR_LLM_GPU=1`
+  overrides to all-GPU for future testing once the upstream sched bug
+  is fixed.
 - **SenseVoice debuts at #1** (19.8× RT, 0% WER) — encoder-only multitask
   model, fastest backend now measured.
 - **mimo-asr** runs at 0.3× (38 s) because PLAN #115 forces it to CPU; it
