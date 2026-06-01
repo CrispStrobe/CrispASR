@@ -545,15 +545,15 @@ static bool dia_kv_cache_init(dia_kv_cache& cache, const dia_model& m) {
 
 // Forward declaration for RoPE mode
 // Dia uses NeoX-style RoPE (mode=2 in ggml_rope)
-static const int DIA_ROPE_MODE = 2;
+static const int DIA_ROPE_MODE = 0; // standard rotate-half (not NeoX interleaved)
 
 static ggml_tensor* build_dia_encoder(ggml_context* ctx, dia_model& m,
                                       ggml_tensor* inp_tokens, // (max_enc_ctx * 2,) I32
                                       ggml_tensor* positions,  // (max_enc_ctx,) I32
                                       ggml_tensor* attn_mask   // (max_enc_ctx, max_enc_ctx) F32
 ) {
-    const int T = (int)m.max_encoder_context;
     const int B = 2; // conditional + unconditional
+    const int T = (int)(inp_tokens->ne[0] / B); // actual sequence length
 
     // Embedding lookup: (enc_hidden, T, B)
     ggml_tensor* cur =
@@ -1231,7 +1231,9 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
     // ===================================================================
     // 1. Run encoder (batch=2: conditional + unconditional)
     // ===================================================================
-    const int T_enc = (int)m.max_encoder_context;
+    // Use actual text length instead of max_encoder_context to avoid
+    // attention dilution from padding (mask handling is complex with CFG batch).
+    const int T_enc = (int)ctx->prompt_size;
     const int B = 2;
     const int enc_hidden = (int)m.encoder_hidden_size;
     const int dec_hidden = (int)m.decoder_hidden_size;
@@ -1241,21 +1243,23 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
     const int n_kv_heads = (int)m.decoder_kv_heads;
     const int head_dim = (int)m.head_dim;
 
-    // Prepare encoder input: [cond_tokens | uncond_tokens(zeros)]
+    // Prepare encoder input: [uncond_tokens(zeros) | cond_tokens]
+    // Dia CFG convention: batch 0 = unconditional, batch 1 = conditional
     std::vector<int32_t> enc_input(T_enc * B, 0);
-    for (size_t i = 0; i < tokens.size(); i++) {
-        enc_input[i] = (int32_t)tokens[i]; // conditional
+    for (size_t i = 0; i < tokens.size() && i < (size_t)T_enc; i++) {
+        enc_input[T_enc + i] = (int32_t)tokens[i]; // conditional = batch 1 (offset T_enc)
     }
-    // unconditional = all zeros (padding)
+    // batch 0 (first T_enc) = all zeros (unconditional)
 
     // Positions: [0, 1, 2, ..., T_enc-1]
     std::vector<int32_t> positions(T_enc);
     for (int i = 0; i < T_enc; i++)
         positions[i] = i;
 
-    // Attention mask: (T_enc, T_enc) — causal=false, full attention within each batch
-    // The mask is 0 (attend) or -inf (block). For encoder, use 0 everywhere (full attention).
-    std::vector<float> enc_mask(T_enc * T_enc, 0.0f);
+    // Attention mask: (T_enc, T_enc, 1, B) — 0 = attend, -inf = block.
+    // Since T_enc = prompt_size (no padding), all tokens are real in the cond batch
+    // and all zeros in the uncond batch. No cross-group masking needed.
+    std::vector<float> enc_mask(T_enc * T_enc * 1 * B, 0.0f);
 
     // Encoder graph
     std::vector<float> encoder_output;
@@ -1276,7 +1280,7 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
         ggml_set_name(positions_t, "enc_positions");
         ggml_set_input(positions_t);
 
-        ggml_tensor* mask_t = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, T_enc, T_enc);
+        ggml_tensor* mask_t = ggml_new_tensor_4d(ctx0, GGML_TYPE_F32, T_enc, T_enc, 1, B);
         ggml_set_name(mask_t, "enc_mask");
         ggml_set_input(mask_t);
 
@@ -1302,7 +1306,7 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
         ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "enc_positions"), positions.data(), 0,
                                 T_enc * sizeof(int32_t));
         ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "enc_mask"), enc_mask.data(), 0,
-                                T_enc * T_enc * sizeof(float));
+                                enc_mask.size() * sizeof(float));
 
         ggml_status st = ggml_backend_graph_compute(ctx->backend, gf);
         if (st != GGML_STATUS_SUCCESS) {
@@ -1323,6 +1327,16 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
 
     if (p.verbosity >= 1) {
         fprintf(stderr, "dia_tts: encoder done, output shape (%d, %d, %d)\n", enc_hidden, T_enc, B);
+        // Print first few values of conditional encoder output for diff-testing
+        // Conditional = batch index 1, offset = enc_hidden * T_enc * 1
+        size_t cond_offset = (size_t)enc_hidden * T_enc;
+        fprintf(stderr, "dia_tts: enc cond pos0 first 4: %.6f %.6f %.6f %.6f\n",
+                encoder_output[cond_offset+0], encoder_output[cond_offset+1],
+                encoder_output[cond_offset+2], encoder_output[cond_offset+3]);
+        // Compute norm of first position
+        float norm0 = 0;
+        for (int d = 0; d < enc_hidden; d++) norm0 += encoder_output[cond_offset+d]*encoder_output[cond_offset+d];
+        fprintf(stderr, "dia_tts: enc cond pos0 norm: %.4f (ref: 2.2434)\n", sqrtf(norm0));
     }
 
     // ===================================================================
