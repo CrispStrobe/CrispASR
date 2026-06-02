@@ -23,7 +23,7 @@ public:
 
     uint32_t capabilities() const override {
         return CAP_AUTO_DOWNLOAD | CAP_FLASH_ATTN | CAP_PUNCTUATION_TOGGLE | CAP_DIARIZE | CAP_TIMESTAMPS_CTC |
-               CAP_TEMPERATURE | CAP_TOKEN_CONFIDENCE;
+               CAP_TEMPERATURE | CAP_TOKEN_CONFIDENCE | CAP_BEAM_SEARCH;
     }
 
     bool init(const whisper_params& p) override {
@@ -46,6 +46,7 @@ public:
         if (!ctx_)
             return out;
 
+        funasr_set_beam_size(ctx_, params.beam_size > 0 ? params.beam_size : 1);
         funasr_result* r = funasr_transcribe_with_probs(ctx_, samples, n_samples);
         if (!r || !r->text) {
             funasr_result_free(r);

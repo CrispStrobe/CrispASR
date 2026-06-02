@@ -13,6 +13,7 @@
 #include "gguf.h"
 
 #include "core/attention.h"
+#include "core/beam_decode.h"
 #include "core/bpe.h"
 #include "core/ffn.h"
 #include "core/gguf_loader.h"
@@ -252,6 +253,7 @@ struct funasr_context {
     ggml_tensor* kv_k = nullptr;
     ggml_tensor* kv_v = nullptr;
     int kv_max_ctx = 0;
+    int beam_size = 1;
 
     // Cached per-step LLM decode graph (PLAN funasr-perf #1). Built once
     // at first decode call (via funasr_ensure_step_graph) using
@@ -1880,38 +1882,74 @@ static std::string funasr_transcribe_impl(funasr_context* ctx, const float* pcm,
     };
     std::vector<int32_t> generated;
     std::vector<float> generated_probs;
-    int next_id = pick_next(logits);
-    float next_prob = softmax_of(logits, next_id);
-    int n_past = total_prompt;
-    int prev_id = -1;
-    int repeat_run = 0;
     auto decode_t0 = std::chrono::steady_clock::now();
-    for (int step = 0; step < max_new_tokens && next_id != (int)hp.eos_token_id; step++) {
-        if (next_id == prev_id) {
-            if (++repeat_run >= 20) {
-                std::fprintf(stderr,
-                             "funasr: greedy decode degenerated (token %d repeated >%d times). "
-                             "Aborting at step %d. This usually means the audio adaptor / encoder "
-                             "produced unusable embeddings — re-run with CRISPASR_VERBOSE=1 to "
-                             "inspect frames_spliced.\n",
-                             next_id, repeat_run, step);
-                break;
+
+    if (ctx->beam_size > 1) {
+        // Beam search via replay-from-prefix. Each beam step embeds
+        // the full suffix token-by-token and forwards through the LLM.
+        auto replay = [](funasr_context* c, const int32_t* toks, int n, int prompt_len) -> float* {
+            const int d = (int)c->model.hparams.llm_d_model;
+            // Embed all suffix tokens and concatenate
+            std::vector<float> embeds((size_t)n * d);
+            for (int i = 0; i < n; i++) {
+                auto e = funasr_embed_tokens(c, {toks[i]});
+                if (e.empty())
+                    return nullptr;
+                std::memcpy(embeds.data() + (size_t)i * d, e.data(), d * sizeof(float));
             }
-        } else {
-            repeat_run = 0;
-            prev_id = next_id;
+            auto lg = funasr_run_llm_step(c, embeds.data(), n, prompt_len);
+            if (lg.empty())
+                return nullptr;
+            float* out = (float*)std::malloc(lg.size() * sizeof(float));
+            std::memcpy(out, lg.data(), lg.size() * sizeof(float));
+            return out;
+        };
+        core_beam_decode::Config bcfg;
+        bcfg.max_new_tokens = max_new_tokens;
+        bcfg.eos_id = (int)hp.eos_token_id;
+        bcfg.vocab_size = (int)hp.llm_vocab_size;
+        bcfg.beam_size = ctx->beam_size;
+        bcfg.prompt_len = total_prompt;
+        auto br = core_beam_decode::run_with_probs(ctx, logits.data(), replay, bcfg);
+        for (size_t i = 0; i < br.tokens.size(); i++) {
+            if (br.tokens[i] == (int32_t)hp.eos_token_id)
+                break;
+            generated.push_back(br.tokens[i]);
+            generated_probs.push_back(br.probs[i]);
         }
-        generated.push_back(next_id);
-        generated_probs.push_back(next_prob);
-        std::vector<float> step_embed = funasr_embed_tokens(ctx, {next_id});
-        if (step_embed.empty())
-            break;
-        logits = funasr_run_llm_step(ctx, step_embed.data(), 1, n_past);
-        if (logits.empty())
-            break;
-        n_past += 1;
-        next_id = pick_next(logits);
-        next_prob = softmax_of(logits, next_id);
+    } else {
+        int next_id = pick_next(logits);
+        float next_prob = softmax_of(logits, next_id);
+        int n_past = total_prompt;
+        int prev_id = -1;
+        int repeat_run = 0;
+        for (int step = 0; step < max_new_tokens && next_id != (int)hp.eos_token_id; step++) {
+            if (next_id == prev_id) {
+                if (++repeat_run >= 20) {
+                    std::fprintf(stderr,
+                                 "funasr: greedy decode degenerated (token %d repeated >%d times). "
+                                 "Aborting at step %d. This usually means the audio adaptor / encoder "
+                                 "produced unusable embeddings — re-run with CRISPASR_VERBOSE=1 to "
+                                 "inspect frames_spliced.\n",
+                                 next_id, repeat_run, step);
+                    break;
+                }
+            } else {
+                repeat_run = 0;
+                prev_id = next_id;
+            }
+            generated.push_back(next_id);
+            generated_probs.push_back(next_prob);
+            std::vector<float> step_embed = funasr_embed_tokens(ctx, {next_id});
+            if (step_embed.empty())
+                break;
+            logits = funasr_run_llm_step(ctx, step_embed.data(), 1, n_past);
+            if (logits.empty())
+                break;
+            n_past += 1;
+            next_id = pick_next(logits);
+            next_prob = softmax_of(logits, next_id);
+        }
     }
     if (funasr_bench_enabled()) {
         auto decode_t1 = std::chrono::steady_clock::now();
@@ -2066,6 +2104,12 @@ extern "C" funasr_context* funasr_init_from_file(const char* path, funasr_contex
                      ctx->step_graph_cache ? "on" : "off");
     }
     return ctx;
+}
+
+extern "C" void funasr_set_beam_size(funasr_context* ctx, int beam_size) {
+    if (!ctx)
+        return;
+    ctx->beam_size = beam_size > 1 ? beam_size : 1;
 }
 
 extern "C" void funasr_free(funasr_context* ctx) {
