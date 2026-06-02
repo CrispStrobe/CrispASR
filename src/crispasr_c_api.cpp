@@ -3795,6 +3795,8 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
 #endif
 #ifdef CA_HAVE_FUNASR
         if (!text && s->backend == "funasr" && s->funasr_ctx) {
+            if (s->beam_size > 1)
+                funasr_set_beam_size(s->funasr_ctx, s->beam_size);
             text = funasr_transcribe(s->funasr_ctx, pcm, n_samples);
             need_free = true;
         }
@@ -3817,6 +3819,9 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
 #endif
 #ifdef CA_HAVE_MOONSHINE_STREAMING
         if (!text && s->backend == "moonshine-streaming" && s->moonshine_streaming_ctx) {
+            if (s->beam_size > 1)
+                moonshine_streaming_set_beam_size((moonshine_streaming_context*)s->moonshine_streaming_ctx,
+                                                  s->beam_size);
             moonshine_streaming_result* msr = moonshine_streaming_transcribe_with_probs(
                 (moonshine_streaming_context*)s->moonshine_streaming_ctx, pcm, n_samples);
             if (msr && msr->text) {
@@ -3843,6 +3848,8 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
 #endif
 #ifdef CA_HAVE_GEMMA4_E2B
         if (!text && s->backend == "gemma4-e2b" && s->gemma4_e2b_ctx) {
+            if (s->beam_size > 1)
+                gemma4_e2b_set_beam_size((gemma4_e2b_context*)s->gemma4_e2b_ctx, s->beam_size);
             const std::string src = lang_set ? lang : (!s->source_language.empty() ? s->source_language : "");
             const std::string tgt = !s->target_language.empty() ? s->target_language : (s->translate ? "en" : src);
             if (s->translate || (!tgt.empty() && tgt != src)) {
@@ -5037,11 +5044,16 @@ CA_EXPORT char* crispasr_session_translate_text(crispasr_session* s, const char*
         return gemma4_e2b_translate_text((gemma4_e2b_context*)s->gemma4_e2b_ctx, text, src_lang, tgt_lang);
 #endif
 #ifdef CA_HAVE_M2M100
-    if (s->m2m100_ctx)
+    if (s->m2m100_ctx) {
+        if (s->beam_size > 1)
+            m2m100_set_beam_size(s->m2m100_ctx, s->beam_size);
         return m2m100_translate(s->m2m100_ctx, text, src_lang, tgt_lang, max_tokens > 0 ? max_tokens : 200);
+    }
 #endif
 #ifdef CA_HAVE_T5_TRANSLATE
     if (s->t5_translate_ctx) {
+        if (s->beam_size > 1)
+            t5_translate_set_beam_size(s->t5_translate_ctx, s->beam_size);
         // MADLAD-400 picks the target language from a "<2xx> " tag
         // prepended to the source (t5_translate expects the caller to do
         // this; src_lang is unused — the encoder is language-agnostic).
@@ -5783,8 +5795,10 @@ CA_EXPORT int crispasr_session_set_frequency_penalty(crispasr_session* s, float 
 //   whisper (native BEAM_SEARCH), qwen3-asr / granite / voxtral (replay via
 //   core_beam_decode::run_with_probs), glm-asr / kyutai-stt / firered /
 //   moonshine / omniasr (per-backend _set_beam_size setter),
-//   canary / cohere (branched-KV AED beam via _set_beam_size).
-// Silent no-op for voxtral4b (streaming), CTC/NAR backends.
+//   canary / cohere (branched-KV AED beam via _set_beam_size),
+//   funasr / gemma4-e2b / moonshine-streaming / m2m100 / t5 (§139).
+// voxtral4b beam is CLI-adapter-only; session streaming path TBD.
+// Silent no-op for CTC/NAR backends.
 // Returns 0 on a non-null session; width <= 0 clamped to 1 (greedy).
 CA_EXPORT int crispasr_session_set_beam_size(crispasr_session* s, int n) {
     if (!s)
