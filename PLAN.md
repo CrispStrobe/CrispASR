@@ -3966,6 +3966,17 @@ stderr → localise → fix the prefill graph emission (per-tensor backend
 tagging), validated via a CPU-vs-GPU `mimo_asr_extract_stage` self-diff
 (no Python ref needed — the CPU path is the verified reference).
 
+**Kernel run 1 (P100, `bf4b5c3c`) — refutes the prefill hypothesis.**
+With `CRISPASR_MIMO_FORCE_GPU=1` the GPU **prefill is correct**: all five
+`mimo_dump` stages (audio_features, text_embeds, inputs_embeds, last_hidden,
+text_logits_step0) match CPU with **no NaN/Inf** (`first GPU-diverging stage:
+none`). But the run **segfaults `rc=-11` at 16.5 s** — *after* the prefill,
+in the **decode step**. So option C is NOT in `mimo_asr_build_prefill_graph`;
+it's the per-token decode path (build_decode_graph + fresh-cgraph-per-token),
+same shape as #125 P0's sched src-mutation-on-re-laid-out-graph — which the
+`95d74455` hardening was supposed to fix but evidently doesn't on P100.
+Kernel run 2 wraps the GPU run in gdb to capture the crash backtrace.
+
 **Status (2026-05-26):** option A shipped, option C still open.
 
 The smoking-gun commit is `89111260` ("perf #72: load weights to GPU when use_gpu=true"), which flipped `core_gguf::load_weights(..., ctx->backend_cpu, ...)` to `..., ctx->backend, ...`. The same commit message foresaw the regression — *"If a platform regresses, add a CRISPASR_FORCE_CPU_WEIGHTS=1 escape hatch — none seen yet"*.

@@ -102,26 +102,38 @@ STAGE_RE = re.compile(r"mimo_dump:\s+(\S+)\s+(.*)")
 STAT_RE = re.compile(r"nan=(\d+)\s+inf=(\d+)")
 
 
-def run_mimo(label: str, extra_env: dict, timeout: int = 900) -> dict:
+def run_mimo(label: str, extra_env: dict, timeout: int = 900, gdb: bool = False) -> dict:
     kh.step(f"{label}.start")
     out_stem = WORK / f"mimo-jfk-{label}"
     for ext in (".txt", ".srt"):
         f = out_stem.with_suffix(ext)
         if f.exists():
             f.unlink()
-    cmd = [str(CLI), "--backend", "mimo-asr", "-m", "auto", "--auto-download",
-           "-f", str(SAMPLE), "-of", str(out_stem), "-otxt"]
+    base = [str(CLI), "--backend", "mimo-asr", "-m", "auto", "--auto-download",
+            "-f", str(SAMPLE), "-of", str(out_stem), "-otxt"]
+    # The GPU run segfaults in the decode step (rc=-11). Wrap it in gdb to
+    # capture the backtrace so the crash site is named.
+    cmd = (["gdb", "-batch", "-nx", "-ex", "run", "-ex", "bt full", "-ex", "quit", "--args"] + base) if gdb else base
     env = {"MIMO_ASR_DUMP_STAGES": "1", "MIMO_ASR_BENCH": "1", **extra_env}
     t0 = time.time()
     try:
         r = subprocess.run(cmd, env={**os.environ, **env}, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                            text=True, timeout=timeout)
-        rc, stderr = r.returncode, r.stderr
+        rc, stdout, stderr = r.returncode, r.stdout, r.stderr
     except subprocess.TimeoutExpired as ex:
         rc = -1
+        stdout = (ex.stdout or b"").decode(errors="replace") if isinstance(ex.stdout, bytes) else (ex.stdout or "")
         stderr = (ex.stderr or b"").decode(errors="replace") if isinstance(ex.stderr, bytes) else (ex.stderr or "")
     elapsed = round(time.time() - t0, 1)
-    (RESULTS / f"{label}_stderr.txt").write_text(stderr)
+    combined = stdout + "\n" + stderr
+    (RESULTS / f"{label}_log.txt").write_text(combined)
+    if gdb:
+        print(f"\n--- {label} gdb backtrace ---", flush=True)
+        bt = [ln for ln in combined.splitlines() if ln.lstrip().startswith("#") or "signal SIG" in ln
+              or "Program received" in ln or "mimo_asr" in ln]
+        for ln in bt[:60]:
+            print(ln, flush=True)
+    stderr = combined  # downstream stage-parse scans both streams
 
     txt_path = out_stem.with_suffix(".txt")
     text = txt_path.read_text().strip() if (txt_path.exists() and txt_path.stat().st_size > 0) else ""
@@ -145,8 +157,9 @@ def run_mimo(label: str, extra_env: dict, timeout: int = 900) -> dict:
     return {"label": label, "rc": rc, "text": text, "ok": ok, "stages": stages}
 
 
+subprocess.run("apt-get install -y -q gdb >/dev/null 2>&1 || true", shell=True)
 cpu = run_mimo("cpu", {})
-gpu = run_mimo("gpu", {"CRISPASR_MIMO_FORCE_GPU": "1"})
+gpu = run_mimo("gpu", {"CRISPASR_MIMO_FORCE_GPU": "1"}, gdb=True)
 
 # ── Compare CPU vs GPU per stage — find the first divergence ──────────────
 print("\n" + "=" * 64, flush=True)
