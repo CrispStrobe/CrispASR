@@ -20,7 +20,7 @@ public:
         // uses ggml_flash_attn_ext (×3); produces segments → CAP_DIARIZE
         // works as the framework post-step.
         return CAP_AUTO_DOWNLOAD | CAP_TIMESTAMPS_CTC | CAP_FLASH_ATTN | CAP_DIARIZE | CAP_TEMPERATURE |
-               CAP_TOKEN_CONFIDENCE;
+               CAP_TOKEN_CONFIDENCE | CAP_BEAM_SEARCH;
     }
 
     bool init(const whisper_params& params) override {
@@ -35,11 +35,12 @@ public:
     }
 
     std::vector<crispasr_segment> transcribe(const float* samples, int n_samples, int64_t t_offset_cs,
-                                             const whisper_params& /*params*/) override {
+                                             const whisper_params& params) override {
         std::vector<crispasr_segment> out;
         if (!ctx_)
             return out;
 
+        moonshine_streaming_set_beam_size(ctx_, params.beam_size > 0 ? params.beam_size : 1);
         moonshine_streaming_result* r = moonshine_streaming_transcribe_with_probs(ctx_, samples, n_samples);
         if (!r || !r->text || !r->text[0]) {
             moonshine_streaming_result_free(r);

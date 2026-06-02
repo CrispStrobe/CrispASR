@@ -47,6 +47,9 @@ void moonshine_streaming_free(struct moonshine_streaming_context* ctx);
 // Set thread count after init.
 void moonshine_streaming_set_n_threads(struct moonshine_streaming_context* ctx, int n_threads);
 
+// Beam search width. 1 = greedy (default); >1 = branched-KV beam.
+void moonshine_streaming_set_beam_size(struct moonshine_streaming_context* ctx, int beam_size);
+
 // Encode-only path for diff testing (crispasr-diff).
 // Runs audio_frontend + transformer encoder on `n_samples` of 16kHz mono PCM.
 // On success writes a malloc'd float32 array to *out (caller frees with free()),

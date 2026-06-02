@@ -12,6 +12,7 @@
 //  - Encoder/decoder may have different hidden sizes (small/medium)
 
 #include "moonshine_streaming.h"
+#include "core/beam_decode.h"
 #include "moonshine-tokenizer.h"
 
 #include "ggml.h"
@@ -151,6 +152,7 @@ struct moonshine_streaming_context {
     int n_threads = 4;
     int verbosity = 1;
     float temperature = 0.0f;
+    int beam_size = 1;
 };
 
 // ── GGUF helpers ────────────────────────────────────────────────────────────
@@ -881,19 +883,18 @@ static char* moonshine_streaming_transcribe_impl(struct moonshine_streaming_cont
     if (ctx->verbosity >= 1)
         fprintf(stderr, "moonshine_streaming: cross-KV precomputed (%d layers)\n", dec_layers);
 
-    // ── Greedy decode loop ──────────────────────────────────────────────
+    // ── Decoder step helper ──────────────────────────────────────────
+    // Factored out of the loop so beam search can reuse the same
+    // graph-build + compute path via a step callback.
     ggml_gallocr_t dec_alloc = ggml_gallocr_new(ggml_backend_get_default_buffer_type(ctx->backend));
-    int32_t cur_token = (int32_t)hp.bos_token_id;
-    std::vector<int32_t> tokens;
-    int kv_pos = 0;
 
-    for (int step = 0; step < max_tokens; step++) {
+    auto run_one_step = [&](int32_t tok, int pos) -> std::vector<float> {
         size_t dn = dec_layers * 60 + 50;
         size_t dmem = ggml_tensor_overhead() * dn + ggml_graph_overhead();
         struct ggml_init_params dgp = {dmem, nullptr, true};
         ggml_context* dctx = ggml_init(dgp);
         if (!dctx)
-            break;
+            return {};
 
         ggml_tensor* tok_inp = ggml_new_tensor_1d(dctx, GGML_TYPE_I32, 1);
         ggml_set_name(tok_inp, "tok");
@@ -904,41 +905,31 @@ static char* moonshine_streaming_transcribe_impl(struct moonshine_streaming_cont
 
         ggml_cgraph* dgf = ggml_new_graph(dctx);
 
-        // Token embedding + cast to F32
         ggml_tensor* cur = ggml_get_rows(dctx, m.dec_embed_w, tok_inp);
         if (cur->type != GGML_TYPE_F32)
             cur = ggml_cast(dctx, cur, GGML_TYPE_F32);
 
         for (int li = 0; li < dec_layers; li++) {
             auto& L = m.dec[li];
-
-            // === Self-attention ===
             ggml_tensor* res = cur;
             cur = ggml_mul(dctx, ggml_norm(dctx, cur, ln_eps), L.attn_norm_w);
-
             ggml_tensor* Q = ggml_mul_mat(dctx, L.attn_q_w, cur);
             ggml_tensor* Kn = ggml_mul_mat(dctx, L.attn_k_w, cur);
             ggml_tensor* Vn = ggml_mul_mat(dctx, L.attn_v_w, cur);
-
             Q = ggml_reshape_3d(dctx, Q, dec_head_dim, dec_heads, 1);
             Kn = ggml_reshape_3d(dctx, Kn, dec_head_dim, dec_kv_heads, 1);
             Vn = ggml_reshape_3d(dctx, Vn, dec_head_dim, dec_kv_heads, 1);
-
-            // Partial RoPE
             Q = ggml_rope_ext(dctx, Q, pos_inp, nullptr, rotary_dim, 0, 0, rope_theta, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f);
             Kn = ggml_rope_ext(dctx, Kn, pos_inp, nullptr, rotary_dim, 0, 0, rope_theta, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f);
-
-            // Write to self-KV cache
             Kn = ggml_permute(dctx, Kn, 0, 2, 1, 3);
             Vn = ggml_permute(dctx, Vn, 0, 2, 1, 3);
             ggml_tensor* ks = ggml_view_3d(dctx, kv[li].self_k, dec_head_dim, 1, dec_kv_heads, kv[li].self_k->nb[1],
-                                           kv[li].self_k->nb[2], kv_pos * kv[li].self_k->nb[1]);
+                                           kv[li].self_k->nb[2], pos * kv[li].self_k->nb[1]);
             ggml_tensor* vs = ggml_view_3d(dctx, kv[li].self_v, dec_head_dim, 1, dec_kv_heads, kv[li].self_v->nb[1],
-                                           kv[li].self_v->nb[2], kv_pos * kv[li].self_v->nb[1]);
+                                           kv[li].self_v->nb[2], pos * kv[li].self_v->nb[1]);
             ggml_build_forward_expand(dgf, ggml_cpy(dctx, Kn, ks));
             ggml_build_forward_expand(dgf, ggml_cpy(dctx, Vn, vs));
-
-            int kvl = kv_pos + 1;
+            int kvl = pos + 1;
             ggml_tensor* Kc = ggml_view_3d(dctx, kv[li].self_k, dec_head_dim, kvl, dec_kv_heads, kv[li].self_k->nb[1],
                                            kv[li].self_k->nb[2], 0);
             ggml_tensor* Vc = ggml_view_3d(dctx, kv[li].self_v, dec_head_dim, kvl, dec_kv_heads, kv[li].self_v->nb[1],
@@ -947,8 +938,6 @@ static char* moonshine_streaming_transcribe_impl(struct moonshine_streaming_cont
             ggml_tensor* attn = ggml_flash_attn_ext(dctx, Q, Kc, Vc, nullptr, scale, 0.0f, 0.0f);
             attn = ggml_reshape_2d(dctx, attn, dec_heads * dec_head_dim, 1);
             cur = ggml_add(dctx, ggml_mul_mat(dctx, L.attn_o_w, attn), res);
-
-            // === Cross-attention ===
             res = cur;
             cur = ggml_mul(dctx, ggml_norm(dctx, cur, ln_eps), L.cross_attn_norm_w);
             ggml_tensor* Qx = ggml_mul_mat(dctx, L.cross_attn_q_w, cur);
@@ -961,14 +950,11 @@ static char* moonshine_streaming_transcribe_impl(struct moonshine_streaming_cont
             ggml_tensor* xa = ggml_flash_attn_ext(dctx, Qx, Kcx, Vcx, nullptr, scale, 0.0f, 0.0f);
             xa = ggml_reshape_2d(dctx, xa, dec_heads * dec_head_dim, 1);
             cur = ggml_add(dctx, ggml_mul_mat(dctx, L.cross_attn_o_w, xa), res);
-
-            // === SiLU-gated FFN ===
             res = cur;
             cur = ggml_mul(dctx, ggml_norm(dctx, cur, ln_eps), L.ffn_norm_w);
             ggml_tensor* fc1 = ggml_mul_mat(dctx, L.ffn_fc1_w, cur);
             if (L.ffn_fc1_b)
                 fc1 = ggml_add(dctx, fc1, L.ffn_fc1_b);
-            // Split: first half = value, second half = gate
             ggml_tensor* val = ggml_view_2d(dctx, fc1, dec_inter, 1, fc1->nb[1], 0);
             ggml_tensor* gate = ggml_view_2d(dctx, fc1, dec_inter, 1, fc1->nb[1], dec_inter * sizeof(float));
             cur = ggml_mul(dctx, ggml_silu(dctx, gate), val);
@@ -977,55 +963,127 @@ static char* moonshine_streaming_transcribe_impl(struct moonshine_streaming_cont
                 cur = ggml_add(dctx, cur, L.ffn_fc2_b);
             cur = ggml_add(dctx, cur, res);
         }
-
-        // Final norm + logits
         cur = ggml_mul(dctx, ggml_norm(dctx, cur, ln_eps), m.dec_output_norm_w);
-        ggml_tensor* logits = ggml_mul_mat(dctx, m.dec_output_w, cur);
-        ggml_set_name(logits, "logits");
-        ggml_set_output(logits);
-        ggml_build_forward_expand(dgf, logits);
+        ggml_tensor* logits_t = ggml_mul_mat(dctx, m.dec_output_w, cur);
+        ggml_set_name(logits_t, "logits");
+        ggml_set_output(logits_t);
+        ggml_build_forward_expand(dgf, logits_t);
 
         if (!ggml_gallocr_alloc_graph(dec_alloc, dgf)) {
             ggml_free(dctx);
-            break;
+            return {};
         }
-        ggml_backend_tensor_set(ggml_graph_get_tensor(dgf, "tok"), &cur_token, 0, sizeof(int32_t));
-        int32_t pos_val = kv_pos;
+        ggml_backend_tensor_set(ggml_graph_get_tensor(dgf, "tok"), &tok, 0, sizeof(int32_t));
+        int32_t pos_val = pos;
         ggml_backend_tensor_set(ggml_graph_get_tensor(dgf, "pos"), &pos_val, 0, sizeof(int32_t));
 
         if (ggml_backend_graph_compute(ctx->backend, dgf) != GGML_STATUS_SUCCESS) {
             ggml_free(dctx);
-            break;
+            return {};
         }
-
-        std::vector<float> logits_data(vocab);
-        ggml_backend_tensor_get(ggml_graph_get_tensor(dgf, "logits"), logits_data.data(), 0, vocab * sizeof(float));
+        std::vector<float> out(vocab);
+        ggml_backend_tensor_get(ggml_graph_get_tensor(dgf, "logits"), out.data(), 0, vocab * sizeof(float));
         ggml_free(dctx);
+        return out;
+    };
 
-        // Greedy argmax + optional softmax probability of the picked token.
-        int best = 0;
-        float bv = logits_data[0];
-        for (int i = 1; i < vocab; i++)
-            if (logits_data[i] > bv) {
-                bv = logits_data[i];
-                best = i;
+    // ── Decode (greedy or beam) ───────────────────────────────────────
+    std::vector<int32_t> tokens;
+    int32_t cur_token = (int32_t)hp.bos_token_id;
+
+    // BOS prefill — get initial logits
+    auto bos_logits = run_one_step(cur_token, 0);
+    if (bos_logits.empty()) {
+        ggml_gallocr_free(dec_alloc);
+        ggml_backend_buffer_free(kv_buf);
+        ggml_free(kv_ctx);
+        return nullptr;
+    }
+    int kv_pos = 1;
+
+    if (ctx->beam_size > 1) {
+        // KV snapshot for beam search — only self-attention KV (cross-KV is shared).
+        struct ms_stream_kv_snap {
+            std::vector<std::vector<uint8_t>> k_data, v_data; // per-layer
+        };
+        auto save_fn = [&](moonshine_streaming_context*) -> ms_stream_kv_snap* {
+            auto* s = new ms_stream_kv_snap();
+            s->k_data.resize(dec_layers);
+            s->v_data.resize(dec_layers);
+            for (int i = 0; i < dec_layers; i++) {
+                size_t nb = ggml_nbytes(kv[i].self_k);
+                s->k_data[i].resize(nb);
+                s->v_data[i].resize(nb);
+                memcpy(s->k_data[i].data(), kv[i].self_k->data, nb);
+                memcpy(s->v_data[i].data(), kv[i].self_v->data, nb);
             }
+            return s;
+        };
+        auto restore_fn = [&](moonshine_streaming_context*, ms_stream_kv_snap* s) {
+            for (int i = 0; i < dec_layers; i++) {
+                memcpy(kv[i].self_k->data, s->k_data[i].data(), s->k_data[i].size());
+                memcpy(kv[i].self_v->data, s->v_data[i].data(), s->v_data[i].size());
+            }
+        };
+        auto snap_free_fn = [](ms_stream_kv_snap* s) { delete s; };
+        auto step_fn = [&](moonshine_streaming_context*, int32_t tok, int n_past) -> float* {
+            auto lg = run_one_step(tok, n_past);
+            if (lg.empty())
+                return nullptr;
+            float* out = (float*)std::malloc(lg.size() * sizeof(float));
+            std::memcpy(out, lg.data(), lg.size() * sizeof(float));
+            return out;
+        };
 
-        if (best == (int)hp.eos_token_id)
-            break;
-        tokens.push_back(best);
-        if (capture_probs) {
-            float s = 0.f;
-            for (int i = 0; i < vocab; i++)
-                s += expf(logits_data[i] - bv);
-            out_token_ids->push_back(best);
-            out_token_probs->push_back((s > 0.f) ? (1.0f / s) : 0.0f);
+        core_beam_decode::Config bcfg;
+        bcfg.max_new_tokens = max_tokens;
+        bcfg.eos_id = (int)hp.eos_token_id;
+        bcfg.vocab_size = vocab;
+        bcfg.beam_size = ctx->beam_size;
+        bcfg.prompt_len = 1; // BOS occupies slot 0
+
+        auto r = core_beam_decode::run_with_probs_branched(ctx, bos_logits.data(), save_fn, restore_fn, snap_free_fn,
+                                                           step_fn, bcfg);
+        for (size_t i = 0; i < r.tokens.size(); i++) {
+            if (r.tokens[i] == (int32_t)hp.eos_token_id)
+                break;
+            tokens.push_back(r.tokens[i]);
+            if (capture_probs) {
+                out_token_ids->push_back(r.tokens[i]);
+                out_token_probs->push_back(r.probs[i]);
+            }
         }
-        cur_token = best;
-        kv_pos++;
+    } else {
+        // Greedy decode from BOS logits
+        for (int step = 0; step < max_tokens; step++) {
+            auto& logits_data = (step == 0) ? bos_logits : bos_logits; // first step uses bos_logits
+            int best = 0;
+            float bv = logits_data[0];
+            for (int i = 1; i < vocab; i++)
+                if (logits_data[i] > bv) {
+                    bv = logits_data[i];
+                    best = i;
+                }
 
-        if (ctx->verbosity >= 2 && step < 3) {
-            fprintf(stderr, "  dec step %d: token=%d\n", step, best);
+            if (best == (int)hp.eos_token_id)
+                break;
+            tokens.push_back(best);
+            if (capture_probs) {
+                float s = 0.f;
+                for (int i = 0; i < vocab; i++)
+                    s += expf(logits_data[i] - bv);
+                out_token_ids->push_back(best);
+                out_token_probs->push_back((s > 0.f) ? (1.0f / s) : 0.0f);
+            }
+            cur_token = best;
+
+            if (ctx->verbosity >= 2 && step < 3)
+                fprintf(stderr, "  dec step %d: token=%d\n", step, best);
+
+            bos_logits = run_one_step(cur_token, kv_pos);
+            if (bos_logits.empty())
+                break;
+            kv_pos++;
         }
     }
     ggml_gallocr_free(dec_alloc);
@@ -1062,6 +1120,12 @@ extern "C" void moonshine_streaming_set_n_threads(struct moonshine_streaming_con
         if (ctx->backend)
             ggml_backend_cpu_set_n_threads(ctx->backend, n_threads);
     }
+}
+
+extern "C" void moonshine_streaming_set_beam_size(struct moonshine_streaming_context* ctx, int beam_size) {
+    if (!ctx)
+        return;
+    ctx->beam_size = beam_size > 1 ? beam_size : 1;
 }
 
 extern "C" int moonshine_streaming_encode(struct moonshine_streaming_context* ctx, const float* pcm, int n_samples,
