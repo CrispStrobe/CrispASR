@@ -3245,7 +3245,9 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
         std::vector<int32_t> prefix_ids, suffix_ids;
         if (use_v3_template) {
             const std::string prefix_str = "<|start_of_role|>user<|end_of_role|>";
-            const std::string suffix_str = "can you transcribe the speech into a written format?"
+            const std::string suffix_str = (!s->ask.empty() ? s->ask
+                                                            : std::string("can you transcribe the speech into a "
+                                                                          "written format?")) +
                                            "<|end_of_text|>\n"
                                            "<|start_of_role|>assistant<|end_of_role|>";
             int n = 0;
@@ -3264,10 +3266,21 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
         } else {
             // granite-4.0-1b legacy hardcoded ids: "USER: " + transcription request.
             static const int32_t kPrefix4[] = {6584, 25, 220};
-            static const int32_t kSuffix4[] = {4919, 499,  1380, 3191, 279,   8982, 1139, 264,
-                                               5439, 3645, 30,   198,  36660, 3931, 2891, 25};
             prefix_ids.assign(kPrefix4, kPrefix4 + (sizeof(kPrefix4) / sizeof(kPrefix4[0])));
-            suffix_ids.assign(kSuffix4, kSuffix4 + (sizeof(kSuffix4) / sizeof(kSuffix4[0])));
+            if (!s->ask.empty()) {
+                const std::string suffix4_str = s->ask + "\nASSISTANT:";
+                int n = 0;
+                int32_t* a = granite_speech_tokenize(s->granite_ctx, suffix4_str.c_str(), &n);
+                if (a && n > 0) {
+                    suffix_ids.assign(a, a + n);
+                    std::free(a);
+                } else if (a)
+                    std::free(a);
+            } else {
+                static const int32_t kSuffix4[] = {4919, 499,  1380, 3191, 279,   8982, 1139, 264,
+                                                   5439, 3645, 30,   198,  36660, 3931, 2891, 25};
+                suffix_ids.assign(kSuffix4, kSuffix4 + (sizeof(kSuffix4) / sizeof(kSuffix4[0])));
+            }
         }
         if (prefix_ids.empty() || suffix_ids.empty()) {
             std::free(proj);
@@ -5557,9 +5570,9 @@ CA_EXPORT int crispasr_session_set_translate(crispasr_session* s, int enable) {
 }
 
 // Sticky audio Q&A prompt for instruct-tuned audio-LLM backends
-// (voxtral / voxtral4b / qwen3-asr). Pass an empty string to clear
-// and resume verbatim transcription. Other backends ignore — set is
-// cheap so we don't error.
+// (granite / voxtral / voxtral4b / qwen3-asr). Pass an empty string
+// to clear and resume verbatim transcription. Other backends ignore —
+// set is cheap so we don't error.
 CA_EXPORT int crispasr_session_set_ask(crispasr_session* s, const char* prompt) {
     if (!s)
         return -1;
