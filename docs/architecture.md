@@ -430,6 +430,27 @@ GGUF built from the HF-transformers checkpoint (rotate_half layout → NEOX
 rope). Diff via `crispasr-diff csm` (backbone per-layer + depth + RVQ vs
 the manual PyTorch reference).
 
+### dia
+
+Nari Labs Dia 1.6B (`nari-labs/Dia-1.6B`, Apache-2.0, ~1.6B params),
+single GGUF, 44.1 kHz mono. Dialogue TTS with inline `[S1]`/`[S2]`
+speaker tags. Architecture:
+
+- **Text encoder** — 12L Llama-style transformer (byte-level tokenizer,
+  1024-d, SwiGLU, RMSNorm, RoPE). Input is raw UTF-8 bytes + special tokens.
+- **AR decoder** — 18L transformer with cross-attention (2048-d, GQA
+  16q/4kv). Generates 9-codebook DAC tokens using a delay pattern
+  `[0, 8, 9, 10, 11, 12, 13, 14, 15]` — channel k is delayed by
+  `delay[k]` steps; after EOS on channel 0, generation continues for
+  max\_delay (15) more steps to flush.
+- **DAC codec** — 9-codebook RVQ → 44.1 kHz PCM. Shared with the Zonos
+  port (#130); a separate DAC GGUF (`--codec-model`) or embedded weights
+  both work.
+
+Classifier-Free Guidance (CFG) runs batch=2 (conditional + unconditional);
+`logits = uncond + cfg_scale * (cond - uncond)`, default `cfg_scale=3.0`.
+Sampling: temperature (default 1.2), top-p (0.95), top-k (45), seedable.
+
 ### speecht5
 
 Microsoft SpeechT5 (`microsoft/speecht5_tts`, MIT, ~80M params), single
