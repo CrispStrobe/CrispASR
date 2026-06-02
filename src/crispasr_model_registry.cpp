@@ -554,6 +554,13 @@ constexpr Entry k_registry[] = {
      "https://huggingface.co/cstr/bark-small-GGUF/resolve/main/bark-small-f16.gguf",
      "~809 MB", nullptr, nullptr},
 
+    // CSM-1B — sesame/csm-1b conversational TTS (Apache 2.0). Llama-3.2 1B
+    // backbone + 100M depth decoder + Kyutai Mimi codec, all in one GGUF.
+    // 24 kHz. Default Q4_K (1.4 GB); F16 + Q8_0 on the same repo.
+    {"csm", "csm-1b-q4_k.gguf",
+     "https://huggingface.co/cstr/csm-1b-GGUF/resolve/main/csm-1b-q4_k.gguf",
+     "~1.4 GB", nullptr, nullptr},
+
     // Text-LID — three families, one auto-routing dispatcher
     // (`src/text_lid_dispatch.cpp`). `lid-cld3` is the default for
     // `crispasr-lid -m auto` because it's the smallest (440 KB F16),

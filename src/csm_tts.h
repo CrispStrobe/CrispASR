@@ -59,6 +59,57 @@ float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx, const char
 
 void csm_tts_pcm_free(float* pcm);
 
+// ---------------------------------------------------------------------------
+// Diagnostic entry point for the diff harness (crispasr-diff csm).
+// ---------------------------------------------------------------------------
+// Runs the backbone PREFILL on `text` (text-only frames, audio masked out)
+// and dumps per-layer activations so they can be compared against the
+// PyTorch manual reference (csm_reference_manual.py) stage by stage. No
+// sampling — fully deterministic given the tokenized prompt.
+//
+// Caller pre-allocates buffers sized with `max_T` capacity (T = number of
+// text-frame positions; the caller usually takes it from the reference
+// tensor shape). Buffers filled on success:
+//   layer0_normed  : [max_T * d_model]        layer-0 pre-attn RMSNorm output
+//   layer_outputs  : n_layers pointers, each [max_T * d_model]
+//                    residual stream after each backbone layer
+//   last_h         : [d_model]                final-norm output, last position
+//   c0_logits      : [audio_vocab_size]       codebook0_head @ last_h
+// Any of the above may be NULL to skip that capture.
+//
+// Returns the actual number of text-frame positions T (>0), or <=0 on error.
+int csm_tts_run_backbone_dump(struct csm_tts_context* ctx, const char* text, int max_T, float* layer0_normed,
+                              float** layer_outputs, int n_layers, float* last_h, float* c0_logits);
+
+// Diagnostic: depth-decoder frame-0 dump. Feed a backbone hidden state
+// `last_h` (e.g. the reference backbone_prefill_last_h, to isolate the depth
+// decoder from any backbone drift) plus the codebook-0 token, run the depth
+// decoder's initial 2-position step, and dump:
+//   initial_proj : [2 * dd_d_model]   projection of [last_h, c0_embed] -> dd dim
+//   c1_logits    : [audio_vocab_size] codebook-1 logits (codebooks_head[0])
+// Either output may be NULL. Returns 0 on success, <0 on error.
+int csm_tts_run_depth_dump(struct csm_tts_context* ctx, const float* last_h, int c0_token, float* initial_proj,
+                           float* c1_logits);
+
+// Diagnostic: run the FULL greedy generation (backbone AR loop + depth decoder
+// for all 32 codebooks per frame) via the real synth path, and copy the
+// resulting codes into out_codes as a row-major [n_frames * audio_num_codebooks]
+// int array (caller allocates max_frames_cap * audio_num_codebooks). Greedy
+// (temperature forced to 0) so it matches a greedy PyTorch reference. Returns
+// the number of frames generated, or <0 on error.
+int csm_tts_run_generate_codes(struct csm_tts_context* ctx, const char* text, int32_t* out_codes, int max_frames_cap);
+
+// Diagnostic: feed reference codes (row-major [T * n_cb]) into the Mimi decode
+// path to isolate it from token-generation drift. Dumps the RVQ-dequantized
+// continuous representation into rvq_out ([T * mimi_dim]). Returns 0 on success.
+int csm_tts_run_mimi_dump(struct csm_tts_context* ctx, const int32_t* codes_T_cb, int T, int n_cb, float* rvq_out);
+
+// Diagnostic: synthesize `text` (capped to frame_cap frames so greedy runs
+// can't run away) and write a 24 kHz mono 16-bit PCM WAV to wav_path
+// (peak-normalised). Returns the number of PCM samples written, or <0 on error.
+int csm_tts_diag_synth_wav(struct csm_tts_context* ctx, const char* text, const char* wav_path, float temperature,
+                           int frame_cap);
+
 // Runtime parameter setters.
 void csm_tts_set_temperature(struct csm_tts_context* ctx, float temperature);
 void csm_tts_set_topk(struct csm_tts_context* ctx, int topk);

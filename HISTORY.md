@@ -6,6 +6,45 @@ technical deep-dives are in `LEARNINGS.md`.
 
 ---
 
+## 2026-06-02 CSM-1B TTS (§135): "buzzing not speech" was one converter line
+
+CSM (sesame/csm-1b) loaded and generated frames but Whisper heard the
+output as "ethereal music / buzzing." Five bugs had already been fixed
+(F16 read, codebooks_head shape, EOS = all-32-codebooks-zero, BPE API);
+the handover guessed RoPE base or Mimi decode. Built the methodical
+diff harness instead of guessing: a `csm` branch in `crispasr-diff`
+plus runtime dump entry points (`csm_tts_run_backbone_dump` /
+`run_depth_dump` / `run_generate_codes` / `run_mimi_dump`) and
+`tools/pack_csm_ref_gguf.py` to pack the manual-reference `.npy` dumps
+(`csm_reference_manual.py` — HF transformers' dynamo path is broken for
+CSM) into a GGUF the harness loads.
+
+Stage-by-stage against F16 (cos threshold 0.999):
+
+- backbone prefill — 16 layers + `last_h` + `c0` logits/argmax: **cos≈1.0**.
+  (NEOX rope is correct here: the GGUF is built from the HF-transformers
+  checkpoint, which is rotate_half layout — refuting the RoPE hypothesis.)
+- depth decoder — `initial_proj`, `c1` logits/argmax: **cos≈1.0**.
+- full greedy `all_codes`: frames 0–5 bit-exact (later drift is just F16
+  greedy-argmax tie-flips) → token generation is structurally correct.
+- **Mimi `rvq_dequant`** (fed reference codes): **FAIL cos 0.908, max_abs 15.8.**
+
+Root cause in `models/convert-csm-to-gguf.py`: moshi's
+`EuclideanCodebook.embedding` is the property
+`embed_sum / cluster_usage.clamp(min=1e-5)`, but the converter clamped
+`cluster_usage` to `max(cu, 1.0)`. `cluster_usage` is a decayed EMA with
+mean ≈0.59 / min ≈0.12 / 96 % of values < 1, so the wrong clamp left
+~96 % of codebook vectors un-normalized → garbled RVQ → buzzing.
+One-line fix (`1.0` → `1e-5`); numpy proof: wrong clamp reproduces cos
+0.92, right clamp gives cos 1.000000.
+
+Re-converted F16, re-diffed: `mimi_rvq_dequant` **cos 1.000000**. ASR
+roundtrip of the corrected GGUF: "The quick brown fox jumps over the
+lazy dog." → Whisper transcribes it back **verbatim**. Intelligible
+audio also proves the rest of the Mimi path (upsample / transformer /
+SEANet) was already correct — the clamp was the only Mimi bug. See
+moshi-codebook-cluster-usage in LEARNINGS.
+
 ## 2026-05-31 all-backends benchmark: green (26/27) — wrong build target was the blocker
 
 The benchmark failed three Kaggle runs in a row; the harness `.log`

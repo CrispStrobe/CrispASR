@@ -8099,3 +8099,38 @@ encoder benefits from CUDA for longer audio.
 - **Attention output reshape**: ALWAYS permute heads before reshape: (hd, T, n_heads) → permute → (hd, n_heads, T) → reshape (hd*n_heads, T). Without this permute, head concatenation is scrambled
 - **ggml conv_1d**: expects (T, C_in) input — NOT channel-first. Conv bias: (1, C) for broadcast over T
 - **Agent-written code**: found 11 bugs in agent-generated Dia runtime. Agents cannot reliably write correct attention code — always validate every intermediate against ground truth
+
+## moshi / Mimi RVQ codebooks: decode uses embed_sum / cluster_usage (CSM §135, June 2026)
+
+Any port of a moshi/Mimi codec (CSM-1B, Kyutai STT/TTS, anything using
+`moshi.quantization`) must reproduce one non-obvious detail of the RVQ
+codebook. The persistent buffer in the checkpoint is `embed_sum` (an EMA
+sum), but the codebook actually used at decode time is the **computed
+property**:
+
+```python
+# moshi/quantization/core_vq.py — EuclideanCodebook.embedding
+embedding = embed_sum / cluster_usage.clamp(min=epsilon)   # epsilon = 1e-5
+```
+
+`cluster_usage` is a decayed EMA of per-code usage, NOT a count — its
+values are mostly **< 1** (CSM-1B: mean ≈0.59, min ≈0.12, 96 % below 1).
+So you cannot skip the division ("EMA stats not needed for inference" is
+wrong), and you cannot clamp it at 1.0 "to avoid divide-by-zero": clamping
+at 1.0 leaves ~96 % of codes effectively un-normalized and the codec
+emits buzzing/tonal garbage from otherwise-correct codes. Clamp at the
+real epsilon (1e-5).
+
+This bit CSM-1B for a full session: `convert-csm-to-gguf.py` had
+`np.maximum(cu, 1.0)`. RVQ-dequant cos vs the moshi reference was 0.908
+(wrong) → 1.000000 after `np.maximum(cu, 1e-5)`. The tell was a fed-
+reference-codes diff of the codec in isolation: `mimi_rvq_dequant` failed
+while every backbone/depth stage passed cos≈1.0. Verify the codebook the
+GGUF stores by reading one layer and diffing against all three candidates
+(`embed_sum`, `embed_sum/max(cu,1.0)`, `embed_sum/max(cu,1e-5)`) — only
+the last matches `mimi.quantizer...._codebook.embedding`.
+
+General rule, same family as the StyleTTS/EMA traps: when a checkpoint
+stores `*_sum` + `*_usage`/`*_count` buffers, the inference weight is the
+quotient, computed lazily by a `@property`. Grep the reference module for
+`@property` over any buffer you're about to export raw.

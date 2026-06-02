@@ -570,8 +570,14 @@ def main():
         # actual_embedding = embed_sum / cluster_usage[None, :]
         if hf_name in rvq_cluster_usage:
             cu = rvq_cluster_usage[hf_name]
-            # Avoid division by zero
-            cu = np.maximum(cu, 1.0)
+            # Clamp to moshi's EuclideanCodebook epsilon (1e-5), NOT 1.0. The
+            # codebook used at decode time is the property
+            #   embedding = embed_sum / cluster_usage.clamp(min=epsilon)
+            # (moshi/quantization/core_vq.py). cluster_usage is a decayed EMA
+            # whose values are mostly < 1 (typical mean ~0.6, min ~0.12), so
+            # clamping at 1.0 left ~96% of codes effectively un-normalized and
+            # produced buzzing audio (RVQ-dequant cos ~0.9). 1e-5 matches moshi.
+            cu = np.maximum(cu, 1e-5)
             # embed_sum shape is (num_codes, codebook_dim) = (2048, 256)
             # cluster_usage shape is (num_codes,) = (2048,)
             # actual_embedding = embed_sum / cluster_usage[:, None]

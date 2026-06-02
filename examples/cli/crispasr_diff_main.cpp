@@ -55,6 +55,7 @@
 #include "mimo_tokenizer.h"
 #include "orpheus_snac.h"
 #include "chatterbox.h"
+#include "csm_tts.h"
 #include "lid_cld3.h"
 #include "lid_fasttext.h"
 #include "moonshine.h"
@@ -4300,6 +4301,209 @@ int main(int argc, char** argv) {
         }
 
         cosyvoice3_tts_free(ctx);
+    } else if (backend_name == "csm") {
+        // CSM-1B backbone prefill per-layer diff. The reference archive is
+        // packed by tools/pack_csm_ref_gguf.py from csm_reference_manual.py's
+        // greedy dumps (HF transformers' dynamo path is broken for CSM, so the
+        // ground truth is a manual safetensors forward). Milestone: localise
+        // the backbone divergence (prime suspect: RoPE type/scaling) by the
+        // first layer whose cosine drops. backbone_layer0_normed is the
+        // pre-RoPE alignment gate — it must pass for the layer diffs to mean
+        // anything (see [[feedback-diff-alignment]]).
+        auto cp = csm_tts_context_default_params();
+        cp.n_threads = 4;
+        cp.verbosity = 0;
+        cp.temperature = 0.0f; // greedy
+        cp.seed = 42;
+        csm_tts_context* ctx = csm_tts_init_from_file(model_path.c_str(), cp);
+        if (!ctx) {
+            fprintf(stderr, "failed to load csm model\n");
+            return 4;
+        }
+
+        std::string text = ref.meta("text");
+        if (text.empty())
+            text = "Hello, how are you?";
+
+        const int d_model = 2048;
+        const int n_layers = 16;
+        const int avocab = 2051;
+        // GGUF stores ne in reverse of numpy order: a (T, d_model) dump has
+        // ne = [d_model, T], so the token count T is the LAST ne entry.
+        auto l0_shp = ref.shape("backbone_layer0_output");
+        const int ref_T = (l0_shp.size() >= 2) ? (int)l0_shp.back() : 0;
+        const int Tcap = (ref_T > 0 ? ref_T : 64) + 8;
+
+        std::vector<std::vector<float>> bufs(n_layers, std::vector<float>((size_t)d_model * Tcap));
+        std::vector<float*> ptrs(n_layers);
+        for (int i = 0; i < n_layers; i++)
+            ptrs[i] = bufs[i].data();
+        std::vector<float> l0n((size_t)d_model * Tcap), last_h(d_model), c0(avocab);
+
+        int T = csm_tts_run_backbone_dump(ctx, text.c_str(), Tcap, l0n.data(), ptrs.data(), n_layers, last_h.data(),
+                                          c0.data());
+        if (T <= 0) {
+            printf("[ERR ] backbone_dump            csm_tts_run_backbone_dump rc=%d\n", T);
+            n_fail++;
+        } else {
+            if (ref_T > 0 && T != ref_T) {
+                printf("[WARN] token-count mismatch: c++ T=%d vs ref T=%d (tokenizer/prompt divergence)\n", T, ref_T);
+            }
+            const int Tc = (ref_T > 0 && ref_T < T) ? ref_T : T;
+
+            if (ref.has("backbone_layer0_normed")) {
+                auto rep = ref.compare("backbone_layer0_normed", l0n.data(), (size_t)Tc * d_model);
+                print_row("backbone_layer0_normed", rep, COS_THRESHOLD);
+                record(rep);
+            }
+            for (int il = 0; il < n_layers; il++) {
+                char nm[64];
+                snprintf(nm, sizeof(nm), "backbone_layer%d_output", il);
+                if (!ref.has(nm))
+                    continue;
+                auto rep = ref.compare(nm, ptrs[il], (size_t)Tc * d_model);
+                print_row(nm, rep, COS_THRESHOLD);
+                record(rep);
+            }
+            if (ref.has("backbone_prefill_last_h")) {
+                auto rep = ref.compare("backbone_prefill_last_h", last_h.data(), (size_t)d_model);
+                print_row("backbone_prefill_last_h", rep, COS_THRESHOLD);
+                record(rep);
+            }
+            if (ref.has("backbone_prefill_c0_logits")) {
+                auto rep = ref.compare("backbone_prefill_c0_logits", c0.data(), (size_t)avocab);
+                print_row("backbone_prefill_c0_logits", rep, COS_THRESHOLD);
+                record(rep);
+                auto repa = ref.compare_argmax("backbone_prefill_c0_logits", c0.data(), (size_t)avocab);
+                print_row("backbone_prefill_c0_argmax", repa, COS_THRESHOLD,
+                          (repa.top1_match == repa.top1_total) ? "" : "(argmax MISMATCH)");
+            }
+        }
+
+        // --- Depth decoder (frame 0), fed the REFERENCE last_h + c0 to isolate
+        // it from any backbone drift (cf. parakeet encoder_with_ref_mel). ---
+        if (ref.has("depth_c1_logits") || ref.has("depth_initial_proj")) {
+            auto lh = ref.get_f32("backbone_prefill_last_h");
+            auto c0l = ref.get_f32("backbone_prefill_c0_logits");
+            if (lh.first && c0l.first) {
+                int c0 = 0;
+                for (size_t i = 1; i < c0l.second; i++) {
+                    if (c0l.first[i] > c0l.first[c0])
+                        c0 = (int)i;
+                }
+                std::vector<float> initial_proj((size_t)1024 * 2), c1_logits(2051);
+                int rc = csm_tts_run_depth_dump(ctx, lh.first, c0, initial_proj.data(), c1_logits.data());
+                if (rc == 0) {
+                    if (ref.has("depth_initial_proj")) {
+                        auto rep = ref.compare("depth_initial_proj", initial_proj.data(), initial_proj.size());
+                        print_row("depth_initial_proj", rep, COS_THRESHOLD);
+                        record(rep);
+                    }
+                    if (ref.has("depth_c1_logits")) {
+                        auto rep = ref.compare("depth_c1_logits", c1_logits.data(), c1_logits.size());
+                        print_row("depth_c1_logits", rep, COS_THRESHOLD);
+                        record(rep);
+                        auto repa = ref.compare_argmax("depth_c1_logits", c1_logits.data(), c1_logits.size());
+                        print_row("depth_c1_argmax", repa, COS_THRESHOLD,
+                                  (repa.top1_match == repa.top1_total) ? "" : "(argmax MISMATCH)");
+                    }
+                } else {
+                    printf("[ERR ] depth_dump              csm_tts_run_depth_dump rc=%d\n", rc);
+                    n_fail++;
+                }
+            }
+        }
+
+        // --- Full greedy token generation vs the reference all_codes. Exact
+        // discrete match (not cosine): covers the backbone AR loop + the entire
+        // depth decoder (codebooks 2..31). The first mismatch localises any
+        // token-generation bug to a (frame, codebook). If all codes match, the
+        // remaining "buzzing" must be in the Mimi decode path. ---
+        if (ref.has("all_codes")) {
+            auto ac = ref.get_f32("all_codes");
+            auto acs = ref.shape("all_codes"); // ne = [n_cb, n_frames]
+            const int n_cb = (acs.size() >= 1) ? (int)acs.front() : 32;
+            const int ref_nf = (acs.size() >= 2) ? (int)acs.back() : 0;
+            if (ac.first && ref_nf > 0) {
+                std::vector<int32_t> codes((size_t)(ref_nf + 8) * n_cb, 0);
+                int nf = csm_tts_run_generate_codes(ctx, text.c_str(), codes.data(), ref_nf + 8);
+                if (nf > 0) {
+                    const int cmpf = std::min(nf, ref_nf);
+                    int total = cmpf * n_cb, match = 0, fbad_f = -1, fbad_q = -1;
+                    for (int t = 0; t < cmpf; t++) {
+                        for (int q = 0; q < n_cb; q++) {
+                            int rc = (int)llroundf(ac.first[(size_t)t * n_cb + q]);
+                            int cc = codes[(size_t)t * n_cb + q];
+                            if (rc == cc) {
+                                match++;
+                            } else if (fbad_f < 0) {
+                                fbad_f = t;
+                                fbad_q = q;
+                            }
+                        }
+                    }
+                    printf("[%s] all_codes (greedy)        %d/%d codes match (frames c++=%d ref=%d)",
+                           match == total ? "PASS" : "FAIL", match, total, nf, ref_nf);
+                    if (fbad_f >= 0) {
+                        printf("  first @frame %d cb %d ref=%d c++=%d", fbad_f, fbad_q,
+                               (int)llroundf(ac.first[(size_t)fbad_f * n_cb + fbad_q]),
+                               codes[(size_t)fbad_f * n_cb + fbad_q]);
+                    }
+                    printf("\n");
+                    if (match == total) {
+                        n_pass++;
+                    } else {
+                        n_fail++;
+                    }
+                } else {
+                    printf("[ERR ] all_codes              csm_tts_run_generate_codes rc=%d\n", nf);
+                    n_fail++;
+                }
+            }
+        }
+
+        // --- Mimi decode, fed the REFERENCE codes (teacher-forced) to isolate
+        // the codec from the F16 token drift. First checkpoint: RVQ dequant. ---
+        if (ref.has("mimi_rvq_dequant") && ref.has("all_codes")) {
+            auto ac = ref.get_f32("all_codes");
+            auto acs = ref.shape("all_codes"); // ne = [n_cb, n_frames]
+            const int n_cb = (acs.size() >= 1) ? (int)acs.front() : 32;
+            const int nf = (acs.size() >= 2) ? (int)acs.back() : 0;
+            const int mdim = 512;
+            if (ac.first && nf > 0) {
+                std::vector<int32_t> rc((size_t)nf * n_cb);
+                for (size_t i = 0; i < rc.size(); i++) {
+                    rc[i] = (int)llroundf(ac.first[i]);
+                }
+                std::vector<float> rvq((size_t)nf * mdim);
+                int r = csm_tts_run_mimi_dump(ctx, rc.data(), nf, n_cb, rvq.data());
+                if (r == 0) {
+                    auto rep = ref.compare("mimi_rvq_dequant", rvq.data(), rvq.size());
+                    print_row("mimi_rvq_dequant", rep, COS_THRESHOLD);
+                    record(rep);
+                } else {
+                    printf("[ERR ] mimi_rvq_dequant       csm_tts_run_mimi_dump rc=%d\n", r);
+                    n_fail++;
+                }
+            }
+        }
+        // Diagnostic: write a synthesized WAV for an ASR roundtrip when
+        // CSM_WAV_OUT is set (reuses this build since the main CLI's crispasr
+        // target is stale in some build dirs). CSM_WAV_TEXT overrides the text,
+        // CSM_WAV_TEMP the temperature (default 0.9), CSM_WAV_FRAMES the cap.
+        if (const char* wav_out = getenv("CSM_WAV_OUT")) {
+            const char* wtext = getenv("CSM_WAV_TEXT");
+            std::string syn_text = wtext ? wtext : (text.empty() ? "Hello, how are you?" : text);
+            float temp = getenv("CSM_WAV_TEMP") ? (float)atof(getenv("CSM_WAV_TEMP")) : 0.9f;
+            int fcap = getenv("CSM_WAV_FRAMES") ? atoi(getenv("CSM_WAV_FRAMES")) : 64;
+            int ns = csm_tts_diag_synth_wav(ctx, syn_text.c_str(), wav_out, temp, fcap);
+            if (ns > 0) {
+                printf("[INFO] synth_wav                wrote %d samples (%.2fs) to %s\n", ns, ns / 24000.0, wav_out);
+            } else {
+                printf("[ERR ] synth_wav                csm_tts_diag_synth_wav rc=%d\n", ns);
+            }
+        }
+        csm_tts_free(ctx);
     } else {
         fprintf(stderr,
                 "crispasr-diff: backend '%s' is not recognised. "

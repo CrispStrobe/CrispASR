@@ -224,6 +224,14 @@ struct csm_tts_context {
     // Sampler RNG state (xorshift64*)
     uint64_t rng_state = 0xdeadbeefcafebabeULL;
 
+    // Diagnostic: the codes from the most recent synthesize() call
+    // ([n_frames][audio_num_codebooks]). Populated before Mimi decode so the
+    // diff harness can read them even if Mimi decode fails.
+    std::vector<std::vector<int32_t>> last_codes;
+    // Diagnostic: cap the greedy AR loop to this many frames (0 = unbounded).
+    // Bounds the diff harness without shrinking the KV cache.
+    int gen_frame_cap = 0;
+
     ~csm_tts_context() {
         if (sched)
             ggml_backend_sched_free(sched);
@@ -1584,6 +1592,9 @@ extern "C" float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx,
         // --- AR decode loop: generate frames 1..N ---
         // Each iteration feeds the PREVIOUS frame's codes as input embedding.
         for (int frame_idx = 1; frame_idx < max_audio_frames; frame_idx++) {
+            if (ctx->gen_frame_cap > 0 && (int)all_codes.size() >= ctx->gen_frame_cap) {
+                break; // diagnostic frame cap (KV cache untouched)
+            }
             // Build audio-frame embedding: sum of audio embeddings, text is masked out
             std::vector<float> step_embed(bb_d);
             build_audio_frame_embedding(prev_audio_codes.data(), step_embed.data());
@@ -1760,6 +1771,7 @@ extern "C" float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx,
     } // end AR decode block
 
 mimi_decode:
+    ctx->last_codes = all_codes; // capture before Mimi decode (which may fail)
     if (all_codes.empty()) {
         fprintf(stderr, "csm_tts: no audio frames generated\n");
         return nullptr;
@@ -1917,4 +1929,437 @@ mimi_decode:
         *out_n_samples = n_pcm;
         return pcm;
     }
+}
+
+// ===================================================================
+// Diagnostic: backbone prefill per-layer dump (for crispasr-diff csm)
+// ===================================================================
+
+extern "C" int csm_tts_run_backbone_dump(struct csm_tts_context* ctx, const char* text, int max_T, float* layer0_normed,
+                                         float** layer_outputs, int n_layers, float* last_h, float* c0_logits) {
+    if (!ctx || !text) {
+        return -1;
+    }
+    auto& m = ctx->model;
+    auto& hp = m.hp;
+    int bb_d = (int)hp.bb_d_model;
+    int avocab = (int)hp.audio_vocab_size;
+
+    std::vector<int32_t> tokens = tokenize_text(m, std::string(text));
+    int T = (int)tokens.size();
+    if (T <= 0) {
+        return -2;
+    }
+    int Tw = (max_T > 0 && T > max_T) ? max_T : T; // rows actually written
+
+    // Build text-only prefill embeddings (audio slots masked → text embed only).
+    std::vector<float> text_embd_data((size_t)bb_d * hp.text_vocab_size);
+    tensor_get_f32(m.bb_text_embd_w, text_embd_data.data(), 0, text_embd_data.size());
+    std::vector<float> embeds((size_t)bb_d * T, 0.0f);
+    for (int i = 0; i < T; i++) {
+        int32_t tok = tokens[i];
+        if (tok >= 0 && tok < (int)hp.text_vocab_size) {
+            std::memcpy(&embeds[(size_t)i * bb_d], &text_embd_data[(size_t)tok * bb_d], (size_t)bb_d * sizeof(float));
+        }
+    }
+
+    // Positions + causal mask (prefill, n_past=0).
+    std::vector<int32_t> positions(T);
+    for (int i = 0; i < T; i++) {
+        positions[i] = i;
+    }
+    std::vector<ggml_fp16_t> mask_data;
+    if (T > 1) {
+        mask_data.assign((size_t)T * T, ggml_fp32_to_fp16(0.0f));
+        ggml_fp16_t neg_inf = ggml_fp32_to_fp16(-INFINITY);
+        for (int q = 0; q < T; q++) {
+            for (int k = q + 1; k < T; k++) {
+                mask_data[(size_t)q * T + k] = neg_inf;
+            }
+        }
+    }
+
+    // --- Build graph mirroring build_backbone_graph, but tag every layer ---
+    ggml_init_params ip = {ctx->compute_meta.size(), ctx->compute_meta.data(), true};
+    ggml_context* ctx0 = ggml_init(ip);
+    ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 16384, false);
+
+    ggml_tensor* in_embeds = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, bb_d, T);
+    ggml_set_name(in_embeds, "bb_embeds");
+    ggml_set_input(in_embeds);
+    ggml_tensor* in_pos = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, T);
+    ggml_set_name(in_pos, "bb_positions");
+    ggml_set_input(in_pos);
+    ggml_tensor* causal_mask = nullptr;
+    if (T > 1) {
+        causal_mask = ggml_new_tensor_2d(ctx0, GGML_TYPE_F16, T, T);
+        ggml_set_name(causal_mask, "bb_mask");
+        ggml_set_input(causal_mask);
+    }
+
+    const core_attn::KvSelfAttnParams kvp = {
+        /*n_heads*/ (int)hp.bb_n_heads,
+        /*n_kv_heads*/ (int)hp.bb_n_kv_heads,
+        /*head_dim*/ (int)hp.bb_head_dim,
+        /*n_kv_grp*/ (int)(hp.bb_n_heads / hp.bb_n_kv_heads),
+        /*n_ctx_orig*/ (int)hp.bb_max_pos,
+        /*rope_theta*/ hp.bb_rope_theta,
+        /*rope_beta_fast*/ 0.0f,
+        /*rope_beta_slow*/ 0.0f,
+        /*attn_scale*/ 1.0f / std::sqrt((float)hp.bb_head_dim),
+        /*qk_norm_eps*/ 0.0f,
+        /*gqa_mode*/ core_attn::GQA_MANUAL_CONT,
+    };
+
+    ggml_backend_buffer_clear(ctx->bb_kv_buf, 0);
+
+    ggml_tensor* cur = in_embeds;
+    for (uint32_t il = 0; il < hp.bb_n_layers; il++) {
+        const auto& blk = m.bb_layers[il];
+        ggml_tensor* residual = cur;
+
+        ggml_tensor* x = ggml_rms_norm(ctx0, cur, hp.bb_rms_norm_eps);
+        x = ggml_mul(ctx0, x, blk.attn_norm_w);
+        if (il == 0) {
+            ggml_set_name(x, "dump_l0_normed");
+            ggml_set_output(x);
+            ggml_build_forward_expand(gf, x);
+        }
+
+        ggml_tensor* attn = core_attn::kv_self_attn(
+            ctx0, gf, x, blk.attn_q_w, blk.attn_k_w, blk.attn_v_w, blk.attn_output_w, nullptr, nullptr, in_pos,
+            (T == 1) ? nullptr : causal_mask, ctx->bb_kv_k, ctx->bb_kv_v, (int)il, 0, kvp);
+        cur = ggml_add(ctx0, residual, attn);
+
+        residual = cur;
+        x = ggml_rms_norm(ctx0, cur, hp.bb_rms_norm_eps);
+        x = ggml_mul(ctx0, x, blk.ffn_norm_w);
+        ggml_tensor* mlp = core_ffn::swiglu(ctx0, x, blk.ffn_gate_w, blk.ffn_up_w, blk.ffn_down_w);
+        cur = ggml_add(ctx0, residual, mlp);
+
+        char nm[32];
+        std::snprintf(nm, sizeof(nm), "dump_layer_%u", il);
+        ggml_set_name(cur, nm);
+        ggml_set_output(cur);
+        ggml_build_forward_expand(gf, cur);
+    }
+
+    // Final norm + last-position hidden + c0 logits.
+    ggml_tensor* normed = ggml_rms_norm(ctx0, cur, hp.bb_rms_norm_eps);
+    normed = ggml_mul(ctx0, normed, m.bb_output_norm_w);
+    ggml_tensor* lh = normed;
+    if (T > 1) {
+        lh = ggml_view_2d(ctx0, normed, bb_d, 1, normed->nb[1], (size_t)(T - 1) * normed->nb[1]);
+        lh = ggml_cont(ctx0, lh);
+    }
+    ggml_set_name(lh, "dump_last_h");
+    ggml_set_output(lh);
+    ggml_build_forward_expand(gf, lh);
+
+    ggml_tensor* logits = ggml_mul_mat(ctx0, m.bb_codebook0_head_w, lh);
+    ggml_set_name(logits, "dump_c0_logits");
+    ggml_set_output(logits);
+    ggml_build_forward_expand(gf, logits);
+
+    ggml_backend_sched_reset(ctx->sched);
+    if (!ggml_backend_sched_alloc_graph(ctx->sched, gf)) {
+        fprintf(stderr, "csm_tts: backbone dump alloc failed\n");
+        ggml_free(ctx0);
+        return -3;
+    }
+    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "bb_embeds"), embeds.data(), 0, embeds.size() * sizeof(float));
+    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "bb_positions"), positions.data(), 0,
+                            positions.size() * sizeof(int32_t));
+    if (T > 1) {
+        ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "bb_mask"), mask_data.data(), 0,
+                                mask_data.size() * sizeof(ggml_fp16_t));
+    }
+    if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS) {
+        fprintf(stderr, "csm_tts: backbone dump compute failed\n");
+        ggml_free(ctx0);
+        return -4;
+    }
+
+    // Read back tagged tensors. Per-layer tensors are [bb_d, T] → row-major
+    // gives T rows of bb_d, matching the reference (T, d_model) layout.
+    if (layer0_normed) {
+        ggml_tensor* t = ggml_graph_get_tensor(gf, "dump_l0_normed");
+        ggml_backend_tensor_get(t, layer0_normed, 0, (size_t)Tw * bb_d * sizeof(float));
+    }
+    if (layer_outputs) {
+        for (int il = 0; il < (int)hp.bb_n_layers && il < n_layers; il++) {
+            if (!layer_outputs[il]) {
+                continue;
+            }
+            char nm[32];
+            std::snprintf(nm, sizeof(nm), "dump_layer_%d", il);
+            ggml_tensor* t = ggml_graph_get_tensor(gf, nm);
+            ggml_backend_tensor_get(t, layer_outputs[il], 0, (size_t)Tw * bb_d * sizeof(float));
+        }
+    }
+    if (last_h) {
+        ggml_tensor* t = ggml_graph_get_tensor(gf, "dump_last_h");
+        ggml_backend_tensor_get(t, last_h, 0, (size_t)bb_d * sizeof(float));
+    }
+    if (c0_logits) {
+        ggml_tensor* t = ggml_graph_get_tensor(gf, "dump_c0_logits");
+        ggml_backend_tensor_get(t, c0_logits, 0, (size_t)avocab * sizeof(float));
+    }
+
+    ggml_free(ctx0);
+    return T;
+}
+
+extern "C" int csm_tts_run_depth_dump(struct csm_tts_context* ctx, const float* last_h, int c0_token,
+                                      float* initial_proj, float* c1_logits) {
+    if (!ctx || !last_h) {
+        return -1;
+    }
+    auto& m = ctx->model;
+    auto& hp = m.hp;
+    int bb_d = (int)hp.bb_d_model;
+    int dd_d = (int)hp.dd_d_model;
+    int avocab = (int)hp.audio_vocab_size;
+
+    // projection (bb_d -> dd_d) and audio-embedding row for codebook 0, token c0.
+    std::vector<float> dd_proj_data((size_t)m.dd_projection_w->ne[0] * m.dd_projection_w->ne[1]);
+    tensor_get_f32(m.dd_projection_w, dd_proj_data.data(), 0, dd_proj_data.size());
+    int proj_ne0 = (int)m.dd_projection_w->ne[0]; // bb_d
+    int proj_ne1 = (int)m.dd_projection_w->ne[1]; // dd_d
+    auto project_to_dd = [&](const float* in_bb, float* out_dd) {
+        for (int d = 0; d < proj_ne1; d++) {
+            float s = 0.0f;
+            for (int k = 0; k < proj_ne0; k++) {
+                s += dd_proj_data[(size_t)d * proj_ne0 + k] * in_bb[k];
+            }
+            out_dd[d] = s;
+        }
+    };
+
+    // c0 embedding in backbone space: audio_embeddings[0*avocab + c0_token].
+    std::vector<float> c0_bb_embed(bb_d, 0.0f);
+    if (c0_token >= 0 && c0_token < avocab) {
+        size_t off_bytes = ((size_t)0 * avocab + c0_token) * bb_d * sizeof(float);
+        tensor_get_f32(m.bb_audio_embd_w, c0_bb_embed.data(), off_bytes, bb_d);
+    }
+
+    // depth input = projection([last_h, c0_embed]) -> (2, dd_d), row-major.
+    std::vector<float> dd_init((size_t)dd_d * 2);
+    project_to_dd(last_h, &dd_init[0]);
+    project_to_dd(c0_bb_embed.data(), &dd_init[dd_d]);
+    if (initial_proj) {
+        std::memcpy(initial_proj, dd_init.data(), (size_t)dd_d * 2 * sizeof(float));
+    }
+
+    // Build the depth graph (T=2, predicting codebook 1, n_past=0), mirroring
+    // build_depth_graph in the synth path.
+    ggml_init_params ip = {ctx->compute_meta.size(), ctx->compute_meta.data(), true};
+    ggml_context* ctx0 = ggml_init(ip);
+    ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 8192, false);
+
+    const int T = 2;
+    ggml_tensor* embeds = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, dd_d, T);
+    ggml_set_name(embeds, "dd_embeds");
+    ggml_set_input(embeds);
+    ggml_tensor* positions = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, T);
+    ggml_set_name(positions, "dd_positions");
+    ggml_set_input(positions);
+    ggml_tensor* causal_mask = ggml_new_tensor_2d(ctx0, GGML_TYPE_F16, T, T);
+    ggml_set_name(causal_mask, "dd_mask");
+    ggml_set_input(causal_mask);
+
+    const core_attn::KvSelfAttnParams kvp = {
+        /*n_heads*/ (int)hp.dd_n_heads,
+        /*n_kv_heads*/ (int)hp.dd_n_kv_heads,
+        /*head_dim*/ (int)hp.dd_head_dim,
+        /*n_kv_grp*/ (int)(hp.dd_n_heads / hp.dd_n_kv_heads),
+        /*n_ctx_orig*/ (int)(hp.audio_num_codebooks + 1),
+        /*rope_theta*/ hp.bb_rope_theta,
+        /*rope_beta_fast*/ 0.0f,
+        /*rope_beta_slow*/ 0.0f,
+        /*attn_scale*/ 1.0f / std::sqrt((float)hp.dd_head_dim),
+        /*qk_norm_eps*/ 0.0f,
+        /*gqa_mode*/ core_attn::GQA_MANUAL_CONT,
+    };
+
+    ggml_backend_buffer_clear(ctx->dd_kv_buf, 0);
+
+    ggml_tensor* cur = embeds;
+    for (uint32_t il = 0; il < hp.dd_n_layers; il++) {
+        const auto& blk = m.dd_layers[il];
+        ggml_tensor* residual = cur;
+        ggml_tensor* x = ggml_rms_norm(ctx0, cur, hp.bb_rms_norm_eps);
+        x = ggml_mul(ctx0, x, blk.attn_norm_w);
+        ggml_tensor* attn =
+            core_attn::kv_self_attn(ctx0, gf, x, blk.attn_q_w, blk.attn_k_w, blk.attn_v_w, blk.attn_output_w, nullptr,
+                                    nullptr, positions, causal_mask, ctx->dd_kv_k, ctx->dd_kv_v, (int)il, 0, kvp);
+        cur = ggml_add(ctx0, residual, attn);
+        residual = cur;
+        x = ggml_rms_norm(ctx0, cur, hp.bb_rms_norm_eps);
+        x = ggml_mul(ctx0, x, blk.ffn_norm_w);
+        ggml_tensor* mlp = core_ffn::swiglu(ctx0, x, blk.ffn_gate_w, blk.ffn_up_w, blk.ffn_down_w);
+        cur = ggml_add(ctx0, residual, mlp);
+    }
+    cur = ggml_rms_norm(ctx0, cur, hp.bb_rms_norm_eps);
+    cur = ggml_mul(ctx0, cur, m.dd_output_norm_w);
+    cur = ggml_view_2d(ctx0, cur, dd_d, 1, cur->nb[1], (size_t)(T - 1) * cur->nb[1]); // last position
+
+    // codebooks_head[0] for codebook 1: 3D ne=[vocab, dd_d, n_cb-1], slice 0.
+    ggml_tensor* head_w = m.dd_codebooks_head_w;
+    ggml_tensor* logits;
+    if (ggml_n_dims(head_w) == 3) {
+        ggml_tensor* slice = ggml_view_2d(ctx0, head_w, head_w->ne[0], head_w->ne[1], head_w->nb[1], 0);
+        slice = ggml_cont(ctx0, ggml_transpose(ctx0, slice));
+        logits = ggml_mul_mat(ctx0, slice, cur);
+    } else {
+        logits = ggml_mul_mat(ctx0, head_w, cur);
+    }
+    ggml_set_name(logits, "dd_logits");
+    ggml_set_output(logits);
+    ggml_build_forward_expand(gf, logits);
+
+    std::vector<int32_t> dd_pos = {0, 1};
+    std::vector<ggml_fp16_t> dd_mask(4, ggml_fp32_to_fp16(0.0f));
+    dd_mask[0 * 2 + 1] = ggml_fp32_to_fp16(-INFINITY); // position 0 cannot see position 1
+
+    ggml_backend_sched_reset(ctx->sched);
+    if (!ggml_backend_sched_alloc_graph(ctx->sched, gf)) {
+        ggml_free(ctx0);
+        return -3;
+    }
+    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "dd_embeds"), dd_init.data(), 0, dd_init.size() * sizeof(float));
+    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "dd_positions"), dd_pos.data(), 0,
+                            dd_pos.size() * sizeof(int32_t));
+    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "dd_mask"), dd_mask.data(), 0,
+                            dd_mask.size() * sizeof(ggml_fp16_t));
+    if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS) {
+        ggml_free(ctx0);
+        return -4;
+    }
+    if (c1_logits) {
+        ggml_backend_tensor_get(ggml_graph_get_tensor(gf, "dd_logits"), c1_logits, 0, (size_t)avocab * sizeof(float));
+    }
+    ggml_free(ctx0);
+    return 0;
+}
+
+extern "C" int csm_tts_run_generate_codes(struct csm_tts_context* ctx, const char* text, int32_t* out_codes,
+                                          int max_frames_cap) {
+    if (!ctx || !text) {
+        return -1;
+    }
+    ctx->last_codes.clear();
+    float saved_t = ctx->params.temperature;
+    int saved_cap = ctx->gen_frame_cap;
+    ctx->params.temperature = 0.0f; // greedy
+    ctx->gen_frame_cap = (max_frames_cap > 0) ? max_frames_cap : 0;
+    int n = 0;
+    float* pcm = csm_tts_synthesize_with_reference(ctx, text, nullptr, 0, nullptr, &n);
+    if (pcm) {
+        free(pcm);
+    }
+    ctx->params.temperature = saved_t;
+    ctx->gen_frame_cap = saved_cap;
+
+    int nf = (int)ctx->last_codes.size();
+    int n_cb = (int)ctx->model.hp.audio_num_codebooks;
+    int w = (max_frames_cap > 0 && nf > max_frames_cap) ? max_frames_cap : nf;
+    if (out_codes) {
+        for (int t = 0; t < w; t++) {
+            for (int q = 0; q < n_cb; q++) {
+                out_codes[(size_t)t * n_cb + q] =
+                    (t < nf && q < (int)ctx->last_codes[t].size()) ? ctx->last_codes[t][q] : 0;
+            }
+        }
+    }
+    return nf;
+}
+
+extern "C" int csm_tts_run_mimi_dump(struct csm_tts_context* ctx, const int32_t* codes_T_cb, int T, int n_cb,
+                                     float* rvq_out) {
+    if (!ctx || !codes_T_cb || T <= 0 || n_cb <= 0) {
+        return -1;
+    }
+    int mdim = (int)ctx->model.hp.mimi_dim;
+    // ref codes are [T, n_cb] row-major; rvq_dequantize wants [n_cb, T].
+    std::vector<int32_t> flat((size_t)n_cb * T);
+    for (int t = 0; t < T; t++) {
+        for (int q = 0; q < n_cb; q++) {
+            flat[(size_t)q * T + t] = codes_T_cb[(size_t)t * n_cb + q];
+        }
+    }
+    std::vector<float> cont;
+    if (!rvq_dequantize(ctx, flat.data(), n_cb, T, cont)) {
+        return -2;
+    }
+    if (rvq_out) {
+        std::memcpy(rvq_out, cont.data(), (size_t)T * mdim * sizeof(float));
+    }
+    return 0;
+}
+
+extern "C" int csm_tts_diag_synth_wav(struct csm_tts_context* ctx, const char* text, const char* wav_path,
+                                      float temperature, int frame_cap) {
+    if (!ctx || !text || !wav_path) {
+        return -1;
+    }
+    float saved_t = ctx->params.temperature;
+    int saved_cap = ctx->gen_frame_cap;
+    ctx->params.temperature = temperature;
+    ctx->gen_frame_cap = frame_cap;
+    int n = 0;
+    float* pcm = csm_tts_synthesize_with_reference(ctx, text, nullptr, 0, nullptr, &n);
+    ctx->params.temperature = saved_t;
+    ctx->gen_frame_cap = saved_cap;
+    if (!pcm || n <= 0) {
+        return -2;
+    }
+
+    // Peak-normalise to 0.95 to avoid clipping on write.
+    float peak = 1e-6f;
+    for (int i = 0; i < n; i++) {
+        float a = std::fabs(pcm[i]);
+        if (a > peak) {
+            peak = a;
+        }
+    }
+    float scale = 0.95f / peak;
+
+    FILE* f = std::fopen(wav_path, "wb");
+    if (!f) {
+        free(pcm);
+        return -3;
+    }
+    const uint32_t sr = 24000, nch = 1, bps = 16;
+    const uint32_t byte_rate = sr * nch * bps / 8;
+    const uint32_t data_bytes = (uint32_t)n * nch * bps / 8;
+    const uint32_t riff = 36 + data_bytes;
+    const uint16_t block_align = nch * bps / 8, fmt_pcm = 1, audio_fmt = 1;
+    const uint32_t fmt_size = 16;
+    std::fwrite("RIFF", 1, 4, f);
+    std::fwrite(&riff, 4, 1, f);
+    std::fwrite("WAVE", 1, 4, f);
+    std::fwrite("fmt ", 1, 4, f);
+    std::fwrite(&fmt_size, 4, 1, f);
+    std::fwrite(&audio_fmt, 2, 1, f);
+    std::fwrite(&nch, 2, 1, f); // nch is u32; write low 2 bytes
+    std::fwrite(&sr, 4, 1, f);
+    std::fwrite(&byte_rate, 4, 1, f);
+    std::fwrite(&block_align, 2, 1, f);
+    std::fwrite(&bps, 2, 1, f); // bps is u32; write low 2 bytes
+    std::fwrite("data", 1, 4, f);
+    std::fwrite(&data_bytes, 4, 1, f);
+    (void)fmt_pcm;
+    for (int i = 0; i < n; i++) {
+        float v = pcm[i] * scale;
+        if (v > 1.0f)
+            v = 1.0f;
+        if (v < -1.0f)
+            v = -1.0f;
+        int16_t s = (int16_t)lrintf(v * 32767.0f);
+        std::fwrite(&s, 2, 1, f);
+    }
+    std::fclose(f);
+    free(pcm);
+    return n;
 }

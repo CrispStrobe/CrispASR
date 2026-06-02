@@ -52,8 +52,7 @@ std::unique_ptr<CrispasrBackend> crispasr_make_speecht5_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_dia_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_parler_tts_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_fastpitch_backend();
-// csm-tts (§135) is a WIP skeleton — src/csm_tts.cpp does not compile yet
-// (core_bpe::encode unimplemented), so it is not built/linked. Guard the
+// csm-tts (§135): sesame/csm-1b — Llama backbone + depth decoder + Mimi codec.
 std::unique_ptr<CrispasrBackend> crispasr_make_csm_tts_backend();
 
 #include "ggml.h"
@@ -520,6 +519,8 @@ std::string crispasr_detect_backend_from_gguf(const std::string& model_path) {
         return "dia";
     if (contains_ci("dia-tts") || contains_ci("dia_tts"))
         return "dia";
+    if (contains_ci("csm") || contains_ci("sesame"))
+        return "csm";
     if (contains_ci("parler") && contains_ci("tts"))
         return "parler-tts";
     if (contains_ci("ggml-") && contains_ci(".bin"))
@@ -624,6 +625,8 @@ std::string crispasr_detect_backend_from_gguf(const std::string& model_path) {
                 result = "speecht5";
             else if (a == "dia" || a == "dia-tts" || a == "dia_tts")
                 result = "dia";
+            else if (a == "csm" || a == "csm-tts" || a == "csm_tts")
+                result = "csm";
             else if (a == "parler-tts" || a == "parler_tts" || a == "parlertts")
                 result = "parler-tts";
         }

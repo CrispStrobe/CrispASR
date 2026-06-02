@@ -407,6 +407,29 @@ Qwen3 talker LM + 12 Hz RVQ speech tokenizer. Three variants:
 - `qwen3-tts-1.7b-base` — 1.7B talker, higher quality
 - `qwen3-tts-1.7b-voicedesign` — natural-language voice description via `--instruct`
 
+### csm
+
+Sesame CSM-1B (`sesame/csm-1b`, Apache-2.0), one GGUF, 24 kHz. Three
+stages run per the original two-transformer + codec design:
+
+- **Backbone** — Llama-3.2 1B (16L, 2048d, 32 heads / 8 KV, SwiGLU,
+  RMSNorm, RoPE θ=500k). Text is Llama-3.2 BPE; each frame sums 32 audio
+  codebook embeddings + 1 text embedding (masked per role). Autoregressive
+  over frames; its head samples codebook 0.
+- **Depth decoder** — Llama-3.2 100M (4L, 1024d), KV cache reset per frame.
+  Given the backbone hidden state + codebook-0 embedding (projected
+  2048→1024), it fills codebooks 1–31 with position-specific heads.
+- **Mimi codec** — Kyutai Mimi: 32-codebook RVQ dequant → depthwise
+  upsample → 8L transformer → SEANet decoder → 24 kHz PCM. The RVQ
+  codebooks are `embed_sum / cluster_usage.clamp(min=1e-5)` — the converter
+  must apply that normalization (a wrong `max(cu,1.0)` clamp left ~96 % of
+  codes un-normalized and produced buzzing; §135). EOS when all 32
+  codebooks of a frame are 0.
+
+GGUF built from the HF-transformers checkpoint (rotate_half layout → NEOX
+rope). Diff via `crispasr-diff csm` (backbone per-layer + depth + RVQ vs
+the manual PyTorch reference).
+
 ### m2m100 / wmt21
 
 12L encoder + 12L decoder transformer (d=1024, 16 heads, FFN=4096, ReLU,

@@ -111,6 +111,10 @@
 #include "chatterbox.h"
 #define CA_HAVE_CHATTERBOX 1
 #endif
+#if __has_include("csm_tts.h")
+#include "csm_tts.h"
+#define CA_HAVE_CSM 1
+#endif
 #if __has_include("voxcpm2_tts.h")
 #include "voxcpm2_tts.h"
 #define CA_HAVE_VOXCPM2 1
@@ -1291,6 +1295,9 @@ struct crispasr_session {
 #ifdef CA_HAVE_CHATTERBOX
     chatterbox_context* chatterbox_ctx = nullptr;
 #endif
+#ifdef CA_HAVE_CSM
+    csm_tts_context* csm_tts_ctx = nullptr;
+#endif
 #ifdef CA_HAVE_VOXCPM2
     voxcpm2_context* voxcpm2_ctx = nullptr;
     std::vector<float> voxcpm2_ref_pcm; // 16 kHz mono cloning reference
@@ -1901,6 +1908,21 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
         return s;
     }
 #endif
+#ifdef CA_HAVE_CSM
+    if (s->backend == "csm" || s->backend == "csm-tts" || s->backend == "sesame" || s->backend == "sesame-csm") {
+        s->backend = "csm";
+        csm_tts_context_params p = csm_tts_context_default_params();
+        p.n_threads = s->n_threads;
+        p.verbosity = g_open_verbosity_tls;
+        p.use_gpu = g_open_use_gpu_tls;
+        s->csm_tts_ctx = csm_tts_init_from_file(model_path, p);
+        if (!s->csm_tts_ctx) {
+            delete s;
+            return nullptr;
+        }
+        return s;
+    }
+#endif
 #ifdef CA_HAVE_VOXCPM2
     if (s->backend == "voxcpm2-tts" || s->backend == "voxcpm2" || s->backend == "voxcpm2_tts") {
         s->backend = "voxcpm2-tts";
@@ -2299,6 +2321,9 @@ CA_EXPORT int crispasr_session_available_backends(char* out_csv, int out_cap) {
 #endif
 #ifdef CA_HAVE_CHATTERBOX
     list += ",chatterbox";
+#endif
+#ifdef CA_HAVE_CSM
+    list += ",csm";
 #endif
 #ifdef CA_HAVE_VOXCPM2
     list += ",voxcpm2-tts";
@@ -4840,6 +4865,13 @@ CA_EXPORT float* crispasr_session_synthesize(crispasr_session* s, const char* te
         return chatterbox_synthesize(s->chatterbox_ctx, text, out_n_samples);
     }
 #endif
+#ifdef CA_HAVE_CSM
+    if (s->csm_tts_ctx) {
+        // CSM emits 24 kHz mono float — same convention as the other TTS
+        // backends; PCM is malloc'd and freed via crispasr_pcm_free.
+        return csm_tts_synthesize(s->csm_tts_ctx, text, out_n_samples);
+    }
+#endif
 #ifdef CA_HAVE_VOXCPM2
     if (s->voxcpm2_ctx) {
         // VoxCPM2 synthesises at 48 kHz mono; every other CrispASR TTS
@@ -5169,6 +5201,10 @@ CA_EXPORT void crispasr_session_close(crispasr_session* s) {
     if (s->chatterbox_ctx)
         chatterbox_free(s->chatterbox_ctx);
 #endif
+#ifdef CA_HAVE_CSM
+    if (s->csm_tts_ctx)
+        csm_tts_free(s->csm_tts_ctx);
+#endif
 #ifdef CA_HAVE_VOXCPM2
     if (s->voxcpm2_ctx)
         voxcpm2_free(s->voxcpm2_ctx);
@@ -5419,6 +5455,13 @@ CA_EXPORT int crispasr_session_set_temperature(crispasr_session* s, float temper
         touched++;
     }
 #endif
+#ifdef CA_HAVE_CSM
+    if (s->csm_tts_ctx) {
+        csm_tts_set_temperature(s->csm_tts_ctx, temperature);
+        csm_tts_set_seed(s->csm_tts_ctx, seed);
+        touched++;
+    }
+#endif
 #ifdef CA_HAVE_QWEN3_TTS
     if (s->qwen3_tts_ctx) {
         // qwen3-tts's code-predictor sampler reads cparams.temperature
@@ -5442,6 +5485,12 @@ CA_EXPORT int crispasr_session_set_tts_seed(crispasr_session* s, uint64_t seed) 
 #ifdef CA_HAVE_CHATTERBOX
     if (s->chatterbox_ctx) {
         chatterbox_set_seed((chatterbox_context*)s->chatterbox_ctx, (uint32_t)seed);
+        touched++;
+    }
+#endif
+#ifdef CA_HAVE_CSM
+    if (s->csm_tts_ctx) {
+        csm_tts_set_seed(s->csm_tts_ctx, seed);
         touched++;
     }
 #endif
