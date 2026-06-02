@@ -1,5 +1,7 @@
 // t5_translate.cpp — T5 encoder-decoder translation via ggml
 //
+// Beam search support via core_beam_decode::run_with_probs (§139).
+//
 // Supports T5ForConditionalGeneration models: MADLAD-400, mT5, Flan-T5.
 //
 // Architecture differences from M2M-100:
@@ -10,6 +12,7 @@
 //   - Explicit d_kv (head dim) not necessarily d_model/n_heads
 
 #include "t5_translate.h"
+#include "core/beam_decode.h"
 #include "core/gguf_loader.h"
 
 #include "ggml-backend.h"
@@ -148,6 +151,7 @@ struct t5_translate_context {
     ggml_context* cross_kv_ctx = nullptr;
     ggml_backend_buffer_t cross_kv_buf = nullptr;
     int cross_T_enc = 0;
+    int beam_size = 1;
 };
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -1008,6 +1012,12 @@ extern "C" void t5_translate_free(struct t5_translate_context* ctx) {
     delete ctx;
 }
 
+extern "C" void t5_translate_set_beam_size(struct t5_translate_context* ctx, int beam_size) {
+    if (!ctx)
+        return;
+    ctx->beam_size = beam_size > 1 ? beam_size : 1;
+}
+
 extern "C" bool t5_has_token(struct t5_translate_context* ctx, const char* token_str) {
     if (!ctx || !token_str)
         return false;
@@ -1054,31 +1064,56 @@ extern "C" char* t5_translate(struct t5_translate_context* ctx, const char* text
     std::vector<float> logits = run_decoder_step(ctx, dec_ids.data(), (int)dec_ids.size(), 0);
     if (logits.empty())
         return nullptr;
-    int offset = (int)dec_ids.size();
 
-    for (int step = 0; step < max_new_tokens; step++) {
-        int best_id = 0;
-        float best_val = logits[0];
-        for (int i = 1; i < hp.vocab_size; i++) {
-            if (logits[i] > best_val) {
-                best_val = logits[i];
-                best_id = i;
+    const int prompt_len = (int)dec_ids.size();
+
+    if (ctx->beam_size > 1) {
+        auto replay = [](t5_translate_context* c, const int32_t* toks, int n, int pl) -> float* {
+            auto lg = run_decoder_step(c, (const int*)toks, n, pl);
+            if (lg.empty())
+                return nullptr;
+            float* out = (float*)std::malloc(lg.size() * sizeof(float));
+            std::memcpy(out, lg.data(), lg.size() * sizeof(float));
+            return out;
+        };
+        core_beam_decode::Config bcfg;
+        bcfg.max_new_tokens = max_new_tokens;
+        bcfg.eos_id = hp.eos_token_id;
+        bcfg.vocab_size = hp.vocab_size;
+        bcfg.beam_size = ctx->beam_size;
+        bcfg.prompt_len = prompt_len;
+        auto br = core_beam_decode::run_with_probs(ctx, logits.data(), replay, bcfg);
+        for (int32_t t : br.tokens) {
+            if (t == hp.eos_token_id)
+                break;
+            dec_ids.push_back((int)t);
+        }
+    } else {
+        int offset = prompt_len;
+        for (int step = 0; step < max_new_tokens; step++) {
+            int best_id = 0;
+            float best_val = logits[0];
+            for (int i = 1; i < hp.vocab_size; i++) {
+                if (logits[i] > best_val) {
+                    best_val = logits[i];
+                    best_id = i;
+                }
             }
-        }
-        if (best_id == hp.eos_token_id)
-            break;
-        dec_ids.push_back(best_id);
+            if (best_id == hp.eos_token_id)
+                break;
+            dec_ids.push_back(best_id);
 
-        if (ctx->params.verbosity >= 2) {
-            fprintf(stderr, "t5[dec]: step=%d tok=%d '%s'\n", step, best_id,
-                    best_id < (int)ctx->tokenizer.id_to_token.size() ? ctx->tokenizer.id_to_token[best_id].c_str()
-                                                                     : "?");
-        }
+            if (ctx->params.verbosity >= 2) {
+                fprintf(stderr, "t5[dec]: step=%d tok=%d '%s'\n", step, best_id,
+                        best_id < (int)ctx->tokenizer.id_to_token.size() ? ctx->tokenizer.id_to_token[best_id].c_str()
+                                                                         : "?");
+            }
 
-        logits = run_decoder_step(ctx, &best_id, 1, offset);
-        if (logits.empty())
-            return nullptr;
-        offset++;
+            logits = run_decoder_step(ctx, &best_id, 1, offset);
+            if (logits.empty())
+                return nullptr;
+            offset++;
+        }
     }
 
     std::string result = detokenize(ctx->tokenizer, dec_ids);

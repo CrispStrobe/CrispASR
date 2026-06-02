@@ -439,7 +439,7 @@ static void dump_stage_i64(const piper_tts_context* ctx, const char* label, cons
 // ── Helper: tiny ggml graph compute ────────────────────────────────
 // Build a small graph, allocate ephemeral buffers, compute, return.
 // Used for each sub-module.
-
+namespace {
 struct mini_graph {
     ggml_context* ctx = nullptr;
     ggml_gallocr_t alloc = nullptr;
@@ -493,6 +493,7 @@ struct mini_graph {
     // Set input data on a tensor (after alloc).
     void set_input(ggml_tensor* t, const void* data, size_t nbytes) { ggml_backend_tensor_set(t, data, 0, nbytes); }
 };
+} // namespace
 
 // ── Tensor read helper (handles F16→F32 conversion) ───────────────
 

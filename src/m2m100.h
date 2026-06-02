@@ -23,6 +23,9 @@ struct m2m100_context* m2m100_init_from_file(const char* path_model, struct m2m1
 
 void m2m100_free(struct m2m100_context* ctx);
 
+// Beam search width. 1 = greedy (default); >1 = replay-from-prefix beam.
+void m2m100_set_beam_size(struct m2m100_context* ctx, int beam_size);
+
 // Translate text from src_lang to tgt_lang.
 // src_lang/tgt_lang: ISO-639-1 codes ("en", "de", "fr", ...)
 // Returns a newly allocated UTF-8 string (caller must free()).

@@ -205,3 +205,31 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j$(nproc)
 ls build/bin/crispasr-quantize
 ```
+
+## Android / Termux
+
+CrispASR builds natively under [Termux](https://termux.dev) on aarch64
+Android devices. Use a **static build** to avoid linker conflicts with
+system-installed `libggml.so` from the `whisper-cli` package (#137):
+
+```bash
+pkg install build-essential cmake git
+git clone https://github.com/CrispStrobe/CrispASR
+cd CrispASR
+cmake -B build -DCMAKE_BUILD_TYPE=Release \
+      -DBUILD_SHARED_LIBS=OFF \
+      -DCRISPASR_BUILD_TESTS=OFF
+cmake --build build -j$(nproc)
+```
+
+**Why static?** Termux's `whisper-cli` package installs an older
+`libggml.so` into `$PREFIX/lib`. The dynamic linker finds it before the
+locally built version, causing `cannot locate symbol` errors at runtime.
+Static linking (`-DBUILD_SHARED_LIBS=OFF`) embeds all ggml code directly
+into the binary, eliminating the conflict entirely.
+
+Strip debug symbols to reduce binary size:
+
+```bash
+strip build/bin/crispasr*
+```

@@ -24,6 +24,9 @@ struct t5_translate_context* t5_translate_init_from_file(const char* path_model,
 
 void t5_translate_free(struct t5_translate_context* ctx);
 
+// Beam search width. 1 = greedy (default); >1 = replay-from-prefix beam.
+void t5_translate_set_beam_size(struct t5_translate_context* ctx, int beam_size);
+
 // Translate text. For MADLAD-400, prefix text with "<2xx> " where xx is the
 // target language code (e.g. "<2de> Hello world" → German translation).
 // Returns a newly allocated UTF-8 string (caller must free()).

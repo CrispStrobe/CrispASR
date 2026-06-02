@@ -30,7 +30,7 @@ public:
         // suppresses the "backend does not support --source-lang" warning
         // that warn_unsupported() would otherwise raise when the user
         // passes -sl/-tl.
-        return CAP_TRANSLATE | CAP_AUTO_DOWNLOAD | CAP_SRC_TGT_LANGUAGE;
+        return CAP_TRANSLATE | CAP_AUTO_DOWNLOAD | CAP_SRC_TGT_LANGUAGE | CAP_BEAM_SEARCH;
     }
 
     std::vector<crispasr_segment> transcribe(const float* /*samples*/, int /*n_samples*/, int64_t /*t_offset_cs*/,
@@ -60,6 +60,7 @@ public:
         if (!ctx_ || text.empty() || src_lang.empty() || tgt_lang.empty()) {
             return {};
         }
+        m2m100_set_beam_size(ctx_, params.beam_size > 0 ? params.beam_size : 1);
         const int max_tokens = params.translate_max_tokens > 0 ? params.translate_max_tokens : 256;
         char* out = m2m100_translate(ctx_, text.c_str(), src_lang.c_str(), tgt_lang.c_str(), max_tokens);
         if (!out) {

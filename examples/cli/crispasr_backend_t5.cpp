@@ -42,7 +42,7 @@ public:
         // -sl is informational (T5 encoders are language-agnostic).
         // CAP_SRC_TGT_LANGUAGE suppresses the warn_unsupported nag
         // that would otherwise complain about -sl/-tl on translate.
-        return CAP_TRANSLATE | CAP_AUTO_DOWNLOAD | CAP_SRC_TGT_LANGUAGE;
+        return CAP_TRANSLATE | CAP_AUTO_DOWNLOAD | CAP_SRC_TGT_LANGUAGE | CAP_BEAM_SEARCH;
     }
 
     std::vector<crispasr_segment> transcribe(const float* /*samples*/, int /*n_samples*/, int64_t /*t_offset_cs*/,
@@ -97,6 +97,7 @@ public:
                         lang_tag.c_str());
             }
         }
+        t5_translate_set_beam_size(ctx_, params.beam_size > 0 ? params.beam_size : 1);
         const int max_tokens = params.translate_max_tokens > 0 ? params.translate_max_tokens : 256;
         char* out = t5_translate(ctx_, input.c_str(), max_tokens);
         if (!out) {

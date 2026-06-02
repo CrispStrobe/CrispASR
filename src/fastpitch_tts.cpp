@@ -65,7 +65,7 @@ struct fastpitch_hparams {
 };
 
 // ── mini_graph: short-lived ggml context + backend allocator ─────────
-
+namespace {
 struct mini_graph {
     ggml_backend_t backend;
     ggml_context* ctx;
@@ -86,6 +86,7 @@ struct mini_graph {
             ggml_free(ctx);
     }
 };
+} // namespace
 
 // ── Context ──────────────────────────────────────────────────────────
 
