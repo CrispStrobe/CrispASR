@@ -131,6 +131,10 @@
 #include "speecht5_tts.h"
 #define CA_HAVE_SPEECHT5 1
 #endif
+#if __has_include("bark_tts.h")
+#include "bark_tts.h"
+#define CA_HAVE_BARK 1
+#endif
 #if __has_include("voxcpm2_tts.h")
 #include "voxcpm2_tts.h"
 #define CA_HAVE_VOXCPM2 1
@@ -1327,6 +1331,9 @@ struct crispasr_session {
     speecht5_tts_context* speecht5_ctx = nullptr;
     std::vector<float> speecht5_speaker; // 512-d x-vector
 #endif
+#ifdef CA_HAVE_BARK
+    bark_context* bark_ctx = nullptr;
+#endif
 #ifdef CA_HAVE_VOXCPM2
     voxcpm2_context* voxcpm2_ctx = nullptr;
     std::vector<float> voxcpm2_ref_pcm; // 16 kHz mono cloning reference
@@ -2029,6 +2036,21 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
         return s;
     }
 #endif
+#ifdef CA_HAVE_BARK
+    if (s->backend == "bark" || s->backend == "bark-tts" || s->backend == "bark_tts") {
+        s->backend = "bark";
+        bark_context_params p = bark_context_default_params();
+        p.n_threads = s->n_threads;
+        p.verbosity = g_open_verbosity_tls;
+        p.use_gpu = g_open_use_gpu_tls;
+        s->bark_ctx = bark_init_from_file(model_path, p);
+        if (!s->bark_ctx) {
+            delete s;
+            return nullptr;
+        }
+        return s;
+    }
+#endif
 #ifdef CA_HAVE_VOXCPM2
     if (s->backend == "voxcpm2-tts" || s->backend == "voxcpm2" || s->backend == "voxcpm2_tts") {
         s->backend = "voxcpm2-tts";
@@ -2442,6 +2464,9 @@ CA_EXPORT int crispasr_session_available_backends(char* out_csv, int out_cap) {
 #endif
 #ifdef CA_HAVE_SPEECHT5
     list += ",speecht5";
+#endif
+#ifdef CA_HAVE_BARK
+    list += ",bark";
 #endif
 #ifdef CA_HAVE_VOXCPM2
     list += ",voxcpm2-tts";
@@ -5063,6 +5088,11 @@ CA_EXPORT float* crispasr_session_synthesize(crispasr_session* s, const char* te
         return speecht5_tts_synthesize(s->speecht5_ctx, text, out_n_samples);
     }
 #endif
+#ifdef CA_HAVE_BARK
+    if (s->bark_ctx) {
+        return bark_synthesize(s->bark_ctx, text, out_n_samples);
+    }
+#endif
 #ifdef CA_HAVE_VOXCPM2
     if (s->voxcpm2_ctx) {
         // VoxCPM2 synthesises at 48 kHz mono; every other CrispASR TTS
@@ -5417,6 +5447,10 @@ CA_EXPORT void crispasr_session_close(crispasr_session* s) {
     if (s->speecht5_ctx)
         speecht5_tts_free(s->speecht5_ctx);
 #endif
+#ifdef CA_HAVE_BARK
+    if (s->bark_ctx)
+        bark_free(s->bark_ctx);
+#endif
 #ifdef CA_HAVE_VOXCPM2
     if (s->voxcpm2_ctx)
         voxcpm2_free(s->voxcpm2_ctx);
@@ -5688,6 +5722,15 @@ CA_EXPORT int crispasr_session_set_temperature(crispasr_session* s, float temper
         touched++;
     }
 #endif
+#ifdef CA_HAVE_BARK
+    if (s->bark_ctx) {
+        bark_set_temperature_semantic(s->bark_ctx, temperature);
+        bark_set_temperature_coarse(s->bark_ctx, temperature);
+        bark_set_temperature_fine(s->bark_ctx, std::min(temperature, 0.5f));
+        bark_set_seed(s->bark_ctx, seed);
+        touched++;
+    }
+#endif
 #ifdef CA_HAVE_QWEN3_TTS
     if (s->qwen3_tts_ctx) {
         // qwen3-tts's code-predictor sampler reads cparams.temperature
@@ -5729,6 +5772,12 @@ CA_EXPORT int crispasr_session_set_tts_seed(crispasr_session* s, uint64_t seed) 
 #ifdef CA_HAVE_POCKET
     if (s->pocket_tts_ctx) {
         pocket_tts_set_seed(s->pocket_tts_ctx, seed);
+        touched++;
+    }
+#endif
+#ifdef CA_HAVE_BARK
+    if (s->bark_ctx) {
+        bark_set_seed(s->bark_ctx, seed);
         touched++;
     }
 #endif

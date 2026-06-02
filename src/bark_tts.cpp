@@ -223,10 +223,104 @@ struct bark_context {
 };
 
 // ---------------------------------------------------------------------------
-// Tensor binding helpers
+// Env-gated dump helpers (BARK_DUMP_DIR)
 // ---------------------------------------------------------------------------
 
 namespace {
+
+static const char* bark_dump_dir() {
+    static const char* d = std::getenv("BARK_DUMP_DIR");
+    return d;
+}
+
+static void bark_dump_int32(const char* name, const int32_t* data, int n) {
+    const char* d = bark_dump_dir();
+    if (!d)
+        return;
+    std::string path = std::string(d) + "/" + name + ".bin";
+    FILE* f = fopen(path.c_str(), "wb");
+    if (f) {
+        fwrite(data, sizeof(int32_t), (size_t)n, f);
+        fclose(f);
+        fprintf(stderr, "bark: dumped %s (%d int32)\n", path.c_str(), n);
+    }
+}
+
+static void bark_dump_float(const char* name, const float* data, int n) {
+    const char* d = bark_dump_dir();
+    if (!d)
+        return;
+    std::string path = std::string(d) + "/" + name + ".bin";
+    FILE* f = fopen(path.c_str(), "wb");
+    if (f) {
+        fwrite(data, sizeof(float), (size_t)n, f);
+        fclose(f);
+        fprintf(stderr, "bark: dumped %s (%d float)\n", path.c_str(), n);
+    }
+}
+
+} // namespace
+
+// ---------------------------------------------------------------------------
+// Tensor row reader (handles any ggml type: F32, F16, Q4_K, etc.)
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// Read row `row` of a tensor into `dst` as F32.  Works for F32, F16, and all
+// quantised types that have a registered to_float dequantiser.
+static bool tensor_get_row_f32(ggml_tensor* t, int64_t row, float* dst, int64_t ne0) {
+    const size_t row_bytes = ggml_row_size(t->type, ne0);
+    const size_t offset = (size_t)row * row_bytes;
+
+    if (t->type == GGML_TYPE_F32) {
+        ggml_backend_tensor_get(t, dst, offset, row_bytes);
+        return true;
+    }
+    if (t->type == GGML_TYPE_F16) {
+        std::vector<ggml_fp16_t> buf((size_t)ne0);
+        ggml_backend_tensor_get(t, buf.data(), offset, row_bytes);
+        for (int64_t i = 0; i < ne0; i++)
+            dst[i] = ggml_fp16_to_fp32(buf[(size_t)i]);
+        return true;
+    }
+    // Quantised type — use the type-traits dequantiser
+    const auto* tr = ggml_get_type_traits(t->type);
+    if (!tr || !tr->to_float)
+        return false;
+    std::vector<uint8_t> raw(row_bytes);
+    ggml_backend_tensor_get(t, raw.data(), offset, row_bytes);
+    tr->to_float(raw.data(), dst, (int)ne0);
+    return true;
+}
+
+// Read all elements of a tensor into dst as F32.  Handles F32, F16, and
+// quantised types.
+static bool tensor_get_all_f32(ggml_tensor* t, float* dst, int64_t n_elements) {
+    size_t nbytes = ggml_nbytes(t);
+    if (t->type == GGML_TYPE_F32) {
+        ggml_backend_tensor_get(t, dst, 0, nbytes);
+        return true;
+    }
+    if (t->type == GGML_TYPE_F16) {
+        std::vector<ggml_fp16_t> buf((size_t)n_elements);
+        ggml_backend_tensor_get(t, buf.data(), 0, nbytes);
+        for (int64_t i = 0; i < n_elements; i++)
+            dst[i] = ggml_fp16_to_fp32(buf[(size_t)i]);
+        return true;
+    }
+    const auto* tr = ggml_get_type_traits(t->type);
+    if (!tr || !tr->to_float)
+        return false;
+    std::vector<uint8_t> raw(nbytes);
+    ggml_backend_tensor_get(t, raw.data(), 0, nbytes);
+    tr->to_float(raw.data(), dst, (int)n_elements);
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Tensor binding helpers
+// ---------------------------------------------------------------------------
 
 static ggml_tensor* get_tensor(bark_context* c, const char* name) {
     auto it = c->tensors.find(name);
@@ -616,27 +710,23 @@ static std::vector<float> compute_embeddings(bark_context* /*c*/, const bark_gpt
     const int D = (int)hp.n_embd;
     const int T = (int)tokens.size();
 
-    // Read embedding and position tables from backend
-    // token_embd: (D, vocab) — row i = embedding for token i
-    // pos_embd: (D, block_size)
-    const size_t embd_row = (size_t)D * sizeof(ggml_fp16_t);
     std::vector<float> result((size_t)D * T, 0.0f);
-    std::vector<ggml_fp16_t> row_buf((size_t)D);
+    std::vector<float> row_buf((size_t)D);
 
     for (int t = 0; t < T; t++) {
         int tok = tokens[(size_t)t];
         int pos = pos_offset + t;
 
-        // Token embedding
-        ggml_backend_tensor_get(m.token_embd, row_buf.data(), (size_t)tok * embd_row, embd_row);
+        // Token embedding (handles F32, F16, and quantised types)
+        tensor_get_row_f32(m.token_embd, tok, row_buf.data(), D);
         for (int d = 0; d < D; d++) {
-            result[(size_t)t * D + d] = ggml_fp16_to_fp32(row_buf[(size_t)d]);
+            result[(size_t)t * D + d] = row_buf[(size_t)d];
         }
 
         // Position embedding
-        ggml_backend_tensor_get(m.pos_embd, row_buf.data(), (size_t)pos * embd_row, embd_row);
+        tensor_get_row_f32(m.pos_embd, pos, row_buf.data(), D);
         for (int d = 0; d < D; d++) {
-            result[(size_t)t * D + d] += ggml_fp16_to_fp32(row_buf[(size_t)d]);
+            result[(size_t)t * D + d] += row_buf[(size_t)d];
         }
     }
 
@@ -853,27 +943,13 @@ static std::vector<float> fold_weight_norm(ggml_tensor* w_g, ggml_tensor* w_v) {
     const int64_t Cout = w_v->ne[2];
     const size_t total = (size_t)(K * Cin * Cout);
 
-    // Read w_v
+    // Read w_v (handles F32, F16, and quantised types)
     std::vector<float> v(total);
-    if (w_v->type == GGML_TYPE_F16) {
-        std::vector<ggml_fp16_t> buf(total);
-        ggml_backend_tensor_get(w_v, buf.data(), 0, total * sizeof(ggml_fp16_t));
-        for (size_t i = 0; i < total; i++)
-            v[i] = ggml_fp16_to_fp32(buf[i]);
-    } else {
-        ggml_backend_tensor_get(w_v, v.data(), 0, total * sizeof(float));
-    }
+    tensor_get_all_f32(w_v, v.data(), (int64_t)total);
 
     // Read w_g
     std::vector<float> g((size_t)Cout);
-    if (w_g->type == GGML_TYPE_F16) {
-        std::vector<ggml_fp16_t> buf((size_t)Cout);
-        ggml_backend_tensor_get(w_g, buf.data(), 0, (size_t)Cout * sizeof(ggml_fp16_t));
-        for (int i = 0; i < Cout; i++)
-            g[(size_t)i] = ggml_fp16_to_fp32(buf[(size_t)i]);
-    } else {
-        ggml_backend_tensor_get(w_g, g.data(), 0, (size_t)Cout * sizeof(float));
-    }
+    tensor_get_all_f32(w_g, g.data(), Cout);
 
     // For each output channel, compute norm of v and scale
     std::vector<float> result(total);
@@ -1028,28 +1104,34 @@ static std::vector<int32_t> generate_text_semantic(bark_context* ctx, const char
     out.reserve((size_t)max_steps);
     float temperature = ctx->params.temperature_semantic;
 
-    // 7. AR decode — sample from logits[0:10000] + logits[SEMANTIC_PAD_TOKEN] as EOS
-    // This matches Python: relevant_logits = hstack([logits[:10000], logits[10000]])
+    // 7. AR decode — sample from relevant_logits = [logits[0:10000], logits[SEMANTIC_PAD_TOKEN]]
+    // The last element (index 10000) is the EOS probability.
     const int sample_vocab = (int)pp.semantic_vocab_size + 1; // 10001: 10000 semantic + 1 EOS
     std::vector<float> sample_logits((size_t)sample_vocab);
 
     const float min_eos_p = 0.2f; // Match Python bark default: stop if EOS prob >= 0.2
 
     for (int step = 0; step < max_steps; step++) {
-        // Sample from logits[0:semantic_vocab_size]
-        int tok = sample_from_logits(logits, (int)pp.semantic_vocab_size, temperature, ctx->rng);
+        // Build relevant_logits: logits[0:SEMANTIC_VOCAB_SIZE] + logits[SEMANTIC_PAD_TOKEN]
+        std::memcpy(sample_logits.data(), logits, (size_t)pp.semantic_vocab_size * sizeof(float));
+        sample_logits[(size_t)pp.semantic_vocab_size] = logits[pp.semantic_pad_token];
+
+        // Sample from the 10001-element relevant logits (includes EOS at index 10000)
+        int tok = sample_from_logits(sample_logits.data(), sample_vocab, temperature, ctx->rng);
         free(logits);
         logits = nullptr;
 
-        // Check EOS
+        // Check EOS (sampled index == semantic_vocab_size means EOS)
         if (tok == (int)pp.semantic_vocab_size) {
+            if (ctx->params.verbosity >= 2) {
+                fprintf(stderr, "bark: EOS sampled at step %d\n", step);
+            }
             break;
         }
 
         // min_eos_p early stop: if EOS probability >= threshold, stop regardless of sampled token.
         // This matches Python bark's `if min_eos_p is not None and probs[-1] >= min_eos_p: break`
         if (min_eos_p > 0.0f && temperature > 0.0f) {
-            // Compute softmax probability of EOS token
             float inv_t = 1.0f / temperature;
             float mx = sample_logits[0] * inv_t;
             for (int k = 1; k < sample_vocab; k++) {
@@ -1107,6 +1189,8 @@ static std::vector<int32_t> generate_text_semantic(bark_context* ctx, const char
         fprintf(stderr, "\n");
     }
 
+    bark_dump_int32("semantic_tokens", out.data(), (int)out.size());
+
     return out;
 }
 
@@ -1151,12 +1235,25 @@ static std::vector<int32_t> generate_coarse(bark_context* ctx, const std::vector
 
     float temperature = ctx->params.temperature_coarse;
 
-    // Process all steps (simplified: single context window)
-    // Build input: [semantic_padded(256) | COARSE_INFER_TOKEN | coarse_history...]
+    // Build input: [semantic_padded(256) | COARSE_INFER_TOKEN | coarse_history_from_speaker...]
     std::vector<int32_t> input_tokens;
     input_tokens.reserve(max_semantic_ctx + 1 + (size_t)n_steps);
     input_tokens.insert(input_tokens.end(), semantic_padded.begin(), semantic_padded.end());
     input_tokens.push_back((int32_t)pp.coarse_infer_token);
+
+    // Prepend speaker coarse history if available
+    // coarse_prompt is (2, T) row-major: row 0 = codebook 0, row 1 = codebook 1
+    // Interleave as full-vocab tokens: semantic_vocab + cb*codebook_size + code
+    if (ctx->speaker.loaded && !ctx->speaker.coarse_prompt.empty() && ctx->speaker.coarse_prompt_cols > 0) {
+        int hist_T = ctx->speaker.coarse_prompt_cols;
+        for (int t = 0; t < hist_T; t++) {
+            for (int cb = 0; cb < (int)pp.n_coarse_codebooks; cb++) {
+                int code = ctx->speaker.coarse_prompt[(size_t)(cb * hist_T + t)];
+                int full_tok = (int)pp.semantic_vocab_size + cb * (int)pp.codebook_size + code;
+                input_tokens.push_back((int32_t)full_tok);
+            }
+        }
+    }
 
     int total_ctx = (int)input_tokens.size() + n_steps;
     if (total_ctx > (int)hp.block_size)
@@ -1218,6 +1315,8 @@ static std::vector<int32_t> generate_coarse(bark_context* ctx, const std::vector
         coarse_out.resize(coarse_out.size() - coarse_out.size() % pp.n_coarse_codebooks);
     }
 
+    bark_dump_int32("coarse_tokens", coarse_out.data(), (int)coarse_out.size());
+
     return coarse_out;
 }
 
@@ -1264,8 +1363,7 @@ static std::vector<int32_t> generate_fine(bark_context* ctx, const int32_t* coar
 
             // Sum embeddings of codebooks 0..nn-1, add position embedding
             std::vector<float> embeds((size_t)(D * win_len), 0.0f);
-            const size_t embd_row = (size_t)D * sizeof(ggml_fp16_t);
-            std::vector<ggml_fp16_t> row_buf((size_t)D);
+            std::vector<float> row_buf((size_t)D);
 
             for (int t = 0; t < win_len; t++) {
                 // Sum token embeddings for codebooks 0..nn
@@ -1273,16 +1371,15 @@ static std::vector<int32_t> generate_fine(bark_context* ctx, const int32_t* coar
                     int tok = codes[(size_t)(cb * n_timesteps + win_start + t)];
                     if (tok >= (int)m.token_embds[(size_t)cb]->ne[1])
                         tok = 0; // clamp
-                    ggml_backend_tensor_get(m.token_embds[(size_t)cb], row_buf.data(), (size_t)tok * embd_row,
-                                            embd_row);
+                    tensor_get_row_f32(m.token_embds[(size_t)cb], tok, row_buf.data(), D);
                     for (int d = 0; d < D; d++) {
-                        embeds[(size_t)(t * D + d)] += ggml_fp16_to_fp32(row_buf[(size_t)d]);
+                        embeds[(size_t)(t * D + d)] += row_buf[(size_t)d];
                     }
                 }
                 // Add position embedding
-                ggml_backend_tensor_get(m.pos_embd, row_buf.data(), (size_t)t * embd_row, embd_row);
+                tensor_get_row_f32(m.pos_embd, t, row_buf.data(), D);
                 for (int d = 0; d < D; d++) {
-                    embeds[(size_t)(t * D + d)] += ggml_fp16_to_fp32(row_buf[(size_t)d]);
+                    embeds[(size_t)(t * D + d)] += row_buf[(size_t)d];
                 }
             }
 
@@ -1316,11 +1413,13 @@ static std::vector<int32_t> generate_fine(bark_context* ctx, const int32_t* coar
         }
     }
 
+    bark_dump_int32("fine_codes", codes.data(), (int)codes.size());
+
     return codes;
 }
 
 // ---------------------------------------------------------------------------
-// EnCodec decoder stub
+// EnCodec decoder
 // ---------------------------------------------------------------------------
 
 // ELU activation: alpha * (exp(x) - 1) for x < 0, x for x >= 0
@@ -1459,16 +1558,7 @@ static std::vector<float> cpu_lstm_forward(const float* input, int C, int T, con
         std::vector<float> wih(ws), whh(ws);
         std::vector<float> bih((size_t)(4 * C)), bhh((size_t)(4 * C));
 
-        auto read_f = [](ggml_tensor* t, float* dst, size_t n) {
-            if (t->type == GGML_TYPE_F16) {
-                std::vector<ggml_fp16_t> buf(n);
-                ggml_backend_tensor_get(t, buf.data(), 0, n * sizeof(ggml_fp16_t));
-                for (size_t i = 0; i < n; i++)
-                    dst[i] = ggml_fp16_to_fp32(buf[i]);
-            } else {
-                ggml_backend_tensor_get(t, dst, 0, n * sizeof(float));
-            }
-        };
+        auto read_f = [](ggml_tensor* t, float* dst, size_t n) { tensor_get_all_f32(t, dst, (int64_t)n); };
 
         read_f(enc.lstm_wih[(size_t)layer], wih.data(), ws);
         read_f(enc.lstm_whh[(size_t)layer], whh.data(), ws);
@@ -1540,16 +1630,15 @@ static std::vector<float> encodec_decode(bark_context* ctx, const int32_t* fine_
 
     // 1. RVQ dequantize: sum codebook embeddings
     std::vector<float> z((size_t)(cb_dim * n_timesteps), 0.0f);
-    std::vector<ggml_fp16_t> emb_buf((size_t)cb_dim);
+    std::vector<float> emb_buf((size_t)cb_dim);
     for (int cb = 0; cb < n_codebooks && cb < 8; cb++) {
         for (int t = 0; t < n_timesteps; t++) {
             int tok = fine_tokens[cb * n_timesteps + t];
             if (tok < 0 || tok >= 1024)
                 tok = 0;
-            ggml_backend_tensor_get(enc.codebooks[(size_t)cb], emb_buf.data(),
-                                    (size_t)tok * cb_dim * sizeof(ggml_fp16_t), (size_t)cb_dim * sizeof(ggml_fp16_t));
+            tensor_get_row_f32(enc.codebooks[(size_t)cb], tok, emb_buf.data(), cb_dim);
             for (int d = 0; d < cb_dim; d++) {
-                z[(size_t)(d * n_timesteps + t)] += ggml_fp16_to_fp32(emb_buf[(size_t)d]);
+                z[(size_t)(d * n_timesteps + t)] += emb_buf[(size_t)d];
             }
         }
     }
@@ -1643,6 +1732,8 @@ static std::vector<float> encodec_decode(bark_context* ctx, const int32_t* fine_
         fprintf(stderr, "bark: EnCodec produced %d samples (%.2f sec)\n", (int)pcm.size(),
                 (float)pcm.size() / 24000.0f);
     }
+
+    bark_dump_float("encodec_pcm", pcm.data(), (int)pcm.size());
 
     return pcm;
 }
@@ -1756,21 +1847,273 @@ uint32_t bark_sample_rate(const struct bark_context* ctx) {
     return ctx ? ctx->pp.sample_rate : 24000;
 }
 
+// ---------------------------------------------------------------------------
+// Minimal NPZ/NPY parser for speaker prompt loading
+// ---------------------------------------------------------------------------
+
+// Parse a .npy buffer: magic, version, header dict -> raw data.
+// Returns int32 vector (casts from int64/int32/int16 as needed).
+// shape_out: filled with dimensions; empty on failure.
+static std::vector<int32_t> parse_npy_to_int32(const uint8_t* data, size_t len, std::vector<int>& shape_out) {
+    shape_out.clear();
+    if (len < 10 || data[0] != 0x93 || data[1] != 'N' || data[2] != 'U' || data[3] != 'M' || data[4] != 'P' ||
+        data[5] != 'Y') {
+        return {};
+    }
+
+    // Version 1.0 or 2.0
+    uint8_t major = data[6];
+    uint32_t hdr_len = 0;
+    size_t hdr_off = 0;
+    if (major == 1) {
+        hdr_len = (uint32_t)data[8] | ((uint32_t)data[9] << 8);
+        hdr_off = 10;
+    } else if (major == 2) {
+        if (len < 12)
+            return {};
+        hdr_len =
+            (uint32_t)data[8] | ((uint32_t)data[9] << 8) | ((uint32_t)data[10] << 16) | ((uint32_t)data[11] << 24);
+        hdr_off = 12;
+    } else {
+        return {};
+    }
+
+    if (hdr_off + hdr_len > len)
+        return {};
+
+    // Parse header dict: {'descr': '<i8', 'fortran_order': False, 'shape': (N,), }
+    std::string hdr((const char*)data + hdr_off, hdr_len);
+    size_t data_start = hdr_off + hdr_len;
+
+    // Find dtype
+    int elem_bytes = 0;
+    bool is_signed = true;
+    auto descr_pos = hdr.find("'descr'");
+    if (descr_pos == std::string::npos)
+        descr_pos = hdr.find("\"descr\"");
+    if (descr_pos != std::string::npos) {
+        // Find the dtype string like '<i8', '<i4', '<i2'
+        auto q1 = hdr.find('\'', descr_pos + 7);
+        if (q1 == std::string::npos)
+            q1 = hdr.find('"', descr_pos + 7);
+        if (q1 != std::string::npos) {
+            auto q2 = hdr.find(hdr[q1], q1 + 1);
+            if (q2 != std::string::npos) {
+                std::string dtype = hdr.substr(q1 + 1, q2 - q1 - 1);
+                // Parse: [<>|][iuf][1248]
+                for (char c : dtype) {
+                    if (c == 'u')
+                        is_signed = false;
+                    if (c >= '1' && c <= '8')
+                        elem_bytes = c - '0';
+                }
+            }
+        }
+    }
+    if (elem_bytes == 0)
+        return {};
+
+    // Parse shape
+    auto shape_pos = hdr.find("'shape'");
+    if (shape_pos == std::string::npos)
+        shape_pos = hdr.find("\"shape\"");
+    if (shape_pos != std::string::npos) {
+        auto p1 = hdr.find('(', shape_pos);
+        auto p2 = hdr.find(')', shape_pos);
+        if (p1 != std::string::npos && p2 != std::string::npos) {
+            std::string shape_str = hdr.substr(p1 + 1, p2 - p1 - 1);
+            // Parse comma-separated integers
+            size_t pos = 0;
+            while (pos < shape_str.size()) {
+                while (pos < shape_str.size() && (shape_str[pos] == ' ' || shape_str[pos] == ','))
+                    pos++;
+                if (pos >= shape_str.size())
+                    break;
+                int val = 0;
+                while (pos < shape_str.size() && shape_str[pos] >= '0' && shape_str[pos] <= '9') {
+                    val = val * 10 + (shape_str[pos] - '0');
+                    pos++;
+                }
+                shape_out.push_back(val);
+            }
+        }
+    }
+
+    // Compute total elements
+    int64_t n_elements = 1;
+    for (int s : shape_out)
+        n_elements *= s;
+    if (n_elements <= 0)
+        return {};
+
+    size_t data_bytes = (size_t)(n_elements * elem_bytes);
+    if (data_start + data_bytes > len)
+        return {};
+
+    // Convert to int32
+    const uint8_t* raw = data + data_start;
+    std::vector<int32_t> result((size_t)n_elements);
+    (void)is_signed; // all bark prompts are non-negative, cast is safe
+
+    if (elem_bytes == 8) {
+        const int64_t* src = (const int64_t*)raw;
+        for (int64_t i = 0; i < n_elements; i++)
+            result[(size_t)i] = (int32_t)src[i];
+    } else if (elem_bytes == 4) {
+        const int32_t* src = (const int32_t*)raw;
+        for (int64_t i = 0; i < n_elements; i++)
+            result[(size_t)i] = src[i];
+    } else if (elem_bytes == 2) {
+        const int16_t* src = (const int16_t*)raw;
+        for (int64_t i = 0; i < n_elements; i++)
+            result[(size_t)i] = (int32_t)src[i];
+    } else {
+        for (int64_t i = 0; i < n_elements; i++)
+            result[(size_t)i] = (int32_t)raw[i];
+    }
+
+    return result;
+}
+
+// Minimal ZIP local file header parser (for .npz = zip of .npy files)
+struct npz_entry {
+    std::string name;
+    std::vector<uint8_t> data;
+};
+
+static std::vector<npz_entry> parse_npz(const uint8_t* data, size_t len) {
+    std::vector<npz_entry> entries;
+    size_t pos = 0;
+
+    while (pos + 30 <= len) {
+        // Local file header signature = 0x04034b50
+        if (data[pos] != 'P' || data[pos + 1] != 'K' || data[pos + 2] != 3 || data[pos + 3] != 4)
+            break;
+
+        uint16_t compression = (uint16_t)(data[pos + 8] | (data[pos + 9] << 8));
+        uint32_t comp_size = (uint32_t)data[pos + 18] | ((uint32_t)data[pos + 19] << 8) |
+                             ((uint32_t)data[pos + 20] << 16) | ((uint32_t)data[pos + 21] << 24);
+        uint16_t name_len = (uint16_t)(data[pos + 26] | (data[pos + 27] << 8));
+        uint16_t extra_len = (uint16_t)(data[pos + 28] | (data[pos + 29] << 8));
+
+        size_t name_start = pos + 30;
+        if (name_start + name_len > len)
+            break;
+        std::string name((const char*)data + name_start, name_len);
+
+        size_t data_start = name_start + name_len + extra_len;
+        if (data_start + comp_size > len)
+            break;
+
+        if (compression == 0) {
+            // Stored (no compression) — typical for .npz
+            entries.push_back({name, std::vector<uint8_t>(data + data_start, data + data_start + comp_size)});
+        }
+        // Skip compressed entries (bark .npz files are typically stored uncompressed)
+
+        pos = data_start + comp_size;
+    }
+
+    return entries;
+}
+
 int bark_set_speaker_npz(struct bark_context* ctx, const char* npz_path) {
     if (!ctx || !npz_path)
         return -1;
 
-    // TODO(#134): Load .npz file and populate ctx->speaker
-    // The .npz contains:
-    //   "semantic_prompt" -> int64 array
-    //   "coarse_prompt"   -> int64 array (2, T)
-    //   "fine_prompt"     -> int64 array (8, T)
     if (ctx->params.verbosity >= 1) {
         fprintf(stderr, "bark: loading speaker from '%s'\n", npz_path);
     }
 
-    ctx->speaker.loaded = false; // Not yet implemented
-    return -1;                   // TODO
+    // Read entire file
+    FILE* f = fopen(npz_path, "rb");
+    if (!f) {
+        fprintf(stderr, "bark: cannot open '%s'\n", npz_path);
+        return -1;
+    }
+    fseek(f, 0, SEEK_END);
+    long fsize = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (fsize <= 0 || fsize > 100 * 1024 * 1024) { // sanity: max 100 MB
+        fclose(f);
+        return -1;
+    }
+    std::vector<uint8_t> buf((size_t)fsize);
+    if (fread(buf.data(), 1, (size_t)fsize, f) != (size_t)fsize) {
+        fclose(f);
+        return -1;
+    }
+    fclose(f);
+
+    // Parse ZIP entries
+    auto entries = parse_npz(buf.data(), buf.size());
+    if (entries.empty()) {
+        fprintf(stderr, "bark: no entries found in '%s'\n", npz_path);
+        return -1;
+    }
+
+    ctx->speaker = bark_speaker_prompt{};
+    bool found_semantic = false, found_coarse = false, found_fine = false;
+
+    for (auto& entry : entries) {
+        // Strip .npy extension for matching
+        std::string key = entry.name;
+        if (key.size() > 4 && key.substr(key.size() - 4) == ".npy")
+            key = key.substr(0, key.size() - 4);
+
+        std::vector<int> shape;
+        std::vector<int32_t> arr = parse_npy_to_int32(entry.data.data(), entry.data.size(), shape);
+        if (arr.empty())
+            continue;
+
+        if (key == "semantic_prompt") {
+            ctx->speaker.semantic_prompt = std::move(arr);
+            found_semantic = true;
+            if (ctx->params.verbosity >= 2) {
+                fprintf(stderr, "bark: loaded semantic_prompt (%d tokens)\n", (int)ctx->speaker.semantic_prompt.size());
+            }
+        } else if (key == "coarse_prompt") {
+            ctx->speaker.coarse_prompt = std::move(arr);
+            // shape should be (n_coarse_codebooks, T)
+            if (shape.size() >= 2) {
+                ctx->speaker.coarse_prompt_cols = shape[1];
+            } else if (shape.size() == 1) {
+                ctx->speaker.coarse_prompt_cols = shape[0];
+            }
+            found_coarse = true;
+            if (ctx->params.verbosity >= 2) {
+                fprintf(stderr, "bark: loaded coarse_prompt (%d elements, cols=%d)\n",
+                        (int)ctx->speaker.coarse_prompt.size(), ctx->speaker.coarse_prompt_cols);
+            }
+        } else if (key == "fine_prompt") {
+            ctx->speaker.fine_prompt = std::move(arr);
+            if (shape.size() >= 2) {
+                ctx->speaker.fine_prompt_cols = shape[1];
+            } else if (shape.size() == 1) {
+                ctx->speaker.fine_prompt_cols = shape[0];
+            }
+            found_fine = true;
+            if (ctx->params.verbosity >= 2) {
+                fprintf(stderr, "bark: loaded fine_prompt (%d elements, cols=%d)\n",
+                        (int)ctx->speaker.fine_prompt.size(), ctx->speaker.fine_prompt_cols);
+            }
+        }
+    }
+
+    if (!found_semantic || !found_coarse || !found_fine) {
+        fprintf(stderr, "bark: incomplete speaker prompt (semantic=%d coarse=%d fine=%d)\n", found_semantic,
+                found_coarse, found_fine);
+        ctx->speaker = bark_speaker_prompt{};
+        return -1;
+    }
+
+    ctx->speaker.loaded = true;
+    if (ctx->params.verbosity >= 1) {
+        fprintf(stderr, "bark: speaker prompt loaded (%d semantic, %d coarse, %d fine)\n",
+                (int)ctx->speaker.semantic_prompt.size(), (int)ctx->speaker.coarse_prompt.size(),
+                (int)ctx->speaker.fine_prompt.size());
+    }
+    return 0;
 }
 
 void bark_clear_speaker(struct bark_context* ctx) {
