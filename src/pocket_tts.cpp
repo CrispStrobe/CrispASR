@@ -1220,6 +1220,12 @@ static void mimi_dec_transformer(pocket_tts_context* pctx, float* seq, int T, in
             float* K = qkv.data() + D;
             float* V = qkv.data() + 2 * D;
 
+            // Apply RoPE to Q and K (per head)
+            for (int h = 0; h < NH; h++) {
+                apply_rope_inplace(&Q[h * HD], HD, t, 10000.0f);
+                apply_rope_inplace(&K[h * HD], HD, t, 10000.0f);
+            }
+
             // Store K,V in cache for this position
             vec_copy(&k_layer[t * D], K, D);
             vec_copy(&v_layer[t * D], V, D);
