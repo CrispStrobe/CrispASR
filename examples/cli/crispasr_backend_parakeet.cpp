@@ -46,8 +46,8 @@ public:
         // the threshold, so 11 s JFK still gets one backend call on the
         // full audio.
         return CAP_TIMESTAMPS_NATIVE | CAP_WORD_TIMESTAMPS | CAP_TOKEN_CONFIDENCE | CAP_FLASH_ATTN |
-               CAP_PUNCTUATION_TOGGLE | CAP_TEMPERATURE | CAP_DIARIZE | CAP_PARALLEL_PROCESSORS | CAP_AUTO_DOWNLOAD |
-               CAP_UNBOUNDED_INPUT;
+               CAP_PUNCTUATION_TOGGLE | CAP_TEMPERATURE | CAP_BEAM_SEARCH | CAP_DIARIZE | CAP_PARALLEL_PROCESSORS |
+               CAP_AUTO_DOWNLOAD | CAP_UNBOUNDED_INPUT;
     }
 
     bool init(const whisper_params& p) override {
@@ -98,6 +98,7 @@ public:
         // who toggles --temperature back off doesn't keep the previous
         // sampling state from a prior file.
         parakeet_set_temperature(ctx_, params.temperature, params.seed);
+        parakeet_set_beam_size(ctx_, params.beam_size > 0 ? params.beam_size : 1);
 
         // PLAN #98: CTC-WS hotword phrase boost
         if (!params.hotwords.empty()) {

@@ -212,7 +212,8 @@ static void whisper_ensure_cpu_threadpool(ggml_backend_sched_t sched, int n_thre
     std::lock_guard<std::mutex> lock(g_cpu_pools_mtx);
     for (int i = 0; i < ggml_backend_sched_get_n_backends(sched); ++i) {
         ggml_backend_t backend = ggml_backend_sched_get_backend(sched, i);
-        if (!ggml_backend_is_cpu(backend)) continue;
+        if (!ggml_backend_is_cpu(backend))
+            continue;
 
         auto& entry = g_cpu_pools[backend];
         if (entry.pool && entry.n_threads >= n_threads) {

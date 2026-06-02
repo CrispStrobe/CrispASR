@@ -112,7 +112,7 @@ Duplicated scaffolding is bundled in a single static library,
 | `core/bpe.h` | GPT-2 byte-level BPE encode + decode | granite_speech, granite_nle, voxtral, qwen3, glm-asr |
 | `core/greedy_decode.h` | Autoregressive greedy decode loop with EOS handling | qwen3, voxtral, voxtral4b, granite, glm-asr |
 | `core/sanm.h` | FunASR SANM encoder block (MHA + FSMN depthwise conv) | funasr, sensevoice, paraformer |
-| `core/asr_context_bias.h` | Aho-Corasick CTC-WS phrase-boost trie for `--hotwords` (#98) | parakeet (CTC + TDT); extensible to any CTC/TDT backend |
+| `core/asr_context_bias.h` | Aho-Corasick CTC-WS phrase-boost trie for `--hotwords` (#98). Per-beam state in TDT/RNNT beam search | parakeet (CTC + TDT greedy + TDT beam); extensible to any CTC/TDT backend |
 
 `core_mel::Params` spans both algorithm clusters: the NeMo family
 (`ln` + per-mel z-score + `(T, n_mels)` layout) and the HF/Whisper
@@ -200,7 +200,9 @@ regression test against `samples/jfk.wav`:
   injected into LLM embedding space, KV-cached autoregressive
   decoding.
 - **Transducer** (parakeet): LSTM predictor + joint network,
-  frame-synchronous TDT decoding.
+  frame-synchronous TDT decoding. Supports greedy (default) and
+  label-looping beam search (`-bs N`) with per-beam LSTM state
+  snapshots and per-beam hotword trie tracking.
 - **Codec + LM** (kyutai-stt): neural audio codec (RVQ) →
   token-based LM.
 - **TTS — codec / vocoder pipeline**:

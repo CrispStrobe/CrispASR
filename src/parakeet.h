@@ -106,6 +106,11 @@ const char* parakeet_token_to_str(struct parakeet_context* ctx, int token_id);
 // until the next call. seed == 0 means time-based RNG.
 void parakeet_set_temperature(struct parakeet_context* ctx, float temperature, uint64_t seed);
 
+// Beam search for TDT/RNNT decode. beam_size == 1 (default) is greedy.
+// beam_size > 1 runs a label-looping beam search that keeps multiple
+// hypotheses alive — especially beneficial with hotword phrase boost.
+void parakeet_set_beam_size(struct parakeet_context* ctx, int beam_size);
+
 // CTC decode mode (hybrid TDT+CTC models only).
 void parakeet_set_ctc_mode(struct parakeet_context* ctx, bool ctc);
 bool parakeet_has_ctc(struct parakeet_context* ctx);

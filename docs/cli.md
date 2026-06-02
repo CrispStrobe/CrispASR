@@ -131,6 +131,7 @@ per-token `tokens[]` arrays when the backend populates them.
 | `--lcs-dedup auto\|on\|off` | NeMo-style sub-word LCS dedup across chunk boundaries (default `auto` — fires when chunking with overlap) |
 | `--lcs-min-length N` | Minimum LCS length to act on (default 1; raise to 3-4 on long-silence audio where blank tokens dominate boundaries) |
 | `--parakeet-decoder ctc\|tdt` | Select CTC or TDT decode head for hybrid parakeet models |
+| `-bs N`, `--beam-size N` | Parakeet TDT/RNNT beam search width (default 1 = greedy). `2`–`4` recommended with hotwords. CTC decode is frame-synchronous and always greedy |
 
 ### Parakeet streamed encoding (issue #89)
 
@@ -373,7 +374,7 @@ upstream tools like SubtitleEdit.
 | `-tp F`, `--temperature F` | Sampling temperature. `0` = pure argmax (default, bit-identical). `> 0` enables multinomial sampling for whisper, voxtral, voxtral4b, qwen3, granite |
 | `--seed N` | RNG seed for sampling. `0` = non-deterministic. Used by temperature-sampling ASR backends and TTS backends that sample; CLI values override backend-specific env seeds |
 | `-bo N`, `--best-of N` | Number of best candidates to keep when temperature > 0 (whisper + some AR backends) |
-| `-bs N`, `--beam-size N` | Beam search width (whisper only) |
+| `-bs N`, `--beam-size N` | Beam search width. Default 5 for whisper, 1 (greedy) for other backends. Supported by whisper, parakeet (TDT/RNNT label-looping beam), glm-asr, kyutai-stt, moonshine, firered-asr, granite, qwen3 |
 | `-tpi F`, `--temperature-inc F` | Whisper temperature-fallback increment |
 | `-nf`, `--no-fallback` | Disable temperature fallback (equivalent to `--temperature-inc 0`) |
 | `--frequency-penalty F` | Opt-in repeated generated-token penalty for autoregressive ASR backends (`0.0` disabled). Applied to generated output tokens before greedy/sampling selection. |
@@ -424,14 +425,37 @@ crispasr --backend parakeet -m auto -f meeting.wav \
     --hotwords-file names.txt --hotwords-boost 3.0
 ```
 
+### Beam search + hotwords (recommended for domain vocabulary)
+
+With greedy decode, a boosted token that loses to blank or a common
+word at one frame is gone forever. Beam search (`-bs 2` or higher)
+keeps alternative hypotheses alive, so a boosted rare term can survive
+in a lower-ranked beam and win later when more confirming audio
+arrives. The combination is especially effective for medical, legal,
+or brand-name vocabulary where greedy hotword boosting alone is
+insufficient.
+
+```bash
+# Beam search + hotwords for medical transcription
+crispasr --backend parakeet -m auto -f consultation.wav \
+    --hotwords "metformin,lisinopril,atorvastatin" -bs 4
+```
+
+The overhead is negligible: parakeet's TDT beam search only multiplies
+the cheap predictor+joint steps (~10 KB LSTM state per beam), while
+the encoder dominates wall time. Measured overhead: ~3 % at beam=2,
+~12 % at beam=4 on 60 s audio.
+
 ### How it works (CTC-WS)
 
 An Aho-Corasick multi-pattern trie is built from the hotword strings
 by tokenizing each word through the backend's SentencePiece vocab.
-Before each frame's argmax, the trie checks which tokens continue an
-active hotword prefix match and adds the boost to their logits. After
-argmax, the trie state advances based on the emitted token. The
-overhead is O(1) per frame — no measurable impact on throughput.
+Before each frame's argmax (or each beam expansion step), the trie
+checks which tokens continue an active hotword prefix match and adds
+the boost to their logits. After token selection, the trie state
+advances based on the emitted token. Each beam hypothesis maintains
+its own trie position. The overhead is O(1) per frame — no measurable
+impact on throughput.
 
 ## Language detection (LID)
 
