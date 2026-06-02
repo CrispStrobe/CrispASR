@@ -1503,7 +1503,7 @@ static float* mimo_asr_run_lm(mimo_asr_context* ctx, const int32_t* input_ids_9x
     // Production path: skip diag captures (~5% win + cleaner allocator,
     // PLAN #51 perf wave). Honour MIMO_ASR_DIAG=1 to keep the diag tensors
     // resident when debugging a transcribe-time regression directly.
-    const bool diag_env = std::getenv("MIMO_ASR_DIAG") != nullptr;
+    const bool diag_env = std::getenv("MIMO_ASR_DIAG") != nullptr || std::getenv("MIMO_ASR_DUMP_STAGES") != nullptr;
     ggml_cgraph* gf = mimo_asr_build_prefill_graph(ctx, Tg, n_past, /*diag_captures*/ diag_env);
     ggml_backend_sched_reset(ctx->sched);
     if (!ggml_backend_sched_alloc_graph(ctx->sched, gf))
@@ -1559,6 +1559,50 @@ static float* mimo_asr_run_lm(mimo_asr_context* ctx, const int32_t* input_ids_9x
 
     if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS)
         return nullptr;
+
+    // Per-stage tensor stats dump (MIMO_ASR_DUMP_STAGES=1) — mirrors funasr's
+    // FUNASR_DUMP_STAGES so a CPU run and a GPU run (CRISPASR_MIMO_FORCE_GPU=1)
+    // can be compared stage-by-stage to localise where the PLAN #115 GPU
+    // prefill diverges (NaN / wrong / zero).
+    if (std::getenv("MIMO_ASR_DUMP_STAGES")) {
+        static const char* dump_stages[] = {
+            "prefill_audio_features", "prefill_text_embeds",       "prefill_inputs_embeds",
+            "prefill_last_hidden",    "prefill_text_logits_step0",
+        };
+        for (const char* sn : dump_stages) {
+            ggml_tensor* t = ggml_graph_get_tensor(gf, sn);
+            if (!t) {
+                std::fprintf(stderr, "mimo_dump: %-28s [not found]\n", sn);
+                continue;
+            }
+            const size_t n = ggml_nelements(t);
+            std::vector<float> buf(n);
+            ggml_backend_tensor_get(t, buf.data(), 0, n * sizeof(float));
+            double mn = 1e30, mx = -1e30, sum = 0.0, l2 = 0.0;
+            int n_nan = 0, n_inf = 0;
+            for (size_t i = 0; i < n; i++) {
+                const float v = buf[i];
+                if (std::isnan(v)) {
+                    n_nan++;
+                    continue;
+                }
+                if (std::isinf(v)) {
+                    n_inf++;
+                    continue;
+                }
+                mn = std::min(mn, (double)v);
+                mx = std::max(mx, (double)v);
+                sum += v;
+                l2 += (double)v * v;
+            }
+            const double mean = n ? sum / (double)n : 0.0;
+            std::fprintf(stderr,
+                         "mimo_dump: %-28s n=%-8zu min=%12.6f max=%12.6f mean=%12.6f L2=%12.4f nan=%d inf=%d "
+                         "first4=[%.4f %.4f %.4f %.4f]\n",
+                         sn, n, mn, mx, mean, std::sqrt(l2), n_nan, n_inf, n > 0 ? buf[0] : 0.f, n > 1 ? buf[1] : 0.f,
+                         n > 2 ? buf[2] : 0.f, n > 3 ? buf[3] : 0.f);
+        }
+    }
 
     ggml_tensor* logits_t = ggml_graph_get_tensor(gf, "prefill_text_logits_step0");
     if (!logits_t)
