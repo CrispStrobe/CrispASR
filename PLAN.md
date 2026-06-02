@@ -3991,14 +3991,25 @@ sched with `{CUDA}` only *aborts* in `ggml_backend_sched_new` (`signo=6`):
 ggml requires a CPU backend as the mandatory last/fallback entry. Reverted.
 So the real bug is a specific **decode op CUDA can't run**, which the sched
 then offloads to CPU where it dereferences a GPU-resident Q4_K weight. The
-decode step uses `ggml_set_rows` to scatter K/V into the cache
-(core/attention.h:611, fixed_kv_len path) — the prefill uses `ggml_cpy`
-(:618), which is why only decode crashes. CUDA's SET_ROWS supports_op
-(ggml-cuda.cu:5026) needs `src[0]` (the new K/V) F32 + idx I32/I64 + dst in
-{F16,Q*}; the permuted F32 K/V *should* qualify, so run 4 adds
-`GGML_SCHED_DEBUG=2` to name the exact CPU-assigned op before committing a
-fix. Once the real op is fixed + GPU JFK passes: flip `--gpu` to honour GPU
-residency by default (restore the 22% PLAN #72 win) and mark option C DONE.
+decode step reads the embedding table.
+
+**Root cause (definitive, runs 4 + dtype check).** `GGML_SCHED_DEBUG=2` is a
+no-op in Release, so it was found by reading the CUDA supports_op + the gguf
+tensor dtypes: CUDA's `GET_ROWS` supports_op (ggml-cuda.cu:5004) lists
+F16/F32/BF16/I32/Q4_0/Q4_1/Q5_0/Q5_1/Q8_0 — **not Q4_K** — and mimo's
+`llm.embed.weight` + `audio.emb.*` are **Q4_K**. So `get_rows(embed[Q4_K])`
+is CUDA-unsupported → the sched routes it to CPU → `dequantize_row_q4_K` reads
+the GPU-resident weight's device pointer → SIGSEGV. Same shape as CSM §135: a
+converter quantized a tensor that must stay gather-friendly (token embeddings
+should never be Q4_K). (The set_rows theory was wrong — set_rows is fine.)
+
+**Fix (runtime).** Under `force_gpu`, load only the get_rows'd
+`embed`/`audio.emb` tables on CPU via `load_weights_split`; every matmul
+weight stays GPU-resident for the speedup (the small embed output is copied
+GPU-ward by the sched). Validating on kernel run 5 → expect GPU JFK PASS; if
+green, flip `--gpu` on by default + mark option C DONE. Cleaner long-term:
+the converter keeps `llm.embed`/`audio.emb` at F16/Q8_0 (CUDA-gatherable) so
+no runtime split is needed — fold into the next mimo-asr GGUF re-bake.
 
 **Status (2026-05-26):** option A shipped, option C still open.
 

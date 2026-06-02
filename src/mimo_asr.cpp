@@ -384,11 +384,26 @@ extern "C" struct mimo_asr_context* mimo_asr_init_from_file(const char* path_mod
             return nullptr;
         }
         fprintf(stderr, "mimo_asr: layer offload requested but pinned to CPU (PLAN #115 — GPU path broken)\n");
+    } else if (force_gpu) {
+        // PLAN #115 option C: CUDA's get_rows cannot gather Q4_K (ggml-cuda
+        // GET_ROWS supports_op lists F16/F32/Q4_0/Q5_0/Q8_0 — NOT Q4_K), and
+        // mimo's `llm.embed.weight` + `audio.emb.*` are Q4_K. If those sit on
+        // the GPU, the sched routes their get_rows to the CPU backend, which
+        // dequantizes a GPU pointer → SIGSEGV (`dequantize_row_q4_K`, the P100
+        // crash). So keep exactly those get_rows'd embedding tables on CPU;
+        // every other (matmul) weight stays GPU-resident for the speedup. The
+        // small embed output is copied GPU-ward by the sched.
+        auto is_gpu_weight = [](const char* n, void*) -> bool {
+            return !(std::strstr(n, "embed") || std::strstr(n, "audio.emb"));
+        };
+        if (!core_gguf::load_weights_split(path_model, ctx->backend, ctx->backend_cpu, is_gpu_weight, nullptr,
+                                           "mimo_asr", wl)) {
+            fprintf(stderr, "mimo_asr: GPU split load failed from '%s'\n", path_model);
+            delete ctx;
+            return nullptr;
+        }
     } else {
-        // force_gpu (option C diag) loads weights onto the GPU backend so the
-        // whole prefill runs GPU-resident; default loads onto CPU (option A).
-        ggml_backend_t weight_backend = force_gpu ? ctx->backend : ctx->backend_cpu;
-        if (!core_gguf::load_weights(path_model, weight_backend, "mimo_asr", wl)) {
+        if (!core_gguf::load_weights(path_model, ctx->backend_cpu, "mimo_asr", wl)) {
             fprintf(stderr, "mimo_asr: failed to load weights from '%s'\n", path_model);
             delete ctx;
             return nullptr;

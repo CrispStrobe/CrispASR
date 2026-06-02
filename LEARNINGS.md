@@ -7951,12 +7951,28 @@ sched GPU-only — does NOT work: `ggml_backend_sched_new` *requires* a CPU
 backend as the mandatory last/fallback entry and `abort()`s on a `{GPU}`-only
 list (verified, run 3 `3ef9f87e` reverted). So the real fix is to make the
 *specific* CPU-routed op CUDA-runnable (or keep its weight CPU-accessible),
-not to drop the CPU backend. The offending op is found via
-`GGML_SCHED_DEBUG=2` (prints the per-node backend assignment); in mimo-asr's
-decode it is in the `ggml_set_rows` KV-scatter path (core/attention.h:611,
-`fixed_kv_len`) — the prefill uses `ggml_cpy` (:618) and runs clean on GPU,
-so only the cached step graph trips it. [Investigation in progress — final op
-+ fix pending kernel run 4.]
+not to drop the CPU backend.
+
+**The actual op (mimo-asr): `get_rows` on a Q4_K embedding table.** CUDA's
+`GET_ROWS` supports_op (ggml-cuda.cu:5004) handles F16/F32/BF16/I32 and the
+*legacy* quants Q4_0/Q4_1/Q5_0/Q5_1/Q8_0 — **but NOT the k-quants (Q4_K
+etc.)**. mimo's `llm.embed.weight` + `audio.emb.*` are Q4_K, so their
+`get_rows` is CUDA-unsupported → CPU-routed → `dequantize_row_q4_K` on a GPU
+pointer → SIGSEGV. `GGML_SCHED_DEBUG=2` is a *no-op in Release* (don't waste a
+kernel round on it) — read the CUDA `supports_op` + the gguf tensor dtypes
+(`gguf.GGUFReader`) instead.
+
+**Two fixes, same lesson — token embeddings must stay CUDA-gatherable:**
+1. *Converter* (preferred, durable): keep `llm.embed`/`audio.emb` (any
+   `get_rows`'d table) at F16 or Q8_0, never a k-quant. Standard llama.cpp
+   practice already keeps `token_embd` higher-precision for exactly this.
+2. *Runtime* (no re-bake): load just those tables on CPU (`load_weights_split`
+   with a name predicate) while matmul weights stay GPU-resident; the sched
+   copies the small embed output GPU-ward. mimo's `force_gpu` path does this.
+
+General rule for porting a GPU backend with k-quant weights: anything fed to
+`ggml_get_rows` (embeddings, MoE expert gather) must be F16/F32/legacy-quant,
+or it silently falls to CPU and dereferences device memory.
 
 ### Cross-refs
 

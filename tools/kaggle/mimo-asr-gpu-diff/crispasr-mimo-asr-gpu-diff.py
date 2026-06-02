@@ -159,20 +159,10 @@ def run_mimo(label: str, extra_env: dict, timeout: int = 900, gdb: bool = False)
 
 subprocess.run("apt-get install -y -q gdb >/dev/null 2>&1 || true", shell=True)
 cpu = run_mimo("cpu", {})
-# GGML_SCHED_DEBUG=2 prints the per-op backend assignment so we can see which
-# decode op the sched routes to CPU (and thus reads a GPU-resident weight).
-gpu = run_mimo("gpu", {"CRISPASR_MIMO_FORCE_GPU": "1", "GGML_SCHED_DEBUG": "2"}, gdb=True)
-
-# Surface the sched split assignments that land on CPU (the cross-backend
-# offload that triggers the segfault) from the saved GPU log.
-print("\n--- GPU sched: ops assigned to CPU backend ---", flush=True)
-gpu_log = (RESULTS / "gpu_log.txt").read_text() if (RESULTS / "gpu_log.txt").exists() else ""
-keep = []
-for ln in gpu_log.splitlines():
-    if ("SPLIT" in ln or "CPU" in ln or "backend" in ln.lower()) and ("SET_ROWS" in ln or "CPU" in ln or "SPLIT" in ln or "MUL_MAT" in ln):
-        keep.append(ln)
-for ln in keep[:80]:
-    print(ln, flush=True)
+# Validation: the fix keeps the Q4_K embed/audio.emb tables on CPU (CUDA
+# get_rows can't gather Q4_K) while the matmul weights stay GPU-resident.
+# Expect GPU == PASS now. gdb stays on to catch any residual crash.
+gpu = run_mimo("gpu", {"CRISPASR_MIMO_FORCE_GPU": "1"}, gdb=True)
 
 # ── Compare CPU vs GPU per stage — find the first divergence ──────────────
 print("\n" + "=" * 64, flush=True)
