@@ -566,12 +566,12 @@ constexpr Entry k_registry[] = {
     // (community voices hosted on rhasspy/piper, not HuggingFace GGUF).
     {"piper", "piper-en_US-lessac-medium-f16.gguf", "", "~30 MB", nullptr, nullptr},
 
-    // Bark — suno/bark 3-stage hierarchical TTS (MIT). bark-small ~300M,
-    // 24 kHz, 10 DE speakers (v2/de_speaker_0..9). Single GGUF packs all
-    // 3 sub-models + EnCodec decoder. No companion needed.
-    {"bark", "bark-small-f16.gguf",
-     "https://huggingface.co/cstr/bark-small-GGUF/resolve/main/bark-small-f16.gguf",
-     "~809 MB", nullptr, nullptr},
+    // Bark — suno/bark 3-stage hierarchical TTS (MIT). bark-small ~300M params,
+    // 24 kHz, 10 German speakers (v2/de_speaker_0..9). Single GGUF packs all
+    // 3 sub-models (semantic + coarse + fine GPT-2) + EnCodec decoder.
+    {"bark", "bark-small-q8_0.gguf",
+     "https://huggingface.co/cstr/bark-small-GGUF/resolve/main/bark-small-q8_0.gguf",
+     "~500 MB", nullptr, nullptr},
 
     // CSM-1B — sesame/csm-1b conversational TTS (Apache 2.0). Llama-3.2 1B
     // backbone + 100M depth decoder + Kyutai Mimi codec, all in one GGUF.
