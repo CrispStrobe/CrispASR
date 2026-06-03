@@ -1188,7 +1188,7 @@ add_library(firered-lid STATIC firered_lid.h firered_lid.cpp)
 set_target_properties(firered-lid PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(firered-lid PUBLIC .)
 target_compile_features   (firered-lid PUBLIC cxx_std_17)
-target_link_libraries     (firered-lid PUBLIC crispasr-core ggml ggml-base ggml-cpu)
+target_link_libraries     (firered-lid PUBLIC firered-asr crispasr-core ggml ggml-base ggml-cpu)
 
 # ---------------------------------------------------------------------------
 # lid-fasttext — fastText supervised LID (GlotLID-V3 + Facebook LID-176).
