@@ -1491,16 +1491,13 @@ static void mimi_decode(pocket_tts_context* pctx, const float* latent_seq, int n
         }
     }
 
-    // Upsample: ConvTranspose1d with groups=Cin (depthwise).
-    // Weight ne=[K, 1, Cin] means (Cin, Cout_per_group=1, K) in PyTorch.
-    // Each of the Cin=OD=512 channels independently upsamples by stride DS=16.
+    // Upsample: depthwise ConvTranspose1d (groups=Cin=512), causal.
+    // Full convtr (no padding), then trim right by K-S to get T*S output.
     int K_up = (int)m.upsample_conv_w->ne[0];
     int Cout_pg = (int)m.upsample_conv_w->ne[1]; // 1 (per-group output channels)
-    int pad_up = (K_up - DS) / 2;
-    if (pad_up < 0)
-        pad_up = 0;
-    int T_up_actual = (n_frames - 1) * DS + K_up - 2 * pad_up;
-    std::vector<float> upsampled(OD * T_up_actual, 0.0f);
+    int T_up_full = (n_frames - 1) * DS + K_up;  // full transposed conv length
+    int T_up_causal = n_frames * DS;             // causal: keep first T*S samples
+    std::vector<float> upsampled(OD * T_up_full, 0.0f);
 
     if (Cout_pg == 1) {
         // Depthwise: each channel ci uses w[ci, 0, :] (= data[ci * K + k])
@@ -1509,29 +1506,23 @@ static void mimi_decode(pocket_tts_context* pctx, const float* latent_seq, int n
             for (int t = 0; t < n_frames; t++) {
                 float x_val = channels_first[ci * n_frames + t];
                 for (int k = 0; k < K_up; k++) {
-                    int t_out = t * DS + k - pad_up;
-                    if (t_out >= 0 && t_out < T_up_actual) {
-                        // ggml row-major with ne=[K, 1, Cin]: data[cin * 1 * K + 0 * K + k] = data[cin * K + k]
-                        upsampled[ci * T_up_actual + t_out] += w[ci * K_up + k] * x_val;
-                    }
-                }
-            }
-        }
-        // Add bias
-        if (m.upsample_conv_b) {
-            const float* b = tensor_f32_data(m.upsample_conv_b);
-            for (int ci = 0; ci < OD; ci++) {
-                for (int t = 0; t < T_up_actual; t++) {
-                    upsampled[ci * T_up_actual + t] += b[ci];
+                    int t_out = t * DS + k; // no padding offset
+                    upsampled[ci * T_up_full + t_out] += w[ci * K_up + k] * x_val;
                 }
             }
         }
     } else {
-        // Non-depthwise fallback
         conv_transpose1d_eager(upsampled.data(), channels_first.data(), OD, n_frames, m.upsample_conv_w,
-                               m.upsample_conv_b, DS, pad_up);
+                               m.upsample_conv_b, DS, 0);
     }
-    int T_xfmr = T_up_actual;
+    // Trim to causal length: keep first T*S samples per channel
+    if (T_up_causal < T_up_full) {
+        std::vector<float> trimmed(OD * T_up_causal);
+        for (int c = 0; c < OD; c++)
+            memcpy(&trimmed[c * T_up_causal], &upsampled[c * T_up_full], T_up_causal * sizeof(float));
+        upsampled = std::move(trimmed);
+    }
+    int T_xfmr = T_up_causal;
 
     // Dump post-upsample
     if (pctx->verbosity >= 2 || getenv("POCKET_DUMP_DIR")) {
