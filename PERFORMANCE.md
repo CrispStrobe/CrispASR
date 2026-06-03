@@ -117,6 +117,62 @@ for the implementation write-up.
 
 ---
 
+## Kaggle T4 GPU — 2026-06-03
+
+Platform: Tesla T4 (16 GB VRAM), 4 CPU threads, CUDA. Commit: latest
+`main` (post `b102060a`). Run via `tools/kaggle-benchmark-all-backends.py`.
+**30 backends tested, 30 pass.** First run to cover all backends added in
+the June 2-3 script completeness audit: granite-4.1-plus, granite-4.1-nar,
+fun-asr-mlt-nano, voxtral4b.
+
+### Speed ranking (11.0 s JFK, Q4_K unless noted, greedy)
+
+| Rank | Backend | RTx | WER | Architecture |
+|---|---|---|---|---|
+| 1 | SenseVoice Small | **17.3x** | 0.0% | Encoder (multitask) |
+| 2 | FastConformer CTC Large | 7.7x | 0.0% | Encoder-CTC |
+| 3 | Data2Vec Base | 6.9x | 4.5% | Encoder-CTC |
+| 4 | Canary 1B | 6.8x | 0.0% | Encoder-AED |
+| 5 | Moonshine Tiny | 6.7x | 9.1% | Encoder-Decoder |
+| 6 | Wav2Vec2 XLSR-EN | 6.4x | 0.0% | Encoder-CTC |
+| 7 | HuBERT Large | 6.2x | 0.0% | Encoder-CTC |
+| 8 | OmniASR CTC 1B v2 | 6.2x | 4.5% | Encoder-CTC |
+| 9 | Cohere Transcribe | 6.1x | 0.0% | Encoder-AED |
+| 10 | Fun-ASR Nano 2512 | 5.5x | 0.0% | Encoder-LLM (enc GPU, LLM CPU) |
+| 11 | Parakeet TDT 0.6B | 5.3x | 0.0% | Encoder-TDT |
+| 12 | Paraformer-zh NAR | 4.3x | 0.0% | Encoder (NAR) |
+| 13 | Qwen3 ASR 0.6B | 4.0x | 0.0% | Encoder-LLM |
+| 14 | GLM ASR Nano | 3.9x | 0.0% | Encoder-LLM |
+| 15 | Mega-ASR 1.7B | 2.6x | 0.0% | Encoder-LLM (qwen3) |
+| 16 | Moonshine Streaming Tiny | 2.5x | 0.0% | Encoder-Decoder |
+| 17 | Granite Speech 1B | 2.5x | 0.0% | Encoder-LLM |
+| 18 | Granite Speech 4.1 2B | 2.4x | 0.0% | Encoder-LLM |
+| 19 | Voxtral Mini 3B | 2.3x | 0.0% | Encoder-LLM |
+| 20 | OmniASR LLM 300M | 1.4x | 4.5% | Encoder-LLM |
+| 21 | Kyutai STT 1B | 1.3x | 0.0% | Encoder-AED |
+| 22 | VibeVoice ASR | 1.2x | 4.5% | Encoder-LLM |
+| 23 | Voxtral 4B Realtime | 0.9x | 0.0% | Encoder-LLM (streaming) |
+| 24 | Granite Speech 4.1 2B+ | 0.8x | 0.0% | Encoder-LLM |
+| 25 | Gemma-4-E2B 2.3B | 0.8x | 9.1% | Encoder-LLM |
+| 26 | Granite Speech 4.1 NAR | 0.6x | 0.0% | Encoder-CTC (non-AR) |
+| 27 | FireRed ASR2 AED | 0.5x | 0.0% | Encoder-AED |
+| 28 | Whisper (base) | 0.4x | 0.0% | Encoder-Decoder |
+| 29 | MiMo-ASR | 0.2x | 0.0% | Encoder-LLM (CPU-forced, #115) |
+| 30 | Fun-ASR MLT Nano 2512 | 0.1x | 0.0% | Encoder-LLM (F16 on CPU) |
+
+### Notes
+
+- **30/30 pass, 24/30 at WER 0.0%** on JFK. The 4.5%/9.1% WER backends
+  have minor word-boundary differences (e.g. "americans" → "americas").
+- **mimo-asr (0.2x RT):** still CPU-forced (PLAN #115 option A). GPU fix
+  landed in `3ef9f87e` (June 2) — needs validation run to flip default.
+- **fun-asr-mlt-nano (0.1x RT):** running F16 (~2 GB) on CPU. Q8_0 quant
+  exists on HF (`cstr/funasr-mlt-nano-GGUF/funasr-mlt-nano-2512-q8_0.gguf`)
+  and should be GPU-safe; switching would recover 5-10x speed.
+- TTS benchmarks were run separately (see TTS section below).
+
+---
+
 ## Kaggle P100 GPU — 2026-05-31
 
 Platform: Tesla P100-PCIE (16 GB VRAM), 4 CPU threads, CUDA **sm_60**
