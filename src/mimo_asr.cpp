@@ -204,6 +204,8 @@ struct mimo_asr_context {
     int32_t id_eosp = 151652;     // <|eosp|>
     int32_t id_eot = 151653;      // <|eot|>
     int32_t id_eostm = 151654;    // <|eostm|>
+
+    std::string ask; // custom instruction (empty = use default)
 };
 
 static uint32_t mimo_kv_u32(gguf_context* ctx, const char* key, uint32_t def) {
@@ -1690,7 +1692,7 @@ static char* mimo_asr_transcribe_impl(struct mimo_asr_context* ctx, const float*
     add_text("<|im_start|>user\n");
     segments.push_back(mimo_asr_build_audio_segment(ctx, codes, n_frames));
     free(codes);
-    add_text("Please transcribe this audio file"); // asr_en_templates[0]
+    add_text(!ctx->ask.empty() ? ctx->ask : std::string("Please transcribe this audio file"));
     add_text("<|im_end|>\n");
     add_text("<|im_start|>assistant\n");
     add_text("<think>\n\n</think>\n<english>");
@@ -1907,4 +1909,9 @@ extern "C" void mimo_asr_set_n_threads(struct mimo_asr_context* ctx, int n_threa
     ctx->n_threads = n_threads;
     if (ctx->backend_cpu)
         ggml_backend_cpu_set_n_threads(ctx->backend_cpu, n_threads);
+}
+
+extern "C" void mimo_asr_set_ask(struct mimo_asr_context* ctx, const char* prompt) {
+    if (ctx)
+        ctx->ask = (prompt && prompt[0]) ? prompt : "";
 }

@@ -52,6 +52,11 @@ void glm_asr_set_seed(struct glm_asr_context* ctx, unsigned int seed);
 // switches to replay-from-prefix beam search when > 1.
 void glm_asr_set_beam_size(struct glm_asr_context* ctx, int beam_size);
 
+// Override the default transcription instruction ("Please transcribe the
+// following audio" or translate variant). Pass NULL or "" to clear and
+// resume the default. The string is copied internally.
+void glm_asr_set_ask(struct glm_asr_context* ctx, const char* prompt);
+
 // Same as above but additionally returns per-token ids + softmax probs.
 // Free with glm_asr_result_free.
 struct glm_asr_result {

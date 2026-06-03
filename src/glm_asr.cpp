@@ -153,6 +153,7 @@ struct glm_asr_context {
     ggml_tensor* kv_v = nullptr;
 
     int n_threads = 4;
+    std::string ask; // custom instruction (empty = use default)
 };
 
 // ===========================================================================
@@ -571,17 +572,25 @@ static char* glm_asr_transcribe_impl(struct glm_asr_context* ctx, const float* s
     ids.push_back(59262);     // <|end_of_audio|>
     ids.push_back(59253);     // <|user|>
 
-    // Tokenize instruction: translate or transcribe
-    if (ctx->params.translate) {
-        const char* tgt = ctx->params.target_lang ? ctx->params.target_lang : "English";
-        char instr[256];
-        snprintf(instr, sizeof(instr), "\nPlease translate the speech to %s.\n", tgt);
-        int n_instr = 0;
-        int32_t* instr_ids = glm_asr_tokenize(ctx, instr, &n_instr);
-        if (instr_ids && n_instr > 0) {
-            for (int i = 0; i < n_instr; i++)
-                ids.push_back(instr_ids[i]);
-            free(instr_ids);
+    // Tokenize instruction: custom ask, translate, or default transcribe
+    {
+        std::string instr_str;
+        if (!ctx->ask.empty()) {
+            instr_str = "\n" + ctx->ask + "\n";
+        } else if (ctx->params.translate) {
+            const char* tgt = ctx->params.target_lang ? ctx->params.target_lang : "English";
+            char buf[256];
+            snprintf(buf, sizeof(buf), "\nPlease translate the speech to %s.\n", tgt);
+            instr_str = buf;
+        }
+        if (!instr_str.empty()) {
+            int n_instr = 0;
+            int32_t* instr_ids = glm_asr_tokenize(ctx, instr_str.c_str(), &n_instr);
+            if (instr_ids && n_instr > 0) {
+                for (int i = 0; i < n_instr; i++)
+                    ids.push_back(instr_ids[i]);
+                free(instr_ids);
+            }
         }
     }
     ids.push_back(59254); // <|assistant|>
@@ -769,6 +778,11 @@ extern "C" void glm_asr_set_seed(struct glm_asr_context* ctx, unsigned int seed)
 extern "C" void glm_asr_set_beam_size(struct glm_asr_context* ctx, int beam_size) {
     if (ctx)
         ctx->params.beam_size = (beam_size > 0) ? beam_size : 1;
+}
+
+extern "C" void glm_asr_set_ask(struct glm_asr_context* ctx, const char* prompt) {
+    if (ctx)
+        ctx->ask = (prompt && prompt[0]) ? prompt : "";
 }
 
 extern "C" void glm_asr_result_free(struct glm_asr_result* r) {

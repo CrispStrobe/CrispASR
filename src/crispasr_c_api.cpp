@@ -3662,6 +3662,7 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
         if (s->beam_size > 1) {
             glm_asr_set_beam_size((glm_asr_context*)s->glmasr_ctx, s->beam_size);
         }
+        glm_asr_set_ask((glm_asr_context*)s->glmasr_ctx, s->ask.empty() ? nullptr : s->ask.c_str());
         glm_asr_result* gr = glm_asr_transcribe_with_probs((glm_asr_context*)s->glmasr_ctx, pcm, n_samples);
         if (!gr || !gr->text) {
             if (gr)
@@ -3937,6 +3938,7 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
         if (!text && s->backend == "gemma4-e2b" && s->gemma4_e2b_ctx) {
             if (s->beam_size > 1)
                 gemma4_e2b_set_beam_size((gemma4_e2b_context*)s->gemma4_e2b_ctx, s->beam_size);
+            gemma4_e2b_set_ask((gemma4_e2b_context*)s->gemma4_e2b_ctx, s->ask.empty() ? nullptr : s->ask.c_str());
             const std::string src = lang_set ? lang : (!s->source_language.empty() ? s->source_language : "");
             const std::string tgt = !s->target_language.empty() ? s->target_language : (s->translate ? "en" : src);
             if (s->translate || (!tgt.empty() && tgt != src)) {
@@ -3987,6 +3989,7 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
             // mimo_asr returns null + logs to stderr if the tokenizer companion
             // wasn't set via crispasr_session_set_codec_path. We surface a clean
             // "no transcription" rather than hanging.
+            mimo_asr_set_ask(s->mimo_asr_ctx, s->ask.empty() ? nullptr : s->ask.c_str());
             mimo_asr_result* mr = mimo_asr_transcribe_with_probs(s->mimo_asr_ctx, pcm, n_samples);
             if (mr && mr->text) {
                 std::vector<ca_token_record> toks;
@@ -5604,9 +5607,9 @@ CA_EXPORT int crispasr_session_set_translate(crispasr_session* s, int enable) {
 }
 
 // Sticky audio Q&A prompt for instruct-tuned audio-LLM backends
-// (granite / voxtral / voxtral4b / qwen3-asr). Pass an empty string
-// to clear and resume verbatim transcription. Other backends ignore —
-// set is cheap so we don't error.
+// (granite / voxtral / voxtral4b / qwen3-asr / glm-asr / gemma4-e2b /
+// mimo-asr). Pass an empty string to clear and resume verbatim
+// transcription. Other backends ignore — set is cheap so we don't error.
 CA_EXPORT int crispasr_session_set_ask(crispasr_session* s, const char* prompt) {
     if (!s)
         return -1;

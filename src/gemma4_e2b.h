@@ -60,6 +60,10 @@ void gemma4_e2b_set_n_threads(struct gemma4_e2b_context* ctx, int n_threads);
 // Beam search width. 1 = greedy (default); >1 = replay-from-prefix beam.
 void gemma4_e2b_set_beam_size(struct gemma4_e2b_context* ctx, int beam_size);
 
+// Override the default transcription instruction. Pass NULL or "" to
+// clear and resume the default. The string is copied internally.
+void gemma4_e2b_set_ask(struct gemma4_e2b_context* ctx, const char* prompt);
+
 // ── Stage hooks for crispasr-diff ───────────────────────────────────────────
 //
 // These mirror the parakeet/voxtral/canary stage API: each one runs a

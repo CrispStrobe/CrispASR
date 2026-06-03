@@ -213,6 +213,7 @@ struct gemma4_e2b_context {
     float temperature = 0.0f;
     int beam_size = 1; // 1 = greedy (default); >1 = beam search
 
+    std::string ask; // custom instruction (empty = use default)
     std::string model_path;
     std::vector<uint8_t> compute_meta; // scratch for graph building
 
@@ -2290,7 +2291,9 @@ static char* gemma4_e2b_transcribe_impl(struct gemma4_e2b_context* ctx, const fl
     std::string src = source_lang ? source_lang : "";
     std::string tgt = target_lang ? target_lang : "";
     std::string user_body;
-    if (translate) {
+    if (!ctx->ask.empty()) {
+        user_body = ctx->ask;
+    } else if (translate) {
         const std::string src_name = g4e_lang_name(src, true);
         const std::string tgt_name = g4e_lang_name(!tgt.empty() ? tgt : std::string("en"), false);
         user_body = "Transcribe the following speech segment in " + src_name + ", then translate it into " + tgt_name +
@@ -2658,4 +2661,9 @@ extern "C" void gemma4_e2b_set_beam_size(struct gemma4_e2b_context* ctx, int bea
     if (!ctx)
         return;
     ctx->beam_size = beam_size > 1 ? beam_size : 1;
+}
+
+extern "C" void gemma4_e2b_set_ask(struct gemma4_e2b_context* ctx, const char* prompt) {
+    if (ctx)
+        ctx->ask = (prompt && prompt[0]) ? prompt : "";
 }

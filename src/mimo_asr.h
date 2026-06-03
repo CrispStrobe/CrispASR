@@ -81,6 +81,10 @@ void mimo_asr_free(struct mimo_asr_context* ctx);
 
 void mimo_asr_set_n_threads(struct mimo_asr_context* ctx, int n_threads);
 
+// Override the default transcription instruction. Pass NULL or "" to
+// clear and resume the default ("Please transcribe this audio file").
+void mimo_asr_set_ask(struct mimo_asr_context* ctx, const char* prompt);
+
 #ifdef __cplusplus
 }
 #endif
