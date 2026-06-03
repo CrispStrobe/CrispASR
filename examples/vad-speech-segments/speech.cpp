@@ -79,10 +79,10 @@ static bool vad_params_parse(int argc, char** argv, cli_params& params) {
             params.vad_model = ARGV_NEXT;
         } else if (arg == "-vt" || arg == "--vad-threshold") {
             params.vad_threshold = std::stof(ARGV_NEXT);
-        } else if (arg == "-vsd" || arg == "--vad-min-speech-duration-ms") {
+        } else if (arg == "-vspd" || arg == "--vad-min-speech-duration-ms") {
             params.vad_min_speech_duration_ms = std::stoi(ARGV_NEXT);
         } else if (arg == "-vsd" || arg == "--vad-min-silence-duration-ms") {
-            params.vad_min_speech_duration_ms = std::stoi(ARGV_NEXT);
+            params.vad_min_silence_duration_ms = std::stoi(ARGV_NEXT);
         } else if (arg == "-vmsd" || arg == "--vad-max-speech-duration-s") {
             params.vad_max_speech_duration_s = std::stof(ARGV_NEXT);
         } else if (arg == "-vp" || arg == "--vad-speech-pad-ms") {
@@ -115,6 +115,26 @@ int main(int argc, char** argv) {
 
     if (cli_params.no_prints) {
         whisper_log_set(cb_log_disable, NULL);
+    }
+
+    // Auto-discover VAD model if not specified.
+    if (cli_params.vad_model.empty()) {
+        const char* candidates[] = {"models/silero-vad.gguf", "models/ggml-silero-vad.bin"};
+        for (const char* c : candidates) {
+            if (FILE* f = fopen(c, "rb")) {
+                fclose(f);
+                cli_params.vad_model = c;
+                if (!cli_params.no_prints) {
+                    fprintf(stderr, "vad: using auto-detected model '%s'\n", c);
+                }
+                break;
+            }
+        }
+        if (cli_params.vad_model.empty()) {
+            fprintf(stderr, "error: no VAD model specified and none found in models/\n");
+            fprintf(stderr, "       use -vm <path> to specify a model file\n");
+            return 1;
+        }
     }
 
     // Load the input sample audio file.
@@ -155,8 +175,9 @@ int main(int argc, char** argv) {
     printf("\n");
     printf("Detected %d speech segments:\n", whisper_vad_segments_n_segments(segments));
     for (int i = 0; i < whisper_vad_segments_n_segments(segments); ++i) {
-        printf("Speech segment %d: start = %.2f, end = %.2f\n", i, whisper_vad_segments_get_segment_t0(segments, i),
-               whisper_vad_segments_get_segment_t1(segments, i));
+        printf("Speech segment %d: start = %.2fs, end = %.2fs\n", i,
+               whisper_vad_segments_get_segment_t0(segments, i) / 100.0f,
+               whisper_vad_segments_get_segment_t1(segments, i) / 100.0f);
     }
     printf("\n");
 
