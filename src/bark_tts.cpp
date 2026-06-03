@@ -2188,6 +2188,44 @@ float* bark_synthesize(struct bark_context* ctx, const char* text, int* out_n_sa
         return nullptr;
     *out_n_samples = 0;
 
+    // BARK_DECODE_CODES: skip stages 1-3, load fine codes from binary file,
+    // and run only the EnCodec decoder.  Format: 8*T int32 row-major
+    // (codebook 0 first, then codebook 1, etc.).
+    // Usage: BARK_DECODE_CODES=/path/to/fine_codes.bin:8:148
+    //        (path:n_codebooks:n_timesteps)
+    {
+        const char* dc = std::getenv("BARK_DECODE_CODES");
+        if (dc) {
+            std::string spec(dc);
+            // Parse path:n_cb:n_t
+            auto p1 = spec.find(':');
+            auto p2 = spec.find(':', p1 + 1);
+            if (p1 != std::string::npos && p2 != std::string::npos) {
+                std::string path = spec.substr(0, p1);
+                int n_cb = std::atoi(spec.substr(p1 + 1, p2 - p1 - 1).c_str());
+                int n_t = std::atoi(spec.substr(p2 + 1).c_str());
+                FILE* f = fopen(path.c_str(), "rb");
+                if (f && n_cb > 0 && n_t > 0) {
+                    std::vector<int32_t> codes((size_t)(n_cb * n_t));
+                    fread(codes.data(), sizeof(int32_t), codes.size(), f);
+                    fclose(f);
+                    fprintf(stderr, "bark: BARK_DECODE_CODES: loaded %d×%d codes from %s\n", n_cb, n_t, path.c_str());
+                    std::vector<float> pcm = encodec_decode(ctx, codes.data(), n_cb, n_t);
+                    if (pcm.empty())
+                        return nullptr;
+                    float* out = (float*)malloc(pcm.size() * sizeof(float));
+                    std::memcpy(out, pcm.data(), pcm.size() * sizeof(float));
+                    *out_n_samples = (int)pcm.size();
+                    bark_dump_float("encodec_pcm", pcm.data(), (int)pcm.size());
+                    return out;
+                }
+                if (f)
+                    fclose(f);
+            }
+            fprintf(stderr, "bark: BARK_DECODE_CODES parse error (expected path:n_cb:n_t)\n");
+        }
+    }
+
     // Stage 1: text -> semantic tokens
     std::vector<int32_t> semantic = generate_text_semantic(ctx, text);
     if (semantic.empty()) {
