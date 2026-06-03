@@ -71,9 +71,10 @@ test_backend() {
 }
 
 # Backends with auto-download support and reasonable CPU speed
-FAST_BACKENDS="parakeet moonshine wav2vec2 data2vec hubert fastconformer-ctc"
-MEDIUM_BACKENDS="canary cohere omniasr qwen3"
-SLOW_BACKENDS="omniasr-llm voxtral voxtral4b granite granite-4.1 granite-4.1-plus granite-4.1-nar gemma4-e2b vibevoice vibevoice-1.5b glm-asr kyutai-stt firered-asr"
+FAST_BACKENDS="parakeet moonshine wav2vec2 data2vec hubert fastconformer-ctc sensevoice paraformer"
+MEDIUM_BACKENDS="canary cohere omniasr qwen3 funasr fun-asr-mlt-nano whisper"
+SLOW_BACKENDS="omniasr-llm voxtral voxtral4b granite granite-4.1 granite-4.1-plus granite-4.1-nar gemma4-e2b vibevoice vibevoice-1.5b glm-asr kyutai-stt firered-asr mimo-asr moonshine-streaming"
+TTS_BACKENDS="kokoro piper speecht5 bark"
 # vibevoice variants and omniasr-llm are very slow on CPU — skip by default
 
 echo "CrispASR backend regression tests"
@@ -107,6 +108,32 @@ else
         echo "  (set CRISPASR_TEST_SLOW=1 to run)"
         SKIP=$((SKIP + ${#SLOW_BACKENDS}))
     fi
+fi
+
+# TTS smoke tests
+echo ""
+echo "TTS backends (smoke test):"
+if [ "${CRISPASR_TEST_TTS:-0}" = "1" ]; then
+    for b in $TTS_BACKENDS; do
+        echo -n "  $b: "
+        local_out="/tmp/tts-$b.wav"
+        rm -f "$local_out"
+        if timeout 120 "$CRISPASR" --backend "$b" -m auto --tts "Hello world." --tts-output "$local_out" \
+            --no-prints 2>/dev/null; then
+            if [ -f "$local_out" ] && [ "$(stat -c%s "$local_out")" -gt 1000 ]; then
+                echo "PASS ($(stat -c%s "$local_out") bytes)"
+                PASS=$((PASS + 1))
+            else
+                echo "FAIL (output missing or too small)"
+                FAIL=$((FAIL + 1))
+            fi
+        else
+            echo "FAIL (timeout or crash)"
+            FAIL=$((FAIL + 1))
+        fi
+    done
+else
+    echo "  (set CRISPASR_TEST_TTS=1 to run)"
 fi
 
 echo ""

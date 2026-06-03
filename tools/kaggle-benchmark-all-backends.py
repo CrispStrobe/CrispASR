@@ -78,11 +78,24 @@ SLOW_BACKENDS = [
     ("granite-4.1",       "Granite Speech 4.1 2B",   300, "Q4_K, ~2.94GB, LLM-AR"),
     ("mega-asr",          "Mega-ASR 1.7B",           120, "Q4_K, ~1.3GB, qwen3 backend + robustness LoRA"),
     ("funasr",            "Fun-ASR Nano 2512",       180, "Q8_0 (~1.06GB); F16 hits CUDA F16xF32 !-loop, Q8_0 is GPU-safe"),
+    ("fun-asr-mlt-nano",  "Fun-ASR MLT Nano 2512",  240, "F16 (~1.98GB); multilingual multitask"),
+    ("granite-4.1-plus",  "Granite Speech 4.1 2B+",  300, "Q4_K, ~2.96GB, LLM-AR plus variant"),
+    ("granite-4.1-nar",   "Granite Speech 4.1 NAR",  300, "Q4_K, ~3.2GB, non-autoregressive"),
     ("mimo-asr",          "MiMo-ASR",                420, "Q4_K ~4.2GB; PLAN #115 forces CPU (~297s/11s clip)"),
 ]
 
+# TTS backends suitable for Kaggle time limits (small/fast models)
+TTS_BACKENDS = [
+    # (backend, display_name, timeout_seconds, notes)
+    ("kokoro",            "Kokoro 82M",               60, "Q8_0, 82M params, multilingual"),
+    ("piper",             "Piper LessAC Medium",      30, "F16, ~30MB, VITS en_US"),
+    ("speecht5",          "SpeechT5 TTS",             60, "F16, encoder-decoder TTS"),
+    ("bark",              "Bark Small",               90, "Q8_0, text-to-audio generative"),
+    ("csm",               "CSM 1B",                  120, "Q4_K, 1B params, conversational speech"),
+]
+
 print(f"CrispASR Benchmark — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-print(f"Backends: {len(BACKENDS)} fast + {len(SLOW_BACKENDS)} slow")
+print(f"Backends: {len(BACKENDS)} fast + {len(SLOW_BACKENDS)} slow ASR, {len(TTS_BACKENDS)} TTS")
 
 # ─────────────────────────── cell 2 (code) ───────────────────────────
 # ── Install dependencies ───────────────────────────────────────────────────
@@ -505,6 +518,38 @@ if BENCHMARK_SLOW == "1":
 else:
     print(f"\n⏭ Skipping {len(SLOW_BACKENDS)} slow backends "
           f"(set BENCHMARK_SLOW=1 to include)")
+
+# TTS smoke benchmark (opt-in, separate from ASR)
+BENCHMARK_TTS = os.environ.get("BENCHMARK_TTS", "0")
+if BENCHMARK_TTS == "1":
+    tts_results = []
+    for backend, name, timeout, notes in TTS_BACKENDS:
+        print(f"\n{'='*60}")
+        print(f"  TTS: {name} (--backend {backend})")
+        print(f"{'='*60}")
+        outfile = f"/tmp/tts-bench-{backend}.wav"
+        cmd = [crispasr_bin, "--backend", backend, "-m", "auto",
+               "--tts", "The quick brown fox jumps over the lazy dog.",
+               "--tts-output", outfile, "--no-prints"]
+        t0 = time.time()
+        try:
+            proc = subprocess.run(cmd, timeout=timeout, capture_output=True)
+            wall = time.time() - t0
+            ok = proc.returncode == 0 and os.path.isfile(outfile) and os.path.getsize(outfile) > 1000
+            sz = os.path.getsize(outfile) if os.path.isfile(outfile) else 0
+            tts_results.append({"backend": backend, "name": name, "wall_s": wall,
+                                "status": "PASS" if ok else "FAIL", "wav_bytes": sz})
+            print(f"  {'PASS' if ok else 'FAIL'} — {wall:.1f}s, {sz} bytes")
+        except subprocess.TimeoutExpired:
+            tts_results.append({"backend": backend, "name": name, "wall_s": timeout,
+                                "status": "TIMEOUT", "wav_bytes": 0})
+            print(f"  TIMEOUT after {timeout}s")
+        if os.path.isfile(outfile):
+            os.remove(outfile)
+    print(f"\nTTS results: {sum(1 for r in tts_results if r['status']=='PASS')}/{len(tts_results)} passed")
+else:
+    print(f"\n⏭ Skipping {len(TTS_BACKENDS)} TTS backends "
+          f"(set BENCHMARK_TTS=1 to include)")
 
 # ─────────────────────────── cell 7 (code) ───────────────────────────
 # ── Format results table ───────────────────────────────────────────────────
