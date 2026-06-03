@@ -136,20 +136,36 @@ quick-start commands and engine selection guidance.
 | **speecht5** | [`cstr/speecht5-tts-GGUF`](https://huggingface.co/cstr/speecht5-tts-GGUF) | SpeechT5 80M: char-level encoder (12L) + AR mel decoder (6L) + 5-layer conv postnet + HiFi-GAN at 16 kHz; speaker via 512-d x-vector (`--voice <xvector.bin>`) | en | MIT |
 | **fastpitch** | [`cstr/fastpitch-en-GGUF`](https://huggingface.co/cstr/fastpitch-en-GGUF) | NVIDIA FastPitch 60M: non-autoregressive parallel TTS — 6L encoder + duration/pitch predictors + 6L decoder + HiFi-GAN at 22 kHz; deterministic, single forward pass ([more](docs/architecture.md#fastpitch)) | en | CC-BY-4.0 |
 | **parler-tts** | [`cstr/parler-tts-mini-v1.1-GGUF`](https://huggingface.co/cstr/parler-tts-mini-v1.1-GGUF) | Parler TTS Mini v1.1 (~900M): T5 encoder + MusicGen decoder + DAC 44.1 kHz; prompt-conditioned (describe voice in text via `--instruct`) | en | Apache-2.0 |
+| **outetts** | [`cstr/outetts-0.3-1b-GGUF`](https://huggingface.co/cstr/outetts-0.3-1b-GGUF) | OLMo-1B talker + WavTokenizer single-codebook VQ-GAN at 24 kHz; voice cloning via speaker profile JSON (`--voice <speaker.json>`) | en | CC-BY-4.0 |
 | **pocket-tts** | [`cstr/pocket-tts-GGUF`](https://huggingface.co/cstr/pocket-tts-GGUF) | Kyutai Pocket TTS 100M: continuous-latent AR at 12.5 Hz + one-step LSD flow + Mimi VAE 24 kHz; voice cloning via ref audio ([more](docs/architecture.md#pocket-tts)) | en | MIT / CC-BY-4.0 |
 
-> _Status:_ end-to-end runnable on both Q4_K and F16; zero-shot synth and
-> voice cloning (`--voice <wav>`) both work and ASR-roundtrip correctly.
-> The inference path matches the upstream PyTorch reference within
-> precision floor (14 pass / 0 fail / 3 skip in `crispasr-diff
-> voxcpm2-tts`, `cfm_step0_result cos_mean ≥ 0.98`). Set
-> `VOXCPM2_USE_GRAPH=1` for the fast path: weights load onto the best
-> available backend (Metal on Apple Silicon), AR-step LocDiT + TSLM
-> run as cached per-step cgraphs (qwen3-style multi-bucket Lk), and
-> the VAE decode hot loops are OMP-parallelised with a SIMD-friendly
-> contiguous-`ic` inner layout. On M1 (OMP=8), `"Hello world"` zero-
-> shot Q4_K takes ~7 s total wall (down from ~49 s before the perf
-> work).
+<details>
+<summary><b>TTS feature matrix</b></summary>
+
+| Backend | Voice cloning | Sampling | kHz | Auto-download | Flash attn |
+|---------|:---:|:---:|:---:|:---:|:---:|
+| vibevoice-tts | yes | temp | 24 | yes | yes |
+| qwen3-tts | yes* | temp | 24 | yes | yes |
+| kokoro | — | — | 24 | yes | — |
+| orpheus | — | temp | 24 | yes | yes |
+| chatterbox | yes | temp | 24 | yes | yes |
+| outetts | yes (JSON) | temp | 24 | yes | yes |
+| indextts | yes | temp | 24 | yes | yes |
+| voxcpm2-tts | yes | — | 48 | yes | — |
+| cosyvoice3-tts | yes | temp | 24 | yes | yes |
+| f5-tts | yes | — | 24 | yes | — |
+| csm | — | temp | 24 | yes | — |
+| dia | — | temp | 44 | yes | — |
+| bark | yes (.npz) | temp | 24 | yes | — |
+| speecht5 | yes (xvec) | — | 16 | yes | — |
+| parler-tts | — | temp | 44 | yes | — |
+| fastpitch | — | — | 22 | — | — |
+| piper | — | — | 22 | — | — |
+| pocket-tts | yes | temp | 24 | yes | — |
+
+\* CustomVoice variant only; Base uses baked speakers via `--voice <name>`.
+
+</details>
 
 ### Translation
 
