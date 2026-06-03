@@ -8522,3 +8522,58 @@ Same seed produces different random sequences → different token choices → di
 after the first few words. This is expected and unfixable without implementing PyTorch's
 exact RNG. Top-k sampling (added as `top_k` param) constrains the distribution so
 divergent draws still land in high-probability regions.
+
+## MAES beam search for TDT transducers (§134, June 2026)
+
+### What MAES is and why it beats standard beam search
+
+Modified Adaptive Expansion Search (MAES) is a transducer-specific beam
+decoding algorithm from NVIDIA NeMo. It's a "Pareto improvement" over
+standard beam search: beam-quality WER at near-greedy speed.
+
+The key insight: standard beam search expands all V hypotheses at every
+timestep, which is expensive for transducers (V can be 1K–8K). MAES is
+**time-synchronous** — it processes one encoder frame at a time and
+adaptively expands only up to N non-blank tokens per frame (usually N=2),
+with gamma-threshold pruning that kills low-probability branches early.
+
+### NeMo's 2-step SOS convention for the LSTM prediction network
+
+The biggest bug during porting: NeMo's `decoder.predict(y=None, add_sos=True)`
+feeds **two** zero inputs to the LSTM (an explicit SOS zero vector prepended,
+plus the pad-token zero from y=None), while our C++ code was feeding **one**
+(the blank embedding, which happens to be all-zeros). After one LSTM step
+the hidden state is different from after two steps, even though both inputs
+are zeros. Fix: call `predictor_step(blank_id)` twice.
+
+This was caught purely by the diff harness — `decoder_initial` had
+cos=0.641 until the fix, then cos=1.000000.
+
+### NeMo's joint_after_projection applies log_softmax on CPU
+
+`RNNTJoint.joint_after_projection()` has an auto-mode: when `self.log_softmax
+is None` and the tensor is on CPU, it applies `log_softmax` to the output.
+Fix: capture raw logits from `joint.joint_net()` directly in the reference
+dumper, bypassing the auto log_softmax.
+
+### Component-level diff testing is essential for transducer ports
+
+The diff stages (`encoder_output_projected`, `decoder_initial`, `joint_t0`)
+each isolate one component. The porting sequence was:
+1. encoder_output_projected — PASS immediately (linear projection)
+2. decoder_initial — FAIL at cos=0.641 → found 2-step SOS bug → PASS
+3. joint_t0 — FAIL at cos=-0.63 → found log_softmax in reference → PASS
+
+### Implementation: ~170 lines of C++ for the core MAES loop
+
+The algorithm per encoder frame:
+1. Run joint on all beam hypotheses at current frame
+2. Top-k candidates (beam + beta) with gamma-threshold pruning
+3. Split into blank (collect in `list_b`) and non-blank (expand predictor)
+4. If only blanks → stop early
+5. Continue expanding non-blank survivors for up to N steps
+6. After last step: force-add blank log-prob to all non-blank survivors
+7. Merge `list_b`, keep top-B by cumulative score, advance frame
+
+Config defaults (matching NeMo): beam=4, num_steps=2, gamma=2.3, beta=2.
+Enable via `CRISPASR_PARAKEET_MAES=1` + `--beam-size 4`.
