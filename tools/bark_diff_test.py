@@ -94,6 +94,46 @@ def generate_reference(text, seed, dump_dir):
     np.save(str(dump / "bert_token_ids.npy"), np.array(bert_ids, dtype=np.int32))
     np.save(str(dump / "bert_offset_ids.npy"), np.array(offset_ids, dtype=np.int32))
 
+    # Capture prefill logits from the semantic model (step 0, before sampling).
+    # This is deterministic given the same input tokens and validates the
+    # GPT-2 forward pass independently of RNG differences.
+    try:
+        from bark.generation import (
+            _tokenize, _normalize_whitespace,
+            SEMANTIC_PAD_TOKEN, SEMANTIC_INFER_TOKEN,
+            TEXT_PAD_TOKEN,
+        )
+        import bark.generation as bg
+
+        # Replicate bark's input construction (from generate_text_semantic)
+        encoded = tokenizer.encode(text, add_special_tokens=True)
+        # Pad/truncate to 256
+        encoded = encoded[:256]
+        encoded += [TEXT_PAD_TOKEN] * (256 - len(encoded))
+        # Offset by TEXT_ENCODING_OFFSET
+        encoded = [e + TEXT_ENCODING_OFFSET for e in encoded]
+        # Semantic history: all PAD
+        sem_hist = [SEMANTIC_PAD_TOKEN] * 256
+        # Build input: text(256) + sem_hist(256) + INFER_TOKEN
+        input_ids = encoded + sem_hist + [SEMANTIC_INFER_TOKEN]
+        x = torch.tensor([input_ids], dtype=torch.long)
+        # Get the model
+        model = bg.models["text"]["model"]
+        model.eval()
+        with torch.no_grad():
+            # bark text model: merge_context=True sums first 256 + next 256
+            # embeddings, then appends the INFER_TOKEN embedding
+            logits = model(x, merge_context=True)
+        # logits shape: (1, n_out, output_vocab)
+        prefill_logits = logits[0, -1, :].cpu().numpy()  # last position
+        np.save(str(dump / "semantic_prefill_logits.npy"), prefill_logits.astype(np.float32))
+        print(f"  Prefill logits: shape={prefill_logits.shape}, "
+              f"argmax={prefill_logits.argmax()}, "
+              f"top5={np.argsort(prefill_logits)[-5:][::-1].tolist()}",
+              file=sys.stderr)
+    except Exception as e:
+        print(f"  WARNING: could not capture prefill logits: {e}", file=sys.stderr)
+
     # Stage 1
     print(f"Stage 1: semantic (text={text!r}, seed={seed})...", file=sys.stderr)
     semantic = generate_text_semantic(text, temp=0.7, use_kv_caching=True)
@@ -156,6 +196,36 @@ def compare_stages(ref_dir, cpp_dir):
         return np.fromfile(str(p), dtype=np.float32)
 
     results = []
+
+    # --- Prefill logits (step 0, before any sampling) ---
+    ref_logits_path = ref / "semantic_prefill_logits.npy"
+    cpp_logits = load_cpp_float("semantic_prefill_logits")
+    if ref_logits_path.exists() and cpp_logits is not None:
+        ref_logits = np.load(str(ref_logits_path))
+        n = min(len(ref_logits), len(cpp_logits))
+        cos = cosine(ref_logits[:n], cpp_logits[:n])
+        maxabs = np.max(np.abs(ref_logits[:n].astype(np.float64) - cpp_logits[:n].astype(np.float64)))
+        ref_top5 = np.argsort(ref_logits)[-5:][::-1]
+        cpp_top5 = np.argsort(cpp_logits)[-5:][::-1]
+        argmax_match = (ref_logits[:n].argmax() == cpp_logits[:n].argmax())
+        print(f"\n[prefill_logits]  ref={len(ref_logits)} cpp={len(cpp_logits)} "
+              f"cos={cos:.6f} max_abs={maxabs:.4f} argmax_match={argmax_match}")
+        print(f"  ref top5: {ref_top5.tolist()}")
+        print(f"  cpp top5: {cpp_top5.tolist()}")
+        status = f"cos={cos:.6f}"
+        if cos > 0.999:
+            status += " PASS"
+        elif cos > 0.99:
+            status += " CLOSE"
+        else:
+            status += " DIVERGED"
+        results.append(("prefill_logits", status))
+    elif cpp_logits is not None:
+        print("\n[prefill_logits]  ref not found (re-run --generate-ref)")
+        results.append(("prefill_logits", "REF MISSING"))
+    else:
+        print("\n[prefill_logits]  C++ dump not found (set BARK_DUMP_DIR)")
+        results.append(("prefill_logits", "CPP MISSING"))
 
     # --- Semantic tokens ---
     ref_sem = np.load(str(ref / "semantic_tokens.npy"))

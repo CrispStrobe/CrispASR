@@ -706,45 +706,75 @@ static float* run_gpt2_forward(bark_context* c, const bark_gpt_model& m, const b
 
 // Compute embeddings: token_embd[token_ids] + pos_embd[positions]
 // Returns (D, T) float array. Handles merge_context summing for text model.
+//
+// When merge_context=true (text/semantic stage):
+//   Python bark does: tok_emb = cat([wte(text[:256]) + wte(semhist[:256]), wte(infer)])
+//                     pos_emb = wpe(0..256)
+//                     x = tok_emb + pos_emb
+//   Token embeddings are summed FIRST, then position embeddings are added
+//   to the MERGED sequence (257 tokens with positions 0..256).
 static std::vector<float> compute_embeddings(bark_context* /*c*/, const bark_gpt_model& m, const bark_gpt_hp& hp,
                                              const std::vector<int32_t>& tokens, int pos_offset, bool merge_context,
                                              int merge_len) {
     const int D = (int)hp.n_embd;
     const int T = (int)tokens.size();
 
-    std::vector<float> result((size_t)D * T, 0.0f);
     std::vector<float> row_buf((size_t)D);
 
+    if (merge_context && merge_len > 0 && T >= 2 * merge_len) {
+        // merge_context path: sum token embeddings first, then add positions
+        // to the merged sequence.
+        // Input: [text(256) | semhist(256) | INFER_TOKEN(1+)]
+        // Output: [(text+semhist)(256) | INFER_TOKEN(1+)] with pos_embd[0..256+]
+        int new_T = T - merge_len;
+        std::vector<float> result((size_t)D * new_T, 0.0f);
+
+        // First merge_len positions: sum text + semhist token embeddings
+        for (int t = 0; t < merge_len; t++) {
+            int tok_text = tokens[(size_t)t];
+            int tok_hist = tokens[(size_t)(t + merge_len)];
+
+            tensor_get_row_f32(m.token_embd, tok_text, row_buf.data(), D);
+            for (int d = 0; d < D; d++)
+                result[(size_t)t * D + d] = row_buf[(size_t)d];
+
+            tensor_get_row_f32(m.token_embd, tok_hist, row_buf.data(), D);
+            for (int d = 0; d < D; d++)
+                result[(size_t)t * D + d] += row_buf[(size_t)d];
+        }
+
+        // Remaining tokens (INFER_TOKEN etc.) — just token embedding
+        for (int t = merge_len; t < new_T; t++) {
+            int tok = tokens[(size_t)(t + merge_len)];
+            tensor_get_row_f32(m.token_embd, tok, row_buf.data(), D);
+            for (int d = 0; d < D; d++)
+                result[(size_t)t * D + d] = row_buf[(size_t)d];
+        }
+
+        // Add position embeddings to the merged sequence (positions 0..new_T-1)
+        for (int t = 0; t < new_T; t++) {
+            int pos = pos_offset + t;
+            tensor_get_row_f32(m.pos_embd, pos, row_buf.data(), D);
+            for (int d = 0; d < D; d++)
+                result[(size_t)t * D + d] += row_buf[(size_t)d];
+        }
+
+        return result;
+    }
+
+    // Non-merge path: token_embd + pos_embd per token
+    std::vector<float> result((size_t)D * T, 0.0f);
     for (int t = 0; t < T; t++) {
         int tok = tokens[(size_t)t];
         int pos = pos_offset + t;
 
-        // Token embedding (handles F32, F16, and quantised types)
         tensor_get_row_f32(m.token_embd, tok, row_buf.data(), D);
-        for (int d = 0; d < D; d++) {
+        for (int d = 0; d < D; d++)
             result[(size_t)t * D + d] = row_buf[(size_t)d];
-        }
 
-        // Position embedding
         tensor_get_row_f32(m.pos_embd, pos, row_buf.data(), D);
-        for (int d = 0; d < D; d++) {
+        for (int d = 0; d < D; d++)
             result[(size_t)t * D + d] += row_buf[(size_t)d];
-        }
-    }
-
-    // merge_context: sum embeddings[0:merge_len] += embeddings[merge_len:2*merge_len]
-    if (merge_context && merge_len > 0 && T >= 2 * merge_len) {
-        for (int t = 0; t < merge_len; t++) {
-            for (int d = 0; d < D; d++) {
-                result[(size_t)t * D + d] += result[(size_t)(t + merge_len) * D + d];
-            }
-        }
-        // Remove the merged semantic history tokens (shift rest down)
-        int new_T = T - merge_len;
-        for (int t = merge_len; t < new_T; t++) {
-            std::memcpy(&result[(size_t)t * D], &result[(size_t)(t + merge_len) * D], (size_t)D * sizeof(float));
-        }
-        result.resize((size_t)new_T * D);
     }
 
     return result;
@@ -1122,12 +1152,24 @@ static std::vector<int32_t> generate_text_semantic(bark_context* ctx, const char
         compute_embeddings(ctx, ctx->text_model, hp, input_tokens, 0, /*merge_context=*/true, ctx_len);
     int n_input = (int)(embeds.size() / (size_t)hp.n_embd); // after merge: 256 + 1 = 257
 
+    // Dump merged embeddings for diff testing (first and last token)
+    if (bark_dump_dir()) {
+        bark_dump_float("semantic_merged_emb_first", embeds.data(), (int)hp.n_embd);
+        bark_dump_float("semantic_merged_emb_last", embeds.data() + (size_t)(n_input - 1) * hp.n_embd, (int)hp.n_embd);
+        fprintf(stderr, "bark: merged embeds: n_input=%d, first[0..2]=%.6f %.6f %.6f\n", n_input, embeds[0], embeds[1],
+                embeds[2]);
+    }
+
     // 6. Prefill
     float* logits = run_gpt2_forward(ctx, ctx->text_model, hp, kv, embeds.data(), n_input, 0, (int)hp.output_vocab);
     if (!logits) {
         kv_cache_free(kv);
         return {};
     }
+
+    // Dump prefill logits (step 0) — deterministic given the same input tokens.
+    // Compare these against the Python reference to validate the GPT-2 forward pass.
+    bark_dump_float("semantic_prefill_logits", logits, (int)hp.output_vocab);
 
     int n_past = n_input;
     std::vector<int32_t> out;
