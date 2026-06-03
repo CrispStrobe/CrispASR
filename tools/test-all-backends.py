@@ -221,6 +221,12 @@ REGISTRY: tuple[Backend, ...] = (
             timeout_s=600, approx_size_mb=4500,
             capabilities=("transcribe", "json-output", "temperature",
                           "word-timestamps", "tts-roundtrip")),
+    # vibevoice-1.5b: base VibeVoice TTS model with WAV cloning. Larger
+    # than the ASR-optimised vibevoice; produces higher-fidelity TTS.
+    Backend("vibevoice-1.5b", "VibeVoice 1.5B TTS", "vibevoice-1.5b-tts-q4_k.gguf",
+            "cstr/vibevoice-1.5b-GGUF", "vibevoice-1.5b-tts-q4_k.gguf",
+            timeout_s=600, approx_size_mb=1600,
+            capabilities=("tts-roundtrip", "temperature", "voice-cloning")),
     Backend("voxtral",    "Voxtral Mini 3B",     "voxtral-mini-3b-2507-q4_k.gguf",
             "cstr/voxtral-mini-3b-2507-GGUF", "voxtral-mini-3b-2507-q4_k.gguf",
             timeout_s=300, approx_size_mb=1900,
@@ -247,6 +253,14 @@ REGISTRY: tuple[Backend, ...] = (
             timeout_s=600, approx_size_mb=4200,
             capabilities=("transcribe", "json-output", "temperature",
                           "word-timestamps")),
+
+    # mega-asr: Qwen3-1.7B variant with robustness LoRA. Same qwen3-asr
+    # runtime; ships as a separate GGUF with the LoRA baked in.
+    Backend("mega-asr",  "Mega-ASR 1.7B",           "mega-asr-1.7b-q4_k.gguf",
+            "cstr/mega-asr-GGUF", "mega-asr-1.7b-q4_k.gguf",
+            timeout_s=300, approx_size_mb=1300,
+            capabilities=("transcribe", "json-output", "beam",
+                          "temperature", "word-timestamps", "punctuation")),
 
     # FunASR LLM-decoder family (70-block SANM encoder + 2-block adaptor
     # + Qwen3-0.6B AR decode). Same runtime path; mlt-nano is the

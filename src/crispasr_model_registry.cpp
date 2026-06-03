@@ -562,9 +562,10 @@ constexpr Entry k_registry[] = {
      "https://huggingface.co/cstr/kokoro-voices-GGUF/resolve/main/kokoro-voice-af_heart.gguf"},
 
     // Piper — rhasspy/piper VITS TTS. 250+ community voices, 30+ languages.
-    // Bundled with en_US-lessac-medium F16 (30 MB). No auto-download yet
-    // (community voices hosted on rhasspy/piper, not HuggingFace GGUF).
-    {"piper", "piper-en_US-lessac-medium-f16.gguf", "", "~30 MB", nullptr, nullptr},
+    // Default voice: en_US-lessac-medium (~16 MB F16).
+    {"piper", "piper-en_US-lessac-medium-f16.gguf",
+     "https://huggingface.co/cstr/piper-en_US-lessac-medium-GGUF/resolve/main/piper-en_US-lessac-medium-f16.gguf",
+     "~16 MB", nullptr, nullptr},
 
     // Bark — suno/bark 3-stage hierarchical TTS (MIT). bark-small ~300M params,
     // 24 kHz, 10 German speakers (v2/de_speaker_0..9). Single GGUF packs all
