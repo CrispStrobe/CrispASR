@@ -1019,10 +1019,8 @@ static void backbone_forward_step_ggml(pocket_tts_context* pctx, const float* x_
 
         // Split Q, K, V: each (D, 1)
         ggml_tensor* Q = ggml_view_2d(ctx0, qkv, D, 1, qkv->nb[1], 0);
-        ggml_tensor* K_cur =
-            ggml_view_2d(ctx0, qkv, D, 1, qkv->nb[1], (size_t)D * ggml_type_size(qkv->type));
-        ggml_tensor* V_cur =
-            ggml_view_2d(ctx0, qkv, D, 1, qkv->nb[1], (size_t)2 * D * ggml_type_size(qkv->type));
+        ggml_tensor* K_cur = ggml_view_2d(ctx0, qkv, D, 1, qkv->nb[1], (size_t)D * ggml_type_size(qkv->type));
+        ggml_tensor* V_cur = ggml_view_2d(ctx0, qkv, D, 1, qkv->nb[1], (size_t)2 * D * ggml_type_size(qkv->type));
 
         // Reshape to (HD, NH, 1) for RoPE
         Q = ggml_reshape_3d(ctx0, ggml_cont(ctx0, Q), HD, NH, 1);
@@ -1030,8 +1028,8 @@ static void backbone_forward_step_ggml(pocket_tts_context* pctx, const float* x_
         V_cur = ggml_reshape_3d(ctx0, ggml_cont(ctx0, V_cur), HD, NH, 1);
 
         // RoPE (backbone uses max_period which may differ from 10000)
-        Q = ggml_rope_ext(ctx0, Q, pos_tensor, nullptr, HD, GGML_ROPE_TYPE_NORMAL, 0, (float)hp.max_period, 1.0f,
-                          0.0f, 1.0f, 0.0f, 0.0f);
+        Q = ggml_rope_ext(ctx0, Q, pos_tensor, nullptr, HD, GGML_ROPE_TYPE_NORMAL, 0, (float)hp.max_period, 1.0f, 0.0f,
+                          1.0f, 0.0f, 0.0f);
         K_cur = ggml_rope_ext(ctx0, K_cur, pos_tensor, nullptr, HD, GGML_ROPE_TYPE_NORMAL, 0, (float)hp.max_period,
                               1.0f, 0.0f, 1.0f, 0.0f, 0.0f);
 
@@ -1554,7 +1552,7 @@ static ggml_tensor* pocket_convtr1d_causal(ggml_context* ctx, ggml_tensor* x, gg
 // with limited context window, LayerScale, GELU FFN, RoPE.
 // Input x: (T, D) = (T, 512). Returns (T, D).
 static ggml_tensor* build_pocket_mimi_xfmr(ggml_context* ctx, const pocket_tts_model& m, ggml_tensor* x,
-                                            ggml_tensor* positions, ggml_tensor* causal_mask) {
+                                           ggml_tensor* positions, ggml_tensor* causal_mask) {
     const auto& mi = m.mimi_hp;
     int D = (int)mi.xfmr_d_model;
     int NH = (int)mi.xfmr_num_heads;
