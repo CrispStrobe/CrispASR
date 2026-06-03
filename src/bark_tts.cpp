@@ -1313,12 +1313,19 @@ static std::vector<int32_t> generate_coarse(bark_context* ctx, const std::vector
     input_tokens.insert(input_tokens.end(), semantic_padded.begin(), semantic_padded.end());
     input_tokens.push_back((int32_t)pp.coarse_infer_token);
 
-    // Prepend speaker coarse history if available
-    // coarse_prompt is (2, T) row-major: row 0 = codebook 0, row 1 = codebook 1
-    // Interleave as full-vocab tokens: semantic_vocab + cb*codebook_size + code
+    // Append speaker coarse history if available.
+    // coarse_prompt is (2, T) row-major: row 0 = codebook 0, row 1 = codebook 1.
+    // Interleave as full-vocab tokens: semantic_vocab + cb*codebook_size + code.
+    // Truncate history to fit within block_size (keep the tail = most recent).
     if (ctx->speaker.loaded && !ctx->speaker.coarse_prompt.empty() && ctx->speaker.coarse_prompt_cols > 0) {
         int hist_T = ctx->speaker.coarse_prompt_cols;
-        for (int t = 0; t < hist_T; t++) {
+        // Max history tokens we can fit: block_size - current_input - n_steps
+        int max_hist_tokens = (int)hp.block_size - (int)input_tokens.size() - n_steps;
+        int max_hist_T = max_hist_tokens / (int)pp.n_coarse_codebooks;
+        if (max_hist_T < 0)
+            max_hist_T = 0;
+        int start_t = hist_T - std::min(hist_T, max_hist_T); // keep tail
+        for (int t = start_t; t < hist_T; t++) {
             for (int cb = 0; cb < (int)pp.n_coarse_codebooks; cb++) {
                 int code = ctx->speaker.coarse_prompt[(size_t)(cb * hist_T + t)];
                 int full_tok = (int)pp.semantic_vocab_size + cb * (int)pp.codebook_size + code;
