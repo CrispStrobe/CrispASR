@@ -107,6 +107,11 @@ REGISTERED_BACKENDS: Dict[str, str] = {
     # logits" entry point the way the speech-LLMs do.
     "cohere":     "reference_backends.cohere",
     "parakeet":   "reference_backends.parakeet",
+    # Parakeet-TDT MAES beam decoding. Same model as "parakeet" but captures
+    # transducer component intermediates (prediction net, joint net) plus
+    # full MAES decode output. Config via MAES_BEAM_SIZE / MAES_NUM_STEPS /
+    # MAES_GAMMA / MAES_BETA env vars (defaults: 4 / 2 / 2.3 / 2).
+    "parakeet-maes": "reference_backends.parakeet_maes",
     # NeMo Canary (FastConformer + Transformer decoder). model_dir may be
     # the HF id "nvidia/canary-1b-v2" or a local .nemo path. The C++ diff
     # branch ("canary") compares mel_spectrogram + encoder_output; the

@@ -1301,7 +1301,7 @@ class Session:
             self._lib.crispasr_session_result_free(res)
 
     # ---------------------------------------------------------------------
-    # TTS synthesis (vibevoice, qwen3-tts, kokoro, orpheus, chatterbox, indextts, voxcpm2, csm, dia, speecht5)
+    # TTS synthesis (vibevoice, qwen3-tts, kokoro, orpheus, chatterbox, indextts, voxcpm2, csm, dia, speecht5, parler-tts)
     # ---------------------------------------------------------------------
 
     def set_codec_path(self, path: str) -> None:
@@ -1935,7 +1935,7 @@ class Session:
 
         Works with any TTS-capable backend — ``vibevoice``, ``qwen3-tts``,
         ``kokoro``, ``orpheus``, ``chatterbox``, ``indextts``, ``voxcpm2-tts``,
-        ``csm``, ``dia``, ``fastpitch``.
+        ``csm``, ``dia``, ``fastpitch``, ``parler-tts``.
         For qwen3-tts call :meth:`set_codec_path` and one of:
 
         * :meth:`set_voice` — Base variants (WAV + ref_text, or voice-pack GGUF)

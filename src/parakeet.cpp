@@ -2212,6 +2212,75 @@ extern "C" int parakeet_test_audio(struct parakeet_context* ctx, const float* sa
     return T_enc;
 }
 
+// ===========================================================================
+// Transducer component entry points for diff testing
+// ===========================================================================
+
+extern "C" float* parakeet_joint_project_encoder(struct parakeet_context* ctx, const float* enc_frames, int T_enc,
+                                                 int d_model, int* out_joint_hidden) {
+    parakeet_init_joint_weights(ctx);
+    const auto& J = ctx->joint_w;
+    if (d_model != J.d_model)
+        return nullptr;
+
+    const int JH = J.joint_hidden;
+    float* out = (float*)malloc(sizeof(float) * T_enc * JH);
+    if (!out)
+        return nullptr;
+
+    for (int t = 0; t < T_enc; t++) {
+        std::vector<float> proj(JH);
+        joint_proj_enc(J, enc_frames + (size_t)t * d_model, proj);
+        memcpy(out + (size_t)t * JH, proj.data(), JH * sizeof(float));
+    }
+    if (out_joint_hidden)
+        *out_joint_hidden = JH;
+    return out;
+}
+
+extern "C" float* parakeet_predictor_initial(struct parakeet_context* ctx, int* out_pred_hidden) {
+    parakeet_init_pred_weights(ctx);
+    const auto& W = ctx->pred_w;
+    const int H = W.H;
+    const int blank_id = (int)ctx->model.hparams.blank_id;
+
+    // NeMo's decoder.predict(y=None, state=None, add_sos=True) feeds TWO
+    // zero inputs to the LSTM: a zero "SOS" vector prepended, plus the
+    // pad-token (also zero since y=None). This means the LSTM runs for 2
+    // timesteps on zero input. The blank embedding is all-zeros (NeMo uses
+    // padding_idx=blank_id), so feeding blank_id twice is equivalent.
+    parakeet_lstm_state state;
+    lstm_init_state(state, H);
+    std::vector<float> pred_out;
+    predictor_step(W, blank_id, state, pred_out); // SOS (zero)
+    predictor_step(W, blank_id, state, pred_out); // pad  (zero)
+
+    float* out = (float*)malloc(sizeof(float) * H);
+    if (!out)
+        return nullptr;
+    memcpy(out, pred_out.data(), H * sizeof(float));
+    if (out_pred_hidden)
+        *out_pred_hidden = H;
+    return out;
+}
+
+extern "C" float* parakeet_joint_step(struct parakeet_context* ctx, const float* proj_enc, const float* pred_out,
+                                      int* out_vocab_total) {
+    parakeet_init_joint_weights(ctx);
+    const auto& J = ctx->joint_w;
+
+    std::vector<float> logits;
+    joint_step(J, proj_enc, pred_out, logits);
+
+    float* out = (float*)malloc(sizeof(float) * logits.size());
+    if (!out)
+        return nullptr;
+    memcpy(out, logits.data(), logits.size() * sizeof(float));
+    if (out_vocab_total)
+        *out_vocab_total = (int)logits.size();
+    return out;
+}
+
 extern "C" void parakeet_result_free(struct parakeet_result* r) {
     if (!r)
         return;

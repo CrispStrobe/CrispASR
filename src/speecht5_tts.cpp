@@ -290,7 +290,7 @@ static std::vector<float> run_encoder(speecht5_tts_context* ctx, const std::vect
     const int T = (int)token_ids.size();
     *out_T = T;
 
-    mini_graph mg(ctx->backend_cpu);
+    mini_graph mg(ctx->backend);
     auto* gc = mg.ctx;
 
     // Input token IDs
@@ -563,7 +563,7 @@ static decoder_step_result run_decoder_step(speecht5_tts_context* ctx,
     decoder_step_result result;
     result.mel_frame.resize(hp.reduction_factor * hp.num_mel_bins, 0.0f);
 
-    mini_graph mg(ctx->backend_cpu);
+    mini_graph mg(ctx->backend);
     auto* gc = mg.ctx;
 
     // Inputs
@@ -1034,7 +1034,7 @@ static std::vector<float> run_postnet(speecht5_tts_context* ctx,
     const auto& hp = ctx->hp;
     const auto& ts = ctx->tensors();
 
-    mini_graph mg(ctx->backend_cpu);
+    mini_graph mg(ctx->backend);
     auto* gc = mg.ctx;
 
     // Input: (T_mel, num_mel_bins) -- ggml conv_1d expects (T, C_in)
@@ -1165,7 +1165,7 @@ static std::vector<float> run_vocoder(speecht5_tts_context* ctx,
     const auto& ts = ctx->tensors();
     const auto& vhp = ctx->voc_hp;
 
-    mini_graph mg(ctx->backend_cpu, 64 * 1024 * 1024);
+    mini_graph mg(ctx->backend, 64 * 1024 * 1024);
     auto* gc = mg.ctx;
 
     // Input mel: (T_mel, num_mel_bins) — ggml conv_1d expects (T, C_in) directly
@@ -1212,7 +1212,7 @@ struct speecht5_tts_params speecht5_tts_default_params(void) {
     struct speecht5_tts_params p;
     p.n_threads = 4;
     p.verbosity = 1;
-    p.use_gpu = false;
+    p.use_gpu = true;
     p.threshold = 0.5f;
     p.max_len = 0;
     p.seed = 0;
@@ -1226,15 +1226,23 @@ struct speecht5_tts_context* speecht5_tts_init(const char* path, struct speecht5
     ctx->threshold = params.threshold;
     ctx->max_len = params.max_len;
 
-    // Backend
-    ctx->backend_cpu = ggml_backend_cpu_init();
-    if (!ctx->backend_cpu) {
-        fprintf(stderr, "speecht5: failed to init CPU backend\n");
+    // Backend — prefer GPU (CUDA/Metal/Vulkan) when available + requested
+    ctx->backend = params.use_gpu ? ggml_backend_init_best() : nullptr;
+    if (!ctx->backend) {
+        ctx->backend = ggml_backend_cpu_init();
+    }
+    if (!ctx->backend) {
+        fprintf(stderr, "speecht5: failed to init any backend\n");
         delete ctx;
         return nullptr;
     }
-    ggml_backend_cpu_set_n_threads(ctx->backend_cpu, params.n_threads);
-    ctx->backend = ctx->backend_cpu;
+    ctx->backend_cpu = ggml_backend_cpu_init();
+    if (ctx->backend_cpu) {
+        ggml_backend_cpu_set_n_threads(ctx->backend_cpu, params.n_threads);
+    }
+    if (ggml_backend_is_cpu(ctx->backend)) {
+        ggml_backend_cpu_set_n_threads(ctx->backend, params.n_threads);
+    }
 
     // Load GGUF metadata
     gguf_context* meta = core_gguf::open_metadata(path);
@@ -1303,6 +1311,7 @@ struct speecht5_tts_context* speecht5_tts_init(const char* path, struct speecht5
     }
 
     if (params.verbosity > 0) {
+        fprintf(stderr, "speecht5: backend=%s\n", ggml_backend_name(ctx->backend));
         fprintf(stderr, "speecht5: loaded model — hidden=%d mel=%d enc=%d dec=%d vocab=%d\n", hp.hidden_size,
                 hp.num_mel_bins, hp.encoder_layers, hp.decoder_layers, hp.vocab_size);
         fprintf(stderr, "speecht5: vocoder — init_ch=%d rates=[%d,%d,%d,%d] kernels=[%d,%d,%d]\n",

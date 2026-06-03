@@ -21,8 +21,9 @@ trade-off:
 | **`dia`** | Nari Labs Dia 1.6B: byte-level text encoder (12L) + AR audio decoder (18L GQA) + 9-codebook DAC codec @ 44.1 kHz. CFG-guided, dialogue-style with `[S1]`/`[S2]` speaker tags. Apache-2.0. | No (dialogue via speaker tags) | ~1.6 GB via `-m auto` |
 | **`speecht5`** | Microsoft SpeechT5 80M: char-level encoder (12L) + AR mel decoder (6L) + 5-conv postnet + HiFi-GAN @ 16 kHz. MIT. Speaker via 512-d x-vector. | Yes (`--voice <xvector.bin>`, raw float32) | ~300 MB via `-m auto` (F16 GGUF) |
 | **`fastpitch`** | NVIDIA FastPitch 60M: non-autoregressive parallel TTS — 6L FFTransformer encoder + duration/pitch predictors + length regulator + 6L FFTransformer decoder + HiFi-GAN @ 22 kHz. Deterministic (no sampling). CC-BY-4.0. | No (single speaker) | ~230 MB via `-m auto` (Q8_0 GGUF) |
+| **`parler-tts`** | Parler TTS Mini v1.1 (~900M): T5 encoder + MusicGen decoder + DAC 44.1 kHz. Apache-2.0. Prompt-conditioned: describe the voice in natural language via `--instruct`. | No (prompt-conditioned) | ~900 MB via `-m auto` (Q8_0 GGUF) |
 
-All backends write mono WAV via `--tts-output` (22 kHz for piper/fastpitch, 16 kHz for speecht5, 24 kHz for most others).
+All backends write mono WAV via `--tts-output` (22 kHz for piper/fastpitch, 16 kHz for speecht5, 24 kHz for most others, 44.1 kHz for parler-tts).
 
 ### Reproducible / diverse generation (`--seed`)
 
@@ -47,7 +48,7 @@ each run can produce a different prosody or phrasing.
 ```
 
 The seed is wired through the sampling-capable TTS backends:
-qwen3-tts, chatterbox, vibevoice, orpheus, indextts, f5-tts, and voxcpm2. It
+qwen3-tts, chatterbox, vibevoice, orpheus, indextts, f5-tts, voxcpm2, and parler-tts. It
 also works for ASR backends with temperature sampling (parakeet,
 canary, cohere, qwen3-asr, voxtral4b, granite, glm-asr, kyutai-stt,
 moonshine). The server API accepts `"seed"` in the `/v1/audio/speech`
@@ -505,6 +506,37 @@ missing up_layer.conv, missing xscale-after-up_embed, attention
 output head layout). encoder_out is now bit-exact to the Python
 reference.
 
+## Parler TTS — prompt-conditioned voice description
+
+Parler TTS Mini v1.1 is a prompt-conditioned TTS model (~900M params):
+T5 encoder processes a natural-language voice description, MusicGen-style
+decoder generates audio codes, DAC codec decodes to 44.1 kHz PCM.
+Apache-2.0 license. No reference audio or voice packs needed --- describe
+the voice you want in text via `--instruct`.
+
+```bash
+# Auto-download (~900 MB Q8_0 GGUF on first run):
+./build/bin/crispasr --backend parler-tts -m auto \
+    --instruct "A female speaker with a warm voice in a quiet room." \
+    --tts "Hello, this is a test of Parler TTS." \
+    --tts-output output.wav --seed 42
+
+# Explicit model path:
+./build/bin/crispasr --backend parler-tts \
+    -m parler-mini-v1.1-q8_0.gguf \
+    --instruct "A young male speaker with an energetic tone." \
+    --tts "Welcome to CrispASR text-to-speech." \
+    --tts-output welcome.wav
+```
+
+The `--instruct` flag sets the voice description. If omitted, a default
+description ("A female speaker with a warm, clear voice in a quiet room.")
+is used. Output is 44.1 kHz mono PCM. Temperature (default 1.0) and seed
+are supported for reproducible / diverse generation.
+
+**Model file:**
+[`cstr/parler-tts-mini-v1.1-GGUF`](https://huggingface.co/cstr/parler-tts-mini-v1.1-GGUF)
+
 ## TTS GGUF downloads
 
 [`cstr/vibevoice-realtime-0.5b-GGUF`](https://huggingface.co/cstr/vibevoice-realtime-0.5b-GGUF) ·
@@ -521,7 +553,8 @@ reference.
 [`cstr/chatterbox-turbo-GGUF`](https://huggingface.co/cstr/chatterbox-turbo-GGUF) ·
 [`cstr/kartoffelbox-turbo-GGUF`](https://huggingface.co/cstr/kartoffelbox-turbo-GGUF) ·
 [`cstr/lahgtna-chatterbox-v1-GGUF`](https://huggingface.co/cstr/lahgtna-chatterbox-v1-GGUF) ·
-[`cstr/indextts-1.5-GGUF`](https://huggingface.co/cstr/indextts-1.5-GGUF)
+[`cstr/indextts-1.5-GGUF`](https://huggingface.co/cstr/indextts-1.5-GGUF) ·
+[`cstr/parler-tts-mini-v1.1-GGUF`](https://huggingface.co/cstr/parler-tts-mini-v1.1-GGUF)
 
 ## F5-TTS — DiT flow-matching voice cloning
 

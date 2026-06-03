@@ -2512,6 +2512,86 @@ int main(int argc, char** argv) {
             }
         }
 
+        // ──── Transducer component diff (MAES §134) ────
+        // Validate predictor LSTM, encoder projection, and joint network
+        // against PyTorch reference captures from parakeet-maes backend.
+        if (ref.has("encoder_output_projected") || ref.has("decoder_initial") || ref.has("joint_t0")) {
+            // Use reference encoder_output so we isolate transducer components
+            auto ref_enc_pair = ref.get_f32("encoder_output");
+            auto ref_enc_shp = ref.shape("encoder_output");
+            if (ref_enc_pair.first && ref_enc_shp.size() >= 2) {
+                const int d_model = (int)ref_enc_shp[0];
+                const int T_enc = (int)ref_enc_shp[1];
+
+                // 1. Encoder projection: joint.project_encoder(enc)
+                if (ref.has("encoder_output_projected")) {
+                    int jh = 0;
+                    float* proj = parakeet_joint_project_encoder(ctx, ref_enc_pair.first, T_enc, d_model, &jh);
+                    if (proj) {
+                        auto rep = ref.compare("encoder_output_projected", proj, (size_t)T_enc * jh);
+                        print_row("encoder_output_projected", rep, COS_THRESHOLD);
+                        record(rep);
+                        free(proj);
+                    } else {
+                        printf("[ERR ] encoder_output_projected  project_encoder failed\n");
+                        n_fail++;
+                    }
+                }
+
+                // 2. Predictor initial state (feed blank/SOS)
+                if (ref.has("decoder_initial")) {
+                    int ph = 0;
+                    float* pred = parakeet_predictor_initial(ctx, &ph);
+                    if (pred) {
+                        auto rep = ref.compare("decoder_initial", pred, (size_t)ph);
+                        print_row("decoder_initial", rep, COS_THRESHOLD);
+                        record(rep);
+
+                        // 2b. Decoder projection: joint.project_prednet(pred)
+                        if (ref.has("decoder_initial_projected")) {
+                            // Re-use the joint projection: pred_w @ pred + pred_b
+                            // We need to call joint_step with just the pred side.
+                            // Instead, project manually using the joint API.
+                            // Actually, we expose joint_project_encoder for enc side;
+                            // for pred side, compute it inline from the joint step.
+                            // The decoder_initial_projected = pred_w @ pred + pred_b
+                            // which is the pred-side projection in joint_step.
+                            // We don't have a separate API for this, but joint_step
+                            // does pred_proj + enc_proj internally. Skip for now.
+                            printf("[SKIP] decoder_initial_projected  (no separate API yet)\n");
+                        }
+
+                        // 3. Joint output at frame 0
+                        if (ref.has("joint_t0")) {
+                            int jh = 0;
+                            float* proj_enc = parakeet_joint_project_encoder(ctx, ref_enc_pair.first, 1, d_model, &jh);
+                            if (proj_enc) {
+                                int vt = 0;
+                                float* logits = parakeet_joint_step(ctx, proj_enc, pred, &vt);
+                                if (logits) {
+                                    auto rep = ref.compare("joint_t0", logits, (size_t)vt);
+                                    print_row("joint_t0", rep, COS_THRESHOLD);
+                                    record(rep);
+                                    free(logits);
+                                } else {
+                                    printf("[ERR ] joint_t0              joint_step failed\n");
+                                    n_fail++;
+                                }
+                                free(proj_enc);
+                            }
+                        }
+
+                        free(pred);
+                    } else {
+                        printf("[ERR ] decoder_initial       predictor_initial failed\n");
+                        n_fail++;
+                    }
+                }
+            } else {
+                printf("[SKIP] transducer components  no encoder_output in reference\n");
+            }
+        }
+
         // ──── Issue #114: per-slice diff mode ────
         //
         // The single-shot diff above feeds the whole audio to parakeet in one

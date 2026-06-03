@@ -587,6 +587,13 @@ constexpr Entry k_registry[] = {
      "https://huggingface.co/cstr/speecht5-tts-GGUF/resolve/main/speecht5-tts-f16.gguf",
      "~300 MB", nullptr, nullptr},
 
+    // Parler TTS Mini v1.1: prompt-conditioned TTS (~900M). T5 encoder +
+    // MusicGen decoder + DAC 44.1 kHz codec. Describe the voice in text
+    // via --instruct. Apache-2.0.
+    {"parler-tts", "parler-mini-v1.1-q8_0.gguf",
+     "https://huggingface.co/cstr/parler-tts-mini-v1.1-GGUF/resolve/main/parler-mini-v1.1-q8_0.gguf",
+     "~900 MB", nullptr, nullptr},
+
     // Text-LID — three families, one auto-routing dispatcher
     // (`src/text_lid_dispatch.cpp`). `lid-cld3` is the default for
     // `crispasr-lid -m auto` because it's the smallest (440 KB F16),

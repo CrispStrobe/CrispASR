@@ -134,6 +134,7 @@ quick-start commands and engine selection guidance.
 | **dia** | [`nari-labs/Dia-1.6B`](https://huggingface.co/cstr/dia-1.6b-GGUF) | Byte-level text encoder (12L) + AR audio decoder (18L GQA + CFG) → 9 delayed DAC codebooks + 44.1 kHz DAC codec; dialogue style with `[S1]`/`[S2]` tags (use >100-char prompts) | en | Apache-2.0 |
 | **speecht5** | [`cstr/speecht5-tts-GGUF`](https://huggingface.co/cstr/speecht5-tts-GGUF) | SpeechT5 80M: char-level encoder (12L) + AR mel decoder (6L) + 5-layer conv postnet + HiFi-GAN at 16 kHz; speaker via 512-d x-vector (`--voice <xvector.bin>`) | en | MIT |
 | **fastpitch** | [`cstr/fastpitch-en-GGUF`](https://huggingface.co/cstr/fastpitch-en-GGUF) | NVIDIA FastPitch 60M: non-autoregressive parallel TTS — 6L encoder + duration/pitch predictors + 6L decoder + HiFi-GAN at 22 kHz; deterministic, single forward pass ([more](docs/architecture.md#fastpitch)) | en | CC-BY-4.0 |
+| **parler-tts** | [`cstr/parler-tts-mini-v1.1-GGUF`](https://huggingface.co/cstr/parler-tts-mini-v1.1-GGUF) | Parler TTS Mini v1.1 (~900M): T5 encoder + MusicGen decoder + DAC 44.1 kHz; prompt-conditioned (describe voice in text via `--instruct`) | en | Apache-2.0 |
 
 > _Status:_ end-to-end runnable on both Q4_K and F16; zero-shot synth and
 > voice cloning (`--voice <wav>`) both work and ASR-roundtrip correctly.

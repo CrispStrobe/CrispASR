@@ -8122,7 +8122,9 @@ encoder benefits from CUDA for longer audio.
   5. **F16 biases**: 1D tensors (biases/norms) MUST be F32 in GGUF for ggml binary ops
   6. **Decoder KV cache**: proper AR self-attention needs accumulated past K/V across steps
 - Pipeline runs end-to-end: encoder → decoder w/ KV cache → postnet → HiFi-GAN → 16kHz WAV
-- Decoder produces speech but wrong content — needs more investigation (likely the decoder also needs position bias batch dim fix)
+- Decoder produced speech but wrong content — **FIXED 2026-06-02**, see
+  "SpeechT5 TTS decoder — what ACTUALLY fixed it" below. Three bugs:
+  KV cache buffer reuse, tokenizer `▁`, postnet/vocoder data layout.
 
 ### Dia 1.6B TTS
 - **Encoder cos = 1.000000** all 12 layers against Python F32 reference
@@ -8362,3 +8364,161 @@ The harness: (1) dump reference per-stage with forward hooks, (2) teacher-force
 tokens via `FASTPITCH_FORCE_TOKENS=<file>`, (3) dump C++ per-stage via
 `FASTPITCH_DUMP_DIR=<dir>`, (4) compare with numpy cosine similarity. First
 divergent stage is the bug. Debug hooks: `FASTPITCH_DUMP_DIR`, `FASTPITCH_FORCE_TOKENS`.
+
+## SpeechT5 TTS decoder — what ACTUALLY fixed it (2026-06-02)
+
+The encoder was validated at cos > 0.999 in the earlier round (§8115). The
+decoder "produced audio but not the prompt" — same symptom class as the Dia KV
+bug. Three bugs, all found by systematic per-step diff against a PyTorch
+reference with dropout disabled (`_consistent_dropout = lambda x, p: x`).
+
+**Bug 1 — self-attention KV cache buffer reuse (the primary cause).** The ggml
+graph allocator reused the memory buffer backing `sk_cur` / `sv_cur` (the K/V
+projection tensors for the current step) before the host-side C++ code read
+their values into the CPU-side KV cache via `ggml_backend_tensor_get`. At step 0
+(single-position self-attention) the cache doesn't matter, so step 0 matched
+perfectly. From step 1 onward, the cache contained whatever later graph
+operation happened to land in the same buffer — completely wrong K/V, causing
+the self-attention to produce garbage. **Fix:** create `ggml_dup` copies of
+`sk_cur`/`sv_cur` and expand them as graph outputs; the dup copies get their
+own non-reusable buffers. The original `sk_cur`/`sv_cur` still feed into the
+attention graph normally. This is the **exact same class** as Dia's KV bug
+(`01beaeaa`), just triggered differently: Dia stored K/V in wrong
+`[step][batch]` order; SpeechT5 stored them from a clobbered buffer.
+
+**Diagnostic that caught it:** the per-step dump initially showed the prenet
+output (after ReLU) containing negative values — impossible after ReLU.
+Switching from `ggml_graph_get_tensor(gf, "name")` to reading from the saved
+pointer gave the same corrupt data. Only `ggml_dup` (which forces the allocator
+to assign a fresh buffer) fixed it. The `ggml_build_forward_expand` call alone
+does NOT prevent buffer reuse — ggml's allocator tracks liveness, not output
+status. An intermediate tensor that is "dead" after its last consumer reads it
+may have its buffer overwritten even before `ggml_backend_graph_compute` returns,
+because compute is node-by-node.
+
+**Bug 2 — tokenizer missing leading `▁`.** SpeechT5 uses a SentencePiece
+char-level tokenizer that prepends `▁` (U+2581) at the start of text and
+replaces spaces with `▁`. The C++ tokenizer only replaced spaces, producing 7
+tokens for "Hello." where the reference produces 8 (`[▁, H, e, l, l, o, ., </s>]`).
+With the wrong token count, the encoder output differs and cross-attention
+attends to the wrong content. **Fix:** prepend `▁` before encoding characters.
+
+**Bug 3 — postnet + vocoder data layout.** The mel spectrogram was stored
+row-major `(T, 80)` in C++ (time steps × mel bins), then passed directly to
+`ggml_conv_1d` via a tensor declared as `(ne[0]=T, ne[1]=80)`. But ggml
+column-major layout means element `[t, c]` is at offset `t + c*T`, while the
+row-major data has it at `t*80 + c`. Result: the conv read transposed data →
+NaN/garbage output from the postnet and vocoder. **Fix:** explicit transpose
+when setting input (`transposed[t + c*T] = row_major[t*80 + c]`) and reverse
+transpose when reading output. Applied in both `run_postnet` and `run_vocoder`.
+
+**Method (reusable for AR-mel TTS).** (1) Dump per-step decoder intermediates
+from both PyTorch and C++ (prenet output, decoder hidden, mel, self-attn K/V).
+(2) Compare per-step with cosine similarity — the first step that diverges
+localizes the bug. (3) For KV cache bugs: step 0 matches perfectly (no past
+cache) but step 1 fails at the hidden state (past cache is corrupt). (4) For
+data layout bugs: all decoder steps match but final audio is garbage — isolate
+postnet vs vocoder by feeding reference mel through the C++ vocoder. (5) ASR
+roundtrip validates end-to-end. The Python reference ALSO drops "there" from
+"Hello there, how are you doing today?" → SpeechT5 model limitation, not a
+port bug.
+
+**Debug hooks:** `SPEECHT5_DUMP_DIR=<dir>` writes per-step `step{N}_mel.f32`
+and `step{N}_self_k_L0.f32`. Compare with `tools/dump_speecht5_decoder.py`
+(PyTorch side) and `tools/compare_speecht5_dumps.py` (cosine/maxabs report).
+
+### Key ggml lesson: `ggml_build_forward_expand` ≠ buffer preservation
+
+Expanding a tensor as a graph output ensures it gets **computed**, but the
+allocator may still reuse its buffer after its last consumer reads it — even
+before `ggml_backend_graph_compute` returns, because compute is node-by-node.
+To **read back an intermediate** after graph compute, you need a `ggml_dup`
+copy (or `ggml_cpy` to a pre-allocated input tensor). This applies to any
+backend that wants to read back KV projections, intermediate hidden states,
+or any tensor that has downstream consumers in the graph.
+
+---
+
+## Parler TTS — T5 + MusicGen decoder + DAC 44 kHz (§137, June 2026)
+
+### `gguf_init_from_file(no_alloc=false)` sets `tensor->data` but not `tensor->buffer`
+
+The legacy GGUF loading pattern (`no_alloc=false`) allocates tensor data inside the
+ggml_context's memory pool. This means `tensor->data` is valid for CPU reads, but
+`tensor->buffer` is NULL. Consequences:
+
+1. `ggml_backend_tensor_get()` crashes (requires `tensor->buffer`).
+2. `ggml_backend_sched` crashes during `alloc_graph` — can't route tensors without buffers.
+3. `ggml_free(ctx_w)` on exit triggers `munmap_chunk(): invalid pointer` — the GGUF loader's
+   internal allocation tracking conflicts with ggml_context's own free path.
+
+Fix: switch to the two-pass `core_gguf::load_weights()` pattern (metadata pass, then
+`no_alloc=true` + `ggml_backend_alloc_ctx_tensors`). This gives every tensor a proper
+`buffer`, enabling `ggml_backend_tensor_get`, scheduler routing, and clean shutdown.
+
+### Per-step `ggml_gallocr` create/free is the dominant cost in AR decode
+
+Each MusicGen AR decode step (up to 2580 steps) was creating a new `ggml_gallocr`,
+allocating the graph, computing, then freeing. The allocator's internal hash table
+construction/destruction dominated wall time — the actual matmuls were secondary.
+
+Fix: create one `ggml_gallocr` before the loop, `ggml_gallocr_reserve()` with a
+worst-case graph (max KV length), then `ggml_gallocr_alloc_graph()` each step.
+The reserved memory fits all subsequent steps since they have equal or smaller tensors.
+
+### SentencePiece BPE ≠ Viterbi unigram — different algorithm, same `.model` file
+
+SentencePiece `.model` files can be either unigram (model_type=1) or BPE (model_type=2).
+Both store a vocab with scores, but the tokenization algorithms are fundamentally different:
+
+- **Unigram Viterbi**: DP over byte positions, picks the highest-score segmentation.
+- **BPE merge**: start with characters, iteratively merge the pair whose merged result
+  has the highest score. Greedy, not global-optimal.
+
+The Parler tokenizer is BPE (LLaMA-2 sentencepiece). Using Viterbi produced 2/24 wrong
+tokens for typical voice descriptions (e.g. "moderate" → `▁moder`+`ate` instead of
+`▁moderate`). The T5 encoder then conditions differently, compounding over 500+ AR steps.
+
+Fix: added `core_spm::tokenize_bpe()` to `sentencepiece.h` — iterative best-merge with
+UTF-8 symbol splitting. Converter stores original SP scores (not byte-length hack) +
+`parler.tokenizer.is_bpe` GGUF flag. Runtime auto-selects algorithm.
+
+Validation: 24/24 description tokens and 13/13 prompt tokens match Python HF tokenizer
+exactly after fix (was 22/24 + 13/13 before).
+
+### DAC audio codec weights are precision-sensitive to quantization
+
+The DAC 44 kHz codec (Snake activations + ConvTranspose1d upsampling stack) reconstructs
+waveforms from 8-dim codebook embeddings through 4 decoder blocks × 3 residual units.
+Quantization noise in these small conv weights produces audible artefacts — same pattern
+as chatterbox's HiFi-GAN vocoder and F5-TTS's Vocos.
+
+Fix: `crispasr-quantize` skips all `dac.*` tensors (left at F16/F32). The T5 encoder and
+MusicGen decoder are safe to quantize. Impact: Q8_0 GGUF is 979 MB instead of ~900 MB
+(80 MB overhead for preserving ~116 DAC tensors at F16).
+
+### Diff harness: compare un-delayed codes, not raw generation-step tokens
+
+MusicGen uses a delay pattern: codebook k is delayed by k steps. The raw generation
+output has codebook 0 producing at step 0, codebook 1 starting at step 1, etc.
+`synthesize_codes()` returns un-delayed aligned codes (audio frame × codebook).
+
+The reference Python dumper originally stored raw per-step tokens in `(num_cb, n_steps)`
+layout. The C++ diff harness indexed these as delayed codes but compared against un-delayed
+C++ output — producing a misleading 21.7% match rate even when the decode was correct.
+
+Fix: Python dumps un-delayed aligned codes in `(T_audio, num_cb)` row-major layout.
+C++ comparison indexes both sides with `t * num_cb + k`.
+
+### MusicGen requires stochastic sampling — greedy produces degenerate output
+
+MusicGen's 9-codebook delay pattern means the model is trained with temperature=1.0
+sampling. Greedy decode (temp=0) produces degenerate output in Python too ("♪ How ♪"
+repeated). The C++ port confirms this — greedy tokens match Python exactly for 10 steps,
+but the resulting audio is garbage. Stochastic sampling with temp=1.0 is required.
+
+The C++ sampler uses `std::mt19937` while PyTorch uses its own MT19937 implementation.
+Same seed produces different random sequences → different token choices → divergent audio
+after the first few words. This is expected and unfixable without implementing PyTorch's
+exact RNG. Top-k sampling (added as `top_k` param) constrains the distribution so
+divergent draws still land in high-probability regions.
