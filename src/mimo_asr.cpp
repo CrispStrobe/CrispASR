@@ -157,6 +157,7 @@ struct mimo_asr_context {
     // Backends + weights
     ggml_backend_t backend = nullptr;
     ggml_backend_t backend_cpu = nullptr;
+    bool gpu_embed_split = false; // PLAN #115: embed_w on CPU, matmul weights on GPU
     ggml_backend_sched_t sched = nullptr;
     ggml_context* ctx_w = nullptr;
     ggml_backend_buffer_t buf_w = nullptr;
@@ -404,6 +405,7 @@ extern "C" struct mimo_asr_context* mimo_asr_init_from_file(const char* path_mod
             delete ctx;
             return nullptr;
         }
+        ctx->gpu_embed_split = true;
     } else {
         if (!core_gguf::load_weights(path_model, ctx->backend_cpu, "mimo_asr", wl)) {
             fprintf(stderr, "mimo_asr: failed to load weights from '%s'\n", path_model);
@@ -959,15 +961,23 @@ static ggml_cgraph* mimo_asr_build_step_graph(mimo_asr_context* ctx, int n_past,
     ggml_context* ctx0 = ggml_init(ip);
     ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 16384, false);
 
-    // PLAN #115 option B: embed lookup is an F32 input tensor filled by the
-    // host via ggml_backend_tensor_set (which handles host→device copies).
-    // When embed_w is Q4_K on CPU (force_gpu split-load), in-graph get_rows
-    // produces a CPU-resident result that CUDA can't consume. The host-side
-    // dequant in run_lm_step avoids all cross-backend routing issues.
     const int d = (int)hp.llm_hidden;
-    ggml_tensor* inputs_embeds = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, d, T);
-    ggml_set_input(inputs_embeds);
-    ggml_set_name(inputs_embeds, "step_embed_input");
+    ggml_tensor* inputs_embeds;
+    if (ctx->gpu_embed_split) {
+        // PLAN #115 option B: embed_w is Q4_K on CPU (force_gpu split-load).
+        // In-graph get_rows produces a CPU-resident result the scheduler
+        // can't copy to GPU. Use an F32 input; run_lm_step fills it via
+        // host-side dequant + ggml_backend_tensor_set (host→device).
+        inputs_embeds = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, d, T);
+        ggml_set_input(inputs_embeds);
+        ggml_set_name(inputs_embeds, "step_embed_input");
+    } else {
+        // CPU path: in-graph get_rows works (all tensors on same backend).
+        ggml_tensor* text_ids = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, T);
+        ggml_set_input(text_ids);
+        ggml_set_name(text_ids, "text_input_ids");
+        inputs_embeds = ggml_get_rows(ctx0, m.llm.embed_w, text_ids);
+    }
 
     // Positions for RoPE; doubles as kv_indices when fixed_kv_len > 0.
     ggml_tensor* positions = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, T);
@@ -1487,26 +1497,25 @@ static float* mimo_asr_run_lm_step(mimo_asr_context* ctx, int32_t next_token, in
     if (!set_t("lm_positions", &pos, sizeof(pos)))
         return nullptr;
 
-    // PLAN #115 option B: host-side embed dequant. Read the quantized row
-    // bytes from embed_w (CPU-resident), dequantize to F32, then copy into
-    // the step graph's input tensor via ggml_backend_tensor_set (handles
-    // host→device transparently). This avoids all ggml scheduler cross-
-    // backend routing issues that plague in-graph get_rows approaches.
-    {
+    if (ctx->gpu_embed_split) {
+        // PLAN #115 option B: host-side embed dequant for GPU path.
         const int d = (int)hp.llm_hidden;
         const ggml_tensor* ew = ctx->model.llm.embed_w;
-        const size_t row_size = ggml_row_size(ew->type, d);
-        std::vector<uint8_t> qrow(row_size);
+        const size_t row_nb = ew->nb[1];
+        std::vector<uint8_t> qrow(row_nb);
         std::vector<float> embed(d);
-        ggml_backend_tensor_get(ew, qrow.data(), (size_t)tok * row_size, row_size);
+        ggml_backend_tensor_get(ew, qrow.data(), (size_t)tok * row_nb, row_nb);
         const auto* traits = ggml_get_type_traits(ew->type);
         if (traits->to_float) {
             traits->to_float(qrow.data(), embed.data(), d);
         } else {
-            // F32 weight — just memcpy
             std::memcpy(embed.data(), qrow.data(), d * sizeof(float));
         }
         if (!set_t("step_embed_input", embed.data(), d * sizeof(float)))
+            return nullptr;
+    } else {
+        // CPU path: set token id for in-graph get_rows.
+        if (!set_t("text_input_ids", &tok, sizeof(tok)))
             return nullptr;
     }
 
