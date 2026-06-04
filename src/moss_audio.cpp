@@ -544,7 +544,7 @@ static ggml_cgraph* moss_audio_build_encoder_graph(
     const int d = (int)hp.enc_d_model;
     const int n_heads = (int)hp.enc_n_heads;
     const int head_dim = (int)hp.enc_head_dim;
-    const int ff_dim = (int)hp.enc_ffn_dim;
+    (void)hp.enc_ffn_dim; // used by encoder layers
 
     // Downsampled temporal dimension after 3× stride-2 convs
     int T1 = conv_out_len(T_mel);
@@ -552,7 +552,7 @@ static ggml_cgraph* moss_audio_build_encoder_graph(
     int T_down = conv_out_len(T2);
 
     // Estimate graph size
-    const size_t buf_size = 512 * 1024 * 1024; // 512 MB compute buffer estimate
+     // 512 MB compute buffer estimate
     struct ggml_init_params gparams = { ctx->compute_meta.size(), ctx->compute_meta.data(), true };
     ggml_context* ctx0 = ggml_init(gparams);
     ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 16384, false);
@@ -696,7 +696,6 @@ static ggml_cgraph* moss_audio_build_adapter_graph(
 {
     const auto& hp = ctx->model.hparams;
     const int d_enc = (int)hp.enc_d_model;
-    const int d_llm = (int)hp.llm_hidden;
 
     struct ggml_init_params gparams = { ctx->compute_meta.size(), ctx->compute_meta.data(), true };
     ggml_context* ctx0 = ggml_init(gparams);
@@ -735,6 +734,170 @@ static ggml_cgraph* moss_audio_build_adapter_graph(
 }
 
 // ===========================================================================
+// Encoder + Adapter execution
+// ===========================================================================
+
+extern "C" float* moss_audio_run_encoder(struct moss_audio_context* ctx,
+                                          const float* mel, int n_mels, int T_mel,
+                                          int* out_T_enc, int* out_d,
+                                          float** ds_tap_0, float** ds_tap_1, float** ds_tap_2) {
+    if (!ctx || !mel) return nullptr;
+    const auto& hp = ctx->model.hparams;
+    const int d = (int)hp.enc_d_model;
+    const int T_down = conv_out_len(conv_out_len(conv_out_len(T_mel)));
+    const bool want_ds = (ds_tap_0 || ds_tap_1 || ds_tap_2);
+
+    ggml_cgraph* gf = moss_audio_build_encoder_graph(ctx, T_mel, want_ds);
+    ggml_backend_sched_reset(ctx->sched);
+    if (!ggml_backend_sched_alloc_graph(ctx->sched, gf)) {
+        fprintf(stderr, "moss_audio: encoder graph alloc failed\n");
+        return nullptr;
+    }
+
+    // Set mel input — layout (n_mels, T_mel) row-major = ggml ne=(T_mel, n_mels)
+    ggml_tensor* mel_in = ggml_graph_get_tensor(gf, "mel_input");
+    ggml_backend_tensor_set(mel_in, mel, 0, (size_t)n_mels * T_mel * sizeof(float));
+
+    // Set positional embedding
+    ggml_tensor* pe_in = ggml_graph_get_tensor(gf, "pos_embed");
+    if (pe_in) {
+        const size_t pe_bytes = (size_t)d * T_down * sizeof(float);
+        if ((size_t)T_down * d <= ctx->model.audio_pe.size()) {
+            ggml_backend_tensor_set(pe_in, ctx->model.audio_pe.data(), 0, pe_bytes);
+        } else {
+            // T_down exceeds max_pos — pad with zeros
+            std::vector<float> pe_buf((size_t)d * T_down, 0.0f);
+            size_t copy = std::min(ctx->model.audio_pe.size(), pe_buf.size());
+            memcpy(pe_buf.data(), ctx->model.audio_pe.data(), copy * sizeof(float));
+            ggml_backend_tensor_set(pe_in, pe_buf.data(), 0, pe_bytes);
+        }
+    }
+
+    if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS) {
+        fprintf(stderr, "moss_audio: encoder graph compute failed\n");
+        return nullptr;
+    }
+
+    // Extract encoder output
+    ggml_tensor* enc_out = ggml_graph_get_tensor(gf, "encoder_output");
+    if (!enc_out) { fprintf(stderr, "moss_audio: missing encoder_output\n"); return nullptr; }
+    const int T_enc = (int)enc_out->ne[1];
+    if (out_T_enc) *out_T_enc = T_enc;
+    if (out_d) *out_d = d;
+
+    float* result = (float*)malloc((size_t)d * T_enc * sizeof(float));
+    ggml_backend_tensor_get(enc_out, result, 0, (size_t)d * T_enc * sizeof(float));
+
+    // Extract deepstack taps
+    if (want_ds) {
+        for (int t = 0; t < 3; t++) {
+            float** out_ptr = (t == 0) ? ds_tap_0 : (t == 1) ? ds_tap_1 : ds_tap_2;
+            if (!out_ptr) continue;
+            char name[32];
+            snprintf(name, sizeof(name), "ds_tap_%d", t);
+            ggml_tensor* tap = ggml_graph_get_tensor(gf, name);
+            if (tap) {
+                *out_ptr = (float*)malloc((size_t)d * T_enc * sizeof(float));
+                ggml_backend_tensor_get(tap, *out_ptr, 0, (size_t)d * T_enc * sizeof(float));
+            } else {
+                *out_ptr = nullptr;
+            }
+        }
+    }
+
+    return result;
+}
+
+extern "C" float* moss_audio_run_adapter(struct moss_audio_context* ctx,
+                                          const float* encoder_out, int T_enc, int d_enc,
+                                          int* out_T, int* out_d) {
+    if (!ctx || !encoder_out) return nullptr;
+    const auto& hp = ctx->model.hparams;
+    const int d_llm = (int)hp.llm_hidden;
+
+    ggml_cgraph* gf = moss_audio_build_adapter_graph(ctx, T_enc);
+    ggml_backend_sched_reset(ctx->sched);
+    if (!ggml_backend_sched_alloc_graph(ctx->sched, gf)) {
+        fprintf(stderr, "moss_audio: adapter graph alloc failed\n");
+        return nullptr;
+    }
+
+    ggml_tensor* in = ggml_graph_get_tensor(gf, "enc_output_in");
+    ggml_backend_tensor_set(in, encoder_out, 0, (size_t)d_enc * T_enc * sizeof(float));
+
+    if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS) {
+        fprintf(stderr, "moss_audio: adapter graph compute failed\n");
+        return nullptr;
+    }
+
+    ggml_tensor* out = ggml_graph_get_tensor(gf, "adapter_output");
+    if (!out) return nullptr;
+
+    if (out_T) *out_T = T_enc;
+    if (out_d) *out_d = d_llm;
+
+    float* result = (float*)malloc((size_t)d_llm * T_enc * sizeof(float));
+    ggml_backend_tensor_get(out, result, 0, (size_t)d_llm * T_enc * sizeof(float));
+    return result;
+}
+
+// Run deepstack mergers on captured taps. Returns 3 buffers of (T_enc, d_llm).
+static void moss_audio_run_deepstack_mergers(
+    moss_audio_context* ctx,
+    float* ds_taps[3], int T_enc, int d_enc,
+    float* ds_projs[3])
+{
+    const auto& hp = ctx->model.hparams;
+    const int d_llm = (int)hp.llm_hidden;
+
+    // Reuse the adapter graph builder — it already has deepstack projection
+    ggml_cgraph* gf = moss_audio_build_adapter_graph(ctx, T_enc);
+    ggml_backend_sched_reset(ctx->sched);
+    if (!ggml_backend_sched_alloc_graph(ctx->sched, gf)) {
+        fprintf(stderr, "moss_audio: deepstack merger alloc failed\n");
+        return;
+    }
+
+    // Set the deepstack tap inputs
+    for (uint32_t i = 0; i < hp.ds_num_taps && i < 3; i++) {
+        if (!ds_taps[i]) continue;
+        char name[32];
+        snprintf(name, sizeof(name), "ds_tap_%u_in", i);
+        ggml_tensor* t = ggml_graph_get_tensor(gf, name);
+        if (t) {
+            ggml_backend_tensor_set(t, ds_taps[i], 0, (size_t)d_enc * T_enc * sizeof(float));
+        }
+    }
+
+    // Also need to set encoder output (for the adapter part)
+    // Use zeros — we only care about the deepstack projection outputs
+    {
+        std::vector<float> zeros((size_t)d_enc * T_enc, 0.0f);
+        ggml_tensor* enc_in = ggml_graph_get_tensor(gf, "enc_output_in");
+        if (enc_in)
+            ggml_backend_tensor_set(enc_in, zeros.data(), 0, zeros.size() * sizeof(float));
+    }
+
+    if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS) {
+        fprintf(stderr, "moss_audio: deepstack merger compute failed\n");
+        return;
+    }
+
+    // Extract projected deepstack outputs
+    for (uint32_t i = 0; i < hp.ds_num_taps && i < 3; i++) {
+        char name[32];
+        snprintf(name, sizeof(name), "ds_proj_%u", i);
+        ggml_tensor* out = ggml_graph_get_tensor(gf, name);
+        if (out) {
+            ds_projs[i] = (float*)malloc((size_t)d_llm * T_enc * sizeof(float));
+            ggml_backend_tensor_get(out, ds_projs[i], 0, (size_t)d_llm * T_enc * sizeof(float));
+        } else {
+            ds_projs[i] = nullptr;
+        }
+    }
+}
+
+// ===========================================================================
 // LLM graph with KV cache (Qwen3)
 // ===========================================================================
 
@@ -752,8 +915,6 @@ static ggml_cgraph* moss_audio_build_llm_kv_graph(
     const int n_heads = (int)hp.llm_n_heads;
     const int n_kv_heads = (int)hp.llm_n_kv_heads;
     const int head_dim = (int)hp.llm_head_dim;
-    const int ff_dim = (int)hp.llm_ff_dim;
-    const int vocab = (int)hp.llm_vocab_size;
     const int Lk = n_past + n_tokens;
 
     struct ggml_init_params gparams = { ctx->compute_meta.size(), ctx->compute_meta.data(), true };
@@ -1164,7 +1325,7 @@ extern "C" char* moss_audio_process(struct moss_audio_context* ctx, const float*
     if (!prompt) prompt = "Transcribe this audio.";
 
     const auto& hp = ctx->model.hparams;
-    (void)hp; // used below
+    const int d_llm = (int)hp.llm_hidden;
 
     if (ctx->params.verbosity >= 1)
         fprintf(stderr, "moss_audio: processing %d samples (%.1f sec), prompt=\"%s\"\n",
@@ -1175,52 +1336,131 @@ extern "C" char* moss_audio_process(struct moss_audio_context* ctx, const float*
     float* mel = moss_audio_compute_mel(ctx, samples, n_samples, &n_mels, &T_mel);
     if (!mel) { fprintf(stderr, "moss_audio: mel failed\n"); return nullptr; }
 
-    // 2. Compute encoder T_down for audio token count
-    int T_down = conv_out_len(conv_out_len(conv_out_len(T_mel)));
+    // 2. Run audio encoder (with DeepStack tap capture)
+    int T_enc = 0, enc_d = 0;
+    float *ds_tap_0 = nullptr, *ds_tap_1 = nullptr, *ds_tap_2 = nullptr;
+    float* encoder_out = moss_audio_run_encoder(ctx, mel, n_mels, T_mel,
+                                                 &T_enc, &enc_d,
+                                                 &ds_tap_0, &ds_tap_1, &ds_tap_2);
+    free(mel);
+    if (!encoder_out) { fprintf(stderr, "moss_audio: encoder failed\n"); return nullptr; }
 
-    // 3. Run encoder (with deepstack capture)
-    // [Implementation note: for now we use a simplified path that runs
-    //  the full model forward in stages. The encoder graph is built and
-    //  executed, then adapter + deepstack projections, then LLM decode.]
+    if (ctx->params.verbosity >= 1)
+        fprintf(stderr, "moss_audio: encoder done: %d frames × %d dims\n", T_enc, enc_d);
 
-    // For the initial implementation, use a simple sequential pipeline:
-    // This will be optimized later with fused graphs.
+    // 3. Run audio adapter (encoder output → LLM space)
+    int adapt_T = 0, adapt_d = 0;
+    float* audio_embeds = moss_audio_run_adapter(ctx, encoder_out, T_enc, enc_d,
+                                                  &adapt_T, &adapt_d);
+    if (!audio_embeds) {
+        free(encoder_out);
+        free(ds_tap_0); free(ds_tap_1); free(ds_tap_2);
+        return nullptr;
+    }
 
-    // Build prompt tokens
-    auto prompt_ids = moss_audio_build_prompt(ctx, prompt, T_down);
+    // 4. Run DeepStack mergers on captured taps
+    float* ds_taps_arr[3] = { ds_tap_0, ds_tap_1, ds_tap_2 };
+    float* ds_projs[3] = { nullptr, nullptr, nullptr };
+    moss_audio_run_deepstack_mergers(ctx, ds_taps_arr, T_enc, enc_d, ds_projs);
+    free(encoder_out);
+    free(ds_tap_0); free(ds_tap_1); free(ds_tap_2);
+
+    // 5. Build prompt token IDs and embed text tokens
+    auto prompt_ids = moss_audio_build_prompt(ctx, prompt, T_enc);
     int n_prompt = (int)prompt_ids.size();
 
     if (ctx->params.verbosity >= 1)
         fprintf(stderr, "moss_audio: %d mel frames, %d enc tokens, %d prompt tokens\n",
-                T_mel, T_down, n_prompt);
+                T_mel, T_enc, n_prompt);
 
-    // Embed text tokens
     float* text_embeds = moss_audio_embed_tokens(ctx, prompt_ids.data(), n_prompt);
-    if (!text_embeds) { free(mel); return nullptr; }
-
-    // TODO: Run encoder, adapter, deepstack, scatter audio into embeds,
-    // then LLM decode. This requires the encoder graph execution and
-    // the deepstack injection to be wired up. For now, provide the
-    // skeleton that will be completed once we have a GGUF to test against.
-
-    // Initialize KV cache
-    int max_ctx = n_prompt + 256; // prompt + max generation
-    if (!moss_audio_kv_init(ctx, max_ctx)) {
-        free(mel); free(text_embeds);
+    if (!text_embeds) {
+        free(audio_embeds);
+        for (int i = 0; i < 3; i++) free(ds_projs[i]);
         return nullptr;
     }
 
-    // Prefill (without encoder for now — text-only placeholder)
+    // 6. Scatter audio embeddings into text embeddings at audio_token positions
+    //    (masked_scatter in PyTorch: replace embed[audio_mask] with audio_embeds)
+    {
+        int audio_idx = 0;
+        for (int pos = 0; pos < n_prompt; pos++) {
+            if (prompt_ids[pos] == (int32_t)hp.audio_token_id) {
+                if (audio_idx < T_enc) {
+                    // Replace text embedding at this position with audio embedding
+                    memcpy(text_embeds + (size_t)pos * d_llm,
+                           audio_embeds + (size_t)audio_idx * d_llm,
+                           (size_t)d_llm * sizeof(float));
+                    audio_idx++;
+                }
+            }
+        }
+        if (ctx->params.verbosity >= 2)
+            fprintf(stderr, "moss_audio: scattered %d audio embeds into prompt\n", audio_idx);
+    }
+    free(audio_embeds);
+
+    // 7. Apply DeepStack injection: for LM layers 0, 1, 2, add projected
+    //    encoder taps as residuals at audio-token positions.
+    //    This is done in-CPU before the LLM forward pass by pre-adding the
+    //    deepstack residuals to the input embeddings at the corresponding
+    //    positions. While the PyTorch reference uses forward hooks (adding
+    //    after each LM block), adding all 3 deepstack residuals to the
+    //    input embeddings is NOT equivalent — each should add at a
+    //    different layer. For now, we add only the sum of all 3 at the
+    //    input (a zeroth-order approximation); the true per-layer injection
+    //    requires modifying the LLM graph to accept auxiliary inputs, which
+    //    will be done once we validate the basic pipeline against the
+    //    reference dump.
+    //
+    //    TODO: proper per-layer injection via the LLM graph builder.
+    {
+        int audio_idx = 0;
+        for (int pos = 0; pos < n_prompt; pos++) {
+            if (prompt_ids[pos] == (int32_t)hp.audio_token_id) {
+                if (audio_idx < T_enc) {
+                    for (uint32_t t = 0; t < hp.ds_num_inject && t < 3; t++) {
+                        if (ds_projs[t]) {
+                            float* dst = text_embeds + (size_t)pos * d_llm;
+                            float* src = ds_projs[t] + (size_t)audio_idx * d_llm;
+                            for (int j = 0; j < d_llm; j++)
+                                dst[j] += src[j];
+                        }
+                    }
+                    audio_idx++;
+                }
+            }
+        }
+    }
+    for (int i = 0; i < 3; i++) free(ds_projs[i]);
+
+    // 8. Initialize KV cache and run LLM prefill + decode
+    int max_ctx = n_prompt + 512;
+    if (ctx->kv_k) {
+        // Reuse existing cache if large enough, otherwise reinit
+        if (ctx->kv_max_ctx < max_ctx) {
+            if (ctx->kv_buf) ggml_backend_buffer_free(ctx->kv_buf);
+            if (ctx->kv_ctx) ggml_free(ctx->kv_ctx);
+            ctx->kv_buf = nullptr; ctx->kv_ctx = nullptr;
+            ctx->kv_k = nullptr; ctx->kv_v = nullptr;
+            moss_audio_kv_init(ctx, max_ctx);
+        } else {
+            moss_audio_kv_reset(ctx);
+        }
+    } else {
+        moss_audio_kv_init(ctx, max_ctx);
+    }
+
+    // Prefill: run all prompt tokens through the LLM
     int n_gen = 0, vocab = 0;
     float* logits = moss_audio_run_llm_kv(ctx, text_embeds, n_prompt, 0, &n_gen, &vocab);
     free(text_embeds);
-    free(mel);
 
     if (!logits) return nullptr;
 
-    // Greedy decode loop
+    // 9. Greedy decode loop
     std::vector<int32_t> generated;
-    int max_new = 256;
+    int max_new = 512;
     for (int step = 0; step < max_new; step++) {
         // Argmax
         int best_id = 0;
@@ -1229,27 +1469,33 @@ extern "C" char* moss_audio_process(struct moss_audio_context* ctx, const float*
             if (logits[i] > best_val) { best_val = logits[i]; best_id = i; }
         }
         free(logits);
+        logits = nullptr;
 
         if (best_id == (int)hp.eos_token_id) break;
         generated.push_back(best_id);
 
-        // Embed next token
+        // Embed next token and run one decode step
         float* next_emb = moss_audio_embed_tokens(ctx, &best_id, 1);
         if (!next_emb) break;
 
-        logits = moss_audio_run_llm_kv(ctx, next_emb, 1, n_prompt + (int)generated.size() - 1,
+        logits = moss_audio_run_llm_kv(ctx, next_emb, 1,
+                                        n_prompt + (int)generated.size() - 1,
                                         &n_gen, &vocab);
         free(next_emb);
         if (!logits) break;
     }
     if (logits) free(logits);
 
-    // Decode tokens to text
+    // 10. Decode tokens to text
     std::string result;
     for (int id : generated) {
         const char* t = moss_audio_token_text(ctx, id);
         if (t) result += t;
     }
+
+    if (ctx->params.verbosity >= 1)
+        fprintf(stderr, "moss_audio: generated %zu tokens: \"%s\"\n",
+                generated.size(), result.substr(0, 100).c_str());
 
     char* out = (char*)malloc(result.size() + 1);
     memcpy(out, result.c_str(), result.size() + 1);
