@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 
 import numpy as np
@@ -65,6 +66,8 @@ def main():
     ap.add_argument("--output", required=True, help="Output .gguf")
     ap.add_argument("--all-f32", action="store_true",
                     help="Store ALL tensors as F32 (for quantization base)")
+    ap.add_argument("--base-speakers", default=None,
+                    help="Directory with base_speakers/ses/*.pth (from OpenVoiceV2)")
     args = ap.parse_args()
 
     # ── Load config ──
@@ -208,13 +211,49 @@ def main():
         n_written += 1
         total_params += arr.size
 
+    # Base speaker embeddings (pre-saved source SE for each MeloTTS voice)
+    base_speakers_dir = args.base_speakers
+    if not base_speakers_dir:
+        # Auto-detect: look for base_speakers/ses/ next to checkpoint
+        candidate = os.path.join(os.path.dirname(args.ckpt), "..", "base_speakers", "ses")
+        if os.path.isdir(candidate):
+            base_speakers_dir = candidate
+
+    n_base_speakers = 0
+    base_speaker_names = []
+    if base_speakers_dir and os.path.isdir(base_speakers_dir):
+        for fname in sorted(os.listdir(base_speakers_dir)):
+            if not fname.endswith(".pth"):
+                continue
+            se_path = os.path.join(base_speakers_dir, fname)
+            se = torch.load(se_path, map_location="cpu", weights_only=False)
+            se_np = se.squeeze().numpy().astype(np.float32)
+            if se_np.shape != (gin_channels,):
+                print(f"  WARNING: {fname} shape {se_np.shape} != ({gin_channels},), skipping")
+                continue
+            name = fname.replace(".pth", "")
+            tensor_name = f"base_speaker.{name}"
+            writer.add_tensor(tensor_name, se_np)
+            base_speaker_names.append(name)
+            n_base_speakers += 1
+            n_written += 1
+            total_params += se_np.size
+            print(f"  base speaker '{name}': mean={se_np.mean():.4f}")
+        print(f"Added {n_base_speakers} base speaker embeddings")
+    else:
+        print("No base speaker embeddings found (pass --base-speakers dir)")
+
+    writer.add_uint32("openvoice2.n_base_speakers", n_base_speakers)
+    if base_speaker_names:
+        writer.add_string("openvoice2.base_speaker_names",
+                          ",".join(base_speaker_names))
+
     print(f"Written {n_written} tensors, {total_params:,} params total")
     writer.write_header_to_file()
     writer.write_kv_data_to_file()
     writer.write_tensors_to_file()
     writer.close()
 
-    import os
     size_mb = os.path.getsize(args.output) / (1024 * 1024)
     print(f"Output: {args.output} ({size_mb:.1f} MB)")
 
