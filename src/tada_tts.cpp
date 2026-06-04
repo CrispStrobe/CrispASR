@@ -48,14 +48,14 @@ struct tada_hp {
 
     // TADA-specific
     uint32_t acoustic_dim     = 512;
-    uint32_t num_time_classes = 1024;
-    uint32_t num_time_bits    = 10;
-    uint32_t time_dim         = 20;
+    uint32_t num_time_classes = 256;
+    uint32_t num_time_bits    = 8;
+    uint32_t time_dim         = 16;
     uint32_t shift_acoustic   = 5;
-    uint32_t head_layers      = 4;
-    float    head_ffn_ratio   = 3.0f;
+    uint32_t head_layers      = 6;
+    float    head_ffn_ratio   = 4.0f;
     uint32_t fm_hidden        = 3072;  // bottleneck_dim or d_model
-    uint32_t fm_latent        = 532;   // acoustic_dim + time_dim
+    uint32_t fm_latent        = 528;   // acoustic_dim + time_dim
     float    acoustic_mean    = 0.0f;
     float    acoustic_std     = 1.5f;
     bool     has_bottleneck   = false;
