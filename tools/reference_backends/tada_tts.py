@@ -92,9 +92,32 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
 
     # ── Load model ──
     print(f"  loading TADA from {model_dir}")
+    from transformers import AutoTokenizer, LlamaForCausalLM
     from tada.modules.tada import TadaForCausalLM, InferenceOptions, TadaConfig
+    from tada.modules.decoder import Decoder
     from tada.modules.encoder import EncoderOutput
     from tada.utils.gray_code import decode_gray_code_to_time
+
+    # Monkey-patch from_pretrained to use the local tokenizer.json
+    # (avoids gated-repo 401 on meta-llama/Llama-3.2-1B)
+    _orig_from_pretrained = TadaForCausalLM.from_pretrained.__func__
+
+    @classmethod
+    def _patched_from_pretrained(cls, path, *args, **kwargs):
+        self = LlamaForCausalLM.from_pretrained(path, *args, **kwargs)
+        self.__class__ = cls
+        cls.__init__(self, self.config)
+        # Load decoder from codec dir if available, else from HF
+        codec_dir = os.environ.get("TADA_CODEC_DIR")
+        if codec_dir:
+            self._decoder = Decoder.from_pretrained(codec_dir, subfolder="decoder")
+        else:
+            self._decoder = Decoder.from_pretrained("HumeAI/tada-codec", subfolder="decoder")
+        # Load tokenizer from the model dir itself (has tokenizer.json)
+        self._tokenizer = AutoTokenizer.from_pretrained(str(path))
+        return self
+
+    TadaForCausalLM.from_pretrained = _patched_from_pretrained
 
     model = TadaForCausalLM.from_pretrained(
         str(model_dir), torch_dtype=torch.bfloat16

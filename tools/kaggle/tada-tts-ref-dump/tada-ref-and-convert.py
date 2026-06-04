@@ -126,6 +126,7 @@ os.environ["TADA_CFG_SCALE"] = "1.0"
 os.environ["TADA_NOISE_TEMP"] = "0.0"
 os.environ["TADA_SEED"] = "42"
 os.environ["TADA_DEVICE"] = "cpu"
+os.environ["TADA_CODEC_DIR"] = str(codec_dir)
 
 ref_output = WORK / "tada-ref.gguf"
 subprocess.check_call([
