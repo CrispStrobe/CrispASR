@@ -433,23 +433,37 @@ static void stft_magnitude(const float * pcm, int n_samples,
     std::vector<float> win;
     hann_window(win_len, win);
 
+    // Reflect-pad input (matches PyTorch's F.pad(..., mode='reflect'))
+    int pad = (fft_size - hop) / 2;
+    int padded_len = n_samples + 2 * pad;
+    std::vector<float> padded(padded_len);
+    for (int i = 0; i < pad; i++)
+        padded[i] = pcm[std::min(pad - i, n_samples - 1)];
+    for (int i = 0; i < n_samples; i++)
+        padded[pad + i] = pcm[i];
+    for (int i = 0; i < pad; i++)
+        padded[pad + n_samples + i] = pcm[std::max(n_samples - 2 - i, 0)];
+
     int n_fft_bins = fft_size / 2 + 1;
-    T_out = (n_samples - win_len) / hop + 1;
+    T_out = (padded_len - win_len) / hop + 1;
     if (T_out < 1) T_out = 1;
     spec.resize(n_fft_bins * T_out, 0.0f);
 
     for (int t = 0; t < T_out; t++) {
         int start = t * hop;
-        // DFT of windowed frame
         for (int k = 0; k < n_fft_bins; k++) {
             float re = 0, im = 0;
-            for (int n = 0; n < win_len && (start + n) < n_samples; n++) {
-                float x = pcm[start + n] * win[n];
-                float angle = -2.0f * (float)M_PI * k * n / fft_size;
-                re += x * cosf(angle);
-                im += x * sinf(angle);
+            for (int n = 0; n < win_len; n++) {
+                int idx = start + n;
+                if (idx < padded_len) {
+                    float x = padded[idx] * win[n];
+                    float angle = -2.0f * (float)M_PI * k * n / fft_size;
+                    re += x * cosf(angle);
+                    im += x * sinf(angle);
+                }
             }
-            spec[t * n_fft_bins + k] = sqrtf(re * re + im * im);
+            // Match upstream: sqrt(re^2 + im^2 + 1e-6)
+            spec[t * n_fft_bins + k] = sqrtf(re * re + im * im + 1e-6f);
         }
     }
 }
