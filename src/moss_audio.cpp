@@ -947,22 +947,11 @@ static ggml_cgraph* moss_audio_build_llm_kv_graph(
         ggml_set_input(causal_mask);
     }
 
-    // DeepStack injection inputs (3 × (n_audio_tokens, d_llm))
-    ggml_tensor* ds_projs[3] = {nullptr, nullptr, nullptr};
-    ggml_tensor* audio_mask_t = nullptr;
-    if (has_deepstack && n_audio_tokens > 0) {
-        audio_mask_t = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, n_tokens);
-        ggml_set_name(audio_mask_t, "audio_mask");
-        ggml_set_input(audio_mask_t);
-
-        for (uint32_t i = 0; i < hp.ds_num_inject && i < 3; i++) {
-            ds_projs[i] = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, d, n_audio_tokens);
-            char name[32];
-            snprintf(name, sizeof(name), "ds_proj_%u_in", i);
-            ggml_set_name(ds_projs[i], name);
-            ggml_set_input(ds_projs[i]);
-        }
-    }
+    // DeepStack injection: ds_full_0/1/2 tensors are pre-scattered on the
+    // CPU side (zero at non-audio positions, deepstack projections at audio
+    // positions). They are created inside the layer loop when has_deepstack
+    // is true. No separate audio_mask input needed.
+    (void)n_audio_tokens; // audio token count used by caller to build ds_full
 
     // KV self-attention params (Qwen3 style)
     core_attn::KvSelfAttnParams attn_p = {};
@@ -1000,28 +989,24 @@ static ggml_cgraph* moss_audio_build_llm_kv_graph(
 
         cur = ggml_add(ctx0, residual, attn_out);
 
-        // DeepStack injection: add projected encoder taps as residual
-        // at LM layers 0, 1, 2 for audio-token positions
-        if (has_deepstack && il < hp.ds_num_inject && ds_projs[il] && audio_mask_t) {
-            // This is the key DeepStack operation:
-            // cur[audio_positions] += ds_projs[il]
-            // We implement this by scattering the deepstack embeddings
-            // into a zero tensor using the audio mask, then adding.
-            //
-            // For simplicity in the graph, we create a full-sequence-length
-            // tensor of zeros, scatter the deepstack projections into audio
-            // positions, and add to cur.
-            //
-            // audio_mask_t is I32 with indices of audio positions in the
-            // sequence (length n_tokens, non-audio positions = -1)
-            //
-            // TODO: For efficiency, this should use ggml_set_rows or similar
-            // scatter operation. For now, we do it as a masked add.
+        // DeepStack injection: after LM layers 0, 1, 2, add the
+        // corresponding projected encoder tap as a residual at audio
+        // positions. The Python reference uses forward hooks that run
+        // AFTER each layer's forward pass.
+        //
+        // Implementation: ds_full_N is a (d, n_tokens) tensor that is
+        // zero everywhere except at audio positions where it holds the
+        // deepstack projection. It's pre-built on the CPU side and
+        // passed as a graph input. We simply add it to cur.
+        if (has_deepstack && il < hp.ds_num_inject) {
+            // ds_full_N contains the scattered deepstack projection
+            // (zero at non-audio positions, ds_proj values at audio positions)
+            char name[32];
+            snprintf(name, sizeof(name), "ds_full_%u", il);
             ggml_tensor* ds_full = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, d, n_tokens);
-            ggml_set_name(ds_full, "ds_inject_full");
-            // Zero-init happens at alloc; we write audio positions via set_rows
-            // For now, pass the full projection and mask it
-            // This is a placeholder that will be refined during testing
+            ggml_set_name(ds_full, name);
+            ggml_set_input(ds_full);
+            cur = ggml_add(ctx0, cur, ds_full);
         }
 
         // Pre-FFN RMSNorm + SwiGLU FFN
@@ -1088,6 +1073,90 @@ extern "C" void moss_audio_kv_reset(struct moss_audio_context* ctx) {
         ggml_backend_buffer_clear(ctx->kv_buf, 0);
         ctx->kv_n_used = 0;
     }
+}
+
+// ===========================================================================
+// LLM prefill with DeepStack injection
+// ===========================================================================
+
+// Internal: run LLM prefill with per-layer deepstack injection.
+// ds_full[0..2] are pre-scattered (d, n_tokens) F32 tensors (zero at
+// non-audio positions, deepstack proj at audio positions). May be empty.
+// Returns logits for the last token.
+static float* moss_audio_run_llm_prefill_with_deepstack(
+    moss_audio_context* ctx, const float* inputs_embeds, int n_tokens,
+    const std::vector<float> ds_full[3], int n_audio_tokens,
+    int* out_vocab_size)
+{
+    if (!ctx || !inputs_embeds || n_tokens <= 0 || !ctx->kv_k) return nullptr;
+    const auto& hp = ctx->model.hparams;
+    const int d = (int)hp.llm_hidden;
+    const int vocab = (int)hp.llm_vocab_size;
+    const int n_past = 0; // prefill always starts at 0
+    const int Lk = n_tokens;
+    const bool has_ds = !ds_full[0].empty();
+
+    ggml_cgraph* gf = moss_audio_build_llm_kv_graph(ctx, n_tokens, n_past,
+                                                      /*last_token_only=*/true,
+                                                      n_audio_tokens, has_ds);
+    ggml_backend_sched_reset(ctx->sched);
+    if (!ggml_backend_sched_alloc_graph(ctx->sched, gf)) {
+        fprintf(stderr, "moss_audio: llm prefill alloc failed\n");
+        return nullptr;
+    }
+
+    // Set inputs_embeds
+    ggml_tensor* emb_in = ggml_graph_get_tensor(gf, "inputs_embeds");
+    ggml_backend_tensor_set(emb_in, inputs_embeds, 0, (size_t)d * n_tokens * sizeof(float));
+
+    // Positions
+    ggml_tensor* pos_in = ggml_graph_get_tensor(gf, "positions");
+    std::vector<int32_t> positions(n_tokens);
+    for (int i = 0; i < n_tokens; i++) positions[i] = i;
+    ggml_backend_tensor_set(pos_in, positions.data(), 0, (size_t)n_tokens * sizeof(int32_t));
+
+    // Causal mask
+    if (n_tokens > 1) {
+        ggml_tensor* mask_in = ggml_graph_get_tensor(gf, "causal_mask");
+        std::vector<ggml_fp16_t> mask((size_t)Lk * n_tokens);
+        const ggml_fp16_t zero_h = ggml_fp32_to_fp16(0.0f);
+        const ggml_fp16_t neginf_h = ggml_fp32_to_fp16(-INFINITY);
+        for (int q = 0; q < n_tokens; q++) {
+            for (int k = 0; k < Lk; k++) {
+                mask[(size_t)q * Lk + k] = (k <= q) ? zero_h : neginf_h;
+            }
+        }
+        ggml_backend_tensor_set(mask_in, mask.data(), 0, mask.size() * sizeof(ggml_fp16_t));
+    }
+
+    // Set DeepStack pre-scattered tensors
+    if (has_ds) {
+        for (uint32_t t = 0; t < hp.ds_num_inject && t < 3; t++) {
+            if (ds_full[t].empty()) continue;
+            char name[32];
+            snprintf(name, sizeof(name), "ds_full_%u", t);
+            ggml_tensor* ds_t = ggml_graph_get_tensor(gf, name);
+            if (ds_t) {
+                ggml_backend_tensor_set(ds_t, ds_full[t].data(), 0,
+                                        ds_full[t].size() * sizeof(float));
+            }
+        }
+    }
+
+    if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS) {
+        fprintf(stderr, "moss_audio: llm prefill compute failed\n");
+        return nullptr;
+    }
+
+    ggml_tensor* logits_t = ggml_graph_get_tensor(gf, "logits");
+    if (!logits_t) return nullptr;
+
+    if (out_vocab_size) *out_vocab_size = vocab;
+    ctx->kv_n_used = n_tokens;
+
+    float* result = (float*)malloc((size_t)vocab * sizeof(float));
+    ggml_backend_tensor_get(logits_t, result, 0, (size_t)vocab * sizeof(float));
+    return result;
 }
 
 // ===========================================================================
@@ -1410,35 +1479,22 @@ extern "C" char* moss_audio_process(struct moss_audio_context* ctx, const float*
     }
     free(audio_embeds);
 
-    // 7. Apply DeepStack injection: for LM layers 0, 1, 2, add projected
-    //    encoder taps as residuals at audio-token positions.
-    //    This is done in-CPU before the LLM forward pass by pre-adding the
-    //    deepstack residuals to the input embeddings at the corresponding
-    //    positions. While the PyTorch reference uses forward hooks (adding
-    //    after each LM block), adding all 3 deepstack residuals to the
-    //    input embeddings is NOT equivalent — each should add at a
-    //    different layer. For now, we add only the sum of all 3 at the
-    //    input (a zeroth-order approximation); the true per-layer injection
-    //    requires modifying the LLM graph to accept auxiliary inputs, which
-    //    will be done once we validate the basic pipeline against the
-    //    reference dump.
-    //
-    //    TODO: proper per-layer injection via the LLM graph builder.
-    {
+    // 7. Build pre-scattered DeepStack tensors for per-layer injection.
+    //    For each of the 3 injection layers, we build a (d_llm, n_prompt)
+    //    tensor that is zero everywhere except at audio-token positions,
+    //    where it contains the projected deepstack embeddings. The LLM
+    //    graph adds ds_full_N to the hidden state after layer N.
+    std::vector<float> ds_full[3];
+    for (uint32_t t = 0; t < hp.ds_num_inject && t < 3; t++) {
+        if (!ds_projs[t]) continue;
+        ds_full[t].assign((size_t)d_llm * n_prompt, 0.0f);
         int audio_idx = 0;
         for (int pos = 0; pos < n_prompt; pos++) {
-            if (prompt_ids[pos] == (int32_t)hp.audio_token_id) {
-                if (audio_idx < T_enc) {
-                    for (uint32_t t = 0; t < hp.ds_num_inject && t < 3; t++) {
-                        if (ds_projs[t]) {
-                            float* dst = text_embeds + (size_t)pos * d_llm;
-                            float* src = ds_projs[t] + (size_t)audio_idx * d_llm;
-                            for (int j = 0; j < d_llm; j++)
-                                dst[j] += src[j];
-                        }
-                    }
-                    audio_idx++;
-                }
+            if (prompt_ids[pos] == (int32_t)hp.audio_token_id && audio_idx < T_enc) {
+                memcpy(ds_full[t].data() + (size_t)pos * d_llm,
+                       ds_projs[t] + (size_t)audio_idx * d_llm,
+                       (size_t)d_llm * sizeof(float));
+                audio_idx++;
             }
         }
     }
@@ -1461,9 +1517,10 @@ extern "C" char* moss_audio_process(struct moss_audio_context* ctx, const float*
         moss_audio_kv_init(ctx, max_ctx);
     }
 
-    // Prefill: run all prompt tokens through the LLM
-    int n_gen = 0, vocab = 0;
-    float* logits = moss_audio_run_llm_kv(ctx, text_embeds, n_prompt, 0, &n_gen, &vocab);
+    // Prefill: run all prompt tokens through the LLM with DeepStack injection
+    int vocab = 0;
+    float* logits = moss_audio_run_llm_prefill_with_deepstack(
+        ctx, text_embeds, n_prompt, ds_full, T_enc, &vocab);
     free(text_embeds);
 
     if (!logits) return nullptr;
@@ -1488,9 +1545,10 @@ extern "C" char* moss_audio_process(struct moss_audio_context* ctx, const float*
         float* next_emb = moss_audio_embed_tokens(ctx, &best_id, 1);
         if (!next_emb) break;
 
+        int dummy_n = 0;
         logits = moss_audio_run_llm_kv(ctx, next_emb, 1,
                                         n_prompt + (int)generated.size() - 1,
-                                        &n_gen, &vocab);
+                                        &dummy_n, &vocab);
         free(next_emb);
         if (!logits) break;
     }

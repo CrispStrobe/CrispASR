@@ -1,7 +1,7 @@
 {
   "id": "chr1str/crispasr-moss-audio-convert",
-  "title": "CrispASR — MOSS-Audio-4B-Instruct F16 GGUF + reference dump",
-  "code_file": "crispasr-moss-audio-convert.py",
+  "title": "crispasr-moss-audio-convert",
+  "code_file": "crispasr-moss-audio-convert.ipynb",
   "language": "python",
   "kernel_type": "notebook",
   "is_private": "true",
