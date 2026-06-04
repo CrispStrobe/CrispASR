@@ -1125,8 +1125,11 @@ static void text_encoder_forward(melotts_context* ctx, const std::vector<int>& p
             x[i] += o[i];
         cpu_layer_norm(x, layer.norm1_g, layer.norm1_b, C, T);
 
-        // FFN via ggml graph
+        // FFN via ggml graph (detect kernel size from weight shape)
         {
+            int ffn_k = (int)layer.ffn_c1_w->ne[0]; // ne[0] = K for 3D conv weight
+            int ffn_pad = (ffn_k - 1) / 2;          // same-padding
+
             mini_graph mg(ctx->sched, 4 * 1024 * 1024);
             auto* gc = mg.ctx;
 
@@ -1134,9 +1137,9 @@ static void text_encoder_forward(melotts_context* ctx, const std::vector<int>& p
             ggml_set_name(x_in, "ffn_in");
             ggml_set_input(x_in);
 
-            ggml_tensor* ff = conv1d_cf(gc, x_in, layer.ffn_c1_w, layer.ffn_c1_b, 1, 1, 1);
+            ggml_tensor* ff = conv1d_cf(gc, x_in, layer.ffn_c1_w, layer.ffn_c1_b, 1, ffn_pad, 1);
             ff = ggml_relu(gc, ff);
-            ff = conv1d_cf(gc, ff, layer.ffn_c2_w, layer.ffn_c2_b, 1, 1, 1);
+            ff = conv1d_cf(gc, ff, layer.ffn_c2_w, layer.ffn_c2_b, 1, ffn_pad, 1);
 
             ggml_cgraph* gf = ggml_new_graph_custom(gc, 1024, false);
             ggml_build_forward_expand(gf, ff);
