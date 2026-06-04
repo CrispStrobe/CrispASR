@@ -959,19 +959,11 @@ static ggml_cgraph* mimo_asr_build_step_graph(mimo_asr_context* ctx, int n_past,
     ggml_context* ctx0 = ggml_init(ip);
     ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 16384, false);
 
-    // PLAN #115 option B: the embed lookup is an F32 *input* tensor rather
-    // than an in-graph ggml_get_rows.  When embed_w lives on CPU (force_gpu
-    // split-load keeps Q4_K embeds off GPU — CUDA GET_ROWS doesn't support
-    // k-quants), putting get_rows in the step graph produces a CPU-resident
-    // result that the scheduler can't copy to GPU correctly (Kaggle v6:
-    // ggml_cuda_cpy DeviceToDevice on host memory → "invalid argument").
-    // By making it a plain input, run_lm_step computes the embed lookup on
-    // CPU, then feeds the F32 result via ggml_backend_tensor_set which
-    // handles host→device copies transparently.
-    const int d = (int)hp.llm_hidden;
-    ggml_tensor* inputs_embeds = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, d, T);
-    ggml_set_input(inputs_embeds);
-    ggml_set_name(inputs_embeds, "step_embed_input");
+    // Embed lookup straight from llm.embed_w (no audio fusion).
+    ggml_tensor* text_ids = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, T);
+    ggml_set_input(text_ids);
+    ggml_set_name(text_ids, "text_input_ids");
+    ggml_tensor* inputs_embeds = ggml_get_rows(ctx0, m.llm.embed_w, text_ids); // [d, 1]
 
     // Positions for RoPE; doubles as kv_indices when fixed_kv_len > 0.
     ggml_tensor* positions = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, T);
@@ -1488,37 +1480,10 @@ static float* mimo_asr_run_lm_step(mimo_asr_context* ctx, int32_t next_token, in
 
     int32_t tok = next_token;
     int32_t pos = n_past_groups;
-    // text_input_ids is no longer in the step graph (PLAN #115 option B
-    // replaced the in-graph get_rows with an external CPU embed lookup),
-    // so we don't set it here. The token is used only by the mini CPU
-    // graph below to compute the embed.
+    if (!set_t("text_input_ids", &tok, sizeof(tok)))
+        return nullptr;
     if (!set_t("lm_positions", &pos, sizeof(pos)))
         return nullptr;
-
-    // PLAN #115 option B: compute embed lookup on CPU, then copy F32 result
-    // into the step graph's GPU-resident input tensor.  embed_w may be Q4_K
-    // on CPU (force_gpu split-load), so in-graph get_rows can't produce a
-    // GPU result.  ggml_backend_tensor_set handles host→device transparently.
-    {
-        const int d = (int)hp.llm_hidden;
-        std::vector<float> embed(d);
-        ggml_init_params ep = {4096, nullptr, true};
-        ggml_context* ectx = ggml_init(ep);
-        ggml_tensor* eid = ggml_new_tensor_1d(ectx, GGML_TYPE_I32, 1);
-        ggml_set_input(eid);
-        ggml_tensor* eout = ggml_get_rows(ectx, ctx->model.llm.embed_w, eid);
-        ggml_set_output(eout);
-        ggml_cgraph* egf = ggml_new_graph(ectx);
-        ggml_build_forward_expand(egf, eout);
-        ggml_backend_buffer_t ebuf = ggml_backend_alloc_ctx_tensors(ectx, ctx->backend_cpu);
-        ggml_backend_tensor_set(eid, &tok, 0, sizeof(tok));
-        ggml_backend_graph_compute(ctx->backend_cpu, egf);
-        ggml_backend_tensor_get(eout, embed.data(), 0, d * sizeof(float));
-        ggml_backend_buffer_free(ebuf);
-        ggml_free(ectx);
-        if (!set_t("step_embed_input", embed.data(), d * sizeof(float)))
-            return nullptr;
-    }
 
     // Causal mask shape (fixed_kv, 1): visible up to and including
     // position n_past_groups, -INF beyond.
