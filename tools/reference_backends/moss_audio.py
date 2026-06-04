@@ -195,9 +195,8 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
 
     # ---- Stage: mel_spectrogram ----
     if "mel_spectrogram" in stages:
-        mel = processor._extract_mel(audio_tensor)
-        # mel shape: (n_mels, T) or similar
-        out["mel_spectrogram"] = mel.detach().cpu().float().numpy()
+        # mel_input is (1, 128, T) from WhisperFeatureExtractor
+        out["mel_spectrogram"] = mel_input[0].detach().cpu().float().numpy()
 
     with torch.no_grad():
         audio_data = inputs.get("audio_data")
