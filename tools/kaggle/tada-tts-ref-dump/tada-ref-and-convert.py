@@ -40,7 +40,7 @@ REPO = WORK / "CrispASR"
 
 if not REPO.exists():
     subprocess.check_call([
-        "git", "clone", "--depth", "1",
+        "git", "clone", "--depth", "1", "--branch", "feature/tada-tts",
         "https://github.com/CrispStrobe/CrispASR.git", str(REPO),
     ])
 
@@ -54,9 +54,22 @@ subprocess.check_call([
     sys.executable, "-m", "pip", "install", "--quiet",
     "torch", "torchaudio", "transformers", "safetensors", "gguf",
     "huggingface_hub", "hf_transfer",
-    "hume-tada",  # TADA Python package
+    "hume-tada",  # TADA Python package (pulls dac etc.)
 ])
 print("[cell 2] deps installed")
+
+# Create a minimal 16 kHz WAV for the dump harness (audio is unused for TTS
+# but dump_reference.py requires it). 1 second of silence.
+import wave, struct
+dummy_wav = REPO / "samples" / "jfk.wav"
+if not dummy_wav.exists():
+    dummy_wav.parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(str(dummy_wav), "w") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(16000)
+        wf.writeframes(struct.pack("<" + "h" * 16000, *([0] * 16000)))
+    print("[cell 2] created dummy jfk.wav")
 
 # %% [code]
 # ── Cell 3: download source models ──
