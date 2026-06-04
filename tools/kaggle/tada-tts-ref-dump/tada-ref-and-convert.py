@@ -30,6 +30,10 @@ if hf_token_secret:
     os.environ["HF_TOKEN"] = hf_token_secret
     os.environ["HUGGING_FACE_HUB_TOKEN"] = hf_token_secret
 
+# Prevent transformers from importing tensorflow (protobuf clash on Kaggle)
+os.environ["TRANSFORMERS_NO_TF"] = "1"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
 # %% [code]
 # ── Cell 2: clone CrispASR + install deps ──
 import subprocess
