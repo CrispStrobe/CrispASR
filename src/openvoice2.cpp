@@ -40,7 +40,7 @@
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-static void read_f32(const ggml_tensor * t, std::vector<float> & out) {
+static void read_f32(const ggml_tensor* t, std::vector<float>& out) {
     int64_t n = ggml_nelements(t);
     out.resize(n);
     if (t->type == GGML_TYPE_F32) {
@@ -57,37 +57,37 @@ static void read_f32(const ggml_tensor * t, std::vector<float> & out) {
 }
 
 // Local conv1d_cf helper (channels-first conv1d via ggml)
-static ggml_tensor * conv1d_cf(ggml_context * ctx, ggml_tensor * x,
-                               ggml_tensor * w, ggml_tensor * b,
-                               int stride = 1, int pad = 0, int dilation = 1) {
-    ggml_tensor * xT = ggml_cont(ctx, ggml_transpose(ctx, x));
-    ggml_tensor * y = ggml_conv_1d(ctx, w, xT, stride, pad, dilation);
+static ggml_tensor* conv1d_cf(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w, ggml_tensor* b, int stride = 1,
+                              int pad = 0, int dilation = 1) {
+    ggml_tensor* xT = ggml_cont(ctx, ggml_transpose(ctx, x));
+    ggml_tensor* y = ggml_conv_1d(ctx, w, xT, stride, pad, dilation);
     y = ggml_cont(ctx, ggml_transpose(ctx, y));
-    if (b) y = ggml_add(ctx, y, b);
+    if (b)
+        y = ggml_add(ctx, y, b);
     return y;
 }
 
 // ── Hyperparameters ──────────────────────────────────────────────────
 
 struct openvoice2_hparams {
-    int inter_channels  = 192;
+    int inter_channels = 192;
     int hidden_channels = 192;
     int filter_channels = 768;
-    int gin_channels    = 256;
-    int sample_rate     = 22050;
-    int hop_length      = 256;
-    int win_length      = 1024;
-    int filter_length   = 1024;
-    int spec_channels   = 513;
-    int n_mels          = 80;
-    bool zero_g         = true;
+    int gin_channels = 256;
+    int sample_rate = 22050;
+    int hop_length = 256;
+    int win_length = 1024;
+    int filter_length = 1024;
+    int spec_channels = 513;
+    int n_mels = 80;
+    bool zero_g = true;
 
     int n_wn_layers_enc_q = 16;
-    int n_flow_blocks     = 4;
-    int n_wn_layers_flow  = 4;
+    int n_flow_blocks = 4;
+    int n_wn_layers_flow = 4;
     int n_upsample_stages = 4;
-    int n_resblocks       = 12;
-    int n_ref_convs       = 6;
+    int n_resblocks = 12;
+    int n_ref_convs = 6;
 
     std::vector<int> upsample_rates;
     std::vector<int> upsample_kernel_sizes;
@@ -98,78 +98,78 @@ struct openvoice2_hparams {
 // ── Weight structures ────────────────────────────────────────────────
 
 struct ov2_wn_layer {
-    ggml_tensor * in_w;     // dilated conv weight
-    ggml_tensor * in_b;     // dilated conv bias
-    ggml_tensor * res_skip_w;
-    ggml_tensor * res_skip_b;
+    ggml_tensor* in_w; // dilated conv weight
+    ggml_tensor* in_b; // dilated conv bias
+    ggml_tensor* res_skip_w;
+    ggml_tensor* res_skip_b;
 };
 
 struct ov2_wn_block {
-    ggml_tensor * cond_w;   // speaker conditioning conv (gin → 2*hidden)
-    ggml_tensor * cond_b;
+    ggml_tensor* cond_w; // speaker conditioning conv (gin → 2*hidden)
+    ggml_tensor* cond_b;
     std::vector<ov2_wn_layer> layers;
 };
 
 struct ov2_flow_block {
-    ggml_tensor * pre_w;    // Conv1d (half → hidden, k=1)
-    ggml_tensor * pre_b;
-    ggml_tensor * post_w;   // Conv1d (hidden → half, k=1)
-    ggml_tensor * post_b;
-    ov2_wn_block wn;        // inner WaveNet
+    ggml_tensor* pre_w; // Conv1d (half → hidden, k=1)
+    ggml_tensor* pre_b;
+    ggml_tensor* post_w; // Conv1d (hidden → half, k=1)
+    ggml_tensor* post_b;
+    ov2_wn_block wn; // inner WaveNet
 };
 
 struct ov2_ref_enc {
     // 6 Conv2d layers (weight-norm fused)
     struct conv2d_layer {
-        ggml_tensor * w;
-        ggml_tensor * b;
+        ggml_tensor* w;
+        ggml_tensor* b;
     };
     std::vector<conv2d_layer> convs;
     // GRU
-    ggml_tensor * gru_w_ih;
-    ggml_tensor * gru_w_hh;
-    ggml_tensor * gru_b_ih;
-    ggml_tensor * gru_b_hh;
+    ggml_tensor* gru_w_ih;
+    ggml_tensor* gru_w_hh;
+    ggml_tensor* gru_b_ih;
+    ggml_tensor* gru_b_hh;
     // LayerNorm
-    ggml_tensor * ln_w;
-    ggml_tensor * ln_b;
+    ggml_tensor* ln_w;
+    ggml_tensor* ln_b;
     // Output projection
-    ggml_tensor * proj_w;
-    ggml_tensor * proj_b;
+    ggml_tensor* proj_w;
+    ggml_tensor* proj_b;
 };
 
 struct ov2_enc_q {
-    ggml_tensor * pre_w;    // Conv1d (spec_channels → hidden, k=1)
-    ggml_tensor * pre_b;
-    ggml_tensor * proj_w;   // Conv1d (hidden → 2*inter, k=1)
-    ggml_tensor * proj_b;
-    ov2_wn_block wn;        // 16-layer WaveNet
+    ggml_tensor* pre_w; // Conv1d (spec_channels → hidden, k=1)
+    ggml_tensor* pre_b;
+    ggml_tensor* proj_w; // Conv1d (hidden → 2*inter, k=1)
+    ggml_tensor* proj_b;
+    ov2_wn_block wn; // 16-layer WaveNet
 };
 
 struct ov2_hifigan {
-    ggml_tensor * conv_pre_w;
-    ggml_tensor * conv_pre_b;
+    ggml_tensor* conv_pre_w;
+    ggml_tensor* conv_pre_b;
     struct upsample_stage {
-        ggml_tensor * w;
-        ggml_tensor * b;
+        ggml_tensor* w;
+        ggml_tensor* b;
     };
     std::vector<upsample_stage> ups;
     struct resblock {
-        ggml_tensor * convs1[3];  // 3 dilated convs
-        ggml_tensor * convs1_b[3];
-        ggml_tensor * convs2[3];  // 3 post convs
-        ggml_tensor * convs2_b[3];
+        ggml_tensor* convs1[3]; // 3 dilated convs
+        ggml_tensor* convs1_b[3];
+        ggml_tensor* convs2[3]; // 3 post convs
+        ggml_tensor* convs2_b[3];
     };
     std::vector<resblock> resblocks;
-    ggml_tensor * conv_post_w;
-    ggml_tensor * conv_post_b;
-    ggml_tensor * cond_w;   // speaker conditioning (gin → upsample_initial_channel)
-    ggml_tensor * cond_b;
+    ggml_tensor* conv_post_w;
+    ggml_tensor* conv_post_b;
+    ggml_tensor* cond_w; // speaker conditioning (gin → upsample_initial_channel)
+    ggml_tensor* cond_b;
 };
 
 struct ov2_base_speaker {
     std::string name;
-    ggml_tensor * embedding;  // (gin_channels,) F32
+    ggml_tensor* embedding; // (gin_channels,) F32
 };
 
 struct ov2_weights {
@@ -191,7 +191,7 @@ struct openvoice2_context {
     ggml_backend_sched_t sched;
 
     // Owned by core_gguf::WeightLoad
-    ggml_context * w_ctx = nullptr;
+    ggml_context* w_ctx = nullptr;
     ggml_backend_buffer_t w_buf = nullptr;
 
     int verbosity;
@@ -215,24 +215,21 @@ static void dump_stage(const openvoice2_context* ctx, const char* label, const f
 
 // ── GGUF loading ─────────────────────────────────────────────────────
 
-static ggml_tensor * find_tensor(const std::map<std::string, ggml_tensor *> & m,
-                                  const std::string & name) {
+static ggml_tensor* find_tensor(const std::map<std::string, ggml_tensor*>& m, const std::string& name) {
     auto it = m.find(name);
     return it != m.end() ? it->second : nullptr;
 }
 
-static ggml_tensor * require_tensor(const std::map<std::string, ggml_tensor *> & m,
-                                     const std::string & name) {
-    auto * t = find_tensor(m, name);
+static ggml_tensor* require_tensor(const std::map<std::string, ggml_tensor*>& m, const std::string& name) {
+    auto* t = find_tensor(m, name);
     if (!t) {
         fprintf(stderr, "openvoice2: missing tensor '%s'\n", name.c_str());
     }
     return t;
 }
 
-static bool load_wn_block(const std::map<std::string, ggml_tensor *> & tensors,
-                           const std::string & prefix, int n_layers,
-                           ov2_wn_block & out) {
+static bool load_wn_block(const std::map<std::string, ggml_tensor*>& tensors, const std::string& prefix, int n_layers,
+                          ov2_wn_block& out) {
     out.cond_w = find_tensor(tensors, prefix + ".cond_layer.weight");
     out.cond_b = find_tensor(tensors, prefix + ".cond_layer.bias");
     out.layers.resize(n_layers);
@@ -243,7 +240,8 @@ static bool load_wn_block(const std::map<std::string, ggml_tensor *> & tensors,
         std::string rp = prefix + ".res_skip_layers." + std::to_string(i);
         out.layers[i].res_skip_w = require_tensor(tensors, rp + ".weight");
         out.layers[i].res_skip_b = require_tensor(tensors, rp + ".bias");
-        if (!out.layers[i].in_w || !out.layers[i].res_skip_w) return false;
+        if (!out.layers[i].in_w || !out.layers[i].res_skip_w)
+            return false;
     }
     return true;
 }
@@ -252,39 +250,38 @@ extern "C" struct openvoice2_context_params openvoice2_context_default_params(vo
     return {/*n_threads=*/4, /*verbosity=*/1, /*use_gpu=*/false, /*tau=*/0.3f};
 }
 
-extern "C" struct openvoice2_context * openvoice2_init_from_file(
-    const char * path, struct openvoice2_context_params params) {
-
-    auto * ctx = new openvoice2_context();
+extern "C" struct openvoice2_context* openvoice2_init_from_file(const char* path,
+                                                                struct openvoice2_context_params params) {
+    auto* ctx = new openvoice2_context();
     ctx->verbosity = params.verbosity;
     ctx->tau = params.tau;
     ctx->rng.seed(42);
 
     // Pass 1: metadata
-    gguf_context * meta = core_gguf::open_metadata(path);
+    gguf_context* meta = core_gguf::open_metadata(path);
     if (!meta) {
         fprintf(stderr, "openvoice2: failed to load '%s'\n", path);
         delete ctx;
         return nullptr;
     }
 
-    auto & hp = ctx->hp;
-    hp.inter_channels    = core_gguf::kv_u32(meta, "openvoice2.inter_channels", 192);
-    hp.hidden_channels   = core_gguf::kv_u32(meta, "openvoice2.hidden_channels", 192);
-    hp.filter_channels   = core_gguf::kv_u32(meta, "openvoice2.filter_channels", 768);
-    hp.gin_channels      = core_gguf::kv_u32(meta, "openvoice2.gin_channels", 256);
-    hp.sample_rate       = core_gguf::kv_u32(meta, "openvoice2.sample_rate", 22050);
-    hp.hop_length        = core_gguf::kv_u32(meta, "openvoice2.hop_length", 256);
-    hp.win_length        = core_gguf::kv_u32(meta, "openvoice2.win_length", 1024);
-    hp.filter_length     = core_gguf::kv_u32(meta, "openvoice2.filter_length", 1024);
-    hp.spec_channels     = core_gguf::kv_u32(meta, "openvoice2.spec_channels", 513);
-    hp.n_mels            = core_gguf::kv_u32(meta, "openvoice2.n_mels", 80);
+    auto& hp = ctx->hp;
+    hp.inter_channels = core_gguf::kv_u32(meta, "openvoice2.inter_channels", 192);
+    hp.hidden_channels = core_gguf::kv_u32(meta, "openvoice2.hidden_channels", 192);
+    hp.filter_channels = core_gguf::kv_u32(meta, "openvoice2.filter_channels", 768);
+    hp.gin_channels = core_gguf::kv_u32(meta, "openvoice2.gin_channels", 256);
+    hp.sample_rate = core_gguf::kv_u32(meta, "openvoice2.sample_rate", 22050);
+    hp.hop_length = core_gguf::kv_u32(meta, "openvoice2.hop_length", 256);
+    hp.win_length = core_gguf::kv_u32(meta, "openvoice2.win_length", 1024);
+    hp.filter_length = core_gguf::kv_u32(meta, "openvoice2.filter_length", 1024);
+    hp.spec_channels = core_gguf::kv_u32(meta, "openvoice2.spec_channels", 513);
+    hp.n_mels = core_gguf::kv_u32(meta, "openvoice2.n_mels", 80);
     hp.n_wn_layers_enc_q = core_gguf::kv_u32(meta, "openvoice2.n_wn_layers_enc_q", 16);
-    hp.n_flow_blocks     = core_gguf::kv_u32(meta, "openvoice2.n_flow_blocks", 4);
-    hp.n_wn_layers_flow  = core_gguf::kv_u32(meta, "openvoice2.n_wn_layers_flow", 4);
+    hp.n_flow_blocks = core_gguf::kv_u32(meta, "openvoice2.n_flow_blocks", 4);
+    hp.n_wn_layers_flow = core_gguf::kv_u32(meta, "openvoice2.n_wn_layers_flow", 4);
     hp.n_upsample_stages = core_gguf::kv_u32(meta, "openvoice2.n_upsample_stages", 4);
-    hp.n_resblocks       = core_gguf::kv_u32(meta, "openvoice2.n_resblocks", 12);
-    hp.n_ref_convs       = core_gguf::kv_u32(meta, "openvoice2.n_ref_convs", 6);
+    hp.n_resblocks = core_gguf::kv_u32(meta, "openvoice2.n_resblocks", 12);
+    hp.n_ref_convs = core_gguf::kv_u32(meta, "openvoice2.n_ref_convs", 6);
 
     // Read arrays from metadata
     {
@@ -293,7 +290,7 @@ extern "C" struct openvoice2_context * openvoice2_init_from_file(
             int n = (int)gguf_get_arr_n(meta, idx);
             hp.upsample_rates.resize(n);
             for (int i = 0; i < n; i++)
-                hp.upsample_rates[i] = (int)((const int32_t *)gguf_get_arr_data(meta, idx))[i];
+                hp.upsample_rates[i] = (int)((const int32_t*)gguf_get_arr_data(meta, idx))[i];
         }
     }
     {
@@ -302,7 +299,7 @@ extern "C" struct openvoice2_context * openvoice2_init_from_file(
             int n = (int)gguf_get_arr_n(meta, idx);
             hp.upsample_kernel_sizes.resize(n);
             for (int i = 0; i < n; i++)
-                hp.upsample_kernel_sizes[i] = (int)((const int32_t *)gguf_get_arr_data(meta, idx))[i];
+                hp.upsample_kernel_sizes[i] = (int)((const int32_t*)gguf_get_arr_data(meta, idx))[i];
         }
     }
     {
@@ -311,7 +308,7 @@ extern "C" struct openvoice2_context * openvoice2_init_from_file(
             int n = (int)gguf_get_arr_n(meta, idx);
             hp.resblock_kernel_sizes.resize(n);
             for (int i = 0; i < n; i++)
-                hp.resblock_kernel_sizes[i] = (int)((const int32_t *)gguf_get_arr_data(meta, idx))[i];
+                hp.resblock_kernel_sizes[i] = (int)((const int32_t*)gguf_get_arr_data(meta, idx))[i];
         }
     }
     {
@@ -320,7 +317,7 @@ extern "C" struct openvoice2_context * openvoice2_init_from_file(
             int n = (int)gguf_get_arr_n(meta, idx);
             hp.resblock_dilation_sizes.resize(n);
             for (int i = 0; i < n; i++)
-                hp.resblock_dilation_sizes[i] = (int)((const int32_t *)gguf_get_arr_data(meta, idx))[i];
+                hp.resblock_dilation_sizes[i] = (int)((const int32_t*)gguf_get_arr_data(meta, idx))[i];
         }
     }
 
@@ -333,12 +330,12 @@ extern "C" struct openvoice2_context * openvoice2_init_from_file(
     gguf_free(meta);
 
     if (ctx->verbosity >= 1) {
-        fprintf(stderr, "openvoice2: loaded — inter=%d hidden=%d gin=%d sr=%d\n",
-                hp.inter_channels, hp.hidden_channels, hp.gin_channels, hp.sample_rate);
-        fprintf(stderr, "openvoice2: enc_q %d WN layers, flow %d blocks x %d WN layers\n",
-                hp.n_wn_layers_enc_q, hp.n_flow_blocks, hp.n_wn_layers_flow);
-        fprintf(stderr, "openvoice2: dec %d upsample, %d resblocks, ref_enc %d convs\n",
-                hp.n_upsample_stages, hp.n_resblocks, hp.n_ref_convs);
+        fprintf(stderr, "openvoice2: loaded — inter=%d hidden=%d gin=%d sr=%d\n", hp.inter_channels, hp.hidden_channels,
+                hp.gin_channels, hp.sample_rate);
+        fprintf(stderr, "openvoice2: enc_q %d WN layers, flow %d blocks x %d WN layers\n", hp.n_wn_layers_enc_q,
+                hp.n_flow_blocks, hp.n_wn_layers_flow);
+        fprintf(stderr, "openvoice2: dec %d upsample, %d resblocks, ref_enc %d convs\n", hp.n_upsample_stages,
+                hp.n_resblocks, hp.n_ref_convs);
     }
 
     // Pass 2: load weights via core_gguf
@@ -354,18 +351,18 @@ extern "C" struct openvoice2_context * openvoice2_init_from_file(
     }
     ctx->w_ctx = wl.ctx;
     ctx->w_buf = wl.buf;
-    auto & tensors = wl.tensors;
+    auto& tensors = wl.tensors;
 
     // Base speaker embeddings
-    for (auto & [name, tensor] : tensors) {
+    for (auto& [name, tensor] : tensors) {
         if (name.rfind("base_speaker.", 0) == 0) {
             std::string spk_name = name.substr(strlen("base_speaker."));
             ctx->w.base_speakers.push_back({spk_name, tensor});
         }
     }
     if (ctx->verbosity >= 1)
-        fprintf(stderr, "openvoice2: loaded %zu tensors, %zu base speakers\n",
-                tensors.size(), ctx->w.base_speakers.size());
+        fprintf(stderr, "openvoice2: loaded %zu tensors, %zu base speakers\n", tensors.size(),
+                ctx->w.base_speakers.size());
 
     // Set up scheduler
     ggml_backend_t backends[2];
@@ -378,7 +375,7 @@ extern "C" struct openvoice2_context * openvoice2_init_from_file(
     // ── Map tensors to weight structures ──
 
     // ref_enc
-    auto & re = ctx->w.ref_enc;
+    auto& re = ctx->w.ref_enc;
     re.convs.resize(hp.n_ref_convs);
     for (int i = 0; i < hp.n_ref_convs; i++) {
         std::string p = "ref_enc.convs." + std::to_string(i);
@@ -395,7 +392,7 @@ extern "C" struct openvoice2_context * openvoice2_init_from_file(
     re.proj_b = require_tensor(tensors, "ref_enc.proj.bias");
 
     // enc_q
-    auto & eq = ctx->w.enc_q;
+    auto& eq = ctx->w.enc_q;
     eq.pre_w = require_tensor(tensors, "enc_q.pre.weight");
     eq.pre_b = require_tensor(tensors, "enc_q.pre.bias");
     eq.proj_w = require_tensor(tensors, "enc_q.proj.weight");
@@ -407,7 +404,7 @@ extern "C" struct openvoice2_context * openvoice2_init_from_file(
     for (int i = 0; i < hp.n_flow_blocks; i++) {
         int idx = i * 2; // even indices (odd are Flip layers)
         std::string p = "flow.flows." + std::to_string(idx);
-        auto & fb = ctx->w.flow_blocks[i];
+        auto& fb = ctx->w.flow_blocks[i];
         fb.pre_w = require_tensor(tensors, p + ".pre.weight");
         fb.pre_b = require_tensor(tensors, p + ".pre.bias");
         fb.post_w = require_tensor(tensors, p + ".post.weight");
@@ -416,7 +413,7 @@ extern "C" struct openvoice2_context * openvoice2_init_from_file(
     }
 
     // HiFi-GAN decoder
-    auto & dec = ctx->w.dec;
+    auto& dec = ctx->w.dec;
     dec.conv_pre_w = require_tensor(tensors, "dec.conv_pre.weight");
     dec.conv_pre_b = require_tensor(tensors, "dec.conv_pre.bias");
     dec.conv_post_w = require_tensor(tensors, "dec.conv_post.weight");
@@ -437,9 +434,9 @@ extern "C" struct openvoice2_context * openvoice2_init_from_file(
         for (int j = 0; j < 3; j++) {
             std::string c1 = p + ".convs1." + std::to_string(j);
             std::string c2 = p + ".convs2." + std::to_string(j);
-            dec.resblocks[i].convs1[j]   = require_tensor(tensors, c1 + ".weight");
+            dec.resblocks[i].convs1[j] = require_tensor(tensors, c1 + ".weight");
             dec.resblocks[i].convs1_b[j] = require_tensor(tensors, c1 + ".bias");
-            dec.resblocks[i].convs2[j]   = require_tensor(tensors, c2 + ".weight");
+            dec.resblocks[i].convs2[j] = require_tensor(tensors, c2 + ".weight");
             dec.resblocks[i].convs2_b[j] = require_tensor(tensors, c2 + ".bias");
         }
     }
@@ -449,15 +446,14 @@ extern "C" struct openvoice2_context * openvoice2_init_from_file(
 
 // ── STFT ─────────────────────────────────────────────────────────────
 
-static void hann_window(int N, std::vector<float> & win) {
+static void hann_window(int N, std::vector<float>& win) {
     win.resize(N);
     for (int i = 0; i < N; i++)
         win[i] = 0.5f * (1.0f - cosf(2.0f * (float)M_PI * i / N));
 }
 
-static void stft_magnitude(const float * pcm, int n_samples,
-                            int fft_size, int hop, int win_len,
-                            std::vector<float> & spec, int & T_out) {
+static void stft_magnitude(const float* pcm, int n_samples, int fft_size, int hop, int win_len,
+                           std::vector<float>& spec, int& T_out) {
     std::vector<float> win;
     hann_window(win_len, win);
 
@@ -474,7 +470,8 @@ static void stft_magnitude(const float * pcm, int n_samples,
 
     int n_fft_bins = fft_size / 2 + 1;
     T_out = (padded_len - win_len) / hop + 1;
-    if (T_out < 1) T_out = 1;
+    if (T_out < 1)
+        T_out = 1;
     spec.resize(n_fft_bins * T_out, 0.0f);
 
     for (int t = 0; t < T_out; t++) {
@@ -499,17 +496,16 @@ static void stft_magnitude(const float * pcm, int n_samples,
 // ── WaveNet forward ──────────────────────────────────────────────────
 // Gated dilated convolution with speaker conditioning.
 
-static void wavenet_forward(const ov2_wn_block & wn, int n_layers,
-                             int hidden, int T,
-                             const std::vector<float> & x_in,      // (hidden, T)
-                             const std::vector<float> & g_cond,    // (2*hidden*n_layers, 1) or empty
-                             std::vector<float> & out) {           // (hidden, T)
+static void wavenet_forward(const ov2_wn_block& wn, int n_layers, int hidden, int T,
+                            const std::vector<float>& x_in,   // (hidden, T)
+                            const std::vector<float>& g_cond, // (2*hidden*n_layers, 1) or empty
+                            std::vector<float>& out) {        // (hidden, T)
     // x_in layout: [t * hidden + c]
     std::vector<float> h = x_in; // working copy
     std::vector<float> skip_sum(hidden * T, 0.0f);
 
     for (int il = 0; il < n_layers; il++) {
-        const auto & layer = wn.layers[il];
+        const auto& layer = wn.layers[il];
 
         // Read weights
         std::vector<float> w_in, b_in;
@@ -597,10 +593,8 @@ static void wavenet_forward(const ov2_wn_block & wn, int n_layers,
 
 // ── Speaker conditioning projection ──────────────────────────────────
 
-static void compute_g_cond(const ov2_wn_block & wn,
-                            const std::vector<float> & g_vec, int gin,
-                            int n_layers, int hidden,
-                            std::vector<float> & g_cond) {
+static void compute_g_cond(const ov2_wn_block& wn, const std::vector<float>& g_vec, int gin, int n_layers, int hidden,
+                           std::vector<float>& g_cond) {
     if (!wn.cond_w || g_vec.empty()) {
         g_cond.clear();
         return;
@@ -624,11 +618,10 @@ static void compute_g_cond(const ov2_wn_block & wn,
 // ── Reference encoder ────────────────────────────────────────────────
 // 6 Conv2d + GRU + proj → 256-d speaker embedding
 
-static bool ref_enc_forward(openvoice2_context * ctx,
-                             const std::vector<float> & spec, int T_spec,
-                             std::vector<float> & out_emb) {
-    const auto & hp = ctx->hp;
-    const auto & re = ctx->w.ref_enc;
+static bool ref_enc_forward(openvoice2_context* ctx, const std::vector<float>& spec, int T_spec,
+                            std::vector<float>& out_emb) {
+    const auto& hp = ctx->hp;
+    const auto& re = ctx->w.ref_enc;
 
     int n_bins = hp.spec_channels; // 513
 
@@ -640,7 +633,8 @@ static bool ref_enc_forward(openvoice2_context * ctx,
         read_f32(re.ln_b, ln_b);
         for (int t = 0; t < T_spec; t++) {
             float mean = 0, var = 0;
-            for (int c = 0; c < n_bins; c++) mean += x[t * n_bins + c];
+            for (int c = 0; c < n_bins; c++)
+                mean += x[t * n_bins + c];
             mean /= n_bins;
             for (int c = 0; c < n_bins; c++) {
                 float d = x[t * n_bins + c] - mean;
@@ -690,8 +684,7 @@ static bool ref_enc_forward(openvoice2_context * ctx,
                                 int ih = oh * 2 - 1 + kh;
                                 int iw = ow * 2 - 1 + kw;
                                 if (ih >= 0 && ih < H && iw >= 0 && iw < W) {
-                                    sum += feat[(ic * H + ih) * W + iw] *
-                                           w_conv[((oc * C_in + ic) * 3 + kh) * 3 + kw];
+                                    sum += feat[(ic * H + ih) * W + iw] * w_conv[((oc * C_in + ic) * 3 + kh) * 3 + kw];
                                 }
                             }
                         }
@@ -794,12 +787,10 @@ static bool ref_enc_forward(openvoice2_context * ctx,
 // ── Posterior encoder (enc_q) ────────────────────────────────────────
 // spec → WaveNet → mean + logvar → sample z
 
-static void enc_q_forward(openvoice2_context * ctx,
-                            const std::vector<float> & spec, int T,
-                            const std::vector<float> & g_vec,
-                            std::vector<float> & z_out) {
-    const auto & hp = ctx->hp;
-    const auto & eq = ctx->w.enc_q;
+static void enc_q_forward(openvoice2_context* ctx, const std::vector<float>& spec, int T,
+                          const std::vector<float>& g_vec, std::vector<float>& z_out) {
+    const auto& hp = ctx->hp;
+    const auto& eq = ctx->w.enc_q;
     int hidden = hp.hidden_channels;
     int inter = hp.inter_channels;
     int spec_ch = hp.spec_channels;
@@ -825,8 +816,7 @@ static void enc_q_forward(openvoice2_context * ctx,
         // zero_g mode: enc_q ignores speaker conditioning
         g_cond.clear();
     } else {
-        compute_g_cond(eq.wn, g_vec, hp.gin_channels,
-                       hp.n_wn_layers_enc_q, hidden, g_cond);
+        compute_g_cond(eq.wn, g_vec, hp.gin_channels, hp.n_wn_layers_enc_q, hidden, g_cond);
     }
 
     // WaveNet
@@ -866,22 +856,20 @@ static void enc_q_forward(openvoice2_context * ctx,
 // Forward: z → z_p (to prior space)
 // Reverse: z_p → z (from prior space)
 
-static void flow_wavenet(openvoice2_context * ctx,
-                          std::vector<float> & z, int T,
-                          const std::vector<float> & g_vec,
-                          bool reverse) {
-    const auto & hp = ctx->hp;
+static void flow_wavenet(openvoice2_context* ctx, std::vector<float>& z, int T, const std::vector<float>& g_vec,
+                         bool reverse) {
+    const auto& hp = ctx->hp;
     int C = hp.inter_channels;
     int half = C / 2;
     int hidden = hp.hidden_channels;
     int n_blocks = hp.n_flow_blocks;
 
     int start = reverse ? (n_blocks - 1) : 0;
-    int end   = reverse ? -1 : n_blocks;
-    int step  = reverse ? -1 : 1;
+    int end = reverse ? -1 : n_blocks;
+    int step = reverse ? -1 : 1;
 
     for (int fi = start; fi != end; fi += step) {
-        const auto & fb = ctx->w.flow_blocks[fi];
+        const auto& fb = ctx->w.flow_blocks[fi];
 
         // Flip channels
         for (int t = 0; t < T; t++)
@@ -914,8 +902,7 @@ static void flow_wavenet(openvoice2_context * ctx,
 
         // Speaker conditioning for this flow block's WaveNet
         std::vector<float> g_cond;
-        compute_g_cond(fb.wn, g_vec, hp.gin_channels,
-                       hp.n_wn_layers_flow, hidden, g_cond);
+        compute_g_cond(fb.wn, g_vec, hp.gin_channels, hp.n_wn_layers_flow, hidden, g_cond);
 
         // WaveNet
         std::vector<float> wn_out;
@@ -952,7 +939,7 @@ static void flow_wavenet(openvoice2_context * ctx,
         // Recombine
         for (int t = 0; t < T; t++) {
             for (int c = 0; c < half; c++) {
-                z[t * C + c]        = z0[t * half + c];
+                z[t * C + c] = z0[t * half + c];
                 z[t * C + half + c] = z1[t * half + c];
             }
         }
@@ -961,8 +948,7 @@ static void flow_wavenet(openvoice2_context * ctx,
 
 // ── Resample helper ──────────────────────────────────────────────────
 
-static void resample_linear(const float * in, int n_in, int sr_in,
-                             int sr_out, std::vector<float> & out) {
+static void resample_linear(const float* in, int n_in, int sr_in, int sr_out, std::vector<float>& out) {
     if (sr_in == sr_out) {
         out.assign(in, in + n_in);
         return;
@@ -981,28 +967,26 @@ static void resample_linear(const float * in, int n_in, int sr_in,
 
 // ── HiFi-GAN decode (ggml graph, same pattern as melotts.cpp) ────────
 
-static bool hifigan_decode_cpu(openvoice2_context * ctx,
-                                const std::vector<float> & z,
-                                const std::vector<float> & g_vec,
-                                int T_latent,
-                                std::vector<float> & pcm_out) {
-    const auto & hp = ctx->hp;
-    const auto & dec = ctx->w.dec;
+static bool hifigan_decode_cpu(openvoice2_context* ctx, const std::vector<float>& z, const std::vector<float>& g_vec,
+                               int T_latent, std::vector<float>& pcm_out) {
+    const auto& hp = ctx->hp;
+    const auto& dec = ctx->w.dec;
     int C_in = hp.inter_channels;
     int gin = hp.gin_channels;
 
     // Allocate ggml context for the graph
     ggml_init_params gp = {64 * 1024 * 1024, nullptr, true};
-    ggml_context * gc = ggml_init(gp);
-    if (!gc) return false;
+    ggml_context* gc = ggml_init(gp);
+    if (!gc)
+        return false;
 
     // Input tensor
-    ggml_tensor * x_input = ggml_new_tensor_2d(gc, GGML_TYPE_F32, C_in, T_latent);
+    ggml_tensor* x_input = ggml_new_tensor_2d(gc, GGML_TYPE_F32, C_in, T_latent);
     ggml_set_name(x_input, "dec_input");
     ggml_set_input(x_input);
 
     // Speaker conditioning (zero for zero_g mode)
-    ggml_tensor * g_input = nullptr;
+    ggml_tensor* g_input = nullptr;
     if (dec.cond_w && !g_vec.empty()) {
         g_input = ggml_new_tensor_1d(gc, GGML_TYPE_F32, gin);
         ggml_set_name(g_input, "dec_g");
@@ -1010,13 +994,12 @@ static bool hifigan_decode_cpu(openvoice2_context * ctx,
     }
 
     // conv_pre: (inter_channels, T) → (upsample_initial_ch=512, T)
-    ggml_tensor * x = conv1d_cf(gc, x_input, dec.conv_pre_w,
-                                dec.conv_pre_b, 1, 3, 1);
+    ggml_tensor* x = conv1d_cf(gc, x_input, dec.conv_pre_w, dec.conv_pre_b, 1, 3, 1);
 
     // Speaker conditioning: x += cond(g)
     if (g_input && dec.cond_w) {
-        ggml_tensor * g_2d = ggml_reshape_2d(gc, g_input, gin, 1);
-        ggml_tensor * g_proj = conv1d_cf(gc, g_2d, dec.cond_w, dec.cond_b);
+        ggml_tensor* g_2d = ggml_reshape_2d(gc, g_input, gin, 1);
+        ggml_tensor* g_proj = conv1d_cf(gc, g_2d, dec.cond_w, dec.cond_b);
         x = ggml_add(gc, x, g_proj);
     }
 
@@ -1031,33 +1014,32 @@ static bool hifigan_decode_cpu(openvoice2_context * ctx,
         int kernel = hp.upsample_kernel_sizes[us];
         int crop_each = (kernel - stride) / 2;
 
-        x = core_convt::convt1d_crop(gc, x, dec.ups[us].w,
-                                     dec.ups[us].b, stride,
-                                     crop_each, crop_each);
+        x = core_convt::convt1d_crop(gc, x, dec.ups[us].w, dec.ups[us].b, stride, crop_each, crop_each);
 
         // MRF: average of resblocks
-        ggml_tensor * sum_rb = nullptr;
+        ggml_tensor* sum_rb = nullptr;
 
         for (int ri = 0; ri < n_rk; ri++) {
-            const auto & rb = dec.resblocks[rb_idx + ri];
+            const auto& rb = dec.resblocks[rb_idx + ri];
             int rk = hp.resblock_kernel_sizes[ri];
 
-            ggml_tensor * y = x;
+            ggml_tensor* y = x;
             // 3 dilated conv pairs per ResBlock1
             for (int di = 0; di < 3; di++) {
                 int d = hp.resblock_dilation_sizes[ri * 3 + di];
                 int p = (rk * d - d) / 2;
 
-                ggml_tensor * yt = ggml_leaky_relu(gc, y, 0.1f, false);
+                ggml_tensor* yt = ggml_leaky_relu(gc, y, 0.1f, false);
                 yt = conv1d_cf(gc, yt, rb.convs1[di], rb.convs1_b[di], 1, p, d);
                 yt = ggml_leaky_relu(gc, yt, 0.1f, false);
-                yt = conv1d_cf(gc, yt, rb.convs2[di], rb.convs2_b[di], 1,
-                               (rk - 1) / 2, 1);
+                yt = conv1d_cf(gc, yt, rb.convs2[di], rb.convs2_b[di], 1, (rk - 1) / 2, 1);
                 y = ggml_add(gc, y, yt);
             }
 
-            if (sum_rb == nullptr) sum_rb = y;
-            else sum_rb = ggml_add(gc, sum_rb, y);
+            if (sum_rb == nullptr)
+                sum_rb = y;
+            else
+                sum_rb = ggml_add(gc, sum_rb, y);
         }
 
         x = ggml_scale(gc, sum_rb, 1.0f / (float)n_rk);
@@ -1070,7 +1052,7 @@ static bool hifigan_decode_cpu(openvoice2_context * ctx,
     x = ggml_tanh(gc, x);
 
     // Build and compute graph
-    ggml_cgraph * gf = ggml_new_graph_custom(gc, 32768, false);
+    ggml_cgraph* gf = ggml_new_graph_custom(gc, 32768, false);
     ggml_build_forward_expand(gf, x);
 
     ggml_backend_sched_reset(ctx->sched);
@@ -1095,9 +1077,10 @@ static bool hifigan_decode_cpu(openvoice2_context * ctx,
         float mn = *std::min_element(pcm_out.begin(), pcm_out.end());
         float mx = *std::max_element(pcm_out.begin(), pcm_out.end());
         double sum = 0;
-        for (auto v : pcm_out) sum += v;
-        fprintf(stderr, "openvoice2: HiFi-GAN output %d samples, min=%.6f max=%.6f mean=%.6f\n",
-                T_audio, mn, mx, (float)(sum / T_audio));
+        for (auto v : pcm_out)
+            sum += v;
+        fprintf(stderr, "openvoice2: HiFi-GAN output %d samples, min=%.6f max=%.6f mean=%.6f\n", T_audio, mn, mx,
+                (float)(sum / T_audio));
     }
 
     ggml_free(gc);
@@ -1106,15 +1089,12 @@ static bool hifigan_decode_cpu(openvoice2_context * ctx,
 
 // ── Main voice conversion API ────────────────────────────────────────
 
-extern "C" bool openvoice2_convert(
-    struct openvoice2_context * ctx,
-    const float * src_pcm, int n_src, int src_sr,
-    const float * ref_pcm, int n_ref, int ref_sr,
-    float ** out_pcm, int * n_out) {
+extern "C" bool openvoice2_convert(struct openvoice2_context* ctx, const float* src_pcm, int n_src, int src_sr,
+                                   const float* ref_pcm, int n_ref, int ref_sr, float** out_pcm, int* n_out) {
+    if (!ctx || !src_pcm || !ref_pcm || !out_pcm || !n_out)
+        return false;
 
-    if (!ctx || !src_pcm || !ref_pcm || !out_pcm || !n_out) return false;
-
-    const auto & hp = ctx->hp;
+    const auto& hp = ctx->hp;
     int target_sr = hp.sample_rate; // 22050
 
     // Resample to target sample rate
@@ -1123,22 +1103,19 @@ extern "C" bool openvoice2_convert(
     resample_linear(ref_pcm, n_ref, ref_sr, target_sr, ref_22k);
 
     if (ctx->verbosity >= 1)
-        fprintf(stderr, "openvoice2: src %d→%d samples, ref %d→%d samples\n",
-                n_src, (int)src_22k.size(), n_ref, (int)ref_22k.size());
+        fprintf(stderr, "openvoice2: src %d→%d samples, ref %d→%d samples\n", n_src, (int)src_22k.size(), n_ref,
+                (int)ref_22k.size());
 
     // 1. STFT of source and reference
     int T_src, T_ref;
     std::vector<float> src_spec, ref_spec;
-    stft_magnitude(src_22k.data(), (int)src_22k.size(),
-                   hp.filter_length, hp.hop_length, hp.win_length,
-                   src_spec, T_src);
-    stft_magnitude(ref_22k.data(), (int)ref_22k.size(),
-                   hp.filter_length, hp.hop_length, hp.win_length,
-                   ref_spec, T_ref);
+    stft_magnitude(src_22k.data(), (int)src_22k.size(), hp.filter_length, hp.hop_length, hp.win_length, src_spec,
+                   T_src);
+    stft_magnitude(ref_22k.data(), (int)ref_22k.size(), hp.filter_length, hp.hop_length, hp.win_length, ref_spec,
+                   T_ref);
 
     if (ctx->verbosity >= 1)
-        fprintf(stderr, "openvoice2: STFT — src T=%d, ref T=%d (%d bins)\n",
-                T_src, T_ref, hp.spec_channels);
+        fprintf(stderr, "openvoice2: STFT — src T=%d, ref T=%d (%d bins)\n", T_src, T_ref, hp.spec_channels);
 
     // 2. Extract target speaker embedding from reference
     std::vector<float> target_se;
@@ -1150,21 +1127,26 @@ extern "C" bool openvoice2_convert(
     if (ctx->verbosity >= 1) {
         float se_min = *std::min_element(target_se.begin(), target_se.end());
         float se_max = *std::max_element(target_se.begin(), target_se.end());
-        float se_mean = 0; for (auto v : target_se) se_mean += v; se_mean /= target_se.size();
-        fprintf(stderr, "openvoice2: target_se (256-d) min=%.4f max=%.4f mean=%.6f\n",
-                se_min, se_max, se_mean);
+        float se_mean = 0;
+        for (auto v : target_se)
+            se_mean += v;
+        se_mean /= target_se.size();
+        fprintf(stderr, "openvoice2: target_se (256-d) min=%.4f max=%.4f mean=%.6f\n", se_min, se_max, se_mean);
     }
 
     // Helper for vector stats
-    auto vec_stats = [](const char * label, const std::vector<float> & v) {
+    auto vec_stats = [](const char* label, const std::vector<float>& v) {
         float mn = *std::min_element(v.begin(), v.end());
         float mx = *std::max_element(v.begin(), v.end());
         double sum = 0, sum2 = 0;
-        for (auto x : v) { sum += x; sum2 += x * (double)x; }
+        for (auto x : v) {
+            sum += x;
+            sum2 += x * (double)x;
+        }
         float mean = (float)(sum / v.size());
         float std_dev = (float)std::sqrt(sum2 / v.size() - mean * (double)mean);
-        fprintf(stderr, "openvoice2: %s n=%zu min=%.4f max=%.4f mean=%.6f std=%.6f\n",
-                label, v.size(), mn, mx, mean, std_dev);
+        fprintf(stderr, "openvoice2: %s n=%zu min=%.4f max=%.4f mean=%.6f std=%.6f\n", label, v.size(), mn, mx, mean,
+                std_dev);
     };
 
     // 3. Posterior encoder: src_spec → z (with g=0 for zero_g)
@@ -1182,9 +1164,12 @@ extern "C" bool openvoice2_convert(
     std::vector<float> src_se;
     if (!ctx->w.base_speakers.empty()) {
         // Default to first base speaker (en-au alphabetically, or en-default if present)
-        const ov2_base_speaker * best = &ctx->w.base_speakers[0];
-        for (const auto & bs : ctx->w.base_speakers) {
-            if (bs.name == "en-default") { best = &bs; break; }
+        const ov2_base_speaker* best = &ctx->w.base_speakers[0];
+        for (const auto& bs : ctx->w.base_speakers) {
+            if (bs.name == "en-default") {
+                best = &bs;
+                break;
+            }
         }
         read_f32(best->embedding, src_se);
         if (ctx->verbosity >= 1)
@@ -1220,30 +1205,27 @@ extern "C" bool openvoice2_convert(
     }
 
     *n_out = (int)pcm.size();
-    *out_pcm = (float *)malloc(pcm.size() * sizeof(float));
+    *out_pcm = (float*)malloc(pcm.size() * sizeof(float));
     memcpy(*out_pcm, pcm.data(), pcm.size() * sizeof(float));
 
     if (ctx->verbosity >= 1)
-        fprintf(stderr, "openvoice2: output %d samples @ %d Hz (%.1f s)\n",
-                *n_out, hp.sample_rate, (float)*n_out / hp.sample_rate);
+        fprintf(stderr, "openvoice2: output %d samples @ %d Hz (%.1f s)\n", *n_out, hp.sample_rate,
+                (float)*n_out / hp.sample_rate);
 
     return true;
 }
 
-extern "C" bool openvoice2_extract_speaker_embedding(
-    struct openvoice2_context * ctx,
-    const float * ref_pcm, int n_ref, int ref_sr,
-    float * out_embedding) {
-
-    if (!ctx || !ref_pcm || !out_embedding) return false;
+extern "C" bool openvoice2_extract_speaker_embedding(struct openvoice2_context* ctx, const float* ref_pcm, int n_ref,
+                                                     int ref_sr, float* out_embedding) {
+    if (!ctx || !ref_pcm || !out_embedding)
+        return false;
 
     std::vector<float> ref_22k;
     resample_linear(ref_pcm, n_ref, ref_sr, ctx->hp.sample_rate, ref_22k);
 
     int T_ref;
     std::vector<float> ref_spec;
-    stft_magnitude(ref_22k.data(), (int)ref_22k.size(),
-                   ctx->hp.filter_length, ctx->hp.hop_length, ctx->hp.win_length,
+    stft_magnitude(ref_22k.data(), (int)ref_22k.size(), ctx->hp.filter_length, ctx->hp.hop_length, ctx->hp.win_length,
                    ref_spec, T_ref);
 
     std::vector<float> emb;
@@ -1254,12 +1236,17 @@ extern "C" bool openvoice2_extract_speaker_embedding(
     return true;
 }
 
-extern "C" void openvoice2_free(struct openvoice2_context * ctx) {
-    if (!ctx) return;
-    if (ctx->sched) ggml_backend_sched_free(ctx->sched);
-    if (ctx->w_buf) ggml_backend_buffer_free(ctx->w_buf);
-    if (ctx->w_ctx) ggml_free(ctx->w_ctx);
-    if (ctx->backend_cpu) ggml_backend_free(ctx->backend_cpu);
+extern "C" void openvoice2_free(struct openvoice2_context* ctx) {
+    if (!ctx)
+        return;
+    if (ctx->sched)
+        ggml_backend_sched_free(ctx->sched);
+    if (ctx->w_buf)
+        ggml_backend_buffer_free(ctx->w_buf);
+    if (ctx->w_ctx)
+        ggml_free(ctx->w_ctx);
+    if (ctx->backend_cpu)
+        ggml_backend_free(ctx->backend_cpu);
     delete ctx;
 }
 

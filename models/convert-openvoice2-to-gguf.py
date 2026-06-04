@@ -197,13 +197,15 @@ def main():
         if arr.ndim == 0:
             continue  # skip scalars
 
-        # Choose dtype
-        if args.all_f32 or arr.ndim <= 1:
-            # 1D tensors (biases, norms) always F32
+        # Choose dtype — WaveNet flow and enc_q weights are numerically
+        # sensitive (16 sequential layers, errors accumulate). Store as F32.
+        is_sensitive = (name.startswith("flow.") or name.startswith("enc_q.")
+                        or name.startswith("ref_enc."))
+        if args.all_f32 or arr.ndim <= 1 or is_sensitive:
             data = arr.astype(np.float32)
             dtype_gguf = 0  # GGUF_TYPE_F32
         else:
-            # 2D+ tensors as F16
+            # Decoder weights as F16 (less sensitive)
             data = arr.astype(np.float16)
             dtype_gguf = 1  # GGUF_TYPE_F16
 
