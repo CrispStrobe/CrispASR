@@ -75,12 +75,8 @@ def dump(model_dir: Path, audio: np.ndarray, stages: set, **kwargs) -> dict:
 
     config = model.config
     results = {}
-    results["__meta__"] = {
-        "backend": "kugelaudio",
-        "kugelaudio_syn_text": syn_text,
-        "seed": str(seed),
-        "steps": str(num_steps),
-    }
+    # Metadata stored as 1-element float arrays (dump_reference.py expects ndarrays)
+    results["kugelaudio_syn_text"] = np.array([0.0], dtype=np.float32)  # placeholder for GGUF meta string
 
     # Prepare inputs
     inputs = processor(text=syn_text, return_tensors="pt")
