@@ -163,7 +163,8 @@ pip3 install git+https://github.com/Kugelaudio/kugelaudio-open.git -q 2>/dev/nul
 export KUGELAUDIO_TEXT="Hello, this is a test of the speech synthesis system."
 export KUGELAUDIO_SEED=42
 export KUGELAUDIO_STEPS=20
-export KUGELAUDIO_CFG=3.0
+# CFG=1.0 for diff (no batch doubling in hooks, matches C++ which has no CFG yet)
+export KUGELAUDIO_CFG=1.0
 
 # Find the source model path
 SRC_MODEL=$(python3 -c "

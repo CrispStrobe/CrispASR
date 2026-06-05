@@ -48,7 +48,9 @@ def dump(model_dir: Path, audio: np.ndarray, stages: set, **kwargs) -> dict:
     syn_text = os.environ.get("KUGELAUDIO_TEXT", "Hello, this is a test of the speech synthesis system.")
     seed = int(os.environ.get("KUGELAUDIO_SEED", "42"))
     num_steps = int(os.environ.get("KUGELAUDIO_STEPS", "20"))
-    cfg_scale = float(os.environ.get("KUGELAUDIO_CFG", "3.0"))
+    # Default CFG=1.0 for diff (avoids batch-doubled tensors in hooks).
+    # Set KUGELAUDIO_CFG=3.0 to test with CFG (captures will be 2x batched).
+    cfg_scale = float(os.environ.get("KUGELAUDIO_CFG", "1.0"))
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
