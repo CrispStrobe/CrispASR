@@ -3303,6 +3303,134 @@ class PuncModel {
 }
 
 // =========================================================================
+// Truecasing — standalone text post-processing (C-ABI 0.5.3+)
+// =========================================================================
+
+/// Standalone truecaser model. Restores letter casing on lowercased text.
+/// Particularly useful for German (truecaser-de-lstm achieves 97.9% F1).
+///
+/// ```dart
+/// final tc = TruecaseModel.open('truecaser-de-lstm.gguf');
+/// final text = tc.process('hallo mein name ist max');
+/// print(text); // "Hallo mein Name ist Max"
+/// tc.close();
+/// ```
+class TruecaseModel {
+  final DynamicLibrary _lib;
+  Pointer<Void> _handle;
+  bool _closed = false;
+
+  TruecaseModel._(this._lib, this._handle);
+
+  /// Load a truecaser GGUF model (statistical, BiLSTM, or CRF).
+  static TruecaseModel open(String modelPath, {String? libPath}) {
+    final lib = DynamicLibrary.open(libPath ?? CrispASR.defaultLibName());
+    final initFn = lib.lookupFunction<
+        Pointer<Void> Function(Pointer<Utf8>),
+        Pointer<Void> Function(Pointer<Utf8>)>('crispasr_truecase_init');
+    final pathPtr = modelPath.toNativeUtf8();
+    final handle = initFn(pathPtr);
+    calloc.free(pathPtr);
+    if (handle == nullptr) {
+      throw Exception('Failed to load truecase model: $modelPath');
+    }
+    return TruecaseModel._(lib, handle);
+  }
+
+  /// Apply truecasing to text.
+  String process(String text) {
+    if (_closed) throw StateError('TruecaseModel is closed');
+    final processFn = _lib.lookupFunction<
+        Pointer<Utf8> Function(Pointer<Void>, Pointer<Utf8>),
+        Pointer<Utf8> Function(Pointer<Void>, Pointer<Utf8>)>('crispasr_truecase_process');
+    final freeFn = _lib.lookupFunction<
+        Void Function(Pointer<Utf8>),
+        void Function(Pointer<Utf8>)>('crispasr_truecase_free_text');
+    final textPtr = text.toNativeUtf8();
+    final resultPtr = processFn(_handle, textPtr);
+    calloc.free(textPtr);
+    if (resultPtr == nullptr) return text;
+    final result = resultPtr.toDartString();
+    freeFn(resultPtr);
+    return result;
+  }
+
+  void close() {
+    if (_closed) return;
+    _closed = true;
+    final freeFn = _lib.lookupFunction<
+        Void Function(Pointer<Void>),
+        void Function(Pointer<Void>)>('crispasr_truecase_free');
+    freeFn(_handle);
+    _handle = nullptr;
+  }
+}
+
+// =========================================================================
+// PCS — Punctuation + Capitalization + Sentence-boundary (C-ABI 0.5.3+)
+// =========================================================================
+
+/// Standalone PCS model. Applies punctuation, truecasing, and sentence
+/// boundary detection in a single pass. Supports 47 languages.
+///
+/// ```dart
+/// final pcs = PcsModel.open('pcs-47-q8_0.gguf');
+/// final text = pcs.process('hello how are you doing today');
+/// print(text); // "Hello, how are you doing today?"
+/// pcs.close();
+/// ```
+class PcsModel {
+  final DynamicLibrary _lib;
+  Pointer<Void> _handle;
+  bool _closed = false;
+
+  PcsModel._(this._lib, this._handle);
+
+  /// Load a PCS GGUF model.
+  static PcsModel open(String modelPath, {String? libPath}) {
+    final lib = DynamicLibrary.open(libPath ?? CrispASR.defaultLibName());
+    final initFn = lib.lookupFunction<
+        Pointer<Void> Function(Pointer<Utf8>),
+        Pointer<Void> Function(Pointer<Utf8>)>('crispasr_pcs_init');
+    final pathPtr = modelPath.toNativeUtf8();
+    final handle = initFn(pathPtr);
+    calloc.free(pathPtr);
+    if (handle == nullptr) {
+      throw Exception('Failed to load PCS model: $modelPath');
+    }
+    return PcsModel._(lib, handle);
+  }
+
+  /// Apply punctuation, truecasing, and sentence boundaries to text.
+  String process(String text) {
+    if (_closed) throw StateError('PcsModel is closed');
+    final processFn = _lib.lookupFunction<
+        Pointer<Utf8> Function(Pointer<Void>, Pointer<Utf8>),
+        Pointer<Utf8> Function(Pointer<Void>, Pointer<Utf8>)>('crispasr_pcs_process');
+    final freeFn = _lib.lookupFunction<
+        Void Function(Pointer<Utf8>),
+        void Function(Pointer<Utf8>)>('crispasr_pcs_free_text');
+    final textPtr = text.toNativeUtf8();
+    final resultPtr = processFn(_handle, textPtr);
+    calloc.free(textPtr);
+    if (resultPtr == nullptr) return text;
+    final result = resultPtr.toDartString();
+    freeFn(resultPtr);
+    return result;
+  }
+
+  void close() {
+    if (_closed) return;
+    _closed = true;
+    final freeFn = _lib.lookupFunction<
+        Void Function(Pointer<Void>),
+        void Function(Pointer<Void>)>('crispasr_pcs_free');
+    freeFn(_handle);
+    _handle = nullptr;
+  }
+}
+
+// =========================================================================
 // TitaNet speaker verification
 // =========================================================================
 

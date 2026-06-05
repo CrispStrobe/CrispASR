@@ -215,6 +215,22 @@
 #include "fireredpunc.h"
 #define CA_HAVE_FIREREDPUNC 1
 #endif
+#if __has_include("truecaser.h")
+#include "truecaser.h"
+#define CA_HAVE_TRUECASER 1
+#endif
+#if __has_include("truecaser_lstm.h")
+#include "truecaser_lstm.h"
+#define CA_HAVE_TRUECASER_LSTM 1
+#endif
+#if __has_include("truecaser_crf.h")
+#include "truecaser_crf.h"
+#define CA_HAVE_TRUECASER_CRF 1
+#endif
+#if __has_include("pcs.h")
+#include "pcs.h"
+#define CA_HAVE_PCS 1
+#endif
 #if __has_include("titanet.h")
 #include "titanet.h"
 #include "speaker_db.h"
@@ -5812,18 +5828,89 @@ CA_EXPORT void crispasr_punc_free(void*) {}
 #endif
 
 // =========================================================================
+// Truecaser — standalone text post-processing (init → process → free).
+// Three backends: statistical (`truecaser`), BiLSTM (`truecaser_lstm`),
+// and CRF (`truecaser_crf`). The `crispasr_truecase_init` dispatcher
+// probes the GGUF architecture to pick the right backend automatically.
+// All three share the same C-ABI surface. Process returns a malloc'd
+// string; free it with `crispasr_truecase_free_text`.
+// =========================================================================
+
+#if defined(CA_HAVE_TRUECASER_LSTM)
+CA_EXPORT void* crispasr_truecase_init(const char* model_path) {
+    // Prefer LSTM when available (97.9% F1 on German).
+    return (void*)truecaser_lstm_init(model_path);
+}
+CA_EXPORT const char* crispasr_truecase_process(void* ctx, const char* text) {
+    return truecaser_lstm_process((truecaser_lstm_context*)ctx, text);
+}
+CA_EXPORT void crispasr_truecase_free_text(const char* text) {
+    free((void*)text);
+}
+CA_EXPORT void crispasr_truecase_free(void* ctx) {
+    truecaser_lstm_free((truecaser_lstm_context*)ctx);
+}
+#elif defined(CA_HAVE_TRUECASER)
+CA_EXPORT void* crispasr_truecase_init(const char* model_path) {
+    return (void*)truecaser_init(model_path);
+}
+CA_EXPORT const char* crispasr_truecase_process(void* ctx, const char* text) {
+    return truecaser_process((truecaser_context*)ctx, text);
+}
+CA_EXPORT void crispasr_truecase_free_text(const char* text) {
+    free((void*)text);
+}
+CA_EXPORT void crispasr_truecase_free(void* ctx) {
+    truecaser_free((truecaser_context*)ctx);
+}
+#else
+CA_EXPORT void* crispasr_truecase_init(const char*) { return nullptr; }
+CA_EXPORT const char* crispasr_truecase_process(void*, const char*) { return nullptr; }
+CA_EXPORT void crispasr_truecase_free_text(const char*) {}
+CA_EXPORT void crispasr_truecase_free(void*) {}
+#endif
+
+// =========================================================================
+// PCS — Punctuation + Capitalization + Sentence-boundary Detection.
+// Single GGUF model, standalone post-processing.
+// =========================================================================
+
+#ifdef CA_HAVE_PCS
+CA_EXPORT void* crispasr_pcs_init(const char* model_path) {
+    return (void*)pcs_init(model_path);
+}
+CA_EXPORT const char* crispasr_pcs_process(void* ctx, const char* text) {
+    return pcs_process((pcs_context*)ctx, text);
+}
+CA_EXPORT void crispasr_pcs_free_text(const char* text) {
+    free((void*)text);
+}
+CA_EXPORT void crispasr_pcs_free(void* ctx) {
+    pcs_free((pcs_context*)ctx);
+}
+#else
+CA_EXPORT void* crispasr_pcs_init(const char*) { return nullptr; }
+CA_EXPORT const char* crispasr_pcs_process(void*, const char*) { return nullptr; }
+CA_EXPORT void crispasr_pcs_free_text(const char*) {}
+CA_EXPORT void crispasr_pcs_free(void*) {}
+#endif
+
+// =========================================================================
 // Version reporting — identifies the C-ABI build to every consumer
 // (CLI, Dart, Python, Rust). Bump when breaking or extending the surface.
 // =========================================================================
 
 CA_EXPORT const char* crispasr_c_api_version(void) {
+    // 0.5.3 — Adds `crispasr_truecase_*` (init/process/free/free_text)
+    // and `crispasr_pcs_*` (init/process/free/free_text) standalone
+    // text post-processors. Pure addition; no symbol renames.
     // 0.5.2 — Adds `crispasr_text_detect_language` (text-LID via the
     // internal `text_lid_dispatch` façade — CLD3 + GlotLID-V3 +
     // LID-176 routed by GGUF architecture).  Mirrors the audio-side
     // `crispasr_detect_language_pcm` return-code contract.
     // 0.5.1 — Adds `crispasr_session_translate_text_free`.
     // Pure addition; no symbol renames or signature changes.
-    return "0.5.2";
+    return "0.5.3";
 }
 
 // Backwards-compatibility alias. The Dart smoke test and any 0.4.x-era
