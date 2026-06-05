@@ -284,6 +284,14 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
             // encoder is precision-sensitive (cos drops to ~0.93 at Q4_K
             // when encoder is quantized; ~0.999 when kept F32).
             !(is_granite_family && !granite_quant_all && sname.find("enc.") == 0) &&
+            // MOSS-Audio: skip encoder + adapter + deepstack tensors.
+            // 32-layer Whisper encoder with DeepStack injection into LM
+            // is highly precision-sensitive — Q4_K encoder produces
+            // absmax=4.7 vs ref 11.0, causing garbage output. Keep
+            // enc.*, adapter.*, deepstack.* at F16; only quantize llm.*.
+            !(arch == "moss_audio" && (sname.find("enc.") == 0 ||
+                                       sname.find("adapter.") == 0 ||
+                                       sname.find("deepstack.") == 0)) &&
             // Skip small classifier heads (ECAPA cosine: 45x192, precision-critical)
             !(sname.find("cls.") == 0 && ggml_nelements(t) < 65536) &&
             // Skip OmniASR-LLM bridging tensors (enc_proj, lm_head, tok_emb, lang_emb)

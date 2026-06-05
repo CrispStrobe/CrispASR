@@ -644,8 +644,13 @@ static ggml_cgraph* moss_audio_build_encoder_graph(
         ggml_tensor* attn = ggml_flash_attn_ext(ctx0, Q, K, V, attn_mask, scale, 0.0f, 0.0f);
         ggml_flash_attn_ext_set_prec(attn, GGML_PREC_F32);
 
-        // Reshape back: (head_dim, T, n_heads) → (d, T)
-        attn = ggml_reshape_2d(ctx0, ggml_cont(ctx0, attn), d, T_down);
+        // Reshape back: flash_attn output is (head_dim, T, n_heads).
+        // Need (d=head_dim*n_heads, T) where for each T, all heads are
+        // concatenated. Permute to (head_dim, n_heads, T) first so
+        // reshape merges head_dim×n_heads into the fast axis.
+        attn = ggml_permute(ctx0, attn, 0, 2, 1, 3); // (head_dim, n_heads, T)
+        attn = ggml_cont(ctx0, attn);
+        attn = ggml_reshape_2d(ctx0, attn, d, T_down);
 
         // Output projection
         ggml_tensor* attn_out = ggml_mul_mat(ctx0, blk.attn_o_w, attn);
@@ -659,7 +664,7 @@ static ggml_cgraph* moss_audio_build_encoder_graph(
         h = ggml_add(ctx0, ggml_mul(ctx0, h, blk.ffn_norm_w), blk.ffn_norm_b);
         h = ggml_mul_mat(ctx0, blk.ffn_fc1_w, h);
         h = ggml_add(ctx0, h, blk.ffn_fc1_b);
-        h = ggml_gelu(ctx0, h);
+        h = ggml_gelu_erf(ctx0, h);
         h = ggml_mul_mat(ctx0, blk.ffn_fc2_w, h);
         h = ggml_add(ctx0, h, blk.ffn_fc2_b);
 
