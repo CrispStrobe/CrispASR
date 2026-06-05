@@ -420,11 +420,19 @@ static ggml_cgraph* build_decode_graph(tada_codec_context* c, int n_frames) {
         k = ggml_reshape_3d(ctx0, k, hd, nh, n_frames);
         v = ggml_reshape_3d(ctx0, v, hd, nh, n_frames);
 
-        // RoPE would go here — skip for now (TODO: apply from rope_freqs)
-        // The RoPE freqs are precomputed in the GGUF as (2, hd/2, max_seq_len)
+        // RoPE on (hd, nh, T) layout — ggml_rope_ext needs ne[2]=T=pos->ne[0]
+        ggml_tensor* pos = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, n_frames);
+        ggml_set_name(pos, "codec_pos");
+        ggml_set_input(pos);
+        q = ggml_rope_ext(ctx0, q, pos, nullptr,
+                          hd, GGML_ROPE_TYPE_NORMAL, 0, 10000.0f,
+                          1.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+        k = ggml_rope_ext(ctx0, k, pos, nullptr,
+                          hd, GGML_ROPE_TYPE_NORMAL, 0, 10000.0f,
+                          1.0f, 0.0f, 0.0f, 0.0f, 0.0f);
 
-        // Permute: (hd, nh, T) → (hd, T, nh) for scaled dot-product
-        q = ggml_permute(ctx0, q, 0, 2, 1, 3); // (hd, T, nh)
+        // Permute to (hd, T, nh) for attention
+        q = ggml_permute(ctx0, q, 0, 2, 1, 3);
         k = ggml_permute(ctx0, k, 0, 2, 1, 3);
         v = ggml_permute(ctx0, v, 0, 2, 1, 3);
 
@@ -571,8 +579,14 @@ float* tada_codec_decode(struct tada_codec_context* ctx,
     ggml_tensor* inp = ggml_graph_get_tensor(gf, "features");
     ggml_backend_tensor_set(inp, features, 0, (size_t)ed * n_frames * sizeof(float));
 
-    // Set the ones tensor for weight norm (if used in the graph)
-    // This needs to be set for every wn_materialize call that created a ones tensor
+    // Set position IDs for RoPE in codec attention layers
+    ggml_tensor* pos_t = ggml_graph_get_tensor(gf, "codec_pos");
+    if (pos_t) {
+        std::vector<int32_t> positions(n_frames);
+        for (int i = 0; i < n_frames; i++) positions[i] = i;
+        ggml_backend_tensor_set(pos_t, positions.data(), 0,
+                                 (size_t)n_frames * sizeof(int32_t));
+    }
     // TODO: this is a design issue — the ones tensor needs to be filled
 
     if (ggml_backend_sched_graph_compute(sched, gf) != GGML_STATUS_SUCCESS) {
