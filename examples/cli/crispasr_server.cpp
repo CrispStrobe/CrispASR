@@ -1068,7 +1068,7 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
     //     "voice":           "<name in --voice-dir>",    (optional)
     //     "instructions":    "<voice direction prose>",  (optional, applied via params.tts_instruct)
     //     "speed":           0.25 .. 4.0,                (optional, default 1.0)
-    //     "response_format": "wav" | "pcm" | "f32"       (optional, default "wav")
+    //     "response_format": "wav"|"pcm"|"f32"|"mp3"|"opus" (optional, default "wav")
     //   }
     //
     // Returns:
@@ -1230,6 +1230,11 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         if (body.contains("max_speech_tokens") && body["max_speech_tokens"].is_number_integer())
             rp.tts_max_speech_tokens = body["max_speech_tokens"].get<int>();
 
+        // Wire speed into params so backends with native duration control
+        // (e.g. melotts length_scale, piper noise_w) can use it directly.
+        // The post-synth resampler below still applies as a fallback.
+        rp.tts_speed = speed;
+
         bool stream = body.value("stream", false);
 
         // Long-form chunking (PLAN §75d / issue #66): split input on
@@ -1255,6 +1260,15 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         // same binary format as response_format=pcm, but arrives
         // incrementally. Speed resampling is still applied per-chunk.
         if (stream) {
+            // Streaming only supports PCM formats (wav/pcm/f32).
+            // mp3/opus require full-file encoding — reject with 400.
+            if (response_format == "mp3" || response_format == "opus") {
+                json_error(res, 400,
+                           "streaming is not supported with response_format='" + response_format +
+                               "'; use 'pcm', 'wav', or 'f32', or set stream=false",
+                           "invalid_request_error", "response_format");
+                return;
+            }
             // Pre-compute 200ms silence gap between chunks
             const int silence_n = sr_out / 5;
             std::vector<short> silence_s16(silence_n, 0);
