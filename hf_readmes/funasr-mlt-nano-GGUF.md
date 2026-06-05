@@ -82,7 +82,7 @@ both); no `--punc-model` post-processor needed.
 git clone https://github.com/CrispStrobe/CrispASR
 cd CrispASR
 cmake -B build-ninja-compile -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build build-ninja-compile --target crispasr
+cmake --build build-ninja-compile --target crispasr-lib
 
 # Auto-download (recommended Q4_K)
 ./build-ninja-compile/bin/crispasr -m fun-asr-mlt-nano --auto-download -f samples/jfk.wav

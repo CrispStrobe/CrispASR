@@ -380,7 +380,7 @@ def build_at(sha: str, out_lib: Path) -> None:
     # before the kill.
     with kh.build_heartbeat("cmake.build"):
         kh.sh_with_progress(
-            f"stdbuf -oL -eL cmake --build {BUILD} --target crispasr -j$(nproc)")
+            f"stdbuf -oL -eL cmake --build {BUILD} --target crispasr-cli -j$(nproc)")
     el = time.time() - t0
     # Locate the .so. Layout differs between cmake/ninja generators slightly.
     candidates = list(BUILD.rglob("libcrispasr.so"))

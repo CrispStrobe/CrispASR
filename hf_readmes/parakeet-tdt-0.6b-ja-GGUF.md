@@ -65,7 +65,7 @@ above tensors pinned to F16) is on the roadmap.
 git clone https://github.com/CrispStrobe/CrispASR
 cd CrispASR
 cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j$(nproc) --target crispasr
+cmake --build build -j$(nproc) --target crispasr-lib
 
 # 2. Download the F16
 huggingface-cli download cstr/parakeet-tdt-0.6b-ja-GGUF \

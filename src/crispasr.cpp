@@ -7216,6 +7216,15 @@ static bool whisper_vad(struct whisper_context* ctx, struct whisper_state* state
 
 int whisper_full_with_state(struct whisper_context* ctx, struct whisper_state* state, struct whisper_full_params params,
                             const float* samples, int n_samples) {
+    // Reset all schedulers so a second whisper_full() call on the same
+    // context doesn't hit GGML_ASSERT(!sched->is_alloc) if a previous
+    // call left a scheduler in the allocated state (e.g. early return,
+    // or the Java/Go bindings reusing the context across tests).
+    ggml_backend_sched_reset(state->sched_conv.sched);
+    ggml_backend_sched_reset(state->sched_encode.sched);
+    ggml_backend_sched_reset(state->sched_cross.sched);
+    ggml_backend_sched_reset(state->sched_decode.sched);
+
     // clear old results
     auto& result_all = state->result_all;
 

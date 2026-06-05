@@ -210,6 +210,8 @@ constexpr Entry k_registry[] = {
      nullptr, nullptr},
     {"omniasr", "omniasr-ctc-1b-v2-q4_k.gguf",
      "https://huggingface.co/cstr/omniASR-CTC-1B-v2-GGUF/resolve/main/omniasr-ctc-1b-v2-q4_k.gguf", "~658 MB", nullptr, nullptr},
+    {"omniasr-300m", "omniasr-ctc-300m-v2-q4_k.gguf",
+     "https://huggingface.co/cstr/omniASR-CTC-300M-v2-GGUF/resolve/main/omniasr-ctc-300m-v2-q4_k.gguf", "~194 MB", nullptr, nullptr},
     {"omniasr-llm", "omniasr-llm-300m-v2-q4_k.gguf",
      "https://huggingface.co/cstr/omniasr-llm-300m-v2-GGUF/resolve/main/omniasr-llm-300m-v2-q4_k.gguf", "~1019 MB", nullptr, nullptr},
     {"omniasr-llm-1b", "omniasr-llm-1b-q4_k.gguf",
@@ -332,6 +334,15 @@ constexpr Entry k_registry[] = {
     {"qwen3-tts", "qwen3-tts-12hz-0.6b-base-q8_0.gguf",
      "https://huggingface.co/cstr/qwen3-tts-0.6b-base-GGUF/resolve/main/qwen3-tts-12hz-0.6b-base-q8_0.gguf",
      "~986 MB",
+     "qwen3-tts-tokenizer-12hz.gguf",
+     "https://huggingface.co/cstr/qwen3-tts-tokenizer-12hz-GGUF/resolve/main/qwen3-tts-tokenizer-12hz.gguf"},
+    // gwen-tts-0.6B: Vietnamese-optimized Qwen3-TTS-0.6B-Base finetune
+    // (MIT, g-group-ai-lab). Same architecture as qwen3-tts-0.6B-Base,
+    // trained on ~1000h Vietnamese TikTok audio. Supports all 10 Qwen3-TTS
+    // languages but excels at Vietnamese. Uses the same 12 Hz tokenizer.
+    {"gwen-tts", "gwen-tts-0.6b-q8_0.gguf",
+     "https://huggingface.co/cstr/gwen-tts-0.6b-GGUF/resolve/main/gwen-tts-0.6b-q8_0.gguf",
+     "~968 MB",
      "qwen3-tts-tokenizer-12hz.gguf",
      "https://huggingface.co/cstr/qwen3-tts-tokenizer-12hz-GGUF/resolve/main/qwen3-tts-tokenizer-12hz.gguf"},
     // Qwen3-TTS-CustomVoice: fixed-speaker fine-tune of qwen3-tts-Base
@@ -585,6 +596,23 @@ constexpr Entry k_registry[] = {
     {"csm", "csm-1b-q4_k.gguf",
      "https://huggingface.co/cstr/csm-1b-GGUF/resolve/main/csm-1b-q4_k.gguf",
      "~1.4 GB", nullptr, nullptr},
+
+    // MeloTTS: VITS2 52M param TTS (myshell-ai/MeloTTS). 44.1 kHz mono.
+    // MIT license. Single GGUF with embedded CMU dictionary + neural G2P.
+    // V2: 4 English speakers (US/BR/India/AU), 112 symbols, 11 tones.
+    // V3: 1 speaker (EN-Newest), 219 symbols, 16 tones (newest checkpoint).
+    // Companion: bert-base-uncased Q4_K (52 MB) for BERT conditioning.
+    // Also available: F16 (227 MB), Q8_0 (97 MB) on the same HF repo.
+    {"melotts", "melotts-en-v2-f16.gguf",
+     "https://huggingface.co/cstr/melotts-en-v2-GGUF/resolve/main/melotts-en-v2-f16.gguf",
+     "~102+52 MB",
+     "bert-base-uncased-q4k.gguf",
+     "https://huggingface.co/cstr/melotts-en-v2-GGUF/resolve/main/bert-base-uncased-q4k.gguf"},
+    {"melotts-v3", "melotts-en-v3-f16.gguf",
+     "https://huggingface.co/cstr/melotts-en-v3-GGUF/resolve/main/melotts-en-v3-f16.gguf",
+     "~93+52 MB",
+     "bert-base-uncased.gguf",
+     "https://huggingface.co/cstr/melotts-en-v3-GGUF/resolve/main/bert-base-uncased.gguf"},
 
     // SpeechT5 TTS: 80M param AR mel decoder + HiFi-GAN vocoder.
     // MIT license (microsoft/speecht5_tts). Needs a 512-d x-vector for

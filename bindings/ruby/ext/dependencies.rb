@@ -16,11 +16,11 @@ class Dependencies
   end
 
   def libs
-    # Only include libraries reachable from the crispasr and common targets.
+    # Only include libraries reachable from the crispasr-lib and common targets.
     # Orphan static libs (e.g. granite_nle, ctc-align) that are defined but
-    # not linked into crispasr would otherwise appear in the link line and
+    # not linked into crispasr-lib would otherwise appear in the link line and
     # cause "cannot find" errors when CRISPASR_BUILD_EXAMPLES=OFF.
-    roots = @nodes.select {|_, (label, _)| label =~ /\Acrispasr\b/ || label == "common" }.keys
+    roots = @nodes.select {|_, (label, _)| label =~ /\Acrispasr-lib\b/ || label == "common" }.keys
     reachable = Set.new
     queue = roots.dup
     until queue.empty?
@@ -38,7 +38,11 @@ class Dependencies
       else
         nil
       end
-    }.reverse.collect {|lib| "lib#{lib}.a"}
+    }.reverse.collect {|lib|
+      # cmake target name → output name (OUTPUT_NAME property)
+      lib = "crispasr" if lib == "crispasr-lib"
+      "lib#{lib}.a"
+    }
   end
 
   def to_s

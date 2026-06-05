@@ -15,6 +15,8 @@
 //   GET  /backends                    — list available backends
 //   GET  /v1/models                   — OpenAI-compatible model list
 //   GET  /v1/voices                   — list voices in --voice-dir (CAP_TTS only)
+//   POST /v1/voices                   — upload voice file (multipart, CAP_TTS only)
+//   DELETE /v1/voices/:name           — delete voice file (CAP_TTS only)
 //
 // Adapted from examples/server/server.cpp for multi-backend support.
 
@@ -57,6 +59,14 @@
 #include <windows.h>
 #else
 #include <unistd.h> // mkstemp, close, unlink
+#endif
+
+// 75e: optional MP3/Opus output encoding (compile-time gated)
+#ifdef CRISPASR_HAVE_LAME
+#include <lame/lame.h>
+#endif
+#ifdef CRISPASR_HAVE_OPUS
+#include <opus/opus.h>
 #endif
 
 // ---------------------------------------------------------------------------
@@ -498,6 +508,114 @@ static transcription_result do_transcribe(const httplib::MultipartFormData& audi
 
 // crispasr_make_wav_int16 lives in crispasr_wav_writer.h so the unit
 // tests can exercise it without linking the server translation unit.
+
+// ---------------------------------------------------------------------------
+// 75e: MP3 / Opus encoding helpers (compile-time gated)
+// ---------------------------------------------------------------------------
+
+#ifdef CRISPASR_HAVE_LAME
+// Encode float32 mono PCM to MP3 via libmp3lame. Returns empty on failure.
+static std::string crispasr_encode_mp3(const float* pcm, int n_samples, int sample_rate, int bitrate_kbps = 128) {
+    lame_t lame = lame_init();
+    if (!lame)
+        return {};
+    lame_set_in_samplerate(lame, sample_rate);
+    lame_set_num_channels(lame, 1);
+    lame_set_out_samplerate(lame, sample_rate);
+    lame_set_brate(lame, bitrate_kbps);
+    lame_set_quality(lame, 2); // 2 = high quality
+    lame_set_mode(lame, MONO);
+    if (lame_init_params(lame) < 0) {
+        lame_close(lame);
+        return {};
+    }
+
+    // Convert float [-1,1] → int16
+    std::vector<short> s16(n_samples);
+    for (int i = 0; i < n_samples; i++) {
+        float v = pcm[i];
+        if (v > 1.0f)
+            v = 1.0f;
+        else if (v < -1.0f)
+            v = -1.0f;
+        s16[i] = (short)(v * 32767.0f);
+    }
+
+    // Worst-case: 1.25 * n + 7200 (lame docs)
+    size_t mp3_buf_size = (size_t)(1.25f * (float)n_samples) + 7200;
+    std::vector<unsigned char> mp3_buf(mp3_buf_size);
+
+    int written = lame_encode_buffer(lame, s16.data(), nullptr, n_samples, mp3_buf.data(), (int)mp3_buf_size);
+    if (written < 0) {
+        lame_close(lame);
+        return {};
+    }
+    int flushed = lame_encode_flush(lame, mp3_buf.data() + written, (int)(mp3_buf_size - (size_t)written));
+    lame_close(lame);
+    if (flushed < 0)
+        return {};
+
+    return std::string((const char*)mp3_buf.data(), (size_t)(written + flushed));
+}
+#endif // CRISPASR_HAVE_LAME
+
+#ifdef CRISPASR_HAVE_OPUS
+// Encode float32 mono PCM to raw Opus frames concatenated with 2-byte
+// little-endian length prefix per frame. Opus requires 48/24/16/12/8 kHz
+// input; we resample to 48 kHz if needed using linear interpolation
+// (good enough for speech; the Opus encoder does its own filtering).
+static std::string crispasr_encode_opus(const float* pcm, int n_samples, int sample_rate, int bitrate = 64000) {
+    // Resample to 48 kHz if needed
+    std::vector<float> resampled;
+    const float* src = pcm;
+    int src_n = n_samples;
+    int enc_rate = sample_rate;
+
+    // Opus supports 8000, 12000, 16000, 24000, 48000
+    if (sample_rate != 48000 && sample_rate != 24000 && sample_rate != 16000 && sample_rate != 12000 &&
+        sample_rate != 8000) {
+        enc_rate = 48000;
+        int out_n = (int)((int64_t)n_samples * 48000 / sample_rate);
+        resampled.resize(out_n);
+        for (int i = 0; i < out_n; i++) {
+            float pos = (float)i * (float)sample_rate / 48000.0f;
+            int s0 = (int)pos;
+            int s1 = std::min(s0 + 1, n_samples - 1);
+            float frac = pos - (float)s0;
+            resampled[i] = pcm[s0] * (1.0f - frac) + pcm[s1] * frac;
+        }
+        src = resampled.data();
+        src_n = out_n;
+    }
+
+    int error = 0;
+    OpusEncoder* enc = opus_encoder_create(enc_rate, 1, OPUS_APPLICATION_VOIP, &error);
+    if (error != OPUS_OK || !enc)
+        return {};
+    opus_encoder_ctl(enc, OPUS_SET_BITRATE(bitrate));
+
+    // Encode in 20ms frames
+    const int frame_samples = enc_rate / 50; // 20ms
+    // Max opus frame is 1275 bytes per channel per frame
+    std::vector<unsigned char> frame_buf(4000);
+    std::string result;
+    result.reserve((size_t)(src_n / 4)); // rough estimate
+
+    for (int offset = 0; offset + frame_samples <= src_n; offset += frame_samples) {
+        int encoded =
+            opus_encode_float(enc, src + offset, frame_samples, frame_buf.data(), (opus_int32)frame_buf.size());
+        if (encoded < 0)
+            break;
+        // Write 2-byte LE length prefix + frame data
+        uint16_t len = (uint16_t)encoded;
+        result.append((const char*)&len, 2);
+        result.append((const char*)frame_buf.data(), (size_t)encoded);
+    }
+
+    opus_encoder_destroy(enc);
+    return result;
+}
+#endif // CRISPASR_HAVE_OPUS
 
 // ---------------------------------------------------------------------------
 // Server entry point
@@ -950,7 +1068,7 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
     //     "voice":           "<name in --voice-dir>",    (optional)
     //     "instructions":    "<voice direction prose>",  (optional, applied via params.tts_instruct)
     //     "speed":           0.25 .. 4.0,                (optional, default 1.0)
-    //     "response_format": "wav" | "pcm" | "f32"       (optional, default "wav")
+    //     "response_format": "wav"|"pcm"|"f32"|"mp3"|"opus" (optional, default "wav")
     //   }
     //
     // Returns:
@@ -1029,11 +1147,30 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         std::string voice_name = body.value("voice", "");
         std::string instructions = body.value("instructions", "");
         std::string response_format = body.value("response_format", std::string("wav"));
-        if (response_format != "wav" && response_format != "pcm" && response_format != "f32") {
-            json_error(res, 400, "response_format must be one of 'wav', 'pcm', or 'f32'", "unsupported_response_format",
-                       "response_format");
+        if (response_format != "wav" && response_format != "pcm" && response_format != "f32" &&
+            response_format != "mp3" && response_format != "opus") {
+            json_error(res, 400, "response_format must be one of 'wav', 'pcm', 'f32', 'mp3', or 'opus'",
+                       "unsupported_response_format", "response_format");
             return;
         }
+#ifndef CRISPASR_HAVE_LAME
+        if (response_format == "mp3") {
+            json_error(res, 400,
+                       "mp3 output requires libmp3lame; rebuild with -DCMAKE_PREFIX_PATH pointing at lame, "
+                       "or install libmp3lame-dev",
+                       "codec_not_available", "response_format");
+            return;
+        }
+#endif
+#ifndef CRISPASR_HAVE_OPUS
+        if (response_format == "opus") {
+            json_error(res, 400,
+                       "opus output requires libopus; rebuild with -DCMAKE_PREFIX_PATH pointing at opus, "
+                       "or install libopus-dev",
+                       "codec_not_available", "response_format");
+            return;
+        }
+#endif
 
         float speed = body.value("speed", 1.0f);
         if (!(speed >= 0.25f && speed <= 4.0f)) {
@@ -1068,6 +1205,38 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         if (body.contains("frequency_penalty") && body["frequency_penalty"].is_number())
             rp.frequency_penalty = body["frequency_penalty"].get<float>();
 
+        // 75c-opt-2: native backend duration / sampling knobs.
+        // All optional; negative sentinel = "use backend default".
+        if (body.contains("top_p") && body["top_p"].is_number())
+            rp.tts_top_p = body["top_p"].get<float>();
+        if (body.contains("min_p") && body["min_p"].is_number())
+            rp.tts_min_p = body["min_p"].get<float>();
+        if (body.contains("top_k") && body["top_k"].is_number_integer())
+            rp.tts_top_k = body["top_k"].get<int>();
+        if (body.contains("repetition_penalty") && body["repetition_penalty"].is_number())
+            rp.tts_repetition_penalty = body["repetition_penalty"].get<float>();
+        if (body.contains("cfg_scale") && body["cfg_scale"].is_number())
+            rp.tts_cfg_scale = body["cfg_scale"].get<float>();
+        if (body.contains("num_steps") && body["num_steps"].is_number_integer())
+            rp.tts_num_steps = body["num_steps"].get<int>();
+        if (body.contains("noise_scale") && body["noise_scale"].is_number())
+            rp.tts_noise_scale = body["noise_scale"].get<float>();
+        if (body.contains("noise_w") && body["noise_w"].is_number())
+            rp.tts_noise_w = body["noise_w"].get<float>();
+        if (body.contains("exaggeration") && body["exaggeration"].is_number())
+            rp.tts_exaggeration = body["exaggeration"].get<float>();
+        if (body.contains("speaker_id") && body["speaker_id"].is_number_integer())
+            rp.tts_speaker_id = body["speaker_id"].get<int>();
+        if (body.contains("max_speech_tokens") && body["max_speech_tokens"].is_number_integer())
+            rp.tts_max_speech_tokens = body["max_speech_tokens"].get<int>();
+
+        // Wire speed into params so backends with native duration control
+        // (e.g. melotts length_scale, piper noise_w) can use it directly.
+        // The post-synth resampler below still applies as a fallback.
+        rp.tts_speed = speed;
+
+        bool stream = body.value("stream", false);
+
         // Long-form chunking (PLAN §75d / issue #66): split input on
         // sentence boundaries before dispatching to the backend so each
         // synth stays inside the talker's healthy training horizon.
@@ -1084,6 +1253,82 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         // voxcpm2-tts emits 48 kHz. Hard-coding 24 kHz here is why
         // voxcpm2 output played at half speed before this fix (#122).
         const int sr_out = backend->tts_sample_rate();
+
+        // 75e: streaming mode — synthesize per-sentence and push each
+        // chunk to the client as raw PCM via chunked transfer encoding.
+        // The client receives int16 LE mono PCM at sr_out. This is the
+        // same binary format as response_format=pcm, but arrives
+        // incrementally. Speed resampling is still applied per-chunk.
+        if (stream) {
+            // Streaming only supports PCM formats (wav/pcm/f32).
+            // mp3/opus require full-file encoding — reject with 400.
+            if (response_format == "mp3" || response_format == "opus") {
+                json_error(res, 400,
+                           "streaming is not supported with response_format='" + response_format +
+                               "'; use 'pcm', 'wav', or 'f32', or set stream=false",
+                           "invalid_request_error", "response_format");
+                return;
+            }
+            // Pre-compute 200ms silence gap between chunks
+            const int silence_n = sr_out / 5;
+            std::vector<short> silence_s16(silence_n, 0);
+
+            // Shared state between the main thread (which synthesizes under
+            // model_mutex) and the chunked provider callback. We synthesize
+            // all chunks first into a queue, then the provider drains it.
+            // (httplib's provider callback runs synchronously in the same
+            // thread, but this structure is clearer.)
+            std::vector<std::string> pcm_chunks;
+            {
+                std::lock_guard<std::mutex> lock(model_mutex);
+                for (size_t i = 0; i < sentences.size(); i++) {
+                    std::vector<float> chunk = backend->synthesize(sentences[i], rp);
+                    if (chunk.empty())
+                        continue;
+                    // Apply speed resampling per chunk
+                    if (speed != 1.0f) {
+                        const int in_n = (int)chunk.size();
+                        const int out_n = std::max(1, (int)((float)in_n / speed));
+                        std::vector<float> rs((size_t)out_n);
+                        for (int j = 0; j < out_n; j++) {
+                            const float s = (float)j * speed;
+                            const int s0 = (int)s;
+                            const int s1 = std::min(s0 + 1, in_n - 1);
+                            const float frac = s - (float)s0;
+                            rs[j] = chunk[s0] * (1.0f - frac) + chunk[s1] * frac;
+                        }
+                        chunk = std::move(rs);
+                    }
+                    pcm_chunks.push_back(crispasr_make_pcm_int16_le(chunk.data(), (int)chunk.size()));
+                    // Add silence gap between sentences (not after last)
+                    if (i + 1 < sentences.size()) {
+                        pcm_chunks.push_back(
+                            std::string((const char*)silence_s16.data(), silence_s16.size() * sizeof(short)));
+                    }
+                }
+            }
+            auto t1_s = std::chrono::steady_clock::now();
+            const double el = std::chrono::duration<double>(t1_s - t0).count();
+            fprintf(stderr, "crispasr-server: streaming %zu PCM chunks in %.2fs\n", pcm_chunks.size(), el);
+
+            if (pcm_chunks.empty()) {
+                json_error(res, 500, "synthesis failed (backend returned empty audio)", "synthesis_failed");
+                return;
+            }
+
+            size_t chunk_idx = 0;
+            res.set_chunked_content_provider("audio/pcm", [pcm_chunks = std::move(pcm_chunks), chunk_idx](
+                                                              size_t /*offset*/, httplib::DataSink& sink) mutable {
+                if (chunk_idx >= pcm_chunks.size()) {
+                    sink.done();
+                    return true;
+                }
+                const auto& c = pcm_chunks[chunk_idx++];
+                sink.write(c.data(), c.size());
+                return true;
+            });
+            return;
+        }
 
         std::vector<std::vector<float>> chunks;
         chunks.reserve(sentences.size());
@@ -1145,6 +1390,24 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             // a self-describing container.
             std::string raw = crispasr_make_pcm_int16_le(pcm.data(), (int)pcm.size());
             res.set_content(std::move(raw), "audio/pcm");
+#ifdef CRISPASR_HAVE_LAME
+        } else if (response_format == "mp3") {
+            std::string mp3 = crispasr_encode_mp3(pcm.data(), (int)pcm.size(), sr_out);
+            if (mp3.empty()) {
+                json_error(res, 500, "MP3 encoding failed", "encoding_failed");
+                return;
+            }
+            res.set_content(std::move(mp3), "audio/mpeg");
+#endif
+#ifdef CRISPASR_HAVE_OPUS
+        } else if (response_format == "opus") {
+            std::string opus = crispasr_encode_opus(pcm.data(), (int)pcm.size(), sr_out);
+            if (opus.empty()) {
+                json_error(res, 500, "Opus encoding failed", "encoding_failed");
+                return;
+            }
+            res.set_content(std::move(opus), "audio/opus");
+#endif
         } else {
             std::string wav = crispasr_make_wav_int16(pcm.data(), (int)pcm.size(), sr_out);
             res.set_content(std::move(wav), "audio/wav");
@@ -1190,6 +1453,123 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         }
         js << "]}";
         res.set_content(js.str(), "application/json");
+    });
+
+    // -----------------------------------------------------------------------
+    // POST /v1/voices — upload a voice file (multipart: "voice" file + optional "name" field)
+    // Returns 201 on success: {"name": "...", "format": "wav", "size_bytes": N}
+    // -----------------------------------------------------------------------
+    svr.Post("/v1/voices", [&](const Request& req, Response& res) {
+        if (!require_auth(req, res))
+            return;
+        if (params.tts_voice_dir.empty()) {
+            json_error(res, 400, "server has no --voice-dir configured; cannot store voice files");
+            return;
+        }
+        if (!req.has_file("voice")) {
+            json_error(res, 400, "missing multipart 'voice' file field");
+            return;
+        }
+        const auto& voice_file = req.get_file_value("voice");
+        if (voice_file.content.size() < 44) {
+            json_error(res, 400, "uploaded file is too small to be a valid audio file");
+            return;
+        }
+
+        // Derive voice name: from "name" form field, or from uploaded filename stem.
+        std::string voice_name;
+        if (req.has_file("name")) {
+            voice_name = req.get_file_value("name").content;
+        } else if (!voice_file.filename.empty()) {
+            voice_name = std::filesystem::path(voice_file.filename).stem().string();
+        }
+        if (voice_name.empty()) {
+            json_error(res, 400, "cannot derive voice name; provide a 'name' form field");
+            return;
+        }
+        // Validate: alphanumeric, dash, underscore only
+        for (char c : voice_name) {
+            if (!std::isalnum((unsigned char)c) && c != '-' && c != '_') {
+                json_error(res, 400, "voice name must match [a-zA-Z0-9_-]+");
+                return;
+            }
+        }
+
+        std::string dest = params.tts_voice_dir + "/" + voice_name + ".wav";
+        if (std::filesystem::exists(dest) && !req.has_param("force")) {
+            json_error(res, 409, "voice '" + voice_name + "' already exists; add ?force=true to overwrite");
+            return;
+        }
+
+        // Write the file
+        std::ofstream out(dest, std::ios::binary);
+        if (!out) {
+            json_error(res, 500, "failed to write voice file");
+            return;
+        }
+        out.write(voice_file.content.data(), (std::streamsize)voice_file.content.size());
+        out.close();
+
+        // If a "transcript" text field is provided, write the paired .txt
+        // (Qwen3-TTS ICL prefill format: <name>.wav + <name>.txt).
+        if (req.has_file("transcript")) {
+            const auto& txt = req.get_file_value("transcript");
+            std::string txt_path = params.tts_voice_dir + "/" + voice_name + ".txt";
+            std::ofstream txt_out(txt_path);
+            if (txt_out) {
+                txt_out.write(txt.content.data(), (std::streamsize)txt.content.size());
+            }
+        }
+
+        nlohmann::json resp;
+        resp["name"] = voice_name;
+        resp["format"] = "wav";
+        resp["size_bytes"] = voice_file.content.size();
+        res.status = 201;
+        res.set_content(resp.dump(), "application/json");
+        fprintf(stderr, "crispasr-server: uploaded voice '%s' (%zu bytes)\n", voice_name.c_str(),
+                voice_file.content.size());
+    });
+
+    // -----------------------------------------------------------------------
+    // DELETE /v1/voices/:name — remove a voice file from --voice-dir
+    // Returns 200: {"deleted": "<name>"}
+    // -----------------------------------------------------------------------
+    svr.Delete(R"(/v1/voices/([a-zA-Z0-9_-]+))", [&](const Request& req, Response& res) {
+        if (!require_auth(req, res))
+            return;
+        if (params.tts_voice_dir.empty()) {
+            json_error(res, 400, "server has no --voice-dir configured");
+            return;
+        }
+
+        const std::string voice_name = req.matches[1].str();
+        // Try .wav then .gguf
+        std::string wav_path = params.tts_voice_dir + "/" + voice_name + ".wav";
+        std::string gguf_path = params.tts_voice_dir + "/" + voice_name + ".gguf";
+        bool found = false;
+
+        if (std::filesystem::exists(wav_path)) {
+            std::remove(wav_path.c_str());
+            // Also remove paired .txt if present
+            std::string txt_path = params.tts_voice_dir + "/" + voice_name + ".txt";
+            std::remove(txt_path.c_str());
+            found = true;
+        }
+        if (std::filesystem::exists(gguf_path)) {
+            std::remove(gguf_path.c_str());
+            found = true;
+        }
+
+        if (!found) {
+            json_error(res, 404, "voice '" + voice_name + "' not found in --voice-dir");
+            return;
+        }
+
+        nlohmann::json resp;
+        resp["deleted"] = voice_name;
+        res.set_content(resp.dump(), "application/json");
+        fprintf(stderr, "crispasr-server: deleted voice '%s'\n", voice_name.c_str());
     });
 
     // -----------------------------------------------------------------------
@@ -1465,6 +1845,8 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
     fprintf(stderr, "  GET  /v1/models                  — model info\n");
     if (tts) {
         fprintf(stderr, "  GET  /v1/voices                  — list voices in --voice-dir\n");
+        fprintf(stderr, "  POST /v1/voices                  — upload voice file (multipart)\n");
+        fprintf(stderr, "  DELETE /v1/voices/:name          — delete voice file\n");
         if (params.tts_voice_dir.empty()) {
             fprintf(stderr, "crispasr-server: warning: --voice-dir not set; /v1/voices will return empty "
                             "and /v1/audio/speech will reject requests with a 'voice' field\n");

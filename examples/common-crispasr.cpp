@@ -1,5 +1,3 @@
-#define _USE_MATH_DEFINES // for M_PI
-
 #if defined(__APPLE__)
 #include <TargetConditionals.h>
 #endif

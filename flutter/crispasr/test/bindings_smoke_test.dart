@@ -270,6 +270,43 @@ void main() {
             'setter is missing');
   });
 
+  test('C-ABI parity: parakeet + kokoro + vad_slices + lcs symbols resolve', () {
+    for (final s in [
+      'crispasr_parakeet_init',
+      'crispasr_parakeet_free',
+      'crispasr_parakeet_transcribe',
+      'crispasr_parakeet_result_text',
+      'crispasr_parakeet_result_n_words',
+      'crispasr_parakeet_result_word_text',
+      'crispasr_parakeet_result_word_t0',
+      'crispasr_parakeet_result_word_t1',
+      'crispasr_parakeet_result_n_tokens',
+      'crispasr_parakeet_result_token_text',
+      'crispasr_parakeet_result_token_t0',
+      'crispasr_parakeet_result_token_t1',
+      'crispasr_parakeet_result_token_p',
+      'crispasr_parakeet_result_free',
+      'crispasr_kokoro_lang_is_german_abi',
+      'crispasr_kokoro_lang_has_native_voice_abi',
+      'crispasr_kokoro_resolve_model_for_lang_abi',
+      'crispasr_kokoro_resolve_fallback_voice_abi',
+      'crispasr_lcs_dedup_prefix_count',
+      'crispasr_vad_slices',
+      'crispasr_stream_set_live_decode',
+      'crispasr_titanet_cosine_sim',
+      'crispasr_session_open_with_params',
+      'crispasr_session_translate_text',
+      'crispasr_session_translate_text_free',
+      'crispasr_session_result_word_p',
+      'crispasr_params_set_max_tokens',
+      'crispasr_text_detect_language',
+      'crispasr_enhance_audio_rnnoise',
+    ]) {
+      expect(() => lib.lookup(s), returnsNormally,
+          reason: 'missing C-ABI symbol: $s');
+    }
+  });
+
   test('LidMethod enum indexes match the C-side CrispasrLidMethod', () {
     // crispasr_detect_language_pcm dispatches on the int value of
     // `method.index`; the C side's `enum class CrispasrLidMethod`

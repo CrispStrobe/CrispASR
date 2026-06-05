@@ -284,6 +284,22 @@ struct whisper_params {
     // this; only the server route reads it.
     float tts_speed = 1.0f;
 
+    // 75c-opt-2: per-request TTS backend knobs exposed via /v1/audio/speech.
+    // Negative sentinel = "use backend default". The server route parses
+    // these from JSON and each backend adapter applies them via native
+    // setter calls when non-sentinel.
+    float tts_top_p = -1.0f;
+    float tts_min_p = -1.0f;
+    int tts_top_k = -1;
+    float tts_repetition_penalty = -1.0f;
+    float tts_cfg_scale = -1.0f;    // chatterbox cfg_weight, f5 cfg_strength
+    int tts_num_steps = -1;         // chatterbox cfm_steps, f5 ode_steps
+    float tts_noise_scale = -1.0f;  // piper VITS variance
+    float tts_noise_w = -1.0f;      // piper stochastic duration predictor
+    float tts_exaggeration = -1.0f; // chatterbox expressiveness
+    int tts_speaker_id = -1;        // piper multi-speaker model
+    int tts_max_speech_tokens = -1; // chatterbox max AR tokens
+
     // Server mode: when non-empty, every server response gets the
     // Access-Control-Allow-* headers set so browser clients can call us
     // cross-origin. Default empty = no CORS headers (server stays

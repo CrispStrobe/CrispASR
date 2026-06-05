@@ -22,7 +22,7 @@ struct whisper_params; // fwd decl
 
 // Resolve the user-supplied VAD model path. When the user passed `--vad`
 // without `--vad-model` (or with `--vad-model auto|default`), download
-// the canonical ggml-silero-v5.1.2.bin into the crispasr cache dir on
+// the canonical ggml-silero-v6.2.0.bin into the crispasr cache dir on
 // first use. Returns empty if VAD was not requested at all.
 //
 // Both the unified slicer and the whisper backend call this so users

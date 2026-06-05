@@ -202,7 +202,7 @@ Additional audit tests added and run after SSH access was confirmed:
 - `../CrispLens`: `python -m pytest -q` -> `30 passed in 6.86s`.
 - `../cloud-backup`: `python -m pytest -q` ->
   `57 passed in 85.58s`.
-- `CrispASR`: `cmake --build build --target crispasr`,
+- `CrispASR`: `cmake --build build --target crispasr-lib`,
   `cmake --build build --target crispasr-cli crispasr-server -j2` -> passed
   with existing compiler warnings only.
 

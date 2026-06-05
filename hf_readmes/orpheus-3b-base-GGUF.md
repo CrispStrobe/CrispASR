@@ -42,7 +42,7 @@ The talker LM is sensitive to peaked codec distributions, so we ship F16 + Q8_0 
 git clone https://github.com/CrispStrobe/CrispASR
 cd CrispASR
 cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j --target crispasr
+cmake --build build -j --target crispasr-lib
 
 # 2. Pull the talker + the SNAC codec
 huggingface-cli download cstr/orpheus-3b-base-GGUF orpheus-3b-base-q8_0.gguf --local-dir .

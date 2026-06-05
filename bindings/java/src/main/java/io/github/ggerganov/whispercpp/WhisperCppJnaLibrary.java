@@ -10,7 +10,7 @@ import io.github.ggerganov.whispercpp.params.WhisperFullParams;
 
 public interface WhisperCppJnaLibrary extends Library {
 
-    WhisperCppJnaLibrary instance = Native.load("whisper", WhisperCppJnaLibrary.class);
+    WhisperCppJnaLibrary instance = Native.load("crispasr", WhisperCppJnaLibrary.class);
 
     String whisper_print_system_info();
 
@@ -40,6 +40,13 @@ public interface WhisperCppJnaLibrary extends Library {
      * @return Whisper context on success, null on failure
      */
     Pointer whisper_init_from_file_with_params(String path_model, WhisperContextParams.ByValue params);
+
+    /**
+     * Pointer-arg variant — avoids JNA struct-by-value alignment issues on
+     * Windows x64 where MSVC padding for structs with size_t + pointer
+     * members differs from JNA's computed layout.
+     */
+    Pointer whisper_init_from_file_with_params_by_ref(String path_model, Pointer params);
 
     /**
      * Allocate (almost) all memory needed for the model by loading from a buffer.
@@ -274,6 +281,9 @@ public interface WhisperCppJnaLibrary extends Library {
      * Uses the specified decoding strategy to obtain the text.
      */
     int whisper_full(Pointer ctx, WhisperFullParams.ByValue params, final float[] samples, int n_samples);
+
+    /** Pointer-arg variant — avoids JNA struct-by-value alignment issues on Win64. */
+    int whisper_full_by_ref(Pointer ctx, Pointer params, final float[] samples, int n_samples);
 
     public int whisper_full_with_state(Pointer ctx, Pointer state, WhisperFullParams.ByValue params, float[] samples, int n_samples);
     //int whisper_full_with_state(Pointer ctx, Pointer state, WhisperFullParams params, final float[] samples, int n_samples);

@@ -146,6 +146,144 @@ public final class CrispasrSession implements AutoCloseable {
         int     crispasr_mic_stop(Pointer mic);
         void    crispasr_mic_close(Pointer mic);
         String  crispasr_mic_default_device_name();
+
+        // --- Full C-ABI parity additions ---
+        void crispasr_stream_set_live_decode(Pointer stream, int enabled);
+
+        // params_set_* on whisper_full_params
+        void crispasr_params_set_language(Pointer p, String lang);
+        void crispasr_params_set_translate(Pointer p, int v);
+        void crispasr_params_set_detect_language(Pointer p, int v);
+        void crispasr_params_set_token_timestamps(Pointer p, int v);
+        void crispasr_params_set_n_threads(Pointer p, int n);
+        void crispasr_params_set_max_len(Pointer p, int n);
+        void crispasr_params_set_best_of(Pointer p, int n);
+        void crispasr_params_set_split_on_word(Pointer p, int v);
+        void crispasr_params_set_no_context(Pointer p, int v);
+        void crispasr_params_set_single_segment(Pointer p, int v);
+        void crispasr_params_set_print_realtime(Pointer p, int v);
+        void crispasr_params_set_print_progress(Pointer p, int v);
+        void crispasr_params_set_print_timestamps(Pointer p, int v);
+        void crispasr_params_set_print_special(Pointer p, int v);
+        void crispasr_params_set_suppress_blank(Pointer p, int v);
+        void crispasr_params_set_temperature(Pointer p, float t);
+        void crispasr_params_set_max_tokens(Pointer p, int n);
+        void crispasr_params_set_initial_prompt(Pointer p, String prompt);
+        void crispasr_params_set_alt_n(Pointer p, int n);
+        void crispasr_params_set_vad(Pointer p, int v);
+        void crispasr_params_set_vad_model_path(Pointer p, String path);
+        void crispasr_params_set_vad_threshold(Pointer p, float t);
+        void crispasr_params_set_vad_min_speech_ms(Pointer p, int ms);
+        void crispasr_params_set_vad_min_silence_ms(Pointer p, int ms);
+        void crispasr_params_set_tdrz(Pointer p, int v);
+
+        // Token-level accessors
+        long  crispasr_token_t0(Pointer ctx, int iSeg, int iTok);
+        long  crispasr_token_t1(Pointer ctx, int iSeg, int iTok);
+        float crispasr_token_p(Pointer ctx, int iSeg, int iTok);
+        int   crispasr_token_n_alts(Pointer ctx, int iSeg, int iTok);
+        int   crispasr_token_alt_id(Pointer ctx, int iSeg, int iTok, int iAlt);
+        float crispasr_token_alt_p(Pointer ctx, int iSeg, int iTok, int iAlt);
+        int   crispasr_token_alt_text(Pointer ctx, int iSeg, int iTok, int iAlt, byte[] out, int outCap);
+
+        // Language detection (whisper context)
+        float crispasr_detect_language(Pointer ctx, float[] pcm, int nSamples,
+                                       int nThreads, byte[] outCode, int outCap);
+
+        // VAD slices
+        int crispasr_vad_slices(String vadModelPath, float[] pcm, int nSamples,
+                                int sampleRate, float threshold, int minSpeechMs, int minSilenceMs,
+                                int speechPadMs, float maxChunkDurationS, int nThreads,
+                                Pointer[] outSpans);
+
+        // LCS dedup
+        int crispasr_lcs_dedup_prefix_count(int[] prevTailTokens, int nPrev,
+                                            int[] currTokens, int nCurr, int minLcsLength);
+
+        // Direct Parakeet API
+        Pointer crispasr_parakeet_init(String modelPath, int nThreads, int useFlash);
+        void    crispasr_parakeet_free(Pointer ctx);
+        Pointer crispasr_parakeet_transcribe(Pointer ctx, float[] pcm, int nSamples, String language);
+        String  crispasr_parakeet_result_text(Pointer r);
+        int     crispasr_parakeet_result_n_words(Pointer r);
+        String  crispasr_parakeet_result_word_text(Pointer r, int i);
+        long    crispasr_parakeet_result_word_t0(Pointer r, int i);
+        long    crispasr_parakeet_result_word_t1(Pointer r, int i);
+        int     crispasr_parakeet_result_n_tokens(Pointer r);
+        String  crispasr_parakeet_result_token_text(Pointer r, int i);
+        long    crispasr_parakeet_result_token_t0(Pointer r, int i);
+        long    crispasr_parakeet_result_token_t1(Pointer r, int i);
+        float   crispasr_parakeet_result_token_p(Pointer r, int i);
+        void    crispasr_parakeet_result_free(Pointer r);
+
+        // TitaNet
+        Pointer crispasr_titanet_init(String modelPath, int nThreads);
+        void    crispasr_titanet_free(Pointer ctx);
+        int     crispasr_titanet_embed(Pointer ctx, float[] pcm16k, int nSamples, float[] out);
+        float   crispasr_titanet_cosine_sim(float[] a, float[] b, int dim);
+
+        // Speaker database
+        Pointer crispasr_speaker_db_load(String dirPath);
+        void    crispasr_speaker_db_free(Pointer db);
+        int     crispasr_speaker_db_count(Pointer db);
+        float   crispasr_speaker_db_match(Pointer db, float[] embedding, int dim,
+                                          float threshold, byte[] outName, int outCap);
+        int     crispasr_speaker_db_enroll(String dirPath, String name, float[] embedding, int dim);
+
+        // Pluggable speaker embedder + clustering + pyannote cache
+        Pointer crispasr_speaker_embedder_make_abi(String modelSpec, int nThreads, String cacheDir);
+        void    crispasr_speaker_embedder_free_abi(Pointer embedder);
+        int     crispasr_speaker_embedder_dim_abi(Pointer embedder);
+        int     crispasr_speaker_embedder_embed_abi(Pointer embedder, float[] pcm16k, int nSamples, float[] out);
+        String  crispasr_speaker_embedder_name_abi(Pointer embedder);
+        int     crispasr_speaker_cluster_abi(float[] embeddings, int n, int dim,
+                                            float mergeThreshold, int maxSpeakers, int[] labelsOut);
+        Pointer crispasr_pyannote_cache_compute_abi(float[] fullAudio, int nSamples,
+                                                    String modelPath, int nThreads);
+        void    crispasr_pyannote_cache_free_abi(Pointer cache);
+        int     crispasr_pyannote_cache_apply_abi(Pointer cache, long sliceT0Cs,
+                                                  Pointer segs, int nSegs);
+
+        // Kokoro lang helpers
+        boolean crispasr_kokoro_lang_is_german_abi(String lang);
+        boolean crispasr_kokoro_lang_has_native_voice_abi(String lang);
+
+        // Backend detection
+        int crispasr_detect_backend_from_gguf(String path, byte[] outName, int outCap);
+
+        // RNNoise audio enhancement
+        int crispasr_enhance_audio_rnnoise(float[] inPcm, int nSamples, float[] outPcm, int outCap);
+
+        // Diarization
+        int crispasr_diarize_segments_abi(float[] leftPcm, float[] rightPcm, int nSamples,
+                                          int isStereo, Pointer segs, int nSegs, Pointer opts);
+
+        // Text-LID
+        int crispasr_text_detect_language(String text, String modelPath, int nThreads,
+                                          byte[] outLabel, int outLabelCap, float[] outConfidence);
+
+        // Registry extras
+        int crispasr_registry_lookup_by_filename_abi(String filename, byte[] outFilename, int filenameCap,
+                                                     byte[] outUrl, int urlCap, byte[] outSize, int sizeCap);
+        int crispasr_registry_list_backends_abi(byte[] outCsv, int outCap);
+
+        // Session extras
+        int     crispasr_session_available_backends(byte[] outCsv, int outCap);
+        Pointer crispasr_session_open_explicit(String modelPath, String backendName, int nThreads);
+        Pointer crispasr_session_open_with_params(String modelPath, String backendName, Pointer params);
+        Pointer crispasr_session_transcribe_vad_lang(Pointer session, float[] pcm, int nSamples,
+                                                     int sampleRate, String vadModelPath, Pointer opts,
+                                                     String language);
+        Pointer crispasr_session_translate_text(Pointer session, String text, String srcLang,
+                                                String tgtLang, int maxTokens);
+        void    crispasr_session_translate_text_free(Pointer text);
+        int     crispasr_session_result_word_n_alts(Pointer result, int iSeg, int iWord);
+        String  crispasr_session_result_word_alt_text(Pointer result, int iSeg, int iWord, int iAlt);
+        float   crispasr_session_result_word_alt_p(Pointer result, int iSeg, int iWord, int iAlt);
+
+        // Streaming (whisper context)
+        Pointer crispasr_stream_open(Pointer ctx, int nThreads, int stepMs,
+                                     int lengthMs, int keepMs, String language, int translate);
     }
 
     /**

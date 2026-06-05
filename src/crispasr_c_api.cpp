@@ -107,9 +107,17 @@
 #include "piper_tts.h"
 #define CA_HAVE_PIPER 1
 #endif
+#if __has_include("melotts.h")
+#include "melotts.h"
+#define CA_HAVE_MELOTTS 1
+#endif
 #if __has_include("chatterbox.h")
 #include "chatterbox.h"
 #define CA_HAVE_CHATTERBOX 1
+#endif
+#if __has_include("outetts.h")
+#include "outetts.h"
+#define CA_HAVE_OUTETTS 1
 #endif
 #if __has_include("csm_tts.h")
 #include "csm_tts.h"
@@ -1068,6 +1076,8 @@ CA_EXPORT int crispasr_detect_backend_from_gguf(const char* path, char* out_name
     else if (strcmp(arch, "chatterbox") == 0 || strcmp(arch, "chatterbox_turbo") == 0 ||
              strcmp(arch, "kartoffelbox") == 0)
         backend = "chatterbox";
+    else if (strcmp(arch, "outetts") == 0)
+        backend = "outetts";
     else if (strcmp(arch, "voxcpm2") == 0 || strcmp(arch, "voxcpm2-tts") == 0)
         backend = "voxcpm2-tts";
     else if (strcmp(arch, "cosyvoice3-llm") == 0 || strcmp(arch, "cosyvoice3") == 0 ||
@@ -1329,6 +1339,9 @@ struct crispasr_session {
 #ifdef CA_HAVE_CHATTERBOX
     chatterbox_context* chatterbox_ctx = nullptr;
 #endif
+#ifdef CA_HAVE_OUTETTS
+    outetts_context* outetts_ctx = nullptr;
+#endif
 #ifdef CA_HAVE_CSM
     csm_tts_context* csm_tts_ctx = nullptr;
 #endif
@@ -1373,6 +1386,9 @@ struct crispasr_session {
 #endif
 #ifdef CA_HAVE_PIPER
     piper_tts_context* piper_ctx = nullptr;
+#endif
+#ifdef CA_HAVE_MELOTTS
+    melotts_context* melotts_ctx = nullptr;
 #endif
 #ifdef CA_HAVE_M2M100
     m2m100_context* m2m100_ctx = nullptr;
@@ -1965,6 +1981,44 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
         return s;
     }
 #endif
+#ifdef CA_HAVE_OUTETTS
+    if (s->backend == "outetts" || s->backend == "oute-tts" || s->backend == "oute_tts") {
+        s->backend = "outetts";
+        outetts_context_params p = outetts_context_default_params();
+        p.n_threads = s->n_threads;
+        p.verbosity = g_open_verbosity_tls;
+        p.use_gpu = g_open_use_gpu_tls;
+        p.flash_attn = g_open_flash_attn_tls;
+        p.temperature = (g_open_temperature_tls > 0.0f) ? g_open_temperature_tls : 0.4f;
+        p.seed = g_open_seed_tls;
+        s->outetts_ctx = outetts_init_from_file(model_path, p);
+        if (!s->outetts_ctx) {
+            delete s;
+            return nullptr;
+        }
+        // WavTokenizer codec set via crispasr_session_set_companion_path
+        // or auto-discovered as sibling wavtokenizer-decoder-f16.gguf
+        {
+            std::string dir(model_path);
+            auto sep = dir.find_last_of("/\\");
+            if (sep != std::string::npos)
+                dir.resize(sep);
+            else
+                dir = ".";
+            const char* names[] = {"wavtokenizer-decoder-f16.gguf", "wavtokenizer-decoder.gguf"};
+            for (const char* n : names) {
+                std::string cp = dir + "/" + n;
+                FILE* f = fopen(cp.c_str(), "rb");
+                if (f) {
+                    fclose(f);
+                    outetts_set_codec_path(s->outetts_ctx, cp.c_str());
+                    break;
+                }
+            }
+        }
+        return s;
+    }
+#endif
 #ifdef CA_HAVE_CSM
     if (s->backend == "csm" || s->backend == "csm-tts" || s->backend == "sesame" || s->backend == "sesame-csm") {
         s->backend = "csm";
@@ -2251,6 +2305,42 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
         return s;
     }
 #endif
+#ifdef CA_HAVE_MELOTTS
+    if (s->backend == "melotts" || s->backend == "melo-tts" || s->backend == "melo") {
+        s->backend = "melotts";
+        melotts_params p = melotts_default_params();
+        p.n_threads = s->n_threads;
+        p.verbosity = g_open_verbosity_tls;
+        p.use_gpu = g_open_use_gpu_tls;
+        s->melotts_ctx = melotts_init_from_file(model_path, p);
+        if (!s->melotts_ctx) {
+            delete s;
+            return nullptr;
+        }
+        // Try to load BERT companion from MELOTTS_BERT env var or
+        // bert-base-uncased.gguf next to the model.
+        {
+            const char* bert_env = std::getenv("MELOTTS_BERT");
+            std::string bert_path;
+            if (bert_env && *bert_env) {
+                bert_path = bert_env;
+            } else {
+                std::string mp = model_path;
+                size_t sep = mp.find_last_of("/\\");
+                std::string dir = (sep != std::string::npos) ? mp.substr(0, sep + 1) : "./";
+                std::string candidate = dir + "bert-base-uncased.gguf";
+                FILE* test = fopen(candidate.c_str(), "rb");
+                if (test) {
+                    fclose(test);
+                    bert_path = candidate;
+                }
+            }
+            if (!bert_path.empty())
+                melotts_load_bert(s->melotts_ctx, bert_path.c_str());
+        }
+        return s;
+    }
+#endif
 #ifdef CA_HAVE_M2M100
     if (s->backend == "m2m100" || s->backend == "m2m-100" || s->backend == "translate" ||
         s->backend == "m2m100-wmt21") {
@@ -2500,7 +2590,7 @@ CA_EXPORT int crispasr_session_available_backends(char* out_csv, int out_cap) {
     // CrisperWeaver's catalogue uses so the front-door
     // available_backends check (which is strict string equality)
     // accepts them.
-    list += ",omniasr,omniasr-llm,omniasr-llm-unlimited";
+    list += ",omniasr,omniasr-300m,omniasr-llm,omniasr-llm-unlimited";
 #endif
 #ifdef CA_HAVE_ORPHEUS
     list += ",orpheus";
@@ -2510,6 +2600,9 @@ CA_EXPORT int crispasr_session_available_backends(char* out_csv, int out_cap) {
 #endif
 #ifdef CA_HAVE_CHATTERBOX
     list += ",chatterbox";
+#endif
+#ifdef CA_HAVE_OUTETTS
+    list += ",outetts";
 #endif
 #ifdef CA_HAVE_CSM
     list += ",csm";
@@ -2549,6 +2642,9 @@ CA_EXPORT int crispasr_session_available_backends(char* out_csv, int out_cap) {
 #endif
 #ifdef CA_HAVE_PIPER
     list += ",piper";
+#endif
+#ifdef CA_HAVE_MELOTTS
+    list += ",melotts";
 #endif
 #ifdef CA_HAVE_M2M100
     // m2m100-wmt21 routes through the same m2m100 engine (WMT21 Dense
@@ -4751,6 +4847,10 @@ CA_EXPORT int crispasr_session_set_codec_path(crispasr_session* s, const char* p
     if (s->chatterbox_ctx)
         return chatterbox_set_s3gen_path(s->chatterbox_ctx, path);
 #endif
+#ifdef CA_HAVE_OUTETTS
+    if (s->outetts_ctx)
+        return outetts_set_codec_path(s->outetts_ctx, path);
+#endif
 #ifdef CA_HAVE_INDEXTTS
     // indextts routes its BigVGAN vocoder companion (indextts-bigvgan)
     // through the shared codec-path setter, same as qwen3-tts/orpheus.
@@ -4965,6 +5065,12 @@ CA_EXPORT int crispasr_session_set_voice(crispasr_session* s, const char* path, 
         int rc = pocket_tts_set_voice(s->pocket_tts_ctx, pcm, n);
         free(pcm);
         return rc;
+    }
+#endif
+#ifdef CA_HAVE_OUTETTS
+    if (s->outetts_ctx) {
+        // OuteTTS speaker profiles are JSON files (not WAV).
+        return outetts_load_speaker(s->outetts_ctx, path);
     }
 #endif
     return -3;
@@ -5192,6 +5298,11 @@ CA_EXPORT float* crispasr_session_synthesize(crispasr_session* s, const char* te
         return bark_synthesize(s->bark_ctx, text, out_n_samples);
     }
 #endif
+#ifdef CA_HAVE_OUTETTS
+    if (s->outetts_ctx) {
+        return outetts_synthesize(s->outetts_ctx, text, out_n_samples);
+    }
+#endif
 #ifdef CA_HAVE_VOXCPM2
     if (s->voxcpm2_ctx) {
         // VoxCPM2 synthesises at 48 kHz mono; every other CrispASR TTS
@@ -5316,6 +5427,39 @@ CA_EXPORT float* crispasr_session_synthesize(crispasr_session* s, const char* te
             dst[j] = (float)((double)src[i0] * (1.0 - frac) + (double)src[i1] * frac);
         }
         free(src);
+        if (out_n_samples)
+            *out_n_samples = (int)nOut;
+        return dst;
+    }
+#endif
+#ifdef CA_HAVE_MELOTTS
+    if (s->melotts_ctx) {
+        // MeloTTS synthesises at 44.1 kHz; resample to 24 kHz for session contract.
+        float* src = nullptr;
+        int sr = 0;
+        const int nIn = melotts_synthesize(s->melotts_ctx, text, &src, &sr);
+        if (!src || nIn <= 0) {
+            if (src)
+                free(src);
+            return nullptr;
+        }
+        if (sr <= 0)
+            sr = 44100;
+        const int64_t nOut = (int64_t)nIn * 24000 / sr;
+        float* dst = (float*)malloc((size_t)(nOut > 0 ? nOut : 1) * sizeof(float));
+        if (!dst) {
+            free(src);
+            return nullptr;
+        }
+        const double ratio = (double)sr / 24000.0;
+        for (int64_t j = 0; j < nOut; ++j) {
+            const double pos = (double)j * ratio;
+            const int64_t i0 = (int64_t)pos;
+            const int64_t i1 = (i0 + 1 < nIn) ? i0 + 1 : nIn - 1;
+            const double frac = pos - (double)i0;
+            dst[j] = (float)((double)src[i0] * (1.0 - frac) + (double)src[i1] * frac);
+        }
+        melotts_pcm_free(src);
         if (out_n_samples)
             *out_n_samples = (int)nOut;
         return dst;
@@ -5559,6 +5703,10 @@ CA_EXPORT void crispasr_session_close(crispasr_session* s) {
     if (s->chatterbox_ctx)
         chatterbox_free(s->chatterbox_ctx);
 #endif
+#ifdef CA_HAVE_OUTETTS
+    if (s->outetts_ctx)
+        outetts_free(s->outetts_ctx);
+#endif
 #ifdef CA_HAVE_CSM
     if (s->csm_tts_ctx)
         csm_tts_free(s->csm_tts_ctx);
@@ -5610,6 +5758,10 @@ CA_EXPORT void crispasr_session_close(crispasr_session* s) {
 #ifdef CA_HAVE_PIPER
     if (s->piper_ctx)
         piper_tts_free(s->piper_ctx);
+#endif
+#ifdef CA_HAVE_MELOTTS
+    if (s->melotts_ctx)
+        melotts_free(s->melotts_ctx);
 #endif
 #ifdef CA_HAVE_M2M100
     if (s->m2m100_ctx)
@@ -5843,6 +5995,13 @@ CA_EXPORT int crispasr_session_set_temperature(crispasr_session* s, float temper
         touched++;
     }
 #endif
+#ifdef CA_HAVE_OUTETTS
+    if (s->outetts_ctx) {
+        outetts_set_temperature(s->outetts_ctx, temperature);
+        outetts_set_seed(s->outetts_ctx, seed);
+        touched++;
+    }
+#endif
 #ifdef CA_HAVE_CSM
     if (s->csm_tts_ctx) {
         csm_tts_set_temperature(s->csm_tts_ctx, temperature);
@@ -5902,6 +6061,12 @@ CA_EXPORT int crispasr_session_set_tts_seed(crispasr_session* s, uint64_t seed) 
 #ifdef CA_HAVE_CHATTERBOX
     if (s->chatterbox_ctx) {
         chatterbox_set_seed((chatterbox_context*)s->chatterbox_ctx, (uint32_t)seed);
+        touched++;
+    }
+#endif
+#ifdef CA_HAVE_OUTETTS
+    if (s->outetts_ctx) {
+        outetts_set_seed(s->outetts_ctx, seed);
         touched++;
     }
 #endif
@@ -5974,6 +6139,12 @@ CA_EXPORT int crispasr_session_set_tts_seed(crispasr_session* s, uint64_t seed) 
 #ifdef CA_HAVE_F5TTS
     if (s->f5tts_ctx) {
         f5_tts_set_seed(s->f5tts_ctx, seed);
+        touched++;
+    }
+#endif
+#ifdef CA_HAVE_MELOTTS
+    if (s->melotts_ctx) {
+        melotts_set_seed(s->melotts_ctx, (uint32_t)seed);
         touched++;
     }
 #endif

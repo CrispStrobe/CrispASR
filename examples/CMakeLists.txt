@@ -50,13 +50,13 @@ add_library(${TARGET} STATIC
     common-crispasr.cpp
     # grammar-parser.{h,cpp} moved to src/ so the library exposes
     # GBNF parsing via the public C ABI. The common target still
-    # gets it transitively via `target_link_libraries(... crispasr)`.
+    # gets it transitively via `target_link_libraries(... crispasr-lib)`.
     ${COMMON_SOURCES_FFMPEG}
     )
 
 include(DefaultTargetOptions)
 
-target_link_libraries(${TARGET} PRIVATE crispasr ${COMMON_EXTRA_LIBS} ${CMAKE_DL_LIBS})
+target_link_libraries(${TARGET} PRIVATE crispasr-lib ${COMMON_EXTRA_LIBS} ${CMAKE_DL_LIBS})
 
 # miniaudio implementation lives in both common-crispasr.cpp (MA_NO_DEVICE_IO
 # subset) and crispasr_audio.cpp (full, with device IO). On MSVC duplicate

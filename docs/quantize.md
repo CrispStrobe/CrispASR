@@ -28,8 +28,8 @@ cmake --build build -j$(nproc)
 ls build/bin/crispasr-quantize    # confirm it exists
 ```
 
-> If you previously built with `--target crispasr` (which only builds
-> the main binary), re-run **without** `--target` or with
+> If you previously built with `--target crispasr-lib` (which only builds
+> the main library), re-run **without** `--target` or with
 > `--target crispasr-quantize` to produce the quantize tool.
 
 The `scripts/dev-build.sh` wrapper accepts `--target` directly:

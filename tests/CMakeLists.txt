@@ -203,7 +203,7 @@ target_include_directories(test-params PRIVATE
 )
 target_link_libraries(test-params PRIVATE
     Catch2::Catch2WithMain
-    crispasr
+    crispasr-lib
     common
 )
 catch_discover_tests(test-params
@@ -301,7 +301,7 @@ target_include_directories(test-diarize-pyannote PRIVATE
 )
 target_link_libraries(test-diarize-pyannote PRIVATE
     Catch2::Catch2WithMain
-    crispasr
+    crispasr-lib
 )
 catch_discover_tests(test-diarize-pyannote
     TEST_SPEC "[unit]"
@@ -321,7 +321,7 @@ target_include_directories(test-diarize-pyannote-live PRIVATE
 )
 target_link_libraries(test-diarize-pyannote-live PRIVATE
     Catch2::Catch2WithMain
-    crispasr
+    crispasr-lib
 )
 catch_discover_tests(test-diarize-pyannote-live
     TEST_SPEC "[live]"
@@ -338,7 +338,7 @@ target_include_directories(test-speaker-cluster PRIVATE
 )
 target_link_libraries(test-speaker-cluster PRIVATE
     Catch2::Catch2WithMain
-    crispasr
+    crispasr-lib
 )
 catch_discover_tests(test-speaker-cluster
     TEST_SPEC "[unit]"
@@ -660,7 +660,7 @@ target_include_directories(test-lcs-c-abi PRIVATE
     ${PROJECT_SOURCE_DIR}/include
 )
 target_link_libraries(test-lcs-c-abi PRIVATE
-    crispasr
+    crispasr-lib
     Catch2::Catch2WithMain
 )
 catch_discover_tests(test-lcs-c-abi
@@ -724,7 +724,7 @@ target_include_directories(test-session-setters PRIVATE
 )
 target_link_libraries(test-session-setters PRIVATE
     Catch2::Catch2WithMain
-    crispasr
+    crispasr-lib
 )
 catch_discover_tests(test-session-setters
     TEST_SPEC "[unit]"
@@ -746,7 +746,7 @@ target_include_directories(test-session-beam PRIVATE
 )
 target_link_libraries(test-session-beam PRIVATE
     Catch2::Catch2WithMain
-    crispasr
+    crispasr-lib
 )
 catch_discover_tests(test-session-beam
     TEST_SPEC "[unit]"
@@ -958,7 +958,7 @@ target_include_directories(test_slice_timestamps PRIVATE
 )
 target_link_libraries(test_slice_timestamps PRIVATE
     Catch2::Catch2WithMain
-    crispasr
+    crispasr-lib
 )
 catch_discover_tests(test_slice_timestamps
     TEST_SPEC "[unit]"
@@ -993,7 +993,7 @@ target_link_libraries(test_qwen3_tts_talker PRIVATE qwen3_tts)
 add_executable(test-chat-ggml test-chat-ggml.cpp)
 target_link_libraries(test-chat-ggml PRIVATE
     Catch2::Catch2WithMain
-    crispasr
+    crispasr-lib
 )
 catch_discover_tests(test-chat-ggml
     TEST_SPEC "[chat]"

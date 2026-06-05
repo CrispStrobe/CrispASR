@@ -38,7 +38,7 @@ Q4_K is **not** published: per the `crispasr-diff kokoro` harness it falls below
 git clone https://github.com/CrispStrobe/CrispASR
 cd CrispASR
 cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j --target crispasr
+cmake --build build -j --target crispasr-lib
 
 # 2. Pull the model + a voice pack
 huggingface-cli download cstr/kokoro-82m-GGUF kokoro-82m-q8_0.gguf --local-dir .

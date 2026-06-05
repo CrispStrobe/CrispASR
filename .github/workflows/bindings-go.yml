@@ -4,16 +4,36 @@ on:
     paths:
       - bindings/go/**
       - crispasr.h
+      - src/CMakeLists.txt
+      - tools/cmake_graphviz_targets.py
+      - tools/sync_go_cgo_ldflags.py
   pull_request:
     paths:
       - bindings/go/**
       - crispasr.h
+      - src/CMakeLists.txt
+      - tools/cmake_graphviz_targets.py
+      - tools/sync_go_cgo_ldflags.py
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  cgo-ldflags-drift:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+      - run: |
+          cmake -S . -B /tmp/go_drift_build \
+            --graphviz=/tmp/crispasr.dot \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DCRISPASR_BUILD_TESTS=OFF \
+            -DCRISPASR_BUILD_EXAMPLES=OFF \
+            -DCRISPASR_BUILD_SERVER=OFF \
+            -DGGML_CUDA=OFF
+          python tools/sync_go_cgo_ldflags.py --check --dot /tmp/crispasr.dot
+
   ubuntu-22:
     runs-on: ubuntu-22.04
     steps:

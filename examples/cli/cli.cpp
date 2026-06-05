@@ -33,6 +33,7 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include <shellapi.h>
 #endif
 
 // helper function to replace substrings
@@ -1819,6 +1820,29 @@ int main(int argc, char** argv) {
     // are still encoded in the system's code page. In this way, we can print
     // non-ASCII characters to the console, and access files with non-ASCII paths.
     SetConsoleOutputCP(CP_UTF8);
+    // Get the true Unicode command line and convert to UTF-8.
+    // This bypasses CP_ACP entirely — works on any locale (GBK, Shift-JIS, etc.).
+    int wargc = 0;
+    LPWSTR* wargv = CommandLineToArgvW(GetCommandLineW(), &wargc);
+    std::vector<std::string> _argv_utf8;
+    std::vector<char*> _argv_ptr;
+    if (wargv && wargc > 0) {
+        _argv_utf8.reserve((size_t)wargc);
+        _argv_ptr.reserve((size_t)wargc);
+        for (int ai = 0; ai < wargc; ai++) {
+            int ulen = WideCharToMultiByte(CP_UTF8, 0, wargv[ai], -1, nullptr, 0, nullptr, nullptr);
+            if (ulen > 1) {
+                _argv_utf8.emplace_back((size_t)(ulen - 1), '\0');
+                WideCharToMultiByte(CP_UTF8, 0, wargv[ai], -1, &_argv_utf8.back()[0], ulen, nullptr, nullptr);
+            } else {
+                _argv_utf8.emplace_back();
+            }
+            _argv_ptr.push_back(&_argv_utf8.back()[0]);
+        }
+        LocalFree(wargv);
+        argc = wargc;
+        argv = _argv_ptr.data();
+    }
 #endif
 
     whisper_params params;
@@ -2259,7 +2283,7 @@ int main(int argc, char** argv) {
             wparams.suppress_nst = params.suppress_nst;
 
             // Resolve `--vad` without `--vad-model` to the canonical
-            // ggml-silero-v5.1.2.bin in the cache, downloading on first
+            // ggml-silero-v6.2.0.bin in the cache, downloading on first
             // use — matches the auto-cache UX of every non-whisper
             // backend (#33). Path must outlive whisper_full(); kept on
             // this stack frame.

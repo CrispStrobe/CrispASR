@@ -16,8 +16,8 @@
 // Default VAD models. Auto-downloaded on first use to ~/.cache/crispasr.
 // `--vad` alone → Silero. `--vad -vm firered` → FireRedVAD. `--vad -vm whisper-vad` → Whisper-VAD-EncDec.
 namespace {
-constexpr const char* kVadSileroUrl = "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v5.1.2.bin";
-constexpr const char* kVadSileroFile = "ggml-silero-v5.1.2.bin";
+constexpr const char* kVadSileroUrl = "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin";
+constexpr const char* kVadSileroFile = "ggml-silero-v6.2.0.bin";
 constexpr const char* kVadFireredUrl = "https://huggingface.co/cstr/firered-vad-GGUF/resolve/main/firered-vad.gguf";
 constexpr const char* kVadFireredFile = "firered-vad.gguf";
 constexpr const char* kVadWhisperUrl =

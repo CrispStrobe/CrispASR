@@ -54,7 +54,7 @@ Build CrispASR:
 git clone https://github.com/CrispStrobe/CrispASR
 cd CrispASR
 cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j$(nproc) --target crispasr
+cmake --build build -j$(nproc) --target crispasr-lib
 ```
 
 Download the talker + tokenizer:

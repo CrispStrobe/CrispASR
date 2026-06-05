@@ -3,8 +3,8 @@ package whisper
 // Minimal TTS surface for the Go binding. Exposes the unified
 // CrispASR Session API for TTS-capable backends (kokoro, vibevoice,
 // qwen3-tts, orpheus, chatterbox, csm, dia, speecht5, fastpitch,
-// piper, parler-tts, outetts, indextts, voxcpm2-tts, cosyvoice3-tts,
-// pocket-tts, f5-tts, bark, ...) plus the kokoro per-language
+// melotts, piper, parler-tts, outetts, indextts, voxcpm2-tts,
+// cosyvoice3-tts, pocket-tts, f5-tts, bark, ...) plus the kokoro per-language
 // model + voice resolver (PLAN #56 opt 2b).
 
 /*
@@ -161,11 +161,128 @@ int crispasr_cache_dir_abi(const char* cache_dir_override, char* out_buf, int ou
 typedef struct CrispasrStream CrispasrStream;
 CrispasrStream* crispasr_session_stream_open(CrispasrSession* s, int n_threads, int step_ms,
                                              int length_ms, int keep_ms, const char* language, int translate);
+CrispasrStream* crispasr_stream_open(void* ctx, int n_threads, int step_ms,
+                                     int length_ms, int keep_ms, const char* language, int translate);
 int             crispasr_stream_feed(CrispasrStream* s, const float* pcm, int n_samples);
 int             crispasr_stream_get_text(CrispasrStream* s, char* out_text, int out_cap,
                                          double* out_t0_s, double* out_t1_s, long long* out_counter);
 int             crispasr_stream_flush(CrispasrStream* s);
 void            crispasr_stream_close(CrispasrStream* s);
+void            crispasr_stream_set_live_decode(CrispasrStream* s, int enabled);
+
+// --- Text-LID ---
+int crispasr_text_detect_language(const char* text, const char* model_path, int n_threads,
+                                  char* out_label, int out_label_cap, float* out_confidence);
+
+// --- Backend detection ---
+int crispasr_detect_backend_from_gguf(const char* path, char* out_name, int out_cap);
+
+// --- RNNoise audio enhancement ---
+int crispasr_enhance_audio_rnnoise(const float* in_pcm, int n_samples, float* out_pcm, int out_cap);
+
+// --- params_set_* on whisper_full_params ---
+void crispasr_params_set_language(void* p, const char* lang);
+void crispasr_params_set_translate(void* p, int v);
+void crispasr_params_set_detect_language(void* p, int v);
+void crispasr_params_set_token_timestamps(void* p, int v);
+void crispasr_params_set_n_threads(void* p, int n);
+void crispasr_params_set_max_len(void* p, int n);
+void crispasr_params_set_best_of(void* p, int n);
+void crispasr_params_set_split_on_word(void* p, int v);
+void crispasr_params_set_no_context(void* p, int v);
+void crispasr_params_set_single_segment(void* p, int v);
+void crispasr_params_set_print_realtime(void* p, int v);
+void crispasr_params_set_print_progress(void* p, int v);
+void crispasr_params_set_print_timestamps(void* p, int v);
+void crispasr_params_set_print_special(void* p, int v);
+void crispasr_params_set_suppress_blank(void* p, int v);
+void crispasr_params_set_temperature(void* p, float t);
+void crispasr_params_set_max_tokens(void* p, int n);
+void crispasr_params_set_initial_prompt(void* p, const char* prompt);
+void crispasr_params_set_alt_n(void* p, int n);
+void crispasr_params_set_vad(void* p, int v);
+void crispasr_params_set_vad_model_path(void* p, const char* path);
+void crispasr_params_set_vad_threshold(void* p, float t);
+void crispasr_params_set_vad_min_speech_ms(void* p, int ms);
+void crispasr_params_set_vad_min_silence_ms(void* p, int ms);
+void crispasr_params_set_tdrz(void* p, int v);
+
+// --- Token-level accessors ---
+long long crispasr_token_t0(void* ctx, int i_seg, int i_tok);
+long long crispasr_token_t1(void* ctx, int i_seg, int i_tok);
+float     crispasr_token_p(void* ctx, int i_seg, int i_tok);
+int       crispasr_token_n_alts(void* ctx, int i_seg, int i_tok);
+int       crispasr_token_alt_id(void* ctx, int i_seg, int i_tok, int i_alt);
+float     crispasr_token_alt_p(void* ctx, int i_seg, int i_tok, int i_alt);
+int       crispasr_token_alt_text(void* ctx, int i_seg, int i_tok, int i_alt, char* out, int out_cap);
+
+// --- Language detection (whisper context) ---
+float crispasr_detect_language(void* ctx, const float* pcm, int n_samples,
+                               int n_threads, char* out_code, int out_cap);
+
+// --- VAD slices ---
+int crispasr_vad_slices(const char* vad_model_path, const float* pcm, int n_samples,
+                        int sample_rate, float threshold, int min_speech_ms, int min_silence_ms,
+                        int speech_pad_ms, float max_chunk_duration_s, int n_threads,
+                        float** out_spans);
+
+// --- LCS dedup ---
+int crispasr_lcs_dedup_prefix_count(const int* prev_tail_tokens, int n_prev,
+                                    const int* curr_tokens, int n_curr, int min_lcs_length);
+
+// --- Direct Parakeet API ---
+void* crispasr_parakeet_init(const char* model_path, int n_threads, int use_flash);
+void  crispasr_parakeet_free(void* ctx);
+void* crispasr_parakeet_transcribe(void* ctx, const float* pcm, int n_samples, const char* language);
+const char* crispasr_parakeet_result_text(void* r);
+int         crispasr_parakeet_result_n_words(void* r);
+const char* crispasr_parakeet_result_word_text(void* r, int i);
+long long   crispasr_parakeet_result_word_t0(void* r, int i);
+long long   crispasr_parakeet_result_word_t1(void* r, int i);
+int         crispasr_parakeet_result_n_tokens(void* r);
+const char* crispasr_parakeet_result_token_text(void* r, int i);
+long long   crispasr_parakeet_result_token_t0(void* r, int i);
+long long   crispasr_parakeet_result_token_t1(void* r, int i);
+float       crispasr_parakeet_result_token_p(void* r, int i);
+void        crispasr_parakeet_result_free(void* r);
+
+// --- TitaNet ---
+void* crispasr_titanet_init(const char* model_path, int n_threads);
+void  crispasr_titanet_free(void* ctx);
+int   crispasr_titanet_embed(void* ctx, const float* pcm_16k, int n_samples, float* out);
+float crispasr_titanet_cosine_sim(const float* a, const float* b, int dim);
+
+// --- Speaker database ---
+void* crispasr_speaker_db_load(const char* dir_path);
+void  crispasr_speaker_db_free(void* db);
+int   crispasr_speaker_db_count(const void* db);
+float crispasr_speaker_db_match(const void* db, const float* embedding, int dim,
+                                float threshold, char* out_name, int out_cap);
+int   crispasr_speaker_db_enroll(const char* dir_path, const char* name,
+                                 const float* embedding, int dim);
+
+// --- Kokoro lang helpers ---
+int  crispasr_kokoro_lang_is_german_abi(const char* lang);
+int  crispasr_kokoro_lang_has_native_voice_abi(const char* lang);
+
+// --- Registry by filename ---
+int crispasr_registry_lookup_by_filename_abi(const char* filename, char* out_filename, int filename_cap,
+                                             char* out_url, int url_cap, char* out_size, int size_cap);
+int crispasr_registry_list_backends_abi(char* out_csv, int out_cap);
+
+// --- Session extras ---
+int crispasr_session_available_backends(char* out_csv, int out_cap);
+CrispasrSession* crispasr_session_open_explicit(const char* model_path, const char* backend_name, int n_threads);
+CrispasrSession* crispasr_session_open_with_params(const char* model_path, const char* backend_name, const void* params);
+crispasr_session_result* crispasr_session_transcribe_vad_lang(CrispasrSession* s, const float* pcm, int n_samples,
+                                                              int sample_rate, const char* vad_model_path, void* opts,
+                                                              const char* language);
+char* crispasr_session_translate_text(CrispasrSession* s, const char* text, const char* src_lang,
+                                      const char* tgt_lang, int max_tokens);
+void  crispasr_session_translate_text_free(char* text);
+int   crispasr_session_result_word_n_alts(crispasr_session_result* r, int i_seg, int i_word);
+const char* crispasr_session_result_word_alt_text(crispasr_session_result* r, int i_seg, int i_word, int i_alt);
+float crispasr_session_result_word_alt_p(crispasr_session_result* r, int i_seg, int i_word, int i_alt);
 */
 import "C"
 
@@ -1295,4 +1412,431 @@ func KokoroResolveForLang(modelPath, lang string) (KokoroResolved, error) {
 		out.VoiceName = C.GoString(outPicked)
 	}
 	return out, nil
+}
+
+// ---------------------------------------------------------------------------
+// Full C-ABI parity wrappers (PLAN #59 bindings-parity milestone)
+// ---------------------------------------------------------------------------
+
+// SessionOpenExplicit opens a session with an explicit backend name override.
+func SessionOpenExplicit(modelPath, backendName string, nThreads int) (*CrispasrSession, error) {
+	cpath := C.CString(modelPath)
+	defer C.free(unsafe.Pointer(cpath))
+	cbe := C.CString(backendName)
+	defer C.free(unsafe.Pointer(cbe))
+	h := C.crispasr_session_open_explicit(cpath, cbe, C.int(nThreads))
+	if h == nil {
+		return nil, fmt.Errorf("crispasr_session_open_explicit: failed to open %s (backend=%s)", modelPath, backendName)
+	}
+	return &CrispasrSession{handle: h}, nil
+}
+
+// AvailableBackends returns the comma-separated list of backend names
+// the loaded libcrispasr was built with.
+func AvailableBackends() []string {
+	var buf [1024]C.char
+	C.crispasr_session_available_backends(&buf[0], 1024)
+	csv := C.GoString(&buf[0])
+	if csv == "" {
+		return nil
+	}
+	var out []string
+	for _, s := range splitCSV(csv) {
+		if s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+func splitCSV(s string) []string {
+	var out []string
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == ',' {
+			out = append(out, s[start:i])
+			start = i + 1
+		}
+	}
+	if start < len(s) {
+		out = append(out, s[start:])
+	}
+	return out
+}
+
+// TranslateText translates text via the session's MT-capable backend.
+// Returns empty string if the backend doesn't support translation.
+func (s *CrispasrSession) TranslateText(text, srcLang, tgtLang string, maxTokens int) (string, error) {
+	ct := C.CString(text)
+	defer C.free(unsafe.Pointer(ct))
+	cs := C.CString(srcLang)
+	defer C.free(unsafe.Pointer(cs))
+	ctg := C.CString(tgtLang)
+	defer C.free(unsafe.Pointer(ctg))
+	res := C.crispasr_session_translate_text(s.handle, ct, cs, ctg, C.int(maxTokens))
+	if res == nil {
+		return "", nil
+	}
+	out := C.GoString(res)
+	C.crispasr_session_translate_text_free(res)
+	return out, nil
+}
+
+// TranscribeVadLang transcribes with VAD segmentation and a language hint.
+func (s *CrispasrSession) TranscribeVadLang(pcm []float32, sampleRate int,
+	vadModelPath string, language string) (*TranscribeResult, error) {
+	if len(pcm) == 0 {
+		return nil, nil
+	}
+	cvad := C.CString(vadModelPath)
+	defer C.free(unsafe.Pointer(cvad))
+	clang := C.CString(language)
+	defer C.free(unsafe.Pointer(clang))
+	res := C.crispasr_session_transcribe_vad_lang(s.handle,
+		(*C.float)(unsafe.Pointer(&pcm[0])), C.int(len(pcm)),
+		C.int(sampleRate), cvad, nil, clang)
+	if res == nil {
+		return nil, fmt.Errorf("crispasr_session_transcribe_vad_lang failed")
+	}
+	defer C.crispasr_session_result_free(res)
+	return extractResult(res), nil
+}
+
+// DetectBackendFromGGUF returns the backend name from GGUF metadata.
+func DetectBackendFromGGUF(path string) (string, error) {
+	cpath := C.CString(path)
+	defer C.free(unsafe.Pointer(cpath))
+	var out [128]C.char
+	rc := C.crispasr_detect_backend_from_gguf(cpath, &out[0], 128)
+	if rc != 0 {
+		return "", fmt.Errorf("detect_backend_from_gguf failed for %s", path)
+	}
+	return C.GoString(&out[0]), nil
+}
+
+// EnhanceAudioRnnoise applies RNNoise denoising to 48 kHz mono PCM.
+func EnhanceAudioRnnoise(pcm []float32) ([]float32, error) {
+	out := make([]float32, len(pcm))
+	rc := C.crispasr_enhance_audio_rnnoise(
+		(*C.float)(unsafe.Pointer(&pcm[0])), C.int(len(pcm)),
+		(*C.float)(unsafe.Pointer(&out[0])), C.int(len(out)))
+	if rc != 0 {
+		return nil, fmt.Errorf("enhance_audio_rnnoise failed (rc=%d)", int(rc))
+	}
+	return out, nil
+}
+
+// TextDetectLanguage classifies the language of a text string.
+// Returns (langCode, confidence).
+func TextDetectLanguage(text, modelPath string, nThreads int) (string, float32, error) {
+	ct := C.CString(text)
+	defer C.free(unsafe.Pointer(ct))
+	cm := C.CString(modelPath)
+	defer C.free(unsafe.Pointer(cm))
+	var label [64]C.char
+	var conf C.float
+	rc := C.crispasr_text_detect_language(ct, cm, C.int(nThreads), &label[0], 64, &conf)
+	if rc != 0 {
+		return "", 0, fmt.Errorf("text_detect_language failed (rc=%d)", int(rc))
+	}
+	return C.GoString(&label[0]), float32(conf), nil
+}
+
+// RegistryLookupByFilename looks up a model by filename.
+func RegistryLookupByFilename(filename string) (RegistryEntry, error) {
+	cf := C.CString(filename)
+	defer C.free(unsafe.Pointer(cf))
+	var fname, url, sz [512]C.char
+	rc := C.crispasr_registry_lookup_by_filename_abi(cf, &fname[0], 512, &url[0], 512, &sz[0], 512)
+	if rc != 0 {
+		return RegistryEntry{}, fmt.Errorf("no registry entry for filename %q", filename)
+	}
+	return RegistryEntry{
+		Filename: C.GoString(&fname[0]),
+		URL:      C.GoString(&url[0]),
+		Size:     C.GoString(&sz[0]),
+	}, nil
+}
+
+// ListKnownModels returns every backend name in the registry.
+func ListKnownModels() []string {
+	var buf [8192]C.char
+	n := C.crispasr_registry_list_backends_abi(&buf[0], 8192)
+	if n <= 0 {
+		return nil
+	}
+	return splitCSV(C.GoString(&buf[0]))
+}
+
+// KokoroLangIsGerman returns true if the lang code maps to German.
+func KokoroLangIsGerman(lang string) bool {
+	cl := C.CString(lang)
+	defer C.free(unsafe.Pointer(cl))
+	return C.crispasr_kokoro_lang_is_german_abi(cl) != 0
+}
+
+// KokoroLangHasNativeVoice returns true if the lang has a native Kokoro voice.
+func KokoroLangHasNativeVoice(lang string) bool {
+	cl := C.CString(lang)
+	defer C.free(unsafe.Pointer(cl))
+	return C.crispasr_kokoro_lang_has_native_voice_abi(cl) != 0
+}
+
+// VadSlices runs the unified VAD dispatcher returning speech spans in seconds.
+func VadSlices(modelPath string, pcm []float32, sampleRate int,
+	threshold float32, minSpeechMs, minSilenceMs, speechPadMs int,
+	maxChunkDurationS float32, nThreads int) ([][2]float32, error) {
+	cm := C.CString(modelPath)
+	defer C.free(unsafe.Pointer(cm))
+	var outSpans *C.float
+	n := C.crispasr_vad_slices(cm,
+		(*C.float)(unsafe.Pointer(&pcm[0])), C.int(len(pcm)),
+		C.int(sampleRate), C.float(threshold),
+		C.int(minSpeechMs), C.int(minSilenceMs), C.int(speechPadMs),
+		C.float(maxChunkDurationS), C.int(nThreads), &outSpans)
+	if n < 0 {
+		return nil, fmt.Errorf("crispasr_vad_slices failed (rc=%d)", int(n))
+	}
+	spans := make([][2]float32, int(n))
+	if n > 0 {
+		raw := (*[1 << 28]C.float)(unsafe.Pointer(outSpans))
+		for i := 0; i < int(n); i++ {
+			spans[i] = [2]float32{float32(raw[2*i]), float32(raw[2*i+1])}
+		}
+		C.crispasr_vad_free(outSpans)
+	}
+	return spans, nil
+}
+
+// LcsDedup returns the number of leading tokens to drop from curr to
+// remove overlap with prevTail.
+func LcsDedup(prevTail, curr []int32, minLcsLength int) int {
+	if len(prevTail) == 0 || len(curr) == 0 {
+		return 0
+	}
+	return int(C.crispasr_lcs_dedup_prefix_count(
+		(*C.int)(unsafe.Pointer(&prevTail[0])), C.int(len(prevTail)),
+		(*C.int)(unsafe.Pointer(&curr[0])), C.int(len(curr)),
+		C.int(minLcsLength)))
+}
+
+// ---------------------------------------------------------------------------
+// Direct Parakeet API
+// ---------------------------------------------------------------------------
+
+// ParakeetContext wraps a direct Parakeet ASR context.
+type ParakeetContext struct {
+	handle unsafe.Pointer
+}
+
+// ParakeetWord holds word-level timing from a Parakeet result.
+type ParakeetWord struct {
+	Text string
+	T0   int64
+	T1   int64
+}
+
+// ParakeetToken holds token-level timing from a Parakeet result.
+type ParakeetToken struct {
+	Text string
+	T0   int64
+	T1   int64
+	P    float32
+}
+
+// ParakeetResult holds the full Parakeet transcription output.
+type ParakeetResult struct {
+	Text   string
+	Words  []ParakeetWord
+	Tokens []ParakeetToken
+}
+
+// ParakeetInit loads a Parakeet model.
+func ParakeetInit(modelPath string, nThreads int, useFlash bool) (*ParakeetContext, error) {
+	cm := C.CString(modelPath)
+	defer C.free(unsafe.Pointer(cm))
+	flash := C.int(0)
+	if useFlash {
+		flash = 1
+	}
+	h := C.crispasr_parakeet_init(cm, C.int(nThreads), flash)
+	if h == nil {
+		return nil, fmt.Errorf("crispasr_parakeet_init failed for %s", modelPath)
+	}
+	return &ParakeetContext{handle: h}, nil
+}
+
+// Transcribe runs Parakeet ASR on mono 16 kHz float32 PCM.
+func (p *ParakeetContext) Transcribe(pcm []float32, language string) (*ParakeetResult, error) {
+	var clang *C.char
+	if language != "" {
+		clang = C.CString(language)
+		defer C.free(unsafe.Pointer(clang))
+	}
+	res := C.crispasr_parakeet_transcribe(p.handle,
+		(*C.float)(unsafe.Pointer(&pcm[0])), C.int(len(pcm)), clang)
+	if res == nil {
+		return nil, fmt.Errorf("crispasr_parakeet_transcribe returned null")
+	}
+	defer C.crispasr_parakeet_result_free(res)
+
+	textPtr := C.crispasr_parakeet_result_text(res)
+	text := ""
+	if textPtr != nil {
+		text = C.GoString(textPtr)
+	}
+
+	nw := int(C.crispasr_parakeet_result_n_words(res))
+	words := make([]ParakeetWord, nw)
+	for i := 0; i < nw; i++ {
+		wp := C.crispasr_parakeet_result_word_text(res, C.int(i))
+		wt := ""
+		if wp != nil {
+			wt = C.GoString(wp)
+		}
+		words[i] = ParakeetWord{
+			Text: wt,
+			T0:   int64(C.crispasr_parakeet_result_word_t0(res, C.int(i))),
+			T1:   int64(C.crispasr_parakeet_result_word_t1(res, C.int(i))),
+		}
+	}
+
+	nt := int(C.crispasr_parakeet_result_n_tokens(res))
+	tokens := make([]ParakeetToken, nt)
+	for i := 0; i < nt; i++ {
+		tp := C.crispasr_parakeet_result_token_text(res, C.int(i))
+		tt := ""
+		if tp != nil {
+			tt = C.GoString(tp)
+		}
+		tokens[i] = ParakeetToken{
+			Text: tt,
+			T0:   int64(C.crispasr_parakeet_result_token_t0(res, C.int(i))),
+			T1:   int64(C.crispasr_parakeet_result_token_t1(res, C.int(i))),
+			P:    float32(C.crispasr_parakeet_result_token_p(res, C.int(i))),
+		}
+	}
+
+	return &ParakeetResult{Text: text, Words: words, Tokens: tokens}, nil
+}
+
+// Close frees the Parakeet context.
+func (p *ParakeetContext) Close() {
+	if p != nil && p.handle != nil {
+		C.crispasr_parakeet_free(p.handle)
+		p.handle = nil
+	}
+}
+
+// ---------------------------------------------------------------------------
+// TitaNet speaker verification
+// ---------------------------------------------------------------------------
+
+// TitaNetContext wraps a TitaNet-Large speaker embedding model.
+type TitaNetContext struct {
+	handle unsafe.Pointer
+}
+
+// TitaNetInit loads a TitaNet model.
+func TitaNetInit(modelPath string, nThreads int) (*TitaNetContext, error) {
+	cm := C.CString(modelPath)
+	defer C.free(unsafe.Pointer(cm))
+	h := C.crispasr_titanet_init(cm, C.int(nThreads))
+	if h == nil {
+		return nil, fmt.Errorf("crispasr_titanet_init failed for %s", modelPath)
+	}
+	return &TitaNetContext{handle: h}, nil
+}
+
+// Embed extracts a 192-d speaker embedding from 16 kHz mono PCM.
+func (t *TitaNetContext) Embed(pcm16k []float32) ([]float32, error) {
+	out := make([]float32, 192)
+	dim := C.crispasr_titanet_embed(t.handle,
+		(*C.float)(unsafe.Pointer(&pcm16k[0])), C.int(len(pcm16k)),
+		(*C.float)(unsafe.Pointer(&out[0])))
+	if dim <= 0 {
+		return nil, fmt.Errorf("titanet_embed failed")
+	}
+	return out[:int(dim)], nil
+}
+
+// Close frees the TitaNet context.
+func (t *TitaNetContext) Close() {
+	if t != nil && t.handle != nil {
+		C.crispasr_titanet_free(t.handle)
+		t.handle = nil
+	}
+}
+
+// TitaNetCosineSim returns the cosine similarity between two embeddings.
+func TitaNetCosineSim(a, b []float32) float32 {
+	dim := len(a)
+	if len(b) < dim {
+		dim = len(b)
+	}
+	return float32(C.crispasr_titanet_cosine_sim(
+		(*C.float)(unsafe.Pointer(&a[0])),
+		(*C.float)(unsafe.Pointer(&b[0])),
+		C.int(dim)))
+}
+
+// ---------------------------------------------------------------------------
+// Speaker database
+// ---------------------------------------------------------------------------
+
+// SpeakerDB wraps a file-based speaker profile database.
+type SpeakerDB struct {
+	handle  unsafe.Pointer
+	dirPath string
+}
+
+// SpeakerDBLoad opens a speaker database directory.
+func SpeakerDBLoad(dirPath string) (*SpeakerDB, error) {
+	cd := C.CString(dirPath)
+	defer C.free(unsafe.Pointer(cd))
+	h := C.crispasr_speaker_db_load(cd)
+	if h == nil {
+		return nil, fmt.Errorf("crispasr_speaker_db_load failed for %s", dirPath)
+	}
+	return &SpeakerDB{handle: h, dirPath: dirPath}, nil
+}
+
+// Count returns the number of enrolled speakers.
+func (db *SpeakerDB) Count() int {
+	return int(C.crispasr_speaker_db_count(db.handle))
+}
+
+// Match returns (name, score) for the best match, or ("", score) if below threshold.
+func (db *SpeakerDB) Match(embedding []float32, threshold float32) (string, float32) {
+	var name [256]C.char
+	score := C.crispasr_speaker_db_match(db.handle,
+		(*C.float)(unsafe.Pointer(&embedding[0])), C.int(len(embedding)),
+		C.float(threshold), &name[0], 256)
+	n := ""
+	if float32(score) >= threshold {
+		n = C.GoString(&name[0])
+	}
+	return n, float32(score)
+}
+
+// Enroll adds a speaker to the database.
+func (db *SpeakerDB) Enroll(name string, embedding []float32) error {
+	cd := C.CString(db.dirPath)
+	defer C.free(unsafe.Pointer(cd))
+	cn := C.CString(name)
+	defer C.free(unsafe.Pointer(cn))
+	rc := C.crispasr_speaker_db_enroll(cd, cn,
+		(*C.float)(unsafe.Pointer(&embedding[0])), C.int(len(embedding)))
+	if rc != 0 {
+		return fmt.Errorf("speaker_db_enroll failed (rc=%d)", int(rc))
+	}
+	return nil
+}
+
+// Close frees the speaker database.
+func (db *SpeakerDB) Close() {
+	if db != nil && db.handle != nil {
+		C.crispasr_speaker_db_free(db.handle)
+		db.handle = nil
+	}
 }

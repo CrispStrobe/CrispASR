@@ -60,7 +60,14 @@ public class WhisperCpp implements AutoCloseable {
             modelPath = new File(modelDir(), modelPath).getAbsolutePath();
         }
 
-        ctx = lib.whisper_init_from_file_with_params(modelPath, params);
+        // Use the _by_ref variant to avoid JNA struct-by-value alignment
+        // issues on Windows x64 (MSVC padding differs from JNA's layout
+        // for structs containing size_t + pointer members like whisper_aheads).
+        // Write user settings into the native-allocated struct via the pointer.
+        Pointer paramsPtr = lib.whisper_context_default_params_by_ref();
+        paramsPtr.setByte(0, params.use_gpu != null ? params.use_gpu.byteValue() : 1);
+        paramsPtr.setByte(1, params.flash_attn != null ? params.flash_attn.byteValue() : 1);
+        ctx = lib.whisper_init_from_file_with_params_by_ref(modelPath, paramsPtr);
 
         if (ctx == null) {
             throw new FileNotFoundException(modelPath);
@@ -144,12 +151,6 @@ public class WhisperCpp implements AutoCloseable {
         if (ctx == null) {
             throw new IllegalStateException("Model not initialised");
         }
-
-        /*
-        WhisperFullParams.ByValue valueParams = new WhisperFullParams.ByValue(
-            lib.whisper_full_default_params_by_ref(WhisperSamplingStrategy.CRISPASR_SAMPLING_BEAM_SEARCH.ordinal()));
-        valueParams.read();
-        */
 
         if (lib.whisper_full(ctx, whisperParams, audioData, audioData.length) != 0) {
             throw new IOException("Failed to process audio");

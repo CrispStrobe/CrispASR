@@ -6,6 +6,7 @@ trade-off:
 
 | Backend | Why pick it | Voice cloning | First-run download |
 |---|---|---|---|
+| **`melotts`** | Multilingual VITS2 (MeloTTS). 4 English speakers (US/BR/India/AU). 44.1 kHz output, ~102 MB GGUF. Neural G2P + CMU dict. BERT companion (Q4_K 52 MB) auto-downloads with `-m auto`; also via `--codec-model` or `MELOTTS_BERT` env. | No (per-speaker ID) | ~154 MB via `-m auto` |
 | **`piper`** | Tiniest footprint (30 MB). rhasspy/piper VITS; 250+ community voices across 30+ languages via espeak-ng phonemizer. 22 kHz output. | No (per-voice GGUF) | Manual `wget` |
 | **`kokoro`** | Smallest + fastest. 82 M-param StyleTTS2-derived model. Multilingual via espeak-ng + native German backbone. | No (preset voice packs) | Manual `wget` (no `-m auto`) |
 | **`qwen3-tts`** | Highest fidelity / strongest cloning. Speech-LLM (talker + code predictor + 12 Hz codec). | Yes (WAV + ref-text or baked voice GGUF) | ~1.3 GB via `-m auto` |
@@ -26,7 +27,7 @@ trade-off:
 | **`voxcpm2-tts`** | VoxCPM2: 2B Qwen2 backbone + flow matching + BigVGAN @ 48 kHz (decimated to 24 kHz). Zero-shot voice cloning via `--voice <ref.wav>`. | Yes | ~2.4 GB via `-m auto` |
 | **`pocket-tts`** | Kyutai Pocket TTS 100M: continuous-latent AR @ 12.5 Hz + one-step LSD flow head + Mimi VAE decoder → 24 kHz. MIT / CC-BY-4.0. Voice cloning via `--voice ref.wav`. | Yes (`--voice`) | ~220 MB via `-m auto` (F16 GGUF) |
 
-All backends write mono WAV via `--tts-output` (22 kHz for piper/fastpitch, 16 kHz for speecht5, 24 kHz for most others, 44.1 kHz for dia/parler-tts, 48 kHz for voxcpm2-tts).
+All backends write mono WAV via `--tts-output` (22 kHz for piper/fastpitch, 16 kHz for speecht5, 24 kHz for most others, 44.1 kHz for melotts/dia/parler-tts, 48 kHz for voxcpm2-tts).
 
 ### Reproducible / diverse generation (`--seed`)
 

@@ -2,7 +2,6 @@
 //
 // Reproduces #79: VibeVoice ASR crashes when transcribing a short buffer
 // followed by a longer buffer because the KV cache wasn't reallocated.
-
 #include "vibevoice.h"
 #include <vector>
 #include <iostream>

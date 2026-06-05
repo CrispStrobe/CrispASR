@@ -465,7 +465,7 @@ jobs:
             -DCRISPASR_BUILD_EXAMPLES=OFF \
             -DCRISPASR_BUILD_SERVER=OFF
           cmake --build build-libs --config Release \
-            -j $(sysctl -n hw.logicalcpu) --target crispasr
+            -j $(sysctl -n hw.logicalcpu) --target crispasr-lib
 
       - name: Package
         run: |
@@ -529,7 +529,7 @@ jobs:
             -DCRISPASR_BUILD_TESTS=OFF \
             -DCRISPASR_BUILD_EXAMPLES=OFF \
             -DCRISPASR_BUILD_SERVER=OFF
-          cmake --build build-libs --config Release -j $(nproc) --target crispasr
+          cmake --build build-libs --config Release -j $(nproc) --target crispasr-lib
 
       - name: Package
         run: |
@@ -598,7 +598,7 @@ jobs:
             -DCRISPASR_BUILD_TESTS=OFF \
             -DCRISPASR_BUILD_EXAMPLES=OFF \
             -DCRISPASR_BUILD_SERVER=OFF
-          cmake --build build-libs --config Release -j $(nproc) --target crispasr
+          cmake --build build-libs --config Release -j $(nproc) --target crispasr-lib
 
       - name: Package
         run: |
@@ -659,7 +659,7 @@ jobs:
             -DCRISPASR_BUILD_TESTS=OFF \
             -DCRISPASR_BUILD_EXAMPLES=OFF \
             -DCRISPASR_BUILD_SERVER=OFF
-          cmake --build build-libs --config Release -j $(nproc) --target crispasr
+          cmake --build build-libs --config Release -j $(nproc) --target crispasr-lib
 
       - name: Package
         run: |
@@ -726,7 +726,7 @@ jobs:
             -DCRISPASR_BUILD_SERVER=OFF `
             -DGGML_NATIVE=OFF `
             -DGGML_AVX2=ON -DGGML_FMA=ON -DGGML_F16C=ON
-          cmake --build build-libs --config Release -j $env:NUMBER_OF_PROCESSORS --target crispasr
+          cmake --build build-libs --config Release -j $env:NUMBER_OF_PROCESSORS --target crispasr-lib
 
       - name: Package
         shell: pwsh
@@ -805,7 +805,7 @@ jobs:
             -DGGML_CUDA=OFF ^
             -DGGML_NATIVE=OFF ^
             -DGGML_AVX2=ON -DGGML_FMA=ON -DGGML_F16C=ON
-          cmake --build build-libs --config Release -j %NUMBER_OF_PROCESSORS% --target crispasr
+          cmake --build build-libs --config Release -j %NUMBER_OF_PROCESSORS% --target crispasr-lib
 
       - name: Package
         shell: pwsh
@@ -904,7 +904,7 @@ jobs:
             -DCRISPASR_BUILD_TESTS=OFF \
             -DCRISPASR_BUILD_EXAMPLES=OFF \
             -DCRISPASR_BUILD_SERVER=OFF
-          cmake --build build-libs --config Release -j $(nproc) --target crispasr
+          cmake --build build-libs --config Release -j $(nproc) --target crispasr-lib
 
       - name: Package
         run: |
@@ -977,7 +977,7 @@ jobs:
             -DCMAKE_CUDA_ARCHITECTURES="75-real;86-real;89-real;120-real;120-virtual" ^
             -DGGML_NATIVE=OFF ^
             -DGGML_AVX2=ON -DGGML_FMA=ON -DGGML_F16C=ON
-          cmake --build build-libs --config Release -j %NUMBER_OF_PROCESSORS% --target crispasr
+          cmake --build build-libs --config Release -j %NUMBER_OF_PROCESSORS% --target crispasr-lib
 
       - name: Package
         shell: pwsh
@@ -1058,7 +1058,7 @@ jobs:
             -DGGML_NATIVE=OFF `
             -DGGML_AVX2=OFF -DGGML_FMA=OFF -DGGML_F16C=OFF `
             -DGGML_AVX=ON
-          cmake --build build-libs --config Release -j $env:NUMBER_OF_PROCESSORS --target crispasr
+          cmake --build build-libs --config Release -j $env:NUMBER_OF_PROCESSORS --target crispasr-lib
 
       - name: Package
         shell: pwsh
@@ -1333,7 +1333,7 @@ jobs:
             -DCRISPASR_BUILD_TESTS=OFF \
             -DCRISPASR_BUILD_EXAMPLES=OFF \
             -DCRISPASR_BUILD_SERVER=OFF
-          cmake --build build-android --config Release -j $(nproc) --target crispasr
+          cmake --build build-android --config Release -j $(nproc) --target crispasr-lib
 
       - name: Package
         run: |

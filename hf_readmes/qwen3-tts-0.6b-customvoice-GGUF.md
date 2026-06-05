@@ -58,7 +58,7 @@ The 1.7B-CustomVoice variant ships at [`cstr/qwen3-tts-1.7b-customvoice-GGUF`](h
 git clone https://github.com/CrispStrobe/CrispASR
 cd CrispASR
 cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j --target crispasr
+cmake --build build -j --target crispasr-lib
 
 # 2. Pull the talker + the codec
 huggingface-cli download cstr/qwen3-tts-0.6b-customvoice-GGUF qwen3-tts-12hz-0.6b-customvoice-q8_0.gguf --local-dir .

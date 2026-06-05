@@ -46,11 +46,11 @@ The default build produces every CLI target. Binaries land in
 | `crispasr-quantize` | Re-quantize any GGUF model — see [quantize.md](quantize.md) |
 | `crispasr-diff` | Per-stage cosine-similarity diff vs Python reference |
 
-To build only the main binary (faster CI builds), pass
-`--target crispasr`:
+To build only the library (faster CI builds), pass
+`--target crispasr-lib`:
 
 ```bash
-cmake --build build -j$(nproc) --target crispasr
+cmake --build build -j$(nproc) --target crispasr-lib
 ```
 
 ### CMake presets
@@ -172,7 +172,7 @@ crispasr --gpu-backend cpu -m model.gguf -f audio.wav        # benchmarking
 #   apt install libavformat-dev libavcodec-dev libavutil-dev libswresample-dev
 
 cmake -B build-ffmpeg -DCMAKE_BUILD_TYPE=Release -DCRISPASR_FFMPEG=ON
-cmake --build build-ffmpeg -j$(nproc) --target crispasr
+cmake --build build-ffmpeg -j$(nproc) --target crispasr-lib
 ```
 
 > **Upstream bug warning.** `.m4a` / `.mp4` / `.webm` containers

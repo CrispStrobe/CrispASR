@@ -2954,7 +2954,7 @@ silently fall back to the default voice on a load failure).
 
 ### The build-target trap that masked it
 
-`cmake --build build-ninja-compile --target crispasr` only relinks
+`cmake --build build-ninja-compile --target crispasr-lib` only relinks
 the **shared library** `libcrispasr.dylib` and stops there — the CLI
 executable lives in target `crispasr-cli`. So edits to
 `examples/cli/crispasr_backend_*.cpp` need an explicit
@@ -3056,7 +3056,7 @@ works with no python at runtime. Module 2 only — modules 3
 ### Build target nits (still relevant)
 
 CLI changes need `--target crispasr-cli`; library-only changes work
-with `--target crispasr` (or `--target chatterbox` for the static
+with `--target crispasr-lib` (or `--target chatterbox` for the static
 sublib). The diff harness needs `--target crispasr-diff`.
 
 ### Diff stages added
@@ -7974,12 +7974,99 @@ General rule for porting a GPU backend with k-quant weights: anything fed to
 `ggml_get_rows` (embeddings, MoE expert gather) must be F16/F32/legacy-quant,
 or it silently falls to CPU and dereferences device memory.
 
+### 2026-06-04/05 update — GPU decode fixed via prefill-graph reuse (PLAN #115 option B)
+
+The 2026-06-02 update identified the *prefill* as correct and the *decode step*
+as the crash site. Fixing the decode step took **12 Kaggle kernel iterations +
+1 RunPod RTX 3090 run** and exhausted the weekly Kaggle GPU quota. The approaches
+tried and their failure modes are instructive for any future cross-backend graph work:
+
+| Approach | Kernel | Result |
+|----------|--------|--------|
+| `ggml_cont` bridge + `set_tensor_backend` on compute node | v6 | `ggml_cuda_cpy: invalid argument` — scheduler tried DeviceToDevice on host memory |
+| External mini CPU graph (`ggml_backend_alloc_ctx_tensors` + `graph_compute`) | v7,v8 | SIGSEGV — cross-context tensor references crash the CPU allocator |
+| F32 input tensor + host-side dequant via `ggml_get_type_traits()->to_float` | v10 | CPU timeout (wrong `ggml_row_size`), GPU SIGSEGV in `cuMemcpyHtoDAsync` |
+| F32 input + `set_tensor_backend` pin to GPU | v11,v12 | GPU `illegal memory access` in `graph_compute` — other tensors misrouted |
+| **Reuse prefill graph for T=1 decode** | v13 (RunPod) | **PASS — 2.4× realtime, correct transcript** |
+
+**Key insight: the ggml scheduler handles cross-backend routing correctly for
+complex graphs (prefill: audio path + text path + 36L LM) but breaks on minimal
+graphs (step: just embed → 36L LM).** The scheduler's backend assignment
+heuristic needs enough GPU-anchored ops to "pull" all nodes GPU-ward. A step
+graph with only a single F32 input and no weight-referencing embed op doesn't
+provide that anchor, even with explicit `set_tensor_backend`.
+
+**The winning fix** (`ec3ba861`): for `gpu_embed_split` mode, decode steps build
+a `[9, gs]` single-token text segment (zeroed audio branch) and call
+`mimo_asr_run_lm` (the prefill graph). The audio path computes zero
+(`speech_active_mask=0`) — negligible overhead for T=1 with gs=4 vs the 36L LM.
+CPU path is unchanged (fast cached T=1 step graph with in-graph `get_rows`).
+
+**Performance (RTX 3090, JFK 11s):**
+- CPU: 11.5s (1.0× realtime)
+- GPU: 4.5s (2.4× realtime) — prefill 75ms, decode 265ms / 26 steps (10 ms/step)
+
+**Rules learned:**
+1. `ggml_backend_sched_set_tensor_backend` on *compute nodes* is unreliable for
+   cross-backend copy insertion. It works for *input tensors* to control placement
+   but the scheduler's copy-node insertion for compute nodes is buggy on small graphs.
+2. `ggml_backend_alloc_ctx_tensors` cannot safely reference tensors from a different
+   `ggml_context` — the allocator doesn't expect cross-context weight pointers and
+   crashes in `graph_compute`.
+3. When a graph already works on GPU (like the prefill graph), reuse it for decode
+   rather than building a minimal step graph that hits scheduler edge cases. The
+   overhead of the unused audio branch (~4 embeddings + 6L tiny transformer) is
+   negligible vs 36L × 4096-dim LM layers.
+4. **RunPod** is a viable alternative to Kaggle for GPU testing ($0.22/hr RTX 3090,
+   ~$0.10 per test run). Script: `tools/runpod-gpu-test.sh`. Needs `pip install
+   cmake` on the pod (system cmake 3.22 too old), `nvcc` at `/usr/local/cuda/bin/`.
+
+**GPU is now the default** (`a429bb45`). Override: `CRISPASR_MIMO_FORCE_CPU=1`.
+
+### 2026-06-05 update — k-quant CUDA GET_ROWS fix (the proper ggml fix)
+
+The root cause of the entire PLAN #115 saga was that CUDA GET_ROWS didn't
+support k-quants (Q2_K–Q6_K). The `supports_op` list in `ggml-cuda.cu:5004`
+only covered F16/F32/BF16/I32 and legacy quants (Q4_0–Q8_0). When a Q4_K
+embedding table sat on GPU, `get_rows` was routed to CPU, which then
+dereference'd the GPU pointer as host memory → SIGSEGV.
+
+**Fix** (`3bf9a599`): add k-quant support to CUDA GET_ROWS by using the
+existing `ggml_get_to_fp32_cuda()` row-dequantize infrastructure from
+`convert.cu`. For each selected row, copy the index to host, then launch
+the type-appropriate dequantize kernel (e.g. `dequantize_block_q4_K`).
+Overhead is negligible for typical embedding lookups (1-4 rows of 4096).
+
+**Validated on RTX 3090 (RunPod):** all weights GPU-resident (no split-load),
+2.0× realtime, correct JFK transcript, 26 decode steps clean.
+
+| Approach | Split-load? | Decode ms/step | Realtime | Complexity |
+|----------|------------|----------------|----------|------------|
+| Option B: prefill-graph reuse | Yes (embed CPU) | 10 ms | 2.4× | Medium — workaround |
+| **k-quant GET_ROWS fix** | **No** | 31 ms | 2.0× | **Low — proper ggml fix** |
+
+The per-step gap (10 vs 31 ms) is because the k-quant GET_ROWS copies
+indices to host and launches sequential dequant kernels, while the
+prefill-graph approach keeps the embed on CPU and lets the scheduler
+insert one bulk copy. A fused k-quant GET_ROWS kernel (single launch,
+no host round-trip) would close the gap — filed as upstream PR 16.
+
+Both approaches produce identical transcripts. The codebase currently
+ships both: the prefill-graph workaround (faster) is used when
+`gpu_embed_split` is true, and the k-quant GET_ROWS (simpler) handles
+the all-GPU case. A future simplification could drop `gpu_embed_split`
+entirely once the fused kernel is optimized.
+
 ### Cross-refs
 
 - HISTORY 2026-05-26 "PLAN #115 — mimo-asr M1 Metal silent-empty fix (option A)" for the bisect + fix chronology
 - PLAN #115 for option C scope (per-tensor backend tagging in `mimo_asr_build_prefill_graph`)
 - [[project_chatterbox_gpu_bug_s3gen]] for a different shape of the same general problem (sched parallel=true fixed it there)
 - `src/mimo_asr.cpp` commit `c887881e` for the option A landing
+- `src/mimo_asr.cpp` commit `ec3ba861` for the option B (prefill-graph reuse) landing
+- `ggml/src/ggml-cuda/getrows.cu` commit `3bf9a599` for the k-quant GET_ROWS fix
+- `tools/upstream-prs/16-sched-small-graph-cross-backend.md` for the upstream PR draft
+- `tools/runpod-gpu-test.sh` for the RunPod GPU test script
 
 ## funasr CUDA !-loop — all-NaN prefill logits (issue #125, §136)
 
@@ -9085,3 +9172,149 @@ and does NOT subtract the mean — unlike `ggml_rms_norm` which computes
 `x / sqrt(mean(x²) + eps)`. For non-zero-mean vectors, these differ. The flow
 net is small (512-dim, 6 depth, called once per AR step with `lsd_steps=1`) so
 the speedup from ggml graphs would be minimal.
+
+## MeloTTS (VITS2) — from zero to BERT conditioning (June 2026)
+
+### Architecture
+
+MeloTTS (myshell-ai) is a VITS2 model: 6-layer relative-position
+transformer text encoder → dual duration predictor (SDP spline flows +
+deterministic DP, blended via `sdp_ratio`) → 4-block TransformerCouplingFlow
+(3 transformer layers per block, NOT WaveNet like Piper) → 5-stage HiFi-GAN
+vocoder at 44.1 kHz. 52M params, 4 English speakers (EN_V2), MIT license.
+
+### Key bugs found during implementation
+
+**GGUF dimension reversal (conv weights):** PyTorch Conv1d weights are
+`(Cout, Cin, K)`. The GGUF Python library reverses numpy dimensions to ggml
+ne[], so storing the PyTorch array as-is gives `ne[0]=K, ne[1]=Cin, ne[2]=Cout`
+— exactly what `ggml_conv_1d` expects. Initially I transposed them (like Piper's
+ONNX converter), giving `ne[0]=Cout` which made ggml think the kernel was 768
+elements wide. Fix: don't transpose conv weights for PyTorch→GGUF.
+
+**BERT projection bias with zero input:** Even with zero BERT embeddings
+(disable-bert mode), `Conv1d(zeros)` still produces the bias term. The combined
+`bert_proj.bias + ja_bert_proj.bias` contributes up to 21.9 amplitude after
+sqrt(192) scaling — this was the entire embedding mismatch. Fix: always add
+both biases regardless of whether BERT features are available.
+
+**Speaker injection order:** MeloTTS injects the speaker embedding BEFORE
+attention (in the Encoder.forward loop), not inside the attention function.
+Injecting inside attention meant the modified input was a working copy that
+didn't propagate back. Moving injection to the main encoder loop brought all
+6 layers to cos=1.0 vs Python reference.
+
+**Intersperse blanks — leading/trailing:** Python's `intersperse` produces
+`[0, e0, 0, e1, ..., eN, 0]` (blanks at both ends). My initial implementation
+only put blanks between elements. Also: blank positions must have `lang_id=0`,
+not the language ID.
+
+**Flow FFN kernel size:** The text encoder FFN uses k=3 but the flow encoder
+FFN uses k=5. Hardcoding pad=1 (correct for k=3) crashed the flow. Fix:
+auto-detect kernel size from `ffn_c1_w->ne[0]`.
+
+**v→V phoneme mapping:** MeloTTS uses uppercase "V" as a distinct phoneme for
+/v/ (the voiced labiodental fricative). The CMU dict returns lowercase "v"
+which must be mapped via `post_replace_ph`.
+
+### BERT conditioning
+
+bert-base-uncased (110M params, 12 layers) provides contextual phoneme
+embeddings. MeloTTS uses hidden_states[-3] (layer 9 output) projected through
+`ja_bert_proj` (768→192). For English, the 1024-dim `bert` input is zeros
+(only bias contributes); the 768-dim `ja_bert` carries actual features.
+
+**Implementation:** Standalone `bert_encoder.{h,cpp}` — 10-layer BERT
+transformer forward pass using ggml graphs, WordPiece tokenizer embedded in
+GGUF metadata, 238 MB GGUF. Loaded as companion model via `melotts_load_bert()`.
+
+**word2ph alignment:** BERT tokenizes "seashells" as `["seas","##hell","##s"]`
+(3 subwords) but G2P treats it as 1 word. The word2ph must map BERT subword
+tokens to phoneme counts. Initial uniform distribution caused "seashore"→"Sichuan"
+regression. Fix: `bert_encoder_word_subtokens()` counts BERT subwords per word,
+then `distribute_phone` splits each word's phonemes evenly across its subwords.
+
+**Quality impact:**
+- Without BERT: "I enjoy reading books..." → "Send your reading books..."
+- With BERT: "I enjoy reading books in the evening." → exact match
+- ASR roundtrip: 4/6 perfect (up from 3/6 without BERT)
+- Diff: enc_output cos=0.990 vs Python reference
+
+### Weight precision
+
+VITS2 tensors are mostly small (192-d embeddings, 192×192 attention). F16 is
+the recommended storage format (93 MB GGUF). Q4_K/Q8 quantization is
+ineffective — only 9/853 tensors meet the block-size threshold, and those
+happen to be the most sensitive embeddings. Storing SDP/DP weights as F32
+prevents spline transform instability but doesn't affect audio quality
+(the real quality lever is BERT conditioning, not weight precision).
+
+### OpenVoice2 ref_enc H/W swap
+
+OpenVoice V2 TCC (voice cloning) uses the same VITS architecture for
+voice conversion. The ref_enc (speaker embedding extractor) has 6 Conv2d
+layers + GRU. Python processes the spectrogram as `(1, 1, T, freq)` but
+the C++ was transposing to `(1, 1, freq, T)` before Conv2d — convolving
+along the wrong spatial axes. Speaker embedding cos went from 0.17 to
+0.999999 after fixing to match Python's layout.
+
+
+## OpenVoice2 voice cloning — ggml data layout (2026-06-05)
+
+**The bug:** HiFi-GAN decoder produced completely wrong output (cos=0.002
+vs Python) despite identical z input. All upstream stages (STFT, ref_enc,
+enc_q, flow) matched at cos≥0.999996.
+
+**Root cause:** ggml tensor `(C, T)` has `ne[0]=C` as the fastest-changing
+dimension. Data in `(T, C)` row-major layout already has C as the fast
+dimension — it can be fed directly to `ggml_backend_tensor_set`. Adding a
+`C*T+t ↔ T*C+c` transpose before setting **reverses** the correct layout.
+
+**The lesson:** ggml's dimension ordering is the reverse of numpy/PyTorch.
+A ggml tensor with `ne = {C, T}` stores data as `[c + t*C]` — identical
+to C row-major `float data[T][C]`. When your CPU array is `(T, C)` row-major,
+set it directly. Only transpose when the CPU array is `(C, T)` column-major.
+
+**Debugging method:** Manual conv in Python using GGUF weights (bypassing
+ggml) proved the weights were correct. Then stage-by-stage diff harness
+(`OV2_DUMP_DIR` + `ggml_set_output` on intermediate tensors) isolated the
+divergence to the first ggml op (conv_pre). The manual conv matched PyTorch
+at cos=1.0 while ggml gave cos=0.002 — proving the data layout was wrong.
+
+## F16 precision loss in deep WaveNet stacks (2026-06-04)
+
+Storing WaveNet weights as F16 causes accumulated precision loss through
+16 sequential layers. For enc_q: F16 gave z std=1.53 (should be 0.77),
+completely wrong latent values → silent HiFi-GAN output. Fix: store
+enc_q/flow/ref_enc weights as F32 in the GGUF (converter flag
+`is_sensitive`). Decoder weights can stay F16 (only 4 upsample stages,
+less accumulation).
+
+## Cohere flash-attn crossover (2026-06-04)
+
+flash_attn_ext wins on long sequences (O(n) vs O(n²)) but loses on
+short sequences due to higher per-op overhead. Cohere with 30s auto-chunking
+always hits the short-form case. Measured: flash +13% slower at 60s,
+-26% faster at 300s. Crossover between 1-5 min. Default flipped to
+cast-on-read for cohere; `CRISPASR_COHERE_FLASH=1` for unchunked long-form.
+
+## MeloTTS + BERT quantization — what works and what doesn't
+
+**Main model (VITS2, 102 MB F16):** Only 9 of 853 tensors meet ggml's
+minimum block size for quantization, and those 9 are embeddings (phone,
+tone, language, speaker). Q8_0 saves 1 MB (98→97). Not worth it for size,
+but works correctly after fixing `read_emb` to dequantize via
+`ggml_get_type_traits()->to_float` (was blindly memcpy'ing Q8_0 bytes as
+F32). The same fix applies to the speaker embedding read in
+`melotts_synthesize` (replaced inline F16/F32 branch with `read_tensor_f32`).
+
+**BERT companion (bert-base-uncased, 227 MB F16):** All 141 MB of F16
+linear weights (768×768 attention, 768×3072 FFN) quantize successfully.
+Q8_0 = 97 MB, Q4_K = **52 MB** (77% smaller) with zero quality loss on
+ASR roundtrip. Required fixing `bert_encoder.cpp` to `ggml_cast(F32)`
+after `ggml_get_rows` on quantized embeddings, since `ggml_add` requires
+F32 operands.
+
+**Recommended deployment:** MeloTTS F16 (102 MB) + BERT Q4_K (52 MB) =
+**154 MB total**. All three BERT quants (F16/Q8/Q4K) uploaded to
+`cstr/melotts-en-v2-GGUF`. Registry companion points to Q4_K by default.

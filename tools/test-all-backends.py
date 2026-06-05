@@ -1186,8 +1186,10 @@ def test_word_timestamps(b: Backend, tier: str, ctx: dict) -> TestOutcome:
 # silero VAD model can live in a few places; the test runner probes them.
 def _find_silero(models_dir: Path) -> Path | None:
     for cand in (
+        models_dir / "ggml-silero-v6.2.0.bin",
+        Path.home() / ".cache" / "crispasr" / "ggml-silero-v6.2.0.bin",
+        models_dir / "for-tests-silero-v6.2.0-ggml.bin",
         models_dir / "ggml-silero-v5.1.2.bin",
-        models_dir / "silero-v5.1.2.bin",
         Path.home() / ".cache" / "crispasr" / "ggml-silero-v5.1.2.bin",
     ):
         if cand.is_file():
@@ -1215,7 +1217,7 @@ def test_vad(b: Backend, tier: str, ctx: dict) -> TestOutcome:
         return TestOutcome(b.name, "vad", tier, "SKIP",
                            "silero VAD model not found in --models or "
                            "~/.cache/crispasr/ — download "
-                           "ggml-silero-v5.1.2.bin from ggml-org/whisper-vad")
+                           "ggml-silero-v6.2.0.bin from ggml-org/whisper-vad")
     if tier == "full":
         try:
             audio = make_multi_segment_probe(audio, n_repeats=4, silence_ms=800)

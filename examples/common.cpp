@@ -1,5 +1,3 @@
-#define _USE_MATH_DEFINES // for M_PI
-
 #include "common.h"
 
 #include <cmath>

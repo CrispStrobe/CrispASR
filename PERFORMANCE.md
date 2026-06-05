@@ -34,7 +34,7 @@ and where the gaps are. Last refresh: **2026-05-04** (after PLAN §79 —
 | backend | KV_QUANT | KV_QUANT_K/_V | KV_ON_CPU | N_GPU_LAYERS | notes |
 |---|:-:|:-:|:-:|:-:|---|
 | canary (1B) | ✓ | ✓ | ✓ | · | flash_attn_ext default, -17 % on JFK with q8_0/q4_0 |
-| cohere (2B) | ✓ | ✓ | ✓ | · | flash_attn_ext available; +11 % regression vs cast-on-read on JFK with q8_0/q4_0 — long-form rerun needed before promoting (see PLAN) |
+| cohere (2B) | ✓ | ✓ | ✓ | · | cast-on-read default (13 % faster on 30 s chunks); `CRISPASR_COHERE_FLASH=1` for unchunked long-form (-26 % win at 300 s) — see §5 |
 | kyutai-stt (1B) | ✓ | ✓ | ✓ | · | flash_attn_ext native, quant-safe |
 | firered-asr (900M) | — | — | — | — | inline AED, no exposed transformer KV |
 | moonshine-tiny / streaming | — | — | — | — | tiny decoder, no exposed KV |
@@ -83,13 +83,21 @@ and where the gaps are. Last refresh: **2026-05-04** (after PLAN §79 —
    dGPU should be even more favourable; deferred until a CUDA host
    is available. If a platform regresses, gate via env
    (`CRISPASR_FORCE_CPU_WEIGHTS=1`).
-5. **Cohere flash_attn_ext regresses on short audio.** JFK (~11 s)
-   with q8_0 K / q4_0 V is +11 % slower under flash than under the
-   cast-on-read fallback (canary on the same workload is -17 %, so
-   the kernel works — cohere's cache layout or head dim flips the
-   crossover). Need a multi-minute clip to confirm flash pulls ahead
-   on long-form before promoting it to the recommended path; until
-   then short-form users on cohere should treat flash as opt-in.
+5. **Cohere flash_attn_ext: crossover confirmed (PLAN #73 closeout,
+   2026-06-04).** Long-form rerun on FLEURS EN, VPS x86 CPU, 2
+   threads, `cohere-transcribe-q4_k.gguf`:
+
+   | audio | flash-attn (s) | cast-on-read (s) | delta |
+   |---|---:|---:|---|
+   | 60 s | 202.72 | 179.13 | flash **+13% slower** |
+   | 300 s | 820.37 | 1114.96 | flash **-26% faster** |
+
+   Crossover is between 60 s and 300 s. Flash wins decisively on
+   unchunked long-form (5+ min) due to O(n) vs O(n²) attention scaling.
+   But with default 30 s auto-chunking, each decode pass is short-form.
+   **Recommendation:** cast-on-read is now the cohere default (13%
+   faster on the chunked path that all normal users hit). For unchunked
+   long-form, set `CRISPASR_COHERE_FLASH=1`.
 
 ### Stacking the four knobs
 
@@ -169,7 +177,29 @@ fun-asr-mlt-nano, voxtral4b.
 - **fun-asr-mlt-nano (0.1x RT):** running F16 (~2 GB) on CPU. Q8_0 quant
   exists on HF (`cstr/funasr-mlt-nano-GGUF/funasr-mlt-nano-2512-q8_0.gguf`)
   and should be GPU-safe; switching would recover 5-10x speed.
-- TTS benchmarks were run separately (see TTS section below).
+### TTS benchmark (same run, P100 GPU)
+
+First comprehensive TTS benchmark across 11 backends. Phrase: "The quick
+brown fox jumps over the lazy dog." Each model auto-downloaded, synthesised,
+output WAV checked for >1 KB, then cleaned up.
+
+| Rank | Backend | Status | Wall (s) | WAV size | Notes |
+|---|---|---|---|---|---|
+| 1 | Piper LessAC Medium | PASS | 3.7 | 103 KB | Fastest TTS, 22 kHz VITS |
+| 2 | SpeechT5 TTS | PASS | 4.6 | 56 KB | 16 kHz, deterministic |
+| 3 | Bark Small | PASS | 16.9 | 245 KB | 3-stage GPT-2, 24 kHz |
+| 4 | Kokoro 82M | PASS | 17.5 | 152 KB | Needs espeak-ng (installed) |
+| 5 | Pocket TTS 100M | PASS | 72.1 | 181 KB | Continuous-latent AR, 24 kHz |
+| 6 | CSM 1B | PASS | 213.4 | 165 KB | Llama-3.2 + Mimi, 24 kHz |
+| 7 | Orpheus 3B-FT | PASS | 269.7 | 205 KB | Llama-3.2 + SNAC, 24 kHz |
+| — | FastPitch 60M | TIMEOUT | >30 | 0 | Timeout too short (30s) |
+| — | F5-TTS v1 Base | FAIL | 4.1 | 0 | Needs `--voice <ref.wav>` |
+| — | Parler TTS Mini v1.1 | TIMEOUT | >180 | 0 | Too slow on CPU path |
+| — | Dia 1.6B | TIMEOUT | >240 | 0 | Too slow on CPU path |
+
+**7/11 pass.** FastPitch needs a longer timeout (model download is slow, not
+inference). F5-TTS requires a reference audio for voice cloning. Parler-TTS
+and Dia are AR LLM-based and need GPU acceleration or longer timeouts.
 
 ---
 

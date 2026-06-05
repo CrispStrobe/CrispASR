@@ -370,7 +370,13 @@ wav2vec2-style CNN frontend (7 layers, stride 5+2×6=320) + 24–48L
 transformer encoder + either CTC head or 12L LLaMA decoder (SwiGLU,
 RoPE, d=4096, 8 heads).
 
-**CTC variant**: greedy argmax with CTC blank collapse.
+**CTC variant** (`omniasr`, `omniasr-300m`): greedy argmax with CTC blank
+collapse (blank = token 0 for both v1/fairseq2 and v2/HF formats). Only
+v2 (HF transformers) GGUFs work — the v1 fairseq2 `.pt` format produces
+empty output because fairseq2's model loader applies weight transforms
+we cannot replicate. The 300M model's positional encoding degrades beyond
+~7 s; the runtime auto-chunks long audio into 5 s segments. The 1B model
+handles all lengths.
 
 **LLM variant** (`omniasr-llm-300m-v2`): Encoder projection (1024→4096)
 + language conditioning (1694 FLORES-200 codes) + autoregressive decode.
@@ -608,6 +614,23 @@ T5 encoder-decoder (12L+12L, d=2048, gated-GELU FFN, RMSNorm, bucketed
 relative-position bias) + SentencePiece (256K vocab). Target language
 specified as `<2xx>` input prefix. Tokens match Python SentencePiece
 bit-by-bit; output matches HF reference.
+
+### melotts
+
+[myshell-ai/MeloTTS](https://github.com/myshell-ai/MeloTTS) VITS2
+architecture (~52M params, MIT). Text encoder (6-layer relative-position
+transformer with speaker conditioning at layer 2) → dual duration predictor
+(SDP spline flows + deterministic DP, blended via sdp_ratio) →
+TransformerCouplingBlock flow (4 blocks × 3 transformer layers) → HiFi-GAN
+vocoder (5 upsample stages) @ 44.1 kHz. Built-in English G2P via embedded
+CMU dictionary (129k entries) + rule-based LTS fallback for OOV words.
+4 English speakers (US, BR, India, AU).
+
+Optional BERT conditioning: loads a companion bert-base-uncased GGUF (238 MB)
+via `melotts_load_bert()`. Runs 10-layer BERT forward pass → hidden_states[-3]
+→ word2ph expansion → `ja_bert_proj` (768→192) → added to text encoder
+embeddings. Improves contextual phoneme disambiguation (4/6 → 4/6 ASR
+roundtrip but fixes previously-broken sentences like "I enjoy reading").
 
 ### piper
 

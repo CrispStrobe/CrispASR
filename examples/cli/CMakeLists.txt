@@ -41,6 +41,7 @@ add_executable(${TARGET}
     crispasr_backend_cosyvoice3.cpp
     crispasr_backend_kokoro.cpp
     crispasr_backend_piper.cpp
+    crispasr_backend_melotts.cpp
     crispasr_backend_m2m100.cpp
     crispasr_backend_t5.cpp
     crispasr_backend_glm_asr.cpp
@@ -162,7 +163,7 @@ add_executable(crispasr-diff
 )
 target_link_libraries(crispasr-diff PRIVATE
     common
-    crispasr
+    crispasr-lib
     parakeet
     canary
     cohere
@@ -200,13 +201,13 @@ install(TARGETS crispasr-diff RUNTIME BUNDLE DESTINATION bin)
 # peeking the GGUF's general.architecture key at load time. One binary
 # for any text-LID GGUF.
 #
-# Link order: text-lid-dispatch BEFORE crispasr because the dispatch
+# Link order: text-lid-dispatch BEFORE crispasr-lib because the dispatch
 # static library has unresolved references to crispasr_registry_lookup
 # / crispasr_cache::ensure_cached_file (in crispasr_model_registry.cpp
-# / crispasr_cache.cpp inside the main `crispasr` library), and MinGW's
+# / crispasr_cache.cpp inside the main `crispasr-lib` library), and MinGW's
 # GNU ld processes static libraries strictly left-to-right — listing
 # the consumer first lets ld pick up the missing definitions when it
-# subsequently scans `crispasr`. Without this, msys2 UCRT64 build.yml
+# subsequently scans `crispasr-lib`. Without this, msys2 UCRT64 build.yml
 # fails with `undefined reference to crispasr_registry_lookup` etc.
 # (Windows MSVC and Linux gcc are forgiving here; only MinGW UCRT64
 # enforces order strictly enough to surface the bug.)
@@ -219,7 +220,7 @@ install(TARGETS crispasr-diff RUNTIME BUNDLE DESTINATION bin)
 add_executable(crispasr-lid crispasr_lid_main.cpp)
 target_link_libraries(crispasr-lid PRIVATE
     text-lid-dispatch
-    crispasr
+    crispasr-lib
     ${CMAKE_THREAD_LIBS_INIT}
     $<$<BOOL:${WIN32}>:winhttp>
     $<$<BOOL:${WIN32}>:ws2_32>
@@ -235,7 +236,7 @@ install(TARGETS crispasr-lid RUNTIME BUNDLE DESTINATION bin)
 add_executable(mimo-tokenizer-smoke mimo_tokenizer_smoke.cpp)
 target_link_libraries(mimo-tokenizer-smoke PRIVATE
     common
-    crispasr
+    crispasr-lib
     mimo_tokenizer
     ${FFMPEG_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}
@@ -250,7 +251,7 @@ include(DefaultTargetOptions)
 
 target_link_libraries(${TARGET} PRIVATE
     common
-    crispasr
+    crispasr-lib
     parakeet
     canary
     cohere
@@ -295,6 +296,7 @@ target_link_libraries(${TARGET} PRIVATE
     $<$<BOOL:${WIN32}>:crypt32>
     $<$<BOOL:${WIN32}>:bcrypt>
     $<$<BOOL:${WIN32}>:iphlpapi>
+    $<$<BOOL:${WIN32}>:shell32>
     $<$<BOOL:${CRISPASR_CURL}>:CURL::libcurl>
 )
 
@@ -314,6 +316,30 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/crispasr_backend_parler.cpp")
     target_link_libraries(${TARGET} PRIVATE parler-tts)
 endif()
 
+# Optional MP3 output (libmp3lame)
+find_library(LAME_LIBRARY NAMES mp3lame)
+find_path(LAME_INCLUDE_DIR lame/lame.h)
+if (LAME_LIBRARY AND LAME_INCLUDE_DIR)
+    target_link_libraries(${TARGET} PRIVATE ${LAME_LIBRARY})
+    target_include_directories(${TARGET} PRIVATE ${LAME_INCLUDE_DIR})
+    target_compile_definitions(${TARGET} PRIVATE CRISPASR_HAVE_LAME=1)
+    message(STATUS "MP3 output enabled (libmp3lame)")
+else()
+    message(STATUS "MP3 output disabled (libmp3lame-dev not found)")
+endif()
+
+# Optional Opus output (libopus + libogg for OGG container)
+find_library(OPUS_LIBRARY NAMES opus)
+find_path(OPUS_INCLUDE_DIR opus/opus.h)
+if (OPUS_LIBRARY AND OPUS_INCLUDE_DIR)
+    target_link_libraries(${TARGET} PRIVATE ${OPUS_LIBRARY})
+    target_include_directories(${TARGET} PRIVATE ${OPUS_INCLUDE_DIR})
+    target_compile_definitions(${TARGET} PRIVATE CRISPASR_HAVE_OPUS=1)
+    message(STATUS "Opus output enabled (libopus)")
+else()
+    message(STATUS "Opus output disabled (libopus-dev not found)")
+endif()
+
 install(TARGETS ${TARGET} RUNTIME BUNDLE DESTINATION bin)
 
 # ---------------------------------------------------------------------------
@@ -329,7 +355,7 @@ add_executable(crispasr-chat
 )
 target_include_directories(crispasr-chat PRIVATE ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(crispasr-chat PRIVATE
-    crispasr
+    crispasr-lib
     ${CMAKE_THREAD_LIBS_INIT}
 )
 include(DefaultTargetOptions)

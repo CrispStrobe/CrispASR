@@ -27,6 +27,6 @@ create_makefile "whisper" do |conf|
     #{libs}: cmake-targets
     cmake-targets:
     #{"\t"}#{cmake} -S sources -B build -D BUILD_SHARED_LIBS=OFF -D CMAKE_ARCHIVE_OUTPUT_DIRECTORY=#{__dir__} -D CMAKE_POSITION_INDEPENDENT_CODE=ON -D CRISPASR_BUILD_TESTS=OFF -D CRISPASR_BUILD_EXAMPLES=OFF -D CRISPASR_BUILD_SERVER=OFF #{options}
-    #{"\t"}#{cmake} --build build --config Release --target common crispasr
+    #{"\t"}#{cmake} --build build --config Release --target common crispasr-lib
   EOF
 end

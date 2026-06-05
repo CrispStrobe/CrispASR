@@ -189,7 +189,7 @@ fn configure_and_build(src_root: &Path) -> PathBuf {
         .arg("--config")
         .arg("Release")
         .arg("--target")
-        .arg("crispasr");
+        .arg("crispasr-lib");
     run(&mut build, "cmake build");
 
     build_dir

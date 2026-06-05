@@ -188,6 +188,20 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
         }
     }
 
+    // Qwen3-TTS: the talker block weights (attn, ffn) are safe to quantize,
+    // but several tensor groups are read via ggml_backend_tensor_get /
+    // lookup_rows and are precision-sensitive:
+    //   - speaker.* — ECAPA speaker encoder (small 1D/3D convs)
+    //   - code_pred.token_embd.* — codec embedding lookups
+    //   - code_pred.output.* — per-codebook lm_head (small, sampling-critical)
+    //   - talker.token_embd.* — text/audio token embedding lookup
+    //   - talker.text_proj.* — text projection (small)
+    //   - talker.codec_bridge.* — codec bridge projection (small)
+    //   - code_pred.small_to_mtp.* — 1.7B dimension projection (small)
+    // The bulk weights (talker.blk.*.attn_*, talker.blk.*.ffn_*,
+    // code_pred.blk.*) are safe to quantize.
+    const bool is_qwen3_tts = (arch.find("qwen3tts") != std::string::npos);
+
     // Parler TTS: DAC audio codec weights are precision-sensitive. Audio
     // codecs reconstruct waveforms from codebook embeddings and small
     // conv stacks — quantization noise in the decoder produces audible
@@ -212,16 +226,124 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
     // Q8_0 works fine; selective Q4_K (projections only) is safe.
     const bool is_bark = (arch.find("bark") != std::string::npos);
 
+    // First pass: determine which tensors will be quantized and compute
+    // their target types. We need this BEFORE adding tensors to ctx_out
+    // so that gguf_add_tensor computes correct offsets for the quantized
+    // sizes.
     const int n_tensors = gguf_get_n_tensors(ctx_in);
+    std::vector<ggml_type> target_types(n_tensors);
+
+    // Allocate a scratch ggml context for creating modified tensor descriptors.
+    ggml_init_params scratch_params = {ggml_tensor_overhead() * (size_t)n_tensors + 1024, nullptr, true};
+    ggml_context* ctx_scratch = ggml_init(scratch_params);
+
     for (int i = 0; i < n_tensors; i++) {
         const char* name = gguf_get_tensor_name(ctx_in, i);
         struct ggml_tensor* t = ggml_get_tensor(ctx_in_ggml, name);
-        gguf_add_tensor(ctx_out, t);
+
+        std::string sname(name);
+        bool is_weight = (sname.find("weight") != std::string::npos) ||
+                         (sname.size() >= 2 && sname.substr(sname.size() - 2) == "_w") ||
+                         (sname.size() >= 2 && sname.substr(sname.size() - 2) == ".w") ||
+                         (sname.find("_proj") != std::string::npos) || (sname.find(".gate") != std::string::npos) ||
+                         (sname.find(".up") != std::string::npos) || (sname.find(".wo") != std::string::npos) ||
+                         (sname.find(".heads.") != std::string::npos);
+        const bool ok_dims = (ggml_n_dims(t) == 2) || ((is_firered || is_ecapa) && ggml_n_dims(t) >= 2);
+        const int64_t ncols = t->ne[0];
+
+        bool should_quantize =
+            ggml_is_quantized(qtype) && (t->type == GGML_TYPE_F32 || t->type == GGML_TYPE_F16) && ok_dims && is_weight &&
+            (sname.find("norm") == std::string::npos) &&
+            (granite_quant_all || sname.find("proj.") != 0) &&
+            !(is_granite_family && !granite_quant_all && sname.find("enc.") == 0) &&
+            !(sname.find("cls.") == 0 && ggml_nelements(t) < 65536) &&
+            (sname.find("enc_proj.") != 0) && (sname.find("lm_head.") != 0) && (sname.find("tok_emb.") != 0) &&
+            (sname.find("lang_emb.") != 0) &&
+            !(is_chatterbox && (sname.find("s3.v.") == 0 || sname.find("conds.") == 0 || sname.find("ve.") == 0 ||
+                                sname.find("t3.text_emb") == 0 || sname.find("t3.speech_emb") == 0 ||
+                                sname.find("t3.wpe") == 0 || sname.find("t3.text_pos_emb") == 0 ||
+                                sname.find("t3.speech_pos_emb") == 0 || sname.find("t3.cond.") == 0)) &&
+            !(is_cosyvoice3 &&
+              (sname == "cosyvoice3.speech_embd.weight" || sname == "cosyvoice3.speech_lm_head.weight" ||
+               sname == "cosyvoice3.flow.input_embd.w" || sname == "cosyvoice3.flow.spk_affine.w" ||
+               sname == "cosyvoice3.s3tok.fsq.proj.w")) &&
+            !is_f5tts &&
+            !(is_qwen3_tts &&
+              (sname.find("speaker.") == 0 || sname.find("code_pred.token_embd") == 0 ||
+               sname.find("code_pred.output") == 0 || sname.find("code_pred.small_to_mtp") == 0 ||
+               sname.find("talker.token_embd") == 0 || sname.find("talker.text_proj") == 0 ||
+               sname.find("talker.codec_bridge") == 0)) &&
+            !(is_parler && sname.find("dac.") == 0) &&
+            !(is_dia && (sname.find("embedding") != std::string::npos || sname.find("audio_encoder") == 0)) &&
+            !(is_bark &&
+              (sname.find("token_embd") != std::string::npos || sname.find("pos_embd") != std::string::npos ||
+               (sname.find("output") != std::string::npos && sname.find("attn_output") == std::string::npos) ||
+               sname.find("encodec.") == 0)) &&
+            ([&]() {
+                if (!is_omniasr_ctc || omniasr_quant_all ||
+                    (omniasr_head_cutoff == 0 && omniasr_tail_cutoff >= omniasr_n_enc))
+                    return true;
+                if (sname.size() < 5 || sname.compare(0, 4, "enc.") != 0)
+                    return true;
+                int idx = 0;
+                size_t p = 4;
+                while (p < sname.size() && sname[p] >= '0' && sname[p] <= '9') {
+                    idx = idx * 10 + (sname[p] - '0');
+                    p++;
+                }
+                if (p == 4)
+                    return true;
+                const bool in_head = idx < omniasr_head_cutoff;
+                const bool in_tail = idx >= omniasr_tail_cutoff;
+                return !(in_head || in_tail);
+            }());
+
+        // Determine actual quant type with row-size fallback
+        ggml_type qt = qtype;
+        if (should_quantize && ncols % ggml_blck_size(qt) != 0) {
+            ggml_type fallback = GGML_TYPE_COUNT;
+            switch (qtype) {
+            case GGML_TYPE_Q2_K: case GGML_TYPE_Q3_K: case GGML_TYPE_Q4_K: fallback = GGML_TYPE_Q4_0; break;
+            case GGML_TYPE_Q5_K: fallback = GGML_TYPE_Q5_0; break;
+            case GGML_TYPE_Q6_K: fallback = GGML_TYPE_Q8_0; break;
+            default: break;
+            }
+            if (fallback != GGML_TYPE_COUNT && ncols % ggml_blck_size(fallback) == 0) {
+                qt = fallback;
+            } else {
+                should_quantize = false;
+            }
+        }
+
+        // Also handle granite enc F32→F16 downcast
+        bool granite_f16 = !should_quantize && granite_enc_to_f16 && t->type == GGML_TYPE_F32 &&
+                           sname.find("enc.") == 0 && sname.find("norm") == std::string::npos &&
+                           sname.find("running_mean") == std::string::npos &&
+                           sname.find("running_var") == std::string::npos &&
+                           sname.find("rel_pos") == std::string::npos &&
+                           sname.find("conv_bn") == std::string::npos && ggml_n_dims(t) == 2;
+
+        if (should_quantize) {
+            target_types[i] = qt;
+        } else if (granite_f16) {
+            target_types[i] = GGML_TYPE_F16;
+        } else {
+            target_types[i] = t->type;
+        }
+
+        // Create a tensor descriptor with the target type for ctx_out
+        if (target_types[i] != t->type) {
+            struct ggml_tensor* t_out = ggml_new_tensor(ctx_scratch, target_types[i], ggml_n_dims(t), t->ne);
+            ggml_set_name(t_out, name);
+            gguf_add_tensor(ctx_out, t_out);
+        } else {
+            gguf_add_tensor(ctx_out, t);
+        }
     }
 
     // Allocate output file
     printf("%s: writing quantized model to '%s'\n", __func__, fname_out.c_str());
-    FILE* fout = fopen(fname_out.c_str(), "wb");
+    FILE* fout = fopen(fname_out.c_str(), "w+b");
     if (!fout) {
         fprintf(stderr, "%s: failed to open '%s' for writing\n", __func__, fname_out.c_str());
         gguf_free(ctx_in);
@@ -253,150 +375,9 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
 
         printf("[%3d/%3d] %-40s - %10s, ", i + 1, n_tensors, name, ggml_type_name(type));
 
-        std::string sname(name);
-        bool is_weight = (sname.find("weight") != std::string::npos) ||
-                         // Kyutai STT uses shortened names ending in _w
-                         (sname.size() >= 2 && sname.substr(sname.size() - 2) == "_w") ||
-                         // FunASR / SenseVoice converter convention: ".w" / ".b" suffixes
-                         // (e.g. sensevoice.enc.blk.0.attn.qkv.w, funasr.enc.blk.0.ffn.l1.w).
-                         // Without this branch, every encoder tensor falls through to the
-                         // copy path and the quant is silently identical to F16.
-                         (sname.size() >= 2 && sname.substr(sname.size() - 2) == ".w") ||
-                         // Dia TTS: tensor names use _proj / gate / up / wo / heads suffixes
-                         // without "weight" (e.g. dia.encoder.layers.0.q_proj, dia.decoder.heads.0)
-                         (sname.find("_proj") != std::string::npos) || (sname.find(".gate") != std::string::npos) ||
-                         (sname.find(".up") != std::string::npos) || (sname.find(".wo") != std::string::npos) ||
-                         (sname.find(".heads.") != std::string::npos);
-        // FireRedASR/LID: pw1/pw2 convs are stored as 3D [1,in,out] but are
-        // effectively 2D matmuls — safe to quantize. Other architectures'
-        // 3D conv weights may be actual spatial kernels, so keep the 2D-only
-        // rule for them.
-        // FireRedASR/LID and ECAPA-TDNN: 3D conv weights (kernel=1 or small kernel)
-        // are effectively 2D matmuls — safe to quantize.
-        const bool ok_dims = (ggml_n_dims(t) == 2) || ((is_firered || is_ecapa) && ggml_n_dims(t) >= 2);
-        bool quantize =
-            ggml_is_quantized(qtype) && (type == GGML_TYPE_F32 || type == GGML_TYPE_F16) && ok_dims && is_weight &&
-            (sname.find("norm") == std::string::npos) &&
-            // Skip projector tensors (Granite family: precision-sensitive).
-            // CRISPASR_GRANITE_QUANT_ALL=1 overrides for the `-mini` build.
-            (granite_quant_all || sname.find("proj.") != 0) &&
-            // Skip encoder tensors for the Granite family: 16-layer Conformer
-            // encoder is precision-sensitive (cos drops to ~0.93 at Q4_K
-            // when encoder is quantized; ~0.999 when kept F32).
-            !(is_granite_family && !granite_quant_all && sname.find("enc.") == 0) &&
-            // MOSS-Audio: skip encoder + adapter + deepstack tensors.
-            // 32-layer Whisper encoder with DeepStack injection into LM
-            // is highly precision-sensitive — Q4_K encoder produces
-            // absmax=4.7 vs ref 11.0, causing garbage output. Keep
-            // enc.*, adapter.*, deepstack.* at F16; only quantize llm.*.
-            !(arch == "moss_audio" && (sname.find("enc.") == 0 ||
-                                       sname.find("adapter.") == 0 ||
-                                       sname.find("deepstack.") == 0)) &&
-            // Skip small classifier heads (ECAPA cosine: 45x192, precision-critical)
-            !(sname.find("cls.") == 0 && ggml_nelements(t) < 65536) &&
-            // Skip OmniASR-LLM bridging tensors (enc_proj, lm_head, tok_emb, lang_emb)
-            (sname.find("enc_proj.") != 0) && (sname.find("lm_head.") != 0) && (sname.find("tok_emb.") != 0) &&
-            (sname.find("lang_emb.") != 0) &&
-            // Skip chatterbox tensors that are read manually via
-            // ggml_backend_tensor_get — vocoder, embeddings, conditioning, VE.
-            // Only T3 block weights (t3.blk.*) and S3Gen encoder/denoiser
-            // weights use the ggml graph and are safe to quantize.
-            !(is_chatterbox && (sname.find("s3.v.") == 0 || sname.find("conds.") == 0 || sname.find("ve.") == 0 ||
-                                sname.find("t3.text_emb") == 0 || sname.find("t3.speech_emb") == 0 ||
-                                sname.find("t3.wpe") == 0 || sname.find("t3.text_pos_emb") == 0 ||
-                                sname.find("t3.speech_pos_emb") == 0 || sname.find("t3.cond.") == 0)) &&
-            // CosyVoice3 precision-sensitive tensors. AR head +
-            // speech-token embedding lookups feed straight into
-            // the speech-token sampler; flow input_embd / spk
-            // projection are tiny (a few MB) and quant noise
-            // there cascades through the 10-step CFM ODE.
-            !(is_cosyvoice3 &&
-              (sname == "cosyvoice3.speech_embd.weight" || sname == "cosyvoice3.speech_lm_head.weight" ||
-               sname == "cosyvoice3.flow.input_embd.w" || sname == "cosyvoice3.flow.spk_affine.w" ||
-               sname == "cosyvoice3.s3tok.fsq.proj.w")) &&
-            // F5-TTS: skip quantization entirely. The 32-step iterative
-            // ODE (22 layers × 32 steps × 2 CFG = 1408 forward passes)
-            // compounds quantization noise catastrophically — verified:
-            // Q4_K and Q8_0 both diverge (36s of noise instead of 1.3s
-            // "Hello world"). Even with mixed precision (only DiT attn/FFN
-            // quantized, conditioning at F16), the error accumulation is
-            // too severe. F16 is the minimum viable precision for F5-TTS.
-            // The read_tensor_f32 dequantization fix ensures robustness if
-            // a user manually creates a quantized GGUF, but the quantizer
-            // should not produce them.
-            !is_f5tts &&
-            // Parler TTS: skip DAC codec tensors (audio codec, precision-sensitive)
-            !(is_parler && sname.find("dac.") == 0) &&
-            // Dia TTS: skip embeddings (codebook lookups, precision-sensitive)
-            // and DAC codec tensors (audio_encoder.* / dac.* if embedded)
-            !(is_dia && (sname.find("embedding") != std::string::npos || sname.find("audio_encoder") == 0)) &&
-            // Bark TTS: skip embeddings, lm_head outputs, and EnCodec decoder.
-            // Only quantize attn/ffn projections (attn_qkv, attn_output,
-            // ffn_up, ffn_down weights inside blk.* layers).
-            // "output" matches lm_heads (text.output.weight, fine.output.0.weight)
-            // and output_norm but NOT attn_output (which is safe to quantize).
-            !(is_bark &&
-              (sname.find("token_embd") != std::string::npos || sname.find("pos_embd") != std::string::npos ||
-               (sname.find("output") != std::string::npos && sname.find("attn_output") == std::string::npos) ||
-               sname.find("encodec.") == 0)) &&
-            // Skip OmniASR-CTC encoder layers in head/tail bands.
-            // Names look like "enc.<idx>.attn.*" / "enc.<idx>.ffn.*";
-            // skip if idx in [0, head_cutoff) ∪ [tail_cutoff, n_enc).
-            ([&]() {
-                if (!is_omniasr_ctc || omniasr_quant_all ||
-                    (omniasr_head_cutoff == 0 && omniasr_tail_cutoff >= omniasr_n_enc))
-                    return true;
-                if (sname.size() < 5 || sname.compare(0, 4, "enc.") != 0)
-                    return true;
-                int idx = 0;
-                size_t p = 4;
-                while (p < sname.size() && sname[p] >= '0' && sname[p] <= '9') {
-                    idx = idx * 10 + (sname[p] - '0');
-                    p++;
-                }
-                if (p == 4)
-                    return true;
-                const bool in_head = idx < omniasr_head_cutoff;
-                const bool in_tail = idx >= omniasr_tail_cutoff;
-                return !(in_head || in_tail);
-            }());
-
-        const int64_t ncols = t->ne[0];
-        ggml_type qtype_used = qtype;
-        int64_t qk_k = ggml_blck_size(qtype_used);
-
-        // Fallback chain for tensors whose row size doesn't divide the
-        // requested quant's block size. K-quants need 256-aligned rows;
-        // legacy Q4_0/Q5_0/Q8_0 use block 32 and accept any 32-aligned
-        // row, which covers the qwen3-asr audio encoder's 896-wide tensors
-        // that K-quants would otherwise leave as F16.
-        if (quantize && ncols % qk_k != 0) {
-            ggml_type fallback = GGML_TYPE_COUNT;
-            switch (qtype) {
-            case GGML_TYPE_Q2_K:
-            case GGML_TYPE_Q3_K:
-            case GGML_TYPE_Q4_K:
-                fallback = GGML_TYPE_Q4_0;
-                break;
-            case GGML_TYPE_Q5_K:
-                fallback = GGML_TYPE_Q5_0;
-                break;
-            case GGML_TYPE_Q6_K:
-                fallback = GGML_TYPE_Q8_0;
-                break;
-            default:
-                break;
-            }
-            if (fallback != GGML_TYPE_COUNT && ncols % ggml_blck_size(fallback) == 0) {
-                qtype_used = fallback;
-                qk_k = ggml_blck_size(qtype_used);
-                printf("(fallback %s) ", ggml_type_name(qtype_used));
-            } else {
-                printf("warning: ncols %lld not divisible by %lld, skipping quantization for this tensor\n",
-                       (long long)ncols, (long long)qk_k);
-                quantize = false;
-            }
-        }
+        // Use pre-computed target type from first pass
+        ggml_type qtype_used = target_types[i];
+        bool quantize = ggml_is_quantized(qtype_used) && (qtype_used != type);
 
         // Use 64-bit seek to avoid overflow on files > 2 GB (Windows
         // long is 32-bit even on x86_64, wrapping at 2^31).
@@ -434,7 +415,6 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
                                                 t->ne[0], nullptr);
 
             fwrite(q_data.data(), 1, q_size, fout);
-            gguf_set_tensor_type(ctx_out, name, qtype_used);
 
             // Padding
             size_t pad = GGML_PAD(q_size, GGUF_DEFAULT_ALIGNMENT) - q_size;
@@ -442,17 +422,8 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
                 fputc(0, fout);
 
             printf("done\n");
-        } else if (granite_enc_to_f16 && type == GGML_TYPE_F32 && sname.find("enc.") == 0 &&
-                   sname.find("norm") == std::string::npos && sname.find("running_mean") == std::string::npos &&
-                   sname.find("running_var") == std::string::npos && sname.find("rel_pos") == std::string::npos &&
-                   sname.find("conv_bn") == std::string::npos && ggml_n_dims(t) == 2) {
-            // Only downcast 2D weight matrices. 1D biases stay F32 because
-            // Metal's `ggml_add(matmul_result_f32, bias)` asserts bias is
-            // F32. conv_bn (BatchNorm gamma/beta) also stays F32 because
-            // the runtime does in-place BN folding at load time.
-            // Granite Speech encoder weight: keep out of Q4K (precision-
-            // sensitive across 16 layers) but downcast F32 → F16. Norms,
-            // BN stats and the RPE table stay F32.
+        } else if (target_types[i] == GGML_TYPE_F16 && type == GGML_TYPE_F32) {
+            // Granite encoder F32 → F16 downcast (or any F32→F16 target)
             printf("F32 -> F16... ");
             const int64_t nelements = ggml_nelements(t);
             std::vector<float> f32(nelements);
@@ -465,7 +436,6 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
                 f16[j] = ggml_fp32_to_fp16(f32[j]);
             const size_t out_bytes = (size_t)nelements * sizeof(ggml_fp16_t);
             fwrite(f16.data(), 1, out_bytes, fout);
-            gguf_set_tensor_type(ctx_out, name, GGML_TYPE_F16);
             size_t pad = GGML_PAD(out_bytes, GGUF_DEFAULT_ALIGNMENT) - out_bytes;
             for (size_t j = 0; j < pad; j++)
                 fputc(0, fout);
@@ -487,25 +457,22 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
         }
     }
 
-    // Write real metadata. Re-compute meta_size because gguf_set_tensor_type
-    // may have changed tensor type fields, altering the serialized metadata size.
-    const size_t meta_size_final = gguf_get_meta_size(ctx_out);
-    if (meta_size_final != meta_size) {
-        fprintf(stderr,
-                "warning: metadata size changed %zu -> %zu during quantization, "
-                "output may be corrupt\n",
-                meta_size, meta_size_final);
-    }
-    meta_data.resize(meta_size_final, 0);
-    rewind(fout);
+    // Rewrite metadata header. Since tensor types were set correctly in
+    // the first pass (before gguf_add_tensor), meta_size should be stable.
+    fflush(fout);
+    fseek(fout, 0, SEEK_SET);
     gguf_get_meta_data(ctx_out, meta_data.data());
-    fwrite(meta_data.data(), 1, meta_size_final, fout);
+    size_t written = fwrite(meta_data.data(), 1, meta_size, fout);
+    fflush(fout);
+    printf("%s: metadata rewrite: %zu / %zu bytes at offset 0, magic=0x%08x\n",
+           __func__, written, meta_size, *(uint32_t*)meta_data.data());
 
     fclose(fin);
     fclose(fout);
     gguf_free(ctx_in);
     gguf_free(ctx_out);
     ggml_free(ctx_in_ggml);
+    ggml_free(ctx_scratch);
 
     return true;
 }

@@ -22,4 +22,23 @@ jobs:
         with:
           ruby-version: '3.2'
       - uses: actions/checkout@v6
+
+      - name: Cache whisper models
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/crispasr
+          key: ruby-whisper-models-base-en
+
+      - name: Pre-download model (with retry)
+        run: |
+          mkdir -p ~/.cache/crispasr/huggingface.co/ggerganov/whisper.cpp/resolve/main
+          MODEL=~/.cache/crispasr/huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin
+          if [ ! -f "$MODEL" ] || [ $(wc -c < "$MODEL") -lt 1000000 ]; then
+            for i in 1 2 3; do
+              curl -L --retry 3 --retry-delay 10 -o "$MODEL" \
+                https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin && break
+              sleep 15
+            done
+          fi
+
       - run: rake test

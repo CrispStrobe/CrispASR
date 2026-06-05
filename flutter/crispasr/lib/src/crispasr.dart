@@ -870,6 +870,18 @@ class TranscribeOptions {
   /// linearly with no real benefit.
   final int altN;
 
+  /// Max tokens per segment. 0 = whisper default. Maps to
+  /// `whisper_full_params.max_tokens`.
+  final int maxTokens;
+  /// Do not use past transcription as initial prompt for the decoder.
+  final bool noContext;
+  /// Force single-segment output (useful for streaming).
+  final bool singleSegment;
+  /// Suppress blank tokens at the beginning of each segment.
+  final bool suppressBlank;
+  /// Initial decoding temperature. 0.0 = whisper default.
+  final double temperature;
+
   const TranscribeOptions({
     this.strategy = 0,
     this.language,
@@ -889,6 +901,11 @@ class TranscribeOptions {
     this.vadMinSilenceMs = 100,
     this.tdrz = false,
     this.altN = 0,
+    this.maxTokens = 0,
+    this.noContext = false,
+    this.singleSegment = false,
+    this.suppressBlank = true,
+    this.temperature = 0.0,
   });
 }
 
@@ -1005,6 +1022,21 @@ typedef _StreamGetText = int Function(
 typedef _StreamCloseNative = Void Function(Pointer<Void>);
 typedef _StreamClose       = void Function(Pointer<Void>);
 
+typedef _StreamSetLiveDecodeNative = Void Function(Pointer<Void>, Int32);
+typedef _StreamSetLiveDecode       = void Function(Pointer<Void>, int);
+
+// token_alt_text: fills a buffer with the alt-candidate text.
+typedef _TokenAltTextNative = Int32 Function(Pointer<Void>, Int32, Int32, Int32, Pointer<Utf8>, Int32);
+typedef _TokenAltText       = int   Function(Pointer<Void>, int, int, int, Pointer<Utf8>, int);
+
+// VAD slices (0.6.0+): unified VAD dispatcher returning seconds.
+typedef _VadSlicesNative = Int32 Function(
+    Pointer<Utf8>, Pointer<Float>, Int32, Int32, Float, Int32, Int32, Int32,
+    Float, Int32, Pointer<Pointer<Float>>);
+typedef _VadSlices = int Function(
+    Pointer<Utf8>, Pointer<Float>, int, int, double, int, int, int,
+    double, int, Pointer<Pointer<Float>>);
+
 /// On-device speech recognition model.
 ///
 /// ```dart
@@ -1083,6 +1115,22 @@ class CrispASR {
   _StreamFlush?   _streamFlush;
   _StreamGetText? _streamGetText;
   _StreamClose?   _streamClose;
+
+  // params_set additions for full parity.
+  _ParamsSetInt?    _paramsSetMaxTokens;
+  _ParamsSetBool?   _paramsSetNoContext;
+  _ParamsSetBool?   _paramsSetSingleSegment;
+  _ParamsSetBool?   _paramsSetSuppressBlank;
+  _ParamsSetFloat?  _paramsSetTemperature;
+
+  // token_alt_text: fills a char* buffer with the alternate text.
+  _TokenAltText?    _tokenAltText;
+
+  // VAD slices (unified dispatcher, returns seconds).
+  _VadSlices?       _vadSlices;
+
+  // Stream live-decode toggle.
+  _StreamSetLiveDecode? _streamSetLiveDecode;
 
   bool get supportsExtended => _detectLang != null;
   bool get supportsStreaming => _streamOpen != null;
@@ -1274,6 +1322,36 @@ class CrispASR {
     if (_lib.providesSymbol('crispasr_stream_close')) {
       _streamClose = _lib.lookupFunction<_StreamCloseNative, _StreamClose>('crispasr_stream_close');
     }
+    if (_lib.providesSymbol('crispasr_stream_set_live_decode')) {
+      _streamSetLiveDecode = _lib.lookupFunction<_StreamSetLiveDecodeNative, _StreamSetLiveDecode>('crispasr_stream_set_live_decode');
+    }
+
+    // params_set additions for full C-ABI parity.
+    if (_lib.providesSymbol('crispasr_params_set_max_tokens')) {
+      _paramsSetMaxTokens = _lib.lookupFunction<_ParamsSetIntNative, _ParamsSetInt>('crispasr_params_set_max_tokens');
+    }
+    if (_lib.providesSymbol('crispasr_params_set_no_context')) {
+      _paramsSetNoContext = _lib.lookupFunction<_ParamsSetBoolNative, _ParamsSetBool>('crispasr_params_set_no_context');
+    }
+    if (_lib.providesSymbol('crispasr_params_set_single_segment')) {
+      _paramsSetSingleSegment = _lib.lookupFunction<_ParamsSetBoolNative, _ParamsSetBool>('crispasr_params_set_single_segment');
+    }
+    if (_lib.providesSymbol('crispasr_params_set_suppress_blank')) {
+      _paramsSetSuppressBlank = _lib.lookupFunction<_ParamsSetBoolNative, _ParamsSetBool>('crispasr_params_set_suppress_blank');
+    }
+    if (_lib.providesSymbol('crispasr_params_set_temperature')) {
+      _paramsSetTemperature = _lib.lookupFunction<_ParamsSetFloatNative, _ParamsSetFloat>('crispasr_params_set_temperature');
+    }
+
+    // token_alt_text: fills a buffer with the alt-candidate text string.
+    if (_lib.providesSymbol('crispasr_token_alt_text')) {
+      _tokenAltText = _lib.lookupFunction<_TokenAltTextNative, _TokenAltText>('crispasr_token_alt_text');
+    }
+
+    // VAD slices (unified dispatcher).
+    if (_lib.providesSymbol('crispasr_vad_slices')) {
+      _vadSlices = _lib.lookupFunction<_VadSlicesNative, _VadSlices>('crispasr_vad_slices');
+    }
   }
 
   /// Transcribe raw PCM audio (float32, mono, 16 kHz).
@@ -1334,6 +1412,11 @@ class CrispASR {
         }
       }
       if (opts.tdrz) _paramsSetTdrz?.call(params, 1);
+      if (opts.maxTokens > 0) _paramsSetMaxTokens?.call(params, opts.maxTokens);
+      if (opts.noContext) _paramsSetNoContext?.call(params, 1);
+      if (opts.singleSegment) _paramsSetSingleSegment?.call(params, 1);
+      if (!opts.suppressBlank) _paramsSetSuppressBlank?.call(params, 0);
+      if (opts.temperature > 0.0) _paramsSetTemperature?.call(params, opts.temperature);
       // Alt-token capture (0 = off, default). Pre-0.5.13 dylibs lack
       // the setter — silently skip so callers stay forward-compatible.
       if (opts.altN > 0) _paramsSetAltN?.call(params, opts.altN);
@@ -1509,6 +1592,56 @@ class CrispASR {
     }
   }
 
+  /// Run CrispASR's unified VAD dispatcher on [pcm]. Returns speech spans
+  /// in seconds. Uses Silero, FireRedVAD, MarbleNet, or Whisper-VAD-EncDec
+  /// depending on the concrete model at [modelPath].
+  ///
+  /// Compared to [vad], this routes through the shared VAD dispatcher and
+  /// returns float pairs in seconds (not centiseconds).
+  List<VadSpan> vadSlices(
+    Float32List pcm, {
+    required String modelPath,
+    int sampleRate = 16000,
+    double threshold = 0.0,
+    int minSpeechMs = 250,
+    int minSilenceMs = 100,
+    int speechPadMs = 30,
+    double maxChunkDurationS = 30.0,
+    int nThreads = 4,
+  }) {
+    if (_vadSlices == null || _vadFree == null) {
+      throw UnsupportedError(
+          'VAD slices helper not available — rebuild CrispASR with 0.6.0+ helpers.');
+    }
+    final samples = calloc<Float>(pcm.length);
+    for (var i = 0; i < pcm.length; i++) {
+      samples[i] = pcm[i];
+    }
+    final modelPtr = modelPath.toNativeUtf8();
+    final outPtr = calloc<Pointer<Float>>();
+    try {
+      final n = _vadSlices!(
+        modelPtr, samples, pcm.length, sampleRate, threshold,
+        minSpeechMs, minSilenceMs, speechPadMs,
+        maxChunkDurationS, nThreads, outPtr,
+      );
+      if (n < 0) throw Exception('VAD slices failed (error $n)');
+      final spans = <VadSpan>[];
+      if (n > 0) {
+        final data = outPtr.value;
+        for (var i = 0; i < n; i++) {
+          spans.add(VadSpan(start: data[2 * i], end: data[2 * i + 1]));
+        }
+        _vadFree!(data);
+      }
+      return spans;
+    } finally {
+      calloc.free(samples);
+      calloc.free(modelPtr);
+      calloc.free(outPtr);
+    }
+  }
+
   /// Supported language codes, e.g. `['en', 'de', ...]`. Returns `[]` when
   /// the loaded dylib doesn't export language-iteration helpers.
   List<String> supportedLanguageCodes() {
@@ -1575,6 +1708,7 @@ class CrispASR {
       flush: _streamFlush,
       getText: _streamGetText!,
       close: _streamClose!,
+      setLiveDecode: _streamSetLiveDecode,
     );
   }
 
@@ -1645,17 +1779,20 @@ class StreamingSession {
     required _StreamFlush? flush,
     required _StreamGetText getText,
     required _StreamClose close,
+    _StreamSetLiveDecode? setLiveDecode,
   })  : _handle = handle,
         _feedFn = feed,
         _flushFn = flush,
         _getTextFn = getText,
-        _closeFn = close;
+        _closeFn = close,
+        _setLiveDecodeFn = setLiveDecode;
 
   final Pointer<Void> _handle;
   final _StreamFeed    _feedFn;
   final _StreamFlush?  _flushFn;
   final _StreamGetText _getTextFn;
   final _StreamClose   _closeFn;
+  final _StreamSetLiveDecode? _setLiveDecodeFn;
 
   bool _closed = false;
   int _lastCounter = -1;
@@ -1721,6 +1858,18 @@ class StreamingSession {
       calloc.free(t1Ptr);
       calloc.free(cntPtr);
     }
+  }
+
+  /// Toggle live-decode mode. When enabled (1), the streaming session
+  /// decodes every feed() call immediately instead of waiting for the
+  /// step threshold. Useful for ultra-low-latency UIs at higher CPU cost.
+  void setLiveDecode(bool enabled) {
+    if (_closed) throw StateError('StreamingSession is closed');
+    if (_setLiveDecodeFn == null) {
+      throw UnsupportedError(
+          'crispasr_stream_set_live_decode not available in this libcrispasr build');
+    }
+    _setLiveDecodeFn!(_handle, enabled ? 1 : 0);
   }
 
   /// Release the native session. Safe to call more than once.
@@ -2763,9 +2912,9 @@ class CrispasrSession {
             Pointer<Void>, Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>, Int32),
         Pointer<Utf8> Function(Pointer<Void>, Pointer<Utf8>, Pointer<Utf8>,
             Pointer<Utf8>, int)>('crispasr_session_translate_text');
-    final freeFn = _lib.providesSymbol('crispasr_session_free_text')
+    final freeFn = _lib.providesSymbol('crispasr_session_translate_text_free')
         ? _lib.lookupFunction<Void Function(Pointer<Utf8>),
-            void Function(Pointer<Utf8>)>('crispasr_session_free_text')
+            void Function(Pointer<Utf8>)>('crispasr_session_translate_text_free')
         : null;
     final textPtr = text.toNativeUtf8();
     final srcPtr = srcLang.toNativeUtf8();
@@ -3059,6 +3208,10 @@ class CrispasrSession {
             Pointer<Double>, Pointer<Int64>)>('crispasr_stream_get_text');
     final closeFn = _lib.lookupFunction<Void Function(Pointer<Void>),
         void Function(Pointer<Void>)>('crispasr_stream_close');
+    final setLiveDecodeFn = _lib.providesSymbol('crispasr_stream_set_live_decode')
+        ? _lib.lookupFunction<_StreamSetLiveDecodeNative, _StreamSetLiveDecode>(
+            'crispasr_stream_set_live_decode')
+        : null;
 
     return StreamingSession._(
       handle: handle,
@@ -3066,6 +3219,7 @@ class CrispasrSession {
       flush: flushFn,
       getText: getTextFn,
       close: closeFn,
+      setLiveDecode: setLiveDecodeFn,
     );
   }
 
@@ -3188,6 +3342,23 @@ class CrispasrTitaNet {
     final result = Float32List.fromList(outPtr.asTypedList(dim));
     malloc.free(outPtr);
     return result;
+  }
+
+  /// Cosine similarity between two embeddings.
+  static double cosineSim(DynamicLibrary lib, Float32List a, Float32List b) {
+    final fn = lib.lookupFunction<
+        Float Function(Pointer<Float>, Pointer<Float>, Int32),
+        double Function(Pointer<Float>, Pointer<Float>, int)>(
+        'crispasr_titanet_cosine_sim');
+    final dim = a.length < b.length ? a.length : b.length;
+    final aPtr = malloc<Float>(dim);
+    aPtr.asTypedList(dim).setAll(0, a.sublist(0, dim));
+    final bPtr = malloc<Float>(dim);
+    bPtr.asTypedList(dim).setAll(0, b.sublist(0, dim));
+    final sim = fn(aPtr, bPtr, dim);
+    malloc.free(aPtr);
+    malloc.free(bPtr);
+    return sim;
   }
 
   void close() {
@@ -3447,5 +3618,284 @@ class CrispasrPyannoteCache {
         void Function(Pointer<Void>)>('crispasr_pyannote_cache_free_abi');
     freeFn(_handle);
     _handle = nullptr;
+  }
+}
+
+// =====================================================================
+// Direct Parakeet API (bypasses unified session)
+// =====================================================================
+
+/// Parakeet ASR result with word- and token-level timestamps.
+class ParakeetResult {
+  final DynamicLibrary _lib;
+  Pointer<Void> _handle;
+
+  ParakeetResult._(this._lib, this._handle);
+
+  String get text {
+    final fn = _lib.lookupFunction<
+        Pointer<Utf8> Function(Pointer<Void>),
+        Pointer<Utf8> Function(Pointer<Void>)>('crispasr_parakeet_result_text');
+    final p = fn(_handle);
+    return p == nullptr ? '' : p.toDartString();
+  }
+
+  int get nWords {
+    final fn = _lib.lookupFunction<Int32 Function(Pointer<Void>),
+        int Function(Pointer<Void>)>('crispasr_parakeet_result_n_words');
+    return fn(_handle);
+  }
+
+  String wordText(int i) {
+    final fn = _lib.lookupFunction<
+        Pointer<Utf8> Function(Pointer<Void>, Int32),
+        Pointer<Utf8> Function(Pointer<Void>, int)>('crispasr_parakeet_result_word_text');
+    final p = fn(_handle, i);
+    return p == nullptr ? '' : p.toDartString();
+  }
+
+  int wordT0(int i) {
+    final fn = _lib.lookupFunction<Int64 Function(Pointer<Void>, Int32),
+        int Function(Pointer<Void>, int)>('crispasr_parakeet_result_word_t0');
+    return fn(_handle, i);
+  }
+
+  int wordT1(int i) {
+    final fn = _lib.lookupFunction<Int64 Function(Pointer<Void>, Int32),
+        int Function(Pointer<Void>, int)>('crispasr_parakeet_result_word_t1');
+    return fn(_handle, i);
+  }
+
+  int get nTokens {
+    final fn = _lib.lookupFunction<Int32 Function(Pointer<Void>),
+        int Function(Pointer<Void>)>('crispasr_parakeet_result_n_tokens');
+    return fn(_handle);
+  }
+
+  String tokenText(int i) {
+    final fn = _lib.lookupFunction<
+        Pointer<Utf8> Function(Pointer<Void>, Int32),
+        Pointer<Utf8> Function(Pointer<Void>, int)>('crispasr_parakeet_result_token_text');
+    final p = fn(_handle, i);
+    return p == nullptr ? '' : p.toDartString();
+  }
+
+  int tokenT0(int i) {
+    final fn = _lib.lookupFunction<Int64 Function(Pointer<Void>, Int32),
+        int Function(Pointer<Void>, int)>('crispasr_parakeet_result_token_t0');
+    return fn(_handle, i);
+  }
+
+  int tokenT1(int i) {
+    final fn = _lib.lookupFunction<Int64 Function(Pointer<Void>, Int32),
+        int Function(Pointer<Void>, int)>('crispasr_parakeet_result_token_t1');
+    return fn(_handle, i);
+  }
+
+  double tokenP(int i) {
+    final fn = _lib.lookupFunction<Float Function(Pointer<Void>, Int32),
+        double Function(Pointer<Void>, int)>('crispasr_parakeet_result_token_p');
+    return fn(_handle, i);
+  }
+
+  void free() {
+    if (_handle == nullptr) return;
+    final fn = _lib.lookupFunction<Void Function(Pointer<Void>),
+        void Function(Pointer<Void>)>('crispasr_parakeet_result_free');
+    fn(_handle);
+    _handle = nullptr;
+  }
+}
+
+/// Direct Parakeet ASR context. For most use cases prefer [CrispasrSession]
+/// which auto-dispatches to Parakeet when the GGUF metadata indicates it.
+class CrispasrParakeet {
+  late final DynamicLibrary _lib;
+  Pointer<Void> _handle = nullptr;
+
+  CrispasrParakeet(DynamicLibrary lib, String modelPath,
+      {int nThreads = 4, bool useFlash = true})
+      : _lib = lib {
+    final initFn = lib.lookupFunction<
+        Pointer<Void> Function(Pointer<Utf8>, Int32, Int32),
+        Pointer<Void> Function(Pointer<Utf8>, int, int)>('crispasr_parakeet_init');
+    final mp = modelPath.toNativeUtf8();
+    _handle = initFn(mp, nThreads, useFlash ? 1 : 0);
+    malloc.free(mp);
+    if (_handle == nullptr) {
+      throw Exception('Failed to load Parakeet model: $modelPath');
+    }
+  }
+
+  /// Transcribe mono 16 kHz float32 PCM. The returned [ParakeetResult]
+  /// must be freed by the caller via [ParakeetResult.free].
+  ParakeetResult transcribe(Float32List pcm16k, {String? language}) {
+    final pcmPtr = malloc<Float>(pcm16k.length);
+    pcmPtr.asTypedList(pcm16k.length).setAll(0, pcm16k);
+    final langPtr = language != null ? language.toNativeUtf8() : nullptr;
+    try {
+      final fn = _lib.lookupFunction<
+          Pointer<Void> Function(Pointer<Void>, Pointer<Float>, Int32, Pointer<Utf8>),
+          Pointer<Void> Function(Pointer<Void>, Pointer<Float>, int, Pointer<Utf8>)>(
+          'crispasr_parakeet_transcribe');
+      final res = fn(_handle, pcmPtr, pcm16k.length, langPtr.cast<Utf8>());
+      if (res == nullptr) {
+        throw Exception('crispasr_parakeet_transcribe returned null');
+      }
+      return ParakeetResult._(_lib, res);
+    } finally {
+      malloc.free(pcmPtr);
+      if (langPtr != nullptr) malloc.free(langPtr);
+    }
+  }
+
+  void close() {
+    if (_handle == nullptr) return;
+    final fn = _lib.lookupFunction<Void Function(Pointer<Void>),
+        void Function(Pointer<Void>)>('crispasr_parakeet_free');
+    fn(_handle);
+    _handle = nullptr;
+  }
+}
+
+// =====================================================================
+// Standalone helpers — full C-ABI parity
+// =====================================================================
+
+/// Detect the backend name from a GGUF file's metadata.
+/// Returns the backend name (e.g. 'whisper', 'parakeet', 'canary') or
+/// null if detection failed.
+String? detectBackendFromGguf(String path, {String? libPath}) {
+  final lib = DynamicLibrary.open(libPath ?? CrispASR.defaultLibName());
+  if (!lib.providesSymbol('crispasr_detect_backend_from_gguf')) return null;
+  final fn = lib.lookupFunction<
+      Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Int32),
+      int Function(Pointer<Utf8>, Pointer<Utf8>, int)>(
+      'crispasr_detect_backend_from_gguf');
+  final pathPtr = path.toNativeUtf8();
+  const cap = 128;
+  final outBuf = calloc<Uint8>(cap);
+  try {
+    final rc = fn(pathPtr, outBuf.cast<Utf8>(), cap);
+    if (rc != 0) return null;
+    return outBuf.cast<Utf8>().toDartString();
+  } finally {
+    calloc.free(pathPtr);
+    calloc.free(outBuf);
+  }
+}
+
+/// Chunk-boundary LCS dedup: returns the number of leading tokens
+/// of [currTokens] to drop to remove overlap with [prevTailTokens].
+int lcsDedup(DynamicLibrary lib, List<int> prevTailTokens,
+    List<int> currTokens, {int minLcsLength = 1}) {
+  final fn = lib.lookupFunction<
+      Int32 Function(Pointer<Int32>, Int32, Pointer<Int32>, Int32, Int32),
+      int Function(Pointer<Int32>, int, Pointer<Int32>, int, int)>(
+      'crispasr_lcs_dedup_prefix_count');
+  final prevPtr = malloc<Int32>(prevTailTokens.length);
+  for (var i = 0; i < prevTailTokens.length; i++) {
+    prevPtr[i] = prevTailTokens[i];
+  }
+  final currPtr = malloc<Int32>(currTokens.length);
+  for (var i = 0; i < currTokens.length; i++) {
+    currPtr[i] = currTokens[i];
+  }
+  final result = fn(prevPtr, prevTailTokens.length, currPtr,
+      currTokens.length, minLcsLength);
+  malloc.free(prevPtr);
+  malloc.free(currPtr);
+  return result;
+}
+
+/// Whether [lang] is German (Kokoro phoneme selection).
+bool kokoroLangIsGerman(String lang, {String? libPath}) {
+  final lib = DynamicLibrary.open(libPath ?? CrispASR.defaultLibName());
+  if (!lib.providesSymbol('crispasr_kokoro_lang_is_german_abi')) return false;
+  final fn = lib.lookupFunction<
+      Bool Function(Pointer<Utf8>),
+      bool Function(Pointer<Utf8>)>('crispasr_kokoro_lang_is_german_abi');
+  final p = lang.toNativeUtf8();
+  try {
+    return fn(p);
+  } finally {
+    calloc.free(p);
+  }
+}
+
+/// Whether [lang] has a native Kokoro voice (vs. cross-lingual fallback).
+bool kokoroLangHasNativeVoice(String lang, {String? libPath}) {
+  final lib = DynamicLibrary.open(libPath ?? CrispASR.defaultLibName());
+  if (!lib.providesSymbol('crispasr_kokoro_lang_has_native_voice_abi')) return false;
+  final fn = lib.lookupFunction<
+      Bool Function(Pointer<Utf8>),
+      bool Function(Pointer<Utf8>)>('crispasr_kokoro_lang_has_native_voice_abi');
+  final p = lang.toNativeUtf8();
+  try {
+    return fn(p);
+  } finally {
+    calloc.free(p);
+  }
+}
+
+/// Resolve the appropriate Kokoro model path for [lang].
+/// Returns the resolved path or null on failure.
+String? kokoroResolveModelForLang(String modelPath, String lang,
+    {String? libPath}) {
+  final lib = DynamicLibrary.open(libPath ?? CrispASR.defaultLibName());
+  if (!lib.providesSymbol('crispasr_kokoro_resolve_model_for_lang_abi')) {
+    return null;
+  }
+  final fn = lib.lookupFunction<
+      Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>, Int32),
+      int Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>, int)>(
+      'crispasr_kokoro_resolve_model_for_lang_abi');
+  final mp = modelPath.toNativeUtf8();
+  final lp = lang.toNativeUtf8();
+  const cap = 512;
+  final outBuf = calloc<Uint8>(cap);
+  try {
+    final rc = fn(mp, lp, outBuf.cast<Utf8>(), cap);
+    if (rc != 0) return null;
+    return outBuf.cast<Utf8>().toDartString();
+  } finally {
+    calloc.free(mp);
+    calloc.free(lp);
+    calloc.free(outBuf);
+  }
+}
+
+/// Resolve the Kokoro fallback voice for [lang].
+/// Returns `(voicePath, voiceName)` or null on failure.
+({String voicePath, String voiceName})? kokoroResolveFallbackVoice(
+    String modelPath, String lang,
+    {String? libPath}) {
+  final lib = DynamicLibrary.open(libPath ?? CrispASR.defaultLibName());
+  if (!lib.providesSymbol('crispasr_kokoro_resolve_fallback_voice_abi')) {
+    return null;
+  }
+  final fn = lib.lookupFunction<
+      Int32 Function(
+          Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>, Int32, Pointer<Utf8>, Int32),
+      int Function(
+          Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>, int, Pointer<Utf8>, int)>(
+      'crispasr_kokoro_resolve_fallback_voice_abi');
+  final mp = modelPath.toNativeUtf8();
+  final lp = lang.toNativeUtf8();
+  const cap = 512;
+  final pathBuf = calloc<Uint8>(cap);
+  final nameBuf = calloc<Uint8>(cap);
+  try {
+    final rc = fn(mp, lp, pathBuf.cast<Utf8>(), cap, nameBuf.cast<Utf8>(), cap);
+    if (rc != 0) return null;
+    return (
+      voicePath: pathBuf.cast<Utf8>().toDartString(),
+      voiceName: nameBuf.cast<Utf8>().toDartString(),
+    );
+  } finally {
+    calloc.free(mp);
+    calloc.free(lp);
+    calloc.free(pathBuf);
+    calloc.free(nameBuf);
   }
 }

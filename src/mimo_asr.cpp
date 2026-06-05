@@ -157,6 +157,7 @@ struct mimo_asr_context {
     // Backends + weights
     ggml_backend_t backend = nullptr;
     ggml_backend_t backend_cpu = nullptr;
+    bool gpu_embed_split = false; // PLAN #115: embed_w on CPU, matmul weights on GPU
     ggml_backend_sched_t sched = nullptr;
     ggml_context* ctx_w = nullptr;
     ggml_backend_buffer_t buf_w = nullptr;
@@ -341,28 +342,24 @@ extern "C" struct mimo_asr_context* mimo_asr_init_from_file(const char* path_mod
     // HISTORY §56 reference (prefill 15.8 s, decode 7.0 s over 26
     // steps). Force-CPU is the cheapest path to correctness; the
     // proper GPU graph fix is tracked as PLAN #115 option C and
-    // belongs in `mimo_asr_build_prefill_graph`.
-    // PLAN #115 option C diagnostic. Default is force-CPU (option A,
-    // verified correct on M1 Metal + Kaggle CPU). Setting
-    // CRISPASR_MIMO_FORCE_GPU=1 (with --gpu) re-enables the GPU-resident
-    // weights + GPU compute config (the `89111260` path) so the silent-empty
-    // bug can be reproduced and localised stage-by-stage on a Kaggle GPU box
-    // (the local M1 can't hold the 4.2 GB model). When this opt-in is OFF the
-    // behaviour is unchanged.
-    const bool force_gpu = params.use_gpu && std::getenv("CRISPASR_MIMO_FORCE_GPU") != nullptr;
-    if (force_gpu) {
+    // GPU default (PLAN #115 option B, validated on RTX 3090 + Kaggle P100).
+    // When use_gpu is true, weights are split: matmul weights on GPU, Q4_K
+    // embed tables on CPU (CUDA GET_ROWS doesn't support k-quants). Decode
+    // steps run via the prefill graph which handles cross-backend routing.
+    // Set CRISPASR_MIMO_FORCE_CPU=1 to override back to CPU-only.
+    const bool force_cpu = std::getenv("CRISPASR_MIMO_FORCE_CPU") != nullptr;
+    if (params.use_gpu && !force_cpu) {
         ctx->backend = ggml_backend_init_best();
         if (!ctx->backend) {
             fprintf(stderr, "mimo_asr: GPU backend init failed; falling back to CPU\n");
             ctx->backend = ctx->backend_cpu;
         } else if (params.verbosity >= 1) {
-            fprintf(stderr,
-                    "mimo_asr: CRISPASR_MIMO_FORCE_GPU=1 — weights + compute on GPU (PLAN #115 option C diag)\n");
+            fprintf(stderr, "mimo_asr: GPU backend active (embed split-load, decode via prefill graph)\n");
         }
     } else {
         ctx->backend = ctx->backend_cpu;
-        if (params.use_gpu && params.verbosity >= 1) {
-            fprintf(stderr, "mimo_asr: --gpu honored as CPU (PLAN #115 — set CRISPASR_MIMO_FORCE_GPU=1 to test GPU)\n");
+        if (force_cpu && params.verbosity >= 1) {
+            fprintf(stderr, "mimo_asr: CRISPASR_MIMO_FORCE_CPU=1 — forced CPU\n");
         }
     }
     // PLAN #69a: when CRISPASR_N_GPU_LAYERS is set and < total LLM
@@ -386,7 +383,7 @@ extern "C" struct mimo_asr_context* mimo_asr_init_from_file(const char* path_mod
             return nullptr;
         }
         fprintf(stderr, "mimo_asr: layer offload requested but pinned to CPU (PLAN #115 — GPU path broken)\n");
-    } else if (force_gpu) {
+    } else if (ctx->backend && ctx->backend != ctx->backend_cpu) {
         // PLAN #115 option C: CUDA's get_rows cannot gather Q4_K (ggml-cuda
         // GET_ROWS supports_op lists F16/F32/Q4_0/Q5_0/Q8_0 — NOT Q4_K), and
         // mimo's `llm.embed.weight` + `audio.emb.*` are Q4_K. If those sit on
@@ -404,6 +401,7 @@ extern "C" struct mimo_asr_context* mimo_asr_init_from_file(const char* path_mod
             delete ctx;
             return nullptr;
         }
+        ctx->gpu_embed_split = true;
     } else {
         if (!core_gguf::load_weights(path_model, ctx->backend_cpu, "mimo_asr", wl)) {
             fprintf(stderr, "mimo_asr: failed to load weights from '%s'\n", path_model);
@@ -960,6 +958,8 @@ static ggml_cgraph* mimo_asr_build_step_graph(mimo_asr_context* ctx, int n_past,
     ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 16384, false);
 
     // Embed lookup straight from llm.embed_w (no audio fusion).
+    // This step graph is only used on the CPU path (gpu_embed_split routes
+    // decode steps through the prefill graph instead — see run_lm_step).
     ggml_tensor* text_ids = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, T);
     ggml_set_input(text_ids);
     ggml_set_name(text_ids, "text_input_ids");
@@ -1437,6 +1437,7 @@ static std::vector<int32_t> mimo_asr_concat_segments(int channels_plus_text,
 //   • The KV buffer is zero-cleared at mimo_asr_kv_init (already in
 //     place at line ~459) — required to avoid CUDA / partial-CPU
 //     noise from uninit'd KV pages (cf. qwen3-tts commit 7298dd5).
+static float* mimo_asr_run_lm(mimo_asr_context* ctx, const int32_t* input_ids_9xT, int T_total, int n_past);
 static float* mimo_asr_run_lm_step(mimo_asr_context* ctx, int32_t next_token, int n_past_groups) {
     const auto& hp = ctx->hp;
     const int vocab = (int)hp.llm_vocab;
@@ -1446,6 +1447,34 @@ static float* mimo_asr_run_lm_step(mimo_asr_context* ctx, int32_t next_token, in
         return nullptr;
     }
 
+    if (ctx->gpu_embed_split) {
+        // PLAN #115 option B (GPU path): reuse the prefill graph for
+        // decode steps. The prefill graph handles the cross-backend embed
+        // lookup correctly (scheduler routes get_rows to CPU, copies the
+        // result to GPU). Building a separate T=1 step graph with an F32
+        // embed input hits scheduler backend-assignment bugs on P100.
+        // The audio branch computes zero (speech_active_mask=0) — minor
+        // overhead for 1 token with gs=4, dwarfed by the 36L LM.
+        const int gs = (int)hp.audio_group_size;
+        const int channels = (int)hp.audio_channels;
+        const int T_seg = gs; // 1 text token × gs = gs frames
+        std::vector<int32_t> block((size_t)(channels + 1) * T_seg);
+        // Row 0: text token replicated via insert_between pattern
+        auto row0 = mimo_asr_insert_between({next_token}, gs, /*fill*/ -100);
+        std::memcpy(block.data(), row0.data(), (size_t)T_seg * sizeof(int32_t));
+        // Rows 1-8: zeroemb padding
+        for (int c = 0; c < channels; c++) {
+            int32_t pad = (int32_t)hp.speech_zeroemb_idx[c];
+            for (int t = 0; t < T_seg; t++)
+                block[(size_t)(1 + c) * T_seg + t] = pad;
+        }
+        // Invalidate the cached step graph (prefill graph uses compute_meta)
+        ctx->step_t1_gf = nullptr;
+        ctx->step_t1_fixed_kv_len = 0;
+        return mimo_asr_run_lm(ctx, block.data(), T_seg, n_past_groups);
+    }
+
+    // CPU path: use the fast cached T=1 step graph with in-graph get_rows.
     const int fixed_kv = ctx->kv_max_ctx;
     const bool can_skip = (ctx->step_t1_gf != nullptr && ctx->step_t1_fixed_kv_len == fixed_kv);
 
@@ -1453,11 +1482,6 @@ static float* mimo_asr_run_lm_step(mimo_asr_context* ctx, int32_t next_token, in
     if (can_skip) {
         gf = ctx->step_t1_gf;
     } else {
-        // n_past=0 here is intentional — only kv_indices (= lm_positions)
-        // controls the cache write slot when fixed_kv_len > 0, and Lk is
-        // already pinned to fixed_kv. The `n_past` parameter is unused
-        // by core_attn::kv_self_attn in that mode (the static-offset
-        // write path is suppressed by kv_indices != nullptr).
         gf = mimo_asr_build_step_graph(ctx, /*n_past*/ 0, /*fixed_kv_len*/ fixed_kv);
         if (!gf)
             return nullptr;
@@ -1485,8 +1509,6 @@ static float* mimo_asr_run_lm_step(mimo_asr_context* ctx, int32_t next_token, in
     if (!set_t("lm_positions", &pos, sizeof(pos)))
         return nullptr;
 
-    // Causal mask shape (fixed_kv, 1): visible up to and including
-    // position n_past_groups, -INF beyond.
     std::vector<ggml_fp16_t> mask((size_t)fixed_kv);
     const ggml_fp16_t z = ggml_fp32_to_fp16(0.0f);
     const ggml_fp16_t ninf = ggml_fp32_to_fp16(-INFINITY);

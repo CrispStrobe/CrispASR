@@ -194,8 +194,27 @@ class CrispASR:
         lib.whisper_lang_str.argtypes = [ctypes.c_int]
         lib.whisper_lang_str.restype = ctypes.c_char_p
 
-        # 0.4.2 — VAD + tdrz param setters on whisper_full_params.
+        # Parameter setters on whisper_full_params — all void(ptr, val).
         for _sym, _argtypes in [
+            ("crispasr_params_set_language", [ctypes.c_void_p, ctypes.c_char_p]),
+            ("crispasr_params_set_translate", [ctypes.c_void_p, ctypes.c_int]),
+            ("crispasr_params_set_detect_language", [ctypes.c_void_p, ctypes.c_int]),
+            ("crispasr_params_set_token_timestamps", [ctypes.c_void_p, ctypes.c_int]),
+            ("crispasr_params_set_n_threads", [ctypes.c_void_p, ctypes.c_int]),
+            ("crispasr_params_set_max_len", [ctypes.c_void_p, ctypes.c_int]),
+            ("crispasr_params_set_best_of", [ctypes.c_void_p, ctypes.c_int]),
+            ("crispasr_params_set_split_on_word", [ctypes.c_void_p, ctypes.c_int]),
+            ("crispasr_params_set_no_context", [ctypes.c_void_p, ctypes.c_int]),
+            ("crispasr_params_set_single_segment", [ctypes.c_void_p, ctypes.c_int]),
+            ("crispasr_params_set_print_realtime", [ctypes.c_void_p, ctypes.c_int]),
+            ("crispasr_params_set_print_progress", [ctypes.c_void_p, ctypes.c_int]),
+            ("crispasr_params_set_print_timestamps", [ctypes.c_void_p, ctypes.c_int]),
+            ("crispasr_params_set_print_special", [ctypes.c_void_p, ctypes.c_int]),
+            ("crispasr_params_set_suppress_blank", [ctypes.c_void_p, ctypes.c_int]),
+            ("crispasr_params_set_temperature", [ctypes.c_void_p, ctypes.c_float]),
+            ("crispasr_params_set_max_tokens", [ctypes.c_void_p, ctypes.c_int]),
+            ("crispasr_params_set_initial_prompt", [ctypes.c_void_p, ctypes.c_char_p]),
+            ("crispasr_params_set_alt_n", [ctypes.c_void_p, ctypes.c_int]),
             ("crispasr_params_set_vad", [ctypes.c_void_p, ctypes.c_int]),
             ("crispasr_params_set_vad_model_path", [ctypes.c_void_p, ctypes.c_char_p]),
             ("crispasr_params_set_vad_threshold", [ctypes.c_void_p, ctypes.c_float]),
@@ -206,6 +225,50 @@ class CrispASR:
             if hasattr(lib, _sym):
                 getattr(lib, _sym).argtypes = _argtypes
                 getattr(lib, _sym).restype = None
+
+        # Token-level accessors (0.5.x).
+        for _sym, _args, _ret in [
+            ("crispasr_token_t0", [ctypes.c_void_p, ctypes.c_int, ctypes.c_int], ctypes.c_int64),
+            ("crispasr_token_t1", [ctypes.c_void_p, ctypes.c_int, ctypes.c_int], ctypes.c_int64),
+            ("crispasr_token_p", [ctypes.c_void_p, ctypes.c_int, ctypes.c_int], ctypes.c_float),
+            ("crispasr_token_n_alts", [ctypes.c_void_p, ctypes.c_int, ctypes.c_int], ctypes.c_int),
+            ("crispasr_token_alt_id", [ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int], ctypes.c_int32),
+            ("crispasr_token_alt_p", [ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int], ctypes.c_float),
+            ("crispasr_token_alt_text", [ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                                         ctypes.c_char_p, ctypes.c_int], ctypes.c_int),
+        ]:
+            if hasattr(lib, _sym):
+                getattr(lib, _sym).argtypes = _args
+                getattr(lib, _sym).restype = _ret
+
+        # Language detection (whisper context).
+        if hasattr(lib, "crispasr_detect_language"):
+            lib.crispasr_detect_language.argtypes = [
+                ctypes.c_void_p, ctypes.POINTER(ctypes.c_float), ctypes.c_int,
+                ctypes.c_int, ctypes.c_char_p, ctypes.c_int,
+            ]
+            lib.crispasr_detect_language.restype = ctypes.c_float
+
+        # VAD free + slices.
+        if hasattr(lib, "crispasr_vad_free"):
+            lib.crispasr_vad_free.argtypes = [ctypes.POINTER(ctypes.c_float)]
+            lib.crispasr_vad_free.restype = None
+        if hasattr(lib, "crispasr_vad_slices"):
+            lib.crispasr_vad_slices.argtypes = [
+                ctypes.c_char_p, ctypes.POINTER(ctypes.c_float), ctypes.c_int,
+                ctypes.c_int, ctypes.c_float, ctypes.c_int, ctypes.c_int,
+                ctypes.c_int, ctypes.c_float, ctypes.c_int,
+                ctypes.POINTER(ctypes.POINTER(ctypes.c_float)),
+            ]
+            lib.crispasr_vad_slices.restype = ctypes.c_int
+
+        # Streaming (whisper context).
+        if hasattr(lib, "crispasr_stream_open"):
+            lib.crispasr_stream_open.argtypes = [
+                ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                ctypes.c_int, ctypes.c_char_p, ctypes.c_int,
+            ]
+            lib.crispasr_stream_open.restype = ctypes.c_void_p
 
     def transcribe(
         self,
@@ -1114,10 +1177,23 @@ class Session:
         if hasattr(lib, "crispasr_session_result_word_p"):
             lib.crispasr_session_result_word_p.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int]
             lib.crispasr_session_result_word_p.restype = ctypes.c_float
+        # 0.5.13: per-word top-N alternative candidates.
+        if hasattr(lib, "crispasr_session_result_word_n_alts"):
+            lib.crispasr_session_result_word_n_alts.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int]
+            lib.crispasr_session_result_word_n_alts.restype = ctypes.c_int
+        if hasattr(lib, "crispasr_session_result_word_alt_p"):
+            lib.crispasr_session_result_word_alt_p.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int]
+            lib.crispasr_session_result_word_alt_p.restype = ctypes.c_float
         lib.crispasr_session_result_free.argtypes = [ctypes.c_void_p]
         lib.crispasr_session_result_free.restype = None
         lib.crispasr_session_close.argtypes = [ctypes.c_void_p]
         lib.crispasr_session_close.restype = None
+        # 0.6.1: session_open_with_params.
+        if hasattr(lib, "crispasr_session_open_with_params"):
+            lib.crispasr_session_open_with_params.argtypes = [
+                ctypes.c_char_p, ctypes.c_char_p, ctypes.c_void_p,
+            ]
+            lib.crispasr_session_open_with_params.restype = ctypes.c_void_p
 
     @staticmethod
     def available_backends(lib_path: Optional[str] = None) -> List[str]:
@@ -1301,7 +1377,7 @@ class Session:
             self._lib.crispasr_session_result_free(res)
 
     # ---------------------------------------------------------------------
-    # TTS synthesis (vibevoice, qwen3-tts, kokoro, orpheus, chatterbox, indextts, voxcpm2, csm, dia, bark, speecht5, parler-tts, pocket-tts)
+    # TTS synthesis (vibevoice, qwen3-tts, kokoro, orpheus, chatterbox, outetts, indextts, voxcpm2, csm, dia, bark, speecht5, parler-tts, pocket-tts)
     # ---------------------------------------------------------------------
 
     def set_codec_path(self, path: str) -> None:
@@ -1935,7 +2011,7 @@ class Session:
 
         Works with any TTS-capable backend — ``vibevoice``, ``qwen3-tts``,
         ``kokoro``, ``orpheus``, ``chatterbox``, ``indextts``, ``voxcpm2-tts``,
-        ``csm``, ``dia``, ``fastpitch``, ``speecht5``, ``piper``,
+        ``csm``, ``dia``, ``fastpitch``, ``speecht5``, ``melotts``, ``piper``,
         ``parler-tts``, ``outetts``, ``cosyvoice3-tts``, ``pocket-tts``,
         ``f5-tts``, ``bark``.
         For qwen3-tts call :meth:`set_codec_path` and one of:
@@ -2522,3 +2598,203 @@ def detect_backend_from_gguf(
     if rc != 0:
         raise RuntimeError(f"detect_backend_from_gguf failed (rc={rc})")
     return out.value.decode("utf-8")
+
+
+# =========================================================================
+# Direct Parakeet API (bypasses unified session)
+# =========================================================================
+
+class Parakeet:
+    """Direct Parakeet ASR context with word- and token-level timestamps.
+
+    For most use cases prefer :class:`Session` which auto-dispatches to
+    Parakeet when the GGUF metadata indicates it.
+    """
+
+    def __init__(self, model_path: str, *, n_threads: int = 4,
+                 use_flash: bool = True, lib_path: Optional[str] = None):
+        self._lib = ctypes.CDLL(lib_path or _find_lib())
+        fn = self._lib.crispasr_parakeet_init
+        fn.argtypes = [ctypes.c_char_p, ctypes.c_int, ctypes.c_int]
+        fn.restype = ctypes.c_void_p
+        self._handle = fn(model_path.encode("utf-8"), n_threads, 1 if use_flash else 0)
+        if not self._handle:
+            raise RuntimeError(f"Failed to load Parakeet model: {model_path}")
+
+    def transcribe(self, pcm: "np.ndarray", language: Optional[str] = None):
+        """Transcribe mono 16 kHz float32 PCM. Returns a dict with text,
+        words [(text, t0_cs, t1_cs)], and tokens [(text, t0_cs, t1_cs, p)]."""
+        pcm_arr = np.ascontiguousarray(pcm, dtype=np.float32)
+        lib = self._lib
+        fn = lib.crispasr_parakeet_transcribe
+        fn.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_float),
+                       ctypes.c_int, ctypes.c_char_p]
+        fn.restype = ctypes.c_void_p
+        lang = language.encode("utf-8") if language else None
+        res = fn(self._handle,
+                 pcm_arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+                 int(pcm_arr.size), lang)
+        if not res:
+            raise RuntimeError("crispasr_parakeet_transcribe returned null")
+        try:
+            # Text
+            lib.crispasr_parakeet_result_text.argtypes = [ctypes.c_void_p]
+            lib.crispasr_parakeet_result_text.restype = ctypes.c_char_p
+            raw = lib.crispasr_parakeet_result_text(res)
+            text = raw.decode("utf-8") if raw else ""
+            # Words
+            lib.crispasr_parakeet_result_n_words.argtypes = [ctypes.c_void_p]
+            lib.crispasr_parakeet_result_n_words.restype = ctypes.c_int
+            lib.crispasr_parakeet_result_word_text.argtypes = [ctypes.c_void_p, ctypes.c_int]
+            lib.crispasr_parakeet_result_word_text.restype = ctypes.c_char_p
+            lib.crispasr_parakeet_result_word_t0.argtypes = [ctypes.c_void_p, ctypes.c_int]
+            lib.crispasr_parakeet_result_word_t0.restype = ctypes.c_int64
+            lib.crispasr_parakeet_result_word_t1.argtypes = [ctypes.c_void_p, ctypes.c_int]
+            lib.crispasr_parakeet_result_word_t1.restype = ctypes.c_int64
+            nw = lib.crispasr_parakeet_result_n_words(res)
+            words = []
+            for i in range(nw):
+                wt = lib.crispasr_parakeet_result_word_text(res, i)
+                words.append((
+                    wt.decode("utf-8") if wt else "",
+                    lib.crispasr_parakeet_result_word_t0(res, i),
+                    lib.crispasr_parakeet_result_word_t1(res, i),
+                ))
+            # Tokens
+            lib.crispasr_parakeet_result_n_tokens.argtypes = [ctypes.c_void_p]
+            lib.crispasr_parakeet_result_n_tokens.restype = ctypes.c_int
+            lib.crispasr_parakeet_result_token_text.argtypes = [ctypes.c_void_p, ctypes.c_int]
+            lib.crispasr_parakeet_result_token_text.restype = ctypes.c_char_p
+            lib.crispasr_parakeet_result_token_t0.argtypes = [ctypes.c_void_p, ctypes.c_int]
+            lib.crispasr_parakeet_result_token_t0.restype = ctypes.c_int64
+            lib.crispasr_parakeet_result_token_t1.argtypes = [ctypes.c_void_p, ctypes.c_int]
+            lib.crispasr_parakeet_result_token_t1.restype = ctypes.c_int64
+            lib.crispasr_parakeet_result_token_p.argtypes = [ctypes.c_void_p, ctypes.c_int]
+            lib.crispasr_parakeet_result_token_p.restype = ctypes.c_float
+            nt = lib.crispasr_parakeet_result_n_tokens(res)
+            tokens = []
+            for i in range(nt):
+                tt = lib.crispasr_parakeet_result_token_text(res, i)
+                tokens.append((
+                    tt.decode("utf-8") if tt else "",
+                    lib.crispasr_parakeet_result_token_t0(res, i),
+                    lib.crispasr_parakeet_result_token_t1(res, i),
+                    float(lib.crispasr_parakeet_result_token_p(res, i)),
+                ))
+            return {"text": text, "words": words, "tokens": tokens}
+        finally:
+            lib.crispasr_parakeet_result_free.argtypes = [ctypes.c_void_p]
+            lib.crispasr_parakeet_result_free.restype = None
+            lib.crispasr_parakeet_result_free(res)
+
+    def close(self):
+        if self._handle:
+            self._lib.crispasr_parakeet_free.argtypes = [ctypes.c_void_p]
+            self._lib.crispasr_parakeet_free.restype = None
+            self._lib.crispasr_parakeet_free(self._handle)
+            self._handle = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.close()
+
+
+# =========================================================================
+# Standalone helpers — full C-ABI parity
+# =========================================================================
+
+def lcs_dedup_prefix_count(
+    prev_tail_tokens: List[int],
+    curr_tokens: List[int],
+    *,
+    min_lcs_length: int = 1,
+    lib_path: Optional[str] = None,
+) -> int:
+    """Chunk-boundary LCS dedup: returns the number of leading tokens
+    of ``curr_tokens`` to drop to remove overlap with ``prev_tail_tokens``."""
+    lib = ctypes.CDLL(lib_path or _find_lib())
+    fn = lib.crispasr_lcs_dedup_prefix_count
+    fn.argtypes = [
+        ctypes.POINTER(ctypes.c_int32), ctypes.c_int,
+        ctypes.POINTER(ctypes.c_int32), ctypes.c_int, ctypes.c_int,
+    ]
+    fn.restype = ctypes.c_int
+    prev_arr = (ctypes.c_int32 * len(prev_tail_tokens))(*prev_tail_tokens)
+    curr_arr = (ctypes.c_int32 * len(curr_tokens))(*curr_tokens)
+    return fn(prev_arr, len(prev_tail_tokens), curr_arr, len(curr_tokens), min_lcs_length)
+
+
+def kokoro_lang_is_german(lang: str, *, lib_path: Optional[str] = None) -> bool:
+    """Whether ``lang`` is German (Kokoro phoneme selection)."""
+    lib = ctypes.CDLL(lib_path or _find_lib())
+    if not hasattr(lib, "crispasr_kokoro_lang_is_german_abi"):
+        return False
+    fn = lib.crispasr_kokoro_lang_is_german_abi
+    fn.argtypes = [ctypes.c_char_p]
+    fn.restype = ctypes.c_bool
+    return fn(lang.encode("utf-8"))
+
+
+def kokoro_lang_has_native_voice(lang: str, *, lib_path: Optional[str] = None) -> bool:
+    """Whether ``lang`` has a native Kokoro voice (vs. cross-lingual fallback)."""
+    lib = ctypes.CDLL(lib_path or _find_lib())
+    if not hasattr(lib, "crispasr_kokoro_lang_has_native_voice_abi"):
+        return False
+    fn = lib.crispasr_kokoro_lang_has_native_voice_abi
+    fn.argtypes = [ctypes.c_char_p]
+    fn.restype = ctypes.c_bool
+    return fn(lang.encode("utf-8"))
+
+
+def vad_slices(
+    pcm: "np.ndarray",
+    model_path: str,
+    *,
+    sample_rate: int = 16000,
+    threshold: float = 0.0,
+    min_speech_ms: int = 250,
+    min_silence_ms: int = 100,
+    speech_pad_ms: int = 30,
+    max_chunk_duration_s: float = 30.0,
+    n_threads: int = 4,
+    lib_path: Optional[str] = None,
+) -> List[VadSpan]:
+    """Run the unified VAD dispatcher returning speech spans in seconds.
+
+    Can use Silero, FireRedVAD, MarbleNet, or Whisper-VAD-EncDec depending
+    on the concrete model at ``model_path``. threshold <= 0 leaves per-model
+    default intact.
+    """
+    lib = ctypes.CDLL(lib_path or _find_lib())
+    fn = lib.crispasr_vad_slices
+    fn.argtypes = [
+        ctypes.c_char_p, ctypes.POINTER(ctypes.c_float), ctypes.c_int,
+        ctypes.c_int, ctypes.c_float, ctypes.c_int, ctypes.c_int,
+        ctypes.c_int, ctypes.c_float, ctypes.c_int,
+        ctypes.POINTER(ctypes.POINTER(ctypes.c_float)),
+    ]
+    fn.restype = ctypes.c_int
+    lib.crispasr_vad_free.argtypes = [ctypes.POINTER(ctypes.c_float)]
+    lib.crispasr_vad_free.restype = None
+
+    pcm_arr = np.ascontiguousarray(pcm, dtype=np.float32)
+    out_spans = ctypes.POINTER(ctypes.c_float)()
+    n = fn(
+        model_path.encode("utf-8"),
+        pcm_arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        int(pcm_arr.size), sample_rate, threshold,
+        min_speech_ms, min_silence_ms, speech_pad_ms,
+        max_chunk_duration_s, n_threads,
+        ctypes.byref(out_spans),
+    )
+    if n < 0:
+        raise RuntimeError(f"crispasr_vad_slices failed (rc={n})")
+    spans = []
+    for i in range(n):
+        spans.append(VadSpan(start=float(out_spans[2 * i]),
+                             end=float(out_spans[2 * i + 1])))
+    if n > 0:
+        lib.crispasr_vad_free(out_spans)
+    return spans

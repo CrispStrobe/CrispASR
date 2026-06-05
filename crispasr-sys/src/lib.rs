@@ -674,4 +674,168 @@ extern "C" {
         segs: *mut CrispasrDiarizeSegAbi,
         n_segs: i32,
     ) -> i32;
+
+    // --- params_set_* on whisper_full_params (full C-ABI parity) ---
+    pub fn crispasr_params_set_language(p: *mut WhisperFullParams, lang: *const c_char);
+    pub fn crispasr_params_set_translate(p: *mut WhisperFullParams, v: c_int);
+    pub fn crispasr_params_set_detect_language(p: *mut WhisperFullParams, v: c_int);
+    pub fn crispasr_params_set_token_timestamps(p: *mut WhisperFullParams, v: c_int);
+    pub fn crispasr_params_set_n_threads(p: *mut WhisperFullParams, n: c_int);
+    pub fn crispasr_params_set_max_len(p: *mut WhisperFullParams, n: c_int);
+    pub fn crispasr_params_set_best_of(p: *mut WhisperFullParams, n: c_int);
+    pub fn crispasr_params_set_split_on_word(p: *mut WhisperFullParams, v: c_int);
+    pub fn crispasr_params_set_no_context(p: *mut WhisperFullParams, v: c_int);
+    pub fn crispasr_params_set_single_segment(p: *mut WhisperFullParams, v: c_int);
+    pub fn crispasr_params_set_print_realtime(p: *mut WhisperFullParams, v: c_int);
+    pub fn crispasr_params_set_print_progress(p: *mut WhisperFullParams, v: c_int);
+    pub fn crispasr_params_set_print_timestamps(p: *mut WhisperFullParams, v: c_int);
+    pub fn crispasr_params_set_print_special(p: *mut WhisperFullParams, v: c_int);
+    pub fn crispasr_params_set_suppress_blank(p: *mut WhisperFullParams, v: c_int);
+    pub fn crispasr_params_set_temperature(p: *mut WhisperFullParams, t: c_float);
+    pub fn crispasr_params_set_max_tokens(p: *mut WhisperFullParams, n: c_int);
+    pub fn crispasr_params_set_initial_prompt(p: *mut WhisperFullParams, prompt: *const c_char);
+    pub fn crispasr_params_set_alt_n(p: *mut WhisperFullParams, n: c_int);
+
+    // --- Token-level accessors ---
+    pub fn crispasr_token_t0(ctx: *mut WhisperContext, i_seg: c_int, i_tok: c_int) -> i64;
+    pub fn crispasr_token_t1(ctx: *mut WhisperContext, i_seg: c_int, i_tok: c_int) -> i64;
+    pub fn crispasr_token_p(ctx: *mut WhisperContext, i_seg: c_int, i_tok: c_int) -> c_float;
+    pub fn crispasr_token_n_alts(ctx: *mut WhisperContext, i_seg: c_int, i_tok: c_int) -> c_int;
+    pub fn crispasr_token_alt_id(
+        ctx: *mut WhisperContext,
+        i_seg: c_int,
+        i_tok: c_int,
+        i_alt: c_int,
+    ) -> i32;
+    pub fn crispasr_token_alt_p(
+        ctx: *mut WhisperContext,
+        i_seg: c_int,
+        i_tok: c_int,
+        i_alt: c_int,
+    ) -> c_float;
+    pub fn crispasr_token_alt_text(
+        ctx: *mut WhisperContext,
+        i_seg: c_int,
+        i_tok: c_int,
+        i_alt: c_int,
+        out: *mut c_char,
+        out_cap: c_int,
+    ) -> c_int;
+
+    // --- Language detection (whisper context) ---
+    pub fn crispasr_detect_language(
+        ctx: *mut WhisperContext,
+        pcm: *const c_float,
+        n_samples: c_int,
+        n_threads: c_int,
+        out_code: *mut c_char,
+        out_cap: c_int,
+    ) -> c_float;
+
+    // --- VAD ---
+    pub fn crispasr_vad_segments(
+        vad_model_path: *const c_char,
+        pcm: *const c_float,
+        n_samples: c_int,
+        sample_rate: c_int,
+        threshold: c_float,
+        min_speech_ms: c_int,
+        min_silence_ms: c_int,
+        n_threads: c_int,
+        use_gpu: c_int,
+        out_spans: *mut *mut c_float,
+    ) -> c_int;
+    pub fn crispasr_vad_slices(
+        vad_model_path: *const c_char,
+        pcm: *const c_float,
+        n_samples: c_int,
+        sample_rate: c_int,
+        threshold: c_float,
+        min_speech_ms: c_int,
+        min_silence_ms: c_int,
+        speech_pad_ms: c_int,
+        max_chunk_duration_s: c_float,
+        n_threads: c_int,
+        out_spans: *mut *mut c_float,
+    ) -> c_int;
+    pub fn crispasr_vad_free(spans: *mut c_float);
+
+    // --- LCS dedup ---
+    pub fn crispasr_lcs_dedup_prefix_count(
+        prev_tail_tokens: *const i32,
+        n_prev: c_int,
+        curr_tokens: *const i32,
+        n_curr: c_int,
+        min_lcs_length: c_int,
+    ) -> c_int;
+
+    // --- Streaming (whisper context) ---
+    pub fn crispasr_stream_open(
+        ctx: *mut WhisperContext,
+        n_threads: c_int,
+        step_ms: c_int,
+        length_ms: c_int,
+        keep_ms: c_int,
+        language: *const c_char,
+        translate: c_int,
+    ) -> *mut CrispasrStream;
+
+    // --- Direct Parakeet API ---
+    pub fn crispasr_parakeet_init(
+        model_path: *const c_char,
+        n_threads: c_int,
+        use_flash: c_int,
+    ) -> *mut c_void;
+    pub fn crispasr_parakeet_free(ctx: *mut c_void);
+    pub fn crispasr_parakeet_transcribe(
+        ctx: *mut c_void,
+        pcm: *const c_float,
+        n_samples: c_int,
+        language: *const c_char,
+    ) -> *mut c_void;
+    pub fn crispasr_parakeet_result_text(r: *mut c_void) -> *const c_char;
+    pub fn crispasr_parakeet_result_n_words(r: *mut c_void) -> c_int;
+    pub fn crispasr_parakeet_result_word_text(r: *mut c_void, i: c_int) -> *const c_char;
+    pub fn crispasr_parakeet_result_word_t0(r: *mut c_void, i: c_int) -> i64;
+    pub fn crispasr_parakeet_result_word_t1(r: *mut c_void, i: c_int) -> i64;
+    pub fn crispasr_parakeet_result_n_tokens(r: *mut c_void) -> c_int;
+    pub fn crispasr_parakeet_result_token_text(r: *mut c_void, i: c_int) -> *const c_char;
+    pub fn crispasr_parakeet_result_token_t0(r: *mut c_void, i: c_int) -> i64;
+    pub fn crispasr_parakeet_result_token_t1(r: *mut c_void, i: c_int) -> i64;
+    pub fn crispasr_parakeet_result_token_p(r: *mut c_void, i: c_int) -> c_float;
+    pub fn crispasr_parakeet_result_free(r: *mut c_void);
+
+    // --- RNNoise audio enhancement ---
+    pub fn crispasr_enhance_audio_rnnoise(
+        in_pcm: *const c_float,
+        n_samples: i32,
+        out_pcm: *mut c_float,
+        out_cap: i32,
+    ) -> c_int;
+
+    // --- Session open with params ---
+    pub fn crispasr_session_open_with_params(
+        model_path: *const c_char,
+        backend_name: *const c_char,
+        params: *const c_void,
+    ) -> *mut CrispasrSession;
+
+    // --- Session result word alts ---
+    pub fn crispasr_session_result_word_n_alts(
+        r: *mut CrispasrSessionResult,
+        i_seg: c_int,
+        i_word: c_int,
+    ) -> c_int;
+    pub fn crispasr_session_result_word_alt_text(
+        r: *mut CrispasrSessionResult,
+        i_seg: c_int,
+        i_word: c_int,
+        i_alt: c_int,
+    ) -> *const c_char;
+    pub fn crispasr_session_result_word_alt_p(
+        r: *mut CrispasrSessionResult,
+        i_seg: c_int,
+        i_word: c_int,
+        i_alt: c_int,
+    ) -> c_float;
 }

@@ -134,6 +134,12 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/build-info.cmake)
 # add_subdirectory(ggml) so the definition propagates to all targets.
 add_compile_definitions(GGML_MAX_NAME=128)
 
+# MSVC's <cmath> doesn't expose M_PI unless _USE_MATH_DEFINES is set.
+# Define globally so all targets (src, tests, examples) get it on Windows.
+if (WIN32)
+    add_compile_definitions(_USE_MATH_DEFINES)
+endif()
+
 # Wire COHERE_MKL into ggml's BLAS backend before add_subdirectory(ggml).
 # This must happen here so the values are visible to the ggml subproject.
 if (COHERE_MKL)
@@ -227,10 +233,10 @@ set(CRISPASR_BIN_INSTALL_DIR     ${CMAKE_INSTALL_BINDIR}     CACHE PATH "Locatio
 
 get_directory_property(CRISPASR_TRANSIENT_DEFINES COMPILE_DEFINITIONS)
 
-set_target_properties(crispasr PROPERTIES PUBLIC_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/include/crispasr.h)
-install(TARGETS crispasr LIBRARY PUBLIC_HEADER)
+set_target_properties(crispasr-lib PROPERTIES PUBLIC_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/include/crispasr.h)
+install(TARGETS crispasr-lib LIBRARY PUBLIC_HEADER)
 
-target_compile_definitions(crispasr PRIVATE
+target_compile_definitions(crispasr-lib PRIVATE
     CRISPASR_VERSION="${PROJECT_VERSION}"
 )
 
@@ -302,7 +308,7 @@ if (MSVC)
     endfunction()
 
     if (CRISPASR_BUILD_EXAMPLES)
-        disable_msvc_warnings(crispasr)
+        disable_msvc_warnings(crispasr-lib)
         disable_msvc_warnings(common)
         disable_msvc_warnings(common-sdl)
         disable_msvc_warnings(lsp)

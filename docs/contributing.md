@@ -158,10 +158,10 @@ Nine edit points, each mirroring the `CA_HAVE_CHATTERBOX` blocks:
 ### CMake — link into the C-ABI library, `src/CMakeLists.txt`
 §4 links the backend into the CLI binary. The C ABI needs it in
 `libcrispasr` too. In the "C-ABI wrappers" block (grep
-`target_link_libraries(crispasr PUBLIC`):
+`target_link_libraries(crispasr-lib PUBLIC`):
 ```cmake
 if (TARGET yourmodel_lib)
-    target_link_libraries(crispasr PUBLIC yourmodel_lib)
+    target_link_libraries(crispasr-lib PUBLIC yourmodel_lib)
 endif()
 ```
 
@@ -204,7 +204,7 @@ For ASR backends, the transcript is the regression target:
 ```bash
 ./build/bin/crispasr --backend yourmodel -m model.gguf -f samples/jfk.wav -np > before.txt
 # ... make changes ...
-cmake --build build --target crispasr
+cmake --build build --target crispasr-lib
 ./build/bin/crispasr --backend yourmodel -m model.gguf -f samples/jfk.wav -np > after.txt
 diff before.txt after.txt && echo BIT-IDENTICAL
 ```

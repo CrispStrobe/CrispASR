@@ -102,7 +102,8 @@ to the [TTS table](#text-to-speech-models) for the synthesis side.
 | **moonshine&#8209;tiny&#8209;de** | [`fidoriel/moonshine-tiny-de`](https://huggingface.co/cstr/moonshine-tiny-de-fidoriel-GGUF) | German fine-tune of moonshine-tiny (11.4% WER CV22) | German | CC&#8209;BY&#8209;NC&#8209;SA&#8209;4.0 |
 | **moonshine-streaming** | [`UsefulSensors/moonshine-streaming-{tiny,small,medium}`](https://huggingface.co/cstr/moonshine-streaming-tiny-GGUF) | Streaming: sliding-window encoder + AR decoder (34–245M) | English | MIT |
 | **gemma4-e2b** | [`google/gemma-4-E2B-it`](https://huggingface.co/cstr/gemma4-e2b-it-GGUF) | USM Conformer 12L + Gemma4 LLM 35L (GQA, PLE) | 140+ langs | Apache-2.0 |
-| **omniasr** | [`facebook/omniASR-CTC-{300M,1B}`](https://huggingface.co/cstr/omniASR-CTC-1B-GGUF) | wav2vec2 CNN + 24–48L transformer + CTC ([more](docs/architecture.md#omniasr-ctc--llm--unlimited)) | **1600+** | Apache-2.0 |
+| **omniasr** | [`omniASR-CTC-1B-v2`](https://huggingface.co/cstr/omniASR-CTC-1B-v2-GGUF) | wav2vec2 CNN + 48L transformer + CTC ([more](docs/architecture.md#omniasr-ctc--llm--unlimited)) | **1600+** | Apache-2.0 |
+| **omniasr&#8209;300m** | [`omniASR-CTC-300M-v2`](https://huggingface.co/cstr/omniASR-CTC-300M-v2-GGUF) | Same arch, 24L, ~194 MB Q4_K; auto-chunks >7 s ([more](docs/architecture.md#omniasr-ctc--llm--unlimited)) | **1600+** | Apache-2.0 |
 | **omniasr-llm** | [`omniASR-LLM-300M-v2`](https://huggingface.co/cstr/omniasr-llm-300m-v2-GGUF) | Same encoder + 12L LLaMA decoder ([more](docs/architecture.md#omniasr-ctc--llm--unlimited)) | **1600+** | Apache-2.0 |
 | **omniasr-llm** | [`omniASR-LLM-Unlimited-300M-v2`](https://huggingface.co/cstr/omniasr-llm-unlimited-300m-v2-GGUF) | Streaming: 15s segment protocol, unlimited audio ([more](docs/architecture.md#omniasr-ctc--llm--unlimited)) | **1600+** | Apache-2.0 |
 | **vibevoice** | [`microsoft/VibeVoice-ASR`](https://huggingface.co/cstr/vibevoice-asr-GGUF) | σ-VAE ConvNeXt + Qwen2.5-7B ([more](docs/architecture.md#vibevoice)) | 50+ | MIT |
@@ -124,6 +125,7 @@ quick-start commands and engine selection guidance.
 | **vibevoice-tts** | [`VibeVoice-Realtime-0.5B`](https://huggingface.co/cstr/vibevoice-realtime-0.5b-GGUF), [`VibeVoice-1.5B`](https://huggingface.co/cstr/vibevoice-1.5b-GGUF) | DPM-Solver++ + σ-VAE decoder; voice presets or cloning | en, zh | MIT |
 | **qwen3-tts** | [`Qwen3-TTS-12Hz-0.6B-Base`](https://huggingface.co/cstr/qwen3-tts-0.6b-base-GGUF), [`1.7B-Base`](https://huggingface.co/cstr/qwen3-tts-1.7b-base-GGUF), [`1.7B-VoiceDesign`](https://huggingface.co/cstr/qwen3-tts-1.7b-voicedesign-GGUF) | Qwen3 talker LM + 12 Hz RVQ ([more](docs/architecture.md#qwen3-tts)) | multilingual | Apache-2.0 |
 | **qwen3-tts-customvoice** | [`1.7B-CustomVoice`](https://huggingface.co/cstr/qwen3-tts-1.7b-customvoice-GGUF) | Same talker + 9 premium built-in speakers (`--voice <name>`); optional style via `--instruct` (e.g. "spoke very slowly") ([more](docs/architecture.md#qwen3-tts)) | multilingual | Apache-2.0 |
+| **melotts** | [`myshell-ai/MeloTTS`](https://github.com/myshell-ai/MeloTTS) EN_V2 | VITS2 (6L transformer + SDP/DP + transformer coupling flow + HiFi-GAN); 44.1 kHz, 102 MB + 52 MB BERT Q4_K companion (154 MB total); neural G2P; 4 EN speakers ([more](docs/architecture.md#melotts)) | en | MIT |
 | **piper** | [`rhasspy/piper`](https://github.com/rhasspy/piper) community voices | VITS (6L transformer + SDP + 4-block coupling flow + HiFi-GAN); 22 kHz mono, 30 MB F16 per voice | 30+ langs via espeak-ng | MIT |
 | **kokoro** | [`hexgrad/Kokoro-82M`](https://huggingface.co/hexgrad/Kokoro-82M) + German backbones | StyleTTS2 / iSTFTNet (82M); per-voice GGUF ([more](docs/architecture.md#kokoro)) | en, es, fr, hi, it, ja, pt, zh, de | Apache-2.0 |
 | **orpheus** | [`Orpheus-3B-FT`](https://huggingface.co/cstr/orpheus-3b-base-GGUF) + [`SNAC 24 kHz`](https://huggingface.co/cstr/snac-24khz-GGUF) | Llama-3.2-3B + SNAC RVQ codec; 8 speakers ([more](docs/architecture.md#orpheus)) | en, de | Llama / MIT |
@@ -137,20 +139,36 @@ quick-start commands and engine selection guidance.
 | **speecht5** | [`cstr/speecht5-tts-GGUF`](https://huggingface.co/cstr/speecht5-tts-GGUF) | SpeechT5 80M: char-level encoder (12L) + AR mel decoder (6L) + 5-layer conv postnet + HiFi-GAN at 16 kHz; speaker via 512-d x-vector (`--voice <xvector.bin>`) | en | MIT |
 | **fastpitch** | [`cstr/fastpitch-en-GGUF`](https://huggingface.co/cstr/fastpitch-en-GGUF) | NVIDIA FastPitch 60M: non-autoregressive parallel TTS — 6L encoder + duration/pitch predictors + 6L decoder + HiFi-GAN at 22 kHz; deterministic, single forward pass ([more](docs/architecture.md#fastpitch)) | en | CC-BY-4.0 |
 | **parler-tts** | [`cstr/parler-tts-mini-v1.1-GGUF`](https://huggingface.co/cstr/parler-tts-mini-v1.1-GGUF) | Parler TTS Mini v1.1 (~900M): T5 encoder + MusicGen decoder + DAC 44.1 kHz; prompt-conditioned (describe voice in text via `--instruct`) | en | Apache-2.0 |
+| **outetts** | [`cstr/outetts-0.3-1b-GGUF`](https://huggingface.co/cstr/outetts-0.3-1b-GGUF) | OLMo-1B talker + WavTokenizer single-codebook VQ-GAN at 24 kHz; voice cloning via speaker profile JSON (`--voice <speaker.json>`) | en | CC-BY-4.0 |
 | **pocket-tts** | [`cstr/pocket-tts-GGUF`](https://huggingface.co/cstr/pocket-tts-GGUF) | Kyutai Pocket TTS 100M: continuous-latent AR at 12.5 Hz + one-step LSD flow + Mimi VAE 24 kHz; voice cloning via ref audio ([more](docs/architecture.md#pocket-tts)) | en | MIT / CC-BY-4.0 |
 
-> _Status:_ end-to-end runnable on both Q4_K and F16; zero-shot synth and
-> voice cloning (`--voice <wav>`) both work and ASR-roundtrip correctly.
-> The inference path matches the upstream PyTorch reference within
-> precision floor (14 pass / 0 fail / 3 skip in `crispasr-diff
-> voxcpm2-tts`, `cfm_step0_result cos_mean ≥ 0.98`). Set
-> `VOXCPM2_USE_GRAPH=1` for the fast path: weights load onto the best
-> available backend (Metal on Apple Silicon), AR-step LocDiT + TSLM
-> run as cached per-step cgraphs (qwen3-style multi-bucket Lk), and
-> the VAE decode hot loops are OMP-parallelised with a SIMD-friendly
-> contiguous-`ic` inner layout. On M1 (OMP=8), `"Hello world"` zero-
-> shot Q4_K takes ~7 s total wall (down from ~49 s before the perf
-> work).
+<details>
+<summary><b>TTS feature matrix</b></summary>
+
+| Backend | Voice cloning | Sampling | kHz | Auto-download | Flash attn |
+|---------|:---:|:---:|:---:|:---:|:---:|
+| vibevoice-tts | yes | temp | 24 | yes | yes |
+| qwen3-tts | yes* | temp | 24 | yes | yes |
+| kokoro | — | — | 24 | yes | — |
+| orpheus | — | temp | 24 | yes | yes |
+| chatterbox | yes | temp | 24 | yes | yes |
+| outetts | yes (JSON) | temp | 24 | yes | yes |
+| indextts | yes | temp | 24 | yes | yes |
+| voxcpm2-tts | yes | — | 48 | yes | — |
+| cosyvoice3-tts | yes | temp | 24 | yes | yes |
+| f5-tts | yes | — | 24 | yes | — |
+| csm | — | temp | 24 | yes | — |
+| dia | — | temp | 44 | yes | — |
+| bark | yes (.npz) | temp | 24 | yes | — |
+| speecht5 | yes (xvec) | — | 16 | yes | — |
+| parler-tts | — | temp | 44 | yes | — |
+| fastpitch | — | — | 22 | — | — |
+| piper | — | — | 22 | — | — |
+| pocket-tts | yes | temp | 24 | yes | — |
+
+\* CustomVoice variant only; Base uses baked speakers via `--voice <name>`.
+
+</details>
 
 ### Translation
 

@@ -170,6 +170,25 @@ public:
             }
         }
         chatterbox_set_seed(ctx_, (uint32_t)params.seed);
+        // 75c-opt-2: native backend knobs
+        if (params.tts_top_p >= 0.0f)
+            chatterbox_set_top_p(ctx_, params.tts_top_p);
+        if (params.tts_min_p >= 0.0f)
+            chatterbox_set_min_p(ctx_, params.tts_min_p);
+        if (params.tts_top_k >= 0)
+            chatterbox_set_top_k(ctx_, params.tts_top_k);
+        if (params.tts_repetition_penalty >= 0.0f)
+            chatterbox_set_repetition_penalty(ctx_, params.tts_repetition_penalty);
+        if (params.tts_cfg_scale >= 0.0f)
+            chatterbox_set_cfg_weight(ctx_, params.tts_cfg_scale);
+        if (params.tts_num_steps >= 0)
+            chatterbox_set_cfm_steps(ctx_, params.tts_num_steps);
+        if (params.tts_exaggeration >= 0.0f)
+            chatterbox_set_exaggeration(ctx_, params.tts_exaggeration);
+        if (params.tts_max_speech_tokens >= 0)
+            chatterbox_set_max_speech_tokens(ctx_, params.tts_max_speech_tokens);
+        if (params.temperature > 0.0f)
+            chatterbox_set_temperature(ctx_, params.temperature);
         int n = 0;
         float* pcm = chatterbox_synthesize(ctx_, text.c_str(), &n);
         if (!pcm || n <= 0)

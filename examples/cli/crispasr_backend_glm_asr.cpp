@@ -21,7 +21,7 @@ public:
         // native LID. Declaring it would disable the framework pre-step
         // — see crispasr_backend_parakeet.cpp for the same reasoning.
         return CAP_TIMESTAMPS_CTC | CAP_TEMPERATURE | CAP_BEAM_SEARCH | CAP_AUTO_DOWNLOAD | CAP_TOKEN_CONFIDENCE |
-               CAP_PUNCTUATION_TOGGLE | CAP_FLASH_ATTN | CAP_DIARIZE;
+               CAP_PUNCTUATION_TOGGLE | CAP_FLASH_ATTN | CAP_DIARIZE | CAP_TRANSLATE | CAP_SRC_TGT_LANGUAGE;
     }
 
     bool init(const whisper_params& params) override {

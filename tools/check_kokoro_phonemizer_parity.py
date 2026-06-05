@@ -98,7 +98,7 @@ def find_lib() -> Path:
             return p
     raise SystemExit(
         "libcrispasr not found. Set CRISPASR_LIB_PATH or build with "
-        "`cmake --build <build-dir> --target crispasr` first.")
+        "`cmake --build <build-dir> --target crispasr-lib` first.")
 
 
 def setup_phonemize_fns(lib_path: Path):

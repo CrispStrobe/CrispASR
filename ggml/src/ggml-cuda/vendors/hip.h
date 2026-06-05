@@ -247,7 +247,11 @@ typedef __hip_bfloat162 nv_bfloat162;
 
 #if HIP_VERSION >= 60200000
 #include <hip/hip_fp8.h>
+#ifdef _WIN32
+typedef __hip_fp8_e4m3_fnuz __nv_fp8_e4m3; // Windows ROCm hip_fp8.h missing e4m3
+#else
 typedef __hip_fp8_e4m3 __nv_fp8_e4m3;
+#endif
 #define FP8_AVAILABLE
 #endif // HIP_VERSION >= 60200000
 

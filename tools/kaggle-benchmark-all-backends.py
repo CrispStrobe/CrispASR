@@ -268,7 +268,7 @@ os.makedirs(CACHE_DIR, exist_ok=True)
 # Pre-download shared models (whisper-tiny for LID, silero for VAD) — kept across tests
 for local_name, repo, hf_name in [
     ("ggml-tiny.bin", "ggerganov/crispasr", "ggml-tiny.bin"),
-    ("ggml-silero-v5.1.2.bin", "ggml-org/whisper-vad", "ggml-silero-v5.1.2.bin"),
+    ("ggml-silero-v6.2.0.bin", "ggml-org/whisper-vad", "ggml-silero-v6.2.0.bin"),
 ]:
     dst = os.path.join(CACHE_DIR, local_name)
     if not os.path.isfile(dst):

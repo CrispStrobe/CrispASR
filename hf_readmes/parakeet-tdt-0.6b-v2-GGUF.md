@@ -47,7 +47,7 @@ All three precisions produce the same text on `samples/jfk.wav`:
 git clone https://github.com/CrispStrobe/CrispASR
 cd CrispASR
 cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j$(nproc) --target crispasr
+cmake --build build -j$(nproc) --target crispasr-lib
 
 # 2a. Auto-download via the registry key
 ./build/bin/crispasr -m parakeet-v2 --auto-download -f your-audio.wav

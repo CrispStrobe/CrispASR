@@ -6,6 +6,78 @@ technical deep-dives are in `LEARNINGS.md`.
 
 ---
 
+## 2026-06-03 → 2026-06-05 PLAN audit + OpenVoice2 voice cloning + cohere FA benchmark
+
+### PLAN audit (2026-06-03)
+
+Code-verified 17 items previously flagged as NOT DONE. Found 4 were
+already done (stale PLAN): #93 CMake rename, #94 Go auto-gen LDFLAGS,
+#103 Silero v6.2.0, O4 beam search. Updated PLAN.md with all findings.
+
+### #96 voxcpm2 graph-default flip (2026-06-04)
+
+Flipped `VOXCPM2_USE_GRAPH` from opt-in to default-on. Graph path was
+already validated (48.7→14.1s on M1 Metal). Tested on VPS (1.58x faster)
+and Kaggle CPU (1.46-1.61x). Both produce correct ASR roundtrip. Opt-out
+via `VOXCPM2_USE_GRAPH=0`. Kaggle kernel: `chr1str/crispasr-voxcpm2-graph-ab`.
+
+### #73 cohere FA long-form benchmark (2026-06-04)
+
+Crossover confirmed: flash-attn wins by 26% on 300s but loses by 13% on
+60s. With default 30s auto-chunking, cast-on-read is always faster. Flipped
+cohere to default cast-on-read (was flash). `CRISPASR_COHERE_FLASH=1` for
+unchunked long-form. Results in PERFORMANCE.md §5.
+
+### #61j glm-asr translate (2026-06-04)
+
+Added `CAP_TRANSLATE | CAP_SRC_TGT_LANGUAGE` to glm-asr backend (2 lines —
+implementation already existed in C library). voxtral4b and omniasr-llm
+assessed as N/A (streaming-only / no text instruction mechanism).
+
+### #100 Phase B: OpenVoice2 voice cloning (2026-06-04 → 2026-06-05)
+
+Full zero-shot voice cloning via OpenVoice V2 Tone Color Converter, wired
+as a post-processor on MeloTTS output.
+
+**Architecture:** ref_enc (6 Conv2d + GRU → 256-d speaker embedding) +
+enc_q (16-layer WaveNet posterior encoder) + WaveNet coupling flow
+(4 blocks × 4 layers, forward + reverse) + HiFi-GAN decoder.
+
+**Files:**
+- `models/convert-openvoice2-to-gguf.py` — GGUF converter (346 tensors
+  with 11 base speaker embeddings, 125 MB all-F32)
+- `src/openvoice2.{h,cpp}` — C runtime (~1300 LOC)
+- `examples/cli/crispasr_backend_melotts.cpp` — `--voice ref.wav` wiring
+- `tools/reference_backends/openvoice2_ref.py` — Python diff harness
+- `tests/test-openvoice2-hifi.cpp` — standalone test
+
+**Bugs found and fixed (5 rounds of diff harness):**
+1. F16 tensor read — `ggml_backend_tensor_get` needs dequant for F16
+2. WAV chunk parser — proper RIFF chunk walking for extra chunks
+3. GRU reshape axis — `(H, C*W)` not `(W, C*H)` for frequency-axis GRU
+4. STFT reflect padding — match upstream `F.pad(mode='reflect')` + `1e-6` floor
+5. F16→F32 sensitive weights — enc_q/flow/ref_enc weights stored as F32
+   in GGUF to prevent accumulated precision loss through 16 WN layers
+6. Pre-saved base speaker embeddings — upstream uses `en-default.pth`,
+   not ref_enc on synthetic audio
+7. HiFi-GAN z layout — ggml `(C,T)` tensor has `ne[0]=C` as fast dim;
+   `(T,C)` row-major data already has C fast — feed directly, no transpose
+
+**Validation (tau=0 deterministic):**
+- enc_q_z: cos=1.000000 (C++ vs Python)
+- z_after_flow_rev: cos=0.999996
+- HiFi-GAN output: ±0.306 (C++ vs Python ±0.306)
+- ASR roundtrip: "Hello." (matches Python exactly)
+
+### CI fixes (2026-06-05)
+
+- `fix(cmake)`: add `bert-encoder` library target — fixes linker error
+  from BERT conditioning commit
+- `fix(go)`: sync CGO LDFLAGS via `tools/sync_go_cgo_ldflags.py` —
+  fixes drift check. All 6 CI jobs + Go + Ruby + Docker Smoke green.
+
+---
+
 ## 2026-06-02 mimo-asr GPU (PLAN #115 option C): the bug was in decode, not prefill
 
 mimo-asr had been forced to CPU since 2026-05-26 (option A) because the GPU
@@ -81,7 +153,7 @@ moshi-codebook-cluster-usage in LEARNINGS.
 The benchmark failed three Kaggle runs in a row; the harness `.log`
 (fetchable via `kaggle kernels output --file-pattern`) finally showed
 why: the build completed to `[452/453]` (libcrispasr.so) then asserted
-`bin/crispasr not found`. The kernel built `--target crispasr` — which
+`bin/crispasr not found`. The kernel built `--target crispasr-lib` — which
 builds only the **library**; the CLI binary comes from target
 `crispasr-cli` (it carries `OUTPUT_NAME crispasr`, see
 examples/cli/CMakeLists.txt:12,232). All three failures were this, not
@@ -97,7 +169,7 @@ voxtral 3B/4B, granite 1B/4.1, kyutai, mimo (0.3× RT, CPU-forced per
 transcript, a real GPU-path backend bug, consistent with its noted
 Blackwell `!`-loop caveat; surfaces on P100 too). Two non-fatal HF
 pre-download 401s (auth API was flaking) fell back to the C++ downloader.
-Note: `issue126`/`fusion-ab` keep `--target crispasr` correctly — they
+Note: `issue126`/`fusion-ab` keep `--target crispasr-lib` correctly — they
 consume libcrispasr.so, not the CLI binary.
 
 ## 2026-05-31 Kaggle kernels: shared `kaggle_harness.py` (one gold standard)
@@ -165,6 +237,35 @@ yet in the registry and stay excluded; TTS/diarization/LID/aligner
 backends stay excluded (the benchmark measures transcription WER).
 Now 27 backends; triggered on a Kaggle T4
 (`chr1str/crispasr-all-backends-benchmark-t4`).
+## 2026-05-29 omniasr-ctc-300m: blank_id fix + CTC auto-chunking + omniasr-300m backend
+
+Three fixes for the OmniASR CTC backend, resolving the empty-output bug
+on the 300M model and wiring it as a first-class named backend:
+
+1. **CTC blank_id = 0** (was `hp.bos_id`, which differs between v1 and
+   v2 GGUFs). Both fairseq2 and HF Wav2Vec2ForCTC train with
+   `torch.nn.functional.ctc_loss(blank=0)`.
+
+2. **CTC auto-chunking**: the 300M model's positional encoding (conv1d
+   kernel=128, groups=16) degrades beyond ~7 s of audio. The backend
+   adapter now auto-splits audio >7 s into 5 s chunks with 0.5 s overlap
+   for CTC variants. The 1B model handles all lengths.
+
+3. **`omniasr-300m` named backend**: registry entry pointing to
+   `cstr/omniASR-CTC-300M-v2-GGUF` Q4_K (~194 MB), CLI alias,
+   available_backends in C ABI, feature-matrix row.
+
+Root cause of the empty output: the GGUF was converted from the v1
+fairseq2 `.pt` checkpoint, which produces garbage in both Python and C++
+inference. Only the v2 (HF transformers format) model works — the v1
+format requires fairseq2's internal weight-loading pipeline which applies
+weight-norm materialization that our converter replicates correctly
+(verified: max diff < 1e-6) but the model still fails, suggesting deeper
+incompatibility (possibly different GELU variant, dropout mask, or
+attention implementation). The converter already auto-detects v1 vs v2;
+only v2 produces usable GGUFs.
+
+---
 
 ## 2026-05-29 cosyvoice3: Phase 6 — native arbitrary-WAV cloning (s3tokenizer_v3 byte-exact)
 

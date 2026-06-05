@@ -125,7 +125,7 @@ jobs:
             -DCRISPASR_BUILD_TESTS=OFF
 
       - name: Build
-        run: cmake --build build-ios --target crispasr -j $(sysctl -n hw.logicalcpu)
+        run: cmake --build build-ios --target crispasr-lib -j $(sysctl -n hw.logicalcpu)
 
   # ===========================================================================
   # Android (cross-compile gate — no runtime test)
@@ -152,4 +152,4 @@ jobs:
             -DCRISPASR_BUILD_TESTS=OFF
 
       - name: Build
-        run: cmake --build build-android --target crispasr -j $(nproc)
+        run: cmake --build build-android --target crispasr-lib -j $(nproc)

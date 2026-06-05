@@ -58,7 +58,7 @@ Build first:
 cmake -S . -B build-ninja-compile \
     -DCMAKE_BUILD_TYPE=Release \
     -DCRISPASR_BUILD_EXAMPLES=ON
-cmake --build build-ninja-compile --target crispasr crispasr-diff
+cmake --build build-ninja-compile --target crispasr-lib crispasr-diff
 ```
 
 Run one backend:

@@ -331,6 +331,14 @@ public class WhisperFullParams extends Structure {
     public long i_start_rule;
     public float grammar_penalty;
 
+    /** Voice Activity Detection (VAD) params */
+    public CBool vad;
+    public String vad_model_path;
+    public WhisperVadParams.ByValue vad_params;
+
+    /** Top-N alternative-candidate tokens (0 = off) */
+    public int alt_n;
+
     @Override
     protected List<String> getFieldOrder() {
         return Arrays.asList("strategy", "n_threads", "n_max_text_ctx",
@@ -349,7 +357,8 @@ public class WhisperFullParams extends Structure {
                 "encoder_begin_callback", "encoder_begin_callback_user_data",
                 "abort_callback", "abort_callback_user_data",
                 "logits_filter_callback", "logits_filter_callback_user_data",
-                "grammar_rules", "n_grammar_rules", "i_start_rule", "grammar_penalty");
+                "grammar_rules", "n_grammar_rules", "i_start_rule", "grammar_penalty",
+                "vad", "vad_model_path", "vad_params", "alt_n");
     }
 
     public static class ByValue extends WhisperFullParams implements Structure.ByValue {

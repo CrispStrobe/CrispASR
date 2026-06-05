@@ -58,7 +58,7 @@ Smoke test on `samples/jfk.wav` (11 s clip, M1 Metal):
 git clone https://github.com/CrispStrobe/CrispASR
 cd CrispASR
 cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j$(nproc) --target crispasr
+cmake --build build -j$(nproc) --target crispasr-lib
 
 # 2a. Auto-download via the registry key
 ./build/bin/crispasr -m parakeet-tdt_ctc-110m --auto-download -f your-audio.wav

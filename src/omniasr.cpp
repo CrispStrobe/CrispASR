@@ -887,8 +887,7 @@ extern "C" char* omniasr_transcribe(struct omniasr_context* ctx, const float* sa
             for (int i = 1; i < V_dbg; i++)
                 if (frame0[i] > frame0[best])
                     best = i;
-            fprintf(stderr, "  logits frame 0: argmax=%d (%.4f), blank(%d)=%.4f\n", best, frame0[best], hp.pad_id,
-                    frame0[hp.pad_id]);
+            fprintf(stderr, "  logits frame 0: argmax=%d (%.4f), blank(0)=%.4f\n", best, frame0[best], frame0[0]);
         }
     }
 
@@ -904,8 +903,9 @@ extern "C" char* omniasr_transcribe(struct omniasr_context* ctx, const float* sa
         fprintf(stderr, "omniasr: logits [%d, %d], CTC decoding...\n", V, T);
 
     // Greedy CTC decode: argmax per frame, collapse repeats, remove blanks
-    // Blank token = pad_id = 1 (SentencePiece convention for OmniASR)
-    int blank_id = hp.bos_id; // CTC blank = <s> = 0 (fairseq2 convention)
+    // CTC blank is always index 0: fairseq2 uses <s>=0, HF uses <pad>=0.
+    // Both trained with PyTorch CTC loss (blank=0 default).
+    int blank_id = 0;
     std::vector<int> tokens;
     int prev_id = -1;
     for (int t = 0; t < T; t++) {
@@ -1701,4 +1701,8 @@ extern "C" void omniasr_set_seed(struct omniasr_context* ctx, uint64_t seed) {
 extern "C" void omniasr_set_beam_size(struct omniasr_context* ctx, int beam_size) {
     if (ctx)
         ctx->params.beam_size = (beam_size > 0) ? beam_size : 1;
+}
+
+extern "C" bool omniasr_is_ctc(struct omniasr_context* ctx) {
+    return ctx && ctx->model.hp.model_type == 0;
 }

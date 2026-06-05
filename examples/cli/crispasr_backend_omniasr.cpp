@@ -54,6 +54,28 @@ public:
         if (!ctx_)
             return out;
 
+        // CTC variant: the 300M model's positional encoding degrades beyond ~7s.
+        // Auto-chunk long audio for CTC models to stay within the safe window.
+        // The LLM variant handles its own segmentation internally.
+        const bool is_ctc = omniasr_is_ctc(ctx_);
+        constexpr int SR = 16000;
+        constexpr int kCtcMaxSamples = 7 * SR; // 7 seconds safe window
+        if (is_ctc && n_samples > kCtcMaxSamples) {
+            const int chunk_samples = 5 * SR; // 5s chunks with 0.5s overlap
+            const int overlap = SR / 2;
+            int offset = 0;
+            while (offset < n_samples) {
+                int end = std::min(offset + chunk_samples, n_samples);
+                int chunk_n = end - offset;
+                int64_t chunk_offset_cs = t_offset_cs + (int64_t)(offset * 100 / SR);
+                auto chunk_segs = transcribe(samples + offset, chunk_n, chunk_offset_cs, params);
+                for (auto& s : chunk_segs)
+                    out.push_back(std::move(s));
+                offset += chunk_samples - overlap;
+            }
+            return out;
+        }
+
         // LLM variant: capture per-token confidence. CTC variant returns
         // nullptr from the with_probs path — fall back to the plain entry.
         // Best-of-N: when temperature > 0 and best_of > 1, run N seeded
@@ -86,7 +108,7 @@ public:
             fprintf(stderr, "crispasr[omniasr]: best-of-%d picked score=%.4f\n", n_runs, best_score);
         crispasr_segment seg;
         seg.t0 = t_offset_cs;
-        seg.t1 = t_offset_cs + (int64_t)(n_samples * 100 / 16000);
+        seg.t1 = t_offset_cs + (int64_t)(n_samples * 100 / SR);
         if (r) {
             if (r->text)
                 seg.text = r->text;

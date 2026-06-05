@@ -51,7 +51,7 @@ Like the upstream Orpheus, sub-Q8 quants tend to break the SNAC super-frame slot
 git clone https://github.com/CrispStrobe/CrispASR
 cd CrispASR
 cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j --target crispasr
+cmake --build build -j --target crispasr-lib
 
 # 2. Pull the talker + the SNAC codec
 huggingface-cli download cstr/kartoffel-orpheus-3b-german-natural-GGUF \

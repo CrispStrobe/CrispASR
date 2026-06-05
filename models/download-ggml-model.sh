@@ -120,7 +120,7 @@ fi
 if [ -x "$(command -v wget2)" ]; then
     wget2 --no-config --progress bar -O ggml-"$model".bin $src/$pfx-"$model".bin
 elif [ -x "$(command -v curl)" ]; then
-    curl -L --output ggml-"$model".bin $src/$pfx-"$model".bin
+    curl -fL --output ggml-"$model".bin $src/$pfx-"$model".bin
 elif [ -x "$(command -v wget)" ]; then
     wget --no-config --quiet --show-progress -O ggml-"$model".bin $src/$pfx-"$model".bin
 else
@@ -131,7 +131,29 @@ fi
 if [ $? -ne 0 ]; then
     printf "Failed to download ggml model %s \n" "$model"
     printf "Please try again later or download the original Whisper model files and convert them yourself.\n"
+    rm -f ggml-"$model".bin
     exit 1
+fi
+
+# Sanity-check: a valid ggml model is at least 1 MB. HTML error pages
+# or truncated downloads from HuggingFace rate-limiting are much smaller.
+file_size=$(wc -c < ggml-"$model".bin 2>/dev/null || echo 0)
+if [ "$file_size" -lt 1000000 ]; then
+    printf "Downloaded file is too small (%s bytes) — likely a failed download or rate-limit error page.\n" "$file_size"
+    printf "Retrying once after 5s ...\n"
+    rm -f ggml-"$model".bin
+    sleep 5
+    if [ -x "$(command -v curl)" ]; then
+        curl -fL --retry 3 --retry-delay 5 --output ggml-"$model".bin $src/$pfx-"$model".bin
+    elif [ -x "$(command -v wget)" ]; then
+        wget --no-config --quiet --show-progress -O ggml-"$model".bin $src/$pfx-"$model".bin
+    fi
+    file_size=$(wc -c < ggml-"$model".bin 2>/dev/null || echo 0)
+    if [ "$file_size" -lt 1000000 ]; then
+        printf "Retry failed. Model %s download is corrupt (%s bytes).\n" "$model" "$file_size"
+        rm -f ggml-"$model".bin
+        exit 1
+    fi
 fi
 
 # Check if 'crispasr' is available in the system PATH

@@ -125,7 +125,7 @@ jobs:
         # tee the output so the full tidy log is visible in the Actions UI even
         # when the build succeeds; the step fails if cmake --build exits non-zero.
         run: |
-          cmake --build build-tidy --target crispasr 2>&1 | tee tidy.log
+          cmake --build build-tidy --target crispasr-lib 2>&1 | tee tidy.log
           grep -q 'warning:' tidy.log && echo "::warning::clang-tidy warnings found" || true
 
   # ---------------------------------------------------------------------------

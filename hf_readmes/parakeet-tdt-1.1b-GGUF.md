@@ -54,7 +54,7 @@ Output is **lowercase, no punctuation** by design — the upstream vocab is lowe
 git clone https://github.com/CrispStrobe/CrispASR
 cd CrispASR
 cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j$(nproc) --target crispasr
+cmake --build build -j$(nproc) --target crispasr-lib
 
 # 2a. Auto-download via the registry key
 ./build/bin/crispasr -m parakeet-tdt-1.1b --auto-download -f your-audio.wav

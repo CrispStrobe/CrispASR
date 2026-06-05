@@ -2218,3 +2218,231 @@ impl Drop for PuncModel {
         }
     }
 }
+
+// =========================================================================
+// Direct Parakeet API (bypasses unified session)
+// =========================================================================
+
+/// Direct Parakeet ASR context with word- and token-level timestamps.
+///
+/// For most use cases prefer [`Session`] which auto-dispatches to Parakeet
+/// when the GGUF metadata indicates it.
+pub struct Parakeet {
+    handle: *mut std::ffi::c_void,
+}
+
+unsafe impl Send for Parakeet {}
+
+/// Parakeet transcription result with word and token accessors.
+pub struct ParakeetResult {
+    handle: *mut std::ffi::c_void,
+}
+
+impl ParakeetResult {
+    pub fn text(&self) -> String {
+        let p = unsafe { crispasr_sys::crispasr_parakeet_result_text(self.handle) };
+        if p.is_null() { String::new() } else { unsafe { CStr::from_ptr(p) }.to_string_lossy().into_owned() }
+    }
+    pub fn n_words(&self) -> i32 { unsafe { crispasr_sys::crispasr_parakeet_result_n_words(self.handle) } }
+    pub fn word_text(&self, i: i32) -> String {
+        let p = unsafe { crispasr_sys::crispasr_parakeet_result_word_text(self.handle, i) };
+        if p.is_null() { String::new() } else { unsafe { CStr::from_ptr(p) }.to_string_lossy().into_owned() }
+    }
+    pub fn word_t0(&self, i: i32) -> i64 { unsafe { crispasr_sys::crispasr_parakeet_result_word_t0(self.handle, i) } }
+    pub fn word_t1(&self, i: i32) -> i64 { unsafe { crispasr_sys::crispasr_parakeet_result_word_t1(self.handle, i) } }
+    pub fn n_tokens(&self) -> i32 { unsafe { crispasr_sys::crispasr_parakeet_result_n_tokens(self.handle) } }
+    pub fn token_text(&self, i: i32) -> String {
+        let p = unsafe { crispasr_sys::crispasr_parakeet_result_token_text(self.handle, i) };
+        if p.is_null() { String::new() } else { unsafe { CStr::from_ptr(p) }.to_string_lossy().into_owned() }
+    }
+    pub fn token_t0(&self, i: i32) -> i64 { unsafe { crispasr_sys::crispasr_parakeet_result_token_t0(self.handle, i) } }
+    pub fn token_t1(&self, i: i32) -> i64 { unsafe { crispasr_sys::crispasr_parakeet_result_token_t1(self.handle, i) } }
+    pub fn token_p(&self, i: i32) -> f32 { unsafe { crispasr_sys::crispasr_parakeet_result_token_p(self.handle, i) } }
+}
+
+impl Drop for ParakeetResult {
+    fn drop(&mut self) {
+        if !self.handle.is_null() {
+            unsafe { crispasr_sys::crispasr_parakeet_result_free(self.handle) };
+            self.handle = std::ptr::null_mut();
+        }
+    }
+}
+
+impl Parakeet {
+    pub fn new(model_path: &str, n_threads: i32, use_flash: bool) -> Result<Self, String> {
+        let c_path = CString::new(model_path).map_err(|e| e.to_string())?;
+        let handle = unsafe { crispasr_sys::crispasr_parakeet_init(c_path.as_ptr(), n_threads, if use_flash { 1 } else { 0 }) };
+        if handle.is_null() { return Err(format!("Failed to load Parakeet model: {model_path}")); }
+        Ok(Self { handle })
+    }
+
+    pub fn transcribe(&self, pcm: &[f32], language: Option<&str>) -> Result<ParakeetResult, String> {
+        let lang = language.map(|l| CString::new(l).unwrap_or_default());
+        let lang_ptr = lang.as_ref().map_or(std::ptr::null(), |c| c.as_ptr());
+        let res = unsafe { crispasr_sys::crispasr_parakeet_transcribe(self.handle, pcm.as_ptr(), pcm.len() as c_int, lang_ptr) };
+        if res.is_null() { return Err("crispasr_parakeet_transcribe returned null".to_string()); }
+        Ok(ParakeetResult { handle: res })
+    }
+}
+
+impl Drop for Parakeet {
+    fn drop(&mut self) {
+        if !self.handle.is_null() {
+            unsafe { crispasr_sys::crispasr_parakeet_free(self.handle) };
+            self.handle = std::ptr::null_mut();
+        }
+    }
+}
+
+// =========================================================================
+// Standalone helpers — full C-ABI parity
+// =========================================================================
+
+/// Chunk-boundary LCS dedup: returns the number of leading tokens
+/// of `curr_tokens` to drop to remove overlap with `prev_tail_tokens`.
+pub fn lcs_dedup_prefix_count(prev_tail: &[i32], curr: &[i32], min_lcs_length: i32) -> i32 {
+    unsafe {
+        crispasr_sys::crispasr_lcs_dedup_prefix_count(
+            prev_tail.as_ptr(), prev_tail.len() as c_int,
+            curr.as_ptr(), curr.len() as c_int, min_lcs_length,
+        )
+    }
+}
+
+/// Run standalone VAD returning speech spans in centiseconds.
+pub fn vad_segments(
+    model_path: &str, pcm: &[f32], sample_rate: i32,
+    threshold: f32, min_speech_ms: i32, min_silence_ms: i32,
+    n_threads: i32, use_gpu: bool,
+) -> Result<Vec<(f32, f32)>, String> {
+    let c_path = CString::new(model_path).map_err(|e| e.to_string())?;
+    let mut out_spans: *mut f32 = std::ptr::null_mut();
+    let n = unsafe {
+        crispasr_sys::crispasr_vad_segments(
+            c_path.as_ptr(), pcm.as_ptr(), pcm.len() as c_int,
+            sample_rate, threshold, min_speech_ms, min_silence_ms,
+            n_threads, if use_gpu { 1 } else { 0 }, &mut out_spans,
+        )
+    };
+    if n < 0 { return Err(format!("crispasr_vad_segments failed (rc={n})")); }
+    let mut spans = Vec::with_capacity(n as usize);
+    for i in 0..n as isize {
+        unsafe { spans.push((*out_spans.offset(2 * i), *out_spans.offset(2 * i + 1))); }
+    }
+    if n > 0 { unsafe { crispasr_sys::crispasr_vad_free(out_spans) }; }
+    Ok(spans)
+}
+
+/// Run unified VAD dispatcher returning speech spans in seconds.
+pub fn vad_slices(
+    model_path: &str, pcm: &[f32], sample_rate: i32,
+    threshold: f32, min_speech_ms: i32, min_silence_ms: i32,
+    speech_pad_ms: i32, max_chunk_duration_s: f32, n_threads: i32,
+) -> Result<Vec<(f32, f32)>, String> {
+    let c_path = CString::new(model_path).map_err(|e| e.to_string())?;
+    let mut out_spans: *mut f32 = std::ptr::null_mut();
+    let n = unsafe {
+        crispasr_sys::crispasr_vad_slices(
+            c_path.as_ptr(), pcm.as_ptr(), pcm.len() as c_int,
+            sample_rate, threshold, min_speech_ms, min_silence_ms,
+            speech_pad_ms, max_chunk_duration_s, n_threads, &mut out_spans,
+        )
+    };
+    if n < 0 { return Err(format!("crispasr_vad_slices failed (rc={n})")); }
+    let mut spans = Vec::with_capacity(n as usize);
+    for i in 0..n as isize {
+        unsafe { spans.push((*out_spans.offset(2 * i), *out_spans.offset(2 * i + 1))); }
+    }
+    if n > 0 { unsafe { crispasr_sys::crispasr_vad_free(out_spans) }; }
+    Ok(spans)
+}
+
+/// RNNoise audio enhancement on 48 kHz mono PCM.
+pub fn enhance_audio_rnnoise(pcm: &[f32]) -> Result<Vec<f32>, String> {
+    let mut out = vec![0f32; pcm.len()];
+    let rc = unsafe {
+        crispasr_sys::crispasr_enhance_audio_rnnoise(
+            pcm.as_ptr(), pcm.len() as i32, out.as_mut_ptr(), out.len() as i32,
+        )
+    };
+    if rc != 0 { return Err(format!("enhance_audio_rnnoise failed (rc={rc})")); }
+    Ok(out)
+}
+
+/// TitaNet cosine similarity between two embeddings.
+pub fn titanet_cosine_sim(a: &[f32], b: &[f32]) -> f32 {
+    let dim = a.len().min(b.len()) as i32;
+    unsafe { crispasr_sys::crispasr_titanet_cosine_sim(a.as_ptr(), b.as_ptr(), dim) }
+}
+
+/// Speaker database wrapper.
+pub struct SpeakerDB {
+    handle: *mut std::ffi::c_void,
+    dir_path: String,
+}
+
+unsafe impl Send for SpeakerDB {}
+
+impl SpeakerDB {
+    pub fn load(dir_path: &str) -> Result<Self, String> {
+        let c_path = CString::new(dir_path).map_err(|e| e.to_string())?;
+        let handle = unsafe { crispasr_sys::crispasr_speaker_db_load(c_path.as_ptr()) };
+        if handle.is_null() { return Err(format!("Failed to load speaker DB: {dir_path}")); }
+        Ok(Self { handle, dir_path: dir_path.to_string() })
+    }
+
+    pub fn count(&self) -> i32 {
+        unsafe { crispasr_sys::crispasr_speaker_db_count(self.handle) }
+    }
+
+    pub fn match_embedding(&self, embedding: &[f32], threshold: f32) -> (Option<String>, f32) {
+        let mut name_buf = vec![0u8; 256];
+        let score = unsafe {
+            crispasr_sys::crispasr_speaker_db_match(
+                self.handle, embedding.as_ptr(), embedding.len() as i32,
+                threshold, name_buf.as_mut_ptr() as *mut c_char, 256,
+            )
+        };
+        let name = if score >= threshold {
+            let c_str = unsafe { CStr::from_ptr(name_buf.as_ptr() as *const c_char) };
+            Some(c_str.to_string_lossy().into_owned())
+        } else {
+            None
+        };
+        (name, score)
+    }
+
+    pub fn enroll(&self, name: &str, embedding: &[f32]) -> Result<(), String> {
+        let c_dir = CString::new(&*self.dir_path).map_err(|e| e.to_string())?;
+        let c_name = CString::new(name).map_err(|e| e.to_string())?;
+        let rc = unsafe {
+            crispasr_sys::crispasr_speaker_db_enroll(
+                c_dir.as_ptr(), c_name.as_ptr(), embedding.as_ptr(), embedding.len() as i32,
+            )
+        };
+        if rc != 0 { return Err(format!("speaker_db_enroll failed (rc={rc})")); }
+        Ok(())
+    }
+}
+
+impl Drop for SpeakerDB {
+    fn drop(&mut self) {
+        if !self.handle.is_null() {
+            unsafe { crispasr_sys::crispasr_speaker_db_free(self.handle) };
+            self.handle = std::ptr::null_mut();
+        }
+    }
+}
+
+/// Whether `lang` is German (Kokoro phoneme selection).
+pub fn kokoro_lang_is_german(lang: &str) -> bool {
+    let c = CString::new(lang).unwrap_or_default();
+    unsafe { crispasr_sys::crispasr_kokoro_lang_is_german_abi(c.as_ptr()) }
+}
+
+/// Whether `lang` has a native Kokoro voice.
+pub fn kokoro_lang_has_native_voice(lang: &str) -> bool {
+    let c = CString::new(lang).unwrap_or_default();
+    unsafe { crispasr_sys::crispasr_kokoro_lang_has_native_voice_abi(c.as_ptr()) }
+}

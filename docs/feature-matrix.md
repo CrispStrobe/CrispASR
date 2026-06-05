@@ -53,6 +53,7 @@ All 52 backends compiled into the `crispasr` binary, with their declared capabil
 | `moonshine-streaming` |  |  |  |  |  | ✓ |  | ✓ |  |  |  |  |  | ✓ | ✓ |  |  |  |  |
 | `gemma4-e2b` |  |  | ✓ | ✓ |  | ✓ |  | ✓ |  |  | ✓ |  |  | ✓ | ✓ |  |  | ✓ |  |
 | `omniasr` |  |  |  |  |  | ✓ |  | ✓ |  | ✓ | ✓ | ✓ |  | ✓ | ✓ |  |  |  |  |
+| `omniasr-300m` |  |  |  |  |  | ✓ |  | ✓ |  | ✓ | ✓ | ✓ |  | ✓ | ✓ |  |  |  |  |
 | `omniasr-llm` |  |  |  |  |  | ✓ |  | ✓ |  | ✓ | ✓ | ✓ |  | ✓ | ✓ |  |  |  |  |
 | `omniasr-llm-1b` |  |  |  |  |  | ✓ |  | ✓ |  | ✓ | ✓ | ✓ |  | ✓ | ✓ |  |  |  |  |
 | `mimo-asr` |  |  |  |  |  | ✓ |  | ✓ |  | ✓ | ✓ |  |  | ✓ | ✓ |  |  |  |  |

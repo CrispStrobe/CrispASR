@@ -1,0 +1,14 @@
+{
+  "id": "chr1str/crispasr-mimo-funasr-quant-gpu-bench",
+  "title": "crispasr-mimo-funasr-quant-gpu-bench",
+  "code_file": "crispasr-mimo-funasr-quant-gpu-bench.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "true",
+  "dataset_sources": [],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}

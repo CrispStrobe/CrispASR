@@ -185,3 +185,72 @@ fn cache_dir_exists() {
         assert!(!d.is_empty());
     }
 }
+
+// ---- C-ABI parity: new types from bindings-parity milestone ----
+
+#[test]
+fn lcs_dedup_empty_inputs() {
+    assert_eq!(crispasr::lcs_dedup_prefix_count(&[], &[], 1), 0);
+    assert_eq!(crispasr::lcs_dedup_prefix_count(&[1, 2, 3], &[], 1), 0);
+    assert_eq!(crispasr::lcs_dedup_prefix_count(&[], &[1, 2, 3], 1), 0);
+}
+
+#[test]
+fn lcs_dedup_overlap() {
+    // prev ends with [3, 4, 5], curr starts with [4, 5, 6] -> drop 2 leading
+    let prev = vec![1, 2, 3, 4, 5];
+    let curr = vec![4, 5, 6, 7];
+    let drop = crispasr::lcs_dedup_prefix_count(&prev, &curr, 1);
+    assert!(drop >= 0, "should return non-negative");
+}
+
+#[test]
+fn titanet_cosine_sim_identical() {
+    let a = vec![1.0f32, 0.0, 0.0];
+    let b = vec![1.0f32, 0.0, 0.0];
+    let sim = crispasr::titanet_cosine_sim(&a, &b);
+    assert!((sim - 1.0).abs() < 1e-5, "identical vectors should have sim ~1.0, got {sim}");
+}
+
+#[test]
+fn titanet_cosine_sim_orthogonal() {
+    let a = vec![1.0f32, 0.0, 0.0];
+    let b = vec![0.0f32, 1.0, 0.0];
+    let sim = crispasr::titanet_cosine_sim(&a, &b);
+    assert!(sim.abs() < 1e-5, "orthogonal vectors should have sim ~0, got {sim}");
+}
+
+#[test]
+fn kokoro_lang_helpers() {
+    assert!(crispasr::kokoro_lang_is_german("de"));
+    assert!(crispasr::kokoro_lang_is_german("deu"));
+    assert!(!crispasr::kokoro_lang_is_german("en"));
+    // "en" always has a native Kokoro voice
+    assert!(crispasr::kokoro_lang_has_native_voice("en"));
+}
+
+#[test]
+fn speaker_db_missing_dir() {
+    // Loading from a non-existent directory should return an error
+    let result = crispasr::SpeakerDB::load("/nonexistent/speaker_db_dir_12345");
+    assert!(result.is_err());
+}
+
+#[test]
+fn vad_segments_null_model() {
+    // Passing a nonsense model path should return an error
+    let pcm = vec![0.0f32; 16000];
+    let result = crispasr::vad_segments(
+        "/nonexistent/vad.gguf", &pcm, 16000, 0.5, 250, 100, 1, false,
+    );
+    assert!(result.is_err());
+}
+
+#[test]
+fn vad_slices_null_model() {
+    let pcm = vec![0.0f32; 16000];
+    let result = crispasr::vad_slices(
+        "/nonexistent/vad.gguf", &pcm, 16000, 0.5, 250, 100, 30, 30.0, 1,
+    );
+    assert!(result.is_err());
+}

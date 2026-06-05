@@ -17,6 +17,7 @@ Redacted descriptions in own voice.
 | 10 | `metal/ggml-alloc : long F32 GPU graphs accumulate drift sensitive to in-place buffer reuse pattern` | yours — bisected through chatterbox-tts UNet; bug report, no patch | drafted, not yet filed |
 | 11 | `metal/sched : mixed CPU+GPU op pinning produces NaN at large input dimensions` | yours — same UNet repro; bug report, no patch | drafted, not yet filed |
 | 14 | `CUDA: support F16 weights in conv_transpose_1d` | yours (555deb98) — fixes issue #126 SNAC + orpheus CUDA segfault; templates kernel on src0 type, relaxes F32-only assert + supports_op | validated on RunPod A40 sm_86 2026-05-26, not yet filed |
+| 16 | `ggml-cuda : add k-quant support to GET_ROWS (Q2_K–Q6_K)` | ours (3bf9a599) — uses `ggml_get_to_fp32_cuda()` row-dequant, copies indices to host, sequential kernel launch per row; also adds Q2_K–Q6_K to `supports_op` | ✅ validated on RunPod RTX 3090 sm_86 2026-06-05 (mimo-asr Q4_K embed, 2.0× RT, correct JFK); `16-sched-small-graph-cross-backend.md` also documents the scheduler cross-backend routing bug for small graphs |
 
 The `.patch` files are clean diffs; they are reference shape, not
 literal `git am` payloads — line numbers are relative to our vendored

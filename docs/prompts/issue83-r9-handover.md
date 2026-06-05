@@ -73,7 +73,7 @@ branch `plan-83-r9-s3gen-gpu-prec-hints` (commit `bd8b98cf`).
 ## Build
 
 ```
-cmake --build build --target crispasr crispasr-diff -j 4
+cmake --build build --target crispasr-lib crispasr-diff -j 4
 ```
 
 CMake target names: the binary is `crispasr-cli` but ships as

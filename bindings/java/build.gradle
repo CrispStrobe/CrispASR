@@ -26,19 +26,19 @@ sourceSets {
 
 tasks.register('copyLibwhisperDynlib', Copy) {
     from '../../build/src'
-    include 'libwhisper.dylib'
+    include 'libcrispasr.dylib'
     into 'build/generated/resources/main'
 }
 
 tasks.register('copyLibwhisperSo', Copy) {
     from '../../build/src'
-    include 'libwhisper.so'
+    include 'libcrispasr.so'
     into 'build/generated/resources/main'
 }
 
 tasks.register('copyWhisperDLL', Copy) {
     from '../../build/bin/Release'
-    include 'whisper.dll'
+    include 'crispasr.dll'
     into 'build/generated/resources/main'
 }
 

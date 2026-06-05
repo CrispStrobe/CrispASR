@@ -47,7 +47,7 @@ Pair with **[`cstr/mimo-tokenizer-GGUF`](https://huggingface.co/cstr/mimo-tokeni
 git clone https://github.com/CrispStrobe/CrispASR.git
 cd CrispASR
 cmake -B build-ninja-compile -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build build-ninja-compile --target crispasr
+cmake --build build-ninja-compile --target crispasr-lib
 
 # Download both halves
 hf download cstr/mimo-asr-GGUF mimo-asr-q4_k.gguf --local-dir models/

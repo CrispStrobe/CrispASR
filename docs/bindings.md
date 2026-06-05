@@ -69,7 +69,7 @@ from crispasr import (
 sess = Session("parakeet-tdt-0.6b-v3-q4_k.gguf")
 sess.set_max_new_tokens(256)       # AR backends; <= 0 clears
 sess.set_frequency_penalty(0.4)    # AR backends; <= 0 disables
-segs = sess.transcribe_vad(pcm, "silero-v5.1.2.bin")  # stitched VAD pass
+segs = sess.transcribe_vad(pcm, "silero-v6.2.0.bin")  # stitched VAD pass
 
 # Run each shared post-step standalone
 lang = detect_language_pcm(pcm, model_path="ggml-tiny.bin")
@@ -104,7 +104,7 @@ use crispasr::{
 let sess = Session::open("cohere-transcribe-q4_k.gguf", 4)?;
 sess.set_max_new_tokens(256)?;
 sess.set_frequency_penalty(0.4)?;
-let segs = sess.transcribe_vad(&pcm, "silero-v5.1.2.bin", None)?;
+let segs = sess.transcribe_vad(&pcm, "silero-v6.2.0.bin", None)?;
 
 let entry = registry_lookup("canary")?.unwrap();
 let path  = cache_ensure_file(&entry.filename, &entry.url, false, None)?;

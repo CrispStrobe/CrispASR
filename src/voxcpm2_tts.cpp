@@ -52,6 +52,14 @@ static bool vox_env_bool(const char* k) {
     return v && *v && std::strcmp(v, "0") != 0;
 }
 
+// Like vox_env_bool but defaults to true (opt-out instead of opt-in).
+static bool vox_env_bool_default_on(const char* k) {
+    const char* v = std::getenv(k);
+    if (!v || !*v)
+        return true;                 // unset → on
+    return std::strcmp(v, "0") != 0; // "0" → off, anything else → on
+}
+
 static double vox_now_ms() {
     using namespace std::chrono;
     return duration_cast<duration<double, std::milli>>(steady_clock::now().time_since_epoch()).count();
@@ -2213,7 +2221,7 @@ static std::vector<float> cfm_euler_solve(voxcpm2_context* ctx, const float* mu,
     // (build_locdit_graph + locdit_forward_graph) instead of the
     // ~30 per-matmul tiny graphs. Same algebra; one graph build/alloc
     // per locdit call instead of one per matmul.
-    const bool use_graph = vox_env_bool("VOXCPM2_USE_GRAPH");
+    const bool use_graph = vox_env_bool_default_on("VOXCPM2_USE_GRAPH");
     auto locdit_call = [&](const float* x_tc, const float* mu_in, float t_cur, const float* cond_in,
                            float dt_in) -> std::vector<float> {
         if (use_graph) {
@@ -3402,7 +3410,7 @@ static std::vector<float> vae_decode(voxcpm2_context* ctx, const std::vector<std
     if (n_patches == 0)
         return {};
 
-    if (vox_env_bool("VOXCPM2_USE_GRAPH")) {
+    if (vox_env_bool_default_on("VOXCPM2_USE_GRAPH")) {
         return vae_decode_graph(ctx, patches);
     }
 
@@ -4615,7 +4623,7 @@ static vox_prefill_inputs build_prefill_inputs_impl(voxcpm2_context* ctx, const 
     int d_dit = (int)hp.locdit_d_model;
     int P_frames = (int)hp.patch_frames;
     int feat_dim_vae = 64;
-    const bool use_graph = vox_env_bool("VOXCPM2_USE_GRAPH");
+    const bool use_graph = vox_env_bool_default_on("VOXCPM2_USE_GRAPH");
 
     // 1. Tokenise (vox_tokenize already appends audio_start_token).
     std::vector<int32_t> text_tokens = vox_tokenize(ctx->tokenizer, text);
@@ -4836,7 +4844,7 @@ static float* vox_synthesize_internal(voxcpm2_context* ctx, const char* text, co
     // through the graph (no further CPU↔backend traffic). Resetting
     // tslm_kv_synced here ensures every synthesis call re-syncs from the
     // fresh prefill cache.
-    const bool use_graph_tslm = vox_env_bool("VOXCPM2_USE_GRAPH");
+    const bool use_graph_tslm = vox_env_bool_default_on("VOXCPM2_USE_GRAPH");
     ctx->tslm_kv_synced = false;
 
     // Python AR loop order (from voxcpm2.py _inference, lines 1060-1108):

@@ -257,6 +257,11 @@ public:
             f5_tts_set_seed(ctx_, p.seed);
         if (p.tts_speed > 0.0f)
             f5_tts_set_speed(ctx_, p.tts_speed);
+        // 75c-opt-2: native f5 knobs
+        if (p.tts_num_steps >= 0)
+            f5_tts_set_ode_steps(ctx_, p.tts_num_steps);
+        if (p.tts_cfg_scale >= 0.0f)
+            f5_tts_set_cfg_strength(ctx_, p.tts_cfg_scale);
 
         float* pcm = nullptr;
         int sr = 0;

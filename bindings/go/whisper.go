@@ -10,16 +10,14 @@ import (
 
 /*
 // Static linking of libcrispasr.a requires every conditionally-built sub-lib
-// the C-ABI shim references. cgo can't read CMake's transitive
-// `target_link_libraries(crispasr PUBLIC <subname>)` graph, so list them
-// explicitly. Order matters on Linux (single-pass linker) — wrap in
-// --start-group / --end-group so the linker iterates until all symbols
-// resolve. macOS ld is order-independent, so a flat list is fine there.
+// the C-ABI shim references. The linux/darwin LDFLAGS library lists below are
+// auto-generated from the CMake dependency graph via:
 //
-// Keep this list in sync with the conditional `target_link_libraries(crispasr
-// PUBLIC <name>)` block in src/CMakeLists.txt — every backend lib that's
-// PUBLIC-linked into libcrispasr.{so,dylib} for shared builds is also a
-// build-time dep here for static.
+//     python tools/sync_go_cgo_ldflags.py
+//
+// CI checks for drift (see .github/workflows/bindings-go.yml). If you add a
+// new target_link_libraries(crispasr PUBLIC <X>) in src/CMakeLists.txt, re-run
+// the sync script to update these lines automatically.
 #cgo CFLAGS: -I${SRCDIR}/../../include -I${SRCDIR}/../../ggml/include
 #cgo LDFLAGS: -L${SRCDIR}/../../build-ninja-compile/src -L${SRCDIR}/../../build-ninja-compile/crisp_audio -L${SRCDIR}/../../build-ninja-compile/ggml/src
 #cgo LDFLAGS: -L${SRCDIR}/../../build/src -L${SRCDIR}/../../build/crisp_audio -L${SRCDIR}/../../build/ggml/src
@@ -31,8 +29,8 @@ import (
 #cgo darwin LDFLAGS: -Wl,-rpath,${SRCDIR}/../../build-ninja-compile/ggml/src -Wl,-rpath,${SRCDIR}/../../build/ggml/src
 #cgo darwin LDFLAGS: -Wl,-rpath,${SRCDIR}/../../build-ninja-compile/ggml/src/ggml-blas -Wl,-rpath,${SRCDIR}/../../build-ninja-compile/ggml/src/ggml-metal
 #cgo darwin LDFLAGS: -Wl,-rpath,${SRCDIR}/../../build/ggml/src/ggml-blas -Wl,-rpath,${SRCDIR}/../../build/ggml/src/ggml-metal
-#cgo linux LDFLAGS: -Wl,--start-group -lcrispasr -lparakeet -lcanary -lqwen3_asr -lcohere -lgranite_speech -lgranite_nle -lcanary_ctc -lvoxtral -lvoxtral4b -lwav2vec2-ggml -lctc-align -lglm-asr -lkyutai-stt -lfirered-asr -lfirered-vad -lmarblenet-vad -lcrispasr-vad-encdec -lfirered-lid -llid-fasttext -lomniasr -lvibevoice -lecapa-lid -ltitanet -lmoonshine -lmoonshine_streaming -lgemma4_e2b -lmimo_tokenizer -lmimo_asr -lqwen3_tts -lorpheus -lchatterbox -lindextts -lm2m100 -lt5_translate -lvoxcpm2_tts -lkokoro -lcosyvoice3_tts -lcsm-tts -loutetts -lzonos-tts -lf5-tts -lpocket-tts -lpiper-tts -ldia-tts -lfastpitch-tts -lspeecht5-tts -lfunasr -lparaformer -lsensevoice -lfireredpunc -ltruecaser -ltruecaser_crf -ltruecaser_lstm -lpcs -lpyannote-seg -lsilero-lid -llid-cld3 -ltext-lid-dispatch -lcrispasr-llama-core -lcrispasr-core -lcrisp_audio -lmoonshine_tokenizer -lggml -lggml-base -lggml-cpu -Wl,--end-group -lm -lstdc++ -fopenmp
-#cgo darwin LDFLAGS: -lcrispasr -lparakeet -lcanary -lqwen3_asr -lcohere -lgranite_speech -lgranite_nle -lcanary_ctc -lvoxtral -lvoxtral4b -lwav2vec2-ggml -lctc-align -lglm-asr -lkyutai-stt -lfirered-asr -lfirered-vad -lmarblenet-vad -lcrispasr-vad-encdec -lfirered-lid -llid-fasttext -lomniasr -lvibevoice -lecapa-lid -ltitanet -lmoonshine -lmoonshine_streaming -lgemma4_e2b -lmimo_tokenizer -lmimo_asr -lqwen3_tts -lorpheus -lchatterbox -lindextts -lm2m100 -lt5_translate -lvoxcpm2_tts -lkokoro -lcosyvoice3_tts -lcsm-tts -loutetts -lzonos-tts -lf5-tts -lpocket-tts -lpiper-tts -ldia-tts -lfastpitch-tts -lspeecht5-tts -lfunasr -lparaformer -lsensevoice -lfireredpunc -ltruecaser -ltruecaser_crf -ltruecaser_lstm -lpcs -lpyannote-seg -lsilero-lid -llid-cld3 -ltext-lid-dispatch -lcrispasr-llama-core -lcrispasr-core -lcrisp_audio -lmoonshine_tokenizer -lggml -lggml-base -lggml-cpu -lm -lstdc++
+#cgo linux LDFLAGS: -Wl,--start-group -lggml-base -lggml-cpu -lggml -lcrispasr-core -llid-fasttext -llid-cld3 -lcrisp_audio -lmoonshine_tokenizer -lmimo_tokenizer -lbert-encoder -lfirered-asr -lzonos-tts -lwav2vec2-ggml -lvoxtral4b -lvoxtral -lvoxcpm2_tts -lvibevoice -ltruecaser_lstm -ltruecaser_crf -ltruecaser -ltitanet -ltext-lid-dispatch -lt5_translate -lspeecht5-tts -lsilero-lid -lsensevoice -lqwen3_tts -lqwen3_asr -lpyannote-seg -lpocket-tts -lpiper-tts -lpcs -lparler-tts -lparakeet -lparaformer -loutetts -lorpheus -lopenvoice2 -lomniasr -lmoonshine_streaming -lmoonshine -lmimo_asr -lmelotts -lmarblenet-vad -lm2m100 -lkyutai-stt -lkokoro -lindextts -lgranite_speech -lgranite_nle -lglm-asr -lgemma4_e2b -lfunasr -lfireredpunc -lfirered-vad -lfirered-lid -lfastpitch-tts -lf5-tts -lecapa-lid -ldia-tts -lctc-align -lcsm-tts -lcrispasr-vad-encdec -lcrispasr-llama-core -lcosyvoice3_tts -lcohere -lchatterbox -lcanary_ctc -lcanary -lbark-tts -lcrispasr -Wl,--end-group -lm -lstdc++ -fopenmp
+#cgo darwin LDFLAGS: -lggml-base -lggml-cpu -lggml -lcrispasr-core -llid-fasttext -llid-cld3 -lcrisp_audio -lmoonshine_tokenizer -lmimo_tokenizer -lbert-encoder -lfirered-asr -lzonos-tts -lwav2vec2-ggml -lvoxtral4b -lvoxtral -lvoxcpm2_tts -lvibevoice -ltruecaser_lstm -ltruecaser_crf -ltruecaser -ltitanet -ltext-lid-dispatch -lt5_translate -lspeecht5-tts -lsilero-lid -lsensevoice -lqwen3_tts -lqwen3_asr -lpyannote-seg -lpocket-tts -lpiper-tts -lpcs -lparler-tts -lparakeet -lparaformer -loutetts -lorpheus -lopenvoice2 -lomniasr -lmoonshine_streaming -lmoonshine -lmimo_asr -lmelotts -lmarblenet-vad -lm2m100 -lkyutai-stt -lkokoro -lindextts -lgranite_speech -lgranite_nle -lglm-asr -lgemma4_e2b -lfunasr -lfireredpunc -lfirered-vad -lfirered-lid -lfastpitch-tts -lf5-tts -lecapa-lid -ldia-tts -lctc-align -lcsm-tts -lcrispasr-vad-encdec -lcrispasr-llama-core -lcosyvoice3_tts -lcohere -lchatterbox -lcanary_ctc -lcanary -lbark-tts -lcrispasr -lm -lstdc++
 #cgo darwin LDFLAGS: -lggml-metal -lggml-blas
 #cgo darwin LDFLAGS: -framework Accelerate -framework Metal -framework Foundation -framework CoreGraphics
 #include <crispasr.h>

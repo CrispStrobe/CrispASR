@@ -196,7 +196,7 @@ jobs:
               -DCRISPASR_BUILD_SERVER=OFF
           # CMake target `crispasr-cli` produces the `bin/crispasr`
           # binary (target name vs output name diverge — see
-          # examples/cli/CMakeLists.txt). Asking for target `crispasr`
+          # examples/cli/CMakeLists.txt). Asking for target `crispasr-lib`
           # would build just the library, leaving bin/crispasr absent.
           #
           # Also build crispasr-diff unconditionally — the binary is

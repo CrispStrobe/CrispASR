@@ -36,7 +36,7 @@ declare -A AUDIOS=(
 
 # ---- Check prerequisites ----
 if [ ! -x "$CRISPASR" ]; then
-  echo "ERROR: $CRISPASR not found. Build first: cmake --build build --target crispasr" >&2
+  echo "ERROR: $CRISPASR not found. Build first: cmake --build build --target crispasr-cli" >&2
   exit 1
 fi
 

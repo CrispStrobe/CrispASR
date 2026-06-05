@@ -63,6 +63,13 @@ public:
         if (p.tts_speed > 0.0f) {
             piper_tts_set_length_scale(ctx_, 1.0f / p.tts_speed);
         }
+        // 75c-opt-2: native piper knobs
+        if (p.tts_noise_scale >= 0.0f)
+            piper_tts_set_noise_scale(ctx_, p.tts_noise_scale);
+        if (p.tts_noise_w >= 0.0f)
+            piper_tts_set_noise_w(ctx_, p.tts_noise_w);
+        if (p.tts_speaker_id >= 0)
+            piper_tts_set_speaker_id(ctx_, p.tts_speaker_id);
 
         float* pcm = nullptr;
         int sr = 0;

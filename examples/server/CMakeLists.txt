@@ -7,7 +7,7 @@ add_executable(${TARGET} server.cpp ws_stream.cpp httplib.h ws_stream.h)
 include(DefaultTargetOptions)
 
 target_include_directories(${TARGET} PRIVATE ${CMAKE_SOURCE_DIR}/include)
-target_link_libraries(${TARGET} PRIVATE common json_cpp whisper crispasr ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(${TARGET} PRIVATE common json_cpp whisper crispasr-lib ${CMAKE_THREAD_LIBS_INIT})
 
 if (WIN32)
     # MSVC auto-links these via #pragma comment in src/crispasr_cache.cpp

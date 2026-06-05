@@ -37,7 +37,11 @@ public:
     bool init(const whisper_params& p) override {
         cohere_context_params cp = cohere_context_default_params();
         cp.n_threads = p.n_threads;
-        cp.use_flash = p.flash_attn;
+        // Cohere: cast-on-read is 13% faster than flash on chunked
+        // short-form (30s auto-chunks). Flash only wins on unchunked
+        // long-form (>5 min). Force flash via CRISPASR_COHERE_FLASH=1.
+        // See PERFORMANCE.md §5 (PLAN #73 closeout).
+        cp.use_flash = (getenv("CRISPASR_COHERE_FLASH") != nullptr);
         cp.use_gpu = crispasr_backend_should_use_gpu(p);
         cp.no_punctuation = !p.punctuation;
         cp.diarize = false;

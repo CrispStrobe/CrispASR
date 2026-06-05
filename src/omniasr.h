@@ -66,6 +66,9 @@ void omniasr_set_seed(struct omniasr_context* ctx, uint64_t seed);
 // by cumulative log-prob. CTC variant ignores this.
 void omniasr_set_beam_size(struct omniasr_context* ctx, int beam_size);
 
+// Returns true if the loaded model is a CTC variant (not LLM).
+bool omniasr_is_ctc(struct omniasr_context* ctx);
+
 #ifdef __cplusplus
 }
 #endif
