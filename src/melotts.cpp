@@ -82,13 +82,120 @@ static std::vector<std::string> json_parse_string_array(const std::string& json)
 // Minimal English G2P using embedded CMU dictionary.
 // Falls back to character-level mapping for unknown words.
 
+// ── Neural G2P (g2p_en encoder-decoder) ───────────────────────────
+// Tiny GRU seq2seq: 29 graphemes → 74 ARPAbet phonemes.
+// Weights loaded from GGUF metadata (base64 JSON, ~4 KB).
+
+struct neural_g2p_model {
+    bool loaded = false;
+    // Grapheme/phoneme vocabularies
+    std::vector<std::string> graphemes; // 29: <pad> <unk> </s> a-z
+    std::vector<std::string> phonemes;  // 74: <pad> <unk> <s> </s> AA0..ZH
+    std::map<std::string, int> g2idx;
+    // Weights (all F32)
+    std::vector<float> enc_emb;                                // (29, 256)
+    std::vector<float> dec_emb;                                // (74, 256)
+    std::vector<float> enc_w_ih, enc_w_hh, enc_b_ih, enc_b_hh; // GRU (768, 256)
+    std::vector<float> dec_w_ih, dec_w_hh, dec_b_ih, dec_b_hh;
+    std::vector<float> fc_w, fc_b; // (74, 256), (74,)
+    int hidden_dim = 256;
+};
+
+static float nn_sigmoid(float x) {
+    return 1.0f / (1.0f + expf(-x));
+}
+
+static void gru_cell(const float* x, const float* h_prev, int input_dim, int hidden_dim, const float* w_ih,
+                     const float* w_hh, const float* b_ih, const float* b_hh, float* h_out) {
+    // GRU: 3 gates (reset, update, new) packed as [r, z, n]
+    std::vector<float> g_ih(3 * hidden_dim, 0.0f);
+    std::vector<float> g_hh(3 * hidden_dim, 0.0f);
+    for (int o = 0; o < 3 * hidden_dim; o++) {
+        float s1 = b_ih[o], s2 = b_hh[o];
+        for (int i = 0; i < input_dim; i++)
+            s1 += x[i] * w_ih[o * input_dim + i];
+        for (int i = 0; i < hidden_dim; i++)
+            s2 += h_prev[i] * w_hh[o * hidden_dim + i];
+        g_ih[o] = s1;
+        g_hh[o] = s2;
+    }
+    for (int i = 0; i < hidden_dim; i++) {
+        float r = nn_sigmoid(g_ih[i] + g_hh[i]);
+        float z = nn_sigmoid(g_ih[hidden_dim + i] + g_hh[hidden_dim + i]);
+        float n = tanhf(g_ih[2 * hidden_dim + i] + r * g_hh[2 * hidden_dim + i]);
+        h_out[i] = (1.0f - z) * n + z * h_prev[i];
+    }
+}
+
+static std::vector<std::string> neural_g2p_predict(const neural_g2p_model& m, const std::string& word) {
+    if (!m.loaded)
+        return {};
+    int D = m.hidden_dim;
+
+    // Encode: chars + </s>
+    std::string lower;
+    for (char c : word)
+        lower += (char)tolower((unsigned char)c);
+
+    std::vector<int> char_ids;
+    for (char c : lower) {
+        std::string cs(1, c);
+        auto it = m.g2idx.find(cs);
+        char_ids.push_back(it != m.g2idx.end() ? it->second : 1); // 1=<unk>
+    }
+    char_ids.push_back(2); // 2=</s>
+
+    // Run encoder GRU
+    std::vector<float> h(D, 0.0f);
+    for (int cid : char_ids) {
+        const float* emb = &m.enc_emb[cid * D];
+        std::vector<float> h_new(D);
+        gru_cell(emb, h.data(), D, D, m.enc_w_ih.data(), m.enc_w_hh.data(), m.enc_b_ih.data(), m.enc_b_hh.data(),
+                 h_new.data());
+        h = h_new;
+    }
+
+    // Decode: start with <s> (id=2), greedy until </s> (id=3) or 20 steps
+    std::vector<std::string> preds;
+    int dec_id = 2; // <s>
+    for (int step = 0; step < 20; step++) {
+        const float* dec_emb = &m.dec_emb[dec_id * D];
+        std::vector<float> h_new(D);
+        gru_cell(dec_emb, h.data(), D, D, m.dec_w_ih.data(), m.dec_w_hh.data(), m.dec_b_ih.data(), m.dec_b_hh.data(),
+                 h_new.data());
+        h = h_new;
+
+        // FC: logits = h @ fc_w^T + fc_b
+        int n_ph = (int)m.phonemes.size();
+        float best_val = -1e30f;
+        int best_id = 0;
+        for (int p = 0; p < n_ph; p++) {
+            float s = m.fc_b[p];
+            for (int d = 0; d < D; d++)
+                s += h[d] * m.fc_w[p * D + d];
+            if (s > best_val) {
+                best_val = s;
+                best_id = p;
+            }
+        }
+
+        if (best_id == 3)
+            break; // </s>
+        if (best_id >= 4 && best_id < n_ph)
+            preds.push_back(m.phonemes[best_id]);
+        dec_id = best_id;
+    }
+    return preds;
+}
+
 struct melotts_g2p {
     // CMU dict: word -> list of syllables, each syllable is a list of phonemes
-    // Stored as JSON in GGUF, parsed on load.
     std::map<std::string, std::vector<std::vector<std::string>>> cmudict;
     std::map<std::string, int> symbol_to_id;
     std::vector<std::string> symbols;
-    int tone_start_en; // tone offset for English (7 in the combined scheme)
+    int tone_start_en;
+    // Neural G2P fallback (g2p_en model)
+    neural_g2p_model neural;
 };
 
 // ARPAbet stress marker -> tone: 0=no stress, 1=primary+1, 2=secondary+1, 3=tertiary+1
@@ -569,7 +676,22 @@ static void g2p_english(const melotts_g2p& g2p, const std::string& text, std::ve
                     }
                 }
             } else {
-                lts_fallback(word, g2p.symbol_to_id, tone_start, lang_id, phone_ids, tone_ids, lang_ids);
+                // Try neural G2P first (g2p_en model), fall back to LTS rules
+                bool used_neural = false;
+                if (g2p.neural.loaded) {
+                    auto preds = neural_g2p_predict(g2p.neural, word);
+                    if (!preds.empty()) {
+                        for (const auto& ph : preds) {
+                            int tone = arpa_to_tone(ph);
+                            std::string base = to_lower(arpa_strip_stress(ph));
+                            std::string mapped = post_replace_ph(base, g2p.symbol_to_id);
+                            add_phone(mapped, tone);
+                        }
+                        used_neural = true;
+                    }
+                }
+                if (!used_neural)
+                    lts_fallback(word, g2p.symbol_to_id, tone_start, lang_id, phone_ids, tone_ids, lang_ids);
             }
         }
 
@@ -2081,6 +2203,7 @@ static bool load_weights(melotts_context* ctx, const char* path) {
     // G2P data
     std::string symbols_json = core_gguf::kv_str(meta, "melotts.symbols_json", "[]");
     std::string cmudict_json = core_gguf::kv_str(meta, "melotts.cmudict_json", "{}");
+    std::string g2p_en_json = core_gguf::kv_str(meta, "melotts.g2p_en_json", "");
 
     core_gguf::free_metadata(meta);
 
@@ -2192,6 +2315,89 @@ static bool load_weights(melotts_context* ctx, const char* path) {
         }
         if (ctx->verbosity >= 1)
             fprintf(stderr, "melotts: CMU dict: %zu entries\n", ctx->g2p.cmudict.size());
+    }
+
+    // Parse neural G2P weights (g2p_en model, base64 JSON)
+    if (!g2p_en_json.empty()) {
+        // Minimal JSON parse: extract meta.graphemes, meta.phonemes, weights.*
+        // The JSON structure: {"meta":{"graphemes":[...],"phonemes":[...]},"weights":{"enc_emb":{"shape":[29,256],"data":"base64..."},...}}
+        auto& nm = ctx->g2p.neural;
+
+        // Extract graphemes and phonemes arrays
+        auto extract_array = [&](const std::string& key) -> std::vector<std::string> {
+            std::string pat = "\"" + key + "\"";
+            size_t pos = g2p_en_json.find(pat);
+            if (pos == std::string::npos)
+                return {};
+            pos = g2p_en_json.find('[', pos);
+            if (pos == std::string::npos)
+                return {};
+            return json_parse_string_array(g2p_en_json.substr(pos, g2p_en_json.find(']', pos) - pos + 1));
+        };
+        nm.graphemes = extract_array("graphemes");
+        nm.phonemes = extract_array("phonemes");
+        for (size_t i = 0; i < nm.graphemes.size(); i++)
+            nm.g2idx[nm.graphemes[i]] = (int)i;
+
+        // Extract base64-encoded weight arrays
+        auto extract_weight = [&](const std::string& key) -> std::vector<float> {
+            std::string pat = "\"" + key + "\"";
+            size_t pos = g2p_en_json.find(pat);
+            if (pos == std::string::npos)
+                return {};
+            // Find "data":"base64..."
+            size_t dpos = g2p_en_json.find("\"data\"", pos);
+            if (dpos == std::string::npos)
+                return {};
+            size_t qstart = g2p_en_json.find('"', dpos + 6);
+            if (qstart == std::string::npos)
+                return {};
+            qstart++;
+            size_t qend = g2p_en_json.find('"', qstart);
+            if (qend == std::string::npos)
+                return {};
+            std::string b64 = g2p_en_json.substr(qstart, qend - qstart);
+
+            // Base64 decode
+            static const std::string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+            std::vector<uint8_t> raw;
+            int val = 0, bits = 0;
+            for (char c : b64) {
+                if (c == '=' || c == '\n' || c == '\r')
+                    continue;
+                size_t idx = chars.find(c);
+                if (idx == std::string::npos)
+                    continue;
+                val = (val << 6) | (int)idx;
+                bits += 6;
+                if (bits >= 8) {
+                    bits -= 8;
+                    raw.push_back((uint8_t)(val >> bits));
+                }
+            }
+            std::vector<float> out(raw.size() / sizeof(float));
+            if (!raw.empty())
+                memcpy(out.data(), raw.data(), out.size() * sizeof(float));
+            return out;
+        };
+
+        nm.enc_emb = extract_weight("enc_emb");
+        nm.dec_emb = extract_weight("dec_emb");
+        nm.enc_w_ih = extract_weight("enc_w_ih");
+        nm.enc_w_hh = extract_weight("enc_w_hh");
+        nm.enc_b_ih = extract_weight("enc_b_ih");
+        nm.enc_b_hh = extract_weight("enc_b_hh");
+        nm.dec_w_ih = extract_weight("dec_w_ih");
+        nm.dec_w_hh = extract_weight("dec_w_hh");
+        nm.dec_b_ih = extract_weight("dec_b_ih");
+        nm.dec_b_hh = extract_weight("dec_b_hh");
+        nm.fc_w = extract_weight("fc_w");
+        nm.fc_b = extract_weight("fc_b");
+
+        nm.loaded = !nm.enc_emb.empty() && !nm.dec_emb.empty() && !nm.fc_w.empty();
+        if (nm.loaded && ctx->verbosity >= 1)
+            fprintf(stderr, "melotts: neural G2P loaded (%zu graphemes, %zu phonemes)\n", nm.graphemes.size(),
+                    nm.phonemes.size());
     }
 
     // Pass 2: load weights

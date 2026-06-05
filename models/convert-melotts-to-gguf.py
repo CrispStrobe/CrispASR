@@ -257,6 +257,30 @@ def main():
     spk2id = cfg["data"].get("spk2id", {})
     writer.add_string("melotts.spk2id_json", json.dumps(spk2id))
 
+    # Neural G2P weights (g2p_en model, ~4 KB base64 JSON)
+    g2p_weights_path = Path(__file__).parent.parent / "melotts-ref" / "g2p_weights.json"
+    if not g2p_weights_path.exists():
+        # Try to generate from g2p_en
+        try:
+            import base64
+            from g2p_en import G2p
+            g = G2p()
+            g2p_data = {"meta": {"graphemes": g.graphemes, "phonemes": g.phonemes}, "weights": {}}
+            for k in sorted(g.variables.keys()):
+                arr = g.variables[k].astype(np.float32)
+                g2p_data["weights"][k] = {
+                    "shape": list(arr.shape),
+                    "data": base64.b64encode(arr.tobytes()).decode("ascii"),
+                }
+            writer.add_string("melotts.g2p_en_json", json.dumps(g2p_data))
+            print(f"g2p_en weights embedded ({len(json.dumps(g2p_data))//1024} KB)")
+        except ImportError:
+            print("WARNING: g2p_en not available, neural G2P weights not embedded")
+    else:
+        with open(g2p_weights_path) as f:
+            writer.add_string("melotts.g2p_en_json", f.read())
+        print("g2p_en weights embedded from cache")
+
     # ── Write tensors ──
     # Skip training-only tensors
     skip_prefixes = ["enc_q.", "dur_disc."]
