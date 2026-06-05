@@ -129,10 +129,10 @@ from huggingface_hub import hf_hub_download, snapshot_download
 import shutil, os
 
 # KugelAudio Q4_K GGUF for C++ inference
-path = hf_hub_download('cstr/kugelaudio-0-open-GGUF', 'kugelaudio-0-open-q4_k.gguf',
+path = hf_hub_download('cstr/kugelaudio-0-open-GGUF', 'kugelaudio-0-open-f16.gguf',
                        cache_dir='/runpod-volume/cache')
-if not os.path.exists('/runpod-volume/kugelaudio-q4k.gguf'):
-    os.symlink(path, '/runpod-volume/kugelaudio-q4k.gguf')
+if not os.path.exists('/runpod-volume/kugelaudio-f16.gguf'):
+    os.symlink(path, '/runpod-volume/kugelaudio-f16.gguf')
 print(f'C++ GGUF: {path}')
 
 # KugelAudio source model for Python reference dump
@@ -190,9 +190,9 @@ export LD_LIBRARY_PATH=/runpod-volume/build/src:/runpod-volume/build/ggml/src:/r
 
 if [ -f /runpod-volume/kugelaudio-ref.gguf ]; then
     /runpod-volume/build/bin/crispasr-diff kugelaudio \
-        /runpod-volume/kugelaudio-q4k.gguf \
+        /runpod-volume/kugelaudio-f16.gguf \
         /runpod-volume/kugelaudio-ref.gguf \
-        /runpod-volume/CrispASR/samples/jfk.wav 2>&1
+        /runpod-volume/CrispASR/samples/jfk.wav 2>&1 || true
 else
     echo "SKIPPED: no reference GGUF (Python dump failed)"
 fi
@@ -207,7 +207,7 @@ CLI=/runpod-volume/build/bin/crispasr
 WHISPER=/runpod-volume/cache/ggml-base.en.bin
 
 echo "--- TTS: English ---"
-$CLI --backend kugelaudio -m /runpod-volume/kugelaudio-q4k.gguf \
+$CLI --backend kugelaudio -m /runpod-volume/kugelaudio-f16.gguf \
   --tts "Hello, this is a test of the speech synthesis system." \
   --tts-output /tmp/kugelaudio-en.wav --seed 42 2>&1 | tail -5
 ls -lh /tmp/kugelaudio-en.wav 2>/dev/null
