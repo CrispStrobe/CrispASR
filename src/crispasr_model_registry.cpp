@@ -15,8 +15,9 @@ struct Entry {
     const char* filename;
     const char* url;
     const char* approx_size;
-    const char* companion_file; // optional extra file (e.g. tokenizer.bin, primary voice). NULL if none.
+    const char* companion_file;          // optional extra file (e.g. tokenizer.bin, primary voice). NULL if none.
     const char* companion_url;
+    const char* companion_approx_size;   // size of the companion file; if NULL, falls back to approx_size
     const char* license; // NULL = permissive (MIT/Apache/etc.), non-NULL = printed to stderr on download
 };
 
@@ -204,7 +205,8 @@ constexpr Entry k_registry[] = {
     {"mimo-asr", "mimo-asr-q4_k.gguf",
      "https://huggingface.co/cstr/mimo-asr-GGUF/resolve/main/mimo-asr-q4_k.gguf", "~4.2 GB",
      "mimo-tokenizer-q4_k.gguf",
-     "https://huggingface.co/cstr/mimo-tokenizer-GGUF/resolve/main/mimo-tokenizer-q4_k.gguf"},
+     "https://huggingface.co/cstr/mimo-tokenizer-GGUF/resolve/main/mimo-tokenizer-q4_k.gguf",
+     "~395 MB"},
     {"omniasr", "omniasr-ctc-1b-v2-q4_k.gguf",
      "https://huggingface.co/cstr/omniASR-CTC-1B-v2-GGUF/resolve/main/omniasr-ctc-1b-v2-q4_k.gguf", "~658 MB", nullptr, nullptr},
     {"omniasr-300m", "omniasr-ctc-300m-v2-q4_k.gguf",
@@ -906,7 +908,7 @@ bool crispasr_registry_lookup_by_filename(const std::string& filename, CrispasrR
             out.backend = row.backend;
             out.filename = base;
             out.url = replace_tail_filename(row.companion_url, row.companion_file, base);
-            out.approx_size = row.approx_size;
+            out.approx_size = row.companion_approx_size ? row.companion_approx_size : row.approx_size;
             out.companion_filename.clear();
             out.companion_url.clear();
             return true;

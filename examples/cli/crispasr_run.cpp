@@ -1172,11 +1172,22 @@ int crispasr_run_backend(const whisper_params& params_in) {
     if (!backend_name.empty() && params.tts_codec_model.empty()) {
         CrispasrRegistryEntry entry;
         if (crispasr_registry_lookup(backend_name, entry, params.model_quant) && !entry.companion_filename.empty()) {
-            const std::string resolved_companion =
-                crispasr_resolve_model_cli(entry.companion_filename, backend_name, params.no_prints, params.cache_dir,
-                                           params.auto_download, params.model_quant);
-            if (params.verbose) {
-                fprintf(stderr, "crispasr[verbose]: resolved companion = '%s'\n", resolved_companion.c_str());
+            // If the companion already sits next to the model file, the
+            // backend's local `discover_*` will find it — skip the prompt.
+            bool companion_already_present = false;
+            auto sep = params.model.find_last_of("/\\");
+            if (sep != std::string::npos) {
+                std::string candidate = params.model.substr(0, sep + 1) + entry.companion_filename;
+                FILE* f = fopen(candidate.c_str(), "rb");
+                if (f) { fclose(f); companion_already_present = true; }
+            }
+            if (!companion_already_present) {
+                const std::string resolved_companion =
+                    crispasr_resolve_model_cli(entry.companion_filename, backend_name, params.no_prints, params.cache_dir,
+                                               params.auto_download, params.model_quant);
+                if (params.verbose) {
+                    fprintf(stderr, "crispasr[verbose]: resolved companion = '%s'\n", resolved_companion.c_str());
+                }
             }
             // Soft-fail: backend init prints its own actionable error if
             // the companion is genuinely required and didn't resolve.
