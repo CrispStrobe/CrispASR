@@ -1499,9 +1499,28 @@ extern "C" char* moss_audio_process(struct moss_audio_context* ctx, const float*
         fprintf(stderr, "moss_audio: processing %d samples (%.1f sec), prompt=\"%s\"\n",
                 n_samples, (float)n_samples / (float)hp.sample_rate, prompt);
 
-    // 1. Mel spectrogram
+    // 1. Mel spectrogram (or load from file for debugging)
     int n_mels = 0, T_mel = 0;
-    float* mel = moss_audio_compute_mel(ctx, samples, n_samples, &n_mels, &T_mel);
+    float* mel = nullptr;
+    const char* mel_override = std::getenv("MOSS_AUDIO_MEL_FILE");
+    if (mel_override) {
+        // Load pre-computed mel from raw F32 file (n_mels × T row-major)
+        FILE* mf = fopen(mel_override, "rb");
+        if (mf) {
+            fseek(mf, 0, SEEK_END);
+            size_t sz = (size_t)ftell(mf);
+            fseek(mf, 0, SEEK_SET);
+            n_mels = 128;
+            T_mel = (int)(sz / sizeof(float) / n_mels);
+            mel = (float*)malloc(sz);
+            fread(mel, 1, sz, mf);
+            fclose(mf);
+            fprintf(stderr, "moss_audio: loaded mel from %s (%d × %d)\n", mel_override, n_mels, T_mel);
+        }
+    }
+    if (!mel) {
+        mel = moss_audio_compute_mel(ctx, samples, n_samples, &n_mels, &T_mel);
+    }
     if (!mel) { fprintf(stderr, "moss_audio: mel failed\n"); return nullptr; }
 
     // 2. Run audio encoder (with DeepStack tap capture)
