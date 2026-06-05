@@ -57,6 +57,7 @@ int              crispasr_session_detect_language(CrispasrSession* s, const floa
                                                   char* out_lang, int out_lang_cap, float* out_prob);
 int              crispasr_session_set_voice(CrispasrSession* s, const char* path, const char* ref_text_or_null);
 int              crispasr_session_set_speaker_name(CrispasrSession* s, const char* name);
+int              crispasr_session_set_speaker_id(CrispasrSession* s, int id);
 int              crispasr_session_n_speakers(CrispasrSession* s);
 const char*      crispasr_session_get_speaker_name(CrispasrSession* s, int i);
 int              crispasr_session_set_instruct(CrispasrSession* s, const char* instruct);
@@ -767,6 +768,31 @@ func (s *CrispasrSession) SetSpeakerName(name string) error {
 	default:
 		return fmt.Errorf("crispasr_session_set_speaker_name failed (rc=%d)", int(rc))
 	}
+}
+
+// SetSpeakerID selects a speaker by integer index for multi-speaker
+// TTS backends (melotts, piper, fastpitch). Index is 0-based; valid
+// range is [0, NSpeakers()-1]. Use SetSpeakerName for name-based
+// backends like orpheus.
+func (s *CrispasrSession) SetSpeakerID(id int) error {
+	rc := C.crispasr_session_set_speaker_id(s.handle, C.int(id))
+	switch rc {
+	case 0:
+		return nil
+	case -2:
+		return fmt.Errorf("speaker id %d out of range; call NSpeakers() to check", id)
+	case -3:
+		return errors.New("backend has no integer-speaker contract; use SetSpeakerName instead")
+	default:
+		return fmt.Errorf("crispasr_session_set_speaker_id failed (rc=%d)", int(rc))
+	}
+}
+
+// NSpeakers returns the number of preset speakers for the active backend.
+// Works for both name-based (orpheus, qwen3-tts) and index-based
+// (melotts, piper, fastpitch) backends.
+func (s *CrispasrSession) NSpeakers() int {
+	return int(C.crispasr_session_n_speakers(s.handle))
 }
 
 // SetInstruct sets the natural-language voice description for

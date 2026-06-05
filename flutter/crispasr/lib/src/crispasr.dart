@@ -3048,6 +3048,42 @@ class CrispasrSession {
     return out;
   }
 
+  /// Select a speaker by integer index for multi-speaker TTS backends
+  /// (melotts, piper, fastpitch). Index is 0-based; valid range is
+  /// `[0, nSpeakers - 1]`.
+  ///
+  /// For melotts: 0=EN-US, 1=EN-BR, etc. For name-based backends like
+  /// orpheus, use [setSpeakerName] instead.
+  void setSpeakerID(int id) {
+    if (_closed) throw StateError('CrispasrSession is closed');
+    if (!_lib.providesSymbol('crispasr_session_set_speaker_id')) {
+      throw UnsupportedError('setSpeakerID API not available in this libcrispasr build');
+    }
+    final fn = _lib.lookupFunction<
+        Int32 Function(Pointer<Void>, Int32),
+        int Function(Pointer<Void>, int)>('crispasr_session_set_speaker_id');
+    final rc = fn(_handle, id);
+    if (rc == -2) {
+      throw RangeError('speaker id $id out of range for backend $_backend');
+    }
+    if (rc == -3) {
+      throw StateError('backend $_backend has no integer-speaker contract; use setSpeakerName() instead');
+    }
+    if (rc != 0) throw Exception('setSpeakerID failed (rc=$rc) for backend $_backend');
+  }
+
+  /// Number of preset speakers for the active backend.
+  /// Works for both name-based (orpheus, qwen3-tts) and index-based
+  /// (melotts, piper, fastpitch) backends.
+  int get nSpeakers {
+    if (_closed) throw StateError('CrispasrSession is closed');
+    if (!_lib.providesSymbol('crispasr_session_n_speakers')) return 0;
+    final fn = _lib.lookupFunction<
+        Int32 Function(Pointer<Void>),
+        int Function(Pointer<Void>)>('crispasr_session_n_speakers');
+    return fn(_handle);
+  }
+
   /// Set the natural-language voice description for instruct-tuned TTS
   /// backends (qwen3-tts VoiceDesign today).
   ///

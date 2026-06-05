@@ -1442,6 +1442,33 @@ class Session:
         if rc != 0:
             raise RuntimeError(f"set_speaker_name failed (rc={rc}) for backend {self.backend!r}")
 
+    def set_speaker_id(self, speaker_id: int) -> None:
+        """Select a speaker by integer index (melotts, piper, fastpitch).
+
+        Multi-speaker TTS backends use 0-based integer speaker IDs.
+        For melotts: 0=EN-US, 1=EN-BR, etc. Valid range is
+        ``[0, n_speakers - 1]`` where ``n_speakers`` comes from
+        :meth:`speakers` (which now also returns counts for
+        integer-indexed backends).
+
+        Raises :exc:`ValueError` if the id is out of range, or
+        :exc:`RuntimeError` if the backend has no integer-speaker
+        contract (use :meth:`set_speaker_name` for name-based backends
+        like orpheus).
+        """
+        if not hasattr(self._lib, "crispasr_session_set_speaker_id"):
+            raise RuntimeError("set_speaker_id API not present in this libcrispasr build")
+        self._lib.crispasr_session_set_speaker_id.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        self._lib.crispasr_session_set_speaker_id.restype = ctypes.c_int
+        rc = self._lib.crispasr_session_set_speaker_id(self._handle, speaker_id)
+        if rc == -2:
+            raise ValueError(f"speaker id {speaker_id} out of range for backend {self.backend!r}")
+        if rc == -3:
+            raise RuntimeError(f"backend {self.backend!r} has no integer-speaker contract; "
+                               f"use set_speaker_name() instead")
+        if rc != 0:
+            raise RuntimeError(f"set_speaker_id failed (rc={rc}) for backend {self.backend!r}")
+
     def set_instruct(self, instruct: str) -> None:
         """Set the natural-language voice description (qwen3-tts VoiceDesign).
 

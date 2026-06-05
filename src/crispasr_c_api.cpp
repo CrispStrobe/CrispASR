@@ -5228,6 +5228,45 @@ CA_EXPORT int crispasr_session_set_speaker_name(crispasr_session* s, const char*
     return -3;
 }
 
+// Select a speaker by integer index for multi-speaker TTS backends
+// (melotts, piper, fastpitch). Index is 0-based; valid range is
+// [0, crispasr_session_n_speakers() - 1].
+//
+// Returns 0 on success, -1 if the session isn't valid, -2 if the id
+// is out of range, -3 if the active backend has no integer-speaker
+// contract.
+CA_EXPORT int crispasr_session_set_speaker_id(crispasr_session* s, int id) {
+    if (!s)
+        return -1;
+    if (id < 0)
+        return -2;
+#ifdef CA_HAVE_MELOTTS
+    if (s->melotts_ctx) {
+        if (id >= melotts_num_speakers(s->melotts_ctx))
+            return -2;
+        melotts_set_speaker_id(s->melotts_ctx, id);
+        return 0;
+    }
+#endif
+#ifdef CA_HAVE_PIPER
+    if (s->piper_ctx) {
+        if (id >= piper_tts_num_speakers(s->piper_ctx))
+            return -2;
+        piper_tts_set_speaker_id(s->piper_ctx, id);
+        return 0;
+    }
+#endif
+#ifdef CA_HAVE_FASTPITCH
+    if (s->fastpitch_ctx) {
+        if (id >= fastpitch_tts_n_speakers(s->fastpitch_ctx))
+            return -2;
+        fastpitch_tts_set_speaker(s->fastpitch_ctx, id);
+        return 0;
+    }
+#endif
+    return -3;
+}
+
 // Number of fixed/preset speakers baked into the active backend's GGUF.
 // Returns 0 if the backend has no preset speakers (or isn't loaded).
 CA_EXPORT int crispasr_session_n_speakers(crispasr_session* s) {
@@ -5240,6 +5279,18 @@ CA_EXPORT int crispasr_session_n_speakers(crispasr_session* s) {
 #ifdef CA_HAVE_QWEN3_TTS
     if (s->qwen3_tts_ctx && qwen3_tts_is_custom_voice(s->qwen3_tts_ctx))
         return qwen3_tts_n_speakers(s->qwen3_tts_ctx);
+#endif
+#ifdef CA_HAVE_MELOTTS
+    if (s->melotts_ctx)
+        return melotts_num_speakers(s->melotts_ctx);
+#endif
+#ifdef CA_HAVE_PIPER
+    if (s->piper_ctx)
+        return piper_tts_num_speakers(s->piper_ctx);
+#endif
+#ifdef CA_HAVE_FASTPITCH
+    if (s->fastpitch_ctx)
+        return fastpitch_tts_n_speakers(s->fastpitch_ctx);
 #endif
     return 0;
 }

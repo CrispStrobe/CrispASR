@@ -154,6 +154,13 @@ Nine edit points, each mirroring the `CA_HAVE_CHATTERBOX` blocks:
    dispatch. This lets `set_ask()` override the default transcription
    instruction. Currently wired for: granite, voxtral, qwen3-asr,
    glm-asr, gemma4-e2b, mimo-asr.
+10. **`crispasr_session_set_speaker_id()`** — if the backend is a
+    multi-speaker TTS model with integer-indexed speakers (e.g. melotts,
+    piper, fastpitch). Add a dispatch block that bounds-checks against
+    `yourmodel_num_speakers()` and calls `yourmodel_set_speaker_id()`.
+    Also wire `crispasr_session_n_speakers()` to return the count.
+    For **name-based** speaker selection (orpheus-style), wire
+    `crispasr_session_set_speaker_name()` instead.
 
 ### CMake — link into the C-ABI library, `src/CMakeLists.txt`
 §4 links the backend into the CLI binary. The C ABI needs it in
@@ -170,6 +177,9 @@ endif()
   the `synthesize` comment + docstring.
 - `bindings/go/crispasr_session.go` — add to the header/type comments.
   Go links `-lcrispasr` (not per-backend), so **no LDFLAGS change**.
+- `flutter/crispasr/lib/src/crispasr.dart` — add to the synthesize
+  docstring. Dart uses `DynamicLibrary.lookupFunction` with symbol-presence
+  checks, so new C-ABI functions are discovered automatically.
 
 ### Docs
 - `README.md` — model-table row (TTS or ASR section).
