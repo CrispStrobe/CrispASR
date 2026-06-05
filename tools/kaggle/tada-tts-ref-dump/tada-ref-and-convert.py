@@ -155,7 +155,147 @@ except subprocess.CalledProcessError as e:
     print(f"[cell 6] WARN: codec GGUF conversion failed: {e}")
 
 # %% [code]
-# ── Cell 7: upload to HuggingFace ──
+# ── Cell 7: quantize to Q4_K and Q8_0 ──
+kh.step("quantizing model GGUF")
+model_q4k = WORK / "tada-tts-3b-ml-q4_k.gguf"
+model_q8  = WORK / "tada-tts-3b-ml-q8_0.gguf"
+
+if model_gguf.exists() and model_gguf.stat().st_size > 0:
+    # Build the quantize binary from CrispASR
+    build_dir = WORK / "quant-build"
+    kh.install_build_toolchain()
+    try:
+        kh.sh_with_progress(
+            f"cmake -G Ninja -B {build_dir} -S {REPO}"
+            f" -DCMAKE_BUILD_TYPE=Release -DGGML_CUDA=OFF"
+            f" -DCMAKE_C_COMPILER_LAUNCHER=ccache"
+            f" -DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
+        )
+        kh.sh_with_progress(
+            f"cmake --build {build_dir} -j{kh.safe_build_jobs(gpu=False)}"
+            f" --target quantize"
+        )
+        quantize_bin = build_dir / "bin" / "quantize"
+        if quantize_bin.exists():
+            kh.sh_with_progress(f"{quantize_bin} {model_gguf} {model_q8} Q8_0")
+            print(f"[cell 7] Q8_0: {model_q8} ({model_q8.stat().st_size / 1e9:.2f} GB)")
+            kh.sh_with_progress(f"{quantize_bin} {model_gguf} {model_q4k} Q4_K")
+            print(f"[cell 7] Q4_K: {model_q4k} ({model_q4k.stat().st_size / 1e9:.2f} GB)")
+        else:
+            print(f"[cell 7] quantize binary not found at {quantize_bin}")
+    except Exception as e:
+        print(f"[cell 7] quantization failed: {e}")
+else:
+    print("[cell 7] skipping quantization — F16 GGUF not found")
+
+# %% [code]
+# ── Cell 8: write HF README ──
+kh.step("writing HF README")
+readme_content = """\
+---
+license: llama3.2
+language:
+- en
+- es
+- ja
+- zh
+- de
+- fr
+- it
+- pt
+- ko
+- ar
+base_model:
+- HumeAI/tada-3b-ml
+- meta-llama/Llama-3.2-3B
+pipeline_tag: text-to-speech
+tags:
+- tts
+- text-to-speech
+- tada
+- llama
+- flow-matching
+- gguf
+- crispasr
+library_name: ggml
+---
+
+# TADA-3B-ML — GGUF (ggml-quantised)
+
+GGUF / ggml conversion of [`HumeAI/tada-3b-ml`](https://huggingface.co/HumeAI/tada-3b-ml) for use with **[CrispStrobe/CrispASR](https://github.com/CrispStrobe/CrispASR)**.
+
+TADA-3B-ML is a 4B-param text-to-speech model built on Meta Llama 3.2 3B with a flow-matching (FM) speech decoder and custom Hume codec. Key innovation: **1:1 token alignment** — every text token maps to exactly one speech vector (no 7:1 expansion like Orpheus/SNAC), eliminating transcript hallucination. 10 languages (en, es, ja, zh, de, fr, it, pt, ko, ar). 24 kHz mono output.
+
+**License:** Apache-2.0 / Llama 3.2 Community License (\"Built with Llama\").
+
+Pair this with the TADA codec decoder at `tada-codec-f16.gguf` (included in this repo) — the talker outputs continuous acoustic vectors that the codec converts to audio.
+
+## Files
+
+| File | Quant | Size | Notes |
+|---|---|---:|---|
+| `tada-tts-3b-ml-f16.gguf` | F16 | ~8.2 GB | Reference quality (LLM + FM head) |
+| `tada-tts-3b-ml-q4_k.gguf` | Q4_K | ~2.5 GB | **Recommended** — good quality, fits 8 GB RAM |
+| `tada-tts-3b-ml-q8_0.gguf` | Q8_0 | ~4.5 GB | Near-lossless |
+| `tada-codec-f16.gguf` | F16 | ~1.1 GB | Codec decoder (required companion) |
+| `tada-ref.gguf` | F32 | ~200 KB | Reference activations for diff harness |
+
+## Architecture
+
+```
+Text Input
+  |
+BPE Tokenize (Llama-3.2 128K vocab)
+  |
+Llama-3.2-3B AR Forward (28L, 3072d, 24 heads / 8 KV)
+  + acoustic embedding (512d) + time embedding (gray code)
+  |-- Each position outputs: hidden state for FM head
+  |
+VibeVoice Diffusion Head (6L SwiGLU + AdaLN, flow matching)
+  |-- Sinusoidal timestep embedding
+  |-- 10 Euler ODE steps: noise -> speech vector (528d)
+  |
+TADA Codec Decoder (6L local-attention + DAC upsampler)
+  |-- speech vectors -> 24 kHz PCM
+  |
+Output: float32 mono @ 24 kHz
+```
+
+## Quick start
+
+```bash
+# 1. Build CrispASR
+git clone https://github.com/CrispStrobe/CrispASR
+cd CrispASR
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j --target crispasr-cli
+
+# 2. Pull the model + codec
+huggingface-cli download cstr/tada-tts-3b-ml-GGUF tada-tts-3b-ml-q4_k.gguf --local-dir .
+huggingface-cli download cstr/tada-tts-3b-ml-GGUF tada-codec-f16.gguf --local-dir .
+
+# 3. Synthesise
+./build/bin/crispasr --backend tada \\
+    -m tada-tts-3b-ml-q4_k.gguf \\
+    --codec-model tada-codec-f16.gguf \\
+    --tts "Hello, this is a test of the TADA speech synthesis system." \\
+    --tts-output hello.wav
+```
+
+## Source model
+
+- **Upstream:** [HumeAI/tada-3b-ml](https://huggingface.co/HumeAI/tada-3b-ml) (safetensors, ~6.6 GB BF16)
+- **Codec:** [HumeAI/tada-codec](https://huggingface.co/HumeAI/tada-codec) (encoder + decoder)
+- **Paper:** [arXiv:2602.23068](https://arxiv.org/abs/2602.23068)
+- **Converted with:** `models/convert-tada-to-gguf.py` + `models/convert-tada-codec-to-gguf.py`
+"""
+
+readme_path = WORK / "README.md"
+readme_path.write_text(readme_content)
+print(f"[cell 8] README written ({len(readme_content)} bytes)")
+
+# %% [code]
+# ── Cell 9: upload to HuggingFace ──
 kh.step("uploading to HuggingFace")
 try:
     from huggingface_hub import HfApi
@@ -164,8 +304,14 @@ try:
 
     api.create_repo(repo_id=repo_id, exist_ok=True, repo_type="model")
 
-    for fpath in [ref_output, model_gguf, codec_gguf]:
-        if fpath.exists():
+    upload_files = [ref_output, model_gguf, codec_gguf, readme_path]
+    if model_q4k.exists():
+        upload_files.append(model_q4k)
+    if model_q8.exists():
+        upload_files.append(model_q8)
+
+    for fpath in upload_files:
+        if fpath.exists() and fpath.stat().st_size > 0:
             print(f"  uploading {fpath.name}...")
             api.upload_file(
                 path_or_fileobj=str(fpath),
@@ -175,9 +321,9 @@ try:
             )
             print(f"  ✓ {fpath.name}")
 
-    print(f"[cell 7] uploaded to {repo_id}")
+    print(f"[cell 9] uploaded to {repo_id}")
 except Exception as exc:
-    print(f"[cell 7] upload failed: {exc}")
+    print(f"[cell 9] upload failed: {exc}")
     print("  Files staged at /kaggle/working/ for manual pickup")
 
 # Clean up the cloned repo from /kaggle/working/ so kernel output
