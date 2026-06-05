@@ -7974,12 +7974,63 @@ General rule for porting a GPU backend with k-quant weights: anything fed to
 `ggml_get_rows` (embeddings, MoE expert gather) must be F16/F32/legacy-quant,
 or it silently falls to CPU and dereferences device memory.
 
+### 2026-06-04/05 update — GPU decode fixed via prefill-graph reuse (PLAN #115 option B)
+
+The 2026-06-02 update identified the *prefill* as correct and the *decode step*
+as the crash site. Fixing the decode step took **12 Kaggle kernel iterations +
+1 RunPod RTX 3090 run** and exhausted the weekly Kaggle GPU quota. The approaches
+tried and their failure modes are instructive for any future cross-backend graph work:
+
+| Approach | Kernel | Result |
+|----------|--------|--------|
+| `ggml_cont` bridge + `set_tensor_backend` on compute node | v6 | `ggml_cuda_cpy: invalid argument` — scheduler tried DeviceToDevice on host memory |
+| External mini CPU graph (`ggml_backend_alloc_ctx_tensors` + `graph_compute`) | v7,v8 | SIGSEGV — cross-context tensor references crash the CPU allocator |
+| F32 input tensor + host-side dequant via `ggml_get_type_traits()->to_float` | v10 | CPU timeout (wrong `ggml_row_size`), GPU SIGSEGV in `cuMemcpyHtoDAsync` |
+| F32 input + `set_tensor_backend` pin to GPU | v11,v12 | GPU `illegal memory access` in `graph_compute` — other tensors misrouted |
+| **Reuse prefill graph for T=1 decode** | v13 (RunPod) | **PASS — 2.4× realtime, correct transcript** |
+
+**Key insight: the ggml scheduler handles cross-backend routing correctly for
+complex graphs (prefill: audio path + text path + 36L LM) but breaks on minimal
+graphs (step: just embed → 36L LM).** The scheduler's backend assignment
+heuristic needs enough GPU-anchored ops to "pull" all nodes GPU-ward. A step
+graph with only a single F32 input and no weight-referencing embed op doesn't
+provide that anchor, even with explicit `set_tensor_backend`.
+
+**The winning fix** (`ec3ba861`): for `gpu_embed_split` mode, decode steps build
+a `[9, gs]` single-token text segment (zeroed audio branch) and call
+`mimo_asr_run_lm` (the prefill graph). The audio path computes zero
+(`speech_active_mask=0`) — negligible overhead for T=1 with gs=4 vs the 36L LM.
+CPU path is unchanged (fast cached T=1 step graph with in-graph `get_rows`).
+
+**Performance (RTX 3090, JFK 11s):**
+- CPU: 11.5s (1.0× realtime)
+- GPU: 4.5s (2.4× realtime) — prefill 75ms, decode 265ms / 26 steps (10 ms/step)
+
+**Rules learned:**
+1. `ggml_backend_sched_set_tensor_backend` on *compute nodes* is unreliable for
+   cross-backend copy insertion. It works for *input tensors* to control placement
+   but the scheduler's copy-node insertion for compute nodes is buggy on small graphs.
+2. `ggml_backend_alloc_ctx_tensors` cannot safely reference tensors from a different
+   `ggml_context` — the allocator doesn't expect cross-context weight pointers and
+   crashes in `graph_compute`.
+3. When a graph already works on GPU (like the prefill graph), reuse it for decode
+   rather than building a minimal step graph that hits scheduler edge cases. The
+   overhead of the unused audio branch (~4 embeddings + 6L tiny transformer) is
+   negligible vs 36L × 4096-dim LM layers.
+4. **RunPod** is a viable alternative to Kaggle for GPU testing ($0.22/hr RTX 3090,
+   ~$0.10 per test run). Script: `tools/runpod-gpu-test.sh`. Needs `pip install
+   cmake` on the pod (system cmake 3.22 too old), `nvcc` at `/usr/local/cuda/bin/`.
+
+**GPU is now the default** (`a429bb45`). Override: `CRISPASR_MIMO_FORCE_CPU=1`.
+
 ### Cross-refs
 
 - HISTORY 2026-05-26 "PLAN #115 — mimo-asr M1 Metal silent-empty fix (option A)" for the bisect + fix chronology
 - PLAN #115 for option C scope (per-tensor backend tagging in `mimo_asr_build_prefill_graph`)
 - [[project_chatterbox_gpu_bug_s3gen]] for a different shape of the same general problem (sched parallel=true fixed it there)
 - `src/mimo_asr.cpp` commit `c887881e` for the option A landing
+- `src/mimo_asr.cpp` commit `ec3ba861` for the option B (prefill-graph reuse) landing
+- `tools/runpod-gpu-test.sh` for the RunPod GPU test script
 
 ## funasr CUDA !-loop — all-NaN prefill logits (issue #125, §136)
 
