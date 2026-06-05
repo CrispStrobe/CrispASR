@@ -161,8 +161,8 @@ model_q4k = WORK / "tada-tts-3b-ml-q4_k.gguf"
 model_q8  = WORK / "tada-tts-3b-ml-q8_0.gguf"
 
 if model_gguf.exists() and model_gguf.stat().st_size > 0:
-    # Build the quantize binary from CrispASR
-    build_dir = WORK / "quant-build"
+    # Build ONLY the quantize binary — use /kaggle/temp to avoid output bloat
+    build_dir = Path("/kaggle/temp/quant-build")
     kh.install_build_toolchain()
     try:
         kh.sh_with_progress(
@@ -175,14 +175,31 @@ if model_gguf.exists() and model_gguf.stat().st_size > 0:
             f"cmake --build {build_dir} -j{kh.safe_build_jobs(gpu=False)}"
             f" --target crispasr-quantize"
         )
-        quantize_bin = build_dir / "bin" / "crispasr-quantize"
-        if quantize_bin.exists():
-            kh.sh_with_progress(f"{quantize_bin} {model_gguf} {model_q8} Q8_0")
+        # Find the binary (may be in bin/ or examples/crispasr-quantize/)
+        quantize_bin = None
+        for candidate in [
+            build_dir / "bin" / "crispasr-quantize",
+            build_dir / "examples" / "crispasr-quantize" / "crispasr-quantize",
+        ]:
+            if candidate.exists():
+                quantize_bin = candidate
+                break
+        if quantize_bin is None:
+            # Brute force search
+            import glob
+            hits = glob.glob(str(build_dir / "**" / "crispasr-quantize"), recursive=True)
+            if hits:
+                quantize_bin = Path(hits[0])
+
+        if quantize_bin and quantize_bin.exists():
+            print(f"[cell 7] quantize binary: {quantize_bin}")
+            kh.sh_with_progress(f"{quantize_bin} {model_gguf} {model_q8} q8_0")
             print(f"[cell 7] Q8_0: {model_q8} ({model_q8.stat().st_size / 1e9:.2f} GB)")
-            kh.sh_with_progress(f"{quantize_bin} {model_gguf} {model_q4k} Q4_K")
+            kh.sh_with_progress(f"{quantize_bin} {model_gguf} {model_q4k} q4_k")
             print(f"[cell 7] Q4_K: {model_q4k} ({model_q4k.stat().st_size / 1e9:.2f} GB)")
         else:
-            print(f"[cell 7] quantize binary not found at {quantize_bin}")
+            print(f"[cell 7] quantize binary not found — listing build/bin:")
+            kh.sh_with_progress(f"find {build_dir} -name 'crispasr*' -type f | head -20")
     except Exception as e:
         print(f"[cell 7] quantization failed: {e}")
 else:
@@ -326,16 +343,20 @@ except Exception as exc:
     print(f"[cell 9] upload failed: {exc}")
     print("  Files staged at /kaggle/working/ for manual pickup")
 
-# Clean up the cloned repo from /kaggle/working/ so kernel output
-# only contains the GGUF files (not 2600+ repo files that bloat the
-# output and prevent `kaggle kernels output` from reaching the GGUFs).
+# Clean up everything except GGUF files from /kaggle/working/
 import shutil
-if REPO.exists():
-    shutil.rmtree(str(REPO), ignore_errors=True)
-    print("[cleanup] removed CrispASR clone from working dir")
+for d in [REPO, WORK / "quant-build", WORK / ".ccache"]:
+    if d.exists():
+        shutil.rmtree(str(d), ignore_errors=True)
+        print(f"[cleanup] removed {d.name}")
+# Also remove F16 if quantized versions exist (save output space)
+if model_q4k.exists() and model_gguf.exists():
+    model_gguf.unlink()
+    print("[cleanup] removed F16 (Q4_K available)")
 
 kh.step("done")
 print("\n=== ALL DONE ===")
-for fpath in [ref_output, model_gguf, codec_gguf]:
+all_outputs = [ref_output, model_gguf, model_q8, model_q4k, codec_gguf]
+for fpath in all_outputs:
     if fpath.exists():
         print(f"  {fpath.name}: {fpath.stat().st_size / 1e9:.2f} GB")
