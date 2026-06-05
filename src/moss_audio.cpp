@@ -1338,80 +1338,68 @@ static float* moss_audio_run_llm_prefill_with_deepstack(
 }
 
 // ===========================================================================
-// Tokenizer (BPE, same as Qwen3)
+// Tokenizer (GPT-2 byte-level BPE via core_bpe, same as qwen3_asr)
 // ===========================================================================
 
-// Byte-level BPE encode (same algorithm as qwen3_asr)
+#include "core/bpe.h"
+
 extern "C" int moss_audio_tokenize(struct moss_audio_context* ctx, const char* text,
                                    int32_t* out_tokens, int max_tokens) {
     if (!ctx || !text || !out_tokens || max_tokens <= 0) return 0;
     const auto& v = ctx->vocab;
+    std::vector<int32_t> result;
 
-    // Byte-encode the input
-    std::vector<std::string> symbols;
-    const uint8_t* p = (const uint8_t*)text;
-    while (*p) {
-        // UTF-8 byte → BPE byte token
-        char buf[8];
-        if (*p < 128) {
-            buf[0] = (char)*p;
-            buf[1] = '\0';
-            symbols.push_back(std::string(buf, 1));
-            p++;
-        } else {
-            // Multi-byte UTF-8 — emit each byte as its own symbol
-            int len = 0;
-            if ((*p & 0xE0) == 0xC0) len = 2;
-            else if ((*p & 0xF0) == 0xE0) len = 3;
-            else if ((*p & 0xF8) == 0xF0) len = 4;
-            else { p++; continue; }
-            for (int i = 0; i < len && *p; i++) {
-                // Qwen BPE uses raw bytes
-                buf[0] = (char)*p;
-                buf[1] = '\0';
-                symbols.push_back(std::string(buf, 1));
-                p++;
-            }
-        }
-    }
-
-    // BPE merge loop
-    while (symbols.size() >= 2) {
-        int best_rank = INT_MAX;
-        int best_idx = -1;
-        for (int i = 0; i + 1 < (int)symbols.size(); i++) {
-            std::string pair = symbols[i] + " " + symbols[i + 1];
-            auto it = v.merge_rank.find(pair);
-            if (it != v.merge_rank.end() && it->second < best_rank) {
-                best_rank = it->second;
-                best_idx = i;
-            }
-        }
-        if (best_idx < 0) break;
-        symbols[best_idx] = symbols[best_idx] + symbols[best_idx + 1];
-        symbols.erase(symbols.begin() + best_idx + 1);
-    }
-
-    // Convert symbols to token IDs
-    int n = 0;
-    for (const auto& sym : symbols) {
-        if (n >= max_tokens) break;
-        auto it = v.token_to_id.find(sym);
-        if (it != v.token_to_id.end()) {
-            out_tokens[n++] = it->second;
-        } else {
-            // Unknown token — encode bytes individually
-            for (uint8_t c : sym) {
-                if (n >= max_tokens) break;
-                char byte_str[4];
-                snprintf(byte_str, sizeof(byte_str), "%c", c);
-                auto bit = v.token_to_id.find(std::string(byte_str, 1));
-                if (bit != v.token_to_id.end()) {
-                    out_tokens[n++] = bit->second;
+    const std::string s = text;
+    size_t i = 0;
+    while (i < s.size()) {
+        // 1. Special-token check: <|...|>
+        if (s[i] == '<' && i + 1 < s.size() && s[i + 1] == '|') {
+            size_t end = s.find("|>", i + 2);
+            if (end != std::string::npos) {
+                std::string special = s.substr(i, end + 2 - i);
+                auto it = v.token_to_id.find(special);
+                if (it != v.token_to_id.end()) {
+                    result.push_back(it->second);
+                    i = end + 2;
+                    continue;
                 }
             }
         }
+
+        // 2. Plain text segment up to next special token
+        size_t j = i;
+        if (s[j] == '<' && j + 1 < s.size() && s[j + 1] == '|') j++;
+        while (j < s.size()) {
+            if (s[j] == '<' && j + 1 < s.size() && s[j + 1] == '|') {
+                size_t end = s.find("|>", j + 2);
+                if (end != std::string::npos) {
+                    std::string special = s.substr(j, end + 2 - j);
+                    if (v.token_to_id.find(special) != v.token_to_id.end()) break;
+                }
+            }
+            j++;
+        }
+        std::string chunk = s.substr(i, j - i);
+        i = j;
+        if (chunk.empty()) continue;
+
+        // 3. Pre-split on whitespace boundaries (GPT-2 style)
+        size_t k = 0;
+        while (k < chunk.size()) {
+            size_t start = k;
+            if (chunk[k] == ' ' || chunk[k] == '\t' || chunk[k] == '\n') k++;
+            while (k < chunk.size() && chunk[k] != ' ' && chunk[k] != '\t' && chunk[k] != '\n') k++;
+            if (k == start) k++;
+            std::string pre(chunk, start, k - start);
+
+            // 4. Byte-encode via GPT-2 table and BPE-merge
+            std::string encoded = core_bpe::bytes_to_unicode(pre.data(), pre.size());
+            core_bpe::bpe_one(v.token_to_id, v.merge_rank, encoded, result);
+        }
     }
+
+    int n = std::min((int)result.size(), max_tokens);
+    std::memcpy(out_tokens, result.data(), (size_t)n * sizeof(int32_t));
     return n;
 }
 
@@ -1711,9 +1699,24 @@ extern "C" char* moss_audio_process(struct moss_audio_context* ctx, const float*
     auto prompt_ids = moss_audio_build_prompt(ctx, prompt, T_enc);
     int n_prompt = (int)prompt_ids.size();
 
-    if (ctx->params.verbosity >= 1)
+    if (ctx->params.verbosity >= 1) {
         fprintf(stderr, "moss_audio: %d mel frames, %d enc tokens, %d prompt tokens\n",
                 T_mel, T_enc, n_prompt);
+        // Dump first and last non-audio tokens for debugging
+        int n_audio = 0;
+        for (int i = 0; i < n_prompt; i++)
+            if (prompt_ids[i] == (int32_t)hp.audio_token_id) n_audio++;
+        fprintf(stderr, "moss_audio: prompt: %d audio + %d text/special tokens\n",
+                n_audio, n_prompt - n_audio);
+        // Print first 15 and last 10 token IDs
+        fprintf(stderr, "moss_audio: prompt first15: ");
+        for (int i = 0; i < std::min(15, n_prompt); i++)
+            fprintf(stderr, "%d ", prompt_ids[i]);
+        fprintf(stderr, "\nmoss_audio: prompt last10: ");
+        for (int i = std::max(0, n_prompt - 10); i < n_prompt; i++)
+            fprintf(stderr, "%d ", prompt_ids[i]);
+        fprintf(stderr, "\n");
+    }
 
     float* text_embeds = moss_audio_embed_tokens(ctx, prompt_ids.data(), n_prompt);
     if (!text_embeds) {
