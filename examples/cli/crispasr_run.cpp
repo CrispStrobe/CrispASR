@@ -1169,7 +1169,7 @@ int crispasr_run_backend(const whisper_params& params_in) {
     // --auto-download set. Doing it here in the dispatcher covers every
     // current and future backend uniformly. Companion lands in the same
     // cache_dir as the LM so the backend's local `discover_*` finds it.
-    if (!backend_name.empty()) {
+    if (!backend_name.empty() && params.tts_codec_model.empty()) {
         CrispasrRegistryEntry entry;
         if (crispasr_registry_lookup(backend_name, entry, params.model_quant) && !entry.companion_filename.empty()) {
             const std::string resolved_companion =
