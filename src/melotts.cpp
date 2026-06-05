@@ -1149,12 +1149,21 @@ static void text_encoder_forward(melotts_context* ctx, const std::vector<int>& p
         size_t bytes = ggml_nbytes(t);
         std::vector<uint8_t> raw(bytes);
         ggml_backend_tensor_get(t, raw.data(), 0, bytes);
-        if (t->type == GGML_TYPE_F16) {
+        if (t->type == GGML_TYPE_F32) {
+            memcpy(table.data(), raw.data(), n * sizeof(float));
+        } else if (t->type == GGML_TYPE_F16) {
             const ggml_fp16_t* src = (const ggml_fp16_t*)raw.data();
             for (int64_t i = 0; i < n; i++)
                 table[i] = ggml_fp16_to_fp32(src[i]);
         } else {
-            memcpy(table.data(), raw.data(), n * sizeof(float));
+            // Quantized (Q4_K, Q8_0, etc.) — dequantize via type traits
+            const auto to_float = ggml_get_type_traits(t->type)->to_float;
+            if (to_float) {
+                to_float(raw.data(), table.data(), n);
+            } else {
+                fprintf(stderr, "melotts: unsupported embedding type %d\n", (int)t->type);
+                std::fill(table.begin(), table.end(), 0.0f);
+            }
         }
     };
 
@@ -2662,18 +2671,7 @@ int melotts_synthesize(struct melotts_context* ctx, const char* text, float** pc
     std::vector<float> g_vec(gin);
     {
         std::vector<float> g_table;
-        int64_t n = ggml_nelements(ctx->w.emb_g);
-        g_table.resize(n);
-        size_t bytes = ggml_nbytes(ctx->w.emb_g);
-        std::vector<uint8_t> raw(bytes);
-        ggml_backend_tensor_get(ctx->w.emb_g, raw.data(), 0, bytes);
-        if (ctx->w.emb_g->type == GGML_TYPE_F16) {
-            const ggml_fp16_t* src = (const ggml_fp16_t*)raw.data();
-            for (int64_t i = 0; i < n; i++)
-                g_table[i] = ggml_fp16_to_fp32(src[i]);
-        } else {
-            memcpy(g_table.data(), raw.data(), n * sizeof(float));
-        }
+        read_tensor_f32(ctx->w.emb_g, g_table); // handles F16, F32, Q4_K, Q8_0
         for (int c = 0; c < gin; c++)
             g_vec[c] = g_table[ctx->speaker_id * gin + c];
     }
