@@ -175,11 +175,20 @@ static bool bert_forward(bert_encoder_context* bctx, const std::vector<int>& tok
     ggml_set_input(pos_ids);
 
     // Embeddings: word + position + type(=0)
+    // Cast to F32 after get_rows in case embeddings are quantized (Q4_K/Q8_0)
     ggml_tensor* x = ggml_get_rows(ctx, bctx->w.word_emb, input_ids);
+    if (x->type != GGML_TYPE_F32)
+        x = ggml_cast(ctx, x, GGML_TYPE_F32);
     ggml_tensor* pos = ggml_get_rows(ctx, bctx->w.pos_emb, pos_ids);
+    if (pos->type != GGML_TYPE_F32)
+        pos = ggml_cast(ctx, pos, GGML_TYPE_F32);
     x = ggml_add(ctx, x, pos);
     // Type embedding is all zeros for single-sentence, so just add type_emb[0]
-    ggml_tensor* type0 = ggml_view_1d(ctx, bctx->w.type_emb, C, 0);
+    // For quantized type_emb, cast the full tensor first then view
+    ggml_tensor* type_f32 = bctx->w.type_emb;
+    if (type_f32->type != GGML_TYPE_F32)
+        type_f32 = ggml_cast(ctx, type_f32, GGML_TYPE_F32);
+    ggml_tensor* type0 = ggml_view_1d(ctx, type_f32, C, 0);
     x = ggml_add(ctx, x, type0);
     // LayerNorm
     x = bert_layer_norm(ctx, x, bctx->w.emb_ln_w, bctx->w.emb_ln_b, bctx->ln_eps);
