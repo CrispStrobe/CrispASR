@@ -2952,14 +2952,24 @@ bool phonemize_espeak_lib(const std::string& lang, const std::string& text, std:
 bool phonemize_popen(const std::string& lang, const std::string& text, std::string& out) {
     std::string cmd = "espeak-ng -q --ipa=3 -v ";
     cmd += lang;
+#ifdef _WIN32
+    // Use double quotes on Windows
+    cmd += " \"";
+    for (char c : text) {
+        if (c == '"') cmd += "\\\"";
+        else cmd += c;
+    }
+    cmd += "\"";
+#else
+    // POSIX single-quote escaping
     cmd += " '";
     for (char c : text) {
-        if (c == '\'')
-            cmd += "'\\''";
-        else
-            cmd += c;
+        if (c == '\'') cmd += "'\\''";
+        else cmd += c;
     }
     cmd += "'";
+#endif    
+
 #ifdef _WIN32
 #define CRISPASR_POPEN _popen
 #define CRISPASR_PCLOSE _pclose
