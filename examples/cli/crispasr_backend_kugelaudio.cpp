@@ -19,15 +19,14 @@
 namespace {
 
 class KugelAudioBackend : public CrispasrBackend {
-  public:
+public:
     KugelAudioBackend() = default;
+    // cppcheck-suppress virtualCallInConstructor
     ~KugelAudioBackend() override { shutdown(); }
 
     const char* name() const override { return "kugelaudio"; }
 
-    uint32_t capabilities() const override {
-        return CAP_TTS;
-    }
+    uint32_t capabilities() const override { return CAP_TTS; }
 
     bool init(const whisper_params& wparams) override {
         kugelaudio_context_params p = kugelaudio_context_default_params();
@@ -47,9 +46,8 @@ class KugelAudioBackend : public CrispasrBackend {
         return kctx_ != nullptr;
     }
 
-    std::vector<crispasr_segment> transcribe(const float* /*samples*/, int /*n_samples*/,
-                                              int64_t /*t_offset_cs*/,
-                                              const whisper_params& /*params*/) override {
+    std::vector<crispasr_segment> transcribe(const float* /*samples*/, int /*n_samples*/, int64_t /*t_offset_cs*/,
+                                             const whisper_params& /*params*/) override {
         crispasr_segment seg;
         seg.text = "[kugelaudio is TTS-only — use --tts for synthesis]";
         seg.t0 = 0;
@@ -58,7 +56,8 @@ class KugelAudioBackend : public CrispasrBackend {
     }
 
     std::vector<float> synthesize(const std::string& text, const whisper_params& wparams) override {
-        if (!kctx_) return {};
+        if (!kctx_)
+            return {};
 
         if (wparams.seed != 0)
             kugelaudio_set_seed(kctx_, wparams.seed);
@@ -69,7 +68,8 @@ class KugelAudioBackend : public CrispasrBackend {
 
         int n_samples = 0;
         float* pcm = kugelaudio_synthesize(kctx_, text.c_str(), &n_samples);
-        if (!pcm || n_samples <= 0) return {};
+        if (!pcm || n_samples <= 0)
+            return {};
 
         std::vector<float> out(pcm, pcm + n_samples);
         free(pcm);
@@ -85,7 +85,7 @@ class KugelAudioBackend : public CrispasrBackend {
         }
     }
 
-  private:
+private:
     kugelaudio_context* kctx_ = nullptr;
 };
 

@@ -34,16 +34,15 @@ struct kugelaudio_context_params {
     int max_new_tokens; // max AR tokens to generate (default 2048)
     int verbosity;      // 0=silent 1=normal 2=verbose
     bool use_gpu;
-    int tts_steps;      // DPM-Solver++ inference steps (default 20, min 4)
-    float cfg_scale;    // classifier-free guidance scale (default 3.0)
-    uint32_t seed;      // RNG seed for diffusion noise (0 = non-deterministic)
-    bool flash_attn;    // use flash attention if available
+    int tts_steps;   // DPM-Solver++ inference steps (default 20, min 4)
+    float cfg_scale; // classifier-free guidance scale (default 3.0)
+    uint32_t seed;   // RNG seed for diffusion noise (0 = non-deterministic)
+    bool flash_attn; // use flash attention if available
 };
 
 struct kugelaudio_context_params kugelaudio_context_default_params(void);
 
-struct kugelaudio_context* kugelaudio_init_from_file(const char* path_model,
-                                                     struct kugelaudio_context_params params);
+struct kugelaudio_context* kugelaudio_init_from_file(const char* path_model, struct kugelaudio_context_params params);
 
 void kugelaudio_free(struct kugelaudio_context* ctx);
 
@@ -55,9 +54,7 @@ void kugelaudio_set_seed(struct kugelaudio_context* ctx, uint32_t seed);
 // Synthesize speech from text. Returns malloc'd 24 kHz mono PCM float array.
 // n_samples is set to the number of output samples. Caller frees with free().
 // Returns NULL on failure.
-float* kugelaudio_synthesize(struct kugelaudio_context* ctx,
-                             const char* text,
-                             int* out_n_samples);
+float* kugelaudio_synthesize(struct kugelaudio_context* ctx, const char* text, int* out_n_samples);
 
 // Load a pre-encoded voice GGUF for speaker identity.
 // Returns 0 on success, -1 on failure.
@@ -67,16 +64,12 @@ int kugelaudio_load_voice(struct kugelaudio_context* ctx, const char* voice_path
 
 // Run the diffusion head for one step. Returns predicted output [vae_dim].
 // Caller frees with free(). Returns NULL on failure.
-float* kugelaudio_run_diffusion_step(struct kugelaudio_context* ctx,
-                                     const float* noisy_latent, int vae_dim,
-                                     int timestep,
-                                     const float* condition, int d_lm,
-                                     int* out_dim);
+float* kugelaudio_run_diffusion_step(struct kugelaudio_context* ctx, const float* noisy_latent, int vae_dim,
+                                     int timestep, const float* condition, int d_lm, int* out_dim);
 
 // Run the acoustic decoder on a latent. Returns PCM audio.
 // latent: [vae_dim] (single frame). Returns NULL on failure.
-float* kugelaudio_run_acoustic_decoder(struct kugelaudio_context* ctx,
-                                       const float* latent, int vae_dim,
+float* kugelaudio_run_acoustic_decoder(struct kugelaudio_context* ctx, const float* latent, int vae_dim,
                                        int* out_n_samples);
 
 #ifdef __cplusplus
