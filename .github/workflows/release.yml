@@ -238,15 +238,15 @@ jobs:
       - name: Install deps + Vulkan SDK
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake g++ libopenblas-dev libvulkan-dev glslang-tools
-          # glslang-tools provides glslangValidator; if glslc is also needed,
-          # install the shaderc package or the full Vulkan SDK.
-          if ! command -v glslc &>/dev/null; then
-            sudo apt-get install -y shaderc || \
-            sudo apt-get install -y glslc || true
-          fi
-          # Verify at least one shader compiler is available
-          command -v glslc || command -v glslangValidator
+          sudo apt-get install -y cmake g++ libopenblas-dev
+          # Install LunarG Vulkan SDK (provides libvulkan-dev + glslc).
+          # Ubuntu 22.04 doesn't ship a glslc package; the SDK is the
+          # reliable way to get both headers and the shader compiler.
+          wget -qO - https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo apt-key add -
+          sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-jammy.list \
+            https://packages.lunarg.com/vulkan/lunarg-vulkan-jammy.list
+          sudo apt-get update
+          sudo apt-get install -y vulkan-sdk
 
       - name: Build
         run: |
