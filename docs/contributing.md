@@ -207,6 +207,26 @@ crispasr.Session("model.gguf", backend="yourmodel")  # opens?
 > the shared `.git/index` — this clobbered the entire §135 CSM landing
 > (commit `100b9ee5`). `git config pull.rebase true` is set in this repo.
 
+## Watermarking tests
+
+All TTS output is automatically watermarked. When changing TTS output
+paths, ensure these test suites still pass:
+
+```bash
+# Unit tests (no model needed)
+build/bin/test_server_wav_writer    # WAV LIST/INFO metadata
+build/bin/test_watermark            # Spread-spectrum embed/detect
+build/bin/test_tts_provenance       # ID3v2, C2PA, consent, edge cases
+build/bin/test_audioseal "[unit]"   # AudioSeal API surface
+
+# Live tests (need AudioSeal GGUF)
+python3 models/convert-audioseal-to-gguf.py -o audioseal.gguf
+AUDIOSEAL_GGUF=audioseal.gguf build/bin/test_audioseal "[live]"
+
+# Cosine parity with PyTorch (need reference .npy files)
+AUDIOSEAL_GGUF=audioseal.gguf build/bin/test_audioseal_cosine
+```
+
 ## Regression-test your backend
 
 For ASR backends, the transcript is the regression target:

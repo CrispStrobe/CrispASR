@@ -990,6 +990,24 @@ implementation. For most voxtral4b VRAM-pressure cases the
 `KV_QUANT=q4_0 + MMAP=1` combo above is sufficient; the layer-split
 features are only needed when even that doesn't fit.
 
+### TTS provenance & watermarking flags
+
+All TTS output is automatically watermarked. Additional flags control
+the neural watermark, C2PA signing, and voice-cloning consent:
+
+| Flag | Description |
+|------|-------------|
+| `--watermark-model PATH` | Load AudioSeal GGUF for neural watermarking (upgrades built-in spread-spectrum) |
+| `--i-have-rights` | Required for voice cloning (`--voice <file.wav>`); attests speaker consent |
+| `--c2pa-cert PATH` | X.509 certificate for C2PA Content Credentials signing |
+| `--c2pa-key PATH` | Private key for C2PA signing (generate both with `scripts/generate-c2pa-cert.sh`) |
+
+Debug env vars:
+- `AUDIOSEAL_DEBUG=1` — print AudioSeal tensor shapes during graph build
+- `AUDIOSEAL_DUMP_STAGES=1` — dump per-stage binary tensors to `/tmp/`
+
+See [`tts.md`](tts.md) for full watermarking documentation.
+
 ### TTS-side env vars
 
 For TTS-specific deployment knobs (codec backend selection, graph

@@ -655,24 +655,61 @@ CA_EXPORT void crispasr_vad_free(float* spans) {
 // stripping.
 
 // =========================================================================
-// AI-generated audio watermark (spread-spectrum, frequency-domain)
+// AI-generated audio watermark
 // =========================================================================
 //
-// The implementation lives in the header-only crispasr_watermark.h so
-// that both the server, CLI, and unit tests can use it. These are thin
-// C-ABI wrappers with input validation.
+// Dispatches to AudioSeal (neural) if a model has been loaded via
+// crispasr_watermark_load_model(), otherwise falls back to the built-in
+// spread-spectrum watermark.
 
 #include "../examples/cli/crispasr_watermark.h"
+#include "audioseal.h"
+
+// Global AudioSeal context for C ABI callers.
+static audioseal_ctx* g_audioseal_ctx = nullptr;
+
+CA_EXPORT int crispasr_watermark_load_model(const char* gguf_path) {
+    if (!gguf_path || !gguf_path[0])
+        return -1;
+    if (g_audioseal_ctx) {
+        audioseal_free(g_audioseal_ctx);
+        g_audioseal_ctx = nullptr;
+    }
+    auto params = audioseal_default_params();
+    params.verbosity = 1;
+    g_audioseal_ctx = audioseal_init_from_file(gguf_path, params);
+    return g_audioseal_ctx ? 0 : -1;
+}
 
 CA_EXPORT float crispasr_watermark_detect(const float* pcm, int n_samples) {
     if (!pcm || n_samples <= 0)
         return 0.0f;
+    if (g_audioseal_ctx) {
+        int n_frames = 0;
+        float* probs = audioseal_detect(g_audioseal_ctx, pcm, n_samples, &n_frames, nullptr);
+        if (probs && n_frames > 0) {
+            double avg = 0.0;
+            for (int i = 0; i < n_frames; i++) avg += probs[i];
+            avg /= (double)n_frames;
+            free(probs);
+            return (float)avg;
+        }
+        if (probs) free(probs);
+    }
     return ::crispasr_watermark_detect_impl(pcm, n_samples);
 }
 
 CA_EXPORT void crispasr_watermark_embed(float* pcm, int n_samples, float alpha) {
     if (!pcm || n_samples <= 0)
         return;
+    if (g_audioseal_ctx) {
+        float* watermarked = audioseal_embed(g_audioseal_ctx, pcm, n_samples, nullptr);
+        if (watermarked) {
+            memcpy(pcm, watermarked, (size_t)n_samples * sizeof(float));
+            free(watermarked);
+            return;
+        }
+    }
     ::crispasr_watermark_embed_impl(pcm, n_samples, alpha > 0.0f ? alpha : 0.005f);
 }
 

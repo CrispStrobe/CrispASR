@@ -37,6 +37,7 @@
 #include "crispasr_tts_chunking.h"
 #include "crispasr_tts_disclaimer.h"
 #include "crispasr_watermark.h"
+#include "crispasr_watermark_dispatch.h"
 #include "crispasr_wav_writer.h"
 #include "../server/httplib.h"
 #include "../json.hpp"
@@ -634,6 +635,9 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
     using namespace httplib;
 
     crispasr_c2pa_startup_check();
+    if (!params.watermark_model.empty()) {
+        crispasr_wm_dispatch::init(params.watermark_model);
+    }
 
     std::vector<std::string> api_keys = split_api_keys(params.server_api_keys);
     if (const char* env_keys = getenv("CRISPASR_API_KEYS")) {
@@ -1344,7 +1348,7 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
                         chunk = std::move(rs);
                     }
                     // Embed watermark per-chunk (survives re-encoding)
-                    crispasr_watermark_embed_impl(chunk.data(), (int)chunk.size());
+                    crispasr_wm_dispatch::embed(chunk.data(), (int)chunk.size(), sr_out);
                     pcm_chunks.push_back(crispasr_make_pcm_int16_le(chunk.data(), (int)chunk.size()));
                     // Add silence gap between sentences (not after last)
                     if (i + 1 < sentences.size()) {
@@ -1424,7 +1428,7 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         // Embed spread-spectrum watermark marking audio as AI-generated.
         // Applied after speed resampling so the watermark is present in
         // the final signal regardless of speed setting.
-        crispasr_watermark_embed_impl(pcm.data(), (int)pcm.size());
+        crispasr_wm_dispatch::embed(pcm.data(), (int)pcm.size(), sr_out);
 
         const double elapsed_s = std::chrono::duration<double>(t1 - t0).count();
         const double audio_s = (double)pcm.size() / (double)sr_out;

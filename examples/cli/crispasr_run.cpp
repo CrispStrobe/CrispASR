@@ -40,6 +40,7 @@
 #include "crispasr_c2pa.h"
 #include "crispasr_tts_disclaimer.h"
 #include "crispasr_watermark.h"
+#include "crispasr_watermark_dispatch.h"
 #include "crispasr_wav_writer.h"
 #include "common-crispasr.h" // read_audio_data
 
@@ -1379,6 +1380,11 @@ int crispasr_run_backend(const whisper_params& params_in) {
             return 14;
         }
 
+        // Initialize AudioSeal neural watermark if --watermark-model is set
+        if (!params.watermark_model.empty()) {
+            crispasr_wm_dispatch::init(params.watermark_model);
+        }
+
         // Voice-cloning consent gate: if the voice is a .wav reference
         // (i.e. voice cloning), require --i-have-rights attestation.
         const bool is_voice_clone = !params.tts_voice.empty() && params.tts_voice.size() >= 4 &&
@@ -1447,8 +1453,8 @@ int crispasr_run_backend(const whisper_params& params_in) {
             }
         }
 
-        // Embed spread-spectrum watermark marking audio as AI-generated
-        crispasr_watermark_embed_impl(audio.data(), (int)audio.size());
+        // Embed watermark (AudioSeal if loaded, otherwise spread-spectrum)
+        crispasr_wm_dispatch::embed(audio.data(), (int)audio.size(), sr_in);
 
         // Write output WAV (backend-native sample rate, mono).
         // crispasr_make_wav_int16 includes a LIST/INFO chunk with

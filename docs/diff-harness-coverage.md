@@ -106,3 +106,24 @@ using it.
 - `indextts`
 - `moonshine-base`
 - `titanet`
+
+## Non-backend diff tools
+
+### AudioSeal watermark parity
+
+AudioSeal has its own standalone cosine comparison tool (not using the
+gguf-archive pattern since the reference is generated via the `audioseal`
+Python package rather than `dump_reference.py`):
+
+```bash
+# 1. Generate reference + convert model
+pip install audioseal gguf
+python3 models/convert-audioseal-to-gguf.py -o audioseal.gguf
+python3 -c "... (see docs/tts.md watermarking section)"
+
+# 2. Compare
+AUDIOSEAL_GGUF=audioseal.gguf build/bin/test_audioseal_cosine
+```
+
+**Current parity:** cosine 1.000000 (full + watermark-only). Stage dumps
+via `AUDIOSEAL_DUMP_STAGES=1`.
