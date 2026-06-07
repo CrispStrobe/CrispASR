@@ -137,6 +137,114 @@ CA_EXPORT int crispasr_audio_load(const char* path, float** out_pcm, int* out_sa
     return 0;
 }
 
+/// Decode an audio file into stereo (2-channel) float32 PCM at 16 kHz.
+/// If the source is mono, both left and right receive the same data and
+/// `*out_channels` is set to 1. If stereo, the interleaved samples are
+/// deinterleaved into separate left and right buffers and `*out_channels`
+/// is set to 2. Each output buffer is malloc-owned and must be released
+/// with `crispasr_audio_free`.
+///
+/// Returns 0 on success, negative on error (same codes as
+/// `crispasr_audio_load`).
+CA_EXPORT int crispasr_audio_load_stereo(
+    const char* path,
+    float** out_left,
+    float** out_right,
+    int* out_samples,
+    int* out_sample_rate,
+    int* out_channels
+) {
+    if (!path || !out_left || !out_right || !out_samples || !out_channels)
+        return -1;
+    *out_left = nullptr;
+    *out_right = nullptr;
+    *out_samples = 0;
+    *out_channels = 0;
+    if (out_sample_rate)
+        *out_sample_rate = 0;
+
+    // Detect native channel count (channels = 0 → native).
+    ma_decoder_config probe_cfg = ma_decoder_config_init(ma_format_f32, 0, kTargetSampleRate);
+    ma_decoder probe;
+    if (ma_decoder_init_file(path, &probe_cfg, &probe) != MA_SUCCESS)
+        return -2;
+    const int native_channels = (int)probe.outputChannels;
+    ma_decoder_uninit(&probe);
+
+    // Re-open with the target channel count (1 or 2) and 16 kHz.
+    const int decode_channels = (native_channels >= 2) ? 2 : 1;
+    ma_decoder_config cfg = ma_decoder_config_init(ma_format_f32, (ma_uint32)decode_channels, kTargetSampleRate);
+    ma_decoder decoder;
+    if (ma_decoder_init_file(path, &cfg, &decoder) != MA_SUCCESS)
+        return -2;
+
+    constexpr ma_uint64 kChunkFrames = (ma_uint64)kTargetSampleRate; // 1 s
+    float* buf = nullptr;
+    size_t capacity = 0; // in frames
+    size_t used = 0;     // in frames
+
+    for (;;) {
+        if (capacity - used < kChunkFrames) {
+            const size_t new_cap = capacity ? capacity * 2 : kChunkFrames * 8;
+            float* nb = (float*)std::realloc(buf, new_cap * (size_t)decode_channels * sizeof(float));
+            if (!nb) {
+                if (buf)
+                    std::free(buf);
+                ma_decoder_uninit(&decoder);
+                return -3;
+            }
+            buf = nb;
+            capacity = new_cap;
+        }
+
+        ma_uint64 frames_read = 0;
+        const ma_result rc = ma_decoder_read_pcm_frames(
+            &decoder, buf + used * (size_t)decode_channels, kChunkFrames, &frames_read);
+        used += (size_t)frames_read;
+
+        if (rc == MA_AT_END || frames_read == 0)
+            break;
+        if (rc != MA_SUCCESS) {
+            std::free(buf);
+            ma_decoder_uninit(&decoder);
+            return -4;
+        }
+    }
+    ma_decoder_uninit(&decoder);
+
+    // Allocate per-channel output buffers.
+    float* left = (float*)std::malloc(used * sizeof(float));
+    float* right = (float*)std::malloc(used * sizeof(float));
+    if (!left || !right) {
+        std::free(buf);
+        std::free(left);
+        std::free(right);
+        return -3;
+    }
+
+    if (decode_channels == 1) {
+        // Mono: copy same data to both channels.
+        std::memcpy(left, buf, used * sizeof(float));
+        std::memcpy(right, buf, used * sizeof(float));
+        *out_channels = 1;
+    } else {
+        // Stereo: deinterleave [L0 R0 L1 R1 ...] into separate buffers.
+        for (size_t i = 0; i < used; ++i) {
+            left[i] = buf[i * 2];
+            right[i] = buf[i * 2 + 1];
+        }
+        *out_channels = 2;
+    }
+    std::free(buf);
+
+    *out_left = left;
+    *out_right = right;
+    *out_samples = (int)used;
+    if (out_sample_rate)
+        *out_sample_rate = kTargetSampleRate;
+    return 0;
+}
+
 /// Release a buffer allocated by `crispasr_audio_load`.
 CA_EXPORT void crispasr_audio_free(float* pcm) {
     if (pcm)

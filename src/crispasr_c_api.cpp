@@ -12,6 +12,7 @@
 // published — these are part of CrispASR's published ABI contract shared
 // across all four consumers above.
 
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -269,6 +270,25 @@
 #define CA_EXPORT extern "C" CRISPASR_API
 
 // =========================================================================
+// Module-level atomic progress (0-100, -1 = idle)
+// =========================================================================
+//
+// Dart FFI cannot use C function pointers as callbacks, so for progress
+// reporting we use a shared atomic integer that Dart polls via
+// crispasr_get_progress(). The whisper progress_callback writes here;
+// Dart reads it at leisure.
+
+static std::atomic<int> g_progress{-1};
+
+CA_EXPORT int crispasr_get_progress(void) {
+    return g_progress.load(std::memory_order_relaxed);
+}
+
+CA_EXPORT void crispasr_reset_progress(void) {
+    g_progress.store(-1, std::memory_order_relaxed);
+}
+
+// =========================================================================
 // whisper_full_params setters
 // =========================================================================
 //
@@ -382,11 +402,25 @@ CA_EXPORT void crispasr_params_set_tdrz(whisper_full_params* p, int v) {
         p->tdrz_enable = v != 0;
 }
 
-// NOTE — DTW (Dynamic Time Warping) fields for precise per-token timing
-// live on `whisper_context_params`, set at context init, not
-// `whisper_full_params`. Exposing them needs a new
-// `crispasr_init_with_dtw_params` entry point and wider binding work;
-// tracked separately.
+// =========================================================================
+// DTW (Dynamic Time Warping) context-params setter
+// =========================================================================
+//
+// DTW fields live on `whisper_context_params`, set at context init. This
+// setter lets Dart configure DTW token-level timestamps via a pointer to
+// the params struct without mirroring its layout.
+
+CA_EXPORT void crispasr_ctx_params_set_dtw(
+    whisper_context_params* p,
+    bool enable,
+    int aheads_preset,   // cast to whisper_alignment_heads_preset
+    int n_top
+) {
+    if (!p) return;
+    p->dtw_token_timestamps = enable;
+    p->dtw_aheads_preset = static_cast<whisper_alignment_heads_preset>(aheads_preset);
+    p->dtw_n_top = n_top;
+}
 
 // =========================================================================
 // Token-level timestamp getters
@@ -410,6 +444,12 @@ CA_EXPORT float crispasr_token_p(whisper_context* ctx, int i_seg, int i_tok) {
     if (!ctx)
         return 0.0f;
     return whisper_full_get_token_data(ctx, i_seg, i_tok).p;
+}
+
+CA_EXPORT int64_t crispasr_token_dtw_t(whisper_context* ctx, int i_segment, int i_token) {
+    if (!ctx)
+        return 0;
+    return whisper_full_get_token_data(ctx, i_segment, i_token).t_dtw;
 }
 
 // =========================================================================
@@ -3249,10 +3289,21 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
             wparams.grammar_penalty = s->grammar_penalty;
         }
 
+        // Set progress callback — writes to the module-level atomic so
+        // Dart can poll via crispasr_get_progress().
+        g_progress.store(0, std::memory_order_relaxed);
+        static auto progress_cb = [](struct whisper_context*, struct whisper_state*, int progress, void*) {
+            g_progress.store(progress, std::memory_order_relaxed);
+        };
+        wparams.progress_callback = progress_cb;
+        wparams.progress_callback_user_data = nullptr;
+
         if (whisper_full(s->whisper_ctx, wparams, pcm, n_samples) != 0) {
+            g_progress.store(-1, std::memory_order_relaxed);
             delete r;
             return nullptr;
         }
+        g_progress.store(-1, std::memory_order_relaxed);
         const int n = whisper_full_n_segments(s->whisper_ctx);
         for (int i = 0; i < n; ++i) {
             crispasr_session_seg seg;
@@ -6181,11 +6232,38 @@ CA_EXPORT void crispasr_pcs_free(void*) {}
 #endif
 
 // =========================================================================
+// Parallel transcription wrapper
+// =========================================================================
+//
+// Thin C-ABI wrapper around whisper_full_parallel for Dart FFI. Tracks
+// progress via the module-level g_progress atomic (same as the session
+// path's progress callback).
+
+CA_EXPORT int crispasr_transcribe_parallel(
+    struct whisper_context* ctx,
+    struct whisper_full_params params,
+    const float* samples,
+    int n_samples,
+    int n_processors
+) {
+    g_progress.store(0, std::memory_order_relaxed);
+    int rc = whisper_full_parallel(ctx, params, samples, n_samples, n_processors);
+    g_progress.store(-1, std::memory_order_relaxed);
+    return rc;
+}
+
+// =========================================================================
 // Version reporting — identifies the C-ABI build to every consumer
 // (CLI, Dart, Python, Rust). Bump when breaking or extending the surface.
 // =========================================================================
 
 CA_EXPORT const char* crispasr_c_api_version(void) {
+    // 0.6.0 — Adds CrisperWeaver parity: crispasr_get_progress /
+    // crispasr_reset_progress (atomic progress polling for Dart FFI),
+    // crispasr_audio_load_stereo (stereo PCM decode),
+    // crispasr_transcribe_parallel (whisper_full_parallel wrapper),
+    // crispasr_ctx_params_set_dtw / crispasr_token_dtw_t (DTW
+    // timestamp init + getter). Pure addition; no symbol renames.
     // 0.5.3 — Adds `crispasr_truecase_*` (init/process/free/free_text)
     // and `crispasr_pcs_*` (init/process/free/free_text) standalone
     // text post-processors. Pure addition; no symbol renames.
@@ -6195,7 +6273,7 @@ CA_EXPORT const char* crispasr_c_api_version(void) {
     // `crispasr_detect_language_pcm` return-code contract.
     // 0.5.1 — Adds `crispasr_session_translate_text_free`.
     // Pure addition; no symbol renames or signature changes.
-    return "0.5.3";
+    return "0.6.0";
 }
 
 // Backwards-compatibility alias. The Dart smoke test and any 0.4.x-era

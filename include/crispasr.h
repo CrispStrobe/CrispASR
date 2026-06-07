@@ -812,6 +812,56 @@ CRISPASR_API void crispasr_watermark_embed(float* pcm, int n_samples, float alph
 // embed/detect calls.
 CRISPASR_API int crispasr_watermark_load_model(const char* gguf_path);
 
+// ─── Atomic progress polling (Dart FFI) ──────────────────────────────
+//
+// Dart cannot use C function pointers as callbacks; instead it polls
+// the module-level atomic via crispasr_get_progress(). Returns 0-100
+// during transcription, -1 when idle.
+CRISPASR_API int  crispasr_get_progress(void);
+CRISPASR_API void crispasr_reset_progress(void);
+
+// ─── Stereo audio decode ─────────────────────────────────────────────
+//
+// Like crispasr_audio_load but returns stereo (2-channel) PCM.
+// If the source is mono, both left and right receive the same data
+// and *out_channels is 1. Always resamples to 16 kHz.
+CRISPASR_API int crispasr_audio_load_stereo(
+    const char* path,
+    float** out_left,
+    float** out_right,
+    int* out_samples,
+    int* out_sample_rate,
+    int* out_channels
+);
+
+// ─── Parallel transcription ─────────────────────────────────────────
+//
+// Thin wrapper around whisper_full_parallel with g_progress tracking.
+CRISPASR_API int crispasr_transcribe_parallel(
+    struct whisper_context* ctx,
+    struct whisper_full_params params,
+    const float* samples,
+    int n_samples,
+    int n_processors
+);
+
+// ─── DTW timestamp helpers ──────────────────────────────────────────
+//
+// crispasr_ctx_params_set_dtw: configure DTW token-level timestamps
+// on a whisper_context_params before context init.
+// crispasr_token_dtw_t: retrieve the DTW timestamp for a given token.
+CRISPASR_API void crispasr_ctx_params_set_dtw(
+    struct whisper_context_params* p,
+    bool enable,
+    int aheads_preset,
+    int n_top
+);
+CRISPASR_API int64_t crispasr_token_dtw_t(
+    struct whisper_context* ctx,
+    int i_segment,
+    int i_token
+);
+
 ////////////////////////////////////////////////////////////////////////////
 
 // Temporary helpers needed for exposing ggml interface

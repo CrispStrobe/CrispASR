@@ -4144,3 +4144,129 @@ class CrispasrWatermark {
     return score;
   }
 }
+
+// ---------------------------------------------------------------------------
+// C1: Transcription progress polling
+// ---------------------------------------------------------------------------
+
+/// Poll the global transcription progress (0–100). Returns -1 when no
+/// transcription is active. The C layer updates this via an atomic int
+/// from the whisper_progress_callback — no function pointers needed on
+/// the Dart side.
+int getTranscriptionProgress({String? libPath}) {
+  final lib = DynamicLibrary.open(libPath ?? CrispASR.defaultLibName());
+  if (!lib.providesSymbol('crispasr_get_progress')) return -1;
+  final fn = lib.lookupFunction<Int32 Function(), int Function()>(
+      'crispasr_get_progress');
+  return fn();
+}
+
+/// Reset the progress counter to -1 (idle). Call before starting a new
+/// transcription to clear stale values from the previous run.
+void resetTranscriptionProgress({String? libPath}) {
+  final lib = DynamicLibrary.open(libPath ?? CrispASR.defaultLibName());
+  if (!lib.providesSymbol('crispasr_reset_progress')) return;
+  final fn = lib.lookupFunction<Void Function(), void Function()>(
+      'crispasr_reset_progress');
+  fn();
+}
+
+// ---------------------------------------------------------------------------
+// C2: Stereo audio decode
+// ---------------------------------------------------------------------------
+
+/// Result of [decodeAudioFileStereo].
+class DecodedAudioStereo {
+  /// Left channel (or the only channel for mono files).
+  final Float32List left;
+
+  /// Right channel. Identical to [left] for mono source files.
+  final Float32List right;
+
+  /// Sample rate (always 16000 for CrispASR).
+  final int sampleRate;
+
+  /// Actual channel count in the source file (1 or 2).
+  final int sourceChannels;
+
+  const DecodedAudioStereo({
+    required this.left,
+    required this.right,
+    required this.sampleRate,
+    required this.sourceChannels,
+  });
+
+  /// True when the source file was stereo.
+  bool get isStereo => sourceChannels >= 2;
+}
+
+/// Decode an audio file preserving stereo channels. Falls back to
+/// [decodeAudioFile] (mono) when the C symbol isn't available.
+DecodedAudioStereo decodeAudioFileStereo(String path, {String? libPath}) {
+  final lib = DynamicLibrary.open(libPath ?? CrispASR.defaultLibName());
+  if (!lib.providesSymbol('crispasr_audio_load_stereo')) {
+    // Fallback: decode mono and duplicate to both channels.
+    final mono = decodeAudioFile(path, libPath: libPath);
+    return DecodedAudioStereo(
+      left: mono.samples,
+      right: mono.samples,
+      sampleRate: mono.sampleRate,
+      sourceChannels: 1,
+    );
+  }
+
+  final load = lib.lookupFunction<
+      Int32 Function(Pointer<Utf8>, Pointer<Pointer<Float>>,
+          Pointer<Pointer<Float>>, Pointer<Int32>, Pointer<Int32>,
+          Pointer<Int32>),
+      int Function(Pointer<Utf8>, Pointer<Pointer<Float>>,
+          Pointer<Pointer<Float>>, Pointer<Int32>, Pointer<Int32>,
+          Pointer<Int32>)>('crispasr_audio_load_stereo');
+  final free = lib.lookupFunction<Void Function(Pointer<Float>),
+      void Function(Pointer<Float>)>('crispasr_audio_free');
+
+  final pathPtr = path.toNativeUtf8();
+  final leftOut = calloc<Pointer<Float>>();
+  final rightOut = calloc<Pointer<Float>>();
+  final nOut = calloc<Int32>();
+  final srOut = calloc<Int32>();
+  final chOut = calloc<Int32>();
+
+  try {
+    final rc = load(pathPtr, leftOut, rightOut, nOut, srOut, chOut);
+    if (rc != 0) {
+      throw Exception(
+          'crispasr_audio_load_stereo failed (code $rc) for $path');
+    }
+    final n = nOut.value;
+    final sr = srOut.value;
+    final ch = chOut.value;
+    if (n <= 0) {
+      throw Exception('Stereo audio decoded to empty buffer: $path');
+    }
+
+    final leftPtr = leftOut.value;
+    final leftCopy = Float32List(n);
+    leftCopy.setAll(0, leftPtr.asTypedList(n));
+    free(leftPtr);
+
+    final rightPtr = rightOut.value;
+    final rightCopy = Float32List(n);
+    rightCopy.setAll(0, rightPtr.asTypedList(n));
+    free(rightPtr);
+
+    return DecodedAudioStereo(
+      left: leftCopy,
+      right: rightCopy,
+      sampleRate: sr > 0 ? sr : 16000,
+      sourceChannels: ch,
+    );
+  } finally {
+    calloc.free(pathPtr);
+    calloc.free(leftOut);
+    calloc.free(rightOut);
+    calloc.free(nOut);
+    calloc.free(srOut);
+    calloc.free(chOut);
+  }
+}
