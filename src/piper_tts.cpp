@@ -2199,6 +2199,29 @@ const char* piper_tts_espeak_voice(const struct piper_tts_context* ctx) {
     return ctx ? ctx->espeak_voice.c_str() : "en-us";
 }
 
+bool piper_tts_has_espeak(void) {
+#ifdef CRISPASR_HAVE_ESPEAK_NG
+    return true;
+#else
+    // Check if espeak-ng binary is on $PATH
+#ifdef _WIN32
+    FILE* fp = _popen("espeak-ng --version 2>NUL", "r");
+#else
+    FILE* fp = popen("espeak-ng --version 2>/dev/null", "r");
+#endif
+    if (!fp)
+        return false;
+    char buf[128];
+    bool ok = fgets(buf, sizeof(buf), fp) != nullptr;
+#ifdef _WIN32
+    _pclose(fp);
+#else
+    pclose(fp);
+#endif
+    return ok;
+#endif
+}
+
 void piper_tts_set_dump_dir(struct piper_tts_context* ctx, const char* dir) {
     if (ctx && dir)
         ctx->dump_dir = dir;

@@ -52,6 +52,11 @@ public:
             piper_tts_set_language(ctx_, p.language.c_str());
         }
 
+        if (!piper_tts_has_espeak()) {
+            fprintf(stderr, "piper: warning: espeak-ng not found; text input requires IPA phonemes.\n"
+                            "       Install espeak-ng for automatic text-to-phoneme conversion.\n");
+        }
+
         return true;
     }
 
@@ -74,11 +79,23 @@ public:
         float* pcm = nullptr;
         int sr = 0;
 
-        // Try full text→phoneme→synth first; if espeak-ng is unavailable
-        // fall back to treating the input as pre-phonemised IPA.
+        // Try full text→phoneme→synth first (requires espeak-ng).
         int n = piper_tts_synthesize(ctx_, text.c_str(), &pcm, &sr);
         if (n <= 0 || !pcm) {
-            n = piper_tts_synthesize_phonemes(ctx_, text.c_str(), &pcm, &sr);
+            // Only fall back to phoneme synthesis if the input looks like
+            // IPA (contains non-ASCII characters typical of IPA notation).
+            // Raw English text fed as "IPA" produces garbage audio because
+            // ASCII letters map to arbitrary phoneme IDs.
+            bool has_ipa_chars = false;
+            for (unsigned char c : text) {
+                if (c >= 0x80) { has_ipa_chars = true; break; }
+            }
+            if (has_ipa_chars) {
+                n = piper_tts_synthesize_phonemes(ctx_, text.c_str(), &pcm, &sr);
+            } else {
+                fprintf(stderr, "piper: espeak-ng not available and input is not IPA phonemes.\n"
+                                "       Install espeak-ng or pass pre-phonemised IPA input.\n");
+            }
         }
         if (n <= 0 || !pcm)
             return {};

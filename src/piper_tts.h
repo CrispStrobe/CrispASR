@@ -65,6 +65,9 @@ int piper_tts_sample_rate(const struct piper_tts_context* ctx);
 int piper_tts_num_speakers(const struct piper_tts_context* ctx);
 const char* piper_tts_espeak_voice(const struct piper_tts_context* ctx);
 
+// Returns true if espeak-ng phonemization is available (linked or in $PATH).
+bool piper_tts_has_espeak(void);
+
 // Diff harness: dump all intermediates to this directory (empty = no dump).
 void piper_tts_set_dump_dir(struct piper_tts_context* ctx, const char* dir);
 
