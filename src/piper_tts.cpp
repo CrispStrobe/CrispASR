@@ -195,10 +195,15 @@ static bool phonemize_espeak(const std::string& voice, const std::string& text, 
         return false;
     if (!g_piper_espeak_inited) {
         const char* data_path = getenv("CRISPASR_ESPEAK_DATA_PATH");
+#ifdef CRISPASR_ESPEAK_DATA_PATH
+        // Bundled build: use the compiled-in data path as fallback
+        if (!data_path) data_path = CRISPASR_ESPEAK_DATA_PATH;
+#endif
         int sr = espeak_Initialize(AUDIO_OUTPUT_SYNCHRONOUS, 0, data_path,
                                    espeakINITIALIZE_PHONEME_IPA | espeakINITIALIZE_DONT_EXIT);
         if (sr < 0) {
-            fprintf(stderr, "piper_tts: espeak_Initialize failed (rc=%d)\n", sr);
+            fprintf(stderr, "piper_tts: espeak_Initialize failed (rc=%d, path=%s)\n",
+                    sr, data_path ? data_path : "<default>");
             g_piper_espeak_init_failed = true;
             return false;
         }

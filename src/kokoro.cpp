@@ -2913,6 +2913,10 @@ bool phonemize_espeak_lib(const std::string& lang, const std::string& text, std:
         // sandboxed apps and on systems where espeak-ng-data isn't in the
         // standard location).
         const char* path = std::getenv("CRISPASR_ESPEAK_DATA_PATH");
+#ifdef CRISPASR_ESPEAK_DATA_PATH
+        // Bundled build: use the compiled-in data path as fallback
+        if (!path) path = CRISPASR_ESPEAK_DATA_PATH;
+#endif
         int sr = espeak_Initialize(AUDIO_OUTPUT_SYNCHRONOUS, 0, path,
                                    espeakINITIALIZE_PHONEME_IPA | espeakINITIALIZE_DONT_EXIT);
         if (sr < 0) {
