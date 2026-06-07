@@ -309,10 +309,23 @@ struct voxcpm2_context {
     vox_kv_cache tslm_kv;
     vox_kv_cache ralm_kv;
 
-    // GGUF weight storage — owned here
+    // GGUF weight storage — owned here (CPU-resident when GPU is discrete)
     ggml_context* ggml_ctx = nullptr;
     ggml_backend_buffer_t weight_buf = nullptr;
     std::map<std::string, ggml_tensor*> tensors;
+
+    // GPU weight mirrors.  On discrete GPUs (Vulkan, CUDA) the primary
+    // weight buffer is CPU-resident so that legacy paths (tensor_data_f32,
+    // matmul_mv_ggml, rms_norm_cpu, …) can dereference tensor->data.
+    // Graph-build functions reference gpu_weights instead so the ggml
+    // cgraph runs entirely on the GPU backend — no cross-backend copies.
+    // On unified-memory backends (Metal) these stay empty; ctx->weights
+    // is used everywhere.
+    vox_weights gpu_weights;
+    ggml_context* gpu_ggml_ctx = nullptr;
+    ggml_backend_buffer_t gpu_weight_buf = nullptr;
+    std::map<std::string, ggml_tensor*> gpu_tensors;
+    bool has_gpu_weights = false;
 
     // Runtime params
     int n_threads = 4;
@@ -327,11 +340,11 @@ struct voxcpm2_context {
     // RNG for CFM noise generation (seeded per synthesis call)
     mt19937_state rng;
 
-    // VOXCPM2_USE_GRAPH backend pool. Init unconditionally so the gate
-    // can be flipped per-call without re-loading the model. Weights still
-    // live on backend_cpu (legacy CPU paths read them directly via
-    // tensor->data); the graph paths run on this same CPU backend, gaining
-    // amortised graph build/alloc and ggml's planner.
+    // Helper: return gpu_weights for graph build (GPU-resident) or weights
+    // for legacy paths (always CPU-accessible).
+    const vox_weights& graph_weights() const { return has_gpu_weights ? gpu_weights : weights; }
+
+    // VOXCPM2_USE_GRAPH backend pool.
     ggml_backend_t backend = nullptr;
     ggml_backend_t backend_cpu = nullptr;
     std::vector<uint8_t> compute_meta;
@@ -925,7 +938,7 @@ static void sync_tslm_kv_cpu_to_backend(voxcpm2_context* ctx) {
 static ggml_cgraph* build_tslm_step_graph(voxcpm2_context* ctx, int n_past, int fixed_kv_len = 0,
                                           ggml_context* arena_ctx = nullptr) {
     const vox_hparams& hp = ctx->hp;
-    const vox_weights& W = ctx->weights;
+    const vox_weights& W = ctx->graph_weights();
     const int d = (int)hp.tslm_d_model;
     const int n_q = (int)hp.tslm_n_heads;
     const int n_kv = (int)hp.tslm_n_kv;
@@ -1456,7 +1469,7 @@ static std::vector<float> locenc_forward(voxcpm2_context* ctx, const float* patc
 
 static ggml_cgraph* build_locenc_graph(voxcpm2_context* ctx, ggml_context* arena_ctx = nullptr) {
     const vox_hparams& hp = ctx->hp;
-    const vox_weights& W = ctx->weights;
+    const vox_weights& W = ctx->graph_weights();
     const int d = (int)hp.locenc_d_model;
     const int n_q = (int)hp.locenc_n_heads;
     const int n_kv = (int)hp.locenc_n_kv;
@@ -1898,7 +1911,7 @@ static std::vector<float> locdit_forward(voxcpm2_context* ctx, const float* x_ra
 
 static ggml_cgraph* build_locdit_graph(voxcpm2_context* ctx, ggml_context* arena_ctx = nullptr) {
     const vox_hparams& hp = ctx->hp;
-    const vox_weights& W = ctx->weights;
+    const vox_weights& W = ctx->graph_weights();
     const int d = (int)hp.locdit_d_model;
     const int n_q = (int)hp.locdit_n_heads;
     const int n_kv = (int)hp.locdit_n_kv;
@@ -4304,10 +4317,17 @@ static bool vox_load_weights(voxcpm2_context* ctx, const char* path) {
     free_metadata(meta);
 
     // --- Pass 2: weights ---
-    // Load onto ctx->backend (Metal when use_gpu on Apple Silicon, else
-    // CPU). Caller (voxcpm2_init_from_file) has already set ctx->backend
-    // / ctx->backend_cpu.
+    // Load onto a host-visible backend so legacy CPU paths can
+    // dereference tensor->data. On unified-memory backends (Metal) this
+    // is the GPU backend itself; on discrete GPUs (Vulkan, CUDA) it's
+    // the CPU backend. GPU mirrors are created later by the caller.
     ggml_backend_t weight_backend = ctx->backend ? ctx->backend : get_cpu_backend();
+    if (weight_backend && weight_backend != ctx->backend_cpu) {
+        ggml_backend_buffer_type_t buft = ggml_backend_get_default_buffer_type(weight_backend);
+        if (buft && !ggml_backend_buft_is_host(buft)) {
+            weight_backend = ctx->backend_cpu;
+        }
+    }
     WeightLoad wl;
     if (!load_weights(path, weight_backend, "voxcpm2", wl))
         return false;
@@ -5066,14 +5086,13 @@ struct voxcpm2_context* voxcpm2_init_from_file(const char* path_model, struct vo
 
     // Backend pool. With `use_gpu`, init_best picks Metal / Vulkan / CUDA.
     // On Apple Silicon, Metal allocates in unified-memory "shared" mode, so
-    // `tensor->data` stays CPU-readable and the remaining legacy
-    // `matmul_mv_ggml` paths (TSLM/RALM prefill, LocEnc, VAE
-    // encode/decode, FSQ, stop) keep working against the same weight
-    // pointers the graph paths use. On discrete GPUs (Vulkan, CUDA) the
-    // default buffer is device-local (not host-visible), so direct
-    // `tensor->data` access from CPU would SIGSEGV. Until every legacy
-    // path is converted to a ggml graph, fall back to CPU for those
-    // backends.
+    // `tensor->data` stays CPU-readable and the remaining legacy CPU paths
+    // (matmul_mv_ggml, rms_norm_cpu, …) work against the same pointers the
+    // graph paths use. On discrete GPUs (Vulkan, CUDA) the default buffer
+    // is device-local VRAM — CPU can't dereference tensor->data. Instead
+    // we load weights to CPU for legacy paths and create GPU mirror copies
+    // for graph-build functions, giving both worlds native-speed access
+    // with no cross-backend copies at compute time.
     ctx->backend_cpu = get_cpu_backend();
     if (!ctx->backend_cpu) {
         fprintf(stderr, "voxcpm2: failed to init CPU backend\n");
@@ -5088,33 +5107,179 @@ struct voxcpm2_context* voxcpm2_init_from_file(const char* path_model, struct vo
             }
             ctx->backend = ctx->backend_cpu;
         }
-        // Legacy code paths dereference tensor->data as CPU pointers
-        // (tensor_data_f32, matmul_mv_ggml, rms_norm_cpu, etc.).  This
-        // only works when the weight buffer is host-visible (unified
-        // memory — e.g. Metal on Apple Silicon).  On discrete GPUs
-        // (Vulkan, CUDA) the buffer lives in device-local VRAM that
-        // cannot be read from the CPU, so we must fall back to CPU to
-        // avoid SIGSEGV.
-        if (ctx->backend != ctx->backend_cpu) {
-            ggml_backend_buffer_type_t buft = ggml_backend_get_default_buffer_type(ctx->backend);
-            if (buft && !ggml_backend_buft_is_host(buft)) {
-                if (params.verbosity >= 1) {
-                    fprintf(stderr, "voxcpm2: %s buffer is not host-visible — "
-                                    "falling back to CPU (legacy paths need CPU-accessible weights)\n",
-                            ggml_backend_name(ctx->backend));
-                }
-                ggml_backend_free(ctx->backend);
-                ctx->backend = ctx->backend_cpu;
-            }
-        }
     } else {
         ctx->backend = ctx->backend_cpu;
+    }
+
+    // Detect whether the GPU backend's buffer is host-visible. If not,
+    // weights will be loaded to CPU and mirrored to GPU (see below).
+    bool needs_gpu_mirror = false;
+    if (ctx->backend != ctx->backend_cpu) {
+        ggml_backend_buffer_type_t buft = ggml_backend_get_default_buffer_type(ctx->backend);
+        needs_gpu_mirror = (buft && !ggml_backend_buft_is_host(buft));
     }
 
     if (!vox_load_weights(ctx, path_model)) {
         fprintf(stderr, "voxcpm2: failed to load '%s'\n", path_model);
         voxcpm2_free(ctx);
         return nullptr;
+    }
+
+    // On discrete GPUs: weights were loaded to CPU (vox_load_weights
+    // checks ggml_backend_buft_is_host internally). Create GPU copies
+    // for the graph-build paths so ggml_backend_graph_compute runs
+    // entirely on the GPU with zero cross-backend data movement.
+    if (needs_gpu_mirror) {
+        ggml_backend_buffer_type_t gpu_buft = ggml_backend_get_default_buffer_type(ctx->backend);
+
+        // 1. Allocate a GPU ggml context with mirror tensors.
+        size_t ctx_size = ctx->tensors.size() * ggml_tensor_overhead() + 1024;
+        ggml_init_params ip = {ctx_size, nullptr, /*no_alloc=*/true};
+        ctx->gpu_ggml_ctx = ggml_init(ip);
+        if (!ctx->gpu_ggml_ctx) {
+            fprintf(stderr, "voxcpm2: failed to create GPU mirror context\n");
+            voxcpm2_free(ctx);
+            return nullptr;
+        }
+
+        for (auto& [name, cpu_t] : ctx->tensors) {
+            ggml_tensor* gpu_t = ggml_dup_tensor(ctx->gpu_ggml_ctx, cpu_t);
+            ggml_set_name(gpu_t, name.c_str());
+            ctx->gpu_tensors[name] = gpu_t;
+        }
+
+        // 2. Allocate GPU buffer for all mirror tensors.
+        ctx->gpu_weight_buf = ggml_backend_alloc_ctx_tensors_from_buft(ctx->gpu_ggml_ctx, gpu_buft);
+        if (!ctx->gpu_weight_buf) {
+            fprintf(stderr, "voxcpm2: failed to allocate GPU weight buffer — "
+                            "falling back to CPU\n");
+            ggml_free(ctx->gpu_ggml_ctx);
+            ctx->gpu_ggml_ctx = nullptr;
+            ctx->gpu_tensors.clear();
+            ctx->backend = ctx->backend_cpu;
+        } else {
+            // 3. Copy data CPU → GPU.
+            for (auto& [name, cpu_t] : ctx->tensors) {
+                auto it = ctx->gpu_tensors.find(name);
+                if (it != ctx->gpu_tensors.end()) {
+                    ggml_backend_tensor_copy(cpu_t, it->second);
+                }
+            }
+
+            // 4. Populate gpu_weights struct by looking up GPU tensors.
+            vox_weights& GW = ctx->gpu_weights;
+            auto& GT = ctx->gpu_tensors;
+            auto gt = [&](const char* n) -> ggml_tensor* {
+                auto it = GT.find(n);
+                return it != GT.end() ? it->second : nullptr;
+            };
+            GW.tslm_token_embd = gt("tslm.token_embd.weight");
+            GW.tslm_output_norm = gt("tslm.output_norm.weight");
+            GW.tslm_rope_short = gt("tslm.rope_short_factors");
+            GW.tslm_rope_long = gt("tslm.rope_long_factors");
+            GW.tslm_layers.resize(ctx->hp.tslm_n_layers);
+            for (uint32_t i = 0; i < ctx->hp.tslm_n_layers; i++) {
+                auto& L = GW.tslm_layers[i];
+                char nb[256];
+                auto fn = [&](const char* sfx) { snprintf(nb, sizeof(nb), "tslm.blk.%u.%s", i, sfx); return nb; };
+                L.attn_norm_w = gt(fn("attn_norm.weight"));
+                L.attn_q_w = gt(fn("attn_q.weight"));
+                L.attn_k_w = gt(fn("attn_k.weight"));
+                L.attn_v_w = gt(fn("attn_v.weight"));
+                L.attn_o_w = gt(fn("attn_output.weight"));
+                L.ffn_norm_w = gt(fn("ffn_norm.weight"));
+                L.ffn_gate_w = gt(fn("ffn_gate.weight"));
+                L.ffn_up_w = gt(fn("ffn_up.weight"));
+                L.ffn_down_w = gt(fn("ffn_down.weight"));
+            }
+            GW.ralm_output_norm = gt("ralm.output_norm.weight");
+            GW.ralm_layers.resize(ctx->hp.ralm_n_layers);
+            for (uint32_t i = 0; i < ctx->hp.ralm_n_layers; i++) {
+                auto& L = GW.ralm_layers[i];
+                char nb[256];
+                auto fn = [&](const char* sfx) { snprintf(nb, sizeof(nb), "ralm.blk.%u.%s", i, sfx); return nb; };
+                L.attn_norm_w = gt(fn("attn_norm.weight"));
+                L.attn_q_w = gt(fn("attn_q.weight"));
+                L.attn_k_w = gt(fn("attn_k.weight"));
+                L.attn_v_w = gt(fn("attn_v.weight"));
+                L.attn_o_w = gt(fn("attn_output.weight"));
+                L.ffn_norm_w = gt(fn("ffn_norm.weight"));
+                L.ffn_gate_w = gt(fn("ffn_gate.weight"));
+                L.ffn_up_w = gt(fn("ffn_up.weight"));
+                L.ffn_down_w = gt(fn("ffn_down.weight"));
+            }
+            GW.fsq_in_proj_w = gt("fsq.in_proj.weight");
+            GW.fsq_in_proj_b = gt("fsq.in_proj.bias");
+            GW.fsq_out_proj_w = gt("fsq.out_proj.weight");
+            GW.fsq_out_proj_b = gt("fsq.out_proj.bias");
+            GW.locenc_cls_token = gt("locenc.cls_token");
+            GW.locenc_in_proj_w = gt("locenc.in_proj.weight");
+            GW.locenc_in_proj_b = gt("locenc.in_proj.bias");
+            GW.locenc_norm_w = gt("locenc.output_norm.weight");
+            GW.locenc_layers.resize(ctx->hp.locenc_n_layers);
+            for (uint32_t i = 0; i < ctx->hp.locenc_n_layers; i++) {
+                auto& L = GW.locenc_layers[i];
+                char nb[256];
+                auto fn = [&](const char* sfx) { snprintf(nb, sizeof(nb), "locenc.blk.%u.%s", i, sfx); return nb; };
+                L.norm1_w = gt(fn("attn_norm.weight"));
+                L.norm2_w = gt(fn("ffn_norm.weight"));
+                L.attn_q_w = gt(fn("attn_q.weight"));
+                L.attn_k_w = gt(fn("attn_k.weight"));
+                L.attn_v_w = gt(fn("attn_v.weight"));
+                L.attn_o_w = gt(fn("attn_output.weight"));
+                L.ffn_gate_w = gt(fn("ffn_gate.weight"));
+                L.ffn_up_w = gt(fn("ffn_up.weight"));
+                L.ffn_down_w = gt(fn("ffn_down.weight"));
+            }
+            GW.locdit_in_proj_w = gt("locdit.in_proj.weight");
+            GW.locdit_in_proj_b = gt("locdit.in_proj.bias");
+            GW.locdit_cond_proj_w = gt("locdit.cond_proj.weight");
+            GW.locdit_cond_proj_b = gt("locdit.cond_proj.bias");
+            GW.locdit_time_mlp_0_w = gt("locdit.time_mlp.0.weight");
+            GW.locdit_time_mlp_0_b = gt("locdit.time_mlp.0.bias");
+            GW.locdit_time_mlp_1_w = gt("locdit.time_mlp.1.weight");
+            GW.locdit_time_mlp_1_b = gt("locdit.time_mlp.1.bias");
+            GW.locdit_dt_mlp_0_w = gt("locdit.dt_mlp.0.weight");
+            GW.locdit_dt_mlp_0_b = gt("locdit.dt_mlp.0.bias");
+            GW.locdit_dt_mlp_1_w = gt("locdit.dt_mlp.1.weight");
+            GW.locdit_dt_mlp_1_b = gt("locdit.dt_mlp.1.bias");
+            GW.locdit_norm_w = gt("locdit.output_norm.weight");
+            GW.locdit_out_proj_w = gt("locdit.out_proj.weight");
+            GW.locdit_out_proj_b = gt("locdit.out_proj.bias");
+            GW.locdit_layers.resize(ctx->hp.locdit_n_layers);
+            for (uint32_t i = 0; i < ctx->hp.locdit_n_layers; i++) {
+                auto& L = GW.locdit_layers[i];
+                char nb[256];
+                auto fn = [&](const char* sfx) { snprintf(nb, sizeof(nb), "locdit.blk.%u.%s", i, sfx); return nb; };
+                L.norm1_w = gt(fn("attn_norm.weight"));
+                L.norm2_w = gt(fn("ffn_norm.weight"));
+                L.attn_q_w = gt(fn("attn_q.weight"));
+                L.attn_k_w = gt(fn("attn_k.weight"));
+                L.attn_v_w = gt(fn("attn_v.weight"));
+                L.attn_o_w = gt(fn("attn_output.weight"));
+                L.ffn_gate_w = gt(fn("ffn_gate.weight"));
+                L.ffn_up_w = gt(fn("ffn_up.weight"));
+                L.ffn_down_w = gt(fn("ffn_down.weight"));
+            }
+            GW.enc_to_lm_w = gt("proj.enc_to_lm.weight");
+            GW.enc_to_lm_b = gt("proj.enc_to_lm.bias");
+            GW.lm_to_dit_w = gt("proj.lm_to_dit.weight");
+            GW.lm_to_dit_b = gt("proj.lm_to_dit.bias");
+            GW.res_to_dit_w = gt("proj.res_to_dit.weight");
+            GW.res_to_dit_b = gt("proj.res_to_dit.bias");
+            GW.fusion_w = gt("proj.fusion.weight");
+            GW.fusion_b = gt("proj.fusion.bias");
+            GW.stop_proj_w = gt("stop.proj.weight");
+            GW.stop_proj_b = gt("stop.proj.bias");
+            GW.stop_head_w = gt("stop.head.weight");
+
+            ctx->has_gpu_weights = true;
+            if (params.verbosity >= 1) {
+                fprintf(stderr, "voxcpm2: created GPU weight mirror on %s (%.0f MB)\n",
+                        ggml_backend_name(ctx->backend),
+                        (double)ggml_backend_buffer_get_size(ctx->gpu_weight_buf) / (1024.0 * 1024.0));
+            }
+        }
     }
 
     // Generous arena: ~9 nodes/layer × 12 LocDiT layers + I/O ≈ 130 nodes;
@@ -5188,6 +5353,16 @@ void voxcpm2_free(struct voxcpm2_context* ctx) {
     if (ctx->galloc) {
         ggml_gallocr_free(ctx->galloc);
         ctx->galloc = nullptr;
+    }
+    // GPU weight mirrors (discrete GPU only)
+    ctx->gpu_tensors.clear();
+    if (ctx->gpu_weight_buf) {
+        ggml_backend_buffer_free(ctx->gpu_weight_buf);
+        ctx->gpu_weight_buf = nullptr;
+    }
+    if (ctx->gpu_ggml_ctx) {
+        ggml_free(ctx->gpu_ggml_ctx);
+        ctx->gpu_ggml_ctx = nullptr;
     }
     if (ctx->weight_buf) {
         ggml_backend_buffer_free(ctx->weight_buf);
