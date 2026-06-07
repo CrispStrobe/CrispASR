@@ -156,6 +156,108 @@ inline std::vector<std::string> neural_predict(const neural_model& m, const std:
     return preds;
 }
 
+// ── Neural G2P weight loading ────────────────────────────────────────
+
+// Decode base64 to raw bytes.
+inline std::vector<uint8_t> base64_decode(const std::string& b64) {
+    static const std::string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::vector<uint8_t> raw;
+    int val = 0, bits = 0;
+    for (char c : b64) {
+        if (c == '=' || c == '\n' || c == '\r') continue;
+        size_t idx = chars.find(c);
+        if (idx == std::string::npos) continue;
+        val = (val << 6) | (int)idx;
+        bits += 6;
+        if (bits >= 8) { bits -= 8; raw.push_back((uint8_t)(val >> bits)); }
+    }
+    return raw;
+}
+
+// Load neural G2P weights from MeloTTS-format JSON.
+// Format: {"meta":{"graphemes":[...],"phonemes":[...]},
+//          "weights":{"enc_emb":{"shape":[29,256],"data":"base64..."},...}}
+// Returns true if loaded successfully.
+inline bool load_neural_g2p_json(neural_model& nm, const std::string& json) {
+    if (json.empty()) return false;
+
+    // Simple JSON string array extractor
+    auto extract_array = [&](const std::string& key) -> std::vector<std::string> {
+        std::string pat = "\"" + key + "\"";
+        size_t pos = json.find(pat);
+        if (pos == std::string::npos) return {};
+        pos = json.find('[', pos);
+        if (pos == std::string::npos) return {};
+        size_t end = json.find(']', pos);
+        if (end == std::string::npos) return {};
+        std::vector<std::string> out;
+        size_t p = pos + 1;
+        while (p < end) {
+            while (p < end && json[p] != '"') p++;
+            if (p >= end) break;
+            p++; // skip opening "
+            std::string s;
+            while (p < end && json[p] != '"') { s += json[p]; p++; }
+            p++; // skip closing "
+            out.push_back(s);
+        }
+        return out;
+    };
+
+    // Weight extractor: find "key":{"shape":...,"data":"base64..."}
+    auto extract_weight = [&](const std::string& key) -> std::vector<float> {
+        std::string pat = "\"" + key + "\"";
+        size_t pos = json.find(pat);
+        if (pos == std::string::npos) return {};
+        size_t dpos = json.find("\"data\"", pos);
+        if (dpos == std::string::npos) return {};
+        size_t qstart = json.find('"', dpos + 6);
+        if (qstart == std::string::npos) return {};
+        qstart++;
+        size_t qend = json.find('"', qstart);
+        if (qend == std::string::npos) return {};
+        auto raw = base64_decode(json.substr(qstart, qend - qstart));
+        std::vector<float> out(raw.size() / sizeof(float));
+        if (!raw.empty()) memcpy(out.data(), raw.data(), out.size() * sizeof(float));
+        return out;
+    };
+
+    nm.graphemes = extract_array("graphemes");
+    nm.phonemes = extract_array("phonemes");
+    for (size_t i = 0; i < nm.graphemes.size(); i++)
+        nm.g2idx[nm.graphemes[i]] = (int)i;
+
+    nm.enc_emb = extract_weight("enc_emb");
+    nm.dec_emb = extract_weight("dec_emb");
+    nm.enc_w_ih = extract_weight("enc_w_ih");
+    nm.enc_w_hh = extract_weight("enc_w_hh");
+    nm.enc_b_ih = extract_weight("enc_b_ih");
+    nm.enc_b_hh = extract_weight("enc_b_hh");
+    nm.dec_w_ih = extract_weight("dec_w_ih");
+    nm.dec_w_hh = extract_weight("dec_w_hh");
+    nm.dec_b_ih = extract_weight("dec_b_ih");
+    nm.dec_b_hh = extract_weight("dec_b_hh");
+    nm.fc_w = extract_weight("fc_w");
+    nm.fc_b = extract_weight("fc_b");
+
+    nm.loaded = !nm.enc_emb.empty() && !nm.dec_emb.empty() && !nm.fc_w.empty();
+    return nm.loaded;
+}
+
+// Load neural G2P weights from a standalone JSON file (same format).
+inline bool load_neural_g2p_file(neural_model& nm, const std::string& path) {
+    FILE* f = fopen(path.c_str(), "r");
+    if (!f) return false;
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    std::string json(sz, '\0');
+    size_t rd = fread(&json[0], 1, sz, f);
+    fclose(f);
+    json.resize(rd);
+    return load_neural_g2p_json(nm, json);
+}
+
 // ── LTS rules (letter-to-sound for OOV) ─────────────────────────────
 // Returns ARPAbet phonemes (lowercase) for an unknown word.
 

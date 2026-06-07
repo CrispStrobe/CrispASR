@@ -4,6 +4,7 @@
 #include "espeak_dlopen.h"
 #include "core/g2p_en.h"
 #include "core/g2p_de.h"
+#include "core/g2p_fr.h"
 // Auto-download support — only available when linked with crispasr-lib
 #ifdef CRISPASR_HAS_CACHE
 #include "crispasr_cache.h"
@@ -24,6 +25,24 @@ static std::mutex g_g2p_mu;
 static bool g_g2p_cmudict_tried = false;
 
 // Try to auto-load CMUdict on first use.
+static void ensure_neural_g2p_loaded() {
+    if (g_g2p_ctx.neural.loaded) return;
+    const char* env = std::getenv("CRISPASR_G2P_MODEL_PATH");
+    if (env && *env) {
+        if (g2p_en::load_neural_g2p_file(g_g2p_ctx.neural, env))
+            fprintf(stderr, "g2p: loaded neural G2P model from %s\n", env);
+        return;
+    }
+    // Try cache dir
+    const char* home = std::getenv("HOME");
+    if (!home) home = std::getenv("USERPROFILE");
+    if (home) {
+        std::string p = std::string(home) + "/.cache/crispasr/g2p_en.json";
+        if (g2p_en::load_neural_g2p_file(g_g2p_ctx.neural, p))
+            fprintf(stderr, "g2p: loaded neural G2P model from %s\n", p.c_str());
+    }
+}
+
 static void ensure_cmudict_loaded() {
     if (g_g2p_ctx.dict.loaded || g_g2p_cmudict_tried) return;
     g_g2p_cmudict_tried = true;
@@ -63,6 +82,7 @@ bool phonemize_builtin_en(const std::string& lang, const std::string& text, std:
     {
         std::lock_guard<std::mutex> g(g_g2p_mu);
         ensure_cmudict_loaded();
+        ensure_neural_g2p_loaded();
     }
     out = g2p_en::text_to_ipa(g_g2p_ctx, text);
     return !out.empty();
@@ -111,6 +131,50 @@ bool phonemize_builtin_de(const std::string& lang, const std::string& text, std:
         ensure_de_dict_loaded();
     }
     out = g2p_de::text_to_ipa(g_g2p_de_ctx, text);
+    return !out.empty();
+}
+
+// ── Built-in French G2P (LTS rules + optional IPA dictionary) ────────
+
+static g2p_fr::context g_g2p_fr_ctx;
+static std::mutex g_g2p_fr_mu;
+static bool g_g2p_fr_tried = false;
+
+static void ensure_fr_dict_loaded() {
+    if (g_g2p_fr_ctx.dict.loaded || g_g2p_fr_tried) return;
+    g_g2p_fr_tried = true;
+    const char* env = std::getenv("CRISPASR_FR_DICT_PATH");
+    if (env && *env) {
+        int n = g2p_fr::load_ipa_dict_file(g_g2p_fr_ctx.dict, env);
+        if (n > 0) { fprintf(stderr, "g2p: loaded French IPA dict (%d entries) from %s\n", n, env); return; }
+    }
+    const char* home = std::getenv("HOME");
+    if (!home) home = std::getenv("USERPROFILE");
+    if (home) {
+        std::string p = std::string(home) + "/.cache/crispasr/ipa_dict_fr.txt";
+        int n = g2p_fr::load_ipa_dict_file(g_g2p_fr_ctx.dict, p);
+        if (n > 0) { fprintf(stderr, "g2p: loaded French IPA dict (%d entries) from %s\n", n, p.c_str()); return; }
+    }
+#ifdef CRISPASR_HAS_CACHE
+    static const char* FR_DICT_URL =
+        "https://raw.githubusercontent.com/open-dict-data/ipa-dict/refs/heads/master/data/fr.txt";
+    std::string path = crispasr_cache::ensure_cached_file(
+        "ipa_dict_fr.txt", FR_DICT_URL, /*quiet=*/true, "crispasr", "");
+    if (!path.empty()) {
+        int n = g2p_fr::load_ipa_dict_file(g_g2p_fr_ctx.dict, path);
+        if (n > 0) { fprintf(stderr, "g2p: loaded French IPA dict (%d entries) from %s\n", n, path.c_str()); return; }
+    }
+#endif
+}
+
+bool phonemize_builtin_fr(const std::string& lang, const std::string& text, std::string& out) {
+    if (!lang.empty() && lang.find("fr") == std::string::npos)
+        return false;
+    {
+        std::lock_guard<std::mutex> g(g_g2p_fr_mu);
+        ensure_fr_dict_loaded();
+    }
+    out = g2p_fr::text_to_ipa(g_g2p_fr_ctx, text);
     return !out.empty();
 }
 

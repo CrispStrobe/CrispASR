@@ -178,6 +178,52 @@ TEST_CASE("tokenizer splits correctly", "[g2p][tokenizer]") {
     }
 }
 
+// ── Neural G2P ──────────────────────────────────────────────────────
+
+TEST_CASE("base64 decode", "[g2p][neural]") {
+    // "hello" in base64 = "aGVsbG8="
+    auto raw = g2p_en::base64_decode("aGVsbG8=");
+    REQUIRE(raw.size() == 5);
+    CHECK(raw[0] == 'h');
+    CHECK(raw[1] == 'e');
+    CHECK(raw[2] == 'l');
+    CHECK(raw[3] == 'l');
+    CHECK(raw[4] == 'o');
+}
+
+TEST_CASE("neural G2P JSON loading", "[g2p][neural]") {
+    g2p_en::neural_model nm;
+
+    SECTION("empty JSON returns false") {
+        CHECK(!g2p_en::load_neural_g2p_json(nm, ""));
+        CHECK(!nm.loaded);
+    }
+
+    SECTION("file loading from path") {
+        const char* env = std::getenv("CRISPASR_G2P_MODEL_PATH");
+        std::string path = env ? env : "";
+        if (path.empty()) {
+            // Try cache dir
+            const char* home = std::getenv("HOME");
+            if (home) path = std::string(home) + "/.cache/crispasr/g2p_en.json";
+        }
+        if (path.empty() || !g2p_en::load_neural_g2p_file(nm, path)) {
+            SKIP("g2p_en.json not available — set CRISPASR_G2P_MODEL_PATH");
+        }
+        REQUIRE(nm.loaded);
+        CHECK(nm.graphemes.size() == 29);
+        CHECK(nm.phonemes.size() == 74);
+        CHECK(!nm.enc_emb.empty());
+
+        SECTION("neural predict produces phonemes") {
+            auto phs = g2p_en::neural_predict(nm, "hello");
+            REQUIRE(!phs.empty());
+            INFO("neural prediction for 'hello': ");
+            for (auto& p : phs) INFO("  " << p);
+        }
+    }
+}
+
 // ── CMUdict loading ──────────────────────────────────────────────────
 
 TEST_CASE("CMUdict file loading", "[g2p][cmudict]") {
