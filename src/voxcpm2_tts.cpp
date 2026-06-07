@@ -5064,15 +5064,16 @@ struct voxcpm2_context* voxcpm2_init_from_file(const char* path_model, struct vo
     ctx->max_len = params.max_len > 0 ? params.max_len : 2000;
     ctx->seed = params.seed;
 
-    // Backend pool. With `use_gpu`, init_best picks Metal on Apple Silicon
-    // (the only relevant target for now — CUDA/Vulkan are untested for
-    // this backend). On Apple Silicon, Metal allocates in unified-memory
-    // "shared" mode, so `tensor->data` stays CPU-readable and the
-    // remaining legacy `matmul_mv_ggml` paths (TSLM/RALM prefill, LocEnc,
-    // VAE encode/decode, FSQ, stop) keep working against the same
-    // weight pointers the graph paths use. On non-shared Metal (rare on
-    // M-series) or discrete GPUs the legacy paths would SIGSEGV — we'd
-    // need to graph-ify them first; for now fall back to CPU there.
+    // Backend pool. With `use_gpu`, init_best picks Metal / Vulkan / CUDA.
+    // On Apple Silicon, Metal allocates in unified-memory "shared" mode, so
+    // `tensor->data` stays CPU-readable and the remaining legacy
+    // `matmul_mv_ggml` paths (TSLM/RALM prefill, LocEnc, VAE
+    // encode/decode, FSQ, stop) keep working against the same weight
+    // pointers the graph paths use. On discrete GPUs (Vulkan, CUDA) the
+    // default buffer is device-local (not host-visible), so direct
+    // `tensor->data` access from CPU would SIGSEGV. Until every legacy
+    // path is converted to a ggml graph, fall back to CPU for those
+    // backends.
     ctx->backend_cpu = get_cpu_backend();
     if (!ctx->backend_cpu) {
         fprintf(stderr, "voxcpm2: failed to init CPU backend\n");
@@ -5086,6 +5087,25 @@ struct voxcpm2_context* voxcpm2_init_from_file(const char* path_model, struct vo
                 fprintf(stderr, "voxcpm2: best backend unavailable, falling back to CPU\n");
             }
             ctx->backend = ctx->backend_cpu;
+        }
+        // Legacy code paths dereference tensor->data as CPU pointers
+        // (tensor_data_f32, matmul_mv_ggml, rms_norm_cpu, etc.).  This
+        // only works when the weight buffer is host-visible (unified
+        // memory — e.g. Metal on Apple Silicon).  On discrete GPUs
+        // (Vulkan, CUDA) the buffer lives in device-local VRAM that
+        // cannot be read from the CPU, so we must fall back to CPU to
+        // avoid SIGSEGV.
+        if (ctx->backend != ctx->backend_cpu) {
+            ggml_backend_buffer_type_t buft = ggml_backend_get_default_buffer_type(ctx->backend);
+            if (buft && !ggml_backend_buft_is_host(buft)) {
+                if (params.verbosity >= 1) {
+                    fprintf(stderr, "voxcpm2: %s buffer is not host-visible — "
+                                    "falling back to CPU (legacy paths need CPU-accessible weights)\n",
+                            ggml_backend_name(ctx->backend));
+                }
+                ggml_backend_free(ctx->backend);
+                ctx->backend = ctx->backend_cpu;
+            }
         }
     } else {
         ctx->backend = ctx->backend_cpu;

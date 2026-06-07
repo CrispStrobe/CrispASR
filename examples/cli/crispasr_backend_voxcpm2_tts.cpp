@@ -110,8 +110,10 @@ public:
             pcm = voxcpm2_synthesize(ctx_, text.c_str(), &n);
         }
 
-        if (!pcm || n <= 0)
+        if (!pcm || n <= 0) {
+            fprintf(stderr, "crispasr[voxcpm2-tts]: synthesis returned no audio\n");
             return {};
+        }
         std::vector<float> out(pcm, pcm + n);
         voxcpm2_pcm_free(pcm);
         return out;
