@@ -95,3 +95,52 @@ TEST_CASE("Watermark detect on null/invalid input returns 0", "[unit][watermark]
     REQUIRE(crispasr_watermark_detect_impl(nullptr, 0) == 0.0f);
     REQUIRE(crispasr_watermark_detect_impl(nullptr, 100) == 0.0f);
 }
+
+// ─── Round-trip through int16 WAV conversion ────────────────────────────────
+// Verifies that the watermark survives the float32 → int16 → float32
+// quantization that happens when writing a WAV file and reading it back.
+// This is the same path as crispasr_make_wav_int16 + the simple reader
+// used by --detect-watermark.
+
+TEST_CASE("Watermark survives int16 round-trip (WAV writer path)", "[unit][watermark]") {
+    auto pcm = make_sine(48000, 24000, 440.0f, 0.5f);
+    crispasr_watermark_embed_impl(pcm.data(), (int)pcm.size());
+
+    // Simulate int16 quantization (same as crispasr_make_wav_int16)
+    std::vector<int16_t> pcm_i16(pcm.size());
+    for (size_t i = 0; i < pcm.size(); i++) {
+        float s = pcm[i];
+        if (s > 1.0f) s = 1.0f;
+        if (s < -1.0f) s = -1.0f;
+        pcm_i16[i] = (int16_t)(s * 32767.0f);
+    }
+
+    // Convert back to float32 (same as --detect-watermark reader)
+    std::vector<float> pcm_back(pcm.size());
+    for (size_t i = 0; i < pcm.size(); i++) {
+        pcm_back[i] = (float)pcm_i16[i] / 32768.0f;
+    }
+
+    float score = crispasr_watermark_detect_impl(pcm_back.data(), (int)pcm_back.size());
+    REQUIRE(score > 0.60f);
+}
+
+// ─── Post-embed verification threshold semantics ────────────────────────────
+// The post-embed verification in crispasr_run.cpp warns when confidence
+// < 0.6. Verify that a properly watermarked signal exceeds this, and
+// that unwatermarked audio falls below.
+
+TEST_CASE("Post-embed verification threshold: watermarked > 0.6, clean < 0.6", "[unit][watermark]") {
+    auto pcm = make_sine(48000, 24000, 440.0f, 0.5f);
+    auto clean = pcm;
+
+    crispasr_watermark_embed_impl(pcm.data(), (int)pcm.size());
+
+    float score_wm = crispasr_watermark_detect_impl(pcm.data(), (int)pcm.size());
+    float score_clean = crispasr_watermark_detect_impl(clean.data(), (int)clean.size());
+
+    // Watermarked audio must pass the post-embed verification threshold
+    REQUIRE(score_wm >= 0.6f);
+    // Clean audio must NOT trigger a false positive at that threshold
+    REQUIRE(score_clean < 0.6f);
+}

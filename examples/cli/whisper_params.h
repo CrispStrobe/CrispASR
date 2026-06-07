@@ -268,6 +268,11 @@ struct whisper_params {
     // instead of the built-in spread-spectrum watermark.
     std::string watermark_model;
 
+    // --detect-watermark PATH: standalone watermark detection mode.
+    // When set, reads the WAV file, runs watermark detection, prints
+    // the result, and exits. Exposes the detection API for end users.
+    std::string detect_watermark_file;
+
     // C2PA (Content Credentials) signing — compile-time gated on
     // CRISPASR_HAVE_C2PA. Paths to self-signed or CA-issued X.509 cert
     // and key. Generate with: scripts/generate-c2pa-cert.sh

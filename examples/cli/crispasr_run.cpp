@@ -1076,6 +1076,72 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, co
 int crispasr_run_backend(const whisper_params& params_in) {
     whisper_params params = params_in;
 
+    // ── --detect-watermark: standalone watermark detection verb ───────────
+    // Reads a WAV file, runs watermark detection, prints the result, exits.
+    // This is handled before any backend/model resolution so no GGUF is
+    // needed (unless --watermark-model is also given for AudioSeal).
+    if (!params.detect_watermark_file.empty()) {
+        const std::string& wav_path = params.detect_watermark_file;
+        FILE* fin = fopen(wav_path.c_str(), "rb");
+        if (!fin) {
+            fprintf(stderr, "crispasr: error: cannot open '%s'\n", wav_path.c_str());
+            return 1;
+        }
+
+        // Read WAV: skip 44-byte header, read int16 samples, convert to float32.
+        fseek(fin, 0, SEEK_END);
+        long file_size = ftell(fin);
+        if (file_size < 44) {
+            fprintf(stderr, "crispasr: error: '%s' is too small to be a valid WAV\n", wav_path.c_str());
+            fclose(fin);
+            return 1;
+        }
+
+        // Parse sample rate from WAV header (bytes 24-27, little-endian uint32)
+        fseek(fin, 24, SEEK_SET);
+        uint32_t wav_sr = 0;
+        if (fread(&wav_sr, 4, 1, fin) != 1) {
+            fprintf(stderr, "crispasr: error: cannot read sample rate from '%s'\n", wav_path.c_str());
+            fclose(fin);
+            return 1;
+        }
+
+        fseek(fin, 44, SEEK_SET);
+        long pcm_bytes = file_size - 44;
+        int n_samples = (int)(pcm_bytes / sizeof(int16_t));
+        std::vector<int16_t> pcm_i16(n_samples);
+        if ((int)fread(pcm_i16.data(), sizeof(int16_t), n_samples, fin) != n_samples) {
+            fprintf(stderr, "crispasr: error: short read from '%s'\n", wav_path.c_str());
+            fclose(fin);
+            return 1;
+        }
+        fclose(fin);
+
+        // Convert int16 to float32
+        std::vector<float> pcm(n_samples);
+        for (int i = 0; i < n_samples; i++) {
+            pcm[i] = (float)pcm_i16[i] / 32768.0f;
+        }
+
+        // Initialize watermark dispatcher (AudioSeal if --watermark-model given)
+        crispasr_wm_dispatch::init(params.watermark_model);
+
+        float confidence = crispasr_wm_dispatch::detect(pcm.data(), n_samples, (int)wav_sr);
+
+        fprintf(stdout, "File: %s\n", wav_path.c_str());
+        fprintf(stdout, "Watermark confidence: %.4f\n", confidence);
+        if (confidence > 0.65f) {
+            fprintf(stdout, "Result: AI-GENERATED WATERMARK DETECTED\n");
+        } else if (confidence >= 0.4f) {
+            fprintf(stdout, "Result: UNCERTAIN\n");
+        } else {
+            fprintf(stdout, "Result: No watermark detected\n");
+        }
+
+        crispasr_wm_dispatch::shutdown();
+        return 0;
+    }
+
     if (params.verbose) {
         fprintf(stderr, "crispasr[verbose]: model arg          = '%s'\n", params.model.c_str());
         fprintf(stderr, "crispasr[verbose]: backend arg        = '%s'\n",
@@ -1470,6 +1536,17 @@ int crispasr_run_backend(const whisper_params& params_in) {
         }
         fwrite(wav.data(), 1, wav.size(), fout);
         fclose(fout);
+
+        // Post-embed watermark verification: re-detect on the in-memory
+        // PCM (which has already been watermarked) and warn if confidence
+        // is too low. This catches edge cases where the embed silently
+        // failed or the audio is too short / silent to hold a watermark.
+        {
+            float conf = crispasr_wm_dispatch::detect(audio.data(), (int)audio.size(), sr_in);
+            if (conf < 0.6f) {
+                fprintf(stderr, "crispasr: warning: watermark verification LOW (confidence=%.3f)\n", conf);
+            }
+        }
 
         if (!params.no_prints)
             fprintf(stderr, "crispasr: TTS output written to '%s' (%zu samples @ %d Hz, %.2f sec)\n", out_path.c_str(),
