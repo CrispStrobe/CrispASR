@@ -430,6 +430,14 @@ struct voxcpm2_context {
     bool tslm_kv_synced = false; // true once tslm_kv (CPU vector) has been
                                  // copied into the backend tensor for this
                                  // synthesis call.
+
+    // RALM backend KV (mirrors TSLM pattern but for RALM's 8 layers)
+    ggml_context* ralm_kv_ctx = nullptr;
+    ggml_backend_buffer_t ralm_kv_buf = nullptr;
+    ggml_tensor* ralm_kv_k = nullptr;
+    ggml_tensor* ralm_kv_v = nullptr;
+    int ralm_kv_max_ctx = 0;
+    bool ralm_kv_synced = false;
 };
 
 // Stream struct
@@ -925,6 +933,205 @@ static void sync_tslm_kv_cpu_to_backend(voxcpm2_context* ctx) {
         }
         ggml_backend_tensor_set(ctx->tslm_kv_v, stage.data(), (size_t)layer * layer_bytes, layer_bytes);
     }
+}
+
+// ---------------------------------------------------------------------------
+// RALM backend KV init + sync + graph (mirrors TSLM pattern, 8 layers,
+// no RoPE)
+// ---------------------------------------------------------------------------
+
+static bool init_ralm_kv_backend(voxcpm2_context* ctx) {
+    if (ctx->ralm_kv_k) {
+        return true;
+    }
+    const vox_hparams& hp = ctx->hp;
+    const int hd = (int)hp.ralm_head_dim;
+    const int n_kv = (int)hp.ralm_n_kv;
+    const int n_lay = (int)hp.ralm_n_layers;
+    const int max_ctx = ctx->ralm_kv.max_ctx > 0 ? ctx->ralm_kv.max_ctx : 4096;
+
+    ggml_init_params kp = {ggml_tensor_overhead() * 4 + 1024, nullptr, /*no_alloc=*/true};
+    ctx->ralm_kv_ctx = ggml_init(kp);
+    if (!ctx->ralm_kv_ctx) {
+        return false;
+    }
+    ctx->ralm_kv_k = ggml_new_tensor_4d(ctx->ralm_kv_ctx, GGML_TYPE_F32, hd, max_ctx, n_kv, n_lay);
+    ctx->ralm_kv_v = ggml_new_tensor_4d(ctx->ralm_kv_ctx, GGML_TYPE_F32, hd, max_ctx, n_kv, n_lay);
+    ggml_set_name(ctx->ralm_kv_k, "ralm_kv_k");
+    ggml_set_name(ctx->ralm_kv_v, "ralm_kv_v");
+    const size_t kb = ggml_nbytes(ctx->ralm_kv_k);
+    const size_t vb = ggml_nbytes(ctx->ralm_kv_v);
+    ctx->ralm_kv_buf = ggml_backend_alloc_buffer(ctx->backend, kb + vb);
+    if (!ctx->ralm_kv_buf) {
+        fprintf(stderr, "voxcpm2: failed to alloc ralm kv backend buffer (%zu bytes)\n", kb + vb);
+        return false;
+    }
+    char* base = (char*)ggml_backend_buffer_get_base(ctx->ralm_kv_buf);
+    ggml_backend_tensor_alloc(ctx->ralm_kv_buf, ctx->ralm_kv_k, base);
+    ggml_backend_tensor_alloc(ctx->ralm_kv_buf, ctx->ralm_kv_v, base + kb);
+    ggml_backend_buffer_clear(ctx->ralm_kv_buf, 0);
+    ctx->ralm_kv_max_ctx = max_ctx;
+    return true;
+}
+
+static void sync_ralm_kv_cpu_to_backend(voxcpm2_context* ctx) {
+    const vox_hparams& hp = ctx->hp;
+    const int hd = (int)hp.ralm_head_dim;
+    const int n_kv = (int)hp.ralm_n_kv;
+    const int n_lay = (int)hp.ralm_n_layers;
+    const int n_past = ctx->ralm_kv.n_past;
+    const int max_ctx = ctx->ralm_kv_max_ctx;
+    if (n_past <= 0 || !ctx->ralm_kv_k || !ctx->ralm_kv_v) {
+        return;
+    }
+    std::vector<float> stage((size_t)max_ctx * n_kv * hd, 0.0f);
+    const size_t layer_bytes = (size_t)max_ctx * n_kv * hd * sizeof(float);
+    for (int layer = 0; layer < n_lay; layer++) {
+        // K
+        std::fill(stage.begin(), stage.end(), 0.0f);
+        for (int kvh = 0; kvh < n_kv; kvh++) {
+            for (int pos = 0; pos < n_past; pos++) {
+                float* dst = stage.data() + (size_t)(kvh * max_ctx + pos) * hd;
+                const float* src = ctx->ralm_kv.k_cache[layer].data() + (size_t)pos * n_kv * hd + (size_t)kvh * hd;
+                std::memcpy(dst, src, (size_t)hd * sizeof(float));
+            }
+        }
+        ggml_backend_tensor_set(ctx->ralm_kv_k, stage.data(), (size_t)layer * layer_bytes, layer_bytes);
+        // V
+        std::fill(stage.begin(), stage.end(), 0.0f);
+        for (int kvh = 0; kvh < n_kv; kvh++) {
+            for (int pos = 0; pos < n_past; pos++) {
+                float* dst = stage.data() + (size_t)(kvh * max_ctx + pos) * hd;
+                const float* src = ctx->ralm_kv.v_cache[layer].data() + (size_t)pos * n_kv * hd + (size_t)kvh * hd;
+                std::memcpy(dst, src, (size_t)hd * sizeof(float));
+            }
+        }
+        ggml_backend_tensor_set(ctx->ralm_kv_v, stage.data(), (size_t)layer * layer_bytes, layer_bytes);
+    }
+}
+
+// Build the per-step RALM cgraph (all 8 layers, T=1). Same structure as
+// build_tslm_step_graph but simpler: no RoPE (rope_theta=0 makes
+// ggml_rope_ext a no-op), uses RALM hparams/weights/KV. Dynamic (non-
+// bucketed) build only — RALM's max_ctx is small and per-step cost is low.
+static ggml_cgraph* build_ralm_step_graph(voxcpm2_context* ctx, int n_past) {
+    const vox_hparams& hp = ctx->hp;
+    const vox_weights& W = ctx->graph_weights();
+    const int d = (int)hp.ralm_d_model;
+    const int n_q = (int)hp.ralm_n_heads;
+    const int n_kv = (int)hp.ralm_n_kv;
+    const int hd = (int)hp.ralm_head_dim;
+    const int n_kv_grp = n_q / n_kv;
+    const float eps = hp.rms_norm_eps;
+    const float attn_scale = 1.0f / std::sqrt((float)hd);
+    const int T = 1;
+    const int Lk = n_past + T;
+
+    ggml_init_params ip = {ctx->compute_meta.size(), ctx->compute_meta.data(), /*no_alloc=*/true};
+    ggml_context* ctx0 = ggml_init(ip);
+    ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 4096, false);
+
+    ggml_tensor* hidden_in = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, d, T);
+    ggml_set_name(hidden_in, "ralm_hidden_in");
+    ggml_set_input(hidden_in);
+
+    ggml_tensor* positions = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, T);
+    ggml_set_name(positions, "ralm_positions");
+    ggml_set_input(positions);
+
+    // No RoPE: set rope_theta = 0.0f so ggml_rope_ext rotates by zero.
+    const core_attn::KvSelfAttnParams kvp = {
+        /*n_heads*/ n_q,
+        /*n_kv_heads*/ n_kv,
+        /*head_dim*/ hd,
+        /*n_kv_grp*/ n_kv_grp,
+        /*n_ctx_orig*/ 0,
+        /*rope_theta*/ 0.0f,
+        /*rope_beta_fast*/ 0.0f,
+        /*rope_beta_slow*/ 0.0f,
+        /*attn_scale*/ attn_scale,
+        /*qk_norm_eps*/ 0.0f,
+        /*gqa_mode*/ core_attn::GQA_MANUAL_CONT,
+        /*rope_type*/ GGML_ROPE_TYPE_NEOX,
+        /*n_rot*/ 0,
+        /*v_rms_norm*/ false,
+        /*rope_freq_factors*/ nullptr,
+    };
+
+    ggml_tensor* cur = hidden_in;
+    for (uint32_t il = 0; il < hp.ralm_n_layers; il++) {
+        const vox_lm_layer& L = W.ralm_layers[il];
+        ggml_tensor* residual = cur;
+
+        // Attention block (RMSNorm x scale -> kv_self_attn -> residual).
+        ggml_tensor* x = ggml_rms_norm(ctx0, cur, eps);
+        x = ggml_mul(ctx0, x, L.attn_norm_w);
+
+        ggml_tensor* attn = core_attn::kv_self_attn(ctx0, gf, x, L.attn_q_w, L.attn_k_w, L.attn_v_w, L.attn_o_w,
+                                                    /*q_norm_w*/ nullptr, /*k_norm_w*/ nullptr, positions, /*causal_mask*/ nullptr,
+                                                    ctx->ralm_kv_k, ctx->ralm_kv_v, (int)il, n_past, kvp,
+                                                    /*qkv_w=*/nullptr, /*fixed_kv_len=*/Lk,
+                                                    /*kv_indices=*/nullptr);
+        cur = ggml_add(ctx0, residual, attn);
+
+        // FFN block (RMSNorm x scale -> SwiGLU -> residual).
+        residual = cur;
+        x = ggml_rms_norm(ctx0, cur, eps);
+        x = ggml_mul(ctx0, x, L.ffn_norm_w);
+        ggml_tensor* mlp = core_ffn::swiglu(ctx0, x, L.ffn_gate_w, L.ffn_up_w, L.ffn_down_w);
+        cur = ggml_add(ctx0, residual, mlp);
+    }
+
+    // Final RMSNorm x ralm_output_norm.
+    cur = ggml_rms_norm(ctx0, cur, eps);
+    cur = ggml_mul(ctx0, cur, W.ralm_output_norm);
+    ggml_set_name(cur, "ralm_hidden_out");
+    ggml_set_output(cur);
+    ggml_build_forward_expand(gf, cur);
+
+    ggml_free(ctx0);
+    return gf;
+}
+
+// Run one RALM step through the graph. Lazily inits the backend KV and
+// syncs from the CPU cache on first call per synthesis.
+static std::vector<float> ralm_step_graph(voxcpm2_context* ctx, const float* hidden_in, int pos) {
+    const int d = (int)ctx->hp.ralm_d_model;
+
+    // Init backend KV on first call
+    if (!ctx->ralm_kv_k) {
+        if (!init_ralm_kv_backend(ctx)) {
+            fprintf(stderr, "voxcpm2: ralm kv backend init failed\n");
+            return std::vector<float>(d, 0.0f);
+        }
+    }
+    if (!ctx->ralm_kv_synced) {
+        sync_ralm_kv_cpu_to_backend(ctx);
+        ctx->ralm_kv_synced = true;
+    }
+
+    ggml_cgraph* gf = build_ralm_step_graph(ctx, pos);
+    if (!ggml_gallocr_alloc_graph(ctx->galloc, gf)) {
+        fprintf(stderr, "voxcpm2: ralm_step gallocr alloc failed\n");
+        return std::vector<float>(d, 0.0f);
+    }
+
+    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "ralm_hidden_in"), hidden_in, 0, (size_t)d * sizeof(float));
+    int32_t pos_i = pos;
+    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "ralm_positions"), &pos_i, 0, sizeof(int32_t));
+
+    if (ggml_backend_is_cpu(ctx->backend)) {
+        ggml_backend_cpu_set_n_threads(ctx->backend, g_cpu_n_threads);
+    }
+    if (ggml_backend_graph_compute(ctx->backend, gf) != GGML_STATUS_SUCCESS) {
+        fprintf(stderr, "voxcpm2: ralm_step graph compute failed\n");
+        return std::vector<float>(d, 0.0f);
+    }
+
+    ggml_tensor* out = ggml_graph_get_tensor(gf, "ralm_hidden_out");
+    std::vector<float> result(d);
+    ggml_backend_tensor_get(out, result.data(), 0, (size_t)d * sizeof(float));
+    return result;
 }
 
 // Build the per-step TSLM cgraph (all 28 layers, T=1). Reuses
@@ -4866,6 +5073,7 @@ static float* vox_synthesize_internal(voxcpm2_context* ctx, const char* text, co
     // fresh prefill cache.
     const bool use_graph_tslm = vox_env_bool_default_on("VOXCPM2_USE_GRAPH");
     ctx->tslm_kv_synced = false;
+    ctx->ralm_kv_synced = false;
 
     // Python AR loop order (from voxcpm2.py _inference, lines 1060-1108):
     //   1. Build mu → CFM solve → LocEnc → enc_to_lm → collect patch
@@ -4990,16 +5198,20 @@ static float* vox_synthesize_internal(voxcpm2_context* ctx, const char* text, co
         // 3d. RALM step
         tb = bench ? vox_now_ms() : 0;
         {
-            std::vector<float> h = fusion_out;
-            for (int l = 0; l < (int)ctx->hp.ralm_n_layers; l++) {
-                ralm_layer_step(ctx, l, h.data(), cpu_be);
+            int ralm_pos = ctx->ralm_kv.n_past;
+            if (use_graph_tslm) {
+                ralm_hidden = ralm_step_graph(ctx, fusion_out.data(), ralm_pos);
+            } else {
+                std::vector<float> h = fusion_out;
+                for (int l = 0; l < (int)ctx->hp.ralm_n_layers; l++) {
+                    ralm_layer_step(ctx, l, h.data(), cpu_be);
+                }
+                std::vector<float> normed(d_ralm);
+                rms_norm_cpu(h.data(), tensor_data_f32(ctx->weights.ralm_output_norm), normed.data(), d_ralm,
+                             ctx->hp.rms_norm_eps);
+                ralm_hidden = normed;
             }
             ctx->ralm_kv.n_past++;
-
-            std::vector<float> normed(d_ralm);
-            rms_norm_cpu(h.data(), tensor_data_f32(ctx->weights.ralm_output_norm), normed.data(), d_ralm,
-                         ctx->hp.rms_norm_eps);
-            ralm_hidden = normed;
         }
         if (bench)
             sum_ralm += vox_now_ms() - tb;
@@ -5340,6 +5552,14 @@ void voxcpm2_free(struct voxcpm2_context* ctx) {
     if (ctx->tslm_kv_ctx) {
         ggml_free(ctx->tslm_kv_ctx);
         ctx->tslm_kv_ctx = nullptr;
+    }
+    if (ctx->ralm_kv_buf) {
+        ggml_backend_buffer_free(ctx->ralm_kv_buf);
+        ctx->ralm_kv_buf = nullptr;
+    }
+    if (ctx->ralm_kv_ctx) {
+        ggml_free(ctx->ralm_kv_ctx);
+        ctx->ralm_kv_ctx = nullptr;
     }
     if (ctx->vae_wn_ggml_buf) {
         ggml_backend_buffer_free(ctx->vae_wn_ggml_buf);
