@@ -1346,8 +1346,12 @@ bool ggml_metal_device_supports_op(ggml_metal_device_t dev, const struct ggml_te
         case GGML_OP_ACC:
             return ggml_is_contiguous_rows(op->src[0]) && ggml_is_contiguous_rows(op->src[1]) && op->src[0]->type == GGML_TYPE_F32;
         case GGML_OP_REPEAT:
-        case GGML_OP_CONV_TRANSPOSE_1D:
             return true;
+        case GGML_OP_CONV_TRANSPOSE_1D:
+            // Force CPU fallback. Metal hangs on M1 with conv_transpose_1d
+            // (kIOGPUCommandBufferCallbackErrorImpactingInteractivity), and
+            // the same kernel crashes CUDA/HIP at TTS scale (#155).
+            return false;
         // CrispASR patch (PR #07-metal-aa-snake-beta) — MUST RE-APPLY after ggml bump.
         case GGML_OP_AA_SNAKE_BETA:
             return op->src[0]->type == GGML_TYPE_F32 &&

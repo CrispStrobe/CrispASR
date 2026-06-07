@@ -5157,14 +5157,12 @@ static bool ggml_backend_cuda_device_supports_op(ggml_backend_dev_t dev, const g
                 return src0_type != GGML_TYPE_I32 && src0_type != GGML_TYPE_I16;
             } break;
         case GGML_OP_CONV_TRANSPOSE_1D:
-            {
-                ggml_type src0_type = op->src[0]->type;
-                ggml_type src1_type = op->src[1]->type;
-                if ((src0_type == GGML_TYPE_F32 || src0_type == GGML_TYPE_F16) && src1_type == GGML_TYPE_F32) {
-                    return true;
-                }
-                return false;
-            } break;
+            // Force CPU fallback. The CUDA kernel for conv_transpose_1d
+            // causes driver crashes (TDR) on both AMD and NVIDIA when
+            // called at TTS scale (many decoder blocks). The CPU path
+            // is fast enough and the rest of the codec still runs on GPU.
+            // See: https://github.com/CrispStrobe/CrispASR/issues/155
+            return false;
         case GGML_OP_SILU_BACK:
             return ggml_is_contiguous(op->src[0]) && op->src[0]->type == GGML_TYPE_F32;
             break;
