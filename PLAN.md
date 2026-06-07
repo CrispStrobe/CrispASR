@@ -5241,6 +5241,9 @@ This mirrors the qwen3_tts architecture (`ggml_backend_sched` +
 
 ### Status
 
-Not started. Blocked on upstream scheduler bug fixes (#10, #16) and
-access to a Vulkan/CUDA test device.
+DONE (2026-06-07, `df6cf31e`) via GPU weight mirrors — weights on CPU
+for legacy paths + GPU mirror copies for graph-build functions. No
+`ggml_backend_sched` needed (avoids per-call PCIe copy overhead).
+Graph paths run entirely on GPU; legacy paths stay on CPU.
+Memory overhead: ~2× model size on discrete GPUs.
 
