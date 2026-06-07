@@ -37,14 +37,15 @@
 #include <string>
 #include <vector>
 
-// espeak-ng phonemizer (shared with kokoro.cpp)
+// espeak-ng phonemizer (shared with kokoro.cpp).
+// Three modes:
+//   1. CRISPASR_HAVE_ESPEAK_NG — build-time linked (GPLv3 binary)
+//   2. CRISPASR_ESPEAK_DLOPEN  — dlopen at runtime (MIT-clean binary)
+//   3. neither                 — popen("espeak-ng ...") subprocess fallback
 #ifdef CRISPASR_HAVE_ESPEAK_NG
-// Match kokoro.cpp: the CMake find_path locates `espeak-ng/speak_lib.h`,
-// so the resolved include dir is the PARENT — the header must be included
-// with its `espeak-ng/` prefix. A bare <speak_lib.h> fails on Homebrew
-// macOS (header under .../include/espeak-ng/) even though it happens to
-// resolve on some Linux layouts.
 #include <espeak-ng/speak_lib.h>
+#elif defined(CRISPASR_ESPEAK_DLOPEN)
+#include "espeak_dlopen.h"
 #endif
 
 // ── JSON-lite parser for phoneme_id_map ────────────────────────────
@@ -188,70 +189,104 @@ static std::mutex g_piper_espeak_mu;
 static bool g_piper_espeak_inited = false;
 static bool g_piper_espeak_init_failed = false;
 
-static bool phonemize_espeak(const std::string& voice, const std::string& text, std::string& out) {
-#ifdef CRISPASR_HAVE_ESPEAK_NG
+// Shared popen helper (used by popen fallback and piper_tts_has_espeak).
+#ifdef _WIN32
+#define piper_popen _popen
+#define piper_pclose _pclose
+static const char* piper_redir = " 2>NUL";
+#else
+#define piper_popen popen
+#define piper_pclose pclose
+static const char* piper_redir = " 2>/dev/null";
+#endif
+
+// Try in-process phonemization via linked or dlopen'd libespeak-ng.
+// Returns true if successful, false to fall through to popen.
+static bool phonemize_espeak_lib(const std::string& voice, const std::string& text, std::string& out) {
+#if defined(CRISPASR_HAVE_ESPEAK_NG)
+    // Build-time linked (GPLv3 binary).
     std::lock_guard<std::mutex> g(g_piper_espeak_mu);
-    if (g_piper_espeak_init_failed)
-        return false;
+    if (g_piper_espeak_init_failed) return false;
     if (!g_piper_espeak_inited) {
         const char* data_path = getenv("CRISPASR_ESPEAK_DATA_PATH");
-#ifdef CRISPASR_ESPEAK_DATA_PATH
-        // Bundled build: use the compiled-in data path as fallback
-        if (!data_path) data_path = CRISPASR_ESPEAK_DATA_PATH;
-#endif
         int sr = espeak_Initialize(AUDIO_OUTPUT_SYNCHRONOUS, 0, data_path,
                                    espeakINITIALIZE_PHONEME_IPA | espeakINITIALIZE_DONT_EXIT);
         if (sr < 0) {
-            fprintf(stderr, "piper_tts: espeak_Initialize failed (rc=%d, path=%s)\n",
-                    sr, data_path ? data_path : "<default>");
+            fprintf(stderr, "piper_tts: espeak_Initialize failed (rc=%d)\n", sr);
             g_piper_espeak_init_failed = true;
             return false;
         }
         g_piper_espeak_inited = true;
     }
     espeak_SetVoiceByName(voice.c_str());
-
     out.clear();
     const char* tp = text.c_str();
-    while (tp != nullptr && *tp != '\0') {
-        const char* phon = espeak_TextToPhonemes((const void**)&tp, espeakCHARS_UTF8, 0x02 /* IPA */);
-        if (phon && *phon) {
-            if (!out.empty())
-                out += ' ';
-            out += phon;
+    while (tp && *tp) {
+        const char* phon = espeak_TextToPhonemes((const void**)&tp, espeakCHARS_UTF8, 0x02);
+        if (phon && *phon) { if (!out.empty()) out += ' '; out += phon; }
+    }
+    return !out.empty();
+#elif defined(CRISPASR_ESPEAK_DLOPEN)
+    // Runtime dlopen (MIT-clean binary).
+    std::lock_guard<std::mutex> g(g_piper_espeak_mu);
+    if (g_piper_espeak_init_failed) return false;
+
+    auto& dl = espeak_dl_get();
+    if (!g_piper_espeak_inited) {
+        if (!dl.load()) {
+            // dlopen failed — fall through to popen
+            return false;
         }
+        const char* data_path = getenv("CRISPASR_ESPEAK_DATA_PATH");
+        int sr = dl.Initialize(
+            CRISPASR_ESPEAK_AUDIO_OUTPUT_SYNCHRONOUS, 0, data_path,
+            CRISPASR_ESPEAK_INITIALIZE_PHONEME_IPA | CRISPASR_ESPEAK_INITIALIZE_DONT_EXIT);
+        if (sr < 0) {
+            fprintf(stderr, "piper_tts: espeak_Initialize failed (rc=%d)\n", sr);
+            g_piper_espeak_init_failed = true;
+            return false;
+        }
+        g_piper_espeak_inited = true;
+    }
+    if (!dl.loaded) return false;
+    dl.SetVoiceByName(voice.c_str());
+    out.clear();
+    const char* tp = text.c_str();
+    while (tp && *tp) {
+        const char* phon = dl.TextToPhonemes((const void**)&tp,
+            CRISPASR_ESPEAK_CHARS_UTF8, 0x02);
+        if (phon && *phon) { if (!out.empty()) out += ' '; out += phon; }
     }
     return !out.empty();
 #else
-    // Fallback: popen to espeak-ng
-#ifdef _WIN32
-#define piper_popen _popen
-#define piper_pclose _pclose
-    const char* redir = " 2>NUL";
-#else
-#define piper_popen popen
-#define piper_pclose pclose
-    const char* redir = " 2>/dev/null";
+    (void)voice; (void)text; (void)out;
+    return false;
 #endif
+}
+
+// popen fallback: shell out to the espeak-ng binary.
+static bool phonemize_espeak_popen(const std::string& voice, const std::string& text, std::string& out) {
     char cmd[512];
-    snprintf(cmd, sizeof(cmd), "espeak-ng -q --ipa=3 -v %s \"%s\"%s", voice.c_str(), text.c_str(), redir);
+    snprintf(cmd, sizeof(cmd), "espeak-ng -q --ipa=3 -v %s \"%s\"%s",
+             voice.c_str(), text.c_str(), piper_redir);
     FILE* fp = piper_popen(cmd, "r");
-    if (!fp)
-        return false;
+    if (!fp) return false;
     out.clear();
     char buf[256];
     while (fgets(buf, sizeof(buf), fp)) {
-        // Strip trailing newline
         size_t len = strlen(buf);
-        while (len > 0 && (buf[len - 1] == '\n' || buf[len - 1] == '\r'))
-            len--;
-        if (!out.empty() && len > 0)
-            out += ' ';
+        while (len > 0 && (buf[len - 1] == '\n' || buf[len - 1] == '\r')) len--;
+        if (!out.empty() && len > 0) out += ' ';
         out.append(buf, len);
     }
     piper_pclose(fp);
     return !out.empty();
-#endif
+}
+
+static bool phonemize_espeak(const std::string& voice, const std::string& text, std::string& out) {
+    // Try in-process first (linked or dlopen'd), then popen fallback.
+    if (phonemize_espeak_lib(voice, text, out)) return true;
+    return phonemize_espeak_popen(voice, text, out);
 }
 
 // ── Hparams ────────────────────────────────────────────────────────
@@ -2207,24 +2242,20 @@ const char* piper_tts_espeak_voice(const struct piper_tts_context* ctx) {
 bool piper_tts_has_espeak(void) {
 #ifdef CRISPASR_HAVE_ESPEAK_NG
     return true;
-#else
-    // Check if espeak-ng binary is on $PATH
-#ifdef _WIN32
-    FILE* fp = _popen("espeak-ng --version 2>NUL", "r");
-#else
-    FILE* fp = popen("espeak-ng --version 2>/dev/null", "r");
+#elif defined(CRISPASR_ESPEAK_DLOPEN)
+    // Try dlopen first
+    if (espeak_dl_get().load()) return true;
+    // Fall through to popen check
 #endif
-    if (!fp)
-        return false;
+    // Check if espeak-ng binary is on $PATH
+    char cmd[64];
+    snprintf(cmd, sizeof(cmd), "espeak-ng --version%s", piper_redir);
+    FILE* fp = piper_popen(cmd, "r");
+    if (!fp) return false;
     char buf[128];
     bool ok = fgets(buf, sizeof(buf), fp) != nullptr;
-#ifdef _WIN32
-    _pclose(fp);
-#else
-    pclose(fp);
-#endif
+    piper_pclose(fp);
     return ok;
-#endif
 }
 
 void piper_tts_set_dump_dir(struct piper_tts_context* ctx, const char* dir) {

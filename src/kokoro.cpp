@@ -58,6 +58,8 @@
 
 #ifdef CRISPASR_HAVE_ESPEAK_NG
 #include <espeak-ng/speak_lib.h>
+#elif defined(CRISPASR_ESPEAK_DLOPEN)
+#include "espeak_dlopen.h"
 #endif
 
 namespace {
@@ -2894,7 +2896,7 @@ void rstrip_inplace(std::string& s) {
     s = s.substr(b, e - b);
 }
 
-#ifdef CRISPASR_HAVE_ESPEAK_NG
+#if defined(CRISPASR_HAVE_ESPEAK_NG) || defined(CRISPASR_ESPEAK_DLOPEN)
 // libespeak-ng's state is process-global, so all access goes through one
 // mutex. Init is one-shot; voice switches are sticky.
 std::mutex g_espeak_mu;
@@ -2909,16 +2911,17 @@ bool phonemize_espeak_lib(const std::string& lang, const std::string& text, std:
     if (g_espeak_init_failed)
         return false;
     if (!g_espeak_inited) {
-        // CRISPASR_ESPEAK_DATA_PATH overrides the default search (helps in
-        // sandboxed apps and on systems where espeak-ng-data isn't in the
-        // standard location).
         const char* path = std::getenv("CRISPASR_ESPEAK_DATA_PATH");
-#ifdef CRISPASR_ESPEAK_DATA_PATH
-        // Bundled build: use the compiled-in data path as fallback
-        if (!path) path = CRISPASR_ESPEAK_DATA_PATH;
-#endif
+#if defined(CRISPASR_HAVE_ESPEAK_NG)
         int sr = espeak_Initialize(AUDIO_OUTPUT_SYNCHRONOUS, 0, path,
                                    espeakINITIALIZE_PHONEME_IPA | espeakINITIALIZE_DONT_EXIT);
+#elif defined(CRISPASR_ESPEAK_DLOPEN)
+        auto& dl = espeak_dl_get();
+        if (!dl.load()) return false;
+        int sr = dl.Initialize(
+            CRISPASR_ESPEAK_AUDIO_OUTPUT_SYNCHRONOUS, 0, path,
+            CRISPASR_ESPEAK_INITIALIZE_PHONEME_IPA | CRISPASR_ESPEAK_INITIALIZE_DONT_EXIT);
+#endif
         if (sr < 0) {
             fprintf(stderr, "kokoro: espeak_Initialize failed (data path=%s) — falling back to popen\n",
                     path ? path : "<default>");
@@ -2928,18 +2931,26 @@ bool phonemize_espeak_lib(const std::string& lang, const std::string& text, std:
         g_espeak_inited = true;
     }
     if (g_espeak_voice != lang) {
+#if defined(CRISPASR_HAVE_ESPEAK_NG)
         if (espeak_SetVoiceByName(lang.c_str()) != EE_OK) {
+#elif defined(CRISPASR_ESPEAK_DLOPEN)
+        auto& dl = espeak_dl_get();
+        if (!dl.loaded || dl.SetVoiceByName(lang.c_str()) != 0) {
+#endif
             fprintf(stderr, "kokoro: espeak_SetVoiceByName('%s') failed — falling back to popen\n", lang.c_str());
             return false;
         }
         g_espeak_voice = lang;
     }
-    // espeak_TextToPhonemes returns up to a sentence/punctuation boundary
-    // and advances textptr; loop until it returns NULL.
     out.clear();
     const void* tp = text.c_str();
     while (tp) {
+#if defined(CRISPASR_HAVE_ESPEAK_NG)
         const char* chunk = espeak_TextToPhonemes(&tp, espeakCHARS_UTF8, espeakPHONEMES_IPA);
+#elif defined(CRISPASR_ESPEAK_DLOPEN)
+        const char* chunk = espeak_dl_get().TextToPhonemes(&tp,
+            CRISPASR_ESPEAK_CHARS_UTF8, 0x02);
+#endif
         if (chunk && *chunk) {
             if (!out.empty())
                 out += ' ';
@@ -3011,7 +3022,7 @@ bool phonemize_cached(kokoro_context* ctx, const std::string& lang, const std::s
     key += text;
     if (ctx->phon_cache.lookup(key, out))
         return true;
-#ifdef CRISPASR_HAVE_ESPEAK_NG
+#if defined(CRISPASR_HAVE_ESPEAK_NG) || defined(CRISPASR_ESPEAK_DLOPEN)
     if (phonemize_espeak_lib(lang, text, out)) {
         if (is_cmn_lang(lang))
             strip_cmn_tone_numbers(out);
@@ -3039,7 +3050,7 @@ bool phonemize_cached(kokoro_context* ctx, const std::string& lang, const std::s
 extern "C" char* kokoro_phonemize_text_lib(const char* lang, const char* text) {
     if (!lang || !text)
         return nullptr;
-#ifdef CRISPASR_HAVE_ESPEAK_NG
+#if defined(CRISPASR_HAVE_ESPEAK_NG) || defined(CRISPASR_ESPEAK_DLOPEN)
     std::string out;
     if (!phonemize_espeak_lib(lang, text, out))
         return nullptr;

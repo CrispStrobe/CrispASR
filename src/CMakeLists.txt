@@ -1011,121 +1011,72 @@ if(NOT MSVC)
     target_compile_options(kokoro PRIVATE -O3)
 endif()
 
-# Optional libespeak-ng linkage. Replaces the popen("espeak-ng …") shell-out
-# with a direct espeak_TextToPhonemes() call (saves ~30–50 ms per call,
-# removes the shell-quoting surface, works in sandboxed processes).
+# Optional libespeak-ng linkage. When ON we replace the popen("espeak-ng …")
+# shell-out with a direct espeak_TextToPhonemes() call (saves ~30–50 ms per
+# call, removes the shell-quoting surface, works in sandboxed processes).
 #
-# AUTO (default): try system first (pkg-config / Homebrew); if not found,
-#   build from source via FetchContent so espeak-ng is always available.
-# ON:  same as AUTO (always builds from source if system not found).
-# OFF: disable completely — runtime falls back to popen(espeak-ng).
+# NOTE: espeak-ng is GPLv3. Static/dynamic linking at build time makes the
+# binary a GPL derivative. The default mode (AUTO) therefore uses **dlopen**
+# at runtime — the binary ships MIT-clean and loads libespeak-ng only if the
+# user has it installed (or auto-downloaded). This follows the same pattern
+# as GIMP/VLC/FFmpeg for optional GPL plugins.
+#
+# AUTO (default): try system headers for compile-time API; load the shared
+#   library at runtime via dlopen. Falls back to popen(espeak-ng) subprocess.
+# ON:  link libespeak-ng at build time (makes the binary GPLv3).
+# OFF: disable completely — popen(espeak-ng) only.
 set(CRISPASR_WITH_ESPEAK_NG "AUTO" CACHE STRING
-    "Link against libespeak-ng for in-process phonemization (AUTO/ON/OFF)")
+    "espeak-ng phonemization: AUTO=dlopen at runtime, ON=link at build time (GPLv3!), OFF=popen only")
 set_property(CACHE CRISPASR_WITH_ESPEAK_NG PROPERTY STRINGS "AUTO" "ON" "OFF")
 
 if(NOT CRISPASR_WITH_ESPEAK_NG STREQUAL "OFF")
     set(_espeak_found FALSE)
-    set(_espeak_bundled FALSE)
     set(_espeak_include "")
     set(_espeak_lib "")
 
-    # --- Try system espeak-ng first ---
-    find_package(PkgConfig QUIET)
-    if(PkgConfig_FOUND)
-        pkg_check_modules(ESPEAK_NG QUIET espeak-ng)
-        if(ESPEAK_NG_FOUND)
-            set(_espeak_found TRUE)
-            set(_espeak_include ${ESPEAK_NG_INCLUDE_DIRS})
-            set(_espeak_lib     ${ESPEAK_NG_LIBRARIES})
-            set(_espeak_libdir  ${ESPEAK_NG_LIBRARY_DIRS})
+    if(CRISPASR_WITH_ESPEAK_NG STREQUAL "ON")
+        # --- Explicit build-time linking (user accepts GPLv3) ---
+        find_package(PkgConfig QUIET)
+        if(PkgConfig_FOUND)
+            pkg_check_modules(ESPEAK_NG QUIET espeak-ng)
+            if(ESPEAK_NG_FOUND)
+                set(_espeak_found TRUE)
+                set(_espeak_include ${ESPEAK_NG_INCLUDE_DIRS})
+                set(_espeak_lib     ${ESPEAK_NG_LIBRARIES})
+                set(_espeak_libdir  ${ESPEAK_NG_LIBRARY_DIRS})
+            endif()
         endif()
-    endif()
-
-    # Homebrew/macOS fallback: pkg-config sometimes isn't on PATH but the lib is.
-    if(NOT _espeak_found)
-        find_path(ESPEAK_NG_INCLUDE_DIR espeak-ng/speak_lib.h
-                  HINTS /opt/homebrew/include /usr/local/include /usr/include)
-        find_library(ESPEAK_NG_LIBRARY NAMES espeak-ng
-                     HINTS /opt/homebrew/lib /usr/local/lib /usr/lib)
-        if(ESPEAK_NG_INCLUDE_DIR AND ESPEAK_NG_LIBRARY)
-            set(_espeak_found TRUE)
-            set(_espeak_include ${ESPEAK_NG_INCLUDE_DIR})
-            set(_espeak_lib     ${ESPEAK_NG_LIBRARY})
+        if(NOT _espeak_found)
+            find_path(ESPEAK_NG_INCLUDE_DIR espeak-ng/speak_lib.h
+                      HINTS /opt/homebrew/include /usr/local/include /usr/include)
+            find_library(ESPEAK_NG_LIBRARY NAMES espeak-ng
+                         HINTS /opt/homebrew/lib /usr/local/lib /usr/lib)
+            if(ESPEAK_NG_INCLUDE_DIR AND ESPEAK_NG_LIBRARY)
+                set(_espeak_found TRUE)
+                set(_espeak_include ${ESPEAK_NG_INCLUDE_DIR})
+                set(_espeak_lib     ${ESPEAK_NG_LIBRARY})
+            endif()
         endif()
-    endif()
-
-    # --- Bundled build from source via FetchContent ---
-    if(NOT _espeak_found)
-        message(STATUS "espeak-ng: system library not found, building from source")
-        include(FetchContent)
-        set(BUILD_SHARED_LIBS_SAVED ${BUILD_SHARED_LIBS})
-        set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
-        set(ENABLE_TESTS OFF CACHE BOOL "" FORCE)
-        set(USE_MBROLA OFF CACHE BOOL "" FORCE)
-        set(USE_LIBPCAUDIO OFF CACHE BOOL "" FORCE)
-        set(USE_ASYNC OFF CACHE BOOL "" FORCE)
-        set(USE_KLATT OFF CACHE BOOL "" FORCE)
-        set(USE_SPEECHPLAYER OFF CACHE BOOL "" FORCE)
-
-        # Cross-compiling (Android NDK, iOS toolchain): espeak-ng needs to
-        # run its own binary to compile phoneme/dict data. That can't work
-        # when the target arch differs from the host. Disable data compilation
-        # and fall back to popen(espeak-ng) or pre-compiled data at runtime.
-        if(CMAKE_CROSSCOMPILING)
-            set(COMPILE_INTONATIONS OFF CACHE BOOL "" FORCE)
-            message(STATUS "espeak-ng: cross-compiling — phoneme data compilation disabled")
-            message(STATUS "  Set CRISPASR_ESPEAK_DATA_PATH at runtime to pre-compiled data,")
-            message(STATUS "  or bundle espeak-ng-data/ in your app's assets.")
-        else()
-            set(COMPILE_INTONATIONS ON CACHE BOOL "" FORCE)
-        endif()
-
-        FetchContent_Declare(espeak-ng
-            GIT_REPOSITORY https://github.com/espeak-ng/espeak-ng.git
-            GIT_TAG        1.52.0
-            GIT_SHALLOW    TRUE
-        )
-        FetchContent_MakeAvailable(espeak-ng)
-        set(BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS_SAVED} CACHE BOOL "" FORCE)
-
-        # espeak-ng's "espeak-include" INTERFACE target exports include/compat
-        # which contains a wchar.h that shadows the system header, breaking
-        # C++ compilation. Strip that directory from the interface includes;
-        # espeak-ng's own C sources already add it via BEFORE PRIVATE.
-        get_target_property(_ei_dirs espeak-include INTERFACE_INCLUDE_DIRECTORIES)
-        list(FILTER _ei_dirs EXCLUDE REGEX "compat")
-        set_target_properties(espeak-include PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${_ei_dirs}")
-
-        set(_espeak_found TRUE)
-        set(_espeak_bundled TRUE)
-        set(_espeak_lib espeak-ng)
-        set(_espeak_include ${espeak-ng_SOURCE_DIR}/src/include)
-        if(NOT CMAKE_CROSSCOMPILING)
-            # The bundled build compiles phoneme data into
-            # ${espeak-ng_BINARY_DIR}/espeak-ng-data/. espeak_Initialize expects
-            # the PARENT directory (it appends /espeak-ng-data itself).
-            set(_espeak_data_path "${espeak-ng_BINARY_DIR}")
-            message(STATUS "espeak-ng: bundled build, data at ${_espeak_data_path}")
+        if(NOT _espeak_found)
+            message(FATAL_ERROR "CRISPASR_WITH_ESPEAK_NG=ON but libespeak-ng not found. Install espeak-ng or set AUTO/OFF.")
         endif()
     endif()
 
     if(_espeak_found)
+        # Build-time linking path (GPLv3)
         target_compile_definitions(kokoro PRIVATE CRISPASR_HAVE_ESPEAK_NG=1)
         target_include_directories(kokoro PRIVATE ${_espeak_include})
         if(_espeak_libdir)
             target_link_directories(kokoro PRIVATE ${_espeak_libdir})
         endif()
-        # PRIVATE: don't leak espeak-ng's compat/ headers (wchar.h shadow)
-        # into downstream targets like crispasr-lib.
         target_link_libraries(kokoro PRIVATE ${_espeak_lib})
-        if(_espeak_bundled AND _espeak_data_path)
-            target_compile_definitions(kokoro PRIVATE
-                "CRISPASR_ESPEAK_DATA_PATH=\"${_espeak_data_path}\"")
-            add_dependencies(kokoro data)
-        endif()
-        message(STATUS "kokoro: libespeak-ng enabled (in-process phonemizer)")
+        message(STATUS "kokoro: libespeak-ng linked (in-process phonemizer) — binary is GPLv3!")
     else()
-        message(STATUS "kokoro: libespeak-ng not found, falling back to popen(espeak-ng) at runtime")
+        # AUTO mode: dlopen at runtime (MIT-clean binary).
+        # Define CRISPASR_ESPEAK_DLOPEN so the runtime uses dlopen/dlsym
+        # instead of direct function calls.
+        target_compile_definitions(kokoro PRIVATE CRISPASR_ESPEAK_DLOPEN=1)
+        message(STATUS "kokoro: espeak-ng via dlopen at runtime (MIT-clean)")
     endif()
 endif()
 
@@ -1297,12 +1248,10 @@ if(_espeak_found)
         target_link_directories(piper-tts PRIVATE ${_espeak_libdir})
     endif()
     target_link_libraries(piper-tts PRIVATE ${_espeak_lib})
-    if(_espeak_bundled AND _espeak_data_path)
-        target_compile_definitions(piper-tts PRIVATE
-            "CRISPASR_ESPEAK_DATA_PATH=\"${_espeak_data_path}\"")
-        add_dependencies(piper-tts data)
-    endif()
-    message(STATUS "piper-tts: libespeak-ng enabled")
+    message(STATUS "piper-tts: libespeak-ng linked — binary is GPLv3!")
+elseif(NOT CRISPASR_WITH_ESPEAK_NG STREQUAL "OFF")
+    target_compile_definitions(piper-tts PRIVATE CRISPASR_ESPEAK_DLOPEN=1)
+    message(STATUS "piper-tts: espeak-ng via dlopen at runtime (MIT-clean)")
 endif()
 
 # speecht5-tts — Microsoft SpeechT5 TTS (encoder-decoder mel + HiFi-GAN)
