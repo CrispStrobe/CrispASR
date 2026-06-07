@@ -2917,10 +2917,10 @@ bool phonemize_espeak_lib(const std::string& lang, const std::string& text, std:
                                    espeakINITIALIZE_PHONEME_IPA | espeakINITIALIZE_DONT_EXIT);
 #elif defined(CRISPASR_ESPEAK_DLOPEN)
         auto& dl = espeak_dl_get();
-        if (!dl.load()) return false;
-        int sr = dl.Initialize(
-            CRISPASR_ESPEAK_AUDIO_OUTPUT_SYNCHRONOUS, 0, path,
-            CRISPASR_ESPEAK_INITIALIZE_PHONEME_IPA | CRISPASR_ESPEAK_INITIALIZE_DONT_EXIT);
+        if (!dl.load())
+            return false;
+        int sr = dl.Initialize(CRISPASR_ESPEAK_AUDIO_OUTPUT_SYNCHRONOUS, 0, path,
+                               CRISPASR_ESPEAK_INITIALIZE_PHONEME_IPA | CRISPASR_ESPEAK_INITIALIZE_DONT_EXIT);
 #endif
         if (sr < 0) {
             fprintf(stderr, "kokoro: espeak_Initialize failed (data path=%s) — falling back to popen\n",
@@ -2948,8 +2948,7 @@ bool phonemize_espeak_lib(const std::string& lang, const std::string& text, std:
 #if defined(CRISPASR_HAVE_ESPEAK_NG)
         const char* chunk = espeak_TextToPhonemes(&tp, espeakCHARS_UTF8, espeakPHONEMES_IPA);
 #elif defined(CRISPASR_ESPEAK_DLOPEN)
-        const char* chunk = espeak_dl_get().TextToPhonemes(&tp,
-            CRISPASR_ESPEAK_CHARS_UTF8, 0x02);
+        const char* chunk = espeak_dl_get().TextToPhonemes(&tp, CRISPASR_ESPEAK_CHARS_UTF8, 0x02);
 #endif
         if (chunk && *chunk) {
             if (!out.empty())

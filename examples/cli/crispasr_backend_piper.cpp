@@ -86,7 +86,10 @@ public:
             // try direct phoneme synthesis.
             bool has_ipa_chars = false;
             for (unsigned char c : text) {
-                if (c >= 0x80) { has_ipa_chars = true; break; }
+                if (c >= 0x80) {
+                    has_ipa_chars = true;
+                    break;
+                }
             }
             if (has_ipa_chars) {
                 n = piper_tts_synthesize_phonemes(ctx_, text.c_str(), &pcm, &sr);

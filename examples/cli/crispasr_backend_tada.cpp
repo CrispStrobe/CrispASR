@@ -39,7 +39,8 @@ static std::string discover_codec(const std::string& model_path) {
     };
     for (const char* name : candidates) {
         std::string p = dir + "/" + name;
-        if (file_exists(p)) return p;
+        if (file_exists(p))
+            return p;
     }
     return "";
 }
@@ -51,12 +52,9 @@ public:
 
     const char* name() const override { return "tada"; }
 
-    uint32_t capabilities() const override {
-        return CAP_TTS | CAP_AUTO_DOWNLOAD | CAP_TEMPERATURE;
-    }
+    uint32_t capabilities() const override { return CAP_TTS | CAP_AUTO_DOWNLOAD | CAP_TEMPERATURE; }
 
-    std::vector<crispasr_segment> transcribe(const float*, int, int64_t,
-                                              const whisper_params&) override {
+    std::vector<crispasr_segment> transcribe(const float*, int, int64_t, const whisper_params&) override {
         fprintf(stderr, "crispasr[tada]: transcription not supported\n");
         return {};
     }
@@ -66,7 +64,8 @@ public:
         cp.n_threads = p.n_threads;
         cp.verbosity = p.no_prints ? 0 : 1;
         cp.use_gpu = crispasr_backend_should_use_gpu(p);
-        if (p.temperature > 0.0f) cp.temperature = p.temperature;
+        if (p.temperature > 0.0f)
+            cp.temperature = p.temperature;
         cp.seed = p.seed;
 
         ctx_ = tada_init_from_file(p.model.c_str(), cp);
@@ -78,20 +77,18 @@ public:
         // Codec discovery
         std::string codec_path = p.tts_codec_model;
         if (!codec_path.empty() && codec_path != "auto" && codec_path != "default") {
-            codec_path = crispasr_resolve_model_cli(codec_path, p.backend, p.no_prints,
-                                                     p.cache_dir, p.auto_download,
-                                                     p.tts_codec_quant);
+            codec_path = crispasr_resolve_model_cli(codec_path, p.backend, p.no_prints, p.cache_dir, p.auto_download,
+                                                    p.tts_codec_quant);
         } else {
             codec_path.clear();
         }
-        if (codec_path.empty()) codec_path = discover_codec(p.model);
+        if (codec_path.empty())
+            codec_path = discover_codec(p.model);
         if (codec_path.empty()) {
             CrispasrRegistryEntry entry;
-            if (crispasr_registry_lookup(p.backend, entry, p.tts_codec_quant) &&
-                !entry.companion_filename.empty()) {
-                codec_path = crispasr_resolve_model_cli(entry.companion_filename, p.backend,
-                                                         p.no_prints, p.cache_dir,
-                                                         p.auto_download, p.tts_codec_quant);
+            if (crispasr_registry_lookup(p.backend, entry, p.tts_codec_quant) && !entry.companion_filename.empty()) {
+                codec_path = crispasr_resolve_model_cli(entry.companion_filename, p.backend, p.no_prints, p.cache_dir,
+                                                        p.auto_download, p.tts_codec_quant);
             }
         }
         if (!codec_path.empty()) {
@@ -100,30 +97,33 @@ public:
                 fprintf(stderr, "crispasr[tada]: codec = '%s'\n", codec_path.c_str());
         } else if (!p.no_prints) {
             fprintf(stderr, "crispasr[tada]: no codec found. "
-                    "Pass --codec-model PATH or place tada-codec.gguf next to model.\n");
+                            "Pass --codec-model PATH or place tada-codec.gguf next to model.\n");
         }
         // Load pre-computed voice prompt if --tts-voice-prompt or TADA_PROMPT_CACHE is set
         std::string prompt_path;
         const char* env = getenv("TADA_PROMPT_CACHE");
-        if (env) prompt_path = env;
+        if (env)
+            prompt_path = env;
         if (!prompt_path.empty()) {
             if (tada_load_prompt(ctx_, prompt_path.c_str()) != 0) {
-                fprintf(stderr, "crispasr[tada]: failed to load prompt from '%s'\n",
-                        prompt_path.c_str());
+                fprintf(stderr, "crispasr[tada]: failed to load prompt from '%s'\n", prompt_path.c_str());
             }
         }
         return true;
     }
 
-    std::vector<float> synthesize(const std::string& text,
-                                   const whisper_params& params) override {
-        if (!ctx_) return {};
-        if (params.temperature > 0.0f) tada_set_temperature(ctx_, params.temperature);
-        if (params.seed > 0) tada_set_seed(ctx_, params.seed);
+    std::vector<float> synthesize(const std::string& text, const whisper_params& params) override {
+        if (!ctx_)
+            return {};
+        if (params.temperature > 0.0f)
+            tada_set_temperature(ctx_, params.temperature);
+        if (params.seed > 0)
+            tada_set_seed(ctx_, params.seed);
 
         int n_samples = 0;
         float* pcm = tada_synthesize(ctx_, text.c_str(), &n_samples);
-        if (!pcm) return {};
+        if (!pcm)
+            return {};
 
         std::vector<float> out(pcm, pcm + n_samples);
         tada_pcm_free(pcm);
@@ -131,7 +131,10 @@ public:
     }
 
     void shutdown() override {
-        if (ctx_) { tada_free(ctx_); ctx_ = nullptr; }
+        if (ctx_) {
+            tada_free(ctx_);
+            ctx_ = nullptr;
+        }
     }
 
 private:

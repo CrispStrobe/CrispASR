@@ -410,13 +410,11 @@ CA_EXPORT void crispasr_params_set_tdrz(whisper_full_params* p, int v) {
 // setter lets Dart configure DTW token-level timestamps via a pointer to
 // the params struct without mirroring its layout.
 
-CA_EXPORT void crispasr_ctx_params_set_dtw(
-    whisper_context_params* p,
-    bool enable,
-    int aheads_preset,   // cast to whisper_alignment_heads_preset
-    int n_top
-) {
-    if (!p) return;
+CA_EXPORT void crispasr_ctx_params_set_dtw(whisper_context_params* p, bool enable,
+                                           int aheads_preset, // cast to whisper_alignment_heads_preset
+                                           int n_top) {
+    if (!p)
+        return;
     p->dtw_token_timestamps = enable;
     p->dtw_aheads_preset = static_cast<whisper_alignment_heads_preset>(aheads_preset);
     p->dtw_n_top = n_top;
@@ -6239,13 +6237,8 @@ CA_EXPORT void crispasr_pcs_free(void*) {}
 // progress via the module-level g_progress atomic (same as the session
 // path's progress callback).
 
-CA_EXPORT int crispasr_transcribe_parallel(
-    struct whisper_context* ctx,
-    struct whisper_full_params params,
-    const float* samples,
-    int n_samples,
-    int n_processors
-) {
+CA_EXPORT int crispasr_transcribe_parallel(struct whisper_context* ctx, struct whisper_full_params params,
+                                           const float* samples, int n_samples, int n_processors) {
     g_progress.store(0, std::memory_order_relaxed);
     int rc = whisper_full_parallel(ctx, params, samples, n_samples, n_processors);
     g_progress.store(-1, std::memory_order_relaxed);
@@ -6673,7 +6666,8 @@ CA_EXPORT int crispasr_session_set_tts_steps(crispasr_session* s, int steps) {
 // Applies to piper + kokoro backends. Returns 0 on success, -1 if session
 // is null, -2 if no TTS backend is active.
 CA_EXPORT int crispasr_session_set_g2p_dict(crispasr_session* s, const char* source) {
-    if (!s) return -1;
+    if (!s)
+        return -1;
     // piper_tts_set_g2p_dict is process-global (not per-context) so call
     // it unconditionally — it affects the next phonemize_builtin() call.
     piper_tts_set_g2p_dict(source);

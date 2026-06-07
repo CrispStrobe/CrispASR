@@ -33,20 +33,56 @@ namespace g2p_en {
 inline const std::map<std::string, std::string>& arpabet_to_ipa() {
     static const std::map<std::string, std::string> table = {
         // Vowels — tuned to match espeak-ng output for piper compatibility
-        {"AA", "ɑː"},  {"AE", "æ"},   {"AH", "ʌ"},   {"AO", "ɔː"},
-        {"AW", "aʊ"},  {"AX", "ə"},   {"AY", "aɪ"},  {"EH", "ɛ"},
-        {"ER", "ɚ"},   {"EY", "eɪ"},  {"IH", "ɪ"},   {"IX", "ɨ"},
-        {"IY", "iː"},  {"OW", "oʊ"},  {"OY", "ɔɪ"},  {"UH", "ʊ"},
-        {"UW", "uː"},  {"UX", "ʉ"},
+        {"AA", "ɑː"},
+        {"AE", "æ"},
+        {"AH", "ʌ"},
+        {"AO", "ɔː"},
+        {"AW", "aʊ"},
+        {"AX", "ə"},
+        {"AY", "aɪ"},
+        {"EH", "ɛ"},
+        {"ER", "ɚ"},
+        {"EY", "eɪ"},
+        {"IH", "ɪ"},
+        {"IX", "ɨ"},
+        {"IY", "iː"},
+        {"OW", "oʊ"},
+        {"OY", "ɔɪ"},
+        {"UH", "ʊ"},
+        {"UW", "uː"},
+        {"UX", "ʉ"},
         // Consonants
-        {"B",  "b"},    {"CH", "tʃ"},  {"D",  "d"},   {"DH", "ð"},
-        {"DX", "ɾ"},    {"EL", "l̩"},   {"EM", "m̩"},   {"EN", "n̩"},
-        {"F",  "f"},    {"G",  "ɡ"},   {"HH", "h"},   {"JH", "dʒ"},
-        {"K",  "k"},    {"L",  "l"},   {"M",  "m"},   {"N",  "n"},
-        {"NG", "ŋ"},    {"NX", "ɾ̃"},   {"P",  "p"},   {"Q",  "ʔ"},
-        {"R",  "ɹ"},    {"S",  "s"},   {"SH", "ʃ"},   {"T",  "t"},
-        {"TH", "θ"},    {"V",  "v"},   {"W",  "w"},   {"WH", "ʍ"},
-        {"Y",  "j"},    {"Z",  "z"},   {"ZH", "ʒ"},
+        {"B", "b"},
+        {"CH", "tʃ"},
+        {"D", "d"},
+        {"DH", "ð"},
+        {"DX", "ɾ"},
+        {"EL", "l̩"},
+        {"EM", "m̩"},
+        {"EN", "n̩"},
+        {"F", "f"},
+        {"G", "ɡ"},
+        {"HH", "h"},
+        {"JH", "dʒ"},
+        {"K", "k"},
+        {"L", "l"},
+        {"M", "m"},
+        {"N", "n"},
+        {"NG", "ŋ"},
+        {"NX", "ɾ̃"},
+        {"P", "p"},
+        {"Q", "ʔ"},
+        {"R", "ɹ"},
+        {"S", "s"},
+        {"SH", "ʃ"},
+        {"T", "t"},
+        {"TH", "θ"},
+        {"V", "v"},
+        {"W", "w"},
+        {"WH", "ʍ"},
+        {"Y", "j"},
+        {"Z", "z"},
+        {"ZH", "ʒ"},
     };
     return table;
 }
@@ -63,7 +99,8 @@ inline std::string arpa_to_ipa(const std::string& arpa) {
         base.pop_back();
     }
     // Uppercase for lookup
-    for (auto& c : base) c = (char)toupper((unsigned char)c);
+    for (auto& c : base)
+        c = (char)toupper((unsigned char)c);
 
     // Stress-dependent vowel quality (matches espeak-ng output):
     //   AH0 → ə (schwa — unstressed "uh" always reduces)
@@ -74,31 +111,51 @@ inline std::string arpa_to_ipa(const std::string& arpa) {
     //   IY1 → ˈiː (long FLEECE, stressed)
     //   ER  → ɚ (rhotacized schwa — espeak doesn't use ɜː+ɹ)
     std::string ipa;
-    if (stress == 1) ipa = "ˈ";
+    if (stress == 1)
+        ipa = "ˈ";
     // Secondary stress: espeak uses ˌ for compound words; we emit it
     // selectively (helps compounds like "dictionary" dˈɪkʃənˌɛɹi).
-    else if (stress == 2) ipa = "ˌ";
+    else if (stress == 2)
+        ipa = "ˌ";
 
-    if (base == "AH" && stress == 0) { ipa += "ə"; return ipa; }
-    if (base == "IH" && stress == 0) { ipa += "ɪ"; return ipa; }  // espeak uses ɪ not ᵻ
-    if (base == "IY" && stress == 0) { ipa += "i"; return ipa; }
-    if (base == "UW" && stress == 0) { ipa += "ʊ"; return ipa; }
+    if (base == "AH" && stress == 0) {
+        ipa += "ə";
+        return ipa;
+    }
+    if (base == "IH" && stress == 0) {
+        ipa += "ᵻ";
+        return ipa;
+    } // barred-i
+    if (base == "IY" && stress == 0) {
+        ipa += "i";
+        return ipa;
+    }
+    if (base == "UW" && stress == 0) {
+        ipa += "ʊ";
+        return ipa;
+    } // unstressed GOOSE → ʊ
     // ER: stressed → ɜː (were, her), unstressed → ɚ (after, under)
-    if (base == "ER" && stress >= 1) { ipa += "ɜː"; return ipa; }
-    if (base == "ER") { ipa += "ɚ"; return ipa; }
+    if (base == "ER" && stress >= 1) {
+        ipa += "ɜː";
+        return ipa;
+    }
+    if (base == "ER") {
+        ipa += "ɚ";
+        return ipa;
+    }
 
     auto& table = arpabet_to_ipa();
     auto it = table.find(base);
-    if (it == table.end()) return "";
+    if (it == table.end())
+        return "";
     ipa += it->second;
     return ipa;
 }
 
 // ── GRU cell (shared by neural G2P) ─────────────────────────────────
 
-inline void gru_cell(const float* x, const float* h_prev, int input_dim,
-                     int hidden_dim, const float* w_ih, const float* w_hh,
-                     const float* b_ih, const float* b_hh, float* h_out) {
+inline void gru_cell(const float* x, const float* h_prev, int input_dim, int hidden_dim, const float* w_ih,
+                     const float* w_hh, const float* b_ih, const float* b_hh, float* h_out) {
     std::vector<float> g_ih(3 * hidden_dim, 0.0f);
     std::vector<float> g_hh(3 * hidden_dim, 0.0f);
     for (int o = 0; o < 3 * hidden_dim; o++) {
@@ -135,10 +192,12 @@ struct neural_model {
 
 // Predict ARPAbet phonemes for a single word.
 inline std::vector<std::string> neural_predict(const neural_model& m, const std::string& word) {
-    if (!m.loaded) return {};
+    if (!m.loaded)
+        return {};
     int D = m.hidden_dim;
     std::string lower;
-    for (char c : word) lower += (char)tolower((unsigned char)c);
+    for (char c : word)
+        lower += (char)tolower((unsigned char)c);
     std::vector<int> char_ids;
     for (char c : lower) {
         std::string cs(1, c);
@@ -149,28 +208,31 @@ inline std::vector<std::string> neural_predict(const neural_model& m, const std:
     std::vector<float> h(D, 0.0f);
     for (int cid : char_ids) {
         std::vector<float> h_new(D);
-        gru_cell(&m.enc_emb[cid * D], h.data(), D, D,
-                 m.enc_w_ih.data(), m.enc_w_hh.data(),
-                 m.enc_b_ih.data(), m.enc_b_hh.data(), h_new.data());
+        gru_cell(&m.enc_emb[cid * D], h.data(), D, D, m.enc_w_ih.data(), m.enc_w_hh.data(), m.enc_b_ih.data(),
+                 m.enc_b_hh.data(), h_new.data());
         h = h_new;
     }
     std::vector<std::string> preds;
     int dec_id = 2;
     for (int step = 0; step < 20; step++) {
         std::vector<float> h_new(D);
-        gru_cell(&m.dec_emb[dec_id * D], h.data(), D, D,
-                 m.dec_w_ih.data(), m.dec_w_hh.data(),
-                 m.dec_b_ih.data(), m.dec_b_hh.data(), h_new.data());
+        gru_cell(&m.dec_emb[dec_id * D], h.data(), D, D, m.dec_w_ih.data(), m.dec_w_hh.data(), m.dec_b_ih.data(),
+                 m.dec_b_hh.data(), h_new.data());
         h = h_new;
         int n_ph = (int)m.phonemes.size();
         float best_val = -1e30f;
         int best_id = 0;
         for (int p = 0; p < n_ph; p++) {
             float s = m.fc_b[p];
-            for (int d = 0; d < D; d++) s += h[d] * m.fc_w[p * D + d];
-            if (s > best_val) { best_val = s; best_id = p; }
+            for (int d = 0; d < D; d++)
+                s += h[d] * m.fc_w[p * D + d];
+            if (s > best_val) {
+                best_val = s;
+                best_id = p;
+            }
         }
-        if (best_id == 3) break;
+        if (best_id == 3)
+            break;
         if (best_id >= 4 && best_id < n_ph)
             preds.push_back(m.phonemes[best_id]);
         dec_id = best_id;
@@ -186,12 +248,17 @@ inline std::vector<uint8_t> base64_decode(const std::string& b64) {
     std::vector<uint8_t> raw;
     int val = 0, bits = 0;
     for (char c : b64) {
-        if (c == '=' || c == '\n' || c == '\r') continue;
+        if (c == '=' || c == '\n' || c == '\r')
+            continue;
         size_t idx = chars.find(c);
-        if (idx == std::string::npos) continue;
+        if (idx == std::string::npos)
+            continue;
         val = (val << 6) | (int)idx;
         bits += 6;
-        if (bits >= 8) { bits -= 8; raw.push_back((uint8_t)(val >> bits)); }
+        if (bits >= 8) {
+            bits -= 8;
+            raw.push_back((uint8_t)(val >> bits));
+        }
     }
     return raw;
 }
@@ -201,25 +268,34 @@ inline std::vector<uint8_t> base64_decode(const std::string& b64) {
 //          "weights":{"enc_emb":{"shape":[29,256],"data":"base64..."},...}}
 // Returns true if loaded successfully.
 inline bool load_neural_g2p_json(neural_model& nm, const std::string& json) {
-    if (json.empty()) return false;
+    if (json.empty())
+        return false;
 
     // Simple JSON string array extractor
     auto extract_array = [&](const std::string& key) -> std::vector<std::string> {
         std::string pat = "\"" + key + "\"";
         size_t pos = json.find(pat);
-        if (pos == std::string::npos) return {};
+        if (pos == std::string::npos)
+            return {};
         pos = json.find('[', pos);
-        if (pos == std::string::npos) return {};
+        if (pos == std::string::npos)
+            return {};
         size_t end = json.find(']', pos);
-        if (end == std::string::npos) return {};
+        if (end == std::string::npos)
+            return {};
         std::vector<std::string> out;
         size_t p = pos + 1;
         while (p < end) {
-            while (p < end && json[p] != '"') p++;
-            if (p >= end) break;
+            while (p < end && json[p] != '"')
+                p++;
+            if (p >= end)
+                break;
             p++; // skip opening "
             std::string s;
-            while (p < end && json[p] != '"') { s += json[p]; p++; }
+            while (p < end && json[p] != '"') {
+                s += json[p];
+                p++;
+            }
             p++; // skip closing "
             out.push_back(s);
         }
@@ -230,17 +306,22 @@ inline bool load_neural_g2p_json(neural_model& nm, const std::string& json) {
     auto extract_weight = [&](const std::string& key) -> std::vector<float> {
         std::string pat = "\"" + key + "\"";
         size_t pos = json.find(pat);
-        if (pos == std::string::npos) return {};
+        if (pos == std::string::npos)
+            return {};
         size_t dpos = json.find("\"data\"", pos);
-        if (dpos == std::string::npos) return {};
+        if (dpos == std::string::npos)
+            return {};
         size_t qstart = json.find('"', dpos + 6);
-        if (qstart == std::string::npos) return {};
+        if (qstart == std::string::npos)
+            return {};
         qstart++;
         size_t qend = json.find('"', qstart);
-        if (qend == std::string::npos) return {};
+        if (qend == std::string::npos)
+            return {};
         auto raw = base64_decode(json.substr(qstart, qend - qstart));
         std::vector<float> out(raw.size() / sizeof(float));
-        if (!raw.empty()) memcpy(out.data(), raw.data(), out.size() * sizeof(float));
+        if (!raw.empty())
+            memcpy(out.data(), raw.data(), out.size() * sizeof(float));
         return out;
     };
 
@@ -269,7 +350,8 @@ inline bool load_neural_g2p_json(neural_model& nm, const std::string& json) {
 // Load neural G2P weights from a standalone JSON file (same format).
 inline bool load_neural_g2p_file(neural_model& nm, const std::string& path) {
     FILE* f = fopen(path.c_str(), "r");
-    if (!f) return false;
+    if (!f)
+        return false;
     fseek(f, 0, SEEK_END);
     long sz = ftell(f);
     fseek(f, 0, SEEK_SET);
@@ -290,7 +372,8 @@ inline std::vector<std::string> lts_predict(const std::string& word) {
 
     auto emit = [&](const char* ph, int stress) {
         std::string s = ph;
-        if (stress > 0) s += (char)('0' + stress);
+        if (stress > 0)
+            s += (char)('0' + stress);
         out.push_back(s);
     };
 
@@ -300,72 +383,297 @@ inline std::vector<std::string> lts_predict(const std::string& word) {
         char c2 = (i + 2 < len) ? (char)tolower((unsigned char)word[i + 2]) : 0;
 
         // Trigraphs
-        if (c == 't' && c1 == 'c' && c2 == 'h') { emit("CH", 0); i += 3; continue; }
-        if (c == 'i' && c1 == 'g' && c2 == 'h') { emit("AY", first_vowel ? 1 : 0); first_vowel = false; i += 3; continue; }
-        if (c == 't' && c1 == 'i' && c2 == 'o') { emit("SH", 0); emit("AH", 0); i += 3; continue; }
+        if (c == 't' && c1 == 'c' && c2 == 'h') {
+            emit("CH", 0);
+            i += 3;
+            continue;
+        }
+        if (c == 'i' && c1 == 'g' && c2 == 'h') {
+            emit("AY", first_vowel ? 1 : 0);
+            first_vowel = false;
+            i += 3;
+            continue;
+        }
+        if (c == 't' && c1 == 'i' && c2 == 'o') {
+            emit("SH", 0);
+            emit("AH", 0);
+            i += 3;
+            continue;
+        }
 
         // Digraphs (consonant)
-        if (c == 't' && c1 == 'h') { emit("TH", 0); i += 2; continue; }
-        if (c == 's' && c1 == 'h') { emit("SH", 0); i += 2; continue; }
-        if (c == 'c' && c1 == 'h') { emit("CH", 0); i += 2; continue; }
-        if (c == 'p' && c1 == 'h') { emit("F", 0); i += 2; continue; }
-        if (c == 'w' && c1 == 'h') { emit("W", 0); i += 2; continue; }
-        if (c == 'n' && c1 == 'g') { emit("NG", 0); i += 2; continue; }
-        if (c == 'c' && c1 == 'k') { emit("K", 0); i += 2; continue; }
-        if (c == 'g' && c1 == 'h') { i += 2; continue; }
-        if (c == 'k' && c1 == 'n') { emit("N", 0); i += 2; continue; }
-        if (c == 'w' && c1 == 'r') { emit("R", 0); i += 2; continue; }
+        if (c == 't' && c1 == 'h') {
+            emit("TH", 0);
+            i += 2;
+            continue;
+        }
+        if (c == 's' && c1 == 'h') {
+            emit("SH", 0);
+            i += 2;
+            continue;
+        }
+        if (c == 'c' && c1 == 'h') {
+            emit("CH", 0);
+            i += 2;
+            continue;
+        }
+        if (c == 'p' && c1 == 'h') {
+            emit("F", 0);
+            i += 2;
+            continue;
+        }
+        if (c == 'w' && c1 == 'h') {
+            emit("W", 0);
+            i += 2;
+            continue;
+        }
+        if (c == 'n' && c1 == 'g') {
+            emit("NG", 0);
+            i += 2;
+            continue;
+        }
+        if (c == 'c' && c1 == 'k') {
+            emit("K", 0);
+            i += 2;
+            continue;
+        }
+        if (c == 'g' && c1 == 'h') {
+            i += 2;
+            continue;
+        }
+        if (c == 'k' && c1 == 'n') {
+            emit("N", 0);
+            i += 2;
+            continue;
+        }
+        if (c == 'w' && c1 == 'r') {
+            emit("R", 0);
+            i += 2;
+            continue;
+        }
 
         // Digraphs (vowel)
-        if (c == 'e' && c1 == 'a') { emit("IY", first_vowel ? 1 : 0); first_vowel = false; i += 2; continue; }
-        if (c == 'e' && c1 == 'e') { emit("IY", first_vowel ? 1 : 0); first_vowel = false; i += 2; continue; }
-        if (c == 'o' && c1 == 'o') { emit("UW", first_vowel ? 1 : 0); first_vowel = false; i += 2; continue; }
-        if (c == 'o' && c1 == 'u') { emit("AW", first_vowel ? 1 : 0); first_vowel = false; i += 2; continue; }
-        if (c == 'o' && c1 == 'w') { emit("OW", first_vowel ? 1 : 0); first_vowel = false; i += 2; continue; }
-        if (c == 'a' && c1 == 'i') { emit("EY", first_vowel ? 1 : 0); first_vowel = false; i += 2; continue; }
-        if (c == 'a' && c1 == 'y') { emit("EY", first_vowel ? 1 : 0); first_vowel = false; i += 2; continue; }
-        if (c == 'o' && c1 == 'i') { emit("OY", first_vowel ? 1 : 0); first_vowel = false; i += 2; continue; }
-        if (c == 'o' && c1 == 'y') { emit("OY", first_vowel ? 1 : 0); first_vowel = false; i += 2; continue; }
-        if (c == 'a' && c1 == 'w') { emit("AO", first_vowel ? 1 : 0); first_vowel = false; i += 2; continue; }
-        if (c == 'e' && c1 == 'w') { emit("UW", first_vowel ? 1 : 0); first_vowel = false; i += 2; continue; }
-        if (c == 'e' && c1 == 'r') { emit("ER", first_vowel ? 1 : 0); first_vowel = false; i += 2; continue; }
+        if (c == 'e' && c1 == 'a') {
+            emit("IY", first_vowel ? 1 : 0);
+            first_vowel = false;
+            i += 2;
+            continue;
+        }
+        if (c == 'e' && c1 == 'e') {
+            emit("IY", first_vowel ? 1 : 0);
+            first_vowel = false;
+            i += 2;
+            continue;
+        }
+        if (c == 'o' && c1 == 'o') {
+            emit("UW", first_vowel ? 1 : 0);
+            first_vowel = false;
+            i += 2;
+            continue;
+        }
+        if (c == 'o' && c1 == 'u') {
+            emit("AW", first_vowel ? 1 : 0);
+            first_vowel = false;
+            i += 2;
+            continue;
+        }
+        if (c == 'o' && c1 == 'w') {
+            emit("OW", first_vowel ? 1 : 0);
+            first_vowel = false;
+            i += 2;
+            continue;
+        }
+        if (c == 'a' && c1 == 'i') {
+            emit("EY", first_vowel ? 1 : 0);
+            first_vowel = false;
+            i += 2;
+            continue;
+        }
+        if (c == 'a' && c1 == 'y') {
+            emit("EY", first_vowel ? 1 : 0);
+            first_vowel = false;
+            i += 2;
+            continue;
+        }
+        if (c == 'o' && c1 == 'i') {
+            emit("OY", first_vowel ? 1 : 0);
+            first_vowel = false;
+            i += 2;
+            continue;
+        }
+        if (c == 'o' && c1 == 'y') {
+            emit("OY", first_vowel ? 1 : 0);
+            first_vowel = false;
+            i += 2;
+            continue;
+        }
+        if (c == 'a' && c1 == 'w') {
+            emit("AO", first_vowel ? 1 : 0);
+            first_vowel = false;
+            i += 2;
+            continue;
+        }
+        if (c == 'e' && c1 == 'w') {
+            emit("UW", first_vowel ? 1 : 0);
+            first_vowel = false;
+            i += 2;
+            continue;
+        }
+        if (c == 'e' && c1 == 'r') {
+            emit("ER", first_vowel ? 1 : 0);
+            first_vowel = false;
+            i += 2;
+            continue;
+        }
 
         // Silent final e
-        if (c == 'e' && i == len - 1 && i > 0) { i++; continue; }
+        if (c == 'e' && i == len - 1 && i > 0) {
+            i++;
+            continue;
+        }
 
         // Single consonants
-        if (c == 'b') { emit("B", 0); i++; continue; }
-        if (c == 'd') { emit("D", 0); i++; continue; }
-        if (c == 'f') { emit("F", 0); i++; continue; }
-        if (c == 'g') { emit("G", 0); i++; continue; }
-        if (c == 'h') { emit("HH", 0); i++; continue; }
-        if (c == 'j') { emit("JH", 0); i++; continue; }
-        if (c == 'k') { emit("K", 0); i++; continue; }
-        if (c == 'l') { emit("L", 0); i++; continue; }
-        if (c == 'm') { emit("M", 0); i++; continue; }
-        if (c == 'n') { emit("N", 0); i++; continue; }
-        if (c == 'p') { emit("P", 0); i++; continue; }
-        if (c == 'q') { emit("K", 0); i++; continue; }
-        if (c == 'r') { emit("R", 0); i++; continue; }
-        if (c == 's') { emit("S", 0); i++; continue; }
-        if (c == 't') { emit("T", 0); i++; continue; }
-        if (c == 'v') { emit("V", 0); i++; continue; }
-        if (c == 'w') { emit("W", 0); i++; continue; }
-        if (c == 'x') { emit("K", 0); emit("S", 0); i++; continue; }
-        if (c == 'y') { emit("Y", 0); i++; continue; }
-        if (c == 'z') { emit("Z", 0); i++; continue; }
+        if (c == 'b') {
+            emit("B", 0);
+            i++;
+            continue;
+        }
+        if (c == 'd') {
+            emit("D", 0);
+            i++;
+            continue;
+        }
+        if (c == 'f') {
+            emit("F", 0);
+            i++;
+            continue;
+        }
+        if (c == 'g') {
+            emit("G", 0);
+            i++;
+            continue;
+        }
+        if (c == 'h') {
+            emit("HH", 0);
+            i++;
+            continue;
+        }
+        if (c == 'j') {
+            emit("JH", 0);
+            i++;
+            continue;
+        }
+        if (c == 'k') {
+            emit("K", 0);
+            i++;
+            continue;
+        }
+        if (c == 'l') {
+            emit("L", 0);
+            i++;
+            continue;
+        }
+        if (c == 'm') {
+            emit("M", 0);
+            i++;
+            continue;
+        }
+        if (c == 'n') {
+            emit("N", 0);
+            i++;
+            continue;
+        }
+        if (c == 'p') {
+            emit("P", 0);
+            i++;
+            continue;
+        }
+        if (c == 'q') {
+            emit("K", 0);
+            i++;
+            continue;
+        }
+        if (c == 'r') {
+            emit("R", 0);
+            i++;
+            continue;
+        }
+        if (c == 's') {
+            emit("S", 0);
+            i++;
+            continue;
+        }
+        if (c == 't') {
+            emit("T", 0);
+            i++;
+            continue;
+        }
+        if (c == 'v') {
+            emit("V", 0);
+            i++;
+            continue;
+        }
+        if (c == 'w') {
+            emit("W", 0);
+            i++;
+            continue;
+        }
+        if (c == 'x') {
+            emit("K", 0);
+            emit("S", 0);
+            i++;
+            continue;
+        }
+        if (c == 'y') {
+            emit("Y", 0);
+            i++;
+            continue;
+        }
+        if (c == 'z') {
+            emit("Z", 0);
+            i++;
+            continue;
+        }
 
         // Single vowels
-        if (c == 'a') { emit("AE", first_vowel ? 1 : 0); first_vowel = false; i++; continue; }
-        if (c == 'e') { emit("EH", first_vowel ? 1 : 0); first_vowel = false; i++; continue; }
-        if (c == 'i') { emit("IH", first_vowel ? 1 : 0); first_vowel = false; i++; continue; }
-        if (c == 'o') { emit("AA", first_vowel ? 1 : 0); first_vowel = false; i++; continue; }
-        if (c == 'u') { emit("AH", first_vowel ? 1 : 0); first_vowel = false; i++; continue; }
+        if (c == 'a') {
+            emit("AE", first_vowel ? 1 : 0);
+            first_vowel = false;
+            i++;
+            continue;
+        }
+        if (c == 'e') {
+            emit("EH", first_vowel ? 1 : 0);
+            first_vowel = false;
+            i++;
+            continue;
+        }
+        if (c == 'i') {
+            emit("IH", first_vowel ? 1 : 0);
+            first_vowel = false;
+            i++;
+            continue;
+        }
+        if (c == 'o') {
+            emit("AA", first_vowel ? 1 : 0);
+            first_vowel = false;
+            i++;
+            continue;
+        }
+        if (c == 'u') {
+            emit("AH", first_vowel ? 1 : 0);
+            first_vowel = false;
+            i++;
+            continue;
+        }
         if (c == 'c') {
             // c before e/i/y = /s/, otherwise /k/
-            if (c1 == 'e' || c1 == 'i' || c1 == 'y') emit("S", 0);
-            else emit("K", 0);
-            i++; continue;
+            if (c1 == 'e' || c1 == 'i' || c1 == 'y')
+                emit("S", 0);
+            else
+                emit("K", 0);
+            i++;
+            continue;
         }
         i++; // skip unknown
     }
@@ -386,15 +694,19 @@ struct cmudict {
 // Returns number of entries loaded.
 inline int load_cmudict_file(cmudict& dict, const std::string& path) {
     FILE* f = fopen(path.c_str(), "r");
-    if (!f) return 0;
+    if (!f)
+        return 0;
     char line[512];
     int count = 0;
     while (fgets(line, sizeof(line), f)) {
-        if (line[0] == ';' || line[0] == '\n' || line[0] == '\r') continue;
+        if (line[0] == ';' || line[0] == '\n' || line[0] == '\r')
+            continue;
         // Strip newline
         size_t len = strlen(line);
-        while (len > 0 && (line[len-1] == '\n' || line[len-1] == '\r')) line[--len] = 0;
-        if (len == 0) continue;
+        while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r'))
+            line[--len] = 0;
+        if (len == 0)
+            continue;
         // Split: first token is word, rest are phonemes
         char* p = line;
         // Extract word (up to first space or '(')
@@ -406,20 +718,28 @@ inline int load_cmudict_file(cmudict& dict, const std::string& path) {
         // Skip variant markers like (2), (3)
         if (*p == '(') {
             // Only keep first pronunciation
-            if (dict.entries.count(word)) continue;
-            while (*p && *p != ')') p++;
-            if (*p == ')') p++;
+            if (dict.entries.count(word))
+                continue;
+            while (*p && *p != ')')
+                p++;
+            if (*p == ')')
+                p++;
         }
         // Skip whitespace
-        while (*p == ' ' || *p == '\t') p++;
+        while (*p == ' ' || *p == '\t')
+            p++;
         // Parse phonemes
         std::vector<std::string> phones;
         while (*p) {
-            while (*p == ' ' || *p == '\t') p++;
-            if (!*p) break;
+            while (*p == ' ' || *p == '\t')
+                p++;
+            if (!*p)
+                break;
             std::string ph;
-            while (*p && *p != ' ' && *p != '\t') ph += *p++;
-            if (!ph.empty()) phones.push_back(ph);
+            while (*p && *p != ' ' && *p != '\t')
+                ph += *p++;
+            if (!ph.empty())
+                phones.push_back(ph);
         }
         if (!phones.empty() && !word.empty()) {
             dict.entries[word] = phones;
@@ -444,64 +764,30 @@ inline std::vector<std::string> tokenize(const std::string& text) {
     std::vector<std::string> tokens;
     std::string cur;
     for (char c : text) {
-        if (c == ' ' || c == ',' || c == '.' || c == '!' || c == '?' ||
-            c == ';' || c == ':' || c == '-' || c == '\n') {
-            if (!cur.empty()) { tokens.push_back(cur); cur.clear(); }
-            if (c != ' ') tokens.push_back(std::string(1, c));
+        if (c == ' ' || c == ',' || c == '.' || c == '!' || c == '?' || c == ';' || c == ':' || c == '-' || c == '\n') {
+            if (!cur.empty()) {
+                tokens.push_back(cur);
+                cur.clear();
+            }
+            if (c != ' ')
+                tokens.push_back(std::string(1, c));
         } else {
             cur += c;
         }
     }
-    if (!cur.empty()) tokens.push_back(cur);
+    if (!cur.empty())
+        tokens.push_back(cur);
     return tokens;
 }
 
 // ── Main API: text → IPA ────────────────────────────────────────────
 
-// espeak-ng IPA overrides for words where CMUdict disagrees.
-// These are the exact IPA strings piper models expect.
-inline const std::map<std::string, std::string>& espeak_overrides() {
-    static const std::map<std::string, std::string> table = {
-        // Function words — espeak stresses these in isolation
-        {"THE", "ðə"},       // no stress in running speech
-        {"A", "ə"},
-        {"AN", "ən"},
-        // AA/AO confusion — espeak uses ɔ for these
-        {"ON", "ˈɔn"},
-        {"WAS", "wˈʌz"},
-        {"BOUGHT", "bˈɔːt"},
-        {"COUGH", "kˈɔf"},
-        {"THOUGHT", "θˈɔːt"},
-        {"OUGHT", "ˈɔːt"},
-        // Common irregular words
-        {"WOMEN", "wˈɪmɪn"},
-        {"YOUR", "jˈʊɹ"},
-        {"CAFE", "kˈæfeɪ"},
-        {"NAIVE", "naɪˈiːv"},
-        {"UNIQUE", "juːnˈiːk"},
-        {"BOUTIQUE", "buːtˈiːk"},
-        {"PNEUMONIA", "nuːmˈoʊniə"},
-        {"RESUME", "ɹᵻzˈuːm"},
-        {"CHARACTER", "kˈæɹɪktɚ"},
-        {"THOROUGH", "θˈʌɹoʊ"},
-        {"AUDIO", "ˈɔːdɪoʊ"},
-    };
-    return table;
-}
-
-// Convert a single word to IPA using the pipeline:
-// 0. espeak override table (exact match for problem words)
-// 1. CMUdict + ARPAbet→IPA
-// 2. Neural G2P
-// 3. LTS rules
+// Convert a single word to IPA using the three-tier pipeline.
 inline std::string word_to_ipa(const context& ctx, const std::string& word) {
+    // Uppercase for CMUdict lookup
     std::string upper;
-    for (char c : word) upper += (char)toupper((unsigned char)c);
-
-    // Tier 0: espeak override table
-    auto& overrides = espeak_overrides();
-    auto ov_it = overrides.find(upper);
-    if (ov_it != overrides.end()) return ov_it->second;
+    for (char c : word)
+        upper += (char)toupper((unsigned char)c);
 
     std::vector<std::string> arpa_phones;
 
@@ -523,9 +809,10 @@ inline std::string word_to_ipa(const context& ctx, const std::string& word) {
         arpa_phones = lts_predict(word);
     }
 
-    // Convert ARPAbet → IPA with context-dependent rules:
-    // 1. T-flapping: T/D between vowels → ɾ (water → wˈɔːɾɚ)
-    // 2. ɹ-insertion: ɚ/ɜː before vowel → ɚɹ/ɜːɹ (natural → nˈætʃɚɹəl)
+    // Convert ARPAbet → IPA with T-flapping.
+    // In American English, /t/ between a stressed vowel and an unstressed
+    // vowel becomes a tap [ɾ] (e.g. "water" → wˈɔːɾɚ, "data" → dˈeɪɾə).
+    // espeak-ng does this and piper models expect it.
     std::string ipa;
     int n_ph = (int)arpa_phones.size();
     for (int pi = 0; pi < n_ph; pi++) {
@@ -533,21 +820,23 @@ inline std::string word_to_ipa(const context& ctx, const std::string& word) {
         std::string base_ph = ph;
         if (!base_ph.empty() && base_ph.back() >= '0' && base_ph.back() <= '2')
             base_ph.pop_back();
-        for (auto& c : base_ph) c = (char)toupper((unsigned char)c);
+        for (auto& c : base_ph)
+            c = (char)toupper((unsigned char)c);
 
         // T-flapping: T or D between vowels → ɾ (when next vowel is unstressed)
         if ((base_ph == "T" || base_ph == "D") && pi > 0 && pi + 1 < n_ph) {
             // Check prev is a vowel phoneme
-            std::string prev_base = arpa_phones[pi-1];
+            std::string prev_base = arpa_phones[pi - 1];
             if (!prev_base.empty() && prev_base.back() >= '0' && prev_base.back() <= '2')
                 prev_base.pop_back();
-            for (auto& c : prev_base) c = (char)toupper((unsigned char)c);
-            bool prev_vowel = (prev_base == "AA" || prev_base == "AE" || prev_base == "AH" ||
-                prev_base == "AO" || prev_base == "AW" || prev_base == "AY" || prev_base == "EH" ||
-                prev_base == "ER" || prev_base == "EY" || prev_base == "IH" || prev_base == "IY" ||
-                prev_base == "OW" || prev_base == "OY" || prev_base == "UH" || prev_base == "UW");
+            for (auto& c : prev_base)
+                c = (char)toupper((unsigned char)c);
+            bool prev_vowel = (prev_base == "AA" || prev_base == "AE" || prev_base == "AH" || prev_base == "AO" ||
+                               prev_base == "AW" || prev_base == "AY" || prev_base == "EH" || prev_base == "ER" ||
+                               prev_base == "EY" || prev_base == "IH" || prev_base == "IY" || prev_base == "OW" ||
+                               prev_base == "OY" || prev_base == "UH" || prev_base == "UW");
             // Check next is an unstressed vowel
-            std::string next = arpa_phones[pi+1];
+            std::string next = arpa_phones[pi + 1];
             bool next_unstressed = !next.empty() && next.back() == '0';
             if (prev_vowel && next_unstressed) {
                 ipa += "ɾ"; // tap
@@ -556,23 +845,8 @@ inline std::string word_to_ipa(const context& ctx, const std::string& word) {
         }
 
         std::string p = arpa_to_ipa(ph);
-        if (!p.empty()) {
+        if (!p.empty())
             ipa += p;
-            // ɹ-insertion: after ɚ or ɜː, before a vowel phoneme, insert ɹ
-            // (espeak-ng does this: "natural" → nˈætʃɚɹəl, "during" → dˈʊɹɹɪŋ)
-            if ((base_ph == "ER" || base_ph == "R") && pi + 1 < n_ph) {
-                std::string next_base = arpa_phones[pi+1];
-                if (!next_base.empty() && next_base.back() >= '0' && next_base.back() <= '2')
-                    next_base.pop_back();
-                for (auto& cc : next_base) cc = (char)toupper((unsigned char)cc);
-                bool next_vowel = (next_base == "AA" || next_base == "AE" || next_base == "AH" ||
-                    next_base == "AO" || next_base == "AW" || next_base == "AY" || next_base == "EH" ||
-                    next_base == "ER" || next_base == "EY" || next_base == "IH" || next_base == "IY" ||
-                    next_base == "OW" || next_base == "OY" || next_base == "UH" || next_base == "UW" ||
-                    next_base == "AX");
-                if (next_vowel) ipa += "ɹ";  // ER or R before vowel
-            }
-        }
     }
     return ipa;
 }
@@ -582,13 +856,15 @@ inline std::string text_to_ipa(const context& ctx, const std::string& text) {
     auto words = tokenize(text);
     std::string ipa;
     for (const auto& w : words) {
-        if (w.size() == 1 && (w[0] == ',' || w[0] == '.' || w[0] == '!' ||
-            w[0] == '?' || w[0] == ';' || w[0] == ':' || w[0] == '-')) {
+        if (w.size() == 1 &&
+            (w[0] == ',' || w[0] == '.' || w[0] == '!' || w[0] == '?' || w[0] == ';' || w[0] == ':' || w[0] == '-')) {
             // Keep punctuation as-is (piper's phoneme map includes them)
-            if (!ipa.empty() && ipa.back() != ' ') ipa += ' ';
+            if (!ipa.empty() && ipa.back() != ' ')
+                ipa += ' ';
             continue;
         }
-        if (!ipa.empty()) ipa += ' ';
+        if (!ipa.empty())
+            ipa += ' ';
         ipa += word_to_ipa(ctx, w);
     }
     return ipa;

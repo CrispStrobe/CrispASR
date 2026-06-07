@@ -208,7 +208,8 @@ static bool phonemize_espeak_lib(const std::string& voice, const std::string& te
 #if defined(CRISPASR_HAVE_ESPEAK_NG)
     // Build-time linked (GPLv3 binary).
     std::lock_guard<std::mutex> g(g_piper_espeak_mu);
-    if (g_piper_espeak_init_failed) return false;
+    if (g_piper_espeak_init_failed)
+        return false;
     if (!g_piper_espeak_inited) {
         const char* data_path = getenv("CRISPASR_ESPEAK_DATA_PATH");
         int sr = espeak_Initialize(AUDIO_OUTPUT_SYNCHRONOUS, 0, data_path,
@@ -225,13 +226,18 @@ static bool phonemize_espeak_lib(const std::string& voice, const std::string& te
     const char* tp = text.c_str();
     while (tp && *tp) {
         const char* phon = espeak_TextToPhonemes((const void**)&tp, espeakCHARS_UTF8, 0x02);
-        if (phon && *phon) { if (!out.empty()) out += ' '; out += phon; }
+        if (phon && *phon) {
+            if (!out.empty())
+                out += ' ';
+            out += phon;
+        }
     }
     return !out.empty();
 #elif defined(CRISPASR_ESPEAK_DLOPEN)
     // Runtime dlopen (MIT-clean binary).
     std::lock_guard<std::mutex> g(g_piper_espeak_mu);
-    if (g_piper_espeak_init_failed) return false;
+    if (g_piper_espeak_init_failed)
+        return false;
 
     auto& dl = espeak_dl_get();
     if (!g_piper_espeak_inited) {
@@ -240,9 +246,8 @@ static bool phonemize_espeak_lib(const std::string& voice, const std::string& te
             return false;
         }
         const char* data_path = getenv("CRISPASR_ESPEAK_DATA_PATH");
-        int sr = dl.Initialize(
-            CRISPASR_ESPEAK_AUDIO_OUTPUT_SYNCHRONOUS, 0, data_path,
-            CRISPASR_ESPEAK_INITIALIZE_PHONEME_IPA | CRISPASR_ESPEAK_INITIALIZE_DONT_EXIT);
+        int sr = dl.Initialize(CRISPASR_ESPEAK_AUDIO_OUTPUT_SYNCHRONOUS, 0, data_path,
+                               CRISPASR_ESPEAK_INITIALIZE_PHONEME_IPA | CRISPASR_ESPEAK_INITIALIZE_DONT_EXIT);
         if (sr < 0) {
             fprintf(stderr, "piper_tts: espeak_Initialize failed (rc=%d)\n", sr);
             g_piper_espeak_init_failed = true;
@@ -250,18 +255,24 @@ static bool phonemize_espeak_lib(const std::string& voice, const std::string& te
         }
         g_piper_espeak_inited = true;
     }
-    if (!dl.loaded) return false;
+    if (!dl.loaded)
+        return false;
     dl.SetVoiceByName(voice.c_str());
     out.clear();
     const char* tp = text.c_str();
     while (tp && *tp) {
-        const char* phon = dl.TextToPhonemes((const void**)&tp,
-            CRISPASR_ESPEAK_CHARS_UTF8, 0x02);
-        if (phon && *phon) { if (!out.empty()) out += ' '; out += phon; }
+        const char* phon = dl.TextToPhonemes((const void**)&tp, CRISPASR_ESPEAK_CHARS_UTF8, 0x02);
+        if (phon && *phon) {
+            if (!out.empty())
+                out += ' ';
+            out += phon;
+        }
     }
     return !out.empty();
 #else
-    (void)voice; (void)text; (void)out;
+    (void)voice;
+    (void)text;
+    (void)out;
     return false;
 #endif
 }
@@ -269,16 +280,18 @@ static bool phonemize_espeak_lib(const std::string& voice, const std::string& te
 // popen fallback: shell out to the espeak-ng binary.
 static bool phonemize_espeak_popen(const std::string& voice, const std::string& text, std::string& out) {
     char cmd[512];
-    snprintf(cmd, sizeof(cmd), "espeak-ng -q --ipa=3 -v %s \"%s\"%s",
-             voice.c_str(), text.c_str(), piper_redir);
+    snprintf(cmd, sizeof(cmd), "espeak-ng -q --ipa=3 -v %s \"%s\"%s", voice.c_str(), text.c_str(), piper_redir);
     FILE* fp = piper_popen(cmd, "r");
-    if (!fp) return false;
+    if (!fp)
+        return false;
     out.clear();
     char buf[256];
     while (fgets(buf, sizeof(buf), fp)) {
         size_t len = strlen(buf);
-        while (len > 0 && (buf[len - 1] == '\n' || buf[len - 1] == '\r')) len--;
-        if (!out.empty() && len > 0) out += ' ';
+        while (len > 0 && (buf[len - 1] == '\n' || buf[len - 1] == '\r'))
+            len--;
+        if (!out.empty() && len > 0)
+            out += ' ';
         out.append(buf, len);
     }
     piper_pclose(fp);
@@ -294,29 +307,34 @@ static bool g_g2p_tried = false;
 static std::string g_g2p_dict_source; // "olaph", "open-dict", or file path
 
 static void g2p_ensure_cmudict() {
-    if (g_g2p_ctx.dict.loaded) return;
+    if (g_g2p_ctx.dict.loaded)
+        return;
 
     // If source is a file path (not "olaph"/"open-dict"/empty), load directly
     if (!g_g2p_dict_source.empty() && g_g2p_dict_source != "olaph" && g_g2p_dict_source != "open-dict") {
-        if (g2p_en::load_cmudict_file(g_g2p_ctx.dict, g_g2p_dict_source) > 0) return;
+        if (g2p_en::load_cmudict_file(g_g2p_ctx.dict, g_g2p_dict_source) > 0)
+            return;
     }
 
     // 1. Env var
     const char* env = getenv("CRISPASR_CMUDICT_PATH");
-    if (env && *env && g2p_en::load_cmudict_file(g_g2p_ctx.dict, env) > 0) return;
+    if (env && *env && g2p_en::load_cmudict_file(g_g2p_ctx.dict, env) > 0)
+        return;
     // 2. Local cache
     const char* home = getenv("HOME");
-    if (!home) home = getenv("USERPROFILE");
+    if (!home)
+        home = getenv("USERPROFILE");
     if (home) {
         std::string base = std::string(home) + "/.cache/crispasr/";
-        if (g2p_en::load_cmudict_file(g_g2p_ctx.dict, base + "cmudict.dict") > 0) return;
+        if (g2p_en::load_cmudict_file(g_g2p_ctx.dict, base + "cmudict.dict") > 0)
+            return;
     }
     // 3. Auto-download from HuggingFace
     std::string path = crispasr_cache::ensure_cached_file(
-        "cmudict.dict",
-        "https://huggingface.co/datasets/cstr/g2p-dicts/resolve/main/cmudict.dict",
+        "cmudict.dict", "https://huggingface.co/datasets/cstr/g2p-dicts/resolve/main/cmudict.dict",
         /*quiet=*/true, "crispasr", "");
-    if (!path.empty()) g2p_en::load_cmudict_file(g_g2p_ctx.dict, path);
+    if (!path.empty())
+        g2p_en::load_cmudict_file(g_g2p_ctx.dict, path);
 }
 
 static bool phonemize_builtin(const std::string& voice, const std::string& text, std::string& out) {
@@ -339,8 +357,10 @@ static bool phonemize_builtin(const std::string& voice, const std::string& text,
 
 static bool phonemize_espeak(const std::string& voice, const std::string& text, std::string& out) {
     // Try in-process espeak first, then popen, then built-in G2P.
-    if (phonemize_espeak_lib(voice, text, out)) return true;
-    if (phonemize_espeak_popen(voice, text, out)) return true;
+    if (phonemize_espeak_lib(voice, text, out))
+        return true;
+    if (phonemize_espeak_popen(voice, text, out))
+        return true;
     return phonemize_builtin(voice, text, out);
 }
 

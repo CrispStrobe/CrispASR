@@ -56,8 +56,8 @@
 // Forward declarations — satisfies -Wmissing-declarations without
 // pulling in the full crispasr.h header (which conflicts with
 // miniaudio's implementation-mode defines in this TU).
-CA_EXPORT int  crispasr_audio_load(const char*, float**, int*, int*);
-CA_EXPORT int  crispasr_audio_load_stereo(const char*, float**, float**, int*, int*, int*);
+CA_EXPORT int crispasr_audio_load(const char*, float**, int*, int*);
+CA_EXPORT int crispasr_audio_load_stereo(const char*, float**, float**, int*, int*, int*);
 CA_EXPORT void crispasr_audio_free(float*);
 
 namespace {
@@ -153,14 +153,8 @@ CA_EXPORT int crispasr_audio_load(const char* path, float** out_pcm, int* out_sa
 ///
 /// Returns 0 on success, negative on error (same codes as
 /// `crispasr_audio_load`).
-CA_EXPORT int crispasr_audio_load_stereo(
-    const char* path,
-    float** out_left,
-    float** out_right,
-    int* out_samples,
-    int* out_sample_rate,
-    int* out_channels
-) {
+CA_EXPORT int crispasr_audio_load_stereo(const char* path, float** out_left, float** out_right, int* out_samples,
+                                         int* out_sample_rate, int* out_channels) {
     if (!path || !out_left || !out_right || !out_samples || !out_channels)
         return -1;
     *out_left = nullptr;
@@ -205,8 +199,8 @@ CA_EXPORT int crispasr_audio_load_stereo(
         }
 
         ma_uint64 frames_read = 0;
-        const ma_result rc = ma_decoder_read_pcm_frames(
-            &decoder, buf + used * (size_t)decode_channels, kChunkFrames, &frames_read);
+        const ma_result rc =
+            ma_decoder_read_pcm_frames(&decoder, buf + used * (size_t)decode_channels, kChunkFrames, &frames_read);
         used += (size_t)frames_read;
 
         if (rc == MA_AT_END || frames_read == 0)

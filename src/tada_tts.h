@@ -25,24 +25,23 @@ extern "C" {
 
 struct tada_context_params {
     int n_threads;
-    int verbosity;        // 0=silent, 1=normal, 2=verbose
+    int verbosity; // 0=silent, 1=normal, 2=verbose
     bool use_gpu;
-    float temperature;    // text sampling temperature (0 = greedy)
+    float temperature; // text sampling temperature (0 = greedy)
     uint64_t seed;
-    int max_tokens;       // max generation tokens (0 = 512 default)
+    int max_tokens; // max generation tokens (0 = 512 default)
     bool flash_attn;
     // FM solver params
-    int num_fm_steps;     // ODE steps (0 = 10 default)
-    float acoustic_cfg;   // CFG scale for acoustic features (1.0 = no CFG)
-    float noise_temp;     // noise temperature (0.0 = deterministic)
+    int num_fm_steps;   // ODE steps (0 = 10 default)
+    float acoustic_cfg; // CFG scale for acoustic features (1.0 = no CFG)
+    float noise_temp;   // noise temperature (0.0 = deterministic)
 };
 
 struct tada_context;
 
 struct tada_context_params tada_context_default_params(void);
 
-struct tada_context* tada_init_from_file(const char* path_model,
-                                          struct tada_context_params params);
+struct tada_context* tada_init_from_file(const char* path_model, struct tada_context_params params);
 
 // Set the companion codec GGUF path (required before synthesize).
 int tada_set_codec_path(struct tada_context* ctx, const char* path);
@@ -61,18 +60,15 @@ void tada_set_temperature(struct tada_context* ctx, float temp);
 // Synthesize text to 24 kHz mono PCM. Returns heap-allocated float array;
 // caller must free with tada_pcm_free(). *out_n_samples is set to the
 // number of float samples. Returns NULL on failure.
-float* tada_synthesize(struct tada_context* ctx,
-                       const char* text,
-                       int* out_n_samples);
+float* tada_synthesize(struct tada_context* ctx, const char* text, int* out_n_samples);
 
 void tada_pcm_free(float* pcm);
 void tada_free(struct tada_context* ctx);
 
 // Test: run a single FM step with given inputs, return velocity.
 // noisy_z: float[528], t_emb_sin: float[256], cond: float[3072], velocity_out: float[528]
-void tada_test_fm_step(struct tada_context* ctx,
-                       const float* noisy_z, const float* t_emb_sin,
-                       const float* cond, float* velocity_out);
+void tada_test_fm_step(struct tada_context* ctx, const float* noisy_z, const float* t_emb_sin, const float* cond,
+                       float* velocity_out);
 
 #ifdef __cplusplus
 }

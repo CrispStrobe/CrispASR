@@ -1067,11 +1067,12 @@ static ggml_cgraph* build_ralm_step_graph(voxcpm2_context* ctx, int n_past) {
         ggml_tensor* x = ggml_rms_norm(ctx0, cur, eps);
         x = ggml_mul(ctx0, x, L.attn_norm_w);
 
-        ggml_tensor* attn = core_attn::kv_self_attn(ctx0, gf, x, L.attn_q_w, L.attn_k_w, L.attn_v_w, L.attn_o_w,
-                                                    /*q_norm_w*/ nullptr, /*k_norm_w*/ nullptr, positions, /*causal_mask*/ nullptr,
-                                                    ctx->ralm_kv_k, ctx->ralm_kv_v, (int)il, n_past, kvp,
-                                                    /*qkv_w=*/nullptr, /*fixed_kv_len=*/Lk,
-                                                    /*kv_indices=*/nullptr);
+        ggml_tensor* attn =
+            core_attn::kv_self_attn(ctx0, gf, x, L.attn_q_w, L.attn_k_w, L.attn_v_w, L.attn_o_w,
+                                    /*q_norm_w*/ nullptr, /*k_norm_w*/ nullptr, positions, /*causal_mask*/ nullptr,
+                                    ctx->ralm_kv_k, ctx->ralm_kv_v, (int)il, n_past, kvp,
+                                    /*qkv_w=*/nullptr, /*fixed_kv_len=*/Lk,
+                                    /*kv_indices=*/nullptr);
         cur = ggml_add(ctx0, residual, attn);
 
         // FFN block (RMSNorm x scale -> SwiGLU -> residual).
@@ -5393,7 +5394,10 @@ struct voxcpm2_context* voxcpm2_init_from_file(const char* path_model, struct vo
             for (uint32_t i = 0; i < ctx->hp.tslm_n_layers; i++) {
                 auto& L = GW.tslm_layers[i];
                 char nb[256];
-                auto fn = [&](const char* sfx) { snprintf(nb, sizeof(nb), "tslm.blk.%u.%s", i, sfx); return nb; };
+                auto fn = [&](const char* sfx) {
+                    snprintf(nb, sizeof(nb), "tslm.blk.%u.%s", i, sfx);
+                    return nb;
+                };
                 L.attn_norm_w = gt(fn("attn_norm.weight"));
                 L.attn_q_w = gt(fn("attn_q.weight"));
                 L.attn_k_w = gt(fn("attn_k.weight"));
@@ -5409,7 +5413,10 @@ struct voxcpm2_context* voxcpm2_init_from_file(const char* path_model, struct vo
             for (uint32_t i = 0; i < ctx->hp.ralm_n_layers; i++) {
                 auto& L = GW.ralm_layers[i];
                 char nb[256];
-                auto fn = [&](const char* sfx) { snprintf(nb, sizeof(nb), "ralm.blk.%u.%s", i, sfx); return nb; };
+                auto fn = [&](const char* sfx) {
+                    snprintf(nb, sizeof(nb), "ralm.blk.%u.%s", i, sfx);
+                    return nb;
+                };
                 L.attn_norm_w = gt(fn("attn_norm.weight"));
                 L.attn_q_w = gt(fn("attn_q.weight"));
                 L.attn_k_w = gt(fn("attn_k.weight"));
@@ -5432,7 +5439,10 @@ struct voxcpm2_context* voxcpm2_init_from_file(const char* path_model, struct vo
             for (uint32_t i = 0; i < ctx->hp.locenc_n_layers; i++) {
                 auto& L = GW.locenc_layers[i];
                 char nb[256];
-                auto fn = [&](const char* sfx) { snprintf(nb, sizeof(nb), "locenc.blk.%u.%s", i, sfx); return nb; };
+                auto fn = [&](const char* sfx) {
+                    snprintf(nb, sizeof(nb), "locenc.blk.%u.%s", i, sfx);
+                    return nb;
+                };
                 L.norm1_w = gt(fn("attn_norm.weight"));
                 L.norm2_w = gt(fn("ffn_norm.weight"));
                 L.attn_q_w = gt(fn("attn_q.weight"));
@@ -5462,7 +5472,10 @@ struct voxcpm2_context* voxcpm2_init_from_file(const char* path_model, struct vo
             for (uint32_t i = 0; i < ctx->hp.locdit_n_layers; i++) {
                 auto& L = GW.locdit_layers[i];
                 char nb[256];
-                auto fn = [&](const char* sfx) { snprintf(nb, sizeof(nb), "locdit.blk.%u.%s", i, sfx); return nb; };
+                auto fn = [&](const char* sfx) {
+                    snprintf(nb, sizeof(nb), "locdit.blk.%u.%s", i, sfx);
+                    return nb;
+                };
                 L.norm1_w = gt(fn("attn_norm.weight"));
                 L.norm2_w = gt(fn("ffn_norm.weight"));
                 L.attn_q_w = gt(fn("attn_q.weight"));
@@ -5487,8 +5500,7 @@ struct voxcpm2_context* voxcpm2_init_from_file(const char* path_model, struct vo
 
             ctx->has_gpu_weights = true;
             if (params.verbosity >= 1) {
-                fprintf(stderr, "voxcpm2: created GPU weight mirror on %s (%.0f MB)\n",
-                        ggml_backend_name(ctx->backend),
+                fprintf(stderr, "voxcpm2: created GPU weight mirror on %s (%.0f MB)\n", ggml_backend_name(ctx->backend),
                         (double)ggml_backend_buffer_get_size(ctx->gpu_weight_buf) / (1024.0 * 1024.0));
             }
         }

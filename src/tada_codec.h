@@ -23,10 +23,8 @@ struct tada_codec_context* tada_codec_init_from_file(const char* path, int n_thr
 // features: (n_frames, 512) float32 row-major
 // token_masks: (n_frames,) int32 — 1 where features are non-zero
 // Returns heap-allocated PCM, caller frees with tada_codec_pcm_free().
-float* tada_codec_decode(struct tada_codec_context* ctx,
-                         const float* features, int n_frames,
-                         const int32_t* token_masks,
-                         int* out_n_samples);
+float* tada_codec_decode(struct tada_codec_context* ctx, const float* features, int n_frames,
+                         const int32_t* token_masks, int* out_n_samples);
 
 void tada_codec_pcm_free(float* pcm);
 void tada_codec_free(struct tada_codec_context* ctx);

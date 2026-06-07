@@ -135,9 +135,11 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/build-info.cmake)
 add_compile_definitions(GGML_MAX_NAME=128)
 
 # MSVC's <cmath> doesn't expose M_PI unless _USE_MATH_DEFINES is set.
-# Define globally so all targets (src, tests, examples) get it on Windows.
+# NOMINMAX prevents <windows.h> from defining min/max macros that conflict
+# with std::min/std::max (#152). Both are defined globally so all targets
+# (src, tests, examples) get them on Windows.
 if (WIN32)
-    add_compile_definitions(_USE_MATH_DEFINES)
+    add_compile_definitions(_USE_MATH_DEFINES NOMINMAX)
 endif()
 
 # Wire COHERE_MKL into ggml's BLAS backend before add_subdirectory(ggml).

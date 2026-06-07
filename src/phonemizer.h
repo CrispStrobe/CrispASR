@@ -23,9 +23,7 @@ namespace crispasr {
 // lang  = espeak-ng voice name or BCP-47 tag (e.g. "en-us")
 // out   = IPA phoneme string (e.g. "həlˈoʊ wˈɜːld")
 // Returns true on success.
-using phonemize_fn = std::function<bool(const std::string& lang,
-                                         const std::string& text,
-                                         std::string& out)>;
+using phonemize_fn = std::function<bool(const std::string& lang, const std::string& text, std::string& out)>;
 
 // Built-in backend: espeak-ng via dlopen (MIT-clean, loads GPL at runtime).
 // Returns false if libespeak-ng is not available.
@@ -57,12 +55,18 @@ bool phonemize_builtin_es(const std::string& lang, const std::string& text, std:
 // Try all available phonemizers in priority order.
 // Order: builtin_{en,de,fr,es} → espeak_dlopen → espeak_popen
 inline bool phonemize(const std::string& lang, const std::string& text, std::string& out) {
-    if (phonemize_builtin_en(lang, text, out)) return true;
-    if (phonemize_builtin_de(lang, text, out)) return true;
-    if (phonemize_builtin_fr(lang, text, out)) return true;
-    if (phonemize_builtin_es(lang, text, out)) return true;
-    if (phonemize_espeak_dlopen(lang, text, out)) return true;
-    if (phonemize_espeak_popen(lang, text, out)) return true;
+    if (phonemize_builtin_en(lang, text, out))
+        return true;
+    if (phonemize_builtin_de(lang, text, out))
+        return true;
+    if (phonemize_builtin_fr(lang, text, out))
+        return true;
+    if (phonemize_builtin_es(lang, text, out))
+        return true;
+    if (phonemize_espeak_dlopen(lang, text, out))
+        return true;
+    if (phonemize_espeak_popen(lang, text, out))
+        return true;
     return false;
 }
 
@@ -73,18 +77,21 @@ inline bool phonemize(const std::string& lang, const std::string& text, std::str
 // `valid_chars` should contain every single Unicode codepoint (as a
 // UTF-8 string per char) that the model's phoneme_id_map accepts.
 // Pass the keys of piper's phoneme_id_map JSON.
-inline std::string filter_to_inventory(const std::string& ipa,
-                                        const std::set<std::string>& valid_chars) {
+inline std::string filter_to_inventory(const std::string& ipa, const std::set<std::string>& valid_chars) {
     std::string out;
     size_t i = 0;
     while (i < ipa.size()) {
         // Decode one UTF-8 codepoint
         unsigned char c = (unsigned char)ipa[i];
         int cp_len = 1;
-        if (c >= 0xF0) cp_len = 4;
-        else if (c >= 0xE0) cp_len = 3;
-        else if (c >= 0xC0) cp_len = 2;
-        if (i + cp_len > ipa.size()) break;
+        if (c >= 0xF0)
+            cp_len = 4;
+        else if (c >= 0xE0)
+            cp_len = 3;
+        else if (c >= 0xC0)
+            cp_len = 2;
+        if (i + cp_len > ipa.size())
+            break;
         std::string ch = ipa.substr(i, cp_len);
         if (valid_chars.count(ch) || ch == " ") {
             out += ch;
