@@ -70,7 +70,7 @@ test-all-backends.py passes 18/18 transcribe + 51/54 feature tests (3 stream ski
 | **MEDIUM** | [§130 Zonos TTS](#130-zonos-tts--transformer--dac-codec-apache-20) | Medium | queued — AR transformer reuses orpheus pattern, needs DAC decoder + conditioning system |
 | **DONE** | [§131 OuteTTS](#131-outetts--llm--wavtokenizer-codec-cc-by-40) | S-M | **WORKING — speech output confirmed via ASR roundtrip.** WavTokenizer decoder validated cos≥0.999 all stages. 8 bugs fixed (GroupNorm vs LayerNorm, SiLU vs GELU, AdaNorm/pos_net order, iSTFT padding="same", magnitude clipping, newline token, text lowercasing, repetition penalty). Speaker prompt support via `--voice speaker.json`. Model registry + GGUF detection + docs wired. |
 | **DONE** | [§139 Beam search — remaining ASR backends](#139-beam-search--remaining-asr-backends-issue-136-follow-up) | Phased | **18/24 done** (was 10). All feasible backends shipped 2026-06-01/02. Only mimo-asr remains (blocked on #115); 5 backends N/A (CTC/NAR). |
-| **IN PROGRESS** | [#156 Permissive G2P phonemizer (replace espeak-ng GPL dep)](#156-permissive-g2p-phonemizer) | Phased | **Phase 1 DONE**: English CMUdict + LTS rules + ARPAbet→IPA table. German LTS rules + IPA dict. espeak-ng via dlopen (MIT binary). **Phase 2 open**: extract melotts neural G2P into shared module, piper-plus G2P study, more languages, phoneme-inventory validation per model. |
+| **MOSTLY DONE** | [#156 Permissive G2P phonemizer (replace espeak-ng GPL dep)](#156-permissive-g2p-phonemizer) | Phased | **Phase 1+2 DONE 2026-06-07**: 4 languages (EN/DE/FR/ES) with LTS rules + auto-download dicts. CMUdict (BSD). Neural G2P weight loader (base64 JSON from MeloTTS). espeak-ng dlopen (MIT binary). Phoneme inventory validated against piper's 154-char map. 192 assertions + 4 live roundtrips. **Phase 3 open**: more languages (PT/JA/ZH/KO/SV via piper-plus port), gruut CRF for DE OOV, GGUF-embedded dicts (TTS.cpp pattern). |
 | **LOW** | [#127 Coverage gaps from 2026-05-26 sweep close-out](#127-coverage-gaps-from-the-2026-05-26-overlap-save-sweep-close-out) | Small | Three loose ends: (a) omniasr-llm overlap-save status unknown — both A/B passes timed out at 20 min wallclock on M1 even at 90 s clip; needs a faster box. (b) mimo-asr local test coverage in place since `2aeaf4c4` but doesn't run in CI because the 4.2 GB Q4_K doesn't fit the runner disk budget — PLAN #115 shipped despite a working `EMPTY`-detecting test because the test wasn't run pre-tag. (c) `cohere-asr-ja-v0.1` registered + README'd (issue #123) but no row in any of `PERFORMANCE.md`'s cohere tables — JA fine-tune needs the same TedX/JSUT fixture sweep the English one had. |
 
 **Recently completed** (full write-ups in HISTORY.md): **Issue #89 reopened — parakeet streamed-encode is now the default → HISTORY 2026-05-24** (lenhone's `yt-dlp` clip reproduced 33 % coverage where the cached MP3 derivation gave 99.5 %; same TDT model collapses on the bad audio in NeMo's stock `transcribe()` too; encoder is bit-for-bit to NeMo via the diff harness; root cause is model-level TDT-single-pass instability that bidirectional attention amplifies past ~20 s; `33f9a162` makes the streamed path the default for any duration). **#81 FA per-head additive mask → HISTORY 2026-05-24** (CUDA MMA-F16 kernel patch +87 LOC behind `GGML_CUDA_CRISPASR_FA_PERHEAD_MASK` default-OFF; byte-identical JFK transcript, 0 CPU FA splits, -37 % short-clip on A1000; `tools/upstream-prs/06-cuda-fa-perhead-mask.md` + `872303bf` write-up). **CI cleanup → HISTORY 2026-05-25** (test #148 catch_discover_tests CLI-parser fix `4fda4be5`; build.yml trimmed 1610 → 1324 lines and arm64 switched to native runners `80ac00d1`; `GG_BUILD_NO_AVX512` knob added to `ci/run.sh` and enabled on `ggml-ci-x64-cpu-high-perf` `565b16af` so the AVX512 SIGILL is structurally fixed instead of `continue-on-error`-papered; `tools/upstream-prs/13-ci-no-avx512-knob.{md,patch}` for upstream submission). **#110 Global diarization timeline → HISTORY 2026-05-23** (sherpa/ecapa runs once on full audio; `CrispasrSherpaCache` mirrors pyannote pattern; segment splitting at speaker turns; 21 tests). **#98 Hotwords A+B → HISTORY 2026-05-23** (CTC-WS Aho-Corasick trie for parakeet CTC/TDT; LLM prompt injection for qwen3-asr/voxtral; `--hotwords` CLI; 17 tests). **Paraformer-zh NAR-ASR → HISTORY 2026-05-21** (220M params, single-pass NAR decode; F16/Q4_K/Q8_0 at `cstr/paraformer-zh-GGUF`; byte-identical on Chinese + English; 4 integration tests). **#86 Flash-attn → DONE** (all backends already wired via core helpers). **#90 Session beam_size all backends → HISTORY 2026-05-23** (qwen3-asr, granite, voxtral wired via `core_beam_decode::run_with_probs`; commit `0c24178e`). **#74 Feature-matrix uplift round 2 → HISTORY 2026-05-23** (74a chatterbox lang routing, 74b cap regression tests, 74c qwen3-tts base voice-cloning cap, 74d matrix regen; commit `b848152a`). **#111 TTS `--seed` parity → HISTORY 2026-05-23** (qwen3-tts, chatterbox, vibevoice realtime/base all show same-seed reproducibility and different-seed divergence on the local backup models; qwen3 env precedence fixed so CLI/request seed wins; IndexTTS stays effectively deterministic on the tested prompt/reference). **#99 funasr MLT-Nano hallucination fix → HISTORY 2026-05-21** (root cause: `use_low_frame_rate` hardcoded true in C++, but MLT-Nano's upstream config omits it (default false) — only 23/183 adaptor frames were spliced into the LLM prompt, truncating 87% of audio context; fix: converter reads the flag from config.yaml into a GGUF KV, runtime reads it at load time; also fixed `ada_n_heads` 16→8 in converter; GGUFs re-uploaded to `cstr/funasr-{nano,mlt-nano}-GGUF`). **SenseVoiceSmall → HISTORY 2026-05-20** (encoder-only multi-task ASR: transcript + LID + emotion + audio-event in one CTC pass; 50+ langs; 9.8-21.8× realtime on M1 Metal; reuses the SANM block helper from the funasr port unchanged; `cstr/sensevoice-small-GGUF` 0.47 GB F16, wired into `-m auto`). **Fun-ASR-Nano + MLT-Nano → HISTORY 2026-05-20** (full LLM-decoder runtime — 70-block SANM encoder + 2-block Transformer adaptor + Qwen3-0.6B AR decode; 77/77 PASS byte-identical on Chinese + English diffs; ~9× realtime on M1 Metal with FA-default-on; both GGUFs at `cstr/funasr-{nano,mlt-nano}-GGUF`). **#57 chatterbox native voice clone → §82** (six-commit sprint shipping all four upstream cond extractors — VoiceEncoder LSTM, S3Tokenizer V2, CAMPPlus, 24 kHz Matcha mel — plus a Kaiser-windowed sinc resampler and atomic 5-cond install in `chatterbox_set_voice_from_wav`'s `.wav` branch; `--voice ref_24k.wav` produces real cloned speech without any python). **#69 + #72 + #73 cap-honesty + KV/layer offload knobs → §79** (14-commit session shipping `CRISPASR_KV_QUANT_K/_V` + `KV_ON_CPU` on 14 backends, `N_GPU_LAYERS` on 10 backends, gemma4/mimo GPU-residency 2.2x / 22 % faster, plus cap-honesty cleanup on parakeet/glm-asr/qwen3/gemma4/omniasr). **vibevoice #69a follow-up → §79b** (mode-aware `tts_lm.layers.` / `lm.layers.` prefix predicate). #78 Chatterbox vocoder → §78. #11 WebSocket server → §76, #63 Feature matrix parity → §72, #59 binding parity → §73, gemma4 #49 + Docker #31 → §74, tests + KV Q8_0 + cleanup → §75. Earlier: #5→§63, #16→§55, #51→§56, #51b→§60, #53→§63, #54→§61, #55→§54, #56→§63, #60d→§64.
@@ -5048,12 +5048,20 @@ phonemize(lang, text) → IPA string
   │
   ├─► phonemize_builtin_en(...)     MIT, zero deps, always available
   │     ├─ CMUdict lookup (134K words, BSD) — auto-download
-  │     ├─ Neural G2P (GRU seq2seq) — weights from GGUF [stub]
+  │     ├─ Neural G2P (GRU seq2seq, 29→74, ~4 KB) — from GGUF or file
   │     └─ LTS rules (digraph/trigraph)
   │
   ├─► phonemize_builtin_de(...)     MIT rules + CC-BY-SA dict
   │     ├─ IPA dict (787K words) — auto-download from open-dict-data
   │     └─ LTS rules (sch/ch/ei/eu/au/st/sp/z/w/v/ng/ß/ä/ö/ü)
+  │
+  ├─► phonemize_builtin_fr(...)     MIT rules + CC-BY-SA dict
+  │     ├─ IPA dict — auto-download from open-dict-data
+  │     └─ LTS rules (ch/gn/nasals/oi/eau/silent finals/s-voicing)
+  │
+  ├─► phonemize_builtin_es(...)     MIT rules + CC-BY-SA dict
+  │     ├─ IPA dict — auto-download from open-dict-data
+  │     └─ LTS rules (seseo/lenition/yeísmo/ch/ll/rr/ñ)
   │
   ├─► phonemize_espeak_dlopen(...)  GPL loaded at runtime, MIT binary
   │
@@ -5066,49 +5074,47 @@ Each language module is a header-only file (`core/g2p_XX.h`) with:
 - `text_to_ipa(ctx, text)` → IPA string
 - `load_*_file(dict, path)` → dict loader
 
-### Phase 1 — DONE (2026-06-07)
+### Phase 1+2 — DONE (2026-06-07)
 
 - `core/g2p_en.h` — English: ARPAbet→IPA table (39 phonemes),
-  CMUdict loader, LTS rules, GRU cell, neural G2P struct
-- `core/g2p_de.h` — German: LTS rules (sch/ch/ei/eu/au/sp/st/z/w/ä/ö/ü),
-  IPA dict loader (open-dict-data format)
+  CMUdict loader, LTS rules, GRU cell + neural G2P struct + base64
+  JSON weight loader (MeloTTS format), base64 decoder
+- `core/g2p_de.h` — German: LTS rules (sch/ch/ei/eu/au/sp/st/z/w/ä/ö/ü/ß),
+  IPA dict loader (open-dict-data format), auto-download
+- `core/g2p_fr.h` — French: LTS rules (ch/gn/nasal vowels ɑ̃/ɔ̃/ɛ̃/œ̃,
+  oi→wa, eau→o, -tion→sjɔ̃, silent finals, mute -e/-es/-ent,
+  intervocalic s→z, accented vowels, u→y), IPA dict loader
+- `core/g2p_es.h` — Spanish: LTS rules (seseo c/z→s, b/d/g allophonic
+  lenition β/ð/ɣ, yeísmo ll→ʝ, ch→tʃ, rr→trill, ñ→ɲ, jota g/j→x,
+  initial r→trill vs intervocalic r→ɾ tap, silent h, qu→k)
 - `espeak_dlopen.h` — cross-platform dlopen loader (3 function pointers)
-- `phonemizer.h/cpp` — cascade interface with auto-loading
+- `phonemizer.h/cpp` — cascade interface with auto-loading + inventory filter
 - Wired into `piper_tts.cpp` (built-in G2P as final fallback)
-- Tests: 134 unit assertions + 4 live roundtrips
+- Phoneme inventory validated: all output chars verified against piper's
+  154-char `phoneme_id_map`. Fixed combining tie U+0361 (not in map).
+  Added `filter_to_inventory()` for runtime validation.
+- Dict auto-download: CMUdict (BSD), DE/FR/ES IPA dicts (CC-BY-SA)
+  via `crispasr_cache::ensure_cached_file()` when `CRISPASR_HAS_CACHE`
+  defined; local cache dir fallback otherwise.
+- Tests: 192 unit assertions (85 EN + 30 DE + 22 FR + 21 ES + 30 piper
+  + 4 inventory) across 35 test cases + 4 live TTS→ASR roundtrips.
 
-### Phase 2 — open
+### Phase 3 — open
 
-**a. Phoneme inventory validation** (CRITICAL for piper models)
-- Piper models are trained against espeak-ng's exact IPA token set
-- The `phoneme_id_map` in each GGUF maps specific IPA chars to model IDs
-- Our ARPAbet→IPA table must emit tokens matching the map
-- TODO: add a validation step that checks every emitted IPA char exists
-  in the model's `phoneme_id_map`, and warn/skip unmapped chars
-- Risk: different piper voices may use different espeak versions with
-  slightly different IPA inventories
-
-**b. Extract melotts neural G2P into shared module**
-- MeloTTS already has a working GRU seq2seq (29 graphemes → 74 ARPAbet)
-- Weights stored in GGUF as `melotts.g2p_en_json` (base64, ~4 KB)
-- TODO: load weights from standalone file or any GGUF, wire into
-  `g2p_en.h` neural_model struct
-
-**c. Study piper-plus G2P (ayutaz/piper-plus, MIT)**
-- Covers 8 languages: JA/EN/ZH/KO/ES/FR/PT/SV — no German yet
-- English: CMUdict + ARPAbet→IPA (same approach as ours)
-- French/Korean/Chinese/Japanese: per-language rule files
-- MIT license, pure C++, could port their per-language modules
-- URL: https://github.com/ayutaz/piper-plus (branch: dev)
-
-**d. More languages**
+**a. More languages (piper-plus port)**
+- piper-plus (ayutaz/piper-plus, MIT, branch: dev) has rule-based G2P
+  for 8 languages. Their French (1197 lines) and Spanish (620 lines)
+  are more thorough than ours (handle NFD normalization, PUA codepoint
+  mapping, syllabification, stress assignment). Consider porting their
+  implementations for higher accuracy.
+- No German in piper-plus yet — our `g2p_de.h` fills that gap.
 
 | Language | Approach | License | Status |
 |----------|----------|---------|--------|
-| English | CMUdict + neural G2P + LTS | BSD/MIT | DONE |
-| German | IPA dict + LTS rules | CC-BY-SA + MIT | DONE |
-| French | piper-plus rules or epitran | MIT | TODO |
-| Spanish | piper-plus rules or epitran | MIT | TODO |
+| English | CMUdict + neural G2P + LTS | BSD/MIT | **DONE** |
+| German | IPA dict + LTS rules | CC-BY-SA + MIT | **DONE** |
+| French | LTS rules + IPA dict | MIT + CC-BY-SA | **DONE** |
+| Spanish | LTS rules + IPA dict (seseo) | MIT + CC-BY-SA | **DONE** |
 | Portuguese | piper-plus rules | MIT | TODO |
 | Japanese | OpenJTalk or piper-plus | BSD/MIT | TODO |
 | Chinese | pypinyin port or piper-plus | MIT | TODO |
@@ -5116,29 +5122,36 @@ Each language module is a header-only file (`core/g2p_XX.h`) with:
 | Swedish | piper-plus rules | MIT | TODO |
 | Other | espeak-ng dlopen/popen | GPL runtime | available |
 
-**e. Dictionary auto-download via model registry**
-- CMUdict (English, 3.5 MB, BSD): auto-download to ~/.cache/crispasr/
-- open-dict-data/de (German, 30 MB, CC-BY-SA): auto-download
-- WikiPron per-language TSVs (CC-BY-SA): as needed
-- Could also embed dicts in GGUF like TTS.cpp does
-  (`phonemizer.rules.keys` / `phonemizer.rules.phonemes`)
+**b. GGUF-embedded dicts (TTS.cpp pattern)**
+- TTS.cpp embeds phonemizer rules in the GGUF itself via
+  `phonemizer.rules.keys` / `phonemizer.rules.phonemes` arrays
+- Could embed CMUdict / neural G2P weights per-model for zero
+  external dependencies at runtime
 
-**f. Gruut (MIT) as alternative backend**
-- rhasspy/gruut: dictionary + CRF G2P model for OOV words
-- German package: 18 MB (SQLite lexicon + CRF model)
-- CRF model uses CRFsuite (C library, BSD) — native C/C++
-- Could port as a higher-quality OOV fallback for German
+**c. Gruut CRF (MIT) for German OOV**
+- rhasspy/gruut: dictionary + CRF G2P model (18 MB, SQLite + CRFsuite)
+- Higher quality than LTS rules for unknown German words
+- CRFsuite is BSD — native C/C++ dependency
+
+**d. Neural G2P weight distribution**
+- MeloTTS v3 GGUF has `melotts.g2p_en_json` (base64, ~4 KB weights)
+- Could publish standalone `g2p_en.json` for download
+- Weight loader already implemented in `g2p_en.h`
 
 ### Files
 
 ```
 src/core/g2p_en.h          — English G2P (ARPAbet→IPA, CMUdict, LTS, neural)
 src/core/g2p_de.h          — German G2P (IPA dict, LTS rules)
+src/core/g2p_fr.h          — French G2P (LTS rules, nasal vowels, IPA dict)
+src/core/g2p_es.h          — Spanish G2P (seseo, lenition, yeísmo, IPA dict)
 src/espeak_dlopen.h        — cross-platform dlopen for libespeak-ng
-src/phonemizer.h           — cascade interface (builtin → dlopen → popen)
-src/phonemizer.cpp         — implementations + auto-loading
-tests/test-g2p-en.cpp      — 74 assertions (ARPAbet, LTS, tokenizer, IPA)
-tests/test-g2p-de.cpp      — 30 assertions (digraphs, vowels, consonants)
+src/phonemizer.h           — cascade interface + filter_to_inventory()
+src/phonemizer.cpp         — implementations + auto-loading + auto-download
+tests/test-g2p-en.cpp      — 85 assertions (ARPAbet, LTS, CMUdict, neural, inventory)
+tests/test-g2p-de.cpp      — 30 assertions (digraphs, vowels, consonants, dict)
+tests/test-g2p-fr.cpp      — 22 assertions (digraphs, nasals, vowels, silent finals)
+tests/test-g2p-es.cpp      — 21 assertions (seseo, lenition, yeísmo, jota)
 tests/test-espeak-phonemize.cpp — 30 assertions (piper synthesis)
 tests/test-piper-roundtrip.sh   — 4 live TTS→ASR tests
 ```

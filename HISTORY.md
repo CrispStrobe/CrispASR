@@ -6,6 +6,33 @@ technical deep-dives are in `LEARNINGS.md`.
 
 ---
 
+## 2026-06-07 Piper ASR roundtrip fix + permissive G2P phonemizer (§156)
+
+**Problem:** Piper TTS → Whisper ASR roundtrip produced garbage when
+espeak-ng was not installed (raw English text fed as IPA phonemes).
+
+**Root cause + fix:** Backend silently fell back to phoneme synthesis
+with plain text. Now rejects non-IPA input; clear error message.
+
+**espeak-ng GPL workaround:** espeak-ng is GPLv3 — can't statically
+link. Replaced with MIT-clean `espeak_dlopen.h` (loads at runtime)
++ built-in permissive G2P for 4 languages:
+
+| Language | Module | Approach | Dict |
+|----------|--------|----------|------|
+| English | `g2p_en.h` | CMUdict (134K, BSD) + neural GRU + LTS | auto-dl |
+| German | `g2p_de.h` | LTS (sch/ch/ei/eu/au/ä/ö/ü) + IPA dict (787K) | auto-dl |
+| French | `g2p_fr.h` | LTS (nasals/oi/eau/silent finals) + IPA dict | auto-dl |
+| Spanish | `g2p_es.h` | LTS (seseo/lenition/yeísmo/ch/ll/ñ) + IPA dict | auto-dl |
+
+Phoneme inventory validated against piper's 154-char map (zero mismatches).
+`filter_to_inventory()` added for runtime safety. Dict auto-download via
+`crispasr_cache`. Cascade: builtin_{en,de,fr,es} → espeak_dlopen → espeak_popen.
+
+**Tests:** 192 assertions, 35 test cases, 4 live TTS→ASR roundtrips.
+
+---
+
 ## 2026-06-03 → 2026-06-05 PLAN audit + OpenVoice2 voice cloning + cohere FA benchmark
 
 ### PLAN audit (2026-06-03)
