@@ -53,6 +53,13 @@
 #define CA_EXPORT extern "C" __attribute__((visibility("default")))
 #endif
 
+// Forward declarations — satisfies -Wmissing-declarations without
+// pulling in the full crispasr.h header (which conflicts with
+// miniaudio's implementation-mode defines in this TU).
+CA_EXPORT int  crispasr_audio_load(const char*, float**, int*, int*);
+CA_EXPORT int  crispasr_audio_load_stereo(const char*, float**, float**, int*, int*, int*);
+CA_EXPORT void crispasr_audio_free(float*);
+
 namespace {
 constexpr int kTargetSampleRate = 16000;
 constexpr int kTargetChannels = 1;
