@@ -47,8 +47,8 @@ public:
             return false;
         }
 
-        // Apply voice/language override
-        if (!p.language.empty()) {
+        // Apply voice/language override (skip "auto" — not a valid espeak voice)
+        if (!p.language.empty() && p.language != "auto") {
             piper_tts_set_language(ctx_, p.language.c_str());
         }
 
