@@ -3880,6 +3880,35 @@ Earlier in the chain:
 
 ---
 
+## 2026-06-07 Issue #158 — VoxCPM2 silent exit on Vulkan/CUDA (discrete GPU)
+
+User reported VoxCPM2 exiting immediately after model load with no WAV
+output and no error on AMD RX 580 (Vulkan, `fp16: 0`, Windows).
+
+**Root cause:** Legacy CPU code paths (`tensor_data_f32`, `matmul_mv_ggml`,
+`rms_norm_cpu`) dereference `tensor->data` as raw CPU pointers. On Metal
+(Apple Silicon) this works via unified memory. On discrete GPUs
+(Vulkan/CUDA) weights live in device-local VRAM — SIGSEGV on access.
+
+**Fix (3 commits):**
+
+1. `c6299251` — Initial CPU fallback via `ggml_backend_buft_is_host()`
+   check (correct but loses GPU acceleration).
+2. `df6cf31e` — **GPU weight mirrors**: load weights to CPU for legacy
+   paths, create GPU copies at init for graph-build functions. Graph
+   paths use `ctx->graph_weights()` → GPU tensors; legacy paths use
+   `ctx->weights` → CPU tensors. Zero cross-backend copies at compute
+   time. Memory: ~2× model size on discrete GPUs.
+3. `0a8e1372` — **Graph-ify RALM step** (8-layer, ~25% of AR time):
+   `build_ralm_step_graph()` + backend KV. All major AR-loop ops now on
+   GPU (TSLM 28L + RALM 8L + LocDiT 12L×10 + LocEnc 12L + VAE decode).
+   Remaining CPU-only: FSQ/stop/fusion/mu (~5-8 ms/step, negligible).
+
+All graph paths gated on `VOXCPM2_USE_GRAPH` (default on). Respects
+`--no-gpu`. Prefills (run once) remain on CPU legacy.
+
+---
+
 ## 2026-05-16 Issue #94 — chatterbox-turbo slow / failing init on macOS
 
 External report from `niksedk` (SubtitleEdit ships `crispasr` for

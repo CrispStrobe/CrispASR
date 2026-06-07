@@ -9393,3 +9393,32 @@ fix for llama.cpp, gated on PR #14 (F16 template) merging first.
 **General lesson:** Any ggml GPU kernel that iterates a full dimension
 with an if-continue can hit TDR at model scale.  Profile wasted
 iterations before enabling GPU support for new ops.
+
+---
+
+## GPU weight mirrors for mixed legacy / graph codebases
+
+**Problem:** A backend with partially graph-ified code (some ops via
+ggml cgraph, some via direct `tensor->data` dereference) works on
+unified-memory GPUs (Metal/Apple Silicon) but SIGSEGVs on discrete GPUs
+(Vulkan, CUDA) where the buffer is device-local.
+
+**Wrong approach:** `ggml_backend_sched` with weights on CPU. The
+scheduler copies ALL referenced weights from CPU to GPU on every
+`ggml_backend_sched_graph_compute()` call — no caching, no
+change-detection. For a 2.4 GB model with 252 weight tensors per TSLM
+step, that's ~200 ms of PCIe traffic per AR step — slower than CPU-only.
+
+**Correct approach:** Load weights to CPU, create GPU mirror copies at
+init (one-time `ggml_backend_tensor_copy`). Store both sets:
+`ctx->weights` (CPU, for legacy paths) and `ctx->gpu_weights` (GPU, for
+graph-build functions). Graph-build functions call `ctx->graph_weights()`
+which returns the GPU set when mirrors exist, else the CPU set. Graph
+compute runs entirely on one backend — no cross-backend copies at
+runtime. Memory cost: ~2× model size, acceptable on 8+ GB GPUs.
+
+**Corollary:** Graph-ify as many paths as possible to maximise GPU
+coverage. For voxcpm2, TSLM (28L) + RALM (8L) + LocDiT (12L) + LocEnc
+(12L) + VAE decode now all run as GPU graphs. The remaining CPU-only ops
+(FSQ, stop, fusion, ~5-8 ms/step) are too small to justify graph-build
+overhead.
