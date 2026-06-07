@@ -9349,3 +9349,47 @@ state via `ggml_scale(x[:,0], 0)`. Outputs concatenated via
 **F16 vs F32 red herring:** Weight quantization made zero difference to
 parity (both cos=1.0). When debugging divergence, always check runtime
 logic first — quantization error is almost never the cause.
+
+## conv_transpose_1d GPU TDR — naive loop is O(IL), not O(K/s0) (June 2026)
+
+**The bug:** `GGML_OP_CONV_TRANSPOSE_1D` caused GPU driver TDR crashes
+(Timeout Detection and Recovery) on AMD RX 7900 XTX and NVIDIA RTX
+5060 Ti when called at TTS codec scale (issue #155).  Root cause: every
+output thread iterated all `IL` input positions with an if-continue to
+find the ≤`⌈K/s0⌉` that actually contribute.  For IL=400, K=16, s0=8
+that is ~200× wasted iterations per thread.  With 800 K output threads
+the full dispatch was ~320 M conditional iterations — enough to exceed
+the OS GPU watchdog (~2 s on Windows, ~1 s on Linux with DRM).
+
+**The workaround that shipped first:** Force `supports_op` to `return
+false` on all GPU backends so the scheduler falls back to CPU.  This
+stops the crash and still gives ~50% TTS speedup vs all-CPU because
+only this one op moves to CPU while the rest of the codec graph stays
+on GPU.  Commit `68732b58`.
+
+**The proper fix:** Compute `i_min`, `i_max` analytically before the
+inner loop:
+```
+i_max = min(idx / s0, IL − 1)
+a = idx − K + 1;  i_min = a ≤ 0 ? 0 : (a + s0 − 1) / s0
+```
+Loop iterates `[i_min, i_max]` only — at most `⌈K/s0⌉` steps.
+Bit-identical output (same multiply order, no new FP rounding).
+Applied in commit `f8fc8b8e`.  The identical fix had already merged
+upstream for the Metal kernel in ggml#1477 (2026-05-10).
+
+**Backend-specific status after f8fc8b8e:**
+- Metal: kernel already had the fix from PR #04 (merged ggml#1477);
+  `supports_op` re-enabled.
+- CUDA: loop fix applied; `supports_op` re-enabled (F32 + F16 weights).
+- Vulkan: shader uses a different shared-memory tiling algorithm that
+  doesn't have the naive loop; `supports_op` re-enabled (F32 only).
+- SYCL/CANN: still disabled — same naive loop in `ggml-sycl/conv.cpp`,
+  no test coverage in this repo.
+
+**Upstream PR plan:** PR #17 (`tools/upstream-prs/17-*`) — CUDA loop
+fix for llama.cpp, gated on PR #14 (F16 template) merging first.
+
+**General lesson:** Any ggml GPU kernel that iterates a full dimension
+with an if-continue can hit TDR at model scale.  Profile wasted
+iterations before enabling GPU support for new ops.

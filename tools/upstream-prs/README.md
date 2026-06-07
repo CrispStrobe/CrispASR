@@ -1,6 +1,6 @@
 # Upstream PR drafts
 
-Drafts of four ggml fork patches we would suggest upstream.
+Drafts of ggml fork patches we would suggest upstream.
 Redacted descriptions in own voice.
 
 | # | Subject | Code provenance | Status |
@@ -18,6 +18,7 @@ Redacted descriptions in own voice.
 | 11 | `metal/sched : mixed CPU+GPU op pinning produces NaN at large input dimensions` | yours — same UNet repro; bug report, no patch | drafted, not yet filed |
 | 14 | `CUDA: support F16 weights in conv_transpose_1d` | yours (555deb98) — fixes issue #126 SNAC + orpheus CUDA segfault; templates kernel on src0 type, relaxes F32-only assert + supports_op | validated on RunPod A40 sm_86 2026-05-26, not yet filed |
 | 16 | `ggml-cuda : add k-quant support to GET_ROWS (Q2_K–Q6_K)` | ours (3bf9a599) — uses `ggml_get_to_fp32_cuda()` row-dequant, copies indices to host, sequential kernel launch per row; also adds Q2_K–Q6_K to `supports_op` | ✅ validated on RunPod RTX 3090 sm_86 2026-06-05 (mimo-asr Q4_K embed, 2.0× RT, correct JFK); `16-sched-small-graph-cross-backend.md` also documents the scheduler cross-backend routing bug for small graphs |
+| 17 | `CUDA: tighten input-position loop in conv_transpose_1d` | ours (f8fc8b8e) — CUDA analog of merged Metal PR #04; i_min/i_max analytical bounds eliminate O(IL) naive loop (was ~200× wasted iterations at TTS codec scale, causing TDR on AMD RX 7900 XTX + NVIDIA RTX 5060 Ti; see #155); bit-identical output | validated locally; CUDA hardware test pending; gated on PR #14 (applies on top of F16 template) — not yet filed |
 
 The `.patch` files are clean diffs; they are reference shape, not
 literal `git am` payloads — line numbers are relative to our vendored
@@ -68,7 +69,8 @@ repo). Order — easiest reviewer call first:
 2. 📤 **02** CUDA im2col → filed at ggml-org/llama.cpp as [#22944](https://github.com/ggml-org/llama.cpp/pull/22944) 2026-05-11 (after ggml#1485 was redirected)
 3. **03** CUDA cpy → file at ggml-org/llama.cpp after #22944 merges; re-derive the kernel-tiling code yourself first
 4. **14** CUDA conv_transpose_1d F16 → file at ggml-org/llama.cpp; small (2 files, ~25 LOC), pure-perf no-regression for existing F32 callers — should be an easy reviewer call
-5. **01** CPU F16 → file at ggml-org/ggml (touches ggml-cpu/ + ggml.c); design-discussion expected, consider opening an issue first
+5. **17** CUDA conv_transpose_1d loop → file at ggml-org/llama.cpp after #14 merges; 1 file, +14/−22 on top of #14; CUDA analog of ggml#1477 — reviewer will recognise the pattern
+6. **01** CPU F16 → file at ggml-org/ggml (touches ggml-cpu/ + ggml.c); design-discussion expected, consider opening an issue first
 
 Per upstream:
 
