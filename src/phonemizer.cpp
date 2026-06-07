@@ -103,20 +103,22 @@ static void ensure_de_dict_loaded() {
         int n = g2p_de::load_ipa_dict_file(g_g2p_de_ctx.dict, env);
         if (n > 0) { fprintf(stderr, "g2p: loaded German IPA dict (%d entries) from %s\n", n, env); return; }
     }
-    // Try local cache
+    // Try local cache (OLaPh MIT dict preferred, then open-dict-data CC-BY-SA)
     const char* home = std::getenv("HOME");
     if (!home) home = std::getenv("USERPROFILE");
     if (home) {
-        std::string p = std::string(home) + "/.cache/crispasr/ipa_dict_de.txt";
-        int n = g2p_de::load_ipa_dict_file(g_g2p_de_ctx.dict, p);
-        if (n > 0) { fprintf(stderr, "g2p: loaded German IPA dict (%d entries) from %s\n", n, p.c_str()); return; }
+        std::string base = std::string(home) + "/.cache/crispasr/";
+        for (const char* name : {"olaph_de.txt", "ipa_dict_de.txt"}) {
+            int n = g2p_de::load_ipa_dict_file(g_g2p_de_ctx.dict, base + name);
+            if (n > 0) { fprintf(stderr, "g2p: loaded German IPA dict (%d entries) from %s%s\n", n, base.c_str(), name); return; }
+        }
     }
 #ifdef CRISPASR_HAS_CACHE
-    // Auto-download (CC-BY-SA, requires attribution — separate data file)
+    // Auto-download OLaPh German dict (MIT, 40 MB, 1.1M entries)
     static const char* DE_DICT_URL =
-        "https://raw.githubusercontent.com/open-dict-data/ipa-dict/refs/heads/master/data/de.txt";
+        "https://raw.githubusercontent.com/iisys-hof/olaph/main/src/olaph/dictionaries/de/de.txt";
     std::string path = crispasr_cache::ensure_cached_file(
-        "ipa_dict_de.txt", DE_DICT_URL, /*quiet=*/true, "crispasr", "");
+        "olaph_de.txt", DE_DICT_URL, /*quiet=*/true, "crispasr", "");
     if (!path.empty()) {
         int n = g2p_de::load_ipa_dict_file(g_g2p_de_ctx.dict, path);
         if (n > 0) { fprintf(stderr, "g2p: loaded German IPA dict (%d entries) from %s\n", n, path.c_str()); return; }
@@ -152,15 +154,18 @@ static void ensure_fr_dict_loaded() {
     const char* home = std::getenv("HOME");
     if (!home) home = std::getenv("USERPROFILE");
     if (home) {
-        std::string p = std::string(home) + "/.cache/crispasr/ipa_dict_fr.txt";
-        int n = g2p_fr::load_ipa_dict_file(g_g2p_fr_ctx.dict, p);
-        if (n > 0) { fprintf(stderr, "g2p: loaded French IPA dict (%d entries) from %s\n", n, p.c_str()); return; }
+        std::string base = std::string(home) + "/.cache/crispasr/";
+        for (const char* name : {"olaph_fr.txt", "ipa_dict_fr.txt"}) {
+            int n = g2p_fr::load_ipa_dict_file(g_g2p_fr_ctx.dict, base + name);
+            if (n > 0) { fprintf(stderr, "g2p: loaded French IPA dict (%d entries) from %s%s\n", n, base.c_str(), name); return; }
+        }
     }
 #ifdef CRISPASR_HAS_CACHE
+    // OLaPh French dict (MIT, 6 MB)
     static const char* FR_DICT_URL =
-        "https://raw.githubusercontent.com/open-dict-data/ipa-dict/refs/heads/master/data/fr.txt";
+        "https://raw.githubusercontent.com/iisys-hof/olaph/main/src/olaph/dictionaries/fr/fr.txt";
     std::string path = crispasr_cache::ensure_cached_file(
-        "ipa_dict_fr.txt", FR_DICT_URL, /*quiet=*/true, "crispasr", "");
+        "olaph_fr.txt", FR_DICT_URL, /*quiet=*/true, "crispasr", "");
     if (!path.empty()) {
         int n = g2p_fr::load_ipa_dict_file(g_g2p_fr_ctx.dict, path);
         if (n > 0) { fprintf(stderr, "g2p: loaded French IPA dict (%d entries) from %s\n", n, path.c_str()); return; }
@@ -196,15 +201,18 @@ static void ensure_es_dict_loaded() {
     const char* home = std::getenv("HOME");
     if (!home) home = std::getenv("USERPROFILE");
     if (home) {
-        std::string p = std::string(home) + "/.cache/crispasr/ipa_dict_es.txt";
-        int n = g2p_es::load_ipa_dict_file(g_g2p_es_ctx.dict, p);
-        if (n > 0) { fprintf(stderr, "g2p: loaded Spanish IPA dict (%d entries) from %s\n", n, p.c_str()); return; }
+        std::string base = std::string(home) + "/.cache/crispasr/";
+        for (const char* name : {"olaph_es.txt", "ipa_dict_es.txt"}) {
+            int n = g2p_es::load_ipa_dict_file(g_g2p_es_ctx.dict, base + name);
+            if (n > 0) { fprintf(stderr, "g2p: loaded Spanish IPA dict (%d entries) from %s%s\n", n, base.c_str(), name); return; }
+        }
     }
 #ifdef CRISPASR_HAS_CACHE
+    // OLaPh Spanish dict (MIT, 16 MB)
     static const char* ES_DICT_URL =
-        "https://raw.githubusercontent.com/open-dict-data/ipa-dict/refs/heads/master/data/es.txt";
+        "https://raw.githubusercontent.com/iisys-hof/olaph/main/src/olaph/dictionaries/es/es.txt";
     std::string path = crispasr_cache::ensure_cached_file(
-        "ipa_dict_es.txt", ES_DICT_URL, /*quiet=*/true, "crispasr", "");
+        "olaph_es.txt", ES_DICT_URL, /*quiet=*/true, "crispasr", "");
     if (!path.empty()) {
         int n = g2p_es::load_ipa_dict_file(g_g2p_es_ctx.dict, path);
         if (n > 0) { fprintf(stderr, "g2p: loaded Spanish IPA dict (%d entries) from %s\n", n, path.c_str()); return; }
