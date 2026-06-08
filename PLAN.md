@@ -4557,6 +4557,15 @@ HF repo `cstr/f5-tts-GGUF` has the F16 GGUF only.
 
 ## 130. Zonos TTS — transformer + DAC codec (Apache 2.0)
 
+**Status (2026-06-08):** AR backbone + full conditioning + CFG + multi-
+codebook delay pattern + DAC decoder all implemented. Verified: model
+loads, conditioning + prefill + AR decode start on CPU. DAC graph-building
+wired into `zonos_tts_synthesize`. Kaggle GPU test kernel pushed.
+**Remaining:** (a) GPU end-to-end validation via Kaggle kernel,
+(b) speaker encoder (ResNet293) — currently requires pre-computed
+embeddings or falls back to random Gaussian, (c) ASR roundtrip
+verification, (d) docs/tts.md entry.
+
 Native C++ runtime for [Zyphra/Zonos](https://github.com/Zyphra/Zonos).
 Apache 2.0 licensed. Unique in the lineup for its fine-grained acoustic
 conditioning (pitch, speaking rate, emotion via speaker embeddings).
