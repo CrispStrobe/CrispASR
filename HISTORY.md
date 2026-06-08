@@ -6,6 +6,41 @@ technical deep-dives are in `LEARNINGS.md`.
 
 ---
 
+## 2026-06-08 §115/§52/§140 audit + pocket-tts GPU migration
+
+**§115 mimo-asr GPU — closed.** Deep audit revealed the item is effectively
+done: GPU is the default since `a429bb45`, Option B (prefill-graph reuse
+for decode, embed tables CPU-resident via `load_weights_split`) validated
+on RTX 3090 + Kaggle P100 at 2.4x realtime. k-quant CUDA GET_ROWS fix
+(`3bf9a599`) landed as a safety net. Option B (10 ms/step) outperforms
+the hypothetical Option C step-graph approach (31 ms/step), so Option C
+is not worth pursuing. PLAN.md updated to reflect this.
+
+**§52 Qwen3-TTS O15 CUDA test.** O15 (persistent code-predictor graph
+reuse) saves ~14-19 ms/frame but was reverted to default-OFF in `61c42bfb`
+after a `GGML_ASSERT` crash on Jetson sm_87 (CUDA, `ggml_backend_tensor_set`
+on cached graph with `ggml_set_rows`). Created Kaggle kernel
+`tools/kaggle/qwen3-tts-o15-cuda/` that tests O15=OFF vs O15=ON on a P100:
+CUDA build, TTS synthesis, ASR roundtrip, timing comparison. Pushed as
+kernel version 1 — awaiting results.
+
+**§140 TTS GPU sched — pocket-tts migrated.** Audit found speecht5/piper/
+parler-tts/outetts already had `ggml_backend_sched` wired (just `use_gpu`
+defaulting false in backend params, overridden to true by C API). Only
+pocket-tts was still on the old `gguf_init_from_file(no_alloc=false)` +
+`ggml_gallocr` + `ggml_backend_graph_compute(cpu)` pattern. Migration:
+- Switched to `core_gguf::open_metadata()` + `core_gguf::load_weights()`
+  (mmap-backed, backend buffer)
+- Added `backend` + `sched` to context, `ggml_backend_init_best()` for GPU
+- Replaced `gallocr` in `backbone_forward_step_ggml` and `mimi_decode_ggml`
+  with `sched_reset` + `sched_alloc_graph` + `sched_graph_compute`
+- Updated `pocket_tts_free` for proper resource cleanup
+- Tensor loading functions now take `TensorMap&` instead of `ggml_context*`
+
+All 6 TTS sched backends now DONE. PLAN.md §140 updated.
+
+---
+
 ## 2026-06-07 → 2026-06-08 Piper ASR roundtrip fix + permissive G2P phonemizer (§156)
 
 **Problem:** Piper TTS → Whisper ASR roundtrip produced garbage when

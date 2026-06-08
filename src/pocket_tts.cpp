@@ -43,6 +43,7 @@
 #include <cstring>
 #include <random>
 #include <string>
+#include <map>
 #include <unordered_map>
 #include <vector>
 
@@ -292,10 +293,12 @@ struct pocket_tts_context {
     pocket_tts_context_params params;
     pocket_tts_model model;
 
-    // GGML
+    // GGML backends + scheduler (§140 GPU/sched migration)
+    ggml_backend_t backend     = nullptr; // GPU or CPU (chosen at init)
     ggml_backend_t backend_cpu = nullptr;
-    ggml_backend_buffer_type_t buf_type = nullptr;
-    ggml_backend_buffer_t buf_weights = nullptr;
+    ggml_backend_sched_t sched = nullptr;
+    ggml_context*  ctx_w       = nullptr; // weight tensor metadata
+    ggml_backend_buffer_t buf_w = nullptr; // weight data buffer
 
     // KV caches
     pocket_tts_kv_cache backbone_kv;
@@ -414,24 +417,27 @@ static bool load_hparams(struct gguf_context* meta, pocket_tts_model& m) {
 
 // ── Tensor loading ─────────────────────────────────────────────────
 
-static ggml_tensor* try_get_tensor(struct ggml_context* ctx, const char* name) {
-    return ggml_get_tensor(ctx, name);
+using TensorMap = std::map<std::string, ggml_tensor*>;
+
+static ggml_tensor* try_get_tensor(const TensorMap& tensors, const char* name) {
+    auto it = tensors.find(name);
+    return (it != tensors.end()) ? it->second : nullptr;
 }
 
-static bool load_flow_lm_tensors(struct ggml_context* ctx, pocket_tts_model& m) {
+static bool load_flow_lm_tensors(const TensorMap& tensors, pocket_tts_model& m) {
     const auto& h = m.flow_lm_hp;
 
-    m.conditioner_embed = try_get_tensor(ctx, "flow_lm.conditioner.embed.weight");
-    m.input_linear = try_get_tensor(ctx, "flow_lm.input_linear.weight");
-    m.out_norm_w = try_get_tensor(ctx, "flow_lm.out_norm.weight");
-    m.out_norm_b = try_get_tensor(ctx, "flow_lm.out_norm.bias");
-    m.out_eos_w = try_get_tensor(ctx, "flow_lm.out_eos.weight");
-    m.out_eos_b = try_get_tensor(ctx, "flow_lm.out_eos.bias");
-    m.bos_emb = try_get_tensor(ctx, "flow_lm.bos_emb");
-    m.bos_before_voice = try_get_tensor(ctx, "flow_lm.bos_before_voice");
-    m.emb_std = try_get_tensor(ctx, "flow_lm.emb_std");
-    m.emb_mean = try_get_tensor(ctx, "flow_lm.emb_mean");
-    m.speaker_proj = try_get_tensor(ctx, "flow_lm.speaker_proj.weight");
+    m.conditioner_embed = try_get_tensor(tensors,"flow_lm.conditioner.embed.weight");
+    m.input_linear = try_get_tensor(tensors,"flow_lm.input_linear.weight");
+    m.out_norm_w = try_get_tensor(tensors,"flow_lm.out_norm.weight");
+    m.out_norm_b = try_get_tensor(tensors,"flow_lm.out_norm.bias");
+    m.out_eos_w = try_get_tensor(tensors,"flow_lm.out_eos.weight");
+    m.out_eos_b = try_get_tensor(tensors,"flow_lm.out_eos.bias");
+    m.bos_emb = try_get_tensor(tensors,"flow_lm.bos_emb");
+    m.bos_before_voice = try_get_tensor(tensors,"flow_lm.bos_before_voice");
+    m.emb_std = try_get_tensor(tensors,"flow_lm.emb_std");
+    m.emb_mean = try_get_tensor(tensors,"flow_lm.emb_mean");
+    m.speaker_proj = try_get_tensor(tensors,"flow_lm.speaker_proj.weight");
 
     // Backbone transformer layers
     m.backbone_layers.resize(h.num_layers);
@@ -440,47 +446,47 @@ static bool load_flow_lm_tensors(struct ggml_context* ctx, pocket_tts_model& m) 
         char buf[256];
 
         snprintf(buf, sizeof(buf), "flow_lm.transformer.%u.norm1.weight", i);
-        L.attn_norm_w = try_get_tensor(ctx, buf);
+        L.attn_norm_w = try_get_tensor(tensors,buf);
         snprintf(buf, sizeof(buf), "flow_lm.transformer.%u.norm1.bias", i);
-        L.attn_norm_b = try_get_tensor(ctx, buf);
+        L.attn_norm_b = try_get_tensor(tensors,buf);
         snprintf(buf, sizeof(buf), "flow_lm.transformer.%u.self_attn.in_proj.weight", i);
-        L.attn_in_proj = try_get_tensor(ctx, buf);
+        L.attn_in_proj = try_get_tensor(tensors,buf);
         snprintf(buf, sizeof(buf), "flow_lm.transformer.%u.self_attn.out_proj.weight", i);
-        L.attn_out_proj = try_get_tensor(ctx, buf);
+        L.attn_out_proj = try_get_tensor(tensors,buf);
 
         snprintf(buf, sizeof(buf), "flow_lm.transformer.%u.norm2.weight", i);
-        L.ffn_norm_w = try_get_tensor(ctx, buf);
+        L.ffn_norm_w = try_get_tensor(tensors,buf);
         snprintf(buf, sizeof(buf), "flow_lm.transformer.%u.norm2.bias", i);
-        L.ffn_norm_b = try_get_tensor(ctx, buf);
+        L.ffn_norm_b = try_get_tensor(tensors,buf);
         snprintf(buf, sizeof(buf), "flow_lm.transformer.%u.linear1.weight", i);
-        L.ffn_linear1 = try_get_tensor(ctx, buf);
+        L.ffn_linear1 = try_get_tensor(tensors,buf);
         snprintf(buf, sizeof(buf), "flow_lm.transformer.%u.linear2.weight", i);
-        L.ffn_linear2 = try_get_tensor(ctx, buf);
+        L.ffn_linear2 = try_get_tensor(tensors,buf);
     }
 
     // Flow network (consistency head)
     auto& fn = m.flow_net;
-    fn.input_proj = try_get_tensor(ctx, "flow_lm.flow_net.input_proj.weight");
-    fn.input_proj_b = try_get_tensor(ctx, "flow_lm.flow_net.input_proj.bias");
-    fn.cond_embed = try_get_tensor(ctx, "flow_lm.flow_net.cond_embed.weight");
-    fn.cond_embed_b = try_get_tensor(ctx, "flow_lm.flow_net.cond_embed.bias");
+    fn.input_proj = try_get_tensor(tensors,"flow_lm.flow_net.input_proj.weight");
+    fn.input_proj_b = try_get_tensor(tensors,"flow_lm.flow_net.input_proj.bias");
+    fn.cond_embed = try_get_tensor(tensors,"flow_lm.flow_net.cond_embed.weight");
+    fn.cond_embed_b = try_get_tensor(tensors,"flow_lm.flow_net.cond_embed.bias");
 
     fn.time_embeds.resize(m.flow_head_hp.num_time_conds);
     for (uint32_t t = 0; t < m.flow_head_hp.num_time_conds; t++) {
         auto& te = fn.time_embeds[t];
         char buf[256];
         snprintf(buf, sizeof(buf), "flow_lm.flow_net.time_embed.%u.mlp.0.weight", t);
-        te.linear1_w = try_get_tensor(ctx, buf);
+        te.linear1_w = try_get_tensor(tensors,buf);
         snprintf(buf, sizeof(buf), "flow_lm.flow_net.time_embed.%u.mlp.0.bias", t);
-        te.linear1_b = try_get_tensor(ctx, buf);
+        te.linear1_b = try_get_tensor(tensors,buf);
         snprintf(buf, sizeof(buf), "flow_lm.flow_net.time_embed.%u.mlp.2.weight", t);
-        te.linear2_w = try_get_tensor(ctx, buf);
+        te.linear2_w = try_get_tensor(tensors,buf);
         snprintf(buf, sizeof(buf), "flow_lm.flow_net.time_embed.%u.mlp.2.bias", t);
-        te.linear2_b = try_get_tensor(ctx, buf);
+        te.linear2_b = try_get_tensor(tensors,buf);
         snprintf(buf, sizeof(buf), "flow_lm.flow_net.time_embed.%u.mlp.3.alpha", t);
-        te.rms_alpha = try_get_tensor(ctx, buf);
+        te.rms_alpha = try_get_tensor(tensors,buf);
         snprintf(buf, sizeof(buf), "flow_lm.flow_net.time_embed.%u.freqs", t);
-        te.freqs = try_get_tensor(ctx, buf);
+        te.freqs = try_get_tensor(tensors,buf);
     }
 
     fn.res_blocks.resize(m.flow_head_hp.flow_depth);
@@ -488,80 +494,80 @@ static bool load_flow_lm_tensors(struct ggml_context* ctx, pocket_tts_model& m) 
         auto& rb = fn.res_blocks[i];
         char buf[256];
         snprintf(buf, sizeof(buf), "flow_lm.flow_net.res_blocks.%u.in_ln.weight", i);
-        rb.ln_w = try_get_tensor(ctx, buf);
+        rb.ln_w = try_get_tensor(tensors,buf);
         snprintf(buf, sizeof(buf), "flow_lm.flow_net.res_blocks.%u.in_ln.bias", i);
-        rb.ln_b = try_get_tensor(ctx, buf);
+        rb.ln_b = try_get_tensor(tensors,buf);
         snprintf(buf, sizeof(buf), "flow_lm.flow_net.res_blocks.%u.mlp.0.weight", i);
-        rb.mlp_linear1 = try_get_tensor(ctx, buf);
+        rb.mlp_linear1 = try_get_tensor(tensors,buf);
         snprintf(buf, sizeof(buf), "flow_lm.flow_net.res_blocks.%u.mlp.0.bias", i);
-        rb.mlp_linear1_b = try_get_tensor(ctx, buf);
+        rb.mlp_linear1_b = try_get_tensor(tensors,buf);
         snprintf(buf, sizeof(buf), "flow_lm.flow_net.res_blocks.%u.mlp.2.weight", i);
-        rb.mlp_linear2 = try_get_tensor(ctx, buf);
+        rb.mlp_linear2 = try_get_tensor(tensors,buf);
         snprintf(buf, sizeof(buf), "flow_lm.flow_net.res_blocks.%u.mlp.2.bias", i);
-        rb.mlp_linear2_b = try_get_tensor(ctx, buf);
+        rb.mlp_linear2_b = try_get_tensor(tensors,buf);
         snprintf(buf, sizeof(buf), "flow_lm.flow_net.res_blocks.%u.adaLN_modulation.1.weight", i);
-        rb.ada_linear = try_get_tensor(ctx, buf);
+        rb.ada_linear = try_get_tensor(tensors,buf);
         snprintf(buf, sizeof(buf), "flow_lm.flow_net.res_blocks.%u.adaLN_modulation.1.bias", i);
-        rb.ada_bias = try_get_tensor(ctx, buf);
+        rb.ada_bias = try_get_tensor(tensors,buf);
     }
 
-    fn.final_linear = try_get_tensor(ctx, "flow_lm.flow_net.final_layer.linear.weight");
-    fn.final_linear_b = try_get_tensor(ctx, "flow_lm.flow_net.final_layer.linear.bias");
-    fn.final_ada = try_get_tensor(ctx, "flow_lm.flow_net.final_layer.adaLN_modulation.1.weight");
-    fn.final_ada_b = try_get_tensor(ctx, "flow_lm.flow_net.final_layer.adaLN_modulation.1.bias");
+    fn.final_linear = try_get_tensor(tensors,"flow_lm.flow_net.final_layer.linear.weight");
+    fn.final_linear_b = try_get_tensor(tensors,"flow_lm.flow_net.final_layer.linear.bias");
+    fn.final_ada = try_get_tensor(tensors,"flow_lm.flow_net.final_layer.adaLN_modulation.1.weight");
+    fn.final_ada_b = try_get_tensor(tensors,"flow_lm.flow_net.final_layer.adaLN_modulation.1.bias");
 
     return m.conditioner_embed != nullptr && m.input_linear != nullptr;
 }
 
-static bool load_mimi_decoder_tensors(struct ggml_context* ctx, pocket_tts_model& m) {
+static bool load_mimi_decoder_tensors(const TensorMap& tensors, pocket_tts_model& m) {
     const auto& mi = m.mimi_hp;
 
     // Quantizer projection (Conv1d, kernel=1)
-    m.quant_proj_w = try_get_tensor(ctx, "mimi.quantizer.output_proj.weight");
+    m.quant_proj_w = try_get_tensor(tensors,"mimi.quantizer.output_proj.weight");
 
     // Upsample conv (transposed, stride=downsample_stride)
-    m.upsample_conv_w = try_get_tensor(ctx, "mimi.upsample.convtr.weight");
+    m.upsample_conv_w = try_get_tensor(tensors,"mimi.upsample.convtr.weight");
     if (!m.upsample_conv_w)
-        m.upsample_conv_w = try_get_tensor(ctx, "mimi.upsample.conv.weight");
-    m.upsample_conv_b = try_get_tensor(ctx, "mimi.upsample.convtr.bias");
+        m.upsample_conv_w = try_get_tensor(tensors,"mimi.upsample.conv.weight");
+    m.upsample_conv_b = try_get_tensor(tensors,"mimi.upsample.convtr.bias");
     if (!m.upsample_conv_b)
-        m.upsample_conv_b = try_get_tensor(ctx, "mimi.upsample.conv.bias");
+        m.upsample_conv_b = try_get_tensor(tensors,"mimi.upsample.conv.bias");
 
     // Decoder transformer
-    m.dec_xfmr_input_proj = try_get_tensor(ctx, "mimi.decoder_transformer.input_proj.weight");
-    m.dec_xfmr_output_proj = try_get_tensor(ctx, "mimi.decoder_transformer.output_projs.0.weight");
+    m.dec_xfmr_input_proj = try_get_tensor(tensors,"mimi.decoder_transformer.input_proj.weight");
+    m.dec_xfmr_output_proj = try_get_tensor(tensors,"mimi.decoder_transformer.output_projs.0.weight");
 
     m.dec_transformer_layers.resize(mi.xfmr_num_layers);
     for (uint32_t i = 0; i < mi.xfmr_num_layers; i++) {
         auto& L = m.dec_transformer_layers[i];
         char buf[256];
         snprintf(buf, sizeof(buf), "mimi.decoder_transformer.transformer.layers.%u.norm1.weight", i);
-        L.attn_norm_w = try_get_tensor(ctx, buf);
+        L.attn_norm_w = try_get_tensor(tensors,buf);
         snprintf(buf, sizeof(buf), "mimi.decoder_transformer.transformer.layers.%u.norm1.bias", i);
-        L.attn_norm_b = try_get_tensor(ctx, buf);
+        L.attn_norm_b = try_get_tensor(tensors,buf);
         snprintf(buf, sizeof(buf), "mimi.decoder_transformer.transformer.layers.%u.self_attn.in_proj.weight", i);
-        L.attn_in_proj = try_get_tensor(ctx, buf);
+        L.attn_in_proj = try_get_tensor(tensors,buf);
         snprintf(buf, sizeof(buf), "mimi.decoder_transformer.transformer.layers.%u.self_attn.out_proj.weight", i);
-        L.attn_out_proj = try_get_tensor(ctx, buf);
+        L.attn_out_proj = try_get_tensor(tensors,buf);
         snprintf(buf, sizeof(buf), "mimi.decoder_transformer.transformer.layers.%u.norm2.weight", i);
-        L.ffn_norm_w = try_get_tensor(ctx, buf);
+        L.ffn_norm_w = try_get_tensor(tensors,buf);
         snprintf(buf, sizeof(buf), "mimi.decoder_transformer.transformer.layers.%u.norm2.bias", i);
-        L.ffn_norm_b = try_get_tensor(ctx, buf);
+        L.ffn_norm_b = try_get_tensor(tensors,buf);
         snprintf(buf, sizeof(buf), "mimi.decoder_transformer.transformer.layers.%u.linear1.weight", i);
-        L.ffn_linear1 = try_get_tensor(ctx, buf);
+        L.ffn_linear1 = try_get_tensor(tensors,buf);
         snprintf(buf, sizeof(buf), "mimi.decoder_transformer.transformer.layers.%u.linear2.weight", i);
-        L.ffn_linear2 = try_get_tensor(ctx, buf);
+        L.ffn_linear2 = try_get_tensor(tensors,buf);
 
         snprintf(buf, sizeof(buf), "mimi.decoder_transformer.transformer.layers.%u.layer_scale_1.scale", i);
-        L.layer_scale_1 = try_get_tensor(ctx, buf);
+        L.layer_scale_1 = try_get_tensor(tensors,buf);
         snprintf(buf, sizeof(buf), "mimi.decoder_transformer.transformer.layers.%u.layer_scale_2.scale", i);
-        L.layer_scale_2 = try_get_tensor(ctx, buf);
+        L.layer_scale_2 = try_get_tensor(tensors,buf);
     }
 
     // SEANet decoder
     auto& sd = m.seanet_dec;
-    sd.initial_conv_w = try_get_tensor(ctx, "mimi.decoder.model.0.conv.weight");
-    sd.initial_conv_b = try_get_tensor(ctx, "mimi.decoder.model.0.conv.bias");
+    sd.initial_conv_w = try_get_tensor(tensors,"mimi.decoder.model.0.conv.weight");
+    sd.initial_conv_b = try_get_tensor(tensors,"mimi.decoder.model.0.conv.bias");
 
     // Decoder stages: for each ratio, there's an upsample + residual blocks
     // Layout in model list: [initial_conv, (ELU, ConvTr, ResBlock*n_res)*n_ratios, ELU, final_conv]
@@ -591,16 +597,16 @@ static bool load_mimi_decoder_tensors(struct ggml_context* ctx, pocket_tts_model
         // ConvTranspose at idx
         char buf[256];
         snprintf(buf, sizeof(buf), "mimi.decoder.model.%u.convtr.weight", idx);
-        stage.convtr_w = try_get_tensor(ctx, buf);
+        stage.convtr_w = try_get_tensor(tensors,buf);
         if (!stage.convtr_w) {
             snprintf(buf, sizeof(buf), "mimi.decoder.model.%u.conv.weight", idx);
-            stage.convtr_w = try_get_tensor(ctx, buf);
+            stage.convtr_w = try_get_tensor(tensors,buf);
         }
         snprintf(buf, sizeof(buf), "mimi.decoder.model.%u.convtr.bias", idx);
-        stage.convtr_b = try_get_tensor(ctx, buf);
+        stage.convtr_b = try_get_tensor(tensors,buf);
         if (!stage.convtr_b) {
             snprintf(buf, sizeof(buf), "mimi.decoder.model.%u.conv.bias", idx);
-            stage.convtr_b = try_get_tensor(ctx, buf);
+            stage.convtr_b = try_get_tensor(tensors,buf);
         }
         idx++; // ConvTr
 
@@ -611,13 +617,13 @@ static bool load_mimi_decoder_tensors(struct ggml_context* ctx, pocket_tts_model
             // Each resblock has a model list: [ELU, Conv, ELU, Conv]
             // block[0] = ELU, block[1] = Conv (dim->hidden), block[2] = ELU, block[3] = Conv (hidden->dim)
             snprintf(buf, sizeof(buf), "mimi.decoder.model.%u.block.1.conv.weight", idx);
-            rb.conv0_w = try_get_tensor(ctx, buf);
+            rb.conv0_w = try_get_tensor(tensors,buf);
             snprintf(buf, sizeof(buf), "mimi.decoder.model.%u.block.1.conv.bias", idx);
-            rb.conv0_b = try_get_tensor(ctx, buf);
+            rb.conv0_b = try_get_tensor(tensors,buf);
             snprintf(buf, sizeof(buf), "mimi.decoder.model.%u.block.3.conv.weight", idx);
-            rb.conv1_w = try_get_tensor(ctx, buf);
+            rb.conv1_w = try_get_tensor(tensors,buf);
             snprintf(buf, sizeof(buf), "mimi.decoder.model.%u.block.3.conv.bias", idx);
-            rb.conv1_b = try_get_tensor(ctx, buf);
+            rb.conv1_b = try_get_tensor(tensors,buf);
             idx++; // ResBlock
         }
     }
@@ -626,55 +632,55 @@ static bool load_mimi_decoder_tensors(struct ggml_context* ctx, pocket_tts_model
     idx++; // ELU
     char buf[256];
     snprintf(buf, sizeof(buf), "mimi.decoder.model.%u.conv.weight", idx);
-    sd.final_conv_w = try_get_tensor(ctx, buf);
+    sd.final_conv_w = try_get_tensor(tensors,buf);
     snprintf(buf, sizeof(buf), "mimi.decoder.model.%u.conv.bias", idx);
-    sd.final_conv_b = try_get_tensor(ctx, buf);
+    sd.final_conv_b = try_get_tensor(tensors,buf);
 
     return true;
 }
 
-static bool load_mimi_encoder_tensors(struct ggml_context* ctx, pocket_tts_model& m) {
+static bool load_mimi_encoder_tensors(const TensorMap& tensors, pocket_tts_model& m) {
     if (!m.has_voice_cloning)
         return true;
 
     const auto& mi = m.mimi_hp;
 
-    m.downsample_conv_w = try_get_tensor(ctx, "mimi.downsample.conv.weight");
-    m.downsample_conv_b = try_get_tensor(ctx, "mimi.downsample.conv.bias");
+    m.downsample_conv_w = try_get_tensor(tensors,"mimi.downsample.conv.weight");
+    m.downsample_conv_b = try_get_tensor(tensors,"mimi.downsample.conv.bias");
 
-    m.enc_xfmr_input_proj = try_get_tensor(ctx, "mimi.encoder_transformer.input_proj.weight");
-    m.enc_xfmr_output_proj = try_get_tensor(ctx, "mimi.encoder_transformer.output_projs.0.weight");
+    m.enc_xfmr_input_proj = try_get_tensor(tensors,"mimi.encoder_transformer.input_proj.weight");
+    m.enc_xfmr_output_proj = try_get_tensor(tensors,"mimi.encoder_transformer.output_projs.0.weight");
 
     m.enc_transformer_layers.resize(mi.xfmr_num_layers);
     for (uint32_t i = 0; i < mi.xfmr_num_layers; i++) {
         auto& L = m.enc_transformer_layers[i];
         char buf[256];
         snprintf(buf, sizeof(buf), "mimi.encoder_transformer.transformer.layers.%u.norm1.weight", i);
-        L.attn_norm_w = try_get_tensor(ctx, buf);
+        L.attn_norm_w = try_get_tensor(tensors,buf);
         snprintf(buf, sizeof(buf), "mimi.encoder_transformer.transformer.layers.%u.norm1.bias", i);
-        L.attn_norm_b = try_get_tensor(ctx, buf);
+        L.attn_norm_b = try_get_tensor(tensors,buf);
         snprintf(buf, sizeof(buf), "mimi.encoder_transformer.transformer.layers.%u.self_attn.in_proj.weight", i);
-        L.attn_in_proj = try_get_tensor(ctx, buf);
+        L.attn_in_proj = try_get_tensor(tensors,buf);
         snprintf(buf, sizeof(buf), "mimi.encoder_transformer.transformer.layers.%u.self_attn.out_proj.weight", i);
-        L.attn_out_proj = try_get_tensor(ctx, buf);
+        L.attn_out_proj = try_get_tensor(tensors,buf);
         snprintf(buf, sizeof(buf), "mimi.encoder_transformer.transformer.layers.%u.norm2.weight", i);
-        L.ffn_norm_w = try_get_tensor(ctx, buf);
+        L.ffn_norm_w = try_get_tensor(tensors,buf);
         snprintf(buf, sizeof(buf), "mimi.encoder_transformer.transformer.layers.%u.norm2.bias", i);
-        L.ffn_norm_b = try_get_tensor(ctx, buf);
+        L.ffn_norm_b = try_get_tensor(tensors,buf);
         snprintf(buf, sizeof(buf), "mimi.encoder_transformer.transformer.layers.%u.linear1.weight", i);
-        L.ffn_linear1 = try_get_tensor(ctx, buf);
+        L.ffn_linear1 = try_get_tensor(tensors,buf);
         snprintf(buf, sizeof(buf), "mimi.encoder_transformer.transformer.layers.%u.linear2.weight", i);
-        L.ffn_linear2 = try_get_tensor(ctx, buf);
+        L.ffn_linear2 = try_get_tensor(tensors,buf);
         snprintf(buf, sizeof(buf), "mimi.encoder_transformer.transformer.layers.%u.layer_scale_1.scale", i);
-        L.layer_scale_1 = try_get_tensor(ctx, buf);
+        L.layer_scale_1 = try_get_tensor(tensors,buf);
         snprintf(buf, sizeof(buf), "mimi.encoder_transformer.transformer.layers.%u.layer_scale_2.scale", i);
-        L.layer_scale_2 = try_get_tensor(ctx, buf);
+        L.layer_scale_2 = try_get_tensor(tensors,buf);
     }
 
     // SEANet encoder
     auto& se = m.seanet_enc;
-    se.initial_conv_w = try_get_tensor(ctx, "mimi.encoder.model.0.conv.weight");
-    se.initial_conv_b = try_get_tensor(ctx, "mimi.encoder.model.0.conv.bias");
+    se.initial_conv_w = try_get_tensor(tensors,"mimi.encoder.model.0.conv.weight");
+    se.initial_conv_b = try_get_tensor(tensors,"mimi.encoder.model.0.conv.bias");
 
     // Encoder: ratios are reversed (compared to decoder)
     std::vector<int> enc_ratios(mi.seanet_ratios.rbegin(), mi.seanet_ratios.rend());
@@ -691,13 +697,13 @@ static bool load_mimi_encoder_tensors(struct ggml_context* ctx, pocket_tts_model
             auto& rb = stage.resblocks[r];
             char buf[256];
             snprintf(buf, sizeof(buf), "mimi.encoder.model.%u.block.1.conv.weight", idx);
-            rb.conv0_w = try_get_tensor(ctx, buf);
+            rb.conv0_w = try_get_tensor(tensors,buf);
             snprintf(buf, sizeof(buf), "mimi.encoder.model.%u.block.1.conv.bias", idx);
-            rb.conv0_b = try_get_tensor(ctx, buf);
+            rb.conv0_b = try_get_tensor(tensors,buf);
             snprintf(buf, sizeof(buf), "mimi.encoder.model.%u.block.3.conv.weight", idx);
-            rb.conv1_w = try_get_tensor(ctx, buf);
+            rb.conv1_w = try_get_tensor(tensors,buf);
             snprintf(buf, sizeof(buf), "mimi.encoder.model.%u.block.3.conv.bias", idx);
-            rb.conv1_b = try_get_tensor(ctx, buf);
+            rb.conv1_b = try_get_tensor(tensors,buf);
             idx++;
         }
 
@@ -705,9 +711,9 @@ static bool load_mimi_encoder_tensors(struct ggml_context* ctx, pocket_tts_model
         idx++; // ELU
         char buf[256];
         snprintf(buf, sizeof(buf), "mimi.encoder.model.%u.conv.weight", idx);
-        stage.conv_w = try_get_tensor(ctx, buf);
+        stage.conv_w = try_get_tensor(tensors,buf);
         snprintf(buf, sizeof(buf), "mimi.encoder.model.%u.conv.bias", idx);
-        stage.conv_b = try_get_tensor(ctx, buf);
+        stage.conv_b = try_get_tensor(tensors,buf);
         idx++;
     }
 
@@ -715,9 +721,9 @@ static bool load_mimi_encoder_tensors(struct ggml_context* ctx, pocket_tts_model
     idx++; // ELU
     char buf[256];
     snprintf(buf, sizeof(buf), "mimi.encoder.model.%u.conv.weight", idx);
-    se.final_conv_w = try_get_tensor(ctx, buf);
+    se.final_conv_w = try_get_tensor(tensors,buf);
     snprintf(buf, sizeof(buf), "mimi.encoder.model.%u.conv.bias", idx);
-    se.final_conv_b = try_get_tensor(ctx, buf);
+    se.final_conv_b = try_get_tensor(tensors,buf);
 
     return true;
 }
@@ -1110,11 +1116,10 @@ static void backbone_forward_step_ggml(pocket_tts_context* pctx, const float* x_
         ggml_build_forward_expand(gf, kv_io[l].new_v);
     }
 
-    // Allocate
-    ggml_gallocr_t galloc = ggml_gallocr_new(ggml_backend_get_default_buffer_type(pctx->backend_cpu));
-    if (!ggml_gallocr_alloc_graph(galloc, gf)) {
+    // Allocate via scheduler
+    ggml_backend_sched_reset(pctx->sched);
+    if (!ggml_backend_sched_alloc_graph(pctx->sched, gf)) {
         fprintf(stderr, "pocket_tts: backbone_forward_step_ggml: alloc failed\n");
-        ggml_gallocr_free(galloc);
         ggml_free(ctx0);
         memset(out, 0, D * sizeof(float));
         return;
@@ -1129,16 +1134,6 @@ static void backbone_forward_step_ggml(pocket_tts_context* pctx, const float* x_
     auto& kv = pctx->backbone_kv;
     for (int l = 0; l < NL; l++) {
         if (pos > 0) {
-            // Host cache layout: k[layer * max_seq * NH * HD + pos * NH * HD + head * HD + d]
-            // We need (HD, pos, NH) for ggml: ne[0]=HD contiguous, then pos, then NH.
-            // Host cache has: for each pos, NH*HD contiguous = (NH, HD) per pos.
-            // ggml wants: for each head, pos*HD contiguous, then next head.
-            // So we need to transpose from (pos, NH, HD) to (HD, pos, NH).
-            // Actually host layout per layer is: [pos][head][d] = stride pos = NH*HD.
-            // ggml (HD, pos, NH): ne[0]=HD, ne[1]=pos, ne[2]=NH.
-            // Data layout: for h in NH, for p in pos, for d in HD: data[h*pos*HD + p*HD + d]
-            // Host layout: for p in pos, for h in NH, for d in HD: data[p*NH*HD + h*HD + d]
-            // These differ — need to reorder.
             size_t stride_layer = (size_t)kv.max_seq * NH * HD;
             std::vector<float> k_reorder((size_t)NH * pos * HD);
             std::vector<float> v_reorder((size_t)NH * pos * HD);
@@ -1162,17 +1157,19 @@ static void backbone_forward_step_ggml(pocket_tts_context* pctx, const float* x_
         }
     }
 
-    // Compute
-    int n_threads = pctx->params.n_threads > 0 ? pctx->params.n_threads : 4;
-    ggml_backend_cpu_set_n_threads(pctx->backend_cpu, n_threads);
-    ggml_backend_graph_compute(pctx->backend_cpu, gf);
+    // Compute via scheduler
+    if (ggml_backend_sched_graph_compute(pctx->sched, gf) != GGML_STATUS_SUCCESS) {
+        fprintf(stderr, "pocket_tts: backbone_forward_step_ggml: compute failed\n");
+        ggml_free(ctx0);
+        memset(out, 0, D * sizeof(float));
+        return;
+    }
 
     // Read backbone output
     ggml_backend_tensor_get(ggml_graph_get_tensor(gf, "backbone_out"), out, 0, D * sizeof(float));
 
     // Read new K/V and store in host cache
     for (int l = 0; l < NL; l++) {
-        // new_k/new_v are (HD, 1, NH) — read and store at cache[layer][pos]
         std::vector<float> new_k(NH * HD), new_v(NH * HD);
         char name[64];
         snprintf(name, sizeof(name), "new_k_%d", l);
@@ -1180,16 +1177,12 @@ static void backbone_forward_step_ggml(pocket_tts_context* pctx, const float* x_
         snprintf(name, sizeof(name), "new_v_%d", l);
         ggml_backend_tensor_get(ggml_graph_get_tensor(gf, name), new_v.data(), 0, new_v.size() * sizeof(float));
 
-        // ggml layout: (HD, 1, NH) = for h in NH: HD values. = [h0d0..h0d63, h1d0..h1d63, ...]
-        // Host layout at cache[layer][pos]: (NH, HD) = [h0d0..h0d63, h1d0..h1d63, ...]
-        // Same layout! Just copy directly.
         float* k_slot = kv_k_ptr(kv, l, pos);
         float* v_slot = kv_v_ptr(kv, l, pos);
         memcpy(k_slot, new_k.data(), new_k.size() * sizeof(float));
         memcpy(v_slot, new_v.data(), new_v.size() * sizeof(float));
     }
 
-    ggml_gallocr_free(galloc);
     ggml_free(ctx0);
 }
 
@@ -1916,14 +1909,9 @@ static void mimi_decode_ggml(pocket_tts_context* pctx, const float* latent_seq, 
     ggml_cgraph* gf = ggml_new_graph_custom(ctx0, graph_nodes, false);
     ggml_build_forward_expand(gf, x);
 
-    ggml_backend_t backend = pctx->backend_cpu;
-    if (!backend) {
-        backend = ggml_backend_cpu_init();
-    }
-    ggml_gallocr_t galloc = ggml_gallocr_new(ggml_backend_get_default_buffer_type(backend));
-    if (!ggml_gallocr_alloc_graph(galloc, gf)) {
+    ggml_backend_sched_reset(pctx->sched);
+    if (!ggml_backend_sched_alloc_graph(pctx->sched, gf)) {
         fprintf(stderr, "pocket_tts: mimi_decode_ggml: failed to alloc graph\n");
-        ggml_gallocr_free(galloc);
         ggml_free(ctx0);
         *pcm_out = nullptr;
         *n_samples_out = 0;
@@ -1958,15 +1946,10 @@ static void mimi_decode_ggml(pocket_tts_context* pctx, const float* latent_seq, 
         ggml_backend_tensor_set(mask_t, mask_data.data(), 0, mask_data.size() * sizeof(ggml_fp16_t));
     }
 
-    // Set number of threads
-    int n_threads = pctx->params.n_threads > 0 ? pctx->params.n_threads : 4;
-    ggml_backend_cpu_set_n_threads(backend, n_threads);
-
-    // Compute
-    ggml_status st = ggml_backend_graph_compute(backend, gf);
+    // Compute via scheduler
+    ggml_status st = ggml_backend_sched_graph_compute(pctx->sched, gf);
     if (st != GGML_STATUS_SUCCESS) {
         fprintf(stderr, "pocket_tts: mimi_decode_ggml: graph compute failed (status=%d)\n", (int)st);
-        ggml_gallocr_free(galloc);
         ggml_free(ctx0);
         *pcm_out = nullptr;
         *n_samples_out = 0;
@@ -1999,7 +1982,6 @@ static void mimi_decode_ggml(pocket_tts_context* pctx, const float* latent_seq, 
     *n_samples_out = n_pcm;
 
     // Cleanup
-    ggml_gallocr_free(galloc);
     ggml_free(ctx0);
 
     if (pctx->verbosity >= 2)
@@ -2707,14 +2689,8 @@ struct pocket_tts_context* pocket_tts_init_from_file(const char* path_model, str
         ctx->rng.seed(rd());
     }
 
-    // Load GGUF
-    struct ggml_context* ggml_ctx = nullptr;
-    struct gguf_init_params gguf_params = {
-        /* .no_alloc = */ false,
-        /* .ctx      = */ &ggml_ctx,
-    };
-
-    struct gguf_context* meta = gguf_init_from_file(path_model, gguf_params);
+    // ── Pass 1: metadata (hparams + tokenizer) ──
+    struct gguf_context* meta = core_gguf::open_metadata(path_model);
     if (!meta) {
         fprintf(stderr, "pocket_tts: failed to load GGUF: %s\n", path_model);
         delete ctx;
@@ -2725,7 +2701,7 @@ struct pocket_tts_context* pocket_tts_init_from_file(const char* path_model, str
     std::string arch = gguf_get_str(meta, "general.architecture", "");
     if (arch != "pocket-tts") {
         fprintf(stderr, "pocket_tts: expected arch 'pocket-tts', got '%s'\n", arch.c_str());
-        gguf_free(meta);
+        core_gguf::free_metadata(meta);
         delete ctx;
         return nullptr;
     }
@@ -2733,29 +2709,74 @@ struct pocket_tts_context* pocket_tts_init_from_file(const char* path_model, str
     // Load hyperparameters
     if (!load_hparams(meta, ctx->model)) {
         fprintf(stderr, "pocket_tts: failed to load hyperparameters\n");
-        gguf_free(meta);
+        core_gguf::free_metadata(meta);
         delete ctx;
         return nullptr;
     }
 
-    // Load tokenizer
-    load_tokenizer(meta, ggml_ctx, ctx->model);
+    // Load tokenizer (reads from GGUF KV metadata, not tensors)
+    load_tokenizer(meta, nullptr, ctx->model);
 
-    // Load tensors from the GGML context that was allocated by gguf_init
-    if (!load_flow_lm_tensors(ggml_ctx, ctx->model)) {
+    core_gguf::free_metadata(meta);
+
+    // ── Init backends ──
+    ctx->backend_cpu = ggml_backend_cpu_init();
+    if (!ctx->backend_cpu) {
+        fprintf(stderr, "pocket_tts: failed to init CPU backend\n");
+        delete ctx;
+        return nullptr;
+    }
+    ggml_backend_cpu_set_n_threads(ctx->backend_cpu, params.n_threads);
+
+    ctx->backend = params.use_gpu ? ggml_backend_init_best() : ctx->backend_cpu;
+    if (!ctx->backend)
+        ctx->backend = ctx->backend_cpu;
+
+    if (ctx->verbosity >= 1 && ctx->backend != ctx->backend_cpu) {
+        fprintf(stderr, "pocket_tts: using GPU backend: %s\n", ggml_backend_name(ctx->backend));
+    }
+
+    // ── Pass 2: load weights via core_gguf (mmap, backend buffer) ──
+    core_gguf::WeightLoad wl;
+    if (!core_gguf::load_weights(path_model, ctx->backend, "pocket_tts", wl)) {
+        fprintf(stderr, "pocket_tts: failed to load weights from '%s'\n", path_model);
+        delete ctx;
+        return nullptr;
+    }
+    ctx->ctx_w = wl.ctx;
+    ctx->buf_w = wl.buf;
+
+    // Bind tensors into model structs
+    if (!load_flow_lm_tensors(wl.tensors, ctx->model)) {
         fprintf(stderr, "pocket_tts: failed to load FlowLM tensors\n");
-        gguf_free(meta);
         delete ctx;
         return nullptr;
     }
 
-    load_mimi_decoder_tensors(ggml_ctx, ctx->model);
-    load_mimi_encoder_tensors(ggml_ctx, ctx->model);
+    load_mimi_decoder_tensors(wl.tensors, ctx->model);
+    load_mimi_encoder_tensors(wl.tensors, ctx->model);
+
+    // ── Create backend scheduler ──
+    {
+        ggml_backend_t backends[2];
+        int n_be = 0;
+        backends[n_be++] = ctx->backend;
+        if (ctx->backend_cpu != ctx->backend)
+            backends[n_be++] = ctx->backend_cpu;
+        ctx->sched = ggml_backend_sched_new(backends, nullptr, n_be,
+                                            /*graph_size=*/16384,
+                                            /*parallel=*/false, /*op_offload=*/false);
+        if (!ctx->sched) {
+            fprintf(stderr, "pocket_tts: failed to create backend scheduler\n");
+            delete ctx;
+            return nullptr;
+        }
+    }
 
     if (ctx->verbosity >= 1) {
         const auto& h = ctx->model.flow_lm_hp;
         const auto& mi = ctx->model.mimi_hp;
-        fprintf(stderr, "pocket_tts: loaded model\n");
+        fprintf(stderr, "pocket_tts: loaded %zu tensors\n", wl.tensors.size());
         fprintf(stderr, "  FlowLM: %u layers, %u heads, %u dim, latent=%u\n", h.num_layers, h.num_heads, h.d_model,
                 h.latent_dim);
         fprintf(stderr, "  Flow head: %u dim, %u depth\n", ctx->model.flow_head_hp.flow_dim,
@@ -2774,21 +2795,22 @@ struct pocket_tts_context* pocket_tts_init_from_file(const char* path_model, str
                 ctx->model.backbone_layers[0].ffn_linear2 ? "ok" : "MISSING");
     }
 
-    gguf_free(meta);
-    // Note: ggml_ctx and tensor data are still alive via the buffer
-
-    // Initialize CPU backend for ggml graph compute
-    ctx->backend_cpu = ggml_backend_cpu_init();
-
     return ctx;
 }
 
 void pocket_tts_free(struct pocket_tts_context* ctx) {
     if (!ctx)
         return;
+    if (ctx->sched)
+        ggml_backend_sched_free(ctx->sched);
+    if (ctx->buf_w)
+        ggml_backend_buffer_free(ctx->buf_w);
+    if (ctx->ctx_w)
+        ggml_free(ctx->ctx_w);
+    if (ctx->backend && ctx->backend != ctx->backend_cpu)
+        ggml_backend_free(ctx->backend);
     if (ctx->backend_cpu)
         ggml_backend_free(ctx->backend_cpu);
-    // TODO: free ggml weight buffers
     delete ctx;
 }
 
