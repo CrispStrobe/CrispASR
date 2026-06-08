@@ -6,7 +6,7 @@ technical deep-dives are in `LEARNINGS.md`.
 
 ---
 
-## 2026-06-08 §115/§52/§140 audit + pocket-tts GPU migration
+## 2026-06-08 §115/§52/§140 audit + pocket-tts/moonshine GPU migration
 
 **§115 mimo-asr GPU — closed.** Deep audit revealed the item is effectively
 done: GPU is the default since `a429bb45`, Option B (prefill-graph reuse
@@ -20,9 +20,9 @@ is not worth pursuing. PLAN.md updated to reflect this.
 reuse) saves ~14-19 ms/frame but was reverted to default-OFF in `61c42bfb`
 after a `GGML_ASSERT` crash on Jetson sm_87 (CUDA, `ggml_backend_tensor_set`
 on cached graph with `ggml_set_rows`). Created Kaggle kernel
-`tools/kaggle/qwen3-tts-o15-cuda/` that tests O15=OFF vs O15=ON on a P100:
-CUDA build, TTS synthesis, ASR roundtrip, timing comparison. Pushed as
-kernel version 1 — awaiting results.
+`tools/kaggle/qwen3-tts-o15-cuda/` — kernel v1 failed because the test
+harness didn't pass a voice reference (qwen3-tts requires `--voice`).
+Fixed with `jfk.wav` as reference; re-pushed as kernel v2. Awaiting results.
 
 **§140 TTS GPU sched — pocket-tts migrated.** Audit found speecht5/piper/
 parler-tts/outetts already had `ggml_backend_sched` wired (just `use_gpu`
@@ -36,8 +36,17 @@ pocket-tts was still on the old `gguf_init_from_file(no_alloc=false)` +
   with `sched_reset` + `sched_alloc_graph` + `sched_graph_compute`
 - Updated `pocket_tts_free` for proper resource cleanup
 - Tensor loading functions now take `TensorMap&` instead of `ggml_context*`
+- **Fix:** weights must load to CPU backend (not GPU) because the flow head
+  and AR loop use eager CPU code that reads `t->data` directly.
 
 All 6 TTS sched backends now DONE. PLAN.md §140 updated.
+
+**Moonshine mmap + sched migration.** `moonshine.cpp` migrated from
+`gguf_init_from_file` + manual fread tensor loop + per-graph `gallocr`
+to `core_gguf::open_metadata` + `core_gguf::load_weights` (mmap) +
+`ggml_backend_sched`. Added `use_gpu` param to `moonshine_init_params`,
+wired via `g_open_use_gpu_tls` in C API. `moonshine_streaming.cpp` still
+on old path (same pattern, lower priority).
 
 ---
 
