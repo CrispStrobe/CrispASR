@@ -223,6 +223,9 @@ ref_wav = WORK / "ref_output.wav"
 ref_codes = WORK / "ref_codes.txt"
 ref_asr = ""
 
+REF_DUMP = WORK / "ref_dump"
+REF_DUMP.mkdir(parents=True, exist_ok=True)
+
 try:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-q",
                            "zonos", "soundfile"], timeout=120)
@@ -231,6 +234,7 @@ try:
         str(REPO / "tools" / "reference_backends" / "zonos_tts_reference.py"),
         "--text", TTS_TEXT,
         "--output", str(ref_wav),
+        "--dump-dir", str(REF_DUMP),
         "--dump-codes", str(ref_codes),
         "--seed", "42",
         "--language", "en-us",
@@ -238,7 +242,7 @@ try:
     ], capture_output=True, text=True, timeout=300)
     print(f"Python ref: rc={ref_r.returncode}", flush=True)
     if ref_r.stderr:
-        for ln in ref_r.stderr.strip().splitlines()[-10:]:
+        for ln in ref_r.stderr.strip().splitlines()[-15:]:
             print(f"  {ln}", flush=True)
     ref_ok = ref_wav.exists() and ref_wav.stat().st_size > 1000
     if ref_ok:
@@ -253,11 +257,26 @@ try:
         txt_path = out_stem.with_suffix(".txt")
         ref_asr = txt_path.read_text().strip() if txt_path.exists() else ""
         print(f"  ref ASR: {ref_asr[:150]!r}", flush=True)
+    # Dump intermediate activation stats
+    if REF_DUMP.exists():
+        import numpy as np
+        npy_files = sorted(REF_DUMP.glob("*.npy"))
+        print(f"  ref activations: {len(npy_files)} files", flush=True)
+        for f in npy_files:
+            arr = np.load(f)
+            print(f"    {f.name}: shape={arr.shape} mean={arr.mean():.4f} "
+                  f"std={arr.std():.4f} min={arr.min():.4f} max={arr.max():.4f}",
+                  flush=True)
     if ref_codes.exists():
-        for ln in ref_codes.read_text().splitlines()[:2]:
-            print(f"  ref codes: {ln[:80]}", flush=True)
+        lines = ref_codes.read_text().splitlines()
+        for ln in lines[:3]:
+            print(f"  ref codes: {ln[:100]}", flush=True)
+        if len(lines) > 3:
+            print(f"  ... ({len(lines)} codebook lines total)", flush=True)
 except Exception as e:
+    import traceback
     print(f"Python ref failed: {e}", flush=True)
+    traceback.print_exc()
     ref_ok = False
 
 kh.step("python_ref.done", ref_ok=ref_ok, ref_asr_len=len(ref_asr))
