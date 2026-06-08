@@ -82,6 +82,16 @@ from `/kaggle/input/<slug>/` to `/kaggle/input/datasets/<owner>/<slug>/`.
 Updated `kaggle_token_from_dataset()` in `kaggle_harness.py` to scan
 both roots + added debug logging. Also fixed `kernel-metadata.json` to
 use string `"true"` instead of boolean `true` (matching working kernels).
+Confirmed working: v6 kernel log shows token loaded from new path.
+
+**CI piper link fix iteration.** First attempt added `CRISPASR_BUILD`
+to piper-tts CMake target — this backfired because it enabled the
+`ensure_cached_file` calls during piper-tts compilation, but the
+static lib still didn't link `crispasr_cache.o`. Reverted the CMake
+define; the `#ifdef CRISPASR_BUILD` guard in `piper_tts.cpp` now
+correctly excludes the calls because `CRISPASR_BUILD` is only defined
+on `crispasr-lib`, not on the standalone `piper-tts` target.
+build.yml: 35/35 pass (was 20 failures).
 
 ---
 
