@@ -145,7 +145,7 @@ struct ms_kv_cache {
 struct moonshine_streaming_context {
     ms_model model;
     moonshine_tokenizer tokenizer;
-    ggml_backend_t backend     = nullptr; // GPU or CPU (chosen at init)
+    ggml_backend_t backend = nullptr; // GPU or CPU (chosen at init)
     ggml_backend_t backend_cpu = nullptr;
     ggml_backend_sched_t sched = nullptr;
 
@@ -381,8 +381,8 @@ extern "C" struct moonshine_streaming_context* moonshine_streaming_init_from_fil
 
     if (params.verbosity >= 1) {
         fprintf(stderr, "moonshine_streaming: loaded %zu tensors%s  enc=%uL×%u dec=%uL×%u vocab=%u\n",
-                wl.tensors.size(), ctx->use_gpu ? " (GPU)" : "",
-                hp.enc_n_layers, hp.enc_hidden, hp.dec_n_layers, hp.dec_hidden, hp.vocab_size);
+                wl.tensors.size(), ctx->use_gpu ? " (GPU)" : "", hp.enc_n_layers, hp.enc_hidden, hp.dec_n_layers,
+                hp.dec_hidden, hp.vocab_size);
     }
 
     return ctx;

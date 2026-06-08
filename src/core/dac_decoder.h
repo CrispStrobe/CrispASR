@@ -138,9 +138,8 @@ static inline ggml_tensor* snake(ggml_context* ctx, ggml_tensor* x, ggml_tensor*
 
 // Conv1d: x(C_in, T) * w(K, C_in, C_out) + b(C_out,) -> (C_out, T)
 // Same-padding with optional dilation. Weight layout matches GGUF convention.
-static inline ggml_tensor* conv1d(ggml_context* ctx, ggml_tensor* x,
-                                   ggml_tensor* w, ggml_tensor* b,
-                                   int K, int dil = 1) {
+static inline ggml_tensor* conv1d(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w, ggml_tensor* b, int K,
+                                  int dil = 1) {
     const int T = (int)x->ne[1];
     const int Cout = (int)w->ne[2];
     const int p = dil * (K - 1) / 2;
@@ -148,15 +147,14 @@ static inline ggml_tensor* conv1d(ggml_context* ctx, ggml_tensor* x,
     y = ggml_conv_1d(ctx, w, y, /*stride=*/1, p, dil);       // (T, Cout, 1)
     y = ggml_reshape_2d(ctx, y, T, Cout);                    // (T, Cout)
     y = ggml_cont(ctx, ggml_transpose(ctx, y));              // (Cout, T)
-    if (b) y = ggml_add(ctx, y, b);
+    if (b)
+        y = ggml_add(ctx, y, b);
     return y;
 }
 
 // ConvTranspose1d with symmetric cropping: T_out = T_in * stride
 // DAC uses kernel=2*stride, pad=stride/2.
-static inline ggml_tensor* convt1d(ggml_context* ctx, ggml_tensor* x,
-                                    ggml_tensor* w, ggml_tensor* b,
-                                    int stride) {
+static inline ggml_tensor* convt1d(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w, ggml_tensor* b, int stride) {
     const int pad = stride / 2;
     const int Cin = (int)x->ne[0];
     const int Cout = (int)w->ne[2];
@@ -168,20 +166,19 @@ static inline ggml_tensor* convt1d(ggml_context* ctx, ggml_tensor* x,
     int T_out_full = (int)y->ne[0];
     int T_out = T_out_full - 2 * pad;
     if (T_out > 0 && pad > 0) {
-        y = ggml_view_2d(ctx, y, T_out, Cout,
-                         y->nb[1], pad * sizeof(float));
+        y = ggml_view_2d(ctx, y, T_out, Cout, y->nb[1], pad * sizeof(float));
         y = ggml_cont(ctx, y);
     }
     // (T_out, Cout) -> (Cout, T_out)
     y = ggml_cont(ctx, ggml_transpose(ctx, y));
-    if (b) y = ggml_add(ctx, y, b);
+    if (b)
+        y = ggml_add(ctx, y, b);
     (void)Cin;
     return y;
 }
 
 // ResidualUnit: Snake -> Conv1d(k=7,dil=d) -> Snake -> Conv1d(k=1) -> add
-static inline ggml_tensor* res_unit(ggml_context* ctx, ggml_tensor* x,
-                                     const DacResUnit& u, int dil) {
+static inline ggml_tensor* res_unit(ggml_context* ctx, ggml_tensor* x, const DacResUnit& u, int dil) {
     ggml_tensor* y = snake(ctx, x, u.alpha0);
     y = conv1d(ctx, y, u.conv0_w, u.conv0_b, 7, dil);
     y = snake(ctx, y, u.alpha1);
@@ -190,8 +187,7 @@ static inline ggml_tensor* res_unit(ggml_context* ctx, ggml_tensor* x,
 }
 
 // DecoderBlock: Snake -> ConvTranspose1d(stride=s) -> 3 x ResidualUnit(d=1,3,9)
-static inline ggml_tensor* dec_block(ggml_context* ctx, ggml_tensor* x,
-                                      const DacDecoderBlock& blk, int stride) {
+static inline ggml_tensor* dec_block(ggml_context* ctx, ggml_tensor* x, const DacDecoderBlock& blk, int stride) {
     x = snake(ctx, x, blk.snake_alpha);
     x = convt1d(ctx, x, blk.up_w, blk.up_b, stride);
     x = res_unit(ctx, x, blk.res[0], 1);
@@ -205,10 +201,8 @@ static inline ggml_tensor* dec_block(ggml_context* ctx, ggml_tensor* x,
 //
 // `codes_in` is an array of n_codebooks I32 tensors, each of length T.
 // These must already be created (ggml_new_tensor_1d) and set as inputs.
-static inline ggml_tensor* build_decode_graph(
-    ggml_context* ctx, const DacWeights& w, ggml_tensor** codes_in,
-    int /*T*/, ggml_cgraph* gf)
-{
+static inline ggml_tensor* build_decode_graph(ggml_context* ctx, const DacWeights& w, ggml_tensor** codes_in, int /*T*/,
+                                              ggml_cgraph* gf) {
     const auto& cfg = w.config;
     const int n_cb = cfg.n_codebooks;
 
@@ -221,9 +215,8 @@ static inline ggml_tensor* build_decode_graph(
         z = ggml_cont(ctx, ggml_cast(ctx, z, GGML_TYPE_F32));
         // out_proj: (codebook_dim, T) -> (hidden, T)
         // pw conv: weight is (1, codebook_dim, hidden)
-        ggml_tensor* W2d = ggml_reshape_2d(ctx, q.out_proj_w,
-                                           q.out_proj_w->ne[0] * q.out_proj_w->ne[1],
-                                           q.out_proj_w->ne[2]);
+        ggml_tensor* W2d =
+            ggml_reshape_2d(ctx, q.out_proj_w, q.out_proj_w->ne[0] * q.out_proj_w->ne[1], q.out_proj_w->ne[2]);
         z = ggml_mul_mat(ctx, W2d, z); // (hidden, T)
         if (q.out_proj_b)
             z = ggml_add(ctx, z, q.out_proj_b);

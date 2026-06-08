@@ -23,7 +23,7 @@
 struct moonshine_context {
     moonshine_model model;
     moonshine_tokenizer tokenizer;
-    ggml_backend_t backend     = nullptr; // GPU or CPU (chosen at init)
+    ggml_backend_t backend = nullptr; // GPU or CPU (chosen at init)
     ggml_backend_t backend_cpu = nullptr;
     ggml_backend_sched_t sched = nullptr;
     std::string result_text;
@@ -324,8 +324,7 @@ struct moonshine_context* moonshine_init_with_params(struct moonshine_init_param
         }
     }
 
-    fprintf(stderr, "moonshine: loaded %zu tensors%s\n", wl.tensors.size(),
-            ctx->use_gpu ? " (GPU)" : "");
+    fprintf(stderr, "moonshine: loaded %zu tensors%s\n", wl.tensors.size(), ctx->use_gpu ? " (GPU)" : "");
     return ctx;
 }
 
@@ -954,7 +953,6 @@ static int moonshine_transcribe_impl(struct moonshine_context* ctx, const float*
         std::vector<float> bos_logits;
         ret = moonshine_decode_step(ctx, (int32_t)hp.bos_token_id, bos_logits);
         if (ret != 0) {
-
             ctx->kv_self.reset();
             ctx->kv_cross.reset();
             return ret;

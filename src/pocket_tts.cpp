@@ -294,10 +294,10 @@ struct pocket_tts_context {
     pocket_tts_model model;
 
     // GGML backends + scheduler (§140 GPU/sched migration)
-    ggml_backend_t backend     = nullptr; // GPU or CPU (chosen at init)
+    ggml_backend_t backend = nullptr; // GPU or CPU (chosen at init)
     ggml_backend_t backend_cpu = nullptr;
     ggml_backend_sched_t sched = nullptr;
-    ggml_context*  ctx_w       = nullptr; // weight tensor metadata
+    ggml_context* ctx_w = nullptr;         // weight tensor metadata
     ggml_backend_buffer_t buf_w = nullptr; // weight data buffer
 
     // KV caches
@@ -427,17 +427,17 @@ static ggml_tensor* try_get_tensor(const TensorMap& tensors, const char* name) {
 static bool load_flow_lm_tensors(const TensorMap& tensors, pocket_tts_model& m) {
     const auto& h = m.flow_lm_hp;
 
-    m.conditioner_embed = try_get_tensor(tensors,"flow_lm.conditioner.embed.weight");
-    m.input_linear = try_get_tensor(tensors,"flow_lm.input_linear.weight");
-    m.out_norm_w = try_get_tensor(tensors,"flow_lm.out_norm.weight");
-    m.out_norm_b = try_get_tensor(tensors,"flow_lm.out_norm.bias");
-    m.out_eos_w = try_get_tensor(tensors,"flow_lm.out_eos.weight");
-    m.out_eos_b = try_get_tensor(tensors,"flow_lm.out_eos.bias");
-    m.bos_emb = try_get_tensor(tensors,"flow_lm.bos_emb");
-    m.bos_before_voice = try_get_tensor(tensors,"flow_lm.bos_before_voice");
-    m.emb_std = try_get_tensor(tensors,"flow_lm.emb_std");
-    m.emb_mean = try_get_tensor(tensors,"flow_lm.emb_mean");
-    m.speaker_proj = try_get_tensor(tensors,"flow_lm.speaker_proj.weight");
+    m.conditioner_embed = try_get_tensor(tensors, "flow_lm.conditioner.embed.weight");
+    m.input_linear = try_get_tensor(tensors, "flow_lm.input_linear.weight");
+    m.out_norm_w = try_get_tensor(tensors, "flow_lm.out_norm.weight");
+    m.out_norm_b = try_get_tensor(tensors, "flow_lm.out_norm.bias");
+    m.out_eos_w = try_get_tensor(tensors, "flow_lm.out_eos.weight");
+    m.out_eos_b = try_get_tensor(tensors, "flow_lm.out_eos.bias");
+    m.bos_emb = try_get_tensor(tensors, "flow_lm.bos_emb");
+    m.bos_before_voice = try_get_tensor(tensors, "flow_lm.bos_before_voice");
+    m.emb_std = try_get_tensor(tensors, "flow_lm.emb_std");
+    m.emb_mean = try_get_tensor(tensors, "flow_lm.emb_mean");
+    m.speaker_proj = try_get_tensor(tensors, "flow_lm.speaker_proj.weight");
 
     // Backbone transformer layers
     m.backbone_layers.resize(h.num_layers);
@@ -446,47 +446,47 @@ static bool load_flow_lm_tensors(const TensorMap& tensors, pocket_tts_model& m) 
         char buf[256];
 
         snprintf(buf, sizeof(buf), "flow_lm.transformer.%u.norm1.weight", i);
-        L.attn_norm_w = try_get_tensor(tensors,buf);
+        L.attn_norm_w = try_get_tensor(tensors, buf);
         snprintf(buf, sizeof(buf), "flow_lm.transformer.%u.norm1.bias", i);
-        L.attn_norm_b = try_get_tensor(tensors,buf);
+        L.attn_norm_b = try_get_tensor(tensors, buf);
         snprintf(buf, sizeof(buf), "flow_lm.transformer.%u.self_attn.in_proj.weight", i);
-        L.attn_in_proj = try_get_tensor(tensors,buf);
+        L.attn_in_proj = try_get_tensor(tensors, buf);
         snprintf(buf, sizeof(buf), "flow_lm.transformer.%u.self_attn.out_proj.weight", i);
-        L.attn_out_proj = try_get_tensor(tensors,buf);
+        L.attn_out_proj = try_get_tensor(tensors, buf);
 
         snprintf(buf, sizeof(buf), "flow_lm.transformer.%u.norm2.weight", i);
-        L.ffn_norm_w = try_get_tensor(tensors,buf);
+        L.ffn_norm_w = try_get_tensor(tensors, buf);
         snprintf(buf, sizeof(buf), "flow_lm.transformer.%u.norm2.bias", i);
-        L.ffn_norm_b = try_get_tensor(tensors,buf);
+        L.ffn_norm_b = try_get_tensor(tensors, buf);
         snprintf(buf, sizeof(buf), "flow_lm.transformer.%u.linear1.weight", i);
-        L.ffn_linear1 = try_get_tensor(tensors,buf);
+        L.ffn_linear1 = try_get_tensor(tensors, buf);
         snprintf(buf, sizeof(buf), "flow_lm.transformer.%u.linear2.weight", i);
-        L.ffn_linear2 = try_get_tensor(tensors,buf);
+        L.ffn_linear2 = try_get_tensor(tensors, buf);
     }
 
     // Flow network (consistency head)
     auto& fn = m.flow_net;
-    fn.input_proj = try_get_tensor(tensors,"flow_lm.flow_net.input_proj.weight");
-    fn.input_proj_b = try_get_tensor(tensors,"flow_lm.flow_net.input_proj.bias");
-    fn.cond_embed = try_get_tensor(tensors,"flow_lm.flow_net.cond_embed.weight");
-    fn.cond_embed_b = try_get_tensor(tensors,"flow_lm.flow_net.cond_embed.bias");
+    fn.input_proj = try_get_tensor(tensors, "flow_lm.flow_net.input_proj.weight");
+    fn.input_proj_b = try_get_tensor(tensors, "flow_lm.flow_net.input_proj.bias");
+    fn.cond_embed = try_get_tensor(tensors, "flow_lm.flow_net.cond_embed.weight");
+    fn.cond_embed_b = try_get_tensor(tensors, "flow_lm.flow_net.cond_embed.bias");
 
     fn.time_embeds.resize(m.flow_head_hp.num_time_conds);
     for (uint32_t t = 0; t < m.flow_head_hp.num_time_conds; t++) {
         auto& te = fn.time_embeds[t];
         char buf[256];
         snprintf(buf, sizeof(buf), "flow_lm.flow_net.time_embed.%u.mlp.0.weight", t);
-        te.linear1_w = try_get_tensor(tensors,buf);
+        te.linear1_w = try_get_tensor(tensors, buf);
         snprintf(buf, sizeof(buf), "flow_lm.flow_net.time_embed.%u.mlp.0.bias", t);
-        te.linear1_b = try_get_tensor(tensors,buf);
+        te.linear1_b = try_get_tensor(tensors, buf);
         snprintf(buf, sizeof(buf), "flow_lm.flow_net.time_embed.%u.mlp.2.weight", t);
-        te.linear2_w = try_get_tensor(tensors,buf);
+        te.linear2_w = try_get_tensor(tensors, buf);
         snprintf(buf, sizeof(buf), "flow_lm.flow_net.time_embed.%u.mlp.2.bias", t);
-        te.linear2_b = try_get_tensor(tensors,buf);
+        te.linear2_b = try_get_tensor(tensors, buf);
         snprintf(buf, sizeof(buf), "flow_lm.flow_net.time_embed.%u.mlp.3.alpha", t);
-        te.rms_alpha = try_get_tensor(tensors,buf);
+        te.rms_alpha = try_get_tensor(tensors, buf);
         snprintf(buf, sizeof(buf), "flow_lm.flow_net.time_embed.%u.freqs", t);
-        te.freqs = try_get_tensor(tensors,buf);
+        te.freqs = try_get_tensor(tensors, buf);
     }
 
     fn.res_blocks.resize(m.flow_head_hp.flow_depth);
@@ -494,27 +494,27 @@ static bool load_flow_lm_tensors(const TensorMap& tensors, pocket_tts_model& m) 
         auto& rb = fn.res_blocks[i];
         char buf[256];
         snprintf(buf, sizeof(buf), "flow_lm.flow_net.res_blocks.%u.in_ln.weight", i);
-        rb.ln_w = try_get_tensor(tensors,buf);
+        rb.ln_w = try_get_tensor(tensors, buf);
         snprintf(buf, sizeof(buf), "flow_lm.flow_net.res_blocks.%u.in_ln.bias", i);
-        rb.ln_b = try_get_tensor(tensors,buf);
+        rb.ln_b = try_get_tensor(tensors, buf);
         snprintf(buf, sizeof(buf), "flow_lm.flow_net.res_blocks.%u.mlp.0.weight", i);
-        rb.mlp_linear1 = try_get_tensor(tensors,buf);
+        rb.mlp_linear1 = try_get_tensor(tensors, buf);
         snprintf(buf, sizeof(buf), "flow_lm.flow_net.res_blocks.%u.mlp.0.bias", i);
-        rb.mlp_linear1_b = try_get_tensor(tensors,buf);
+        rb.mlp_linear1_b = try_get_tensor(tensors, buf);
         snprintf(buf, sizeof(buf), "flow_lm.flow_net.res_blocks.%u.mlp.2.weight", i);
-        rb.mlp_linear2 = try_get_tensor(tensors,buf);
+        rb.mlp_linear2 = try_get_tensor(tensors, buf);
         snprintf(buf, sizeof(buf), "flow_lm.flow_net.res_blocks.%u.mlp.2.bias", i);
-        rb.mlp_linear2_b = try_get_tensor(tensors,buf);
+        rb.mlp_linear2_b = try_get_tensor(tensors, buf);
         snprintf(buf, sizeof(buf), "flow_lm.flow_net.res_blocks.%u.adaLN_modulation.1.weight", i);
-        rb.ada_linear = try_get_tensor(tensors,buf);
+        rb.ada_linear = try_get_tensor(tensors, buf);
         snprintf(buf, sizeof(buf), "flow_lm.flow_net.res_blocks.%u.adaLN_modulation.1.bias", i);
-        rb.ada_bias = try_get_tensor(tensors,buf);
+        rb.ada_bias = try_get_tensor(tensors, buf);
     }
 
-    fn.final_linear = try_get_tensor(tensors,"flow_lm.flow_net.final_layer.linear.weight");
-    fn.final_linear_b = try_get_tensor(tensors,"flow_lm.flow_net.final_layer.linear.bias");
-    fn.final_ada = try_get_tensor(tensors,"flow_lm.flow_net.final_layer.adaLN_modulation.1.weight");
-    fn.final_ada_b = try_get_tensor(tensors,"flow_lm.flow_net.final_layer.adaLN_modulation.1.bias");
+    fn.final_linear = try_get_tensor(tensors, "flow_lm.flow_net.final_layer.linear.weight");
+    fn.final_linear_b = try_get_tensor(tensors, "flow_lm.flow_net.final_layer.linear.bias");
+    fn.final_ada = try_get_tensor(tensors, "flow_lm.flow_net.final_layer.adaLN_modulation.1.weight");
+    fn.final_ada_b = try_get_tensor(tensors, "flow_lm.flow_net.final_layer.adaLN_modulation.1.bias");
 
     return m.conditioner_embed != nullptr && m.input_linear != nullptr;
 }
@@ -523,51 +523,51 @@ static bool load_mimi_decoder_tensors(const TensorMap& tensors, pocket_tts_model
     const auto& mi = m.mimi_hp;
 
     // Quantizer projection (Conv1d, kernel=1)
-    m.quant_proj_w = try_get_tensor(tensors,"mimi.quantizer.output_proj.weight");
+    m.quant_proj_w = try_get_tensor(tensors, "mimi.quantizer.output_proj.weight");
 
     // Upsample conv (transposed, stride=downsample_stride)
-    m.upsample_conv_w = try_get_tensor(tensors,"mimi.upsample.convtr.weight");
+    m.upsample_conv_w = try_get_tensor(tensors, "mimi.upsample.convtr.weight");
     if (!m.upsample_conv_w)
-        m.upsample_conv_w = try_get_tensor(tensors,"mimi.upsample.conv.weight");
-    m.upsample_conv_b = try_get_tensor(tensors,"mimi.upsample.convtr.bias");
+        m.upsample_conv_w = try_get_tensor(tensors, "mimi.upsample.conv.weight");
+    m.upsample_conv_b = try_get_tensor(tensors, "mimi.upsample.convtr.bias");
     if (!m.upsample_conv_b)
-        m.upsample_conv_b = try_get_tensor(tensors,"mimi.upsample.conv.bias");
+        m.upsample_conv_b = try_get_tensor(tensors, "mimi.upsample.conv.bias");
 
     // Decoder transformer
-    m.dec_xfmr_input_proj = try_get_tensor(tensors,"mimi.decoder_transformer.input_proj.weight");
-    m.dec_xfmr_output_proj = try_get_tensor(tensors,"mimi.decoder_transformer.output_projs.0.weight");
+    m.dec_xfmr_input_proj = try_get_tensor(tensors, "mimi.decoder_transformer.input_proj.weight");
+    m.dec_xfmr_output_proj = try_get_tensor(tensors, "mimi.decoder_transformer.output_projs.0.weight");
 
     m.dec_transformer_layers.resize(mi.xfmr_num_layers);
     for (uint32_t i = 0; i < mi.xfmr_num_layers; i++) {
         auto& L = m.dec_transformer_layers[i];
         char buf[256];
         snprintf(buf, sizeof(buf), "mimi.decoder_transformer.transformer.layers.%u.norm1.weight", i);
-        L.attn_norm_w = try_get_tensor(tensors,buf);
+        L.attn_norm_w = try_get_tensor(tensors, buf);
         snprintf(buf, sizeof(buf), "mimi.decoder_transformer.transformer.layers.%u.norm1.bias", i);
-        L.attn_norm_b = try_get_tensor(tensors,buf);
+        L.attn_norm_b = try_get_tensor(tensors, buf);
         snprintf(buf, sizeof(buf), "mimi.decoder_transformer.transformer.layers.%u.self_attn.in_proj.weight", i);
-        L.attn_in_proj = try_get_tensor(tensors,buf);
+        L.attn_in_proj = try_get_tensor(tensors, buf);
         snprintf(buf, sizeof(buf), "mimi.decoder_transformer.transformer.layers.%u.self_attn.out_proj.weight", i);
-        L.attn_out_proj = try_get_tensor(tensors,buf);
+        L.attn_out_proj = try_get_tensor(tensors, buf);
         snprintf(buf, sizeof(buf), "mimi.decoder_transformer.transformer.layers.%u.norm2.weight", i);
-        L.ffn_norm_w = try_get_tensor(tensors,buf);
+        L.ffn_norm_w = try_get_tensor(tensors, buf);
         snprintf(buf, sizeof(buf), "mimi.decoder_transformer.transformer.layers.%u.norm2.bias", i);
-        L.ffn_norm_b = try_get_tensor(tensors,buf);
+        L.ffn_norm_b = try_get_tensor(tensors, buf);
         snprintf(buf, sizeof(buf), "mimi.decoder_transformer.transformer.layers.%u.linear1.weight", i);
-        L.ffn_linear1 = try_get_tensor(tensors,buf);
+        L.ffn_linear1 = try_get_tensor(tensors, buf);
         snprintf(buf, sizeof(buf), "mimi.decoder_transformer.transformer.layers.%u.linear2.weight", i);
-        L.ffn_linear2 = try_get_tensor(tensors,buf);
+        L.ffn_linear2 = try_get_tensor(tensors, buf);
 
         snprintf(buf, sizeof(buf), "mimi.decoder_transformer.transformer.layers.%u.layer_scale_1.scale", i);
-        L.layer_scale_1 = try_get_tensor(tensors,buf);
+        L.layer_scale_1 = try_get_tensor(tensors, buf);
         snprintf(buf, sizeof(buf), "mimi.decoder_transformer.transformer.layers.%u.layer_scale_2.scale", i);
-        L.layer_scale_2 = try_get_tensor(tensors,buf);
+        L.layer_scale_2 = try_get_tensor(tensors, buf);
     }
 
     // SEANet decoder
     auto& sd = m.seanet_dec;
-    sd.initial_conv_w = try_get_tensor(tensors,"mimi.decoder.model.0.conv.weight");
-    sd.initial_conv_b = try_get_tensor(tensors,"mimi.decoder.model.0.conv.bias");
+    sd.initial_conv_w = try_get_tensor(tensors, "mimi.decoder.model.0.conv.weight");
+    sd.initial_conv_b = try_get_tensor(tensors, "mimi.decoder.model.0.conv.bias");
 
     // Decoder stages: for each ratio, there's an upsample + residual blocks
     // Layout in model list: [initial_conv, (ELU, ConvTr, ResBlock*n_res)*n_ratios, ELU, final_conv]
@@ -597,16 +597,16 @@ static bool load_mimi_decoder_tensors(const TensorMap& tensors, pocket_tts_model
         // ConvTranspose at idx
         char buf[256];
         snprintf(buf, sizeof(buf), "mimi.decoder.model.%u.convtr.weight", idx);
-        stage.convtr_w = try_get_tensor(tensors,buf);
+        stage.convtr_w = try_get_tensor(tensors, buf);
         if (!stage.convtr_w) {
             snprintf(buf, sizeof(buf), "mimi.decoder.model.%u.conv.weight", idx);
-            stage.convtr_w = try_get_tensor(tensors,buf);
+            stage.convtr_w = try_get_tensor(tensors, buf);
         }
         snprintf(buf, sizeof(buf), "mimi.decoder.model.%u.convtr.bias", idx);
-        stage.convtr_b = try_get_tensor(tensors,buf);
+        stage.convtr_b = try_get_tensor(tensors, buf);
         if (!stage.convtr_b) {
             snprintf(buf, sizeof(buf), "mimi.decoder.model.%u.conv.bias", idx);
-            stage.convtr_b = try_get_tensor(tensors,buf);
+            stage.convtr_b = try_get_tensor(tensors, buf);
         }
         idx++; // ConvTr
 
@@ -617,13 +617,13 @@ static bool load_mimi_decoder_tensors(const TensorMap& tensors, pocket_tts_model
             // Each resblock has a model list: [ELU, Conv, ELU, Conv]
             // block[0] = ELU, block[1] = Conv (dim->hidden), block[2] = ELU, block[3] = Conv (hidden->dim)
             snprintf(buf, sizeof(buf), "mimi.decoder.model.%u.block.1.conv.weight", idx);
-            rb.conv0_w = try_get_tensor(tensors,buf);
+            rb.conv0_w = try_get_tensor(tensors, buf);
             snprintf(buf, sizeof(buf), "mimi.decoder.model.%u.block.1.conv.bias", idx);
-            rb.conv0_b = try_get_tensor(tensors,buf);
+            rb.conv0_b = try_get_tensor(tensors, buf);
             snprintf(buf, sizeof(buf), "mimi.decoder.model.%u.block.3.conv.weight", idx);
-            rb.conv1_w = try_get_tensor(tensors,buf);
+            rb.conv1_w = try_get_tensor(tensors, buf);
             snprintf(buf, sizeof(buf), "mimi.decoder.model.%u.block.3.conv.bias", idx);
-            rb.conv1_b = try_get_tensor(tensors,buf);
+            rb.conv1_b = try_get_tensor(tensors, buf);
             idx++; // ResBlock
         }
     }
@@ -632,9 +632,9 @@ static bool load_mimi_decoder_tensors(const TensorMap& tensors, pocket_tts_model
     idx++; // ELU
     char buf[256];
     snprintf(buf, sizeof(buf), "mimi.decoder.model.%u.conv.weight", idx);
-    sd.final_conv_w = try_get_tensor(tensors,buf);
+    sd.final_conv_w = try_get_tensor(tensors, buf);
     snprintf(buf, sizeof(buf), "mimi.decoder.model.%u.conv.bias", idx);
-    sd.final_conv_b = try_get_tensor(tensors,buf);
+    sd.final_conv_b = try_get_tensor(tensors, buf);
 
     return true;
 }
@@ -645,42 +645,42 @@ static bool load_mimi_encoder_tensors(const TensorMap& tensors, pocket_tts_model
 
     const auto& mi = m.mimi_hp;
 
-    m.downsample_conv_w = try_get_tensor(tensors,"mimi.downsample.conv.weight");
-    m.downsample_conv_b = try_get_tensor(tensors,"mimi.downsample.conv.bias");
+    m.downsample_conv_w = try_get_tensor(tensors, "mimi.downsample.conv.weight");
+    m.downsample_conv_b = try_get_tensor(tensors, "mimi.downsample.conv.bias");
 
-    m.enc_xfmr_input_proj = try_get_tensor(tensors,"mimi.encoder_transformer.input_proj.weight");
-    m.enc_xfmr_output_proj = try_get_tensor(tensors,"mimi.encoder_transformer.output_projs.0.weight");
+    m.enc_xfmr_input_proj = try_get_tensor(tensors, "mimi.encoder_transformer.input_proj.weight");
+    m.enc_xfmr_output_proj = try_get_tensor(tensors, "mimi.encoder_transformer.output_projs.0.weight");
 
     m.enc_transformer_layers.resize(mi.xfmr_num_layers);
     for (uint32_t i = 0; i < mi.xfmr_num_layers; i++) {
         auto& L = m.enc_transformer_layers[i];
         char buf[256];
         snprintf(buf, sizeof(buf), "mimi.encoder_transformer.transformer.layers.%u.norm1.weight", i);
-        L.attn_norm_w = try_get_tensor(tensors,buf);
+        L.attn_norm_w = try_get_tensor(tensors, buf);
         snprintf(buf, sizeof(buf), "mimi.encoder_transformer.transformer.layers.%u.norm1.bias", i);
-        L.attn_norm_b = try_get_tensor(tensors,buf);
+        L.attn_norm_b = try_get_tensor(tensors, buf);
         snprintf(buf, sizeof(buf), "mimi.encoder_transformer.transformer.layers.%u.self_attn.in_proj.weight", i);
-        L.attn_in_proj = try_get_tensor(tensors,buf);
+        L.attn_in_proj = try_get_tensor(tensors, buf);
         snprintf(buf, sizeof(buf), "mimi.encoder_transformer.transformer.layers.%u.self_attn.out_proj.weight", i);
-        L.attn_out_proj = try_get_tensor(tensors,buf);
+        L.attn_out_proj = try_get_tensor(tensors, buf);
         snprintf(buf, sizeof(buf), "mimi.encoder_transformer.transformer.layers.%u.norm2.weight", i);
-        L.ffn_norm_w = try_get_tensor(tensors,buf);
+        L.ffn_norm_w = try_get_tensor(tensors, buf);
         snprintf(buf, sizeof(buf), "mimi.encoder_transformer.transformer.layers.%u.norm2.bias", i);
-        L.ffn_norm_b = try_get_tensor(tensors,buf);
+        L.ffn_norm_b = try_get_tensor(tensors, buf);
         snprintf(buf, sizeof(buf), "mimi.encoder_transformer.transformer.layers.%u.linear1.weight", i);
-        L.ffn_linear1 = try_get_tensor(tensors,buf);
+        L.ffn_linear1 = try_get_tensor(tensors, buf);
         snprintf(buf, sizeof(buf), "mimi.encoder_transformer.transformer.layers.%u.linear2.weight", i);
-        L.ffn_linear2 = try_get_tensor(tensors,buf);
+        L.ffn_linear2 = try_get_tensor(tensors, buf);
         snprintf(buf, sizeof(buf), "mimi.encoder_transformer.transformer.layers.%u.layer_scale_1.scale", i);
-        L.layer_scale_1 = try_get_tensor(tensors,buf);
+        L.layer_scale_1 = try_get_tensor(tensors, buf);
         snprintf(buf, sizeof(buf), "mimi.encoder_transformer.transformer.layers.%u.layer_scale_2.scale", i);
-        L.layer_scale_2 = try_get_tensor(tensors,buf);
+        L.layer_scale_2 = try_get_tensor(tensors, buf);
     }
 
     // SEANet encoder
     auto& se = m.seanet_enc;
-    se.initial_conv_w = try_get_tensor(tensors,"mimi.encoder.model.0.conv.weight");
-    se.initial_conv_b = try_get_tensor(tensors,"mimi.encoder.model.0.conv.bias");
+    se.initial_conv_w = try_get_tensor(tensors, "mimi.encoder.model.0.conv.weight");
+    se.initial_conv_b = try_get_tensor(tensors, "mimi.encoder.model.0.conv.bias");
 
     // Encoder: ratios are reversed (compared to decoder)
     std::vector<int> enc_ratios(mi.seanet_ratios.rbegin(), mi.seanet_ratios.rend());
@@ -697,13 +697,13 @@ static bool load_mimi_encoder_tensors(const TensorMap& tensors, pocket_tts_model
             auto& rb = stage.resblocks[r];
             char buf[256];
             snprintf(buf, sizeof(buf), "mimi.encoder.model.%u.block.1.conv.weight", idx);
-            rb.conv0_w = try_get_tensor(tensors,buf);
+            rb.conv0_w = try_get_tensor(tensors, buf);
             snprintf(buf, sizeof(buf), "mimi.encoder.model.%u.block.1.conv.bias", idx);
-            rb.conv0_b = try_get_tensor(tensors,buf);
+            rb.conv0_b = try_get_tensor(tensors, buf);
             snprintf(buf, sizeof(buf), "mimi.encoder.model.%u.block.3.conv.weight", idx);
-            rb.conv1_w = try_get_tensor(tensors,buf);
+            rb.conv1_w = try_get_tensor(tensors, buf);
             snprintf(buf, sizeof(buf), "mimi.encoder.model.%u.block.3.conv.bias", idx);
-            rb.conv1_b = try_get_tensor(tensors,buf);
+            rb.conv1_b = try_get_tensor(tensors, buf);
             idx++;
         }
 
@@ -711,9 +711,9 @@ static bool load_mimi_encoder_tensors(const TensorMap& tensors, pocket_tts_model
         idx++; // ELU
         char buf[256];
         snprintf(buf, sizeof(buf), "mimi.encoder.model.%u.conv.weight", idx);
-        stage.conv_w = try_get_tensor(tensors,buf);
+        stage.conv_w = try_get_tensor(tensors, buf);
         snprintf(buf, sizeof(buf), "mimi.encoder.model.%u.conv.bias", idx);
-        stage.conv_b = try_get_tensor(tensors,buf);
+        stage.conv_b = try_get_tensor(tensors, buf);
         idx++;
     }
 
@@ -721,9 +721,9 @@ static bool load_mimi_encoder_tensors(const TensorMap& tensors, pocket_tts_model
     idx++; // ELU
     char buf[256];
     snprintf(buf, sizeof(buf), "mimi.encoder.model.%u.conv.weight", idx);
-    se.final_conv_w = try_get_tensor(tensors,buf);
+    se.final_conv_w = try_get_tensor(tensors, buf);
     snprintf(buf, sizeof(buf), "mimi.encoder.model.%u.conv.bias", idx);
-    se.final_conv_b = try_get_tensor(tensors,buf);
+    se.final_conv_b = try_get_tensor(tensors, buf);
 
     return true;
 }
