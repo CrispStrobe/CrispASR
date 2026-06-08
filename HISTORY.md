@@ -41,12 +41,11 @@ pocket-tts was still on the old `gguf_init_from_file(no_alloc=false)` +
 
 All 6 TTS sched backends now DONE. PLAN.md §140 updated.
 
-**Moonshine mmap + sched migration.** `moonshine.cpp` migrated from
-`gguf_init_from_file` + manual fread tensor loop + per-graph `gallocr`
-to `core_gguf::open_metadata` + `core_gguf::load_weights` (mmap) +
-`ggml_backend_sched`. Added `use_gpu` param to `moonshine_init_params`,
-wired via `g_open_use_gpu_tls` in C API. `moonshine_streaming.cpp` still
-on old path (same pattern, lower priority).
+**Moonshine mmap + sched migration.** Both `moonshine.cpp` and
+`moonshine_streaming.cpp` migrated from `gguf_init_from_file` + manual
+fread tensor loop + per-graph `gallocr` to `core_gguf::open_metadata` +
+`core_gguf::load_weights` (mmap) + `ggml_backend_sched`. Added `use_gpu`
+to both init params, wired via `g_open_use_gpu_tls` in C API.
 
 ---
 
