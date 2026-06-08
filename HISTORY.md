@@ -16,13 +16,17 @@ on RTX 3090 + Kaggle P100 at 2.4x realtime. k-quant CUDA GET_ROWS fix
 the hypothetical Option C step-graph approach (31 ms/step), so Option C
 is not worth pursuing. PLAN.md updated to reflect this.
 
-**§52 Qwen3-TTS O15 CUDA test.** O15 (persistent code-predictor graph
-reuse) saves ~14-19 ms/frame but was reverted to default-OFF in `61c42bfb`
-after a `GGML_ASSERT` crash on Jetson sm_87 (CUDA, `ggml_backend_tensor_set`
-on cached graph with `ggml_set_rows`). Created Kaggle kernel
-`tools/kaggle/qwen3-tts-o15-cuda/` — kernel v1 failed because the test
-harness didn't pass a voice reference (qwen3-tts requires `--voice`).
-Fixed with `jfk.wav` as reference; re-pushed as kernel v2. Awaiting results.
+**§52 Qwen3-TTS O15 CUDA test — O15 CONFIRMED BROKEN on CUDA.**
+O15 (persistent code-predictor graph reuse) saves ~14-19 ms/frame but
+was reverted to default-OFF in `61c42bfb`. Kaggle kernel v4 on P100
+(sm_60) confirms:
+- **O15=OFF works**: rc=0, 27.3 ms/frame (78 frames), ASR roundtrip OK
+  ("Please call Stella...")
+- **O15=ON crashes**: rc=-6, CUDA error at `ggml_backend_cuda_synchronize`
+  after voice prompt encoding
+- **Verdict**: O15 stays default OFF. The crash is cross-architecture
+  (Jetson sm_87 + P100 sm_60). Root cause is in the ggml sched's
+  buffer management when reusing graphs with `ggml_set_rows`.
 
 **§140 TTS GPU sched — pocket-tts migrated.** Audit found speecht5/piper/
 parler-tts/outetts already had `ggml_backend_sched` wired (just `use_gpu`
