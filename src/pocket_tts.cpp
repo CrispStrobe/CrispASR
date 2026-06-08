@@ -2737,8 +2737,12 @@ struct pocket_tts_context* pocket_tts_init_from_file(const char* path_model, str
     }
 
     // ── Pass 2: load weights via core_gguf (mmap, backend buffer) ──
+    // Weights must stay CPU-accessible because the flow head + AR loop use
+    // eager CPU code (tensor_f32_data) that reads t->data directly.
+    // The sched auto-copies to GPU for graph ops (backbone_forward_step_ggml,
+    // mimi_decode_ggml).
     core_gguf::WeightLoad wl;
-    if (!core_gguf::load_weights(path_model, ctx->backend, "pocket_tts", wl)) {
+    if (!core_gguf::load_weights(path_model, ctx->backend_cpu, "pocket_tts", wl)) {
         fprintf(stderr, "pocket_tts: failed to load weights from '%s'\n", path_model);
         delete ctx;
         return nullptr;
