@@ -206,6 +206,8 @@ curl http://localhost:8080/v1/audio/speech \
 | `frequency_penalty` | `0.0` | Opt-in repeated generated-token penalty for AR TTS backends. `0.0` disabled. |
 | `speed` | `1.0` | Tempo multiplier `0.25 .. 4.0` (OpenAI range). Applied as a post-synth linear resampler. Out-of-range returns 400 with `code=invalid_speed`. |
 | `response_format` | `"wav"` | `wav` (16-bit PCM RIFF, 24 kHz mono — default), `pcm` (OpenAI spec: 24 kHz signed 16-bit LE raw, no header), or `f32` (crispasr-specific raw float32 for downstream DSP). |
+| `consent_attestation` | empty | Required when `voice` ends in `.wav` (voice cloning). A free-text statement attesting speaker consent, e.g. `"I have the speaker's consent"`. Logged for audit. |
+| `spoken_disclaimer` | `true` | Set to `false` to skip the audible AI-disclosure prefix on voice-cloned output. Machine-readable provenance (watermark + C2PA) is always applied. When `false`, the caller assumes responsibility for providing appropriate AI-disclosure to end users. |
 
 **Returns:**
 

@@ -1000,6 +1000,7 @@ the neural watermark, C2PA signing, and voice-cloning consent:
 | `--watermark-model PATH` | Load AudioSeal GGUF for neural watermarking (upgrades built-in spread-spectrum) |
 | `--detect-watermark PATH` | Read a WAV file, run watermark detection, print confidence + verdict (`>0.65` = AI-GENERATED, `0.4–0.65` = UNCERTAIN, `<0.4` = none), then exit |
 | `--i-have-rights` | Required for voice cloning (`--voice <file.wav>`); attests speaker consent |
+| `--no-spoken-disclaimer` | Skip the audible AI-disclosure prefix on voice-cloned output (watermark + C2PA still applied; caller assumes disclosure responsibility) |
 | `--g2p-dict SOURCE` | G2P pronunciation dictionary: `olaph` (MIT, default), `open-dict` (CC-BY-SA), or path to a custom dict file. Auto-downloads on first use. See [`tts.md`](tts.md) for details. |
 | `--c2pa-cert PATH` | X.509 certificate for C2PA Content Credentials signing |
 | `--c2pa-key PATH` | Private key for C2PA signing (generate both with `scripts/generate-c2pa-cert.sh`) |

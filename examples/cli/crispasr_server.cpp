@@ -1186,8 +1186,7 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             char ts[64];
             std::strftime(ts, sizeof(ts), "%Y-%m-%dT%H:%M:%S%z", std::localtime(&t));
             fprintf(stderr, "[CONSENT] ts=%s voice=%s attestation=\"%s\" spoken_disclaimer=%s\n", ts,
-                    voice_name.c_str(), consent_attestation.c_str(),
-                    spoken_disclaimer ? "yes" : "no");
+                    voice_name.c_str(), consent_attestation.c_str(), spoken_disclaimer ? "yes" : "no");
         }
         std::string response_format = body.value("response_format", std::string("wav"));
         if (response_format != "wav" && response_format != "pcm" && response_format != "f32" &&
