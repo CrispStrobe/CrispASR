@@ -218,6 +218,15 @@ the GGUF architecture. Supported TTS backends: `kokoro`, `qwen3-tts`
 `chatterbox`, `indextts`, `voxcpm2-tts`, and `cosyvoice3-tts`. See
 [`tts.md`](tts.md) for per-backend cloning + voice details.
 
+**Provenance responsibility:** `synthesize()` returns raw PCM with no
+watermark or spoken disclaimer — those are applied at the CLI/server
+layer. When using the C API or any binding directly, callers **must**
+embed the watermark themselves via `watermark_embed()` (available in
+every binding). The spoken disclaimer is optional (see
+[`tts.md`](tts.md#spoken-disclaimer-voice-clones-only)), but
+machine-readable provenance (watermark) should always be applied to
+voice-cloned output for EU AI Act compliance.
+
 ```python
 # Python (identical shape in every binding)
 s = crispasr.Session("cosyvoice3-llm-f16.gguf")   # backend auto-detected
