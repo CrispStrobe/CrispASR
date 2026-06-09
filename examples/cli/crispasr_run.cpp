@@ -1490,7 +1490,9 @@ int crispasr_run_backend(const whisper_params& params_in) {
         // Prepend spoken AI-disclosure for voice-cloned output. The
         // disclaimer is synthesized with the neutral/default voice (not
         // the cloned voice) and cached. 300ms silence gap.
-        if (is_voice_clone) {
+        // Skipped when --no-spoken-disclaimer is set; watermark + C2PA
+        // provenance remain regardless.
+        if (is_voice_clone && !params.tts_no_spoken_disclaimer) {
             crispasr_tts_prepend_disclaimer(audio, backend.get(), params);
         }
 

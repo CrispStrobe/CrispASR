@@ -287,6 +287,11 @@ struct whisper_params {
     bool tts_voice_clone_consent = false;
     std::string tts_consent_attestation;
 
+    // Skip the spoken AI-disclosure prefix on voice-cloned output.
+    // Machine-readable provenance (watermark + C2PA) is always retained.
+    // CLI: --no-spoken-disclaimer   Server: "spoken_disclaimer": false
+    bool tts_no_spoken_disclaimer = false;
+
     // Server mode: directory containing voice profiles for /v1/audio/speech.
     // Each profile is a sibling pair: <name>.wav + <name>.txt (the WAV is
     // the reference audio, the TXT is its transcription used by Qwen3-TTS

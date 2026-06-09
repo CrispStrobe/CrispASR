@@ -1162,6 +1162,9 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         std::string voice_name = body.value("voice", "");
         std::string consent_attestation = body.value("consent_attestation", "");
         std::string instructions = body.value("instructions", "");
+        // spoken_disclaimer defaults to true; set to false to skip the
+        // audible AI-disclosure prefix (watermark + C2PA remain).
+        const bool spoken_disclaimer = body.value("spoken_disclaimer", true);
 
         // Voice-cloning consent gate: when the voice is a .wav reference
         // (voice cloning), require an explicit consent_attestation field.
@@ -1182,8 +1185,9 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             auto t = std::chrono::system_clock::to_time_t(now);
             char ts[64];
             std::strftime(ts, sizeof(ts), "%Y-%m-%dT%H:%M:%S%z", std::localtime(&t));
-            fprintf(stderr, "[CONSENT] ts=%s voice=%s attestation=\"%s\"\n", ts, voice_name.c_str(),
-                    consent_attestation.c_str());
+            fprintf(stderr, "[CONSENT] ts=%s voice=%s attestation=\"%s\" spoken_disclaimer=%s\n", ts,
+                    voice_name.c_str(), consent_attestation.c_str(),
+                    spoken_disclaimer ? "yes" : "no");
         }
         std::string response_format = body.value("response_format", std::string("wav"));
         if (response_format != "wav" && response_format != "pcm" && response_format != "f32" &&
@@ -1402,7 +1406,9 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         }
 
         // Prepend spoken AI-disclosure for voice-cloned requests.
-        if (is_voice_clone) {
+        // Skipped when "spoken_disclaimer": false; watermark + C2PA
+        // provenance remain regardless.
+        if (is_voice_clone && spoken_disclaimer) {
             crispasr_tts_prepend_disclaimer(pcm, backend.get(), rp);
         }
 
