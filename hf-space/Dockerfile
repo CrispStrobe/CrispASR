@@ -15,7 +15,7 @@ ARG CRISPASR_REF=main
 # Cache-buster: change this to force a fresh git clone on rebuild.
 # HF Spaces caches Docker layers aggressively; without this, the git
 # clone layer persists even when main has new commits.
-ARG CRISPASR_CACHE_BUST=1
+ARG CRISPASR_CACHE_BUST=2
 
 RUN git clone --depth 1 "${CRISPASR_REPO}" /src/CrispASR && \
   git -C /src/CrispASR fetch --depth 1 origin "${CRISPASR_REF}" && \
