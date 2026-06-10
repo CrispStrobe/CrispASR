@@ -18,7 +18,10 @@ from pathlib import Path
 from typing import Iterable
 
 import gradio as gr
+import httpx
 import requests
+import uvicorn
+from fastapi import FastAPI, Request, Response
 
 
 SERVER_URL = os.environ.get("CRISPASR_SERVER_URL", "http://127.0.0.1:8080").rstrip("/")
@@ -517,12 +520,97 @@ Each tab loads its own backend through the server's `/load` endpoint; the server
     demo.load(wait_for_server, outputs=[status_box, backends_box])
 
 
+# ── OpenAI-compatible REST proxy in front of Gradio ──────────────────
+# HF Spaces only route the public port (7860) to the Gradio app, so the
+# CrispASR HTTP server's OpenAI-compatible API on :8080 was unreachable
+# from outside the container — `/v1/*`, `/health`, `/backends`, `/load`
+# all 404'd publicly. Mount a thin reverse proxy so those endpoints are
+# served on the public URL (with CORS), for HTTP API consumers like the
+# CrisperWeaver web/PWA app. The Gradio UI stays mounted at "/".
+
+_PROXY_TIMEOUT = httpx.Timeout(900.0, connect=15.0)
+_HOP_BY_HOP = {
+    "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
+    "te", "trailers", "transfer-encoding", "upgrade", "content-length",
+    "host", "content-encoding",
+}
+
+
+def _cors(headers: dict) -> dict:
+    headers["Access-Control-Allow-Origin"] = "*"
+    headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    headers["Access-Control-Allow-Headers"] = "*"
+    headers["Access-Control-Max-Age"] = "86400"
+    return headers
+
+
+def _build_app():
+    """FastAPI reverse proxy for the CrispASR server, with Gradio at '/'."""
+    api = FastAPI(title="CrispASR API proxy", docs_url=None, redoc_url=None)
+    client = httpx.AsyncClient(timeout=_PROXY_TIMEOUT)
+
+    async def _forward(request: Request, path: str) -> Response:
+        # Preflight: answer here so the browser never reaches the backend.
+        if request.method == "OPTIONS":
+            return Response(status_code=204, headers=_cors({}))
+        body = await request.body()
+        headers = {
+            k: v for k, v in request.headers.items()
+            if k.lower() not in _HOP_BY_HOP and k.lower() != "origin"
+        }
+        if API_KEY and "authorization" not in {k.lower() for k in headers}:
+            headers["Authorization"] = f"Bearer {API_KEY}"
+        try:
+            upstream = await client.request(
+                request.method, f"{SERVER_URL}{path}", content=body,
+                headers=headers, params=request.query_params,
+            )
+        except httpx.HTTPError as exc:
+            return Response(
+                content=json.dumps({"error": f"upstream unavailable: {exc}"}),
+                status_code=502, media_type="application/json",
+                headers=_cors({}),
+            )
+        out = _cors({
+            k: v for k, v in upstream.headers.items()
+            if k.lower() not in _HOP_BY_HOP
+        })
+        return Response(
+            content=upstream.content, status_code=upstream.status_code,
+            headers=out, media_type=upstream.headers.get("content-type"),
+        )
+
+    @api.api_route("/v1/{path:path}",
+                   methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+    async def _proxy_v1(path: str, request: Request):
+        return await _forward(request, f"/v1/{path}")
+
+    @api.api_route("/health", methods=["GET", "OPTIONS"])
+    async def _proxy_health(request: Request):
+        return await _forward(request, "/health")
+
+    @api.api_route("/backends", methods=["GET", "OPTIONS"])
+    async def _proxy_backends(request: Request):
+        return await _forward(request, "/backends")
+
+    @api.api_route("/load", methods=["POST", "OPTIONS"])
+    async def _proxy_load(request: Request):
+        return await _forward(request, "/load")
+
+    # Gradio UI at the root; the explicit API routes above take precedence.
+    return gr.mount_gradio_app(api, demo, path="/")
+
+
+app = _build_app()
+
+
 if __name__ == "__main__":
     log(
         f"launch: server_url={SERVER_URL} samples={SAMPLES_DIR} "
         f"lid_bin={CRISPASR_LID_BIN} cache={CACHE_DIR}"
     )
-    demo.launch(
-        server_name=os.environ.get("GRADIO_SERVER_NAME", "0.0.0.0"),
-        server_port=int(os.environ.get("GRADIO_SERVER_PORT", "7860")),
+    uvicorn.run(
+        app,
+        host=os.environ.get("GRADIO_SERVER_NAME", "0.0.0.0"),
+        port=int(os.environ.get("GRADIO_SERVER_PORT", "7860")),
     )
