@@ -6376,8 +6376,8 @@ static void ggml_compute_forward_col2im_1d_f32(
 
     if (ir0 >= ir1) return;
 
-    const float * __restrict__ cp = (const float *)col->data;
-    float       * __restrict__ dp = (float *)      dst->data;
+    const float * GGML_RESTRICT cp = (const float *)col->data;
+    float       * GGML_RESTRICT dp = (float *)      dst->data;
 
     for (int gidx = ir0; gidx < ir1; gidx++) {
         const int t_out = gidx % T_out;
