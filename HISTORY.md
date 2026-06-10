@@ -6,6 +6,25 @@ technical deep-dives are in `LEARNINGS.md`.
 
 ---
 
+## 2026-06-10 WASM build — all backends, multithreaded
+
+Compiled the full CrispASR library (~70 ASR/TTS/LID/VAD backends) to
+WebAssembly via Emscripten. Multithreaded (`-pthread`, `PTHREAD_POOL_SIZE=8`,
+requires COOP/COEP headers for SharedArrayBuffer).
+
+- `build-wasm.sh`: ninja + ccache, SIMD128, CPU-only
+- `CMakeLists.txt`: `CRISPASR_WASM` option + `add_subdirectory(bindings/javascript)`
+- `crispasr_cache.cpp`: `__EMSCRIPTEN__` guards (MEMFS dir, no fetch)
+- `emscripten.cpp`: fixed stale `CrispasrSession` typedef, removed conflicting
+  forward declarations
+- `kokoro.cpp`: qualified `phonemize_builtin_*` with `crispasr::` namespace
+- `CMakeLists.txt` (src): added `phonemizer.cpp` to kokoro static lib
+- CI: `build-wasm.yml` workflow, `deploy-hf-space.yml` auto-deploy
+- Output: 103K JS + 4.3M WASM (all backends)
+- Tested: whisper-tiny (77 MB) loads and inits in WASM (844ms)
+
+---
+
 ## 2026-06-10 hf-space — public OpenAI-compatible /v1 API + space un-rot
 
 The `hf-space/` Gradio demo only exposed its UI on the public port (7860);

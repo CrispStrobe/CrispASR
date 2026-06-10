@@ -15,6 +15,12 @@ $ crispasr --backend kokoro -m auto --tts "Hello world" --tts-output out.wav  # 
 
 No Python. No PyTorch. No separate per-model binary. No `pip install`. Just one C++ binary and a GGUF file.
 
+**Browser**: All backends compile to WebAssembly (4.3 MB) via `build-wasm.sh`.
+Multithreaded, runs entirely client-side with COOP/COEP headers.
+
+**Demo**: [HuggingFace Space](https://huggingface.co/spaces/cstr/CrispASR) —
+live transcription + TTS + language detection, auto-deployed from `hf-space/`.
+
 ### What's new (v0.6.9+)
 
 - **Long-audio fix (issue #89):** NeMo-style streamed pipeline (global z-norm + 8 s chunked encode + single TDT decode) is now the default path for parakeet / canary / fastconformer-ctc at any duration. The single-pass-over-the-whole-clip encoder was numerically unstable to codec-level audio perturbations and could drop most of a 60 s clip; the streamed path is stable. Tuneable via `CRISPASR_PARAKEET_STREAM_THRESHOLD` (escape hatch back to single-pass) / `_CHUNK` / `_OVERLAP` env vars.
