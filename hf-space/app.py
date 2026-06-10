@@ -85,6 +85,18 @@ LID_MODELS = [
     ("LID-176 — 176 ISO-639-1 (CC-BY-SA)",   "auto:lid-fasttext176",  "Facebook fastText. Output GGUF inherits CC-BY-SA-3.0."),
 ]
 
+# (display, backend, model_arg, approx_size, blurb)
+NMT_MODELS = [
+    ("M2M-100 418M — 100 langs, any→any",    "m2m100",     "auto", "~800 MB",
+     "Facebook M2M-100. 100 language pairs. Best general-purpose NMT."),
+    ("WMT21 Dense — en↔X, 14 high-resource",  "m2m100-wmt21", "auto", "~800 MB",
+     "WMT21 competition model. Higher quality for en↔de, en↔zh, etc."),
+    ("MADLAD-400 — 419 langs (CC-BY-SA)",     "madlad",     "auto", "~500 MB",
+     "Google T5-based. Widest language coverage. Output inherits CC-BY-SA."),
+]
+
+CRISPASR_CLI_BIN = shutil.which("crispasr") or "crispasr"
+
 
 def log(msg: str) -> None:
     print(
@@ -313,6 +325,51 @@ def detect_text_language(text, model_choice, top_k):
     return rows, (proc.stdout or "") + ("\n--- stderr ---\n" + proc.stderr if proc.stderr else "")
 
 
+def translate_text(text, model_choice, src_lang, tgt_lang):
+    text = (text or "").strip()
+    if not text:
+        raise gr.Error("Enter some text to translate.")
+    spec = _spec_by_label(NMT_MODELS, model_choice) or NMT_MODELS[0]
+    _, backend, model_arg, _, _ = spec
+    src = (src_lang or "en").strip()
+    tgt = (tgt_lang or "de").strip()
+    cmd = [
+        CRISPASR_CLI_BIN,
+        "--backend", backend,
+        "-m", model_arg,
+        "--auto-download",
+        "--cache-dir", str(CACHE_DIR),
+        "--text", text,
+        "-sl", src,
+        "-tl", tgt,
+    ]
+    log(f"translate: backend={backend} {src}→{tgt} chars={len(text)}")
+    env = {**os.environ, "CRISPASR_CACHE_DIR": str(CACHE_DIR)}
+    try:
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=300,
+            env=env,
+        )
+    except FileNotFoundError:
+        raise gr.Error(f"crispasr not found at '{CRISPASR_CLI_BIN}'.")
+    if proc.returncode != 0:
+        raise gr.Error(
+            f"Translation failed (exit {proc.returncode}): {(proc.stderr or '').strip()[:400]}"
+        )
+    result = proc.stdout.strip()
+    if not result:
+        raise gr.Error("Translation returned empty output.")
+    return result
+
+
+def select_nmt(choice):
+    spec = _spec_by_label(NMT_MODELS, choice) or NMT_MODELS[0]
+    return f"{spec[4]}\n\nApprox. download: {spec[3]}"
+
+
 def list_sample_files() -> list[str]:
     if not SAMPLES_DIR.exists():
         return []
@@ -513,6 +570,33 @@ Each tab loads its own backend through the server's `/load` endpoint; the server
             )
             lid_raw = gr.Code(label="Raw output")
 
+        # --- Text translation ------------------------------------------
+        with gr.Tab("Translate text (NMT)"):
+            gr.Markdown(
+                "Text → text translation via M2M-100, WMT21, or MADLAD-400 NMT backends. "
+                "Uses the `crispasr` CLI's `--text` mode — the model downloads on first use."
+            )
+            with gr.Row():
+                nmt_choice = gr.Dropdown(
+                    [e[0] for e in NMT_MODELS], value=NMT_MODELS[0][0], label="NMT model", scale=3
+                )
+            nmt_info = gr.Textbox(
+                value=f"{NMT_MODELS[0][4]}\n\nApprox. download: {NMT_MODELS[0][3]}",
+                label="Notes",
+                interactive=False,
+                lines=2,
+            )
+            with gr.Row():
+                nmt_src_lang = gr.Textbox(value="en", label="Source language", placeholder="en / de / fr / zh …")
+                nmt_tgt_lang = gr.Textbox(value="de", label="Target language", placeholder="de / en / fr / zh …")
+            nmt_input = gr.Textbox(
+                label="Source text",
+                value="The quick brown fox jumps over the lazy dog.",
+                lines=4,
+            )
+            nmt_submit = gr.Button("Translate", variant="primary")
+            nmt_output = gr.Textbox(label="Translation", lines=4)
+
         # --- Backends info --------------------------------------------
         with gr.Tab("About & backends"):
             gr.Markdown(CAPABILITY_TABLE_MD)
@@ -525,6 +609,7 @@ Each tab loads its own backend through the server's `/load` endpoint; the server
 
     tts_choice.change(select_tts, inputs=[tts_choice], outputs=[tts_info])
     tts_load_btn.click(load_tts, inputs=[tts_choice], outputs=[status_box, backends_box])
+    nmt_choice.change(select_nmt, inputs=[nmt_choice], outputs=[nmt_info])
     tts_voices_btn.click(list_voices, outputs=[tts_voices_list])
 
     lid_choice.change(select_lid, inputs=[lid_choice], outputs=[lid_info])
@@ -538,6 +623,11 @@ Each tab loads its own backend through the server's `/load` endpoint; the server
     )
     tts_submit.click(synthesize, inputs=[tts_text, tts_voice, tts_speed], outputs=[tts_audio])
     lid_run.click(detect_text_language, inputs=[lid_text, lid_choice, lid_topk], outputs=[lid_table, lid_raw])
+    nmt_submit.click(
+        translate_text,
+        inputs=[nmt_input, nmt_choice, nmt_src_lang, nmt_tgt_lang],
+        outputs=[nmt_output],
+    )
 
     demo.load(wait_for_server, outputs=[status_box, backends_box])
 
