@@ -65,6 +65,7 @@ void ggml_compute_forward_rope(const struct ggml_compute_params * params, struct
 void ggml_compute_forward_rope_back(const struct ggml_compute_params * params, struct ggml_tensor * dst);
 void ggml_compute_forward_clamp(const struct ggml_compute_params * params, struct ggml_tensor * dst);
 void ggml_compute_forward_conv_transpose_1d(const struct ggml_compute_params * params, struct ggml_tensor * dst);
+void ggml_compute_forward_col2im_1d(const struct ggml_compute_params * params, struct ggml_tensor * dst);
 // CrispASR patch (PR #07-metal-aa-snake-beta) — MUST RE-APPLY after ggml bump.
 void ggml_compute_forward_aa_snake_beta(const struct ggml_compute_params * params, struct ggml_tensor * dst);
 void ggml_compute_forward_im2col(const struct ggml_compute_params * params, struct ggml_tensor * dst);

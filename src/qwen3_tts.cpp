@@ -82,6 +82,7 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <memory>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -540,6 +541,7 @@ struct g3t_codec_xfmr_layer {
 
 struct g3t_codec_up_stage {
     ggml_tensor* tconv_w = nullptr;
+    ggml_tensor* tconv_w_perm = nullptr;  // pre-permuted [IC, K*OC] for causal-trans-conv
     ggml_tensor* tconv_b = nullptr;
     ggml_tensor* dw_w = nullptr;
     ggml_tensor* dw_b = nullptr;
@@ -567,6 +569,7 @@ struct g3t_codec_dec_block {
     ggml_tensor* snake_a = nullptr;
     ggml_tensor* snake_b = nullptr;
     ggml_tensor* tconv_w = nullptr;
+    ggml_tensor* tconv_w_perm = nullptr;  // pre-permuted [IC, K*OC] for causal-trans-conv
     ggml_tensor* tconv_b = nullptr;
     g3t_codec_res_unit res[3];
 };
@@ -601,6 +604,8 @@ struct g3t_codec {
 
     ggml_context* ctx_w = nullptr;
     ggml_backend_buffer_t buf_w = nullptr;
+    ggml_context* ctx_perm = nullptr;
+    ggml_backend_buffer_t buf_perm = nullptr;
     std::map<std::string, ggml_tensor*> tensors;
 
     bool loaded = false;
@@ -682,6 +687,7 @@ struct qwen3_tts_context {
     // independently of params.use_gpu. Talker / code_predictor still use
     // `sched` (GPU-accelerated when available).
     ggml_backend_sched_t codec_sched = nullptr;
+    ggml_backend_sched_t codec_sched_gpu = nullptr;  // dedicated GPU scheduler
 
     ggml_context* ctx_w = nullptr;
     ggml_backend_buffer_t buf_w = nullptr;
@@ -753,6 +759,7 @@ struct qwen3_tts_context {
     int vp_active = -1; // index into vp_names; -1 = none selected
 
     int language_id = -1; // codec language id (-1 = auto / nothink path)
+    bool xvec_only = false;  // ECAPA-only, skip ref codes (cross-lingual)
 
     std::string codec_path;
     std::string voice_prompt_path;
@@ -2722,6 +2729,12 @@ bool build_icl_prefill_embeds(qwen3_tts_context* c, const std::string& syn_text,
         const int n_total = (int)c->runtime_ref_codes.size();
         T_codec = n_total / n_groups;
         ref_code_TC = c->runtime_ref_codes; // already [T, n_q] row-major
+    } else if (c->xvec_only && (int)c->runtime_spk_emb.size() == d) {
+        // xvec_only path: ECAPA embedding only, no ref codes.
+        // T_codec stays 0 → codec_lens=1 → only codec_bos in fusion.
+        spk_buf = c->runtime_spk_emb;
+        T_codec = 0;
+        ref_code_TC.clear();
     } else {
         // Voice pack path (original behavior).
         if (c->vp_active < 0) {
@@ -2755,7 +2768,8 @@ bool build_icl_prefill_embeds(qwen3_tts_context* c, const std::string& syn_text,
 
     // ---- tokenise ----
     auto syn_ids = tokenise_assistant_text(c, syn_text);
-    auto ref_ids = tokenise_ref_text(c, ref_text);
+    // xvec_only: ref_text may be empty (no transcription needed).
+    auto ref_ids = tokenise_ref_text(c, c->xvec_only && ref_text.empty() ? "." : ref_text);
     if ((int)syn_ids.size() < 8 || (int)ref_ids.size() < 5) {
         fprintf(stderr, "qwen3_tts: prompt too short (syn=%zu ref=%zu)\n", syn_ids.size(), ref_ids.size());
         return false;
@@ -2849,8 +2863,8 @@ bool build_icl_prefill_embeds(qwen3_tts_context* c, const std::string& syn_text,
     // ---- codec_embed (codec_bos + per-frame sum of 16 codebooks) ----
     int32_t codec_bos = (int32_t)hp.codec_bos_id;
     float* codec_bos_emb = lookup_rows(c, c->talker.token_embd_w, &codec_bos, 1);
-    float* codec_sum = sum_codec_embeds(c, ref_code_TC.data(), T_codec);
-    if (!codec_bos_emb || !codec_sum) {
+    float* codec_sum = (T_codec > 0) ? sum_codec_embeds(c, ref_code_TC.data(), T_codec) : nullptr;
+    if (!codec_bos_emb || (T_codec > 0 && !codec_sum)) {
         free(tts_special_emb);
         free(role_emb);
         free(codec_bos_emb);
@@ -3392,10 +3406,17 @@ static ggml_tensor* codec_dw_causal_conv1d(ggml_context* ctx, ggml_tensor* x, gg
     return x;
 }
 
-// Causal transposed conv1d for upsampling — thin wrapper that trims the
-// right tail by (K - stride) samples so T_out = T_in · stride.
-static inline ggml_tensor* codec_transposed_conv1d(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w, ggml_tensor* b,
-                                                   int stride) {
+// Causal transposed conv1d for upsampling.
+// If w_perm (pre-permuted weight [IC, K*OC]) is available, uses the new
+// mul_mat + col2im GPU path; otherwise falls back to the old
+// ggml_conv_transpose_1d path (stable on CPU, also used by the legacy DLL).
+static inline ggml_tensor* codec_transposed_conv1d(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w,
+                                                   ggml_tensor* w_perm, ggml_tensor* b, int stride) {
+    if (w_perm) {
+        const int K = (int)w->ne[0];
+        return core_convt::convt1d_causal_decomp(ctx, x, w_perm, b, stride, K);
+    }
+    // Old path — stable, works on CPU without the col2im op.
     const int K = (int)w->ne[0];
     const int crop_right = (K > stride) ? (K - stride) : 0;
     return core_convt::convt1d_crop(ctx, x, w, b, stride, /*crop_left=*/0, crop_right);
@@ -3451,7 +3472,7 @@ static ggml_tensor* codec_res_unit(ggml_context* ctx, ggml_tensor* x, const g3t_
 // ---------------------------------------------------------------------------
 static ggml_tensor* codec_dec_block(ggml_context* ctx, ggml_tensor* x, const g3t_codec_dec_block& blk, int stride) {
     x = codec_snake_beta(ctx, x, blk.snake_a, blk.snake_b);
-    x = codec_transposed_conv1d(ctx, x, blk.tconv_w, blk.tconv_b, stride);
+    x = codec_transposed_conv1d(ctx, x, blk.tconv_w, blk.tconv_w_perm, blk.tconv_b, stride);
     static const int dilations[3] = {1, 3, 9};
     for (int u = 0; u < 3; u++) {
         x = codec_res_unit(ctx, x, blk.res[u], dilations[u]);
@@ -3569,7 +3590,7 @@ static ggml_cgraph* build_graph_codec_decode(qwen3_tts_context* c, int T) {
 
     // ── Step 4: ConvNeXt upsample (2 stages, each 2×) ──────────────────────
     for (int s = 0; s < 2; s++) {
-        h = codec_transposed_conv1d(ctx0, h, codec.up[s].tconv_w, codec.up[s].tconv_b, 2);
+        h = codec_transposed_conv1d(ctx0, h, codec.up[s].tconv_w, codec.up[s].tconv_w_perm, codec.up[s].tconv_b, 2);
         h = codec_convnext_block(ctx0, h, codec.up[s]);
         char uname[32];
         snprintf(uname, sizeof(uname), "codec_up%d_out", s);
@@ -3749,6 +3770,73 @@ static bool load_codec(qwen3_tts_context* c, const char* path) {
     codec.out_conv_w = req("codec.dec.out_conv_w");
     codec.out_conv_b = req("codec.dec.out_conv_b");
 
+    // ---------- permute tconv weights for causal-trans-conv (mul_mat + col2im) ----------
+    {
+        const int n_perm = 6;
+        const size_t meta_bytes = ggml_tensor_overhead() * (size_t)n_perm + ggml_graph_overhead() + 4096;
+        struct ggml_init_params pparams = { meta_bytes, nullptr, true };
+        codec.ctx_perm = ggml_init(pparams);
+        if (!codec.ctx_perm) {
+            fprintf(stderr, "qwen3_tts: codec: failed to init permuted weight context\n");
+            return false;
+        }
+
+        // Helper: permute PyTorch weight (K, OC, IC) → w_perm (IC, K*OC), return
+        // the F32 float buffer holding the result. The tensor is created with
+        // data=NULL so ggml_backend_alloc_ctx_tensors can allocate it.
+        auto permute = [&](ggml_tensor* src, std::unique_ptr<float[]>& out_buf) -> ggml_tensor* {
+            int K  = (int)src->ne[0];
+            int OC = (int)src->ne[1];
+            int IC = (int)src->ne[2];
+
+            ggml_tensor* dst = ggml_new_tensor_2d(codec.ctx_perm, GGML_TYPE_F32, IC, K * OC);
+
+            size_t n_elems = (size_t)K * OC * IC;
+            out_buf = std::make_unique<float[]>((size_t)IC * K * OC);
+            float* dp = out_buf.get();
+
+            if (src->type == GGML_TYPE_F32) {
+                auto src_buf = std::make_unique<float[]>(n_elems);
+                ggml_backend_tensor_get(src, src_buf.get(), 0, n_elems * sizeof(float));
+                for (int ic = 0; ic < IC; ic++)
+                    for (int oc = 0; oc < OC; oc++)
+                        for (int k = 0; k < K; k++)
+                            dp[(oc * K + k) * IC + ic] = src_buf[ic * OC * K + oc * K + k];
+            } else {
+                auto src_buf = std::make_unique<ggml_fp16_t[]>(n_elems);
+                ggml_backend_tensor_get(src, src_buf.get(), 0, n_elems * sizeof(ggml_fp16_t));
+                for (int ic = 0; ic < IC; ic++)
+                    for (int oc = 0; oc < OC; oc++)
+                        for (int k = 0; k < K; k++)
+                            dp[(oc * K + k) * IC + ic] =
+                                ggml_fp16_to_fp32(src_buf[ic * OC * K + oc * K + k]);
+            }
+            return dst; // data == NULL, backend buffer will own the memory
+        };
+
+        std::unique_ptr<float[]> up_wp_buf[2];
+        std::unique_ptr<float[]> blk_wp_buf[4];
+        for (int s = 0; s < 2; s++)
+            codec.up[s].tconv_w_perm = permute(codec.up[s].tconv_w, up_wp_buf[s]);
+        for (int b = 0; b < 4; b++)
+            codec.blocks[b].tconv_w_perm = permute(codec.blocks[b].tconv_w, blk_wp_buf[b]);
+
+        // Allocate backend buffer (GPU or CPU) for the permuted tensors.
+        codec.buf_perm = ggml_backend_alloc_ctx_tensors(codec.ctx_perm, weight_backend);
+        if (!codec.buf_perm) {
+            fprintf(stderr, "qwen3_tts: codec: failed to alloc permuted weight buffer\n");
+            return false;
+        }
+
+        // Upload the permuted data into the freshly allocated backend buffer.
+        for (int s = 0; s < 2; s++)
+            ggml_backend_tensor_set(codec.up[s].tconv_w_perm, up_wp_buf[s].get(), 0,
+                                    ggml_nbytes(codec.up[s].tconv_w_perm));
+        for (int b = 0; b < 4; b++)
+            ggml_backend_tensor_set(codec.blocks[b].tconv_w_perm, blk_wp_buf[b].get(), 0,
+                                    ggml_nbytes(codec.blocks[b].tconv_w_perm));
+    }
+
     // Codec compute metadata
     c->codec_compute_meta.resize(ggml_tensor_overhead() * 8192 + ggml_graph_overhead_custom(8192, false));
 
@@ -3785,23 +3873,29 @@ struct codec_trace_state {
     ggml_backend_sched_t sched = nullptr;
     int idx = 0;
     int total = 0;
+    std::chrono::steady_clock::time_point t0;
+    bool first = true;
 };
 
 static bool codec_trace_eval_cb(struct ggml_tensor* t, bool ask, void* user_data) {
     auto* s = (codec_trace_state*)user_data;
     if (ask) {
-        ggml_backend_t be = ggml_backend_sched_get_tensor_backend(s->sched, t);
-        const char* be_name = be ? ggml_backend_name(be) : "?";
-        char shape[64];
-        snprintf(shape, sizeof(shape), "[%lld,%lld,%lld,%lld]", (long long)t->ne[0], (long long)t->ne[1],
-                 (long long)t->ne[2], (long long)t->ne[3]);
-        fprintf(stderr, "  [%4d/%4d] %-22s %-32s %-22s -> %s\n", s->idx, s->total, ggml_op_name(t->op),
-                t->name[0] ? t->name : "(unnamed)", shape, be_name);
-        fflush(stderr);
+        if (s->first) { s->t0 = std::chrono::steady_clock::now(); s->first = false; }
+        s->t0 = std::chrono::steady_clock::now();
         return true;
     }
-    // Post-execute: synchronize so a Metal hang is attributed to *this* op.
+    // Post-execute: sync + time
+    double dt = std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - s->t0).count();
     ggml_backend_t be = ggml_backend_sched_get_tensor_backend(s->sched, t);
+    const char* be_name = be ? ggml_backend_name(be) : "?";
+    char shape[64];
+    snprintf(shape, sizeof(shape), "[%lld,%lld,%lld,%lld]", (long long)t->ne[0], (long long)t->ne[1],
+             (long long)t->ne[2], (long long)t->ne[3]);
+    fprintf(stderr, "  [%4d/%4d] %7.1fms %-22s %-32s %-22s -> %s\n",
+            s->idx, s->total, dt, ggml_op_name(t->op),
+            t->name[0] ? t->name : "(unnamed)", shape, be_name);
+    fflush(stderr);
     if (be) {
         ggml_backend_synchronize(be);
     }
@@ -3818,7 +3912,14 @@ static bool codec_trace_eval_cb(struct ggml_tensor* t, bool ask, void* user_data
 //                                   hang does not apply.
 static ggml_backend_sched_t codec_pick_sched(qwen3_tts_context* c) {
     if (std::getenv("QWEN3_TTS_CODEC_FORCE_METAL") || std::getenv("QWEN3_TTS_CODEC_GPU")) {
-        return c->sched;
+        // Dedicated GPU scheduler — isolates codec memory pool from talker/main
+        // to prevent VRAM fragmentation across repeated Python interop cycles.
+        if (!c->codec_sched_gpu) {
+            ggml_backend_t backends[2] = {c->backend, c->backend_cpu};
+            int n_be = (c->backend && c->backend != c->backend_cpu) ? 2 : 1;
+            c->codec_sched_gpu = ggml_backend_sched_new(backends, nullptr, n_be, 8192, false, false);
+        }
+        return c->codec_sched_gpu;
     }
     return c->codec_sched;
 }
@@ -3868,12 +3969,15 @@ static float* codec_decode_codes(qwen3_tts_context* c, const int32_t* codes, int
 
     ggml_cgraph* gf = build_graph_codec_decode(c, T_codec);
     ggml_backend_sched_t sched = codec_pick_sched(c);
+
+    fprintf(stderr, "qwen3_tts: codec: sched_alloc...\n"); fflush(stderr);
     ggml_backend_sched_reset(sched);
     if (!ggml_backend_sched_alloc_graph(sched, gf)) {
         fprintf(stderr, "qwen3_tts: codec: graph alloc failed\n");
         return nullptr;
     }
 
+    fprintf(stderr, "qwen3_tts: codec: tensor_set...\n"); fflush(stderr);
     ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "codec_codes"), codes_t.data(), 0,
                             codes_t.size() * sizeof(int32_t));
     ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "codec_positions"), pos.data(), 0, pos.size() * sizeof(int32_t));
@@ -3882,30 +3986,36 @@ static float* codec_decode_codes(qwen3_tts_context* c, const int32_t* codes, int
                                 mask_data.size() * sizeof(ggml_fp16_t));
     }
 
+    fprintf(stderr, "qwen3_tts: codec: compute...\n"); fflush(stderr);
     codec_trace_state ts{sched, 0, ggml_graph_n_nodes(gf)};
-    const bool trace = std::getenv("QWEN3_TTS_CODEC_TRACE") || std::getenv("QWEN3_TTS_CODEC_FORCE_METAL");
-    if (trace) {
-        fprintf(stderr, "qwen3_tts: codec: tracing %d nodes (sched=%s)\n", ts.total,
-                sched == c->codec_sched ? "codec_cpu" : "main");
+    if (std::getenv("QWEN3_TTS_CODEC_TRACE")) {
+        fprintf(stderr, "qwen3_tts: codec: tracing %d nodes\n", ts.total);
         ggml_backend_sched_set_eval_callback(sched, codec_trace_eval_cb, &ts);
     }
-
     ggml_status st = ggml_backend_sched_graph_compute(sched, gf);
-    if (trace) {
+    if (std::getenv("QWEN3_TTS_CODEC_TRACE")) {
         ggml_backend_sched_set_eval_callback(sched, nullptr, nullptr);
     }
+    // Sync GPU to drain the command queue before reading back; also prevents
+    // command-buffer pile-up across repeated Python interop cycles.
+    {
+        int n = ggml_backend_sched_get_n_backends(sched);
+        if (n > 0) ggml_backend_synchronize(ggml_backend_sched_get_backend(sched, 0));
+    }
+    fprintf(stderr, "qwen3_tts: codec: compute done (status=%d)\n", (int)st); fflush(stderr);
     if (st != GGML_STATUS_SUCCESS) {
-        fprintf(stderr, "qwen3_tts: codec: compute failed (status=%d, last_op_idx=%d)\n", (int)st, ts.idx);
         return nullptr;
     }
 
     ggml_tensor* out = ggml_graph_get_tensor(gf, "pcm");
-    const int n_samples = (int)ggml_nelements(out);
+    int n_samples = (int)ggml_nelements(out);
+    fprintf(stderr, "qwen3_tts: codec: n_samples=%d, malloc...\n", n_samples); fflush(stderr);
     float* pcm = (float*)malloc((size_t)n_samples * sizeof(float));
     if (!pcm) {
         return nullptr;
     }
     ggml_backend_tensor_get(out, pcm, 0, (size_t)n_samples * sizeof(float));
+    fprintf(stderr, "qwen3_tts: codec: done\n"); fflush(stderr);
     if (out_n_samples) {
         *out_n_samples = n_samples;
     }
@@ -4891,6 +5001,40 @@ static void build_embd_caches(qwen3_tts_context* c) {
         c->codec_embd_cache[i].init(cp.codec_embd[i]);
 }
 
+extern "C" struct qwen3_tts_context* qwen3_tts_init_codec_only(const char* codec_path,
+                                                               struct qwen3_tts_context_params params) {
+    auto* c = new qwen3_tts_context();
+    c->params = params;
+    c->n_threads = params.n_threads > 0 ? params.n_threads : 4;
+
+    c->backend_cpu = ggml_backend_cpu_init();
+    if (!c->backend_cpu) {
+        fprintf(stderr, "qwen3_tts: failed to init CPU backend\n");
+        delete c;
+        return nullptr;
+    }
+    ggml_backend_cpu_set_n_threads(c->backend_cpu, c->n_threads);
+    c->backend = params.use_gpu ? ggml_backend_init_best() : c->backend_cpu;
+    if (!c->backend) {
+        c->backend = c->backend_cpu;
+    }
+
+    if (!load_codec(c, codec_path)) {
+        fprintf(stderr, "qwen3_tts: codec-only init: failed to load codec\n");
+        qwen3_tts_free(c);
+        return nullptr;
+    }
+
+    // Create main scheduler — codec_pick_sched() returns c->sched for GPU path.
+    // ggml_backend_sched_new requires last backend to be CPU.
+    {
+        ggml_backend_t backends[2] = {c->backend, c->backend_cpu};
+        c->sched = ggml_backend_sched_new(backends, nullptr, 2, 16384, false, false);
+    }
+
+    return c;
+}
+
 extern "C" struct qwen3_tts_context* qwen3_tts_init_from_file(const char* path_model,
                                                               struct qwen3_tts_context_params params) {
     auto* c = new qwen3_tts_context();
@@ -5312,10 +5456,31 @@ extern "C" int qwen3_tts_set_voice_prompt_with_text(struct qwen3_tts_context* ct
     if (!ctx) {
         return -1;
     }
+    ctx->xvec_only = false;
     if (ref_text) {
         ctx->runtime_ref_text = ref_text;
     }
     return qwen3_tts_set_voice_prompt(ctx, wav_path);
+}
+
+extern "C" int qwen3_tts_set_voice_prompt_xvec_only(struct qwen3_tts_context* ctx, const char* wav_path) {
+    if (!ctx) {
+        return -1;
+    }
+    // Use the same WAV loading + ECAPA pipeline as set_voice_prompt.
+    int rc = qwen3_tts_set_voice_prompt(ctx, wav_path);
+    if (rc != 0) {
+        return rc;
+    }
+    // Keep the speaker embedding, but clear the reference codes so the
+    // ICL prefill builder skips ref_code fusion — only the codec BOS
+    // token is injected, producing x_vector_only behaviour.
+    ctx->runtime_ref_codes.clear();
+    ctx->xvec_only = true;
+    if (ctx->params.verbosity >= 1) {
+        fprintf(stderr, "qwen3_tts: voice prompt (xvec_only) set from '%s'\n", wav_path);
+    }
+    return 0;
 }
 
 // Debug: get the runtime ref codes (for diff harness / comparison).
@@ -5742,8 +5907,10 @@ extern "C" int32_t* qwen3_tts_synthesize_codes(struct qwen3_tts_context* ctx, co
             return nullptr;
         }
     } else {
-        // Base: need either a voice pack OR a runtime voice prompt.
-        if (ctx->vp_active < 0 && ctx->runtime_ref_codes.empty()) {
+        // Base: need either a voice pack, a runtime voice prompt with ref_codes,
+        // or an xvec_only prompt (speaker embedding only, no ref codes).
+        if (ctx->vp_active < 0 && ctx->runtime_ref_codes.empty()
+            && !(ctx->xvec_only && (int)ctx->runtime_spk_emb.size() == (int)ctx->hp.d_model)) {
             fprintf(stderr, "qwen3_tts: no voice — call qwen3_tts_load_voice_pack or qwen3_tts_set_voice_prompt\n");
             return nullptr;
         }
@@ -5791,9 +5958,13 @@ extern "C" int32_t* qwen3_tts_synthesize_codes(struct qwen3_tts_context* ctx, co
             ref_text = ctx->vp_ref_texts[ctx->vp_active];
         }
         if (ref_text.empty()) {
-            fprintf(stderr,
-                    "qwen3_tts: no ref_text — call qwen3_tts_set_voice_prompt with ref_text or load a voice pack\n");
-            return nullptr;
+            if (ctx->xvec_only) {
+                ref_text = ".";  // xvec_only: dummy ref_text, ICL fusion is skipped
+            } else {
+                fprintf(stderr,
+                        "qwen3_tts: no ref_text — call qwen3_tts_set_voice_prompt with ref_text or load a voice pack\n");
+                return nullptr;
+            }
         }
         if (!build_icl_prefill_embeds(ctx, text, ref_text, prefill, T_pre, trailing, M_trail)) {
             return nullptr;
@@ -6120,8 +6291,10 @@ extern "C" float* qwen3_tts_synthesize(struct qwen3_tts_context* ctx, const char
         fprintf(stderr, "qwen3_tts: synthesize() requires the codec — call qwen3_tts_set_codec_path() first.\n");
         return nullptr;
     }
+    const double t_total0 = now_ms();
     int n_codes = 0;
     int32_t* codes = qwen3_tts_synthesize_codes(ctx, text, &n_codes);
+    const double t_codes = now_ms();
     if (!codes || n_codes <= 0) {
         free(codes);
         return nullptr;
@@ -6202,11 +6375,37 @@ extern "C" float* qwen3_tts_synthesize(struct qwen3_tts_context* ctx, const char
     }
 
     free(codes);
+    const double t_total1 = now_ms();
+    if (out_n_samples && *out_n_samples > 0) {
+        double dur = (double)(*out_n_samples) / 24000.0;
+        double code_ms = t_codes - t_total0;
+        double codec_ms = t_total1 - t_codes;
+        double total_ms = t_total1 - t_total0;
+        fprintf(stderr, "qwen3_tts: perf — codes=%.0f ms  codec=%.0f ms  total=%.0f ms  "
+                        "audio=%.1f s  rtf=%.3f\n",
+                code_ms, codec_ms, total_ms, dur, (total_ms / 1000.0) / dur);
+    }
     return pcm;
 }
 
 extern "C" void qwen3_tts_pcm_free(float* pcm) {
     free(pcm);
+}
+
+extern "C" void qwen3_tts_sync(struct qwen3_tts_context* ctx) {
+    if (!ctx) return;
+    auto sync_sched = [](ggml_backend_sched_t sched) {
+        if (!sched) return;
+        int n = ggml_backend_sched_get_n_backends(sched);
+        for (int i = 0; i < n; i++)
+            ggml_backend_synchronize(ggml_backend_sched_get_backend(sched, i));
+    };
+    sync_sched(ctx->sched);
+    sync_sched(ctx->codec_sched);
+    sync_sched(ctx->codec_sched_gpu);
+    sync_sched(ctx->talker_step_sched);
+    sync_sched(ctx->cp_sched);
+    sync_sched(ctx->cp_step0_sched);
 }
 
 extern "C" void qwen3_tts_free(struct qwen3_tts_context* ctx) {
@@ -6215,6 +6414,9 @@ extern "C" void qwen3_tts_free(struct qwen3_tts_context* ctx) {
     }
     if (ctx->codec_sched) {
         ggml_backend_sched_free(ctx->codec_sched);
+    }
+    if (ctx->codec_sched_gpu) {
+        ggml_backend_sched_free(ctx->codec_sched_gpu);
     }
     if (ctx->cp_sched) {
         ggml_backend_sched_free(ctx->cp_sched);
@@ -6271,6 +6473,12 @@ extern "C" void qwen3_tts_free(struct qwen3_tts_context* ctx) {
     }
     if (ctx->codec.ctx_w) {
         ggml_free(ctx->codec.ctx_w);
+    }
+    if (ctx->codec.buf_perm) {
+        ggml_backend_buffer_free(ctx->codec.buf_perm);
+    }
+    if (ctx->codec.ctx_perm) {
+        ggml_free(ctx->codec.ctx_perm);
     }
     if (ctx->vp_buf_w) {
         ggml_backend_buffer_free(ctx->vp_buf_w);

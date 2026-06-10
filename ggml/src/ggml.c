@@ -1029,6 +1029,7 @@ static const char * GGML_OP_NAME[GGML_OP_COUNT] = {
     "ROPE_BACK",
     "CLAMP",
     "CONV_TRANSPOSE_1D",
+    "COL2IM_1D",
     "IM2COL",
     "IM2COL_BACK",
     "IM2COL_3D",
@@ -1084,7 +1085,7 @@ static const char * GGML_OP_NAME[GGML_OP_COUNT] = {
     "AA_SNAKE_BETA",
 };
 
-static_assert(GGML_OP_COUNT == 98, "GGML_OP_COUNT != 98");
+static_assert(GGML_OP_COUNT == 99, "GGML_OP_COUNT != 99");
 
 static const char * GGML_OP_SYMBOL[GGML_OP_COUNT] = {
     "none",
@@ -1143,6 +1144,7 @@ static const char * GGML_OP_SYMBOL[GGML_OP_COUNT] = {
     "rope_back(x)",
     "clamp(x)",
     "conv_transpose_1d(x)",
+    "col2im_1d(x)",
     "im2col(x)",
     "im2col_back(x)",
     "im2col_3d(x)",
@@ -1198,7 +1200,7 @@ static const char * GGML_OP_SYMBOL[GGML_OP_COUNT] = {
     "aa_snake_beta(x, log_a, log_b, usf, dsf)",
 };
 
-static_assert(GGML_OP_COUNT == 98, "GGML_OP_COUNT != 98");
+static_assert(GGML_OP_COUNT == 99, "GGML_OP_COUNT != 99");
 
 static_assert(GGML_OP_POOL_COUNT == 2, "GGML_OP_POOL_COUNT != 2");
 
@@ -4632,6 +4634,35 @@ GGML_API struct ggml_tensor * ggml_conv_transpose_1d(
     result->op     = GGML_OP_CONV_TRANSPOSE_1D;
     result->src[0] = a;
     result->src[1] = b;
+
+    return result;
+}
+
+// ggml_col2im_1d
+
+GGML_API struct ggml_tensor * ggml_col2im_1d(
+        struct ggml_context * ctx,
+        struct ggml_tensor  * col,
+        int                   s0,
+        int                   oc,
+        int                   p0) {
+    GGML_ASSERT(ggml_is_matrix(col));
+    GGML_ASSERT(col->ne[0] % oc == 0);
+    GGML_ASSERT(col->type == GGML_TYPE_F32 || col->type == GGML_TYPE_F16 || col->type == GGML_TYPE_BF16);
+
+    const int K_OC = (int)col->ne[0];
+    const int T_in = (int)col->ne[1];
+    const int K    = K_OC / oc;
+    const int T_out = (T_in - 1) * s0 + K - p0;
+
+    const int64_t ne[4] = { T_out, oc, 1, 1 };
+    struct ggml_tensor * result = ggml_new_tensor(ctx, GGML_TYPE_F32, 4, ne);
+
+    int32_t params[] = { s0, oc, p0 };
+    ggml_set_op_params(result, params, sizeof(params));
+
+    result->op     = GGML_OP_COL2IM_1D;
+    result->src[0] = col;
 
     return result;
 }

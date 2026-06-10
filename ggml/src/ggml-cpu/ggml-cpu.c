@@ -1900,6 +1900,10 @@ static void ggml_compute_forward(struct ggml_compute_params * params, struct ggm
             {
                 ggml_compute_forward_conv_transpose_1d(params, tensor);
             } break;
+        case GGML_OP_COL2IM_1D:
+            {
+                ggml_compute_forward_col2im_1d(params, tensor);
+            } break;
         // CrispASR patch (PR #07-metal-aa-snake-beta) — MUST RE-APPLY after ggml bump.
         case GGML_OP_AA_SNAKE_BETA:
             {
@@ -2351,6 +2355,7 @@ static int ggml_get_n_tasks(struct ggml_tensor * node, int n_threads) {
         case GGML_OP_CONV_3D:
         case GGML_OP_CONV_2D_DW:
         case GGML_OP_CONV_TRANSPOSE_1D:
+        case GGML_OP_COL2IM_1D:
         case GGML_OP_CONV_TRANSPOSE_2D:
         // CrispASR patch (PR #07-metal-aa-snake-beta) — MUST RE-APPLY after ggml bump.
         case GGML_OP_AA_SNAKE_BETA:
@@ -2884,6 +2889,9 @@ struct ggml_cplan ggml_graph_plan(
                             GGML_ABORT("fatal error");
                         }
                     } break;
+                case GGML_OP_COL2IM_1D:
+                    // no work buffer needed — gather-only kernel
+                    break;
                 case GGML_OP_CONV_2D:
                 case GGML_OP_CONV_3D:
                     {

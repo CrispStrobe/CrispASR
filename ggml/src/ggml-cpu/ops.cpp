@@ -6342,6 +6342,77 @@ void ggml_compute_forward_conv_transpose_1d(
     }
 }
 
+// ggml_compute_forward_col2im_1d
+//
+// Gather-based col2im: each output position (t_out, oc) loops over its
+// contributing input columns and sums the pre-computed (oc, k) entries.
+// Matches the CUDA kernel in col2im-1d.cu bit-for-bit so GPU/CPU results
+// are interchangeable.
+static void ggml_compute_forward_col2im_1d_f32(
+        const ggml_compute_params * params,
+              ggml_tensor * dst) {
+
+    const ggml_tensor * col = dst->src[0];
+
+    GGML_ASSERT(col->type == GGML_TYPE_F32);
+    GGML_ASSERT(dst->type == GGML_TYPE_F32);
+
+    const int32_t s0 = ((const int32_t *)(dst->op_params))[0];
+    const int32_t OC = ((const int32_t *)(dst->op_params))[1];
+    const int32_t p0 = ((const int32_t *)(dst->op_params))[2];
+
+    const int K_OC = (int)col->ne[0];
+    const int T_in = (int)col->ne[1];
+    const int K    = K_OC / OC;
+    const int T_out = (int)dst->ne[0];
+
+    const int ith = params->ith;
+    const int nth = params->nth;
+
+    const int total  = T_out * OC;
+    const int dr     = (total + nth - 1) / nth;
+    const int ir0    = dr * ith;
+    const int ir1    = ir0 + dr < total ? ir0 + dr : total;
+
+    if (ir0 >= ir1) return;
+
+    const float * __restrict__ cp = (const float *)col->data;
+    float       * __restrict__ dp = (float *)      dst->data;
+
+    for (int gidx = ir0; gidx < ir1; gidx++) {
+        const int t_out = gidx % T_out;
+        const int oc    = gidx / T_out;
+        const int t_abs = t_out + p0;
+
+        int t_in_min = (t_abs - K + s0) / s0;
+        if (t_in_min < 0) t_in_min = 0;
+        int t_in_max = t_abs / s0;
+        if (t_in_max >= T_in) t_in_max = T_in - 1;
+
+        float sum = 0.0f;
+        for (int t_in = t_in_min; t_in <= t_in_max; t_in++) {
+            const int j = t_abs - t_in * s0;
+            sum += cp[(oc * K + j) + t_in * K_OC];
+        }
+        dp[gidx] = sum;
+    }
+}
+
+void ggml_compute_forward_col2im_1d(
+        const ggml_compute_params * params,
+              ggml_tensor * dst) {
+
+    const ggml_tensor * col = dst->src[0];
+
+    switch (col->type) {
+        case GGML_TYPE_F32:
+            ggml_compute_forward_col2im_1d_f32(params, dst);
+            break;
+        default:
+            GGML_ABORT("col2im_1d: unsupported type");
+    }
+}
+
 // ggml_compute_forward_aa_snake_beta
 //
 // CrispASR patch (PR #07-metal-aa-snake-beta): fused BigVGAN v2 anti-aliased

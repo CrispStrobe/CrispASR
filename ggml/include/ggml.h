@@ -527,6 +527,7 @@ extern "C" {
         GGML_OP_ROPE_BACK,
         GGML_OP_CLAMP,
         GGML_OP_CONV_TRANSPOSE_1D,
+        GGML_OP_COL2IM_1D,
         GGML_OP_IM2COL,
         GGML_OP_IM2COL_BACK,
         GGML_OP_IM2COL_3D,
@@ -2065,6 +2066,17 @@ extern "C" {
             int                   s0,  // stride
             int                   p0,  // padding
             int                   d0); // dilation
+
+    // col2im_1d: gather columns → 1D signal (ConvTranspose1d decomp).
+    //   col: [K*OC, T_in]  F32/F16/BF16 — GEMM output (mul_mat of pre-permuted weight)
+    //   Output: [T_out, OC] F32  where T_out = (T_in-1)*s0 + K - p0
+    //   op_params: [s0=stride, OC, p0=left_crop]
+    GGML_API struct ggml_tensor * ggml_col2im_1d(
+            struct ggml_context * ctx,
+            struct ggml_tensor  * col, // [K*OC, T_in]
+            int                   s0,  // stride
+            int                   oc,  // output channels (= K*OC / K)
+            int                   p0); // left offset / pre-crop
 
     // CrispASR patch (PR #07-metal-aa-snake-beta): BigVGAN v2 anti-aliased
     // SnakeBeta — fused upsample 2× + sin²(α·x)/β + downsample 2×.

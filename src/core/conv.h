@@ -132,4 +132,44 @@ static inline ggml_tensor* convt1d_crop(ggml_context* ctx, ggml_tensor* x, ggml_
     return y;
 }
 
+// Causal ConvTranspose1d via decomposed mul_mat + col2im.
+// Uses pre-permuted weights w_perm [IC, K*OC] and the new col2im_1d op.
+// Replaces ggml_conv_transpose_1d without touching the old op.
+//
+// Inputs:
+//   x      : (Cin, T_in)  F32, channel-major.
+//   w_perm : (IC, K*OC)   F32, weight pre-permuted at load time.
+//   b      : (Cout,)      F32 or nullptr.
+//   stride : positive integer.
+//   K      : kernel size.
+//
+// Output: (Cout, T_in * stride) F32 (causal right-trim applied).
+static inline ggml_tensor* convt1d_causal_decomp(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w_perm, ggml_tensor* b,
+                                                  int stride, int K) {
+    const int OC = (int)w_perm->ne[1] / K;
+
+    // x: [Cin, T_in] channels-first → ne[0]=Cin=IC already matches w_perm's ne[0]=IC.
+    // mul_mat contracts IC → col: [K*OC, T_in]
+    ggml_tensor* col = ggml_mul_mat(ctx, w_perm, x);
+
+    // col2im: [K*OC, T_in] → [T_raw, OC]  (GATHER)
+    ggml_tensor* y = ggml_col2im_1d(ctx, col, stride, OC, 0);
+
+    // Causal right-trim: T_raw - (K-stride) = T_in * stride
+    const int trim = K - stride;
+    if (trim > 0) {
+        const int64_t T_keep = y->ne[0] - trim;
+        y = ggml_view_2d(ctx, y, T_keep, y->ne[1], y->nb[1], 0);
+        y = ggml_cont(ctx, y);
+    }
+
+    // [T_out, OC] → [OC, T_out]  (back to channels-first)
+    y = ggml_cont(ctx, ggml_transpose(ctx, y));
+
+    if (b) {
+        y = ggml_add(ctx, y, b);
+    }
+    return y;
+}
+
 } // namespace core_convt
