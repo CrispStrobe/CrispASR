@@ -72,26 +72,34 @@ add_test(NAME ${TEST_TARGET}
     -f ${PROJECT_SOURCE_DIR}/samples/jfk.wav)
 set_tests_properties(${TEST_TARGET} PROPERTIES LABELS "small;en")
 
+# CLI integration tests — use auto-download to fetch real whisper models.
+# Set CRISPASR_MODELS_DIR to a local cache dir to avoid network downloads.
 set(TEST_TARGET test-crispasr-cli-medium)
 add_test(NAME ${TEST_TARGET}
     COMMAND $<TARGET_FILE:crispasr-cli>
-    -m ${PROJECT_SOURCE_DIR}/models/for-tests-ggml-medium.bin -l fr
+    --backend whisper -m auto --auto-download -l fr
     -f ${PROJECT_SOURCE_DIR}/samples/jfk.wav)
-set_tests_properties(${TEST_TARGET} PROPERTIES LABELS "medium")
+set_tests_properties(${TEST_TARGET} PROPERTIES
+    LABELS "medium;live"
+    TIMEOUT 300)
 
 set(TEST_TARGET test-crispasr-cli-medium.en)
 add_test(NAME ${TEST_TARGET}
     COMMAND $<TARGET_FILE:crispasr-cli>
-    -m ${PROJECT_SOURCE_DIR}/models/for-tests-ggml-medium.en.bin
+    --backend whisper -m auto --auto-download
     -f ${PROJECT_SOURCE_DIR}/samples/jfk.wav)
-set_tests_properties(${TEST_TARGET} PROPERTIES LABELS "medium;en")
+set_tests_properties(${TEST_TARGET} PROPERTIES
+    LABELS "medium;en;live"
+    TIMEOUT 300)
 
 set(TEST_TARGET test-crispasr-cli-large)
 add_test(NAME ${TEST_TARGET}
     COMMAND $<TARGET_FILE:crispasr-cli>
-    -m ${PROJECT_SOURCE_DIR}/models/for-tests-ggml-large.bin
+    --backend whisper -m auto --auto-download -l fr
     -f ${PROJECT_SOURCE_DIR}/samples/jfk.wav)
-set_tests_properties(${TEST_TARGET} PROPERTIES LABELS "large")
+set_tests_properties(${TEST_TARGET} PROPERTIES
+    LABELS "large;live"
+    TIMEOUT 300)
 
 if (CRISPASR_FFMPEG)
     set(TEST_TARGET test-crispasr-cli-tiny-mp3)
@@ -325,7 +333,10 @@ target_link_libraries(test-diarize-pyannote-live PRIVATE
 )
 catch_discover_tests(test-diarize-pyannote-live
     TEST_SPEC "[live]"
-    PROPERTIES LABELS "live;diarize"
+    PROPERTIES
+        LABELS live
+        SKIP_RETURN_CODE 4
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
 )
 
 # Agglomerative cosine clustering used by --diarize-embedder (#107 P3b).
@@ -398,7 +409,10 @@ target_link_libraries(test-paraformer PRIVATE
 )
 catch_discover_tests(test-paraformer
     TEST_SPEC "[paraformer]"
-    PROPERTIES LABELS "live;paraformer"
+    PROPERTIES
+        LABELS live
+        SKIP_RETURN_CODE 4
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
 )
 
 # ─── test - context - bias — Catch2 unit tests for CTC-WS phrase-boost trie (PLAN #98)
@@ -481,16 +495,13 @@ target_include_directories(test-flash-attn-defaults PRIVATE
 # Link every backend whose header we touch. CMake auto-skips
 # missing targets via the if(TARGET …) guards so a slim build
 # (e.g. iOS device-only with fewer backends) still configures.
-set(_flash_attn_test_libs Catch2::Catch2WithMain)
-foreach(_be parakeet canary cohere qwen3_asr voxtral voxtral4b
-             granite_speech vibevoice qwen3_tts orpheus kokoro
-             chatterbox)
-    if (TARGET ${_be})
-        list(APPEND _flash_attn_test_libs ${_be})
-    endif()
-endforeach()
-target_link_libraries(test-flash-attn-defaults PRIVATE ${_flash_attn_test_libs})
-unset(_flash_attn_test_libs)
+# Link crispasr-lib (which already pulls every backend) rather than
+# enumerating individual backend libraries — this avoids missing
+# transitive dependencies (e.g. kokoro → phonemizer → crispasr_cache).
+target_link_libraries(test-flash-attn-defaults PRIVATE
+    Catch2::Catch2WithMain
+    crispasr-lib
+)
 catch_discover_tests(test-flash-attn-defaults
     TEST_SPEC "[unit]"
     PROPERTIES LABELS "unit;flash_attn"
@@ -777,7 +788,10 @@ catch_discover_tests(test-session-beam
 )
 catch_discover_tests(test-session-beam
     TEST_SPEC "[.live]"
-    PROPERTIES LABELS "live;beam"
+    PROPERTIES
+        LABELS live
+        SKIP_RETURN_CODE 4
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
 )
 
 # ─── test - registry — Catch2 unit tests for crispasr_model_registry
@@ -1099,7 +1113,10 @@ target_link_libraries(test-chat-ggml PRIVATE
 )
 catch_discover_tests(test-chat-ggml
     TEST_SPEC "[chat]"
-    PROPERTIES LABELS "chat;integration"
+    PROPERTIES
+        LABELS live
+        SKIP_RETURN_CODE 4
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
 )
 
 # ─── test_metal_norm_repro — ggml_norm Metal vs CPU bit-exactness ────────────

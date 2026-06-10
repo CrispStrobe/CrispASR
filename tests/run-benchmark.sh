@@ -23,17 +23,20 @@ if [ ! -x "$CRISPASR" ]; then
     exit 2
 fi
 
-# Check for parakeet model
-MODEL=""
-for p in /mnt/storage/parakeet-tdt-0.6b-v3/parakeet-tdt-0.6b-v3.gguf \
-         /mnt/storage/parakeet-tdt-0.6b-v3.gguf; do
-    if [ -f "$p" ]; then
-        MODEL="$p"
-        break
-    fi
-done
+# Check for parakeet model — respect CRISPASR_MODELS_DIR, then fall back to
+# the auto-download cache.
+MODELS_DIR="${CRISPASR_MODELS_DIR:-$HOME/.cache/crispasr}"
+MODEL="${CRISPASR_BENCHMARK_MODEL:-}"
 if [ -z "$MODEL" ]; then
-    echo "SKIP: parakeet model not found on disk"
+    for name in parakeet-tdt-0.6b-v3.gguf parakeet-tdt-0.6b-v3-q4_k.gguf; do
+        if [ -f "$MODELS_DIR/$name" ]; then
+            MODEL="$MODELS_DIR/$name"
+            break
+        fi
+    done
+fi
+if [ -z "$MODEL" ]; then
+    echo "SKIP: parakeet model not found (set CRISPASR_MODELS_DIR or CRISPASR_BENCHMARK_MODEL)"
     exit 2
 fi
 

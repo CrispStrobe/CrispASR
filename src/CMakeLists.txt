@@ -137,6 +137,10 @@ add_library(crispasr-lib
             # and by the C-ABI `crispasr_align_words_abi`. Both canary-ctc
             # and qwen3-forced-aligner paths route through one call.
             crispasr_aligner.cpp
+            # Built-in G2P phonemizers (EN/DE/FR/ES). LTS rules + optional
+            # IPA dict auto-download. Used by kokoro TTS for espeak-free
+            # phonemization.
+            phonemizer.cpp
             # HF download + filesystem cache (shared with CLI). Consumed
             # by the library's VAD / LID / diarize auto-download paths
             # and by the CLI's `-m auto` resolver.

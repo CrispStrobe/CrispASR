@@ -207,6 +207,42 @@ crispasr.Session("model.gguf", backend="yourmodel")  # opens?
 > the shared `.git/index` — this clobbered the entire §135 CSM landing
 > (commit `100b9ee5`). `git config pull.rebase true` is set in this repo.
 
+## Running integration / live tests
+
+Unit tests (429 of them) need no models and pass unconditionally. The
+~25 integration ("live") tests need real GGUF models on disk and are
+env-var-gated — they SKIP cleanly when the env vars are unset.
+
+**Quick start:**
+```bash
+# Point at your local model cache (auto-download also probes this):
+export CRISPASR_MODELS_DIR=/mnt/storage/gguf-models
+
+# Source all env vars at once:
+source tests/env-live-tests.sh
+
+# Run only the previously-failed tests:
+ctest --test-dir build --rerun-failed --output-on-failure --timeout 300
+```
+
+`tests/env-live-tests.sh` sets every env var the live tests expect.
+Override `CRISPASR_MODELS_DIR` to point at your local model directory;
+all other vars derive from it unless individually overridden.
+
+**Key env vars** (see `env-live-tests.sh` for the full list):
+
+| Variable | Used by |
+|---|---|
+| `CRISPASR_MODELS_DIR` | Well-known search dir for all model lookups |
+| `CRISPASR_MODEL_WHISPER` | Beam search + VAD tests |
+| `PARAFORMER_MODEL` | Paraformer live tests |
+| `CRISPASR_TEST_DIARIZE_MODEL` | Diarization live tests |
+| `CRISPASR_CHAT_TEST_MODEL` | Chat (LLM) smoke test |
+
+Tests that use `SKIP()` return exit code 4 (Catch2 convention). The
+CMakeLists.txt sets `SKIP_RETURN_CODE 4` so ctest reports them as
+"Skipped" rather than "Failed".
+
 ## Watermarking tests
 
 All TTS output is automatically watermarked. When changing TTS output

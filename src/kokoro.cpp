@@ -2669,11 +2669,12 @@ extern "C" struct kokoro_context* kokoro_init_from_file(const char* path_model, 
         std::unique_ptr<float[]> perm_bufs[2];
         for (int i = 0; i < 2; i++) {
             auto it = c->tensors.find(ups_names[i]);
-            if (it == c->tensors.end()) continue;
+            if (it == c->tensors.end())
+                continue;
             ggml_tensor* src = it->second;
             perm_bufs[i] = core_convt::permute_convt1d_weight(src);
-            c->ups_w_perm[i] = ggml_new_tensor_2d(c->ctx_perm, GGML_TYPE_F32,
-                                                   (int)src->ne[2], (int)src->ne[0] * (int)src->ne[1]);
+            c->ups_w_perm[i] =
+                ggml_new_tensor_2d(c->ctx_perm, GGML_TYPE_F32, (int)src->ne[2], (int)src->ne[0] * (int)src->ne[1]);
         }
         c->buf_perm = ggml_backend_alloc_ctx_tensors(c->ctx_perm, c->backend);
         for (int i = 0; i < 2; i++) {
@@ -3058,13 +3059,13 @@ bool phonemize_cached(kokoro_context* ctx, const std::string& lang, const std::s
     // These auto-download IPA dicts from HuggingFace on first call.
     bool builtin_ok = false;
     if (lang == "en" || lang == "en-us" || lang == "en-gb")
-        builtin_ok = phonemize_builtin_en(lang, text, out);
+        builtin_ok = crispasr::phonemize_builtin_en(lang, text, out);
     else if (lang == "de")
-        builtin_ok = phonemize_builtin_de(lang, text, out);
+        builtin_ok = crispasr::phonemize_builtin_de(lang, text, out);
     else if (lang == "fr" || lang == "fr-fr")
-        builtin_ok = phonemize_builtin_fr(lang, text, out);
+        builtin_ok = crispasr::phonemize_builtin_fr(lang, text, out);
     else if (lang == "es" || lang == "es-es")
-        builtin_ok = phonemize_builtin_es(lang, text, out);
+        builtin_ok = crispasr::phonemize_builtin_es(lang, text, out);
     if (builtin_ok && !out.empty()) {
         if (is_cmn_lang(lang))
             strip_cmn_tone_numbers(out);

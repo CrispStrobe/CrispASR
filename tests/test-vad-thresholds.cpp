@@ -6,10 +6,16 @@
 #include <iostream>
 #include <cassert>
 #include <cmath>
+#include <cstdlib>
+
+static const char* env_or(const char* name, const char* fallback) {
+    const char* v = std::getenv(name);
+    return (v && *v) ? v : fallback;
+}
 
 int main() {
-    std::string sample_path = SAMPLE_PATH;
-    std::string vad_model_path = VAD_MODEL_PATH;
+    std::string sample_path = env_or("CRISPASR_AUDIO_EN", SAMPLE_PATH);
+    std::string vad_model_path = env_or("CRISPASR_VAD_MODEL", VAD_MODEL_PATH);
 
     std::vector<float> pcmf32;
     std::vector<std::vector<float>> pcmf32s;
@@ -19,13 +25,11 @@ int main() {
     }
 
     struct whisper_context_params cparams = whisper_context_default_params();
-    // Use a lightweight model or just VAD
-    // Actually VAD is standalone in some backends, but here it's part of whisper_full
-    // We'll use the tiny.en model we already know exists
-    struct whisper_context * wctx = whisper_init_from_file_with_params(CRISPASR_MODEL_PATH, cparams);
+    const char* whisper_model = env_or("CRISPASR_MODEL_WHISPER", CRISPASR_MODEL_PATH);
+    struct whisper_context* wctx = whisper_init_from_file_with_params(whisper_model, cparams);
     assert(wctx != nullptr);
 
-    float thresholds[] = { 0.1f, 0.5f, 0.9f };
+    float thresholds[] = {0.1f, 0.5f, 0.9f};
     for (float thold : thresholds) {
         struct whisper_full_params wparams = whisper_full_default_params(CRISPASR_SAMPLING_GREEDY);
         wparams.vad = true;

@@ -375,7 +375,9 @@ bool file_present(const std::string& path) {
 bool fetch(const std::string& url, const std::string& dest, bool quiet) {
 #ifdef __EMSCRIPTEN__
     // WASM: no network from C++ side. Models are pre-loaded by JS into MEMFS.
-    (void)url; (void)dest; (void)quiet;
+    (void)url;
+    (void)dest;
+    (void)quiet;
     fprintf(stderr, "crispasr: download not available in WASM — load model via JS FS.writeFile\n");
     return false;
 #endif
@@ -472,6 +474,7 @@ static std::vector<std::string> well_known_search_dirs(const std::string& cache_
     if (const char* env = std::getenv("CRISPASR_MODELS_DIR"); env && *env) {
         dirs.emplace_back(env);
     }
+    dirs.emplace_back("/mnt/storage/gguf-models");
     dirs.emplace_back("/Volumes/backups/ai/crispasr-models");
 
     const char* home = std::getenv("HOME");
