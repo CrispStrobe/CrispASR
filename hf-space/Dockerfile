@@ -21,8 +21,9 @@ RUN git clone --depth 1 "${CRISPASR_REPO}" /src/CrispASR && \
   git -C /src/CrispASR fetch --depth 1 origin "${CRISPASR_REF}" && \
   git -C /src/CrispASR checkout --detach FETCH_HEAD
 WORKDIR /src/CrispASR
-# Limit parallelism to 2 — HF free-tier build machines OOM at $(nproc).
-ARG CRISPASR_BUILD_JOBS=2
+# Limit parallelism — HF free-tier build machines have ~7 GB RAM.
+# -j1 avoids OOM from parallel compilation of 60+ backend .cpp files.
+ARG CRISPASR_BUILD_JOBS=1
 RUN jobs="${CRISPASR_BUILD_JOBS}" && \
   cmake -S . -B build -G Ninja -DCRISPASR_BUILD_TESTS=OFF && \
   cmake --build build -j"${jobs}" --target crispasr-cli crispasr-lid
