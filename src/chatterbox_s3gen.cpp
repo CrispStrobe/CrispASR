@@ -19,6 +19,7 @@
 #include "chatterbox_campplus.h"
 #include "chatterbox_s3gen.h"
 #include "chatterbox_s3tok.h"
+#include "core/conv.h"
 #include "core/gguf_loader.h"
 
 #include "ggml-backend.h"
@@ -282,6 +283,12 @@ struct chatterbox_s3gen_context {
 
     ggml_backend_sched_t sched = nullptr;
     std::vector<uint8_t> compute_meta;
+
+    // Pre-permuted ConvTranspose1d weights for decomposed mul_mat + col2im_1d.
+    static constexpr int kMaxUps = 4;
+    ggml_tensor* ups_w_perm[kMaxUps] = {};
+    ggml_context* ctx_perm = nullptr;
+    ggml_backend_buffer_t buf_perm = nullptr;
     mt19937_state noise_rng{};
     uint32_t noise_seed = 0;
 
@@ -301,6 +308,10 @@ struct chatterbox_s3gen_context {
     ~chatterbox_s3gen_context() {
         if (sched)
             ggml_backend_sched_free(sched);
+        if (buf_perm)
+            ggml_backend_buffer_free(buf_perm);
+        if (ctx_perm)
+            ggml_free(ctx_perm);
         if (ctx_w)
             ggml_free(ctx_w);
         if (buf_w)
@@ -593,6 +604,29 @@ extern "C" struct chatterbox_s3gen_context* chatterbox_s3gen_init_from_file(cons
         fprintf(stderr, "s3gen: loaded %zu tensors from %s\n", c->tensors.size(), path);
         fprintf(stderr, "s3gen: diffusion noise seed=%u\n", c->noise_seed);
         std::fflush(stderr);
+    }
+
+    // Permute ConvTranspose1d weights for decomposed mul_mat + col2im_1d.
+    {
+        const char* ups_names[3] = {"s3.v.ups.0.weight", "s3.v.ups.1.weight", "s3.v.ups.2.weight"};
+        const int n_ups = 3;
+        const size_t meta_bytes = ggml_tensor_overhead() * (size_t)n_ups + 4096;
+        struct ggml_init_params pp = {meta_bytes, nullptr, true};
+        c->ctx_perm = ggml_init(pp);
+        std::unique_ptr<float[]> perm_bufs[3];
+        for (int i = 0; i < n_ups; i++) {
+            auto it = c->tensors.find(ups_names[i]);
+            if (it == c->tensors.end()) continue;
+            ggml_tensor* src = it->second;
+            perm_bufs[i] = core_convt::permute_convt1d_weight(src);
+            c->ups_w_perm[i] = ggml_new_tensor_2d(c->ctx_perm, GGML_TYPE_F32,
+                                                   (int)src->ne[2], (int)src->ne[0] * (int)src->ne[1]);
+        }
+        c->buf_perm = ggml_backend_alloc_ctx_tensors(c->ctx_perm, c->backend);
+        for (int i = 0; i < n_ups; i++) {
+            if (c->ups_w_perm[i] && perm_bufs[i])
+                ggml_backend_tensor_set(c->ups_w_perm[i], perm_bufs[i].get(), 0, ggml_nbytes(c->ups_w_perm[i]));
+        }
     }
 
     // Verify critical tensors exist
@@ -2486,22 +2520,22 @@ static std::vector<float> hift_vocoder_cpu(chatterbox_s3gen_context* c,
             int s = strides[stage];
             int k = kernels[stage];
             int p = (k - s) / 2;
-            // ggml_conv_transpose_1d doesn't support non-zero padding
-            // Run with p=0, then crop (k-s)/2 from each side
-            int T_in = (int)x->ne[0];
-            x = ggml_conv_transpose_1d(ctx0, up_w, x, s, 0, 1);
-            // Output length with p=0: (T_in - 1) * s + k
-            // Expected with p: (T_in - 1) * s + k - 2*p = T_in * s
-            if (p > 0) {
-                int T_out = (int)((T_in - 1) * s + k);
-                int T_want = T_in * s; // expected output length
-                int C_out = (int)x->ne[1];
-                // Crop p from left: view starting at offset p
-                x = ggml_view_2d(ctx0, x, T_want, C_out, x->nb[1], p * x->nb[0]);
-                x = ggml_cont(ctx0, x);
+            ggml_tensor* wp = (stage < chatterbox_s3gen_context::kMaxUps) ? c->ups_w_perm[stage] : nullptr;
+            if (wp) {
+                x = core_convt::convt1d_decomp_tf(ctx0, x, wp, up_b, s, k, p, p);
+            } else {
+                int T_in = (int)x->ne[0];
+                x = ggml_conv_transpose_1d(ctx0, up_w, x, s, 0, 1);
+                if (p > 0) {
+                    int T_out = (int)((T_in - 1) * s + k);
+                    int T_want = T_in * s;
+                    int C_out = (int)x->ne[1];
+                    x = ggml_view_2d(ctx0, x, T_want, C_out, x->nb[1], p * x->nb[0]);
+                    x = ggml_cont(ctx0, x);
+                }
+                if (up_b)
+                    x = ggml_add(ctx0, x, ggml_reshape_2d(ctx0, up_b, 1, (int)up_b->ne[0]));
             }
-            if (up_b)
-                x = ggml_add(ctx0, x, ggml_reshape_2d(ctx0, up_b, 1, (int)up_b->ne[0]));
         }
         // Reflection pad at last upsample stage: ReflectionPad1d((1, 0))
         // Python: if i == num_upsamples - 1: x = self.reflection_pad(x)

@@ -189,6 +189,24 @@ static inline ggml_tensor* convt1d_causal_decomp(ggml_context* ctx, ggml_tensor*
     return convt1d_decomp(ctx, x, w_perm, b, stride, K, /*crop_left=*/0, /*crop_right=*/K - stride);
 }
 
+// Time-first variant of convt1d_decomp for runtimes that use ggml's
+// native (T, C) convention (e.g. IndExTTS BigVGAN, Chatterbox S3Gen).
+// Input:  x = (T_in, Cin) F32.
+// Output: (T_out, Cout) F32 where T_out = (T_in-1)*stride + K - crop_left - crop_right.
+// Bias b = (Cout,) or nullptr — applied as (1, Cout) broadcast.
+static inline ggml_tensor* convt1d_decomp_tf(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w_perm, ggml_tensor* b,
+                                             int stride, int K, int crop_left, int crop_right) {
+    // (T, C) → (C, T) for the channels-first decomp path
+    ggml_tensor* xt = ggml_cont(ctx, ggml_transpose(ctx, x));
+    ggml_tensor* y = convt1d_decomp(ctx, xt, w_perm, nullptr, stride, K, crop_left, crop_right);
+    // (Cout, T_out) → (T_out, Cout) back to time-first
+    y = ggml_cont(ctx, ggml_transpose(ctx, y));
+    if (b) {
+        y = ggml_add(ctx, y, ggml_reshape_2d(ctx, b, 1, (int)b->ne[0]));
+    }
+    return y;
+}
+
 // ---------------------------------------------------------------------------
 // Weight permutation utility (host-side, called at load time).
 // ---------------------------------------------------------------------------

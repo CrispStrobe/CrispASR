@@ -29,6 +29,7 @@
 // so the raw SnakeBeta (x + sin(αx)²/β) gives full GPU offload.
 
 #include "indextts_voc.h"
+#include "core/conv.h"
 #include "core/fft.h"
 #include "core/gguf_loader.h"
 #include "core/mel.h"
@@ -123,6 +124,12 @@ struct indextts_voc_context {
     ggml_backend_sched_t sched = nullptr;
     std::vector<uint8_t> compute_meta;
 
+    // Pre-permuted ConvTranspose1d weights for decomposed mul_mat + col2im_1d.
+    static constexpr int kMaxUps = 4;
+    ggml_tensor* ups_w_perm[kMaxUps] = {};
+    ggml_context* ctx_perm = nullptr;
+    ggml_backend_buffer_t buf_perm = nullptr;
+
     int n_threads = 4;
     int verbosity = 1;
     // BigVGAN v2 needs anti-aliased SnakeBeta — the raw `x + sin(αx)²/β`
@@ -145,6 +152,12 @@ struct indextts_voc_context {
         clear_aa_params();
         if (sched) {
             ggml_backend_sched_free(sched);
+        }
+        if (buf_perm) {
+            ggml_backend_buffer_free(buf_perm);
+        }
+        if (ctx_perm) {
+            ggml_free(ctx_perm);
         }
         if (ctx_w) {
             ggml_free(ctx_w);
@@ -1013,18 +1026,24 @@ static ggml_cgraph* build_bigvgan_graph(indextts_voc_context* c, int T_in) {
             ggml_tensor* up_w = T(ts, wn);
             ggml_tensor* up_b = T(ts, bn);
             if (up_w) {
-                int T_cur = (int)x->ne[0];
-                x = ggml_conv_transpose_1d(ctx0, up_w, x, s, 0, 1);
-                // Crop padding: output with p=0 is (T-1)*s+k, we want T*s
                 int p = (k - s) / 2;
-                if (p > 0) {
-                    int T_want = T_cur * s;
-                    int C_out_t = (int)x->ne[1];
-                    x = ggml_view_2d(ctx0, x, T_want, C_out_t, x->nb[1], (size_t)p * x->nb[0]);
-                    x = ggml_cont(ctx0, x);
-                }
-                if (up_b) {
-                    x = ggml_add(ctx0, x, ggml_reshape_2d(ctx0, up_b, 1, (int)up_b->ne[0]));
+                ggml_tensor* wp = (i < indextts_voc_context::kMaxUps) ? c->ups_w_perm[i] : nullptr;
+                if (wp) {
+                    // Decomposed path: mul_mat + col2im_1d (time-first convention)
+                    x = core_convt::convt1d_decomp_tf(ctx0, x, wp, up_b, s, k, p, p);
+                } else {
+                    // Old path
+                    int T_cur = (int)x->ne[0];
+                    x = ggml_conv_transpose_1d(ctx0, up_w, x, s, 0, 1);
+                    if (p > 0) {
+                        int T_want = T_cur * s;
+                        int C_out_t = (int)x->ne[1];
+                        x = ggml_view_2d(ctx0, x, T_want, C_out_t, x->nb[1], (size_t)p * x->nb[0]);
+                        x = ggml_cont(ctx0, x);
+                    }
+                    if (up_b) {
+                        x = ggml_add(ctx0, x, ggml_reshape_2d(ctx0, up_b, 1, (int)up_b->ne[0]));
+                    }
                 }
             }
         }
@@ -1336,6 +1355,30 @@ extern "C" struct indextts_voc_context* indextts_voc_init(const char* path, int 
         c->ctx_w = wl.ctx;
         c->buf_w = wl.buf;
         c->tensors = std::move(wl.tensors);
+    }
+
+    // Permute ConvTranspose1d weights for decomposed mul_mat + col2im_1d.
+    {
+        const int n_ups = c->hp.num_upsamples;
+        const size_t meta_bytes = ggml_tensor_overhead() * (size_t)n_ups + 4096;
+        struct ggml_init_params pp = {meta_bytes, nullptr, true};
+        c->ctx_perm = ggml_init(pp);
+        std::unique_ptr<float[]> perm_bufs[indextts_voc_context::kMaxUps];
+        for (int i = 0; i < n_ups && i < indextts_voc_context::kMaxUps; i++) {
+            char wn[32];
+            std::snprintf(wn, sizeof(wn), "ups.%d.0.weight", i);
+            auto it = c->tensors.find(wn);
+            if (it == c->tensors.end()) continue;
+            ggml_tensor* src = it->second;
+            perm_bufs[i] = core_convt::permute_convt1d_weight(src);
+            c->ups_w_perm[i] = ggml_new_tensor_2d(c->ctx_perm, GGML_TYPE_F32,
+                                                   (int)src->ne[2], (int)src->ne[0] * (int)src->ne[1]);
+        }
+        c->buf_perm = ggml_backend_alloc_ctx_tensors(c->ctx_perm, c->backend);
+        for (int i = 0; i < n_ups && i < indextts_voc_context::kMaxUps; i++) {
+            if (c->ups_w_perm[i] && perm_bufs[i])
+                ggml_backend_tensor_set(c->ups_w_perm[i], perm_bufs[i].get(), 0, ggml_nbytes(c->ups_w_perm[i]));
+        }
     }
 
     // Verify critical tensors exist
