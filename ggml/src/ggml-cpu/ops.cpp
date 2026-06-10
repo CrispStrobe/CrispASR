@@ -5126,7 +5126,7 @@ static void ggml_compute_forward_soft_max_ext_back_f32(const ggml_compute_params
             assert(!isnan(y[i]));
         }
 #endif // NDEBUG
-    // Jii = yi - yi*yi                                                                                                \
+        // Jii = yi - yi*yi                                                                                                \
     // Jij = -yi*yj                                                                                                    \
     // J = diag(y)-y.T*y                                                                                               \
     // dx = J * dy                                                                                                     \
