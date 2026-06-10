@@ -5126,24 +5126,26 @@ static void ggml_compute_forward_soft_max_ext_back_f32(const ggml_compute_params
             assert(!isnan(y[i]));
         }
 #endif // NDEBUG
-        // Jii = yi - yi*yi                                                                                                \
-    // Jij = -yi*yj                                                                                                    \
-    // J = diag(y)-y.T*y                                                                                               \
-    // dx = J * dy                                                                                                     \
-    // dxk = sum_i(Jki * dyi)                                                                                          \
-    // dxk = sum_i(-yk*yi * dyi) - (-yk*yk)*dyk + (yk - yk*yk)*dyk                                                     \
-    // dxk = sum_i(-yk*yi * dyi) + yk*yk*dyk + yk*dyk - yk*yk*dyk                                                      \
-    // dxk = sum_i(-yk*yi * dyi) + yk*dyk                                                                              \
-    // dxk = -yk * sum_i(yi * dyi) + yk*dyk                                                                            \
-    // dxk = -yk * dot(y, dy) + yk*dyk                                                                                 \
-    // dxk = yk * (- dot(y, dy) + dyk)                                                                                 \
-    // dxk = yk * (dyk - dot(y, dy))                                                                                   \
-    //                                                                                                                 \
-    // post-order:                                                                                                     \
-    // dot_y_dy := dot(y, dy)                                                                                          \
-    // dx := dy                                                                                                        \
-    // dx := dx - dot_y_dy                                                                                             \
-    // dx := dx * y
+        /*
+         * Jii = yi - yi*yi
+         * Jij = -yi*yj
+         * J = diag(y)-y.T*y
+         * dx = J * dy
+         * dxk = sum_i(Jki * dyi)
+         * dxk = sum_i(-yk*yi * dyi) - (-yk*yk)*dyk + (yk - yk*yk)*dyk
+         * dxk = sum_i(-yk*yi * dyi) + yk*yk*dyk + yk*dyk - yk*yk*dyk
+         * dxk = sum_i(-yk*yi * dyi) + yk*dyk
+         * dxk = -yk * sum_i(yi * dyi) + yk*dyk
+         * dxk = -yk * dot(y, dy) + yk*dyk
+         * dxk = yk * (- dot(y, dy) + dyk)
+         * dxk = yk * (dyk - dot(y, dy))
+         *
+         * post-order:
+         * dot_y_dy := dot(y, dy)
+         * dx := dy
+         * dx := dx - dot_y_dy
+         * dx := dx * y
+         */
 
         // linear runtime, no additional memory
         float dot_y_dy = 0;
