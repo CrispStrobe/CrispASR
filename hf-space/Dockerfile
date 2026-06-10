@@ -8,13 +8,13 @@ RUN printf 'Acquire::Retries "5";\nAcquire::http::Timeout "30";\nAcquire::https:
       espeak-ng espeak-ng-data libespeak-ng1 && \
   rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
-# Pre-built binaries (crispasr + crispasr-lid + shared libs) uploaded to
-# the Space repo at bin/. This avoids the 6+ minute C++ compilation that
-# exceeds the free-tier Docker build timeout.
-COPY bin/crispasr-bin-linux-x64.tar.gz /tmp/
+# Pre-built binaries — download from the Space repo's LFS to avoid the
+# 6+ minute C++ compilation that exceeds the free-tier build timeout.
+ARG BIN_URL=https://huggingface.co/spaces/cstr/CrispASR/resolve/main/bin/crispasr-bin-linux-x64.tar.gz
 RUN mkdir -p /opt/crispasr/build/bin && \
-  tar xzf /tmp/crispasr-bin-linux-x64.tar.gz -C /opt/crispasr/build/bin/ && \
-  rm /tmp/crispasr-bin-linux-x64.tar.gz && \
+  curl -sL "${BIN_URL}" -o /tmp/crispasr-bin.tar.gz && \
+  tar xzf /tmp/crispasr-bin.tar.gz -C /opt/crispasr/build/bin/ && \
+  rm /tmp/crispasr-bin.tar.gz && \
   find /opt/crispasr/build/bin -name 'lib*.so*' -exec cp -a {} /usr/local/lib/ \; && \
   ldconfig
 
