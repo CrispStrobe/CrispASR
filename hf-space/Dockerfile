@@ -9,7 +9,7 @@ RUN printf 'Acquire::Retries "5";\nAcquire::http::Timeout "30";\nAcquire::https:
 
 # Pre-built binaries from GitHub Releases — avoids the 6+ minute C++
 # compilation that exceeds the HF free-tier Docker build timeout.
-# v2: tarball now includes lib symlinks (libcrispasr.so → libcrispasr.so.0.7.1 etc.)
+# v3: tarball with SOVERSION symlinks now includes lib symlinks (libcrispasr.so → libcrispasr.so.0.7.1 etc.)
 ARG BIN_URL=https://github.com/CrispStrobe/CrispASR/releases/download/hf-space-bin/crispasr-bin-linux-x64.tar.gz
 RUN mkdir -p /opt/crispasr/build/bin && \
   curl -sL "${BIN_URL}" -o /tmp/crispasr-bin.tar.gz && \
