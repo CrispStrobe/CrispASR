@@ -113,10 +113,11 @@ struct ResUnitSlots {
 
 // Tensor slots for one decoder block.
 struct BlockSlots {
-    ggml_tensor* act = nullptr;    // block activation param
-    ggml_tensor* up_w = nullptr;   // ConvTranspose1d weight
-    ggml_tensor* up_b = nullptr;   // ConvTranspose1d bias
-    std::vector<ResUnitSlots> res; // residual units
+    ggml_tensor* act = nullptr;      // block activation param
+    ggml_tensor* up_w = nullptr;     // ConvTranspose1d weight
+    ggml_tensor* up_w_perm = nullptr;// pre-permuted [IC, K*OC] for decomposed path (or nullptr)
+    ggml_tensor* up_b = nullptr;     // ConvTranspose1d bias
+    std::vector<ResUnitSlots> res;   // residual units
 };
 
 // Tensor slots for the codebook quantizer (decode direction only).
@@ -291,7 +292,13 @@ static inline ggml_tensor* build_decoder_block(ggml_context* ctx, ggml_tensor* x
                                                const std::vector<int>& dilations, bool depthwise,
                                                const ActivationFn& act_fn) {
     x = act_fn(ctx, x, blk.act);
-    x = convt1d_crop(ctx, x, blk.up_w, blk.up_b, stride, /*crop_left=*/stride / 2, /*crop_right=*/stride / 2);
+    if (blk.up_w_perm) {
+        const int K = (int)blk.up_w->ne[0];
+        x = core_convt::convt1d_decomp(ctx, x, blk.up_w_perm, blk.up_b, stride, K,
+                                       /*crop_left=*/stride / 2, /*crop_right=*/stride / 2);
+    } else {
+        x = convt1d_crop(ctx, x, blk.up_w, blk.up_b, stride, /*crop_left=*/stride / 2, /*crop_right=*/stride / 2);
+    }
 
     for (int r = 0; r < (int)blk.res.size() && r < (int)dilations.size(); r++) {
         x = build_residual_unit(ctx, x, blk.res[r], dilations[r], depthwise, act_fn);

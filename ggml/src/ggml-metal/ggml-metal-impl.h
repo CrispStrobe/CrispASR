@@ -667,6 +667,19 @@ typedef struct {
     uint64_t nb1;
 } ggml_metal_kargs_conv_transpose_1d;
 
+// CrispASR patch (PR #160 col2im_1d decomposition): kargs for the
+// col2im_1d gather kernel — scatter-adds GEMM columns to 1D signal.
+// MUST RE-APPLY after every ggml bump.
+typedef struct {
+    int32_t T_in;
+    int32_t T_out;
+    int32_t OC;
+    int32_t K;
+    int32_t K_OC;
+    int32_t s0;
+    int32_t p0;
+} ggml_metal_kargs_col2im_1d;
+
 // CrispASR patch (PR #07-metal-aa-snake-beta): kargs for the fused
 // BigVGAN v2 anti-aliased SnakeBeta kernel. K is fixed at 12 by the
 // kernel — left in kargs only for sanity-checking on the host side.

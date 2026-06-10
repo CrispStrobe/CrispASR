@@ -400,6 +400,11 @@ static int ggml_metal_op_encode_impl(ggml_metal_op_t ctx, int idx) {
             {
                 n_fuse = ggml_metal_op_conv_transpose_1d(ctx, idx);
             } break;
+        // CrispASR patch (PR #160 col2im_1d) — MUST RE-APPLY after ggml bump.
+        case GGML_OP_COL2IM_1D:
+            {
+                n_fuse = ggml_metal_op_col2im_1d(ctx, idx);
+            } break;
         // CrispASR patch (PR #07-metal-aa-snake-beta) — MUST RE-APPLY after ggml bump.
         case GGML_OP_AA_SNAKE_BETA:
             {
@@ -4136,6 +4141,54 @@ int ggml_metal_op_conv_transpose_1d(ggml_metal_op_t ctx, int idx) {
     ggml_metal_encoder_set_buffer  (enc, ggml_metal_get_buffer_id(op),         3);
 
     ggml_metal_encoder_dispatch_threadgroups(enc, OL, OC, 1, 1, 1, 1);
+
+    return 1;
+}
+
+// CrispASR patch (PR #160 col2im_1d): dispatch the col2im_1d gather kernel.
+// MUST RE-APPLY after every ggml bump.
+int ggml_metal_op_col2im_1d(ggml_metal_op_t ctx, int idx) {
+    ggml_tensor * op = ctx->node(idx);
+
+    ggml_metal_library_t lib = ctx->lib;
+    ggml_metal_encoder_t enc = ctx->enc;
+
+    const ggml_tensor * src0 = op->src[0];
+
+    GGML_ASSERT(ggml_is_contiguous(src0));
+
+    const int32_t s0 = ((const int32_t *)(op->op_params))[0];
+    const int32_t OC = ((const int32_t *)(op->op_params))[1];
+    const int32_t p0 = ((const int32_t *)(op->op_params))[2];
+
+    const int K_OC  = (int) src0->ne[0];
+    const int T_in  = (int) src0->ne[1];
+    const int K     = K_OC / OC;
+    const int T_out = (int) op->ne[0];
+
+    const int total = T_out * OC;
+
+    ggml_metal_kargs_col2im_1d args = {
+        /*.T_in  =*/ T_in,
+        /*.T_out =*/ T_out,
+        /*.OC    =*/ OC,
+        /*.K     =*/ K,
+        /*.K_OC  =*/ K_OC,
+        /*.s0    =*/ s0,
+        /*.p0    =*/ p0,
+    };
+
+    auto pipeline = ggml_metal_library_get_pipeline_col2im_1d(lib, op);
+
+    const int nth = 256;
+    const int ntg = (total + nth - 1) / nth;
+
+    ggml_metal_encoder_set_pipeline(enc, pipeline);
+    ggml_metal_encoder_set_bytes   (enc, &args, sizeof(args), 0);
+    ggml_metal_encoder_set_buffer  (enc, ggml_metal_get_buffer_id(src0), 1);
+    ggml_metal_encoder_set_buffer  (enc, ggml_metal_get_buffer_id(op),   2);
+
+    ggml_metal_encoder_dispatch_threadgroups(enc, ntg, 1, 1, nth, 1, 1);
 
     return 1;
 }

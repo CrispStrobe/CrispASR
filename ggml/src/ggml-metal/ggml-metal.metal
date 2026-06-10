@@ -5003,6 +5003,54 @@ kernel void kernel_conv_transpose_1d<half>(
     uint3    tgpg[[threadgroups_per_grid]]);
 
 
+// ── CrispASR patch (PR #160 col2im_1d decomposition) ──────────────────
+// Gather-based col2im_1d: scatter-add GEMM columns to 1D signal.
+// columns: [K*OC, T_in]  ->  output: [T_out, OC]
+// One thread per output element. F32 accumulator.
+// MUST RE-APPLY after every ggml bump.
+
+template <typename T>
+kernel void kernel_col2im_1d(
+        constant ggml_metal_kargs_col2im_1d & args,
+        device const T * src0,
+        device       T * dst,
+        uint gid [[thread_position_in_grid]]) {
+
+    const int total = args.T_out * args.OC;
+    if ((int)gid >= total) return;
+
+    const int t_out = (int)gid % args.T_out;
+    const int oc    = (int)gid / args.T_out;
+    const int t_abs = t_out + args.p0;
+
+    int t_in_min = (t_abs - args.K + args.s0) / args.s0;
+    if (t_in_min < 0) t_in_min = 0;
+    int t_in_max = t_abs / args.s0;
+    if (t_in_max >= args.T_in) t_in_max = args.T_in - 1;
+
+    float sum = 0.0f;
+    for (int t_in = t_in_min; t_in <= t_in_max; t_in++) {
+        const int k = t_abs - t_in * args.s0;
+        sum += float(src0[(oc * args.K + k) + t_in * args.K_OC]);
+    }
+
+    dst[gid] = T(sum);
+}
+
+template [[host_name("kernel_col2im_1d_f32")]]
+kernel void kernel_col2im_1d<float>(
+    constant ggml_metal_kargs_col2im_1d & args,
+    device const float * src0,
+    device       float * dst,
+    uint gid [[thread_position_in_grid]]);
+
+template [[host_name("kernel_col2im_1d_f16")]]
+kernel void kernel_col2im_1d<half>(
+    constant ggml_metal_kargs_col2im_1d & args,
+    device const half * src0,
+    device       half * dst,
+    uint gid [[thread_position_in_grid]]);
+
 // ── CrispASR patch (PR #07-metal-aa-snake-beta) ─────────────────────
 // Fused BigVGAN v2 anti-aliased SnakeBeta. One threadgroup per
 // (channel × seq-chunk × batch). Each thread owns AA_BUFFER_SIZE

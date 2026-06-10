@@ -1777,6 +1777,27 @@ ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_conv_transpose_1
     return res;
 }
 
+// CrispASR patch (PR #160 col2im_1d) — MUST RE-APPLY after ggml bump.
+ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_col2im_1d(ggml_metal_library_t lib, const ggml_tensor * op) {
+    assert(op->op == GGML_OP_COL2IM_1D);
+
+    GGML_ASSERT(ggml_is_contiguous(op->src[0]));
+    GGML_ASSERT(op->src[0]->type == GGML_TYPE_F32 || op->src[0]->type == GGML_TYPE_F16);
+
+    char base[256];
+    char name[256];
+
+    snprintf(base, 256, "kernel_col2im_1d_%s", ggml_type_name(op->src[0]->type));
+    snprintf(name, 256, "%s", base);
+
+    ggml_metal_pipeline_with_params res = ggml_metal_library_get_pipeline(lib, name);
+    if (!res.pipeline) {
+        res = ggml_metal_library_compile_pipeline(lib, base, name, nullptr);
+    }
+
+    return res;
+}
+
 // CrispASR patch (PR #07-metal-aa-snake-beta) — MUST RE-APPLY after ggml bump.
 // INDEXTTS_AA_METAL_VARIANT selects among three semantically-equivalent
 // Metal kernels for the AA-SnakeBeta op. All three produce numerically-

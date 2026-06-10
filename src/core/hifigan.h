@@ -31,6 +31,7 @@
 
 #pragma once
 
+#include "conv.h"
 #include "ggml.h"
 
 #include <cassert>
@@ -99,12 +100,18 @@ static inline ggml_tensor* conv1d(ggml_context* ctx, ggml_tensor* x, ggml_tensor
 // ── ConvTranspose1d helper ─────────────────────────────────────────
 //
 // weight: (in_ch, out_ch, kernel) stored as ggml (kernel, out_ch, in_ch)
+// w_perm: (in_ch, kernel*out_ch) pre-permuted weight for decomposed path,
+//         or nullptr to use the old ggml_conv_transpose_1d path.
 // For ggml_conv_transpose_1d: (a=weight, b=input, stride, padding, dilation)
 // PyTorch padding = (kernel - stride) / 2
 
-static inline ggml_tensor* conv_transpose_1d(ggml_context* ctx, ggml_tensor* x, ggml_tensor* weight, ggml_tensor* bias,
-                                             int stride, int padding) {
-    // ggml_conv_transpose_1d requires padding=0. Apply padding by trimming output.
+static inline ggml_tensor* conv_transpose_1d(ggml_context* ctx, ggml_tensor* x, ggml_tensor* weight,
+                                             ggml_tensor* w_perm, ggml_tensor* bias, int stride, int padding) {
+    if (w_perm) {
+        const int K = (int)weight->ne[0];
+        return core_convt::convt1d_decomp(ctx, x, w_perm, bias, stride, K, padding, padding);
+    }
+    // Old path — stable, works on CPU without the col2im op.
     ggml_tensor* y = ggml_conv_transpose_1d(ctx, weight, x, stride, 0 /*p0*/, 1);
     // Trim padding from both ends: crop from [padding .. T_out - padding]
     if (padding > 0) {
@@ -168,12 +175,17 @@ static inline ggml_tensor* resblock_forward(ggml_context* ctx, ggml_tensor* x,
 // tensors: map of GGUF tensor name -> ggml_tensor*
 // prefix: tensor name prefix (e.g. "voc" for "voc.conv_pre.weight")
 // hp: hyperparameters
+// ups_w_perm: pre-permuted upsample weights [IC, K*OC] for each stage,
+//             or empty to use the old conv_transpose_1d path. When
+//             provided, must have hp.num_upsamples() elements (nullptr
+//             entries fall back to the old path for that stage).
 //
 // Returns: (1, T_audio) F32, mono waveform in [-1, 1].
 
 static inline ggml_tensor* forward(ggml_context* ctx, ggml_tensor* mel,
                                    const std::map<std::string, ggml_tensor*>& tensors, const std::string& prefix,
-                                   const hparams& hp) {
+                                   const hparams& hp,
+                                   const std::vector<ggml_tensor*>& ups_w_perm = {}) {
     ggml_tensor* x = mel;
 
     // Optional normalization: (mel - mean) / scale
@@ -203,7 +215,8 @@ static inline ggml_tensor* forward(ggml_context* ctx, ggml_tensor* mel,
 
         std::string ups_w = prefix + ".ups." + std::to_string(i) + ".weight";
         std::string ups_b = prefix + ".ups." + std::to_string(i) + ".bias";
-        x = conv_transpose_1d(ctx, x, T(tensors, ups_w), T(tensors, ups_b), rate, pad);
+        ggml_tensor* wp = (i < (int)ups_w_perm.size()) ? ups_w_perm[i] : nullptr;
+        x = conv_transpose_1d(ctx, x, T(tensors, ups_w), wp, T(tensors, ups_b), rate, pad);
 
         // MRF: sum of resblocks / num_kernels
         ggml_tensor* res_sum = nullptr;

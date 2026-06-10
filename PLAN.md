@@ -4971,38 +4971,76 @@ passed via `g_open_use_gpu_tls` from the C API.
 
 ## 155. CONV_TRANSPOSE_1D GPU optimization (issue #155)
 
-**Status (2026-06-08):** Crash bug fixed in `f8fc8b8e` — the CUDA/HIP
-kernel was doing O(IL) iterations per output thread instead of the
-tight O(K/s) range, enough to trip TDR on AMD + NVIDIA. Analytical
-`i_min`/`i_max` fix applied (same approach as Metal fix in ggml#1477).
-`supports_op` re-enabled on CUDA/HIP/Metal/Vulkan.
+**Status (2026-06-10):** Core decomposition landed in `5f600f25` (PR #160
+by @Rafa00127, cleaned up). New `GGML_OP_COL2IM_1D` op with CPU (F32) and
+CUDA (F32/F16/BF16) kernels. Qwen3-TTS codec: **1200 ms → 130 ms** (9×).
 
-**Remaining:** The kernel still has poor performance relative to CPU
-for TTS codec workloads. User @Rafa00127 reports on AMD RX 7900 XTX:
-- Codec full-GPU: 1198 ms (rtf 0.342)
-- Codec GPU except conv_transpose_1d on CPU: 396 ms (rtf 0.264)
-- Delta: ~800 ms wasted in the convt kernel alone
+**Approach:** Decompose `conv_transpose_1d(w, x, stride)` into:
+1. Pre-permute `w[K, OC, IC]` → `w_perm[IC, K*OC]` at load time
+2. `col = ggml_mul_mat(w_perm, x)` — highly-optimized GEMM
+3. `y = ggml_col2im_1d(col, stride, OC, p0)` — lightweight gather
+4. Crop + transpose → channels-first output
 
-The kernel processes each output position independently, so it's
-memory-bandwidth-bound with poor cache behavior for the large strides
-(s=8) used in TTS decoder blocks. Potential optimizations:
+The old `ggml_conv_transpose_1d` stays as fallback when `w_perm == NULL`.
 
-1. **Tiled/shared-memory kernel** — load weight tiles into shared mem,
-   process multiple output positions per block. Standard cuDNN approach
-   for transposed conv but not yet implemented in ggml.
-2. **Winograd-style transform** — may be viable for the k=16,s=8 case
-   (the most common TTS stride).
-3. **Fused upconv+activation** — combine ConvTranspose1d + Snake in a
-   single kernel to avoid the intermediate buffer read.
-4. **CPU-fallback policy** — as a pragmatic intermediate step, route
-   `CONV_TRANSPOSE_1D` to CPU when the stride×kernel product exceeds
-   a threshold (e.g. s≥4). This is what the user discovered gives the
-   best throughput today. Could be a `CRISPASR_CONVT_CPU=1` env flag
-   or an auto-heuristic in the sched op-offload callback.
+### Phase 1: Generalize conv.h helpers — IN PROGRESS
 
-**Applies to:** qwen3-tts codec, orpheus SNAC, outetts WavTokenizer,
-pocket-tts Mimi, Zonos DAC — any TTS backend with a strided upsampling
-conv decoder. The fix/optimization lives in ggml (not backend-specific).
+Add `convt1d_decomp()` to `src/core/conv.h` — general-purpose version of
+`convt1d_causal_decomp()` that supports symmetric cropping (crop_left =
+crop_right, used by most decoders) not just causal right-trim.
+
+Add `permute_convt1d_weight()` utility — de-duplicates the inline permutation
+lambda from qwen3_tts.cpp for reuse across all backends.
+
+### Phase 2: Wire into shared decoder headers
+
+**2a. `src/core/hifigan.h`** — HiFi-GAN vocoder (SpeechT5, FastPitch,
+      Kokoro, MeloTTS, OpenVoice2, Piper-TTS)
+      Symmetric crop: `pad = (K − stride) / 2`.
+      Add `up_w_perm` field, branch in `conv_transpose_1d()`.
+
+**2b. `src/core/seanet_decoder.h`** — SEANet family (SNAC/Orpheus, future
+      CSM/Bark/Mimi).
+      Symmetric crop: `crop_left = crop_right = stride / 2`.
+      Add `up_w_perm` to `BlockSlots`, branch in `build_decoder_block()`.
+
+**2c. `src/core/dac_decoder.h`** — DAC decoder (Zonos, Parler, Dia).
+      Symmetric crop: `pad = stride / 2`.
+      Add `up_w_perm` to `DacDecoderBlock`, branch in `convt1d()`.
+
+### Phase 3: Wire into standalone runtimes
+
+**3a. `src/kokoro.cpp`** — HIGH PRIORITY. Has CPU-pinning workaround for
+      Metal `conv_transpose_1d` hang. Decomposition eliminates the hack.
+**3b. `src/indextts_voc.cpp`** — BigVGAN v2 upsample blocks.
+**3c. `src/chatterbox_s3gen.cpp`** — S3Gen vocoder.
+**3d. `src/audioseal.cpp`** — decoder + detector.
+**3e. Remaining** — csm_tts, vibevoice, voxcpm2_tts, tada_codec,
+      pocket_tts, kugelaudio (single ConvTranspose1d each, lower priority).
+
+### Phase 4: Metal kernel for `GGML_OP_COL2IM_1D`
+
+Port the CUDA gather kernel to Metal. Simple kernel (1 thread per output
+element). Files: `ggml-metal.metal` (shader), `ggml-metal-impl.h` (kargs),
+`ggml-metal-ops.cpp` (dispatch), `ggml-metal-device.cpp` (pipeline lookup),
+`ggml-metal-device.m` (supports_op), `ggml-metal-ops.h` / `ggml-metal-device.h`
+(declarations).
+
+### Phase 5: Remove Kokoro Metal workaround
+
+Once Phase 4 lands, remove the CPU-pinning hack in kokoro.cpp (the
+`conv_transpose_1d` pin loop ~line 2330).
+
+### Implementation order
+
+Phase 1 → 2a–2c → 3a → 4 → 5 → 3b–3e (incremental).
+
+**Applies to:** qwen3-tts codec (done), orpheus SNAC, outetts WavTokenizer,
+pocket-tts Mimi, Zonos DAC, Parler DAC, Dia DAC, Kokoro HiFi-GAN,
+SpeechT5 HiFi-GAN, FastPitch HiFi-GAN, MeloTTS, OpenVoice2, Piper-TTS,
+IndexTTS BigVGAN, Chatterbox S3Gen, AudioSeal, CSM Mimi, VibéVoice,
+VoxCPM2, TADA codec, KugelAudio — every TTS backend with strided
+upsampling conv.
 
 ---
 

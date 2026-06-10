@@ -100,10 +100,11 @@ struct DacResUnit {
 
 // DecoderBlock weights
 struct DacDecoderBlock {
-    ggml_tensor* snake_alpha = nullptr; // Snake1d alpha (1, in_ch, 1)
-    ggml_tensor* up_w = nullptr;        // ConvTranspose1d weight
-    ggml_tensor* up_b = nullptr;        // ConvTranspose1d bias
-    DacResUnit res[3];                  // dilation 1, 3, 9
+    ggml_tensor* snake_alpha = nullptr;  // Snake1d alpha (1, in_ch, 1)
+    ggml_tensor* up_w = nullptr;         // ConvTranspose1d weight
+    ggml_tensor* up_w_perm = nullptr;    // pre-permuted [IC, K*OC] for decomposed path (or nullptr)
+    ggml_tensor* up_b = nullptr;         // ConvTranspose1d bias
+    DacResUnit res[3];                   // dilation 1, 3, 9
 };
 
 // Full DAC decoder weight set
@@ -155,9 +156,14 @@ static inline ggml_tensor* conv1d(ggml_context* ctx, ggml_tensor* x, ggml_tensor
 
 // ConvTranspose1d with symmetric cropping: T_out = T_in * stride
 // DAC uses kernel=2*stride, pad=stride/2.
-// Delegates to core_convt::convt1d_crop (proven in orpheus SNAC).
-static inline ggml_tensor* convt1d(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w, ggml_tensor* b, int stride) {
+// Uses decomposed mul_mat + col2im_1d when w_perm is available.
+static inline ggml_tensor* convt1d(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w, ggml_tensor* w_perm,
+                                   ggml_tensor* b, int stride) {
     const int pad = stride / 2;
+    if (w_perm) {
+        const int K = (int)w->ne[0];
+        return core_convt::convt1d_decomp(ctx, x, w_perm, b, stride, K, pad, pad);
+    }
     return core_convt::convt1d_crop(ctx, x, w, b, stride, /*crop_left=*/pad, /*crop_right=*/pad);
 }
 
@@ -173,7 +179,7 @@ static inline ggml_tensor* res_unit(ggml_context* ctx, ggml_tensor* x, const Dac
 // DecoderBlock: Snake -> ConvTranspose1d(stride=s) -> 3 x ResidualUnit(d=1,3,9)
 static inline ggml_tensor* dec_block(ggml_context* ctx, ggml_tensor* x, const DacDecoderBlock& blk, int stride) {
     x = snake(ctx, x, blk.snake_alpha);
-    x = convt1d(ctx, x, blk.up_w, blk.up_b, stride);
+    x = convt1d(ctx, x, blk.up_w, blk.up_w_perm, blk.up_b, stride);
     x = res_unit(ctx, x, blk.res[0], 1);
     x = res_unit(ctx, x, blk.res[1], 3);
     x = res_unit(ctx, x, blk.res[2], 9);

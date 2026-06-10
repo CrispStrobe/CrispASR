@@ -20,6 +20,9 @@
 #pragma once
 
 #include "ggml.h"
+#include "ggml-backend.h"
+
+#include <memory>
 
 namespace core_convt {
 
@@ -132,33 +135,39 @@ static inline ggml_tensor* convt1d_crop(ggml_context* ctx, ggml_tensor* x, ggml_
     return y;
 }
 
-// Causal ConvTranspose1d via decomposed mul_mat + col2im.
-// Uses pre-permuted weights w_perm [IC, K*OC] and the new col2im_1d op.
-// Replaces ggml_conv_transpose_1d without touching the old op.
+// General-purpose decomposed ConvTranspose1d via mul_mat + col2im_1d.
+// Uses pre-permuted weights w_perm [IC, K*OC] and the col2im_1d op.
+//
+// Supports both causal (crop_left=0, crop_right=K-stride) and symmetric
+// (crop_left=crop_right=stride/2) cropping patterns used across all TTS
+// decoder families.
 //
 // Inputs:
-//   x      : (Cin, T_in)  F32, channel-major.
-//   w_perm : (IC, K*OC)   F32, weight pre-permuted at load time.
-//   b      : (Cout,)      F32 or nullptr.
-//   stride : positive integer.
-//   K      : kernel size.
+//   x          : (Cin, T_in)  F32, channel-major.
+//   w_perm     : (IC, K*OC)   F32, weight pre-permuted at load time.
+//   b          : (Cout,)      F32 or nullptr.
+//   stride     : positive integer.
+//   K          : kernel size.
+//   crop_left  : samples to crop from the start of the time axis (≥ 0).
+//   crop_right : samples to crop from the end of the time axis (≥ 0).
 //
-// Output: (Cout, T_in * stride) F32 (causal right-trim applied).
-static inline ggml_tensor* convt1d_causal_decomp(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w_perm, ggml_tensor* b,
-                                                 int stride, int K) {
+// Output: (Cout, T_unpad - crop_left - crop_right) F32.
+static inline ggml_tensor* convt1d_decomp(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w_perm, ggml_tensor* b,
+                                          int stride, int K, int crop_left, int crop_right) {
     const int OC = (int)w_perm->ne[1] / K;
 
-    // x: [Cin, T_in] channels-first → ne[0]=Cin=IC already matches w_perm's ne[0]=IC.
     // mul_mat contracts IC → col: [K*OC, T_in]
     ggml_tensor* col = ggml_mul_mat(ctx, w_perm, x);
 
     // col2im: [K*OC, T_in] → [T_raw, OC]  (GATHER)
-    ggml_tensor* y = ggml_col2im_1d(ctx, col, stride, OC, 0);
+    // p0 = crop_left tells col2im to start the output at offset crop_left
+    // in the uncropped signal, effectively skipping crop_left samples.
+    ggml_tensor* y = ggml_col2im_1d(ctx, col, stride, OC, crop_left);
 
-    // Causal right-trim: T_raw - (K-stride) = T_in * stride
-    const int trim = K - stride;
-    if (trim > 0) {
-        const int64_t T_keep = y->ne[0] - trim;
+    // col2im output length: T_raw = (T_in-1)*stride + K - crop_left
+    // We want T_out = T_raw - crop_right, so trim the tail if needed.
+    if (crop_right > 0) {
+        const int64_t T_keep = y->ne[0] - crop_right;
         y = ggml_view_2d(ctx, y, T_keep, y->ne[1], y->nb[1], 0);
         y = ggml_cont(ctx, y);
     }
@@ -170,6 +179,59 @@ static inline ggml_tensor* convt1d_causal_decomp(ggml_context* ctx, ggml_tensor*
         y = ggml_add(ctx, y, b);
     }
     return y;
+}
+
+// Causal ConvTranspose1d via decomposed mul_mat + col2im.
+// Convenience wrapper: crop_left=0, crop_right=K-stride.
+// Output: (Cout, T_in * stride) F32.
+static inline ggml_tensor* convt1d_causal_decomp(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w_perm, ggml_tensor* b,
+                                                 int stride, int K) {
+    return convt1d_decomp(ctx, x, w_perm, b, stride, K, /*crop_left=*/0, /*crop_right=*/K - stride);
+}
+
+// ---------------------------------------------------------------------------
+// Weight permutation utility (host-side, called at load time).
+// ---------------------------------------------------------------------------
+
+// Permute a ConvTranspose1d weight from ggml layout [K, OC, IC] to the
+// decomposed layout [IC, K*OC] needed by convt1d_decomp / mul_mat.
+//
+// Supports F32 and F16 source tensors. Always produces F32 output.
+// Returns a heap-allocated buffer; caller owns it.
+//
+// Usage at load time:
+//   auto buf = permute_convt1d_weight(src_tensor);
+//   ggml_tensor* dst = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, IC, K*OC);
+//   ggml_backend_tensor_set(dst, buf.get(), 0, ggml_nbytes(dst));
+
+static inline std::unique_ptr<float[]> permute_convt1d_weight(ggml_tensor* src) {
+    const int K  = (int)src->ne[0];
+    const int OC = (int)src->ne[1];
+    const int IC = (int)src->ne[2];
+    const size_t n_elems = (size_t)K * OC * IC;
+
+    auto out = std::make_unique<float[]>((size_t)IC * K * OC);
+    float* dp = out.get();
+
+    if (src->type == GGML_TYPE_F32) {
+        auto tmp = std::make_unique<float[]>(n_elems);
+        ggml_backend_tensor_get(src, tmp.get(), 0, n_elems * sizeof(float));
+        // src layout: [K, OC, IC] → src[ic][oc][k] = tmp[ic * OC * K + oc * K + k]
+        // dst layout: [IC, K*OC]  → dst[oc*K+k][ic] = dp[(oc * K + k) * IC + ic]
+        for (int ic = 0; ic < IC; ic++)
+            for (int oc = 0; oc < OC; oc++)
+                for (int k = 0; k < K; k++)
+                    dp[(oc * K + k) * IC + ic] = tmp[ic * OC * K + oc * K + k];
+    } else {
+        // F16 (most codec weights are F16)
+        auto tmp = std::make_unique<ggml_fp16_t[]>(n_elems);
+        ggml_backend_tensor_get(src, tmp.get(), 0, n_elems * sizeof(ggml_fp16_t));
+        for (int ic = 0; ic < IC; ic++)
+            for (int oc = 0; oc < OC; oc++)
+                for (int k = 0; k < K; k++)
+                    dp[(oc * K + k) * IC + ic] = ggml_fp16_to_fp32(tmp[ic * OC * K + oc * K + k]);
+    }
+    return out;
 }
 
 } // namespace core_convt

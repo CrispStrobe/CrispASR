@@ -87,6 +87,8 @@ int ggml_metal_op_im2col            (ggml_metal_op_t ctx, int idx);
 int ggml_metal_op_conv_2d           (ggml_metal_op_t ctx, int idx);
 int ggml_metal_op_conv_3d           (ggml_metal_op_t ctx, int idx);
 int ggml_metal_op_conv_transpose_1d (ggml_metal_op_t ctx, int idx);
+// CrispASR patch (PR #160 col2im_1d) — MUST RE-APPLY after ggml bump.
+int ggml_metal_op_col2im_1d         (ggml_metal_op_t ctx, int idx);
 // CrispASR patch (PR #07-metal-aa-snake-beta) — MUST RE-APPLY after ggml bump.
 int ggml_metal_op_aa_snake_beta     (ggml_metal_op_t ctx, int idx);
 int ggml_metal_op_conv_transpose_2d (ggml_metal_op_t ctx, int idx);

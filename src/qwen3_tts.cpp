@@ -3781,44 +3781,22 @@ static bool load_codec(qwen3_tts_context* c, const char* path) {
             return false;
         }
 
-        // Helper: permute PyTorch weight (K, OC, IC) → w_perm (IC, K*OC), return
-        // the F32 float buffer holding the result. The tensor is created with
-        // data=NULL so ggml_backend_alloc_ctx_tensors can allocate it.
-        auto permute = [&](ggml_tensor* src, std::unique_ptr<float[]>& out_buf) -> ggml_tensor* {
-            int K = (int)src->ne[0];
-            int OC = (int)src->ne[1];
-            int IC = (int)src->ne[2];
-
+        // Create permuted weight tensors and compute host-side buffers.
+        auto mk_perm = [&](ggml_tensor* src, std::unique_ptr<float[]>& out_buf) -> ggml_tensor* {
+            const int IC = (int)src->ne[2];
+            const int K  = (int)src->ne[0];
+            const int OC = (int)src->ne[1];
             ggml_tensor* dst = ggml_new_tensor_2d(codec.ctx_perm, GGML_TYPE_F32, IC, K * OC);
-
-            size_t n_elems = (size_t)K * OC * IC;
-            out_buf = std::make_unique<float[]>((size_t)IC * K * OC);
-            float* dp = out_buf.get();
-
-            if (src->type == GGML_TYPE_F32) {
-                auto src_buf = std::make_unique<float[]>(n_elems);
-                ggml_backend_tensor_get(src, src_buf.get(), 0, n_elems * sizeof(float));
-                for (int ic = 0; ic < IC; ic++)
-                    for (int oc = 0; oc < OC; oc++)
-                        for (int k = 0; k < K; k++)
-                            dp[(oc * K + k) * IC + ic] = src_buf[ic * OC * K + oc * K + k];
-            } else {
-                auto src_buf = std::make_unique<ggml_fp16_t[]>(n_elems);
-                ggml_backend_tensor_get(src, src_buf.get(), 0, n_elems * sizeof(ggml_fp16_t));
-                for (int ic = 0; ic < IC; ic++)
-                    for (int oc = 0; oc < OC; oc++)
-                        for (int k = 0; k < K; k++)
-                            dp[(oc * K + k) * IC + ic] = ggml_fp16_to_fp32(src_buf[ic * OC * K + oc * K + k]);
-            }
-            return dst; // data == NULL, backend buffer will own the memory
+            out_buf = core_convt::permute_convt1d_weight(src);
+            return dst;
         };
 
         std::unique_ptr<float[]> up_wp_buf[2];
         std::unique_ptr<float[]> blk_wp_buf[4];
         for (int s = 0; s < 2; s++)
-            codec.up[s].tconv_w_perm = permute(codec.up[s].tconv_w, up_wp_buf[s]);
+            codec.up[s].tconv_w_perm = mk_perm(codec.up[s].tconv_w, up_wp_buf[s]);
         for (int b = 0; b < 4; b++)
-            codec.blocks[b].tconv_w_perm = permute(codec.blocks[b].tconv_w, blk_wp_buf[b]);
+            codec.blocks[b].tconv_w_perm = mk_perm(codec.blocks[b].tconv_w, blk_wp_buf[b]);
 
         // Allocate backend buffer (GPU or CPU) for the permuted tensors.
         codec.buf_perm = ggml_backend_alloc_ctx_tensors(codec.ctx_perm, weight_backend);

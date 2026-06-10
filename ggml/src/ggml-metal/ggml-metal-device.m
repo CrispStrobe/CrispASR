@@ -1348,6 +1348,9 @@ bool ggml_metal_device_supports_op(ggml_metal_device_t dev, const struct ggml_te
         case GGML_OP_REPEAT:
         case GGML_OP_CONV_TRANSPOSE_1D:
             return true;
+        // CrispASR patch (PR #160 col2im_1d) — MUST RE-APPLY after ggml bump.
+        case GGML_OP_COL2IM_1D:
+            return op->src[0]->type == GGML_TYPE_F32 || op->src[0]->type == GGML_TYPE_F16;
         // CrispASR patch (PR #07-metal-aa-snake-beta) — MUST RE-APPLY after ggml bump.
         case GGML_OP_AA_SNAKE_BETA:
             return op->src[0]->type == GGML_TYPE_F32 &&
