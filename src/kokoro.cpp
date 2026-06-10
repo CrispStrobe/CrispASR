@@ -193,6 +193,11 @@ struct kokoro_context {
     ggml_context* ctx_w = nullptr;
     ggml_backend_buffer_t buf_w = nullptr;
     std::map<std::string, ggml_tensor*> tensors;
+
+    // Pre-permuted ConvTranspose1d weights for decomposed mul_mat + col2im_1d.
+    ggml_tensor* ups_w_perm[2] = {nullptr, nullptr}; // gen.ups.{0,1}
+    ggml_context* ctx_perm = nullptr;
+    ggml_backend_buffer_t buf_perm = nullptr;
     std::vector<uint8_t> compute_meta;
 
     // Voice pack (secondary GGUF).
@@ -1874,16 +1879,20 @@ static inline ggml_tensor* kokoro_resblock1_forward(ggml_context* ctx, ggml_tens
     return x;
 }
 
-// PyTorch ConvTranspose1d wrapper: ggml_conv_transpose_1d only supports
-// padding=0, so we run with p=0 and crop `pad` samples from each side of the
-// time axis afterwards. PyTorch formula (stride s, kernel k, padding p):
-//   T_out = (T_in - 1) * s - 2*p + k
-// ggml's p=0 output: T_unpad = (T_in - 1) * s + k. Crop p from each side.
+// PyTorch ConvTranspose1d wrapper: uses decomposed mul_mat + col2im_1d when
+// w_perm is available, otherwise falls back to ggml_conv_transpose_1d with
+// manual symmetric crop.
 //
 // in: (Cin, T) F32. w: ne=(K, Cout, Cin) F16. b: ne=(Cout,) F32.
+// w_perm: ne=(Cin, K*Cout) F32 or nullptr.
 // Returns (Cout, T_out) F32.
-static inline ggml_tensor* kokoro_convt1d_pad(ggml_context* ctx, ggml_tensor* in, ggml_tensor* w, ggml_tensor* b,
-                                              int stride, int pad) {
+static inline ggml_tensor* kokoro_convt1d_pad(ggml_context* ctx, ggml_tensor* in, ggml_tensor* w, ggml_tensor* w_perm,
+                                              ggml_tensor* b, int stride, int pad) {
+    if (w_perm) {
+        const int K = (int)w->ne[0];
+        return core_convt::convt1d_decomp(ctx, in, w_perm, b, stride, K, pad, pad);
+    }
+    // Old path — stable, works on CPU without the col2im op.
     const int Cout = (int)w->ne[1];
     ggml_tensor* xT = ggml_cont(ctx, ggml_transpose(ctx, in));         // (T, Cin)
     ggml_tensor* y = ggml_conv_transpose_1d(ctx, w, xT, stride, 0, 1); // (T_unpad, Cout, 1, 1)
@@ -2198,10 +2207,10 @@ static ggml_cgraph* kokoro_build_graph_generator(kokoro_context* c, int T_frames
         // x = ups[i](x)  with PyTorch padding handled via post-crop
         if (i == 0) {
             // k=20, s=10, p=(k-s)/2 = 5
-            x = kokoro_convt1d_pad(ctx0, x, ups0_w, ups0_b, /*s*/ 10, /*p*/ 5);
+            x = kokoro_convt1d_pad(ctx0, x, ups0_w, c->ups_w_perm[0], ups0_b, /*s*/ 10, /*p*/ 5);
         } else {
             // k=12, s=6, p=(k-s)/2 = 3
-            x = kokoro_convt1d_pad(ctx0, x, ups1_w, ups1_b, /*s*/ 6, /*p*/ 3);
+            x = kokoro_convt1d_pad(ctx0, x, ups1_w, c->ups_w_perm[1], ups1_b, /*s*/ 6, /*p*/ 3);
         }
 
         // Last upsample: reflection_pad((1, 0)) — 1 sample on the left, 0 on the right.
@@ -2648,6 +2657,28 @@ extern "C" struct kokoro_context* kokoro_init_from_file(const char* path_model, 
         fprintf(stderr, "kokoro: weight sanity check failed for '%s'\n", path_model);
         kokoro_free(c);
         return nullptr;
+    }
+
+    // ---- Permute ConvTranspose1d weights for decomposed mul_mat + col2im ----
+    {
+        const char* ups_names[2] = {"dec.gen.ups.0.weight", "dec.gen.ups.1.weight"};
+        const size_t meta_bytes = ggml_tensor_overhead() * 2 + 4096;
+        struct ggml_init_params pp = {meta_bytes, nullptr, true};
+        c->ctx_perm = ggml_init(pp);
+        std::unique_ptr<float[]> perm_bufs[2];
+        for (int i = 0; i < 2; i++) {
+            auto it = c->tensors.find(ups_names[i]);
+            if (it == c->tensors.end()) continue;
+            ggml_tensor* src = it->second;
+            perm_bufs[i] = core_convt::permute_convt1d_weight(src);
+            c->ups_w_perm[i] = ggml_new_tensor_2d(c->ctx_perm, GGML_TYPE_F32,
+                                                   (int)src->ne[2], (int)src->ne[0] * (int)src->ne[1]);
+        }
+        c->buf_perm = ggml_backend_alloc_ctx_tensors(c->ctx_perm, c->backend);
+        for (int i = 0; i < 2; i++) {
+            if (c->ups_w_perm[i] && perm_bufs[i])
+                ggml_backend_tensor_set(c->ups_w_perm[i], perm_bufs[i].get(), 0, ggml_nbytes(c->ups_w_perm[i]));
+        }
     }
 
     // ---- Schedulers ----
@@ -3305,6 +3336,10 @@ extern "C" void kokoro_free(struct kokoro_context* ctx) {
         ggml_backend_buffer_free(ctx->vp.vp_buf_w);
     if (ctx->vp.vp_ctx_w)
         ggml_free(ctx->vp.vp_ctx_w);
+    if (ctx->buf_perm)
+        ggml_backend_buffer_free(ctx->buf_perm);
+    if (ctx->ctx_perm)
+        ggml_free(ctx->ctx_perm);
     if (ctx->buf_w)
         ggml_backend_buffer_free(ctx->buf_w);
     if (ctx->ctx_w)
