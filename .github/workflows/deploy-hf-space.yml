@@ -22,7 +22,7 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           cd hf-space
-          git init
+          git init -b main
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git remote add hf "https://cstr:${HF_TOKEN}@huggingface.co/spaces/cstr/CrispASR"
