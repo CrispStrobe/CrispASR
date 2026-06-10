@@ -541,7 +541,7 @@ struct g3t_codec_xfmr_layer {
 
 struct g3t_codec_up_stage {
     ggml_tensor* tconv_w = nullptr;
-    ggml_tensor* tconv_w_perm = nullptr;  // pre-permuted [IC, K*OC] for causal-trans-conv
+    ggml_tensor* tconv_w_perm = nullptr; // pre-permuted [IC, K*OC] for causal-trans-conv
     ggml_tensor* tconv_b = nullptr;
     ggml_tensor* dw_w = nullptr;
     ggml_tensor* dw_b = nullptr;
@@ -569,7 +569,7 @@ struct g3t_codec_dec_block {
     ggml_tensor* snake_a = nullptr;
     ggml_tensor* snake_b = nullptr;
     ggml_tensor* tconv_w = nullptr;
-    ggml_tensor* tconv_w_perm = nullptr;  // pre-permuted [IC, K*OC] for causal-trans-conv
+    ggml_tensor* tconv_w_perm = nullptr; // pre-permuted [IC, K*OC] for causal-trans-conv
     ggml_tensor* tconv_b = nullptr;
     g3t_codec_res_unit res[3];
 };
@@ -687,7 +687,7 @@ struct qwen3_tts_context {
     // independently of params.use_gpu. Talker / code_predictor still use
     // `sched` (GPU-accelerated when available).
     ggml_backend_sched_t codec_sched = nullptr;
-    ggml_backend_sched_t codec_sched_gpu = nullptr;  // dedicated GPU scheduler
+    ggml_backend_sched_t codec_sched_gpu = nullptr; // dedicated GPU scheduler
 
     ggml_context* ctx_w = nullptr;
     ggml_backend_buffer_t buf_w = nullptr;
@@ -758,8 +758,8 @@ struct qwen3_tts_context {
     ggml_backend_buffer_t vp_buf_w = nullptr;
     int vp_active = -1; // index into vp_names; -1 = none selected
 
-    int language_id = -1; // codec language id (-1 = auto / nothink path)
-    bool xvec_only = false;  // ECAPA-only, skip ref codes (cross-lingual)
+    int language_id = -1;   // codec language id (-1 = auto / nothink path)
+    bool xvec_only = false; // ECAPA-only, skip ref codes (cross-lingual)
 
     std::string codec_path;
     std::string voice_prompt_path;
@@ -3774,7 +3774,7 @@ static bool load_codec(qwen3_tts_context* c, const char* path) {
     {
         const int n_perm = 6;
         const size_t meta_bytes = ggml_tensor_overhead() * (size_t)n_perm + ggml_graph_overhead() + 4096;
-        struct ggml_init_params pparams = { meta_bytes, nullptr, true };
+        struct ggml_init_params pparams = {meta_bytes, nullptr, true};
         codec.ctx_perm = ggml_init(pparams);
         if (!codec.ctx_perm) {
             fprintf(stderr, "qwen3_tts: codec: failed to init permuted weight context\n");
@@ -3785,7 +3785,7 @@ static bool load_codec(qwen3_tts_context* c, const char* path) {
         // the F32 float buffer holding the result. The tensor is created with
         // data=NULL so ggml_backend_alloc_ctx_tensors can allocate it.
         auto permute = [&](ggml_tensor* src, std::unique_ptr<float[]>& out_buf) -> ggml_tensor* {
-            int K  = (int)src->ne[0];
+            int K = (int)src->ne[0];
             int OC = (int)src->ne[1];
             int IC = (int)src->ne[2];
 
@@ -3808,8 +3808,7 @@ static bool load_codec(qwen3_tts_context* c, const char* path) {
                 for (int ic = 0; ic < IC; ic++)
                     for (int oc = 0; oc < OC; oc++)
                         for (int k = 0; k < K; k++)
-                            dp[(oc * K + k) * IC + ic] =
-                                ggml_fp16_to_fp32(src_buf[ic * OC * K + oc * K + k]);
+                            dp[(oc * K + k) * IC + ic] = ggml_fp16_to_fp32(src_buf[ic * OC * K + oc * K + k]);
             }
             return dst; // data == NULL, backend buffer will own the memory
         };
@@ -3880,20 +3879,21 @@ struct codec_trace_state {
 static bool codec_trace_eval_cb(struct ggml_tensor* t, bool ask, void* user_data) {
     auto* s = (codec_trace_state*)user_data;
     if (ask) {
-        if (s->first) { s->t0 = std::chrono::steady_clock::now(); s->first = false; }
+        if (s->first) {
+            s->t0 = std::chrono::steady_clock::now();
+            s->first = false;
+        }
         s->t0 = std::chrono::steady_clock::now();
         return true;
     }
     // Post-execute: sync + time
-    double dt = std::chrono::duration<double, std::milli>(
-        std::chrono::steady_clock::now() - s->t0).count();
+    double dt = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - s->t0).count();
     ggml_backend_t be = ggml_backend_sched_get_tensor_backend(s->sched, t);
     const char* be_name = be ? ggml_backend_name(be) : "?";
     char shape[64];
     snprintf(shape, sizeof(shape), "[%lld,%lld,%lld,%lld]", (long long)t->ne[0], (long long)t->ne[1],
              (long long)t->ne[2], (long long)t->ne[3]);
-    fprintf(stderr, "  [%4d/%4d] %7.1fms %-22s %-32s %-22s -> %s\n",
-            s->idx, s->total, dt, ggml_op_name(t->op),
+    fprintf(stderr, "  [%4d/%4d] %7.1fms %-22s %-32s %-22s -> %s\n", s->idx, s->total, dt, ggml_op_name(t->op),
             t->name[0] ? t->name : "(unnamed)", shape, be_name);
     fflush(stderr);
     if (be) {
@@ -3970,14 +3970,16 @@ static float* codec_decode_codes(qwen3_tts_context* c, const int32_t* codes, int
     ggml_cgraph* gf = build_graph_codec_decode(c, T_codec);
     ggml_backend_sched_t sched = codec_pick_sched(c);
 
-    fprintf(stderr, "qwen3_tts: codec: sched_alloc...\n"); fflush(stderr);
+    fprintf(stderr, "qwen3_tts: codec: sched_alloc...\n");
+    fflush(stderr);
     ggml_backend_sched_reset(sched);
     if (!ggml_backend_sched_alloc_graph(sched, gf)) {
         fprintf(stderr, "qwen3_tts: codec: graph alloc failed\n");
         return nullptr;
     }
 
-    fprintf(stderr, "qwen3_tts: codec: tensor_set...\n"); fflush(stderr);
+    fprintf(stderr, "qwen3_tts: codec: tensor_set...\n");
+    fflush(stderr);
     ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "codec_codes"), codes_t.data(), 0,
                             codes_t.size() * sizeof(int32_t));
     ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "codec_positions"), pos.data(), 0, pos.size() * sizeof(int32_t));
@@ -3986,7 +3988,8 @@ static float* codec_decode_codes(qwen3_tts_context* c, const int32_t* codes, int
                                 mask_data.size() * sizeof(ggml_fp16_t));
     }
 
-    fprintf(stderr, "qwen3_tts: codec: compute...\n"); fflush(stderr);
+    fprintf(stderr, "qwen3_tts: codec: compute...\n");
+    fflush(stderr);
     codec_trace_state ts{sched, 0, ggml_graph_n_nodes(gf)};
     if (std::getenv("QWEN3_TTS_CODEC_TRACE")) {
         fprintf(stderr, "qwen3_tts: codec: tracing %d nodes\n", ts.total);
@@ -4000,22 +4003,26 @@ static float* codec_decode_codes(qwen3_tts_context* c, const int32_t* codes, int
     // command-buffer pile-up across repeated Python interop cycles.
     {
         int n = ggml_backend_sched_get_n_backends(sched);
-        if (n > 0) ggml_backend_synchronize(ggml_backend_sched_get_backend(sched, 0));
+        if (n > 0)
+            ggml_backend_synchronize(ggml_backend_sched_get_backend(sched, 0));
     }
-    fprintf(stderr, "qwen3_tts: codec: compute done (status=%d)\n", (int)st); fflush(stderr);
+    fprintf(stderr, "qwen3_tts: codec: compute done (status=%d)\n", (int)st);
+    fflush(stderr);
     if (st != GGML_STATUS_SUCCESS) {
         return nullptr;
     }
 
     ggml_tensor* out = ggml_graph_get_tensor(gf, "pcm");
     int n_samples = (int)ggml_nelements(out);
-    fprintf(stderr, "qwen3_tts: codec: n_samples=%d, malloc...\n", n_samples); fflush(stderr);
+    fprintf(stderr, "qwen3_tts: codec: n_samples=%d, malloc...\n", n_samples);
+    fflush(stderr);
     float* pcm = (float*)malloc((size_t)n_samples * sizeof(float));
     if (!pcm) {
         return nullptr;
     }
     ggml_backend_tensor_get(out, pcm, 0, (size_t)n_samples * sizeof(float));
-    fprintf(stderr, "qwen3_tts: codec: done\n"); fflush(stderr);
+    fprintf(stderr, "qwen3_tts: codec: done\n");
+    fflush(stderr);
     if (out_n_samples) {
         *out_n_samples = n_samples;
     }
@@ -5909,8 +5916,8 @@ extern "C" int32_t* qwen3_tts_synthesize_codes(struct qwen3_tts_context* ctx, co
     } else {
         // Base: need either a voice pack, a runtime voice prompt with ref_codes,
         // or an xvec_only prompt (speaker embedding only, no ref codes).
-        if (ctx->vp_active < 0 && ctx->runtime_ref_codes.empty()
-            && !(ctx->xvec_only && (int)ctx->runtime_spk_emb.size() == (int)ctx->hp.d_model)) {
+        if (ctx->vp_active < 0 && ctx->runtime_ref_codes.empty() &&
+            !(ctx->xvec_only && (int)ctx->runtime_spk_emb.size() == (int)ctx->hp.d_model)) {
             fprintf(stderr, "qwen3_tts: no voice — call qwen3_tts_load_voice_pack or qwen3_tts_set_voice_prompt\n");
             return nullptr;
         }
@@ -5959,10 +5966,11 @@ extern "C" int32_t* qwen3_tts_synthesize_codes(struct qwen3_tts_context* ctx, co
         }
         if (ref_text.empty()) {
             if (ctx->xvec_only) {
-                ref_text = ".";  // xvec_only: dummy ref_text, ICL fusion is skipped
+                ref_text = "."; // xvec_only: dummy ref_text, ICL fusion is skipped
             } else {
-                fprintf(stderr,
-                        "qwen3_tts: no ref_text — call qwen3_tts_set_voice_prompt with ref_text or load a voice pack\n");
+                fprintf(
+                    stderr,
+                    "qwen3_tts: no ref_text — call qwen3_tts_set_voice_prompt with ref_text or load a voice pack\n");
                 return nullptr;
             }
         }
@@ -6381,8 +6389,9 @@ extern "C" float* qwen3_tts_synthesize(struct qwen3_tts_context* ctx, const char
         double code_ms = t_codes - t_total0;
         double codec_ms = t_total1 - t_codes;
         double total_ms = t_total1 - t_total0;
-        fprintf(stderr, "qwen3_tts: perf — codes=%.0f ms  codec=%.0f ms  total=%.0f ms  "
-                        "audio=%.1f s  rtf=%.3f\n",
+        fprintf(stderr,
+                "qwen3_tts: perf — codes=%.0f ms  codec=%.0f ms  total=%.0f ms  "
+                "audio=%.1f s  rtf=%.3f\n",
                 code_ms, codec_ms, total_ms, dur, (total_ms / 1000.0) / dur);
     }
     return pcm;
@@ -6393,9 +6402,11 @@ extern "C" void qwen3_tts_pcm_free(float* pcm) {
 }
 
 extern "C" void qwen3_tts_sync(struct qwen3_tts_context* ctx) {
-    if (!ctx) return;
+    if (!ctx)
+        return;
     auto sync_sched = [](ggml_backend_sched_t sched) {
-        if (!sched) return;
+        if (!sched)
+            return;
         int n = ggml_backend_sched_get_n_backends(sched);
         for (int i = 0; i < n; i++)
             ggml_backend_synchronize(ggml_backend_sched_get_backend(sched, i));

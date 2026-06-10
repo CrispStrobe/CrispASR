@@ -50,11 +50,13 @@ struct qwen3_tts_context_params {
 QWEN3_TTS_API struct qwen3_tts_context_params qwen3_tts_context_default_params(void);
 
 // Initialise from the talker LM GGUF file.
-QWEN3_TTS_API struct qwen3_tts_context* qwen3_tts_init_from_file(const char* path_model, struct qwen3_tts_context_params params);
+QWEN3_TTS_API struct qwen3_tts_context* qwen3_tts_init_from_file(const char* path_model,
+                                                                 struct qwen3_tts_context_params params);
 
 // Initialise a codec-only context — no talker / code_predictor / speaker encoder.
 // Only loads the codec GGUF and sets up a backend.
-QWEN3_TTS_API struct qwen3_tts_context* qwen3_tts_init_codec_only(const char* codec_path, struct qwen3_tts_context_params params);
+QWEN3_TTS_API struct qwen3_tts_context* qwen3_tts_init_codec_only(const char* codec_path,
+                                                                  struct qwen3_tts_context_params params);
 
 // Point the runtime at the codec GGUF (cstr/qwen3-tts-tokenizer-12hz-GGUF).
 // Required before the first `qwen3_tts_synthesize` call. Returns 0 on success.
@@ -70,7 +72,8 @@ QWEN3_TTS_API int qwen3_tts_set_voice_prompt(struct qwen3_tts_context* ctx, cons
 
 // Same as set_voice_prompt but also stores the reference transcription.
 // Required for synthesis when no voice pack is loaded.
-QWEN3_TTS_API int qwen3_tts_set_voice_prompt_with_text(struct qwen3_tts_context* ctx, const char* wav_path, const char* ref_text);
+QWEN3_TTS_API int qwen3_tts_set_voice_prompt_with_text(struct qwen3_tts_context* ctx, const char* wav_path,
+                                                       const char* ref_text);
 
 // ECAPA-only voice prompt: computes the speaker embedding but skips the
 // codec encode. Used for cross-lingual cloning (e.g. Japanese reference
@@ -97,7 +100,7 @@ QWEN3_TTS_API const float* qwen3_tts_get_runtime_spk_emb(struct qwen3_tts_contex
 //   "enc_emb"          — Final embeddings (channels-first) [512, T_frames]
 // Returns malloc'd float[*out_n] array. Caller frees with free().
 QWEN3_TTS_API float* qwen3_tts_cenc_extract_stage(struct qwen3_tts_context* ctx, const float* audio, int n_samples,
-                                    const char* stage_name, int* out_n);
+                                                  const char* stage_name, int* out_n);
 
 // Load a voice pack GGUF (produced by `models/bake-qwen3-tts-voice-pack.py`)
 // containing one or more `(spk_embedding, ref_code)` pairs extracted via
@@ -205,7 +208,8 @@ QWEN3_TTS_API int qwen3_tts_set_cv_style_instruct(struct qwen3_tts_context* ctx,
 // Pure-text path that doesn't depend on the speaker_embed / codec
 // splice, so a numerical mismatch here implicates only the
 // text_embedding lookup or the text_proj fc1/fc2.
-QWEN3_TTS_API float* qwen3_tts_run_text_proj(struct qwen3_tts_context* ctx, const int32_t* ids, int n_tokens, int* out_T, int* out_d);
+QWEN3_TTS_API float* qwen3_tts_run_text_proj(struct qwen3_tts_context* ctx, const int32_t* ids, int n_tokens,
+                                             int* out_T, int* out_d);
 
 // Run the talker prefill on a caller-supplied embedding tensor of shape
 // (n_tokens, hidden_size). Returns the codec_head logits at the LAST
@@ -216,7 +220,7 @@ QWEN3_TTS_API float* qwen3_tts_run_text_proj(struct qwen3_tts_context* ctx, cons
 // prefill builder semantically correct" — feed in a PyTorch-prebuilt
 // embedding, expect bit-equivalent logits at the tail.
 QWEN3_TTS_API float* qwen3_tts_run_talker_with_embeds(struct qwen3_tts_context* ctx, const float* embeds, int n_tokens,
-                                        int* out_vocab);
+                                                      int* out_vocab);
 
 // Run a single code-predictor AR step against caller-supplied embeds.
 // Mirrors the per-step calls inside `code_pred_generate_15`, but exposes
@@ -236,8 +240,8 @@ QWEN3_TTS_API float* qwen3_tts_run_talker_with_embeds(struct qwen3_tts_context* 
 // 0..14 to drive a full AR frame. Returns malloc'd float[*out_vocab]
 // logits (last-position only). *out_vocab is set to cp_vocab_size on
 // success. Caller frees with free().
-QWEN3_TTS_API float* qwen3_tts_run_code_pred_step(struct qwen3_tts_context* ctx, const float* embeds, int n_tokens, int n_past,
-                                    int lm_head_idx, int* out_vocab);
+QWEN3_TTS_API float* qwen3_tts_run_code_pred_step(struct qwen3_tts_context* ctx, const float* embeds, int n_tokens,
+                                                  int n_past, int lm_head_idx, int* out_vocab);
 
 // Build the full ICL prefill embedding from a (syn_text, ref_text) pair
 // using the active voice pack's spk_embedding + ref_code. Returns a
@@ -246,8 +250,8 @@ QWEN3_TTS_API float* qwen3_tts_run_code_pred_step(struct qwen3_tts_context* ctx,
 //
 // Mirrors `Qwen3TTSForConditionalGeneration.generate_icl_prompt` for
 // the non_streaming_mode=False voice-clone Base path.
-QWEN3_TTS_API float* qwen3_tts_build_icl_prefill(struct qwen3_tts_context* ctx, const char* syn_text, const char* ref_text,
-                                   int* out_T);
+QWEN3_TTS_API float* qwen3_tts_build_icl_prefill(struct qwen3_tts_context* ctx, const char* syn_text,
+                                                 const char* ref_text, int* out_T);
 
 // Run the talker on `text`, AR-decode codebook-0 until <eos> or the
 // step limit, and return the resulting code stream. *out_n_codes is
@@ -265,7 +269,8 @@ QWEN3_TTS_API void qwen3_tts_codes_free(int32_t* codes);
 // 24 kHz mono float32 PCM. Requires `qwen3_tts_set_codec_path` to have
 // been called first. Caller frees with `qwen3_tts_pcm_free`.
 // *out_n_samples is set on success; returns nullptr on failure.
-QWEN3_TTS_API float* qwen3_tts_decode_codes(struct qwen3_tts_context* ctx, const int32_t* codes, int n_codes, int* out_n_samples);
+QWEN3_TTS_API float* qwen3_tts_decode_codes(struct qwen3_tts_context* ctx, const int32_t* codes, int n_codes,
+                                            int* out_n_samples);
 
 // Run the codec graph on `codes` and extract a named intermediate tensor
 // by `stage_name`. Useful for the diff harness — matches stage names that
@@ -275,7 +280,7 @@ QWEN3_TTS_API float* qwen3_tts_decode_codes(struct qwen3_tts_context* ctx, const
 //   "codec_blk0_out", "pcm"
 // Returns malloc'd float array of *out_n elements. Caller frees with free().
 QWEN3_TTS_API float* qwen3_tts_codec_extract_stage(struct qwen3_tts_context* ctx, const int32_t* codes, int n_codes,
-                                     const char* stage_name, int* out_n);
+                                                   const char* stage_name, int* out_n);
 
 // Synthesise text → 24 kHz mono float32 PCM. Caller frees with
 // `qwen3_tts_pcm_free`. *out_n_samples is set on success.
@@ -303,20 +308,21 @@ QWEN3_TTS_API void qwen3_tts_set_seed(struct qwen3_tts_context* ctx, uint64_t se
 // Compute the 128-mel log-mel spectrogram used by the speaker encoder
 // from 24 kHz mono audio. Returns malloc'd (T_mel × 128) row-major float32.
 // *out_T_mel is set to the number of mel frames. Caller frees with free().
-QWEN3_TTS_API float* qwen3_tts_compute_speaker_mel(struct qwen3_tts_context* ctx, const float* audio, int n_samples, int* out_T_mel,
-                                     int* out_n_mels);
+QWEN3_TTS_API float* qwen3_tts_compute_speaker_mel(struct qwen3_tts_context* ctx, const float* audio, int n_samples,
+                                                   int* out_T_mel, int* out_n_mels);
 
 // Run the ECAPA speaker encoder on a pre-computed mel spectrogram.
 // mel is (T_mel × n_mels=128) row-major float32. Returns malloc'd float[1024].
-QWEN3_TTS_API float* qwen3_tts_run_speaker_enc_on_mel(struct qwen3_tts_context* ctx, const float* mel, int T_mel, int* out_dim);
+QWEN3_TTS_API float* qwen3_tts_run_speaker_enc_on_mel(struct qwen3_tts_context* ctx, const float* mel, int T_mel,
+                                                      int* out_dim);
 
 // Compute a 1024-d speaker embedding from 24 kHz mono float32 audio
 // via the ECAPA-TDNN speaker encoder. Returns a malloc'd float[1024]
 // array that the caller frees with free(). Returns nullptr on failure.
 // Does NOT set the context's active voice — call qwen3_tts_set_voice_prompt
 // to both compute and activate the embedding for synthesis.
-QWEN3_TTS_API float* qwen3_tts_compute_speaker_embedding(struct qwen3_tts_context* ctx, const float* audio, int n_samples,
-                                           int* out_dim);
+QWEN3_TTS_API float* qwen3_tts_compute_speaker_embedding(struct qwen3_tts_context* ctx, const float* audio,
+                                                         int n_samples, int* out_dim);
 
 #ifdef __cplusplus
 }

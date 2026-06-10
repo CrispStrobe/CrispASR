@@ -145,7 +145,7 @@ static inline ggml_tensor* convt1d_crop(ggml_context* ctx, ggml_tensor* x, ggml_
 //
 // Output: (Cout, T_in * stride) F32 (causal right-trim applied).
 static inline ggml_tensor* convt1d_causal_decomp(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w_perm, ggml_tensor* b,
-                                                  int stride, int K) {
+                                                 int stride, int K) {
     const int OC = (int)w_perm->ne[1] / K;
 
     // x: [Cin, T_in] channels-first → ne[0]=Cin=IC already matches w_perm's ne[0]=IC.
