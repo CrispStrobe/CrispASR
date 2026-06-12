@@ -179,7 +179,7 @@ struct lfm2_audio_context {
     ggml_backend_t backend = nullptr;
 
     // Compute buffers: large for prefill, small for decode steps
-    std::vector<uint8_t> compute_meta; // 2 GB for prefill (T >> 1)
+    std::vector<uint8_t> compute_meta; // 256 MB for prefill (T >> 1)
     std::vector<uint8_t> decode_meta;  // 64 MB for decode (T=1)
 
     // Staged callback (set by run_lfm_staged)
@@ -547,7 +547,7 @@ lfm2_audio_context* lfm2_audio_init_from_file(const char* path_model, lfm2_audio
     ctx->verbosity = params.verbosity;
     ctx->use_gpu = params.use_gpu;
     ctx->backend = ggml_backend_cpu_init();
-    ctx->compute_meta.resize(256ULL * 1024 * 1024); // 2 GB scratch for prefill
+    ctx->compute_meta.resize(256ULL * 1024 * 1024); // 256 MB scratch for prefill
     ctx->decode_meta.resize(64ULL * 1024 * 1024);   // 64 MB scratch for T=1 decode
 
     ctx->model_path = path_model;
@@ -1778,6 +1778,8 @@ static std::vector<int32_t> lfm2_depthformer_sample_frame(lfm2_audio_context* ct
     std::vector<int32_t> codes(codebooks);
     std::vector<float> prev_emb(depth_dim, 0.0f); // zero for first codebook
 
+    const size_t step_mem = 8 * 1024 * 1024;
+    std::vector<uint8_t> step_buf(step_mem);
     for (int c = 0; c < codebooks; c++) {
         // Input: depth_linear_out[c] + prev_emb
         std::vector<float> input(depth_dim);
@@ -1787,8 +1789,6 @@ static std::vector<int32_t> lfm2_depthformer_sample_frame(lfm2_audio_context* ct
         // Run 6-layer transformer on this single token
         // (no KV cache across codebooks — each frame is independent,
         //  but within a frame the 8 codebook steps share a cache)
-        const size_t step_mem = 8 * 1024 * 1024;
-        std::vector<uint8_t> step_buf(step_mem);
         ggml_init_params sip = {step_mem, step_buf.data(), false};
         ggml_context* sc = ggml_init(sip);
         if (!sc)
