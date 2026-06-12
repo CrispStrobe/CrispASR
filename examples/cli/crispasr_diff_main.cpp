@@ -5630,6 +5630,30 @@ int main(int argc, char** argv) {
             }
         }
 
+        // ---- S2S smoke test (if SNAC available next to model) ----
+        {
+            // Try to load SNAC from same directory as model
+            std::string model_dir = model_path.substr(0, model_path.find_last_of("/\\"));
+            std::string snac_path = model_dir + "/snac-24khz.gguf";
+            if (mini_omni2_load_snac(ctx, snac_path.c_str())) {
+                char* s2s_text = nullptr;
+                int s2s_n = 0;
+                float* s2s_pcm =
+                    mini_omni2_speech_to_speech(ctx, samples.data(), (int)samples.size(), &s2s_text, &s2s_n);
+                if (s2s_pcm && s2s_n > 0) {
+                    printf("[INFO] s2s                     %d samples @ 24kHz (%.2fs)", s2s_n, (double)s2s_n / 24000.0);
+                    if (s2s_text)
+                        printf(" text: %s", s2s_text);
+                    printf("\n");
+                    free(s2s_pcm);
+                } else {
+                    printf("[INFO] s2s                     no audio output (model may not support s2s well)\n");
+                }
+                if (s2s_text)
+                    free(s2s_text);
+            }
+        }
+
         mini_omni2_free(ctx);
 
     } else {

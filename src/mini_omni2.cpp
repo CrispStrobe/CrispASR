@@ -1179,27 +1179,21 @@ extern "C" char* mini_omni2_transcribe(struct mini_omni2_context* ctx, const flo
         if (next == MO2_EOT)
             break;
 
-        // Build input: 7 audio pad streams + 1 text token, embed + average.
-        // Mini-Omni2 uses snac_config.end_of_audio=4097 (pad_a), not eoa=4096.
+        // Build input: embed all 8 tokens in one batch, then average.
+        // 7 audio pad_a (layershifted) + 1 text token.
+        int32_t batch_ids[8];
+        for (int s = 0; s < 7; s++)
+            batch_ids[s] = mo2_layershift(MO2_PAD_A, s);
+        batch_ids[7] = next;
+
+        float* batch_emb = mo2_embed_tokens(ctx, batch_ids, 8);
+        if (!batch_emb)
+            break;
         std::vector<float> step_emb(d, 0.0f);
-        for (int stream = 0; stream < 7; stream++) {
-            int32_t id = mo2_layershift(MO2_PAD_A, stream);
-            float* emb = mo2_embed_tokens(ctx, &id, 1);
-            if (emb) {
-                for (int i = 0; i < d; i++)
-                    step_emb[i] += emb[i];
-                free(emb);
-            }
-        }
-        {
-            int32_t id = next;
-            float* emb = mo2_embed_tokens(ctx, &id, 1);
-            if (emb) {
-                for (int i = 0; i < d; i++)
-                    step_emb[i] += emb[i];
-                free(emb);
-            }
-        }
+        for (int s = 0; s < 8; s++)
+            for (int i = 0; i < d; i++)
+                step_emb[i] += batch_emb[s * d + i];
+        free(batch_emb);
         for (int i = 0; i < d; i++)
             step_emb[i] /= 8.0f;
 
@@ -1311,26 +1305,21 @@ static void mo2_generate_dual(mini_omni2_context* ctx, const float* input_embeds
         if (text_tok == MO2_EOT)
             text_end = true;
 
-        // Build step input: 7 audio tokens (layershifted) + 1 text token
+        // Build step input: embed all 8 tokens in one batch, then average.
+        // 7 audio tokens (layershifted) + 1 text token.
+        int32_t batch_ids[8];
+        for (int s = 0; s < 7; s++)
+            batch_ids[s] = mo2_layershift(audio_toks[s], s);
+        batch_ids[7] = text_end ? MO2_PAD_T : text_tok;
+
+        float* batch_emb = mo2_embed_tokens(ctx, batch_ids, 8);
+        if (!batch_emb)
+            break;
         std::vector<float> step_emb(d, 0.0f);
-        for (int s = 0; s < 7; s++) {
-            int32_t id = mo2_layershift(audio_toks[s], s);
-            float* emb = mo2_embed_tokens(ctx, &id, 1);
-            if (emb) {
-                for (int i = 0; i < d; i++)
-                    step_emb[i] += emb[i];
-                free(emb);
-            }
-        }
-        {
-            int32_t id = text_end ? MO2_PAD_T : text_tok;
-            float* emb = mo2_embed_tokens(ctx, &id, 1);
-            if (emb) {
-                for (int i = 0; i < d; i++)
-                    step_emb[i] += emb[i];
-                free(emb);
-            }
-        }
+        for (int s = 0; s < 8; s++)
+            for (int i = 0; i < d; i++)
+                step_emb[i] += batch_emb[s * d + i];
+        free(batch_emb);
         for (int i = 0; i < d; i++)
             step_emb[i] /= 8.0f;
 
@@ -1419,6 +1408,11 @@ extern "C" float* mini_omni2_synthesize(struct mini_omni2_context* ctx, const ch
     std::vector<std::vector<int32_t>> gen_audio;
     mo2_generate_dual(ctx, avg_emb.data(), T_total, gen_text, gen_audio, 2048);
 
+    if (ctx->params.verbosity >= 1) {
+        fprintf(stderr, "mini_omni2: TTS generated %d audio steps, %d text tokens\n", (int)gen_audio[0].size(),
+                (int)gen_text.size());
+    }
+
     // Decode SNAC audio
     return mo2_decode_snac(ctx, gen_audio, out_n_samples);
 }
@@ -1505,6 +1499,11 @@ extern "C" float* mini_omni2_speech_to_speech(struct mini_omni2_context* ctx, co
     std::vector<int32_t> gen_text;
     std::vector<std::vector<int32_t>> gen_audio;
     mo2_generate_dual(ctx, avg_emb.data(), T_total, gen_text, gen_audio, 2048);
+
+    if (ctx->params.verbosity >= 1) {
+        fprintf(stderr, "mini_omni2: S2S generated %d audio steps, %d text tokens\n", (int)gen_audio[0].size(),
+                (int)gen_text.size());
+    }
 
     // 4. Decode text
     if (out_text) {
