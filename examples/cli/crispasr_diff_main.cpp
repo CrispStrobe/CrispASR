@@ -48,7 +48,7 @@
 #include "gemma4_e2b.h"
 #include "mimo_asr.h"
 #include "mimo_tokenizer.h"
-#include "orpheus_snac.h"
+#include "core/snac.h"
 #include "chatterbox.h"
 #include "csm_tts.h"
 #include "lid_cld3.h"

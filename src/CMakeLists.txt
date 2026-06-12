@@ -234,7 +234,7 @@ if (CRISPASR_EXTRA_FLAGS)
 endif()
 
 find_package(Threads REQUIRED)
-target_link_libraries(crispasr-lib PUBLIC ggml Threads::Threads audioseal)
+target_link_libraries(crispasr-lib PUBLIC ggml Threads::Threads audioseal crispasr-core snac)
 
 # `crispasr_cache.cpp` calls WinHTTP for HF auto-download on Windows. MSVC
 # auto-links winhttp.lib via `#pragma comment(lib, "winhttp.lib")` inside
@@ -429,6 +429,18 @@ if(NOT MSVC)
     target_compile_options(crispasr-core PRIVATE -O3)
 endif()
 set_target_properties(crispasr-core PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+# ---------------------------------------------------------------------------
+# snac — Standalone SNAC 24 kHz codec decoder (shared by orpheus, mini-omni2)
+# ---------------------------------------------------------------------------
+add_library(snac STATIC core/snac.h core/snac.cpp)
+set_target_properties(snac PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(snac PUBLIC .)
+target_compile_features   (snac PUBLIC cxx_std_17)
+target_link_libraries     (snac PUBLIC crispasr-core ggml ggml-base ggml-cpu)
+if(NOT MSVC)
+    target_compile_options(snac PRIVATE -O3)
+endif()
 
 # ---------------------------------------------------------------------------
 # crispasr-llama-core — vendored llama.cpp built as a private STATIC lib
@@ -748,7 +760,7 @@ add_library(mini-omni2 STATIC mini_omni2.h mini_omni2.cpp)
 set_target_properties(mini-omni2 PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(mini-omni2 PUBLIC .)
 target_compile_features   (mini-omni2 PUBLIC cxx_std_17)
-target_link_libraries     (mini-omni2 PUBLIC crispasr-core ggml ggml-base ggml-cpu)
+target_link_libraries     (mini-omni2 PUBLIC crispasr-core snac ggml ggml-base ggml-cpu)
 if(NOT MSVC)
     target_compile_options(mini-omni2 PRIVATE -O3)
 endif()
@@ -863,11 +875,11 @@ endif()
 # ---------------------------------------------------------------------------
 # orpheus — canopylabs/orpheus-3b-0.1-ft (Llama-3.2-3B + SNAC 24 kHz codec)
 # ---------------------------------------------------------------------------
-add_library(orpheus STATIC orpheus.h orpheus.cpp orpheus_snac.h orpheus_snac.cpp)
+add_library(orpheus STATIC orpheus.h orpheus.cpp)
 set_target_properties(orpheus PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(orpheus PUBLIC .)
 target_compile_features   (orpheus PUBLIC cxx_std_17)
-target_link_libraries     (orpheus PUBLIC crispasr-core ggml ggml-base ggml-cpu)
+target_link_libraries     (orpheus PUBLIC crispasr-core snac ggml ggml-base ggml-cpu)
 if(NOT MSVC)
     target_compile_options(orpheus PRIVATE -O3)
 endif()

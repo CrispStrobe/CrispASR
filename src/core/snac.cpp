@@ -1,4 +1,4 @@
-// orpheus_snac.cpp — SNAC 24 kHz decoder (hubertsiuzdak/snac_24khz).
+// snac.cpp — SNAC 24 kHz decoder (hubertsiuzdak/snac_24khz).
 //
 // Architecture (verbatim from the live model + snac/{snac.py,layers.py}
 // at the canonical 24 kHz config — sampling_rate=24000, encoder_dim=48,
@@ -51,7 +51,7 @@
 // `ggml_conv_transpose_1d` follows the same convention, so the converter
 // passes weights through unchanged — do NOT add a "fix" here.
 
-#include "orpheus_snac.h"
+#include "core/snac.h"
 #include "core/activation.h"
 #include "core/conv.h"
 #include "core/gguf_loader.h"
@@ -90,11 +90,11 @@ struct snac_res_unit {
 };
 
 struct snac_block {
-    ggml_tensor* alpha = nullptr;      // (input_dim,) F32
-    ggml_tensor* up_w = nullptr;       // (K=2s, output_dim, input_dim) F16
-    ggml_tensor* up_w_perm = nullptr;  // pre-permuted [IC, K*OC] for decomposed path
-    ggml_tensor* up_b = nullptr;       // (output_dim,) F32
-    ggml_tensor* noise_w = nullptr;    // (1, output_dim, output_dim) F16 — bound but unused
+    ggml_tensor* alpha = nullptr;     // (input_dim,) F32
+    ggml_tensor* up_w = nullptr;      // (K=2s, output_dim, input_dim) F16
+    ggml_tensor* up_w_perm = nullptr; // pre-permuted [IC, K*OC] for decomposed path
+    ggml_tensor* up_b = nullptr;      // (output_dim,) F32
+    ggml_tensor* noise_w = nullptr;   // (1, output_dim, output_dim) F16 — bound but unused
     std::array<snac_res_unit, 3> res;
 };
 
@@ -222,7 +222,7 @@ static void load_metadata(snac_decoder_ctx* c, gguf_context* g) {
 
 static bool bind_tensors(snac_decoder_ctx* c) {
     auto& t = c->tensors;
-    const char* tag = "orpheus_snac";
+    const char* tag = "snac";
 
     // Quantizers (we only need codebook + out_proj for decode — in_proj is
     // bound implicitly by the GGUF tensor map but unused).
@@ -529,7 +529,7 @@ static float* run_graph_and_extract(snac_decoder_ctx* c, const int32_t* c0, int 
     if (n1 * (int)c->hp.vq_strides[1] != T_q || n2 * (int)c->hp.vq_strides[2] != T_q ||
         n0 * (int)c->hp.vq_strides[0] != T_q) {
         fprintf(stderr,
-                "orpheus_snac: bad code lengths n0=%d n1=%d n2=%d (each n_k must satisfy n_k·vq_strides[k] "
+                "snac: bad code lengths n0=%d n1=%d n2=%d (each n_k must satisfy n_k·vq_strides[k] "
                 "= T_q for vq_strides=[%u,%u,%u])\n",
                 n0, n1, n2, c->hp.vq_strides[0], c->hp.vq_strides[1], c->hp.vq_strides[2]);
         return nullptr;
@@ -568,7 +568,7 @@ static float* run_graph_and_extract(snac_decoder_ctx* c, const int32_t* c0, int 
 
     ggml_status st = ggml_backend_graph_compute(backend, gf);
     if (st != GGML_STATUS_SUCCESS) {
-        fprintf(stderr, "orpheus_snac: graph compute failed (status=%d)\n", (int)st);
+        fprintf(stderr, "snac: graph compute failed (status=%d)\n", (int)st);
         ggml_gallocr_free(galloc);
         ggml_free(ctx0);
         return nullptr;
@@ -576,7 +576,7 @@ static float* run_graph_and_extract(snac_decoder_ctx* c, const int32_t* c0, int 
 
     ggml_tensor* out = ggml_graph_get_tensor(gf, stage_name);
     if (!out) {
-        fprintf(stderr, "orpheus_snac: stage '%s' not in graph\n", stage_name);
+        fprintf(stderr, "snac: stage '%s' not in graph\n", stage_name);
         ggml_gallocr_free(galloc);
         ggml_free(ctx0);
         return nullptr;
@@ -630,7 +630,7 @@ extern "C" struct snac_decoder_ctx* snac_decoder_init_from_file(const char* path
     // Backend.
     c->backend_cpu = ggml_backend_cpu_init();
     if (!c->backend_cpu) {
-        fprintf(stderr, "orpheus_snac: failed to init CPU backend\n");
+        fprintf(stderr, "snac: failed to init CPU backend\n");
         delete c;
         return nullptr;
     }
@@ -642,8 +642,8 @@ extern "C" struct snac_decoder_ctx* snac_decoder_init_from_file(const char* path
 
     // Pass 2: weights.
     core_gguf::WeightLoad wl;
-    if (!core_gguf::load_weights(path, c->backend, "orpheus_snac", wl)) {
-        fprintf(stderr, "orpheus_snac: failed to load weights from '%s'\n", path);
+    if (!core_gguf::load_weights(path, c->backend, "snac", wl)) {
+        fprintf(stderr, "snac: failed to load weights from '%s'\n", path);
         delete c;
         return nullptr;
     }
@@ -652,7 +652,7 @@ extern "C" struct snac_decoder_ctx* snac_decoder_init_from_file(const char* path
     c->tensors = std::move(wl.tensors);
 
     if (!bind_tensors(c)) {
-        fprintf(stderr, "orpheus_snac: tensor binding failed\n");
+        fprintf(stderr, "snac: tensor binding failed\n");
         delete c;
         return nullptr;
     }
@@ -666,13 +666,11 @@ extern "C" struct snac_decoder_ctx* snac_decoder_init_from_file(const char* path
             srcs[i] = c->blocks[i].up_w;
             dsts[i] = &c->blocks[i].up_w_perm;
         }
-        core_convt::permute_convt1d_weights_batch(srcs.data(), dsts.data(), n,
-                                                  c->backend, &c->ctx_perm, &c->buf_perm);
+        core_convt::permute_convt1d_weights_batch(srcs.data(), dsts.data(), n, c->backend, &c->ctx_perm, &c->buf_perm);
     }
 
     if (params.verbosity >= 1) {
-        fprintf(stderr,
-                "orpheus_snac: sample_rate=%u  n_codebooks=%u  codebook=%u×%u  latent_dim=%u  decoder_dim=%u  hop=%u\n",
+        fprintf(stderr, "snac: sample_rate=%u  n_codebooks=%u  codebook=%u×%u  latent_dim=%u  decoder_dim=%u  hop=%u\n",
                 c->hp.sample_rate, c->hp.n_codebooks, c->hp.codebook_size, c->hp.codebook_dim, c->hp.latent_dim,
                 c->hp.decoder_dim, c->hp.hop_length);
     }

@@ -20,7 +20,7 @@
 #include "core/ffn.h"
 #include "core/gguf_loader.h"
 #include "core/mel.h"
-#include "orpheus_snac.h"
+#include "core/snac.h"
 
 #include "ggml-backend.h"
 #include "ggml-cpu.h"
