@@ -289,6 +289,44 @@ Tests that use `SKIP()` return exit code 4 (Catch2 convention). The
 CMakeLists.txt sets `SKIP_RETURN_CODE 4` so ctest reports them as
 "Skipped" rather than "Failed".
 
+## Common pitfalls
+
+### Mel spectrogram
+
+- **FFT size must match upstream exactly.** Whisper uses `torch.stft` with
+  `n_fft=400` — a 400-point DFT, NOT zero-padded to 512. Zero-padding
+  changes frequency bin spacing (`k*sr/400` vs `k*sr/512`) and corrupts the
+  mel projection. Use `core_mel` with a matching FFT callback (a naive
+  O(N*N_freqs) DFT is fast enough for N=400).
+- **Hann window variant**: `torch.hann_window(N)` (periodic) differs from
+  `np.hanning(N+1)[:-1]` (symmetric) by ~2.4e-7 per sample. Enough to
+  cause cos_min≈0.95 on the mel comparison. Store the correct variant in
+  the GGUF.
+- **Frame count**: `torch.stft` produces N+1 frames and drops the last one
+  (`stft[..., :-1]`). `core_mel::compute` may produce 1 extra frame.
+  Truncate: `T_mel = n_samples / hop_length`.
+- **Filterbank layout**: `core_mel::FbLayout::MelsFreqs` = `fb[m*n_freqs+k]`
+  (numpy `(n_mels, n_freqs)` row-major). HF `WhisperFeatureExtractor` uses
+  `FreqsMels` (transposed). Check which one your upstream model uses.
+
+### Multi-stream audio LLMs
+
+Models that interleave text + audio codec streams (mini-omni2-style):
+- N input streams embedded and averaged — audio features replace pad
+  positions in audio streams only (NOT the text stream)
+- Special task tokens at stream end select the mode (ASR/TTS/S2S)
+- For decode-step performance, batch all N token embeddings in one
+  `ggml_get_rows` call instead of N separate graph builds
+
+### Reference dump memory management (8 GB RAM)
+
+PyTorch model loading OOMs easily on this machine. Patterns:
+- Load encoder, capture activations, `del model; gc.collect()` before
+  loading the LLM
+- `del state_dict; gc.collect()` after `model.load_state_dict()`
+- Use `--stages mel_spectrogram,encoder_output` to skip LLM loading
+  entirely when only testing the audio pipeline
+
 ## Watermarking tests
 
 All TTS output is automatically watermarked. When changing TTS output
