@@ -224,7 +224,7 @@ static inline ggml_tensor* convt1d_decomp_tf(ggml_context* ctx, ggml_tensor* x, 
 //   ggml_backend_tensor_set(dst, buf.get(), 0, ggml_nbytes(dst));
 
 static inline std::unique_ptr<float[]> permute_convt1d_weight(ggml_tensor* src) {
-    const int K  = (int)src->ne[0];
+    const int K = (int)src->ne[0];
     const int OC = (int)src->ne[1];
     const int IC = (int)src->ne[2];
     const size_t n_elems = (size_t)K * OC * IC;
@@ -263,26 +263,29 @@ static inline std::unique_ptr<float[]> permute_convt1d_weight(ggml_tensor* src) 
 //   ggml_tensor* src_list[] = { ups[0].w, ups[1].w, ... };
 //   ggml_tensor** dst_list[] = { &ups[0].w_perm, &ups[1].w_perm, ... };
 //   permute_convt1d_weights_batch(src_list, dst_list, n, backend, &ctx_perm, &buf_perm);
-static inline bool permute_convt1d_weights_batch(
-        ggml_tensor** srcs, ggml_tensor*** dsts, int n,
-        ggml_backend_t backend,
-        ggml_context** out_ctx, ggml_backend_buffer_t* out_buf) {
+static inline bool permute_convt1d_weights_batch(ggml_tensor** srcs, ggml_tensor*** dsts, int n, ggml_backend_t backend,
+                                                 ggml_context** out_ctx, ggml_backend_buffer_t* out_buf) {
     const size_t meta_bytes = ggml_tensor_overhead() * (size_t)n + 4096;
     struct ggml_init_params pp = {meta_bytes, nullptr, true};
     ggml_context* ctx = ggml_init(pp);
-    if (!ctx) return false;
+    if (!ctx)
+        return false;
 
     std::vector<std::unique_ptr<float[]>> bufs(n);
     for (int i = 0; i < n; i++) {
-        if (!srcs[i]) continue;
+        if (!srcs[i])
+            continue;
         bufs[i] = permute_convt1d_weight(srcs[i]);
         const int IC = (int)srcs[i]->ne[2];
-        const int K  = (int)srcs[i]->ne[0];
+        const int K = (int)srcs[i]->ne[0];
         const int OC = (int)srcs[i]->ne[1];
         *dsts[i] = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, IC, K * OC);
     }
     ggml_backend_buffer_t buf = ggml_backend_alloc_ctx_tensors(ctx, backend);
-    if (!buf) { ggml_free(ctx); return false; }
+    if (!buf) {
+        ggml_free(ctx);
+        return false;
+    }
     for (int i = 0; i < n; i++) {
         if (*dsts[i] && bufs[i])
             ggml_backend_tensor_set(*dsts[i], bufs[i].get(), 0, ggml_nbytes(*dsts[i]));

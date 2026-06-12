@@ -973,10 +973,9 @@ int dia_tts_set_codec_path(struct dia_tts_context* ctx, const char* path) {
     {
         const int n = 4; // DAC has 4 decoder blocks
         ggml_tensor* srcs[4] = {m.dac.blocks[0].up_w, m.dac.blocks[1].up_w, m.dac.blocks[2].up_w, m.dac.blocks[3].up_w};
-        ggml_tensor** dsts[4] = {&m.dac.blocks[0].up_w_perm, &m.dac.blocks[1].up_w_perm,
-                                 &m.dac.blocks[2].up_w_perm, &m.dac.blocks[3].up_w_perm};
-        core_convt::permute_convt1d_weights_batch(srcs, dsts, n,
-                                                  backend, &m.ctx_perm, &m.buf_perm);
+        ggml_tensor** dsts[4] = {&m.dac.blocks[0].up_w_perm, &m.dac.blocks[1].up_w_perm, &m.dac.blocks[2].up_w_perm,
+                                 &m.dac.blocks[3].up_w_perm};
+        core_convt::permute_convt1d_weights_batch(srcs, dsts, n, backend, &m.ctx_perm, &m.buf_perm);
     }
 
     if (verbosity >= 1) {

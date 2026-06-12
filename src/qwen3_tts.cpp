@@ -3784,7 +3784,7 @@ static bool load_codec(qwen3_tts_context* c, const char* path) {
         // Create permuted weight tensors and compute host-side buffers.
         auto mk_perm = [&](ggml_tensor* src, std::unique_ptr<float[]>& out_buf) -> ggml_tensor* {
             const int IC = (int)src->ne[2];
-            const int K  = (int)src->ne[0];
+            const int K = (int)src->ne[0];
             const int OC = (int)src->ne[1];
             ggml_tensor* dst = ggml_new_tensor_2d(codec.ctx_perm, GGML_TYPE_F32, IC, K * OC);
             out_buf = core_convt::permute_convt1d_weight(src);

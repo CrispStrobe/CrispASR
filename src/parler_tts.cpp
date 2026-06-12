@@ -722,8 +722,8 @@ struct parler_tts_context* parler_tts_init_from_file(const char* path_model, str
             srcs[i] = ctx->model.dac.blocks[i].up_w;
             dsts[i] = &ctx->model.dac.blocks[i].up_w_perm;
         }
-        core_convt::permute_convt1d_weights_batch(srcs.data(), dsts.data(), n,
-                                                  ctx->backend, &ctx->ctx_perm, &ctx->buf_perm);
+        core_convt::permute_convt1d_weights_batch(srcs.data(), dsts.data(), n, ctx->backend, &ctx->ctx_perm,
+                                                  &ctx->buf_perm);
     }
 
     if (params.verbosity >= 1) {
@@ -1005,7 +1005,8 @@ static ggml_tensor* dac_conv_transpose_1d(ggml_context* ctx, ggml_tensor* x, ggm
     if (w_perm) {
         const int K = (int)w->ne[0];
         ggml_tensor* y = core_convt::convt1d_decomp(ctx, x, w_perm, nullptr, stride, K, pad, pad);
-        if (b) y = ggml_add(ctx, y, cast_f32(ctx, b));
+        if (b)
+            y = ggml_add(ctx, y, cast_f32(ctx, b));
         return y;
     }
     const int Cout = (int)w->ne[1];

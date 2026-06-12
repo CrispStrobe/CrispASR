@@ -332,7 +332,7 @@ static ggml_tensor* wn_convt1d(ggml_context* ctx, ggml_tensor* x, const wn_conv&
     if (!w)
         return x;
 
-    const int K = (int)w->ne[0]; // kernel_size = 2*stride
+    const int K = (int)w->ne[0];      // kernel_size = 2*stride
     const int pad = (stride + 1) / 2; // ceil(stride/2), matches Python
 
     if (wn.w_perm) {
@@ -679,8 +679,7 @@ struct tada_codec_context* tada_codec_init_from_file(const char* path, int n_thr
             srcs[i] = wn_weight(c->blocks[i].up_conv);
             dsts[i] = &c->blocks[i].up_conv.w_perm;
         }
-        core_convt::permute_convt1d_weights_batch(srcs, dsts, n,
-                                                  c->backend, &c->ctx_perm, &c->buf_perm);
+        core_convt::permute_convt1d_weights_batch(srcs, dsts, n, c->backend, &c->ctx_perm, &c->buf_perm);
     }
 
     fprintf(stderr, "tada-codec: loaded OK (%zu tensors)\n", c->tensors.size());

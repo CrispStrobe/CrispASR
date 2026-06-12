@@ -359,8 +359,8 @@ static fastpitch_tts_context* load_model(const char* path, fastpitch_tts_params 
             srcs[i] = (it2 != ctx->tensors.end()) ? it2->second : nullptr;
             dsts[i] = &ctx->ups_w_perm[i];
         }
-        core_convt::permute_convt1d_weights_batch(srcs.data(), dsts.data(), n,
-                                                  ctx->backend, &ctx->ctx_perm, &ctx->buf_perm);
+        core_convt::permute_convt1d_weights_batch(srcs.data(), dsts.data(), n, ctx->backend, &ctx->ctx_perm,
+                                                  &ctx->buf_perm);
     }
 
     // Infer vocab size from embedding tensor

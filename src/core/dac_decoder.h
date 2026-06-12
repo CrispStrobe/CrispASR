@@ -100,11 +100,11 @@ struct DacResUnit {
 
 // DecoderBlock weights
 struct DacDecoderBlock {
-    ggml_tensor* snake_alpha = nullptr;  // Snake1d alpha (1, in_ch, 1)
-    ggml_tensor* up_w = nullptr;         // ConvTranspose1d weight
-    ggml_tensor* up_w_perm = nullptr;    // pre-permuted [IC, K*OC] for decomposed path (or nullptr)
-    ggml_tensor* up_b = nullptr;         // ConvTranspose1d bias
-    DacResUnit res[3];                   // dilation 1, 3, 9
+    ggml_tensor* snake_alpha = nullptr; // Snake1d alpha (1, in_ch, 1)
+    ggml_tensor* up_w = nullptr;        // ConvTranspose1d weight
+    ggml_tensor* up_w_perm = nullptr;   // pre-permuted [IC, K*OC] for decomposed path (or nullptr)
+    ggml_tensor* up_b = nullptr;        // ConvTranspose1d bias
+    DacResUnit res[3];                  // dilation 1, 3, 9
 };
 
 // Full DAC decoder weight set

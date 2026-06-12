@@ -2300,8 +2300,8 @@ static bool load_dac_codec(zonos_tts_context* ctx) {
             srcs[i] = dw.blocks[i].up_w;
             dsts_arr[i] = &dw.blocks[i].up_w_perm;
         }
-        core_convt::permute_convt1d_weights_batch(srcs, dsts_arr, n,
-                                                  ctx->backend, &ctx->dac_ctx_perm, &ctx->dac_buf_perm);
+        core_convt::permute_convt1d_weights_batch(srcs, dsts_arr, n, ctx->backend, &ctx->dac_ctx_perm,
+                                                  &ctx->dac_buf_perm);
     }
 
     ctx->dac_loaded = true;

@@ -1320,8 +1320,8 @@ struct speecht5_tts_context* speecht5_tts_init(const char* path, struct speecht5
             srcs[i] = (it != ts.end()) ? it->second : nullptr;
             dsts[i] = &ctx->ups_w_perm[i];
         }
-        core_convt::permute_convt1d_weights_batch(srcs.data(), dsts.data(), n,
-                                                  ctx->backend, &ctx->ctx_perm, &ctx->buf_perm);
+        core_convt::permute_convt1d_weights_batch(srcs.data(), dsts.data(), n, ctx->backend, &ctx->ctx_perm,
+                                                  &ctx->buf_perm);
     }
 
     if (params.verbosity > 0) {

@@ -41,8 +41,7 @@ public:
         return out;
     }
 
-    std::vector<float> speech_to_speech(const float* samples, int n_samples,
-                                        std::string* out_text,
+    std::vector<float> speech_to_speech(const float* samples, int n_samples, std::string* out_text,
                                         const whisper_params& params) override {
         if (!ctx_)
             return {};

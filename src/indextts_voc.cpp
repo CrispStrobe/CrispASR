@@ -1368,11 +1368,12 @@ extern "C" struct indextts_voc_context* indextts_voc_init(const char* path, int 
             char wn[32];
             std::snprintf(wn, sizeof(wn), "ups.%d.0.weight", i);
             auto it = c->tensors.find(wn);
-            if (it == c->tensors.end()) continue;
+            if (it == c->tensors.end())
+                continue;
             ggml_tensor* src = it->second;
             perm_bufs[i] = core_convt::permute_convt1d_weight(src);
-            c->ups_w_perm[i] = ggml_new_tensor_2d(c->ctx_perm, GGML_TYPE_F32,
-                                                   (int)src->ne[2], (int)src->ne[0] * (int)src->ne[1]);
+            c->ups_w_perm[i] =
+                ggml_new_tensor_2d(c->ctx_perm, GGML_TYPE_F32, (int)src->ne[2], (int)src->ne[0] * (int)src->ne[1]);
         }
         c->buf_perm = ggml_backend_alloc_ctx_tensors(c->ctx_perm, c->backend);
         for (int i = 0; i < n_ups && i < indextts_voc_context::kMaxUps; i++) {

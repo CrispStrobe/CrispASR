@@ -574,8 +574,8 @@ static ggml_tensor* forward_decoder(ggml_context* ctx, ggml_tensor* x, const aud
             if (up[i].w_perm) {
                 // Decomposed path: crop_left=pad_right, crop_right=pad_left
                 // (reversed from PyTorch convention — matches ggml dim-0 ordering)
-                x = core_convt::convt1d_decomp_tf(ctx, x, up[i].w_perm, up[i].b,
-                                                  ratio, K, /*crop_left=*/pad_right, /*crop_right=*/pad_left);
+                x = core_convt::convt1d_decomp_tf(ctx, x, up[i].w_perm, up[i].b, ratio, K, /*crop_left=*/pad_right,
+                                                  /*crop_right=*/pad_left);
             } else {
                 // ggml_conv_transpose_1d has no padding — crop output manually
                 ggml_tensor* y = ggml_conv_transpose_1d(ctx, up[i].w, x, ratio, 0, 1);
@@ -663,8 +663,7 @@ struct audioseal_ctx* audioseal_init_from_file(const char* path, struct audiosea
             srcs[i] = c->gen_dec_up[i].w;
             dsts[i] = &c->gen_dec_up[i].w_perm;
         }
-        core_convt::permute_convt1d_weights_batch(srcs, dsts, n,
-                                                  c->backend, &c->ctx_perm, &c->buf_perm);
+        core_convt::permute_convt1d_weights_batch(srcs, dsts, n, c->backend, &c->ctx_perm, &c->buf_perm);
     }
 
     // Allocate compute scratch (generous for ~5M param model)

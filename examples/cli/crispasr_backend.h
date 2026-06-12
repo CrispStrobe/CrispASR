@@ -162,8 +162,7 @@ public:
     // PCM output at `tts_sample_rate()`. If out_text is non-null, writes the
     // intermediate transcript. Default returns empty (not supported). Only
     // backends with CAP_S2S override.
-    virtual std::vector<float> speech_to_speech(const float* samples, int n_samples,
-                                                std::string* out_text,
+    virtual std::vector<float> speech_to_speech(const float* samples, int n_samples, std::string* out_text,
                                                 const whisper_params& /*params*/) {
         (void)samples;
         (void)n_samples;

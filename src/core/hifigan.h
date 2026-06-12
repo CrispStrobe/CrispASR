@@ -184,8 +184,7 @@ static inline ggml_tensor* resblock_forward(ggml_context* ctx, ggml_tensor* x,
 
 static inline ggml_tensor* forward(ggml_context* ctx, ggml_tensor* mel,
                                    const std::map<std::string, ggml_tensor*>& tensors, const std::string& prefix,
-                                   const hparams& hp,
-                                   const std::vector<ggml_tensor*>& ups_w_perm = {}) {
+                                   const hparams& hp, const std::vector<ggml_tensor*>& ups_w_perm = {}) {
     ggml_tensor* x = mel;
 
     // Optional normalization: (mel - mean) / scale

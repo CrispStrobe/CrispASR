@@ -701,8 +701,8 @@ bool load_weights(const char* path, ggml_backend_t backend, const char* model_ta
             }
 #endif
             if (fread(tbuf.data(), 1, nbytes, fp) != nbytes) {
-                fprintf(stderr, "%s: short read for tensor '%s' (%zu bytes expected) — file truncated?\n",
-                        tag, ggml_get_name(t), nbytes);
+                fprintf(stderr, "%s: short read for tensor '%s' (%zu bytes expected) — file truncated?\n", tag,
+                        ggml_get_name(t), nbytes);
                 load_ok = false;
                 break;
             }

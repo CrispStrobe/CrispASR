@@ -113,11 +113,11 @@ struct ResUnitSlots {
 
 // Tensor slots for one decoder block.
 struct BlockSlots {
-    ggml_tensor* act = nullptr;      // block activation param
-    ggml_tensor* up_w = nullptr;     // ConvTranspose1d weight
-    ggml_tensor* up_w_perm = nullptr;// pre-permuted [IC, K*OC] for decomposed path (or nullptr)
-    ggml_tensor* up_b = nullptr;     // ConvTranspose1d bias
-    std::vector<ResUnitSlots> res;   // residual units
+    ggml_tensor* act = nullptr;       // block activation param
+    ggml_tensor* up_w = nullptr;      // ConvTranspose1d weight
+    ggml_tensor* up_w_perm = nullptr; // pre-permuted [IC, K*OC] for decomposed path (or nullptr)
+    ggml_tensor* up_b = nullptr;      // ConvTranspose1d bias
+    std::vector<ResUnitSlots> res;    // residual units
 };
 
 // Tensor slots for the codebook quantizer (decode direction only).

@@ -1033,8 +1033,7 @@ static void whisper_print_usage(int /*argc*/, char** argv, const whisper_params&
     fprintf(stderr, "             -m auto                        download a default model for the chosen backend\n");
     // Text-To-Speech (TTS) parameters — vibevoice and qwen3-tts backends
     fprintf(stderr, "\nSpeech-to-speech (S2S) options:\n");
-    fprintf(stderr,
-            "             --s2s                   [%-7s] speech-to-speech mode: audio input → audio output\n",
+    fprintf(stderr, "             --s2s                   [%-7s] speech-to-speech mode: audio input → audio output\n",
             params.s2s ? "true" : "false");
     fprintf(stderr, "             --s2s-output FNAME      [%-7s] output WAV path (default: s2s_output.wav)\n",
             params.s2s_output.c_str());

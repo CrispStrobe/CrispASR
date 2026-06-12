@@ -1025,13 +1025,13 @@ extern "C" struct csm_tts_context* csm_tts_init_from_file(const char* path_model
 
     // Permute ConvTranspose1d weights
     {
-        ggml_tensor* srcs[4], **dsts_arr[4];
+        ggml_tensor *srcs[4], **dsts_arr[4];
         for (int i = 0; i < 4; i++) {
             srcs[i] = c->model.seanet_dec.conv_stride[i].w;
             dsts_arr[i] = &c->model.seanet_dec.conv_stride[i].w_perm;
         }
-        core_convt::permute_convt1d_weights_batch(srcs, dsts_arr, 4,
-                                                  c->backend, &c->model.ctx_perm, &c->model.buf_perm);
+        core_convt::permute_convt1d_weights_batch(srcs, dsts_arr, 4, c->backend, &c->model.ctx_perm,
+                                                  &c->model.buf_perm);
     }
 
     // Scheduler

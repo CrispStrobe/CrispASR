@@ -271,8 +271,8 @@ extern "C" struct vibevoice_context* vibevoice_init_from_file(const char* path_m
             srcs[i] = (it != m.tensors.end()) ? it->second : nullptr;
             dsts[i] = &ctx->dec_ups_w_perm[i];
         }
-        core_convt::permute_convt1d_weights_batch(srcs.data(), dsts.data(), n_stages,
-                                                  ctx->backend, &ctx->ctx_perm, &ctx->buf_perm);
+        core_convt::permute_convt1d_weights_batch(srcs.data(), dsts.data(), n_stages, ctx->backend, &ctx->ctx_perm,
+                                                  &ctx->buf_perm);
     }
 
     {

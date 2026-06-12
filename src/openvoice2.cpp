@@ -446,8 +446,8 @@ extern "C" struct openvoice2_context* openvoice2_init_from_file(const char* path
             srcs[i] = dec.ups[i].w;
             dsts[i] = &dec.ups[i].w_perm;
         }
-        core_convt::permute_convt1d_weights_batch(srcs.data(), dsts.data(), n,
-                                                  ctx->backend, &ctx->ctx_perm, &ctx->buf_perm);
+        core_convt::permute_convt1d_weights_batch(srcs.data(), dsts.data(), n, ctx->backend, &ctx->ctx_perm,
+                                                  &ctx->buf_perm);
     }
 
     dec.resblocks.resize(hp.n_resblocks);
@@ -1037,7 +1037,8 @@ static bool hifigan_decode_cpu(openvoice2_context* ctx, const std::vector<float>
         int crop_each = (kernel - stride) / 2;
 
         if (dec.ups[us].w_perm) {
-            x = core_convt::convt1d_decomp(gc, x, dec.ups[us].w_perm, dec.ups[us].b, stride, kernel, crop_each, crop_each);
+            x = core_convt::convt1d_decomp(gc, x, dec.ups[us].w_perm, dec.ups[us].b, stride, kernel, crop_each,
+                                           crop_each);
         } else {
             x = core_convt::convt1d_crop(gc, x, dec.ups[us].w, dec.ups[us].b, stride, crop_each, crop_each);
         }

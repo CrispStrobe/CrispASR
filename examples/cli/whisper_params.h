@@ -254,8 +254,8 @@ struct whisper_params {
     std::string hf_file;
     std::string tts_text;
     std::string tts_output;
-    bool s2s = false;            // speech-to-speech mode: audio in → audio out
-    std::string s2s_output;      // S2S output WAV path (default: s2s_output.wav)
+    bool s2s = false;       // speech-to-speech mode: audio in → audio out
+    std::string s2s_output; // S2S output WAV path (default: s2s_output.wav)
     std::string tts_voice;
     int tts_steps = 20;
     std::string tts_codec_model;

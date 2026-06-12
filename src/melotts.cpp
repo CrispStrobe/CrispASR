@@ -1999,7 +1999,8 @@ static bool hifigan_decode(melotts_context* ctx, const std::vector<float>& z, co
         int crop_each = (kernel - stride) / 2;
 
         if (w.dec_ups[us].w_perm) {
-            x = core_convt::convt1d_decomp(gc, x, w.dec_ups[us].w_perm, w.dec_ups[us].b, stride, kernel, crop_each, crop_each);
+            x = core_convt::convt1d_decomp(gc, x, w.dec_ups[us].w_perm, w.dec_ups[us].b, stride, kernel, crop_each,
+                                           crop_each);
         } else {
             x = core_convt::convt1d_crop(gc, x, w.dec_ups[us].w, w.dec_ups[us].b, stride, crop_each, crop_each);
         }
@@ -2606,8 +2607,8 @@ struct melotts_context* melotts_init_from_file(const char* path_model, struct me
             srcs[i] = ctx->w.dec_ups[i].w;
             dsts[i] = &ctx->w.dec_ups[i].w_perm;
         }
-        core_convt::permute_convt1d_weights_batch(srcs.data(), dsts.data(), n,
-                                                  ctx->backend, &ctx->ctx_perm, &ctx->buf_perm);
+        core_convt::permute_convt1d_weights_batch(srcs.data(), dsts.data(), n, ctx->backend, &ctx->ctx_perm,
+                                                  &ctx->buf_perm);
     }
 
     // Create scheduler
