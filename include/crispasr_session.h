@@ -27,6 +27,12 @@
 extern "C" {
 #endif
 
+// Whisper types (defined in whisper.h, forward-declared here so this
+// header is self-contained without pulling in the full whisper API).
+struct whisper_context;
+struct whisper_context_params;
+struct whisper_full_params;
+
 struct crispasr_align_result;
 typedef struct crispasr_align_result crispasr_align_result;
 struct crispasr_diarize_opts_abi;
