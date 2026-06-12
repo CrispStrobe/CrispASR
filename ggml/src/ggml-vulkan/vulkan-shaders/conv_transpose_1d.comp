@@ -1,5 +1,7 @@
 #version 450
 
+#extension GL_EXT_shader_explicit_arithmetic_types_float16 : enable
+
 #include "types.glsl"
 
 layout (binding = 0) readonly buffer A {A_TYPE data_a[];};   // src0 - kernel:    [K, Cout, Cin]
@@ -68,7 +70,7 @@ void main(){
                 A_TYPE elemKrn = data_a[K_idx + Cout_idx * p.nb01 + Cin_idx * p.nb02];
                 if(L_idx < p.L){
                     B_TYPE elemInp = data_b[L_idx + Cin_idx*p.nb11];
-                    dp = fma(elemKrn, elemInp, dp);
+                    dp = fma(float(elemKrn), elemInp, dp);
                 }
             }
             tmp[tid*p.s0 + K_idx] += dp;
