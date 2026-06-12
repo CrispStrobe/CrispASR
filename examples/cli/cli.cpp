@@ -751,7 +751,7 @@ static bool whisper_params_parse(int argc, char** argv, whisper_params& params) 
 static void whisper_print_usage(int /*argc*/, char** argv, const whisper_params& params) {
     fprintf(stderr, "\n");
     fprintf(stderr, "usage: %s [options] file0 file1 ...\n", argv[0]);
-    fprintf(stderr, "supported audio formats: flac, mp3, ogg, wav\n");
+    fprintf(stderr, "supported audio formats: wav, mp3, flac, ogg (native); m4a, aac, opus, webm, wma (via ffmpeg)\n");
     fprintf(stderr, "\n");
     fprintf(stderr, "options:\n");
     fprintf(stderr, "  -h,        --help                 [default] show this help message and exit\n");

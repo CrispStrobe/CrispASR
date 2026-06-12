@@ -100,7 +100,16 @@ static std::string scratch_dir() {
 // Create a scratch file securely via mkstemp (POSIX) or _mktemp_s (Win).
 // Writes `data` to it and returns the path. On failure returns "".
 // The caller is responsible for calling std::remove() on the returned path.
-static std::string write_temp_audio(const char* data, size_t size) {
+// Preserve the original file extension so ffmpeg and miniaudio can detect
+// the container format (critical for m4a/aac/opus/webm uploads).
+static std::string write_temp_audio(const char* data, size_t size, const std::string& original_filename = "") {
+    // Extract extension from original filename
+    std::string ext;
+    if (!original_filename.empty()) {
+        auto dot = original_filename.rfind('.');
+        if (dot != std::string::npos)
+            ext = original_filename.substr(dot); // e.g. ".m4a"
+    }
 #ifdef _WIN32
     char tmp_dir[MAX_PATH];
     if (!GetTempPathA(MAX_PATH, tmp_dir))
@@ -108,17 +117,24 @@ static std::string write_temp_audio(const char* data, size_t size) {
     char tmp_path[MAX_PATH];
     if (!GetTempFileNameA(tmp_dir, "cra", 0, tmp_path))
         return "";
-    std::ofstream f(tmp_path, std::ios::binary);
+    std::string final_path = std::string(tmp_path) + ext;
+    if (!ext.empty())
+        MoveFileA(tmp_path, final_path.c_str());
+    else
+        final_path = tmp_path;
+    std::ofstream f(final_path, std::ios::binary);
     if (!f)
         return "";
     f.write(data, (std::streamsize)size);
     f.close();
-    return std::string(tmp_path);
+    return final_path;
 #else
-    std::string tmpl_s = scratch_dir() + "/crispasr-XXXXXX";
+    std::string tmpl_s = scratch_dir() + "/crispasr-XXXXXX" + ext;
+    // mkstemps requires the suffix length
+    int suffix_len = (int)ext.size();
     std::vector<char> tmpl(tmpl_s.begin(), tmpl_s.end());
     tmpl.push_back('\0');
-    int fd = mkstemp(tmpl.data());
+    int fd = suffix_len > 0 ? mkstemps(tmpl.data(), suffix_len) : mkstemp(tmpl.data());
     if (fd < 0)
         return "";
     // Write all data; retry on partial write.
@@ -321,7 +337,7 @@ static transcription_result do_transcribe(const httplib::MultipartFormData& audi
                 audio_file.content.size());
 
     // Write to a secure temporary file for audio decoding.
-    std::string tmp_path = write_temp_audio(audio_file.content.data(), audio_file.content.size());
+    std::string tmp_path = write_temp_audio(audio_file.content.data(), audio_file.content.size(), audio_file.filename);
     if (tmp_path.empty()) {
         result.error = "failed to create temporary file for audio";
         return result;
@@ -1522,7 +1538,8 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         const auto& audio_file = req.get_file_value("file");
 
         // Decode input audio to 16 kHz mono PCM.
-        std::string tmp_path = write_temp_audio(audio_file.content.data(), audio_file.content.size());
+        std::string tmp_path =
+            write_temp_audio(audio_file.content.data(), audio_file.content.size(), audio_file.filename);
         if (tmp_path.empty()) {
             json_error(res, 500, "failed to create temporary file for audio");
             return;
