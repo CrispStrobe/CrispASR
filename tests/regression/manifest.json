@@ -20,8 +20,8 @@
       },
       "fixture_sample_path": "parakeet-tdt-0.6b-ja/reazon_baseball_14s/audio.wav",
       "_sample_note": "Sample WAVs live in the fixtures HF repo rather than the source tree; samples/.gitignore excludes them by default to keep the repo small.",
-      "expected_transcript": "\u30d4\u30c3\u30c1\u30e3\u30fc\u306e\u5ca1\u672c\u306f1\u56de\u6226\u306e\u9ce5\u53d6\u57ce\u5317\u6226\u306f8\u56de\u30016\u5bfe33\u70b9\u30ea\u30fc\u30c9\u306e\u5834\u9762\u30673\u4eba\u76ee\u3067\u30de\u30a6\u30f3\u30c9\u306b\u4e0a\u304c\u308a\u307e\u3057\u305f\u3002",
-      "expected_transcript_source": "captured on commit 3a9b294c (post-issue-#88 fix) with HF revision fd1963a, M1 Metal CPU+BLAS, decode_temperature=0. NOT the human ground-truth (ground_truth.srt in the fixtures repo, which reads \u5c71\u672c / Yamamoto rather than the model's \u30d4\u30c3\u30c1\u30e3\u30fc\u306e\u5ca1\u672c / Okamoto). Lock-in is for regression, not correctness.",
+      "expected_transcript": "ピッチャーの岡本は1回戦の鳥取城北戦は8回、6対33点リードの場面で3人目でマウンドに上がりました。",
+      "expected_transcript_source": "captured on commit 3a9b294c (post-issue-#88 fix) with HF revision fd1963a, M1 Metal CPU+BLAS, decode_temperature=0. NOT the human ground-truth (ground_truth.srt in the fixtures repo, which reads 山本 / Yamamoto rather than the model's ピッチャーの岡本 / Okamoto). Lock-in is for regression, not correctness.",
       "fixture_ref_path": "parakeet-tdt-0.6b-ja/reazon_baseball_14s/ref.gguf",
       "diff_thresholds": {
         "encoder_output": 0.999,
@@ -40,7 +40,7 @@
         "revision": "28281de882bac021e9241e640f44a9a289607e03",
         "file": "moonshine-tiny.gguf",
         "approx_size_mb": 104,
-        "_file_note": "F16 GGUF used for diff regression (cos=1.000 vs PyTorch). The q4_k variant uses Q4_0 for attn weights, giving cos_min~0.79 \u2014 not suitable for diff. Transcript is identical between F16 and Q4K.",
+        "_file_note": "F16 GGUF used for diff regression (cos=1.000 vs PyTorch). The q4_k variant uses Q4_0 for attn weights, giving cos_min~0.79 — not suitable for diff. Transcript is identical between F16 and Q4K.",
         "companion_files": [
           "tokenizer.bin"
         ]
@@ -64,14 +64,14 @@
         "revision": "bfb1ef9865b9f83f35f050ab03e5e9ddaf736b7b",
         "file": "moonshine-base.gguf",
         "approx_size_mb": 234,
-        "_file_note": "F16 GGUF used for diff regression (cos=1.000 vs PyTorch). The q4_k variant uses Q4_0 for attn weights, giving cos_min~0.83 \u2014 not suitable for diff.",
+        "_file_note": "F16 GGUF used for diff regression (cos=1.000 vs PyTorch). The q4_k variant uses Q4_0 for attn weights, giving cos_min~0.83 — not suitable for diff.",
         "companion_files": [
           "tokenizer.bin"
         ]
       },
       "sample": "samples/jfk.wav",
       "expected_transcript": "And so my fellow Americans ask not what your country can do for you ask what you can do for your country",
-      "expected_transcript_source": "captured 2026-05-15 with HF revision bfb1ef9, CPU-only, samples/jfk.wav (moonshine-base F16 greedy, no comma or trailing period \u2014 model-deterministic)",
+      "expected_transcript_source": "captured 2026-05-15 with HF revision bfb1ef9, CPU-only, samples/jfk.wav (moonshine-base F16 greedy, no comma or trailing period — model-deterministic)",
       "fixture_ref_path": "moonshine-base/jfk_11s/ref.gguf",
       "diff_thresholds": {
         "encoder_output": 0.999
@@ -697,9 +697,134 @@
       "sample": "samples/jfk.wav",
       "expected_transcript": "PLACEHOLDER",
       "expected_transcript_source": "TODO"
+    },
+    {
+      "name": "vibevoice-asr",
+      "backend_id": "vibevoice",
+      "gguf": {
+        "repo": "cstr/vibevoice-asr-GGUF",
+        "revision": "main",
+        "file": "vibevoice-asr-q4_k.gguf",
+        "approx_size_mb": 4588
+      },
+      "sample": "samples/jfk.wav",
+      "expected_transcript": "TBD",
+      "expected_transcript_source": "not yet captured — skip_diff entry, transcript needs pinning",
+      "skip_diff": true
+    },
+    {
+      "name": "firered-lid",
+      "backend_id": "firered-lid",
+      "gguf": {
+        "repo": "cstr/firered-lid-GGUF",
+        "revision": "main",
+        "file": "firered-lid-q4_k.gguf",
+        "approx_size_mb": 543
+      },
+      "sample": "samples/jfk.wav",
+      "expected_transcript": "TBD",
+      "expected_transcript_source": "LID output — expected language code, not yet captured",
+      "skip_diff": true
+    },
+    {
+      "name": "silero-lid-lang95",
+      "backend_id": "silero-lid",
+      "gguf": {
+        "repo": "cstr/silero-lid-lang95-GGUF",
+        "revision": "main",
+        "file": "silero-lid-lang95-f32.gguf",
+        "approx_size_mb": 16
+      },
+      "sample": "samples/jfk.wav",
+      "expected_transcript": "TBD",
+      "expected_transcript_source": "LID output — expected language code, not yet captured",
+      "skip_diff": true
+    },
+    {
+      "name": "fasttext-lid176",
+      "backend_id": "lid-fasttext",
+      "gguf": {
+        "repo": "cstr/fasttext-lid176-GGUF",
+        "revision": "main",
+        "file": "fasttext-lid176-f16.gguf",
+        "approx_size_mb": 62
+      },
+      "sample": "samples/jfk.wav",
+      "expected_transcript": "TBD",
+      "expected_transcript_source": "LID output — expected language code, not yet captured",
+      "skip_diff": true
+    },
+    {
+      "name": "ecapa-lid-107",
+      "backend_id": "ecapa-lid",
+      "gguf": {
+        "repo": "cstr/ecapa-lid-107-GGUF",
+        "revision": "main",
+        "file": "ecapa-lid-107-f16.gguf",
+        "approx_size_mb": 40
+      },
+      "sample": "samples/jfk.wav",
+      "expected_transcript": "TBD",
+      "expected_transcript_source": "LID output — expected language code, not yet captured",
+      "skip_diff": true
+    },
+    {
+      "name": "moss-audio-4b-instruct",
+      "backend_id": "moss-audio",
+      "gguf": {
+        "repo": "cstr/MOSS-Audio-4B-Instruct-GGUF",
+        "revision": "main",
+        "file": "moss-audio-4b-instruct-q4_k.gguf",
+        "approx_size_mb": 3920
+      },
+      "sample": "samples/jfk.wav",
+      "expected_transcript": "TBD",
+      "expected_transcript_source": "not yet captured — skip_diff entry, transcript needs pinning",
+      "skip_diff": true
+    },
+    {
+      "name": "kugelaudio-0-open",
+      "backend_id": "kugelaudio",
+      "gguf": {
+        "repo": "cstr/kugelaudio-0-open-GGUF",
+        "revision": "main",
+        "file": "kugelaudio-0-open-q4_k.gguf",
+        "approx_size_mb": 5445
+      },
+      "sample": "samples/jfk.wav",
+      "expected_transcript": "TBD",
+      "expected_transcript_source": "not yet captured — skip_diff entry, transcript needs pinning",
+      "skip_diff": true
+    },
+    {
+      "name": "mini-omni2",
+      "backend_id": "mini-omni2",
+      "gguf": {
+        "repo": "cstr/mini-omni2-GGUF",
+        "revision": "main",
+        "file": "mini-omni2-q4_k.gguf",
+        "approx_size_mb": 1009
+      },
+      "sample": "samples/jfk.wav",
+      "expected_transcript": "TBD",
+      "expected_transcript_source": "not yet captured — skip_diff entry, transcript needs pinning",
+      "skip_diff": true
+    },
+    {
+      "name": "lfm2-audio-1.5b",
+      "backend_id": "lfm2-audio",
+      "gguf": {
+        "repo": "cstr/lfm2-audio-1.5b-GGUF",
+        "revision": "main",
+        "file": "lfm2-audio-1.5b-q8_0.gguf",
+        "approx_size_mb": 1996
+      },
+      "sample": "samples/jfk.wav",
+      "expected_transcript": "TBD",
+      "expected_transcript_source": "not yet captured — skip_diff entry, transcript needs pinning",
+      "skip_diff": true
     }
   ],
-
   "tts_backends_note": "TTS->ASR roundtrip regression. Each entry synthesises tts_phrase via the TTS backend, transcribes the output with the pinned ASR backend (parakeet by default — high-accuracy English ground truth), and asserts WER <= wer_max. Catches silent decode regressions like the voxcpm2 BF16 noise bug that the encoder/mel diff harness can miss. WER ignores punctuation and case after normalisation, so a kokoro tts_phrase that comes back as 'the quick brown fox jumps over the lazy dog.' is still WER=0.",
   "tts_backends": [
     {
@@ -718,7 +843,7 @@
       },
       "tts_phrase": "The quick brown fox jumps over the lazy dog",
       "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
-      "wer_max": 0.10,
+      "wer_max": 0.1,
       "wer_max_note": "Kokoro 82M Q8_0 on a clean pangram routinely lands at WER 0.0 in local roundtrip via parakeet. 10% gives headroom for prosody artefacts + parakeet's own ~0% baseline drift on the CI runner image."
     },
     {
@@ -740,7 +865,7 @@
       "voice_preset_note": "qwen3-tts-CustomVoice has 9 baked speakers selectable by name (aiden, dylan, eric, ono_anna, ryan, serena, sohee, uncle_fu, vivian). `eric` is a clear male voice — best fit for the pangram phrase + parakeet transcription. No separate voice GGUF needed; the speaker embed lives inside the customvoice model.",
       "tts_phrase": "The quick brown fox jumps over the lazy dog",
       "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
-      "wer_max": 0.10,
+      "wer_max": 0.1,
       "wer_max_note": "Local roundtrip lands at WER 0.0 (parakeet adds a trailing '.' which normalisation strips). The Q8_0 model is used here; Q4_K has a documented quality regression on this same repo (see its README) so we pin Q8_0 explicitly. Total download per nightly slot: 970 MB talker + 360 MB tokenizer + 466 MB parakeet = ~1.8 GB.",
       "_total_download_mb": 1796
     },
@@ -756,7 +881,7 @@
       "voice_preset": "v2/en_speaker_3",
       "tts_phrase": "The quick brown fox jumps over the lazy dog",
       "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
-      "wer_max": 0.20,
+      "wer_max": 0.2,
       "wer_max_note": "Bark is a generative audio model with variable output quality. 20% WER headroom for prosody artefacts."
     },
     {
@@ -845,7 +970,7 @@
       },
       "tts_phrase": "The quick brown fox jumps over the lazy dog",
       "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
-      "wer_max": 0.20,
+      "wer_max": 0.2,
       "wer_max_note": "Parler TTS Mini v1.1 (~900M). T5 encoder + DAC decoder. Prompt-conditioned voice via --instruct."
     },
     {
@@ -860,8 +985,122 @@
       "tts_phrase": "[S1] The quick brown fox jumps over the lazy dog.",
       "_tts_phrase_note": "Dia requires [S1] or [S2] speaker tags. Prompts under ~100 chars may produce poor output.",
       "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
-      "wer_max": 0.20,
+      "wer_max": 0.2,
       "wer_max_note": "Dia 1.6B dialogue TTS with CFG. 20% WER headroom for stochastic decode."
+    },
+    {
+      "name": "cosyvoice3-0.5b",
+      "backend_id": "cosyvoice3-tts",
+      "gguf": {
+        "repo": "cstr/cosyvoice3-0.5b-2512-GGUF",
+        "revision": "main",
+        "file": "cosyvoice3-llm-q4_k.gguf",
+        "approx_size_mb": 366,
+        "_companion_note": "Also needs cosyvoice3-flow-q8_0.gguf, cosyvoice3-hift-f16.gguf, cosyvoice3-campplus-f16.gguf, cosyvoice3-s3tok-f16.gguf, cosyvoice3-voices.gguf"
+      },
+      "tts_phrase": "The quick brown fox jumps over the lazy dog",
+      "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
+      "wer_max": 0.3,
+      "wer_max_note": "Initial placeholder — cosyvoice3 roundtrip WER not yet measured. 30% is conservative."
+    },
+    {
+      "name": "fastpitch-en",
+      "backend_id": "fastpitch",
+      "gguf": {
+        "repo": "cstr/fastpitch-en-GGUF",
+        "revision": "main",
+        "file": "fastpitch-en-q4_k.gguf",
+        "approx_size_mb": 226
+      },
+      "tts_phrase": "The quick brown fox jumps over the lazy dog",
+      "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
+      "wer_max": 0.3,
+      "wer_max_note": "Initial placeholder — fastpitch roundtrip WER not yet measured."
+    },
+    {
+      "name": "melotts-en-v3",
+      "backend_id": "melotts",
+      "gguf": {
+        "repo": "cstr/melotts-en-v3-GGUF",
+        "revision": "main",
+        "file": "melotts-en-v3-f16.gguf",
+        "approx_size_mb": 92
+      },
+      "tts_phrase": "The quick brown fox jumps over the lazy dog",
+      "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
+      "wer_max": 0.3,
+      "wer_max_note": "Initial placeholder — melotts roundtrip WER not yet measured."
+    },
+    {
+      "name": "orpheus-3b-base",
+      "backend_id": "orpheus",
+      "gguf": {
+        "repo": "cstr/orpheus-3b-base-GGUF",
+        "revision": "main",
+        "file": "orpheus-3b-base-q8_0.gguf",
+        "approx_size_mb": 3352
+      },
+      "tts_phrase": "The quick brown fox jumps over the lazy dog",
+      "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
+      "wer_max": 0.3,
+      "wer_max_note": "Initial placeholder — orpheus roundtrip WER not yet measured."
+    },
+    {
+      "name": "outetts-0.3-1b",
+      "backend_id": "outetts",
+      "gguf": {
+        "repo": "cstr/outetts-0.3-1b-GGUF",
+        "revision": "main",
+        "file": "outetts-0.3-1b-q4_k.gguf",
+        "approx_size_mb": 801,
+        "_companion_note": "Also needs wavtokenizer-decoder-f16.gguf"
+      },
+      "tts_phrase": "The quick brown fox jumps over the lazy dog",
+      "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
+      "wer_max": 0.3,
+      "wer_max_note": "Initial placeholder — outetts roundtrip WER not yet measured."
+    },
+    {
+      "name": "tada-tts-3b-ml",
+      "backend_id": "tada-tts",
+      "gguf": {
+        "repo": "cstr/tada-tts-3b-ml-GGUF",
+        "revision": "main",
+        "file": "tada-tts-3b-ml-q4_k.gguf",
+        "approx_size_mb": 2213
+      },
+      "tts_phrase": "The quick brown fox jumps over the lazy dog",
+      "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
+      "wer_max": 0.3,
+      "wer_max_note": "Initial placeholder — tada-tts roundtrip WER not yet measured."
+    },
+    {
+      "name": "tada-codec",
+      "backend_id": "tada-codec",
+      "gguf": {
+        "repo": "cstr/tada-tts-3b-ml-GGUF",
+        "revision": "main",
+        "file": "tada-codec-f16.gguf",
+        "approx_size_mb": 1006
+      },
+      "tts_phrase": "The quick brown fox jumps over the lazy dog",
+      "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
+      "wer_max": 0.5,
+      "wer_max_note": "Codec roundtrip — encode+decode loses quality, WER will be higher."
+    },
+    {
+      "name": "zonos-v0.1-transformer",
+      "backend_id": "zonos-tts",
+      "gguf": {
+        "repo": "cstr/zonos-v0.1-transformer-GGUF",
+        "revision": "main",
+        "file": "zonos-v0.1-transformer-q4_k.gguf",
+        "approx_size_mb": 930
+      },
+      "tts_phrase": "The quick brown fox jumps over the lazy dog",
+      "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
+      "wer_max": 0.3,
+      "wer_max_note": "Initial placeholder — zonos roundtrip WER not yet measured."
     }
   ]
 }
