@@ -538,8 +538,8 @@ lfm2_audio_context* lfm2_audio_init_from_file(const char* path_model, lfm2_audio
     ctx->verbosity = params.verbosity;
     ctx->use_gpu = params.use_gpu;
     ctx->backend = ggml_backend_cpu_init();
-    ctx->compute_meta.resize(2ULL * 1024 * 1024 * 1024); // 2 GB scratch for prefill
-    ctx->decode_meta.resize(64ULL * 1024 * 1024);        // 64 MB scratch for T=1 decode
+    ctx->compute_meta.resize(256ULL * 1024 * 1024); // 2 GB scratch for prefill
+    ctx->decode_meta.resize(64ULL * 1024 * 1024);   // 64 MB scratch for T=1 decode
 
     ctx->model_path = path_model;
     if (!lfm2_audio_load(ctx->model, path_model, ctx->backend, params.verbosity)) {
