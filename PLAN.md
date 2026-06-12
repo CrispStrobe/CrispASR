@@ -5484,7 +5484,7 @@ all working, fully wired per `docs/contributing.md`, Kaggle GPU-tested.
 | Depthformer buffer reuse | ✓ DONE | reduced malloc |
 | GPU backend init (`ggml_backend_init_best`) | ✓ DONE | enables CUDA/Metal |
 | Kaggle GPU test | ✓ DONE | kernel COMPLETE on T4 |
-| `ggml_backend_sched` full migration | OPEN | needs all graph paths |
+| `ggml_backend_sched` full migration | NOT NEEDED | gallocr works with CUDA directly |
 | Streaming Mimi decode | OPEN | nice-to-have |
 | `causal_conv1d` CUDA kernel | OPEN | GPU-only optimization |
 
