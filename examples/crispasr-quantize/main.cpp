@@ -261,6 +261,14 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
     //   - preprocessor.* (mel filterbank)
     const bool is_lfm2_audio = (arch.find("lfm2-audio") != std::string::npos);
 
+    // Mini-Omni2: Whisper-small encoder + whisperMLP adapter + Qwen2-0.5B LLM.
+    // Only the LLM layers (llm.blk.*) should be quantized. Keep:
+    //   - audio.* (Whisper encoder — conformer drift, same issue as canary)
+    //   - adapter.* (small SwiGLU adapter, precision-sensitive)
+    //   - llm.token_embd.weight (tied with lm_head, sampling-critical)
+    //   - llm.output_norm.weight (small, F32 anyway)
+    const bool is_mini_omni2 = (arch.find("mini-omni2") != std::string::npos);
+
     // Bark TTS: 3 GPT-2 sub-models + EnCodec decoder.
     // Embeddings (token_embd, pos_embd), output heads, and the entire
     // EnCodec decoder are read via CPU tensor_get_row_f32 / tensor_get_all_f32
@@ -329,6 +337,8 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
                                 sname.find("audio_embd.") == 0 || sname.find("adapter.") == 0 ||
                                 sname.find("mimi.") == 0 || sname.find("encoder.") == 0 ||
                                 sname.find("depth.codebook.") == 0 || sname.find("preprocessor.") == 0)) &&
+            !(is_mini_omni2 && (sname.find("audio.") == 0 || sname.find("adapter.") == 0 ||
+                                sname.find("llm.token_embd") == 0)) &&
             ([&]() {
                 if (!is_omniasr_ctc || omniasr_quant_all ||
                     (omniasr_head_cutoff == 0 && omniasr_tail_cutoff >= omniasr_n_enc))
