@@ -10,16 +10,19 @@ effort estimate. Completed items have been moved to `HISTORY.md`.
 
 **Latest release: v0.6.12** (commit `345ecfdc`). Full notes in [`RELEASE_NOTES_v0.6.12.md`](RELEASE_NOTES_v0.6.12.md).
 
-> **Audit 2026-06-03 → 2026-06-05** — code-verified all items.
-> **Closed:** #96 graph-default flip, #73 FA benchmark (cohere cast-on-read
-> default), #61j glm-asr translate, #94 Go auto-gen, #93 CMake rename,
-> #103 Silero v6, #100 Phase A (MeloTTS), O4 beam search, **#100 Phase B
-> (OpenVoice2 voice cloning — WORKING, ASR roundtrip "Hello.")**.
+> **Audit 2026-06-12** — code-verified all items against HISTORY.md and codebase.
+> **Newly closed (stale in table until this audit):** #42 VibeVoice-ASR 7B
+> (shipped with GGUFs + layer offload), #43 Fun-ASR-Nano (shipped 2026-05-20),
+> #59 Cross-binding C-ABI parity (all 7 bindings 149/149 symbols, 2026-06-04),
+> #155 CONV_TRANSPOSE_1D GPU (Vulkan+CUDA done, 2026-06-10),
+> §WASM Browser build (all backends + HF Space, 2026-06-10).
+> **Updated:** #52 O15 broken on CUDA; #56 diff-harness done, only JA kanji remains;
+> #81 Nemotron un-deferred → HIGH for dictation.
 > **Still open:** #52 perf pass, #51c F16 (RAM-blocked), #56 JA kanji
 > (needs MeCab/KaKaSi), #58 MOSS (in progress), #75 server
 > round 2, #66 wrapper publishing, O5/O6/O7 (O6 GPU-only, O7 needs draft
 > models), #101 OmniVoice, #102 RapidTP.
-> **Closed this session:** #115 (GPU default, Option B + k-quant GET_ROWS).
+> **Prior audit closed:** #96, #73 FA, #61j, #94, #93, #103, #100 A+B, O4, #115.
 
 **Current state (May 2026, v0.6.11):** 20 ASR + 3 TTS + 1 speaker-verification backends (+ Chatterbox T3 in progress), unified CLI,
 OpenAI-compatible server + WebSocket streaming, shared `src/core/` library, FireRedPunc
@@ -45,18 +48,18 @@ test-all-backends.py passes 18/18 transcribe + 51/54 feature tests (3 stream ski
 
 | Priority | Item | Effort | Status |
 |---|---|---|---|
-| **MEDIUM** | [#52 Qwen3-TTS](#52-qwen3-tts) — perf pass | Medium | talker + code_predictor + codec + ECAPA + codec_encoder all done; only step-4 perf pass open (~137 ms/frame → real-time) |
+| **MEDIUM** | [#52 Qwen3-TTS](#52-qwen3-tts) — perf pass | Medium | talker + code_predictor + codec + ECAPA + codec_encoder all done; step-4 perf pass open (~137 ms/frame → real-time). **O15 broken on CUDA and default-OFF** (`61c42bfb`) — main perf lever disabled; needs scheduler fix or alternative (FUSED_QKV, CP graph fusion). |
 | **HIGH** | [#57 Commercial-friendly TTS expansion](#57-commercial-friendly-tts-backend-expansion) | Phased | Phases 1-3 DONE; Turbo WORKING; F0 wired in; native voice cloning shipped → HISTORY §82; **#83 production fix LANDED 2026-05-24 → HISTORY 2026-05-24 + LEARNINGS Round 9** — S3Gen UNet weight residency split (`s3.fd.*` on CPU, encoder/vocoder GPU): M1 Metal cos_min 0.940→**0.999980** in diff harness, intelligible audio at all T; comparable wall-time to pure CPU on M1. Q8_0×F32 bit-match Metal kernel committed (commit `752baecf`, upstream-PR-quality, drafted as PR 09). 3 upstream PR drafts in `tools/upstream-prs/09-11` covering Metal Q8_0 kernel + ggml-alloc drift bug report + scheduler NaN-at-large-T bug report. Linux CPU smoke validated on VPS. **R9 follow-up #4 2026-05-24**: two bugs found. **Bug A** (ggml sched dangling src pointers across `alloc_graph` calls): **FIXED** with a per-call mutation log in `ggml/src/ggml-backend.cpp` that restores `node->src[j]` originals at end of compute. Repro is the chatterbox CFG cond+uncond pair on the same gf; characterized and upstream-PR drafted at `tools/upstream-prs/10`. **Bug B** (`unet_input` divergence under sched-copy): **STILL OPEN — current code only WORKS AROUND it** by pinning `unet_input` to Metal in `cfm_euler_solve::run_denoiser`. With Bug A patched, the sched CPU→GPU copy delivers correct bytes to the kernel (verified by inline `tensor_get` before im2col dispatch) yet downstream compute still diverges (smoke rms ~16). Pinning `time_emb` is actively harmful (rms ~209), so the workaround is narrow. Without a real fix, any future user of `ggml_backend_sched` with a similar topology will hit this. Handover prompt for the follow-up at `handover-prompts/issue83-r9-followup-5-unet-input-routing.md`. **R9 follow-up #5 2026-05-24**: **Bug B FIXED via `parallel=true` in `ggml_backend_sched_new`**. After eliminating ~10 candidate hypotheses (cache barriers, blit copies, concurrency, fusion, optimize, n_cb variants, private-storage buffers, im2col edge case, rc-as-mul_mat) and proving the divergence is between host's and GPU's view of the same shared-storage Metal buffer on the uncond pass, the root cause is sched's between-submission synchronisation. With `parallel=false` (the chatterbox default until this fix) sched uses `[cmd_buf_last waitUntilCompleted]`, which doesn't invalidate the GPU's L1/L2 cached view of a shared-storage `MTLBuffer` that the CPU just memcpy'd between submissions. With `parallel=true` sched uses `ggml_backend_event_record` / `event_wait` → on Metal that's `MTLSharedEvent` `encodeSignalEvent` / `encodeWaitForEvent`, which carry proper GPU cache invalidation. Switched `chatterbox_s3gen_init_from_file` to `parallel=true`. Removed the unet_input pin workaround and the `CRISPASR_NO_INPUT_PIN` env override. Verification: GPU residency smoke `rms 16.x → 5.143`, CPU residency smoke `rms 5.139` unchanged (no regression), diff harness `s3gen_mel cos_min = 0.999976` (matches prior workaround baseline). LEARNINGS R9 #5 closes with new lessons 7' and 8 ("Check sched's `parallel` flag for Metal cache-coherency-shaped bugs"). End-to-end status: smoke rms `13.938 → 5.143`, diff `s3gen_mel cos_min 0.940 → 0.999976`, 2-mark trigger `NaN → 5.291`. Production CPU-residency path unchanged. Also open: Kartoffelbox_Turbo DE |
 | **MEDIUM** | [#51c MiMo-V2.5-ASR F16 step decode](#51c-f16-step-decode) | Small | F16 step-decode validation blocked behind ≥32 GB box (see PLAN #51c); base runtime + Q4_K shipped → HISTORY §56 |
-| **MEDIUM** | [#56 Kokoro multilingual phonemizer](#56-kokoro-multilingual-phonemizer-espeak-ng) | Small | espeak-ng + DE backbone shipped; HF GGUFs published 2026-05-01; auto-download wired; Mandarin tone strip done (`strip_cmn_tone_numbers`); CJK quality warnings added (`5257e33d`); only JA kanji g2p (needs MeCab/KaKaSi) + diff-harness phonemizer-step polish remain |
+| **LOW** | [#56 Kokoro multilingual phonemizer](#56-kokoro-multilingual-phonemizer-espeak-ng) | Small | espeak-ng + DE backbone shipped; HF GGUFs published 2026-05-01; auto-download wired; Mandarin tone strip done; CJK quality warnings added; diff-harness phonemizer-step **DONE** (`ee9af935`). Only JA kanji g2p (needs MeCab/KaKaSi) remains. |
 | **MEDIUM** | [#58 MOSS-Audio-4B-Instruct](#58-moss-audio-4b-instruct) | Large | first audio-understanding (not just ASR) backend; introduces DeepStack cross-layer feature injection |
-| **MEDIUM** | [#59 Cross-binding C-ABI parity](#59-cross-binding-c-abi-parity) | Medium | Go now has full surface (✅ all 11 capabilities). Java has transcribe+align+LID. Ruby has transcribe. JS needs WebAssembly approach |
+| **DONE** | [#59 Cross-binding C-ABI parity](#59-cross-binding-c-abi-parity) | Medium | **DONE 2026-06-04.** All 7 bindings at 100% C-ABI parity (149/149 symbols, `0b64a6d7` + `4835a241`). Go/Python/Rust fully wrapped; Java/Ruby/Dart/JS have C-ABI declarations + partial-to-full idiomatic wrappers. JS/WASM build live since 2026-06-10 (`c29f6653`). |
 | **DONE** | [#104 Stateful TDT frame-streaming](#104-stateful-frame-streaming-tdt-decode-for-parakeet-long-form-issue-89) | M-L | **DONE 2026-05-23.** Global z-norm + chunked encode + single decode → 99.5 % (was 59.7 %). Extended to canary (96.8 %) and fastconformer-ctc (98.5 %) via `CAP_INTERNAL_CHUNKING`. See HISTORY 2026-05-21. |
 | **PARKED** | [#9 Parakeet TDT GPU](#9-parakeet-tdt-decoder-gpu) | Medium | Encoder 85%+ of time; LSTM+joint <0.7s; sequential steps limit GPU benefit |
-| **BLOCKED** | [#42 VibeVoice-ASR 7B](#42-vibevoice-asr-7b) | High | Needs ≥16 GB RAM |
-| **BLOCKED** | [#43 Fun-ASR-Nano](#43-fun-asr-nano) | Medium | License unclear |
+| **DONE** | [#42 VibeVoice-ASR 7B](#42-vibevoice-asr-7b) | High | **DONE.** GGUFs at `cstr/VibeVoice-7B-GGUF` (Q3_K 4.7 GB – F16 17.4 GB). ASR+TTS working. Layer offload validated on M1 Metal (ASR 28L, TTS 20L). |
+| **DONE** | [#43 Fun-ASR-Nano](#43-fun-asr-nano) | Medium | **DONE 2026-05-20.** Full LLM-decoder runtime shipped; GGUFs at `cstr/funasr-{nano,mlt-nano}-GGUF`; byte-identical diffs; ~9× RT on M1 Metal. CTC two-pass rescore is a separate low-pri follow-up. |
 | **DONE** | [#80 nano-cohere-transcribe-inspired tweaks](#80-nano-cohere-transcribe-inspired-perf--chunking-tweaks) | Small | 80a parked; **80b DONE**; **80c DONE**; **80d DONE** 2026-05-23 (audit: no fixes needed — all backends use energy chunker); 80e low-priority warmup deferred |
-| **DEFERRED** | [#81 Nemotron-Speech-Streaming-EN-0.6B](#81-nemotron-speech-streaming-en-06b--first-cache-aware-streaming-native-asr) | M-L | NVOML license, ~60–75 % reuse from parakeet/canary; the new bit is cache-aware FastConformer streaming. Wait for `--stream-json` (issue #84) to settle + a second user request (only mention so far is issue #85) before starting. |
+| **HIGH** | [#81 Nemotron-Speech-Streaming-EN-0.6B](#81-nemotron-speech-streaming-en-06b--first-cache-aware-streaming-native-asr) | M-L | NVOML license, ~60–75 % reuse from parakeet/canary; cache-aware FastConformer streaming. **Un-deferred for dictation use case** (2026-06-12). 80 ms / 0-lookahead / 8.4 % WER has no equivalent in the lineup. ~1000–1300 LOC, 3–5 days. |
 | **DONE** | [#86 Per-backend flash-attention wiring](#86-per-backend-flash-attention-wiring-crisperweaver-driven) | — | All backends now route through core helpers (`core_attn`, `core_sanm`, `core_conformer`) that unconditionally use `ggml_flash_attn_ext`. Only t5_translate excluded (T5 rel-pos bias incompatible). |
 | **LOW** | [#87 `gpu_backend` runtime selector](#87-gpu_backend-runtime-selector-multi-backend-ggml-build) | ~1 week | Needs ggml-side multi-backend dispatch to land first. CrisperWeaver UI placeholder ready when the C-side is. |
 | **LOW** | [#95 IndexTTS Chinese TN binary alternative](#95-indextts-15-chinese-tn--binary-alternative-to-the-python-wetext-hook) | survey only | Python `INDEXTTS_TEXT_NORMALIZER` hook shipped 2026-05-19. Hand-roll (#95a) is the right next step *when* a user reports a digit/date prompt that breaks; OpenFST vendoring (#95b) only after #95a grows past ~5 cases. |
@@ -72,8 +75,8 @@ test-all-backends.py passes 18/18 transcribe + 51/54 feature tests (3 stream ski
 | **DONE** | [§131 OuteTTS](#131-outetts--llm--wavtokenizer-codec-cc-by-40) | S-M | **WORKING — speech output confirmed via ASR roundtrip.** WavTokenizer decoder validated cos≥0.999 all stages. 8 bugs fixed (GroupNorm vs LayerNorm, SiLU vs GELU, AdaNorm/pos_net order, iSTFT padding="same", magnitude clipping, newline token, text lowercasing, repetition penalty). Speaker prompt support via `--voice speaker.json`. Model registry + GGUF detection + docs wired. |
 | **DONE** | [§139 Beam search — remaining ASR backends](#139-beam-search--remaining-asr-backends-issue-136-follow-up) | Phased | **18/24 done** (was 10). All feasible backends shipped 2026-06-01/02. Only mimo-asr remains (blocked on #115); 5 backends N/A (CTC/NAR). |
 | **DONE** | [#156 Permissive G2P phonemizer (replace espeak-ng GPL dep)](#156-permissive-g2p-phonemizer) | Phased | **DONE 2026-06-08**: Pre-generated IPA pronunciation dicts (EN 126K, DE 667K, FR 257K, ES 600K) at cstr/g2p-dicts — 99.5% piper-compatible. Cascade: IPA dict → CMUdict+ARPAbet→IPA (76%) → OLaPh → LTS → dlopen → popen. `--g2p-dict` CLI + C ABI + Go. 174 assertions + 4 live roundtrips. **Remaining**: more langs (PT/IT/NL/SV), GGUF-embedded dicts, frequency-ranked word lists. |
-| **MEDIUM** | [#155 CONV_TRANSPOSE_1D GPU optimization](#155-conv_transpose_1d-gpu-optimization-issue-155) | Small | Crash fixed (`f8fc8b8e`), but kernel still 3× slower than CPU fallback on TTS codec workloads. User-reported: codec GPU 1198 ms vs CPU-fallback 396 ms on RX 7900 XTX. |
-| **MEDIUM** | [§WASM Browser build](#wasm-browser-build--all-backends-multithreaded) | Medium | `build-wasm.sh` + wired `bindings/javascript/` into top-level CMakeLists; Emscripten guards in `crispasr_cache.cpp`; all ~70 backends link via `crispasr-lib`; `-pthread` + `PTHREAD_POOL_SIZE=8` (requires COOP/COEP headers) |
+| **DONE** | [#155 CONV_TRANSPOSE_1D GPU optimization](#155-conv_transpose_1d-gpu-optimization-issue-155) | Small | **DONE 2026-06-10.** Crash fixed (`f8fc8b8e`); CUDA/HIP 9× speedup (1200→130 ms, `5f600f25`); Vulkan `col2im_1d` kernel ported (`cad7fbac`) — codec stays fully on-GPU. Confirmed on A1000 (18.7× speedup). |
+| **DONE** | [§WASM Browser build](#wasm-browser-build--all-backends-multithreaded) | Medium | **DONE 2026-06-10.** All backends, multithreaded (`-pthread` + `PTHREAD_POOL_SIZE=8`). 103K JS + 4.3 MB WASM. CI workflow + HF Space auto-deploy. m4a/aac/opus/webm accepted (`c7246d28`). |
 | **LOW** | [#127 Coverage gaps from 2026-05-26 sweep close-out](#127-coverage-gaps-from-the-2026-05-26-overlap-save-sweep-close-out) | Small | Three loose ends: (a) omniasr-llm overlap-save status unknown — both A/B passes timed out at 20 min wallclock on M1 even at 90 s clip; needs a faster box. (b) mimo-asr local test coverage in place since `2aeaf4c4` but doesn't run in CI because the 4.2 GB Q4_K doesn't fit the runner disk budget — PLAN #115 shipped despite a working `EMPTY`-detecting test because the test wasn't run pre-tag. (c) `cohere-asr-ja-v0.1` registered + README'd (issue #123) but no row in any of `PERFORMANCE.md`'s cohere tables — JA fine-tune needs the same TedX/JSUT fixture sweep the English one had. |
 
 **Recently completed** (full write-ups in HISTORY.md): **Issue #89 reopened — parakeet streamed-encode is now the default → HISTORY 2026-05-24** (lenhone's `yt-dlp` clip reproduced 33 % coverage where the cached MP3 derivation gave 99.5 %; same TDT model collapses on the bad audio in NeMo's stock `transcribe()` too; encoder is bit-for-bit to NeMo via the diff harness; root cause is model-level TDT-single-pass instability that bidirectional attention amplifies past ~20 s; `33f9a162` makes the streamed path the default for any duration). **#81 FA per-head additive mask → HISTORY 2026-05-24** (CUDA MMA-F16 kernel patch +87 LOC behind `GGML_CUDA_CRISPASR_FA_PERHEAD_MASK` default-OFF; byte-identical JFK transcript, 0 CPU FA splits, -37 % short-clip on A1000; `tools/upstream-prs/06-cuda-fa-perhead-mask.md` + `872303bf` write-up). **CI cleanup → HISTORY 2026-05-25** (test #148 catch_discover_tests CLI-parser fix `4fda4be5`; build.yml trimmed 1610 → 1324 lines and arm64 switched to native runners `80ac00d1`; `GG_BUILD_NO_AVX512` knob added to `ci/run.sh` and enabled on `ggml-ci-x64-cpu-high-perf` `565b16af` so the AVX512 SIGILL is structurally fixed instead of `continue-on-error`-papered; `tools/upstream-prs/13-ci-no-avx512-knob.{md,patch}` for upstream submission). **#110 Global diarization timeline → HISTORY 2026-05-23** (sherpa/ecapa runs once on full audio; `CrispasrSherpaCache` mirrors pyannote pattern; segment splitting at speaker turns; 21 tests). **#98 Hotwords A+B → HISTORY 2026-05-23** (CTC-WS Aho-Corasick trie for parakeet CTC/TDT; LLM prompt injection for qwen3-asr/voxtral; `--hotwords` CLI; 17 tests). **Paraformer-zh NAR-ASR → HISTORY 2026-05-21** (220M params, single-pass NAR decode; F16/Q4_K/Q8_0 at `cstr/paraformer-zh-GGUF`; byte-identical on Chinese + English; 4 integration tests). **#86 Flash-attn → DONE** (all backends already wired via core helpers). **#90 Session beam_size all backends → HISTORY 2026-05-23** (qwen3-asr, granite, voxtral wired via `core_beam_decode::run_with_probs`; commit `0c24178e`). **#74 Feature-matrix uplift round 2 → HISTORY 2026-05-23** (74a chatterbox lang routing, 74b cap regression tests, 74c qwen3-tts base voice-cloning cap, 74d matrix regen; commit `b848152a`). **#111 TTS `--seed` parity → HISTORY 2026-05-23** (qwen3-tts, chatterbox, vibevoice realtime/base all show same-seed reproducibility and different-seed divergence on the local backup models; qwen3 env precedence fixed so CLI/request seed wins; IndexTTS stays effectively deterministic on the tested prompt/reference). **#99 funasr MLT-Nano hallucination fix → HISTORY 2026-05-21** (root cause: `use_low_frame_rate` hardcoded true in C++, but MLT-Nano's upstream config omits it (default false) — only 23/183 adaptor frames were spliced into the LLM prompt, truncating 87% of audio context; fix: converter reads the flag from config.yaml into a GGUF KV, runtime reads it at load time; also fixed `ada_n_heads` 16→8 in converter; GGUFs re-uploaded to `cstr/funasr-{nano,mlt-nano}-GGUF`). **SenseVoiceSmall → HISTORY 2026-05-20** (encoder-only multi-task ASR: transcript + LID + emotion + audio-event in one CTC pass; 50+ langs; 9.8-21.8× realtime on M1 Metal; reuses the SANM block helper from the funasr port unchanged; `cstr/sensevoice-small-GGUF` 0.47 GB F16, wired into `-m auto`). **Fun-ASR-Nano + MLT-Nano → HISTORY 2026-05-20** (full LLM-decoder runtime — 70-block SANM encoder + 2-block Transformer adaptor + Qwen3-0.6B AR decode; 77/77 PASS byte-identical on Chinese + English diffs; ~9× realtime on M1 Metal with FA-default-on; both GGUFs at `cstr/funasr-{nano,mlt-nano}-GGUF`). **#57 chatterbox native voice clone → §82** (six-commit sprint shipping all four upstream cond extractors — VoiceEncoder LSTM, S3Tokenizer V2, CAMPPlus, 24 kHz Matcha mel — plus a Kaiser-windowed sinc resampler and atomic 5-cond install in `chatterbox_set_voice_from_wav`'s `.wav` branch; `--voice ref_24k.wav` produces real cloned speech without any python). **#69 + #72 + #73 cap-honesty + KV/layer offload knobs → §79** (14-commit session shipping `CRISPASR_KV_QUANT_K/_V` + `KV_ON_CPU` on 14 backends, `N_GPU_LAYERS` on 10 backends, gemma4/mimo GPU-residency 2.2x / 22 % faster, plus cap-honesty cleanup on parakeet/glm-asr/qwen3/gemma4/omniasr). **vibevoice #69a follow-up → §79b** (mode-aware `tts_lm.layers.` / `lm.layers.` prefix predicate). #78 Chatterbox vocoder → §78. #11 WebSocket server → §76, #63 Feature matrix parity → §72, #59 binding parity → §73, gemma4 #49 + Docker #31 → §74, tests + KV Q8_0 + cleanup → §75. Earlier: #5→§63, #16→§55, #51→§56, #51b→§60, #53→§63, #54→§61, #55→§54, #56→§63, #60d→§64.
@@ -389,14 +392,9 @@ Total: ~1 week of work covering 9 of 14 backends.
 
 ## 42. VibeVoice-ASR 7B
 
-**BLOCKED:** Needs ≥16 GB RAM for conversion. Converter OOMs on 8 GB due
-to Qwen2.5-7B embedding (152064 × 3584 = 2.1 GB F32).
-
-**Fix:** Use `safe_open` per-tensor conversion. Then Q4_K → ~4 GB.
-
-Full architecture analysis in HISTORY.md #34. C++ runtime partially
-implemented (`src/vibevoice.cpp`). F16 im2col precision issue in
-depthwise conv needs fixing.
+**DONE.** Full ASR+TTS GGUF (1205 tensors) at `cstr/VibeVoice-7B-GGUF`,
+7 quantizations Q3_K (4.7 GB) through F16 (17.4 GB). Layer offload
+validated on M1 Metal (ASR 28L, TTS 20L). See HISTORY for details.
 
 ---
 
@@ -2808,25 +2806,17 @@ so this is a small extension to the harness itself.
 
 ### When to do this
 
-**Not yet.** Two reasons to wait:
+**Un-deferred 2026-06-12** — dictation use case is the concrete
+demand. The streaming pipeline has had weeks of real use since
+`--stream-json` (#84) landed. The 80 ms / 0-lookahead / 8.4 % WER
+operating point has no equivalent in our lineup and is the right
+fit for live dictation where sub-200 ms latency matters.
 
-1. The streaming pipeline only just got `--stream-json` (issue #84)
-   and the rolling-buffer fix; we want a few weeks of real wrappers
-   building on it before we add a backend that's specifically
-   tailored to it. If the structured-output API needs to evolve
-   (e.g., adding word-level probability streams), better to find
-   that out before nemotron locks in expectations.
-2. The user demand is one outside-reporter mention so far (issue
-   #85). Worth waiting until either a second user asks or a
-   concrete production use case (live captioning, voice agent)
-   needs sub-200 ms ASR. The 6.93 % batch number isn't an
-   improvement over what we ship — only the streaming-native
-   property is.
-
-When demand materializes: **realistic estimate 3–5 days of focused
-work** for someone who's already touched parakeet/canary, plus
-benchmarking against the upstream Open ASR Leaderboard table to
-confirm parity on the published WERs.
+**Realistic estimate 3–5 days of focused work** for someone who's
+already touched parakeet/canary, plus benchmarking against the
+upstream Open ASR Leaderboard table to confirm parity on the
+published WERs. EN-only; German dictation will need a multilingual
+streaming model (see research notes from 2026-06-12 session).
 
 ---
 
