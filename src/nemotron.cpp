@@ -628,8 +628,27 @@ static ggml_tensor* nemotron_build_pre_encode(ggml_context* ctx0, ggml_tensor* m
 // conv_dw_b add with a proper LayerNorm using the conv_ln_w/conv_ln_b tensors.
 // ===========================================================================
 
+// Build a banded attention window mask (F16) for cache-aware streaming.
+// mask[k, q] = 0 if q-left <= k <= q+right, else -inf.
+// Shape: (T, T) broadcast across heads.
+static std::vector<ggml_fp16_t> build_window_mask(int T, int left, int right) {
+    std::vector<ggml_fp16_t> mask((size_t)T * T);
+    const ggml_fp16_t neg_inf = ggml_fp32_to_fp16(-1e9f);
+    const ggml_fp16_t zero = ggml_fp32_to_fp16(0.0f);
+    for (int q = 0; q < T; q++) {
+        for (int k = 0; k < T; k++) {
+            bool in_window = (k >= q - left) && (k <= q + right);
+            mask[(size_t)q * T + k] = in_window ? zero : neg_inf;
+        }
+    }
+    return mask;
+}
+
+// window_mask: optional (T, T) F16 tensor with -inf outside the context window.
+// When nullptr, attention is bidirectional (fallback for debugging).
 static ggml_tensor* nemotron_build_block(ggml_context* ctx0, ggml_tensor* cur, ggml_tensor* pos_enc, int T,
-                                         const nemotron_enc_layer& e, const core_conformer::BlockParams& p) {
+                                         const nemotron_enc_layer& e, const core_conformer::BlockParams& p,
+                                         ggml_tensor* window_mask = nullptr) {
     const int d = p.d;
     const int n_heads = p.n_heads;
     const int head_dim = p.head_dim;
@@ -674,12 +693,27 @@ static ggml_tensor* nemotron_build_block(ggml_context* ctx0, ggml_tensor* cur, g
     const float scale = 1.0f / sqrtf((float)head_dim);
     ggml_tensor* BD_c = ggml_cont(ctx0, BD);
     ggml_tensor* BD_scaled = ggml_scale(ctx0, BD_c, scale);
-    ggml_tensor* BD_mask = ggml_cast(ctx0, BD_scaled, GGML_TYPE_F16);
+
+    // Combine rel-pos bias with the streaming window mask
+    ggml_tensor* attn_mask;
+    if (window_mask) {
+        // window_mask is (T, T) F16 with -inf outside the window, 0 inside.
+        // BD_scaled is (T, T, n_heads) F32. Add window_mask (broadcast over heads)
+        // then cast to F16 for flash_attn_ext.
+        ggml_tensor* wm_f32 = ggml_cast(ctx0, window_mask, GGML_TYPE_F32);
+        // Reshape window_mask to (T, T, 1) for broadcast
+        ggml_tensor* wm_3d = ggml_reshape_3d(ctx0, wm_f32, T, T, 1);
+        ggml_tensor* combined =
+            ggml_add(ctx0, BD_scaled, ggml_repeat(ctx0, wm_3d, ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, T, T, n_heads)));
+        attn_mask = ggml_cast(ctx0, combined, GGML_TYPE_F16);
+    } else {
+        attn_mask = ggml_cast(ctx0, BD_scaled, GGML_TYPE_F16);
+    }
 
     ggml_tensor* V_ = ggml_cont(ctx0, ggml_permute(ctx0, ggml_reshape_3d(ctx0, V, head_dim, n_heads, T), 0, 2, 1, 3));
 
     ggml_tensor* attn_out =
-        ggml_flash_attn_ext(ctx0, ggml_cont(ctx0, Q_u), ggml_cont(ctx0, K_), V_, BD_mask, scale, 0.0f, 0.0f);
+        ggml_flash_attn_ext(ctx0, ggml_cont(ctx0, Q_u), ggml_cont(ctx0, K_), V_, attn_mask, scale, 0.0f, 0.0f);
     attn_out = ggml_reshape_2d(ctx0, attn_out, d, T);
 
     attn_out = mm_bias(e.attn_out_w, attn_out, e.attn_out_b);
@@ -691,7 +725,8 @@ static ggml_tensor* nemotron_build_block(ggml_context* ctx0, ggml_tensor* cur, g
 
     ggml_tensor* pw1_w = ggml_reshape_2d(ctx0, e.conv_pw1_w, d, 2 * d);
     ggml_tensor* cnv = mm_bias(pw1_w, x, e.conv_pw1_b);
-    cnv = ggml_siglu_swapped(ctx0, cnv);
+    // NeMo Conformer GLU: first_half=value, second_half=gate → non-swapped siglu
+    cnv = ggml_siglu(ctx0, cnv);
 
     // DW conv (kernel K, causal padding)
     ggml_tensor* dw_w_f32 = ggml_cast(ctx0, e.conv_dw_w, GGML_TYPE_F32);
@@ -761,6 +796,17 @@ static ggml_cgraph* nemotron_build_graph_encoder(nemotron_context* ctx, int T_me
     ggml_set_name(pos_enc, "pos_enc");
     ggml_set_input(pos_enc);
 
+    // ----- Window mask for cache-aware streaming attention -----
+    // NEMOTRON_NO_WINDOW_MASK=1 → bidirectional attention (for A/B testing).
+    // Default: banded attention with att_context_left/right.
+    ggml_tensor* window_mask_t = nullptr;
+    const bool use_window_mask = !getenv("NEMOTRON_NO_WINDOW_MASK");
+    if (use_window_mask && T > 0) {
+        window_mask_t = ggml_new_tensor_2d(ctx0, GGML_TYPE_F16, T, T);
+        ggml_set_name(window_mask_t, "window_mask");
+        ggml_set_input(window_mask_t);
+    }
+
     // ----- Conformer layers -----
     core_conformer::BlockParams bp;
     bp.d = (int)hp.d_model;
@@ -770,7 +816,7 @@ static ggml_cgraph* nemotron_build_graph_encoder(nemotron_context* ctx, int T_me
     bp.ln_eps = kLayerNormEps;
 
     for (uint32_t il = 0; il < hp.n_layers; il++) {
-        cur = nemotron_build_block(ctx0, cur, pos_enc, T, m.enc[il], bp);
+        cur = nemotron_build_block(ctx0, cur, pos_enc, T, m.enc[il], bp, window_mask_t);
     }
 
     ggml_set_name(cur, "enc_out");
@@ -814,6 +860,17 @@ static bool nemotron_run_encoder(nemotron_context* ctx, const float* mel, int n_
     auto pe = core_conformer::make_pos_enc(d_model_out, T_enc);
     ggml_tensor* pos_t = ggml_graph_get_tensor(gf, "pos_enc");
     ggml_backend_tensor_set(pos_t, pe.data(), 0, pe.size() * sizeof(float));
+
+    // Set window mask for streaming attention
+    ggml_tensor* wm_t = ggml_graph_get_tensor(gf, "window_mask");
+    if (wm_t) {
+        int preset = ctx->att_context_preset;
+        int left = ctx->model.hparams.att_context_left[preset];
+        int right = ctx->model.hparams.att_context_right[preset];
+        auto wm = build_window_mask(T_enc, left, right);
+        ggml_backend_tensor_set(wm_t, wm.data(), 0, wm.size() * sizeof(ggml_fp16_t));
+        fprintf(stderr, "nemotron: streaming attention L=%d R=%d (NEMOTRON_NO_WINDOW_MASK to disable)\n", left, right);
+    }
 
     // Run
     if (ctx->backend_cpu) {
