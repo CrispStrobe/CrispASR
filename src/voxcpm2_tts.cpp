@@ -1264,18 +1264,44 @@ static ggml_cgraph* build_tslm_step_graph(voxcpm2_context* ctx, int n_past, int 
     //
     // Computing the full chain (FSQ + stop) inside the graph ensures the
     // stop decision uses the same GPU dequantization + matmul path as the
-    // hidden state. For quantised models (Q4_K), CUDA dequantization
-    // differs from CPU dequantization, causing hidden states to diverge
-    // over 28 layers. Without FSQ in the graph, the stop predictor sees
-    // inputs from a different numerical path and never fires (#164).
-    // Stop predictor computed from the TSLM hidden output directly.
-    // Python checks stop on the FSQ'd output from the previous step, but
-    // computing FSQ inside the ggml graph produces NaN on CUDA (ggml_round
-    // + ggml_scale chain is numerically unstable on some backends, #164).
-    // The stop predictor is a simple 2-class classifier that fires reliably
-    // on the raw (non-FSQ'd) hidden state when all operations stay on the
-    // same GPU dequantization path.
-    if (W.stop_proj_w && W.stop_proj_b && W.stop_head_w) {
+    // hidden state. Without FSQ, the stop predictor sees out-of-distribution
+    // inputs and never fires on Vulkan (#164). We implement round(x) as
+    // floor(x + 0.5) to avoid ggml_round, which produces NaN on CUDA.
+    // The stop predictor weights were trained on FSQ'd inputs, so feeding raw
+    // hidden state is out-of-distribution and fails on Vulkan (#164).
+    // FSQ: round(tanh(in_proj(hidden)) * 9) / 9 → out_proj.
+    // We implement round(x) as floor(x + 0.5) to avoid ggml_round, which
+    // produces NaN on some CUDA backends.
+    if (W.stop_proj_w && W.stop_proj_b && W.stop_head_w && W.fsq_in_proj_w && W.fsq_out_proj_w) {
+        // FSQ path
+        ggml_tensor* fsq_in = ggml_mul_mat(ctx0, W.fsq_in_proj_w, cur);
+        if (W.fsq_in_proj_b) {
+            fsq_in = ggml_add(ctx0, fsq_in, W.fsq_in_proj_b);
+        }
+        ggml_tensor* th = ggml_tanh(ctx0, fsq_in);
+        th = ggml_scale(ctx0, th, 9.0f);
+        // round(x) = floor(x + 0.5) — avoids ggml_round NaN on CUDA
+        ggml_tensor* half_const = ggml_new_tensor_1d(ctx0, GGML_TYPE_F32, 1);
+        ggml_set_name(half_const, "fsq_half");
+        ggml_set_input(half_const);
+        th = ggml_add(ctx0, th, half_const);
+        th = ggml_floor(ctx0, th);
+        th = ggml_scale(ctx0, th, 1.0f / 9.0f);
+        ggml_tensor* fsq_out = ggml_mul_mat(ctx0, W.fsq_out_proj_w, th);
+        if (W.fsq_out_proj_b) {
+            fsq_out = ggml_add(ctx0, fsq_out, W.fsq_out_proj_b);
+        }
+
+        ggml_tensor* sp = ggml_mul_mat(ctx0, W.stop_proj_w, fsq_out);
+        sp = ggml_add(ctx0, sp, W.stop_proj_b);
+        sp = ggml_silu(ctx0, sp);
+        ggml_tensor* sl = ggml_mul_mat(ctx0, W.stop_head_w, sp);
+        sl = ggml_soft_max(ctx0, sl);
+        ggml_set_name(sl, "stop_probs");
+        ggml_set_output(sl);
+        ggml_build_forward_expand(gf, sl);
+    } else if (W.stop_proj_w && W.stop_proj_b && W.stop_head_w) {
+        // Fallback without FSQ (missing FSQ weights)
         ggml_tensor* sp = ggml_mul_mat(ctx0, W.stop_proj_w, cur);
         sp = ggml_add(ctx0, sp, W.stop_proj_b);
         sp = ggml_silu(ctx0, sp);
@@ -1382,8 +1408,13 @@ static std::vector<float> tslm_step_graph(voxcpm2_context* ctx, const float* hid
     ggml_gallocr_t galloc = nullptr;
     int Lk = 0;
     bool bucketed = false;
+    // VOXCPM2_NO_BUCKET=1 forces the dynamic (non-bucketed) graph path,
+    // which uses ggml_cpy for KV writes instead of ggml_set_rows. This
+    // works around a NaN bug where ggml_set_rows on CUDA corrupts the
+    // KV cache on the second AR step (#164).
+    static const bool no_bucket = vox_env_bool("VOXCPM2_NO_BUCKET");
     const int needed_lk = pos + 1;
-    const int bucket_idx = tslm_pick_bucket(needed_lk);
+    const int bucket_idx = no_bucket ? -1 : tslm_pick_bucket(needed_lk);
     if (bucket_idx >= 0) {
         gf = get_or_build_tslm_step_graph(ctx, bucket_idx);
         if (gf) {
@@ -1416,6 +1447,13 @@ static std::vector<float> tslm_step_graph(voxcpm2_context* ctx, const float* hid
         }
         ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "causal_mask"), mask.data(), 0,
                                 mask.size() * sizeof(ggml_fp16_t));
+    }
+
+    // FSQ half-constant for floor(x + 0.5) rounding (#164)
+    ggml_tensor* fsq_half_t = ggml_graph_get_tensor(gf, "fsq_half");
+    if (fsq_half_t) {
+        const float half_val = 0.5f;
+        ggml_backend_tensor_set(fsq_half_t, &half_val, 0, sizeof(float));
     }
 
     if (ggml_backend_is_cpu(ctx->backend)) {
