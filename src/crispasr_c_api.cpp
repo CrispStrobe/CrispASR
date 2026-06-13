@@ -36,6 +36,7 @@
 #include "crispasr_aligner.h"        // CTC / forced-aligner word timings (shared with CLI)
 #include "crispasr_cache.h"          // HF download + filesystem cache (shared with CLI)
 #include "crispasr_model_registry.h" // Known-model lookup (shared with CLI)
+#include "crispasr_punc_model.h"     // shared --punc-model alias resolution (CLI/server/C-ABI parity)
 #include "core/beam_decode.h"        // Shared autoregressive beam-search decode helper
 #include "core/greedy_decode.h"      // Shared autoregressive greedy decode helper
 #include "grammar-parser.h"          // GBNF parser for grammar-constrained sampling
@@ -1320,6 +1321,13 @@ struct crispasr_session {
     std::string target_language; // canary/cohere/voxtral target-lang (≠ source ⇒ translate)
     bool punctuation = true;     // canary/cohere per-call arg + post-process gate
     bool translate = false;      // whisper sticky --translate (others: use src/tgt mismatch)
+
+    // --punc-model post-processor (set via crispasr_session_set_punc_model).
+    // Held as void* so the struct doesn't depend on the optionally-compiled
+    // fireredpunc/pcs headers; at most one is non-null. Applied per segment
+    // after transcription (gated on `punctuation`), mirroring the CLI/server.
+    void* punc_ctx = nullptr; // fireredpunc_context*
+    void* pcs_ctx = nullptr;  // pcs_context*
     // Free-form audio Q&A prompt for instruct-tuned audio-LLM backends
     // (voxtral / voxtral4b / qwen3-asr). When non-empty, replaces the
     // standard "lang:<X>[TRANSCRIBE]" suffix with `[/INST]<prompt>`,
@@ -3246,6 +3254,10 @@ static crispasr_session_result* run_voxtral_family(Ctx* ctx, const VoxtralFamily
 static crispasr_session_result* transcribe_single(crispasr_session* s, const float* pcm, int n_samples,
                                                   const char* language);
 
+// Applies the session's resident --punc-model (if any) to a result in place.
+// Defined further down next to crispasr_session_set_punc_model.
+static void apply_session_punc_model(crispasr_session* s, crispasr_session_result* r);
+
 CA_EXPORT crispasr_session_result* crispasr_session_transcribe_lang(crispasr_session* s, const float* pcm,
                                                                     int n_samples, const char* language) {
     if (!s || !pcm || n_samples <= 0)
@@ -3255,8 +3267,11 @@ CA_EXPORT crispasr_session_result* crispasr_session_transcribe_lang(crispasr_ses
     // highest average per-token confidence. Whisper handles best_of internally
     // via greedy.best_of, so we only loop externally for non-whisper backends.
     const int n_runs = (s->best_of > 1 && s->backend != "whisper") ? s->best_of : 1;
-    if (n_runs <= 1)
-        return transcribe_single(s, pcm, n_samples, language);
+    if (n_runs <= 1) {
+        crispasr_session_result* r = transcribe_single(s, pcm, n_samples, language);
+        apply_session_punc_model(s, r);
+        return r;
+    }
 
     crispasr_session_result* best = nullptr;
     double best_avg_p = -1.0;
@@ -3283,6 +3298,7 @@ CA_EXPORT crispasr_session_result* crispasr_session_transcribe_lang(crispasr_ses
             delete candidate;
         }
     }
+    apply_session_punc_model(s, best);
     return best;
 }
 
@@ -6269,6 +6285,14 @@ CA_EXPORT crispasr_stream* crispasr_session_stream_open(crispasr_session* s, int
 CA_EXPORT void crispasr_session_close(crispasr_session* s) {
     if (!s)
         return;
+#ifdef CA_HAVE_FIREREDPUNC
+    if (s->punc_ctx)
+        fireredpunc_free((fireredpunc_context*)s->punc_ctx);
+#endif
+#ifdef CA_HAVE_PCS
+    if (s->pcs_ctx)
+        pcs_free((pcs_context*)s->pcs_ctx);
+#endif
     if (s->whisper_ctx)
         whisper_free(s->whisper_ctx);
 #ifdef CA_HAVE_PARAKEET
@@ -6716,6 +6740,82 @@ CA_EXPORT int crispasr_session_set_punctuation(crispasr_session* s, int enable) 
         return -1;
     s->punctuation = (enable != 0);
     return 0;
+}
+
+// Select + load a punctuation-restoration model on the session, the same way
+// the CLI `--punc-model` and the server do. `punc_model` is an alias
+// (auto|firered|fullstop|punctuate-all|pcs) or a direct .gguf path; the model
+// auto-downloads on first use. Pass "none"/""/NULL to unload. Restores
+// punctuation on non-PnC backends (parakeet RNNT/CTC, etc.) that emit none.
+// Returns 0 on success (incl. unload), -1 on bad handle, -2 if the requested
+// model failed to load, -3 if punctuation support wasn't compiled in.
+CA_EXPORT int crispasr_session_set_punc_model(crispasr_session* s, const char* punc_model) {
+    if (!s)
+        return -1;
+        // Unload any currently-resident context first.
+#ifdef CA_HAVE_FIREREDPUNC
+    if (s->punc_ctx) {
+        fireredpunc_free((fireredpunc_context*)s->punc_ctx);
+        s->punc_ctx = nullptr;
+    }
+#endif
+#ifdef CA_HAVE_PCS
+    if (s->pcs_ctx) {
+        pcs_free((pcs_context*)s->pcs_ctx);
+        s->pcs_ctx = nullptr;
+    }
+#endif
+
+    const crispasr_punc_spec spec = crispasr_resolve_punc_model(punc_model ? punc_model : "");
+    if (spec.kind == crispasr_punc_kind::none)
+        return 0; // unloaded / disabled
+
+    std::string path = spec.direct_path;
+    if (path.empty() && !spec.cache_filename.empty())
+        path = crispasr_cache::ensure_cached_file(spec.cache_filename, spec.url, /*quiet=*/true, "crispasr[punc]", "");
+    if (path.empty())
+        return -2;
+
+    if (spec.kind == crispasr_punc_kind::fireredpunc) {
+#ifdef CA_HAVE_FIREREDPUNC
+        s->punc_ctx = (void*)fireredpunc_init(path.c_str());
+        return s->punc_ctx ? 0 : -2;
+#else
+        return -3;
+#endif
+    }
+    if (spec.kind == crispasr_punc_kind::pcs) {
+#ifdef CA_HAVE_PCS
+        s->pcs_ctx = (void*)pcs_init(path.c_str());
+        return s->pcs_ctx ? 0 : -2;
+#else
+        return -3;
+#endif
+    }
+    return -2;
+}
+
+// Apply the session's resident punctuation model (if any) to every segment's
+// text, in place. PCS takes precedence over FireRedPunc. Gated on
+// `s->punctuation` so a caller that disabled punctuation still gets plain text.
+static void apply_session_punc_model(crispasr_session* s, crispasr_session_result* r) {
+    if (!s || !r || !s->punctuation)
+        return;
+    for (auto& seg : r->segments) {
+        char* out = nullptr;
+#ifdef CA_HAVE_PCS
+        if (s->pcs_ctx)
+            out = pcs_process((pcs_context*)s->pcs_ctx, seg.text.c_str());
+#endif
+#ifdef CA_HAVE_FIREREDPUNC
+        if (!out && s->punc_ctx)
+            out = fireredpunc_process((fireredpunc_context*)s->punc_ctx, seg.text.c_str());
+#endif
+        if (out) {
+            seg.text = out;
+            free(out);
+        }
+    }
 }
 
 // Sticky --translate toggle (whisper). For canary/cohere/voxtral the

@@ -270,6 +270,11 @@ CRISPASR_SESSION_API int crispasr_session_kokoro_clear_phoneme_cache(crispasr_se
 CRISPASR_SESSION_API int crispasr_session_set_source_language(crispasr_session* s, const char* lang);
 CRISPASR_SESSION_API int crispasr_session_set_target_language(crispasr_session* s, const char* lang);
 CRISPASR_SESSION_API int crispasr_session_set_punctuation(crispasr_session* s, int enable);
+// Select + load a punctuation-restoration model (alias auto|firered|fullstop|
+// punctuate-all|pcs, or a .gguf path; "none"/NULL unloads). Auto-downloads on
+// first use. Restores punctuation on backends that emit none (parakeet, CTC).
+// Returns 0 on success/unload, -1 bad handle, -2 load failed, -3 not compiled.
+CRISPASR_SESSION_API int crispasr_session_set_punc_model(crispasr_session* s, const char* punc_model);
 CRISPASR_SESSION_API int crispasr_session_set_translate(crispasr_session* s, int enable);
 CRISPASR_SESSION_API int crispasr_session_set_ask(crispasr_session* s, const char* prompt);
 CRISPASR_SESSION_API int crispasr_session_set_temperature(crispasr_session* s, float temperature, uint64_t seed);

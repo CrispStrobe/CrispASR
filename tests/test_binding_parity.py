@@ -2,7 +2,7 @@
 from the Python ctypes binding.
 
 Does NOT instantiate models or run inference — purely checks that the
-binding declares (and can look up) all 149 exported C-ABI functions.
+binding declares (and can look up) all 150 exported C-ABI functions.
 Requires CRISPASR_LIB_PATH pointing at a built libcrispasr.{so,dylib}.
 
     CRISPASR_LIB_PATH=build/src/libcrispasr.so python -m pytest tests/test_binding_parity.py -v
@@ -14,7 +14,7 @@ import sys
 
 import pytest
 
-# All 149 CA_EXPORT symbols (sorted, from:
+# All 150 CA_EXPORT symbols (sorted, from:
 #   grep -oP 'CA_EXPORT\s+\w+[\s*]+\K(crispasr_\w+)' src/crispasr_c_api.cpp | sort -u
 # )
 ALL_SYMBOLS = [
@@ -116,6 +116,7 @@ ALL_SYMBOLS = [
     "crispasr_session_set_max_new_tokens",
     "crispasr_session_set_max_speech_tokens",
     "crispasr_session_set_min_p",
+    "crispasr_session_set_punc_model",
     "crispasr_session_set_punctuation",
     "crispasr_session_set_repetition_penalty",
     "crispasr_session_set_source_language",
@@ -195,8 +196,8 @@ def test_symbol_resolves(lib, symbol):
 
 
 def test_symbol_count(lib):
-    """Sanity: we expect exactly 149 crispasr_* symbols."""
-    assert len(ALL_SYMBOLS) == 149, f"expected 149 symbols, got {len(ALL_SYMBOLS)}"
+    """Sanity: we expect exactly 150 crispasr_* symbols."""
+    assert len(ALL_SYMBOLS) == 150, f"expected 150 symbols, got {len(ALL_SYMBOLS)}"
 
 
 def test_python_binding_imports():

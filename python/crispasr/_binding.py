@@ -1552,6 +1552,23 @@ class Session:
         if rc != 0:
             raise RuntimeError(f"set_punctuation failed (rc={rc})")
 
+    def set_punc_model(self, punc_model: str) -> None:
+        """Select + load a punctuation-restoration model on the session.
+
+        ``punc_model`` is an alias (``auto`` / ``firered`` / ``fullstop`` /
+        ``punctuate-all`` / ``pcs``) or a path to a ``.gguf``; ``"none"`` or
+        ``""`` unloads. The model auto-downloads on first use. This restores
+        punctuation on backends that emit none (parakeet RNNT/CTC, etc.) —
+        the same post-processor the CLI ``--punc-model`` and server apply.
+        """
+        if not hasattr(self._lib, "crispasr_session_set_punc_model"):
+            raise RuntimeError("punc-model API not present in this libcrispasr build")
+        self._lib.crispasr_session_set_punc_model.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+        self._lib.crispasr_session_set_punc_model.restype = ctypes.c_int
+        rc = self._lib.crispasr_session_set_punc_model(self._handle, (punc_model or "").encode("utf-8"))
+        if rc != 0:
+            raise RuntimeError(f"set_punc_model failed (rc={rc})")
+
     def set_translate(self, enable: bool) -> None:
         """Whisper sticky ``--translate``. For canary/cohere/voxtral the
         equivalent is :meth:`set_target_language` ≠ source."""

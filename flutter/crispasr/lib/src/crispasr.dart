@@ -2432,6 +2432,28 @@ class CrispasrSession {
     if (rc != 0) throw Exception('setPunctuation failed (rc=$rc)');
   }
 
+  /// Select + load a punctuation-restoration model on the session.
+  ///
+  /// [model] is an alias (`auto` / `firered` / `fullstop` / `punctuate-all` /
+  /// `pcs`) or a path to a `.gguf`; `'none'` or `''` unloads. Auto-downloads on
+  /// first use. Restores punctuation on backends that emit none (parakeet
+  /// RNNT/CTC, etc.) — the same post-processor the CLI `--punc-model` applies.
+  void setPuncModel(String model) {
+    if (_closed) throw StateError('CrispasrSession is closed');
+    if (!_lib.providesSymbol('crispasr_session_set_punc_model')) {
+      throw UnsupportedError('punc-model API not present in this libcrispasr build');
+    }
+    final fn = _lib.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Utf8>),
+        int Function(Pointer<Void>, Pointer<Utf8>)>('crispasr_session_set_punc_model');
+    final p = model.toNativeUtf8();
+    try {
+      final rc = fn(_handle, p);
+      if (rc != 0) throw Exception('setPuncModel failed (rc=$rc)');
+    } finally {
+      calloc.free(p);
+    }
+  }
+
   /// Whisper sticky `--translate`. For canary/cohere/voxtral the equivalent
   /// is [setTargetLanguage] ≠ source.
   void setTranslate(bool enable) {

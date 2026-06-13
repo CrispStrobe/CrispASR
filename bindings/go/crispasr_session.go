@@ -28,6 +28,7 @@ int              crispasr_session_set_codec_path(CrispasrSession* s, const char*
 int              crispasr_session_set_source_language(CrispasrSession* s, const char* lang);
 int              crispasr_session_set_target_language(CrispasrSession* s, const char* lang);
 int              crispasr_session_set_punctuation(CrispasrSession* s, int enable);
+int              crispasr_session_set_punc_model(CrispasrSession* s, const char* punc_model);
 int              crispasr_session_set_translate(CrispasrSession* s, int enable);
 int              crispasr_session_set_temperature(CrispasrSession* s, float temperature, unsigned long long seed);
 int              crispasr_session_set_tts_seed(CrispasrSession* s, unsigned long long seed);
@@ -379,6 +380,21 @@ func (s *CrispasrSession) SetPunctuation(enable bool) error {
 	rc := C.crispasr_session_set_punctuation(s.handle, v)
 	if rc != 0 {
 		return errors.New("crispasr_session_set_punctuation failed")
+	}
+	return nil
+}
+
+// SetPuncModel selects + loads a punctuation-restoration model on the session.
+// model is an alias (auto|firered|fullstop|punctuate-all|pcs) or a .gguf path;
+// "none" or "" unloads. Auto-downloads on first use. Restores punctuation on
+// backends that emit none (parakeet RNNT/CTC, etc.) — the same post-processor
+// the CLI --punc-model and the server apply.
+func (s *CrispasrSession) SetPuncModel(model string) error {
+	cm := C.CString(model)
+	defer C.free(unsafe.Pointer(cm))
+	rc := C.crispasr_session_set_punc_model(s.handle, cm)
+	if rc != 0 {
+		return errors.New("crispasr_session_set_punc_model failed")
 	}
 	return nil
 }
