@@ -1256,13 +1256,32 @@ static ggml_cgraph* build_tslm_step_graph(voxcpm2_context* ctx, int n_past, int 
     ggml_set_output(cur);
     ggml_build_forward_expand(gf, cur);
 
-    // Stop predictor: stop_proj(+bias) → SiLU → stop_head → softmax.
-    // Computing this inside the graph ensures the stop decision uses the
-    // same numerical path as the hidden state, avoiding the compounding
-    // divergence that caused the stop predictor to never fire when
-    // stop_score was computed separately on CPU (issue #164).
-    if (W.stop_proj_w && W.stop_proj_b && W.stop_head_w) {
-        ggml_tensor* sp = ggml_mul_mat(ctx0, W.stop_proj_w, cur);
+    // Stop predictor: FSQ(hidden) → stop_proj(+bias) → SiLU → stop_head → softmax.
+    //
+    // Python checks stop on the FSQ'd output from the PREVIOUS step:
+    //   fsq_out = fsq_out_proj(round(tanh(fsq_in_proj(hidden)) * 9) / 9)
+    //   stop_probs = softmax(stop_head(silu(stop_proj(fsq_out) + bias)))
+    //
+    // Computing the full chain (FSQ + stop) inside the graph ensures the
+    // stop decision uses the same GPU dequantization + matmul path as the
+    // hidden state. For quantised models (Q4_K), CUDA dequantization
+    // differs from CPU dequantization, causing hidden states to diverge
+    // over 28 layers. Without FSQ in the graph, the stop predictor sees
+    // inputs from a different numerical path and never fires (#164).
+    if (W.stop_proj_w && W.stop_proj_b && W.stop_head_w && W.fsq_in_proj_w && W.fsq_in_proj_b && W.fsq_out_proj_w &&
+        W.fsq_out_proj_b) {
+        // FSQ: in_proj → tanh → round(x*9)/9 → out_proj
+        ggml_tensor* fq = ggml_mul_mat(ctx0, W.fsq_in_proj_w, cur);
+        fq = ggml_add(ctx0, fq, W.fsq_in_proj_b);
+        fq = ggml_tanh(ctx0, fq);
+        fq = ggml_scale(ctx0, fq, 9.0f);
+        fq = ggml_round(ctx0, fq);
+        fq = ggml_scale(ctx0, fq, 1.0f / 9.0f);
+        fq = ggml_mul_mat(ctx0, W.fsq_out_proj_w, fq);
+        fq = ggml_add(ctx0, fq, W.fsq_out_proj_b);
+
+        // Stop: stop_proj(fsq_out) + bias → SiLU → stop_head → softmax
+        ggml_tensor* sp = ggml_mul_mat(ctx0, W.stop_proj_w, fq);
         sp = ggml_add(ctx0, sp, W.stop_proj_b);
         sp = ggml_silu(ctx0, sp);
         ggml_tensor* sl = ggml_mul_mat(ctx0, W.stop_head_w, sp);
