@@ -22,6 +22,21 @@ duplicate, pin the duplicate against the original with a test (here:
 `tests/test-dry-run-resolve.sh`). Same lesson as the §166 punc-model resolver
 being shared across CLI/server/C-ABI rather than copied three times.
 
+## Regenerate Go cgo LDFLAGS from a *linux-equivalent* config, never macOS
+
+`tools/sync_go_cgo_ldflags.py` writes the SHARED `#cgo linux/darwin LDFLAGS`
+line from whatever CMake graphviz dot it's given. Run on macOS, the dot includes
+macOS-only ggml backends (`ggml-metal`, and `ggml-blas` via Accelerate even with
+`-DGGML_METAL=OFF`), so they leak into the *shared* line — which then (a) fails
+the CI `cgo-ldflags-drift` check (the linux runner's graph has neither) and (b)
+breaks the linux link (`-lggml-metal`/`-lggml-blas` don't exist there). macOS gets
+those from a separate `#cgo darwin LDFLAGS: -lggml-metal -lggml-blas` line, so the
+shared line must match the LINUX set: `ggml-base`/`ggml-cpu`/`ggml` + the
+platform-independent crispasr backends. To regenerate on macOS, configure with
+`-DGGML_METAL=OFF -DGGML_BLAS=OFF -DGGML_ACCELERATE=OFF -DGGML_CUDA=OFF` (what the
+CI drift job's linux defaults produce) before running the sync, then confirm with
+`--check --dot <that dot>`. (Cost me two wrong commits — metal, then blas.)
+
 ## cmake-js defaults its build dir to `build/` — point it elsewhere (§166)
 
 Running `cmake-js compile` from the repo root reconfigured and clobbered the
