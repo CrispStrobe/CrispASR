@@ -85,21 +85,20 @@ print(f"Model: {model_path} ({model_path.stat().st_size / 1e6:.1f} MB)")
 
 # ── Download test fixture ────────────────────────────────────────────
 FIXTURE_REPO = "cstr/crispasr-regression-fixtures"
-FIXTURE_FILE = "parakeet-tdt-0.6b-ja/reazon_baseball_14s.wav"
+FIXTURE_FILE = "parakeet-tdt-0.6b-ja/reazon_baseball_14s/audio.wav"
 fixture_path = model_dir / "reazon_baseball_14s.wav"
 
 if not fixture_path.exists():
     print(f"Downloading fixture {FIXTURE_FILE}...")
     from huggingface_hub import hf_hub_download
-    hf_hub_download(
+    dl_path = hf_hub_download(
         repo_id=FIXTURE_REPO,
         filename=FIXTURE_FILE,
         local_dir=str(model_dir),
     )
     # Move from nested path to flat
-    nested = model_dir / FIXTURE_FILE
-    if nested.exists() and nested != fixture_path:
-        nested.rename(fixture_path)
+    import shutil
+    shutil.copy2(dl_path, str(fixture_path))
 print(f"Fixture: {fixture_path} ({fixture_path.stat().st_size / 1e6:.1f} MB)")
 
 # ── Create 42s concatenated clip (3x 14s) ───────────────────────────
