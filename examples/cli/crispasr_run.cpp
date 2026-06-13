@@ -18,6 +18,7 @@
 #include "crispasr_output.h"
 #include "crispasr_punctuation_policy.h"
 #include "crispasr_punc_loader.h"
+#include "crispasr_truecase_loader.h"
 #include "crispasr_model_mgr_cli.h"
 #include "crispasr_model_registry.h"
 #include "crispasr_aligner_cli.h"
@@ -1679,75 +1680,8 @@ int crispasr_run_backend(const whisper_params& params_in) {
     std::unique_ptr<truecaser_context, decltype(&truecaser_free)> tc_ctx(nullptr, truecaser_free);
     std::unique_ptr<truecaser_crf_context, decltype(&truecaser_crf_free)> tc_crf_ctx(nullptr, truecaser_crf_free);
     std::unique_ptr<truecaser_lstm_context, decltype(&truecaser_lstm_free)> tc_lstm_ctx(nullptr, truecaser_lstm_free);
-    {
-        std::string tc_path = params.truecase_model;
-        if (tc_path == "none" || tc_path == "off")
-            tc_path.clear();
-        if (tc_path == "lstm" || tc_path == "lstm-de" || tc_path == "lstm-en" || tc_path == "lstm-es" ||
-            tc_path == "lstm-ru") {
-            // Map language suffix to filename
-            std::string lang = "de";
-            if (tc_path == "lstm-en")
-                lang = "en";
-            else if (tc_path == "lstm-es")
-                lang = "es";
-            else if (tc_path == "lstm-ru")
-                lang = "ru";
-            std::string fname = "truecaser-lstm-" + lang + ".bin";
-            std::string url = "https://huggingface.co/cstr/truecaser-de/resolve/main/" + fname;
-            tc_path =
-                crispasr_cache::ensure_cached_file(fname, url, params.no_prints, "crispasr[tc]", params.cache_dir);
-            if (!tc_path.empty()) {
-                tc_lstm_ctx.reset(truecaser_lstm_init(tc_path.c_str()));
-                if (tc_lstm_ctx && !params.no_prints)
-                    fprintf(stderr, "crispasr: loaded BiLSTM truecaser '%s'\n", tc_path.c_str());
-            }
-            tc_path.clear();
-        } else if (tc_path == "crf" || tc_path == "crf-de") {
-            tc_path = crispasr_cache::ensure_cached_file(
-                "truecaser-crf-de.bin", "https://huggingface.co/cstr/truecaser-de/resolve/main/truecaser-crf-de.bin",
-                params.no_prints, "crispasr[tc]", params.cache_dir);
-            if (!tc_path.empty()) {
-                tc_crf_ctx.reset(truecaser_crf_init(tc_path.c_str()));
-                if (tc_crf_ctx && !params.no_prints)
-                    fprintf(stderr, "crispasr: loaded CRF truecaser '%s'\n", tc_path.c_str());
-            }
-            tc_path.clear();
-        } else if (!tc_path.empty() && tc_path != "auto" && tc_path != "de") {
-            // Direct path — detect format by magic bytes
-            FILE* probe = fopen(tc_path.c_str(), "rb");
-            if (probe) {
-                char magic[4] = {};
-                (void)!fread(magic, 1, 4, probe);
-                fclose(probe);
-                if (memcmp(magic, "LSTM", 4) == 0) {
-                    tc_lstm_ctx.reset(truecaser_lstm_init(tc_path.c_str()));
-                    if (tc_lstm_ctx && !params.no_prints)
-                        fprintf(stderr, "crispasr: loaded BiLSTM truecaser '%s'\n", tc_path.c_str());
-                    tc_path.clear();
-                } else if (memcmp(magic, "CRF1", 4) == 0) {
-                    tc_crf_ctx.reset(truecaser_crf_init(tc_path.c_str()));
-                    if (tc_crf_ctx && !params.no_prints)
-                        fprintf(stderr, "crispasr: loaded CRF truecaser '%s'\n", tc_path.c_str());
-                    tc_path.clear();
-                }
-            }
-        }
-        if (tc_path == "auto" || tc_path == "de") {
-            tc_path = crispasr_cache::ensure_cached_file(
-                "truecaser-de.bin", "https://huggingface.co/cstr/truecaser-de/resolve/main/truecaser-de.bin",
-                params.no_prints, "crispasr[tc]", params.cache_dir);
-        }
-        if (!tc_path.empty()) {
-            tc_ctx.reset(truecaser_init(tc_path.c_str()));
-            if (!tc_ctx) {
-                fprintf(stderr, "crispasr: warning: failed to load truecaser '%s' — continuing without\n",
-                        tc_path.c_str());
-            } else if (!params.no_prints) {
-                fprintf(stderr, "crispasr: loaded truecaser '%s'\n", tc_path.c_str());
-            }
-        }
-    }
+    crispasr_load_truecase(params.truecase_model, params.no_prints, params.cache_dir, tc_ctx, tc_crf_ctx, tc_lstm_ctx,
+                           "crispasr[tc]");
 
     // ---- Streaming mode: read raw PCM from stdin, transcribe chunks ----
     if (params.stream) {

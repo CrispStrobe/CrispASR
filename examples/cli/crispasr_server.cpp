@@ -35,6 +35,7 @@
 #include "pcs.h"                         // PCS (punctuation + caps + segmentation) model
 #include "crispasr_cache.h"              // ensure_cached_file() for resolving the punc model
 #include "crispasr_punc_loader.h"        // shared --punc-model alias resolution (CLI parity)
+#include "crispasr_truecase_loader.h"    // shared --truecase-model resolution + apply (CLI parity)
 #include "crispasr_punctuation_policy.h" // crispasr_should_auto_enable_punctuation()
 
 #include "common-crispasr.h" // read_audio_data
@@ -345,7 +346,10 @@ struct transcription_result {
 // Acquires model_mutex internally.
 static transcription_result do_transcribe(const httplib::MultipartFormData& audio_file, CrispasrBackend* backend,
                                           std::mutex& model_mutex, whisper_params rp, bool need_timestamps,
-                                          fireredpunc_context* punc_ctx = nullptr, pcs_context* pcs_ctx = nullptr) {
+                                          fireredpunc_context* punc_ctx = nullptr, pcs_context* pcs_ctx = nullptr,
+                                          truecaser_context* tc_ctx = nullptr,
+                                          truecaser_crf_context* tc_crf_ctx = nullptr,
+                                          truecaser_lstm_context* tc_lstm_ctx = nullptr) {
     transcription_result result;
     result.language = rp.language;
 
@@ -556,6 +560,17 @@ static transcription_result do_transcribe(const httplib::MultipartFormData& audi
                     free(out);
                 }
             }
+        }
+
+        // Truecasing post-step (--truecase-model), applied after punctuation —
+        // mirrors the CLI, which the server path previously skipped entirely.
+        // PCS already restores casing, so skip when PCS is active. Serialized:
+        // the truecaser contexts aren't re-entrant.
+        if (!pcs_ctx && (tc_ctx || tc_crf_ctx || tc_lstm_ctx)) {
+            static std::mutex tc_mtx;
+            std::lock_guard<std::mutex> tlk(tc_mtx);
+            for (auto& seg : result.segs)
+                crispasr_apply_truecase(tc_ctx, tc_crf_ctx, tc_lstm_ctx, seg.text);
         }
 
         auto t1 = std::chrono::steady_clock::now();
@@ -818,6 +833,15 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         }
     }
 
+    // Truecasing post-processor, loaded once (resident) when --truecase-model is
+    // set. The server path previously skipped truecasing entirely; resolve the
+    // same aliases the CLI does via the shared loader.
+    std::unique_ptr<truecaser_context, decltype(&truecaser_free)> tc_ctx(nullptr, truecaser_free);
+    std::unique_ptr<truecaser_crf_context, decltype(&truecaser_crf_free)> tc_crf_ctx(nullptr, truecaser_crf_free);
+    std::unique_ptr<truecaser_lstm_context, decltype(&truecaser_lstm_free)> tc_lstm_ctx(nullptr, truecaser_lstm_free);
+    crispasr_load_truecase(params.truecase_model, params.no_prints, params.cache_dir, tc_ctx, tc_crf_ctx, tc_lstm_ctx,
+                           "crispasr-server");
+
     Server svr;
 
     // CORS support — opt-in via --cors-origin. Browser clients calling our
@@ -879,6 +903,9 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         rp.diarize = form_bool(req, "diarize", rp.diarize);
         if (rp.diarize && rp.diarize_method.empty())
             rp.diarize_method = form_string(req, "diarize_method", "energy");
+        rp.diarize_embedder = form_string(req, "diarize_embedder", rp.diarize_embedder);
+        rp.diarize_cluster_threshold = form_float(req, "diarize_cluster_threshold", rp.diarize_cluster_threshold);
+        rp.diarize_max_speakers = form_int(req, "diarize_max_speakers", rp.diarize_max_speakers);
         rp.vad = form_bool(req, "vad", rp.vad);
         rp.vad_threshold = form_float(req, "vad_threshold", rp.vad_threshold);
         rp.vad_min_speech_duration_ms = form_int(req, "vad_min_speech_duration_ms", rp.vad_min_speech_duration_ms);
@@ -904,13 +931,15 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         rp.temperature_inc = form_float(req, "temperature_inc", rp.temperature_inc);
         rp.no_fallback = form_bool(req, "no_fallback", rp.no_fallback);
         rp.detect_language = form_bool(req, "detect_language", rp.detect_language);
+        rp.lid_backend = form_string(req, "lid_backend", rp.lid_backend);
+        rp.lid_model = form_string(req, "lid_model", rp.lid_model);
         rp.chunk_seconds = form_int(req, "chunk_seconds", rp.chunk_seconds);
         rp.no_timestamps = form_bool(req, "no_timestamps", rp.no_timestamps);
         rp.split_on_word = form_bool(req, "split_on_word", rp.split_on_word);
         rp.max_len = form_int(req, "max_len", rp.max_len);
 
         auto result = do_transcribe(audio_file, backend.get(), model_mutex, rp, /*need_timestamps=*/true,
-                                    punc_ctx.get(), pcs_ctx.get());
+                                    punc_ctx.get(), pcs_ctx.get(), tc_ctx.get(), tc_crf_ctx.get(), tc_lstm_ctx.get());
         if (!result.ok) {
             json_error(res, 400, result.error);
             return;
@@ -1017,6 +1046,9 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             rp.diarize_method = diarize_method;
         else if (diarize && rp.diarize_method.empty())
             rp.diarize_method = "energy";
+        rp.diarize_embedder = form_string(req, "diarize_embedder", rp.diarize_embedder);
+        rp.diarize_cluster_threshold = form_float(req, "diarize_cluster_threshold", rp.diarize_cluster_threshold);
+        rp.diarize_max_speakers = form_int(req, "diarize_max_speakers", rp.diarize_max_speakers);
         rp.vad = form_bool(req, "vad", rp.vad);
         rp.vad_threshold = form_float(req, "vad_threshold", rp.vad_threshold);
         rp.vad_min_speech_duration_ms = form_int(req, "vad_min_speech_duration_ms", rp.vad_min_speech_duration_ms);
@@ -1037,6 +1069,8 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         rp.temperature_inc = form_float(req, "temperature_inc", rp.temperature_inc);
         rp.no_fallback = form_bool(req, "no_fallback", rp.no_fallback);
         rp.detect_language = form_bool(req, "detect_language", rp.detect_language);
+        rp.lid_backend = form_string(req, "lid_backend", rp.lid_backend);
+        rp.lid_model = form_string(req, "lid_model", rp.lid_model);
         rp.chunk_seconds = form_int(req, "chunk_seconds", rp.chunk_seconds);
         rp.no_timestamps = form_bool(req, "no_timestamps", rp.no_timestamps);
         rp.split_on_word = form_bool(req, "split_on_word", rp.split_on_word);
@@ -1046,8 +1080,8 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
 
         const bool need_timestamps =
             response_format == "verbose_json" || response_format == "srt" || response_format == "vtt";
-        auto result =
-            do_transcribe(audio_file, backend.get(), model_mutex, rp, need_timestamps, punc_ctx.get(), pcs_ctx.get());
+        auto result = do_transcribe(audio_file, backend.get(), model_mutex, rp, need_timestamps, punc_ctx.get(),
+                                    pcs_ctx.get(), tc_ctx.get(), tc_crf_ctx.get(), tc_lstm_ctx.get());
         if (!result.ok) {
             json_error(res, 400, result.error);
             return;
