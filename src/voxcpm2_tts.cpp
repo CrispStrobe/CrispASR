@@ -5056,6 +5056,7 @@ struct vox_prefill_inputs {
     std::vector<uint8_t> audio_mask_pos; // 1 = ref-audio position, 0 = text position
     std::vector<float> combined_embed;   // [N_pos * d_tslm]
     std::vector<float> feat_embed_pos;   // [N_pos * d_tslm]; nonzero only at audio positions
+    std::vector<float> ralm_prefill_in;  // [N_pos * d_ralm] saved for RALM graph KV replay
     std::vector<float> ref_feat;         // [T_ref * P * D] from VAE encoder (kept for AR-loop access)
     int T_ref = 0;
     int N_pos = 0;
@@ -5274,6 +5275,8 @@ static float* vox_synthesize_internal(voxcpm2_context* ctx, const char* text, co
         ralm_hidden.resize(dr);
         rms_norm_cpu(ralm_out.data() + (size_t)(N_pos - 1) * dr, tensor_data_f32(ctx->weights.ralm_output_norm),
                      ralm_hidden.data(), dr, hp.rms_norm_eps);
+        // Save RALM prefill inputs for graph KV replay (#164)
+        pi.ralm_prefill_in = ralm_input;
     }
 
     // 5. Build mu [2048] for LocDiT: mu = cat(lm_to_dit(tslm), res_to_dit(ralm))
@@ -5547,6 +5550,35 @@ static float* vox_synthesize_internal(voxcpm2_context* ctx, const char* text, co
         {
             int ralm_pos = ctx->ralm_kv.n_past;
             if (use_graph_tslm) {
+                if (!ctx->ralm_kv_synced) {
+                    if (!init_ralm_kv_backend(ctx)) {
+                        fprintf(stderr, "voxcpm2: ralm kv backend init failed; falling back to legacy step\n");
+                    } else {
+                        // Replay RALM prefill through the graph to populate the
+                        // backend KV cache directly (#164). Same reasoning as
+                        // the TSLM replay — legacy CPU attention computes
+                        // different KV values than graph flash_attn, causing
+                        // NaN when the graph reads mixed CPU/graph KV history.
+                        const int n_ralm_prefill = ctx->ralm_kv.n_past;
+                        // Mark synced BEFORE replay so ralm_step_graph
+                        // doesn't call sync_ralm_kv_cpu_to_backend (which
+                        // would overwrite the replay's graph-computed KV).
+                        ctx->ralm_kv_synced = true;
+                        if (n_ralm_prefill > 0 && !pi.ralm_prefill_in.empty()) {
+                            const int d = (int)ctx->hp.ralm_d_model;
+                            ctx->ralm_kv.n_past = 0;
+                            for (int t = 0; t < n_ralm_prefill; t++) {
+                                const float* emb = pi.ralm_prefill_in.data() + (size_t)t * d;
+                                ralm_step_graph(ctx, emb, t);
+                                ctx->ralm_kv.n_past = t + 1;
+                            }
+                            if (ctx->verbosity >= 1) {
+                                fprintf(stderr, "voxcpm2: replayed %d RALM prefill tokens through graph KV\n",
+                                        n_ralm_prefill);
+                            }
+                        }
+                    }
+                }
                 ralm_hidden = ralm_step_graph(ctx, fusion_out.data(), ralm_pos);
             } else {
                 std::vector<float> h = fusion_out;
