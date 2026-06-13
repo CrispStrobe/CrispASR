@@ -56,13 +56,14 @@ backend doesn't expose that knob, but the call is safe to make.
 | Go | ✓ | Full (all 11 capabilities) |
 | Java | ✓ | Transcribe + align + LID; full session-setter parity (JNA) |
 | Ruby | ✓ | Transcribe; full session-setter parity (C ext) |
-| JavaScript | partial | WASM ASR is whisper-only today; session-setter parity for TTS. See PLAN.md #59. |
+| JavaScript / WASM | ✓ | `asrOpen`/`asrTranscribe` + session setters (backend-agnostic); plus the whisper-only `init`/`full_default` and the TTS surface. Built with emcc. |
 
 > **Setter parity.** Python, Rust (`crispasr-sys` + `crispasr` at the repo root),
 > Go, Dart, Java, and Ruby all expose the complete `crispasr_session_set_*`
 > surface from `include/crispasr_session.h`. The native Node addon
-> (`examples/addon.node`, see below) reaches it via `transcribeSession`; the
-> WASM/JS ASR path is the remaining gap (tracked in PLAN.md).
+> (`examples/addon.node`) reaches it via `transcribeSession`; the WASM/JS binding
+> (`bindings/javascript/emscripten.cpp`) via the `asr*` functions
+> (`asrOpen`/`asrTranscribe`/`asrSet…`).
 
 ## Python
 

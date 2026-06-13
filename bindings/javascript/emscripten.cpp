@@ -49,6 +49,8 @@ const char*  crispasr_session_backend(CrispasrSession* s);
 int          crispasr_session_set_source_language(CrispasrSession* s, const char* lang);
 int          crispasr_session_set_target_language(CrispasrSession* s, const char* lang);
 int          crispasr_session_set_punctuation(CrispasrSession* s, int enable);
+int          crispasr_session_set_punc_model(CrispasrSession* s, const char* punc_model);
+int          crispasr_session_set_hotwords(CrispasrSession* s, const char* hotwords, float boost);
 int          crispasr_session_set_translate(CrispasrSession* s, int enable);
 int          crispasr_session_set_temperature(CrispasrSession* s, float temperature, unsigned long long seed);
 int          crispasr_session_set_tts_seed(CrispasrSession* s, unsigned long long seed);
@@ -234,6 +236,9 @@ int crispasr_diarize_segments_abi(const float* left_pcm, const float* right_pcm,
 }
 
 static CrispasrSession* g_tts_session = nullptr;
+// Backend-agnostic ASR session (parakeet/canary/whisper/…) for the asr* surface
+// below — distinct from the whisper-only g_context used by init()/full_default().
+static CrispasrSession* g_asr_session = nullptr;
 
 struct whisper_context* g_context;
 
@@ -312,6 +317,102 @@ EMSCRIPTEN_BINDINGS(whisper) {
             }
 
             return 0;
+        }));
+
+    // -------------------------------------------------------------------
+    // Backend-agnostic ASR session surface (parakeet, canary, …) over the
+    // crispasr_session C-ABI — the WASM analogue of the native bindings'
+    // Session. Unlike init()/full_default() above (whisper-only), this reaches
+    // every ASR backend plus the session post-processors (punctuation,
+    // punc-model, beam, hotwords, translate). Mirrors the tts* surface.
+    // -------------------------------------------------------------------
+    emscripten::function("asrOpen", emscripten::optional_override(
+                                        [](const std::string& model_path, const std::string& backend, int n_threads) {
+                                            if (g_asr_session) {
+                                                crispasr_session_close(g_asr_session);
+                                                g_asr_session = nullptr;
+                                            }
+                                            g_asr_session =
+                                                backend.empty()
+                                                    ? crispasr_session_open(model_path.c_str(), n_threads)
+                                                    : crispasr_session_open_explicit(model_path.c_str(),
+                                                                                     backend.c_str(), n_threads);
+                                            return g_asr_session != nullptr;
+                                        }));
+
+    emscripten::function("asrClose", emscripten::optional_override([]() {
+                             if (g_asr_session) {
+                                 crispasr_session_close(g_asr_session);
+                                 g_asr_session = nullptr;
+                             }
+                         }));
+
+    emscripten::function("asrSetSourceLanguage", emscripten::optional_override([](const std::string& lang) {
+                             return g_asr_session ? crispasr_session_set_source_language(g_asr_session, lang.c_str())
+                                                  : -1;
+                         }));
+    emscripten::function("asrSetTargetLanguage", emscripten::optional_override([](const std::string& lang) {
+                             return g_asr_session ? crispasr_session_set_target_language(g_asr_session, lang.c_str())
+                                                  : -1;
+                         }));
+    emscripten::function("asrSetTranslate", emscripten::optional_override([](bool enable) {
+                             return g_asr_session ? crispasr_session_set_translate(g_asr_session, enable ? 1 : 0) : -1;
+                         }));
+    emscripten::function("asrSetPunctuation", emscripten::optional_override([](bool enable) {
+                             return g_asr_session ? crispasr_session_set_punctuation(g_asr_session, enable ? 1 : 0)
+                                                  : -1;
+                         }));
+    emscripten::function("asrSetPuncModel", emscripten::optional_override([](const std::string& m) {
+                             return g_asr_session ? crispasr_session_set_punc_model(g_asr_session, m.c_str()) : -1;
+                         }));
+    emscripten::function("asrSetBeamSize", emscripten::optional_override([](int n) {
+                             return g_asr_session ? crispasr_session_set_beam_size(g_asr_session, n) : -1;
+                         }));
+    emscripten::function("asrSetHotwords", emscripten::optional_override([](const std::string& w, double boost) {
+                             return g_asr_session
+                                        ? crispasr_session_set_hotwords(g_asr_session, w.c_str(), (float)boost)
+                                        : -1;
+                         }));
+    emscripten::function("asrSetAsk", emscripten::optional_override([](const std::string& prompt) {
+                             return g_asr_session ? crispasr_session_set_ask(g_asr_session, prompt.c_str()) : -1;
+                         }));
+    emscripten::function("asrSetTemperature", emscripten::optional_override([](double temp, double seed) {
+                             return g_asr_session ? crispasr_session_set_temperature(g_asr_session, (float)temp,
+                                                                                     (unsigned long long)seed)
+                                                  : -1;
+                         }));
+
+    // Transcribe a Float32Array of 16 kHz mono PCM. Returns an array of
+    // { t0, t1, text } segments (timestamps in centiseconds). Empty on failure.
+    emscripten::function(
+        "asrTranscribe",
+        emscripten::optional_override([](const emscripten::val& audio, const std::string& lang) -> emscripten::val {
+            emscripten::val out = emscripten::val::array();
+            if (!g_asr_session)
+                return out;
+            const int n = audio["length"].as<int>();
+            std::vector<float> pcmf32(n);
+            emscripten::val heap = emscripten::val::module_property("HEAPU8");
+            emscripten::val memory = heap["buffer"];
+            emscripten::val view =
+                audio["constructor"].new_(memory, reinterpret_cast<uintptr_t>(pcmf32.data()), n);
+            view.call<void>("set", audio);
+
+            crispasr_session_result* r = crispasr_session_transcribe_lang(
+                g_asr_session, pcmf32.data(), n, lang.empty() ? nullptr : lang.c_str());
+            if (!r)
+                return out;
+            const int ns = crispasr_session_result_n_segments(r);
+            for (int i = 0; i < ns; i++) {
+                emscripten::val seg = emscripten::val::object();
+                seg.set("t0", (double)crispasr_session_result_segment_t0(r, i));
+                seg.set("t1", (double)crispasr_session_result_segment_t1(r, i));
+                const char* text = crispasr_session_result_segment_text(r, i);
+                seg.set("text", std::string(text ? text : ""));
+                out.call<void>("push", seg);
+            }
+            crispasr_session_result_free(r);
+            return out;
         }));
 
     // -------------------------------------------------------------------
