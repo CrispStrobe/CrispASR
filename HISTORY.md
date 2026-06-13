@@ -30,8 +30,13 @@ graceful fallback instead of SIGABRT on any future tensor name mismatch.
 
 VAE decode Vulkan crash (separate, Part 3 of §166) was already fixed in
 `7449f793` (GPU copies of bias/alpha tensors). graph=0 path unaffected
-throughout. Awaiting Kaggle CUDA + HubSana Vulkan validation of the full
-graph=1 path.
+throughout.
+
+**Validated on Kaggle T4 (2026-06-13):** all 3 configs pass — nograph
+(stop at step 7, 0.999), graph_default (stop at step 6, 0.881, 4.1s),
+graph_fa_cpu (stop at step 6, 0.861, 12.9s). Graph path is 5× faster
+than legacy. FA_CPU only needed on P100 (sm_60) where F16 flash_attn
+accumulator overflows.
 
 ## 2026-06-13 #165 server perf round — resident LID, CLI-matching VAD slicing, silero GPU crash
 

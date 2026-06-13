@@ -5631,7 +5631,7 @@ The f16 variant passed `A_TYPE=float16_t` without enabling the required
 
 Fix: enable the extension + cast kernel element to float in `fma()`.
 
-### Part 2 — VOXCPM2_USE_GRAPH NaN + SIGABRT — MOSTLY FIXED
+### Part 2 — VOXCPM2_USE_GRAPH NaN + SIGABRT — DONE
 
 **NaN root cause (confirmed 2026-06-13):** RALM has `rope_theta=0`.
 `ggml_rope_ext` computes `powf(0, -2/d) = inf`, cascading NaN through
@@ -5657,9 +5657,11 @@ RALM → mu → CFM → LocEnc → enc_lm → TSLM input from pos=5 onwards.
    null-checking. Any future graph change would SIGABRT again.
    **Fix:** null-guard every call; graceful fallback to CPU or zero-fill.
 
-**Status:** RoPE NaN fix + revert + fsq_half shape fix + null-guards all
-on main. Needs Kaggle P100 CUDA + HubSana Vulkan validation to confirm
-the graph path produces correct stop_score and output audio.
+**Status: DONE.** Validated on Kaggle T4 (2026-06-13): all 3 configs pass
+(nograph, graph_default, graph_fa_cpu). Stop predictor fires correctly on
+all paths (step 6-7, scores 0.86-0.99). graph_default 5× faster than
+nograph (4.1s vs 20.6s). FA_CPU only needed on P100 (sm_60) where F16
+flash_attn overflows. Awaiting HubSana Vulkan re-test on Arc B580.
 
 ### Part 3 — VAE decode crash on Vulkan — DONE
 
