@@ -278,6 +278,13 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
     // Q8_0 works fine; selective Q4_K (projections only) is safe.
     const bool is_bark = (arch.find("bark") != std::string::npos);
 
+    // Orpheus TTS: Llama-3.2-3B with SNAC 24 kHz codec. The token embedding
+    // is tied with the LM head (no separate output.weight). The talker emits
+    // peaked SNAC codec distributions — quantizing the embedding/head breaks
+    // the super-frame slot pattern and produces gibberish. Keep
+    // talker.token_embd.weight at F16; block projections are safe to quantize.
+    const bool is_orpheus = (arch.find("orpheus") != std::string::npos);
+
     // First pass: determine which tensors will be quantized and compute
     // their target types. We need this BEFORE adding tensors to ctx_out
     // so that gguf_add_tensor computes correct offsets for the quantized
@@ -337,9 +344,9 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
                                 sname.find("audio_embd.") == 0 || sname.find("adapter.") == 0 ||
                                 sname.find("mimi.") == 0 || sname.find("encoder.") == 0 ||
                                 sname.find("depth.codebook.") == 0 || sname.find("preprocessor.") == 0)) &&
-            !(is_mini_omni2 && (sname.find("audio.") == 0 || sname.find("adapter.") == 0 ||
-                                sname.find("llm.token_embd") == 0)) &&
-            ([&]() {
+            !(is_mini_omni2 &&
+              (sname.find("audio.") == 0 || sname.find("adapter.") == 0 || sname.find("llm.token_embd") == 0)) &&
+            !(is_orpheus && sname.find("talker.token_embd") == 0) && ([&]() {
                 if (!is_omniasr_ctc || omniasr_quant_all ||
                     (omniasr_head_cutoff == 0 && omniasr_tail_cutoff >= omniasr_n_enc))
                     return true;
