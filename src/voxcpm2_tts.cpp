@@ -1128,15 +1128,21 @@ static std::vector<float> ralm_step_graph(voxcpm2_context* ctx, const float* hid
     }
 
     ggml_tensor* t_hidden_in = ggml_graph_get_tensor(gf, "ralm_hidden_in");
-    ggml_tensor* t_positions = ggml_graph_get_tensor(gf, "ralm_positions");
-    if (!t_hidden_in || !t_positions) {
-        fprintf(stderr, "voxcpm2: ralm_step graph missing input tensors (hidden_in=%p positions=%p)\n",
-                (void*)t_hidden_in, (void*)t_positions);
+    if (!t_hidden_in) {
+        fprintf(stderr, "voxcpm2: ralm_step graph missing ralm_hidden_in tensor\n");
         return std::vector<float>(d, 0.0f);
     }
-    int32_t pos_i = pos;
     ggml_backend_tensor_set(t_hidden_in, hidden_in, 0, (size_t)d * sizeof(float));
-    ggml_backend_tensor_set(t_positions, &pos_i, 0, sizeof(int32_t));
+
+    // positions is optional — when rope_theta=0 (RALM has no positional
+    // encoding) and the KV cache is F32, nothing in the graph consumes it,
+    // so ggml_graph_get_tensor won't find it. That's fine: set it only if
+    // present (#164).
+    ggml_tensor* t_positions = ggml_graph_get_tensor(gf, "ralm_positions");
+    if (t_positions) {
+        int32_t pos_i = pos;
+        ggml_backend_tensor_set(t_positions, &pos_i, 0, sizeof(int32_t));
+    }
 
     if (ggml_backend_is_cpu(ctx->backend)) {
         ggml_backend_cpu_set_n_threads(ctx->backend, g_cpu_n_threads);
