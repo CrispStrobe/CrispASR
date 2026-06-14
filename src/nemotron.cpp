@@ -583,91 +583,31 @@ static ggml_tensor* nemotron_build_pre_encode(ggml_context* ctx0, ggml_tensor* m
         return ggml_cast(ctx0, ggml_reshape_4d(ctx0, b, 1, 1, b->ne[0], 1), GGML_TYPE_F32);
     };
 
-    // CausalConv2D padding: (left=k-1=2, right=s-1=1) on BOTH freq and time axes
-    // ggml_conv_2d(w, x, sx, sy, px, py, dx, dy) — px/py are symmetric.
-    // We need asymmetric padding, so we pad manually and use p=0 in the conv.
-    // ggml_pad: pads ne[0] with (p0, p0) and ne[1] with (p1, p1) — symmetric only!
-    // So we use ggml_conv_2d with padding=(2, 2) and then trim the right/bottom by 1.
-    // Actually, for stride=2 conv with pad=(2,2): output = (W+4-3)/2+1 = (W+1)/2+1
-    // For pad=(2,1): output = (W+3-3)/2+1 = W/2+1
-    // So pad=(2,2) gives one extra element compared to pad=(2,1).
-    //
-    // Cleaner approach: use pad=(1,1) (the symmetric parakeet default) and accept
-    // that we get W3=16 not 17 from the conv chain. Then we just need to make the
-    // flatten dim match the linear weight. Since the linear weight is (4352, 1024),
-    // and we'd flatten to 4096 instead of 4352, the shapes won't match.
-    //
-    // Best approach: use ggml_conv_2d with excess padding, then slice to trim.
-    // ggml_conv_2d(w, x, 2, 2, 2, 2, 1, 1) gives output (W+4-3)/2+1 for dim0.
-    // For 128: (128+4-3)/2+1 = 65. Need 65. Then trim... no, 65 is correct!
-    // For second stage (DW, input=65): (65+4-3)/2+1 = 34. Need 33. Off by 1.
-    //
-    // Simplest correct approach: pad input explicitly, then conv with p=0.
-    // ggml doesn't have a general asymmetric 2D pad, but we can use views/concat.
-    // Actually, the simplest approach for a first pass: use (2, 2) padding and
-    // take a view that drops the last element in the freq dimension after each conv.
-
-    // APPROACH: Use the standard ggml_conv_2d with padding (2, 2) for strided convs.
-    // This gives output freq = (W+4-3)/2+1 = (W+1)/2+1 per stage.
-    // For pad(2,1): freq = (W+3-3)/2+1 = W/2+1.
-    // Difference is always 1 extra element with pad(2,2). We can remove it
-    // using ggml_view to trim the last freq element.
-
-    // Stage 0: Conv2d(1, C, k=3, s=2) with causal padding
-    // Standard symmetric pad = (1,1): gives floor((128+2-3)/2)+1 = 64
-    // Causal pad = (2,1): gives floor((128+3-3)/2)+1 = 65
-    // Use pad (2,2): gives floor((128+4-3)/2)+1 = 65 (same as causal if W is even)
-    // For W even: (2,1) gives (W+3-3)/2+1 = W/2+1, (2,2) gives (W+4-3)/2+1 = (W+1)/2+1
-    // When W is even: W/2+1 vs (W+1)/2+1. floor((W+1)/2)+1 = W/2+1. Same! Good.
-
-    // Causal Conv2d padding: (left=k-1=2, right=s-1=1) on BOTH freq and time.
-    // ggml_conv_2d only supports symmetric padding, so we use pad=(2,2) and
-    // trim the last element from BOTH freq (ne[0]) and time (ne[1]) after
-    // each strided conv to match the asymmetric causal padding result.
-    // For even input size W: pad(2,1) gives W/2+1, pad(2,2) also gives W/2+1 → no trim.
-    // For odd input size W: pad(2,1) gives (W+1)/2, pad(2,2) gives (W+1)/2+1 → trim 1.
-    // Safest: always trim both dims when the pad(2,2) output exceeds the expected causal size.
-    auto trim_causal = [&](ggml_tensor* t, int expected_freq, int expected_time) {
-        int64_t W = t->ne[0], H = t->ne[1];
-        if (W > expected_freq || H > expected_time) {
-            t = ggml_view_4d(ctx0, t, expected_freq, expected_time, t->ne[2], t->ne[3], t->nb[1], t->nb[2], t->nb[3],
-                             0);
-            t = ggml_cont(ctx0, t);
-        }
-        return t;
+    // CausalConv2D: pad left=k-1=2, right=s-1=1 on BOTH freq (ne[0]) and time (ne[1]).
+    // Use ggml_pad_ext for true asymmetric padding, then conv with p=0.
+    // This produces correct per-element values (symmetric pad=(2,2) changes values
+    // because the extra right-side zeros participate in the convolution).
+    auto causal_pad = [&](ggml_tensor* x) -> ggml_tensor* {
+        return ggml_pad_ext(ctx0, x, /*lp0*/ 2, /*rp0*/ 1, /*lp1*/ 2, /*rp1*/ 1, 0, 0, 0, 0);
     };
 
-    // Stage 0: Conv2d(1, C, k=3, s=2) — mel (128, T_mel) → (65, T_mel/2+1)
-    int T_mel_in = (int)mel->ne[1];
-    int freq0 = 128 / 2 + 1;        // 65 (causal on even input)
-    int time0 = (T_mel_in + 1) / 2; // causal: (T+2+1-3)/2+1 = T/2+1 for even T, (T+1)/2 for odd
-    // More precisely: causal output = (input + left + right - kernel) / stride + 1
-    //               = (input + 2 + 1 - 3) / 2 + 1 = input / 2 + 1 for even, (input+1)/2 for odd
-    freq0 = (128 + 2 + 1 - 3) / 2 + 1;      // 65
-    time0 = (T_mel_in + 2 + 1 - 3) / 2 + 1; // (T_mel_in) / 2 + 1 for even
-    ggml_tensor* cur = ggml_conv_2d(ctx0, w.conv0_w, mel, 2, 2, 2, 2, 1, 1);
+    // Stage 0: Conv2d(1, C, k=3, s=2) with causal padding
+    ggml_tensor* cur = ggml_conv_2d(ctx0, w.conv0_w, causal_pad(mel), 2, 2, 0, 0, 1, 1);
     cur = ggml_add(ctx0, cur, bias_4d(w.conv0_b));
-    cur = trim_causal(cur, freq0, time0);
     cur = ggml_relu(ctx0, cur);
 
-    // Stage 2: DW Conv2d(C, k=3, s=2)
-    int freq2 = ((int)cur->ne[0] + 2 + 1 - 3) / 2 + 1;
-    int time2 = ((int)cur->ne[1] + 2 + 1 - 3) / 2 + 1;
-    cur = ggml_conv_2d_dw(ctx0, w.conv2_w, cur, 2, 2, 2, 2, 1, 1);
+    // Stage 2: DW Conv2d(C, k=3, s=2) with causal padding
+    cur = ggml_conv_2d_dw(ctx0, w.conv2_w, causal_pad(cur), 2, 2, 0, 0, 1, 1);
     cur = ggml_add(ctx0, cur, bias_4d(w.conv2_b));
-    cur = trim_causal(cur, freq2, time2);
 
-    // Stage 3: PW Conv2d(C, C, k=1, s=1) — no padding change
+    // Stage 3: PW Conv2d(C, C, k=1, s=1) — no padding
     cur = ggml_conv_2d(ctx0, w.conv3_w, cur, 1, 1, 0, 0, 1, 1);
     cur = ggml_add(ctx0, cur, bias_4d(w.conv3_b));
     cur = ggml_relu(ctx0, cur);
 
-    // Stage 5: DW Conv2d(C, k=3, s=2)
-    int freq5 = ((int)cur->ne[0] + 2 + 1 - 3) / 2 + 1;
-    int time5 = ((int)cur->ne[1] + 2 + 1 - 3) / 2 + 1;
-    cur = ggml_conv_2d_dw(ctx0, w.conv5_w, cur, 2, 2, 2, 2, 1, 1);
+    // Stage 5: DW Conv2d(C, k=3, s=2) with causal padding
+    cur = ggml_conv_2d_dw(ctx0, w.conv5_w, causal_pad(cur), 2, 2, 0, 0, 1, 1);
     cur = ggml_add(ctx0, cur, bias_4d(w.conv5_b));
-    cur = trim_causal(cur, freq5, time5);
 
     // Stage 6: PW Conv2d(C, C, k=1, s=1)
     cur = ggml_conv_2d(ctx0, w.conv6_w, cur, 1, 1, 0, 0, 1, 1);
