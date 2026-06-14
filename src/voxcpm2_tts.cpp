@@ -3678,6 +3678,23 @@ static std::vector<float> vae_decode_graph(voxcpm2_context* ctx, const std::vect
     const int P = (int)ctx->hp.patch_frames; // 4
     const int T_lat = n_patches * P;
 
+    // Guard against Vulkan maxComputeWorkGroupCount overflow (#164).
+    // The VAE upsamples by 1920× total; intermediate conv layers after block 2+
+    // operate on T_lat × 240..1920 frames. Vulkan mandates
+    // maxComputeWorkGroupCount[0] >= 65535 and many GPUs (e.g. Arc B580) report
+    // exactly that. When the temporal dimension exceeds ~500K samples the
+    // dispatch assertion in ggml-vulkan.cpp fires. Fall back to the CPU path
+    // which has no such limit — the VAE is <5% of total synthesis time anyway.
+    const int64_t out_samples = (int64_t)T_lat * 1920;
+    if (out_samples > 500000 && !ggml_backend_is_cpu(ctx->backend)) {
+        if (ctx->verbosity >= 1)
+            fprintf(stderr,
+                    "voxcpm2: VAE output too long for GPU dispatch "
+                    "(%lld samples, %d patches); using CPU\n",
+                    (long long)out_samples, n_patches);
+        return vae_decode(ctx, patches, ctx->backend_cpu);
+    }
+
     // Pack patches into a flat [T_lat, feat_dim] host buffer.
     // ne convention: ne[0]=T_lat (innermost), ne[1]=feat_dim → element (t,c)
     // is at index `c * T_lat + t`.
