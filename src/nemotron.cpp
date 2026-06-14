@@ -198,7 +198,7 @@ struct nemotron_context {
 
     // Streaming state
     int att_context_preset = 0;
-    int prompt_id = 7; // language prompt index (7 = en-US in sorted order)
+    int prompt_id = 0; // language prompt index (0 = en-US in NeMo's prompt_dictionary)
 
     // Decode controls
     float decode_temperature = 0.0f;
@@ -309,22 +309,44 @@ static bool nemotron_load_model(nemotron_model& model, nemotron_vocab& vocab,
         // expose directly for int arrays. Use defaults for now; the runtime
         // picks the preset index and the C++ code handles the mapping.
 
-        // Populate language → prompt_id mapping (alphabetically sorted, matching converter)
+        // Populate language → prompt_id mapping from NeMo's prompt_dictionary.
+        // This is NOT alphabetical — it's the order from the model_config.yaml
+        // training config. The prompt_kernel one-hot encoding must match this
+        // exact mapping or the encoder output will be conditioned on the wrong
+        // language (#81).
         {
-            const char* langs[] = {
-                "ar-AR", "bg-BG", "cs-CZ", "da-DK", "de-DE", "el-GR", "en-GB", "en-US", "es-ES", "es-US",
-                "et-EE", "fi-FI", "fr-CA", "fr-FR", "he-IL", "hi-IN", "hr-HR", "hu-HU", "it-IT", "ja-JP",
-                "ko-KR", "lt-LT", "lv-LV", "nb-NO", "nl-NL", "nn-NO", "pl-PL", "pt-BR", "pt-PT", "ro-RO",
-                "ru-RU", "sk-SK", "sl-SL", "sv-SE", "th-TH", "tr-TR", "uk-UA", "vi-VN", "zh-CN",
+            // clang-format off
+            const struct { const char* code; int id; } prompts[] = {
+                {"en-US", 0}, {"en-GB", 1}, {"es-ES", 2}, {"es-US", 3},
+                {"zh-CN", 4}, {"zh-TW", 5}, {"hi-IN", 6}, {"ar-AR", 7},
+                {"fr-FR", 8}, {"de-DE", 9}, {"ja-JP", 10}, {"ru-RU", 11},
+                {"pt-BR", 12}, {"pt-PT", 13}, {"ko-KR", 14}, {"it-IT", 15},
+                {"nl-NL", 16}, {"pl-PL", 17}, {"tr-TR", 18}, {"uk-UA", 19},
+                {"ro-RO", 20}, {"el-GR", 21}, {"cs-CZ", 22}, {"hu-HU", 23},
+                {"sv-SE", 24}, {"da-DK", 25}, {"fi-FI", 26}, {"nb-NO", 27},
+                {"sk-SK", 28}, {"hr-HR", 29}, {"bg-BG", 30}, {"lt-LT", 31},
+                {"th-TH", 32}, {"vi-VN", 33}, {"et-EE", 60}, {"lv-LV", 61},
+                {"sl-SI", 62}, {"he-IL", 64}, {"fr-CA", 100}, {"nn-NO", 104},
             };
-            for (int i = 0; i < 39; i++) {
-                lang_to_prompt[langs[i]] = i;
-                // Also add lowercase version for case-insensitive matching
-                std::string lo = langs[i];
+            // clang-format on
+            for (const auto& p : prompts) {
+                lang_to_prompt[p.code] = p.id;
+                std::string lo = p.code;
                 for (auto& c : lo)
                     c = (char)std::tolower((unsigned char)c);
-                lang_to_prompt[lo] = i;
+                lang_to_prompt[lo] = p.id;
             }
+            // Common aliases
+            lang_to_prompt["en"] = 0;
+            lang_to_prompt["de"] = 9;
+            lang_to_prompt["fr"] = 8;
+            lang_to_prompt["es"] = 3;
+            lang_to_prompt["zh"] = 4;
+            lang_to_prompt["ja"] = 10;
+            lang_to_prompt["ko"] = 14;
+            lang_to_prompt["ru"] = 11;
+            lang_to_prompt["pt"] = 13;
+            lang_to_prompt["it"] = 15;
         }
 
         core_gguf::free_metadata(gctx);
@@ -1822,9 +1844,9 @@ extern "C" void nemotron_set_language(struct nemotron_context* ctx, const char* 
     if (it != ctx->lang_to_prompt.end()) {
         ctx->prompt_id = it->second;
     } else {
-        // Default to English (en-US = index 7 in sorted lang order)
+        // Default to English (en-US = index 0 in NeMo's prompt_dictionary)
         fprintf(stderr, "nemotron: unknown language '%s', defaulting to en-US\n", lang_code);
-        ctx->prompt_id = 7;
+        ctx->prompt_id = 0;
     }
 }
 
