@@ -1211,6 +1211,18 @@ static bool nemotron_run_encoder_chunked(nemotron_context* ctx, const float* pre
 
             chunk_in.assign(win_output.data() + (size_t)n_ctx * d, win_output.data() + (size_t)(n_ctx + n_new) * d);
 
+            // Debug: print per-layer stats for first chunk
+            if (ci == 0) {
+                float lmin = 1e30f, lmax = -1e30f;
+                for (size_t i = 0; i < chunk_in.size(); i++) {
+                    if (chunk_in[i] < lmin)
+                        lmin = chunk_in[i];
+                    if (chunk_in[i] > lmax)
+                        lmax = chunk_in[i];
+                }
+                fprintf(stderr, "  layer %d output: min=%.2f max=%.2f\n", il, lmin, lmax);
+            }
+
             // Cache: keep last min(L, T_win) frames of block output
             int keep = std::min(L, T_win);
             int skip = T_win - keep;
