@@ -102,6 +102,15 @@ if (CRISPASR_OPENVINO)
     set_target_properties(${TARGET} PROPERTIES FOLDER "libs")
 endif()
 
+# ---------------------------------------------------------------------------
+# phonemizer — shared OBJECT library so kokoro + crispasr-lib both see the
+# symbols without duplication in shared-library builds.
+# ---------------------------------------------------------------------------
+add_library(phonemizer-obj OBJECT phonemizer.cpp phonemizer.h)
+set_target_properties(phonemizer-obj PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(phonemizer-obj PUBLIC .)
+target_compile_features   (phonemizer-obj PUBLIC cxx_std_17)
+
 # crispasr-lib (formerly whisper)
 
 add_library(crispasr-lib
@@ -137,10 +146,8 @@ add_library(crispasr-lib
             # and by the C-ABI `crispasr_align_words_abi`. Both canary-ctc
             # and qwen3-forced-aligner paths route through one call.
             crispasr_aligner.cpp
-            # Built-in G2P phonemizers (EN/DE/FR/ES). LTS rules + optional
-            # IPA dict auto-download. Used by kokoro TTS for espeak-free
-            # phonemization.
-            phonemizer.cpp
+            # Built-in G2P phonemizers (EN/DE/FR/ES) are in the
+            # phonemizer-obj OBJECT library (shared with kokoro).
             # HF download + filesystem cache (shared with CLI). Consumed
             # by the library's VAD / LID / diarize auto-download paths
             # and by the CLI's `-m auto` resolver.
@@ -234,7 +241,7 @@ if (CRISPASR_EXTRA_FLAGS)
 endif()
 
 find_package(Threads REQUIRED)
-target_link_libraries(crispasr-lib PUBLIC ggml Threads::Threads audioseal crispasr-core snac)
+target_link_libraries(crispasr-lib PUBLIC ggml Threads::Threads audioseal crispasr-core snac phonemizer-obj)
 
 # `crispasr_cache.cpp` calls WinHTTP for HF auto-download on Windows. MSVC
 # auto-links winhttp.lib via `#pragma comment(lib, "winhttp.lib")` inside
@@ -1077,13 +1084,11 @@ endif()
 # ---------------------------------------------------------------------------
 # kokoro — hexgrad/Kokoro-82M + yl4579/StyleTTS2-LJSpeech (iSTFTNet TTS)
 # ---------------------------------------------------------------------------
-# phonemizer.cpp is in crispasr-lib (line ~143); don't duplicate it here
-# or the all-in-one link (Linux/Android shared .so) gets duplicate symbols.
-add_library(kokoro STATIC kokoro.h kokoro.cpp phonemizer.h)
+add_library(kokoro STATIC kokoro.h kokoro.cpp)
 set_target_properties(kokoro PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(kokoro PUBLIC .)
 target_compile_features   (kokoro PUBLIC cxx_std_17)
-target_link_libraries     (kokoro PUBLIC crispasr-core ggml ggml-base ggml-cpu)
+target_link_libraries     (kokoro PUBLIC crispasr-core ggml ggml-base ggml-cpu phonemizer-obj)
 if(NOT MSVC)
     target_compile_options(kokoro PRIVATE -O3)
 endif()

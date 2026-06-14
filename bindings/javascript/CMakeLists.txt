@@ -28,18 +28,23 @@ if (CRISPASR_WASM_SINGLE_FILE)
         ${CMAKE_CURRENT_SOURCE_DIR}/whisper.js
         )
 
+    # With SINGLE_FILE=1, modern Emscripten inlines the pthread worker
+    # into the main .js and does NOT emit a separate .worker.js file.
+    # Only copy it when the file actually exists.
     add_custom_command(
         TARGET ${TARGET} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy
-        ${CMAKE_BINARY_DIR}/bin/libwhisper.worker.js
-        ${CMAKE_CURRENT_SOURCE_DIR}/crispasr.worker.js
+        COMMAND ${CMAKE_COMMAND}
+            -Dsrc=${CMAKE_BINARY_DIR}/bin/libwhisper.worker.js
+            -Ddst=${CMAKE_CURRENT_SOURCE_DIR}/crispasr.worker.js
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/copy_if_exists.cmake
         )
 
     add_custom_command(
         TARGET ${TARGET} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy
-        ${CMAKE_BINARY_DIR}/bin/libwhisper.worker.js
-        ${CMAKE_CURRENT_SOURCE_DIR}/libwhisper.worker.js
+        COMMAND ${CMAKE_COMMAND}
+            -Dsrc=${CMAKE_BINARY_DIR}/bin/libwhisper.worker.js
+            -Ddst=${CMAKE_CURRENT_SOURCE_DIR}/libwhisper.worker.js
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/copy_if_exists.cmake
         )
 endif()
 

@@ -703,7 +703,7 @@
       "backend_id": "vibevoice",
       "gguf": {
         "repo": "cstr/vibevoice-asr-GGUF",
-        "revision": "main",
+        "revision": "7f09f5c112ff98251c8998946e033b6f3078247c",
         "file": "vibevoice-asr-q4_k.gguf",
         "approx_size_mb": 4588
       },
@@ -717,7 +717,7 @@
       "backend_id": "firered-lid",
       "gguf": {
         "repo": "cstr/firered-lid-GGUF",
-        "revision": "main",
+        "revision": "f2861e9d0845889b7d7fd7c66d07c15a369577d3",
         "file": "firered-lid-q4_k.gguf",
         "approx_size_mb": 543
       },
@@ -731,7 +731,7 @@
       "backend_id": "silero-lid",
       "gguf": {
         "repo": "cstr/silero-lid-lang95-GGUF",
-        "revision": "main",
+        "revision": "64cab0db25340ca04589e1efae7064bd0e4f8799",
         "file": "silero-lid-lang95-f32.gguf",
         "approx_size_mb": 16
       },
@@ -745,7 +745,7 @@
       "backend_id": "lid-fasttext",
       "gguf": {
         "repo": "cstr/fasttext-lid176-GGUF",
-        "revision": "main",
+        "revision": "7d1a7353c2967d365db7f6a892f9cf9e5ef4b3f6",
         "file": "fasttext-lid176-f16.gguf",
         "approx_size_mb": 62
       },
@@ -759,7 +759,7 @@
       "backend_id": "ecapa-lid",
       "gguf": {
         "repo": "cstr/ecapa-lid-107-GGUF",
-        "revision": "main",
+        "revision": "95fb0613bf78c6e48305fccd9ce023ac15f0b5a6",
         "file": "ecapa-lid-107-f16.gguf",
         "approx_size_mb": 40
       },
@@ -773,7 +773,7 @@
       "backend_id": "moss-audio",
       "gguf": {
         "repo": "cstr/MOSS-Audio-4B-Instruct-GGUF",
-        "revision": "main",
+        "revision": "dbc2e72233d4a6653781dc3e556f123ba5f1f0c4",
         "file": "moss-audio-4b-instruct-q4_k.gguf",
         "approx_size_mb": 3920
       },
@@ -787,7 +787,7 @@
       "backend_id": "kugelaudio",
       "gguf": {
         "repo": "cstr/kugelaudio-0-open-GGUF",
-        "revision": "main",
+        "revision": "f3796df6f2ab4c690f01da696a29aa7bd96a9739",
         "file": "kugelaudio-0-open-q4_k.gguf",
         "approx_size_mb": 5445
       },
@@ -801,7 +801,7 @@
       "backend_id": "mini-omni2",
       "gguf": {
         "repo": "cstr/mini-omni2-GGUF",
-        "revision": "main",
+        "revision": "0b27fedc2a6c880f77b336bad2b524c24decbea5",
         "file": "mini-omni2-q4_k.gguf",
         "approx_size_mb": 1009
       },
@@ -815,7 +815,7 @@
       "backend_id": "lfm2-audio",
       "gguf": {
         "repo": "cstr/lfm2-audio-1.5b-GGUF",
-        "revision": "main",
+        "revision": "53caad18ec951e54663fe851c71b3ffc78110cac",
         "file": "lfm2-audio-1.5b-q8_0.gguf",
         "approx_size_mb": 1996
       },
@@ -893,6 +893,7 @@
         "file": "csm-1b-q4_k.gguf",
         "approx_size_mb": 1100
       },
+      "voice_preset": "default",
       "tts_phrase": "The quick brown fox jumps over the lazy dog",
       "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
       "wer_max": 0.15,
@@ -926,6 +927,7 @@
         "file": "piper-en_US-lessac-medium-f16.gguf",
         "approx_size_mb": 16
       },
+      "voice_preset": "default",
       "tts_phrase": "The quick brown fox jumps over the lazy dog",
       "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
       "wer_max": 0.15,
@@ -943,7 +945,8 @@
       "tts_phrase": "The quick brown fox jumps over the lazy dog",
       "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
       "wer_max": 0.15,
-      "wer_max_note": "Kyutai Pocket TTS 100M, continuous-latent AR at 12.5 Hz, CC-BY-4.0."
+      "wer_max_note": "Kyutai Pocket TTS 100M, continuous-latent AR at 12.5 Hz, CC-BY-4.0.",
+      "voice_preset": "default"
     },
     {
       "name": "f5-tts-v1-base",
@@ -957,7 +960,8 @@
       "tts_phrase": "The quick brown fox jumps over the lazy dog",
       "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
       "wer_max": 0.15,
-      "wer_max_note": "F5-TTS DiT flow-matching. Needs reference audio for voice cloning; without --voice uses built-in default."
+      "wer_max_note": "F5-TTS DiT flow-matching. Needs reference audio for voice cloning; without --voice uses built-in default.",
+      "voice_preset": "default"
     },
     {
       "name": "parler-tts-mini-v1.1",
@@ -971,7 +975,8 @@
       "tts_phrase": "The quick brown fox jumps over the lazy dog",
       "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
       "wer_max": 0.2,
-      "wer_max_note": "Parler TTS Mini v1.1 (~900M). T5 encoder + DAC decoder. Prompt-conditioned voice via --instruct."
+      "wer_max_note": "Parler TTS Mini v1.1 (~900M). T5 encoder + DAC decoder. Prompt-conditioned voice via --instruct.",
+      "voice_preset": "default"
     },
     {
       "name": "dia-1.6b",
@@ -986,14 +991,15 @@
       "_tts_phrase_note": "Dia requires [S1] or [S2] speaker tags. Prompts under ~100 chars may produce poor output.",
       "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
       "wer_max": 0.2,
-      "wer_max_note": "Dia 1.6B dialogue TTS with CFG. 20% WER headroom for stochastic decode."
+      "wer_max_note": "Dia 1.6B dialogue TTS with CFG. 20% WER headroom for stochastic decode.",
+      "voice_preset": "default"
     },
     {
       "name": "cosyvoice3-0.5b",
       "backend_id": "cosyvoice3-tts",
       "gguf": {
         "repo": "cstr/cosyvoice3-0.5b-2512-GGUF",
-        "revision": "main",
+        "revision": "1c0a6465c78eed08eab0fa8568cebddd3027a4e5",
         "file": "cosyvoice3-llm-q4_k.gguf",
         "approx_size_mb": 366,
         "_companion_note": "Also needs cosyvoice3-flow-q8_0.gguf, cosyvoice3-hift-f16.gguf, cosyvoice3-campplus-f16.gguf, cosyvoice3-s3tok-f16.gguf, cosyvoice3-voices.gguf"
@@ -1001,56 +1007,60 @@
       "tts_phrase": "The quick brown fox jumps over the lazy dog",
       "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
       "wer_max": 0.3,
-      "wer_max_note": "Initial placeholder — cosyvoice3 roundtrip WER not yet measured. 30% is conservative."
+      "wer_max_note": "Initial placeholder — cosyvoice3 roundtrip WER not yet measured. 30% is conservative.",
+      "voice_preset": "default"
     },
     {
       "name": "fastpitch-en",
       "backend_id": "fastpitch",
       "gguf": {
         "repo": "cstr/fastpitch-en-GGUF",
-        "revision": "main",
+        "revision": "55934b51f1111a8bc41d5029d96cad547364f1cd",
         "file": "fastpitch-en-q4_k.gguf",
         "approx_size_mb": 226
       },
       "tts_phrase": "The quick brown fox jumps over the lazy dog",
       "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
       "wer_max": 0.3,
-      "wer_max_note": "Initial placeholder — fastpitch roundtrip WER not yet measured."
+      "wer_max_note": "Initial placeholder — fastpitch roundtrip WER not yet measured.",
+      "voice_preset": "default"
     },
     {
       "name": "melotts-en-v3",
       "backend_id": "melotts",
       "gguf": {
         "repo": "cstr/melotts-en-v3-GGUF",
-        "revision": "main",
+        "revision": "0d0100b0646c86e1576eaea4b14d0131311036f1",
         "file": "melotts-en-v3-f16.gguf",
         "approx_size_mb": 92
       },
       "tts_phrase": "The quick brown fox jumps over the lazy dog",
       "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
       "wer_max": 0.3,
-      "wer_max_note": "Initial placeholder — melotts roundtrip WER not yet measured."
+      "wer_max_note": "Initial placeholder — melotts roundtrip WER not yet measured.",
+      "voice_preset": "default"
     },
     {
       "name": "orpheus-3b-base",
       "backend_id": "orpheus",
       "gguf": {
         "repo": "cstr/orpheus-3b-base-GGUF",
-        "revision": "main",
+        "revision": "71a8f0c6b2fd083c11d523b950a231d90200d8a0",
         "file": "orpheus-3b-base-q8_0.gguf",
         "approx_size_mb": 3352
       },
       "tts_phrase": "The quick brown fox jumps over the lazy dog",
       "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
       "wer_max": 0.3,
-      "wer_max_note": "Initial placeholder — orpheus roundtrip WER not yet measured."
+      "wer_max_note": "Initial placeholder — orpheus roundtrip WER not yet measured.",
+      "voice_preset": "default"
     },
     {
       "name": "outetts-0.3-1b",
       "backend_id": "outetts",
       "gguf": {
         "repo": "cstr/outetts-0.3-1b-GGUF",
-        "revision": "main",
+        "revision": "fdd6560ab48bb197ad4a2b92d2a1fd93ac115f05",
         "file": "outetts-0.3-1b-q4_k.gguf",
         "approx_size_mb": 801,
         "_companion_note": "Also needs wavtokenizer-decoder-f16.gguf"
@@ -1058,49 +1068,53 @@
       "tts_phrase": "The quick brown fox jumps over the lazy dog",
       "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
       "wer_max": 0.3,
-      "wer_max_note": "Initial placeholder — outetts roundtrip WER not yet measured."
+      "wer_max_note": "Initial placeholder — outetts roundtrip WER not yet measured.",
+      "voice_preset": "default"
     },
     {
       "name": "tada-tts-3b-ml",
       "backend_id": "tada-tts",
       "gguf": {
         "repo": "cstr/tada-tts-3b-ml-GGUF",
-        "revision": "main",
+        "revision": "b41c671e7fdcb69888b61273ea5ca840c88183b5",
         "file": "tada-tts-3b-ml-q4_k.gguf",
         "approx_size_mb": 2213
       },
       "tts_phrase": "The quick brown fox jumps over the lazy dog",
       "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
       "wer_max": 0.3,
-      "wer_max_note": "Initial placeholder — tada-tts roundtrip WER not yet measured."
+      "wer_max_note": "Initial placeholder — tada-tts roundtrip WER not yet measured.",
+      "voice_preset": "default"
     },
     {
       "name": "tada-codec",
       "backend_id": "tada-codec",
       "gguf": {
         "repo": "cstr/tada-tts-3b-ml-GGUF",
-        "revision": "main",
+        "revision": "b41c671e7fdcb69888b61273ea5ca840c88183b5",
         "file": "tada-codec-f16.gguf",
         "approx_size_mb": 1006
       },
       "tts_phrase": "The quick brown fox jumps over the lazy dog",
       "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
       "wer_max": 0.5,
-      "wer_max_note": "Codec roundtrip — encode+decode loses quality, WER will be higher."
+      "wer_max_note": "Codec roundtrip — encode+decode loses quality, WER will be higher.",
+      "voice_preset": "default"
     },
     {
       "name": "zonos-v0.1-transformer",
       "backend_id": "zonos-tts",
       "gguf": {
         "repo": "cstr/zonos-v0.1-transformer-GGUF",
-        "revision": "main",
+        "revision": "42304d39d2a01b0d7a2a086ad2c1dfc6270c0b29",
         "file": "zonos-v0.1-transformer-q4_k.gguf",
         "approx_size_mb": 930
       },
       "tts_phrase": "The quick brown fox jumps over the lazy dog",
       "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
       "wer_max": 0.3,
-      "wer_max_note": "Initial placeholder — zonos roundtrip WER not yet measured."
+      "wer_max_note": "Initial placeholder — zonos roundtrip WER not yet measured.",
+      "voice_preset": "default"
     }
   ]
 }
