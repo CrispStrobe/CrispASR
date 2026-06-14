@@ -1021,7 +1021,8 @@ jobs:
   # tarball is self-contained for downstream Windows consumers — matches
   # the existing build-windows-cuda EXE bundle's pattern.
   build-libs-windows-x86_64-cuda:
-    runs-on: windows-latest
+    # Pin to windows-2022 — CUDA 12.8 doesn't support VS 2026 (MSVC 14.51).
+    runs-on: windows-2022
     env:
       CUDA_VERSION: "12.8.0"
     steps:
@@ -1248,7 +1249,8 @@ jobs:
 
   # ── Windows CUDA (dynamic, requires NVIDIA driver on target machine) ─────────
   build-windows-cuda:
-    runs-on: windows-latest
+    # Pin to windows-2022 — CUDA 12.8 doesn't support VS 2026 (MSVC 14.51).
+    runs-on: windows-2022
     env:
       CUDA_VERSION: "12.8.0"
     steps:
