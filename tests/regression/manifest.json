@@ -668,8 +668,8 @@
         "approx_size_mb": 3200
       },
       "sample": "samples/jfk.wav",
-      "expected_transcript": "SIGABRT on CUDA+CPU (rc=-6) — known runtime bug, needs investigation",
-      "expected_transcript_source": "2026-06-15: rc=-6 on both T4 GPU and CPU-only Kaggle. Needs granite_nle.cpp debugging."
+      "expected_transcript": "and so my fellow americans ask not what your country can do for you ask what you can do for your country",
+      "expected_transcript_source": "captured 2026-06-15 Kaggle T4 Debug build — previous SIGABRT was stale Release build artifact"
     },
     {
       "name": "voxtral4b-realtime",
@@ -1149,7 +1149,9 @@
         "revision": "6e35d352cc95160054c662489fc7293341a1f0e4",
         "file": "indextts-gpt.gguf",
         "approx_size_mb": 2175,
-        "companion_files": ["indextts-bigvgan.gguf"]
+        "companion_files": [
+          "indextts-bigvgan.gguf"
+        ]
       },
       "tts_phrase": "The quick brown fox jumps over the lazy dog",
       "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",

@@ -1,0 +1,11 @@
+{
+  "id": "chr1s4/crispasr-granite-nar-debug",
+  "title": "crispasr-granite-nar-debug",
+  "code_file": "debug.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "true",
+  "dataset_sources": ["chr1s4/crispasr-hf-token"]
+}
