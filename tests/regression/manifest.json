@@ -326,8 +326,8 @@
         "approx_size_mb": 2529
       },
       "sample": "samples/jfk.wav",
-      "expected_transcript": "PLACEHOLDER — capture from first rebake run",
-      "expected_transcript_source": "TODO — capture once rebake produces the ref archive"
+      "expected_transcript": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
+      "expected_transcript_source": "captured 2026-06-15 Kaggle T4 GPU (chr1s4) on samples/jfk.wav"
     },
     {
       "name": "mimo-asr",
@@ -548,8 +548,8 @@
         "approx_size_mb": 400
       },
       "sample": "samples/jfk.wav",
-      "expected_transcript": "PLACEHOLDER",
-      "expected_transcript_source": "TODO"
+      "expected_transcript": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
+      "expected_transcript_source": "captured 2026-06-15 Kaggle T4 GPU (chr1s4) on samples/jfk.wav"
     },
     {
       "name": "omniasr-ctc-1b-v2",
@@ -563,8 +563,8 @@
         "approx_size_mb": 660
       },
       "sample": "samples/jfk.wav",
-      "expected_transcript": "PLACEHOLDER",
-      "expected_transcript_source": "TODO"
+      "expected_transcript": "And so my fellow americans ask not. What your country can do for you? Ask what you can do for your country.",
+      "expected_transcript_source": "captured 2026-06-15 Kaggle T4 GPU (chr1s4) on samples/jfk.wav"
     },
     {
       "name": "omniasr-llm-300m",
@@ -578,8 +578,8 @@
         "approx_size_mb": 1100
       },
       "sample": "samples/jfk.wav",
-      "expected_transcript": "PLACEHOLDER",
-      "expected_transcript_source": "TODO"
+      "expected_transcript": "And so my fellow americas, ask not what your country can do for you, ask what you can do for your country.",
+      "expected_transcript_source": "captured 2026-06-15 Kaggle T4 GPU (chr1s4) on samples/jfk.wav"
     },
     {
       "name": "kyutai-stt-1b",
@@ -593,8 +593,8 @@
         "approx_size_mb": 700
       },
       "sample": "samples/jfk.wav",
-      "expected_transcript": "PLACEHOLDER",
-      "expected_transcript_source": "TODO"
+      "expected_transcript": "And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country.",
+      "expected_transcript_source": "captured 2026-06-15 Kaggle T4 GPU (chr1s4) on samples/jfk.wav"
     },
     {
       "name": "gemma4-e2b-it",
@@ -608,8 +608,8 @@
         "approx_size_mb": 2500
       },
       "sample": "samples/jfk.wav",
-      "expected_transcript": "PLACEHOLDER",
-      "expected_transcript_source": "TODO"
+      "expected_transcript": "ANd so my fellow Americans ask not what your country can do for you, ask what you can do for your country.",
+      "expected_transcript_source": "captured 2026-06-15 Kaggle T4 GPU (chr1s4) on samples/jfk.wav"
     },
     {
       "name": "funasr-nano",
@@ -623,8 +623,8 @@
         "approx_size_mb": 1060
       },
       "sample": "samples/jfk.wav",
-      "expected_transcript": "PLACEHOLDER",
-      "expected_transcript_source": "TODO"
+      "expected_transcript": "AND SO MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU ASK WHAT YOU CAN DO FOR YOUR COUNTRY",
+      "expected_transcript_source": "captured 2026-06-15 Kaggle T4 GPU (chr1s4) on samples/jfk.wav"
     },
     {
       "name": "funasr-mlt-nano",
@@ -638,8 +638,8 @@
         "approx_size_mb": 1980
       },
       "sample": "samples/jfk.wav",
-      "expected_transcript": "PLACEHOLDER",
-      "expected_transcript_source": "TODO"
+      "expected_transcript": "And so my fellow Americans ask not what your country can do for you, ask what you can do for your country.",
+      "expected_transcript_source": "captured 2026-06-15 Kaggle T4 GPU (chr1s4) on samples/jfk.wav"
     },
     {
       "name": "granite-4.1-plus",
@@ -653,8 +653,8 @@
         "approx_size_mb": 2960
       },
       "sample": "samples/jfk.wav",
-      "expected_transcript": "PLACEHOLDER",
-      "expected_transcript_source": "TODO"
+      "expected_transcript": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
+      "expected_transcript_source": "captured 2026-06-15 Kaggle T4 GPU (chr1s4) on samples/jfk.wav"
     },
     {
       "name": "granite-4.1-nar",
@@ -683,8 +683,8 @@
         "approx_size_mb": 2500
       },
       "sample": "samples/jfk.wav",
-      "expected_transcript": "PLACEHOLDER",
-      "expected_transcript_source": "TODO"
+      "expected_transcript": "And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country.",
+      "expected_transcript_source": "captured 2026-06-15 Kaggle T4 GPU (chr1s4) on samples/jfk.wav"
     },
     {
       "name": "vibevoice-asr",
@@ -696,8 +696,8 @@
         "approx_size_mb": 4588
       },
       "sample": "samples/jfk.wav",
-      "expected_transcript": "TBD",
-      "expected_transcript_source": "not yet captured — skip_diff entry, transcript needs pinning",
+      "expected_transcript": "And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country.",
+      "expected_transcript_source": "captured 2026-06-15 Kaggle T4 GPU (chr1s4) on samples/jfk.wav",
       "skip_diff": true
     },
     {
@@ -766,8 +766,8 @@
         "approx_size_mb": 3920
       },
       "sample": "samples/jfk.wav",
-      "expected_transcript": "TBD",
-      "expected_transcript_source": "not yet captured — skip_diff entry, transcript needs pinning",
+      "expected_transcript": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
+      "expected_transcript_source": "captured 2026-06-15 Kaggle T4 GPU (chr1s4) on samples/jfk.wav",
       "skip_diff": true
     },
     {
@@ -794,8 +794,8 @@
         "approx_size_mb": 1009
       },
       "sample": "samples/jfk.wav",
-      "expected_transcript": "TBD",
-      "expected_transcript_source": "not yet captured — skip_diff entry, transcript needs pinning",
+      "expected_transcript": "And so my fellow americans ask not what your country can do for you, ask what you can do for your country.",
+      "expected_transcript_source": "captured 2026-06-15 Kaggle T4 GPU (chr1s4) on samples/jfk.wav",
       "skip_diff": true
     },
     {
