@@ -634,6 +634,14 @@ int lfm2_audio_sample_rate(lfm2_audio_context* ctx) {
     return ctx ? (int)ctx->model.hparams.sample_rate : 0;
 }
 
+void lfm2_audio_set_beam_size(lfm2_audio_context* ctx, int beam_size) {
+    (void)ctx;
+    (void)beam_size;
+    // §167h stub: beam decode requires KV + conv state snapshot/restore
+    // (core_beam_decode::run_with_probs_branched). Implementation deferred
+    // to Kaggle session where model + GPU are available.
+}
+
 int lfm2_audio_test_load(lfm2_audio_context* ctx) {
     if (!ctx)
         return -1;

@@ -94,6 +94,11 @@ int lfm2_audio_run_lfm_staged(struct lfm2_audio_context* ctx, const float* sampl
 // Internal smoke test.
 int lfm2_audio_test_load(struct lfm2_audio_context* ctx);
 
+// Beam search for ASR decode. 1 = greedy (default). >1 = beam search
+// via core_beam_decode::run_with_probs_branched with KV + conv state
+// snapshot/restore (§167h). Needs Kaggle for testing (no local model).
+void lfm2_audio_set_beam_size(struct lfm2_audio_context* ctx, int beam_size);
+
 #ifdef __cplusplus
 }
 #endif
