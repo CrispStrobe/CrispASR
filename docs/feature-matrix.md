@@ -3,20 +3,21 @@
 
 # Feature matrix
 
-All 75 backends compiled into the `crispasr` binary, with their declared capability bits. For an interactive sortable/filterable view, open [`feature-matrix.html`](feature-matrix.html).
+All 76 backends compiled into the `crispasr` binary, with their declared capability bits. For an interactive sortable/filterable view, open [`feature-matrix.html`](feature-matrix.html).
 
 | Backend | TTS | Voice cloning | Translate | Src/Tgt language | Language detect | Auto-download | Timestamps (native) | Timestamps (CTC) | Word timestamps | Token confidence | Temperature | Beam search | Punctuation toggle | Flash attention | Diarize | GBNF grammar | VAD (internal) | Parallel processors | Punctuation Native | S2S |
 |---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
 | `whisper` |  |  | ✓ |  | ✓ | ✓ | ✓ |  | ✓ | ✓ | ✓ | ✓ |  | ✓ | ✓ | ✓ | ✓ | ✓ |  |  |
+| `nemotron` |  |  |  |  |  | ✓ | ✓ |  | ✓ | ✓ | ✓ | ✓ |  | ✓ | ✓ |  |  |  | ✓ |  |
 | `parakeet` |  |  |  |  |  | ✓ | ✓ |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |  | ✓ |  |  |
 | `canary` |  |  | ✓ | ✓ |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |  | ✓ |  |  |
-| `lfm2-audio` | ✓ |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  | ✓ |
+| `lfm2-audio` | ✓ |  |  |  |  | ✓ |  |  |  |  |  | ✓ |  |  |  |  |  |  |  | ✓ |
 | `mini-omni2` | ✓ |  |  |  |  | ✓ |  |  |  |  | ✓ |  |  |  |  |  |  |  |  | ✓ |
 | `cohere` |  |  |  |  |  | ✓ | ✓ |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |  | ✓ |  |  |
 | `granite` |  |  | ✓ | ✓ |  | ✓ |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |  | ✓ |  |  |
 | `granite-4.1` |  |  | ✓ | ✓ |  | ✓ |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |  | ✓ |  |  |
 | `granite-4.1-plus` |  |  | ✓ | ✓ |  | ✓ |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |  | ✓ |  |  |
-| `granite-4.1-nar` |  |  |  |  |  | ✓ |  | ✓ |  |  |  |  |  | ✓ | ✓ |  |  |  | ✓ |  |
+| `granite-4.1-nar` |  |  |  |  |  | ✓ |  | ✓ |  |  |  | ✓ |  | ✓ | ✓ |  |  |  | ✓ |  |
 | `voxtral` |  |  | ✓ | ✓ |  | ✓ |  | ✓ |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |  | ✓ |  |  |
 | `voxtral4b` |  |  |  |  |  | ✓ |  | ✓ |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |  | ✓ |  |  |
 | `qwen3` |  |  | ✓ | ✓ |  | ✓ |  | ✓ |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |  | ✓ |  |  |
@@ -65,8 +66,8 @@ All 75 backends compiled into the `crispasr` binary, with their declared capabil
 | `omniasr-300m` |  |  |  |  |  | ✓ |  | ✓ |  | ✓ | ✓ | ✓ |  | ✓ | ✓ |  |  |  |  |  |
 | `omniasr-llm` |  |  |  |  |  | ✓ |  | ✓ |  | ✓ | ✓ | ✓ |  | ✓ | ✓ |  |  |  |  |  |
 | `omniasr-llm-1b` |  |  |  |  |  | ✓ |  | ✓ |  | ✓ | ✓ | ✓ |  | ✓ | ✓ |  |  |  |  |  |
-| `mimo-asr` |  |  |  |  |  | ✓ |  | ✓ |  | ✓ | ✓ |  |  | ✓ | ✓ |  |  |  |  |  |
-| `moss-audio` |  |  |  |  |  | ✓ |  |  |  |  | ✓ |  |  |  |  |  |  |  | ✓ |  |
+| `mimo-asr` |  |  |  |  |  | ✓ |  | ✓ |  | ✓ | ✓ | ✓ |  | ✓ | ✓ |  |  |  |  |  |
+| `moss-audio` |  |  |  |  |  | ✓ |  |  |  |  | ✓ | ✓ |  |  |  |  |  |  | ✓ |  |
 | `funasr` |  |  |  |  |  | ✓ |  | ✓ |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |  |  |  |  |
 | `fun-asr-mlt-nano` |  |  |  |  |  | ✓ |  | ✓ |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |  |  |  |  |
 | `paraformer` |  |  |  |  |  | ✓ |  | ✓ |  |  |  |  | ✓ | ✓ | ✓ |  |  |  |  |  |
