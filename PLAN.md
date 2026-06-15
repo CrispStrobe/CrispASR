@@ -2893,13 +2893,24 @@ Four backends migrated from `ggml_gallocr` to `ggml_backend_sched`:
 
 All verified: identical output on CPU, ASR roundtrip for TTS, 435 unit tests pass.
 
+### Second batch (2026-06-15, commit `f748b94d`)
+
+Two more backends migrated:
+- **audioseal** — generator encode + detect graphs
+- **lfm2_audio** — encoder, backbone, adapter graphs; F16 verified
+
+**lfm2 Q4_K finding:** the published `lfm2-audio-1.5b-q4_k.gguf` was quantized
+with an older quantizer that Q4_K'd `lfm.embed_tokens` (should be F16). Even
+after re-quantizing with correct rules (embed_tokens F16), Q4_K still produces
+0 tokens — the hybrid conv+attention backbone is too precision-sensitive. **Q5_K
+works** and gives identical output to F16. Need to re-publish GGUFs on HF with
+Q5_K as minimum quant.
+
 ### Remaining gallocr backends
 
 | Backend | gallocr | init_best | Status |
 |---------|:-------:|:---------:|--------|
-| `voxcpm2_tts` | 27 | ✅ | gallocr on GPU backend — graph path uses GPU |
-| `lfm2_audio` | 12 | ✅ | gallocr on GPU backend — works |
-| `audioseal` | 10 | ✅ | gallocr on GPU backend — small model |
+| `voxcpm2_tts` | 27 | ✅ | persistent gallocr with reserve — complex migration |
 
 ### Nemotron streaming encoder — QUALITY PROBLEM
 
