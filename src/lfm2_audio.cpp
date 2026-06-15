@@ -178,6 +178,7 @@ struct lfm2_audio_context {
     bool use_gpu = false;
     ggml_backend_t backend = nullptr;
     ggml_backend_t backend_cpu = nullptr;
+    ggml_backend_sched_t sched = nullptr;
 
     // Compute buffers: large for prefill, small for decode steps
     std::vector<uint8_t> compute_meta; // 256 MB for prefill (T >> 1)
@@ -608,6 +609,8 @@ void lfm2_audio_free(lfm2_audio_context* ctx) {
         ggml_backend_buffer_free(ctx->detok.buf);
     if (ctx->detok.ctx)
         ggml_free(ctx->detok.ctx);
+    if (ctx->sched)
+        ggml_backend_sched_free(ctx->sched);
     if (ctx->kv_buf)
         ggml_backend_buffer_free(ctx->kv_buf);
     if (ctx->kv_ctx)
@@ -709,10 +712,15 @@ float* lfm2_audio_run_encoder(lfm2_audio_context* ctx, const float* mel, int T_m
     ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 16384, false);
     ggml_build_forward_expand(gf, out);
 
-    // Allocate via gallocr
-    ggml_gallocr_t galloc = ggml_gallocr_new(ggml_backend_get_default_buffer_type(ctx->backend));
-    if (!ggml_gallocr_alloc_graph(galloc, gf)) {
-        ggml_gallocr_free(galloc);
+    // Allocate via sched
+    if (!ctx->sched) {
+        ggml_backend_t backends[2] = {ctx->backend, ctx->backend_cpu};
+        int n_be = (ctx->backend != ctx->backend_cpu) ? 2 : 1;
+        ctx->sched = ggml_backend_sched_new(backends, nullptr, n_be, 16384, false, false);
+    }
+    ggml_backend_sched_reset(ctx->sched);
+    if (!ggml_backend_sched_alloc_graph(ctx->sched, gf)) {
+        fprintf(stderr, "lfm2_audio: sched alloc encoder graph failed\n");
         ggml_free(ctx0);
         return nullptr;
     }
@@ -721,7 +729,11 @@ float* lfm2_audio_run_encoder(lfm2_audio_context* ctx, const float* mel, int T_m
     ggml_backend_tensor_set(mel_t, mel, 0, sizeof(float) * n_mels * T_mel);
     ggml_backend_tensor_set(pos_t, pos_vec.data(), 0, sizeof(float) * d * (2 * T_enc - 1));
 
-    ggml_backend_graph_compute(ctx->backend, gf);
+    if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS) {
+        fprintf(stderr, "lfm2_audio: encoder graph compute failed\n");
+        ggml_free(ctx0);
+        return nullptr;
+    }
 
     float* result = (float*)malloc(sizeof(float) * T_enc * d);
     if (result)
@@ -731,7 +743,6 @@ float* lfm2_audio_run_encoder(lfm2_audio_context* ctx, const float* mel, int T_m
         *out_T_enc = T_enc;
     if (out_d_model)
         *out_d_model = d;
-    ggml_gallocr_free(galloc);
     ggml_free(ctx0);
     return result;
 }
@@ -1101,10 +1112,15 @@ static Lfm2StepResult lfm2_backbone_step(lfm2_audio_context* ctx, const float* e
     ggml_build_forward_expand(gf, out);
     ggml_build_forward_expand(gf, hid_snap);
 
-    // Allocate graph via gallocr — only allocates what's needed
-    ggml_gallocr_t galloc = ggml_gallocr_new(ggml_backend_get_default_buffer_type(ctx->backend));
-    if (!ggml_gallocr_alloc_graph(galloc, gf)) {
-        ggml_gallocr_free(galloc);
+    // Allocate graph via sched
+    if (!ctx->sched) {
+        ggml_backend_t backends[2] = {ctx->backend, ctx->backend_cpu};
+        int n_be = (ctx->backend != ctx->backend_cpu) ? 2 : 1;
+        ctx->sched = ggml_backend_sched_new(backends, nullptr, n_be, 16384, false, false);
+    }
+    ggml_backend_sched_reset(ctx->sched);
+    if (!ggml_backend_sched_alloc_graph(ctx->sched, gf)) {
+        fprintf(stderr, "lfm2_audio: sched alloc backbone graph failed\n");
         ggml_free(ctx0);
         return {};
     }
@@ -1142,7 +1158,11 @@ static Lfm2StepResult lfm2_backbone_step(lfm2_audio_context* ctx, const float* e
         }
     }
 
-    ggml_backend_graph_compute(ctx->backend, gf);
+    if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS) {
+        fprintf(stderr, "lfm2_audio: backbone graph compute failed\n");
+        ggml_free(ctx0);
+        return {};
+    }
 
     int vocab_size = (int)out->ne[0];
     Lfm2StepResult result;
@@ -1184,7 +1204,6 @@ static Lfm2StepResult lfm2_backbone_step(lfm2_audio_context* ctx, const float* e
     }
 
     ctx->kv_n_past += T_in;
-    ggml_gallocr_free(galloc);
     ggml_free(ctx0);
     return result;
 }
@@ -1405,14 +1424,23 @@ float* lfm2_audio_run_adapter(lfm2_audio_context* ctx, const float* encoder_out,
     ggml_cgraph* gf = ggml_new_graph(ctx0);
     ggml_build_forward_expand(gf, out);
 
-    ggml_gallocr_t galloc = ggml_gallocr_new(ggml_backend_get_default_buffer_type(ctx->backend));
-    if (!ggml_gallocr_alloc_graph(galloc, gf)) {
-        ggml_gallocr_free(galloc);
+    if (!ctx->sched) {
+        ggml_backend_t backends[2] = {ctx->backend, ctx->backend_cpu};
+        int n_be = (ctx->backend != ctx->backend_cpu) ? 2 : 1;
+        ctx->sched = ggml_backend_sched_new(backends, nullptr, n_be, 16384, false, false);
+    }
+    ggml_backend_sched_reset(ctx->sched);
+    if (!ggml_backend_sched_alloc_graph(ctx->sched, gf)) {
+        fprintf(stderr, "lfm2_audio: sched alloc adapter graph failed\n");
         ggml_free(ctx0);
         return nullptr;
     }
     ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "adapter_in"), encoder_out, 0, sizeof(float) * T_enc * d_model);
-    ggml_backend_graph_compute(ctx->backend, gf);
+    if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS) {
+        fprintf(stderr, "lfm2_audio: adapter graph compute failed\n");
+        ggml_free(ctx0);
+        return nullptr;
+    }
 
     float* result = (float*)malloc(sizeof(float) * T_enc * hidden);
     if (result)
@@ -1420,7 +1448,6 @@ float* lfm2_audio_run_adapter(lfm2_audio_context* ctx, const float* encoder_out,
 
     if (out_hidden_size)
         *out_hidden_size = hidden;
-    ggml_gallocr_free(galloc);
     ggml_free(ctx0);
     return result;
 }
