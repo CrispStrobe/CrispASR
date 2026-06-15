@@ -820,7 +820,7 @@
       "_skip_diff_note": "Added 2026-06-15. Transcript-only regression for now; diff harness needs NeMo ref dump integration.",
       "gguf": {
         "repo": "cstr/nemotron-3.5-asr-streaming-GGUF",
-        "revision": "5d7b89a8b6e4c2f1a3d0e9f8c7b6a5d4e3f2a1b0",
+        "revision": "bbd95a9ca5fa0dfca3312a122dfc45a2b578b9c2",
         "_revision_note": "TODO: replace with actual 40-char SHA from HF repo.",
         "file": "nemotron-3.5-asr-streaming-0.6b-q4_k.gguf",
         "approx_size_mb": 458

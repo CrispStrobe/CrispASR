@@ -3212,11 +3212,11 @@ parity-pass audit doesn't have to re-discover them.
 
 ## 92. All-backend regression suite (nightly CI)
 
-**Status:** 23/30 ASR transcript pins filled (2026-06-15). Kaggle T4
-GPU kernel (`chr1s4/crispasr-regression-transcript-capture`) captured
-13 backends in one run. 7 remaining PLACEHOLDERs are TTS/LID/broken.
-Next: flip `skip_diff` on backends where ref archives exist, promote
-to release gating.
+**Status:** 35/35 ASR + 21 TTS regression entries filled, 0 PLACEHOLDERs
+(2026-06-15). CI workflow at `.github/workflows/regression.yml` runs
+nightly + on PR (smoke-only). Matrix: 22 ASR + 7 TTS backends on GH
+free tier. Next: flip `skip_diff` on backends where ref archives exist,
+add heavier backends via Kaggle weekly sweep, promote to release gating.
 
 **Why:** the ggml-assertion-hardening regression in 0.6.x cycle
 demonstrated that we silently inherit upstream behaviour changes —
