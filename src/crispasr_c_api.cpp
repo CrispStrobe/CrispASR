@@ -48,6 +48,10 @@
 #include "parakeet.h"
 #define CA_HAVE_PARAKEET 1
 #endif
+#if __has_include("nemotron.h")
+#include "nemotron.h"
+#define CA_HAVE_NEMOTRON 1
+#endif
 #if __has_include("canary.h")
 #include "canary.h"
 #define CA_HAVE_CANARY 1
@@ -1151,6 +1155,32 @@ CA_EXPORT void crispasr_parakeet_result_free(parakeet_result* r) {
 
 #endif // CA_HAVE_PARAKEET
 
+#ifdef CA_HAVE_NEMOTRON
+
+CA_EXPORT nemotron_context* crispasr_nemotron_init(const char* model_path, int n_threads, int use_gpu) {
+    if (!model_path)
+        return nullptr;
+    nemotron_context_params p = nemotron_context_default_params();
+    p.n_threads = n_threads > 0 ? n_threads : 4;
+    p.use_gpu = use_gpu != 0;
+    p.verbosity = 0;
+    return nemotron_init_from_file(model_path, p);
+}
+
+CA_EXPORT void crispasr_nemotron_free(nemotron_context* ctx) {
+    if (ctx)
+        nemotron_free(ctx);
+}
+
+CA_EXPORT nemotron_result* crispasr_nemotron_transcribe(nemotron_context* ctx, const float* pcm, int n_samples,
+                                                        int64_t t_offset_cs) {
+    if (!ctx || !pcm || n_samples <= 0)
+        return nullptr;
+    return nemotron_transcribe_ex(ctx, pcm, n_samples, t_offset_cs);
+}
+
+#endif // CA_HAVE_NEMOTRON
+
 // =========================================================================
 // Backend auto-detection from GGUF metadata
 // =========================================================================
@@ -1426,6 +1456,9 @@ struct crispasr_session {
     whisper_context* whisper_ctx = nullptr;
 #ifdef CA_HAVE_PARAKEET
     parakeet_context* parakeet_ctx = nullptr;
+#endif
+#ifdef CA_HAVE_NEMOTRON
+    nemotron_context* nemotron_ctx = nullptr;
 #endif
 #ifdef CA_HAVE_CANARY
     canary_context* canary_ctx = nullptr;
@@ -1821,6 +1854,23 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
             delete s;
             return nullptr;
         }
+        return s;
+    }
+#endif
+#ifdef CA_HAVE_NEMOTRON
+    if (s->backend == "nemotron") {
+        nemotron_context_params np = nemotron_context_default_params();
+        np.n_threads = s->n_threads;
+        np.verbosity = g_open_verbosity_tls;
+        np.use_gpu = g_open_use_gpu_tls;
+        np.use_flash = g_open_flash_attn_tls;
+        s->nemotron_ctx = nemotron_init_from_file(model_path, np);
+        if (!s->nemotron_ctx) {
+            delete s;
+            return nullptr;
+        }
+        if (!s->source_language.empty())
+            nemotron_set_language(s->nemotron_ctx, s->source_language.c_str());
         return s;
     }
 #endif
@@ -2839,6 +2889,9 @@ CA_EXPORT int crispasr_session_available_backends(char* out_csv, int out_cap) {
 #ifdef CA_HAVE_PARAKEET
     list += ",parakeet";
 #endif
+#ifdef CA_HAVE_NEMOTRON
+    list += ",nemotron";
+#endif
 #ifdef CA_HAVE_CANARY
     list += ",canary";
 #endif
@@ -3510,6 +3563,39 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
         }
         r->segments.push_back(std::move(seg));
         parakeet_result_free(pr);
+        return r;
+    }
+#endif
+#ifdef CA_HAVE_NEMOTRON
+    if (s->backend == "nemotron" && s->nemotron_ctx) {
+        if (lang_set)
+            nemotron_set_language(s->nemotron_ctx, lang.c_str());
+        nemotron_result* nr = nemotron_transcribe_ex(s->nemotron_ctx, pcm, n_samples, 0);
+        if (!nr) {
+            delete r;
+            return nullptr;
+        }
+
+        // Nemotron produces one logical segment covering the whole input;
+        // we package word-level timings into a single segment for the
+        // unified shape.
+        crispasr_session_seg seg;
+        seg.text = nr->text ? nr->text : "";
+        if (nr->n_words > 0) {
+            seg.t0 = nr->words[0].t0;
+            seg.t1 = nr->words[nr->n_words - 1].t1;
+            seg.words.reserve(nr->n_words);
+            for (int i = 0; i < nr->n_words; ++i) {
+                crispasr_session_seg::word w;
+                w.text = nr->words[i].text;
+                w.t0 = nr->words[i].t0;
+                w.t1 = nr->words[i].t1;
+                w.p = nr->words[i].p > 0.0f ? nr->words[i].p : 1.0f;
+                seg.words.push_back(std::move(w));
+            }
+        }
+        r->segments.push_back(std::move(seg));
+        nemotron_result_free(nr);
         return r;
     }
 #endif
@@ -6298,6 +6384,10 @@ CA_EXPORT void crispasr_session_close(crispasr_session* s) {
 #ifdef CA_HAVE_PARAKEET
     if (s->parakeet_ctx)
         parakeet_free(s->parakeet_ctx);
+#endif
+#ifdef CA_HAVE_NEMOTRON
+    if (s->nemotron_ctx)
+        nemotron_free(s->nemotron_ctx);
 #endif
 #ifdef CA_HAVE_CANARY
     if (s->canary_ctx)

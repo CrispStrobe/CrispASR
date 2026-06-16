@@ -244,6 +244,9 @@ int crispasr_lcs_dedup_prefix_count(const int* prev_tail_tokens, int n_prev,
                                     const int* curr_tokens, int n_curr, int min_lcs_length);
 
 // --- Direct Parakeet API ---
+// Note: nemotron, lfm2-audio, and other recent backends are accessed
+// via the Session API (Open → Transcribe → Close). Standalone wrappers
+// below are for backwards compatibility with early parakeet integrations.
 void* crispasr_parakeet_init(const char* model_path, int n_threads, int use_flash);
 void  crispasr_parakeet_free(void* ctx);
 void* crispasr_parakeet_transcribe(void* ctx, const float* pcm, int n_samples, const char* language);

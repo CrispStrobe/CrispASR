@@ -1605,7 +1605,7 @@ class Session:
 
     def set_temperature(self, temperature: float, seed: int = 0) -> None:
         """Set decoder temperature on backends that support runtime control
-        (canary, cohere, parakeet, moonshine). Other backends silently no-op.
+        (canary, cohere, parakeet, nemotron, moonshine). Other backends silently no-op.
 
         ``seed`` is the RNG seed for sampling; pass 0 for time-based.
         Returns silently when no backend in the session honours the

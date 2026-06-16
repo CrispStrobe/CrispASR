@@ -325,7 +325,7 @@ class RegistryEntry {
 }
 
 /// Look up the canonical GGUF for a backend (whisper, parakeet, canary,
-/// voxtral, voxtral4b, granite, qwen3, cohere, wav2vec2). Returns null
+/// voxtral, voxtral4b, granite, qwen3, cohere, nemotron, wav2vec2). Returns null
 /// on miss.
 RegistryEntry? registryLookup(String backend, {DynamicLibrary? lib}) =>
     _registryCall('crispasr_registry_lookup_abi', backend, lib);
