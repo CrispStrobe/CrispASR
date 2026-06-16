@@ -1,0 +1,14 @@
+{
+  "id": "chr1s4/crispasr-lahgtna-reconvert-170",
+  "title": "crispasr lahgtna reconvert 170",
+  "code_file": "reconvert.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "false",
+  "enable_internet": "true",
+  "dataset_sources": ["chr1s4/crispasr-hf-token"],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}
