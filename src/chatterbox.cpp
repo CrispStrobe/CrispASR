@@ -742,6 +742,7 @@ struct chatterbox_context {
     cb_ve_model ve;
     cb_tokenizer tokenizer;
     cb_precomputed_conds conds;
+    std::string language; // multilingual: "[de]", "[fr]", etc. Empty = English
 
     ggml_backend_t backend = nullptr;
     ggml_backend_t backend_cpu = nullptr;
@@ -2524,6 +2525,12 @@ extern "C" int32_t* chatterbox_synthesize_tokens(struct chatterbox_context* ctx,
 
     // 1. Normalize and tokenize text
     std::string norm_text = punc_norm(text);
+
+    // Multilingual: prepend [lang] token if set (#170)
+    if (!ctx->language.empty()) {
+        norm_text = ctx->language + norm_text;
+    }
+
     std::vector<int32_t> text_tokens;
     if (ctx->tokenizer.has_bpe) {
         text_tokens = ctx->tokenizer.bpe_byte_level ? tokenize_text_bpe(ctx->tokenizer, norm_text)
@@ -3670,6 +3677,24 @@ extern "C" void chatterbox_set_seed(struct chatterbox_context* ctx, uint32_t see
     mt19937_seed(ctx->rng_state, seed);
     if (ctx->s3gen_ctx)
         chatterbox_s3gen_set_seed(ctx->s3gen_ctx, seed);
+}
+
+extern "C" void chatterbox_set_language(struct chatterbox_context* ctx, const char* lang) {
+    if (!ctx)
+        return;
+    if (!lang || !*lang) {
+        ctx->language.clear();
+        return;
+    }
+    // Validate: check the tokenizer vocab for [lang] token
+    std::string tag = std::string("[") + lang + "]";
+    if (ctx->tokenizer.token_to_id.find(tag) == ctx->tokenizer.token_to_id.end()) {
+        fprintf(stderr,
+                "chatterbox: warning: language token '%s' not in vocab — "
+                "generation may not work as expected\n",
+                tag.c_str());
+    }
+    ctx->language = tag;
 }
 
 extern "C" void chatterbox_tokens_free(int32_t* tokens) {

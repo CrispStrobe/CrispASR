@@ -170,6 +170,11 @@ public:
             }
         }
         chatterbox_set_seed(ctx_, (uint32_t)params.seed);
+        // Multilingual language selection (#170)
+        if (!params.language.empty() && params.language != "auto")
+            chatterbox_set_language(ctx_, params.language.c_str());
+        else
+            chatterbox_set_language(ctx_, nullptr); // clear
         // 75c-opt-2: native backend knobs
         if (params.tts_top_p >= 0.0f)
             chatterbox_set_top_p(ctx_, params.tts_top_p);
