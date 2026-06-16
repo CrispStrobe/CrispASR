@@ -216,6 +216,8 @@ jobs:
         env:
           BUILD_DIR: build-regression
           WORK_DIR: ${{ runner.temp }}/regression-${{ matrix.backend }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_HUB_ENABLE_HF_TRANSFER: "0"
         run: |
           mkdir -p "$WORK_DIR"
           tests/regression/run_one.py "${{ matrix.backend }}"

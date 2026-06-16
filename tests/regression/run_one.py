@@ -79,19 +79,33 @@ def hf_download(repo: str, file_in_repo: str, revision: str, dest_dir: Path) -> 
     the right choice for CI where every job is a clean runner anyway.
     """
     from huggingface_hub import hf_hub_download
+    import time as _time
 
     cache_dir = None
     if not (os.environ.get("HF_HOME") or os.environ.get("HUGGINGFACE_HUB_CACHE")):
         cache_dir = str(dest_dir / "hf_cache")
 
     print(f"  download  {repo}@{revision[:8]} :: {file_in_repo}", flush=True)
-    local = hf_hub_download(
-        repo_id=repo,
-        filename=file_in_repo,
-        revision=revision,
-        cache_dir=cache_dir,
-    )
-    return Path(local)
+    # Retry with exponential backoff for HF 429 rate limiting.
+    # With 29 concurrent CI jobs all hitting HF, anonymous rate limits
+    # are easily exceeded. An HF_TOKEN secret helps; retries handle
+    # the remaining transient 429s.
+    for attempt in range(5):
+        try:
+            local = hf_hub_download(
+                repo_id=repo,
+                filename=file_in_repo,
+                revision=revision,
+                cache_dir=cache_dir,
+            )
+            return Path(local)
+        except Exception as e:
+            if "429" in str(e) and attempt < 4:
+                wait = 2 ** (attempt + 1) + (hash(repo) % 5)  # stagger
+                print(f"  429 rate limit — retry {attempt+1}/4 in {wait}s", flush=True)
+                _time.sleep(wait)
+            else:
+                raise
 
 
 def _levenshtein(a: list, b: list) -> int:
