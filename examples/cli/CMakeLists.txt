@@ -228,9 +228,12 @@ install(TARGETS crispasr-diff RUNTIME BUNDLE DESTINATION bin)
 # MSVC but MinGW silently ignores those pragmas.
 # ---------------------------------------------------------------------------
 add_executable(crispasr-lid crispasr_lid_main.cpp)
+if(TARGET crisp_lid)
+    target_link_libraries(crispasr-lid PRIVATE crisp_lid crispasr-lib)
+else()
+    target_link_libraries(crispasr-lid PRIVATE text-lid-dispatch crispasr-lib)
+endif()
 target_link_libraries(crispasr-lid PRIVATE
-    text-lid-dispatch
-    crispasr-lib
     ${CMAKE_THREAD_LIBS_INIT}
     $<$<BOOL:${WIN32}>:winhttp>
     $<$<BOOL:${WIN32}>:ws2_32>

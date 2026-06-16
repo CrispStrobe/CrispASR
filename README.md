@@ -700,6 +700,8 @@ loader, FastConformer / Conformer / Granite-LLM blocks, etc.).
 **Shared libraries** (cross-repo with CrispEmbed):
 - `crisp_audio/` — Whisper-shape audio encoder (Conv-stem + Transformer)
 - `crisp_punc/` — punctuation restoration (FireRedPunc + PCS)
+- `crisp_lid/` — text-based language identification (fastText + CLD3)
+- `crisp_truecase/` — truecasing (statistical + CRF + BiLSTM)
 
 Both are self-contained static libraries with CMakeLists.txt. CrispEmbed
 links them via `add_subdirectory(../CrispASR/crisp_*/)`; CrispASR uses
