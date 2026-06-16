@@ -1477,15 +1477,23 @@ if(NOT MSVC)
 endif()
 
 # ---------------------------------------------------------------------------
-# fireredpunc — FireRedPunc BERT-based punctuation restoration
+# crisp_punc — shared punctuation library (FireRedPunc + PCS).
+# Prefer the shared library from crisp_punc/; fall back to local copies.
 # ---------------------------------------------------------------------------
-add_library(fireredpunc STATIC fireredpunc.h fireredpunc.cpp)
-set_target_properties(fireredpunc PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_include_directories(fireredpunc PUBLIC .)
-target_compile_features   (fireredpunc PUBLIC cxx_std_17)
-target_link_libraries     (fireredpunc PUBLIC crispasr-core ggml ggml-base ggml-cpu)
-if(NOT MSVC)
-    target_compile_options(fireredpunc PRIVATE -O3)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../crisp_punc/CMakeLists.txt" AND NOT TARGET crisp_punc)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../crisp_punc
+                     ${CMAKE_BINARY_DIR}/crisp_punc)
+    message(STATUS "crispasr: using shared crisp_punc library")
+else()
+    # Local fallback: fireredpunc
+    add_library(fireredpunc STATIC fireredpunc.h fireredpunc.cpp)
+    set_target_properties(fireredpunc PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    target_include_directories(fireredpunc PUBLIC .)
+    target_compile_features   (fireredpunc PUBLIC cxx_std_17)
+    target_link_libraries     (fireredpunc PUBLIC crispasr-core ggml ggml-base ggml-cpu)
+    if(NOT MSVC)
+        target_compile_options(fireredpunc PRIVATE -O3)
+    endif()
 endif()
 
 # ---------------------------------------------------------------------------
@@ -1524,13 +1532,16 @@ endif()
 # ---------------------------------------------------------------------------
 # pcs — Punctuation + Capitalization + Segmentation (1-800-BAD-CODE XLM-R)
 # ---------------------------------------------------------------------------
-add_library(pcs STATIC pcs.h pcs.cpp)
-set_target_properties(pcs PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_include_directories(pcs PUBLIC .)
-target_compile_features   (pcs PUBLIC cxx_std_17)
-target_link_libraries     (pcs PUBLIC crispasr-core ggml ggml-base ggml-cpu)
-if(NOT MSVC)
-    target_compile_options(pcs PRIVATE -O3)
+if(NOT TARGET crisp_punc)
+    # Only build local pcs if shared crisp_punc wasn't loaded
+    add_library(pcs STATIC pcs.h pcs.cpp)
+    set_target_properties(pcs PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    target_include_directories(pcs PUBLIC .)
+    target_compile_features   (pcs PUBLIC cxx_std_17)
+    target_link_libraries     (pcs PUBLIC crispasr-core ggml ggml-base ggml-cpu)
+    if(NOT MSVC)
+        target_compile_options(pcs PRIVATE -O3)
+    endif()
 endif()
 
 # ---------------------------------------------------------------------------
@@ -1768,7 +1779,9 @@ endif()
 if (TARGET sensevoice)
     target_link_libraries(crispasr-lib PUBLIC sensevoice)
 endif()
-if (TARGET fireredpunc)
+if (TARGET crisp_punc)
+    target_link_libraries(crispasr-lib PUBLIC crisp_punc)
+elseif (TARGET fireredpunc)
     target_link_libraries(crispasr-lib PUBLIC fireredpunc)
 endif()
 if (TARGET truecaser)
@@ -1780,7 +1793,7 @@ endif()
 if (TARGET truecaser_lstm)
     target_link_libraries(crispasr-lib PUBLIC truecaser_lstm)
 endif()
-if (TARGET pcs)
+if (TARGET pcs AND NOT TARGET crisp_punc)
     target_link_libraries(crispasr-lib PUBLIC pcs)
 endif()
 # Pyannote segmentation is not a backend; it's consumed by
