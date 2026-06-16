@@ -51,7 +51,7 @@ out_dir = WORK / "gguf-out"
 out_dir.mkdir(exist_ok=True)
 subprocess.check_call([
     sys.executable, str(CRISPASR_DIR / "models" / "convert-chatterbox-to-gguf.py"),
-    "--model-dir", str(model_dir),
+    "--input", str(model_dir),
     "--output-dir", str(out_dir),
     "--t3-only",  # S3Gen is shared with base chatterbox, no need to re-convert
 ])
