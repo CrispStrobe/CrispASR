@@ -301,53 +301,6 @@ bool phonemize_builtin_es(const std::string& lang, const std::string& text, std:
     return !out.empty();
 }
 
-// ── espeak-ng helpers ────────────────────────────────────────────────
-
-// Strip espeak-ng language-switch markers like (en), (it), (de-AT) from
-// IPA output. These are parenthesized ISO 639 codes that espeak inserts
-// when it detects a mid-sentence language switch. TTS backends (Piper,
-// Kokoro) don't understand them and read them literally. See #169.
-void strip_espeak_lang_markers(std::string& ipa) {
-    // Pattern: '(' + 2-3 lowercase letters + optional '-' + 2-4 alphanums + ')'
-    // Examples: (en), (it), (de-AT), (cmn), (pt-BR)
-    size_t out = 0;
-    size_t len = ipa.size();
-    for (size_t i = 0; i < len;) {
-        if (ipa[i] == '(' && i + 3 < len) {
-            // Try to match (xx) or (xx-XX) or (xxx) or (xxx-XXXX)
-            size_t j = i + 1;
-            // 2-3 lowercase letters
-            size_t alpha_start = j;
-            while (j < len && j - alpha_start < 3 && ipa[j] >= 'a' && ipa[j] <= 'z')
-                j++;
-            if (j - alpha_start >= 2) {
-                // Optional region: '-' + 2-4 alphanums
-                size_t before_region = j;
-                if (j < len && ipa[j] == '-') {
-                    j++;
-                    size_t reg_start = j;
-                    while (j < len && j - reg_start < 4 &&
-                           ((ipa[j] >= 'a' && ipa[j] <= 'z') || (ipa[j] >= 'A' && ipa[j] <= 'Z') ||
-                            (ipa[j] >= '0' && ipa[j] <= '9')))
-                        j++;
-                    if (j - reg_start < 2)
-                        j = before_region; // bad region, backtrack
-                }
-                if (j < len && ipa[j] == ')') {
-                    j++; // skip closing paren
-                    // Also skip a trailing space if the marker was preceded by one
-                    if (j < len && ipa[j] == ' ')
-                        j++;
-                    i = j;
-                    continue;
-                }
-            }
-        }
-        ipa[out++] = ipa[i++];
-    }
-    ipa.resize(out);
-}
-
 // ── espeak-ng via dlopen ─────────────────────────────────────────────
 
 static std::mutex g_espeak_mu;

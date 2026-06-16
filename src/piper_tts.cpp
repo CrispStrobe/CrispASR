@@ -25,6 +25,7 @@
 #include "core/conv.h"
 #include "core/g2p_en.h"
 #include "core/gguf_loader.h"
+#include "phonemizer.h" // strip_espeak_lang_markers (#169)
 // crispasr_cache is part of crispasr-lib, not piper-tts; guard behind CRISPASR_BUILD.
 #ifdef CRISPASR_BUILD
 #include "crispasr_cache.h"
@@ -390,10 +391,14 @@ static bool phonemize_builtin(const std::string& voice, const std::string& text,
 
 static bool phonemize_espeak(const std::string& voice, const std::string& text, std::string& out) {
     // Try in-process espeak first, then popen, then built-in G2P.
-    if (phonemize_espeak_lib(voice, text, out))
+    if (phonemize_espeak_lib(voice, text, out)) {
+        crispasr::strip_espeak_lang_markers(out); // #169
         return true;
-    if (phonemize_espeak_popen(voice, text, out))
+    }
+    if (phonemize_espeak_popen(voice, text, out)) {
+        crispasr::strip_espeak_lang_markers(out); // #169
         return true;
+    }
     return phonemize_builtin(voice, text, out);
 }
 

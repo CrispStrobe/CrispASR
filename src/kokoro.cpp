@@ -3168,6 +3168,7 @@ bool phonemize_cached(kokoro_context* ctx, const std::string& lang, const std::s
     // For JA, effective_text has kanji converted to kana via MeCab.
 #if defined(CRISPASR_HAVE_ESPEAK_NG) || defined(CRISPASR_ESPEAK_DLOPEN)
     if (phonemize_espeak_lib(lang, effective_text, out)) {
+        crispasr::strip_espeak_lang_markers(out); // #169
         if (is_cmn_lang(lang))
             strip_cmn_tone_numbers(out);
         ctx->phon_cache.insert(key, out);
@@ -3175,6 +3176,7 @@ bool phonemize_cached(kokoro_context* ctx, const std::string& lang, const std::s
     }
 #endif
     if (phonemize_popen(lang, effective_text, out)) {
+        crispasr::strip_espeak_lang_markers(out); // #169
         if (is_cmn_lang(lang))
             strip_cmn_tone_numbers(out);
         ctx->phon_cache.insert(key, out);
