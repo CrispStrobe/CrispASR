@@ -1581,7 +1581,7 @@ int crispasr_run_backend(const whisper_params& params_in) {
             } else {
                 if (!params.no_prints)
                     fprintf(stderr, "crispasr: playing on '%s'\n", crispasr_speaker_default_device_name());
-                if (crispasr_speaker_play(spk, audio.data(), (int)audio.size()) == 0)
+                if (crispasr_speaker_play(spk, audio.data(), (int)audio.size(), sr_in, 1) == 0)
                     crispasr_speaker_wait(spk);
                 else
                     fprintf(stderr, "crispasr: warning: --tts-play: playback failed\n");

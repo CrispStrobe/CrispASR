@@ -20,21 +20,24 @@ struct crispasr_speaker;
 
 // Open a playback device without starting it.
 //
-//   sample_rate:   target output rate in Hz (24000 for most TTS backends)
-//   channels:      1 (mono) or 2 (stereo). Pass 1 for TTS output.
-//   device_index:  -1 = default device; 0-N = enumerate via
-//                  crispasr_speaker_list_devices() (future).
+//   sample_rate:   ignored (kept for API symmetry; device-native rate is used).
+//   channels:      ignored (kept for API symmetry; device-native channels used).
+//   device_index:  -1 = default device; numeric index is a future addition.
 //
-// Returns nullptr on failure (no output device available, bad args).
-// Call crispasr_speaker_close() when done regardless of whether play was called.
+// Returns nullptr on failure (no output device available).
+// Call crispasr_speaker_close() when done.
 struct crispasr_speaker* crispasr_speaker_open(int sample_rate, int channels, int device_index);
 
-// Begin playing `pcm` (float32, `n_samples` mono frames at the sample rate
-// passed to open). Returns immediately — playback runs on the audio thread.
-// The caller MUST keep `pcm` valid until crispasr_speaker_wait() or
-// crispasr_speaker_stop() returns.
+// Begin playing `pcm` (float32, interleaved, `n_samples` total samples at
+// `app_sample_rate` Hz and `app_channels` channels). The implementation
+// pre-resamples to the hardware-native rate/channel layout via linear
+// interpolation, so the device callback is a straight memcpy (no runtime
+// upsampling artifacts). Returns immediately — playback runs on the audio thread.
+// The caller only needs to keep `pcm` valid until this function returns
+// (the resampled copy is owned by the speaker).
 // Returns 0 on success, non-zero on driver error.
-int crispasr_speaker_play(struct crispasr_speaker* s, const float* pcm, int n_samples);
+int crispasr_speaker_play(struct crispasr_speaker* s, const float* pcm, int n_samples, int app_sample_rate,
+                          int app_channels);
 
 // Block until playback of the current buffer is complete. Returns 0 when
 // playback finished naturally, -1 if interrupted by crispasr_speaker_stop().
