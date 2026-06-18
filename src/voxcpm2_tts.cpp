@@ -1423,10 +1423,16 @@ static std::vector<float> tslm_step_graph(voxcpm2_context* ctx, const float* hid
     int Lk = 0;
     bool bucketed = false;
     // VOXCPM2_NO_BUCKET=1 forces the dynamic (non-bucketed) graph path,
-    // which uses ggml_cpy for KV writes instead of ggml_set_rows. This
-    // works around a NaN bug where ggml_set_rows on CUDA corrupts the
-    // KV cache on the second AR step (#164).
-    static const bool no_bucket = vox_env_bool("VOXCPM2_NO_BUCKET");
+    // which uses ggml_cpy for KV writes instead of ggml_set_rows. The
+    // bucketed path is also disabled by default on CUDA because
+    // ggml_set_rows corrupts the KV cache on the second AR step on CUDA
+    // (#164). Set VOXCPM2_BUCKET_CUDA=1 to re-enable buckets on CUDA
+    // (e.g. for benchmarking), or VOXCPM2_NO_BUCKET=1 to disable on all
+    // backends.
+    static const bool env_no_bucket = vox_env_bool("VOXCPM2_NO_BUCKET");
+    static const bool env_bucket_cuda = vox_env_bool("VOXCPM2_BUCKET_CUDA");
+    const bool is_cuda = (strncmp(ggml_backend_name(ctx->backend), "CUDA", 4) == 0);
+    const bool no_bucket = env_no_bucket || (is_cuda && !env_bucket_cuda);
     const int needed_lk = pos + 1;
     const int bucket_idx = no_bucket ? -1 : tslm_pick_bucket(needed_lk);
     if (bucket_idx >= 0) {
