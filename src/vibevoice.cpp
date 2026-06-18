@@ -16,7 +16,6 @@
 #include "vibevoice.h"
 #include "core/attention.h"
 #include "core/bpe.h"
-#include "core/conv.h"
 #include "core/ffn.h"
 #include "core/gguf_loader.h"
 #include "vibevoice_wav_ref.h"
@@ -109,10 +108,6 @@ struct vibevoice_context {
         ggml_backend_buffer_t buf = nullptr;
     } voice;
     std::vector<uint8_t> compute_meta;
-    // Pre-permuted ConvTranspose1d weights for decomposed col2im path
-    std::vector<ggml_tensor*> dec_ups_w_perm; // one per upsample stage
-    ggml_context* ctx_perm = nullptr;
-    ggml_backend_buffer_t buf_perm = nullptr;
     // Cached prediction head graph (reused across DPM steps)
     ggml_context* pred_graph_ctx = nullptr;
     ggml_cgraph* pred_graph = nullptr;
@@ -275,23 +270,6 @@ extern "C" struct vibevoice_context* vibevoice_init_from_file(const char* path_m
     ctx->buf_cpu = wl.buf_cpu;
     m.tensors = wl.tensors;
 
-    // Permute ConvTranspose1d upsample weights for decomposed col2im path
-    {
-        const int n_stages = (int)hp.encoder_ratios.size(); // 6 upsample stages
-        std::vector<ggml_tensor*> srcs(n_stages);
-        std::vector<ggml_tensor**> dsts(n_stages);
-        ctx->dec_ups_w_perm.resize(n_stages, nullptr);
-        for (int i = 0; i < n_stages; i++) {
-            char wn[128];
-            snprintf(wn, sizeof(wn), "at_dec.us.%d.0.convtr.weight", i + 1);
-            auto it = m.tensors.find(wn);
-            srcs[i] = (it != m.tensors.end()) ? it->second : nullptr;
-            dsts[i] = &ctx->dec_ups_w_perm[i];
-        }
-        core_convt::permute_convt1d_weights_batch(srcs.data(), dsts.data(), n_stages, ctx->backend, &ctx->ctx_perm,
-                                                  &ctx->buf_perm);
-    }
-
     {
         int n_be = 0;
         ggml_backend_t backends[2];
@@ -338,10 +316,6 @@ extern "C" void vibevoice_free(struct vibevoice_context* ctx) {
         return;
     if (ctx->pred_graph_ctx)
         ggml_free(ctx->pred_graph_ctx);
-    if (ctx->buf_perm)
-        ggml_backend_buffer_free(ctx->buf_perm);
-    if (ctx->ctx_perm)
-        ggml_free(ctx->ctx_perm);
     if (ctx->kv_neg_buf)
         ggml_backend_buffer_free(ctx->kv_neg_buf);
     if (ctx->kv_neg_ctx)
@@ -2270,12 +2244,7 @@ static ggml_cgraph* build_pred_head_graph(vibevoice_context* ctx, int n_frames) 
 // Input/output in [C, T] format. Upsamples by 'stride'.
 // Output trimmed to T_in * stride (removes K - stride from end).
 static ggml_tensor* build_transposed_conv1d(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w, ggml_tensor* b,
-                                            int stride, ggml_tensor* w_perm = nullptr) {
-    if (w_perm) {
-        const int K = (int)w->ne[0];
-        return core_convt::convt1d_decomp(ctx, x, w_perm, b, stride, K, /*crop_left=*/0, /*crop_right=*/K - stride);
-    }
-
+                                            int stride) {
     int T_in = (int)x->ne[1];
 
     // Transpose to [T, C_in] for ggml conv ops
@@ -2354,8 +2323,7 @@ static ggml_cgraph* build_vae_decoder_graph(vibevoice_context* ctx, int n_frames
         snprintf(wn, sizeof(wn), "at_dec.us.%d.0.convtr.weight", si);
         snprintf(bn_str, sizeof(bn_str), "at_dec.us.%d.0.convtr.bias", si);
         int stride = ratios[si - 1];
-        ggml_tensor* wp = (si - 1 < (int)ctx->dec_ups_w_perm.size()) ? ctx->dec_ups_w_perm[si - 1] : nullptr;
-        h = build_transposed_conv1d(ctx0, h, G(wn), G(bn_str), stride, wp);
+        h = build_transposed_conv1d(ctx0, h, G(wn), G(bn_str), stride);
 
         int n_blocks = (si < (int)depths.size()) ? depths[si] : 3;
         for (int bi = 0; bi < n_blocks; bi++) {
