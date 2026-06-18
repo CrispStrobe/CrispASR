@@ -86,6 +86,18 @@ if command -v ldconfig >/dev/null 2>&1; then
     fi
 fi
 
+# Vulkan / AMD DRI check — separate from CUDA. If /dev/dri/renderD* nodes
+# are visible the Vulkan image can use the host GPU without --gpus.
+if ls /dev/dri/renderD* >/dev/null 2>&1; then
+    log "DRI render nodes found: $(ls /dev/dri/renderD* 2>/dev/null | tr '\n' ' ')"
+    if command -v vulkaninfo >/dev/null 2>&1; then
+        log "vulkaninfo:"
+        vulkaninfo --summary 2>&1 | grep -E "GPU id|deviceName|driverVersion" | sed 's/^/  /' >&2 || true
+    fi
+else
+    log "no /dev/dri/renderD* nodes (AMD/Intel Vulkan GPU not passed through — add --device=/dev/dri and --group-add video --group-add render to docker run)"
+fi
+
 # CRISPASR_USE_CUDA_COMPAT=1 — opt-in for hosts whose driver is OLDER
 # than the runtime needs. The Dockerfile ships compat libs on disk but
 # does NOT register them in ldconfig (that broke newer drivers per #31).

@@ -1,0 +1,38 @@
+services:
+  crispasr:
+    image: ${CRISPASR_IMAGE_VULKAN:-crispasr-local:main-vulkan}
+    build:
+      context: .
+      dockerfile: .devops/main-vulkan.Dockerfile
+    ports:
+      - "${CRISPASR_HOST_PORT:-${CRISPASR_PORT:-8080}}:${CRISPASR_PORT:-8080}"
+    user: "${CRISPASR_UID:-1000}:${CRISPASR_GID:-1000}"
+    group_add:
+      - video
+      - render
+    devices:
+      - /dev/dri:/dev/dri
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - ./models:/models
+      - crispasr-cache:/cache
+    environment:
+      CRISPASR_MODEL: ${CRISPASR_MODEL:-/models/model.gguf}
+      CRISPASR_BACKEND: ${CRISPASR_BACKEND:-}
+      CRISPASR_LANGUAGE: ${CRISPASR_LANGUAGE:-auto}
+      CRISPASR_PORT: ${CRISPASR_PORT:-8080}
+      CRISPASR_AUTO_DOWNLOAD: ${CRISPASR_AUTO_DOWNLOAD:-0}
+      CRISPASR_CACHE_DIR: ${CRISPASR_CACHE_DIR:-/cache}
+      CRISPASR_API_KEYS: ${CRISPASR_API_KEYS:-}
+      CRISPASR_EXTRA_ARGS: ${CRISPASR_EXTRA_ARGS:-}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:$${CRISPASR_PORT:-8080}/health >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  crispasr-cache:
