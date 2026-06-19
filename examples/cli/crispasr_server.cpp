@@ -61,10 +61,13 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <condition_variable>
+#include <deque>
 #include <fstream>
 #include <memory>
 #include <mutex>
 #include <sstream>
+#include <thread>
 #include <string>
 #include <vector>
 
@@ -1632,71 +1635,116 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             const int silence_n = sr_out / 5;
             std::vector<short> silence_s16(silence_n, 0);
 
-            // Shared state between the main thread (which synthesizes under
-            // model_mutex) and the chunked provider callback. We synthesize
-            // all chunks first into a queue, then the provider drains it.
-            // (httplib's provider callback runs synchronously in the same
-            // thread, but this structure is clearer.)
-            std::vector<std::string> pcm_chunks;
-            {
-                std::lock_guard<std::mutex> lock(model_mutex);
-                // Prepend disclaimer as first chunk for voice-clone streams
-                if (is_voice_clone) {
-                    const auto& disc = crispasr_tts_get_disclaimer(backend.get(), rp);
-                    if (!disc.empty()) {
-                        pcm_chunks.push_back(crispasr_make_pcm_int16_le(disc.data(), (int)disc.size()));
-                        pcm_chunks.push_back(
-                            std::string((const char*)silence_s16.data(), silence_s16.size() * sizeof(short)));
+            // Producer/consumer streaming: a worker thread synthesizes under
+            // model_mutex and pushes int16 LE PCM chunks into a bounded queue;
+            // the chunked-content-provider (which httplib runs on the request
+            // thread) blocks on a condition variable and writes each chunk as
+            // it arrives. This lets the first chunk reach the client as soon
+            // as the backend emits it — for CAP_STREAMING backends that is
+            // after the first ~chunk_frames codec frames, not after the whole
+            // clip — so time-to-first-audio drops to roughly one chunk.
+            struct StreamQueue {
+                std::mutex m;
+                std::condition_variable cv;
+                std::deque<std::string> q;
+                bool done = false;
+                bool failed = false;
+            };
+            auto sq = std::make_shared<StreamQueue>();
+
+            const bool true_streaming = (backend->capabilities() & CAP_STREAMING) != 0;
+
+            // Post-process one float PCM buffer (speed resample + watermark) and
+            // enqueue it as int16 LE. Runs on the worker thread.
+            auto push_pcm = [&, sq, sr_out, speed](const float* pcm, int n_samples) {
+                if (!pcm || n_samples <= 0)
+                    return;
+                std::vector<float> chunk(pcm, pcm + n_samples);
+                if (speed != 1.0f) {
+                    const int in_n = (int)chunk.size();
+                    const int out_n = std::max(1, (int)((float)in_n / speed));
+                    std::vector<float> rs((size_t)out_n);
+                    for (int j = 0; j < out_n; j++) {
+                        const float s = (float)j * speed;
+                        const int s0 = (int)s;
+                        const int s1 = std::min(s0 + 1, in_n - 1);
+                        const float frac = s - (float)s0;
+                        rs[j] = chunk[s0] * (1.0f - frac) + chunk[s1] * frac;
                     }
+                    chunk = std::move(rs);
                 }
-                for (size_t i = 0; i < sentences.size(); i++) {
-                    std::vector<float> chunk = backend->synthesize(sentences[i], rp);
-                    if (chunk.empty())
-                        continue;
-                    // Apply speed resampling per chunk
-                    if (speed != 1.0f) {
-                        const int in_n = (int)chunk.size();
-                        const int out_n = std::max(1, (int)((float)in_n / speed));
-                        std::vector<float> rs((size_t)out_n);
-                        for (int j = 0; j < out_n; j++) {
-                            const float s = (float)j * speed;
-                            const int s0 = (int)s;
-                            const int s1 = std::min(s0 + 1, in_n - 1);
-                            const float frac = s - (float)s0;
-                            rs[j] = chunk[s0] * (1.0f - frac) + chunk[s1] * frac;
+                crispasr_wm_dispatch::embed(chunk.data(), (int)chunk.size(), sr_out);
+                std::string enc = crispasr_make_pcm_int16_le(chunk.data(), (int)chunk.size());
+                {
+                    std::lock_guard<std::mutex> lk(sq->m);
+                    sq->q.push_back(std::move(enc));
+                }
+                sq->cv.notify_one();
+            };
+
+            // Worker thread: synthesize all sentences, enqueueing chunks as
+            // they are produced. Captures by value the bits it needs so it
+            // outlives the handler scope (the provider keeps `sq` alive).
+            std::thread worker([&backend, &model_mutex, sentences, rp, is_voice_clone, silence_s16, true_streaming,
+                                push_pcm, sq, t0]() {
+                {
+                    std::lock_guard<std::mutex> lock(model_mutex);
+                    if (is_voice_clone) {
+                        const auto& disc = crispasr_tts_get_disclaimer(backend.get(), rp);
+                        if (!disc.empty()) {
+                            push_pcm(disc.data(), (int)disc.size());
+                            std::string sil((const char*)silence_s16.data(), silence_s16.size() * sizeof(short));
+                            {
+                                std::lock_guard<std::mutex> lk(sq->m);
+                                sq->q.push_back(std::move(sil));
+                            }
+                            sq->cv.notify_one();
                         }
-                        chunk = std::move(rs);
                     }
-                    // Embed watermark per-chunk (survives re-encoding)
-                    crispasr_wm_dispatch::embed(chunk.data(), (int)chunk.size(), sr_out);
-                    pcm_chunks.push_back(crispasr_make_pcm_int16_le(chunk.data(), (int)chunk.size()));
-                    // Add silence gap between sentences (not after last)
-                    if (i + 1 < sentences.size()) {
-                        pcm_chunks.push_back(
-                            std::string((const char*)silence_s16.data(), silence_s16.size() * sizeof(short)));
+                    for (size_t i = 0; i < sentences.size(); i++) {
+                        if (true_streaming) {
+                            backend->synthesize_streaming(
+                                sentences[i], rp,
+                                [&](const float* pcm, int n_samples, bool /*is_final*/) { push_pcm(pcm, n_samples); });
+                        } else {
+                            std::vector<float> chunk = backend->synthesize(sentences[i], rp);
+                            if (!chunk.empty())
+                                push_pcm(chunk.data(), (int)chunk.size());
+                        }
+                        if (i + 1 < sentences.size()) {
+                            std::string sil((const char*)silence_s16.data(), silence_s16.size() * sizeof(short));
+                            {
+                                std::lock_guard<std::mutex> lk(sq->m);
+                                sq->q.push_back(std::move(sil));
+                            }
+                            sq->cv.notify_one();
+                        }
                     }
                 }
-            }
-            auto t1_s = std::chrono::steady_clock::now();
-            const double el = std::chrono::duration<double>(t1_s - t0).count();
-            fprintf(stderr, "crispasr-server: streaming %zu PCM chunks in %.2fs\n", pcm_chunks.size(), el);
-
-            if (pcm_chunks.empty()) {
-                json_error(res, 500, "synthesis failed (backend returned empty audio)", "synthesis_failed");
-                return;
-            }
-
-            size_t chunk_idx = 0;
-            res.set_chunked_content_provider("audio/pcm", [pcm_chunks = std::move(pcm_chunks), chunk_idx](
-                                                              size_t /*offset*/, httplib::DataSink& sink) mutable {
-                if (chunk_idx >= pcm_chunks.size()) {
-                    sink.done();
-                    return true;
+                {
+                    std::lock_guard<std::mutex> lk(sq->m);
+                    sq->done = true;
                 }
-                const auto& c = pcm_chunks[chunk_idx++];
-                sink.write(c.data(), c.size());
-                return true;
+                sq->cv.notify_one();
+                const double el = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+                fprintf(stderr, "crispasr-server: streaming synthesis finished in %.2fs\n", el);
             });
+            worker.detach();
+
+            res.set_chunked_content_provider(
+                "audio/pcm", [sq](size_t /*offset*/, httplib::DataSink& sink) -> bool {
+                    std::unique_lock<std::mutex> lk(sq->m);
+                    sq->cv.wait(lk, [&] { return !sq->q.empty() || sq->done; });
+                    if (sq->q.empty() && sq->done) {
+                        lk.unlock();
+                        sink.done();
+                        return true;
+                    }
+                    std::string c = std::move(sq->q.front());
+                    sq->q.pop_front();
+                    lk.unlock();
+                    return sink.write(c.data(), c.size());
+                });
             return;
         }
 

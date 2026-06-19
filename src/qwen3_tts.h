@@ -271,6 +271,29 @@ float* qwen3_tts_codec_extract_stage(struct qwen3_tts_context* ctx, const int32_
 // Returns nullptr until the codec decoder lands (PLAN #52 step 3).
 float* qwen3_tts_synthesize(struct qwen3_tts_context* ctx, const char* text, int* out_n_samples);
 
+// Streaming TTS callback: invoked once per generated audio chunk as the
+// AR loop produces frames. `pcm` points at `n_samples` float32 mono
+// samples at 24 kHz (owned by the synth — copy if you need to keep it).
+// `is_final` is non-zero on the last chunk. `user_data` is passed through
+// from qwen3_tts_synthesize_streaming.
+typedef void (*qwen3_tts_pcm_callback)(const float* pcm, int n_samples, int is_final, void* user_data);
+
+// Streaming counterpart to qwen3_tts_synthesize. Emits PCM in chunks as
+// the talker AR loop generates codes, so time-to-first-audio drops from
+// the whole-clip latency to roughly one chunk. `cb` fires once per chunk
+// (and once more with is_final=1 at EOS/end). `chunk_frames` codec frames
+// are decoded per emission; `overlap_frames` already-emitted frames are
+// prepended as left context to avoid window-boundary clicks (their PCM is
+// discarded). Args <= 0 fall back to defaults (chunk_frames=8,
+// overlap_frames=96 — 96 exceeds the codec sliding-window of 72 plus the
+// causal upsample-conv receptive field so each emitted window matches the
+// whole-clip decode). Returns the full concatenated PCM too (caller frees
+// with qwen3_tts_pcm_free); *out_n_samples is set on success. Returns
+// nullptr on failure.
+float* qwen3_tts_synthesize_streaming(struct qwen3_tts_context* ctx, const char* text, int chunk_frames,
+                                      int overlap_frames, qwen3_tts_pcm_callback cb, void* user_data,
+                                      int* out_n_samples);
+
 void qwen3_tts_pcm_free(float* pcm);
 
 void qwen3_tts_free(struct qwen3_tts_context* ctx);

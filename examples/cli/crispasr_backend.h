@@ -154,6 +154,21 @@ public:
         return {};
     }
 
+    // Streaming TTS callback: invoked once per generated PCM chunk as the
+    // backend produces audio, with the last chunk flagged is_final=true.
+    // `pcm` is mono float32 at `tts_sample_rate()`.
+    using crispasr_pcm_stream_callback = std::function<void(const float* pcm, int n_samples, bool is_final)>;
+
+    // Synthesize with streaming output. Default implementation falls back to
+    // the whole-clip synthesize() and emits it as a single final chunk.
+    // Backends with CAP_STREAMING override to emit incrementally.
+    virtual void synthesize_streaming(const std::string& text, const whisper_params& p,
+                                      crispasr_pcm_stream_callback cb) {
+        auto v = synthesize(text, p);
+        if (!v.empty())
+            cb(v.data(), (int)v.size(), true);
+    }
+
     // Sample rate of `synthesize()` output PCM. Defaults to 24 kHz since most
     // TTS backends (kokoro, qwen3-tts, vibevoice, chatterbox, orpheus, indextts)
     // produce 24 kHz. Backends that emit a different rate (e.g. voxcpm2-tts at

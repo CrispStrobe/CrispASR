@@ -90,7 +90,7 @@ public:
     const char* name() const override { return "qwen3-tts"; }
 
     uint32_t capabilities() const override {
-        uint32_t caps = CAP_TTS | CAP_AUTO_DOWNLOAD | CAP_TEMPERATURE | CAP_FLASH_ATTN;
+        uint32_t caps = CAP_TTS | CAP_AUTO_DOWNLOAD | CAP_TEMPERATURE | CAP_FLASH_ATTN | CAP_STREAMING;
         if (is_base_)
             caps |= CAP_VOICE_CLONING;
         return caps;
@@ -147,9 +147,13 @@ public:
         return true;
     }
 
-    std::vector<float> synthesize(const std::string& text, const whisper_params& params) override {
+    // Shared voice/customvoice/voicedesign setup for both synthesize() and
+    // synthesize_streaming(). Configures temperature, seed, language, and the
+    // active voice identity (re-loading only when the identity changes via
+    // last_voice_key_). Returns true when the context is ready to generate.
+    bool prepare_synthesis(const std::string& text, const whisper_params& params) {
         if (!ctx_ || text.empty())
-            return {};
+            return false;
         qwen3_tts_set_temperature(ctx_, params.temperature);
         qwen3_tts_set_seed(ctx_, params.seed);
 
@@ -195,7 +199,7 @@ public:
                 if (v.find("..") != std::string::npos || v.find('\0') != std::string::npos) {
                     fprintf(stderr, "crispasr[qwen3-tts]: voice name '%s' contains illegal characters (.. or NUL)\n",
                             v.c_str());
-                    return {};
+                    return false;
                 }
                 const std::string wav_path = params.tts_voice_dir + "/" + v + ".wav";
                 const std::string gguf_path = params.tts_voice_dir + "/" + v + ".gguf";
@@ -241,10 +245,10 @@ public:
                 }
                 if (params.tts_instruct.empty()) {
                     fprintf(stderr, "crispasr[qwen3-tts]: VoiceDesign requires --instruct \"<voice description>\"\n");
-                    return {};
+                    return false;
                 }
                 if (qwen3_tts_set_instruct(ctx_, params.tts_instruct.c_str()) != 0) {
-                    return {};
+                    return false;
                 }
                 if (!params.no_prints) {
                     fprintf(stderr, "crispasr[qwen3-tts]: VoiceDesign instruct = \"%s\"\n",
@@ -265,12 +269,12 @@ public:
                     if (!first) {
                         fprintf(stderr,
                                 "crispasr[qwen3-tts]: CustomVoice model has no speakers in the GGUF metadata\n");
-                        return {};
+                        return false;
                     }
                     spk_name = first;
                 }
                 if (qwen3_tts_set_speaker_by_name(ctx_, spk_name.c_str()) != 0) {
-                    return {};
+                    return false;
                 }
                 if (!params.no_prints) {
                     fprintf(stderr, "crispasr[qwen3-tts]: CustomVoice speaker = '%s' (available: ", spk_name.c_str());
@@ -293,16 +297,16 @@ public:
                     if (resolved_ref_text.empty()) {
                         fprintf(stderr, "crispasr[qwen3-tts]: --voice is a WAV but --ref-text was not set. "
                                         "Provide the reference transcription so the talker can match it.\n");
-                        return {};
+                        return false;
                     }
                     if (qwen3_tts_set_voice_prompt_with_text(ctx_, v.c_str(), resolved_ref_text.c_str()) != 0) {
                         fprintf(stderr, "crispasr[qwen3-tts]: failed to set voice prompt from '%s'\n", v.c_str());
-                        return {};
+                        return false;
                     }
                 } else {
                     if (qwen3_tts_load_voice_pack(ctx_, v.c_str()) != 0) {
                         fprintf(stderr, "crispasr[qwen3-tts]: failed to load voice pack '%s'\n", v.c_str());
-                        return {};
+                        return false;
                     }
                 }
             } else {
@@ -314,7 +318,7 @@ public:
                                 def.c_str());
                     if (qwen3_tts_load_voice_pack(ctx_, def.c_str()) != 0) {
                         fprintf(stderr, "crispasr[qwen3-tts]: failed to load default voice '%s'\n", def.c_str());
-                        return {};
+                        return false;
                     }
                     // Encode the resolved path into the key so the next call with
                     // an explicit --voice still triggers a reload.
@@ -327,11 +331,17 @@ public:
                             "  --backend qwen3-tts-customvoice    — use built-in fixed speakers (no --voice needed)\n"
                             "A default voice pack (qwen3-tts-voice-default.gguf) can be auto-downloaded "
                             "with: crispasr --model auto --backend qwen3-tts\n");
-                    return {};
+                    return false;
                 }
             }
             last_voice_key_ = voice_key;
         }
+        return true;
+    }
+
+    std::vector<float> synthesize(const std::string& text, const whisper_params& params) override {
+        if (!prepare_synthesis(text, params))
+            return {};
 
         int n = 0;
         float* pcm = qwen3_tts_synthesize(ctx_, text.c_str(), &n);
@@ -340,6 +350,36 @@ public:
         std::vector<float> out(pcm, pcm + n);
         qwen3_tts_pcm_free(pcm);
         return out;
+    }
+
+    void synthesize_streaming(const std::string& text, const whisper_params& params,
+                              crispasr_pcm_stream_callback cb) override {
+        if (!prepare_synthesis(text, params))
+            return;
+
+        // Trampoline: forward the C callback to the std::function. is_final
+        // chunks may arrive with n_samples==0 (empty end-of-stream marker);
+        // skip pushing audio but still propagate the final flag.
+        auto trampoline = [](const float* pcm, int n_samples, int is_final, void* user_data) {
+            auto* fn = static_cast<crispasr_pcm_stream_callback*>(user_data);
+            if (n_samples > 0 || is_final) {
+                (*fn)(pcm, n_samples, is_final != 0);
+            }
+        };
+        int n = 0;
+        // chunk_frames=8: the first chunk fires after only 8 AR-generated
+        // frames, so time-to-first-audio (~1s) is gated by 8 talker steps, not
+        // the whole clip. overlap_frames=96 > the codec sliding-window (72)
+        // plus the causal upsample-conv receptive field, so each window's
+        // emitted tail matches the whole-clip decode (no audible seam; max
+        // |diff| ~430/32767 vs whole decode). The cost is re-decoding 96 left-
+        // context frames per 8-frame window; codec decode is cheap relative to
+        // the AR loop so end-to-end overhead stays modest. Override via the
+        // (chunk_frames, overlap_frames) args for a different latency/quality
+        // balance.
+        float* full = qwen3_tts_synthesize_streaming(ctx_, text.c_str(), 8, 96, trampoline, &cb, &n);
+        // The full buffer was already delivered via the callback chunks; free it.
+        qwen3_tts_pcm_free(full);
     }
 
     void shutdown() override {
