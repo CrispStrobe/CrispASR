@@ -116,6 +116,60 @@ parity is DONE (HISTORY).
 
 ---
 
+## §175 Surgical DRY — share pure helpers across the CLI/library boundary (OPEN)
+
+**Context.** The `CrispasrBackend` adapter layer (`examples/cli/`) and the
+session C ABI (`src/crispasr_c_api.cpp`, the dylib every binding + the HTTP
+server loads) are two **separate** implementations of each backend's
+transcribe/synthesize. This is structural: `CrispasrBackend` and
+`whisper_params` live in `examples/cli/` and `libcrispasr` (`src/`) links
+nothing from there, so the session ABI *cannot* call the adapters — it
+reimplements inline. contributing.md §6 already institutionalises this as a
+"9 edit points" checklist. See memory `project-session-abi-reimplements-cli`.
+
+**Scope decision (2026-06-19).** Do **not** unify the dispatch layer (hoisting
+`CrispasrBackend`+`whisper_params` into `src/` and routing both consumers
+through it touches all ~25 backends, the two impls have diverged — sticky
+fields, voice-key caching, server error strings, best-of-N, hotwords,
+punctuation toggles — and regresses CLI + 7 bindings + server; cannot promise
+"no breaking changes" without a multi-week test matrix). Instead extract the
+small, **pure, copy-pasted** helpers that cross the boundary cleanly as
+header-only `inline` functions in `src/core/` that both sides include (no link
+dependency across the boundary).
+
+**Gate every item on before/after regression** — bit-identical output required:
+unit test the pure helper + run the Kaggle `lang-spec-sweep`, `crispasr-diff`
+stage harness, and `tests/regression/manifest.json` before and after.
+
+Candidates (audited 2026-06-19):
+
+1. **ISO-639-1 → English language-name map — DO FIRST.** Literally 4 full
+   copies (6-15 langs each): `examples/cli/crispasr_backend_utils.h`
+   (`crispasr_iso_to_english_lang`), `examples/cli/crispasr_backend_voxtral.cpp`,
+   `src/crispasr_c_api.cpp` (`ca_iso_to_english_lang`), `src/gemma4_e2b.cpp`.
+   → `src/core/lang_names.h`, header-only `inline`. Lowest risk (pure lookup,
+   trivially bit-identical), highest copy count. Unit test the table.
+
+2. **GPT-2 byte-level BPE decoder.** ~3+ cpp definitions plus header copies
+   across `examples/cli/crispasr_backend_{mimo_asr,glm_asr,qwen3,moss_audio,
+   granite}.cpp`, `cli.cpp`, and `src/{qwen3_asr,lfm2_audio}.cpp`,
+   `src/{granite_speech,qwen3_asr}.h`. **Audit carefully: two distinct
+   variants exist** — (a) the full 256-byte `byte_decoder()` printable-Unicode
+   inverse (qwen3/parakeet) and (b) the simpler `Ġ→space, Ċ→newline` piece
+   decoder (glm/mimo/moss). They are NOT interchangeable; consolidate each
+   family separately into `src/core/bpe_decode.h`. Medium risk.
+
+3. **Language-instruction prompt templates.** "Transcribe the speech in
+   <lang>." now duplicated CLI↔C-ABI per backend (§174). Semantically coupled
+   to each model's chat template, so lower priority / higher coupling — leave
+   unless it grows; revisit if a 3rd consumer appears.
+
+Not candidates: `crispasr_strip_ascii_punctuation` / `crispasr_lowercase_ascii`
+/ `crispasr_backend_should_use_gpu` are CLI-only (already DRY via
+`crispasr_backend_utils.h`; the C ABI does not duplicate them).
+
+---
+
 ## WASM Browser build — all backends, multithreaded
 
 ### Goal

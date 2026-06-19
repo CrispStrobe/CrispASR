@@ -11,6 +11,7 @@
 #include "core/attention.h"
 #include "core/bpe.h"
 #include "core/ffn.h"
+#include "core/lang_names.h"
 #include "core/gguf_loader.h"
 #include "core/beam_decode.h"
 #include "core/greedy_decode.h"
@@ -259,42 +260,13 @@ struct gemma4_e2b_context {
     std::vector<int32_t> ple_token_ids;
 };
 
+// gemma4-specific wrapper: the empty/"auto" case has a translate-direction
+// nuance ("its original language" vs "English") that the generic map can't
+// express; everything else defers to the shared core_lang::iso_to_english().
 static std::string g4e_lang_name(const std::string& lang, bool allow_original = false) {
     if (lang.empty() || lang == "auto")
         return allow_original ? std::string("its original language") : std::string("English");
-    if (lang == "en")
-        return "English";
-    if (lang == "de")
-        return "German";
-    if (lang == "fr")
-        return "French";
-    if (lang == "es")
-        return "Spanish";
-    if (lang == "it")
-        return "Italian";
-    if (lang == "pt")
-        return "Portuguese";
-    if (lang == "ru")
-        return "Russian";
-    if (lang == "ja")
-        return "Japanese";
-    if (lang == "zh")
-        return "Chinese";
-    if (lang == "nl")
-        return "Dutch";
-    if (lang == "ko")
-        return "Korean";
-    if (lang == "tr")
-        return "Turkish";
-    if (lang == "pl")
-        return "Polish";
-    if (lang == "uk")
-        return "Ukrainian";
-    if (lang == "vi")
-        return "Vietnamese";
-    if (lang == "hi")
-        return "Hindi";
-    return lang;
+    return core_lang::iso_to_english(lang);
 }
 
 static std::vector<int32_t> g4e_tokenize_text(gemma4_e2b_context* ctx, const std::string& text) {

@@ -1121,6 +1121,22 @@ catch_discover_tests(test-core-sentencepiece
     PROPERTIES LABELS "unit"
 )
 
+# ─── test-core-lang-names — core/lang_names.h ISO-639-1 → English map ─────────
+# Locks the shared language-name map that replaced four copy-pasted copies
+# (PLAN §175): the common 15 codes (bit-identical to the former CLI + C-ABI
+# maps), the gemma4-only union (uk/vi), and unknown-input passthrough.
+add_executable(test-core-lang-names test-core-lang-names.cpp)
+target_include_directories(test-core-lang-names PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-core-lang-names PRIVATE
+    Catch2::Catch2WithMain
+)
+catch_discover_tests(test-core-lang-names
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit"
+)
+
 # ─── test-core-istft — core/istft.h inverse-STFT overlap-add ──────────────────
 # Verifies the extracted iSTFT against an independent full-DFT reference
 # (fuzzed) + a forward-STFT→iSTFT sinusoid round-trip.

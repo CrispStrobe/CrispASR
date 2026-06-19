@@ -1,6 +1,7 @@
 #pragma once
 
 #include "whisper_params.h"
+#include "core/lang_names.h"
 
 #include <cctype>
 #include <string>
@@ -59,41 +60,9 @@ inline void crispasr_lowercase_ascii(std::string& s) {
 }
 
 // Map an ISO-639-1 code to a plain English language name for prompt
-// injection in instruct-tuned audio-LLM backends. The LLM reads the
-// system/user prompt literally, and a bare two-letter code is unreliable
-// ("de" gets read as the English word "of", steering the model to
-// Spanish). Sending the spelled-out name keeps it on the right language.
-// Unknown codes (or already-spelled-out names) pass through verbatim.
+// injection in instruct-tuned audio-LLM backends. Thin alias over the
+// shared core_lang::iso_to_english() (src/core/lang_names.h); kept as a
+// named CLI-side function so existing adapter call sites are unchanged.
 inline std::string crispasr_iso_to_english_lang(const std::string& code) {
-    if (code == "en")
-        return "English";
-    if (code == "de")
-        return "German";
-    if (code == "fr")
-        return "French";
-    if (code == "es")
-        return "Spanish";
-    if (code == "it")
-        return "Italian";
-    if (code == "pt")
-        return "Portuguese";
-    if (code == "ru")
-        return "Russian";
-    if (code == "ja")
-        return "Japanese";
-    if (code == "ko")
-        return "Korean";
-    if (code == "zh")
-        return "Chinese";
-    if (code == "nl")
-        return "Dutch";
-    if (code == "pl")
-        return "Polish";
-    if (code == "tr")
-        return "Turkish";
-    if (code == "ar")
-        return "Arabic";
-    if (code == "hi")
-        return "Hindi";
-    return code;
+    return core_lang::iso_to_english(code);
 }

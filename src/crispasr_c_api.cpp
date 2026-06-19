@@ -39,6 +39,7 @@
 #include "crispasr_punc_model.h"     // shared --punc-model alias resolution (CLI/server/C-ABI parity)
 #include "core/beam_decode.h"        // Shared autoregressive beam-search decode helper
 #include "core/greedy_decode.h"      // Shared autoregressive greedy decode helper
+#include "core/lang_names.h"         // Shared ISO-639-1 → English language-name map
 #include "grammar-parser.h"          // GBNF parser for grammar-constrained sampling
 // Non-Whisper backend headers. Each of these lives in `src/` and is built as
 // its own shared library — we link them into libwhisper privately so Dart
@@ -3305,42 +3306,11 @@ static crispasr_session_result* run_voxtral_family(Ctx* ctx, const VoxtralFamily
 // ---------------------------------------------------------------------------
 
 // Map an ISO-639-1 code to a plain English language name for prompt
-// injection in the audio-LLM session dispatch. Mirrors the CLI-side
-// crispasr_iso_to_english_lang() (examples/cli/crispasr_backend_utils.h);
-// a bare two-letter code is unreliable in an LLM prompt ("de" reads as the
-// English "of"). Unknown codes pass through verbatim.
+// injection in the audio-LLM session dispatch. Thin alias over the shared
+// core_lang::iso_to_english() (src/core/lang_names.h); kept as a named
+// helper so the session dispatch call sites are unchanged.
 static std::string ca_iso_to_english_lang(const std::string& code) {
-    if (code == "en")
-        return "English";
-    if (code == "de")
-        return "German";
-    if (code == "fr")
-        return "French";
-    if (code == "es")
-        return "Spanish";
-    if (code == "it")
-        return "Italian";
-    if (code == "pt")
-        return "Portuguese";
-    if (code == "ru")
-        return "Russian";
-    if (code == "ja")
-        return "Japanese";
-    if (code == "ko")
-        return "Korean";
-    if (code == "zh")
-        return "Chinese";
-    if (code == "nl")
-        return "Dutch";
-    if (code == "pl")
-        return "Polish";
-    if (code == "tr")
-        return "Turkish";
-    if (code == "ar")
-        return "Arabic";
-    if (code == "hi")
-        return "Hindi";
-    return code;
+    return core_lang::iso_to_english(code);
 }
 
 // Internal single-pass transcribe (used by best-of-N wrapper below).
