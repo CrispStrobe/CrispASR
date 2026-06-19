@@ -31,7 +31,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # ---------------------------------------------------------------------------
 
 def find_binary():
-    for rel in ["build/bin/crispasr", "build-ninja-compile/bin/crispasr", "bin/crispasr"]:
+    for rel in ["build/bin/crispasr", "build/bin/Release/crispasr.exe",
+                "build-ninja-compile/bin/crispasr", "bin/crispasr", "bin/crispasr.exe"]:
         p = os.path.join(ROOT, rel)
         if os.path.isfile(p) and os.access(p, os.X_OK):
             return p
@@ -60,12 +61,21 @@ def load_pcm_s16(path):
 
 
 def wyoming_send(sock, msg_type, data, payload=b""):
-    hdr = json.dumps({
-        "type": msg_type,
-        "data": data,
-        "payload_length": len(payload),
-    }) + "\n"
-    sock.sendall(hdr.encode())
+    # Frame exactly like Home Assistant's official `wyoming` library: non-empty
+    # `data` is sent as a SEPARATE length-prefixed JSON blob (data_length) after
+    # the header line — NOT inline. Sending it inline (as the old test did) hides
+    # the data_length parsing path and let issue #172's transcribe desync slip
+    # through. (regression guard)
+    hdr = {"type": msg_type}
+    data_bytes = b""
+    if data:
+        data_bytes = json.dumps(data, ensure_ascii=False).encode("utf-8")
+        hdr["data_length"] = len(data_bytes)
+    if payload:
+        hdr["payload_length"] = len(payload)
+    sock.sendall((json.dumps(hdr) + "\n").encode())
+    if data_bytes:
+        sock.sendall(data_bytes)
     if payload:
         sock.sendall(payload)
 
