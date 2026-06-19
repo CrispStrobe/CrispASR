@@ -6523,6 +6523,371 @@ extern "C" float* qwen3_tts_synthesize(struct qwen3_tts_context* ctx, const char
     return pcm;
 }
 
+// ---------------------------------------------------------------------------
+// Streaming synthesis. Mirrors qwen3_tts_synthesize_codes' AR loop verbatim
+// (same prefill, same per-frame talker + code_pred steps, same KV / past_hidden
+// flow), but decodes and emits PCM in windows as codes are produced instead of
+// returning the full clip only at the end. KV state is never reset between
+// chunks — only the codec decode is windowed.
+//
+// Windowing: the codec is a strictly-causal forward pass (sliding-window
+// attention, window=72; causal convs, left-pad only). codec_decode_codes(W)
+// where W = [left-context frames] + [new frames] reproduces the new frames'
+// PCM bit-for-bit (no right context needed); we discard the left-context
+// PCM as a pre-roll. See the equivalence note in qwen3_tts_synthesize.
+extern "C" float* qwen3_tts_synthesize_streaming(struct qwen3_tts_context* ctx, const char* text, int chunk_frames,
+                                                 int overlap_frames, qwen3_tts_pcm_callback cb, void* user_data,
+                                                 int* out_n_samples) {
+    if (out_n_samples) {
+        *out_n_samples = 0;
+    }
+    if (!ctx || !text) {
+        return nullptr;
+    }
+    if (!ctx->codec.loaded) {
+        fprintf(stderr,
+                "qwen3_tts: synthesize_streaming() requires the codec — call qwen3_tts_set_codec_path() first.\n");
+        return nullptr;
+    }
+    if (ctx->vocab.id_to_token.empty()) {
+        fprintf(stderr, "qwen3_tts: vocab empty — re-convert with the updated converter\n");
+        return nullptr;
+    }
+    if (chunk_frames <= 0) {
+        chunk_frames = 8;
+    }
+    if (overlap_frames < 0) {
+        // 96 > codec sliding-window (72) + causal upsample-conv receptive
+        // field, so the emitted window tail matches a whole-clip decode.
+        overlap_frames = 96;
+    }
+
+    const bool is_custom_voice = (ctx->hp.tts_model_type == "custom_voice");
+    const bool is_voice_design = (ctx->hp.tts_model_type == "voice_design");
+    if (is_custom_voice) {
+        if ((int)ctx->runtime_spk_emb.size() != (int)ctx->hp.d_model) {
+            fprintf(stderr, "qwen3_tts: no speaker — call qwen3_tts_set_speaker_by_name\n");
+            return nullptr;
+        }
+    } else if (is_voice_design) {
+        if (ctx->runtime_instruct.empty()) {
+            fprintf(stderr, "qwen3_tts: VoiceDesign needs a voice description — call qwen3_tts_set_instruct\n");
+            return nullptr;
+        }
+    } else {
+        if (ctx->vp_active < 0 && ctx->runtime_ref_codes.empty() &&
+            !(ctx->xvec_only && (int)ctx->runtime_spk_emb.size() == (int)ctx->hp.d_model)) {
+            fprintf(stderr, "qwen3_tts: no voice — call qwen3_tts_load_voice_pack or qwen3_tts_set_voice_prompt\n");
+            return nullptr;
+        }
+    }
+
+    const bool bench = env_bool("QWEN3_TTS_BENCH");
+    const bool dbg = env_bool("QWEN3_TTS_DEBUG");
+    const char* dump_dir = env_str("QWEN3_TTS_DUMP_DIR");
+    const auto& hp = ctx->hp;
+    const int d = (int)hp.d_model;
+    const int n_groups = (int)hp.n_code_groups; // 16
+    const int n_q = (int)ctx->codec.hp.n_q;
+    int max_frames = ctx->params.max_codec_steps > 0 ? ctx->params.max_codec_steps : 1500;
+    if (const char* mf = getenv("QWEN3_TTS_MAX_FRAMES")) {
+        const int v = std::atoi(mf);
+        if (v > 0)
+            max_frames = v;
+    }
+    const int eos = (int)hp.codec_eos_id;
+
+    uint64_t rng = 42;
+    if (const char* s = env_str("QWEN3_TTS_SEED")) {
+        rng = (uint64_t)std::strtoull(s, nullptr, 10);
+    }
+    if (ctx->params.seed != 0)
+        rng = ctx->params.seed;
+
+    // ---- prefill builder: identical to qwen3_tts_synthesize_codes ----
+    double t0 = bench ? now_ms() : 0.0;
+    std::vector<float> prefill, trailing;
+    int T_pre = 0, M_trail = 0;
+    if (is_custom_voice) {
+        if (!build_customvoice_prefill_embeds(ctx, text, prefill, T_pre, trailing, M_trail)) {
+            return nullptr;
+        }
+    } else if (is_voice_design) {
+        if (!build_voicedesign_prefill_embeds(ctx, ctx->runtime_instruct, text, prefill, T_pre, trailing, M_trail)) {
+            return nullptr;
+        }
+    } else {
+        std::string ref_text;
+        if (!ctx->runtime_ref_text.empty()) {
+            ref_text = ctx->runtime_ref_text;
+        } else if (ctx->vp_active >= 0) {
+            ref_text = ctx->vp_ref_texts[ctx->vp_active];
+        }
+        if (ref_text.empty()) {
+            if (ctx->xvec_only) {
+                ref_text = ".";
+            } else {
+                fprintf(stderr,
+                        "qwen3_tts: no ref_text — call qwen3_tts_set_voice_prompt with ref_text or load a voice pack\n");
+                return nullptr;
+            }
+        }
+        if (!build_icl_prefill_embeds(ctx, text, ref_text, prefill, T_pre, trailing, M_trail)) {
+            return nullptr;
+        }
+    }
+    if (bench) {
+        const char* label = is_custom_voice ? "customvoice" : (is_voice_design ? "voicedesign" : "icl");
+        fprintf(stderr, "qwen3_tts: [stream] prefill %7.1f ms (T=%d, %s)\n", now_ms() - t0, T_pre, label);
+    }
+
+    // ---- talker prefill: get logits + hidden_last ----
+    double t1 = bench ? now_ms() : 0.0;
+    float* past_hidden = nullptr;
+    float* logits = run_talker_kv(ctx, prefill.data(), T_pre, /*n_past=*/0, &past_hidden);
+    if (!logits || !past_hidden) {
+        free(logits);
+        free(past_hidden);
+        return nullptr;
+    }
+    if (bench) {
+        fprintf(stderr, "qwen3_tts: [stream] talker_pre %7.1f ms\n", now_ms() - t1);
+    }
+
+    int n_past = T_pre;
+    const bool embd_cache_enabled = !env_bool("QWEN3_TTS_NO_EMBD_CACHE");
+
+    if (!cp_kv_alloc(ctx)) {
+        fprintf(stderr, "qwen3_tts: cp_kv allocation failed\n");
+        free(logits);
+        free(past_hidden);
+        return nullptr;
+    }
+
+    std::vector<int32_t> all_codes; // flattened (T_frames, 16)
+    all_codes.reserve((size_t)max_frames * n_groups);
+
+    // Streaming output state.
+    std::vector<float> full_pcm;      // concatenated emitted PCM (return value)
+    int frames_emitted = 0;           // frames whose PCM has already been pushed
+    const int frame_samples = 1920;   // 24 kHz / 12.5 Hz codec rate
+    full_pcm.reserve((size_t)max_frames * frame_samples);
+
+    // Decode the window [emit_lo .. n_frames) and emit the tail (frames
+    // [frames_emitted .. n_frames)), discarding the left-context pre-roll.
+    // Fires cb() with the emitted samples. Returns false on decode failure.
+    auto emit_window = [&](int n_frames, bool is_final) -> bool {
+        if (n_frames <= frames_emitted) {
+            if (is_final && cb) {
+                cb(nullptr, 0, 1, user_data); // signal end with empty final chunk
+            }
+            return true;
+        }
+        const int emit_lo = std::max(0, frames_emitted - overlap_frames);
+        const int pre_roll_frames = frames_emitted - emit_lo; // left context to discard
+        const int W = n_frames - emit_lo;
+        const int32_t* window_codes = all_codes.data() + (size_t)emit_lo * n_q;
+
+        int n_pcm = 0;
+        float* pcm = codec_decode_codes(ctx, window_codes, W, &n_pcm);
+        if (!pcm || n_pcm <= 0) {
+            free(pcm);
+            return false;
+        }
+        // Discard the pre-roll PCM (the left-context frames). The codec is
+        // strictly causal so the remaining samples equal the full-clip
+        // decode of frames [frames_emitted .. n_frames).
+        const int discard = std::min(n_pcm, pre_roll_frames * frame_samples);
+        const int n_emit = n_pcm - discard;
+        if (n_emit > 0) {
+            const float* emitted = pcm + discard;
+            full_pcm.insert(full_pcm.end(), emitted, emitted + n_emit);
+            if (cb) {
+                cb(emitted, n_emit, is_final ? 1 : 0, user_data);
+            }
+        } else if (is_final && cb) {
+            cb(nullptr, 0, 1, user_data);
+        }
+        free(pcm);
+        frames_emitted = n_frames;
+        return true;
+    };
+
+    double t_loop = bench ? now_ms() : 0.0;
+    double t_codec = 0.0;
+    bool first_chunk_logged = false;
+    int frame = 0;
+    bool emit_failed = false;
+    const int talker_top_k = 50;
+    const float talker_temp = 0.9f;
+    const float talker_repetition_penalty = 1.05f;
+    const int min_new_frames = 2;
+    const int suppress_lo = (int)hp.vocab_size - 1024;
+    std::vector<int32_t> talker_history;
+    talker_history.reserve((size_t)max_frames);
+    std::vector<float> last_id_hidden_buf(d);
+    std::vector<float> next_emb_row_buf(d);
+    std::vector<float> next_emb(d, 0.0f);
+    for (frame = 0; frame < max_frames; frame++) {
+        apply_repetition_penalty(logits, (int)hp.vocab_size, talker_history, talker_repetition_penalty);
+        for (int i = suppress_lo; i < (int)hp.vocab_size; i++) {
+            if (i != eos) {
+                logits[i] = -INFINITY;
+            }
+        }
+        if (frame < min_new_frames) {
+            logits[eos] = -INFINITY;
+        }
+        int cb0 = top_k_sample(logits, (int)hp.vocab_size, talker_top_k, talker_temp, &rng);
+        free(logits);
+        logits = nullptr;
+        if (cb0 == eos) {
+            if (dbg) {
+                fprintf(stderr, "qwen3_tts: [stream] codec_eos at frame %d\n", frame);
+            }
+            free(past_hidden);
+            past_hidden = nullptr;
+            break;
+        }
+        talker_history.push_back(cb0);
+        if (embd_cache_enabled && ctx->token_embd_cache) {
+            if (!ctx->token_embd_cache.get_row_into(cb0, last_id_hidden_buf.data())) {
+                free(past_hidden);
+                return nullptr;
+            }
+        } else {
+            float* tmp = lookup_rows(ctx, ctx->talker.token_embd_w, &cb0, 1);
+            if (!tmp) {
+                free(past_hidden);
+                return nullptr;
+            }
+            std::memcpy(last_id_hidden_buf.data(), tmp, (size_t)d * sizeof(float));
+            free(tmp);
+        }
+        int32_t cb1_15[15];
+        if (!code_pred_generate_15(ctx, past_hidden, last_id_hidden_buf.data(), cb1_15, &rng, frame)) {
+            free(past_hidden);
+            return nullptr;
+        }
+        free(past_hidden);
+        past_hidden = nullptr;
+
+        all_codes.push_back(cb0);
+        for (int i = 0; i < 15; i++) {
+            all_codes.push_back(cb1_15[i]);
+        }
+
+        std::fill(next_emb.data(), next_emb.data() + d, 0.0f);
+        {
+            for (int cb = 0; cb < n_groups; cb++) {
+                int32_t code = (cb == 0) ? cb0 : cb1_15[cb - 1];
+                bool ok = false;
+                if (embd_cache_enabled && cb == 0 && ctx->token_embd_cache) {
+                    ok = ctx->token_embd_cache.get_row_into(code, next_emb_row_buf.data());
+                } else if (embd_cache_enabled && cb > 0 && cb - 1 < (int)ctx->codec_embd_cache.size() &&
+                           ctx->codec_embd_cache[cb - 1]) {
+                    ok = ctx->codec_embd_cache[cb - 1].get_row_into(code, next_emb_row_buf.data());
+                } else {
+                    ggml_tensor* w = (cb == 0) ? ctx->talker.token_embd_w : ctx->code_pred.codec_embd[cb - 1];
+                    float* row = lookup_rows(ctx, w, &code, 1);
+                    if (row) {
+                        std::memcpy(next_emb_row_buf.data(), row, (size_t)d * sizeof(float));
+                        free(row);
+                        ok = true;
+                    }
+                }
+                if (!ok) {
+                    free(past_hidden);
+                    return nullptr;
+                }
+                for (int j = 0; j < d; j++) {
+                    next_emb[j] += next_emb_row_buf[j];
+                }
+            }
+        }
+
+        const int trail_idx = std::min(frame, M_trail - 1);
+        const float* trail = trailing.data() + (size_t)trail_idx * d;
+        for (int j = 0; j < d; j++) {
+            next_emb[j] += trail[j];
+        }
+
+        // ---- streaming emit: every chunk_frames new frames ----
+        if ((frame + 1) - frames_emitted >= chunk_frames) {
+            const double tc = bench ? now_ms() : 0.0;
+            if (!emit_window(frame + 1, /*is_final=*/false)) {
+                emit_failed = true;
+                free(past_hidden);
+                past_hidden = nullptr;
+                break;
+            }
+            if (bench) {
+                t_codec += now_ms() - tc;
+                if (!first_chunk_logged) {
+                    fprintf(stderr, "qwen3_tts: [stream] time-to-first-chunk %7.1f ms (%d frames)\n", now_ms() - t0,
+                            frame + 1);
+                    first_chunk_logged = true;
+                }
+            }
+        }
+
+        if (n_past >= ctx->kv_max_ctx - 1) {
+            fprintf(stderr, "qwen3_tts: [stream] talker kv cache full at frame %d (n_past=%d)\n", frame, n_past);
+            break;
+        }
+        logits = run_talker_kv(ctx, next_emb.data(), 1, n_past, &past_hidden);
+        if (!logits || !past_hidden) {
+            free(logits);
+            free(past_hidden);
+            return nullptr;
+        }
+        n_past += 1;
+    }
+    free(logits);
+    free(past_hidden);
+
+    if (emit_failed) {
+        return nullptr;
+    }
+
+    // Final (possibly partial) chunk: emit any frames not yet pushed.
+    const int total_frames = (int)(all_codes.size() / n_groups);
+    {
+        const double tc = bench ? now_ms() : 0.0;
+        if (!emit_window(total_frames, /*is_final=*/true)) {
+            return nullptr;
+        }
+        if (bench) {
+            t_codec += now_ms() - tc;
+        }
+    }
+
+    if (bench) {
+        fprintf(stderr, "qwen3_tts: [stream] ar_loop %7.1f ms (%d frames)  codec %7.1f ms\n", now_ms() - t_loop, frame,
+                t_codec);
+    }
+    if (ctx->params.verbosity >= 1) {
+        fprintf(stderr, "qwen3_tts: [stream] produced %d frames × 16 codebooks → %zu samples\n", total_frames,
+                full_pcm.size());
+    }
+    if (dump_dir && !all_codes.empty()) {
+        dump_i32(dump_dir, "generated_codes", all_codes.data(), all_codes.size());
+    }
+
+    if (full_pcm.empty()) {
+        return nullptr;
+    }
+    float* out = (float*)malloc(full_pcm.size() * sizeof(float));
+    if (!out) {
+        return nullptr;
+    }
+    std::memcpy(out, full_pcm.data(), full_pcm.size() * sizeof(float));
+    if (out_n_samples) {
+        *out_n_samples = (int)full_pcm.size();
+    }
+    return out;
+}
+
 extern "C" void qwen3_tts_pcm_free(float* pcm) {
     free(pcm);
 }
