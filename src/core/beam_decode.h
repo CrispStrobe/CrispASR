@@ -132,8 +132,13 @@ inline void top_k_log_softmax(const float* logits, int vocab, int K, std::vector
 
     // Min-heap: stores (logit, token_id) pairs; the smallest logit is
     // at the top so we can cheaply evict it when a larger one arrives.
+    // Reused across calls (thread-local) so the K-element heap isn't
+    // re-allocated on every beam-expansion step (B×T per transcribe). clear()
+    // keeps capacity; the heap is rebuilt from scratch below, so the result is
+    // bit-identical to a fresh vector. (§176r follow-up)
     using Pair = std::pair<float, int>;
-    std::vector<Pair> heap;
+    static thread_local std::vector<Pair> heap;
+    heap.clear();
     heap.reserve((size_t)K);
     for (int i = 0; i < vocab; i++) {
         if ((int)heap.size() < K) {
