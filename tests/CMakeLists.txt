@@ -1222,6 +1222,41 @@ catch_discover_tests(test-core-lang-names
     PROPERTIES LABELS "unit"
 )
 
+# ─── test-bench-enabled — unit tests for the bench_enabled() + BenchStage RAII
+# pattern shared by 70+ backends. Pure env-var logic, no model load.
+add_executable(test-bench-enabled test-bench-enabled.cpp)
+target_link_libraries(test-bench-enabled PRIVATE Catch2::Catch2WithMain)
+catch_discover_tests(test-bench-enabled
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit;bench"
+)
+
+# ─── test-core-bpe — core/bpe.h GPT-2 byte-level BPE tokenizer ──────────────
+# Verifies byte_encoder, utf8_encode, bytes_to_unicode, bpe_one merge,
+# token_bytes_to_utf8, detokenize round-trips. No model load, pure CPU.
+add_executable(test-core-bpe test-core-bpe.cpp)
+target_include_directories(test-core-bpe PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-core-bpe PRIVATE Catch2::Catch2WithMain)
+catch_discover_tests(test-core-bpe
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit;bpe"
+)
+
+# ─── test-core-wordpiece — core/wordpiece.h BERT WordPiece tokenizer ─────────
+# Verifies build_map, lookup, cased/uncased detection, BasicTokenizer,
+# WordPiece greedy subword splitting, [UNK] fallback. No model load, pure CPU.
+add_executable(test-core-wordpiece test-core-wordpiece.cpp)
+target_include_directories(test-core-wordpiece PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-core-wordpiece PRIVATE Catch2::Catch2WithMain)
+catch_discover_tests(test-core-wordpiece
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit;wordpiece"
+)
+
 # ─── test-core-istft — core/istft.h inverse-STFT overlap-add ──────────────────
 # Verifies the extracted iSTFT against an independent full-DFT reference
 # (fuzzed) + a forward-STFT→iSTFT sinusoid round-trip.
