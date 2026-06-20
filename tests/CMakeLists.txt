@@ -614,6 +614,40 @@ catch_discover_tests(test-chatterbox-params
     PROPERTIES LABELS "unit;chatterbox"
 )
 
+# ─── test-funasr-params — Catch2 unit tests for funasr_context_params defaults
+# and null-guard coverage. No GGUF required. ───────────────────────────────────
+add_executable(test-funasr-params
+    test-funasr-params.cpp
+)
+target_include_directories(test-funasr-params PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-funasr-params PRIVATE
+    Catch2::Catch2WithMain
+    funasr
+)
+catch_discover_tests(test-funasr-params
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit;funasr"
+)
+
+# ─── test-f5tts-params — Catch2 unit tests for f5_tts_params defaults
+# and null-guard coverage. No GGUF required. ───────────────────────────────────
+add_executable(test-f5tts-params
+    test-f5tts-params.cpp
+)
+target_include_directories(test-f5tts-params PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-f5tts-params PRIVATE
+    Catch2::Catch2WithMain
+    f5-tts
+)
+catch_discover_tests(test-f5tts-params
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit;f5tts"
+)
+
 # ─── test-parakeet-params — Catch2 unit tests for parakeet_context_params defaults
 # and null-guard coverage. No GGUF required. ───────────────────────────────────
 add_executable(test-parakeet-params
