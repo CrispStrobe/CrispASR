@@ -10241,3 +10241,24 @@ you can test, suspect a fused-kernel shader miscompile (flash-attention coopmat2
 on bleeding-edge AMD/Intel), not your graph. Keep an env-selectable non-fused
 fallback for fused ops so a reporter can bisect on hardware you don't have. EOS
 classifiers amplify tiny attention drift into gross over-generation.
+
+## read_tensor_f32 weight pre-cache for VITS-family TTS (2026-06-20)
+
+Piper and MeloTTS use CPU-scalar C++ for flow_inverse, wavenet, SDP,
+attention — each reads weights via `read_tensor_f32` which does
+`ggml_backend_tensor_get` + F16→F32 dequant. 39-48 calls per synthesis
+add up to 14-16% of total time. Fix: pre-populate
+`unordered_map<tensor*, vector<float>>` at init, check in
+`read_tensor_f32` via module-level context pointer. Cost: ~2× model RAM
+(30-100 MB range). Gated by `CRISPASR_PIPER_WEIGHT_CACHE` /
+`CRISPASR_MELOTTS_WEIGHT_CACHE`. Lesson: small helpers that look
+innocuous (`read_tensor_f32`) accumulate significant overhead when called
+40-50 times per synthesis.
+
+## Single-token embed graph elimination for LLM-ASR (2026-06-20)
+
+AR decode in LLM-ASR backends (funasr, glm_asr, etc.) called
+`embed_tokens({next_id})` per step, building a full ggml graph for a
+single GET_ROWS. Fix: n==1 fast path dequants one row directly. Gated
+by `CRISPASR_XXX_EMBED_FAST`. Lesson: not every ggml op needs a graph —
+single-row lookups are cheaper as direct tensor reads.

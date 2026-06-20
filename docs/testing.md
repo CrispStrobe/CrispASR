@@ -5,7 +5,7 @@ CrispASR has two tiers of tests: **unit tests** (no models, fast) and
 
 ## Unit tests
 
-439 unit tests run unconditionally in ~5 seconds with no model files:
+679 unit tests run unconditionally in ~20 seconds with no model files:
 
 ```bash
 ctest --test-dir build -L unit --timeout 30
@@ -13,7 +13,9 @@ ctest --test-dir build -L unit --timeout 30
 
 These cover: audio chunking, mel preprocessing, CTC/beam decode,
 sentence splitting, WAV metadata, stream finalization, registry lookup,
-watermark embed/detect, cache helpers, and more.
+watermark embed/detect, cache helpers, GPT-2 BPE tokenizer,
+BERT WordPiece tokenizer, bench env-var gating, per-backend param
+defaults and null-guard coverage (43 backends), and more.
 
 ## Integration tests
 

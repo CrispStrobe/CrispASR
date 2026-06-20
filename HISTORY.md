@@ -73,6 +73,21 @@ tensor_get_f32 data movement per 1000-token synthesis (~48 MB per step).
 All 10 call sites in build_speech_token_embed, build_speech_token_embed_gpt2,
 prefill builders, and CFG uncond setup now use direct array indexing.
 
+## 2026-06-20 Unit test expansion — 468 → 679 tests
+
+Built 43 previously-uncompiled test binaries (param/setter/null-guard
+tests for every backend). Also wrote 38 new tests: bench env-var gating
+(7), GPT-2 BPE (16), BERT WordPiece (15). All 679/679 pass.
+
+---
+
+## 2026-06-20 fix(nemotron): strip `<en-US>` language tokens from output
+
+`nemotron_detokenize` now skips any token matching `<...>` (special
+tokens). Also fixed `#include <array>` in chatterbox/orpheus/outetts.
+
+---
+
 ## 2026-06-20 §196 MeloTTS weight pre-cache — 16% faster synthesis (§176t)
 
 Same pattern as piper-tts §195. Pre-populate `unordered_map<tensor*,

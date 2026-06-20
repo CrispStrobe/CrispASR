@@ -44,6 +44,34 @@ Use `src/core/mel`, `src/core/ffn`, `src/core/attention`, and
 `src/core/gguf_loader` wherever they fit — they cover ~80 % of the
 boilerplate.
 
+**Add bench instrumentation.** Every runtime gets per-stage RAII timing
+gated by `YOURMODEL_BENCH=1`:
+
+```cpp
+static bool yourmodel_bench_enabled() {
+    static int v = -1;
+    if (v < 0) { const char* e = std::getenv("YOURMODEL_BENCH");
+                  v = (e && *e && *e != '0') ? 1 : 0; }
+    return v != 0;
+}
+struct yourmodel_bench_stage {
+    const char* name;
+    std::chrono::steady_clock::time_point t0;
+    explicit yourmodel_bench_stage(const char* n)
+        : name(n), t0(std::chrono::steady_clock::now()) {}
+    ~yourmodel_bench_stage() {
+        if (!yourmodel_bench_enabled()) return;
+        double ms = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - t0).count();
+        std::fprintf(stderr, "  yourmodel_bench: %-22s %.2f ms\n", name, ms);
+    }
+};
+```
+
+Place `yourmodel_bench_stage _b("stage_name");` at each pipeline stage
+(mel, encoder, decoder, vocoder, etc.). Zero overhead when the env var
+is unset (~1 ns cached getenv).
+
 ## 2. Write the backend adapter
 
 Create `examples/cli/crispasr_backend_yourmodel.cpp`:

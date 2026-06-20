@@ -2960,7 +2960,32 @@ Ordered by estimated breadth × depth of impact across the project:
 14. **VoxCPM2: fix Metal buffer type mismatch** — currently CPU-only due
     to SIGSEGV from buffer placement. Unlocks GPU for the entire pipeline.
 
-15. **embed_tokens micro-graph elimination** — Orpheus, OuteTTS, FunASR
-    build a single-op ggml graph per AR step for `ggml_get_rows`. Should
-    be a direct CPU dequant or fused into the main graph.
+15. **embed_tokens micro-graph elimination — MOSTLY DONE.** FunASR,
+    GLM-ASR, MOSS-Audio, Qwen3-ASR, Gemma4-E2B shipped with direct CPU
+    dequant (`CRISPASR_XXX_EMBED_FAST`). Orpheus/OuteTTS already had it.
+    ~1.6× embed step. Only granite-speech remains.
+
+16. **read_tensor_f32 weight pre-cache — DONE (piper 14%, melotts 16%).**
+    `CRISPASR_PIPER_WEIGHT_CACHE` / `CRISPASR_MELOTTS_WEIGHT_CACHE`.
+
+### VPS bench data (2026-06-20, 4-core CPU, Q4_K/F16, JFK 11s)
+
+| Backend | Stage | Time (ms) |
+|---------|-------|-----------|
+| paraformer-zh Q4_K (123 MB) | fbank+lfr | 142 |
+| | encoder | 5007 |
+| | cif_predict | 461 |
+| | decoder | 522 |
+| nemotron Q4_K (458 MB) | mel | 143 |
+| | encoder | 31411 |
+| | rnnt_decode | 7838 |
+| canary-ctc Q4_K (434 MB) | encoder+ctc | 43235 |
+| piper-en F16 (30 MB) | text_encoder | 939 |
+| | flow_inverse | 5187 |
+| | hifigan_decode | 5487 |
+| | **total** | **11790** |
+| melotts-en F16 (98 MB) | text_encoder | 407 |
+| | flow_inverse | 2579 |
+| | hifigan_decode | 17947 |
+| | **total** | **26272** |
 
