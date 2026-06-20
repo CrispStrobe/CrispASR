@@ -6591,7 +6591,7 @@ backends at long output sequences.
 
 #### §176d BLAS/ggml for scalar CPU matmul hotpaths
 
-**Status:** PARTIAL — TitaNet ASP DONE, Silero LID DONE, FireRed VAD DONE (§193), Parakeet DONE (§194), Nemotron DONE (§176d `325432f6`), MeloTTS weight cache DONE (§195)
+**Status:** PARTIAL — TitaNet ASP DONE, Silero LID DONE, FireRed VAD DONE (§193), Parakeet DONE (§194), Nemotron DONE (`325432f6`), MeloTTS weight cache DONE (§195), OpenVoice2 WaveNet DONE (`5e7d8704`)
 **Effort:** Medium-Large (per-backend refactor)
 **Targets (ordered by compute dominance):**
 - TitaNet ASP TDNN: DONE — cblas_sgemm under HAVE_ACCELERATE (prior)
@@ -6611,9 +6611,9 @@ runtimes and currently run as unvectorized nested loops.
 
 #### §176e Context caching for support runtimes
 
-**Status:** PARTIAL — WhisperEncDec + MarbleNet VAD DONE (`ccdd3af6`), Pyannote DONE (`afb651bf`), FireRed VAD DONE (§196 2026-06-20), CTC aligner DONE (`39c8f966`)
+**Status:** DONE — all support runtimes now cached or per-session.
 **Effort:** Small per backend (template: Silero VAD static cache)
-**Backends done:** WhisperEncDec VAD, MarbleNet VAD, Pyannote segmentation, FireRed VAD, CTC aligner. **Remaining:** ECAPA-TDNN LID, RNNoise enhancement, FireRedPunc (graph ctx)
+**Backends done:** WhisperEncDec VAD, MarbleNet VAD, Pyannote segmentation, FireRed VAD, CTC aligner, ECAPA-TDNN LID (EcapaLidCache). FireRedPunc is per-session (init once, free at session end). RNNoise is per-call but lightweight (no model weights, just DSP state).
 **Approach:** The Silero VAD `g_silero_cache_mtx` + static context
 pattern prevents 70× init/free regression. Replicate for each backend:
 static or per-pipeline cached context, mutex-guarded.
@@ -6789,9 +6789,10 @@ alloc per beam expansion step.
 
 #### §176s Encoder graph caching by shape
 
-**Status:** OPEN
+**Status:** PARTIAL — SenseVoice DONE (`1c82bd0d`)
 **Effort:** Small-Medium
-**Backends:** SenseVoice (70 layers), Canary, Moonshine, Moonshine
+**Backends done:** SenseVoice (cached arena when T_lfr matches).
+**Remaining:** Canary, Moonshine, Moonshine
 Streaming, FunASR, OmniASR, Qwen3 ASR, MOSS Audio, Voxtral/4B, GLM ASR,
 Granite Speech, Kyutai STT
 **Approach:** Nemotron demonstrates caching encoder graphs keyed by

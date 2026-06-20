@@ -9201,3 +9201,33 @@ GEMM'd the dilated conv (im2col) + res_skip 1×1 via cblas_sgemm (scalar
 fallback; OV2_FORCE_SCALAR=1). Numeric cos 1.0 vs scalar; voice-clone runs,
 GEMM/scalar garble identically (pre-existing melotts quality, no regression);
 ~28 s conversion delta. 699 unit tests pass. §176d family.
+
+## 2026-06-20 §176 round 2 — 10 optimization commits (Claude Opus session)
+
+Full code-read audit of all 65+ runtimes followed by 10 mechanical
+optimization commits across the session:
+
+**Core infrastructure** (commit `294bedff`):
+- §176q: `greedy_decode.h` thread_local probs vector (all 30+ AR backends)
+- §176j: `fft.h` recursive→iterative FFT (granite, lfm2, indextts, chatterbox, cosyvoice3)
+- §176f: `kaldi_fbank.cpp` thread_local fft scratch (paraformer, funasr, sensevoice, nemotron)
+- §176o: orpheus/outetts/funasr direct CPU dequant for n=1 embed lookup
+- §176p: MOSS Audio 32-layer encoder flash_attn_ext
+- §176r: `beam_decode.h` K-element min-heap top-K (all beam-search backends)
+
+**Lk-bucketed AR graph cache** (§176b):
+- OuteTTS (`d20c4196`), Zonos (`69e6f71b`), TADA (`953023bb`)
+  Pre-built graphs at fixed KV lengths {512,1024,2048,4096}; eliminates
+  sched_reset + alloc_graph per decode step.
+
+**Context caching** (§176e):
+- MarbleNet + WhisperEncDec VAD (`ccdd3af6`)
+- Pyannote segmentation (`afb651bf`)
+- CTC aligner — qwen3-FA + canary-CTC (`39c8f966`)
+
+**BLAS GEMV** (§176d):
+- Nemotron LSTM predictor + joint head (`325432f6`)
+
+**Other**:
+- §176m: Nemotron streaming KV cache memmove (`6e416c85`)
+- §176s: SenseVoice encoder graph caching by T_lfr (`1c82bd0d`)
