@@ -51,3 +51,6 @@ struct CrispasrAlignedWord {
 std::vector<CrispasrAlignedWord> crispasr_align_words(const std::string& aligner_model, const std::string& transcript,
                                                       const float* samples, int n_samples, int64_t t_offset_cs,
                                                       int n_threads);
+
+/// Free the cached aligner model context (§176e). Call at shutdown.
+void crispasr_aligner_free_cache();

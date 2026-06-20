@@ -17,7 +17,49 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <mutex>
+#include <string>
 #include <utility>
+
+// §176e: static cache for aligner model contexts. Avoids loading/freeing
+// the GGUF model on every crispasr_align_words call — alignment models
+// are 300 MB–1 GB and the load/free dominates wall time for short segments.
+namespace {
+
+enum class AlignerType { None, Qwen3FA, Wav2Vec2, CanaryCTC };
+
+static std::mutex g_aligner_cache_mtx;
+static void* g_aligner_cache_ctx = nullptr;
+static std::string g_aligner_cache_path;
+static AlignerType g_aligner_cache_type = AlignerType::None;
+
+static void aligner_cache_free_locked() {
+    if (!g_aligner_cache_ctx)
+        return;
+    switch (g_aligner_cache_type) {
+    case AlignerType::Qwen3FA:
+        qwen3_asr_free((qwen3_asr_context*)g_aligner_cache_ctx);
+        break;
+    case AlignerType::Wav2Vec2:
+        // wav2vec2 doesn't have a public C context — not cached.
+        break;
+    case AlignerType::CanaryCTC:
+        canary_ctc_free((canary_ctc_context*)g_aligner_cache_ctx);
+        break;
+    default:
+        break;
+    }
+    g_aligner_cache_ctx = nullptr;
+    g_aligner_cache_path.clear();
+    g_aligner_cache_type = AlignerType::None;
+}
+
+} // namespace
+
+void crispasr_aligner_free_cache() {
+    std::lock_guard<std::mutex> lock(g_aligner_cache_mtx);
+    aligner_cache_free_locked();
+}
 
 namespace {
 
@@ -121,20 +163,30 @@ std::vector<CrispasrAlignedWord> align_qwen3_fa(const std::string& model_path, c
     if (words.empty())
         return out;
 
-    qwen3_asr_context_params cp = qwen3_asr_context_default_params();
-    cp.n_threads = n_threads;
-    cp.verbosity = 0;
-    qwen3_asr_context* ctx = qwen3_asr_init_from_file(model_path.c_str(), cp);
+    // §176e: reuse cached context if same model path.
+    std::lock_guard<std::mutex> lock(g_aligner_cache_mtx);
+    if (g_aligner_cache_type != AlignerType::Qwen3FA || g_aligner_cache_path != model_path)
+        aligner_cache_free_locked();
+    qwen3_asr_context* ctx = (qwen3_asr_context*)g_aligner_cache_ctx;
     if (!ctx) {
-        fprintf(stderr, "crispasr[aligner-qwen3]: failed to load '%s'\n", model_path.c_str());
-        return out;
+        qwen3_asr_context_params cp = qwen3_asr_context_default_params();
+        cp.n_threads = n_threads;
+        cp.verbosity = 0;
+        ctx = qwen3_asr_init_from_file(model_path.c_str(), cp);
+        if (!ctx) {
+            fprintf(stderr, "crispasr[aligner-qwen3]: failed to load '%s'\n", model_path.c_str());
+            return out;
+        }
+        g_aligner_cache_ctx = ctx;
+        g_aligner_cache_path = model_path;
+        g_aligner_cache_type = AlignerType::Qwen3FA;
     }
     if (qwen3_asr_lm_head_dim(ctx) == 0 || qwen3_asr_lm_head_dim(ctx) > 10000) {
         fprintf(stderr,
                 "crispasr[aligner-qwen3]: model '%s' lm_head dim is %d "
                 "(expected ~5000 for forced-aligner)\n",
                 model_path.c_str(), qwen3_asr_lm_head_dim(ctx));
-        qwen3_asr_free(ctx);
+        aligner_cache_free_locked(); // wrong model — evict from cache
         return out;
     }
 
@@ -146,7 +198,7 @@ std::vector<CrispasrAlignedWord> align_qwen3_fa(const std::string& model_path, c
     std::vector<int64_t> end_ms(words.size(), 0);
     int rc = qwen3_asr_align_words(ctx, samples, n_samples, word_ptrs.data(), (int)words.size(), start_ms.data(),
                                    end_ms.data());
-    qwen3_asr_free(ctx);
+    // Do NOT free ctx — it's cached (§176e).
     if (rc != 0) {
         fprintf(stderr, "crispasr[aligner-qwen3]: align_words rc=%d\n", rc);
         return out;
@@ -227,12 +279,22 @@ std::vector<CrispasrAlignedWord> crispasr_align_words(const std::string& aligner
         return align_wav2vec2_ctc(aligner_model, words, samples, n_samples, t_offset_cs, n_threads);
     }
 
-    canary_ctc_context_params acp = canary_ctc_context_default_params();
-    acp.n_threads = n_threads;
-    canary_ctc_context* actx = canary_ctc_init_from_file(aligner_model.c_str(), acp);
+    // §176e: reuse cached canary-ctc context if same model path.
+    std::lock_guard<std::mutex> lock(g_aligner_cache_mtx);
+    if (g_aligner_cache_type != AlignerType::CanaryCTC || g_aligner_cache_path != aligner_model)
+        aligner_cache_free_locked();
+    canary_ctc_context* actx = (canary_ctc_context*)g_aligner_cache_ctx;
     if (!actx) {
-        fprintf(stderr, "crispasr[aligner]: failed to load '%s'\n", aligner_model.c_str());
-        return out;
+        canary_ctc_context_params acp = canary_ctc_context_default_params();
+        acp.n_threads = n_threads;
+        actx = canary_ctc_init_from_file(aligner_model.c_str(), acp);
+        if (!actx) {
+            fprintf(stderr, "crispasr[aligner]: failed to load '%s'\n", aligner_model.c_str());
+            return out;
+        }
+        g_aligner_cache_ctx = actx;
+        g_aligner_cache_path = aligner_model;
+        g_aligner_cache_type = AlignerType::CanaryCTC;
     }
 
     float* ctc_logits = nullptr;
@@ -240,14 +302,12 @@ std::vector<CrispasrAlignedWord> crispasr_align_words(const std::string& aligner
     int rc = canary_ctc_compute_logits(actx, samples, n_samples, &ctc_logits, &T_ctc, &V_ctc);
     if (rc != 0) {
         fprintf(stderr, "crispasr[aligner]: compute_logits failed (rc=%d)\n", rc);
-        canary_ctc_free(actx);
         return out;
     }
 
     const auto words = tokenise_words(transcript);
     if (words.empty()) {
         free(ctc_logits);
-        canary_ctc_free(actx);
         return out;
     }
 
@@ -258,7 +318,7 @@ std::vector<CrispasrAlignedWord> crispasr_align_words(const std::string& aligner
 
     rc = canary_ctc_align_words(actx, ctc_logits, T_ctc, V_ctc, word_ptrs.data(), (int)words.size(), aligned.data());
     free(ctc_logits);
-    canary_ctc_free(actx);
+    // Do NOT free actx — it's cached (§176e).
 
     if (rc != 0) {
         fprintf(stderr, "crispasr[aligner]: align_words failed (rc=%d)\n", rc);
