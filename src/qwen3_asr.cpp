@@ -247,6 +247,13 @@ struct qwen3_asr_context {
     // qwen3_asr_compute_mel / qwen3_asr_run_encoder once `audio_ca` is open.
     crisp_audio_context* audio_ca = nullptr;
     std::string model_path; // remembered for lazy crisp_audio init
+
+    // §176s: cached encoder graph — reused when (T_chunk, num_chunks, T_chunk_out) match.
+    ggml_cgraph* cached_enc_gf = nullptr;
+    std::vector<uint8_t> cached_enc_meta;
+    int cached_enc_T_chunk = 0;
+    int cached_enc_num_chunks = 0;
+    int cached_enc_T_chunk_out = 0;
 };
 
 // ===========================================================================
@@ -1726,7 +1733,21 @@ extern "C" float* qwen3_asr_run_encoder(qwen3_asr_context* ctx, const float* mel
     // is ready when we add real per-chunk padding masking later.)
     std::vector<float> mask((size_t)N_padded * N_padded, 0.0f);
 
-    ggml_cgraph* gf = qwen3_asr_build_graph_encoder(ctx, chunk_T, num_chunks, T_chunk_out);
+    // §176s: reuse cached encoder graph when shape matches.
+    ggml_cgraph* gf;
+    if (ctx->cached_enc_gf && ctx->cached_enc_T_chunk == chunk_T && ctx->cached_enc_num_chunks == num_chunks &&
+        ctx->cached_enc_T_chunk_out == T_chunk_out) {
+        gf = ctx->cached_enc_gf;
+    } else {
+        ctx->cached_enc_meta.assign(ctx->compute_meta.size(), 0);
+        std::swap(ctx->compute_meta, ctx->cached_enc_meta);
+        gf = qwen3_asr_build_graph_encoder(ctx, chunk_T, num_chunks, T_chunk_out);
+        std::swap(ctx->compute_meta, ctx->cached_enc_meta);
+        ctx->cached_enc_gf = gf;
+        ctx->cached_enc_T_chunk = chunk_T;
+        ctx->cached_enc_num_chunks = num_chunks;
+        ctx->cached_enc_T_chunk_out = T_chunk_out;
+    }
     ggml_backend_sched_reset(ctx->sched);
     if (!ggml_backend_sched_alloc_graph(ctx->sched, gf)) {
         fprintf(stderr, "qwen3_asr: failed to alloc encoder graph\n");
