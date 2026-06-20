@@ -724,6 +724,13 @@ struct qwen3_tts_context {
     ggml_cgraph* cp_t1_gf = nullptr;
     ggml_backend_sched_t cp_t1_sched = nullptr; // dedicated sched for O15 T=1 reuse
     bool cp_t1_allocated = false;               // true once cp_t1_sched has allocated cp_t1_gf
+    // Dedicated persistent arena for cp_t1_gf's tensor metadata. Without this
+    // the graph is built into the shared `compute_meta`, which intervening
+    // builds (notably the 1.7B small_to_mtp projection, run between code steps)
+    // overwrite — leaving cp_t1_gf's tensors dangling so a later reuse hits
+    // GGML_ASSERT in ggml_backend_tensor_set (#56; 1.7B-specific, not CUDA).
+    ggml_context* cp_t1_ctx = nullptr;
+    std::vector<uint8_t> cp_t1_compute_meta;
 
     // Step-0 graph cache (PLAN #52 step 4 follow-on). The first cp_pred call
     // per frame is T=2 with lm_head[0]; the existing cp_t1_gf cache only
@@ -1896,13 +1903,35 @@ float* run_code_pred_kv(qwen3_tts_context* c, const float* embeds, int n_tokens,
     ggml_cgraph* gf;
     if (can_skip) {
         gf = c->cp_t1_gf;
+    } else if (use_slot) {
+        if (!c->cp_t1_gf) {
+            // First T=1 build: into a dedicated persistent arena (cp_t1_ctx) so
+            // intervening compute_meta builds (notably the 1.7B small_to_mtp
+            // projection, run between code steps) can't clobber this cached
+            // graph's tensor metadata. The graph is n_past-invariant under O15
+            // (positions carries n_past; lm_head via cp_lm_head_slot), so it is
+            // built once and reused for all T=1 steps and frames.
+            c->cp_t1_compute_meta.assign(c->compute_meta.size(), 0);
+            ggml_init_params ip = {c->cp_t1_compute_meta.size(), c->cp_t1_compute_meta.data(), true};
+            c->cp_t1_ctx = ggml_init(ip);
+            if (!c->cp_t1_ctx) {
+                return nullptr;
+            }
+            gf = build_graph_code_pred_kv(c, n_past, n_tokens, lm_head, c->cp_t1_ctx);
+            if (!gf) {
+                ggml_free(c->cp_t1_ctx);
+                c->cp_t1_ctx = nullptr;
+                c->cp_t1_compute_meta.clear();
+                return nullptr;
+            }
+            c->cp_t1_gf = gf; // cache for all future T=1 steps and frames
+        } else {
+            gf = c->cp_t1_gf;
+        }
     } else {
         gf = build_graph_code_pred_kv(c, n_past, n_tokens, lm_head);
         if (!gf) {
             return nullptr;
-        }
-        if (use_slot) {
-            c->cp_t1_gf = gf; // cache for future skip_plan calls within this frame
         }
     }
 
@@ -1925,12 +1954,20 @@ float* run_code_pred_kv(qwen3_tts_context* c, const float* embeds, int n_tokens,
     if (!use_slot && !code_pred_reserve_sched(c, sched)) {
         return nullptr;
     }
+    // The "skip reset+alloc on cache hit" optimisation is only safe on backends
+    // whose scheduler keeps a previous allocation valid across computes
+    // (Metal/CPU). On CUDA, computing a reused graph without re-allocating the
+    // scheduler triggers an illegal memory access (#56). So by default we
+    // re-alloc each step — we still keep the larger O15 win (the graph itself is
+    // built exactly once, no per-step rebuild). Metal/CPU users can opt back
+    // into the skip with QWEN3_TTS_O15_SKIP_REALLOC=1.
+    const bool skip_realloc = can_skip && c->cp_t1_allocated && env_bool("QWEN3_TTS_O15_SKIP_REALLOC");
     const double t_reset0 = bench ? now_ms() : 0.0;
-    if (!can_skip || !c->cp_t1_allocated) {
+    if (!skip_realloc) {
         ggml_backend_sched_reset(sched);
     }
     const double t_reset1 = bench ? now_ms() : 0.0;
-    if (!can_skip || !c->cp_t1_allocated) {
+    if (!skip_realloc) {
         if (!ggml_backend_sched_alloc_graph(sched, gf)) {
             return nullptr;
         }
@@ -6491,6 +6528,9 @@ extern "C" void qwen3_tts_free(struct qwen3_tts_context* ctx) {
     }
     if (ctx->cp_step0_sched) {
         ggml_backend_sched_free(ctx->cp_step0_sched);
+    }
+    if (ctx->cp_t1_ctx) {
+        ggml_free(ctx->cp_t1_ctx);
     }
     if (ctx->cp_step0_ctx) {
         ggml_free(ctx->cp_step0_ctx);
