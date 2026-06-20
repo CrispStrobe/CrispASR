@@ -1365,12 +1365,16 @@ static bool nemotron_run_encoder_chunked(nemotron_context* ctx, const float* pre
                 std::vector<float> new_cache((size_t)n_new * d);
                 ggml_backend_tensor_get(cache_out, new_cache.data(), 0, new_cache.size() * sizeof(float));
 
-                // Append to cache and trim to L frames
+                // Append to cache and trim to L frames. Use memmove
+                // instead of vector::erase to avoid O(N) element shifting
+                // on every chunk (§176m).
                 cache.k_cache.insert(cache.k_cache.end(), new_cache.begin(), new_cache.end());
                 cache.n_cached += n_new;
                 if (cache.n_cached > L) {
                     int excess = cache.n_cached - L;
-                    cache.k_cache.erase(cache.k_cache.begin(), cache.k_cache.begin() + (size_t)excess * d);
+                    size_t keep = (size_t)L * d;
+                    std::memmove(cache.k_cache.data(), cache.k_cache.data() + (size_t)excess * d, keep * sizeof(float));
+                    cache.k_cache.resize(keep);
                     cache.n_cached = L;
                 }
             }

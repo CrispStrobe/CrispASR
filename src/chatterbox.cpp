@@ -779,6 +779,14 @@ struct chatterbox_context {
     ggml_backend_sched_t t3_step_sched = nullptr;
     int t3_active_bucket = -1;
 
+    // §188: CPU-side F32 copies of embedding tables.
+    // Populated once at init; eliminates tensor_get_f32 on every decode step.
+    std::vector<float> speech_emb_cache;     // (speech_vocab_size × hidden)
+    std::vector<float> speech_pos_emb_cache; // (speech_pos_emb_size × hidden)
+    std::vector<float> text_emb_cache;       // (text_vocab_size × hidden)
+    std::vector<float> text_pos_emb_cache;   // (text_pos_emb_size × hidden)
+    std::vector<float> wpe_cache;            // (wpe_max_positions × hidden) GPT-2 path
+
     // Per-call performance counters (populated when CHATTERBOX_BENCH=1)
     struct {
         int64_t t_tokenize_us = 0;
@@ -1725,11 +1733,8 @@ static std::vector<float> build_prefill_embeds(chatterbox_context* c, const std:
         int n_heads = 4;
         int hd = D / n_heads; // 256
 
-        // Read embedding tables
-        std::vector<float> speech_emb_tab(c->hp.speech_vocab_size * D);
-        tensor_get_f32(m.speech_emb_w, speech_emb_tab.data(), speech_emb_tab.size());
-        std::vector<float> speech_pos_tab(c->hp.speech_pos_emb_size * D);
-        tensor_get_f32(m.speech_pos_emb_w, speech_pos_tab.data(), speech_pos_tab.size());
+        const auto& speech_emb_tab = c->speech_emb_cache;
+        const auto& speech_pos_tab = c->speech_pos_emb_cache;
 
         // Read prompt token IDs
         std::vector<int32_t> prompt_ids(n_prompt);
@@ -1931,11 +1936,8 @@ static std::vector<float> build_prefill_embeds(chatterbox_context* c, const std:
 
     // Place text embeddings: text_emb + text_pos_emb
     {
-        std::vector<float> text_emb_table(c->hp.text_vocab_size * D);
-        tensor_get_f32(m.text_emb_w, text_emb_table.data(), text_emb_table.size());
-        std::vector<float> text_pos_table(c->hp.text_pos_emb_size * D);
-        tensor_get_f32(m.text_pos_emb_w, text_pos_table.data(), text_pos_table.size());
-
+        const auto& text_emb_table = c->text_emb_cache;
+        const auto& text_pos_table = c->text_pos_emb_cache;
         for (int i = 0; i < text_len; i++) {
             int tok = text_tokens[i];
             if (tok < 0 || tok >= (int)c->hp.text_vocab_size)
@@ -1949,10 +1951,8 @@ static std::vector<float> build_prefill_embeds(chatterbox_context* c, const std:
 
     // Place speech start embedding: speech_emb(start_token) + speech_pos_emb(0)
     {
-        std::vector<float> speech_emb_table(c->hp.speech_vocab_size * D);
-        tensor_get_f32(m.speech_emb_w, speech_emb_table.data(), speech_emb_table.size());
-        std::vector<float> speech_pos_table(c->hp.speech_pos_emb_size * D);
-        tensor_get_f32(m.speech_pos_emb_w, speech_pos_table.data(), speech_pos_table.size());
+        const auto& speech_emb_table = c->speech_emb_cache;
+        const auto& speech_pos_table = c->speech_pos_emb_cache;
 
         int start_tok = (int)c->hp.start_speech_token;
         for (int j = 0; j < D; j++) {
@@ -1969,13 +1969,8 @@ static std::vector<float> build_speech_token_embed(chatterbox_context* c, int32_
 ) {
     const int D = (int)c->hp.hidden_size;
     std::vector<float> embed(D);
-
-    // speech_emb(token) + speech_pos_emb(pos)
-    // Read full tables and index: partial byte-offset reads break on quantized tensors.
-    std::vector<float> emb_tab(c->hp.speech_vocab_size * D);
-    tensor_get_f32(c->t3.speech_emb_w, emb_tab.data(), emb_tab.size());
-    std::vector<float> pos_tab(c->hp.speech_pos_emb_size * D);
-    tensor_get_f32(c->t3.speech_pos_emb_w, pos_tab.data(), pos_tab.size());
+    const auto& emb_tab = c->speech_emb_cache;
+    const auto& pos_tab = c->speech_pos_emb_cache;
     int tid = (token_id >= 0 && token_id < (int)c->hp.speech_vocab_size) ? token_id : 0;
     int pid = (speech_pos >= 0 && speech_pos < (int)c->hp.speech_pos_emb_size) ? speech_pos : 0;
     for (int j = 0; j < D; j++)
@@ -2268,10 +2263,7 @@ static std::vector<float> build_prefill_embeds_gpt2(chatterbox_context* c, const
     const int D = (int)c->hp.hidden_size;
     const auto& m = c->t3;
 
-    // Read WPE table
-    int wpe_size = (int)c->hp.wpe_max_positions;
-    std::vector<float> wpe_table((size_t)wpe_size * D);
-    tensor_get_f32(m.wpe_w, wpe_table.data(), wpe_table.size());
+    const auto& wpe_table = c->wpe_cache;
 
     // 1. Conditioning: speaker_emb projection + speech prompt token embeddings
     // Python: cond_enc(t3_cond) returns [spkr_proj, speech_emb(cond_tokens)]
@@ -2308,9 +2300,7 @@ static std::vector<float> build_prefill_embeds_gpt2(chatterbox_context* c, const
             std::vector<int32_t> prompt_toks(n_prompt);
             ggml_backend_tensor_get(c->conds.speech_prompt_tokens, prompt_toks.data(), 0, n_prompt * sizeof(int32_t));
 
-            std::vector<float> speech_emb_table(c->hp.speech_vocab_size * D);
-            tensor_get_f32(m.speech_emb_w, speech_emb_table.data(), speech_emb_table.size());
-
+            const auto& speech_emb_table = c->speech_emb_cache;
             cond_speech_embs.resize((size_t)n_prompt * D);
             for (int i = 0; i < n_prompt; i++) {
                 int tok = std::max(0, std::min((int)c->hp.speech_vocab_size - 1, (int)prompt_toks[i]));
@@ -2328,11 +2318,8 @@ static std::vector<float> build_prefill_embeds_gpt2(chatterbox_context* c, const
 
     std::vector<float> embeds((size_t)total_len * D, 0.0f);
 
-    // Read embedding tables
-    std::vector<float> text_emb_table(c->hp.text_vocab_size * D);
-    tensor_get_f32(m.text_emb_w, text_emb_table.data(), text_emb_table.size());
-    std::vector<float> speech_emb_table(c->hp.speech_vocab_size * D);
-    tensor_get_f32(m.speech_emb_w, speech_emb_table.data(), speech_emb_table.size());
+    const auto& text_emb_table = c->text_emb_cache;
+    const auto& speech_emb_table = c->speech_emb_cache;
 
     int pos = 0;
     int wpe_pos = 0;
@@ -2386,12 +2373,8 @@ static std::vector<float> build_prefill_embeds_gpt2(chatterbox_context* c, const
 static std::vector<float> build_speech_token_embed_gpt2(chatterbox_context* c, int32_t token_id, int abs_pos) {
     const int D = (int)c->hp.hidden_size;
     std::vector<float> embed(D);
-
-    // Read full tables and index: partial byte-offset reads break on quantized tensors.
-    std::vector<float> emb_tab(c->hp.speech_vocab_size * D);
-    tensor_get_f32(c->t3.speech_emb_w, emb_tab.data(), emb_tab.size());
-    std::vector<float> wpe_tab(c->hp.wpe_max_positions * D);
-    tensor_get_f32(c->t3.wpe_w, wpe_tab.data(), wpe_tab.size());
+    const auto& emb_tab = c->speech_emb_cache;
+    const auto& wpe_tab = c->wpe_cache;
     int tid = (token_id >= 0 && token_id < (int)c->hp.speech_vocab_size) ? token_id : 0;
     int pid = (abs_pos >= 0 && abs_pos < (int)c->hp.wpe_max_positions) ? abs_pos : 0;
     for (int j = 0; j < D; j++)
@@ -2654,6 +2637,32 @@ extern "C" struct chatterbox_context* chatterbox_init_from_file(const char* path
         c->compute_meta.resize(ggml_tensor_overhead() * 16384 + ggml_graph_overhead_custom(16384, false));
     }
 
+    // §188: cache embedding tables once; eliminates per-step tensor_get_f32.
+    {
+        const int D = (int)c->hp.hidden_size;
+        const auto& m = c->t3;
+        if (m.speech_emb_w) {
+            c->speech_emb_cache.resize((size_t)c->hp.speech_vocab_size * D);
+            tensor_get_f32(m.speech_emb_w, c->speech_emb_cache.data(), c->speech_emb_cache.size());
+        }
+        if (m.speech_pos_emb_w) {
+            c->speech_pos_emb_cache.resize((size_t)c->hp.speech_pos_emb_size * D);
+            tensor_get_f32(m.speech_pos_emb_w, c->speech_pos_emb_cache.data(), c->speech_pos_emb_cache.size());
+        }
+        if (m.text_emb_w) {
+            c->text_emb_cache.resize((size_t)c->hp.text_vocab_size * D);
+            tensor_get_f32(m.text_emb_w, c->text_emb_cache.data(), c->text_emb_cache.size());
+        }
+        if (m.text_pos_emb_w) {
+            c->text_pos_emb_cache.resize((size_t)c->hp.text_pos_emb_size * D);
+            tensor_get_f32(m.text_pos_emb_w, c->text_pos_emb_cache.data(), c->text_pos_emb_cache.size());
+        }
+        if (m.wpe_w) {
+            c->wpe_cache.resize((size_t)c->hp.wpe_max_positions * D);
+            tensor_get_f32(m.wpe_w, c->wpe_cache.data(), c->wpe_cache.size());
+        }
+    }
+
     return c;
 }
 
@@ -2773,8 +2782,7 @@ extern "C" int32_t* chatterbox_synthesize_tokens(struct chatterbox_context* ctx,
         const int D = ctx->hp.hidden_size;
         int text_start = prefill_len - (int)text_tokens.size() - 2; // cond_len
         int text_end = prefill_len - 2;                             // before speech tokens
-        std::vector<float> text_pos_table(ctx->hp.text_pos_emb_size * D);
-        tensor_get_f32(ctx->t3.text_pos_emb_w, text_pos_table.data(), text_pos_table.size());
+        const auto& text_pos_table = ctx->text_pos_emb_cache;
         for (int i = text_start; i < text_end; i++) {
             const int pos_idx = i - text_start;
             std::memcpy(&uncond_embeds[(size_t)i * D], &text_pos_table[(size_t)pos_idx * D], (size_t)D * sizeof(float));
@@ -4161,8 +4169,7 @@ extern "C" int chatterbox_dump_t3_next_logits(struct chatterbox_context* ctx, co
         uncond_embeds = prefill_embeds;
         const int text_start = prefill_len - (int)text_tokens.size() - 2;
         const int text_end = prefill_len - 2;
-        std::vector<float> text_pos_table((size_t)ctx->hp.text_pos_emb_size * D);
-        tensor_get_f32(ctx->t3.text_pos_emb_w, text_pos_table.data(), text_pos_table.size());
+        const auto& text_pos_table = ctx->text_pos_emb_cache;
         for (int i = text_start; i < text_end; ++i) {
             const int pos_idx = i - text_start;
             std::memcpy(&uncond_embeds[(size_t)i * D], &text_pos_table[(size_t)pos_idx * D], (size_t)D * sizeof(float));
