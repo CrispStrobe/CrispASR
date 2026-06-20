@@ -247,6 +247,12 @@ struct funasr_context {
 
     std::vector<uint8_t> compute_meta;
 
+    // §176s: cached encoder+adaptor graph — reused when T_lfr matches.
+    ggml_cgraph* cached_enc_gf = nullptr;
+    ggml_context* cached_enc_ctx = nullptr;
+    std::vector<uint8_t> cached_enc_meta;
+    int cached_enc_T_lfr = 0;
+
     // KV cache for the LLM body — same layout as qwen3_asr.
     ggml_context* kv_ctx = nullptr;
     ggml_backend_buffer_t kv_buf = nullptr;
@@ -582,13 +588,13 @@ static ggml_tensor* maybe_snap(ggml_context* ctx0, ggml_cgraph* gf, ggml_tensor*
     return t;
 }
 
-static ggml_cgraph* funasr_build_graph_features(funasr_context* ctx, int T_lfr) {
+static ggml_cgraph* funasr_build_graph_features(funasr_context* ctx, int T_lfr, ggml_context* arena_ctx = nullptr) {
     const auto& hp = ctx->model.hparams;
     const int D_in = (int)hp.input_size;
     const int D = (int)hp.d_model;
 
     ggml_init_params ip = {ctx->compute_meta.size(), ctx->compute_meta.data(), true};
-    ggml_context* ctx0 = ggml_init(ip);
+    ggml_context* ctx0 = arena_ctx ? arena_ctx : ggml_init(ip);
     ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 16384, false);
 
     // ---- inputs ----
@@ -724,7 +730,8 @@ static ggml_cgraph* funasr_build_graph_features(funasr_context* ctx, int T_lfr) 
 
     ggml_set_name(cur, "audio_adaptor_output");
     ggml_build_forward_expand(gf, cur);
-    ggml_free(ctx0);
+    if (!arena_ctx)
+        ggml_free(ctx0);
     return gf;
 }
 
@@ -741,7 +748,24 @@ static std::vector<float> funasr_run_encoder_adaptor(funasr_context* ctx, const 
         compute_encoder_pe(ctx->model, T_lfr + 256);
     }
 
-    ggml_cgraph* gf = funasr_build_graph_features(ctx, T_lfr);
+    // §176s: reuse cached encoder graph when T_lfr matches previous call.
+    ggml_cgraph* gf;
+    if (ctx->cached_enc_gf && ctx->cached_enc_T_lfr == T_lfr) {
+        gf = ctx->cached_enc_gf;
+    } else {
+        if (ctx->cached_enc_ctx) {
+            ggml_free(ctx->cached_enc_ctx);
+            ctx->cached_enc_ctx = nullptr;
+            ctx->cached_enc_gf = nullptr;
+        }
+        ctx->cached_enc_meta.assign(ctx->compute_meta.size(), 0);
+        ggml_init_params ip = {ctx->cached_enc_meta.size(), ctx->cached_enc_meta.data(), true};
+        ctx->cached_enc_ctx = ggml_init(ip);
+        gf = funasr_build_graph_features(ctx, T_lfr, ctx->cached_enc_ctx);
+        ctx->cached_enc_gf = gf;
+        ctx->cached_enc_T_lfr = T_lfr;
+    }
+
     ggml_backend_sched_reset(ctx->sched);
     if (!ggml_backend_sched_alloc_graph(ctx->sched, gf)) {
         std::fprintf(stderr, "funasr: failed to alloc encoder graph\n");
@@ -2179,6 +2203,9 @@ extern "C" void funasr_set_language(funasr_context* ctx, const char* lang) {
 extern "C" void funasr_free(funasr_context* ctx) {
     if (!ctx)
         return;
+    // §176s: free cached encoder graph arena.
+    if (ctx->cached_enc_ctx)
+        ggml_free(ctx->cached_enc_ctx);
     if (ctx->sched)
         ggml_backend_sched_free(ctx->sched);
     if (ctx->step_galloc)
