@@ -955,6 +955,142 @@ catch_discover_tests(test-omniasr-params
     PROPERTIES LABELS "unit;omniasr"
 )
 
+# ─── test-outetts-params — Catch2 unit tests for outetts_context_params defaults
+# and null-guard coverage. No GGUF required. ───────────────────────────────────
+add_executable(test-outetts-params
+    test-outetts-params.cpp
+)
+target_include_directories(test-outetts-params PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-outetts-params PRIVATE
+    Catch2::Catch2WithMain
+    outetts
+)
+catch_discover_tests(test-outetts-params
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit;outetts"
+)
+
+# ─── test-parlertts-params — Catch2 unit tests for parler_tts_context_params defaults
+# and null-guard coverage. No GGUF required. ───────────────────────────────────
+add_executable(test-parlertts-params
+    test-parlertts-params.cpp
+)
+target_include_directories(test-parlertts-params PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-parlertts-params PRIVATE
+    Catch2::Catch2WithMain
+    parler-tts
+)
+catch_discover_tests(test-parlertts-params
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit;parler_tts"
+)
+
+# ─── test-pockettts-params — Catch2 unit tests for pocket_tts_context_params defaults
+# and null-guard coverage. No GGUF required. ───────────────────────────────────
+add_executable(test-pockettts-params
+    test-pockettts-params.cpp
+)
+target_include_directories(test-pockettts-params PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-pockettts-params PRIVATE
+    Catch2::Catch2WithMain
+    pocket-tts
+)
+catch_discover_tests(test-pockettts-params
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit;pocket_tts"
+)
+
+# ─── test-qwen3asr-params — Catch2 unit tests for qwen3_asr_context_params defaults
+# and null-guard coverage. No GGUF required. ───────────────────────────────────
+add_executable(test-qwen3asr-params
+    test-qwen3asr-params.cpp
+)
+target_include_directories(test-qwen3asr-params PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-qwen3asr-params PRIVATE
+    Catch2::Catch2WithMain
+    qwen3_asr
+)
+catch_discover_tests(test-qwen3asr-params
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit;qwen3_asr"
+)
+
+# ─── test-qwen3tts-params — Catch2 unit tests for qwen3_tts_context_params defaults
+# and null-guard coverage. No GGUF required. ───────────────────────────────────
+add_executable(test-qwen3tts-params
+    test-qwen3tts-params.cpp
+)
+target_include_directories(test-qwen3tts-params PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-qwen3tts-params PRIVATE
+    Catch2::Catch2WithMain
+    qwen3_tts
+)
+catch_discover_tests(test-qwen3tts-params
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit;qwen3_tts"
+)
+
+# ─── test-tada-params — Catch2 unit tests for tada_context_params defaults
+# and null-guard coverage. No GGUF required. ───────────────────────────────────
+add_executable(test-tada-params
+    test-tada-params.cpp
+)
+target_include_directories(test-tada-params PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-tada-params PRIVATE
+    Catch2::Catch2WithMain
+    tada-tts
+)
+catch_discover_tests(test-tada-params
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit;tada"
+)
+
+# ─── test-vibevoice-params — Catch2 unit tests for vibevoice_context_params defaults
+# and null-guard coverage. No GGUF required. ───────────────────────────────────
+add_executable(test-vibevoice-params
+    test-vibevoice-params.cpp
+)
+target_include_directories(test-vibevoice-params PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-vibevoice-params PRIVATE
+    Catch2::Catch2WithMain
+    vibevoice
+)
+catch_discover_tests(test-vibevoice-params
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit;vibevoice"
+)
+
+# ─── test-voxcpm2-params — Catch2 unit tests for voxcpm2_context_params defaults
+# and null-guard coverage. No GGUF required. ───────────────────────────────────
+add_executable(test-voxcpm2-params
+    test-voxcpm2-params.cpp
+)
+target_include_directories(test-voxcpm2-params PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-voxcpm2-params PRIVATE
+    Catch2::Catch2WithMain
+    voxcpm2_tts
+)
+catch_discover_tests(test-voxcpm2-params
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit;voxcpm2"
+)
+
 # ─── test-qwen3-tts-cv-style — Catch2 unit tests for qwen3_tts_set_cv_style_instruct
 # (issue #91: --instruct silently ignored for CustomVoice models).
 # Exercises null-ctx guards and default-params sanity — no GGUF needed. ─────
