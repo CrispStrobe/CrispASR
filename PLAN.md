@@ -6564,11 +6564,11 @@ context_params structs. Wire the flag through and default it ON.
 
 #### §176b Lk-bucketed graph caching for AR decode steps
 
-**Status:** PARTIAL — Chatterbox T3 DONE (§186 2026-06-20), Orpheus DONE (§190 2026-06-20), OuteTTS DONE (already implemented pre-§192)
+**Status:** PARTIAL — Chatterbox T3 DONE (§186), Orpheus DONE (§190), OuteTTS DONE, Zonos DONE, TADA DONE. F5-TTS DiT done differently (§183).
 **Effort:** Medium (template from qwen3-tts)
-**Backends done:** Chatterbox T3 (§186), Orpheus (§190), OuteTTS (already had kBucketN/ar_buckets). **Remaining:** Parler (9 codebooks), SpeechT5, Dia, Pocket-TTS,
-Zonos, TADA, CosyVoice3, VoxCPM2, VibeVoice (pred head), LFM2 (VAE), KugelAudio
-(VAE + pred). F5-TTS DiT done differently (§183 single graph, 32-step CFG loop).
+**Backends done:** Chatterbox T3 (§186), Orpheus (§190), OuteTTS, Zonos, TADA.
+**Remaining:** Parler (9 codebooks), SpeechT5, Dia, Pocket-TTS,
+CosyVoice3, VoxCPM2, VibeVoice (pred head), LFM2 (VAE), KugelAudio (VAE + pred).
 **Approach:** Qwen3-TTS demonstrates with 5 pre-built graphs at fixed Lk
 sizes. MIMO has a simpler single-bucket `step_t1_gf`. FunASR has the
 infrastructure but disabled due to full-window attend; needs Lk-bucketing
@@ -6591,7 +6591,7 @@ backends at long output sequences.
 
 #### §176d BLAS/ggml for scalar CPU matmul hotpaths
 
-**Status:** PARTIAL — TitaNet ASP DONE (HAVE_ACCELERATE, prior), Silero LID DONE (§ e1a0725e 2026-06-20), FireRed VAD DONE (§193 2026-06-20), Parakeet DONE (§194 2026-06-20)
+**Status:** PARTIAL — TitaNet ASP DONE, Silero LID DONE, FireRed VAD DONE (§193), Parakeet DONE (§194), Nemotron DONE (§176d `325432f6`), MeloTTS weight cache DONE (§195)
 **Effort:** Medium-Large (per-backend refactor)
 **Targets (ordered by compute dominance):**
 - TitaNet ASP TDNN: DONE — cblas_sgemm under HAVE_ACCELERATE (prior)
@@ -6720,14 +6720,12 @@ optimization remaining.
 dominant cost. Options: SIMD-vectorized exhaustive search, or product
 quantization / FAISS-style IVF for approximate nearest-neighbor.
 
-#### §176m Nemotron: ring buffer for streaming KV cache
+#### §176m Nemotron: streaming KV cache trim
 
-**Status:** OPEN
-**Effort:** Small
+**Status:** DONE — memmove replaces vector::erase (`6e416c85`)
 **File:** `src/nemotron.cpp`
-**Approach:** `std::vector::erase` from front is O(N) per eviction.
-Replace with a ring buffer (or `std::deque` with fixed-size window) for
-O(1) eviction.
+**Done:** `memmove` + `resize` instead of `vector::erase(begin, begin+N)`,
+eliminating O(N) element-shifting per chunk eviction.
 
 #### §176n VoxCPM2: fix Metal buffer type mismatch
 
@@ -6770,32 +6768,25 @@ pointer. Cost: ~2× model RAM (acceptable for <200 MB TTS models).
 
 #### §176p MOSS Audio: wire encoder flash attention
 
-**Status:** OPEN
-**Effort:** Small
+**Status:** DONE — `ggml_flash_attn_ext` wired for 32-layer encoder (`294bedff`)
 **File:** `src/moss_audio.cpp`
-**Approach:** 32-layer Whisper encoder uses `ggml_soft_max_ext` + manual
-mask. Replace with `ggml_flash_attn_ext`. Also add layer offload
-(`CRISPASR_N_GPU_LAYERS`) and fused QKV for the 36-layer Qwen3 LLM.
+**Done:** Replaced manual mul_mat+soft_max+mul_mat with `ggml_flash_attn_ext`.
+F16 mask for flash_attn compat. Layer offload and fused QKV still open.
 
 #### §176q greedy_decode.h: eliminate per-token alloc
 
-**Status:** OPEN
-**Effort:** Small
+**Status:** DONE — `thread_local static` probs vector (`294bedff`)
 **File:** `src/core/greedy_decode.h`
-**Approach:** `sample_temp` allocates `std::vector<double> probs(vocab_size)`
-every call. Make it `thread_local static` to eliminate ~one malloc per
-decode step across all AR backends.
+**Done:** `sample_temp` probs vector is now `thread_local static`;
+eliminates one `malloc(vocab×8)` per AR decode step across all 30+ backends.
 
 #### §176r beam_decode.h: heap-based top-K
 
-**Status:** OPEN
-**Effort:** Small
+**Status:** DONE — K-element min-heap (`294bedff`)
 **File:** `src/core/beam_decode.h`
-**Approach:** `detail::top_k_log_softmax` allocates `std::vector<int>
-idx(vocab_size)` and calls `std::partial_sort` over the full vocab per
-beam per step. A heap-based linear-scan top-K (O(V log K)) would avoid
-the full allocation. Also: `Beam::tokens` deep-copies on fork — a
-persistent prefix trie would halve copy cost.
+**Done:** `top_k_log_softmax` uses a K-element min-heap instead of
+vocab-sized `std::vector<int>` + `partial_sort`. Eliminates ~128–600 KB
+alloc per beam expansion step.
 
 #### §176s Encoder graph caching by shape
 
