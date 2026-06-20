@@ -573,6 +573,14 @@ if(GGML_CUDA)
     target_compile_definitions(nemotron PRIVATE GGML_USE_CUDA)
     target_link_libraries(nemotron PUBLIC ggml-cuda)
 endif()
+# §176d: Accelerate cblas_sgemv for LSTM predictor + joint head.
+if(APPLE)
+    if(NOT ACCELERATE_LIB)
+        find_library(ACCELERATE_LIB Accelerate REQUIRED)
+    endif()
+    target_link_libraries(nemotron PUBLIC ${ACCELERATE_LIB})
+    target_compile_definitions(nemotron PRIVATE HAVE_ACCELERATE ACCELERATE_NEW_LAPACK)
+endif()
 
 # ---------------------------------------------------------------------------
 # Parakeet TDT — nvidia/parakeet-tdt-0.6b-v3 (FastConformer encoder + TDT decoder)

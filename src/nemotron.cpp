@@ -37,6 +37,18 @@
 #include "core/gguf_loader.h"
 #include "core/mel.h"
 
+#if defined(HAVE_ACCELERATE)
+#include <Accelerate/Accelerate.h>
+#endif
+
+// §176d: env-gated fallback to scalar LSTM/joint loops for A/B testing.
+static bool nemotron_force_scalar() {
+    static int v = -1;
+    if (v < 0)
+        v = (std::getenv("NEMOTRON_FORCE_SCALAR") != nullptr) ? 1 : 0;
+    return v != 0;
+}
+
 #include <algorithm>
 #include <cassert>
 #include <chrono>
@@ -1447,14 +1459,27 @@ static bool nemotron_run_encoder_chunked(nemotron_context* ctx, const float* pre
 static void lstm_step_layer(const float* x_in, const float* w_ih, const float* b_ih, const float* w_hh,
                             const float* b_hh, float* h, float* c, float* h_out, int H, int in_dim) {
     auto sig = [](float v) { return 1.0f / (1.0f + expf(-v)); };
-    std::vector<float> gates(4 * H, 0.0f);
-    for (int j = 0; j < 4 * H; j++) {
-        float s = b_ih[j] + b_hh[j];
-        for (int k = 0; k < in_dim; k++)
-            s += w_ih[j * in_dim + k] * x_in[k];
-        for (int k = 0; k < H; k++)
-            s += w_hh[j * H + k] * h[k];
-        gates[j] = s;
+    const int H4 = 4 * H;
+    std::vector<float> gates((size_t)H4);
+    // gates = b_ih + b_hh
+    for (int j = 0; j < H4; j++)
+        gates[(size_t)j] = b_ih[j] + b_hh[j];
+#if defined(HAVE_ACCELERATE)
+    if (!nemotron_force_scalar()) {
+        // gates += w_ih @ x_in + w_hh @ h
+        cblas_sgemv(CblasRowMajor, CblasNoTrans, H4, in_dim, 1.0f, w_ih, in_dim, x_in, 1, 1.0f, gates.data(), 1);
+        cblas_sgemv(CblasRowMajor, CblasNoTrans, H4, H, 1.0f, w_hh, H, h, 1, 1.0f, gates.data(), 1);
+    } else
+#endif
+    {
+        for (int j = 0; j < H4; j++) {
+            float s = gates[(size_t)j];
+            for (int k = 0; k < in_dim; k++)
+                s += w_ih[j * in_dim + k] * x_in[k];
+            for (int k = 0; k < H; k++)
+                s += w_hh[j * H + k] * h[k];
+            gates[(size_t)j] = s;
+        }
     }
     for (int j = 0; j < H; j++) {
         float i_g = sig(gates[0 * H + j]);
@@ -1492,34 +1517,62 @@ static void predictor_step(const nemotron_predictor_weights& W, int token_id, ne
 
 static void joint_proj_enc(const nemotron_joint_weights& J, const float* enc_t, std::vector<float>& out) {
     out.assign(J.joint_hidden, 0.0f);
-    for (int i = 0; i < J.joint_hidden; i++) {
-        float s = J.enc_b[i];
-        const float* row = J.enc_w.data() + (size_t)i * J.d_model;
-        for (int k = 0; k < J.d_model; k++)
-            s += row[k] * enc_t[k];
-        out[i] = s;
+#if defined(HAVE_ACCELERATE)
+    if (!nemotron_force_scalar()) {
+        std::memcpy(out.data(), J.enc_b.data(), (size_t)J.joint_hidden * sizeof(float));
+        cblas_sgemv(CblasRowMajor, CblasNoTrans, J.joint_hidden, J.d_model, 1.0f, J.enc_w.data(), J.d_model, enc_t, 1,
+                    1.0f, out.data(), 1);
+    } else
+#endif
+    {
+        for (int i = 0; i < J.joint_hidden; i++) {
+            float s = J.enc_b[i];
+            const float* row = J.enc_w.data() + (size_t)i * J.d_model;
+            for (int k = 0; k < J.d_model; k++)
+                s += row[k] * enc_t[k];
+            out[i] = s;
+        }
     }
 }
 
 static void joint_step(const nemotron_joint_weights& J, const float* proj_enc, const float* pred_u,
                        std::vector<float>& logits) {
     std::vector<float> mid(J.joint_hidden);
-    for (int i = 0; i < J.joint_hidden; i++) {
-        float s = J.pred_b[i];
-        const float* row = J.pred_w.data() + (size_t)i * J.pred_hidden;
-        for (int k = 0; k < J.pred_hidden; k++)
-            s += row[k] * pred_u[k];
-        float v = proj_enc[i] + s;
-        mid[i] = v > 0.0f ? v : 0.0f; // ReLU
-    }
-
-    logits.assign(J.vocab_total, 0.0f);
-    for (int v = 0; v < J.vocab_total; v++) {
-        float s = J.out_b[v];
-        const float* row = J.out_w.data() + (size_t)v * J.joint_hidden;
-        for (int k = 0; k < J.joint_hidden; k++)
-            s += row[k] * mid[k];
-        logits[v] = s;
+#if defined(HAVE_ACCELERATE)
+    if (!nemotron_force_scalar()) {
+        // mid = pred_b + pred_w @ pred_u
+        std::memcpy(mid.data(), J.pred_b.data(), (size_t)J.joint_hidden * sizeof(float));
+        cblas_sgemv(CblasRowMajor, CblasNoTrans, J.joint_hidden, J.pred_hidden, 1.0f, J.pred_w.data(), J.pred_hidden,
+                    pred_u, 1, 1.0f, mid.data(), 1);
+        // mid = ReLU(proj_enc + mid)
+        for (int i = 0; i < J.joint_hidden; i++) {
+            float v = proj_enc[i] + mid[i];
+            mid[i] = v > 0.0f ? v : 0.0f;
+        }
+        // logits = out_b + out_w @ mid
+        logits.assign(J.vocab_total, 0.0f);
+        std::memcpy(logits.data(), J.out_b.data(), (size_t)J.vocab_total * sizeof(float));
+        cblas_sgemv(CblasRowMajor, CblasNoTrans, J.vocab_total, J.joint_hidden, 1.0f, J.out_w.data(), J.joint_hidden,
+                    mid.data(), 1, 1.0f, logits.data(), 1);
+    } else
+#endif
+    {
+        for (int i = 0; i < J.joint_hidden; i++) {
+            float s = J.pred_b[i];
+            const float* row = J.pred_w.data() + (size_t)i * J.pred_hidden;
+            for (int k = 0; k < J.pred_hidden; k++)
+                s += row[k] * pred_u[k];
+            float v = proj_enc[i] + s;
+            mid[i] = v > 0.0f ? v : 0.0f; // ReLU
+        }
+        logits.assign(J.vocab_total, 0.0f);
+        for (int v = 0; v < J.vocab_total; v++) {
+            float s = J.out_b[v];
+            const float* row = J.out_w.data() + (size_t)v * J.joint_hidden;
+            for (int k = 0; k < J.joint_hidden; k++)
+                s += row[k] * mid[k];
+            logits[v] = s;
+        }
     }
 }
 
