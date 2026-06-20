@@ -6718,3 +6718,23 @@ Granite Speech, Kyutai STT
 `(layer, T_new, T_cache)`. Most other encoders rebuild from scratch each
 call despite fixed topology for a given T_mel. Cache by T_mel (or use
 bucketed T values).
+
+## §188 ecapa-lid — GPU-box crash fix + Accelerate GEMM ASP head — DONE 2026-06-20
+
+ECAPA-TDNN language-id (107 languages) had two issues, both in ecapa_lid.cpp:
+1. Crashed at init on every GPU box. `ecapa_lid_init` built a single-backend
+   sched from `ggml_backend_init_best()` (Metal/CUDA). ggml now asserts the
+   sched's last backend must be CPU → GGML_ASSERT abort, LID unusable on GPU.
+   The graph was designed for CPU+BLAS (file header) and produces garbage
+   embeddings on Metal anyway, so pin the encoder to the CPU backend.
+2. ASP pooling head was scalar. The encoder runs in the ggml graph, but the
+   Attentive Statistical Pooling head — TDNN (128×9216×T) + attention conv
+   (3072×128×T) — was a hand-rolled scalar triple loop, the dominant LID cost.
+   → `cblas_sgemm` (Accelerate), scalar fallback, `ECAPA_FORCE_SCALAR=1` bypass,
+   `ECAPA_TIMING=1` per-call timing.
+
+Validation (F32 model, M1): GEMM output bit-identical to scalar — en p=0.870,
+zh p=1.000, de (→lb 0.481, a pre-existing de/lb model confusion, same in both
+paths). ASP head 4110 ms → 100 ms (41×). NB: the q8_0 ecapa model produces
+near-uniform garbage (quantization breaks the embedding) regardless of this
+change; use the F32 model.

@@ -9034,3 +9034,17 @@ A/B (M1 Metal, Q4_K, jfk.wav 11 s ref):
 The decisive win is Linux/CUDA, where the only prior path was the 672 s scalar
 loop; CUDA A/B not run here (no GPU box reachable from this M1). The full
 VoxCPM2 voice-clone pipeline is now GPU-resident, CPU paths as fallbacks.
+
+## 2026-06-20 §188 ecapa-lid — GPU crash fix + Accelerate GEMM ASP head (41×)
+
+ECAPA-TDNN LID crashed at init on every GPU box (`ecapa_lid_init` built a
+single Metal/CUDA-backend sched; ggml asserts the last sched backend must be
+CPU). The graph was designed for CPU+BLAS and gives garbage on Metal anyway —
+pinned the encoder to the CPU backend. Separately, the Attentive Statistical
+Pooling head (TDNN 128×9216×T + attention conv 3072×128×T) was scalar — the
+LID hotspot; replaced with `cblas_sgemm` (Accelerate), scalar fallback,
+`ECAPA_FORCE_SCALAR=1` bypass.
+
+A/B (F32 model, M1, 11 s clip): ASP head 4110 ms → 100 ms (41×). GEMM output
+bit-identical to scalar across en/zh/de. The q8_0 model produces near-uniform
+garbage (quantization breaks the embedding) independent of this change → F32.
