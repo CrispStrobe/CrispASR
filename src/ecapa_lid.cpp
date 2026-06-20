@@ -594,6 +594,19 @@ extern "C" const char* ecapa_lid_detect(struct ecapa_lid_context* ctx, const flo
             std::vector<uint16_t> tmp(n);
             ggml_backend_tensor_get(t, tmp.data(), 0, n * sizeof(uint16_t));
             ggml_fp16_to_fp32_row(reinterpret_cast<const ggml_fp16_t*>(tmp.data()), out.data(), n);
+        } else {
+            // Quantized (q8_0/q4_k/…): dequantize via the type's to_float.
+            // crispasr-quantize quantizes the CPU-read ASP/FC head weights;
+            // without this branch they read back as zeros → garbage embedding
+            // (this is why the q8_0 ecapa GGUF produced near-uniform output).
+            const struct ggml_type_traits* tr = ggml_get_type_traits(t->type);
+            if (tr && tr->to_float) {
+                std::vector<char> raw(ggml_nbytes(t));
+                ggml_backend_tensor_get(t, raw.data(), 0, raw.size());
+                tr->to_float(raw.data(), out.data(), n);
+            } else {
+                std::fill(out.begin(), out.end(), 0.0f);
+            }
         }
     };
 

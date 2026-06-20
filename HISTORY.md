@@ -9063,3 +9063,12 @@ LID hotspot; replaced with `cblas_sgemm` (Accelerate), scalar fallback,
 A/B (F32 model, M1, 11 s clip): ASP head 4110 ms → 100 ms (41×). GEMM output
 bit-identical to scalar across en/zh/de. The q8_0 model produces near-uniform
 garbage (quantization breaks the embedding) independent of this change → F32.
+
+## 2026-06-20 §190 ecapa-lid — q8 GGUF fixed (read_f32 dequant)
+
+The q8_0 ecapa-lid GGUF gave near-uniform garbage. Not a quantizer bug: the
+CPU-resident Attentive Statistical Pooling head read its weights via a
+`read_f32` lambda handling only F32/F16, so q8'd ASP/FC weights read back as
+zeros → zero embedding → uniform softmax. Generalised `read_f32` to dequantize
+any type via `ggml_get_type_traits(type)->to_float`. q8 now matches F32
+(en/zh/de); 24 MB vs 42 MB F32, fully usable, no re-export. Follows §188.

@@ -6784,3 +6784,19 @@ zh p=1.000, de (→lb 0.481, a pre-existing de/lb model confusion, same in both
 paths). ASP head 4110 ms → 100 ms (41×). NB: the q8_0 ecapa model produces
 near-uniform garbage (quantization breaks the embedding) regardless of this
 change; use the F32 model.
+
+## §190 ecapa-lid — q8 GGUF fixed via read_f32 dequant — DONE 2026-06-20
+
+The q8_0 ecapa-lid GGUF produced near-uniform garbage (jfk → 'ms' p=0.023 vs
+'en' p=0.87). Root cause was NOT the quantizer: crispasr-quantize correctly
+q8's only the 17 k=1 conv weights and keeps BN/bias/1D at F32. But the
+Attentive Statistical Pooling head runs on CPU and reads its weights via a
+local `read_f32` lambda that handled only F32/F16 — a q8 tensor fell through
+and read back as all zeros. emb.asp.tdnn/conv.weight + emb.fc.conv.weight are
+CPU-read → became zero → zero embedding → uniform softmax.
+
+Fix: `read_f32` now dequantizes any type via
+`ggml_get_type_traits(type)->to_float`. Encoder convs (read through the ggml
+graph) already dequantized fine. q8 now matches F32: en 0.878 (F32 0.870), zh
+1.000 (=), de→lb 0.473 (0.481). q8 GGUF 24 MB vs 42 MB F32 (43% smaller), now
+usable — no quantizer change or model re-export needed. (Builds on §188.)
