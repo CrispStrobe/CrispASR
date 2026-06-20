@@ -6564,9 +6564,9 @@ context_params structs. Wire the flag through and default it ON.
 
 #### §176b Lk-bucketed graph caching for AR decode steps
 
-**Status:** PARTIAL — Chatterbox T3 DONE (§186 2026-06-20)
+**Status:** PARTIAL — Chatterbox T3 DONE (§186 2026-06-20), Orpheus DONE (§190 2026-06-20)
 **Effort:** Medium (template from qwen3-tts)
-**Backends done:** Chatterbox T3 (§186). **Remaining:** Orpheus/OuteTTS (long
+**Backends done:** Chatterbox T3 (§186), Orpheus (§190). **Remaining:** OuteTTS (long
 codec sequences), Parler (9 codebooks), SpeechT5, Dia, Pocket-TTS,
 Zonos, TADA, CosyVoice3, VoxCPM2, VibeVoice (pred head), LFM2 (VAE), KugelAudio
 (VAE + pred). F5-TTS DiT done differently (§183 single graph, 32-step CFG loop).

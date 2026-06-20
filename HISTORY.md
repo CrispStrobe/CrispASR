@@ -6,6 +6,17 @@ technical deep-dives are in `LEARNINGS.md`.
 
 ---
 
+## 2026-06-20 §190 Orpheus Lk-bucketed AR decode graph cache
+
+Ported chatterbox §186 T3-bucket pattern to `orpheus.cpp`. Added
+`OrpheusBucket` struct with `kBucketLks={512,1024,2048,4096}` plus
+`ar_step_sched`, `ar_active_bucket` to `orpheus_context`. Extended
+`build_graph_talker_kv` with `fixed_kv_len` + `arena_ctx` params;
+single-step decode now uses a causal mask (to gate unwritten KV slots)
+and `eff_kv_indices=positions` for dynamic KV-write position.
+Forward-declared `run_talker_kv_bucket` to resolve call-before-definition.
+484 unit tests pass; live test pending (1.7 GB model exceeds 2 GB VPS budget).
+
 ## 2026-06-20 §189 mel.cpp BLAS mel filterbank projection
 
 Replace scalar do_matmul triple-loop with cblas_sgemm for both MelsFreqs
