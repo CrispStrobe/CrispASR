@@ -606,6 +606,40 @@ catch_discover_tests(test-chatterbox-params
     PROPERTIES LABELS "unit;chatterbox"
 )
 
+# ─── test-orpheus-params — Catch2 unit tests for orpheus_context_params defaults
+# and null-guard coverage. No GGUF required. ───────────────────────────────────
+add_executable(test-orpheus-params
+    test-orpheus-params.cpp
+)
+target_include_directories(test-orpheus-params PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-orpheus-params PRIVATE
+    Catch2::Catch2WithMain
+    orpheus
+)
+catch_discover_tests(test-orpheus-params
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit;orpheus"
+)
+
+# ─── test-zonos-params — Catch2 unit tests for zonos_tts_params defaults
+# and null-guard coverage. No GGUF required. ───────────────────────────────────
+add_executable(test-zonos-params
+    test-zonos-params.cpp
+)
+target_include_directories(test-zonos-params PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-zonos-params PRIVATE
+    Catch2::Catch2WithMain
+    zonos-tts
+)
+catch_discover_tests(test-zonos-params
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit;zonos"
+)
+
 # ─── test-qwen3-tts-cv-style — Catch2 unit tests for qwen3_tts_set_cv_style_instruct
 # (issue #91: --instruct silently ignored for CustomVoice models).
 # Exercises null-ctx guards and default-params sanity — no GGUF needed. ─────
