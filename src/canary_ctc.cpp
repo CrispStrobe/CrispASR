@@ -154,6 +154,11 @@ struct canary_ctc_context {
     std::vector<uint8_t> compute_meta;
 
     int n_threads = 4;
+
+    // §176s: cached encoder+CTC graph — reused when T_mel matches.
+    ggml_cgraph* cached_gf = nullptr;
+    std::vector<uint8_t> cached_meta;
+    int cached_T_mel = 0;
 };
 
 // ===========================================================================
@@ -616,7 +621,18 @@ extern "C" int canary_ctc_compute_logits_from_mel_debug(struct canary_ctc_contex
     if (ctx->compute_meta.empty()) {
         ctx->compute_meta.resize(ggml_tensor_overhead() * 16384 + ggml_graph_overhead_custom(16384, false));
     }
-    ggml_cgraph* gf = cc_build_graph(ctx, T_mel);
+    // §176s: reuse cached graph when T_mel matches.
+    ggml_cgraph* gf;
+    if (ctx->cached_gf && ctx->cached_T_mel == T_mel) {
+        gf = ctx->cached_gf;
+    } else {
+        ctx->cached_meta.assign(ctx->compute_meta.size(), 0);
+        std::swap(ctx->compute_meta, ctx->cached_meta);
+        gf = cc_build_graph(ctx, T_mel);
+        std::swap(ctx->compute_meta, ctx->cached_meta);
+        ctx->cached_gf = gf;
+        ctx->cached_T_mel = T_mel;
+    }
     ggml_backend_sched_reset(ctx->sched);
     if (!ggml_backend_sched_alloc_graph(ctx->sched, gf))
         return -2;
@@ -670,7 +686,18 @@ extern "C" int canary_ctc_compute_logits(struct canary_ctc_context* ctx, const f
     }
 
     canary_ctc_bench_stage _b_enc("encoder+ctc");
-    ggml_cgraph* gf = cc_build_graph(ctx, T_mel);
+    // §176s: reuse cached graph when T_mel matches.
+    ggml_cgraph* gf;
+    if (ctx->cached_gf && ctx->cached_T_mel == T_mel) {
+        gf = ctx->cached_gf;
+    } else {
+        ctx->cached_meta.assign(ctx->compute_meta.size(), 0);
+        std::swap(ctx->compute_meta, ctx->cached_meta);
+        gf = cc_build_graph(ctx, T_mel);
+        std::swap(ctx->compute_meta, ctx->cached_meta);
+        ctx->cached_gf = gf;
+        ctx->cached_T_mel = T_mel;
+    }
 
     ggml_backend_sched_reset(ctx->sched);
     if (!ggml_backend_sched_alloc_graph(ctx->sched, gf))
