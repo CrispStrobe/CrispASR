@@ -3094,6 +3094,54 @@ static void causal_conv1d(const float* weight, const float* bias, const float* x
 static void causal_transposed_conv1d(const float* weight, const float* bias, const float* x_in, float* x_out, int in_ch,
                                      int out_ch, int ksize, int T_in, int stride) {
     int T_out = T_in * stride;
+
+#if defined(HAVE_ACCELERATE)
+    // Transposed conv = GEMM (P = W2 @ x_in) + col2im overlap-add scatter.
+    //   P[oc*ksize + k, it] = sum_ic weight[ic, oc, k] * x_in[ic, it]
+    //   x_out[oc, it*stride + k] += P[oc*ksize + k, it]   (keep pos < T_out)
+    // The GEMM (M=out_ch*ksize, N=T_in, K=in_ch) runs on Accelerate AMX
+    // (~100 GFLOP/s on M1); the scatter is memory-bound and cheap.
+    // Override with VOXCPM2_FORCE_SCALAR=1 to use the transpose-trick path below.
+    if (!s_vox_force_scalar) {
+        int M = out_ch * ksize;
+        // W2[(oc*ksize + k), ic] from weight[(ic*out_ch + oc)*ksize + k]
+        std::vector<float> W2((size_t)M * in_ch);
+#if defined(_OPENMP)
+#pragma omp parallel for collapse(2) schedule(static)
+#endif
+        for (int oc = 0; oc < out_ch; oc++) {
+            for (int k = 0; k < ksize; k++) {
+                float* dst = W2.data() + (size_t)(oc * ksize + k) * in_ch;
+                for (int ic = 0; ic < in_ch; ic++) {
+                    dst[ic] = weight[((size_t)ic * out_ch + oc) * ksize + k];
+                }
+            }
+        }
+        std::vector<float> P((size_t)M * T_in);
+        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, M, T_in, in_ch, 1.0f, W2.data(), in_ch, x_in, T_in, 0.0f,
+                    P.data(), T_in);
+        // col2im scatter (one oc per thread → no write races between threads).
+#if defined(_OPENMP)
+#pragma omp parallel for schedule(static)
+#endif
+        for (int oc = 0; oc < out_ch; oc++) {
+            float* out_row = x_out + (size_t)oc * T_out;
+            float b_val = bias ? bias[oc] : 0.0f;
+            for (int ot = 0; ot < T_out; ot++)
+                out_row[ot] = b_val;
+            for (int k = 0; k < ksize; k++) {
+                const float* p_row = P.data() + (size_t)(oc * ksize + k) * T_in;
+                for (int it = 0; it < T_in; it++) {
+                    int pos = it * stride + k;
+                    if (pos < T_out)
+                        out_row[pos] += p_row[it];
+                }
+            }
+        }
+        return;
+    }
+#endif
+
     (void)ksize; // no offset needed: take first T_in*S of the no-padding output
 
     // Inner ic loop in the natural layout reads x[ic*T_in+it] (stride T_in)

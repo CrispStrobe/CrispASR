@@ -8886,3 +8886,21 @@ Timing (M1, Q4_K, jfk.wav 11 s → 69 patches):
   locenc:       1.41 s (Metal, warm cache)
   TSLM prefill: 6.01 s
   Total (synthesis of "Hi."): 20.5 s
+
+## 2026-06-20 §180 VoxCPM2 VAE decoder transposed-conv — Accelerate GEMM (7×)
+
+Follow-on to §179 (encoder). `causal_transposed_conv1d` (decoder upsample
+stack, CPU fallback path) still did scalar dot products under the
+transpose-trick → 66 s decode on M1 CPU.
+
+Expressed as GEMM + col2im scatter (`P = W2 @ x_in` via `cblas_sgemm`, then
+overlap-add `x_out[oc, it*stride+k] += P[oc*ksize+k, it]`). Same
+`VOXCPM2_FORCE_SCALAR=1` gate as §179.
+
+A/B (M1, Q4_K, zero-shot, `VOXCPM2_USE_GRAPH=0`):
+  scalar:  VAE decode 66.3 s
+  GEMM:    VAE decode  9.5 s   → 7.0×
+  audio cosine 0.99999987 vs scalar (float accumulation-order noise only).
+
+Note: default synthesis uses `vae_decode_graph` (ggml backend); this speeds
+the CPU-only fallback that a pure-CPU VPS or any graph-fallback hits.

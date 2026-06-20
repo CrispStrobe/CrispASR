@@ -6252,3 +6252,23 @@ the B matrix directly — zero allocation.
 Result: 3.85 s (175× speedup). Full voice-clone synthesis: 20.5 s.
 Gate: `VOXCPM2_FORCE_SCALAR=1` falls back to scalar (for benchmarking).
 CMake: `find_library(ACCELERATE_LIB) + HAVE_ACCELERATE` added to `voxcpm2_tts` on Apple.
+
+## §180 VoxCPM2 VAE decoder transposed-conv — Accelerate GEMM — DONE 2026-06-20
+
+Follow-on to §179. The VAE *decoder*'s `causal_transposed_conv1d` (upsample
+stack, the CPU fallback path used when `VOXCPM2_USE_GRAPH=0` or any
+`vae_decode_graph` fallback fires) had a transpose-for-vectorisation trick
+but still did scalar dot products → 66 s decode on M1 CPU.
+
+Fix: express transposed conv as GEMM + col2im scatter:
+  P[oc*ksize + k, it] = sum_ic weight[ic, oc, k] * x_in[ic, it]   (cblas_sgemm)
+  x_out[oc, it*stride + k] += P[oc*ksize + k, it]                 (scatter, pos<T_out)
+Natural-layout x_in is the B matrix (no x transpose needed). Gated by the
+same `VOXCPM2_FORCE_SCALAR=1` env knob as §179.
+
+A/B (M1, Q4_K, zero-shot, `VOXCPM2_USE_GRAPH=0`, "Hello world, this is a
+speech test."):
+  scalar (FORCE_SCALAR=1):  VAE decode 66.3 s
+  GEMM (default):           VAE decode  9.5 s   → 7.0× speedup
+  audio equivalence: cosine 0.99999987, max |Δ| 21/32768 (0.06 %, float
+  accumulation-order noise from BLAS blocked summation).
