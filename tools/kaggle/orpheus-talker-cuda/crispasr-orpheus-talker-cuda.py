@@ -201,6 +201,9 @@ def do_ref():
              "--max-new-tokens", MAXGEN],
             env={"ORPHEUS_TEXT": TEXT, "ORPHEUS_SPEAKER": SPEAKER,
                  "ORPHEUS_CUSTOM_OFFSET": str(offset), "ORPHEUS_CUSTOM_COUNT": str(count),
+                 # Kaggle workers have ~20 GB RAM (not the doc's 13): use F32 for
+                 # a clean ground truth even on a P100 (sm_60, no torch GPU).
+                 "ORPHEUS_REF_DTYPE": os.environ.get("ORPHEUS_REF_DTYPE", "float32"),
                  "OMP_NUM_THREADS": "1", "PYTHONUNBUFFERED": "1", "HF_HUB_OFFLINE": "1"})
     step("ref_generated", ref_kb=round(REF.stat().st_size / 1e3, 1))
 
