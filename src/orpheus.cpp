@@ -933,6 +933,22 @@ static int sample_logits(const float* logits, int n, float temperature, int top_
 // then engine_class.py prepends `start_token` and appends `end_tokens`.
 static std::vector<int32_t> build_prompt_ids(orpheus_context* c, const std::string& text) {
     const auto& hp = c->hp;
+    // Diff-harness override: force the exact prompt token IDs from the Python
+    // reference (avoids any C++/HF BPE tokenizer mismatch), mirroring
+    // PARLER_PROMPT_IDS. Comma-separated full prompt (incl. control tokens).
+    if (const char* ov = std::getenv("ORPHEUS_PROMPT_IDS"); ov && *ov) {
+        std::vector<int32_t> out;
+        const char* p = ov;
+        while (*p) {
+            char* end = nullptr;
+            long v = std::strtol(p, &end, 10);
+            if (end == p)
+                break;
+            out.push_back((int32_t)v);
+            p = (*end == ',') ? end + 1 : end;
+        }
+        return out;
+    }
     std::string adapted;
     if (hp.tts_model_type == "fixed_speaker" && c->active_speaker >= 0 &&
         c->active_speaker < (int)hp.spk_names.size()) {

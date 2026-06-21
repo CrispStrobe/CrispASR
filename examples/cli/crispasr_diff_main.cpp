@@ -63,6 +63,7 @@
 #include "paraformer.h"
 #include "sensevoice.h"
 #include "cosyvoice3_tts.h"
+#include "orpheus.h"
 #include "parler_tts.h"
 #include "melotts.h"
 #include "moss_audio.h"
@@ -3368,6 +3369,74 @@ int main(int argc, char** argv) {
             free(our_data);
         }
         snac_decoder_free(ctx);
+    } else if (backend_name == "orpheus-talker") {
+        // Orpheus talker AR-decode diff: greedy codec-token stream vs PyTorch
+        // ground truth (reference_backends/orpheus_talker.py). This covers the
+        // §176b Lk-bucketed AR decode + device KV that the SNAC-only `orpheus`
+        // diff does not. model_path = the talker LM GGUF; the reference carries
+        // the full prompt token IDs (used verbatim via ORPHEUS_PROMPT_IDS so the
+        // C++ BPE can't drift) and the greedy `gen_codes` stream.
+        auto [pid, pid_n] = ref.get_f32("prompt_ids");
+        auto [gc, gc_n] = ref.get_f32("gen_codes");
+        if (!pid || pid_n == 0) {
+            fprintf(stderr, "crispasr-diff orpheus-talker: reference missing prompt_ids\n");
+            return 4;
+        }
+        std::string ids_str;
+        for (size_t i = 0; i < pid_n; i++) {
+            if (i)
+                ids_str += ",";
+            ids_str += std::to_string((int)pid[i]);
+        }
+#ifdef _WIN32
+        _putenv_s("ORPHEUS_PROMPT_IDS", ids_str.c_str());
+#else
+        setenv("ORPHEUS_PROMPT_IDS", ids_str.c_str(), 1);
+#endif
+        auto cp = orpheus_context_default_params();
+        cp.n_threads = 4;
+        cp.verbosity = 0;
+        cp.temperature = 0.0f; // greedy for deterministic comparison
+        cp.seed = 42;
+        // gen_codes covers the first frames only; cap the AR loop so we don't
+        // run the full ~8192-step default (override via ORPHEUS_DIFF_MAXGEN).
+        {
+            const char* mg = std::getenv("ORPHEUS_DIFF_MAXGEN");
+            cp.max_audio_tokens = mg && mg[0] ? std::atoi(mg) : 96;
+        }
+        orpheus_context* octx = orpheus_init_from_file(model_path.c_str(), cp);
+        if (!octx) {
+            fprintf(stderr, "failed to load orpheus talker model '%s'\n", model_path.c_str());
+            return 4;
+        }
+        int n_codes = 0;
+        int32_t* codes = orpheus_synthesize_codes(octx, "ignored (ORPHEUS_PROMPT_IDS override)", &n_codes);
+        if (codes && n_codes > 0 && gc && gc_n > 0) {
+            int n_cmp = (int)std::min((size_t)n_codes, gc_n);
+            int match = 0;
+            for (int i = 0; i < n_cmp; i++)
+                if ((int)gc[i] == codes[i])
+                    match++;
+            printf("  gen_codes               : ref=%zu cpp=%d, comparing %d\n", gc_n, n_codes, n_cmp);
+            for (int i = 0; i < std::min(n_cmp, 12); i++)
+                printf("    [%2d] ref=%d cpp=%d%s\n", i, (int)gc[i], codes[i],
+                       ((int)gc[i] == codes[i]) ? "" : "  <-- DIFF");
+            float acc = n_cmp > 0 ? (float)match / n_cmp : 0.0f;
+            printf("  gen_codes               : %d/%d tokens match (%.1f%%)\n", match, n_cmp, acc * 100.0f);
+            if (acc >= 0.9f) {
+                n_pass++;
+                printf("  → PASS\n");
+            } else {
+                n_fail++;
+                printf("  → FAIL (token accuracy %.1f%% < 90%%)\n", acc * 100.0f);
+            }
+        } else {
+            n_fail++;
+            printf("  gen_codes               : FAIL (cpp produced %d codes, ref %zu)\n", n_codes, gc_n);
+        }
+        if (codes)
+            free(codes);
+        orpheus_free(octx);
     } else if (backend_name == "moonshine") {
         // Moonshine (UsefulSensors tiny/base). Non-streaming variant.
         moonshine_init_params mp{};
