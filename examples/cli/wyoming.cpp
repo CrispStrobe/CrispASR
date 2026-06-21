@@ -352,6 +352,9 @@ static void wyoming_handle_connection(socket_t fd) {
             } else if (payload_length > 0 && audio_width == 4) {
                 // float32 LE PCM (some Wyoming clients) → mono int16 (H1)
                 int n_f32 = payload_length / 4;
+                // Intentional reinterpretation of the raw little-endian PCM
+                // byte buffer as float32 samples (Wyoming wire format).
+                // cppcheck-suppress invalidPointerCast
                 const float* src = (const float*)payload.data();
                 int ch = std::max(audio_ch, 1);
                 int frames = n_f32 / ch;

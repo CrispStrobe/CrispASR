@@ -85,7 +85,11 @@ public:
         // the disclaimer code clears tts_voice to request zero-shot even when a
         // voice was set at init time. Fallback to voice_path_ only when the
         // caller never set tts_voice (empty params from a bare API call).
-        const std::string& ref_path =
+        // By value, not by reference: the `""` branch yields a temporary
+        // std::string, so the ternary is a prvalue. Binding it to a
+        // reference trips cppcheck's danglingTemporaryLifetime; a copy of a
+        // short path string is cheap and unambiguous.
+        const std::string ref_path =
             !params.tts_voice.empty() ? params.tts_voice : (params.tts_voice_clone_consent ? "" : voice_path_);
         std::vector<float> ref_pcm;
         if (!ref_path.empty()) {
