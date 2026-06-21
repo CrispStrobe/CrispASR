@@ -5816,3 +5816,25 @@ refactor to split).
 persistent `cached_enc_meta` before calling the graph builder, swap
 back after. The cached graph arena persists across calls. Invalidate
 when the topology key (T_mel, T_lfr, n_samples, etc.) changes.
+
+#### §176u Chatterbox CPU backend thread count (wired; default tuning open)
+
+**Status:** PARTIAL — bug fixed + parity-proven (`bca36bde`); optimal default
++ speedup magnitude OPEN (needs a quiet-machine A/B — owner: §176 campaign).
+**Effort:** Small.
+**Finding:** `chatterbox.cpp` called `ggml_backend_cpu_init()` but never
+`ggml_backend_cpu_set_n_threads()`, so the compute-bound T3 AR decode (≈88% of
+synth wall) ran at `GGML_DEFAULT_N_THREADS=4` on every machine and the CLI `-t`
+flag was silently ignored for chatterbox.
+**Shipped:** wire `c->n_threads` to the CPU backend, default
+`min(8, hardware_concurrency)` (never below `-t`), env override
+`CRISPASR_CHATTERBOX_THREADS`.
+**Parity:** bit-identical — ggml CPU matmul splits output rows per-thread with
+no cross-thread reduction, so output is thread-count-independent. Verified:
+4-thread vs 8-thread emitted speech tokens identical (32/32).
+**Open / handed to §176:** could NOT quantify the speedup — measured only on a
+box at load avg 16–38 (multi-session), where absolute timing was unusable and 8
+threads even over-subscribed/regressed. Needs a quiet-machine interleaved A/B
+(alternating order, min-of-arm) to (a) confirm the win and (b) pick the optimal
+default/cap (E-core penalty on Apple silicon?). Same applies to whether the
+global CLI default `min(4, hw)` should rise for other compute-bound backends.
