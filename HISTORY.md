@@ -96,16 +96,26 @@ accumulation" — it is not).** Instrumented with `CRISPASR_S3GEN_DUMP=1`
   (`CRISPASR_S3GEN_UNET_CFG_SINGLE=1`) is *finite but unintelligible* on q8-GPU
   (`conv_pre rms` ~2× ref, ASR → ∅). Same root cause, different blow-up.
 
-Fix: `s3gen_cfm_is_quantized()` peeks GGUF tensor types for a quantized
-`s3.fd.*`; on **Metal builds** (`#ifdef GGML_USE_METAL`) a quantized CFM on GPU
-is auto-routed to CPU (`force_unet_cpu`) so the q8 weights are dequantised to
-F32 and never hit the Metal q8 GEMV. F16 s3gen stays GPU-resident; CUDA is
-untouched (PLAN #83 validated GPU+PREC_F32 to cos 1.0 on P100, so the crash fix
-alone should let the q8 sweep pass there). Override with
-`CRISPASR_S3GEN_UNET_CPU=0`. Result: q8 default-config synth produces finite,
-intelligible audio (`conv_pre rms≈3.4`, ASR roundtrip recognisable). A future
-GPU-keeping alternative: dequantise `s3.fd.*` to F16 at load on Metal so it
-takes the correct `mul_mm_f16_f32_hp` path.
+Fix (`s3gen_cfm_is_quantized()` peeks GGUF tensor types for a quantized
+`s3.fd.*`; **Metal builds** only, `#ifdef GGML_USE_METAL`):
+
+1. **First cut — route the CFM to CPU** (`force_unet_cpu`): the q8 weights are
+   dequantised to F32 and never hit the Metal q8 GEMV. Correct, but the CFM
+   leaves the GPU, so it's slow on M1.
+2. **Default now — dequantise the CFM weights to F16 GPU-resident**
+   (`dequant_cfm_f16`): after the q8 load, each quantized `s3.fd.*` tensor is
+   replaced with an F16 GPU copy (CPU-side dequant q8→F32→F16, ~65→122 MiB), so
+   the CFM uses the correct `mul_mm_f16_f32_hp` Metal kernel and stays on GPU at
+   full speed. The 352 converted weights produce **bit-for-bit the same quality
+   as the CPU route** — `conv_pre rms=3.380` vs `3.379`, per-channel within
+   1e-3, identical ASR roundtrip — but on the **default batch=2 CFG graph on
+   GPU**, no NaN. The leftover q8 tensors (65 MiB) stay in the load buffer
+   unreferenced.
+
+`CRISPASR_S3GEN_UNET_CPU=1` forces the CPU route (1); `=0` keeps the broken q8
+GPU path for debugging. F16 s3gen is unaffected; CUDA is untouched (PLAN #83
+validated GPU+PREC_F32 to cos 1.0 on P100, so the crash fix alone should let the
+q8 sweep pass there).
 
 Open: confirm on a Kaggle CUDA re-run that q8 chatterbox (the sweep default)
 produces good audio there with the FFT fix (the Metal CFM route is M1-only).

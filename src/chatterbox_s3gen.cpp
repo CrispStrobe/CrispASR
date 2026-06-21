@@ -327,6 +327,15 @@ struct chatterbox_s3gen_context {
     ggml_tensor* ups_w_perm[kMaxUps] = {};
     ggml_context* ctx_perm = nullptr;
     ggml_backend_buffer_t buf_perm = nullptr;
+
+    // F16-dequantized CFM (s3.fd.*) weights, used on Metal when the GGUF is
+    // quantized: Metal's q8 mat-vec kernel requantizes activations to q8 and
+    // corrupts the flow-matcher, so we dequantize the CFM weights to F16 at
+    // load and keep them GPU-resident (correct mul_mm_f16_f32_hp path). See
+    // force_unet_cpu comment for the full diagnosis.
+    bool dequant_cfm_f16 = false;
+    ggml_context* ctx_f16 = nullptr;
+    ggml_backend_buffer_t buf_f16 = nullptr;
     mt19937_state noise_rng{};
     uint32_t noise_seed = 0;
 
@@ -359,6 +368,10 @@ struct chatterbox_s3gen_context {
             ggml_backend_buffer_free(buf_perm);
         if (ctx_perm)
             ggml_free(ctx_perm);
+        if (buf_f16)
+            ggml_backend_buffer_free(buf_f16);
+        if (ctx_f16)
+            ggml_free(ctx_f16);
         if (ctx_w)
             ggml_free(ctx_w);
         if (buf_w)
@@ -644,16 +657,17 @@ extern "C" struct chatterbox_s3gen_context* chatterbox_s3gen_init_from_file(cons
         const bool unet_cpu_env_off =
             unet_cpu_env && (unet_cpu_env[0] == '0' || unet_cpu_env[0] == 'n' || unet_cpu_env[0] == 'N');
 #ifdef GGML_USE_METAL
-        // Auto-route a quantized CFM to CPU on Metal: Metal's q8 mat-vec kernel
-        // requantizes the CFM activations to q8 (corrupting the flow-matcher —
-        // NaN/garbage), which CPU dequant→F32 avoids. See force_unet_cpu comment.
-        if (!unet_cpu_env_off && c->backend != c->backend_cpu && s3gen_cfm_is_quantized(path)) {
-            c->force_unet_cpu = true;
-            if (verbosity >= 1) {
-                fprintf(stderr, "s3gen: quantized CFM on Metal → routing UNet1D to CPU "
-                                "(avoids Metal q8 F16-accumulation NaN; F16 s3gen stays GPU-resident; "
-                                "override with CRISPASR_S3GEN_UNET_CPU=0)\n");
-            }
+        // Metal q8 fix: Metal's q8 mat-vec kernel (kernel_quantize_q8_0_f32 +
+        // kernel_mul_mv_q8_0_q8_0) requantizes the CFM activations to q8 and
+        // corrupts the flow-matcher (NaN on the batch=2 CFG graph, garbage on
+        // batch=1). Default fix: dequantize the quantized CFM (s3.fd.*) weights
+        // to F16 at load and keep the CFM GPU-resident — the correct
+        // mul_mm_f16_f32_hp path, at full GPU speed (the post-load conversion
+        // below sets dequant_cfm_f16 results). CRISPASR_S3GEN_UNET_CPU=1 forces
+        // the slower CPU route instead; CRISPASR_S3GEN_UNET_CPU=0 keeps the
+        // (broken) q8 GPU path for debugging.
+        if (!unet_cpu_env_on && !unet_cpu_env_off && c->backend != c->backend_cpu && s3gen_cfm_is_quantized(path)) {
+            c->dequant_cfm_f16 = true;
         }
 #endif
         const bool unet_cpu_forced = unet_cpu_env_on || c->force_unet_cpu;
@@ -678,6 +692,62 @@ extern "C" struct chatterbox_s3gen_context* chatterbox_s3gen_init_from_file(cons
     c->buf_w = wl.buf;
     c->buf_cpu_w = wl.buf_cpu;
     c->tensors = std::move(wl.tensors);
+
+    // Metal q8 fix (see dequant_cfm_f16 comment): replace each quantized CFM
+    // (s3.fd.*) weight with an F16 GPU copy so the CFM uses the correct
+    // mul_mm_f16_f32_hp Metal kernel instead of the activation-requantizing
+    // q8 mat-vec kernel. CPU-side dequant (q8→F32→F16) is exact w.r.t. the
+    // stored q8; the original q8 tensors stay in buf_w but are unreferenced.
+    if (c->dequant_cfm_f16) {
+        std::vector<ggml_tensor*> qsrc;
+        for (auto& kv : c->tensors) {
+            if (kv.first.rfind("s3.fd.", 0) == 0 && kv.second && ggml_is_quantized(kv.second->type))
+                qsrc.push_back(kv.second);
+        }
+        if (!qsrc.empty()) {
+            const size_t meta = ggml_tensor_overhead() * (qsrc.size() + 8) + 4096;
+            struct ggml_init_params fp = {meta, nullptr, true};
+            c->ctx_f16 = ggml_init(fp);
+            std::vector<ggml_tensor*> f16dst(qsrc.size(), nullptr);
+            for (size_t i = 0; i < qsrc.size(); i++) {
+                ggml_tensor* s = qsrc[i];
+                f16dst[i] = ggml_new_tensor(c->ctx_f16, GGML_TYPE_F16, ggml_n_dims(s), s->ne);
+                if (f16dst[i])
+                    ggml_set_name(f16dst[i], ggml_get_name(s));
+            }
+            c->buf_f16 = ggml_backend_alloc_ctx_tensors(c->ctx_f16, c->backend);
+            size_t n_conv = 0, bytes_q = 0, bytes_f16 = 0;
+            std::vector<char> raw;
+            std::vector<float> f32;
+            std::vector<ggml_fp16_t> f16;
+            for (size_t i = 0; i < qsrc.size(); i++) {
+                ggml_tensor* s = qsrc[i];
+                ggml_tensor* d = f16dst[i];
+                const auto* tt = ggml_get_type_traits(s->type);
+                if (!d || !tt || !tt->to_float)
+                    continue;
+                const int64_t n = ggml_nelements(s);
+                raw.resize(ggml_nbytes(s));
+                ggml_backend_tensor_get(s, raw.data(), 0, ggml_nbytes(s));
+                f32.resize((size_t)n);
+                tt->to_float(raw.data(), f32.data(), n);
+                f16.resize((size_t)n);
+                ggml_fp32_to_fp16_row(f32.data(), f16.data(), n);
+                ggml_backend_tensor_set(d, f16.data(), 0, (size_t)n * sizeof(ggml_fp16_t));
+                c->tensors[ggml_get_name(s)] = d; // redirect graph lookups to the F16 copy
+                n_conv++;
+                bytes_q += ggml_nbytes(s);
+                bytes_f16 += ggml_nbytes(d);
+            }
+            if (verbosity >= 1) {
+                fprintf(stderr,
+                        "s3gen: quantized CFM on Metal → dequantized %zu UNet1D weights q8→F16 GPU-resident "
+                        "(%.0f→%.0f MiB; correct mul_mm_f16_f32_hp path, full GPU speed; "
+                        "CRISPASR_S3GEN_UNET_CPU=1 for the CPU route)\n",
+                        n_conv, bytes_q / 1048576.0, bytes_f16 / 1048576.0);
+            }
+        }
+    }
 
     if (verbosity >= 1) {
         fprintf(stderr, "s3gen: loaded %zu tensors from %s\n", c->tensors.size(), path);

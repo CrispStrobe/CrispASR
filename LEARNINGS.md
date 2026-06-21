@@ -97,15 +97,19 @@ Bisecting per-op (`CRISPASR_S3GEN_UNET_PIN_CPU_OP` / `..._KEEP_GPU_OP`) is a dea
 end here precisely because the culprit is the q8 *mul_mat* path, not an
 activation op (`flash_attn_ext`/`mish` were individually exonerated). Fix:
 detect a quantized CFM (peek GGUF tensor types for `s3.fd.*` via
-`open_metadata`) and, on Metal builds, route the UNet to CPU so the q8 weights
-are dequantised to F32 and never hit the Metal q8 GEMV; CUDA is unaffected
-(PLAN #83 validated GPU+`GGML_PREC_F32` to cos 1.0 on P100). A future
-GPU-keeping alternative: dequantise the `s3.fd.*` weights to F16 at load on
-Metal so they take the correct `mul_mm_f16_f32_hp` path. Lessons: (1) never
-diagnose a NaN by adjective — print the first NaN and the compiled kernels;
-(2) `GGML_PREC_F32` does **not** stop activation requantisation in Metal's q8
-mat-vec kernel, so quantized weights on Metal can be silently wrong for
-precision-sensitive iterative solvers, not just slightly drifted.
+`open_metadata`) on Metal builds, and **dequantise those weights to F16 at load,
+GPU-resident** (`dequant_cfm_f16`) — replace each quantized `s3.fd.*` tensor with
+an F16 GPU copy so the CFM takes the correct `mul_mm_f16_f32_hp` path instead of
+the activation-requantising q8 GEMV, keeping full GPU speed. This reproduces the
+CPU-dequant result bit-for-bit (`conv_pre rms` 3.380 vs 3.379, identical ASR) on
+the default batch=2 GPU graph. `CRISPASR_S3GEN_UNET_CPU=1` is the slower
+all-CPU fallback. CUDA is unaffected (PLAN #83 validated GPU+`GGML_PREC_F32` to
+cos 1.0 on P100). Lessons: (1) never diagnose a NaN by adjective — print the
+first NaN and the compiled kernels; (2) `GGML_PREC_F32` does **not** stop
+activation requantisation in Metal's q8 mat-vec kernel, so quantized weights on
+Metal can be silently wrong for precision-sensitive iterative solvers, not just
+slightly drifted — and the cheap fix is to keep the *weights* off the q8 kernel
+(dequantise to F16 at load) rather than move the whole subgraph to CPU.
 
 ---
 
