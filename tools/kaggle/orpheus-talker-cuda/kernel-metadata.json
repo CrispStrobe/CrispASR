@@ -1,6 +1,6 @@
 {
   "id": "chr1str/crispasr-orpheus-talker-cuda",
-  "title": "CrispASR orpheus talker CUDA diff — 0-byte localize",
+  "title": "crispasr orpheus talker cuda",
   "code_file": "crispasr-orpheus-talker-cuda.py",
   "language": "python",
   "kernel_type": "script",
