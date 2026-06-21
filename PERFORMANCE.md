@@ -2655,8 +2655,8 @@ core infrastructure.
 
 **Parler TTS** (`parler_tts.cpp`):
 - Has: T5 encoder cached after set_description, cross-KV pre-projected
-  once (24 layers), pre-permuted DAC ConvT weights, prefill in single
-  step, delay pattern, top-k+temperature, all_eos early exit
+  once (24 layers, F16 §176i), pre-permuted DAC ConvT weights, prefill
+  in single step, delay pattern, top-k+temperature, all_eos early exit
 - §176b+c (opt-in `CRISPASR_PARLER_BUCKET=1`): Lk-bucketed decode graph
   cache (no per-step rebuild), device-resident self-attn + cross-attn KV
   (`ggml_set_rows` write, no per-step re-upload, no growing `ggml_concat`),
@@ -2667,13 +2667,12 @@ core infrastructure.
   growing KV; flash_attn unused; read_embed_row per codebook per step.
 
 **SpeechT5** (`speecht5_tts.cpp`):
-- Has: host-side KV cache for decoder, cross-attn encoder output reuse,
-  BN fusion in postnet, pre-permuted HiFi-GAN ConvT weights, separate
-  mini_graphs per stage, early exit via stop probability, sinusoidal PE
-  precomputed
+- Has: host-side KV cache for decoder, cross-KV precomputed once (F16
+  §176i, via ggml_cpy auto-conversion), BN fusion in postnet,
+  pre-permuted HiFi-GAN ConvT weights, separate mini_graphs per stage,
+  early exit via stop probability, sinusoidal PE precomputed
 - Gap: **KV re-uploaded every step** (growing O(step×hidden)), new K/V
-  readback per step (sync), **cross-attn K/V recomputed every step**
-  (6 layers, fixed data), no flash attn, graph rebuild every step
+  readback per step (sync), no flash attn, graph rebuild every step
 
 **F5-TTS** (`f5_tts.cpp`):
 - Has: flash attn (22 DiT blocks), RoPE, on-the-fly mel+iSTFT, GPU
@@ -2684,12 +2683,12 @@ core infrastructure.
   rebuilt per call
 
 **Dia** (`dia_tts.cpp`):
-- Has: pre-allocated KV cache, cross-KV precomputed once (18 layers),
-  encoder runs once, CFG batch B=2 in encoder, GQA with repeat_4d,
-  pre-permuted DAC ConvT weights, RoPE
+- Has: pre-allocated KV cache, cross-KV precomputed once (18 layers,
+  F16 §176i), encoder runs once, CFG batch B=2 in encoder, GQA with
+  repeat_4d, pre-permuted DAC ConvT weights, RoPE
 - Gap: past KV re-uploaded every step (18 layers × B=2), cross-KV
-  re-uploaded every step, new K/V readback per step, graph rebuilt
-  per step, no flash attn
+  re-uploaded every step (F16 now), new K/V readback per step, graph
+  rebuilt per step, no flash attn
 
 **CSM** (`csm_tts.cpp`):
 - Has: **device-resident KV cache** (backbone F32, depth F16), KV dtype
@@ -2864,15 +2863,16 @@ core infrastructure.
 **M2M-100** (`m2m100.cpp`):
 - Has: cross-KV cache, decoder self-KV (F16 4D), flash attn (enc SA,
   dec CA), beam search, prefill batching
-- Gap: CPU-only, encoder graph rebuilt per call, cross-KV F32 (should
-  be F16), KV reallocated per call
+- Gap: CPU-only, encoder graph rebuilt per call, KV reallocated per call
+- §176i (2026-06-21): cross-KV F32 → F16 (halves cross-KV memory)
 
 **T5 Translation** (`t5_translate.cpp`):
 - Has: cross-KV cache, decoder self-KV, Viterbi DP tokenizer, rel-pos
   bias in-graph, RMSNorm, gated-GELU FFN, F32 precision on KQ matmul
 - Gap: CPU-only, manual encoder attention (can't use flash_attn_ext with
   additive rel-pos bias), position bucket indices recomputed per step,
-  cross-KV F32, encoder rebuilt per call
+  encoder rebuilt per call
+- §176i (2026-06-21): cross-KV F32 → F16 (halves cross-KV memory)
 
 #### Other
 

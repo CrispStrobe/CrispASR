@@ -10,6 +10,34 @@ If a lesson is still "live" (affects current work), it's linked from
 
 ---
 
+## Cross-attention KV is a free F16 win — encoder-decoder backends (§176i)
+
+Cross-attention K/V in encoder-decoder models is projected once from the
+encoder output and then read-only for all decode steps. Unlike self-attention
+KV (which accumulates per-step and where quantization noise compounds), cross-KV
+is write-once/read-many — F16 halves memory with zero measurable quality impact.
+
+**Pattern:** change the allocation from `GGML_TYPE_F32` to `GGML_TYPE_F16`, then
+convert the F32 projection output to F16 before writing:
+```cpp
+std::vector<ggml_fp16_t> buf16(n_elem);
+ggml_backend_tensor_get(graph_output, f32_buf.data(), 0, n_elem * sizeof(float));
+ggml_fp32_to_fp16_row(f32_buf.data(), buf16.data(), (int)n_elem);
+ggml_backend_tensor_set(cross_kv_tensor, buf16.data(), 0, n_elem * sizeof(ggml_fp16_t));
+```
+
+If the backend uses `ggml_cpy` to write into the cross-KV tensor (like speecht5),
+just changing the tensor type is enough — `ggml_cpy` auto-converts F32→F16.
+
+Downstream consumers (`ggml_mul_mat`, `ggml_flash_attn_ext`) handle F16 inputs
+natively. For backends that feed cross-KV through graph *input* tensors each step
+(dia, parler legacy path), the input tensor type must also change to F16 and the
+staging vectors to `std::vector<ggml_fp16_t>`.
+
+Applied to 5 backends (m2m100, t5, speecht5, dia, parler) in one pass.
+
+---
+
 ## Localizing a GPU miscompute with CPU-vs-Metal diffing — the ggml_backend_sched weight-less-first-op trap (§206)
 
 lfm2-audio transcribed garbage on Metal but was bit-correct on CPU. Technique to

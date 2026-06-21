@@ -31,6 +31,35 @@ diverge (waveform corr drops to 0.58).
 apples-to-apples with the 10-step reference dump. 10 remains the
 reference-exact setting.
 
+## 2026-06-21 §176i Cross-attention KV cache F16 — 5 encoder-decoder backends
+
+Cross-attention K/V is projected once from the encoder and read-only
+thereafter. Storing as F16 instead of F32 halves the cross-KV memory
+footprint with no accuracy impact — `ggml_mul_mat` and `ggml_flash_attn_ext`
+handle F16 inputs natively.
+
+**Backends updated:**
+- `t5_translate.cpp` — `GGML_TYPE_F16` alloc + `ggml_fp32_to_fp16_row` write
+- `m2m100.cpp` — same pattern; flash_attn_ext cross-attn path unchanged
+- `speecht5_tts.cpp` — F16 alloc; uses `ggml_cpy` which auto-converts F32→F16
+- `dia_tts.cpp` — F16 alloc, staging vectors (`std::vector<ggml_fp16_t>`),
+  graph input tensors, write/dump paths; debug dump converts back to F32 for
+  diff-harness compatibility
+- `parler_tts.cpp` — F16 alloc + buffer sizing, staging vectors, graph input
+  tensors (legacy path), device-resident tensors (bucket path), all write paths
+
+**Validation (VPS, CPU-only):** build clean, 688 unit tests pass. Smoke-tested
+all 5 backends: m2m100 → correct German translation; t5/madlad → correct
+German translation; speecht5 → 0.45 s audio; dia → 2.15 s audio (argmax
+matches Python ref); parler → 29.86 s audio.
+
+Also updated §175 item 1 status (lang_names.h DRY already complete — all 4
+callers delegate to `core_lang::iso_to_english()`). Updated §201 cosyvoice3
+note: §205's mixed-radix FFT fix covers its `n_fft=400` mel (needs CUDA
+re-test to confirm).
+
+---
+
 ## 2026-06-21 §206 LFM2-Audio — defaulted to CPU (GPU backbone diverges)
 
 The §201 CUDA sweep flagged lfm2-audio ASR as a ~9.8 s crash. Diffing the CPU
