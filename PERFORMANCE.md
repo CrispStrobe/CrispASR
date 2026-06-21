@@ -59,6 +59,52 @@ and where the gaps are. Last refresh: **2026-05-04** (after PLAN §79 —
 | vibevoice (4B TTS mode) | F16 | F16 | F16 | ✓ | KV migration still pending; layer offload routes `tts_lm.layers.<N>.*` |
 | kokoro | — | — | — | — | non-AR vocoder, no transformer KV |
 
+### Batched classifier-free guidance (CFG) — the dispatch/bandwidth lever (§214)
+
+Most TTS backends apply CFG by running the conditioned and unconditioned passes
+as **two sequential forwards** and blending the outputs. That's correct and
+quant-safe, but on a single-token AR step (or per-diffusion-step) it reads the
+full weight set **twice** and doubles the dispatch count. Batching cond+uncond
+into **one B=2 forward** reads each weight **once** — the lever for any
+decode/step that is weight-bandwidth + dispatch bound. gianni-cor/chatterbox.cpp
+measured **−42 % on the chatterbox T3 AR decode** (its largest stage) from
+exactly this.
+
+**Who batches CFG, and how (full-tree audit, §214):**
+
+| backend | CFG mechanism | batched on GPU? | quant on GPU |
+|---|---|:-:|---|
+| **s3gen CFM** (chatterbox) | B=2 (`build_graph_unet1d_b2`) | ✓ | dequant q*→F16 GPU-resident (`dequant_cfm_f16`) |
+| **chatterbox T3** (§214) | B=2 (`build_graph_t3_kv_b2`) | ✓ | dequant q*→F16 GPU-resident (`ensure_t3_b2_f16_weights`) |
+| dia | B=2 encoder only | ✓ | n/a (F16/F32) |
+| zonos | two separate KV caches, sequential | · | n/a |
+| tada | two sequential B=1 passes | · | n/a |
+| cosyvoice3 | two sequential B=1 (**explicitly chose not to batch**) | · | n/a |
+| f5 | two sequential B=1 passes | · | n/a |
+| voxcpm2 | two sequential B=1 passes | · | n/a |
+| kugelaudio | CFG not implemented (TODO) | — | — |
+
+**The Metal quant gotcha (and the fix).** A B=2 matmul against **quantized**
+weights on Metal becomes a mat-vec with `ne[1]=1, ne[2]=2` that does **not**
+dispatch the PREC_F32 `mul_mv_q*_K` exact-dot kernel the single-token (`ne==1`)
+path hits → it requantizes activations and drifts enough to wreck a greedy
+sampler (chatterbox T3: token divergence at step 2 → repetition collapse; same
+class as native batched-quant CFM NaN). F16 weights are fine batched. **Fix
+(only solution in the tree):** dequantize the batched-against weights q*→F16
+GPU-resident **once** at first use (host `to_float` → `ggml_fp32_to_fp16_row` →
+upload to the GPU backend), then the B=2 matmuls take the correct `mul_mm_f16`
+path. Both GPU-batched paths — s3gen CFM and chatterbox T3 — use this. CPU
+batches quantized weights natively (exact dot), no dequant needed.
+
+**Chatterbox T3 B=2 status (§214, `CRISPASR_CHATTERBOX_T3_CFG_B2=1`, default OFF):**
+greedy-token bit-identical to the legacy sequential path on CPU (all quants) and
+GPU+F16; GPU+quant fixed via the F16 dequant above (ASR-roundtrips verbatim).
+Also the **first working T3-on-GPU path on Metal** — it rebuilds the step graph
+each step, so it sidesteps the §186 Lk-bucket `buffer is nil` crash that breaks
+legacy T3-GPU. CPU floor speedup **~34 % ms/tok** (75→50) measured on a contended
+M1 (load 8–12, absolute numbers unreliable); a clean GPU number and a bucketed
+B=2 graph (to amortize the per-step Metal re-alloc) are open — see PLAN §214.
+
 ### Where the gaps are
 
 1. **Layer offload (`N_GPU_LAYERS`) on encoder-decoder ASR** (canary,

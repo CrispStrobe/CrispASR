@@ -102,6 +102,45 @@ test-all-backends.py passes 18/18 transcribe + 51/54 feature tests (3 stream ski
 
 ---
 
+## §214 follow-up — chatterbox T3 batched-CFG (B=2) — deliver the win (OPEN)
+
+§214 shipped the batched-CFG B=2 T3 decode (`CRISPASR_CHATTERBOX_T3_CFG_B2=1`,
+default OFF) — greedy-token bit-identical to legacy on CPU (all quants), GPU+F16,
+and GPU+quant (via F16 dequant). It works; what's left is *delivering* the
+speedup and proving it. Files: `src/chatterbox.cpp` (`build_graph_t3_kv_b2`,
+`run_t3_kv_b2`, `ensure_t3_b2_f16_weights`, decode loop ~§214). See HISTORY +
+PERFORMANCE §214.
+
+1. **Quiet-machine A/B + default-flip decision (HIGH).** The CPU floor ~34 %
+   (75→50 ms/tok) was measured on a contended M1 (load 8–12) — unreliable.
+   Re-measure on a quiet host (alternating order, min-of-N, deterministic
+   token-parity gate `CRISPASR_CHATTERBOX_TEMP=0`). If the win holds, propose
+   flipping the default ON for the CFG path (keep the env + legacy path forever
+   for bisection). ~1 h on a quiet box.
+
+2. **Cached / bucketed B=2 step graph (MED — only if alloc-bound).** B2 currently
+   rebuilds + `sched_alloc_graph`s every step. §208/§212 say rebuild is negligible
+   on compute-bound CPU, but the per-step **Metal** sched re-alloc is unmeasured
+   and likely caps the GPU win. First *measure* (instrument build+alloc with
+   `ggml_time_us()` around `build_graph_t3_kv_b2`/`alloc_graph`, per the §208
+   methodology) — only bucket it if alloc is a real fraction. CAUTION: a cached
+   B2 graph may reintroduce the §186 Lk-bucket `buffer is nil` Metal crash (the
+   reason per-step rebuild is what makes B2-on-GPU work today); a CPU-only bucket
+   or the proper per-tensor backend-assignment fix may be required.
+
+3. **GPU speedup number (MED).** Couldn't get a clean GPU ms/tok under load.
+   Measure GPU+F16 and GPU+q4k (post-dequant) B2 vs the non-bucket GPU-legacy
+   baseline on a quiet box; report whether GPU B2 finally beats the CPU default.
+
+4. **Generalize B=2 to the other CFG backends (LOW, opportunistic).** dia (decode),
+   zonos, tada, f5, voxcpm2 all run two sequential B=1 CFG passes; cosyvoice3
+   explicitly declined (22-block estimator, per-call overhead small). Worth B=2
+   only where the per-step forward is dispatch/bandwidth-bound *and* the step
+   count is high (AR token loops, not few-step diffusion). Reuse the s3gen/T3
+   dequant-to-F16 pattern for any GPU+quant case.
+
+---
+
 ## §166 follow-up — WASM `asr*` session surface needs a build-verify (OPEN)
 
 Round 4 (2026-06-13, see HISTORY) added a backend-agnostic ASR session surface to
