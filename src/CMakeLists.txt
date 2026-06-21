@@ -288,7 +288,13 @@ else()
     # so this find_package(BLAS) call is steered toward MKL automatically.
     # cohere.cpp also does a bare `#include <cblas.h>` under HAVE_BLAS — gate on
     # the header being reachable (see crispasr-core note above re: MSYS2).
-    find_package(BLAS)
+    find_package(CBLAS)
+    if (CBLAS_FOUND)
+      set(BLAS_FOUND ON)
+      set(BLAS_LIBRARIES ${CBLAS_LIBRARIES})
+    else()
+      find_package(BLAS)
+    endif()
     find_path(CBLAS_INCLUDE_DIR cblas.h PATH_SUFFIXES openblas)
     if(BLAS_FOUND AND CBLAS_INCLUDE_DIR)
         target_link_libraries(cohere PUBLIC ${BLAS_LIBRARIES})
@@ -461,7 +467,13 @@ if(CRISPASR_MEL_BLAS AND NOT MSVC)
         # OpenBLAS) cblas.h lives under an `openblas/` subdir not on the default
         # include path — so only enable HAVE_BLAS when cblas.h is actually
         # reachable, otherwise fall back to the scalar mel projection.
-        find_package(BLAS QUIET)
+        find_package(CBLAS QUIET)
+        if (CBLAS_FOUND)
+          set(BLAS_FOUND ON)
+          set(BLAS_LIBRARIES ${CBLAS_LIBRARIES})
+        else()
+          find_package(BLAS QUIET)
+        endif()
         find_path(CBLAS_INCLUDE_DIR cblas.h PATH_SUFFIXES openblas)
         if(BLAS_FOUND AND CBLAS_INCLUDE_DIR)
             target_link_libraries     (crispasr-core PRIVATE ${BLAS_LIBRARIES})
