@@ -262,20 +262,25 @@ safe("snac", do_snac)
 #    the full-synthesize glue. Runs the exact CLI path the sweep used:
 #    crispasr --backend orpheus -m <talker> --codec-model <snac> --voice tara
 #    GPU is on by default (cli.cpp use_gpu=true); --no-gpu forces CPU.
-def run_synth(label, model, gpu):
+def run_synth(label, model, gpu, bucket=False):
     out = WORK / f"orpheus-e2e-{label}.wav"
     if out.exists():
         out.unlink()
+    # The text flag is `--tts` (was incorrectly `--tts-text`, which the CLI
+    # ignores → empty prompt → 0-byte regardless of backend).
     cmd = [str(CLI), "--backend", "orpheus", "-m", str(model),
            "--codec-model", str(SNAC), "--voice", SPEAKER,
-           "--tts-text", TEXT, "--tts-output", str(out)]
+           "--tts", TEXT, "--tts-output", str(out)]
     if not gpu:
         cmd.append("--no-gpu")
+    env = dict(os.environ)
+    if bucket:
+        env["CRISPASR_ORPHEUS_BUCKET"] = "1"  # §215: exercise the Lk-bucket decode
     step(f"{label}_start")
     t0 = time.time()
     try:
         r = subprocess.run(cmd, timeout=900, stdout=subprocess.PIPE,
-                           stderr=subprocess.STDOUT, text=True)
+                           stderr=subprocess.STDOUT, text=True, env=env)
         rc, log = r.returncode, r.stdout
     except subprocess.TimeoutExpired as ex:
         rc = -1
@@ -297,6 +302,8 @@ def do_e2e():
         return
     safe("e2e_cpu", run_synth, "e2e_cpu", F16, False)
     safe("e2e_gpu", run_synth, "e2e_gpu", F16, True)
+    # §215: confirm the Lk-bucket decode (gated, fixed on Metal) also runs on CUDA.
+    safe("e2e_gpu_bucket", run_synth, "e2e_gpu_bucket", F16, True, bucket=True)
 
 
 safe("e2e", do_e2e)
