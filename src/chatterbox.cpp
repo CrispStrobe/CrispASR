@@ -2401,13 +2401,15 @@ extern "C" struct chatterbox_context_params chatterbox_context_default_params(vo
     p.top_p = 1.0f;
     p.top_k = 0;
     p.max_speech_tokens = 1000;
-    // S3Gen flow-matching Euler steps. Upstream/reference uses 10; we default to
-    // 6 — flow-matching trajectories are nearly straight, so 6 steps is
-    // perceptually the same audio (log-mel-spectrogram corr 0.981 vs 10 steps,
-    // identical ASR roundtrip) while cutting the CFM solver time ~46%. Override
-    // with --tts-steps N (the crispasr-diff harness pins 10 to match the
-    // reference dump). 10 stays the "reference-exact" setting.
-    p.cfm_steps = 6;
+    // S3Gen flow-matching Euler steps. 0 = auto, resolved per-model in s3gen:
+    // standard models → 6, meanflow/turbo distilled models → 2. (Standard:
+    // upstream/reference uses 10; 6 is perceptually identical — log-mel corr
+    // 0.981 vs 10, identical ASR roundtrip — at ~46% less CFM time. Meanflow:
+    // the distilled 2-step schedule; §207's 10→6 standard change previously
+    // broke the meanflow auto-downgrade, leaving turbo at 6 steps.) Override
+    // with --tts-steps N; the crispasr-diff harness pins 10 to match the
+    // reference dump, the "reference-exact" setting.
+    p.cfm_steps = 0;
     // PLAN #89: flash_attn defaults to true (lost in commit ff5536ae;
     // restored 2026-05-11). The compute-graph wiring per backend
     // lands in PLAN #86; until then this is plumbing-only on

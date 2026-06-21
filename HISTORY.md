@@ -6,6 +6,35 @@ technical deep-dives are in `LEARNINGS.md`.
 
 ---
 
+## 2026-06-21 §211 Chatterbox turbo meanflow — fix §207 regression that ran 6 CFM steps instead of 2
+
+§207 changed the standard CFM default 10→6, but the meanflow (turbo/distilled)
+2-step auto-downgrade was gated on the stale `n_cfm_steps == 10` sentinel
+(`chatterbox_s3gen.cpp`). So turbo models silently ran **6 meanflow steps
+instead of 2** — 3× more CFM work than intended. Replaced with a proper
+sentinel: `chatterbox_context.cfm_steps` defaults to **0 = auto**, resolved at
+a single choke point in s3gen (meanflow → 2, standard → 6); an explicit
+`--tts-steps N` is honoured, and a literal 10 + meanflow still maps to 2 for
+pre-§207 back-compat. The diff harness (pins `--tts-steps 10`) is unaffected.
+
+Measured (M1 Metal, base-t3 q8 + turbo-s3gen q8, "quick brown fox"): meanflow
+CFM **3611 ms (6 steps) → 1211 ms (2 steps)**, −66%; standard unchanged at 6
+steps; intelligible ASR roundtrip both. Turbo's per-step is also ~3× cheaper
+than standard (single-pass, no CFG: ~600 ms/step vs the b2 CFG ~1800 ms/step),
+so turbo-at-2-steps is the fastest CFM config by far.
+
+Side investigation (no code): traced the §205 "native q8/Q4_K CFM corruption"
+to confirm it is NOT the `ggml_backend_sched` (the §208 single-backend gallocr
+path NaNs identically) — it is the quantized CFM mat-mul path itself (NaN at
+batch=2 CFG, garbage at batch=1). The §205 dequant-to-F16 stays the correct
+fix. Native Q4_K isn't worth pursuing for speed: even if the NaN were fixed,
+patch #09 routes quant mat-muls through `mul_mv` (mat-vec), slower than the F16
+`mul_mm` for the 484-col CFM — it would help size, not speed. The real
+remaining speed levers are batched CFG B=2 on T3 (the largest stage; gianni
+−42%) and turbo. Worktree: `/Volumes/backups/code/cb-q4k-stash`.
+
+---
+
 ## 2026-06-21 §210 Chatterbox multilingual #170 — NFKD text-prep parity + diff-harness stage + CPU thread wiring
 
 Issue #170 follow-up: after the 2026-06-18 tokenizer-mismatch fix, an external

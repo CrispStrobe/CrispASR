@@ -43,7 +43,7 @@ struct chatterbox_context_params {
                               // + min_p=0 to match HF inference_turbo defaults
                               // (tts_turbo.py:248-260, t3.py:415).
     int max_speech_tokens;    // upper bound on T3 AR decode (default 1000)
-    int cfm_steps;            // number of CFM Euler steps (default 10)
+    int cfm_steps;            // CFM Euler steps; 0 = auto (standard 6, meanflow 2)
     bool flash_attn;          // PLAN #89 plumbing — T3 Llama-style AR
                               // loop. Highest-impact target alongside
                               // orpheus for the kernel wiring in #86.

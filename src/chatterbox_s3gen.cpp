@@ -3682,8 +3682,18 @@ static bool chatterbox_s3gen_compute_gen_mel(struct chatterbox_s3gen_context* ct
         return false;
     if (out_T_mel)
         *out_T_mel = 0;
-    if (n_cfm_steps <= 0)
-        n_cfm_steps = 10;
+    // Resolve the CFM step count. 0 = auto (the default since the cfm_steps
+    // sentinel): meanflow/turbo distilled models use 2 steps, standard models
+    // use 6 (§207). An explicit positive count (--tts-steps /
+    // chatterbox_set_cfm_steps) is honoured as-is. A literal 10 with a meanflow
+    // model is also treated as the legacy auto-default and mapped to 2
+    // (back-compat with pre-§207 callers that passed the old default of 10).
+    // NOTE: §207 changed the standard default 10→6, which silently broke the
+    // old `== 10` meanflow downgrade — turbo then ran 6 meanflow steps instead
+    // of 2. This resolves it at a single choke point regardless of the default.
+    const bool is_meanflow = (T(ctx, "s3.fd.tmx.weight") != nullptr);
+    if (n_cfm_steps <= 0 || (is_meanflow && n_cfm_steps == 10))
+        n_cfm_steps = is_meanflow ? 2 : 6;
 
     if (ctx->verbosity >= 1) {
         fprintf(stderr, "s3gen: %d speech tokens + %d prompt tokens, %d CFM steps\n", n_speech_tokens, n_prompt_tokens,
@@ -3789,14 +3799,11 @@ static bool chatterbox_s3gen_compute_gen_mel(struct chatterbox_s3gen_context* ct
     }
 
     // 4. CFM Euler solver: noise → mel
-    // Detect meanflow: time_embed_mixer weight exists only in meanflow models
-    bool is_meanflow = (T(ctx, "s3.fd.tmx.weight") != nullptr);
+    // is_meanflow + the resolved step count were determined at function entry
+    // (meanflow detected via the s3.fd.tmx.weight mixer tensor). Meanflow uses
+    // a linear schedule and no CFG.
     float cfg = is_meanflow ? 0.0f : 0.7f;
-    // Meanflow defaults to 2 CFM steps (distilled model); override if caller passed default 10
     int actual_steps = n_cfm_steps;
-    if (is_meanflow && n_cfm_steps == 10) {
-        actual_steps = 2; // Python default for meanflow
-    }
     if (ctx->verbosity >= 1 && is_meanflow) {
         fprintf(stderr, "s3gen: meanflow mode (%d steps, linear schedule, no CFG)\n", actual_steps);
     }
