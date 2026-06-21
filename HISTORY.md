@@ -6,7 +6,7 @@ technical deep-dives are in `LEARNINGS.md`.
 
 ---
 
-## 2026-06-21 Chatterbox CUDA crash — non-power-of-two FFT heap overflow (fix/chatterbox-cuda)
+## 2026-06-21 §205 Chatterbox CUDA crash — non-power-of-two FFT heap overflow + q8/Metal CFM NaN
 
 Kaggle full-backend-sweep (Tesla P100, sm_60) crashed chatterbox TTS with
 `free(): corrupted unsorted chunks` immediately after the `[CONSENT]` line

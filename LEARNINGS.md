@@ -10,6 +10,56 @@ If a lesson is still "live" (affects current work), it's linked from
 
 ---
 
+## A glibc-only crash reproduces on macOS under AddressSanitizer — and the bug is often a non-power-of-two FFT (§205)
+
+A backend that crashes on a Linux/CUDA host with `free(): corrupted unsorted
+chunks` (or `malloc(): ...`) but runs fine on macOS is almost always a **latent
+heap buffer overflow**, not a platform/kernel difference: glibc's allocator
+traps the overwrite of an adjacent chunk header that macOS's allocator silently
+tolerates. You do **not** need the Linux box to find it — build the failing
+binary on M1 with `-fsanitize=address` and run the exact failing command. ASan
+instruments every allocation regardless of platform, so it reports the same
+overflow with a precise stack. (`libgmalloc` via `DYLD_INSERT_LIBRARIES` is a
+fallback, but its 16-byte-slack mode misses small overruns and it can't see
+writes that stay within a `std::vector`'s `capacity()`; ASan's container
+annotations can — prefer ASan.)
+
+The specific trap that bit chatterbox: **`fft_radix2_inplace` is power-of-two
+only**, but several mel front-ends pass a non-pow2 `n_fft` — VoiceEncoder and
+S3Tokenizer use 400, CAMPPlus 1920, CosyVoice3 400. For N=400 the `len=256`
+butterfly stage writes `re[400..511]`, 112 floats past the N-element scratch.
+Whisper-style n_fft=400 needs a **true 400-point transform** (the mel
+filterbank is built for `N/2+1` bins), so the fix is a mixed-radix real FFT
+(radix-2 DIT split down to an odd-N naive DFT base case — like `voxtral_fft`),
+gated to non-pow2 N so the pow2 callers (granite 512, indextts 1024) stay
+bit-identical. Audit rule: **any `core_mel::compute` caller passing
+`fft_radix2_wrapper` must use a power-of-two `p.n_fft`** — grep the call sites
+when adding a backend. See [[project_tts_gpu_cuda_crash_patterns]].
+
+## A Metal kernel can NaN on quantized weights where it only drifts on F16 (§205)
+
+Chatterbox's S3Gen CFM (the flow-matching UNet1D) produces **all-NaN mel on
+M1 Metal with q8 weights** but is clean with F16. It is **not** the q8 data
+(forcing the CFM to CPU dequantizes the same q8 weights and yields finite,
+reference-matching output) and **not** the vocoder (`CRISPASR_S3GEN_VOCODER_CPU`
+is irrelevant; `UNET_CPU=1` is what fixes it). It is a **compound F16
+accumulation** failure: q8 quantization noise inflates intermediate magnitudes,
+and the GPU's F16-accumulating non-`mul_mat` ops (norm/conv/activation) compound
+that over the 10-step Euler solver until it overflows to NaN. The existing
+`mul_mat`→CPU pin (the F32-precision lever) is *not enough*, and bisecting with
+`CRISPASR_S3GEN_UNET_PIN_CPU_OP=<op>` / `..._KEEP_GPU_OP=<op>` exonerates
+`flash_attn_ext` and `mish` individually — no single op is the culprit. The
+robust fix is residency: detect a quantized CFM (peek GGUF tensor types for
+`s3.fd.*` via `open_metadata`) and, on Metal builds only, route the whole UNet
+to CPU; CUDA keeps GPU residency (PLAN #83 validated GPU+`GGML_PREC_F32` to
+cos 1.0 on P100). Lesson: a per-op precision hint (`ggml_mul_mat_set_prec`,
+`ggml_flash_attn_ext_set_prec`) only covers the op it tags; for a deep
+GPU subgraph that compounds F16 error under quantization, whole-subgraph CPU
+residency is the reliable fix, and it's worth gating to the affected backend
+(Metal) so you don't tax the platform that's actually fine.
+
+---
+
 ## A byte-identical standalone reproducer is the only way to (dis)prove a "ggml bug" (§203)
 
 When a batched/fused graph misbehaves and you suspect ggml's allocator or a
