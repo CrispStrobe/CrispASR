@@ -10757,6 +10757,18 @@ DUD (cf. the bucket-floor DUD in [[project_chatterbox_t3_decode_perf]]). The
 single-backend gallocr path is also a Bug-B-free reference: no sched, no
 cross-backend copy boundary, so CFG uncond cannot diverge.
 
+**§214 re-confirmation (chatterbox T3 B=2 decode).** Same trap, second data point:
+before bucketing the per-step-rebuilt B=2 T3 graph, `CHATTERBOX_BENCH_B2=1` split
+each step into build+alloc vs compute → **CPU 0.41 ms/step (0.8%)** of a 53 ms
+step, **GPU+F16 1.55 ms (0.7%)** of a 232 ms step. <1% on both → a cached/bucketed
+B2 graph is a DUD, and worse, it would risk reintroducing the §186 Lk-bucket
+`buffer is nil` Metal crash that the per-step rebuild *deliberately* sidesteps
+(the rebuild is what makes B2-on-GPU work at all). The instrumentation is shipped
+(gated `CHATTERBOX_BENCH_B2`) so the call is data-backed, not assumed. Corollary
+the same run surfaced: GPU per-step compute (232 ms) ≫ CPU (53 ms), so B=2 does
+**not** make T3-on-GPU beat the CPU default — B2's GPU value is purely *enabling*
+T3-on-GPU (sidestep the bucket crash) + the GPU+quant F16-dequant path.
+
 ### RNNoise/resampler caching isn't worth breaking thread safety
 
 The miniaudio resamplers and RNNoise DenoiseState are per-call by
