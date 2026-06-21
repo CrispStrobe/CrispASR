@@ -794,6 +794,12 @@ struct chatterbox_context {
     ggml_backend_sched_t t3_step_sched_cfg = nullptr;
     int t3_active_bucket_cfg = -1;
 
+    // §214: dedicated scheduler for the batched classifier-free-guidance (B=2)
+    // T3 decode step (CRISPASR_CHATTERBOX_T3_CFG_B2). Kept separate from c->sched
+    // and the bucket schedulers so the B=2 graph can rebuild + re-alloc per step
+    // without disturbing the cond/uncond bucket allocations.
+    ggml_backend_sched_t t3_sched_b2 = nullptr;
+
     // §188: CPU-side F32 copies of embedding tables.
     // Populated once at init; eliminates tensor_get_f32 on every decode step.
     std::vector<float> speech_emb_cache;     // (speech_vocab_size × hidden)
@@ -829,6 +835,8 @@ struct chatterbox_context {
             ggml_backend_sched_free(t3_step_sched);
         if (t3_step_sched_cfg)
             ggml_backend_sched_free(t3_step_sched_cfg);
+        if (t3_sched_b2)
+            ggml_backend_sched_free(t3_sched_b2);
         for (auto& bk : t3_buckets)
             if (bk.ctx)
                 ggml_free(bk.ctx);
@@ -1428,6 +1436,236 @@ static ggml_cgraph* build_graph_t3_kv(chatterbox_context* c, int n_past, int n_t
     if (!arena_ctx)
         ggml_free(ctx0);
     return gf;
+}
+
+// §214: batched classifier-free-guidance (B=2) T3 decode step.
+//
+// Runs the conditioned and unconditioned CFG passes as ONE batch-2 forward so
+// each weight is read once for both passes — halving weight-bandwidth + dispatch
+// on the single-token AR decode, which is the largest synthesis stage (the
+// reference impl gianni-cor/chatterbox.cpp measured −42 % T3 from this change).
+//
+// Reuses the two existing KV caches (kv_k/kv_v cond, kv_k_cfg/kv_v_cfg uncond):
+// the heavy Q/K/V/O/FFN/head GEMMs are batched over ne[2]=2 (ggml_mul_mat
+// broadcasts the 2D weight over the batch dim); the cheap per-token attention
+// (cache write/read + flash) is SPLIT per batch — the two passes use different
+// caches and must not attend across each other. Both batches share the same
+// token embedding and the same position (lockstep n_past == n_past_cfg in the
+// decode loop), so the inputs are trivially replicated.
+//
+// Output `logits` is (speech_vocab, 1, 2): batch 0 = cond, batch 1 = uncond.
+//
+// This MUST stay token-parity-identical to the legacy sequential cond+uncond
+// path. The graph faithfully replicates core_attn::kv_self_attn's chatterbox
+// configuration (NEOX RoPE over the full head_dim, GQA_MANUAL_CONT expansion,
+// F16-cache ggml_cpy write / quant-cache ggml_set_rows write, dequant-on-read)
+// and tags every mul_mat + flash_attn_ext with GGML_PREC_F32 (load-bearing for
+// the T3 multinomial sampler — see build_graph_t3_kv ~§83).
+static ggml_cgraph* build_graph_t3_kv_b2(chatterbox_context* c, int n_past) {
+    const auto& hp = c->hp;
+    const int D = (int)hp.hidden_size;
+    const int n_q = (int)hp.n_heads;
+    const int n_kv = (int)hp.n_kv_heads;
+    const int hd = (int)hp.head_dim;
+    const int grp = n_q / n_kv;
+    const float eps = hp.rms_norm_eps;
+    const float attn_scale = 1.0f / std::sqrt((float)hd);
+    const int Lk = n_past + 1;
+    const int n_ctx_orig = (int)hp.rope_original_max_pos;
+    const float rope_theta = hp.rope_theta;
+
+    GGML_ASSERT(c->kv_k && c->kv_v && c->kv_k_cfg && c->kv_v_cfg && Lk <= c->kv_max_ctx);
+
+    ggml_init_params ip = {c->compute_meta.size(), c->compute_meta.data(), true};
+    ggml_context* ctx0 = ggml_init(ip);
+    ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 16384, false);
+
+    // Shared inputs: same embed for both passes (replicated along batch ne[2]),
+    // same single position. Decode-only (T=1) so no causal mask is needed.
+    ggml_tensor* embeds = ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, D, 1, 2);
+    ggml_set_name(embeds, "inputs_embeds");
+    ggml_set_input(embeds);
+    ggml_tensor* positions = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, 1);
+    ggml_set_name(positions, "positions");
+    ggml_set_input(positions);
+    ggml_tensor* rope_freq_factors = nullptr;
+    if (!c->rope_freq_factors.empty()) {
+        rope_freq_factors = ggml_new_tensor_1d(ctx0, GGML_TYPE_F32, (int64_t)c->rope_freq_factors.size());
+        ggml_set_name(rope_freq_factors, "rope_freq_factors");
+        ggml_set_input(rope_freq_factors);
+    }
+
+    ggml_tensor* kv_ks[2] = {c->kv_k, c->kv_k_cfg};
+    ggml_tensor* kv_vs[2] = {c->kv_v, c->kv_v_cfg};
+    const bool quant_kv = ggml_is_quantized(c->kv_k->type);
+    static const bool s_kv_read_f32 = []() {
+        const char* s = std::getenv("CRISPASR_KV_READ_F32");
+        return s && *s && std::strcmp(s, "0") != 0;
+    }();
+    const bool need_dequant = quant_kv || (s_kv_read_f32 && c->kv_k->type != GGML_TYPE_F32);
+
+    ggml_tensor* cur = embeds; // (D, 1, 2)
+    for (uint32_t il = 0; il < hp.n_layers; il++) {
+        const auto& b = c->t3.blocks[il];
+        ggml_tensor* residual = cur;
+
+        ggml_tensor* x = ggml_rms_norm(ctx0, cur, eps);
+        x = ggml_mul(ctx0, x, b.attn_norm_w); // (D, 1, 2)
+
+        // Batched Q/K/V projections — each weight read once for both passes.
+        ggml_tensor* Q = ggml_mul_mat(ctx0, b.attn_q_w, x); // (n_q*hd, 1, 2)
+        ggml_tensor* K = ggml_mul_mat(ctx0, b.attn_k_w, x); // (n_kv*hd, 1, 2)
+        ggml_tensor* V = ggml_mul_mat(ctx0, b.attn_v_w, x);
+        Q = ggml_reshape_4d(ctx0, Q, hd, n_q, 1, 2);
+        K = ggml_reshape_4d(ctx0, K, hd, n_kv, 1, 2);
+        V = ggml_reshape_4d(ctx0, V, hd, n_kv, 1, 2);
+
+        // RoPE (NEOX, full head_dim). positions (len 1 == ne[2]) is applied
+        // independently to each batch at ne[3]. Matches kv_self_attn exactly:
+        // freq_scale 1, ext_factor 0, attn_factor 1, beta_fast/slow 0.
+        Q = ggml_rope_ext(ctx0, Q, positions, rope_freq_factors, hd, GGML_ROPE_TYPE_NEOX, n_ctx_orig, rope_theta, 1.0f,
+                          0.0f, 1.0f, 0.0f, 0.0f);
+        K = ggml_rope_ext(ctx0, K, positions, rope_freq_factors, hd, GGML_ROPE_TYPE_NEOX, n_ctx_orig, rope_theta, 1.0f,
+                          0.0f, 1.0f, 0.0f, 0.0f);
+
+        ggml_tensor* attn_b[2];
+        for (int bi = 0; bi < 2; bi++) {
+            ggml_tensor* kv_k = kv_ks[bi];
+            ggml_tensor* kv_v = kv_vs[bi];
+            // Per-batch slices (each batch is a contiguous block at ne[3]=bi).
+            ggml_tensor* Qb = ggml_view_3d(ctx0, Q, hd, n_q, 1, Q->nb[1], Q->nb[2], (size_t)bi * Q->nb[3]);
+            ggml_tensor* Kb = ggml_view_3d(ctx0, K, hd, n_kv, 1, K->nb[1], K->nb[2], (size_t)bi * K->nb[3]);
+            ggml_tensor* Vb = ggml_view_3d(ctx0, V, hd, n_kv, 1, V->nb[1], V->nb[2], (size_t)bi * V->nb[3]);
+
+            // Permute new K/V to (hd, 1, n_kv) for the cache write.
+            ggml_tensor* K_new_perm = ggml_permute(ctx0, Kb, 0, 2, 1, 3);
+            ggml_tensor* V_new_perm = ggml_permute(ctx0, Vb, 0, 2, 1, 3);
+
+            // Write into the per-batch cache at [n_past, n_past+1). Quant caches
+            // scatter via ggml_set_rows (positions == row ids); F16 caches use a
+            // strided-view ggml_cpy. Mirrors core_attn::kv_self_attn.
+            if (quant_kv) {
+                ggml_tensor* k_layer =
+                    ggml_view_3d(ctx0, kv_k, hd, kv_k->ne[1], n_kv, kv_k->nb[1], kv_k->nb[2], (size_t)il * kv_k->nb[3]);
+                ggml_tensor* v_layer =
+                    ggml_view_3d(ctx0, kv_v, hd, kv_v->ne[1], n_kv, kv_v->nb[1], kv_v->nb[2], (size_t)il * kv_v->nb[3]);
+                ggml_build_forward_expand(gf, ggml_set_rows(ctx0, k_layer, K_new_perm, positions));
+                ggml_build_forward_expand(gf, ggml_set_rows(ctx0, v_layer, V_new_perm, positions));
+            } else {
+                ggml_tensor* k_view = ggml_view_4d(ctx0, kv_k, hd, 1, n_kv, 1, kv_k->nb[1], kv_k->nb[2], kv_k->nb[3],
+                                                   (size_t)il * kv_k->nb[3] + (size_t)n_past * kv_k->nb[1]);
+                ggml_tensor* v_view = ggml_view_4d(ctx0, kv_v, hd, 1, n_kv, 1, kv_v->nb[1], kv_v->nb[2], kv_v->nb[3],
+                                                   (size_t)il * kv_v->nb[3] + (size_t)n_past * kv_v->nb[1]);
+                ggml_build_forward_expand(gf, ggml_cpy(ctx0, K_new_perm, k_view));
+                ggml_build_forward_expand(gf, ggml_cpy(ctx0, V_new_perm, v_view));
+            }
+
+            // Read the full [0, Lk) history back from the cache.
+            ggml_tensor* k_layer_view =
+                ggml_view_3d(ctx0, kv_k, hd, Lk, n_kv, kv_k->nb[1], kv_k->nb[2], (size_t)il * kv_k->nb[3]);
+            ggml_tensor* v_layer_view =
+                ggml_view_3d(ctx0, kv_v, hd, Lk, n_kv, kv_v->nb[1], kv_v->nb[2], (size_t)il * kv_v->nb[3]);
+            ggml_tensor* Kfull =
+                need_dequant ? ggml_cast(ctx0, k_layer_view, GGML_TYPE_F32) : ggml_cont(ctx0, k_layer_view);
+            ggml_tensor* Vfull =
+                need_dequant ? ggml_cast(ctx0, v_layer_view, GGML_TYPE_F32) : ggml_cont(ctx0, v_layer_view);
+
+            // GQA expansion (no-op for chatterbox default n_kv == n_q, grp == 1).
+            if (grp > 1) {
+                ggml_tensor* K4 = ggml_reshape_4d(ctx0, Kfull, hd, Lk, 1, n_kv);
+                ggml_tensor* V4 = ggml_reshape_4d(ctx0, Vfull, hd, Lk, 1, n_kv);
+                K4 = ggml_repeat_4d(ctx0, K4, hd, Lk, grp, n_kv);
+                V4 = ggml_repeat_4d(ctx0, V4, hd, Lk, grp, n_kv);
+                Kfull = ggml_cont(ctx0, ggml_reshape_3d(ctx0, K4, hd, Lk, n_q));
+                Vfull = ggml_cont(ctx0, ggml_reshape_3d(ctx0, V4, hd, Lk, n_q));
+            }
+
+            ggml_tensor* Qp = ggml_cont(ctx0, ggml_permute(ctx0, Qb, 0, 2, 1, 3)); // (hd, 1, n_q)
+            ggml_tensor* a = ggml_flash_attn_ext(ctx0, Qp, Kfull, Vfull, /*mask*/ nullptr, attn_scale,
+                                                 /*max_bias*/ 0.0f, /*logit_softcap*/ 0.0f);
+            attn_b[bi] = ggml_reshape_2d(ctx0, a, hd * n_q, 1);
+        }
+
+        // Re-batch the two attention outputs and project once.
+        ggml_tensor* attn_cat = ggml_concat(ctx0, attn_b[0], attn_b[1], 2); // (hd*n_q, 1, 2)
+        ggml_tensor* o = ggml_mul_mat(ctx0, b.attn_output_w, attn_cat);     // (D, 1, 2)
+        cur = ggml_add(ctx0, residual, o);
+
+        residual = cur;
+        x = ggml_rms_norm(ctx0, cur, eps);
+        x = ggml_mul(ctx0, x, b.ffn_norm_w);
+        ggml_tensor* mlp = core_ffn::swiglu(ctx0, x, b.ffn_gate_w, b.ffn_up_w, b.ffn_down_w); // (D, 1, 2)
+        cur = ggml_add(ctx0, residual, mlp);
+    }
+
+    cur = ggml_rms_norm(ctx0, cur, eps);
+    cur = ggml_mul(ctx0, cur, c->t3.output_norm_w);
+    cur = ggml_mul_mat(ctx0, c->t3.speech_head_w, cur); // (speech_vocab, 1, 2)
+    ggml_set_name(cur, "logits");
+    ggml_build_forward_expand(gf, cur);
+
+    // PLAN #83: GGML_PREC_F32 on every mul_mat + flash_attn_ext (sampler parity).
+    for (int i = 0; i < ggml_graph_n_nodes(gf); i++) {
+        ggml_tensor* t = ggml_graph_node(gf, i);
+        if (t->op == GGML_OP_MUL_MAT) {
+            ggml_mul_mat_set_prec(t, GGML_PREC_F32);
+        } else if (t->op == GGML_OP_FLASH_ATTN_EXT) {
+            ggml_flash_attn_ext_set_prec(t, GGML_PREC_F32);
+        }
+    }
+
+    ggml_free(ctx0); // metadata lives in c->compute_meta; gf stays valid (cf. build_graph_t3_kv)
+    return gf;
+}
+
+// §214: run one batched-CFG B=2 decode step. Fills out_cond/out_uncond (each
+// `speech_vocab` floats) with the cond/uncond logit rows. Returns false on
+// failure. n_past must equal the (lockstep) cond/uncond cache length.
+static bool run_t3_kv_b2(chatterbox_context* c, const float* embeds, int n_past, float* out_cond, float* out_uncond) {
+    if (n_past + 1 > c->kv_max_ctx) {
+        fprintf(stderr, "chatterbox: kv overflow b2 (%d+1 > %d)\n", n_past, c->kv_max_ctx);
+        return false;
+    }
+    const int D = (int)c->hp.hidden_size;
+    const int vocab = (int)c->hp.speech_vocab_size;
+
+    if (!c->t3_sched_b2) {
+        ggml_backend_t backends[2] = {c->backend, c->backend_cpu};
+        int n_be = (c->backend && c->backend != c->backend_cpu) ? 2 : 1;
+        c->t3_sched_b2 = ggml_backend_sched_new(backends, nullptr, n_be, 16384, false, false);
+        if (!c->t3_sched_b2)
+            return false;
+    }
+
+    ggml_cgraph* gf = build_graph_t3_kv_b2(c, n_past);
+    if (!gf)
+        return false;
+
+    ggml_backend_sched_reset(c->t3_sched_b2);
+    if (!ggml_backend_sched_alloc_graph(c->t3_sched_b2, gf)) {
+        fprintf(stderr, "chatterbox: failed to alloc T3 b2 graph\n");
+        return false;
+    }
+
+    // Same embedding for both passes (batch 0 = cond, batch 1 = uncond).
+    ggml_tensor* emb_t = ggml_graph_get_tensor(gf, "inputs_embeds");
+    ggml_backend_tensor_set(emb_t, embeds, 0, (size_t)D * sizeof(float));
+    ggml_backend_tensor_set(emb_t, embeds, (size_t)D * sizeof(float), (size_t)D * sizeof(float));
+    int32_t pos = n_past;
+    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "positions"), &pos, 0, sizeof(int32_t));
+    if (!c->rope_freq_factors.empty())
+        ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "rope_freq_factors"), c->rope_freq_factors.data(), 0,
+                                c->rope_freq_factors.size() * sizeof(float));
+
+    if (ggml_backend_sched_graph_compute(c->t3_sched_b2, gf) != GGML_STATUS_SUCCESS) {
+        fprintf(stderr, "chatterbox: T3 b2 compute failed\n");
+        return false;
+    }
+
+    ggml_tensor* out = ggml_graph_get_tensor(gf, "logits"); // (vocab, 1, 2)
+    ggml_backend_tensor_get(out, out_cond, 0, (size_t)vocab * sizeof(float));
+    ggml_backend_tensor_get(out, out_uncond, (size_t)vocab * sizeof(float), (size_t)vocab * sizeof(float));
+    return true;
 }
 
 // §186: returns true if any debug-dump env vars are set (those change graph topology).
@@ -2881,6 +3119,30 @@ extern "C" int32_t* chatterbox_synthesize_tokens(struct chatterbox_context* ctx,
     // 5. CFG setup: build unconditioned prefill if cfg_weight > 0
     const float cfg_w = ctx->params.cfg_weight;
     const bool use_cfg = (!is_gpt2 && cfg_w > 0.0f && ctx->kv_k_cfg);
+    // §214: opt into the batched-CFG B=2 decode (cond+uncond as one B=2 forward).
+    // Default OFF (legacy sequential cond+uncond) until token-parity + a real
+    // quiet-machine speedup are demonstrated. Requires the CFG uncond cache.
+    bool use_b2 = use_cfg && []() {
+        const char* s = std::getenv("CRISPASR_CHATTERBOX_T3_CFG_B2");
+        return s && (s[0] == '1' || s[0] == 'y' || s[0] == 'Y');
+    }();
+    // B2 is bit-identical to the legacy sequential cond+uncond path on CPU (all
+    // weight quants) and on GPU with F16 weights, but DEGENERATES on GPU with
+    // quantized T3 weights: Metal's batched (ne[2]=2) quantized mat-vec does not
+    // hit the PREC_F32 mul_mv_q*_K exact-dot kernel that the single-token legacy
+    // decode uses, so the batched quant matmul drifts and the speech-token loop
+    // collapses into repetition. (Same class as the §211 batched-quant-CFM
+    // garbage.) Restrict B2 to the known-safe configs. T3 defaults to CPU on
+    // Metal/Vulkan, so this only bites the explicit T3_GPU + quant + B2 combo.
+    if (use_b2 && ctx->backend != ctx->backend_cpu && !ctx->t3.blocks.empty() &&
+        ggml_is_quantized(ctx->t3.blocks[0].attn_q_w->type)) {
+        use_b2 = false;
+        if (ctx->params.verbosity >= 1)
+            fprintf(stderr, "chatterbox: T3 CFG B2 disabled — GPU + quantized T3 weights "
+                            "(Metal batched quant matmul unsupported); use F16 T3 or run T3 on CPU.\n");
+    }
+    if (use_b2 && ctx->params.verbosity >= 1)
+        fprintf(stderr, "chatterbox: T3 CFG B2 (batched cond+uncond decode) ENABLED\n");
     std::vector<float> uncond_embeds;
     if (use_cfg) {
         // Unconditioned CFG path in Python zeros only text token embeddings
@@ -2992,22 +3254,39 @@ extern "C" int32_t* chatterbox_synthesize_tokens(struct chatterbox_context* ctx,
         }
         speech_pos++;
 
-        // Conditioned forward step
-        if (is_gpt2) {
-            logits = run_t3_gpt2_kv(ctx, tok_embed.data(), 1, n_past);
-        } else {
-            logits = run_t3_kv(ctx, tok_embed.data(), 1, n_past);
-        }
-        if (!logits) {
-            fprintf(stderr, "chatterbox: decode step %d failed\n", step);
-            break;
-        }
-        n_past++;
-
-        // Unconditioned forward step for CFG (Llama only)
-        if (use_cfg) {
-            logits_uncond = run_t3_kv(ctx, tok_embed.data(), 1, n_past_cfg, ctx->kv_k_cfg, ctx->kv_v_cfg);
+        if (use_b2) {
+            // §214: run cond + uncond as one batch-2 forward (n_past == n_past_cfg
+            // by construction). One weight read serves both passes.
+            logits = (float*)malloc((size_t)V * sizeof(float));
+            logits_uncond = (float*)malloc((size_t)V * sizeof(float));
+            if (!run_t3_kv_b2(ctx, tok_embed.data(), n_past, logits, logits_uncond)) {
+                fprintf(stderr, "chatterbox: decode step %d (b2) failed\n", step);
+                free(logits);
+                logits = nullptr;
+                free(logits_uncond);
+                logits_uncond = nullptr;
+                break;
+            }
+            n_past++;
             n_past_cfg++;
+        } else {
+            // Conditioned forward step
+            if (is_gpt2) {
+                logits = run_t3_gpt2_kv(ctx, tok_embed.data(), 1, n_past);
+            } else {
+                logits = run_t3_kv(ctx, tok_embed.data(), 1, n_past);
+            }
+            if (!logits) {
+                fprintf(stderr, "chatterbox: decode step %d failed\n", step);
+                break;
+            }
+            n_past++;
+
+            // Unconditioned forward step for CFG (Llama only)
+            if (use_cfg) {
+                logits_uncond = run_t3_kv(ctx, tok_embed.data(), 1, n_past_cfg, ctx->kv_k_cfg, ctx->kv_v_cfg);
+                n_past_cfg++;
+            }
         }
     }
     if (logits)

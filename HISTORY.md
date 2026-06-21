@@ -6,6 +6,60 @@ technical deep-dives are in `LEARNINGS.md`.
 
 ---
 
+## 2026-06-21 §214 Chatterbox — batched classifier-free-guidance (B=2) T3 decode (gated; the real T3 win)
+
+The §212 follow-up: run the CFG **cond + uncond passes as one batch-2 forward**
+instead of two sequential `run_t3_kv` calls, so each T3 weight is read once for
+both passes (the AR decode is weight-bandwidth + dispatch bound on single-token
+steps — the largest synthesis stage). Reference impl gianni-cor/chatterbox.cpp
+measured **−42 % T3** from exactly this. Gated behind
+`CRISPASR_CHATTERBOX_T3_CFG_B2=1`, default OFF; legacy path bit-unchanged when off.
+
+**Design (reuse both existing caches, batch GEMMs, split attention).** New
+`build_graph_t3_kv_b2` / `run_t3_kv_b2`. Per layer, hidden is `(D,1,2)` (b0=cond,
+b1=uncond); the heavy Q/K/V/O/FFN/head matmuls are **batched over `ne[2]=2`**
+(`ggml_mul_mat` broadcasts the 2D weight) — that is the win. The cheap per-token
+attention is **split per batch** (cond reads/writes `kv_k/kv_v`, uncond
+`kv_k_cfg/kv_v_cfg`), since the two passes use different caches and must not
+attend across each other. Faithfully replicates `core_attn::kv_self_attn`'s
+chatterbox config (NEOX RoPE full head_dim, GQA_MANUAL_CONT, F16-cache
+`ggml_cpy` / quant-cache `ggml_set_rows` write, dequant-on-read) and tags every
+mul_mat + flash_attn_ext `GGML_PREC_F32` (sampler parity, §83). Both passes share
+the same token embedding + position (lockstep `n_past`), so inputs are trivially
+replicated. Dedicated `t3_sched_b2`; graph rebuilt + re-alloc'd per step (no
+bucket cache yet — §208/§212 say rebuild is negligible on compute-bound CPU; not
+yet true for the per-step Metal alloc — see GPU caveat).
+
+**Validation — greedy (`CRISPASR_CHATTERBOX_TEMP=0`) token parity is the gate.**
+Since greedy + fixed seed makes the whole pipeline deterministic, identical T3
+tokens ⇒ byte-identical WAV. Results:
+- **CPU, all quants**: B2 ≡ legacy. q8 verified at the **token level**
+  (seed-independent, bit-identical through EOS + count); q8/f16/q4k WAV
+  byte-identical with a pinned `CRISPASR_CHATTERBOX_SEED`. (WAV md5 is only a
+  valid gate with a pinned seed — the S3Gen flow-matching prior is RNG-seeded;
+  default seed is 0.)
+- **GPU (`CRISPASR_CHATTERBOX_T3_GPU=1`) + F16**: B2 ≡ GPU-legacy, byte-identical
+  — AND it **runs where legacy crashes**: the §186 Lk-bucket step graph segfaults
+  on Metal step ≥1 (`buffer is nil`, the tightened cross-backend resolution); B2
+  rebuilds each step so it sidesteps the bucket entirely. So B2 is the first
+  working T3-GPU path on Metal.
+- **GPU + quantized weights**: B2 **degenerates** (token divergence at step 2 →
+  repetition loop). Metal's batched (`ne[2]=2`) quantized mat-vec does NOT hit
+  the PREC_F32 `mul_mv_q*_K` exact-dot kernel the single-token legacy uses (same
+  class as the §211 batched-quant-CFM garbage). **Guarded off**: B2 auto-disables
+  (with a warning) when T3 is on GPU and the weights are quantized; allowed on
+  CPU (any quant) and GPU+F16.
+
+**Speedup.** CPU min-of-N floor on this contended M1 (load 8–12, absolute numbers
+unreliable — the [[project_chatterbox_t3_decode_perf]] noise trap): legacy
+**75 → 50 ms/tok (~34 %)** at the least-contended floor, consistent with the
+weight-bandwidth-halving prediction. GPU speedup not cleanly measurable under load
+(and the per-step Metal sched re-alloc likely caps it — a bucketed B2 graph is the
+follow-up). Kept **default OFF** pending a quiet-machine confirmation before any
+default flip. Worktree: `/Volumes/backups/code/chatterbox-t3-cfg-b2-stash`.
+
+---
+
 ## 2026-06-21 §213 Orpheus talker diff harness — localizing the CUDA 0-byte
 
 Built talker-level diff coverage for Orpheus (the SNAC-only `orpheus` diff

@@ -10,6 +10,36 @@ If a lesson is still "live" (affects current work), it's linked from
 
 ---
 
+## §214 Metal batched (B=2) quantized mat-vec ≠ the single-token PREC_F32 path
+
+When you batch a single-token decode into `B=2` (cond+uncond CFG, hidden
+`(D,1,2)`), the projection `ggml_mul_mat(W, x_b2)` becomes a mat-vec with
+`ne[1]=1, ne[2]=2`. With **F16 weights** this is bit-identical to two separate
+forwards on Metal. With **quantized weights it is NOT**: the batched path does
+not dispatch Metal's PREC_F32 `mul_mv_q*_K` exact-dot kernel that the
+`ne==1`-vector single-token decode hits, so the result drifts enough to flip the
+greedy speech-token sampler (chatterbox T3: divergence at step ~2 → repetition
+collapse). Same failure class as the §211 native-batched-quant-CFM garbage.
+**Rule:** B=2 batching of quantized matmuls is safe on the CPU backend (all
+quants) and on Metal only with F16 weights; guard quant+GPU off. (CrispASR's T3
+defaults to CPU on Metal anyway, so this only bites the explicit T3-GPU + quant
+opt-in.) Corollary win: a per-step-rebuilt B=2 graph **sidesteps the §186
+Lk-bucket `buffer is nil` Metal crash**, making B=2+F16 the first working
+T3-on-GPU path.
+
+## TTS WAV md5 is only a valid parity gate with a pinned seed
+
+Chatterbox's S3Gen flow-matching prior is RNG-seeded (default seed 0). Two runs
+with identical T3 tokens but different `CRISPASR_CHATTERBOX_SEED` produce
+different WAVs — so a WAV md5 diff across seeds is a **false** parity failure. For
+greedy T3 parity (B=2 vs legacy) either pin `CRISPASR_CHATTERBOX_SEED` for both
+runs, or — better, because it's seed-independent — compare the **speech-token
+sequence** directly (`CRISPASR_CHATTERBOX_TEMP=0`, dump steps + EOS + count;
+`CRISPASR_CHATTERBOX_DUMP_LOGITS_AT=9e9` also bypasses the bucket for a
+like-for-like legacy graph).
+
+---
+
 ## Kaggle: datasets are per-account, and the ccache dataset has a required shape (§213)
 
 Two traps cost a couple of cold ~25 min CUDA builds before they were caught:
