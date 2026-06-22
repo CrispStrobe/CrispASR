@@ -1591,21 +1591,48 @@ static struct ggml_cgraph* cohere_build_graph_decoder(struct cohere_context* ctx
         struct ggml_tensor* Q = ggml_permute(ctx0, ggml_reshape_3d(ctx0, Qcur, head_dim, n_heads, n_tokens), 0, 2, 1,
                                              3); // [hd, n_tok, n_heads]
 
-        // PLAN #73: ggml_flash_attn_ext fuses K-mul-Q + softmax + V-mul
-        // into one op and natively handles quant K/V (no cast tax).
+        // Self-attention: KV cache views for this layer.
         struct ggml_tensor* K =
             ggml_view_3d(ctx0, ctx->kv_k, head_dim, sa_L, n_heads, ctx->kv_k->nb[1], ctx->kv_k->nb[2],
                          il * ctx->kv_k->nb[3]); // [hd, L, n_heads]
         struct ggml_tensor* V =
             ggml_view_3d(ctx0, ctx->kv_v, head_dim, sa_L, n_heads, ctx->kv_v->nb[1], ctx->kv_v->nb[2],
                          il * ctx->kv_v->nb[3]); // [hd, L, n_heads]
-        struct ggml_tensor* sa_out =
-            ggml_flash_attn_ext(ctx0, ggml_cont(ctx0, Q), K, V, sa_mask, 1.0f / sqrtf((float)head_dim), 0.0f, 0.0f);
-        // flash_attn_ext output is [hd, n_heads, n_tokens] — same layout
-        // as the legacy ggml_permute(sa_out, 0,2,1,3), so the additional
-        // permute+cont is gone. reshape_2d packs the inner two dims into
-        // d = hd * n_heads.
-        cur = ggml_reshape_2d(ctx0, sa_out, d, n_tokens);
+
+        // CRISPASR_COHERE_LEGACY_SA=1: fall back to the pre-v0.7 manual
+        // mul_mat self-attention path. The flash_attn_ext path (PLAN #73)
+        // fuses Q·K + softmax + V into a single op, but caused a ~10×
+        // CUDA regression on some Windows setups (#161). This env var
+        // lets users bisect whether flash_attn_ext is the culprit.
+        static const bool legacy_sa = (getenv("CRISPASR_COHERE_LEGACY_SA") != nullptr);
+
+        if (legacy_sa) {
+            // Legacy path: explicit mul_mat attention (pre-v0.7).
+            struct ggml_tensor* K_c = ggml_cont(ctx0, K);
+            struct ggml_tensor* KQ = ggml_mul_mat(ctx0, K_c, Q); // [L, n_tok, n_heads]
+            KQ = ggml_scale_inplace(ctx0, KQ, 1.0f / sqrtf((float)head_dim));
+            if (n_tokens > 1) {
+                KQ = ggml_diag_mask_inf_inplace(ctx0, KQ, offset);
+            }
+            KQ = ggml_soft_max_inplace(ctx0, KQ);
+
+            struct ggml_tensor* V_trans = ggml_cont(ctx0, ggml_permute(ctx0, V, 1, 0, 2, 3)); // [L, hd, n_heads]
+            struct ggml_tensor* sa_out = ggml_mul_mat(ctx0, V_trans, KQ);                     // [hd, n_tok, n_heads]
+
+            sa_out = ggml_permute(ctx0, sa_out, 0, 2, 1, 3); // [hd, n_heads, n_tok]
+            sa_out = ggml_cont(ctx0, sa_out);
+            cur = ggml_reshape_2d(ctx0, sa_out, d, n_tokens);
+        } else {
+            // PLAN #73: ggml_flash_attn_ext fuses K-mul-Q + softmax + V-mul
+            // into one op and natively handles quant K/V (no cast tax).
+            struct ggml_tensor* sa_out =
+                ggml_flash_attn_ext(ctx0, ggml_cont(ctx0, Q), K, V, sa_mask, 1.0f / sqrtf((float)head_dim), 0.0f, 0.0f);
+            // flash_attn_ext output is [hd, n_heads, n_tokens] — same layout
+            // as the legacy ggml_permute(sa_out, 0,2,1,3), so the additional
+            // permute+cont is gone. reshape_2d packs the inner two dims into
+            // d = hd * n_heads.
+            cur = ggml_reshape_2d(ctx0, sa_out, d, n_tokens);
+        }
 
         // out projection
         cur = ggml_add(ctx0, ggml_mul_mat(ctx0, layer.attn_o_w, cur), layer.attn_o_b);
