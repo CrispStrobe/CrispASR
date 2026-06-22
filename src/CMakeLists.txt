@@ -347,6 +347,23 @@ if (CRISPASR_AMR)
             FetchContent_Populate(crispasr_opencore_amr)
         endif()
 
+        # System packages install headers as <opencore-amrnb/interf_dec.h> and
+        # <opencore-amrwb/dec_if.h>. The upstream source tree uses amrnb/ and
+        # amrwb/. Create compatibility symlinks so the same #include works for
+        # both system and FetchContent paths.
+        if (NOT EXISTS "${crispasr_opencore_amr_SOURCE_DIR}/opencore-amrnb")
+            file(CREATE_LINK
+                "${crispasr_opencore_amr_SOURCE_DIR}/amrnb"
+                "${crispasr_opencore_amr_SOURCE_DIR}/opencore-amrnb"
+                SYMBOLIC)
+        endif()
+        if (NOT EXISTS "${crispasr_opencore_amr_SOURCE_DIR}/opencore-amrwb")
+            file(CREATE_LINK
+                "${crispasr_opencore_amr_SOURCE_DIR}/amrwb"
+                "${crispasr_opencore_amr_SOURCE_DIR}/opencore-amrwb"
+                SYMBOLIC)
+        endif()
+
         # AMR-NB decoder
         file(GLOB _amrnb_srcs "${crispasr_opencore_amr_SOURCE_DIR}/opencore/codecs_v2/audio/gsm_amr/amr_nb/dec/src/*.cpp")
         file(GLOB _amrnb_common "${crispasr_opencore_amr_SOURCE_DIR}/opencore/codecs_v2/audio/gsm_amr/common/dec/src/*.cpp")
@@ -354,6 +371,7 @@ if (CRISPASR_AMR)
             ${crispasr_opencore_amr_SOURCE_DIR}/amrnb/wrapper.cpp
             ${_amrnb_srcs} ${_amrnb_common})
         target_include_directories(crispasr_amrnb PUBLIC
+            ${crispasr_opencore_amr_SOURCE_DIR}
             ${crispasr_opencore_amr_SOURCE_DIR}/amrnb
             ${crispasr_opencore_amr_SOURCE_DIR}/opencore/codecs_v2/audio/gsm_amr/amr_nb/dec/src
             ${crispasr_opencore_amr_SOURCE_DIR}/opencore/codecs_v2/audio/gsm_amr/amr_nb/dec/include
@@ -367,6 +385,7 @@ if (CRISPASR_AMR)
             ${crispasr_opencore_amr_SOURCE_DIR}/amrwb/wrapper.cpp
             ${_amrwb_srcs})
         target_include_directories(crispasr_amrwb PUBLIC
+            ${crispasr_opencore_amr_SOURCE_DIR}
             ${crispasr_opencore_amr_SOURCE_DIR}/amrwb
             ${crispasr_opencore_amr_SOURCE_DIR}/opencore/codecs_v2/audio/gsm_amr/amr_wb/dec/src
             ${crispasr_opencore_amr_SOURCE_DIR}/opencore/codecs_v2/audio/gsm_amr/amr_wb/dec/include)
