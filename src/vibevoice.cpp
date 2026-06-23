@@ -4055,10 +4055,9 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
 
         // §201: Lk-bucketed fast path for single-token decode.
         // Disabled by default — the bucket graph's ggml_set_rows + cached
-        // KV views crash on CUDA (P100) and Vulkan (RDNA4) with illegal
-        // memory access (issue #184). Enable with CRISPASR_VIBEVOICE_LM_BUCKETS=1
-        // for CPU-only inference where the cache speedup (~30%) applies.
-        const bool use_buckets = std::getenv("CRISPASR_VIBEVOICE_LM_BUCKETS") != nullptr;
+        // §201: Lk-bucketed fast path for single-token decode.
+        // Disable with CRISPASR_VIBEVOICE_NO_LM_BUCKETS=1.
+        const bool use_buckets = !std::getenv("CRISPASR_VIBEVOICE_NO_LM_BUCKETS");
         if (use_buckets && n_tokens == 1 && (!dump_dir || !dump_dir[0])) {
             const int idx = lm_pick_bucket(n_past + 1);
             if (idx >= 0) {
@@ -4068,14 +4067,16 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
                     if (!step_sched)
                         goto dynamic_path;
                     int& active_bk = (kv_sel == 0) ? ctx->lm_active_bucket_pos : ctx->lm_active_bucket_neg;
-                    if (active_bk != idx) {
-                        ggml_backend_sched_reset(step_sched);
-                        if (!ggml_backend_sched_alloc_graph(step_sched, gf)) {
-                            active_bk = -1;
-                            goto dynamic_path;
-                        }
-                        active_bk = idx;
+                    // Always reset+realloc — skipping this when active_bk==idx
+                    // causes "illegal memory access" on CUDA (P100) because the
+                    // gallocr's compute buffer state goes stale after ctx->sched
+                    // runs other graphs between bucket calls (issue #184).
+                    ggml_backend_sched_reset(step_sched);
+                    if (!ggml_backend_sched_alloc_graph(step_sched, gf)) {
+                        active_bk = -1;
+                        goto dynamic_path;
                     }
+                    active_bk = idx;
                     const int Lk = vibevoice_context::kLmBucketLks[idx];
                     int32_t pos = n_past;
                     ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "tts_step_pos"), &pos, 0, sizeof(int32_t));
