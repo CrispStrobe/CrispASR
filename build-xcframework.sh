@@ -273,9 +273,13 @@ combine_static_libraries() {
     # under build/crisp_<x>/, NOT build/src/ — include those roots too or the
     # iOS dylib link fails with undefined fireredpunc_*/pcs_*/text_lid_*/
     # truecaser_lstm_* symbols. Missing roots are skipped (-print0 2>/dev/null).
+    # Also search _deps/ for FetchContent-built static libs (opus, ogg,
+    # opusfile, opencore-amr) that crispasr-lib links via PRIVATE but
+    # whose objects must be in combined.a for the xcframework consumer.
     done < <(find "${base_dir}/${build_dir}/src" "${base_dir}/${build_dir}/crisp_audio" \
                   "${base_dir}/${build_dir}/crisp_lid" "${base_dir}/${build_dir}/crisp_punc" \
                   "${base_dir}/${build_dir}/crisp_truecase" \
+                  "${base_dir}/${build_dir}/_deps" \
                   -path "*/${release_dir}/*.a" -print0 2>/dev/null)
     if [ ${#src_libs[@]} -gt 0 ]; then
         echo "Auto-discovered ${#src_libs[@]} static backend libraries under src/${release_dir}/ + crisp_audio/${release_dir}/"

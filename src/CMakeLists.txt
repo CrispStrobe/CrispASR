@@ -235,15 +235,7 @@ target_compile_features   (crispasr-lib PUBLIC ${CRISPASR_LIB_CXX_STANDARD}) # d
 # without system libs (Windows/iOS/Android/WASM): build them statically via
 # FetchContent. Disable entirely with -DCRISPASR_OPUS=OFF; force the static
 # build (also used to validate the fallback locally) with -DCRISPASR_OPUS_FETCH=ON.
-# Disable opus by default on iOS — the FetchContent static build produces
-# symbols that don't get linked into the Xcode combined.a archive, causing
-# linker errors (_opus_decoder_create etc.). iOS uses AudioToolbox for most
-# audio formats anyway.
-if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
-    option(CRISPASR_OPUS "Decode .opus (Ogg/Opus) via libopus + opusfile" OFF)
-else()
-    option(CRISPASR_OPUS "Decode .opus (Ogg/Opus) via libopus + opusfile" ON)
-endif()
+option(CRISPASR_OPUS       "Decode .opus (Ogg/Opus) via libopus + opusfile" ON)
 option(CRISPASR_OPUS_FETCH "Skip system pkg-config; build opus/ogg/opusfile statically via FetchContent" OFF)
 
 if (CRISPASR_OPUS)
