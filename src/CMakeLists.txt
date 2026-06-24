@@ -251,6 +251,9 @@ if (CRISPASR_OPUS)
                 # references from libopus.
                 # With this you e.g. get `-lopusfile -logg -lopus` instead of just
                 # `/usr/lib/libopusfile.so` passed to the linker.
+                # Using `PkgConfig::OPUSFILE` was also populating compiler flags. So we append
+                # those separately now.
+                target_compile_options(crispasr-lib PRIVATE ${OPUSFILE_CFLAGS})
                 target_link_libraries(crispasr-lib PRIVATE ${OPUSFILE_STATIC_LIBRARIES})
                 set(_crispasr_opus_ok ON)
                 message(STATUS "CrispASR: .opus via system opusfile ${OPUSFILE_VERSION} (pkg-config)")
