@@ -68,6 +68,10 @@ public:
             cp.temperature = p.temperature;
         cp.seed = p.seed;
 
+        if (cp.use_gpu && !p.no_prints)
+            fprintf(stderr, "crispasr[tada]: note: GPU acceleration is not yet implemented "
+                            "for TADA; running on CPU\n");
+
         ctx_ = tada_init_from_file(p.model.c_str(), cp);
         if (!ctx_) {
             fprintf(stderr, "crispasr[tada]: failed to load '%s'\n", p.model.c_str());
@@ -101,8 +105,27 @@ public:
         }
         std::string prompt_path;
         if (!p.tts_voice.empty() && p.tts_voice != "default" && p.tts_voice != "auto") {
-            prompt_path = crispasr_resolve_model_cli(p.tts_voice, p.backend, p.no_prints, p.cache_dir, p.auto_download,
-                                                     p.model_quant);
+            // Check for .wav — not yet supported; user needs a tada-ref.gguf
+            const std::string& v = p.tts_voice;
+            bool is_wav = v.size() >= 4 &&
+                          (v.substr(v.size() - 4) == ".wav" || v.substr(v.size() - 4) == ".WAV");
+            if (is_wav) {
+                fprintf(stderr, "crispasr[tada]: --voice with a .wav file is not yet supported directly.\n"
+                                "  Convert your audio to a reference GGUF first:\n"
+                                "    python models/convert-tada-ref-to-gguf.py \\\n"
+                                "      --audio your_voice.wav \\\n"
+                                "      --transcript \"Exact words spoken in the audio.\" \\\n"
+                                "      --output tada-ref-custom.gguf\n"
+                                "  For non-English audio add: --language fr  (ar/ch/de/es/fr/it/ja/pl/pt)\n"
+                                "  Then: --voice tada-ref-custom.gguf\n");
+            } else {
+                prompt_path = crispasr_resolve_model_cli(p.tts_voice, p.backend, p.no_prints, p.cache_dir,
+                                                         p.auto_download, p.model_quant);
+                if (prompt_path.empty() && !p.no_prints)
+                    fprintf(stderr, "crispasr[tada]: --voice '%s' not found. "
+                                    "Pass the path to a tada-ref.gguf file.\n",
+                            p.tts_voice.c_str());
+            }
         } else if (const char* env = getenv("TADA_PROMPT_CACHE"); env && *env) {
             prompt_path = env;
         }
@@ -117,6 +140,12 @@ public:
     std::vector<float> synthesize(const std::string& text, const whisper_params& params) override {
         if (!ctx_)
             return {};
+        if (!params.language.empty() && params.language != "auto" && params.language != "en" &&
+            !params.no_prints) {
+            fprintf(stderr, "crispasr[tada]: note: -l / --language has no effect on TADA. "
+                            "To speak a language other than English, pass a reference audio in "
+                            "that language via --voice tada-ref-<lang>.gguf\n");
+        }
         if (params.temperature > 0.0f)
             tada_set_temperature(ctx_, params.temperature);
         if (params.seed > 0)

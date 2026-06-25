@@ -1644,16 +1644,24 @@ float* tada_synthesize(struct tada_context* ctx, const char* text, int* out_n_sa
                 std::vector<float> feat(ctx->prompt_values.begin() + prompt_feat_idx * ad,
                                         ctx->prompt_values.begin() + (prompt_feat_idx + 1) * ad);
                 acoustic_features.push_back(feat);
-                int tb = (prompt_feat_idx + 1 < (int)ctx->prompt_time_before.size())
-                             ? ctx->prompt_time_before[prompt_feat_idx + 1]
-                             : pred_t_before;
+                // Match Python's time-transition boundary exactly:
+                //   Python switches from prompted → predicted time when
+                //     step - shift_acoustic >= prompt_time_len_before.shape[1] - 1
+                //   which in C++ terms is feat_idx >= prompt_used_len - 1.
+                // Acoustic stays prompted through feat_idx < prompt_used_len; only time
+                // transitions one step earlier.
+                bool use_prompted_time =
+                    (feat_idx < prompt_used_len - 1) && (prompt_feat_idx + 1 < (int)ctx->prompt_time_before.size());
+                int tb = use_prompted_time ? ctx->prompt_time_before[prompt_feat_idx + 1] : pred_t_before;
+                int ta = use_prompted_time ? ((prompt_feat_idx + 1 < (int)ctx->prompt_time_after.size())
+                                                  ? ctx->prompt_time_after[prompt_feat_idx + 1]
+                                                  : pred_t_after)
+                                           : pred_t_after;
                 time_before_list.push_back(tb);
                 cur_acoustic = feat;
                 cur_mask = 1;
                 cur_t_before = tb;
-                cur_t_after = (prompt_feat_idx + 1 < (int)ctx->prompt_time_after.size())
-                                  ? ctx->prompt_time_after[prompt_feat_idx + 1]
-                                  : pred_t_after;
+                cur_t_after = ta;
             } else {
                 // Use FM-predicted features
                 std::vector<float> feat(speech.begin(), speech.begin() + ad);
@@ -1665,10 +1673,15 @@ float* tada_synthesize(struct tada_context* ctx, const char* text, int* out_n_sa
                 cur_t_after = pred_t_after;
             }
         } else {
+            // step < shift: structural chat-header tokens (system/user/assistant markers).
+            // Python's batch prefill zero-initialises time_before for ALL prompt
+            // positions and only fills in real values at shift+1..shift+n_t. Keep
+            // cur_t_before/cur_t_after = 0 here so every header step gets the same
+            // zero time embedding Python would produce.
             std::fill(cur_acoustic.begin(), cur_acoustic.end(), 0.0f);
             cur_mask = 0;
-            cur_t_before = pred_t_before;
-            cur_t_after = pred_t_after;
+            cur_t_before = 0;
+            cur_t_after = 0;
         }
 
         free(tr.hidden);
