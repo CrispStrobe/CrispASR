@@ -293,6 +293,11 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
     // and the FM head at source precision; quantize only the large talker
     // block projection matrices.
     const bool is_tada = (arch.find("tada-tts") != std::string::npos || arch.find("tada_tts") != std::string::npos);
+    const char* env_tada_all = std::getenv("CRISPASR_TADA_QUANT_ALL");
+    const bool tada_quant_all = is_tada && env_tada_all && *env_tada_all && *env_tada_all != '0';
+    if (is_tada && tada_quant_all) {
+        printf("%s: tada-tts - quantizing precision-sensitive tada.* tensors (experimental override)\n", __func__);
+    }
 
     // First pass: determine which tensors will be quantized and compute
     // their target types. We need this BEFORE adding tensors to ctx_out
@@ -356,7 +361,8 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
             !(is_mini_omni2 &&
               (sname.find("audio.") == 0 || sname.find("adapter.") == 0 || sname.find("llm.token_embd") == 0)) &&
             !(is_orpheus && sname.find("talker.token_embd") == 0) &&
-            !(is_tada && (sname.find("talker.token_embd") == 0 || sname.find("tada.") == 0)) && ([&]() {
+            !(is_tada && !tada_quant_all && (sname.find("talker.token_embd") == 0 || sname.find("tada.") == 0)) &&
+            ([&]() {
                 if (!is_omniasr_ctc || omniasr_quant_all ||
                     (omniasr_head_cutoff == 0 && omniasr_tail_cutoff >= omniasr_n_enc))
                     return true;
