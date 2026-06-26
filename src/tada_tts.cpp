@@ -1559,10 +1559,33 @@ float* tada_synthesize(struct tada_context* ctx, const char* text, int* out_n_sa
         n_past++;
 
         // ── Flow matching solver ──
-        std::vector<float> speech(lat);
-        // Initialize noise
-        for (int j = 0; j < lat; j++) {
-            speech[j] = rng_normal(&ctx->rng_state) * noise_temp;
+        // Python only runs FM during the AR phase (step >= prefill_len).  During the
+        // batch prefill (steps 0..prefill_len-1) no noise is drawn, so consuming RNG
+        // here would offset the entire noise sequence relative to Python.  Skip the
+        // FM (and the RNG draw) when the FM output will be discarded anyway:
+        //   • step < shift: structural tokens, cur_t/cur_ac forced to 0
+        //   • in-prefix (feat_idx < prefix_len): cur_t/cur_ac forced to 0
+        //   • in-prompt with reference time (feat_idx < prompt_used_len-1): time
+        //     comes from the prompt array; FM time/acoustic both discarded
+        // FM IS needed at feat_idx == prompt_used_len-1 (time transitions to
+        // predicted) and for all fully-generated steps beyond that.
+        bool need_fm = false;
+        if (step >= shift) {
+            int fi = step - shift;
+            bool fi_in_prefix = (fi < prefix_len && fi < prompt_used_len);
+            if (!fi_in_prefix) {
+                int pfidx = fi - prefix_len;
+                bool fi_in_prompt = (fi < prompt_used_len && ctx->n_prompt > 0 && pfidx >= 0 && pfidx < ctx->n_prompt);
+                bool fi_use_ref_time =
+                    fi_in_prompt && (fi < prompt_used_len - 1) && (pfidx + 1 < (int)ctx->prompt_time_before.size());
+                need_fm = !fi_use_ref_time;
+            }
+        }
+
+        std::vector<float> speech(lat, 0.0f);
+        if (need_fm) {
+            for (int j = 0; j < lat; j++)
+                speech[j] = rng_normal(&ctx->rng_state) * noise_temp;
         }
 
         // Solve ODE with proper negative conditioning
@@ -1581,7 +1604,8 @@ float* tada_synthesize(struct tada_context* ctx, const char* text, int* out_n_sa
                     speech[2], speech[3], speech[4]);
         }
 
-        fm_euler_solve(ctx, speech.data(), tr.hidden, num_fm_steps, cfg_scale, neg_hidden, dump_trajectory);
+        if (need_fm)
+            fm_euler_solve(ctx, speech.data(), tr.hidden, num_fm_steps, cfg_scale, neg_hidden, dump_trajectory);
 
         float speech_rms = 0;
         for (int j = 0; j < ad; j++)
