@@ -223,6 +223,9 @@ struct tada_context {
     ggml_cgraph* fm_b2_gf = nullptr;
     ggml_backend_sched_t fm_b2_sched = nullptr;
     bool fm_b2_active = false;
+    ggml_context* fm_b2_ctx_f16 = nullptr;
+    ggml_backend_buffer_t fm_b2_buf_f16 = nullptr;
+    tada_fm_head fm_b2_f16{};
 };
 
 // ──────────────────────── metadata loading ─────────────────────────────
@@ -657,6 +660,7 @@ static ggml_cgraph* build_graph_fm_step(tada_context* c, ggml_context* arena_ctx
 //   velocity_b2 (lat,2) — vel[:,0]=pos_vel, vel[:,1]=neg_vel
 static ggml_cgraph* build_graph_fm_step_b2(tada_context* c, ggml_context* arena_ctx = nullptr) {
     const auto& hp = c->hp;
+    const tada_fm_head& fm = c->fm_b2_f16.layers.empty() ? c->fm : c->fm_b2_f16;
     const int hid = (int)hp.fm_hidden;
     const int lat = (int)hp.fm_latent;
     const float eps = hp.rms_norm_eps;
@@ -683,21 +687,21 @@ static ggml_cgraph* build_graph_fm_step_b2(tada_context* c, ggml_context* arena_
     ggml_set_input(cond_b2);
 
     // Shared branch: x = noisy_proj(noisy_z) → (hid,), then replicate to (hid, 2)
-    ggml_tensor* x_shared = ggml_mul_mat(ctx0, c->fm.noisy_proj_w, noisy_z);
+    ggml_tensor* x_shared = ggml_mul_mat(ctx0, fm.noisy_proj_w, noisy_z);
     ggml_tensor* x_b2 = ggml_repeat(ctx0, x_shared, cond_b2);
 
     // Shared branch: t = t_mlp(t_emb_sin) → (hid,), then replicate to (hid, 2)
-    ggml_tensor* t_shared = ggml_mul_mat(ctx0, c->fm.t_emb_mlp0_w, t_emb_sin);
+    ggml_tensor* t_shared = ggml_mul_mat(ctx0, fm.t_emb_mlp0_w, t_emb_sin);
     t_shared = ggml_silu(ctx0, t_shared);
-    t_shared = ggml_mul_mat(ctx0, c->fm.t_emb_mlp1_w, t_shared);
+    t_shared = ggml_mul_mat(ctx0, fm.t_emb_mlp1_w, t_shared);
     ggml_tensor* t_b2 = ggml_repeat(ctx0, t_shared, cond_b2);
 
     // Batched: cond_proj(cond_b2) → (hid, 2)
-    ggml_tensor* c_emb = ggml_add(ctx0, ggml_mul_mat(ctx0, c->fm.cond_proj_w, cond_b2), t_b2);
+    ggml_tensor* c_emb = ggml_add(ctx0, ggml_mul_mat(ctx0, fm.cond_proj_w, cond_b2), t_b2);
 
     // Head layers: all ops run on (hid, 2) batch
     for (uint32_t i = 0; i < hp.head_layers; i++) {
-        const auto& l = c->fm.layers[i];
+        const auto& l = fm.layers[i];
 
         // adaLN: silu(c_emb) @ adaln_w^T → (3*hid, 2), then chunk
         ggml_tensor* mod = ggml_silu(ctx0, c_emb);
@@ -725,16 +729,16 @@ static ggml_cgraph* build_graph_fm_step_b2(tada_context* c, ggml_context* arena_
     // Final layer: 2-way adaLN → proj
     {
         ggml_tensor* mod = ggml_silu(ctx0, c_emb);
-        mod = ggml_mul_mat(ctx0, c->fm.final_adaln_w, mod); // (2*hid, 2)
+        mod = ggml_mul_mat(ctx0, fm.final_adaln_w, mod); // (2*hid, 2)
         size_t col_stride = (size_t)2 * hid * sizeof(float);
         ggml_tensor* shift = ggml_view_2d(ctx0, mod, hid, 2, col_stride, 0);
         ggml_tensor* scale = ggml_view_2d(ctx0, mod, hid, 2, col_stride, (size_t)hid * sizeof(float));
 
         ggml_tensor* h = ggml_rms_norm(ctx0, x_b2, eps);
-        if (c->fm.final_norm_w)
-            h = ggml_mul(ctx0, h, ggml_repeat(ctx0, c->fm.final_norm_w, x_b2));
+        if (fm.final_norm_w)
+            h = ggml_mul(ctx0, h, ggml_repeat(ctx0, fm.final_norm_w, x_b2));
         h = ggml_add(ctx0, ggml_add(ctx0, h, ggml_mul(ctx0, h, scale)), shift);
-        h = ggml_mul_mat(ctx0, c->fm.final_proj_w, h); // (lat, 2)
+        h = ggml_mul_mat(ctx0, fm.final_proj_w, h); // (lat, 2)
         ggml_set_name(h, "velocity_b2");
         ggml_build_forward_expand(gf, h);
     }
@@ -1118,6 +1122,116 @@ static void run_fm_step(tada_context* c, const float* noisy_z, float timestep, c
     ggml_backend_tensor_get(vel, velocity_out, 0, (size_t)lat * sizeof(float));
 }
 
+// Lazily build F16 GPU-resident copies of quantized FM matmul weights for the
+// B=2 CFG graph. This mirrors chatterbox T3 / s3gen: batched Metal matmuls
+// against quantized weights can take a slower or lower-precision path; F16
+// copies route through the stable f16 x f32 mul_mm path.
+static bool ensure_fm_b2_f16_weights(tada_context* c) {
+    if (!c->fm_b2_f16.layers.empty())
+        return true;
+
+    std::vector<ggml_tensor*> qsrc;
+    auto want = [&](ggml_tensor* w) {
+        if (w && ggml_is_quantized(w->type))
+            qsrc.push_back(w);
+    };
+
+    want(c->fm.noisy_proj_w);
+    want(c->fm.cond_proj_w);
+    want(c->fm.t_emb_mlp0_w);
+    want(c->fm.t_emb_mlp1_w);
+    for (const auto& l : c->fm.layers) {
+        want(l.ffn_gate_w);
+        want(l.ffn_up_w);
+        want(l.ffn_down_w);
+        want(l.adaln_w);
+    }
+    want(c->fm.final_proj_w);
+    want(c->fm.final_adaln_w);
+
+    if (qsrc.empty())
+        return false;
+
+    const size_t meta = ggml_tensor_overhead() * (qsrc.size() + 8) + 4096;
+    ggml_init_params fp = {meta, nullptr, true};
+    c->fm_b2_ctx_f16 = ggml_init(fp);
+    if (!c->fm_b2_ctx_f16)
+        return false;
+
+    std::map<ggml_tensor*, ggml_tensor*> q2f16;
+    for (ggml_tensor* s : qsrc) {
+        if (q2f16.count(s))
+            continue;
+        ggml_tensor* d = ggml_new_tensor(c->fm_b2_ctx_f16, GGML_TYPE_F16, ggml_n_dims(s), s->ne);
+        if (!d) {
+            ggml_free(c->fm_b2_ctx_f16);
+            c->fm_b2_ctx_f16 = nullptr;
+            return false;
+        }
+        ggml_set_name(d, ggml_get_name(s));
+        q2f16[s] = d;
+    }
+
+    c->fm_b2_buf_f16 = ggml_backend_alloc_ctx_tensors(c->fm_b2_ctx_f16, c->backend);
+    if (!c->fm_b2_buf_f16) {
+        ggml_free(c->fm_b2_ctx_f16);
+        c->fm_b2_ctx_f16 = nullptr;
+        return false;
+    }
+
+    size_t bytes_q = 0, bytes_f16 = 0;
+    std::vector<char> raw;
+    std::vector<float> f32;
+    std::vector<ggml_fp16_t> f16;
+    for (const auto& kv : q2f16) {
+        ggml_tensor* s = kv.first;
+        ggml_tensor* d = kv.second;
+        const auto* tt = ggml_get_type_traits(s->type);
+        if (!tt || !tt->to_float)
+            return false;
+        const int64_t n = ggml_nelements(s);
+        raw.resize(ggml_nbytes(s));
+        ggml_backend_tensor_get(s, raw.data(), 0, ggml_nbytes(s));
+        f32.resize((size_t)n);
+        tt->to_float(raw.data(), f32.data(), n);
+        f16.resize((size_t)n);
+        ggml_fp32_to_fp16_row(f32.data(), f16.data(), n);
+        ggml_backend_tensor_set(d, f16.data(), 0, (size_t)n * sizeof(ggml_fp16_t));
+        bytes_q += ggml_nbytes(s);
+        bytes_f16 += ggml_nbytes(d);
+    }
+
+    auto repl = [&](ggml_tensor* w) -> ggml_tensor* {
+        auto it = q2f16.find(w);
+        return it != q2f16.end() ? it->second : w;
+    };
+
+    c->fm_b2_f16 = c->fm;
+    c->fm_b2_f16.noisy_proj_w = repl(c->fm.noisy_proj_w);
+    c->fm_b2_f16.cond_proj_w = repl(c->fm.cond_proj_w);
+    c->fm_b2_f16.t_emb_mlp0_w = repl(c->fm.t_emb_mlp0_w);
+    c->fm_b2_f16.t_emb_mlp1_w = repl(c->fm.t_emb_mlp1_w);
+    c->fm_b2_f16.layers.resize(c->fm.layers.size());
+    for (size_t i = 0; i < c->fm.layers.size(); i++) {
+        tada_fm_layer f = c->fm.layers[i];
+        f.ffn_gate_w = repl(f.ffn_gate_w);
+        f.ffn_up_w = repl(f.ffn_up_w);
+        f.ffn_down_w = repl(f.ffn_down_w);
+        f.adaln_w = repl(f.adaln_w);
+        c->fm_b2_f16.layers[i] = f;
+    }
+    c->fm_b2_f16.final_proj_w = repl(c->fm.final_proj_w);
+    c->fm_b2_f16.final_adaln_w = repl(c->fm.final_adaln_w);
+
+    if (c->params.verbosity >= 1) {
+        fprintf(stderr,
+                "tada: FM B=2 on GPU - dequantized %zu FM matmul weights to F16 GPU-resident "
+                "(%.0f -> %.0f MiB; correct f16 batched path)\n",
+                q2f16.size(), bytes_q / 1048576.0, bytes_f16 / 1048576.0);
+    }
+    return true;
+}
+
 // ── FM B=2 batched CFG helpers ────────────────────────────────────────────
 
 static ggml_backend_sched_t tada_fm_b2_sched_lazy(tada_context* c) {
@@ -1385,29 +1499,45 @@ struct tada_context* tada_init_from_file(const char* path_model, struct tada_con
         fprintf(stderr, "tada: loaded OK, KV cache for %d tokens\n", max_ctx);
     }
 
-    // FM B=2 batched CFG: enabled by default on CPU; on GPU requires F16 FM weights.
-    // CRISPASR_TADA_FM_B2=0 to disable, =1 to force-enable.
+    // FM B=2 batched CFG: enabled by default. On GPU with quantized FM weights,
+    // prefer F16 GPU-resident dequant copies; CRISPASR_TADA_FM_B2=1 forces the
+    // native quantized batched path if F16 setup fails.
     {
         const char* env = std::getenv("CRISPASR_TADA_FM_B2");
         bool want = true; // default ON
+        bool force_on = false;
         if (env && (env[0] == '0' || env[0] == 'n' || env[0] == 'N'))
             want = false;
-        else if (env && (env[0] == '1' || env[0] == 'y' || env[0] == 'Y'))
+        else if (env && (env[0] == '1' || env[0] == 'y' || env[0] == 'Y')) {
             want = true;
+            force_on = true;
+        }
 
         if (want) {
             // On GPU with quantized FM weights: B=2 batched mul_mat may diverge.
-            // Check type of a representative FM weight (noisy_proj).
+            // Route through F16 copies matching the other Metal workarounds.
+            // Scan the whole FM head; some weights (e.g. noisy_proj with 528
+            // columns) are not Q4_K-compatible and may stay F16 even in an
+            // otherwise quantized FM head.
             bool fm_is_quant = false;
-            auto wit = c->tensors.find("tada.fm_head.noisy_proj.weight");
-            if (wit != c->tensors.end() && wit->second) {
-                ggml_type wt = wit->second->type;
-                fm_is_quant = (wt != GGML_TYPE_F32 && wt != GGML_TYPE_F16 && wt != GGML_TYPE_BF16);
+            for (const auto& kv : c->tensors) {
+                if (kv.first.find("tada.fm_head.") == 0 && kv.second && ggml_is_quantized(kv.second->type)) {
+                    fm_is_quant = true;
+                    break;
+                }
             }
             if (fm_is_quant && c->backend != c->backend_cpu) {
-                if (params.verbosity >= 1)
-                    fprintf(stderr, "tada: FM B=2 disabled (GPU+quant weights; set CRISPASR_TADA_FM_B2=1 to force)\n");
-                want = false;
+                if (!ensure_fm_b2_f16_weights(c)) {
+                    if (force_on) {
+                        if (params.verbosity >= 1)
+                            fprintf(stderr, "tada: FM B=2 F16 dequant failed; forcing native GPU+quant batched path\n");
+                    } else {
+                        if (params.verbosity >= 1)
+                            fprintf(stderr, "tada: FM B=2 disabled (GPU+quant weights; F16 dequant failed; set "
+                                            "CRISPASR_TADA_FM_B2=1 to force native)\n");
+                        want = false;
+                    }
+                }
             }
         }
         c->fm_b2_active = want;
@@ -2244,6 +2374,10 @@ void tada_free(struct tada_context* ctx) {
         ggml_backend_sched_free(ctx->fm_b2_sched);
     if (ctx->fm_b2_ctx)
         ggml_free(ctx->fm_b2_ctx);
+    if (ctx->fm_b2_buf_f16)
+        ggml_backend_buffer_free(ctx->fm_b2_buf_f16);
+    if (ctx->fm_b2_ctx_f16)
+        ggml_free(ctx->fm_b2_ctx_f16);
     if (ctx->fm_step_sched)
         ggml_backend_sched_free(ctx->fm_step_sched);
     if (ctx->fm_step_ctx)
