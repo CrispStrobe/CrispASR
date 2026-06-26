@@ -149,6 +149,12 @@ struct tada_vocab {
 
 } // anonymous namespace
 
+struct mt19937_state_t {
+    uint32_t mt[624];
+    int32_t  left;
+    int32_t  pos;
+};
+
 struct tada_context {
     tada_context_params params;
     tada_hp hp;
@@ -190,6 +196,7 @@ struct tada_context {
     int n_prompt = 0;
 
     uint64_t rng_state = 0;
+    mt19937_state_t mt_rng = {};
 
     // §176b: Lk-bucketed single-step AR graph cache.
     struct TadaBucket {
@@ -656,7 +663,7 @@ static int decode_gray_code(const float* bits, int num_bits) {
     return binary;
 }
 
-// xorshift64* RNG
+// xorshift64* RNG (kept for fallback; AR loop uses mt19937_randn below)
 static uint64_t rng_next(uint64_t* state) {
     uint64_t x = *state;
     x ^= x >> 12;
@@ -667,12 +674,95 @@ static uint64_t rng_next(uint64_t* state) {
 }
 
 static float rng_normal(uint64_t* state) {
-    // Box-Muller
     double u1 = (double)(rng_next(state) >> 11) / (double)(1ULL << 53);
     double u2 = (double)(rng_next(state) >> 11) / (double)(1ULL << 53);
     if (u1 < 1e-12)
         u1 = 1e-12;
     return (float)(std::sqrt(-2.0 * std::log(u1)) * std::cos(2.0 * M_PI * u2));
+}
+
+// ── PyTorch-compatible MT19937 + normal_fill ──────────────────────────────
+// Matches torch.randn(N) on CPU/ARM (M1 Mac non-AVX2 path) so that noise
+// vectors are bit-identical to the Python reference when seeded with the
+// same integer.  Algorithm: normal_fill / normal_fill_16 from
+// aten/src/ATen/native/cpu/DistributionTemplates.h.
+
+static void mt19937_init(mt19937_state_t* s, uint32_t seed) {
+    s->mt[0] = seed;
+    for (int j = 1; j < 624; j++) {
+        s->mt[j] = (1812433253u * (s->mt[j-1] ^ (s->mt[j-1] >> 30)) + (uint32_t)j) & 0xffffffffu;
+    }
+    s->left = 1; // PyTorch CPUGeneratorImpl initial value → twist on first draw
+    s->pos  = 0;
+}
+
+static void mt19937_twist(mt19937_state_t* s) {
+    static const uint32_t A = 0x9908b0dfu;
+    uint32_t* mt = s->mt;
+    for (int j = 0; j < 227; j++) {
+        uint32_t y = (mt[j] & 0x80000000u) | (mt[j+1] & 0x7fffffffu);
+        mt[j] = mt[j+397] ^ (y >> 1) ^ ((y & 1u) ? A : 0u);
+    }
+    for (int j = 227; j < 623; j++) {
+        uint32_t y = (mt[j] & 0x80000000u) | (mt[j+1] & 0x7fffffffu);
+        mt[j] = mt[j-227] ^ (y >> 1) ^ ((y & 1u) ? A : 0u);
+    }
+    uint32_t y = (mt[623] & 0x80000000u) | (mt[0] & 0x7fffffffu);
+    mt[623] = mt[396] ^ (y >> 1) ^ ((y & 1u) ? A : 0u);
+    s->left = 624;
+    s->pos  = 0;
+}
+
+static uint32_t mt19937_next(mt19937_state_t* s) {
+    s->left--;
+    if (s->left == 0)
+        mt19937_twist(s);
+    uint32_t y = s->mt[s->pos++];
+    y ^= (y >> 11);
+    y ^= (y <<  7) & 0x9d2c5680u;
+    y ^= (y << 15) & 0xefc60000u;
+    y ^= (y >> 18);
+    return y;
+}
+
+// Generate N float32 N(0,1) samples matching PyTorch's normal_fill<float>:
+//   1. Fill array with uniform floats via lower-24-bits / 2^24
+//   2. Process 16-element blocks: u1=1-data[j], u2=data[j+8],
+//      r=sqrtf(-2*logf(u1)), theta=(2π_double)*u2,
+//      data[j]=r*cos(theta), data[j+8]=r*sin(theta)
+//   3. Re-draw last 16 if size%16≠0 and repeat
+static void mt19937_randn(mt19937_state_t* s, float* data, int N) {
+    static const uint32_t MASK24  = (1u << 24) - 1u;
+    static const float    DIV24   = 1.0f / (float)(1u << 24);
+    static const double   TWO_PI  = 2.0 * M_PI; // double precision, matches c10::pi<double>
+
+    for (int i = 0; i < N; i++)
+        data[i] = (float)(mt19937_next(s) & MASK24) * DIV24;
+
+    for (int i = 0; i <= N - 16; i += 16) {
+        for (int j = 0; j < 8; j++) {
+            float u1 = 1.0f - data[i+j];
+            float u2 = data[i+j+8];
+            float r  = std::sqrt(-2.0f * std::log(u1));
+            double theta = TWO_PI * (double)u2;
+            data[i+j]   = (float)((double)r * std::cos(theta));
+            data[i+j+8] = (float)((double)r * std::sin(theta));
+        }
+    }
+
+    if (N % 16 != 0) {
+        int tail = N - 16;
+        for (int i = 0; i < 16; i++)
+            data[tail+i] = (float)(mt19937_next(s) & MASK24) * DIV24;
+        for (int j = 0; j < 8; j++) {
+            float u1 = 1.0f - data[tail+j];
+            float u2 = data[tail+j+8];
+            float r  = std::sqrt(-2.0f * std::log(u1));
+            double theta = TWO_PI * (double)u2;
+            data[tail+j]   = (float)((double)r * std::cos(theta));
+            data[tail+j+8] = (float)((double)r * std::sin(theta));
+        }
+    }
 }
 
 // Embed tokens → float array (d_model * n_tokens)
@@ -1010,6 +1100,7 @@ struct tada_context* tada_init_from_file(const char* path_model, struct tada_con
     auto* c = new tada_context();
     c->params = params;
     c->rng_state = params.seed ? params.seed : 42;
+    mt19937_init(&c->mt_rng, (uint32_t)(params.seed ? params.seed : 42));
     c->compute_meta.resize(16 * 1024 * 1024);
 
     // ── Pass 1: metadata ──
@@ -1153,8 +1244,10 @@ int tada_load_prompt(struct tada_context* ctx, const char* path) {
 }
 
 void tada_set_seed(struct tada_context* ctx, uint64_t seed) {
-    if (ctx)
+    if (ctx) {
         ctx->rng_state = seed ? seed : 42;
+        mt19937_init(&ctx->mt_rng, (uint32_t)(seed ? seed : 42));
+    }
 }
 
 void tada_set_temperature(struct tada_context* ctx, float temp) {
@@ -1278,6 +1371,7 @@ float* tada_extract_stage(struct tada_context* ctx, const char* text, const char
     if (ctx->kv_neg_buf)
         ggml_backend_buffer_clear(ctx->kv_neg_buf, 0);
     ctx->rng_state = ctx->params.seed ? ctx->params.seed : 42;
+    mt19937_init(&ctx->mt_rng, (uint32_t)(ctx->params.seed ? ctx->params.seed : 42));
 
     float* emb = build_step_embedding(ctx, full_ids[0], zeros.data(), 0, 0, 0);
     if (!emb)
@@ -1299,8 +1393,9 @@ float* tada_extract_stage(struct tada_context* ctx, const char* text, const char
     }
 
     std::vector<float> speech(lat);
+    mt19937_randn(&ctx->mt_rng, speech.data(), lat);
     for (int j = 0; j < lat; j++)
-        speech[j] = rng_normal(&ctx->rng_state) * ctx->params.noise_temp;
+        speech[j] *= ctx->params.noise_temp;
     if (strcmp(stage, "fm_noise_0") == 0) {
         float* out = (float*)malloc((size_t)lat * sizeof(float));
         if (!out) {
@@ -1362,8 +1457,9 @@ float* tada_synthesize(struct tada_context* ctx, const char* text, int* out_n_sa
     const float cfg_scale = ctx->params.acoustic_cfg;
     const int max_tokens = ctx->params.max_tokens > 0 ? ctx->params.max_tokens : 512;
 
-    // Reset RNG
+    // Reset RNG (both legacy xorshift and PyTorch-compatible MT19937)
     ctx->rng_state = ctx->params.seed ? ctx->params.seed : 42;
+    mt19937_init(&ctx->mt_rng, (uint32_t)(ctx->params.seed ? ctx->params.seed : 42));
 
     tada_bench_stage _bs_synth("synthesize");
 
@@ -1584,8 +1680,11 @@ float* tada_synthesize(struct tada_context* ctx, const char* text, int* out_n_sa
 
         std::vector<float> speech(lat, 0.0f);
         if (need_fm) {
+            // Draw noise using PyTorch-compatible MT19937 + normal_fill algorithm
+            // so that noise vectors match torch.randn(lat) when seeded identically.
+            mt19937_randn(&ctx->mt_rng, speech.data(), lat);
             for (int j = 0; j < lat; j++)
-                speech[j] = rng_normal(&ctx->rng_state) * noise_temp;
+                speech[j] *= noise_temp;
         }
 
         // Solve ODE with proper negative conditioning
