@@ -209,6 +209,20 @@ struct tada_context {
     static constexpr int kBucketLks[kBucketN] = {512, 1024, 2048, 4096};
     std::array<TadaBucket, kBucketN> ar_buckets{};
     ggml_backend_sched_t ar_step_sched = nullptr;
+
+    // Fixed-shape FM velocity graph cache.
+    ggml_context* fm_step_ctx = nullptr;
+    std::vector<uint8_t> fm_step_meta;
+    ggml_cgraph* fm_step_gf = nullptr;
+    ggml_backend_sched_t fm_step_sched = nullptr;
+
+    // B=2 batched CFG FM graph cache (CRISPASR_TADA_FM_B2).
+    // Batches pos+neg condition in one forward; halves FM graph compute calls.
+    ggml_context* fm_b2_ctx = nullptr;
+    std::vector<uint8_t> fm_b2_meta;
+    ggml_cgraph* fm_b2_gf = nullptr;
+    ggml_backend_sched_t fm_b2_sched = nullptr;
+    bool fm_b2_active = false;
 };
 
 // ──────────────────────── metadata loading ─────────────────────────────
@@ -540,15 +554,18 @@ static ggml_cgraph* build_graph_talker_kv(tada_context* c, int n_past, int n_tok
 // VibeVoiceDiffusionHead forward pass.
 // Inputs: noisy_z (latent_dim,), timestep (scalar float), condition (hidden_dim,)
 // Output: predicted velocity (latent_dim,)
-static ggml_cgraph* build_graph_fm_step(tada_context* c) {
+static ggml_cgraph* build_graph_fm_step(tada_context* c, ggml_context* arena_ctx = nullptr) {
     const auto& hp = c->hp;
     const int hid = (int)hp.fm_hidden;
     const int lat = (int)hp.fm_latent;
     (void)hp; // fm_ffn_dim used implicitly via layer weights
     const float eps = hp.rms_norm_eps;
 
-    ggml_init_params ip = {c->compute_meta.size(), c->compute_meta.data(), true};
-    ggml_context* ctx0 = ggml_init(ip);
+    ggml_context* ctx0 = arena_ctx;
+    if (!ctx0) {
+        ggml_init_params ip = {c->compute_meta.size(), c->compute_meta.data(), true};
+        ctx0 = ggml_init(ip);
+    }
     ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 4096, false);
 
     // Inputs
@@ -626,7 +643,104 @@ static ggml_cgraph* build_graph_fm_step(tada_context* c) {
         ggml_build_forward_expand(gf, h);
     }
 
-    ggml_free(ctx0);
+    if (!arena_ctx)
+        ggml_free(ctx0);
+    return gf;
+}
+
+// B=2 batched CFG FM graph: runs pos+neg cond in one forward pass.
+// Inputs:
+//   noisy_z  (lat,)    — same for both paths
+//   t_emb_sin (256,)   — same for both paths
+//   fm_cond_b2 (hid,2) — cond[:,0]=pos, cond[:,1]=neg stacked column-wise
+// Output:
+//   velocity_b2 (lat,2) — vel[:,0]=pos_vel, vel[:,1]=neg_vel
+static ggml_cgraph* build_graph_fm_step_b2(tada_context* c, ggml_context* arena_ctx = nullptr) {
+    const auto& hp = c->hp;
+    const int hid = (int)hp.fm_hidden;
+    const int lat = (int)hp.fm_latent;
+    const float eps = hp.rms_norm_eps;
+
+    ggml_context* ctx0 = arena_ctx;
+    if (!ctx0) {
+        ggml_init_params ip = {c->fm_b2_meta.size(), c->fm_b2_meta.data(), true};
+        ctx0 = ggml_init(ip);
+    }
+    ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 8192, false);
+
+    // Shared inputs (same for both CFG paths)
+    ggml_tensor* noisy_z = ggml_new_tensor_1d(ctx0, GGML_TYPE_F32, lat);
+    ggml_set_name(noisy_z, "noisy_z");
+    ggml_set_input(noisy_z);
+
+    ggml_tensor* t_emb_sin = ggml_new_tensor_1d(ctx0, GGML_TYPE_F32, 256);
+    ggml_set_name(t_emb_sin, "t_emb_sin");
+    ggml_set_input(t_emb_sin);
+
+    // Batched condition input: (hid, 2) — col 0 = pos, col 1 = neg
+    ggml_tensor* cond_b2 = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, hid, 2);
+    ggml_set_name(cond_b2, "fm_cond_b2");
+    ggml_set_input(cond_b2);
+
+    // Shared branch: x = noisy_proj(noisy_z) → (hid,), then replicate to (hid, 2)
+    ggml_tensor* x_shared = ggml_mul_mat(ctx0, c->fm.noisy_proj_w, noisy_z);
+    ggml_tensor* x_b2 = ggml_repeat(ctx0, x_shared, cond_b2);
+
+    // Shared branch: t = t_mlp(t_emb_sin) → (hid,), then replicate to (hid, 2)
+    ggml_tensor* t_shared = ggml_mul_mat(ctx0, c->fm.t_emb_mlp0_w, t_emb_sin);
+    t_shared = ggml_silu(ctx0, t_shared);
+    t_shared = ggml_mul_mat(ctx0, c->fm.t_emb_mlp1_w, t_shared);
+    ggml_tensor* t_b2 = ggml_repeat(ctx0, t_shared, cond_b2);
+
+    // Batched: cond_proj(cond_b2) → (hid, 2)
+    ggml_tensor* c_emb = ggml_add(ctx0, ggml_mul_mat(ctx0, c->fm.cond_proj_w, cond_b2), t_b2);
+
+    // Head layers: all ops run on (hid, 2) batch
+    for (uint32_t i = 0; i < hp.head_layers; i++) {
+        const auto& l = c->fm.layers[i];
+
+        // adaLN: silu(c_emb) @ adaln_w^T → (3*hid, 2), then chunk
+        ggml_tensor* mod = ggml_silu(ctx0, c_emb);
+        mod = ggml_mul_mat(ctx0, l.adaln_w, mod); // (3*hid, 2)
+
+        // Chunk into shift/scale/gate — each (hid, 2) via 2D strided views
+        // mod is contiguous (3*hid, 2): nb[0]=4, nb[1]=3*hid*4
+        size_t col_stride = (size_t)3 * hid * sizeof(float);
+        ggml_tensor* shift = ggml_view_2d(ctx0, mod, hid, 2, col_stride, 0);
+        ggml_tensor* scale = ggml_view_2d(ctx0, mod, hid, 2, col_stride, (size_t)hid * sizeof(float));
+        ggml_tensor* gate = ggml_view_2d(ctx0, mod, hid, 2, col_stride, (size_t)2 * hid * sizeof(float));
+
+        // Modulate + FFN
+        ggml_tensor* h = ggml_rms_norm(ctx0, x_b2, eps);
+        h = ggml_mul(ctx0, h, ggml_repeat(ctx0, l.norm_w, x_b2)); // broadcast norm_w
+        h = ggml_add(ctx0, ggml_add(ctx0, h, ggml_mul(ctx0, h, scale)), shift);
+
+        // SwiGLU FFN — gate_w, up_w, down_w operate on (hid, 2)
+        ggml_tensor* ffn_out = core_ffn::swiglu(ctx0, h, l.ffn_gate_w, l.ffn_up_w, l.ffn_down_w);
+
+        // Gated residual
+        x_b2 = ggml_add(ctx0, x_b2, ggml_mul(ctx0, gate, ffn_out));
+    }
+
+    // Final layer: 2-way adaLN → proj
+    {
+        ggml_tensor* mod = ggml_silu(ctx0, c_emb);
+        mod = ggml_mul_mat(ctx0, c->fm.final_adaln_w, mod); // (2*hid, 2)
+        size_t col_stride = (size_t)2 * hid * sizeof(float);
+        ggml_tensor* shift = ggml_view_2d(ctx0, mod, hid, 2, col_stride, 0);
+        ggml_tensor* scale = ggml_view_2d(ctx0, mod, hid, 2, col_stride, (size_t)hid * sizeof(float));
+
+        ggml_tensor* h = ggml_rms_norm(ctx0, x_b2, eps);
+        if (c->fm.final_norm_w)
+            h = ggml_mul(ctx0, h, ggml_repeat(ctx0, c->fm.final_norm_w, x_b2));
+        h = ggml_add(ctx0, ggml_add(ctx0, h, ggml_mul(ctx0, h, scale)), shift);
+        h = ggml_mul_mat(ctx0, c->fm.final_proj_w, h); // (lat, 2)
+        ggml_set_name(h, "velocity_b2");
+        ggml_build_forward_expand(gf, h);
+    }
+
+    if (!arena_ctx)
+        ggml_free(ctx0);
     return gf;
 }
 
@@ -940,6 +1054,27 @@ static talker_result run_talker_kv(tada_context* c, const float* embeds, int n_t
     return res;
 }
 
+static ggml_backend_sched_t tada_fm_step_sched_lazy(tada_context* c) {
+    if (c->fm_step_sched)
+        return c->fm_step_sched;
+    ggml_backend_t backends[2] = {c->backend, c->backend_cpu};
+    int n_be = (c->backend && c->backend != c->backend_cpu) ? 2 : 1;
+    c->fm_step_sched = ggml_backend_sched_new(backends, nullptr, n_be, 4096, false, false);
+    return c->fm_step_sched;
+}
+
+static ggml_cgraph* tada_get_or_build_fm_step(tada_context* c) {
+    if (c->fm_step_gf)
+        return c->fm_step_gf;
+    c->fm_step_meta.assign(c->compute_meta.size(), 0);
+    ggml_init_params ip = {c->fm_step_meta.size(), c->fm_step_meta.data(), true};
+    c->fm_step_ctx = ggml_init(ip);
+    if (!c->fm_step_ctx)
+        return nullptr;
+    c->fm_step_gf = build_graph_fm_step(c, c->fm_step_ctx);
+    return c->fm_step_gf;
+}
+
 // Run one FM step (velocity prediction).
 static void run_fm_step(tada_context* c, const float* noisy_z, float timestep, const float* cond, float* velocity_out) {
     const int lat = (int)c->hp.fm_latent;
@@ -958,9 +1093,14 @@ static void run_fm_step(tada_context* c, const float* noisy_z, float timestep, c
         cond_input = cond;
     }
 
-    ggml_cgraph* gf = build_graph_fm_step(c);
-    ggml_backend_sched_reset(c->sched);
-    if (!ggml_backend_sched_alloc_graph(c->sched, gf)) {
+    ggml_cgraph* gf = tada_get_or_build_fm_step(c);
+    if (!gf) {
+        fprintf(stderr, "tada: failed to build fm_step graph\n");
+        return;
+    }
+    ggml_backend_sched_t sched = tada_fm_step_sched_lazy(c);
+    ggml_backend_sched_reset(sched);
+    if (!ggml_backend_sched_alloc_graph(sched, gf)) {
         fprintf(stderr, "tada: failed to alloc fm_step graph\n");
         return;
     }
@@ -969,13 +1109,82 @@ static void run_fm_step(tada_context* c, const float* noisy_z, float timestep, c
     ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "t_emb_sin"), t_emb, 0, 256 * sizeof(float));
     ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "fm_cond"), cond_input, 0, (size_t)hid * sizeof(float));
 
-    if (ggml_backend_sched_graph_compute(c->sched, gf) != GGML_STATUS_SUCCESS) {
+    if (ggml_backend_sched_graph_compute(sched, gf) != GGML_STATUS_SUCCESS) {
         fprintf(stderr, "tada: fm_step compute failed\n");
         return;
     }
 
     ggml_tensor* vel = ggml_graph_get_tensor(gf, "velocity");
     ggml_backend_tensor_get(vel, velocity_out, 0, (size_t)lat * sizeof(float));
+}
+
+// ── FM B=2 batched CFG helpers ────────────────────────────────────────────
+
+static ggml_backend_sched_t tada_fm_b2_sched_lazy(tada_context* c) {
+    if (c->fm_b2_sched)
+        return c->fm_b2_sched;
+    ggml_backend_t backends[2] = {c->backend, c->backend_cpu};
+    int n_be = (c->backend && c->backend != c->backend_cpu) ? 2 : 1;
+    c->fm_b2_sched = ggml_backend_sched_new(backends, nullptr, n_be, 8192, false, false);
+    return c->fm_b2_sched;
+}
+
+static ggml_cgraph* tada_get_or_build_fm_b2(tada_context* c) {
+    if (c->fm_b2_gf)
+        return c->fm_b2_gf;
+    c->fm_b2_meta.assign(c->compute_meta.size() * 2, 0);
+    ggml_init_params ip = {c->fm_b2_meta.size(), c->fm_b2_meta.data(), true};
+    c->fm_b2_ctx = ggml_init(ip);
+    if (!c->fm_b2_ctx)
+        return nullptr;
+    c->fm_b2_gf = build_graph_fm_step_b2(c, c->fm_b2_ctx);
+    return c->fm_b2_gf;
+}
+
+// Run one B=2 FM step: pos+neg cond in one batched forward.
+// Returns false on failure (falls back to sequential run_fm_step calls).
+static bool run_fm_step_b2(tada_context* c, const float* noisy_z, float timestep, const float* cond_pos,
+                           const float* cond_neg, float* vel_pos_out, float* vel_neg_out) {
+    const int lat = (int)c->hp.fm_latent;
+    const int hid = (int)c->hp.fm_hidden;
+
+    float t_emb[256];
+    sinusoidal_embedding(timestep, 256, t_emb);
+
+    ggml_cgraph* gf = tada_get_or_build_fm_b2(c);
+    if (!gf)
+        return false;
+
+    ggml_backend_sched_t sched = tada_fm_b2_sched_lazy(c);
+    ggml_backend_sched_reset(sched);
+    if (!ggml_backend_sched_alloc_graph(sched, gf))
+        return false;
+
+    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "noisy_z"), noisy_z, 0, (size_t)lat * sizeof(float));
+    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "t_emb_sin"), t_emb, 0, 256 * sizeof(float));
+
+    // Pack pos+neg as column-interleaved (hid, 2) in column-major order:
+    // col 0 = cond_pos, col 1 = cond_neg
+    std::vector<float> cond_b2((size_t)hid * 2);
+    for (int j = 0; j < hid; j++) {
+        cond_b2[j] = cond_pos[j];       // col 0
+        cond_b2[hid + j] = cond_neg[j]; // col 1
+    }
+    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "fm_cond_b2"), cond_b2.data(), 0, cond_b2.size() * sizeof(float));
+
+    if (ggml_backend_sched_graph_compute(sched, gf) != GGML_STATUS_SUCCESS)
+        return false;
+
+    ggml_tensor* vel = ggml_graph_get_tensor(gf, "velocity_b2");
+    std::vector<float> vel_b2((size_t)lat * 2);
+    ggml_backend_tensor_get(vel, vel_b2.data(), 0, vel_b2.size() * sizeof(float));
+
+    // Unpack: col 0 = vel_pos, col 1 = vel_neg
+    for (int j = 0; j < lat; j++) {
+        vel_pos_out[j] = vel_b2[j];
+        vel_neg_out[j] = vel_b2[lat + j];
+    }
+    return true;
 }
 
 // Cosine CFG schedule: scale decays from base at t=0 to 1.0 at t=1.
@@ -1026,8 +1235,13 @@ static void fm_euler_solve(tada_context* c, float* speech, const float* cond, in
         if (a_cfg != 1.0f) {
             // CFG: velocity = v_neg + cfg * (v_pos - v_neg)
             // Separate acoustic and duration CFG (duration_cfg = 1.0)
-            run_fm_step(c, speech, t_val, cond, vel_pos.data());
-            run_fm_step(c, speech, t_val, neg, vel_neg.data());
+            // B=2 path: run pos+neg in one batched forward when available.
+            bool used_b2 =
+                c->fm_b2_active && run_fm_step_b2(c, speech, t_val, cond, neg, vel_pos.data(), vel_neg.data());
+            if (!used_b2) {
+                run_fm_step(c, speech, t_val, cond, vel_pos.data());
+                run_fm_step(c, speech, t_val, neg, vel_neg.data());
+            }
 
             for (int j = 0; j < ad; j++) {
                 // Acoustic dims: apply acoustic CFG
@@ -1170,6 +1384,37 @@ struct tada_context* tada_init_from_file(const char* path_model, struct tada_con
     if (params.verbosity >= 1) {
         fprintf(stderr, "tada: loaded OK, KV cache for %d tokens\n", max_ctx);
     }
+
+    // FM B=2 batched CFG: enabled by default on CPU; on GPU requires F16 FM weights.
+    // CRISPASR_TADA_FM_B2=0 to disable, =1 to force-enable.
+    {
+        const char* env = std::getenv("CRISPASR_TADA_FM_B2");
+        bool want = true; // default ON
+        if (env && (env[0] == '0' || env[0] == 'n' || env[0] == 'N'))
+            want = false;
+        else if (env && (env[0] == '1' || env[0] == 'y' || env[0] == 'Y'))
+            want = true;
+
+        if (want) {
+            // On GPU with quantized FM weights: B=2 batched mul_mat may diverge.
+            // Check type of a representative FM weight (noisy_proj).
+            bool fm_is_quant = false;
+            auto wit = c->tensors.find("tada.fm_head.noisy_proj.weight");
+            if (wit != c->tensors.end() && wit->second) {
+                ggml_type wt = wit->second->type;
+                fm_is_quant = (wt != GGML_TYPE_F32 && wt != GGML_TYPE_F16 && wt != GGML_TYPE_BF16);
+            }
+            if (fm_is_quant && c->backend != c->backend_cpu) {
+                if (params.verbosity >= 1)
+                    fprintf(stderr, "tada: FM B=2 disabled (GPU+quant weights; set CRISPASR_TADA_FM_B2=1 to force)\n");
+                want = false;
+            }
+        }
+        c->fm_b2_active = want;
+        if (want && params.verbosity >= 1)
+            fprintf(stderr, "tada: FM B=2 batched CFG ENABLED\n");
+    }
+
     return c;
 }
 
@@ -1995,6 +2240,14 @@ void tada_pcm_free(float* pcm) {
 void tada_free(struct tada_context* ctx) {
     if (!ctx)
         return;
+    if (ctx->fm_b2_sched)
+        ggml_backend_sched_free(ctx->fm_b2_sched);
+    if (ctx->fm_b2_ctx)
+        ggml_free(ctx->fm_b2_ctx);
+    if (ctx->fm_step_sched)
+        ggml_backend_sched_free(ctx->fm_step_sched);
+    if (ctx->fm_step_ctx)
+        ggml_free(ctx->fm_step_ctx);
     if (ctx->ar_step_sched)
         ggml_backend_sched_free(ctx->ar_step_sched);
     for (auto& bk : ctx->ar_buckets)
