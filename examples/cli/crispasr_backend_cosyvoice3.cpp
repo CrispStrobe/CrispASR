@@ -85,6 +85,7 @@ public:
         // user override (including --temperature 0 for diff testing).
         cp.temperature = p.temperature > 0.0f ? p.temperature : 0.8f;
         cp.seed = (uint64_t)p.seed;
+        cp.max_tokens = p.max_new_tokens;
 
         ctx_ = cosyvoice3_tts_init_from_file(p.model.c_str(), cp);
         if (!ctx_) {

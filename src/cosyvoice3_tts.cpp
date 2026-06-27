@@ -1192,7 +1192,12 @@ extern "C" float* cosyvoice3_tts_prefill_with_embeds(struct cosyvoice3_tts_conte
         return nullptr;
     const auto& hp = ctx->hp;
     const int d = (int)hp.d_model;
-    if (!cv3_kv_init(ctx, std::max(n_past + n_tokens + 1024, 4096)))
+    // Standalone prefill callers need some decode headroom, but allocating a
+    // fixed 4096-token cache makes the cached T=1 Metal graph attend over all
+    // 4096 slots on every generated token.  The generation entry points size
+    // the cache to their known token budget before reaching this fallback.
+    const int prefill_capacity = ctx->kv_max_ctx > 0 ? ctx->kv_max_ctx : std::max(n_past + n_tokens + 256, 512);
+    if (!cv3_kv_init(ctx, std::max(n_past + n_tokens, prefill_capacity)))
         return nullptr;
 
     // Invalidate any cached step graph — prefill builds in the same
@@ -1259,7 +1264,11 @@ extern "C" float* cosyvoice3_tts_step_speech(struct cosyvoice3_tts_context* ctx,
         fprintf(stderr, "cosyvoice3_tts: speech_id %d out of range [0, %u)\n", speech_id, hp.speech_vocab);
         return nullptr;
     }
-    if (!cv3_kv_init(ctx, std::max(n_past + 1 + 1024, 4096)))
+    // Generation pre-sizes the cache to its full token budget.  Keep a
+    // modest fallback for direct step callers without inflating an existing
+    // request-sized cache to 4096 slots.
+    const int step_capacity = ctx->kv_max_ctx > 0 ? ctx->kv_max_ctx : 512;
+    if (!cv3_kv_init(ctx, std::max(n_past + 1, step_capacity)))
         return nullptr;
     if (n_past + 1 > ctx->kv_max_ctx) {
         fprintf(stderr, "cosyvoice3_tts: kv overflow (%d+1 > %d)\n", n_past, ctx->kv_max_ctx);
@@ -1496,6 +1505,8 @@ extern "C" int32_t* cosyvoice3_tts_generate_tokens_from_embeds(struct cosyvoice3
     const int speech_vocab = (int)hp.speech_vocab;
     const int max_steps = max_tokens > 0 ? max_tokens : (ctx->params.max_tokens > 0 ? ctx->params.max_tokens : 1500);
 
+    if (!cv3_kv_init(ctx, n_tokens + max_steps))
+        return nullptr;
     cosyvoice3_tts_reset_kv(ctx);
     float* logits = cosyvoice3_tts_prefill_with_embeds(ctx, embeds, n_tokens, /*n_past*/ 0);
     if (!logits)
@@ -5047,6 +5058,10 @@ std::vector<int32_t> cv3_generate_tokens_with_stop_floor(cosyvoice3_tts_context*
     const int speech_vocab = (int)ctx->hp.speech_vocab;
     const int max_steps = max_tokens > 0 ? max_tokens : (ctx->params.max_tokens > 0 ? ctx->params.max_tokens : 1500);
 
+    // Right-size the fixed-shape T=1 graph to this request.  This preserves
+    // graph reuse while avoiding attention over thousands of unused KV slots.
+    if (!cv3_kv_init(ctx, n_tokens + max_steps))
+        return out;
     cosyvoice3_tts_reset_kv(ctx);
     float* logits = cosyvoice3_tts_prefill_with_embeds(ctx, embeds, n_tokens, /*n_past*/ 0);
     if (!logits)
@@ -5291,11 +5306,22 @@ float* cv3_synth_with_voice(cosyvoice3_tts_context* ctx, const char* text, const
     std::vector<float> x_init = cv3_seeded_gaussian((size_t)T_mel_total * (size_t)mel, /*seed*/ 0);
 
     // ---- 7. Run flow Euler → mel ----
+    int flow_steps = (int)ctx->flow.hp.cfm_n_steps;
+    if (const char* env_steps = std::getenv("COSYVOICE3_FLOW_STEPS")) {
+        char* end = nullptr;
+        const long parsed = std::strtol(env_steps, &end, 10);
+        if (end != env_steps && *end == '\0' && parsed >= 1 && parsed <= 100) {
+            flow_steps = (int)parsed;
+        } else if (ctx->params.verbosity >= 1) {
+            fprintf(stderr, "cosyvoice3_tts: ignoring invalid COSYVOICE3_FLOW_STEPS='%s' (expected 1..100)\n",
+                    env_steps);
+        }
+    }
     float* mel_full;
     {
         cosyvoice3_bench_stage _b("flow_euler");
         mel_full = cosyvoice3_tts_solve_flow_euler(ctx, mu.data(), T_mel_total, spks_proj.data(), cond.data(),
-                                                   x_init.data(), /*n_steps*/ 10, ctx->flow.hp.cfm_inference_cfg_rate);
+                                                   x_init.data(), flow_steps, ctx->flow.hp.cfm_inference_cfg_rate);
     }
     if (!mel_full)
         return nullptr;

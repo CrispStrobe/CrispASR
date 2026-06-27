@@ -1119,6 +1119,10 @@ reuse, etc.) see [`tts.md`](tts.md):
 - `QWEN3_TTS_CODEC_GPU` — clean codec-on-GPU path (CUDA / Vulkan)
 - `QWEN3_TTS_O15` — code-predictor graph reuse (CPU/Metal opt-in)
 - `KOKORO_GEN_GPU` — generator on GPU (CUDA / Vulkan)
+- `COSYVOICE3_FLOW_STEPS=N` — CosyVoice3 flow Euler steps (`1..100`;
+  model default `10`). Lower values reduce flow latency approximately
+  linearly at a possible quality cost; `5` is a practical fast mode.
+- `COSYVOICE3_BENCH=1` — print CosyVoice3 per-stage timings.
 - `VIBEVOICE_VAE_BACKEND={auto,cpu,gpu}` — VAE decoder placement
 - `VIBEVOICE_TTS_FLASH_ATTN={1,0}` — TTS LM attention: `1` (default)
   uses fused `ggml_flash_attn_ext`; `0` uses an explicit
