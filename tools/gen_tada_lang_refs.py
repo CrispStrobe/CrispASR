@@ -146,9 +146,8 @@ def fetch_fleurs_clip(fleurs_config: str, index: int = 0):
 
 def encode_and_save(audio: np.ndarray, transcript: str, lang: str,
                     out_path: str, device: str = "cpu"):
-    hf_token = os.environ.get("HF_TOKEN")
     print(f"  loading aligner for lang='{lang}' from {CODEC_REPO} …")
-    encoder = Encoder.from_pretrained(CODEC_REPO, language=lang, token=hf_token).to(device)
+    encoder = Encoder.from_pretrained(CODEC_REPO, language=lang).to(device)
     encoder.eval()
 
     waveform = torch.from_numpy(audio).unsqueeze(0).to(device)  # (1, T)
@@ -208,7 +207,9 @@ def main():
             print(f"  transcript: {transcript[:80]}")
             encode_and_save(audio, transcript, lang, out_path, device=args.device)
         except Exception as e:
-            print(f"  ERROR: {e}")
+            import traceback
+            print(f"  ERROR: {e}", flush=True)
+            traceback.print_exc()
             continue
 
     print("\nDone.")
