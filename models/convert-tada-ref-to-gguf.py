@@ -97,8 +97,31 @@ def main():
             "  pip install git+https://github.com/HumeAI/tada.git"
         )
 
+    # Patch for transformers >= 5.x compatibility
+    import transformers
+    if not hasattr(transformers.PreTrainedModel, 'all_tied_weights_keys'):
+        def _get_tied(self):
+            return getattr(self, '_all_tied_weights_keys_store', None) or \
+                   getattr(self, '_tied_weights_keys', None) or {}
+        def _set_tied(self, val):
+            self._all_tied_weights_keys_store = val
+        transformers.PreTrainedModel.all_tied_weights_keys = property(_get_tied, _set_tied)
+
+    # Redirect gated Llama tokenizer to unsloth mirror
+    from transformers import AutoTokenizer
+    _orig_tok = AutoTokenizer.from_pretrained.__func__
+    @classmethod
+    def _patched_tok(cls, name, *a, **kw):
+        try:
+            return _orig_tok(cls, name, *a, **kw)
+        except Exception as e:
+            if "gated" in str(e).lower() or "401" in str(e):
+                return _orig_tok(cls, "unsloth/Llama-3.2-1B", *a, **kw)
+            raise
+    AutoTokenizer.from_pretrained = _patched_tok
+
     encoder = Encoder.from_pretrained(args.codec_repo, subfolder="encoder",
-                                      language=language).to(args.device)
+                                      language=language).float().to(args.device)
     encoder.eval()
 
     waveform = waveform.to(args.device)
