@@ -9,4 +9,8 @@
     <Description>C# bindings for CrispASR — multi-backend ASR/TTS inference via the unified Session C ABI.</Description>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="CrispASR.Tests" />
+  </ItemGroup>
+
 </Project>
