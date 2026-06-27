@@ -1,14 +1,32 @@
 #!/usr/bin/env python3
-"""Convert Google Gemma-4-E2B model to GGUF format for CrispASR.
+"""Convert an audio-capable Gemma 4 model to GGUF format for CrispASR.
 
-Architecture: USM Conformer audio encoder (12L, 1024d) + Gemma4 LLM decoder (35L, 1536d).
-The model has 2011 tensors, 9.5 GB in BF16. Conversion needs ~16 GB RAM.
+Supported inputs — the `gemma4` architecture (USM Conformer audio, 1024-dim):
+    google/gemma-4-E2B-it   model_type=gemma4   35L×1536  audio 1024  (shipped)
+    google/gemma-4-E4B-it   model_type=gemma4   42L×2560  audio 1024  (larger)
+
+NOT yet supported — `gemma4_unified` (a *different* architecture):
+    google/gemma-4-12B-it   model_type=gemma4_unified  48L×3840  audio 640
+    The 12B uses `Gemma4UnifiedForConditionalGeneration` with a different
+    audio encoder (640-dim, `audio_embed_dim` / `audio_samples_per_token`
+    keys) and a unified decoder — its tensors do not match this converter's
+    USM-Conformer name map, so the emitted GGUF crashes at the first audio
+    slice (issue #196). Supporting it needs a separate converter + backend
+    audio path. E2B/E4B all feature native audio and work today.
+
+NOTE: the GGUF `general.architecture` string written here is `gemma4e2b`
+(CrispASR's internal name for the `gemma4` E2B/E4B family).
+
+Conversion streams tensors one at a time (use_temp_file), so RAM stays
+bounded (~16 GB is plenty); the binding constraint is disk for the
+download + output.
 
 Usage:
     python models/convert-gemma4-e2b-to-gguf.py --input google/gemma-4-E2B-it --output gemma4-e2b-it.gguf
-    python models/convert-gemma4-e2b-to-gguf.py --input /path/to/local/dir --output model.gguf --outtype f16
+    python models/convert-gemma4-e2b-to-gguf.py --input google/gemma-4-E4B-it --output gemma4-e4b-it.gguf --outtype f16
+    python models/convert-gemma4-e2b-to-gguf.py --input /path/to/local/dir   --output model.gguf
 
-Designed to run on Kaggle (16 GB RAM) or better.
+Designed to run on Kaggle (≥16 GB RAM) or better.
 """
 
 import argparse
@@ -163,6 +181,40 @@ def main():
     ac = config.get("audio_config", {})
     tc = config.get("text_config", {})
 
+    # Guard: this converter + the C++ gemma4 backend implement the `gemma4`
+    # architecture (E2B / E4B): a USM Conformer audio encoder (1024-dim) plus
+    # the standard gemma4 decoder. The 12B checkpoint is a DIFFERENT
+    # architecture — `gemma4_unified` / Gemma4UnifiedForConditionalGeneration
+    # — with a 640-dim audio encoder (audio_embed_dim / audio_samples_per_token)
+    # and a unified decoder, whose tensor names do not match the map below.
+    # Converting it anyway produces a GGUF that loads but crashes at the first
+    # audio slice (issue #196: Windows 0xC0000005 / return code 3221225477).
+    # Detect it up front and fail loudly rather than emit a broken GGUF.
+    model_type = config.get("model_type", "")
+    architectures = config.get("architectures", []) or []
+    if model_type == "gemma4_unified" or any("Unified" in a for a in architectures):
+        print(
+            "\nError: this is the `gemma4_unified` architecture "
+            f"(model_type={model_type!r}, {architectures}) — the Gemma-4 12B "
+            "model.\n"
+            "  It uses a different 640-dim audio encoder + unified decoder "
+            "that this converter and the C++ gemma4 backend do not support "
+            "yet (issue #196).\n"
+            "  Supported today (model_type=gemma4, USM Conformer 1024-dim):\n"
+            "    google/gemma-4-E2B-it   (already shipped)\n"
+            "    google/gemma-4-E4B-it   (larger; same architecture)",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    if not ac:
+        print(
+            "\nError: this checkpoint has no `audio_config` — it is not an "
+            "audio-capable Gemma 4 model and cannot be used for ASR.\n"
+            "  Use google/gemma-4-E2B-it or google/gemma-4-E4B-it.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     print(f"\nGemma-4-E2B")
     print(f"  Audio: {ac.get('num_hidden_layers')}L, hidden={ac.get('hidden_size')}, "
           f"heads={ac.get('num_attention_heads')}, conv_k={ac.get('conv_kernel_size')}")
@@ -190,6 +242,19 @@ def main():
         for name in h.keys():
             tensor_names[name] = idx
     print(f"  Safetensors: {len(tensor_names)} tensors in {len(st_files)} file(s)")
+
+    # Belt-and-suspenders: even if a config carried an `audio_config`, refuse
+    # to emit a GGUF when the actual audio-tower weights are absent (this is
+    # what produces the silent-then-crash GGUF in issue #196).
+    if not any("audio_tower" in n for n in tensor_names):
+        print(
+            "\nError: no `model.audio_tower.*` tensors found in the "
+            "checkpoint — cannot build an audio-LLM GGUF.\n"
+            "  Use an audio-capable Gemma 3n model (E2B / E4B); plain "
+            "Gemma 3 (12B/27B) has no audio tower.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     # Create GGUF writer
     outfile = Path(args.output)
