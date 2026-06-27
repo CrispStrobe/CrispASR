@@ -263,7 +263,10 @@ jobs:
           ref: ${{ inputs.tag || github.ref }}
 
       - name: Install deps
-        run: apt-get install -y cmake g++
+        # The slim rocm/dev image ships the HIP compiler + runtime but NOT the
+        # math libraries; GGML_HIP needs hipBLAS/rocBLAS (and their cmake config
+        # files) or `find_package(hipblas)` fails at configure time (#196).
+        run: apt-get install -y cmake g++ hipblas-dev rocblas-dev
 
       - name: Build
         run: |
@@ -271,6 +274,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_SHARED_LIBS=OFF \
             -DGGML_HIP=ON \
+            -DCMAKE_PREFIX_PATH=/opt/rocm \
             -DCMAKE_C_COMPILER=hipcc \
             -DCMAKE_CXX_COMPILER=hipcc \
             -DAMDGPU_TARGETS="gfx906;gfx908;gfx90a;gfx1030;gfx1035;gfx1100;gfx1101;gfx1102;gfx1201" \
@@ -318,7 +322,9 @@ jobs:
           ref: ${{ inputs.tag || github.ref }}
 
       - name: Install deps
-        run: apt-get install -y cmake g++ patchelf
+        # See build-linux-x86_64-hip: the slim rocm/dev image lacks hipBLAS/
+        # rocBLAS, which GGML_HIP requires at configure time (#196).
+        run: apt-get install -y cmake g++ patchelf hipblas-dev rocblas-dev
 
       - name: Build (shared libs, HIP)
         run: |
@@ -326,6 +332,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_SHARED_LIBS=ON \
             -DGGML_HIP=ON \
+            -DCMAKE_PREFIX_PATH=/opt/rocm \
             -DCMAKE_C_COMPILER=hipcc \
             -DCMAKE_CXX_COMPILER=hipcc \
             -DAMDGPU_TARGETS="gfx906;gfx908;gfx90a;gfx1030;gfx1035;gfx1100;gfx1101;gfx1102;gfx1201" \
