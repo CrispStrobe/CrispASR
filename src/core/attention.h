@@ -608,6 +608,14 @@ struct KvSelfAttnParams {
     bool v_rms_norm = false;
     // Optional per-dimension RoPE frequency factors (e.g. Llama 3 scaling).
     ggml_tensor* rope_freq_factors = nullptr;
+    // Force the cached K/V to be cast to F32 before the GQA repeat/expansion,
+    // exactly like the global CRISPASR_KV_READ_F32 knob but per-call. Needed on
+    // Vulkan, where REPEAT has no f16→f16 pipeline (the GQA head-expansion
+    // `ggml_repeat_4d` on an F16 cache aborts with "Missing op: REPEAT for f16
+    // to f16"; #192). Casting to F32 first lowers it to a supported F32 REPEAT.
+    // Default false → legacy F16 fast path on Metal/CPU. Caller sets it true only
+    // for the Vulkan-native graph.
+    bool force_kv_read_f32 = false;
 };
 
 // KV-cached self-attention. Writes the new K/V into the persistent cache
@@ -829,8 +837,9 @@ static inline ggml_tensor* kv_self_attn(ggml_context* ctx0, ggml_cgraph* gf, ggm
         const char* s = std::getenv("CRISPASR_KV_READ_F32");
         return s && *s && std::strcmp(s, "0") != 0;
     }();
-    const bool need_dequant_k = ggml_is_quantized(kv_k->type) || (s_kv_read_f32 && kv_k->type != GGML_TYPE_F32);
-    const bool need_dequant_v = ggml_is_quantized(kv_v->type) || (s_kv_read_f32 && kv_v->type != GGML_TYPE_F32);
+    const bool want_f32_read = s_kv_read_f32 || p.force_kv_read_f32;
+    const bool need_dequant_k = ggml_is_quantized(kv_k->type) || (want_f32_read && kv_k->type != GGML_TYPE_F32);
+    const bool need_dequant_v = ggml_is_quantized(kv_v->type) || (want_f32_read && kv_v->type != GGML_TYPE_F32);
     ggml_tensor* Kfull = need_dequant_k ? ggml_cast(ctx0, k_layer_view, GGML_TYPE_F32) : ggml_cont(ctx0, k_layer_view);
     ggml_tensor* Vfull = need_dequant_v ? ggml_cast(ctx0, v_layer_view, GGML_TYPE_F32) : ggml_cont(ctx0, v_layer_view);
 

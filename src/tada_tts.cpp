@@ -531,9 +531,14 @@ static ggml_cgraph* build_graph_talker_kv(tada_context* c, int n_past, int n_tok
         ggml_set_input(causal_mask);
     }
 
-    const core_attn::KvSelfAttnParams kvp = {
+    core_attn::KvSelfAttnParams kvp = {
         n_q, n_kv, hd, n_kv_grp, (int)hp.max_pos, theta, 0.0f, 0.0f, attn_scale, 0.0f, core_attn::GQA_MANUAL_CONT,
     };
+    // On the native Vulkan path the F16 KV cache can't be GQA-expanded: Vulkan has
+    // no REPEAT f16→f16 pipeline (aborts "Missing op: REPEAT for f16 to f16" on
+    // both RADV and MoltenVK; #192). Force the cache read up to F32 so the GQA
+    // repeat lowers to a supported F32 REPEAT. Metal/CPU keep the F16 fast path.
+    kvp.force_kv_read_f32 = c->vulkan_native;
 
     ggml_tensor* eff_kv_indices = fixed_kv_len > 0 ? positions : nullptr;
 
