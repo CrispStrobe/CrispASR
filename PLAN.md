@@ -15,6 +15,35 @@ effort estimate. Completed items have been moved to `HISTORY.md`.
 The remaining open item for full 12B support (a new converter map + backend audio path for the 640-dim unified
 encoder) is a larger port, scoped but not started.
 
+## crispasr-diff harness extensions — catch decode-policy / quality bugs (OPEN)
+
+Motivated by #197: the stage-cosine diff validates the forward pass against a
+Python reference *pinned to a non-default mode* (`text_do_sample=False`) for
+determinism, so it structurally cannot see (a) a production default diverging
+from upstream, (b) decode-policy bugs (greedy looping / cut-off words), or (c)
+perceptual pathologies. The cheap config-parity guard is **DONE** (a
+defaults-audit unit test, `tests/test-tada-params.cpp`, asserting the C++
+defaults equal upstream `InferenceOptions`). Three larger extensions remain:
+
+1. **Per-step talker logits in the diff.** Dump the talker logits at each
+   generation step in both the Python reference and the C++ runtime and compare
+   them. Validates the text-decoder *input* so the sampler is a faithful port
+   over verified logits — today only the FM/codec stages are diffed.
+2. **Generation-health regression gate (non-diff).** A small en/fr/de suite
+   asserting objective signals on the raw output: EOS reached within a bound, no
+   token-loop (n-gram repeat rate under threshold), no excessive trailing
+   low-energy frames (the #192 "trailing background noise" symptom), audio
+   duration within a sane band of the text length. Catches perceptual
+   pathologies cosine can't, without trusting noisy ASR roundtrips.
+3. **Replay-token dual-mode reference.** Dump the Python *sampled* token ids and
+   replay them in C++ (instead of re-sampling) so the sampling-enabled
+   downstream stages can be diffed deterministically despite torch-vs-`mt19937`
+   RNG mismatch — gives the sampling path a ground-truth diff, not just greedy.
+
+Generalise the defaults-audit pattern across backends: a per-backend table of
+(param → upstream default) checked against the params struct, so "a knob is
+declared but dead / defaults diverge from upstream" fails CI everywhere.
+
 > **Audit 2026-06-12** — code-verified all items against HISTORY.md and codebase.
 > **Newly closed (stale in table until this audit):** #42 VibeVoice-ASR 7B
 > (shipped with GGUFs + layer offload), #43 Fun-ASR-Nano (shipped 2026-05-20),
