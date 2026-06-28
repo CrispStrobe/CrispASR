@@ -47,6 +47,10 @@ TEST_CASE("session setter: set_cfg_weight null-handle → -1", "[unit][setters]"
     REQUIRE(crispasr_session_set_cfg_weight(nullptr, 0.5f) == -1);
 }
 
+TEST_CASE("session setter: set_tts_noise_temp null-handle → -1", "[unit][setters]") {
+    REQUIRE(crispasr_session_set_tts_noise_temp(nullptr, 0.9f) == -1);
+}
+
 TEST_CASE("session setter: set_exaggeration null-handle → -1", "[unit][setters]") {
     REQUIRE(crispasr_session_set_exaggeration(nullptr, 0.5f) == -1);
 }

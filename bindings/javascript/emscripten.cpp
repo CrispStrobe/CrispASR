@@ -64,6 +64,7 @@ int          crispasr_session_set_do_sample(CrispasrSession* s, int enable);
 int          crispasr_session_set_min_p(CrispasrSession* s, float min_p);
 int          crispasr_session_set_repetition_penalty(CrispasrSession* s, float r);
 int          crispasr_session_set_cfg_weight(CrispasrSession* s, float cfg_weight);
+int          crispasr_session_set_tts_noise_temp(CrispasrSession* s, float noise_temp);
 int          crispasr_session_set_exaggeration(CrispasrSession* s, float exaggeration);
 int          crispasr_session_set_max_speech_tokens(CrispasrSession* s, int n);
 int          crispasr_session_set_length_scale(CrispasrSession* s, float scale);
@@ -601,6 +602,9 @@ EMSCRIPTEN_BINDINGS(whisper) {
     }));
     emscripten::function("sessionSetCfgWeight", emscripten::optional_override([](float w) {
         return g_tts_session ? crispasr_session_set_cfg_weight(g_tts_session, w) : -1;
+    }));
+    emscripten::function("sessionSetTtsNoiseTemp", emscripten::optional_override([](float t) {
+        return g_tts_session ? crispasr_session_set_tts_noise_temp(g_tts_session, t) : -1;
     }));
     emscripten::function("sessionSetExaggeration", emscripten::optional_override([](float e) {
         return g_tts_session ? crispasr_session_set_exaggeration(g_tts_session, e) : -1;

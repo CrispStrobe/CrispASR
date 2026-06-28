@@ -139,6 +139,20 @@ public:
         if (const char* e = std::getenv("TADA_REPETITION_PENALTY"); e && *e)
             cp.text_repetition_penalty = (float)atof(e);
 
+        // Acoustic flow-matching knobs (#197): the "quick and dirty" vs "slow and
+        // accurate" axis. num_fm_steps is the primary quality lever (more ODE
+        // steps = slower, higher fidelity). Defaults match upstream
+        // InferenceOptions (10 / 1.6 / 0.9); override via env or per request.
+        if (const char* e = std::getenv("TADA_NUM_FM_STEPS"); e && *e) {
+            int n = atoi(e);
+            if (n > 0)
+                cp.num_fm_steps = n;
+        }
+        if (const char* e = std::getenv("TADA_ACOUSTIC_CFG"); e && *e)
+            cp.acoustic_cfg = (float)atof(e);
+        if (const char* e = std::getenv("TADA_NOISE_TEMP"); e && *e)
+            cp.noise_temp = (float)atof(e);
+
         // Remember the resolved sampler defaults so a server can override them
         // per request and have unspecified knobs fall back here (rather than
         // leaking a previous request's value through the shared context).
@@ -148,6 +162,9 @@ public:
         def_rep_penalty_ = cp.text_repetition_penalty;
         def_do_sample_ = cp.text_do_sample;
         def_num_candidates_ = cp.num_acoustic_candidates;
+        def_num_fm_steps_ = cp.num_fm_steps; // 0 → synth uses the 10-step default
+        def_acoustic_cfg_ = cp.acoustic_cfg;
+        def_noise_temp_ = cp.noise_temp;
 
         ctx_ = tada_init_from_file(p.model.c_str(), cp);
         if (!ctx_) {
@@ -256,6 +273,12 @@ public:
                                                                                : def_rep_penalty_);
         tada_set_num_candidates(ctx_, params.tts_num_candidates >= 1 ? params.tts_num_candidates : def_num_candidates_);
         tada_set_do_sample(ctx_, params.tts_do_sample >= 0 ? (params.tts_do_sample != 0) : def_do_sample_);
+        // Acoustic-FM knobs (#197): same per-request-or-default isolation. These
+        // reuse the cross-backend "num_steps"/"cfg_scale" HTTP fields (FM ODE steps
+        // / CFG scale) plus a tada-specific noise_temp.
+        tada_set_num_fm_steps(ctx_, params.tts_num_steps > 0 ? params.tts_num_steps : def_num_fm_steps_);
+        tada_set_acoustic_cfg(ctx_, params.tts_cfg_scale >= 0.0f ? params.tts_cfg_scale : def_acoustic_cfg_);
+        tada_set_noise_temp(ctx_, params.tts_noise_temp >= 0.0f ? params.tts_noise_temp : def_noise_temp_);
         if (params.seed > 0)
             tada_set_seed(ctx_, params.seed);
 
@@ -285,6 +308,10 @@ private:
     float def_rep_penalty_ = 1.1f;
     bool def_do_sample_ = true;
     int def_num_candidates_ = 4;
+    // Resolved acoustic-FM defaults ("slow vs fast" axis, #197).
+    int def_num_fm_steps_ = 10;
+    float def_acoustic_cfg_ = 1.6f;
+    float def_noise_temp_ = 0.9f;
 };
 
 } // namespace

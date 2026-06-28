@@ -2885,6 +2885,16 @@ class CrispasrSession {
     if (rc != 0 && rc != -2) throw Exception('setCfgWeight failed (rc=$rc)');
   }
 
+  /// TADA flow-matching noise temperature (Python noise_temp, default 0.9).
+  void setTtsNoiseTemp(double noiseTemp) {
+    if (_closed) throw StateError('CrispasrSession is closed');
+    if (!_lib.providesSymbol('crispasr_session_set_tts_noise_temp')) return;
+    final fn = _lib.lookupFunction<Int32 Function(Pointer<Void>, Float),
+        int Function(Pointer<Void>, double)>('crispasr_session_set_tts_noise_temp');
+    final rc = fn(_handle, noiseTemp);
+    if (rc != 0 && rc != -2) throw Exception('setTtsNoiseTemp failed (rc=$rc)');
+  }
+
   /// Emotion-exaggeration scalar (chatterbox). 0.5 default.
   void setExaggeration(double exaggeration) {
     if (_closed) throw StateError('CrispasrSession is closed');

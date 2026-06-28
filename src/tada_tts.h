@@ -77,6 +77,14 @@ void tada_set_top_p(struct tada_context* ctx, float top_p);
 void tada_set_top_k(struct tada_context* ctx, int top_k);
 void tada_set_repetition_penalty(struct tada_context* ctx, float penalty);
 
+// Acoustic flow-matching knobs (match upstream InferenceOptions). These trade
+// speed for fidelity — the reporter's "quick and dirty" vs "slow and accurate"
+// axis (#197). num_fm_steps is the primary quality lever (Python
+// num_flow_matching_steps, default 10; <=0 restores it).
+void tada_set_num_fm_steps(struct tada_context* ctx, int steps);
+void tada_set_acoustic_cfg(struct tada_context* ctx, float cfg);
+void tada_set_noise_temp(struct tada_context* ctx, float temp);
+
 // Synthesize text to 24 kHz mono PCM. Returns heap-allocated float array;
 // caller must free with tada_pcm_free(). *out_n_samples is set to the
 // number of float samples. Returns NULL on failure.

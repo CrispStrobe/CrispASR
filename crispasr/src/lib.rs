@@ -955,6 +955,17 @@ impl Session {
         Ok(())
     }
 
+    /// Set the TADA flow-matching noise temperature (Python noise_temp,
+    /// default 0.9).
+    pub fn set_tts_noise_temp(&self, noise_temp: f32) -> Result<(), String> {
+        let rc =
+            unsafe { crispasr_sys::crispasr_session_set_tts_noise_temp(self.handle, noise_temp) };
+        if rc != 0 && rc != -2 {
+            return Err(format!("set_tts_noise_temp failed (rc={})", rc));
+        }
+        Ok(())
+    }
+
     /// Set the emotion-exaggeration scalar (chatterbox). 0.5 is the upstream default.
     pub fn set_exaggeration(&self, exaggeration: f32) -> Result<(), String> {
         let rc = unsafe {

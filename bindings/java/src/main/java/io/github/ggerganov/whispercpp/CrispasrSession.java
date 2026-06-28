@@ -63,6 +63,7 @@ public final class CrispasrSession implements AutoCloseable {
         int     crispasr_session_set_min_p(Pointer session, float minP);
         int     crispasr_session_set_repetition_penalty(Pointer session, float r);
         int     crispasr_session_set_cfg_weight(Pointer session, float cfgWeight);
+        int     crispasr_session_set_tts_noise_temp(Pointer session, float noiseTemp);
         int     crispasr_session_set_exaggeration(Pointer session, float exaggeration);
         int     crispasr_session_set_max_speech_tokens(Pointer session, int n);
         int     crispasr_session_set_length_scale(Pointer session, float scale);
@@ -434,6 +435,12 @@ public final class CrispasrSession implements AutoCloseable {
     public void setCfgWeight(float cfgWeight) {
         int rc = Lib.INSTANCE.crispasr_session_set_cfg_weight(handle, cfgWeight);
         if (rc != 0 && rc != -2) throw new IllegalStateException("set_cfg_weight failed (rc=" + rc + ")");
+    }
+
+    /** TADA flow-matching noise temperature (Python noise_temp, default 0.9). */
+    public void setTtsNoiseTemp(float noiseTemp) {
+        int rc = Lib.INSTANCE.crispasr_session_set_tts_noise_temp(handle, noiseTemp);
+        if (rc != 0 && rc != -2) throw new IllegalStateException("set_tts_noise_temp failed (rc=" + rc + ")");
     }
 
     /** Emotion-exaggeration scalar (chatterbox). 0.5 is the upstream default. */

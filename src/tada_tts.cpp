@@ -2231,6 +2231,22 @@ void tada_set_repetition_penalty(struct tada_context* ctx, float penalty) {
     if (ctx)
         ctx->params.text_repetition_penalty = penalty > 0.0f ? penalty : 1.0f;
 }
+void tada_set_num_fm_steps(struct tada_context* ctx, int steps) {
+    // Flow-matching ODE steps (Python num_flow_matching_steps, default 10). More
+    // steps = slower but more accurate acoustics; <=0 restores the default.
+    if (ctx)
+        ctx->params.num_fm_steps = steps > 0 ? steps : 0;
+}
+void tada_set_acoustic_cfg(struct tada_context* ctx, float cfg) {
+    // Acoustic classifier-free-guidance scale (Python acoustic_cfg, default 1.6).
+    if (ctx && cfg >= 0.0f)
+        ctx->params.acoustic_cfg = cfg;
+}
+void tada_set_noise_temp(struct tada_context* ctx, float temp) {
+    // FM noise temperature (Python noise_temp, default 0.9).
+    if (ctx && temp >= 0.0f)
+        ctx->params.noise_temp = temp;
+}
 
 static std::string tada_normalize_text(std::string text) {
     auto replace_all = [](std::string& s, const std::string& from, const std::string& to) {

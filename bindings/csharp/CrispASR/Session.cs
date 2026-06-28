@@ -209,6 +209,10 @@ namespace CrispASR
         public void SetCfgWeight(float cfgWeight)
             => Check(NativeMethods.crispasr_session_set_cfg_weight(Handle, cfgWeight), "set_cfg_weight");
 
+        /// <summary>TADA flow-matching noise temperature (Python noise_temp, default 0.9).</summary>
+        public void SetTtsNoiseTemp(float noiseTemp)
+            => Check(NativeMethods.crispasr_session_set_tts_noise_temp(Handle, noiseTemp), "set_tts_noise_temp");
+
         /// <summary>Emotion-exaggeration scalar (chatterbox).</summary>
         public void SetExaggeration(float exaggeration)
             => Check(NativeMethods.crispasr_session_set_exaggeration(Handle, exaggeration), "set_exaggeration");

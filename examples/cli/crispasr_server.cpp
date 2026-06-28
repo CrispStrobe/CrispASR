@@ -1590,6 +1590,8 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             rp.tts_noise_scale = body["noise_scale"].get<float>();
         if (body.contains("noise_w") && body["noise_w"].is_number())
             rp.tts_noise_w = body["noise_w"].get<float>();
+        if (body.contains("noise_temp") && body["noise_temp"].is_number())
+            rp.tts_noise_temp = body["noise_temp"].get<float>();
         if (body.contains("exaggeration") && body["exaggeration"].is_number())
             rp.tts_exaggeration = body["exaggeration"].get<float>();
         if (body.contains("speaker_id") && body["speaker_id"].is_number_integer())

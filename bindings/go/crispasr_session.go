@@ -43,6 +43,7 @@ int              crispasr_session_set_do_sample(CrispasrSession* s, int enable);
 int              crispasr_session_set_min_p(CrispasrSession* s, float min_p);
 int              crispasr_session_set_repetition_penalty(CrispasrSession* s, float r);
 int              crispasr_session_set_cfg_weight(CrispasrSession* s, float cfg_weight);
+int              crispasr_session_set_tts_noise_temp(CrispasrSession* s, float noise_temp);
 int              crispasr_session_set_exaggeration(CrispasrSession* s, float exaggeration);
 int              crispasr_session_set_max_speech_tokens(CrispasrSession* s, int n);
 int              crispasr_session_set_length_scale(CrispasrSession* s, float scale);
@@ -554,6 +555,16 @@ func (s *CrispasrSession) SetCFGWeight(cfgWeight float32) error {
 	rc := C.crispasr_session_set_cfg_weight(s.handle, C.float(cfgWeight))
 	if rc != 0 && rc != -2 {
 		return errors.New("crispasr_session_set_cfg_weight failed")
+	}
+	return nil
+}
+
+// SetTtsNoiseTemp sets the TADA flow-matching noise temperature
+// (Python noise_temp, default 0.9).
+func (s *CrispasrSession) SetTtsNoiseTemp(noiseTemp float32) error {
+	rc := C.crispasr_session_set_tts_noise_temp(s.handle, C.float(noiseTemp))
+	if rc != 0 && rc != -2 {
+		return errors.New("crispasr_session_set_tts_noise_temp failed")
 	}
 	return nil
 }

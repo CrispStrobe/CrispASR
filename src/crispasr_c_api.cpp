@@ -2398,9 +2398,8 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
             std::string mp = model_path ? model_path : "";
             auto sep = mp.find_last_of("/\\");
             std::string dir = (sep == std::string::npos) ? std::string(".") : mp.substr(0, sep);
-            for (const char* name : {"dots-tts-soar-vocoder-f16.gguf",
-                                     "dots-tts-vocoder-f16.gguf",
-                                     "dots-tts-vocoder.gguf"}) {
+            for (const char* name :
+                 {"dots-tts-soar-vocoder-f16.gguf", "dots-tts-vocoder-f16.gguf", "dots-tts-vocoder.gguf"}) {
                 std::string cp = dir + "/" + name;
                 FILE* f = fopen(cp.c_str(), "rb");
                 if (f) {
@@ -7335,6 +7334,15 @@ CA_EXPORT int crispasr_session_set_tts_steps(crispasr_session* s, int steps) {
         touched++;
     }
 #endif
+#ifdef CA_HAVE_TADA
+    if (s->tada_ctx) {
+        // TADA flow-matching ODE steps (Python num_flow_matching_steps). The
+        // reporter's "quick and dirty" vs "slow and accurate" lever (#197) —
+        // more steps trade speed for acoustic fidelity. Read per synthesize().
+        tada_set_num_fm_steps(s->tada_ctx, steps);
+        touched++;
+    }
+#endif
     return touched > 0 ? 0 : -2;
 }
 
@@ -7461,6 +7469,29 @@ CA_EXPORT int crispasr_session_set_cfg_weight(crispasr_session* s, float cfg_wei
 #ifdef CA_HAVE_CHATTERBOX
     if (s->chatterbox_ctx) {
         chatterbox_set_cfg_weight((chatterbox_context*)s->chatterbox_ctx, cfg_weight);
+        touched++;
+    }
+#endif
+#ifdef CA_HAVE_TADA
+    if (s->tada_ctx) {
+        // TADA acoustic classifier-free-guidance scale (Python acoustic_cfg, #197).
+        tada_set_acoustic_cfg(s->tada_ctx, cfg_weight);
+        touched++;
+    }
+#endif
+    return touched > 0 ? 0 : -2;
+}
+
+// Set the TADA flow-matching noise temperature (Python noise_temp, default 0.9).
+// Honoured by tada; other backends no-op. Returns 0 on success, -1 if session
+// is null, -2 if no backend supports it.
+CA_EXPORT int crispasr_session_set_tts_noise_temp(crispasr_session* s, float noise_temp) {
+    if (!s)
+        return -1;
+    int touched = 0;
+#ifdef CA_HAVE_TADA
+    if (s->tada_ctx) {
+        tada_set_noise_temp(s->tada_ctx, noise_temp);
         touched++;
     }
 #endif

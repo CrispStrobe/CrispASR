@@ -1749,6 +1749,16 @@ class Session:
         if rc != 0 and rc != -2:
             raise RuntimeError(f"set_cfg_weight failed (rc={rc})")
 
+    def set_tts_noise_temp(self, noise_temp: float) -> None:
+        """TADA flow-matching noise temperature (Python noise_temp, default 0.9)."""
+        if not hasattr(self._lib, "crispasr_session_set_tts_noise_temp"):
+            return
+        self._lib.crispasr_session_set_tts_noise_temp.argtypes = [ctypes.c_void_p, ctypes.c_float]
+        self._lib.crispasr_session_set_tts_noise_temp.restype = ctypes.c_int
+        rc = self._lib.crispasr_session_set_tts_noise_temp(self._handle, float(noise_temp))
+        if rc != 0 and rc != -2:
+            raise RuntimeError(f"set_tts_noise_temp failed (rc={rc})")
+
     def set_exaggeration(self, exaggeration: float) -> None:
         """Set the emotion-exaggeration scalar (chatterbox). 0.5 is the upstream default."""
         if not hasattr(self._lib, "crispasr_session_set_exaggeration"):

@@ -128,6 +128,9 @@ namespace CrispASR
         internal static extern int crispasr_session_set_cfg_weight(IntPtr s, float cfgWeight);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int crispasr_session_set_tts_noise_temp(IntPtr s, float noiseTemp);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int crispasr_session_set_exaggeration(IntPtr s, float exaggeration);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]

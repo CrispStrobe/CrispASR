@@ -226,6 +226,9 @@ curl http://localhost:8080/v1/audio/speech \
 | `repetition_penalty` | backend default | Talker repetition penalty (`1.0` = none). Honoured by tada, chatterbox. Per request. |
 | `do_sample` | backend default | `true`/`false` — enable/disable talker sampling (`false` = greedy). Honoured by tada. Per request. |
 | `num_candidates` | backend default | tada per-token flow-matching candidates: higher = more robust timing, lower = faster (`1` = single noise draw). Per request. |
+| `num_steps` | backend default | Flow-matching ODE steps. For tada this is the primary "quick and dirty" vs "slow and accurate" lever (Python `num_flow_matching_steps`, default 10): more steps = slower, higher acoustic fidelity. Also honoured by chatterbox/f5. Per request. |
+| `cfg_scale` | backend default | Classifier-free-guidance scale. For tada the acoustic CFG (Python `acoustic_cfg`, default 1.6). Also chatterbox/f5. Per request. |
+| `noise_temp` | backend default | tada flow-matching noise temperature (Python `noise_temp`, default 0.9). Per request. |
 | `speed` | `1.0` | Tempo multiplier `0.25 .. 4.0` (OpenAI range). Applied as a post-synth linear resampler. Out-of-range returns 400 with `code=invalid_speed`. |
 | `response_format` | `"wav"` | `wav` (16-bit PCM RIFF, 24 kHz mono — default), `pcm` (OpenAI spec: 24 kHz signed 16-bit LE raw, no header), or `f32` (crispasr-specific raw float32 for downstream DSP). |
 | `consent_attestation` | empty | Required when `voice` ends in `.wav` (voice cloning). A free-text statement attesting speaker consent, e.g. `"I have the speaker's consent"`. Logged for audit. |

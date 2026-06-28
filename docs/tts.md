@@ -193,6 +193,33 @@ query time without a restart. A field that is omitted falls back to the value
 the server was started with (env / flags), so requests don't leak settings into
 each other.
 
+### Acoustic fidelity — quick vs accurate (`TADA_NUM_FM_STEPS`, …)
+
+The **acoustic** flow-matching head (which renders the predicted features into
+codec frames) has its own knobs, separate from the talker sampler and the
+duration-candidate ranking. These are the upstream `InferenceOptions` fields
+(`tada.py`) the reporter in #197 flagged as the "quick and dirty" vs "slow and
+accurate" axis. `num_flow_matching_steps` is the primary lever — more ODE steps
+cost proportionally more wall-clock but improve fidelity (e.g. ~4 steps is fast
+and intelligible; ~25 is noticeably slower and crisper).
+
+| Env var | Default | Notes |
+|---|---|---|
+| `TADA_NUM_FM_STEPS` | `10` | Flow-matching ODE steps (Python `num_flow_matching_steps`); higher = slower/more accurate. Also `set_tts_steps` |
+| `TADA_ACOUSTIC_CFG` | `1.6` | Acoustic classifier-free-guidance scale (Python `acoustic_cfg`). Also `set_cfg_weight` |
+| `TADA_NOISE_TEMP` | `0.9` | FM noise temperature (Python `noise_temp`). Also `set_tts_noise_temp` |
+
+On the HTTP server these are also **per-request** JSON fields on `POST
+/v1/audio/speech`: `num_steps` (→ FM steps), `cfg_scale` (→ acoustic CFG), and
+`noise_temp`. Same omit-falls-back-to-default, no-leak semantics as the sampler.
+
+```bash
+# Slow and accurate: more ODE steps for crisper acoustics.
+curl -s http://localhost:8080/v1/audio/speech \
+  -H 'Content-Type: application/json' \
+  -d '{"input":"Hi. My name is Bob.","num_steps":25}' -o out.wav
+```
+
 ### Reproducible / diverse generation (`--seed`)
 
 Pass `--seed N` (any non-zero integer) for **reproducible** output —

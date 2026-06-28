@@ -495,6 +495,7 @@ extern "C" {
     pub fn crispasr_session_set_min_p(s: *mut CrispasrSession, min_p: c_float) -> c_int;
     pub fn crispasr_session_set_repetition_penalty(s: *mut CrispasrSession, r: c_float) -> c_int;
     pub fn crispasr_session_set_cfg_weight(s: *mut CrispasrSession, cfg_weight: c_float) -> c_int;
+    pub fn crispasr_session_set_tts_noise_temp(s: *mut CrispasrSession, noise_temp: c_float) -> c_int;
     pub fn crispasr_session_set_exaggeration(
         s: *mut CrispasrSession,
         exaggeration: c_float,

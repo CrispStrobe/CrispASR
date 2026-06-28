@@ -595,6 +595,7 @@ CRISPASR_API int crispasr_session_set_top_k(struct crispasr_session* s, int top_
 CRISPASR_API int crispasr_session_set_do_sample(struct crispasr_session* s, int enable);
 CRISPASR_API int crispasr_session_set_tts_num_candidates(struct crispasr_session* s, int n);
 CRISPASR_API int crispasr_session_set_cfg_weight(struct crispasr_session* s, float cfg_weight);
+CRISPASR_API int crispasr_session_set_tts_noise_temp(struct crispasr_session* s, float noise_temp);
 CRISPASR_API int crispasr_session_set_exaggeration(struct crispasr_session* s, float exaggeration);
 CRISPASR_API int crispasr_session_set_max_speech_tokens(struct crispasr_session* s, int n);
 CRISPASR_API int crispasr_session_set_length_scale(struct crispasr_session* s, float scale);

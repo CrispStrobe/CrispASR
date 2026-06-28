@@ -153,6 +153,7 @@ namespace CrispASR.Tests
         [InlineData("crispasr_session_set_min_p")]
         [InlineData("crispasr_session_set_repetition_penalty")]
         [InlineData("crispasr_session_set_cfg_weight")]
+        [InlineData("crispasr_session_set_tts_noise_temp")]
         [InlineData("crispasr_session_set_exaggeration")]
         [InlineData("crispasr_session_set_max_speech_tokens")]
         [InlineData("crispasr_session_set_length_scale")]
