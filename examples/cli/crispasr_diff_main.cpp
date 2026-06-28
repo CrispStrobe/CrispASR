@@ -74,6 +74,7 @@
 #include "tada_codec.h"
 #include "tada_encoder.h"
 #include "tada_tts.h"
+#include "dots_tts.h"
 #if __has_include("kugelaudio.h")
 #include "kugelaudio.h"
 #define CA_HAVE_KUGELAUDIO 1
@@ -1033,6 +1034,12 @@ int main(int argc, char** argv) {
     const std::string model_path = argv[2];
     const std::string ref_path = argv[3];
     const std::string audio_path = argv[4];
+
+    // dots-tts: self-contained PatchEncoder parity check (no audio needed; the
+    // reference is an isolated decode_patch dump from tools/dots_penc_reference.py).
+    if (backend_name == "dots-tts") {
+        return dots_tts_penc_diff(model_path.c_str(), ref_path.c_str(), /*verbosity=*/2);
+    }
 
     // Load the reference archive.
     crispasr_diff::Ref ref;

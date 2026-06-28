@@ -73,6 +73,11 @@ void dots_tts_set_n_threads(struct dots_tts_context* ctx, int n_threads);
 void dots_tts_set_temperature(struct dots_tts_context* ctx, float temperature);
 void dots_tts_set_seed(struct dots_tts_context* ctx, uint64_t seed);
 
+// Diff-harness entry: validate the PatchEncoder decode_patch (patch 0) against
+// a reference GGUF carrying penc_in_patch0 / penc_out_patch0 (produced by
+// tools/dots_penc_reference.py). Prints cosine/max_abs; returns 0 on PASS.
+int dots_tts_penc_diff(const char* model_gguf, const char* ref_gguf, int verbosity);
+
 #ifdef __cplusplus
 }
 #endif

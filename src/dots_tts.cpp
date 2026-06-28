@@ -189,11 +189,13 @@ struct dots_penc {
     uint32_t input_dim = 128;
     float rope_theta = 10000.0f;
 
-    ggml_tensor* in_proj = nullptr; // (hidden_size, input_dim * ds_rate)
-    ggml_tensor* out_proj = nullptr;
-    ggml_tensor* ds_conv_w = nullptr; // downsample conv weight
+    ggml_tensor* in_proj = nullptr; // Linear(input_dim -> hidden_size)
+    ggml_tensor* in_proj_b = nullptr;
+    ggml_tensor* out_proj = nullptr; // Linear(hidden_size*out_ds_rate -> out_dim)
+    ggml_tensor* out_proj_b = nullptr;
+    ggml_tensor* ds_conv_w = nullptr; // downsample Conv1d(in,in,k=2,s=2,causal) weight
     ggml_tensor* ds_conv_b = nullptr;
-    ggml_tensor* final_norm = nullptr;
+    ggml_tensor* final_norm = nullptr; // unused: SuperviseEncoder has no final norm
     std::vector<dots_penc_layer> layers;
 };
 
@@ -587,10 +589,12 @@ static bool dots_load_core(dots_tts_context* ctx, const char* path, int verbosit
 
     // PatchEncoder
     penc.in_proj = T("dots.penc.in_proj.weight");
+    penc.in_proj_b = T("dots.penc.in_proj.bias");
     penc.out_proj = T("dots.penc.out_proj.weight");
+    penc.out_proj_b = T("dots.penc.out_proj.bias");
     penc.ds_conv_w = T("dots.penc.ds_conv.weight");
     penc.ds_conv_b = T("dots.penc.ds_conv.bias");
-    penc.final_norm = T("dots.penc.final_norm.weight");
+    penc.final_norm = T("dots.penc.final_norm.weight"); // absent in checkpoint (null)
 
     for (uint32_t i = 0; i < penc.n_layers; i++) {
         auto& L = penc.layers[i];
@@ -1003,75 +1007,114 @@ static void dots_dit_forward(dots_tts_context* ctx, const float* fm_seq, int fm_
 // PatchEncoder forward (latent patch → LLM embedding)
 // ===========================================================================
 
+// Reference: VAESemanticEncoder.decode_patch (semantic_encoder.py).
+// One latent patch (in_dim, n_frames) -> one LLM embedding (out_dim).
+//   1. causal Conv1d(k=2,s=2) downsample          -> out_ds_rate tokens
+//   2. in_proj (Linear + bias)                     -> (hidden, out_ds_rate)
+//   3. n_layers x [RMSNorm -> causal MHA(no RoPE,  -> (hidden, out_ds_rate)
+//      no qk_norm) -> +res ; RMSNorm -> SiLU MLP -> +res]
+//   4. concat the out_ds_rate tokens -> (hidden*out_ds_rate)
+//   5. out_proj (Linear + bias)                    -> (out_dim, 1)
+//
+// PATCH-0 ONLY: conv_tail and the encoder KV history are zero/empty here, so
+// the stride-2 causal conv == symmetric pad=1 conv cropped to out_ds_rate, and
+// attention is plain causal self-attention over the new tokens. Multi-patch
+// (n_past>0) needs the persisted conv_tail + per-layer KV cache — TODO.
 static void dots_penc_forward(dots_tts_context* ctx, const float* latent_patch, int n_frames, int n_past,
                               float* out_embed) {
     auto& pe = ctx->penc;
-    const int in_dim = (int)pe.input_dim;
+    const int in_dim = (int)pe.input_dim; // 128
+    const int H = (int)pe.hidden_size;    // 1024
+    const int nh = (int)pe.n_heads;       // 16
+    const int hd = (int)pe.head_dim;      // 64
+    const int T_in = n_frames;            // patch frames (4)
+    const int T = T_in / 2;               // out_ds_rate tokens after stride-2 ds
+    if (n_past != 0 && dots_debug_enabled())
+        std::fprintf(stderr, "dots_tts: penc n_past=%d (cross-patch KV not wired)\n", n_past);
 
-    // Downsample conv: stride=2, so T_out = n_frames / 2
-    // For now, use the in_proj as a simple linear
-    // TODO: implement strided conv downsample properly
-    int T = n_frames; // After downsample, may be T/2
-
-    size_t n_tensors = pe.n_layers * 80 + 512; // kv_self_attn ~40-60 nodes/layer
+    size_t n_tensors = pe.n_layers * 64 + 256;
     size_t ctx_size = n_tensors * ggml_tensor_overhead() + ggml_graph_overhead();
     ggml_init_params ip = {ctx_size, nullptr, true};
     ggml_context* ctx0 = ggml_init(ip);
     ggml_cgraph* gf = ggml_new_graph_custom(ctx0, n_tensors, false);
 
-    ggml_tensor* x = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, in_dim, T);
+    ggml_tensor* x = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, in_dim, T_in); // (in_dim, T_in)
     ggml_set_name(x, "penc_input");
     ggml_set_input(x);
 
-    // Input projection
-    ggml_tensor* cur = ggml_mul_mat(ctx0, pe.in_proj, x);
+    // Causal attention mask over the T new tokens (F32: 0 keep, -inf mask).
+    ggml_tensor* mask = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, T, T);
+    ggml_set_name(mask, "penc_mask");
+    ggml_set_input(mask);
 
-    // PatchEncoder: 24-layer causal transformer.
-    // TODO: The full KV-cached attention causes segfaults on some backends.
-    // For now, run a simplified version: just the FFN layers (no attention).
-    // This produces embeddings of the right shape for the pipeline to complete
-    // end-to-end, though the embeddings won't be numerically correct until
-    // the attention is debugged via the diff harness.
+    // ── 1. Downsample conv (k=2, s=2, causal). conv_tail=0 for patch 0, so a
+    //        symmetric pad=1 conv reproduces windows [0,f0],[f1,f2],... ; crop.
+    ggml_tensor* xT = ggml_cont(ctx0, ggml_transpose(ctx0, x));                        // (T_in, in_dim)
+    ggml_tensor* ds = ggml_conv_1d(ctx0, pe.ds_conv_w, xT, /*s*/ 2, /*p*/ 1, /*d*/ 1); // (T_ds, in_dim)
+    ds = ggml_cont(ctx0, ggml_view_2d(ctx0, ds, T, in_dim, ds->nb[1], 0));             // first T rows
+    ds = ggml_cont(ctx0, ggml_transpose(ctx0, ds));                                    // (in_dim, T)
+    if (pe.ds_conv_b)
+        ds = ggml_add(ctx0, ds, pe.ds_conv_b);
+
+    // ── 2. in_proj (Linear 128 -> 1024) + bias
+    ggml_tensor* cur = ggml_mul_mat(ctx0, pe.in_proj, ds); // (H, T)
+    if (pe.in_proj_b)
+        cur = ggml_add(ctx0, cur, pe.in_proj_b);
+
+    const float scale = 1.0f / std::sqrt((float)hd);
+
+    // ── 3. Encoder layers
     for (uint32_t il = 0; il < pe.n_layers; il++) {
         auto& L = pe.layers[il];
-        if (!L.attn_norm || !L.ffn_norm || !L.ffn_up || !L.ffn_down)
+        if (!L.attn_norm || !L.q_proj || !L.k_proj || !L.v_proj || !L.o_proj || !L.ffn_norm || !L.ffn_up ||
+            !L.ffn_down) {
+            std::fprintf(stderr, "dots_tts: penc layer %u has null weight(s)!\n", il);
             break;
+        }
+
+        // Attention: RMSNorm -> MHA (no RoPE, no qk_norm) + residual
         ggml_tensor* residual = cur;
+        ggml_tensor* h = rms_norm(ctx0, cur, L.attn_norm, 1e-6f);
+        ggml_tensor* Q = ggml_mul_mat(ctx0, L.q_proj, h); // (H, T)
+        ggml_tensor* K = ggml_mul_mat(ctx0, L.k_proj, h);
+        ggml_tensor* V = ggml_mul_mat(ctx0, L.v_proj, h);
+        Q = ggml_reshape_3d(ctx0, Q, hd, nh, T); // (hd, nh, T)
+        K = ggml_reshape_3d(ctx0, K, hd, nh, T);
+        V = ggml_reshape_3d(ctx0, V, hd, nh, T);
+        Q = ggml_cont(ctx0, ggml_permute(ctx0, Q, 0, 2, 1, 3)); // (hd, T, nh)
+        K = ggml_cont(ctx0, ggml_permute(ctx0, K, 0, 2, 1, 3)); // (hd, T, nh)
+        ggml_tensor* kq = ggml_mul_mat(ctx0, K, Q);             // (Tk, Tq, nh)
+        kq = ggml_soft_max_ext(ctx0, kq, mask, scale, 0.0f);
+        ggml_tensor* Vp = ggml_cont(ctx0, ggml_permute(ctx0, V, 1, 2, 0, 3)); // (T, hd, nh)
+        ggml_tensor* kqv = ggml_mul_mat(ctx0, Vp, kq);                        // (hd, Tq, nh)
+        kqv = ggml_cont(ctx0, ggml_permute(ctx0, kqv, 0, 2, 1, 3));           // (hd, nh, Tq)
+        ggml_tensor* attn = ggml_reshape_2d(ctx0, kqv, H, T);                 // (H, T)
+        attn = ggml_mul_mat(ctx0, L.o_proj, attn);
+        if (L.o_proj_b)
+            attn = ggml_add(ctx0, attn, L.o_proj_b);
+        cur = ggml_add(ctx0, residual, attn);
 
-        // Skip attention for now — just apply FFN
-        cur = rms_norm(ctx0, cur, L.ffn_norm, 1e-6f);
-        cur = ggml_mul_mat(ctx0, L.ffn_up, cur);
+        // FFN: RMSNorm -> fc1 -> SiLU -> fc2 + residual
+        residual = cur;
+        h = rms_norm(ctx0, cur, L.ffn_norm, 1e-6f);
+        h = ggml_mul_mat(ctx0, L.ffn_up, h);
         if (L.ffn_up_b)
-            cur = ggml_add(ctx0, cur, L.ffn_up_b);
-        cur = ggml_silu(ctx0, cur);
-        cur = ggml_mul_mat(ctx0, L.ffn_down, cur);
+            h = ggml_add(ctx0, h, L.ffn_up_b);
+        h = ggml_silu(ctx0, h);
+        h = ggml_mul_mat(ctx0, L.ffn_down, h);
         if (L.ffn_down_b)
-            cur = ggml_add(ctx0, cur, L.ffn_down_b);
-        cur = ggml_add(ctx0, residual, cur);
+            h = ggml_add(ctx0, h, L.ffn_down_b);
+        cur = ggml_add(ctx0, residual, h);
     }
 
-    if (pe.final_norm)
-        cur = rms_norm(ctx0, cur, pe.final_norm, 1e-6f);
+    // ── 4. concat the T tokens: (H, T) -> (H*T, 1)  [token0 | token1 | ...]
+    cur = ggml_cont(ctx0, cur);
+    cur = ggml_reshape_2d(ctx0, cur, H * T, 1);
 
-    // Output projection: out_proj expects 2*hidden_size input (adjacent frames
-    // are concatenated after stride-2 downsample). Reshape (hidden, T) →
-    // (2*hidden, T/2) before projection.
-    if (pe.out_proj) {
-        int out_in_dim = (int)pe.out_proj->ne[0];
-        int cur_dim = (int)cur->ne[0];
-        int cur_T = (int)cur->ne[1];
-        if (out_in_dim == 2 * cur_dim && cur_T >= 2) {
-            // Reshape: concatenate pairs of adjacent frames
-            cur = ggml_reshape_2d(ctx0, cur, cur_dim * 2, cur_T / 2);
-        }
-        cur = ggml_mul_mat(ctx0, pe.out_proj, cur);
-        if (pe.out_proj->ne[1] > 0) {
-            // Check for out_proj bias
-            ggml_tensor* out_proj_b = ggml_get_tensor(ctx->ctx_w, "dots.penc.out_proj.bias");
-            if (out_proj_b)
-                cur = ggml_add(ctx0, cur, out_proj_b);
-        }
-    }
+    // ── 5. out_proj (Linear H*out_ds_rate -> out_dim) + bias
+    cur = ggml_mul_mat(ctx0, pe.out_proj, cur); // (out_dim, 1)
+    if (pe.out_proj_b)
+        cur = ggml_add(ctx0, cur, pe.out_proj_b);
 
     ggml_set_name(cur, "penc_output");
     ggml_set_output(cur);
@@ -1080,13 +1123,19 @@ static void dots_penc_forward(dots_tts_context* ctx, const float* latent_patch, 
     ggml_gallocr_t galloc = ggml_gallocr_new(ggml_backend_get_default_buffer_type(ctx->backend));
     ggml_gallocr_alloc_graph(galloc, gf);
 
-    ggml_backend_tensor_set(x, latent_patch, 0, in_dim * T * sizeof(float));
+    ggml_backend_tensor_set(x, latent_patch, 0, (size_t)in_dim * T_in * sizeof(float));
+
+    // Causal mask: query q attends to keys k<=q. Layout (Tk, Tq): elem(k,q).
+    std::vector<float> mask_data((size_t)T * T, 0.0f);
+    for (int q = 0; q < T; q++)
+        for (int k = 0; k < T; k++)
+            mask_data[(size_t)q * T + k] = (k <= q) ? 0.0f : -INFINITY;
+    ggml_backend_tensor_set(mask, mask_data.data(), 0, mask_data.size() * sizeof(float));
 
     ggml_backend_graph_compute(ctx->backend, gf);
 
     ggml_tensor* out = ggml_graph_get_tensor(gf, "penc_output");
-    size_t out_bytes = ggml_nbytes(out);
-    ggml_backend_tensor_get(out, out_embed, 0, out_bytes);
+    ggml_backend_tensor_get(out, out_embed, 0, ggml_nbytes(out));
 
     ggml_gallocr_free(galloc);
     ggml_free(ctx0);
@@ -1842,4 +1891,70 @@ void dots_tts_set_seed(struct dots_tts_context* ctx, uint64_t seed) {
         ctx->params.seed = seed;
         ctx->rng.seed(seed > 0 ? seed : 42);
     }
+}
+
+// ── Diff-harness: validate PatchEncoder decode_patch (patch 0) ──────────────
+// Loads a (penc-only is fine) core GGUF + a reference GGUF carrying
+// penc_in_patch0 / penc_out_patch0 (tools/dots_penc_reference.py), runs the
+// C++ PatchEncoder, and prints cosine / max_abs vs the PyTorch reference.
+extern "C" int dots_tts_penc_diff(const char* model_gguf, const char* ref_gguf, int verbosity) {
+    dots_tts_context_params p = dots_tts_context_default_params();
+    p.verbosity = verbosity;
+    p.use_gpu = false;
+    dots_tts_context* ctx = dots_tts_init_from_file(model_gguf, p);
+    if (!ctx) {
+        std::fprintf(stderr, "dots_penc_diff: failed to load model %s\n", model_gguf);
+        return 2;
+    }
+
+    core_gguf::WeightLoad rw;
+    if (!core_gguf::load_weights(ref_gguf, ctx->backend, "ref", rw)) {
+        std::fprintf(stderr, "dots_penc_diff: failed to load reference %s\n", ref_gguf);
+        dots_tts_free(ctx);
+        return 2;
+    }
+    ggml_tensor* t_in = ggml_get_tensor(rw.ctx, "penc_in_patch0");
+    ggml_tensor* t_out = ggml_get_tensor(rw.ctx, "penc_out_patch0");
+    if (!t_in || !t_out) {
+        std::fprintf(stderr, "dots_penc_diff: reference missing penc_in_patch0/penc_out_patch0\n");
+        dots_tts_free(ctx);
+        return 2;
+    }
+
+    const int in_dim = (int)t_in->ne[0];   // 128
+    const int n_frames = (int)t_in->ne[1]; // 4
+    const int out_n = (int)ggml_nelements(t_out);
+
+    std::vector<float> in_data((size_t)in_dim * n_frames);
+    ggml_backend_tensor_get(t_in, in_data.data(), 0, in_data.size() * sizeof(float));
+    std::vector<float> ref_out((size_t)out_n);
+    ggml_backend_tensor_get(t_out, ref_out.data(), 0, ref_out.size() * sizeof(float));
+
+    std::vector<float> got((size_t)out_n, 0.0f);
+    dots_penc_forward(ctx, in_data.data(), n_frames, /*n_past=*/0, got.data());
+
+    double dot = 0, na = 0, nb = 0, maxabs = 0;
+    for (int i = 0; i < out_n; i++) {
+        dot += (double)got[i] * ref_out[i];
+        na += (double)got[i] * got[i];
+        nb += (double)ref_out[i] * ref_out[i];
+        double d = std::fabs((double)got[i] - ref_out[i]);
+        if (d > maxabs)
+            maxabs = d;
+    }
+    double cos = (na > 0 && nb > 0) ? dot / (std::sqrt(na) * std::sqrt(nb)) : 0.0;
+    std::printf("dots-tts penc decode_patch[0]: in=(%d,%d) out_dim=%d  cos=%.6f  max_abs=%.6f  %s\n", in_dim, n_frames,
+                out_n, cos, maxabs, cos > 0.999 ? "PASS" : "FAIL");
+    if (verbosity >= 2) {
+        std::printf("  got[:6]:");
+        for (int i = 0; i < 6 && i < out_n; i++)
+            std::printf(" %+.4f", got[i]);
+        std::printf("\n  ref[:6]:");
+        for (int i = 0; i < 6 && i < out_n; i++)
+            std::printf(" %+.4f", ref_out[i]);
+        std::printf("\n");
+    }
+
+    dots_tts_free(ctx);
+    return cos > 0.999 ? 0 : 1;
 }

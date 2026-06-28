@@ -206,6 +206,7 @@ target_link_libraries(crispasr-diff PRIVATE
     csm-tts
     parler-tts
     mini-omni2
+    dots-tts
     crispasr-diff-lib
     ${FFMPEG_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}
