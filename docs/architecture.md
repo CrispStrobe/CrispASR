@@ -956,5 +956,36 @@ Key architectural points:
   (override with `CRISPASR_PARAKEET_QUANT_ALL=1`). Q8_0 (704 MB) is the recommended
   deployment quant; Q4_K (455 MB) works with the RNNT protection rule.
 - 3000-token SentencePiece unigram vocabulary, Japanese only.
+- **Parity**: transcript-identical to upstream NeMo Python / `reazonspeech`
+  package on gTTS Japanese test audio (verified on Kaggle, 2026-06-28).
 
 Models at `cstr/reazonspeech-nemo-v2-GGUF`: F16 (1240 MB), Q8_0 (704 MB), Q4_K (455 MB).
+
+### parakeet-ctc-1.1b-ja
+
+Community Japanese fine-tune of nvidia/parakeet-ctc-1.1b (grider-transwithai,
+Apache-2.0). 42-layer FastConformer-CTC, 1.1B params.
+
+```
+Audio → 80 log-mel (n_fft=512, Hann, per-feature z-norm)
+      → dw_striding 8× subsampling (5× Conv2d + Linear)
+      → 42 FastConformer blocks (rel_pos, full attention, xscaling)
+      → CTC head (Conv1d(1024 → 4001, k=1))
+      → CTC greedy decode
+```
+
+Key points:
+- Same architecture and runtime as the English parakeet-ctc-{0.6b,1.1b} models.
+  Uses the `canary-ctc` GGUF arch tag + `canary_ctc.cpp` runtime.
+- **Checkpoint selection**: the HF repo has two `.nemo` files. `parakeet-ja.nemo`
+  has **corrupt F32 weights** in layers 26-28 (NaN + values >1e38 in
+  `attn.v.weight` and `ff1.linear1.weight`). Only `parakeet-ja-gal.nemo` works.
+- **Quantization**: Q8_0 is the recommended deployment quant. Q4_K degrades on
+  the 42-layer CTC encoder (same finding as English parakeet-ctc-1.1b and
+  OmniASR-CTC — CTC argmax is structurally sensitive to accumulated
+  quantization noise across many layers).
+- 4000-token SentencePiece unigram vocabulary, Japanese only.
+- **Parity**: transcript-identical to upstream NeMo Python on gTTS Japanese
+  test audio (verified on Kaggle, 2026-06-28).
+
+Models at `cstr/parakeet-ctc-1.1b-ja-GGUF`: F16 (2.0 GB), Q8_0 (1.2 GB), Q4_K (631 MB).
