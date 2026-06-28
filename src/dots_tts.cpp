@@ -1071,7 +1071,8 @@ static void dots_penc_forward(dots_tts_context* ctx, const float* latent_patch, 
         cur = ggml_add(ctx0, residual, cur);
     }
 
-    cur = rms_norm(ctx0, cur, pe.final_norm, 1e-6f);
+    if (pe.final_norm)
+        cur = rms_norm(ctx0, cur, pe.final_norm, 1e-6f);
 
     // Output projection: out_proj expects 2*hidden_size input (adjacent frames
     // are concatenated after stride-2 downsample). Reshape (hidden, T) →
