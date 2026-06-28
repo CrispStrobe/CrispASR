@@ -48,6 +48,13 @@ DEFAULT_STAGES = [
     "dit_t",
     "dit_gcond",
     "dit_vel",
+    "fm_input_seq",
+    "fm_cfg_seq",
+    "fm_mask",
+    "fm_pos",
+    "fm_noise",
+    "fm_latent_out",
+    "fm_meta",
 ]
 
 
@@ -229,6 +236,123 @@ def _dump_dit(model_dir: Path, seed: int) -> Dict[str, np.ndarray]:
     }
 
 
+def _dump_flowmatch(model_dir: Path, seed: int) -> Dict[str, np.ndarray]:
+    """Isolated flow-matching ODE driver reference (core.fm_solver_step + Euler).
+
+    Builds a patch-1-style FM sequence [h0, l0(×4), h1] + 4 noise slots so the
+    block-causal attn_mask AND non-arange pos_ids are exercised (not just the
+    trivial patch-0 case). Loads ONLY the DiT + the 3 projections, runs a
+    deterministic Euler loop with seeded noise feeding core.fm_solver_step.
+    """
+    import torch
+    from safetensors import safe_open
+    from dots_tts.modules.backbone.dit import DiT
+
+    torch.set_num_threads(2)
+    torch.set_grad_enabled(False)
+
+    cj = json.loads((model_dir / "config.json").read_text())
+    latent_dim = int(cj["latent_dim"])
+    patch_size = int(cj["patch_size"])
+    dit_cfg = _Cfg(cj["DiT"])
+    fm_hidden = int(dit_cfg["hidden_size"])
+
+    st_path = model_dir / "model.safetensors"
+    with safe_open(str(st_path), framework="pt") as f:
+        llm_dim = int(list(f.get_slice("hidden_proj.weight").get_shape())[1])
+        dit_sd = {k[len("velocity_field_predictor."):]: f.get_tensor(k).float()
+                  for k in f.keys() if k.startswith("velocity_field_predictor.")}
+        proj = {}
+        for nm in ("hidden_proj", "latent_proj", "coordinate_proj"):
+            proj[nm + "_w"] = f.get_tensor(nm + ".weight").float()
+            proj[nm + "_b"] = f.get_tensor(nm + ".bias").float()
+
+    dit = DiT(in_dim=fm_hidden, out_dim=latent_dim, transformer_config=dit_cfg,
+              mode="flow_matching")
+    dit.load_state_dict(dit_sd, strict=False)
+    dit.eval().float()
+
+    def lin(name, x):  # x: (..., in) -> (..., out)
+        return torch.nn.functional.linear(x, proj[name + "_w"], proj[name + "_b"])
+
+    g = torch.Generator().manual_seed(seed)
+    rn = lambda *s: torch.randn(*s, generator=g, dtype=torch.float32)
+    h0 = rn(1, 1, llm_dim)
+    h1 = rn(1, 1, llm_dim)
+    lat_hist = rn(1, patch_size, latent_dim)          # decoded latent-0 history
+    noise = rn(1, patch_size, latent_dim)             # ODE init coordinate
+    g_cond = torch.zeros(1, fm_hidden)                # text-only -> null g_cond
+
+    fm_seq_len = 1 + patch_size + 1                   # [h0, l0×4, h1]
+    total_len = fm_seq_len + patch_size               # + 4 noise slots
+    latent_start = fm_seq_len
+
+    input_seq = torch.zeros(1, total_len, fm_hidden)
+    cfg_seq = torch.zeros(1, total_len, fm_hidden)
+    h0p, h1p = lin("hidden_proj", h0), lin("hidden_proj", h1)
+    hnull = lin("hidden_proj", torch.zeros(1, 1, llm_dim))
+    latp = lin("latent_proj", lat_hist)               # (1, patch_size, fm_hidden)
+    input_seq[:, 0:1] = h0p
+    input_seq[:, 1:1 + patch_size] = latp
+    input_seq[:, 1 + patch_size:fm_seq_len] = h1p
+    cfg_seq[:, 0:1] = hnull
+    cfg_seq[:, 1:1 + patch_size] = latp
+    cfg_seq[:, 1 + patch_size:fm_seq_len] = hnull
+
+    # _build_fm_attn_mask (bool, True=attend) for fm_seq_len, latent_start.
+    hidden_patch_size = 1
+    mask = torch.zeros(1, total_len, total_len, dtype=torch.bool)
+    block_start = fm_seq_len - hidden_patch_size
+    if block_start > 0:
+        causal = torch.ones(block_start, block_start, dtype=torch.bool).triu(1).logical_not()
+        mask[:, :block_start, :block_start] = causal
+    mask[:, block_start:fm_seq_len, :fm_seq_len] = True
+    mask[:, block_start:fm_seq_len, latent_start:] = True
+    mask[:, latent_start:, :fm_seq_len] = True
+    mask[:, latent_start:, latent_start:] = True
+
+    # _build_fm_pos_ids
+    pos = torch.zeros(1, total_len, dtype=torch.float32)
+    pos[:, :fm_seq_len] = torch.arange(fm_seq_len, dtype=torch.float32)
+    pos[:, latent_start:] = torch.arange(fm_seq_len, fm_seq_len + patch_size, dtype=torch.float32)
+
+    num_steps = 4
+    cfg_scale = 3.0
+
+    def solver(t, z):
+        zc = lin("coordinate_proj", z)                # (1, patch, fm_hidden)
+        sc = input_seq.clone(); sc[:, latent_start:] = zc
+        su = cfg_seq.clone();   su[:, latent_start:] = zc
+        z_z = torch.cat([sc, su], 0)                  # (2, total_len, fm_hidden)
+        t_t = t.reshape(1).repeat(2)
+        gg = torch.cat([g_cond, torch.zeros_like(g_cond)], 0)
+        vt = dit(x=z_z, timesteps=t_t, attn_mask=mask, pos_ids=pos, g_cond=gg)
+        vt = vt[:, latent_start:]
+        vc, vu = vt[:1], vt[1:]
+        return vc + cfg_scale * (vc - vu)
+
+    z = noise.clone()
+    dt = 1.0 / num_steps
+    for k in range(num_steps):
+        t = torch.tensor(float(k) * dt, dtype=torch.float32)
+        z = z + dt * solver(t, z)
+
+    # Additive mask [q][k] row-major (0 attend, -inf block) for the C++ side.
+    add_mask = torch.where(mask[0], torch.zeros(()), torch.full((), float("-inf")))
+    print(f"[dots-ref/fm] total_len={total_len} latent_start={latent_start} "
+          f"steps={num_steps} cfg={cfg_scale}")
+    return {
+        "fm_input_seq": _npf(input_seq[0]),    # (total_len, fm_hidden)
+        "fm_cfg_seq": _npf(cfg_seq[0]),        # (total_len, fm_hidden)
+        "fm_mask": _npf(add_mask),             # (total_len, total_len) [q][k]
+        "fm_pos": _npf(pos[0]),                # (total_len,)
+        "fm_noise": _npf(noise[0]),            # (patch_size, latent_dim)
+        "fm_latent_out": _npf(z[0]),           # (patch_size, latent_dim)
+        "fm_meta": np.array([total_len, latent_start, num_steps, cfg_scale],
+                            dtype=np.float32),
+    }
+
+
 def dump(
     model_dir: "Path | str | None" = None,
     audio: np.ndarray | None = None,
@@ -256,10 +380,13 @@ def dump(
         results.update(_dump_patch_encoder(model_dir, seed))
     if any(s.startswith("dit_") for s in stages):
         results.update(_dump_dit(model_dir, seed))
+    if any(s.startswith("fm_") for s in stages):
+        results.update(_dump_flowmatch(model_dir, seed))
 
-    # Keep only requested stages (plus the always-present penc/dit tensors).
+    # Keep only requested stages (plus the always-present penc/dit/fm tensors).
     out = {k: np.ascontiguousarray(v.astype(np.float32))
            for k, v in results.items()
-           if k in stages or k.startswith("penc_") or k.startswith("dit_")}
+           if k in stages or k.startswith("penc_") or k.startswith("dit_")
+           or k.startswith("fm_")}
     print(f"[dots-ref] returning {len(out)} tensors: {sorted(out)}")
     return out

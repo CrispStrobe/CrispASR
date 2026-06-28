@@ -1041,7 +1041,8 @@ int main(int argc, char** argv) {
     if (backend_name == "dots-tts") {
         int rp = dots_tts_penc_diff(model_path.c_str(), ref_path.c_str(), /*verbosity=*/2);
         int rd = dots_tts_dit_diff(model_path.c_str(), ref_path.c_str(), /*verbosity=*/2);
-        return (rp == 0 && rd == 0) ? 0 : 1;
+        int rf = dots_tts_flowmatch_diff(model_path.c_str(), ref_path.c_str(), /*verbosity=*/2);
+        return (rp == 0 && rd == 0 && rf == 0) ? 0 : 1;
     }
 
     // Load the reference archive.

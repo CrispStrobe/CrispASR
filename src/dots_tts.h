@@ -83,6 +83,11 @@ int dots_tts_penc_diff(const char* model_gguf, const char* ref_gguf, int verbosi
 // Prints cosine/max_abs; returns 0 on PASS.
 int dots_tts_dit_diff(const char* model_gguf, const char* ref_gguf, int verbosity);
 
+// Diff-harness entry: validate the flow-matching ODE driver against a reference
+// GGUF carrying fm_input_seq / fm_cfg_seq / fm_mask / fm_pos / fm_noise /
+// fm_latent_out / fm_meta. Prints cosine/max_abs; returns 0 on PASS.
+int dots_tts_flowmatch_diff(const char* model_gguf, const char* ref_gguf, int verbosity);
+
 #ifdef __cplusplus
 }
 #endif

@@ -845,8 +845,12 @@ static void dots_llm_step(dots_tts_context* ctx, const float* input_embeds, int 
 
 // g_cond: optional (D,) global conditioning added to the timestep embedding
 // to form the AdaLN condition c (reference: c = time_embedder(t) + g_cond).
+// attn_mask_add: optional (fm_len*fm_len) additive mask, row-major [query][key]
+//   (0 = attend, -INFINITY = block); nullptr = full bidirectional.
+// pos_ids_in:   optional (fm_len) RoPE position ids; nullptr = arange(0..T-1).
 static void dots_dit_forward(dots_tts_context* ctx, const float* fm_seq, int fm_len, float timestep,
-                             const float* g_cond, float* out_velocity) {
+                             const float* g_cond, const float* attn_mask_add, const int32_t* pos_ids_in,
+                             float* out_velocity) {
     auto& dit = ctx->dit;
     const int D = (int)dit.hidden_size;
     const int T = fm_len;
@@ -905,10 +909,18 @@ static void dots_dit_forward(dots_tts_context* ctx, const float* fm_seq, int fm_
     ggml_tensor* dbg_x0 = cur;
     ggml_tensor* dbg_b0 = nullptr;
 
-    // Positions for RoPE (bidirectional, 0..T-1)
+    // Positions for RoPE (pos_ids_in, or 0..T-1 when null)
     ggml_tensor* positions = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, T);
     ggml_set_name(positions, "dit_pos");
     ggml_set_input(positions);
+
+    // Optional additive attention mask (production FM block-causal mask).
+    ggml_tensor* attn_mask_t = nullptr;
+    if (attn_mask_add) {
+        attn_mask_t = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, T, T); // (Tk, Tq)
+        ggml_set_name(attn_mask_t, "dit_mask");
+        ggml_set_input(attn_mask_t);
+    }
 
     // DiT blocks with AdaLN-Zero
     for (uint32_t il = 0; il < dit.n_layers; il++) {
@@ -954,7 +966,7 @@ static void dots_dit_forward(dots_tts_context* ctx, const float* fm_seq, int fm_
         Q = ggml_cont(ctx0, ggml_permute(ctx0, Q, 0, 2, 1, 3)); // (hd, T, nh)
         K = ggml_cont(ctx0, ggml_permute(ctx0, K, 0, 2, 1, 3)); // (hd, T, nh)
         ggml_tensor* kq = ggml_mul_mat(ctx0, K, Q);             // (Tk, Tq, nh)
-        kq = ggml_soft_max_ext(ctx0, kq, nullptr, scale, 0.0f);
+        kq = ggml_soft_max_ext(ctx0, kq, attn_mask_t, scale, 0.0f);
         ggml_tensor* Vp = ggml_cont(ctx0, ggml_permute(ctx0, V, 1, 2, 0, 3)); // (T, hd, nh)
         ggml_tensor* kqv = ggml_mul_mat(ctx0, Vp, kq);                        // (hd, Tq, nh)
         kqv = ggml_cont(ctx0, ggml_permute(ctx0, kqv, 0, 2, 1, 3));           // (hd, nh, Tq)
@@ -1032,8 +1044,11 @@ static void dots_dit_forward(dots_tts_context* ctx, const float* fm_seq, int fm_
     // Positions
     std::vector<int32_t> pos(T);
     for (int i = 0; i < T; i++)
-        pos[i] = i;
+        pos[i] = pos_ids_in ? pos_ids_in[i] : i;
     ggml_backend_tensor_set(positions, pos.data(), 0, T * sizeof(int32_t));
+
+    if (attn_mask_t)
+        ggml_backend_tensor_set(attn_mask_t, attn_mask_add, 0, (size_t)T * T * sizeof(float));
 
     ggml_backend_graph_compute(ctx->backend, gf);
 
@@ -1201,100 +1216,181 @@ static void dots_penc_forward(dots_tts_context* ctx, const float* latent_patch, 
 // Flow-matching ODE solver (Euler method)
 // ===========================================================================
 
-static void dots_flow_match(dots_tts_context* ctx, const float* llm_hidden, int n_hidden_tokens,
-                            const float* spk_emb, // 512-d or nullptr
-                            float* out_latent,    // (patch_size, latent_dim)
-                            const float* prev_latents, int n_prev_patches) {
-    (void)llm_hidden;
-    (void)n_hidden_tokens;
-    (void)spk_emb;
-    (void)prev_latents;
-    (void)n_prev_patches;
+// Small Linear (y = x·Wᵀ + b) on the model backend, handling quantized W via a
+// tiny one-shot ggml graph. in: (n_rows, in_dim) row-major; returns (n_rows, out_dim).
+static std::vector<float> dots_linear(dots_tts_context* ctx, ggml_tensor* w, ggml_tensor* b, const float* in,
+                                      int n_rows, int in_dim, int out_dim) {
+    size_t n_tensors = 8;
+    ggml_init_params ip = {n_tensors * ggml_tensor_overhead() + ggml_graph_overhead(), nullptr, true};
+    ggml_context* c0 = ggml_init(ip);
+    ggml_cgraph* gf = ggml_new_graph(c0);
+    ggml_tensor* x = ggml_new_tensor_2d(c0, GGML_TYPE_F32, in_dim, n_rows);
+    ggml_set_input(x);
+    ggml_tensor* y = ggml_mul_mat(c0, w, x); // (out_dim, n_rows)
+    if (b)
+        y = ggml_add(c0, y, b);
+    ggml_set_output(y);
+    ggml_build_forward_expand(gf, y);
+    ggml_gallocr_t ga = ggml_gallocr_new(ggml_backend_get_default_buffer_type(ctx->backend));
+    ggml_gallocr_alloc_graph(ga, gf);
+    ggml_backend_tensor_set(x, in, 0, (size_t)in_dim * n_rows * sizeof(float));
+    ggml_backend_graph_compute(ctx->backend, gf);
+    std::vector<float> out((size_t)out_dim * n_rows);
+    ggml_backend_tensor_get(y, out.data(), 0, out.size() * sizeof(float));
+    ggml_gallocr_free(ga);
+    ggml_free(c0);
+    return out;
+}
 
-    int ode_steps = ctx->params.ode_steps > 0 ? ctx->params.ode_steps : 16;
-    (void)ode_steps; // TODO: used in full implementation
-    int latent_dim = ctx->latent_dim;
-    int patch_size = ctx->patch_size;
-    int n_latent = patch_size * latent_dim;
+// Flow-matching ODE driver (core.fm_solver_step + _flow_matching_step_fm).
+//   input_seq / cfg_seq: (fm_total_len, dit_dim) row-major. The two CFG branches
+//     differ only in the history hidden slots (real hidden_proj vs hidden_proj(0)).
+//   latent_start: first of the trailing patch_size noise slots.
+//   attn_mask_add: (fm_total_len²) additive [q][k] mask or nullptr (bidirectional).
+//   pos_ids:       (fm_total_len) RoPE ids or nullptr (arange).
+//   noise:         (patch_size, latent_dim) ODE initial coordinate (caller-seeded).
+// Writes the raw (un-denormalized) latent (patch_size, latent_dim) to out_latent.
+static void dots_flow_match_core(dots_tts_context* ctx, const float* input_seq, const float* cfg_seq, int fm_total_len,
+                                 int latent_start, const float* attn_mask_add, const int32_t* pos_ids,
+                                 const float* noise, int num_steps, float cfg_scale, float* out_latent) {
+    const int dit_dim = (int)ctx->dit.hidden_size;
+    const int latent_dim = ctx->latent_dim;
+    const int patch_size = fm_total_len - latent_start;
+    const int n_latent = patch_size * latent_dim;
+    auto& p = ctx->proj;
 
-    // Initialize with Gaussian noise
-    std::vector<float> z(n_latent);
-    std::normal_distribution<float> normal(0.0f, 1.0f);
-    for (int i = 0; i < n_latent; i++) {
-        z[i] = normal(ctx->rng);
-    }
+    std::vector<float> z(noise, noise + n_latent);
+    // Mutable per-branch sequences; only the latent slots change each ODE step.
+    std::vector<float> seq_c(input_seq, input_seq + (size_t)fm_total_len * dit_dim);
+    std::vector<float> seq_u(cfg_seq, cfg_seq + (size_t)fm_total_len * dit_dim);
 
-    // Build the FM sequence for DiT:
-    // [LLM hidden states | projected previous latents | noise coordinate]
-    // For simplicity, we concatenate everything into one sequence.
+    const float dt = 1.0f / (float)num_steps;
+    std::vector<float> vel_c((size_t)fm_total_len * latent_dim);
+    std::vector<float> vel_u((size_t)fm_total_len * latent_dim);
 
-    int dit_dim = (int)ctx->dit.hidden_size;
-
-    // Project LLM hidden → DiT dimension
-    // hidden_proj: (dit_dim, llm_hidden_size)
-    std::vector<float> proj_hidden(n_hidden_tokens * dit_dim, 0.0f);
-    // Manual matmul for now (small dimensions)
-    // TODO: use ggml graph for projection
-
-    // For the Euler ODE: integrate from t=0 to t=1
-    float dt = 1.0f / (float)ode_steps;
-    std::vector<float> velocity(n_latent);
-
-    for (int step = 0; step < ode_steps; step++) {
+    for (int step = 0; step < num_steps; step++) {
         float t = (float)step * dt;
 
-        // Build FM input sequence
-        // For each ODE step, we run the DiT with the current z
-        // The FM sequence has the current noise projected via coordinate_proj
+        // coordinate_proj(z): (patch_size, latent_dim) → (patch_size, dit_dim)
+        std::vector<float> z_proj =
+            dots_linear(ctx, p.coord_proj_w, p.coord_proj_b, z.data(), patch_size, latent_dim, dit_dim);
+        std::memcpy(seq_c.data() + (size_t)latent_start * dit_dim, z_proj.data(),
+                    (size_t)patch_size * dit_dim * sizeof(float));
+        std::memcpy(seq_u.data() + (size_t)latent_start * dit_dim, z_proj.data(),
+                    (size_t)patch_size * dit_dim * sizeof(float));
 
-        // Project z → DiT dimension
-        std::vector<float> z_proj(patch_size * dit_dim, 0.0f);
-        // TODO: implement coordinate_proj via ggml
+        // CFG branches as two B=1 DiT forwards (text-only g_cond is zero for both).
+        dots_dit_forward(ctx, seq_c.data(), fm_total_len, t, /*g_cond=*/nullptr, attn_mask_add, pos_ids, vel_c.data());
+        dots_dit_forward(ctx, seq_u.data(), fm_total_len, t, /*g_cond=*/nullptr, attn_mask_add, pos_ids, vel_u.data());
 
-        // For now, construct a simple FM sequence: [condition tokens | noise tokens]
-        int fm_len = n_hidden_tokens + patch_size;
-        std::vector<float> fm_seq(fm_len * dit_dim, 0.0f);
-        // Copy projected hidden states
-        std::memcpy(fm_seq.data(), proj_hidden.data(), n_hidden_tokens * dit_dim * sizeof(float));
-        // Copy projected noise
-        std::memcpy(fm_seq.data() + n_hidden_tokens * dit_dim, z_proj.data(), patch_size * dit_dim * sizeof(float));
-
-        // Run DiT
-        std::vector<float> vel_full(fm_len * dit_dim);
-
-        // Conditional pass (g_cond wiring is part of the full flow-match port; TODO)
-        dots_dit_forward(ctx, fm_seq.data(), fm_len, t, /*g_cond=*/nullptr, vel_full.data());
-
-        // Extract velocity for the noise tokens (last patch_size positions)
-        // The output dim from DiT final_proj is latent_dim, not dit_dim
-        int vel_dim = latent_dim;
-        for (int i = 0; i < patch_size; i++) {
-            for (int d = 0; d < vel_dim; d++) {
-                velocity[i * vel_dim + d] = vel_full[(n_hidden_tokens + i) * vel_dim + d];
-            }
-        }
-
-        // CFG: For now, skip unconditional pass (TODO: implement properly)
-        // v = v_cond + cfg_scale * (v_cond - v_uncond)
-        // With no uncond: v = v_cond * (1 + cfg_scale)
-
-        // Euler step: z = z + dt * v
-        for (int i = 0; i < n_latent; i++) {
-            z[i] += dt * velocity[i];
-        }
-    }
-
-    // Denormalize latents using latent_stats
-    if (!ctx->latent_stats.mean.empty() && !ctx->latent_stats.std.empty()) {
+        // Euler step on the noise-slot velocities with classifier-free guidance.
         for (int i = 0; i < patch_size; i++) {
             for (int d = 0; d < latent_dim; d++) {
-                int idx = i * latent_dim + d;
-                z[idx] = z[idx] * ctx->latent_stats.std[d] + ctx->latent_stats.mean[d];
+                int src = (latent_start + i) * latent_dim + d;
+                float vc = vel_c[src];
+                float vu = vel_u[src];
+                float v = vc + cfg_scale * (vc - vu);
+                z[i * latent_dim + d] += dt * v;
             }
         }
     }
 
     std::memcpy(out_latent, z.data(), n_latent * sizeof(float));
+}
+
+// Runtime wrapper: build the FM sequence from accumulated LLM hidden history +
+// previous latents, run the ODE, denormalize. Currently single-hidden-token
+// (hidden_patch_size=1) with optional prior latent history.
+static void dots_flow_match(dots_tts_context* ctx, const float* llm_hidden, int n_hidden_tokens,
+                            const float* spk_emb, // 512-d or nullptr (g_cond TODO)
+                            float* out_latent,    // (patch_size, latent_dim)
+                            const float* prev_latents, int n_prev_patches) {
+    (void)spk_emb;
+    const int dit_dim = (int)ctx->dit.hidden_size;
+    const int llm_dim = (int)ctx->llm.hidden_size;
+    const int latent_dim = ctx->latent_dim;
+    const int patch_size = ctx->patch_size;
+    auto& p = ctx->proj;
+
+    int ode_steps = ctx->params.ode_steps > 0 ? ctx->params.ode_steps : 16;
+    float cfg_scale = ctx->params.cfg_scale > 0.0f ? ctx->params.cfg_scale : 3.0f;
+
+    // History layout (hidden_patch_size=1): per prior patch a hidden slot then
+    // patch_size latent slots; the current hidden slot precedes the noise block.
+    int hist_hidden = n_hidden_tokens;                                // current hidden token(s)
+    int fm_seq_len = n_prev_patches * (1 + patch_size) + hist_hidden; // filled history length
+    int fm_total_len = fm_seq_len + patch_size;                       // + trailing noise slots
+    int latent_start = fm_seq_len;
+
+    std::vector<float> seq_c((size_t)fm_total_len * dit_dim, 0.0f);
+    std::vector<float> seq_u((size_t)fm_total_len * dit_dim, 0.0f);
+
+    // hidden_proj(current hidden) for cond; hidden_proj(0) for uncond.
+    std::vector<float> h_proj =
+        dots_linear(ctx, p.hidden_proj_w, p.hidden_proj_b, llm_hidden, hist_hidden, llm_dim, dit_dim);
+    std::vector<float> zero_hidden((size_t)hist_hidden * llm_dim, 0.0f);
+    std::vector<float> h_null =
+        dots_linear(ctx, p.hidden_proj_w, p.hidden_proj_b, zero_hidden.data(), hist_hidden, llm_dim, dit_dim);
+    int cur_hidden_off = (fm_seq_len - hist_hidden) * dit_dim;
+    std::memcpy(seq_c.data() + cur_hidden_off, h_proj.data(), (size_t)hist_hidden * dit_dim * sizeof(float));
+    std::memcpy(seq_u.data() + cur_hidden_off, h_null.data(), (size_t)hist_hidden * dit_dim * sizeof(float));
+
+    // latent_proj(prev_latents) — identical in both branches.
+    if (n_prev_patches > 0 && prev_latents) {
+        for (int pp = 0; pp < n_prev_patches; pp++) {
+            std::vector<float> lp =
+                dots_linear(ctx, p.latent_proj_w, p.latent_proj_b, prev_latents + (size_t)pp * patch_size * latent_dim,
+                            patch_size, latent_dim, dit_dim);
+            int off = (pp * (1 + patch_size) + 1) * dit_dim;
+            std::memcpy(seq_c.data() + off, lp.data(), (size_t)patch_size * dit_dim * sizeof(float));
+            std::memcpy(seq_u.data() + off, lp.data(), (size_t)patch_size * dit_dim * sizeof(float));
+        }
+    }
+
+    // Block-causal FM attention mask + position ids (model._build_fm_*).
+    std::vector<float> mask((size_t)fm_total_len * fm_total_len, -INFINITY);
+    std::vector<int32_t> pos(fm_total_len, 0);
+    {
+        auto set_attend = [&](int q, int k) { mask[(size_t)q * fm_total_len + k] = 0.0f; };
+        int block_start = fm_seq_len - hist_hidden; // current hidden block start
+        for (int q = 0; q < block_start; q++)       // causal over prior history
+            for (int k = 0; k <= q; k++)
+                set_attend(q, k);
+        for (int q = block_start; q < fm_seq_len; q++) { // current hidden attends history + latent
+            for (int k = 0; k < fm_seq_len; k++)
+                set_attend(q, k);
+            for (int k = latent_start; k < fm_total_len; k++)
+                set_attend(q, k);
+        }
+        for (int q = latent_start; q < fm_total_len; q++) { // latent attends history + latent
+            for (int k = 0; k < fm_seq_len; k++)
+                set_attend(q, k);
+            for (int k = latent_start; k < fm_total_len; k++)
+                set_attend(q, k);
+        }
+        for (int i = 0; i < fm_seq_len; i++)
+            pos[i] = i;
+        for (int i = 0; i < patch_size; i++)
+            pos[latent_start + i] = fm_seq_len + i;
+    }
+
+    std::vector<float> noise((size_t)patch_size * latent_dim);
+    std::normal_distribution<float> normal(0.0f, 1.0f);
+    for (auto& v : noise)
+        v = normal(ctx->rng);
+
+    std::vector<float> z((size_t)patch_size * latent_dim);
+    dots_flow_match_core(ctx, seq_c.data(), seq_u.data(), fm_total_len, latent_start, mask.data(), pos.data(),
+                         noise.data(), ode_steps, cfg_scale, z.data());
+
+    // Denormalize latents using latent_stats.
+    if (!ctx->latent_stats.mean.empty() && !ctx->latent_stats.std.empty()) {
+        for (int i = 0; i < patch_size; i++)
+            for (int d = 0; d < latent_dim; d++)
+                z[i * latent_dim + d] = z[i * latent_dim + d] * ctx->latent_stats.std[d] + ctx->latent_stats.mean[d];
+    }
+
+    std::memcpy(out_latent, z.data(), (size_t)patch_size * latent_dim * sizeof(float));
 }
 
 // ===========================================================================
@@ -2015,6 +2111,94 @@ extern "C" int dots_tts_penc_diff(const char* model_gguf, const char* ref_gguf, 
     return cos > 0.999 ? 0 : 1;
 }
 
+// ── Diff-harness: validate the flow-matching ODE driver ─────────────────────
+// Reference carries fm_input_seq (dit_dim,total_len), fm_cfg_seq, fm_mask
+// (total_len,total_len additive [q][k]), fm_pos (total_len), fm_noise
+// (latent_dim,patch_size), fm_latent_out (latent_dim,patch_size) and fm_meta
+// [total_len, latent_start, num_steps, cfg_scale].
+extern "C" int dots_tts_flowmatch_diff(const char* model_gguf, const char* ref_gguf, int verbosity) {
+    dots_tts_context_params p = dots_tts_context_default_params();
+    p.verbosity = verbosity;
+    p.use_gpu = false;
+    dots_tts_context* ctx = dots_tts_init_from_file(model_gguf, p);
+    if (!ctx) {
+        std::fprintf(stderr, "dots_flowmatch_diff: failed to load model %s\n", model_gguf);
+        return 2;
+    }
+    core_gguf::WeightLoad rw;
+    if (!core_gguf::load_weights(ref_gguf, ctx->backend, "ref", rw)) {
+        std::fprintf(stderr, "dots_flowmatch_diff: failed to load reference %s\n", ref_gguf);
+        dots_tts_free(ctx);
+        return 2;
+    }
+    auto get = [&](const char* nm) { return ggml_get_tensor(rw.ctx, nm); };
+    ggml_tensor* t_in = get("fm_input_seq");
+    ggml_tensor* t_cfg = get("fm_cfg_seq");
+    ggml_tensor* t_mask = get("fm_mask");
+    ggml_tensor* t_pos = get("fm_pos");
+    ggml_tensor* t_noise = get("fm_noise");
+    ggml_tensor* t_out = get("fm_latent_out");
+    ggml_tensor* t_meta = get("fm_meta");
+    if (!t_in || !t_cfg || !t_mask || !t_pos || !t_noise || !t_out || !t_meta) {
+        std::fprintf(stderr, "dots_flowmatch_diff: reference missing fm_* tensors\n");
+        dots_tts_free(ctx);
+        return 2;
+    }
+
+    float meta[4];
+    ggml_backend_tensor_get(t_meta, meta, 0, sizeof(meta));
+    const int total_len = (int)meta[0];
+    const int latent_start = (int)meta[1];
+    const int num_steps = (int)meta[2];
+    const float cfg_scale = meta[3];
+    const int dit_dim = (int)ctx->dit.hidden_size;
+    const int latent_dim = ctx->latent_dim;
+    const int patch_size = total_len - latent_start;
+    const int out_n = patch_size * latent_dim;
+
+    std::vector<float> in_seq((size_t)total_len * dit_dim), cfg_seq((size_t)total_len * dit_dim);
+    std::vector<float> mask((size_t)total_len * total_len), noise((size_t)out_n), ref_out((size_t)out_n);
+    std::vector<float> pos_f((size_t)total_len);
+    ggml_backend_tensor_get(t_in, in_seq.data(), 0, in_seq.size() * sizeof(float));
+    ggml_backend_tensor_get(t_cfg, cfg_seq.data(), 0, cfg_seq.size() * sizeof(float));
+    ggml_backend_tensor_get(t_mask, mask.data(), 0, mask.size() * sizeof(float));
+    ggml_backend_tensor_get(t_pos, pos_f.data(), 0, pos_f.size() * sizeof(float));
+    ggml_backend_tensor_get(t_noise, noise.data(), 0, noise.size() * sizeof(float));
+    ggml_backend_tensor_get(t_out, ref_out.data(), 0, ref_out.size() * sizeof(float));
+    std::vector<int32_t> pos(total_len);
+    for (int i = 0; i < total_len; i++)
+        pos[i] = (int32_t)pos_f[i];
+
+    std::vector<float> got((size_t)out_n, 0.0f);
+    dots_flow_match_core(ctx, in_seq.data(), cfg_seq.data(), total_len, latent_start, mask.data(), pos.data(),
+                         noise.data(), num_steps, cfg_scale, got.data());
+
+    double dot = 0, na = 0, nb = 0, maxabs = 0;
+    for (int i = 0; i < out_n; i++) {
+        dot += (double)got[i] * ref_out[i];
+        na += (double)got[i] * got[i];
+        nb += (double)ref_out[i] * ref_out[i];
+        double d = std::fabs((double)got[i] - ref_out[i]);
+        if (d > maxabs)
+            maxabs = d;
+    }
+    double cos = (na > 0 && nb > 0) ? dot / (std::sqrt(na) * std::sqrt(nb)) : 0.0;
+    std::printf("dots-tts flow-match: total=%d latent_start=%d steps=%d cfg=%.1f out=%d  cos=%.6f  max_abs=%.6f  %s\n",
+                total_len, latent_start, num_steps, cfg_scale, out_n, cos, maxabs, cos > 0.999 ? "PASS" : "FAIL");
+    if (verbosity >= 2) {
+        std::printf("  got[:6]:");
+        for (int i = 0; i < 6 && i < out_n; i++)
+            std::printf(" %+.4f", got[i]);
+        std::printf("\n  ref[:6]:");
+        for (int i = 0; i < 6 && i < out_n; i++)
+            std::printf(" %+.4f", ref_out[i]);
+        std::printf("\n");
+    }
+
+    dots_tts_free(ctx);
+    return cos > 0.999 ? 0 : 1;
+}
+
 // ── Diff-harness: validate DiT (velocity_field_predictor) one forward ───────
 // Reference carries dit_x (D,T), dit_t (scalar), dit_gcond (D), dit_vel
 // (latent_dim,T) from tools/reference_backends/dots_tts_reference.py.
@@ -2059,7 +2243,8 @@ extern "C" int dots_tts_dit_diff(const char* model_gguf, const char* ref_gguf, i
     ggml_backend_tensor_get(t_vel, ref_vel.data(), 0, ref_vel.size() * sizeof(float));
 
     std::vector<float> got((size_t)out_n, 0.0f);
-    dots_dit_forward(ctx, x_data.data(), T, t_scalar, have_g ? g_data.data() : nullptr, got.data());
+    dots_dit_forward(ctx, x_data.data(), T, t_scalar, have_g ? g_data.data() : nullptr,
+                     /*attn_mask=*/nullptr, /*pos_ids=*/nullptr, got.data());
 
     double dot = 0, na = 0, nb = 0, maxabs = 0;
     for (int i = 0; i < out_n; i++) {
