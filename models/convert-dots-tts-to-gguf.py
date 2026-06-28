@@ -125,77 +125,87 @@ def add_tensor(writer, name, t, quant_level):
 def map_core_name(hf_name: str) -> str | None:
     """Map model.safetensors key → GGUF tensor name for the core model.
 
-    HF keys look like:
-      core.llm.model.layers.0.self_attn.q_proj.weight
-      core.patch_encoder.supervise_encoder.layers.0.self_attn.q_proj.weight
-      core.velocity_field_predictor.blocks.0.attn.q_proj.weight
-      core.hidden_proj.weight
-      core.latent_proj.weight
-      core.coordinate_proj.weight
-      core.xvec_proj.0.weight
-      core.eos_proj.0.weight
+    Actual safetensors keys (NO 'core.' prefix):
+      llm.model.layers.0.self_attn.q_proj.weight
+      llm.model.layers.0.self_attn.q_proj.bias
+      llm.model.norm.weight
+      patch_encoder.encoder.layers.0.attn.q_proj.weight
+      patch_encoder.encoder.layers.0.ffn.fc1.weight
+      patch_encoder.in_proj.weight
+      patch_encoder.ds_proj.weight
+      velocity_field_predictor.blocks.0.adaLN_modulation.1.weight
+      velocity_field_predictor.blocks.0.attn.q_proj.weight
+      velocity_field_predictor.blocks.0.ffn.fc1.weight
+      velocity_field_predictor.time_embedder.mlp.0.weight
+      velocity_field_predictor.input_layer.weight
+      velocity_field_predictor.output_layer.linear.weight
+      velocity_field_predictor.output_layer.adaLN_modulation.1.weight
+      hidden_proj.weight
+      latent_proj.weight
+      coordinate_proj.weight
+      xvec_proj.0.weight  xvec_proj.1.weight (BatchNorm)
+      eos_proj.0.weight   eos_proj.2.weight
     """
     n = hf_name
 
     # ── LLM (Qwen2.5-1.5B) ──
-    if n.startswith("core.llm."):
-        n = n.replace("core.llm.model.", "llm.")
-        n = n.replace("core.llm.lm_head.", "llm.lm_head.")
-        # Flatten self_attn / mlp
+    if n.startswith("llm."):
+        n = n.replace("llm.model.", "llm.")
+        n = n.replace("llm.lm_head.", "llm.lm_head.")
         n = n.replace(".self_attn.", ".")
         n = n.replace(".mlp.gate_proj.", ".gate.")
         n = n.replace(".mlp.up_proj.", ".up.")
         n = n.replace(".mlp.down_proj.", ".down.")
         n = n.replace(".input_layernorm.", ".attn_norm.")
         n = n.replace(".post_attention_layernorm.", ".ffn_norm.")
-        n = n.replace("embed_tokens.", "tok_emb.")
+        n = n.replace("llm.embed_tokens.", "llm.tok_emb.")
         return "dots." + n
 
     # ── PatchEncoder (VAESemanticEncoder) ──
-    if n.startswith("core.patch_encoder."):
-        n = n.replace("core.patch_encoder.", "penc.")
-        n = n.replace("supervise_encoder.layers.", "layers.")
-        n = n.replace("supervise_encoder.norm.", "final_norm.")
-        n = n.replace(".self_attn.", ".")
-        n = n.replace(".feed_forward.w1.", ".ffn_gate.")
-        n = n.replace(".feed_forward.w2.", ".ffn_down.")
-        n = n.replace(".feed_forward.w3.", ".ffn_up.")
-        n = n.replace(".norm1.", ".attn_norm.")
-        n = n.replace(".norm2.", ".ffn_norm.")
-        n = n.replace("input_proj.", "in_proj.")
-        n = n.replace("output_proj.", "out_proj.")
-        n = n.replace("downsample_conv.", "ds_conv.")
+    if n.startswith("patch_encoder."):
+        n = n.replace("patch_encoder.", "penc.")
+        n = n.replace("penc.encoder.layers.", "penc.layers.")
+        n = n.replace("penc.encoder.norm.", "penc.final_norm.")
+        n = n.replace(".attn.", ".")
+        # FFN is 2-layer (fc1/fc2), NOT SwiGLU
+        n = n.replace(".ffn.fc1.", ".ffn_up.")
+        n = n.replace(".ffn.fc2.", ".ffn_down.")
+        # ds_proj is the downsample projection
+        n = n.replace("penc.ds_proj.", "penc.ds_conv.")
+        n = n.replace("penc.in_proj.", "penc.in_proj.")
+        n = n.replace("penc.out_proj.", "penc.out_proj.")
         return "dots." + n
 
     # ── DiT (velocity_field_predictor) ──
-    if n.startswith("core.velocity_field_predictor."):
-        n = n.replace("core.velocity_field_predictor.", "dit.")
-        n = n.replace("blocks.", "blk.")
+    if n.startswith("velocity_field_predictor."):
+        n = n.replace("velocity_field_predictor.", "dit.")
+        n = n.replace("dit.blocks.", "dit.blk.")
+        # AdaLN modulation: .adaLN_modulation.1. → .adaln.
+        n = n.replace(".adaLN_modulation.1.", ".adaln.")
         n = n.replace(".attn.", ".")
-        n = n.replace(".feed_forward.w1.", ".ffn_gate.")
-        n = n.replace(".feed_forward.w2.", ".ffn_down.")
-        n = n.replace(".feed_forward.w3.", ".ffn_up.")
-        n = n.replace(".norm1.", ".attn_norm.")
-        n = n.replace(".norm2.", ".ffn_norm.")
-        n = n.replace(".modulation.linear.", ".adaln.")
-        n = n.replace("timestep_embedder.", "time_emb.")
-        n = n.replace("input_layer.", "in_proj.")
-        n = n.replace("final_layer.norm.", "final_norm.")
-        n = n.replace("final_layer.linear.", "final_proj.")
-        n = n.replace("final_layer.modulation.", "final_adaln.")
+        # FFN is 2-layer (fc1/fc2)
+        n = n.replace(".ffn.fc1.", ".ffn_up.")
+        n = n.replace(".ffn.fc2.", ".ffn_down.")
+        # Timestep embedder
+        n = n.replace("dit.time_embedder.", "dit.time_emb.")
+        # Input/output layers
+        n = n.replace("dit.input_layer.", "dit.in_proj.")
+        n = n.replace("dit.output_layer.linear.", "dit.final_proj.")
+        n = n.replace("dit.output_layer.adaLN_modulation.1.", "dit.final_adaln.")
+        n = n.replace("dit.output_layer.norm.", "dit.final_norm.")
         return "dots." + n
 
-    # ── Projection layers ──
-    if n.startswith("core.hidden_proj."):
-        return "dots." + n.replace("core.", "")
-    if n.startswith("core.latent_proj."):
-        return "dots." + n.replace("core.", "")
-    if n.startswith("core.coordinate_proj."):
-        return "dots." + n.replace("core.", "")
-    if n.startswith("core.xvec_proj."):
-        return "dots." + n.replace("core.", "")
-    if n.startswith("core.eos_proj."):
-        return "dots." + n.replace("core.", "")
+    # ── Projection layers (no prefix in safetensors) ──
+    if n.startswith("hidden_proj."):
+        return "dots." + n
+    if n.startswith("latent_proj."):
+        return "dots." + n
+    if n.startswith("coordinate_proj."):
+        return "dots." + n
+    if n.startswith("xvec_proj."):
+        return "dots." + n
+    if n.startswith("eos_proj."):
+        return "dots." + n
 
     # Skip unknown
     return None
