@@ -1142,6 +1142,14 @@ reuse, etc.) see [`tts.md`](tts.md):
   Default `4` also applies through the C ABI / bindings / server; override there
   at runtime with `set_tts_num_candidates(n)`.
   See [`tts.md`](tts.md#timing-quality-tada_num_candidates).
+- `TADA_DO_SAMPLE`, `TADA_TEMPERATURE`, `TADA_TOP_P`, `TADA_TOP_K`,
+  `TADA_REPETITION_PENALTY` — TADA **talker** text-decoder sampling, matching
+  upstream `InferenceOptions` defaults (do_sample=1, temp=0.6, top_p=0.9,
+  top_k=0, rep_penalty=1.1). The talker samples by default; greedy decoding
+  (`TADA_DO_SAMPLE=0`) has no repetition control and loops/cuts off words on
+  harder or non-English text. Honoured by the CLI, C ABI, bindings and server;
+  `set_temperature` / `set_top_p` / `set_repetition_penalty` also reach TADA at
+  runtime.
 - `VIBEVOICE_VAE_BACKEND={auto,cpu,gpu}` — VAE decoder placement
 - `VIBEVOICE_TTS_FLASH_ATTN={1,0}` — TTS LM attention: `1` (default)
   uses fused `ggml_flash_attn_ext`; `0` uses an explicit

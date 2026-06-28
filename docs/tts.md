@@ -165,6 +165,27 @@ runtime with `set_tts_num_candidates(n)` (Python/Go/Rust/Ruby),
 `SetTtsNumCandidates` (C#/Java), or `setTtsNumCandidates` (Dart/JS) — and the
 `TADA_NUM_CANDIDATES` env var is honoured by every consumer, not just the CLI.
 
+### Talker text sampling (`TADA_TEMPERATURE`, `TADA_TOP_P`, …)
+
+`TADA_NUM_CANDIDATES` tunes only the **duration** flow-matching head, not the
+**content** (which words are spoken). The talker text decoder is a separate
+knob. It samples by default, matching upstream `InferenceOptions`
+(do_sample=True, temperature=0.6, top_k=0, top_p=0.9, repetition_penalty=1.1);
+pure greedy decoding has no repetition control and loops, cuts words off, or
+adds trailing noise — worst on harder or non-English text.
+
+| Env var | Default | Notes |
+|---|---|---|
+| `TADA_DO_SAMPLE` | `1` | `0` = greedy argmax (the old behaviour) |
+| `TADA_TEMPERATURE` | `0.6` | also set by `--temperature` / `set_temperature` |
+| `TADA_TOP_P` | `0.9` | nucleus; also `set_top_p` |
+| `TADA_TOP_K` | `0` | `0` = disabled |
+| `TADA_REPETITION_PENALTY` | `1.1` | `1.0` = none; also `set_repetition_penalty` |
+
+Honoured by the CLI, C ABI, bindings and server. Raising
+`TADA_REPETITION_PENALTY` measurably reduces repeats; with sampling on, `--seed`
+changes the wording.
+
 ### Reproducible / diverse generation (`--seed`)
 
 Pass `--seed N` (any non-zero integer) for **reproducible** output —
