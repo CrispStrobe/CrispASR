@@ -10,6 +10,11 @@ effort estimate. Completed items have been moved to `HISTORY.md`.
 
 **Latest release: v0.6.12** (commit `345ecfdc`). Full notes in [`RELEASE_NOTES_v0.6.12.md`](RELEASE_NOTES_v0.6.12.md).
 
+## Gemma-4 12B (gemma4_unified) ASR support (OPEN)
+
+The remaining open item for full 12B support (a new converter map + backend audio path for the 640-dim unified
+encoder) is a larger port, scoped but not started.
+
 > **Audit 2026-06-12** — code-verified all items against HISTORY.md and codebase.
 > **Newly closed (stale in table until this audit):** #42 VibeVoice-ASR 7B
 > (shipped with GGUFs + layer offload), #43 Fun-ASR-Nano (shipped 2026-05-20),
