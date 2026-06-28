@@ -2988,6 +2988,9 @@ CA_EXPORT int crispasr_session_available_backends(char* out_csv, int out_cap) {
 #ifdef CA_HAVE_DIA
     list += ",dia";
 #endif
+#ifdef CA_HAVE_DOTS_TTS
+    list += ",dots-tts";
+#endif
 #ifdef CA_HAVE_POCKET
     list += ",pocket-tts";
 #endif

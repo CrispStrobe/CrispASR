@@ -58,6 +58,7 @@ std::unique_ptr<CrispasrBackend> crispasr_make_bark_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_pocket_tts_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_speecht5_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_dia_backend();
+std::unique_ptr<CrispasrBackend> crispasr_make_dots_tts_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_parler_tts_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_fastpitch_backend();
 // csm-tts (§135): sesame/csm-1b — Llama backbone + depth decoder + Mimi codec.
@@ -193,6 +194,8 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& name
         return crispasr_make_speecht5_backend();
     if (name == "dia" || name == "dia-tts" || name == "dia-1.6b" || name == "dia_tts")
         return crispasr_make_dia_backend();
+    if (name == "dots-tts" || name == "dots_tts" || name == "dots" || name == "dots.tts")
+        return crispasr_make_dots_tts_backend();
     if (name == "parler-tts" || name == "parler_tts" || name == "parler" || name == "parlertts")
         return crispasr_make_parler_tts_backend();
     if (name == "zonos" || name == "zonos-tts" || name == "zonos_tts")
@@ -281,6 +284,7 @@ std::vector<std::string> crispasr_list_backends() {
         "speecht5",
         "dia",
         "dia-tts",
+        "dots-tts",
         "parler-tts",
         "zonos",
         "zonos-tts",
@@ -579,6 +583,8 @@ std::string crispasr_detect_backend_from_gguf(const std::string& model_path) {
         return "dia";
     if (contains_ci("dia-tts") || contains_ci("dia_tts"))
         return "dia";
+    if (contains_ci("dots-tts") || contains_ci("dots_tts") || contains_ci("dots.tts"))
+        return "dots-tts";
     if (contains_ci("csm") || contains_ci("sesame"))
         return "csm";
     if (contains_ci("parler") && contains_ci("tts"))
@@ -709,6 +715,8 @@ std::string crispasr_detect_backend_from_gguf(const std::string& model_path) {
                 result = "bark";
             else if (a == "dia" || a == "dia-tts" || a == "dia_tts")
                 result = "dia";
+            else if (a == "dots-tts" || a == "dots_tts" || a == "dots.tts")
+                result = "dots-tts";
             else if (a == "csm" || a == "csm-tts" || a == "csm_tts")
                 result = "csm";
             else if (a == "parler-tts" || a == "parler_tts" || a == "parlertts")

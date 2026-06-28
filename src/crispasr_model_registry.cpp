@@ -592,6 +592,16 @@ constexpr Entry k_registry[] = {
      "dac-44khz.gguf",
      "https://huggingface.co/cstr/dia-1.6b-GGUF/resolve/main/dac-44khz.gguf",
      "~80 MB"},
+    // dots.tts: rednote-hilab's 2B continuous AR TTS (48 kHz, Apache-2.0).
+    // Qwen2.5-1.5B LLM + 18L DiT flow-matching + BigVGAN vocoder.
+    // No discrete codec tokens — generates continuous latents patch-by-patch.
+    // BPE text input (no phonemes). Vocoder is a separate GGUF companion.
+    {"dots-tts", "dots-tts-soar-f16.gguf",
+     "https://huggingface.co/cstr/dots-tts-soar-GGUF/resolve/main/dots-tts-soar-f16.gguf",
+     "~4.4 GB",
+     "dots-tts-soar-vocoder-f16.gguf",
+     "https://huggingface.co/cstr/dots-tts-soar-GGUF/resolve/main/dots-tts-soar-vocoder-f16.gguf",
+     "~345 MB"},
     // Pocket TTS: Kyutai's 100M continuous-latent AR TTS (24 kHz, MIT/CC-BY-4.0).
     // Generates continuous 32-dim float vectors at 12.5 Hz via one-step LSD,
     // decoded by Mimi VAE to 24 kHz PCM. Single GGUF, no codec companion.
