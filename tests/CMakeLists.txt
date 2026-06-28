@@ -356,6 +356,23 @@ catch_discover_tests(test-speaker-cluster
     PROPERTIES LABELS "unit;diarize"
 )
 
+# Named-voiceprint profile DB used by the opt-in --speaker-db path. Drives
+# enroll/load/match on synthetic embeddings; no model, no audio, no network.
+add_executable(test-speaker-db
+    test-speaker-db.cpp
+)
+target_include_directories(test-speaker-db PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-speaker-db PRIVATE
+    Catch2::Catch2WithMain
+    crispasr-lib
+)
+catch_discover_tests(test-speaker-db
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit;diarize"
+)
+
 # test-titanet — TitaNet speaker-embedding smoke/live tool. Plain main(); takes
 # <model.gguf> <audio...> and prints embeddings + a cosine-sim matrix. Builds
 # the orphaned smoke test so it can serve as a live check (same-speaker high /
@@ -2297,6 +2314,18 @@ add_test(NAME test-piper-roundtrip
 set_tests_properties(test-piper-roundtrip PROPERTIES
     LABELS "live;tts;piper;espeak;roundtrip"
     TIMEOUT 300)
+endif()
+
+# ─── test-speaker-id-live — live test: consent gate (--speaker-db-consent) +
+# session-scoped --diarize-speakers. SKIPs cleanly without audio/models. ──────
+if(TARGET crispasr-cli)
+add_test(NAME test-speaker-id-live
+    COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test-speaker-id-live.sh
+            $<TARGET_FILE:crispasr-cli>
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+set_tests_properties(test-speaker-id-live PROPERTIES
+    LABELS "live;diarize;speaker"
+    TIMEOUT 600)
 endif()
 
 # ─── test-progress-output — live test: -pp/--print-progress emits per-slice

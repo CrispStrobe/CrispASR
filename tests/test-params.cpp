@@ -38,6 +38,25 @@ TEST_CASE("whisper_params: chunk_seconds defaults to 30", "[unit]") {
     REQUIRE(kDefaults.chunk_seconds == 30);
 }
 
+// ─── speaker identification / diarization defaults ────────────────────────────
+
+// Safety default: the biometric named-profile path (--enroll-speaker /
+// --speaker-db, 1:N identification, GDPR Art. 9) must be OFF unless the
+// deployer explicitly affirms consent via --speaker-db-consent.
+TEST_CASE("whisper_params: speaker_db_consent defaults to false (biometric off)", "[unit]") {
+    REQUIRE(kDefaults.speaker_db_consent == false);
+}
+
+TEST_CASE("whisper_params: speaker_db / enroll_speaker / diarize_embedder default empty", "[unit]") {
+    REQUIRE(kDefaults.speaker_db.empty());
+    REQUIRE(kDefaults.enroll_speaker.empty());
+    REQUIRE(kDefaults.diarize_embedder.empty());
+}
+
+TEST_CASE("whisper_params: speaker_threshold defaults to 0.7", "[unit]") {
+    REQUIRE(kDefaults.speaker_threshold == 0.7f);
+}
+
 TEST_CASE("whisper_params: warmup off by default, no_warmup off by default", "[unit]") {
     // The server warms up by default (no_warmup=false); --no-warmup flips it on
     // as an escape hatch for drivers that crash/hang in warmup (#165).

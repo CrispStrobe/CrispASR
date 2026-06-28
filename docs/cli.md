@@ -686,6 +686,32 @@ extending the factory's dispatch. Tune clustering with
 `--diarize-cluster-threshold X` (default 0.5; higher = more clusters)
 and `--diarize-max-speakers N` (default 8 — hard cap).
 
+This clustering is **session-scoped**: embeddings are computed per
+recording and discarded, labels are anonymous `(speaker N)`, and nothing
+is persisted — no voiceprint database, no names. It identifies no one; it
+only makes the labels stable within one file.
+
+### `--diarize-speakers` — opt-in convenience alias
+
+`--diarize-speakers` is shorthand for `--diarize --diarize-embedder auto`.
+Use it when you just want stable per-recording speaker labels without
+remembering the flag combination:
+
+```bash
+crispasr -m auto --backend cohere -f meeting.wav --diarize-speakers -ojf
+```
+
+> **Named profiles are a separate, deliberately opt-in feature.** The
+> `--enroll-speaker` / `--speaker-db` flags build a *persistent* database
+> of voiceprints linked to real names and perform one-to-many
+> identification — that is biometric special-category data under GDPR
+> Art. 9 and carries consent/transparency obligations. They are
+> off-by-default and refuse to run without `--speaker-db-consent`. The
+> session-scoped clustering above does **not** persist anything and needs
+> no consent flag. See
+> [diarization-speakers.md](diarization-speakers.md) for the full
+> comparison and the legal/privacy posture.
+
 ### Output shape
 
 Each segment carries the label as the string `"(speaker N) "` in

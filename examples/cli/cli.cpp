@@ -469,6 +469,28 @@ static bool whisper_params_parse_arg_backend_vad(int argc, char** argv, int& i, 
         params.speaker_threshold = std::stof(ARGV_NEXT);
     } else if (arg == "--diarize-embedder") {
         params.diarize_embedder = ARGV_NEXT;
+    } else if (arg == "--diarize-speakers") {
+        // Convenience opt-in for session-scoped speaker clustering: the
+        // best out-of-box diarization that identifies no one. Enables
+        // --diarize, the pyannote segmenter (proper speaker-turn
+        // boundaries), and the default embedder so segments get
+        // globally-stable per-recording "(speaker N)" labels. This is
+        // purely transient diarization quality — embeddings are computed
+        // per recording and discarded; nothing is persisted, no
+        // voiceprint database, no names. (For named profiles see the
+        // separate, deliberately opt-in --speaker-db / --enroll-speaker
+        // biometric path documented in docs/diarization-speakers.md.)
+        params.diarize = true;
+        if (params.diarize_method.empty())
+            params.diarize_method = "pyannote";
+        if (params.diarize_embedder.empty())
+            params.diarize_embedder = "auto";
+    } else if (arg == "--speaker-db-consent") {
+        // Affirms a lawful basis + explicit consent for the biometric
+        // named-profile path. Without it, --enroll-speaker / --speaker-db
+        // refuse to run (see crispasr_run.cpp). No-DB diarization
+        // (--diarize-speakers / --diarize-embedder) never needs this.
+        params.speaker_db_consent = true;
     } else if (arg == "--diarize-cluster-threshold") {
         params.diarize_cluster_threshold = std::stof(ARGV_NEXT);
     } else if (arg == "--diarize-max-speakers") {
@@ -954,6 +976,15 @@ static void whisper_print_usage(int /*argc*/, char** argv, const whisper_params&
             "Pass a .gguf path to load directly. When unset, --diarize-method pyannote labels are local to each "
             "forward pass (#107).\n",
             params.diarize_embedder.empty() ? "off" : params.diarize_embedder.c_str());
+    fprintf(stderr, "  --diarize-speakers                [opt-in ] convenience alias: enable --diarize + pyannote "
+                    "segmentation + session-scoped speaker clustering for stable per-recording (speaker N) labels. "
+                    "Transient only: identifies no one, no voiceprint database, no names stored. See "
+                    "docs/diarization-speakers.md\n");
+    fprintf(stderr,
+            "  --speaker-db-consent              [%-7s] REQUIRED to use the biometric named-profile path "
+            "(--enroll-speaker / --speaker-db). Affirms you have a lawful basis (GDPR Art. 9) and explicit "
+            "consent from every enrolled person. Not needed for --diarize-speakers / --diarize-embedder.\n",
+            params.speaker_db_consent ? "on" : "off");
     fprintf(stderr,
             "  --diarize-cluster-threshold X     [%-7.2f] cosine merge threshold for --diarize-embedder clustering "
             "(higher = more distinct clusters, lower = more merged)\n",

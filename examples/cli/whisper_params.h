@@ -168,6 +168,12 @@ struct whisper_params {
     std::string enroll_speaker;     // enrollment mode: save embedding as this name
     std::string titanet_model;      // TitaNet GGUF path or "auto"
     float speaker_threshold = 0.7f; // cosine similarity threshold for matching
+    // The named-profile DB (--enroll-speaker / --speaker-db) persists
+    // voiceprints linked to real names and performs 1:N identification —
+    // biometric special-category data under GDPR Art. 9. It is OFF by
+    // default: the deployer must affirm a lawful basis + explicit consent
+    // via --speaker-db-consent before enrollment or matching will run.
+    bool speaker_db_consent = false;
 
     // Embedding-based diarization clustering (issue #107 P3). When set,
     // after --diarize-method pyannote runs, each speech segment is

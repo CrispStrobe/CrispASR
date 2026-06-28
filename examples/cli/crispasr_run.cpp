@@ -301,6 +301,18 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, co
 
     // Speaker enrollment mode: extract TitaNet embedding, save to DB, exit.
     if (!params.enroll_speaker.empty()) {
+        // Biometric consent gate. Enrollment persists a voiceprint linked
+        // to a real name — special-category data under GDPR Art. 9. Refuse
+        // unless the deployer has affirmed a lawful basis + explicit consent.
+        if (!params.speaker_db_consent) {
+            fprintf(stderr, "crispasr: error: --enroll-speaker requires --speaker-db-consent.\n"
+                            "  Enrollment stores a voiceprint linked to a real name (biometric data,\n"
+                            "  GDPR Art. 9 special category). Pass --speaker-db-consent only if you have\n"
+                            "  explicit consent from this person and a lawful basis to store it.\n"
+                            "  For privacy-clean stable speaker labels that identify no one, use\n"
+                            "  --diarize-speakers instead (no database, no names).\n");
+            return 25;
+        }
         std::string tmodel = params.titanet_model;
         if (tmodel.empty() || tmodel == "auto") {
             tmodel =
@@ -780,7 +792,20 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, co
 
         // Speaker identification: match diarized speakers against profile DB.
         // Also supports standalone speaker ID (without diarize) when --speaker-db is set.
-        if (!params.speaker_db.empty() && !segs.empty()) {
+        //
+        // Biometric consent gate (1:N named identification, GDPR Art. 9):
+        // skip entirely unless the deployer affirmed --speaker-db-consent.
+        // Warn once (the slice loop may run on multiple workers).
+        if (!params.speaker_db.empty() && !params.speaker_db_consent) {
+            static std::once_flag spk_consent_warn;
+            std::call_once(spk_consent_warn, [] {
+                fprintf(stderr, "crispasr: --speaker-db ignored: 1:N matching against named voiceprints is\n"
+                                "  biometric identification (GDPR Art. 9). Re-run with --speaker-db-consent to\n"
+                                "  affirm consent + a lawful basis. For privacy-clean stable speaker labels\n"
+                                "  that identify no one, use --diarize-speakers instead.\n");
+            });
+        }
+        if (!params.speaker_db.empty() && params.speaker_db_consent && !segs.empty()) {
             static titanet_context* spk_ctx = nullptr;
             static speaker_db* spk_db = nullptr;
             if (!spk_ctx) {
