@@ -123,6 +123,22 @@ public:
                 cp.num_acoustic_candidates = n;
         }
 
+        // Talker text decoder: greedy AR with no repetition control loops and
+        // hallucinates (#197). Sample by default with upstream InferenceOptions
+        // values (do_sample=True, temp=0.6, top_k=0, top_p=0.9, rep_penalty=1.1).
+        // Override via env vars. --temperature (above) still sets cp.temperature.
+        cp.text_do_sample = true;
+        if (const char* e = std::getenv("TADA_DO_SAMPLE"); e && *e)
+            cp.text_do_sample = !(e[0] == '0' || e[0] == 'f' || e[0] == 'F' || e[0] == 'n' || e[0] == 'N');
+        if (const char* e = std::getenv("TADA_TEMPERATURE"); e && *e)
+            cp.temperature = (float)atof(e);
+        if (const char* e = std::getenv("TADA_TOP_P"); e && *e)
+            cp.text_top_p = (float)atof(e);
+        if (const char* e = std::getenv("TADA_TOP_K"); e && *e)
+            cp.text_top_k = atoi(e);
+        if (const char* e = std::getenv("TADA_REPETITION_PENALTY"); e && *e)
+            cp.text_repetition_penalty = (float)atof(e);
+
         ctx_ = tada_init_from_file(p.model.c_str(), cp);
         if (!ctx_) {
             fprintf(stderr, "crispasr[tada]: failed to load '%s'\n", p.model.c_str());

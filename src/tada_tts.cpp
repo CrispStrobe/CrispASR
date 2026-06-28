@@ -27,7 +27,9 @@
 #include <map>
 #include <memory>
 #include <numeric>
+#include <random>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #ifndef M_PI
@@ -1710,6 +1712,97 @@ static int argmax_logits(const float* logits, int n) {
     return best;
 }
 
+// Talker next-token selection, mirroring upstream tada.py `_generate`:
+//   suppress pad → [repetition penalty → temperature → top-k → top-p →
+//   multinomial] when text_do_sample, else greedy argmax. `logits` is
+//   modified in place. `history` is the running id sequence (for rep penalty).
+static int tada_sample_token(const tada_context_params& p, float* logits, int n_vocab,
+                             const std::vector<int32_t>& history, int pad_id, std::mt19937& rng) {
+    if (pad_id >= 0 && pad_id < n_vocab)
+        logits[pad_id] = -INFINITY; // upstream: prevent pad from being generated
+
+    const bool do_sample = p.text_do_sample && p.temperature > 0.0f;
+    if (!do_sample)
+        return argmax_logits(logits, n_vocab);
+
+    // 1. Repetition penalty over ids already in the sequence (once per unique
+    //    id; upstream gather/scatter is idempotent across duplicates).
+    if (p.text_repetition_penalty != 1.0f) {
+        std::unordered_set<int32_t> seen;
+        seen.reserve(history.size());
+        for (int32_t id : history) {
+            if (id < 0 || id >= n_vocab || !seen.insert(id).second)
+                continue;
+            float s = logits[id];
+            logits[id] = (s < 0.0f) ? s * p.text_repetition_penalty : s / p.text_repetition_penalty;
+        }
+    }
+
+    // 2. Temperature.
+    const float inv_t = 1.0f / p.temperature;
+    for (int i = 0; i < n_vocab; i++)
+        logits[i] *= inv_t;
+
+    // 3. Top-k: keep only the k largest logits.
+    if (p.text_top_k > 0 && p.text_top_k < n_vocab) {
+        std::vector<float> tmp(logits, logits + n_vocab);
+        std::nth_element(tmp.begin(), tmp.begin() + (n_vocab - p.text_top_k), tmp.end());
+        const float kth = tmp[n_vocab - p.text_top_k];
+        for (int i = 0; i < n_vocab; i++)
+            if (logits[i] < kth)
+                logits[i] = -INFINITY;
+    }
+
+    // 4. Top-p (nucleus): sort desc, remove tokens once the cumulative prob of
+    //    the strictly-higher-ranked tokens already reaches top_p (upstream's
+    //    shift-right keeps the first token that crosses the threshold).
+    if (p.text_top_p > 0.0f && p.text_top_p < 1.0f) {
+        std::vector<int> order(n_vocab);
+        std::iota(order.begin(), order.end(), 0);
+        std::sort(order.begin(), order.end(), [&](int a, int b) { return logits[a] > logits[b]; });
+        const float maxl = logits[order[0]];
+        double Z = 0.0;
+        for (int i = 0; i < n_vocab; i++) {
+            if (logits[order[i]] == -INFINITY)
+                break;
+            Z += std::exp((double)logits[order[i]] - maxl);
+        }
+        double cum_before = 0.0;
+        for (int i = 0; i < n_vocab; i++) {
+            const int id = order[i];
+            if (logits[id] == -INFINITY)
+                break;
+            const double pr = std::exp((double)logits[id] - maxl) / Z;
+            if (cum_before >= (double)p.text_top_p)
+                logits[id] = -INFINITY;
+            cum_before += pr;
+        }
+    }
+
+    // 5. Softmax over survivors + multinomial sample.
+    float maxl = -INFINITY;
+    for (int i = 0; i < n_vocab; i++)
+        if (logits[i] > maxl)
+            maxl = logits[i];
+    double Z = 0.0;
+    for (int i = 0; i < n_vocab; i++)
+        if (logits[i] != -INFINITY)
+            Z += std::exp((double)logits[i] - maxl);
+    std::uniform_real_distribution<double> dist(0.0, 1.0);
+    double r = dist(rng) * Z;
+    double acc = 0.0;
+    int last = -1;
+    for (int i = 0; i < n_vocab; i++) {
+        if (logits[i] == -INFINITY)
+            continue;
+        last = i;
+        acc += std::exp((double)logits[i] - maxl);
+        if (acc >= r)
+            return i;
+    }
+    return last >= 0 ? last : argmax_logits(logits, n_vocab);
+}
+
 // BPE tokenize text using Llama tokenizer.
 static std::vector<int32_t> tokenize(tada_context* c, const std::string& text) {
     return core_bpe::tokenize_simple(c->vocab.token_to_id, c->vocab.merge_rank, text);
@@ -1724,7 +1817,7 @@ struct tada_context_params tada_context_default_params(void) {
     p.n_threads = 4;
     p.verbosity = 1;
     p.use_gpu = false;
-    p.temperature = 0.0f;
+    p.temperature = 0.6f; // upstream text_temperature (used only when text_do_sample)
     p.seed = 42;
     p.max_tokens = 0;
     p.flash_attn = false;
@@ -1732,6 +1825,14 @@ struct tada_context_params tada_context_default_params(void) {
     p.acoustic_cfg = 1.6f;         // match Python InferenceOptions default
     p.noise_temp = 0.9f;           // match Python InferenceOptions default
     p.num_acoustic_candidates = 1; // match Python InferenceOptions default
+    // Talker text-decoder sampling. Upstream InferenceOptions defaults are
+    // do_sample=True/top_p=0.9/top_k=0/rep_penalty=1.1, but the LIBRARY default
+    // stays greedy (text_do_sample=false) so crispasr-diff is deterministic;
+    // the CLI adapter and C ABI enable sampling with the upstream values.
+    p.text_do_sample = false;
+    p.text_top_p = 0.9f;
+    p.text_top_k = 0;
+    p.text_repetition_penalty = 1.1f;
     return p;
 }
 
@@ -1960,6 +2061,22 @@ void tada_set_num_candidates(struct tada_context* ctx, int n) {
     if (ctx)
         ctx->params.num_acoustic_candidates = n > 0 ? n : 1;
 }
+void tada_set_do_sample(struct tada_context* ctx, bool enable) {
+    if (ctx)
+        ctx->params.text_do_sample = enable;
+}
+void tada_set_top_p(struct tada_context* ctx, float top_p) {
+    if (ctx)
+        ctx->params.text_top_p = top_p;
+}
+void tada_set_top_k(struct tada_context* ctx, int top_k) {
+    if (ctx)
+        ctx->params.text_top_k = top_k > 0 ? top_k : 0;
+}
+void tada_set_repetition_penalty(struct tada_context* ctx, float penalty) {
+    if (ctx)
+        ctx->params.text_repetition_penalty = penalty > 0.0f ? penalty : 1.0f;
+}
 
 static std::string tada_normalize_text(std::string text) {
     auto replace_all = [](std::string& s, const std::string& from, const std::string& to) {
@@ -2165,6 +2282,9 @@ float* tada_synthesize(struct tada_context* ctx, const char* text, int* out_n_sa
     // Reset RNG (both legacy xorshift and PyTorch-compatible MT19937)
     ctx->rng_state = ctx->params.seed ? ctx->params.seed : 42;
     mt19937_init(&ctx->mt_rng, (uint32_t)(ctx->params.seed ? ctx->params.seed : 42));
+    // Separate RNG stream for talker text-token sampling so it stays
+    // independent of the FM-noise MT19937 stream (which is re-seeded per gen).
+    std::mt19937 sampler_rng((uint32_t)(ctx->params.seed ? ctx->params.seed : 42));
 
     tada_bench_stage _bs_synth("synthesize");
 
@@ -2619,10 +2739,12 @@ float* tada_synthesize(struct tada_context* ctx, const char* text, int* out_n_sa
             fm_dump_records.push_back(std::move(fm_rec));
         }
 
-        // Next token prediction (greedy). After the last fixed-input token,
-        // push generated tokens to all_ids so the loop extends until EOS.
+        // Next token prediction. Greedy by default (library); the CLI/C-ABI
+        // enable upstream sampling (repetition penalty + temperature + top-k/
+        // top-p). After the last fixed-input token, push generated tokens to
+        // all_ids so the loop extends until EOS.
         if (need_logits && tr.logits) {
-            int next = argmax_logits(tr.logits, (int)hp.vocab_size);
+            int next = tada_sample_token(ctx->params, tr.logits, (int)hp.vocab_size, all_ids, pad_id, sampler_rng);
             if (next == eot) {
                 if (ctx->params.verbosity >= 1)
                     fprintf(stderr, "tada: EOS at step %d\n", step);

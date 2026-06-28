@@ -2260,6 +2260,20 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
             if (n >= 1)
                 p.num_acoustic_candidates = n;
         }
+        // Talker text-decoder sampling — mirror the CLI: sample by default with
+        // upstream InferenceOptions values so bindings/server don't loop or
+        // hallucinate (#197). Honour the same env overrides.
+        p.text_do_sample = true;
+        if (const char* e = std::getenv("TADA_DO_SAMPLE"); e && *e)
+            p.text_do_sample = !(e[0] == '0' || e[0] == 'f' || e[0] == 'F' || e[0] == 'n' || e[0] == 'N');
+        if (const char* e = std::getenv("TADA_TEMPERATURE"); e && *e)
+            p.temperature = (float)atof(e);
+        if (const char* e = std::getenv("TADA_TOP_P"); e && *e)
+            p.text_top_p = (float)atof(e);
+        if (const char* e = std::getenv("TADA_TOP_K"); e && *e)
+            p.text_top_k = atoi(e);
+        if (const char* e = std::getenv("TADA_REPETITION_PENALTY"); e && *e)
+            p.text_repetition_penalty = (float)atof(e);
         s->tada_ctx = tada_init_from_file(model_path, p);
         if (!s->tada_ctx) {
             fprintf(stderr, "crispasr: failed to init tada from '%s'\n", model_path);
@@ -7310,6 +7324,12 @@ CA_EXPORT int crispasr_session_set_top_p(crispasr_session* s, float top_p) {
         touched++;
     }
 #endif
+#ifdef CA_HAVE_TADA
+    if (s->tada_ctx) {
+        tada_set_top_p(s->tada_ctx, top_p);
+        touched++;
+    }
+#endif
     return touched > 0 ? 0 : -2;
 }
 
@@ -7336,6 +7356,12 @@ CA_EXPORT int crispasr_session_set_repetition_penalty(crispasr_session* s, float
 #ifdef CA_HAVE_CHATTERBOX
     if (s->chatterbox_ctx) {
         chatterbox_set_repetition_penalty((chatterbox_context*)s->chatterbox_ctx, r);
+        touched++;
+    }
+#endif
+#ifdef CA_HAVE_TADA
+    if (s->tada_ctx) {
+        tada_set_repetition_penalty(s->tada_ctx, r);
         touched++;
     }
 #endif
