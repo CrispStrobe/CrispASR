@@ -100,7 +100,15 @@ struct dots_bench_stage {
 
 static uint32_t read_u32(gguf_context* meta, const char* key, uint32_t def) {
     int idx = gguf_find_key(meta, key);
-    return (idx >= 0) ? gguf_get_val_u32(meta, idx) : def;
+    if (idx < 0)
+        return def;
+    // Handle both UINT32 and INT32 (Python gguf library writes int as INT32)
+    enum gguf_type t = gguf_get_kv_type(meta, idx);
+    if (t == GGUF_TYPE_UINT32)
+        return gguf_get_val_u32(meta, idx);
+    if (t == GGUF_TYPE_INT32)
+        return (uint32_t)gguf_get_val_i32(meta, idx);
+    return def;
 }
 
 static float read_f32(gguf_context* meta, const char* key, float def) {
@@ -731,7 +739,7 @@ static void dots_llm_step(dots_tts_context* ctx, const float* input_embeds, int 
     ggml_set_input(positions);
 
     // Causal mask
-    ggml_tensor* mask = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, n_past + T, T);
+    ggml_tensor* mask = ggml_new_tensor_2d(ctx0, GGML_TYPE_F16, n_past + T, T);
     ggml_set_name(mask, "mask");
     ggml_set_input(mask);
 
@@ -791,13 +799,13 @@ static void dots_llm_step(dots_tts_context* ctx, const float* input_embeds, int 
 
     // Causal mask (0 for allowed, -inf for masked)
     int Lk = n_past + T;
-    std::vector<float> mask_data(Lk * T, -INFINITY);
+    std::vector<ggml_fp16_t> mask_data(Lk * T, ggml_fp32_to_fp16(-INFINITY));
     for (int q = 0; q < T; q++) {
         for (int k = 0; k < n_past + q + 1; k++) {
-            mask_data[q * Lk + k] = 0.0f;
+            mask_data[q * Lk + k] = ggml_fp32_to_fp16(0.0f);
         }
     }
-    ggml_backend_tensor_set(mask, mask_data.data(), 0, mask_data.size() * sizeof(float));
+    ggml_backend_tensor_set(mask, mask_data.data(), 0, mask_data.size() * sizeof(ggml_fp16_t));
 
     ggml_backend_graph_compute(ctx->backend, gf);
 
@@ -999,7 +1007,7 @@ static void dots_penc_forward(dots_tts_context* ctx, const float* latent_patch, 
     ggml_set_input(positions);
 
     // Causal mask
-    ggml_tensor* mask = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, n_past + T, T);
+    ggml_tensor* mask = ggml_new_tensor_2d(ctx0, GGML_TYPE_F16, n_past + T, T);
     ggml_set_name(mask, "penc_mask");
     ggml_set_input(mask);
 
@@ -1062,13 +1070,13 @@ static void dots_penc_forward(dots_tts_context* ctx, const float* latent_patch, 
     ggml_backend_tensor_set(positions, pos.data(), 0, T * sizeof(int32_t));
 
     int Lk = n_past + T;
-    std::vector<float> mask_data(Lk * T, -INFINITY);
+    std::vector<ggml_fp16_t> mask_data(Lk * T, ggml_fp32_to_fp16(-INFINITY));
     for (int q = 0; q < T; q++) {
         for (int k = 0; k < n_past + q + 1; k++) {
-            mask_data[q * Lk + k] = 0.0f;
+            mask_data[q * Lk + k] = ggml_fp32_to_fp16(0.0f);
         }
     }
-    ggml_backend_tensor_set(mask, mask_data.data(), 0, mask_data.size() * sizeof(float));
+    ggml_backend_tensor_set(mask, mask_data.data(), 0, mask_data.size() * sizeof(ggml_fp16_t));
 
     ggml_backend_graph_compute(ctx->backend, gf);
 
@@ -1395,18 +1403,35 @@ static void dots_embed_tokens(dots_tts_context* ctx, const int32_t* token_ids, i
     auto& llm = ctx->llm;
     int D = (int)llm.hidden_size;
 
-    // Read embedding rows from the weight tensor
-    // tok_emb shape: (hidden_size, vocab_size) in ggml convention
-    for (int i = 0; i < n_tokens; i++) {
-        int id = token_ids[i];
-        if (id < 0 || id >= (int)llm.vocab_size) {
-            std::memset(out_embeds + i * D, 0, D * sizeof(float));
-            continue;
-        }
-        // ggml stores embeddings as (hidden_size, vocab_size) → row id is the
-        // second dimension, offset = id * hidden_size
-        ggml_backend_tensor_get(llm.tok_emb, out_embeds + i * D, (size_t)id * D * sizeof(float), D * sizeof(float));
-    }
+    // Use ggml_get_rows to handle quantized embedding tensors (Q4_K etc).
+    // tok_emb shape: (hidden_size, vocab_size) in ggml convention.
+    size_t ctx_size = 8 * ggml_tensor_overhead() + ggml_graph_overhead();
+    ggml_init_params ip = {ctx_size, nullptr, true};
+    ggml_context* ctx0 = ggml_init(ip);
+
+    ggml_tensor* ids = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, n_tokens);
+    ggml_set_name(ids, "tok_ids");
+    ggml_set_input(ids);
+
+    // ggml_get_rows: extracts rows from the embedding table → (D, n_tokens) F32
+    ggml_tensor* emb = ggml_get_rows(ctx0, llm.tok_emb, ids);
+    ggml_set_name(emb, "tok_emb_out");
+    ggml_set_output(emb);
+
+    ggml_cgraph* gf = ggml_new_graph(ctx0);
+    ggml_build_forward_expand(gf, emb);
+
+    ggml_gallocr_t galloc = ggml_gallocr_new(ggml_backend_get_default_buffer_type(ctx->backend));
+    ggml_gallocr_alloc_graph(galloc, gf);
+
+    ggml_backend_tensor_set(ids, token_ids, 0, n_tokens * sizeof(int32_t));
+    ggml_backend_graph_compute(ctx->backend, gf);
+
+    ggml_tensor* out = ggml_graph_get_tensor(gf, "tok_emb_out");
+    ggml_backend_tensor_get(out, out_embeds, 0, D * n_tokens * sizeof(float));
+
+    ggml_gallocr_free(galloc);
+    ggml_free(ctx0);
 }
 
 // ===========================================================================
