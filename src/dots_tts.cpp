@@ -334,9 +334,11 @@ struct dots_latent_stats {
 // KV cache
 // ===========================================================================
 
+// KV cache: single 4D tensor (head_dim, max_seq, n_kv_heads, n_layers)
+// as required by core_attn::kv_self_attn which indexes layer via nb[3].
 struct dots_kv_cache {
-    std::vector<ggml_tensor*> k_l;
-    std::vector<ggml_tensor*> v_l;
+    ggml_tensor* k = nullptr; // (hd, max_seq, n_kv, n_layers) F16
+    ggml_tensor* v = nullptr;
     ggml_context* ctx = nullptr;
     ggml_backend_buffer_t buf = nullptr;
     int max_seq_len = 0;
@@ -345,31 +347,24 @@ struct dots_kv_cache {
 static bool dots_kv_init(dots_kv_cache& kv, int n_layers, int head_dim, int n_kv_heads, int max_seq,
                          ggml_backend_t backend) {
     kv.max_seq_len = max_seq;
-    int kv_dim = head_dim * n_kv_heads;
 
-    size_t n_tensors = (size_t)n_layers * 2;
-    size_t ctx_size = n_tensors * ggml_tensor_overhead() + 64;
+    size_t ctx_size = 2 * ggml_tensor_overhead() + 64;
     ggml_init_params ip = {ctx_size, nullptr, true};
     kv.ctx = ggml_init(ip);
     if (!kv.ctx)
         return false;
 
-    kv.k_l.resize(n_layers);
-    kv.v_l.resize(n_layers);
-    for (int i = 0; i < n_layers; i++) {
-        kv.k_l[i] = ggml_new_tensor_2d(kv.ctx, GGML_TYPE_F16, kv_dim, max_seq);
-        kv.v_l[i] = ggml_new_tensor_2d(kv.ctx, GGML_TYPE_F16, kv_dim, max_seq);
-    }
+    kv.k = ggml_new_tensor_4d(kv.ctx, GGML_TYPE_F16, head_dim, max_seq, n_kv_heads, n_layers);
+    kv.v = ggml_new_tensor_4d(kv.ctx, GGML_TYPE_F16, head_dim, max_seq, n_kv_heads, n_layers);
+    ggml_set_name(kv.k, "kv_k");
+    ggml_set_name(kv.v, "kv_v");
 
     kv.buf = ggml_backend_alloc_ctx_tensors(kv.ctx, backend);
     if (!kv.buf)
         return false;
 
-    // Zero-initialize
-    for (int i = 0; i < n_layers; i++) {
-        ggml_backend_tensor_memset(kv.k_l[i], 0, 0, ggml_nbytes(kv.k_l[i]));
-        ggml_backend_tensor_memset(kv.v_l[i], 0, 0, ggml_nbytes(kv.v_l[i]));
-    }
+    ggml_backend_tensor_memset(kv.k, 0, 0, ggml_nbytes(kv.k));
+    ggml_backend_tensor_memset(kv.v, 0, 0, ggml_nbytes(kv.v));
     return true;
 }
 
@@ -721,7 +716,7 @@ static void dots_llm_step(dots_tts_context* ctx, const float* input_embeds, int 
     const int T = n_tokens;
 
     // Build graph
-    size_t n_tensors = T * llm.n_layers * 20 + 256;
+    size_t n_tensors = llm.n_layers * 80 + 512; // kv_self_attn uses ~40-60 nodes/layer
     size_t ctx_size = n_tensors * ggml_tensor_overhead() + ggml_graph_overhead();
     ggml_init_params ip = {ctx_size, nullptr, true};
     ggml_context* ctx0 = ggml_init(ip);
@@ -757,14 +752,29 @@ static void dots_llm_step(dots_tts_context* ctx, const float* input_embeds, int 
     ggml_tensor* cur = x;
     for (uint32_t il = 0; il < llm.n_layers; il++) {
         auto& L = llm.layers[il];
+        if (!L.attn_norm || !L.q_proj || !L.k_proj || !L.v_proj || !L.o_proj || !L.gate || !L.up || !L.down ||
+            !L.ffn_norm) {
+            std::fprintf(stderr, "dots_tts: LLM layer %u has null weight(s)!\n", il);
+            std::fprintf(stderr, "  attn_norm=%p q=%p k=%p v=%p o=%p gate=%p up=%p down=%p ffn_norm=%p\n",
+                         (void*)L.attn_norm, (void*)L.q_proj, (void*)L.k_proj, (void*)L.v_proj, (void*)L.o_proj,
+                         (void*)L.gate, (void*)L.up, (void*)L.down, (void*)L.ffn_norm);
+            break;
+        }
         ggml_tensor* residual = cur;
 
         // Pre-attention RMSNorm
         cur = rms_norm(ctx0, cur, L.attn_norm, llm.rms_norm_eps);
 
         // Self-attention with KV cache
+        if (il == 0 && dots_debug_enabled()) {
+            std::fprintf(stderr, "  llm L0: cur=(%lld,%lld) q=(%lld,%lld) k=(%lld,%lld) kv=(%lld,%lld,%lld,%lld)\n",
+                         (long long)cur->ne[0], (long long)cur->ne[1], (long long)L.q_proj->ne[0],
+                         (long long)L.q_proj->ne[1], (long long)L.k_proj->ne[0], (long long)L.k_proj->ne[1],
+                         (long long)ctx->llm_kv.k->ne[0], (long long)ctx->llm_kv.k->ne[1],
+                         (long long)ctx->llm_kv.k->ne[2], (long long)ctx->llm_kv.k->ne[3]);
+        }
         cur = core_attn::kv_self_attn(ctx0, gf, cur, L.q_proj, L.k_proj, L.v_proj, L.o_proj, L.q_norm, L.k_norm,
-                                      positions, mask, ctx->llm_kv.k_l[il], ctx->llm_kv.v_l[il], (int)il, n_past, atp,
+                                      positions, mask, ctx->llm_kv.k, ctx->llm_kv.v, (int)il, n_past, atp,
                                       /*qkv_w=*/nullptr, /*fixed_kv_len=*/0, /*kv_indices=*/nullptr, L.q_proj_b,
                                       L.k_proj_b, L.v_proj_b);
 
@@ -827,7 +837,7 @@ static void dots_dit_forward(dots_tts_context* ctx, const float* fm_seq, int fm_
     const int D = (int)dit.hidden_size;
     const int T = fm_len;
 
-    size_t n_tensors = dit.n_layers * 30 + 128;
+    size_t n_tensors = dit.n_layers * 80 + 256; // AdaLN + attn + FFN needs ~50 nodes/block
     size_t ctx_size = n_tensors * ggml_tensor_overhead() + ggml_graph_overhead();
     ggml_init_params ip = {ctx_size, nullptr, true};
     ggml_context* ctx0 = ggml_init(ip);
@@ -838,12 +848,13 @@ static void dots_dit_forward(dots_tts_context* ctx, const float* fm_seq, int fm_
     ggml_set_name(x, "dit_input");
     ggml_set_input(x);
 
-    // Timestep embedding
-    ggml_tensor* t_emb_in = ggml_new_tensor_1d(ctx0, GGML_TYPE_F32, D);
+    // Timestep embedding: sinusoidal(t_dim) → Linear(t_dim→D) → SiLU → Linear(D→D)
+    // t_dim = time_mlp_0_w.ne[0] (the input dimension of the first linear)
+    const int t_dim = (int)dit.time_mlp_0_w->ne[0];
+    ggml_tensor* t_emb_in = ggml_new_tensor_1d(ctx0, GGML_TYPE_F32, t_dim);
     ggml_set_name(t_emb_in, "t_emb");
     ggml_set_input(t_emb_in);
 
-    // Timestep MLP: sinusoidal → Linear → SiLU → Linear
     ggml_tensor* t_emb = ggml_mul_mat(ctx0, dit.time_mlp_0_w, t_emb_in);
     if (dit.time_mlp_0_b)
         t_emb = ggml_add(ctx0, t_emb, dit.time_mlp_0_b);
@@ -955,8 +966,8 @@ static void dots_dit_forward(dots_tts_context* ctx, const float* fm_seq, int fm_
 
     // Timestep embedding (sinusoidal)
     std::vector<float> t_emb_data;
-    dots_timestep_embed(timestep, D, t_emb_data);
-    ggml_backend_tensor_set(t_emb_in, t_emb_data.data(), 0, D * sizeof(float));
+    dots_timestep_embed(timestep, t_dim, t_emb_data);
+    ggml_backend_tensor_set(t_emb_in, t_emb_data.data(), 0, t_dim * sizeof(float));
 
     // Positions
     std::vector<int32_t> pos(T);
@@ -1029,7 +1040,7 @@ static void dots_penc_forward(dots_tts_context* ctx, const float* latent_patch, 
         cur = rms_norm(ctx0, cur, L.attn_norm, 1e-6f);
 
         cur = core_attn::kv_self_attn(ctx0, gf, cur, L.q_proj, L.k_proj, L.v_proj, L.o_proj, L.q_norm, L.k_norm,
-                                      positions, mask, ctx->penc_kv.k_l[il], ctx->penc_kv.v_l[il], (int)il, n_past, atp,
+                                      positions, mask, ctx->penc_kv.k, ctx->penc_kv.v, (int)il, n_past, atp,
                                       /*qkv_w=*/nullptr, /*fixed_kv_len=*/0, /*kv_indices=*/nullptr,
                                       /*q_b=*/nullptr, /*k_b=*/nullptr, /*v_b=*/nullptr, L.o_proj_b);
 
@@ -1695,18 +1706,23 @@ float* dots_tts_synthesize(struct dots_tts_context* ctx, const char* text, int* 
     int llm_n_past = 0;
 
     // Prefill: run LLM on text tokens
+    std::fprintf(stderr, "dots_tts: prefill %d tokens (llm_dim=%d)...\n", n_text, llm_dim);
+    std::fflush(stderr);
     {
         dots_bench_stage b("llm_prefill");
         std::vector<float> hidden(n_text * llm_dim);
         dots_llm_step(ctx, text_embeds.data(), n_text, 0, hidden.data());
         llm_n_past = n_text;
     }
+    std::fprintf(stderr, "dots_tts: prefill done, n_past=%d\n", llm_n_past);
+    std::fflush(stderr);
 
     // Generate patches
     int penc_n_past = 0;
     for (int patch_idx = 0; patch_idx < max_patches; patch_idx++) {
         dots_bench_stage b_patch("patch_generate");
 
+        std::fprintf(stderr, "dots_tts: patch %d — embed span token...\n", patch_idx);
         // Add audio_gen_span token to LLM input
         std::vector<float> span_embed(llm_dim, 0.0f);
         if (ctx->token_audio_gen_span >= 0) {
@@ -1714,6 +1730,7 @@ float* dots_tts_synthesize(struct dots_tts_context* ctx, const char* text, int* 
             dots_embed_tokens(ctx, &span_id, 1, span_embed.data());
         }
 
+        std::fprintf(stderr, "dots_tts: patch %d — llm step (n_past=%d)...\n", patch_idx, llm_n_past);
         // LLM step for the audio span token
         std::vector<float> span_hidden(llm_dim);
         {
@@ -1722,6 +1739,7 @@ float* dots_tts_synthesize(struct dots_tts_context* ctx, const char* text, int* 
             llm_n_past += 1;
         }
 
+        std::fprintf(stderr, "dots_tts: patch %d — flow match...\n", patch_idx);
         // Flow-matching: generate one latent patch
         std::vector<float> patch_latent(patch_size * latent_dim);
         {
@@ -1733,6 +1751,7 @@ float* dots_tts_synthesize(struct dots_tts_context* ctx, const char* text, int* 
         // Accumulate latent
         all_latents.insert(all_latents.end(), patch_latent.begin(), patch_latent.end());
 
+        std::fprintf(stderr, "dots_tts: patch %d — penc forward (n_past=%d)...\n", patch_idx, penc_n_past);
         // PatchEncoder: encode this patch → LLM embedding for next step
         std::vector<float> patch_embed(patch_size * llm_dim);
         {
