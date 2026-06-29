@@ -24,8 +24,12 @@ features) localized it precisely: the codec's attention encoder MATCHES across
 backends, but the **DAC decoder front-end explodes** — `dump_dac_in` (an
 `in_conv` Conv1d → im2col+mul_mat) hits rms ~37 / range ±800 on Vulkan vs ~0.85
 on CPU (~43×). It is **size-dependent** (short inputs render fine; only longer
-sequences break) → a **MoltenVK conv/im2col kernel bug**. Fix: run the whole codec
-on CPU when the GPU is Vulkan. **Beware the two wrong explanations I went through
+sequences break). Crucially it is **NOT a conv kernel bug** — a standalone repro of
+`conv_1d`/`im2col`/the full `wn_conv1d` at the codec's exact dims and T=522 is
+bit-correct on MoltenVK, and capping `GGML_VK_FORCE_MAX_ALLOCATION_SIZE` doesn't
+help — so it's a graph-scale gallocr/aliasing-class corruption in the *large* real
+graph, unreproducible in a minimal harness. Fix: run the whole codec on CPU when
+the GPU is Vulkan. **Beware the two wrong explanations I went through
 first** (both plausible, both false — verify, don't assume): (a) "it's a
 `ggml_backend_sched` cross-backend-copy bug" — NO, `GGML_SCHED_DEBUG=2` shows the
 codec is a *single Vulkan split*, no offload, no copies; (b) "Vulkan lacks the

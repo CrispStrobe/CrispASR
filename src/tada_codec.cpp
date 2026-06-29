@@ -704,9 +704,13 @@ static tada_codec_context* tada_codec_init_from_file_impl(const char* path, int 
     // empty/garbled ASR. It is NOT a precision issue (storing F32 weights changes
     // nothing — MoltenVK downconverts) and NOT a ggml_backend_sched cross-backend
     // bug (the codec runs as a single Vulkan split, no CPU offload). It is
-    // size-dependent: short inputs ("Hello world") render fine on Vulkan; the
-    // im2col/conv path breaks only past some sequence length — a MoltenVK conv
-    // kernel bug. The CPU codec is bit-faithful (Metal, which renders these same
+    // size-dependent: short inputs ("Hello world") render fine on Vulkan; it only
+    // breaks past some sequence length. NOT the conv op itself — a standalone
+    // repro of conv_1d/im2col/the full wn_conv1d sequence at T=522 with these
+    // dims is bit-correct on MoltenVK, and capping GGML_VK_FORCE_MAX_ALLOCATION_SIZE
+    // doesn't help — so it's a graph-scale gallocr/aliasing-class corruption in the
+    // large real codec graph that only bites at length, not a fixable kernel.
+    // The CPU codec is bit-faithful (Metal, which renders these same
     // features correctly, confirms the features are good). Talker/FM keep their
     // native Vulkan path. Opt back into the broken native codec with
     // CRISPASR_TADA_CODEC_VULKAN_NATIVE=1 for debugging.

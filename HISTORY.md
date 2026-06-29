@@ -55,10 +55,13 @@ Per-stage `TADA_CODEC_DUMP` (Vulkan vs CPU, identical 522-frame features) pinned
 attention encoder MATCHES, but the DAC decoder front-end explodes — `dump_dac_in` (the
 `in_conv` Conv1d → im2col+mul_mat) hits rms ~37 / range ±800 on Vulkan vs ~0.85 on CPU
 (~43×), distorting the output (the final Tanh masks the range). Size-dependent (short
-"Hello world" renders fine on Vulkan) → a MoltenVK conv/im2col kernel bug. **NOT** a
-`ggml_backend_sched` cross-backend bug (single Vulkan split, no offload — `GGML_SCHED_DEBUG`
-confirmed), **NOT** missing kernels (ggml-vulkan has conv_transpose_1d/col2im/im2col;
-the codec has no ISTFT), **NOT** precision.
+"Hello world" renders fine on Vulkan). **NOT** a `ggml_backend_sched` cross-backend bug
+(single Vulkan split, no offload — `GGML_SCHED_DEBUG` confirmed), **NOT** missing kernels
+(ggml-vulkan has conv_transpose_1d/col2im/im2col; the codec has no ISTFT), **NOT** precision,
+and **NOT even a conv kernel bug** — a standalone repro of conv_1d/im2col/the full wn_conv1d
+at the codec's exact dims and T=522 is bit-correct on MoltenVK, and capping
+`GGML_VK_FORCE_MAX_ALLOCATION_SIZE` doesn't help. It's a graph-scale gallocr/aliasing-class
+corruption in the *large* real codec graph, unreproducible in a minimal harness.
 
 **Disproven en route** (so the next reader doesn't repeat it): forcing F32 FM weights on
 Vulkan left output **bit-identical** (MoltenVK `mul_mm` downconverts src0 to f16 regardless
@@ -72,9 +75,9 @@ GPU backend is Vulkan, run the whole codec on the **CPU backend**
 (`tada_codec_init_from_file_impl`). The codec is a one-shot decode (not the AR loop) and its
 input features are bit-identical Metal-vs-Vulkan (Metal renders them correctly), so CPU
 rendering is faithful. Talker/FM keep the native-Vulkan path. Debug override:
-`CRISPASR_TADA_CODEC_VULKAN_NATIVE=1`. Open follow-up: proper fix is upstream in
-ggml-vulkan (length-dependent conv/im2col kernel) or a chunked codec decode under the
-breaking size — either keeps the codec on GPU.
+`CRISPASR_TADA_CODEC_VULKAN_NATIVE=1`. Open follow-up: op-level repros rule out the conv
+kernels, so the GPU-native path needs either a chunked codec decode (under the breaking
+length) or graph-scale gallocr debugging — best on RADV, not MoltenVK.
 
 **Validation.** Native Vulkan now ASR-round-trips intelligibly on "four hours" (seed 1, ==
 Metal), "the quick brown fox…" (seed 1), and "four hours" (seed 2); deterministic across

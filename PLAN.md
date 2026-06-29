@@ -143,16 +143,22 @@ explodes** — `dump_dac_in` (the `in_conv` Conv1d → im2col+mul_mat) jumps to
 rms ~37 / range ±800 on Vulkan vs rms ~0.85 / ±8 on CPU (~43×), propagating to the
 output; the final `Tanh` masks the range but the audio is distorted. It is
 **size-dependent**: short inputs ("Hello world") render *correctly* on Vulkan
-(per-stage dump bit-comparable to CPU), and only break past some sequence length →
-a **MoltenVK conv/im2col kernel bug**, not CrispASR graph logic.
+(per-stage dump bit-comparable to CPU), and only break past some sequence length.
 
-**NOT what earlier notes claimed.** It is **not** a `ggml_backend_sched`
-cross-backend-copy bug — `GGML_SCHED_DEBUG=2` shows the codec runs as a *single
-Vulkan split*, no CPU offload, no cross-backend copies. It is **not** missing
-Vulkan kernels — ggml-vulkan has `conv_transpose_1d`/`col2im_1d`/`im2col`/
-`mul_mat`/`flash_attn_ext` pipelines, and the codec uses **no ISTFT** (it is a DAC
-*conv* decoder). It is **not** precision — storing F32 weights changes nothing
-(MoltenVK downconverts src0→f16 in matmul). (Also disproven for the FM red
+**NOT what earlier notes claimed (each verified, not assumed).** It is **not** a
+`ggml_backend_sched` cross-backend-copy bug — `GGML_SCHED_DEBUG=2` shows the codec
+runs as a *single Vulkan split*, no CPU offload, no cross-backend copies. It is
+**not** missing Vulkan kernels — ggml-vulkan has `conv_transpose_1d`/`col2im_1d`/
+`im2col`/`mul_mat`/`flash_attn_ext`, and the codec uses **no ISTFT** (DAC *conv*
+decoder). It is **not** precision — F32 weights change nothing (MoltenVK
+downconverts src0→f16); and the real in_conv weight is tiny (absmax 0.068), so no
+overflow. It is **not even a conv/im2col kernel bug** — a standalone repro of
+`conv_1d` / `im2col` / the full `wn_conv1d` (transpose+cont→conv→reshape+transpose)
+at the codec's exact dims and T=522 is **bit-correct** on MoltenVK, and capping
+`GGML_VK_FORCE_MAX_ALLOCATION_SIZE` doesn't help. So it's a **graph-scale
+gallocr/aliasing-class corruption** in the large real codec graph — the in_conv
+output is wrong despite a correct input (`dump_attn` matches) — that only bites at
+length and isn't reproducible in a minimal harness. (Also disproven for the FM red
 herring: F32 FM weights and whole-FM-on-CPU both left output bit-identical;
 `time_before` already matched across backends.)
 
@@ -161,10 +167,13 @@ backend (`src/tada_codec.cpp`, `tada_codec_init_from_file_impl`). The codec is a
 one-shot decode (not the AR loop) and its input features are bit-identical
 Metal-vs-Vulkan (Metal renders them correctly), so CPU rendering is faithful. The
 talker/FM keep their native-Vulkan path. Opt back into the broken native codec
-with `CRISPASR_TADA_CODEC_VULKAN_NATIVE=1` (debug only). **Open follow-up:** the
-proper fix is upstream in ggml-vulkan (the length-dependent conv/im2col kernel),
-or a chunked codec decode that stays under the broken size — either keeps the
-codec on the GPU.
+with `CRISPASR_TADA_CODEC_VULKAN_NATIVE=1` (debug only). **Open follow-up (to keep
+the codec on GPU):** the op-level repros rule out the conv kernels, so the
+remaining lever is the graph-scale corruption — best chased on RADV (real
+hardware, where the talker/FM native path is also pending validation) with a
+ggml-vulkan gallocr/graph dump, not MoltenVK. A **chunked codec decode** (decode in
+time-windows under the breaking length, where short inputs are proven correct) is
+the pragmatic GPU-native workaround and sidesteps the root cause entirely.
 
 **Caveat — MoltenVK can't fully validate GPU numerics.** MoltenVK's `mul_mm` /
 `mul_mat_vec` downconvert src0 to f16 regardless of stored dtype (storing F32 FM
