@@ -33,17 +33,29 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str], max_new_tokens
     import torch
     from transformers import AutoModelForCausalLM, AutoProcessor
 
+    # Footprint control on a 16 GB M1: only load the 3B model for stages that
+    # actually need it. `mel_spectrogram` needs just the feature extractor
+    # (~tiny); the encoder-only `audio_embeds` could in principle load only the
+    # submodule, but transformers gives us the whole model, so audio_embeds /
+    # first_logits / generated_text all trigger the full load. Run mel alone when
+    # RAM is tight; defer the model-heavy stages to a free machine.
+    needs_model = bool(stages & {"audio_embeds", "first_logits", "llm_input_ids", "generated_text"})
+
     # Default to bfloat16: a float32 3B forward needs ~12 GB RAM and OOM-crashes
     # a 16 GB box. bf16 (~6 GB weights) keeps the cosine gate valid (>0.99 vs the
     # F16 ggml port). Override with ARKASR_REF_DTYPE=float32 on a big machine.
     dtype_name = os.environ.get("ARKASR_REF_DTYPE", "bfloat16")
     dtype = getattr(torch, dtype_name)
-    print(f"  loading ARK-ASR from {model_dir} (dtype={dtype_name})")
     processor = AutoProcessor.from_pretrained(str(model_dir), trust_remote_code=True)
-    model = AutoModelForCausalLM.from_pretrained(
-        str(model_dir), trust_remote_code=True, torch_dtype=dtype, device_map="cpu"
-    )
-    model.eval()
+    model = None
+    if needs_model:
+        print(f"  loading ARK-ASR from {model_dir} (dtype={dtype_name})")
+        model = AutoModelForCausalLM.from_pretrained(
+            str(model_dir), trust_remote_code=True, torch_dtype=dtype, device_map="cpu"
+        )
+        model.eval()
+    else:
+        print("  mel-only dump: skipping 3B model load (low footprint)")
 
     audio = np.asarray(audio, dtype=np.float32).reshape(-1)
     out: Dict[str, np.ndarray] = {}
@@ -58,9 +70,9 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str], max_new_tokens
         out["mel_spectrogram"] = input_features[0].detach().cpu().numpy()  # (128, T)
 
     # ---- encoder + adapter (audio_embeds) ----
-    with torch.no_grad():
-        emb = model.audio_encoder(input_features.to(dtype))  # (1, N, hidden)
     if "audio_embeds" in stages:
+        with torch.no_grad():
+            emb = model.audio_encoder(input_features.to(dtype))  # (1, N, hidden)
         out["audio_embeds"] = emb[0].detach().cpu().float().numpy()  # (N, hidden)
 
     # ---- prompt build + first-token logits ----
