@@ -265,12 +265,15 @@ struct dots_projections {
     ggml_tensor* eos_proj_1_b = nullptr;
 };
 
-// ── BigVGAN vocoder ──
-// Architecture: pre_proj → MI-LSTM → post_proj(→latent) → conv_pre →
-//   6× (SnakeBeta → ConvTranspose1d → 3× AMPBlock averaged) →
-//   SnakeBeta → conv_post → tanh → mono 48 kHz PCM.
-// AMPBlock (resblock): 3× (SnakeBeta → dilated conv1 → SnakeBeta → conv2) + residual.
-// Anti-alias filters in Activation1d are skipped for now (quality refinement).
+// ── BigVGAN vocoder (AudioVAE.inference_from_latents, do_sample=False) ──
+// Architecture: post_proj → dec_mi(Linear→SLSTM[4×LSTM+skip]→Linear) → conv_pre
+//   (non-causal) → 6× (causal ConvTranspose1d → 3× AMPBlock1 averaged) →
+//   alias-free SnakeBeta → conv_post (causal) → clamp[-1,1] → mono 48 kHz PCM.
+// AMPBlock1: 3× (alias-free SnakeBeta → dilated conv1 → alias-free SnakeBeta →
+//   conv2 → +residual, residual added PER dilation iteration).
+// Activation1d (alias-free): upsample 2× (depthwise transposed conv via
+//   zero-insert + dw-conv with the checkpoint kaiser-sinc filter) → SnakeBeta →
+//   downsample 2× (replicate-pad + strided dw-conv). Validated cos≈1.0 per stage.
 
 struct dots_voc_resblock {
     // AMPBlock1: 3 dilated conv pairs (convs1[0..2] + convs2[0..2])
@@ -1462,22 +1465,67 @@ static ggml_tensor* dots_convt1d(ggml_context* ctx, ggml_tensor* x, ggml_tensor*
     return y;
 }
 
+// ── Alias-free SnakeBeta activation (BigVGAN v2 Activation1d, causal) ─────────
+// x (C,T) channel-first -> (C,T). upsample 2x (depthwise transposed conv with
+// the kaiser-sinc filter) -> SnakeBeta -> downsample 2x. The filters are
+// symmetric, so the transposed conv == a zero-inserted depthwise conv (no flip),
+// and PyTorch conv1d == ggml cross-correlation directly.
+//   up:   zero-insert along T -> dw-conv(filter, pad 11) -> keep first 2T, x2
+//   down: replicate-pad-left 11 -> dw-conv(filter, stride 2)
+static ggml_tensor* dots_alias_free_act(ggml_context* ctx, ggml_tensor* x, ggml_tensor* alpha, ggml_tensor* beta,
+                                        ggml_tensor* up_filter, ggml_tensor* down_filter) {
+    const int C = (int)x->ne[0];
+    const int T = (int)x->ne[1];
+    const int K = (int)up_filter->ne[0]; // 12
+
+    // Per-channel depthwise kernels (K,1,C): broadcast shared [K,1,1] filters.
+    auto kern = [&](ggml_tensor* f) -> ggml_tensor* {
+        if ((int)f->ne[2] == C)
+            return f; // already per-channel ([K,1,C])
+        ggml_tensor* tgt = ggml_new_tensor_3d(ctx, GGML_TYPE_F32, K, 1, C);
+        return ggml_repeat(ctx, ggml_reshape_3d(ctx, f, K, 1, 1), tgt);
+    };
+    ggml_tensor* upk = kern(up_filter);
+    ggml_tensor* dnk = kern(down_filter);
+
+    // Upsample: zero-insert (C,T)->(C,2T) [x at even t, 0 at odd t].
+    ggml_tensor* x3 = ggml_reshape_3d(ctx, x, C, 1, T);
+    ggml_tensor* z3 = ggml_scale(ctx, x3, 0.0f);
+    ggml_tensor* xc = ggml_concat(ctx, x3, z3, 1);                                      // (C,2,T)
+    ggml_tensor* x_up = ggml_reshape_2d(ctx, xc, C, 2 * T);                             // (C,2T)
+    ggml_tensor* x_up_t = ggml_cont(ctx, ggml_transpose(ctx, x_up));                    // (2T,C)
+    ggml_tensor* up = ggml_conv_1d_dw(ctx, upk, x_up_t, /*s*/ 1, /*p*/ K - 1, /*d*/ 1); // (2T+K-1, C)
+    up = ggml_cont(ctx, ggml_view_2d(ctx, up, 2 * T, C, up->nb[1], 0));                 // keep first 2T
+    up = ggml_scale(ctx, up, 2.0f);
+    ggml_tensor* up_cf = ggml_cont(ctx, ggml_transpose(ctx, up)); // (C,2T)
+
+    // SnakeBeta on the upsampled signal.
+    ggml_tensor* s = core_act::snake_beta(ctx, up_cf, alpha, beta); // (C,2T)
+
+    // Downsample: replicate-pad-left (K-1), depthwise conv stride 2.
+    ggml_tensor* s_t = ggml_cont(ctx, ggml_transpose(ctx, s));        // (2T,C)
+    ggml_tensor* first = ggml_view_2d(ctx, s_t, 1, C, s_t->nb[1], 0); // (1,C) first time-step
+    ggml_tensor* pad = ggml_repeat(ctx, first, ggml_new_tensor_2d(ctx, GGML_TYPE_F32, K - 1, C)); // (K-1,C)
+    ggml_tensor* s_pad = ggml_concat(ctx, pad, s_t, 0);                                           // (2T+K-1, C)
+    ggml_tensor* dn = ggml_conv_1d_dw(ctx, dnk, s_pad, /*s*/ 2, /*p*/ 0, /*d*/ 1);                // (T, C)
+    return ggml_cont(ctx, ggml_transpose(ctx, dn));                                               // (C,T)
+}
+
 // ── AMPBlock1 forward (one resblock) ────────────────────────────────────────
-// Structure: 3× (SnakeBeta → dilated_conv1 → SnakeBeta → conv2) + residual
+// Structure: 3× (alias-free SnakeBeta → dilated_conv1 → alias-free SnakeBeta → conv2) + residual
 static ggml_tensor* dots_resblock_fwd(ggml_context* ctx, ggml_tensor* x, const dots_voc_resblock& rb,
                                       const int dilations[3]) {
-    ggml_tensor* residual = x;
     for (int d = 0; d < 3; d++) {
-        // SnakeBeta before conv1
-        x = core_act::snake_beta(ctx, x, rb.act_alpha[d * 2], rb.act_beta[d * 2]);
-        // Dilated conv1
-        x = dots_conv1d(ctx, x, rb.convs1_w[d], rb.convs1_b[d], dilations[d]);
-        // SnakeBeta before conv2
-        x = core_act::snake_beta(ctx, x, rb.act_alpha[d * 2 + 1], rb.act_beta[d * 2 + 1]);
-        // Conv2 (dilation=1)
-        x = dots_conv1d(ctx, x, rb.convs2_w[d], rb.convs2_b[d], 1);
+        // AMPBlock1: residual added PER dilation iteration (x = conv_chain(x) + x).
+        ggml_tensor* xt = dots_alias_free_act(ctx, x, rb.act_alpha[d * 2], rb.act_beta[d * 2], rb.act_up_filter[d * 2],
+                                              rb.act_down_filter[d * 2]);
+        xt = dots_conv1d(ctx, xt, rb.convs1_w[d], rb.convs1_b[d], dilations[d]);
+        xt = dots_alias_free_act(ctx, xt, rb.act_alpha[d * 2 + 1], rb.act_beta[d * 2 + 1], rb.act_up_filter[d * 2 + 1],
+                                 rb.act_down_filter[d * 2 + 1]);
+        xt = dots_conv1d(ctx, xt, rb.convs2_w[d], rb.convs2_b[d], 1);
+        x = ggml_add(ctx, xt, x);
     }
-    return ggml_add(ctx, x, residual);
+    return x;
 }
 
 // ── BigVGAN vocoder decode ──────────────────────────────────────────────────
@@ -1522,48 +1570,40 @@ static float* dots_vocoder_decode(dots_tts_context* ctx, const float* latents, i
     ggml_set_name(x, "voc_input");
     ggml_set_input(x);
 
-    // Step 1: MI layer — Linear(128→512) → 4-layer LSTM(512) → Linear(512→128)
-    // The MI layer processes latents through a mutual information bottleneck.
+    // Step 0: post_proj (pointwise Conv1d 128→128) — applied before the MI layer.
+    if (voc.post_proj_w)
+        x = dots_conv1d(ctx0, x, voc.post_proj_w, voc.post_proj_b, 1, /*causal=*/false);
+
+    // Step 1: dec_mi_layer — Linear(128→512) → SLSTM[4-layer LSTM(512)+skip] → Linear(512→128)
     if (voc.mi_in_w && voc.lstm_w_ih[0]) {
-        // Linear in: (latent_dim, T) → (512, T)
         x = ggml_mul_mat(ctx0, voc.mi_in_w, x);
         if (voc.mi_in_b)
             x = ggml_add(ctx0, x, voc.mi_in_b);
-        // 4-layer stacked LSTM (forward only, hidden=512)
         const int lstm_h = 512;
+        ggml_tensor* lstm_in = x; // SLSTM skip residual is the LSTM input
         for (int li = 0; li < 4; li++) {
             if (!voc.lstm_w_ih[li])
                 break;
             x = core_lstm::lstm_unidir(ctx0, gf, x, voc.lstm_w_ih[li], voc.lstm_w_hh[li], voc.lstm_b_ih[li],
                                        voc.lstm_b_hh[li], lstm_h, /*reverse=*/false);
         }
-        // Linear out: (512, T) → (128, T)
+        x = ggml_add(ctx0, x, lstm_in); // SLSTM skip: y = LSTM(x) + x
         x = ggml_mul_mat(ctx0, voc.mi_out_w, x);
         if (voc.mi_out_b)
             x = ggml_add(ctx0, x, voc.mi_out_b);
     }
 
-    // Step 2: conv_pre — Conv1d(128, 1536, k=5)
-    x = dots_conv1d(ctx0, x, voc.conv_pre_w, voc.conv_pre_b);
+    // Step 2: conv_pre — Conv1d(128→1536, k=5), NON-causal (symmetric pad 2)
+    x = dots_conv1d(ctx0, x, voc.conv_pre_w, voc.conv_pre_b, 1, /*causal=*/false);
 
-    // Step 3: 6 upsample stages
+    // Step 3: 6 upsample stages — causal ConvTranspose1d, then 3 AMPBlock1 averaged.
     const int dilations[3] = {1, 3, 5};
     int n_stages = (int)voc.n_stages;
 
     for (int si = 0; si < n_stages; si++) {
-        // SnakeBeta activation before upsample
-        // Note: the activation is inside the resblocks, not before upsample.
-        // BigVGAN does: upsample → resblocks (SnakeBeta inside each).
-        // Actually looking at the upstream code, the upsample has LeakyReLU
-        // BEFORE it (BigVGAN v1) or SnakeBeta (BigVGAN v2). In dots.tts,
-        // the activation is inside Activation1d which wraps each resblock conv.
-        // The upsample has NO activation before it.
-
-        // ConvTranspose1d upsample
         int stride = (int)voc.upsample_rates[si];
         x = dots_convt1d(ctx0, x, voc.ups_w[si], voc.ups_b[si], stride);
 
-        // 3 resblocks per stage, outputs averaged
         int rb_base = si * 3;
         ggml_tensor* xs = nullptr;
         for (int j = 0; j < 3; j++) {
@@ -1573,12 +1613,11 @@ static float* dots_vocoder_decode(dots_tts_context* ctx, const float* latents, i
         x = ggml_scale(ctx0, xs, 1.0f / 3.0f);
     }
 
-    // Step 4: Post activation (SnakeBeta) + conv_post
-    x = core_act::snake_beta(ctx0, x, voc.post_alpha, voc.post_beta);
-    // conv_post: Conv1d(24, 1, k=7), no bias
-    x = dots_conv1d(ctx0, x, voc.post_conv_w, nullptr);
-    // Tanh
-    x = ggml_tanh(ctx0, x);
+    // Step 4: alias-free SnakeBeta (post) + conv_post (causal, k=7, no bias)
+    x = dots_alias_free_act(ctx0, x, voc.post_alpha, voc.post_beta, voc.post_up_filter, voc.post_down_filter);
+    x = dots_conv1d(ctx0, x, voc.post_conv_w, nullptr, 1, /*causal=*/true);
+    // dots config use_tanh_at_final=false → clamp to [-1, 1] (not tanh).
+    x = ggml_clamp(ctx0, x, -1.0f, 1.0f);
 
     // Output: (1, n_samples) — mono
     ggml_set_name(x, "voc_output");
@@ -2393,7 +2432,21 @@ extern "C" int dots_tts_vocoder_diff(const char* voc_gguf, const char* ref_gguf,
     ggml_tensor* cp = dots_conv1d(ctx0, h, voc.conv_pre_w, voc.conv_pre_b, 1, /*causal=*/false);
     ggml_set_name(cp, "conv_pre");
     ggml_set_output(cp);
+    // Bisection: stage-0 upsample + resblocks.
+    const int dilations[3] = {1, 3, 5};
+    ggml_tensor* u0 = dots_convt1d(ctx0, cp, voc.ups_w[0], voc.ups_b[0], (int)voc.upsample_rates[0]);
+    ggml_set_name(u0, "ups0");
+    ggml_set_output(u0);
+    ggml_tensor* xs = nullptr;
+    for (int j = 0; j < 3; j++) {
+        ggml_tensor* rj = dots_resblock_fwd(ctx0, u0, voc.resblocks[j], dilations);
+        xs = xs ? ggml_add(ctx0, xs, rj) : rj;
+    }
+    ggml_tensor* st0 = ggml_scale(ctx0, xs, 1.0f / 3.0f);
+    ggml_set_name(st0, "stage0");
+    ggml_set_output(st0);
     ggml_build_forward_expand(gf, cp);
+    ggml_build_forward_expand(gf, st0);
 
     ggml_gallocr_t galloc = ggml_gallocr_new(ggml_backend_get_default_buffer_type(ctx->backend));
     ggml_gallocr_alloc_graph(galloc, gf);
@@ -2438,6 +2491,19 @@ extern "C" int dots_tts_vocoder_diff(const char* voc_gguf, const char* ref_gguf,
         if (cos <= 0.999)
             rc = 1;
     }
+    for (const char* nm : {"ups0", "stage0"}) {
+        ggml_tensor* o = ggml_graph_get_tensor(gf, nm);
+        ggml_tensor* tr = ggml_get_tensor(rw.ctx, std::string("voc_").append(nm).c_str());
+        if (!o || !tr)
+            continue;
+        std::vector<float> got((size_t)ggml_nelements(o)), ref((size_t)ggml_nelements(tr));
+        ggml_backend_tensor_get(o, got.data(), 0, got.size() * sizeof(float));
+        ggml_backend_tensor_get(tr, ref.data(), 0, ref.size() * sizeof(float));
+        double cos, mx;
+        cosmax(got, ref, cos, mx);
+        std::printf("dots-tts voc %-9s n=%zu (ref=%zu)  cos=%.6f  max_abs=%.6f  %s\n", nm, got.size(), ref.size(), cos,
+                    mx, cos > 0.999 ? "PASS" : "FAIL");
+    }
     ggml_gallocr_free(galloc);
     ggml_free(ctx0);
 
@@ -2459,4 +2525,84 @@ extern "C" int dots_tts_vocoder_diff(const char* voc_gguf, const char* ref_gguf,
 
     dots_tts_free(ctx);
     return rc;
+}
+
+// ── Diff-harness: validate the isolated alias-free Activation1d ──────────────
+// Reference (dots-tts-act) carries act_in / act_out (T,C) + act_alpha/act_beta
+// (C,) + act_up_filter/act_down_filter (K,). Validates dots_alias_free_act.
+extern "C" int dots_tts_act_diff(const char* ref_gguf, int verbosity) {
+    auto* ctx = new dots_tts_context();
+    ctx->backend_cpu = ggml_backend_cpu_init();
+    ctx->backend = ctx->backend_cpu;
+    core_gguf::WeightLoad rw;
+    if (!core_gguf::load_weights(ref_gguf, ctx->backend, "ref", rw)) {
+        std::fprintf(stderr, "dots_act_diff: failed to load reference %s\n", ref_gguf);
+        dots_tts_free(ctx);
+        return 2;
+    }
+    auto G = [&](const char* n) { return ggml_get_tensor(rw.ctx, n); };
+    ggml_tensor* t_in = G("act_in");
+    ggml_tensor* t_out = G("act_out");
+    ggml_tensor* alpha = G("act_alpha");
+    ggml_tensor* beta = G("act_beta");
+    ggml_tensor* upf = G("act_up_filter");
+    ggml_tensor* dnf = G("act_down_filter");
+    if (!t_in || !t_out || !alpha || !beta || !upf || !dnf) {
+        std::fprintf(stderr, "dots_act_diff: reference missing act_* tensors\n");
+        dots_tts_free(ctx);
+        return 2;
+    }
+    const int C = (int)t_in->ne[0];
+    const int T = (int)t_in->ne[1];
+
+    size_t n_tensors = 512;
+    ggml_init_params ip = {n_tensors * ggml_tensor_overhead() + ggml_graph_overhead(), nullptr, true};
+    ggml_context* ctx0 = ggml_init(ip);
+    ggml_cgraph* gf = ggml_new_graph(ctx0);
+    ggml_tensor* x = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, C, T);
+    ggml_set_name(x, "act_x");
+    ggml_set_input(x);
+    ggml_tensor* y = dots_alias_free_act(ctx0, x, alpha, beta, upf, dnf);
+    ggml_set_name(y, "act_y");
+    ggml_set_output(y);
+    ggml_build_forward_expand(gf, y);
+
+    ggml_gallocr_t ga = ggml_gallocr_new(ggml_backend_get_default_buffer_type(ctx->backend));
+    ggml_gallocr_alloc_graph(ga, gf);
+    std::vector<float> in_data((size_t)C * T);
+    ggml_backend_tensor_get(t_in, in_data.data(), 0, in_data.size() * sizeof(float));
+    ggml_backend_tensor_set(x, in_data.data(), 0, in_data.size() * sizeof(float));
+    ggml_backend_graph_compute(ctx->backend, gf);
+
+    ggml_tensor* o = ggml_graph_get_tensor(gf, "act_y");
+    int n = (int)ggml_nelements(o);
+    std::vector<float> got((size_t)n), ref((size_t)ggml_nelements(t_out));
+    ggml_backend_tensor_get(o, got.data(), 0, got.size() * sizeof(float));
+    ggml_backend_tensor_get(t_out, ref.data(), 0, ref.size() * sizeof(float));
+    double dot = 0, na = 0, nb = 0, mx = 0;
+    int m = std::min((int)got.size(), (int)ref.size());
+    for (int i = 0; i < m; i++) {
+        dot += (double)got[i] * ref[i];
+        na += (double)got[i] * got[i];
+        nb += (double)ref[i] * ref[i];
+        double d = std::fabs((double)got[i] - ref[i]);
+        if (d > mx)
+            mx = d;
+    }
+    double cos = (na > 0 && nb > 0) ? dot / (std::sqrt(na) * std::sqrt(nb)) : 0.0;
+    std::printf("dots-tts alias-free act: C=%d T=%d out_n=%d (ref=%d)  cos=%.6f  max_abs=%.6f  %s\n", C, T, n,
+                (int)ref.size(), cos, mx, cos > 0.999 ? "PASS" : "FAIL");
+    if (verbosity >= 2) {
+        std::printf("  got[:6]:");
+        for (int i = 0; i < 6 && i < n; i++)
+            std::printf(" %+.4f", got[i]);
+        std::printf("\n  ref[:6]:");
+        for (int i = 0; i < 6 && i < (int)ref.size(); i++)
+            std::printf(" %+.4f", ref[i]);
+        std::printf("\n");
+    }
+    ggml_gallocr_free(ga);
+    ggml_free(ctx0);
+    dots_tts_free(ctx);
+    return cos > 0.999 ? 0 : 1;
 }

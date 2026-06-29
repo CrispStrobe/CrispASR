@@ -93,6 +93,11 @@ int dots_tts_flowmatch_diff(const char* model_gguf, const char* ref_gguf, int ve
 // Validates the post_proj → dec_mi LSTM → conv_pre front-end; returns 0 on PASS.
 int dots_tts_vocoder_diff(const char* voc_gguf, const char* ref_gguf, int verbosity);
 
+// Diff-harness entry: validate the isolated alias-free Activation1d against a
+// reference carrying act_in/act_out/act_alpha/act_beta/act_up_filter/
+// act_down_filter. Returns 0 on PASS.
+int dots_tts_act_diff(const char* ref_gguf, int verbosity);
+
 #ifdef __cplusplus
 }
 #endif

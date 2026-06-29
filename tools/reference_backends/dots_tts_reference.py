@@ -59,7 +59,15 @@ DEFAULT_STAGES = [
     "voc_post_proj",
     "voc_mi_out",
     "voc_conv_pre",
+    "voc_ups0",
+    "voc_stage0",
     "voc_audio",
+    "act_in",
+    "act_out",
+    "act_alpha",
+    "act_beta",
+    "act_up_filter",
+    "act_down_filter",
 ]
 
 
@@ -399,6 +407,10 @@ def _dump_vocoder(model_dir: Path, seed: int) -> Dict[str, np.ndarray]:
     vae.post_proj.register_forward_hook(lambda m, i, o: caps.__setitem__("post", o.detach()))
     vae.dec_mi_layer.register_forward_hook(lambda m, i, o: caps.__setitem__("mi", o.detach()))
     vae.decoder.conv_pre.register_forward_hook(lambda m, i, o: caps.__setitem__("convpre", o.detach()))
+    # Bisection taps: ups[0] output (after first upsample) and ups[1] input
+    # (== stage-0 output, after the 3 averaged resblocks).
+    vae.decoder.ups[0][0].register_forward_hook(lambda m, i, o: caps.__setitem__("ups0", o.detach()))
+    vae.decoder.ups[1][0].register_forward_pre_hook(lambda m, i: caps.__setitem__("stage0", i[0].detach()))
 
     audio = vae.inference_from_latents(x_in, do_sample=False)  # (1, 1, n_samples)
 
@@ -411,7 +423,55 @@ def _dump_vocoder(model_dir: Path, seed: int) -> Dict[str, np.ndarray]:
         "voc_post_proj": _npf(caps["post"][0].transpose(0, 1)),    # (n_frames, latent_dim)
         "voc_mi_out": _npf(caps["mi"][0]),                # already (n_frames, latent_dim)
         "voc_conv_pre": _npf(caps["convpre"][0].transpose(0, 1)),  # (n_frames, initial_ch)
+        "voc_ups0": _npf(caps["ups0"][0].transpose(0, 1)),         # (T0, C0) after first upsample
+        "voc_stage0": _npf(caps["stage0"][0].transpose(0, 1)),     # (T0, C0) after stage-0 resblocks
         "voc_audio": _npf(audio[0, 0]),                   # (n_samples,)
+    }
+
+
+def _dump_act(model_dir: Path, seed: int) -> Dict[str, np.ndarray]:
+    """Isolated single alias-free Activation1d reference (resblocks.0.activations.0).
+
+    Builds just that Activation1d (upsample 2x -> SnakeBeta -> downsample 2x with
+    the checkpoint's kaiser-sinc filters) and runs it on a seeded input, so the
+    C++ alias-free op can be debugged on its own. Also dumps the alpha/beta and
+    up/down filters so the C++ side reads identical values.
+    """
+    import torch
+    from safetensors import safe_open
+    from dots_tts.modules.vocoder.alias_free_act import Activation1d, SnakeBeta
+
+    torch.set_num_threads(2)
+    torch.set_grad_enabled(False)
+
+    pfx = "decoder.resblocks.0.activations.0."
+    with safe_open(str(model_dir / "vocoder.safetensors"), framework="pt") as f:
+        alpha = f.get_tensor(pfx + "act.alpha").float()
+        beta = f.get_tensor(pfx + "act.beta").float()
+        up_f = f.get_tensor(pfx + "upsample.filter").float()
+        dn_f = f.get_tensor(pfx + "downsample.lowpass.filter").float()
+    C = int(alpha.shape[0])
+
+    snake = SnakeBeta(C, alpha_logscale=True)
+    snake.alpha.copy_(alpha)
+    snake.beta.copy_(beta)
+    act = Activation1d(activation=snake, causal=True, fixed_filter=True)
+    act.upsample.filter.copy_(up_f)
+    act.downsample.lowpass.filter.copy_(dn_f)
+    act.eval()
+
+    g = torch.Generator().manual_seed(seed)
+    T = 8
+    x = torch.randn(1, C, T, generator=g, dtype=torch.float32)
+    y = act(x)
+    print(f"[dots-ref/act] C={C} T={T} -> out T={y.shape[-1]}")
+    return {
+        "act_in": _npf(x[0].transpose(0, 1)),    # (T, C)
+        "act_out": _npf(y[0].transpose(0, 1)),   # (T, C)
+        "act_alpha": _npf(alpha),                # (C,)
+        "act_beta": _npf(beta),                  # (C,)
+        "act_up_filter": _npf(up_f.reshape(-1)),    # (12,)
+        "act_down_filter": _npf(dn_f.reshape(-1)),  # (12,)
     }
 
 
@@ -446,11 +506,13 @@ def dump(
         results.update(_dump_flowmatch(model_dir, seed))
     if any(s.startswith("voc_") for s in stages):
         results.update(_dump_vocoder(model_dir, seed))
+    if any(s.startswith("act_") for s in stages):
+        results.update(_dump_act(model_dir, seed))
 
     # Keep only requested stages (plus the always-present penc/dit/fm/voc tensors).
     out = {k: np.ascontiguousarray(v.astype(np.float32))
            for k, v in results.items()
            if k in stages or k.startswith("penc_") or k.startswith("dit_")
-           or k.startswith("fm_") or k.startswith("voc_")}
+           or k.startswith("fm_") or k.startswith("voc_") or k.startswith("act_")}
     print(f"[dots-ref] returning {len(out)} tensors: {sorted(out)}")
     return out

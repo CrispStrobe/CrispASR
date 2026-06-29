@@ -1048,6 +1048,10 @@ int main(int argc, char** argv) {
         // model_path = vocoder GGUF, ref_path = voc-ref GGUF.
         return dots_tts_vocoder_diff(model_path.c_str(), ref_path.c_str(), /*verbosity=*/2);
     }
+    if (backend_name == "dots-tts-act") {
+        // ref_path = act-ref GGUF (self-contained; model_path ignored).
+        return dots_tts_act_diff(ref_path.c_str(), /*verbosity=*/2);
+    }
 
     // Load the reference archive.
     crispasr_diff::Ref ref;
