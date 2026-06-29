@@ -693,21 +693,28 @@ static tada_codec_context* tada_codec_init_from_file_impl(const char* path, int 
             c->backend = c->backend_cpu;
     }
 
-    // #192: the codec compute uses ggml_backend_sched, whose cross-backend copies
-    // are corrupted on Vulkan/MoltenVK (the same defect that gated the talker/FM
-    // onto a direct-gallocr path). The codec offloads some ops (ISTFT, certain
-    // convs) to CPU, so a pure-Vulkan gallocr path is not viable — instead run
-    // the whole codec on CPU when the GPU backend is Vulkan. Verified: the codec
-    // *input* features are bit-identical Metal-vs-Vulkan, and Metal (which
-    // tolerates the sched copies) renders them correctly, so CPU rendering of the
-    // Vulkan-generated features is faithful. The talker/FM keep their native
-    // Vulkan path. Opt back into the (broken) native codec with
+    // #192: the codec miscomputes on Vulkan/MoltenVK for non-trivial sequence
+    // lengths, so run the whole codec on CPU when the GPU backend is Vulkan.
+    // Diagnosis (per-stage TADA_CODEC_DUMP, Vulkan vs CPU on identical 522-frame
+    // features): the attention encoder MATCHES across backends (dump_attn,
+    // dump_layer0 identical), but the DAC decoder front-end explodes — dump_dac_in
+    // (the in_conv Conv1d → im2col+mul_mat) jumps to rms ~37 / range ±800 on
+    // Vulkan vs rms ~0.85 / ±8 on CPU, a ~43× structural blowup that propagates to
+    // the output; the final Tanh masks the range but the audio is distorted →
+    // empty/garbled ASR. It is NOT a precision issue (storing F32 weights changes
+    // nothing — MoltenVK downconverts) and NOT a ggml_backend_sched cross-backend
+    // bug (the codec runs as a single Vulkan split, no CPU offload). It is
+    // size-dependent: short inputs ("Hello world") render fine on Vulkan; the
+    // im2col/conv path breaks only past some sequence length — a MoltenVK conv
+    // kernel bug. The CPU codec is bit-faithful (Metal, which renders these same
+    // features correctly, confirms the features are good). Talker/FM keep their
+    // native Vulkan path. Opt back into the broken native codec with
     // CRISPASR_TADA_CODEC_VULKAN_NATIVE=1 for debugging.
     if (c->backend != c->backend_cpu && std::strstr(ggml_backend_name(c->backend), "Vulkan")) {
         const char* keep = std::getenv("CRISPASR_TADA_CODEC_VULKAN_NATIVE");
         if (!(keep && keep[0] == '1')) {
-            fprintf(stderr, "tada-codec: Vulkan backend detected — running codec on CPU (#192 sched "
-                            "corruption; set CRISPASR_TADA_CODEC_VULKAN_NATIVE=1 to override)\n");
+            fprintf(stderr, "tada-codec: Vulkan backend detected — running codec on CPU (#192 Vulkan "
+                            "conv miscompute at length; set CRISPASR_TADA_CODEC_VULKAN_NATIVE=1 to override)\n");
             c->backend = c->backend_cpu;
         }
     }

@@ -131,29 +131,40 @@ output byte-identical to before (fix is Vulkan-gated). Still gated
 (`CRISPASR_TADA_VULKAN_NATIVE=1`), default remains CPU-fallback — ask reporter
 (BergmannAtmet, RADV) to confirm before flipping the default.
 
-**Actual root cause (the FM premise was wrong).** A/B'd Metal vs Vulkan native on
-the same input: both produce **bit-identical** durations (`time_before =
-[38,2,9,6,8,8,5,10,9,5,211]`) and 522 frames — i.e. the talker + FM + duration
-decode AGREE across GPUs. Metal renders them intelligibly; Vulkan rendered empty
-audio. So the divergence is purely in **audio rendering = the codec**
-(`tada_codec.cpp`). The codec still computed via `ggml_backend_sched`, whose
-cross-backend copies are corrupted on Vulkan/MoltenVK — the very #192 defect that
-gated the talker/FM onto a direct-`ggml_gallocr` path; the codec was never
-migrated. (Disproven en route: FM-head precision — forcing F32 FM weights or
-running the whole FM head on CPU left output bit-identical; and `time_before`
-durations come straight from the FM gray-code decode, which already matched
-across backends. The candidate-ranking sensitivity is real but secondary —
-candidates=1 was partially intelligible pre-fix, candidates=4 empty — both fixed
-by the codec change.)
+**Actual root cause (the FM premise was wrong; the codec is the culprit).** A/B'd
+Metal vs Vulkan native on the same input: both produce **bit-identical** durations
+(`time_before = [38,2,9,6,8,8,5,10,9,5,211]`) and 522 frames — the talker + FM +
+duration decode AGREE across GPUs. Metal renders them intelligibly; Vulkan
+rendered empty audio. So the divergence is purely in **audio rendering = the
+codec** (`tada_codec.cpp`). Pinned down with per-stage `TADA_CODEC_DUMP` (Vulkan
+vs CPU, identical 522-frame features): the **attention encoder MATCHES** across
+backends (`dump_attn`, `dump_layer0` identical), but the **DAC decoder front-end
+explodes** — `dump_dac_in` (the `in_conv` Conv1d → im2col+mul_mat) jumps to
+rms ~37 / range ±800 on Vulkan vs rms ~0.85 / ±8 on CPU (~43×), propagating to the
+output; the final `Tanh` masks the range but the audio is distorted. It is
+**size-dependent**: short inputs ("Hello world") render *correctly* on Vulkan
+(per-stage dump bit-comparable to CPU), and only break past some sequence length →
+a **MoltenVK conv/im2col kernel bug**, not CrispASR graph logic.
+
+**NOT what earlier notes claimed.** It is **not** a `ggml_backend_sched`
+cross-backend-copy bug — `GGML_SCHED_DEBUG=2` shows the codec runs as a *single
+Vulkan split*, no CPU offload, no cross-backend copies. It is **not** missing
+Vulkan kernels — ggml-vulkan has `conv_transpose_1d`/`col2im_1d`/`im2col`/
+`mul_mat`/`flash_attn_ext` pipelines, and the codec uses **no ISTFT** (it is a DAC
+*conv* decoder). It is **not** precision — storing F32 weights changes nothing
+(MoltenVK downconverts src0→f16 in matmul). (Also disproven for the FM red
+herring: F32 FM weights and whole-FM-on-CPU both left output bit-identical;
+`time_before` already matched across backends.)
 
 **Fix.** When the codec's GPU backend is Vulkan, run the whole codec on the CPU
-backend (`src/tada_codec.cpp`, `tada_codec_init_from_file_impl`). A pure-Vulkan
-gallocr path isn't viable — the codec offloads some ops (ISTFT, certain convs) to
-CPU, so it genuinely needs two backends, and the sched copies between them are
-what corrupt. The codec is a one-shot decode (not the AR loop) and its input
-features are bit-identical Metal-vs-Vulkan, so CPU rendering is faithful. The
+backend (`src/tada_codec.cpp`, `tada_codec_init_from_file_impl`). The codec is a
+one-shot decode (not the AR loop) and its input features are bit-identical
+Metal-vs-Vulkan (Metal renders them correctly), so CPU rendering is faithful. The
 talker/FM keep their native-Vulkan path. Opt back into the broken native codec
-with `CRISPASR_TADA_CODEC_VULKAN_NATIVE=1` (debug only).
+with `CRISPASR_TADA_CODEC_VULKAN_NATIVE=1` (debug only). **Open follow-up:** the
+proper fix is upstream in ggml-vulkan (the length-dependent conv/im2col kernel),
+or a chunked codec decode that stays under the broken size — either keeps the
+codec on the GPU.
 
 **Caveat — MoltenVK can't fully validate GPU numerics.** MoltenVK's `mul_mm` /
 `mul_mat_vec` downconvert src0 to f16 regardless of stored dtype (storing F32 FM

@@ -50,9 +50,15 @@ Same branch. The "FM time-dimension divergence" localization above was a **red h
 produced **bit-identical** durations (`time_before = [38,2,9,6,8,8,5,10,9,5,211]`) and 522
 frames — the talker + FM + gray-code duration decode AGREE across GPUs. Metal rendered them
 intelligibly ("I went to school in back in four hours"); Vulkan rendered **empty** audio.
-So the divergence is entirely in audio rendering = the **codec** (`tada_codec.cpp`), which
-still computed via `ggml_backend_sched` — the cross-backend-copy corruption that #192 had
-already gated the talker/FM away from (direct `ggml_gallocr`); the codec was never migrated.
+So the divergence is entirely in audio rendering = the **codec** (`tada_codec.cpp`).
+Per-stage `TADA_CODEC_DUMP` (Vulkan vs CPU, identical 522-frame features) pinned it: the
+attention encoder MATCHES, but the DAC decoder front-end explodes — `dump_dac_in` (the
+`in_conv` Conv1d → im2col+mul_mat) hits rms ~37 / range ±800 on Vulkan vs ~0.85 on CPU
+(~43×), distorting the output (the final Tanh masks the range). Size-dependent (short
+"Hello world" renders fine on Vulkan) → a MoltenVK conv/im2col kernel bug. **NOT** a
+`ggml_backend_sched` cross-backend bug (single Vulkan split, no offload — `GGML_SCHED_DEBUG`
+confirmed), **NOT** missing kernels (ggml-vulkan has conv_transpose_1d/col2im/im2col;
+the codec has no ISTFT), **NOT** precision.
 
 **Disproven en route** (so the next reader doesn't repeat it): forcing F32 FM weights on
 Vulkan left output **bit-identical** (MoltenVK `mul_mm` downconverts src0 to f16 regardless
@@ -61,12 +67,14 @@ Vulkan left output **bit-identical** (MoltenVK `mul_mm` downconverts src0 to f16
 durations. The FM was never the problem — its gray-code time bits already matched CPU at
 the records that mattered.
 
-**Fix (this commit).** When the codec's GPU backend is Vulkan, run the whole codec on the
-**CPU backend** (`tada_codec_init_from_file_impl`). The codec offloads ISTFT / some convs to
-CPU, so a pure-Vulkan gallocr isn't viable — it needs two backends and the sched copies
-between them are the defect. The codec is a one-shot decode (not the AR loop) and its input
-features are bit-identical Metal-vs-Vulkan, so CPU rendering is faithful. Talker/FM keep the
-native-Vulkan path. Debug override: `CRISPASR_TADA_CODEC_VULKAN_NATIVE=1`.
+**Fix (commit 1cc02fef; explanation corrected in a follow-up commit).** When the codec's
+GPU backend is Vulkan, run the whole codec on the **CPU backend**
+(`tada_codec_init_from_file_impl`). The codec is a one-shot decode (not the AR loop) and its
+input features are bit-identical Metal-vs-Vulkan (Metal renders them correctly), so CPU
+rendering is faithful. Talker/FM keep the native-Vulkan path. Debug override:
+`CRISPASR_TADA_CODEC_VULKAN_NATIVE=1`. Open follow-up: proper fix is upstream in
+ggml-vulkan (length-dependent conv/im2col kernel) or a chunked codec decode under the
+breaking size — either keeps the codec on GPU.
 
 **Validation.** Native Vulkan now ASR-round-trips intelligibly on "four hours" (seed 1, ==
 Metal), "the quick brown fox…" (seed 1), and "four hours" (seed 2); deterministic across

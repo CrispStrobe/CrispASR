@@ -19,17 +19,28 @@ generate the same sentence on **Metal** vs **Vulkan** native. Both produced
 **bit-identical durations and frame counts** (`time_before` matched exactly) —
 proving the talker + FM + duration decode AGREE across GPUs — yet Metal's audio
 was intelligible and Vulkan's was empty. So the divergence was purely in audio
-**rendering = the codec**, which still ran through `ggml_backend_sched` (the
-cross-backend-copy corruption that already gated the talker/FM onto a direct
-`ggml_gallocr` path; the codec was never migrated). Fix: run the codec on CPU
-when the GPU is Vulkan (it offloads ISTFT/some convs to CPU, so a pure-Vulkan
-gallocr isn't viable; the sched copies between the two backends are the defect).
+**rendering = the codec**. Per-stage `TADA_CODEC_DUMP` (Vulkan vs CPU, identical
+features) localized it precisely: the codec's attention encoder MATCHES across
+backends, but the **DAC decoder front-end explodes** — `dump_dac_in` (an
+`in_conv` Conv1d → im2col+mul_mat) hits rms ~37 / range ±800 on Vulkan vs ~0.85
+on CPU (~43×). It is **size-dependent** (short inputs render fine; only longer
+sequences break) → a **MoltenVK conv/im2col kernel bug**. Fix: run the whole codec
+on CPU when the GPU is Vulkan. **Beware the two wrong explanations I went through
+first** (both plausible, both false — verify, don't assume): (a) "it's a
+`ggml_backend_sched` cross-backend-copy bug" — NO, `GGML_SCHED_DEBUG=2` shows the
+codec is a *single Vulkan split*, no offload, no copies; (b) "Vulkan lacks the
+conv/ISTFT kernels" — NO, ggml-vulkan has conv_transpose_1d/col2im/im2col/
+flash_attn, and the codec has no ISTFT at all (it's a DAC conv decoder).
 **Lessons:** (1) when two GPU backends exist, A/B them first — if they agree with
 each other but disagree with CPU-rendered output, the bug is in the
 backend-specific *rendering*, not the shared upstream math; (2) inherit a
 handover's *localization* skeptically — re-run its cheapest disproving test
-before building on it. Disproven en route: forcing F32 FM weights or running the
-whole FM head on CPU left output bit-identical (the FM was never the issue).
+before building on it (the FM premise was wrong — F32 FM weights and whole-FM-on-
+CPU both left output bit-identical); (3) localize with the per-stage magnitude
+dump before naming a cause — `dump_dac_in` rms 0.85→37 named the op in one run,
+after two hand-wavy mechanisms wasted effort. (4) `grep` the actual op list +
+`supports_op` before claiming "no kernel"; check `GGML_SCHED_DEBUG=2` before
+claiming "cross-backend copy".
 
 ## MoltenVK `mul_mm`/`mul_mat_vec` downconvert src0 to f16 regardless of stored dtype (§192)
 
