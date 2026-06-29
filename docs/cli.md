@@ -479,6 +479,23 @@ The implicit-enable line goes to stderr (suppressed under
 `--no-prints`) so it doesn't perturb stdout subtitle parsing in
 upstream tools like SubtitleEdit.
 
+### Granite word-level timestamps and `--max-len` (#205)
+
+`--backend granite` (Granite Speech 4.1 PLUS variant) now requests
+word-level timestamps from the model whenever the output format needs
+them: `--max-len`, `-osrt`, `-ovtt`, or `--split-on-punct`. Previously,
+word timestamps were only generated for `--output-wts` and `-ojf`,
+causing `--max-len` to silently have no effect.
+
+```bash
+./build/bin/crispasr --backend granite \
+    -m granite-speech-4.1-2b-plus-q4_k.gguf \
+    -f audio.wav --max-len 50 -osrt
+```
+
+> **Note:** Qwen3 does not support word-level timestamps, so `--max-len`
+> segment splitting is not available with that backend.
+
 ## Sampling / decoding (whisper + LLM backends)
 
 | Flag | Meaning |

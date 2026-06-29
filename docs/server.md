@@ -88,7 +88,7 @@ curl http://localhost:8080/v1/audio/transcriptions \
 | `model` | Ignored (uses the loaded model) |
 | `language` | ISO-639-1 code (default: server's `-l` setting) |
 | `prompt` | Initial prompt / context |
-| `response_format` | `json` (default), `verbose_json`, `text`, `srt`, `vtt` |
+| `response_format` | `json` (default), `verbose_json`, `diarized_json`, `text`, `srt`, `vtt` |
 | `temperature` | Sampling temperature (default: 0.0) |
 | `seed` | RNG seed for sampling (`0` = non-deterministic) |
 | `max_tokens` | Generated-token cap for supported autoregressive ASR backends |
@@ -163,6 +163,47 @@ curl http://localhost:8080/v1/audio/transcriptions \
   -F "diarize=true" \
   -F "diarize_method=pyannote"
 ```
+
+### Diarized JSON format (#206)
+
+`response_format=diarized_json` returns OpenAI-compatible verbose JSON
+extended with per-segment speaker labels. Speaker strings are normalised
+to single letters (`A`, `B`, `C`, …). Each segment includes a `type`
+field for compatibility with transcription clients that expect the
+diarized schema.
+
+```bash
+curl http://localhost:8080/v1/audio/transcriptions \
+  -F "file=@DIALOGUE.ogg" \
+  -F "response_format=diarized_json" \
+  -F "diarize=true" \
+  -F "diarize_method=pyannote"
+```
+
+Response structure:
+
+```json
+{
+  "task": "transcribe",
+  "language": "en",
+  "duration": 245.029,
+  "text": "Full transcript text...",
+  "segments": [
+    {
+      "id": 0,
+      "start": 0.00,
+      "end": 26.10,
+      "text": "I'll tell you basically what this is about...",
+      "speaker": "A",
+      "type": "transcript.text.segment"
+    }
+  ]
+}
+```
+
+When `diarize` is not enabled, all segments default to speaker `"A"`.
+Word-level timestamps are included in each segment when the backend
+provides them.
 
 ### Translation example
 

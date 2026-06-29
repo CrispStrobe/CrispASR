@@ -295,6 +295,8 @@ The matrix above covers 24 ASR backends. **Additional ASR backends** not shown: 
 - `sherpa` / `ecapa` — external [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) subprocess; runs once globally on full audio for consistent speaker IDs (#110)
 - `vad-turns` — mono-friendly gap-based proxy
 
+The server endpoint supports `response_format=diarized_json` for structured speaker-labelled output with normalised speaker letters (A, B, C …) — see [`docs/server.md`](docs/server.md#diarized-json-format-206).
+
 Full reference + tuning knobs (cluster threshold, max speakers, pluggable embedder adapters): see [`docs/cli.md#diarization`](docs/cli.md#diarization).
 
 **Language identification** for backends without native LID: `--lid-backend whisper` (default, 75 MB ggml-tiny.bin), `--lid-backend silero` (native GGUF, 16 MB, 95 languages), or `--lid-backend firered` (FireRedLID, 1.7 GB, 120 languages — Conformer encoder + Transformer decoder).
