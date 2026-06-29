@@ -845,7 +845,7 @@ extern "C" float* ark_asr_prefill_logits(struct ark_asr_context* ctx, const floa
 // ===========================================================================
 // Transcribe (one <=30s window)
 // ===========================================================================
-static std::string ark_transcribe_window(ark_asr_context* ctx, const float* pcm, int n_samples) {
+static std::string ark_transcribe_window(ark_asr_context* ctx, const float* pcm, int n_samples, int max_new) {
     const auto& hp = ctx->hp;
     int n_mels = 0, T_mel = 0;
     float* mel = ark_asr_compute_mel(ctx, pcm, n_samples, &n_mels, &T_mel);
@@ -881,7 +881,6 @@ static std::string ark_transcribe_window(ark_asr_context* ctx, const float* pcm,
     }
     free(audio);
 
-    const int max_new = 256;
     if (!ark_kv_init(ctx, T + max_new + 16))
         return std::string();
     core_gguf::mmap_advise_random(ctx->buf_w);
@@ -932,18 +931,48 @@ static std::string ark_transcribe_window(ark_asr_context* ctx, const float* pcm,
     return txt;
 }
 
+// Budget for greedy decode: output tokens are ~0.3x the audio-token count, so
+// the audio-token estimate (n_samples / (hop*2*merge) = n_samples/1280) is a
+// safe upper bound with headroom. Clamp to [256, 4096] (floor for short clips,
+// backstop against a no-EOS runaway).
+static int ark_max_new_for(int n_samples) {
+    int est = n_samples / 1280 + 64;
+    if (est < 256)
+        est = 256;
+    if (est > 4096)
+        est = 4096;
+    return est;
+}
+
 extern "C" char* ark_asr_transcribe(struct ark_asr_context* ctx, const float* pcm, int n_samples) {
     if (!ctx || !pcm || n_samples <= 0)
         return nullptr;
     const int sr = (int)ctx->hp.sample_rate;
-    const int win = 30 * sr; // 30 s windows (model max_source_positions = 1500)
+
+    // Single-pass whole-audio, matching the reference (modeling_arkasr.py): the
+    // RoPE encoder has no positional cap, so the whole clip is one encoder pass +
+    // one decode. This avoids the per-window language drift that independent
+    // chunks cause. The encoder uses flash-attn (bounded memory), but attention
+    // is O(T^2) compute and decode is O(transcript) — so cap single-pass length
+    // and fall back to internal chunking for very long audio to stay off the
+    // 16 GB M1's OOM/slowdown cliff. Override the cap (seconds) with
+    // CRISPASR_ARKASR_MAX_SINGLE_PASS_S (0 = never chunk).
+    int cap_s = 300;
+    if (const char* e = std::getenv("CRISPASR_ARKASR_MAX_SINGLE_PASS_S"))
+        cap_s = std::atoi(e);
+    const long cap_samples = (long)cap_s * sr;
+
     std::string full;
-    if (n_samples <= win) {
-        full = ark_transcribe_window(ctx, pcm, n_samples);
+    if (cap_s <= 0 || (long)n_samples <= cap_samples) {
+        full = ark_transcribe_window(ctx, pcm, n_samples, ark_max_new_for(n_samples));
     } else {
+        // Fallback for very long audio: internal 30 s windows (re-introduces the
+        // per-window drift, but bounds memory/time). Pass --vad for cleaner
+        // silence-bounded segments, or raise CRISPASR_ARKASR_MAX_SINGLE_PASS_S.
+        const int win = 30 * sr;
         for (int off = 0; off < n_samples; off += win) {
             const int len = std::min(win, n_samples - off);
-            std::string seg = ark_transcribe_window(ctx, pcm + off, len);
+            std::string seg = ark_transcribe_window(ctx, pcm + off, len, ark_max_new_for(len));
             if (!seg.empty()) {
                 if (!full.empty())
                     full += " ";

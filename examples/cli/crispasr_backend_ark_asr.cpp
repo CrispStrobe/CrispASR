@@ -21,7 +21,16 @@ public:
 
     const char* name() const override { return "ark-asr"; }
 
-    uint32_t capabilities() const override { return CAP_AUTO_DOWNLOAD | CAP_INTERNAL_CHUNKING | CAP_FLASH_ATTN; }
+    uint32_t capabilities() const override {
+        // CAP_UNBOUNDED_INPUT: the reference (modeling_arkasr.py) encodes the
+        // whole clip in one RoPE encoder pass + one decode — no 30 s windowing.
+        // Chunking into independent windows lets the promptless model re-detect
+        // language per window (a German chunk gets translated to English), so we
+        // default to full-audio like the reference. CAP_INTERNAL_CHUNKING makes
+        // ark_asr_transcribe own the long-audio fallback (single-pass up to a
+        // safety cap, else internal chunks) instead of crispasr_run's 30 s split.
+        return CAP_AUTO_DOWNLOAD | CAP_UNBOUNDED_INPUT | CAP_INTERNAL_CHUNKING | CAP_FLASH_ATTN;
+    }
 
     bool init(const whisper_params& params) override {
         auto cp = ark_asr_context_default_params();
