@@ -485,16 +485,30 @@ frames → Linear 5120→4096 → GELU → Linear 4096→2048) + stock **Qwen2.5
 `<|audio|>` (151663) placeholder embeddings are overwritten by the first
 N = `((mel_frames+1)//2)//4` adapter frames; mel is the stock WhisperFeatureExtractor
 recipe (128-bin, n_fft 400, hop 160). Convert with
-`models/convert-arkasr-to-gguf.py` (`--outtype f16|q8_0`).
+`models/convert-arkasr-to-gguf.py` (`--outtype f16|q8_0`); build Q4_K from the F16
+with `crispasr-quantize` (the ark-asr rule keeps encoder/adapter/embeddings F16).
+
+**Validated** against the original PyTorch model (`trust_remote_code`, bf16) via
+`crispasr-diff arkasr` on jfk: log-mel cos 0.999993, first decoder logits (Q8_0)
+cos 0.999646, audio-embeds mean cos 0.999445. Transcript verbatim (en + de).
+GGUFs published at [`cstr/ark-asr-3b-GGUF`](https://huggingface.co/cstr/ark-asr-3b-GGUF)
+(f16 / q8_0 / q4_k).
+
+**Single-pass whole-audio** (matches the reference): the RoPE encoder has no
+positional cap, so the whole clip is one encoder pass + one decode. Long audio
+falls back to internal 30 s chunking only above `CRISPASR_ARKASR_MAX_SINGLE_PASS_S`
+(default 300 s; 0 = never) to bound O(T²) encoder compute / decode length.
+The transcript-opening `.` token the model emits (the reference shows it too) is
+stripped in the output cleanup.
 
 **Known limitations (WIP):**
-- **Language steering is experimental.** ARK is promptless, so language can drift
-  per 30 s chunk on long audio (e.g. one chunk transcribed but the next
-  *translated* to English). Passing `-l <lang>` injects a best-effort
-  "Transcribe the audio in <Language>." instruction, but the model was not trained
-  on instructions, so it does not fully prevent the drift (observed identically on
-  CPU and GPU). The default (no `-l`) is the validated promptless path. A robust
-  fix needs cross-chunk language conditioning, not a prompt.
+- **Language steering is experimental.** ARK is promptless. Within the single-pass
+  window language is stable (the earlier per-30 s-chunk *translate-to-English*
+  drift was a chunking artifact, fixed by single-pass). Beyond the single-pass cap
+  the internal-chunk fallback can re-introduce it — pass `--vad` or raise the cap.
+  `-l <lang>` injects a best-effort "Transcribe the audio in <Language>."
+  instruction, but the model was not instruction-trained, so it is not a hard
+  guarantee. The default (no `-l`) is the validated promptless path.
 - **GPU per-token decode is not faster on Apple unified memory.** GPU is the
   default and is verbatim-correct on Metal — prefill is ~5.6× faster, but the
   single-token decode steps are bandwidth/dispatch-bound and roughly neutral

@@ -6248,23 +6248,31 @@ verbatim English; De-Abwasch 79 s → verbatim German. CLI: `crispasr -m
 ark-asr-3b-q8_0.gguf --backend ark-asr -f audio.wav`. **GPU is now the default**
 (Metal-validated; force CPU with `CRISPASR_ARKASR_CPU=1`).
 
-Done: session ABI (crispasr_c_api.cpp), `-l` language-instruction injection
-(§9b, experimental), model registry entry, live test, docs, GGUF publish.
+Done: full wiring per docs/contributing.md (C API, adapter, factory, CMake lib+cli,
+registry, session ABI + symbols in libcrispasr.dylib + available_backends, live
+test, docs). `-l` injection (§9b). GGUFs published cstr/ark-asr-3b-GGUF
+(f16 7 GB / q8_0 4 GB / q4_k 3.3 GB, all verbatim) + HF model card.
+
+**Diff harness RUN** (vs PyTorch bf16 reference, jfk): log-mel cos 0.999993,
+first_logits (q8_0) cos 0.999646, audio_embeds mean cos 0.999445 (one low-mag
+frame at 0.953 = q8 noise, harmless — logits pass). Pipeline matches the blueprint.
 
 Both perf follow-ups settled by measurement (gated `CRISPASR_ARKASR_TIMING=1`):
 - **(a) step-graph cache = DUD** — per-step build+alloc is 0.3–0.5% of each step
   (~0.45 ms vs ~120 ms compute); decode is fully compute-bound on the 3B forward.
-  The "rebuild is slow" note was a misdiagnosis. Don't build the cache.
 - **(b) GPU "no tokens" no longer reproduces** — GPU is verbatim on M1 Metal,
-  ~5.6× faster prefill, ~neutral per-token decode (bandwidth/dispatch-bound on
-  unified memory), ~1.7× overall. Flipped to default. CUDA unvalidated.
+  ~5.6× faster prefill, ~neutral per-token decode, ~1.7× overall. Default. CUDA unvalidated.
 
-Remaining genuine rough edge: **language drift** on long audio — a 30 s chunk can
-be *translated* to English rather than transcribed; identical on CPU and GPU and
-not fully fixed by the `-l` instruction (model not instruction-trained). A real
-fix needs cross-chunk language conditioning (carry prior-chunk language/context
-into each chunk's decode), not a stronger prompt. Diff harness is built (optional;
-the verbatim roundtrip is the stronger gate).
+**Language drift FIXED** by matching the reference's single-pass whole-audio
+(commit: CAP_UNBOUNDED_INPUT + single-pass ark_asr_transcribe). The drift was a
+chunking artifact (independent 30 s windows re-detected language); the RoPE encoder
+has no positional cap, so the reference encodes the whole clip in one pass. De-Abwasch
+79 s now verbatim German throughout. Long audio > `CRISPASR_ARKASR_MAX_SINGLE_PASS_S`
+(default 300 s) falls back to internal chunking (drift can return there → use --vad).
+Also strip the model's leading `.` transcript-opening token in output cleanup.
+
+Open (minor): cross-chunk language conditioning for audio beyond the single-pass
+cap; CUDA validation. Both nice-to-have, not blockers.
 
 Port of [AutoArk-AI/ARK-ASR-3B](https://huggingface.co/AutoArk-AI/ARK-ASR-3B):
 a 19-language ASR model = **Whisper-large-v3 encoder with partial RoPE** +
