@@ -178,6 +178,19 @@ TEST_CASE("server TTS policy keeps tada single-shot", "[unit][chunking]") {
     }
 }
 
+// PLAN #200: dots.tts is a continuous-latent AR model that generates
+// multi-sentence utterances in one pass with its own EOS, like the reference
+// dots.tts generate(text). Splitting re-runs the per-sentence trailing-pause
+// over-prediction AND re-emits the spoken AI-disclaimer that
+// dots_tts_synthesize prepends on each call (one per chunk) when cloning. The
+// backend registers as "dots-tts".
+TEST_CASE("server TTS policy keeps dots-tts single-shot", "[unit][chunking]") {
+    const char* text = "First sentence. Second sentence. Third sentence.";
+    auto out = crispasr_tts_plan_chunks_for_backend(text, "dots-tts");
+    REQUIRE(out.size() == 1);
+    REQUIRE(out[0] == text);
+}
+
 TEST_CASE("server TTS policy chunks sentence-safe backends", "[unit][chunking]") {
     auto out = crispasr_tts_plan_chunks_for_backend("First sentence. Second sentence.", "kokoro");
     REQUIRE(out.size() == 2);
