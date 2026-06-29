@@ -1180,3 +1180,17 @@ When the spoken disclaimer is suppressed, the caller assumes
 responsibility for providing appropriate AI-disclosure to end users
 (e.g. a visual label in the UI). The spread-spectrum watermark and
 C2PA metadata are always embedded regardless of this setting.
+
+**Latency (by design).** The disclaimer is a *full synthesis pass* of the
+neutral sentence on the loaded backend — not a pre-recorded clip — so it adds
+latency proportional to that one fixed sentence. It is cached per process and
+reused: a long-running **server** pays this cost once (on the first voice-clone
+request) and not again, whereas the **CLI** re-synthesizes it on every
+invocation because each run is a fresh process with a cold cache. For
+continuous-latent AR backends such as dots.tts the disclaimer is a complete
+autoregressive generation, so on a short clone it can roughly double the
+wall-clock time of a single CLI call (a constant overhead that becomes
+negligible for longer text and for repeated server requests). Pass
+`--no-spoken-disclaimer` / `"spoken_disclaimer": false` to skip it when you
+provide AI-disclosure another way — the watermark and C2PA provenance are
+still embedded.
