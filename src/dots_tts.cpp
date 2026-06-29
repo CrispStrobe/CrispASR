@@ -782,7 +782,10 @@ static void dots_llm_step(dots_tts_context* ctx, const float* input_embeds, int 
     atp.rope_type = GGML_ROPE_TYPE_NEOX;
     atp.rope_theta = llm.rope_theta;
     atp.n_ctx_orig = 131072;
-
+    // 1/sqrt(head_dim). KvSelfAttnParams has no default for attn_scale, so {}
+    // leaves it 0 → flash_attn scale 0 → uniform attention → garbage prefill
+    // (a single decode step survives only because the residual stream dominates).
+    atp.attn_scale = 1.0f / std::sqrt((float)llm.head_dim);
     atp.qk_norm_eps = llm.rms_norm_eps;
 
     ggml_tensor* cur = x;
@@ -2241,6 +2244,95 @@ extern "C" int dots_tts_penc_diff(const char* model_gguf, const char* ref_gguf, 
 
     dots_tts_free(ctx);
     return rc;
+}
+
+// ── Diff-harness: validate the LLM (Qwen2.5) forward ────────────────────────
+// Reference (tools/reference_backends/dots_tts_reference.py _dump_llm) carries
+// llm_ids_prefill (N), llm_hidden_prefill (hidden,N), llm_step_embed (hidden,1),
+// llm_hidden_step (hidden,1). Validates BOTH the prefill (input_ids, n_past=0)
+// and the KV-cached incremental step on an embedding (the penc->LLM feedback
+// path). Prints per-stage cosine/max_abs; returns 0 if both PASS.
+extern "C" int dots_tts_llm_diff(const char* model_gguf, const char* ref_gguf, int verbosity) {
+    dots_tts_context_params p = dots_tts_context_default_params();
+    p.verbosity = verbosity;
+    p.use_gpu = false;
+    dots_tts_context* ctx = dots_tts_init_from_file(model_gguf, p);
+    if (!ctx) {
+        std::fprintf(stderr, "dots_llm_diff: failed to load model %s\n", model_gguf);
+        return 2;
+    }
+    core_gguf::WeightLoad rw;
+    if (!core_gguf::load_weights(ref_gguf, ctx->backend, "ref", rw)) {
+        std::fprintf(stderr, "dots_llm_diff: failed to load reference %s\n", ref_gguf);
+        dots_tts_free(ctx);
+        return 2;
+    }
+    ggml_tensor* t_ids = ggml_get_tensor(rw.ctx, "llm_ids_prefill");
+    ggml_tensor* t_hp = ggml_get_tensor(rw.ctx, "llm_hidden_prefill");
+    ggml_tensor* t_se = ggml_get_tensor(rw.ctx, "llm_step_embed");
+    ggml_tensor* t_hs = ggml_get_tensor(rw.ctx, "llm_hidden_step");
+    if (!t_ids || !t_hp || !t_se || !t_hs) {
+        std::fprintf(stderr, "dots_llm_diff: reference missing llm_* tensors\n");
+        dots_tts_free(ctx);
+        return 2;
+    }
+
+    const int D = (int)ctx->llm.hidden_size;
+    const int N = (int)ggml_nelements(t_ids);
+
+    auto report = [&](const char* tag, const float* got, const float* ref, int n) -> bool {
+        double dot = 0, na = 0, nb = 0, maxabs = 0;
+        for (int i = 0; i < n; i++) {
+            dot += (double)got[i] * ref[i];
+            na += (double)got[i] * got[i];
+            nb += (double)ref[i] * ref[i];
+            double d = std::fabs((double)got[i] - ref[i]);
+            if (d > maxabs)
+                maxabs = d;
+        }
+        double cos = (na > 0 && nb > 0) ? dot / (std::sqrt(na) * std::sqrt(nb)) : 0.0;
+        bool pass = cos > 0.999;
+        std::printf("dots-tts llm %-16s n=%d  cos=%.6f  max_abs=%.6f  %s\n", tag, n, cos, maxabs,
+                    pass ? "PASS" : "FAIL");
+        if (verbosity >= 2) {
+            std::printf("  got[:6]:");
+            for (int i = 0; i < 6 && i < n; i++)
+                std::printf(" %+.4f", got[i]);
+            std::printf("\n  ref[:6]:");
+            for (int i = 0; i < 6 && i < n; i++)
+                std::printf(" %+.4f", ref[i]);
+            std::printf("\n");
+        }
+        return pass;
+    };
+
+    // ── Prefill: embed the seeded ids, run dots_llm_step(n_past=0). ──
+    std::vector<float> idf(N);
+    ggml_backend_tensor_get(t_ids, idf.data(), 0, N * sizeof(float));
+    std::vector<int32_t> ids(N);
+    for (int i = 0; i < N; i++)
+        ids[i] = (int32_t)std::lround(idf[i]);
+    std::vector<float> emb((size_t)N * D);
+    dots_embed_tokens(ctx, ids.data(), N, emb.data());
+    std::vector<float> hp((size_t)N * D);
+    dots_llm_step(ctx, emb.data(), N, 0, hp.data());
+
+    std::vector<float> ref_hp((size_t)N * D);
+    ggml_backend_tensor_get(t_hp, ref_hp.data(), 0, ref_hp.size() * sizeof(float));
+    bool ok_pre = report("prefill[all]", hp.data(), ref_hp.data(), N * D);
+    bool ok_prelast = report("prefill[last]", hp.data() + (size_t)(N - 1) * D, ref_hp.data() + (size_t)(N - 1) * D, D);
+
+    // ── Incremental step on a seeded embedding (penc->LLM feedback path). ──
+    std::vector<float> se(D);
+    ggml_backend_tensor_get(t_se, se.data(), 0, D * sizeof(float));
+    std::vector<float> hs(D);
+    dots_llm_step(ctx, se.data(), 1, N, hs.data());
+    std::vector<float> ref_hs(D);
+    ggml_backend_tensor_get(t_hs, ref_hs.data(), 0, D * sizeof(float));
+    bool ok_step = report("step[embed]", hs.data(), ref_hs.data(), D);
+
+    dots_tts_free(ctx);
+    return (ok_pre && ok_prelast && ok_step) ? 0 : 1;
 }
 
 // ── Diff-harness: validate the flow-matching ODE driver ─────────────────────

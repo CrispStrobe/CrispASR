@@ -192,6 +192,64 @@ def _dump_patch_encoder(model_dir: Path, seed: int) -> Dict[str, np.ndarray]:
     return out
 
 
+def _dump_llm(model_dir: Path, seed: int) -> Dict[str, np.ndarray]:
+    """Isolated LLM (Qwen2.5-1.5B backbone) forward reference.
+
+    Loads ONLY the ``llm.*`` weights (~1.5 B, ~6 GB f32) into a stock
+    Qwen2ForCausalLM and validates both paths the AR loop exercises:
+      1. PREFILL over the exact "Hello world." generation-template token ids
+         (input_ids, n_past=0) -> last-layer post-norm hidden (== step_llm's
+         outputs.hidden_states[-1]).
+      2. One INCREMENTAL step on a seeded random embedding (inputs_embeds, with
+         the prefill KV cache) -> hidden. This mirrors the penc->LLM feedback
+         where EOS misfired, so it exercises the KV-cached decode path directly.
+    """
+    import torch
+    from safetensors import safe_open
+    from transformers import Qwen2Config, Qwen2ForCausalLM
+
+    torch.set_num_threads(2)
+    torch.set_grad_enabled(False)
+
+    cfg = Qwen2Config(**json.loads((model_dir / "llm_config.json").read_text()))
+    model = Qwen2ForCausalLM(cfg)
+    st_path = model_dir / "model.safetensors"
+    with safe_open(str(st_path), framework="pt") as f:
+        sd = {
+            k[len("llm."):]: f.get_tensor(k).float()
+            for k in f.keys() if k.startswith("llm.")
+        }
+    missing, unexpected = model.load_state_dict(sd, strict=False)
+    # tie_word_embeddings -> lm_head.weight is expected-missing; warn otherwise.
+    miss = [m for m in missing if "lm_head" not in m]
+    if miss:
+        print(f"[dots-ref/llm] WARNING missing: {miss}")
+    if unexpected:
+        print(f"[dots-ref/llm] WARNING unexpected: {unexpected}")
+    model.eval().float()
+    print(f"[dots-ref/llm] loaded {len(sd)} llm tensors, hidden={cfg.hidden_size}")
+
+    # Exact "Hello world." prefill per the generation template
+    # ([文本]{text}[文本对应语音]<|audio_gen_start|>).
+    prefill_ids = [58, 108704, 60, 9707, 1879, 13, 58, 108704, 103124, 105761, 60, 151668]
+    ids = torch.tensor([prefill_ids], dtype=torch.long)
+    out = model(input_ids=ids, use_cache=True, output_hidden_states=True, return_dict=True)
+    h_prefill = out.hidden_states[-1][0]  # (N, hidden)
+
+    g = torch.Generator().manual_seed(seed)
+    step_embed = torch.randn(1, 1, cfg.hidden_size, generator=g, dtype=torch.float32)
+    out2 = model(inputs_embeds=step_embed, past_key_values=out.past_key_values,
+                 use_cache=True, output_hidden_states=True, return_dict=True)
+    h_step = out2.hidden_states[-1][0]  # (1, hidden)
+
+    return {
+        "llm_ids_prefill": np.asarray(prefill_ids, dtype=np.float32),  # (N,)
+        "llm_hidden_prefill": _npf(h_prefill),                         # (N, hidden)
+        "llm_step_embed": _npf(step_embed[0]),                         # (1, hidden)
+        "llm_hidden_step": _npf(h_step),                               # (1, hidden)
+    }
+
+
 def _dump_dit(model_dir: Path, seed: int) -> Dict[str, np.ndarray]:
     """Isolated DiT (velocity_field_predictor) forward reference.
 
@@ -507,6 +565,8 @@ def dump(
 
     results: Dict[str, np.ndarray] = {}
 
+    if any(s.startswith("llm_") for s in stages):
+        results.update(_dump_llm(model_dir, seed))
     if any(s.startswith("penc_") for s in stages):
         results.update(_dump_patch_encoder(model_dir, seed))
     if any(s.startswith("dit_") for s in stages):
@@ -521,7 +581,8 @@ def dump(
     # Keep only requested stages (plus the always-present penc/dit/fm/voc tensors).
     out = {k: np.ascontiguousarray(v.astype(np.float32))
            for k, v in results.items()
-           if k in stages or k.startswith("penc_") or k.startswith("dit_")
-           or k.startswith("fm_") or k.startswith("voc_") or k.startswith("act_")}
+           if k in stages or k.startswith("llm_") or k.startswith("penc_")
+           or k.startswith("dit_") or k.startswith("fm_") or k.startswith("voc_")
+           or k.startswith("act_")}
     print(f"[dots-ref] returning {len(out)} tensors: {sorted(out)}")
     return out

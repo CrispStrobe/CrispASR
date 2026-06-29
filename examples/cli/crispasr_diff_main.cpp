@@ -1044,6 +1044,10 @@ int main(int argc, char** argv) {
         int rf = dots_tts_flowmatch_diff(model_path.c_str(), ref_path.c_str(), /*verbosity=*/2);
         return (rp == 0 && rd == 0 && rf == 0) ? 0 : 1;
     }
+    if (backend_name == "dots-tts-llm") {
+        // model_path = core GGUF (q8 is fine for the LLM), ref_path = llm-ref GGUF.
+        return dots_tts_llm_diff(model_path.c_str(), ref_path.c_str(), /*verbosity=*/2);
+    }
     if (backend_name == "dots-tts-voc") {
         // model_path = vocoder GGUF, ref_path = voc-ref GGUF.
         return dots_tts_vocoder_diff(model_path.c_str(), ref_path.c_str(), /*verbosity=*/2);
