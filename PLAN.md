@@ -6250,7 +6250,11 @@ ark-asr-3b-q8_0.gguf --backend ark-asr -f audio.wav`. **GPU is now the default**
 
 Done: full wiring per docs/contributing.md (C API, adapter, factory, CMake lib+cli,
 registry, session ABI + symbols in libcrispasr.dylib + available_backends, live
-test, docs). `-l` injection (§9b). GGUFs published cstr/ark-asr-3b-GGUF
+test, docs). Bindings audited: ASR dispatch is automatic (verified ark-asr in
+python Session.available_backends()); added ark-asr to the python set_ask
+docstring enumeration; dart/go/rust/java/ruby/wasm need no change (illustrative
+lists + generic set_ask docstrings; no new setter). `-l` injection (§9b). GGUFs
+published cstr/ark-asr-3b-GGUF
 (f16 7 GB / q8_0 4 GB / q4_k 3.3 GB, all verbatim) + HF model card.
 
 **Diff harness RUN** (vs PyTorch bf16 reference, jfk): log-mel cos 0.999993,

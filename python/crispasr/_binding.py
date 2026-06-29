@@ -1886,9 +1886,11 @@ class Session:
         """Set a free-form prompt passed to the backend on the next transcribe/synthesize call.
 
         Supported by: granite, voxtral, qwen3-asr, glm-asr, gemma4-e2b,
-        mimo-asr, moss-audio, lfm2-audio, mini-omni2. For moss-audio this
-        enables audio understanding beyond ASR (e.g. "Describe the sounds
-        in this clip." or "What language is spoken?").
+        mimo-asr, moss-audio, lfm2-audio, mini-omni2, ark-asr. For moss-audio
+        this enables audio understanding beyond ASR (e.g. "Describe the sounds
+        in this clip." or "What language is spoken?"). For ark-asr it is a
+        best-effort language hint (the model is promptless / not instruction-
+        trained).
         """
         if not hasattr(self._lib, "crispasr_session_set_ask"):
             return
