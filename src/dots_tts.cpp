@@ -35,14 +35,17 @@
 #include "ggml.h"
 #include "gguf.h"
 
+#include "chatterbox_campplus.h"
 #include "core/activation.h"
 #include "core/adaln.h"
 #include "core/attention.h"
+#include "core/audio_resample.h"
 #include "core/bpe.h"
 #include "core/conv.h"
 #include "core/ffn.h"
 #include "core/gguf_loader.h"
 #include "core/lstm.h"
+#include "core/wav_reader.h"
 
 #include <algorithm>
 #include <cassert>
@@ -441,10 +444,17 @@ struct dots_tts_context {
 
     // Vocoder loaded flag
     bool has_vocoder = false;
-    bool has_speaker = false;
+    bool has_speaker = false; // CAM++ encoder weights loaded
+    bool has_voice = false;   // a reference voice → g_cond computed
 
     // Speaker embedding (if set via voice prompt)
-    std::vector<float> speaker_emb;
+    std::vector<float> speaker_emb; // 512-d CAM++ x-vector
+    std::vector<float> g_cond;      // 1024-d xvec_proj(x-vector·scale) → DiT condition
+
+    // CAM++ speaker encoder (separate GGUF, like the vocoder).
+    core_gguf::WeightLoad spk_w;
+    cb_campplus_model spk_model;
+    chatterbox_campplus::cb_campplus_runtime spk_runtime;
 };
 
 // ===========================================================================
@@ -680,10 +690,13 @@ static bool dots_load_core(dots_tts_context* ctx, const char* path, int verbosit
     p.latent_proj_b = T("dots.latent_proj.bias");
     p.coord_proj_w = T("dots.coordinate_proj.weight");
     p.coord_proj_b = T("dots.coordinate_proj.bias");
+    // xvec_proj = Sequential(Linear(512→1024), LayerNorm(1024)). The checkpoint
+    // stores the LayerNorm at index .1 (gamma/beta, both shape (1024,)), NOT a
+    // second Linear at .2 — g_cond = LayerNorm(Linear(xvector·speaker_scale)).
     p.xvec_proj_0_w = T("dots.xvec_proj.0.weight");
     p.xvec_proj_0_b = T("dots.xvec_proj.0.bias");
-    p.xvec_proj_1_w = T("dots.xvec_proj.2.weight");
-    p.xvec_proj_1_b = T("dots.xvec_proj.2.bias");
+    p.xvec_proj_1_w = T("dots.xvec_proj.1.weight"); // LayerNorm gamma
+    p.xvec_proj_1_b = T("dots.xvec_proj.1.bias");   // LayerNorm beta
     p.eos_proj_0_w = T("dots.eos_proj.0.weight");
     p.eos_proj_0_b = T("dots.eos_proj.0.bias");
     p.eos_proj_1_w = T("dots.eos_proj.2.weight");
@@ -1288,7 +1301,8 @@ static std::vector<float> dots_linear(dots_tts_context* ctx, ggml_tensor* w, ggm
 // Writes the raw (un-denormalized) latent (patch_size, latent_dim) to out_latent.
 static void dots_flow_match_core(dots_tts_context* ctx, const float* input_seq, const float* cfg_seq, int fm_total_len,
                                  int latent_start, const float* attn_mask_add, const int32_t* pos_ids,
-                                 const float* noise, int num_steps, float cfg_scale, float* out_latent) {
+                                 const float* noise, int num_steps, float cfg_scale, float* out_latent,
+                                 const float* g_cond = nullptr) {
     const int dit_dim = (int)ctx->dit.hidden_size;
     const int latent_dim = ctx->latent_dim;
     const int patch_size = fm_total_len - latent_start;
@@ -1315,8 +1329,10 @@ static void dots_flow_match_core(dots_tts_context* ctx, const float* input_seq, 
         std::memcpy(seq_u.data() + (size_t)latent_start * dit_dim, z_proj.data(),
                     (size_t)patch_size * dit_dim * sizeof(float));
 
-        // CFG branches as two B=1 DiT forwards (text-only g_cond is zero for both).
-        dots_dit_forward(ctx, seq_c.data(), fm_total_len, t, /*g_cond=*/nullptr, attn_mask_add, pos_ids, vel_c.data());
+        // CFG branches as two B=1 DiT forwards. For voice cloning the COND
+        // branch carries the speaker g_cond and the UNCOND branch carries zero
+        // (reference fm_solver_step: DiT g_cond=[g, 0]). Text-only → both null.
+        dots_dit_forward(ctx, seq_c.data(), fm_total_len, t, g_cond, attn_mask_add, pos_ids, vel_c.data());
         dots_dit_forward(ctx, seq_u.data(), fm_total_len, t, /*g_cond=*/nullptr, attn_mask_add, pos_ids, vel_u.data());
 
         // Euler step on the noise-slot velocities with classifier-free guidance.
@@ -1857,23 +1873,261 @@ int dots_tts_set_vocoder_path(struct dots_tts_context* ctx, const char* path) {
     return 0;
 }
 
+// Read a (possibly F16) GGUF tensor into a host f32 vector (row-major flat).
+static std::vector<float> dots_read_f32(ggml_tensor* t) {
+    if (!t)
+        return {};
+    const int64_t n = ggml_nelements(t);
+    std::vector<float> out((size_t)n);
+    if (t->type == GGML_TYPE_F32) {
+        ggml_backend_tensor_get(t, out.data(), 0, (size_t)n * sizeof(float));
+    } else if (t->type == GGML_TYPE_F16) {
+        std::vector<ggml_fp16_t> tmp((size_t)n);
+        ggml_backend_tensor_get(t, tmp.data(), 0, (size_t)n * sizeof(ggml_fp16_t));
+        for (int64_t i = 0; i < n; i++)
+            out[(size_t)i] = ggml_fp16_to_fp32(tmp[(size_t)i]);
+    } else {
+        return {};
+    }
+    return out;
+}
+
+// Bind the 3D-Speaker CAM++ tensors from a loaded `dots-tts-soar-spk` GGUF
+// (`dots.spk.model.*`) into a cb_campplus_model. Same backbone as chatterbox's
+// CAMPPlus, only the names differ (`xv.`→`xvector.`, `.nl.bn.`→
+// `.nonlinear.batchnorm.`, dense-layer `l1`→`linear1`, `cam.{ll,l1,l2}`→
+// `cam_layer.{linear_local,linear1,linear2}`, `nonl{1,2}.bn`→
+// `nonlinear{1,2}.batchnorm`, `out_nl`→`out_nonlinear`).
+static bool dots_bind_campplus(core_gguf::WeightLoad& w, cb_campplus_model& m) {
+    auto* C = w.ctx;
+    auto T = [&](const char* name) -> ggml_tensor* { return ggml_get_tensor(C, name); };
+    char k[160];
+    const char* P = "dots.spk.model";
+
+    auto bind_unit = [&](cb_campplus_unit& u, const char* base) {
+        std::snprintf(k, sizeof(k), "%s.linear.weight", base), u.lin_w = T(k);
+        std::snprintf(k, sizeof(k), "%s.linear.bias", base), u.lin_b = T(k);
+        std::snprintf(k, sizeof(k), "%s.nonlinear.batchnorm.weight", base), u.bn_w = T(k);
+        std::snprintf(k, sizeof(k), "%s.nonlinear.batchnorm.bias", base), u.bn_b = T(k);
+        std::snprintf(k, sizeof(k), "%s.nonlinear.batchnorm.running_mean", base), u.bn_m = T(k);
+        std::snprintf(k, sizeof(k), "%s.nonlinear.batchnorm.running_var", base), u.bn_v = T(k);
+    };
+    auto bind_resblock = [&](cb_campplus_resblock& b, const char* base) {
+        std::snprintf(k, sizeof(k), "%s.conv1.weight", base), b.conv1_w = T(k);
+        std::snprintf(k, sizeof(k), "%s.conv1.bias", base), b.conv1_b = T(k);
+        std::snprintf(k, sizeof(k), "%s.bn1.weight", base), b.bn1_w = T(k);
+        std::snprintf(k, sizeof(k), "%s.bn1.bias", base), b.bn1_b = T(k);
+        std::snprintf(k, sizeof(k), "%s.bn1.running_mean", base), b.bn1_m = T(k);
+        std::snprintf(k, sizeof(k), "%s.bn1.running_var", base), b.bn1_v = T(k);
+        std::snprintf(k, sizeof(k), "%s.conv2.weight", base), b.conv2_w = T(k);
+        std::snprintf(k, sizeof(k), "%s.conv2.bias", base), b.conv2_b = T(k);
+        std::snprintf(k, sizeof(k), "%s.bn2.weight", base), b.bn2_w = T(k);
+        std::snprintf(k, sizeof(k), "%s.bn2.bias", base), b.bn2_b = T(k);
+        std::snprintf(k, sizeof(k), "%s.bn2.running_mean", base), b.bn2_m = T(k);
+        std::snprintf(k, sizeof(k), "%s.bn2.running_var", base), b.bn2_v = T(k);
+        std::snprintf(k, sizeof(k), "%s.shortcut.0.weight", base), b.sc_w = T(k);
+        std::snprintf(k, sizeof(k), "%s.shortcut.0.bias", base), b.sc_b = T(k);
+        std::snprintf(k, sizeof(k), "%s.shortcut.1.weight", base), b.sc_bn_w = T(k);
+        std::snprintf(k, sizeof(k), "%s.shortcut.1.bias", base), b.sc_bn_b = T(k);
+        std::snprintf(k, sizeof(k), "%s.shortcut.1.running_mean", base), b.sc_bn_m = T(k);
+        std::snprintf(k, sizeof(k), "%s.shortcut.1.running_var", base), b.sc_bn_v = T(k);
+    };
+    auto bind_dense_layer = [&](cb_campplus_dense_layer& l, const char* base) {
+        std::snprintf(k, sizeof(k), "%s.nonlinear1.batchnorm.weight", base), l.nonl1_bn_w = T(k);
+        std::snprintf(k, sizeof(k), "%s.nonlinear1.batchnorm.bias", base), l.nonl1_bn_b = T(k);
+        std::snprintf(k, sizeof(k), "%s.nonlinear1.batchnorm.running_mean", base), l.nonl1_bn_m = T(k);
+        std::snprintf(k, sizeof(k), "%s.nonlinear1.batchnorm.running_var", base), l.nonl1_bn_v = T(k);
+        std::snprintf(k, sizeof(k), "%s.linear1.weight", base), l.l1_w = T(k);
+        std::snprintf(k, sizeof(k), "%s.linear1.bias", base), l.l1_b = T(k);
+        std::snprintf(k, sizeof(k), "%s.nonlinear2.batchnorm.weight", base), l.nonl2_bn_w = T(k);
+        std::snprintf(k, sizeof(k), "%s.nonlinear2.batchnorm.bias", base), l.nonl2_bn_b = T(k);
+        std::snprintf(k, sizeof(k), "%s.nonlinear2.batchnorm.running_mean", base), l.nonl2_bn_m = T(k);
+        std::snprintf(k, sizeof(k), "%s.nonlinear2.batchnorm.running_var", base), l.nonl2_bn_v = T(k);
+        std::snprintf(k, sizeof(k), "%s.cam_layer.linear_local.weight", base), l.cam_ll_w = T(k);
+        std::snprintf(k, sizeof(k), "%s.cam_layer.linear1.weight", base), l.cam_l1_w = T(k);
+        std::snprintf(k, sizeof(k), "%s.cam_layer.linear1.bias", base), l.cam_l1_b = T(k);
+        std::snprintf(k, sizeof(k), "%s.cam_layer.linear2.weight", base), l.cam_l2_w = T(k);
+        std::snprintf(k, sizeof(k), "%s.cam_layer.linear2.bias", base), l.cam_l2_b = T(k);
+    };
+
+    // FCM head.
+    auto& head = m.head;
+    std::snprintf(k, sizeof(k), "%s.head.conv1.weight", P), head.conv1_w = T(k);
+    std::snprintf(k, sizeof(k), "%s.head.bn1.weight", P), head.bn1_w = T(k);
+    std::snprintf(k, sizeof(k), "%s.head.bn1.bias", P), head.bn1_b = T(k);
+    std::snprintf(k, sizeof(k), "%s.head.bn1.running_mean", P), head.bn1_m = T(k);
+    std::snprintf(k, sizeof(k), "%s.head.bn1.running_var", P), head.bn1_v = T(k);
+    std::snprintf(k, sizeof(k), "%s.head.conv2.weight", P), head.conv2_w = T(k);
+    std::snprintf(k, sizeof(k), "%s.head.bn2.weight", P), head.bn2_w = T(k);
+    std::snprintf(k, sizeof(k), "%s.head.bn2.bias", P), head.bn2_b = T(k);
+    std::snprintf(k, sizeof(k), "%s.head.bn2.running_mean", P), head.bn2_m = T(k);
+    std::snprintf(k, sizeof(k), "%s.head.bn2.running_var", P), head.bn2_v = T(k);
+    head.layer1.assign(2, cb_campplus_resblock{});
+    head.layer2.assign(2, cb_campplus_resblock{});
+    for (int i = 0; i < 2; i++) {
+        char base[96];
+        std::snprintf(base, sizeof(base), "%s.head.layer1.%d", P, i), bind_resblock(head.layer1[i], base);
+        std::snprintf(base, sizeof(base), "%s.head.layer2.%d", P, i), bind_resblock(head.layer2[i], base);
+    }
+    head.layer1[0].stride = 2; // first block of each layer downsamples H by 2
+    head.layer2[0].stride = 2;
+
+    // xvector chain.
+    char base[96];
+    std::snprintf(base, sizeof(base), "%s.xvector.tdnn", P), bind_unit(m.tdnn, base);
+    std::snprintf(base, sizeof(base), "%s.xvector.transit1", P), bind_unit(m.transit1, base);
+    std::snprintf(base, sizeof(base), "%s.xvector.transit2", P), bind_unit(m.transit2, base);
+    std::snprintf(base, sizeof(base), "%s.xvector.transit3", P), bind_unit(m.transit3, base);
+    // out_nonlinear is a bare BN (no Linear) at `out_nonlinear.batchnorm.*`.
+    m.out_nl.lin_w = nullptr;
+    m.out_nl.lin_b = nullptr;
+    std::snprintf(k, sizeof(k), "%s.xvector.out_nonlinear.batchnorm.weight", P), m.out_nl.bn_w = T(k);
+    std::snprintf(k, sizeof(k), "%s.xvector.out_nonlinear.batchnorm.bias", P), m.out_nl.bn_b = T(k);
+    std::snprintf(k, sizeof(k), "%s.xvector.out_nonlinear.batchnorm.running_mean", P), m.out_nl.bn_m = T(k);
+    std::snprintf(k, sizeof(k), "%s.xvector.out_nonlinear.batchnorm.running_var", P), m.out_nl.bn_v = T(k);
+    // dense: Conv1d(1024→512) + BN(affine=False, running_* only).
+    std::snprintf(k, sizeof(k), "%s.xvector.dense.linear.weight", P), m.dense.lin_w = T(k);
+    std::snprintf(k, sizeof(k), "%s.xvector.dense.nonlinear.batchnorm.running_mean", P), m.dense.bn_m = T(k);
+    std::snprintf(k, sizeof(k), "%s.xvector.dense.nonlinear.batchnorm.running_var", P), m.dense.bn_v = T(k);
+
+    // Dense blocks: 12 / 24 / 16 layers, dilation 1 / 2 / 2, names tdnnd1..N (1-indexed).
+    const int nlayers[3] = {12, 24, 16};
+    const int dils[3] = {1, 2, 2};
+    cb_campplus_dense_block* blocks[3] = {&m.block1, &m.block2, &m.block3};
+    for (int bi = 0; bi < 3; bi++) {
+        auto& blk = *blocks[bi];
+        blk.num_layers = nlayers[bi];
+        blk.dilation = dils[bi];
+        blk.layers.assign(nlayers[bi], cb_campplus_dense_layer{});
+        for (int li = 0; li < nlayers[bi]; li++) {
+            std::snprintf(base, sizeof(base), "%s.xvector.block%d.tdnnd%d", P, bi + 1, li + 1);
+            bind_dense_layer(blk.layers[li], base);
+        }
+    }
+
+    if (!m.head.conv1_w || !m.tdnn.lin_w || !m.dense.lin_w || m.block1.layers.empty() || !m.block1.layers[0].l1_w) {
+        std::fprintf(stderr, "dots_tts: CAM++ bind failed (missing core tensors)\n");
+        return false;
+    }
+    return true;
+}
+
+// Compute g_cond (1024-d DiT global conditioning) from a 16 kHz mono PCM
+// reference: x-vector = CAM++(pcm) (512-d, 3D-Speaker stats var floor 1e-2),
+// then g_cond = LayerNorm(Linear(x-vector · speaker_scale)). Mirrors
+// model.py: `g_cond = core.xvec_proj(speaker_embedding * speaker_scale)`.
+static bool dots_compute_g_cond(dots_tts_context* ctx, const float* pcm16k, int n_samples, float speaker_scale) {
+    if (!ctx->has_speaker) {
+        std::fprintf(stderr, "dots_tts: no speaker encoder loaded (call set_speaker_path first)\n");
+        return false;
+    }
+    auto xvec = chatterbox_campplus::embed_speaker(ctx->spk_model, ctx->spk_runtime, pcm16k, n_samples,
+                                                   /*stats_var_floor=*/1e-2f);
+    if ((int)xvec.size() != ctx->spk_dim) {
+        std::fprintf(stderr, "dots_tts: x-vector size %zu != spk_dim %d\n", xvec.size(), ctx->spk_dim);
+        return false;
+    }
+    ctx->speaker_emb = xvec;
+
+    // xvec_proj.0 = Linear(spk_dim → fm_hidden). Weight ne=(in, out) → flat W[o*in+i].
+    auto W0 = dots_read_f32(ctx->proj.xvec_proj_0_w);
+    auto b0 = dots_read_f32(ctx->proj.xvec_proj_0_b);
+    auto gamma = dots_read_f32(ctx->proj.xvec_proj_1_w);
+    auto beta = dots_read_f32(ctx->proj.xvec_proj_1_b);
+    const int in_dim = ctx->spk_dim;
+    const int out_dim = (int)b0.size();
+    if ((int)W0.size() != in_dim * out_dim || (int)gamma.size() != out_dim || (int)beta.size() != out_dim) {
+        std::fprintf(stderr, "dots_tts: xvec_proj dims bad (W0=%zu b0=%zu ln=%zu)\n", W0.size(), b0.size(),
+                     gamma.size());
+        return false;
+    }
+    std::vector<float> h((size_t)out_dim);
+    for (int o = 0; o < out_dim; o++) {
+        double acc = (double)b0[(size_t)o];
+        const float* wr = W0.data() + (size_t)o * in_dim;
+        for (int i = 0; i < in_dim; i++)
+            acc += (double)wr[i] * ((double)xvec[(size_t)i] * (double)speaker_scale);
+        h[(size_t)o] = (float)acc;
+    }
+    // LayerNorm(out_dim), eps 1e-5, biased variance.
+    double mean = 0.0;
+    for (int o = 0; o < out_dim; o++)
+        mean += (double)h[(size_t)o];
+    mean /= (double)out_dim;
+    double var = 0.0;
+    for (int o = 0; o < out_dim; o++) {
+        double d = (double)h[(size_t)o] - mean;
+        var += d * d;
+    }
+    var /= (double)out_dim;
+    const double inv = 1.0 / std::sqrt(var + 1e-5);
+    ctx->g_cond.assign((size_t)out_dim, 0.0f);
+    for (int o = 0; o < out_dim; o++)
+        ctx->g_cond[(size_t)o] =
+            (float)(((double)h[(size_t)o] - mean) * inv * (double)gamma[(size_t)o] + (double)beta[(size_t)o]);
+    ctx->has_voice = true;
+    if (ctx->params.verbosity >= 1)
+        std::fprintf(stderr, "dots_tts: voice g_cond ready (xvec %d-d, g_cond %d-d)\n", in_dim, out_dim);
+    return true;
+}
+
 int dots_tts_set_speaker_path(struct dots_tts_context* ctx, const char* path) {
     if (!ctx || !path)
         return -1;
-    // TODO: load CAM++ speaker encoder weights
-    // For now, mark as not loaded
-    ctx->has_speaker = false;
+    if (!core_gguf::load_weights(path, ctx->backend, "dots-spk", ctx->spk_w)) {
+        std::fprintf(stderr, "dots_tts: failed to load speaker encoder %s\n", path);
+        ctx->has_speaker = false;
+        return -1;
+    }
+    if (!dots_bind_campplus(ctx->spk_w, ctx->spk_model)) {
+        ctx->has_speaker = false;
+        return -1;
+    }
+    ctx->has_speaker = true;
     if (ctx->params.verbosity >= 1)
-        std::fprintf(stderr, "dots_tts: speaker encoder not yet implemented\n");
+        std::fprintf(stderr, "dots_tts: CAM++ speaker encoder loaded (%s)\n", path);
     return 0;
+}
+
+int dots_tts_set_speaker_pcm(struct dots_tts_context* ctx, const float* pcm_16k, int n_samples) {
+    if (!ctx || !pcm_16k || n_samples <= 0)
+        return -1;
+    // CAM++ crops to 10 s (model.py max_audio_seconds); cap the input here so
+    // the deterministic (start=0) crop matches the reference.
+    const int cap = 16000 * 10;
+    if (n_samples > cap)
+        n_samples = cap;
+    return dots_compute_g_cond(ctx, pcm_16k, n_samples, /*speaker_scale=*/1.5f) ? 0 : -1;
 }
 
 int dots_tts_set_voice_prompt(struct dots_tts_context* ctx, const char* wav_path) {
     if (!ctx || !wav_path)
         return -1;
-    // TODO: load reference audio, compute speaker embedding via CAM++
-    std::fprintf(stderr, "dots_tts: voice prompt not yet implemented\n");
-    return -1;
+    if (!ctx->has_speaker) {
+        std::fprintf(stderr, "dots_tts: set a speaker encoder GGUF before a voice prompt\n");
+        return -1;
+    }
+    std::vector<float> pcm;
+    int sr = 0;
+    if (!crispasr::core::read_wav_mono_pcm16(wav_path, pcm, sr) || pcm.empty()) {
+        std::fprintf(stderr, "dots_tts: failed to read reference WAV %s\n", wav_path);
+        return -1;
+    }
+    if (sr != 16000) {
+        pcm = core_audio::resample_polyphase(pcm.data(), (int)pcm.size(), sr, 16000);
+    }
+    return dots_tts_set_speaker_pcm(ctx, pcm.data(), (int)pcm.size());
+}
+
+int dots_tts_set_voice_enabled(struct dots_tts_context* ctx, int on) {
+    if (!ctx)
+        return -1;
+    // Toggle voice conditioning without discarding the computed g_cond, so the
+    // CLI can synthesize the neutral spoken AI-disclaimer with the default voice
+    // (params.tts_voice cleared) and then re-enable the cloned voice. A no-op
+    // when no reference voice was ever computed.
+    ctx->has_voice = (on != 0) && !ctx->g_cond.empty();
+    return 0;
 }
 
 float* dots_tts_synthesize(struct dots_tts_context* ctx, const char* text, int* out_n_samples) {
@@ -2041,7 +2295,8 @@ float* dots_tts_synthesize(struct dots_tts_context* ctx, const char* text, int* 
         {
             dots_bench_stage b2("flow_match");
             dots_flow_match_core(ctx, seq_c.data(), seq_u.data(), fm_total_len, latent_start, mask.data(), pos.data(),
-                                 noise.data(), ode_steps, cfg_scale, z_norm.data());
+                                 noise.data(), ode_steps, cfg_scale, z_norm.data(),
+                                 ctx->has_voice ? ctx->g_cond.data() : nullptr);
         }
 
         // Denormalize for penc + vocoder; keep z_norm for FM history.
@@ -2137,6 +2392,9 @@ void dots_tts_free(struct dots_tts_context* ctx) {
         ggml_backend_buffer_free(ctx->voc.buf_w);
     if (ctx->voc.ctx_w)
         ggml_free(ctx->voc.ctx_w);
+
+    if (ctx->spk_w.ctx)
+        core_gguf::free_weights(ctx->spk_w);
 
     if (ctx->backend && ctx->backend != ctx->backend_cpu)
         ggml_backend_free(ctx->backend);
@@ -2680,6 +2938,88 @@ extern "C" int dots_tts_vocoder_diff(const char* voc_gguf, const char* ref_gguf,
 
     dots_tts_free(ctx);
     return rc;
+}
+
+// ── Diff-harness: validate the CAM++ speaker path (Phase F) ─────────────────
+// `spk_gguf` is the dots-tts-soar-spk encoder; the reference (dots-tts-spk)
+// carries spk_pcm_16k (input), spk_xvector (512), spk_g_cond (1024), and the
+// four xvec_proj weights (xvec_proj_0_w/0_b, xvec_proj_1_w/1_b) so the diff
+// can run the full wav→x-vector→g_cond pipeline without the 4.6 GB core GGUF.
+extern "C" int dots_tts_spk_diff(const char* spk_gguf, const char* ref_gguf, int verbosity) {
+    auto* ctx = new dots_tts_context();
+    ctx->backend_cpu = ggml_backend_cpu_init();
+    ctx->backend = ctx->backend_cpu;
+    ctx->params = dots_tts_context_default_params();
+    ctx->params.verbosity = verbosity;
+    ctx->spk_dim = 512;
+
+    if (dots_tts_set_speaker_path(ctx, spk_gguf) != 0) {
+        std::fprintf(stderr, "dots_spk_diff: failed to load speaker encoder %s\n", spk_gguf);
+        dots_tts_free(ctx);
+        return 2;
+    }
+    core_gguf::WeightLoad rw;
+    if (!core_gguf::load_weights(ref_gguf, ctx->backend, "ref", rw)) {
+        std::fprintf(stderr, "dots_spk_diff: failed to load reference %s\n", ref_gguf);
+        dots_tts_free(ctx);
+        return 2;
+    }
+    auto Tref = [&](const char* n) { return ggml_get_tensor(rw.ctx, n); };
+    ggml_tensor* t_pcm = Tref("spk_pcm_16k");
+    ggml_tensor* t_xv = Tref("spk_xvector");
+    ggml_tensor* t_gc = Tref("spk_g_cond");
+    // Bind the xvec_proj weights from the reference into the projection slots.
+    ctx->proj.xvec_proj_0_w = Tref("xvec_proj_0_w");
+    ctx->proj.xvec_proj_0_b = Tref("xvec_proj_0_b");
+    ctx->proj.xvec_proj_1_w = Tref("xvec_proj_1_w");
+    ctx->proj.xvec_proj_1_b = Tref("xvec_proj_1_b");
+    if (!t_pcm || !t_xv || !t_gc || !ctx->proj.xvec_proj_0_w || !ctx->proj.xvec_proj_1_w) {
+        std::fprintf(stderr, "dots_spk_diff: reference missing spk_* / xvec_proj_* tensors\n");
+        dots_tts_free(ctx);
+        return 2;
+    }
+    const int n_pcm = (int)ggml_nelements(t_pcm);
+    std::vector<float> pcm((size_t)n_pcm);
+    ggml_backend_tensor_get(t_pcm, pcm.data(), 0, pcm.size() * sizeof(float));
+
+    if (dots_tts_set_speaker_pcm(ctx, pcm.data(), n_pcm) != 0) {
+        std::fprintf(stderr, "dots_spk_diff: g_cond computation failed\n");
+        dots_tts_free(ctx);
+        return 2;
+    }
+
+    auto cosmax = [](const std::vector<float>& a, const std::vector<float>& b, double& cos, double& maxabs) {
+        double dot = 0, na = 0, nb = 0;
+        maxabs = 0;
+        size_t n = std::min(a.size(), b.size());
+        for (size_t i = 0; i < n; i++) {
+            dot += (double)a[i] * b[i];
+            na += (double)a[i] * a[i];
+            nb += (double)b[i] * b[i];
+            double d = std::fabs((double)a[i] - b[i]);
+            if (d > maxabs)
+                maxabs = d;
+        }
+        cos = (na > 0 && nb > 0) ? dot / (std::sqrt(na) * std::sqrt(nb)) : 0.0;
+    };
+    auto ref_vec = [&](ggml_tensor* t) {
+        std::vector<float> v((size_t)ggml_nelements(t));
+        ggml_backend_tensor_get(t, v.data(), 0, v.size() * sizeof(float));
+        return v;
+    };
+
+    std::vector<float> xv_ref = ref_vec(t_xv), gc_ref = ref_vec(t_gc);
+    double cx, mx, cg, mg;
+    cosmax(ctx->speaker_emb, xv_ref, cx, mx);
+    cosmax(ctx->g_cond, gc_ref, cg, mg);
+    std::printf("dots-tts-spk: x-vector[%zu]  cos=%.6f  max|Δ|=%.5f\n", ctx->speaker_emb.size(), cx, mx);
+    std::printf("dots-tts-spk: g_cond  [%zu]  cos=%.6f  max|Δ|=%.5f\n", ctx->g_cond.size(), cg, mg);
+
+    core_gguf::free_weights(rw);
+    dots_tts_free(ctx);
+    const bool pass = (cx > 0.999 && cg > 0.999);
+    std::printf("dots-tts-spk: %s\n", pass ? "PASS" : "FAIL");
+    return pass ? 0 : 1;
 }
 
 // ── Diff-harness: validate the isolated alias-free Activation1d ──────────────

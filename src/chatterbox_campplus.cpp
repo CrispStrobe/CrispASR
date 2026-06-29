@@ -809,7 +809,9 @@ static std::vector<float> bn_relu_conv1d(const BNFolded& bn, const float* in, in
 }
 
 // StatsPool: concat(mean, std) along T → (2*C,)
-static std::vector<float> stats_pool(const float* in, int C, int T) {
+// `var_floor` clamps the variance before sqrt (3D-Speaker's masked stats
+// pooling uses eps=1e-2 → std>=0.1; chatterbox/CosyVoice uses 0 = no floor).
+static std::vector<float> stats_pool(const float* in, int C, int T, double var_floor = 0.0) {
     std::vector<float> out((size_t)(2 * C), 0.0f);
     for (int c = 0; c < C; c++) {
         const float* row = in + (size_t)c * (size_t)T;
@@ -823,7 +825,9 @@ static std::vector<float> stats_pool(const float* in, int C, int T) {
             sumsq += d * d;
         }
         // PyTorch tensor.std defaults to unbiased=True → divide by (n-1).
-        const double var = (T > 1) ? sumsq / (double)(T - 1) : 0.0;
+        double var = (T > 1) ? sumsq / (double)(T - 1) : 0.0;
+        if (var < var_floor)
+            var = var_floor;
         const double std_ = std::sqrt(var);
         out[(size_t)c] = (float)mean;
         out[(size_t)C + (size_t)c] = (float)std_;
@@ -851,7 +855,7 @@ cb_campplus_runtime::~cb_campplus_runtime() {
 // ---------------------------------------------------------------------------
 
 std::vector<float> compute_xvector(const cb_campplus_model& m, cb_campplus_runtime& cache, const float* feat_t_80,
-                                   int T) {
+                                   int T, float stats_var_floor) {
     if (!feat_t_80 || T <= 0)
         return {};
     if (!m.head.conv1_w || !m.tdnn.lin_w || !m.dense.lin_w || m.block1.layers.empty()) {
@@ -926,9 +930,12 @@ std::vector<float> compute_xvector(const cb_campplus_model& m, cb_campplus_runti
     relu_inplace(post_t3.data(), post_t3.size());
 
     // StatsPool → (1024,)
-    auto stats = stats_pool(post_t3.data(), 512, T_tdnn);
+    auto stats = stats_pool(post_t3.data(), 512, T_tdnn, (double)stats_var_floor);
 
-    // dense: Conv1d(1024→192, k=1) + BN(affine=False)
+    // dense: Conv1d(1024→emb_dim, k=1) + BN(affine=False). emb_dim is 192 for
+    // chatterbox's CAM++ and 512 for dots.tts — inferred from the actual
+    // dense.linear weight (init_unit set out_dim from ne[2]).
+    const int emb_dim = state->xv_dense.out_dim > 0 ? state->xv_dense.out_dim : 192;
     std::vector<float> dense_in((size_t)1024, 0.0f);
     std::memcpy(dense_in.data(), stats.data(), 1024 * sizeof(float));
     int T_dense = 1;
@@ -937,24 +944,24 @@ std::vector<float> compute_xvector(const cb_campplus_model& m, cb_campplus_runti
         unit_forward(state->xv_dense, dense_in.data(), 1024, T_dense, T_dense_out, /*s*/ 1, /*p*/ 0); // BN folded
     if (dense_pre.empty())
         return {};
-    // The unit_forward above used u.bn folded against `out_dim=192`; for
+    // The unit_forward above used u.bn folded against `out_dim`; for
     // affine=False the gamma reduces to 1/sqrt(var+eps) and beta to
     // -mean/sqrt(var+eps), so it's correct.
     // Squeeze the trailing T=1.
-    std::vector<float> emb((size_t)192);
-    for (int i = 0; i < 192; i++)
+    std::vector<float> emb((size_t)emb_dim);
+    for (int i = 0; i < emb_dim; i++)
         emb[(size_t)i] = dense_pre[(size_t)i];
     return emb;
 }
 
 std::vector<float> embed_speaker(const cb_campplus_model& m, cb_campplus_runtime& cache, const float* pcm_16k,
-                                 int n_samples) {
+                                 int n_samples, float stats_var_floor) {
     cb_campplus_bench_stage _bs_total("embed_speaker");
     int T = 0;
     auto fb = compute_fbank(pcm_16k, n_samples, T);
     if (fb.empty() || T <= 0)
         return {};
-    return compute_xvector(m, cache, fb.data(), T);
+    return compute_xvector(m, cache, fb.data(), T, stats_var_floor);
 }
 
 // ---------------------------------------------------------------------------

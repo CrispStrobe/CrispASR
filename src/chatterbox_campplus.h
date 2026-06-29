@@ -196,12 +196,16 @@ std::vector<float> compute_fbank(const float* pcm_16k, int n_samples, int& T_fra
 //       dense (1024→192) Conv1d(k=1) + BN(affine=False) → 192-d
 //
 // Returns the (192,) f32 vector. Empty on error.
+// `stats_var_floor` clamps the StatsPool variance before sqrt: 0 (default) =
+// chatterbox/CosyVoice behaviour; 1e-2 = 3D-Speaker masked stats pooling (dots.tts).
+// The embedding dimension (192 chatterbox / 512 dots) is inferred from the bound
+// dense weight, so no separate parameter is needed.
 std::vector<float> compute_xvector(const cb_campplus_model& m, cb_campplus_runtime& cache, const float* feat_t_80,
-                                   int T);
+                                   int T, float stats_var_floor = 0.0f);
 
 // Convenience: PCM → fbank → xvector.
 std::vector<float> embed_speaker(const cb_campplus_model& m, cb_campplus_runtime& cache, const float* pcm_16k,
-                                 int n_samples);
+                                 int n_samples, float stats_var_floor = 0.0f);
 
 // Module 4 phase 3 — 24 kHz Matcha-TTS prompt mel for `gen.prompt_feat`.
 // Mirrors `chatterbox.models.s3gen.utils.mel.mel_spectrogram` with

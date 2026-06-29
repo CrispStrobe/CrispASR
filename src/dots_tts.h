@@ -57,6 +57,17 @@ int dots_tts_set_speaker_path(struct dots_tts_context* ctx, const char* path);
 // wav_path must be a mono WAV file. Returns 0 on success.
 int dots_tts_set_voice_prompt(struct dots_tts_context* ctx, const char* wav_path);
 
+// Set reference voice directly from 16 kHz mono float PCM (requires speaker
+// encoder). Computes the CAM++ x-vector → xvec_proj → g_cond. Returns 0 on
+// success. Used by the diff harness and CLI adapters that decode audio
+// themselves.
+int dots_tts_set_speaker_pcm(struct dots_tts_context* ctx, const float* pcm_16k, int n_samples);
+
+// Enable/disable voice conditioning for subsequent synthesis without discarding
+// the computed g_cond. Lets a caller synthesize a neutral utterance (e.g. the
+// spoken AI-disclaimer) and then restore the cloned voice. Returns 0 on success.
+int dots_tts_set_voice_enabled(struct dots_tts_context* ctx, int on);
+
 // Synthesize text to 48 kHz mono float32 PCM.
 // Returns malloc'd float[*out_n_samples]. Caller frees with dots_tts_pcm_free().
 // Returns nullptr on failure.
@@ -103,6 +114,11 @@ int dots_tts_vocoder_diff(const char* voc_gguf, const char* ref_gguf, int verbos
 // reference carrying act_in/act_out/act_alpha/act_beta/act_up_filter/
 // act_down_filter. Returns 0 on PASS.
 int dots_tts_act_diff(const char* ref_gguf, int verbosity);
+
+// Diff-harness entry: validate the CAM++ speaker path. spk_gguf is the speaker
+// encoder GGUF; ref carries spk_pcm_16k / spk_xvector / spk_g_cond plus the
+// xvec_proj_{0,1}_{w,b} weights. Validates wav→x-vector→g_cond. Returns 0 on PASS.
+int dots_tts_spk_diff(const char* spk_gguf, const char* ref_gguf, int verbosity);
 
 #ifdef __cplusplus
 }

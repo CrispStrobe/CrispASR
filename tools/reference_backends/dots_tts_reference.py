@@ -542,6 +542,66 @@ def _dump_act(model_dir: Path, seed: int) -> Dict[str, np.ndarray]:
     }
 
 
+def _dump_speaker(model_dir: Path, seed: int) -> Dict[str, np.ndarray]:
+    """Isolated CAM++ speaker path (Phase F) reference: wav -> x-vector -> g_cond.
+
+    Loads ONLY the 7.18M-param SpeakerXVectorFeatures (3D-Speaker CAM++) plus the
+    core's xvec_proj (Linear(512->1024) + LayerNorm(1024)) — never the 4.6 GB
+    core. g_cond = LayerNorm(Linear(x-vector * speaker_scale)), speaker_scale=1.5.
+    Dumps the input PCM and the four xvec_proj weights so the C++ diff
+    (dots-tts-spk) runs the whole pipeline without the core GGUF.
+
+    Reference WAV: $DOTS_SPK_WAV (16 kHz mono, trimmed to <=10 s so the CAM++
+    encoder's deterministic crop is start=0).
+    """
+    import torch
+    import torchaudio
+    from safetensors import safe_open
+    from safetensors.torch import load_file
+    from dots_tts.modules.speaker.encoder import SpeakerXVectorFeatures
+    from dots_tts.modules.speaker.fbank import extract_speaker_fbank
+
+    torch.set_num_threads(2)
+    torch.set_grad_enabled(False)
+    speaker_scale = 1.5
+    wav_path = os.environ.get(
+        "DOTS_SPK_WAV",
+        "/Volumes/backups/code/audio_samples/multi/obama_speech_16k.wav")
+
+    wav, sr = torchaudio.load(wav_path)
+    if wav.size(0) > 1:
+        wav = wav[:1]
+    if sr != 16000:
+        wav = torchaudio.transforms.Resample(sr, 16000)(wav)
+    pcm = wav[0][: 16000 * 10].contiguous()
+
+    spk = SpeakerXVectorFeatures(sample_rate=16000, campplus_embedding_size=512)
+    spk.load_state_dict(load_file(str(model_dir / "speaker_encoder.safetensors")),
+                        strict=False)
+    spk.eval()
+    fb = extract_speaker_fbank(pcm, sample_rate=16000)
+    xvec = spk(pcm.unsqueeze(0))[0].float()
+
+    with safe_open(str(model_dir / "model.safetensors"), framework="pt") as f:
+        lin_w = f.get_tensor("xvec_proj.0.weight").float()
+        lin_b = f.get_tensor("xvec_proj.0.bias").float()
+        ln_w = f.get_tensor("xvec_proj.1.weight").float()
+        ln_b = f.get_tensor("xvec_proj.1.bias").float()
+    h = torch.nn.functional.linear(xvec * speaker_scale, lin_w, lin_b)
+    g_cond = torch.nn.functional.layer_norm(h, (h.shape[-1],), ln_w, ln_b, eps=1e-5)
+    print(f"[dots-ref/spk] pcm={pcm.numel()} fbank={tuple(fb.shape)} "
+          f"xvec_norm={xvec.norm():.4f} g_cond_norm={g_cond.norm():.4f}")
+    return {
+        "spk_pcm_16k": _npf(pcm),
+        "spk_xvector": _npf(xvec),
+        "spk_g_cond": _npf(g_cond),
+        "xvec_proj_0_w": _npf(lin_w),
+        "xvec_proj_0_b": _npf(lin_b),
+        "xvec_proj_1_w": _npf(ln_w),
+        "xvec_proj_1_b": _npf(ln_b),
+    }
+
+
 def dump(
     model_dir: "Path | str | None" = None,
     audio: np.ndarray | None = None,
@@ -577,12 +637,14 @@ def dump(
         results.update(_dump_vocoder(model_dir, seed))
     if any(s.startswith("act_") for s in stages):
         results.update(_dump_act(model_dir, seed))
+    if any(s.startswith("spk_") or s.startswith("xvec_proj_") for s in stages):
+        results.update(_dump_speaker(model_dir, seed))
 
     # Keep only requested stages (plus the always-present penc/dit/fm/voc tensors).
     out = {k: np.ascontiguousarray(v.astype(np.float32))
            for k, v in results.items()
            if k in stages or k.startswith("llm_") or k.startswith("penc_")
            or k.startswith("dit_") or k.startswith("fm_") or k.startswith("voc_")
-           or k.startswith("act_")}
+           or k.startswith("act_") or k.startswith("spk_") or k.startswith("xvec_proj_")}
     print(f"[dots-ref] returning {len(out)} tensors: {sorted(out)}")
     return out
