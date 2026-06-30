@@ -306,6 +306,17 @@ assert "yourmodel" in crispasr.Session.available_backends()
 crispasr.Session("model.gguf", backend="yourmodel")  # opens?
 ```
 
+**Audit the wiring automatically.** After adding a backend, run the audit — it
+checks every canonical backend (those with a dedicated CLI adapter) against the
+required surface (factory / c_api dispatch + `available_backends` list /
+feature-matrix / cli.md beam list) and reports advisory coverage gaps (test,
+reference dumper, README, registry, streaming). Aliases and standalone reference
+dumpers are handled, not false-flagged:
+
+```bash
+python tools/check-backend-wiring.py --crispasr ./build/bin/crispasr   # exit 1 on a required gap
+```
+
 > ⚠️ **Commit from a separate `git worktree`, or `git pull --rebase`
 > immediately before committing.** A `git add -A` / `commit -a` from a
 > parallel session over a stale tree silently reverts others' work through
