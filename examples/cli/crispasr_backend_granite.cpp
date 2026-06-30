@@ -600,6 +600,18 @@ public:
             if (!words.empty()) {
                 seg.words = std::move(words);
                 seg.text = std::move(clean);
+            } else if (seg.text.find("[T:") != std::string::npos) {
+                // Near-empty chunk that emitted only silence markers
+                // ("_ [T:179]"). Strip the residual [T:N] tags + bare "_" so the
+                // junk doesn't leak into the transcript (#205).
+                static const std::regex tag_re(R"(\[T:\d+\])");
+                seg.text = std::regex_replace(seg.text, tag_re, "");
+                while (!seg.text.empty() && (seg.text.back() == ' ' || seg.text.back() == '\t'))
+                    seg.text.pop_back();
+                while (!seg.text.empty() && (seg.text.front() == ' ' || seg.text.front() == '\t'))
+                    seg.text.erase(seg.text.begin());
+                if (seg.text == "_")
+                    seg.text.clear();
             }
         }
 

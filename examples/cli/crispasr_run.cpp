@@ -752,13 +752,31 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, co
                     if (w.t0 >= left_cs && w.t0 < right_cs)
                         kept.push_back(std::move(w));
                 }
-                // Rebuild segment text from surviving words without
-                // inserting spaces (fixes the JA kana-spacing bug from
-                // 617cd02). The tokenizer already includes leading
-                // spaces in word text where appropriate (Latin style).
+                // Rebuild segment text from the surviving words. Two word
+                // conventions coexist: whisper/parakeet carry a leading space
+                // in word.text (" on"), while granite's [T:N]-parsed words do
+                // not ("on"). Insert a separating space only when the current
+                // word does not already start with one AND the boundary is not
+                // CJK (#205: granite long-audio text was concatenated to
+                // "previouslyonmccloud's" because the words lack leading
+                // spaces; the original no-space concat fixed JA kana-spacing,
+                // 617cd02, which the CJK guard preserves).
                 std::string rebuilt;
-                for (const auto& w : kept)
+                for (const auto& w : kept) {
+                    if (w.text.empty())
+                        continue;
+                    if (!rebuilt.empty()) {
+                        const unsigned char prev_last = (unsigned char)rebuilt.back();
+                        const unsigned char cur_first = (unsigned char)w.text[0];
+                        const bool already_spaced = (cur_first == ' ');
+                        // 3-byte+ UTF-8 lead bytes (>= 0xE0) cover CJK / kana /
+                        // hangul, which are written without inter-word spaces.
+                        const bool cjk_boundary = (prev_last >= 0xE0) || (cur_first >= 0xE0);
+                        if (!already_spaced && !cjk_boundary)
+                            rebuilt += ' ';
+                    }
                     rebuilt += w.text;
+                }
                 // Strip leading space if present (first word of segment
                 // may have a leading space from BPE convention).
                 if (!rebuilt.empty() && rebuilt[0] == ' ')

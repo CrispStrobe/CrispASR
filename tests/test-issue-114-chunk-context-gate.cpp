@@ -57,6 +57,7 @@ TEST_CASE("backend_allows_chunk_context: known offenders opt out, others do not"
     REQUIRE_FALSE(backend_allows_chunk_context("cohere"));
     REQUIRE_FALSE(backend_allows_chunk_context("gemma4-e2b"));
     REQUIRE_FALSE(backend_allows_chunk_context("glm-asr"));
+    REQUIRE_FALSE(backend_allows_chunk_context("granite")); // #205: [T:N] word-trim drops slices
     REQUIRE_FALSE(backend_allows_chunk_context("kyutai-stt"));
     REQUIRE_FALSE(backend_allows_chunk_context("qwen3"));
     REQUIRE_FALSE(backend_allows_chunk_context("voxtral"));

@@ -6,6 +6,40 @@ technical deep-dives are in `LEARNINGS.md`.
 
 ---
 
+## #205f 2026-06-30 Granite long-audio: chunk-context drops slices + spaceless rebuild (REAL no-spaces fix)
+
+Reproduced the reporter's two remaining complaints on the actual 2.5-min sample
+(auto-downloaded granite-speech-4.1-2b-plus-q4_k-mini since the model disk is
+detached). Both traced to the CLI long-audio path, not the model:
+
+1. **Words concatenated without spaces.** When chunk-context is active (>1 slice,
+   non-VAD), the dispatcher rebuilds each segment's text by concatenating
+   `word.text` with NO separator (crispasr_run.cpp), assuming the
+   whisper/parakeet convention where word.text carries a leading space. Granite's
+   `[T:N]`-parsed words are bare ("on", "mccloud's"), so they collapsed to
+   "previouslyonmccloud's". Fixed the rebuild to insert a space unless the word
+   already starts with one or the boundary is CJK (preserves the 617cd02 JA
+   kana-spacing fix; no change for leading-space backends). The earlier #205e
+   `[^\[\s]+` regex was necessary but not sufficient — `parse_ts` produced the
+   right words, the dispatcher then re-joined them spaceless.
+
+2. **Misses whole passages (~1:55).** The plus model's native `[T:N]` word
+   timestamps don't line up with the overlap-save slice boundaries, so the
+   word-level trim kept only the few words whose stamp fell in-range and dropped
+   the rest — a 2.5-min clip collapsed from ~150 s of audio to ~36 s of text
+   (gaps 30–80 s and 83–138 s). This is the exact failure that already put
+   cohere/voxtral/qwen3 on the chunk-context opt-out list; added "granite" too.
+   Now the bare slices transcribe fully (recovered 112–124 s, the missing 1:55
+   passage). Plus a small cleanup: a near-empty chunk that emits only "_ [T:179]"
+   has the residual tag/silence stripped.
+
+Validated (granite-plus-mini, M1/Metal, reporter's 2.5-min wav): default `-ojf`
+now spaced + full coverage (666 chars vs base 524 vs the broken 430); jfk
+`--max-len`/timestamps unchanged; 751/751 unit tests (added a granite assertion to
+the chunk-context gate test). Note: q4_k-mini, not the reporter's q4_k — the
+fixes are path-level so they apply to both, but the exact transcript quality will
+differ.
+
 ## #205e 2026-06-30 Granite-plus timestamps: fix spaceless text on run-on [T:] pairs
 
 Reporter (AppleSheeple) confirmed `--max-len` works on `main` but flagged that the
