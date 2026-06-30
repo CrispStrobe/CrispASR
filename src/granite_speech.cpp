@@ -2431,6 +2431,12 @@ static float* granite_run_bucket_decode(granite_speech_context* ctx, const float
     const int d = (int)hp.llm_d_model;
     const int vocab = (int)hp.llm_vocab_size;
 
+    // n_past indexes the set_rows KV write into a fixed [0, bucket_len) view;
+    // out of range would corrupt the cache. Caller (run_llm_kv) already gates on
+    // n_past < dec_bucket_len, but stay self-safe and fall back on misuse.
+    if (n_past < 0 || n_past >= bucket_len)
+        return nullptr;
+
     ggml_cgraph* gf = granite_build_bucket_decode(ctx, bucket_len);
     // Allocate once per (graph, sched). Subsequent steps reuse the allocation.
     ggml_backend_sched_reset(ctx->sched);
@@ -2550,6 +2556,12 @@ static ggml_cgraph* granite_build_argmax_decode(granite_speech_context* ctx, int
 // Returns -1 on failure.
 static int granite_greedy_decode_step(granite_speech_context* ctx, int32_t token_id, const float* input_embed,
                                       int n_past, int bucket_len, float* out_logit) {
+    // The new token's KV is written at row n_past via set_rows into a fixed
+    // [0, bucket_len) view; n_past >= bucket_len would index past it (and past
+    // the KV cache, which is allocated == max bucket). Refuse rather than
+    // corrupt — callers stop at the bucket ceiling. See PERFORMANCE.md §210.
+    if (n_past < 0 || n_past >= bucket_len)
+        return -1;
     ggml_cgraph* gf = granite_build_argmax_decode(ctx, bucket_len);
     // reset+alloc every step: the documented sched reuse shortcut
     // (ggml-backend.h:285) breaks CUDA-graph capture here ("CUDA error:
@@ -2607,7 +2619,13 @@ extern "C" int32_t* granite_speech_greedy_decode(struct granite_speech_context* 
     tokens.push_back(first_token);
 
     int n_past = initial_n_past;
-    while ((int)tokens.size() < max_new_tokens && tokens.back() != eos_id) {
+    // Stop at the bucket ceiling: the per-step KV write lands at row n_past in a
+    // fixed [0, bucket) view, so n_past must stay < bucket. bucket <= the KV
+    // cache capacity (both 4096), so this is also the hard context limit — the
+    // legacy path runs out of cache at the same point. Without this guard a
+    // long generation (e.g. --max-new-tokens that pushes prompt+gen past the
+    // 4096 clamp) writes out of bounds.
+    while ((int)tokens.size() < max_new_tokens && tokens.back() != eos_id && n_past < bucket) {
         int32_t last = tokens.back();
         float* emb = nullptr;
         if (!ctx->dec_fused_embed) {
