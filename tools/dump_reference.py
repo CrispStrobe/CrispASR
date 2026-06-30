@@ -255,6 +255,10 @@ REGISTERED_BACKENDS: Dict[str, str] = {
     # dir. GitHub source (modeling code) expected at ref/moss_audio/github/
     # or via MOSS_AUDIO_GITHUB env. Prompt from MOSS_AUDIO_PROMPT env.
     "moss-audio":  "reference_backends.moss_audio",
+    # MOSS-Transcribe-preview-2B: Qwen3-Omni audio encoder + GatedMLP adapter +
+    # Qwen3-1.7B LM. Ships modeling+processing code (no GitHub clone needed).
+    # model_dir = OpenMOSS-Team/MOSS-Transcribe-preview-2B HF id or local dir.
+    "moss-transcribe": "reference_backends.moss_transcribe",
     # TADA-3B-ML TTS: Llama-3.2-3B + per-token flow matching + TADA codec.
     # model_dir = HumeAI/tada-3b-ml HF id or local snapshot.
     # Audio arg is unused (text-driven). Text from TADA_SYN_TEXT env var.

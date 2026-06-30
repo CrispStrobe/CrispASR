@@ -69,6 +69,7 @@
 #include "parler_tts.h"
 #include "melotts.h"
 #include "moss_audio.h"
+#include "moss_transcribe.h"
 #include "lfm2_audio.h"
 #include "mini_omni2.h"
 #include "nemotron.h"
@@ -5834,6 +5835,93 @@ int main(int argc, char** argv) {
         }
 
         moss_audio_free(ctx);
+    } else if (backend_name == "moss-transcribe") {
+        auto cp = moss_transcribe_context_default_params();
+        cp.n_threads = 4;
+        cp.verbosity = 1;
+        moss_transcribe_context* ctx = moss_transcribe_init_from_file(model_path.c_str(), cp);
+        if (!ctx) {
+            fprintf(stderr, "failed to load moss-transcribe model\n");
+            return 4;
+        }
+
+        // ---- mel_spectrogram ----
+        int n_mels = 0, T_mel = 0;
+        float* mel = moss_transcribe_compute_mel(ctx, samples.data(), (int)samples.size(), &n_mels, &T_mel);
+        if (mel) {
+            auto rep = ref.compare("mel_spectrogram", mel, (size_t)n_mels * T_mel);
+            print_row("mel_spectrogram", rep, COS_THRESHOLD);
+            record(rep);
+        } else {
+            printf("[ERR ] mel_spectrogram         (compute failed)\n");
+            n_fail++;
+        }
+
+        // ---- encoder_output → adapter_output → LM prefill ----
+        if (mel) {
+            int T_enc = 0, d_enc = 0;
+            float* enc = moss_transcribe_run_encoder(ctx, mel, n_mels, T_mel, &T_enc, &d_enc);
+            free(mel);
+            if (enc) {
+                auto rep = ref.compare("encoder_output", enc, (size_t)T_enc * d_enc);
+                print_row("encoder_output", rep, COS_THRESHOLD);
+                record(rep);
+
+                int adapt_T = 0, adapt_d = 0;
+                float* adapted = moss_transcribe_run_adapter(ctx, enc, T_enc, d_enc, &adapt_T, &adapt_d);
+                free(enc);
+                if (adapted) {
+                    auto ra = ref.compare("adapter_output", adapted, (size_t)adapt_T * adapt_d);
+                    print_row("adapter_output", ra, COS_THRESHOLD);
+                    record(ra);
+
+                    // ---- LM prefill: build prompt, embed, splice audio, run ----
+                    const int d_llm = adapt_d;
+                    std::vector<int32_t> ids((size_t)T_enc + 16);
+                    int n_prompt = moss_transcribe_build_prompt(ctx, T_enc, ids.data(), (int)ids.size());
+                    if (n_prompt > 0) {
+                        ids.resize(n_prompt);
+                        float* emb = moss_transcribe_embed_tokens(ctx, ids.data(), n_prompt);
+                        if (emb) {
+                            int aidx = 0;
+                            for (int pos = 0; pos < n_prompt; pos++)
+                                if (ids[pos] == 0 && aidx < T_enc) {
+                                    memcpy(emb + (size_t)pos * d_llm, adapted + (size_t)aidx * d_llm,
+                                           (size_t)d_llm * sizeof(float));
+                                    aidx++;
+                                }
+                            if (ref.has("prefill_inputs_embeds")) {
+                                auto re = ref.compare("prefill_inputs_embeds", emb, (size_t)n_prompt * d_llm);
+                                print_row("prefill_inputs_embeds", re, COS_THRESHOLD);
+                                record(re);
+                            }
+                            moss_transcribe_kv_init(ctx, n_prompt + 16);
+                            int vocab = 0;
+                            float* logits = moss_transcribe_run_llm_kv(ctx, emb, n_prompt, 0, nullptr, &vocab);
+                            free(emb);
+                            if (logits) {
+                                auto rl = ref.compare("prefill_logits_step0", logits, (size_t)vocab);
+                                print_row("prefill_logits_step0", rl, COS_THRESHOLD);
+                                record(rl);
+                                int am = 0;
+                                for (int i = 1; i < vocab; i++)
+                                    if (logits[i] > logits[am])
+                                        am = i;
+                                printf("  C++ first-token argmax = %d  ('%s')\n", am,
+                                       moss_transcribe_token_text(ctx, am) ? moss_transcribe_token_text(ctx, am) : "?");
+                                free(logits);
+                            }
+                        }
+                    }
+                    free(adapted);
+                }
+            } else {
+                printf("[ERR ] encoder_output         (encoder failed)\n");
+                n_fail++;
+            }
+        }
+
+        moss_transcribe_free(ctx);
     } else if (backend_name == "melotts") {
         // MeloTTS (VITS2): text-driven TTS. The reference archive
         // contains intermediate activations (enc_output, enc_mean,

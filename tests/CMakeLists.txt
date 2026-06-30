@@ -623,6 +623,26 @@ catch_discover_tests(test-moss-audio
         WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
 )
 
+# ─── test - moss-transcribe — live ASR integration test for MOSS-Transcribe-preview-2B
+add_executable(test-moss-transcribe
+    test_moss_transcribe_live.cpp
+)
+target_include_directories(test-moss-transcribe PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/examples
+)
+target_link_libraries(test-moss-transcribe PRIVATE
+    Catch2::Catch2WithMain
+    moss_transcribe
+)
+catch_discover_tests(test-moss-transcribe
+    TEST_SPEC "[moss-transcribe]"
+    PROPERTIES
+        LABELS live
+        SKIP_RETURN_CODE 4
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+)
+
 # ─── test - context - bias — Catch2 unit tests for CTC-WS phrase-boost trie (PLAN #98)
 add_executable(test-context-bias
     test_context_bias.cpp

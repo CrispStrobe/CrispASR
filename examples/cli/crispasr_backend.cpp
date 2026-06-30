@@ -44,6 +44,7 @@ std::unique_ptr<CrispasrBackend> crispasr_make_omniasr_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_mimo_asr_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_ark_asr_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_moss_audio_backend();
+std::unique_ptr<CrispasrBackend> crispasr_make_moss_transcribe_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_funasr_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_paraformer_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_sensevoice_backend();
@@ -189,6 +190,8 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& name
         return crispasr_make_ark_asr_backend();
     if (name == "moss-audio" || name == "moss_audio" || name == "mossaudio")
         return crispasr_make_moss_audio_backend();
+    if (name == "moss-transcribe" || name == "moss_transcribe" || name == "mosstranscribe")
+        return crispasr_make_moss_transcribe_backend();
     if (name == "funasr" || name == "fun-asr" || name == "fun-asr-nano" || name == "fun-asr-mlt-nano")
         return crispasr_make_funasr_backend();
     if (name == "paraformer" || name == "paraformer-zh" || name == "paraformer-en")
@@ -284,6 +287,7 @@ std::vector<std::string> crispasr_list_backends() {
         "mimo-asr",
         "ark-asr",
         "moss-audio",
+        "moss-transcribe",
         "funasr",
         "fun-asr-mlt-nano",
         "paraformer",
@@ -714,6 +718,8 @@ std::string crispasr_detect_backend_from_gguf(const std::string& model_path) {
                 result = "ark-asr";
             else if (a == "moss_audio" || a == "moss-audio")
                 result = "moss-audio";
+            else if (a == "moss_transcribe" || a == "moss-transcribe")
+                result = "moss-transcribe";
             else if (a == "funasr" || a == "fun_asr" || a == "fun-asr")
                 result = "funasr";
             else if (a == "paraformer")

@@ -566,6 +566,25 @@ are injected as residual adds at LM blocks 0, 1, and 2, preserving
 multi-resolution audio features (low-level prosody/transients alongside
 high-level semantics) through the LM's early layers.
 
+### moss-transcribe
+
+Dedicated ASR sibling of moss-audio (same author). Uses the **stock
+Qwen3-Omni-MoE audio encoder**: 128-mel → 3×Conv2d(stride 2, 480ch) →
+`conv_out`(7680→1280, no bias) → sinusoidal positions → 32 pre-LN
+Whisper-style layers (1280d, 20 heads, FFN 5120) with **block-diagonal
+windowed attention** (windows of `n_window_infer/(2·n_window)`=8 conv
+chunks) → `ln_post` → `proj1`(1280→1280)+GELU → `proj2`(1280→2048). A
+**GatedMLP adapter** (2048→8192→2048, SiLU gate) maps encoder frames into
+the LM embedding space, where they are `masked_scatter`-spliced into the
+prompt at audio-placeholder positions. The decoder is a **Qwen3-1.7B** LM
+(28L, 2048d, 16Q/8KV, head_dim 128, QK-norm, SwiGLU 6144, RoPE θ=1M, tied
+embeddings). No DeepStack. Apache-2.0, ~2.4B params. The prompt follows
+`chat_template_default.py` (ChatML):
+`<|im_start|>user\n<|audio_start|>`·audio·`<|audio_end|><|im_end|>\n<|im_start|>assistant\n`
+→ transcript → `<|im_end|>`. The `user`/`assistant` framing is required —
+without it the model emits garbage instead of transcribing. ASR-only;
+output is lowercase, lightly punctuated.
+
 **Audio front-end:** 128-bin log-mel → 3×Conv2d (stride 2 each, 8×
 downsample total) → stem_proj Linear(7680, 1280) → sinusoidal position
 embeddings → 32 encoder blocks. Slaney mel filterbank normalization.

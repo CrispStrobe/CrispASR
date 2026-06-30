@@ -425,6 +425,13 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
             // MOSS-Audio: keep encoder + adapter + deepstack at F16
             !(arch == "moss_audio" &&
               (sname.find("enc.") == 0 || sname.find("adapter.") == 0 || sname.find("deepstack.") == 0)) &&
+            // MOSS-Transcribe: keep encoder + adapter at F16
+            // MOSS-Transcribe: keep the audio encoder + adapter at F16, and the
+            // TIED token embedding at F16 — `llm.embed.weight` doubles as the
+            // output head (lm_head = embed), so quantizing it to q4_k corrupts
+            // both the input embeddings and every output logit.
+            !(arch == "moss_transcribe" &&
+              (sname.find("enc.") == 0 || sname.find("adapter.") == 0 || sname == "llm.embed.weight")) &&
             !(sname.find("cls.") == 0 && ggml_nelements(t) < 65536) && (sname.find("enc_proj.") != 0) &&
             (sname.find("lm_head.") != 0) && (sname.find("tok_emb.") != 0) && (sname.find("lang_emb.") != 0) &&
             !(is_chatterbox && (sname.find("s3.v.") == 0 || sname.find("conds.") == 0 || sname.find("ve.") == 0 ||
@@ -436,13 +443,12 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
                sname == "cosyvoice3.flow.input_embd.w" || sname == "cosyvoice3.flow.spk_affine.w" ||
                sname == "cosyvoice3.s3tok.fsq.proj.w")) &&
             !is_f5tts &&
-            !(is_dots_tts &&
-              (sname.find("dots.dit.") == 0 || sname.find(".adaln.") != std::string::npos ||
-               sname.find("dots.hidden_proj.") == 0 || sname.find("dots.latent_proj.") == 0 ||
-               sname.find("dots.coordinate_proj.") == 0 || sname.find("dots.xvec_proj.") == 0 ||
-               sname.find("dots.eos_proj.") == 0 || sname.find("dots.llm.tok_emb.") == 0 ||
-               sname.find("dots.latent_stats.") == 0 || sname.find("dots.penc.in_proj.") == 0 ||
-               sname.find("dots.penc.out_proj.") == 0 || sname.find("dots.penc.ds_conv.") == 0)) &&
+            !(is_dots_tts && (sname.find("dots.dit.") == 0 || sname.find(".adaln.") != std::string::npos ||
+                              sname.find("dots.hidden_proj.") == 0 || sname.find("dots.latent_proj.") == 0 ||
+                              sname.find("dots.coordinate_proj.") == 0 || sname.find("dots.xvec_proj.") == 0 ||
+                              sname.find("dots.eos_proj.") == 0 || sname.find("dots.llm.tok_emb.") == 0 ||
+                              sname.find("dots.latent_stats.") == 0 || sname.find("dots.penc.in_proj.") == 0 ||
+                              sname.find("dots.penc.out_proj.") == 0 || sname.find("dots.penc.ds_conv.") == 0)) &&
             !(is_qwen3_tts && (sname.find("speaker.") == 0 || sname.find("code_pred.token_embd") == 0 ||
                                sname.find("code_pred.output") == 0 || sname.find("code_pred.small_to_mtp") == 0 ||
                                sname.find("talker.token_embd") == 0 || sname.find("talker.text_proj") == 0 ||

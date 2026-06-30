@@ -232,6 +232,10 @@
 #include "moss_audio.h"
 #define CA_HAVE_MOSS_AUDIO 1
 #endif
+#if __has_include("moss_transcribe.h")
+#include "moss_transcribe.h"
+#define CA_HAVE_MOSS_TRANSCRIBE 1
+#endif
 #if __has_include("glm_asr.h")
 #include "glm_asr.h"
 #define CA_HAVE_GLMASR 1
@@ -1293,6 +1297,8 @@ CA_EXPORT int crispasr_detect_backend_from_gguf(const char* path, char* out_name
         backend = "madlad";
     else if (strcmp(arch, "moss_audio") == 0 || strcmp(arch, "moss-audio") == 0)
         backend = "moss-audio";
+    else if (strcmp(arch, "moss_transcribe") == 0 || strcmp(arch, "moss-transcribe") == 0)
+        backend = "moss-transcribe";
     else if (strcmp(arch, "kugelaudio") == 0 || strcmp(arch, "kugelaudio-tts") == 0)
         backend = "kugelaudio";
     else if (strcmp(arch, "zonos") == 0 || strcmp(arch, "zonos-tts") == 0)
@@ -1668,6 +1674,9 @@ struct crispasr_session {
 #endif
 #ifdef CA_HAVE_MOSS_AUDIO
     moss_audio_context* moss_audio_ctx = nullptr;
+#endif
+#ifdef CA_HAVE_MOSS_TRANSCRIBE
+    moss_transcribe_context* moss_transcribe_ctx = nullptr;
 #endif
 };
 
@@ -2827,6 +2836,21 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
         return s;
     }
 #endif
+#ifdef CA_HAVE_MOSS_TRANSCRIBE
+    if (s->backend == "moss-transcribe" || s->backend == "moss_transcribe" || s->backend == "mosstranscribe") {
+        s->backend = "moss-transcribe";
+        moss_transcribe_context_params p = moss_transcribe_context_default_params();
+        p.n_threads = s->n_threads;
+        p.verbosity = g_open_verbosity_tls;
+        p.use_gpu = g_open_use_gpu_tls;
+        s->moss_transcribe_ctx = moss_transcribe_init_from_file(model_path, p);
+        if (!s->moss_transcribe_ctx) {
+            delete s;
+            return nullptr;
+        }
+        return s;
+    }
+#endif
 
     // Unknown or unsupported-in-this-build backend.
     delete s;
@@ -3116,6 +3140,9 @@ CA_EXPORT int crispasr_session_available_backends(char* out_csv, int out_cap) {
 #endif
 #ifdef CA_HAVE_MOSS_AUDIO
     list += ",moss-audio";
+#endif
+#ifdef CA_HAVE_MOSS_TRANSCRIBE
+    list += ",moss-transcribe";
 #endif
 #ifdef CA_HAVE_QWEN3
     // mega-asr is a Qwen3-ASR variant (LoRA merged offline) — dispatch
@@ -5173,6 +5200,13 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
             need_free = true;
         }
 #endif
+#ifdef CA_HAVE_MOSS_TRANSCRIBE
+        if (!text && s->moss_transcribe_ctx) {
+            // ASR-only (promptless legacy layout); language/ask hints are ignored.
+            text = moss_transcribe_transcribe(s->moss_transcribe_ctx, pcm, n_samples);
+            need_free = true;
+        }
+#endif
         if (text)
             return package_text_only(text, need_free);
     }
@@ -7106,6 +7140,10 @@ CA_EXPORT void crispasr_session_close(crispasr_session* s) {
 #ifdef CA_HAVE_MOSS_AUDIO
     if (s->moss_audio_ctx)
         moss_audio_free(s->moss_audio_ctx);
+#endif
+#ifdef CA_HAVE_MOSS_TRANSCRIBE
+    if (s->moss_transcribe_ctx)
+        moss_transcribe_free(s->moss_transcribe_ctx);
 #endif
     delete s;
 }

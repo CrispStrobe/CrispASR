@@ -1255,6 +1255,18 @@ if(NOT MSVC)
 endif()
 
 # ---------------------------------------------------------------------------
+# moss_transcribe — OpenMOSS-Team/MOSS-Transcribe-preview-2B (Qwen3-Omni audio encoder + Qwen3-1.7B LLM)
+# ---------------------------------------------------------------------------
+add_library(moss_transcribe STATIC moss_transcribe.h moss_transcribe.cpp)
+set_target_properties(moss_transcribe PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(moss_transcribe PUBLIC .)
+target_compile_features   (moss_transcribe PUBLIC cxx_std_17)
+target_link_libraries     (moss_transcribe PUBLIC crispasr-core ggml ggml-base ggml-cpu)
+if(NOT MSVC)
+    target_compile_options(moss_transcribe PRIVATE -O3)
+endif()
+
+# ---------------------------------------------------------------------------
 # qwen3_tts — Qwen/Qwen3-TTS (Qwen3 talker + 16-codebook RVQ output)
 # ---------------------------------------------------------------------------
 add_library(qwen3_tts STATIC qwen3_tts.h qwen3_tts.cpp)
@@ -2148,6 +2160,9 @@ if (TARGET mimo_asr)
 endif()
 if (TARGET moss_audio)
     target_link_libraries(crispasr-lib PUBLIC moss_audio)
+endif()
+if (TARGET moss_transcribe)
+    target_link_libraries(crispasr-lib PUBLIC moss_transcribe)
 endif()
 if (TARGET qwen3_tts)
     target_link_libraries(crispasr-lib PUBLIC qwen3_tts)

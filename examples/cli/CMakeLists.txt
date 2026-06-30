@@ -61,6 +61,7 @@ add_executable(${TARGET}
     crispasr_backend_mimo_asr.cpp
     crispasr_backend_ark_asr.cpp
     crispasr_backend_moss_audio.cpp
+    crispasr_backend_moss_transcribe.cpp
     crispasr_backend_funasr.cpp
     crispasr_backend_paraformer.cpp
     crispasr_backend_sensevoice.cpp
@@ -200,6 +201,7 @@ target_link_libraries(crispasr-diff PRIVATE
     mimo_asr
     ark_asr
     moss_audio
+    moss_transcribe
     voxcpm2_tts
     funasr
     paraformer
@@ -312,6 +314,7 @@ target_link_libraries(${TARGET} PRIVATE
     paraformer
     sensevoice
     moss_audio
+    moss_transcribe
     ${FFMPEG_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}
     $<$<BOOL:${WIN32}>:winhttp>

@@ -63,6 +63,7 @@ archived at `cstr/chatterbox-GGUF/diff-harness-ref/`.
 | `moonshine-base` | `tools/reference_backends/moonshine.py` | — | — | **no** | torch, transformers |
 | `moonshine-streaming` | `tools/reference_backends/moonshine_streaming.py` | — | — | yes | gguf, scipy |
 | `moss-audio` | `tools/reference_backends/moss_audio.py` | — | — | yes | safetensors, torch, transformers |
+| `moss-transcribe` | `tools/reference_backends/moss_transcribe.py` | — | — | yes | safetensors, torch, transformers≥4.57 |
 | `nemotron` | `tools/reference_backends/nemotron.py` | — | — | yes | gguf, nemo, soundfile, torch, torchaudio |
 | `orpheus` | `tools/reference_backends/orpheus_snac.py` | — | — | yes | snac, torch |
 | `orpheus-talker` | `tools/reference_backends/orpheus_talker.py` | — | — | yes | torch, transformers |
