@@ -806,6 +806,15 @@ static void dots_llm_step(dots_tts_context* ctx, const float* input_embeds, int 
     // (a single decode step survives only because the residual stream dominates).
     atp.attn_scale = 1.0f / std::sqrt((float)llm.head_dim);
     atp.qk_norm_eps = llm.rms_norm_eps;
+    // Vulkan has no f16→f16 REPEAT pipeline, so the GQA head-expansion
+    // (12Q/2KV → repeat_4d) on the F16 KV cache aborts with "Missing op:
+    // REPEAT for f16 to f16" (issue #200, RX580/RADV). Casting the cached
+    // K/V to F32 before the repeat lowers it to a supported F32 REPEAT.
+    // Metal/CPU keep the legacy F16 fast path. Same knob as TADA (#192).
+    {
+        const char* bname = ggml_backend_name(ctx->backend);
+        atp.force_kv_read_f32 = bname && std::strstr(bname, "Vulkan") != nullptr;
+    }
 
     ggml_tensor* cur = x;
     for (uint32_t il = 0; il < llm.n_layers; il++) {

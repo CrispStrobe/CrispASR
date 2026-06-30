@@ -58,13 +58,19 @@ fraction of the size. **Do not re-quantize the DiT yourself.**
 
 ```bash
 # Build CrispASR (see repo README), then:
-crispasr-cli --tts \
-  --backend dots-tts \
+./build/bin/crispasr --backend dots-tts \
   -m dots-tts-soar-q8_0.gguf \
-  --tts-vocoder dots-tts-soar-vocoder-f16.gguf \
-  --text "Hello world." \
-  -o out.wav
+  --tts "Hello world." \
+  --tts-output out.wav
 ```
+
+The **vocoder companion is auto-discovered** as a sibling file next to the
+core model (`dots-tts-soar-vocoder-*.gguf` in the same directory), so no
+extra flag is needed. To point at a vocoder elsewhere, pass
+`--codec-model dots-tts-soar-vocoder-f16.gguf` (there is **no**
+`--tts-vocoder` flag). The optional CAM++ speaker encoder
+(`dots-tts-soar-spk-f16.gguf`) is discovered the same way and only used
+when you pass `--voice` for cloning.
 
 Or let the model registry fetch the default (F16 core + vocoder)
 automatically with `-m auto --backend dots-tts`.
