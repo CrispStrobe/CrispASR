@@ -156,6 +156,39 @@ or fusing the many small GEMV/elementwise ops into fewer larger kernels — **no
 ICB. `CRISPASR_METAL_PROFILE` is kept (env-gated, off by default) as the reusable
 probe for any future "is this Metal graph host- or GPU-bound?" question.
 
+### Would other backends benefit from the granite shape-stable-decode rewrite? Mostly only on Ampere+ CUDA (§210 survey)
+
+The two wins PR #207 + the Metal follow-up gave granite (CUDA-graph capture; Metal
+gallocr allocate-once) **both require the same prerequisite**: the per-step decode
+graph must be *shape-stable* — a fixed-`Lk` KV bucket written via `ggml_set_rows`
+at a runtime index, so the topology is byte-identical every step. The naive
+anti-pattern (most backends) is a KV view sized `Lk = n_past + T`, which grows
+every token → no capture, no allocate-once. Surveyed every LLM/AR-decoder backend
+(2026-06-30) for which side of that line they're on:
+
+- **Already shape-stable** (get both wins): `granite_speech` (PR #207),
+  **`mimo_asr`** — independently: cached `step_t1_gf` + `fixed_kv_len` + `set_rows`
+  scatter + skip-plan reuse (`mimo_asr.cpp:211,958,1507-1522`); `dots_tts` has the
+  Metal gallocr allocate-once (`ec74c5a0`).
+- **Growing-shape + naive per-step rebuild** (candidates): `voxtral`, `voxtral4b`,
+  `qwen3_asr`, `gemma4_e2b`, `glm_asr`, `higgs_stt`, `ark_asr` (all `Lk = n_past+T`);
+  `lfm2_audio` (growing but already on a gallocr for the §206 fix); naive TTS
+  decoders `csm_tts`, `indextts`, `bark_tts`, `moss_audio`, `mini_omni2`.
+
+**The catch (why this is *conditional*, not a roadmap to mass-port):** the headline
+CUDA-graph win is **arch-gated to Ampere+ (sm_80+)** (`ggml-cuda.cu:4329`), so the
+project's usual CUDA test GPUs **T4 (sm_75) and P100 (sm_60) get nothing** — only
+RTX 5090 / A100-class do. And on **Metal there is no throughput win at all** (this
+decode is GPU-bound, per the measurement above) — only memory-pressure robustness.
+So porting the granite pattern to N other backends is a per-backend manual graph
+rewrite (set_rows bucket + in-graph argmax + capturable/fused embed + diff-harness
+parity) for a payoff that materializes only on Ampere+ NVIDIA. Do it **targeted,
+on deployment demand, measured first** — not as a sweep. CUDA-graph capture itself
+is automatic once the graph is capturable (no k-quant `GET_ROWS`, no split buffer,
+no problematic `MUL_MAT_ID`) and shape+pointer-stable; no per-backend CUDA code is
+needed, just the shape-stable rewrite. Actionable port plan + per-backend file:line
+anchors + recipe in [[PLAN]] §210 follow-up.
+
 ## A "garbled GPU output" bug can live entirely downstream — A/B the GPUs before localizing (§192)
 
 The #192 native-Vulkan TADA garbage was localized (by a prior handover) to the

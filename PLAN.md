@@ -376,6 +376,116 @@ the "don't extract single-consumer helpers" rule.
 
 ---
 
+## §210 follow-up — shape-stable bucketed decode for the remaining LLM/AR backends (CUDA-graph capture) (OPEN, CONDITIONAL)
+
+PR #207 made **granite-speech**'s single-token LLM decode a *cached, shape-stable*
+graph (fixed-`Lk` KV bucket written via `ggml_set_rows` at a runtime index, in-graph
+`ggml_argmax`, fused F16 embed), which unlocks **two** wins:
+- **CUDA-graph capture** — the ~1.4k-op step replays as one `cudaGraphLaunch`,
+  ~9–13× on the decode (RTX 5090). Engages **automatically** in ggml-cuda for any
+  capturable, shape+pointer-stable graph routed through the sched — no per-backend
+  CUDA code.
+- **Metal gallocr allocate-once** (`granite_dec_use_gallocr`) — reserve one
+  `ggml_gallocr` against the cached graph, reuse every step (skip per-step
+  `sched_reset`+`sched_alloc_graph`).
+
+The question: which other LLM/AR-decoder backends would benefit? Survey done
+2026-06-30 (see [[LEARNINGS]] §210; the gating property is shape-stability —
+`fixed-KV bucket` vs growing `Lk = n_past + T`).
+
+### ⚠️ READ FIRST — the honest cost/benefit (don't mass-port)
+
+1. **The headline (CUDA-graph) win is gated to Ampere+ (sm_80+)** — see
+   `ggml/src/ggml-cuda/ggml-cuda.cu:4329` (`< GGML_CUDA_CC_AMPERE` →
+   `disable_due_to_gpu_arch`). The project's usual CUDA test GPUs — **T4 (sm_75),
+   P100 (sm_60) — are gated OUT.** Only RTX 5090 / A100-class actually benefit.
+2. **On Metal there is NO throughput win.** §210 measured the M1 granite decode at
+   host-encode **1.8 %** / GPU **98 %** — it's GPU-bound (weight-bandwidth-bound
+   Q4_K GEMVs), so the shape-stable rewrite buys only memory-pressure robustness
+   (alloc balloon 68–236 ms → ~0) on Metal, not speed. The real Metal/Apple-Silicon
+   lever is GPU-side (kernel fusion, lower-bandwidth quant), not graph replay.
+3. **Each port is a MANUAL graph rewrite + byte-identical diff-harness validation**
+   — not mechanical, and **NOT delegable to agents** (runtime graph code, per
+   [[feedback_no_agents_for_runtime_graphs]]). Budget one focused session per
+   backend.
+
+**Therefore: port a backend ONLY when it's actually deployed on Ampere+ CUDA
+servers, and measure first** (`CRISPASR_METAL_PROFILE` for the host/GPU split;
+confirm the GGML_LOG_DEBUG "disabling CUDA graphs due to …" line does NOT fire on
+an Ampere+ GPU). For smaller LLM decoders the host-encode fraction may be larger
+than granite's 1.8 %, which would change the calculus — so don't assume, measure.
+
+### Templates (copy these — already shape-stable)
+
+- **`src/granite_speech.cpp`**: `granite_build_argmax_decode` (~L2474, fixed
+  `bucket_len`, in-graph argmax, fused F16 embed when `token_embd` non-quant),
+  `granite_dec_use_gallocr` (~L2362, gates gallocr vs sched: gallocr on Metal/CPU,
+  **sched on CUDA so capture still fires**).
+- **`src/mimo_asr.cpp`**: did it independently — cached `step_t1_gf` +
+  `step_t1_fixed_kv_len` (L211), `set_rows` scatter-write at runtime `kv_indices`
+  (L958, L1026), skip-plan reuse "update inputs only, no reset/alloc"
+  (L1507–1522). Good second reference for the set_rows path.
+
+### Already done (no work): `granite_speech`, `mimo_asr`, `dots_tts` (Metal gallocr, `ec74c5a0`).
+
+### Candidates — growing-shape (`Lk = n_past + T`) + naive per-step rebuild + `sched_reset`/`alloc`
+
+ASR-LLM (prioritized by likely server deployment):
+1. **voxtral** — `src/voxtral.cpp`, `Lk` at L1019; per-step graph rebuild +
+   `sched_reset`+`sched_alloc_graph` at L1159/L1192/L1244.
+2. **qwen3_asr** — `src/qwen3_asr.cpp`, `Lk` at L1210.
+3. **voxtral4b** — `src/voxtral4b.cpp`, `Lk` at L1411 (decode via
+   `core_greedy_decode`).
+4. **gemma4_e2b** — `src/gemma4_e2b.cpp`, `Lk` at L995 (decode via
+   `core_greedy_decode::run_with_probs_cb`, ~L1631).
+5. **glm_asr** — `src/glm_asr.cpp`, `Lk` at L1322.
+6. **higgs_stt** — `src/higgs_stt.cpp`, `Lk` at L1061 (Qwen3-1.7B decoder).
+7. **ark_asr** — `src/ark_asr.cpp`, `ark_build_decoder_graph` (L643) /
+   `ark_run_decoder` (L729), `Lk` at L674 (Qwen2.5-3B decoder).
+8. **lfm2_audio** — `src/lfm2_audio.cpp`, `Lk` at L933; already on a gallocr (L875,
+   the §206 weight-less-first-op fix) but growing-shape, so not yet capturable.
+
+TTS AR decoders (LOWER priority — heavy per-step compute = even more GPU-bound, so
+the Metal payoff is ~nil and even the CUDA payoff is diluted by larger per-step
+GPU time): `csm_tts`, `indextts`, `bark_tts`, `moss_audio`, `mini_omni2` are naive
+growing-shape. `qwen3_tts`, `chatterbox` (T3), `tada_tts`, `parler_tts`,
+`vibevoice` already have per-backend perf work (`set_rows`/gallocr present) — audit
+individually before touching.
+
+### Per-backend recipe (mirror granite)
+
+1. Allocate KV at `kv_max_ctx` once; pick a fixed `bucket_len` (≤ cache cap).
+2. Rewrite the step graph to a fixed `[0, bucket_len)` KV view; write the new
+   token's K/V via `ggml_set_rows` at runtime index `n_past` (not a growing
+   `ggml_view` sized to `n_past`). Mask is `(bucket_len, 1)`, set host-side each
+   step. Topology must be byte-identical across steps.
+3. Move argmax in-graph (`ggml_argmax`); keep `logits` as a graph output for
+   callers needing the vocab.
+4. Make the embed **capturable**: if `token_embd` is k-quant, the in-graph
+   `GET_ROWS` host-syncs and disables capture — either fuse a F16 embed (granite)
+   or pass a pre-computed F32 embed input (granite's `fused_embed` branch).
+5. Cache the cgraph; gate gallocr-vs-sched like `granite_dec_use_gallocr` (gallocr
+   on Metal/CPU, sched on CUDA/HIP so capture engages; force sched if a CPU layer
+   split exists). Add an env opt-out.
+6. Bound `n_past < bucket_len` (granite's OOB guard, `c5035969`).
+
+### Validation gate (mandatory, per [[feedback_methodology]])
+
+- **Byte-identical transcript** vs the legacy path on jfk + fleurs_60s (the granite
+  gate). This is the correctness bar — no merge without it.
+- **Measure** before/after: `CRISPASR_METAL_PROFILE` (host vs GPU µs split) and a
+  per-step compute-µs accumulator like `CRISPASR_GRANITE_DEC_PROFILE`. On a real
+  Ampere+ GPU, confirm capture engages (no "disabling CUDA graphs" debug line) and
+  A/B the decode RTFx.
+- M1 wall time is noise (§210) — gate on the instrumented per-step quantity, not
+  end-to-end wall.
+
+**Effort:** ~1 focused session per backend (graph rewrite + diff-harness parity +
+profile). Do the highest-deployment ASR backend first; stop if its measured CUDA
+A/B on Ampere+ doesn't justify the next.
+
+---
+
 ## §219 — more permissive audio input formats for crispasr_audio_load (OPEN)
 
 Done so far (ffmpeg-free): WAV/MP3/FLAC (miniaudio), Ogg Vorbis (stb_vorbis),
