@@ -2619,6 +2619,22 @@ core infrastructure.
 - Gap: cpu_linear is naive F32 dequant matmul (no SIMD, no OMP),
   depthwise_conv_1d_cpu is scalar loops, Q-Former 3-token bottleneck
   lossy for long audio, encoder graph rebuilt per call
+- §210 bucketed decode (PR #207): single-token LLM decode runs a cached,
+  shape-stable graph (fixed `Lk` bucket) so CUDA-graph capture engages
+  (~9–13× on RTX 5090, bit-identical). On backends without capture
+  (Metal/Vulkan/CPU, and not a CPU layer-split) the same graph is allocated
+  **once** via a persistent `ggml_gallocr` on the single GPU backend and reused
+  every step (`granite_dec_use_gallocr`), skipping the per-step
+  `ggml_backend_sched_reset`+`sched_alloc_graph` that capture requires.
+  Default-on; opt out with `CRISPASR_GRANITE_DEC_GALLOCR=0`.
+  Measured on M1 Metal (granite-4.1-2b Q4_K, `CRISPASR_GRANITE_DEC_PROFILE=1`):
+  per-step sched alloc ≈3 ms quiet (balloons to 68–236 ms under memory
+  pressure) → gallocr drops it to ~0.02 ms; n_cb (1/2/4) makes no difference.
+  The dominant per-step cost (~100 ms on this box) is **Metal per-op dispatch**
+  of the ~280-op graph — the launch-bound cost CUDA capture removes but Metal
+  cannot without indirect command buffers (ICB; not yet in ggml-metal). So on
+  Metal gallocr is a modest quiet-machine win + a large robustness/variance win
+  under load; the real remaining lever is ICB graph replay.
 
 **Qwen3 ASR** (`qwen3_asr.cpp`):
 - Has: KV cache, lazy crisp_audio init, optional fused QKV, layer offload,

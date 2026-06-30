@@ -301,6 +301,24 @@ struct granite_speech_context {
     // token embedding); otherwise the caller supplies a pre-computed embeds.
     bool dec_fused_embed = false;
 
+    // Raw-gallocr allocate-once decode (Metal/Vulkan/CPU — i.e. backends with
+    // no CUDA-graph capture). The bucketed decode graph is shape-stable, so we
+    // allocate it ONCE via a persistent ggml_gallocr on the single GPU backend
+    // and reuse it across steps with ggml_backend_graph_compute — skipping the
+    // per-step ggml_backend_sched_reset + sched_alloc_graph (which CUDA capture
+    // requires but which is pure overhead without it). gallocr_alloc_graph does
+    // not mutate the graph, so the same object is re-fed each step. Mirrors the
+    // chatterbox s3gen §208 single-backend path. CUDA keeps the sched path so
+    // ggml-cuda graph capture still engages. One allocator per cached graph.
+    ggml_gallocr_t dec_galloc = nullptr;    // for cached_dec_gf (logits)
+    ggml_gallocr_t argmax_galloc = nullptr; // for cached_argmax_gf (greedy)
+    int dec_use_gallocr = -1;               // -1 undecided, 0 sched, 1 gallocr
+    // Decode profiling accumulators (CRISPASR_GRANITE_DEC_PROFILE). Measure the
+    // per-step alloc vs compute split directly — deterministic, unlike noisy
+    // end-to-end wall time on M1.
+    int64_t dec_prof_alloc_us = 0;
+    int64_t dec_prof_compute_us = 0;
+
     // §176s: cached encoder graph — reused when (T, with_rpe) matches.
     ggml_cgraph* cached_enc_gf = nullptr;
     ggml_context* cached_enc_ctx = nullptr;
@@ -843,6 +861,10 @@ extern "C" void granite_speech_free(struct granite_speech_context* ctx) {
         return;
     if (ctx->cached_enc_ctx)
         ggml_free(ctx->cached_enc_ctx);
+    if (ctx->dec_galloc)
+        ggml_gallocr_free(ctx->dec_galloc);
+    if (ctx->argmax_galloc)
+        ggml_gallocr_free(ctx->argmax_galloc);
     if (ctx->sched)
         ggml_backend_sched_free(ctx->sched);
     if (ctx->kv_buf)
@@ -2329,6 +2351,48 @@ extern "C" float* granite_speech_run_llm_kv(struct granite_speech_context* ctx, 
     return result;
 }
 
+// Decide once whether the bucket decode uses the raw-gallocr allocate-once path
+// (no per-step sched reset+alloc) instead of the sched. Enabled when the whole
+// decode graph runs on a single GPU/CPU backend that has no CUDA-graph capture:
+//   - not CUDA/HIP (those want the sched so ggml-cuda capture engages)
+//   - no CPU layer split (CRISPASR_N_GPU_LAYERS) — a split graph spans two
+//     backends and must go through the sched.
+// Override: CRISPASR_GRANITE_DEC_GALLOCR=0 forces the sched path, =1 forces the
+// gallocr path (debug/bench).
+static bool granite_dec_use_gallocr(granite_speech_context* ctx) {
+    if (ctx->dec_use_gallocr >= 0)
+        return ctx->dec_use_gallocr != 0;
+    bool use = true;
+    if (!ctx->backend) {
+        use = false;
+    } else {
+        const char* name = ggml_backend_name(ctx->backend);
+        const bool is_cuda = name && (std::strstr(name, "CUDA") || std::strstr(name, "ROCm") ||
+                                      std::strstr(name, "HIP") || std::strstr(name, "MUSA"));
+        const bool split = ctx->model.buf_cpu != nullptr; // some weights on CPU
+        use = !is_cuda && !split;
+    }
+    if (const char* s = std::getenv("CRISPASR_GRANITE_DEC_GALLOCR"))
+        use = (std::atoi(s) != 0);
+    ctx->dec_use_gallocr = use ? 1 : 0;
+    if (std::getenv("CRISPASR_GRANITE_DEC_PROFILE"))
+        fprintf(stderr, "[granite dec-profile] backend=%s split=%d -> gallocr=%d\n",
+                ctx->backend ? ggml_backend_name(ctx->backend) : "(null)", ctx->model.buf_cpu != nullptr ? 1 : 0, use);
+    return use;
+}
+
+// Free the persistent decode allocators (on bucket change / teardown).
+static void granite_free_dec_gallocs(granite_speech_context* ctx) {
+    if (ctx->dec_galloc) {
+        ggml_gallocr_free(ctx->dec_galloc);
+        ctx->dec_galloc = nullptr;
+    }
+    if (ctx->argmax_galloc) {
+        ggml_gallocr_free(ctx->argmax_galloc);
+        ctx->argmax_galloc = nullptr;
+    }
+}
+
 extern "C" void granite_speech_set_decode_bucket(struct granite_speech_context* ctx, int bucket_len) {
     if (!ctx)
         return;
@@ -2340,6 +2404,7 @@ extern "C" void granite_speech_set_decode_bucket(struct granite_speech_context* 
             ctx->cached_dec_gf = nullptr;
             ctx->cached_argmax_gf = nullptr;
         }
+        granite_free_dec_gallocs(ctx); // allocators are tied to the freed graphs
         ctx->cached_dec_bucket = 0;
     }
     ctx->dec_bucket_len = bucket_len;
@@ -2351,12 +2416,15 @@ static ggml_cgraph* granite_build_bucket_decode(granite_speech_context* ctx, int
     if (ctx->cached_dec_gf && ctx->cached_dec_bucket == bucket_len)
         return ctx->cached_dec_gf;
 
-    // Free a previous cached graph built for a different bucket.
+    // Free a previous cached graph built for a different bucket. The argmax
+    // graph lives in the same arena, so it dies too; drop both allocators.
     if (ctx->cached_dec_ctx) {
         ggml_free(ctx->cached_dec_ctx);
         ctx->cached_dec_ctx = nullptr;
         ctx->cached_dec_gf = nullptr;
+        ctx->cached_argmax_gf = nullptr;
         ctx->cached_dec_meta.assign(ctx->cached_dec_meta.size(), 0);
+        granite_free_dec_gallocs(ctx);
     }
 
     const auto& m = ctx->model;
@@ -2438,10 +2506,23 @@ static float* granite_run_bucket_decode(granite_speech_context* ctx, const float
         return nullptr;
 
     ggml_cgraph* gf = granite_build_bucket_decode(ctx, bucket_len);
-    // Allocate once per (graph, sched). Subsequent steps reuse the allocation.
-    ggml_backend_sched_reset(ctx->sched);
-    if (!ggml_backend_sched_alloc_graph(ctx->sched, gf))
-        return nullptr;
+    const bool use_ga = granite_dec_use_gallocr(ctx);
+    if (use_ga) {
+        // Raw-gallocr: allocate the shape-stable graph once, reuse every step.
+        if (!ctx->dec_galloc) {
+            ctx->dec_galloc = ggml_gallocr_new(ggml_backend_get_default_buffer_type(ctx->backend));
+            if (!ctx->dec_galloc || !ggml_gallocr_alloc_graph(ctx->dec_galloc, gf)) {
+                granite_free_dec_gallocs(ctx);
+                return nullptr; // caller falls back to the legacy rebuild path
+            }
+        }
+    } else {
+        // Sched path (CUDA capture): reset+alloc every step. Subsequent steps
+        // reuse the allocation.
+        ggml_backend_sched_reset(ctx->sched);
+        if (!ggml_backend_sched_alloc_graph(ctx->sched, gf))
+            return nullptr;
+    }
 
     // positions: the single new token's absolute position.
     int32_t pos = n_past;
@@ -2457,7 +2538,9 @@ static float* granite_run_bucket_decode(granite_speech_context* ctx, const float
         pmask[k] = (k <= n_past) ? zero : neg_inf;
     ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "causal_mask"), pmask, 0, ctx->dec_mask_buf.size());
 
-    if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS)
+    const ggml_status st =
+        use_ga ? ggml_backend_graph_compute(ctx->backend, gf) : ggml_backend_sched_graph_compute(ctx->sched, gf);
+    if (st != GGML_STATUS_SUCCESS)
         return nullptr;
 
     ggml_tensor* logits_t = ggml_graph_get_tensor(gf, "logits");
@@ -2563,13 +2646,28 @@ static int granite_greedy_decode_step(granite_speech_context* ctx, int32_t token
     if (n_past < 0 || n_past >= bucket_len)
         return -1;
     ggml_cgraph* gf = granite_build_argmax_decode(ctx, bucket_len);
-    // reset+alloc every step: the documented sched reuse shortcut
-    // (ggml-backend.h:285) breaks CUDA-graph capture here ("CUDA error:
-    // invalid argument" mid-decode). The alloc on a cached plan is cheap and
-    // capture already removes the dominant per-launch cost.
-    ggml_backend_sched_reset(ctx->sched);
-    if (!ggml_backend_sched_alloc_graph(ctx->sched, gf))
-        return -1;
+    const bool use_ga = granite_dec_use_gallocr(ctx);
+    const int64_t t_alloc0 = ggml_time_us();
+    if (use_ga) {
+        // Raw-gallocr (Metal/Vulkan/CPU): allocate the shape-stable argmax graph
+        // once and reuse it every step — no per-step sched reset+alloc.
+        if (!ctx->argmax_galloc) {
+            ctx->argmax_galloc = ggml_gallocr_new(ggml_backend_get_default_buffer_type(ctx->backend));
+            if (!ctx->argmax_galloc || !ggml_gallocr_alloc_graph(ctx->argmax_galloc, gf)) {
+                granite_free_dec_gallocs(ctx);
+                return -1;
+            }
+        }
+    } else {
+        // Sched path: reset+alloc every step. The documented sched reuse
+        // shortcut (ggml-backend.h:285) breaks CUDA-graph capture here ("CUDA
+        // error: invalid argument" mid-decode), and capture already removes the
+        // dominant per-launch cost there.
+        ggml_backend_sched_reset(ctx->sched);
+        if (!ggml_backend_sched_alloc_graph(ctx->sched, gf))
+            return -1;
+    }
+    ctx->dec_prof_alloc_us += ggml_time_us() - t_alloc0;
 
     const auto& hp = ctx->model.hparams;
     const int d = (int)hp.llm_d_model;
@@ -2589,7 +2687,11 @@ static int granite_greedy_decode_step(granite_speech_context* ctx, int32_t token
         pmask[k] = (k <= n_past) ? zero : neg_inf;
     ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "causal_mask"), pmask, 0, ctx->dec_mask_buf.size());
 
-    if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS)
+    const int64_t t_comp0 = ggml_time_us();
+    const ggml_status st =
+        use_ga ? ggml_backend_graph_compute(ctx->backend, gf) : ggml_backend_sched_graph_compute(ctx->sched, gf);
+    ctx->dec_prof_compute_us += ggml_time_us() - t_comp0;
+    if (st != GGML_STATUS_SUCCESS)
         return -1;
 
     int32_t token = -1;
@@ -2618,6 +2720,14 @@ extern "C" int32_t* granite_speech_greedy_decode(struct granite_speech_context* 
     tokens.reserve((size_t)max_new_tokens);
     tokens.push_back(first_token);
 
+    // CRISPASR_GRANITE_DEC_PROFILE=1 → report decode-loop wall time + per-step
+    // cost (isolates the decode path from the encoder; A/B the gallocr vs sched
+    // path with CRISPASR_GRANITE_DEC_GALLOCR).
+    const bool dec_profile = std::getenv("CRISPASR_GRANITE_DEC_PROFILE") != nullptr;
+    const int64_t prof_t0 = dec_profile ? ggml_time_us() : 0;
+    ctx->dec_prof_alloc_us = 0;
+    ctx->dec_prof_compute_us = 0;
+
     int n_past = initial_n_past;
     // Stop at the bucket ceiling: the per-step KV write lands at row n_past in a
     // fixed [0, bucket) view, so n_past must stay < bucket. bucket <= the KV
@@ -2639,6 +2749,17 @@ extern "C" int32_t* granite_speech_greedy_decode(struct granite_speech_context* 
             break;
         n_past++;
         tokens.push_back((int32_t)nx);
+    }
+
+    if (dec_profile) {
+        const int64_t dt = ggml_time_us() - prof_t0;
+        const int steps = (int)tokens.size() - 1; // first_token came from prefill
+        const double inv = steps > 0 ? 1.0 / steps : 0.0;
+        fprintf(stderr,
+                "[granite dec-profile] %d steps, %.1f ms total | alloc %.0f us/step, compute %.0f us/step "
+                "(gallocr=%d)\n",
+                steps, dt / 1000.0, ctx->dec_prof_alloc_us * inv, ctx->dec_prof_compute_us * inv,
+                granite_dec_use_gallocr(ctx) ? 1 : 0);
     }
 
     int32_t* out = (int32_t*)malloc(tokens.size() * sizeof(int32_t));
