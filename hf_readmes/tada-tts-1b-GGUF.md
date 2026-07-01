@@ -35,7 +35,7 @@ TADA-1B is a text-to-speech model built on Meta Llama 3.2 1B with a flow-matchin
 | `tada-codec-f16.gguf` | F16 | ~1.0 GB | Codec decoder, required companion |
 | `tada-ref.gguf` | F32 | ~17 KB | Default voice reference (8-token JFK prompt) |
 | `tada-encoder-f16.gguf` | F16 | ~187 MB | Reference encoder for `--make-ref` voice cloning |
-| `tada-aligner-en.gguf` | F16 | ~1.2 GB | English CTC aligner for `--make-ref` (add `--language` for others) |
+| `tada-aligner-<lang>.gguf` | Q8_0 | ~906 MB | CTC aligner for `--make-ref` / `--align` (en) |
 
 The Q4_K file uses a TADA-aware quantization policy (tail=8): large transformer block projection matrices are quantized, while the last 8 token-embedding rows and all `tada.*` flow-matching tensors are kept at F16. This preserves the timing and acoustic conditioning paths where quantization noise matters most.
 
@@ -117,6 +117,23 @@ non-English audio pass `--language <code>` to select `tada-aligner-<code>.gguf`.
 Or pass any voice reference GGUF directly via `--voice /path/to/voice.gguf`.
 
 The bundled `tada-ref.gguf` encodes a short JFK clip as the default voice.
+
+
+### Forced-alignment word timestamps (`--align`)
+
+The TADA aligner (a wav2vec2 CTC model over the Llama-3.2 BPE vocab) also does
+forced alignment: given audio + its transcript it emits frame-accurate word
+timings. Same assets as `--make-ref` (auto-downloaded):
+
+```bash
+crispasr --backend tada-1b -m tada-tts-1b-f16.gguf --auto-download \
+  --align --voice speech.wav --ref-text "exact transcript" \
+  --align-format srt   # srt (default) | json | plain
+```
+
+Multilingual: pass `--language <code>` to use `tada-aligner-<code>.gguf`
+(en). Note it is a *forced* aligner — it needs the transcript, it is not
+a standalone recogniser.
 
 
 ## Source model
