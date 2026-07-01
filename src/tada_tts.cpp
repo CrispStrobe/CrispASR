@@ -19,6 +19,7 @@
 #include <cassert>
 #include <cctype>
 #include <chrono>
+#include <climits>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -1799,12 +1800,89 @@ static bool fm_solve_rank_candidates(tada_context* c, const float* all_noise, in
         }
     }
 
+    // Candidate selection (#192). The reconstruction ("likelihood") scorer above
+    // looks at the ACOUSTIC dims only, so it is blind to — and can even PREFER —
+    // a candidate whose gray-code *duration* is an outlier (good acoustics, bad
+    // timing). That is exactly how best-of-N picked a token with a 43-frame gap
+    // and derailed "…four hours" into "…and forth", making cand>1 worse than a
+    // single draw. So the DEFAULT selector is duration_median (a Python-provided
+    // scorer): decode each candidate's per-token duration (time_before +
+    // time_after) and keep the one closest to the median of the N. Per token the
+    // candidates share the same text, so the median duration is the robust pick
+    // and drops the FM noise lottery's timing outliers — which is the whole
+    // point of drawing >1 candidate. Measured: cand=4 likelihood → "and forth";
+    // cand=4 duration_median → verbatim "four hours".
+    // cand>1 candidate selection (#192). IMPORTANT: cand>1 is an inherently
+    // unstable per-token lottery — no scorer beats cand=1 on all inputs (that
+    // is why cand=1 is the default num_acoustic_candidates). Measured on
+    // 1b/q4_k, best-of-4:
+    //   likelihood       reconstruction (acoustic) only — picks a timing
+    //                    outlier: "four hours" -> "and forth".
+    //   duration_median  closest-to-median duration only — fixes "four hours"
+    //                    but can pick an acoustically bad draw elsewhere
+    //                    ("hello world" -> "elleworld").
+    //   hybrid           duration-inlier then best reconstruction — fixes
+    //                    "hello world"/"count" but not "four hours".
+    // The cand>1 DEFAULT is duration_median: it repairs the #192 reported case
+    // and the FM noise lottery's timing collapse (the whole reason to draw >1),
+    // which is what cand>1 is for. CRISPASR_TADA_SCORER=likelihood|hybrid A/Bs
+    // the others. For guaranteed-best quality, use cand=1 (the default).
+    static const int s_scorer = []() {
+        const char* e = std::getenv("CRISPASR_TADA_SCORER");
+        if (e && strcmp(e, "likelihood") == 0)
+            return 1;
+        if (e && strcmp(e, "hybrid") == 0)
+            return 0;
+        return 2; // duration_median (cand>1 default)
+    }();
+
+    const int nbits = (int)c->hp.num_time_bits;
+    std::vector<int> dur(N);
+    for (int cnd = 0; cnd < N; cnd++) {
+        const float* s = states.data() + (size_t)cnd * lat;
+        dur[cnd] = decode_gray_code(s + ad, nbits) + decode_gray_code(s + ad + nbits, nbits);
+    }
+    std::vector<int> sorted_dur = dur;
+    std::sort(sorted_dur.begin(), sorted_dur.end());
+    const int median = sorted_dur[N / 2];
+
     int best = 0;
-    double best_err = err[0];
-    for (int cnd = 1; cnd < N; cnd++) {
-        if (err[cnd] < best_err) {
-            best_err = err[cnd];
-            best = cnd;
+    if (s_scorer == 2) {
+        // Pure duration_median: closest to median (ties → lower recon error).
+        int best_gap = INT_MAX;
+        double best_err = 3.4e38;
+        for (int cnd = 0; cnd < N; cnd++) {
+            int g = std::abs(dur[cnd] - median);
+            if (g < best_gap || (g == best_gap && err[cnd] < best_err)) {
+                best_gap = g;
+                best_err = err[cnd];
+                best = cnd;
+            }
+        }
+    } else {
+        // Likelihood (s_scorer==1) over all candidates, or hybrid (default):
+        // best recon error among duration inliers (|dur-median| within a tight
+        // band that drops a ~43-vs-~13 gap but keeps normal variation).
+        const int band = std::max(6, median);
+        double best_err = 3.4e38;
+        best = -1;
+        for (int cnd = 0; cnd < N; cnd++) {
+            if (s_scorer == 0 && std::abs(dur[cnd] - median) > band)
+                continue;
+            if (err[cnd] < best_err) {
+                best_err = err[cnd];
+                best = cnd;
+            }
+        }
+        if (best < 0) { // degenerate: all outside band — take closest-to-median
+            int best_gap = INT_MAX;
+            for (int cnd = 0; cnd < N; cnd++) {
+                int g = std::abs(dur[cnd] - median);
+                if (g < best_gap) {
+                    best_gap = g;
+                    best = cnd;
+                }
+            }
         }
     }
     std::copy(states.data() + (size_t)best * lat, states.data() + (size_t)(best + 1) * lat, best_out);
