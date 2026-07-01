@@ -114,9 +114,11 @@ public:
         // single unlucky noise draw can collapse token durations (rushed,
         // unintelligible speech). Generate several candidates per step and keep
         // the best by reconstruction score (Python num_acoustic_candidates).
-        // Default to 4 for robust multilingual output; override with
-        // TADA_NUM_CANDIDATES (1 = fastest, reproduces a single noise draw).
-        cp.num_acoustic_candidates = 4;
+        // Q4_K quantization amplifies the noise lottery — 4 candidates aren't
+        // enough to reliably find a good sample (#192 "four hours" truncation).
+        // 8 candidates make Q4_K produce correct output across seeds.
+        // Override with TADA_NUM_CANDIDATES (1 = fastest/least robust).
+        cp.num_acoustic_candidates = 8;
         if (const char* env = std::getenv("TADA_NUM_CANDIDATES"); env && *env) {
             int n = atoi(env);
             if (n >= 1)

@@ -2718,14 +2718,17 @@ float* tada_synthesize(struct tada_context* ctx, const char* text, int* out_n_sa
     // Starts at prefill_len when batched prefill ran, otherwise at 0.
     const int loop_start = do_batch_prefill ? prefill_len : 0;
 
-    // Match Python's _generate() behaviour (#192): run for exactly
-    // num_prompt + extra steps, never auto-regressively generate text
-    // tokens, never stop early on EOS.  Python feeds input_ids[step]
-    // for step < len(input_ids) and repeats the last token (EOT) for any
-    // extra steps.  The fixed input already has shift trailing EOTs that
-    // cover the text→acoustic shift for the pre-specified text, but the
-    // FM needs additional tail steps to produce complete acoustic features
-    // for the final tokens.  Default extra = shift_acoustic (5).
+    // Match Python's _generate() exactly (#192): run for a fixed number
+    // of steps, auto-regressively generate text tokens (appending to
+    // all_ids), but NEVER stop on EOS.  Python (tada.py line 880-1102)
+    // runs `for step in range(step_start, num_steps)` where
+    // num_steps = len(input_ids) + num_extra_steps (default 0).  At each
+    // step >= len(input_ids)-1, it samples the next text token and appends
+    // it to input_ids.  The loop continues unconditionally.
+    //
+    // The old C++ code stopped on the first EOT, truncating the last word
+    // because the acoustic features lag by shift_acoustic (5) positions.
+    // Default extra = shift_acoustic so the FM produces tail features.
     // CRISPASR_TADA_EXTRA_STEPS overrides (0 = exact Python default).
     static const int s_extra_steps = []() {
         const char* e = std::getenv("CRISPASR_TADA_EXTRA_STEPS");
@@ -2733,9 +2736,6 @@ float* tada_synthesize(struct tada_context* ctx, const char* text, int* out_n_sa
     }();
     const int extra_steps = (s_extra_steps >= 0) ? s_extra_steps : shift;
     const int total_steps = num_prompt + extra_steps;
-    // Pre-push extra EOT tokens so all_ids covers the full range.
-    for (int t = 0; t < extra_steps; t++)
-        all_ids.push_back(eot);
 
     // Main AR + FM loop: runs for exactly total_steps steps.
     bool done = false;
@@ -2930,17 +2930,18 @@ float* tada_synthesize(struct tada_context* ctx, const char* text, int* out_n_sa
             fm_dump_records.push_back(std::move(fm_rec));
         }
 
-        // Token sampling — for diagnostics only, not loop control (#192).
-        // Python's _generate() never auto-regressively generates text: the
-        // loop always feeds the pre-specified input tokens (and repeats the
-        // last token — EOT — for any extra steps).  Matching that exactly
-        // prevents the model from hallucinating text tokens that change the
-        // LLM hidden state and corrupt acoustic features.
-        // We still sample so verbose mode can print the generated text.
+        // Auto-regressive text generation — matches Python exactly (#192).
+        // Python samples the next token at every step >= len(input_ids)-1,
+        // appends it to input_ids, and uses it as input for the next step.
+        // It NEVER stops on EOS — the loop runs for the full num_steps.
+        // The generated token feeds back into the LLM, affecting the hidden
+        // state that conditions the FM.  Removing this (feeding fixed EOTs
+        // instead) produces different hidden states and worse acoustics.
         if (need_logits && tr.logits) {
             int next = tada_sample_token(ctx->params, tr.logits, (int)hp.vocab_size, all_ids, pad_id, sampler_rng);
+            all_ids.push_back(next);
             if (next == eot && ctx->params.verbosity >= 1)
-                fprintf(stderr, "tada: text head predicts EOS at step %d\n", step);
+                fprintf(stderr, "tada: text head predicts EOS at step %d (continuing)\n", step);
         }
         free(tr.logits);
 
