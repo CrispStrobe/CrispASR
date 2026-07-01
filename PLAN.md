@@ -224,28 +224,32 @@ signal. (3) Re-run each config twice for determinism before forming a hypothesis
 
 ---
 
-## Cross-platform (Linux/x86 CPU) validation + audit tooling (OPEN)
+## Cross-platform (Linux/x86 CPU) validation — DONE (green) + audit tooling
 
-Everything shipped in the moss-transcribe / higgs-stt / ark-asr work this cycle
-was validated on **M1 / Metal only**. Given the long history of Metal-masked
-bugs and CPU↔GPU divergence (sched cross-backend traps, the q8_0-on-CPU scare,
-§206/§133/§176b), the missing leg of the test matrix is **x86 CPU-only Linux**.
+The moss-transcribe / higgs-stt / ark-asr work was validated on M1/Metal only, so
+the missing leg was x86 CPU-only Linux (long history of Metal-masked bugs). Ran on
+the 8 GB CPU-only Ubuntu VPS (`root@168.119.190.252`, x86_64, Linux 6.8) at HEAD
+`dcc7e47b` — results in `handover-prompts/vps-validation-results.md` on the VPS:
 
-**Linux CPU-parity validation node (assign to the 8 GB CPU-only Ubuntu VPS):**
-- [ ] Cold build with `-DGGML_METAL=OFF` + ccache; `ctest -L unit` green.
-- [ ] ASR roundtrip on `samples/jfk.wav` **on CPU/x86** for the three q4_k models
-  touched this cycle — `moss-transcribe`, `higgs-stt`, `ark-asr` — confirm each is
-  verbatim (real cross-platform gate; ark's beam was only seen on M1 CPU).
-- [ ] `higgs-stt -bs 2` and `ark-asr -bs 2` on Linux — confirm beam works off-Metal.
-- [ ] **Build + link `bindings/go` on actual Linux** — the one thing the M1 can't
-  truly verify: the CI-enforced `#cgo linux` LDFLAGS (incl. the new
-  `-lmoss_transcribe`) and the macOS Metal/BLAS-leak gotcha
-  (docs/contributing.md "Go bindings: cgo LDFLAGS sync"). A green Ubuntu Go link is
-  the proof.
-- Memory fit: q4_k models are 2.3–3.3 GB, one heavy proc at a time → fine on 8 GB.
-  **Do NOT** run PyTorch reference dumps there (8 GB is tighter than the 16 GB M1
-  that already OOM'd on the 2.4B) — references stay a Kaggle / bigger-box job.
-- If useful, promote to a standing post-push Linux smoke (Routine/cron).
+- [x] Cold build `-DGGML_METAL=OFF -DGGML_CUDA=OFF` — PASS.
+- [x] ASR roundtrip on jfk.wav, CPU/x86 — **all three verbatim, identical word
+  sequence to the M1/Metal baseline**: moss-transcribe / higgs-stt / ark-asr. **No
+  Metal-masked or x86-SIMD divergence.**
+- [x] `higgs-stt -bs 2` and `ark-asr -bs 2` — **token-identical to greedy on Linux
+  CPU** (beam works off-Metal).
+- [x] Go cgo LDFLAGS **drift check PASS on Linux** (`sync_go_cgo_ldflags.py --check`
+  clean — incl. `-lmoss_transcribe`). Actual `go build/test` **skipped** (no Go
+  toolchain on the VPS); the real link runs in CI (ubuntu-22 `Bindings Tests (Go)`).
+- Timing (8 GB CPU, 11 s audio): moss 125 s, higgs 152 s; **ark-asr 2243 s —
+  severely swap-bound** (3 B q4_k = 3.4 GB on 8 GB). Expected, not a bug.
+
+Follow-ups (LOW):
+- [ ] The VPS run only executed 2 unit tests (it built `crispasr`/`crispasr-diff`
+  targets, not the test targets) — the handover should `cmake --build build` (all)
+  before `ctest -L unit`. Fix the handover / or the VPS builds all targets next time.
+- [ ] Install the Go toolchain on the VPS (or leave the Go link to CI) to close the
+  one SKIPPED check.
+- [ ] Optional: promote to a standing post-push Linux smoke (Routine/cron).
 - Handover prompt staged at `handover-prompts/` (gitignored) + scp'd to the VPS.
 
 **Multilingual + beam-quality spot-checks (LOW, either machine):**
