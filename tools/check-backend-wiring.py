@@ -149,7 +149,10 @@ def main():
             adv_missing.append("ref-dumper")
         if f'"{name}"' not in registry:
             adv_missing.append("registry")
-        if "streaming" in caps and name not in streaming:
+        # streaming.md documents ASR live transcription only. The `streaming` cap on
+        # a TTS backend means incremental PCM synthesis (documented in tts.md), so
+        # only expect a streaming.md row for ASR backends.
+        if "streaming" in caps and "tts" not in caps and name not in streaming:
             adv_missing.append("streaming.md")
         if adv_missing:
             advisory_gap.append((name, adv_missing))

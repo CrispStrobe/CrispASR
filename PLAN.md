@@ -274,7 +274,10 @@ Run `python tools/check-backend-wiring.py` to re-list. As of `ccc04a02`:
   text-only MT (no audio diff), gemma4-e2b shares the gemma path, the encoder
   components diff via their host backends. Confirm per-backend before adding; not a
   blanket gap.
-- [ ] **`qwen3-tts`** — no `streaming.md` row despite the streaming cap (1-line doc).
+- [~] **`qwen3-tts` streaming.md** — NOT a gap. `streaming.md` documents ASR live
+  transcription; the `streaming` cap on qwen3-tts (the only backends that set it)
+  means incremental PCM *synthesis* (a TTS feature, in tts.md). Audit refined to only
+  expect a streaming.md row for ASR backends (`streaming` cap && !`tts`).
 
 ---
 
