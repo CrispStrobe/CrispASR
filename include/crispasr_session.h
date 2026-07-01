@@ -60,6 +60,24 @@ typedef struct whisper_context_params whisper_context_params;
 
 CRISPASR_SESSION_API int crispasr_get_progress(void);
 CRISPASR_SESSION_API void crispasr_reset_progress(void);
+
+// 0.10.3+ (issue #208): per-session progress callback for long-form
+// (chunked) transcription. Invoked once per finished window from within
+// crispasr_session_transcribe_chunked[_lang] (and any auto-chunked long
+// Parakeet transcribe) with the number of input samples processed so far
+// and the total. `processed` is monotonically non-decreasing and ends at
+// `total`. It is invoked on the calling (transcribe) thread — keep the
+// callback fast and non-blocking; do not re-enter the session from it.
+// Single-pass and non-Parakeet backends do not fire it. The module-level
+// atomic (crispasr_get_progress) is updated in lockstep, so pure pollers
+// (e.g. Dart FFI) get chunked progress without registering a callback.
+typedef void (*crispasr_progress_callback)(int processed, int total, void* user_data);
+
+// Register (or clear, with cb == NULL) the session progress callback.
+// user_data is passed back verbatim to every invocation. The pointer is
+// stored, not copied; keep it valid for the duration of transcribe calls.
+CRISPASR_SESSION_API void crispasr_session_set_progress_callback(crispasr_session* s, crispasr_progress_callback cb,
+                                                                 void* user_data);
 CRISPASR_SESSION_API void crispasr_params_set_language(whisper_full_params* p, const char* lang);
 CRISPASR_SESSION_API void crispasr_params_set_translate(whisper_full_params* p, int v);
 CRISPASR_SESSION_API void crispasr_params_set_detect_language(whisper_full_params* p, int v);
@@ -158,8 +176,7 @@ CRISPASR_SESSION_API crispasr_session_result* crispasr_session_transcribe(crispa
 // uses the default. For non-Parakeet backends the chunk params are inert
 // and this behaves exactly like crispasr_session_transcribe[_lang].
 CRISPASR_SESSION_API crispasr_session_result* crispasr_session_transcribe_chunked_lang(
-    crispasr_session* s, const float* pcm, int n_samples, int chunk_seconds, int overlap_seconds,
-    const char* language);
+    crispasr_session* s, const float* pcm, int n_samples, int chunk_seconds, int overlap_seconds, const char* language);
 CRISPASR_SESSION_API crispasr_session_result* crispasr_session_transcribe_chunked(crispasr_session* s, const float* pcm,
                                                                                   int n_samples, int chunk_seconds,
                                                                                   int overlap_seconds);

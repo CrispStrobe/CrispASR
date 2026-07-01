@@ -296,6 +296,25 @@ reimplemented re-entrantly. Validated on `parakeet-tdt-0.6b-v3-q4_k` (M1/Metal):
 plain transcribe ×N verbatim, chunked 0 / 5 s verbatim, 60 s silence-split path
 bounded (4.1 s) and non-empty; 739/739 unit tests green. See [[LEARNINGS]].
 
+**2026-07-01 follow-ups (reporter's two non-blocker asks).**
+(a) **Progress callback.** Added `crispasr_session_set_progress_callback(s, cb,
+user_data)` — `cb(processed_samples, total_samples, ud)` fires once per finished
+window from `parakeet_session_chunked_merge`, monotonic to `total`. Also mirrored
+into the existing `crispasr_get_progress()` atomic so the Dart poll path (the
+project's callback-free progress mechanism) now covers chunked long-audio for
+free. Rust safe wrapper `Session::transcribe_chunked_with_progress` (scoped-closure
+trampoline). Validated live on `parakeet-tdt-0.6b-v3-q4_k` (M1/Metal) via a session
+harness: 33→53→72→92→100 %. Native-callback setter is intentionally not mirrored to
+the callback-hostile bindings (Dart/Go/Java/Ruby/WASM) — they use the poll.
+(b) **Encoder-cache reentrancy — measured DUD, not pursued.** The reporter asked
+whether a re-entrant cache would speed up chunked mode. Measured per uniform 20 s
+window on M1 Metal (new `PARAKEET_ENC_PROBE` hook): graph **build ≈0.3 ms**,
+`sched_alloc` ≈1 ms, GPU **compute ≈1 s** → build+alloc is ~0.13 % of per-window
+time; a re-entrant cache saves ~0.04 %. Kept opt-in-OFF; the probe also reproduces
+the 2nd-reuse std collapse (0.0218 → 0.0078) and the resulting mid-window text drop.
+Real headroom = encoder GPU compute + the ~40 % overlap re-encode, not the cache.
+763/763 unit tests green. See [[LEARNINGS]].
+
 ## §192 2026-06-29 TADA Vulkan — REPEAT-f16 abort unblocked; FM time-dim divergence localized (superseded below)
 
 On branch `fix/tada-vulkan-repeat-f16` (worktree `/Volumes/backups/code/tada-vk-stash`).

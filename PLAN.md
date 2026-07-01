@@ -318,6 +318,11 @@ all now closed:
   re-entrant with a shared sched (2nd reuse collapses to empty), and the
   chatterbox/CFM graph-cache was a measured DUD (host build+alloc ≈ 0.3% of a
   compute-bound step). Measure `ggml_time_us()` on build+alloc BEFORE porting.
+  **Parakeet enc cache measured 2026-07-01 (#208): also a DUD** — per uniform
+  20 s window on M1 Metal, build ≈0.3 ms / alloc ≈1 ms / GPU compute ≈1 s, so a
+  re-entrant cache saves ≈0.04%. Not on the roadmap; the `PARAKEET_ENC_PROBE`
+  env hook reproduces both the timing and the 2nd-reuse std collapse. Real
+  chunked-long-audio headroom = encoder compute + the ~40% overlap re-encode.
 - `flash_attn_ext` is absent in tada / melotts (small attention — marginal).
 - ark-asr is CPU-only; Metal-validating it is a real win but carries the usual
   sched/precision risk — not "easy."

@@ -809,13 +809,28 @@ static std::vector<float> parakeet_encode_mel(parakeet_context* ctx, const float
     // encode per process.
     //
     // Default is therefore the correct rebuild-every-call path. The cache is
-    // kept behind an opt-in env for benchmarking only, until it is
-    // reimplemented re-entrantly (e.g. a dedicated reserved gallocr per
-    // cached graph rather than the shared sched). See issue #208.
+    // kept behind an opt-in env for benchmarking only.
+    //
+    // #208 follow-up (2026-07-01): the reporter asked whether a re-entrant
+    // cache is worth building to speed up chunked long audio. Measured on M1
+    // Metal (Q4_K 0.6B-v3, PARAKEET_ENC_PROBE) per uniform 20 s window:
+    //   graph build ~0.3 ms | sched_alloc ~1 ms | GPU compute ~1000 ms.
+    // Graph build+alloc is ~0.13 % of per-window time; a re-entrant cache
+    // could only skip the ~0.3 ms build (sched_alloc still runs every call),
+    // so it is a DUD — reimplementing it re-entrantly gains nothing. The
+    // headroom in chunked long-audio is the encoder GPU compute itself (and
+    // the ~40 % overlap re-encode in parakeet_session_chunked_merge), NOT the
+    // graph cache. Kept opt-in-OFF as a benchmark hook, not on the roadmap.
+    // Enable PARAKEET_ENC_PROBE to reproduce the measurement and the 2nd-reuse
+    // corruption (reuse windows collapse enc std 0.020 → 0.008). See issue #208.
     ggml_cgraph* gf;
     const bool use_enc_cache = getenv("CRISPASR_PARAKEET_ENC_CACHE") != nullptr;
+    const bool probe_time = getenv("PARAKEET_ENC_PROBE") != nullptr;
+    bool enc_cache_hit = false;
+    int64_t t_build0 = probe_time ? ggml_time_us() : 0;
     if (use_enc_cache && ctx->cached_enc_gf && ctx->cached_enc_T_mel == T_mel) {
         gf = ctx->cached_enc_gf;
+        enc_cache_hit = true;
     } else if (use_enc_cache) {
         ctx->cached_enc_meta.assign(ctx->compute_meta.size(), 0);
         std::swap(ctx->compute_meta, ctx->cached_enc_meta);
@@ -826,12 +841,15 @@ static std::vector<float> parakeet_encode_mel(parakeet_context* ctx, const float
     } else {
         gf = parakeet_build_graph_encoder(ctx, T_mel);
     }
+    int64_t t_build_us = probe_time ? ggml_time_us() - t_build0 : 0;
 
+    int64_t t_alloc0 = probe_time ? ggml_time_us() : 0;
     ggml_backend_sched_reset(ctx->sched);
     if (!ggml_backend_sched_alloc_graph(ctx->sched, gf)) {
         fprintf(stderr, "parakeet: failed to alloc encoder graph\n");
         return {};
     }
+    int64_t t_alloc_us = probe_time ? ggml_time_us() - t_alloc0 : 0;
 
     // Set inputs
     ggml_tensor* mel_in = ggml_graph_get_tensor(gf, "mel");
@@ -853,10 +871,12 @@ static std::vector<float> parakeet_encode_mel(parakeet_context* ctx, const float
     }
 
     // Compute
+    int64_t t_comp0 = probe_time ? ggml_time_us() : 0;
     if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS) {
         fprintf(stderr, "parakeet: encoder graph compute failed\n");
         return {};
     }
+    int64_t t_comp_us = probe_time ? ggml_time_us() - t_comp0 : 0;
 
     ggml_tensor* out = ggml_graph_get_tensor(gf, "enc_out");
     if (!out) {
@@ -870,6 +890,23 @@ static std::vector<float> parakeet_encode_mel(parakeet_context* ctx, const float
 
     std::vector<float> result((size_t)d * Te);
     ggml_backend_tensor_get(out, result.data(), 0, result.size() * sizeof(float));
+    if (getenv("PARAKEET_ENC_PROBE")) {
+        double s = 0, s2 = 0;
+        const size_t n = result.size();
+        for (float v : result) {
+            s += v;
+            s2 += (double)v * v;
+        }
+        const double mean = s / n;
+        const double var = s2 / n - mean * mean;
+        static int call_idx = 0;
+        fprintf(stderr,
+                "[enc-probe] call=%d T_mel=%d T_enc=%d cache=%s mean=%.6f std=%.6f first=%.6f,%.6f "
+                "build=%.2fms alloc=%.2fms compute=%.2fms\n",
+                call_idx++, T_mel, Te, !use_enc_cache ? "off" : (enc_cache_hit ? "reuse" : "fill"), mean,
+                var > 0 ? sqrt(var) : 0.0, n > 0 ? result[0] : 0.0, n > 1 ? result[1] : 0.0, t_build_us / 1000.0,
+                t_alloc_us / 1000.0, t_comp_us / 1000.0);
+    }
     return result;
 }
 

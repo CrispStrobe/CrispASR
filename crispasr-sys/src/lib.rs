@@ -23,6 +23,11 @@ pub struct WhisperContextParams(c_void);
 pub const CRISPASR_SAMPLING_GREEDY: c_int = 0;
 pub const CRISPASR_SAMPLING_BEAM_SEARCH: c_int = 1;
 
+/// Progress callback for long-form (chunked) transcription (issue #208).
+/// `Option<...>` so a null pointer clears the callback (C `NULL`).
+pub type CrispasrProgressCallback =
+    Option<unsafe extern "C" fn(processed: c_int, total: c_int, user_data: *mut c_void)>;
+
 extern "C" {
     // --- Lifecycle ---
     pub fn whisper_init_from_file_with_params(
@@ -223,6 +228,17 @@ extern "C" {
         chunk_seconds: c_int,
         overlap_seconds: c_int,
     ) -> *mut CrispasrSessionResult;
+
+    /// 0.10.3+ (issue #208): register a per-session progress callback for
+    /// long-form (chunked) transcription. Fired once per finished window
+    /// with `(processed_samples, total_samples, user_data)`; `processed`
+    /// is monotonic and reaches `total` on the last window. Invoked on the
+    /// transcribe thread. Pass `None`/null `cb` to clear.
+    pub fn crispasr_session_set_progress_callback(
+        s: *mut CrispasrSession,
+        cb: CrispasrProgressCallback,
+        user_data: *mut c_void,
+    );
 
     /// VAD-driven session transcribe. Runs Silero VAD on the PCM buffer,
     /// merges short / overlong speech slices, stitches them into one

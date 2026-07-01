@@ -113,6 +113,23 @@ CLI, empty from the binding" smells like cross-call context state, not a binding
 bug. Fixed by defaulting to rebuild-every-call and gating the cache opt-in
 (`CRISPASR_PARAKEET_ENC_CACHE=1`). See [[HISTORY]] #208.
 
+**2026-07-01 follow-up — the cache is a DUD, reentrancy is not worth building.**
+The #208 reporter asked whether a re-entrant cache should be built to speed up
+chunked long audio (they assumed rebuild-every-window was the penalty). Measured
+on M1 Metal (Q4_K 0.6B-v3) via a new `PARAKEET_ENC_PROBE` hook, per uniform 20 s
+session window: **graph build ≈ 0.3 ms | `sched_alloc` ≈ 1 ms | GPU compute ≈
+920–1000 ms.** A re-entrant cache can only skip the ~0.3 ms build (`sched_alloc`
+runs every call regardless) → ≈0.04 % of per-window wall time. Same dud shape as
+the chatterbox CFM gallocr cache (§208). The probe also reproduces the corruption
+numerically: `fill` windows have enc std ≈0.020, the 2nd+ `reuse` windows collapse
+to ≈0.0078 and the session transcript drops the middle windows. Conclusion: keep
+rebuild default, keep the cache opt-in-OFF as a benchmark hook only, **do not**
+reimplement it re-entrantly. The real chunked-long-audio headroom is the encoder
+GPU compute and the ~40 % overlap re-encode in `parakeet_session_chunked_merge`
+(20 s window / 8 s overlap), not the graph cache. Generalizable rule (already
+learned for CFM in §208): **measure build+alloc with `ggml_time_us()` BEFORE
+porting any graph-cache — on a compute-bound backend it is almost always noise.**
+
 ## On Metal a cached decode graph is dispatch-bound, not alloc-bound — measure the step's parts, don't trust wall time (§210, PR #207)
 
 PR #207 made granite-speech's single-token LLM decode run a cached, shape-stable

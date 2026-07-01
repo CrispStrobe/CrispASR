@@ -434,6 +434,72 @@ impl Session {
         self.parse_session_result(res, "crispasr_session_transcribe_chunked")
     }
 
+    /// Chunked-encode transcribe with a per-window progress callback
+    /// (issue #208). `progress(processed_samples, total_samples)` is invoked
+    /// once per finished window on the calling thread; `processed` is
+    /// monotonically non-decreasing and reaches `total` on the last window.
+    /// The callback only fires for the duration of this call, so it need not
+    /// be `Send` or `'static`. Short (single-pass) audio and non-Parakeet
+    /// backends do not fire it. See [`Self::transcribe_chunked`] for the
+    /// chunking semantics.
+    pub fn transcribe_chunked_with_progress<F: FnMut(i32, i32)>(
+        &self,
+        pcm: &[f32],
+        chunk_seconds: i32,
+        overlap_seconds: i32,
+        language: Option<&str>,
+        mut progress: F,
+    ) -> Result<Vec<SessionSegment>, String> {
+        if pcm.is_empty() {
+            return Ok(Vec::new());
+        }
+        let lang_c = match language {
+            Some(l) if !l.is_empty() => {
+                Some(CString::new(l).map_err(|e| format!("language NUL: {e}"))?)
+            }
+            _ => None,
+        };
+
+        extern "C" fn trampoline<F: FnMut(i32, i32)>(processed: c_int, total: c_int, ud: *mut c_void) {
+            if ud.is_null() {
+                return;
+            }
+            // SAFETY: `ud` is the `&mut F` registered just below. The C side
+            // only invokes this synchronously from within the transcribe call
+            // (same thread), so the reference is live and unaliased here.
+            let f = unsafe { &mut *(ud as *mut F) };
+            f(processed, total);
+        }
+
+        // Register for the duration of this call only, then clear — a raw
+        // pointer to a stack closure must never outlive this frame.
+        unsafe {
+            crispasr_sys::crispasr_session_set_progress_callback(
+                self.handle,
+                Some(trampoline::<F>),
+                &mut progress as *mut F as *mut c_void,
+            );
+        }
+        let res = unsafe {
+            crispasr_sys::crispasr_session_transcribe_chunked_lang(
+                self.handle,
+                pcm.as_ptr(),
+                pcm.len() as i32,
+                chunk_seconds,
+                overlap_seconds,
+                lang_c.as_ref().map_or(std::ptr::null(), |c| c.as_ptr()),
+            )
+        };
+        unsafe {
+            crispasr_sys::crispasr_session_set_progress_callback(
+                self.handle,
+                None,
+                std::ptr::null_mut(),
+            );
+        }
+        self.parse_session_result(res, "crispasr_session_transcribe_chunked")
+    }
+
     /// Parse a raw session-result handle into [`SessionSegment`]s and free
     /// it. `ctx` names the call site for the null-result error message.
     fn parse_session_result(

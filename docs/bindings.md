@@ -68,6 +68,22 @@ backend doesn't expose that knob, but the call is safe to make.
 > (`examples/addon.node`) reaches it via `transcribeSession`; the WASM/JS binding
 > (`bindings/javascript/emscripten.cpp`) via the `asr*` functions
 > (`asrOpen`/`asrTranscribe`/`asrSet…`).
+>
+> **Progress on long (chunked) audio — two mechanisms (issue #208).** For
+> long-form Parakeet transcription the session runs many bounded windows; two
+> ways to surface progress downstream:
+> 1. **Poll (universal, no callback).** `crispasr_get_progress()` returns
+>    `0..100` and now tracks the chunked-merge windows in lockstep (it was
+>    previously only fed by whisper). This is the Dart-friendly path (Dart FFI
+>    can't take C function-pointer callbacks) and works from any binding that
+>    exposes `crispasr_get_progress`.
+> 2. **Native callback.** `crispasr_session_set_progress_callback(s, cb,
+>    user_data)` — `cb(processed_samples, total_samples, user_data)` fires once
+>    per finished window on the transcribe thread. This is a *native-caller*
+>    setter (C/C++, Rust `Session::transcribe_chunked_with_progress`); it is
+>    intentionally **not** mirrored to the callback-hostile bindings (Dart/Go/
+>    Java/Ruby/WASM) — those use the poll above. `transcribe_chunked[_lang]`
+>    itself is currently exposed in C/C++ and Rust.
 
 ## Python
 

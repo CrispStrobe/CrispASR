@@ -1493,6 +1493,12 @@ struct crispasr_session {
     int parakeet_force_chunk_seconds = -1;
     int parakeet_force_overlap_seconds = -1;
 
+    // Issue #208: per-session progress callback for long-form (chunked)
+    // transcription. Fired once per finished window from the chunked merge
+    // path with (processed_samples, total_samples). nullptr = disabled.
+    crispasr_progress_callback progress_cb = nullptr;
+    void* progress_ud = nullptr;
+
     // Exactly one of these pointers is non-null based on `backend`.
     whisper_context* whisper_ctx = nullptr;
 #ifdef CA_HAVE_PARAKEET
@@ -3520,7 +3526,8 @@ static std::string parakeet_norm_word(const char* s) {
 // (nothing dropped) with no boundary duplication.
 static void parakeet_session_chunked_merge(parakeet_context* ctx, const float* samples, int n_samples,
                                            int chunk_samples, int overlap_samples,
-                                           std::vector<crispasr_session_seg>& out) {
+                                           std::vector<crispasr_session_seg>& out,
+                                           crispasr_progress_callback prog_cb = nullptr, void* prog_ud = nullptr) {
     const int SR = 16000;
     if (chunk_samples < SR)
         chunk_samples = SR; // 1 s floor
@@ -3569,6 +3576,13 @@ static void parakeet_session_chunked_merge(parakeet_context* ctx, const float* s
             prev_end_cs = (int64_t)((double)end / SR * 100.0);
             parakeet_result_free(r);
         }
+        // Issue #208: report progress after each finished window. `end` is the
+        // last input sample this window covered, so it is monotonically
+        // non-decreasing and reaches n_samples on the final window. Mirror it
+        // into the module-level atomic so pollers (Dart FFI) also see it.
+        g_progress.store((int)((int64_t)end * 100 / n_samples), std::memory_order_relaxed);
+        if (prog_cb)
+            prog_cb(end, n_samples, prog_ud);
         if (end >= n_samples)
             break;
     }
@@ -3649,6 +3663,16 @@ CA_EXPORT crispasr_session_result* crispasr_session_transcribe_chunked(crispasr_
                                                                        int n_samples, int chunk_seconds,
                                                                        int overlap_seconds) {
     return crispasr_session_transcribe_chunked_lang(s, pcm, n_samples, chunk_seconds, overlap_seconds, nullptr);
+}
+
+// Issue #208: register a per-session progress callback for long-form
+// (chunked) transcription. See crispasr_session.h for the contract.
+CA_EXPORT void crispasr_session_set_progress_callback(crispasr_session* s, crispasr_progress_callback cb,
+                                                      void* user_data) {
+    if (!s)
+        return;
+    s->progress_cb = cb;
+    s->progress_ud = cb ? user_data : nullptr;
 }
 
 static crispasr_session_result* transcribe_single(crispasr_session* s, const float* pcm, int n_samples,
@@ -3898,7 +3922,10 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
         // non-JA long audio → overlapping-window merge (no dropped sections,
         // no boundary duplicates). Emits one merged segment.
         if (!use_single_pass && !is_ja) {
-            parakeet_session_chunked_merge(s->parakeet_ctx, pcm, n_samples, chunk_s * SR, overlap_s * SR, r->segments);
+            g_progress.store(0, std::memory_order_relaxed); // issue #208: pollers see "started"
+            parakeet_session_chunked_merge(s->parakeet_ctx, pcm, n_samples, chunk_s * SR, overlap_s * SR, r->segments,
+                                           s->progress_cb, s->progress_ud);
+            g_progress.store(-1, std::memory_order_relaxed); // back to idle
             return r;
         }
 
