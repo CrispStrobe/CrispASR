@@ -642,9 +642,28 @@ static ggml_cgraph* build_tokenizer_encoder_graph(vibevoice_context* ctx, const 
 // Stage helpers (shared by public stage API and vibevoice_transcribe)
 // ===========================================================================
 
-// Run one tokenizer encoder. Returns [vae_dim * T] row-major, frame-first.
-static std::vector<float> run_encoder_stage(vibevoice_context* ctx, const char* prefix, const float* samples,
-                                            int n_samples, int* out_T, int* out_vae_dim) {
+// Cap per-chunk raw audio length fed to the encoder in one graph-build-
+// and-compute call. ggml's CUDA unary-op kernels (e.g. GELU,
+// ggml/src/ggml-cuda/unary.cu) take the element count as a 32-bit `int`.
+// The encoder's stage-0 FFN GELU runs on a [C_ffn=128, T] tensor with
+// stride 1 (T = n_samples, not yet downsampled), so INT32_MAX/128 ≈ 698.9s
+// @ 24kHz overflows the CUDA kernel launch ("invalid argument"). 300s is
+// comfortably under that, with ~2.3x margin for any other similarly-shaped
+// op, and needs only ~12 chunks for a full 60-minute recording.
+static constexpr int VIBEVOICE_ENCODER_MAX_CHUNK_SAMPLES = 300 * 24000;
+
+// Left-context audio prepended to every chunk after the first, in samples.
+// The encoder is causal-only (build_causal_conv1d/build_causal_dw_conv1d
+// both left-pad only), so a hard cut at a chunk boundary would otherwise
+// feed the first several output frames zero history instead of real
+// preceding audio. 10s is a generous bound on the encoder's true receptive
+// field summed across all 7 ConvNeXt stages.
+static constexpr int VIBEVOICE_ENCODER_LEFT_CONTEXT_SAMPLES = 10 * 24000;
+
+// Run one tokenizer encoder call: a single graph build + compute, no
+// chunking. Returns [vae_dim * T] row-major, frame-first.
+static std::vector<float> run_encoder_stage_one_call(vibevoice_context* ctx, const char* prefix, const float* samples,
+                                                     int n_samples, int* out_T, int* out_vae_dim) {
     ggml_cgraph* gf = build_tokenizer_encoder_graph(ctx, prefix, n_samples);
     ggml_backend_sched_reset(ctx->sched);
     if (!ggml_backend_sched_alloc_graph(ctx->sched, gf)) {
@@ -660,13 +679,80 @@ static std::vector<float> run_encoder_stage(vibevoice_context* ctx, const char* 
     ggml_tensor* out = ggml_graph_get_tensor(gf, "encoder_out");
     int vae_dim = (int)out->ne[0];
     int T = (int)out->ne[1];
-    std::vector<float> mean(vae_dim * T);
-    ggml_backend_tensor_get(out, mean.data(), 0, vae_dim * T * sizeof(float));
+    std::vector<float> mean((size_t)vae_dim * T);
+    ggml_backend_tensor_get(out, mean.data(), 0, (size_t)vae_dim * T * sizeof(float));
     if (out_T)
         *out_T = T;
     if (out_vae_dim)
         *out_vae_dim = vae_dim;
     return mean;
+}
+
+// Run one tokenizer encoder ("at_enc" acoustic or "st_enc" semantic) over
+// arbitrarily long raw audio. Returns [vae_dim * T] row-major, frame-first
+// — same contract as before chunking was added, so every caller (the
+// exported vibevoice_run_acoustic_encoder/vibevoice_run_semantic_encoder/
+// vibevoice_encode_speech stage API, vibevoice_transcribe_impl, and the TTS
+// voice-cloning reference-encode path) gets the fix for free.
+//
+// Splits audio longer than VIBEVOICE_ENCODER_MAX_CHUNK_SAMPLES into chunks
+// to avoid the CUDA int32 overflow above, using overlap-and-discard: each
+// chunk after the first is extended with VIBEVOICE_ENCODER_LEFT_CONTEXT_SAMPLES
+// of real preceding audio so the causal convs see true history, then the
+// frames covering that extension are discarded before stitching. The
+// discard count is measured empirically — by running the encoder on the
+// left-context prefix alone and counting its output frames — rather than
+// computed analytically, since build_causal_conv1d's stride-alignment
+// right-padding makes an exact closed-form frame count fragile to derive
+// across all 7 stages.
+static std::vector<float> run_encoder_stage(vibevoice_context* ctx, const char* prefix, const float* samples,
+                                            int n_samples, int* out_T, int* out_vae_dim) {
+    const int n_chunks = (n_samples + VIBEVOICE_ENCODER_MAX_CHUNK_SAMPLES - 1) / VIBEVOICE_ENCODER_MAX_CHUNK_SAMPLES;
+    if (n_chunks <= 1)
+        return run_encoder_stage_one_call(ctx, prefix, samples, n_samples, out_T, out_vae_dim);
+
+    if (ctx->params.verbosity >= 1)
+        fprintf(stderr, "vibevoice: %s: audio %.1fs exceeds %ds encoder chunk limit, splitting into %d chunks\n",
+                prefix, n_samples / 24000.0f, VIBEVOICE_ENCODER_MAX_CHUNK_SAMPLES / 24000, n_chunks);
+
+    std::vector<float> out_mean;
+    int total_T = 0;
+    int vae_dim = 0;
+    for (int c = 0; c < n_chunks; c++) {
+        const int chunk_start = c * VIBEVOICE_ENCODER_MAX_CHUNK_SAMPLES;
+        const int chunk_end = std::min(n_samples, chunk_start + VIBEVOICE_ENCODER_MAX_CHUNK_SAMPLES);
+        const int raw_start = std::max(0, chunk_start - VIBEVOICE_ENCODER_LEFT_CONTEXT_SAMPLES);
+
+        int discard_T = 0;
+        if (raw_start < chunk_start) {
+            int prefix_vae_dim = 0;
+            auto prefix_mean = run_encoder_stage_one_call(ctx, prefix, samples + raw_start, chunk_start - raw_start,
+                                                          &discard_T, &prefix_vae_dim);
+            if (prefix_mean.empty()) {
+                fprintf(stderr, "vibevoice: %s: left-context measurement failed on chunk %d/%d\n", prefix, c + 1,
+                        n_chunks);
+                return {};
+            }
+        }
+
+        int chunk_T = 0, chunk_vae_dim = 0;
+        auto chunk_mean = run_encoder_stage_one_call(ctx, prefix, samples + raw_start, chunk_end - raw_start, &chunk_T,
+                                                     &chunk_vae_dim);
+        if (chunk_mean.empty()) {
+            fprintf(stderr, "vibevoice: %s: encoder failed on chunk %d/%d\n", prefix, c + 1, n_chunks);
+            return {};
+        }
+        vae_dim = chunk_vae_dim;
+        if (discard_T > chunk_T)
+            discard_T = chunk_T; // defensive clamp
+        out_mean.insert(out_mean.end(), chunk_mean.begin() + (size_t)discard_T * chunk_vae_dim, chunk_mean.end());
+        total_T += chunk_T - discard_T;
+    }
+    if (out_T)
+        *out_T = total_T;
+    if (out_vae_dim)
+        *out_vae_dim = vae_dim;
+    return out_mean;
 }
 
 // Run one SpeechConnector (FC1 → RMSNorm → FC2) via ggml graph.
@@ -977,78 +1063,30 @@ static char* vibevoice_transcribe_impl(struct vibevoice_context* ctx, const floa
     if (ctx->params.verbosity >= 1)
         fprintf(stderr, "vibevoice: %d samples (%.2fs at 24kHz)\n", n_samples, n_samples / 24000.0f);
 
-    // 1. Run acoustic tokenizer encoder
-    if (ctx->params.verbosity >= 1)
-        fprintf(stderr, "vibevoice: running acoustic encoder...\n");
-
-    ggml_cgraph* gf_at = build_tokenizer_encoder_graph(ctx, "at_enc", n_samples);
-    ggml_backend_sched_reset(ctx->sched);
-    if (!ggml_backend_sched_alloc_graph(ctx->sched, gf_at)) {
-        fprintf(stderr, "vibevoice: acoustic encoder graph alloc failed\n");
-        return nullptr;
+    // 1-4. Encode raw audio into combined acoustic+semantic speech features
+    // via the shared vibevoice_encode_speech() stage API (encoder+encoder+
+    // connector+connector+sum). Its encoder calls internally chunk long
+    // audio to avoid a CUDA int32 overflow (see run_encoder_stage above)
+    // while the LLM decode below still runs as a single pass over the
+    // whole feature sequence, so global context / diarization consistency
+    // across the recording is unaffected.
+    std::vector<float> speech_features;
+    int T_audio = 0;
+    {
+        int n_frames = 0, d_lm_out = 0;
+        float* feat = vibevoice_encode_speech(ctx, samples, n_samples, &n_frames, &d_lm_out);
+        if (!feat) {
+            fprintf(stderr, "vibevoice: encoder/connector failed\n");
+            return nullptr;
+        }
+        speech_features.assign(feat, feat + (size_t)n_frames * d_lm_out);
+        free(feat);
+        T_audio = n_frames;
     }
 
-    ggml_tensor* inp_t = ggml_graph_get_tensor(gf_at, "audio_in");
-    // Input is [C=1, T=n_samples] → ne[0]=1, ne[1]=n_samples
-    // The flat data is [sample_0, sample_1, ...] which maps to ne[1] varying fastest
-    // In ggml column-major: data[c * T + t] = data[0 * T + t] = data[t]
-    // So just write the samples directly
-    ggml_backend_tensor_set(inp_t, samples, 0, n_samples * sizeof(float));
-
-    if (ggml_backend_sched_graph_compute(ctx->sched, gf_at) != GGML_STATUS_SUCCESS) {
-        fprintf(stderr, "vibevoice: acoustic encoder compute failed\n");
-        return nullptr;
-    }
-
-    ggml_tensor* at_out = ggml_graph_get_tensor(gf_at, "encoder_out");
-    int vae_dim_at = (int)at_out->ne[0];
-    int T_audio = (int)at_out->ne[1];
-    std::vector<float> acoustic_mean(vae_dim_at * T_audio);
-    ggml_backend_tensor_get(at_out, acoustic_mean.data(), 0, vae_dim_at * T_audio * sizeof(float));
-
-    if (ctx->params.verbosity >= 1)
-        fprintf(stderr, "vibevoice: acoustic encoder: [%d, %d] (vae_dim=%d, frames=%d)\n", vae_dim_at, T_audio,
-                vae_dim_at, T_audio);
-
-    // 2. Run semantic tokenizer encoder
-    if (ctx->params.verbosity >= 1)
-        fprintf(stderr, "vibevoice: running semantic encoder...\n");
-
-    ggml_cgraph* gf_st = build_tokenizer_encoder_graph(ctx, "st_enc", n_samples);
-    ggml_backend_sched_reset(ctx->sched);
-    if (!ggml_backend_sched_alloc_graph(ctx->sched, gf_st)) {
-        fprintf(stderr, "vibevoice: semantic encoder graph alloc failed\n");
-        return nullptr;
-    }
-    ggml_tensor* inp_st = ggml_graph_get_tensor(gf_st, "audio_in");
-    ggml_backend_tensor_set(inp_st, samples, 0, n_samples * sizeof(float));
-    if (ggml_backend_sched_graph_compute(ctx->sched, gf_st) != GGML_STATUS_SUCCESS) {
-        fprintf(stderr, "vibevoice: semantic encoder compute failed\n");
-        return nullptr;
-    }
-    ggml_tensor* st_out = ggml_graph_get_tensor(gf_st, "encoder_out");
-    int vae_dim_st = (int)st_out->ne[0];
-    int T_sem = (int)st_out->ne[1];
-    std::vector<float> semantic_mean(vae_dim_st * T_sem);
-    ggml_backend_tensor_get(st_out, semantic_mean.data(), 0, vae_dim_st * T_sem * sizeof(float));
-
-    if (ctx->params.verbosity >= 1)
-        fprintf(stderr, "vibevoice: semantic encoder: [%d, %d]\n", vae_dim_st, T_sem);
-
-    // 3. Run connectors via ggml graph (handles Q4_K and any quantized weight type)
-    auto acoustic_features = run_connector_stage(ctx, "at_conn", acoustic_mean.data(), T_audio, vae_dim_at);
-    auto semantic_features = run_connector_stage(ctx, "se_conn", semantic_mean.data(), T_sem, vae_dim_st);
-    if (acoustic_features.empty() || semantic_features.empty()) {
-        fprintf(stderr, "vibevoice: connector failed\n");
-        return nullptr;
-    }
-
-    if (ctx->params.verbosity >= 1)
-        fprintf(stderr, "vibevoice: connectors done: acoustic=[%d,%d] semantic=[%d,%d]\n", T_audio, hp.d_lm, T_sem,
-                hp.d_lm);
-
-    // 4. Combine acoustic + semantic features (element-wise sum)
-    // Debug: optionally inject Python reference features
+    // Debug: optionally inject Python reference features (whole-buffer
+    // override of the features computed above; only used for short
+    // single-chunk reference clips in stage-diff testing).
     const char* ref_features_path = getenv("VIBEVOICE_REF_FEATURES");
     if (ref_features_path && ref_features_path[0]) {
         FILE* f = fopen(ref_features_path, "rb");
@@ -1057,28 +1095,28 @@ static char* vibevoice_transcribe_impl(struct vibevoice_context* ctx, const floa
             int n = (int)(ftell(f) / sizeof(float));
             fseek(f, 0, SEEK_SET);
             // Reference is [T, d_lm] = [83, 1536]
-            int T_ref = n / hp.d_lm;
-            std::vector<float> ref_features(n);
-            size_t rd = fread(ref_features.data(), sizeof(float), n, f);
-            fclose(f);
-            (void)rd;
-            fprintf(stderr, "vibevoice: INJECTING reference features [%d, %d] from %s\n", T_ref, hp.d_lm,
-                    ref_features_path);
-            // Replace features with reference
-            T_audio = T_ref;
-            T_sem = T_ref;
-            acoustic_features.resize(T_ref * hp.d_lm);
-            semantic_features.assign(T_ref * hp.d_lm, 0.0f); // zero semantic — ref already combined
-            memcpy(acoustic_features.data(), ref_features.data(), T_ref * hp.d_lm * sizeof(float));
+            if (n <= 0 || n % hp.d_lm != 0) {
+                fprintf(stderr,
+                        "vibevoice: VIBEVOICE_REF_FEATURES '%s' has %d floats, not a positive multiple of "
+                        "d_lm=%d -- ignoring\n",
+                        ref_features_path, n, hp.d_lm);
+                fclose(f);
+            } else {
+                int T_ref = n / hp.d_lm;
+                speech_features.assign((size_t)T_ref * hp.d_lm, 0.0f);
+                size_t rd = fread(speech_features.data(), sizeof(float), speech_features.size(), f);
+                fclose(f);
+                if (rd != speech_features.size()) {
+                    fprintf(stderr, "vibevoice: VIBEVOICE_REF_FEATURES '%s' short read (%zu of %zu floats)\n",
+                            ref_features_path, rd, speech_features.size());
+                    return nullptr;
+                }
+                fprintf(stderr, "vibevoice: INJECTING reference features [%d, %d] from %s\n", T_ref, hp.d_lm,
+                        ref_features_path);
+                T_audio = T_ref;
+            }
         }
     }
-    if (T_audio != T_sem) {
-        fprintf(stderr, "vibevoice: frame mismatch: acoustic=%d, semantic=%d\n", T_audio, T_sem);
-        return nullptr;
-    }
-    std::vector<float> speech_features(T_audio * hp.d_lm);
-    for (int i = 0; i < T_audio * hp.d_lm; i++)
-        speech_features[i] = acoustic_features[i] + semantic_features[i];
 
     if (ctx->params.verbosity >= 1)
         fprintf(stderr, "vibevoice: speech features combined: [%d, %d]\n", T_audio, hp.d_lm);
