@@ -116,7 +116,7 @@ def write_ccache_artifact(kh) -> None:
         kh.step("ccache_artifact_missing", path=str(ccache_dir))
         return
     artifact = WORK / "ccache.tar"
-    proc = run(["tar", "-C", str(WORK), "cf", str(artifact), ".ccache"], timeout=900, check=False)
+    proc = run(["tar", "-cf", str(artifact), "-C", str(WORK), ".ccache"], timeout=900, check=False)
     if proc.returncode == 0 and artifact.exists():
         kh.step("ccache_artifact_ready", path=str(artifact), size_mb=round(artifact.stat().st_size / 1e6, 1))
     else:
