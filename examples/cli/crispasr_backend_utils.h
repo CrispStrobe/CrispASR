@@ -2,9 +2,13 @@
 
 #include "whisper_params.h"
 #include "core/lang_names.h"
+#include "core/ngram_loop_fix.h"
 
 #include <cctype>
+#include <cstdio>
+#include <cstdlib>
 #include <string>
+#include <utility>
 
 inline bool crispasr_backend_should_use_gpu(const whisper_params& params) {
     return params.use_gpu && params.gpu_backend != "cpu";
@@ -65,4 +69,21 @@ inline void crispasr_lowercase_ascii(std::string& s) {
 // named CLI-side function so existing adapter call sites are unchanged.
 inline std::string crispasr_iso_to_english_lang(const std::string& code) {
     return core_lang::iso_to_english(code);
+}
+
+// Collapse degenerate repeated phrases from autoregressive ASR decoders after
+// detokenization. This preserves logits/token parity and can be disabled for
+// raw-reference comparisons with CRISPASR_NO_NGRAM_LOOPFIX=1.
+inline void crispasr_apply_ngram_loop_fix(std::string& text, const char* backend_name, bool quiet) {
+    const char* off = std::getenv("CRISPASR_NO_NGRAM_LOOPFIX");
+    if (off && off[0] == '1')
+        return;
+    std::string fixed = core_ngram::fix_loops(text);
+    if (fixed != text) {
+        if (!quiet) {
+            std::fprintf(stderr, "crispasr[%s]: collapsed n-gram loop(s) (%zu -> %zu chars)\n", backend_name,
+                         text.size(), fixed.size());
+        }
+        text = std::move(fixed);
+    }
 }

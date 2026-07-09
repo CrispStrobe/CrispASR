@@ -273,6 +273,7 @@ public:
             while (start < transcript.size() && transcript[start] == ' ')
                 start++;
             seg.text = transcript.substr(start);
+            crispasr_apply_ngram_loop_fix(seg.text, name(), params.no_prints);
             seg.tokens = std::move(out_tokens);
             if (!params.punctuation) {
                 crispasr_strip_ascii_punctuation(seg.text);
@@ -455,6 +456,7 @@ public:
         seg.t0 = t_offset_cs;
         seg.t1 = t_offset_cs + (int64_t)((double)n_samples / 16000.0 * 100.0);
         seg.text = transcript;
+        crispasr_apply_ngram_loop_fix(seg.text, name(), params.no_prints);
         seg.tokens = std::move(out_tokens);
         out.push_back(std::move(seg));
         return out;

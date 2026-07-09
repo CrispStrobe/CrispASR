@@ -134,6 +134,7 @@ public:
                     word.text.erase(word.text.begin());
             }
         }
+        crispasr_apply_ngram_loop_fix(seg.text, name(), params.no_prints);
 
         cohere_result_free(r);
         out.push_back(std::move(seg));
