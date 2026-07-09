@@ -121,6 +121,7 @@ public:
             seg.text.erase(seg.text.begin());
         while (!seg.text.empty() && (seg.text.back() == ' ' || seg.text.back() == '\n'))
             seg.text.pop_back();
+        crispasr_apply_ngram_loop_fix(seg.text, name(), params.no_prints);
 
         // GPT-2 byte-level BPE decoder: Ġ (U+0120, UTF-8 0xC4 0xA0) → space,
         // Ċ (U+010A, UTF-8 0xC4 0x8A) → newline. All other bytes pass through.

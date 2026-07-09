@@ -365,6 +365,7 @@ public:
             while (start < transcript.size() && transcript[start] == ' ')
                 start++;
             seg.text = transcript.substr(start);
+            crispasr_apply_ngram_loop_fix(seg.text, name(), params.no_prints);
             seg.tokens.reserve(gen_ids.size());
             for (size_t i = 0; i < gen_ids.size(); i++) {
                 if (gen_ids[i] == eos_tok)
@@ -566,6 +567,7 @@ public:
                         s.t0 = words.front().t0;
                         s.t1 = words.back().t1;
                         s.text = std::move(clean);
+                        crispasr_apply_ngram_loop_fix(s.text, name(), params.no_prints);
                         s.words = std::move(words);
                         saa_segs.push_back(std::move(s));
                         return;
@@ -574,6 +576,7 @@ public:
                 s.t0 = seg.t0;
                 s.t1 = seg.t1;
                 s.text = std::move(chunk);
+                crispasr_apply_ngram_loop_fix(s.text, name(), params.no_prints);
                 saa_segs.push_back(std::move(s));
             };
 
@@ -614,6 +617,7 @@ public:
                     seg.text.clear();
             }
         }
+        crispasr_apply_ngram_loop_fix(seg.text, name(), params.no_prints);
 
         // Per-token entries with decode-loop confidences. granite uses
         // its own batch detokenizer (granite_speech_decode_tokens) for

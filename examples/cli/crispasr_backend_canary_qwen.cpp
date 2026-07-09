@@ -68,6 +68,7 @@ public:
 
         crispasr_segment seg;
         seg.text = r->text ? r->text : "";
+        crispasr_apply_ngram_loop_fix(seg.text, name(), params.no_prints);
         seg.t0 = t_offset_cs;
         // Estimate duration from audio length
         seg.t1 = t_offset_cs + (int64_t)(100.0 * n_samples / 16000.0);

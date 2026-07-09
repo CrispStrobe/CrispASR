@@ -56,6 +56,16 @@ TEST_CASE("degenerate multi-word cycle collapses", "[ngram-loop]") {
     REQUIRE(out.find("hey hey hey hey hey") == std::string::npos);
 }
 
+TEST_CASE("degenerate phrase repetition collapses", "[ngram-loop]") {
+    // issue #218 follow-ups: multiple AR ASR backends can loop on short
+    // phrases such as "come on" after a valid prefix.
+    const std::string loop = "move much of the fence. come on come on come on come on come on come on come on come on";
+    const std::string out = fix_loops(loop);
+    REQUIRE(out.find("move much of the fence.") == 0);
+    REQUIRE(out.find("come on come on come on come on") == std::string::npos);
+    REQUIRE(out.size() < loop.size());
+}
+
 TEST_CASE("edge cases are safe", "[ngram-loop]") {
     REQUIRE(fix_loops("") == "");
     REQUIRE(fix_loops("word") == "word");
