@@ -110,6 +110,19 @@ def has_bad_loop(metrics: dict[str, int]) -> bool:
     )
 
 
+def write_ccache_artifact(kh) -> None:
+    ccache_dir = WORK / ".ccache"
+    if not ccache_dir.exists():
+        kh.step("ccache_artifact_missing", path=str(ccache_dir))
+        return
+    artifact = WORK / "ccache.tar"
+    proc = run(["tar", "-C", str(WORK), "cf", str(artifact), ".ccache"], timeout=900, check=False)
+    if proc.returncode == 0 and artifact.exists():
+        kh.step("ccache_artifact_ready", path=str(artifact), size_mb=round(artifact.stat().st_size / 1e6, 1))
+    else:
+        kh.step("ccache_artifact_failed", rc=proc.returncode)
+
+
 def main() -> int:
     WORK.mkdir(parents=True, exist_ok=True)
     CACHE.mkdir(parents=True, exist_ok=True)
@@ -246,6 +259,7 @@ def main() -> int:
     payload = {"ref": CRISPASR_REF, "sha": sha, "audio": str(AUDIO), "results": results, "failures": failures}
     RESULTS.write_text(json.dumps(payload, indent=2))
     kh.step("results_written", path=str(RESULTS), failures=len(failures))
+    write_ccache_artifact(kh)
     print(json.dumps(payload, indent=2), flush=True)
     return 1 if failures else 0
 
