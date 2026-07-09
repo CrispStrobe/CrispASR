@@ -26,9 +26,10 @@ mkdir -p "$OUT_DIR"
 # Only ASR backends in the AT-RISK bucket (no CAP_UNBOUNDED_INPUT, no
 # CAP_INTERNAL_CHUNKING). Source of truth for "is this backend in the
 # overlap-save opt-out" is `examples/cli/crispasr_chunk_context_gate.h`'s
-# `backend_allows_chunk_context()` — currently blocks cohere, gemma4-e2b,
-# glm-asr, kyutai-stt, qwen3, voxtral. Those six are KEPT in the sweep
-# as regression-positive checks: their default and no-overlap runs
+# `backend_allows_chunk_context()` — currently blocks canary-qwen, cohere,
+# gemma4-e2b, glm-asr, granite, kyutai-stt, moss-transcribe, qwen3, and voxtral.
+# Those opt-out backends are KEPT in the sweep as regression-positive checks:
+# their default and no-overlap runs
 # should match because the gate skips the overlap-save wrap. If any
 # of them ever flips back to a SUSPECTED-BUG verdict, the opt-out
 # regressed.
@@ -38,10 +39,13 @@ mkdir -p "$OUT_DIR"
 # under the hood, passed the original A/B cleanly.
 CASES=(
   # ── opt-out backends (regression-positive — should print OK) ──
+  "canary-qwen|canary-qwen-2.5b-q8_0.gguf|"
   "cohere|cohere-transcribe-q4_k.gguf|"
   "gemma4-e2b|gemma4-e2b-it-q4_k.gguf|"
   "glm-asr|glm-asr-nano-q4_k.gguf|"
+  "granite|granite-speech-4.1-2b-plus-q4_k.gguf|"
   "kyutai-stt|kyutai-stt-1b-q4_k.gguf|"
+  "moss-transcribe|moss-transcribe-preview-2b-q8_0.gguf|"
   "qwen3|qwen3-asr-0.6b-q4_k.gguf|"
   "voxtral|voxtral-mini-3b-2507-q4_k.gguf|"
   # ── never-opted-out backends (sweep guards future regressions) ──
