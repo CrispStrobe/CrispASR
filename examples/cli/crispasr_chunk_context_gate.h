@@ -32,7 +32,11 @@ namespace crispasr_chunk_context {
 // outcomes: cohere, voxtral, and qwen3 drop follow-up chunks via word-
 // timestamp trimming (voxtral collapses a 5 min clip down to ~60 s of
 // output; qwen3 truncates a 90 s clip mid-sentence in chunk 1);
-// gemma4-e2b, glm-asr, and kyutai-stt blow past a 15 min wallclock on a
+// canary-qwen emits one segment without word timestamps, so overlap-save falls
+// back to segment-level filtering and keeps the whole extended segment. On the
+// issue #218 10 s / 2 s overlap sample, that repeated the acoustic prefix enough
+// to drive the decoder into a long "back back ..." loop. gemma4-e2b, glm-asr,
+// and kyutai-stt blow past a 15 min wallclock on a
 // 5 min clip (LLM-decode retry loop on the over-long buffer). voxtral4b
 // is not affected — different model architecture despite the shared name.
 // granite-speech-4.1-2b-plus emits native [T:N] word timestamps that do not
@@ -51,8 +55,8 @@ inline bool backend_allows_chunk_context(const char* backend_name) {
     if (backend_name == nullptr) {
         return true;
     }
-    static const char* const kBlocked[] = {"cohere",     "gemma4-e2b",      "glm-asr", "granite",
-                                           "kyutai-stt", "moss-transcribe", "qwen3",   "voxtral"};
+    static const char* const kBlocked[] = {"canary-qwen", "cohere",          "gemma4-e2b", "glm-asr", "granite",
+                                           "kyutai-stt",  "moss-transcribe", "qwen3",      "voxtral"};
     for (const char* b : kBlocked) {
         if (std::strcmp(backend_name, b) == 0) {
             return false;
