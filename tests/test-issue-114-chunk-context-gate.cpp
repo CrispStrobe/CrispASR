@@ -54,10 +54,11 @@ TEST_CASE("backend can opt out of external overlap-save context", "[unit][chunk-
 TEST_CASE("backend_allows_chunk_context: known offenders opt out, others do not",
           "[unit][chunk-context][backend-list]") {
     // Surfaced by tools/check-overlap-save-bug.sh A/B sweep.
+    REQUIRE_FALSE(backend_allows_chunk_context("canary-qwen")); // #218: no timestamps -> repeated overlap prefix
     REQUIRE_FALSE(backend_allows_chunk_context("cohere"));
     REQUIRE_FALSE(backend_allows_chunk_context("gemma4-e2b"));
     REQUIRE_FALSE(backend_allows_chunk_context("glm-asr"));
-    REQUIRE_FALSE(backend_allows_chunk_context("granite"));         // #205: [T:N] word-trim drops slices
+    REQUIRE_FALSE(backend_allows_chunk_context("granite")); // #205: [T:N] word-trim drops slices
     REQUIRE_FALSE(backend_allows_chunk_context("kyutai-stt"));
     REQUIRE_FALSE(backend_allows_chunk_context("moss-transcribe")); // #218: no timestamps → seam dup + worse loops
     REQUIRE_FALSE(backend_allows_chunk_context("qwen3"));

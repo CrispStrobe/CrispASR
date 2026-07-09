@@ -16,42 +16,22 @@
 
 #pragma once
 
-#include <cctype>
 #include <string>
-#include <utility>
 #include <vector>
 
 namespace core_ngram {
-
-struct Word {
-    std::string text;
-    std::string key;
-};
-
-inline std::string normalize_key(const std::string& word) {
-    std::string key;
-    key.reserve(word.size());
-    for (unsigned char c : word) {
-        if (std::isalnum(c)) {
-            key.push_back((char)std::tolower(c));
-        } else if (c == '\'') {
-            key.push_back((char)c);
-        }
-    }
-    return key;
-}
 
 // Collapse immediately-repeated n-grams (window size `n`) in `w` to at most
 // `max_rep` consecutive reps. Walks left-to-right building `out`; whenever the
 // next n words equal the tail of `out` and that tail already repeats >= max_rep
 // times, the duplicate n-gram is dropped.
-inline std::vector<Word> collapse(const std::vector<Word>& w, int n, int max_rep) {
-    std::vector<Word> out;
+inline std::vector<std::string> collapse(const std::vector<std::string>& w, int n, int max_rep) {
+    std::vector<std::string> out;
     const int L = (int)w.size();
     int i = 0;
     auto tail_eq = [&]() {
         for (int k = 0; k < n; k++)
-            if (w[i + k].key != out[out.size() - n + k].key)
+            if (w[i + k] != out[out.size() - n + k])
                 return false;
         return true;
     };
@@ -63,7 +43,7 @@ inline std::vector<Word> collapse(const std::vector<Word>& w, int n, int max_rep
                 bool eq = true;
                 const size_t b = out.size() - (size_t)n * (reps + 1);
                 for (int k = 0; k < n; k++)
-                    if (out[b + k].key != out[out.size() - n + k].key) {
+                    if (out[b + k] != out[out.size() - n + k]) {
                         eq = false;
                         break;
                     }
@@ -88,7 +68,7 @@ inline std::vector<Word> collapse(const std::vector<Word>& w, int n, int max_rep
 // (unigrams kept up to 3 reps, longer n-grams up to 2), and re-join with single
 // spaces. Returns cleaned text.
 inline std::string fix_loops(const std::string& text, int max_n = 16) {
-    std::vector<Word> words;
+    std::vector<std::string> words;
     size_t i = 0;
     while (i < text.size()) {
         while (i < text.size() && std::isspace((unsigned char)text[i]))
@@ -96,12 +76,8 @@ inline std::string fix_loops(const std::string& text, int max_n = 16) {
         size_t j = i;
         while (j < text.size() && !std::isspace((unsigned char)text[j]))
             j++;
-        if (j > i) {
-            std::string word = text.substr(i, j - i);
-            std::string key = normalize_key(word);
-            if (!key.empty())
-                words.push_back({std::move(word), std::move(key)});
-        }
+        if (j > i)
+            words.push_back(text.substr(i, j - i));
         i = j;
     }
     for (int n = max_n; n >= 1; n--)
@@ -110,7 +86,7 @@ inline std::string fix_loops(const std::string& text, int max_n = 16) {
     for (size_t k = 0; k < words.size(); k++) {
         if (k)
             out += ' ';
-        out += words[k].text;
+        out += words[k];
     }
     return out;
 }
