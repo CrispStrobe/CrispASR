@@ -53,7 +53,8 @@
 #include "crispasr_wav_writer.h"
 #include "crispasr_mp3_writer.h" // MP3 output via in-tree glint encoder
 #include "crispasr_aac_writer.h" // AAC-LC (ADTS) output via in-tree glint encoder
-#include "common-crispasr.h"     // read_audio_data
+#include "core/ngram_loop_fix.h"
+#include "common-crispasr.h" // read_audio_data
 
 #include <algorithm>
 #include <atomic>
@@ -250,6 +251,37 @@ std::vector<crispasr_segment> merge_segments(std::vector<std::vector<crispasr_se
             out.push_back(std::move(s));
     }
     return out;
+}
+
+static void apply_global_ngram_loop_fix(std::vector<crispasr_segment>& segs, const char* backend_name, bool quiet) {
+    const char* off = std::getenv("CRISPASR_NO_NGRAM_LOOPFIX");
+    if ((off && off[0] == '1') || segs.empty())
+        return;
+
+    std::string joined;
+    for (const auto& s : segs) {
+        if (s.text.empty())
+            continue;
+        if (!joined.empty())
+            joined += ' ';
+        joined += s.text;
+    }
+    std::string fixed = core_ngram::fix_loops(joined);
+    if (fixed == joined)
+        return;
+
+    if (!quiet) {
+        std::fprintf(stderr, "crispasr[%s]: collapsed global n-gram loop(s) (%zu -> %zu chars)\n", backend_name,
+                     joined.size(), fixed.size());
+    }
+    const int64_t t0 = segs.front().t0;
+    const int64_t t1 = segs.back().t1;
+    segs.front().text = std::move(fixed);
+    segs.front().t0 = t0;
+    segs.front().t1 = t1;
+    segs.front().tokens.clear();
+    segs.front().words.clear();
+    segs.erase(segs.begin() + 1, segs.end());
 }
 
 bool crispasr_words_have_positive_span(const std::vector<crispasr_word>& words) {
@@ -629,6 +661,7 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, co
         std::vector<std::vector<crispasr_segment>> stitched_per_slice(1);
         stitched_per_slice[0] = std::move(segs);
         auto all_segs = merge_segments(std::move(stitched_per_slice), slices);
+        apply_global_ngram_loop_fix(all_segs, backend.name(), params.no_prints);
 
         apply_punc_model(punc_ctx, all_segs);
         apply_truecase_model(tc_ctx, all_segs);
@@ -1098,6 +1131,7 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, co
                 per_slice_redo[i] = std::move(per_slice[i]);
             }
             auto all_segs = merge_segments(std::move(per_slice_redo), slices);
+            apply_global_ngram_loop_fix(all_segs, backend.name(), params.no_prints);
             // Mirror the embedding-based remap from the sequential
             // path above so file outputs in the parallel/output-redo
             // path get globally stable speaker IDs too (#107 P3).
@@ -1169,6 +1203,7 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, co
     }
 
     auto all_segs = merge_segments(std::move(per_slice), slices);
+    apply_global_ngram_loop_fix(all_segs, backend.name(), params.no_prints);
 
     // Optional embedding-based clustering (#107 P3). When the user
     // supplied --diarize-embedder, anchor speaker IDs globally across
@@ -3460,6 +3495,7 @@ int crispasr_run_backend(const whisper_params& params_in) {
             }
         }
         auto all_segs = merge_segments(std::move(per_slice), slices);
+        apply_global_ngram_loop_fix(all_segs, backend->name(), params.no_prints);
 
         apply_punc_model(punc_ctx, all_segs);
         apply_truecase_model(tc_ctx, all_segs);
