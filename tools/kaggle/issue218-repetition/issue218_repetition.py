@@ -168,10 +168,15 @@ def main() -> int:
         wavs[0].rename(AUDIO)
     kh.step("audio_ready", size_mb=round(AUDIO.stat().st_size / 1e6, 1))
 
-    granite_plus_url = (
-        "https://huggingface.co/cstr/granite-speech-4.1-2b-plus-GGUF/resolve/main/"
-        "granite-speech-4.1-2b-plus-q4_k.gguf"
+    from huggingface_hub import hf_hub_download
+
+    kh.step("download_granite_plus")
+    granite_plus_path = hf_hub_download(
+        repo_id="cstr/granite-speech-4.1-2b-plus-GGUF",
+        filename="granite-speech-4.1-2b-plus-q4_k.gguf",
+        local_dir=str(CACHE),
     )
+    kh.step("granite_plus_ready", path=granite_plus_path)
     cases = [
         {"name": "moss-transcribe", "backend": "moss-transcribe", "model": "auto", "args": ["--language", "en"]},
         {"name": "qwen3", "backend": "qwen3", "model": "auto", "args": ["--language", "en"]},
@@ -180,7 +185,7 @@ def main() -> int:
         {
             "name": "granite-4.1-plus",
             "backend": "granite",
-            "model": granite_plus_url,
+            "model": granite_plus_path,
             "args": ["--language", "en", "--chunk-seconds", "10", "--chunk-overlap", "2"],
         },
         {
