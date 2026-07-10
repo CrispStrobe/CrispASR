@@ -3072,6 +3072,12 @@ struct pocket_tts_context* pocket_tts_init_from_file(const char* path_model, str
 void pocket_tts_free(struct pocket_tts_context* ctx) {
     if (!ctx)
         return;
+    // Drop this model's dequantized weights from the file-scope cache. It is
+    // keyed by tensor data pointer, which the allocator may hand back to a
+    // subsequently loaded model; without this, that model would read stale
+    // entries — i.e. this model's weights. (A per-model cache would be the
+    // fuller fix; see tensor_f32_data.)
+    g_f16_cache.clear();
     if (ctx->buf_perm)
         ggml_backend_buffer_free(ctx->buf_perm);
     if (ctx->ctx_perm)
