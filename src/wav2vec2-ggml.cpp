@@ -1672,14 +1672,14 @@ static std::vector<float> wav2vec2_compute_logits_graph(const wav2vec2_model& m,
     t0 = ggml_time_us();
     {
         // hidden_ht is [T, H] layout (same as ggml [H, T] data layout)
-        layer_norm(hidden_ht.data(), hidden_ht.data(), tensor_data_f32(m, m.enc_ln_w), tensor_data_f32(m, m.enc_ln_b), T, H,
-                   ln_eps);
+        layer_norm(hidden_ht.data(), hidden_ht.data(), tensor_data_f32(m, m.enc_ln_w), tensor_data_f32(m, m.enc_ln_b),
+                   T, H, ln_eps);
 
         int V_size = (int)hp.vocab_size;
         std::vector<float> logits(T * V_size);
         std::vector<uint8_t> scratch;
-        ggml_linear_f32(scratch, m.lm_w, m.lm_b ? tensor_data_f32(m, m.lm_b) : nullptr, hidden_ht.data(), logits.data(), H,
-                        V_size, T, n_threads, m.backend);
+        ggml_linear_f32(scratch, m.lm_w, m.lm_b ? tensor_data_f32(m, m.lm_b) : nullptr, hidden_ht.data(), logits.data(),
+                        H, V_size, T, n_threads, m.backend);
         t_lm = ggml_time_us() - t0;
 
         if (bench) {
@@ -1892,11 +1892,13 @@ std::vector<float> wav2vec2_compute_logits(const wav2vec2_model& m, const float*
         layer_norm(hidden.data(), normed.data(), tensor_data_f32(m, e.ln2_w), tensor_data_f32(m, e.ln2_b), T, H,
                    hp.layer_norm_eps);
 
-        ggml_linear_f32(scratch, e.fc1_w, tensor_data_f32(m, e.fc1_b), normed.data(), ffn_mid.data(), H, I, T, n_threads);
+        ggml_linear_f32(scratch, e.fc1_w, tensor_data_f32(m, e.fc1_b), normed.data(), ffn_mid.data(), H, I, T,
+                        n_threads);
         for (int i = 0; i < T * I; i++)
             ffn_mid[i] = gelu(ffn_mid[i]);
 
-        ggml_linear_f32(scratch, e.fc2_w, tensor_data_f32(m, e.fc2_b), ffn_mid.data(), ffn_out.data(), I, H, T, n_threads);
+        ggml_linear_f32(scratch, e.fc2_w, tensor_data_f32(m, e.fc2_b), ffn_mid.data(), ffn_out.data(), I, H, T,
+                        n_threads);
         for (int i = 0; i < T * H; i++)
             hidden[i] += ffn_out[i];
     }
