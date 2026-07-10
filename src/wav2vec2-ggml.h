@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <map>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 // ---------------------------------------------------------------------------
@@ -101,6 +102,13 @@ struct wav2vec2_model {
     ggml_backend_buffer_t buf = nullptr; // backend buffer (core_gguf)
     ggml_backend_t backend = nullptr;    // backend that owns buf
     std::map<std::string, ggml_tensor*> tensors;
+
+    // CPU dequantization cache for GPU-resident weights, keyed by tensor
+    // pointer (see tensor_data_f32). Scoped to the model so its lifetime
+    // matches the weights it caches — a reloaded/second model cannot alias a
+    // freed tensor pointer, and two live models never share cache state.
+    // mutable: the compute path takes `const wav2vec2_model&` and populates it.
+    mutable std::unordered_map<const ggml_tensor*, std::vector<float>> tensor_cache;
 
     wav2vec2_model() = default;
     wav2vec2_model(const wav2vec2_model&) = delete;
