@@ -422,14 +422,26 @@ static bool load_model(omnivoice_context* ctx, const char* path) {
         return false;
     }
 
-    // Create backend + buffer
-    ctx->backend = ggml_backend_cpu_init();
+    // Create backend + buffer. use_gpu picks the best GPU (CUDA/Metal/Vulkan);
+    // CRISPASR_OMNIVOICE_CPU=1 forces CPU. Only the LLM iterative loop runs here
+    // — the DAC codec stays on CPU (see load_tokenizer). Falls back to CPU if
+    // GPU init fails.
+    {
+        const char* e = std::getenv("CRISPASR_OMNIVOICE_CPU");
+        const bool force_cpu = e && *e && *e != '0';
+        ctx->backend = (ctx->use_gpu && !force_cpu) ? crispasr_init_gpu_backend() : nullptr;
+        if (!ctx->backend)
+            ctx->backend = ggml_backend_cpu_init();
+    }
     if (!ctx->backend) {
-        fprintf(stderr, "omnivoice: failed to init CPU backend\n");
+        fprintf(stderr, "omnivoice: failed to init backend\n");
         gguf_free(gf);
         return false;
     }
-    ggml_backend_cpu_set_n_threads(ctx->backend, ctx->n_threads);
+    if (ggml_backend_is_cpu(ctx->backend))
+        ggml_backend_cpu_set_n_threads(ctx->backend, ctx->n_threads);
+    if (ctx->verbosity >= 1)
+        fprintf(stderr, "omnivoice: compute backend = %s\n", ggml_backend_name(ctx->backend));
 
     ctx->buf_w = ggml_backend_alloc_ctx_tensors(ctx->ctx_w, ctx->backend);
     if (!ctx->buf_w) {
@@ -1645,7 +1657,7 @@ void omnivoice_sync(struct omnivoice_context* ctx) {
 void omnivoice_set_n_threads(struct omnivoice_context* ctx, int n_threads) {
     if (ctx && n_threads > 0) {
         ctx->n_threads = n_threads;
-        if (ctx->backend)
+        if (ctx->backend && ggml_backend_is_cpu(ctx->backend))
             ggml_backend_cpu_set_n_threads(ctx->backend, n_threads);
     }
 }
