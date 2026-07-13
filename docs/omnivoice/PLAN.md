@@ -25,14 +25,26 @@ stranded GPU commit `feat/omnivoice-gpu` = "run the LLM on GPU").
   target frames ⇒ over-long audio. Doesn't change RTF (numerator+denominator both
   scale) but bloats latency + trailing silence. Track separately.
 
-### Next
-1. Finish isolated venv → extend `tools/reference_backends/omnivoice.py` to dump
-   encode stages (sem feats pre/post `[::2]`, `encoder_semantic` out, `e_acoustic`,
-   post-`fc` emb, per-quantizer residual + codes) → `ref.gguf`.
-2. Implement C++ `higgs_encode` (reuse `core_dac`, `core/conv.h`, `core_rvq`) +
-   port HuBERT encoder; diff each stage vs `ref.gguf`.
-3. Wire `omnivoice_set_voice_prompt`: resample→24k, clip to ×960, encode; and fix
-   `generate_iterative` layout (add `<|denoise|>`, prepend ref_text to target text).
+- ✅ **Encode reference dumped + validated** — isolated venv (torch 2.13,
+  transformers 5.13.1) at `/Volumes/backups/ai/crispasr-gguf/.venv-omnivoice-ref`;
+  `tools/dump_omnivoice_encode_reference.py` runs the REAL `encode()` with forward
+  hooks → `/Volumes/backups/ai/crispasr-gguf/omnivoice-encode-ref.gguf`. jfk.wav
+  (11 s) → **275 frames @ 25 Hz** (264000/960), all stage shapes match the blueprint:
+  `sem_hidden_mean`(550,768)→`sem_ds`(275,768)→`e_semantic`(275,768),
+  `e_acoustic`(275,256), `emb_fc`(275,1024), `codes`(8,275) ∈ [1,1023]. ref.gguf
+  (5.7 MB) → upload to `cstr/crispasr-regression-fixtures` (NOT in git).
+
+### Next (implementation)
+1. **C++ `higgs_encode` port, stage-by-stage vs `omnivoice-encode-ref.gguf`**
+   (self-contained `omnivoice_encode_diff` runner, dots-tts pattern). Order:
+   DAC acoustic encoder (`e_acoustic`; reuse `core_dac`/`core/conv.h`) →
+   `encoder_semantic` bridge → HuBERT semantic (biggest piece) → mean-13/`[::2]` →
+   concat+`fc` (`emb_fc`) → RVQ (`core_rvq::encode_euclidean`, `codes`). First
+   divergence = the bug.
+2. Load encoder-side tokenizer weights in `load_tokenizer` (currently decoder-only).
+3. Wire `omnivoice_set_voice_prompt`: resample→24k, RMS-norm, clip ×960, encode →
+   `ref_audio_codes`/`ref_T`; fix `generate_iterative` (add `<|denoise|>`, prepend
+   ref_text). Validate: closed-loop cosine(C,R) > cosine(B,R).
 4. RTF wins, gated + A/B'd.
 
 - ✅ Rebased the stranded `feat/omnivoice-gpu` (single commit `c80328e08`, never
