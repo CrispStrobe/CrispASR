@@ -129,3 +129,7 @@ tools/kaggle/fc-pw-requant/kaggle_harness.py
 tools/kaggle/fc-unified-graph-ab/kaggle_harness.py
 tools/kaggle/fc-pw-requant/only.txt
 /handover-*.md
+
+# #254 omnivoice reference artifacts (belong on HF fixtures, not git)
+*.encode-ref.gguf
+omnivoice-encode-ref.gguf
