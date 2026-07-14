@@ -1499,11 +1499,19 @@ static ov_gen_result generate_iterative(omnivoice_context* ctx, const std::strin
         }
 
         // Prepare conditional embeddings (full context: style + text + ref + target)
-        auto embeds = prepare_embeddings(ctx, full_text_ids, audio_tokens, audio_mask, T_total);
+        std::vector<float> embeds;
+        {
+            ov_bench_stage b("  embeds_cond");
+            embeds = prepare_embeddings(ctx, full_text_ids, audio_tokens, audio_mask, T_total);
+        }
 
         // Conditional forward (full context)
         int target_start = T_total - T_target;
-        auto c_logits = run_llm_forward(fwd_c, embeds, T_total, target_start);
+        std::vector<float> c_logits;
+        {
+            ov_bench_stage b("  fwd_cond");
+            c_logits = run_llm_forward(fwd_c, embeds, T_total, target_start);
+        }
 
         // Unconditional forward (target tokens only) for classifier-free guidance
         std::vector<float> u_logits;
@@ -1518,7 +1526,12 @@ static ov_gen_result generate_iterative(omnivoice_context* ctx, const std::strin
                     u_audio[cb * T_target + t] = audio_tokens[cb * T_audio + T_ref + t];
                 }
             }
-            auto u_embeds = prepare_embeddings(ctx, u_text_ids, u_audio, u_mask, T_target);
+            std::vector<float> u_embeds;
+            {
+                ov_bench_stage b("  embeds_uncond");
+                u_embeds = prepare_embeddings(ctx, u_text_ids, u_audio, u_mask, T_target);
+            }
+            ov_bench_stage b("  fwd_uncond");
             u_logits = run_llm_forward(fwd_u, u_embeds, T_target, 0);
         }
 
