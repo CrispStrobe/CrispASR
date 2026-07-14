@@ -1938,6 +1938,52 @@ static std::vector<float> higgs_acoustic_encode(omnivoice_context* ctx, const fl
     return out;
 }
 
+// encoder_semantic bridge: sem (768, T) → e_semantic (768, T). conv(k3) then
+// 2 blocks of {2 ELU ResidualUnits [ELU→conv k3→ELU→conv k1] + block conv k3}.
+// All res-unit convs are bias-free; block conv has bias. No temporal change.
+static std::vector<float> higgs_encoder_semantic(omnivoice_context* ctx, const float* sem, int T) {
+    auto& tok = ctx->tokenizer;
+    if (!tok.encsem_conv_w || tok.encsem_blocks.size() != 2)
+        return {};
+    const int D = tok.sem_d; // 768
+    size_t mem_size = 2048 * 2 * ggml_tensor_overhead() + ggml_graph_overhead_custom(4096, false);
+    std::vector<uint8_t> mem_buf(mem_size);
+    ggml_init_params ip = {mem_size, mem_buf.data(), true};
+    ggml_context* ctx0 = ggml_init(ip);
+    ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 4096, false);
+
+    ggml_tensor* x = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, D, T); // (768, T)
+    ggml_set_name(x, "sem");
+    ggml_set_input(x);
+    ggml_tensor* h = core_dac::conv1d(ctx0, x, tok.encsem_conv_w, nullptr, 3);
+    for (int b = 0; b < 2; b++) {
+        auto& blk = tok.encsem_blocks[b];
+        for (int r = 0; r < 2; r++) {
+            ggml_tensor* y = ggml_elu(ctx0, h);
+            y = core_dac::conv1d(ctx0, y, blk.res[r].conv1_w, nullptr, 3);
+            y = ggml_elu(ctx0, y);
+            y = core_dac::conv1d(ctx0, y, blk.res[r].conv2_w, nullptr, 1);
+            h = ggml_add(ctx0, h, y);
+        }
+        h = core_dac::conv1d(ctx0, h, blk.conv_w, blk.conv_b, 3);
+    }
+    ggml_set_name(h, "e_semantic");
+    ggml_set_output(h);
+    ggml_build_forward_expand(gf, h);
+
+    ggml_gallocr_t ga = ggml_gallocr_new(ggml_backend_get_default_buffer_type(tok.backend));
+    ggml_gallocr_alloc_graph(ga, gf);
+    ggml_backend_tensor_set(x, sem, 0, (size_t)D * T * sizeof(float));
+    ggml_backend_graph_compute(tok.backend, gf);
+
+    int C = (int)h->ne[0], To = (int)h->ne[1];
+    std::vector<float> out((size_t)To * C);
+    ggml_backend_tensor_get(h, out.data(), 0, out.size() * sizeof(float));
+    ggml_gallocr_free(ga);
+    ggml_free(ctx0);
+    return out;
+}
+
 // Run the encode diff against a Python reference archive. Stage-by-stage: each
 // ported stage is fed the REFERENCE input for the previous stage, so the first
 // mismatch localizes the bug. Returns 0 on success.
@@ -2048,6 +2094,26 @@ static int run_encode_diff(omnivoice_context* ctx, const char* ref_path) {
             }
         } else {
             fprintf(stderr, "  acoustic_enc: ref missing input_wav24k/e_acoustic\n");
+        }
+    }
+
+    // --- Stage encoder_semantic: ref sem_ds (T,768) → e_semantic (T,768). ---
+    {
+        ggml_tensor* r_sem = ref.get("sem_ds");
+        ggml_tensor* r_es = ref.get("e_semantic");
+        if (r_sem && r_es) {
+            int T = (int)r_sem->ne[1], C = (int)r_sem->ne[0];
+            auto mine = higgs_encoder_semantic(ctx, (const float*)r_sem->data, T);
+            if ((int)mine.size() == T * C) {
+                float cmin, cmean, mabs;
+                higgs_cos(mine.data(), (const float*)r_es->data, T, C, cmin, cmean, mabs);
+                fprintf(stderr, "  encoder_semantic (→e_semantic): cos_min=%.6f cos_mean=%.6f max_abs=%.3e  %s\n", cmin,
+                        cmean, mabs, cmin >= 0.999f ? "PASS" : "FAIL");
+            } else {
+                fprintf(stderr, "  encoder_semantic: size mismatch mine=%zu ref=%d\n", mine.size(), T * C);
+            }
+        } else {
+            fprintf(stderr, "  encoder_semantic: ref missing sem_ds/e_semantic\n");
         }
     }
 
