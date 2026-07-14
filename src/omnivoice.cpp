@@ -28,6 +28,7 @@
 #include "core/dac_decoder.h"
 #include "core/ffn.h"
 #include "core/rvq.h"
+#include "core/wav_reader.h"
 #include "core/gguf_loader.h"
 #include "core/gpu_backend_pref.h"
 #include "ggml-alloc.h"
@@ -1290,12 +1291,23 @@ static ov_gen_result generate_iterative(omnivoice_context* ctx, const std::strin
     ov_gen_result result;
     result.n_codebooks = (int)hp.n_codebooks;
 
-    // 1. Tokenize text
-    std::string wrapped = "<|text_start|>" + text + "<|text_end|>";
+    // 1. Tokenize text. Voice cloning prepends the reference transcript into ONE
+    //    combined text stream (Python _combine_text: ref_text + " " + target).
+    auto trim = [](const std::string& s) {
+        size_t a = s.find_first_not_of(" \t\r\n");
+        if (a == std::string::npos)
+            return std::string();
+        size_t b = s.find_last_not_of(" \t\r\n");
+        return s.substr(a, b - a + 1);
+    };
+    std::string combined_text = text;
+    if (ctx->ref_T > 0 && !ctx->ref_text.empty())
+        combined_text = trim(ctx->ref_text) + " " + trim(text);
+    std::string wrapped = "<|text_start|>" + combined_text + "<|text_end|>";
     std::vector<int32_t> text_token_ids = tokenize(ctx->vocab, wrapped);
     int T_text = (int)text_token_ids.size();
 
-    // 2. Estimate target audio length
+    // 2. Estimate target audio length (from the TARGET text only, not the ref).
     int T_target = estimate_target_tokens(text);
     result.T = T_target;
 
@@ -1309,8 +1321,11 @@ static ov_gen_result generate_iterative(omnivoice_context* ctx, const std::strin
         fprintf(stderr, "\n");
     }
 
-    // 3. Build style prefix (simplified — language + instruct)
+    // 3. Build style prefix. When cloning, a <|denoise|> token leads the style
+    //    (Python create_voice_clone_prompt), then language + instruct.
     std::string style_text;
+    if (ctx->ref_T > 0)
+        style_text += "<|denoise|>";
     std::string lang_str = ctx->language.empty() ? "None" : ctx->language;
     std::string instruct_str = ctx->instruct.empty() ? "None" : ctx->instruct;
     style_text += "<|lang_start|>" + lang_str + "<|lang_end|>";
@@ -2607,8 +2622,48 @@ int omnivoice_set_voice_prompt(struct omnivoice_context* ctx, const char* wav_pa
         return 0;
     }
     ctx->ref_text = ref_text ? ref_text : "";
-    // TODO: load WAV, encode through audio tokenizer to get ref_audio_codes
-    fprintf(stderr, "omnivoice: voice prompt set (tokenizer encode pending)\n");
+    if (!ctx->tokenizer.loaded) {
+        fprintf(stderr, "omnivoice: voice cloning requires the audio tokenizer — call "
+                        "omnivoice_set_tokenizer_path first\n");
+        return -1;
+    }
+    // Load WAV (mono), resample → 24 kHz, RMS-normalize, clip to a multiple of
+    // hop_length(960), then encode through the tokenizer (HuBERT + DAC + RVQ).
+    std::vector<float> pcm;
+    int sr = 0;
+    if (!crispasr::core::read_wav_mono_pcm16(wav_path, pcm, sr) || pcm.empty()) {
+        fprintf(stderr, "omnivoice: failed to read voice WAV '%s'\n", wav_path);
+        return -1;
+    }
+    if (sr != 24000)
+        pcm = core_audio::resample_polyphase(pcm.data(), (int)pcm.size(), sr, 24000);
+    double ss = 0;
+    for (float v : pcm)
+        ss += (double)v * v;
+    float rms = (float)std::sqrt(ss / std::max<size_t>(1, pcm.size()));
+    if (rms > 0.0f && rms < 0.1f) {
+        float g = 0.1f / rms;
+        for (float& v : pcm)
+            v *= g;
+    }
+    size_t clip = pcm.size() % 960;
+    if (clip)
+        pcm.resize(pcm.size() - clip);
+    if (pcm.empty()) {
+        fprintf(stderr, "omnivoice: voice WAV too short after clipping\n");
+        return -1;
+    }
+    int T_ref = 0;
+    auto codes = higgs_encode(ctx, pcm.data(), (int)pcm.size(), &T_ref);
+    if (codes.empty() || T_ref <= 0) {
+        fprintf(stderr, "omnivoice: voice-prompt encode failed\n");
+        return -1;
+    }
+    ctx->ref_audio_codes = std::move(codes);
+    ctx->ref_T = T_ref;
+    if (ctx->verbosity >= 1)
+        fprintf(stderr, "omnivoice: voice prompt encoded — %d ref frames (%d codebooks)\n", T_ref,
+                (int)ctx->hp.n_codebooks);
     return 0;
 }
 
