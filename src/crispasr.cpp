@@ -921,9 +921,12 @@ struct whisper_vocab {
     id token_not = 50362; // no timestamps
     id token_beg = 50363; // begin timestamps
 
-    bool is_multilingual() const { return n_vocab >= 51865; }
+    bool multilingual = false;
+    int n_lang = 0;
 
-    int num_languages() const { return n_vocab - 51765 - (is_multilingual() ? 1 : 0); }
+    bool is_multilingual() const { return multilingual; }
+
+    int num_languages() const { return n_lang; }
 };
 
 struct whisper_segment {
@@ -2113,7 +2116,48 @@ static bool whisper_model_load(struct whisper_model_loader* loader, whisper_cont
         }
 
         vocab.n_vocab = model.hparams.n_vocab;
-        if (vocab.is_multilingual()) {
+
+        auto set_token_id = [&](whisper_vocab::id& dst, const char* token) {
+            const auto it = vocab.token_to_id.find(token);
+            if (it != vocab.token_to_id.end()) {
+                dst = it->second;
+                return true;
+            }
+            return false;
+        };
+
+        const bool has_serialized_specials =
+            set_token_id(vocab.token_eot, "<|endoftext|>") && set_token_id(vocab.token_sot, "<|startoftranscript|>");
+
+        if (has_serialized_specials) {
+            set_token_id(vocab.token_translate, "<|translate|>");
+            set_token_id(vocab.token_transcribe, "<|transcribe|>");
+            set_token_id(vocab.token_solm, "<|startoflm|>");
+            set_token_id(vocab.token_prev, "<|startofprev|>");
+            if (!set_token_id(vocab.token_nosp, "<|nospeech|>")) {
+                set_token_id(vocab.token_nosp, "<|nocaptions|>");
+            }
+            set_token_id(vocab.token_not, "<|notimestamps|>");
+            set_token_id(vocab.token_beg, "<|0.00|>");
+
+            if (vocab.token_translate > vocab.token_sot) {
+                vocab.n_lang = vocab.token_translate - vocab.token_sot - 1;
+            }
+            bool has_lang_token = false;
+            for (const auto& kv : g_lang) {
+                if (vocab.token_to_id.find("<|" + kv.first + "|>") != vocab.token_to_id.end()) {
+                    has_lang_token = true;
+                    break;
+                }
+            }
+            vocab.multilingual = vocab.n_lang > 0 && has_lang_token &&
+                                 vocab.token_to_id.find("<|transcribe|>") != vocab.token_to_id.end();
+        } else {
+            vocab.multilingual = vocab.n_vocab >= 51865;
+            vocab.n_lang = std::max(0, vocab.n_vocab - 51765 - (vocab.multilingual ? 1 : 0));
+        }
+
+        if (!has_serialized_specials && vocab.is_multilingual()) {
             vocab.token_eot++;
             vocab.token_sot++;
 
