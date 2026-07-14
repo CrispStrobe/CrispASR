@@ -49,14 +49,19 @@ mine≈0 vs ref=23.45 → weight compare showed the zeros.
 ### Encode port — stage status (diff vs omnivoice-encode-ref.gguf, `OMNIVOICE_ENCODE_DIFF`)
 | Stage | wav→ | status |
 |-------|------|--------|
-| DAC acoustic encoder | `e_acoustic` | ⚠ cos 0.934 with corrupt GGUF; C++ believed correct — reverify vs regenerated GGUF |
+| DAC acoustic encoder | `e_acoustic` | ✅ cos_min 1.000000 (needs FIXED GGUF) |
 | HuBERT semantic | `sem_ds` | ⬜ not started (largest piece) |
-| `encoder_semantic` | `e_semantic` | ⬜ not started |
+| `encoder_semantic` | `e_semantic` | ✅ cos_min 1.000000 |
 | concat+`fc` | `emb_fc` | ✅ cos_min 1.000000 |
 | RVQ (8 cb) | `codes` | ✅ 2197/2200 exact (F16 near-tie flips) |
 
-Tail (concat+fc → RVQ) fully validated. Next: bisect acoustic encoder with per-block
-Python intermediate dumps; then encoder_semantic; then HuBERT; then wire set_voice_prompt.
+**4/5 stages validated.** Only HuBERT (wav→sem_ds) remains: resample 24→16k,
+F.pad(160,160), 7-conv feat-extractor (GroupNorm on layer 0), feat_proj (LN+Linear),
+weight-normed pos_conv, 12 post-norm transformer layers, mean-of-13-hidden-states,
+`[::2]`. Then wire `set_voice_prompt` + fix `generate_iterative` layout.
+
+**Deliverable outstanding:** regenerated `omnivoice-tokenizer-f16-fixed.gguf` (0 zeroed
+channels) must replace the corrupt one on HF `cstr/omnivoice-GGUF` + registry SHA bump.
 
 ### Next (implementation)
 1. **C++ `higgs_encode` port, stage-by-stage vs `omnivoice-encode-ref.gguf`**
