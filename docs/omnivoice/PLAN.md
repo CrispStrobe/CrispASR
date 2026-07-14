@@ -50,18 +50,25 @@ mine≈0 vs ref=23.45 → weight compare showed the zeros.
 | Stage | wav→ | status |
 |-------|------|--------|
 | DAC acoustic encoder | `e_acoustic` | ✅ cos_min 1.000000 (needs FIXED GGUF) |
-| HuBERT semantic | `sem_ds` | ⬜ not started (largest piece) |
+| HuBERT feat-extract | `hb_featextract` | ✅ cos_min 1.000000 |
+| HuBERT feat-proj | `hb_featproj` | ✅ cos_min 1.000000 |
+| HuBERT encoder (pos_conv+12L) | `hb_layer0/11`,`hb_mean13` | ✅ cos_min 1.000000 |
 | `encoder_semantic` | `e_semantic` | ✅ cos_min 1.000000 |
 | concat+`fc` | `emb_fc` | ✅ cos_min 1.000000 |
 | RVQ (8 cb) | `codes` | ✅ 2197/2200 exact (F16 near-tie flips) |
+| **FULL wav→codes** | `codes` | ✅ 1975/2200 (89.8%) — resample-limited |
 
-**4/5 stages validated.** Only HuBERT (wav→sem_ds) remains: resample 24→16k,
-F.pad(160,160), 7-conv feat-extractor (GroupNorm on layer 0), feat_proj (LN+Linear),
-weight-normed pos_conv, 12 post-norm transformer layers, mean-of-13-hidden-states,
-`[::2]`. Then wire `set_voice_prompt` + fix `generate_iterative` layout.
+**ENCODE PORT COMPLETE + validated stage-by-stage at cos 1.0.** Full chain 89.8%
+(only gap = C++ Kaiser vs torchaudio Hann-sinc 24→16k resample; acoustic branch
+exact). `omnivoice_set_voice_prompt` wired (load→resample24k→RMS-norm→clip×960→
+higgs_encode), `generate_iterative` adds `<|denoise|>` + ref-text prepend.
 
-**Deliverable outstanding:** regenerated `omnivoice-tokenizer-f16-fixed.gguf` (0 zeroed
-channels) must replace the corrupt one on HF `cstr/omnivoice-GGUF` + registry SHA bump.
+### Remaining
+1. Voice-clone roundtrip acceptance: cosine(C,R) > cosine(B,R) (Resemblyzer).
+2. Optional: match torchaudio resample (Hann sinc) to push codes >99%.
+3. **Ship the GGUF fix**: `omnivoice-tokenizer-f16-fixed.gguf` (0 zeroed channels)
+   → replace corrupt HF `cstr/omnivoice-GGUF` + registry SHA bump.
+4. RTF wins (issue #2), gated + A/B'd.
 
 ### Next (implementation)
 1. **C++ `higgs_encode` port, stage-by-stage vs `omnivoice-encode-ref.gguf`**
