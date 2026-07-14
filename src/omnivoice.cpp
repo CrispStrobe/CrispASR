@@ -2062,6 +2062,166 @@ static std::vector<float> higgs_hubert_frontend(omnivoice_context* ctx, const fl
     return out;
 }
 
+// Fold pos_conv weight-norm (dim=2): w[o,i,k] = g[k]·v[o,i,k]/‖v[:,:,k]‖.
+// GGUF layout: v ne=[K=128, in_g=48, out=768], g ne=[K,1,1]. Returns flat
+// [o*in_g*K + i*K + k] = ggml conv-weight layout ne=[K, in_g, out].
+static std::vector<float> fold_posconv_weight(ov_higgs_tokenizer& tok) {
+    std::vector<float> v = read_tensor_f32(tok.sem_posconv_v); // [out*in_g*K]
+    std::vector<float> g = read_tensor_f32(tok.sem_posconv_g); // [K]
+    int K = (int)tok.sem_posconv_v->ne[0];
+    int in_g = (int)tok.sem_posconv_v->ne[1];
+    int out = (int)tok.sem_posconv_v->ne[2];
+    std::vector<double> nrm(K, 0.0);
+    for (int o = 0; o < out; o++)
+        for (int i = 0; i < in_g; i++)
+            for (int k = 0; k < K; k++) {
+                float x = v[(size_t)o * in_g * K + (size_t)i * K + k];
+                nrm[k] += (double)x * x;
+            }
+    for (int k = 0; k < K; k++)
+        nrm[k] = std::sqrt(nrm[k]);
+    std::vector<float> w(v.size());
+    for (int o = 0; o < out; o++)
+        for (int i = 0; i < in_g; i++)
+            for (int k = 0; k < K; k++) {
+                size_t idx = (size_t)o * in_g * K + (size_t)i * K + k;
+                w[idx] = (float)(g[k] * v[idx] / (nrm[k] > 0 ? nrm[k] : 1.0));
+            }
+    return w;
+}
+
+// LayerNorm over ne0 (channels), affine (w,b length = ne0). x (C, T) → (C, T).
+static ggml_tensor* hubert_layernorm(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w, ggml_tensor* b, float eps) {
+    int C = (int)x->ne[0];
+    ggml_tensor* y = ggml_norm(ctx, x, eps);
+    y = ggml_mul(ctx, y, ggml_reshape_2d(ctx, w, C, 1));
+    y = ggml_add(ctx, y, ggml_reshape_2d(ctx, b, C, 1));
+    return y;
+}
+
+// HuBERT transformer encoder: feat_proj (768, T) → mean of 13 hidden states
+// (768, T). pos_conv (weight-normed grouped conv, SamePad, GELU) + residual;
+// encoder LayerNorm; 12 post-norm layers (12-head MHA + FFN); mean of the
+// encoder-input + 12 layer outputs. Captures hb_layer0/hb_layer11.
+static std::vector<float> higgs_hubert_encoder(omnivoice_context* ctx, const float* featproj, int T,
+                                               std::vector<ov_dbg_tensor>* dbg = nullptr) {
+    auto& tok = ctx->tokenizer;
+    const int D = tok.sem_d;     // 768
+    const int H = tok.sem_heads; // 12
+    const int hd = D / H;        // 64
+    const int groups = 16;
+    const int in_g = D / groups; // 48
+    const int K = 128;
+    std::vector<float> pcw = fold_posconv_weight(tok);
+
+    size_t mem_size = 8192 * 2 * ggml_tensor_overhead() + ggml_graph_overhead_custom(16384, false);
+    std::vector<uint8_t> mem_buf(mem_size);
+    ggml_init_params ip = {mem_size, mem_buf.data(), true};
+    ggml_context* ctx0 = ggml_init(ip);
+    ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 16384, false);
+
+    ggml_tensor* x = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, D, T); // (768, T)
+    ggml_set_name(x, "featproj");
+    ggml_set_input(x);
+    ggml_tensor* pc_w = ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, K, in_g, D); // grouped conv weight
+    ggml_set_name(pc_w, "pc_w");
+    ggml_set_input(pc_w);
+
+    // pos_conv: grouped conv (16 groups), pad=64, stride=1, then SamePad (drop
+    // last col, even kernel) + GELU; residual add.
+    std::vector<ggml_tensor*> gouts(groups);
+    for (int grp = 0; grp < groups; grp++) {
+        ggml_tensor* xin = ggml_view_2d(ctx0, x, in_g, T, x->nb[1], (size_t)grp * in_g * x->nb[0]);
+        xin = ggml_cont(ctx0, xin); // (48, T)
+        ggml_tensor* wg =
+            ggml_view_3d(ctx0, pc_w, K, in_g, in_g, pc_w->nb[1], pc_w->nb[2], (size_t)grp * in_g * pc_w->nb[2]);
+        wg = ggml_cont(ctx0, wg);                                       // (K, 48, 48)
+        gouts[grp] = enc_conv1d_strided(ctx0, xin, wg, nullptr, 1, 64); // (48, T+1)
+    }
+    ggml_tensor* pc = gouts[0];
+    for (int grp = 1; grp < groups; grp++)
+        pc = ggml_concat(ctx0, pc, gouts[grp], 0); // (768, T+1)
+    // + bias, SamePad (drop last column), GELU.
+    pc = ggml_add(ctx0, pc, ggml_reshape_2d(ctx0, tok.sem_posconv_b, D, 1));
+    pc = ggml_cont(ctx0, ggml_view_2d(ctx0, pc, D, T, pc->nb[1], 0)); // (768, T) drop last
+    pc = ggml_gelu_erf(ctx0, pc);
+    ggml_tensor* h = ggml_add(ctx0, x, pc);
+    // encoder LayerNorm.
+    h = hubert_layernorm(ctx0, h, tok.sem_enc_ln_w, tok.sem_enc_ln_b, tok.sem_ln_eps);
+
+    const float scale = 1.0f / sqrtf((float)hd);
+    std::vector<ggml_tensor*> hidden; // 13 states: input + 12 layer outputs
+    hidden.push_back(h);
+    for (int l = 0; l < tok.n_sem_layers; l++) {
+        auto& b = tok.sem_blocks[l];
+        // Self-attention (bidirectional, no mask).
+        ggml_tensor* q = ggml_add(ctx0, ggml_mul_mat(ctx0, b.attn_q_w, h), b.attn_q_b);
+        ggml_tensor* k = ggml_add(ctx0, ggml_mul_mat(ctx0, b.attn_k_w, h), b.attn_k_b);
+        ggml_tensor* v = ggml_add(ctx0, ggml_mul_mat(ctx0, b.attn_v_w, h), b.attn_v_b);
+        q = ggml_scale(ctx0, q, scale);
+        q = ggml_cont(ctx0, ggml_permute(ctx0, ggml_reshape_3d(ctx0, q, hd, H, T), 0, 2, 1, 3)); // (hd,T,H)
+        k = ggml_cont(ctx0, ggml_permute(ctx0, ggml_reshape_3d(ctx0, k, hd, H, T), 0, 2, 1, 3));
+        v = ggml_cont(ctx0, ggml_permute(ctx0, ggml_reshape_3d(ctx0, v, hd, H, T), 0, 2, 1, 3));
+        ggml_tensor* scores = ggml_mul_mat(ctx0, k, q); // (T, T, H)
+        scores = ggml_soft_max(ctx0, scores);
+        ggml_tensor* vt = ggml_cont(ctx0, ggml_permute(ctx0, v, 1, 0, 2, 3)); // (T, hd, H)
+        ggml_tensor* attn = ggml_mul_mat(ctx0, vt, scores);                   // (hd, T, H)
+        attn = ggml_cont(ctx0, ggml_permute(ctx0, attn, 0, 2, 1, 3));         // (hd, H, T)
+        attn = ggml_reshape_2d(ctx0, attn, D, T);
+        attn = ggml_add(ctx0, ggml_mul_mat(ctx0, b.attn_out_w, attn), b.attn_out_b);
+        h = ggml_add(ctx0, h, attn);
+        h = hubert_layernorm(ctx0, h, b.ln_w, b.ln_b, tok.sem_ln_eps);
+        // FFN.
+        ggml_tensor* f = ggml_add(ctx0, ggml_mul_mat(ctx0, b.fc1_w, h), b.fc1_b);
+        f = ggml_gelu_erf(ctx0, f);
+        f = ggml_add(ctx0, ggml_mul_mat(ctx0, b.fc2_w, f), b.fc2_b);
+        h = ggml_add(ctx0, h, f);
+        h = hubert_layernorm(ctx0, h, b.ffn_ln_w, b.ffn_ln_b, tok.sem_ln_eps);
+        hidden.push_back(h);
+        if (dbg && (l == 0 || l == 11)) {
+            char nm[16];
+            snprintf(nm, sizeof(nm), "hb_layer%d", l);
+            ggml_set_name(h, nm);
+            ggml_set_output(h);
+        }
+    }
+    // Mean of the 13 hidden states.
+    ggml_tensor* mean = hidden[0];
+    for (size_t i = 1; i < hidden.size(); i++)
+        mean = ggml_add(ctx0, mean, hidden[i]);
+    mean = ggml_scale(ctx0, mean, 1.0f / (float)hidden.size());
+    ggml_set_name(mean, "hb_mean13");
+    ggml_set_output(mean);
+    ggml_build_forward_expand(gf, mean);
+
+    ggml_gallocr_t ga = ggml_gallocr_new(ggml_backend_get_default_buffer_type(tok.backend));
+    ggml_gallocr_alloc_graph(ga, gf);
+    ggml_backend_tensor_set(x, featproj, 0, (size_t)D * T * sizeof(float));
+    ggml_backend_tensor_set(pc_w, pcw.data(), 0, pcw.size() * sizeof(float));
+    ggml_backend_graph_compute(tok.backend, gf);
+
+    if (dbg) {
+        for (const char* nm : {"hb_layer0", "hb_layer11"}) {
+            ggml_tensor* t = ggml_graph_get_tensor(gf, nm);
+            if (!t)
+                continue;
+            ov_dbg_tensor d;
+            d.name = nm;
+            d.C = (int)t->ne[0];
+            d.T = (int)t->ne[1];
+            d.data.resize(ggml_nelements(t));
+            ggml_backend_tensor_get(t, d.data.data(), 0, d.data.size() * sizeof(float));
+            dbg->push_back(std::move(d));
+        }
+    }
+    int C = (int)mean->ne[0], To = (int)mean->ne[1];
+    std::vector<float> out((size_t)To * C);
+    ggml_backend_tensor_get(mean, out.data(), 0, out.size() * sizeof(float));
+    ggml_gallocr_free(ga);
+    ggml_free(ctx0);
+    return out;
+}
+
 // Run the encode diff against a Python reference archive. Stage-by-stage: each
 // ported stage is fed the REFERENCE input for the previous stage, so the first
 // mismatch localizes the bug. Returns 0 on success.
@@ -2105,8 +2265,24 @@ static int run_encode_diff(omnivoice_context* ctx, const char* ref_path) {
                     higgs_cos(mine.data(), (const float*)r_fp->data, T, C, cmin, cmean, mabs);
                     fprintf(stderr, "  hb_featproj: cos_min=%.6f cos_mean=%.6f max_abs=%.3e  %s\n", cmin, cmean, mabs,
                             cmin >= 0.999f ? "PASS" : "FAIL");
-                } else {
-                    fprintf(stderr, "  hb_featproj: shape mine=%zu(T=%d) ref=(%d,%d)\n", mine.size(), T_out, T, C);
+                    // Encoder: feed ref featproj → hb_layer0/11 + hb_mean13.
+                    std::vector<ov_dbg_tensor> edbg;
+                    auto emean = higgs_hubert_encoder(ctx, (const float*)r_fp->data, T, &edbg);
+                    auto cmp = [&](const char* nm, const float* md, int mc, int mt) {
+                        ggml_tensor* rt = href.get(nm);
+                        if (!rt || (int)rt->ne[0] != mc || (int)rt->ne[1] != mt) {
+                            fprintf(stderr, "    %-11s ref missing/shape\n", nm);
+                            return;
+                        }
+                        float a, b2, c2;
+                        higgs_cos(md, (const float*)rt->data, mt, mc, a, b2, c2);
+                        fprintf(stderr, "    %-11s cos_min=%.6f cos_mean=%.6f max_abs=%.3e %s\n", nm, a, b2, c2,
+                                a >= 0.999f ? "PASS" : "<< FAIL");
+                    };
+                    for (auto& d : edbg)
+                        cmp(d.name.c_str(), d.data.data(), d.C, d.T);
+                    if ((int)emean.size() == T * C)
+                        cmp("hb_mean13", emean.data(), C, T);
                 }
             }
         }
