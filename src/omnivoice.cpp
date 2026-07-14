@@ -26,6 +26,7 @@
 #include "core/conv.h"
 #include "core/dac_decoder.h"
 #include "core/ffn.h"
+#include "core/rvq.h"
 #include "core/gguf_loader.h"
 #include "core/gpu_backend_pref.h"
 #include "ggml-alloc.h"
@@ -163,6 +164,9 @@ struct ov_higgs_vq {
     ggml_tensor* codebook = nullptr; // (codebook_dim=64, codebook_size=1024)
     ggml_tensor* proj_out_w = nullptr;
     ggml_tensor* proj_out_b = nullptr;
+    // Encode side (voice cloning): project_in 1024->64 before the Euclidean NN.
+    ggml_tensor* proj_in_w = nullptr; // (hidden=1024, codebook_dim=64)
+    ggml_tensor* proj_in_b = nullptr; // (codebook_dim=64)
 };
 
 struct ov_higgs_res_unit {
@@ -181,6 +185,43 @@ struct ov_higgs_dec_block {
     ov_higgs_res_unit res[3]; // dilation 1, 3, 9
 };
 
+// --- Encode-side (voice cloning) ------------------------------------------
+// DAC acoustic-encoder block: 3 ResidualUnits (d=1,3,9) then Snake + strided
+// downsampling conv1 (k = 2*stride). Mirror of ov_higgs_dec_block.
+struct ov_higgs_enc_block {
+    ov_higgs_res_unit res[3]; // dilation 1, 3, 9
+    ggml_tensor* snake1_alpha = nullptr;
+    ggml_tensor* conv1_w = nullptr; // strided downsample conv (k=2*stride)
+    ggml_tensor* conv1_b = nullptr;
+};
+
+// HuBERT feature-extractor conv layer. Layer 0 has a GroupNorm (ln.*); layers
+// 1..6 have none. conv is bias-free.
+struct ov_sem_conv_layer {
+    ggml_tensor* conv_w = nullptr;
+    ggml_tensor* ln_w = nullptr; // GroupNorm weight (layer 0 only)
+    ggml_tensor* ln_b = nullptr;
+};
+
+// HuBERT transformer block (post-norm variant).
+struct ov_sem_block {
+    ggml_tensor *attn_q_w = nullptr, *attn_q_b = nullptr;
+    ggml_tensor *attn_k_w = nullptr, *attn_k_b = nullptr;
+    ggml_tensor *attn_v_w = nullptr, *attn_v_b = nullptr;
+    ggml_tensor *attn_out_w = nullptr, *attn_out_b = nullptr;
+    ggml_tensor *ln_w = nullptr, *ln_b = nullptr;         // post-attention LN
+    ggml_tensor *fc1_w = nullptr, *fc1_b = nullptr;       // 768->3072
+    ggml_tensor *fc2_w = nullptr, *fc2_b = nullptr;       // 3072->768
+    ggml_tensor *ffn_ln_w = nullptr, *ffn_ln_b = nullptr; // final LN
+};
+
+// encoder_semantic bridge block: 2 ResidualUnits (ELU-based, dil=1) + conv.
+struct ov_encsem_block {
+    ov_higgs_res_unit res[2]; // snake fields reused as ELU markers (no alpha)
+    ggml_tensor* conv_w = nullptr;
+    ggml_tensor* conv_b = nullptr;
+};
+
 struct ov_higgs_tokenizer {
     // Quantizer: 8 VQ layers (for OmniVoice's 8 codebooks)
     std::vector<ov_higgs_vq> quantizers;
@@ -197,6 +238,28 @@ struct ov_higgs_tokenizer {
     ggml_tensor* dec_conv2_w = nullptr;         // Conv1d(32, 1, k=7)
     ggml_tensor* dec_conv2_b = nullptr;
 
+    // --- Encode side (voice cloning) --------------------------------------
+    // fc: project concat([e_acoustic(256), e_semantic(768)]) 1024 -> 1024
+    ggml_tensor* fc_w = nullptr;
+    ggml_tensor* fc_b = nullptr;
+    // DAC acoustic encoder
+    ggml_tensor* enc_conv1_w = nullptr; // Conv1d(1, 64, k=7)
+    ggml_tensor* enc_conv1_b = nullptr;
+    std::vector<ov_higgs_enc_block> enc_blocks; // 5 blocks, strides [8,5,4,2,3]
+    ggml_tensor* enc_snake1_alpha = nullptr;    // final Snake1d (2048 ch)
+    ggml_tensor* enc_conv2_w = nullptr;         // Conv1d(2048, 256, k=3)
+    ggml_tensor* enc_conv2_b = nullptr;
+    // HuBERT semantic encoder
+    std::vector<ov_sem_conv_layer> sem_conv;                                // 7 feat-extract conv layers
+    ggml_tensor *sem_featproj_ln_w = nullptr, *sem_featproj_ln_b = nullptr; // LN(512)
+    ggml_tensor *sem_featproj_w = nullptr, *sem_featproj_b = nullptr;       // 512->768
+    ggml_tensor *sem_posconv_g = nullptr, *sem_posconv_v = nullptr, *sem_posconv_b = nullptr; // weight-norm pos conv
+    ggml_tensor *sem_enc_ln_w = nullptr, *sem_enc_ln_b = nullptr;                             // pre-stack LN
+    std::vector<ov_sem_block> sem_blocks;                                                     // 12 transformer layers
+    // encoder_semantic bridge
+    ggml_tensor* encsem_conv_w = nullptr;       // Conv1d(768,768,k=3,bias=F)
+    std::vector<ov_encsem_block> encsem_blocks; // 2 blocks
+
     // Config
     int n_quantizers = 8;
     int codebook_size = 1024;
@@ -209,6 +272,21 @@ struct ov_higgs_tokenizer {
     int dec_channels[6] = {1024, 512, 256, 128, 64, 32};
     int hop_length = 960;    // total upsample = 8*5*4*2*3 = 960
     int sample_rate = 24000; // output sample rate
+
+    // Encode-side config
+    int downsampling_ratios[5] = {8, 5, 4, 2, 3};          // acoustic encoder strides
+    int enc_channels[6] = {64, 128, 256, 512, 1024, 2048}; // conv1 out .. conv2 in
+    int n_sem_layers = 12;
+    int sem_d = 768;
+    int sem_heads = 12;
+    int sem_ff = 3072;
+    int n_sem_conv = 7;
+    int sem_conv_k[7] = {10, 3, 3, 3, 3, 2, 2};
+    int sem_conv_s[7] = {5, 2, 2, 2, 2, 2, 2};
+    int semantic_sample_rate = 16000;
+    int semantic_downsample_factor = 2;
+    float sem_ln_eps = 1e-5f;
+    int n_encsem_blocks = 2;
 
     // Backend
     ggml_context* ctx_w = nullptr;
@@ -600,6 +678,112 @@ static bool load_tokenizer(omnivoice_context* ctx, const char* path) {
             snprintf(buf, sizeof(buf), "acoustic_decoder.block.%d.%s.conv2.bias", b, ru_names[r]);
             blk.res[r].conv2_b = find(buf);
         }
+    }
+
+    // --- Encode-side weights (voice cloning). Absent-tolerant: a decode-only
+    //     tokenizer still loads; encode paths check for null at use. ---
+    for (int i = 0; i < tok.n_quantizers; i++) {
+        char buf[128];
+        snprintf(buf, sizeof(buf), "quantizer.quantizers.%d.project_in.weight", i);
+        tok.quantizers[i].proj_in_w = find(buf);
+        snprintf(buf, sizeof(buf), "quantizer.quantizers.%d.project_in.bias", i);
+        tok.quantizers[i].proj_in_b = find(buf);
+    }
+    tok.fc_w = find("fc.weight");
+    tok.fc_b = find("fc.bias");
+    // DAC acoustic encoder
+    tok.enc_conv1_w = find("acoustic_encoder.conv1.weight");
+    tok.enc_conv1_b = find("acoustic_encoder.conv1.bias");
+    tok.enc_snake1_alpha = find("acoustic_encoder.snake1.alpha");
+    tok.enc_conv2_w = find("acoustic_encoder.conv2.weight");
+    tok.enc_conv2_b = find("acoustic_encoder.conv2.bias");
+    tok.enc_blocks.resize(5);
+    for (int b = 0; b < 5; b++) {
+        char buf[160];
+        auto& blk = tok.enc_blocks[b];
+        static const char* ru_names[] = {"res_unit1", "res_unit2", "res_unit3"};
+        for (int r = 0; r < 3; r++) {
+            snprintf(buf, sizeof(buf), "acoustic_encoder.block.%d.%s.snake1.alpha", b, ru_names[r]);
+            blk.res[r].snake1_alpha = find(buf);
+            snprintf(buf, sizeof(buf), "acoustic_encoder.block.%d.%s.conv1.weight", b, ru_names[r]);
+            blk.res[r].conv1_w = find(buf);
+            snprintf(buf, sizeof(buf), "acoustic_encoder.block.%d.%s.conv1.bias", b, ru_names[r]);
+            blk.res[r].conv1_b = find(buf);
+            snprintf(buf, sizeof(buf), "acoustic_encoder.block.%d.%s.snake2.alpha", b, ru_names[r]);
+            blk.res[r].snake2_alpha = find(buf);
+            snprintf(buf, sizeof(buf), "acoustic_encoder.block.%d.%s.conv2.weight", b, ru_names[r]);
+            blk.res[r].conv2_w = find(buf);
+            snprintf(buf, sizeof(buf), "acoustic_encoder.block.%d.%s.conv2.bias", b, ru_names[r]);
+            blk.res[r].conv2_b = find(buf);
+        }
+        snprintf(buf, sizeof(buf), "acoustic_encoder.block.%d.snake1.alpha", b);
+        blk.snake1_alpha = find(buf);
+        snprintf(buf, sizeof(buf), "acoustic_encoder.block.%d.conv1.weight", b);
+        blk.conv1_w = find(buf);
+        snprintf(buf, sizeof(buf), "acoustic_encoder.block.%d.conv1.bias", b);
+        blk.conv1_b = find(buf);
+    }
+    // HuBERT semantic encoder
+    tok.sem_conv.resize(tok.n_sem_conv);
+    for (int i = 0; i < tok.n_sem_conv; i++) {
+        char buf[96];
+        snprintf(buf, sizeof(buf), "sem.conv.%d.conv.weight", i);
+        tok.sem_conv[i].conv_w = find(buf);
+        snprintf(buf, sizeof(buf), "sem.conv.%d.ln.weight", i);
+        tok.sem_conv[i].ln_w = find(buf);
+        snprintf(buf, sizeof(buf), "sem.conv.%d.ln.bias", i);
+        tok.sem_conv[i].ln_b = find(buf);
+    }
+    tok.sem_featproj_ln_w = find("sem.feat_proj_ln.weight");
+    tok.sem_featproj_ln_b = find("sem.feat_proj_ln.bias");
+    tok.sem_featproj_w = find("sem.feat_proj.weight");
+    tok.sem_featproj_b = find("sem.feat_proj.bias");
+    tok.sem_posconv_g = find("sem.pos_conv.parametrizations.weight.original0");
+    tok.sem_posconv_v = find("sem.pos_conv.parametrizations.weight.original1");
+    tok.sem_posconv_b = find("sem.pos_conv.bias");
+    tok.sem_enc_ln_w = find("sem.enc_ln.weight");
+    tok.sem_enc_ln_b = find("sem.enc_ln.bias");
+    tok.sem_blocks.resize(tok.n_sem_layers);
+    for (int i = 0; i < tok.n_sem_layers; i++) {
+        char buf[96];
+        auto& b = tok.sem_blocks[i];
+        auto g = [&](const char* suffix) {
+            snprintf(buf, sizeof(buf), "sem.blk.%d.%s", i, suffix);
+            return find(buf);
+        };
+        b.attn_q_w = g("attn_q.weight");
+        b.attn_q_b = g("attn_q.bias");
+        b.attn_k_w = g("attn_k.weight");
+        b.attn_k_b = g("attn_k.bias");
+        b.attn_v_w = g("attn_v.weight");
+        b.attn_v_b = g("attn_v.bias");
+        b.attn_out_w = g("attn_output.weight");
+        b.attn_out_b = g("attn_output.bias");
+        b.ln_w = g("ln.weight");
+        b.ln_b = g("ln.bias");
+        b.fc1_w = g("fc1.weight");
+        b.fc1_b = g("fc1.bias");
+        b.fc2_w = g("fc2.weight");
+        b.fc2_b = g("fc2.bias");
+        b.ffn_ln_w = g("ffn_ln.weight");
+        b.ffn_ln_b = g("ffn_ln.bias");
+    }
+    // encoder_semantic bridge
+    tok.encsem_conv_w = find("encoder_semantic.conv.weight");
+    tok.encsem_blocks.resize(tok.n_encsem_blocks);
+    for (int b = 0; b < tok.n_encsem_blocks; b++) {
+        char buf[128];
+        auto& blk = tok.encsem_blocks[b];
+        for (int r = 0; r < 2; r++) {
+            snprintf(buf, sizeof(buf), "encoder_semantic.conv_blocks.%d.res_units.%d.conv1.weight", b, r);
+            blk.res[r].conv1_w = find(buf);
+            snprintf(buf, sizeof(buf), "encoder_semantic.conv_blocks.%d.res_units.%d.conv2.weight", b, r);
+            blk.res[r].conv2_w = find(buf);
+        }
+        snprintf(buf, sizeof(buf), "encoder_semantic.conv_blocks.%d.conv.weight", b);
+        blk.conv_w = find(buf);
+        snprintf(buf, sizeof(buf), "encoder_semantic.conv_blocks.%d.conv.bias", b);
+        blk.conv_b = find(buf);
     }
 
     // Verify critical weights
@@ -1478,6 +1662,184 @@ static ov_gen_result generate_iterative(omnivoice_context* ctx, const std::strin
     return result;
 }
 
+// ===========================================================================
+// Voice-cloning ENCODE path (WAV → codes). Built stage-by-stage and validated
+// against the Python reference (omnivoice-encode-ref.gguf) via the diff harness.
+// ===========================================================================
+
+// Read a (possibly F16) weight tensor to a flat F32 row-major vector.
+static std::vector<float> read_tensor_f32(ggml_tensor* t) {
+    size_t n = ggml_nelements(t);
+    std::vector<float> out(n);
+    if (t->type == GGML_TYPE_F32) {
+        ggml_backend_tensor_get(t, out.data(), 0, n * sizeof(float));
+    } else if (t->type == GGML_TYPE_F16) {
+        std::vector<ggml_fp16_t> tmp(n);
+        ggml_backend_tensor_get(t, tmp.data(), 0, n * sizeof(ggml_fp16_t));
+        ggml_fp16_to_fp32_row(tmp.data(), out.data(), (int64_t)n);
+    } else {
+        fprintf(stderr, "omnivoice: read_tensor_f32: unsupported type %d for %s\n", (int)t->type, t->name);
+        out.assign(n, 0.0f);
+    }
+    return out;
+}
+
+// Factorized residual VQ encode: emb (T, hidden=1024 row-major) → codes (n_q, T).
+// Per stage k: project_in (1024→64), Euclidean NN over codebook_k (1024×64),
+// subtract project_out (64→1024) of the matched centroid from the residual.
+// Mirrors HiggsAudioV2 quantizer.encode (project_in ≠ project_out, both learned).
+static bool higgs_rvq_encode(ov_higgs_tokenizer& tok, const std::vector<float>& emb, int T,
+                             std::vector<int32_t>& out_codes) {
+    const int H = tok.hidden_size;   // 1024
+    const int D = tok.codebook_dim;  // 64
+    const int S = tok.codebook_size; // 1024
+    const int NQ = tok.n_quantizers;
+    for (int k = 0; k < NQ; k++) {
+        auto& q = tok.quantizers[k];
+        if (!q.proj_in_w || !q.proj_in_b || !q.codebook || !q.proj_out_w || !q.proj_out_b) {
+            fprintf(stderr, "omnivoice: RVQ stage %d missing encode weights\n", k);
+            return false;
+        }
+    }
+    out_codes.assign((size_t)NQ * T, 0);
+    std::vector<float> residual = emb; // (T, H)
+
+    for (int k = 0; k < NQ; k++) {
+        auto& q = tok.quantizers[k];
+        std::vector<float> pin_w = read_tensor_f32(q.proj_in_w);   // (D, H) row-major: [o*H + i]
+        std::vector<float> pin_b = read_tensor_f32(q.proj_in_b);   // (D,)
+        std::vector<float> cb = read_tensor_f32(q.codebook);       // (S, D) row-major: [s*D + d]
+        std::vector<float> pout_w = read_tensor_f32(q.proj_out_w); // (H, D) row-major: [o*D + d]
+        std::vector<float> pout_b = read_tensor_f32(q.proj_out_b); // (H,)
+
+        // Project all frames' residual → P (T, D).
+        std::vector<float> P((size_t)T * D);
+        for (int t = 0; t < T; t++) {
+            const float* r = residual.data() + (size_t)t * H;
+            float* p = P.data() + (size_t)t * D;
+            for (int o = 0; o < D; o++) {
+                float acc = pin_b[o];
+                const float* w = pin_w.data() + (size_t)o * H;
+                for (int i = 0; i < H; i++)
+                    acc += w[i] * r[i];
+                p[o] = acc;
+            }
+        }
+
+        // Euclidean nearest-neighbor over the codebook (reuse core_rvq).
+        std::vector<float> norm_sq(S);
+        for (int s = 0; s < S; s++) {
+            float ss = 0.0f;
+            const float* e = cb.data() + (size_t)s * D;
+            for (int d = 0; d < D; d++)
+                ss += e[d] * e[d];
+            norm_sq[s] = ss;
+        }
+        core_rvq::Codebook cbk{cb.data(), norm_sq.data(), S, D};
+        std::vector<int32_t> idx(T);
+        if (!core_rvq::encode_euclidean(P.data(), T, D, &cbk, 1, idx.data()))
+            return false;
+
+        // Store codes + subtract project_out(centroid) from the residual.
+        for (int t = 0; t < T; t++) {
+            int s = idx[t];
+            out_codes[(size_t)k * T + t] = s;
+            const float* e = cb.data() + (size_t)s * D;
+            float* r = residual.data() + (size_t)t * H;
+            for (int o = 0; o < H; o++) {
+                float acc = pout_b[o];
+                const float* w = pout_w.data() + (size_t)o * D;
+                for (int d = 0; d < D; d++)
+                    acc += w[d] * e[d];
+                r[o] -= acc;
+            }
+        }
+    }
+    return true;
+}
+
+// Minimal reader for a reference GGUF: pull a named F32/I32 tensor to a flat
+// float vector (int codes are returned as float for uniform compare/print).
+struct ov_ref_gguf {
+    gguf_context* gf = nullptr;
+    ggml_context* ctx = nullptr;
+    bool load(const char* path) {
+        gguf_init_params gp = {/*.no_alloc=*/false, /*.ctx=*/&ctx};
+        gf = gguf_init_from_file(path, gp);
+        return gf != nullptr;
+    }
+    ~ov_ref_gguf() {
+        if (gf)
+            gguf_free(gf);
+        if (ctx)
+            ggml_free(ctx);
+    }
+    ggml_tensor* get(const char* name) const { return ctx ? ggml_get_tensor(ctx, name) : nullptr; }
+};
+
+// Run the encode diff against a Python reference archive. Stage-by-stage: each
+// ported stage is fed the REFERENCE input for the previous stage, so the first
+// mismatch localizes the bug. Returns 0 on success.
+static int run_encode_diff(omnivoice_context* ctx, const char* ref_path) {
+    auto& tok = ctx->tokenizer;
+    if (!tok.loaded) {
+        fprintf(stderr, "omnivoice: encode-diff needs the tokenizer loaded\n");
+        return -1;
+    }
+    ov_ref_gguf ref;
+    if (!ref.load(ref_path)) {
+        fprintf(stderr, "omnivoice: encode-diff cannot open ref %s\n", ref_path);
+        return -1;
+    }
+    fprintf(stderr, "omnivoice encode-diff vs %s\n", ref_path);
+
+    // --- Stage RVQ: ref emb_fc (T,1024) → codes; compare to ref codes (NQ,T). ---
+    ggml_tensor* r_emb = ref.get("emb_fc");
+    ggml_tensor* r_codes = ref.get("codes");
+    if (r_emb && r_codes) {
+        int T = (int)r_emb->ne[1]; // ne=[1024, T]
+        int H = (int)r_emb->ne[0];
+        // Ref tensors live in the gguf ctx's own memory (no backend buffer) —
+        // read tensor->data directly.
+        std::vector<float> emb((size_t)T * H);
+        std::memcpy(emb.data(), r_emb->data, emb.size() * sizeof(float));
+        std::vector<int32_t> mine;
+        if (higgs_rvq_encode(tok, emb, T, mine)) {
+            // ref codes stored (NQ, T) row-major as float/int32.
+            int NQ = tok.n_quantizers;
+            std::vector<int32_t> refc((size_t)NQ * T);
+            if (r_codes->type == GGML_TYPE_I32) {
+                std::memcpy(refc.data(), r_codes->data, refc.size() * sizeof(int32_t));
+            } else {
+                const float* tmp = (const float*)r_codes->data;
+                for (size_t i = 0; i < refc.size(); i++)
+                    refc[i] = (int32_t)llroundf(tmp[i]);
+            }
+            long match = 0, tot = (long)NQ * T;
+            std::vector<int> per_cb(NQ, 0);
+            for (int k = 0; k < NQ; k++)
+                for (int t = 0; t < T; t++)
+                    if (mine[(size_t)k * T + t] == refc[(size_t)k * T + t]) {
+                        match++;
+                        per_cb[k]++;
+                    }
+            fprintf(stderr, "  RVQ (emb_fc→codes): %ld/%ld exact (%.1f%%)  per-cb:", match, tot, 100.0 * match / tot);
+            for (int k = 0; k < NQ; k++)
+                fprintf(stderr, " %d/%d", per_cb[k], T);
+            fprintf(stderr, "\n    mine cb0[:12]:");
+            for (int t = 0; t < std::min(12, T); t++)
+                fprintf(stderr, " %d", mine[t]);
+            fprintf(stderr, "\n    ref  cb0[:12]:");
+            for (int t = 0; t < std::min(12, T); t++)
+                fprintf(stderr, " %d", refc[t]);
+            fprintf(stderr, "\n");
+        }
+    } else {
+        fprintf(stderr, "  RVQ: ref missing emb_fc/codes\n");
+    }
+    return 0;
+}
+
 } // namespace
 
 // ===========================================================================
@@ -1652,6 +2014,12 @@ void omnivoice_free(struct omnivoice_context* ctx) {
 void omnivoice_sync(struct omnivoice_context* ctx) {
     if (ctx && ctx->backend)
         ggml_backend_synchronize(ctx->backend);
+}
+
+int omnivoice_encode_diff(struct omnivoice_context* ctx, const char* ref_gguf_path) {
+    if (!ctx || !ref_gguf_path)
+        return -1;
+    return run_encode_diff(ctx, ref_gguf_path);
 }
 
 void omnivoice_set_n_threads(struct omnivoice_context* ctx, int n_threads) {

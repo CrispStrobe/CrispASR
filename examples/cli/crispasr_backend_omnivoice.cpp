@@ -93,6 +93,13 @@ public:
             fprintf(stderr, "crispasr[omnivoice]: code generation will work; audio decode requires the tokenizer.\n");
         }
 
+        // Diff-harness: OMNIVOICE_ENCODE_DIFF=<ref.gguf> runs the encode-path
+        // stage diff and exits (#254 voice-clone port validation).
+        if (const char* rp = getenv("OMNIVOICE_ENCODE_DIFF")) {
+            int rc = omnivoice_encode_diff(ctx_, rp);
+            exit(rc == 0 ? 0 : 1);
+        }
+
         // Language
         if (!p.language.empty() && p.language != "auto") {
             omnivoice_set_language(ctx_, p.language.c_str());
