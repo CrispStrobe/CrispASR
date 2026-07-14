@@ -1688,6 +1688,48 @@ static std::vector<float> read_tensor_f32(ggml_tensor* t) {
 // Per stage k: project_in (1024→64), Euclidean NN over codebook_k (1024×64),
 // subtract project_out (64→1024) of the matched centroid from the residual.
 // Mirrors HiggsAudioV2 quantizer.encode (project_in ≠ project_out, both learned).
+// Dense y = W x + b for T frames. W row-major ne=[in,out] (flat [o*in + i]);
+// x (T, in) row-major → y (T, out). b may be empty.
+static void higgs_linear(const std::vector<float>& W, const std::vector<float>& b, const float* x, int T, int in,
+                         int out, std::vector<float>& y) {
+    y.assign((size_t)T * out, 0.0f);
+    for (int t = 0; t < T; t++) {
+        const float* xt = x + (size_t)t * in;
+        float* yt = y.data() + (size_t)t * out;
+        for (int o = 0; o < out; o++) {
+            float acc = b.empty() ? 0.0f : b[o];
+            const float* w = W.data() + (size_t)o * in;
+            for (int i = 0; i < in; i++)
+                acc += w[i] * xt[i];
+            yt[o] = acc;
+        }
+    }
+}
+
+// Per-row cosine (min/mean) + max_abs between two (T, C) row-major buffers.
+static void higgs_cos(const float* a, const float* b, int T, int C, float& cos_min, float& cos_mean, float& max_abs) {
+    cos_min = 1.0f;
+    double sum_cos = 0.0;
+    max_abs = 0.0f;
+    for (int t = 0; t < T; t++) {
+        const float* x = a + (size_t)t * C;
+        const float* y = b + (size_t)t * C;
+        double dot = 0, nx = 0, ny = 0;
+        for (int c = 0; c < C; c++) {
+            dot += (double)x[c] * y[c];
+            nx += (double)x[c] * x[c];
+            ny += (double)y[c] * y[c];
+            float d = std::fabs(x[c] - y[c]);
+            if (d > max_abs)
+                max_abs = d;
+        }
+        float cs = (nx > 0 && ny > 0) ? (float)(dot / (std::sqrt(nx) * std::sqrt(ny))) : 1.0f;
+        cos_min = std::min(cos_min, cs);
+        sum_cos += cs;
+    }
+    cos_mean = (float)(sum_cos / std::max(1, T));
+}
+
 static bool higgs_rvq_encode(ov_higgs_tokenizer& tok, const std::vector<float>& emb, int T,
                              std::vector<int32_t>& out_codes) {
     const int H = tok.hidden_size;   // 1024
@@ -1792,6 +1834,36 @@ static int run_encode_diff(omnivoice_context* ctx, const char* ref_path) {
         return -1;
     }
     fprintf(stderr, "omnivoice encode-diff vs %s\n", ref_path);
+
+    // --- Stage concat+fc: ref e_acoustic(T,256) + e_semantic(T,768) → emb_fc. ---
+    {
+        ggml_tensor* r_ac = ref.get("e_acoustic");
+        ggml_tensor* r_se = ref.get("e_semantic");
+        ggml_tensor* r_emb = ref.get("emb_fc");
+        if (r_ac && r_se && r_emb && tok.fc_w) {
+            int T = (int)r_ac->ne[1];
+            int Ca = (int)r_ac->ne[0]; // 256
+            int Cs = (int)r_se->ne[0]; // 768
+            int H = Ca + Cs;           // 1024
+            const float* ac = (const float*)r_ac->data;
+            const float* se = (const float*)r_se->data;
+            std::vector<float> cat((size_t)T * H);
+            for (int t = 0; t < T; t++) {
+                std::memcpy(cat.data() + (size_t)t * H, ac + (size_t)t * Ca, Ca * sizeof(float));
+                std::memcpy(cat.data() + (size_t)t * H + Ca, se + (size_t)t * Cs, Cs * sizeof(float));
+            }
+            std::vector<float> fc_w = read_tensor_f32(tok.fc_w);
+            std::vector<float> fc_b = tok.fc_b ? read_tensor_f32(tok.fc_b) : std::vector<float>();
+            std::vector<float> mine;
+            higgs_linear(fc_w, fc_b, cat.data(), T, H, H, mine);
+            float cmin, cmean, mabs;
+            higgs_cos(mine.data(), (const float*)r_emb->data, T, H, cmin, cmean, mabs);
+            fprintf(stderr, "  concat+fc (→emb_fc): cos_min=%.6f cos_mean=%.6f max_abs=%.3e  %s\n", cmin, cmean, mabs,
+                    cmin >= 0.999f ? "PASS" : "FAIL");
+        } else {
+            fprintf(stderr, "  concat+fc: ref missing e_acoustic/e_semantic/emb_fc or fc weights\n");
+        }
+    }
 
     // --- Stage RVQ: ref emb_fc (T,1024) → codes; compare to ref codes (NQ,T). ---
     ggml_tensor* r_emb = ref.get("emb_fc");
