@@ -88,6 +88,11 @@ void omnivoice_free(struct omnivoice_context* ctx);
 void omnivoice_sync(struct omnivoice_context* ctx);
 void omnivoice_set_n_threads(struct omnivoice_context* ctx, int n_threads);
 
+// Diff-harness entry: validate the voice-clone ENCODE path stage-by-stage against
+// a Python reference archive (omnivoice-encode-ref.gguf). Requires the tokenizer
+// loaded. Prints per-stage results to stderr. Returns 0 on success. (#254)
+int omnivoice_encode_diff(struct omnivoice_context* ctx, const char* ref_gguf_path);
+
 #ifdef __cplusplus
 }
 #endif
