@@ -1837,16 +1837,34 @@ static ggml_tensor* enc_conv1d_strided(ggml_context* ctx, ggml_tensor* x, ggml_t
 // DAC acoustic encoder: wav (1, T_samp) @ 24 kHz → e_acoustic (256, T25).
 // conv1(1,64,k7) → 5 blocks [3 ResidualUnit(d=1,3,9) then Snake + strided conv
 // (k=2·s)] → Snake → conv2(2048,256,k3). Mirror of higgs_decode's DAC decoder.
-static std::vector<float> higgs_acoustic_encode(omnivoice_context* ctx, const float* wav, int T_samp, int* out_T) {
+struct ov_dbg_tensor {
+    std::string name;
+    int C = 0, T = 0;
+    std::vector<float> data; // (T, C) row-major
+};
+
+static std::vector<float> higgs_acoustic_encode(omnivoice_context* ctx, const float* wav, int T_samp, int* out_T,
+                                                std::vector<ov_dbg_tensor>* dbg = nullptr) {
     auto& tok = ctx->tokenizer;
     if (!tok.enc_conv1_w || tok.enc_blocks.size() != 5 || !tok.enc_conv2_w)
         return {};
 
-    size_t mem_size = 800 * 2 * ggml_tensor_overhead() + ggml_graph_overhead_custom(4096, false);
+    // The full DAC encoder graph is ~2–3k tensors (each conv1d expands to ~10);
+    // an undersized context silently returns NULL for the LAST block's tensors →
+    // partially-garbage output (bisected: blocks 0–3 exact, block4 corrupt).
+    size_t mem_size = 8192 * 2 * ggml_tensor_overhead() + ggml_graph_overhead_custom(16384, false);
     std::vector<uint8_t> mem_buf(mem_size);
     ggml_init_params ip = {mem_size, mem_buf.data(), true};
     ggml_context* ctx0 = ggml_init(ip);
-    ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 4096, false);
+    ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 16384, false);
+    std::vector<std::pair<std::string, ggml_tensor*>> tagged;
+    auto tag = [&](ggml_tensor* t, const char* name) {
+        if (dbg) {
+            ggml_set_name(t, name);
+            ggml_set_output(t);
+            tagged.emplace_back(name, t);
+        }
+    };
 
     ggml_tensor* x = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, T_samp, 1); // (T, 1ch)
     ggml_set_name(x, "wav");
@@ -1854,6 +1872,7 @@ static std::vector<float> higgs_acoustic_encode(omnivoice_context* ctx, const fl
     // conv1: (1, T) → (64, T). core_dac::conv1d wants (Cin, T).
     ggml_tensor* h = ggml_cont(ctx0, ggml_transpose(ctx0, x)); // (1, T)
     h = core_dac::conv1d(ctx0, h, tok.enc_conv1_w, tok.enc_conv1_b, 7);
+    tag(h, "ac_conv1");
 
     static const int dil[3] = {1, 3, 9};
     for (int bl = 0; bl < 5; bl++) {
@@ -1867,12 +1886,19 @@ static std::vector<float> higgs_acoustic_encode(omnivoice_context* ctx, const fl
             h = ggml_add(ctx0, h, y);
         }
         h = core_dac::snake(ctx0, h, blk.snake1_alpha);
+        char snm[20];
+        snprintf(snm, sizeof(snm), "ac_b%d_snake", bl);
+        tag(h, snm);
         int stride = tok.downsampling_ratios[bl];
         int pad = (stride + 1) / 2; // ceil(stride/2); k = 2*stride
         h = enc_conv1d_strided(ctx0, h, blk.conv1_w, blk.conv1_b, stride, pad);
         h = ggml_cont(ctx0, h);
+        char nm[16];
+        snprintf(nm, sizeof(nm), "ac_block%d", bl);
+        tag(h, nm);
     }
     h = core_dac::snake(ctx0, h, tok.enc_snake1_alpha);
+    tag(h, "ac_snake1");
     h = core_dac::conv1d(ctx0, h, tok.enc_conv2_w, tok.enc_conv2_b, 3); // (256, T25)
     ggml_set_name(h, "e_acoustic");
     ggml_set_output(h);
@@ -1882,6 +1908,21 @@ static std::vector<float> higgs_acoustic_encode(omnivoice_context* ctx, const fl
     ggml_gallocr_alloc_graph(ga, gf);
     ggml_backend_tensor_set(x, wav, 0, (size_t)T_samp * sizeof(float));
     ggml_backend_graph_compute(tok.backend, gf);
+
+    // Snapshot debug intermediates into caller-owned buffers before ctx0 is freed.
+    // ggml (C,T) column-major == (T,C) row-major, so a straight copy suffices.
+    if (dbg) {
+        for (auto& pr : tagged) {
+            ggml_tensor* t = pr.second;
+            ov_dbg_tensor d;
+            d.name = pr.first;
+            d.C = (int)t->ne[0];
+            d.T = (int)t->ne[1];
+            d.data.resize(ggml_nelements(t));
+            ggml_backend_tensor_get(t, d.data.data(), 0, d.data.size() * sizeof(float));
+            dbg->push_back(std::move(d));
+        }
+    }
 
     int C = (int)h->ne[0], T = (int)h->ne[1];
     std::vector<float> raw((size_t)C * T);
@@ -1920,7 +1961,81 @@ static int run_encode_diff(omnivoice_context* ctx, const char* ref_path) {
         if (r_wav && r_ac) {
             int T_samp = (int)r_wav->ne[0];
             int T_out = 0;
-            auto mine = higgs_acoustic_encode(ctx, (const float*)r_wav->data, T_samp, &T_out);
+            // Optional per-block bisect vs a separate intermediates archive.
+            std::vector<ov_dbg_tensor> dbg;
+            const char* bisect = getenv("OMNIVOICE_ACENC_BISECT");
+            auto mine = higgs_acoustic_encode(ctx, (const float*)r_wav->data, T_samp, &T_out, bisect ? &dbg : nullptr);
+            if (bisect) {
+                ov_ref_gguf bref;
+                if (bref.load(bisect)) {
+                    fprintf(stderr, "  acoustic_enc bisect vs %s:\n", bisect);
+                    for (auto& d : dbg) {
+                        ggml_tensor* rt = bref.get(d.name.c_str());
+                        if (!rt) {
+                            fprintf(stderr, "    %-10s ref missing\n", d.name.c_str());
+                            continue;
+                        }
+                        int rc = (int)rt->ne[0], rT = (int)rt->ne[1];
+                        if (rc != d.C || rT != d.T) {
+                            fprintf(stderr, "    %-10s SHAPE mine=(%d,%d) ref=(%d,%d)\n", d.name.c_str(), d.T, d.C, rT,
+                                    rc);
+                            continue;
+                        }
+                        float cmin, cmean, mabs;
+                        higgs_cos(d.data.data(), (const float*)rt->data, d.T, d.C, cmin, cmean, mabs);
+                        fprintf(stderr, "    %-10s (%d,%d) cos_min=%.6f cos_mean=%.6f max_abs=%.3e %s\n",
+                                d.name.c_str(), d.T, d.C, cmin, cmean, mabs, cmin >= 0.999f ? "ok" : "<< DIVERGES");
+                        if (cmin < 0.999f) {
+                            const float* rf = (const float*)rt->data;
+                            // Find the worst row and probe channel ranges of frame 0.
+                            int worst = 0;
+                            float worst_cos = 2.0f;
+                            for (int t = 0; t < d.T; t++) {
+                                const float* x = d.data.data() + (size_t)t * d.C;
+                                const float* y = rf + (size_t)t * d.C;
+                                double dot = 0, nx = 0, ny = 0;
+                                for (int c = 0; c < d.C; c++) {
+                                    dot += (double)x[c] * y[c];
+                                    nx += (double)x[c] * x[c];
+                                    ny += (double)y[c] * y[c];
+                                }
+                                float cs = (nx > 0 && ny > 0) ? (float)(dot / (sqrt(nx) * sqrt(ny))) : 1.0f;
+                                if (cs < worst_cos) {
+                                    worst_cos = cs;
+                                    worst = t;
+                                }
+                            }
+                            fprintf(stderr, "        worst row t=%d cos=%.4f\n", worst, worst_cos);
+                            // Locate the single max-abs-error element.
+                            int mt = 0, mc = 0;
+                            float me = 0;
+                            for (int t = 0; t < d.T; t++)
+                                for (int c = 0; c < d.C; c++) {
+                                    float e = std::fabs(d.data[(size_t)t * d.C + c] - rf[(size_t)t * d.C + c]);
+                                    if (e > me) {
+                                        me = e;
+                                        mt = t;
+                                        mc = c;
+                                    }
+                                }
+                            fprintf(stderr, "        max-err at t=%d c=%d: mine=%+.4f ref=%+.4f (|d|=%.3f)\n", mt, mc,
+                                    d.data[(size_t)mt * d.C + mc], rf[(size_t)mt * d.C + mc], me);
+                            auto probe = [&](int t, int c0) {
+                                fprintf(stderr, "        t%d c%d: mine", t, c0);
+                                for (int c = c0; c < c0 + 4; c++)
+                                    fprintf(stderr, " %+.3f", d.data[(size_t)t * d.C + c]);
+                                fprintf(stderr, " | ref");
+                                for (int c = c0; c < c0 + 4; c++)
+                                    fprintf(stderr, " %+.3f", rf[(size_t)t * d.C + c]);
+                                fprintf(stderr, "\n");
+                            };
+                            probe(worst, 0);
+                            probe(worst, d.C / 2);
+                            probe(worst, d.C - 4);
+                        }
+                    }
+                }
+            }
             int C = (int)r_ac->ne[0], T = (int)r_ac->ne[1];
             if ((int)mine.size() == T * C && T_out == T) {
                 float cmin, cmean, mabs;

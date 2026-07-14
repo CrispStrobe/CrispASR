@@ -34,10 +34,22 @@ stranded GPU commit `feat/omnivoice-gpu` = "run the LLM on GPU").
   `e_acoustic`(275,256), `emb_fc`(275,1024), `codes`(8,275) ∈ [1,1023]. ref.gguf
   (5.7 MB) → upload to `cstr/crispasr-regression-fixtures` (NOT in git).
 
+### ⚠ SHIPPED GGUF BUG (found via bisect) — corrupt tokenizer weight
+`omnivoice-tokenizer-f16.gguf` (HF `cstr/omnivoice-GGUF`, SHA-matched) has
+`acoustic_encoder.block.4.conv1.weight` with **511 contiguous output channels
+(1411–1921) zeroed** — a ~6 MB zeroed block in a 25 MB tensor (file/write
+corruption, same class as [[cohere-arabic-gguf-zeroed-norms]]). Every other tensor
+is clean; the source safetensors is clean. Latent because the encoder was never
+exercised (voice-clone was a stub). This is what dragged the C++ acoustic encoder
+to cos 0.934. **Fix: regenerate the tokenizer GGUF from safetensors → verify no
+zeroed channels → re-upload to HF + update registry SHA.** The bisect harness
+(`OMNIVOICE_ACENC_BISECT`) localized it: blocks 0–3 exact, block4 one channel
+mine≈0 vs ref=23.45 → weight compare showed the zeros.
+
 ### Encode port — stage status (diff vs omnivoice-encode-ref.gguf, `OMNIVOICE_ENCODE_DIFF`)
 | Stage | wav→ | status |
 |-------|------|--------|
-| DAC acoustic encoder | `e_acoustic` | ⚠ cos_min 0.934 / mean 0.963 — WIP, bisect even-kernel strided conv |
+| DAC acoustic encoder | `e_acoustic` | ⚠ cos 0.934 with corrupt GGUF; C++ believed correct — reverify vs regenerated GGUF |
 | HuBERT semantic | `sem_ds` | ⬜ not started (largest piece) |
 | `encoder_semantic` | `e_semantic` | ⬜ not started |
 | concat+`fc` | `emb_fc` | ✅ cos_min 1.000000 |
