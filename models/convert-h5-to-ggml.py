@@ -86,8 +86,6 @@ dir_model = Path(sys.argv[1])
 dir_whisper = Path(sys.argv[2])
 dir_out = Path(sys.argv[3])
 
-encoder = json.load((dir_model / "vocab.json").open("r", encoding="utf8"))
-encoder_added = json.load((dir_model / "added_tokens.json").open("r", encoding="utf8"))
 hparams = json.load((dir_model / "config.json").open("r", encoding="utf8"))
 
 # Add this block to handle missing 'max_length'
@@ -112,11 +110,7 @@ n_mels = hparams["num_mel_bins"]
 with np.load(os.path.join(dir_whisper, "whisper/assets", "mel_filters.npz")) as f:
     filters = torch.from_numpy(f[f"mel_{n_mels}"])
 
-dir_tokenizer = dir_model
-
 fname_out = dir_out / "ggml-model.bin"
-
-tokens = json.load(open(dir_tokenizer / "vocab.json", "r", encoding="utf8"))
 
 # use 16-bit or 32-bit floats
 use_f16 = True
@@ -148,11 +142,27 @@ for i in range(filters.shape[0]):
 byte_encoder = bytes_to_unicode()
 byte_decoder = {v: k for k, v in byte_encoder.items()}
 
-fout.write(struct.pack("i", len(tokens)))
+tokens = json.load((dir_model / "vocab.json").open("r", encoding="utf8"))
+added_tokens_path = dir_model / "added_tokens.json"
+if added_tokens_path.exists():
+    tokens.update(json.load(added_tokens_path.open("r", encoding="utf8")))
 
-tokens = sorted(tokens.items(), key=lambda x: x[1])
-for key in tokens:
-    text = bytearray([byte_decoder[c] for c in key[0]])
+if added_tokens_path.exists():
+    n_vocab = hparams["vocab_size"]
+    id_to_token = [""] * n_vocab
+    for token, idx in tokens.items():
+        if 0 <= idx < n_vocab:
+            id_to_token[idx] = token
+else:
+    id_to_token = [token for token, _ in sorted(tokens.items(), key=lambda x: x[1])]
+
+fout.write(struct.pack("i", len(id_to_token)))
+
+for token in id_to_token:
+    try:
+        text = bytearray([byte_decoder[c] for c in token])
+    except KeyError:
+        text = token.encode("utf-8")
     fout.write(struct.pack("i", len(text)))
     fout.write(text)
 
