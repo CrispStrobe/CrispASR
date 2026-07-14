@@ -1984,6 +1984,84 @@ static std::vector<float> higgs_encoder_semantic(omnivoice_context* ctx, const f
     return out;
 }
 
+// Per-channel GroupNorm(num_groups=C) = InstanceNorm over time. h (C,T) → (C,T).
+static ggml_tensor* hubert_groupnorm(ggml_context* ctx, ggml_tensor* h, ggml_tensor* w, ggml_tensor* b, float eps) {
+    int C = (int)h->ne[0];
+    ggml_tensor* hT = ggml_cont(ctx, ggml_transpose(ctx, h)); // (T, C)
+    hT = ggml_norm(ctx, hT, eps);                             // normalize over ne0=T per channel
+    hT = ggml_mul(ctx, hT, ggml_reshape_2d(ctx, w, 1, C));
+    hT = ggml_add(ctx, hT, ggml_reshape_2d(ctx, b, 1, C));
+    return ggml_cont(ctx, ggml_transpose(ctx, hT)); // (C, T)
+}
+
+// HuBERT frontend: wav16k (1, T_samp) → feat_proj (768, T_feat). Feature
+// extractor = 7 VALID (no-pad) strided convs, GroupNorm on layer 0, GELU(erf);
+// feat_projection = LayerNorm(512) + Linear(512→768). Captures hb_featextract.
+static std::vector<float> higgs_hubert_frontend(omnivoice_context* ctx, const float* wav, int T_samp, int* out_T,
+                                                std::vector<ov_dbg_tensor>* dbg = nullptr) {
+    auto& tok = ctx->tokenizer;
+    if (tok.sem_conv.size() != 7 || !tok.sem_featproj_w)
+        return {};
+    size_t mem_size = 4096 * 2 * ggml_tensor_overhead() + ggml_graph_overhead_custom(8192, false);
+    std::vector<uint8_t> mem_buf(mem_size);
+    ggml_init_params ip = {mem_size, mem_buf.data(), true};
+    ggml_context* ctx0 = ggml_init(ip);
+    ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 8192, false);
+
+    ggml_tensor* x = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, T_samp, 1);
+    ggml_set_name(x, "wav16k");
+    ggml_set_input(x);
+    ggml_tensor* h = ggml_cont(ctx0, ggml_transpose(ctx0, x)); // (1, T)
+    for (int i = 0; i < 7; i++) {
+        // VALID conv (pad=0), stride sem_conv_s[i].
+        h = enc_conv1d_strided(ctx0, h, tok.sem_conv[i].conv_w, nullptr, tok.sem_conv_s[i], 0);
+        if (i == 0 && tok.sem_conv[0].ln_w)
+            h = hubert_groupnorm(ctx0, h, tok.sem_conv[0].ln_w, tok.sem_conv[0].ln_b, 1e-5f);
+        h = ggml_gelu_erf(ctx0, h);
+        h = ggml_cont(ctx0, h);
+    }
+    // h: (512, T_feat).
+    ggml_tensor* feat = h;
+    ggml_set_name(feat, "hb_featextract");
+    ggml_set_output(feat);
+    // feat_projection: LayerNorm(512) over channels per frame, then Linear(512→768).
+    int Cf = (int)h->ne[0];
+    ggml_tensor* p = ggml_norm(ctx0, h, tok.sem_ln_eps); // over ne0=512 per frame
+    p = ggml_mul(ctx0, p, ggml_reshape_2d(ctx0, tok.sem_featproj_ln_w, Cf, 1));
+    p = ggml_add(ctx0, p, ggml_reshape_2d(ctx0, tok.sem_featproj_ln_b, Cf, 1));
+    p = ggml_mul_mat(ctx0, tok.sem_featproj_w, p); // (768, T)
+    if (tok.sem_featproj_b)
+        p = ggml_add(ctx0, p, tok.sem_featproj_b);
+    ggml_set_name(p, "hb_featproj");
+    ggml_set_output(p);
+    ggml_build_forward_expand(gf, p);
+
+    ggml_gallocr_t ga = ggml_gallocr_new(ggml_backend_get_default_buffer_type(tok.backend));
+    ggml_gallocr_alloc_graph(ga, gf);
+    ggml_backend_tensor_set(x, wav, 0, (size_t)T_samp * sizeof(float));
+    ggml_backend_graph_compute(tok.backend, gf);
+
+    if (dbg) {
+        for (ggml_tensor* t : {feat}) {
+            ov_dbg_tensor d;
+            d.name = ggml_get_name(t);
+            d.C = (int)t->ne[0];
+            d.T = (int)t->ne[1];
+            d.data.resize(ggml_nelements(t));
+            ggml_backend_tensor_get(t, d.data.data(), 0, d.data.size() * sizeof(float));
+            dbg->push_back(std::move(d));
+        }
+    }
+
+    int C = (int)p->ne[0], T = (int)p->ne[1];
+    std::vector<float> out((size_t)T * C);
+    ggml_backend_tensor_get(p, out.data(), 0, out.size() * sizeof(float));
+    *out_T = T;
+    ggml_gallocr_free(ga);
+    ggml_free(ctx0);
+    return out;
+}
+
 // Run the encode diff against a Python reference archive. Stage-by-stage: each
 // ported stage is fed the REFERENCE input for the previous stage, so the first
 // mismatch localizes the bug. Returns 0 on success.
@@ -1999,6 +2077,40 @@ static int run_encode_diff(omnivoice_context* ctx, const char* ref_path) {
         return -1;
     }
     fprintf(stderr, "omnivoice encode-diff vs %s\n", ref_path);
+
+    // --- Stage HuBERT frontend: feed ref wav16k_pad (isolates resampling) →
+    //     hb_featextract + hb_featproj. Uses a separate archive via env. ---
+    if (const char* hp = getenv("OMNIVOICE_HUBERT_REF")) {
+        ov_ref_gguf href;
+        if (href.load(hp)) {
+            ggml_tensor* r_wav = href.get("wav16k_pad");
+            ggml_tensor* r_fe = href.get("hb_featextract");
+            ggml_tensor* r_fp = href.get("hb_featproj");
+            if (r_wav && r_fp) {
+                int T_samp = (int)r_wav->ne[0];
+                int T_out = 0;
+                std::vector<ov_dbg_tensor> dbg;
+                auto mine = higgs_hubert_frontend(ctx, (const float*)r_wav->data, T_samp, &T_out, &dbg);
+                for (auto& d : dbg) {
+                    if (d.name == "hb_featextract" && r_fe && (int)r_fe->ne[0] == d.C && (int)r_fe->ne[1] == d.T) {
+                        float cmin, cmean, mabs;
+                        higgs_cos(d.data.data(), (const float*)r_fe->data, d.T, d.C, cmin, cmean, mabs);
+                        fprintf(stderr, "  hb_featextract: cos_min=%.6f cos_mean=%.6f max_abs=%.3e  %s\n", cmin, cmean,
+                                mabs, cmin >= 0.999f ? "PASS" : "FAIL");
+                    }
+                }
+                int C = (int)r_fp->ne[0], T = (int)r_fp->ne[1];
+                if ((int)mine.size() == T * C && T_out == T) {
+                    float cmin, cmean, mabs;
+                    higgs_cos(mine.data(), (const float*)r_fp->data, T, C, cmin, cmean, mabs);
+                    fprintf(stderr, "  hb_featproj: cos_min=%.6f cos_mean=%.6f max_abs=%.3e  %s\n", cmin, cmean, mabs,
+                            cmin >= 0.999f ? "PASS" : "FAIL");
+                } else {
+                    fprintf(stderr, "  hb_featproj: shape mine=%zu(T=%d) ref=(%d,%d)\n", mine.size(), T_out, T, C);
+                }
+            }
+        }
+    }
 
     // --- Stage acoustic encoder: ref input_wav24k → e_acoustic (T,256). ---
     {
