@@ -24,6 +24,7 @@
 #include "core/attention.h"
 #include "core/bpe.h"
 #include "core/conv.h"
+#include "core/audio_resample.h"
 #include "core/dac_decoder.h"
 #include "core/ffn.h"
 #include "core/rvq.h"
@@ -2222,6 +2223,51 @@ static std::vector<float> higgs_hubert_encoder(omnivoice_context* ctx, const flo
     return out;
 }
 
+// Full voice-clone encode: wav @ 24 kHz mono → codes (n_q, T25). Semantic branch
+// resamples to 16 kHz, F.pad(160,160), HuBERT, mean-13, [::2]; acoustic branch runs
+// the DAC encoder on 24 kHz; concat[acoustic,semantic] → fc → RVQ.
+static std::vector<int32_t> higgs_encode(omnivoice_context* ctx, const float* wav24k, int n24k, int* out_T) {
+    auto& tok = ctx->tokenizer;
+    // Acoustic branch (24 kHz).
+    int T_ac = 0;
+    auto e_acoustic = higgs_acoustic_encode(ctx, wav24k, n24k, &T_ac); // (T_ac, 256)
+    if (e_acoustic.empty())
+        return {};
+    // Semantic branch: resample 24→16k, pad 160 both sides.
+    auto wav16 = core_audio::resample_polyphase(wav24k, n24k, 24000, 16000);
+    std::vector<float> wav16p(wav16.size() + 320, 0.0f);
+    std::memcpy(wav16p.data() + 160, wav16.data(), wav16.size() * sizeof(float));
+    int T_fe = 0;
+    auto featproj = higgs_hubert_frontend(ctx, wav16p.data(), (int)wav16p.size(), &T_fe, nullptr);
+    if (featproj.empty())
+        return {};
+    auto mean13 = higgs_hubert_encoder(ctx, featproj.data(), T_fe, nullptr); // (T_fe, 768)
+    // [::2] downsample.
+    int T_se = (T_fe + 1) / 2;
+    std::vector<float> sem_ds((size_t)T_se * tok.sem_d);
+    for (int t = 0; t < T_se; t++)
+        std::memcpy(sem_ds.data() + (size_t)t * tok.sem_d, mean13.data() + (size_t)(2 * t) * tok.sem_d,
+                    tok.sem_d * sizeof(float));
+    auto e_semantic = higgs_encoder_semantic(ctx, sem_ds.data(), T_se); // (T_se, 768)
+    // Align lengths (branches can differ by ±1).
+    int T = std::min(T_ac, T_se);
+    const int Ca = tok.dac_hidden, Cs = tok.sem_d, Hh = tok.hidden_size; // 256, 768, 1024
+    std::vector<float> cat((size_t)T * Hh);
+    for (int t = 0; t < T; t++) {
+        std::memcpy(cat.data() + (size_t)t * Hh, e_acoustic.data() + (size_t)t * Ca, Ca * sizeof(float));
+        std::memcpy(cat.data() + (size_t)t * Hh + Ca, e_semantic.data() + (size_t)t * Cs, Cs * sizeof(float));
+    }
+    std::vector<float> fc_w = read_tensor_f32(tok.fc_w);
+    std::vector<float> fc_b = tok.fc_b ? read_tensor_f32(tok.fc_b) : std::vector<float>();
+    std::vector<float> emb;
+    higgs_linear(fc_w, fc_b, cat.data(), T, Hh, Hh, emb);
+    std::vector<int32_t> codes;
+    if (!higgs_rvq_encode(tok, emb, T, codes))
+        return {};
+    *out_T = T;
+    return codes; // (n_q, T)
+}
+
 // Run the encode diff against a Python reference archive. Stage-by-stage: each
 // ported stage is fed the REFERENCE input for the previous stage, so the first
 // mismatch localizes the bug. Returns 0 on success.
@@ -2478,6 +2524,34 @@ static int run_encode_diff(omnivoice_context* ctx, const char* ref_path) {
         }
     } else {
         fprintf(stderr, "  RVQ: ref missing emb_fc/codes\n");
+    }
+
+    // --- Full chain: ref input_wav24k → higgs_encode → codes (measures the
+    //     24→16k resample impact; acceptance is the roundtrip, not exact codes). ---
+    {
+        ggml_tensor* r_wav = ref.get("input_wav24k");
+        ggml_tensor* r_codes = ref.get("codes");
+        if (r_wav && r_codes) {
+            int T_out = 0;
+            auto mine = higgs_encode(ctx, (const float*)r_wav->data, (int)r_wav->ne[0], &T_out);
+            int NQ = tok.n_quantizers, T = (int)r_codes->ne[0];
+            if (!mine.empty() && T_out == T) {
+                std::vector<int32_t> refc((size_t)NQ * T);
+                if (r_codes->type == GGML_TYPE_I32)
+                    std::memcpy(refc.data(), r_codes->data, refc.size() * sizeof(int32_t));
+                else
+                    for (size_t i = 0; i < refc.size(); i++)
+                        refc[i] = (int32_t)llroundf(((const float*)r_codes->data)[i]);
+                long match = 0;
+                for (size_t i = 0; i < refc.size(); i++)
+                    if (mine[i] == refc[i])
+                        match++;
+                fprintf(stderr, "  FULL wav→codes: %ld/%zu exact (%.1f%%), T=%d\n", match, refc.size(),
+                        100.0 * match / refc.size(), T_out);
+            } else {
+                fprintf(stderr, "  FULL wav→codes: T_out=%d ref T=%d (align)\n", T_out, T);
+            }
+        }
     }
     return 0;
 }
