@@ -77,9 +77,25 @@ frames". **Issue #1 (voice cloning doesn't work) RESOLVED.**
   tokenizer quants.
 - ✅ `estimate_target_tokens` fixed to 25 Hz (2.5 frames/char): 23 s → 4.4 s, ASR clean.
 
+### RTF (issue #2) — profiled; naive wins disproven by measurement
+Per-phase `gen_step` (M1 Metal, `OMNIVOICE_BENCH`, steady state): embeds ~2 ms each,
+**fwd_cond ~99 ms + fwd_uncond ~99 ms** = ~198 of 214 ms. So:
+- ❌ **embed-cache** — embeds are 2 ms, worthless (my initial hypothesis, disproven).
+- ❌ **target-slice audio head** — head is out_dim·d·T ≈ 0.7 % of the forward (28-layer
+  body dominates); even for large T_ref the saving is <1 %.
+- ✅ **Real lever = unified cond+uncond graph** (seq-concat + block-diagonal mask +
+  per-block RoPE positions): fuses 2 forwards → 1 dispatch. Compute-NEUTRAL (same
+  T_total+T_target tokens through 28 layers) — the win is GPU dispatch/sync efficiency
+  + batching, ~1.2–1.4× expected. Needs: `build_llm_graph` mask support, F16
+  block-diagonal mask padded to `GGML_KQ_MASK_PAD`, gate `OMNIVOICE_UNIFIED_CFG`,
+  A/B back-to-back + **Kaggle CUDA verdict** before flipping default (perf-change
+  discipline). The 3–4× gap vs omnivoice.cpp likely also involves per-op Metal launch
+  overhead (~12.5k dispatches/synth) — investigate CP_DIRECT / fewer ops per layer.
+  **Deferred as a focused follow-on** — not landed unverified.
+
 ### Remaining
-1. Optional: match torchaudio resample (Hann sinc) to push encode codes >99%.
-2. **RTF (issue #2)** — profile per-step, land gated + A/B'd wins.
+1. Unified CFG graph (above) — the RTF fix.
+2. Optional: match torchaudio resample (Hann sinc) to push encode codes >99%.
 3. **Ship the GGUF fix**: `omnivoice-tokenizer-f16-fixed.gguf` (0 zeroed channels)
    → replace corrupt HF `cstr/omnivoice-GGUF` + registry SHA bump.
 4. RTF wins (issue #2), gated + A/B'd.
