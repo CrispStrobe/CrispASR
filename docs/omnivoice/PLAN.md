@@ -34,6 +34,18 @@ stranded GPU commit `feat/omnivoice-gpu` = "run the LLM on GPU").
   `e_acoustic`(275,256), `emb_fc`(275,1024), `codes`(8,275) ∈ [1,1023]. ref.gguf
   (5.7 MB) → upload to `cstr/crispasr-regression-fixtures` (NOT in git).
 
+### Encode port — stage status (diff vs omnivoice-encode-ref.gguf, `OMNIVOICE_ENCODE_DIFF`)
+| Stage | wav→ | status |
+|-------|------|--------|
+| DAC acoustic encoder | `e_acoustic` | ⚠ cos_min 0.934 / mean 0.963 — WIP, bisect even-kernel strided conv |
+| HuBERT semantic | `sem_ds` | ⬜ not started (largest piece) |
+| `encoder_semantic` | `e_semantic` | ⬜ not started |
+| concat+`fc` | `emb_fc` | ✅ cos_min 1.000000 |
+| RVQ (8 cb) | `codes` | ✅ 2197/2200 exact (F16 near-tie flips) |
+
+Tail (concat+fc → RVQ) fully validated. Next: bisect acoustic encoder with per-block
+Python intermediate dumps; then encoder_semantic; then HuBERT; then wire set_voice_prompt.
+
 ### Next (implementation)
 1. **C++ `higgs_encode` port, stage-by-stage vs `omnivoice-encode-ref.gguf`**
    (self-contained `omnivoice_encode_diff` runner, dots-tts pattern). Order:
