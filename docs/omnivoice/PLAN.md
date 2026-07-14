@@ -63,9 +63,16 @@ mine≈0 vs ref=23.45 → weight compare showed the zeros.
 exact). `omnivoice_set_voice_prompt` wired (load→resample24k→RMS-norm→clip×960→
 higgs_encode), `generate_iterative` adds `<|denoise|>` + ref-text prepend.
 
+### ✅ Voice-clone acceptance PASSED
+Closed-loop speaker cosine (Resemblyzer VoiceEncoder), clone jfk→"quick brown fox":
+**cosine(clone,ref)=0.7743 vs cosine(baseline,ref)=0.4737, Δ+0.30** → clone pulls
+timbre toward the reference. Runs end-to-end: "voice prompt encoded — 275 ref
+frames". **Issue #1 (voice cloning doesn't work) RESOLVED.**
+
 ### Remaining
-1. Voice-clone roundtrip acceptance: cosine(C,R) > cosine(B,R) (Resemblyzer).
-2. Optional: match torchaudio resample (Hann sinc) to push codes >99%.
+1. Optional: match torchaudio resample (Hann sinc) to push codes >99%.
+2. Quality: `estimate_target_tokens` still assumes 75 Hz → ~3× over-long audio
+   (23 s for a 44-char sentence). Fix to 25 Hz (~2 frames/char).
 3. **Ship the GGUF fix**: `omnivoice-tokenizer-f16-fixed.gguf` (0 zeroed channels)
    → replace corrupt HF `cstr/omnivoice-GGUF` + registry SHA bump.
 4. RTF wins (issue #2), gated + A/B'd.
