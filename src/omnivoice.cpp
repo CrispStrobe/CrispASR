@@ -1021,8 +1021,16 @@ static std::vector<int32_t> tokenize(const ov_vocab& vocab, const std::string& t
 // ---------------------------------------------------------------------------
 
 static int estimate_target_tokens(const std::string& text, float speed = 1.0f) {
-    // Rough heuristic: ~6 audio frames per text character at 75 Hz frame rate.
-    // OmniVoice's frame rate = 24000/320 = 75 Hz.
+    // OmniVoice's codec frame rate is 24000/960 = 25 Hz (hop_length=960), NOT 75 Hz
+    // — downsample_factor=320 is a red herring. English speech ~11 chars/s ⇒ ~2.3
+    // frames/char at 25 Hz; use 2.5 (slightly generous — over-estimating trails
+    // silence, under-estimating truncates). Override via OMNIVOICE_FRAMES_PER_CHAR.
+    float fpc = 2.5f;
+    if (const char* e = std::getenv("OMNIVOICE_FRAMES_PER_CHAR")) {
+        float v = (float)atof(e);
+        if (v > 0.0f)
+            fpc = v;
+    }
     int n_chars = 0;
     for (size_t i = 0; i < text.size();) {
         unsigned char c = text[i];
@@ -1036,7 +1044,7 @@ static int estimate_target_tokens(const std::string& text, float speed = 1.0f) {
             i += 4;
         n_chars++;
     }
-    int est = (int)(n_chars * 6.0f / speed);
+    int est = (int)(n_chars * fpc / speed);
     return std::max(est, 10);
 }
 
