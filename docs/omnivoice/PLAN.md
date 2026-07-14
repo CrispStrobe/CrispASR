@@ -69,10 +69,17 @@ Closed-loop speaker cosine (Resemblyzer VoiceEncoder), clone jfk→"quick brown 
 timbre toward the reference. Runs end-to-end: "voice prompt encoded — 275 ref
 frames". **Issue #1 (voice cloning doesn't work) RESOLVED.**
 
+### ✅ Shipped to HF `cstr/omnivoice-GGUF` (all SHA-verified)
+- `omnivoice-tokenizer-f16.gguf` → **replaced corrupt file** with clean regen (sha 710ef610).
+- `omnivoice-q4_k.gguf` → **new** main-model quant, 597 MB, ASR-clean (sha e9ae2a80).
+- **Tokenizer stays F16** — quantizing it collapses RVQ code match to 0.6% (q8 AND
+  q4_k): the codec's VQ codebook nearest-neighbor is too quant-sensitive. Do NOT ship
+  tokenizer quants.
+- ✅ `estimate_target_tokens` fixed to 25 Hz (2.5 frames/char): 23 s → 4.4 s, ASR clean.
+
 ### Remaining
-1. Optional: match torchaudio resample (Hann sinc) to push codes >99%.
-2. Quality: `estimate_target_tokens` still assumes 75 Hz → ~3× over-long audio
-   (23 s for a 44-char sentence). Fix to 25 Hz (~2 frames/char).
+1. Optional: match torchaudio resample (Hann sinc) to push encode codes >99%.
+2. **RTF (issue #2)** — profile per-step, land gated + A/B'd wins.
 3. **Ship the GGUF fix**: `omnivoice-tokenizer-f16-fixed.gguf` (0 zeroed channels)
    → replace corrupt HF `cstr/omnivoice-GGUF` + registry SHA bump.
 4. RTF wins (issue #2), gated + A/B'd.
