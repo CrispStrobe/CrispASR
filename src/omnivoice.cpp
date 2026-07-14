@@ -1819,6 +1819,84 @@ struct ov_ref_gguf {
     ggml_tensor* get(const char* name) const { return ctx ? ggml_get_tensor(ctx, name) : nullptr; }
 };
 
+// Strided Conv1d for the DAC encoder downsampling convs (core_dac::conv1d is
+// stride-1 only). x (Cin, T), w (K, Cin, Cout) → (Cout, T_out); explicit pad.
+static ggml_tensor* enc_conv1d_strided(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w, ggml_tensor* b, int stride,
+                                       int pad) {
+    const int Cout = (int)w->ne[2];
+    ggml_tensor* y = ggml_cont(ctx, ggml_transpose(ctx, x)); // (T, Cin)
+    y = ggml_conv_1d(ctx, w, y, stride, pad, 1);             // (T_out, Cout, 1)
+    const int T_out = (int)y->ne[0];
+    y = ggml_reshape_2d(ctx, y, T_out, Cout);
+    y = ggml_cont(ctx, ggml_transpose(ctx, y)); // (Cout, T_out)
+    if (b)
+        y = ggml_add(ctx, y, b);
+    return y;
+}
+
+// DAC acoustic encoder: wav (1, T_samp) @ 24 kHz → e_acoustic (256, T25).
+// conv1(1,64,k7) → 5 blocks [3 ResidualUnit(d=1,3,9) then Snake + strided conv
+// (k=2·s)] → Snake → conv2(2048,256,k3). Mirror of higgs_decode's DAC decoder.
+static std::vector<float> higgs_acoustic_encode(omnivoice_context* ctx, const float* wav, int T_samp, int* out_T) {
+    auto& tok = ctx->tokenizer;
+    if (!tok.enc_conv1_w || tok.enc_blocks.size() != 5 || !tok.enc_conv2_w)
+        return {};
+
+    size_t mem_size = 800 * 2 * ggml_tensor_overhead() + ggml_graph_overhead_custom(4096, false);
+    std::vector<uint8_t> mem_buf(mem_size);
+    ggml_init_params ip = {mem_size, mem_buf.data(), true};
+    ggml_context* ctx0 = ggml_init(ip);
+    ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 4096, false);
+
+    ggml_tensor* x = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, T_samp, 1); // (T, 1ch)
+    ggml_set_name(x, "wav");
+    ggml_set_input(x);
+    // conv1: (1, T) → (64, T). core_dac::conv1d wants (Cin, T).
+    ggml_tensor* h = ggml_cont(ctx0, ggml_transpose(ctx0, x)); // (1, T)
+    h = core_dac::conv1d(ctx0, h, tok.enc_conv1_w, tok.enc_conv1_b, 7);
+
+    static const int dil[3] = {1, 3, 9};
+    for (int bl = 0; bl < 5; bl++) {
+        auto& blk = tok.enc_blocks[bl];
+        for (int r = 0; r < 3; r++) {
+            auto& ru = blk.res[r];
+            ggml_tensor* y = core_dac::snake(ctx0, h, ru.snake1_alpha);
+            y = core_dac::conv1d(ctx0, y, ru.conv1_w, ru.conv1_b, 7, dil[r]);
+            y = core_dac::snake(ctx0, y, ru.snake2_alpha);
+            y = core_dac::conv1d(ctx0, y, ru.conv2_w, ru.conv2_b, 1);
+            h = ggml_add(ctx0, h, y);
+        }
+        h = core_dac::snake(ctx0, h, blk.snake1_alpha);
+        int stride = tok.downsampling_ratios[bl];
+        int pad = (stride + 1) / 2; // ceil(stride/2); k = 2*stride
+        h = enc_conv1d_strided(ctx0, h, blk.conv1_w, blk.conv1_b, stride, pad);
+        h = ggml_cont(ctx0, h);
+    }
+    h = core_dac::snake(ctx0, h, tok.enc_snake1_alpha);
+    h = core_dac::conv1d(ctx0, h, tok.enc_conv2_w, tok.enc_conv2_b, 3); // (256, T25)
+    ggml_set_name(h, "e_acoustic");
+    ggml_set_output(h);
+    ggml_build_forward_expand(gf, h);
+
+    ggml_gallocr_t ga = ggml_gallocr_new(ggml_backend_get_default_buffer_type(tok.backend));
+    ggml_gallocr_alloc_graph(ga, gf);
+    ggml_backend_tensor_set(x, wav, 0, (size_t)T_samp * sizeof(float));
+    ggml_backend_graph_compute(tok.backend, gf);
+
+    int C = (int)h->ne[0], T = (int)h->ne[1];
+    std::vector<float> raw((size_t)C * T);
+    ggml_backend_tensor_get(h, raw.data(), 0, raw.size() * sizeof(float));
+    // (C, T) column-major → (T, C) row-major for the diff.
+    std::vector<float> out((size_t)T * C);
+    for (int t = 0; t < T; t++)
+        for (int c = 0; c < C; c++)
+            out[(size_t)t * C + c] = raw[(size_t)t * C + c];
+    *out_T = T;
+    ggml_gallocr_free(ga);
+    ggml_free(ctx0);
+    return out;
+}
+
 // Run the encode diff against a Python reference archive. Stage-by-stage: each
 // ported stage is fed the REFERENCE input for the previous stage, so the first
 // mismatch localizes the bug. Returns 0 on success.
@@ -1834,6 +1912,29 @@ static int run_encode_diff(omnivoice_context* ctx, const char* ref_path) {
         return -1;
     }
     fprintf(stderr, "omnivoice encode-diff vs %s\n", ref_path);
+
+    // --- Stage acoustic encoder: ref input_wav24k → e_acoustic (T,256). ---
+    {
+        ggml_tensor* r_wav = ref.get("input_wav24k");
+        ggml_tensor* r_ac = ref.get("e_acoustic");
+        if (r_wav && r_ac) {
+            int T_samp = (int)r_wav->ne[0];
+            int T_out = 0;
+            auto mine = higgs_acoustic_encode(ctx, (const float*)r_wav->data, T_samp, &T_out);
+            int C = (int)r_ac->ne[0], T = (int)r_ac->ne[1];
+            if ((int)mine.size() == T * C && T_out == T) {
+                float cmin, cmean, mabs;
+                higgs_cos(mine.data(), (const float*)r_ac->data, T, C, cmin, cmean, mabs);
+                fprintf(stderr, "  acoustic_enc (→e_acoustic): cos_min=%.6f cos_mean=%.6f max_abs=%.3e  %s\n", cmin,
+                        cmean, mabs, cmin >= 0.999f ? "PASS" : "FAIL");
+            } else {
+                fprintf(stderr, "  acoustic_enc: shape mismatch mine=%zu (T_out=%d) ref=(%d,%d)\n", mine.size(), T_out,
+                        T, C);
+            }
+        } else {
+            fprintf(stderr, "  acoustic_enc: ref missing input_wav24k/e_acoustic\n");
+        }
+    }
 
     // --- Stage concat+fc: ref e_acoustic(T,256) + e_semantic(T,768) → emb_fc. ---
     {
