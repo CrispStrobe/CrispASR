@@ -198,6 +198,10 @@ fn configure_and_build(src_root: &Path) -> PathBuf {
             .arg("-DCMAKE_CXX_COMPILER_LAUNCHER=ccache");
     }
 
+    // Rebrandable library file name (CRISPASR_LIB_NAME env, also used for the
+    // link-lib directive) — keeps downstream bundles free of the project name.
+    configure.arg(format!("-DCRISPASR_LIB_OUTPUT_NAME={}", link_lib_name()));
+
     if cfg!(feature = "cuda") {
         configure.arg("-DGGML_CUDA=ON");
     }

@@ -218,10 +218,13 @@ if(APPLE)
         PROPERTIES LANGUAGE OBJCXX)
 endif()
 
+# Downstream bundlers can rebrand the shipped library file name (the C API
+# symbols are unchanged). Defaults to the historical "crispasr".
+set(CRISPASR_LIB_OUTPUT_NAME "crispasr" CACHE STRING "Base file name for the built library")
 set_target_properties(crispasr-lib PROPERTIES
     VERSION ${PROJECT_VERSION}
     SOVERSION ${SOVERSION}
-    OUTPUT_NAME crispasr
+    OUTPUT_NAME ${CRISPASR_LIB_OUTPUT_NAME}
 )
 
 target_include_directories(crispasr-lib PUBLIC . ../include)
