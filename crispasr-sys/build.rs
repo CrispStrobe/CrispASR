@@ -198,6 +198,13 @@ fn configure_and_build(src_root: &Path) -> PathBuf {
             .arg("-DCMAKE_CXX_COMPILER_LAUNCHER=ccache");
     }
 
+    // ggml's own cmake auto-detects ccache/sccache as a compiler launcher.
+    // Under the Ninja generator, sccache fails on the GGML_METAL_EMBED_LIBRARY
+    // assembly object (ninja emits depfile rules for the .s compile; sccache
+    // cannot produce the .d and aborts the build). The explicit ccache
+    // launcher above is unaffected, so just disable ggml's auto-detection.
+    configure.arg("-DGGML_CCACHE=OFF");
+
     if cfg!(feature = "cuda") {
         configure.arg("-DGGML_CUDA=ON");
     }
