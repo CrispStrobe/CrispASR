@@ -1371,6 +1371,8 @@ CA_EXPORT int crispasr_detect_backend_from_gguf(const char* path, char* out_name
         backend = "canary-ctc";
     else if (strcmp(arch, "wav2vec2") == 0)
         backend = "wav2vec2";
+    else if (strcmp(arch, "firered-asr") == 0 || strcmp(arch, "firered") == 0)
+        backend = "firered-asr";
     // Both the Omni ASR CTC and LLM converters write general.architecture="omniasr-ctc"
     // (see models/convert-omniasr-{ctc,llm}-to-gguf.py); the "omniasr" backend prefix-matches
     // every omniasr-* variant and reads model_type from the GGUF to route CTC vs LLM.
@@ -2670,6 +2672,7 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
     if (s->backend == "firered-asr" || s->backend == "firered") {
         firered_asr_context_params p = firered_asr_context_default_params();
         p.n_threads = s->n_threads;
+        p.use_gpu = g_open_use_gpu_tls;
         s->firered_ctx = firered_asr_init_from_file(model_path, p);
         if (!s->firered_ctx) {
             delete s;
