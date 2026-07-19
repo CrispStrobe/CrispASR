@@ -93,26 +93,41 @@ Corroborating facts:
   builder, so the reshape between them is untested. That is the mechanism by
   which this survived.
 
-#### ⚠️ OPEN — do this before merging to main
+#### ✅ AUDIT COMPLETE — landed in the fork (`CrispStrobe/ggml@662b05fb`)
 
-**Nobody has yet demonstrated that any existing caller passes N > 1.** There are
-132 `ggml_conv_1d` call sites in `src/`; their comments read `(T, C, 1)`
-throughout, and PR 23 notes batch is 1 for essentially all inference. So the
-likely truth is that this bug is **latent — real, but currently unreachable**,
-and the earlier claim that "any backend passing N > 1 is silently wrong" is true
-as stated but probably vacuous.
+The open question was whether any existing caller passes N > 1. Answered, and
+**my original safety argument was wrong**:
 
-Three attempts to confirm this empirically all produced INVALID results and were
-discarded (see the traps section — an empty output file, unbuilt test binaries,
-and a model run that never emitted a transcript, each of which made `grep -c`
-return a meaningless 0). The audit still needs doing properly:
+- **CrispEmbed: zero `ggml_conv_1d` callers.** Unaffected entirely. (Its only 1-D
+  conv use is two `ggml_conv_1d_dw` calls, a different function, both N == 1.)
+- **CrispASR: 141 call sites** — 11 more than my `grep` found, because
+  `ggml_conv_1d_ph` forwards to `ggml_conv_1d` without matching the literal
+  string. **136 pass N == 1.** **2 pass N > 1.** 0 unknown.
 
-1. Build the unit-test targets, arm a temporary `fprintf` in the `N > 1` branch,
-   run `ctest -L unit` **and** a few real backends (whisper, pyannote_seg,
-   ecapa_lid, a vocoder), and confirm the probe never fires.
-2. If it *does* fire anywhere, that caller may have hand-compensated for the
-   transpose — in which case this fix BREAKS it and that call site must be
-   migrated in the same commit.
+The two batched callers are `aa_snake_beta_native` in `src/indextts_voc.cpp`
+(:508 and :551), which deliberately maps **channels onto the batch axis** so one
+depthwise FIR runs across all C channels at once. So "the N == 1 branch is
+unmodified, therefore every caller is bit-identical" was **false** — those two
+take the new branch.
+
+They are safe for a *different* reason: their filter is `[K,1,1]`, i.e.
+**OC == 1**, and with OC == 1 both branches produce the identical flat layout
+`n*OL+ol` *and* the identical declared `ne`. Confirmed from the source (the
+shape is documented at `indextts_voc.cpp:459-460` and enforced by a downstream
+`ggml_reshape_2d` nelements assert) and verified empirically on that exact shape
+class at N = 1..4. Neither site compensates for the old transpose, so nothing
+depended on the broken layout.
+
+**The branches diverge only when N > 1 AND OC > 1** — which no caller in either
+repo does. CREPE would have been the first, which is why it surfaced here.
+
+Gates run: standalone repro (both shape classes, all N) cos = 1.0; CrispASR unit
+suite **1032/1032**; CREPE parity unchanged at cos = 1.0.
+
+**Related, not fixed:** `ggml_conv_1d_dw` ends with
+`ggml_reshape_3d(..., result->ne[0], result->ne[2], 1)` — it hardcodes `1` into
+`ne[2]`, so it is the same bug class and is only correct for N == 1. No current
+caller in either repo passes N > 1 to it. Worth fixing in the same upstream PR.
 
 ### Two measurement traps hit while benchmarking (both in the dev doc already)
 
