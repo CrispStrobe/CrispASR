@@ -125,4 +125,11 @@ export CRISPASR_MODEL_WAVTOK="${CRISPASR_MODEL_WAVTOK:-$CRISPASR_MODELS_DIR/wavt
 # ── Sidon speech restoration ──
 export CRISPASR_MODEL_SIDON="${CRISPASR_MODEL_SIDON:-$CRISPASR_MODELS_DIR/sidon-v0.1-f16.gguf}"
 
+# ── CREPE monophonic F0 / pitch (cstr/crepe-GGUF) ──
+# `tiny` is the shipping default: `full` is 38x the compute for the same
+# geometry (see docs/music-transcription/PLAN.md). CRISPASR_MODEL_CREPE_FULL is
+# only read by manual runs of test-crepe-parity, not by ctest.
+export CRISPASR_MODEL_CREPE="${CRISPASR_MODEL_CREPE:-$CRISPASR_MODELS_DIR/crepe-tiny-f16.gguf}"
+export CRISPASR_MODEL_CREPE_FULL="${CRISPASR_MODEL_CREPE_FULL:-$CRISPASR_MODELS_DIR/crepe-full-f16.gguf}"
+
 echo "Live test env configured (CRISPASR_MODELS_DIR=$CRISPASR_MODELS_DIR)"

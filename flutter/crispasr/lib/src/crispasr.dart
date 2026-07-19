@@ -2066,6 +2066,24 @@ class StreamingSession {
 // =====================================================================
 
 /// Unified session over any CrispASR-supported GGUF model.
+/// One frame of a pitch (F0) track, as returned by [CrispasrSession.pitch].
+///
+/// - `timeMs` — frame centre, in milliseconds from the start of the input.
+/// - `f0Hz` — estimated fundamental frequency, in Hz.
+/// - `voicedProb` — model activation at the decoded bin, in `[0, 1]`. Low
+///   values mean the frame is probably unvoiced; gate on this rather than
+///   trusting `f0Hz` on every frame.
+///
+/// Deliberately a record rather than a class: the shape is chosen to match
+/// the `PitchFrame` contract used by downstream music-transcription apps,
+/// so the value crosses the seam without a marshalling step.
+///
+/// On the C side this is `crepe_frame` — three **32-bit** floats. [pitch]
+/// reads them through a [Float32List] view. Dart's `double` is 64-bit, so
+/// declaring these as FFI `Double` fields over the same buffer would be a
+/// silent 32/64-bit mismatch that reads garbage.
+typedef PitchFrame = ({double timeMs, double f0Hz, double voicedProb});
+
 class CrispasrSession {
   CrispasrSession._(
     this._lib,
@@ -3844,6 +3862,106 @@ class CrispasrSession {
       calloc.free(nOutPtr);
       calloc.free(textOutPtr);
     }
+  }
+
+  /// Estimate a monophonic pitch (F0) track from mono float32 PCM.
+  ///
+  /// Requires a pitch-capable backend (`crepe`). [pcm16k] must be mono
+  /// float32 at the model's native rate — 16000 Hz for CREPE; query
+  /// [pitchSampleRate] to confirm rather than hard-coding it. [hopMs] is
+  /// the analysis hop in milliseconds; a value `<= 0` uses the model
+  /// default (10 ms).
+  ///
+  /// Returns one [PitchFrame] per hop, in time order. The frames are
+  /// copied into Dart-owned memory before returning, so the result stays
+  /// valid after the next [pitch] call or [close].
+  ///
+  /// Note that CREPE is monophonic — it estimates a single F0 per frame.
+  /// For polyphonic material, separate the source first (see the
+  /// `--separate` CLI route) and run [pitch] per stem.
+  ///
+  /// Open the session with an explicit `backend: 'crepe'`:
+  ///
+  /// ```dart
+  /// final s = CrispasrSession.open(path, backend: 'crepe');
+  /// final track = s.pitch(pcm);
+  /// ```
+  ///
+  /// As of CrispASR 0.8.14 the C ABI's GGUF architecture auto-detection
+  /// has no `crepe` case, so plain [CrispasrSession.open] returns null
+  /// and throws for a CREPE model even though the backend is compiled in.
+  ///
+  /// Throws [UnsupportedError] when the loaded dylib predates the pitch
+  /// API, [StateError] when the session is closed, and [Exception] when
+  /// the backend has no pitch arm (the C side returns -1).
+  List<PitchFrame> pitch(Float32List pcm16k, {double hopMs = 10.0}) {
+    if (_closed) throw StateError('CrispasrSession is closed');
+    if (!_lib.providesSymbol('crispasr_session_pitch')) {
+      throw UnsupportedError(
+          'Pitch API not available in this libcrispasr build');
+    }
+    if (pcm16k.isEmpty) return const <PitchFrame>[];
+    // `hop_ms` is a C `float`; the native signature must say Float while
+    // the Dart signature says double — the FFI trampoline narrows it.
+    final pitchFn = _lib.lookupFunction<
+        Int32 Function(Pointer<Void>, Pointer<Float>, Int32, Float),
+        int Function(Pointer<Void>, Pointer<Float>, int, double)>(
+      'crispasr_session_pitch',
+    );
+    final framesFn = _lib.lookupFunction<
+        Pointer<Float> Function(Pointer<Void>, Pointer<Int32>),
+        Pointer<Float> Function(Pointer<Void>, Pointer<Int32>)>(
+      'crispasr_session_pitch_frames',
+    );
+    final inPtr = calloc<Float>(pcm16k.length);
+    final nPtr = calloc<Int32>();
+    try {
+      // Bulk view-then-copy, not an element-by-element loop — same
+      // reasoning as [synthesize].
+      inPtr.asTypedList(pcm16k.length).setAll(0, pcm16k);
+      final n = pitchFn(_handle, inPtr, pcm16k.length, hopMs);
+      if (n <= 0) {
+        throw Exception('pitch failed for backend $_backend — the model '
+            'is probably not pitch-capable (expected `crepe`)');
+      }
+      final framesPtr = framesFn(_handle, nPtr);
+      final nFrames = nPtr.value;
+      if (framesPtr == nullptr || nFrames <= 0) {
+        throw Exception('pitch returned no frames');
+      }
+      // The C side hands back a flat, session-owned view of
+      // `crepe_frame[]`: three 32-bit floats per frame, frame-major, as
+      // {time_ms, f0_hz, voiced_prob}. `asTypedList` on a Pointer<Float>
+      // yields a Float32List whose elements widen to Dart `double` on
+      // read, which is the only correct way across the 32/64 boundary.
+      final flat = framesPtr.asTypedList(nFrames * 3);
+      return List<PitchFrame>.generate(
+        nFrames,
+        (i) => (
+          timeMs: flat[i * 3],
+          f0Hz: flat[i * 3 + 1],
+          voicedProb: flat[i * 3 + 2],
+        ),
+        growable: false,
+      );
+    } finally {
+      calloc.free(inPtr);
+      calloc.free(nPtr);
+    }
+  }
+
+  /// Native input sample rate the loaded pitch model expects, in Hz
+  /// (16000 for CREPE).
+  ///
+  /// Returns 0 when the session's backend has no pitch arm, or when the
+  /// loaded dylib predates the pitch API — so this doubles as a
+  /// capability probe that never throws.
+  int get pitchSampleRate {
+    if (_closed) throw StateError('CrispasrSession is closed');
+    if (!_lib.providesSymbol('crispasr_session_pitch_sample_rate')) return 0;
+    final fn = _lib.lookupFunction<Int32 Function(Pointer<Void>),
+        int Function(Pointer<Void>)>('crispasr_session_pitch_sample_rate');
+    return fn(_handle);
   }
 
   /// Set hotwords for contextual biasing.

@@ -600,6 +600,27 @@ add_executable(test-crepe-parity test_crepe_parity.cpp)
 target_include_directories(test-crepe-parity PRIVATE ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(test-crepe-parity PRIVATE crepe crispasr-core ggml ggml-base ggml-cpu)
 
+# ─── test-crepe-live — ctest-registered CREPE pitch/F0 integration test.
+# Gated on CRISPASR_MODEL_CREPE; SKIPs cleanly when unset. Complements (does
+# not replace) test-crepe-parity above, which is the torchcrepe cosine gate.
+add_executable(test-crepe-live
+    test_crepe_live.cpp
+)
+target_include_directories(test-crepe-live PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-crepe-live PRIVATE
+    Catch2::Catch2WithMain
+    crepe
+)
+catch_discover_tests(test-crepe-live
+    TEST_SPEC "[crepe]"
+    PROPERTIES
+        LABELS live
+        SKIP_RETURN_CODE 4
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+)
+
 # ─── test - punctuation - policy — Catch2 unit tests for punctuation auto - enable
 #policy.Pure logic, no model load.
 add_executable(test-punctuation-policy

@@ -334,6 +334,13 @@ REGISTERED_BACKENDS: Dict[str, str] = {
     # Audio arg = mono WAV at 44100 Hz. Captures decode path intermediates
     # (FSQ→prenet→decoder→upsampler→ISTFT) for per-stage parity testing.
     "miocodec": "reference_backends.miocodec",
+    # CREPE (Kim et al. 2018, MIT) monophonic F0 / pitch. NOT ASR and NOT TTS —
+    # it emits a 360-bin pitch activation per 10 ms frame. `model_dir` is the
+    # CAPACITY, not a directory: pass "tiny" or "full" (weights ship inside the
+    # torchcrepe package). Audio arg = any 16 kHz mono WAV.
+    # ⚠️ Only the raw activation is dumped: torchcrepe.convert.bins_to_cents
+    # dithers, so any decoded Hz would be non-deterministic.
+    "crepe": "reference_backends.crepe",
 }
 
 DEFAULT_STAGES_BY_BACKEND: Dict[str, List[str]] = {}  # populated at import

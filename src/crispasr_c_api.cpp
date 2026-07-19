@@ -1464,6 +1464,14 @@ CA_EXPORT int crispasr_detect_backend_from_gguf(const char* path, char* out_name
         backend = "zonos";
     else if (strcmp(arch, "dots-tts") == 0 || strcmp(arch, "dots_tts") == 0 || strcmp(arch, "dots.tts") == 0)
         backend = "dots-tts";
+    // Non-transcribe task backends. These were auto-detected in the CLI
+    // (examples/cli/crispasr_backend.cpp) but never here, so every binding
+    // (Dart, Python, Go, wasm) got 0 from detect and a null session unless it
+    // passed the backend explicitly — the multi-surface dispatch trap again.
+    else if (strcmp(arch, "crepe") == 0)
+        backend = "crepe";
+    else if (strcmp(arch, "htdemucs") == 0)
+        backend = "htdemucs";
 
     std::strncpy(out_name, backend, out_cap - 1);
     out_name[out_cap - 1] = '\0';

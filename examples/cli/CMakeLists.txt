@@ -234,6 +234,7 @@ target_link_libraries(crispasr-diff PRIVATE
     dots-tts
     miotts
     miocodec
+    crepe
     crispasr-diff-lib
     ${FFMPEG_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}
