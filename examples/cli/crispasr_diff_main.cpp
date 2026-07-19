@@ -85,6 +85,7 @@
 #include "dots_tts.h"
 #include "miocodec.h"
 #include "miotts.h"
+#include "crepe.h"
 #if __has_include("kugelaudio.h")
 #include "kugelaudio.h"
 #define CA_HAVE_KUGELAUDIO 1
@@ -7314,6 +7315,102 @@ int main(int argc, char** argv) {
 
         miocodec_free(ctx);
 
+    } else if (backend_name == "crepe") {
+        // CREPE monophonic F0. Neither ASR nor TTS: the comparable output is
+        // the raw 360-bin pitch activation, one row per 10 ms frame.
+        //
+        // The reference (tools/reference_backends/crepe.py) also dumps the
+        // normalized input frames and the six per-layer conv outputs, but
+        // src/crepe.h exposes only crepe_compute_activation() — there is no
+        // per-layer stage API — so those come out as SKIP. They are there for
+        // Python-side bisection when the final activation disagrees.
+        //
+        // NOTE: nothing decoded is compared. torchcrepe.convert.bins_to_cents
+        // applies triangular dithering, so any reference Hz is random.
+        crepe_context* ctx = crepe_init(model_path.c_str(), 4);
+        if (!ctx) {
+            fprintf(stderr, "failed to load crepe model\n");
+            return 4;
+        }
+        printf("crepe: capacity=%s\n", crepe_capacity(ctx));
+
+        const float hop_ms = 10.0f;
+        const int n_frames = crepe_n_frames(ctx, (int)samples.size(), hop_ms);
+        std::vector<float> act((size_t)n_frames * CREPE_PITCH_BINS);
+        const int got = crepe_compute_activation(ctx, samples.data(), (int)samples.size(), hop_ms, act.data(), n_frames);
+        if (got <= 0) {
+            fprintf(stderr, "crepe_compute_activation failed\n");
+            crepe_free(ctx);
+            return 4;
+        }
+        printf("crepe: %d frames x %d bins\n", got, CREPE_PITCH_BINS);
+
+        auto rep = ref.compare("activation", act.data(), (size_t)got * CREPE_PITCH_BINS);
+        print_row("activation", rep, COS_THRESHOLD);
+        record(rep);
+
+        // Ref::compare's COS_LAST_DIM groups by the outermost reference dim,
+        // which for an (n_frames, 360) capture is not the 360-wide frame. The
+        // metric that matters here is per-FRAME cosine plus per-frame argmax
+        // agreement (the pitch bin is the thing the decoder actually reads),
+        // so compute both explicitly over the raw reference buffer.
+        auto act_ref = ref.get_f32("activation");
+        if (act_ref.first && act_ref.second >= (size_t)got * CREPE_PITCH_BINS) {
+            double cos_min = 1.0, cos_sum = 0.0;
+            int rows = 0, argmax_match = 0, worst = 0;
+            for (int f = 0; f < got; f++) {
+                const float* a = act.data() + (size_t)f * CREPE_PITCH_BINS;
+                const float* b = act_ref.first + (size_t)f * CREPE_PITCH_BINS;
+                double dot = 0.0, na = 0.0, nb = 0.0;
+                int ia = 0, ib = 0;
+                for (int k = 0; k < CREPE_PITCH_BINS; k++) {
+                    dot += (double)a[k] * b[k];
+                    na += (double)a[k] * a[k];
+                    nb += (double)b[k] * b[k];
+                    if (a[k] > a[ia])
+                        ia = k;
+                    if (b[k] > b[ib])
+                        ib = k;
+                }
+                const double denom = std::sqrt(na) * std::sqrt(nb);
+                if (denom > 1e-12) {
+                    const double cs = dot / denom;
+                    if (cs < cos_min) {
+                        cos_min = cs;
+                        worst = f;
+                    }
+                    cos_sum += cs;
+                    rows++;
+                }
+                argmax_match += (ia == ib);
+            }
+            // Pass on cosine, same as every other stage in this harness.
+            // argmax agreement is reported, not gated: it is the metric that
+            // actually matters for pitch, but a quantized model legitimately
+            // shifts the argmax by a bin on the low-confidence (unvoiced,
+            // near-flat) frames where the activation has no real peak. Read
+            // it as "how many frames decode to the same pitch bin" — f16
+            // should be 100 %, q8_0 ~98 %, and a q4_k that drops well below
+            // that is the documented octave-shift risk, not a port bug.
+            const bool pass = rows > 0 && cos_min >= COS_THRESHOLD;
+            printf("%s %-22s frames=%-10d cos_min=%.6f  cos_mean=%.6f  worst_frame=%d  argmax=%d/%d (%.1f%%)\n",
+                   pass ? "[PASS]" : "[FAIL]", "activation/frame", got, cos_min, rows ? cos_sum / rows : 0.0, worst,
+                   argmax_match, got, 100.0 * argmax_match / got);
+            pass ? n_pass++ : n_fail++;
+        }
+
+        // Diagnostic-only reference stages: no C++ stage API to run them against.
+        const char* diag[] = {"frames",    "conv1_out", "conv2_out", "conv3_out",
+                              "conv4_out", "conv5_out", "conv6_out", "embedding"};
+        for (const char* s : diag) {
+            if (ref.has(s)) {
+                printf("[SKIP] %-22s (diagnostic; src/crepe.h exposes no per-layer stage API)\n", s);
+                n_skip++;
+            }
+        }
+
+        crepe_free(ctx);
+
     } else {
         fprintf(stderr,
                 "crispasr-diff: backend '%s' is not recognised. "
@@ -7321,7 +7418,8 @@ int main(int argc, char** argv) {
                 "granite-4.1, granite-nle, parakeet, canary, canary-qwen, cohere, gemma4, mimo-tokenizer, mimo-asr, "
                 "orpheus, moonshine, moonshine-streaming, lid-cld3, glm-asr, firered-asr, voxcpm2-tts, funasr, "
                 "paraformer, sensevoice, cosyvoice3-tts, melotts, parler-tts, moss-audio, kugelaudio, zonos-tts, "
-                "lfm2-audio, mini-omni2, nemotron, kyutai-stt, moss-diarize, miotts, miocodec, htdemucs.\n",
+                "lfm2-audio, mini-omni2, nemotron, kyutai-stt, moss-diarize, miotts, miocodec, htdemucs, "
+                "crepe.\n",
                 backend_name.c_str());
         return 5;
     }

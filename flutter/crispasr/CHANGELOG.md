@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8.15
+
+- Pitch (F0) estimation: `CrispasrSession.pitch()` returns a monophonic
+  pitch track from mono 16 kHz float32 PCM, backed by the CREPE backend.
+  Adds the `PitchFrame` record typedef (`timeMs`, `f0Hz`, `voicedProb`)
+  and the `pitchSampleRate` capability probe.
+- Open CREPE models with an explicit `backend: 'crepe'` — the native GGUF
+  architecture auto-detect has no `crepe` case yet, so plain
+  `CrispasrSession.open()` returns null for them.
+
 ## 0.8.11
 
 - Session introspection accessors: CTC vocab, Whisper `no_speech_prob`, and

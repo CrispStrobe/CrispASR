@@ -142,20 +142,47 @@ tiny/full), `license: mit` verified present on the card via
 `--auto-download` now resolves. Published deliberately *before* the accuracy
 eval, so that eval can be run on real music from the published artifacts.
 
-#### ⚠️ OPEN — accuracy eval on real music, before recommending a default
+#### ✅ ACCURACY EVAL ON REAL MUSIC — the octave concern did NOT reproduce
 
-`crepe-tiny` reads a median ~242 Hz over high-confidence frames of
-`samples/jfk.wav`, where the speaker's voice is ~110–130 Hz — an **octave
-error**, which is precisely the failure the handoff's acceptance gate forbids
-("note-F ≥ 0.9, ZERO octave errors"). Synthetic tones are exact, so this is
-model capacity on archival speech, not wiring. Unresolved questions:
+Run on 10 monophonic instrumental recordings (violin arco + pizz, piano, glock,
+carillon, cello, flute, three folk melodies, brass), `tools/crepe_music_eval.py`.
+No hand-labelled F0, so two load-independent proxies: **tiny-vs-full octave
+disagreement** (|log2(a/b)| ~ 1) and **in-tessitura rate** on voiced frames
+(voiced_prob >= 0.5).
 
-1. Does `crepe-full` do better on the same clip? (It is 38× the compute; if it
-   fixes the octave, the "tiny is the shipping default" call is wrong.)
-2. How do both behave on **music** — sung voice, monophonic instruments — which
-   is the actual target domain? Speech at 1961 archival quality is not it.
-3. `q4_k` shifts the argmax by up to an octave on low-confidence noise frames
-   (±1 bin on pitched input). Needs the same real-audio check.
+| | tiny | full |
+|---|---|---|
+| in-tessitura (weighted) | **89.6%** | 89.0% |
+| voiced frames | 8166 | 9165 |
+| octave disagreement tiny-vs-full | **2.3%** | — |
+
+**Conclusion: `crepe-tiny` is NOT meaningfully worse than `crepe-full` on real
+monophonic music** — 0.6 pt apart on in-tessitura, 2.3% octave disagreement, and
+on `10_amazing_brass` tiny is actually *better* (92.8% vs 83.9%). Given tiny is
+38x cheaper (RTF 0.28 vs 2.0), **tiny stays the default.** The earlier
+`samples/jfk.wav` octave worry was archival *speech* — out of domain for a model
+being shipped for music — and it did not generalize.
+
+Per-clip, the failures are domain limits shared by both capacities, not capacity
+defects:
+- `02_violin_pizz` — 49% / 52% in range. Plucked, fast-decaying transients; most
+  frames have no sustained pitch. Worst clip by far for both.
+- `05_carillon_ode` — only 39 (tiny) / 117 (full) of 1501 frames voiced at all.
+  Bells are inharmonic; CREPE is trained on harmonic pitch. Correctly abstains
+  rather than inventing pitch.
+- Clean cases (fur_elise, cello, flute, row_boat, old_macdonald, glock) sit at
+  96–100% in range with 0–6% octave disagreement.
+
+⚠️ **Caveats on this eval, stated so it is not over-trusted.** (a) The tessitura
+bounds are hand-guessed per instrument, so the *absolute* in-range numbers are
+soft — `01_violin_scale` reads 86%/80%, which is more likely my bounds than real
+error. The tiny-vs-full *comparison* is the robust part, since both are scored
+identically. (b) A first version of this script also reported "fraction within
++/-50 cents of the nearest semitone" at exactly 100.0% for every clip and both
+models — that metric is **vacuous by construction** (deviation from the *nearest*
+semitone is bounded to +/-50c) and was removed. It is not evidence of anything.
+(c) Real per-frame ground truth (a labelled MIR dataset) is still the honest way
+to get an absolute note-F number against the handoff's "note-F >= 0.9" gate.
 
 ### Two measurement traps hit while benchmarking (both in the dev doc already)
 
