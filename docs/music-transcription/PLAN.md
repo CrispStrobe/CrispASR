@@ -7,12 +7,61 @@ ggml/GGUF backends.
 ## NOW — active work
 
 - **Done**: feasibility triage of all 7 handoff workers (below); fixed a live
-  `CAP_SEPARATE`/`CAP_STREAMING` bit collision (both were `1u << 22`).
-- **In flight**: nothing — awaiting go/no-go on the phase-0 infra.
-- **Next**: `core/stft.h` extraction, then CREPE (`src/crepe.cpp`) as the first
-  music-analysis backend.
+  `CAP_SEPARATE`/`CAP_STREAMING` bit collision (both were `1u << 22`; CLI builds
+  clean after the move to bit 23). **CREPE converter landed and validated**:
+  `models/convert-crepe-to-gguf.py` + `tools/crepe_numpy_parity.py`, cos=1.0 vs
+  torchcrepe on both capacities (tiny 1.0 MB, full 44.5 MB at f16).
+- **In flight**: nothing.
+- **Next**: `src/crepe.{h,cpp}` — a direct transcription of
+  `tools/crepe_numpy_parity.py` into a ggml graph, then the 12-point checklist.
+  `core/stft.h` extraction is independent and can go in parallel (CREPE needs
+  no STFT).
 - **Branch**: `feat/music-transcription`, worktree
   `.claude/worktrees/music-transcription`.
+
+### CREPE blueprint — the geometry the C++ must hit
+
+Traced from `torchcrepe/model.py` + `core.py` + `convert.py` (the *source*, see
+the warning below). Input is a 1024-sample 16 kHz frame, per-frame normalized
+(`-= mean`, `/= max(std, 1e-10)`); hop is 10 ms; `pad=True` zero-pads
+`WINDOW_SIZE//2` each edge.
+
+Per layer: `F.pad -> conv -> F.relu -> batch_norm -> max_pool2d(2)`.
+
+| layer | K | stride | pad (l, r) | out ch (full / tiny) | T out |
+|---|---|---|---|---|---|
+| conv1 | 512 | 4 | 254, 254 | 1024 / 128 | 1024 → 256 → 128 |
+| conv2 | 64 | 1 | 31, **32** | 128 / 16 | 128 → 64 |
+| conv3 | 64 | 1 | 31, **32** | 128 / 16 | 64 → 32 |
+| conv4 | 64 | 1 | 31, **32** | 128 / 16 | 32 → 16 |
+| conv5 | 64 | 1 | 31, **32** | 256 / 32 | 16 → 8 |
+| conv6 | 64 | 1 | 31, **32** | 512 / 64 | 8 → 4 |
+
+Then permute to (T, C) — **C is the fast axis** — flatten to `in_features`
+(4 × 512 = 2048 full, 4 × 64 = 256 tiny), `classifier` Linear → 360, sigmoid.
+Decode: `cents = 20 * bin + 1997.3794084376191`, `Hz = 10 * 2**(cents/1200)`.
+
+Three traps, all now pinned by `tools/crepe_numpy_parity.py`:
+
+1. **ReLU is BEFORE BatchNorm.** So the conv+BN fold is *invalid*. BN ships as a
+   standalone per-channel affine (`_BN.scale`, `_BN.offset`, computed in f64).
+2. **conv2..6 padding is asymmetric (31, 32)** and Metal rejects an asymmetric
+   `GGML_OP_PAD` — use symmetric `p=32` and drop output column 0.
+3. **`torchcrepe.convert.bins_to_cents` applies dithering** (triangular noise),
+   so the reference is *non-deterministic*. Disable it when dumping parity
+   fixtures, and do not implement it in C++. Also note torchcrepe's default
+   decoder is **Viterbi**, not the handoff's weighted-average-around-argmax —
+   implement `local_average` (original CREPE) and treat Viterbi as optional.
+
+> ⚠️ **Lesson (HARD RULE #1, the expensive way).** The first converter folded BN
+> into the conv, because a fetched *summary* of `model.py` listed the ops as
+> "Batch Norm ... ReLU activation" in that order. The real source has the relu
+> first. The failure looked like plausible numerics, not a structural bug: layer
+> 1 at cos=0.83 with ~2× the reference magnitude — because least-squares fitting
+> an affine through a *rectified* signal recovers about half the true scale. What
+> caught it in one run was printing `|mine|` and `|ref|` per stage and noticing
+> `|mine|` was **identical across four different input frames**. A fetched
+> summary of source is not reading the source.
 
 ---
 
