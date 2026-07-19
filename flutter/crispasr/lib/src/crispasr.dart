@@ -3887,9 +3887,11 @@ class CrispasrSession {
   /// final track = s.pitch(pcm);
   /// ```
   ///
-  /// As of CrispASR 0.8.14 the C ABI's GGUF architecture auto-detection
-  /// has no `crepe` case, so plain [CrispasrSession.open] returns null
-  /// and throws for a CREPE model even though the backend is compiled in.
+  /// Passing `backend: 'crepe'` explicitly is the safest form and always
+  /// works. Plain [CrispasrSession.open] also works from CrispASR 0.8.15
+  /// onward, where the C ABI's GGUF architecture auto-detection gained a
+  /// `crepe` case; against an older dylib it returns null for a CREPE
+  /// model even though the backend is compiled in.
   ///
   /// Throws [UnsupportedError] when the loaded dylib predates the pitch
   /// API, [StateError] when the session is closed, and [Exception] when

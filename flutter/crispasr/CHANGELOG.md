@@ -6,9 +6,11 @@
   pitch track from mono 16 kHz float32 PCM, backed by the CREPE backend.
   Adds the `PitchFrame` record typedef (`timeMs`, `f0Hz`, `voicedProb`)
   and the `pitchSampleRate` capability probe.
-- Open CREPE models with an explicit `backend: 'crepe'` — the native GGUF
-  architecture auto-detect has no `crepe` case yet, so plain
-  `CrispasrSession.open()` returns null for them.
+- The native GGUF architecture auto-detect now recognises `crepe` (and
+  `htdemucs`), so plain `CrispasrSession.open()` works for those models;
+  previously only the CLI auto-detected them and every binding had to name
+  the backend. Passing `backend: 'crepe'` explicitly remains valid and is
+  required against an older native library.
 
 ## 0.8.11
 
