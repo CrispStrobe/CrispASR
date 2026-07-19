@@ -124,10 +124,38 @@ repo does. CREPE would have been the first, which is why it surfaced here.
 Gates run: standalone repro (both shape classes, all N) cos = 1.0; CrispASR unit
 suite **1032/1032**; CREPE parity unchanged at cos = 1.0.
 
-**Related, not fixed:** `ggml_conv_1d_dw` ends with
-`ggml_reshape_3d(..., result->ne[0], result->ne[2], 1)` — it hardcodes `1` into
-`ne[2]`, so it is the same bug class and is only correct for N == 1. No current
-caller in either repo passes N > 1 to it. Worth fixing in the same upstream PR.
+**Companion, now also landed (`CrispStrobe/ggml@655c14e4`): `ggml_conv_1d_dw`
+batch support.** The first description of this (mine, repeating an agent's) was
+wrong: it does NOT silently drop the batch dim. It reshapes to `[T,1,C,N]` and
+hits `GGML_ASSERT(b->ne[3] == 1)` at `ggml.c:4476`, i.e. it **aborts** — a safe
+failure, an unsupported case rather than a correctness bug. Verified by probing
+it rather than reading it. Fixed by folding the batch into the channel axis and
+tiling the kernel with `ggml_repeat`; verified N = 1..4 at cos = 1.0,
+max_abs = 0.0 exactly. No existing caller changes (N == 1 path untouched, and
+nothing can depend on an abort).
+
+### CREPE weights are published
+
+**https://huggingface.co/cstr/crepe-GGUF** — all six files (f16/q8_0/q4_k ×
+tiny/full), `license: mit` verified present on the card via
+`model_info(expand=["cardData"])`, public, ungated. So `-m auto` /
+`--auto-download` now resolves. Published deliberately *before* the accuracy
+eval, so that eval can be run on real music from the published artifacts.
+
+#### ⚠️ OPEN — accuracy eval on real music, before recommending a default
+
+`crepe-tiny` reads a median ~242 Hz over high-confidence frames of
+`samples/jfk.wav`, where the speaker's voice is ~110–130 Hz — an **octave
+error**, which is precisely the failure the handoff's acceptance gate forbids
+("note-F ≥ 0.9, ZERO octave errors"). Synthetic tones are exact, so this is
+model capacity on archival speech, not wiring. Unresolved questions:
+
+1. Does `crepe-full` do better on the same clip? (It is 38× the compute; if it
+   fixes the octave, the "tiny is the shipping default" call is wrong.)
+2. How do both behave on **music** — sung voice, monophonic instruments — which
+   is the actual target domain? Speech at 1961 archival quality is not it.
+3. `q4_k` shifts the argmax by up to an octave on low-confidence noise frames
+   (±1 bin on pitched input). Needs the same real-audio check.
 
 ### Two measurement traps hit while benchmarking (both in the dev doc already)
 

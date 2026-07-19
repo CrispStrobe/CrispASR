@@ -59,8 +59,20 @@ any such caller exists and had hand-compensated for the transpose, this would
 break it — worth an audit before merge, though it is more likely that none
 exist, which is why the bug went unnoticed.
 
-**Suggested companion:** add `conv_1d` cases (including `N > 1`) to
-`test-backend-ops` so the composite is covered.
+**Companion in the same PR: `ggml_conv_1d_dw` batch support.** Different failure
+mode, worth stating precisely. It reshapes `b [T,C,N]` to `[T,1,C,N]` and feeds
+the 1-D im2col path, whose `GGML_ASSERT(b->ne[3] == 1)` then fires for any
+`N > 1` — so batched depthwise conv **aborts** rather than miscomputing. (Its
+trailing `ggml_reshape_3d(..., result->ne[2], 1)` also hardcodes `1` into
+`ne[2]`.) That is a missing capability, not wrong output. Fix folds the batch
+into the channel axis (`b -> [T, 1, C*N, 1]`, `cn = n*C + ch`) and tiles the
+per-channel kernel with `ggml_repeat`, whose semantics give element `cn` the
+kernel `cn mod C = ch`. The `[OL, 1, C*N]` result is bit-for-bit the
+`[OL, C, N]` layout, so the final reshape is free. Verified at N = 1..4,
+cos = 1.0, max_abs = 0.0 exactly (`24-conv-1d-batch-reshape.dw-repro.cpp`).
+
+**Suggested companion:** add `conv_1d` and `conv_1d_dw` cases (including
+`N > 1`) to `test-backend-ops` so both composites are covered.
 
 Found while porting CREPE (a pitch model that batches frames for GPU
 throughput) — the first ggml consumer we have that genuinely wants `N > 1`.
