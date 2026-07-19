@@ -24,7 +24,7 @@ extern "C" {
 // symbol must still exist for the linker.
 #if !defined(RTC_FATAL_PROVIDED)
 #define RTC_FATAL_PROVIDED
-__attribute__((noreturn)) void rtc_FatalMessage(const char* file, int line, const char* msg) {
+[[noreturn]] void rtc_FatalMessage(const char* file, int line, const char* msg) {
     fprintf(stderr, "WebRTC fatal: %s:%d: %s\n", file, line, msg);
     abort();
 }
