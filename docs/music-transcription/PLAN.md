@@ -11,11 +11,70 @@ ggml/GGUF backends.
   clean after the move to bit 23). **CREPE converter landed and validated**:
   `models/convert-crepe-to-gguf.py` + `tools/crepe_numpy_parity.py`, cos=1.0 vs
   torchcrepe on both capacities (tiny 1.0 MB, full 44.5 MB at f16).
+- **Done**: `src/crepe.{h,cpp}` runtime — **cos = 1.0 vs the numpy spec** on a
+  real tone sweep, decoding 220.6 / 440.4 / 881.4 Hz at 0.95–0.97 confidence.
+  `tests/test_crepe_parity.cpp` is the acceptance gate.
 - **In flight**: nothing.
-- **Next**: `src/crepe.{h,cpp}` — a direct transcription of
-  `tools/crepe_numpy_parity.py` into a ggml graph, then the 12-point checklist.
-  `core/stft.h` extraction is independent and can go in parallel (CREPE needs
-  no STFT).
+- **Next**: quantize (q8_0/q4_k) and re-measure; then the 12-point checklist
+  (CLI adapter, C ABI, registry, `cstr/crepe-GGUF` upload), then the Dart FFI +
+  WASM surfaces. `core/stft.h` extraction is independent (CREPE needs no STFT).
+
+### Performance — measured, M1, quiet box (load 4.0), 10 s audio, median of 3
+
+| model | Metal | CPU |
+|---|---|---|
+| full (44.5 MB f16) | 20.0 s — **RTF 2.0** | ~400 s — RTF 40 |
+| tiny (1.0 MB f16) | 2.8 s — **RTF 0.28** | ~24 s — RTF 2.4 |
+
+CREPE is genuinely expensive: at the reference 10 ms hop it is **1409 MMAC per
+frame → 282 GFLOP per second of audio** for `full`, and 36.7 MMAC/frame →
+7.3 GFLOP/s for `tiny` (38× cheaper). So **tiny is the shipping default** — it
+is also what the handoff asks for ("smallest that hits accuracy"). `full` stays
+available and is the right choice offline. Neither is close to real-time on CPU;
+the GPU path is not optional here.
+
+Three graph decisions got it from the first working version (RTF 31) to here:
+
+1. **Batching (the big one).** One frame per dispatch wastes the GPU on a model
+   this small per-frame. `kBatch = 64` makes each layer one large GEMM.
+2. **Channel-fastest layout throughout.** `ggml_conv_1d` ends by permuting back
+   to (OL, OC, N), materializing the whole activation every layer. We keep the
+   mul_mat's native (OC, OL, N), do bias/relu/BN there — where a plain (OC)
+   vector broadcasts along ne[0], ggml's fast path, instead of a stride-0
+   (1, OC, 1) broadcast — and pool with `ggml_pool_2d(k0=1, k1=2)`. The one
+   transpose im2col forces is deferred until *after* the pool, so it moves half
+   the bytes, and the last layer skips it entirely because (OC, OL, N) already
+   *is* the channel-fastest flatten the classifier wants.
+3. **F32-baked conv kernels** (`ggml_conv_1d` casts an F16 kernel to F32 inside
+   the graph — in a persistent graph that re-casts 44 MB per 10 ms frame).
+   Gated `CRISPASR_CREPE_NO_BAKE_F32=1`. Honest note: this one measured
+   **neutral** here, unlike qwen3-tts CODEC_FASTCONV. Kept gated-on because it
+   is provably redundant work, but it was not the win.
+
+Gates: `CRISPASR_CREPE_NO_GPU=1`, `CRISPASR_CREPE_NO_BAKE_F32=1`,
+`CRISPASR_CREPE_DEBUG=1`.
+
+### ⚠️ `ggml_conv_1d` batching is BROKEN for N > 1 (found here, affects others)
+
+`ggml_conv_1d` reshapes its mul_mat result to (OL, OC, N) from a buffer that is
+actually (OC, OL*N). Those coincide **only at N == 1**. Measured: batch=1
+reproduced the reference exactly through all six layers; batch=2 scrambled even
+frame 0 (cos 0.14, |out| 6× too large). `src/crepe.cpp` therefore calls
+`ggml_im2col` + `ggml_mul_mat` directly instead.
+
+**This is not CREPE-specific.** Any backend passing N > 1 to `ggml_conv_1d` is
+silently wrong. Worth auditing the other conv-heavy backends and, if confirmed,
+fixing in the fork + sending upstream.
+
+### Two measurement traps hit while benchmarking (both in the dev doc already)
+
+- A run piped to `head -2` reported **0.79 s for 30 s of audio** (RTF 0.026,
+  which would have been ~10 TFLOP/s — above M1's FP32 peak). SIGPIPE had killed
+  it after two lines. The "too good, and the arithmetic disagrees" smell is what
+  caught it; the frame-count-scales check (101 / 1001 / 3001) is what confirmed
+  the real runs.
+- Load average hit **253** mid-session, making every timing meaningless. Numbers
+  above were all re-taken at load 4.0.
 - **Branch**: `feat/music-transcription`, worktree
   `.claude/worktrees/music-transcription`.
 

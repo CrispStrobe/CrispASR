@@ -2358,6 +2358,18 @@ if(NOT MSVC)
 endif()
 
 # ---------------------------------------------------------------------------
+# crepe — CREPE monophonic F0 estimation (music transcription)
+# ---------------------------------------------------------------------------
+add_library(crepe STATIC crepe.h crepe.cpp)
+set_target_properties(crepe PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(crepe PUBLIC .)
+target_compile_features   (crepe PUBLIC cxx_std_17)
+target_link_libraries     (crepe PUBLIC crispasr-core ggml ggml-base ggml-cpu)
+if(NOT MSVC)
+    target_compile_options(crepe PRIVATE -O3)
+endif()
+
+# ---------------------------------------------------------------------------
 # mel-band-roformer — Mel-Band RoFormer source separation (§248)
 # ---------------------------------------------------------------------------
 add_library(mel-band-roformer STATIC mel_band_roformer.h mel_band_roformer.cpp)

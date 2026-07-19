@@ -592,6 +592,14 @@ add_executable(test-titanet test-titanet.cpp)
 target_include_directories(test-titanet PRIVATE ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(test-titanet PRIVATE titanet crispasr-core ggml ggml-base ggml-cpu)
 
+# test-crepe-parity — runs the CREPE ggml graph on a deterministic tone sweep
+# and dumps the 360-bin activations for tools/crepe_numpy_parity.py to score.
+# Plain main(); takes <crepe.gguf> <out.bin>. Not registered as a ctest case —
+# it needs a model — but it is the acceptance gate for src/crepe.cpp.
+add_executable(test-crepe-parity test_crepe_parity.cpp)
+target_include_directories(test-crepe-parity PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(test-crepe-parity PRIVATE crepe crispasr-core ggml ggml-base ggml-cpu)
+
 # ─── test - punctuation - policy — Catch2 unit tests for punctuation auto - enable
 #policy.Pure logic, no model load.
 add_executable(test-punctuation-policy
