@@ -14,9 +14,17 @@ ggml/GGUF backends.
 - **Done**: `src/crepe.{h,cpp}` runtime — **cos = 1.0 vs the numpy spec** on a
   real tone sweep, decoding 220.6 / 440.4 / 881.4 Hz at 0.95–0.97 confidence.
   `tests/test_crepe_parity.cpp` is the acceptance gate.
+- **Done**: CREPE wired through the 12-point checklist — `CAP_PITCH = 1u << 24`,
+  `examples/cli/crispasr_backend_crepe.cpp` (redirect shim, mirroring the
+  htdemucs one), the `--pitch` early dispatcher
+  (`examples/cli/crispasr_pitch_cli.{h,cpp}`, mirroring `--separate`), factory /
+  roster / arch auto-detect (`crepe`) / filename heuristic in
+  `crispasr_backend.cpp`, the session C ABI (`crispasr_session_pitch*` in
+  `src/crispasr_c_api.cpp` + `include/crispasr_session.h`), registry entries for
+  `cstr/crepe-GGUF` (**tiny is the default**), CMake linkage, README + docs/cli.md.
 - **In flight**: nothing.
-- **Next**: quantize (q8_0/q4_k) and re-measure; then the 12-point checklist
-  (CLI adapter, C ABI, registry, `cstr/crepe-GGUF` upload), then the Dart FFI +
+- **Next**: upload `cstr/crepe-GGUF` (the registry URLs point at it but the repo
+  is not published yet); quantize (q8_0/q4_k) and re-measure; then the Dart FFI +
   WASM surfaces. `core/stft.h` extraction is independent (CREPE needs no STFT).
 
 ### Performance — measured, M1, quiet box (load 4.0), 10 s audio, median of 3
@@ -54,17 +62,57 @@ Three graph decisions got it from the first working version (RTF 31) to here:
 Gates: `CRISPASR_CREPE_NO_GPU=1`, `CRISPASR_CREPE_NO_BAKE_F32=1`,
 `CRISPASR_CREPE_DEBUG=1`.
 
-### ⚠️ `ggml_conv_1d` batching is BROKEN for N > 1 (found here, affects others)
+### `ggml_conv_1d` returns a tensor whose declared shape contradicts its data for N > 1
 
-`ggml_conv_1d` reshapes its mul_mat result to (OL, OC, N) from a buffer that is
-actually (OC, OL*N). Those coincide **only at N == 1**. Measured: batch=1
-reproduced the reference exactly through all six layers; batch=2 scrambled even
-frame 0 (cos 0.14, |out| 6× too large). `src/crepe.cpp` therefore calls
-`ggml_im2col` + `ggml_mul_mat` directly instead.
+**Status: fixed in the fork (`ggml/src/ggml.c`), upstream PR drafted at
+`tools/upstream-prs/24-conv-1d-batch-reshape.md` + a standalone repro. NOT yet
+merged to main — one audit item is open, see below.**
 
-**This is not CREPE-specific.** Any backend passing N > 1 to `ggml_conv_1d` is
-silently wrong. Worth auditing the other conv-heavy backends and, if confirmed,
-fixing in the fork + sending upstream.
+The im2col is the FIRST `ggml_mul_mat` argument, so the result's ne is
+`[N*OL, OC]` (OC slowest). The final `ggml_reshape_3d` declares `[OL, OC, N]`
+(N slowest). Those expressions coincide **exactly when N == 1** and differ
+otherwise — which is why every shipping caller is correct and this was invisible.
+
+Repro (`tools/upstream-prs/24-conv-1d-batch-reshape.repro.cpp`, standalone,
+vs a hand-rolled direct convolution), before the fix:
+
+```
+N=1  cos=1.00000000  OK        N=2  cos=0.41129104  MISMATCH        N=3  cos=0.05935857  MISMATCH
+```
+
+After: all three `cos=1.0`. Fix reshapes to the true `[OL, N, OC]` then permutes;
+the `N == 1` branch is the *unmodified original statement*, so batch-1 callers
+are bit-identical **by construction**, not merely by test.
+
+Corroborating facts:
+
+- **Upstream `llama.cpp` has byte-identical code.** Not a fork regression, and
+  not fixed upstream.
+- **Upstream `test-backend-ops.cpp` has ZERO `conv_1d` cases.** It covers
+  `IM2COL` and `MUL_MAT` as ops, but `ggml_conv_1d` is a composite graph
+  builder, so the reshape between them is untested. That is the mechanism by
+  which this survived.
+
+#### ⚠️ OPEN — do this before merging to main
+
+**Nobody has yet demonstrated that any existing caller passes N > 1.** There are
+132 `ggml_conv_1d` call sites in `src/`; their comments read `(T, C, 1)`
+throughout, and PR 23 notes batch is 1 for essentially all inference. So the
+likely truth is that this bug is **latent — real, but currently unreachable**,
+and the earlier claim that "any backend passing N > 1 is silently wrong" is true
+as stated but probably vacuous.
+
+Three attempts to confirm this empirically all produced INVALID results and were
+discarded (see the traps section — an empty output file, unbuilt test binaries,
+and a model run that never emitted a transcript, each of which made `grep -c`
+return a meaningless 0). The audit still needs doing properly:
+
+1. Build the unit-test targets, arm a temporary `fprintf` in the `N > 1` branch,
+   run `ctest -L unit` **and** a few real backends (whisper, pyannote_seg,
+   ecapa_lid, a vocoder), and confirm the probe never fires.
+2. If it *does* fire anywhere, that caller may have hand-compensated for the
+   transpose — in which case this fix BREAKS it and that call site must be
+   migrated in the same commit.
 
 ### Two measurement traps hit while benchmarking (both in the dev doc already)
 
