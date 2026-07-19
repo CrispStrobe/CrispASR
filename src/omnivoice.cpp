@@ -3502,6 +3502,13 @@ int omnivoice_set_num_steps(struct omnivoice_context* ctx, int num_steps) {
     return 0;
 }
 
+int omnivoice_set_seed(struct omnivoice_context* ctx, uint64_t seed) {
+    if (!ctx)
+        return -1;
+    ctx->gen.seed = seed;
+    return 0;
+}
+
 int32_t* omnivoice_synthesize_codes(struct omnivoice_context* ctx, const char* text, int* out_n_codes) {
     if (!ctx || !text || !out_n_codes)
         return nullptr;

@@ -2644,6 +2644,7 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
         p.verbosity = g_open_verbosity_tls;
         p.use_gpu = g_open_use_gpu_tls;
         p.flash_attn = g_open_flash_attn_tls;
+        p.seed = g_open_seed_tls;
         s->omnivoice_ctx = omnivoice_init_from_file(model_path, p);
         if (!s->omnivoice_ctx) {
             delete s;
@@ -9216,9 +9217,8 @@ CA_EXPORT int crispasr_session_set_temperature(crispasr_session* s, float temper
     return touched > 0 ? 0 : -2;
 }
 
-// Set the seed for sampling-capable TTS backends. This currently
-// covers chatterbox, vibevoice, qwen3-tts, and orpheus. Other
-// backends silently no-op (rc=-2).
+// Set the seed for sampling-capable TTS backends. Unsupported backends
+// silently no-op (rc=-2).
 CA_EXPORT int crispasr_session_set_tts_seed(crispasr_session* s, uint64_t seed) {
     if (!s)
         return -1;
@@ -9304,6 +9304,12 @@ CA_EXPORT int crispasr_session_set_tts_seed(crispasr_session* s, uint64_t seed) 
 #ifdef CA_HAVE_MOSS_TTS_LOCAL
     if (s->moss_tts_local_ctx) {
         moss_tts_local_set_seed(s->moss_tts_local_ctx, (uint32_t)seed);
+        touched++;
+    }
+#endif
+#ifdef CA_HAVE_OMNIVOICE
+    if (s->omnivoice_ctx) {
+        omnivoice_set_seed(s->omnivoice_ctx, seed);
         touched++;
     }
 #endif

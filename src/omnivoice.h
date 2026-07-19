@@ -74,6 +74,9 @@ int omnivoice_set_speed(struct omnivoice_context* ctx, float speed);
 // Read live per synthesize (no reload). Values <1 are ignored. (#254)
 int omnivoice_set_num_steps(struct omnivoice_context* ctx, int num_steps);
 
+// Set the sampling seed for subsequent synthesis calls.
+int omnivoice_set_seed(struct omnivoice_context* ctx, uint64_t seed);
+
 // Run the masked iterative generation: text → 8-codebook audio codes.
 // Returns malloc'd int32_t array of shape (n_codebooks * T) row-major
 // [cb0_t0, cb1_t0, ..., cb7_t0, cb0_t1, ...].
