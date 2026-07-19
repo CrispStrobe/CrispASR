@@ -178,8 +178,11 @@ struct DacConfig {
     int sample_rate = 44100;
     int hop_length = 512; // total upsample factor
     int n_decoder_blocks = 4;
-    int upsampling_ratios[4] = {8, 8, 4, 2};
-    int decoder_channels[5] = {1536, 768, 384, 192, 96};
+    // Five slots accommodate Sidon's 48 kHz decoder. The stock DAC model
+    // still uses n_decoder_blocks=4, so its behaviour and defaults are
+    // unchanged.
+    int upsampling_ratios[5] = {8, 8, 4, 2, 0};
+    int decoder_channels[6] = {1536, 768, 384, 192, 96, 0};
     int residual_dilations[3] = {1, 3, 9};
 };
 
@@ -217,7 +220,7 @@ struct DacWeights {
     // Decoder
     ggml_tensor* in_conv_w = nullptr;       // Conv1d(hidden, decoder_hidden, k=7) weight
     ggml_tensor* in_conv_b = nullptr;       // Conv1d bias
-    DacDecoderBlock blocks[4];              // 4 decoder blocks
+    DacDecoderBlock blocks[5];              // DAC uses 4; Sidon uses 5
     ggml_tensor* out_snake_alpha = nullptr; // final Snake1d alpha
     ggml_tensor* out_conv_w = nullptr;      // Conv1d(96, 1, k=7) weight
     ggml_tensor* out_conv_b = nullptr;      // Conv1d bias
@@ -279,11 +282,13 @@ static inline ggml_tensor* conv1d(ggml_context* ctx, ggml_tensor* x, ggml_tensor
 }
 
 // ConvTranspose1d with symmetric cropping: T_out = T_in * stride
-// DAC uses kernel=2*stride, pad=stride/2.
+// DAC uses kernel=2*stride, padding=ceil(stride/2). For even strides this
+// yields exactly T*stride samples; odd strides intentionally yield
+// T*stride-1, matching torch.nn.ConvTranspose1d used by Sidon.
 // Uses decomposed mul_mat + col2im_1d when w_perm is available.
 static inline ggml_tensor* convt1d(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w, ggml_tensor* w_perm,
                                    ggml_tensor* b, int stride) {
-    const int pad = stride / 2;
+    const int pad = (stride + 1) / 2;
     if (w_perm) {
         const int K = (int)w->ne[0];
         return core_convt::convt1d_decomp(ctx, x, w_perm, b, stride, K, pad, pad);
@@ -367,6 +372,33 @@ static inline ggml_tensor* build_decode_graph(ggml_context* ctx, const DacWeight
     if (gf)
         ggml_build_forward_expand(gf, h);
 
+    return h;
+}
+
+// Build only the neural decoder half of DAC from continuous latent features.
+// Sidon predicts these features directly, so no RVQ codebook lookup is needed.
+// features is (hidden_size, T); the returned PCM tensor is flattened and marked
+// as a graph output exactly like build_decode_graph().
+static inline ggml_tensor* build_decode_features_graph(ggml_context* ctx, const DacWeights& w, ggml_tensor* features,
+                                                       ggml_cgraph* gf, const fastconv_cache* fc = nullptr) {
+    const auto& cfg = w.config;
+    ggml_tensor* h = conv1d(ctx, features, w.in_conv_w, w.in_conv_b, 7, 1, fc);
+
+    for (int b = 0; b < cfg.n_decoder_blocks; b++) {
+        h = dec_block(ctx, h, w.blocks[b], cfg.upsampling_ratios[b], fc);
+        h = ggml_cont(ctx, h);
+    }
+
+    h = snake(ctx, h, w.out_snake_alpha);
+    h = conv1d(ctx, h, w.out_conv_w, w.out_conv_b, 7, 1, fc);
+    h = ggml_tanh(ctx, h);
+
+    const int T_pcm = (int)h->ne[1];
+    h = ggml_cont(ctx, ggml_reshape_1d(ctx, h, T_pcm));
+    ggml_set_name(h, "dac_pcm");
+    ggml_set_output(h);
+    if (gf)
+        ggml_build_forward_expand(gf, h);
     return h;
 }
 

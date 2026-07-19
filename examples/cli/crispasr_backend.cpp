@@ -54,6 +54,7 @@ std::unique_ptr<CrispasrBackend> crispasr_make_moss_transcribe_diarize_backend()
 std::unique_ptr<CrispasrBackend> crispasr_make_funasr_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_paraformer_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_sensevoice_backend();
+std::unique_ptr<CrispasrBackend> crispasr_make_sidon_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_voxcpm2_tts_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_cosyvoice3_tts_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_piper_backend();
@@ -226,6 +227,8 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& name
         return crispasr_make_paraformer_backend();
     if (name == "sensevoice" || name == "sensevoice-small" || name == "sense-voice")
         return crispasr_make_sensevoice_backend();
+    if (name == "sidon" || name == "sidon-v0.1" || name == "speech-restoration")
+        return crispasr_make_sidon_backend();
     if (name == "bark" || name == "bark-tts" || name == "bark-small" || name == "bark-large")
         return crispasr_make_bark_backend();
     if (name == "speecht5" || name == "speecht5-tts" || name == "speecht5_tts")
@@ -329,6 +332,7 @@ std::vector<std::string> crispasr_list_backends() {
         "fun-asr-mlt-nano",
         "paraformer",
         "sensevoice",
+        "sidon",
         "bark",
         "bark-tts",
         "speecht5",
@@ -647,6 +651,8 @@ std::string crispasr_detect_backend_from_gguf(const std::string& model_path) {
         return "funasr";
     if (contains_ci("sensevoice") || contains_ci("sense-voice") || contains_ci("sense_voice"))
         return "sensevoice";
+    if (contains_ci("sidon"))
+        return "sidon";
     if (contains_ci("speecht5"))
         return "speecht5";
     if (contains_ci("bark"))
@@ -693,6 +699,8 @@ std::string crispasr_detect_backend_from_gguf(const std::string& model_path) {
             const std::string a = arch;
             if (a == "whisper")
                 result = "whisper";
+            else if (a == "sidon")
+                result = "sidon";
             else if (a == "nemotron" || a == "nemotron-asr" || a == "nemotron-streaming")
                 result = "nemotron";
             else if (a == "parakeet")

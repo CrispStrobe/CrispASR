@@ -68,6 +68,9 @@ crispasr --backend kokoro -m auto --tts "Hello, how are you?" -o output.wav
 # S2S — speech-to-speech (audio in → audio out)
 crispasr --backend lfm2-audio -m auto -f input.wav --s2s -o reply.wav
 
+# Speech restoration — 16 kHz input, restored 48 kHz output
+crispasr -m sidon-v0.1-f16.gguf -f input.wav --s2s --s2s-output restored.wav
+
 # List every backend + capabilities
 crispasr --list-backends
 ```
@@ -84,7 +87,7 @@ crispasr --list-backends
 | `--tts "TEXT"` | Synthesize speech from text (requires `CAP_TTS` backend). Output via `--tts-output` |
 | `--tts-output FNAME` | Output path for TTS WAV (default: `tts_output.wav`) |
 | `--tts-stream` | Stream s16le mono PCM to stdout per sentence (pipe to a player); logs stay on stderr. See [streaming.md](streaming.md#streaming-synthesized-audio-out) |
-| `--s2s` | Speech-to-speech mode: audio in → audio out (requires `CAP_S2S` backend, e.g. `lfm2-audio`, `mini-omni2`) |
+| `--s2s` | Speech-to-speech mode: audio in → audio out (requires `CAP_S2S` backend, e.g. `lfm2-audio`, `mini-omni2`, `sidon`) |
 | `--s2s-output FNAME` | Output path for S2S WAV |
 | `--voice PATH` | Voice reference for TTS: GGUF voice pack or reference WAV for cloning (`--i-have-rights` required for WAV cloning) |
 | `--server` | Run as HTTP server with persistent model (see [`server.md`](server.md)) |

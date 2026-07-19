@@ -342,17 +342,18 @@ pcm = s.synthesize("Clone my voice.")
 
 ## Speech-to-speech
 
-Backends with S2S capability (`lfm2-audio`, `mini-omni2`) support
+Backends with S2S capability (`lfm2-audio`, `mini-omni2`, `sidon`) support
 end-to-end audio-in → audio-out transformation through a single model
 pass. Available in Python, Go, Dart/Flutter, and the HTTP server
 (`POST /v1/audio/speech-to-speech`).
 
-- `speech_to_speech(pcm_16khz) -> (float32 PCM @ 24 kHz, transcript)`
+- `speech_to_speech(pcm) -> (float32 PCM, transcript)`
   (`crispasr_session_speech_to_speech`)
 
-Input is 16 kHz mono float32 PCM. Returns output audio at the backend's
-TTS sample rate (24 kHz) plus an optional intermediate ASR transcript.
-Output is automatically watermarked, same as TTS.
+Input defaults to 16 kHz mono float32 PCM. Python callers with another input
+rate call `set_pcm_sample_rate(rate)` before `speech_to_speech()`; Sidon then
+resamples internally to 16 kHz. Conversational S2S backends return 24 kHz;
+Sidon returns restored 48 kHz audio and an empty transcript.
 
 ```python
 # Python
@@ -362,6 +363,15 @@ audio, sr = sf.read("input.wav", dtype="float32")  # must be 16 kHz mono
 out_pcm, transcript = s.speech_to_speech(audio)
 print(f"Transcript: {transcript}")
 sf.write("output.wav", out_pcm, 24000)
+```
+
+```python
+# Sidon restoration from a 24 kHz source
+s = crispasr.Session("sidon-v0.1-f16.gguf")
+audio, sr = sf.read("input.wav", dtype="float32")
+s.set_pcm_sample_rate(sr)
+restored, _ = s.speech_to_speech(audio)
+sf.write("restored.wav", restored, 48000)
 ```
 
 ```go

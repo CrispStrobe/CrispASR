@@ -1164,6 +1164,46 @@ supporting ASR, TTS, and speech-to-speech.
 Models: single GGUF (F16 ~1.6 GB) converted from `lit_model.pth` + `small.pt`.
 For TTS/S2S, also needs SNAC codec GGUF (`--codec-model snac-24khz.gguf`).
 
+### sidon
+
+SaruLab Sidon v0.1 is a multilingual speech-restoration model exposed through
+the existing speech-to-speech API. It removes noise and reverberation and
+restores bandwidth while preserving speaker identity.
+
+- **Frontend:** SeamlessM4T / w2v-BERT 2.0 log-mel extraction, stored with the
+  exact window and mel-filter constants in the GGUF. Input is 16 kHz mono.
+- **Predictor:** the first eight w2v-BERT 2.0 encoder layers with Sidon's LoRA
+  deltas merged by `models/convert-sidon-to-gguf.py`. Relative position
+  attention produces continuous 1024-d features.
+- **Decoder:** a five-block DAC decoder with upsampling ratios `[8, 5, 4, 3,
+  2]`; no RVQ lookup is needed because the predictor emits continuous DAC
+  features directly. Output is 48 kHz mono PCM.
+- **Execution:** CPU, CUDA, and Vulkan. The Vulkan graph decomposes affine
+  normalization and relative-position gather operations into supported GGML
+  primitives; both predictor and DAC execute fully on Vulkan.
+
+The CLI auto-detects `general.architecture = "sidon"` and exposes `CAP_S2S`:
+
+```bash
+crispasr -m sidon-v0.1-f16.gguf -f input.wav --s2s --s2s-output restored.wav
+```
+
+The C/Python session API accepts non-16 kHz input after setting the PCM sample
+rate; the unified S2S dispatch performs polyphase resampling before inference.
+
+To reproduce the F16 GGUF from the upstream base model and released Sidon raw
+weights:
+
+```bash
+huggingface-cli download facebook/w2v-bert-2.0 --local-dir models/w2v-bert-2.0
+huggingface-cli download sarulab-speech/sidon_raw_weight --local-dir models/sidon_raw_weight
+python models/convert-sidon-to-gguf.py \
+  --base models/w2v-bert-2.0 \
+  --sidon models/sidon_raw_weight \
+  --output models/sidon-v0.1-f16.gguf \
+  --dtype f16
+```
+
 ### reazonspeech
 
 ReazonSpeech NeMo v2 (reazon-research, Apache-2.0): 619M-param Japanese

@@ -74,6 +74,7 @@ add_executable(${TARGET}
     crispasr_backend_funasr.cpp
     crispasr_backend_paraformer.cpp
     crispasr_backend_sensevoice.cpp
+    crispasr_backend_sidon.cpp
     crispasr_backend_speecht5.cpp
     crispasr_backend_zonos.cpp
     crispasr_aligner_cli.cpp
@@ -221,6 +222,7 @@ target_link_libraries(crispasr-diff PRIVATE
     funasr
     paraformer
     sensevoice
+    sidon
     cosyvoice3_tts
     csm-tts
     parler-tts
@@ -343,6 +345,7 @@ target_link_libraries(${TARGET} PRIVATE
     funasr
     paraformer
     sensevoice
+    sidon
     moss_audio
     moss_tts
     moss_tts_local

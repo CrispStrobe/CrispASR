@@ -780,6 +780,25 @@ catch_discover_tests(test-lfm2-audio
         WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
 )
 
+# ─── test-sidon-live — live speech-restoration integration test
+add_executable(test-sidon-live
+    test_sidon_live.cpp
+)
+target_include_directories(test-sidon-live PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-sidon-live PRIVATE
+    Catch2::Catch2WithMain
+    sidon
+)
+catch_discover_tests(test-sidon-live
+    TEST_SPEC "[sidon]"
+    PROPERTIES
+        LABELS live
+        SKIP_RETURN_CODE 4
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+)
+
 # ─── test - snac — unit + live tests for core/snac.h (SNAC 24kHz decoder)
 add_executable(test-snac
     test_snac_unit.cpp

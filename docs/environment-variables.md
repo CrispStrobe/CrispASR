@@ -842,6 +842,11 @@ suffixes.
 - `CRISPASR_SENSEVOICE_BENCH`
 - `CRISPASR_SENSEVOICE_NO_FA`
 
+### Sidon
+
+- `CRISPASR_SIDON_FASTCONV` — DAC convolution mode (`off`, `k1-f16`, `k1-f32`, or `full`). Unset defaults to
+  `k1-f16` on CUDA and `off` on Vulkan/CPU.
+
 ### Sherpa
 
 - `CRISPASR_SHERPA_LID_BIN`

@@ -71,7 +71,9 @@ live transcription + TTS + language detection, auto-deployed from `hf-space/`.
 ## Supported backends
 
 CrispASR ships **43 ASR backends** for transcription/translation and
-**48 TTS engines** for synthesis (91 total in the [feature matrix](docs/feature-matrix.md)).
+**48 TTS engines** for synthesis. It also ships Sidon as an audio-to-audio
+speech-restoration backend; see the [feature matrix](docs/feature-matrix.md)
+for the complete capability list.
 Pick at the CLI with `--backend NAME`, or omit it to let the binary auto-detect
 from the GGUF metadata. Jump to the [TTS table](#text-to-speech-models) for the synthesis side.
 
@@ -137,6 +139,17 @@ from the GGUF metadata. Jump to the [TTS table](#text-to-speech-models) for the 
 | **fun-asr-mlt-nano** | [`FunAudioLLM/Fun-ASR-MLT-Nano-2512`](https://huggingface.co/cstr/funasr-mlt-nano-GGUF) | Same architecture, multilingual decoder | 31 langs incl. de, fr, es, pt, ru, ar, hi, vi, th, ko | FunASR Model License v1.1 |
 | **paraformer** | [`funasr/paraformer-zh`](https://huggingface.co/cstr/paraformer-zh-GGUF) | 50-block SANM encoder + CIF predictor + 16-block NAR decoder (single-pass, non-autoregressive); character-level vocab (8404); 220M params | zh, en | FunASR Model License (commercial OK w/ attribution) |
 | **sensevoice** | [`FunAudioLLM/SenseVoiceSmall`](https://huggingface.co/cstr/sensevoice-small-GGUF) | 70-block SANM encoder + CTC head; emits transcript + language ID + emotion + audio-event in one forward pass (non-AR, 15× faster than Whisper-Large); structured C ABI + `-oj` JSON expose the four tags as separate fields | 50+ langs; native LID + emotion + audio-event tags | FunASR Model License v1.1 |
+
+### Speech restoration
+
+| Backend | Model | Architecture | Input / output | License |
+|---|---|---|---|---|
+| **sidon** | [`KevinAHM/Sidon-GGUF`](https://huggingface.co/KevinAHM/Sidon-GGUF) (base [`sarulab-speech/sidon-v0.1`](https://huggingface.co/sarulab-speech/sidon-v0.1)) | w2v-BERT 2.0 predictor + continuous DAC decoder ([more](docs/architecture.md#sidon)) | 16 kHz mono → restored 48 kHz mono | MIT |
+
+```bash
+huggingface-cli download KevinAHM/Sidon-GGUF sidon-v0.1-f16.gguf --local-dir models
+crispasr -m models/sidon-v0.1-f16.gguf -f input.wav --s2s --s2s-output restored.wav
+```
 
 ### Text-to-Speech models
 

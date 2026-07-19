@@ -21,6 +21,7 @@
 #include "core/ngram_loop_fix.h"    // fix/session-long-audio: collapse decode loops in merged chunks (issue #218)
 #include "parakeet_orchestrate.h"   // improvements Phase 1: shared parakeet transcribe orchestration
 #include "core/gpu_backend_pref.h"  // crispasr_set_gpu_backend_pref (#214)
+#include "core/audio_resample.h"    // Sidon S2S input-rate conversion
 
 #include <atomic>
 #include <climits> // INT_MIN (parakeet att_context_* sentinels) — issue #257
@@ -82,6 +83,10 @@
 #if __has_include("mini_omni2.h")
 #include "mini_omni2.h"
 #define CA_HAVE_MINI_OMNI2 1
+#endif
+#if __has_include("sidon.h")
+#include "sidon.h"
+#define CA_HAVE_SIDON 1
 #endif
 #if __has_include("qwen3_asr.h")
 #include "qwen3_asr.h"
@@ -1353,6 +1358,8 @@ CA_EXPORT int crispasr_detect_backend_from_gguf(const char* path, char* out_name
         backend = "canary-qwen";
     else if (strcmp(arch, "lfm2-audio") == 0)
         backend = "lfm2-audio";
+    else if (strcmp(arch, "sidon") == 0)
+        backend = "sidon";
     else if (strcmp(arch, "cohere-transcribe") == 0)
         backend = "cohere";
     else if (strcmp(arch, "qwen3-asr") == 0 || strcmp(arch, "qwen3asr") == 0)
@@ -1726,6 +1733,9 @@ struct crispasr_session {
 #endif
 #ifdef CA_HAVE_MINI_OMNI2
     mini_omni2_context* mini_omni2_ctx = nullptr;
+#endif
+#ifdef CA_HAVE_SIDON
+    sidon_context* sidon_ctx = nullptr;
 #endif
 #ifdef CA_HAVE_QWEN3
     qwen3_asr_context* qwen3_ctx = nullptr;
@@ -2342,6 +2352,20 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
         p.use_gpu = g_open_use_gpu_tls;
         s->mini_omni2_ctx = mini_omni2_init_from_file(model_path, p);
         if (!s->mini_omni2_ctx) {
+            delete s;
+            return nullptr;
+        }
+        return s;
+    }
+#endif
+#ifdef CA_HAVE_SIDON
+    if (s->backend == "sidon") {
+        sidon_context_params p = sidon_context_default_params();
+        p.n_threads = s->n_threads;
+        p.verbosity = g_open_verbosity_tls;
+        p.use_gpu = g_open_use_gpu_tls;
+        s->sidon_ctx = sidon_init_from_file(model_path, p);
+        if (!s->sidon_ctx) {
             delete s;
             return nullptr;
         }
@@ -3703,6 +3727,9 @@ CA_EXPORT int crispasr_session_available_backends(char* out_csv, int out_cap) {
 #endif
 #ifdef CA_HAVE_MINI_OMNI2
     list += ",mini-omni2";
+#endif
+#ifdef CA_HAVE_SIDON
+    list += ",sidon";
 #endif
 #ifdef CA_HAVE_QWEN3
     list += ",qwen3";
@@ -8223,6 +8250,33 @@ CA_EXPORT float* crispasr_session_speech_to_speech(crispasr_session* s, const fl
         return pcm;
     }
 #endif
+#ifdef CA_HAVE_SIDON
+    if (s->sidon_ctx) {
+        const float* sidon_input = in_samples;
+        int sidon_input_count = n_in_samples;
+        std::vector<float> resampled;
+        if (s->pcm_sample_rate != 16000) {
+            resampled = core_audio::resample_polyphase(in_samples, n_in_samples, s->pcm_sample_rate, 16000);
+            sidon_input = resampled.data();
+            sidon_input_count = (int)resampled.size();
+        }
+
+        std::vector<float> restored = sidon_restore(s->sidon_ctx, sidon_input, sidon_input_count);
+        if (restored.empty()) {
+            s->last_synth_error = "Sidon restoration produced no audio";
+            return nullptr;
+        }
+        float* pcm = (float*)malloc(restored.size() * sizeof(float));
+        if (!pcm) {
+            s->last_synth_error = "failed to allocate Sidon output";
+            return nullptr;
+        }
+        memcpy(pcm, restored.data(), restored.size() * sizeof(float));
+        if (out_n_samples)
+            *out_n_samples = (int)restored.size();
+        return pcm;
+    }
+#endif
 
     s->last_synth_error = "backend '" + s->backend + "' does not support speech-to-speech";
     return nullptr;
@@ -8513,6 +8567,10 @@ CA_EXPORT void crispasr_session_close(crispasr_session* s) {
 #ifdef CA_HAVE_MINI_OMNI2
     if (s->mini_omni2_ctx)
         mini_omni2_free(s->mini_omni2_ctx);
+#endif
+#ifdef CA_HAVE_SIDON
+    if (s->sidon_ctx)
+        sidon_free(s->sidon_ctx);
 #endif
 #ifdef CA_HAVE_QWEN3
     if (s->qwen3_ctx)

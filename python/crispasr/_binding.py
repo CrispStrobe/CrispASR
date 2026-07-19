@@ -1662,6 +1662,16 @@ class Session:
         if rc != 0:
             raise RuntimeError(f"set_codec_path failed (rc={rc}) for backend {self.backend!r}")
 
+    def set_pcm_sample_rate(self, sample_rate: int) -> None:
+        """Declare the sample rate of PCM passed to the next audio call."""
+        if not hasattr(self._lib, "crispasr_session_set_pcm_sample_rate"):
+            raise RuntimeError("PCM sample-rate API not present in this libcrispasr build")
+        self._lib.crispasr_session_set_pcm_sample_rate.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        self._lib.crispasr_session_set_pcm_sample_rate.restype = ctypes.c_int
+        rc = self._lib.crispasr_session_set_pcm_sample_rate(self._handle, int(sample_rate))
+        if rc != 0:
+            raise RuntimeError(f"set_pcm_sample_rate failed (rc={rc})")
+
     def set_parakeet_att_context(self, left: int, right: int) -> None:
         """Set parakeet/canary local-attention window (issue #257).
 
@@ -2477,10 +2487,12 @@ class Session:
         """Speech-to-speech: audio in → audio out via a single model pass.
 
         Supported on backends with S2S capability (``lfm2-audio``,
-        ``mini-omni2``).  Input is 16 kHz mono float32 PCM.  Returns a
+        ``mini-omni2``, ``sidon``). Input is mono float32 PCM; call
+        :meth:`set_pcm_sample_rate` first when it is not 16 kHz. Returns a
         tuple ``(output_pcm, transcript)`` where *output_pcm* is a
-        float32 numpy array at the backend's TTS sample rate (typically
-        24 kHz) and *transcript* is the intermediate ASR text (may be
+        float32 numpy array at the backend's output sample rate (24 kHz
+        for conversational S2S, 48 kHz for Sidon) and *transcript* is the
+        intermediate ASR text (may be
         empty if the backend doesn't produce one).
 
         Raises :class:`RuntimeError` if the C ABI lacks the symbol or

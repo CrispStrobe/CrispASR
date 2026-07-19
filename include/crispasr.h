@@ -622,7 +622,7 @@ CRISPASR_API float* crispasr_session_synthesize_raw(struct crispasr_session* s, 
 CRISPASR_API void crispasr_pcm_free(float* pcm);
 
 // Speech-to-Speech — audio in → audio out via a single model pass.
-// Supported on backends with S2S capability (lfm2-audio, mini-omni2).
+// Supported on backends with S2S capability (lfm2-audio, mini-omni2, sidon).
 // Returns malloc'd float32 PCM; caller frees with crispasr_pcm_free().
 // out_text (optional): if non-null, receives the intermediate transcript
 // (malloc'd, caller frees with free()). Returns nullptr on failure or
@@ -647,7 +647,7 @@ CRISPASR_API const char* crispasr_session_last_synth_error(struct crispasr_sessi
 // backends and 0 on error.
 CRISPASR_API int crispasr_session_input_sample_rate(struct crispasr_session* s);
 
-// Tell the session what sample rate the next transcribe call's PCM is at.
+// Tell the session what sample rate the next PCM input call's audio is at.
 // Backends that normally resample (e.g. 16 kHz → 24 kHz) will skip the
 // step when the rate already matches. Defaults to 16000 for back-compat.
 CRISPASR_API int crispasr_session_set_pcm_sample_rate(struct crispasr_session* s, int rate);

@@ -2378,13 +2378,13 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
     //   response_format: "wav"|"pcm"|"f32"               (optional, default "wav")
     //
     // Returns:
-    //   200 audio/wav — output audio at backend's TTS sample rate (24 kHz mono)
+    //   200 audio/wav — output audio at backend's native TTS/S2S sample rate
     //   Header X-Transcript: <URL-encoded intermediate ASR transcript>
     //   400 — backend lacks CAP_S2S, missing file
     //   500 — S2S returned empty audio
     //   503 — model still loading
     //
-    // Supported backends: lfm2-audio, mini-omni2
+    // Supported backends: lfm2-audio, mini-omni2, sidon
     // -----------------------------------------------------------------------
     svr.Post("/v1/audio/speech-to-speech", [&](const Request& req, Response& res) {
         if (!require_auth(req, res))
@@ -2397,7 +2397,7 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             json_error(res, 400,
                        "loaded backend '" + backend_name +
                            "' does not support speech-to-speech (no CAP_S2S); "
-                           "load lfm2-audio or mini-omni2 via POST /load");
+                           "load lfm2-audio, mini-omni2, or sidon via POST /load");
             return;
         }
 
