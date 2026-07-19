@@ -108,7 +108,7 @@ enum crispasr_capability : uint32_t {
     CAP_INTERNAL_CHUNKING = 1u << 20,   // backend handles its own long-audio chunking internally
                                         // (PLAN #104: parakeet uses chunked-encode + single-decode).
                                         // Skip the crispasr_run.cpp auto-chunk fallback for these.
-    CAP_STREAMING = 1u << 22,           // backend supports true token-level streaming output
+    CAP_STREAMING = 1u << 23,           // backend supports true token-level streaming output
 };
 
 // ---------------------------------------------------------------------------
