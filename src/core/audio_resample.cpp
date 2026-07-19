@@ -122,7 +122,7 @@ std::vector<float> resample_polyphase(const float* in, int n_in, int src_rate, i
         // Compensate for the implicit factor-L upsample (zero-stuffing
         // multiplies the spectrum by 1/L; a corresponding factor-L gain
         // restores unity DC).
-        out[(size_t)i] = (float)(s * (double)up);
+        out[(size_t)i] = (float)(s * (double)L);
     }
     return out;
 }

@@ -279,6 +279,22 @@ catch_discover_tests(test-cpu-ops-to-f32
     PROPERTIES LABELS "unit"
 )
 
+# Regression guard for polyphase resampler gain compensation.
+add_executable(test-audio-resample
+    test-audio-resample.cpp
+    ${PROJECT_SOURCE_DIR}/src/core/audio_resample.cpp
+)
+target_include_directories(test-audio-resample PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-audio-resample PRIVATE
+    Catch2::Catch2WithMain
+)
+catch_discover_tests(test-audio-resample
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit"
+)
+
 # ─── test-core-rvq — core_rvq::encode_euclidean vs full-distance reference ─────
 # Proves the 2·x·E−‖E‖² shootout selects the same codes as a direct argmin
 # (the correctness property behind §176l routing kyutai through core_rvq).
