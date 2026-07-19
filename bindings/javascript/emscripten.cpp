@@ -970,8 +970,9 @@ EMSCRIPTEN_BINDINGS(whisper) {
         }));
 
     // --- Pitch (F0) estimation — CREPE ---
-    // Open the model with ttsOpenExplicit(path, "crepe", nThreads): the GGUF
-    // architecture auto-detect has no `crepe` case, so plain ttsOpen returns
+    // Open the model with ttsOpenExplicit(path, "crepe", nThreads) -- always
+    // correct. Plain ttsOpen also works from 0.8.15 on, where the GGUF
+    // architecture auto-detect gained a `crepe` case; older builds return
     // false for a CREPE model even though the backend is compiled in.
     //
     // `audio` is a mono Float32Array at 16 kHz (query sessionPitchSampleRate
