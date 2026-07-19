@@ -1492,6 +1492,15 @@ static thread_local int g_open_n_gpu_layers_tls = -1;
 static thread_local float g_open_temperature_tls = 0.0f;
 static thread_local uint64_t g_open_seed_tls = 0;
 
+// CLI entry points load dynamic GGML plugins during startup, but direct C ABI
+// consumers (Python, Dart, Rust, Go) have no CLI main(). Load them lazily on
+// the first GPU session open, once across all caller threads.
+static std::once_flag g_dynamic_backends_once;
+
+static void ensure_dynamic_backends_loaded() {
+    std::call_once(g_dynamic_backends_once, []() { ggml_backend_load_all(); });
+}
+
 // Defined ahead of crispasr_session so the session can hold its own
 // streamed-segment polling buffer (see the Dart FFI polling API below).
 struct crispasr_session_seg {
@@ -2226,6 +2235,9 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
                                                            int n_threads) {
     if (!model_path || !backend_name)
         return nullptr;
+
+    if (g_open_use_gpu_tls)
+        ensure_dynamic_backends_loaded();
 
     auto* s = new crispasr_session();
     s->model_path = model_path;
