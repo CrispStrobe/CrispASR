@@ -247,6 +247,34 @@ regression test against `samples/jfk.wav`:
 
   Both are driven by `--text "..." -sl <src> -tl <tgt>`.
 
+### Non-transcribe task surfaces
+
+Not every backend produces text or synthetic speech. A task whose result
+is **not** `crispasr_segment`s does **not** get layered onto `transcribe()`
+— it gets its own early CLI dispatcher, hit *before* the ASR backend is
+constructed, and its own capability bit (used for detection and help text,
+never for routing). `docs/source-separation-surface.md` settled this design;
+everything below follows it.
+
+- **Source separation** (`htdemucs`, `mel-band-roformer`) — one mixed input
+  → N named stems of the *user's own* audio. `CAP_SEPARATE` (bit 22),
+  `--separate`, `src/core/separation_io.h`, `crispasr_separate_cli.{h,cpp}`.
+  Output is one WAV per stem at the model's native rate, with **no
+  AI-provenance INFO chunk** — the audio is not AI-generated.
+- **Pitch / F0** (`crepe`) — one monophonic input → a per-frame fundamental
+  frequency track. `CAP_PITCH` (bit 24), `--pitch`,
+  `crispasr_pitch_cli.{h,cpp}` (mirroring `--separate`), C ABI
+  `crispasr_session_pitch*`. Output is a `crepe_frame` series
+  (`{time_ms, f0_hz, voiced_prob}`), laid out to match the CometBeat Dart
+  `PitchFrame` record field-for-field so the FFI binding is a reinterpret
+  rather than a marshal. See `### crepe` below and
+  `docs/music-transcription/PLAN.md`.
+
+Both are steps in the same music-transcription chain (separate → F0 →
+notes), which is why they share the "early dispatcher, own result type"
+shape. Note that `CAP_SEPARATE` and `CAP_STREAMING` briefly collided on
+bit 22; streaming now owns bit 23.
+
 ### Optimization opportunities
 
 - **Beam search** for all encoder-decoder and Audio-LLM backends —
@@ -1276,3 +1304,78 @@ Key points:
   test audio (verified on Kaggle, 2026-06-28).
 
 Models at `cstr/parakeet-ctc-1.1b-ja-GGUF`: F16 (2.0 GB), Q8_0 (1.2 GB), Q4_K (631 MB).
+
+### crepe
+
+Monophonic **pitch / F0** estimation — CREPE (Kim et al. 2018, MIT), from the
+`torchcrepe` weights. Neither ASR nor TTS: see
+[Non-transcribe task surfaces](#non-transcribe-task-surfaces). Driven by
+`--pitch`, capability bit `CAP_PITCH` (bit 24), C ABI `crispasr_session_pitch*`,
+runtime `src/crepe.{h,cpp}`.
+
+```
+16 kHz mono PCM
+  → 1024-sample frames, hop 10 ms, zero-padded 512 at both edges
+    (torchcrepe pad=True), each frame mean-centred and divided by its
+    UNBIASED (n-1) std
+  → 6 × [pad → conv1d → RELU → batchnorm → maxpool(2)]
+  → flatten channel-fastest → Linear → 360 bins → sigmoid
+  → decode: cents = 20·bin + 1997.3794084376191, Hz = 10·2^(cents/1200)
+```
+
+| layer | K | stride | pad (l, r) | out ch (full / tiny) | T |
+|---|---|---|---|---|---|
+| conv1 | 512 | 4 | 254, 254 | 1024 / 128 | 1024 → 256 → 128 |
+| conv2..4 | 64 | 1 | 31, **32** | 128 / 16 | halves each layer |
+| conv5 | 64 | 1 | 31, **32** | 256 / 32 | 16 → 8 |
+| conv6 | 64 | 1 | 31, **32** | 512 / 64 | 8 → 4 |
+
+Three geometry decisions that are easy to get wrong:
+
+- **The ReLU is BEFORE the BatchNorm.** So the usual conv+BN fold is
+  *invalid* — BN ships as a standalone per-channel affine (`<conv>_BN.scale` /
+  `.offset`, computed in f64 by the converter). Folding it produced plausible-
+  looking numerics (cos 0.83 at ~2× the reference magnitude) rather than an
+  obvious structural break, because least-squares fitting an affine through a
+  rectified signal recovers about half the true scale.
+- **conv2..6 padding is asymmetric (31, 32)**, and Metal rejects an asymmetric
+  `GGML_OP_PAD`. The graph uses a symmetric `p=32` conv and drops output
+  column 0, which is exactly equivalent.
+- **`torchcrepe.convert.bins_to_cents` applies triangular dithering**, so the
+  upstream decode is *non-deterministic*. CrispASR does not implement it, and
+  the diff harness compares only the raw 360-bin activation. The decoder here
+  is the original CREPE weighted local average over ±4 bins around the argmax
+  (torchcrepe defaults to Viterbi instead; `crepe_compute_activation()` exposes
+  the raw grid so a caller can run its own).
+
+**Performance.** CREPE is genuinely expensive per frame: at the reference 10 ms
+hop, `full` is 1409 MMAC/frame → 282 GFLOP per second of audio; `tiny` is
+36.7 MMAC/frame → 7.3 GFLOP/s (38× cheaper). Measured on M1 over 10 s of audio:
+`full` RTF 2.0 (Metal) / ~40 (CPU), `tiny` RTF 0.28 (Metal) / ~2.4 (CPU).
+**`tiny` is the shipping default** and the GPU path is not optional. The graph
+batches 64 frames per dispatch and keeps the channel-fastest `(OC, OL, N)`
+layout throughout rather than letting `ggml_conv_1d` permute back every layer.
+Gates: `CRISPASR_CREPE_NO_GPU`, `CRISPASR_CREPE_NO_BAKE_F32`,
+`CRISPASR_CREPE_DEBUG`.
+
+> Batching CREPE surfaced a latent `ggml_conv_1d` bug: for `N > 1` the final
+> `ggml_reshape_3d` declares a shape that contradicts the data layout. Fixed in
+> the fork (`CrispStrobe/ggml@662b05fb`); no other caller in either repo hits
+> the `N > 1 && OC > 1` case. See `docs/music-transcription/PLAN.md`.
+
+**Parity.** `tools/reference_backends/crepe.py` → `crispasr-diff crepe`
+compares the 360-bin activation against `torchcrepe` per frame;
+`tools/crepe_numpy_parity.py` is the executable numpy spec for the graph, and
+`tests/test_crepe_parity.cpp` dumps activations for it to score. Measured on
+`samples/jfk.wav` (1101 frames), per-frame `cos_min` / same-argmax rate:
+
+| | f16 | q8_0 | q4_k |
+|---|---|---|---|
+| tiny | 0.999999 · 100 % | 0.999807 · 98.5 % | 0.961643 · 85.2 % |
+| full | 1.000000 · 100 % | 0.999937 · 99.5 % | 0.992563 · 91.4 % |
+
+So **q8_0 is the lowest safe quant**; q4_k shifts the argmax on low-confidence
+frames, which for pitch means octave errors. Models at `cstr/crepe-GGUF`
+(f16 / q8_0 / q4_k × tiny / full; tiny-f16 is 1.0 MB, full-f16 44.5 MB).
+
+Live test: `tests/test_crepe_live.cpp`, gated on `CRISPASR_MODEL_CREPE`.

@@ -7337,7 +7337,8 @@ int main(int argc, char** argv) {
         const float hop_ms = 10.0f;
         const int n_frames = crepe_n_frames(ctx, (int)samples.size(), hop_ms);
         std::vector<float> act((size_t)n_frames * CREPE_PITCH_BINS);
-        const int got = crepe_compute_activation(ctx, samples.data(), (int)samples.size(), hop_ms, act.data(), n_frames);
+        const int got =
+            crepe_compute_activation(ctx, samples.data(), (int)samples.size(), hop_ms, act.data(), n_frames);
         if (got <= 0) {
             fprintf(stderr, "crepe_compute_activation failed\n");
             crepe_free(ctx);
