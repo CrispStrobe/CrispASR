@@ -378,6 +378,7 @@ struct omnivoice_context {
     // Voice cloning state
     std::vector<int32_t> ref_audio_codes; // (n_codebooks, T_ref) row-major
     int ref_T = 0;
+    float ref_rms = 0.0f;
     std::string ref_text;
 
     // Language / instruct
@@ -3363,6 +3364,7 @@ int omnivoice_set_voice_prompt(struct omnivoice_context* ctx, const char* wav_pa
     if (!wav_path || !*wav_path) {
         ctx->ref_audio_codes.clear();
         ctx->ref_T = 0;
+        ctx->ref_rms = 0.0f;
         ctx->ref_text.clear();
         return 0;
     }
@@ -3470,6 +3472,7 @@ int omnivoice_set_voice_prompt(struct omnivoice_context* ctx, const char* wav_pa
     }
     ctx->ref_audio_codes = std::move(codes);
     ctx->ref_T = T_ref;
+    ctx->ref_rms = rms;
     return 0;
 }
 
@@ -3550,6 +3553,15 @@ float* omnivoice_decode_codes(struct omnivoice_context* ctx, const int32_t* code
     if (pcm.empty()) {
         *out_n_samples = 0;
         return nullptr;
+    }
+
+    // Match the reference implementation's post-processing: quiet prompts are
+    // normalized to 0.1 RMS for encoding, then decoded audio is restored to the
+    // prompt's original loudness.
+    if (ctx->ref_rms > 0.0f && ctx->ref_rms < 0.1f) {
+        const float gain = ctx->ref_rms / 0.1f;
+        for (float& sample : pcm)
+            sample *= gain;
     }
 
     int n = (int)pcm.size();
