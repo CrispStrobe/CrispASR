@@ -100,17 +100,15 @@ copies amortized over few frames).
   summary at normal verbosity (`gen Xs + decode Ys = Zs for Ws audio (RTF …)`) —
   no more wrapping in `time`.
 - ✅ **Landed on `main`** (`6a1b1903b`, rebased past the 0.8.11 release bump).
-- 🧪 **GPU/Metal codec decode (`OMNIVOICE_CODEC_GPU`, default OFF, shipped as scaffold):**
+- ✅ **GPU codec decode (`OMNIVOICE_CODEC_GPU`, default ON for CUDA, opt-in elsewhere):**
   every decode op is Metal-supported (CONV_TRANSPOSE_1D/IM2COL/MUL_MAT/SIN/CAST/
   GET_ROWS), output equivalent (max |Δ| ≈ 54/32768, inaudible). **But on M1 Metal it
   LOSES to CPU-FASTCONV:** decode 1.15→1.73 s (short) and 11.2→19.6 s (437-frame) —
-  ~40 modest-channel convs are dispatch-bound on Metal and contend with the
-  concurrently-Metal LLM (the dev-guide "small-op GPU dispatch is launch-bound"
-  case). Kept OFF (verified-but-slower → opt-in). **May still win on CUDA** (the
-  unified-CFG precedent in this same PLAN flipped a Metal-loser into a +13% CUDA
-  win) → needs a Kaggle CUDA A/B before any default flip. Box was loaded (gen
-  37→58 s between runs) so numbers are directional, not clean — but the conservative
-  default (OFF) is unaffected.
+  ~40 modest-channel convs are dispatch-bound on Metal, so Metal remains CPU by
+  default. CUDA validation on RTX 5070 Ti reduced a 7.52 s clip's decode from
+  ~1.4 s on CPU to ~34 ms with PCM cosine 0.99999986; issue #254 independently
+  reported 0.05–0.11 s CUDA decode. `OMNIVOICE_CODEC_GPU=0` restores CPU placement,
+  while `=1` opts non-CUDA GPU backends into the existing path.
 - ⏭ **Remaining lever:** the LLM `gen` phase is already at per-step parity with
   omnivoice.cpp, so headroom there is kernel-level (their ggml fork). A persistent
   decode graph (build/alloc once, reuse across chunks) could cut the GPU dispatch

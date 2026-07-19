@@ -13,6 +13,7 @@
 //   OMNIVOICE_DEBUG=1      — verbose per-step trace
 //   OMNIVOICE_BENCH=1      — per-stage wall-clock timings
 //   OMNIVOICE_DUMP_DIR=/d  — dump intermediate tensors
+//   OMNIVOICE_CODEC_GPU=0/1 — override automatic CUDA codec placement
 
 #include "omnivoice.h"
 
@@ -657,7 +658,7 @@ static bool load_model(omnivoice_context* ctx, const char* path) {
 // ---------------------------------------------------------------------------
 
 static bool codec_fastconv_enabled();
-static bool codec_gpu_enabled();
+static bool codec_gpu_enabled(const omnivoice_context* ctx);
 
 static bool load_tokenizer(omnivoice_context* ctx, const char* path) {
     auto& tok = ctx->tokenizer;
@@ -851,11 +852,11 @@ static bool load_tokenizer(omnivoice_context* ctx, const char* path) {
         return false;
     }
 
-    // Create backend + buffer. Codec decode is normally CPU; OMNIVOICE_CODEC_GPU=1
-    // (with a GPU main backend) puts the conv-heavy decode/encode graphs on the GPU
-    // — experimental, default OFF (see codec_gpu_enabled). A fresh GPU backend keeps
-    // the tokenizer independent of ctx->backend for clean teardown.
-    const bool codec_gpu = ctx->use_gpu && codec_gpu_enabled();
+    // Create backend + buffer. CUDA defaults to GPU for the conv-heavy codec;
+    // Metal/CPU stay on CPU because Metal's small convs are dispatch-bound.
+    // OMNIVOICE_CODEC_GPU=0/1 overrides automatic placement. A fresh GPU backend
+    // keeps the tokenizer independent of ctx->backend for clean teardown.
+    const bool codec_gpu = ctx->use_gpu && codec_gpu_enabled(ctx);
     tok.backend = codec_gpu ? crispasr_init_gpu_backend() : nullptr;
     if (!tok.backend)
         tok.backend = ggml_backend_cpu_init();
@@ -943,16 +944,16 @@ static bool codec_fastconv_enabled() {
     return !(e && e[0] == '0');
 }
 
-// GPU codec decode (#254, experimental). The DAC decode is one big conv-heavy
-// graph (not a per-step small-matmul loop), so unlike an AR decode it is a good
-// GPU candidate — the dev-guide "codec 3× Metal" case. Every op in the decode
-// graph is Metal-supported (CONV_TRANSPOSE_1D, IM2COL, MUL_MAT, SIN/SQR/DIV,
-// CAST, GET_ROWS). Default OFF: a GPU default must be Kaggle-CUDA-verified per
-// perf-discipline before flipping. Enable with OMNIVOICE_CODEC_GPU=1 (requires
-// --use-gpu / GPU main backend). Pairs with FASTCONV (baked F32 kernels).
-static bool codec_gpu_enabled() {
+// GPU codec decode (#254). The DAC decode is one large conv-heavy graph. CUDA
+// measurements on RTX 5070 Ti reduce decode from ~1.4 s on CPU to ~34 ms, while
+// Metal remains slower than CPU-FASTCONV because its modest-channel convs are
+// dispatch-bound. Default to GPU only when the main backend is CUDA; explicit
+// OMNIVOICE_CODEC_GPU=0/1 remains the cross-platform override.
+static bool codec_gpu_enabled(const omnivoice_context* ctx) {
     const char* e = crispasr_env::get("CRISPASR_OMNIVOICE_CODEC_GPU");
-    return e && e[0] && e[0] != '0';
+    if (e && e[0])
+        return e[0] != '0';
+    return ctx && ctx->backend && std::strstr(ggml_backend_name(ctx->backend), "CUDA") != nullptr;
 }
 
 // Bake F32 copies of every decode-path conv kernel into a dedicated buffer on
