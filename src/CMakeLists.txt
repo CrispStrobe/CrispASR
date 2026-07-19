@@ -2746,6 +2746,12 @@ if (TARGET htdemucs)
     target_link_libraries(crispasr-lib PUBLIC htdemucs)
 endif()
 
+# Pitch (F0) estimation — driven by the --pitch CLI dispatcher
+# (examples/cli/crispasr_pitch_cli.cpp), arch auto-detected from the GGUF.
+if (TARGET crepe)
+    target_link_libraries(crispasr-lib PUBLIC crepe)
+endif()
+
 # Text-LLM chat backend — PRIVATE link: llama.h identifiers are
 # absorbed into libcrispasr and don't bleed into the public surface.
 # Symbols downstream consumers see are only the `crispasr_chat_*` ABI

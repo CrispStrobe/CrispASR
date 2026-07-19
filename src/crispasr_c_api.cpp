@@ -300,6 +300,10 @@
 #include "htdemucs.h"
 #define CA_HAVE_HTDEMUCS 1
 #endif
+#if __has_include("crepe.h")
+#include "crepe.h"
+#define CA_HAVE_CREPE 1
+#endif
 #if __has_include("kyutai_stt.h")
 #include "kyutai_stt.h"
 #define CA_HAVE_KYUTAI 1
@@ -1844,6 +1848,10 @@ struct crispasr_session {
     htdemucs_context* htdemucs_ctx = nullptr;
     htdemucs_result* htdemucs_last_result = nullptr;
 #endif
+#ifdef CA_HAVE_CREPE
+    crepe_context* crepe_ctx = nullptr;
+    std::vector<crepe_frame> crepe_last_frames;
+#endif
 #ifdef CA_HAVE_KYUTAI
     void* kyutai_ctx = nullptr;
 #endif
@@ -2735,6 +2743,16 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
         hp.use_gpu = g_open_use_gpu_tls; // crispasr_session has no use_gpu member; use the open-time TLS flag
         s->htdemucs_ctx = htdemucs_init_from_file(model_path, hp);
         if (!s->htdemucs_ctx) {
+            delete s;
+            return nullptr;
+        }
+        return s;
+    }
+#endif
+#ifdef CA_HAVE_CREPE
+    if (s->backend == "crepe" || s->backend == "crepe-tiny" || s->backend == "crepe-full") {
+        s->crepe_ctx = crepe_init(model_path, s->n_threads);
+        if (!s->crepe_ctx) {
             delete s;
             return nullptr;
         }
@@ -3842,6 +3860,9 @@ CA_EXPORT int crispasr_session_available_backends(char* out_csv, int out_cap) {
 #endif
 #ifdef CA_HAVE_HTDEMUCS
     list += ",htdemucs";
+#endif
+#ifdef CA_HAVE_CREPE
+    list += ",crepe";
 #endif
 #ifdef CA_HAVE_KYUTAI
     list += ",kyutai-stt";
@@ -8591,6 +8612,95 @@ CA_EXPORT int crispasr_session_separate_sample_rate(crispasr_session* s) {
     return 0;
 }
 
+// ---------------------------------------------------------------------------
+// Pitch (F0) session API
+//
+// Mirrors the separation block above: pitch frames are not crispasr_segments,
+// so they get their own entry points rather than riding on transcribe().
+// ---------------------------------------------------------------------------
+
+CA_EXPORT int crispasr_session_pitch(crispasr_session* s, const float* pcm_16k, int n_samples, float hop_ms) {
+    if (!s || !pcm_16k || n_samples <= 0)
+        return -1;
+#ifdef CA_HAVE_CREPE
+    if (s->crepe_ctx) {
+        const int n_max = crepe_n_frames(s->crepe_ctx, n_samples, hop_ms);
+        if (n_max <= 0)
+            return -1;
+        s->crepe_last_frames.assign((size_t)n_max, crepe_frame{});
+        const int n = crepe_compute_f0(s->crepe_ctx, pcm_16k, n_samples, hop_ms, s->crepe_last_frames.data(), n_max);
+        if (n <= 0) {
+            s->crepe_last_frames.clear();
+            return -1;
+        }
+        s->crepe_last_frames.resize((size_t)n);
+        return n;
+    }
+#endif
+    (void)hop_ms;
+    return -1;
+}
+
+CA_EXPORT int crispasr_session_pitch_n_frames(crispasr_session* s) {
+    if (!s)
+        return 0;
+#ifdef CA_HAVE_CREPE
+    return (int)s->crepe_last_frames.size();
+#else
+    return 0;
+#endif
+}
+
+CA_EXPORT int crispasr_session_pitch_frame(crispasr_session* s, int idx, float* out_time_ms, float* out_f0_hz,
+                                           float* out_voiced_prob) {
+    if (!s || idx < 0)
+        return -1;
+#ifdef CA_HAVE_CREPE
+    if (idx < (int)s->crepe_last_frames.size()) {
+        const crepe_frame& f = s->crepe_last_frames[(size_t)idx];
+        if (out_time_ms)
+            *out_time_ms = f.time_ms;
+        if (out_f0_hz)
+            *out_f0_hz = f.f0_hz;
+        if (out_voiced_prob)
+            *out_voiced_prob = f.voiced_prob;
+        return 0;
+    }
+#else
+    (void)out_time_ms;
+    (void)out_f0_hz;
+    (void)out_voiced_prob;
+#endif
+    return -1;
+}
+
+CA_EXPORT const float* crispasr_session_pitch_frames(crispasr_session* s, int* out_n_frames) {
+    if (out_n_frames)
+        *out_n_frames = 0;
+    if (!s)
+        return nullptr;
+#ifdef CA_HAVE_CREPE
+    if (!s->crepe_last_frames.empty()) {
+        if (out_n_frames)
+            *out_n_frames = (int)s->crepe_last_frames.size();
+        // crepe_frame is three floats; the flat view is {time_ms, f0_hz,
+        // voiced_prob} x n_frames, matching the Dart PitchFrame field order.
+        return reinterpret_cast<const float*>(s->crepe_last_frames.data());
+    }
+#endif
+    return nullptr;
+}
+
+CA_EXPORT int crispasr_session_pitch_sample_rate(crispasr_session* s) {
+    if (!s)
+        return 0;
+#ifdef CA_HAVE_CREPE
+    if (s->crepe_ctx)
+        return CREPE_SAMPLE_RATE;
+#endif
+    return 0;
+}
+
 CA_EXPORT void crispasr_session_close(crispasr_session* s) {
     if (!s)
         return;
@@ -8729,6 +8839,10 @@ CA_EXPORT void crispasr_session_close(crispasr_session* s) {
         htdemucs_result_free(s->htdemucs_last_result);
     if (s->htdemucs_ctx)
         htdemucs_free(s->htdemucs_ctx);
+#endif
+#ifdef CA_HAVE_CREPE
+    if (s->crepe_ctx)
+        crepe_free(s->crepe_ctx);
 #endif
 #ifdef CA_HAVE_KYUTAI
     if (s->kyutai_ctx)

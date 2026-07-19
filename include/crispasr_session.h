@@ -369,6 +369,20 @@ CRISPASR_SESSION_API const char* crispasr_session_separate_stem_name(crispasr_se
 // the per-channel sample count.
 CRISPASR_SESSION_API const float* crispasr_session_separate_stem(crispasr_session* s, int stem_idx, int* out_n_samples);
 CRISPASR_SESSION_API int crispasr_session_separate_sample_rate(crispasr_session* s);
+
+// Pitch (F0) estimation: monophonic pitch track from mono PCM at the model's
+// native rate (16000 Hz for crepe). `hop_ms` <= 0 uses the model default (10 ms).
+// Returns the frame count (>0) on success, -1 on error. Frames stay valid until
+// the next pitch() call or session close.
+CRISPASR_SESSION_API int crispasr_session_pitch(crispasr_session* s, const float* pcm_16k, int n_samples, float hop_ms);
+CRISPASR_SESSION_API int crispasr_session_pitch_n_frames(crispasr_session* s);
+// Single frame by index. Any out_* pointer may be NULL. Returns 0 on success.
+CRISPASR_SESSION_API int crispasr_session_pitch_frame(crispasr_session* s, int idx, float* out_time_ms,
+                                                      float* out_f0_hz, float* out_voiced_prob);
+// Flat view of every frame: 3 floats per frame {time_ms, f0_hz, voiced_prob},
+// frame-major. Owned by the session. *out_n_frames receives the frame count.
+CRISPASR_SESSION_API const float* crispasr_session_pitch_frames(crispasr_session* s, int* out_n_frames);
+CRISPASR_SESSION_API int crispasr_session_pitch_sample_rate(crispasr_session* s);
 CRISPASR_SESSION_API const char* crispasr_session_last_synth_error(crispasr_session* s);
 CRISPASR_SESSION_API char* crispasr_session_translate_text(crispasr_session* s, const char* text, const char* src_lang,
                                                            const char* tgt_lang, int max_tokens);

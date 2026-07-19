@@ -123,6 +123,13 @@ struct whisper_params {
     std::string stems;          // comma-separated stem subset; empty/"all" = every stem
     std::string sep_output_dir; // output dir for stems; empty = alongside input
 
+    // Pitch (F0) estimation. --pitch routes to the pitch dispatcher
+    // (crispasr_pitch_cli) BEFORE any transcribe backend is built; the model
+    // arch (crepe) is auto-detected from the GGUF.
+    bool pitch = false;
+    std::string pitch_format;   // "text" (default) or "json"
+    float pitch_hop_ms = 10.0f; // CREPE reference hop
+
     std::string backend;
     std::string source_lang;
     std::string target_lang;

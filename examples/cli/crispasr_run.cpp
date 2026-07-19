@@ -19,6 +19,7 @@
 #include "crispasr_mic_cli.h"
 #include "crispasr_speaker.h"
 #include "crispasr_popen.h"
+#include "crispasr_pitch_cli.h"
 #include "crispasr_separate_cli.h"
 #include "crispasr_vad_cli.h"
 #include "crispasr_output.h"
@@ -1681,6 +1682,11 @@ int crispasr_run_backend(const whisper_params& params_in) {
     // Route to the separation dispatcher before any transcribe backend is built.
     if (params.separate)
         return crispasr_run_separate(params);
+
+    // Pitch (F0) is its own task too (pitch frames out, not transcripts).
+    // Same early-dispatch rule as --separate.
+    if (params.pitch)
+        return crispasr_run_pitch(params);
 
     // ── Speaker-db policy gates (issue #266) ──────────────────────────────
     // Named identification is recorded-file only, consent-gated, and a

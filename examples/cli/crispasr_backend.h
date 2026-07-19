@@ -109,6 +109,10 @@ enum crispasr_capability : uint32_t {
                                         // (PLAN #104: parakeet uses chunked-encode + single-decode).
                                         // Skip the crispasr_run.cpp auto-chunk fallback for these.
     CAP_STREAMING = 1u << 23,           // backend supports true token-level streaming output
+    CAP_PITCH = 1u << 24,               // monophonic F0 / pitch-track estimation (audio in ->
+                                        // pitch frames out). Like CAP_SEPARATE this is a task
+                                        // marker for --list-backends, NOT a transcribe() path:
+                                        // routing happens in the --pitch dispatcher.
 };
 
 // ---------------------------------------------------------------------------

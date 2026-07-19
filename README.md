@@ -24,6 +24,7 @@ live transcription + TTS + language detection, auto-deployed from `hf-space/`.
 ### What's new (v0.8.9)
 
 - **Source separation (§248, new task):** `--separate` splits a mix into stems (`<input>_<stem>.wav`) — **mel-band-roformer** (vocal/instrumental, MIT) and **htdemucs** (4-stem), architecture auto-detected from the GGUF. Mel-Band RoFormer diff harness validated end-to-end (every stage cos=1.0, reconstructed waveform bit-exact). `--stems vocals,drums` selects a subset; `--sep-output-dir` sets the output location.
+- **Pitch / F0 estimation (new task):** `--pitch` prints a monophonic pitch track (`time_ms`, `f0_hz`, `voiced_prob` per frame; `--pitch-format json` for JSON) via **CREPE** (MIT), architecture auto-detected from the GGUF. Ships `crepe-tiny-f16.gguf` (~1.0 MB, RTF 0.28 on Metal) as the default with `crepe-full-f16.gguf` (~44.5 MB) available from `cstr/crepe-GGUF`. See [docs/cli.md](docs/cli.md#pitch--f0-estimation---pitch).
 - **MOSS-Transcribe-Diarize (#242, v0.8.9):** joint ASR + speaker diarization + timestamps in a single 0.9B model. Stock Whisper encoder + VQAdaptor + Qwen3-0.6B. Diff harness 4/4 cos=1.0. `--backend moss-diarize -m auto`.
 - **dots.tts full pipeline (#200, v0.8.9):** PatchEncoder RoPE + QK-norm fix, BigVGAN vocoder working e2e, voice cloning via CAM++ speaker encoder. `--tts-steps` / `--tts-cfg-scale` wired.
 - **Irodori-TTS VoiceDesign (v0.8.9):** caption-conditioned voice design for Irodori TTS.
