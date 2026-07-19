@@ -223,6 +223,39 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
                 "  compressed via GGUF block quantization.\n",
                 __func__, arch.c_str());
     }
+    // CREPE (pitch/F0, 6× conv1d + one dense classifier). Only `conv*.weight`
+    // and `classifier.weight` are quantizable. Everything else is a per-channel
+    // affine parameter — `conv*.bias`, `conv*_BN.scale`, `conv*_BN.offset`,
+    // `classifier.bias` — and MUST stay F32: the relu sits BEFORE the BN, so
+    // the BN ships as a standalone affine that is applied once per channel per
+    // frame. Rounding those is a direct multiplicative error on the whole
+    // channel, which is exactly what corrupts BN-style folds.
+    //
+    // The conv weights are 3D in ggml conv layout (K, IC, OC), so the 2D-only
+    // `ok_dims` rule would otherwise skip them entirely.
+    //
+    // Block-size geometry — the thing to get right here. `src/crepe.cpp`
+    // consumes each kernel as `ggml_reshape_2d(w, ne[0]*ne[1], ne[2])`, i.e.
+    // (K*IC, OC), so it is tempting to quantize at row = K*IC. Don't: the GGUF
+    // loader validates the DECLARED ne[0] against the block size
+    // (ggml/src/gguf.cpp:671), so a file quantized at K*IC but still declaring
+    // ne=(K, IC, OC) is rejected at load. We therefore quantize at ne[0] = K.
+    // That is layout-safe — blocks are contiguous and K is a multiple of 32, so
+    // the runtime reshape to (K*IC, OC) reinterprets exactly the same block
+    // stream — and it makes the row-fit fallback below the load-bearing rule:
+    //
+    //   conv1       ne[0] = 512  -> Q8_0 ok, Q4_K ok (2 super-blocks)
+    //   conv2..6    ne[0] =  64  -> Q8_0 ok, Q4_K NO -> falls back to Q4_0
+    //   classifier  ne[0] = 256 (tiny) / 2048 (full), 2D -> both ok
+    //
+    // So conv1 is NOT the problem tensor despite IC=1: K=512 divides both block
+    // sizes cleanly. The 64-tap conv2..6 kernels are what Q4_K cannot tile, and
+    // a "q4_k" CREPE is really Q4_K on conv1+classifier and Q4_0 on conv2..6.
+    // Getting true Q4_K on conv2..6 would mean writing them reshaped to 2D
+    // (K*IC, OC) the way `pw_conv3d` does below, which also needs src/crepe.cpp
+    // to stop deriving the im2col geometry from the kernel's own shape.
+    const bool is_crepe = (arch == "crepe");
+
     const bool is_chatterbox =
         (arch.find("chatterbox") != std::string::npos || arch.find("kartoffelbox") != std::string::npos);
     // CosyVoice3: the three sub-models live in separate GGUFs but share the
@@ -632,7 +665,13 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
         };
         const bool pw_conv3d =
             ggml_n_dims(t) == 3 && t->ne[0] == 1 && (ends_with("conv.pw1.weight") || ends_with("conv.pw2.weight"));
-        const bool ok_dims = (ggml_n_dims(t) == 2) || pw_conv3d || ((is_firered || is_ecapa) && ggml_n_dims(t) >= 2);
+        // CREPE conv1d kernels are 3D (K, IC, OC) — allow them through the
+        // 2D-only gate, but quantize at the DECLARED ne[0] = K, not the K*IC
+        // matmul row. See the is_crepe note above for why.
+        const bool crepe_conv3d =
+            is_crepe && ggml_n_dims(t) == 3 && sname.rfind("conv", 0) == 0 && ends_with(".weight");
+        const bool ok_dims =
+            (ggml_n_dims(t) == 2) || pw_conv3d || crepe_conv3d || ((is_firered || is_ecapa) && ggml_n_dims(t) >= 2);
         const int64_t ncols = pw_conv3d ? t->ne[1] : t->ne[0];
         row_lens[i] = ncols;
 
@@ -647,6 +686,10 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
         bool should_quantize =
             ggml_is_quantized(qtype) && src_ok && ok_dims && is_weight && (sname.find("norm") == std::string::npos) &&
             (granite_quant_all || sname.find("proj.") != 0) &&
+            // CREPE: allow-list, not a deny-list — only the conv kernels and the
+            // dense classifier matrix. conv*.bias / conv*_BN.scale / .offset /
+            // classifier.bias stay F32 (per-channel affines; see is_crepe note).
+            !(is_crepe && !(crepe_conv3d || sname == "classifier.weight")) &&
             !(is_granite_family && !granite_quant_all && sname.find("enc.") == 0) &&
             // MOSS-Audio: keep encoder + adapter + deepstack at F16
             !(arch == "moss_audio" &&

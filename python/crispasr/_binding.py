@@ -2530,6 +2530,37 @@ class Session:
                 result[name] = arr
         return result
 
+    def pitch(self, pcm_mono: "np.ndarray", hop_ms: float = 10.0) -> "np.ndarray":
+        """Pitch (F0) estimation: mono audio in, a pitch track out.
+
+        Input is mono float32 PCM at the model's native sample rate
+        (16000 Hz for ``crepe``).  Returns an ``(n_frames, 3)`` float32
+        array whose columns are ``time_ms``, ``f0_hz`` and
+        ``voiced_prob``.
+
+        Works with pitch-capable backends — ``crepe``.
+        """
+        lib = self._lib
+        lib.crispasr_session_pitch.argtypes = [
+            ctypes.c_void_p, ctypes.POINTER(ctypes.c_float), ctypes.c_int, ctypes.c_float,
+        ]
+        lib.crispasr_session_pitch.restype = ctypes.c_int
+        lib.crispasr_session_pitch_frames.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_int)]
+        lib.crispasr_session_pitch_frames.restype = ctypes.POINTER(ctypes.c_float)
+
+        data = pcm_mono.astype(np.float32)
+        n = lib.crispasr_session_pitch(
+            self._handle, data.ctypes.data_as(ctypes.POINTER(ctypes.c_float)), len(data), float(hop_ms),
+        )
+        if n <= 0:
+            raise RuntimeError(f"pitch failed for backend {self.backend!r}")
+
+        n_out = ctypes.c_int(0)
+        ptr = lib.crispasr_session_pitch_frames(self._handle, ctypes.byref(n_out))
+        if not ptr or n_out.value <= 0:
+            raise RuntimeError("pitch returned no frames")
+        return np.ctypeslib.as_array(ptr, shape=(n_out.value * 3,)).copy().reshape(-1, 3)
+
     def speech_to_speech(self, input_pcm: "np.ndarray", language: str = None) -> tuple:
         """Speech-to-speech: audio in → audio out via a single model pass.
 

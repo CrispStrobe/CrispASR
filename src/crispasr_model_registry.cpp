@@ -333,6 +333,18 @@ constexpr Entry k_registry[] = {
      "https://huggingface.co/mistralai/Voxtral-4B-TTS-2603)"},
     {"htdemucs", "htdemucs-q4_k.gguf",
      "https://huggingface.co/cstr/htdemucs-GGUF/resolve/main/htdemucs-q4_k.gguf", "~38 MB", nullptr, nullptr},
+    // CREPE monophonic F0 (--pitch). MIT weights + MIT code (torchcrepe).
+    // DEFAULT IS TINY: measured RTF 0.28 on Metal vs 2.0 for full, and full is
+    // 38x the MACs per frame. `full` stays available for offline accuracy.
+    {"crepe", "crepe-tiny-f16.gguf",
+     "https://huggingface.co/cstr/crepe-GGUF/resolve/main/crepe-tiny-f16.gguf", "~1.0 MB", nullptr, nullptr, nullptr,
+     "MIT"},
+    {"crepe-tiny", "crepe-tiny-f16.gguf",
+     "https://huggingface.co/cstr/crepe-GGUF/resolve/main/crepe-tiny-f16.gguf", "~1.0 MB", nullptr, nullptr, nullptr,
+     "MIT"},
+    {"crepe-full", "crepe-full-f16.gguf",
+     "https://huggingface.co/cstr/crepe-GGUF/resolve/main/crepe-full-f16.gguf", "~44.5 MB", nullptr, nullptr, nullptr,
+     "MIT"},
     {"glm-asr", "glm-asr-nano-q4_k.gguf",
      "https://huggingface.co/cstr/glm-asr-nano-GGUF/resolve/main/glm-asr-nano-q4_k.gguf", "~1.2 GB", nullptr, nullptr},
     {"moonshine", "moonshine-tiny-q4_k.gguf",

@@ -795,6 +795,12 @@ static bool whisper_params_parse_arg_streaming_tts(int argc, char** argv, int& i
         params.stems = ARGV_NEXT;
     } else if (arg == "--sep-output-dir") {
         params.sep_output_dir = ARGV_NEXT;
+    } else if (arg == "--pitch") {
+        params.pitch = true; // pitch (F0) task — crepe
+    } else if (arg == "--pitch-format") {
+        params.pitch_format = ARGV_NEXT;
+    } else if (arg == "--pitch-hop-ms") {
+        params.pitch_hop_ms = std::stof(ARGV_NEXT);
     } else {
         return false;
     }
@@ -1358,6 +1364,14 @@ static void whisper_print_usage(int /*argc*/, char** argv, const whisper_params&
             "             --sep-output-dir DIR        [%-7s] directory for separated stems (default: next to "
             "input)\n",
             params.sep_output_dir.empty() ? "none" : params.sep_output_dir.c_str());
+    fprintf(stderr,
+            "             --pitch                     [%-7s] pitch (F0) task; prints time_ms/f0_hz/voiced_prob per "
+            "frame (crepe, arch auto-detected)\n",
+            params.pitch ? "true" : "false");
+    fprintf(stderr, "             --pitch-format FMT          [%-7s] pitch output format: text or json\n",
+            params.pitch_format.empty() ? "text" : params.pitch_format.c_str());
+    fprintf(stderr, "             --pitch-hop-ms MS           [%-7.1f] pitch analysis hop in milliseconds\n",
+            params.pitch_hop_ms);
     fprintf(stderr, "\n");
 }
 
@@ -2286,6 +2300,12 @@ int main(int argc, char** argv) {
     // the separation model is not a transcribe backend and must not be loaded as
     // whisper.
     if (params.separate) {
+        return crispasr_run_backend(params);
+    }
+
+    // --pitch is a standalone pitch-estimation verb, same shape as --separate:
+    // audio in, pitch frames out. Route before any ASR backend detection.
+    if (params.pitch) {
         return crispasr_run_backend(params);
     }
 

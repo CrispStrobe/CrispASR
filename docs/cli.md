@@ -20,6 +20,7 @@ when you don't pass `--backend`, whisper is the default.
 - [Multi-language / translation](#multi-language--translation)
 - [Threading & processors](#threading--processors)
 - [Whisper-only flags](#whisper-only-flags)
+- [Pitch / F0 estimation (`--pitch`)](#pitch--f0-estimation---pitch) — CREPE pitch track
 - [Auto-download (`-m auto`)](#auto-download--m-auto) — registry table
 - [Audio formats](#audio-formats) — WAV / FLAC / MP3 / OGG / Opus / M4A
 - [Memory footprint](#memory-footprint) — KV quant, mmap, recommended combos
@@ -1058,6 +1059,52 @@ unique to it (`-owts` karaoke, full-mode JSON DTW tokens) — pass a
 
 For the full list of upstream whisper flags see `crispasr --help`
 when invoked with a `ggml-*.bin` model loaded.
+
+## Pitch / F0 estimation (`--pitch`)
+
+Pitch tracking is its own task, like `--separate`: audio goes in, a pitch
+track comes out — not transcript segments. `--pitch` therefore routes to its
+own dispatcher before any ASR backend is constructed.
+
+```bash
+# Auto-download the default model (crepe tiny) and print a pitch track
+crispasr --pitch -m auto --auto-download -f samples/jfk.wav
+
+# Explicit model, JSON output, 20 ms hop
+crispasr --pitch -m crepe-full-f16.gguf --pitch-format json --pitch-hop-ms 20 -f audio.wav
+```
+
+The backend (`crepe`) is auto-detected from the GGUF `general.architecture`,
+so you never name it; input is decoded to CREPE's native 16 kHz mono
+automatically.
+
+| Flag | Meaning |
+|---|---|
+| `--pitch` | Enable the pitch task |
+| `--pitch-format FMT` | `text` (default) or `json` |
+| `--pitch-hop-ms MS` | Analysis hop in milliseconds (default 10, CREPE's reference) |
+
+Default output is one tab-separated line per frame — `time_ms`, `f0_hz`,
+`voiced_prob` — so it pipes straight into `awk` / `cut`:
+
+```
+0.0	123.456	0.9312
+10.0	123.501	0.9370
+```
+
+`--pitch-format json` emits `{file, model, n_frames, frames: [...]}` with the
+same three fields per frame.
+
+**Models** (`cstr/crepe-GGUF`, MIT):
+
+| Registry key | File | Size | Notes |
+|---|---|---|---|
+| `crepe` / `crepe-tiny` | `crepe-tiny-f16.gguf` | ~1.0 MB | **default** — RTF 0.28 on Metal |
+| `crepe-full` | `crepe-full-f16.gguf` | ~44.5 MB | RTF 2.0 on Metal; offline use |
+
+CREPE is compute-heavy per frame (282 GFLOP per second of audio for `full`,
+7.3 for `tiny`), so tiny is the shipping default and the GPU path is not
+optional — on CPU even tiny runs at roughly RTF 2.4.
 
 ## Auto-download (`-m auto`)
 
