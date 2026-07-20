@@ -2084,6 +2084,21 @@ class StreamingSession {
 /// silent 32/64-bit mismatch that reads garbage.
 typedef PitchFrame = ({double timeMs, double f0Hz, double voicedProb});
 
+/// One separated source stem, as returned by [CrispasrSession.separate].
+///
+/// - `name` — the model's own label for the stem (`drums`, `bass`, `other`,
+///   `vocals` for htdemucs). Match on this rather than on index; stem order
+///   is the model's, not a contract.
+/// - `pcm` — **interleaved stereo** float32, `L,R,L,R,…`, at
+///   [CrispasrSession.separateSampleRate] (44100 Hz for htdemucs). Length is
+///   `2 * framesPerChannel`, the same length as the input passed to
+///   [CrispasrSession.separate].
+///
+/// The PCM is Dart-owned: [CrispasrSession.separate] copies it out of the
+/// session-owned native buffer, which is invalidated by the next separate
+/// call or by closing the session.
+typedef Stem = ({String name, Float32List pcm});
+
 class CrispasrSession {
   CrispasrSession._(
     this._lib,
@@ -3963,6 +3978,116 @@ class CrispasrSession {
     if (!_lib.providesSymbol('crispasr_session_pitch_sample_rate')) return 0;
     final fn = _lib.lookupFunction<Int32 Function(Pointer<Void>),
         int Function(Pointer<Void>)>('crispasr_session_pitch_sample_rate');
+    return fn(_handle);
+  }
+
+  /// Split audio into source stems (e.g. drums / bass / other / vocals).
+  ///
+  /// Requires a separation-capable backend (`htdemucs`).
+  ///
+  /// [pcmStereo] is **interleaved stereo** float32 — `L,R,L,R,…` — at the
+  /// model's native rate (44100 Hz for htdemucs; query
+  /// [separateSampleRate] rather than hard-coding it). Its length must
+  /// therefore be `2 * framesPerChannel`; an odd length is rejected.
+  ///
+  /// Each returned [Stem] carries interleaved stereo PCM of the same
+  /// length as the input. Stems are copied into Dart-owned memory before
+  /// returning, so they stay valid after the next [separate] or [close]
+  /// — the C side hands back session-owned buffers that do not.
+  ///
+  /// To feed a stem to [pitch] (the "transcribe the melody of a song"
+  /// path), downmix to mono at the pitch model's rate first — [pitch]
+  /// wants mono at 16 kHz, not stereo at 44.1 kHz:
+  ///
+  /// ```dart
+  /// final stems = sep.separate(songStereo);
+  /// final vocals = stems.firstWhere((s) => s.name == 'vocals').pcm;
+  /// final mono = Float32List(vocals.length ~/ 2);
+  /// for (var i = 0; i < mono.length; i++) {
+  ///   mono[i] = (vocals[i * 2] + vocals[i * 2 + 1]) / 2;
+  /// }
+  /// // then resample mono 44100 -> 16000 and call pitch() on it
+  /// ```
+  ///
+  /// Separation is heavy and offline-grade; run it off the UI isolate.
+  ///
+  /// Throws [UnsupportedError] when the loaded dylib predates the
+  /// separation API, [StateError] when the session is closed,
+  /// [ArgumentError] on a non-interleaved (odd-length) buffer, and
+  /// [Exception] when the backend has no separation arm (C returns -1).
+  List<Stem> separate(Float32List pcmStereo) {
+    if (_closed) throw StateError('CrispasrSession is closed');
+    if (!_lib.providesSymbol('crispasr_session_separate')) {
+      throw UnsupportedError(
+          'Separation API not available in this libcrispasr build');
+    }
+    if (pcmStereo.isEmpty) return const <Stem>[];
+    if (pcmStereo.length.isOdd) {
+      throw ArgumentError.value(pcmStereo.length, 'pcmStereo.length',
+          'must be even — interleaved stereo is 2 samples per frame');
+    }
+    // The C side counts samples PER CHANNEL, not total interleaved floats.
+    // Passing the interleaved length here would ask htdemucs to read twice
+    // the buffer.
+    final framesPerChannel = pcmStereo.length ~/ 2;
+
+    final sepFn = _lib.lookupFunction<
+        Int32 Function(Pointer<Void>, Pointer<Float>, Int32),
+        int Function(Pointer<Void>, Pointer<Float>, int)>(
+      'crispasr_session_separate',
+    );
+    final nameFn = _lib.lookupFunction<
+        Pointer<Utf8> Function(Pointer<Void>, Int32),
+        Pointer<Utf8> Function(Pointer<Void>, int)>(
+      'crispasr_session_separate_stem_name',
+    );
+    final stemFn = _lib.lookupFunction<
+        Pointer<Float> Function(Pointer<Void>, Int32, Pointer<Int32>),
+        Pointer<Float> Function(Pointer<Void>, int, Pointer<Int32>)>(
+      'crispasr_session_separate_stem',
+    );
+
+    final inPtr = calloc<Float>(pcmStereo.length);
+    final nPtr = calloc<Int32>();
+    try {
+      inPtr.asTypedList(pcmStereo.length).setAll(0, pcmStereo);
+      final nStems = sepFn(_handle, inPtr, framesPerChannel);
+      if (nStems <= 0) {
+        throw Exception('separate failed for backend $_backend — the model '
+            'is probably not separation-capable (expected `htdemucs`)');
+      }
+      final out = <Stem>[];
+      for (var i = 0; i < nStems; i++) {
+        final ptr = stemFn(_handle, i, nPtr);
+        final perChannel = nPtr.value;
+        if (ptr == nullptr || perChannel <= 0) continue;
+        final namePtr = nameFn(_handle, i);
+        final name = namePtr == nullptr ? 'stem$i' : namePtr.toDartString();
+        // Session-owned view -> copy, since it dies on the next separate().
+        // Length is interleaved (2x per-channel), matching the input.
+        final view = ptr.asTypedList(perChannel * 2);
+        out.add((name: name, pcm: Float32List.fromList(view)));
+      }
+      return out;
+    } finally {
+      calloc.free(inPtr);
+      calloc.free(nPtr);
+    }
+  }
+
+  /// Native sample rate the loaded separation model expects, in Hz
+  /// (44100 for htdemucs).
+  ///
+  /// Returns 0 when the session's backend has no separation arm, or when
+  /// the loaded dylib predates the separation API — so this doubles as a
+  /// capability probe that never throws.
+  int get separateSampleRate {
+    if (_closed) throw StateError('CrispasrSession is closed');
+    if (!_lib.providesSymbol('crispasr_session_separate_sample_rate')) {
+      return 0;
+    }
+    final fn = _lib.lookupFunction<Int32 Function(Pointer<Void>),
+        int Function(Pointer<Void>)>('crispasr_session_separate_sample_rate');
     return fn(_handle);
   }
 
