@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.17
+
+- Source separation: `CrispasrSession.separate()` splits interleaved stereo
+  PCM into named stems (`drums`/`bass`/`other`/`vocals` for htdemucs), with
+  the `Stem` record typedef and a `separateSampleRate` capability probe.
+  Previously separation was reachable only from the CLI, the C ABI and
+  Python — never from Dart.
+- Note the input contract: `separate()` takes **interleaved** stereo
+  (`L,R,L,R,…`) at 44100 Hz, and the native side counts samples *per
+  channel*. To feed a stem to `pitch()`, downmix to mono and resample to
+  16 kHz first — the dartdoc has the recipe.
+
 ## 0.8.16
 
 - Pitch (F0) estimation: `CrispasrSession.pitch()` returns a monophonic
