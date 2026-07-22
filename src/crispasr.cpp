@@ -7573,6 +7573,19 @@ int whisper_full_with_state(struct whisper_context* ctx, struct whisper_state* s
 
     result_all.clear();
 
+    // Tiron (#295): onset guardrail — prepend 0.75 s of silence once (harness
+    // apply_onset_pad / config.PAD_START_SEC). A full-energy mid-word onset makes
+    // the model defer output; the benchmark config uses this pad. Segment/token
+    // times are shifted back by the pad before returning (original file timeline).
+    std::vector<float> tiron_pad_buf;
+    const int tiron_pad = ctx->vocab.has_speakers ? (int)(0.75f * CRISPASR_SAMPLE_RATE) : 0;
+    if (tiron_pad > 0 && n_samples > 0) {
+        tiron_pad_buf.resize((size_t)tiron_pad + n_samples, 0.0f);
+        std::copy(samples, samples + n_samples, tiron_pad_buf.begin() + tiron_pad);
+        samples = tiron_pad_buf.data();
+        n_samples += tiron_pad;
+    }
+
     if (n_samples > 0) {
         // compute log mel spectrogram
         if (whisper_pcm_to_mel_with_state(ctx, state, samples, n_samples, params.n_threads) != 0) {
@@ -8576,6 +8589,24 @@ int whisper_full_with_state(struct whisper_context* ctx, struct whisper_state* s
             seek += seek_delta;
 
             CRISPASR_LOG_DEBUG("seek = %d, seek_delta = %d\n", seek, seek_delta);
+        }
+    }
+
+    // Tiron: undo the onset pad on the output so the caller sees the original
+    // file timeline (harness shift_segments_to_original_timeline).
+    if (tiron_pad > 0) {
+        const int64_t pad_cs = (int64_t)tiron_pad / (CRISPASR_SAMPLE_RATE / 100); // samples -> centiseconds (75)
+        for (auto& seg : result_all) {
+            seg.t0 = std::max<int64_t>(0, seg.t0 - pad_cs);
+            seg.t1 = std::max<int64_t>(0, seg.t1 - pad_cs);
+            for (auto& tok : seg.tokens) {
+                if (tok.t0 >= 0) {
+                    tok.t0 = std::max<int64_t>(0, tok.t0 - pad_cs);
+                }
+                if (tok.t1 >= 0) {
+                    tok.t1 = std::max<int64_t>(0, tok.t1 - pad_cs);
+                }
+            }
         }
     }
 
