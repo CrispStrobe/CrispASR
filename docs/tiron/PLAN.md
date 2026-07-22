@@ -19,9 +19,17 @@ Branch: `feat/tiron-asr` · worktree `.claude/worktrees/feat-tiron`
   increasing-ts / ts-vs-text forcing), samplers keep `.tid` to real timestamps only,
   emitter renders `<|speakerN|>` inline + splits segments only on real timestamps,
   seek-window no longer advances ~30 s on a speaker token.
-- **Next:** Phase 1 conversion (Trelis/tiron → GGML f16/q8_0/q4_k) → validate:
-  transcribe a multi-speaker clip, confirm text + plausible speaker turns; A/B
-  `CRISPASR_WHISPER_TIRON=0` on a single-speaker clip must equal stock whisper.
+- **Next:** run the Kaggle kernel `tools/kaggle/tiron-convert-f5-ab/` on a CUDA
+  box. It does Phase 1 (convert → f16/q8_0/q4_k → validate the tiron decode on
+  multispeaker.wav + jfk.wav + `CRISPASR_WHISPER_TIRON=0` A/B → upload to
+  `cstr/tiron-GGML`) AND the F5 #294 perf A/B fleet (EMBED_GPU / F16_ACT /
+  BATCH_CFG / EPSS 7-step / CFG_INTERVAL / DIT_SKIP + recommended stack, each
+  with ode_solve ms + ASR-roundtrip proof-of-work). Rebased onto main
+  `5b8ed72b6` so the clone has the full F5 lever set.
+- **⚠ recovery note:** the tiron `src/crispasr.cpp` edits were first made in the
+  SHARED main tree by mistake ([[isolate-worktree-on-shared-tree]]); moved via
+  patch into the worktree, main tree restored clean, real build re-run WITH the
+  changes present (the first "builds clean" had compiled the unmodified file).
 - **Last push SHA:** (this commit)
 
 ---
