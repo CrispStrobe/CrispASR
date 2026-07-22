@@ -1,0 +1,15 @@
+{
+  "id": "chr1str/f5-tts-reference-dump-and-validation",
+  "title": "f5-tts-reference-dump-and-validation",
+  "code_file": "f5-tts-ref-dump.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "competition_sources": [],
+  "dataset_sources": ["chr1str/crispasr-hf-token"],
+  "kernel_sources": [],
+  "model_sources": []
+}

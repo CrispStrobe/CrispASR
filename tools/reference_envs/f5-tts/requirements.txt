@@ -1,0 +1,32 @@
+# Reference-dump env for `--backend f5-tts`
+# Bootstrap: tools/bootstrap_ref_env.sh f5-tts
+#
+# Produces the ground-truth `f5-tts-ref.gguf` (per-stage intermediates of the
+# upstream SWivid/F5-TTS PyTorch forward pass) for crispasr-diff validation.
+# Archive convention: cstr/f5-tts-GGUF/diff-harness-ref/f5-tts-ref.gguf
+#
+# Models needed at run time (NOT pip deps — pass paths to dump_reference.py):
+#   - checkpoint:  SWivid/F5-TTS  F5TTS_v1_Base/model_1250000.safetensors (1.35 GB)
+#                  + vocab.txt (bundled in the f5_tts package's infer/examples/)
+#   - vocoder:     charactr/vocos-mel-24khz  (config.yaml + pytorch_model.bin)
+
+numpy>=2.0
+gguf>=0.10
+
+# Match the torch the GGUF weights were converted under. F5-TTS's DiT is
+# flow-matching (RoPE + AdaLN); torch 2.4+ has the native CPU paths used here.
+torch>=2.4
+torchaudio>=2.4
+
+# Upstream F5-TTS (SWivid). The reference backend imports CFM, DiT, get_tokenizer
+# and the model's mel_spec; the pinned sha should match the checkpoint the GGUF
+# was converted from (v1 Base, model_1250000).
+#   pip install f5-tts
+# or from source:
+#   f5-tts @ git+https://github.com/SWivid/F5-TTS.git@main
+f5-tts
+
+# Vocos vocoder (mel-24khz). Loaded via Vocos.from_hparams(config.yaml).
+vocos
+
+safetensors>=0.4
