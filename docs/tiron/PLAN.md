@@ -8,7 +8,30 @@ Branch: `feat/tiron-asr` · worktree `.claude/worktrees/feat-tiron`
 
 ---
 
-## NOW — active work
+## NOW — active work (2026-07-22, validated against blueprint reference)
+
+- **Conversion DONE:** `cstr/tiron-GGML` = f16 + q4_k (via `crispasr-legacy-quantize`
+  — the whisper-bin quantizer; `crispasr-quantize` is GGUF-only and rc=1s).
+- **Reference DONE:** `cstr/crispasr-regression-fixtures/tiron/multispeaker/ref.gguf`
+  — dumped from the ACTUAL harness recipe (`engine.py`: `decoder_input_ids=[[sot,
+  lang,transcribe]]`, generation config disabled, 0.75 s onset pad, constraint
+  grammar). Earlier model-card-guess recipe (`language=`/`task=`) injected
+  `<|notimestamps|>` → repeat loop; fixed.
+- **Runtime DONE + validated:** decode grammar (`whisper_tiron_apply_grammar`,
+  port of `constraints.py`) + fixed 30 s windows + 0.75 s onset pad (timeline-
+  shifted). C++ q4_k MATCHES the f32 reference on speaker1 (JFK ×2, correct
+  segment structure + timeline). speaker2 residual divergence = q4_k on
+  overlapping speech (experimental tier).
+- **Wirings DONE:** `tiron` factory alias → whisper; registry row; README row
+  marked experimental; `tiron_link.{h,cpp}` cross-window linking runtime
+  (+ unit test); `tools/reference_backends/tiron.py` + dump_reference registration.
+- **NEXT:** wire `crispasr_tiron_link_speakers` into the CLI output (global
+  `SPEAKER_NN`); optional f16 A/B to quantify the q4_k speaker2 gap; live test +
+  docs; `crispasr-diff tiron` per-stage branch (mel/encoder already whisper-proven).
+
+---
+
+## Earlier notes
 
 - **Status:** Phase 2 (decode mode) + Phase 3 (cross-window linking runtime)
   IMPLEMENTED + build clean on macOS (Metal, Release). Kaggle convert/validate
