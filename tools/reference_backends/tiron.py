@@ -71,6 +71,31 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
         str(model_dir), torch_dtype=torch.float32, low_cpu_mem_usage=True,
     ).eval()
 
+    # Drive decoding exactly as the model card / harness engine.py do: Tiron
+    # supplies its own [sot, lang, transcribe] prefix via decoder_input_ids and
+    # ALL of Whisper's default forcing/suppression must be OFF. Passing
+    # language=/task= instead makes HF inject <|notimestamps|> (prompt_len 4),
+    # which desyncs the constraint grammar (prompt_len 3) and degenerates the
+    # decode into a repeat loop. So disable it all here.
+    for cfg in (model.config, model.generation_config):
+        cfg.forced_decoder_ids = None
+        cfg.suppress_tokens = [] if cfg is model.config else None
+        cfg.begin_suppress_tokens = [] if cfg is model.config else None
+    gc = model.generation_config
+    gc.language = None
+    gc.task = None
+    if hasattr(gc, "no_timestamps_token_id"):
+        delattr(gc, "no_timestamps_token_id")
+    gc.no_speech_threshold = None
+
+    # ---- Onset guardrail: prepend 0.75 s of silence once (harness
+    # apply_onset_pad / config.PAD_START_SEC). A full-energy mid-word onset makes
+    # the model defer output; the benchmark config uses this pad, so the faithful
+    # reference must too (and the C++ tiron path must match). ----
+    PAD_START_SEC = 0.75
+    audio = np.concatenate([np.zeros(int(PAD_START_SEC * 16000), dtype=np.float32),
+                            np.asarray(audio, dtype=np.float32)])
+
     # ---- Feature extraction (128-mel WhisperFeatureExtractor) ----
     inputs = processor(
         audio, sampling_rate=16000, return_tensors="pt")
@@ -115,18 +140,24 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
 
     from transformers import LogitsProcessorList
 
+    tok = processor.tokenizer
+    prefix = [
+        tok.convert_tokens_to_ids("<|startoftranscript|>"),
+        tok.convert_tokens_to_ids("<|en|>"),
+        tok.convert_tokens_to_ids("<|transcribe|>"),
+    ]
+    decoder_input_ids = torch.tensor([prefix], dtype=torch.long)
+
     gen_kwargs = dict(
         input_features=feats,
+        decoder_input_ids=decoder_input_ids,
         max_new_tokens=max(max_new_tokens, 444),
         do_sample=False, num_beams=1,
-        # Tiron decode: no default suppression / forced ids (grammar drives it).
-        forced_decoder_ids=None, suppress_tokens=[], begin_suppress_tokens=[],
-        language="en", task="transcribe",
     )
     if logits_processor is not None:
         gen_kwargs["logits_processor"] = LogitsProcessorList([logits_processor])
 
-    print("  running constrained generate() for the reference transcript")
+    print(f"  running constrained generate() (prefix={prefix}) for the reference transcript")
     with torch.no_grad():
         gen = model.generate(**gen_kwargs)
     eh.remove()
