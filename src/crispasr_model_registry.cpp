@@ -50,6 +50,12 @@ struct ExtraList {
 constexpr Entry k_registry[] = {
     {"whisper", "ggml-base.bin",
      "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin", "~147 MB", nullptr, nullptr},
+    // Tiron (#295, EXPERIMENTAL): Whisper large-v3 + inline <|speakerN|> markers.
+    // `--backend tiron -m auto` (alias → whisper backend in crispasr_backend.cpp);
+    // the whisper loader auto-detects the speaker vocab and enables the tiron
+    // constrained-decoding grammar. Apache-2.0 (base Trelis/tiron).
+    {"tiron", "tiron-q4_k.bin",
+     "https://huggingface.co/cstr/tiron-GGML/resolve/main/tiron-q4_k.bin", "~889 MB", nullptr, nullptr},
     // AudioSeal (Meta FAIR) — optional NEURAL watermark model (MIT code + weights).
     // Not a transcription/TTS backend: resolved by the name "audioseal" when the
     // user passes `--watermark-model auto`. CrispASR's built-in zero-dependency

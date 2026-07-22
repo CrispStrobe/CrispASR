@@ -102,7 +102,11 @@ std::unique_ptr<CrispasrBackend> crispasr_make_omnivoice_backend();
 // ---------------------------------------------------------------------------
 
 std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& name) {
-    if (name == "whisper")
+    // "tiron" (#295) is a Whisper large-v3 checkpoint with inline <|speakerN|>
+    // markers — it runs on the whisper backend, which auto-detects the speaker
+    // vocab and enables the tiron constrained-decoding grammar. The alias only
+    // affects the model-registry lookup + CLI dispatch.
+    if (name == "whisper" || name == "tiron")
         return crispasr_make_whisper_backend();
     if (name == "nemotron" || name == "nemotron-streaming" || name == "nemotron-3.5" || name == "nemotron-asr" ||
         name == "nemotron-speech-streaming")
