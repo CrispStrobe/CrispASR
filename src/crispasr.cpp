@@ -6653,6 +6653,189 @@ static void whisper_compute_probs(const std::vector<float>& logits, const int n_
     }
 }
 
+// Tiron (#295) constrained-decoding grammar options.
+struct whisper_tiron_opts {
+    bool allow_initial_nospeech = true; // <|nospeech|> legal only as the first generated token
+    int max_speakers = 0;               // 0 = use the full <|speakerN|> pool
+    int no_repeat_ngram_size = 15;      // block any next token recreating a present n-gram (HF parity)
+    int max_init_ts_index = 1500;       // cap on the row's very first timestamp (<=30 s)
+};
+
+// Port of tiron/constraints.py TironConstraintLogitsProcessor._apply_row
+// (speaker_blocks mode; the public 30 s Tiron has no <|window|> token). Masks
+// `logits` in place given the GENERATED token suffix `out_ids` (== whisper's
+// decoder.sequence.tokens ids — the [sot,lang,transcribe] prompt is not part of
+// it, matching the harness's input_ids[prompt_len:]). Plain greedy loses ~5
+// cpWER vs this grammar, so this is what the port must enforce.
+static void whisper_tiron_apply_grammar(const whisper_vocab& vocab, const std::vector<whisper_token>& out_ids,
+                                        std::vector<float>& logits, int n_logits, const whisper_tiron_opts& opt) {
+    const int ts_begin = vocab.token_beg;
+    const int ts_end = (int)vocab.timestamp_end() - 1; // inclusive last timestamp (TS_END_ID)
+    const int eos = vocab.token_eot;
+    const int spk0 = vocab.token_speaker_beg;
+    int n_spk = vocab.n_speakers;
+    if (opt.max_speakers > 0) {
+        n_spk = std::max(1, std::min(opt.max_speakers, n_spk));
+    }
+    const int speaker1 = spk0;
+    const float NEG = -INFINITY;
+
+    auto mask = [&](int lo, int hi) {
+        lo = std::max(0, lo);
+        hi = std::min(n_logits, hi);
+        for (int i = lo; i < hi; ++i) {
+            logits[i] = NEG;
+        }
+    };
+    auto is_ts = [&](whisper_token t) { return t >= ts_begin && t <= ts_end; };
+    auto is_spk = [&](whisper_token t) { return t >= spk0 && t < spk0 + vocab.n_speakers; };
+
+    // Always suppress <|notimestamps|>; <|nospeech|> suppressed except at step 0.
+    logits[vocab.token_not] = NEG;
+    const float nospeech_save = logits[vocab.token_nosp];
+    logits[vocab.token_nosp] = NEG;
+    const float eos_save = logits[eos];
+
+    const int n = (int)out_ids.size();
+
+    // step 0: force <|speaker1|> (+ <|nospeech|> when opted in).
+    if (n == 0) {
+        const float s1 = logits[speaker1];
+        mask(0, n_logits);
+        logits[speaker1] = s1;
+        if (opt.allow_initial_nospeech) {
+            logits[vocab.token_nosp] = nospeech_save;
+        }
+        return;
+    }
+
+    // A <|nospeech|> row is trained as <|nospeech|><|endoftext|>.
+    if (out_ids.back() == vocab.token_nosp) {
+        mask(0, n_logits);
+        logits[eos] = eos_save;
+        return;
+    }
+
+    const whisper_token last = out_ids.back();
+    const bool last_is_ts = is_ts(last);
+    const bool last_is_spk = is_spk(last);
+    const bool penult_is_ts = n >= 2 && is_ts(out_ids[n - 2]);
+    const bool penult_is_spk = n >= 2 && is_spk(out_ids[n - 2]);
+    bool allow_eos = true;
+
+    if (last_is_spk) {
+        // speaker tag -> forced opening timestamp (first ts capped at max_init).
+        bool first_ts = true;
+        for (whisper_token t : out_ids) {
+            if (is_ts(t)) {
+                first_ts = false;
+                break;
+            }
+        }
+        mask(0, ts_begin);
+        mask(ts_end + 1, n_logits);
+        if (first_ts) {
+            mask(ts_begin + opt.max_init_ts_index + 1, ts_end + 1);
+        }
+        allow_eos = false;
+    } else if (last_is_ts) {
+        if (penult_is_spk || penult_is_ts) {
+            // opening timestamp -> forced text (control tokens suppressed).
+            mask(eos, n_logits);
+            allow_eos = false;
+        } else {
+            // closing timestamp -> next new speaker slot, another opening ts
+            // (same speaker continues), or EOS. Keep timestamps + next speaker.
+            int max_seen = -1;
+            for (whisper_token t : out_ids) {
+                if (is_spk(t)) {
+                    max_seen = std::max(max_seen, (int)(t - spk0));
+                }
+            }
+            const int next_slot = (max_seen + 1 < n_spk) ? max_seen + 1 : -1;
+            std::vector<float> ts_saves(logits.begin() + ts_begin, logits.begin() + ts_end + 1);
+            const float spk_save = (next_slot >= 0) ? logits[spk0 + next_slot] : 0.0f;
+            mask(0, n_logits);
+            std::copy(ts_saves.begin(), ts_saves.end(), logits.begin() + ts_begin);
+            if (next_slot >= 0) {
+                logits[spk0 + next_slot] = spk_save;
+            }
+            // allow_eos stays true
+        }
+    } else {
+        // inside text: continue text or close with a timestamp.
+        mask(eos, ts_begin);
+        mask(ts_end + 1, n_logits);
+        allow_eos = false;
+        // ts-mass tie-breaker (constraints.py): if aggregate timestamp logprob
+        // mass beats the top single text token, force a timestamp this step.
+        double maxl = NEG;
+        for (int i = 0; i < n_logits; ++i) {
+            if (logits[i] > maxl) {
+                maxl = logits[i];
+            }
+        }
+        double Z = 0.0;
+        for (int i = 0; i < n_logits; ++i) {
+            if (logits[i] > NEG) {
+                Z += std::exp((double)logits[i] - maxl);
+            }
+        }
+        const double logZ = maxl + std::log(Z);
+        double ts_maxl = NEG;
+        for (int i = ts_begin; i <= ts_end; ++i) {
+            if (logits[i] > ts_maxl) {
+                ts_maxl = logits[i];
+            }
+        }
+        double ts_lp = NEG;
+        if (ts_maxl > NEG) {
+            double s = 0.0;
+            for (int i = ts_begin; i <= ts_end; ++i) {
+                if (logits[i] > NEG) {
+                    s += std::exp((double)logits[i] - ts_maxl);
+                }
+            }
+            ts_lp = ts_maxl + std::log(s) - logZ;
+        }
+        double max_text_lp = NEG;
+        for (int i = 0; i < ts_begin; ++i) {
+            if (logits[i] > NEG) {
+                max_text_lp = std::max(max_text_lp, (double)logits[i] - logZ);
+            }
+        }
+        if (ts_lp > max_text_lp) {
+            mask(0, ts_begin);
+            mask(ts_end + 1, n_logits);
+        }
+    }
+
+    // no_repeat_ngram_size (mirror HF): block any next token that would recreate
+    // an n-gram already present in out_ids.
+    const int ng = opt.no_repeat_ngram_size;
+    if (ng > 1 && n >= ng) {
+        for (int i = 0; i + ng <= n; ++i) {
+            bool m = true;
+            for (int j = 0; j < ng - 1; ++j) {
+                if (out_ids[i + j] != out_ids[n - (ng - 1) + j]) {
+                    m = false;
+                    break;
+                }
+            }
+            if (m) {
+                const whisper_token b = out_ids[i + ng - 1];
+                if (b >= 0 && b < n_logits) {
+                    logits[b] = NEG;
+                }
+            }
+        }
+    }
+
+    if (allow_eos) {
+        logits[eos] = eos_save;
+    }
+}
+
 // process the logits for the selected decoder
 // - applies logit filters
 // - computes logprobs and probs
@@ -6688,12 +6871,11 @@ static void whisper_process_logits(struct whisper_context& ctx, struct whisper_s
         logprobs.resize(n_logits);
     }
 
-    // Tiron decode mode: the model emits <|speakerN|> markers inline and is
-    // trained to place timestamps freely (no pairing / increasing / forcing
-    // constraints — see the model card: greedy, suppress_tokens=[],
-    // forced_decoder_ids=None). Bypass Whisper's timestamp heuristics so the
-    // learned distribution drives sampling. Auto-on for a speaker vocab; the
-    // env var CRISPASR_WHISPER_TIRON=0 forces the stock path for A/B.
+    // Tiron decode mode: replace Whisper's timestamp heuristics with Tiron's
+    // constrained-decoding grammar (whisper_tiron_apply_grammar, a port of
+    // tiron/constraints.py) so the <|speakerN|> / timestamp / text token stream
+    // is well-formed — plain greedy loses ~5 cpWER. Auto-on for a speaker vocab;
+    // env CRISPASR_WHISPER_TIRON=0 forces the stock whisper path for A/B.
     const bool tiron = vocab.has_speakers && [] {
         const char* e = getenv("CRISPASR_WHISPER_TIRON");
         return !(e && e[0] == '0');
@@ -6704,83 +6886,115 @@ static void whisper_process_logits(struct whisper_context& ctx, struct whisper_s
     // apply logit filters here
     // ref: https://github.com/openai/whisper/blob/0b1ba3d46ebf7fe6f953acfd8cad62a4f851b49f/whisper/decoding.py#L480-L493
     {
-        // suppress blank
-        // https://github.com/openai/whisper/blob/0b1ba3d46ebf7fe6f953acfd8cad62a4f851b49f/whisper/decoding.py#L388-L390
-        if (params.suppress_blank) {
-            if (is_initial) {
-                logits[vocab.token_eot] = -INFINITY;
-                logits[vocab.token_to_id.at(" ")] = -INFINITY;
+        if (tiron) {
+            // Tiron: enforce the constrained-decoding grammar (constraints.py),
+            // NOT the whisper suppress/heuristic path. The grammar masks every
+            // token not legal in the current state; a user callback / regex may
+            // still narrow further on top.
+            std::vector<whisper_token> t_out_ids;
+            t_out_ids.reserve(tokens_cur.size());
+            for (const auto& t : tokens_cur) {
+                t_out_ids.push_back(t.id);
             }
-        }
-
-        // suppress <|notimestamps|> token
-        // ref: https://github.com/openai/whisper/blob/0b1ba3d46ebf7fe6f953acfd8cad62a4f851b49f/whisper/decoding.py#L410-L412
-        logits[vocab.token_not] = -INFINITY;
-        if (params.no_timestamps) {
-            // in tiron mode this stops at the speaker tokens so they survive
-            for (int i = vocab.token_beg; i < ts_end; ++i) {
-                logits[i] = -INFINITY;
+            whisper_tiron_opts topt;
+            if (const char* e = getenv("CRISPASR_WHISPER_TIRON_NOSPEECH")) {
+                topt.allow_initial_nospeech = !(e[0] == '0');
             }
-        }
-
-        // suppress sot and nosp tokens
-        logits[vocab.token_sot] = -INFINITY;
-        logits[vocab.token_nosp] = -INFINITY;
-
-        // [TDRZ] when tinydiarize is disabled, suppress solm token
-        if (params.tdrz_enable == false) {
-            logits[vocab.token_solm] = -INFINITY;
-        }
-
-        // suppress task tokens
-        logits[vocab.token_translate] = -INFINITY;
-        logits[vocab.token_transcribe] = -INFINITY;
-        logits[vocab.token_prev] = -INFINITY;
-
-        // suppress lang tokens
-        for (size_t i = 0; i < g_lang.size(); ++i) {
-            logits[whisper_token_lang(&ctx, i)] = -INFINITY;
-        }
-
-        // suppress prev token
-        logits[vocab.token_prev] = -INFINITY;
-
-        if (params.logits_filter_callback) {
-            params.logits_filter_callback(&ctx, &state, tokens_cur.data(), tokens_cur.size(), logits.data(),
-                                          params.logits_filter_callback_user_data);
-        }
-
-        // suppress any tokens matching a regular expression
-        // ref: https://github.com/openai/whisper/discussions/1041
-        if (params.suppress_regex != nullptr) {
-            std::regex re(params.suppress_regex);
-            for (std::pair<whisper_vocab::token, whisper_vocab::id> token_id : vocab.token_to_id) {
-                if (std::regex_match(token_id.first, re)) {
-                    logits[token_id.second] = -INFINITY;
+            if (const char* e = getenv("CRISPASR_WHISPER_TIRON_MAX_SPEAKERS")) {
+                topt.max_speakers = atoi(e);
+            }
+            whisper_tiron_apply_grammar(vocab, t_out_ids, logits, n_logits, topt);
+            if (params.logits_filter_callback) {
+                params.logits_filter_callback(&ctx, &state, tokens_cur.data(), tokens_cur.size(), logits.data(),
+                                              params.logits_filter_callback_user_data);
+            }
+            if (params.suppress_regex != nullptr) {
+                std::regex re(params.suppress_regex);
+                for (std::pair<whisper_vocab::token, whisper_vocab::id> token_id : vocab.token_to_id) {
+                    if (std::regex_match(token_id.first, re)) {
+                        logits[token_id.second] = -INFINITY;
+                    }
                 }
             }
-        }
+        } else {
+            // suppress blank
+            // https://github.com/openai/whisper/blob/0b1ba3d46ebf7fe6f953acfd8cad62a4f851b49f/whisper/decoding.py#L388-L390
+            if (params.suppress_blank) {
+                if (is_initial) {
+                    logits[vocab.token_eot] = -INFINITY;
+                    logits[vocab.token_to_id.at(" ")] = -INFINITY;
+                }
+            }
 
-        // suppress non-speech tokens
-        // ref: https://github.com/openai/whisper/blob/7858aa9c08d98f75575035ecd6481f462d66ca27/whisper/tokenizer.py#L224-L253
-        if (params.suppress_nst) {
-            for (const std::string& token : non_speech_tokens) {
-                const std::string suppress_tokens[] = {token, " " + token};
-                for (const std::string& suppress_token : suppress_tokens) {
-                    if (vocab.token_to_id.find(suppress_token) != vocab.token_to_id.end()) {
-                        logits[vocab.token_to_id.at(suppress_token)] = -INFINITY;
+            // suppress <|notimestamps|> token
+            // ref: https://github.com/openai/whisper/blob/0b1ba3d46ebf7fe6f953acfd8cad62a4f851b49f/whisper/decoding.py#L410-L412
+            logits[vocab.token_not] = -INFINITY;
+            if (params.no_timestamps) {
+                // in tiron mode this stops at the speaker tokens so they survive
+                for (int i = vocab.token_beg; i < ts_end; ++i) {
+                    logits[i] = -INFINITY;
+                }
+            }
+
+            // suppress sot and nosp tokens
+            logits[vocab.token_sot] = -INFINITY;
+            logits[vocab.token_nosp] = -INFINITY;
+
+            // [TDRZ] when tinydiarize is disabled, suppress solm token
+            if (params.tdrz_enable == false) {
+                logits[vocab.token_solm] = -INFINITY;
+            }
+
+            // suppress task tokens
+            logits[vocab.token_translate] = -INFINITY;
+            logits[vocab.token_transcribe] = -INFINITY;
+            logits[vocab.token_prev] = -INFINITY;
+
+            // suppress lang tokens
+            for (size_t i = 0; i < g_lang.size(); ++i) {
+                logits[whisper_token_lang(&ctx, i)] = -INFINITY;
+            }
+
+            // suppress prev token
+            logits[vocab.token_prev] = -INFINITY;
+
+            if (params.logits_filter_callback) {
+                params.logits_filter_callback(&ctx, &state, tokens_cur.data(), tokens_cur.size(), logits.data(),
+                                              params.logits_filter_callback_user_data);
+            }
+
+            // suppress any tokens matching a regular expression
+            // ref: https://github.com/openai/whisper/discussions/1041
+            if (params.suppress_regex != nullptr) {
+                std::regex re(params.suppress_regex);
+                for (std::pair<whisper_vocab::token, whisper_vocab::id> token_id : vocab.token_to_id) {
+                    if (std::regex_match(token_id.first, re)) {
+                        logits[token_id.second] = -INFINITY;
                     }
                 }
             }
 
-            // allow hyphens "-" and single quotes "'" between words, but not at the beginning of a word
-            if (vocab.token_to_id.find(" -") != vocab.token_to_id.end()) {
-                logits[vocab.token_to_id.at(" -")] = -INFINITY;
+            // suppress non-speech tokens
+            // ref: https://github.com/openai/whisper/blob/7858aa9c08d98f75575035ecd6481f462d66ca27/whisper/tokenizer.py#L224-L253
+            if (params.suppress_nst) {
+                for (const std::string& token : non_speech_tokens) {
+                    const std::string suppress_tokens[] = {token, " " + token};
+                    for (const std::string& suppress_token : suppress_tokens) {
+                        if (vocab.token_to_id.find(suppress_token) != vocab.token_to_id.end()) {
+                            logits[vocab.token_to_id.at(suppress_token)] = -INFINITY;
+                        }
+                    }
+                }
+
+                // allow hyphens "-" and single quotes "'" between words, but not at the beginning of a word
+                if (vocab.token_to_id.find(" -") != vocab.token_to_id.end()) {
+                    logits[vocab.token_to_id.at(" -")] = -INFINITY;
+                }
+                if (vocab.token_to_id.find(" '") != vocab.token_to_id.end()) {
+                    logits[vocab.token_to_id.at(" '")] = -INFINITY;
+                }
             }
-            if (vocab.token_to_id.find(" '") != vocab.token_to_id.end()) {
-                logits[vocab.token_to_id.at(" '")] = -INFINITY;
-            }
-        }
+        } // end !tiron whisper-suppression path
 
         // timestamps have to appear in pairs, except directly before EOT; mask logits accordingly
         // https://github.com/openai/whisper/blob/0b1ba3d46ebf7fe6f953acfd8cad62a4f851b49f/whisper/decoding.py#L414-L424
