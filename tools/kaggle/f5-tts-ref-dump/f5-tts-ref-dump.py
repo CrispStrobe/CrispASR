@@ -20,12 +20,18 @@ os.environ["TRANSFORMERS_NO_TF"] = "1"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 WORK = Path("/kaggle/working")
-REPO = WORK / "CrispASR"
+REPO = Path("/kaggle/temp/CrispASR")  # NOT /kaggle/working (keeps output download small)
 BUILD = Path("/kaggle/temp/build")
 BRANCH = os.environ.get("CRISPASR_REF", "f5-ref-dump")
 REF_GGUF = WORK / "f5-tts-ref.gguf"
 HF_REPO = "cstr/f5-tts-GGUF"
 REF_PATH_IN_REPO = "diff-harness-ref/f5-tts-ref.gguf"
+# Reference transcript of samples/jfk.wav. Must be NON-EMPTY: the reference
+# duration formula is ref_audio_len + int(ref_audio_len / len(ref_text) * gen_len),
+# so an empty ref_text floors the denominator to 1 and blows the sequence length
+# past the model's 8192 positional limit (RuntimeError in dit text_embed).
+JFK_REF_TEXT = ("And so my fellow Americans, ask not what your country can do for you, "
+                "ask what you can do for your country.")
 
 # %% [code]
 # ── Cell 1: clone repo + harness ──
@@ -76,7 +82,7 @@ kh.step("models_downloaded", ckpt=str(mdir), vocos=str(vdir))
 # Fixed, matched params so the C++ side can reproduce the trajectory.
 os.environ.update({
     "F5_TTS_SYN_TEXT": "Hello world.",
-    "F5_TTS_REF_TEXT": "",
+    "F5_TTS_REF_TEXT": JFK_REF_TEXT,
     "F5_TTS_SEED": "42",
     "F5_TTS_STEPS": "32",
     "F5_TTS_CFG": "2.0",
@@ -110,7 +116,7 @@ dump_dir.mkdir(exist_ok=True)
 proc = subprocess.run(
     [testbin, model_gguf, "Hello world.", str(WORK / "out.wav"),
      "--ref-gguf", str(REF_GGUF), "--dump", str(dump_dir),
-     "--ref-text", "", "--seed", "42"],
+     "--ref-text", JFK_REF_TEXT, "--seed", "42"],
     cwd=str(REPO), capture_output=True, text=True,
 )
 print("=== test-f5-tts stdout ===\n" + proc.stdout)
