@@ -49,14 +49,34 @@ These use existing knobs — the win is validating + recommending them. Fewer/sk
 forward passes ⇒ speedup is box-independent (unlike the GPU-compute changes below,
 which need a CUDA verdict).
 
-### Changes
+### Ecosystem research (how F5 runs elsewhere) — reshapes priorities
+
+- Upstream (SWivid) = torchdiffeq **Euler**, nfe **32** (16 offered), **CFG as ONE
+  2×-batch forward** (our `F5_BATCH_CFG`, i.e. our *default two-forward path is the
+  non-standard one*), sway −1.0, Vocos. cfg_strength 2.0.
+- **EPSS (arXiv 2505.19931)** training-free non-uniform step pruning → **~4× at 7 NFE**,
+  quality stable to 7–12 NFE. **We already ship these schedules** in
+  `get_epss_timesteps` (n=5/6/7/10/12/16). So the headline win is already coded —
+  just needs validation + recommendation, no new kernel.
+- **Guidance-free / interval CFG** halves per-step cost; interval form is portable and
+  we already have `CRISPASR_F5_CFG_INTERVAL`. Paper RTF 0.31→0.17 by dropping uncond.
+- **Layer caching across steps** (DiTReducio 2509.09748) — training-free, NEW lever we
+  lack. Complex + quality-risky. Future direction.
+- Reference length is a real lever (joint ref+gen DiT sequence). Confirmed.
+- No verified Candle/burn F5 port, no vLLM/SGLang. MLX port ~8× RT on M3 Max.
+
+**Conclusion: F5 is already well-optimized; the real wins are configuration
+(EPSS low steps + interval-CFG + short ref + batched-CFG on CUDA), not new kernels.**
+
+### Changes tried
 
 | # | Change | Gate | Status |
 |---|--------|------|--------|
-| 4 | F16 activations in DiT matmuls | `CRISPASR_F5_F16_ACT` | built + gated. **Metal: byte-identical + ~17% SLOWER** (ggml already casts RHS to F16 internally). Kept gated OFF for a CUDA-only A/B; do NOT default on. |
-| 2 | host-embed → GPU graph | tbd | TODO — biggest new-code win for reporter's slow CPU; correctness-verifiable locally, speed verdict needs CUDA (M1 GPU already the bottleneck ⇒ expect M1 regression / reporter win). |
-| 6 | persistent inputs for CUDA-graph replay | tbd | TODO (CUDA-only verdict) |
-| — | higher-order ODE solver | tbd | LOW priority — 16-step Euler already holds quality here. |
+| 4 | F16 activations in DiT matmuls | `CRISPASR_F5_F16_ACT` | built + gated. **Metal: byte-identical + ~17% SLOWER** (ggml already casts RHS to F16 internally). Committed, default OFF, CUDA-A/B-only. |
+| 6 | stable-alloc (skip per-step re-alloc for CUDA-graph replay) | `CRISPASR_F5_STABLE_ALLOC` | **REVERTED — correctness bug**: pos_in clobbered after step 0 → garbage ("(wind blowing)"). Proper fix needs persistent input tensors on a dedicated buffer (omnivoice §245 pattern); CUDA-only value, unverifiable on Metal. Not worth it now. |
+| 2 | host-embed → GPU graph | — | NOT DONE — ggml has no grouped conv1d (F5 conv-pos groups=16 ⇒ 16 sliced convs + concat in-graph), invasive + correctness-risky + only a CUDA win. Deprioritized vs config levers. |
+| batched CFG default (CUDA) | `CRISPASR_F5_BATCH_CFG` | exists; validating correctness. Matches upstream. Candidate CUDA default. |
+| EPSS low-NFE + interval | (knobs) | validating quality at n=7/10/12 (+interval). Primary recommendation. |
 
 ### Reporter comms
 - Posted knobs (`--tts-steps 16`, `CRISPASR_F5_CFG_INTERVAL=2`), `-nfa`-is-a-no-op,
