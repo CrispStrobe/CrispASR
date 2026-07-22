@@ -119,6 +119,11 @@ REGISTERED_BACKENDS: Dict[str, str] = {
     # autoregresses with a KV cache that doesn't have a clean "per-step
     # logits" entry point the way the speech-LLMs do.
     "cohere":     "reference_backends.cohere",
+    # Tiron (#295): Whisper large-v3 + inline <|speakerN|> markers. Dumps mel +
+    # encoder_output (structural parity) and the CONSTRAINED-GRAMMAR decoded
+    # transcript (the acceptance target — see reference_backends/tiron.py). The
+    # audio arg is a real multi-speaker clip.
+    "tiron":      "reference_backends.tiron",
     "parakeet":   "reference_backends.parakeet",
     # Parakeet-TDT MAES beam decoding. Same model as "parakeet" but captures
     # transducer component intermediates (prediction net, joint net) plus
