@@ -511,6 +511,23 @@ catch_discover_tests(test-speaker-cluster
     PROPERTIES LABELS "unit;diarize"
 )
 
+# Tiron (#295) cross-window speaker linking: grouping + clustering logic
+# exercised with a deterministic fake embedder (no model needed).
+add_executable(test-tiron-link
+    test-tiron-link.cpp
+)
+target_include_directories(test-tiron-link PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-tiron-link PRIVATE
+    Catch2::Catch2WithMain
+    crispasr-lib
+)
+catch_discover_tests(test-tiron-link
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit;diarize"
+)
+
 # VAD segment boundary export/import serialization (issue #227). Pure
 # string <-> struct round-trip; no model, no audio. Links crispasr-lib so
 # it tests the shipped serializer/parser rather than a fork.
