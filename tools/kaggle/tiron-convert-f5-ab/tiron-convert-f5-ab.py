@@ -118,10 +118,21 @@ if str(REPO / "tools" / "kaggle") not in sys.path or "kaggle_harness" not in sys
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 import kaggle_harness as kh  # noqa: E402
 
-kh.init_progress()
+# Live progress mirror to a public HF dataset so the run is watchable while it
+# runs (kaggle_usage: never hallucinate progress). Resolve the token EARLY so
+# the mirror + heartbeat are active from the build onward, not just at upload.
+kh.init_progress(hf_progress_repo="cstr/crispasr-kaggle-progress")
+kh._HF_PUSH_INTERVAL_S = 20.0
 if not REPO.exists():
     raise SystemExit("repo clone missing — cannot build (need internet + GPU worker)")
 step("cloned", sha=subprocess.check_output(["git", "-C", str(REPO), "rev-parse", "HEAD"], text=True).strip())
+
+token = kh.resolve_hf_token()  # exports HF_TOKEN (+ enables the progress mirror)
+# ⚠ resolve_hf_token() flips HF_HUB_ENABLE_HF_TRANSFER back to "1"; hf_transfer
+# wedges multi-GB Kaggle downloads with no resume — force it OFF for the Tiron
+# safetensors (3 GB) + F5 f16 (~1 GB) pulls.
+os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
+step("hf_token", have=bool(token), hf_transfer=os.environ.get("HF_HUB_ENABLE_HF_TRANSFER"))
 
 run(["nvidia-smi", "-L"])
 gpu_name = subprocess.check_output(["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"], text=True).strip()
@@ -162,8 +173,6 @@ QUANT = _find("crispasr-quantize")
 os.environ["LD_LIBRARY_PATH"] = f"{BUILD / 'src'}:{os.environ.get('LD_LIBRARY_PATH', '')}"
 SAMPLES = REPO / "samples"
 step("bins", cli=str(CLI), quant=str(QUANT))
-
-token = kh.resolve_hf_token()
 
 
 # ─────────────────────────── cell 3 (code) — shared helpers ──────────────
@@ -218,6 +227,7 @@ try:
     kh.sh_with_progress("pip install -q transformers safetensors")
     from huggingface_hub import HfApi, hf_hub_download  # noqa: E402
 
+    os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"  # defensive: no wedge on the 3 GB pull
     step("tiron.download.begin", free_gb=kh.free_gb(str(MODELS)))
     src_dir = MODELS / "tiron-src"
     src_dir.mkdir(parents=True, exist_ok=True)
