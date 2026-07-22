@@ -962,6 +962,29 @@ for Chinese). Output is 24 kHz mono PCM.
 **Model file:**
 [`cstr/f5-tts-GGUF`](https://huggingface.co/cstr/f5-tts-GGUF)
 
+### Performance (issue #294)
+
+The whole cost is the ODE denoising loop — 32 steps × 2 (CFG) = **64 full 22-layer
+DiT passes** over the ref+gen sequence. The vocoder and text encoder are <1%.
+**Quantization is not an option** — flow matching accumulates per-op error 1408×
+per synthesis, so anything below F16 is unintelligible (F16 is the only viable
+format; see the model README). All speed comes from *fewer / smaller passes*:
+
+| Lever | Speedup | How | Quality |
+|-------|---------|-----|---------|
+| **`--tts-steps 7`** | **~4.7×** | EPSS non-uniform step schedule (built in for n=5/6/7/10/12/16) | verified intact; drop to 10/12 (~3×) if a voice sounds rough |
+| `--tts-steps 16` | ~2.0× | fewer uniform-ish steps | intact |
+| `CRISPASR_F5_CFG_INTERVAL=2` | ~1.3× | reuse the unconditional CFG velocity between steps | intact at ≥16 steps |
+| shorter reference clip (3–5 s) | scales with T | the DiT denoises ref+gen jointly, so a long ref inflates *every* pass (attention is O(T²)) | intact |
+| `CRISPASR_F5_BATCH_CFG=1` | GPU-dependent | one 2×-batch CFG forward (matches upstream) instead of two; try on CUDA | intact |
+
+Stacking: `~4 s ref` + `--tts-steps 7` compound. **Do not** combine a low step count
+with `CFG_INTERVAL` — too few non-uniform steps + a stale uncond degrades to noise
+(the runtime warns when interval-CFG runs with <16 steps).
+
+`CRISPASR_F5_BENCH=1` prints the per-stage split (host_embed / dit_graph / vocos).
+`-nfa` has no effect on F5 — the DiT always uses flash attention.
+
 ## IndexTTS — Chinese/English voice cloning
 
 IndexTTS-1.5 is a zero-shot voice cloning TTS model. Given a short
