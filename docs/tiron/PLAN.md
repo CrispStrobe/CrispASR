@@ -10,8 +10,20 @@ Branch: `feat/tiron-asr` · worktree `.claude/worktrees/feat-tiron`
 
 ## NOW — active work
 
-- **Status:** Phase 2 (tiron decode mode) IMPLEMENTED + builds clean on macOS
-  (Metal, Release). Not yet validated end-to-end (needs the converted model).
+- **Status:** Phase 2 (decode mode) + Phase 3 (cross-window linking runtime)
+  IMPLEMENTED + build clean on macOS (Metal, Release). Kaggle convert/validate
+  run in flight.
+- **Phase 3 DONE:** `src/tiron_link.{h,cpp}` — `crispasr_tiron_link_speakers()`
+  promotes window-local `<|speakerN|>` indices to meeting-level ids by
+  clustering per-(window,local-speaker) group voiceprints. REUSES the existing
+  stack: `crispasr_make_speaker_embedder` (TitaNet/ECAPA) +
+  `crispasr_agglomerative_cluster` + `crispasr_cluster_centroids`. Adds the
+  within-window must-link (aggregate a group's audio into one clean embedding =
+  upstream "spine"), acoustic attach for short groups, temporal fallback,
+  no-embedder degradation. Unit test `tests/test-tiron-link.cpp` (fake embedder,
+  no model): proves linking follows VOICE not local index — 13 assertions PASS.
+  Wired into `src/CMakeLists.txt` + `tests/CMakeLists.txt` (label unit;diarize).
+- **Phase 2 recap:** `src/crispasr.cpp` — speaker-token detection on load
 - **Done:** `src/crispasr.cpp` — speaker-token detection on load
   (`token_speaker_beg`/`n_speakers`/`has_speakers` + `is_timestamp`/`is_speaker`
   helpers), `tiron` decode flag (auto-on for a speaker vocab, `CRISPASR_WHISPER_TIRON=0`

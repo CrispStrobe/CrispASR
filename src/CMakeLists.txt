@@ -164,6 +164,10 @@ add_library(crispasr-lib
             # + indextts_voc runtimes also compiled in here.
             crispasr_speaker_embedder.cpp
             crispasr_speaker_cluster.cpp
+            # Tiron (#295): promote window-local <|speakerN|> indices to
+            # meeting-level ids by clustering group voiceprints (reuses the
+            # embedder + agglomerative clusterer above).
+            tiron_link.cpp
             # Text-LLM chat C ABI (docs/prompts/chat-abi.md). Calls into
             # the private crispasr-llama-core static lib; the public
             # surface lives in include/crispasr_chat.h and exposes only
