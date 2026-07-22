@@ -31,11 +31,17 @@ REF_PATH_IN_REPO = "diff-harness-ref/f5-tts-ref.gguf"
 # ── Cell 1: clone repo + harness ──
 if REPO.exists():
     shutil.rmtree(REPO)
-subprocess.check_call(
-    ["git", "clone", "--recurse-submodules", "--shallow-submodules", "--depth", "1",
-     "--branch", BRANCH, "https://github.com/CrispStrobe/CrispASR.git", str(REPO)]
-)
-sys.path.insert(0, str(REPO / "tools" / "kaggle"))
+try:
+    subprocess.check_call(
+        ["git", "clone", "--recurse-submodules", "--shallow-submodules", "--depth", "1",
+         "--branch", BRANCH, "https://github.com/CrispStrobe/CrispASR.git", str(REPO)]
+    )
+    sys.path.insert(0, str(REPO / "tools" / "kaggle"))
+except Exception as e:
+    print("clone failed, falling back to bundled harness:", e)
+# Bundled-harness fallback (the kernel dir travels with the push).
+if str(REPO / "tools" / "kaggle") not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
 import kaggle_harness as kh  # noqa: E402
 
 kh.init_progress()
