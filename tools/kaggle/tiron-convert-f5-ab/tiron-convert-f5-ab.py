@@ -16,15 +16,20 @@
 #   wins (M1 Metal timing is dispatch-bound/noisy — needs a clean GPU verdict).
 #   F16 only (flow-matching: q8 error compounds). Matrix, seed 42, fixed jfk
 #   ref + fixed gen text, 1 warmup + 3 measured, median ode_solve ms + ASR
-#   roundtrip (a perf win is a lie without proof-of-work):
+#   roundtrip proof-of-work (a perf win is a lie without proof — kaggle_usage #24):
 #     A baseline (32 steps)          F CRISPASR_F5_BATCH_CFG=1
 #     B --tts-steps 7 (EPSS)         G CRISPASR_F5_F16_ACT=1  (CUDA-only question)
 #     C 7 + CFG_INTERVAL=2           H CRISPASR_F5_DIT_SKIP=2
 #     D CRISPASR_F5_EMBED_GPU=1      I recommended CUDA stack (EMBED_GPU+BATCH_CFG+7+int2)
 #     E EMBED_GPU + 7 steps
 #
-# Requirements: Kaggle GPU, Internet ON, ~12 GB disk.
-# Datasets: chr1str/crispasr-hf-token (upload token), chr1str/crispasr-ccache.
+# Regime (kaggle_usage.md): repo/build/models staged on the ~70 GB ephemeral
+# layer (/kaggle/temp), NOT the 20 GB /kaggle/working output mount (#18/#21/#22);
+# only small logs + summary JSON land in /kaggle/working. ccache auto-warmed by
+# the harness onto /kaggle/temp; ccache.tar exported at the end for refresh.
+#
+# Requirements: Kaggle GPU, Internet ON. Datasets (chr1s4, same account as id):
+#   chr1s4/crispasr-hf-token, chr1s4/crispasr-ccache.
 
 # ─────────────────────────── cell 1 (code) — config ──────────────────────
 import hashlib
@@ -38,13 +43,17 @@ import time
 import wave
 from pathlib import Path
 
+# Stage heavy work on the ~70 GB ephemeral layer; keep /kaggle/working tiny
+# (it is the 20 GB output mount, page-capped at 500 files — kaggle_usage #22).
+SCRATCH = Path("/kaggle/temp") if Path("/kaggle/temp").is_dir() else Path("/tmp")
 WORK = Path("/kaggle/working")
-REPO = WORK / "CrispASR"
-BUILD = WORK / "build"
-MODELS = WORK / "models"
-RESULTS = WORK / "results"
-OUT = WORK / "tiron-out"
-for d in (MODELS, RESULTS, OUT):
+REPO = SCRATCH / "CrispASR"
+BUILD = SCRATCH / "build"
+MODELS = SCRATCH / "models"
+OUT = SCRATCH / "tiron-out"
+AUDIO = SCRATCH / "audio"      # throwaway synthesized wavs (kept off /kaggle/working)
+RESULTS = WORK / "results"     # retained output: logs + summary JSON only
+for d in (MODELS, OUT, AUDIO, RESULTS):
     d.mkdir(parents=True, exist_ok=True)
 
 CRISPASR_REPO = os.environ.get("CRISPASR_REPO", "https://github.com/CrispStrobe/CrispASR.git")
@@ -67,11 +76,12 @@ F5_HF_FILE = "f5-tts-v1-base-f16.gguf"
 F5_REF_TEXT = ("And so, my fellow Americans, ask not what your country can do for you, "
                "ask what you can do for your country.")
 F5_GEN_TEXT = "The quick brown fox jumps over the lazy dog and then it ran away."
+F5_GEN_WORDS = ["quick", "brown", "fox", "lazy", "dog", "ran"]
 SEED = 42
 N_WARMUP = 1
 N_MEASURED = 3
 
-os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"  # hf_transfer wedges multi-GB on Kaggle
+os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"  # hf_transfer wedges multi-GB on Kaggle (#-download)
 os.environ["USE_TF"] = "0"
 os.environ["PYTHONUNBUFFERED"] = "1"
 
@@ -92,22 +102,32 @@ def run(cmd, check=True, env=None, cwd=None, timeout=None):
 
 
 # ─────────────────────────── cell 2 (code) — clone + build ───────────────
-step("start", ref=CRISPASR_REF)
+step("start", ref=CRISPASR_REF, scratch=str(SCRATCH))
 if REPO.exists():
     shutil.rmtree(REPO)
-run(["git", "clone", "--depth", "1", "--branch", CRISPASR_REF, "--recursive", CRISPASR_REPO, str(REPO)])
 
-sys.path.insert(0, os.path.join(str(REPO), "tools", "kaggle"))
+# Robust clone + import (kaggle_usage "Auth via kaggle_harness"): prefer the
+# cloned repo's harness, fall back to the copy bundled beside this script.
+try:
+    run(["git", "clone", "--depth", "1", "--branch", CRISPASR_REF, "--recursive",
+         CRISPASR_REPO, str(REPO)])
+    sys.path.insert(0, str(REPO / "tools" / "kaggle"))
+except Exception as ex:  # noqa: BLE001
+    print(f"clone failed: {ex}", flush=True)
+if str(REPO / "tools" / "kaggle") not in sys.path or "kaggle_harness" not in sys.modules:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
 import kaggle_harness as kh  # noqa: E402
 
 kh.init_progress()
+if not REPO.exists():
+    raise SystemExit("repo clone missing — cannot build (need internet + GPU worker)")
 step("cloned", sha=subprocess.check_output(["git", "-C", str(REPO), "rev-parse", "HEAD"], text=True).strip())
 
 run(["nvidia-smi", "-L"])
 gpu_name = subprocess.check_output(["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"], text=True).strip()
 step("gpu", gpu=gpu_name)
 
-kh.install_build_toolchain()
+kh.install_build_toolchain()  # warms ccache onto /kaggle/temp/.ccache
 arch = kh.detect_cuda_arch()
 step("cuda_arch", arch=arch)
 
@@ -116,7 +136,7 @@ cmake_args = [
     "cmake", "-S", str(REPO), "-B", str(BUILD),
     "-DCMAKE_BUILD_TYPE=Release",
     "-DBUILD_SHARED_LIBS=ON",
-] + kh.cuda_build_flags(arch) + kh.cache_and_link_flags()
+] + kh.cuda_build_flags(arch) + kh.cache_and_link_flags()  # cache_and_link_flags folds in NO_C2PA
 run(cmake_args)
 step("cmake_done")
 
@@ -193,6 +213,9 @@ def median(xs):
 # ═══════════════════════════ PHASE A — Tiron ═════════════════════════════
 tiron_summary = {"phase": "tiron", "src": TIRON_SRC}
 try:
+    # transformers is needed by convert-h5-to-ggml.py; torch is pre-installed on
+    # Kaggle (kaggle_usage #11 — never pip install torch).
+    kh.sh_with_progress("pip install -q transformers safetensors")
     from huggingface_hub import HfApi, hf_hub_download  # noqa: E402
 
     step("tiron.download.begin", free_gb=kh.free_gb(str(MODELS)))
@@ -210,7 +233,7 @@ try:
     f16 = OUT / "ggml-model.bin"
     if f16.exists():
         f16.unlink()
-    step("tiron.convert.begin")
+    step("tiron.convert.begin", free_gb=kh.free_gb(str(OUT)))
     with kh.build_heartbeat("tiron.convert", interval_s=60):
         run(["python", "models/convert-h5-to-ggml.py", str(src_dir), str(whisper_repo), str(OUT)],
             cwd=str(REPO), timeout=3600)
@@ -218,11 +241,11 @@ try:
     f16.rename(f16_named)
     step("tiron.convert.done", gb=round(f16_named.stat().st_size / 1e9, 3))
 
-    # quantize
+    # quantize (f16 + quant coexist on disk — staged on /kaggle/temp per #18)
     quants = {}
     for q in ("q8_0", "q4_k"):
         outq = OUT / f"{TIRON_NAME}-{q}.bin"
-        step(f"tiron.quant.{q}.begin")
+        step(f"tiron.quant.{q}.begin", free_gb=kh.free_gb(str(OUT)))
         with kh.build_heartbeat(f"tiron.quant.{q}", interval_s=60):
             run([str(QUANT), str(f16_named), str(outq), q], timeout=1800)
         quants[q] = outq
@@ -254,7 +277,6 @@ try:
 
     tiron_summary.update({
         "convert_ok": True,
-        "sha256_f16": None,
         "files": {"f16": str(f16_named), **{k: str(v) for k, v in quants.items()}},
         "validate": {
             "multispeaker_rc": rc_on,
@@ -335,10 +357,11 @@ _SPLIT_RE = re.compile(r"host_embed=([\d.]+)\s+ms\s+dit_graph=([\d.]+)\s+ms")
 
 f5_summary = {"phase": "f5", "gpu": gpu_name, "cuda_arch": arch,
               "gen_text": F5_GEN_TEXT, "seed": SEED, "configs": {}}
+F5_CONFIGS = []
 try:
     from huggingface_hub import hf_hub_download  # noqa: E402
 
-    step("f5.download.begin")
+    step("f5.download.begin", free_gb=kh.free_gb(str(MODELS)))
     f5_model = Path(hf_hub_download(repo_id=F5_HF_REPO, filename=F5_HF_FILE,
                                     local_dir=str(MODELS), token=token or None))
     step("f5.model", path=str(f5_model), mb=round(f5_model.stat().st_size / 1e6, 1))
@@ -383,10 +406,14 @@ try:
     for tag, env, args in F5_CONFIGS:
         step("f5.config_start", tag=tag, env=env, args=args)
         for _ in range(N_WARMUP):
-            f5_synth(tag, env, args, RESULTS / f"f5_{tag}_warm.wav")
-        runs = [f5_synth(tag, env, args, RESULTS / f"f5_{tag}_{i}.wav") for i in range(N_MEASURED)]
-        wav0 = RESULTS / f"f5_{tag}_0.wav"
+            f5_synth(tag, env, args, AUDIO / f"f5_{tag}_warm.wav")
+        runs = [f5_synth(tag, env, args, AUDIO / f"f5_{tag}_{i}.wav") for i in range(N_MEASURED)]
+        wav0 = AUDIO / f"f5_{tag}_0.wav"
         rt = asr_roundtrip(wav0)
+        # proof-of-work: a fast crash mints a fake win, so a config only counts
+        # if the audio actually reproduces the sentence (kaggle_usage #24).
+        rt_hits = sum(w in rt.lower() for w in F5_GEN_WORDS)
+        roundtrip_ok = rt_hits >= 3
         ok = [r for r in runs if r["rc"] == 0 and r["ode_ms"] is not None]
         f5_summary["configs"][tag] = {
             "env": env, "args": args,
@@ -399,6 +426,7 @@ try:
             "n_ok": len(ok),
             "md5": md5(wav0),
             "roundtrip": rt,
+            "roundtrip_ok": roundtrip_ok,
         }
         step("f5.config_done", tag=tag, **f5_summary["configs"][tag])
         (RESULTS / "f5_summary.json").write_text(json.dumps(f5_summary, indent=2))
@@ -422,15 +450,23 @@ print(f"PHASE B — F5 perf on {gpu_name} (arch {arch}) — median of {N_MEASURE
 print(f"gen: {F5_GEN_TEXT!r}  seed {SEED}", flush=True)
 print("=" * 80, flush=True)
 base = f5_summary["configs"].get("A_base", {}).get("ode_ms_median")
-hdr = f"{'config':16} {'ode ms':>10} {'speedup':>8} {'dur s':>6}  roundtrip"
+hdr = f"{'config':16} {'ode ms':>10} {'speedup':>8} {'dur s':>6} {'rt_ok':>6}  roundtrip"
 print(hdr, flush=True)
 print("-" * 80, flush=True)
-for tag, _, _ in (F5_CONFIGS if "F5_CONFIGS" in dir() else []):
+for tag, _, _ in F5_CONFIGS:
     c = f5_summary["configs"].get(tag)
     if not c:
         continue
     spd = f"{base / c['ode_ms_median']:.2f}x" if base and c["ode_ms_median"] else "-"
-    print(f"{tag:16} {str(c['ode_ms_median']):>10} {spd:>8} {str(c['dur_s']):>6}  "
-          f"{(c['roundtrip'] or '')[:44]}", flush=True)
+    print(f"{tag:16} {str(c['ode_ms_median']):>10} {spd:>8} {str(c['dur_s']):>6} "
+          f"{str(c['roundtrip_ok']):>6}  {(c['roundtrip'] or '')[:40]}", flush=True)
 print("=" * 80, flush=True)
+
+# Refresh the ccache seed (single tar in /kaggle/working so `kaggle kernels
+# output` gets it on page 1 — kaggle_usage #22). Upload to BOTH account copies.
+try:
+    kh.export_ccache_tar()
+except Exception as ex:  # noqa: BLE001
+    print(f"ccache export skipped: {ex}", flush=True)
+
 step("DONE")
