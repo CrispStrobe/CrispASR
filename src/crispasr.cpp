@@ -8564,6 +8564,14 @@ int whisper_full_with_state(struct whisper_context* ctx, struct whisper_state* s
                 seek_delta = std::min(seek_end - seek, CRISPASR_CHUNK_SIZE * 100);
             }
 
+            // Tiron (#295): fixed non-overlapping 30 s windows (the harness decodes
+            // fixed_window_chunks of CHUNK_MAX_SEC each — engine.py), NOT whisper's
+            // timestamp-driven overlapping seek. Advance by the full window so
+            // per-window local speaker indices line up with how the model is driven.
+            if (ctx->vocab.has_speakers) {
+                seek_delta = std::min(seek_end - seek, CRISPASR_CHUNK_SIZE * 100);
+            }
+
             // update audio window
             seek += seek_delta;
 
