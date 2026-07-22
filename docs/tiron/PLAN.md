@@ -10,12 +10,18 @@ Branch: `feat/tiron-asr` · worktree `.claude/worktrees/feat-tiron`
 
 ## NOW — active work
 
-- **Status:** planning + investigation COMPLETE. Enabling infra already on `main`
-  (from issue #258). No large-vocab loader risk remains.
-- **In flight:** Phase 2 — add a "tiron" decode mode to `src/crispasr.cpp`
-  (greedy, speaker tokens emitted inline, timestamp heuristics bypassed).
-- **Next:** Phase 1 conversion (Trelis/tiron → GGML f16/q8_0/q4_k) to validate
-  the decode changes end-to-end.
+- **Status:** Phase 2 (tiron decode mode) IMPLEMENTED + builds clean on macOS
+  (Metal, Release). Not yet validated end-to-end (needs the converted model).
+- **Done:** `src/crispasr.cpp` — speaker-token detection on load
+  (`token_speaker_beg`/`n_speakers`/`has_speakers` + `is_timestamp`/`is_speaker`
+  helpers), `tiron` decode flag (auto-on for a speaker vocab, `CRISPASR_WHISPER_TIRON=0`
+  reverts to stock for A/B), timestamp heuristics bypassed (pairing / max_initial_ts /
+  increasing-ts / ts-vs-text forcing), samplers keep `.tid` to real timestamps only,
+  emitter renders `<|speakerN|>` inline + splits segments only on real timestamps,
+  seek-window no longer advances ~30 s on a speaker token.
+- **Next:** Phase 1 conversion (Trelis/tiron → GGML f16/q8_0/q4_k) → validate:
+  transcribe a multi-speaker clip, confirm text + plausible speaker turns; A/B
+  `CRISPASR_WHISPER_TIRON=0` on a single-speaker clip must equal stock whisper.
 - **Last push SHA:** (this commit)
 
 ---
