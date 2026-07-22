@@ -96,8 +96,11 @@ def run(cmd, check=True, env=None, cwd=None, timeout=None):
                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     if r.stdout:
         print(r.stdout, flush=True)
+    # RuntimeError (not SystemExit): SystemExit derives from BaseException and
+    # would bypass the Phase A/B `except Exception` guards, killing the whole
+    # kernel on a single-phase failure instead of isolating it.
     if check and r.returncode != 0:
-        raise SystemExit(f"command failed ({r.returncode}): {' '.join(map(str, cmd))}")
+        raise RuntimeError(f"command failed ({r.returncode}): {' '.join(map(str, cmd))}")
     return r
 
 

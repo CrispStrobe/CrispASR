@@ -194,7 +194,10 @@ for name in list_vars.keys():
         name = conv_map[name] if name in conv_map else name
 
     print(src, " -> ", name)
-    data = list_vars[src].squeeze().numpy()
+    # .float() upcasts bf16 -> f32 first: numpy has no bfloat16, so a bf16
+    # checkpoint (e.g. Trelis/tiron) would raise "unsupported ScalarType
+    # BFloat16" on a bare .numpy(). Harmless for f16/f32 tensors.
+    data = list_vars[src].squeeze().float().numpy()
     data = data.astype(np.float16)
 
     # reshape conv bias from [n] to [n, 1]
