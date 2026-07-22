@@ -1623,6 +1623,17 @@ static std::vector<float> euler_solve(f5_tts_context* ctx,
     if (interval_on && ctx->verbosity >= 1)
         fprintf(stderr, "f5_tts: interval-CFG K=%d (uncond recomputed every %d ODE steps; first+last always)\n",
                 cfg_interval, cfg_interval);
+    // Footgun guard (#294): interval-CFG reuses a stale uncond velocity between
+    // recomputes. That is fine at the default 32 / 16 steps, but stacking it on an
+    // aggressive EPSS low-step schedule leaves too few recomputes over a highly
+    // non-uniform schedule and the output degrades to noise (MEASURED: 7 steps +
+    // K=2 → unintelligible, while 16 + K=2 is clean). Warn — don't block; the
+    // caller may have a reason. Threshold picked from the 7-vs-16 A/B.
+    if (interval_on && n_steps < 16)
+        fprintf(stderr,
+                "f5_tts: WARNING interval-CFG (CRISPASR_F5_CFG_INTERVAL=%d) with only %d ODE steps degrades "
+                "quality — use one lever or the other (low --tts-steps OR interval CFG), not both.\n",
+                cfg_interval, n_steps);
 
     // Initial noise y0 ~ N(0, 1)
     std::vector<float> x(T * mel_dim);
