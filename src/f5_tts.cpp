@@ -76,6 +76,27 @@ static bool f5_batch_cfg_enabled() {
     return v != 0;
 }
 
+// Opt-in (#294): feed the DiT matmuls F16 activations instead of F32, by casting
+// only the mat-mul RHS (norm/attn/FFN activations); norms/adaln/rope/flash and the
+// output stay F32. Intent: the F16 weights make the F32 activation the only wide
+// operand, so an F16 RHS halves its bandwidth on the 64×/synth forwards.
+//   MEASURED (M1 Metal, F16, jfk ref): output is BYTE-IDENTICAL to the F32-activation
+//   path (md5 unchanged) AND ~17% slower (dit_graph 53.3 s vs 45.3 s). The
+//   byte-identity proves ggml's F16-weight mul_mat already converts the F32 RHS to
+//   F16 internally on Metal — so the explicit cast is redundant work, not a new win.
+//   Kept gated (default OFF) ONLY so a CUDA user can A/B it, since a cuBLAS/CUDA
+//   kernel may keep F32 activations where this would help. Do NOT default this on
+//   without a trustworthy CUDA measurement. (The old "F32->F16 activations is the
+//   real lever" note below is wrong for the Metal backend.)
+static bool f5_f16_act_enabled() {
+    static int v = -1;
+    if (v < 0) {
+        const char* e = crispasr_env::get("CRISPASR_F5_F16_ACT");
+        v = (e && *e && *e != '0') ? 1 : 0;
+    }
+    return v != 0;
+}
+
 struct f5_bench_stage {
     const char* name;
     std::chrono::steady_clock::time_point t0;
@@ -1012,6 +1033,11 @@ static bool f5_dit_cache_build(f5_tts_context* ctx, int T, int B) {
     ggml_set_input(cache.pos_in);
 
     // Chain all 22 DiT blocks
+    // #294: optionally feed the big mat-muls F16 activations (weights are F16
+    // already, so the RHS is the only F32 operand). Cast only the mat-mul inputs;
+    // everything else (norm/adaln/rope/flash) stays F32, output stays F32.
+    const bool f16act = f5_f16_act_enabled();
+    auto A = [&](ggml_tensor* t) { return f16act ? ggml_cast(cache.gctx, t, GGML_TYPE_F16) : t; };
     ggml_tensor* x = cache.hidden_in;
     for (int i = 0; i < hp.depth; i++) {
         const auto& blk = w.dit_blocks[i];
@@ -1034,12 +1060,13 @@ static bool f5_dit_cache_build(f5_tts_context* ctx, int T, int B) {
         norm_x = ggml_add(cache.gctx, norm_x, scaled);
         norm_x = ggml_add(cache.gctx, norm_x, shift_msa);
 
-        // QKV projections
-        ggml_tensor* q = ggml_mul_mat(cache.gctx, blk.attn_q_weight, norm_x);
+        // QKV projections (share one F16 cast of the norm output across q/k/v)
+        ggml_tensor* norm_x_m = A(norm_x);
+        ggml_tensor* q = ggml_mul_mat(cache.gctx, blk.attn_q_weight, norm_x_m);
         q = ggml_add(cache.gctx, q, blk.attn_q_bias);
-        ggml_tensor* k = ggml_mul_mat(cache.gctx, blk.attn_k_weight, norm_x);
+        ggml_tensor* k = ggml_mul_mat(cache.gctx, blk.attn_k_weight, norm_x_m);
         k = ggml_add(cache.gctx, k, blk.attn_k_bias);
-        ggml_tensor* v = ggml_mul_mat(cache.gctx, blk.attn_v_weight, norm_x);
+        ggml_tensor* v = ggml_mul_mat(cache.gctx, blk.attn_v_weight, norm_x_m);
         v = ggml_add(cache.gctx, v, blk.attn_v_bias);
 
         // Reshape for RoPE: (dim, T) → (head_dim, n_heads, T)
@@ -1062,7 +1089,7 @@ static bool f5_dit_cache_build(f5_tts_context* ctx, int T, int B) {
         attn_out = ggml_reshape_3d(cache.gctx, attn_out, dim, T, B);
 
         // O-proj + gated residual
-        ggml_tensor* attn_proj = ggml_mul_mat(cache.gctx, blk.attn_o_weight, attn_out);
+        ggml_tensor* attn_proj = ggml_mul_mat(cache.gctx, blk.attn_o_weight, A(attn_out));
         attn_proj = ggml_add(cache.gctx, attn_proj, blk.attn_o_bias);
         ggml_tensor* gated_attn = ggml_mul(cache.gctx, attn_proj, gate_msa);
         ggml_tensor* x_res = ggml_add(cache.gctx, x, gated_attn);
@@ -1074,10 +1101,10 @@ static bool f5_dit_cache_build(f5_tts_context* ctx, int T, int B) {
         ff_norm = ggml_add(cache.gctx, ff_norm, shift_mlp);
 
         // FFN: up → GELU → down
-        ggml_tensor* ff = ggml_mul_mat(cache.gctx, blk.ffn_up_weight, ff_norm);
+        ggml_tensor* ff = ggml_mul_mat(cache.gctx, blk.ffn_up_weight, A(ff_norm));
         ff = ggml_add(cache.gctx, ff, blk.ffn_up_bias);
         ff = ggml_gelu(cache.gctx, ff);
-        ff = ggml_mul_mat(cache.gctx, blk.ffn_down_weight, ff);
+        ff = ggml_mul_mat(cache.gctx, blk.ffn_down_weight, A(ff));
         ff = ggml_add(cache.gctx, ff, blk.ffn_down_bias);
 
         // Gated residual
@@ -1098,7 +1125,7 @@ static bool f5_dit_cache_build(f5_tts_context* ctx, int T, int B) {
         norm_x = ggml_add(cache.gctx, norm_x, fn_sc);
         norm_x = ggml_add(cache.gctx, norm_x, fshift);
 
-        ggml_tensor* vel = ggml_mul_mat(cache.gctx, w.final_proj_weight, norm_x);
+        ggml_tensor* vel = ggml_mul_mat(cache.gctx, w.final_proj_weight, A(norm_x));
         vel = ggml_add(cache.gctx, vel, w.final_proj_bias);
         ggml_set_name(vel, "velocity");
         ggml_set_output(vel);
