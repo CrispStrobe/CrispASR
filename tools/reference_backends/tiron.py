@@ -76,12 +76,16 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
     # ALL of Whisper's default forcing/suppression must be OFF. Passing
     # language=/task= instead makes HF inject <|notimestamps|> (prompt_len 4),
     # which desyncs the constraint grammar (prompt_len 3) and degenerates the
-    # decode into a repeat loop. So disable it all here.
-    for cfg in (model.config, model.generation_config):
-        cfg.forced_decoder_ids = None
-        cfg.suppress_tokens = [] if cfg is model.config else None
-        cfg.begin_suppress_tokens = [] if cfg is model.config else None
+    # decode into a repeat loop.
+    #
+    # ⚠ Newer transformers REJECT controlling generation via model.config
+    # ("...not supported anymore..."), so — unlike the harness/model-card code,
+    # which predates that change and sets model.config.suppress_tokens=[] — put
+    # EVERYTHING on generation_config only and never touch model.config.
     gc = model.generation_config
+    gc.forced_decoder_ids = None
+    gc.suppress_tokens = None
+    gc.begin_suppress_tokens = None
     gc.language = None
     gc.task = None
     if hasattr(gc, "no_timestamps_token_id"):
