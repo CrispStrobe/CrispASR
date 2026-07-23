@@ -695,6 +695,38 @@ speaker-labelled transcription. Hotwords are injected into the system prompt
 via `热词提示：word1, word2`. The user turn wraps the audio pad sequence
 between `<|audio_start|>` and `<|audio_end|>`.
 
+### tiron ⚠️ *experimental* (#295)
+
+Multi-speaker meeting ASR (`Trelis/tiron`, Apache-2.0). A **drop-in
+`WhisperForConditionalGeneration`** — Whisper **large-v3** (128-mel, 32 enc +
+32 dec, 1280d) with an **extended vocab** (51904): `<|speaker1|>`..`<|speaker8|>`
+(ids 51866–51873, contiguous above the 1501-token timestamp block) + `<|nospeech|>`.
+It runs on the **whisper backend** (alias `tiron`); the loader auto-detects the
+speaker tokens (`whisper_has_speaker_tokens`) and switches the decode.
+
+**Decode.** Not plain greedy — a port of the harness's constrained-decoding
+grammar (`whisper_tiron_apply_grammar`, from `tiron/constraints.py`; plain greedy
+loses ~5 cpWER): step 0 forces `<|speaker1|>`/`<|nospeech|>`; a speaker tag forces
+an opening timestamp; text runs until a closing timestamp; a closing timestamp
+allows EOS, another opening ts (same speaker continues), or the **next** speaker
+slot (`speaker_blocks`); `no_repeat_ngram_size=15`. Per-speaker timelines are
+**non-monotonic** (a later speaker opens earlier in the window), so the stock
+whisper "timestamps must increase / don't go back in time" seek rules are
+disabled for a speaker vocab. Driven exactly as `engine.py`: a 0.75 s onset pad,
+**fixed non-overlapping 30 s windows** (the whisper adapter declares
+`CAP_INTERNAL_CHUNKING` so the CLI passes the whole clip), and an RMS silent-
+window gate. Validated byte-exact (f16 **and** q8_0 token stream) vs the Python
+reference (`tools/reference_backends/tiron.py`).
+
+**Speaker indices are window-LOCAL.** `crispasr_tiron_link_speakers`
+(`src/tiron_link.{h,cpp}`) promotes them to meeting-level `SPEAKER_NN` by
+clustering per-(window, local-speaker) group voiceprints (TitaNet/ECAPA +
+agglomerative cosine), with a within-window must-link "spine". Hoisted into the
+library (`crispasr_tiron_link_transcript`) so the CLI and server both apply it;
+opt-in via `--diarize` / `--diarize-embedder`. GGUFs at
+[`cstr/tiron-GGML`](https://huggingface.co/cstr/tiron-GGML) (f16 + q4_k, quantized
+with `crispasr-legacy-quantize` — the whisper-bin quantizer).
+
 ### qwen3-tts
 
 Qwen3 talker LM + 12 Hz RVQ speech tokenizer. Three variants:

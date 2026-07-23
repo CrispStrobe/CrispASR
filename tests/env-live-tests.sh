@@ -26,6 +26,9 @@ fi
 export CRISPASR_MODEL_WHISPER="${CRISPASR_MODEL_WHISPER:-$_whisper_default}"
 unset _whisper_cache _whisper_default
 
+# Tiron (#295): Whisper large-v3 + inline <|speakerN|> markers (legacy ggml bin).
+export CRISPASR_MODEL_TIRON="${CRISPASR_MODEL_TIRON:-$CRISPASR_MODELS_DIR/tiron-q4_k.bin}"
+
 # ── Beam search backends ──
 export CRISPASR_MODEL_GLM_ASR="${CRISPASR_MODEL_GLM_ASR:-$CRISPASR_MODELS_DIR/glm-asr-nano.gguf}"
 export CRISPASR_MODEL_QWEN3_ASR="${CRISPASR_MODEL_QWEN3_ASR:-$CRISPASR_MODELS_DIR/qwen3-asr-0.6b.gguf}"
