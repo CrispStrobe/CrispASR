@@ -464,6 +464,17 @@ static bool crispasr_apply_tiron_linking(std::vector<crispasr_segment>& segs, co
         snprintf(lbl, sizeof(lbl), "SPEAKER_%02d ", g);
         segs[turn_seg[k]].speaker = lbl;
     }
+    // The global label now carries attribution — strip the window-local
+    // <|speakerN|> markers from the text and drop the bare marker segments.
+    for (auto& s : segs) {
+        s.text = std::regex_replace(s.text, spk_re, "");
+    }
+    segs.erase(std::remove_if(segs.begin(), segs.end(),
+                              [](const crispasr_segment& s) {
+                                  return !std::any_of(s.text.begin(), s.text.end(),
+                                                      [](unsigned char c) { return std::isalnum(c); });
+                              }),
+               segs.end());
     if (!params.no_prints) {
         fprintf(stderr, "crispasr[tiron]: linked %d turns across windows -> %d meeting-level speakers\n",
                 (int)turns.size(), res.n_speakers);
