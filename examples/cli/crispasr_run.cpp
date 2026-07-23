@@ -38,6 +38,7 @@
 #include "crispasr_lid.h" // crispasr_lid_free_cache()
 #include "crispasr_diarize_cli.h"
 #include "crispasr_speaker_embedder.h"
+#include "tiron_link.h"
 #include "crispasr_mem.h"
 #include "crispasr_stream_finalize.h"
 #include "crispasr_stream_partial_decode.h"
@@ -65,6 +66,7 @@
 #include "common-crispasr.h"      // read_audio_data
 
 #include <algorithm>
+#include <regex>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -406,8 +408,76 @@ std::mutex g_stdout_mutex;
 // independently against the claimed profiles, unmatched clusters keep
 // their anonymous "(speaker N) " labels, and nothing runs after this
 // stage that could overwrite a matched name.
+// Tiron (#295): promote the model's window-LOCAL <|speakerN|> markers to stable
+// meeting-level SPEAKER_NN by clustering group voiceprints (crispasr_tiron_link_speakers).
+// The markers arrive inline in each segment's text; we track the current local
+// speaker across segments, build one turn per content segment, link, and relabel.
+// Returns true if tiron output was detected and handled.
+static bool crispasr_apply_tiron_linking(std::vector<crispasr_segment>& segs, const std::vector<float>& samples,
+                                         const whisper_params& params) {
+    static const std::regex spk_re(R"(<\|speaker(\d+)\|>)");
+    bool is_tiron = false;
+    for (const auto& s : segs) {
+        if (std::regex_search(s.text, spk_re)) {
+            is_tiron = true;
+            break;
+        }
+    }
+    if (!is_tiron)
+        return false;
+
+    // Cross-window linking is opt-in (it auto-downloads a speaker embedder):
+    // without a diarization flag, keep the model's window-local <|speakerN|>
+    // markers (already correct per window, just not globally stable).
+    const bool want_link = params.diarize || !params.diarize_embedder.empty();
+    if (!want_link || samples.empty())
+        return true;
+
+    const std::string spec = !params.diarize_embedder.empty() ? params.diarize_embedder : std::string("auto");
+    auto embedder = crispasr_make_speaker_embedder(spec, params.n_threads, params.cache_dir);
+    if (!embedder)
+        return true;
+
+    std::vector<TironTurn> turns;
+    std::vector<int> turn_seg;
+    int cur_local = 0;
+    for (int si = 0; si < (int)segs.size(); si++) {
+        const std::string& t = segs[si].text;
+        for (auto it = std::sregex_iterator(t.begin(), t.end(), spk_re); it != std::sregex_iterator(); ++it) {
+            cur_local = std::stoi((*it)[1].str());
+        }
+        std::string content = std::regex_replace(t, spk_re, "");
+        bool has_word = std::any_of(content.begin(), content.end(), [](unsigned char c) { return std::isalnum(c); });
+        if (!has_word)
+            continue;
+        const int window = segs[si].chunk_id >= 0 ? segs[si].chunk_id : (int)(segs[si].t0 / 3000);
+        turns.push_back(TironTurn{segs[si].t0, segs[si].t1, window, cur_local});
+        turn_seg.push_back(si);
+    }
+    if (turns.empty())
+        return true;
+
+    TironLinkResult res = crispasr_tiron_link_speakers(turns, samples.data(), (int)samples.size(), embedder.get());
+    for (int k = 0; k < (int)turns.size(); k++) {
+        const int g = res.turn_speaker[k] < 0 ? 0 : res.turn_speaker[k];
+        char lbl[24];
+        snprintf(lbl, sizeof(lbl), "SPEAKER_%02d ", g);
+        segs[turn_seg[k]].speaker = lbl;
+    }
+    if (!params.no_prints) {
+        fprintf(stderr, "crispasr[tiron]: linked %d turns across windows -> %d meeting-level speakers\n",
+                (int)turns.size(), res.n_speakers);
+    }
+    return true;
+}
+
 static void crispasr_apply_global_speaker_stages(std::vector<crispasr_segment>& all_segs,
                                                  const std::vector<float>& samples, const whisper_params& params) {
+    // Tiron output uses the model's own local speaker markers; link them into
+    // global SPEAKER_NN and skip the generic pyannote/embedding diarizer.
+    if (crispasr_apply_tiron_linking(all_segs, samples, params))
+        return;
+
     const bool want_cluster = params.diarize && !params.diarize_embedder.empty();
     const bool want_ident = !params.speaker_db.empty() && params.speaker_db_consent && !params.expect_speakers.empty();
     if ((!want_cluster && !want_ident) || all_segs.empty() || samples.empty())
