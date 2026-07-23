@@ -56,6 +56,35 @@ struct TironLinkResult {
     int dim = 0;
 };
 
+// ── High-level transcript linking (library-hoisted so EVERY surface — CLI,
+// session C-ABI, server — applies the same SPEAKER_NN linking, not just the CLI).
+// One segment of a decoded Tiron transcript. `text` carries the inline
+// <|speakerN|> markers on input; on output they are stripped and `speaker` /
+// `drop` are filled.
+struct TironTranscriptSeg {
+    std::string text;  // in: may contain <|speakerN|>; out: markers stripped
+    int64_t t0_cs = 0; // centiseconds
+    int64_t t1_cs = 0;
+    int chunk_id = -1;   // decode window; -1 => derived from t0_cs
+    std::string speaker; // out: "SPEAKER_NN " when linked (else left unchanged)
+    bool drop = false;   // out: true => a bare <|speakerN|> marker segment; caller should drop it
+};
+
+// Detect Tiron output and, when an embedder spec is given, promote the window-
+// local <|speakerN|> markers to meeting-level SPEAKER_NN by voiceprint
+// clustering. Mutates `segs` in place (strips markers, sets speaker/drop).
+//
+// Returns:
+//   -1  not a Tiron transcript (no <|speakerN|> markers) — `segs` untouched.
+//    0  Tiron, but no linking performed (empty/failed embedder spec) — the
+//       local <|speakerN|> markers are LEFT in place for the caller to render.
+//   >0  number of meeting-level speakers; markers stripped, labels applied.
+//
+// `embedder_spec` accepts crispasr_make_speaker_embedder's specs ("auto",
+// "titanet", "ecapa", a .gguf path); empty/"" skips linking.
+int crispasr_tiron_link_transcript(std::vector<TironTranscriptSeg>& segs, const float* pcm_16k, int n_samples,
+                                   const char* embedder_spec, int n_threads, const char* cache_dir);
+
 // Link Tiron's window-local speaker indices into meeting-level ids.
 //
 // `pcm_16k` is the full mono 16 kHz PCM the turns index into (turn times are
