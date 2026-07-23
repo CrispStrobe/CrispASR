@@ -8,6 +8,25 @@ Branch: `feat/tiron-asr` · worktree `.claude/worktrees/feat-tiron`
 
 ---
 
+## Wiring status vs docs/contributing.md (2026-07-23)
+
+| checklist point | status |
+|---|---|
+| 1 C runtime `src/<name>.{h,cpp}` | N/A — runs on the whisper backend |
+| 2 CLI adapter | N/A — whisper adapter |
+| 3 factory + detect | ✅ `tiron`→whisper alias (crispasr_backend.cpp); legacy-magic routing |
+| 4/5 CMake + lib | ✅ `tiron_link.cpp` in src/CMakeLists |
+| 6 C-ABI / bindings / multi-surface | ✅ decode+grammar+windowing in `whisper_full` (all surfaces); **linking hoisted to `crispasr_tiron_link_transcript` (lib) + called by CLI AND server**; session C-ABI is raw ASR (no diarize by design); bindings dispatch dynamically via whisper path |
+| 7 registry | ✅ tiron row (cstr/tiron-GGML) |
+| 8 quantize rules | ✅ uses `crispasr-legacy-quantize` (whisper-bin quantizer) |
+| 9 reference dumper (py) | ✅ `tools/reference_backends/tiron.py` + registered |
+| 9 crispasr-diff C++ branch | ⬜ DEFERRED — decode validated BYTE-EXACT via token dump vs the published ref.gguf (equiv. rigor); a C++ branch needs whisper mel/encoder stage APIs (re-validates the already-proven forward) |
+| 10 bindings docstrings | ✅ functional (dynamic dispatch); documented in README + architecture.md |
+| 11 go LDFLAGS | N/A — tiron_link.cpp is in crispasr-lib (no new -l) |
+| 12 README / architecture / live test / env | ✅ README (experimental row), architecture.md section, `tests/test-tiron-live.sh` + ctest + `CRISPASR_MODEL_TIRON` |
+
+---
+
 ## NOW — active work (2026-07-23, FIXED PROPERLY — byte-exact parity)
 
 - **PROVEN not quantization** (you were right): the speaker2 divergence was
