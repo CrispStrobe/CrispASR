@@ -8154,9 +8154,20 @@ int whisper_full_with_state(struct whisper_context* ctx, struct whisper_state* s
                     {
                         const auto& token = decoder.sequence.tokens.back();
 
-                        // timestamp token - update sliding window
-                        // (a Tiron <|speakerN|> token is > token_beg but NOT a timestamp)
-                        if (token.id > whisper_token_beg(ctx) && ctx->vocab.is_timestamp(token.id)) {
+                        if (ctx->vocab.has_speakers) {
+                            // Tiron: fixed 30 s windows + per-speaker (non-monotonic)
+                            // timestamps — a later speaker block legitimately opens
+                            // EARLIER in the window than the previous one closed. So do
+                            // NOT drive seek from timestamps and do NOT fail on a
+                            // "backward" timestamp (the stock rule below kills the
+                            // window the moment speaker2 opens before speaker1 ended).
+                            // Commit every token; the model ends the window with EOT.
+                            result_len = i + 1;
+                            if (ctx->vocab.is_timestamp(token.id)) {
+                                has_ts = true;
+                            }
+                        } else if (token.id > whisper_token_beg(ctx) && ctx->vocab.is_timestamp(token.id)) {
+                            // timestamp token - update sliding window
                             const int seek_delta_new = 2 * (token.id - whisper_token_beg(ctx));
 
                             // do not allow to go back in time
@@ -8185,10 +8196,11 @@ int whisper_full_with_state(struct whisper_context* ctx, struct whisper_state* s
 #endif
 
                         // end of segment
-                        if (token.id == whisper_token_eot(ctx) ||                 // end of text token
-                            (params.max_tokens > 0 && i >= params.max_tokens) ||  // max tokens per segment reached
-                            (has_ts && seek + seek_delta + delta_min >= seek_end) // end of audio reached (100ms)
-                        ) {
+                        if (token.id == whisper_token_eot(ctx) ||                // end of text token
+                            (params.max_tokens > 0 && i >= params.max_tokens) || // max tokens per segment reached
+                            // end of audio reached (100ms) — NOT for tiron, whose window
+                            // ends on EOT (seek_delta isn't timestamp-driven there).
+                            (!ctx->vocab.has_speakers && has_ts && seek + seek_delta + delta_min >= seek_end)) {
                             if (result_len == 0 && !params.no_timestamps) {
                                 if (seek + seek_delta + delta_min >= seek_end) {
                                     result_len = i + 1;
@@ -8410,6 +8422,14 @@ int whisper_full_with_state(struct whisper_context* ctx, struct whisper_state* s
             const auto result_len = best_decoder.sequence.result_len;
 
             const auto& tokens_cur = best_decoder.sequence.tokens;
+
+            if (ctx->vocab.has_speakers && getenv("CRISPASR_WHISPER_TIRON_DEBUG")) {
+                fprintf(stderr, "[tiron] window tokens (n=%d): ", (int)tokens_cur.size());
+                for (const auto& t : tokens_cur) {
+                    fprintf(stderr, "%d ", t.id);
+                }
+                fprintf(stderr, "\n");
+            }
 
             // [EXPERIMENTAL] Token-level timestamps with DTW
             const auto n_segments_before = state->result_all.size();
