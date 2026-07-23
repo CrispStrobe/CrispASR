@@ -408,76 +408,43 @@ std::mutex g_stdout_mutex;
 // independently against the claimed profiles, unmatched clusters keep
 // their anonymous "(speaker N) " labels, and nothing runs after this
 // stage that could overwrite a matched name.
-// Tiron (#295): promote the model's window-LOCAL <|speakerN|> markers to stable
-// meeting-level SPEAKER_NN by clustering group voiceprints (crispasr_tiron_link_speakers).
-// The markers arrive inline in each segment's text; we track the current local
-// speaker across segments, build one turn per content segment, link, and relabel.
-// Returns true if tiron output was detected and handled.
+// Tiron (#295): thin CLI wrapper over the library-hoisted linker
+// (crispasr_tiron_link_transcript) so the CLI, session C-ABI, and server all
+// share ONE implementation. Returns true if the segments were tiron output.
 static bool crispasr_apply_tiron_linking(std::vector<crispasr_segment>& segs, const std::vector<float>& samples,
                                          const whisper_params& params) {
-    static const std::regex spk_re(R"(<\|speaker(\d+)\|>)");
-    bool is_tiron = false;
-    for (const auto& s : segs) {
-        if (std::regex_search(s.text, spk_re)) {
-            is_tiron = true;
-            break;
-        }
-    }
-    if (!is_tiron)
-        return false;
-
-    // Cross-window linking is opt-in (it auto-downloads a speaker embedder):
-    // without a diarization flag, keep the model's window-local <|speakerN|>
-    // markers (already correct per window, just not globally stable).
+    // Cross-window linking is opt-in (auto-downloads a speaker embedder); without
+    // a diarization flag keep the model's window-local <|speakerN|> markers.
     const bool want_link = params.diarize || !params.diarize_embedder.empty();
-    if (!want_link || samples.empty())
-        return true;
+    const std::string spec = want_link ? (!params.diarize_embedder.empty() ? params.diarize_embedder : "auto") : "";
 
-    const std::string spec = !params.diarize_embedder.empty() ? params.diarize_embedder : std::string("auto");
-    auto embedder = crispasr_make_speaker_embedder(spec, params.n_threads, params.cache_dir);
-    if (!embedder)
-        return true;
+    std::vector<TironTranscriptSeg> ts(segs.size());
+    for (size_t i = 0; i < segs.size(); i++) {
+        ts[i].text = segs[i].text;
+        ts[i].t0_cs = segs[i].t0;
+        ts[i].t1_cs = segs[i].t1;
+        ts[i].chunk_id = segs[i].chunk_id;
+    }
+    const int n_spk = crispasr_tiron_link_transcript(ts, samples.data(), (int)samples.size(), spec.c_str(),
+                                                     params.n_threads, params.cache_dir.c_str());
+    if (n_spk < 0)
+        return false; // not tiron
 
-    std::vector<TironTurn> turns;
-    std::vector<int> turn_seg;
-    int cur_local = 0;
-    for (int si = 0; si < (int)segs.size(); si++) {
-        const std::string& t = segs[si].text;
-        for (auto it = std::sregex_iterator(t.begin(), t.end(), spk_re); it != std::sregex_iterator(); ++it) {
-            cur_local = std::stoi((*it)[1].str());
-        }
-        std::string content = std::regex_replace(t, spk_re, "");
-        bool has_word = std::any_of(content.begin(), content.end(), [](unsigned char c) { return std::isalnum(c); });
-        if (!has_word)
+    // Copy the (stripped) text + labels back; drop bare-marker segments.
+    std::vector<crispasr_segment> kept;
+    kept.reserve(segs.size());
+    for (size_t i = 0; i < segs.size(); i++) {
+        if (ts[i].drop)
             continue;
-        const int window = segs[si].chunk_id >= 0 ? segs[si].chunk_id : (int)(segs[si].t0 / 3000);
-        turns.push_back(TironTurn{segs[si].t0, segs[si].t1, window, cur_local});
-        turn_seg.push_back(si);
+        segs[i].text = ts[i].text;
+        if (!ts[i].speaker.empty())
+            segs[i].speaker = ts[i].speaker;
+        kept.push_back(std::move(segs[i]));
     }
-    if (turns.empty())
-        return true;
-
-    TironLinkResult res = crispasr_tiron_link_speakers(turns, samples.data(), (int)samples.size(), embedder.get());
-    for (int k = 0; k < (int)turns.size(); k++) {
-        const int g = res.turn_speaker[k] < 0 ? 0 : res.turn_speaker[k];
-        char lbl[24];
-        snprintf(lbl, sizeof(lbl), "SPEAKER_%02d ", g);
-        segs[turn_seg[k]].speaker = lbl;
-    }
-    // The global label now carries attribution — strip the window-local
-    // <|speakerN|> markers from the text and drop the bare marker segments.
-    for (auto& s : segs) {
-        s.text = std::regex_replace(s.text, spk_re, "");
-    }
-    segs.erase(std::remove_if(segs.begin(), segs.end(),
-                              [](const crispasr_segment& s) {
-                                  return !std::any_of(s.text.begin(), s.text.end(),
-                                                      [](unsigned char c) { return std::isalnum(c); });
-                              }),
-               segs.end());
-    if (!params.no_prints) {
-        fprintf(stderr, "crispasr[tiron]: linked %d turns across windows -> %d meeting-level speakers\n",
-                (int)turns.size(), res.n_speakers);
+    if (n_spk > 0)
+        segs = std::move(kept);
+    if (n_spk > 0 && !params.no_prints) {
+        fprintf(stderr, "crispasr[tiron]: linked across windows -> %d meeting-level speakers\n", n_spk);
     }
     return true;
 }

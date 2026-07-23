@@ -6,9 +6,14 @@
 #include "crispasr_speaker_embedder.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <map>
+#include <memory>
+#include <regex>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -205,4 +210,63 @@ TironLinkResult crispasr_tiron_link_speakers(const std::vector<TironTurn>& turns
             res.turn_speaker[ti] = g.global;
 
     return res;
+}
+
+int crispasr_tiron_link_transcript(std::vector<TironTranscriptSeg>& segs, const float* pcm_16k, int n_samples,
+                                   const char* embedder_spec, int n_threads, const char* cache_dir) {
+    static const std::regex spk_re(R"(<\|speaker(\d+)\|>)");
+
+    bool is_tiron = false;
+    for (const auto& s : segs) {
+        if (std::regex_search(s.text, spk_re)) {
+            is_tiron = true;
+            break;
+        }
+    }
+    if (!is_tiron)
+        return -1;
+
+    // No embedder requested → leave the window-local markers in place.
+    const std::string spec = embedder_spec ? embedder_spec : "";
+    if (spec.empty() || !pcm_16k || n_samples <= 0)
+        return 0;
+
+    auto embedder = crispasr_make_speaker_embedder(spec, n_threads, cache_dir ? cache_dir : "");
+    if (!embedder)
+        return 0;
+
+    std::vector<TironTurn> turns;
+    std::vector<int> turn_seg;
+    int cur_local = 0;
+    for (int si = 0; si < (int)segs.size(); si++) {
+        const std::string& t = segs[si].text;
+        for (auto it = std::sregex_iterator(t.begin(), t.end(), spk_re); it != std::sregex_iterator(); ++it) {
+            cur_local = std::stoi((*it)[1].str());
+        }
+        std::string content = std::regex_replace(t, spk_re, "");
+        const bool has_word =
+            std::any_of(content.begin(), content.end(), [](unsigned char c) { return std::isalnum(c); });
+        if (!has_word)
+            continue;
+        const int window = segs[si].chunk_id >= 0 ? segs[si].chunk_id : (int)(segs[si].t0_cs / 3000);
+        turns.push_back(TironTurn{segs[si].t0_cs, segs[si].t1_cs, window, cur_local});
+        turn_seg.push_back(si);
+    }
+    if (turns.empty())
+        return 0;
+
+    TironLinkResult res = crispasr_tiron_link_speakers(turns, pcm_16k, n_samples, embedder.get());
+    for (int k = 0; k < (int)turns.size(); k++) {
+        const int g = res.turn_speaker[k] < 0 ? 0 : res.turn_speaker[k];
+        char lbl[24];
+        snprintf(lbl, sizeof(lbl), "SPEAKER_%02d ", g);
+        segs[turn_seg[k]].speaker = lbl;
+    }
+    // Strip the local markers (global labels now carry attribution) and mark
+    // bare-marker segments for the caller to drop.
+    for (auto& s : segs) {
+        s.text = std::regex_replace(s.text, spk_re, "");
+        s.drop = !std::any_of(s.text.begin(), s.text.end(), [](unsigned char c) { return std::isalnum(c); });
+    }
+    return res.n_speakers;
 }

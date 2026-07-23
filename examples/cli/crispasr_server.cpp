@@ -24,6 +24,7 @@
 
 #include "crispasr_backend.h"
 #include "crispasr_diarize_cli.h"
+#include "tiron_link.h" // #295: tiron cross-window speaker linking (shared with the CLI)
 #include "crispasr_gap_fill.h"
 #include "crispasr_speaker_embedder.h"
 #include "crispasr_lid.h"
@@ -711,9 +712,42 @@ static transcription_result do_transcribe(const httplib::MultipartFormData& audi
             }
         }
 
+        // Tiron (#295): if the transcript carries <|speakerN|> markers, link them
+        // to global SPEAKER_NN with the library-shared linker (same as the CLI)
+        // and skip the generic diarizer. Opt-in via diarize / diarize_embedder.
+        bool tiron_handled = false;
+        if (!result.segs.empty()) {
+            std::vector<TironTranscriptSeg> ts(result.segs.size());
+            for (size_t i = 0; i < result.segs.size(); i++) {
+                ts[i].text = result.segs[i].text;
+                ts[i].t0_cs = result.segs[i].t0;
+                ts[i].t1_cs = result.segs[i].t1;
+                ts[i].chunk_id = result.segs[i].chunk_id;
+            }
+            const std::string spec =
+                !rp.diarize_embedder.empty() ? rp.diarize_embedder : (rp.diarize ? std::string("auto") : std::string());
+            const int n_spk = crispasr_tiron_link_transcript(ts, pcmf32.data(), n_samples, spec.c_str(), rp.n_threads,
+                                                             rp.cache_dir.c_str());
+            if (n_spk >= 0) {
+                tiron_handled = true;
+                std::vector<crispasr_segment> kept;
+                kept.reserve(result.segs.size());
+                for (size_t i = 0; i < result.segs.size(); i++) {
+                    if (ts[i].drop)
+                        continue;
+                    result.segs[i].text = ts[i].text;
+                    if (!ts[i].speaker.empty())
+                        result.segs[i].speaker = ts[i].speaker;
+                    kept.push_back(std::move(result.segs[i]));
+                }
+                if (n_spk > 0)
+                    result.segs = std::move(kept);
+            }
+        }
+
         // Diarization post-step (#143): assign speaker labels to segments.
         // Mirrors the CLI path in crispasr_run.cpp:732-743.
-        if (rp.diarize && !result.segs.empty()) {
+        if (!tiron_handled && rp.diarize && !result.segs.empty()) {
             // #261: diarization (pyannote-seg / sherpa / embedding) runs on the
             // CPU ggml backend. Breadcrumb the stage for the fatal-signal
             // handler, and wrap the whole step so a throwing failure (e.g.
