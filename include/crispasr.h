@@ -355,6 +355,8 @@ CRISPASR_API int whisper_n_vocab(struct whisper_context* ctx);
 CRISPASR_API int whisper_n_text_ctx(struct whisper_context* ctx);
 CRISPASR_API int whisper_n_audio_ctx(struct whisper_context* ctx);
 CRISPASR_API int whisper_is_multilingual(struct whisper_context* ctx);
+// Tiron (#295): 1 if the loaded model has <|speakerN|> tokens.
+CRISPASR_API int whisper_has_speaker_tokens(struct whisper_context* ctx);
 
 CRISPASR_API int whisper_model_n_vocab(struct whisper_context* ctx);
 CRISPASR_API int whisper_model_n_audio_ctx(struct whisper_context* ctx);

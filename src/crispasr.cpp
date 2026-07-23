@@ -4683,6 +4683,12 @@ int whisper_is_multilingual(struct whisper_context* ctx) {
     return ctx->vocab.is_multilingual() ? 1 : 0;
 }
 
+// Tiron (#295): 1 if the model exposes <|speakerN|> tokens (the tiron decode
+// grammar + fixed-window/onset-pad path are active for it).
+int whisper_has_speaker_tokens(struct whisper_context* ctx) {
+    return ctx->vocab.has_speakers ? 1 : 0;
+}
+
 float* whisper_get_logits(struct whisper_context* ctx) {
     return ctx->state->logits.data();
 }
@@ -7638,6 +7644,30 @@ int whisper_full_with_state(struct whisper_context* ctx, struct whisper_state* s
         return 0;
     }
 
+    // Tiron (#295): 50 ms-frame RMS energy + an adaptive silence floor (25th
+    // percentile), from the harness fixed_window_chunks. Used to skip a
+    // pure-silence window so the model doesn't hallucinate on the silent tail
+    // chunk of a >30 s clip (window 1 already matches the single-window reference
+    // byte-exact; the hard-cut tail window was the only spurious output).
+    std::vector<float> tiron_rms; // one RMS per 50 ms frame
+    float tiron_silence_thresh = 0.0f;
+    if (ctx->vocab.has_speakers && n_samples > 0) {
+        const int fs = CRISPASR_SAMPLE_RATE / 20; // 50 ms = 800 samples
+        const int nf = std::max(1, n_samples / fs);
+        tiron_rms.resize(nf);
+        for (int f = 0; f < nf; f++) {
+            double s = 0.0;
+            for (int k = 0; k < fs; k++) {
+                const float v = samples[(size_t)f * fs + k];
+                s += (double)v * v;
+            }
+            tiron_rms[f] = (float)std::sqrt(s / fs + 1e-12);
+        }
+        std::vector<float> sorted = tiron_rms;
+        std::sort(sorted.begin(), sorted.end());
+        tiron_silence_thresh = sorted[sorted.size() / 4];
+    }
+
     // a set of temperatures to use
     // [ t0, t0 + delta, t0 + 2*delta, ..., < 1.0f + 1e-6f ]
     std::vector<float> temperatures;
@@ -7806,6 +7836,30 @@ int whisper_full_with_state(struct whisper_context* ctx, struct whisper_state* s
             if (params.encoder_begin_callback(ctx, state, params.encoder_begin_callback_user_data) == false) {
                 CRISPASR_LOG_ERROR("%s: encoder_begin_callback returned false - aborting\n", __func__);
                 break;
+            }
+        }
+
+        // Tiron: skip a pure-silence window (no frame clearly above the noise
+        // floor) — the model otherwise hallucinates on a silent tail chunk. Frames
+        // are 50 ms; seek is in 10 ms units (÷5 to index tiron_rms).
+        if (ctx->vocab.has_speakers && !tiron_rms.empty()) {
+            const int win_end = std::min(seek + 100 * CRISPASR_CHUNK_SIZE, seek_end);
+            const int f0 = seek / 5;
+            const int f1 = std::min((int)tiron_rms.size(), win_end / 5);
+            int speech_frames = 0;
+            for (int f = f0; f < f1; f++) {
+                if (tiron_rms[f] > tiron_silence_thresh * 2.5f) {
+                    speech_frames++;
+                }
+            }
+            if (getenv("CRISPASR_WHISPER_TIRON_DEBUG")) {
+                fprintf(stderr, "[tiron] gate: seek=%d win_end=%d frames[%d,%d) speech=%d thresh=%.5f\n", seek, win_end,
+                        f0, f1, speech_frames, tiron_silence_thresh);
+            }
+            if (speech_frames < 5) { // < ~0.25 s of clear speech in the window
+                CRISPASR_LOG_DEBUG("%s: tiron: skipping silent window at seek=%d\n", __func__, seek);
+                seek += std::min(seek_end - seek, 100 * CRISPASR_CHUNK_SIZE);
+                continue;
             }
         }
 

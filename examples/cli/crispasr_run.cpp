@@ -761,7 +761,10 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, co
     // encoder quality loss from reduced context is inherent to the
     // architecture.
     int effective_chunk_seconds = params.chunk_seconds;
-    if (!params.chunk_seconds_explicit && (backend.capabilities() & CAP_UNBOUNDED_INPUT)) {
+    if (!params.chunk_seconds_explicit && (backend.capabilities() & (CAP_UNBOUNDED_INPUT | CAP_INTERNAL_CHUNKING))) {
+        // A backend that streams unbounded input OR chunks internally (tiron's
+        // fixed 30 s windows) gets the whole clip; slicing it here would
+        // double-chunk / duplicate overlap.
         effective_chunk_seconds = 0;
     }
     // Issue #257: a backend that chunks internally (parakeet / canary — full-
