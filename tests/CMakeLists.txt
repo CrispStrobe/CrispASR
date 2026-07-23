@@ -3370,6 +3370,18 @@ set_tests_properties(test-speaker-id-live PROPERTIES
     TIMEOUT 600)
 endif()
 
+# ─── test-tiron-live — live test (#295): tiron decode grammar emits per-window
+# <|speakerN|> markers + cross-window linker → SPEAKER_NN. SKIPs without model. ─
+if(TARGET crispasr-cli)
+add_test(NAME test-tiron-live
+    COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test-tiron-live.sh
+            $<TARGET_FILE:crispasr-cli>
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+set_tests_properties(test-tiron-live PROPERTIES
+    LABELS "live;diarize;tiron;asr"
+    TIMEOUT 900)
+endif()
+
 # ─── test-surface-parity — cross-surface parity harness (improvements Phase 0):
 # CLI adapter vs session C-ABI produce the same transcription. Skips unless a
 # parakeet model + libcrispasr shared lib + python are present.
