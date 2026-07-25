@@ -1367,7 +1367,7 @@ jobs:
           fail_on_unmatched_files: false
 
   # ── Windows x86_64 shared libs + headers (CUDA) ──────────────────────────────
-  # CUDA 12.8 toolkit (Blackwell-aware). Unlike the Linux CUDA tarball,
+  # CUDA 12.8 toolkit (Tesla P100 through Blackwell). Unlike the Linux CUDA tarball,
   # we bundle the CUDA runtime DLLs (cudart / cublas / cublasLt) so the
   # tarball is self-contained for downstream Windows consumers — matches
   # the existing build-windows-cuda EXE bundle's pattern.
@@ -1401,7 +1401,7 @@ jobs:
             -DCRISPASR_BUILD_EXAMPLES=OFF ^
             -DCRISPASR_BUILD_SERVER=OFF ^
             -DGGML_CUDA=ON ^
-            -DCMAKE_CUDA_ARCHITECTURES="75-real;86-real;89-real;120-real;120-virtual" ^
+            -DCMAKE_CUDA_ARCHITECTURES="60-real;75-real;86-real;89-real;120-real;120-virtual" ^
             -DGGML_NATIVE=OFF ^
             -DGGML_AVX2=ON -DGGML_FMA=ON -DGGML_F16C=ON ^
             -DCRISPASR_OPUS_FETCH=ON
@@ -1632,10 +1632,10 @@ jobs:
           submodules: recursive
           ref: ${{ inputs.tag || github.ref }}
 
-      # CUDA 12.8 is the minimum that ships sm_120 SASS for Blackwell
-      # consumer GPUs (RTX 50xx). Earlier toolkits (12.4 etc.) only know
-      # up to sm_90, so RTX 5060/5070/5080/5090 fail at runtime with
-      # 'no kernel image is available'.
+      # CUDA 12.8 covers the release range from sm_60 (Tesla P100) through
+      # sm_120 (Blackwell consumer GPUs, RTX 50xx). Earlier toolkits (12.4
+      # etc.) only know up to sm_90, so RTX 5060/5070/5080/5090 fail at
+      # runtime with 'no kernel image is available'.
       - name: Install CUDA Toolkit 12.8.0
         # v0.2.19 only knows up to CUDA 12.4; v0.2.35 added 12.8 + 12.9
         # support. Required for sm_120 (RTX 50xx, Blackwell consumer) builds.
@@ -1653,7 +1653,7 @@ jobs:
           cmake -S . -B build -G Ninja ^
             -DCMAKE_BUILD_TYPE=Release ^
             -DGGML_CUDA=ON ^
-            -DCMAKE_CUDA_ARCHITECTURES="75-real;86-real;89-real;120-real;120-virtual" ^
+            -DCMAKE_CUDA_ARCHITECTURES="60-real;75-real;86-real;89-real;120-real;120-virtual" ^
             -DGGML_NATIVE=OFF ^
             -DGGML_AVX2=ON -DGGML_FMA=ON -DGGML_F16C=ON ^
             -DCRISPASR_OPUS_FETCH=ON

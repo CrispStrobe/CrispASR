@@ -100,7 +100,12 @@ Produces `build\bin\crispasr.exe`. Extra CMake flags can be appended:
 ```cmd
 build-windows.bat -DCRISPASR_CURL=ON   :: enable libcurl fallback
 build-windows.bat -DGGML_CUDA=ON       :: NVIDIA GPU (CUDA must be installed)
+build-windows.bat -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=60  :: Tesla P100
 ```
+
+Tesla P100 is a Pascal GPU with compute capability 6.0 (`sm_60`). Use a
+CUDA 12.x toolkit when building for it; CUDA 13 no longer generates code
+for Pascal GPUs.
 
 What it does:
 1. Locates `vswhere.exe` under `%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\`.
