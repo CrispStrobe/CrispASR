@@ -15,7 +15,7 @@
 //     → final LayerNorm
 //     → down_sample (Conv1d 1280→1280, k=2, s=2, no bias) + GELU
 //     → down_sample_norm (LayerNorm)
-//     → 8-stage Euclidean RVQ encode (CPU-side argmin)
+//     → 8-stage Euclidean RVQ encode (CUDA graph, CPU fallback)
 //
 // Architecture is documented in src/mimo_tokenizer.h and mirrored in the
 // Python reference dumper at tools/reference_backends/mimo_tokenizer.py.
@@ -42,6 +42,9 @@
 #include "core/gpu_backend_pref.h" // crispasr_init_gpu_backend (#214)
 #include "ggml-backend.h"
 #include "ggml-cpu.h"
+#if defined(GGML_USE_CUDA)
+#include "ggml-cuda.h"
+#endif
 #include "ggml.h"
 #include "gguf.h"
 
@@ -54,6 +57,9 @@
 #include <numeric>
 #include <string>
 #include <vector>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -136,6 +142,7 @@ struct mimo_tokenizer_context {
     ggml_context* ctx_w = nullptr;
     ggml_backend_buffer_t buf_w = nullptr;
     std::map<std::string, ggml_tensor*> tensors;
+    bool cuda_rvq_available = false;
 
     // Bound tensor handles (encoder forward path).
     ggml_tensor* conv1_w = nullptr;
@@ -315,7 +322,8 @@ static void mimo_fft_wrapper(const float* in, int N, float* out) {
 // Returns (T_mel, n_mels) row-major in `out_mel` and writes T_mel to *T_mel_out.
 // ===========================================================================
 
-static std::vector<float> compute_tokenizer_mel(const float* pcm16k, int n_in, const mimo_tok_hp& hp, int& T_mel_out) {
+static std::vector<float> compute_tokenizer_mel(const float* pcm16k, int n_in, const mimo_tok_hp& hp, int n_threads,
+                                                int& T_mel_out) {
     // 1. Resample to 24 kHz.
     std::vector<float> pcm24k = resample_sinc_hann(pcm16k, n_in, 16000, (int)hp.sampling_rate);
 
@@ -353,10 +361,20 @@ static std::vector<float> compute_tokenizer_mel(const float* pcm16k, int n_in, c
     p.log_eps = 1e-7f;
     p.center_pad = true; // zero-pad; torchaudio uses reflect — minor mismatch
     p.drop_last_frame = false;
+    // The FFT wrapper uses thread-local scratch, so frame-level parallelism is
+    // safe. Reuse the tokenizer's existing thread budget.
+    p.allow_parallel_stft = true;
 
     int T = 0;
+#ifdef _OPENMP
+    const int previous_omp_threads = omp_get_max_threads();
+    omp_set_num_threads(std::max(1, n_threads));
+#endif
     std::vector<float> mel = core_mel::compute(pcm24k.data(), (int)pcm24k.size(), hann.data(), win_length,
                                                mel_fb.data(), n_freqs, mimo_fft_wrapper, p, T);
+#ifdef _OPENMP
+    omp_set_num_threads(previous_omp_threads);
+#endif
     T_mel_out = T;
     return mel;
 }
@@ -430,6 +448,9 @@ extern "C" struct mimo_tokenizer_context* mimo_tokenizer_init_from_file(const ch
     ggml_backend_t weights_be = ctx->backend;
     if (const char* e = std::getenv("CRISPASR_MIMO_TOK_CPU"); e && *e && *e != '0')
         weights_be = ctx->backend_cpu;
+#if defined(GGML_USE_CUDA)
+    ctx->cuda_rvq_available = weights_be == ctx->backend && ggml_backend_is_cuda(ctx->backend);
+#endif
     core_gguf::WeightLoad wl;
     if (!core_gguf::load_weights(path_model, weights_be, "mimo_tokenizer", wl)) {
         delete ctx;
@@ -527,6 +548,7 @@ extern "C" struct mimo_tokenizer_context* mimo_tokenizer_init_from_file(const ch
     if (params.verbosity >= 1) {
         fprintf(stderr, "mimo_tokenizer: loaded %zu tensors  encoder=%uL/%u  rvq=%u stages\n", ctx->tensors.size(),
                 hp.encoder_layers, hp.d_model, hp.num_quantizers);
+        fprintf(stderr, "mimo_tokenizer: RVQ backend=%s\n", ctx->cuda_rvq_available ? "CUDA" : "CPU");
     }
     return ctx;
 }
@@ -561,15 +583,23 @@ extern "C" void mimo_tokenizer_set_n_threads(struct mimo_tokenizer_context* ctx,
 // Inputs (by graph name):
 //   "mel"        F32  ne=(T_mel, n_mels)             — already log-clipped
 //   "positions"  I32  ne=(T_xfmr,)                   — RoPE position ids
+//   "tok_codebook_norms_N" F32 ne=(codebook_size,)   — CUDA RVQ only
 //
 // Stage outputs (by graph name):
 //   "tok_conv1_out"  F32  ne=(T_mel,    d_model, 1)
 //   "tok_conv2_out"  F32  ne=(T_xfmr,   d_model, 1)
 //   "tok_xfmr_out"   F32  ne=(d_model,  T_xfmr)
 //   "tok_pool_out"   F32  ne=(d_model,  T_pool)      — final encoder output
+//   "tok_codes_N"    I32  ne=(T_pool,)               — CUDA RVQ stage N
 // ===========================================================================
 
-static ggml_cgraph* mimo_tok_build_encoder_graph(mimo_tokenizer_context* ctx, int T_mel, int T_xfmr, int T_pool) {
+static bool mimo_tok_gpu_rvq_enabled(const mimo_tokenizer_context* ctx) {
+    const char* force_cpu = std::getenv("CRISPASR_MIMO_TOK_CPU_RVQ");
+    return ctx && ctx->cuda_rvq_available && !(force_cpu && *force_cpu && *force_cpu != '0');
+}
+
+static ggml_cgraph* mimo_tok_build_encoder_graph(mimo_tokenizer_context* ctx, int T_mel, int T_xfmr, int T_pool,
+                                                 bool gpu_rvq) {
     const auto& hp = ctx->hp;
     const int d = (int)hp.d_model;               // 1280
     const int n_q = (int)hp.encoder_heads;       // 20
@@ -689,7 +719,37 @@ static ggml_cgraph* mimo_tok_build_encoder_graph(mimo_tokenizer_context* ctx, in
     ggml_set_name(cur, "tok_pool_out");
     ggml_set_output(cur);
 
-    ggml_build_forward_expand(gf, cur);
+    if (gpu_rvq) {
+        constexpr int n_stages = 8;
+        ggml_tensor* residual = cur;
+        ggml_tensor* last_code = nullptr;
+        for (int s = 0; s < n_stages; s++) {
+            const auto& cb = ctx->codebooks[(size_t)s];
+            const int K = (int)cb.codebook_size;
+
+            ggml_tensor* norms = ggml_new_tensor_1d(ctx0, GGML_TYPE_F32, K);
+            ggml_format_name(norms, "tok_codebook_norms_%d", s);
+            ggml_set_input(norms);
+
+            // argmin ||x-e||^2 = argmax (2*x*e - ||e||^2).
+            ggml_tensor* scores = ggml_mul_mat(ctx0, cb.embed, residual);
+            ggml_mul_mat_set_prec(scores, GGML_PREC_F32);
+            scores = ggml_scale(ctx0, scores, 2.0f);
+            scores = ggml_sub(ctx0, scores, ggml_repeat(ctx0, norms, scores));
+
+            last_code = ggml_argmax(ctx0, scores);
+            ggml_format_name(last_code, "tok_codes_%d", s);
+            ggml_set_output(last_code);
+
+            if (s + 1 < n_stages) {
+                ggml_tensor* selected = ggml_get_rows(ctx0, cb.embed, last_code);
+                residual = ggml_sub(ctx0, residual, selected);
+            }
+        }
+        ggml_build_forward_expand(gf, last_code);
+    } else {
+        ggml_build_forward_expand(gf, cur);
+    }
     ggml_free(ctx0);
     return gf;
 }
@@ -701,6 +761,8 @@ static ggml_cgraph* mimo_tok_build_encoder_graph(mimo_tokenizer_context* ctx, in
 
 namespace {
 
+static void ensure_codebook_f32(mimo_tokenizer_context* ctx, int stage_idx);
+
 struct EncoderOutputs {
     int T_mel = 0;
     int T_xfmr = 0;
@@ -709,17 +771,18 @@ struct EncoderOutputs {
     std::vector<float> conv2_out; // (T_xfmr, d)
     std::vector<float> xfmr_out;  // (T_xfmr, d)
     std::vector<float> pool_out;  // (T_pool, d)
+    std::vector<int32_t> codes;   // (T_pool, 8)
 };
 
 static bool run_encoder(mimo_tokenizer_context* ctx, const float* pcm16k, int n_in, EncoderOutputs& out,
-                        bool need_conv1, bool need_conv2, bool need_xfmr, bool need_pool) {
+                        bool need_conv1, bool need_conv2, bool need_xfmr, bool need_pool, bool need_codes) {
     if (!ctx || !pcm16k || n_in <= 0)
         return false;
     const auto& hp = ctx->hp;
 
     // 1. CPU-side mel.
     int T_mel = 0;
-    std::vector<float> mel = compute_tokenizer_mel(pcm16k, n_in, hp, T_mel);
+    std::vector<float> mel = compute_tokenizer_mel(pcm16k, n_in, hp, ctx->n_threads, T_mel);
     if (T_mel <= 0) {
         fprintf(stderr, "mimo_tokenizer: input audio too short for STFT\n");
         return false;
@@ -734,8 +797,23 @@ static bool run_encoder(mimo_tokenizer_context* ctx, const float* pcm16k, int n_
     out.T_xfmr = T_xfmr;
     out.T_pool = T_pool;
 
+    const bool gpu_rvq = need_codes && mimo_tok_gpu_rvq_enabled(ctx);
+    if (gpu_rvq) {
+        if ((int)ctx->codebooks.size() < 8) {
+            fprintf(stderr, "mimo_tokenizer: only %zu codebooks bound, need 8\n", ctx->codebooks.size());
+            return false;
+        }
+        for (int s = 0; s < 8; s++) {
+            if (!ctx->codebooks[(size_t)s].embed) {
+                fprintf(stderr, "mimo_tokenizer: missing codebook for stage %d\n", s);
+                return false;
+            }
+            ensure_codebook_f32(ctx, s);
+        }
+    }
+
     // 2. Build graph.
-    ggml_cgraph* gf = mimo_tok_build_encoder_graph(ctx, T_mel, T_xfmr, T_pool);
+    ggml_cgraph* gf = mimo_tok_build_encoder_graph(ctx, T_mel, T_xfmr, T_pool, gpu_rvq);
 
     // 3. Schedule + alloc.
     ggml_backend_sched_reset(ctx->sched);
@@ -752,6 +830,15 @@ static bool run_encoder(mimo_tokenizer_context* ctx, const float* pcm16k, int n_
     std::vector<int32_t> positions(T_xfmr);
     std::iota(positions.begin(), positions.end(), 0);
     ggml_backend_tensor_set(pos_in, positions.data(), 0, positions.size() * sizeof(int32_t));
+    if (gpu_rvq) {
+        for (int s = 0; s < 8; s++) {
+            char name[48];
+            snprintf(name, sizeof(name), "tok_codebook_norms_%d", s);
+            ggml_tensor* norms = ggml_graph_get_tensor(gf, name);
+            const auto& values = ctx->codebooks[(size_t)s].embed_norm_sq;
+            ggml_backend_tensor_set(norms, values.data(), 0, values.size() * sizeof(float));
+        }
+    }
 
     // 5. Compute.
     if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS) {
@@ -793,8 +880,24 @@ static bool run_encoder(mimo_tokenizer_context* ctx, const float* pcm16k, int n_
         return false;
     if (need_xfmr && !pull("tok_xfmr_out", out.xfmr_out, T_xfmr, d, /*transpose*/ false))
         return false;
-    if (need_pool && !pull("tok_pool_out", out.pool_out, T_pool, d, /*transpose*/ false))
+    if ((need_pool || (need_codes && !gpu_rvq)) && !pull("tok_pool_out", out.pool_out, T_pool, d, /*transpose*/ false))
         return false;
+    if (gpu_rvq) {
+        out.codes.assign((size_t)T_pool * 8, 0);
+        std::vector<int32_t> stage_codes((size_t)T_pool);
+        for (int s = 0; s < 8; s++) {
+            char name[32];
+            snprintf(name, sizeof(name), "tok_codes_%d", s);
+            ggml_tensor* codes = ggml_graph_get_tensor(gf, name);
+            if (!codes) {
+                fprintf(stderr, "mimo_tokenizer: missing graph output '%s'\n", name);
+                return false;
+            }
+            ggml_backend_tensor_get(codes, stage_codes.data(), 0, stage_codes.size() * sizeof(int32_t));
+            for (int t = 0; t < T_pool; t++)
+                out.codes[(size_t)t * 8 + s] = stage_codes[(size_t)t];
+        }
+    }
 
     return true;
 }
@@ -868,9 +971,12 @@ extern "C" int32_t* mimo_tokenizer_encode_pcm16k(struct mimo_tokenizer_context* 
     if (!ctx)
         return nullptr;
     EncoderOutputs eo;
-    if (!run_encoder(ctx, pcm, n_samples, eo, /*conv1*/ false, /*conv2*/ false, /*xfmr*/ false, /*pool*/ true))
+    if (!run_encoder(ctx, pcm, n_samples, eo, /*conv1*/ false, /*conv2*/ false, /*xfmr*/ false,
+                     /*pool*/ false, /*codes*/ true))
         return nullptr;
-    auto codes = rvq_encode(ctx, eo.pool_out.data(), eo.T_pool);
+    auto codes = std::move(eo.codes);
+    if (codes.empty())
+        codes = rvq_encode(ctx, eo.pool_out.data(), eo.T_pool);
     if (codes.empty())
         return nullptr;
     int32_t* result = (int32_t*)std::malloc(codes.size() * sizeof(int32_t));
@@ -898,7 +1004,7 @@ extern "C" float* mimo_tokenizer_extract_stage(struct mimo_tokenizer_context* ct
 
     if (s == "tok_mel") {
         int T_mel = 0;
-        std::vector<float> mel_mt = compute_tokenizer_mel(pcm, n_samples, ctx->hp, T_mel);
+        std::vector<float> mel_mt = compute_tokenizer_mel(pcm, n_samples, ctx->hp, ctx->n_threads, T_mel);
         if (T_mel <= 0)
             return nullptr;
         // Transpose MelsTime (n_mels, T) → TimeMels (T, n_mels) to match the
@@ -915,12 +1021,13 @@ extern "C" float* mimo_tokenizer_extract_stage(struct mimo_tokenizer_context* ct
     const bool want_conv1 = (s == "tok_conv1_out");
     const bool want_conv2 = (s == "tok_conv2_out");
     const bool want_xfmr = (s == "tok_xfmr_out");
-    const bool want_pool = (s == "tok_pool_out") || (s == "tok_codes");
-    if (!want_conv1 && !want_conv2 && !want_xfmr && !want_pool) {
+    const bool want_pool = s == "tok_pool_out";
+    const bool want_codes = s == "tok_codes";
+    if (!want_conv1 && !want_conv2 && !want_xfmr && !want_pool && !want_codes) {
         fprintf(stderr, "mimo_tokenizer_extract_stage: unknown stage '%s'\n", stage);
         return nullptr;
     }
-    if (!run_encoder(ctx, pcm, n_samples, eo, want_conv1, want_conv2, want_xfmr, want_pool))
+    if (!run_encoder(ctx, pcm, n_samples, eo, want_conv1, want_conv2, want_xfmr, want_pool, want_codes))
         return nullptr;
     if (want_conv1)
         return give(eo.conv1_out);
@@ -931,7 +1038,9 @@ extern "C" float* mimo_tokenizer_extract_stage(struct mimo_tokenizer_context* ct
     if (s == "tok_pool_out")
         return give(eo.pool_out);
     if (s == "tok_codes") {
-        auto codes = rvq_encode(ctx, eo.pool_out.data(), eo.T_pool);
+        auto codes = std::move(eo.codes);
+        if (codes.empty())
+            codes = rvq_encode(ctx, eo.pool_out.data(), eo.T_pool);
         if (codes.empty())
             return nullptr;
         // Cast to float32 row-major (T_pool, 8) for cosine-comparable output.
