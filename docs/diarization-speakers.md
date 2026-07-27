@@ -20,11 +20,10 @@ with the obligations in the last section understood.
 
 > **Streaming?** Both columns above are **recorded-file (offline)** features.
 > For live transcription, a backend that emits a structured per-segment speaker
-> label (`moss-diarize`; `granite` in speaker-aware `--diarize` mode) surfaces
-> its own per-utterance `(Speaker N)` labels under `--stream` — but the
-> cross-recording clustering and named-voiceprint paths here do not run in real
-> time. (`vibevoice`'s speaker info is inline transcript text, not a structured
-> label.) See [`streaming.md`](streaming.md#speaker-diarization-while-streaming).
+> label (`moss-diarize`; `vibevoice` from v0.8.24; `granite` in speaker-aware
+> `--diarize` mode) surfaces its own per-utterance `(Speaker N)` labels under
+> `--stream` — but the cross-recording clustering and named-voiceprint paths
+> here do not run in real time. See [`streaming.md`](streaming.md#speaker-diarization-while-streaming).
 
 ---
 

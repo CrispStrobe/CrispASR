@@ -9,6 +9,7 @@
 #include "whisper_params.h"
 
 #include "vibevoice.h"
+#include "vibevoice_transcript_parse.h" // #300: Start/End/Speaker/Content → segments
 
 #include <cctype>
 #include <cstdlib>
@@ -138,13 +139,70 @@ public:
         char* text = vibevoice_transcribe_with_context(ctx_, vv_pcm, vv_n, context);
         if (!text)
             return out;
+        const std::string raw = text;
+        std::free(text);
+
+        const int64_t dur_cs = (int64_t)((double)n_samples * 100.0 / (double)sr);
+
+        // #300: VibeVoice-ASR answers with a JSON array of utterances carrying
+        // Start / End / Speaker / Content (that is what its prompt asks for).
+        // Read it: one segment per utterance, native timings, and the speaker in
+        // the structured `speaker` field — the "(Speaker N) " form moss-diarize
+        // uses, which is what file-mode prefixing and the #300 streaming emit
+        // both consume. Before this the whole blob came back as ONE segment's
+        // text, so the labels were literal JSON in the transcript and
+        // `seg.speaker` was never set (the streaming "speaker" field could not
+        // fire for this backend at all).
+        //
+        // CRISPASR_VIBEVOICE_RAW_TRANSCRIPT=1 restores the pre-#300 behaviour
+        // (one segment, raw model output) for anyone parsing the blob themselves.
+        if (!crispasr_env::truthy("CRISPASR_VIBEVOICE_RAW_TRANSCRIPT")) {
+            for (const auto& u : vibevoice_transcript::parse(raw)) {
+                std::string t = u.text;
+                while (!t.empty() && (unsigned char)t.front() <= ' ')
+                    t.erase(t.begin());
+                while (!t.empty() && (unsigned char)t.back() <= ' ')
+                    t.pop_back();
+                if (t.empty())
+                    continue;
+                crispasr_segment seg;
+                seg.text = std::move(t);
+                // The model times each utterance within THIS chunk, so the
+                // chunk offset still has to be added; clamp into the chunk in
+                // case a decode overshoots its own window.
+                auto clamp_cs = [&](double sec, int64_t fallback) {
+                    if (sec < 0.0)
+                        return t_offset_cs + fallback;
+                    int64_t cs = (int64_t)(sec * 100.0 + (sec < 0 ? -0.5 : 0.5));
+                    if (cs < 0)
+                        cs = 0;
+                    if (cs > dur_cs)
+                        cs = dur_cs;
+                    return t_offset_cs + cs;
+                };
+                seg.t0 = clamp_cs(u.start_s, 0);
+                seg.t1 = clamp_cs(u.end_s, dur_cs);
+                if (seg.t1 < seg.t0)
+                    seg.t1 = seg.t0;
+                if (u.speaker >= 0) {
+                    char spk[32];
+                    snprintf(spk, sizeof(spk), "(Speaker %d) ", u.speaker);
+                    seg.speaker = spk;
+                }
+                out.push_back(std::move(seg));
+            }
+            if (!out.empty())
+                return out;
+            // Nothing parsed — the model answered in prose, or the decode was
+            // cut before the first complete object. Fall through and hand back
+            // the raw string rather than dropping the transcript.
+        }
 
         crispasr_segment seg;
-        seg.text = text;
+        seg.text = raw;
         seg.t0 = t_offset_cs;
-        seg.t1 = t_offset_cs + (int64_t)((double)n_samples * 100.0 / (double)sr);
+        seg.t1 = t_offset_cs + dur_cs;
         out.push_back(std::move(seg));
-        std::free(text);
         return out;
     }
 
