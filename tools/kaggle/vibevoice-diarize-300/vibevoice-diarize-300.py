@@ -87,16 +87,29 @@ kh.step("gate.present")
 
 kh.install_build_toolchain()
 run(["apt-get", "install", "-y", "-q", "libopenblas-dev", "ffmpeg"], capture_output=False)
-JOBS = str(min(4, os.cpu_count() or 2))
 
 BDIR = TEMP / "build"
-CUDA = shutil.which("nvcc") is not None
+# CUDA needs the harness flags, not a bare -DGGML_CUDA=ON: without the stubs
+# dir on LIBRARY_PATH cmake fails Generate with `Target "ggml-cuda" links to
+# CUDA::cuda_driver but the target was not found`. cuda_build_flags() also
+# pins ONE arch (T4 → 75), which is what keeps nvcc from OOMing the box.
+CUDA = os.path.isfile("/usr/local/cuda/bin/nvcc") or shutil.which("nvcc") is not None
+extra = kh.cuda_build_flags() if CUDA else []
+JOBS = "2" if CUDA else str(min(4, os.cpu_count() or 2))  # nvcc TUs are RAM-heavy
 cfg = ["cmake", "-G", "Ninja", "-B", str(BDIR), "-S", str(REPO),
-       "-DCMAKE_BUILD_TYPE=Release"] + kh.cache_and_link_flags()
-if CUDA:
-    cfg += ["-DGGML_CUDA=ON"]
-kh.step("cfg.begin", cuda=CUDA)
+       "-DCMAKE_BUILD_TYPE=Release"] + kh.cache_and_link_flags() + extra
+kh.step("cfg.begin", cuda=CUDA, jobs=JOBS, extra=" ".join(extra))
 r = run(cfg, capture_output=False)
+if r.returncode and CUDA:
+    # A CUDA-toolchain problem must not cost the whole run — the thing under
+    # test is a text parse, which a CPU build validates just as well (slower).
+    kh.step("cfg.FAIL.cuda.retry_cpu")
+    shutil.rmtree(BDIR, ignore_errors=True)
+    CUDA = False
+    JOBS = str(min(4, os.cpu_count() or 2))
+    cfg = ["cmake", "-G", "Ninja", "-B", str(BDIR), "-S", str(REPO),
+           "-DCMAKE_BUILD_TYPE=Release"] + kh.cache_and_link_flags()
+    r = run(cfg, capture_output=False)
 if r.returncode:
     kh.step("cfg.FAIL")
     raise SystemExit(1)
