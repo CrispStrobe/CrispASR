@@ -1,0 +1,14 @@
+{
+  "id": "chr1str/crispasr-vibevoice-diarize-300",
+  "title": "crispasr vibevoice diarize 300",
+  "code_file": "vibevoice-diarize-300.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "true",
+  "competition_sources": [],
+  "dataset_sources": ["chr1str/crispasr-hf-token", "chr1str/crispasr-ccache"],
+  "kernel_sources": [],
+  "model_sources": []
+}

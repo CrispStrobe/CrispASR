@@ -61,10 +61,9 @@ Event types:
 | `silence` | A streaming step produced no speech slices. Emitted regardless of whether an utterance is still open, so wrappers always see a timeline heartbeat. | `t` |
 
 The optional `speaker` field on `final` events appears only with a backend that
-populates the structured speaker label (`moss-diarize`; `granite` in
-speaker-aware `--diarize` mode) when the finalized utterance is single-speaker;
-its ordinals are utterance-local. `vibevoice`'s speaker info is inline transcript
-text, not this field. See
+populates the structured speaker label (`moss-diarize`; `vibevoice` from
+v0.8.24; `granite` in speaker-aware `--diarize` mode) when the finalized
+utterance is single-speaker; its ordinals are utterance-local. See
 [Speaker diarization while streaming](#speaker-diarization-while-streaming).
 
 Stream-contract guarantees:
@@ -336,18 +335,27 @@ mechanisms** — worth understanding because they behave differently downstream:
 | Backend | How speaker info is produced | In streaming you get |
 |---|---|---|
 | **`moss-diarize`** (MOSS-Transcribe-Diarize-0.9B, `cstr/MOSS-Transcribe-Diarize-GGUF`) | a **structured** per-segment speaker label (`seg.speaker`), parsed from the model's `[Sxx]` tags | inline `(Speaker N)` in plain `--stream`; a `"speaker"` field on `--stream-json` `final` events |
-| **`vibevoice`** (VibeVoice-ASR, `cstr/vibevoice-asr-GGUF`) | the model writes speaker info **inline in its transcript text** (its prompt asks for "Start time, End time, Speaker ID, Content") — the adapter does not split it into a structured field | that raw text verbatim in the transcript; **no** `(Speaker N)` prefix or JSON `speaker` field |
+| **`vibevoice`** (VibeVoice-ASR, `cstr/vibevoice-asr-GGUF`) | a **structured** per-segment speaker label, parsed from the JSON array the model answers with (its prompt asks for "Start time, End time, Speaker ID, Content") — from v0.8.24; before that the blob was passed through as raw text | inline `(Speaker N)` in plain `--stream`; a `"speaker"` field on `--stream-json` `final` events. Set `CRISPASR_VIBEVOICE_RAW_TRANSCRIPT=1` for the old raw-blob behaviour |
 
 Issue #300's change surfaces the **structured** `seg.speaker` field in streaming
-— so it applies to `moss-diarize` (and any backend that populates it, e.g.
-`granite` in speaker-aware `--diarize` mode). For `vibevoice` the speaker info
-was, and remains, part of the transcript text and flows through streaming
-unchanged; the change is a no-op there.
+— so it applies to `moss-diarize`, to `granite` in speaker-aware `--diarize`
+mode, and to `vibevoice`.
+
+> **`vibevoice` needs v0.8.24.** VibeVoice-ASR answers with a JSON array of
+> utterances (`Start` / `End` / `Speaker` / `Content`), but until v0.8.24 the
+> adapter handed that blob back as ONE segment's text — so the labels reached
+> you as literal JSON, `seg.speaker` was never populated, and the `"speaker"`
+> field below could not fire for this backend at all. v0.8.24 reads the answer:
+> one segment per utterance, native per-utterance timings, and the speaker in
+> the structured field like any other native diarizer.
+> `CRISPASR_VIBEVOICE_RAW_TRANSCRIPT=1` restores the raw blob for callers that
+> were parsing it themselves.
 
 ### What works in streaming
 
-`moss-diarize` populates the structured field, so under `--stream` / `--mic` /
-`--live` each decoded window carries its own speaker labels:
+`moss-diarize` and `vibevoice` populate the structured field, so under
+`--stream` / `--mic` / `--live` each decoded window carries its own speaker
+labels (substitute `--backend vibevoice` in either recipe below):
 
 ```bash
 # Plain streaming — labels are prefixed inline, exactly like file-mode text output:

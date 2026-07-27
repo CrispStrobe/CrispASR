@@ -2700,6 +2700,22 @@ catch_discover_tests(test-marking-policy
     PROPERTIES LABELS "unit"
 )
 
+# ─── test-vibevoice-transcript — Catch2 unit tests for the VibeVoice-ASR
+# answer parser (#300). Header-only (examples/cli/vibevoice_transcript_parse.h):
+# Start/End/Speaker/Content -> utterances, incl. a truncated decode and the
+# prompt's long key spellings. No model, no audio.
+add_executable(test-vibevoice-transcript test-vibevoice-transcript.cpp)
+target_include_directories(test-vibevoice-transcript PRIVATE
+    ${PROJECT_SOURCE_DIR}/examples/cli
+)
+target_link_libraries(test-vibevoice-transcript PRIVATE
+    Catch2::Catch2WithMain
+)
+catch_discover_tests(test-vibevoice-transcript
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit"
+)
+
 # ─── test_watermark — Catch2 unit tests for the spread-spectrum audio
 #watermark (embed + detect round-trip, SNR, robustness).
 #Pure CPU, no model dependencies — ~10 ms total.
