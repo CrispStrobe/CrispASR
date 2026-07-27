@@ -78,8 +78,13 @@ public:
 
     uint32_t capabilities() const override {
         // ASR mode produces segments → framework -am + --diarize work.
-        uint32_t caps =
-            CAP_TIMESTAMPS_CTC | CAP_AUTO_DOWNLOAD | CAP_TEMPERATURE | CAP_FLASH_ATTN | CAP_TTS | CAP_DIARIZE;
+        // CAP_PUNCTUATION_NATIVE: VibeVoice-ASR is an LLM decoder — its Content
+        // is already punctuated AND sentence-cased. Without the flag the CLI
+        // auto-ran FireRedPunc over it (#308's audit item, found while fixing
+        // #300): the capitaliser turned "And" into "ANd" and a second full stop
+        // landed on text that already ended in one ("country..").
+        uint32_t caps = CAP_TIMESTAMPS_CTC | CAP_AUTO_DOWNLOAD | CAP_TEMPERATURE | CAP_FLASH_ATTN | CAP_TTS |
+                        CAP_DIARIZE | CAP_PUNCTUATION_NATIVE;
         if (allow_generic_no_voice_)
             caps |= CAP_VOICE_CLONING;
         return caps;

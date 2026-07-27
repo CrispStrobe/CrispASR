@@ -6,6 +6,48 @@ technical deep-dives are in `LEARNINGS.md`.
 
 ---
 
+## 2026-07-27 — #300 follow-up: vibevoice printed its speaker labels instead of reading them
+
+The reporter came back on the closed #300 with "What about vibevoice?" — and was
+right. VibeVoice-ASR is prompted for JSON ("transcribes audio input into text
+output in JSON format" + "please transcribe it with these keys: Start time, End
+time, Speaker ID, Content") and answers with an array of utterances. The adapter
+handed that whole blob back as ONE segment's text. So the speaker turns and their
+timings were present all along, just never read: `seg.speaker` stayed empty,
+`--stream` printed raw JSON, the per-utterance timings were dropped, and the
+`"speaker"` field #300 added to `--stream-json` finals could not fire for this
+backend at all — it reads `seg.speaker`. The closing note on #300 and three doc
+sites all said the change was a no-op here "because the speaker info is inline
+text". It was not inline text; it was structured data nobody parsed.
+
+Fixed by parsing it: one segment per utterance, `t0`/`t1` from the model's own
+Start/End (offset into the chunk and clamped to it), speaker as `"(Speaker N) "`,
+the same form moss-diarize emits. `CRISPASR_VIBEVOICE_RAW_TRANSCRIPT=1` keeps the
+old single-raw-segment path, which is also the fallback when nothing parses. The
+parser is a hand scanner rather than json.hpp on purpose — a decode that hits the
+token cap ends mid-array, and a strict parse of a truncated blob discards every
+COMPLETE utterance before the cut.
+
+Two things fell out of running it. First, the model really does diarize: on
+`samples/multispeaker.wav` it returns four utterances alternating Speaker 0/1 with
+plausible boundaries, so the labels are the model's, not an invention of the
+parse. Second, the transcript came out as `(Speaker 0) ANd so, … your country..` —
+double capital, doubled full stop. That is #308's audit item: the vibevoice
+adapter lacked `CAP_PUNCTUATION_NATIVE`, so the CLI auto-ran FireRedPunc over text
+an LLM had already punctuated and cased. Adding the flag cleans it up. The same
+pass had been mangling the raw blob's own KEYS (`"STart"`, `"SPeaker"`, `"ENd"`) —
+so anyone who had been parsing the pre-fix output was parsing corrupted JSON.
+
+The regression pin was re-captured: `expected_transcript` had been the bare
+Content since 2026-06-15, which could never have matched what the CLI actually
+printed (the blob), so that entry cannot have been passing.
+
+Validated on the shipping `cstr/vibevoice-asr-GGUF` q4_k both ways — Kaggle T4
+(`tools/kaggle/vibevoice-diarize-300/`, all gates PASS: raw arm 0 labels / 5 blob
+hits, new arm 4 labels / 0 blob, `--stream` 11 labels, `--stream-json` 4 of 7
+finals carrying `speaker`) and locally on M1 Metal. The A/B flips only the env
+gate on one binary, so the arms cannot differ by anything but the code path.
+
 ## 2026-07-27 — #312: the marking-attestation gate 400'd every released Subtitle Edit
 
 Chatterbox voice cloning through Subtitle Edit failed with
