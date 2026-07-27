@@ -682,8 +682,8 @@
         "approx_size_mb": 4588
       },
       "sample": "samples/jfk.wav",
-      "expected_transcript": "And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country.",
-      "expected_transcript_source": "captured 2026-06-15 Kaggle T4 GPU (chr1s4) on samples/jfk.wav",
+      "expected_transcript": "(Speaker 0) And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
+      "expected_transcript_source": "re-captured 2026-07-27 (M1 Metal, q4_k) after #300: the adapter now parses the model's JSON answer into per-utterance segments, so the transcript is the Content prefixed with the structured speaker label. The 2026-06-15 pin was the bare Content and could never have matched what the CLI printed (the raw JSON blob) \u2014 see HISTORY 2026-07-27.",
       "skip_diff": true
     },
     {

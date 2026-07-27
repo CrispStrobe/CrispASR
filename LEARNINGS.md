@@ -10,6 +10,49 @@ If a lesson is still "live" (affects current work), it's linked from
 
 ---
 
+## "The model emits it inline as text" is a claim to VERIFY, not to document — structured data you never parsed looks identical to a model limitation (#300 follow-up, 2026-07-27)
+
+vibevoice was written off in #300 as "speaker info is part of the transcript text,
+so the structured-label change is a no-op there" — and that sentence was then
+copied into three doc sites and the issue's closing comment. It was wrong in a
+specific, checkable way: the model answers with
+`[{"Start":..,"End":..,"Speaker":N,"Content":".."}]`, which is *more* structured
+than the field we said it lacked. The adapter simply assigned the whole blob to
+`seg.text`. One `grep` for what the prompt asks the model to produce
+(`src/vibevoice.cpp`: "please transcribe it with these keys: Start time, End time,
+Speaker ID, Content") would have settled it before the claim was written down.
+
+The tell to generalise: when a backend "can't do X" but its OUTPUT is a blob you
+pass through untouched, you have not established that it can't do X — you have
+established that nobody looked. Read what the prompt asks the model for; the
+answer's shape is usually right there.
+
+Three supporting lessons from the same fix:
+
+**Parse LLM output with a scanner, not a strict reader.** A decode that hits the
+token cap ends mid-array. `json.hpp` throws on that and you lose every complete
+utterance before the cut — precisely the long-audio case where the labels matter
+most. An object-at-a-time scanner loses only the unfinished tail. Unit-test the
+truncation case explicitly; it is the one a strict parser silently turns into
+"the model produced nothing."
+
+**A pass over already-formatted text corrupts it, and the corruption hides until
+you clean up the layer above.** With the blob passing through, FireRedPunc was
+capitalising *inside* the JSON — the printed keys were `"STart"`, `"ENd"`,
+`"SPeaker"`. So the pre-fix output wasn't even valid for the consumers who were
+parsing it, and nobody noticed because the text looked "roughly right". Once the
+parse landed, the same pass produced `ANd so … country..` on the clean text, which
+is #308's `CAP_PUNCTUATION_NATIVE` audit item — every LLM-decoder ASR backend
+emits punctuated, cased text and must declare that flag. Fixing a formatting layer
+often reveals a second formatting bug that the first one was masking.
+
+**A pinned expected_transcript that cannot match is worse than no pin.**
+vibevoice's regression entry held the bare Content since 2026-06-15 while the CLI
+printed the JSON blob — the entry could never have passed, and it sat there
+looking like coverage. When pinning a transcript, capture it from the binary under
+test and say where it came from; if the pin and the printed output can't be the
+same string, the entry is decoration.
+
 ## A new REQUIRED request field is a breaking API change on a schedule you don't control — deny the sub-feature, don't refuse the request (#312, 2026-07-27)
 
 v0.8.22 made `"spoken_disclaimer": false` on a voice clone require a companion
