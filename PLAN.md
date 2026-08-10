@@ -245,6 +245,47 @@ None tracked for cohere. Two things deliberately NOT done, with reasons:
    extra model. Threshold sits below one int16 LSB so one non-zero sample
    disables it; the quietest real speech to hand peaks ~3800x higher.
 
+## LANDED 2026-08-10 — #339 HIP: the bundler erased the RUNPATH it needed to read
+
+v0.8.27 restored five of the six missing Linux tarballs and HIP still did not
+package. Separate defect, and one the first fix could not have caught: the build
+succeeds, then `check-bundled-deps.py` refuses the staged directory with
+`crispasr needs libomp.so`.
+
+`bundle-linux-runtime.sh` did its two jobs in the wrong order — rewrite RUNPATH
+to `$ORIGIN`, THEN ask `ldd` what the binaries need. `ldd` resolves through the
+binary's own RUNPATH, so erasing it first turns exactly those dependencies into
+`=> not found`, and the copy loop's `grep '^/'` dropped them with the blank
+lines. ROCm's clang links OpenMP against LLVM's `libomp.so` under
+`/opt/rocm/lib/llvm/lib`, reachable only that way; gcc's `libgomp.so.1` is in
+the default loader path, which is why six legs were unaffected and this
+survived v0.8.27.
+
+⚠ **The failing line printed the evidence and was read as progress.** The log
+says `rpath crispasr: '$ORIGIN:…:/opt/rocm-6.3.0/lib/llvm/lib:…' -> '$ORIGIN'`
+and then `rpaths normalised, 0 librar(ies) bundled`. The directory it needed
+was in the string being discarded, and "0 bundled" was a count nobody had a
+reason to expect to be non-zero.
+
+⚠ **A green summary line over a dropped dependency.** The bundler reported how
+many libraries it had copied and said nothing about the one it could not find;
+`grep '^/'` filtered `=> not found` out with the blank lines. It is now fatal
+there, naming the library, and consults the same exclusion list the copy loop
+uses — otherwise `libcuda.so.1`, legitimately absent from a driverless CI
+runner, would take down every CUDA leg.
+
+⚠ **These scripts only ever ran inside a release job.** That is why two defects
+in them shipped: there was no way to observe one without publishing a release.
+`tests/test-bundle-linux-runtime.sh` now reproduces the whole thing with `cc`
+and a private directory plus `-Wl,-rpath` — no ROCm, no GPU, no release — and
+sits in the `unit` tier on every push. Red-verified against the v0.8.27 script
+before being trusted. `patchelf` was added to the CI unit job for it, because a
+SKIP reads exactly like a PASS in the ctest summary.
+
+Dry runs of a single leg are now readable: `validate-version` compared VERSION
+against the branch name when `tag` was empty and failed on every dry run, which
+is the mode the input's own documentation recommends.
+
 ## LANDED 2026-08-10 — #339 fallout: a red Release run silently killed every GPU wheel
 
 The reported bug was six of seven Linux tarballs failing in v0.8.26 (two shell
