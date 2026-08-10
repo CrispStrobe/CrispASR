@@ -4231,6 +4231,19 @@ set_tests_properties(test-dry-run-resolve PROPERTIES
     LABELS "cli"
     TIMEOUT 60)
 
+# ─── test-bundle-linux-runtime — the Linux packaging bundler. Registered as a
+# unit test on purpose: these scripts previously ran only inside a release job,
+# so a defect in them could not be observed without publishing a release, and
+# two shipped that way. Needs no models and no GPU — cc + patchelf + ldd, which
+# is why it can run on every push. SKIPs (77) off Linux.
+add_test(NAME test-bundle-linux-runtime
+    COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test-bundle-linux-runtime.sh
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+set_tests_properties(test-bundle-linux-runtime PROPERTIES
+    LABELS "unit"
+    SKIP_RETURN_CODE 77
+    TIMEOUT 120)
+
 # ─── test-server-ws-stream — live: --ws-port real-time WebSocket ASR streaming.
 # Raw-socket client (stdlib only) verifies the RFC 6455 handshake + a streaming
 # transcription. Needs a whisper ggml model; SKIPs otherwise.
