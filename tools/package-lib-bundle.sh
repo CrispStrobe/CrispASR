@@ -82,9 +82,22 @@ Darwin)
     echo "  rpaths → @loader_path (macOS), re-signed"
     ;;
 Linux)
+    # Copy the external dependency closure FIRST, while the libraries still
+    # carry the RUNPATH that can find it (CrispASR #341, and #339 for why the
+    # order is not a detail). The published HIP bundle needed libomp.so — ROCm
+    # clang's OpenMP runtime, which lives in /opt/rocm/lib/llvm/lib and is on no
+    # loader search path — and shipped without it, because nothing here ever
+    # asked about a dependency the bundle did not already provide.
+    #
+    # Safe to point at the flattened lib/: anything the bundle already provides
+    # is skipped by name, so the ggml sonames the libraries resolve through the
+    # build tree are not re-copied over the SOVERSION symlinks.
+    bash "$HERE/../scripts/bundle-linux-runtime.sh" "$OUT/lib"
     for lib in "$OUT"/lib/*.so*; do
         [ -f "$lib" ] || continue
         [ -L "$lib" ] && continue
+        # Overwrites the plain $ORIGIN the bundler just set: a consumer reaching
+        # the bundle through the src/ symlink sees $ORIGIN as the symlinked dir.
         patchelf --set-rpath '$ORIGIN:$ORIGIN/../lib' "$lib" 2>/dev/null || true
     done
     echo "  rpaths → \$ORIGIN (Linux)"

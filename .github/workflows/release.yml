@@ -569,6 +569,13 @@ jobs:
           # because the gate only checked dependencies were PRESENT, never that
           # RUNPATH could find them. Fails the release rather than the consumer.
           bash tools/package-lib-bundle.sh "$OUT"
+          # And assert the result. verify-lib-bundle.sh (inside the script above)
+          # gates INTRA-bundle resolvability only — a dependency absent from the
+          # bundle entirely is outside what it asks, which is how the HIP bundle
+          # shipped needing an unbundled libomp.so (#341). This is the same gate
+          # the CLI tarballs have had since #296.
+          python3 scripts/check-bundled-deps.py "$OUT/lib" \
+            --allow 'libamdhip64.so.*' --allow 'librocblas.so.*' --allow 'libhsa*.so.*'
           cp include/crispasr.h "$OUT/include/"
           cp ggml/include/*.h   "$OUT/ggml/include/" 2>/dev/null || true
           cp LICENSE "$OUT/"
@@ -791,10 +798,14 @@ jobs:
           cp build/ggml/src/libggml-cpu.so  "$PKG/" 2>/dev/null || true
           cp build/libcrispasr_helpers.so   "$PKG/"
 
-          # Patch RPATH to $ORIGIN so libs resolve siblings without LD_LIBRARY_PATH
-          for f in "$PKG"/*.so; do
-            patchelf --set-rpath '$ORIGIN' "$f" 2>/dev/null || true
-          done
+          # Bundle the external dependency closure and patch RPATH to $ORIGIN,
+          # in that order (CrispASR #339). The inline loop this replaces did only
+          # the RUNPATH half, so the shipped tarball needed libgomp.so.1 and
+          # libblas.so.3 from the user's machine and `import crispasr` died in
+          # the loader on any host without them.
+          bash scripts/bundle-linux-runtime.sh "$PKG"
+          # Then assert it — the gate the other Linux legs have had since #296.
+          python3 scripts/check-bundled-deps.py "$PKG"
 
           cd release && tar czf crispasr-python-linux-x86_64.tar.gz crispasr-python-linux-x86_64/
 
@@ -864,10 +875,14 @@ jobs:
           cp build/ggml/src/libggml-cpu.so  "$PKG/" 2>/dev/null || true
           cp build/libcrispasr_helpers.so   "$PKG/"
 
-          # RPATH = $ORIGIN so siblings resolve without LD_LIBRARY_PATH
-          for f in "$PKG"/*.so; do
-            patchelf --set-rpath '$ORIGIN' "$f" 2>/dev/null || true
-          done
+          # Bundle the external dependency closure and patch RPATH to $ORIGIN,
+          # in that order (CrispASR #339). The inline loop this replaces did only
+          # the RUNPATH half, so the shipped tarball needed libgomp.so.1 and
+          # libblas.so.3 from the user's machine and `import crispasr` died in
+          # the loader on any host without them.
+          bash scripts/bundle-linux-runtime.sh "$PKG"
+          # Then assert it — the gate the other Linux legs have had since #296.
+          python3 scripts/check-bundled-deps.py "$PKG"
 
           cd release && tar czf crispasr-python-linux-arm64.tar.gz crispasr-python-linux-arm64/
 
@@ -1150,6 +1165,12 @@ jobs:
           # because the gate only checked dependencies were PRESENT, never that
           # RUNPATH could find them. Fails the release rather than the consumer.
           bash tools/package-lib-bundle.sh "$OUT"
+          # And assert the result. verify-lib-bundle.sh (inside the script above)
+          # gates INTRA-bundle resolvability only — a dependency absent from the
+          # bundle entirely is outside what it asks, which is how the HIP bundle
+          # shipped needing an unbundled libomp.so (#341). This is the same gate
+          # the CLI tarballs have had since #296.
+          python3 scripts/check-bundled-deps.py "$OUT/lib"
           # Headers so binding authors can extend the FFI without
           # vendoring the whole CrispASR repo.
           cp include/crispasr.h "$OUT/include/"
@@ -1222,6 +1243,12 @@ jobs:
           # because the gate only checked dependencies were PRESENT, never that
           # RUNPATH could find them. Fails the release rather than the consumer.
           bash tools/package-lib-bundle.sh "$OUT"
+          # And assert the result. verify-lib-bundle.sh (inside the script above)
+          # gates INTRA-bundle resolvability only — a dependency absent from the
+          # bundle entirely is outside what it asks, which is how the HIP bundle
+          # shipped needing an unbundled libomp.so (#341). This is the same gate
+          # the CLI tarballs have had since #296.
+          python3 scripts/check-bundled-deps.py "$OUT/lib"
           cp include/crispasr.h "$OUT/include/"
           cp ggml/include/*.h   "$OUT/ggml/include/" 2>/dev/null || true
           cp LICENSE "$OUT/"
@@ -1296,6 +1323,12 @@ jobs:
           # because the gate only checked dependencies were PRESENT, never that
           # RUNPATH could find them. Fails the release rather than the consumer.
           bash tools/package-lib-bundle.sh "$OUT"
+          # And assert the result. verify-lib-bundle.sh (inside the script above)
+          # gates INTRA-bundle resolvability only — a dependency absent from the
+          # bundle entirely is outside what it asks, which is how the HIP bundle
+          # shipped needing an unbundled libomp.so (#341). This is the same gate
+          # the CLI tarballs have had since #296.
+          python3 scripts/check-bundled-deps.py "$OUT/lib"
           # Headers so binding authors can extend the FFI without
           # vendoring the whole CrispASR repo.
           cp include/crispasr.h "$OUT/include/"
@@ -1555,6 +1588,13 @@ jobs:
           # because the gate only checked dependencies were PRESENT, never that
           # RUNPATH could find them. Fails the release rather than the consumer.
           bash tools/package-lib-bundle.sh "$OUT"
+          # And assert the result. verify-lib-bundle.sh (inside the script above)
+          # gates INTRA-bundle resolvability only — a dependency absent from the
+          # bundle entirely is outside what it asks, which is how the HIP bundle
+          # shipped needing an unbundled libomp.so (#341). This is the same gate
+          # the CLI tarballs have had since #296.
+          python3 scripts/check-bundled-deps.py "$OUT/lib" \
+            --allow 'libcuda.so.*' --allow 'libcudart.so.*' --allow 'libcublas*.so.*' --allow 'libnv*.so.*'
           cp include/crispasr.h "$OUT/include/"
           cp ggml/include/*.h   "$OUT/ggml/include/" 2>/dev/null || true
           cp LICENSE "$OUT/"

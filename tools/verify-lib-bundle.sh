@@ -52,10 +52,23 @@ import ctypes, glob, os, re, subprocess, sys
 root = sys.argv[1]
 IS_MAC = sys.platform == "darwin"
 
-# Driver / loader-provided sonames that are correctly NOT in any bundle: GPU
-# drivers, plus toolchain and OpenMP runtimes that ship with the compiler/system
-# (libomp/libgomp are the LLVM/GNU OpenMP runtimes — same category as libstdc++,
-# pulled in by GGML_OPENMP and provided by the user's toolchain, never bundled).
+# Driver / loader-provided sonames that may legitimately be absent here.
+#
+# ⚠ This list is a TOLERANCE, and the dlopen below `sys.exit(0)`s on the FIRST
+# match — so anything named here stops the check rather than passing it. That is
+# how #341 shipped: the HIP bundle's dlopen failed on `libomp.so`, matched this
+# list, printed "dlopen deferred: external driver absent in CI" and exited 0,
+# and the bundle went out needing a library that exists only under
+# /opt/rocm/lib/llvm/lib. The claim that libomp/libgomp are "provided by the
+# user's toolchain" holds for gcc's versioned libgomp.so.1 on the default loader
+# path; it does not hold for ROCm clang's unversioned libomp.so.
+#
+# On Linux those two are now bundled (package-lib-bundle.sh copies the
+# dependency closure), so they land in `provided` and the tolerance no longer
+# applies to them — the `not in provided` guard below is what makes that work.
+# They stay listed for macOS, where OpenMP really does come from the toolchain.
+# Add nothing here without asking what a bundle would look like if the entry
+# were wrong.
 EXTERNAL = re.compile(
     r"^(libcuda|libamdhip64|libhsa-runtime|librocm|libnvidia|libcudart|libcublas|"
     r"libomp|libgomp|librt|libdl|libpthread|libm|libc|libstdc\+\+|libgcc_s|libSystem)\b"

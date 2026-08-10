@@ -4244,6 +4244,18 @@ set_tests_properties(test-bundle-linux-runtime PROPERTIES
     SKIP_RETURN_CODE 77
     TIMEOUT 120)
 
+# ─── test-package-lib-bundle — the libcrispasr bundle packager (#341). Its own
+# verifier gates INTRA-bundle resolvability only, and its dlopen tolerance
+# exits 0 on the first externally-provided soname, so a dependency missing from
+# the bundle entirely was never a question anyone posed. This asks it.
+add_test(NAME test-package-lib-bundle
+    COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test-package-lib-bundle.sh
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+set_tests_properties(test-package-lib-bundle PROPERTIES
+    LABELS "unit"
+    SKIP_RETURN_CODE 77
+    TIMEOUT 120)
+
 # ─── test-server-ws-stream — live: --ws-port real-time WebSocket ASR streaming.
 # Raw-socket client (stdlib only) verifies the RFC 6455 handshake + a streaming
 # transcription. Needs a whisper ggml model; SKIPs otherwise.
