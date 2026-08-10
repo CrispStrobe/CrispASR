@@ -336,9 +336,56 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-NOTE: OpenBLAS is dynamically linked (not bundled in the release tarball)
-on Linux builds compiled with -DGGML_OPENBLAS=ON. Users must have
-libopenblas installed on their system.
+NOTE: OpenBLAS IS bundled in the Linux release archives, alongside its own
+dependency closure. It used to be dynamically linked and left to the user,
+which is what CrispASR #296 fixed — the loader failed before main() on any
+machine without it. This paragraph said otherwise until 2026-08-10.
+
+
+────────────────────────────────────────────────────────────────────────────────
+GNU OpenMP runtime — libgomp (https://gcc.gnu.org/)
+GPL-3.0-or-later WITH GCC-exception-3.1 (GCC Runtime Library Exception)
+────────────────────────────────────────────────────────────────────────────────
+
+The Linux release archives bundle `libgomp.so.1`, the OpenMP runtime that ships
+with GCC, because GGML is compiled with OpenMP enabled and the library is absent
+from minimal installs.
+
+CrispASR's own source remains under the MIT licence in LICENSE. The GCC Runtime
+Library Exception grants permission to propagate the compiled result of
+combining this runtime with independent modules under any licence, provided all
+target code was produced by Eligible Compilation Processes — which GCC is. The
+exception is what makes an MIT-licensed binary linking libgomp unproblematic;
+it does not change the licence of libgomp itself.
+
+Redistributing the `libgomp.so.1` FILE is separately a conveyance of a
+GPL-3.0-or-later work, and carries the corresponding-source obligation of
+GPLv3 section 6. The bundled copy is the unmodified library from the GCC
+package of the distribution the release was built on (Ubuntu 22.04, `gcc-12`).
+Complete corresponding source for that exact build is available from Ubuntu's
+source archive (`apt-get source gcc-12`) and from https://gcc.gnu.org/, and the
+CrispASR maintainers will provide it on request for three years from the date
+of the release that carried it — open an issue at
+https://github.com/CrispStrobe/CrispASR.
+
+Licence texts: https://www.gnu.org/licenses/gpl-3.0.html and
+https://www.gnu.org/licenses/gcc-exception-3.1.html
+
+
+────────────────────────────────────────────────────────────────────────────────
+LLVM OpenMP runtime — libomp (https://openmp.llvm.org/)
+Apache License 2.0 WITH LLVM-exception
+────────────────────────────────────────────────────────────────────────────────
+
+The Linux HIP/ROCm release archives bundle `libomp.so`, the LLVM OpenMP runtime.
+ROCm's compiler is clang, so `-fopenmp` resolves to LLVM's runtime rather than
+GCC's, and it lives under `/opt/rocm/lib/llvm/lib` — a directory the dynamic
+loader does not search, so it must travel with the binaries (CrispASR #339).
+
+Unmodified. Apache-2.0 with the LLVM exception is a permissive licence; it
+imposes no copyleft on CrispASR's MIT-licensed source and no source-availability
+obligation on this redistribution. Licence text and the exception:
+https://llvm.org/LICENSE.txt
 
 
 ────────────────────────────────────────────────────────────────────────────────
