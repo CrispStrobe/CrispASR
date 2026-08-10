@@ -94,6 +94,12 @@ while [ "$i" -lt "${#queue[@]}" ]; do
     while read -r base; do
         [ -n "$base" ] || continue
         skip_lib "$base" && continue
+        # Already staged beside the binary. This is not hypothetical:
+        # bundle-c2pa.sh drops libc2pa_c.so in before this script runs, and a
+        # binary whose RUNPATH lacks $ORIGIN (crispasr-quantize, pre-v0.8.26)
+        # reports it as `not found` even though it is sitting right there — and
+        # will resolve it once step 2 gives it $ORIGIN.
+        [ -e "$DEST/$base" ] && continue
         case "$missing" in *" $base "*) continue ;; esac
         missing="$missing $base "
         echo "  MISSING $base  (needed by $(basename "$f"), unresolvable on this machine)" >&2

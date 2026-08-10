@@ -108,4 +108,26 @@ bash "$BUNDLE" "$stage3" > "$WORK/bundle3.log" 2>&1 || {
 if [ -f "$stage3/libcuda.so.1" ]; then fail "libcuda.so.1 must never be bundled"; fi
 echo "  ok: an absent host-provided runtime is tolerated and not bundled"
 
+# ── 4. a dependency already staged, but not yet reachable ───────────────────
+# bundle-c2pa.sh drops libc2pa_c.so into the directory before this script runs,
+# and crispasr-quantize used to have no $ORIGIN in its RUNPATH at all — so the
+# library sits right there and `ldd` still says `not found`. Making an
+# unresolved dependency fatal without this exemption would have failed every
+# Linux leg. It resolves once step 2 grants $ORIGIN, which is what the run
+# check below proves.
+priv4="$WORK/private-lib4"
+stage4="$WORK/stage4"
+mkdir -p "$priv4" "$stage4"
+cc -shared -fPIC -o "$priv4/libcrispasrteststaged.so" "$WORK/dep.c"
+cc -o "$WORK/app4" "$WORK/app.c" -L"$priv4" -lcrispasrteststaged -Wl,-rpath,"$priv4"
+cp "$WORK/app4" "$stage4/app4"
+cp "$priv4/libcrispasrteststaged.so" "$stage4/"
+rm -rf "$priv4"
+
+bash "$BUNDLE" "$stage4" > "$WORK/bundle4.log" 2>&1 || {
+    cat "$WORK/bundle4.log"; fail "a dependency already staged must not be treated as missing"; }
+out4="$("$stage4/app4" 2>&1)" || { echo "$out4"; fail "staged app4 does not run"; }
+[ "$out4" = "dep=42" ] || fail "staged app4 printed '$out4', expected 'dep=42'"
+echo "  ok: an already-staged dependency is not missing, and resolves once \$ORIGIN is set"
+
 echo "PASS: bundle-linux-runtime"
