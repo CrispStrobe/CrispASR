@@ -131,6 +131,12 @@ jobs:
           # base-system means the loader dies before main() and the process
           # exits 127 silently.
           python3 scripts/check-bundled-deps.py release/crispasr-linux-x86_64
+          # Ship the licence text with the binaries. Every Windows, Android and
+          # libcrispasr artifact already did; no CLI tarball did, and these bundle
+          # third-party shared libraries (libgomp, and libomp on HIP) whose terms
+          # require the notice to travel with them.
+          cp LICENSE release/crispasr-linux-x86_64/
+          cp THIRD_PARTY_NOTICES.txt release/crispasr-linux-x86_64/
           cd release && tar czf crispasr-linux-x86_64.tar.gz crispasr-linux-x86_64/
 
       - uses: actions/upload-artifact@v4
@@ -230,6 +236,12 @@ jobs:
           # Then assert it: any DT_NEEDED that is neither bundled nor base-system
           # means the loader dies before main() and the process exits 127 silently.
           python3 scripts/check-bundled-deps.py release/crispasr-linux-x86_64-avx512
+          # Ship the licence text with the binaries. Every Windows, Android and
+          # libcrispasr artifact already did; no CLI tarball did, and these bundle
+          # third-party shared libraries (libgomp, and libomp on HIP) whose terms
+          # require the notice to travel with them.
+          cp LICENSE release/crispasr-linux-x86_64-avx512/
+          cp THIRD_PARTY_NOTICES.txt release/crispasr-linux-x86_64-avx512/
           cd release && tar czf crispasr-linux-x86_64-avx512.tar.gz \
               crispasr-linux-x86_64-avx512/
 
@@ -307,6 +319,12 @@ jobs:
           # means the loader dies before main() and the process exits 127 silently.
           python3 scripts/check-bundled-deps.py release/crispasr-linux-x86_64-cuda \
             --allow 'libcuda.so.*' --allow 'libcudart.so.*' --allow 'libcublas*.so.*' --allow 'libnv*.so.*'
+          # Ship the licence text with the binaries. Every Windows, Android and
+          # libcrispasr artifact already did; no CLI tarball did, and these bundle
+          # third-party shared libraries (libgomp, and libomp on HIP) whose terms
+          # require the notice to travel with them.
+          cp LICENSE release/crispasr-linux-x86_64-cuda/
+          cp THIRD_PARTY_NOTICES.txt release/crispasr-linux-x86_64-cuda/
           cd release && tar czf crispasr-linux-x86_64-cuda.tar.gz crispasr-linux-x86_64-cuda/
           ls -lh crispasr-linux-x86_64-cuda.tar.gz
 
@@ -383,6 +401,12 @@ jobs:
           # means the loader dies before main() and the process exits 127 silently.
           python3 scripts/check-bundled-deps.py release/crispasr-linux-x86_64-cuda13 \
             --allow 'libcuda.so.*' --allow 'libcudart.so.*' --allow 'libcublas*.so.*' --allow 'libnv*.so.*'
+          # Ship the licence text with the binaries. Every Windows, Android and
+          # libcrispasr artifact already did; no CLI tarball did, and these bundle
+          # third-party shared libraries (libgomp, and libomp on HIP) whose terms
+          # require the notice to travel with them.
+          cp LICENSE release/crispasr-linux-x86_64-cuda13/
+          cp THIRD_PARTY_NOTICES.txt release/crispasr-linux-x86_64-cuda13/
           cd release && tar czf crispasr-linux-x86_64-cuda13.tar.gz crispasr-linux-x86_64-cuda13/
           ls -lh crispasr-linux-x86_64-cuda13.tar.gz
 
@@ -457,6 +481,12 @@ jobs:
           # means the loader dies before main() and the process exits 127 silently.
           python3 scripts/check-bundled-deps.py release/crispasr-linux-x86_64-hip \
             --allow 'libamdhip64.so.*' --allow 'librocblas.so.*' --allow 'libhsa*.so.*'
+          # Ship the licence text with the binaries. Every Windows, Android and
+          # libcrispasr artifact already did; no CLI tarball did, and these bundle
+          # third-party shared libraries (libgomp, and libomp on HIP) whose terms
+          # require the notice to travel with them.
+          cp LICENSE release/crispasr-linux-x86_64-hip/
+          cp THIRD_PARTY_NOTICES.txt release/crispasr-linux-x86_64-hip/
           cd release && tar czf crispasr-linux-x86_64-hip.tar.gz crispasr-linux-x86_64-hip/
           ls -lh crispasr-linux-x86_64-hip.tar.gz
 
@@ -615,6 +645,12 @@ jobs:
           # means the loader dies before main() and the process exits 127 silently.
           python3 scripts/check-bundled-deps.py release/crispasr-linux-x86_64-vulkan \
             --allow 'libvulkan.so.*'
+          # Ship the licence text with the binaries. Every Windows, Android and
+          # libcrispasr artifact already did; no CLI tarball did, and these bundle
+          # third-party shared libraries (libgomp, and libomp on HIP) whose terms
+          # require the notice to travel with them.
+          cp LICENSE release/crispasr-linux-x86_64-vulkan/
+          cp THIRD_PARTY_NOTICES.txt release/crispasr-linux-x86_64-vulkan/
           cd release && tar czf crispasr-linux-x86_64-vulkan.tar.gz crispasr-linux-x86_64-vulkan/
           ls -lh crispasr-linux-x86_64-vulkan.tar.gz
 
@@ -678,6 +714,12 @@ jobs:
           # base-system means the loader dies before main() and the process
           # exits 127 silently.
           python3 scripts/check-bundled-deps.py release/crispasr-linux-arm64
+          # Ship the licence text with the binaries. Every Windows, Android and
+          # libcrispasr artifact already did; no CLI tarball did, and these bundle
+          # third-party shared libraries (libgomp, and libomp on HIP) whose terms
+          # require the notice to travel with them.
+          cp LICENSE release/crispasr-linux-arm64/
+          cp THIRD_PARTY_NOTICES.txt release/crispasr-linux-arm64/
           cd release && tar czf crispasr-linux-arm64.tar.gz crispasr-linux-arm64/
 
       - uses: actions/upload-artifact@v4
@@ -863,6 +905,12 @@ jobs:
           cp build/bin/crispasr release/crispasr-macos/
           cp build/bin/crispasr-quantize release/crispasr-macos/
           bash scripts/bundle-c2pa.sh release/crispasr-macos || true
+          # Ship the licence text with the binaries. Every Windows, Android and
+          # libcrispasr artifact already did; no CLI tarball did, and these carry
+          # bundled third-party libraries whose terms require the notice to
+          # travel with them.
+          cp LICENSE release/crispasr-macos/
+          cp THIRD_PARTY_NOTICES.txt release/crispasr-macos/
           cd release && tar czf crispasr-macos.tar.gz crispasr-macos/
 
       - uses: actions/upload-artifact@v4
