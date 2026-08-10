@@ -75,8 +75,12 @@ jobs:
         with:
           submodules: recursive
 
+      # patchelf is for test-bundle-linux-runtime, which exercises the release
+      # packaging scripts. Without it that test SKIPs, and a skip is
+      # indistinguishable from a pass in the summary — which is how the release
+      # packaging went unobserved in the first place.
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build g++ libopenblas-dev
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build g++ libopenblas-dev patchelf
 
       # Examples/server stay at their defaults: some tests link `common`, which
       # lives under examples/, so switching them off would break configure.
