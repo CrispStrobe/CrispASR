@@ -41,7 +41,12 @@ jobs:
         with:
           submodules: recursive
           ref: ${{ inputs.tag || github.ref }}
+      # A dry run (empty tag, dispatched from a branch) has no tag to match, so
+      # this compared VERSION against a branch name and failed every time —
+      # which made the run red and the one job you dispatched it for unreadable
+      # among the noise. There is nothing to verify when nothing is published.
       - name: Verify VERSION matches tag
+        if: inputs.tag != '' || startsWith(github.ref, 'refs/tags/')
         run: |
           tag_version="${{ inputs.tag || github.ref_name }}"
           tag_version="${tag_version#v}"
