@@ -105,3 +105,57 @@ TEST_CASE("sub-30s pad exclusion: plan_chunks over T_mel_actual, never the pad",
     REQUIRE(full == 375);
     REQUIRE(full == padded_total);
 }
+
+TEST_CASE("encoder wrappers: ds_tap out-pointers untouched on failure (issue #344 B1)",
+          "[moss-audio-valid-meta]") {
+    // B1 regression guard. The run_encoder/run_encoder_meta wrappers must NEVER
+    // write *ds_tap_x when the encoder impl fails: pre-fix, both wrappers
+    // published the impl's (possibly freed) tap slots on EVERY failure path,
+    // leaving callers with dangling non-NULL pointers on a NULL return.
+    //
+    // The deep failure paths (graph alloc / graph compute / missing
+    // encoder_output) require a loaded model and a ggml backend and cannot be
+    // forced hermetically. This pins the wrapper invariant at the observable
+    // boundary instead: any NULL-returning call must leave caller-provided tap
+    // out-pointers byte-for-byte untouched. Pre-fix this test fails (the
+    // sentinels are overwritten with NULL); post-fix it passes.
+    float dummy0 = 0.0f, dummy1 = 0.0f, dummy2 = 0.0f;
+    int T_enc = -1, d = -1;
+
+    // run_encoder: NULL ctx => impl early-validation failure => NULL return.
+    float* ds0 = &dummy0;
+    float* ds1 = &dummy1;
+    float* ds2 = &dummy2;
+    float* r = moss_audio_run_encoder(nullptr, nullptr, 0, 0, &T_enc, &d, &ds0, &ds1, &ds2);
+    REQUIRE(r == nullptr);
+    REQUIRE(ds0 == &dummy0);
+    REQUIRE(ds1 == &dummy1);
+    REQUIRE(ds2 == &dummy2);
+
+    // Same, with tap requests nominally enabled and garbage mel args.
+    ds0 = &dummy0;
+    ds1 = &dummy1;
+    ds2 = &dummy2;
+    T_enc = -1;
+    d = -1;
+    float sample = 0.0f;
+    r = moss_audio_run_encoder(nullptr, &sample, 1, 400, &T_enc, &d, &ds0, &ds1, &ds2);
+    REQUIRE(r == nullptr);
+    REQUIRE(ds0 == &dummy0);
+    REQUIRE(ds1 == &dummy1);
+    REQUIRE(ds2 == &dummy2);
+
+    // run_encoder_meta: fail-closed NULL return => taps untouched.
+    ds0 = &dummy0;
+    ds1 = &dummy1;
+    ds2 = &dummy2;
+    T_enc = -1;
+    d = -1;
+    int nc = -1, tot = -1, echo = -1;
+    r = moss_audio_run_encoder_meta(nullptr, &sample, 1, 3000, 100, &T_enc, &d, nullptr, &nc, &echo, &tot, &ds0, &ds1,
+                                    &ds2);
+    REQUIRE(r == nullptr);
+    REQUIRE(ds0 == &dummy0);
+    REQUIRE(ds1 == &dummy1);
+    REQUIRE(ds2 == &dummy2);
+}
