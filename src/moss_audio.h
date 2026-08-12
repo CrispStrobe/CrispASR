@@ -91,6 +91,8 @@ float* moss_audio_compute_mel_meta(struct moss_audio_context* ctx, const float* 
 // output tokens — so for a padded input this includes the pad chunks, exactly
 // as the Python reference does. Use moss_audio_run_encoder_meta() to get only
 // real-content frames with truthful valid-frame metadata.
+// On failure (NULL return) *ds_tap_0/1/2 are NOT modified: they never receive
+// a dangling pointer. Check the return value before using or freeing taps.
 float* moss_audio_run_encoder(struct moss_audio_context* ctx, const float* mel, int n_mels, int T_mel, int* out_T_enc,
                               int* out_d, float** ds_tap_0, float** ds_tap_1, float** ds_tap_2);
 
@@ -134,6 +136,8 @@ int moss_audio_plan_chunks(int T_mel, int* valid_counts, int* out_total_valid);
 // byte-identical to moss_audio_run_encoder(). For shorter inputs it differs by
 // design: run_encoder preserves the reference's padded full-length behaviour,
 // while this entrypoint returns only content.
+// On failure (NULL return, including fail-closed T_mel_actual validation)
+// *ds_tap_0/1/2 are NOT modified: they never receive a dangling pointer.
 float* moss_audio_run_encoder_meta(struct moss_audio_context* ctx, const float* mel, int n_mels, int T_mel,
                                    int T_mel_actual, int* out_T_enc, int* out_d, int* valid_counts, int* out_num_chunks,
                                    int* out_T_mel_actual, int* out_total_valid, float** ds_tap_0, float** ds_tap_1,

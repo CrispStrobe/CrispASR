@@ -1080,8 +1080,10 @@ static float* moss_audio_run_encoder_impl(moss_audio_context* ctx, const float* 
         if (!ggml_backend_sched_alloc_graph(ctx->sched, gf)) {
             fprintf(stderr, "moss_audio: encoder graph alloc failed (chunk %d)\n", c);
             free(result);
-            for (int t = 0; t < 3; t++)
+            for (int t = 0; t < 3; t++) {
                 free(ds_results_alloc[t]);
+                ds_results[t] = nullptr; // never leave a freed pointer behind (issue #344 B1)
+            }
             return nullptr;
         }
 
@@ -1132,8 +1134,10 @@ static float* moss_audio_run_encoder_impl(moss_audio_context* ctx, const float* 
         if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS) {
             fprintf(stderr, "moss_audio: encoder graph compute failed (chunk %d)\n", c);
             free(result);
-            for (int t = 0; t < 3; t++)
+            for (int t = 0; t < 3; t++) {
                 free(ds_results_alloc[t]);
+                ds_results[t] = nullptr; // never leave a freed pointer behind (issue #344 B1)
+            }
             return nullptr;
         }
 
@@ -1157,8 +1161,10 @@ static float* moss_audio_run_encoder_impl(moss_audio_context* ctx, const float* 
         if (!enc_out) {
             fprintf(stderr, "moss_audio: missing encoder_output (chunk %d)\n", c);
             free(result);
-            for (int t = 0; t < 3; t++)
+            for (int t = 0; t < 3; t++) {
                 free(ds_results_alloc[t]);
+                ds_results[t] = nullptr; // never leave a freed pointer behind (issue #344 B1)
+            }
             return nullptr;
         }
 
@@ -1200,12 +1206,18 @@ extern "C" float* moss_audio_run_encoder(struct moss_audio_context* ctx, const f
     float* ds_results[3] = {nullptr, nullptr, nullptr};
     float* r = moss_audio_run_encoder_impl(ctx, mel, n_mels, T_mel, T_mel, want_ds, ds_results, out_T_enc, out_d,
                                            nullptr, nullptr, nullptr);
-    if (ds_tap_0)
-        *ds_tap_0 = ds_results[0];
-    if (ds_tap_1)
-        *ds_tap_1 = ds_results[1];
-    if (ds_tap_2)
-        *ds_tap_2 = ds_results[2];
+    // On failure the impl frees any allocated tap buffers; write the tap
+    // out-pointers ONLY on success so *ds_tap_x can never dangle (issue #344,
+    // B1). This matches the pre-refactor contract: taps were only ever
+    // published after the chunk loop completed.
+    if (r != nullptr) {
+        if (ds_tap_0)
+            *ds_tap_0 = ds_results[0];
+        if (ds_tap_1)
+            *ds_tap_1 = ds_results[1];
+        if (ds_tap_2)
+            *ds_tap_2 = ds_results[2];
+    }
     return r;
 }
 
@@ -1224,12 +1236,16 @@ extern "C" float* moss_audio_run_encoder_meta(struct moss_audio_context* ctx, co
     float* ds_results[3] = {nullptr, nullptr, nullptr};
     float* r = moss_audio_run_encoder_impl(ctx, mel, n_mels, T_mel, T_mel_actual, want_ds, ds_results, out_T_enc, out_d,
                                            valid_counts, out_num_chunks, out_total_valid);
-    if (ds_tap_0)
-        *ds_tap_0 = ds_results[0];
-    if (ds_tap_1)
-        *ds_tap_1 = ds_results[1];
-    if (ds_tap_2)
-        *ds_tap_2 = ds_results[2];
+    // Same failure contract as moss_audio_run_encoder: never publish tap
+    // out-pointers on failure (the impl has freed them).
+    if (r != nullptr) {
+        if (ds_tap_0)
+            *ds_tap_0 = ds_results[0];
+        if (ds_tap_1)
+            *ds_tap_1 = ds_results[1];
+        if (ds_tap_2)
+            *ds_tap_2 = ds_results[2];
+    }
     return r;
 }
 
