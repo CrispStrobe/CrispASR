@@ -18,6 +18,18 @@ Trace and fix the HIP-vs-CPU talker divergence, add a regression guard for the
 first sampled token / normal termination, and validate the real GPU path when
 available.
 
+## CLAIMED 2026-08-11 — #344 MOSS valid-frame metadata in stable C ABI
+
+Worktree: `worktrees/crispasr-344-moss-valid-frames`
+(branch `feat/344-moss-valid-frame-metadata`).
+Additive MOSS encoder/tap/adapter valid-frame metadata for the downstream
+MOSS-Music-8B-Thinking feature pipeline: `moss_audio_plan_chunks`,
+`moss_audio_compute_mel_meta` (preserves pre-pad `T_mel_actual` — never inferred
+from padded zeros/floor), and `moss_audio_run_encoder_meta` (existing chunk loop
+reused, caller-allocated per-chunk valid counts, adapter output dim reported from
+GGUF weights, fail-closed llm_hidden vs adapter-row check). Existing
+`moss_audio_*` symbols unchanged. Hermetic CPU test + live differential test.
+
 ## LANDED 2026-08-10 — voxtral-tts pre-tokenizer parity (c69ac61b, from #338)
 
 Carried out of #338 after it closed. Reporter measured 5/57 vs `mistral-common`;
