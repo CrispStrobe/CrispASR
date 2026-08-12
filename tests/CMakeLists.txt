@@ -1302,6 +1302,23 @@ catch_discover_tests(test-moss-audio
         WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
 )
 
+# ─── test-moss-audio-valid-meta — hermetic (no model) valid-frame metadata (issue #344)
+add_executable(test-moss-audio-valid-meta
+    test-moss-audio-valid-meta.cpp
+)
+target_include_directories(test-moss-audio-valid-meta PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-moss-audio-valid-meta PRIVATE
+    Catch2::Catch2WithMain
+    moss_audio
+)
+catch_discover_tests(test-moss-audio-valid-meta
+    TEST_SPEC "[moss-audio-valid-meta]"
+    PROPERTIES
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+)
+
 # ─── test - moss-transcribe — live ASR integration test for MOSS-Transcribe-preview-2B
 add_executable(test-moss-transcribe
     test_moss_transcribe_live.cpp
