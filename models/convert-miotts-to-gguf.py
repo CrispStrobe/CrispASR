@@ -222,7 +222,7 @@ def main():
     config_path = llm_dir / "config.json"
     if not config_path.exists():
         sys.exit(f"config.json not found in {llm_dir}")
-    with open(config_path) as f:
+    with open(config_path, encoding="utf-8") as f:
         config = json.load(f)
 
     print(f"MioTTS converter")

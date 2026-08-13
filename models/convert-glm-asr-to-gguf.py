@@ -136,7 +136,7 @@ def main():
             tok_json = hf_hub_download(args.input, "tokenizer.json")
         merges: list[str] = []
         if os.path.exists(tok_json):
-            raw = json.load(open(tok_json)).get("model", {}).get("merges", [])
+            raw = json.load(open(tok_json, encoding="utf-8")).get("model", {}).get("merges", [])
             for m in raw:
                 merges.append(" ".join(m) if isinstance(m, (list, tuple)) else m)
         if merges:

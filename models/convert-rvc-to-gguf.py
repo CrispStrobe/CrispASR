@@ -127,7 +127,7 @@ def main():
     )
     args = ap.parse_args()
 
-    cfg = json.load(open(args.config))
+    cfg = json.load(open(args.config, encoding="utf-8"))
     m, d = cfg["model"], cfg["data"]
     rates = list(m["upsample_rates"])
     sr = int(d["sampling_rate"])

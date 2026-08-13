@@ -118,7 +118,7 @@ def main():
     # Load config
     config_path = encoder_dir / "config.json"
     if config_path.exists():
-        with open(config_path) as f:
+        with open(config_path, encoding="utf-8") as f:
             cfg = json.load(f)
     else:
         cfg = {}
