@@ -9,24 +9,38 @@ REPO="${2:-$(cd "$(dirname "$0")/.." && pwd)}"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-PYTHONPATH="$REPO/gguf-py${PYTHONPATH:+:$PYTHONPATH}" python3 - "$TMP/in.gguf" <<'PY'
+python3 - "$TMP/in.gguf" <<'PY'
+import struct
 import sys
-import numpy as np
-from gguf import GGUFWriter
 
-w = GGUFWriter(sys.argv[1], "chatterbox", use_temp_file=False)
-matrix = np.linspace(-1.0, 1.0, 32 * 256, dtype=np.float32).reshape(32, 256)
-for name in (
+# Write the deliberately tiny GGUF directly.  The unit-test image does not
+# install NumPy (nor should this hermetic quantizer policy test require it).
+names = (
     "s3.tok.encoder.weight",
     "t3.speech_head.weight",
     "t3.tfmr.layers.0.attn.q_proj.weight",
     "s3.v.conv_pre.weight",
-):
-    w.add_tensor(name, matrix)
-w.write_header_to_file()
-w.write_kv_data_to_file()
-w.write_tensors_to_file()
-w.close()
+)
+
+def string(value):
+    data = value.encode("utf-8")
+    return struct.pack("<Q", len(data)) + data
+
+with open(sys.argv[1], "wb") as f:
+    f.write(b"GGUF")
+    f.write(struct.pack("<IQQ", 3, len(names), 1))
+    f.write(string("general.architecture"))
+    f.write(struct.pack("<I", 8))  # GGUF_TYPE_STRING
+    f.write(string("chatterbox"))
+    tensor_bytes = 32 * 256 * 4
+    for index, name in enumerate(names):
+        f.write(string(name))
+        f.write(struct.pack("<IQQIQ", 2, 256, 32, 0, index * tensor_bytes))
+    padding = (-f.tell()) % 32
+    f.write(b"\0" * padding)
+    row = b"".join(struct.pack("<f", -1.0 + 2.0 * i / 255.0) for i in range(256))
+    for _ in names:
+        f.write(row * 32)
 PY
 
 LOG="$TMP/quant.log"
