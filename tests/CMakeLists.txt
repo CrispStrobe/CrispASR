@@ -1290,6 +1290,9 @@ target_include_directories(test-moss-audio PRIVATE
     ${PROJECT_SOURCE_DIR}/src
     ${PROJECT_SOURCE_DIR}/examples
 )
+target_compile_definitions(test-moss-audio PRIVATE
+    SAMPLES_DIR="${PROJECT_SOURCE_DIR}/samples"
+)
 target_link_libraries(test-moss-audio PRIVATE
     Catch2::Catch2WithMain
     moss_audio
