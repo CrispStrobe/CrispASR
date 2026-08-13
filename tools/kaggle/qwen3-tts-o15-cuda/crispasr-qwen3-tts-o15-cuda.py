@@ -34,7 +34,7 @@ RESULTS.mkdir(parents=True, exist_ok=True)
 
 CRISPASR_REF = os.environ.get("CRISPASR_REF", "fix/337-qwen3-tts-hip")
 CRISPASR_COMMIT = os.environ.get(
-    "CRISPASR_COMMIT", "e6a179b6958cccc0f3f22a9be7e577d12c1d9218"
+    "CRISPASR_COMMIT", "8b2a538802303f652b63e7c20e054f401b7e3565"
 )
 CRISPASR_REPO = os.environ.get(
     "CRISPASR_REPO", "https://github.com/CrispStrobe/CrispASR.git"
@@ -176,6 +176,7 @@ def run_tts(label, o15_value, extra_env=None, gpu_backend=None, replay_codes=Non
     dump_dir.mkdir(parents=True, exist_ok=True)
     env.update({
         "CRISPASR_QWEN3_TTS_GREEDY": "1",
+        "CRISPASR_QWEN3_TTS_DUMP_TALKER_LAYERS": "1",
         "CRISPASR_QWEN3_TTS_DUMP_DIR": str(dump_dir),
         "CRISPASR_QWEN3_TTS_DUMP_LOGITS": str(dump_dir),
     })
@@ -347,8 +348,39 @@ def compare_replay(cpu_dir, gpu_dir):
     )
     return n > 0 and n == replay_frames and worst >= 0.999
 
+def compare_layers(cpu_dir, gpu_dir):
+    import glob
+    import numpy as np
+    cpu_files = {Path(p).stem: p for p in glob.glob(str(cpu_dir / "talker_layer_*.bin"))}
+    gpu_files = {Path(p).stem: p for p in glob.glob(str(gpu_dir / "talker_layer_*.bin"))}
+    names = sorted(set(cpu_files) & set(gpu_files))
+    first_bad = None
+    worst = (1.0, "")
+    for name in names:
+        a = np.fromfile(cpu_files[name], dtype="<f4")
+        b = np.fromfile(gpu_files[name], dtype="<f4")
+        if a.shape != b.shape or not a.size:
+            print(f"#337 layer {name}: shape mismatch", flush=True)
+            continue
+        cos = float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-12))
+        max_abs = float(np.max(np.abs(a - b)))
+        print(f"#337 layer {name}: cos={cos:.6f} max_abs={max_abs:.6f}", flush=True)
+        if cos < worst[0]:
+            worst = (cos, name)
+        if first_bad is None and cos < 0.999:
+            first_bad = name
+    print(f"#337 layers: compared={len(names)} first_bad={first_bad or 'none'} "
+          f"worst={worst[1] or 'none'} cos={worst[0]:.6f}", flush=True)
+    (RESULTS / "issue337_layers.txt").write_text(
+        f"compared={len(names)}\nfirst_bad={first_bad or 'none'}\n"
+        f"worst={worst[1] or 'none'}\nworst_cos={worst[0]:.6f}\n"
+    )
+    return bool(names) and first_bad is None
+
 replay_ok = compare_replay(RESULTS / "replay_cpu_dump", RESULTS / "replay_gpu_dump")
 kh.step("issue337.replay", ok=replay_ok)
+layers_ok = compare_layers(RESULTS / "replay_cpu_dump", RESULTS / "replay_gpu_dump")
+kh.step("issue337.layers", ok=layers_ok)
 
 
 # ── ASR roundtrip: transcribe both WAVs with parakeet ──────────────
@@ -418,7 +450,7 @@ kh.step(
     "summary",
     o15_works=o15_works, o15_faster=o15_faster,
     off_ms=off["ms_per_frame"], on_ms=on["ms_per_frame"],
-    sha=sha, issue337_replay_ok=replay_ok,
+    sha=sha, issue337_replay_ok=replay_ok, issue337_layers_ok=layers_ok,
 )
 # Keep the shared CUDA compiler cache current after a real build.  The harness
 # writes one archive so Kaggle's output file cap cannot truncate the cache.
