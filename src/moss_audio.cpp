@@ -408,6 +408,23 @@ static bool moss_audio_load_model(moss_audio_model& model, moss_audio_vocab& voc
     model.adapter.up_w = require(model, "adapter.up.weight");
     model.adapter.down_w = require(model, "adapter.down.weight");
 
+    // Issue #344: the adapter's output-row shape comes from the weights, not a
+    // hardcoded 2560. down_w is (adapter_hidden, llm_hidden) in ggml ne terms,
+    // so ne[1] is the output feature count. Fail closed if the GGUF kv
+    // moss_audio.llm.hidden_size disagrees — never silently accept a 2560
+    // fallback for a 4096-D MOSS-Music-8B-Thinking checkpoint.
+    {
+        const int adapter_out_rows = (int)model.adapter.down_w->ne[1];
+        if ((int)model.hparams.llm_hidden != adapter_out_rows) {
+            fprintf(stderr,
+                    "moss_audio: llm.hidden_size=%u disagrees with adapter down_proj "
+                    "output rows=%d — refusing to load (no silent 2560 fallback for a "
+                    "4096-D checkpoint)\n",
+                    model.hparams.llm_hidden, adapter_out_rows);
+            return false;
+        }
+    }
+
     // DeepStack mergers
     for (uint32_t i = 0; i < model.hparams.ds_num_taps && i < 3; i++) {
         char buf[64];
@@ -528,8 +545,8 @@ static void moss_audio_fft(float* in, int N, float* out) {
 // Mel spectrogram (Whisper-style, 128-bin)
 // ===========================================================================
 
-extern "C" float* moss_audio_compute_mel(struct moss_audio_context* ctx, const float* samples, int n_samples,
-                                         int* out_n_mels, int* out_T_mel) {
+static float* moss_audio_compute_mel_impl(struct moss_audio_context* ctx, const float* samples, int n_samples,
+                                          int* out_n_mels, int* out_T_mel, int* out_T_mel_actual) {
     if (!ctx || !samples || n_samples <= 0)
         return nullptr;
     const auto& hp = ctx->model.hparams;
@@ -567,9 +584,14 @@ extern "C" float* moss_audio_compute_mel(struct moss_audio_context* ctx, const f
     mel_params.center_pad = true;
     mel_params.center_pad_reflect = true; // WhisperFeatureExtractor uses reflect padding
 
+    // T_mel_actual is the OBSERVED pre-pad frame count. It must survive to the
+    // caller so a downstream pipeline can separate real audio frames from the
+    // 3000-frame Whisper pad (issue #344); it is never re-derived from padded
+    // zeros or a global floor.
     int T_mel_actual = 0;
     std::vector<float> mel_out = core_mel::compute(samples, n_samples, hann.data(), n_fft, mel_filters.data(), n_freqs,
                                                    fft_fn, mel_params, T_mel_actual);
+    const int T_mel_pre_pad = T_mel_actual;
 
     // Pad to 3000 frames (30s Whisper convention) — WhisperFeatureExtractor
     // always pads to nb_max_frames=3000. The encoder chunks this into 400-frame
@@ -594,7 +616,19 @@ extern "C" float* moss_audio_compute_mel(struct moss_audio_context* ctx, const f
         *out_n_mels = n_mels_val;
     if (out_T_mel)
         *out_T_mel = T_mel_actual;
+    if (out_T_mel_actual)
+        *out_T_mel_actual = T_mel_pre_pad;
     return result;
+}
+
+extern "C" float* moss_audio_compute_mel(struct moss_audio_context* ctx, const float* samples, int n_samples,
+                                         int* out_n_mels, int* out_T_mel) {
+    return moss_audio_compute_mel_impl(ctx, samples, n_samples, out_n_mels, out_T_mel, nullptr);
+}
+
+extern "C" float* moss_audio_compute_mel_meta(struct moss_audio_context* ctx, const float* samples, int n_samples,
+                                              int* out_n_mels, int* out_T_mel, int* out_T_mel_actual) {
+    return moss_audio_compute_mel_impl(ctx, samples, n_samples, out_n_mels, out_T_mel, out_T_mel_actual);
 }
 
 // ===========================================================================
@@ -604,6 +638,35 @@ extern "C" float* moss_audio_compute_mel(struct moss_audio_context* ctx, const f
 // Conv2d stride-2 downsampling: input (n_mels, T) → output shape after 3 convs
 static int conv_out_len(int L) {
     return (L - 1) / 2 + 1;
+}
+
+// Per-chunk valid-frame bookkeeping for the encoder chunk loop (issue #344).
+// chunk_frames=400 is fixed by the encoder architecture; a chunk's valid token
+// count is 3× stride-2 conv downsampling of its real length. This is the ONLY
+// source of per-chunk valid counts for both moss_audio_run_encoder and
+// moss_audio_run_encoder_meta, so metadata can never drift from the loop.
+// Returns the number of chunks (0 when T_mel <= 0). If valid_counts is
+// non-null it must have capacity >= (T_mel + chunk_frames - 1) / chunk_frames.
+extern "C" int moss_audio_plan_chunks(int T_mel, int* valid_counts, int* out_total_valid) {
+    if (T_mel <= 0) {
+        if (out_total_valid)
+            *out_total_valid = 0;
+        return 0;
+    }
+    const int chunk_frames = 400;
+    const int num_chunks = (T_mel + chunk_frames - 1) / chunk_frames;
+
+    int total_valid = 0;
+    for (int c = 0; c < num_chunks; c++) {
+        const int chunk_len = std::min(chunk_frames, T_mel - c * chunk_frames);
+        const int valid = conv_out_len(conv_out_len(conv_out_len(chunk_len)));
+        if (valid_counts)
+            valid_counts[c] = valid;
+        total_valid += valid;
+    }
+    if (out_total_valid)
+        *out_total_valid = total_valid;
+    return num_chunks;
 }
 
 static ggml_cgraph* moss_audio_build_encoder_graph(moss_audio_context* ctx, int T_mel, bool capture_deepstack,
@@ -895,14 +958,27 @@ static ggml_cgraph* moss_audio_build_adapter_graph(moss_audio_context* ctx, int 
 // Encoder + Adapter execution
 // ===========================================================================
 
-extern "C" float* moss_audio_run_encoder(struct moss_audio_context* ctx, const float* mel, int n_mels, int T_mel,
-                                         int* out_T_enc, int* out_d, float** ds_tap_0, float** ds_tap_1,
-                                         float** ds_tap_2) {
-    if (!ctx || !mel)
+// Shared encoder executor for moss_audio_run_encoder and
+// moss_audio_run_encoder_meta (issue #344). The chunk/valid bookkeeping is
+// delegated to moss_audio_plan_chunks so the two entrypoints can never drift.
+//
+//   mel           : (n_mels, T_mel_stride) F32 row-major; T_mel_stride is the
+//                   buffer's row stride (the padded length as returned by
+//                   moss_audio_compute_mel/meta).
+//   T_chunk_end   : mel columns to process — the FULL length for the reference-
+//                   faithful moss_audio_run_encoder, or the pre-pad T_mel_actual
+//                   for the content-only moss_audio_run_encoder_meta.
+//   want_ds[3]    : per-tap capture flags.
+//   ds_results    : out slots; entries with want_ds[t] are malloc'd + filled.
+//   valid_counts  : optional caller buffer (capacity >= ceil(T_chunk_end/400)).
+static float* moss_audio_run_encoder_impl(moss_audio_context* ctx, const float* mel, int n_mels, int T_mel_stride,
+                                          int T_chunk_end, const bool want_ds[3], float* ds_results[3], int* out_T_enc,
+                                          int* out_d, int* valid_counts, int* out_num_chunks, int* out_total_valid) {
+    if (!ctx || !mel || n_mels <= 0 || T_mel_stride <= 0 || T_chunk_end <= 0)
         return nullptr;
     const auto& hp = ctx->model.hparams;
     const int d = (int)hp.enc_d_model;
-    const bool want_ds = (ds_tap_0 || ds_tap_1 || ds_tap_2);
+    const bool capture_ds = (want_ds[0] || want_ds[1] || want_ds[2]);
 
     // Invalidate the §176s cached encoder graph across invocations (#215).
     // Reuse within the chunk loop below stays safe (identical allocs, no
@@ -919,21 +995,31 @@ extern "C" float* moss_audio_run_encoder(struct moss_audio_context* ctx, const f
     // chunk (no cross-chunk attention), then selects valid output tokens.
     const int chunk_frames = 400; // n_window(200) * 2
 
-    // Compute chunk boundaries
-    int num_chunks = (T_mel + chunk_frames - 1) / chunk_frames;
-    std::vector<int> chunk_lengths(num_chunks, chunk_frames);
-    int tail = T_mel % chunk_frames;
-    if (tail > 0)
-        chunk_lengths[num_chunks - 1] = tail;
-    // If tail == 0, last chunk is full (chunk_frames)
-
-    // For each chunk, compute valid output length after 3× stride-2 conv
-    std::vector<int> valid_lens(num_chunks);
+    // Per-chunk valid-frame counts come from the single shared planner.
+    std::vector<int> valid_lens;
+    int num_chunks = 0;
     int total_valid = 0;
-    for (int c = 0; c < num_chunks; c++) {
-        valid_lens[c] = conv_out_len(conv_out_len(conv_out_len(chunk_lengths[c])));
-        total_valid += valid_lens[c];
+    if (T_chunk_end > 0) {
+        valid_lens.assign((size_t)((T_chunk_end + chunk_frames - 1) / chunk_frames), 0);
+        num_chunks = moss_audio_plan_chunks(T_chunk_end, valid_lens.data(), &total_valid);
     }
+    if (num_chunks == 0) {
+        if (out_T_enc)
+            *out_T_enc = 0;
+        if (out_d)
+            *out_d = d;
+        if (out_num_chunks)
+            *out_num_chunks = 0;
+        if (out_total_valid)
+            *out_total_valid = 0;
+        return nullptr;
+    }
+    if (valid_counts)
+        memcpy(valid_counts, valid_lens.data(), (size_t)num_chunks * sizeof(int));
+    if (out_num_chunks)
+        *out_num_chunks = num_chunks;
+    if (out_total_valid)
+        *out_total_valid = total_valid;
 
     // Padded chunk conv output length (all chunks padded to chunk_frames)
     const int T_chunk_down = conv_out_len(conv_out_len(conv_out_len(chunk_frames)));
@@ -946,14 +1032,14 @@ extern "C" float* moss_audio_run_encoder(struct moss_audio_context* ctx, const f
 
     // Allocate output buffers
     float* result = (float*)malloc((size_t)d * total_valid * sizeof(float));
-    float* ds_results[3] = {nullptr, nullptr, nullptr};
-    if (want_ds) {
-        if (ds_tap_0)
-            ds_results[0] = (float*)malloc((size_t)d * total_valid * sizeof(float));
-        if (ds_tap_1)
-            ds_results[1] = (float*)malloc((size_t)d * total_valid * sizeof(float));
-        if (ds_tap_2)
-            ds_results[2] = (float*)malloc((size_t)d * total_valid * sizeof(float));
+    float* ds_results_alloc[3] = {nullptr, nullptr, nullptr};
+    if (capture_ds) {
+        for (int t = 0; t < 3; t++) {
+            if (want_ds[t]) {
+                ds_results_alloc[t] = (float*)malloc((size_t)d * total_valid * sizeof(float));
+                ds_results[t] = ds_results_alloc[t];
+            }
+        }
     }
 
     int out_offset = 0; // write position in output buffers
@@ -961,17 +1047,17 @@ extern "C" float* moss_audio_run_encoder(struct moss_audio_context* ctx, const f
     for (int c = 0; c < num_chunks; c++) {
         // Prepare padded mel chunk for ggml ne=(T=chunk_frames, n_mels).
         // ggml ne[0]=T varies fastest: data[t + chunk_frames * f].
-        // Input mel is (n_mels, T_mel) row-major: mel[f * T_mel + t].
+        // Input mel is (n_mels, T_mel_stride) row-major: mel[f * T_mel_stride + t].
         std::vector<float> chunk_mel((size_t)n_mels * chunk_frames, 0.0f);
         int t_start = c * chunk_frames;
-        int t_len = chunk_lengths[c];
+        int t_len = std::min(chunk_frames, T_chunk_end - t_start);
         // Pack mel with freq (n_mels) as ne[0] (fastest) and time as ne[1].
         // This transposes from (n_mels, T) row-major to (T, n_mels) ne-order
         // = ggml ne=(n_mels, T). ggml conv2d applies KW (kernel ne[0]) along
         // data ne[0]=n_mels and KH (ne[1]) along data ne[1]=T.
         for (int t = 0; t < t_len; t++) {
             for (int f = 0; f < n_mels; f++) {
-                chunk_mel[(size_t)f + n_mels * (size_t)t] = mel[(size_t)f * T_mel + t_start + t];
+                chunk_mel[(size_t)f + n_mels * (size_t)t] = mel[(size_t)f * T_mel_stride + t_start + t];
             }
         }
 
@@ -986,7 +1072,7 @@ extern "C" float* moss_audio_run_encoder(struct moss_audio_context* ctx, const f
             ctx->cached_enc_meta.assign(ctx->compute_meta.size(), 0);
             ggml_init_params aip = {ctx->cached_enc_meta.size(), ctx->cached_enc_meta.data(), true};
             ctx->cached_enc_ctx = ggml_init(aip);
-            gf = moss_audio_build_encoder_graph(ctx, chunk_frames, want_ds, ctx->cached_enc_ctx);
+            gf = moss_audio_build_encoder_graph(ctx, chunk_frames, capture_ds, ctx->cached_enc_ctx);
             ctx->cached_enc_gf = gf;
             ctx->cached_enc_T_mel = chunk_frames;
         }
@@ -994,8 +1080,10 @@ extern "C" float* moss_audio_run_encoder(struct moss_audio_context* ctx, const f
         if (!ggml_backend_sched_alloc_graph(ctx->sched, gf)) {
             fprintf(stderr, "moss_audio: encoder graph alloc failed (chunk %d)\n", c);
             free(result);
-            for (int t = 0; t < 3; t++)
-                free(ds_results[t]);
+            for (int t = 0; t < 3; t++) {
+                free(ds_results_alloc[t]);
+                ds_results[t] = nullptr; // never leave a freed pointer behind (issue #344 B1)
+            }
             return nullptr;
         }
 
@@ -1046,8 +1134,10 @@ extern "C" float* moss_audio_run_encoder(struct moss_audio_context* ctx, const f
         if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS) {
             fprintf(stderr, "moss_audio: encoder graph compute failed (chunk %d)\n", c);
             free(result);
-            for (int t = 0; t < 3; t++)
-                free(ds_results[t]);
+            for (int t = 0; t < 3; t++) {
+                free(ds_results_alloc[t]);
+                ds_results[t] = nullptr; // never leave a freed pointer behind (issue #344 B1)
+            }
             return nullptr;
         }
 
@@ -1071,8 +1161,10 @@ extern "C" float* moss_audio_run_encoder(struct moss_audio_context* ctx, const f
         if (!enc_out) {
             fprintf(stderr, "moss_audio: missing encoder_output (chunk %d)\n", c);
             free(result);
-            for (int t = 0; t < 3; t++)
-                free(ds_results[t]);
+            for (int t = 0; t < 3; t++) {
+                free(ds_results_alloc[t]);
+                ds_results[t] = nullptr; // never leave a freed pointer behind (issue #344 B1)
+            }
             return nullptr;
         }
 
@@ -1082,15 +1174,15 @@ extern "C" float* moss_audio_run_encoder(struct moss_audio_context* ctx, const f
         ggml_backend_tensor_get(enc_out, result + (size_t)out_offset * d, 0, (size_t)valid * d * sizeof(float));
 
         // Extract deepstack taps (same valid subset)
-        if (want_ds) {
+        if (capture_ds) {
             for (int t = 0; t < 3; t++) {
-                if (!ds_results[t])
+                if (!ds_results_alloc[t])
                     continue;
                 char name[32];
                 snprintf(name, sizeof(name), "ds_tap_%d", t);
                 ggml_tensor* tap = ggml_graph_get_tensor(gf, name);
                 if (tap) {
-                    ggml_backend_tensor_get(tap, ds_results[t] + (size_t)out_offset * d, 0,
+                    ggml_backend_tensor_get(tap, ds_results_alloc[t] + (size_t)out_offset * d, 0,
                                             (size_t)valid * d * sizeof(float));
                 }
             }
@@ -1103,22 +1195,67 @@ extern "C" float* moss_audio_run_encoder(struct moss_audio_context* ctx, const f
         *out_T_enc = total_valid;
     if (out_d)
         *out_d = d;
-    if (ds_tap_0)
-        *ds_tap_0 = ds_results[0];
-    if (ds_tap_1)
-        *ds_tap_1 = ds_results[1];
-    if (ds_tap_2)
-        *ds_tap_2 = ds_results[2];
 
     return result;
+}
+
+extern "C" float* moss_audio_run_encoder(struct moss_audio_context* ctx, const float* mel, int n_mels, int T_mel,
+                                         int* out_T_enc, int* out_d, float** ds_tap_0, float** ds_tap_1,
+                                         float** ds_tap_2) {
+    const bool want_ds[3] = {ds_tap_0 != nullptr, ds_tap_1 != nullptr, ds_tap_2 != nullptr};
+    float* ds_results[3] = {nullptr, nullptr, nullptr};
+    float* r = moss_audio_run_encoder_impl(ctx, mel, n_mels, T_mel, T_mel, want_ds, ds_results, out_T_enc, out_d,
+                                           nullptr, nullptr, nullptr);
+    // On failure the impl frees any allocated tap buffers; write the tap
+    // out-pointers ONLY on success so *ds_tap_x can never dangle (issue #344,
+    // B1). This matches the pre-refactor contract: taps were only ever
+    // published after the chunk loop completed.
+    if (r != nullptr) {
+        if (ds_tap_0)
+            *ds_tap_0 = ds_results[0];
+        if (ds_tap_1)
+            *ds_tap_1 = ds_results[1];
+        if (ds_tap_2)
+            *ds_tap_2 = ds_results[2];
+    }
+    return r;
+}
+
+extern "C" float* moss_audio_run_encoder_meta(struct moss_audio_context* ctx, const float* mel, int n_mels, int T_mel,
+                                              int T_mel_actual, int* out_T_enc, int* out_d, int* valid_counts,
+                                              int* out_num_chunks, int* out_T_mel_actual, int* out_total_valid,
+                                              float** ds_tap_0, float** ds_tap_1, float** ds_tap_2) {
+    // Fail closed: T_mel_actual must be the caller's observed pre-pad length.
+    // It is NEVER inferred from padded zeros or a global floor here.
+    if (!ctx || !mel || n_mels <= 0 || T_mel <= 0 || T_mel_actual <= 0 || T_mel_actual > T_mel)
+        return nullptr;
+    if (out_T_mel_actual)
+        *out_T_mel_actual = T_mel_actual;
+
+    const bool want_ds[3] = {ds_tap_0 != nullptr, ds_tap_1 != nullptr, ds_tap_2 != nullptr};
+    float* ds_results[3] = {nullptr, nullptr, nullptr};
+    float* r = moss_audio_run_encoder_impl(ctx, mel, n_mels, T_mel, T_mel_actual, want_ds, ds_results, out_T_enc, out_d,
+                                           valid_counts, out_num_chunks, out_total_valid);
+    // Same failure contract as moss_audio_run_encoder: never publish tap
+    // out-pointers on failure (the impl has freed them).
+    if (r != nullptr) {
+        if (ds_tap_0)
+            *ds_tap_0 = ds_results[0];
+        if (ds_tap_1)
+            *ds_tap_1 = ds_results[1];
+        if (ds_tap_2)
+            *ds_tap_2 = ds_results[2];
+    }
+    return r;
 }
 
 extern "C" float* moss_audio_run_adapter(struct moss_audio_context* ctx, const float* encoder_out, int T_enc, int d_enc,
                                          int* out_T, int* out_d) {
     if (!ctx || !encoder_out)
         return nullptr;
-    const auto& hp = ctx->model.hparams;
-    const int d_llm = (int)hp.llm_hidden;
+    // Adapter output dim reported from the GGUF weight shape (ne[1] = output
+    // rows); == moss_audio.llm.hidden_size, enforced at load time (#344).
+    const int d_llm = (int)ctx->model.adapter.down_w->ne[1];
 
     ggml_cgraph* gf = moss_audio_build_adapter_graph(ctx, T_enc);
     ggml_backend_sched_reset(ctx->sched);
