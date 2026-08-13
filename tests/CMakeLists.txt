@@ -569,6 +569,19 @@ if(CRISPASR_BUILD_EXAMPLES)
         TIMEOUT 120)
 endif()
 
+# Chatterbox Multilingual V3: Q4 must retain enough precision in the native
+# voice tokenizer and AR sampling head. The script creates its own tiny GGUF,
+# so this exercises the real quantizer without downloading model weights.
+if(CRISPASR_BUILD_EXAMPLES)
+    add_test(NAME test-chatterbox-quant-carveout
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/test-chatterbox-quant-carveout.sh
+            $<TARGET_FILE:crispasr-quantize>
+            ${PROJECT_SOURCE_DIR})
+    set_tests_properties(test-chatterbox-quant-carveout PROPERTIES
+        LABELS "unit;gh;chatterbox;regression-348"
+        TIMEOUT 120)
+endif()
+
 # ─── test - stream - finalize — Catch2 unit tests for the streaming
 # `final.text` stitcher used by `--stream-json` finalize_utterance.
 # Header-only target (no crispasr lib needed): the helper is a pure

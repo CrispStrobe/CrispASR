@@ -127,6 +127,16 @@ class TestVoiceCloningSessionDispatch(unittest.TestCase):
             self.set_voice,
         )
 
+    def test_chatterbox_16khz_voice_clone_installs_all_conditionals_atomically(self):
+        source = (REPO / "src" / "chatterbox.cpp").read_text(encoding="utf-8")
+        voice_loader = source.split('extern "C" int chatterbox_set_voice_from_wav', 1)[1].split(
+            'extern "C" void chatterbox_set_exaggeration', 1
+        )[0]
+        self.assertIn("resample_polyphase(pcm_16k, n_16k, 16000, 24000)", voice_loader)
+        self.assertIn("atomic_path = !pcm_24k.empty()", voice_loader)
+        self.assertIn("chatterbox_install_native_voice", voice_loader)
+        self.assertNotIn("partial native WAV clone", voice_loader)
+
     def test_chatterbox_synthesis_wires_languages_and_cross_lingual_cfg(self):
         self.assertIn(
             "chatterbox_set_language((chatterbox_context*)s->chatterbox_ctx",

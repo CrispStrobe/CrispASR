@@ -210,14 +210,14 @@ TEST_CASE("registry: preferred quant rewrites primary filename", "[unit][registr
     CrispasrRegistryEntry e;
     bool found = crispasr_registry_lookup("chatterbox", e, "q4_k");
     REQUIRE(found);
-    REQUIRE(e.filename == "chatterbox-t3-q4_k.gguf");
+    REQUIRE(e.filename == "chatterbox-v3-t3-q4_k.gguf");
 }
 
 TEST_CASE("registry: companion quant can be resolved independently", "[unit][registry]") {
     CrispasrRegistryEntry e;
     bool found = crispasr_registry_lookup("chatterbox", e, "q4_k");
     REQUIRE(found);
-    REQUIRE(e.companion_filename == "chatterbox-s3gen-q4_k.gguf");
+    REQUIRE(e.companion_filename == "chatterbox-v3-s3gen-q4_k.gguf");
 }
 
 TEST_CASE("registry: non-quantized companion remains unchanged", "[unit][registry]") {
@@ -281,8 +281,8 @@ TEST_CASE("registry: chatterbox family keeps multilingual and finetunes separate
     CrispasrRegistryEntry e;
 
     REQUIRE(crispasr_registry_lookup("chatterbox", e));
-    REQUIRE(e.filename == "chatterbox-t3-q8_0.gguf");
-    REQUIRE(e.companion_filename == "chatterbox-s3gen-q8_0.gguf");
+    REQUIRE(e.filename == "chatterbox-v3-t3-q8_0.gguf");
+    REQUIRE(e.companion_filename == "chatterbox-v3-s3gen-q8_0.gguf");
 
     REQUIRE(crispasr_registry_lookup("kartoffelbox-turbo", e));
     REQUIRE(e.filename.find("kartoffelbox-turbo-t3") != std::string::npos);

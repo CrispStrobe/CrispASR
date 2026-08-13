@@ -166,14 +166,14 @@ KARTOFFELBOX_T3_HPARAMS = dict(
 
 # ── Helpers ─────────────────────────────────────────────────────────
 
-def load_model_dir(model_id: str) -> Path:
+def load_model_dir(model_id: str, revision: str | None = None) -> Path:
     p = Path(model_id)
     if p.is_dir():
         return p
     if snapshot_download is None:
         sys.exit(f"Directory {model_id} not found and huggingface_hub not installed")
     print(f"Downloading {model_id}…", file=sys.stderr)
-    return Path(snapshot_download(model_id, allow_patterns=[
+    return Path(snapshot_download(model_id, revision=revision, allow_patterns=[
         "*.safetensors", "*.json", "*.pt", "tokenizer*",
     ]))
 
@@ -464,29 +464,39 @@ def write_t3_gguf(
     output_path: Path,
     conds_path: Path | None,
     tokenizer_path: Path | None,
+    t3_filename: str | None = None,
+    source_revision: str | None = None,
 ):
     print(f"\n=== Writing T3 GGUF: {output_path} ===")
 
     # ── Pre-load T3 to infer vocab size before writing hparams ──
-    t3_path = select_chatterbox_t3_checkpoint(model_dir)
+    t3_path = model_dir / t3_filename if t3_filename else select_chatterbox_t3_checkpoint(model_dir)
     if not t3_path.exists():
         sys.exit(f"Missing T3 weights (tried t3_mtl*.safetensors and t3_cfg.safetensors in {model_dir})")
     print(f"  T3 weights: {t3_path.name}")
     t3_tensors = load_safetensors(t3_path)
 
+    # Do not mutate the module-level defaults: converter functions are also
+    # exercised in-process by tests and tooling.
+    t3_hparams = dict(T3_HPARAMS)
+
     # Infer text_vocab_size from the actual embedding (#170).
     for emb_key in ["text_emb.weight", "text_embedding.weight"]:
         if emb_key in t3_tensors:
             actual_vocab = t3_tensors[emb_key].shape[0]
-            if actual_vocab != T3_HPARAMS["text_vocab_size"]:
-                print(f"  text_vocab_size: {T3_HPARAMS['text_vocab_size']} -> {actual_vocab} (from {emb_key})")
-                T3_HPARAMS["text_vocab_size"] = actual_vocab
+            if actual_vocab != t3_hparams["text_vocab_size"]:
+                print(f"  text_vocab_size: {t3_hparams['text_vocab_size']} -> {actual_vocab} (from {emb_key})")
+                t3_hparams["text_vocab_size"] = actual_vocab
             break
 
     writer = GGUFWriter(str(output_path), "chatterbox")
+    writer.add_string("general.source.url", "https://huggingface.co/ResembleAI/chatterbox")
+    if source_revision:
+        writer.add_string("general.source.revision", source_revision)
+    writer.add_string("chatterbox.t3.checkpoint", t3_path.name)
 
     # ── Hyperparameters (after vocab inference) ──
-    for k, v in T3_HPARAMS.items():
+    for k, v in t3_hparams.items():
         key = f"chatterbox.t3.{k}"
         if isinstance(v, int):
             writer.add_uint32(key, v)
@@ -515,7 +525,7 @@ def write_t3_gguf(
             for token, idx in vocab.items():
                 if idx < len(tokens):
                     tokens[idx] = token
-            expected_vocab = int(T3_HPARAMS["text_vocab_size"])
+            expected_vocab = int(t3_hparams["text_vocab_size"])
             if len(tokens) != expected_vocab:
                 sys.exit(
                     f"Tokenizer vocab size mismatch for {tokenizer_path.name}: "
@@ -922,6 +932,7 @@ def write_s3gen_gguf(
     model_dir: Path,
     output_path: Path,
     s3gen_filename: str | None = None,
+    source_revision: str | None = None,
 ):
     print(f"\n=== Writing S3Gen GGUF: {output_path} ===")
 
@@ -944,6 +955,10 @@ def write_s3gen_gguf(
         s3gen_path = model_dir / s3gen_filename
     if not s3gen_path.exists():
         sys.exit(f"Missing {s3gen_path}")
+    writer.add_string("general.source.url", "https://huggingface.co/ResembleAI/chatterbox")
+    if source_revision:
+        writer.add_string("general.source.revision", source_revision)
+    writer.add_string("chatterbox.s3gen.checkpoint", s3gen_path.name)
     s3gen_tensors = load_safetensors(s3gen_path)
 
     # Group by component for reporting
@@ -988,9 +1003,17 @@ def main():
                         help="Only convert T3 model")
     parser.add_argument("--s3gen-only", action="store_true",
                         help="Only convert S3Gen model")
+    parser.add_argument("--t3-checkpoint", default="t3_mtl23ls_v3.safetensors",
+                        help="Multilingual T3 checkpoint filename (default: production V3)")
+    parser.add_argument("--s3gen-checkpoint", default="s3gen.safetensors",
+                        help="S3Gen checkpoint filename (default: production V3 pairing)")
+    parser.add_argument("--revision", default=None,
+                        help="Pinned Hugging Face revision (also embedded as GGUF provenance)")
+    parser.add_argument("--output-prefix", default="chatterbox",
+                        help="Output filename prefix (for example: chatterbox-v3)")
     args = parser.parse_args()
 
-    model_dir = load_model_dir(args.input)
+    model_dir = load_model_dir(args.input, revision=args.revision)
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1037,15 +1060,19 @@ def main():
     if not args.s3gen_only:
         write_t3_gguf(
             model_dir,
-            out_dir / "chatterbox-t3-f16.gguf",
+            out_dir / f"{args.output_prefix}-t3-f16.gguf",
             conds_path if conds_path.exists() else None,
             tokenizer_path if tokenizer_path.exists() else None,
+            t3_filename=args.t3_checkpoint,
+            source_revision=args.revision,
         )
 
     if not args.t3_only:
         write_s3gen_gguf(
             model_dir,
-            out_dir / "chatterbox-s3gen-f16.gguf",
+            out_dir / f"{args.output_prefix}-s3gen-f16.gguf",
+            s3gen_filename=args.s3gen_checkpoint,
+            source_revision=args.revision,
         )
 
     print("\nDone!")

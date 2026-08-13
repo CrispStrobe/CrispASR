@@ -909,12 +909,12 @@ constexpr Entry k_registry[] = {
     // filename + URL (Q4_K / Q5_K / Q8_0 / F16); `--tts-codec-quant Q`
     // substitutes the S3Gen companion; both repos publish F16 / Q8_0 /
     // Q4_K for both halves.
-    {"chatterbox", "chatterbox-t3-q8_0.gguf",
-     "https://huggingface.co/cstr/chatterbox-GGUF/resolve/main/chatterbox-t3-q8_0.gguf",
-     "~880 MB",
-     "chatterbox-s3gen-q8_0.gguf",
-     "https://huggingface.co/cstr/chatterbox-GGUF/resolve/main/chatterbox-s3gen-q8_0.gguf",
-     "~627 MB"},
+    {"chatterbox", "chatterbox-v3-t3-q8_0.gguf",
+     "https://huggingface.co/cstr/chatterbox-GGUF/resolve/main/chatterbox-v3-t3-q8_0.gguf",
+     "~610 MB",
+     "chatterbox-v3-s3gen-q8_0.gguf",
+     "https://huggingface.co/cstr/chatterbox-GGUF/resolve/main/chatterbox-v3-s3gen-q8_0.gguf",
+     "~349 MB"},
     // Chatterbox-Turbo: distilled GPT-2 T3 (24L) + 2-step meanflow S3Gen.
     // Different architecture from base — runtime keys off
     // `chatterbox.t3.arch` ("kartoffelbox" branch handles GPT-2 T3 for
