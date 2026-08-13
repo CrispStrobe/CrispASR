@@ -179,6 +179,7 @@ kh.step("reference_dump_start", model=REF_MODEL, output=str(REF_GGUF))
 run([
     sys.executable, "-m", "pip", "install", "-q",
     "qwen-tts", "transformers==4.57.3", "gguf", "soundfile", "scipy",
+    "hf_transfer",
 ])
 ref_env = {
     "HF_TOKEN": hf_token,
