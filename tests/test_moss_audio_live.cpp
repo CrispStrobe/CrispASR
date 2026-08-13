@@ -14,6 +14,10 @@
 #include <string>
 #include <vector>
 
+#ifndef SAMPLES_DIR
+#define SAMPLES_DIR "samples"
+#endif
+
 static std::vector<float> load_wav_16k(const char* path) {
     FILE* f = fopen(path, "rb");
     if (!f)
@@ -42,7 +46,7 @@ TEST_CASE("moss-audio transcribe JFK", "[integration][moss-audio]") {
     auto* ctx = moss_audio_init_from_file(model_path, params);
     REQUIRE(ctx != nullptr);
 
-    auto pcm = load_wav_16k("samples/jfk.wav");
+    auto pcm = load_wav_16k(SAMPLES_DIR "/jfk.wav");
     REQUIRE(!pcm.empty());
 
     char* text = moss_audio_transcribe(ctx, pcm.data(), (int)pcm.size());
@@ -69,7 +73,7 @@ TEST_CASE("moss-audio custom prompt", "[integration][moss-audio]") {
     auto* ctx = moss_audio_init_from_file(model_path, params);
     REQUIRE(ctx != nullptr);
 
-    auto pcm = load_wav_16k("samples/jfk.wav");
+    auto pcm = load_wav_16k(SAMPLES_DIR "/jfk.wav");
     REQUIRE(!pcm.empty());
 
     // Audio understanding: ask a question about the audio
@@ -97,7 +101,7 @@ TEST_CASE("moss-audio run_encoder_meta valid-frame metadata (issue #344)", "[int
     auto* ctx = moss_audio_init_from_file(model_path, params);
     REQUIRE(ctx != nullptr);
 
-    auto pcm = load_wav_16k("samples/jfk.wav");
+    auto pcm = load_wav_16k(SAMPLES_DIR "/jfk.wav");
     REQUIRE(!pcm.empty());
 
     // 1. mel with truthful pre-pad length
