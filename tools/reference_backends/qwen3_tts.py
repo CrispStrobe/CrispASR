@@ -83,6 +83,16 @@ DEFAULT_STAGES = [
     *(f"cp_step{i}_logits" for i in range(15)),
 ]
 
+# Optional full talker checkpoints for backend bisection. They are kept in the
+# default reference so a diff run can identify the first divergent layer; the
+# C++ side only materialises them when CRISPASR_QWEN3_TTS_DUMP_TALKER_LAYERS=1.
+DEFAULT_STAGES += [
+    f"talker_layer_{i:02d}_{stem}"
+    for i in range(28)
+    for stem in ("attn_norm", "attn", "ffn_norm", "out")
+]
+DEFAULT_STAGES += ["talker_layer_28_output_norm"]
+
 # Defaults match the official examples/test_model_12hz_base.py smoke
 # test so the diff is reproducible without arguments.
 _DEFAULT_REF_TEXT = (
@@ -201,8 +211,20 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
         ("talker_layer_0_out",  talker.model.layers[0]),
         ("talker_layer_27_out", talker.model.layers[-1]),
         ("talker_output_norm",  talker.model.norm),
+        ("talker_layer_28_output_norm", talker.model.norm),
         ("talker_logits",       talker.codec_head),
     ]
+    if any(s_.startswith("talker_layer_") for s_ in stages):
+        # Match the runtime's four checkpoints around each decoder block. HF
+        # exposes the corresponding weighted norms and submodules directly;
+        # the residual additions are represented by the decoder-layer output.
+        for i, layer in enumerate(talker.model.layers):
+            layer_hook_map.extend([
+                (f"talker_layer_{i:02d}_attn_norm", getattr(layer, "input_layernorm", None)),
+                (f"talker_layer_{i:02d}_attn", getattr(layer, "self_attn", None)),
+                (f"talker_layer_{i:02d}_ffn_norm", getattr(layer, "post_attention_layernorm", None)),
+                (f"talker_layer_{i:02d}_out", layer),
+            ])
     hook_stage_names = [name for name, _mod in layer_hook_map]
     # Per-step codec_head outputs. `capture_modules(first_call_only=True)` above
     # keeps the prefill; this keeps one capture per AR step under its own key.
@@ -294,7 +316,7 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
         "generated_codes",
         *cp_in_names,
         *cp_out_names,
-    )):
+    )) or any(s.startswith("talker_layer_") for s in stages):
         prompt_items = tts.create_voice_clone_prompt(
             ref_audio=(prompt_audio, prompt_sr),
             ref_text=ref_text,

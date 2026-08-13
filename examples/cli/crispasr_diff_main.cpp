@@ -159,6 +159,8 @@ static char* portable_mkdtemp(char* tpl) {
 // We only wire up the backends + stages whose C headers expose a
 // standalone entry point. Everything else is reported as [SKIP].
 
+static void print_row(const char* name, const crispasr_diff::Report& r, float cos_threshold, const char* extra = "");
+
 namespace {
 
 struct StageResult {
@@ -660,6 +662,46 @@ static StageResult qwen3_tts_talker_logits_r(qwen3_tts_context* ctx, const float
     return r;
 }
 
+static void qwen3_tts_compare_layer_dumps(const crispasr_diff::Ref& ref, int& n_pass, int& n_fail, int& n_skip) {
+    const char* dir = crispasr_env::get("CRISPASR_QWEN3_TTS_DUMP_DIR");
+    if (!dir || !crispasr_env::get("CRISPASR_QWEN3_TTS_DUMP_TALKER_LAYERS"))
+        return;
+    for (const auto& name : ref.tensor_names()) {
+        if (name.rfind("talker_layer_", 0) != 0)
+            continue;
+        const std::string path = std::string(dir) + "/" + name + ".bin";
+        FILE* f = std::fopen(path.c_str(), "rb");
+        if (!f) {
+            printf("[SKIP] %-30s no C++ layer dump\n", name.c_str());
+            n_skip++;
+            continue;
+        }
+        std::fseek(f, 0, SEEK_END);
+        const long bytes = std::ftell(f);
+        std::fseek(f, 0, SEEK_SET);
+        if (bytes <= 0 || bytes % (long)sizeof(float) != 0) {
+            std::fclose(f);
+            printf("[FAIL] %-30s malformed C++ layer dump\n", name.c_str());
+            n_fail++;
+            continue;
+        }
+        std::vector<float> data((size_t)bytes / sizeof(float));
+        const bool ok = std::fread(data.data(), sizeof(float), data.size(), f) == data.size();
+        std::fclose(f);
+        if (!ok) {
+            printf("[FAIL] %-30s could not read C++ layer dump\n", name.c_str());
+            n_fail++;
+            continue;
+        }
+        auto rep = ref.compare(name, data.data(), data.size());
+        print_row(name.c_str(), rep, 0.999f);
+        if (rep.is_pass(0.999f))
+            n_pass++;
+        else
+            n_fail++;
+    }
+}
+
 // ---- chatterbox ----
 
 static StageResult chatterbox_tokens_r(chatterbox_context* ctx, const char* text) {
@@ -885,7 +927,7 @@ static StageResult moonshine_encoder_r(moonshine_context* ctx, const float* samp
 } // namespace
 
 
-static void print_row(const char* name, const crispasr_diff::Report& r, float cos_threshold, const char* extra = "") {
+static void print_row(const char* name, const crispasr_diff::Report& r, float cos_threshold, const char* extra) {
     const char* tag = r.found ? (r.is_pass(cos_threshold) ? "[PASS]" : "[FAIL]") : "[SKIP]";
     std::string shape_str = "[";
     for (size_t i = 0; i < r.shape.size(); i++) {
@@ -2455,6 +2497,11 @@ int main(int argc, char** argv) {
                 n_fail++;
             }
         }
+        // Optional full per-layer bisection. The talker call above consumes
+        // the PyTorch-produced prefill, so any first failing checkpoint here
+        // is in the talker graph rather than the ICL builder.
+        qwen3_tts_compare_layer_dumps(ref, n_pass, n_fail, n_skip);
+
         // Stage: talker_logits_via_icl_prefill — the full self-test.
         // Build the ICL prefill on the C++ side (text_embed + text_proj
         // for the chat template + codec sentinels + speaker_embed (from
