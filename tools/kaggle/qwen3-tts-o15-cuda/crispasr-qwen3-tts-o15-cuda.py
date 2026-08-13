@@ -79,7 +79,7 @@ except ImportError:
     import kaggle_harness as kh
 
 kh.init_progress()
-kh.resolve_hf_token()
+hf_token = kh.resolve_hf_token(require=True)
 
 sha = subprocess.check_output(
     ["git", "-C", str(REPO), "rev-parse", "HEAD"], text=True
@@ -158,6 +158,56 @@ asr_model = Path(hf_hub_download(
     cache_dir=str(MODELS), token=token,
 ))
 kh.step("models_downloaded")
+
+# ── Produce and publish the Python ground-truth archive first ───────────────
+# This is the canonical crispasr-diff reference, not a runtime diagnostic.
+# Keep it on the ephemeral layer until upload so /kaggle/working remains
+# reserved for the small, inspectable run artifacts.
+REF_FIXTURE_REPO = os.environ.get(
+    "CRISPASR_REF_FIXTURE_REPO", "cstr/crispasr-regression-fixtures"
+)
+REF_FIXTURE_PATH = os.environ.get(
+    "CRISPASR_REF_FIXTURE_PATH", "qwen3-tts/jfk/ref.gguf"
+)
+REF_MODEL = os.environ.get(
+    "CRISPASR_QWEN3_TTS_REF_MODEL", "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
+)
+REF_DIR = Path("/kaggle/temp/qwen3-tts-reference")
+REF_DIR.mkdir(parents=True, exist_ok=True)
+REF_GGUF = REF_DIR / "qwen3-tts-jfk-ref.gguf"
+kh.step("reference_dump_start", model=REF_MODEL, output=str(REF_GGUF))
+run([
+    sys.executable, "-m", "pip", "install", "-q",
+    "qwen-tts", "transformers==4.57.3", "gguf", "soundfile", "scipy",
+])
+ref_env = {
+    "HF_TOKEN": hf_token,
+    "QWEN3_TTS_SYN_TEXT": TTS_TEXT,
+    "QWEN3_TTS_REF_TEXT": (
+        "And so my fellow Americans, ask not what your country can do for you, "
+        "ask what you can do for your country."
+    ),
+}
+with kh.build_heartbeat("dump_reference"):
+    run([
+        sys.executable, "-u", str(REPO / "tools" / "dump_reference.py"),
+        "--backend", "qwen3-tts", "--model-dir", REF_MODEL,
+        "--audio", str(REPO / "samples" / "jfk.wav"),
+        "--output", str(REF_GGUF),
+    ], env=ref_env, timeout=3600)
+if not REF_GGUF.exists() or REF_GGUF.stat().st_size == 0:
+    raise SystemExit("reference dumper produced no GGUF")
+import hashlib
+ref_sha256 = hashlib.sha256(REF_GGUF.read_bytes()).hexdigest()
+kh.step("reference_dump_done", bytes=REF_GGUF.stat().st_size, sha256=ref_sha256)
+from huggingface_hub import HfApi
+HfApi(token=hf_token).upload_file(
+    path_or_fileobj=str(REF_GGUF), path_in_repo=REF_FIXTURE_PATH,
+    repo_id=REF_FIXTURE_REPO, repo_type="dataset",
+    commit_message=f"Add Qwen3-TTS diff reference ({sha[:8]})",
+)
+kh.step("reference_uploaded", repo=REF_FIXTURE_REPO, path=REF_FIXTURE_PATH,
+        sha256=ref_sha256)
 
 
 # ── Run TTS with O15=OFF and O15=ON ────────────────────────────────
