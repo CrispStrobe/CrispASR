@@ -241,17 +241,33 @@ Report Ref::compare(const std::string& name, const float* data, size_t n_elem, C
         return r;
 
     // Element-wise diff
-    double sum_abs = 0.0, sum_sq = 0.0;
+    double sum_abs = 0.0, sum_sq = 0.0, sum_data_sq = 0.0, sum_ref_sq = 0.0;
     for (size_t i = 0; i < n; i++) {
+        if (!std::isfinite(data[i]) || !std::isfinite(ref[i])) {
+            r.n_nonfinite++;
+            continue;
+        }
         const float d = data[i] - ref[i];
         const float ad = d < 0 ? -d : d;
         if (ad > r.max_abs)
             r.max_abs = ad;
         sum_abs += ad;
         sum_sq += (double)d * (double)d;
+        sum_data_sq += (double)data[i] * (double)data[i];
+        sum_ref_sq += (double)ref[i] * (double)ref[i];
     }
-    r.mean_abs = (float)(sum_abs / n);
-    r.rms = (float)std::sqrt(sum_sq / n);
+    const size_t n_finite = n - r.n_nonfinite;
+    if (n_finite > 0) {
+        r.mean_abs = (float)(sum_abs / n_finite);
+        r.rms = (float)std::sqrt(sum_sq / n_finite);
+        r.rms_data = (float)std::sqrt(sum_data_sq / n_finite);
+        r.rms_ref = (float)std::sqrt(sum_ref_sq / n_finite);
+        if (r.rms_ref > 1e-20f) {
+            r.norm_ratio = r.rms_data / r.rms_ref;
+        } else if (r.rms_data > 1e-20f) {
+            r.norm_ratio = INFINITY;
+        }
+    }
 
     // Cosine similarity over the last dimension (rows)
     if (mode == COS_LAST_DIM && !r.shape.empty()) {
@@ -263,13 +279,20 @@ Report Ref::compare(const std::string& name, const float* data, size_t n_elem, C
             size_t cos_rows = 0;
             for (size_t i = 0; i < n_rows; i++) {
                 double dot = 0.0, na = 0.0, nb = 0.0;
+                bool finite_row = true;
                 for (int k = 0; k < row_w; k++) {
                     const float a = data[i * row_w + k];
                     const float b = ref[i * row_w + k];
+                    if (!std::isfinite(a) || !std::isfinite(b)) {
+                        finite_row = false;
+                        break;
+                    }
                     dot += (double)a * b;
                     na += (double)a * a;
                     nb += (double)b * b;
                 }
+                if (!finite_row)
+                    continue;
                 const double denom = std::sqrt(na) * std::sqrt(nb);
                 if (denom > 1e-12) {
                     const float cs = (float)(dot / denom);

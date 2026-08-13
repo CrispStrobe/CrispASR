@@ -81,10 +81,13 @@ namespace crispasr_diff {
 struct Report {
     bool found = false;         // the name existed in the archive
     size_t n_elem = 0;          // number of elements compared
-    size_t n_nonfinite = 0;     // count of NaN / Inf in the C++ data array
+    size_t n_nonfinite = 0;     // count of compared NaN / Inf values
     float max_abs = 0.0f;       // max |cpp[i] - ref[i]|
     float mean_abs = 0.0f;      // mean |cpp[i] - ref[i]|
     float rms = 0.0f;           // sqrt(mean((cpp-ref)^2))
+    float rms_data = 0.0f;      // sqrt(mean(cpp[i]^2))
+    float rms_ref = 0.0f;       // sqrt(mean(ref[i]^2))
+    float norm_ratio = 1.0f;    // rms_data / rms_ref (1 when both are zero)
     float cos_min = 1.0f;       // worst per-row cosine similarity (-1 .. 1)
     float cos_mean = 1.0f;      // average per-row cosine similarity
     int top1_match = 0;         // logits only: tokens matching ref argmax

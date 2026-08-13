@@ -584,6 +584,9 @@ def main() -> None:
     # harnesses on the C++ side can replay the exact synthesis context.
     for env_key in ("QWEN3_TTS_SYN_TEXT", "QWEN3_TTS_REF_TEXT", "QWEN3_TTS_LANG", "QWEN3_TTS_VOICE",
                     "KOKORO_PHONEMES", "KOKORO_VOICE", "KOKORO_SEED", "CHATTERBOX_SYN_TEXT",
+                    "CHATTERBOX_LANG",
+                    "CHATTERBOX_SEED",
+                    "CHATTERBOX_DEVICE",
                     "VOXCPM2_SYN_TEXT", "VOXCPM2_USE_REF",
                     "F5_TTS_SYN_TEXT", "F5_TTS_REF_TEXT", "F5_TTS_SEED",
                     "F5_TTS_STEPS", "F5_TTS_CFG", "F5_TTS_SWAY",

@@ -62,6 +62,7 @@ DEFAULT_STAGES = [
     # (bypasses the kaiser_fast vs simple-resampler parity question).
     "prompt_feat_24k",
     "audio_24k_input",
+    "t3_text_tokens",
     "t3_cond_emb",
     "t3_prefill_emb",
     "t3_speech_tokens",
@@ -89,6 +90,8 @@ DEFAULT_STAGES = [
 ]
 
 DEFAULT_SYN_TEXT = "Hello world."
+DEFAULT_LANGUAGE = "en"
+DEFAULT_SEED = 42
 DEFAULT_CFG_WEIGHT = 0.5
 DEFAULT_TEMPERATURE = 0.8
 DEFAULT_REPETITION_PENALTY = 1.2
@@ -130,20 +133,47 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
             sys.path.insert(0, src_path)
 
     # ── Load Chatterbox ──
-    from chatterbox.tts import ChatterboxTTS, punc_norm
+    from chatterbox.mtl_tts import ChatterboxMultilingualTTS, SUPPORTED_LANGUAGES, punc_norm
     from chatterbox.models.s3gen import S3GEN_SR
     from chatterbox.models.s3tokenizer import S3_SR, drop_invalid_tokens
 
-    print(f"  loading Chatterbox from {model_dir}")
-    model = ChatterboxTTS.from_local(model_dir, device="cpu")
+    device = os.environ.get("CHATTERBOX_DEVICE", "cpu").lower()
+    if device == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError("CHATTERBOX_DEVICE=cuda requested but CUDA is unavailable")
+    if device == "mps" and not torch.backends.mps.is_available():
+        raise RuntimeError("CHATTERBOX_DEVICE=mps requested but MPS is unavailable")
+    print(f"  loading Chatterbox V3 from {model_dir} on {device}")
+    model = ChatterboxMultilingualTTS.from_local(model_dir, device=device, t3_model="v3")
+    seed = int(os.environ.get("CHATTERBOX_SEED", str(DEFAULT_SEED)))
+    torch.manual_seed(seed)
 
-    # Use built-in voice (conds.pt)
-    assert model.conds is not None, "conds.pt not found in model_dir"
+    # The diff fixture is a voice-cloning fixture: derive every downstream
+    # conditional from the same audio that native CrispASR receives.  The old
+    # dumper captured the audio front ends but then drove T3/S3Gen with the
+    # unrelated built-in conds.pt voice, leaving a major parity blind spot.
+    import tempfile
+    import wave
+    with tempfile.NamedTemporaryFile(suffix=".wav") as ref_wav:
+        pcm16 = np.clip(audio, -1.0, 1.0)
+        pcm16 = (pcm16 * 32767.0).astype("<i2", copy=False)
+        with wave.open(ref_wav.name, "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(16000)
+            wf.writeframes(pcm16.tobytes())
+        model.prepare_conditionals(ref_wav.name)
 
     # ── Text tokenization ──
     test_text = os.environ.get("CHATTERBOX_SYN_TEXT", DEFAULT_SYN_TEXT)
+    language = os.environ.get("CHATTERBOX_LANG", DEFAULT_LANGUAGE).lower()
+    if language not in SUPPORTED_LANGUAGES:
+        raise ValueError(
+            f"Unsupported CHATTERBOX_LANG={language!r}; expected one of {sorted(SUPPORTED_LANGUAGES)}"
+        )
     text_norm = punc_norm(test_text)
-    text_tokens = model.tokenizer.text_to_tokens(text_norm).to("cpu")
+    text_tokens = model.tokenizer.text_to_tokens(text_norm, language_id=language).to(device)
+    if "t3_text_tokens" in stages:
+        out["t3_text_tokens"] = text_tokens.squeeze(0).cpu().numpy().astype(np.float32, copy=False)
     text_tokens_infer = text_tokens
     if DEFAULT_CFG_WEIGHT > 0.0:
         text_tokens_infer = torch.cat([text_tokens_infer, text_tokens_infer], dim=0)
@@ -188,7 +218,7 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
         partials_np = _ve_partials(ve_mel, hp, overlap=0.5, rate=1.3, min_coverage=0.8)
         # (n_partials, 160, 40)
         with torch.inference_mode():
-            partials_t = torch.from_numpy(partials_np.copy()).float()
+            partials_t = torch.from_numpy(partials_np.copy()).float().to(device)
             partial_embeds = ve(partials_t)  # (n_partials, 256), L2-normed
         if "ve_partial_emb" in stages:
             out["ve_partial_emb"] = partial_embeds.cpu().numpy().astype(np.float32, copy=False)
@@ -209,7 +239,7 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
     if s3tok_stages & stages:
         s3_tok = model.s3gen.tokenizer
         # Audio in: 16 kHz mono float32 (already loaded that way).
-        wav_t = torch.from_numpy(audio.astype(np.float32, copy=False)).unsqueeze(0)
+        wav_t = torch.from_numpy(audio.astype(np.float32, copy=False)).unsqueeze(0).to(device)
 
         if "s3tok_log_mel" in stages:
             with torch.inference_mode():
@@ -261,7 +291,7 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
         # `s3gen.speaker_encoder.inference([wav_16k])` runs the full
         # CAMPPlus forward (FCM head + xvector chain + StatsPool + dense)
         # and returns the 192-d speaker embedding.
-        wav_t = torch.from_numpy(audio.astype(np.float32, copy=False))
+        wav_t = torch.from_numpy(audio.astype(np.float32, copy=False)).to(device)
         with torch.inference_mode():
             xv = model.s3gen.speaker_encoder.inference([wav_t])  # (1, 192)
         out["campplus_xvector"] = xv.detach().cpu().numpy().astype(np.float32, copy=False)
@@ -331,7 +361,7 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
     print(f"  T3 generated {speech_tokens_valid.size(0)} speech tokens")
 
     # ── S3Gen: tokens → mel ──
-    speech_tokens_2d = speech_tokens_valid.unsqueeze(0).to("cpu")
+    speech_tokens_2d = speech_tokens_valid.unsqueeze(0).to(device)
 
     # Token embedding
     flow = model.s3gen.flow
@@ -367,9 +397,9 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
 
     # Extract encoder output
     ref_dict = model.conds.gen
-    prompt_token = ref_dict['prompt_token'].to("cpu")
+    prompt_token = ref_dict['prompt_token'].to(device)
     prompt_token_len = ref_dict['prompt_token_len']
-    token_len = torch.LongTensor([speech_tokens_valid.size(0)]).to("cpu")
+    token_len = torch.LongTensor([speech_tokens_valid.size(0)]).to(device)
 
     # Concat prompt + speech tokens
     full_tokens = torch.cat([prompt_token, speech_tokens_2d], dim=1)

@@ -1027,8 +1027,13 @@ and the GPT-2-T3 path (turbo/kartoffelbox-turbo):
 
 ### Multilingual language selection
 
-The base `chatterbox` backend uses the upstream multilingual v3 T3 weights
-from `cstr/chatterbox-GGUF`. Pass `-l <code>` / `--language <code>` to
+The base `chatterbox` backend uses the upstream multilingual V3 T3 checkpoint
+`t3_mtl23ls_v3.safetensors` at pinned source revision
+`5bb1f6ee58e50c3b8d408bc82a6d3740c2db6e18`. It is paired with upstream's
+production `s3gen.pt` weights (converted from their tensor-equivalent
+`s3gen.safetensors`), not the retired `s3gen_v3` experiment. The explicit
+`chatterbox-v3-*` filenames prevent an older generic artifact from being
+mistaken for this pair. Pass `-l <code>` / `--language <code>` to
 select the language token for multilingual synthesis:
 
 ```bash
@@ -1067,7 +1072,7 @@ was trained on. Without it, partial-diacritic Arabic produced spurious onset
 letters (#170). Script-specific normalizers (zh cangjie / ja kakasi / he dicta /
 ko jamo / ru stress) are not yet implemented.
 
-> **Note on published GGUFs.** Some published multilingual T3 artifacts pair a
+> **Note on legacy GGUFs.** Some older multilingual T3 artifacts pair a
 > 2352-token tokenizer with a 2454-vocab T3; the loader rejects that mismatch.
 > Repair locally with `models/patch-chatterbox-gguf-add-merges.py` and the
 > matching `grapheme_mtl_merged_expanded_v1.json` (2454 tokens).

@@ -83,12 +83,12 @@ class TestConverterEncoding(unittest.TestCase):
             (model_dir / "t3_cfg.safetensors").touch()
             self.assertEqual(select_chatterbox_t3_checkpoint(model_dir).name, "t3_cfg.safetensors")
 
-    def test_chatterbox_s3gen_checkpoint_selection_prefers_v3(self) -> None:
+    def test_chatterbox_v3_uses_upstream_production_s3gen(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             model_dir = pathlib.Path(td)
             (model_dir / "s3gen.safetensors").touch()
             (model_dir / "s3gen_v3.safetensors").touch()
-            self.assertEqual(select_chatterbox_s3gen_checkpoint(model_dir).name, "s3gen_v3.safetensors")
+            self.assertEqual(select_chatterbox_s3gen_checkpoint(model_dir).name, "s3gen.safetensors")
 
     def test_chatterbox_tokenizer_selection_prefers_upstream_multilingual_graphemes(self) -> None:
         with tempfile.TemporaryDirectory() as td:

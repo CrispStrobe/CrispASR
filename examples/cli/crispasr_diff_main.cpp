@@ -857,6 +857,21 @@ static std::string chatterbox_find_s3gen(const std::string& model_path) {
 
     const size_t sep = model_path.find_last_of("/\\");
     const std::string dir = (sep == std::string::npos) ? "." : model_path.substr(0, sep);
+    const std::string base = (sep == std::string::npos) ? model_path : model_path.substr(sep + 1);
+
+    // Prefer the companion with the exact same release prefix and quant tag:
+    // chatterbox-v3-t3-q8_0.gguf -> chatterbox-v3-s3gen-q8_0.gguf.  Falling
+    // straight to the legacy generic names can silently pair a newly converted
+    // T3 with an older/incompatible S3Gen that happens to share the cache.
+    const size_t marker = base.find("-t3-");
+    if (marker != std::string::npos) {
+        const std::string exact = dir + "/" + base.substr(0, marker) + "-s3gen-" + base.substr(marker + 4);
+        if (file_exists(exact))
+            return exact;
+        const std::string release_f16 = dir + "/" + base.substr(0, marker) + "-s3gen-f16.gguf";
+        if (file_exists(release_f16))
+            return release_f16;
+    }
     for (const char* const* it = candidates; *it; ++it) {
         const std::string path = dir + "/" + *it;
         if (file_exists(path))
@@ -949,7 +964,7 @@ static crispasr_diff::Report compare_logits_strided(const crispasr_diff::Ref& re
     r.n_elem = n_rows * (size_t)row_w;
     if (r.n_elem == 0)
         return r;
-    double sum_abs = 0.0, sum_sq = 0.0;
+    double sum_abs = 0.0, sum_sq = 0.0, sum_data_sq = 0.0, sum_ref_sq = 0.0;
     size_t n_finite = 0;
     r.cos_min = 1.0f;
     double cos_sum = 0.0;
@@ -970,6 +985,8 @@ static crispasr_diff::Report compare_logits_strided(const crispasr_diff::Ref& re
                 r.max_abs = ad;
             sum_abs += ad;
             sum_sq += (double)d * d;
+            sum_data_sq += (double)a * a;
+            sum_ref_sq += (double)b * b;
             dot += (double)a * b;
             na += (double)a * a;
             nb += (double)b * b;
@@ -986,6 +1003,12 @@ static crispasr_diff::Report compare_logits_strided(const crispasr_diff::Ref& re
     if (n_finite > 0) {
         r.mean_abs = (float)(sum_abs / n_finite);
         r.rms = (float)std::sqrt(sum_sq / n_finite);
+        r.rms_data = (float)std::sqrt(sum_data_sq / n_finite);
+        r.rms_ref = (float)std::sqrt(sum_ref_sq / n_finite);
+        if (r.rms_ref > 1e-20f)
+            r.norm_ratio = r.rms_data / r.rms_ref;
+        else if (r.rms_data > 1e-20f)
+            r.norm_ratio = INFINITY;
     }
     if (cos_rows > 0)
         r.cos_mean = (float)(cos_sum / cos_rows);
@@ -1004,7 +1027,7 @@ static crispasr_diff::Report compare_with_row_width(const crispasr_diff::Ref& re
     r.n_elem = n;
     if (n == 0)
         return r;
-    double sum_abs = 0.0, sum_sq = 0.0;
+    double sum_abs = 0.0, sum_sq = 0.0, sum_data_sq = 0.0, sum_ref_sq = 0.0;
     for (size_t i = 0; i < n; ++i) {
         if (!std::isfinite(data[i])) {
             r.n_nonfinite++;
@@ -1016,9 +1039,20 @@ static crispasr_diff::Report compare_with_row_width(const crispasr_diff::Ref& re
             r.max_abs = ad;
         sum_abs += ad;
         sum_sq += (double)d * (double)d;
+        sum_data_sq += (double)data[i] * (double)data[i];
+        sum_ref_sq += (double)pair.first[i] * (double)pair.first[i];
     }
-    r.mean_abs = (float)(sum_abs / n);
-    r.rms = (float)std::sqrt(sum_sq / n);
+    const size_t n_finite = n - r.n_nonfinite;
+    if (n_finite > 0) {
+        r.mean_abs = (float)(sum_abs / n_finite);
+        r.rms = (float)std::sqrt(sum_sq / n_finite);
+        r.rms_data = (float)std::sqrt(sum_data_sq / n_finite);
+        r.rms_ref = (float)std::sqrt(sum_ref_sq / n_finite);
+        if (r.rms_ref > 1e-20f)
+            r.norm_ratio = r.rms_data / r.rms_ref;
+        else if (r.rms_data > 1e-20f)
+            r.norm_ratio = INFINITY;
+    }
     const size_t n_rows = n / (size_t)row_w;
     r.cos_min = 1.0f;
     double cos_sum = 0.0;
@@ -1409,9 +1443,15 @@ int main(int argc, char** argv) {
         // voc_rb_0 sitting at cos_min 0.937 cos_mean 0.998, which passed the 0.95
         // mean check but was already structurally broken.
         constexpr float CHATTERBOX_VOC_STRICT_MIN = 0.999f;
+        constexpr float CHATTERBOX_NORM_RATIO_MIN = 0.80f;
+        constexpr float CHATTERBOX_NORM_RATIO_MAX = 1.25f;
+        auto scale_ok = [&](const crispasr_diff::Report& r) {
+            return std::isfinite(r.norm_ratio) && r.norm_ratio >= CHATTERBOX_NORM_RATIO_MIN &&
+                   r.norm_ratio <= CHATTERBOX_NORM_RATIO_MAX;
+        };
         auto print_row_mean = [&](const char* name, const crispasr_diff::Report& r, float cos_threshold,
                                   const char* extra = "") {
-            const bool pass = r.found && r.n_nonfinite == 0 && r.cos_mean >= cos_threshold;
+            const bool pass = r.found && r.n_nonfinite == 0 && r.cos_mean >= cos_threshold && scale_ok(r);
             const char* tag = r.found ? (pass ? "[PASS]" : "[FAIL]") : "[SKIP]";
             std::string shape_str = "[";
             for (size_t i = 0; i < r.shape.size(); i++) {
@@ -1430,14 +1470,16 @@ int main(int argc, char** argv) {
                        tag, name, shape_str.c_str(), r.n_nonfinite, r.n_elem, *extra ? "  " : "", extra);
                 return pass;
             }
-            printf("%s %-22s shape=%-16s cos_min=%.6f  cos_mean=%.6f  max_abs=%.2e  rms=%.2e%s%s\n", tag, name,
-                   shape_str.c_str(), r.cos_min, r.cos_mean, r.max_abs, r.rms, *extra ? "  " : "", extra);
+            printf("%s %-22s shape=%-16s cos_min=%.6f  cos_mean=%.6f  norm=%.4f (cpp=%.2e ref=%.2e)  "
+                   "max_abs=%.2e  rms_err=%.2e%s%s\n",
+                   tag, name, shape_str.c_str(), r.cos_min, r.cos_mean, r.norm_ratio, r.rms_data, r.rms_ref,
+                   r.max_abs, r.rms, *extra ? "  " : "", extra);
             return pass;
         };
         auto record_mean = [&](const crispasr_diff::Report& r, float cos_threshold) {
             if (!r.found) {
                 n_skip++;
-            } else if (r.cos_mean >= cos_threshold) {
+            } else if (r.n_nonfinite == 0 && r.cos_mean >= cos_threshold && scale_ok(r)) {
                 n_pass++;
             } else {
                 n_fail++;
@@ -1448,8 +1490,8 @@ int main(int argc, char** argv) {
         // expected divergence is fp32-ULP rounding.
         auto print_row_strict = [&](const char* name, const crispasr_diff::Report& r, float cos_mean_threshold,
                                     float cos_min_threshold, const char* extra = "") {
-            const bool pass =
-                r.found && r.n_nonfinite == 0 && r.cos_mean >= cos_mean_threshold && r.cos_min >= cos_min_threshold;
+            const bool pass = r.found && r.n_nonfinite == 0 && r.cos_mean >= cos_mean_threshold &&
+                              r.cos_min >= cos_min_threshold && scale_ok(r);
             const char* tag = r.found ? (pass ? "[PASS]" : "[FAIL]") : "[SKIP]";
             std::string shape_str = "[";
             for (size_t i = 0; i < r.shape.size(); i++) {
@@ -1468,14 +1510,17 @@ int main(int argc, char** argv) {
                        tag, name, shape_str.c_str(), r.n_nonfinite, r.n_elem, *extra ? "  " : "", extra);
                 return pass;
             }
-            printf("%s %-22s shape=%-16s cos_min=%.6f  cos_mean=%.6f  max_abs=%.2e  rms=%.2e%s%s\n", tag, name,
-                   shape_str.c_str(), r.cos_min, r.cos_mean, r.max_abs, r.rms, *extra ? "  " : "", extra);
+            printf("%s %-22s shape=%-16s cos_min=%.6f  cos_mean=%.6f  norm=%.4f (cpp=%.2e ref=%.2e)  "
+                   "max_abs=%.2e  rms_err=%.2e%s%s\n",
+                   tag, name, shape_str.c_str(), r.cos_min, r.cos_mean, r.norm_ratio, r.rms_data, r.rms_ref,
+                   r.max_abs, r.rms, *extra ? "  " : "", extra);
             return pass;
         };
         auto record_strict = [&](const crispasr_diff::Report& r, float cos_mean_threshold, float cos_min_threshold) {
             if (!r.found) {
                 n_skip++;
-            } else if (r.cos_mean >= cos_mean_threshold && r.cos_min >= cos_min_threshold) {
+            } else if (r.n_nonfinite == 0 && r.cos_mean >= cos_mean_threshold &&
+                       r.cos_min >= cos_min_threshold && scale_ok(r)) {
                 n_pass++;
             } else {
                 n_fail++;
@@ -1510,14 +1555,30 @@ int main(int argc, char** argv) {
         // The runtime default is 6 CFM steps (a perf default); the reference
         // dump uses 10, so pin 10 here for an apples-to-apples mel/CFM diff.
         chatterbox_set_cfm_steps(ctx, 10);
-        // CHATTERBOX_LANG=<code> selects the multilingual path (prepends [lang]
-        // + enables NFKD normalization, #170). Required for the t3_text_tokens
-        // stage to match a multilingual reference archive. Empty = English.
+        // The reference records the language used by the multilingual Python
+        // oracle. Reuse it automatically so a portable -ref.gguf is sufficient
+        // to reproduce the run; an explicit env override remains useful for
+        // negative/A-B experiments.
+        std::string chatterbox_lang = ref.meta("chatterbox_lang");
         if (const char* env_lang = crispasr_env::get("CRISPASR_CHATTERBOX_LANG")) {
-            if (*env_lang) {
-                chatterbox_set_language(ctx, env_lang);
-                fprintf(stderr, "[crispasr-diff] CHATTERBOX_LANG=%s -> multilingual path\n", env_lang);
-            }
+            if (*env_lang)
+                chatterbox_lang = env_lang;
+        }
+        if (!chatterbox_lang.empty()) {
+            chatterbox_set_language(ctx, chatterbox_lang.c_str());
+            fprintf(stderr, "[crispasr-diff] CHATTERBOX_LANG=%s -> multilingual path\n", chatterbox_lang.c_str());
+        }
+        // The Python Chatterbox blueprint derives T3 and S3Gen conditionals
+        // from the --audio fixture.  Install that same voice in the native
+        // context before comparing conditioning/prefill/encoder stages.  The
+        // previous harness compared the supplied voice front ends in isolation
+        // but then silently drove the model with its unrelated built-in
+        // conds.pt voice, so every downstream voice-clone stage was guaranteed
+        // to diverge despite being reported as a model parity failure.
+        if (chatterbox_set_voice_from_wav(ctx, audio_path.c_str()) != 0) {
+            fprintf(stderr, "failed to derive chatterbox voice conditionals from '%s'\n", audio_path.c_str());
+            chatterbox_free(ctx);
+            return 4;
         }
         // ---- VE pipeline (Module 2 of native voice clone) ----
         // `samples` is the 16 kHz mono float32 PCM that the harness loaded.

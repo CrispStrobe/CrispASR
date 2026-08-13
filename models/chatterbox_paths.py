@@ -18,9 +18,15 @@ def select_chatterbox_t3_checkpoint(model_dir: Path) -> Path:
 
 
 def select_chatterbox_s3gen_checkpoint(model_dir: Path) -> Path:
-    """Select the best available Chatterbox S3Gen checkpoint."""
+    """Select the S3Gen checkpoint used by upstream multilingual V3.
 
-    for name in ("s3gen_v3.safetensors", "s3gen.safetensors"):
+    Chatterbox's V3 release changes the multilingual T3 checkpoint.  The
+    production driver still pairs it with the original ``s3gen.pt`` weights
+    (the equivalent converter input is ``s3gen.safetensors``).  In particular,
+    ``s3gen_v3`` is *not* the currently deployed V3 pairing.
+    """
+
+    for name in ("s3gen.safetensors", "s3gen_v3.safetensors"):
         candidate = model_dir / name
         if candidate.exists():
             return candidate
