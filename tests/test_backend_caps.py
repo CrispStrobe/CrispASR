@@ -59,6 +59,10 @@ _SRC_TGT_BACKENDS = {
     # printing "--target-lang ignored by this backend" and discarding the flag,
     # which is how #329 came to read as "this engine has no language option".
     "cosyvoice3-tts",
+    "chatterbox",
+    "chatterbox-turbo",
+    "kartoffelbox-turbo",
+    "lahgtna-chatterbox",
     "qwen3-tts",
     "qwen3-tts-1.7b-base",
     "canary",
@@ -101,6 +105,9 @@ class TestVoiceCloningSessionDispatch(unittest.TestCase):
         cls.set_voice = source.split("CA_EXPORT int crispasr_session_set_voice", 1)[1].split(
             "CA_EXPORT int crispasr_session_tada_set_makeref_models", 1
         )[0]
+        cls.synthesize = source.split("static float* crispasr_session_synthesize_raw_impl", 1)[1].split(
+            "static int crispasr_session_set_prompt", 1
+        )[0]
 
     def test_omnivoice_dispatches_audio_tokenizer(self):
         self.assertIn(
@@ -118,6 +125,16 @@ class TestVoiceCloningSessionDispatch(unittest.TestCase):
         self.assertIn(
             "chatterbox_set_voice_from_wav(s->chatterbox_ctx, path)",
             self.set_voice,
+        )
+
+    def test_chatterbox_synthesis_wires_languages_and_cross_lingual_cfg(self):
+        self.assertIn(
+            "chatterbox_set_language((chatterbox_context*)s->chatterbox_ctx",
+            self.synthesize,
+        )
+        self.assertIn(
+            "core_tts_lang::is_cross_lingual(output_lang, s->tts_reference_language)",
+            self.synthesize,
         )
 
     def test_omnivoice_dispatches_wav_and_reference_text(self):

@@ -56,6 +56,7 @@
 #include "core/beam_decode.h"         // Shared autoregressive beam-search decode helper
 #include "core/greedy_decode.h"       // Shared autoregressive greedy decode helper
 #include "core/lang_names.h"          // Shared ISO-639-1 → English language-name map
+#include "core/tts_lang.h"            // Chatterbox cross-lingual clone predicate
 #include "core/ngram_loop_fix.h"      // core_ngram::fix_loops (issue #218, mirrors CLI adapters)
 #include "core/crispasr_c2pa.h"       // C2PA Content Credentials signing (shared with CLI; #260)
 #include "core/crispasr_wav_writer.h" // WAV container + AI-provenance INFO tag (interop floor)
@@ -1587,8 +1588,9 @@ struct crispasr_session {
     // from source_language, which for TTS already serves as the output-language
     // fallback when target_language is unset.
     std::string tts_reference_language;
-    bool punctuation = true; // canary/cohere per-call arg + post-process gate
-    bool translate = false;  // whisper sticky --translate (others: use src/tgt mismatch)
+    bool punctuation = true;              // canary/cohere per-call arg + post-process gate
+    bool translate = false;               // whisper sticky --translate (others: use src/tgt mismatch)
+    bool chatterbox_cfg_explicit = false; // preserve caller override over auto cross-lingual CFG
 
     // Acoustic language detected by the last transcribe (whisper only —
     // whisper_full_lang_id → whisper_lang_str, an ISO-639-1 code). Set on
@@ -8735,6 +8737,16 @@ static float* crispasr_session_synthesize_raw_impl(crispasr_session* s, const ch
 #endif
 #ifdef CA_HAVE_CHATTERBOX
     if (s->chatterbox_ctx) {
+        const std::string output_lang = !s->target_language.empty() ? s->target_language : s->source_language;
+        chatterbox_set_language((chatterbox_context*)s->chatterbox_ctx,
+                                (!output_lang.empty() && output_lang != "auto") ? output_lang.c_str() : nullptr);
+        if (!s->chatterbox_cfg_explicit && core_tts_lang::is_cross_lingual(output_lang, s->tts_reference_language)) {
+            chatterbox_set_cfg_weight((chatterbox_context*)s->chatterbox_ctx, 0.0f);
+        } else if (!s->chatterbox_cfg_explicit) {
+            // Sessions are persistent: restore the upstream default after a
+            // prior cross-lingual request.
+            chatterbox_set_cfg_weight((chatterbox_context*)s->chatterbox_ctx, 0.5f);
+        }
         return chatterbox_synthesize(s->chatterbox_ctx, text, out_n_samples);
     }
 #endif
@@ -11316,6 +11328,7 @@ CA_EXPORT int crispasr_session_set_cfg_weight(crispasr_session* s, float cfg_wei
 #ifdef CA_HAVE_CHATTERBOX
     if (s->chatterbox_ctx) {
         chatterbox_set_cfg_weight((chatterbox_context*)s->chatterbox_ctx, cfg_weight);
+        s->chatterbox_cfg_explicit = true;
         touched++;
     }
 #endif
