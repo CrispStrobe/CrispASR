@@ -14,17 +14,18 @@
   upstream `.pt` states; convert explicit V3 F16 T3 and S3Gen GGUFs.
 - [x] Quantize with `crispasr-quantize`; use staged F16/Q8/Q4 parity to set
   precision carve-outs for sampling, CFM trajectory, and vocoder tensors.
-- [ ] Dump a multilingual voice-clone `-ref.gguf`, run `crispasr-diff` from
+- [x] Dump a multilingual voice-clone `-ref.gguf`, run `crispasr-diff` from
   front ends through AR tokens, CFM mel, vocoder stages, and PCM, and publish
-  it under `chatterbox-v3/<fixture>/ref.gguf` in regression fixtures. (The
-  archive and 32-pass local run are complete; publication remains part of the
-  final artifact checkpoint.)
-- [ ] Run local unit/ABI/CLI tests plus multilingual live synthesis and closed
+  it under `chatterbox-v3/de-jfk/ref.gguf` in regression fixtures (fixture
+  commit `7982e8dd8e0d53c344681335b00239773300a7aa`).
+- [x] Run local unit/ABI/CLI tests plus multilingual live synthesis and closed
   loop R/C/B TTS→ASR clone roundtrips with speaker-similarity evidence.
-- [ ] Add the exact V3 artifacts to the registry and verify autodownload into
-  `/Volumes/backups/ai/crispasr-gguf`.
-- [ ] Repeat conversion/parity/live roundtrips with CUDA in a dedicated Kaggle
-  kernel, preserving `progress.txt` and downloadable result artifacts.
+- [x] Add the exact V3 artifacts to the registry, publish the six F16/Q8/Q4
+  files (model commit `c45504bb8d55473a2213db17ec472ed11b69056a`), and verify
+  registry quant/companion substitution against the SSD cache.
+- [x] Repeat conversion/parity/live roundtrips with CUDA in the dedicated
+  `chr1str/crispasr-chatterbox-v3-issue-348-cuda-parity` Kaggle kernel,
+  preserving JSONL progress, logs, JSON summaries, and WAV artifacts.
 - [ ] Rebase, merge only with green CI, then answer #348 with linked evidence.
 
 ## Acceptance gates
@@ -58,3 +59,19 @@
   is `C,R = 0.792725` vs un-cloned `B,R = 0.431873`.
 - Hermetic Chatterbox/registry/Parakeet language-routing set: 76/76 pass;
   public CLI capability/dispatch tests: 12/12 pass; converter tests: 5/5 pass.
+- Model-backed Parakeet long-form controls: multilingual V3 Q4_K passes both
+  231-second issue-#350 cases (7 assertions; gap-fill recovered 99 words), and
+  the preserved Japanese path passes its 42-second live case at Q8_0 (6
+  assertions). Japanese Q4_K reproduced its documented TDT quantization
+  failure (2/3 keyword occurrences), so it is not represented as a green TDT
+  artifact; Q8_0 is the release-quality Japanese TDT control.
+- Kaggle P100/SM60 CUDA gate at exact CrispASR commit `ea3302ed`: the pinned
+  converter and quantizer reproduced 313 T3 + 2,285 S3 tensor names, shapes,
+  types and provenance; native CUDA diff against the published Python oracle
+  passed **32/0/2**; all 23 supported languages emitted finite/non-silent
+  audio through the C ABI; nine supported European languages produced nonempty
+  Parakeet ASR roundtrips; and independent Kokoro R / Chatterbox C / default B
+  scored `cos(C,R)=0.769132 > cos(B,R)=0.491945`, with exact target ASR for C
+  and B. The worker's preinstalled PyTorch excludes SM60, so a fresh
+  Python-on-CUDA dump was explicitly recorded unsupported; the authoritative
+  CPU Python oracle → native CUDA diff passed in full.
