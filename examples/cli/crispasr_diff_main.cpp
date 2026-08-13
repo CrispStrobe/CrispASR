@@ -1472,8 +1472,8 @@ int main(int argc, char** argv) {
             }
             printf("%s %-22s shape=%-16s cos_min=%.6f  cos_mean=%.6f  norm=%.4f (cpp=%.2e ref=%.2e)  "
                    "max_abs=%.2e  rms_err=%.2e%s%s\n",
-                   tag, name, shape_str.c_str(), r.cos_min, r.cos_mean, r.norm_ratio, r.rms_data, r.rms_ref,
-                   r.max_abs, r.rms, *extra ? "  " : "", extra);
+                   tag, name, shape_str.c_str(), r.cos_min, r.cos_mean, r.norm_ratio, r.rms_data, r.rms_ref, r.max_abs,
+                   r.rms, *extra ? "  " : "", extra);
             return pass;
         };
         auto record_mean = [&](const crispasr_diff::Report& r, float cos_threshold) {
@@ -1512,15 +1512,15 @@ int main(int argc, char** argv) {
             }
             printf("%s %-22s shape=%-16s cos_min=%.6f  cos_mean=%.6f  norm=%.4f (cpp=%.2e ref=%.2e)  "
                    "max_abs=%.2e  rms_err=%.2e%s%s\n",
-                   tag, name, shape_str.c_str(), r.cos_min, r.cos_mean, r.norm_ratio, r.rms_data, r.rms_ref,
-                   r.max_abs, r.rms, *extra ? "  " : "", extra);
+                   tag, name, shape_str.c_str(), r.cos_min, r.cos_mean, r.norm_ratio, r.rms_data, r.rms_ref, r.max_abs,
+                   r.rms, *extra ? "  " : "", extra);
             return pass;
         };
         auto record_strict = [&](const crispasr_diff::Report& r, float cos_mean_threshold, float cos_min_threshold) {
             if (!r.found) {
                 n_skip++;
-            } else if (r.n_nonfinite == 0 && r.cos_mean >= cos_mean_threshold &&
-                       r.cos_min >= cos_min_threshold && scale_ok(r)) {
+            } else if (r.n_nonfinite == 0 && r.cos_mean >= cos_mean_threshold && r.cos_min >= cos_min_threshold &&
+                       scale_ok(r)) {
                 n_pass++;
             } else {
                 n_fail++;
