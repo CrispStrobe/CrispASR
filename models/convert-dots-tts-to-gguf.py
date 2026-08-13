@@ -286,12 +286,12 @@ def main():
     # ── Load config ──
     config_path = model_dir / "config.json"
     assert config_path.exists(), f"config.json not found in {model_dir}"
-    with open(config_path) as f:
+    with open(config_path, encoding="utf-8") as f:
         config = json.load(f)
 
     llm_config_path = model_dir / "llm_config.json"
     assert llm_config_path.exists(), f"llm_config.json not found in {model_dir}"
-    with open(llm_config_path) as f:
+    with open(llm_config_path, encoding="utf-8") as f:
         llm_config = json.load(f)
 
     print(f"Model: dots.tts")
@@ -382,7 +382,7 @@ def main():
         # ── Special tokens ──
         special_tokens_path = model_dir / "added_tokens.json"
         if special_tokens_path.exists():
-            with open(special_tokens_path) as f:
+            with open(special_tokens_path, encoding="utf-8") as f:
                 added_tokens = json.load(f)
             # Find audio_gen_span and other special tokens
             for tok_name, tok_id in added_tokens.items():

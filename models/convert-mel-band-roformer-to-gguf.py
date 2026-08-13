@@ -48,7 +48,7 @@ def _load_config(model_dir: Path):
         "tag:yaml.org,2002:python/tuple",
         lambda loader, node: tuple(loader.construct_sequence(node)),
     )
-    with open(cands[0]) as f:
+    with open(cands[0], encoding="utf-8") as f:
         cfg_all = yaml.load(f, Loader=_Loader)
     m = dict(cfg_all.get("model", {}))
     a = cfg_all.get("audio", {}) or {}

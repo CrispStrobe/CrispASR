@@ -48,7 +48,7 @@ def resolve_model_path(model_id: str) -> tuple:
 def parse_config(config_path: str) -> dict:
     """Parse the config.yaml and extract model hyperparameters."""
     import yaml
-    with open(config_path) as f:
+    with open(config_path, encoding="utf-8") as f:
         raw = yaml.safe_load(f)
 
     init = raw["model"]["init_args"]

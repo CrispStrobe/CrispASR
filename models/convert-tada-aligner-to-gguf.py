@@ -113,7 +113,7 @@ def main():
     st_path = hf_hub_download(args.codec_repo, f"{subfolder}/model.safetensors")
     cfg_path = hf_hub_download(args.codec_repo, f"{subfolder}/config.json")
 
-    with open(cfg_path) as f:
+    with open(cfg_path, encoding="utf-8") as f:
         cfg = json.load(f)
     print(f"  Config: {json.dumps(cfg, indent=2)}")
 
