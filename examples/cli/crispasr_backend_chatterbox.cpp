@@ -10,6 +10,7 @@
 #include "whisper_params.h"
 
 #include "chatterbox.h"
+#include "core/tts_lang.h"
 
 #include <cctype>
 #include <cstdio>
@@ -111,7 +112,8 @@ public:
     const char* name() const override { return "chatterbox"; }
 
     uint32_t capabilities() const override {
-        return CAP_TTS | CAP_AUTO_DOWNLOAD | CAP_TEMPERATURE | CAP_FLASH_ATTN | CAP_VOICE_CLONING;
+        return CAP_TTS | CAP_AUTO_DOWNLOAD | CAP_TEMPERATURE | CAP_FLASH_ATTN | CAP_VOICE_CLONING |
+               CAP_SRC_TGT_LANGUAGE;
     }
 
     std::vector<crispasr_segment> transcribe(const float* /*samples*/, int /*n_samples*/, int64_t /*t_offset_cs*/,
@@ -170,9 +172,11 @@ public:
             }
         }
         chatterbox_set_seed(ctx_, (uint32_t)params.seed);
-        // Multilingual language selection (#170)
-        if (!params.language.empty() && params.language != "auto")
-            chatterbox_set_language(ctx_, params.language.c_str());
+        // Multilingual language selection (#170/#348). `--target-lang` is the
+        // explicit TTS output language; `-l` remains the convenient fallback.
+        const std::string output_lang = !params.target_lang.empty() ? params.target_lang : params.language;
+        if (!output_lang.empty() && output_lang != "auto")
+            chatterbox_set_language(ctx_, output_lang.c_str());
         else
             chatterbox_set_language(ctx_, nullptr); // clear
         // 75c-opt-2: native backend knobs
@@ -186,6 +190,16 @@ public:
             chatterbox_set_repetition_penalty(ctx_, params.tts_repetition_penalty);
         if (params.tts_cfg_scale >= 0.0f)
             chatterbox_set_cfg_weight(ctx_, params.tts_cfg_scale);
+        else if (core_tts_lang::is_cross_lingual(output_lang, params.source_lang)) {
+            // Upstream V3 warns that a reference recorded in another language
+            // can carry its accent into the target language. Its documented
+            // mitigation is cfg_weight=0 for cross-lingual cloning.
+            chatterbox_set_cfg_weight(ctx_, 0.0f);
+        } else {
+            // The adapter is reused by the server; restore the upstream
+            // default after a previous cross-lingual request.
+            chatterbox_set_cfg_weight(ctx_, 0.5f);
+        }
         if (params.tts_num_steps >= 0)
             chatterbox_set_cfm_steps(ctx_, params.tts_num_steps);
         if (params.tts_exaggeration >= 0.0f)

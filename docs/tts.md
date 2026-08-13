@@ -1039,6 +1039,15 @@ tokenizer/model mismatch and make `-l` active, but some French Q4_K samples
 remain heavily accented. Treat language-token checks as a wiring smoke test,
 not a guarantee of native pronunciation.
 
+For voice cloning, pass `--source-lang <code>` when the reference recording's
+language differs from the requested output language (`-l` or `--target-lang`).
+Chatterbox then follows the upstream V3 cross-lingual recommendation and uses
+CFG weight 0 unless an explicit `--cfg-scale` override is supplied. This keeps
+the reference speaker's timbre while reducing transfer of the reference
+language's accent. In server/session use, set the output language with the
+target/source language setter and the recording language with
+`set_tts_reference_language()`.
+
 On the multilingual path the text is **NFKD-normalized** (then ASCII-lowercased)
 before tokenization, matching upstream `MTLTokenizer.preprocess_text`. This
 matters for scripts with precomposed diacritics: e.g. Arabic `أ`
