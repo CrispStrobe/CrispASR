@@ -1345,6 +1345,18 @@ ggml_cgraph* build_graph_talker_kv(qwen3_tts_context* c, int n_past, int n_token
         ctx0 = ggml_init(ip);
     }
     ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 16384, false);
+    const bool dump_layers = env_bool("CRISPASR_QWEN3_TTS_DUMP_TALKER_LAYERS") && n_past == 0 && n_tokens > 1;
+    auto checkpoint = [&](ggml_tensor* x, const char* stem, uint32_t il) {
+        if (!dump_layers)
+            return x;
+        char name[64];
+        std::snprintf(name, sizeof(name), "talker_layer_%02u_%s", il, stem);
+        ggml_tensor* dump = ggml_cont(ctx0, x);
+        ggml_set_name(dump, name);
+        ggml_set_output(dump);
+        ggml_build_forward_expand(gf, dump);
+        return x;
+    };
 
     ggml_tensor* embeds = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, d, T);
     ggml_set_name(embeds, "inputs_embeds");
@@ -1396,21 +1408,26 @@ ggml_cgraph* build_graph_talker_kv(qwen3_tts_context* c, int n_past, int n_token
 
         ggml_tensor* x = ggml_rms_norm(ctx0, cur, eps);
         x = ggml_mul(ctx0, x, b.attn_norm_w);
+        checkpoint(x, "attn_norm", il);
 
         ggml_tensor* attn = core_attn::kv_self_attn(
             ctx0, gf, x, b.attn_q_w, b.attn_k_w, b.attn_v_w, b.attn_output_w, b.attn_q_norm_w, b.attn_k_norm_w,
             positions, eff_mask, c->kv_k, c->kv_v, (int)il, n_past, kvp, b.attn_qkv_w, fixed_kv_len, eff_kv_indices);
+        checkpoint(attn, "attn", il);
         cur = ggml_add(ctx0, residual, attn);
 
         residual = cur;
         x = ggml_rms_norm(ctx0, cur, eps);
         x = ggml_mul(ctx0, x, b.ffn_norm_w);
+        checkpoint(x, "ffn_norm", il);
         ggml_tensor* mlp = core_ffn::swiglu(ctx0, x, b.ffn_gate_w, b.ffn_up_w, b.ffn_down_w);
         cur = ggml_add(ctx0, residual, mlp);
+        checkpoint(cur, "out", il);
     }
 
     cur = ggml_rms_norm(ctx0, cur, eps);
     cur = ggml_mul(ctx0, cur, c->talker.output_norm_w);
+    checkpoint(cur, "output_norm", hp.n_layers);
 
     if (T > 1) {
         cur = ggml_view_2d(ctx0, cur, d, 1, cur->nb[1], (size_t)(T - 1) * cur->nb[1]);
@@ -1662,6 +1679,30 @@ static float* run_talker_kv_dynamic(qwen3_tts_context* c, const float* embeds, i
         ggml_backend_sched_set_eval_callback(sched, nullptr, nullptr);
     }
     const double t_compute1 = bench ? now_ms() : 0.0;
+    if (env_bool("CRISPASR_QWEN3_TTS_DUMP_TALKER_LAYERS") && n_past == 0 && n_tokens > 1) {
+        const char* dump_dir = env_str("CRISPASR_QWEN3_TTS_DUMP_DIR");
+        dump_f32(dump_dir, "talker_prefill_input", embeds, (size_t)d * n_tokens);
+        auto dump_tensor = [&](const char* name) {
+            ggml_tensor* t = ggml_graph_get_tensor(gf, name);
+            if (!t)
+                return;
+            const size_t n = ggml_nelements(t);
+            std::vector<float> data(n);
+            ggml_backend_tensor_get(t, data.data(), 0, n * sizeof(float));
+            dump_f32(dump_dir, name, data.data(), n);
+        };
+        for (uint32_t il = 0; il <= hp.n_layers; il++) {
+            char name[64];
+            if (il < hp.n_layers) {
+                for (const char* stem : {"attn_norm", "attn", "ffn_norm", "out"}) {
+                    std::snprintf(name, sizeof(name), "talker_layer_%02u_%s", il, stem);
+                    dump_tensor(name);
+                }
+            } else {
+                dump_tensor("talker_layer_28_output_norm");
+            }
+        }
+    }
     ggml_tensor* out = ggml_graph_get_tensor(gf, "logits");
     float* r = (float*)malloc((size_t)vocab * sizeof(float));
     ggml_backend_tensor_get(out, r, 0, (size_t)vocab * sizeof(float));
