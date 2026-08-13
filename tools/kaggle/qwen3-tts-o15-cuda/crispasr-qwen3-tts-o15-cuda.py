@@ -36,7 +36,7 @@ os.environ.setdefault("HF_HOME", str(TEMP / "hf-cache"))
 
 CRISPASR_REF = os.environ.get("CRISPASR_REF", "fix/337-qwen3-tts-hip")
 CRISPASR_COMMIT = os.environ.get(
-    "CRISPASR_COMMIT", "8b2a538802303f652b63e7c20e054f401b7e3565"
+    "CRISPASR_COMMIT", "b9f6199f"
 )
 CRISPASR_REPO = os.environ.get(
     "CRISPASR_REPO", "https://github.com/CrispStrobe/CrispASR.git"
