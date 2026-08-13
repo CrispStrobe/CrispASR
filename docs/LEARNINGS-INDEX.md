@@ -17,7 +17,7 @@ per-backend porting detail (Per-model port notes + the family cross-reference).
 Reach for the topic groups when you are stuck on a *technique*, and the
 cross-reference when you already know which model you are touching.
 
-## Index by topic (277 lessons)
+## Index by topic (278 lessons)
 
 **Security & untrusted input** (2)
 
@@ -85,7 +85,7 @@ cross-reference when you already know which model you are touching.
 - L17453 — session-state fixes + moonshine CPU-only SOLVED
 - L17677 — Wyoming TTS marked nothing — FIXED 8f4197ec
 
-**Parity, the diff harness & ground truth** (36)
+**Parity, the diff harness & ground truth** (37)
 
 - L289 — The diff harness starts where its INPUT starts — check what it is fed before trusting parity
 - L516 — When a clone/zero-shot path misbehaves but the BAKED/preset path is clean, diff the two paths' DATA byte-for-byte — the difference IS the bug
@@ -123,6 +123,7 @@ cross-reference when you already know which model you are touching.
 - L14231 — A normalization stage amplifies upstream float error — input-align it before trusting its cos (§248 MBR)
 - L15369 — #333 madlad400 quants + T5 parity
 - L16241 — chatterbox hift_pcm(ref_mel) cos≈0.879 was a diff-harness layout bug (source_stft fed transposed), not a…
+- L17871 — Chatterbox Multilingual V3: checkpoint names, quant hashes, and a non-silent clone are not parity
 
 **ggml graphs, allocation & caching** (43)
 
@@ -344,7 +345,7 @@ A section is listed when its heading names the family, or its body mentions it
 at least 3 times. Sections appear under several families; this is a
 lookup, not a partition.
 
-- **chatterbox** (25) — L2132, L2317, L5348, L5610, L5661, L5693, L5732, L5836, L5889, L5995, L6098, L6164, L6239, L6287, L8436, L9223, L12848, L13896, L14285, L14345, L14804, L15593, L16203, L16241, L16797
+- **chatterbox** (26) — L2132, L2317, L5348, L5610, L5661, L5693, L5732, L5836, L5889, L5995, L6098, L6164, L6239, L6287, L8436, L9223, L12848, L13896, L14285, L14345, L14804, L15593, L16203, L16241, L16797, L17871
 - **cosyvoice3** (9) — L516, L8830, L12848, L13896, L14345, L15222, L15455, L16414, L16442
 - **vibevoice** (14) — L441, L1592, L2499, L5067, L5836, L8347, L12699, L12734, L12777, L13453, L14909, L14929, L15160, L17588
 - **tada** (9) — L922, L1295, L1639, L1689, L1703, L12848, L13111, L15837, L17540
