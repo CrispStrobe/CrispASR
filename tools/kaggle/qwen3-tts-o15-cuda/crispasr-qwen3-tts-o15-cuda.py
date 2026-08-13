@@ -27,10 +27,12 @@ import time
 from pathlib import Path
 
 WORK = Path("/kaggle/working")
-REPO = WORK / "CrispASR"
-BUILD = WORK / "build"
-RESULTS = WORK / "results"
+TEMP = Path("/kaggle/temp") if Path("/kaggle/temp").is_dir() else Path("/tmp")
+REPO = TEMP / "CrispASR"
+BUILD = TEMP / "build"
+RESULTS = TEMP / "results"
 RESULTS.mkdir(parents=True, exist_ok=True)
+os.environ.setdefault("HF_HOME", str(TEMP / "hf-cache"))
 
 CRISPASR_REF = os.environ.get("CRISPASR_REF", "fix/337-qwen3-tts-hip")
 CRISPASR_COMMIT = os.environ.get(
@@ -42,12 +44,12 @@ CRISPASR_REPO = os.environ.get(
 TTS_TEXT = "Please call Stella. Ask her to bring these things with her from the store."
 
 
-def run(cmd, check=True, env=None, timeout=None):
+def run(cmd, check=True, env=None, timeout=None, cwd=None):
     print(f"\n$ {' '.join(str(c) for c in cmd)}", flush=True)
     e = os.environ.copy()
     if env:
         e.update(env)
-    r = subprocess.run(cmd, env=e, timeout=timeout)
+    r = subprocess.run(cmd, env=e, timeout=timeout, cwd=cwd)
     if check and r.returncode != 0:
         raise SystemExit(f"command failed (rc={r.returncode}): {cmd}")
     return r
@@ -86,13 +88,71 @@ sha = subprocess.check_output(
 ).strip()
 kh.step("cloned", sha=sha, ref=CRISPASR_REF)
 
+# ── Produce and publish the Python ground-truth archive first ───────────────
+# This is the canonical crispasr-diff reference, not a runtime diagnostic.
+# Keep all large/intermediate files on the ephemeral layer; /kaggle/working
+# is reserved for the small, inspectable artifacts and the ccache archive.
+REF_FIXTURE_REPO = os.environ.get(
+    "CRISPASR_REF_FIXTURE_REPO", "cstr/crispasr-regression-fixtures"
+)
+REF_FIXTURE_PATH = os.environ.get(
+    "CRISPASR_REF_FIXTURE_PATH", "qwen3-tts/jfk/ref.gguf"
+)
+REF_MODEL = os.environ.get(
+    "CRISPASR_QWEN3_TTS_REF_MODEL", "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
+)
+REF_DIR = TEMP / "qwen3-tts-reference"
+REF_DIR.mkdir(parents=True, exist_ok=True)
+REF_GGUF = REF_DIR / "qwen3-tts-jfk-ref.gguf"
+kh.step("reference_dump_start", model=REF_MODEL, output=str(REF_GGUF))
+with kh.build_heartbeat("reference_deps"):
+    run([
+        sys.executable, "-m", "pip", "install", "-q",
+        "qwen-tts", "transformers==4.57.3", "gguf", "soundfile", "scipy",
+        "hf_transfer",
+    ], timeout=1800)
+ref_env = {
+    "HF_TOKEN": hf_token,
+    "QWEN3_TTS_SYN_TEXT": TTS_TEXT,
+    "QWEN3_TTS_REF_TEXT": (
+        "And so my fellow Americans, ask not what your country can do for you, "
+        "ask what you can do for your country."
+    ),
+}
+with kh.build_heartbeat("dump_reference"):
+    run([
+        sys.executable, "-u", str(REPO / "tools" / "dump_reference.py"),
+        "--backend", "qwen3-tts", "--model-dir", REF_MODEL,
+        "--audio", str(REPO / "samples" / "jfk.wav"),
+        "--output", str(REF_GGUF),
+    ], env=ref_env, timeout=3600, cwd=str(REPO))
+if not REF_GGUF.exists() or REF_GGUF.stat().st_size == 0:
+    raise SystemExit("reference dumper produced no GGUF")
+import hashlib
+ref_sha256 = hashlib.sha256(REF_GGUF.read_bytes()).hexdigest()
+kh.step("reference_dump_done", bytes=REF_GGUF.stat().st_size, sha256=ref_sha256)
+from huggingface_hub import HfApi
+with kh.build_heartbeat("reference_upload"):
+    HfApi(token=hf_token).upload_file(
+        path_or_fileobj=str(REF_GGUF), path_in_repo=REF_FIXTURE_PATH,
+        repo_id=REF_FIXTURE_REPO, repo_type="dataset",
+        commit_message=f"Add Qwen3-TTS diff reference ({sha[:8]})",
+    )
+Path("/kaggle/working/reference_manifest.txt").write_text(
+    f"repo={REF_FIXTURE_REPO}\npath={REF_FIXTURE_PATH}\n"
+    f"sha256={ref_sha256}\nbytes={REF_GGUF.stat().st_size}\n"
+)
+kh.step("reference_uploaded", repo=REF_FIXTURE_REPO, path=REF_FIXTURE_PATH,
+        sha256=ref_sha256)
+
 run(["nvidia-smi", "-L"])
 gpu_name = subprocess.check_output(
     ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"], text=True
 ).strip()
 kh.step("gpu", gpu_name=gpu_name)
 
-kh.install_build_toolchain()
+with kh.build_heartbeat("toolchain"):
+    kh.install_build_toolchain()
 arch = kh.detect_cuda_arch()
 kh.step("cuda_arch", arch=arch)
 
@@ -138,77 +198,27 @@ except ImportError:
     )
     from huggingface_hub import hf_hub_download
 
-token = os.environ.get("HF_TOKEN")
-MODELS = WORK / "models"
+token = hf_token
+MODELS = TEMP / "models"
 MODELS.mkdir(exist_ok=True)
 
-tts_model = Path(hf_hub_download(
-    "cstr/qwen3-tts-0.6b-base-GGUF",
-    "qwen3-tts-12hz-0.6b-base-q8_0.gguf",
-    cache_dir=str(MODELS), token=token,
-))
-tts_codec = Path(hf_hub_download(
-    "cstr/qwen3-tts-tokenizer-12hz-GGUF",
-    "qwen3-tts-tokenizer-12hz.gguf",
-    cache_dir=str(MODELS), token=token,
-))
-asr_model = Path(hf_hub_download(
-    "cstr/parakeet-tdt-0.6b-v2-GGUF",
-    "parakeet-tdt-0.6b-v2-q4_k.gguf",
-    cache_dir=str(MODELS), token=token,
-))
+with kh.build_heartbeat("models_download"):
+    tts_model = Path(hf_hub_download(
+        "cstr/qwen3-tts-0.6b-base-GGUF",
+        "qwen3-tts-12hz-0.6b-base-q8_0.gguf",
+        cache_dir=str(MODELS), token=token,
+    ))
+    tts_codec = Path(hf_hub_download(
+        "cstr/qwen3-tts-tokenizer-12hz-GGUF",
+        "qwen3-tts-tokenizer-12hz.gguf",
+        cache_dir=str(MODELS), token=token,
+    ))
+    asr_model = Path(hf_hub_download(
+        "cstr/parakeet-tdt-0.6b-v2-GGUF",
+        "parakeet-tdt-0.6b-v2-q4_k.gguf",
+        cache_dir=str(MODELS), token=token,
+    ))
 kh.step("models_downloaded")
-
-# ── Produce and publish the Python ground-truth archive first ───────────────
-# This is the canonical crispasr-diff reference, not a runtime diagnostic.
-# Keep it on the ephemeral layer until upload so /kaggle/working remains
-# reserved for the small, inspectable run artifacts.
-REF_FIXTURE_REPO = os.environ.get(
-    "CRISPASR_REF_FIXTURE_REPO", "cstr/crispasr-regression-fixtures"
-)
-REF_FIXTURE_PATH = os.environ.get(
-    "CRISPASR_REF_FIXTURE_PATH", "qwen3-tts/jfk/ref.gguf"
-)
-REF_MODEL = os.environ.get(
-    "CRISPASR_QWEN3_TTS_REF_MODEL", "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
-)
-REF_DIR = Path("/kaggle/temp/qwen3-tts-reference")
-REF_DIR.mkdir(parents=True, exist_ok=True)
-REF_GGUF = REF_DIR / "qwen3-tts-jfk-ref.gguf"
-kh.step("reference_dump_start", model=REF_MODEL, output=str(REF_GGUF))
-run([
-    sys.executable, "-m", "pip", "install", "-q",
-    "qwen-tts", "transformers==4.57.3", "gguf", "soundfile", "scipy",
-    "hf_transfer",
-])
-ref_env = {
-    "HF_TOKEN": hf_token,
-    "QWEN3_TTS_SYN_TEXT": TTS_TEXT,
-    "QWEN3_TTS_REF_TEXT": (
-        "And so my fellow Americans, ask not what your country can do for you, "
-        "ask what you can do for your country."
-    ),
-}
-with kh.build_heartbeat("dump_reference"):
-    run([
-        sys.executable, "-u", str(REPO / "tools" / "dump_reference.py"),
-        "--backend", "qwen3-tts", "--model-dir", REF_MODEL,
-        "--audio", str(REPO / "samples" / "jfk.wav"),
-        "--output", str(REF_GGUF),
-    ], env=ref_env, timeout=3600)
-if not REF_GGUF.exists() or REF_GGUF.stat().st_size == 0:
-    raise SystemExit("reference dumper produced no GGUF")
-import hashlib
-ref_sha256 = hashlib.sha256(REF_GGUF.read_bytes()).hexdigest()
-kh.step("reference_dump_done", bytes=REF_GGUF.stat().st_size, sha256=ref_sha256)
-from huggingface_hub import HfApi
-HfApi(token=hf_token).upload_file(
-    path_or_fileobj=str(REF_GGUF), path_in_repo=REF_FIXTURE_PATH,
-    repo_id=REF_FIXTURE_REPO, repo_type="dataset",
-    commit_message=f"Add Qwen3-TTS diff reference ({sha[:8]})",
-)
-kh.step("reference_uploaded", repo=REF_FIXTURE_REPO, path=REF_FIXTURE_PATH,
-        sha256=ref_sha256)
 
 
 # ── Run TTS with O15=OFF and O15=ON ────────────────────────────────
