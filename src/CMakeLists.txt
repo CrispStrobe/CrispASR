@@ -3116,8 +3116,12 @@ if(CRISPASR_USE_ONNXRUNTIME)
         if(TARGET ${_ort_tgt})
             target_compile_definitions(${_ort_tgt} PRIVATE CRISPASR_USE_ONNXRUNTIME=1)
             target_include_directories(${_ort_tgt} PRIVATE ${ONNXRUNTIME_ROOT}/include)
-            target_link_directories(${_ort_tgt} PRIVATE ${ONNXRUNTIME_ROOT}/lib)
-            target_link_libraries(${_ort_tgt} PRIVATE onnxruntime)
+            # PUBLIC (nicht PRIVATE): crispasr-lib ist statisch — der finale
+            # Link (crispasr-server, CLI) braucht -L${ONNXRUNTIME_ROOT}/lib und
+            # -lonnxruntime ebenfalls, sonst „cannot find -lonnxruntime"
+            # (gefunden beim Stack-GPU-Test 2026-08-16).
+            target_link_directories(${_ort_tgt} PUBLIC ${ONNXRUNTIME_ROOT}/lib)
+            target_link_libraries(${_ort_tgt} PUBLIC onnxruntime)
         endif()
     endforeach()
 endif()
