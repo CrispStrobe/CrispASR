@@ -17,6 +17,8 @@
 #include "speaker_db.h"
 #include "whisper_params.h"
 
+#include <set>
+
 #include "core/spectral_diarize.h"
 
 #include <algorithm>
