@@ -115,6 +115,11 @@ option(CRISPASR_USE_SYSTEM_GGML "crispasr: use system-installed GGML library" OF
 option(CRISPASR_PORTABLE_CPU
        "crispasr: compile bundled ggml-cpu for generic x86-64 (no optional ISA)"
        OFF)
+option(CRISPASR_USE_ONNXRUNTIME
+       "crispasr: enable onnxruntime inference for pyannote-seg/TitaNet (model paths ending in .onnx); GPU via CUDA EP with CPU fallback"
+       OFF)
+set(ONNXRUNTIME_ROOT "" CACHE PATH
+       "crispasr: path to the onnxruntime C++ distribution (contains include/ and lib/); required when CRISPASR_USE_ONNXRUNTIME=ON")
 
 # sanitizers
 option(CRISPASR_SANITIZE_THREAD    "crispasr: enable thread sanitizer"    OFF)

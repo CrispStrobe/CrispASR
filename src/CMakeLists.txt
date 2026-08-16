@@ -267,6 +267,7 @@ else()
     target_compile_features(crispasr_c2pa_native PRIVATE cxx_std_17)
     set_target_properties(crispasr_c2pa_native PROPERTIES POSITION_INDEPENDENT_CODE ON)
     target_link_libraries(crispasr-lib PUBLIC crispasr_c2pa_native)
+
 endif()
 
 set(CRISPASR_LIB_CXX_STANDARD cxx_std_11)
@@ -3098,4 +3099,25 @@ if (BUILD_SHARED_LIBS)
             COMMENT "Copying $<TARGET_FILE:crispasr-lib> to whisper.dll alias"
         )
     endif()
+endif()
+
+# ── Optional onnxruntime backend for diarization models ──────────────────────
+# titanet.cpp / pyannote_seg.cpp are separate static targets (libtitanet.a,
+# libpyannote-seg.a), so the compile definition, ORT headers and the ORT link
+# must reach all three targets. Model files whose path ends in ".onnx" are
+# executed by onnxruntime (CUDA EP when the linked distribution provides it,
+# CPU otherwise) — see src/core/ort_session.h. Default OFF: the GGUF/ggml CPU
+# path remains the default and no onnxruntime dependency is introduced.
+if(CRISPASR_USE_ONNXRUNTIME)
+    if(NOT ONNXRUNTIME_ROOT)
+        message(FATAL_ERROR "CRISPASR_USE_ONNXRUNTIME=ON requires -DONNXRUNTIME_ROOT=<path to onnxruntime dist>")
+    endif()
+    foreach(_ort_tgt crispasr-lib titanet pyannote-seg)
+        if(TARGET ${_ort_tgt})
+            target_compile_definitions(${_ort_tgt} PRIVATE CRISPASR_USE_ONNXRUNTIME=1)
+            target_include_directories(${_ort_tgt} PRIVATE ${ONNXRUNTIME_ROOT}/include)
+            target_link_directories(${_ort_tgt} PRIVATE ${ONNXRUNTIME_ROOT}/lib)
+            target_link_libraries(${_ort_tgt} PRIVATE onnxruntime)
+        endif()
+    endforeach()
 endif()

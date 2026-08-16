@@ -6,6 +6,9 @@
 
 #include "pyannote_seg.h"
 #include "core/gguf_loader.h"
+#if defined(CRISPASR_USE_ONNXRUNTIME)
+#include "core/ort_session.h"
+#endif
 #include "core/crispasr_env.h"
 #include "core/powerset.h"
 
@@ -101,6 +104,9 @@ struct pyannote_model {
 struct pyannote_seg_context {
     pyannote_model model;
     int n_threads = 4;
+#if defined(CRISPASR_USE_ONNXRUNTIME)
+    Ort::Session* ort_session = nullptr; // onnxruntime path (path ends in ".onnx")
+#endif
 };
 
 // ===========================================================================
@@ -755,9 +761,66 @@ static void bilstm_forward(const float* input, int T, int C_in, const pyannote_l
 // Public API
 // ===========================================================================
 
+// ===========================================================================
+// onnxruntime path (CRISPASR_USE_ONNXRUNTIME) — model path ending in ".onnx".
+// The sherpa-onnx pyannote-segmentation-3-0 export takes raw 16 kHz mono PCM
+// as input ("x", [N, 1, T]) and returns per-frame log-softmax posteriors
+// ("y", [N, T_out, 7]) — the same contract as pyannote_seg_run().
+// ===========================================================================
+
+#if defined(CRISPASR_USE_ONNXRUNTIME)
+
+static struct pyannote_seg_context* pyannote_seg_init_ort(struct pyannote_seg_context* ctx, const char* model_path,
+                                                          int n_threads) {
+    const bool force_cpu = crispasr_env::get("CRISPASR_ORT_FORCE_CPU") != nullptr;
+    std::string provider;
+    try {
+        ctx->ort_session = new Ort::Session(
+            crispasr_ort::create_session(model_path, n_threads > 0 ? n_threads : 4, force_cpu, provider));
+    } catch (const Ort::Exception& e) {
+        fprintf(stderr, "pyannote_seg[ort]: failed to create session: %s\n", e.what());
+        delete ctx;
+        return nullptr;
+    }
+    fprintf(stderr, "pyannote_seg[ort]: %s (%s EP)\n", model_path, provider.c_str());
+    return ctx;
+}
+
+static float* pyannote_seg_run_ort(pyannote_seg_context* ctx, const float* samples, int n_samples, int* out_T) {
+    std::vector<int64_t> shape = {1, 1, n_samples};
+    Ort::MemoryInfo mem = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
+    Ort::Value in = Ort::Value::CreateTensor<float>(mem, const_cast<float*>(samples), (size_t)n_samples, shape.data(), 3);
+    const char* in_names[] = {"x"};
+    const char* out_names[] = {"y"};
+    Ort::RunOptions ro;
+    auto outs = ctx->ort_session->Run(ro, in_names, &in, 1, out_names, 1);
+    if (outs.size() != 1)
+        return nullptr;
+    auto oshape = outs[0].GetTensorTypeAndShapeInfo().GetShape();
+    if (oshape.size() != 3)
+        return nullptr;
+    const int T_out = (int)oshape[1];
+    if (T_out <= 0)
+        return nullptr;
+    float* result = (float*)malloc((size_t)T_out * 7 * sizeof(float));
+    if (!result)
+        return nullptr;
+    memcpy(result, outs[0].GetTensorData<float>(), (size_t)T_out * 7 * sizeof(float));
+    *out_T = T_out;
+    return result;
+}
+
+#endif // CRISPASR_USE_ONNXRUNTIME
+
 extern "C" struct pyannote_seg_context* pyannote_seg_init(const char* gguf_path, int n_threads) {
     auto* ctx = new pyannote_seg_context();
     ctx->n_threads = n_threads > 0 ? n_threads : 4;
+
+#if defined(CRISPASR_USE_ONNXRUNTIME)
+    if (crispasr_ort::is_onnx_path(gguf_path))
+        return pyannote_seg_init_ort(ctx, gguf_path, n_threads);
+#endif
+
     if (!pyannote_load(ctx->model, gguf_path)) {
         delete ctx;
         return nullptr;
@@ -770,6 +833,10 @@ extern "C" struct pyannote_seg_context* pyannote_seg_init(const char* gguf_path,
 extern "C" void pyannote_seg_free(struct pyannote_seg_context* ctx) {
     if (!ctx)
         return;
+#if defined(CRISPASR_USE_ONNXRUNTIME)
+    delete ctx->ort_session;
+    ctx->ort_session = nullptr;
+#endif
     if (ctx->model.buf)
         core_gguf::release_weight_buffer(ctx->model.buf);
     if (ctx->model.ctx)
@@ -783,6 +850,10 @@ extern "C" float* pyannote_seg_run(struct pyannote_seg_context* ctx, const float
     if (!ctx || !samples || n_samples <= 0)
         return nullptr;
     pyannote_seg_bench_stage _bs_total("run_total");
+#if defined(CRISPASR_USE_ONNXRUNTIME)
+    if (ctx->ort_session)
+        return pyannote_seg_run_ort(ctx, samples, n_samples, out_T);
+#endif
     if (!pyannote_use_legacy())
         return pyannote_seg_run_ggml(ctx, samples, n_samples, out_T);
     const auto& m = ctx->model;

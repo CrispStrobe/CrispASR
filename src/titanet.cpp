@@ -14,6 +14,9 @@
 
 #include "titanet.h"
 #include "core/gguf_loader.h"
+#if defined(CRISPASR_USE_ONNXRUNTIME)
+#include "core/ort_session.h"
+#endif
 #include "core/gpu_backend_pref.h" // crispasr_init_gpu_backend (#214)
 #include "core/crispasr_env.h"
 #include "ggml-alloc.h"
@@ -252,6 +255,10 @@ struct titanet_context {
 
     ggml_backend_t backend_cpu = nullptr; // ggml-path compute backend
     TitanetGgml g;
+
+#if defined(CRISPASR_USE_ONNXRUNTIME)
+    Ort::Session* ort_session = nullptr; // onnxruntime path (model_path ends in ".onnx")
+#endif
 };
 
 // ============================================================================
@@ -588,10 +595,130 @@ static bool titanet_embed_ggml(titanet_context* ctx, const float* mel, int T, fl
     return ok;
 }
 
+// ============================================================================
+// onnxruntime path (CRISPASR_USE_ONNXRUNTIME) — model_path ending in ".onnx"
+// ============================================================================
+
+#if defined(CRISPASR_USE_ONNXRUNTIME)
+
+// NeMo/librosa-style mel filterbank with slaney area normalization.
+// 80 triangular filters over [0, sr/2], matching AudioToMelSpectrogramPreprocessor.
+static std::vector<float> compute_mel_filterbank_slaney(int sr, int n_fft, int n_mels) {
+    const int n_bins = n_fft / 2 + 1;
+    std::vector<float> fb((size_t)n_mels * n_bins, 0.0f);
+    auto hz_to_mel = [](float f) { return 2595.0f * std::log10(1.0f + f / 700.0f); };
+    auto mel_to_hz = [](float m) { return 700.0f * (std::pow(10.0f, m / 2595.0f) - 1.0f); };
+    const float f_min = 0.0f, f_max = (float)sr / 2.0f;
+    const float m_min = hz_to_mel(f_min), m_max = hz_to_mel(f_max);
+    std::vector<float> mels(n_mels + 2);
+    for (int i = 0; i < n_mels + 2; i++)
+        mels[i] = m_min + (m_max - m_min) * (float)i / (float)(n_mels + 1);
+    for (int m = 0; m < n_mels; m++) {
+        const float f_l = mel_to_hz(mels[m]);
+        const float f_c = mel_to_hz(mels[m + 1]);
+        const float f_r = mel_to_hz(mels[m + 2]);
+        const float norm = (f_r - f_l) / 2.0f; // slaney: normalize by triangle area
+        for (int k = 0; k < n_bins; k++) {
+            const float f = (float)k * (float)sr / (float)n_fft;
+            float w = 0.0f;
+            if (f >= f_l && f <= f_c)
+                w = (f - f_l) / (f_c - f_l);
+            else if (f >= f_c && f <= f_r)
+                w = (f_r - f) / (f_r - f_c);
+            if (w > 0.0f)
+                fb[(size_t)m * n_bins + k] = w * 2.0f / norm;
+        }
+    }
+    return fb;
+}
+
+// Fill the model cache with TitaNet-Large constants and the embedded
+// preprocessor (periodic Hann + slaney mel), then open the ORT session.
+static struct titanet_context* titanet_init_ort(struct titanet_context* ctx, const char* model_path, int n_threads) {
+    auto& c = ctx->cache;
+    c.n_mels = 80;
+    c.n_fft = 512;
+    c.emb_dim = 192;
+    c.channels = 1024;
+    c.epilog_channels = 3072;
+    c.n_blocks = 5;
+    c.se_channels = 128;
+    c.block_repeats = {1, 3, 3, 3, 1};
+    c.block_kernels = {3, 7, 11, 15, 1};
+
+    // Periodic Hann window (400) — the GGUF path overrides the embedded
+    // symmetric window with periodic; keep identical preprocessing here.
+    c.hann_window.resize(400);
+    for (int i = 0; i < 400; i++)
+        c.hann_window[i] = 0.5f * (1.0f - std::cos(2.0f * (float)M_PI * (float)i / 400.0f));
+
+    c.mel_fb = compute_mel_filterbank_slaney(16000, c.n_fft, c.n_mels);
+
+    const bool force_cpu = crispasr_env::get("CRISPASR_ORT_FORCE_CPU") != nullptr;
+    std::string provider;
+    try {
+        ctx->ort_session =
+            new Ort::Session(crispasr_ort::create_session(model_path, n_threads > 0 ? n_threads : 4, force_cpu, provider));
+    } catch (const Ort::Exception& e) {
+        fprintf(stderr, "titanet[ort]: failed to create session: %s\n", e.what());
+        delete ctx;
+        return nullptr;
+    }
+    c.initialised = true;
+    fprintf(stderr, "titanet[ort]: %s (%s EP)\n", model_path, provider.c_str());
+    return ctx;
+}
+
+static int titanet_embed_ort(struct titanet_context* ctx, const float* mel, int T, int n_samples, float* out) {
+    auto& c = ctx->cache;
+    // Transpose (T, 80) → (1, 80, T), the NeMo ONNX input layout.
+    std::vector<float> x((size_t)c.n_mels * T);
+    for (int m = 0; m < c.n_mels; m++)
+        for (int t = 0; t < T; t++)
+            x[(size_t)m * T + t] = mel[(size_t)t * c.n_mels + m];
+
+    std::vector<int64_t> audio_shape = {1, c.n_mels, T};
+    std::vector<int64_t> len_shape = {1};
+    int64_t len_val = n_samples;
+    Ort::MemoryInfo mem = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
+    Ort::Value in_audio = Ort::Value::CreateTensor<float>(mem, x.data(), x.size(), audio_shape.data(), 3);
+    Ort::Value in_len = Ort::Value::CreateTensor<int64_t>(mem, &len_val, 1, len_shape.data(), 1);
+
+    const char* in_names[] = {"audio_signal", "length"};
+    const char* out_names[] = {"embs"};
+    Ort::RunOptions ro;
+    // Run() expects a contiguous array of Ort::Value — build one.
+    std::vector<Ort::Value> inputs;
+    inputs.push_back(std::move(in_audio));
+    inputs.push_back(std::move(in_len));
+    auto outs = ctx->ort_session->Run(ro, in_names, inputs.data(), 2, out_names, 1);
+    if (outs.size() != 1)
+        return 0;
+
+    const float* data = outs[0].GetTensorData<float>();
+    float norm = 0.0f;
+    for (int i = 0; i < c.emb_dim; i++) {
+        out[i] = data[i];
+        norm += out[i] * out[i];
+    }
+    norm = 1.0f / (std::sqrt(norm) + 1e-12f);
+    for (int i = 0; i < c.emb_dim; i++)
+        out[i] *= norm;
+    titanet_dump_emb(out, c.emb_dim);
+    return c.emb_dim;
+}
+
+#endif // CRISPASR_USE_ONNXRUNTIME
+
 extern "C" struct titanet_context* titanet_init(const char* model_path, int n_threads) {
     auto* ctx = new titanet_context();
     ctx->n_threads = n_threads > 0 ? n_threads : 4;
     auto& c = ctx->cache;
+
+#if defined(CRISPASR_USE_ONNXRUNTIME)
+    if (crispasr_ort::is_onnx_path(model_path))
+        return titanet_init_ort(ctx, model_path, n_threads);
+#endif
 
     // Phase 1: metadata
     gguf_context* gctx = core_gguf::open_metadata(model_path);
@@ -680,6 +807,10 @@ extern "C" struct titanet_context* titanet_init(const char* model_path, int n_th
 extern "C" void titanet_free(struct titanet_context* ctx) {
     if (!ctx)
         return;
+#if defined(CRISPASR_USE_ONNXRUNTIME)
+    delete ctx->ort_session;
+    ctx->ort_session = nullptr;
+#endif
     if (ctx->g.buf)
         ggml_backend_buffer_free(ctx->g.buf);
     if (ctx->g.ctx)
@@ -951,6 +1082,12 @@ extern "C" int titanet_embed(struct titanet_context* ctx, const float* pcm_16k, 
             fprintf(stderr, "titanet: LOADED ref mel from %s (%d frames)\n", ref_path, T);
         }
     }
+
+#if defined(CRISPASR_USE_ONNXRUNTIME)
+    // onnxruntime path: the ONNX graph replaces the hand-rolled encoder.
+    if (ctx->ort_session)
+        return titanet_embed_ort(ctx, mel.data(), T, n_samples, out);
+#endif
 
     // ggml path: encoder + ASP as one CPU-backend graph, then shared L2 norm.
     if (ctx->backend_cpu && ctx->g.ctx) {
