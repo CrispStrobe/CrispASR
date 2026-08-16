@@ -577,6 +577,36 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_METAL=ON    # Apple Silicon
 cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_VULKAN=ON   # cross-vendor
 ```
 
+### Optional: onnxruntime for diarization models (`.onnx` paths)
+
+The pyannote segmentation and TitaNet speaker-embedding nets used by
+`--diarize-method pyannote` normally run on the CPU-only ggml runtime.
+When built with `CRISPASR_USE_ONNXRUNTIME=ON`, any model path ending in
+`.onnx` is executed by [onnxruntime](https://onnxruntime.ai/) instead —
+the CUDA execution provider is attached automatically when the linked
+distribution provides it (use `onnxruntime-gpu`), with a silent fallback
+to the CPU EP; `CRISPASR_ORT_FORCE_CPU=1` disables CUDA explicitly.
+The GGUF/ggml path is untouched.
+
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Release \
+  -DCRISPASR_USE_ONNXRUNTIME=ON \
+  -DONNXRUNTIME_ROOT=/path/to/onnxruntime-linux-x64-gpu-1.21.0
+cmake --build build -j$(nproc)
+```
+
+Use **onnxruntime ≥ 1.20**: 1.19.x requires `libcudnn.so.8`, while current
+CUDA 12 images ship cuDNN 9 — the mismatch makes the CUDA EP fail to attach
+and the models silently run on CPU. Known-good exports for this path:
+
+- `sherpa-onnx-pyannote-segmentation-3-0/model.onnx` (from the
+  [sherpa-onnx speaker-diarization release](https://github.com/k2-fsa/sherpa-onnx/releases/tag/speaker-diarization-models))
+- `nemo_en_titanet_large.onnx` (NVIDIA NeMo, exported via `torch.onnx.export`)
+
+`tools/test_ort_poc.cpp` (built as `build/bin/test-ort-poc`) compares the
+GGUF vs ONNX TitaNet embeddings on two speaker WAVs and runs the pyannote
+segmentation ONNX on raw 16 kHz PCM.
+
 **See [`docs/install.md`](docs/install.md)** for the full guide:
 all GPU backends (CUDA / Metal / Vulkan / MUSA / SYCL), Windows
 convenience scripts, ffmpeg ingestion, optional BLAS, glibc notes,
