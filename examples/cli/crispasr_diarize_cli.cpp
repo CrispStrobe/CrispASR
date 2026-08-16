@@ -1199,14 +1199,19 @@ void crispasr_remap_speakers_via_embeddings(std::vector<crispasr_segment>& segs,
     // speakers into one label; clamp min_speakers to at least the number of
     // distinct local tracks seen on the embeddable segments.
     int min_spk = 1;
+    std::set<int> local_tracks;
     for (size_t k = 0; k < embed_idx.size(); k++) {
         const std::string& sp = segs[embed_idx[k]].speaker;
         if (sp.rfind("(speaker ", 0) == 0) {
             const int n = std::atoi(sp.c_str() + 9);
             if (n >= 0)
-                min_spk = std::max(min_spk, n + 1);
+                local_tracks.insert(n);
         }
     }
+    // Distinct local tracks, not max+1: the track indices within one
+    // forward pass are contiguous labels, but only the COUNT of distinct
+    // tracks is a lower bound on the speaker count.
+    min_spk = std::max(min_spk, (int)local_tracks.size());
     if (params.diarize_cluster_threshold_explicit) {
         labels = crispasr_agglomerative_cluster(embeddings, n_emb, d, thr, max_spk);
     } else {
