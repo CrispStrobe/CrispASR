@@ -1197,15 +1197,32 @@ void crispasr_remap_speakers_via_embeddings(std::vector<crispasr_segment>& segs,
     // actually passes it: the threshold is meaningless to the spectral path,
     // so honouring its DEFAULT would just reinstate the bug.
     std::vector<int> labels;
+    // The pyannote local tracks already on the segments are a lower
+    // bound on the true speaker count. They come from a single forward pass
+    // (the #107 full-audio cache), so within one pass the track indices are
+    // globally consistent — distinct tracks are distinct speakers. The
+    // GMM/BIC estimator can collapse to k=1 on short inputs (few segments,
+    // near-duplicate embeddings), which would silently merge distinct
+    // speakers into one label; clamp min_speakers to at least the number of
+    // distinct local tracks seen on the embeddable segments.
+    int min_spk = 1;
+    for (size_t k = 0; k < embed_idx.size(); k++) {
+        const std::string& sp = segs[embed_idx[k]].speaker;
+        if (sp.rfind("(speaker ", 0) == 0) {
+            const int n = std::atoi(sp.c_str() + 9);
+            if (n >= 0)
+                min_spk = std::max(min_spk, n + 1);
+        }
+    }
     if (params.diarize_cluster_threshold_explicit) {
         labels = crispasr_agglomerative_cluster(embeddings, n_emb, d, thr, max_spk);
     } else {
         core_spectral::SpeakerEstimate est;
-        labels = core_spectral::cluster_speakers(embeddings.data(), n_emb, d, /*min_speakers=*/1, max_spk,
+        labels = core_spectral::cluster_speakers(embeddings.data(), n_emb, d, /*min_speakers=*/min_spk, max_spk,
                                                  /*num_speakers=*/params.diarize_num_speakers, &est);
         if (std::getenv("CRISPASR_DIARIZE_DEBUG"))
-            fprintf(stderr, "crispasr[diarize]: n_emb=%d dim=%d -> k=%d (%s, cos_p10=%.4f, pca=%d)\n", n_emb, d,
-                    est.best_k, est.reason, est.cosine_sim_p10, est.pca_dim);
+            fprintf(stderr, "crispasr[diarize]: n_emb=%d dim=%d -> k=%d (min_spk=%d, %s, cos_p10=%.4f, pca=%d)\n",
+                    n_emb, d, est.best_k, min_spk, est.reason, est.cosine_sim_p10, est.pca_dim);
     }
 
     // Rewrite segment speakers from clustering output. Segments that
