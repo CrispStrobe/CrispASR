@@ -297,8 +297,12 @@ bool apply_sherpa(const std::vector<float>& mono, int64_t slice_t0_cs, std::vect
     return true;
 }
 
-// Resolve the pyannote GGUF path from the CLI flags, auto-downloading
-// the canonical one from HF on first use if the user passed "auto".
+// Resolve the pyannote model path from the CLI flags, auto-downloading
+// the canonical GGUF from HF on first use if the user passed "auto".
+// Both GGUF (in-process ggml) and ONNX (onnxruntime, CUDA EP when the
+// linked distribution provides it — see src/core/ort_session.h) are
+// accepted; any other extension returns empty so the caller can fall
+// back to the sherpa subprocess.
 std::string resolve_pyannote_model(const whisper_params& params) {
     std::string mp = params.sherpa_segment_model;
     if (mp.empty() || mp == "auto") {
@@ -317,8 +321,11 @@ std::string resolve_pyannote_model(const whisper_params& params) {
             "https://huggingface.co/cstr/pyannote-v3-segmentation-GGUF/resolve/main/pyannote-seg-3.0.gguf", "mit",
             params.no_prints, "crispasr[diarize]", params.cache_dir, params.accept_license);
     }
-    if (mp.size() < 5 || mp.compare(mp.size() - 5, 5, ".gguf") != 0)
-        return {}; // not GGUF → caller can fall back to sherpa subprocess
+    if (mp.size() < 5)
+        return {};
+    const std::string ext = mp.substr(mp.size() - 5);
+    if (ext != ".gguf" && ext != ".onnx")
+        return {}; // not GGUF/ONNX → caller can fall back to sherpa subprocess
     return mp;
 }
 
