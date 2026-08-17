@@ -229,6 +229,14 @@ static void print_tada_fm_rows(const crispasr_diff::Ref& ref, const char* name, 
         double cos = 1.0;
         double max_abs = 0.0;
         double rms = 0.0;
+        // |mine| and |ref| per row. Cosine on a near-zero row is numerically
+        // meaningless — a silent frame can read cos 0.95 while both sides are
+        // essentially the same zero — and a 10-30x magnitude gap between the
+        // two sides means "same name, wrong data", i.e. a harness bug rather
+        // than a runtime one. Without these you cannot tell those apart, and
+        // the guide's voxtral-tts post-mortem is exactly that mistake.
+        double norm_a = 0.0;
+        double norm_b = 0.0;
     };
     std::vector<RowMetric> rows;
     rows.reserve(n_rows);
@@ -250,6 +258,8 @@ static void print_tada_fm_rows(const crispasr_diff::Ref& ref, const char* name, 
         m.cos = (na > 0.0 && nb > 0.0) ? dot / std::sqrt(na * nb) : 1.0;
         m.max_abs = ma;
         m.rms = std::sqrt(ss / (double)row_width);
+        m.norm_a = std::sqrt(na);
+        m.norm_b = std::sqrt(nb);
         rows.push_back(m);
     }
     std::sort(rows.begin(), rows.end(), [](const RowMetric& a, const RowMetric& b) {
@@ -259,7 +269,8 @@ static void print_tada_fm_rows(const crispasr_diff::Ref& ref, const char* name, 
     });
     printf("  [FM-ROWS %-14s] worst %zu/%zu calls:", name, std::min(max_rows, rows.size()), rows.size());
     for (size_t i = 0; i < rows.size() && i < max_rows; i++) {
-        printf(" #%zu cos=%.6f max=%.2e rms=%.2e", rows[i].row, rows[i].cos, rows[i].max_abs, rows[i].rms);
+        printf(" #%zu cos=%.6f max=%.2e rms=%.2e |mine|=%.3g |ref|=%.3g", rows[i].row, rows[i].cos,
+               rows[i].max_abs, rows[i].rms, rows[i].norm_a, rows[i].norm_b);
     }
     printf("\n");
 }
@@ -3582,6 +3593,13 @@ int main(int argc, char** argv) {
                 auto rep = ref.compare("audio_embeds", emb, (size_t)h * N);
                 print_row("audio_embeds", rep, COS_THRESHOLD);
                 record(rep);
+                // Aggregate cos hides WHICH frames are wrong: jfk shows
+                // cos_mean 0.9996 against cos_min 0.943, i.e. a handful of bad
+                // frames in an otherwise clean tensor. Whether those are the
+                // FIRST or the LAST frames separates a conv-stem padding bug
+                // from a tail bug in the 4-frame adapter merge, and the
+                // aggregate cannot tell you which.
+                print_tada_fm_rows(ref, "audio_embeds", std::vector<float>(emb, emb + (size_t)h * N), (size_t)h, 8);
                 free(emb);
             } else {
                 printf("[ERR ] audio_embeds           extract returned null\n");
