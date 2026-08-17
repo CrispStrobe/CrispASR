@@ -18,94 +18,65 @@ to main before you start**. Several agents run here at once; a claim that lands
 with the work is a claim that did nothing. Delete it when the work lands, or if
 it goes stale for more than a day.
 
-## CLAIMED 2026-08-17 — ark-asr prompt diverges from upstream (empty transcripts)
+## CLAIMED 2026-08-17 — ark-asr prompt diverges from upstream (DONE, ready to merge)
 
-Worktree: `.claude/worktrees/fix-wiring`.
+Worktree: `.claude/worktrees/fix-wiring`. Branch `fix/binding-wiring`.
 
 **Root cause.** Upstream `ArkAsrProcessor._build_templates_and_audios`
-(AutoArk-AI/ARK-ASR-3B, `processing_arkasr.py`) concatenates the user's content
-parts in order, so the documented ASR conversation renders as
+(AutoArk-AI/ARK-ASR-3B) concatenates content parts in order, so the documented
+ASR conversation renders as
 
     <|user|><|begin_of_audio|>…<|end_of_audio|>Please transcribe this audio.<|assistant|>
 
-`ark_asr.cpp` went straight from `<|end_of_audio|>` to `<|assistant|>` — no text
-instruction — i.e. every ark decode ran on a prompt the model never saw in
-training. The existing `ctx->ask` knob is not this: it inserts text *before*
-`<|begin_of_audio|>`, a different position, and is off by default.
+`ark_asr.cpp` went straight from `<|end_of_audio|>` to `<|assistant|>` — every
+ark decode ran on a prompt the model never saw in training. Off-distribution the
+step-1 argmax is `<im_end>`; the #253 hack bans it on step 1 (upstream never
+does), so it emitted the runner-up "." and stopped at step 2. "." trims to empty
+⇒ "no text produced". Marginal rather than broken, so any perturbation tipped
+it — which is why the symptom tracked the KV dtype and the audio length
+non-monotonically and looked q8_0-specific on one clip. It was not: the default
+f16 cache failed too.
 
-**Why it looked like a quantisation bug.** Off-distribution, the model's step-1
-argmax is `<im_end>` (stop immediately). Our #253 hack bans `<im_end>` on step 1
-— upstream never does — so it emits the runner-up `.` (id 13) and stops at step
-2. Output `.` trims to empty ⇒ "no text produced". Because the model is only
-*marginal*, not broken, any small numeric perturbation flips it, which is why
-the symptom tracked the KV cache dtype and audio length non-monotonically
-(7.5 s fails, 8.0 s works, 8.5 s fails, 9.0 s works) and looked q8_0-specific on
-one clip. It is not: the **default f16** cache fails too (1 token at 10/18/26 s
-on fleurs_60s) where q4_0 works.
+**Verified.** Six previously-empty cases now transcribe (1 → 17/20/21/21/43/43
+tokens); previously-working paths byte-identical; 1698 unit tests green.
+`first_logits` against a correctly-dumped reference: 0.9944 (jfk) / 0.9967
+(fleurs_en), up from 0.449 against the stale one. Upstream's own regenerated
+reference no longer emits the leading "." either — confirming the mechanism from
+the Python side.
 
-**Fix.** `ark_push_instruction()` appends the instruction at upstream's
-position, default on; `CRISPASR_ARKASR_INSTRUCTION` overrides the text, empty
-restores the old promptless path. Paired A/B, same binary, instruction the only
-variable: 7.5 s q8_0 1 → 17 tokens; 8.5 s q8_0 1 → 20 tokens.
+**Shipped alongside**
+- upstream's `bad_words_ids` (all specials but EOS, every step, greedy + beam)
+- upstream's `asr_block_token_id_from` (ids >= 151670 = bicodec/semantic space)
+- `ask` now reaches transcription at all (it was spliced only into
+  `ark_build_prefill_inputs`, which `ark_transcribe_window` never calls)
+- `kv_dtype_parse` accepts q4_1/q5_0/q5_1 instead of silently serving f16
+- `tests/test-kv-quant-roundtrip.cpp` — the quantised KV cache had NO coverage
+- ark reference dumper fixed twice (missing instruction; missing
+  `audios.to(dtype)`), plus per-frame diff rows with `|mine|`/`|ref|`
 
-**Also landed here.** `core/attention.h:kv_dtype_parse` accepted only
-f16/f32/q8_0/q4_0 and silently served F16 for anything else, so any narrowing
-table over q4_1/q5_0/q5_1/q6_k was measuring f16 and saying otherwise. Now
-parses q4_1/q5_0/q5_1 (block-32, both halves of the round-trip already exist on
-CPU and Metal) and says plainly when it falls back. Plus
-`tests/test-kv-quant-roundtrip.cpp` — there was *no* coverage of a quantised KV
-cache at all: cross-graph write→read and the prefill-then-append decode shape
-across six dtypes at ark's geometry.
+**Not bugs, established by measurement**
+- *German → English*: upstream translates that clip too, near word-for-word.
+- *`audio_embeds` cos 0.94*: bf16 REFERENCE rounding. f32 reference ⇒ 0.9985,
+  the normal F16 band; the worst frames MOVE between references, which a real
+  port bug would not do.
+- *`first_logits` 0.449*: the stale reference, not the fix.
 
-**#253 EOS suppression — measured, kept.** With the prompt right it is a
-no-op: on the four cases that used to come back empty, token counts are
-identical with `CRISPASR_ARKASR_NO_EOS_SUPPRESS` unset and set (17/17, 20/20,
-43/43, 43/43). The model no longer wants to stop on step 1, so the hack never
-fires. Left on: flipping the default would change nothing measurable on the
-fixed path while removing the safety net for a genuinely degenerate window.
+**Lesson worth keeping.** The diff harness could not catch the prompt bug
+because the reference shared the runtime's assumption — it reported cos 0.988 by
+comparing our mistake to itself, and fixing only the runtime made that number
+FALL. Ground truth had to come from outside both sides (upstream's own
+`apply_chat_template`). Same shape as the bf16 false failure. Both documented in
+`tools/reference_backends/arkasr.py`.
 
-**`ask` was dead for transcription.** `ark_asr_set_ask()` was spliced in only
-in `ark_build_prefill_inputs`, which `ark_transcribe_window` never calls — so a
-caller-supplied instruction reached the diff/logits harness and never a real
-transcript, and it sat before `<|begin_of_audio|>` rather than in upstream's
-text slot. Now routed through `ark_push_instruction` (precedence: `ask` >
-`CRISPASR_ARKASR_INSTRUCTION` > upstream default), so both paths build the same
-prompt.
+**Also closed this pass.** #366 kyutai language warning — keyed to the backend
+rather than the checkpoint. Now derived from LM layer count (16 = en+fr,
+48 = en); verified on BOTH models, since "the warning stopped appearing" looks
+identical whether the detection was fixed or simply broken.
 
-**30 s windowing — keep, it matches upstream.** Not symptom management after
-all: upstream hard-caps audio at 30 s (`preprocessor_config.json` has
-`chunk_length: 30`, `n_samples: 480000`, `nb_max_frames: 3000`, and the README
-passes `audio_max_length=30*16000`), and its token count is computed from
-`min(len, audio_max_length)`. Upstream simply *truncates* past 30 s; our 30 s
-windowing is a superset that transcribes the remainder instead of dropping it.
-The cap itself is correct and stays.
-
-**German transcribes as English — RESOLVED, it is upstream behaviour.** Settled
-by running upstream's own reference forward on the SAME clip bytes (Kaggle,
-`tools/dump_reference.py`, weights are no longer on the dev box):
-
-    upstream:  for the best prospects on hong kong they should leave the island
-               and go to the opposite bank of kowloon.
-    crispasr:  For the best prospects in hong kong, they should leave the island
-               and go to the opposite bank of kowloon.
-
-The reference model translates that clip too. Our port reproduces it almost
-word for word ("in" vs "on"), so this was never a CrispASR defect and the
-encoder / mel / adapter suspects are all cleared. It surfaced only because the
-prompt fix turned an empty transcript into a visible one. English control on the
-same run also matches ours exactly.
-
-**Also blocked now.** Upstream's `BlockTokenIdsFromLogitsProcessor` masks every
-id >= `asr_block_token_id_from` (default 151670): the text vocab ends at 151669
-(`<|system|>`) and everything above is bicodec/semantic-token space from the
-shared multi-task vocabulary. Our vocab is 151936, so 266 ids were emittable
-that upstream forbids. `CRISPASR_ARKASR_BLOCK_FROM_ID` overrides (negative =
-off).
-
-**Open.** Breadth: the fix is
-verified on English FLEURS plus de/ja/beam/windowed spot checks; a full
-language and long-clip sweep is worth pushing to Kaggle rather than
-serialising 40-minute batteries on the 16 GB box.
+Corrected reference archives live at
+`/Volumes/backups/ai/crispasr-gguf/arkasr-refs/` (jfk, fleurs_de, fleurs_en +
+f32 encoder refs). ARK-ASR-3B weights are local again at
+`/Volumes/backups/ai/ark-asr-3b`, so the dump→diff loop no longer needs Kaggle.
 
 ## CLAIMED 2026-08-13 — #350 parakeet non-JA long-form drops whole spans
 
