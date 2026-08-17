@@ -18,6 +18,50 @@ to main before you start**. Several agents run here at once; a claim that lands
 with the work is a claim that did nothing. Delete it when the work lands, or if
 it goes stale for more than a day.
 
+## CLAIMED 2026-08-17 — ark-asr prompt diverges from upstream (empty transcripts)
+
+Worktree: `.claude/worktrees/fix-wiring`.
+
+**Root cause.** Upstream `ArkAsrProcessor._build_templates_and_audios`
+(AutoArk-AI/ARK-ASR-3B, `processing_arkasr.py`) concatenates the user's content
+parts in order, so the documented ASR conversation renders as
+
+    <|user|><|begin_of_audio|>…<|end_of_audio|>Please transcribe this audio.<|assistant|>
+
+`ark_asr.cpp` went straight from `<|end_of_audio|>` to `<|assistant|>` — no text
+instruction — i.e. every ark decode ran on a prompt the model never saw in
+training. The existing `ctx->ask` knob is not this: it inserts text *before*
+`<|begin_of_audio|>`, a different position, and is off by default.
+
+**Why it looked like a quantisation bug.** Off-distribution, the model's step-1
+argmax is `<im_end>` (stop immediately). Our #253 hack bans `<im_end>` on step 1
+— upstream never does — so it emits the runner-up `.` (id 13) and stops at step
+2. Output `.` trims to empty ⇒ "no text produced". Because the model is only
+*marginal*, not broken, any small numeric perturbation flips it, which is why
+the symptom tracked the KV cache dtype and audio length non-monotonically
+(7.5 s fails, 8.0 s works, 8.5 s fails, 9.0 s works) and looked q8_0-specific on
+one clip. It is not: the **default f16** cache fails too (1 token at 10/18/26 s
+on fleurs_60s) where q4_0 works.
+
+**Fix.** `ark_push_instruction()` appends the instruction at upstream's
+position, default on; `CRISPASR_ARKASR_INSTRUCTION` overrides the text, empty
+restores the old promptless path. Paired A/B, same binary, instruction the only
+variable: 7.5 s q8_0 1 → 17 tokens; 8.5 s q8_0 1 → 20 tokens.
+
+**Also landed here.** `core/attention.h:kv_dtype_parse` accepted only
+f16/f32/q8_0/q4_0 and silently served F16 for anything else, so any narrowing
+table over q4_1/q5_0/q5_1/q6_k was measuring f16 and saying otherwise. Now
+parses q4_1/q5_0/q5_1 (block-32, both halves of the round-trip already exist on
+CPU and Metal) and says plainly when it falls back. Plus
+`tests/test-kv-quant-roundtrip.cpp` — there was *no* coverage of a quantised KV
+cache at all: cross-graph write→read and the prefill-then-append decode shape
+across six dtypes at ark's geometry.
+
+**Open.** Whether the #253 step-1 `<im_end>` suppression and the 30 s windowed
+fallback are still needed once the prompt is right — both are symptom management
+for this cause. Upstream also passes `bad_words_ids` banning every special token
+except EOS at *every* step; we do not.
+
 ## CLAIMED 2026-08-13 — #350 parakeet non-JA long-form drops whole spans
 
 Worktree: `.claude/worktrees/crisp-asr-issue-filing-0ca183`.
