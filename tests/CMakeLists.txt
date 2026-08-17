@@ -4113,6 +4113,25 @@ catch_discover_tests(test-core-cross-attn
     PROPERTIES LABELS "unit"
 )
 
+# ─── test-kv-quant-roundtrip — CRISPASR_KV_QUANT cross-graph round-trip ──────
+# Writes a quantised KV cache with set_rows in one graph and reads it back with
+# view+cast in a LATER graph, for every supported KV dtype. Nothing covered the
+# quantised cache before; q8_0 on ark-asr silently produced an empty transcript.
+add_executable(test-kv-quant-roundtrip test-kv-quant-roundtrip.cpp)
+target_include_directories(test-kv-quant-roundtrip PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/ggml/include
+    ${PROJECT_SOURCE_DIR}/include
+)
+target_link_libraries(test-kv-quant-roundtrip PRIVATE
+    Catch2::Catch2WithMain
+    ggml ggml-base crispasr_link_ggml_cpu
+)
+catch_discover_tests(test-kv-quant-roundtrip
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit"
+)
+
 # ─── test-core-adaln — core/adaln.h AdaLN-Zero modulation (ggml graph) ────────
 add_executable(test-core-adaln test-core-adaln.cpp)
 target_include_directories(test-core-adaln PRIVATE
