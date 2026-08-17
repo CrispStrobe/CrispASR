@@ -819,12 +819,31 @@ static void ark_build_banned_ids(ark_asr_context* ctx) {
     }
 }
 
-// Apply that ban to one logits row, in place.
+// Upstream additionally blocks every id at or above `asr_block_token_id_from`
+// (scripts/infer/ark_asr_transformers.py, default 151670) via
+// BlockTokenIdsFromLogitsProcessor. The text vocabulary ends at 151669
+// (<|system|>); everything above it is bicodec / semantic-token space that the
+// shared multi-task vocabulary carries but ASR must never emit. Our vocab is
+// 151936, so 266 ids were emittable that upstream forbids. Override or disable
+// with CRISPASR_ARKASR_BLOCK_FROM_ID (negative = off).
+static int ark_block_from_id() {
+    static const int s_from = []() {
+        const char* e = std::getenv("CRISPASR_ARKASR_BLOCK_FROM_ID");
+        return e ? atoi(e) : 151670;
+    }();
+    return s_from;
+}
+
+// Apply both bans to one logits row, in place.
 static void ark_mask_specials(const ark_asr_context* ctx, float* logits) {
     const int vocab = (int)ctx->hp.llm_vocab;
     for (int32_t id : ctx->banned_ids)
         if (id >= 0 && id < vocab)
             logits[id] = -INFINITY;
+    const int from = ark_block_from_id();
+    if (from >= 0)
+        for (int i = from; i < vocab; i++)
+            logits[i] = -INFINITY;
 }
 
 // Append the user's text instruction, which upstream places BETWEEN
@@ -850,16 +869,39 @@ static void ark_mask_specials(const ark_asr_context* ctx, float* logits) {
 // `ctx->ask` knob is NOT this: it inserts text BEFORE <|begin_of_audio|>, which
 // is a different position from upstream's, and it is off by default.
 //
-// CRISPASR_ARKASR_INSTRUCTION overrides the text (e.g. for a non-English
-// instruction); setting it empty restores the old promptless behaviour.
+// Precedence: ark_asr_set_ask() > CRISPASR_ARKASR_INSTRUCTION > upstream's
+// default. Setting any of them empty restores the old promptless behaviour.
+//
+// `ask` used to be spliced in before <|begin_of_audio|> and ONLY in
+// ark_build_prefill_inputs — ark_transcribe_window never looked at it — so the
+// caller-supplied instruction reached the diff/logits harness and never a real
+// transcript. Routing it here fixes both halves at once: it now applies to
+// transcription, and it lands in the slot upstream actually puts text in.
 static void ark_push_instruction(ark_asr_context* ctx, std::vector<int32_t>& ids) {
-    static const std::string s_instruction = []() {
-        const char* e = std::getenv("CRISPASR_ARKASR_INSTRUCTION");
-        return e ? std::string(e) : std::string("Please transcribe this audio.");
-    }();
-    if (s_instruction.empty())
+    // The env var is an explicit operator override, so it outranks `ask` —
+    // which the CLI derives automatically from the detected language and would
+    // otherwise always set, leaving the env knob unreachable in practice.
+    // Present-but-empty is a deliberate "no instruction at all".
+    static const bool s_env_set = std::getenv("CRISPASR_ARKASR_INSTRUCTION") != nullptr;
+    static const std::string s_env = s_env_set ? std::getenv("CRISPASR_ARKASR_INSTRUCTION") : std::string();
+    static const std::string s_default = "Please transcribe this audio.";
+
+    const std::string& instruction = s_env_set ? s_env : (!ctx->ask.empty() ? ctx->ask : s_default);
+    if (instruction.empty())
         return;
-    const std::vector<int32_t> tids = core_bpe::tokenize_simple(ctx->token_to_id, ctx->merge_rank, s_instruction);
+    const std::vector<int32_t> tids = core_bpe::tokenize_simple(ctx->token_to_id, ctx->merge_rank, instruction);
+    if (std::getenv("CRISPASR_ARKASR_DEBUG_GEN")) {
+        // tokenize_simple does NOT do GPT-2 regex pre-tokenization (its own
+        // docstring says so): it splits on whitespace only, so a trailing "."
+        // stays glued to the last word and can BPE-merge across a boundary the
+        // reference tokenizer would have split. Print what we actually feed the
+        // model so a non-canonical prompt is visible rather than inferred.
+        fprintf(stderr, "[ark-instr] \"%s\" -> %zu tokens:", instruction.c_str(), tids.size());
+        for (int32_t t : tids)
+            fprintf(stderr, " %d(%s)", t,
+                    (t >= 0 && (size_t)t < ctx->vocab.size()) ? ctx->vocab[(size_t)t].c_str() : "?");
+        fprintf(stderr, "\n");
+    }
     ids.insert(ids.end(), tids.begin(), tids.end());
 }
 
@@ -882,12 +924,9 @@ static bool ark_build_prefill_inputs(ark_asr_context* ctx, const float* pcm, int
     ids.clear();
     ids.reserve((size_t)N + 16);
     ids.push_back(ctx->id_user);
-    // EXPERIMENTAL: prepend a tokenised instruction (e.g. language steering)
-    // when set. Default (no ask) is promptless — the validated path.
-    if (!ctx->ask.empty()) {
-        std::vector<int32_t> tids = core_bpe::tokenize_simple(ctx->token_to_id, ctx->merge_rank, ctx->ask);
-        ids.insert(ids.end(), tids.begin(), tids.end());
-    }
+    // `ask` is no longer spliced in here: it goes through ark_push_instruction
+    // below, at the position upstream puts text in, so this path and
+    // ark_transcribe_window build the same prompt.
     ids.push_back(ctx->id_boa);
     const int audio_start = (int)ids.size();
     for (int i = 0; i < N; i++)
