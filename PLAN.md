@@ -80,18 +80,20 @@ passes `audio_max_length=30*16000`), and its token count is computed from
 windowing is a superset that transcribes the remainder instead of dropping it.
 The cap itself is correct and stays.
 
-**Open — German transcribes as English (separate, pre-existing).** `de/fleurs_10s`
-(17.9 s) returns an English *translation* of the German audio. Not caused by the
-prompt fix and not a regression: with the instruction off, that clip returned
-NOTHING at all, so this was hidden underneath the empty-transcript bug. Not
-steerable either — `"Transcribe the audio in German."` (correctly tokenised,
-`ĠGerman`=5938) yields the identical English text, and upstream deliberately
-uses the same English instruction for every language, so the instruction is not
-the lever. `de/fleurs_60s` DOES come out German, so the model can do it; it is
-clip- or length-dependent. Suspects, in order: mel/audio front-end, adapter, the
-encoder's partial-interleaved RoPE. Needs an upstream-vs-ours numerical diff on
-the same German clip, which is what `crispasr-diff` exists for (ark is not yet
-one of its backends).
+**German transcribes as English — RESOLVED, it is upstream behaviour.** Settled
+by running upstream's own reference forward on the SAME clip bytes (Kaggle,
+`tools/dump_reference.py`, weights are no longer on the dev box):
+
+    upstream:  for the best prospects on hong kong they should leave the island
+               and go to the opposite bank of kowloon.
+    crispasr:  For the best prospects in hong kong, they should leave the island
+               and go to the opposite bank of kowloon.
+
+The reference model translates that clip too. Our port reproduces it almost
+word for word ("in" vs "on"), so this was never a CrispASR defect and the
+encoder / mel / adapter suspects are all cleared. It surfaced only because the
+prompt fix turned an empty transcript into a visible one. English control on the
+same run also matches ours exactly.
 
 **Also blocked now.** Upstream's `BlockTokenIdsFromLogitsProcessor` masks every
 id >= `asr_block_token_id_from` (default 151670): the text vocab ends at 151669
