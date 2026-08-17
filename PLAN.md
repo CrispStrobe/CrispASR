@@ -57,10 +57,53 @@ CPU and Metal) and says plainly when it falls back. Plus
 cache at all: cross-graph write→read and the prefill-then-append decode shape
 across six dtypes at ark's geometry.
 
-**Open.** Whether the #253 step-1 `<im_end>` suppression and the 30 s windowed
-fallback are still needed once the prompt is right — both are symptom management
-for this cause. Upstream also passes `bad_words_ids` banning every special token
-except EOS at *every* step; we do not.
+**#253 EOS suppression — measured, kept.** With the prompt right it is a
+no-op: on the four cases that used to come back empty, token counts are
+identical with `CRISPASR_ARKASR_NO_EOS_SUPPRESS` unset and set (17/17, 20/20,
+43/43, 43/43). The model no longer wants to stop on step 1, so the hack never
+fires. Left on: flipping the default would change nothing measurable on the
+fixed path while removing the safety net for a genuinely degenerate window.
+
+**`ask` was dead for transcription.** `ark_asr_set_ask()` was spliced in only
+in `ark_build_prefill_inputs`, which `ark_transcribe_window` never calls — so a
+caller-supplied instruction reached the diff/logits harness and never a real
+transcript, and it sat before `<|begin_of_audio|>` rather than in upstream's
+text slot. Now routed through `ark_push_instruction` (precedence: `ask` >
+`CRISPASR_ARKASR_INSTRUCTION` > upstream default), so both paths build the same
+prompt.
+
+**30 s windowing — keep, it matches upstream.** Not symptom management after
+all: upstream hard-caps audio at 30 s (`preprocessor_config.json` has
+`chunk_length: 30`, `n_samples: 480000`, `nb_max_frames: 3000`, and the README
+passes `audio_max_length=30*16000`), and its token count is computed from
+`min(len, audio_max_length)`. Upstream simply *truncates* past 30 s; our 30 s
+windowing is a superset that transcribes the remainder instead of dropping it.
+The cap itself is correct and stays.
+
+**Open — German transcribes as English (separate, pre-existing).** `de/fleurs_10s`
+(17.9 s) returns an English *translation* of the German audio. Not caused by the
+prompt fix and not a regression: with the instruction off, that clip returned
+NOTHING at all, so this was hidden underneath the empty-transcript bug. Not
+steerable either — `"Transcribe the audio in German."` (correctly tokenised,
+`ĠGerman`=5938) yields the identical English text, and upstream deliberately
+uses the same English instruction for every language, so the instruction is not
+the lever. `de/fleurs_60s` DOES come out German, so the model can do it; it is
+clip- or length-dependent. Suspects, in order: mel/audio front-end, adapter, the
+encoder's partial-interleaved RoPE. Needs an upstream-vs-ours numerical diff on
+the same German clip, which is what `crispasr-diff` exists for (ark is not yet
+one of its backends).
+
+**Also blocked now.** Upstream's `BlockTokenIdsFromLogitsProcessor` masks every
+id >= `asr_block_token_id_from` (default 151670): the text vocab ends at 151669
+(`<|system|>`) and everything above is bicodec/semantic-token space from the
+shared multi-task vocabulary. Our vocab is 151936, so 266 ids were emittable
+that upstream forbids. `CRISPASR_ARKASR_BLOCK_FROM_ID` overrides (negative =
+off).
+
+**Open.** Breadth: the fix is
+verified on English FLEURS plus de/ja/beam/windowed spot checks; a full
+language and long-clip sweep is worth pushing to Kaggle rather than
+serialising 40-minute batteries on the 16 GB box.
 
 ## CLAIMED 2026-08-13 — #350 parakeet non-JA long-form drops whole spans
 
