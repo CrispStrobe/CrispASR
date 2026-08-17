@@ -269,8 +269,8 @@ static void print_tada_fm_rows(const crispasr_diff::Ref& ref, const char* name, 
     });
     printf("  [FM-ROWS %-14s] worst %zu/%zu calls:", name, std::min(max_rows, rows.size()), rows.size());
     for (size_t i = 0; i < rows.size() && i < max_rows; i++) {
-        printf(" #%zu cos=%.6f max=%.2e rms=%.2e |mine|=%.3g |ref|=%.3g", rows[i].row, rows[i].cos,
-               rows[i].max_abs, rows[i].rms, rows[i].norm_a, rows[i].norm_b);
+        printf(" #%zu cos=%.6f max=%.2e rms=%.2e |mine|=%.3g |ref|=%.3g", rows[i].row, rows[i].cos, rows[i].max_abs,
+               rows[i].rms, rows[i].norm_a, rows[i].norm_b);
     }
     printf("\n");
 }
