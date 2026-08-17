@@ -46,6 +46,21 @@ DEFAULT_STAGES = [
 ]
 
 
+def _cast_audios(batch, dtype):
+    """Match the model dtype for the audio tensor.
+
+    apply_chat_template returns `audios` as float32 while the model is loaded
+    bf16, and the encoder's conv1 then raises
+    "Input type (float) and bias type (c10::BFloat16) should be the same".
+    Upstream's own example does this cast explicitly:
+        if "audios" in inputs: inputs["audios"] = inputs["audios"].to(dtype=torch_dtype)
+    """
+    a = batch.get("audios")
+    if a is not None and hasattr(a, "to"):
+        batch["audios"] = a.to(dtype=dtype)
+    return batch
+
+
 def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str], max_new_tokens: int) -> Dict[str, np.ndarray]:
     import os
 
@@ -101,6 +116,7 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str], max_new_tokens
                                           {"type": "text", "text": ASR_INSTRUCTION}]}],
             add_generation_prompt=True, tokenize=True, return_tensors="pt",
         )
+        batch = _cast_audios(batch, dtype)
         input_ids = batch["input_ids"]
         if "llm_input_ids" in stages:
             out["llm_input_ids"] = input_ids[0].detach().cpu().numpy().astype(np.float32)
@@ -122,6 +138,7 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str], max_new_tokens
                                           {"type": "text", "text": ASR_INSTRUCTION}]}],
             add_generation_prompt=True, tokenize=True, return_tensors="pt",
         )
+        batch = _cast_audios(batch, dtype)
         with torch.no_grad():
             gen = model.generate(
                 input_ids=batch["input_ids"],
