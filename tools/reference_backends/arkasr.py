@@ -19,6 +19,25 @@ from typing import Dict, Set
 
 import numpy as np
 
+# Upstream puts the user's text instruction BETWEEN <|end_of_audio|> and
+# <|assistant|>: both the model card's example and the real batch inference
+# script (AutoArk/open-audio-opd, scripts/infer/ark_asr_transformers.py) send
+#   content=[{"type":"audio",...},{"type":"text","text":"Please transcribe this audio."}]
+# and ArkAsrProcessor concatenates content parts in order.
+#
+# This dumper used to pass the audio part ALONE, so the reference archive
+# encoded a prompt the model was never trained on — and because ark_asr.cpp
+# omitted the instruction too, the diff compared two copies of the same wrong
+# assumption and reported first_logits cos=0.988. Fixing only the runtime made
+# that number DROP to 0.449, which looks like a regression and is the opposite:
+# the runtime moved to upstream's prompt while the reference stayed behind.
+# A reference that shares the runtime's assumption cannot falsify it.
+#
+# Verified against upstream's own apply_chat_template on a 17.9 s clip: 234
+# prompt tokens = <|user|> <|begin_of_audio|> 224x<|audio|> <|end_of_audio|>
+# Please| trans|cribe| this| audio|. <|assistant|>
+ASR_INSTRUCTION = "Please transcribe this audio."
+
 DEFAULT_STAGES = [
     "mel_spectrogram",
     "audio_embeds",
@@ -78,7 +97,8 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str], max_new_tokens
     # ---- prompt build + first-token logits ----
     if {"first_logits", "llm_input_ids"} & stages:
         batch = processor.apply_chat_template(
-            [{"role": "user", "content": [{"type": "audio", "array": audio}]}],
+            [{"role": "user", "content": [{"type": "audio", "array": audio},
+                                          {"type": "text", "text": ASR_INSTRUCTION}]}],
             add_generation_prompt=True, tokenize=True, return_tensors="pt",
         )
         input_ids = batch["input_ids"]
@@ -98,7 +118,8 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str], max_new_tokens
     # ---- end-to-end greedy transcript ----
     if "generated_text" in stages:
         batch = processor.apply_chat_template(
-            [{"role": "user", "content": [{"type": "audio", "array": audio}]}],
+            [{"role": "user", "content": [{"type": "audio", "array": audio},
+                                          {"type": "text", "text": ASR_INSTRUCTION}]}],
             add_generation_prompt=True, tokenize=True, return_tensors="pt",
         )
         with torch.no_grad():
