@@ -76,7 +76,31 @@ inline ggml_type kv_dtype_parse(const char* s, const char* backend_tag, const ch
         return GGML_TYPE_Q8_0;
     if (std::strcmp(s, "q4_0") == 0 || std::strcmp(s, "Q4_0") == 0)
         return GGML_TYPE_Q4_0;
-    std::fprintf(stderr, "%s: %s='%s' unrecognised, defaulting to f16\n", backend_tag, env_name, s);
+    // q4_1 / q5_0 / q5_1 are block-32 like q4_0 and q8_0, and every backend
+    // that matters implements both halves of the cache round-trip for them:
+    // `ggml_set_rows` F32->X (CPU via from_float, Metal via kernel_set_rows_q32)
+    // and `ggml_cpy` X->F32 for the dequant-on-read. Accepting them is not a
+    // new code path, only a wider parse.
+    //
+    // They used to fall through to the warning below and be silently served as
+    // F16. That is worse than it sounds: it makes a narrowing table LIE. An
+    // ark-asr empty-transcript hunt was narrowed as "q4_1/q5_0/q5_1 all fine,
+    // only q8_0 empty", which reads like a q8_0-specific defect — but those
+    // three arms were never quantised at all, so the only real comparison was
+    // q4_0 against q8_0. (The true cause was neither: the ark prompt was
+    // missing upstream's instruction text. See PLAN.md.) A knob that quietly
+    // does something else turns a measurement into a guess.
+    if (std::strcmp(s, "q4_1") == 0 || std::strcmp(s, "Q4_1") == 0)
+        return GGML_TYPE_Q4_1;
+    if (std::strcmp(s, "q5_0") == 0 || std::strcmp(s, "Q5_0") == 0)
+        return GGML_TYPE_Q5_0;
+    if (std::strcmp(s, "q5_1") == 0 || std::strcmp(s, "Q5_1") == 0)
+        return GGML_TYPE_Q5_1;
+    // Still reachable for k-quants (q4_k, q6_k, …): their 256-element blocks
+    // cannot tile a head_dim-wide row on the usual 64/80/128 head dims, and
+    // ggml has no set_rows path for them. Falling back to F16 is right; saying
+    // so is the point.
+    std::fprintf(stderr, "%s: %s='%s' is not a supported KV cache type, using f16 instead\n", backend_tag, env_name, s);
     return GGML_TYPE_F16;
 }
 
