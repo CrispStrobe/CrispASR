@@ -76,8 +76,24 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str], max_new_tokens
     needs_model = bool(stages & {"audio_embeds", "first_logits", "llm_input_ids", "generated_text"})
 
     # Default to bfloat16: a float32 3B forward needs ~12 GB RAM and OOM-crashes
-    # a 16 GB box. bf16 (~6 GB weights) keeps the cosine gate valid (>0.99 vs the
-    # F16 ggml port). Override with ARKASR_REF_DTYPE=float32 on a big machine.
+    # a 16 GB box. bf16 (~6 GB weights) is fine for a >0.99 gate.
+    #
+    # ⚠ bf16 CANNOT support the harness's 0.999 threshold on audio_embeds, and
+    # will manufacture a failure that looks like an encoder bug. Measured on
+    # fleurs_en, same runtime, only the reference dtype changed:
+    #
+    #     bf16 reference   audio_embeds cos_min 0.9679  rms 3.6e-2   [FAIL]
+    #     f32  reference   audio_embeds cos_min 0.9985  rms 5.6e-3   [~PASS]
+    #
+    # bf16 has ~8 mantissa bits vs F16's 10, so for |x|~40 activations the
+    # REFERENCE is the less precise side and 32 encoder layers accumulate it.
+    # The giveaway is that the worst frames MOVE between the two references
+    # (#127/#119/#2 vs #131/#117/#3) — a real port bug would hit the same frames
+    # regardless of reference precision. 0.9985 is the normal F16-vs-F32 band.
+    #
+    # So: use the bf16 default for prompt/logit work, but dump with
+    # ARKASR_REF_DTYPE=float32 on a big machine before believing any
+    # encoder-stage failure.
     dtype_name = os.environ.get("ARKASR_REF_DTYPE", "bfloat16")
     dtype = getattr(torch, dtype_name)
     processor = AutoProcessor.from_pretrained(str(model_dir), trust_remote_code=True)
