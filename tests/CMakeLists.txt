@@ -4113,6 +4113,22 @@ catch_discover_tests(test-core-cross-attn
     PROPERTIES LABELS "unit"
 )
 
+# ─── test-core-diarize-tracks — speaker floor from pyannote local tracks ─────
+# #368: GMM/BIC collapses to k=1 on short inputs and merges speakers. The floor
+# comes from distinct local-track ids — distinct, NOT max+1, which would force a
+# split on sparse ids. Those two agree on dense input, so the sparse case is the
+# only one that can tell them apart.
+add_executable(test-core-diarize-tracks test-core-diarize-tracks.cpp)
+target_include_directories(test-core-diarize-tracks PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/include
+)
+target_link_libraries(test-core-diarize-tracks PRIVATE Catch2::Catch2WithMain)
+catch_discover_tests(test-core-diarize-tracks
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit"
+)
+
 # ─── test-core-utf8 — core/utf8.h codepoint counting ─────────────────────────
 # A byte count is not a character count outside ASCII, and the two were being
 # mixed: f5-tts multiplied a chars/sec rate by strlen() of the target, so
