@@ -19,6 +19,7 @@
 
 #include <set>
 
+#include "core/diarize_tracks.h"
 #include "core/spectral_diarize.h"
 
 #include <algorithm>
@@ -1200,20 +1201,16 @@ void crispasr_remap_speakers_via_embeddings(std::vector<crispasr_segment>& segs,
     // near-duplicate embeddings), which would silently merge distinct
     // speakers into one label; clamp min_speakers to at least the number of
     // distinct local tracks seen on the embeddable segments.
-    int min_spk = 1;
-    std::set<int> local_tracks;
-    for (size_t k = 0; k < embed_idx.size(); k++) {
-        const std::string& sp = segs[embed_idx[k]].speaker;
-        if (sp.rfind("(speaker ", 0) == 0) {
-            const int n = std::atoi(sp.c_str() + 9);
-            if (n >= 0)
-                local_tracks.insert(n);
-        }
-    }
-    // Distinct local tracks, not max+1: the track indices within one
-    // forward pass are contiguous labels, but only the COUNT of distinct
-    // tracks is a lower bound on the speaker count.
-    min_spk = std::max(min_spk, (int)local_tracks.size());
+    // Distinct local tracks, not max+1 — sparse ids (only tracks 1 and 2 active)
+    // would over-estimate and force a split that does not exist. The rule lives
+    // in core/diarize_tracks.h with tests: the two implementations agree on every
+    // DENSE input, so only the sparse case can tell them apart, and that is not
+    // something to leave to an inline expression.
+    std::vector<std::string> track_labels;
+    track_labels.reserve(embed_idx.size());
+    for (size_t k = 0; k < embed_idx.size(); k++)
+        track_labels.push_back(segs[embed_idx[k]].speaker);
+    const int min_spk = core_diarize_tracks::min_speakers_from_labels(track_labels);
     if (params.diarize_cluster_threshold_explicit) {
         labels = crispasr_agglomerative_cluster(embeddings, n_emb, d, thr, max_spk);
     } else {
