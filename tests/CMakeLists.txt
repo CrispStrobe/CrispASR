@@ -4113,6 +4113,22 @@ catch_discover_tests(test-core-cross-attn
     PROPERTIES LABELS "unit"
 )
 
+# ─── test-core-utf8 — core/utf8.h codepoint counting ─────────────────────────
+# A byte count is not a character count outside ASCII, and the two were being
+# mixed: f5-tts multiplied a chars/sec rate by strlen() of the target, so
+# Devanagari came out ~3x too long. ASCII fixtures cannot catch that, which is
+# why these cases are deliberately non-ASCII.
+add_executable(test-core-utf8 test-core-utf8.cpp)
+target_include_directories(test-core-utf8 PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/include
+)
+target_link_libraries(test-core-utf8 PRIVATE Catch2::Catch2WithMain)
+catch_discover_tests(test-core-utf8
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit"
+)
+
 # ─── test-kv-quant-roundtrip — CRISPASR_KV_QUANT cross-graph round-trip ──────
 # Writes a quantised KV cache with set_rows in one graph and reads it back with
 # view+cast in a LATER graph, for every supported KV dtype. Nothing covered the
