@@ -10,6 +10,7 @@
 #include "crispasr_backend_utils.h"
 #include "crispasr_model_mgr_cli.h"
 #include "crispasr_model_registry.h"
+#include "core/tts_voice_policy.h"
 #include "core/tts_ref_cache.h"
 #include "crispasr_tts_ref_text.h"
 #include "whisper_params.h"
@@ -159,12 +160,16 @@ public:
     // "auto" mean "use the built-in reference" (kept as-is); an empty voice
     // also keeps the current reference.
     void prepare_voice(const whisper_params& p) {
-        if (p.tts_voice == last_voice_)
+        // Decision lives in core/tts_voice_policy.h with tests: dedupe an
+        // identical repeat, treat ""/default/auto as the built-in reference, and
+        // apply anything else. Exact-match sentinels on purpose — a file really
+        // can be called Default.wav.
+        const auto action = core_tts_voice::decide(last_voice_, p.tts_voice);
+        if (action == core_tts_voice::Action::Unchanged)
             return;
         last_voice_ = p.tts_voice;
-        const bool voice_is_sentinel = p.tts_voice == "default" || p.tts_voice == "auto";
-        if (p.tts_voice.empty() || voice_is_sentinel)
-            return;
+        if (action == core_tts_voice::Action::Builtin)
+            return; // keep f5's built-in reference
 
         int wav_sr = 0;
         auto ref_pcm = read_wav_mono(p.tts_voice, &wav_sr);
