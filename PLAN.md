@@ -7,6 +7,42 @@ Review PR #352 end to end, validate that its long-form routing and gap repair
 do not regress any language path, add targeted unit/live coverage where needed,
 and merge or improve the change after local/SSD validation.
 
+## OPEN 2026-08-18 — stb_vorbis heap overflow on untrusted audio (security)
+
+Found incidentally by `linux-fuzz-smoke` on PR #371, which does not touch that
+code — fuzzing is stochastic and it happened to surface there. NOT that PR's
+fault, and it reproduces from the audio fuzzer, not from anything in the diff.
+
+    ==6684==ERROR: AddressSanitizer: heap-buffer-overflow
+    WRITE of size 13174835200 at 0x7f29bad7d000
+      #0 memset
+      #1 start_decoder(stb_vorbis*)        examples/stb_vorbis.c:3683
+      #2 stb_vorbis_open_memory            examples/stb_vorbis.c:5141
+      #3 stb_vorbis_decode_memory          examples/stb_vorbis.c:5419
+      #4 crispasr_webm_decode(...)         src/crispasr_audio.cpp:1405
+      #5 crispasr_audio_load               src/crispasr_audio.cpp:2801
+      #6 LLVMFuzzerTestOneInput            tests/fuzz/fuzz_audio_load.cpp:40
+
+    0x7f29bad7d000 is located 0 bytes after a 289933312-byte region
+    allocated by setup_malloc(stb_vorbis*, int)  examples/stb_vorbis.c:960
+
+A 13 GB `memset` past a 289 MB allocation: the size computation in
+`start_decoder` overflows or is not validated against the allocation
+`setup_malloc` actually made. Reachable through `crispasr_audio_load`, i.e. on
+ANY caller-supplied audio file — the CLI, the HTTP server's upload path, and
+every binding. That makes it a memory-safety issue on untrusted input, not just
+a fuzz curiosity.
+
+Severity note, honestly: a 13 GB write will fault almost immediately in
+practice, so the realistic outcome is a crash (DoS) rather than exploitable
+corruption. Worth fixing regardless, and worth checking whether a smaller,
+more controllable overflow is reachable from the same path.
+
+Next steps: reproduce locally with a fuzz build
+(`-DCRISPASR_FUZZ=ON -DCRISPASR_SANITIZE_ADDRESS=ON`), minimise the input, then
+decide between bounds-checking `start_decoder` and pulling a newer stb_vorbis.
+Check whether upstream stb has already fixed it before patching a vendored copy.
+
 ## Start here
 
 Live work only. Completed threads move to `HISTORY.md`; technical deep-dives to
