@@ -4113,6 +4113,21 @@ catch_discover_tests(test-core-cross-attn
     PROPERTIES LABELS "unit"
 )
 
+# ─── test-core-tts-voice-policy — per-request voice decisions (#371) ─────────
+# The server reuses one backend per session and passes voice= per request; a
+# backend that reads tts_voice only at init() serves the startup voice forever.
+# Pins apply/dedupe/builtin, and that a FAILED load must not dedupe its retry.
+add_executable(test-core-tts-voice-policy test-core-tts-voice-policy.cpp)
+target_include_directories(test-core-tts-voice-policy PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/include
+)
+target_link_libraries(test-core-tts-voice-policy PRIVATE Catch2::Catch2WithMain)
+catch_discover_tests(test-core-tts-voice-policy
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit"
+)
+
 # ─── test-core-diarize-tracks — speaker floor from pyannote local tracks ─────
 # #368: GMM/BIC collapses to k=1 on short inputs and merges speakers. The floor
 # comes from distinct local-track ids — distinct, NOT max+1, which would force a
