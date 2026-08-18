@@ -6,6 +6,50 @@ technical deep-dives are in `LEARNINGS.md`.
 
 ---
 
+## ark-asr empty transcripts, and a diff harness that could not see it — merged 2026-08-18
+
+`ark_asr.cpp` built the prompt as `<|user|><|begin_of_audio|>…<|end_of_audio|><|assistant|>`,
+omitting the text instruction upstream's `ArkAsrProcessor` always sends. Every ark
+decode therefore ran on a prompt the model was never trained on. Off-distribution
+the step-1 argmax is `<im_end>`; the #253 hack bans that on step 1 (upstream never
+does), so it emitted the runner-up "." and stopped at step 2, and "." trims to
+empty — "no text produced for N s of non-silent audio". Because the model was
+merely marginal rather than broken, any perturbation tipped it, so the symptom
+tracked the KV cache dtype and the audio length non-monotonically and looked
+q8_0-specific on one clip. It was not: the default f16 cache failed too.
+
+Six previously-empty cases now transcribe (1 → 17/20/21/21/43/43 tokens);
+previously-working paths are byte-identical. Also landed upstream's
+`bad_words_ids`, its `asr_block_token_id_from` (ids ≥ 151670 were emittable and
+are never valid ASR output), and `ark_asr_set_ask()` reaching transcription at
+all — it had been spliced only into a function the transcribe path never calls,
+so the CLI's language steering had never once run.
+
+The harness that should have caught it could not. `tools/reference_backends/arkasr.py`
+built the same promptless prompt, so the reference and the runtime shared one wrong
+assumption and `first_logits` reported cos 0.988 by comparing our mistake against
+itself. Fixing only the runtime made that number FALL to 0.449, which reads as a
+regression and is the exact opposite. With a correctly-dumped reference it is
+0.9944 (jfk) / 0.9967 (fleurs_en). The dumper was wrong in four independent ways
+in total: missing instruction, missing `audios.to(dtype)` (so nothing could be
+dumped at the default bf16), no `gguf` dependency to write an archive, and a bf16
+default that manufactures a false `audio_embeds` failure.
+
+Three things that looked like bugs and were not, each closed by measurement:
+German transcribing as English (upstream translates that clip too, near
+word-for-word, confirmed by running its own forward pass on the same bytes);
+`audio_embeds` cos 0.94 (bf16 reference rounding — f32 gives 0.9985, and the
+worst frames MOVE between references, which a real port bug would not do);
+`first_logits` 0.449 (the stale reference).
+
+Alongside: `kv_dtype_parse` accepted only f16/f32/q8_0/q4_0 and silently served
+F16 for everything else, so any narrowing table over q4_1/q5_0/q5_1 was measuring
+f16 while saying otherwise; `tests/test-kv-quant-roundtrip.cpp` gives the
+quantised KV cache its first coverage. #366 (kyutai) keyed its language warning to
+the backend rather than the loaded checkpoint — now derived from LM layer count,
+verified on BOTH models since "the warning stopped appearing" looks identical
+whether the detection was fixed or simply broken.
+
 ## #355-#360 community issue sweep — 2026-08-16
 
 Five open issues worked end to end. #360 (`f57b65a2`): the TTS speech-token
