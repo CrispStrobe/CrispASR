@@ -93,6 +93,8 @@ _D = "Process, triage & documentation discipline"
 
 # Heading-prefix -> topic, for the ones the keyword rules misfile.
 OVERRIDES = {
+    "One red job hides every job behind it": _D,
+    "A reference that shares the runtime's assumption": _P,
     "A positional arg landing on the WRONG parameter": _D,
     "Two writers on one output field": _M,
     "A feature has ~8 front-ends": _M,

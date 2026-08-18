@@ -54,66 +54,6 @@ to main before you start**. Several agents run here at once; a claim that lands
 with the work is a claim that did nothing. Delete it when the work lands, or if
 it goes stale for more than a day.
 
-## CLAIMED 2026-08-17 — ark-asr prompt diverges from upstream (DONE, ready to merge)
-
-Worktree: `.claude/worktrees/fix-wiring`. Branch `fix/binding-wiring`.
-
-**Root cause.** Upstream `ArkAsrProcessor._build_templates_and_audios`
-(AutoArk-AI/ARK-ASR-3B) concatenates content parts in order, so the documented
-ASR conversation renders as
-
-    <|user|><|begin_of_audio|>…<|end_of_audio|>Please transcribe this audio.<|assistant|>
-
-`ark_asr.cpp` went straight from `<|end_of_audio|>` to `<|assistant|>` — every
-ark decode ran on a prompt the model never saw in training. Off-distribution the
-step-1 argmax is `<im_end>`; the #253 hack bans it on step 1 (upstream never
-does), so it emitted the runner-up "." and stopped at step 2. "." trims to empty
-⇒ "no text produced". Marginal rather than broken, so any perturbation tipped
-it — which is why the symptom tracked the KV dtype and the audio length
-non-monotonically and looked q8_0-specific on one clip. It was not: the default
-f16 cache failed too.
-
-**Verified.** Six previously-empty cases now transcribe (1 → 17/20/21/21/43/43
-tokens); previously-working paths byte-identical; 1698 unit tests green.
-`first_logits` against a correctly-dumped reference: 0.9944 (jfk) / 0.9967
-(fleurs_en), up from 0.449 against the stale one. Upstream's own regenerated
-reference no longer emits the leading "." either — confirming the mechanism from
-the Python side.
-
-**Shipped alongside**
-- upstream's `bad_words_ids` (all specials but EOS, every step, greedy + beam)
-- upstream's `asr_block_token_id_from` (ids >= 151670 = bicodec/semantic space)
-- `ask` now reaches transcription at all (it was spliced only into
-  `ark_build_prefill_inputs`, which `ark_transcribe_window` never calls)
-- `kv_dtype_parse` accepts q4_1/q5_0/q5_1 instead of silently serving f16
-- `tests/test-kv-quant-roundtrip.cpp` — the quantised KV cache had NO coverage
-- ark reference dumper fixed twice (missing instruction; missing
-  `audios.to(dtype)`), plus per-frame diff rows with `|mine|`/`|ref|`
-
-**Not bugs, established by measurement**
-- *German → English*: upstream translates that clip too, near word-for-word.
-- *`audio_embeds` cos 0.94*: bf16 REFERENCE rounding. f32 reference ⇒ 0.9985,
-  the normal F16 band; the worst frames MOVE between references, which a real
-  port bug would not do.
-- *`first_logits` 0.449*: the stale reference, not the fix.
-
-**Lesson worth keeping.** The diff harness could not catch the prompt bug
-because the reference shared the runtime's assumption — it reported cos 0.988 by
-comparing our mistake to itself, and fixing only the runtime made that number
-FALL. Ground truth had to come from outside both sides (upstream's own
-`apply_chat_template`). Same shape as the bf16 false failure. Both documented in
-`tools/reference_backends/arkasr.py`.
-
-**Also closed this pass.** #366 kyutai language warning — keyed to the backend
-rather than the checkpoint. Now derived from LM layer count (16 = en+fr,
-48 = en); verified on BOTH models, since "the warning stopped appearing" looks
-identical whether the detection was fixed or simply broken.
-
-Corrected reference archives live at
-`/Volumes/backups/ai/crispasr-gguf/arkasr-refs/` (jfk, fleurs_de, fleurs_en +
-f32 encoder refs). ARK-ASR-3B weights are local again at
-`/Volumes/backups/ai/ark-asr-3b`, so the dump→diff loop no longer needs Kaggle.
-
 ## CLAIMED 2026-08-13 — #350 parakeet non-JA long-form drops whole spans
 
 Worktree: `.claude/worktrees/crisp-asr-issue-filing-0ca183`.
