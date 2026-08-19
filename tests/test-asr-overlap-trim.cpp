@@ -80,6 +80,16 @@ TEST_CASE("overlap trim: an entirely covered chunk reports every token", "[unit]
     REQUIRE(trim(next_chunk, 99999) == 2);
 }
 
+TEST_CASE("overlap trim: conservative seam rule requires two covered tokens", "[unit][overlap][issue-375]") {
+    const std::vector<Tok> one_early = {{" Many", 100, 200}, {" people", 200, 400}};
+    REQUIRE(core_overlap_trim::leading_covered_multi(
+                (int)one_early.size(), 250, [&](int i) { return one_early[(size_t)i].t1; }) == 0);
+
+    const std::vector<Tok> repeated = {{" rendu", 100, 200}, {" compte", 200, 250}, {" real", 250, 400}};
+    REQUIRE(core_overlap_trim::leading_covered_multi(
+                (int)repeated.size(), 250, [&](int i) { return repeated[(size_t)i].t1; }) == 2);
+}
+
 TEST_CASE("overlap trim: scanning stops at the first uncovered token", "[unit][overlap][issue-365]") {
     // A decoder can emit a stray token whose timing sits behind its neighbours.
     // Scanning the whole chunk and counting every covered token would drop real

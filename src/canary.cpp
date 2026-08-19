@@ -1684,6 +1684,25 @@ extern "C" struct canary_result* canary_transcribe_streamed(struct canary_contex
             }
         }
 
+        // #375: after the encoder-graph lifetime fix (73bb9b2f), the AED can
+        // choose different wording for the overlap on adjacent chunks.  The
+        // token-id LCS above then finds no match and the re-transcribed prefix
+        // is appended verbatim, producing repeated phrases (and timestamps
+        // that move backwards).  Apply the conservative time signal here:
+        // only trim a prefix of at least two complete tokens whose end is
+        // already at or before the last accepted token.  A one-token prefix is
+        // intentionally retained; boundary timing can put a genuine first
+        // word slightly early, and this avoids the false-positive seen in
+        // #365 ("Many").  The fuzzy word matcher remains opt-in for cases
+        // where timing alone is insufficient.
+        if (chunks_processed > 0 && !all_tokens.empty() && part->n_tokens > n_skip) {
+            const int64_t accepted_end_cs = all_tokens.back().t1;
+            const int covered = core_overlap_trim::leading_covered_multi(
+                part->n_tokens, accepted_end_cs, [&](int i) { return part->tokens[i].t1; });
+            if (covered > 0)
+                n_skip = std::max(n_skip, covered);
+        }
+
         // #365: fuzzy seam dedup, UNDER the LCS result.
         //
         // The LCS above compares token ids, so it only fires when the decoder

@@ -63,6 +63,14 @@ template <typename F> inline int leading_covered(int n, int64_t accepted_end_cs,
     return skip;
 }
 
+// Conservative streamed-seam variant. A single early token can be a genuine
+// first word whose decoder timestamp straddles the seam; require at least two
+// covered tokens before treating the prefix as re-transcribed overlap.
+template <typename F> inline int leading_covered_multi(int n, int64_t accepted_end_cs, F t1_of) {
+    const int skip = leading_covered(n, accepted_end_cs, t1_of);
+    return skip >= 2 && skip < n ? skip : 0;
+}
+
 
 // ---------------------------------------------------------------------------
 // Fuzzy seam dedup
