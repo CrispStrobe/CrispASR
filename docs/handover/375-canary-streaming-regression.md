@@ -1,105 +1,98 @@
 # Handover — #375 canary streaming regression
 
-**State: NOT reproduced. Do not ship a fix until it is.** PR #376 is open and on
-hold; my review of it is on the PR, including a correction of my own first pass.
+**State: a real, reproduced regression in the bisect window is found and fixed
+(glint AAC-LC decode). Whether it is the reporter's regression awaits their
+confirmation of the input format.** PR #376 remains on hold — it targets the
+pre-existing seam artifact, not this.
 
 ## The report
 
 `cdoepmann`, 2026-08-19. Upgraded CrispASR, canary recognition degraded:
 "sentences are interrupted and words/phrases are repeated a few times before the
 recognition continues". Present on **all quantizations**, and on **CUDA and CPU
-alike**. Bisected to `282e5d0b` (good) .. `c08f7a52` (bad) — 41 commits, and they
-could not narrow further because some commits in the range do not compile.
+alike**. Bisected to `282e5d0b` (good) .. `c08f7a52` (bad).
 
-## What has been established (measured, not argued)
+## Root cause found (2026-08-19, measured)
 
-Built both endpoints, ran `canary-1b-v2-q4_k` on CPU:
+The signature — all quants, CPU and CUDA alike — is an **input-path** signature.
+The window rerouted compressed-audio decode through the in-tree glint decoder
+(`f3d82d30`, `bf249d09`, …), and glint's AAC-LC decoder had two defects that
+only fire on streams glint's own encoder never produces:
 
-| audio | `282e5d0b` vs `main` |
-|---|---|
-| `jfk_x12.wav` 132 s, 16 seams | byte-identical, md5 `7cce22b79c7cae62f05591caa512fe6c` |
-| `de/fleurs_600s.wav` 594 s, ~74 seams | byte-identical, md5 `58346dcdf82aa6c1eda898cc8f4f75b7` |
+1. **`window_shape` parsed and discarded** — synthesis always used sine
+   windows. Real encoders (ffmpeg, Apple, fdk) emit KBD on ~80%+ of frames;
+   KBD analysis + sine synthesis breaks MDCT perfect reconstruction.
+2. **TNS decode broken**: skipped entirely on EIGHT_SHORT windows (transients),
+   no `tns_max_bands` clamp, direction bit ignored, only one filter per window,
+   hardcoded 4-bit dequant.
 
-Command: `crispasr --backend canary -m <gguf> -ng -t 8 [-l de] -f <wav> -nt`
-Model: `/Volumes/backups/ai/crispasr-gguf/canary-dl/canary-1b-v2-q4_k.gguf`
-Good worktree: `.claude/worktrees/bisect-375-good` (already built).
+Net effect: **every real-world .aac (ADTS) file decodes at ~17 dB SNR** —
+bitrate-independent (96k and 192k both 17.7 dB) — where the old path
+(AudioToolbox on macOS, ffmpeg subprocess on Linux) gives 37–66 dB. Since
+`f3d82d30`, glint runs BEFORE AudioToolbox/ffmpeg, so even ffmpeg-enabled
+builds regressed. Formats measured unaffected: wav/mp3/m4a/flac byte-identical
+across the endpoints; opus/webm differ ≤2e-5 (decoder rounding).
 
-**Ruled out:**
-* **ggml** — submodule pointer is `0714117daca2471b00e09554c7eaa74a06b0b2c5` at
-  BOTH endpoints. Nothing in that family can be involved. (Verified with
-  `git ls-tree <rev> ggml`, not with a log filter.)
-* `73bb9b2f` (the encoder-graph UAF fix, and the only commit in the window
-  touching canary sources) changes nothing on either probe.
-* `core/generation_health.h` (`d9845cbe`) — test-only, never referenced from src/.
+End-to-end (canary-1b-v2-q4_k, CPU, `fleurs_60s` re-encoded to AAC): the two
+endpoints' transcripts **differ on .aac input** (first divergence on any
+input); the degraded audio produces garbled openings and a "transcript is not
+in time order after slice merge" warning. The repeated-phrase symptom is the
+canary AED **looping on hard audio** — observed firing even on the GOOD build
+on one clean-audio chunk ("Ich habe das Gefühl, dass ich das Gefühl habe,
+dass …" ×25) — degraded 17 dB input makes those loops far more likely, which
+matches the reporter's description exactly.
 
-**NOT ruled out, and never examined:** the window contains six commits touching
-the audio input path — `f3d82d30` (routes CLI + stereo decode through glint),
-`6ad72199`, `bf249d09`, `6b087cdf`, `4053ca11`, `3739e70d` (clamps/bounds-checks
-file parsers). A changed decode path shifts sample counts and therefore chunk
-boundaries. Nobody has tested these. **If the reporter's audio is a compressed
-format (mp3/m4a/opus/webm) rather than WAV, start here, not in canary.cpp.**
+## The fix
 
-## The trap that cost the first two attempts
+glint upstream `77738f3` (`CrispStrobe/glint`): KBD window tables
+(ISO/IEC 14496-3 4.6.11.3.2, α=4 long / α=6 short, left half keyed to the
+previous frame's shape), full spec `tns_decode_frame` (short-window TNS via
+window-major de-interleave before TNS, region stacking, direction, per-res
+dequant). Measured: 17.7 → 67.3 dB (16 kHz), 17.0 → 70.1 dB (44.1 kHz).
+glint's full ctest suite green, including fuzz.
 
-Both PR #376's diagnosis and my first review were built on a file-path-scoped
-search ("the only canary change in the window"), which by construction cannot see
-cross-cutting changes. `73bb9b2f` was **selected, not bisected**.
+**Regression gate** (red-verified): `tools/test_aac_decoder.py` Tier 3 —
+foreign encoder with PNS disabled → glint decode, hard 40 dB SNR floor. Old
+decoder: 16.4/17.3 dB FAIL; every pre-existing gate passed at 17 dB (the
+roundtrip gates own both sides of the contract; the foreign-stream gate only
+checked spectrum correlation).
 
-Then I "reproduced" the symptom on `main` and reasoned from it — without checking
-the artifacts are absent on the good commit. They are not. Anything that looks
-like the report on `main` must be diffed against `282e5d0b` on the SAME file
-before it is treated as the regression. That check is two runs and it invalidated
-a whole review.
+Synced into CrispASR via the sync-glint workflow (run 32288223794). CrispASR's
+`test-audio-formats` passes (106 assertions); canary end-to-end on .aac now
+matches the good endpoint except chunk-1 loop flips that the good build also
+exhibits.
 
-## Pre-existing defect found on the way (real, but a different issue)
+## What remains open
 
-Canary streams everything in 8 s chunks / 2 s overlap and merges seams by
-token-id LCS. When the AED rewords the overlap the LCS misses and text is
-duplicated. On `jfk_x12.wav`, on BOTH endpoints:
+1. **Reporter confirmation** — asked on #375 whether their inputs are .aac
+   (ADTS). If their audio is WAV/MP3, this fix is real but not their bug, and
+   the hunt resumes (everything else in the window is measured byte-identical
+   on two files; a content-dependent delta would need their audio).
+   Workaround offered meanwhile: `CRISPASR_AAC_DECODER=ffmpeg` (any non-glint
+   value) bypasses glint AAC.
+2. **Pre-existing, separate**: the glint decode paths resample 44.1/48 kHz →
+   16 kHz with miniaudio's LINEAR resampler: ~28 dB vs AudioToolbox/ffmpeg's
+   ~38 dB on the same decode. Same class as the opus/webm paths at BOTH
+   endpoints (29.3 dB). Not the regression; worth its own issue.
+3. **Pre-existing**: canary seam-merge artifacts (`ask not Ask not`,
+   `T-Rex war war`) on both endpoints — the #365 `CRISPASR_CANARY_SEAM_DEDUP=1`
+   fuzzy matcher removes them; defaulting it on is a corpus question. Deserves
+   its own issue; do not fold into #375.
+4. **PR #376** stays on hold: it addresses the seam artifact, unvalidated
+   against the regression, deletes real tokens (`ask not Ask not` → `ask not
+   not`), and reintroduces a time-floor heuristic the code comments say was
+   measured harmful.
 
-* `"ask not Ask not what your country…"` — duplication (capitalisation rewording)
-* `"ask what you can do. for your country."` — sentence broken at a seam
-* `"for yourself. your country."` — misrecognition at a seam
+## Traps already burned (do not repeat)
 
-`CRISPASR_CANARY_SEAM_DEDUP=1` (the #365 fuzzy matcher, already in the tree,
-gated) removes the duplication cleanly. It is gated because on a 600 s clip it
-also dropped a leading "Many" that could not be confirmed as duplicate. **Whether
-to default it on is a corpus question** — run both settings over the regression
-audio and count insertions vs deletions. Do not decide it from one clip. This
-deserves its own issue and should not be folded into #375.
-
-## What to do next, in order
-
-1. **Get a reproduction.** Asked on #375: a failing audio sample, the exact GGUF
-   + quant, the exact command, and ideally both transcripts (good build vs bad).
-   Without at least the audio, nothing here can be validated.
-2. When audio arrives, first run
-   `CRISPASR_CANARY_STREAM_THRESHOLD_S=99999` (forces single-pass, no chunking, no
-   seam merge). If the symptom vanishes it is the seam merge; if it persists the
-   whole seam-dedup line of attack — including PR #376 — is the wrong tree.
-3. If it is the seam merge, compare `CRISPASR_CANARY_SEAM_DEDUP=1` against the
-   PR's time-floor heuristic ON THAT AUDIO before choosing.
-4. If it is not the seam merge, bisect the window **by building**, starting with
-   the six audio-input commits. Note the reporter's warning that parts of the
-   range do not compile; `282e5d0b` and `c08f7a52` both build fine with
-   `-DGGML_NATIVE=OFF -DCRISPASR_BUILD_TESTS=OFF` after
-   `git submodule update --init --recursive ggml`.
-
-## Why PR #376 is on hold
-
-It adds a timestamp-based prefix trim to the streamed seam. Three concerns, in
-order of weight:
-
-1. **Unvalidated against the regression** — as is any fix right now.
-2. It reintroduces exactly what the code above it says was measured as harmful:
-   *"Deliberately NOT a plain time floor. Trimming the overlap by timestamp alone
-   was measured removing real speech."* Silent deletion is a worse failure than
-   duplication, because users can see duplication.
-3. On the one end-to-end file it was tested against it turns `ask not Ask not`
-   into `ask not not` — it removes one token of a two-token duplicate. And
-   `leading_covered_multi`'s `skip >= 2 && skip < n` returns 0 for a fully covered
-   chunk, i.e. it declines the clearest duplicate case while acting on ambiguous
-   ones.
-
-HARD RULE 3 applies: the decoded-output roundtrip is the only acceptance test,
-and unit tests of the helper are not it.
+* A file-path-scoped search cannot see cross-cutting changes: `73bb9b2f` was
+  selected, not bisected, by "the only canary commit in the window".
+* Anything that looks like the report on `main` must be diffed against
+  `282e5d0b` on the SAME file first — the seam artifacts reproduce on both.
+* WAV-only probes cannot rule out the audio path: the regression was
+  format-specific (.aac only). Test the formats whose ROUTING changed.
+* SNR without shift alignment understates resampled paths (group delay);
+  align first, then judge.
+* glint's own roundtrip gates (86–135 dB) said nothing about foreign streams:
+  the encoder never emits KBD windows or short-window TNS. A test that owns
+  both sides of a contract is blind.
