@@ -2,8 +2,17 @@
 
 **State: a real, reproduced regression in the bisect window is found and fixed
 (glint AAC-LC decode). Whether it is the reporter's regression awaits their
-confirmation of the input format.** PR #376 remains on hold — it targets the
-pre-existing seam artifact, not this.
+confirmation of the input format.** PR #376 is CLOSED — the pre-existing seam
+artifact it aimed at is fixed at the root instead: canary long-form now ports
+canary-1b-v2's own `.transcribe()` dynamic chunking (30..40 s raw-waveform
+chunks, 1 s overlap, per-chunk normalization, NeMo's LCS-alignment merge —
+`core/canary_chunk_merge.h`, pinned by `tests/test-canary-chunk-merge.cpp`
+against vectors from the nemo 2.7.3 Python functions). The previous 8 s / 2 s
+LCS-prefix streaming was parakeet machinery grafted onto canary; it survives
+only behind `CRISPASR_CANARY_LEGACY_STREAM=1` as the bisection arm. On
+jfk_x12 the legacy gate reproduces `ask not Ask not` / broken clauses ×2
+while the default now emits 12 clean repetitions; fleurs_600s has zero
+repeated n-grams in 925 words.
 
 ## The report
 
@@ -74,14 +83,9 @@ exhibits.
    16 kHz with miniaudio's LINEAR resampler: ~28 dB vs AudioToolbox/ffmpeg's
    ~38 dB on the same decode. Same class as the opus/webm paths at BOTH
    endpoints (29.3 dB). Not the regression; worth its own issue.
-3. **Pre-existing**: canary seam-merge artifacts (`ask not Ask not`,
-   `T-Rex war war`) on both endpoints — the #365 `CRISPASR_CANARY_SEAM_DEDUP=1`
-   fuzzy matcher removes them; defaulting it on is a corpus question. Deserves
-   its own issue; do not fold into #375.
-4. **PR #376** stays on hold: it addresses the seam artifact, unvalidated
-   against the regression, deletes real tokens (`ask not Ask not` → `ask not
-   not`), and reintroduces a time-floor heuristic the code comments say was
-   measured harmful.
+3. ~~Canary seam-merge artifacts~~ — FIXED by the blueprint port (see the
+   State block). PR #376 CLOSED, its branch deleted;
+   `CRISPASR_CANARY_SEAM_DEDUP` only means anything under the legacy gate.
 
 ## Traps already burned (do not repeat)
 
@@ -96,3 +100,8 @@ exhibits.
 * glint's own roundtrip gates (86–135 dB) said nothing about foreign streams:
   the encoder never emits KBD windows or short-window TNS. A test that owns
   both sides of a contract is blind.
+* The 8 s / 2 s "NeMo FrameBatchMultiTaskAED analogon" comment in canary.cpp
+  was FALSE on every parameter — FrameBatchMultiTaskAED joins NON-overlapping
+  chunks with `" ".join`, and canary-1b-v2's shipped path is dynamic 30..40 s
+  chunks with a 1 s overlap and `lcs_alignment_merge_buffer`. Read the
+  blueprint, not the comment that cites it.
