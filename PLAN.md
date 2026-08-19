@@ -13,6 +13,18 @@ Review PR #352 end to end, validate that its long-form routing and gap repair
 do not regress any language path, add targeted unit/live coverage where needed,
 and merge or improve the change after local/SSD validation.
 
+## OPEN 2026-08-19 — #374 needs a release to actually deliver the fix
+
+`398aabc9` stops nine GPU jobs shipping `-march=native` binaries, and
+`tools/check-release-portable-cpu.py` (in Lint) keeps them that way. But
+release.yml only runs on a tag, so **v0.8.29 is still broken for the reporter** —
+their RTX 4060 laptop cannot use the GPU at all until a new tag ships: the CUDA
+build SIGILLs on their non-AVX-512 CPU and the AVX2 fallback is CPU-only.
+
+Nothing to design; it needs the release cutting. Follow the VERSION/tagging
+discipline further down this file. When it ships, say so on #374 — the reporter
+was told the fix has landed but not yet been delivered.
+
 ## OPEN 2026-08-19 — vibevoice-asr 7B answers "[Silence]" on time-stretched audio
 
 The transcript-side damage is FIXED (`3b1bc0b2`, see HISTORY): `[Silence]` is a

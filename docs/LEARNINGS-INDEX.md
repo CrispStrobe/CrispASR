@@ -17,341 +17,342 @@ per-backend porting detail (Per-model port notes + the family cross-reference).
 Reach for the topic groups when you are stuck on a *technique*, and the
 cross-reference when you already know which model you are touching.
 
-## Index by topic (289 lessons)
+## Index by topic (290 lessons)
 
 **Security & untrusted input** (2)
 
-- L1841 — Two more untrusted-input lessons: an HTTP server reads the body before your auth check, and a parser that abort()s on malformed input is a DoS a fuzzer finds in seconds
-- L1868 — Every hand-rolled file parser sizes a buffer from an untrusted length field — that is the #1 memory-safety bug class, and a multi-agent audit finds them fast
+- L1877 — Two more untrusted-input lessons: an HTTP server reads the body before your auth check, and a parser that abort()s on malformed input is a DoS a fuzzer finds in seconds
+- L1904 — Every hand-rolled file parser sizes a buffer from an untrusted length field — that is the #1 memory-safety bug class, and a multi-agent audit finds them fast
 
 **Compliance, provenance & marking (EU AI Act)** (7)
 
-- L584 — A watermarked TTS output cannot be A/B'd with `cmp` — and whisper LID is not an accent metric
-- L1144 — Moving a release tag is CLEAN when the fix touches only release TOOLING — the test is provenance, not "never move a tag"
-- L11216 — Always rebuild the box-under-test before benchmarking
-- L16305 — EU AI Act audit — provenance not suffix
-- L16363 — EU AI Act — a PRESET voice can be a real person
-- L16813 — consent record — BIND to the audio, don't chain the log
-- L18108 — watermark detector — swap the STATISTIC, not the threshold
+- L620 — A watermarked TTS output cannot be A/B'd with `cmp` — and whisper LID is not an accent metric
+- L1180 — Moving a release tag is CLEAN when the fix touches only release TOOLING — the test is provenance, not "never move a tag"
+- L11252 — Always rebuild the box-under-test before benchmarking
+- L16341 — EU AI Act audit — provenance not suffix
+- L16399 — EU AI Act — a PRESET voice can be a real person
+- L16849 — consent record — BIND to the audio, don't chain the log
+- L18144 — watermark detector — swap the STATISTIC, not the threshold
 
-**Build, CI, release & packaging** (21)
+**Build, CI, release & packaging** (22)
 
-- L488 — A packaging step that destroys the state a later step reads — and scripts that only run in a release job
-- L792 — A guard job that runs ONE compiler family guards one compiler family
-- L1080 — A green release job is not a shipped artifact — verify what you DELIVER, not what the workflow says
-- L1209 — "Linked in CMake" is NOT evidence the code SHIPS — the linker drops an object nothing references
-- L1429 — Path-filtered CI workflows ROT — the first re-triggering change inherits ALL the debt accumulated since the last run
-- L1449 — Scoped `ctest -R` on a PARTIALLY BUILT tree has two name-collision traps: configure-time add_test and catch_discover NOT_BUILT placeholders
-- L1734 — Porting a libllama-hosted reference onto our in-house Qwen3 was clean on first contact; and Kaggle `kernels_logs()` is the escape hatch when the output is page-capped
-- L1792 — ggml disables CUDA graphs below Ampere (cc < 800) — an Ampere-only re-warm bug can't be reproduced on Kaggle's P100/T4
-- L2091 — Two concurrent HuggingFace uploads from one machine cause spurious mid-batch failures — serialize them (#192 aligner re-ship)
-- L2560 — Never benchmark on a near-full disk — SIGBUS + nondeterminism masquerade as a code signal (§192)
-- L2636 — Kaggle: datasets are per-account, and the ccache dataset has a required shape (§213)
-- L3058 — Kaggle regression kernels: write output incrementally, crash-guard everything
-- L3185 — Regenerate Go cgo LDFLAGS from a *linux-equivalent* config, never macOS
-- L3200 — cmake-js defaults its build dir to `build/` — point it elsewhere (§166)
-- L3354 — HF Space is a separate, FLAT repo that silently drifts from `hf-space/`
-- L4657 — Windows / MSVC portability
-- L5895 — GitHub Actions workflow triggers — `master` → `main` rename gotcha
-- L6041 — libcrispasr.a + libcommon.a both define stb_vorbis / miniaudio impl (Linux ld dies)
-- L11280 — Kaggle as a batch-rebake target: seven fragilities the script has to work around
-- L14724 — CI has no NVIDIA GPU — a CUDA-only graph path (mimo RVQ) is guarded by an on-Kaggle exact-parity smoke, not CI (#309)
-- L15551 — #313 Rust crates on crates.io via git dep
+- L20 — A release workflow's first run IS the release — guard the flags, not the convention
+- L524 — A packaging step that destroys the state a later step reads — and scripts that only run in a release job
+- L828 — A guard job that runs ONE compiler family guards one compiler family
+- L1116 — A green release job is not a shipped artifact — verify what you DELIVER, not what the workflow says
+- L1245 — "Linked in CMake" is NOT evidence the code SHIPS — the linker drops an object nothing references
+- L1465 — Path-filtered CI workflows ROT — the first re-triggering change inherits ALL the debt accumulated since the last run
+- L1485 — Scoped `ctest -R` on a PARTIALLY BUILT tree has two name-collision traps: configure-time add_test and catch_discover NOT_BUILT placeholders
+- L1770 — Porting a libllama-hosted reference onto our in-house Qwen3 was clean on first contact; and Kaggle `kernels_logs()` is the escape hatch when the output is page-capped
+- L1828 — ggml disables CUDA graphs below Ampere (cc < 800) — an Ampere-only re-warm bug can't be reproduced on Kaggle's P100/T4
+- L2127 — Two concurrent HuggingFace uploads from one machine cause spurious mid-batch failures — serialize them (#192 aligner re-ship)
+- L2596 — Never benchmark on a near-full disk — SIGBUS + nondeterminism masquerade as a code signal (§192)
+- L2672 — Kaggle: datasets are per-account, and the ccache dataset has a required shape (§213)
+- L3094 — Kaggle regression kernels: write output incrementally, crash-guard everything
+- L3221 — Regenerate Go cgo LDFLAGS from a *linux-equivalent* config, never macOS
+- L3236 — cmake-js defaults its build dir to `build/` — point it elsewhere (§166)
+- L3390 — HF Space is a separate, FLAT repo that silently drifts from `hf-space/`
+- L4693 — Windows / MSVC portability
+- L5931 — GitHub Actions workflow triggers — `master` → `main` rename gotcha
+- L6077 — libcrispasr.a + libcommon.a both define stb_vorbis / miniaudio impl (Linux ld dies)
+- L11316 — Kaggle as a batch-rebake target: seven fragilities the script has to work around
+- L14760 — CI has no NVIDIA GPU — a CUDA-only graph path (mimo RVQ) is guarded by an on-Kaggle exact-parity smoke, not CI (#309)
+- L15587 — #313 Rust crates on crates.io via git dep
 
 **Multi-surface wiring — CLI / C ABI / bindings / server** (27)
 
-- L255 — Four ways a measurement lied in one session — and the experiment to run when you lack the reporter's hardware
-- L306 — A guard that no toolchain runs, and a test literal that pins the MODEL instead of the feature
-- L355 — Splitting a path in half drops its prologue and its epilogue, and "disjoint state" has to include what the CALLER does between the halves
-- L713 — A gate that ANDs "both sides known" is only as alive as its weakest detector
-- L952 — A new REQUIRED request field is a breaking API change on a schedule you don't control — deny the sub-feature, don't refuse the request
-- L1040 — A hardcoded decode cap silently ignores --max-new-tokens — and forwarding it naively SHRINKS a backend
-- L1117 — A capability flag is a PROMISE the backend must keep — an unimplemented cap disables the safety nets keyed off it
-- L1411 — Two writers on one output field at different pipeline stages = an ordering bug — fix the ORDER, don't bolt on provenance
-- L1470 — A binding wrapper that has never been EXECUTED is untested code — and parallel agents produce cross-cutting conflicts only the verifier can see
-- L2060 — A persistent KV cache reused from a larger allocation makes local `max_ctx` the wrong stride (#171 VibeVoice server leak)
-- L2967 — Backend-name guards must match the *registered* name, by prefix when aliased (#171, #174)
-- L3101 — A feature has ~8 front-ends — wiring it into one isn't "done" (§166)
-- L3127 — A dry-run "preview" must mirror the real resolver, or it lies (§166)
-- L3212 — A WebSocket server that "works in the browser" can still be RFC-broken (§166)
-- L3226 — Server warmup is the launch-time differentiator vs the CLI (#165)
-- L3239 — Don't throw on the per-request server path; surface the real error (#165)
-- L6566 — Chatterbox CAMPPlus phase 1 — Kaldi fbank front-end
-- L9108 — voxcpm2 VAE — Python wrapper that captures kwargs without forwarding
-- L13644 — 2026-07-02 — `--gpu-backend` was silently ignored (#214)
-- L14332 — Before starting a "top-priority, profiled" perf target: check whether it's already been tried-and-rejected, and whether a parallel session owns it
-- L14813 — A public API with no caller is a harness-blind zone announcing itself — and an ONNX export may FOLD a BatchNorm your C++ still expects as tensors
-- L15485 — #311 --strict-pipeline SHIPPED
-- L15628 — #315 vibevoice long-form ASR budget: PR fixed only session; CLI+server needed the adapter…
-- L15664 — #324 server diarize DROPPED 59% of the transcript
-- L17814 — Parakeet #208 long-audio + enc-cache collapse
-- L17921 — session-state fixes + moonshine CPU-only SOLVED
-- L18145 — Wyoming TTS marked nothing — FIXED 8f4197ec
+- L291 — Four ways a measurement lied in one session — and the experiment to run when you lack the reporter's hardware
+- L342 — A guard that no toolchain runs, and a test literal that pins the MODEL instead of the feature
+- L391 — Splitting a path in half drops its prologue and its epilogue, and "disjoint state" has to include what the CALLER does between the halves
+- L749 — A gate that ANDs "both sides known" is only as alive as its weakest detector
+- L988 — A new REQUIRED request field is a breaking API change on a schedule you don't control — deny the sub-feature, don't refuse the request
+- L1076 — A hardcoded decode cap silently ignores --max-new-tokens — and forwarding it naively SHRINKS a backend
+- L1153 — A capability flag is a PROMISE the backend must keep — an unimplemented cap disables the safety nets keyed off it
+- L1447 — Two writers on one output field at different pipeline stages = an ordering bug — fix the ORDER, don't bolt on provenance
+- L1506 — A binding wrapper that has never been EXECUTED is untested code — and parallel agents produce cross-cutting conflicts only the verifier can see
+- L2096 — A persistent KV cache reused from a larger allocation makes local `max_ctx` the wrong stride (#171 VibeVoice server leak)
+- L3003 — Backend-name guards must match the *registered* name, by prefix when aliased (#171, #174)
+- L3137 — A feature has ~8 front-ends — wiring it into one isn't "done" (§166)
+- L3163 — A dry-run "preview" must mirror the real resolver, or it lies (§166)
+- L3248 — A WebSocket server that "works in the browser" can still be RFC-broken (§166)
+- L3262 — Server warmup is the launch-time differentiator vs the CLI (#165)
+- L3275 — Don't throw on the per-request server path; surface the real error (#165)
+- L6602 — Chatterbox CAMPPlus phase 1 — Kaldi fbank front-end
+- L9144 — voxcpm2 VAE — Python wrapper that captures kwargs without forwarding
+- L13680 — 2026-07-02 — `--gpu-backend` was silently ignored (#214)
+- L14368 — Before starting a "top-priority, profiled" perf target: check whether it's already been tried-and-rejected, and whether a parallel session owns it
+- L14849 — A public API with no caller is a harness-blind zone announcing itself — and an ONNX export may FOLD a BatchNorm your C++ still expects as tensors
+- L15521 — #311 --strict-pipeline SHIPPED
+- L15664 — #315 vibevoice long-form ASR budget: PR fixed only session; CLI+server needed the adapter…
+- L15700 — #324 server diarize DROPPED 59% of the transcript
+- L17850 — Parakeet #208 long-audio + enc-cache collapse
+- L17957 — session-state fixes + moonshine CPU-only SOLVED
+- L18181 — Wyoming TTS marked nothing — FIXED 8f4197ec
 
 **Parity, the diff harness & ground truth** (40)
 
-- L20 — A model family's per-size behaviour lives in the reference RUNTIME, not the modelling code
-- L203 — A reference that shares the runtime's assumption cannot falsify it — and a green diff is not evidence
-- L417 — A guard has to assert the property the CONSUMER reads — segment spans are not cue times
-- L757 — The diff harness starts where its INPUT starts — check what it is fed before trusting parity
-- L984 — When a clone/zero-shot path misbehaves but the BAKED/preset path is clean, diff the two paths' DATA byte-for-byte — the difference IS the bug
-- L1247 — Cosine, correlation and peak-match are ALL scale-invariant — a uniform gain error passes every one of them
-- L1315 — A logits-level diff harness at cos 1.000000 says nothing about the TABLE that turns logits into labels
-- L1390 — When you can't run the acceptance roundtrip, ship the path gated default-OFF + a provable-equivalence argument — don't block on the model
-- L1487 — Deterministic DROPOUT of whole words/tokens (not garble) = a zeroed weight BLOCK in the shipped GGUF — scan converted tensors for zero-norm rows BEFORE debugging the port
-- L1532 — A TTS AR model that "never stops" is often a WRONG-SAMPLING-PARAMS bug, not a stop-head/port bug — read the model card's generation params
-- L1827 — Validating a TTS perf change by WAV correlation is invalid — melotts `--seed` isn't deterministic; use ASR round-trip or a deterministic-ASR bit-check
-- L1909 — MelsTime mel layout IS ggml Conv1d input layout — transposing corrupts with cos ~0.3, not a gradual drift
-- L1954 — Baked mel filterbank layout MUST match core_mel's `fb_layout` — a transpose produces cos_min ≈ −0.15, not a gradual drift
-- L2157 — A production default that diverges from the upstream reference is a whole class of bug the stage-cosine diff can't see (#192 TADA)
-- L2197 — A forced aligner is not an ASR model — its free CTC argmax is all-blank (#192)
-- L2206 — When the engine and the PyTorch reference produce the SAME wrong output, the engine is right — the harness input (usually the prompt) is the bug (moss-transcribe)
-- L2231 — An input feature the checkpoint wasn't trained with is worse than nothing — the moss-transcribe time-marker experiment (#218)
-- L2256 — Stage the PyTorch reference load — encoder and LM as separate standalone modules, never the monolithic `*ForCausalLM` (moss-transcribe)
-- L2276 — Parakeet single-pass DROPS whole sections of long audio — chunk-and-merge, and pick the reference clip carefully (#208b)
-- L2572 — Always A/B against the *upstream reference*, not just your own option matrix (§216)
-- L2623 — TTS WAV md5 is only a valid parity gate with a pinned seed
-- L3044 — Regression transcripts need WER tolerance, not byte-exact match (#92)
-- L4054 — Methodical debugging of ported models against ground truth
-- L6161 — Chatterbox base T3 sampler parity — Gumbel-max → torch.multinomial
-- L6200 — Chatterbox HiFT vocoder parity nits
-- L9231 — Diff-harness "drift" is mostly the GGUF quant, not a code bug
-- L12506 — Pocket TTS — 12 bugs from stub to cos=0.999997
-- L13921 — ASR roundtrip does not validate audio ONSETS; reproduce with the original pipeline before debugging your runtime
-- L13965 — Porting the missing sub-model is necessary but not sufficient — hunt the hardcoded "unconditional" defaults that ignore it
-- L14038 — Python reference dumpers must apply identical audio conditioning as the C++ runtime
-- L14055 — A `frames/token` (or chars/sec) length heuristic silently truncates diffusion TTS — run the duration predictor the model already ships
-- L14160 — A faithful port can still loop: get the bf16 blueprint's behaviour on the SAME audio before hunting a runtime bug
-- L14220 — Generation-config defaults are part of the blueprint contract — a masked-iterative TTS with the wrong sampler knobs degenerates to SILENCE, not to bad audio
-- L14364 — CosyVoice3 CFM Euler steps: 6 is the sweet spot, and validate it with log-mel corr vs full-steps — NOT ASR roundtrip
-- L14556 — Exact greedy code-parity is unachievable for a QUANTIZED AR audio LM — confirm the port with a step-0 logit-rank probe, not byte-exact codes
-- L14606 — A GPU-vs-reference RTF gap that survives kernel parity is per-step HOST detours — fuse them into the step graph; unified-memory Metal hides exactly this class of cost
-- L14699 — A normalization stage amplifies upstream float error — input-align it before trusting its cos (§248 MBR)
-- L15837 — #333 madlad400 quants + T5 parity
-- L16709 — chatterbox hift_pcm(ref_mel) cos≈0.879 was a diff-harness layout bug (source_stft fed transposed), not a…
-- L18339 — Chatterbox Multilingual V3: checkpoint names, quant hashes, and a non-silent clone are not parity
+- L56 — A model family's per-size behaviour lives in the reference RUNTIME, not the modelling code
+- L239 — A reference that shares the runtime's assumption cannot falsify it — and a green diff is not evidence
+- L453 — A guard has to assert the property the CONSUMER reads — segment spans are not cue times
+- L793 — The diff harness starts where its INPUT starts — check what it is fed before trusting parity
+- L1020 — When a clone/zero-shot path misbehaves but the BAKED/preset path is clean, diff the two paths' DATA byte-for-byte — the difference IS the bug
+- L1283 — Cosine, correlation and peak-match are ALL scale-invariant — a uniform gain error passes every one of them
+- L1351 — A logits-level diff harness at cos 1.000000 says nothing about the TABLE that turns logits into labels
+- L1426 — When you can't run the acceptance roundtrip, ship the path gated default-OFF + a provable-equivalence argument — don't block on the model
+- L1523 — Deterministic DROPOUT of whole words/tokens (not garble) = a zeroed weight BLOCK in the shipped GGUF — scan converted tensors for zero-norm rows BEFORE debugging the port
+- L1568 — A TTS AR model that "never stops" is often a WRONG-SAMPLING-PARAMS bug, not a stop-head/port bug — read the model card's generation params
+- L1863 — Validating a TTS perf change by WAV correlation is invalid — melotts `--seed` isn't deterministic; use ASR round-trip or a deterministic-ASR bit-check
+- L1945 — MelsTime mel layout IS ggml Conv1d input layout — transposing corrupts with cos ~0.3, not a gradual drift
+- L1990 — Baked mel filterbank layout MUST match core_mel's `fb_layout` — a transpose produces cos_min ≈ −0.15, not a gradual drift
+- L2193 — A production default that diverges from the upstream reference is a whole class of bug the stage-cosine diff can't see (#192 TADA)
+- L2233 — A forced aligner is not an ASR model — its free CTC argmax is all-blank (#192)
+- L2242 — When the engine and the PyTorch reference produce the SAME wrong output, the engine is right — the harness input (usually the prompt) is the bug (moss-transcribe)
+- L2267 — An input feature the checkpoint wasn't trained with is worse than nothing — the moss-transcribe time-marker experiment (#218)
+- L2292 — Stage the PyTorch reference load — encoder and LM as separate standalone modules, never the monolithic `*ForCausalLM` (moss-transcribe)
+- L2312 — Parakeet single-pass DROPS whole sections of long audio — chunk-and-merge, and pick the reference clip carefully (#208b)
+- L2608 — Always A/B against the *upstream reference*, not just your own option matrix (§216)
+- L2659 — TTS WAV md5 is only a valid parity gate with a pinned seed
+- L3080 — Regression transcripts need WER tolerance, not byte-exact match (#92)
+- L4090 — Methodical debugging of ported models against ground truth
+- L6197 — Chatterbox base T3 sampler parity — Gumbel-max → torch.multinomial
+- L6236 — Chatterbox HiFT vocoder parity nits
+- L9267 — Diff-harness "drift" is mostly the GGUF quant, not a code bug
+- L12542 — Pocket TTS — 12 bugs from stub to cos=0.999997
+- L13957 — ASR roundtrip does not validate audio ONSETS; reproduce with the original pipeline before debugging your runtime
+- L14001 — Porting the missing sub-model is necessary but not sufficient — hunt the hardcoded "unconditional" defaults that ignore it
+- L14074 — Python reference dumpers must apply identical audio conditioning as the C++ runtime
+- L14091 — A `frames/token` (or chars/sec) length heuristic silently truncates diffusion TTS — run the duration predictor the model already ships
+- L14196 — A faithful port can still loop: get the bf16 blueprint's behaviour on the SAME audio before hunting a runtime bug
+- L14256 — Generation-config defaults are part of the blueprint contract — a masked-iterative TTS with the wrong sampler knobs degenerates to SILENCE, not to bad audio
+- L14400 — CosyVoice3 CFM Euler steps: 6 is the sweet spot, and validate it with log-mel corr vs full-steps — NOT ASR roundtrip
+- L14592 — Exact greedy code-parity is unachievable for a QUANTIZED AR audio LM — confirm the port with a step-0 logit-rank probe, not byte-exact codes
+- L14642 — A GPU-vs-reference RTF gap that survives kernel parity is per-step HOST detours — fuse them into the step graph; unified-memory Metal hides exactly this class of cost
+- L14735 — A normalization stage amplifies upstream float error — input-align it before trusting its cos (§248 MBR)
+- L15873 — #333 madlad400 quants + T5 parity
+- L16745 — chatterbox hift_pcm(ref_mel) cos≈0.879 was a diff-harness layout bug (source_stft fed transposed), not a…
+- L18375 — Chatterbox Multilingual V3: checkpoint names, quant hashes, and a non-silent clone are not parity
 
 **ggml graphs, allocation & caching** (43)
 
-- L1023 — Reusing a cached scheduler graph across `sched_reset`/`alloc` cycles is CPU-safe but SIGSEGVs on GPU — the reused input tensor is bound to the prior cycle's freed buffer
-- L1593 — Metal-validated GPU TTS graph paths DID transfer cleanly to CUDA — the stricter-CUDA risk is real but not universal
-- L1629 — BatchNorm-fold must respect the conv tensor's dtype — and a per-backend fix usually has siblings
-- L1663 — "Migrate host KV to device-resident" is a ~1% win on a compute-bound transformer decoder — measure the fraction before the rewrite
-- L1963 — Never cache a ggml compute graph across calls that share a scheduler with a larger graph — the allocator regrows and frees the cached graph's GPU buffers
-- L1974 — Flow-matching DiT with JointAttention REQUIRES attention masking even for unconditional generation — skipping masked KV tokens silently corrupts output (2026-07)
-- L2309 — A cached cgraph is NOT re-entrant with ggml_backend_sched — the 2nd reuse silently corrupts (#208)
-- L2351 — On Metal a cached decode graph is dispatch-bound, not alloc-bound — measure the step's parts, don't trust wall time (§210, PR #207)
-- L2508 — Precomputed attention masks in a GGUF are dead weight if the runtime rebuilds them (§192)
-- L2676 — Cross-attention KV is a free F16 win — encoder-decoder backends (§176i)
-- L2704 — Localizing a GPU miscompute with CPU-vs-Metal diffing — the ggml_backend_sched weight-less-first-op trap (§206)
-- L2858 — A byte-identical standalone reproducer is the only way to (dis)prove a "ggml bug" (§203)
-- L2888 — In-place device-KV decode graphs on Metal: three hazards (§176b+c, §203)
-- L2996 — Never pass `ggml_graph_get_tensor` directly to `ggml_backend_tensor_set` (#164)
-- L3016 — `rope_theta=0` means "no positional encoding" — skip RoPE entirely (#164)
-- L3025 — `ggml_siglu` ≠ PyTorch `glu` — the gate/value halves are SWAPPED (#81)
-- L3094 — Asymmetric rel-pos shift uses the same formula as symmetric (#81)
-- L3139 — Graph input tensors that nothing consumes are invisible to `ggml_graph_get_tensor` (#164)
-- L3172 — `ggml_backend_cpu_set_n_threads` asserts CPU — guard it after `init_best()`
-- L3285 — Decompose ConvTranspose1d → mul_mat + col2im_1d; port col2im per-backend (#155)
-- L3325 — Beam-search KV snapshots must stay on-device (#161)
-- L3608 — ggml / inference engine
-- L4180 — ggml graph allocation: gallocr vs compute_with_ctx
-- L5528 — 2026-04-22 - No-gpu mode must gate `ggml_backend_load_all()`
-- L7633 — 2026-05-05 — ggml fork patches we carry (must re-apply on every ggml bump)
-- L8904 — voxcpm2 perf — per-step ggml graphs, Metal, SIMD layouts
-- L9188 — ggml broadcast hides size-mismatch bugs
-- L11408 — ggml scheduler tightened cross-backend tensor resolution between §56 and 2026-05-26 (PLAN #115)
-- L12662 — Pocket TTS — manual CPU → ggml compute graph rewrite
-- L12901 — AudioSeal ggml port — ggml_pad_ext convention trap
-- L12978 — GPU weight mirrors for mixed legacy / graph codebases
-- L13102 — ggml_graph_get_tensor hash invalidated by ggml_gallocr
-- L13295 — read_tensor_f32 weight pre-cache for VITS-family TTS
-- L13308 — Single-token embed graph elimination for LLM-ASR
-- L13822 — A once-allocated-then-reused bucket step graph is a CUDA-graph-capture hazard: reset+alloc the sched EVERY step
-- L13881 — A cached cgraph is invalidated by ANY other graph on its scheduler — reset+alloc per step is NOT enough
-- L13981 — TTS code predictor: the dispatch overhead is real, but "fuse into one graph" and "skip the reset" are BOTH wrong — the fix is a sched-free persistent graph
-- L14050 — Any T-sized `ggml_view` into a fixed-length weight table must be bounded by the tensor's real length — long inputs overflow it and abort
-- L14192 — gallocr does NOT protect input-flagged tensors across computes — re-set EVERY input before EVERY compute of a persistent graph
-- L14253 — Vocoder/codec conv graphs hide three graph-construction wastes that dwarf the actual conv FLOPs — profile per-node before assuming it's inherent
-- L14300 — Before optimizing a graph's *dispatch*, split host-encode vs GPU-execute — and never trust a GPU benchmark taken under load
-- L14395 — A "GPU" model can be silently running on CPU — audit for hot graphs pinned to backend_cpu and CLI adapters that never forward use_gpu
-- L17883 — PR #244 dequant-cache fix MERGED
+- L1059 — Reusing a cached scheduler graph across `sched_reset`/`alloc` cycles is CPU-safe but SIGSEGVs on GPU — the reused input tensor is bound to the prior cycle's freed buffer
+- L1629 — Metal-validated GPU TTS graph paths DID transfer cleanly to CUDA — the stricter-CUDA risk is real but not universal
+- L1665 — BatchNorm-fold must respect the conv tensor's dtype — and a per-backend fix usually has siblings
+- L1699 — "Migrate host KV to device-resident" is a ~1% win on a compute-bound transformer decoder — measure the fraction before the rewrite
+- L1999 — Never cache a ggml compute graph across calls that share a scheduler with a larger graph — the allocator regrows and frees the cached graph's GPU buffers
+- L2010 — Flow-matching DiT with JointAttention REQUIRES attention masking even for unconditional generation — skipping masked KV tokens silently corrupts output (2026-07)
+- L2345 — A cached cgraph is NOT re-entrant with ggml_backend_sched — the 2nd reuse silently corrupts (#208)
+- L2387 — On Metal a cached decode graph is dispatch-bound, not alloc-bound — measure the step's parts, don't trust wall time (§210, PR #207)
+- L2544 — Precomputed attention masks in a GGUF are dead weight if the runtime rebuilds them (§192)
+- L2712 — Cross-attention KV is a free F16 win — encoder-decoder backends (§176i)
+- L2740 — Localizing a GPU miscompute with CPU-vs-Metal diffing — the ggml_backend_sched weight-less-first-op trap (§206)
+- L2894 — A byte-identical standalone reproducer is the only way to (dis)prove a "ggml bug" (§203)
+- L2924 — In-place device-KV decode graphs on Metal: three hazards (§176b+c, §203)
+- L3032 — Never pass `ggml_graph_get_tensor` directly to `ggml_backend_tensor_set` (#164)
+- L3052 — `rope_theta=0` means "no positional encoding" — skip RoPE entirely (#164)
+- L3061 — `ggml_siglu` ≠ PyTorch `glu` — the gate/value halves are SWAPPED (#81)
+- L3130 — Asymmetric rel-pos shift uses the same formula as symmetric (#81)
+- L3175 — Graph input tensors that nothing consumes are invisible to `ggml_graph_get_tensor` (#164)
+- L3208 — `ggml_backend_cpu_set_n_threads` asserts CPU — guard it after `init_best()`
+- L3321 — Decompose ConvTranspose1d → mul_mat + col2im_1d; port col2im per-backend (#155)
+- L3361 — Beam-search KV snapshots must stay on-device (#161)
+- L3644 — ggml / inference engine
+- L4216 — ggml graph allocation: gallocr vs compute_with_ctx
+- L5564 — 2026-04-22 - No-gpu mode must gate `ggml_backend_load_all()`
+- L7669 — 2026-05-05 — ggml fork patches we carry (must re-apply on every ggml bump)
+- L8940 — voxcpm2 perf — per-step ggml graphs, Metal, SIMD layouts
+- L9224 — ggml broadcast hides size-mismatch bugs
+- L11444 — ggml scheduler tightened cross-backend tensor resolution between §56 and 2026-05-26 (PLAN #115)
+- L12698 — Pocket TTS — manual CPU → ggml compute graph rewrite
+- L12937 — AudioSeal ggml port — ggml_pad_ext convention trap
+- L13014 — GPU weight mirrors for mixed legacy / graph codebases
+- L13138 — ggml_graph_get_tensor hash invalidated by ggml_gallocr
+- L13331 — read_tensor_f32 weight pre-cache for VITS-family TTS
+- L13344 — Single-token embed graph elimination for LLM-ASR
+- L13858 — A once-allocated-then-reused bucket step graph is a CUDA-graph-capture hazard: reset+alloc the sched EVERY step
+- L13917 — A cached cgraph is invalidated by ANY other graph on its scheduler — reset+alloc per step is NOT enough
+- L14017 — TTS code predictor: the dispatch overhead is real, but "fuse into one graph" and "skip the reset" are BOTH wrong — the fix is a sched-free persistent graph
+- L14086 — Any T-sized `ggml_view` into a fixed-length weight table must be bounded by the tensor's real length — long inputs overflow it and abort
+- L14228 — gallocr does NOT protect input-flagged tensors across computes — re-set EVERY input before EVERY compute of a persistent graph
+- L14289 — Vocoder/codec conv graphs hide three graph-construction wastes that dwarf the actual conv FLOPs — profile per-node before assuming it's inherent
+- L14336 — Before optimizing a graph's *dispatch*, split host-encode vs GPU-execute — and never trust a GPU benchmark taken under load
+- L14431 — A "GPU" model can be silently running on CPU — audit for hot graphs pinned to backend_cpu and CLI adapters that never forward use_gpu
+- L17919 — PR #244 dequant-cache fix MERGED
 
 **GPU portability — Metal / CUDA / Vulkan** (24)
 
-- L1568 — When the full system needs an unavailable resource (model / GPU), factor the risky logic into a pure helper and prove IT on synthetic data
-- L1683 — Verify a roadmap "broken/OPEN" claim empirically before implementing it — the codebase may have outgrown the note
-- L1763 — A Metal masked-attention-padding penalty does NOT transfer to CUDA, and a bucket-width change is byte-identical on Metal/CPU but not on CUDA
-- L1810 — ggml-metal im2col starves batch-1 convs — 3–11 threads/threadgroup at N=1, ~40× below bandwidth
-- L2472 — A "garbled GPU output" bug can live entirely downstream — A/B the GPUs before localizing (§192)
-- L2526 — MoltenVK `mul_mm`/`mul_mat_vec` downconvert src0 to f16 regardless of stored dtype (§192)
-- L2537 — Vulkan has no `REPEAT f16→f16` — cast K/V to F32 *before* the GQA repeat (§192)
-- L2550 — On macOS, GGML_METAL is default-ON and silently wins over Vulkan (§192)
-- L2600 — §214 Metal batched (B=2) quantized mat-vec ≠ the single-token PREC_F32 path
-- L2811 — Metal's q8_0 mat-vec kernel requantizes activations to q8 and ignores the F32 prec hint (§205)
-- L3309 — Measuring GPU perf on a thermally-throttling laptop GPU
-- L9554 — WDDM idle-clock-state hysteresis on consumer/laptop NVIDIA SKUs
-- L9691 — Chatterbox #83 Round 9 — S3Gen UNet GPU drift on Metal
-- L10944 — FA per-head additive mask CUDA kernel — what the upstream signature already gave us
-- L11562 — funasr CUDA !-loop — all-NaN prefill logits (issue #125, §136)
-- L12872 — Cohere flash-attn crossover
-- L12932 — conv_transpose_1d GPU TDR — naive loop is O(IL), not O(K/s0)
-- L13134 — flash_attn_ext vs scalar attention — numerical divergence
-- L13245 — VibeVoice TTS garbles only on AMD RDNA4: coopmat2 flash-attention
-- L14430 — Micro-optimizing an already-BLAS'd path with a GPU-ggml port is usually a dud — check for existing Accelerate/cblas and measure encode-vs-execute BEFORE porting
-- L14753 — "Backend miscomputes my pipeline" ≠ "op X is broken": arbitrate with test-backend-ops, and beware aggregate precision (#304 native-Vulkan post-mortem)
-- L16671 — Chatterbox GPU UNet performance fix
-- L16910 — cosyvoice3 \"CUDA test FAIL\" was a registry-alias + flow-quant discovery bug, NOT a CUDA bug
-- L18201 — "GPU picks a different token than CPU" is usually NOT a miscompute in an AR audio model — dump the LOGITS, and don't reach for the repetition detector
+- L1604 — When the full system needs an unavailable resource (model / GPU), factor the risky logic into a pure helper and prove IT on synthetic data
+- L1719 — Verify a roadmap "broken/OPEN" claim empirically before implementing it — the codebase may have outgrown the note
+- L1799 — A Metal masked-attention-padding penalty does NOT transfer to CUDA, and a bucket-width change is byte-identical on Metal/CPU but not on CUDA
+- L1846 — ggml-metal im2col starves batch-1 convs — 3–11 threads/threadgroup at N=1, ~40× below bandwidth
+- L2508 — A "garbled GPU output" bug can live entirely downstream — A/B the GPUs before localizing (§192)
+- L2562 — MoltenVK `mul_mm`/`mul_mat_vec` downconvert src0 to f16 regardless of stored dtype (§192)
+- L2573 — Vulkan has no `REPEAT f16→f16` — cast K/V to F32 *before* the GQA repeat (§192)
+- L2586 — On macOS, GGML_METAL is default-ON and silently wins over Vulkan (§192)
+- L2636 — §214 Metal batched (B=2) quantized mat-vec ≠ the single-token PREC_F32 path
+- L2847 — Metal's q8_0 mat-vec kernel requantizes activations to q8 and ignores the F32 prec hint (§205)
+- L3345 — Measuring GPU perf on a thermally-throttling laptop GPU
+- L9590 — WDDM idle-clock-state hysteresis on consumer/laptop NVIDIA SKUs
+- L9727 — Chatterbox #83 Round 9 — S3Gen UNet GPU drift on Metal
+- L10980 — FA per-head additive mask CUDA kernel — what the upstream signature already gave us
+- L11598 — funasr CUDA !-loop — all-NaN prefill logits (issue #125, §136)
+- L12908 — Cohere flash-attn crossover
+- L12968 — conv_transpose_1d GPU TDR — naive loop is O(IL), not O(K/s0)
+- L13170 — flash_attn_ext vs scalar attention — numerical divergence
+- L13281 — VibeVoice TTS garbles only on AMD RDNA4: coopmat2 flash-attention
+- L14466 — Micro-optimizing an already-BLAS'd path with a GPU-ggml port is usually a dud — check for existing Accelerate/cblas and measure encode-vs-execute BEFORE porting
+- L14789 — "Backend miscomputes my pipeline" ≠ "op X is broken": arbitrate with test-backend-ops, and beware aggregate precision (#304 native-Vulkan post-mortem)
+- L16707 — Chatterbox GPU UNet performance fix
+- L16946 — cosyvoice3 \"CUDA test FAIL\" was a registry-alias + flow-quant discovery bug, NOT a CUDA bug
+- L18237 — "GPU picks a different token than CPU" is usually NOT a miscompute in an AR audio model — dump the LOGITS, and don't reach for the repetition detector
 
 **Quantization** (10)
 
-- L2027 — Auditing CrispASR against CrispEmbed's bug classes: a weight reader with no quantized branch fails silently (2026-07)
-- L2107 — Quantizing a forced-aligner: q8 everywhere (incl. lm_head) is bit-identical; q4 on the encoder is not (#192 TADA aligner)
-- L3157 — Orpheus/SNAC TTS: `token_embd` must stay F16 for sub-Q8 quants
-- L3759 — Quantisation and memory
-- L4034 — Quantization
-- L12863 — F16 precision loss in deep WaveNet stacks
-- L12880 — MeloTTS + BERT quantization — what works and what doesn't
-- L13974 — Re-quantized GGUFs on HF must be re-baked when the quantizer adds carve-outs
-- L14062 — Sub-8-bit quantization of an audio tower fails as BEHAVIORAL collapse (loops, empty output) — and there is no per-block cliff to bisect
-- L17698 — imatrix quant SHIPPED
+- L2063 — Auditing CrispASR against CrispEmbed's bug classes: a weight reader with no quantized branch fails silently (2026-07)
+- L2143 — Quantizing a forced-aligner: q8 everywhere (incl. lm_head) is bit-identical; q4 on the encoder is not (#192 TADA aligner)
+- L3193 — Orpheus/SNAC TTS: `token_embd` must stay F16 for sub-Q8 quants
+- L3795 — Quantisation and memory
+- L4070 — Quantization
+- L12899 — F16 precision loss in deep WaveNet stacks
+- L12916 — MeloTTS + BERT quantization — what works and what doesn't
+- L14010 — Re-quantized GGUFs on HF must be re-baked when the quantizer adds carve-outs
+- L14098 — Sub-8-bit quantization of an audio tower fails as BEHAVIORAL collapse (loops, empty output) — and there is no per-block cliff to bisect
+- L17734 — imatrix quant SHIPPED
 
 **Perf measurement & A/B discipline** (8)
 
-- L1701 — Per-step matvec dispatch overhead is LOAD-DEPENDENT — a "win" measured on a busy box is mostly a contention artifact
-- L2171 — Best-of-N only helps if the scorer measures what you care about — TADA's reconstruction scorer is blind to duration outliers (#192)
-- L3795 — CPU vs ONNX vs PyTorch baselines
-- L4238 — Performance: what faster-whisper / insanely-fast-whisper do
-- L5535 — 2026-04-23 - FireRed decoder optimization triage
-- L11243 — Distinguishing "slow run" from "hung run" — CPU time ≪ wall time is the signal
-- L11378 — Cross-backend bug-sweep methodology — pair the cap survey with an empirical A/B
-- L13316 — §176 runtime optimization audit methodology
+- L1737 — Per-step matvec dispatch overhead is LOAD-DEPENDENT — a "win" measured on a busy box is mostly a contention artifact
+- L2207 — Best-of-N only helps if the scorer measures what you care about — TADA's reconstruction scorer is blind to duration outliers (#192)
+- L3831 — CPU vs ONNX vs PyTorch baselines
+- L4274 — Performance: what faster-whisper / insanely-fast-whisper do
+- L5571 — 2026-04-23 - FireRed decoder optimization triage
+- L11279 — Distinguishing "slow run" from "hung run" — CPU time ≪ wall time is the signal
+- L11414 — Cross-backend bug-sweep methodology — pair the cap survey with an empirical A/B
+- L13352 — §176 runtime optimization audit methodology
 
 **Long-form audio, VAD & chunking** (8)
 
-- L1932 — LLM-ASR (SALM) instruction-echo on short windows is genuine model behaviour, not a port bug — gate the input, don't chase the prompt
-- L1985 — The Mimi codec transformer must be causal — non-causal silently truncates long audio; the >250-frame WER A/B settled it (2026-07)
-- L3378 — VAD + chunking
-- L4311 — VAD integration and long audio
-- L11067 — TDT single-pass over a full long utterance is numerically fragile to codec-level audio noise
-- L15175 — #227 "--vad-import wants ggml-tiny" = LID not VAD
-- L15397 — #300 streaming diarization SHIPPED
-- L15993 — #89 parakeet-ja long-form FIXED
+- L1968 — LLM-ASR (SALM) instruction-echo on short windows is genuine model behaviour, not a port bug — gate the input, don't chase the prompt
+- L2021 — The Mimi codec transformer must be causal — non-causal silently truncates long audio; the >250-frame WER A/B settled it (2026-07)
+- L3414 — VAD + chunking
+- L4347 — VAD integration and long audio
+- L11103 — TDT single-pass over a full long utterance is numerically fragile to codec-level audio noise
+- L15211 — #227 "--vad-import wants ggml-tiny" = LID not VAD
+- L15433 — #300 streaming diarization SHIPPED
+- L16029 — #89 parakeet-ja long-form FIXED
 
 **Tokenizers, prompts, language & text** (17)
 
-- L844 — MOSS-TTS-Local 4B stop runaway was a PROMPT-TOKENIZATION bug — non-compositional BPE, not the forward (#249, 2026-07)
-- L894 — Cross-lingual TTS needs the target language plumbed through /v1/audio/speech (#249/#304, 2026-07)
-- L2183 — A converter that embeds a tokenizer MUST embed the merges — a silent `try/except: pass` byte-fallback breaks everything downstream (#192)
-- L3881 — Language handling
-- L5702 — FireRedPunc / fullstop-punc — BERT punctuation restoration
-- L6707 — Chatterbox 24 kHz prompt mel — module 4 phase 3
-- L7866 — Text LID via fastText — GlotLID-V3 + LID-176
-- L8077 — Text LID via CLD3 — Google compact language detector
-- L13167 — VibeVoice TTS: missing BPE merges still need BPE behavior
-- L13697 — 2026-07 — SentencePiece tokenizer taxonomy: greedy longest-match is wrong for BOTH Unigram and BPE
-- L13954 — SentencePiece `byte_fallback` is not optional decoration — OOV emoji/symbols must become `<0xHH>` byte tokens, and a `utf8_aligned` Viterbi dead-ends at a multi-byte lead without it
-- L14103 — The prompt contract is part of the port: a specials-only tokenizer silently sent EVERY glm-asr prompt instruction-less
-- L14138 — Unigram run-length loop metrics pass 2-gram cycles — and a "raw" baseline is only raw if the disable gate actually exists
-- L15311 — #249 MOSS-Local 4B stop-runaway = PROMPT tokenization bug
-- L15690 — #329 TTS target language
-- L16764 — cohere language whitelist + probe LID
-- L16882 — CV3 phase 6 speech_tokenizer_v3 ggml port
+- L880 — MOSS-TTS-Local 4B stop runaway was a PROMPT-TOKENIZATION bug — non-compositional BPE, not the forward (#249, 2026-07)
+- L930 — Cross-lingual TTS needs the target language plumbed through /v1/audio/speech (#249/#304, 2026-07)
+- L2219 — A converter that embeds a tokenizer MUST embed the merges — a silent `try/except: pass` byte-fallback breaks everything downstream (#192)
+- L3917 — Language handling
+- L5738 — FireRedPunc / fullstop-punc — BERT punctuation restoration
+- L6743 — Chatterbox 24 kHz prompt mel — module 4 phase 3
+- L7902 — Text LID via fastText — GlotLID-V3 + LID-176
+- L8113 — Text LID via CLD3 — Google compact language detector
+- L13203 — VibeVoice TTS: missing BPE merges still need BPE behavior
+- L13733 — 2026-07 — SentencePiece tokenizer taxonomy: greedy longest-match is wrong for BOTH Unigram and BPE
+- L13990 — SentencePiece `byte_fallback` is not optional decoration — OOV emoji/symbols must become `<0xHH>` byte tokens, and a `utf8_aligned` Viterbi dead-ends at a multi-byte lead without it
+- L14139 — The prompt contract is part of the port: a specials-only tokenizer silently sent EVERY glm-asr prompt instruction-less
+- L14174 — Unigram run-length loop metrics pass 2-gram cycles — and a "raw" baseline is only raw if the disable gate actually exists
+- L15347 — #249 MOSS-Local 4B stop-runaway = PROMPT tokenization bug
+- L15726 — #329 TTS target language
+- L16800 — cohere language whitelist + probe LID
+- L16918 — CV3 phase 6 speech_tokenizer_v3 ggml port
 
 **Mel, codecs & the audio front-end** (16)
 
-- L111 — The audio front door resampled with linear interpolation
-- L1921 — A one-frame error in a codec ENCODER shifts every RoPE position and shows up as an onset artifact, not a gradual drift — and a padding scheme faithful to one codec can be wrong for another
-- L2785 — A glibc-only crash reproduces on macOS under AddressSanitizer — and the bug is often a non-power-of-two FFT (§205)
-- L3076 — Streaming conv modules need cached left context, not zero-padding (#81)
-- L3254 — FFT size must match upstream exactly (Mini-Omni2 / Whisper mel)
-- L3563 — mel / preprocessor
-- L3711 — Mel spectrograms
-- L3849 — Audio format lessons
-- L4820 — Kyutai STT: causal padding, interleaved RoPE, and codec-based ASR
-- L4954 — FireRedVAD: FSMN Conv1d replication
-- L6755 — Chatterbox atomic native voice clone — the resampler + 5-cond install
-- L11732 — moshi / Mimi RVQ codebooks: decode uses embed_sum / cluster_usage
-- L12755 — MeloTTS (VITS2) — from zero to BERT conditioning
-- L15272 — #245/§232 qwen3-tts CP_DIRECT + codec FASTCONV DONE
-- L17597 — glint MP3+AAC TTS output §225 SHIPPED
-- L18080 — voxcpm2 CausalTransposeConv1d kwargs gotcha
+- L147 — The audio front door resampled with linear interpolation
+- L1957 — A one-frame error in a codec ENCODER shifts every RoPE position and shows up as an onset artifact, not a gradual drift — and a padding scheme faithful to one codec can be wrong for another
+- L2821 — A glibc-only crash reproduces on macOS under AddressSanitizer — and the bug is often a non-power-of-two FFT (§205)
+- L3112 — Streaming conv modules need cached left context, not zero-padding (#81)
+- L3290 — FFT size must match upstream exactly (Mini-Omni2 / Whisper mel)
+- L3599 — mel / preprocessor
+- L3747 — Mel spectrograms
+- L3885 — Audio format lessons
+- L4856 — Kyutai STT: causal padding, interleaved RoPE, and codec-based ASR
+- L4990 — FireRedVAD: FSMN Conv1d replication
+- L6791 — Chatterbox atomic native voice clone — the resampler + 5-cond install
+- L11768 — moshi / Mimi RVQ codebooks: decode uses embed_sum / cluster_usage
+- L12791 — MeloTTS (VITS2) — from zero to BERT conditioning
+- L15308 — #245/§232 qwen3-tts CP_DIRECT + codec FASTCONV DONE
+- L17633 — glint MP3+AAC TTS output §225 SHIPPED
+- L18116 — voxcpm2 CausalTransposeConv1d kwargs gotcha
 
 **Process, triage & documentation discipline** (19)
 
-- L162 — One red job hides every job behind it — five days of a 33-job nightly that never ran
-- L816 — When instrumenting the suspect file produces NO output, you are editing the wrong file — look for a second copy
-- L909 — "The model emits it inline as text" is a claim to VERIFY, not to document — structured data you never parsed looks identical to a model limitation
-- L1166 — A positional arg landing on the WRONG parameter is invisible in review and baked into the weights
-- L1371 — PLAN "OPEN" items are frequently already shipped — audit against the CODE, never the prose
-- L1609 — Audit a whole roadmap CLUSTER in one measure-first pass before implementing any of it
-- L1915 — Handover docs can be dangerously stale — read the actual Python source, not the handover
-- L2664 — DRY shared headers can exist for months before callers migrate (§175)
-- L3957 — Regression testing discipline
-- L3984 — Specific bugs that cost us a day each
-- L4447 — CLI ↔ library DRY refactor
-- L6011 — Audit script ≠ behavior test
-- L11152 — Long-form ASR has three distinct failure classes, not one (2026-05-25, generalising issue #89)
-- L13078 — beam_size default — greedy vs beam-5
-- L13202 — VibeVoice TTS start clicks: distinguish decoder PCM from CLI post-processing
-- L13750 — Issue #89 close-out: four transferable lessons
-- L14045 — Issue triage discipline: check the codebase before leaving issues open
-- L14672 — `git apply --3way` STAGES its result — a later `git add X && git commit` sweeps it up
-- L16950 — CrispEmbed #31 WASM OCR e2e
+- L198 — One red job hides every job behind it — five days of a 33-job nightly that never ran
+- L852 — When instrumenting the suspect file produces NO output, you are editing the wrong file — look for a second copy
+- L945 — "The model emits it inline as text" is a claim to VERIFY, not to document — structured data you never parsed looks identical to a model limitation
+- L1202 — A positional arg landing on the WRONG parameter is invisible in review and baked into the weights
+- L1407 — PLAN "OPEN" items are frequently already shipped — audit against the CODE, never the prose
+- L1645 — Audit a whole roadmap CLUSTER in one measure-first pass before implementing any of it
+- L1951 — Handover docs can be dangerously stale — read the actual Python source, not the handover
+- L2700 — DRY shared headers can exist for months before callers migrate (§175)
+- L3993 — Regression testing discipline
+- L4020 — Specific bugs that cost us a day each
+- L4483 — CLI ↔ library DRY refactor
+- L6047 — Audit script ≠ behavior test
+- L11188 — Long-form ASR has three distinct failure classes, not one (2026-05-25, generalising issue #89)
+- L13114 — beam_size default — greedy vs beam-5
+- L13238 — VibeVoice TTS start clicks: distinguish decoder PCM from CLI post-processing
+- L13786 — Issue #89 close-out: four transferable lessons
+- L14081 — Issue triage discipline: check the codebase before leaving issues open
+- L14708 — `git apply --3way` STAGES its result — a later `git add X && git commit` sweeps it up
+- L16986 — CrispEmbed #31 WASM OCR e2e
 
 **Per-model port notes** (44)
 
-- L664 — A model's capability list cannot be inferred from its vocabulary — and forcing a fake list does not simulate having the capability
-- L3269 — Multi-stream token architecture (Mini-Omni2)
-- L3919 — Model architecture comparisons
-- L4863 — FireRedASR: Conformer encoder debugging
-- L5816 — TTS / Vocoder (Chatterbox HiFTGenerator)
-- L6078 — Chatterbox-Turbo conformer encoder — ggml layout traps
-- L6129 — Chatterbox repaired GGUF split — stage-specific regen
-- L6304 — Chatterbox voice cloning — bake to GGUF, load via `--voice`
-- L6357 — Chatterbox VoiceEncoder native port — module 2 of voice cloning
-- L6463 — Chatterbox S3Tokenizer V2 native port — module 3 of voice cloning
-- L6632 — Chatterbox CAMPPlus phase 2 — TDNN forward
-- L7528 — T5-family translation runtime traps (May 2026, MADLAD-400 debugging)
-- L8234 — IndexTTS-1.5 TTS backend
-- L8701 — Speaker verification — TitaNet
-- L8749 — Parakeet-TDT greedy decode — blank + duration=0
-- L8815 — VibeVoice 1.5B TTS voice cloning: acoustic + semantic dual encoder
-- L9298 — SANM-encoder family (FunASR / SenseVoice / CosyVoice)
-- L11691 — Round 10 — SpeechT5 + Dia TTS backend ports (2026-05-31/06-01)
-- L11766 — Dia 1.6B TTS — what ACTUALLY fixed it
-- L11820 — FastPitch TTS — non-autoregressive parallel TTS port (§133, 2026-06-02/03)
-- L11986 — SpeechT5 TTS decoder — what ACTUALLY fixed it
-- L12060 — Parler TTS — T5 + MusicGen decoder + DAC 44 kHz
-- L12192 — MAES beam search for TDT transducers
-- L12294 — Bark TTS — what ACTUALLY fixed it
-- L12841 — OpenVoice2 voice cloning — ggml data layout
-- L13579 — TADA encoder port: staged model loading on constrained RAM (§221)
-- L14893 — #195 parakeet-ctc-1.1b-ja CTC routing
-- L14936 — #205 --max-len text-split + granite-plus
-- L15053 — #221 irodori voice cloning SHIPPED
-- L15216 — #231 cohere-arabic loop = corrupt GGUF
-- L15329 — #249 MOSS voice cloning SHIPPED
-- L15377 — vibevoice #299 runtime-reproduced
-- L15442 — #308 whisper subtitles double-caps
-- L15923 — #334 cosyvoice3 clone bugs
-- L16061 — #93 voxtral-tts SHIPPED
-- L16541 — ARK-ASR-3B port SHIPPED
-- L17045 — CSM-1B TTS §135 FIXED
-- L17089 — Dia 1.6B TTS port
-- L17265 — dots.tts #200 SHIPPED
-- L17638 — higgs-audio-v3-stt SHIPPED
-- L17769 — indextts long-ref crash FIXED
-- L18008 — TADA TTS time embedding bugs
-- L18056 — Four bugs that together caused empty/garbage transcripts; all patched in src/vibevoice.cpp +…
-- L18281 — "Verified byte-identical at 225 s" verified a clip, not a length — and a decoder that drops spans needs a repair pass, not a better cap
+- L700 — A model's capability list cannot be inferred from its vocabulary — and forcing a fake list does not simulate having the capability
+- L3305 — Multi-stream token architecture (Mini-Omni2)
+- L3955 — Model architecture comparisons
+- L4899 — FireRedASR: Conformer encoder debugging
+- L5852 — TTS / Vocoder (Chatterbox HiFTGenerator)
+- L6114 — Chatterbox-Turbo conformer encoder — ggml layout traps
+- L6165 — Chatterbox repaired GGUF split — stage-specific regen
+- L6340 — Chatterbox voice cloning — bake to GGUF, load via `--voice`
+- L6393 — Chatterbox VoiceEncoder native port — module 2 of voice cloning
+- L6499 — Chatterbox S3Tokenizer V2 native port — module 3 of voice cloning
+- L6668 — Chatterbox CAMPPlus phase 2 — TDNN forward
+- L7564 — T5-family translation runtime traps (May 2026, MADLAD-400 debugging)
+- L8270 — IndexTTS-1.5 TTS backend
+- L8737 — Speaker verification — TitaNet
+- L8785 — Parakeet-TDT greedy decode — blank + duration=0
+- L8851 — VibeVoice 1.5B TTS voice cloning: acoustic + semantic dual encoder
+- L9334 — SANM-encoder family (FunASR / SenseVoice / CosyVoice)
+- L11727 — Round 10 — SpeechT5 + Dia TTS backend ports (2026-05-31/06-01)
+- L11802 — Dia 1.6B TTS — what ACTUALLY fixed it
+- L11856 — FastPitch TTS — non-autoregressive parallel TTS port (§133, 2026-06-02/03)
+- L12022 — SpeechT5 TTS decoder — what ACTUALLY fixed it
+- L12096 — Parler TTS — T5 + MusicGen decoder + DAC 44 kHz
+- L12228 — MAES beam search for TDT transducers
+- L12330 — Bark TTS — what ACTUALLY fixed it
+- L12877 — OpenVoice2 voice cloning — ggml data layout
+- L13615 — TADA encoder port: staged model loading on constrained RAM (§221)
+- L14929 — #195 parakeet-ctc-1.1b-ja CTC routing
+- L14972 — #205 --max-len text-split + granite-plus
+- L15089 — #221 irodori voice cloning SHIPPED
+- L15252 — #231 cohere-arabic loop = corrupt GGUF
+- L15365 — #249 MOSS voice cloning SHIPPED
+- L15413 — vibevoice #299 runtime-reproduced
+- L15478 — #308 whisper subtitles double-caps
+- L15959 — #334 cosyvoice3 clone bugs
+- L16097 — #93 voxtral-tts SHIPPED
+- L16577 — ARK-ASR-3B port SHIPPED
+- L17081 — CSM-1B TTS §135 FIXED
+- L17125 — Dia 1.6B TTS port
+- L17301 — dots.tts #200 SHIPPED
+- L17674 — higgs-audio-v3-stt SHIPPED
+- L17805 — indextts long-ref crash FIXED
+- L18044 — TADA TTS time embedding bugs
+- L18092 — Four bugs that together caused empty/garbage transcripts; all patched in src/vibevoice.cpp +…
+- L18317 — "Verified byte-identical at 225 s" verified a clip, not a length — and a decoder that drops spans needs a repair pass, not a better cap
 
 **Uncategorised** (3)
 
-- L65 — An arm that fails under every condition cannot discriminate a fix
-- L86 — Hardcoded token ids need a guard that DECODES them
-- L137 — Model-emitted sentinels are not transcript text
+- L101 — An arm that fails under every condition cannot discriminate a fix
+- L122 — Hardcoded token ids need a guard that DECODES them
+- L173 — Model-emitted sentinels are not transcript text
 
 ## Cross-reference by model / family
 
@@ -359,42 +360,42 @@ A section is listed when its heading names the family, or its body mentions it
 at least 3 times. Sections appear under several families; this is a
 lookup, not a partition.
 
-- **chatterbox** (26) — L2600, L2785, L5816, L6078, L6129, L6161, L6200, L6304, L6357, L6463, L6566, L6632, L6707, L6755, L8904, L9691, L13316, L14364, L14753, L14813, L15272, L16061, L16671, L16709, L17265, L18339
-- **cosyvoice3** (9) — L984, L9298, L13316, L14364, L14813, L15690, L15923, L16882, L16910
-- **vibevoice** (15) — L86, L909, L2060, L2967, L5535, L6304, L8815, L13167, L13202, L13245, L13921, L15377, L15397, L15628, L18056
-- **tada** (9) — L1390, L1763, L2107, L2157, L2171, L13316, L13579, L16305, L18008
-- **whisper** (22) — L584, L2276, L3254, L4054, L4238, L4311, L4447, L4954, L5895, L7866, L8234, L13078, L14936, L15442, L15485, L15551, L15993, L16541, L16882, L17638, L17698, L17814
-- **parakeet / TDT** (18) — L355, L1117, L2276, L2309, L3378, L4311, L4657, L6755, L8749, L11067, L11152, L12192, L13750, L14893, L14936, L15993, L17814, L18281
-- **moss** (13) — L844, L1040, L1532, L1734, L1909, L1915, L2206, L2231, L2256, L3378, L14556, L15311, L15329
-- **firered** (9) — L1701, L4863, L4954, L5535, L5702, L6566, L13697, L15442, L15485
-- **funasr / sensevoice / SANM** (2) — L9298, L11562
-- **kyutai / moshi / mimi** (7) — L1921, L1985, L4820, L11732, L12506, L12662, L17045
-- **dia** (5) — L1663, L11691, L11766, L11986, L17089
-- **parler** (1) — L12060
-- **speecht5** (2) — L11691, L11986
-- **bark** (1) — L12294
-- **pocket-tts** (3) — L12506, L12662, L17883
-- **melotts / VITS** (5) — L1827, L12755, L12880, L13295, L16363
-- **fastpitch** (1) — L11820
-- **indextts** (1) — L8234
-- **orpheus / SNAC** (1) — L3157
-- **voxcpm2** (4) — L8904, L9108, L9231, L18080
-- **openvoice2** (1) — L12841
-- **glm-asr** (1) — L14103
-- **qwen3** (17) — L1734, L3608, L4311, L4954, L7633, L8234, L8904, L9298, L11280, L14062, L14160, L14253, L14936, L15272, L15690, L17698, L18201
-- **madlad / T5** (1) — L7528
-- **mini-omni2** (2) — L3254, L3269
-- **titanet / speaker-id** (1) — L8701
-- **audioseal** (1) — L12901
-- **cohere** (7) — L664, L3711, L11216, L12872, L14936, L15216, L16764
-- **voxtral** (11) — L3608, L3711, L3759, L3919, L4311, L11152, L11216, L11243, L11378, L16061, L17265
-- **granite** (3) — L2351, L3608, L14936
-- **ark-asr** (3) — L203, L16541, L17265
-- **higgs-stt** (2) — L1040, L17638
-- **dots-tts** (2) — L1915, L17265
-- **irodori** (2) — L1792, L15053
-- **f5-tts** (1) — L14395
-- **kokoro** (4) — L757, L7633, L15690, L16363
-- **zonos** (1) — L12060
-- **omniasr / omnivoice** (6) — L584, L1487, L4954, L14192, L14220, L14606
-- **glm / mimo / mega** (3) — L11408, L14103, L14160
+- **chatterbox** (26) — L2636, L2821, L5852, L6114, L6165, L6197, L6236, L6340, L6393, L6499, L6602, L6668, L6743, L6791, L8940, L9727, L13352, L14400, L14789, L14849, L15308, L16097, L16707, L16745, L17301, L18375
+- **cosyvoice3** (9) — L1020, L9334, L13352, L14400, L14849, L15726, L15959, L16918, L16946
+- **vibevoice** (15) — L122, L945, L2096, L3003, L5571, L6340, L8851, L13203, L13238, L13281, L13957, L15413, L15433, L15664, L18092
+- **tada** (9) — L1426, L1799, L2143, L2193, L2207, L13352, L13615, L16341, L18044
+- **whisper** (22) — L620, L2312, L3290, L4090, L4274, L4347, L4483, L4990, L5931, L7902, L8270, L13114, L14972, L15478, L15521, L15587, L16029, L16577, L16918, L17674, L17734, L17850
+- **parakeet / TDT** (18) — L391, L1153, L2312, L2345, L3414, L4347, L4693, L6791, L8785, L11103, L11188, L12228, L13786, L14929, L14972, L16029, L17850, L18317
+- **moss** (13) — L880, L1076, L1568, L1770, L1945, L1951, L2242, L2267, L2292, L3414, L14592, L15347, L15365
+- **firered** (9) — L1737, L4899, L4990, L5571, L5738, L6602, L13733, L15478, L15521
+- **funasr / sensevoice / SANM** (2) — L9334, L11598
+- **kyutai / moshi / mimi** (7) — L1957, L2021, L4856, L11768, L12542, L12698, L17081
+- **dia** (5) — L1699, L11727, L11802, L12022, L17125
+- **parler** (1) — L12096
+- **speecht5** (2) — L11727, L12022
+- **bark** (1) — L12330
+- **pocket-tts** (3) — L12542, L12698, L17919
+- **melotts / VITS** (5) — L1863, L12791, L12916, L13331, L16399
+- **fastpitch** (1) — L11856
+- **indextts** (1) — L8270
+- **orpheus / SNAC** (1) — L3193
+- **voxcpm2** (4) — L8940, L9144, L9267, L18116
+- **openvoice2** (1) — L12877
+- **glm-asr** (1) — L14139
+- **qwen3** (17) — L1770, L3644, L4347, L4990, L7669, L8270, L8940, L9334, L11316, L14098, L14196, L14289, L14972, L15308, L15726, L17734, L18237
+- **madlad / T5** (1) — L7564
+- **mini-omni2** (2) — L3290, L3305
+- **titanet / speaker-id** (1) — L8737
+- **audioseal** (1) — L12937
+- **cohere** (7) — L700, L3747, L11252, L12908, L14972, L15252, L16800
+- **voxtral** (11) — L3644, L3747, L3795, L3955, L4347, L11188, L11252, L11279, L11414, L16097, L17301
+- **granite** (3) — L2387, L3644, L14972
+- **ark-asr** (3) — L239, L16577, L17301
+- **higgs-stt** (2) — L1076, L17674
+- **dots-tts** (2) — L1951, L17301
+- **irodori** (2) — L1828, L15089
+- **f5-tts** (1) — L14431
+- **kokoro** (4) — L793, L7669, L15726, L16399
+- **zonos** (1) — L12096
+- **omniasr / omnivoice** (6) — L620, L1523, L4990, L14228, L14256, L14642
+- **glm / mimo / mega** (3) — L11444, L14139, L14196
