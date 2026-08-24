@@ -91,7 +91,9 @@ std::vector<float> repeated_fixture(int reps) {
 }
 
 // 231 s — squarely in the 30-300 s dead zone the #350 cases need.
-std::vector<float> long_fixture() { return repeated_fixture(21); }
+std::vector<float> long_fixture() {
+    return repeated_fixture(21);
+}
 
 std::string transcript_of(crispasr_session_result* r) {
     std::string text;
@@ -196,8 +198,7 @@ TEST_CASE("parakeet long-form: dropped spans are repaired (issue #350)", "[integ
 // but the orchestrator carried no progress hook, so
 // crispasr_session_set_progress_callback + transcribe_chunked reported nothing
 // (callback silent, g_progress atomic stuck at idle) until the call returned.
-TEST_CASE("parakeet long-form: chunked entry point reports progress (issue #385)",
-          "[integration][parakeet-longform]") {
+TEST_CASE("parakeet long-form: chunked entry point reports progress (issue #385)", "[integration][parakeet-longform]") {
     const char* model_path = parakeet_model();
     if (!model_path)
         SKIP("CRISPASR_MODEL_PARAKEET not set or not readable");
