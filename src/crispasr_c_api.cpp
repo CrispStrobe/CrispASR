@@ -5556,8 +5556,12 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
                 }
                 for (auto& w : sw)
                     words.push_back(std::move(w));
-                if (s->progress_cb)
-                    s->progress_cb((int)si + 1, (int)slices.size(), s->progress_ud);
+                // Issue #385: report through the shared helper so the pollable
+                // g_progress atomic moves in lockstep with the callback — this
+                // path used to fire the callback alone, leaving Dart-style
+                // pollers at 0 % for the whole JA run. Units are slices, not
+                // samples (pre-existing on this path).
+                session_report_progress(s, (int)si + 1, (int)slices.size());
             }
             std::sort(
                 words.begin(), words.end(),
