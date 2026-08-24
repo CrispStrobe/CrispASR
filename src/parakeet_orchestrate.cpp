@@ -459,8 +459,8 @@ std::vector<parakeet_seg> transcribe_longform(parakeet_context* ctx, const float
     // Issue #385: report each finished window. `w.end` is the window's logical
     // end sample, so the sequence is monotonic and the last fires (n, n).
     auto report = [&](const lf_window& w) {
-        if (opts.progress_cb)
-            opts.progress_cb(w.end, n_samples, opts.progress_ud);
+        if (opts.on_progress)
+            opts.on_progress(w.end, n_samples);
     };
 
     bool pipeline = plan.size() > 1 && parakeet_decode_uses_backend(ctx) == 0;

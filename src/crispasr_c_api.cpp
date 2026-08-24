@@ -4944,6 +4944,23 @@ CA_EXPORT crispasr_session_result* crispasr_session_transcribe_lang(crispasr_ses
 // session path bounds the FastConformer encode on long audio instead of
 // building one O(T^2) full-length graph.
 
+// The one definition of the #208 progress contract: mirror the pollable
+// g_progress atomic, then the per-session callback, in lockstep — every
+// long-form path reports through here so the two cannot drift apart (#385
+// was exactly that drift: a path that updated neither).
+static void session_report_progress(crispasr_session* s, int processed, int total) {
+    g_progress.store(total > 0 ? (int)((int64_t)processed * 100 / total) : 0, std::memory_order_relaxed);
+    if (s && s->progress_cb)
+        s->progress_cb(processed, total, s->progress_ud);
+}
+
+// Issue #208: started(0) / idle(-1) bracket around a long-form run, RAII so
+// no exit — early return or failure — can leak a stale percentage to pollers.
+struct scoped_session_progress {
+    scoped_session_progress() { g_progress.store(0, std::memory_order_relaxed); }
+    ~scoped_session_progress() { g_progress.store(-1, std::memory_order_relaxed); }
+};
+
 // Normalize a word for boundary-dedup comparison: lowercase + drop ASCII
 // punctuation. Non-ASCII bytes (JA / accented text) are kept verbatim.
 static std::string parakeet_norm_word(const char* s) {
@@ -4984,7 +5001,7 @@ static std::string parakeet_norm_word(const char* s) {
 static void parakeet_session_chunked_merge(parakeet_context* ctx, const float* samples, int n_samples,
                                            int chunk_samples, int overlap_samples,
                                            std::vector<crispasr_session_seg>& out,
-                                           crispasr_progress_callback prog_cb = nullptr, void* prog_ud = nullptr) {
+                                           crispasr_session* sess = nullptr) {
     const int SR = 16000;
     if (chunk_samples < SR)
         chunk_samples = SR; // 1 s floor
@@ -5035,11 +5052,8 @@ static void parakeet_session_chunked_merge(parakeet_context* ctx, const float* s
         }
         // Issue #208: report progress after each finished window. `end` is the
         // last input sample this window covered, so it is monotonically
-        // non-decreasing and reaches n_samples on the final window. Mirror it
-        // into the module-level atomic so pollers (Dart FFI) also see it.
-        g_progress.store((int)((int64_t)end * 100 / n_samples), std::memory_order_relaxed);
-        if (prog_cb)
-            prog_cb(end, n_samples, prog_ud);
+        // non-decreasing and reaches n_samples on the final window.
+        session_report_progress(sess, end, n_samples);
         if (end >= n_samples)
             break;
     }
@@ -5421,25 +5435,11 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
             // Issue #385: the unified dispatch dropped the #208 progress
             // contract — neither s->progress_cb nor the pollable g_progress
             // atomic was touched, so chunked long-form callers saw 0 % until
-            // return. Route the orchestrator's per-window progress through
-            // both, in lockstep as the session header documents. `pc` lives on
-            // this frame; the orchestrator only fires the callback on the
-            // calling thread, inside this call.
-            struct prog_ctx {
-                crispasr_progress_callback cb;
-                void* ud;
-            } pc{s->progress_cb, s->progress_ud};
-            oo.progress_cb = [](int done, int total, void* ud) {
-                g_progress.store(total > 0 ? (int)((int64_t)done * 100 / total) : 0, std::memory_order_relaxed);
-                const auto* p = static_cast<const prog_ctx*>(ud);
-                if (p->cb)
-                    p->cb(done, total, p->ud);
-            };
-            oo.progress_ud = &pc;
-            g_progress.store(0, std::memory_order_relaxed); // issue #208: pollers see "started"
-            auto segs = parakeet_transcribe_segments(s->parakeet_ctx, pcm, n_samples, 0, is_ja, oo);
-            g_progress.store(-1, std::memory_order_relaxed); // back to idle
-            for (auto& ps : segs) {
+            // return. The orchestrator invokes on_progress on the calling
+            // thread, inside this call, so capturing `s` is safe.
+            oo.on_progress = [s](int done, int total) { session_report_progress(s, done, total); };
+            scoped_session_progress prog;
+            for (auto& ps : parakeet_transcribe_segments(s->parakeet_ctx, pcm, n_samples, 0, is_ja, oo)) {
                 crispasr_session_seg seg;
                 seg.text = std::move(ps.text);
                 seg.t0 = ps.t0;
@@ -5666,9 +5666,8 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
             if (const char* e = getenv("CRISPASR_PARAKEET_STREAM_CHUNK"))
                 enc_window = std::max(2, atoi(e));
             const int ov = s->parakeet_force_overlap_seconds >= 0 ? s->parakeet_force_overlap_seconds : 2;
-            g_progress.store(0, std::memory_order_relaxed);
+            scoped_session_progress prog;
             parakeet_result* pr = parakeet_transcribe_streamed(s->parakeet_ctx, pcm, n_samples, 0, enc_window, ov);
-            g_progress.store(-1, std::memory_order_relaxed);
             if (!pr) {
                 delete r;
                 return nullptr;
@@ -5682,10 +5681,9 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
         // merge (no dropped sections, no boundary duplicates). Emits one merged
         // segment (the #208 batch-caller contract).
         if (!use_single_pass && !is_ja) {
-            g_progress.store(0, std::memory_order_relaxed); // issue #208: pollers see "started"
+            scoped_session_progress prog; // issue #208: pollers see "started"; idle again on return
             parakeet_session_chunked_merge(s->parakeet_ctx, pcm, n_samples, chunk_s * SR, overlap_s * SR, r->segments,
-                                           s->progress_cb, s->progress_ud);
-            g_progress.store(-1, std::memory_order_relaxed); // back to idle
+                                           s);
             return r;
         }
 
@@ -5697,9 +5695,8 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
         if (const char* e = getenv("CRISPASR_PARAKEET_VAD_SLICE_CAP"))
             ja_cap_s = std::max(0, atoi(e));
         if (!use_single_pass && is_ja && ja_cap_s > 0 && !force_chunked) {
-            g_progress.store(0, std::memory_order_relaxed);
+            scoped_session_progress prog;
             r->segments.push_back(transcribe_ja_sliced(pcm, n_samples, SR, ja_cap_s));
-            g_progress.store(-1, std::memory_order_relaxed);
             return r;
         }
 

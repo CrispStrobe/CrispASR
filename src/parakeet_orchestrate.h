@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -60,16 +61,15 @@ struct parakeet_orchestrate_opts {
     bool chunked_requested = false;
     // Issue #385: per-window progress on the LONGFORM route — the #208 session
     // contract, which the #350 hoist left behind on the legacy inline path.
-    // Fired on the calling thread after each finished window with (input
+    // Invoked on the calling thread after each finished window with (input
     // samples processed so far, total samples); `processed` is monotonically
     // non-decreasing and reaches `total` on the last window, including a
     // window whose encode failed, so a caller's progress bar cannot stall
     // short of 100 %. The single-decode routes (SINGLE_PASS / STREAMED /
-    // CHUNK_SEGMENTED) have no observable windows and do not fire it, per the
-    // session header's documented contract; the #350 gap-fill repair runs
+    // CHUNK_SEGMENTED) have no observable windows and do not invoke it, per
+    // the session header's documented contract; the #350 gap-fill repair runs
     // after the last window and stays silent too.
-    void (*progress_cb)(int processed, int total, void* user_data) = nullptr;
-    void* progress_ud = nullptr;
+    std::function<void(int processed, int total)> on_progress;
 };
 
 // The decoder's reliable single-pass window, in seconds. Past roughly this much
