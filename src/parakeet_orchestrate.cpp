@@ -157,6 +157,7 @@ int find_silence_cut(const float* s, int n, int target, int window, int sr) {
 // ahead of the decoder (see transcribe_longform).
 struct lf_window {
     int ext_s, ext_e;          // encoder input range (window ± 2 s context)
+    int end;                   // logical end sample (pre-extension) — what progress reports as processed (#385)
     int64_t ext_t0;            // absolute start of ext_s, centiseconds
     int64_t left_cs, right_cs; // keep words with left_cs <= t0 < right_cs
 };
@@ -181,6 +182,7 @@ std::vector<lf_window> plan_longform_windows(const float* samples, int n_samples
         lf_window w;
         w.ext_s = std::max(0, pos - ctxs);
         w.ext_e = std::min(n_samples, end + ctxs);
+        w.end = end;
         w.ext_t0 = t_offset_cs + (int64_t)((double)w.ext_s / SR * 100.0);
         w.left_cs = (pos == 0) ? INT64_MIN : t_offset_cs + (int64_t)((double)pos / SR * 100.0);
         w.right_cs = (end == n_samples) ? INT64_MAX : t_offset_cs + (int64_t)((double)end / SR * 100.0);
@@ -447,19 +449,29 @@ void append_window_seg(parakeet_result* r, const lf_window& w, std::vector<parak
 // parakeet_decode_uses_backend() says so. CRISPASR_PARAKEET_PIPELINE=0/1
 // forces it off/on.
 std::vector<parakeet_seg> transcribe_longform(parakeet_context* ctx, const float* samples, int n_samples,
-                                              int64_t t_offset_cs, int cap_samples) {
+                                              int64_t t_offset_cs, int cap_samples,
+                                              const parakeet_orchestrate_opts& opts) {
     std::vector<parakeet_seg> out;
     const std::vector<lf_window> plan = plan_longform_windows(samples, n_samples, t_offset_cs, cap_samples);
     if (plan.empty())
         return out;
+
+    // Issue #385: report each finished window. `w.end` is the window's logical
+    // end sample, so the sequence is monotonic and the last fires (n, n).
+    auto report = [&](const lf_window& w) {
+        if (opts.progress_cb)
+            opts.progress_cb(w.end, n_samples, opts.progress_ud);
+    };
 
     bool pipeline = plan.size() > 1 && parakeet_decode_uses_backend(ctx) == 0;
     if (const char* e = getenv("CRISPASR_PARAKEET_PIPELINE"))
         pipeline = atoi(e) != 0 && plan.size() > 1;
 
     if (!pipeline) {
-        for (const auto& w : plan)
+        for (const auto& w : plan) {
             append_window_seg(parakeet_transcribe_ex(ctx, samples + w.ext_s, w.ext_e - w.ext_s, w.ext_t0), w, out);
+            report(w);
+        }
         return out;
     }
 
@@ -496,10 +508,11 @@ std::vector<parakeet_seg> transcribe_longform(parakeet_context* ctx, const float
             q.pop_front();
             cv_full.notify_one();
         }
-        if (!it.buf)
-            continue; // encode failed for this window; keep going, order intact
-        append_window_seg(parakeet_decode_frames(ctx, it.buf, it.T_enc, it.d_model, plan[i].ext_t0), plan[i], out);
-        free(it.buf);
+        if (it.buf) {
+            append_window_seg(parakeet_decode_frames(ctx, it.buf, it.T_enc, it.d_model, plan[i].ext_t0), plan[i], out);
+            free(it.buf);
+        } // else: encode failed for this window; keep going, order intact
+        report(plan[i]);
     }
 
     producer.join();
@@ -680,7 +693,7 @@ std::vector<parakeet_seg> parakeet_transcribe_segments(parakeet_context* ctx, co
     // are independent: the window is a throughput knob, gap_fill_segments is
     // what makes coverage robust.
     if (strat == parakeet_strategy::LONGFORM) {
-        out = transcribe_longform(ctx, samples, n_samples, t_offset_cs, rs.longform_window_s * SR);
+        out = transcribe_longform(ctx, samples, n_samples, t_offset_cs, rs.longform_window_s * SR, opts);
         if (repair)
             gap_fill_segments(ctx, samples, n_samples, t_offset_cs, out, kParakeetBoundedWindowS, kParakeetGapFillMinCs,
                               opts.no_prints);

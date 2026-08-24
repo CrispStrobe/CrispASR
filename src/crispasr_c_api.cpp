@@ -5418,7 +5418,28 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
             oo.chunk_overlap_seconds =
                 s->parakeet_force_overlap_seconds >= 0 ? (float)s->parakeet_force_overlap_seconds : 2.0f;
             oo.no_prints = false;
-            for (auto& ps : parakeet_transcribe_segments(s->parakeet_ctx, pcm, n_samples, 0, is_ja, oo)) {
+            // Issue #385: the unified dispatch dropped the #208 progress
+            // contract — neither s->progress_cb nor the pollable g_progress
+            // atomic was touched, so chunked long-form callers saw 0 % until
+            // return. Route the orchestrator's per-window progress through
+            // both, in lockstep as the session header documents. `pc` lives on
+            // this frame; the orchestrator only fires the callback on the
+            // calling thread, inside this call.
+            struct prog_ctx {
+                crispasr_progress_callback cb;
+                void* ud;
+            } pc{s->progress_cb, s->progress_ud};
+            oo.progress_cb = [](int done, int total, void* ud) {
+                g_progress.store(total > 0 ? (int)((int64_t)done * 100 / total) : 0, std::memory_order_relaxed);
+                const auto* p = static_cast<const prog_ctx*>(ud);
+                if (p->cb)
+                    p->cb(done, total, p->ud);
+            };
+            oo.progress_ud = &pc;
+            g_progress.store(0, std::memory_order_relaxed); // issue #208: pollers see "started"
+            auto segs = parakeet_transcribe_segments(s->parakeet_ctx, pcm, n_samples, 0, is_ja, oo);
+            g_progress.store(-1, std::memory_order_relaxed); // back to idle
+            for (auto& ps : segs) {
                 crispasr_session_seg seg;
                 seg.text = std::move(ps.text);
                 seg.t0 = ps.t0;
