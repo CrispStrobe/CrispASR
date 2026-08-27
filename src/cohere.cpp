@@ -2404,6 +2404,12 @@ void cohere_save_utterance_cross_kv(struct cohere_context* ctx, int64_t utteranc
 void cohere_restore_utterance_cross_kv(struct cohere_context* ctx, int n_new_samples) {
     if (!ctx || ctx->utterance_cached_k.empty()) { if (ctx) ctx->stream_delta_new_samples = 0; return; }
     const int saved_T = ctx->utterance_cached_T_enc;
+    // ponytail: guard against缩水 cache (throttled VAD shifted window) — fallback to full encode rather than corrupt KV
+    if (saved_T <= 0 || (int)ctx->utterance_cached_k[0].size() != saved_T * ctx->model.hparams.dec_head_dim * ctx->model.hparams.dec_n_heads) {
+        if (ctx) ctx->stream_delta_new_samples = 0;
+        ctx->utterance_cached_k.clear(); ctx->utterance_cached_v.clear(); ctx->utterance_cached_T_enc = 0;
+        return;
+    }
     ctx->stream_cached_k = ctx->utterance_cached_k;
     ctx->stream_cached_v = ctx->utterance_cached_v;
     ctx->stream_cached_T_enc = saved_T;
@@ -2617,7 +2623,9 @@ struct cohere_result* cohere_transcribe_ex(struct cohere_context* ctx, const flo
     if (!reuse_enc) {
         // --- Streaming delta encoding ---
         const int T_guard = 4;
-        const int guard_samples = T_guard * hp.hop_length * hp.pre_sub_fac;
+        // ponytail: adaptive guard — for tiny windows guard 5120 dominates delta_n
+        const int guard_samples_full = T_guard * hp.hop_length * hp.pre_sub_fac; // 5120
+        const int guard_samples = std::min(guard_samples_full, ctx->stream_delta_new_samples / 2);
         const bool cache_valid = !ctx->stream_cached_k.empty() &&
                                  (int)ctx->stream_cached_k.size() == hp.dec_n_layers &&
                                  ctx->stream_cached_T_enc > T_guard;
@@ -2641,9 +2649,10 @@ struct cohere_result* cohere_transcribe_ex(struct cohere_context* ctx, const flo
             COHERE_VLOG2(vb, "cohere: delta encode done  delta_T_enc=%d  cached_T_enc=%d  delta_n=%d (guard %d)\n",
                          delta_T_enc, ctx->stream_cached_T_enc, delta_n, guard_samples);
 
-            // Trim tail guard frames from cached cross-KV per head
+            // Trim tail guard frames from cached cross-KV per head (effective guard may be smaller)
             const int cached_T = ctx->stream_cached_T_enc;
-            const int trimmed_T = cached_T - T_guard;
+            const int eff_guard_T = guard_samples / (hp.hop_length * hp.pre_sub_fac);
+            const int trimmed_T = cached_T - eff_guard_T;
             const int head_dim = hp.dec_head_dim;
             const int n_heads = hp.dec_n_heads;
             std::vector<std::vector<float>> trimmed_k(hp.dec_n_layers), trimmed_v(hp.dec_n_layers);

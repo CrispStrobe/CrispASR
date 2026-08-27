@@ -4113,7 +4113,12 @@ int crispasr_run_backend(const whisper_params& params_in) {
             std::vector<std::pair<crispasr_audio_slice, std::string>> step_slice_text;
             bool decoded_segments_this_step = false;
             if (!stream_vad_path.empty()) {
-                if (backend->capabilities() & CAP_STREAM_DELTA) backend->set_stream_delta((int)n_new);
+                // ponytail: small-window bypass — delta has no gain when overlap <=50% vs guard overhead
+                const bool use_delta = length_samples >= 4000 && length_samples >= step_samples * 3;
+                if (backend->capabilities() & CAP_STREAM_DELTA) {
+                    if (use_delta) backend->set_stream_delta((int)n_new);
+                    else backend->set_stream_delta(0);
+                }
                 const int64_t window_start_sample_now = cumulative_samples - (int64_t)pcm_window_size();
                 std::vector<crispasr_audio_slice> slices;
                 const bool final_silence_due_early =
@@ -4123,7 +4128,9 @@ int crispasr_run_backend(const whisper_params& params_in) {
                 const bool allow_partial_decode_early = crispasr_stream_partial_decode_allow(
                     params.stream_json, last_partial_decode_sample, final_silence_due_early, cumulative_samples,
                     partial_decode_interval_samples);
-                const bool need_fresh_vad = allow_partial_decode_early || !params.stream_json || !cached_vad_valid;
+                // ponytail: throttling adds 500ms boundary delay — disable for small windows already on fallback path
+                const bool vad_throttle_on = length_samples >= 4000;
+                const bool need_fresh_vad = (vad_throttle_on ? allow_partial_decode_early : true) || !params.stream_json || !cached_vad_valid;
                 if (need_fresh_vad) {
                     slices = crispasr_compute_vad_slices(pcm_window_data(), (int)pcm_window_size(), SR,
                                                                 stream_vad_path.c_str(), stream_vad_opts);
@@ -4132,12 +4139,17 @@ int crispasr_run_backend(const whisper_params& params_in) {
                     cached_vad_valid = true;
                 } else {
                     // shift cached slices by window advance; drop those that fell out
+                    // ponytail: must also shift t0/t1_cs (window-relative) or mid assignment drifts — fix throttled VAD bug
                     const int64_t shift = window_start_sample_now - cached_vad_window_start;
+                    const int64_t shift_cs = shift * 100 / SR;
                     slices.reserve(cached_vad_slices.size());
                     for (auto sl : cached_vad_slices) {
                         sl.start -= (int)shift; sl.end -= (int)shift;
+                        sl.t0_cs -= shift_cs; sl.t1_cs -= shift_cs;
                         if (sl.end <= 0 || sl.start >= (int)pcm_window_size()) continue;
                         sl.start = std::max(0, sl.start); sl.end = std::min((int)pcm_window_size(), sl.end);
+                        if (sl.t1_cs <= 0) continue;
+                        sl.t0_cs = std::max<int64_t>(0, sl.t0_cs);
                         if (sl.end > sl.start) slices.push_back(sl);
                     }
                 }
