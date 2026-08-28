@@ -161,9 +161,13 @@ def audit(archive: Path, expected_sha: str, baseline: str,
         if cpu_dll.is_file():
             _scan_isa(cpu_dll, baseline, disassembler)
             _check_dynamic_features(root, cpu_dll, baseline)
+            contract = f"dynamic CPU ISA is {baseline}"
         else:
-            print("PASS layout: no dynamic ggml-cpu.dll to audit")
-        print(f"RESULT: PASS — {archive.name} is a {baseline} artifact from {expected_sha[:8]}")
+            contract = "no dynamic ggml-cpu.dll (static ISA is checked at build configuration)"
+            print(f"PASS layout: {contract}")
+        print(
+            f"RESULT: PASS — {archive.name} embeds {expected_sha[:8]}; {contract}"
+        )
 
 
 def self_test() -> None:
