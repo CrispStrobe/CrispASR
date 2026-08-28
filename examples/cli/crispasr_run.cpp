@@ -9,6 +9,7 @@
 
 #include "crispasr_backend.h"
 #include "crispasr_cache.h"
+#include <cassert>
 #include "crispasr_gap_fill.h"
 #include "crispasr_split_pipeline.h"
 #include "tada_encoder.h"
@@ -350,13 +351,7 @@ static bool stream_punc_finals_enabled(const whisper_params& params) {
     return crispasr_stream_punc_finals_enabled(params.stream_punc);
 }
 
-static bool stream_postprocess_partials_enabled(const whisper_params& params) {
-    return crispasr_stream_postprocess_partials_enabled(params.stream_postprocess);
-}
 
-static bool stream_postprocess_finals_enabled(const whisper_params& params) {
-    return crispasr_stream_postprocess_finals_enabled(params.stream_postprocess);
-}
 
 // Apply PCS (punctuation + capitalization + segmentation) to all segments.
 static void apply_pcs_model(pcs_context* pcs_ctx, std::vector<crispasr_segment>& segs) {
@@ -4119,6 +4114,10 @@ int crispasr_run_backend(const whisper_params& params_in) {
                     if (use_delta) backend->set_stream_delta((int)n_new);
                     else backend->set_stream_delta(0);
                 }
+                // Hard guard: continue_decode + VAD merge would crash -1073741819 (cross-KV invalid
+                // after window shift). No backend supports it today (crispasr_backend.h:239
+                // supports_continue_with_vad()==false); fail fast if a future backend claims support.
+                assert(!backend->supports_continue_with_vad() && "continue_decode+VAD merge unsupported: cross-KV invalid after window shift");
                 const int64_t window_start_sample_now = cumulative_samples - (int64_t)pcm_window_size();
                 std::vector<crispasr_audio_slice> slices;
                 const bool final_silence_due_early =

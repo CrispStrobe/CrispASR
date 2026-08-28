@@ -234,6 +234,9 @@ public:
     virtual void save_utterance_cross_kv(int64_t /*utterance_start*/, int64_t /*utterance_end*/, int64_t /*window_start*/, int /*sample_rate*/, int64_t /*generation*/) {}
     virtual void restore_utterance_cross_kv(int /*n_new_samples*/, int64_t /*generation*/) {}
     virtual void clear_utterance_cross_kv() {}
+    // Hard guard: must not combine continue_decode with VAD merge (window shift invalidates cross-KV).
+    // Caller should assert on this; backend enforces via CAPs.
+    virtual bool supports_continue_with_vad() const { return false; }
 
     // ---- Language detection ----
     // are silently dropped whenever the pipeline engages — measured on
