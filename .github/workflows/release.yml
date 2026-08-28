@@ -153,6 +153,76 @@ jobs:
           fail_on_unmatched_files: true
 
   # ── WebAssembly build (browser: ASR + TTS, all backends) ─────────────────────
+  build-linux-cpu-legacy:
+    if: ${{ !inputs.only || inputs.only == 'build-linux-cpu-legacy' }}
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Install deps
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ patchelf libopenblas-dev
+
+      - name: Build
+        run: |
+          cmake -S . -B build -DCRISPASR_C2PA_FETCH=ON -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
+            -DGGML_OPENBLAS=ON \
+            -DCRISPASR_PORTABLE_CPU=ON \
+            -DCRISPASR_OPUS_FETCH=ON
+          cmake --build build --target crispasr-cli crispasr-quantize -j $(nproc)
+
+      - name: Package
+        run: |
+          mkdir -p release/crispasr-linux-x86_64-cpu-legacy
+          cp build/bin/crispasr release/crispasr-linux-x86_64-cpu-legacy/
+          cp build/bin/crispasr-quantize release/crispasr-linux-x86_64-cpu-legacy/
+          bash scripts/bundle-c2pa.sh release/crispasr-linux-x86_64-cpu-legacy || true
+          # Self-contained: rewrite RUNPATH to $ORIGIN (v0.8.25 shipped a leaked
+          # /home/runner/... path, and crispasr-quantize had no $ORIGIN at all, so it
+          # could not find its own bundled libc2pa_c.so) and copy in the non-system
+          # dependency closure — libopenblas AND libgomp, per CrispASR #296.
+          bash scripts/bundle-linux-runtime.sh release/crispasr-linux-x86_64-cpu-legacy
+          # #296: the binary carries `NEEDED libopenblas.so.0` (apt ships a
+          # dynamic OpenBLAS), so without this the tarball does not START on a
+          # machine that lacks it. RUNPATH is $ORIGIN, so a copy beside the
+          # binary resolves. Verified against the published v0.8.25 artifact.
+          # Assert the SHIPPED artifact, not the configure log: a silent scalar
+          # fallback used to be indistinguishable from a green run.
+          # MUST run AFTER bundle-linux-runtime.sh — that is the step that copies
+          # libopenblas in. Asserting first made this gate fail on every
+          # dynamically-linked build (#339, all of v0.8.26's Linux tarballs).
+          if objdump -p release/crispasr-linux-x86_64-cpu-legacy/crispasr | grep -q 'NEEDED.*libopenblas'; then
+            test -f release/crispasr-linux-x86_64-cpu-legacy/libopenblas.so.0 || {
+              echo "::error::crispasr needs libopenblas.so.0 but it is not bundled — the tarball will not run without OpenBLAS installed"; exit 1; }
+          fi
+          # Then assert the rest: any DT_NEEDED that is neither bundled nor
+          # base-system means the loader dies before main() and the process
+          # exits 127 silently.
+          python3 scripts/check-bundled-deps.py release/crispasr-linux-x86_64-cpu-legacy
+          # Ship the licence text with the binaries. Every Windows, Android and
+          # libcrispasr artifact already did; no CLI tarball did, and these bundle
+          # third-party shared libraries (libgomp, and libomp on HIP) whose terms
+          # require the notice to travel with them.
+          cp LICENSE release/crispasr-linux-x86_64-cpu-legacy/
+          cp THIRD_PARTY_NOTICES.txt release/crispasr-linux-x86_64-cpu-legacy/
+          cd release && tar czf crispasr-linux-x86_64-cpu-legacy.tar.gz crispasr-linux-x86_64-cpu-legacy/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: crispasr-linux-x86_64-cpu-legacy
+          path: release/crispasr-linux-x86_64-cpu-legacy.tar.gz
+
+      - name: Attach crispasr-linux-x86_64-cpu-legacy.tar.gz to release
+        if: inputs.tag != '' || startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          files: release/crispasr-linux-x86_64-cpu-legacy.tar.gz
+          fail_on_unmatched_files: true
+
+  # ── WebAssembly build (browser: ASR + TTS, all backends) ─────────────────────
   build-wasm:
     if: ${{ !inputs.only || inputs.only == 'build-wasm' }}
     runs-on: ubuntu-latest
@@ -2239,7 +2309,7 @@ jobs:
   # to transient permission issues). softprops won't clobber files that
   # already exist on the release.
   publish:
-    needs: [validate-version, build-linux, build-linux-x86_64-avx512, build-linux-x86_64-cuda, build-linux-x86_64-cuda13, build-linux-x86_64-hip, build-linux-arm64, build-python-linux, build-python-linux-arm64, build-macos, build-libs-macos-arm64, build-libs-linux-x86_64, build-libs-linux-x86_64-avx512, build-libs-linux-x86_64-hip, build-libs-linux-arm64, build-libs-linux-x86_64-cuda, build-libs-windows-x86_64, build-libs-windows-x86_64-vulkan, build-libs-windows-x86_64-cuda, build-libs-windows-x86_64-cpu-legacy, build-windows-cpu, build-windows-cpu-legacy, build-windows-cuda, build-windows-vulkan, build-android-arm64]
+    needs: [validate-version, build-linux, build-linux-cpu-legacy, build-linux-x86_64-avx512, build-linux-x86_64-cuda, build-linux-x86_64-cuda13, build-linux-x86_64-hip, build-linux-arm64, build-python-linux, build-python-linux-arm64, build-macos, build-libs-macos-arm64, build-libs-linux-x86_64, build-libs-linux-x86_64-avx512, build-libs-linux-x86_64-hip, build-libs-linux-arm64, build-libs-linux-x86_64-cuda, build-libs-windows-x86_64, build-libs-windows-x86_64-vulkan, build-libs-windows-x86_64-cuda, build-libs-windows-x86_64-cpu-legacy, build-windows-cpu, build-windows-cpu-legacy, build-windows-cuda, build-windows-vulkan, build-android-arm64]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
     steps:
