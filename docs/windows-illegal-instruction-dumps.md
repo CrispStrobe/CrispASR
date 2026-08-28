@@ -18,24 +18,27 @@ as below; a different optimized CPU path is executing during startup.
 
 ## Capture a minimal dump
 
-1. Download Microsoft's Sysinternals ProcDump and create `C:\crispasr-dumps`.
+1. Download [Microsoft Sysinternals ProcDump](https://learn.microsoft.com/sysinternals/downloads/procdump)
+   and create `C:\crispasr-dumps`.
 2. Open Command Prompt and run this *before* launching CrispASR. **Give the
    final argument as a dump FILE, not a directory** — pointed at a directory,
    ProcDump does not reliably derive a name and you end up with no dump
    (reported in #403):
 
    ```bat
-   procdump64.exe -accepteula -64 -e -w crispasr.exe C:\crispasr-dumps\crispasr_dump
+   procdump64.exe -accepteula -mt -e -w crispasr.exe C:\crispasr-dumps\crispasr_dump
    ```
 
    That writes `C:\crispasr-dumps\crispasr_dump.dmp` — ProcDump appends the
-   extension itself. `-64` forces a 64-bit dump of the 64-bit process, which
-   matters when a 32-bit ProcDump is first on `PATH`.
+   extension itself. `-mt` requests ProcDump's smaller triage dump. The #403
+   reporter verified that it retains the exception context and disassembly this
+   procedure needs. Microsoft says it attempts to remove sensitive information,
+   but does not guarantee that, so still review the text you share.
 
-3. Reproduce the crash once. ProcDump's default mini dump includes the exception
-   context, thread stacks, module list, and referenced memory. Do not use `-ma`
-   unless requested: a full dump may contain model data, audio, paths, and other
-   process memory.
+3. Reproduce the crash once. Do not use `-ma` unless requested: a full dump may
+   contain model data, audio, paths, and other process memory. `-64` is also not
+   needed here: `procdump64.exe` is already capturing the 64-bit CrispASR
+   process; Microsoft documents that switch for overriding WOW64 dump capture.
 4. Record the exact CrispASR release/filename and the CPU name:
 
    ```powershell
@@ -62,7 +65,6 @@ Open the `.dmp` in WinDbg — on Windows 11 the executable is **`WinDbgX.exe`**
 ```text
 .logopen /t crispasr-illegal-instruction.txt
 .exepath+ C:\path\to\your\crispasr
-.sympath+ C:\path\to\your\crispasr
 .reload /f
 !analyze -v
 .exr -1
@@ -75,12 +77,13 @@ lm
 .logclose
 ```
 
-`!analyze -v` cannot resolve an instruction inside `ggml-cpu.dll` until the
-debugger knows where the binaries are, and left to itself it will try to
-download unrelated symbols instead (#403). The `.exepath`/`.sympath`/`.reload`
-lines above point it at the directory you unzipped — give the folder holding
-`crispasr.exe` and `ggml-cpu.dll`, not a single DLL. (`.load` is for debugger
-*extensions*; it will not attach a module's symbols.)
+A triage/user-mode minidump does not contain the application binaries.
+`.exepath` tells WinDbg where to find the exact `crispasr.exe` and DLL images;
+give it the whole directory you unzipped, not one DLL. `.sympath` is different:
+it searches for PDB symbol files, and release archives currently contain no
+CrispASR PDBs. WinDbg may still fetch Microsoft symbols for Windows system
+modules; that is normal and does not replace the matching CrispASR binaries.
+`.load` is for debugger *extensions*, not application DLLs.
 
 Send `crispasr-illegal-instruction*.txt`, the CPU name, and the exact binary—not
 the dump—in the public issue. The key fields are the exception address, the

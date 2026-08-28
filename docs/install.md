@@ -62,9 +62,10 @@ that report the CLI checks at startup and prints an explicit error instead
 
 For pre-AVX2 CPUs use **`crispasr-windows-x86_64-cpu-legacy.zip`** — a generic
 x86-64/SSE2-floor build (`CRISPASR_PORTABLE_CPU=ON`) that runs on anything
-from Westmere up, just slower per core. Check with `wmic cpu get name` and
-look the model up, or run the AVX2 build once: the new error message tells
-you which features are missing.
+from Westmere up, just slower per core. Run the AVX2 build once: its startup
+check tells you exactly which required feature is missing. The CUDA and Vulkan
+Windows archives use the same AVX2 + FMA CPU baseline; the legacy archive is
+CPU-only.
 
 ## Windows CUDA: split downloads (#342)
 
@@ -85,9 +86,11 @@ So each release ships both forms:
 | `cudart64_*.dll`, `cublas64_*.dll`, `cublasLt64_*.dll` | the three DLLs, on their own |
 | `crispasr-windows-x86_64-cuda-runtime-sha256.txt` | SHA-256 of each of the three |
 
-To upgrade without re-downloading the runtime: take the `-non-cuda` archive,
-unpack it, and copy the three DLLs you already have next to `crispasr.exe`
-(for the libs package, into `bin\`).
+To upgrade without re-downloading the runtime, unpack the `-non-cuda` archive
+into a **new empty directory**. After checking the SHA-256 manifest, copy only
+the three named NVIDIA runtime DLLs you already have next to `crispasr.exe`
+(for the libs package, into `bin\`). Do not copy an old `ggml-cpu.dll`,
+`ggml-cuda.dll`, `crispasr.dll`, or executable into the new directory.
 
 The three DLLs are published **once** per release and shared by both packages —
 sound only because every CUDA-bundling job pins the same toolkit (12.8.0).

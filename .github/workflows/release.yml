@@ -1912,22 +1912,31 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          python -m pip install --quiet huggingface_hub
+          $repo = (Get-Location).Path
           $extract = Join-Path $env:RUNNER_TEMP "crispasr-windows-package-e2e"
-          $work = Join-Path $env:RUNNER_TEMP "crispasr-windows-package-e2e-work"
-          $hfHome = Join-Path $env:RUNNER_TEMP "crispasr-windows-package-e2e-hf"
-          New-Item -ItemType Directory -Force $extract,$work,$hfHome | Out-Null
+          $cache = Join-Path $env:RUNNER_TEMP "crispasr-windows-package-e2e-cache"
+          New-Item -ItemType Directory -Force $extract,$cache | Out-Null
           Expand-Archive release/crispasr-windows-x86_64-cpu.zip -DestinationPath $extract
           $bins = @(Get-ChildItem $extract -Recurse -Filter crispasr.exe)
           if ($bins.Count -ne 1) {
             throw "Expected one packaged crispasr.exe, found $($bins.Count)"
           }
-          $env:CRISPASR_BIN = $bins[0].FullName
-          $env:WORK_DIR = $work
-          $env:HF_HOME = $hfHome
-          & $env:CRISPASR_BIN --version
-          if ($LASTEXITCODE -ne 0) { throw "Packaged crispasr.exe --version failed: rc=$LASTEXITCODE" }
-          python tests/regression/run_one.py kokoro-82m-en
+          $env:CRISPASR_CACHE_DIR = $cache
+          Push-Location $bins[0].DirectoryName
+          try {
+            # These are deliberately the literal README first-run commands.
+            .\crispasr.exe --version
+            if ($LASTEXITCODE -ne 0) { throw "Packaged crispasr.exe --version failed: rc=$LASTEXITCODE" }
+            .\crispasr.exe --backend kokoro -m auto --tts "The quick brown fox jumps over the lazy dog." --tts-output hello.wav
+            if ($LASTEXITCODE -ne 0) { throw "Packaged Kokoro first run failed: rc=$LASTEXITCODE" }
+            $actualLines = @(& .\crispasr.exe --backend parakeet -m auto -f .\hello.wav -l en)
+            if ($LASTEXITCODE -ne 0) { throw "Packaged Parakeet first run failed: rc=$LASTEXITCODE" }
+          } finally {
+            Pop-Location
+          }
+          $env:ACTUAL_TRANSCRIPT = ($actualLines -join "`n").Trim()
+          $env:REGRESSION_HELPER = Join-Path $repo "tests/regression/run_one.py"
+          python -c 'import os,runpy; a=os.environ["ACTUAL_TRANSCRIPT"]; m=runpy.run_path(os.environ["REGRESSION_HELPER"]); w=m["compute_transcript_metrics"]("The quick brown fox jumps over the lazy dog",a)[1]; print(f"Windows onboarding transcript={a!r} WER={w:.4f}"); raise SystemExit(w > 0.4)'
 
       - uses: actions/upload-artifact@v4
         with:
