@@ -32,7 +32,9 @@
 #include <cstdlib>
 #include <cstring>
 #include <map>
+#include <mutex>
 #include <random>
+#include <thread>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -164,6 +166,14 @@ struct cohere_perf {
 static void cohere_perf_reset(cohere_perf& p) {
     p = cohere_perf{};
 }
+
+// Lightweight re-entrancy guard: transcribe_ex touches stream_cached/utterance_cached without locking.
+// Concurrent calls would race on those vectors and on ggml_alloc. Cheap assert, not full thread-safety.
+static thread_local bool g_cohere_in_transcribe = false;
+struct cohere_transcribe_guard {
+    cohere_transcribe_guard() { assert(!g_cohere_in_transcribe && "cohere_transcribe_ex re-entered on same thread — not thread-safe"); g_cohere_in_transcribe = true; }
+    ~cohere_transcribe_guard() { g_cohere_in_transcribe = false; }
+};
 
 static void cohere_perf_print(const cohere_perf& p, int n_samples, int sample_rate, int verbosity) {
     if (verbosity < 2)
@@ -571,6 +581,8 @@ struct cohere_context {
     std::vector<std::vector<float>> utterance_cached_k;
     std::vector<std::vector<float>> utterance_cached_v;
     int utterance_cached_T_enc = 0;
+    int64_t utterance_cached_generation = 0; // pair with utterance_id to detect stale cross-session reuse
+    int64_t current_utterance_generation = 0;
 
     // Mel spectrogram buffer
     std::vector<float> mel_buf;
@@ -2370,7 +2382,7 @@ void cohere_set_stream_delta(struct cohere_context* ctx, int delta_new_samples) 
         ctx->stream_cached_T_enc = 0;
     }
 }
-void cohere_save_utterance_cross_kv(struct cohere_context* ctx, int64_t utterance_start_sample, int64_t utterance_end_sample, int64_t window_start_sample, int sample_rate) {
+void cohere_save_utterance_cross_kv(struct cohere_context* ctx, int64_t utterance_start_sample, int64_t utterance_end_sample, int64_t window_start_sample, int sample_rate, int64_t generation) {
     if (!ctx || ctx->stream_cached_k.empty()) return;
     (void)sample_rate;
     const auto& hp = ctx->model.hparams;
@@ -2400,12 +2412,14 @@ void cohere_save_utterance_cross_kv(struct cohere_context* ctx, int64_t utteranc
         }
     }
     ctx->utterance_cached_T_enc = cnt;
+    ctx->utterance_cached_generation = generation;
 }
-void cohere_restore_utterance_cross_kv(struct cohere_context* ctx, int n_new_samples) {
+void cohere_restore_utterance_cross_kv(struct cohere_context* ctx, int n_new_samples, int64_t generation) {
     if (!ctx || ctx->utterance_cached_k.empty()) { if (ctx) ctx->stream_delta_new_samples = 0; return; }
     const int saved_T = ctx->utterance_cached_T_enc;
-    // ponytail: guard against缩水 cache (throttled VAD shifted window) — fallback to full encode rather than corrupt KV
-    if (saved_T <= 0 || (int)ctx->utterance_cached_k[0].size() != saved_T * ctx->model.hparams.dec_head_dim * ctx->model.hparams.dec_n_heads) {
+    // ponytail: generation + size guard — reject stale cross-session residue even when dims match
+    if (saved_T <= 0 || ctx->utterance_cached_generation != generation ||
+        (int)ctx->utterance_cached_k[0].size() != saved_T * ctx->model.hparams.dec_head_dim * ctx->model.hparams.dec_n_heads) {
         if (ctx) ctx->stream_delta_new_samples = 0;
         ctx->utterance_cached_k.clear(); ctx->utterance_cached_v.clear(); ctx->utterance_cached_T_enc = 0;
         return;
@@ -2418,9 +2432,11 @@ void cohere_restore_utterance_cross_kv(struct cohere_context* ctx, int n_new_sam
 void cohere_clear_utterance_cross_kv(struct cohere_context* ctx) {
     if (!ctx) return;
     ctx->utterance_cached_k.clear(); ctx->utterance_cached_v.clear(); ctx->utterance_cached_T_enc = 0;
+    ctx->utterance_cached_generation = 0;
 }
 struct cohere_result* cohere_transcribe_ex(struct cohere_context* ctx, const float* samples, int n_samples,
                                            const char* lang, int64_t t_offset_cs) {
+    cohere_transcribe_guard _guard;
     const auto& hp = ctx->model.hparams;
     const auto& voc = ctx->vocab;
     const int n_heads = hp.dec_n_heads;
@@ -2622,10 +2638,8 @@ struct cohere_result* cohere_transcribe_ex(struct cohere_context* ctx, const flo
 
     if (!reuse_enc) {
         // --- Streaming delta encoding ---
-        const int T_guard = 4;
-        // ponytail: adaptive guard — for tiny windows guard 5120 dominates delta_n
-        const int guard_samples_full = T_guard * hp.hop_length * hp.pre_sub_fac; // 5120
-        const int guard_samples = std::min(guard_samples_full, ctx->stream_delta_new_samples / 2);
+        const int T_guard = 4; // floor(conv_k=9 /2), correctness lower bound — do not reduce
+        const int guard_samples = T_guard * hp.hop_length * hp.pre_sub_fac; // 5120, fixed
         const bool cache_valid = !ctx->stream_cached_k.empty() &&
                                  (int)ctx->stream_cached_k.size() == hp.dec_n_layers &&
                                  ctx->stream_cached_T_enc > T_guard;
@@ -2633,7 +2647,8 @@ struct cohere_result* cohere_transcribe_ex(struct cohere_context* ctx, const flo
 
         if (delta) {
             // ===== DELTA ENCODE PATH =====
-            // ponytail: guard handles Conformer conv kernel edge; sliding-window head eviction not handled (cache grows) — trim head if long streams show duplication
+            // ponytail: guard is correctness lower bound (Conformer kernel edge); never shrink via min(n_new/2)
+            // Small-window bypass already handled at call site (Q1: length>=4000 && length>=step*3)
             const int delta_n_raw = ctx->stream_delta_new_samples;
             int delta_n = delta_n_raw + guard_samples;
             if (delta_n > n_samples) delta_n = n_samples;
@@ -2649,10 +2664,9 @@ struct cohere_result* cohere_transcribe_ex(struct cohere_context* ctx, const flo
             COHERE_VLOG2(vb, "cohere: delta encode done  delta_T_enc=%d  cached_T_enc=%d  delta_n=%d (guard %d)\n",
                          delta_T_enc, ctx->stream_cached_T_enc, delta_n, guard_samples);
 
-            // Trim tail guard frames from cached cross-KV per head (effective guard may be smaller)
+            // Trim fixed guard frames from cached cross-KV per head
             const int cached_T = ctx->stream_cached_T_enc;
-            const int eff_guard_T = guard_samples / (hp.hop_length * hp.pre_sub_fac);
-            const int trimmed_T = cached_T - eff_guard_T;
+            const int trimmed_T = cached_T - T_guard;
             const int head_dim = hp.dec_head_dim;
             const int n_heads = hp.dec_n_heads;
             std::vector<std::vector<float>> trimmed_k(hp.dec_n_layers), trimmed_v(hp.dec_n_layers);

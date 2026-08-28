@@ -213,8 +213,8 @@ public:
         if (ctx_)
             cohere_set_stream_delta(ctx_, delta_new_samples);
     }
-    void save_utterance_cross_kv(int64_t s, int64_t e, int64_t w, int sr) override { if (ctx_) cohere_save_utterance_cross_kv(ctx_, s, e, w, sr); }
-    void restore_utterance_cross_kv(int n) override { if (ctx_) cohere_restore_utterance_cross_kv(ctx_, n); }
+    void save_utterance_cross_kv(int64_t s, int64_t e, int64_t w, int sr, int64_t gen) override { if (ctx_) cohere_save_utterance_cross_kv(ctx_, s, e, w, sr, gen); }
+    void restore_utterance_cross_kv(int n, int64_t gen) override { if (ctx_) cohere_restore_utterance_cross_kv(ctx_, n, gen); }
     void clear_utterance_cross_kv() override { if (ctx_) cohere_clear_utterance_cross_kv(ctx_); }
 
     std::vector<crispasr_segment> transcribe(const float* samples, int n_samples, int64_t t_offset_cs,

@@ -4229,7 +4229,7 @@ int crispasr_run_backend(const whisper_params& params_in) {
                 // ponytail: utterance-level delta — save utterance portion of cross-KV for later finalize reuse
                 if (params.stream_json && have_open_utterance && decoded_segments_this_step && (backend->capabilities() & CAP_STREAM_UTTERANCE)) {
                     const int64_t ue = last_speech_end_sample > 0 ? last_speech_end_sample : utterance_start_sample + 1;
-                    backend->save_utterance_cross_kv(utterance_start_sample, ue, window_start_sample_now, SR);
+                    backend->save_utterance_cross_kv(utterance_start_sample, ue, window_start_sample_now, SR, utterance_id);
                     utterance_pcm_size_at_save = (int64_t)utterance_pcm.size();
                 }
             } else {
@@ -4338,7 +4338,7 @@ int crispasr_run_backend(const whisper_params& params_in) {
                             decode_params.vad_model.clear();
                             if ((backend->capabilities() & CAP_STREAM_UTTERANCE)) {
                                 const int n_new_since_save = (int)utterance_pcm.size() - (int)utterance_pcm_size_at_save;
-                                backend->restore_utterance_cross_kv(n_new_since_save);
+                                backend->restore_utterance_cross_kv(n_new_since_save, utterance_id);
                             }
                             auto utt_segs =
                                 backend->transcribe(utterance_pcm.data(), (int)utterance_pcm.size(), 0, decode_params);
@@ -4656,7 +4656,7 @@ int crispasr_run_backend(const whisper_params& params_in) {
                     // EOF also benefits from utterance-level delta
                     if ((backend->capabilities() & CAP_STREAM_UTTERANCE) && utterance_pcm_size_at_save > 0) {
                         const int n_new2 = (int)utterance_pcm.size() - (int)utterance_pcm_size_at_save;
-                        backend->restore_utterance_cross_kv(n_new2);
+                        backend->restore_utterance_cross_kv(n_new2, utterance_id);
                     }
                     auto utt_segs =
                         backend->transcribe(utterance_pcm.data(), (int)utterance_pcm.size(), 0, decode_params);

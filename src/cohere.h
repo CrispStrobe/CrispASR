@@ -182,8 +182,9 @@ void cohere_set_stream_delta(struct cohere_context* ctx, int delta_new_samples);
 
 // Utterance-level delta: save/restore the utterance portion of the
 // cached cross-KV so finalize redecode only encodes the new tail.
-void cohere_save_utterance_cross_kv(struct cohere_context* ctx, int64_t utterance_start_sample, int64_t utterance_end_sample, int64_t window_start_sample, int sample_rate);
-void cohere_restore_utterance_cross_kv(struct cohere_context* ctx, int n_new_samples);
+// generation is a monotonic utterance_id; save tags cache with it, restore verifies it to reject stale reuse.
+void cohere_save_utterance_cross_kv(struct cohere_context* ctx, int64_t utterance_start_sample, int64_t utterance_end_sample, int64_t window_start_sample, int sample_rate, int64_t generation);
+void cohere_restore_utterance_cross_kv(struct cohere_context* ctx, int n_new_samples, int64_t generation);
 void cohere_clear_utterance_cross_kv(struct cohere_context* ctx);
 
 #ifdef __cplusplus
