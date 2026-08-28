@@ -167,10 +167,12 @@ crispasr --backend kokoro -m auto --tts "test" --tts-output out.wav --no-gpu
   your GPU, driver version, and which zip/tarball you downloaded.
 - **Fails both ways** → not the GPU. The model, the file, or the CLI arguments.
 
-Note that the `-cuda` / `-hip` / `-vulkan` builds **require** the matching GPU
-driver and do *not* silently fall back to CPU — see
-[install.md](install.md#prebuilt-linux-tarballs--which-one-to-download-355).
-Passing `--no-gpu` to such a build is fine; it just uses the CPU path.
+Fallback is package-specific. The v0.8.30 Linux CUDA tarball loads CUDA
+dynamically and can fall back to CPU; Linux HIP/Vulkan and the Windows GPU
+archives require their matching driver/runtime. See the exact
+[install matrix](install.md#prebuilt-linux-tarballs--which-one-to-download-355).
+`--no-gpu` forces CPU once the process can start, but cannot repair a missing
+dependency in a hard-linked package.
 
 ---
 

@@ -81,8 +81,9 @@ and unzip it:
 When upgrading on Windows, extract into a new empty directory. Do not mix an
 older `ggml-cpu.dll` or GPU DLL with a newer `crispasr.exe`.
 
-Prefer to build it yourself? See [Install & build](#install--build). GPU builds
-require the matching driver and do **not** fall back to CPU.
+Prefer to build it yourself? See [Install & build](#install--build). GPU driver
+requirements and CPU fallback differ by package; the
+[install matrix](docs/install.md) records the exact behavior.
 
 Check it runs — this should print a version banner and exit:
 
