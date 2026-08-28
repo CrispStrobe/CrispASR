@@ -6,6 +6,31 @@ technical deep-dives are in `LEARNINGS.md`.
 
 ---
 
+## #397 Windows CUDA illegal instruction — release artifact proof and first-run recovery, fixed 2026-08-28
+
+The reporter's `0xC000001D` crash was not a model-download or RTX 4070 problem.
+Their WinDbg screenshot identified `ggml-cpu.dll+0x98e9` executing a ZMM load;
+the delivered v0.8.29 DLL reproduced that exact offset and contained AVX-512
+despite the documented AVX2 baseline. This was the already-fixed v0.8.29
+packaging regression in #374: the Windows CUDA job omitted `GGML_NATIVE=OFF`
+and inherited the hosted runner's CPU. The issue response now records that
+causal chain and gives a literal PowerShell Kokoro-to-Parakeet recovery test;
+Windows upgrade docs require extracting the complete archive into an empty
+directory so an old `ggml-cpu.dll` cannot survive beside a new executable.
+
+Release CI now audits the packaged Windows archives rather than trusting their
+CMake command: executable provenance must match the release SHA, dynamic
+`ggml-cpu.dll` must contain no instructions wider than its promised baseline,
+and its exported compiled-feature predicates are checked on Windows. The real
+v0.8.29 CUDA archive is the negative control (ZMM scan fails); the v0.8.30
+archive passes. The CPU package also runs the pinned Kokoro TTS → Parakeet ASR
+round-trip from a fresh extraction. A separate post-release workflow downloads
+the public CPU, legacy, CUDA split, and Vulkan assets and compares them with the
+current tag, catching mixed-provenance assets after tag repair. GitHub provides
+no Windows NVIDIA runner for this repository, so CUDA execution remains a
+reporter/hardware acceptance step; CI does not represent a static DLL audit as
+an end-to-end GPU run.
+
 ## #383 Nemotron `/v1/realtime` progressive lag — native streaming + VAD, fixed 2026-08-27
 
 The realtime JSON WebSocket re-ran ASR over the entire growing turn every 0.5

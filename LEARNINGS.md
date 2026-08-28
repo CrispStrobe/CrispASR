@@ -1242,6 +1242,19 @@ verification, not the end. Same family as [[cmake-link-not-shipped]] and the
 cancelled-CI-reads-as-green trap. See `PLAN.md` 2026-07-21 completions and memory
 [[release-packaging-gotchas]].
 
+The v0.8.29 Windows CUDA package added the ISA version of the same failure
+(#374, rediscovered through #397). Its workflow omitted `GGML_NATIVE=OFF`, so
+the hosted runner compiled AVX-512 into `ggml-cpu.dll`; an AVX2/FMA reporter
+then crashed at `ggml-cpu.dll+0x98e9`, where their debugger showed a ZMM
+`vmovups`. CPU flags, the exact exception (`0xC000001D`), the faulting module,
+and the instruction are a complete causal chain — read attached debugger
+evidence and linked release issues before asking for model reinstalls or a new
+minimal repro. The durable gate has two layers: lint the portable CMake flags,
+then inspect the packaged DLL and its exported compiled-feature predicates.
+After publication, independently download the named assets and compare the
+embedded executable SHA with the *current tag target*; a green build cannot
+detect mixed assets left behind while a release tag is moved and repaired.
+
 ---
 
 ## A capability flag is a PROMISE the backend must keep — an unimplemented cap disables the safety nets keyed off it (canary-qwen #290, 2026-07-21)

@@ -113,14 +113,26 @@ echo $?
 | `132` | — | Illegal instruction on Linux/macOS. |
 | `11`, `12`, `13`, `14` | — | Not a crash — a normal error return. CrispASR printed a reason; scroll up. |
 
-**Step 2 — if it's an illegal instruction**, you are on the wrong build for
-your CPU. The default Windows CPU zip targets an **AVX2 + FMA** baseline
-(Intel Haswell 2013+ / AMD Excavator 2015+). On an older CPU, download
+**Step 2 — if it's an illegal instruction**, the binary executed an instruction
+the host cannot run. That can mean either the CPU is older than the artifact's
+advertised baseline **or the artifact was packaged incorrectly**. Do not assume
+the first and blame the user's CPU without comparing the evidence.
+
+The default Windows CPU zip targets an **AVX2 + FMA** baseline (Intel Haswell
+2013+ / AMD Excavator 2015+). If the host genuinely lacks AVX2 or FMA, download
 `crispasr-windows-x86_64-cpu-legacy.zip` instead — a generic x86-64/SSE2 build
 that runs anywhere from Westmere up, just slower per core. Recent builds check
-this at startup and print an explicit message naming the missing feature
+this at startup and print the exact missing feature
 (`CRISPASR_IGNORE_CPU_ISA=1` overrides the check). Full detail:
 [install.md § Windows CPU: which zip?](install.md#windows-cpu-which-zip-380).
+
+If the host **does** support the documented baseline, treat the crash as a
+release bug. This happened in v0.8.29: the Windows CUDA package accidentally
+inherited AVX-512 from its GitHub runner and crashed in `ggml-cpu.dll` on modern
+AVX2-only machines ([#374](https://github.com/CrispStrobe/CrispASR/issues/374),
+[#397](https://github.com/CrispStrobe/CrispASR/issues/397)). The v0.8.30 Windows
+CUDA package is pinned to AVX2. Replace the whole extracted directory when
+upgrading so the old DLL is not loaded beside the new executable.
 
 **Step 3 — if it's an access violation**, narrow *where* it dies before
 reporting. Add `-v` and note the last line printed:

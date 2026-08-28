@@ -1,0 +1,64 @@
+name: Audit Published Release Assets
+
+on:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audit-release-assets-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: true
+
+jobs:
+  windows-cli-contract:
+    # Standard releases originate from a v* tag. Branch dry-runs publish no
+    # assets and have nothing to audit.
+    if: >-
+      startsWith(github.event.workflow_run.head_branch, 'v') &&
+      github.event.workflow_run.conclusion != 'cancelled'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Resolve the release tag target
+        id: release
+        env:
+          TAG: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          git fetch --force origin "refs/tags/$TAG:refs/tags/$TAG"
+          expected="$(git rev-list -n1 "$TAG")"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "expected_sha=$expected" >> "$GITHUB_OUTPUT"
+          echo "Auditing $TAG at $expected"
+
+      - name: Download the exact public Windows CLI assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          mkdir release-assets
+          gh release download "$TAG" --dir release-assets \
+            --pattern 'crispasr-windows-x86_64-cpu.zip' \
+            --pattern 'crispasr-windows-x86_64-cpu-legacy.zip' \
+            --pattern 'crispasr-windows-x86_64-cuda-non-cuda.zip' \
+            --pattern 'crispasr-windows-x86_64-vulkan.zip'
+
+      - name: Audit public ISA + embedded Git provenance
+        env:
+          EXPECTED_SHA: ${{ steps.release.outputs.expected_sha }}
+        run: |
+          python tools/audit-windows-release.py \
+            release-assets/crispasr-windows-x86_64-cpu.zip \
+            --expected-sha "$EXPECTED_SHA" --baseline avx2
+          python tools/audit-windows-release.py \
+            release-assets/crispasr-windows-x86_64-cpu-legacy.zip \
+            --expected-sha "$EXPECTED_SHA" --baseline legacy
+          python tools/audit-windows-release.py \
+            release-assets/crispasr-windows-x86_64-cuda-non-cuda.zip \
+            --expected-sha "$EXPECTED_SHA" --baseline avx2
+          python tools/audit-windows-release.py \
+            release-assets/crispasr-windows-x86_64-vulkan.zip \
+            --expected-sha "$EXPECTED_SHA" --baseline avx2
