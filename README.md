@@ -37,7 +37,7 @@ live transcription + TTS + language detection, auto-deployed from `hf-space/`.
 - [**Start here**](#start-here) — new to CrispASR? Two commands to your first working audio, no repo clone needed
 - [Supported backends](#supported-backends) — [ASR](#asr-backends) + [TTS](#text-to-speech-models) + [translation](#translation) + [post-processing](#post-processing-models) + [music & audio analysis](#music--audio-analysis)
 - [Feature matrix](#feature-matrix)
-- [Install & build](#install--build) — quick install (full guide in [docs/install.md](docs/install.md)); **[which prebuilt Linux tarball to download](docs/install.md#prebuilt-linux-tarballs--which-one-to-download-355)** — the `-cuda` / `-hip` / `-vulkan` builds require the matching GPU driver and do **not** fall back to CPU
+- [Install & build](#install--build) — quick install (full guide in [docs/install.md](docs/install.md)); **[which prebuilt Linux tarball to download](docs/install.md#prebuilt-linux-tarballs--which-one-to-download-355)** — fallback is package-specific: CUDA can fall back to CPU, while HIP/Vulkan currently cannot
 - [Quick start — ASR](#quick-start)
 - [Troubleshooting](docs/troubleshooting.md) — it printed the banner and stopped, reading the exit code, `--no-gpu` bisect, which Windows zip
 - [**Text-to-Speech (TTS)**](docs/tts.md) — 52 engines: Kokoro, Qwen3-TTS, VibeVoice, dots.tts, Orpheus, Chatterbox, IndexTTS, Irodori, VoxCPM2, CosyVoice3, CSM, Dia, Zonos, Bark, Piper, MeloTTS, and more
