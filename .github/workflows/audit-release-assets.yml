@@ -46,7 +46,7 @@ jobs:
             --pattern 'crispasr-windows-x86_64-cuda-non-cuda.zip' \
             --pattern 'crispasr-windows-x86_64-vulkan.zip'
 
-      - name: Audit public ISA + embedded Git provenance
+      - name: Audit public provenance + dynamic CPU DLL ISA
         env:
           EXPECTED_SHA: ${{ steps.release.outputs.expected_sha }}
         run: |
