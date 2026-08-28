@@ -37,14 +37,12 @@ Verify what a given tarball actually requires before deploying it:
 readelf -d crispasr | grep NEEDED
 ```
 
-> **Can the GPU build degrade gracefully instead?** Yes, if you build it
-> yourself: `-DGGML_BACKEND_DL=ON -DBUILD_SHARED_LIBS=ON` makes each backend a
-> `dlopen`-ed module, so a missing CUDA driver leaves the CUDA backend
-> unregistered instead of killing the process. This works and is verified on
-> Metal and CPU — see [the #355 section](#graceful-degradation-via-ggml_backend_dl-355)
-> for the measured transcripts and the two throughput caveats. The prebuilt
-> tarballs below are still statically linked, because flipping the release leg
-> needs an A/B on real CUDA, HIP and Vulkan hardware first.
+> **Can the other GPU builds degrade gracefully too?** The mechanism is
+> `-DGGML_BACKEND_DL=ON -DBUILD_SHARED_LIBS=ON`: an unavailable GPU module stays
+> unregistered and the CPU backend can win. The prebuilt Linux CUDA archive now
+> uses it. HIP and Vulkan remain hard-linked pending their own real-hardware A/B;
+> see [the #355 section](#graceful-degradation-via-ggml_backend_dl-355) for the
+> measured behavior and throughput caveats.
 
 ## Windows CPU: which zip? (#380)
 
