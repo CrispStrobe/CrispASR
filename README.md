@@ -72,8 +72,9 @@ and unzip it:
 
 | Platform | Download | Notes |
 |---|---|---|
-| **Windows** | `crispasr-windows-x86_64-cpu.zip` | Needs AVX2 (2013+ Intel / 2015+ AMD). Older CPU → `…-cpu-legacy.zip` |
-| **Windows + NVIDIA** | `crispasr-windows-x86_64-cuda.zip` | Self-contained; a CUDA Toolkit install is **not** required |
+| **Windows (CPU)** | `crispasr-windows-x86_64-cpu.zip` | Needs AVX2 + FMA. Older CPU → `…-cpu-legacy.zip` |
+| **Windows + NVIDIA** | `crispasr-windows-x86_64-cuda.zip` | Needs AVX2 + FMA and an NVIDIA driver; CUDA Toolkit not required |
+| **Windows + AMD/Intel/NVIDIA** | `crispasr-windows-x86_64-vulkan.zip` | Needs AVX2 + FMA and a Vulkan-capable driver |
 | **macOS** | `crispasr-macos.tar.gz` | Metal GPU support built in |
 | **Linux** | `crispasr-linux-x86_64.tar.gz` | `…-cuda.tar.gz` / `…-vulkan.tar.gz` for GPU |
 
@@ -86,7 +87,13 @@ require the matching driver and do **not** fall back to CPU.
 Check it runs — this should print a version banner and exit:
 
 ```bash
-crispasr --version          # Windows: .\crispasr.exe --version
+crispasr --version
+```
+
+Windows PowerShell (from the directory you unzipped):
+
+```powershell
+.\crispasr.exe --version
 ```
 
 ### 2. Make it speak

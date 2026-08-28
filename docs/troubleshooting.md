@@ -150,7 +150,7 @@ about to open really are on disk and the expected size, and
 
 **On Windows, a minidump pins it exactly.** The repo has a ProcDump recipe:
 [windows-illegal-instruction-dumps.md](windows-illegal-instruction-dumps.md).
-Use the default minidump, not `-ma` — a full dump can contain your audio,
+Use the documented triage dump, not `-ma` — a full dump can contain your audio,
 model data, and file paths.
 
 ---
@@ -208,10 +208,10 @@ diagnosing a crash: it means the problem is in loading the file, not locating it
 | Zip | Use when |
 |---|---|
 | `crispasr-windows-x86_64-cpu.zip` | Default. Needs AVX2 + FMA (2013+ Intel / 2015+ AMD). |
-| `crispasr-windows-x86_64-cpu-legacy.zip` | Older CPU, or the AVX2 build died with `0xC000001D`. |
-| `crispasr-windows-x86_64-cuda.zip` | NVIDIA GPU. Self-contained. |
-| `crispasr-windows-x86_64-cuda-non-cuda.zip` | NVIDIA GPU, and you already have the three runtime DLLs. |
-| `crispasr-windows-x86_64-vulkan.zip` | Cross-vendor GPU (AMD/Intel/NVIDIA). |
+| `crispasr-windows-x86_64-cpu-legacy.zip` | Host genuinely lacks AVX2 or FMA. CPU-only. |
+| `crispasr-windows-x86_64-cuda.zip` | NVIDIA GPU + AVX2/FMA CPU. Self-contained. |
+| `crispasr-windows-x86_64-cuda-non-cuda.zip` | Same baseline, and you already have the three matching runtime DLLs. |
+| `crispasr-windows-x86_64-vulkan.zip` | Vulkan GPU + AVX2/FMA CPU (AMD/Intel/NVIDIA). |
 
 The CUDA packages bundle **CUDA 12** runtime DLLs — `cudart64_12.dll`,
 `cublas64_12.dll`, `cublasLt64_12.dll`. They are published once per release and
