@@ -77,6 +77,9 @@ and unzip it:
 | **macOS** | `crispasr-macos.tar.gz` | Metal GPU support built in |
 | **Linux** | `crispasr-linux-x86_64.tar.gz` | `…-cuda.tar.gz` / `…-vulkan.tar.gz` for GPU |
 
+When upgrading on Windows, extract into a new empty directory. Do not mix an
+older `ggml-cpu.dll` or GPU DLL with a newer `crispasr.exe`.
+
 Prefer to build it yourself? See [Install & build](#install--build). GPU builds
 require the matching driver and do **not** fall back to CPU.
 
@@ -97,6 +100,12 @@ crispasr --backend kokoro -m auto --tts "The quick brown fox jumps over the lazy
 # crispasr: TTS output written to 'hello.wav' (78000 samples @ 24000 Hz, 3.25 sec)
 ```
 
+Windows PowerShell (from the directory you unzipped):
+
+```powershell
+.\crispasr.exe --backend kokoro -m auto --tts "The quick brown fox jumps over the lazy dog." --tts-output hello.wav
+```
+
 Play `hello.wav`. That is the TTS half working.
 
 ### 3. Transcribe it back
@@ -105,6 +114,12 @@ Play `hello.wav`. That is the TTS half working.
 crispasr --backend parakeet -m auto -f hello.wav -l en
 # crispasr: transcribed 3.2s audio in 0.32s (10.1x realtime)
 # The quick brown fox jumps over the lazy dog.
+```
+
+Windows PowerShell:
+
+```powershell
+.\crispasr.exe --backend parakeet -m auto -f .\hello.wav -l en
 ```
 
 (~467 MB on first run. `-l en` skips language auto-detection, which would

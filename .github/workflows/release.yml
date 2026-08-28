@@ -1902,6 +1902,33 @@ jobs:
           }
           Compress-Archive -Path release\crispasr-windows-x86_64-cpu -DestinationPath release\crispasr-windows-x86_64-cpu.zip -CompressionLevel Optimal
 
+      - name: Audit packaged ISA + Git provenance (#374, #397)
+        run: |
+          $expectedSha = (git rev-parse HEAD).Trim()
+          python tools/audit-windows-release.py release/crispasr-windows-x86_64-cpu.zip `
+            --expected-sha $expectedSha --baseline avx2
+
+      - name: Fresh packaged Windows TTS to ASR round-trip (#397)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python -m pip install --quiet huggingface_hub
+          $extract = Join-Path $env:RUNNER_TEMP "crispasr-windows-package-e2e"
+          $work = Join-Path $env:RUNNER_TEMP "crispasr-windows-package-e2e-work"
+          $hfHome = Join-Path $env:RUNNER_TEMP "crispasr-windows-package-e2e-hf"
+          New-Item -ItemType Directory -Force $extract,$work,$hfHome | Out-Null
+          Expand-Archive release/crispasr-windows-x86_64-cpu.zip -DestinationPath $extract
+          $bins = @(Get-ChildItem $extract -Recurse -Filter crispasr.exe)
+          if ($bins.Count -ne 1) {
+            throw "Expected one packaged crispasr.exe, found $($bins.Count)"
+          }
+          $env:CRISPASR_BIN = $bins[0].FullName
+          $env:WORK_DIR = $work
+          $env:HF_HOME = $hfHome
+          & $env:CRISPASR_BIN --version
+          if ($LASTEXITCODE -ne 0) { throw "Packaged crispasr.exe --version failed: rc=$LASTEXITCODE" }
+          python tests/regression/run_one.py kokoro-82m-en
+
       - uses: actions/upload-artifact@v4
         with:
           name: crispasr-windows-x86_64-cpu
@@ -1945,6 +1972,12 @@ jobs:
           Copy-Item LICENSE release\crispasr-windows-x86_64-cpu-legacy\
           Copy-Item THIRD_PARTY_NOTICES.txt release\crispasr-windows-x86_64-cpu-legacy\
           Compress-Archive -Path release\crispasr-windows-x86_64-cpu-legacy -DestinationPath release\crispasr-windows-x86_64-cpu-legacy.zip -CompressionLevel Optimal
+
+      - name: Audit packaged ISA + Git provenance (#374, #397)
+        run: |
+          $expectedSha = (git rev-parse HEAD).Trim()
+          python tools/audit-windows-release.py release/crispasr-windows-x86_64-cpu-legacy.zip `
+            --expected-sha $expectedSha --baseline legacy
 
       - uses: actions/upload-artifact@v4
         with:
@@ -2058,6 +2091,15 @@ jobs:
           }
           $hashLines | Set-Content release\crispasr-windows-x86_64-cuda-runtime-sha256.txt
 
+      - name: Audit packaged ISA + Git provenance (#374, #397)
+        shell: pwsh
+        run: |
+          $expectedSha = (git rev-parse HEAD).Trim()
+          python tools/audit-windows-release.py release/crispasr-windows-x86_64-cuda.zip `
+            --expected-sha $expectedSha --baseline avx2
+          python tools/audit-windows-release.py release/crispasr-windows-x86_64-cuda-non-cuda.zip `
+            --expected-sha $expectedSha --baseline avx2
+
       - uses: actions/upload-artifact@v4
         with:
           name: crispasr-windows-x86_64-cuda
@@ -2128,6 +2170,13 @@ jobs:
           Copy-Item LICENSE release\crispasr-windows-x86_64-vulkan\
           Copy-Item THIRD_PARTY_NOTICES.txt release\crispasr-windows-x86_64-vulkan\
           Compress-Archive -Path release\crispasr-windows-x86_64-vulkan -DestinationPath release\crispasr-windows-x86_64-vulkan.zip -CompressionLevel Optimal
+
+      - name: Audit packaged ISA + Git provenance (#374, #397)
+        shell: pwsh
+        run: |
+          $expectedSha = (git rev-parse HEAD).Trim()
+          python tools/audit-windows-release.py release/crispasr-windows-x86_64-vulkan.zip `
+            --expected-sha $expectedSha --baseline avx2
 
       - uses: actions/upload-artifact@v4
         with:
