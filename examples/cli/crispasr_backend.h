@@ -138,6 +138,11 @@ enum crispasr_capability : uint32_t {
                                         // dispatcher. Note this backend emits scores, not a
                                         // decided tablature: the constrained Viterbi/DP that
                                         // picks a playable fingering belongs to the caller.
+    CAP_STREAM_DELTA = 1u << 29,        // supports streaming delta encoding
+    CAP_STREAM_UTTERANCE = 1u << 30, // utterance-level delta (save/restore)
+                                        // (cohere_set_stream_delta). Avoids re-encoding
+                                        // the overlapping portion of sequential rolling
+                                        // windows in JSON+VAD streaming mode.
 };
 
 // ---------------------------------------------------------------------------
@@ -218,6 +223,19 @@ public:
     // hotwords, attention context) to backend state on every call; the split
     // pair cannot, because encode_slice runs on a worker thread and mutating
     // decode state there would race the decoder. Without this hook those flags
+// Optional streaming delta-encoding hint.  When the caller is about to
+    // transcribe sequential overlapping audio windows (e.g. JSON+VAD
+    // streaming), it may call this before each transcribe() to convey how
+    // many samples in the next buffer are NEW (not present in the previous
+    // call).  A backend that supports delta encoding (CAP_STREAM_DELTA) can
+    // use this to avoid re-encoding the overlapping portion of the audio.
+    // Default no-op.
+    virtual void set_stream_delta(int /*delta_new_samples*/) {}
+    virtual void save_utterance_cross_kv(int64_t /*utterance_start*/, int64_t /*utterance_end*/, int64_t /*window_start*/, int /*sample_rate*/) {}
+    virtual void restore_utterance_cross_kv(int /*n_new_samples*/) {}
+    virtual void clear_utterance_cross_kv() {}
+
+    // ---- Language detection ----
     // are silently dropped whenever the pipeline engages — measured on
     // parakeet: `--vad --beam-size 4` decoded greedily.
     virtual void begin_split_run(const whisper_params& /*params*/) {}

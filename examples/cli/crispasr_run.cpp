@@ -350,6 +350,14 @@ static bool stream_punc_finals_enabled(const whisper_params& params) {
     return crispasr_stream_punc_finals_enabled(params.stream_punc);
 }
 
+static bool stream_postprocess_partials_enabled(const whisper_params& params) {
+    return crispasr_stream_postprocess_partials_enabled(params.stream_postprocess);
+}
+
+static bool stream_postprocess_finals_enabled(const whisper_params& params) {
+    return crispasr_stream_postprocess_finals_enabled(params.stream_postprocess);
+}
+
 // Apply PCS (punctuation + capitalization + segmentation) to all segments.
 static void apply_pcs_model(pcs_context* pcs_ctx, std::vector<crispasr_segment>& segs) {
     if (!pcs_ctx)
@@ -3224,8 +3232,10 @@ int crispasr_run_backend(const whisper_params& params_in) {
 
     // #80e: optional warmup — transcribe a short silence buffer to
     // amortize first-call overhead (graph alloc, GPU kernel compile).
-    // Enabled via --warmup or CRISPASR_WARMUP=1.
-    if (params.warmup || getenv("CRISPASR_WARMUP")) {
+    // Enabled via --warmup, CRISPASR_WARMUP=1, or automatically in
+    // JSON+VAD streaming mode (--stream-json) to eliminate startup
+    // latency spikes from GPU kernel compilation.
+    if (params.stream_json || params.warmup || getenv("CRISPASR_WARMUP")) {
         auto t_warmup_start = std::chrono::steady_clock::now();
         backend->warmup();
         if (params.verbose || !params.no_prints) {
@@ -4029,6 +4039,7 @@ int crispasr_run_backend(const whisper_params& params_in) {
         std::vector<float> utterance_pcm;
         std::string prefix_committed;
         std::string last_partial_text; // dedupe key + prefix-mode tail
+        int64_t utterance_pcm_size_at_save = 0;
         int64_t last_partial_decode_sample = -1;
         int64_t cumulative_samples = 0;
         const int64_t utterance_max_samples = (int64_t)params.stream_utterance_max_sec * SR;
@@ -4091,15 +4102,9 @@ int crispasr_run_backend(const whisper_params& params_in) {
             std::vector<std::pair<crispasr_audio_slice, std::string>> step_slice_text;
             bool decoded_segments_this_step = false;
             if (!stream_vad_path.empty()) {
+                if (backend->capabilities() & CAP_STREAM_DELTA) backend->set_stream_delta((int)n_new);
                 const auto slices = crispasr_compute_vad_slices(pcm_window.data(), (int)pcm_window.size(), SR,
                                                                 stream_vad_path.c_str(), stream_vad_opts);
-                // Snapshot for the straddling-slice subrange decode below.
-                // `cumulative_samples` has already been advanced by
-                // `n_new` for this step, so the rolling window currently
-                // covers [window_start_sample_now, cumulative_samples).
-                // finalized_until_sample is updated inside the JSON state
-                // machine *after* this loop runs, so it reflects the
-                // upper bound of all utterances finalized before this step.
                 const int64_t window_start_sample_now = cumulative_samples - (int64_t)pcm_window.size();
                 const bool final_silence_due =
                     params.stream_json && params.stream_final_silence_ms > 0 && have_open_utterance &&
@@ -4109,98 +4114,88 @@ int crispasr_run_backend(const whisper_params& params_in) {
                     params.stream_json, last_partial_decode_sample, final_silence_due, cumulative_samples,
                     partial_decode_interval_samples);
                 bool partial_decode_attempted_this_step = false;
-                constexpr int kStraddleMinSamples = 32000; // 2 s @ 16 kHz; backend-safe tail decode floor.
-                for (const auto& sl : slices) {
-                    if (params.stream_json) {
-                        const int64_t s_start_abs = window_start_sample_now + (int64_t)sl.start;
-                        const int64_t s_end_abs = window_start_sample_now + (int64_t)sl.end;
-                        if (s_end_abs <= finalized_until_sample)
-                            continue;
-                        // Apply punc/strip on a copy so the per-slice text
-                        // is in its final form before we hand it to the
-                        // utterance state machine. JSON mode can filter or
-                        // trim finalized rolling-window slices before decode;
-                        // plain-text mode below still decodes full slices.
-                        std::vector<crispasr_segment> sl_for_text;
-
-                        // Round 3 (CKwasd #1 corner): if the VAD slice
-                        // straddles a previously-finalized boundary
-                        // (s_start < finalized_until_sample < s_end), the
-                        // full-slice decode covers audio that belongs to
-                        // the prior utterance — emitting it as a partial
-                        // for the new utterance_id leaks prior text into
-                        // the live stream. Decode just the post-finalized
-                        // subrange so partial.text describes only the new
-                        // utterance's interval.
-                        // Some backends (moonshine's stacked conv1d
-                        // encoder, for example) abort on inputs shorter
-                        // than a few hundred ms — `OW > 0` from
-                        // `ggml_im2col`. Gate the subrange decode on a
-                        // generous min so we don't crash; fall back to
-                        // suppressing the partial in that case so we
-                        // don't leak the prior utterance's text either.
-                        // 32000 samples = 2 s @ 16 kHz, comfortably
-                        // above every supported backend's encoder
-                        // minimum.
-                        if (!allow_partial_decode) {
-                            // Keep VAD slice timing in the JSON state machine
-                            // but skip the expensive ASR partial decode for
-                            // this step.
-                        } else if (s_start_abs < finalized_until_sample) {
-                            const int sub_start = (int)(finalized_until_sample - window_start_sample_now);
-                            const int sub_end = (int)sl.end;
-                            const int sub_len = sub_end - sub_start;
-                            if (sub_start >= 0 && sub_len >= kStraddleMinSamples && sub_end <= (int)pcm_window.size()) {
-                                whisper_params decode_params = params;
-                                decode_params.vad = false;
-                                decode_params.vad_model.clear();
-                                partial_decode_attempted_this_step = true;
-                                const int64_t abs_offset_cs = (window_start_sample_now + (int64_t)sub_start) * 100 / SR;
-                                sl_for_text = backend->transcribe(pcm_window.data() + sub_start, sub_len, abs_offset_cs,
-                                                                  decode_params);
+                constexpr int kStraddleMinSamples = 32000;
+                if (params.stream_json) {
+                    // ponytail: single full-window transcribe so delta survives; midpoint assigns segments to slices
+                    if (!allow_partial_decode) {
+                        for (auto &sl : slices) {
+                            if (window_start_sample_now + sl.end <= finalized_until_sample) continue;
+                            step_slice_text.emplace_back(sl, std::string());
+                        }
+                    } else if (!slices.empty()) {
+                        const int64_t window_cs = window_start_sample_now * 100 / SR;
+                        auto full_segs = backend->transcribe(pcm_window.data(), (int)pcm_window.size(), window_cs, params);
+                        if (!full_segs.empty()) decoded_segments_this_step = true;
+                        if (stream_punc_partials_enabled(params)) apply_punc_model(punc_ctx.get(), full_segs);
+                        apply_truecase_model(tc_ctx.get(), full_segs);
+                        apply_truecase_crf_model(tc_crf_ctx.get(), full_segs);
+                        apply_truecase_lstm_model(tc_lstm_ctx.get(), full_segs);
+                        apply_pcs_model(pcs_ctx.get(), full_segs);
+                        if (!params.punctuation) for (auto &s : full_segs) crispasr_strip_punctuation(s);
+                        // filter finalized region for assignment
+                        std::vector<std::string> slice_text(slices.size());
+                        for (auto &seg : full_segs) {
+                            if (seg.t1 <= finalized_until_sample * 100 / SR) continue;
+                            const int64_t mid = (seg.t0 + seg.t1) / 2;
+                            int best = -1;
+                            for (size_t i = 0; i < slices.size(); i++) {
+                                const int64_t s0 = window_start_sample_now * 100 / SR + slices[i].t0_cs;
+                                const int64_t s1 = window_start_sample_now * 100 / SR + slices[i].t1_cs;
+                                if (mid >= s0 && mid < s1) { best = (int)i; break; }
                             }
-                            // else: sl_for_text stays empty → empty
-                            // partial text for this slice, which
-                            // `flush_pending_partial` will skip. The
-                            // straddling slice's prior-utterance audio
-                            // never reaches the wrapper; the genuine
-                            // new audio will be picked up on a later
-                            // step once the subrange exceeds the min.
-                        } else {
-                            partial_decode_attempted_this_step = true;
-                            const int64_t abs_t0_cs = window_start_sample_now * 100 / SR + sl.t0_cs;
-                            sl_for_text =
-                                backend->transcribe(pcm_window.data() + sl.start, sl.end - sl.start, abs_t0_cs, params);
+                            if (best < 0) {
+                                // fallback: nearest slice by midpoint distance
+                                int64_t best_d = INT64_MAX;
+                                for (size_t i = 0; i < slices.size(); i++) {
+                                    const int64_t s0 = window_start_sample_now * 100 / SR + slices[i].t0_cs;
+                                    const int64_t s1 = window_start_sample_now * 100 / SR + slices[i].t1_cs;
+                                    const int64_t mid_s = (s0 + s1) / 2;
+                                    int64_t d = llabs(mid - mid_s);
+                                    if (d < best_d) { best_d = d; best = (int)i; }
+                                }
+                            }
+                            if (best >= 0) {
+                                // straddling guard: skip if slice fully finalized or subrange too short
+                                const int64_t s_start_abs = window_start_sample_now + slices[best].start;
+                                const int64_t s_end_abs = window_start_sample_now + slices[best].end;
+                                if (s_end_abs <= finalized_until_sample) continue;
+                                if (s_start_abs < finalized_until_sample) {
+                                    const int sub_len = (int)(s_end_abs - finalized_until_sample);
+                                    if (sub_len < kStraddleMinSamples) continue;
+                                }
+                                slice_text[best] += seg.text;
+                            }
                         }
-                        if (!sl_for_text.empty())
-                            decoded_segments_this_step = true;
-                        if (stream_punc_partials_enabled(params))
-                            apply_punc_model(punc_ctx.get(), sl_for_text);
-                        apply_truecase_model(tc_ctx.get(), sl_for_text);
-                        apply_truecase_crf_model(tc_crf_ctx.get(), sl_for_text);
-                        apply_truecase_lstm_model(tc_lstm_ctx.get(), sl_for_text);
-                        apply_pcs_model(pcs_ctx.get(), sl_for_text);
-                        if (!params.punctuation) {
-                            for (auto& seg : sl_for_text)
-                                crispasr_strip_punctuation(seg);
+                        for (size_t i = 0; i < slices.size(); i++) {
+                            if (window_start_sample_now + slices[i].end <= finalized_until_sample) continue;
+                            if (slices[i].start < finalized_until_sample - window_start_sample_now) {
+                                const int sub_len = (int)(slices[i].end - (finalized_until_sample - window_start_sample_now));
+                                if (sub_len < kStraddleMinSamples) continue;
+                            }
+                            step_slice_text.emplace_back(slices[i], std::move(slice_text[i]));
                         }
-                        std::string sl_text;
-                        for (const auto& s : sl_for_text)
-                            sl_text += s.text;
-                        step_slice_text.emplace_back(sl, std::move(sl_text));
-                    } else {
-                        const int64_t abs_t0_cs = window_start_sample_now * 100 / SR + sl.t0_cs;
-                        auto slice_segs =
-                            backend->transcribe(pcm_window.data() + sl.start, sl.end - sl.start, abs_t0_cs, params);
-                        if (!slice_segs.empty())
-                            decoded_segments_this_step = true;
-                        segs.insert(segs.end(), std::make_move_iterator(slice_segs.begin()),
-                                    std::make_move_iterator(slice_segs.end()));
+                        partial_decode_attempted_this_step = true;
                     }
+                } else {
+                    // non-JSON VAD: single full-window transcribe, aggregate
+                    const int64_t window_cs = window_start_sample_now * 100 / SR;
+                    auto full_segs = backend->transcribe(pcm_window.data(), (int)pcm_window.size(), window_cs, params);
+                    if (!full_segs.empty()) decoded_segments_this_step = true;
+                    segs.insert(segs.end(), std::make_move_iterator(full_segs.begin()), std::make_move_iterator(full_segs.end()));
                 }
-                if (partial_decode_attempted_this_step)
-                    last_partial_decode_sample = cumulative_samples;
+                if (partial_decode_attempted_this_step) last_partial_decode_sample = cumulative_samples;
+                // ponytail: utterance-level delta — save utterance portion of cross-KV for later finalize reuse
+                if (params.stream_json && have_open_utterance && decoded_segments_this_step && (backend->capabilities() & CAP_STREAM_UTTERANCE)) {
+                    const int64_t ue = last_speech_end_sample > 0 ? last_speech_end_sample : utterance_start_sample + 1;
+                    backend->save_utterance_cross_kv(utterance_start_sample, ue, window_start_sample_now, SR);
+                    utterance_pcm_size_at_save = (int64_t)utterance_pcm.size();
+                }
             } else {
+                // No-VAD path: transcribe the full window.
+                // Also set streaming delta hint for backends that support it.
+                if (backend->capabilities() & CAP_STREAM_DELTA) {
+                    backend->set_stream_delta((int)n_new);
+                }
                 const int64_t no_vad_window_start_cs = (cumulative_samples - (int64_t)pcm_window.size()) * 100 / SR;
                 segs = backend->transcribe(pcm_window.data(), (int)pcm_window.size(), no_vad_window_start_cs, params);
                 if (!segs.empty())
@@ -4299,6 +4294,10 @@ int crispasr_run_backend(const whisper_params& params_in) {
                             whisper_params decode_params = params;
                             decode_params.vad = false;
                             decode_params.vad_model.clear();
+                            if ((backend->capabilities() & CAP_STREAM_UTTERANCE)) {
+                                const int n_new_since_save = (int)utterance_pcm.size() - (int)utterance_pcm_size_at_save;
+                                backend->restore_utterance_cross_kv(n_new_since_save);
+                            }
                             auto utt_segs =
                                 backend->transcribe(utterance_pcm.data(), (int)utterance_pcm.size(), 0, decode_params);
                             if (stream_punc_finals_enabled(params))
@@ -4345,6 +4344,7 @@ int crispasr_run_backend(const whisper_params& params_in) {
                     utterance_pcm.clear();
                     prefix_committed.clear();
                     last_partial_text.clear();
+                    if (backend->capabilities() & CAP_STREAM_UTTERANCE) { backend->clear_utterance_cross_kv(); utterance_pcm_size_at_save = 0; }
                 };
 
                 auto open_utterance_at = [&](int window_offset, int64_t stream_start) {
@@ -4359,6 +4359,7 @@ int crispasr_run_backend(const whisper_params& params_in) {
                     utterance_pcm.assign(pcm_window.begin() + window_offset, pcm_window.end());
                     prefix_committed.clear();
                     last_partial_text.clear();
+                    if (backend->capabilities() & CAP_STREAM_UTTERANCE) { backend->clear_utterance_cross_kv(); utterance_pcm_size_at_save = 0; }
                 };
 
                 auto on_partial_text = [&](const std::string& new_text) {
@@ -4605,6 +4606,11 @@ int crispasr_run_backend(const whisper_params& params_in) {
                     whisper_params decode_params = params;
                     decode_params.vad = false;
                     decode_params.vad_model.clear();
+                    // EOF also benefits from utterance-level delta
+                    if ((backend->capabilities() & CAP_STREAM_UTTERANCE) && utterance_pcm_size_at_save > 0) {
+                        const int n_new2 = (int)utterance_pcm.size() - (int)utterance_pcm_size_at_save;
+                        backend->restore_utterance_cross_kv(n_new2);
+                    }
                     auto utt_segs =
                         backend->transcribe(utterance_pcm.data(), (int)utterance_pcm.size(), 0, decode_params);
                     if (stream_punc_finals_enabled(params))

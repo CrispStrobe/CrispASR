@@ -165,6 +165,27 @@ typedef void (*cohere_stage_cb)(const char* name, const float* data, int T_enc, 
 int cohere_run_encoder_staged(struct cohere_context* ctx, const float* mel, int n_mels, int T_mel, cohere_stage_cb cb,
                               void* userdata);
 
+// ---- Streaming delta-encoding support ----
+//
+// When transcribing sequential overlapping audio windows (e.g. in
+// JSON+VAD streaming mode), the caller may enable delta encoding to
+// avoid re-encoding the overlapping portion of the audio. Instead,
+// the previous step's cross-KV cache is retained on the CPU, and only
+// the NEW samples are encoded. The old + new cross-KV are spliced
+// together using the same multi-chunk scatter-copy path already
+// proven by the 30s+ long-audio chunker.
+//
+// Call cohere_set_stream_delta(ctx, new_samples) before every
+// cohere_transcribe_ex() call. Pass 0 to disable delta encoding
+// (full encode) for the next call.
+void cohere_set_stream_delta(struct cohere_context* ctx, int delta_new_samples);
+
+// Utterance-level delta: save/restore the utterance portion of the
+// cached cross-KV so finalize redecode only encodes the new tail.
+void cohere_save_utterance_cross_kv(struct cohere_context* ctx, int64_t utterance_start_sample, int64_t utterance_end_sample, int64_t window_start_sample, int sample_rate);
+void cohere_restore_utterance_cross_kv(struct cohere_context* ctx, int n_new_samples);
+void cohere_clear_utterance_cross_kv(struct cohere_context* ctx);
+
 #ifdef __cplusplus
 }
 #endif

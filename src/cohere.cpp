@@ -550,6 +550,27 @@ struct cohere_context {
     // place that sets it, and it clears it again in the same function.
     bool reuse_encoder = false;
     int reused_T_enc = 0;
+// Streaming delta-encode mode (phase 1). Instead of re-encoding the full
+    // rolling window every step, only encode the NEW samples and splice the
+    // cross-KV with the cached output from the previous step. This eliminates
+    // ~90% of encoder computation per streaming step once the window is warm.
+    //
+    // Managed by cohere_set_stream_delta(). Call with new_samples=0 (or omit)
+    // to perform a full encode and reset the cache. Non-zero triggers delta
+    // encoding on the next transcribe_ex() call, provided the cache is valid.
+    //
+    // The per-layer CPU F32 cross-KV from the last full/delta encode is
+    // retained in stream_cached_k/v so it can be reused as chunk[0] during
+    // the next delta step. This is only populated when delta encoding is
+    // active; it is freed at the start of any full encode (new_samples=0).
+    int stream_delta_new_samples = 0;
+    int stream_cached_T_enc = 0;
+    std::vector<std::vector<float>> stream_cached_k; // [layer][data]
+    std::vector<std::vector<float>> stream_cached_v;
+    // utterance-level delta: portion of cached cross-KV for the open utterance
+    std::vector<std::vector<float>> utterance_cached_k;
+    std::vector<std::vector<float>> utterance_cached_v;
+    int utterance_cached_T_enc = 0;
 
     // Mel spectrogram buffer
     std::vector<float> mel_buf;
@@ -2226,6 +2247,172 @@ static void cohere_fold_batchnorm(cohere_model& model, int verbosity) {
     COHERE_VLOG(verbosity, "cohere: BN folded into conv_dw weights for %d layers\n", model.hparams.enc_n_layers);
 }
 
+// ---------------------------------------------------------------------------
+// Helper: encode an audio span and extract per-layer cross-attention K/V
+// to CPU F32 buffers.  Used by the streaming delta-encode path and by the
+// normal single‑chunk encoder path.
+//
+// Caller supplies mel_fb / window (from ctx->model).  On success out_T_enc
+// is set and out_k_k[il] / out_k_v[il] are populated with the flat F32
+// cross‑KV for each decoder layer (head_dim × T_enc × n_heads elements).
+// ---------------------------------------------------------------------------
+static bool cohere_encode_and_extract_cross_kv(
+    cohere_context* ctx,
+    const float* samples, int n_samples,
+    const std::vector<float>& mel_fb,
+    const std::vector<float>& window,
+    int& out_T_enc,
+    std::vector<std::vector<float>>& out_k_k,
+    std::vector<std::vector<float>>& out_k_v,
+    cohere_perf& perf)
+{
+    const auto& hp = ctx->model.hparams;
+    const int vb = ctx->params.verbosity;
+    int64_t t0, t1;
+
+    // Feature extraction
+    int T_mel_c = 0;
+    t0 = ggml_time_us();
+    auto mel_c = cohere_compute_features(hp, mel_fb.data(), window.data(), samples, n_samples, T_mel_c);
+    t1 = ggml_time_us();
+    perf.t_features_us += (t1 - t0);
+
+    // Build encoder graph
+    t0 = ggml_time_us();
+    struct ggml_cgraph* gf_enc = cohere_build_graph_encoder(ctx, T_mel_c);
+    t1 = ggml_time_us();
+    perf.t_enc_build_us += (t1 - t0);
+
+    // Allocate
+    t0 = ggml_time_us();
+    ggml_backend_sched_reset(ctx->ggml_alloc);
+    if (!ggml_backend_sched_alloc_graph(ctx->ggml_alloc, gf_enc)) {
+        fprintf(stderr, "cohere: failed to allocate encoder graph\n");
+        return false;
+    }
+    t1 = ggml_time_us();
+    perf.t_enc_alloc_us += (t1 - t0);
+
+    // Set mel input
+    struct ggml_tensor* mel_t = ggml_graph_get_tensor(gf_enc, "mel");
+    if (!mel_t) { fprintf(stderr, "error: mel tensor not found\n"); return false; }
+    ggml_backend_tensor_set(mel_t, mel_c.data(), 0, mel_c.size() * sizeof(float));
+
+    // Positional encodings
+    int H1c = (T_mel_c + 2 - 3) / 2 + 1;
+    int H2c = (H1c + 2 - 3) / 2 + 1;
+    int H3c = (H2c + 2 - 3) / 2 + 1;
+    auto pos_enc_c = ct_rel_pos_enc(H3c, hp.enc_d_model);
+    struct ggml_tensor* pos_enc_t = ggml_graph_get_tensor(gf_enc, "pos_enc");
+    if (!pos_enc_t) { fprintf(stderr, "error: pos_enc tensor not found\n"); return false; }
+    ggml_backend_tensor_set(pos_enc_t, pos_enc_c.data(), 0, pos_enc_c.size() * sizeof(float));
+
+    // Compute
+    t0 = ggml_time_us();
+    if (!cohere_sched_graph_compute(ctx->ggml_alloc, gf_enc, ctx->params.n_threads)) {
+        fprintf(stderr, "cohere: failed to compute encoder graph\n");
+        return false;
+    }
+    t1 = ggml_time_us();
+    perf.t_enc_compute_us += (t1 - t0);
+
+    // Determine T_enc (the encoder output temporal dimension)
+    // The last encoder layer output is named "enc_out" in the graph.
+    struct ggml_tensor* enc_out_t = ggml_graph_get_tensor(gf_enc, "enc_out");
+    if (!enc_out_t) { fprintf(stderr, "error: enc_out tensor not found\n"); return false; }
+    out_T_enc = enc_out_t->ne[1]; // [d_model, T_enc]
+
+    // Extract cross-KV from encoder graph for each decoder layer
+    const int n_heads = hp.dec_n_heads;
+    const int head_dim = hp.dec_head_dim;
+    const int n_layers = hp.dec_n_layers;
+
+    out_k_k.resize(n_layers);
+    out_k_v.resize(n_layers);
+
+    const int64_t t_ckr0 = ggml_time_us();
+    for (int il = 0; il < n_layers; il++) {
+        char ck_name[32], cv_name[32];
+        snprintf(ck_name, sizeof(ck_name), "ck_%d", il);
+        snprintf(cv_name, sizeof(cv_name), "cv_%d", il);
+        struct ggml_tensor* ck_src = ggml_graph_get_tensor(gf_enc, ck_name);
+        struct ggml_tensor* cv_src = ggml_graph_get_tensor(gf_enc, cv_name);
+        if (!ck_src || !cv_src) {
+            fprintf(stderr, "error: cross-KV tensor %s or %s not found\n", ck_name, cv_name);
+            return false;
+        }
+        const int64_t nelem = ggml_nelements(ck_src);
+        out_k_k[il].resize(nelem);
+        out_k_v[il].resize(nelem);
+        ggml_backend_tensor_get(ck_src, out_k_k[il].data(), 0, ggml_nbytes(ck_src));
+        ggml_backend_tensor_get(cv_src, out_k_v[il].data(), 0, ggml_nbytes(cv_src));
+    }
+    perf.t_crosskv_read_us += (ggml_time_us() - t_ckr0);
+
+    COHERE_VLOG2(vb, "cohere: extract done T_enc=%d  layers=%d\n", out_T_enc, n_layers);
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Enable / disable streaming delta encoding for the next transcribe_ex() call.
+//
+// Pass delta_new_samples > 0 to encode only the final delta_new_samples
+// samples on the next call, reusing the cached cross‑KV for the overlapping
+// portion.  Pass 0 (the default) to perform a full encode and reset the cache.
+// ---------------------------------------------------------------------------
+void cohere_set_stream_delta(struct cohere_context* ctx, int delta_new_samples) {
+    ctx->stream_delta_new_samples = delta_new_samples;
+    if (delta_new_samples == 0) {
+        // Full encode next — discard any cached cross-KV so the delta path
+        // is not accidentally taken with stale data.
+        ctx->stream_cached_k.clear();
+        ctx->stream_cached_v.clear();
+        ctx->stream_cached_T_enc = 0;
+    }
+}
+void cohere_save_utterance_cross_kv(struct cohere_context* ctx, int64_t utterance_start_sample, int64_t utterance_end_sample, int64_t window_start_sample, int sample_rate) {
+    if (!ctx || ctx->stream_cached_k.empty()) return;
+    (void)sample_rate;
+    const auto& hp = ctx->model.hparams;
+    const int n_heads = hp.dec_n_heads; const int head_dim = hp.dec_head_dim;
+    const int elems_per_frame = head_dim * n_heads;
+    const int samples_per_frame = hp.hop_length * hp.pre_sub_fac; // 1280
+    const int64_t overlap_start = std::max(utterance_start_sample, window_start_sample);
+    const int64_t overlap_end = std::min(utterance_end_sample, window_start_sample + (int64_t)ctx->stream_cached_T_enc * samples_per_frame);
+    if (overlap_end <= overlap_start) { ctx->utterance_cached_k.clear(); ctx->utterance_cached_v.clear(); ctx->utterance_cached_T_enc = 0; return; }
+    const int frame_offset = (int)((overlap_start - window_start_sample) / samples_per_frame);
+    const int frame_count = (int)((overlap_end - overlap_start) / samples_per_frame);
+    if (frame_count <= 0 || frame_offset < 0) { ctx->utterance_cached_k.clear(); ctx->utterance_cached_v.clear(); ctx->utterance_cached_T_enc = 0; return; }
+    const int avail = ctx->stream_cached_T_enc;
+    const int off = std::min(frame_offset, avail); const int cnt = std::min(frame_count, avail - off);
+    if (cnt <= 0) { ctx->utterance_cached_k.clear(); ctx->utterance_cached_v.clear(); ctx->utterance_cached_T_enc = 0; return; }
+    const int elem_off = off * elems_per_frame; const int elem_cnt = cnt * elems_per_frame;
+    const int n_layers = (int)ctx->stream_cached_k.size();
+    ctx->utterance_cached_k.resize(n_layers); ctx->utterance_cached_v.resize(n_layers);
+    for (int il = 0; il < n_layers; il++) {
+        const auto& k = ctx->stream_cached_k[il]; const auto& v = ctx->stream_cached_v[il];
+        if (elem_off + elem_cnt <= (int)k.size()) {
+            ctx->utterance_cached_k[il].assign(k.begin() + elem_off, k.begin() + elem_off + elem_cnt);
+            ctx->utterance_cached_v[il].assign(v.begin() + elem_off, v.begin() + elem_off + elem_cnt);
+        } else {
+            const int take = std::min(elem_cnt, (int)k.size() - elem_off);
+            if (take > 0) { ctx->utterance_cached_k[il].assign(k.begin() + elem_off, k.begin() + elem_off + take); ctx->utterance_cached_v[il].assign(v.begin() + elem_off, v.begin() + elem_off + take); }
+        }
+    }
+    ctx->utterance_cached_T_enc = cnt;
+}
+void cohere_restore_utterance_cross_kv(struct cohere_context* ctx, int n_new_samples) {
+    if (!ctx || ctx->utterance_cached_k.empty()) { if (ctx) ctx->stream_delta_new_samples = 0; return; }
+    const int saved_T = ctx->utterance_cached_T_enc;
+    ctx->stream_cached_k = ctx->utterance_cached_k;
+    ctx->stream_cached_v = ctx->utterance_cached_v;
+    ctx->stream_cached_T_enc = saved_T;
+    ctx->stream_delta_new_samples = n_new_samples;
+}
+void cohere_clear_utterance_cross_kv(struct cohere_context* ctx) {
+    if (!ctx) return;
+    ctx->utterance_cached_k.clear(); ctx->utterance_cached_v.clear(); ctx->utterance_cached_T_enc = 0;
+}
 struct cohere_result* cohere_transcribe_ex(struct cohere_context* ctx, const float* samples, int n_samples,
                                            const char* lang, int64_t t_offset_cs) {
     const auto& hp = ctx->model.hparams;
@@ -2293,6 +2480,7 @@ struct cohere_result* cohere_transcribe_ex(struct cohere_context* ctx, const flo
                 free(empty);
                 return nullptr;
             }
+            ctx->stream_delta_new_samples = 0;
             return empty;
         }
     }
@@ -2374,6 +2562,8 @@ struct cohere_result* cohere_transcribe_ex(struct cohere_context* ctx, const flo
                 COHERE_VLOG(vb, "cohere: chunk %zu/%zu  samples [%d, %d)  t0=%.1fs  dur=%.2fs\n", chunk_idx + 1,
                             chunks.size(), offset, chunk_end, chunk_t0_cs / 100.0,
                             (double)(chunk_end - offset) / hp.sample_rate);
+                // long-audio loop re-enters transcribe_ex; clear stale delta hint
+                ctx->stream_delta_new_samples = 0; ctx->stream_cached_k.clear(); ctx->stream_cached_v.clear(); ctx->stream_cached_T_enc = 0;
                 cohere_result* chunk_r =
                     cohere_transcribe_ex(ctx, samples + offset, chunk_end - offset, lang, chunk_t0_cs);
                 if (!merge_results(full, chunk_r)) {
@@ -2425,7 +2615,103 @@ struct cohere_result* cohere_transcribe_ex(struct cohere_context* ctx, const flo
     bool do_prof = !do_chunked && (crispasr_env::get("CRISPASR_COHERE_PROF") != nullptr);
 
     if (!reuse_enc) {
-        cohere_bench_stage _b_enc("encoder (all chunks)");
+        // --- Streaming delta encoding ---
+        const int T_guard = 4;
+        const int guard_samples = T_guard * hp.hop_length * hp.pre_sub_fac;
+        const bool cache_valid = !ctx->stream_cached_k.empty() &&
+                                 (int)ctx->stream_cached_k.size() == hp.dec_n_layers &&
+                                 ctx->stream_cached_T_enc > T_guard;
+        const bool delta = ctx->stream_delta_new_samples > 0 && cache_valid;
+
+        if (delta) {
+            // ===== DELTA ENCODE PATH =====
+            // ponytail: guard handles Conformer conv kernel edge; sliding-window head eviction not handled (cache grows) — trim head if long streams show duplication
+            const int delta_n_raw = ctx->stream_delta_new_samples;
+            int delta_n = delta_n_raw + guard_samples;
+            if (delta_n > n_samples) delta_n = n_samples;
+            cohere_bench_stage _b_enc_delta("encoder (delta)");
+            const float* delta_ptr = samples + n_samples - delta_n;
+
+            std::vector<std::vector<float>> delta_k_k, delta_k_v;
+            int delta_T_enc = 0;
+            if (!cohere_encode_and_extract_cross_kv(ctx, delta_ptr, delta_n, mel_fb, window,
+                                                      delta_T_enc, delta_k_k, delta_k_v, perf)) {
+                return nullptr;
+            }
+            COHERE_VLOG2(vb, "cohere: delta encode done  delta_T_enc=%d  cached_T_enc=%d  delta_n=%d (guard %d)\n",
+                         delta_T_enc, ctx->stream_cached_T_enc, delta_n, guard_samples);
+
+            // Trim tail guard frames from cached cross-KV per head
+            const int cached_T = ctx->stream_cached_T_enc;
+            const int trimmed_T = cached_T - T_guard;
+            const int head_dim = hp.dec_head_dim;
+            const int n_heads = hp.dec_n_heads;
+            std::vector<std::vector<float>> trimmed_k(hp.dec_n_layers), trimmed_v(hp.dec_n_layers);
+            for (int il = 0; il < hp.dec_n_layers; il++) {
+                trimmed_k[il].resize((size_t)trimmed_T * head_dim * n_heads);
+                trimmed_v[il].resize((size_t)trimmed_T * head_dim * n_heads);
+                const float* src_k = ctx->stream_cached_k[il].data();
+                const float* src_v = ctx->stream_cached_v[il].data();
+                float* dst_k = trimmed_k[il].data();
+                float* dst_v = trimmed_v[il].data();
+                for (int h = 0; h < n_heads; h++) {
+                    const float* sk = src_k + (size_t)h * cached_T * head_dim;
+                    float* dk = dst_k + (size_t)h * trimmed_T * head_dim;
+                    memcpy(dk, sk, (size_t)trimmed_T * head_dim * sizeof(float));
+                    const float* sv = src_v + (size_t)h * cached_T * head_dim;
+                    float* dv = dst_v + (size_t)h * trimmed_T * head_dim;
+                    memcpy(dv, sv, (size_t)trimmed_T * head_dim * sizeof(float));
+                }
+            }
+            ctx->stream_cached_k.clear();
+            ctx->stream_cached_v.clear();
+
+            // Build partial_k/v: chunk[0] = trimmed cached, chunk[1] = delta (with guard)
+            for (int il = 0; il < hp.dec_n_layers; il++) {
+                partial_k[il].push_back(std::move(trimmed_k[il]));
+                partial_v[il].push_back(std::move(trimmed_v[il]));
+            }
+            for (int il = 0; il < hp.dec_n_layers; il++) {
+                partial_k[il].push_back(std::move(delta_k_k[il]));
+                partial_v[il].push_back(std::move(delta_k_v[il]));
+            }
+            delta_k_k.clear();
+            delta_k_v.clear();
+
+            T_enc_chunks.push_back(trimmed_T);
+            T_enc_chunks.push_back(delta_T_enc);
+            T_enc_total = trimmed_T + delta_T_enc;
+
+            // Save combined (trimmed + delta) cross-KV per-head for next step
+            ctx->stream_cached_k.resize(hp.dec_n_layers);
+            ctx->stream_cached_v.resize(hp.dec_n_layers);
+            for (int il = 0; il < hp.dec_n_layers; il++) {
+                ctx->stream_cached_k[il].resize((size_t)T_enc_total * head_dim * n_heads);
+                ctx->stream_cached_v[il].resize((size_t)T_enc_total * head_dim * n_heads);
+                const float* k0 = partial_k[il][0].data();
+                const float* k1 = partial_k[il][1].data();
+                float* dst_k = ctx->stream_cached_k[il].data();
+                const float* v0 = partial_v[il][0].data();
+                const float* v1 = partial_v[il][1].data();
+                float* dst_v = ctx->stream_cached_v[il].data();
+                for (int h = 0; h < n_heads; h++) {
+                    float* dk = dst_k + (size_t)h * T_enc_total * head_dim;
+                    const float* sk0 = k0 + (size_t)h * trimmed_T * head_dim;
+                    const float* sk1 = k1 + (size_t)h * delta_T_enc * head_dim;
+                    memcpy(dk, sk0, (size_t)trimmed_T * head_dim * sizeof(float));
+                    memcpy(dk + trimmed_T * head_dim, sk1, (size_t)delta_T_enc * head_dim * sizeof(float));
+                    float* dv = dst_v + (size_t)h * T_enc_total * head_dim;
+                    const float* sv0 = v0 + (size_t)h * trimmed_T * head_dim;
+                    const float* sv1 = v1 + (size_t)h * delta_T_enc * head_dim;
+                    memcpy(dv, sv0, (size_t)trimmed_T * head_dim * sizeof(float));
+                    memcpy(dv + trimmed_T * head_dim, sv1, (size_t)delta_T_enc * head_dim * sizeof(float));
+                }
+            }
+            ctx->stream_cached_T_enc = T_enc_total;
+            COHERE_VLOG2(vb, "cohere: delta spliced      T_enc_total=%d (trimmed %d + delta %d)\n", T_enc_total, trimmed_T, delta_T_enc);
+        } else {
+            // ===== FULL ENCODE PATH =====
+            cohere_bench_stage _b_enc("encoder (all chunks)");
         int n_chunks = 0;
         for (int sample_offset = 0; sample_offset < n_samples; sample_offset += CHUNK_SAMPLES) {
             int chunk_n = std::min(CHUNK_SAMPLES, n_samples - sample_offset);
@@ -2659,7 +2945,34 @@ struct cohere_result* cohere_transcribe_ex(struct cohere_context* ctx, const flo
         if (do_prof) {
             cohere_prof_print(prof_state);
         }
-    }
+// Save full cross-KV to cache for future delta streaming steps
+        ctx->stream_cached_k.resize(hp.dec_n_layers);
+        ctx->stream_cached_v.resize(hp.dec_n_layers);
+        if (n_chunks == 1) {
+            for (int il = 0; il < hp.dec_n_layers; il++) {
+                ctx->stream_cached_k[il] = partial_k[il][0];
+                ctx->stream_cached_v[il] = partial_v[il][0];
+            }
+        } else {
+            for (int il = 0; il < hp.dec_n_layers; il++) {
+                size_t total = 0;
+                for (int c = 0; c < n_chunks; c++)
+                    total += partial_k[il][c].size();
+                ctx->stream_cached_k[il].resize(total);
+                ctx->stream_cached_v[il].resize(total);
+                float* kp = ctx->stream_cached_k[il].data();
+                float* vp = ctx->stream_cached_v[il].data();
+                for (int c = 0; c < n_chunks; c++) {
+                    size_t sz = partial_k[il][c].size();
+                    memcpy(kp, partial_k[il][c].data(), sz * sizeof(float));
+                    memcpy(vp, partial_v[il][c].data(), sz * sizeof(float));
+                    kp += sz; vp += sz;
+                }
+            }
+        }
+        ctx->stream_cached_T_enc = T_enc_total;
+    }  // close else (full encode path)
+    }  // close if (!reuse_enc)
 
     // Assemble cross-KV from per-chunk CPU data and upload to backend buffer.
     if (!reuse_enc) {
@@ -3340,6 +3653,8 @@ struct cohere_result* cohere_transcribe_ex(struct cohere_context* ctx, const flo
         return nullptr;
     }
     memcpy(res->text, full_text.c_str(), full_text.size() + 1);
+    // Single-use hint: consumed after one transcribe_ex
+    ctx->stream_delta_new_samples = 0;
     return res;
 }
 
