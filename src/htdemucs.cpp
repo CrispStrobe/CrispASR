@@ -644,8 +644,17 @@ static htdemucs_context* htdemucs_init_impl(const char* model_path, htdemucs_par
         want_gpu = atoi(gpu_env) != 0;
     if (params.use_gpu)
         want_gpu = true;
-    if (want_gpu && htdemucs_use_ggml()) {
-        ctx->backend = crispasr_init_gpu_backend();
+    // The ggml graph path is the gate to the GPU backend: want_gpu WITHOUT
+    // it still runs on CPU (measured — 0% GPU util on an RTX 3090 with
+    // CRISPASR_HTDEMUCS_GPU=1 alone). For GPU setups the graph path only
+    // pays off with FUSED (single graph, no host<->device roundtrips; the
+    // per-layer graphs measured slower than CPU+Accelerate). So: GPU users
+    // set CRISPASR_HTDEMUCS_GGML=1 + CRISPASR_HTDEMUCS_FUSED=1; want_gpu
+    // alone stays on the CPU/BLAS path (no silent behavior change for
+    // CPU-only hosts, which keep their BLAS path).
+    const bool want_graph = htdemucs_use_ggml() || (want_gpu && htdemucs_use_fused());
+    if (want_graph) {
+        ctx->backend = want_gpu ? crispasr_init_gpu_backend() : core_cpu_backend::init();
         if (!ctx->backend)
             ctx->backend = core_cpu_backend::init();
     } else {
