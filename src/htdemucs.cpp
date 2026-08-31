@@ -633,7 +633,17 @@ static htdemucs_context* htdemucs_init_impl(const char* model_path, htdemucs_par
     // device->host read. CRISPASR_HTDEMUCS_GPU=1 requests it without having to
     // thread a flag through all three surfaces (CLI, session C-ABI, server).
     const char* gpu_env = getenv("CRISPASR_HTDEMUCS_GPU");
-    const bool want_gpu = (params.use_gpu || (gpu_env && atoi(gpu_env) != 0));
+    // Prefer the GPU backend whenever the build has one — the fused graph
+    // path is dramatically faster on CUDA (measured RTF ≈ 0.3 vs ≈ 7.4 on
+    // an RTX 3090 for a 30 s clip; the CPU default left htdemucs on CPU
+    // even on CUDA builds). CRISPASR_HTDEMUCS_GPU=0 opts out (forces CPU);
+    // =1 forces GPU. crispasr_init_gpu_backend() falls back to CPU on
+    // GPU-less hosts, so the default is safe everywhere.
+    bool want_gpu = true;
+    if (gpu_env && gpu_env[0])
+        want_gpu = atoi(gpu_env) != 0;
+    if (params.use_gpu)
+        want_gpu = true;
     if (want_gpu && htdemucs_use_ggml()) {
         ctx->backend = crispasr_init_gpu_backend();
         if (!ctx->backend)
