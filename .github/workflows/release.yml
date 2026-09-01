@@ -2139,6 +2139,11 @@ jobs:
           }
           $hashLines | Set-Content release\crispasr-windows-x86_64-cuda-runtime-sha256.txt
 
+          # The hosted runner has no NVIDIA device.  Keep ggml's startup probe
+          # from emitting a CUDA-driver warning on stderr: pwsh under Actions
+          # promotes native stderr to ErrorRecord and can abort the capture
+          # before the diagnostic text is assigned (#400 proof run 33477050379).
+          $env:CUDA_VISIBLE_DEVICES = "-1"
           $version = (& "$full\crispasr.exe" --version 2>&1) -join "`n"
           Write-Host $version
           if ($LASTEXITCODE -ne 0 -or $version -notmatch 'cuda toolkit\s*:\s*12\.' -or
