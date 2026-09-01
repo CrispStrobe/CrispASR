@@ -94,7 +94,14 @@ int crispasr_run_separate(const whisper_params& params) {
         std::vector<std::vector<float>> stereo;
 
         if (arch == "mel-band-roformer") {
-            auto* ctx = mel_band_roformer_init_from_file(model.c_str(), mel_band_roformer_default_params());
+            // #414: forward the CLI's GPU intent — zero-initialized default
+            // params carry use_gpu=false, which silently pinned separation to
+            // CPU even on GPU builds (the moonshine "encoder gap" trap).
+            auto mp = mel_band_roformer_default_params();
+            mp.use_gpu = params.use_gpu;
+            mp.n_threads = params.n_threads;
+            mp.gpu_device = params.gpu_device;
+            auto* ctx = mel_band_roformer_init_from_file(model.c_str(), mp);
             if (!ctx) {
                 rc = 2;
                 break;
@@ -127,7 +134,14 @@ int crispasr_run_separate(const whisper_params& params) {
             mel_band_roformer_free(ctx);
 
         } else if (arch == "htdemucs") {
-            auto* ctx = htdemucs_init_from_file(model.c_str(), htdemucs_default_params());
+            // #414: same forwarding — without it the AUTO gates in
+            // htdemucs_gates.h see use_gpu=false and never probe the GPU
+            // (caught by the Kaggle proof kernel: all arms ran BLAS).
+            auto hp = htdemucs_default_params();
+            hp.use_gpu = params.use_gpu;
+            hp.n_threads = params.n_threads;
+            hp.gpu_device = params.gpu_device;
+            auto* ctx = htdemucs_init_from_file(model.c_str(), hp);
             if (!ctx) {
                 rc = 2;
                 break;
