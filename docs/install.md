@@ -114,6 +114,19 @@ unpack it, and copy the three DLLs you already have next to `crispasr.exe`
 (`cudart64_12.dll` vs `cudart64_13.dll`), so a CUDA 12 trio cannot be
 mistakenly installed into a CUDA 13 package or vice versa.
 
+The executable reports the toolkit it was built and linked against and the
+required runtime ABI major on both diagnostic surfaces:
+
+```powershell
+.\crispasr.exe --version | Select-String 'cuda'
+.\crispasr.exe --diagnostics 2>&1 | Select-String 'cuda toolkit|cuda runtime ABI'
+```
+
+A CUDA 12 package prints `cuda toolkit : 12.8...` and `cuda runtime ABI: 12`;
+the CUDA 13 package prints `13.0...` and ABI `13`. This identifies the binary,
+not a separately installed toolkit. The self-contained zip loads its matching
+major-version DLLs from beside `crispasr.exe`.
+
 Each trio is published **once** per release and shared by that major's
 packages — sound only because every CUDA-bundling job of the same major pins
 the same toolkit (12.8.0 for the CUDA 12 packages, 13.0.0 for CUDA 13).

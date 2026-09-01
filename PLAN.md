@@ -1,5 +1,13 @@
 # CrispASR — Pending work
 
+## NOW 2026-09-01 — #400 complete CUDA runtime reporting
+
+Worktree `.claude/worktrees/fix-400-reporting`, branch
+`fix/400-cuda-reporting`. Reproduce why CUDA packages omit their CUDA major
+from `--version` and `--diagnostics`, repair the compile-time report, cover both
+surfaces, and prove the packaged Windows CUDA 13 binary agrees with its actual
+DLL imports on a clean hosted Windows build.
+
 ## DONE 2026-08-31 — #397 Piper Windows CLI/server resolution and live proof
 
 Worktree `.claude/worktrees/fix-397-piper`, branch

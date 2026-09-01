@@ -87,6 +87,9 @@ Check it runs — this should print a version banner and exit:
 crispasr --version          # Windows: .\crispasr.exe --version
 ```
 
+CUDA builds also print `cuda toolkit` and `cuda runtime ABI`, so this command
+distinguishes the CUDA 12 and CUDA 13 packages without inspecting DLLs.
+
 ### 2. Make it speak
 
 `-m auto` downloads the model on first use (~135 MB here) and reuses it

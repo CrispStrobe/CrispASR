@@ -38,6 +38,9 @@
 #ifndef CRISPASR_CUDA_VERSION
 #define CRISPASR_CUDA_VERSION ""
 #endif
+#ifndef CRISPASR_CUDA_RUNTIME_MAJOR
+#define CRISPASR_CUDA_RUNTIME_MAJOR ""
+#endif
 
 // One macro per compiled-in ggml backend. Each guard mirrors the
 // corresponding GGML_* CMake option so the banner accurately reports
@@ -125,7 +128,11 @@ void crispasr_print_build_info(FILE* out) {
     std::fprintf(out, "  ggml backends : %s\n", crispasr_compiled_backends());
 #ifdef CRISPASR_HAVE_CUDA
     if (CRISPASR_CUDA_VERSION[0] != '\0') {
-        std::fprintf(out, "  cuda toolkit  : %s\n", CRISPASR_CUDA_VERSION);
+        std::fprintf(out, "  cuda toolkit  : %s (build/link target)\n", CRISPASR_CUDA_VERSION);
+    }
+    if (CRISPASR_CUDA_RUNTIME_MAJOR[0] != '\0') {
+        std::fprintf(out, "  cuda runtime ABI: %s (matching major-version runtime libraries required)\n",
+                     CRISPASR_CUDA_RUNTIME_MAJOR);
     }
     if (CRISPASR_CUDA_ARCHS[0] != '\0') {
         std::fprintf(out, "  cuda archs    : %s\n", CRISPASR_CUDA_ARCHS);

@@ -145,6 +145,16 @@ target_compile_definitions(${TARGET} PRIVATE
     CRISPASR_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
 )
 if (GGML_CUDA)
+    # ggml discovers CUDA in its own add_subdirectory() scope. CMake's
+    # CUDAToolkit_VERSION normal variable does not propagate back up to this
+    # sibling directory, so diagnostics previously compiled an empty version
+    # string even in the shipped CUDA packages (#400). Discover it in the CLI
+    # scope too and fail the build rather than ship an unidentifiable binary.
+    find_package(CUDAToolkit REQUIRED)
+    if (NOT CUDAToolkit_VERSION)
+        message(FATAL_ERROR "CUDA is enabled but CUDAToolkit_VERSION is unavailable")
+    endif()
+    string(REGEX MATCH "^[0-9]+" CRISPASR_CUDA_RUNTIME_MAJOR "${CUDAToolkit_VERSION}")
     # CMAKE_CUDA_ARCHITECTURES is a CMake list ("75-real;86-real;..."). When
     # fed into target_compile_definitions, CMake's command-line generator
     # treats list items as SEPARATE arguments — the cl.exe line ends up as
@@ -157,6 +167,7 @@ if (GGML_CUDA)
     target_compile_definitions(${TARGET} PRIVATE
         CRISPASR_HAVE_CUDA=1
         CRISPASR_CUDA_VERSION="${CUDAToolkit_VERSION}"
+        CRISPASR_CUDA_RUNTIME_MAJOR="${CRISPASR_CUDA_RUNTIME_MAJOR}"
         CRISPASR_CUDA_ARCHS="${CRISPASR_CUDA_ARCHS_STR}"
     )
 endif()

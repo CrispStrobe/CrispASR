@@ -25,6 +25,8 @@ on:
     paths:
       - '.github/workflows/win-cuda13-verify.yml'
       - '.github/workflows/release.yml'
+      - 'examples/cli/CMakeLists.txt'
+      - 'examples/cli/crispasr_diagnostics.cpp'
 
 jobs:
   win-cuda13-verify:
@@ -85,6 +87,24 @@ jobs:
           Copy-Item THIRD_PARTY_NOTICES.txt $full\
           Get-ChildItem $full | Format-Table Name, Length
       # ── …lockstep with release.yml build-windows-cuda13 to here ─────────────
+
+      - name: Prove packaged CLI reports CUDA 13 on both surfaces
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path release\crispasr-windows-x86_64-cuda13\crispasr.exe
+          $version = (& $exe --version 2>&1) -join "`n"
+          if ($LASTEXITCODE -ne 0) { throw "--version exited $LASTEXITCODE" }
+          Write-Host $version
+          if ($version -notmatch 'ggml backends\s*:\s*.*cuda') { throw '--version omitted the CUDA backend' }
+          if ($version -notmatch 'cuda toolkit\s*:\s*13\.') { throw '--version omitted the CUDA 13 toolkit' }
+          if ($version -notmatch 'cuda runtime ABI\s*:\s*13\b') { throw '--version omitted CUDA runtime ABI 13' }
+
+          $diagnostics = (& $exe --diagnostics 2>&1) -join "`n"
+          if ($LASTEXITCODE -ne 0) { throw "--diagnostics exited $LASTEXITCODE" }
+          Write-Host $diagnostics
+          if ($diagnostics -notmatch 'cuda toolkit\s*:\s*13\.') { throw '--diagnostics omitted CUDA toolkit 13' }
+          if ($diagnostics -notmatch 'cuda runtime ABI\s*:\s*13\b') { throw '--diagnostics omitted CUDA runtime ABI 13' }
+          Write-Host 'WIN_CUDA13_REPORT_OK — --version and --diagnostics identify CUDA 13'
 
       - name: Assert ggml-cuda.dll is wired to the CUDA 13 runtime
         shell: pwsh

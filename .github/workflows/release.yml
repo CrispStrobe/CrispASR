@@ -2139,6 +2139,13 @@ jobs:
           }
           $hashLines | Set-Content release\crispasr-windows-x86_64-cuda-runtime-sha256.txt
 
+          $version = (& "$full\crispasr.exe" --version 2>&1) -join "`n"
+          Write-Host $version
+          if ($LASTEXITCODE -ne 0 -or $version -notmatch 'cuda toolkit\s*:\s*12\.' -or
+              $version -notmatch 'cuda runtime ABI\s*:\s*12\b') {
+            throw 'Packaged CUDA 12 executable does not identify its CUDA 12 toolkit/runtime ABI'
+          }
+
       - uses: actions/upload-artifact@v4
         with:
           name: crispasr-windows-x86_64-cuda
@@ -2263,6 +2270,13 @@ jobs:
           Copy-Item LICENSE $split\
           Copy-Item THIRD_PARTY_NOTICES.txt $split\
           Compress-Archive -Path $split -DestinationPath release\crispasr-windows-x86_64-cuda13-non-cuda.zip -CompressionLevel Optimal
+
+          $version = (& "$full\crispasr.exe" --version 2>&1) -join "`n"
+          Write-Host $version
+          if ($LASTEXITCODE -ne 0 -or $version -notmatch 'cuda toolkit\s*:\s*13\.' -or
+              $version -notmatch 'cuda runtime ABI\s*:\s*13\b') {
+            throw 'Packaged CUDA 13 executable does not identify its CUDA 13 toolkit/runtime ABI'
+          }
 
           $hashLines = $cudaDlls | ForEach-Object {
             $hash = (Get-FileHash (Join-Path $runtime $_.Name) -Algorithm SHA256).Hash.ToLowerInvariant()
