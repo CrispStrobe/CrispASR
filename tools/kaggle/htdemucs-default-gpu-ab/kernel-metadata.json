@@ -1,0 +1,14 @@
+{
+  "id": "chr1str/crispasr-htdemucs-default-gpu-ab",
+  "title": "crispasr-htdemucs-default-gpu-ab",
+  "code_file": "htdemucs_default_gpu_ab.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "true",
+  "dataset_sources": ["chr1str/crispasr-hf-token", "chr1str/crispasr-ccache"],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}

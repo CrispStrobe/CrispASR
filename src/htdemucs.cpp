@@ -6,6 +6,7 @@
 // Phase 4: Full forward + overlap-add chunking.
 
 #include "htdemucs.h"
+#include "htdemucs_gates.h"
 #include "htdemucs_ggml_util.h"
 
 #include "ggml.h"
@@ -66,6 +67,8 @@ static bool htdemucs_profile() {
 static double htd_now_ms();
 static bool htdemucs_use_ggml();
 static bool htdemucs_use_fused();
+static void htdemucs_resolve_gates(bool caller_use_gpu, bool have_real_gpu);
+static htdemucs_gates::Resolved htdemucs_gates_resolved();
 static bool htdemucs_fused_ggml(struct htdemucs_context* ctx, std::vector<float>& x_buf, int& x_C, int& x_Fq, int x_T,
                                 std::vector<float>& xt_buf, int& xt_C, int xt_T,
                                 const std::vector<float>& freq_emb_bcast);
@@ -632,35 +635,42 @@ static htdemucs_context* htdemucs_init_impl(const char* model_path, htdemucs_par
     // weights would live on the GPU and every scalar/BLAS kernel would pay a
     // device->host read. CRISPASR_HTDEMUCS_GPU=1 requests it without having to
     // thread a flag through all three surfaces (CLI, session C-ABI, server).
-    const char* gpu_env = getenv("CRISPASR_HTDEMUCS_GPU");
-    // Prefer the GPU backend whenever the build has one — the fused graph
-    // path is dramatically faster on CUDA (measured RTF ≈ 0.3 vs ≈ 7.4 on
-    // an RTX 3090 for a 30 s clip; the CPU default left htdemucs on CPU
-    // even on CUDA builds). CRISPASR_HTDEMUCS_GPU=0 opts out (forces CPU);
-    // =1 forces GPU. crispasr_init_gpu_backend() falls back to CPU on
-    // GPU-less hosts, so the default is safe everywhere.
-    bool want_gpu = true;
-    if (gpu_env && gpu_env[0])
-        want_gpu = atoi(gpu_env) != 0;
-    if (params.use_gpu)
-        want_gpu = true;
-    // The ggml graph path is the gate to the GPU backend: want_gpu WITHOUT
-    // it still runs on CPU (measured — 0% GPU util on an RTX 3090 with
-    // CRISPASR_HTDEMUCS_GPU=1 alone). For GPU setups the graph path only
-    // pays off with FUSED (single graph, no host<->device roundtrips; the
-    // per-layer graphs measured slower than CPU+Accelerate). So: GPU users
-    // set CRISPASR_HTDEMUCS_GGML=1 + CRISPASR_HTDEMUCS_FUSED=1; want_gpu
-    // alone stays on the CPU/BLAS path (no silent behavior change for
-    // CPU-only hosts, which keep their BLAS path).
-    const bool want_graph = htdemucs_use_ggml() || (want_gpu && htdemucs_use_fused());
-    if (want_graph) {
-        ctx->backend = want_gpu ? crispasr_init_gpu_backend() : core_cpu_backend::init();
+    // #413/#414: on a host with a real GPU backend the fused-graph GPU path
+    // is ~20x faster than CPU/BLAS (RTF 0.37 vs 7.4, RTX 3090 Ti), while
+    // per-layer graphs — GPU or CPU — measured SLOWER than BLAS. The AUTO
+    // defaults in htdemucs_gates::resolve() therefore pick graph+fused+GPU
+    // exactly when a real GPU is present, and the legacy BLAS path otherwise
+    // — a CPU-only host sees no behavior change. Probe the GPU backend first
+    // (the DL registry hands back CPU or null on GPU-less hosts) so AUTO
+    // resolves against reality, not against the build flags.
+    ggml_backend_t gpu_probe = nullptr;
+    {
+        // Skip the probe when GPU is explicitly forbidden — a CUDA context
+        // spin-up is not free and the answer would be discarded.
+        const char* e = getenv("CRISPASR_HTDEMUCS_GPU");
+        const bool may_gpu = (e && *e) ? atoi(e) != 0 : params.use_gpu;
+        if (may_gpu) {
+            gpu_probe = crispasr_init_gpu_backend();
+            if (gpu_probe && core_cpu_backend::is_cpu(gpu_probe)) {
+                ggml_backend_free(gpu_probe);
+                gpu_probe = nullptr;
+            }
+        }
+    }
+    htdemucs_resolve_gates(params.use_gpu, gpu_probe != nullptr);
+    const htdemucs_gates::Resolved gates = htdemucs_gates_resolved();
+    if (gates.use_graph) {
+        ctx->backend = gates.gpu_backend ? gpu_probe : core_cpu_backend::init();
         if (!ctx->backend)
             ctx->backend = core_cpu_backend::init();
     } else {
         ctx->backend = core_cpu_backend::init();
     }
+    if (gpu_probe && ctx->backend != gpu_probe)
+        ggml_backend_free(gpu_probe);
     ctx->is_gpu = !core_cpu_backend::is_cpu(ctx->backend);
+    fprintf(stderr, "htdemucs: gates graph=%d fused=%d gpu=%d (real_gpu_present=%d)\n", (int)gates.use_graph,
+            (int)gates.use_fused, (int)gates.gpu_backend, (int)(gpu_probe != nullptr));
     fprintf(stderr, "htdemucs: backend = %s\n", ggml_backend_name(ctx->backend));
     core_gguf::WeightLoad wl;
     if (!core_gguf::load_weights(model_path, ctx->backend, "htdemucs", wl)) {
@@ -974,13 +984,28 @@ static void htd_gemm(int M, int N, int K, const float* A, const float* B, float*
 // GGML graph port for the CrossTransformer (CRISPASR_HTDEMUCS_GGML).
 // Default OFF pending a full A/B: per the dev-guide inverse-default rule a
 // verified-but-not-yet-faster path stays opt-in and the old path stays default.
+// #414: the gates resolve ONCE at init (htdemucs_resolve_gates) so the AUTO
+// defaults can see whether a real GPU backend exists. Before init the helpers
+// fall back to the plain env reads (old semantics) — nothing on the compute
+// paths runs pre-init, this is belt-and-braces for stray early callers.
+static htdemucs_gates::Resolved g_htd_gates;
+static bool g_htd_gates_set = false;
+
+static void htdemucs_resolve_gates(bool caller_use_gpu, bool have_real_gpu) {
+    g_htd_gates = htdemucs_gates::resolve(getenv("CRISPASR_HTDEMUCS_GPU"), getenv("CRISPASR_HTDEMUCS_GGML"),
+                                          getenv("CRISPASR_HTDEMUCS_FUSED"), caller_use_gpu, have_real_gpu);
+    g_htd_gates_set = true;
+}
+
+static htdemucs_gates::Resolved htdemucs_gates_resolved() {
+    return g_htd_gates;
+}
+
 static bool htdemucs_use_ggml() {
-    static int v = -1;
-    if (v < 0) {
-        const char* e = getenv("CRISPASR_HTDEMUCS_GGML");
-        v = (e && atoi(e) != 0) ? 1 : 0; // default OFF
-    }
-    return v != 0;
+    if (g_htd_gates_set)
+        return g_htd_gates.use_graph;
+    const char* e = getenv("CRISPASR_HTDEMUCS_GGML");
+    return e && atoi(e) != 0;
 }
 
 // FUSED: run encoder + transformer + decoder as ONE graph so activations never
@@ -989,12 +1014,10 @@ static bool htdemucs_use_ggml() {
 // SLOWER than CPU+Accelerate for the encoder despite the transformer being
 // 3.3-6x faster.
 static bool htdemucs_use_fused() {
-    static int v = -1;
-    if (v < 0) {
-        const char* e = getenv("CRISPASR_HTDEMUCS_FUSED");
-        v = (e && atoi(e) != 0) ? 1 : 0; // default OFF
-    }
-    return v != 0;
+    if (g_htd_gates_set)
+        return g_htd_gates.use_fused;
+    const char* e = getenv("CRISPASR_HTDEMUCS_FUSED");
+    return e && atoi(e) != 0;
 }
 
 // FASTCONV: batched im2col + gemm for the CPU convs (default ON). Set
