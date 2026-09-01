@@ -701,13 +701,16 @@ suffixes.
 - `CRISPASR_HTDEMUCS_WCACHE` — cache F32 copies of weight tensors by pointer
   (default **ON**). `=0` re-reads and re-converts on every access, which the
   DConv stacks do ~6k times per encoder layer.
-- `CRISPASR_HTDEMUCS_GGML` — run the CrossTransformer as a ggml graph instead of
-  the CPU/BLAS path (default **OFF**). Verified correct on CPU and Metal (45/45
-  stages, every layer cos 1.000000) but not yet proven faster overall, so it
-  stays opt-in per the inverse-default rule.
-- `CRISPASR_HTDEMUCS_GPU` — request a GPU backend (CUDA > Metal > Vulkan, CPU
-  fallback). Only meaningful together with `_GGML=1`: under the CPU/BLAS path
-  the weights would sit on the device and every kernel would pay a read back.
+- `CRISPASR_HTDEMUCS_GGML` — run the ggml graph path instead of CPU/BLAS.
+  Since #414 the default is **AUTO**: ON exactly when a real GPU backend is
+  present and permitted (where the fused graph measured ~20x faster than
+  BLAS — RTF 0.37 vs 7.4 on an RTX 3090 Ti), OFF on CPU-only hosts (where
+  graphs measured slower than BLAS). `=1`/`=0` force either way.
+- `CRISPASR_HTDEMUCS_GPU` — GPU permission (CUDA > Metal > Vulkan). Default
+  AUTO follows the caller's use_gpu (CLI default on); an explicit `=0`/`=1`
+  beats the caller in both directions — so `=0` genuinely opts out even
+  though the CLI defaults `use_gpu=true` (#414 review catch). On GPU-less
+  hosts everything resolves to the BLAS path regardless.
 - `CRISPASR_HTDEMUCS_NO_BCAST_CAST` — disable the issue-#398 fix that casts
   non-F32 affine/bias weights to F32 in-graph before broadcast add/mul sites
   (bisection aid). With `=1` the pre-fix graph is rebuilt, which on CUDA
@@ -717,9 +720,11 @@ suffixes.
   forward pass (stft / enc / transformer / dec / istft).
 - `CRISPASR_HTDEMUCS_DEBUG` — verbose per-layer shape and NaN diagnostics.
 - `CRISPASR_HTDEMUCS_SKIP_TIME` — skip the time branch (bisection aid).
-- `CRISPASR_HTDEMUCS_FUSED` — per-layer fused ggml graphs (default **OFF**): the
-  host↔device roundtrip per layer measured slower than CPU+Accelerate for the
-  encoder, even though the transformer alone is 3.3–6x faster.
+- `CRISPASR_HTDEMUCS_FUSED` — single fused graph (encoder+transformer+decoder
+  on-device, no per-layer host↔device roundtrips). Default **AUTO**: ON with
+  the GPU graph path (#414), OFF otherwise. `=1` alone implies the graph path
+  it needs; `=0` on GPU keeps the per-layer-graph bisection arm.
+  The full decision table is unit-locked in tests/test-htdemucs-gates.cpp.
 - `CRISPASR_HTDEMUCS_MEMSTATS` — log each weight-cache admission and the running
   cache total in MB.
 - `CRISPASR_HTDEMUCS_NO_SEGMENT` — process the whole track in one pass instead of

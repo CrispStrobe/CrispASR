@@ -1,5 +1,36 @@
 # CrispASR — Pending work
 
+## 2026-09-01 — PR #414 htdemucs GPU-by-default: merged + corrected + tested (#413)
+
+Worktree `.claude/worktrees/fix-414`, branch `integr/pr-414` (PR merge
+commit preserves @tilllt's authorship; their RTX 3090 Ti numbers — fused
+GPU RTF 0.37 vs CPU/BLAS 7.4 — are the motivating measurement).
+
+Two review catches fixed on top of the PR:
+(a) its gate (`want_graph = use_ggml() || (want_gpu && use_fused())`) left
+the DEFAULT on CPU (both envs default off) despite the title, and made
+`FUSED=1` alone select the slow per-layer GPU path;
+(b) `if (params.use_gpu) want_gpu = true` ran after the env read and
+params.use_gpu defaults true from the CLI — so the advertised
+`CRISPASR_HTDEMUCS_GPU=0` opt-out was dead.
+
+Fix: `src/htdemucs_gates.h` — pure resolve() with AUTO defaults that
+encode the measurements (fused-graph-GPU exactly when a real GPU backend
+is present and permitted; CPU hosts keep BLAS; per-layer graphs never
+AUTO-selected), explicit envs force either way, `FUSED=1` implies the
+graph it needs, env beats caller intent in both directions. Resolved once
+per init against a real GPU probe; one unconditional
+"htdemucs: gates graph=X fused=X gpu=X" line for tests/kernels to assert.
+
+Tests: tests/test-htdemucs-gates.cpp locks the full 9-case decision table;
+tests/test-htdemucs-separate-live.sh (live) proves AUTO-stays-BLAS on CPU
+hosts + forced-fused engagement + per-stem BLAS-vs-fused parity (measured
+worst max|diff| 4.3e-4 on q4_k). GPU proof:
+tools/kaggle/htdemucs-default-gpu-ab kernel (branch-pinned) — default-arm
+engagement + FUSED-vs-BLAS per-stem parity (f16+q8_0) + speedup on real
+CUDA; #398's kernel only covered the per-layer graph arm. Merge to main on
+that kernel's green verdict.
+
 ## 2026-09-01 — #419 aligner romanization leaked into display text (FIX)
 
 Worktree `.claude/worktrees/fix-419-canary`, branch `fix/419-canary-cyrillic`.

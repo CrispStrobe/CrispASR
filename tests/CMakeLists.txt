@@ -3288,6 +3288,22 @@ catch_discover_tests(test-loopfix-wiring
     PROPERTIES LABELS "unit;ngram-loop"
 )
 
+# ─── test-htdemucs-gates — unit tests for the #413/#414 path-selection
+# table (AUTO fused-GPU on real-GPU hosts, BLAS otherwise, env overrides).
+add_executable(test-htdemucs-gates
+    test-htdemucs-gates.cpp
+)
+target_include_directories(test-htdemucs-gates PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-htdemucs-gates PRIVATE
+    Catch2::Catch2WithMain
+)
+catch_discover_tests(test-htdemucs-gates
+    TEST_SPEC "[htdemucs]"
+    PROPERTIES LABELS "unit;htdemucs"
+)
+
 # ─── test-uroman — Catch2 unit tests for core/uroman.h romanization.
 # Validates Arabic + Cyrillic romanization for CTC forced alignment (#252).
 add_executable(test-uroman
@@ -5014,6 +5030,16 @@ add_test(NAME test-omnivoice-seed
 set_tests_properties(test-omnivoice-seed PROPERTIES
     LABELS "live;tts;omnivoice;determinism"
     TIMEOUT 600)
+
+# ─── test-htdemucs-separate-live — #413/#414 htdemucs live test: BLAS
+# default on CPU hosts, forced fused-graph arm, per-stem parity between
+# them. SKIPs cleanly without the model.
+add_test(NAME test-htdemucs-separate-live
+    COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test-htdemucs-separate-live.sh
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+set_tests_properties(test-htdemucs-separate-live PROPERTIES
+    LABELS "live;htdemucs"
+    TIMEOUT 900)
 
 # ─── test-separate-live — §248 source separation smoke test. SKIPs cleanly
 # without a mel-band-roformer model (CRISPASR_MBR_MODEL / CRISPASR_MODELS_DIR).
