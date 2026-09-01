@@ -175,6 +175,128 @@ def load_nemo_disk(nemo_path: Path, extract_dir: Path) -> dict:
     return result
 
 
+def _mel_filterbank(sr: int, n_fft: int, n_mels: int) -> np.ndarray:
+    """Librosa/NeMo Slaney mel bank, without a librosa dependency."""
+    def hz_to_mel(hz: np.ndarray) -> np.ndarray:
+        f_sp = 200.0 / 3
+        mel = hz / f_sp
+        log_t = hz >= 1000.0
+        mel[log_t] = 15.0 + np.log(hz[log_t] / 1000.0) / (np.log(6.4) / 27.0)
+        return mel
+
+    def mel_to_hz(mel: np.ndarray) -> np.ndarray:
+        f_sp = 200.0 / 3
+        hz = mel * f_sp
+        log_t = mel >= 15.0
+        hz[log_t] = 1000.0 * np.exp((mel[log_t] - 15.0) * (np.log(6.4) / 27.0))
+        return hz
+
+    fftfreqs = np.linspace(0.0, sr / 2.0, 1 + n_fft // 2)
+    mel_f = mel_to_hz(np.linspace(hz_to_mel(np.array([0.0]))[0],
+                                  hz_to_mel(np.array([sr / 2.0]))[0], n_mels + 2))
+    fdiff = np.diff(mel_f)
+    ramps = mel_f[:, None] - fftfreqs[None, :]
+    weights = np.maximum(0.0, np.minimum(-ramps[:-2] / fdiff[:-1, None],
+                                         ramps[2:] / fdiff[1:, None]))
+    weights *= (2.0 / (mel_f[2:] - mel_f[:-2]))[:, None]
+    return weights.astype(np.float32)
+
+
+def load_onnx_export(encoder_path: Path, decoder_path: Path, tokens_path: Path) -> dict:
+    """Recover a NeMo-style state dict from a standard nemo-conformer-rnnt ONNX export."""
+    try:
+        import onnx
+        from onnx import numpy_helper
+    except ImportError:
+        sys.exit("pip install onnx")
+
+    import torch
+    enc = onnx.load(str(encoder_path), load_external_data=True)
+    dec = onnx.load(str(decoder_path), load_external_data=True)
+    sd: dict[str, torch.Tensor] = {}
+
+    def arrays(model):
+        return {x.name: numpy_helper.to_array(x).copy() for x in model.graph.initializer}
+
+    ea, da = arrays(enc), arrays(dec)
+    for name, value in ea.items():
+        if name.startswith("pre_encode."):
+            sd["encoder." + name] = torch.from_numpy(value)
+        elif name.startswith("layers."):
+            sd["encoder." + name] = torch.from_numpy(value)
+
+    # torch Linear weights were exported as MatMul constants [in, out].
+    for node in enc.graph.node:
+        if node.op_type == "MatMul" and len(node.input) >= 2 and node.input[1] in ea:
+            module = node.name.strip("/").removesuffix("/MatMul").replace("/", ".")
+            if module == "pre_encode.out" or module.startswith("layers."):
+                sd["encoder." + module + ".weight"] = torch.from_numpy(ea[node.input[1]].T.copy())
+        elif node.op_type == "Conv" and "depthwise_conv" in node.name:
+            module = node.name.strip("/").removesuffix("/Conv").replace("/", ".")
+            sd["encoder." + module + ".weight"] = torch.from_numpy(ea[node.input[1]])
+            if len(node.input) >= 3 and node.input[2] in ea:
+                sd["encoder." + module + ".bias"] = torch.from_numpy(ea[node.input[2]])
+
+    layer_ids = sorted({int(k.split(".")[2]) for k in sd if k.startswith("encoder.layers.")})
+    d_model = int(sd["encoder.layers.0.norm_out.weight"].numel())
+    for layer in layer_ids:
+        # ONNX inference folds BatchNorm into depthwise Conv. Identity BN keeps
+        # the native runtime's mandatory fold step mathematically neutral.
+        p = f"encoder.layers.{layer}.conv.batch_norm."
+        sd[p + "weight"] = torch.ones(d_model)
+        sd[p + "bias"] = torch.zeros(d_model)
+        sd[p + "running_mean"] = torch.zeros(d_model)
+        sd[p + "running_var"] = torch.full((d_model,), 1.0 - 1e-5)
+
+    # The ONNX predictor uses gate order i,o,f,c; PyTorch/native uses i,f,g,o.
+    def reorder_lstm(x: np.ndarray) -> np.ndarray:
+        x = x[0]
+        return np.concatenate(np.split(x, 4)[::2] + [np.split(x, 4)[3], np.split(x, 4)[1]], axis=0)
+
+    sd["decoder.prediction.embed.weight"] = torch.from_numpy(da["decoder.prediction.embed.weight"])
+    lstm_node = next(n for n in dec.graph.node if n.op_type == "LSTM")
+    w, r, b = (da[lstm_node.input[i]] for i in (1, 2, 3))
+    sd["decoder.prediction.dec_rnn.lstm.weight_ih_l0"] = torch.from_numpy(reorder_lstm(w).copy())
+    sd["decoder.prediction.dec_rnn.lstm.weight_hh_l0"] = torch.from_numpy(reorder_lstm(r).copy())
+    b_ih, b_hh = np.split(b[0], 2)
+    sd["decoder.prediction.dec_rnn.lstm.bias_ih_l0"] = torch.from_numpy(reorder_lstm(b_ih[None]).copy())
+    sd["decoder.prediction.dec_rnn.lstm.bias_hh_l0"] = torch.from_numpy(reorder_lstm(b_hh[None]).copy())
+    for node in dec.graph.node:
+        if node.op_type != "MatMul" or len(node.input) < 2 or node.input[1] not in da:
+            continue
+        module = node.name.strip("/").removesuffix("/MatMul").replace("/", ".")
+        target = {"joint.enc": "joint.enc.weight", "joint.pred": "joint.pred.weight",
+                  "joint.joint_net.joint_net.2": "joint.joint_net.2.weight"}.get(module)
+        if target:
+            sd[target] = torch.from_numpy(da[node.input[1]].T.copy())
+    for name in ("joint.enc.bias", "joint.pred.bias", "joint.joint_net.2.bias"):
+        sd[name] = torch.from_numpy(da[name])
+
+    vocab_by_id: dict[int, str] = {}
+    for line in tokens_path.read_text(encoding="utf-8").splitlines():
+        piece, token_id = line.rsplit(" ", 1)
+        vocab_by_id[int(token_id)] = piece
+    vocab = [vocab_by_id[i] for i in range(len(vocab_by_id))]
+    n_mels = int(enc.graph.input[0].type.tensor_type.shape.dim[1].dim_value)
+    n_layers = max(layer_ids) + 1
+    n_heads = int(sd["encoder.layers.0.self_attn.pos_bias_u"].shape[0])
+    ff_dim = int(sd["encoder.layers.0.feed_forward1.linear1.weight"].shape[0])
+    conv_kernel = int(sd["encoder.layers.0.conv.depthwise_conv.weight"].shape[-1])
+    pred_hidden = int(sd["decoder.prediction.embed.weight"].shape[1])
+    sd["preprocessor.featurizer.fb"] = torch.from_numpy(_mel_filterbank(16000, 512, n_mels))
+    sd["preprocessor.featurizer.window"] = torch.hann_window(400, periodic=True)
+    import yaml
+    config = {"preprocessor": {"sample_rate": 16000, "features": n_mels, "n_fft": 512,
+                                "window_size": 0.025, "window_stride": 0.01},
+              "encoder": {"feat_in": n_mels, "d_model": d_model, "n_layers": n_layers,
+                          "n_heads": n_heads, "ff_expansion_factor": ff_dim // d_model,
+                          "subsampling_factor": 8, "subsampling_conv_channels": 256,
+                          "conv_kernel_size": conv_kernel, "xscaling": True},
+              "decoder": {"prednet": {"pred_hidden": pred_hidden, "pred_rnn_layers": 1}, "durations": []},
+              "joint": {"jointnet": {"joint_hidden": int(sd["joint.pred.weight"].shape[0])}}}
+    return {"weights": sd, "config_str": yaml.safe_dump(config), "vocab": vocab}
+
+
 # ---------------------------------------------------------------------------
 # Tensor name remapping
 # ---------------------------------------------------------------------------
@@ -308,13 +430,16 @@ _QUANT_TYPE_MAP: dict[str, gguf.GGMLQuantizationType] = {
 }
 
 
-def convert(nemo_path: Path, out_path: Path, quant: str | None = None,
-            extract_dir: Path | None = None) -> None:
+def convert(nemo_path: Path | None, out_path: Path, quant: str | None = None,
+            extract_dir: Path | None = None, loaded_data: dict | None = None) -> None:
     quant_type = _QUANT_TYPE_MAP.get(quant.lower()) if quant else None
     if quant and quant_type is None:
         sys.exit(f"Unknown --quant type '{quant}'. Choices: {list(_QUANT_TYPE_MAP)}")
 
-    if extract_dir is not None:
+    if loaded_data is not None:
+        nemo_data = loaded_data
+        print("Loading: ONNX encoder + RNNT decoder export")
+    elif extract_dir is not None:
         print(f"Loading: {nemo_path}  (disk extract to {extract_dir}, mmap)")
         nemo_data = load_nemo_disk(nemo_path, extract_dir)
     else:
@@ -346,10 +471,12 @@ def convert(nemo_path: Path, out_path: Path, quant: str | None = None,
             "or auto-detects when you omit --backend."
         )
 
-    import io as _io
-    sp = spm.SentencePieceProcessor()
-    sp.LoadFromSerializedProto(nemo_data["spm_bytes"])
-    vocab = [sp.id_to_piece(i) for i in range(sp.get_piece_size())]
+    if "vocab" in nemo_data:
+        vocab = nemo_data["vocab"]
+    else:
+        sp = spm.SentencePieceProcessor()
+        sp.LoadFromSerializedProto(nemo_data["spm_bytes"])
+        vocab = [sp.id_to_piece(i) for i in range(sp.get_piece_size())]
     print(f"  vocab:  {len(vocab)} pieces")
 
     # ----- write GGUF -----
@@ -599,8 +726,11 @@ def convert(nemo_path: Path, out_path: Path, quant: str | None = None,
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Convert Parakeet .nemo → GGUF (F16 or quantized)")
-    p.add_argument("--nemo", required=True, type=Path, help="path to .nemo file")
+    p = argparse.ArgumentParser(description="Convert Parakeet .nemo or NeMo RNNT ONNX export → GGUF")
+    source = p.add_mutually_exclusive_group(required=True)
+    source.add_argument("--nemo", type=Path, help="path to .nemo file")
+    source.add_argument("--onnx-dir", type=Path,
+                        help="directory with encoder-model.onnx, decoder_joint-model.onnx, tokens.txt")
     p.add_argument("--output", required=True, type=Path, help="output GGUF path")
     p.add_argument("--quant", default=None, help="quantize linear weights (e.g. q4_k, q8_0); default: F16")
     p.add_argument("--extract-dir", default=None, type=Path,
@@ -610,4 +740,9 @@ def parse_args() -> argparse.Namespace:
 
 if __name__ == "__main__":
     args = parse_args()
-    convert(args.nemo, args.output, quant=args.quant, extract_dir=args.extract_dir)
+    loaded = None
+    if args.onnx_dir:
+        loaded = load_onnx_export(args.onnx_dir / "encoder-model.onnx",
+                                  args.onnx_dir / "decoder_joint-model.onnx",
+                                  args.onnx_dir / "tokens.txt")
+    convert(args.nemo, args.output, quant=args.quant, extract_dir=args.extract_dir, loaded_data=loaded)

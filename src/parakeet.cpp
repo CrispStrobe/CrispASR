@@ -108,6 +108,7 @@ struct parakeet_predictor_weights {
     std::vector<float> w_ih_0, w_hh_0, b_ih_0, b_hh_0;
     std::vector<float> w_ih_1, w_hh_1, b_ih_1, b_hh_1;
     int H = 0;
+    int n_layers = 2;
     bool initialised = false;
 };
 
@@ -486,8 +487,7 @@ static bool parakeet_load_model(parakeet_model& model, parakeet_vocab& vocab, co
     p.lstm0_b_ih = require(model, "decoder.lstm.0.b_ih");
     p.lstm0_b_hh = require(model, "decoder.lstm.0.b_hh");
     // lstm.1 only exists when pred_layers >= 2 (v2/v3/0.6b-ja). Single-LSTM
-    // hybrids (e.g. parakeet-tdt_ctc-110m has pred_layers=1) keep them null
-    // and must use the CTC head — TDT decode requires a 2-LSTM predictor.
+    // hybrids/RNNTs keep them null; predictor_step returns layer 0 directly.
     const bool has_lstm1 = model.hparams.pred_layers >= 2;
     p.lstm1_w_ih = has_lstm1 ? require(model, "decoder.lstm.1.w_ih") : nullptr;
     p.lstm1_w_hh = has_lstm1 ? require(model, "decoder.lstm.1.w_hh") : nullptr;
@@ -1152,13 +1152,16 @@ static void predictor_step(const parakeet_predictor_weights& W, int token_id, pa
                     state.c0.data(), h0_new.data(), H, H);
     state.h0 = h0_new;
 
-    // Layer 1 — input is layer 0's hidden
-    std::vector<float> h1_new(H);
-    lstm_step_layer(state.h0.data(), W.w_ih_1.data(), W.b_ih_1.data(), W.w_hh_1.data(), W.b_hh_1.data(),
-                    state.h1.data(), state.c1.data(), h1_new.data(), H, H);
-    state.h1 = h1_new;
-
-    pred_out = state.h1;
+    if (W.n_layers >= 2) {
+        // Layer 1 — input is layer 0's hidden.
+        std::vector<float> h1_new(H);
+        lstm_step_layer(state.h0.data(), W.w_ih_1.data(), W.b_ih_1.data(), W.w_hh_1.data(), W.b_hh_1.data(),
+                        state.h1.data(), state.c1.data(), h1_new.data(), H, H);
+        state.h1 = h1_new;
+        pred_out = state.h1;
+    } else {
+        pred_out = state.h0;
+    }
 }
 
 // ===========================================================================
@@ -1253,10 +1256,13 @@ static void parakeet_init_pred_weights(parakeet_context* ctx) {
     W.w_hh_0 = tensor_to_f32(p.lstm0_w_hh);
     W.b_ih_0 = tensor_to_f32(p.lstm0_b_ih);
     W.b_hh_0 = tensor_to_f32(p.lstm0_b_hh);
-    W.w_ih_1 = tensor_to_f32(p.lstm1_w_ih);
-    W.w_hh_1 = tensor_to_f32(p.lstm1_w_hh);
-    W.b_ih_1 = tensor_to_f32(p.lstm1_b_ih);
-    W.b_hh_1 = tensor_to_f32(p.lstm1_b_hh);
+    W.n_layers = (int)ctx->model.hparams.pred_layers;
+    if (W.n_layers >= 2) {
+        W.w_ih_1 = tensor_to_f32(p.lstm1_w_ih);
+        W.w_hh_1 = tensor_to_f32(p.lstm1_w_hh);
+        W.b_ih_1 = tensor_to_f32(p.lstm1_b_ih);
+        W.b_hh_1 = tensor_to_f32(p.lstm1_b_hh);
+    }
 
     W.H = H;
     W.initialised = true;
@@ -1380,6 +1386,11 @@ static bool parakeet_ggml_decode_active(const parakeet_context* ctx) {
 #endif
     if (const char* e = crispasr_env::get("CRISPASR_PARAKEET_GGML_DECODE"))
         ggml_dec = (e[0] == '1');
+    // The shared persistent ggml decoder currently has a fixed two-LSTM
+    // graph.  NeMo RNNT models such as Quds-v4 legitimately use one layer;
+    // keep their small predictor/joint on the validated scalar/BLAS path.
+    if (ctx->model.hparams.pred_layers < 2)
+        ggml_dec = false;
     return ggml_dec;
 }
 

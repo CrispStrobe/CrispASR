@@ -1,5 +1,15 @@
 # CrispASR — Pending work
 
+## NOW 2026-09-01 — #387 Quds-v4 Persian RNN-T from ONNX
+
+Worktree `.claude/worktrees/fix-387-quds`, branch `fix/387-quds-onnx`.
+The author licensed the model CC-BY-NC-4.0 but published only a NeMo ONNX
+export. Add a bounded ONNX importer to the existing Parakeet converter, support
+its valid one-layer RNN-T predictor, convert on Kaggle (not this 8 GB VPS), then
+prove native inference against the ONNX reference before registry publication.
+The public export contains RNN-T only; a separate `.nemo` remains necessary to
+ship its CTC head too.
+
 ## DONE 2026-08-31 — #397 Piper Windows CLI/server resolution and live proof
 
 Worktree `.claude/worktrees/fix-397-piper`, branch
