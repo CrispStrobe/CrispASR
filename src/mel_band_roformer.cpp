@@ -14,12 +14,16 @@
 #include "mel_band_roformer.h"
 
 #include "ggml-backend.h"
+#include "ggml-alloc.h" // ggml_gallocr_* (Change 176: band-split ggml graph path)
 #include "ggml-cpu.h"
 #include "ggml.h"
 
 #include "core/fft.h"         // fft_radix2_wrapper (r2c, interleaved full spectrum)
+#include "core/ggml_cpu_backend.h" // core_cpu_backend::init/is_cpu (Change 176)
 #include "core/gguf_loader.h" // core_gguf::{open_metadata,kv_u32,load_weights}
+#include "core/gpu_backend_pref.h" // crispasr_init_gpu_backend (Change 176, htdemucs pattern)
 #include "core/istft.h"       // core_istft::istft (torch center=True match)
+#include "core/wav_reader.h"  // crispasr::core::read_wav_mono_pcm16 (Change 176 parity)
 
 // BLAS for the linear() SGEMM. #296: the forward is ~264 GFLOP of matmul; without
 // a BLAS backend linear() falls back to a scalar loop that took ~24 min on an 11s
@@ -82,6 +86,11 @@ struct mel_band_roformer_context {
 
     ggml_backend_t backend = nullptr;
     core_gguf::WeightLoad weights;
+
+    // Change 176: band-split runs as a ggml graph on `backend` (GPU-capable)
+    // when use_graph is set; otherwise the validated CPU reference path runs.
+    bool use_graph = false;
+    bool is_gpu = false;
 
     // Baked band layout (from the converter's aux.* int32 tensors).
     std::vector<int32_t> freq_indices;       // length = sum over bands of 2*nfreq*ch? no: N gather idx
@@ -282,12 +291,38 @@ mel_band_roformer_context* mel_band_roformer_init_from_file(const char* model_pa
     hp.normalized = (int)core_gguf::kv_u32(meta, "mel-band-roformer.stft_normalized", hp.normalized);
     core_gguf::free_metadata(meta);
 
-    ctx->backend = core_cpu_backend::init();
+    // Change 176: backend selection honours params.use_gpu + CRISPASR_MELBAND_GPU,
+    // mirroring the htdemucs pattern (src/htdemucs.cpp:635-662). The ggml graph
+    // path is the gate to the GPU backend: want_gpu WITHOUT the graph path would
+    // put the weights on the GPU and pay a device->host read on every scalar
+    // kernel (htdemucs lesson). CRISPASR_MELBAND_GGML=1 enables the graph band-
+    // split; CRISPASR_MELBAND_GPU=1 forces the GPU backend (falls back to CPU on
+    // GPU-less hosts), =0 forces CPU. Default: CPU backend + CPU reference path
+    // (no behavior change for existing users until parity is green, E2).
+    const char* ggml_env = getenv("CRISPASR_MELBAND_GGML");
+    const bool want_graph = ggml_env && ggml_env[0] && atoi(ggml_env) != 0;
+    bool want_gpu = false;
+    const char* gpu_env = getenv("CRISPASR_MELBAND_GPU");
+    if (gpu_env && gpu_env[0])
+        want_gpu = atoi(gpu_env) != 0;
+    if (params.use_gpu)
+        want_gpu = true;
+    if (want_graph && want_gpu) {
+        ctx->backend = crispasr_init_gpu_backend();
+        if (!ctx->backend)
+            ctx->backend = core_cpu_backend::init();
+    } else {
+        ctx->backend = core_cpu_backend::init();
+    }
     if (!ctx->backend) {
-        fprintf(stderr, "mel_band_roformer: ggml_backend_cpu_init failed\n");
+        fprintf(stderr, "mel_band_roformer: backend init failed\n");
         delete ctx;
         return nullptr;
     }
+    ctx->use_graph = want_graph;
+    ctx->is_gpu = !core_cpu_backend::is_cpu(ctx->backend);
+    fprintf(stderr, "mel_band_roformer: backend = %s (graph=%d, gpu=%d)\n", ggml_backend_name(ctx->backend),
+            ctx->use_graph ? 1 : 0, ctx->is_gpu ? 1 : 0);
     if (!core_gguf::load_weights(model_path, ctx->backend, "mel_band_roformer", ctx->weights)) {
         fprintf(stderr, "mel_band_roformer: failed to load weights from '%s'\n", model_path);
         mel_band_roformer_free(ctx);
@@ -438,7 +473,150 @@ bool band_split_cpu(core_gguf::WeightLoad& mw, const std::vector<float>& gathere
     return true;
 }
 
-// y[t][o] = sum_i x[t][i] * W[o][i] + (bias ? bias[o] : 0). W row-major (dout,din).
+// ---------------------------------------------------------------------------
+// Change 176 (Phase 1): band-split encoder as a ggml graph, cleanroom port
+// following the htdemucs graph pattern (src/htdemucs.cpp). Runs on
+// ctx->backend (CPU or GPU); produces the SAME output layout as band_split_cpu
+// ((T, nb, dim) row-major — see the flat-layout note below), so the parity test
+// compares the two functions element-for-element on identical input.
+//
+// Flat-layout equivalence: the graph output is a (dim, nb, T) ggml tensor
+// (ne[0]=dim fastest). Its flat index is o + dim*(b + nb*t) — byte-identical to
+// band_split_cpu's row-major (T, nb, dim) index ((t*nb + b)*dim + o). The graph
+// result can therefore be handed straight to the transformer stack unchanged.
+// ---------------------------------------------------------------------------
+bool band_split_graph(mel_band_roformer_context* ctx, const std::vector<float>& gathered, int T,
+                      std::vector<float>& out) {
+    const auto& hp = ctx->hp;
+    const int nb = (int)ctx->band_width.size();
+    const int dim = hp.dim;
+    const int N2 = (int)ctx->freq_indices.size() * 2; // gathered feature axis width
+
+    if ((int64_t)gathered.size() != (int64_t)T * N2)
+        return false;
+
+    // Per band: view + rms_norm (5 ops) + linear (mul_mat + add) + reshape ≈ 9
+    // tensors; plus ~nb concat nodes, the input and the output.
+    const size_t n_nodes = 16 * (size_t)nb + 64;
+    ggml_init_params gparams = {
+        /*.mem_size   = */ ggml_tensor_overhead() * n_nodes + ggml_graph_overhead_custom((size_t)n_nodes, false),
+        /*.mem_buffer = */ nullptr,
+        /*.no_alloc   = */ true,
+    };
+    ggml_context* gctx = ggml_init(gparams);
+    if (!gctx)
+        return false;
+
+    // Input: gathered is (T, 2N) row-major; as a ggml (2N, T) tensor the flat
+    // memory order (ne[0] fastest) is identical, so no copy/transpose is needed.
+    ggml_tensor* in = ggml_new_tensor_2d(gctx, GGML_TYPE_F32, N2, T);
+    ggml_set_name(in, "mbr_band_split_in");
+    ggml_set_input(in);
+
+    std::vector<ggml_tensor*> bands;
+    bands.reserve((size_t)nb);
+    std::vector<ggml_tensor*> sqrt_dim_ts;
+    sqrt_dim_ts.reserve((size_t)nb);
+
+    // RMSNorm constants (F.normalize eps, sqrt(dim) scale) as 1-element INPUT
+    // tensors: ggml_new_f32 asserts !no_alloc, and the graph context must be
+    // no_alloc so gallocr can place intermediates on the backend buffer. Values
+    // are written once via ggml_backend_tensor_set before compute (htdemucs
+    // pattern). Broadcast to (1, T) via ggml_can_repeat in the binops below.
+    ggml_tensor* eps_t = ggml_new_tensor_1d(gctx, GGML_TYPE_F32, 1);
+    ggml_set_name(eps_t, "mbr_rms_eps");
+    ggml_set_input(eps_t);
+
+    int off = 0;
+    for (int b = 0; b < nb; b++) {
+        const int din = ctx->band_width[b];
+        const std::string pre = "band_split.to_features." + std::to_string(b);
+
+        auto it_g = ctx->weights.tensors.find(pre + ".0.gamma");
+        auto it_w = ctx->weights.tensors.find(pre + ".1.weight");
+        auto it_b = ctx->weights.tensors.find(pre + ".1.bias");
+        if (it_g == ctx->weights.tensors.end() || it_w == ctx->weights.tensors.end() ||
+            it_b == ctx->weights.tensors.end() || !it_g->second || !it_w->second || !it_b->second) {
+            ggml_free(gctx);
+            return false;
+        }
+
+        // Band b's slice: rows [off, off+din) of the (2N, T) input.
+        ggml_tensor* xv = ggml_view_2d(gctx, in, din, T, in->nb[1], (size_t)off * sizeof(float));
+        off += din;
+
+        // RMSNorm — exact CPU formula: y = x * sqrt(din) / (sqrt(sum(x^2)) + eps) * gamma.
+        // NOTE: the sqrt scale uses the BAND's input width din (CPU rms_norm_inplace
+        // gets din), NOT the model dim — a global sqrt(hp.dim) scaled every band
+        // differently and broke parity (cos=0.877, |graph|/|cpu| ~2.1).
+        ggml_tensor* sq = ggml_mul(gctx, xv, xv);                     // (din, T)
+        ggml_tensor* ss = ggml_sum_rows(gctx, sq);                    // (1, T)
+        ggml_tensor* rt = ggml_sqrt(gctx, ss);                        // (1, T)
+        ggml_tensor* denom = ggml_add(gctx, rt, eps_t);               // (1, T)
+        // div(a,b) takes a's shape and repeats b to it — repeat sqrt_dim to (1,T) first.
+        ggml_tensor* sqrt_dim_t = ggml_new_tensor_1d(gctx, GGML_TYPE_F32, 1);
+        ggml_set_name(sqrt_dim_t, ("mbr_rms_sqrt_dim_" + std::to_string(b)).c_str());
+        ggml_set_input(sqrt_dim_t);
+        sqrt_dim_ts.push_back(sqrt_dim_t);
+        ggml_tensor* scale = ggml_div(gctx, ggml_repeat(gctx, sqrt_dim_t, denom), denom); // (1, T)
+        ggml_tensor* xn = ggml_mul(gctx, xv, scale);                  // (din, T) broadcast
+        ggml_tensor* y = ggml_mul(gctx, xn, it_g->second);            // * gamma (din, 1) broadcast
+
+        // Linear: mul_mat(weight (din, dim), y (din, T)) -> (dim, T); + bias
+        ggml_tensor* proj = ggml_mul_mat(gctx, it_w->second, y);
+        ggml_tensor* bout = ggml_add(gctx, proj, it_b->second);
+
+        // (dim, 1, T) for the band-axis concat below.
+        ggml_tensor* b3 = ggml_reshape_3d(gctx, bout, dim, 1, T);
+        ggml_set_name(b3, ("band_split." + std::to_string(b)).c_str());
+        bands.push_back(b3);
+    }
+
+    // Balanced concat along the band axis (BSRoformer ConcatBalanced pattern) ->
+    // (dim, nb, T). Its flat order equals (T, nb, dim) row-major (see above).
+    auto concat_balanced = [&](auto&& self, size_t lo, size_t hi) -> ggml_tensor* {
+        if (hi - lo == 1)
+            return bands[lo];
+        const size_t mid = lo + (hi - lo) / 2;
+        ggml_tensor* a = self(self, lo, mid);
+        ggml_tensor* b = self(self, mid, hi);
+        return ggml_concat(gctx, a, b, 1);
+    };
+    ggml_tensor* out3 = concat_balanced(concat_balanced, 0, bands.size());
+    ggml_set_name(out3, "mbr_band_split_out");
+    ggml_set_output(out3);
+
+    ggml_cgraph* gf = ggml_new_graph_custom(gctx, (size_t)n_nodes, false);
+    ggml_build_forward_expand(gf, out3);
+
+    ggml_gallocr_t alloc = ggml_gallocr_new(ggml_backend_get_default_buffer_type(ctx->backend));
+    if (!alloc || !ggml_gallocr_alloc_graph(alloc, gf)) {
+        fprintf(stderr, "mel_band_roformer: band_split_graph gallocr alloc failed\n");
+        if (alloc)
+            ggml_gallocr_free(alloc);
+        ggml_free(gctx);
+        return false;
+    }
+
+    ggml_backend_tensor_set(in, gathered.data(), 0, gathered.size() * sizeof(float));
+    const float eps = 1e-12f; // F.normalize eps — see rms_norm_inplace
+    ggml_backend_tensor_set(eps_t, &eps, 0, sizeof(float));
+    for (int b = 0; b < nb; b++) {
+        // Per-band sqrt(din): the CPU reference scales RMSNorm by sqrt(din_b),
+        // not sqrt(hp.dim) — see the formula note above.
+        const float sqrt_dim = std::sqrt((float)ctx->band_width[b]);
+        ggml_backend_tensor_set(sqrt_dim_ts[b], &sqrt_dim, 0, sizeof(float));
+    }
+    ggml_backend_graph_compute(ctx->backend, gf);
+
+    const int64_t n = ggml_nelements(out3);
+    out.resize((size_t)n);
+    ggml_backend_tensor_get(out3, out.data(), 0, (size_t)n * sizeof(float));
+
+    ggml_gallocr_free(alloc);
+    ggml_free(gctx);
+    return true;
+}
 void linear(const std::vector<float>& x, int T, int din, const std::vector<float>& W, const std::vector<float>* bias,
             int dout, std::vector<float>& y) {
     y.assign((size_t)T * dout, 0.0f);
@@ -895,9 +1073,19 @@ bool run_forward(mel_band_roformer_context* ctx, const std::vector<std::vector<f
     std::vector<float> gathered;
     band_gather(packed, ctx->freq_indices, T, gathered);
     std::vector<float> x;
-    if (!band_split_cpu(ctx->weights, gathered, ctx->band_width, T, dim, x))
+    bool bs_ok;
+    if (ctx->use_graph) {
+        // Change 176 (Phase 1): ggml-graph band-split on ctx->backend. Parity
+        // gate: output layout identical to band_split_cpu, compared in the
+        // diff harness (band_split_out stage).
+        bs_ok = band_split_graph(ctx, gathered, T, x);
+        lap("band_split(graph)");
+    } else {
+        bs_ok = band_split_cpu(ctx->weights, gathered, ctx->band_width, T, dim, x);
+        lap("band_split");
+    }
+    if (!bs_ok)
         return false;
-    lap("band_split");
     // Compute-heavy Transformer stack; emit per-layer progress so it never looks
     // hung, and (under profiling) split run_time vs run_freq time.
     fprintf(stderr, "mel_band_roformer: separating (T=%d frames, %d layers, %d bands)...\n", T, hp.depth, nb);
@@ -976,8 +1164,76 @@ mel_band_roformer_result* mel_band_roformer_separate(mel_band_roformer_context* 
     return r;
 }
 
+int mel_band_roformer_parity(const char* model_gguf, const char* audio_wav, int verbosity) {
+    // Change 176 Phase 1: standalone parity — ggml-graph band-split vs the
+    // validated CPU reference on IDENTICAL input (the same wav, run through the
+    // same STFT/gather front-end). The CPU path is cos=1.0 vs the Python
+    // fixture, so graph==CPU proves the cleanroom port without needing torch or
+    // the fixture. Returns 0 iff the graph stage passes the diff threshold.
+    mel_band_roformer_context* ctx = mel_band_roformer_init_from_file(model_gguf, mel_band_roformer_default_params());
+    if (!ctx) {
+        fprintf(stderr, "mbr_parity: failed to load model %s\n", model_gguf);
+        return 2;
+    }
+
+    std::vector<float> pcm;
+    int sr = 0;
+    if (!crispasr::core::read_wav_mono_pcm16(audio_wav, pcm, sr)) {
+        fprintf(stderr, "mbr_parity: failed to read wav %s\n", audio_wav);
+        mel_band_roformer_free(ctx);
+        return 2;
+    }
+    // The front-end expects `channels` per-channel arrays; mono wav -> 1 channel.
+    const int channels = ctx->hp.audio_channels;
+    std::vector<std::vector<float>> chan(channels, std::vector<float>(pcm.size(), 0.0f));
+    for (size_t i = 0; i < pcm.size(); i++)
+        for (int s = 0; s < channels; s++)
+            chan[s][i] = pcm[i];
+
+    const auto& hp = ctx->hp;
+    const int n_freqs = ctx->n_freqs();
+    const int T_samp = (int)pcm.size();
+    const int T = stft_n_frames(T_samp, hp.hop);
+
+    std::vector<float> window;
+    hann_periodic(hp.win, window);
+    std::vector<std::vector<float>> chan_spec(channels);
+    for (int s = 0; s < channels; s++)
+        stft_one_channel(chan[s].data(), T_samp, hp.n_fft, hp.hop, window, T, n_freqs, chan_spec[s]);
+    std::vector<float> packed;
+    pack_stft(chan_spec, n_freqs, T, channels, packed);
+    std::vector<float> gathered;
+    band_gather(packed, ctx->freq_indices, T, gathered);
+
+    fprintf(stderr, "mel_band_roformer parity (T_samp=%d, T=%d, n_freqs=%d, channels=%d, N_gather=%zu):\n", T_samp, T,
+            n_freqs, channels, ctx->freq_indices.size());
+
+    std::vector<float> cpu_out, graph_out;
+    const bool cpu_ok = band_split_cpu(ctx->weights, gathered, ctx->band_width, T, hp.dim, cpu_out);
+    const bool graph_ok = band_split_graph(ctx, gathered, T, graph_out);
+    if (!cpu_ok || !graph_ok) {
+        fprintf(stderr, "mbr_parity: band-split failed (cpu=%d graph=%d)\n", cpu_ok ? 1 : 0, graph_ok ? 1 : 0);
+        mel_band_roformer_free(ctx);
+        return 2;
+    }
+
+    const int64_t n = (int64_t)std::min(cpu_out.size(), graph_out.size());
+    const double cos = cosine(graph_out.data(), cpu_out.data(), n);
+    const double mad = max_abs_diff(graph_out.data(), cpu_out.data(), n);
+    const double lg = l2_norm(graph_out.data(), n), lc = l2_norm(cpu_out.data(), n);
+    const bool ok = cos >= 0.9995 && graph_out.size() == cpu_out.size();
+    if (verbosity >= 1 || !ok) {
+        fprintf(stderr, "  %-16s %s cos=%.6f max_abs=%.3e  (graph=%zu cpu=%zu)\n", "band_split_graph", ok ? "PASS" : "FAIL",
+                cos, mad, graph_out.size(), cpu_out.size());
+        if (verbosity >= 2)
+            fprintf(stderr, "    |graph|=%.6f |cpu|=%.6f\n", lg, lc);
+    }
+    mel_band_roformer_free(ctx);
+    fprintf(stderr, "mel_band_roformer parity: %s\n", ok ? "PASS" : "FAIL");
+    return ok ? 0 : 1;
+}
+
 int mel_band_roformer_diff(const char* model_gguf, const char* ref_gguf, const char* audio_wav, int verbosity) {
-    (void)audio_wav; // Phase 1 reads input_audio FROM the ref (input-aligned).
 
     mel_band_roformer_context* ctx = mel_band_roformer_init_from_file(model_gguf, mel_band_roformer_default_params());
     if (!ctx) {
@@ -1096,6 +1352,26 @@ int mel_band_roformer_diff(const char* model_gguf, const char* ref_gguf, const c
                     report("band_split_out", bso, ref_bso);
             } else {
                 fprintf(stderr, "  band_split_out: SKIP (a band weight was missing)\n");
+            }
+        }
+    }
+
+    // --- band_split_out (GRAPH): Change 176 Phase 1 parity gate ---
+    // The ggml-graph band-split vs the validated CPU reference, on IDENTICAL
+    // input (the same reference band_gathered). This is the Phase 1 acceptance
+    // test: the CPU path is already cos=1.0 vs the Python fixture, so
+    // graph==CPU proves the cleanroom port. Uses a fresh default ctx so the
+    // graph runs on the same backend as the harness ctx (no flag pollution).
+    {
+        std::vector<float> ref_bg_in;
+        int64_t nn = 0;
+        if (ref_get(rw, "band_gathered", ref_bg_in, nn)) {
+            std::vector<float> cpu_out, graph_out;
+            if (band_split_cpu(ctx->weights, ref_bg_in, ctx->band_width, T, hp.dim, cpu_out) &&
+                band_split_graph(ctx, ref_bg_in, T, graph_out)) {
+                report("band_split_graph", graph_out, cpu_out);
+            } else {
+                fprintf(stderr, "  band_split_graph: SKIP (graph or CPU band-split failed)\n");
             }
         }
     }

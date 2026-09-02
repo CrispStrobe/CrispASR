@@ -71,6 +71,13 @@ const char* mel_band_roformer_source_name(const mel_band_roformer_context* ctx, 
 // verbosity: 0 = summary, 1 = per-stage, 2 = per-stage + magnitudes.
 int mel_band_roformer_diff(const char* model_gguf, const char* ref_gguf, const char* audio_wav, int verbosity);
 
+// Change 176 Phase 1: standalone band-split parity — the ggml-graph band-split
+// vs the validated CPU reference on IDENTICAL input (a wav run through the same
+// STFT/gather front-end). No Python fixture needed. Returns 0 iff the graph
+// stage passes the cos threshold (>= 0.9995) with equal output sizes.
+// verbosity: 1 = result, 2 = result + magnitudes.
+int mel_band_roformer_parity(const char* model_gguf, const char* audio_wav, int verbosity);
+
 #ifdef __cplusplus
 }
 #endif

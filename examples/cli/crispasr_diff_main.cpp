@@ -1307,6 +1307,11 @@ int main(int argc, char** argv) {
         // diff binary), so the backend shipped with no per-stage evidence.
         return mel_band_roformer_diff(model_path.c_str(), ref_path.c_str(), audio_path.c_str(), /*verbosity=*/2);
     }
+    if (backend_name == "mbr-parity" || backend_name == "mel-band-parity") {
+        // Change 176 Phase 1: standalone graph-vs-CPU band-split parity on a
+        // wav (no Python fixture needed). model_path = GGUF, audio_path = wav.
+        return mel_band_roformer_parity(model_path.c_str(), audio_path.c_str(), /*verbosity=*/2);
+    }
     if (backend_name == "rvc" || backend_name == "rvc-svc") {
         // model_path = rvc GGUF, ref_path = dump from tools/rvc_torch_parity.py.
         // Input-aligned AND noise-aligned: the reference carries input_phone,
