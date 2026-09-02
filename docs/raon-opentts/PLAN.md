@@ -5,7 +5,38 @@ English, F5-TTS DiT + flow matching + HiFi-GAN vocoder, 16 kHz / 80-mel.
 Reference code cloned to /mnt/volume1/tmp-overflow/raon-ref/Raon-OpenTTS
 (fork of the F5-TTS repo, Apache-2.0 for the vocoder).
 
-## NOW — converter WRITTEN (models/convert-raon-opentts-to-gguf.py), running 0.3B.
+## NOW — converter DONE + validated locally; Kaggle ref-dump kernel written.
+
+0.3B converted locally (mmap, <2 GB RSS): 364 DiT + 156 HiFi-GAN + shipped
+slaney fb(513,80)+window(1024), 5559 vocab → raon-opentts-0.3b-f16.gguf 880 MB
+(the size is the f5 converter's f32-AdaLN conditioning protection, inherited).
+
+**Runtime approach settled (a DRY correction):** f5's vocoder is a PURE-CPU
+implementation (`vocos_decode` = cpu_conv1d/cpu_layer_norm, NOT a ggml graph),
+so `core/hifigan.h` (ggml primitive) is NOT the drop-in first scoped. The
+DRY-consistent path is a compact **CPU HiFi-GAN** in the f5 idiom (reuse
+`cpu_conv1d`; add cpu conv_transpose_1d + MRF resblocks + leaky_relu + tanh),
+weights extracted to a CPU cache like `voc_cache` (weight-norm already fused
+in the converter). Delta #1 is therefore a ~120-line CPU vocoder, not a
+core_hifigan wiring. Delta #2 (mel) unchanged: shipped-fb + center=False +
+16 kHz, gated on `f5.vocoder`/`f5.mel_spec_type`, in compute_mel_spectrogram.
+
+Ref-dump: `tools/kaggle/raon-ref-dump/` runs the reference Raon end-to-end on
+Kaggle, dumps ref_mel/gen_mel/vocoder_audio (crispasr-diff fixtures) + the
+raon-ref.wav (TTS→ASR roundtrip target) + reruns our converter on-box. Torch
+can't load the .pt on the VPS, so this is the ONLY source of validation
+fixtures. Launch it (RAON_SIZE=0.3B) before the runtime pass.
+
+### Runtime integration checklist (next focused pass)
+- hparams: add vocoder/mel_spec_type/mel_center strings+bool; HiFi-GAN
+  voc hp (upsample_rates/kernels, resblock kernels/dilations, init_ch);
+  shipped `f5.mel_fb`/`f5.mel_window` → CPU vectors.
+- compute_mel_spectrogram: param `sr`; branch shipped-fb + center=false.
+- new cpu_hifigan_decode (mirror vocos_decode structure); dispatch at
+  f5_tts.cpp:2505 on hp.vocoder=="hifigan".
+- validate: crispasr-diff mel/vocoder vs ref.gguf; then TTS→ASR roundtrip
+  of raon-ref target text (HARD RULE #3).
+- registry (raon/raon-1b) NC-gated; backend alias → f5-tts; live test.
 
 Checkpoint facts (peeked via mmap): model_225000.pt is a training checkpoint
 {model_state_dict, optimizer_state_dict (the 4.9 GB bulk), ema_model_state_dict,
