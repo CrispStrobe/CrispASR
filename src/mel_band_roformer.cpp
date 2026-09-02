@@ -617,6 +617,216 @@ bool band_split_graph(mel_band_roformer_context* ctx, const std::vector<float>& 
     ggml_free(gctx);
     return true;
 }
+
+// ---------------------------------------------------------------------------
+// Change 176 (Phase 2): RoFormer transformer block as a ggml graph, cleanroom
+// port following the htdemucs graph pattern (src/htdemucs.cpp g_mha). One
+// block = pre-RMSNorm attention (with per-head gating + RoPE) + pre-RMSNorm
+// FFN, both residual. The graph operates on x_b = (dim, S, B):
+//   ne0 = dim  (feature axis, RMSNorm/linear contract)
+//   ne1 = S    (block sequence axis: T for run_time, nb for run_freq)
+//   ne2 = B    (batch axis: nb for run_time, T for run_freq)
+// which is a pure ggml_permute away from the (dim, nb, T) x buffer — see
+// mbr_block_layer_graph() below. Weights come straight from the load context
+// (ctx->weights.tensors) like band_split_graph.
+// ---------------------------------------------------------------------------
+
+// RMSNorm (lucidrains F.normalize form) over ne0 (dim) of x_b, per (S, B)
+// slice: y = x / (sqrt(sum(x^2)) + eps) * sqrt(dim) * gamma. eps and
+// sqrt_dim are 1-element INPUT tensors (ggml_new_f32 asserts !no_alloc).
+static ggml_tensor* g_rms_dim(ggml_context* g, ggml_tensor* x, ggml_tensor* gamma, ggml_tensor* eps_t,
+                              ggml_tensor* sqrt_dim_t) {
+    ggml_tensor* sq = ggml_mul(g, x, x);                          // (dim,S,B)
+    ggml_tensor* ss = ggml_sum_rows(g, sq);                       // (1,S,B)
+    ggml_tensor* rt = ggml_sqrt(g, ss);                           // (1,S,B)
+    ggml_tensor* denom = ggml_add(g, rt, eps_t);                  // (1,S,B)
+    ggml_tensor* scale = ggml_div(g, ggml_repeat(g, sqrt_dim_t, denom), denom); // (1,S,B)
+    ggml_tensor* xn = ggml_mul(g, x, scale);                      // (dim,S,B)
+    if (gamma)
+        xn = ggml_mul(g, xn, ggml_reshape_3d(g, gamma, (int)gamma->ne[0], 1, 1));
+    return xn;
+}
+
+// One batched multi-head attention: xn (dim,S,B) is the pre-RMSNorm input the
+// qkv/gate projections read; the residual is added to the UN-normalized x
+// (CPU roformer_block: x[i] += attn_out[i], NOT onto xn).
+static ggml_tensor* g_mbr_attn(ggml_context* g, ggml_tensor* x, ggml_tensor* xn, ggml_tensor* qkv_w,
+                               ggml_tensor* gate_w, ggml_tensor* gate_b, ggml_tensor* out_w, ggml_tensor* pos_t,
+                               int S, int B, int dim, int heads, int dim_head) {
+    const int inner = heads * dim_head;
+    ggml_tensor* qkv = ggml_mul_mat(g, qkv_w, xn); // (3*inner, S, B)
+
+    // q/k/v slices: each (inner, S, B) -> (dim_head, heads, S, B). The flat
+    // order of (inner, S, B) with inner = heads*dim_head splits into
+    // d + dim_head*h + inner*(s + S*b), exactly reshape_4d(dh, heads, S, B).
+    const size_t off = (size_t)inner * ggml_element_size(qkv);
+    const size_t nb1 = qkv->nb[1], nb2 = qkv->nb[2];
+    ggml_tensor* q4 = ggml_reshape_4d(g, ggml_cont(g, ggml_view_3d(g, qkv, inner, S, B, nb1, nb2, 0)), dim_head,
+                                      heads, S, B);
+    ggml_tensor* k4 = ggml_reshape_4d(g, ggml_cont(g, ggml_view_3d(g, qkv, inner, S, B, nb1, nb2, off)), dim_head,
+                                      heads, S, B);
+    ggml_tensor* v4 = ggml_reshape_4d(g, ggml_cont(g, ggml_view_3d(g, qkv, inner, S, B, nb1, nb2, 2 * off)),
+                                      dim_head, heads, S, B);
+
+    // RoPE (interleaved pairs, theta=10000): CPU rope_head rotates (2i, 2i+1)
+    // with angle m*10000^-(2i/dim_head) -> GGML_ROPE_TYPE_NORMAL, n_dims =
+    // dim_head, pos m = sequence index (0..S-1), same for every batch slice.
+    q4 = ggml_rope_ext(g, q4, pos_t, nullptr, dim_head, GGML_ROPE_TYPE_NORMAL, 0, 10000.0f, 1.0f, 0.0f, 1.0f, 0.0f,
+                       0.0f);
+    k4 = ggml_rope_ext(g, k4, pos_t, nullptr, dim_head, GGML_ROPE_TYPE_NORMAL, 0, 10000.0f, 1.0f, 0.0f, 1.0f, 0.0f,
+                       0.0f);
+
+    // Attention per head, scale = dim_head^-0.5, full (no mask). g_mha layout:
+    // q,k: (dh, S, heads, B) [ne0=dh contract, ne1=S keys/queries, ne2=heads,
+    // ne3=B batch]; scores = k^T q -> (S, S, heads, B), softmax over ne0.
+    ggml_tensor* q_att = ggml_cont(g, ggml_permute(g, q4, 0, 2, 1, 3));
+    ggml_tensor* k_att = ggml_cont(g, ggml_permute(g, k4, 0, 2, 1, 3));
+    ggml_tensor* scores = ggml_mul_mat(g, k_att, q_att); // (S, S, heads, B)
+    const float scale = 1.0f / std::sqrt((float)dim_head);
+    scores = ggml_soft_max_ext(g, scores, nullptr, scale, 0.0f);
+
+    ggml_tensor* v_att = ggml_cont(g, ggml_permute(g, v4, 1, 2, 0, 3)); // (S, dh, heads, B)
+    ggml_tensor* out = ggml_mul_mat(g, v_att, scores);                  // (dh, S, heads, B)
+
+    // per-head gating: attn[t,h,:] *= sigmoid(gates[t,h]) — gates (heads,S,B)
+    // broadcast over the dh axis of the reshaped attention output.
+    ggml_tensor* gates = ggml_mul_mat(g, gate_w, xn); // (heads, S, B)
+    if (gate_b)
+        gates = ggml_add(g, gates, ggml_reshape_3d(g, gate_b, heads, 1, 1));
+    gates = ggml_sigmoid(g, gates);
+    ggml_tensor* attn4 = ggml_cont(g, ggml_permute(g, out, 0, 2, 1, 3)); // (dh, heads, S, B)
+    attn4 = ggml_mul(g, attn4, ggml_reshape_4d(g, gates, 1, heads, S, B));
+
+    ggml_tensor* attn3 = ggml_reshape_3d(g, attn4, inner, S, B); // (inner, S, B)
+    ggml_tensor* attn_out = ggml_mul_mat(g, out_w, attn3);       // (dim, S, B)
+    return ggml_add(g, x, attn_out);                             // residual on x, not xn
+}
+
+// FFN: x -> x + (Linear(dim->hid) -> GELU(erf) -> Linear(hid->dim)), pre-RMS.
+static ggml_tensor* g_mbr_ffn(ggml_context* g, ggml_tensor* x, ggml_tensor* ff_g, ggml_tensor* ff1_w,
+                              ggml_tensor* ff1_b, ggml_tensor* ff4_w, ggml_tensor* ff4_b, ggml_tensor* eps_t,
+                              ggml_tensor* sqrt_dim_t, int S, int B, int dim, int hid) {
+    ggml_tensor* fn = g_rms_dim(g, x, ff_g, eps_t, sqrt_dim_t); // (dim,S,B)
+    ggml_tensor* h1 = ggml_mul_mat(g, ff1_w, fn);
+    if (ff1_b)
+        h1 = ggml_add(g, h1, ggml_reshape_3d(g, ff1_b, hid, 1, 1));
+    h1 = ggml_gelu_erf(g, h1);
+    ggml_tensor* h2 = ggml_mul_mat(g, ff4_w, h1);
+    if (ff4_b)
+        h2 = ggml_add(g, h2, ggml_reshape_3d(g, ff4_b, dim, 1, 1));
+    return ggml_add(g, x, h2);
+}
+
+// Full transformer LAYER over x_b (dim,S,B): block (attn + ffn) then the final
+// RMSNorm (layers.{L}.{0|1}.norm.gamma) — exactly what CPU run_time/run_freq
+// do after roformer_block(). Weights are read from ctx->weights.tensors.
+// Returns the layer output tensor (same (dim,S,B) shape as x_b), or nullptr.
+static ggml_tensor* mbr_block_layer_graph(mel_band_roformer_context* ctx, ggml_context* g, const std::string& pre,
+                                          ggml_tensor* x_b, int S, int B, int dim, int heads, int dim_head,
+                                          ggml_tensor* eps_t, ggml_tensor* sqrt_dim_t, ggml_tensor* pos_t) {
+    auto find = [&](const char* name) -> ggml_tensor* {
+        auto it = ctx->weights.tensors.find(name);
+        return (it == ctx->weights.tensors.end()) ? nullptr : it->second;
+    };
+    const std::string b = pre + "layers.0.";
+    ggml_tensor* nrm_g = find((b + "0.norm.gamma").c_str());
+    ggml_tensor* qkv_w = find((b + "0.to_qkv.weight").c_str());
+    ggml_tensor* gate_w = find((b + "0.to_gates.weight").c_str());
+    ggml_tensor* gate_b = find((b + "0.to_gates.bias").c_str());
+    ggml_tensor* out_w = find((b + "0.to_out.0.weight").c_str());
+    ggml_tensor* ff_g = find((b + "1.net.0.gamma").c_str());
+    ggml_tensor* ff1_w = find((b + "1.net.1.weight").c_str());
+    ggml_tensor* ff1_b = find((b + "1.net.1.bias").c_str());
+    ggml_tensor* ff4_w = find((b + "1.net.4.weight").c_str());
+    ggml_tensor* ff4_b = find((b + "1.net.4.bias").c_str());
+    ggml_tensor* fg = find((pre + "norm.gamma").c_str());
+    if (!nrm_g || !qkv_w || !gate_w || !gate_b || !out_w || !ff_g || !ff1_w || !ff1_b || !ff4_w || !ff4_b || !fg)
+        return nullptr;
+    const int hid = (int)ff1_b->ne[0];
+
+    ggml_tensor* xn = g_rms_dim(g, x_b, nrm_g, eps_t, sqrt_dim_t);
+    ggml_tensor* y = g_mbr_attn(g, x_b, xn, qkv_w, gate_w, gate_b, out_w, pos_t, S, B, dim, heads, dim_head);
+    y = g_mbr_ffn(g, y, ff_g, ff1_w, ff1_b, ff4_w, ff4_b, eps_t, sqrt_dim_t, S, B, dim, hid);
+    y = g_rms_dim(g, y, fg, eps_t, sqrt_dim_t); // final layer norm
+    return y;
+}
+
+// Build + run one transformer layer (time or freq) as a fresh graph over the
+// (dim, nb, T) x buffer (flat == CPU (T, nb, dim) row-major). is_time: attend
+// over T per band (seq S=T, batch B=nb); else attend over bands per frame.
+// Mirrors CPU run_time()/run_freq() signatures; x is updated in place.
+static bool mbr_layer_graph(mel_band_roformer_context* ctx, int L, bool is_time, std::vector<float>& x, int T, int nb,
+                     int dim, int heads, int dim_head) {
+    const int S = is_time ? T : nb;
+    const int B = is_time ? nb : T;
+    const size_t n_x = (size_t)T * nb * dim;
+    if (x.size() != n_x)
+        return false;
+
+    // ~24 ops per layer incl. the block; generous headroom for views/permutes.
+    const size_t n_nodes = 256;
+    ggml_init_params gparams = {
+        ggml_tensor_overhead() * n_nodes + ggml_graph_overhead_custom((size_t)n_nodes, false), nullptr, true};
+    ggml_context* gctx = ggml_init(gparams);
+    if (!gctx)
+        return false;
+
+    // x buffer is (dim, nb, T) flat-compatible (ne0=dim fastest).
+    ggml_tensor* xt = ggml_new_tensor_3d(gctx, GGML_TYPE_F32, dim, nb, T);
+    ggml_set_name(xt, "mbr_layer_in");
+    ggml_set_input(xt);
+
+    // seq axis must be ne1: time -> (dim, T, nb), freq -> (dim, nb, T) already.
+    ggml_tensor* x_b = is_time ? ggml_cont(gctx, ggml_permute(gctx, xt, 0, 2, 1, 3)) : xt;
+
+    const std::string pre = "layers." + std::to_string(L) + (is_time ? ".0." : ".1.");
+    ggml_tensor* eps_t = ggml_new_tensor_1d(gctx, GGML_TYPE_F32, 1);
+    ggml_set_input(eps_t);
+    ggml_tensor* sqrt_dim_t = ggml_new_tensor_1d(gctx, GGML_TYPE_F32, 1);
+    ggml_set_input(sqrt_dim_t);
+    ggml_tensor* pos_t = ggml_new_tensor_1d(gctx, GGML_TYPE_I32, S);
+    ggml_set_input(pos_t);
+
+    ggml_tensor* y =
+        mbr_block_layer_graph(ctx, gctx, pre, x_b, S, B, dim, heads, dim_head, eps_t, sqrt_dim_t, pos_t);
+    if (!y) {
+        ggml_free(gctx);
+        return false;
+    }
+
+    // Final output: back to (dim, nb, T) layout.
+    ggml_tensor* out3 = is_time ? ggml_cont(gctx, ggml_permute(gctx, y, 0, 2, 1, 3)) : y;
+    ggml_set_name(out3, "mbr_layer_out");
+    ggml_set_output(out3);
+
+    ggml_cgraph* gf = ggml_new_graph_custom(gctx, n_nodes, false);
+    ggml_build_forward_expand(gf, out3);
+
+    ggml_gallocr_t alloc = ggml_gallocr_new(ggml_backend_get_default_buffer_type(ctx->backend));
+    if (!alloc || !ggml_gallocr_alloc_graph(alloc, gf)) {
+        fprintf(stderr, "mel_band_roformer: mbr_layer_graph gallocr alloc failed\n");
+        if (alloc)
+            ggml_gallocr_free(alloc);
+        ggml_free(gctx);
+        return false;
+    }
+
+    ggml_backend_tensor_set(xt, x.data(), 0, n_x * sizeof(float));
+    const float eps = 1e-12f, sd = std::sqrt((float)dim);
+    ggml_backend_tensor_set(eps_t, &eps, 0, sizeof(float));
+    ggml_backend_tensor_set(sqrt_dim_t, &sd, 0, sizeof(float));
+    std::vector<int32_t> pos((size_t)S);
+    for (int i = 0; i < S; i++)
+        pos[(size_t)i] = i;
+    ggml_backend_tensor_set(pos_t, pos.data(), 0, (size_t)S * sizeof(int32_t));
+
+    ggml_backend_graph_compute(ctx->backend, gf);
+    ggml_backend_tensor_get(out3, x.data(), 0, n_x * sizeof(float));
+
+    ggml_gallocr_free(alloc);
+    ggml_free(gctx);
+    return true;
+}
 void linear(const std::vector<float>& x, int T, int din, const std::vector<float>& W, const std::vector<float>* bias,
             int dout, std::vector<float>& y) {
     y.assign((size_t)T * dout, 0.0f);
@@ -1093,10 +1303,29 @@ bool run_forward(mel_band_roformer_context* ctx, const std::vector<std::vector<f
     for (int L = 0; L < hp.depth; L++) {
         fprintf(stderr, "mel_band_roformer: layer %d/%d\n", L + 1, hp.depth);
         auto a = clk::now();
-        if (!run_time(ctx->weights, L, x, T, nb, dim, hp.heads, hp.dim_head))
+        bool ok_t;
+        if (ctx->use_graph) {
+            // Change 176 Phase 2: RoFormer block as a ggml graph (GPU-capable).
+            // Parity gate: layer0_time/layer0_freq cos=1.0 vs the CPU reference
+            // in the mbr-parity harness; all depth layers share this code path.
+            ok_t = mbr_layer_graph(ctx, L, true, x, T, nb, dim, hp.heads, hp.dim_head);
+            lap("run_time(graph)");
+        } else {
+            ok_t = run_time(ctx->weights, L, x, T, nb, dim, hp.heads, hp.dim_head);
+            lap("run_time");
+        }
+        if (!ok_t)
             return false;
         auto b = clk::now();
-        if (!run_freq(ctx->weights, L, x, T, nb, dim, hp.heads, hp.dim_head))
+        bool ok_f;
+        if (ctx->use_graph) {
+            ok_f = mbr_layer_graph(ctx, L, false, x, T, nb, dim, hp.heads, hp.dim_head);
+            lap("run_freq(graph)");
+        } else {
+            ok_f = run_freq(ctx->weights, L, x, T, nb, dim, hp.heads, hp.dim_head);
+            lap("run_freq");
+        }
+        if (!ok_f)
             return false;
         auto c = clk::now();
         t_time += std::chrono::duration_cast<std::chrono::milliseconds>(b - a).count();
@@ -1228,9 +1457,72 @@ int mel_band_roformer_parity(const char* model_gguf, const char* audio_wav, int 
         if (verbosity >= 2)
             fprintf(stderr, "    |graph|=%.6f |cpu|=%.6f\n", lg, lc);
     }
+    if (!ok) {
+        mel_band_roformer_free(ctx);
+        fprintf(stderr, "mel_band_roformer parity: FAIL (band_split)\n");
+        return 1;
+    }
+
+    // Change 176 Phase 2: transformer layers — graph vs CPU on IDENTICAL input
+    // (the CPU-validated band_split output, layout (T, nb, dim) row-major == the
+    // graph's (dim, nb, T) flat buffer). Layer 0 time, then layer 0 freq
+    // chained off the time output (mirrors the diff harness layer0_freq stage).
+    // CPU run_time/run_freq mutate x in place; the graph layer does the same.
+    int n_fail = 0;
+    const int nb = (int)ctx->band_width.size();
+    const int dim = hp.dim, heads = hp.heads, dim_head = hp.dim_head;
+    auto report = [&](const char* stage, std::vector<float>& cpu, std::vector<float>& graph) {
+        const int64_t nn = (int64_t)std::min(cpu.size(), graph.size());
+        const double c = cosine(graph.data(), cpu.data(), nn);
+        const double a = max_abs_diff(graph.data(), cpu.data(), nn);
+        const bool p = c >= 0.9995 && cpu.size() == graph.size();
+        if (!p)
+            n_fail++;
+        if (verbosity >= 1 || !p)
+            fprintf(stderr, "  %-16s %s cos=%.6f max_abs=%.3e  (graph=%zu cpu=%zu)%s\n", stage, p ? "PASS" : "FAIL", c, a,
+                    graph.size(), cpu.size(),
+                    verbosity >= 2 ? ("  |graph|=" + std::to_string(l2_norm(graph.data(), nn)) +
+                                      " |cpu|=" + std::to_string(l2_norm(cpu.data(), nn)))
+                                         .c_str()
+                                   : "");
+        if (!p && verbosity >= 2) {
+            // Localize: report the band (of nb) containing the largest error
+            // and the first few mismatched element offsets — layout bugs show
+            // up as band-localized errors, formula bugs as scattered ones.
+            int64_t worst = 0;
+            double worst_v = -1;
+            for (int64_t i = 0; i < nn; i++) {
+                const double dv = std::fabs((double)graph[i] - (double)cpu[i]);
+                if (dv > worst_v) {
+                    worst_v = dv;
+                    worst = i;
+                }
+            }
+            fprintf(stderr, "      worst@%lld band=%lld t=%lld d=%lld (|g|=%.4f |c|=%.4f)\n", (long long)worst,
+                    (long long)((worst / dim) % nb), (long long)(worst / ((long long)nb * dim)),
+                    (long long)(worst % dim), graph[worst], cpu[worst]);
+        }
+    };
+
+    {
+        std::vector<float> cpu_x = cpu_out, graph_x = cpu_out;
+        if (run_time(ctx->weights, 0, cpu_x, T, nb, dim, heads, dim_head) &&
+            mbr_layer_graph(ctx, 0, true, graph_x, T, nb, dim, heads, dim_head))
+            report("layer0_time_graph", cpu_x, graph_x);
+        else
+            fprintf(stderr, "  layer0_time_graph: SKIP (run failed)\n");
+        // freq chained off the layer-0-time outputs (diff-harness semantics).
+        if (run_freq(ctx->weights, 0, cpu_x, T, nb, dim, heads, dim_head) &&
+            mbr_layer_graph(ctx, 0, false, graph_x, T, nb, dim, heads, dim_head))
+            report("layer0_freq_graph", cpu_x, graph_x);
+        else
+            fprintf(stderr, "  layer0_freq_graph: SKIP (run failed)\n");
+    }
+
     mel_band_roformer_free(ctx);
-    fprintf(stderr, "mel_band_roformer parity: %s\n", ok ? "PASS" : "FAIL");
-    return ok ? 0 : 1;
+    const bool all_ok = n_fail == 0;
+    fprintf(stderr, "mel_band_roformer parity: %s\n", all_ok ? "PASS" : "FAIL");
+    return all_ok ? 0 : 1;
 }
 
 int mel_band_roformer_diff(const char* model_gguf, const char* ref_gguf, const char* audio_wav, int verbosity) {
