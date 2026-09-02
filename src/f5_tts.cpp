@@ -327,8 +327,12 @@ struct f5_dit_graph_cache {
     ggml_tensor* t_emb_in = nullptr;  // (dim,)  — timestep embedding (shared over B)
     ggml_tensor* pos_in = nullptr;    // (T,) i32 — constant [0..T-1] (shared over B)
     ggml_tensor* output = nullptr;    // (mel_dim, T, B) — velocity/velocities
+    // #387-adj DiT diff probe (CRISPASR_F5_DIT_PROBE): per-block residual-stream
+    // outputs, tapped as graph outputs so they survive gallocr for read-back.
+    std::vector<ggml_tensor*> block_taps;
 
     void reset() {
+        block_taps.clear();
         if (galloc) {
             ggml_gallocr_free(galloc);
             galloc = nullptr;
@@ -1214,6 +1218,12 @@ static bool f5_dit_cache_build(f5_tts_context* ctx, int T, int B) {
 
         // Gated residual
         x = ggml_add(cache.gctx, x_res, ggml_mul(cache.gctx, ff, gate_mlp));
+
+        // #387-adj: tap this block's residual-stream output for the DiT diff.
+        if (crispasr_env::present("CRISPASR_F5_DIT_PROBE")) {
+            ggml_set_output(x);
+            cache.block_taps.push_back(x);
+        }
     }
 
     // Final AdaLN + projection → velocity (mel_dim, T)
@@ -1240,6 +1250,10 @@ static bool f5_dit_cache_build(f5_tts_context* ctx, int T, int B) {
     // Build graph
     cache.gf = ggml_new_graph_custom(cache.gctx, 8192, false);
     ggml_build_forward_expand(cache.gf, cache.output);
+    // #387-adj: keep the tapped per-block outputs reachable so gallocr preserves
+    // them for read-back after compute.
+    for (ggml_tensor* tap : cache.block_taps)
+        ggml_build_forward_expand(cache.gf, tap);
 
     // Reserve then allocate memory layout on the compute backend (GPU when
     // use_gpu; falls back to backend_cpu otherwise). The DiT weights already
@@ -2725,6 +2739,63 @@ int f5_tts_synthesize(struct f5_tts_context* ctx, const char* text, float** pcm_
             fprintf(stderr, "f5_tts: VOCODE_MEL probe T=%d mel=%d → %zu samples\n", T, mel_dim, audio.size());
             return (int)audio.size();
         }
+    }
+
+    // #387-adj DiT diff probe: CRISPASR_F5_DIT_PROBE=<dir> injects a reference
+    // input-embed output (hidden.bin, T×dim f32) + timestep embedding
+    // (temb.bin, dim f32) straight into ONE DiT forward, then dumps our velocity
+    // (cpp_velocity.bin, T×mel) and every per-block residual output
+    // (cpp_block_<k>.bin, T×dim). Diffing these against the Python reference
+    // localizes the first divergent DiT stage without the ODE loop or the
+    // input/text front-end. shape.txt: "<T>".
+    if (const char* pdir = crispasr_env::get("CRISPASR_F5_DIT_PROBE")) {
+        const int dim = hp.dim;
+        std::string dir(pdir);
+        auto rd_bin = [&](const std::string& name, size_t nfloats) {
+            std::vector<float> v(nfloats);
+            FILE* f = fopen((dir + "/" + name).c_str(), "rb");
+            if (!f) {
+                fprintf(stderr, "f5_tts: DIT_PROBE missing %s\n", name.c_str());
+                return std::vector<float>();
+            }
+            size_t got = fread(v.data(), sizeof(float), nfloats, f);
+            fclose(f);
+            v.resize(got);
+            return v;
+        };
+        auto wr_bin = [&](const std::string& name, const std::vector<float>& v) {
+            FILE* f = fopen((dir + "/" + name).c_str(), "wb");
+            if (f) {
+                fwrite(v.data(), sizeof(float), v.size(), f);
+                fclose(f);
+            }
+        };
+        int T = 0;
+        if (FILE* sf = fopen((dir + "/shape.txt").c_str(), "r")) {
+            if (fscanf(sf, "%d", &T) != 1)
+                T = 0;
+            fclose(sf);
+        }
+        std::vector<float> hidden = rd_bin("hidden.bin", (size_t)T * dim);
+        std::vector<float> temb = rd_bin("temb.bin", (size_t)dim);
+        if (T > 0 && (int)hidden.size() == T * dim && (int)temb.size() == dim) {
+            std::vector<float> velocity = f5_dit_run(ctx, hidden.data(), T, temb.data());
+            wr_bin("cpp_velocity.bin", velocity);
+            auto& cache = ctx->dit_cache;
+            for (size_t k = 0; k < cache.block_taps.size(); k++) {
+                std::vector<float> b((size_t)T * dim);
+                ggml_backend_tensor_get(cache.block_taps[k], b.data(), 0, b.size() * sizeof(float));
+                wr_bin("cpp_block_" + std::to_string(k) + ".bin", b);
+            }
+            fprintf(stderr, "f5_tts: DIT_PROBE T=%d dim=%d → velocity + %zu block taps\n", T, dim,
+                    cache.block_taps.size());
+        } else {
+            fprintf(stderr, "f5_tts: DIT_PROBE bad inputs (T=%d hidden=%zu temb=%zu)\n", T, hidden.size(), temb.size());
+        }
+        *pcm_out = (float*)malloc(sizeof(float));
+        (*pcm_out)[0] = 0.0f;
+        *sample_rate_out = hp.sample_rate;
+        return 1;
     }
 
     // ── Text preparation ──
