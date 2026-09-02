@@ -100,7 +100,12 @@ except Exception:
 step("built", cli=str(CLI))
 
 # ── models: raon GGUF + whisper-tiny + a real English reference clip ───────
-gguf = hf_hub_download("cstr/raon-opentts-0.3b-GGUF", "raon-opentts-0.3b-f16.gguf",
+# Size-parameterized: RAON_SIZE=0.3B (default) uses --backend raon; 1B uses
+# --backend raon-1b. Same sbhifigan16k vocoder + mel front-end either way.
+SIZE = os.environ.get("RAON_SIZE", "0.3B")
+BACKEND = {"0.3B": "raon", "1B": "raon-1b"}[SIZE]
+GGUF_FILE = f"raon-opentts-{SIZE.lower()}-f16.gguf"
+gguf = hf_hub_download(f"cstr/raon-opentts-{SIZE.lower()}-GGUF", GGUF_FILE,
                        local_dir=str(MODELS), token=HF_TOKEN or None)
 sh(f"bash {CLONE}/models/download-ggml-model.sh tiny.en {MODELS}", timeout=600)
 whisper = MODELS / "ggml-tiny.en.bin"
@@ -111,7 +116,7 @@ step("models", gguf=os.path.basename(gguf), whisper=whisper.exists(), ref=ref_wa
 
 # ── synth (GPU DiT + GPU HiFi-GAN, #387) ─────────────────────────────────────────
 out_wav = WORK / "raon_synth.wav"
-synth_cmd = (f"{CLI} --backend raon -m {gguf} --voice {ref_wav} "
+synth_cmd = (f"{CLI} --backend {BACKEND} -m {gguf} --voice {ref_wav} "
              f"--ref-text \"{ref_text}\" --tts \"{GEN_TEXT}\" --tts-output {out_wav} "
              f"-t 4 --seed 42 --i-have-rights -v")
 t0 = time.time()
@@ -150,7 +155,7 @@ asr_words = norm(asr)
 overlap = round(len(gen_words & asr_words) / max(1, len(gen_words)), 3)
 passed = overlap >= 0.7  # most content words present ⇒ intelligible, correct words
 
-result = {"pass": bool(passed), "overlap": overlap, "gen_text": GEN_TEXT, "asr": asr,
+result = {"pass": bool(passed), "size": SIZE, "backend": BACKEND, "overlap": overlap, "gen_text": GEN_TEXT, "asr": asr,
           "synth_wall_s": synth_s, "dur_s": round(n_frames / sr, 2) if sr else 0, "gpu": gpu}
 RESULTS.write_text(json.dumps(result, indent=2))
 print(json.dumps(result, indent=2), flush=True)
@@ -161,7 +166,7 @@ try:
     api = HfApi(token=HF_TOKEN)
     api.upload_file(path_or_fileobj=str(out_wav), repo_type="dataset",
                     repo_id="cstr/crispasr-regression-fixtures",
-                    path_in_repo="raon-opentts/0.3B/raon_synth_ours.wav")
+                    path_in_repo=f"raon-opentts/{SIZE}/raon_synth_ours.wav")
 except Exception as e:
     step("upload_skip", err=str(e)[:200])
 
