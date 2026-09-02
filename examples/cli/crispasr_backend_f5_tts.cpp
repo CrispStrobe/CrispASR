@@ -179,8 +179,12 @@ public:
             return;
         }
 
-        // Resample to 24kHz
-        auto ref_24k = resample_linear(ref_pcm, wav_sr, 24000);
+        // Resample to the MODEL's mel sample rate (24 kHz for stock F5/Vocos,
+        // 16 kHz for Raon sbhifigan16k — #387). The mel front-end uses
+        // hp.sample_rate, so the reference PCM must match it or the mel is
+        // computed on wrongly-rated audio.
+        const int model_sr = f5_tts_sample_rate(ctx_);
+        auto ref_24k = resample_linear(ref_pcm, wav_sr, model_sr);
 
         // RMS normalize to 0.1 (matching Python reference)
         float rms = 0.0f;
@@ -244,8 +248,8 @@ public:
         }
 
         if (!p.no_prints) {
-            fprintf(stderr, "crispasr[f5-tts]: loaded ref audio '%s' (%d@%dHz → %d@24kHz) ref_text='%s'\n",
-                    p.tts_voice.c_str(), (int)ref_pcm.size(), wav_sr, (int)ref_24k.size(), ref_text);
+            fprintf(stderr, "crispasr[f5-tts]: loaded ref audio '%s' (%d@%dHz → %d@%dHz) ref_text='%s'\n",
+                    p.tts_voice.c_str(), (int)ref_pcm.size(), wav_sr, (int)ref_24k.size(), model_sr, ref_text);
         }
     }
 
