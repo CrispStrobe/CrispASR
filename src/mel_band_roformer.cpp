@@ -10,6 +10,12 @@
 //
 // Blueprint: MIT lucidrains/BS-RoFormer. Weights: KimberleyJSN/melbandroformer
 // (MIT). Reference pinned at bs-roformer==0.3.10. See docs/mel-band-roformer/PLAN.md.
+//
+// Change 176: the ggml-graph paths (band-split, transformer blocks, fused
+// single graph) were written cleanroom following the in-repo htdemucs graph
+// pattern, with chenmozhijin/BSRoformer.cpp (MIT) used strictly as a
+// reference/oracle for graph structure and correctness — no code copied.
+// Parity is verified against this file's own validated CPU path (cos=1.0).
 
 #include "mel_band_roformer.h"
 

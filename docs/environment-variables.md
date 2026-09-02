@@ -844,7 +844,32 @@ All three optimisation gates are output-equivalent: the per-stage diff reports
 
 ### Mel-Band RoFormer (source separation)
 
-- `CRISPASR_MBR_PROFILE`
+- `CRISPASR_MBR_PROFILE` — print a per-stage wall-time breakdown of one forward
+  pass (stft+pack / band_split / run_time / run_freq / mask_est / synthesize).
+- `CRISPASR_MELBAND_GGML` — run the ggml graph path instead of the legacy CPU
+  path. Since the Change-176 graph port the default is **AUTO**: ON exactly
+  when a real GPU backend is present and permitted (the fused single graph
+  measured ~112x faster than the per-layer graphs — RTF ~0.09 vs ~10 on an
+  RTX 3090 Ti), OFF on CPU-only hosts. `=1`/`=0` force either way.
+- `CRISPASR_MELBAND_GPU` — GPU permission (CUDA > Metal > Vulkan). Default
+  AUTO follows the caller's use_gpu (CLI default on); an explicit `=0`/`=1`
+  beats the caller in both directions — so `=0` genuinely opts out even
+  though the CLI defaults `use_gpu=true` (#414 review semantics). On GPU-less
+  hosts everything resolves to the CPU path regardless.
+- `CRISPASR_MELBAND_FUSED` — single fused graph: band-split + the full
+  time/freq transformer stack + mask estimator on-device in one graph, no
+  per-layer host↔device roundtrips (the measured-fastest path on GPU).
+  Default **AUTO**: ON with the GPU graph path, OFF otherwise. `=1` alone
+  implies the graph path it needs; `=0` on GPU keeps the per-layer-graph
+  bisection arm. The full decision table is unit-locked in
+  tests/test-mel-band-gates.cpp.
+- `CRISPASR_MELBAND_SEG_S` — override the Demucs-style segment length in
+  seconds (`params.segment_seconds`; <=0 → default 10 s). The attention
+  matrix is O(T²·bands·heads), so long inputs are split into ~10 s segments
+  with 25% overlap and a triangular weight (bounds VRAM; the unsegmented
+  whole-buffer path OOMs on any clip beyond ~10 s).
+- `CRISPASR_MELBAND_NO_SEGMENT` — process the whole track in one pass instead
+  of the segmented overlap-add schedule (A/B against the old behaviour).
 
 ### MeloTTS
 
