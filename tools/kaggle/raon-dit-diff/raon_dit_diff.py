@@ -114,59 +114,72 @@ text_ids = list_str_to_idx([list(gen_text)], vmap)  # (1, nt)
 time_t = torch.tensor([0.5])
 
 dim = a["dim"]; text_dim = a["text_dim"]
-cap = {}
+cap = {}; blk_out = {}
 h1 = dit.input_embed.register_forward_hook(lambda m, i, o: cap.__setitem__("hidden", o.detach()))
 h2 = dit.time_embed.register_forward_hook(lambda m, i, o: cap.__setitem__("temb", o.detach()))
 h4 = dit.text_embed.register_forward_hook(lambda m, i, o: cap.__setitem__("text_embed", o.detach()))
+h3 = dit.proj_out.register_forward_hook(lambda m, i, o: cap.__setitem__("velocity", o.detach()))
+bh = [dit.transformer_blocks[k].register_forward_hook(
+        (lambda kk: (lambda m, i, o: blk_out.__setitem__(kk, o.detach())))(k))
+      for k in range(len(dit.transformer_blocks))]
 with torch.no_grad():
     _ = dit(x, cond, text_ids, time_t, drop_audio_cond=False, drop_text=False, cfg_infer=False)
-for h in [h1, h2, h4]:
+for h in [h1, h2, h4, h3] + bh:
     h.remove()
 
 hidden = cap["hidden"][0].contiguous().numpy().astype(np.float32)          # (T, dim)
 temb = cap["temb"].reshape(-1).numpy().astype(np.float32)                  # (dim,)
 text_embed = cap["text_embed"][0].contiguous().numpy().astype(np.float32)  # (T, text_dim)
-tok = text_ids[0].numpy().astype(np.int32)                                 # (nt,)
-# raw inputs for the C++ INPUT_PROBE
+velocity = cap["velocity"][0].contiguous().numpy().astype(np.float32)      # (T, mel)
+depth = len(blk_out)
+ref_blocks = [blk_out[k][0].contiguous().numpy().astype(np.float32) for k in range(depth)]
+tok = text_ids[0].numpy().astype(np.int32)
 (PROBE / "shape.txt").write_text(f"{T} {tok.size}")
 (PROBE / "t.txt").write_text(str(float(time_t.item())))
 x[0].contiguous().numpy().astype(np.float32).tofile(PROBE / "x.bin")
 cond[0].contiguous().numpy().astype(np.float32).tofile(PROBE / "cond.bin")
 tok.tofile(PROBE / "tokens.bin")
-step("captured", T=T, nt=int(tok.size), dim=dim, text_dim=text_dim,
-     temb_std=float(temb.std()), text_embed_std=float(text_embed.std()), hidden_std=float(hidden.std()))
+hidden.tofile(PROBE / "hidden.bin"); temb.tofile(PROBE / "temb.bin")
+step("captured", T=T, nt=int(tok.size), dim=dim, depth=depth,
+     hidden_std=float(hidden.std()), velocity_std=float(velocity.std()))
 
-# ── run our C++ input-path probe (CUDA) ────────────────────────────────────
-env = dict(os.environ); env["CRISPASR_F5_INPUT_PROBE"] = str(PROBE)
-rc = sh(f"{CLI} --backend raon-1b -m {gguf} --voice {ref_wav} --ref-text x --tts probe "
-        f"--tts-output {WORK/'probe.wav'} -t 4 --i-have-rights -v", env=env, timeout=1200)
-print(rc.stdout[-1500:], rc.stderr[-2500:], flush=True)
+def run(mode):
+    env = dict(os.environ); env[mode] = str(PROBE)
+    r = sh(f"{CLI} --backend raon-1b -m {gguf} --voice {ref_wav} --ref-text x --tts probe "
+           f"--tts-output {WORK/'probe.wav'} -t 4 --i-have-rights -v", env=env, timeout=1200)
+    print(f"[{mode}]", r.stdout[-500:], r.stderr[-1500:], flush=True)
 
-def cos(u, v):
-    u = np.asarray(u).reshape(-1).astype(np.float64); v = np.asarray(v).reshape(-1).astype(np.float64)
-    if u.size != v.size:
-        return None
-    d = np.linalg.norm(u) * np.linalg.norm(v)
-    return float(u.dot(v) / d) if d > 0 else float("nan")
+run("CRISPASR_F5_INPUT_PROBE")   # -> cpp_temb / cpp_text_embed / cpp_hidden
+run("CRISPASR_F5_DIT_PROBE")     # -> cpp_velocity / cpp_block_<k> (injected hidden+temb)
 
 def load(name):
     p = PROBE / name
     return np.fromfile(p, dtype=np.float32) if p.exists() else None
 
-cpp_temb = load("cpp_temb.bin"); cpp_te = load("cpp_text_embed.bin"); cpp_hidden = load("cpp_hidden.bin")
-# positive control: comparator must report identity=1 and a real shift<1
-ctrl = {"identity_cos": cos(hidden, hidden),
-        "sensitivity_cos_shift": cos(hidden.reshape(-1), np.roll(hidden.reshape(-1), 137))}
-present = {"cpp_temb": cpp_temb is not None, "cpp_text_embed": cpp_te is not None, "cpp_hidden": cpp_hidden is not None}
-result = {"size": SIZE, "T": T, "nt": int(tok.size), "dim": dim, "text_dim": text_dim,
-          "positive_control": {k: (None if v is None else round(v, 6)) for k, v in ctrl.items()},
-          "present": present,
-          "temb_cos": cos(temb, cpp_temb) if cpp_temb is not None else None,
-          "text_embed_cos": cos(text_embed, cpp_te) if cpp_te is not None else None,
-          "hidden_cos": cos(hidden, cpp_hidden) if cpp_hidden is not None else None}
-for k in ("temb_cos", "text_embed_cos", "hidden_cos"):
-    if result[k] is not None:
-        result[k] = round(result[k], 5)
+def compare(ref, cpp):
+    if cpp is None:
+        return None
+    u = np.asarray(ref).reshape(-1).astype(np.float64); v = np.asarray(cpp).reshape(-1).astype(np.float64)
+    if u.size != v.size:
+        return {"size_mismatch": [int(u.size), int(v.size)]}
+    nu, nv = np.linalg.norm(u), np.linalg.norm(v)
+    cosv = float(u.dot(v) / (nu * nv)) if nu > 0 and nv > 0 else None
+    return {"cos": None if cosv is None else round(cosv, 5),
+            "norm_ratio": round(float(nv / nu), 4) if nu > 0 else None,       # ||cpp|| / ||ref||  (1.0 = same scale)
+            "maxabs_ratio": round(float(np.abs(v).max() / (np.abs(u).max() + 1e-12)), 4)}
+
+# positive control on magnitude too: a 1.7x-scaled ref must read norm_ratio≈1.7, cos≈1
+pc = compare(hidden, (hidden * 1.7).reshape(-1))
+result = {"size": SIZE, "T": T, "depth": depth,
+          "positive_control_scale1.7": pc,
+          "input_path": {"temb": compare(temb, load("cpp_temb.bin")),
+                         "text_embed": compare(text_embed, load("cpp_text_embed.bin")),
+                         "hidden": compare(hidden, load("cpp_hidden.bin"))},
+          "velocity": compare(velocity, load("cpp_velocity.bin")),
+          "blocks": [{"k": k, **(compare(ref_blocks[k], load(f"cpp_block_{k}.bin")) or {})} for k in range(depth)]}
 (WORK / "raon_dit_diff.json").write_text(json.dumps(result, indent=2))
 print(json.dumps(result, indent=2), flush=True)
-step("DONE", temb_cos=result["temb_cos"], text_embed_cos=result["text_embed_cos"], hidden_cos=result["hidden_cos"])
+nr = [b.get("norm_ratio") for b in result["blocks"] if b.get("norm_ratio")]
+step("DONE", velocity=result["velocity"], block0_nr=result["blocks"][0].get("norm_ratio"),
+     blocklast_nr=result["blocks"][-1].get("norm_ratio"),
+     norm_ratio_span=[min(nr), max(nr)] if nr else None)
