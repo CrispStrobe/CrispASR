@@ -656,7 +656,8 @@ static void f5_linear(const float* x, const float* W, const float* bias, float* 
 
 // ── Text Encoder (embedding + sinusoidal pos + ConvNeXtV2 blocks) ─
 
-static std::vector<float> compute_text_embed(f5_tts_context* ctx, const int32_t* tokens, int n_tokens, int seq_len) {
+static std::vector<float> compute_text_embed(f5_tts_context* ctx, const int32_t* tokens, int n_tokens, int seq_len,
+                                             bool drop_text = false) {
     const auto& hp = ctx->hp;
 
     // tokens are in range [-1, vocab_size-1]. We add 1 to make 0 the filler.
@@ -666,18 +667,25 @@ static std::vector<float> compute_text_embed(f5_tts_context* ctx, const int32_t*
         padded[i] = tokens[i] + 1; // shift by 1 (filler = 0)
     }
 
-    // Create text mask: 1 where padded == 0 (filler/padding)
+    // Create text mask: 1 where padded == 0 (filler/padding). Upstream computes
+    // this from the REAL (pre-drop) text, so the CFG-uncond arm (drop_text) still
+    // masks only the true padding positions — the valid positions keep the filler
+    // embedding, NOT zero. (Passing all-zeros for the uncond text embed was the
+    // #387-adj 1B bug: CFG's v=cond+2·(cond−uncond) doubles that error, which the
+    // deeper 1B turned into non-speech while the 0.3B tolerated it.)
     std::vector<float> text_mask(seq_len);
     for (int i = 0; i < seq_len; i++) {
         text_mask[i] = (padded[i] == 0) ? 1.0f : 0.0f;
     }
 
-    // Embedding lookup — use pre-dequantized cache (loaded at init).
+    // Embedding lookup — use pre-dequantized cache (loaded at init). drop_text
+    // (CFG uncond) looks up the filler row (index 0) at EVERY position, matching
+    // the reference's `text = torch.zeros_like(text)` before the embed.
     const std::vector<float>& emb_weight = ctx->text_cache.emb;
 
     std::vector<float> text_emb(seq_len * hp.text_dim, 0.0f);
     for (int t = 0; t < seq_len; t++) {
-        int idx = padded[t];
+        int idx = drop_text ? 0 : padded[t];
         if (idx >= 0 && idx < hp.text_num_embeds) {
             for (int d = 0; d < hp.text_dim; d++) {
                 text_emb[t * hp.text_dim + d] = emb_weight[idx * hp.text_dim + d];
@@ -2946,8 +2954,13 @@ int f5_tts_synthesize(struct f5_tts_context* ctx, const char* text, float** pcm_
         return 0;
     dump_stage(ctx, "text_embed", text_emb.data(), text_emb.size());
 
-    // Unconditional text embedding (all zeros)
-    std::vector<float> text_emb_uncond(duration * text_dim, 0.0f);
+    // Unconditional text embedding (CFG drop_text): the filler embedding run
+    // through the text encoder with the REAL padding mask — NOT all zeros (see
+    // compute_text_embed). #387-adj: the all-zeros shortcut garbled the 1B.
+    std::vector<float> text_emb_uncond = compute_text_embed(ctx, tokens.data(), (int)tokens.size(), duration,
+                                                            /*drop_text=*/true);
+    if (text_emb_uncond.empty())
+        return 0;
 
     // ── Conditioning (ref mel padded to duration) ──
     std::vector<float> cond(duration * mel_dim, 0.0f);
