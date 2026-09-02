@@ -70,8 +70,12 @@ HF_TOKEN = kh.resolve_hf_token()
 # x_transformers/ema_pytorch have small pure-python deps (loguru, einops,
 # accelerate) — install WITH deps; pip won't reinstall the satisfied torch.
 # Only torch/torchaudio itself must not be reinstalled (GPU-arch mismatch).
+# Raon's runtime import chain (modules.py) needs these small pure-python deps.
+# torch/torchaudio stay Kaggle's pre-built ones (GPU-arch match); pip won't
+# reinstall the satisfied torch when resolving these.
 subprocess.run([sys.executable, "-m", "pip", "install", "-q",
                 "x_transformers", "torchdiffeq", "ema_pytorch", "loguru", "einops",
+                "jieba", "pypinyin", "hydra-core", "omegaconf", "vocos",
                 "pyyaml", "soundfile", "huggingface_hub"], check=False)
 subprocess.run([sys.executable, "-m", "pip", "install", "-q", "--no-deps", "gguf"], check=False)
 sys.path.insert(0, str(RAON / "src"))
