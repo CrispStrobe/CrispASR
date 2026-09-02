@@ -44,9 +44,24 @@ def step(name, **kv):
     print(f"[{time.strftime('%H:%M:%S')}] {name} " + json.dumps(kv), flush=True)
 
 
+# Some Kaggle workers have flaky GitHub access (gotcha #18); clone the repo
+# with retries, then init submodules separately (a failed submodule fetch must
+# not abort the whole clone the way --recurse-submodules does).
 if not CLONE.exists():
-    subprocess.run(["git", "clone", "--depth", "1", "--branch", CRISPASR_REF,
-                    "--recurse-submodules", CRISPASR_URL, str(CLONE)], check=True, timeout=1800)
+    for attempt in range(4):
+        r = subprocess.run(["git", "clone", "--depth", "1", "--branch", CRISPASR_REF,
+                            CRISPASR_URL, str(CLONE)], timeout=1800)
+        if r.returncode == 0:
+            break
+        time.sleep(15)
+    else:
+        print("clone failed after retries", flush=True); sys.exit(1)
+for attempt in range(4):
+    r = subprocess.run(["git", "submodule", "update", "--init", "--recursive",
+                        "ggml", "third_party/c2pa-audio"], cwd=str(CLONE), timeout=1800)
+    if r.returncode == 0 or (CLONE / "ggml" / "CMakeLists.txt").exists():
+        break
+    time.sleep(15)
 sys.path.insert(0, str(CLONE / "tools" / "kaggle"))
 import kaggle_harness as kh  # noqa: E402
 
