@@ -1351,8 +1351,11 @@ bool run_forward(mel_band_roformer_context* ctx, const std::vector<std::vector<f
 
 } // namespace
 
-mel_band_roformer_result* mel_band_roformer_separate(mel_band_roformer_context* ctx, const float* pcm, int n_samples,
-                                                     int in_channels) {
+// Whole-buffer forward (no segmentation). Public API entry point for callers
+// that already chunk themselves (e.g. per-request audio); mel_band_roformer_separate
+// is the segmented wrapper below.
+static mel_band_roformer_result* mel_band_roformer_separate_full(mel_band_roformer_context* ctx, const float* pcm,
+                                                                 int n_samples, int in_channels) {
     if (!ctx || !pcm || n_samples <= 0)
         return nullptr;
     const int channels = ctx->hp.audio_channels;
@@ -1388,6 +1391,135 @@ mel_band_roformer_result* mel_band_roformer_separate(mel_band_roformer_context* 
             const size_t idx = (size_t)i * channels + s;
             r->sources[1][idx] = chan[s][i] - vocals[idx];
         }
+    r->source_names[0] = ctx->source_names_storage[0].c_str();
+    r->source_names[1] = ctx->source_names_storage.size() > 1 ? ctx->source_names_storage[1].c_str() : "other";
+    return r;
+}
+
+// Segmented forward with weighted overlap-add — the Demucs split=True pattern,
+// ported from htdemucs (src/htdemucs.cpp htdemucs_separate, itself Demucs
+// apply_model split=True): segment_length = 10 s of samples, overlap = 0.25,
+// triangular weight peaking mid-segment, normalised by the accumulated weight.
+//
+// WHY: the transformer attention matrix is O(T^2 * num_bands * heads) in the
+// ggml graph path (and O(T^2 * heads) per band in the CPU path) — a 3-min
+// song at 44.1 kHz is T ~= 20k frames, which is 17 GB+ of scores alone and
+// OOMs on any GPU (measured: 30 s clip needs ~19 GB on CUDA). Segmenting
+// bounds peak memory to one segment's working set and makes time linear in
+// length.
+//
+// Short inputs (<= one segment) take the whole-buffer path unchanged, so
+// existing behaviour/parity is preserved bit-for-bit. CRISPASR_MELBAND_NO_SEGMENT=1
+// forces the old behaviour everywhere for A/B.
+mel_band_roformer_result* mel_band_roformer_separate(mel_band_roformer_context* ctx, const float* pcm, int n_samples,
+                                                     int in_channels) {
+    if (!ctx || !pcm || n_samples <= 0)
+        return nullptr;
+    const int channels = ctx->hp.audio_channels;
+
+    // 10 s segment at the model sample rate (hop=441 => ~1001 STFT frames =>
+    // ~2 GB attention scores on GPU; well under the 24 GB RTX 3090).
+    // CRISPASR_MELBAND_SEG_S overrides the segment length in seconds (tests).
+    int seg_len = 10 * ctx->hp.sample_rate;
+    if (const char* seg_s = std::getenv("CRISPASR_MELBAND_SEG_S")) {
+        int s = atoi(seg_s);
+        if (s > 0)
+            seg_len = s * ctx->hp.sample_rate;
+    }
+    const bool no_seg = std::getenv("CRISPASR_MELBAND_NO_SEGMENT") != nullptr;
+    if (no_seg || n_samples <= seg_len || seg_len <= 0)
+        return mel_band_roformer_separate_full(ctx, pcm, n_samples, in_channels);
+
+    const float overlap = 0.25f;
+    int stride = (int)((1.0f - overlap) * (float)seg_len);
+    if (stride <= 0)
+        stride = seg_len;
+
+    // Triangular weight, peaking mid-segment (Demucs transition_power=1.0).
+    std::vector<float> weight((size_t)seg_len);
+    {
+        const int half = seg_len / 2;
+        for (int i = 0; i < half; i++)
+            weight[(size_t)i] = (float)(i + 1);
+        for (int i = half; i < seg_len; i++)
+            weight[(size_t)i] = (float)(seg_len - i);
+        float wmax = 0.0f;
+        for (float w : weight)
+            wmax = std::max(wmax, w);
+        if (wmax > 0.0f)
+            for (float& w : weight)
+                w /= wmax;
+    }
+
+    const int n_sources = 2;
+    std::vector<float> sum_weight((size_t)n_samples, 0.0f);
+    std::vector<float> acc((size_t)n_samples * channels, 0.0f); // vocals accumulator
+    std::vector<float> pcm_seg((size_t)seg_len * channels, 0.0f);
+
+    for (int off = 0; off < n_samples; off += stride) {
+        const int valid = std::min(seg_len, n_samples - off);
+        // Build the (already channel-interleaved) segment: zero-pad tail.
+        for (int i = 0; i < valid; i++)
+            for (int c = 0; c < channels; c++)
+                pcm_seg[(size_t)i * channels + c] = pcm[(size_t)(off + i) * channels + c];
+        for (size_t i = (size_t)valid * channels; i < pcm_seg.size(); i++)
+            pcm_seg[i] = 0.0f;
+
+        mel_band_roformer_result* part =
+            mel_band_roformer_separate_full(ctx, pcm_seg.data(), seg_len, channels);
+        if (!part) {
+            fprintf(stderr, "mel_band_roformer: segment @%d failed\n", off);
+            acc.clear();
+            return nullptr;
+        }
+        const int n = std::min(valid, part->n_samples);
+        // accumulate weighted vocals (stem 0); discard the 'other' residual
+        // (recomputed from the full original at the end).
+        const float* src = part->sources[0];
+        float* dst = acc.data();
+        for (int i = 0; i < n; i++) {
+            const float w = weight[(size_t)i];
+            for (int c = 0; c < channels; c++)
+                dst[(size_t)(off + i) * channels + c] += w * src[(size_t)i * channels + c];
+        }
+        for (int i = 0; i < n; i++)
+            sum_weight[(size_t)(off + i)] += weight[(size_t)i];
+        mel_band_roformer_result_free(part);
+    }
+
+    if (acc.empty())
+        return nullptr;
+
+    // Normalise vocals by accumulated weight; residual = original - vocals.
+    // Mix the original to model channels exactly like separate_full does, so
+    // the residual is valid for any in_channels (incl. mono up-mix).
+    fprintf(stderr, "mel_band_roformer: segmented %d samples into %d chunks of %d (stride %d, overlap %.0f%%)\n",
+            n_samples, (n_samples + stride - 1) / stride, seg_len, stride, 100.0f * overlap);
+    std::vector<float> orig_mix((size_t)n_samples * channels);
+    for (int i = 0; i < n_samples; i++)
+        for (int c = 0; c < channels; c++) {
+            int src = (in_channels <= 0) ? 0 : (c < in_channels ? c : in_channels - 1);
+            orig_mix[(size_t)i * channels + c] = pcm[(size_t)i * (in_channels > 0 ? in_channels : 1) + src];
+        }
+    auto* r = (mel_band_roformer_result*)calloc(1, sizeof(mel_band_roformer_result));
+    r->n_sources = n_sources;
+    r->n_channels = channels;
+    r->n_samples = n_samples;
+    r->sample_rate = ctx->hp.sample_rate;
+    r->sources = (float**)calloc(n_sources, sizeof(float*));
+    r->source_names = (const char**)calloc(n_sources, sizeof(char*));
+    const size_t nf = (size_t)n_samples * channels;
+    r->sources[0] = (float*)malloc(nf * sizeof(float));
+    r->sources[1] = (float*)malloc(nf * sizeof(float));
+    for (int i = 0; i < n_samples; i++) {
+        const float w = sum_weight[(size_t)i];
+        for (int c = 0; c < channels; c++) {
+            const size_t idx = (size_t)i * channels + c;
+            float v = w > 0.0f ? acc[idx] / w : 0.0f;
+            r->sources[0][idx] = v;
+            r->sources[1][idx] = orig_mix[idx] - v;
+        }
+    }
     r->source_names[0] = ctx->source_names_storage[0].c_str();
     r->source_names[1] = ctx->source_names_storage.size() > 1 ? ctx->source_names_storage[1].c_str() : "other";
     return r;
