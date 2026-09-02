@@ -209,9 +209,12 @@ def main():
     # the tensor and trim the shipped vocab to match, so char→idx lookups map
     # onto real trained rows. get_tokenizer strips the trailing newline per
     # line, so vocab[i] is line i verbatim.
+    # F5 DiT builds nn.Embedding(text_num_embeds + 1) (dit.py: 0 is the filler
+    # token), so the checkpoint tensor has text_num_embeds+1 rows. Recover the
+    # DiT arg (which is also the real vocab-char count) as rows - 1.
     te = dit["ema_model.transformer.text_embed.text_embed.weight"]
-    text_num_embeds = int(te.shape[0])
-    real_vocab = text_num_embeds - 1
+    text_num_embeds = int(te.shape[0]) - 1
+    real_vocab = text_num_embeds
     if real_vocab != len(vocab):
         print(f"  NOTE: checkpoint vocab {real_vocab} != vocab.txt {len(vocab)}; "
               f"shipping the first {real_vocab} chars", flush=True)

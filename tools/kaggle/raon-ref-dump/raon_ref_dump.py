@@ -113,9 +113,9 @@ sd = {k.replace("ema_model.", ""): v for k, v in sd.items() if k.startswith("ema
 ckpt_text_embeds = int(sd["transformer.text_embed.text_embed.weight"].shape[0])
 model = CFM(
     transformer=DiT(**{k: arch[k] for k in arch if k not in ("name",)}, mel_dim=mspec["n_mel_channels"],
-                    text_num_embeds=ckpt_text_embeds),
+                    text_num_embeds=ckpt_text_embeds - 1),  # Embedding(N+1) → rows-1
     mel_spec_kwargs=mspec,
-    vocab_char_map={c: i for c, i in vocab_map.items() if i < ckpt_text_embeds},
+    vocab_char_map={c: i for c, i in vocab_map.items() if i < ckpt_text_embeds - 1},
 ).to(device)
 missing, unexpected = model.load_state_dict(sd, strict=False)
 step("model_loaded", missing=len(missing), unexpected=len(unexpected))
