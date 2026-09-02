@@ -67,9 +67,13 @@ HF_TOKEN = kh.resolve_hf_token()
 # Do NOT reinstall torch/torchaudio — Kaggle's are pre-built for its GPU arch;
 # a fresh torchaudio drags a mismatched torch (cudaErrorNoKernelImageForDevice
 # in torch.stft). Install only the small pure-python deps Raon needs.
-subprocess.run([sys.executable, "-m", "pip", "install", "-q", "--no-deps",
-                "x_transformers", "torchdiffeq", "ema_pytorch", "gguf"], check=False)
-subprocess.run([sys.executable, "-m", "pip", "install", "-q", "pyyaml", "soundfile", "huggingface_hub"], check=False)
+# x_transformers/ema_pytorch have small pure-python deps (loguru, einops,
+# accelerate) — install WITH deps; pip won't reinstall the satisfied torch.
+# Only torch/torchaudio itself must not be reinstalled (GPU-arch mismatch).
+subprocess.run([sys.executable, "-m", "pip", "install", "-q",
+                "x_transformers", "torchdiffeq", "ema_pytorch", "loguru", "einops",
+                "pyyaml", "soundfile", "huggingface_hub"], check=False)
+subprocess.run([sys.executable, "-m", "pip", "install", "-q", "--no-deps", "gguf"], check=False)
 sys.path.insert(0, str(RAON / "src"))
 from huggingface_hub import hf_hub_download  # noqa: E402
 import numpy as np  # noqa: E402
