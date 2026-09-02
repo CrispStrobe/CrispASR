@@ -202,7 +202,8 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& name
     if (name == "outetts" || name == "outetts-tts" || name == "oute-tts" || name == "outetts-0.3-1b")
         return crispasr_make_outetts_backend();
 #endif
-    if (name == "f5-tts" || name == "f5_tts" || name == "f5tts" || name == "f5")
+    if (name == "f5-tts" || name == "f5_tts" || name == "f5tts" || name == "f5" || name == "raon" ||
+        name == "raon-1b")
         return crispasr_make_f5_tts_backend();
     if (name == "irodori-tts" || name == "irodori_tts" || name == "irodori")
         return crispasr_make_irodori_tts_backend();
@@ -362,6 +363,7 @@ std::vector<std::string> crispasr_list_backends() {
         "tada-3b-ml",
         "indextts",
         "f5-tts",
+        "raon",
         "pocket-tts",
         "pocket-tts-de",
         "pocket-tts-es",
@@ -699,8 +701,8 @@ std::string crispasr_detect_backend_from_gguf(const std::string& model_path) {
         return "outetts";
     if (contains_ci("indextts"))
         return "indextts";
-    if (contains_ci("f5-tts") || contains_ci("f5tts") || contains_ci("F5TTS"))
-        return "f5-tts";
+    if (contains_ci("f5-tts") || contains_ci("f5tts") || contains_ci("F5TTS") || contains_ci("raon"))
+        return "f5-tts"; // #387 Raon-OpenTTS rides the f5-tts runtime
     if (contains_ci("pocket-tts") || contains_ci("pocket_tts") || contains_ci("pockettts"))
         return "pocket-tts";
     if (contains_ci("fastpitch"))

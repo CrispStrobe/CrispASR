@@ -184,6 +184,15 @@ struct f5_hparams {
     int voc_num_layers = 8;
     int voc_n_fft = 1024;
     int voc_hop_length = 256;
+    // #387 Raon-OpenTTS deltas (default = stock F5/Vocos):
+    //   vocoder       "vocos" | "hifigan"  — which decoder to run
+    //   mel_spec_type "vocos" | "sbhifigan16k" — mel front-end variant
+    //   mel_center    STFT center padding (Vocos true, sbhifigan false)
+    // sbhifigan16k also ships its (slaney) filterbank + window as GGUF
+    // buffers, so the runtime never rebuilds the slaney basis in C++.
+    std::string vocoder = "vocos";
+    std::string mel_spec_type = "vocos";
+    bool mel_center = true;
 };
 
 // ── Weight structure ─────────────────────────────────────────────
@@ -389,6 +398,14 @@ struct f5_tts_context {
     // Reference audio state
     std::vector<float> ref_mel; // (T_ref, mel_dim) row-major
     int ref_mel_T = 0;
+
+    // #387 sbhifigan16k: shipped slaney mel filterbank (n_freqs*n_mels,
+    // layout fb[k*n_mels+m]) + Hann window (n_fft), copied verbatim from the
+    // GGUF; and the HiFi-GAN vocoder weights as CPU F32 (weight-norm already
+    // fused in the converter), keyed by their `voc.*` GGUF name.
+    std::vector<float> mel_fb;
+    std::vector<float> mel_window;
+    std::map<std::string, std::vector<float>> hifigan_w;
     std::string ref_text;
 
     // Diff harness: inject reference initial noise for reproducibility
@@ -853,14 +870,24 @@ static float mel_to_hz(float m) {
 //
 // Returns (T, n_mels) row-major mel spectrogram.
 
+// sr, and the optional shipped_fb / shipped_window / center args, are #387
+// additions. Vocos (stock F5) passes sr=24000, shipped_*=nullptr, center=true
+// → identical behaviour. sbhifigan16k passes sr=16000, the shipped slaney
+// filterbank + Hann window, and center=false (torchaudio Spectrogram default).
 static std::vector<float> compute_mel_spectrogram(const float* pcm_24k, int n_samples, int n_fft, int hop_length,
-                                                  int win_length, int n_mels, int& T_out) {
+                                                  int win_length, int n_mels, int& T_out, float sr = 24000.0f,
+                                                  const std::vector<float>* shipped_fb = nullptr,
+                                                  const std::vector<float>* shipped_window = nullptr,
+                                                  bool center = true) {
     int n_freqs = n_fft / 2 + 1; // 513
-    float sr = 24000.0f;
 
-    // ── Build mel filterbank (n_freqs × n_mels) ──
-    std::vector<float> mel_fb(n_freqs * n_mels, 0.0f);
-    {
+    // ── Mel filterbank (n_freqs × n_mels): shipped (slaney) or HTK-built ──
+    std::vector<float> mel_fb_local;
+    const float* mel_fb = nullptr;
+    if (shipped_fb && (int)shipped_fb->size() == n_freqs * n_mels) {
+        mel_fb = shipped_fb->data(); // slaney, copied verbatim from the GGUF
+    } else {
+        mel_fb_local.assign(n_freqs * n_mels, 0.0f);
         float f_min = 0.0f, f_max = sr / 2.0f;
         float mel_min = hz_to_mel(f_min);
         float mel_max = hz_to_mel(f_max);
@@ -878,29 +905,40 @@ static std::vector<float> compute_mel_spectrogram(const float* pcm_24k, int n_sa
                     val = (f - f_left) / (f_center - f_left);
                 else if (f > f_center && f <= f_right && f_right > f_center)
                     val = (f_right - f) / (f_right - f_center);
-                mel_fb[k * n_mels + m] = val;
+                mel_fb_local[k * n_mels + m] = val;
             }
         }
+        mel_fb = mel_fb_local.data();
     }
 
-    // ── Hann window ──
-    std::vector<float> hann(win_length);
-    for (int i = 0; i < win_length; i++)
-        hann[i] = 0.5f * (1.0f - cosf(2.0f * (float)M_PI * (float)i / (float)win_length));
+    // ── Hann window: shipped (torch periodic) or built ──
+    std::vector<float> hann_local;
+    const float* hann = nullptr;
+    if (shipped_window && (int)shipped_window->size() == win_length) {
+        hann = shipped_window->data();
+    } else {
+        hann_local.assign(win_length, 0.0f);
+        for (int i = 0; i < win_length; i++)
+            hann_local[i] = 0.5f * (1.0f - cosf(2.0f * (float)M_PI * (float)i / (float)win_length));
+        hann = hann_local.data();
+    }
 
-    // ── Center padding (reflect) ──
-    int pad = n_fft / 2;
+    // ── Padding: center=true reflect-pads n_fft/2 each side (Vocos);
+    //    center=false (sbhifigan16k) frames the raw signal, no padding. ──
+    const int pad = center ? n_fft / 2 : 0;
     int padded_len = n_samples + 2 * pad;
     std::vector<float> padded(padded_len);
-    // Reflect pad left
-    for (int i = 0; i < pad; i++)
-        padded[i] = pcm_24k[pad - i]; // reflect: index 1,2,3,...,pad
-    // Copy signal
-    for (int i = 0; i < n_samples; i++)
-        padded[pad + i] = pcm_24k[i];
-    // Reflect pad right
-    for (int i = 0; i < pad; i++)
-        padded[pad + n_samples + i] = pcm_24k[n_samples - 2 - i]; // reflect
+    if (center) {
+        for (int i = 0; i < pad; i++)
+            padded[i] = pcm_24k[pad - i]; // reflect: index 1,2,3,...,pad
+        for (int i = 0; i < n_samples; i++)
+            padded[pad + i] = pcm_24k[i];
+        for (int i = 0; i < pad; i++)
+            padded[pad + n_samples + i] = pcm_24k[n_samples - 2 - i]; // reflect
+    } else {
+        for (int i = 0; i < n_samples; i++)
+            padded[i] = pcm_24k[i];
+    }
 
     // ── STFT frames ──
     int T = (padded_len - n_fft) / hop_length + 1;
@@ -1489,6 +1527,32 @@ static void cpu_conv1d(const float* input, int C_in, int T, const float* weight,
     }
 }
 
+// Dilated 1-D conv (groups=1), same-padding. #387 HiFi-GAN resblocks.
+static void cpu_conv1d_dil(const float* input, int C_in, int T, const float* weight, const float* bias, int C_out,
+                           int K, int dilation, float* output) {
+    const int pad = dilation * (K - 1) / 2; // "same" for odd K
+    for (int oc = 0; oc < C_out; oc++) {
+        for (int t = 0; t < T; t++) {
+            float sum = bias ? bias[oc] : 0.0f;
+            for (int ic = 0; ic < C_in; ic++) {
+                const float* in = input + (size_t)ic * T;
+                const float* w = weight + ((size_t)oc * C_in + ic) * K;
+                for (int k = 0; k < K; k++) {
+                    int ti = t + k * dilation - pad;
+                    if (ti >= 0 && ti < T)
+                        sum += in[ti] * w[k];
+                }
+            }
+            output[(size_t)oc * T + t] = sum;
+        }
+    }
+}
+
+static inline void cpu_leaky_relu(std::vector<float>& x, float slope) {
+    for (float& v : x)
+        v = v > 0.0f ? v : slope * v;
+}
+
 // ── CPU LayerNorm over last dim of (T, D) data ─────────────────────
 static void cpu_layer_norm(float* data, int T, int D, const float* gamma, const float* beta, float eps) {
     for (int t = 0; t < T; t++) {
@@ -1523,6 +1587,120 @@ static void transpose_tc(const float* src, int T, int C, float* dst) {
     for (int t = 0; t < T; t++)
         for (int c = 0; c < C; c++)
             dst[c * T + t] = src[t * C + c];
+}
+
+// ── CPU HiFi-GAN v1 decoder (#387 Raon-OpenTTS sbhifigan16k) ──────────────
+// mel_data is (T_mel, mel_dim) row-major (log-mel). Mirrors the reference
+// HifiganGenerator: conv_pre → for each of 4 stages { LeakyReLU →
+// ConvTranspose1d(rate) → sum_j resblock_j / 3 } → LeakyReLU → conv_post →
+// tanh. Weights come from ctx->hifigan_w (weight-norm fused in the converter);
+// the arch is the fixed sbhifigan16k config from Raon's vocoder.py.
+static std::vector<float> hifigan_decode(f5_tts_context* ctx, const float* mel_data, int T_mel, int mel_dim) {
+    const auto& W = ctx->hifigan_w;
+    auto has = [&](const std::string& n) { return W.find(n) != W.end(); };
+    auto get = [&](const std::string& n) -> const std::vector<float>& { return W.at(n); };
+
+    const int up_rates[4] = {8, 8, 2, 2};
+    const int up_kernels[4] = {16, 16, 4, 4};
+    const int rb_kernels[3] = {3, 7, 11};
+    const int rb_dils[3] = {1, 3, 5};
+    const float slope = 0.1f;
+    int init_ch = 512;
+
+    const auto voc_t0 = std::chrono::steady_clock::now();
+
+    // mel (T, C) → (C, T) for conv layout.
+    std::vector<float> x(mel_dim * T_mel);
+    transpose_tc(mel_data, T_mel, mel_dim, x.data());
+    int C = mel_dim, T = T_mel;
+
+    // conv_pre: Conv1d(mel_dim, init_ch, k=7, pad=3)
+    {
+        std::vector<float> out((size_t)init_ch * T, 0.0f);
+        cpu_conv1d(x.data(), C, T, get("voc.conv_pre.weight").data(), get("voc.conv_pre.bias").data(), init_ch, 7, 3, 1,
+                   out.data());
+        x = std::move(out);
+        C = init_ch;
+    }
+
+    int ch = init_ch;
+    for (int s = 0; s < 4; s++) {
+        cpu_leaky_relu(x, slope);
+        // ConvTranspose1d(ch, ch/2, k=up_kernels[s], stride=up_rates[s],
+        // pad=(k-stride)/2). PyTorch CT weight layout is (in_ch, out_ch, k).
+        const int out_ch = ch / 2;
+        const int stride = up_rates[s], k = up_kernels[s], pad = (k - stride) / 2;
+        const int T_out = (T - 1) * stride + k - 2 * pad;
+        const std::vector<float>& uw = get("voc.ups." + std::to_string(s) + ".weight");
+        const std::vector<float>& ub = get("voc.ups." + std::to_string(s) + ".bias");
+        std::vector<float> up((size_t)out_ch * T_out, 0.0f);
+        for (int oc = 0; oc < out_ch; oc++)
+            for (int t = 0; t < T_out; t++)
+                up[(size_t)oc * T_out + t] = ub[oc];
+        for (int ic = 0; ic < ch; ic++) {
+            const float* in = x.data() + (size_t)ic * T;
+            for (int ti = 0; ti < T; ti++) {
+                float v = in[ti];
+                if (v == 0.0f)
+                    continue;
+                for (int kk = 0; kk < k; kk++) {
+                    int to = ti * stride + kk - pad;
+                    if (to < 0 || to >= T_out)
+                        continue;
+                    for (int oc = 0; oc < out_ch; oc++) {
+                        // weight[ic][oc][kk]
+                        float w = uw[(((size_t)ic * out_ch) + oc) * k + kk];
+                        up[(size_t)oc * T_out + to] += v * w;
+                    }
+                }
+            }
+        }
+        x = std::move(up);
+        ch = out_ch;
+        T = T_out;
+
+        // MRF: mean of 3 resblocks over the current (ch, T).
+        std::vector<float> acc((size_t)ch * T, 0.0f);
+        for (int j = 0; j < 3; j++) {
+            const int rb = s * 3 + j;
+            std::vector<float> h = x; // resblock input
+            for (int d = 0; d < 3; d++) {
+                // convs1[d]: dilated, then convs2[d]: dilation 1, each pre-LeakyReLU
+                std::vector<float> a = h;
+                cpu_leaky_relu(a, slope);
+                std::vector<float> b1((size_t)ch * T, 0.0f);
+                const std::string p1 = "voc.resblocks." + std::to_string(rb) + ".convs1." + std::to_string(d);
+                cpu_conv1d_dil(a.data(), ch, T, get(p1 + ".weight").data(), get(p1 + ".bias").data(), ch, rb_kernels[j],
+                               rb_dils[d], b1.data());
+                cpu_leaky_relu(b1, slope);
+                std::vector<float> b2((size_t)ch * T, 0.0f);
+                const std::string p2 = "voc.resblocks." + std::to_string(rb) + ".convs2." + std::to_string(d);
+                cpu_conv1d_dil(b1.data(), ch, T, get(p2 + ".weight").data(), get(p2 + ".bias").data(), ch, rb_kernels[j],
+                               1, b2.data());
+                for (size_t i = 0; i < h.size(); i++)
+                    h[i] += b2[i]; // residual
+            }
+            for (size_t i = 0; i < acc.size(); i++)
+                acc[i] += h[i];
+        }
+        for (size_t i = 0; i < x.size(); i++)
+            x[i] = acc[i] / 3.0f;
+        (void)has;
+    }
+
+    // final LeakyReLU → conv_post: Conv1d(ch, 1, k=7, pad=3) → tanh
+    cpu_leaky_relu(x, slope);
+    std::vector<float> out((size_t)1 * T, 0.0f);
+    cpu_conv1d(x.data(), ch, T, get("voc.conv_post.weight").data(), get("voc.conv_post.bias").data(), 1, 7, 3, 1,
+               out.data());
+    for (float& v : out)
+        v = tanhf(v);
+
+    if (ctx->verbosity >= 1) {
+        double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - voc_t0).count();
+        fprintf(stderr, "f5_tts: hifigan_decode T_mel=%d → %zu samples in %.1f ms\n", T_mel, out.size(), ms);
+    }
+    return out;
 }
 
 static std::vector<float> vocos_decode(f5_tts_context* ctx, const float* mel_data, int T_mel, int mel_dim) {
@@ -1999,6 +2177,10 @@ static bool load_weights(f5_tts_context* ctx, const char* path) {
     hp.voc_num_layers = core_gguf::kv_i32(meta, "f5.voc_num_layers", hp.voc_num_layers);
     hp.voc_n_fft = core_gguf::kv_i32(meta, "f5.voc_n_fft", hp.voc_n_fft);
     hp.voc_hop_length = core_gguf::kv_i32(meta, "f5.voc_hop_length", hp.voc_hop_length);
+    // #387 Raon deltas
+    hp.vocoder = core_gguf::kv_str(meta, "f5.vocoder", hp.vocoder.c_str());
+    hp.mel_spec_type = core_gguf::kv_str(meta, "f5.mel_spec_type", hp.mel_spec_type.c_str());
+    hp.mel_center = core_gguf::kv_bool(meta, "f5.mel_center", hp.mel_center);
 
     // Vocab
     auto vocab_chars = core_gguf::kv_str_array(meta, "f5.vocab");
@@ -2082,27 +2264,40 @@ static bool load_weights(f5_tts_context* ctx, const char* path) {
     // Rotary
     w.rotary_inv_freq = get("f5.rotary_inv_freq");
 
-    // Vocos
-    w.voc_embed_weight = get("voc.embed.weight");
-    w.voc_embed_bias = get("voc.embed.bias");
-    w.voc_norm_weight = get("voc.norm.weight");
-    w.voc_norm_bias = get("voc.norm.bias");
-    w.voc_blocks.resize(hp.voc_num_layers);
-    for (int i = 0; i < hp.voc_num_layers; i++) {
-        char buf[128];
-        auto g = [&](const char* suffix) -> ggml_tensor* {
-            snprintf(buf, sizeof(buf), "voc.blk.%d.%s", i, suffix);
-            return get(buf);
-        };
-        w.voc_blocks[i] = {
-            g("dw.weight"),  g("dw.bias"),        g("norm.weight"),  g("norm.bias"),   g("pw_up.weight"),
-            g("pw_up.bias"), g("pw_down.weight"), g("pw_down.bias"), g("layer_scale"),
-        };
+    // Vocos (stock F5) — only when this GGUF actually carries Vocos weights.
+    if (hp.vocoder == "vocos") {
+        w.voc_embed_weight = get("voc.embed.weight");
+        w.voc_embed_bias = get("voc.embed.bias");
+        w.voc_norm_weight = get("voc.norm.weight");
+        w.voc_norm_bias = get("voc.norm.bias");
+        w.voc_blocks.resize(hp.voc_num_layers);
+        for (int i = 0; i < hp.voc_num_layers; i++) {
+            char buf[128];
+            auto g = [&](const char* suffix) -> ggml_tensor* {
+                snprintf(buf, sizeof(buf), "voc.blk.%d.%s", i, suffix);
+                return get(buf);
+            };
+            w.voc_blocks[i] = {
+                g("dw.weight"),  g("dw.bias"),        g("norm.weight"),  g("norm.bias"),   g("pw_up.weight"),
+                g("pw_up.bias"), g("pw_down.weight"), g("pw_down.bias"), g("layer_scale"),
+            };
+        }
+        w.voc_final_norm_weight = get("voc.final_norm.weight");
+        w.voc_final_norm_bias = get("voc.final_norm.bias");
+        w.voc_head_weight = get("voc.head.weight");
+        w.voc_head_bias = get("voc.head.bias");
+    } else if (hp.vocoder == "hifigan") {
+        // #387: pull every voc.* HiFi-GAN tensor straight into the CPU cache
+        // (weight-norm already fused in the converter). The decoder looks them
+        // up by name; the arch (rates/kernels) is fixed by sbhifigan16k.
+        for (const auto& kv : ts) {
+            if (kv.first.rfind("voc.", 0) == 0)
+                read_tensor_f32(kv.second, ctx->hifigan_w[kv.first]);
+        }
+        // Shipped slaney mel filterbank + Hann window.
+        read_tensor_f32(get("f5.mel_fb"), ctx->mel_fb);
+        read_tensor_f32(get("f5.mel_window"), ctx->mel_window);
     }
-    w.voc_final_norm_weight = get("voc.final_norm.weight");
-    w.voc_final_norm_bias = get("voc.final_norm.bias");
-    w.voc_head_weight = get("voc.head.weight");
-    w.voc_head_bias = get("voc.head.bias");
 
     return true;
 }
@@ -2188,7 +2383,7 @@ struct f5_tts_context* f5_tts_init_from_file(const char* path_model, struct f5_t
         }
 
         // §185: Vocos vocoder weights (1× per synthesis, ~54 MB F32)
-        {
+        if (ctx->hp.vocoder == "vocos") {
             auto& vc = ctx->voc_cache;
             read_tensor_f32(w.voc_embed_weight, vc.embed_w);
             read_tensor_f32(w.voc_embed_bias, vc.embed_b);
@@ -2350,10 +2545,14 @@ int f5_tts_set_reference(struct f5_tts_context* ctx, const float* pcm_24k, int n
     pcm_24k = ref_pcm.data();
     n_samples = (int)ref_pcm.size();
 
-    // Compute mel spectrogram of reference audio
+    // Compute mel spectrogram of reference audio. sbhifigan16k (#387) uses the
+    // shipped slaney filterbank + window and STFT center=false at 16 kHz.
     int T_ref;
-    ctx->ref_mel = compute_mel_spectrogram(pcm_24k, n_samples, ctx->hp.n_fft, ctx->hp.hop_length, ctx->hp.win_length,
-                                           ctx->hp.mel_dim, T_ref);
+    const bool sbmel = (ctx->hp.mel_spec_type == "sbhifigan16k");
+    ctx->ref_mel = compute_mel_spectrogram(
+        pcm_24k, n_samples, ctx->hp.n_fft, ctx->hp.hop_length, ctx->hp.win_length, ctx->hp.mel_dim, T_ref,
+        (float)ctx->hp.sample_rate, sbmel ? &ctx->mel_fb : nullptr, sbmel ? &ctx->mel_window : nullptr,
+        sbmel ? ctx->hp.mel_center : true);
 
     // If mel computation not yet implemented, allow setting ref_mel directly
     // via the diff harness (which provides it as a GGUF tensor)
@@ -2500,9 +2699,10 @@ int f5_tts_synthesize(struct f5_tts_context* ctx, const char* text, float** pcm_
     }
     dump_stage(ctx, "vocos_input", gen_mel.data(), gen_mel.size());
 
-    // ── Vocos vocoder ──
-    f5_bench_stage _b_voc("vocos_vocoder");
-    auto audio = vocos_decode(ctx, gen_mel.data(), gen_T, mel_dim);
+    // ── Vocoder (Vocos for stock F5; HiFi-GAN for Raon sbhifigan16k, #387) ──
+    f5_bench_stage _b_voc("vocoder");
+    auto audio = (hp.vocoder == "hifigan") ? hifigan_decode(ctx, gen_mel.data(), gen_T, mel_dim)
+                                           : vocos_decode(ctx, gen_mel.data(), gen_T, mel_dim);
     if (audio.empty()) {
         // Fallback: return empty for now, will be filled once vocos is implemented
         *pcm_out = nullptr;
