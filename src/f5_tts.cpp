@@ -1186,7 +1186,12 @@ static bool f5_dit_cache_build(f5_tts_context* ctx, int T, int B) {
         // Flash attention (bidirectional, no mask)
         float attn_scale = 1.0f / sqrtf((float)head_dim);
         ggml_tensor* attn_out = ggml_flash_attn_ext(cache.gctx, q, k, v, nullptr, attn_scale, 0.0f, 0.0f);
-        attn_out = ggml_reshape_3d(cache.gctx, attn_out, dim, T, B);
+        // Collapse heads to inner_dim = n_heads*head_dim, NOT dim: F5 Attention
+        // sets inner_dim independently (dim_head defaults to 64), so inner_dim !=
+        // dim in general (1B: dim=1408, inner=1536). attn_o then maps inner→dim.
+        // (0.3B is unaffected: inner==dim==1024 there.)
+        const int inner_dim = n_heads * head_dim;
+        attn_out = ggml_reshape_3d(cache.gctx, attn_out, inner_dim, T, B);
 
         // O-proj + gated residual
         ggml_tensor* attn_proj = ggml_mul_mat(cache.gctx, blk.attn_o_weight, A(attn_out));
