@@ -190,11 +190,8 @@ def main():
     n_fft = mel["n_fft"]
     mel_type = mel["mel_spec_type"]
     assert mel_type == "sbhifigan16k", f"expected sbhifigan16k, got {mel_type}"
-    head_dim = dim // heads
 
     vocab = [ln.rstrip("\n") for ln in open(args.vocab, encoding="utf-8")]
-    print(f"arch: dim={dim} depth={depth} heads={heads}x{head_dim} ff_mult={ff_mult} "
-          f"n_mels={n_mels} sr={sr} vocab={len(vocab)}", flush=True)
 
     print("loading DiT (ema) via mmap …", flush=True)
     ckpt = torch.load(str(args.checkpoint), map_location="cpu", weights_only=True, mmap=True)
@@ -202,6 +199,20 @@ def main():
     dit = {k: v for k, v in ema.items()
            if k.startswith("ema_model.transformer.") and k not in ("initted", "step")}
     print(f"  {len(dit)} DiT tensors", flush=True)
+
+    # head_dim from the ACTUAL q-projection, not dim//heads. F5 Attention sets
+    # inner_dim = dim_head * heads with dim_head defaulting to 64, independent of
+    # `dim` — so inner_dim != dim in general (1B: dim=1408, heads=24, but
+    # inner=1536 → dim_head=64). The 0.3B happened to have inner==dim so the old
+    # dim//heads was right there; it truncates to 58 on the 1B. Read the truth.
+    _q = next((v for k, v in dit.items() if k.endswith(".attn.to_q.weight")), None)
+    if _q is None:
+        sys.exit("no .attn.to_q.weight in checkpoint — cannot derive head_dim")
+    inner_dim = int(_q.shape[0])
+    assert inner_dim % heads == 0, f"inner_dim {inner_dim} not divisible by heads {heads}"
+    head_dim = inner_dim // heads
+    print(f"arch: dim={dim} depth={depth} heads={heads}x{head_dim} (inner={inner_dim}) "
+          f"ff_mult={ff_mult} n_mels={n_mels} sr={sr} vocab={len(vocab)}", flush=True)
 
     # The trained text-embedding row count is authoritative for text_num_embeds
     # (= vocab_size + 1). The repo vocab.txt can be larger than the checkpoint

@@ -1085,12 +1085,21 @@ constexpr Entry k_registry[] = {
     // HiFi-GAN, English zero-shot voice cloning. Rides the f5-tts runtime
     // (same DiT; norm_type=rmsnorm is dead metadata with post_norm=False).
     // Single GGUF carries DiT + HiFi-GAN + the shipped slaney mel fb/window.
-    // TTS→ASR roundtrip validated on Kaggle (word overlap 0.90). CPU vocoder
-    // is slow (~40s/utterance); a GPU build runs the DiT on-device.
+    // TTS→ASR roundtrip validated on Kaggle (word overlap 0.90). The HiFi-GAN
+    // vocoder runs through the shared GPU-capable core_hifigan graph (#387);
+    // the DiT ODE loop is the remaining cost and runs on-device in a GPU build.
     {"raon", "raon-opentts-0.3b-f16.gguf",
      "https://huggingface.co/cstr/raon-opentts-0.3b-GGUF/resolve/main/raon-opentts-0.3b-f16.gguf",
      "~959 MB", nullptr, nullptr, nullptr,
      "CC-BY-NC-4.0 — NON-COMMERCIAL use only (KRAFTON/Raon-OpenTTS-0.3B, "
+     "https://huggingface.co/KRAFTON/Raon-OpenTTS-0.3B)"},
+    // Raon-OpenTTS 1B: larger DiT (dim=1408 depth=28 heads=24x64 ff_mult=4);
+    // same sbhifigan16k mel + HiFi-GAN vocoder as the 0.3B. Roundtrip validated
+    // on Kaggle. Use --backend raon-1b (or -m auto with this key).
+    {"raon-1b", "raon-opentts-1b-f16.gguf",
+     "https://huggingface.co/cstr/raon-opentts-1b-GGUF/resolve/main/raon-opentts-1b-f16.gguf",
+     "~2.8 GB", nullptr, nullptr, nullptr,
+     "CC-BY-NC-4.0 — NON-COMMERCIAL use only (KRAFTON/Raon-OpenTTS-1B, "
      "https://huggingface.co/KRAFTON/Raon-OpenTTS-1B)"},
     // Irodori-TTS v3 500M: RF-DiT flow-matching TTS with zero-shot voice
     // cloning via DAC-VAE latents. 48 kHz output, Japanese-focused.
