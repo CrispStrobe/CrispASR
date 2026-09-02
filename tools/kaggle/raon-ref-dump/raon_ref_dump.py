@@ -65,7 +65,9 @@ import kaggle_harness as kh  # noqa: E402
 kh.init_progress()
 HF_TOKEN = kh.resolve_hf_token()
 subprocess.run([sys.executable, "-m", "pip", "install", "-q", "torchaudio", "pyyaml", "gguf", "soundfile",
-                "huggingface_hub"], check=False)
+                "huggingface_hub", "x_transformers", "torchdiffeq", "jieba", "pypinyin", "vocos"], check=False)
+# Install the Raon package itself so all its submodule imports resolve.
+subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-e", str(RAON), "--no-deps"], check=False)
 sys.path.insert(0, str(RAON / "src"))
 from huggingface_hub import hf_hub_download  # noqa: E402
 import numpy as np  # noqa: E402

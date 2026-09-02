@@ -27,7 +27,20 @@ raon-ref.wav (TTS→ASR roundtrip target) + reruns our converter on-box. Torch
 can't load the .pt on the VPS, so this is the ONLY source of validation
 fixtures. Launch it (RAON_SIZE=0.3B) before the runtime pass.
 
-### Runtime integration checklist (next focused pass)
+### Runtime integration — WRITTEN (building), validation pending fixtures
+- hparams: vocoder/mel_spec_type/mel_center added; loaded from f5.* KV.
+- compute_mel_spectrogram: sr param + shipped-fb + center=false (sbhifigan).
+- load_weights: vocos gets gated on vocoder=="vocos"; hifigan branch pulls
+  every voc.* into ctx->hifigan_w (CPU F32) + reads f5.mel_fb/f5.mel_window.
+- hifigan_decode(): CPU HiFi-GAN v1 (conv_pre → 4×[LReLU, ConvTranspose,
+  MRF mean of 3 resblocks] → LReLU → conv_post → tanh); arch hardcoded to
+  the sbhifigan16k config (rates [8,8,2,2], kernels [16,16,4,4], resblock
+  [3,7,11]×[1,3,5]). Reuses cpu_conv1d; adds cpu_conv1d_dil + leaky_relu.
+- dispatch at the vocoder call site branches on hp.vocoder.
+- backend alias raon/raon-1b → f5-tts runtime.
+
+### Remaining checklist
+
 - hparams: add vocoder/mel_spec_type/mel_center strings+bool; HiFi-GAN
   voc hp (upsample_rates/kernels, resblock kernels/dilations, init_ch);
   shipped `f5.mel_fb`/`f5.mel_window` → CPU vectors.
