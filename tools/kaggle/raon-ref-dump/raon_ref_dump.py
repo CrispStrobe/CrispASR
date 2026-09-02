@@ -115,7 +115,10 @@ from f5_tts.model.utils import get_tokenizer  # noqa: E402
 conf = yaml.safe_load(open(cfg))
 arch = conf["model"]["arch"]
 mspec = conf["model"]["mel_spec"]
-device = "cuda" if torch.cuda.is_available() else "cpu"
+# Force CPU: Kaggle randomly assigns P100 (sm_60), which recent torch
+# dropped kernels for (cudaErrorNoKernelImageForDevice in torch.stft).
+# The 0.3B reference dump is a one-shot; Kaggle CPU (4c/30GB) handles it.
+device = "cpu"
 
 # build model
 vocab_map, vocab_size = get_tokenizer(vocab, "custom")
