@@ -3336,6 +3336,22 @@ catch_discover_tests(test-sidon-rpe-gates
     TEST_SPEC "[sidon]"
     PROPERTIES LABELS "unit;sidon"
 )
+# ─── test-mel-band-gates — unit tests for the Change-176 path-selection
+# table (mirrors test-htdemucs-gates; AUTO fused-graph-GPU on real-GPU hosts,
+# CPU path otherwise, env overrides, #414 review semantics).
+add_executable(test-mel-band-gates
+    test-mel-band-gates.cpp
+)
+target_include_directories(test-mel-band-gates PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-mel-band-gates PRIVATE
+    Catch2::Catch2WithMain
+)
+catch_discover_tests(test-mel-band-gates
+    TEST_SPEC "[mel-band]"
+    PROPERTIES LABELS "unit;mel-band"
+)
 
 # ─── test-uroman — Catch2 unit tests for core/uroman.h romanization.
 # Validates Arabic + Cyrillic romanization for CTC forced alignment (#252).

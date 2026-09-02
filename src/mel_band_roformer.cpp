@@ -13,6 +13,8 @@
 
 #include "mel_band_roformer.h"
 
+#include "mel_band_gates.h" // Change 176: graph/fused/GPU path selection (PR #414 pattern)
+
 #include "ggml-backend.h"
 #include "ggml-alloc.h" // ggml_gallocr_* (Change 176: band-split ggml graph path)
 #include "ggml-cpu.h"
@@ -89,7 +91,9 @@ struct mel_band_roformer_context {
 
     // Change 176: band-split runs as a ggml graph on `backend` (GPU-capable)
     // when use_graph is set; otherwise the validated CPU reference path runs.
+    // use_fused (Phase 5): the whole network runs as ONE fused graph.
     bool use_graph = false;
+    bool use_fused = false;
     bool is_gpu = false;
 
     // Baked band layout (from the converter's aux.* int32 tensors).
@@ -249,8 +253,10 @@ void rms_norm_inplace(float* x, int dim, const float* gamma) {
 mel_band_roformer_params mel_band_roformer_default_params(void) {
     mel_band_roformer_params p;
     p.n_threads = 0;
-    p.use_gpu = false; // CPU front-end in Phase 1
+    p.use_gpu = false; // CPU path is the default (E2); gates AUTO-upgrade to GPU
     p.gpu_device = 0;
+    p.segment_seconds = 0;  // <=0 -> default 10 s (Demucs split for long audio)
+    p.no_segment = false;   // segmented forward for >1-segment inputs
     return p;
 }
 
@@ -291,38 +297,52 @@ mel_band_roformer_context* mel_band_roformer_init_from_file(const char* model_pa
     hp.normalized = (int)core_gguf::kv_u32(meta, "mel-band-roformer.stft_normalized", hp.normalized);
     core_gguf::free_metadata(meta);
 
-    // Change 176: backend selection honours params.use_gpu + CRISPASR_MELBAND_GPU,
-    // mirroring the htdemucs pattern (src/htdemucs.cpp:635-662). The ggml graph
-    // path is the gate to the GPU backend: want_gpu WITHOUT the graph path would
-    // put the weights on the GPU and pay a device->host read on every scalar
-    // kernel (htdemucs lesson). CRISPASR_MELBAND_GGML=1 enables the graph band-
-    // split; CRISPASR_MELBAND_GPU=1 forces the GPU backend (falls back to CPU on
-    // GPU-less hosts), =0 forces CPU. Default: CPU backend + CPU reference path
-    // (no behavior change for existing users until parity is green, E2).
-    const char* ggml_env = getenv("CRISPASR_MELBAND_GGML");
-    const bool want_graph = ggml_env && ggml_env[0] && atoi(ggml_env) != 0;
-    bool want_gpu = false;
-    const char* gpu_env = getenv("CRISPASR_MELBAND_GPU");
-    if (gpu_env && gpu_env[0])
-        want_gpu = atoi(gpu_env) != 0;
-    if (params.use_gpu)
-        want_gpu = true;
-    if (want_graph && want_gpu) {
-        ctx->backend = crispasr_init_gpu_backend();
+    // Change 176: backend selection mirrors the htdemucs pattern from PR #414
+    // (src/htdemucs_gates.h): gates are resolved ONCE here by mel_band_gates::
+    // resolve() from the env, the caller's use_gpu intent, and whether a REAL
+    // (non-CPU) GPU backend exists. AUTO = fused single graph on the GPU when
+    // a real GPU is present and permitted (the measured-fastest path, ~112x
+    // the per-layer graphs), legacy CPU path otherwise — CPU-only hosts see no
+    // behaviour change. Explicit envs (CRISPASR_MELBAND_GPU/GGML/FUSED) force
+    // either way; FUSED=1 implies the graph it needs. Env beats caller intent
+    // in both directions (the #414 review catch).
+    ggml_backend_t gpu_probe = nullptr;
+    {
+        // Skip the probe when GPU is explicitly forbidden — a CUDA context
+        // spin-up is not free and the answer would be discarded.
+        const char* e = getenv("CRISPASR_MELBAND_GPU");
+        const bool may_gpu = (e && *e) ? atoi(e) != 0 : params.use_gpu;
+        if (may_gpu) {
+            gpu_probe = crispasr_init_gpu_backend();
+            if (gpu_probe && core_cpu_backend::is_cpu(gpu_probe)) {
+                ggml_backend_free(gpu_probe);
+                gpu_probe = nullptr;
+            }
+        }
+    }
+    const mel_band_gates::Resolved gates = mel_band_gates::resolve(
+        getenv("CRISPASR_MELBAND_GPU"), getenv("CRISPASR_MELBAND_GGML"), getenv("CRISPASR_MELBAND_FUSED"),
+        params.use_gpu, gpu_probe != nullptr);
+    if (gates.use_graph) {
+        ctx->backend = gates.gpu_backend ? gpu_probe : core_cpu_backend::init();
         if (!ctx->backend)
             ctx->backend = core_cpu_backend::init();
     } else {
         ctx->backend = core_cpu_backend::init();
     }
+    if (gpu_probe && ctx->backend != gpu_probe)
+        ggml_backend_free(gpu_probe);
     if (!ctx->backend) {
         fprintf(stderr, "mel_band_roformer: backend init failed\n");
         delete ctx;
         return nullptr;
     }
-    ctx->use_graph = want_graph;
+    ctx->use_graph = gates.use_graph;
+    ctx->use_fused = gates.use_fused;
     ctx->is_gpu = !core_cpu_backend::is_cpu(ctx->backend);
-    fprintf(stderr, "mel_band_roformer: backend = %s (graph=%d, gpu=%d)\n", ggml_backend_name(ctx->backend),
-            ctx->use_graph ? 1 : 0, ctx->is_gpu ? 1 : 0);
+    fprintf(stderr, "mel_band_roformer: gates graph=%d fused=%d gpu=%d (real_gpu_present=%d)\n",
+            (int)gates.use_graph, (int)gates.use_fused, (int)gates.gpu_backend, (int)(gpu_probe != nullptr));
+    fprintf(stderr, "mel_band_roformer: backend = %s\n", ggml_backend_name(ctx->backend));
     if (!core_gguf::load_weights(model_path, ctx->backend, "mel_band_roformer", ctx->weights)) {
         fprintf(stderr, "mel_band_roformer: failed to load weights from '%s'\n", model_path);
         mel_band_roformer_free(ctx);
@@ -485,11 +505,85 @@ bool band_split_cpu(core_gguf::WeightLoad& mw, const std::vector<float>& gathere
 // band_split_cpu's row-major (T, nb, dim) index ((t*nb + b)*dim + o). The graph
 // result can therefore be handed straight to the transformer stack unchanged.
 // ---------------------------------------------------------------------------
+
+// Tensor-building half of band_split_graph: creates the per-band RMSNorm
+// eps/sqrt_dim input tensors in `g` and returns the balanced-concat (dim, nb, T)
+// tensor. Used by band_split_graph (own context + run) AND by the Phase-5 FUSED
+// single graph (shared context), so both paths build byte-identical chains.
+// `in` is the (N2, T) gathered input tensor of the same context.
+static ggml_tensor* mbr_band_split_build(mel_band_roformer_context* ctx, ggml_context* g, ggml_tensor* in, int T,
+                                         ggml_tensor** eps_out, std::vector<ggml_tensor*>& sqrt_dim_ts) {
+    const int nb = (int)ctx->band_width.size();
+    const int dim = ctx->hp.dim;
+
+    ggml_tensor* eps_t = ggml_new_tensor_1d(g, GGML_TYPE_F32, 1);
+    ggml_set_name(eps_t, "mbr_rms_eps");
+    ggml_set_input(eps_t);
+    if (eps_out)
+        *eps_out = eps_t;
+
+    std::vector<ggml_tensor*> bands;
+    bands.reserve((size_t)nb);
+    sqrt_dim_ts.clear();
+    sqrt_dim_ts.reserve((size_t)nb);
+
+    int off = 0;
+    for (int b = 0; b < nb; b++) {
+        const int din = ctx->band_width[b];
+        const std::string pre = "band_split.to_features." + std::to_string(b);
+
+        auto it_g = ctx->weights.tensors.find(pre + ".0.gamma");
+        auto it_w = ctx->weights.tensors.find(pre + ".1.weight");
+        auto it_b = ctx->weights.tensors.find(pre + ".1.bias");
+        if (it_g == ctx->weights.tensors.end() || it_w == ctx->weights.tensors.end() ||
+            it_b == ctx->weights.tensors.end() || !it_g->second || !it_w->second || !it_b->second)
+            return nullptr;
+
+        // Band b's slice: rows [off, off+din) of the (N2, T) input.
+        ggml_tensor* xv = ggml_view_2d(g, in, din, T, in->nb[1], (size_t)off * sizeof(float));
+        off += din;
+
+        // RMSNorm — exact CPU formula: y = x * sqrt(din) / (sqrt(sum(x^2)) + eps) * gamma.
+        ggml_tensor* sq = ggml_mul(g, xv, xv);                     // (din, T)
+        ggml_tensor* ss = ggml_sum_rows(g, sq);                    // (1, T)
+        ggml_tensor* rt = ggml_sqrt(g, ss);                        // (1, T)
+        ggml_tensor* denom = ggml_add(g, rt, eps_t);               // (1, T)
+        ggml_tensor* sqrt_dim_t = ggml_new_tensor_1d(g, GGML_TYPE_F32, 1);
+        ggml_set_name(sqrt_dim_t, ("mbr_rms_sqrt_dim_" + std::to_string(b)).c_str());
+        ggml_set_input(sqrt_dim_t);
+        sqrt_dim_ts.push_back(sqrt_dim_t);
+        ggml_tensor* scale = ggml_div(g, ggml_repeat(g, sqrt_dim_t, denom), denom); // (1, T)
+        ggml_tensor* xn = ggml_mul(g, xv, scale);                  // (din, T) broadcast
+        ggml_tensor* y = ggml_mul(g, xn, it_g->second);            // * gamma (din, 1) broadcast
+
+        // Linear: mul_mat(weight (din, dim), y (din, T)) -> (dim, T); + bias
+        ggml_tensor* proj = ggml_mul_mat(g, it_w->second, y);
+        ggml_tensor* bout = ggml_add(g, proj, it_b->second);
+
+        // (dim, 1, T) for the band-axis concat below.
+        ggml_tensor* b3 = ggml_reshape_3d(g, bout, dim, 1, T);
+        ggml_set_name(b3, ("band_split." + std::to_string(b)).c_str());
+        bands.push_back(b3);
+    }
+
+    // Balanced concat along the band axis (BSRoformer ConcatBalanced pattern) ->
+    // (dim, nb, T). Its flat order equals (T, nb, dim) row-major (see above).
+    auto concat_balanced = [&](auto&& self, size_t lo, size_t hi) -> ggml_tensor* {
+        if (hi - lo == 1)
+            return bands[lo];
+        const size_t mid = lo + (hi - lo) / 2;
+        ggml_tensor* a = self(self, lo, mid);
+        ggml_tensor* b = self(self, mid, hi);
+        return ggml_concat(g, a, b, 1);
+    };
+    ggml_tensor* out3 = concat_balanced(concat_balanced, 0, bands.size());
+    ggml_set_name(out3, "mbr_band_split_out");
+    return out3;
+}
+
 bool band_split_graph(mel_band_roformer_context* ctx, const std::vector<float>& gathered, int T,
                       std::vector<float>& out) {
-    const auto& hp = ctx->hp;
     const int nb = (int)ctx->band_width.size();
-    const int dim = hp.dim;
     const int N2 = (int)ctx->freq_indices.size() * 2; // gathered feature axis width
 
     if ((int64_t)gathered.size() != (int64_t)T * N2)
@@ -513,77 +607,14 @@ bool band_split_graph(mel_band_roformer_context* ctx, const std::vector<float>& 
     ggml_set_name(in, "mbr_band_split_in");
     ggml_set_input(in);
 
-    std::vector<ggml_tensor*> bands;
-    bands.reserve((size_t)nb);
+    ggml_tensor* eps_t = nullptr;
     std::vector<ggml_tensor*> sqrt_dim_ts;
-    sqrt_dim_ts.reserve((size_t)nb);
-
-    // RMSNorm constants (F.normalize eps, sqrt(dim) scale) as 1-element INPUT
-    // tensors: ggml_new_f32 asserts !no_alloc, and the graph context must be
-    // no_alloc so gallocr can place intermediates on the backend buffer. Values
-    // are written once via ggml_backend_tensor_set before compute (htdemucs
-    // pattern). Broadcast to (1, T) via ggml_can_repeat in the binops below.
-    ggml_tensor* eps_t = ggml_new_tensor_1d(gctx, GGML_TYPE_F32, 1);
-    ggml_set_name(eps_t, "mbr_rms_eps");
-    ggml_set_input(eps_t);
-
-    int off = 0;
-    for (int b = 0; b < nb; b++) {
-        const int din = ctx->band_width[b];
-        const std::string pre = "band_split.to_features." + std::to_string(b);
-
-        auto it_g = ctx->weights.tensors.find(pre + ".0.gamma");
-        auto it_w = ctx->weights.tensors.find(pre + ".1.weight");
-        auto it_b = ctx->weights.tensors.find(pre + ".1.bias");
-        if (it_g == ctx->weights.tensors.end() || it_w == ctx->weights.tensors.end() ||
-            it_b == ctx->weights.tensors.end() || !it_g->second || !it_w->second || !it_b->second) {
-            ggml_free(gctx);
-            return false;
-        }
-
-        // Band b's slice: rows [off, off+din) of the (2N, T) input.
-        ggml_tensor* xv = ggml_view_2d(gctx, in, din, T, in->nb[1], (size_t)off * sizeof(float));
-        off += din;
-
-        // RMSNorm — exact CPU formula: y = x * sqrt(din) / (sqrt(sum(x^2)) + eps) * gamma.
-        // NOTE: the sqrt scale uses the BAND's input width din (CPU rms_norm_inplace
-        // gets din), NOT the model dim — a global sqrt(hp.dim) scaled every band
-        // differently and broke parity (cos=0.877, |graph|/|cpu| ~2.1).
-        ggml_tensor* sq = ggml_mul(gctx, xv, xv);                     // (din, T)
-        ggml_tensor* ss = ggml_sum_rows(gctx, sq);                    // (1, T)
-        ggml_tensor* rt = ggml_sqrt(gctx, ss);                        // (1, T)
-        ggml_tensor* denom = ggml_add(gctx, rt, eps_t);               // (1, T)
-        // div(a,b) takes a's shape and repeats b to it — repeat sqrt_dim to (1,T) first.
-        ggml_tensor* sqrt_dim_t = ggml_new_tensor_1d(gctx, GGML_TYPE_F32, 1);
-        ggml_set_name(sqrt_dim_t, ("mbr_rms_sqrt_dim_" + std::to_string(b)).c_str());
-        ggml_set_input(sqrt_dim_t);
-        sqrt_dim_ts.push_back(sqrt_dim_t);
-        ggml_tensor* scale = ggml_div(gctx, ggml_repeat(gctx, sqrt_dim_t, denom), denom); // (1, T)
-        ggml_tensor* xn = ggml_mul(gctx, xv, scale);                  // (din, T) broadcast
-        ggml_tensor* y = ggml_mul(gctx, xn, it_g->second);            // * gamma (din, 1) broadcast
-
-        // Linear: mul_mat(weight (din, dim), y (din, T)) -> (dim, T); + bias
-        ggml_tensor* proj = ggml_mul_mat(gctx, it_w->second, y);
-        ggml_tensor* bout = ggml_add(gctx, proj, it_b->second);
-
-        // (dim, 1, T) for the band-axis concat below.
-        ggml_tensor* b3 = ggml_reshape_3d(gctx, bout, dim, 1, T);
-        ggml_set_name(b3, ("band_split." + std::to_string(b)).c_str());
-        bands.push_back(b3);
+    ggml_tensor* out3 = mbr_band_split_build(ctx, gctx, in, T, &eps_t, sqrt_dim_ts);
+    if (!out3) {
+        ggml_free(gctx);
+        return false;
     }
 
-    // Balanced concat along the band axis (BSRoformer ConcatBalanced pattern) ->
-    // (dim, nb, T). Its flat order equals (T, nb, dim) row-major (see above).
-    auto concat_balanced = [&](auto&& self, size_t lo, size_t hi) -> ggml_tensor* {
-        if (hi - lo == 1)
-            return bands[lo];
-        const size_t mid = lo + (hi - lo) / 2;
-        ggml_tensor* a = self(self, lo, mid);
-        ggml_tensor* b = self(self, mid, hi);
-        return ggml_concat(gctx, a, b, 1);
-    };
-    ggml_tensor* out3 = concat_balanced(concat_balanced, 0, bands.size());
-    ggml_set_name(out3, "mbr_band_split_out");
     ggml_set_output(out3);
 
     ggml_cgraph* gf = ggml_new_graph_custom(gctx, (size_t)n_nodes, false);
@@ -1243,6 +1274,208 @@ void synthesize(mel_band_roformer_context* ctx, const std::vector<float>& packed
     }
 }
 
+// ---------------------------------------------------------------------------
+// Change 176 (Phase 5): FUSED single graph — band_split + the full
+// time/freq transformer stack + mask estimator in ONE ggml graph ("no
+// roundtrips", htdemucs ee2585b64 pattern). The per-layer path
+// (band_split_graph + 12× mbr_layer_graph) pays a host<->device roundtrip per
+// layer (~2×370 MB PCIe per layer) plus CPU host phases; the fused graph keeps
+// every intermediate on the backend and returns only mask_raw.
+//
+// Input: gathered (T, 2N) row-major (== ggml (2N, T), no copy).
+// Output: mask_raw exactly as the CPU mask_estimator produces it — (T, total)
+// row-major flat, total = Σ band_width[b] == 2N — ready for synthesize().
+//
+// Weights come straight from ctx->weights.tensors (load context), same as the
+// per-layer graphs. eps/sqrt_dim/positions are shared 1-element INPUT tensors
+// created once in this context (values constant across all 12 blocks).
+// ---------------------------------------------------------------------------
+static bool mbr_fused_graph(mel_band_roformer_context* ctx, const std::vector<float>& gathered, int T,
+                            std::vector<float>& mask_raw) {
+    const auto& hp = ctx->hp;
+    const int nb = (int)ctx->band_width.size();
+    const int dim = hp.dim, heads = hp.heads, dim_head = hp.dim_head;
+    const int N2 = (int)ctx->freq_indices.size() * 2;
+
+    if ((int64_t)gathered.size() != (int64_t)T * N2)
+        return false;
+
+    auto find = [&](const char* name) -> ggml_tensor* {
+        auto it = ctx->weights.tensors.find(name);
+        return (it == ctx->weights.tensors.end()) ? nullptr : it->second;
+    };
+
+    // Graph budget: band_split (~16·nb), 12 transformer blocks (~150 each) and
+    // the per-band mask MLPs (~15·nb) — ~3500 ops total; 16k gives headroom for
+    // views/permutes (htdemucs fused uses the same budget).
+    const size_t n_nodes = 16384;
+    ggml_init_params gparams = {
+        /*.mem_size   = */ ggml_tensor_overhead() * n_nodes + ggml_graph_overhead_custom(n_nodes, false),
+        /*.mem_buffer = */ nullptr,
+        /*.no_alloc   = */ true,
+    };
+    ggml_context* gctx = ggml_init(gparams);
+    if (!gctx)
+        return false;
+
+    ggml_tensor* in = ggml_new_tensor_2d(gctx, GGML_TYPE_F32, N2, T);
+    ggml_set_name(in, "mbr_fused_in");
+    ggml_set_input(in);
+
+    // Shared layer constants: eps (F.normalize), sqrt(dim) scale, and the two
+    // position vectors (time blocks attend over T frames, freq over nb bands).
+    ggml_tensor* eps_t = ggml_new_tensor_1d(gctx, GGML_TYPE_F32, 1);
+    ggml_set_name(eps_t, "mbr_fused_eps");
+    ggml_set_input(eps_t);
+    ggml_tensor* sqrt_dim_t = ggml_new_tensor_1d(gctx, GGML_TYPE_F32, 1);
+    ggml_set_name(sqrt_dim_t, "mbr_fused_sqrt_dim");
+    ggml_set_input(sqrt_dim_t);
+    ggml_tensor* pos_time_t = ggml_new_tensor_1d(gctx, GGML_TYPE_I32, T);
+    ggml_set_name(pos_time_t, "mbr_fused_pos_time");
+    ggml_set_input(pos_time_t);
+    ggml_tensor* pos_freq_t = ggml_new_tensor_1d(gctx, GGML_TYPE_I32, nb);
+    ggml_set_name(pos_freq_t, "mbr_fused_pos_freq");
+    ggml_set_input(pos_freq_t);
+
+    // ---- band split (Phase 1 chain, same builder as the standalone graph) ----
+    std::vector<ggml_tensor*> bs_sqrt;
+    ggml_tensor* bs_eps = nullptr;
+    ggml_tensor* x = mbr_band_split_build(ctx, gctx, in, T, &bs_eps, bs_sqrt);
+    if (!x || !bs_eps) {
+        fprintf(stderr, "mel_band_roformer: fused band_split build failed (missing weight?)\n");
+        ggml_free(gctx);
+        return false;
+    }
+    // x is (dim, nb, T): ne0=dim, ne1=nb (bands), ne2=T (frames).
+
+    // ---- transformer stack: depth × (time block, freq block) ----
+    for (int L = 0; L < hp.depth; L++) {
+        // time: seq over frames (S=T on ne1, batch=nb on ne2) — permute in/out.
+        ggml_tensor* xt = ggml_cont(gctx, ggml_permute(gctx, x, 0, 2, 1, 3)); // (dim, T, nb)
+        ggml_tensor* yt = mbr_block_layer_graph(ctx, gctx, ("layers." + std::to_string(L) + ".0.").c_str(), xt, T,
+                                                nb, dim, heads, dim_head, eps_t, sqrt_dim_t, pos_time_t);
+        if (!yt) {
+            fprintf(stderr, "mel_band_roformer: fused time layer %d build failed (missing weight?)\n", L);
+            ggml_free(gctx);
+            return false;
+        }
+        x = ggml_cont(gctx, ggml_permute(gctx, yt, 0, 2, 1, 3)); // back to (dim, nb, T)
+
+        // freq: seq over bands — (dim, nb, T) already has S=nb on ne1, B=T on ne2.
+        x = mbr_block_layer_graph(ctx, gctx, ("layers." + std::to_string(L) + ".1.").c_str(), x, nb, T, dim, heads,
+                                  dim_head, eps_t, sqrt_dim_t, pos_freq_t);
+        if (!x) {
+            fprintf(stderr, "mel_band_roformer: fused freq layer %d build failed (missing weight?)\n", L);
+            ggml_free(gctx);
+            return false;
+        }
+    }
+
+    // ---- mask estimator (per-band Tanh MLP → GLU), Phase 3 in-graph ----
+    // CPU reads band b as in[t][d] = x[(t*nb + b)*dim + d]. After permuting the
+    // final (dim, nb, T) to (dim, T, nb), band b is a contiguous (dim, T) plane
+    // (same flat order), so each band's MLP reads a plain view — no per-band
+    // scatter/copy. Outputs concat along the width axis in band order → (total, T),
+    // flat-identical to the CPU (T, total) row-major mask_raw.
+    ggml_tensor* xm = ggml_cont(gctx, ggml_permute(gctx, x, 0, 2, 1, 3)); // (dim, T, nb)
+    std::vector<ggml_tensor*> masks;
+    masks.reserve((size_t)nb);
+    int total = 0;
+    for (int b = 0; b < nb; b++) {
+        const std::string pre = "mask_estimators.0.to_freqs." + std::to_string(b) + ".0.";
+        ggml_tensor* w0 = find((pre + "0.weight").c_str());
+        ggml_tensor* b0 = find((pre + "0.bias").c_str());
+        ggml_tensor* w2 = find((pre + "2.weight").c_str());
+        ggml_tensor* b2 = find((pre + "2.bias").c_str());
+        ggml_tensor* w4 = find((pre + "4.weight").c_str());
+        ggml_tensor* b4 = find((pre + "4.bias").c_str());
+        if (!w0 || !b0 || !w2 || !b2 || !w4 || !b4) {
+            fprintf(stderr, "mel_band_roformer: fused mask estimator band %d build failed (missing weight?)\n", b);
+            ggml_free(gctx);
+            return false;
+        }
+        const int hid = (int)b0->ne[0];
+        const int din2 = (int)b4->ne[0]; // 2 * band width
+        const int din = din2 / 2;
+        if (din != ctx->band_width[b]) {
+            fprintf(stderr,
+                    "mel_band_roformer: fused mask band %d width mismatch (weight=%d band_width=%d)\n", b, din,
+                    ctx->band_width[b]);
+            ggml_free(gctx);
+            return false;
+        }
+        total += din;
+
+        // contiguous (dim, T) plane of band b inside (dim, T, nb).
+        ggml_tensor* xb = ggml_view_2d(gctx, xm, dim, T, xm->nb[1], (size_t)b * dim * T * sizeof(float));
+
+        ggml_tensor* a = ggml_mul_mat(gctx, w0, xb); // (hid, T)
+        a = ggml_add(gctx, a, b0);
+        a = ggml_tanh(gctx, a);
+        ggml_tensor* c = ggml_mul_mat(gctx, w2, a); // (hid, T)
+        c = ggml_add(gctx, c, b2);
+        c = ggml_tanh(gctx, c);
+        ggml_tensor* e = ggml_mul_mat(gctx, w4, c); // (din2, T)
+        e = ggml_add(gctx, e, b4);
+        // GLU(-1): e[:din] * sigmoid(e[din:])
+        ggml_tensor* e1 = ggml_view_2d(gctx, e, din, T, e->nb[1], 0);
+        ggml_tensor* e2 = ggml_view_2d(gctx, e, din, T, e->nb[1], (size_t)din * sizeof(float));
+        ggml_tensor* m = ggml_mul(gctx, e1, ggml_sigmoid(gctx, e2)); // (din, T)
+        masks.push_back(m);
+    }
+
+    // Balanced concat over the width axis (ne0) in band order -> (total, T).
+    auto concat_w = [&](auto&& self, size_t lo, size_t hi) -> ggml_tensor* {
+        if (hi - lo == 1)
+            return masks[lo];
+        const size_t mid = lo + (hi - lo) / 2;
+        ggml_tensor* a = self(self, lo, mid);
+        ggml_tensor* b = self(self, mid, hi);
+        return ggml_concat(gctx, a, b, 0);
+    };
+    ggml_tensor* out = concat_w(concat_w, 0, masks.size());
+    ggml_set_name(out, "mbr_fused_mask_out");
+    ggml_set_output(out);
+
+    ggml_cgraph* gf = ggml_new_graph_custom(gctx, n_nodes, false);
+    ggml_build_forward_expand(gf, out);
+
+    ggml_gallocr_t alloc = ggml_gallocr_new(ggml_backend_get_default_buffer_type(ctx->backend));
+    if (!alloc || !ggml_gallocr_alloc_graph(alloc, gf)) {
+        fprintf(stderr, "mel_band_roformer: fused graph gallocr alloc failed\n");
+        if (alloc)
+            ggml_gallocr_free(alloc);
+        ggml_free(gctx);
+        return false;
+    }
+
+    ggml_backend_tensor_set(in, gathered.data(), 0, gathered.size() * sizeof(float));
+    const float eps = 1e-12f, sd = std::sqrt((float)dim);
+    ggml_backend_tensor_set(bs_eps, &eps, 0, sizeof(float)); // band-split RMS eps
+    ggml_backend_tensor_set(eps_t, &eps, 0, sizeof(float));  // transformer-block RMS eps
+    ggml_backend_tensor_set(sqrt_dim_t, &sd, 0, sizeof(float));
+    std::vector<int32_t> pos_tb((size_t)T), pos_fb((size_t)nb);
+    for (int i = 0; i < T; i++)
+        pos_tb[(size_t)i] = i;
+    for (int i = 0; i < nb; i++)
+        pos_fb[(size_t)i] = i;
+    ggml_backend_tensor_set(pos_time_t, pos_tb.data(), 0, (size_t)T * sizeof(int32_t));
+    ggml_backend_tensor_set(pos_freq_t, pos_fb.data(), 0, (size_t)nb * sizeof(int32_t));
+    for (size_t b = 0; b < bs_sqrt.size(); b++) {
+        const float sqrt_dim = std::sqrt((float)ctx->band_width[b]);
+        ggml_backend_tensor_set(bs_sqrt[b], &sqrt_dim, 0, sizeof(float));
+    }
+    ggml_backend_graph_compute(ctx->backend, gf);
+
+    const int64_t n = ggml_nelements(out);
+    mask_raw.resize((size_t)n);
+    ggml_backend_tensor_get(out, mask_raw.data(), 0, (size_t)n * sizeof(float));
+
+    ggml_gallocr_free(alloc);
+    ggml_free(gctx);
+    return true;
+}
+
 // Full validated forward on real per-channel PCM (chan[s] has T_samp samples).
 // Produces the vocal stem interleaved (channels-interleaved, T_samp frames).
 bool run_forward(mel_band_roformer_context* ctx, const std::vector<std::vector<float>>& chan, int T_samp,
@@ -1282,6 +1515,20 @@ bool run_forward(mel_band_roformer_context* ctx, const std::vector<std::vector<f
     lap("stft+pack");
     std::vector<float> gathered;
     band_gather(packed, ctx->freq_indices, T, gathered);
+    std::vector<float> mask_raw;
+
+    if (ctx->use_graph && ctx->use_fused) {
+        // Change 176 (Phase 5): the WHOLE network forward — band_split + all
+        // depth×(time,freq) blocks + mask estimator — runs as ONE ggml graph on
+        // ctx->backend ("no roundtrips", htdemucs ee2585b64 pattern). No
+        // per-layer host<->device copies and no CPU mask estimator: gathered in,
+        // mask_raw out. synthesize() (complex mask + iSTFT) stays CPU (E3).
+        if (!mbr_fused_graph(ctx, gathered, T, mask_raw)) {
+            fprintf(stderr, "mel_band_roformer: fused graph failed\n");
+            return false;
+        }
+        lap("fused_graph");
+    } else {
     std::vector<float> x;
     bool bs_ok;
     if (ctx->use_graph) {
@@ -1334,10 +1581,10 @@ bool run_forward(mel_band_roformer_context* ctx, const std::vector<std::vector<f
     if (prof)
         fprintf(stderr, "  [mbr-prof] run_time(all)  %7.0f ms\n  [mbr-prof] run_freq(all)  %7.0f ms\n", t_time, t_freq);
     tick = clk::now();
-    std::vector<float> mask_raw;
     if (!mask_estimator(ctx->weights, x, T, nb, dim, ctx->band_width, mask_raw))
         return false;
     lap("mask_est");
+    } // else: per-layer graph / CPU reference path
     std::vector<float> out_planar; // channels * T_samp
     synthesize(ctx, packed, mask_raw, T, T_samp, out_planar);
     lap("synthesize");
@@ -1417,16 +1664,20 @@ mel_band_roformer_result* mel_band_roformer_separate(mel_band_roformer_context* 
         return nullptr;
     const int channels = ctx->hp.audio_channels;
 
-    // 10 s segment at the model sample rate (hop=441 => ~1001 STFT frames =>
-    // ~2 GB attention scores on GPU; well under the 24 GB RTX 3090).
-    // CRISPASR_MELBAND_SEG_S overrides the segment length in seconds (tests).
-    int seg_len = 10 * ctx->hp.sample_rate;
-    if (const char* seg_s = std::getenv("CRISPASR_MELBAND_SEG_S")) {
-        int s = atoi(seg_s);
+    // Segmented forward for long audio (Demucs split=True pattern). Segment
+    // length from params.segment_seconds (<=0 -> 10 s default: hop=441 =>
+    // ~1001 STFT frames => ~2 GB attention scores on GPU; well under 24 GB).
+    // Env overrides for CLI A/B: CRISPASR_MELBAND_SEG_S, CRISPASR_MELBAND_NO_SEGMENT.
+    int seg_s = ctx->params.segment_seconds;
+    if (const char* seg_env = std::getenv("CRISPASR_MELBAND_SEG_S")) {
+        int s = atoi(seg_env);
         if (s > 0)
-            seg_len = s * ctx->hp.sample_rate;
+            seg_s = s;
     }
-    const bool no_seg = std::getenv("CRISPASR_MELBAND_NO_SEGMENT") != nullptr;
+    bool no_seg = ctx->params.no_segment;
+    if (const char* ns_env = std::getenv("CRISPASR_MELBAND_NO_SEGMENT"))
+        no_seg = ns_env[0] && atoi(ns_env) != 0;
+    const int seg_len = (seg_s > 0 ? seg_s : 10) * ctx->hp.sample_rate;
     if (no_seg || n_samples <= seg_len || seg_len <= 0)
         return mel_band_roformer_separate_full(ctx, pcm, n_samples, in_channels);
 
@@ -1649,6 +1900,30 @@ int mel_band_roformer_parity(const char* model_gguf, const char* audio_wav, int 
             report("layer0_freq_graph", cpu_x, graph_x);
         else
             fprintf(stderr, "  layer0_freq_graph: SKIP (run failed)\n");
+    }
+
+    // Change 176 Phase 5: FUSED single graph vs the complete CPU chain. The CPU
+    // path runs band_split_cpu + all depth×(time,freq) blocks + the CPU mask
+    // estimator on identical input; the graph runs mbr_fused_graph (the whole
+    // network as ONE graph). mask_raw is the graph's final output, so this is
+    // the full-forward parity gate for Phase 5 — no per-layer host roundtrips
+    // allowed to change the result. (synthesize/iSTFT is CPU in both paths and
+    // excluded here; the E2E vocal-stem check covers it.)
+    {
+        std::vector<float> cpu_mask, fused_mask;
+        bool cpu_chain_ok = true;
+        {
+            std::vector<float> x = cpu_out;
+            for (int L = 0; L < hp.depth && cpu_chain_ok; L++)
+                cpu_chain_ok = run_time(ctx->weights, L, x, T, nb, dim, heads, dim_head) &&
+                               run_freq(ctx->weights, L, x, T, nb, dim, heads, dim_head);
+            cpu_chain_ok = cpu_chain_ok && mask_estimator(ctx->weights, x, T, nb, dim, ctx->band_width, cpu_mask);
+        }
+        const bool fused_ok = mbr_fused_graph(ctx, gathered, T, fused_mask);
+        if (cpu_chain_ok && fused_ok)
+            report("fused_mask_raw", cpu_mask, fused_mask);
+        else
+            fprintf(stderr, "  fused_mask_raw: SKIP (cpu_chain=%d fused=%d)\n", cpu_chain_ok ? 1 : 0, fused_ok ? 1 : 0);
     }
 
     mel_band_roformer_free(ctx);

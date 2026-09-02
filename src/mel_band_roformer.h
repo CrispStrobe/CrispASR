@@ -28,6 +28,11 @@ struct mel_band_roformer_params {
     int n_threads;  // 0 = auto
     bool use_gpu;   // attempt GPU acceleration (Metal/CUDA); CPU otherwise
     int gpu_device; // GPU device index
+    // Change 176: segmentation toggles (defaults = validated 10 s Demucs-split).
+    // Graph/fused/GPU are NOT caller fields — they resolve once in init via
+    // mel_band_gates::resolve() (env AUTO/override, mirrors htdemucs #414).
+    int segment_seconds; // Demucs-style split length; <=0 = default (10 s), 1 = per-second
+    bool no_segment;     // 1 = whole-buffer forward even for long audio (A/B)
 };
 
 // Separation result: one waveform per source. For the vocals model the sources
