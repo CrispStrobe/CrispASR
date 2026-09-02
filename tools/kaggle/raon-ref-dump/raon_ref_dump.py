@@ -65,9 +65,7 @@ import kaggle_harness as kh  # noqa: E402
 kh.init_progress()
 HF_TOKEN = kh.resolve_hf_token()
 subprocess.run([sys.executable, "-m", "pip", "install", "-q", "torchaudio", "pyyaml", "gguf", "soundfile",
-                "huggingface_hub", "x_transformers", "torchdiffeq", "jieba", "pypinyin", "vocos"], check=False)
-# Install the Raon package itself so all its submodule imports resolve.
-subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-e", str(RAON), "--no-deps"], check=False)
+                "huggingface_hub", "x_transformers", "torchdiffeq", "jieba", "pypinyin", "vocos", "ema_pytorch"], check=False)
 sys.path.insert(0, str(RAON / "src"))
 from huggingface_hub import hf_hub_download  # noqa: E402
 import numpy as np  # noqa: E402
@@ -96,7 +94,8 @@ step("downloaded", size=SIZE)
 import yaml  # noqa: E402
 import soundfile as sf  # noqa: E402
 import torchaudio  # noqa: E402
-from f5_tts.model import CFM, DiT  # noqa: E402
+from f5_tts.model.cfm import CFM  # noqa: E402
+from f5_tts.model.backbones.dit import DiT  # noqa: E402
 from f5_tts.model.modules import MelSpec  # noqa: E402
 from f5_tts.model.vocoder import load_hifigan_vocoder  # noqa: E402
 from f5_tts.model.utils import get_tokenizer  # noqa: E402
