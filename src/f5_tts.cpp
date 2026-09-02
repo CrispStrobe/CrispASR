@@ -1508,6 +1508,9 @@ static void cpu_conv1d(const float* input, int C_in, int T, const float* weight,
     for (int g = 0; g < groups; g++) {
         int oc_start = g * ch_per_group_out;
         int ic_start = g * ch_per_group_in;
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static)
+#endif
         for (int oc = oc_start; oc < oc_start + ch_per_group_out; oc++) {
             for (int t = 0; t < T; t++) {
                 float sum = bias ? bias[oc] : 0.0f;
@@ -1531,6 +1534,9 @@ static void cpu_conv1d(const float* input, int C_in, int T, const float* weight,
 static void cpu_conv1d_dil(const float* input, int C_in, int T, const float* weight, const float* bias, int C_out,
                            int K, int dilation, float* output) {
     const int pad = dilation * (K - 1) / 2; // "same" for odd K
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static)
+#endif
     for (int oc = 0; oc < C_out; oc++) {
         for (int t = 0; t < T; t++) {
             float sum = bias ? bias[oc] : 0.0f;
@@ -1634,25 +1640,30 @@ static std::vector<float> hifigan_decode(f5_tts_context* ctx, const float* mel_d
         const std::vector<float>& uw = get("voc.ups." + std::to_string(s) + ".weight");
         const std::vector<float>& ub = get("voc.ups." + std::to_string(s) + ".bias");
         std::vector<float> up((size_t)out_ch * T_out, 0.0f);
-        for (int oc = 0; oc < out_ch; oc++)
-            for (int t = 0; t < T_out; t++)
-                up[(size_t)oc * T_out + t] = ub[oc];
-        for (int ic = 0; ic < ch; ic++) {
-            const float* in = x.data() + (size_t)ic * T;
-            for (int ti = 0; ti < T; ti++) {
-                float v = in[ti];
-                if (v == 0.0f)
-                    continue;
+        // Gather per output channel (parallel-safe: each oc writes its own row).
+        // For each output position `to`, sum over the input taps that scatter
+        // into it: to = ti*stride + kk - pad  ⇒  ti = (to + pad - kk)/stride.
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static)
+#endif
+        for (int oc = 0; oc < out_ch; oc++) {
+            float* orow = up.data() + (size_t)oc * T_out;
+            for (int to = 0; to < T_out; to++) {
+                float acc = ub[oc];
                 for (int kk = 0; kk < k; kk++) {
-                    int to = ti * stride + kk - pad;
-                    if (to < 0 || to >= T_out)
+                    int num = to + pad - kk;
+                    if (num < 0 || (num % stride) != 0)
                         continue;
-                    for (int oc = 0; oc < out_ch; oc++) {
-                        // weight[ic][oc][kk]
+                    int ti = num / stride;
+                    if (ti < 0 || ti >= T)
+                        continue;
+                    for (int ic = 0; ic < ch; ic++) {
+                        float v = x[(size_t)ic * T + ti];
                         float w = uw[(((size_t)ic * out_ch) + oc) * k + kk];
-                        up[(size_t)oc * T_out + to] += v * w;
+                        acc += v * w;
                     }
                 }
+                orow[to] = acc;
             }
         }
         x = std::move(up);
@@ -2558,6 +2569,19 @@ int f5_tts_set_reference(struct f5_tts_context* ctx, const float* pcm_24k, int n
     // via the diff harness (which provides it as a GGUF tensor)
     ctx->ref_mel_T = T_ref;
     ctx->ref_text = ref_text ? ref_text : "";
+
+    // #387 mel-parity probe: dump the computed reference mel (T, mel_dim
+    // row-major) as raw f32 and exit, so the sbhifigan slaney/center=false
+    // front-end can be diffed against the reference ref_mel without paying
+    // for the (minutes-on-CPU) DiT ODE loop that follows.
+    if (const char* dp = crispasr_env::get("CRISPASR_F5_DUMP_REFMEL")) {
+        FILE* f = fopen(dp, "wb");
+        if (f) {
+            fwrite(ctx->ref_mel.data(), sizeof(float), ctx->ref_mel.size(), f);
+            fclose(f);
+            fprintf(stderr, "f5_tts: dumped ref_mel (T=%d, mel=%d) → %s\n", ctx->ref_mel_T, ctx->hp.mel_dim, dp);
+        }
+    }
     return 0;
 }
 
@@ -2568,6 +2592,32 @@ int f5_tts_synthesize(struct f5_tts_context* ctx, const char* text, float** pcm_
     const auto& hp = ctx->hp;
     int mel_dim = hp.mel_dim;
     int text_dim = hp.text_dim;
+
+    // #387 vocoder-parity probe: CRISPASR_F5_VOCODE_MEL=<file>[:T] reads a raw
+    // f32 mel (T × mel_dim, row-major), runs ONLY the vocoder, and returns the
+    // audio — bypassing the DiT so the CPU HiFi-GAN can be diffed against the
+    // reference vocoder output without the minutes-long ODE loop.
+    if (const char* mp = crispasr_env::get("CRISPASR_F5_VOCODE_MEL")) {
+        FILE* f = fopen(mp, "rb");
+        if (f) {
+            fseek(f, 0, SEEK_END);
+            long bytes = ftell(f);
+            fseek(f, 0, SEEK_SET);
+            int n = (int)(bytes / sizeof(float));
+            int T = n / mel_dim;
+            std::vector<float> mel(n);
+            size_t rd = fread(mel.data(), sizeof(float), n, f);
+            fclose(f);
+            (void)rd;
+            auto audio = (hp.vocoder == "hifigan") ? hifigan_decode(ctx, mel.data(), T, mel_dim)
+                                                   : vocos_decode(ctx, mel.data(), T, mel_dim);
+            *pcm_out = (float*)malloc(audio.size() * sizeof(float));
+            memcpy(*pcm_out, audio.data(), audio.size() * sizeof(float));
+            *sample_rate_out = hp.sample_rate;
+            fprintf(stderr, "f5_tts: VOCODE_MEL probe T=%d mel=%d → %zu samples\n", T, mel_dim, audio.size());
+            return (int)audio.size();
+        }
+    }
 
     // ── Text preparation ──
     std::string ref_text = ctx->ref_text;

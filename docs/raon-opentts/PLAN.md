@@ -39,6 +39,35 @@ fixtures. Launch it (RAON_SIZE=0.3B) before the runtime pass.
 - dispatch at the vocoder call site branches on hp.vocoder.
 - backend alias raon/raon-1b → f5-tts runtime.
 
+### VALIDATION STATUS (2026-09-02)
+- **Reference works**: Kaggle ref-dump v9 green (CPU — P100 lacks torch
+  kernels, gotcha #21); raon-ref.wav ASRs to the exact gen_text ("...quick
+  brown fox jumps over the lazy dog"). Fixtures at cstr/crispasr-regression-
+  fixtures/raon-opentts/0.3B/ (ref.gguf + raon-ref.wav).
+- **Converter validated**: Kaggle re-ran it on-box → 959M GGUF consistent
+  with the local one.
+- **Vocoder (CPU HiFi-GAN) validated**: fed the reference gen_mel through our
+  hifigan_decode → cos 0.997902 vs the reference vocoder_audio, |ratio| 1.047
+  (int16-wav quantization/clipping). Length exact (47104). Probe:
+  CRISPASR_F5_VOCODE_MEL=<raw T×mel f32>. OpenMP-parallelized (gather
+  ConvTranspose, algebraically identical): 117s → 41s for 2.9s audio.
+- **DiT**: reuses stock f5_tts.cpp verbatim (blueprint: post_norm=False).
+
+### Still open (next pass)
+- **Mel parity**: the ref-dump used UNSEEDED random noise (no example wav in
+  the repo), so ref_mel isn't reproducible. Low risk — we ship torchaudio's
+  exact slaney fb + window (the scale trap is sidestepped by construction) —
+  but to confirm center=false framing: re-run the kernel with
+  torch.manual_seed + save the exact 16 kHz input wav, then diff our
+  compute_mel_spectrogram (CRISPASR_F5_DUMP_REFMEL probe exists) vs ref_mel.
+- **Full TTS→ASR roundtrip**: F5 DiT is minutes on CPU (VPS) — run OUR
+  crispasr synth on Kaggle CPU (or a GPU build) with a seeded ref for the
+  end-to-end acceptance gate.
+- **Vocoder perf**: 41s is slow; a ggml core_hifigan path (im2col+gemm,
+  GPU-capable) is the real fix — ship gated with a perf note meanwhile.
+- Registry entries (raon/raon-1b) NC-gated + HF upload + live test AFTER the
+  roundtrip passes.
+
 ### Remaining checklist
 
 - hparams: add vocoder/mel_spec_type/mel_center strings+bool; HiFi-GAN
