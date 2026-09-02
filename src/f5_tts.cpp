@@ -2798,6 +2798,70 @@ int f5_tts_synthesize(struct f5_tts_context* ctx, const char* text, float** pcm_
         return 1;
     }
 
+    // #387-adj input-path probe: CRISPASR_F5_INPUT_PROBE=<dir> reads the raw
+    // DiT inputs a reference forward used — x.bin (T×mel), cond.bin (T×mel),
+    // tokens.bin (nt i32, raw char indices), t.txt (float), shape.txt "<T> <nt>"
+    // — runs ONLY our input path and dumps cpp_temb.bin (dim), cpp_text_embed.bin
+    // (T×text_dim) and cpp_hidden.bin (T×dim). The DiT-block diff already proved
+    // the transformer stack byte-exact given matched hidden+temb, so this
+    // localizes the divergence to time-embed / text-encoder / input-embed.
+    if (const char* pdir = crispasr_env::get("CRISPASR_F5_INPUT_PROBE")) {
+        std::string dir(pdir);
+        auto rd = [&](const std::string& nm, size_t nf) {
+            std::vector<float> v(nf);
+            FILE* f = fopen((dir + "/" + nm).c_str(), "rb");
+            size_t got = f ? fread(v.data(), sizeof(float), nf, f) : 0;
+            if (f)
+                fclose(f);
+            v.resize(got);
+            return v;
+        };
+        auto wr = [&](const std::string& nm, const std::vector<float>& v) {
+            FILE* f = fopen((dir + "/" + nm).c_str(), "wb");
+            if (f) {
+                fwrite(v.data(), sizeof(float), v.size(), f);
+                fclose(f);
+            }
+        };
+        int T = 0, nt = 0;
+        float t_val = 0.5f;
+        if (FILE* sf = fopen((dir + "/shape.txt").c_str(), "r")) {
+            if (fscanf(sf, "%d %d", &T, &nt) != 2)
+                T = 0;
+            fclose(sf);
+        }
+        if (FILE* tf = fopen((dir + "/t.txt").c_str(), "r")) {
+            if (fscanf(tf, "%f", &t_val) != 1)
+                t_val = 0.5f;
+            fclose(tf);
+        }
+        std::vector<float> x = rd("x.bin", (size_t)T * mel_dim);
+        std::vector<float> cond = rd("cond.bin", (size_t)T * mel_dim);
+        std::vector<int32_t> tokens(nt);
+        if (FILE* kf = fopen((dir + "/tokens.bin").c_str(), "rb")) {
+            size_t got = fread(tokens.data(), sizeof(int32_t), nt, kf);
+            fclose(kf);
+            tokens.resize(got);
+        }
+        if (T > 0 && (int)x.size() == T * mel_dim && (int)cond.size() == T * mel_dim) {
+            std::vector<float> temb = compute_time_embed(ctx, t_val);
+            std::vector<float> text_embed = compute_text_embed(ctx, tokens.data(), (int)tokens.size(), T);
+            std::vector<float> hidden =
+                f5_compute_hidden(ctx, x.data(), T, mel_dim, cond.data(), text_embed.data(), text_dim, false, false, 0);
+            wr("cpp_temb.bin", temb);
+            wr("cpp_text_embed.bin", text_embed);
+            wr("cpp_hidden.bin", hidden);
+            fprintf(stderr, "f5_tts: INPUT_PROBE T=%d nt=%zu → temb %zu text_embed %zu hidden %zu\n", T, tokens.size(),
+                    temb.size(), text_embed.size(), hidden.size());
+        } else {
+            fprintf(stderr, "f5_tts: INPUT_PROBE bad inputs (T=%d x=%zu cond=%zu)\n", T, x.size(), cond.size());
+        }
+        *pcm_out = (float*)malloc(sizeof(float));
+        (*pcm_out)[0] = 0.0f;
+        *sample_rate_out = hp.sample_rate;
+        return 1;
+    }
+
     // ── Text preparation ──
     std::string ref_text = ctx->ref_text;
     auto ends_with = [](const std::string& s, const std::string& suffix) {

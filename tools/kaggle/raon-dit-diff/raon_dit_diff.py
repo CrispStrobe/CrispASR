@@ -113,75 +113,60 @@ gen_text = "the quick brown fox jumps over the lazy dog"
 text_ids = list_str_to_idx([list(gen_text)], vmap)  # (1, nt)
 time_t = torch.tensor([0.5])
 
+dim = a["dim"]; text_dim = a["text_dim"]
 cap = {}
 h1 = dit.input_embed.register_forward_hook(lambda m, i, o: cap.__setitem__("hidden", o.detach()))
 h2 = dit.time_embed.register_forward_hook(lambda m, i, o: cap.__setitem__("temb", o.detach()))
-h3 = dit.proj_out.register_forward_hook(lambda m, i, o: cap.__setitem__("velocity", o.detach()))
-blk_out = {}
-bh = [dit.transformer_blocks[k].register_forward_hook(
-        (lambda kk: (lambda m, i, o: blk_out.__setitem__(kk, o.detach())))(k))
-      for k in range(len(dit.transformer_blocks))]
+h4 = dit.text_embed.register_forward_hook(lambda m, i, o: cap.__setitem__("text_embed", o.detach()))
 with torch.no_grad():
     _ = dit(x, cond, text_ids, time_t, drop_audio_cond=False, drop_text=False, cfg_infer=False)
-for h in [h1, h2, h3] + bh:
+for h in [h1, h2, h4]:
     h.remove()
 
-hidden = cap["hidden"][0].contiguous().numpy().astype(np.float32)   # (T, dim)
-temb = cap["temb"].reshape(-1).numpy().astype(np.float32)           # (dim,)
-velocity = cap["velocity"][0].contiguous().numpy().astype(np.float32)  # (T, mel)
-depth = len(blk_out)
-(PROBE / "shape.txt").write_text(str(T))
-hidden.tofile(PROBE / "hidden.bin"); temb.tofile(PROBE / "temb.bin")
-velocity.tofile(PROBE / "ref_velocity.bin")
-ref_blocks = []
-for k in range(depth):
-    b = blk_out[k][0].contiguous().numpy().astype(np.float32)
-    b.tofile(PROBE / f"ref_block_{k}.bin"); ref_blocks.append(b)
-step("captured", T=T, dim=hidden.shape[1], depth=depth, hidden_std=float(hidden.std()),
-     temb_std=float(temb.std()), vel_std=float(velocity.std()))
+hidden = cap["hidden"][0].contiguous().numpy().astype(np.float32)          # (T, dim)
+temb = cap["temb"].reshape(-1).numpy().astype(np.float32)                  # (dim,)
+text_embed = cap["text_embed"][0].contiguous().numpy().astype(np.float32)  # (T, text_dim)
+tok = text_ids[0].numpy().astype(np.int32)                                 # (nt,)
+# raw inputs for the C++ INPUT_PROBE
+(PROBE / "shape.txt").write_text(f"{T} {tok.size}")
+(PROBE / "t.txt").write_text(str(float(time_t.item())))
+x[0].contiguous().numpy().astype(np.float32).tofile(PROBE / "x.bin")
+cond[0].contiguous().numpy().astype(np.float32).tofile(PROBE / "cond.bin")
+tok.tofile(PROBE / "tokens.bin")
+step("captured", T=T, nt=int(tok.size), dim=dim, text_dim=text_dim,
+     temb_std=float(temb.std()), text_embed_std=float(text_embed.std()), hidden_std=float(hidden.std()))
 
-# ── run our C++ DiT probe (CUDA) ───────────────────────────────────────────
-env = dict(os.environ); env["CRISPASR_F5_DIT_PROBE"] = str(PROBE)
+# ── run our C++ input-path probe (CUDA) ────────────────────────────────────
+env = dict(os.environ); env["CRISPASR_F5_INPUT_PROBE"] = str(PROBE)
 rc = sh(f"{CLI} --backend raon-1b -m {gguf} --voice {ref_wav} --ref-text x --tts probe "
         f"--tts-output {WORK/'probe.wav'} -t 4 --i-have-rights -v", env=env, timeout=1200)
 print(rc.stdout[-1500:], rc.stderr[-2500:], flush=True)
 
 def cos(u, v):
-    u = u.reshape(-1).astype(np.float64); v = v.reshape(-1).astype(np.float64)
+    u = np.asarray(u).reshape(-1).astype(np.float64); v = np.asarray(v).reshape(-1).astype(np.float64)
+    if u.size != v.size:
+        return None
     d = np.linalg.norm(u) * np.linalg.norm(v)
     return float(u.dot(v) / d) if d > 0 else float("nan")
 
-def load(name, n):
+def load(name):
     p = PROBE / name
-    if not p.exists():
-        return None
-    a = np.fromfile(p, dtype=np.float32)
-    return a if a.size == n else a
+    return np.fromfile(p, dtype=np.float32) if p.exists() else None
 
-# positive control
-ctrl = {"identity_cos": cos(ref_blocks[0], ref_blocks[0]),
-        "sensitivity_cos_b0_b1": cos(ref_blocks[0], ref_blocks[1]) if depth > 1 else None}
-cpp_v = load("cpp_velocity.bin", T * n_mel)
-inj_ok = cpp_v is not None and np.isfinite(cpp_v).all() and float(np.abs(cpp_v).sum()) > 0
-step("positive_control", **ctrl, cpp_velocity_present=cpp_v is not None,
-     cpp_velocity_finite_nonzero=bool(inj_ok))
-
-# per-stage diff
-stages = []
-first_div = None
-for k in range(depth):
-    cb = load(f"cpp_block_{k}.bin", T * hidden.shape[1])
-    c = cos(ref_blocks[k], cb) if cb is not None else None
-    stages.append({"block": k, "cos": None if c is None else round(c, 5)})
-    if c is not None and c < 0.99 and first_div is None:
-        first_div = k
-vel_cos = cos(velocity, cpp_v) if cpp_v is not None else None
-result = {"size": SIZE, "T": T, "depth": depth,
+cpp_temb = load("cpp_temb.bin"); cpp_te = load("cpp_text_embed.bin"); cpp_hidden = load("cpp_hidden.bin")
+# positive control: comparator must report identity=1 and a real shift<1
+ctrl = {"identity_cos": cos(hidden, hidden),
+        "sensitivity_cos_shift": cos(hidden.reshape(-1), np.roll(hidden.reshape(-1), 137))}
+present = {"cpp_temb": cpp_temb is not None, "cpp_text_embed": cpp_te is not None, "cpp_hidden": cpp_hidden is not None}
+result = {"size": SIZE, "T": T, "nt": int(tok.size), "dim": dim, "text_dim": text_dim,
           "positive_control": {k: (None if v is None else round(v, 6)) for k, v in ctrl.items()},
-          "injection_ok": bool(inj_ok),
-          "first_divergent_block": first_div,
-          "velocity_cos": None if vel_cos is None else round(vel_cos, 5),
-          "block_cos": stages}
+          "present": present,
+          "temb_cos": cos(temb, cpp_temb) if cpp_temb is not None else None,
+          "text_embed_cos": cos(text_embed, cpp_te) if cpp_te is not None else None,
+          "hidden_cos": cos(hidden, cpp_hidden) if cpp_hidden is not None else None}
+for k in ("temb_cos", "text_embed_cos", "hidden_cos"):
+    if result[k] is not None:
+        result[k] = round(result[k], 5)
 (WORK / "raon_dit_diff.json").write_text(json.dumps(result, indent=2))
 print(json.dumps(result, indent=2), flush=True)
-step("DONE", first_divergent_block=first_div, velocity_cos=result["velocity_cos"])
+step("DONE", temb_cos=result["temb_cos"], text_embed_cos=result["text_embed_cos"], hidden_cos=result["hidden_cos"])
