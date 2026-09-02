@@ -203,6 +203,20 @@ def main():
            if k.startswith("ema_model.transformer.") and k not in ("initted", "step")}
     print(f"  {len(dit)} DiT tensors", flush=True)
 
+    # The trained text-embedding row count is authoritative for text_num_embeds
+    # (= vocab_size + 1). The repo vocab.txt can be larger than the checkpoint
+    # (0.3B: vocab.txt has 5559 chars but the embed is 5556 = 5555 + 1); trust
+    # the tensor and trim the shipped vocab to match, so char→idx lookups map
+    # onto real trained rows. get_tokenizer strips the trailing newline per
+    # line, so vocab[i] is line i verbatim.
+    te = dit["ema_model.transformer.text_embed.text_embed.weight"]
+    text_num_embeds = int(te.shape[0])
+    real_vocab = text_num_embeds - 1
+    if real_vocab != len(vocab):
+        print(f"  NOTE: checkpoint vocab {real_vocab} != vocab.txt {len(vocab)}; "
+              f"shipping the first {real_vocab} chars", flush=True)
+    vocab = vocab[:real_vocab]
+
     print("loading HiFi-GAN …", flush=True)
     voc_sd = fuse_weight_norm(torch.load(str(args.hifigan), map_location="cpu", weights_only=True))
 
@@ -218,7 +232,7 @@ def main():
     w.add_int32("f5.dim_head", head_dim)
     w.add_int32("f5.ff_mult", ff_mult)
     w.add_int32("f5.text_dim", text_dim)
-    w.add_int32("f5.text_num_embeds", len(vocab) + 1)
+    w.add_int32("f5.text_num_embeds", text_num_embeds)
     w.add_int32("f5.conv_layers", conv_layers)
     w.add_int32("f5.mel_dim", n_mels)
     w.add_int32("f5.sample_rate", sr)
