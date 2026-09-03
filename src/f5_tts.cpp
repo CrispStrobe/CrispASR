@@ -2721,6 +2721,14 @@ int f5_tts_synthesize(struct f5_tts_context* ctx, const char* text, float** pcm_
     int mel_dim = hp.mel_dim;
     int text_dim = hp.text_dim;
 
+    // #387-adj: enable per-stage dumps (ode_step_N, vocos_input, …) from the
+    // environment so a real synthesis' ODE trajectory can be inspected without
+    // a CLI flag. Only sets when the caller hasn't already set a dump dir.
+    if (ctx->dump_dir.empty()) {
+        if (const char* dd = crispasr_env::get("CRISPASR_F5_DUMP_DIR"))
+            ctx->dump_dir = dd;
+    }
+
     // #387 vocoder-parity probe: CRISPASR_F5_VOCODE_MEL=<file>[:T] reads a raw
     // f32 mel (T × mel_dim, row-major), runs ONLY the vocoder, and returns the
     // audio — bypassing the DiT so the CPU HiFi-GAN can be diffed against the
