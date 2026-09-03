@@ -2996,6 +2996,13 @@ int f5_tts_synthesize(struct f5_tts_context* ctx, const char* text, float** pcm_
     // guard (a bad/too-long ref transcript must not collapse the rate to zero),
     // but only a very loose UPPER guard that catches a garbage near-empty
     // transcript (which would explode the duration) — not genuinely slow speech.
+    // KNOWN DELTA vs Raon's utils_infer.py (#387-adj, not yet ported): the
+    // upstream Raon inference sets local_speed = 0.3 when the gen text is < 10
+    // UTF-8 bytes, i.e. ~3.3x MORE frames for very short prompts (one-word
+    // synthesis). It also clamps sec_per_byte to a 12 chars/s floor via VAD. We
+    // do neither, so a one-word --tts will be rushed/truncated on BOTH 0.3B and
+    // 1B. Harmless for normal-length text (the clamp/local_speed don't fire).
+    // TODO: port the <10-byte local_speed=0.3 branch + the 12 c/s VAD clamp.
     float rate = (float)ref_T / (float)std::max(1, ref_text_len);
     // The clamp is an ADD-ON over the upstream formula (which has no clamp); gate
     // it so it can be switched off. CRISPASR_F5_DURATION_CLAMP=0 restores the
