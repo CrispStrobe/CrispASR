@@ -1,0 +1,17 @@
+{
+  "id": "chr1str/crispasr-raon-roundtrip-1b",
+  "title": "crispasr-raon-roundtrip-1b",
+  "code_file": "raon_roundtrip_1b.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "true",
+  "dataset_sources": [
+    "chr1str/crispasr-hf-token",
+    "chr1str/crispasr-ccache"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}
