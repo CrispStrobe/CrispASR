@@ -110,6 +110,40 @@ o_blocks = [blk[k][0].contiguous().numpy().astype(np.float32) for k in range(len
 depth = len(o_blocks)
 step("oracle_forward", depth=depth, hidden_std=round(float(o_hidden.std()), 4), vel_std=round(float(o_vel.std()), 4))
 
+# ── f16-MIRROR oracle (peer's substitution): round the SAME weights C++ stores
+# as f16 through f16 precision (keep f32 dtype so arithmetic stays f32, matching
+# C++'s f16-weights/f32-activations path), then run the blocks on the SAME f32
+# o_hidden/o_temb C++ is given. If torch-f16 drift == C++ drift, ~1e-4 is just
+# f16 and C++ is exonerated; if C++ drifts materially MORE, the excess is C++'s.
+import copy  # noqa: E402
+_A_F32 = ("text_emb", "freqs_cis", "inv_freq", "time_", "conv_pos", "input_proj",
+          "input_embed.proj", "final_adaln", "final_proj", "adaln", ".layer_scale")
+def gg(nm):  # mirror convert-raon-opentts map_f5tts_name for a DiT.state_dict key
+    n = nm.replace("transformer_blocks.", "blk.").replace(".attn.to_q.", ".attn_q.").replace(".attn.to_k.", ".attn_k.")
+    n = n.replace(".attn.to_v.", ".attn_v.").replace(".attn.to_out.0.", ".attn_o.").replace(".attn_norm.linear.", ".adaln.")
+    n = n.replace(".ff.ff.0.0.", ".ffn_up.").replace(".ff.ff.2.", ".ffn_down.")
+    n = n.replace("text_embed.text_embed.", "text_emb.").replace("text_embed.text_blocks.", "text_blk.")
+    n = n.replace(".dwconv.", ".dw.").replace(".pwconv1.", ".pw_up.").replace(".pwconv2.", ".pw_down.")
+    n = n.replace("time_embed.time_mlp.0.", "time_mlp_0.").replace("time_embed.time_mlp.2.", "time_mlp_1.")
+    n = n.replace("input_embed.proj.", "input_proj.").replace("norm_out.linear.", "final_adaln.").replace("proj_out.", "final_proj.")
+    n = n.replace("input_embed.conv_pos_embed.conv1d.0.", "conv_pos_0.").replace("input_embed.conv_pos_embed.conv1d.2.", "conv_pos_1.")
+    return "f5." + n
+dit16 = copy.deepcopy(dit)
+n_f16 = 0
+with torch.no_grad():
+    for nm, p in dit16.named_parameters():
+        if p.ndim >= 2 and p.numel() >= 256 and not any(s in gg(nm) for s in _A_F32):
+            p.data = p.data.half().float(); n_f16 += 1
+# run torch-f16 BLOCKS on the injected f32 o_hidden/o_temb (same input as C++ DIT_PROBE)
+xb = torch.from_numpy(o_hidden).unsqueeze(0); tb = torch.from_numpy(o_temb).unsqueeze(0)
+rope = dit16.rotary_embed.forward_from_seq_len(T)
+f16_blocks = []
+with torch.no_grad():
+    for b in dit16.transformer_blocks:
+        xb = b(xb, tb, mask=None, rope=rope); f16_blocks.append(xb[0].contiguous().numpy().astype(np.float32))
+    f16_vel = dit16.proj_out(dit16.norm_out(xb, tb))[0].contiguous().numpy().astype(np.float32)
+step("f16_mirror", n_f16_weights=n_f16)
+
 def maxdiff(u, v):
     if v is None or u.size != v.size:
         return None
@@ -141,15 +175,22 @@ def relerr(md, ref):
     rms = float(np.sqrt(np.mean(ref.astype(np.float64) ** 2)))
     return round(md / rms, 7) if rms > 0 else None
 
-block_md = [maxdiff(o_blocks[k], load(DT, f"cpp_block_{k}.bin")) for k in range(depth)]
-block_rel = [relerr(block_md[k], o_blocks[k]) for k in range(depth)]
-result = {"size": SIZE, "T": T, "depth": depth, "t": tval,
-          "time_embed_maxdiff": maxdiff(o_temb, cpp_temb), "time_embed_relerr": relerr(maxdiff(o_temb, cpp_temb), o_temb),
-          "input_embed_maxdiff": maxdiff(o_hidden, cpp_hidden), "input_embed_relerr": relerr(maxdiff(o_hidden, cpp_hidden), o_hidden),
-          "velocity_maxdiff_injected_oracle_hidden": maxdiff(o_vel, load(DT, "cpp_velocity.bin")),
-          "block_maxdiff": [None if x is None else round(x, 7) for x in block_md],
-          "block_relerr": block_rel}
+cpp_blocks = [load(DT, f"cpp_block_{k}.bin") for k in range(depth)]
+cpp_vel_inj = load(DT, "cpp_velocity.bin")
+# both C++ and torch-f16 blocks were fed the SAME f32 o_hidden/o_temb; compare each to the f32 oracle
+cpp_bmd = [maxdiff(o_blocks[k], cpp_blocks[k]) for k in range(depth)]
+f16_bmd = [maxdiff(o_blocks[k], f16_blocks[k]) for k in range(depth)]
+result = {"size": SIZE, "T": T, "depth": depth, "t": tval, "n_f16_weights": n_f16,
+          "input_embed_maxdiff_cpp": maxdiff(o_hidden, cpp_hidden),
+          "time_embed_maxdiff_cpp": maxdiff(o_temb, cpp_temb),
+          "velocity_maxdiff_CPP": maxdiff(o_vel, cpp_vel_inj),
+          "velocity_maxdiff_TORCH_f16": maxdiff(o_vel, f16_vel),
+          # THE decisive pair: per-block drift, C++ vs torch-f16, both on identical f32 input
+          "block_maxdiff_CPP": [None if x is None else round(x, 7) for x in cpp_bmd],
+          "block_maxdiff_TORCH_f16": [None if x is None else round(x, 7) for x in f16_bmd],
+          "block_relerr_CPP": [relerr(cpp_bmd[k], o_blocks[k]) for k in range(depth)],
+          "block_relerr_TORCH_f16": [relerr(f16_bmd[k], o_blocks[k]) for k in range(depth)]}
 (WORK / "raon_drift.json").write_text(json.dumps(result, indent=2))
 print(json.dumps(result, indent=2), flush=True)
-step("DONE", temb_rel=result["time_embed_relerr"], input_rel=result["input_embed_relerr"],
-     block0_rel=block_rel[0], blocklast_rel=block_rel[-1])
+step("DONE", vel_cpp=result["velocity_maxdiff_CPP"], vel_torch_f16=result["velocity_maxdiff_TORCH_f16"],
+     blocklast_cpp=cpp_bmd[-1], blocklast_torch_f16=f16_bmd[-1])
