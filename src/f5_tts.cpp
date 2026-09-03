@@ -2888,6 +2888,55 @@ int f5_tts_synthesize(struct f5_tts_context* ctx, const char* text, float** pcm_
         return 1;
     }
 
+    // #387-adj ODE trajectory probe: CRISPASR_F5_ODE_PROBE=<dir> injects a matched
+    // x0 (x0.bin, T×mel), cond (cond.bin, T×mel) and tokens (tokens.bin, nt i32),
+    // runs the FULL euler_solve, and dumps x at every step (ode_step_N.bin, via
+    // dump_dir) so the free-running trajectory can be diffed step-by-step against
+    // the reference — the ONLY probe that exposes compounding divergence (matched
+    // per-stage snapshots are structurally blind to it). shape.txt: "<T> <nt>".
+    if (const char* pdir = crispasr_env::get("CRISPASR_F5_ODE_PROBE")) {
+        std::string dir(pdir);
+        auto rd = [&](const std::string& nm, size_t nf) {
+            std::vector<float> v(nf);
+            FILE* f = fopen((dir + "/" + nm).c_str(), "rb");
+            size_t got = f ? fread(v.data(), sizeof(float), nf, f) : 0;
+            if (f)
+                fclose(f);
+            v.resize(got);
+            return v;
+        };
+        int T = 0, nt = 0;
+        if (FILE* sf = fopen((dir + "/shape.txt").c_str(), "r")) {
+            if (fscanf(sf, "%d %d", &T, &nt) != 2)
+                T = 0;
+            fclose(sf);
+        }
+        std::vector<float> x0 = rd("x0.bin", (size_t)T * mel_dim);
+        std::vector<float> cond = rd("cond.bin", (size_t)T * mel_dim);
+        std::vector<int32_t> tokens(nt);
+        if (FILE* kf = fopen((dir + "/tokens.bin").c_str(), "rb")) {
+            size_t got = fread(tokens.data(), sizeof(int32_t), nt, kf);
+            fclose(kf);
+            tokens.resize(got);
+        }
+        if (T > 0 && (int)x0.size() == T * mel_dim && (int)cond.size() == T * mel_dim) {
+            ctx->ref_init_noise = x0; // euler_solve uses this as y0
+            ctx->dump_dir = dir;      // euler_solve dumps ode_step_N here
+            std::vector<float> text_emb = compute_text_embed(ctx, tokens.data(), (int)tokens.size(), T);
+            std::vector<float> text_emb_u =
+                compute_text_embed(ctx, tokens.data(), (int)tokens.size(), T, /*drop_text=*/true);
+            std::vector<float> gen = euler_solve(ctx, cond, text_emb, text_emb_u, T, mel_dim, text_dim);
+            fprintf(stderr, "f5_tts: ODE_PROBE T=%d nt=%zu → trajectory dumped (%zu final)\n", T, tokens.size(),
+                    gen.size());
+        } else {
+            fprintf(stderr, "f5_tts: ODE_PROBE bad inputs (T=%d x0=%zu cond=%zu)\n", T, x0.size(), cond.size());
+        }
+        *pcm_out = (float*)malloc(sizeof(float));
+        (*pcm_out)[0] = 0.0f;
+        *sample_rate_out = hp.sample_rate;
+        return 1;
+    }
+
     // ── Text preparation ──
     std::string ref_text = ctx->ref_text;
     auto ends_with = [](const std::string& s, const std::string& suffix) {
