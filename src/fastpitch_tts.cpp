@@ -341,6 +341,14 @@ static fastpitch_tts_context* load_model(const char* path, fastpitch_tts_params 
     core_cpu_backend::set_n_threads(ctx->backend_cpu, params.n_threads);
 
     ctx->backend = params.use_gpu ? crispasr_init_gpu_backend() : ctx->backend_cpu;
+    // On a CPU-only build crispasr_init_gpu_backend() falls through to
+    // ggml_backend_init_best() and hands back a SECOND, DISTINCT CPU backend;
+    // keeping it silently dropped params.n_threads (set_n_threads was applied
+    // to backend_cpu only). Collapse back — same guard as bananamind_tts.
+    if (ctx->backend && ctx->backend != ctx->backend_cpu && core_cpu_backend::is_cpu(ctx->backend)) {
+        ggml_backend_free(ctx->backend);
+        ctx->backend = ctx->backend_cpu;
+    }
     if (!ctx->backend)
         ctx->backend = ctx->backend_cpu;
 

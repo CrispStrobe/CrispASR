@@ -753,6 +753,14 @@ constexpr Entry k_registry[] = {
     {"basic-pitch", "basic-pitch-f16.gguf",
      "https://huggingface.co/cstr/basic-pitch-GGUF/resolve/main/basic-pitch-f16.gguf",
      "~110 KB"},
+    // Magenta MT3 (ISMIR 2021 / ICLR 2022, Apache-2.0): multi-instrument
+    // transcription — every note carries a General-MIDI program. NOTE: the HF
+    // repo is not uploaded yet, so auto-download will 404; build the GGUF
+    // locally with models/convert-mt3-to-gguf.py against the T5X checkpoint at
+    // gs://mt3/checkpoints/mt3.
+    {"mt3", "mt3-f16.gguf",
+     "https://huggingface.co/cstr/mt3-GGUF/resolve/main/mt3-f16.gguf",
+     "~96 MB"},
     {"moss-tts", "moss-tts-v1.5-q4_k.gguf",
      "https://huggingface.co/cstr/moss-tts-v1.5-GGUF/resolve/main/moss-tts-v1.5-q4_k.gguf",
      "~5 GB",

@@ -1,0 +1,13 @@
+{
+  "id": "${KAGGLE_ACCOUNT}/crispasr-breeze-refdump",
+  "title": "crispasr-breeze-refdump",
+  "code_file": "breeze_refdump.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "true",
+  "dataset_sources": ["${KAGGLE_ACCOUNT}/crispasr-hf-token"],
+  "competition_sources": [],
+  "kernel_sources": []
+}

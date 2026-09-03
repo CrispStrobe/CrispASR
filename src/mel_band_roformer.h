@@ -28,6 +28,13 @@ struct mel_band_roformer_params {
     int n_threads;  // 0 = auto
     bool use_gpu;   // attempt GPU acceleration (Metal/CUDA); CPU otherwise
     int gpu_device; // GPU device index
+    // Change 176: segmentation toggles. Default segment length comes from the
+    // checkpoint's trained chunk_size (GGUF metadata; 8 s Kim fallback) — NOT
+    // a fixed 10 s, which would extrapolate RoPE 25% past training (review #422).
+    // Graph/fused/GPU are NOT caller fields — they resolve once in init via
+    // mel_band_gates::resolve() (env AUTO/override, mirrors htdemucs #414).
+    int segment_seconds; // Demucs-style split length; <=0 = trained chunk_size, 1 = per-second
+    bool no_segment;     // 1 = whole-buffer forward even for long audio (A/B)
 };
 
 // Separation result: one waveform per source. For the vocals model the sources
@@ -70,6 +77,19 @@ const char* mel_band_roformer_source_name(const mel_band_roformer_context* ctx, 
 // mask_raw, output_vocals). Returns 0 if every stage passes cos threshold.
 // verbosity: 0 = summary, 1 = per-stage, 2 = per-stage + magnitudes.
 int mel_band_roformer_diff(const char* model_gguf, const char* ref_gguf, const char* audio_wav, int verbosity);
+
+// Change 176 Phase 1: standalone band-split parity — the ggml-graph band-split
+// vs the validated CPU reference on IDENTICAL input (a wav run through the same
+// STFT/gather front-end). No Python fixture needed. Returns 0 iff the graph
+// stage passes the cos threshold (>= 0.9995) with equal output sizes.
+// verbosity: 1 = result, 2 = result + magnitudes.
+//
+// NOTE (review #422): this inits from default_params() with use_gpu=false, so
+// a bare run compares CPU-graph against CPU-reference even on a GPU host; set
+// CRISPASR_MELBAND_GPU=1 for a GPU run. The init line prints the backend name
+// ("mel_band_roformer: backend = ...") — do not record a "GPU PASS" from a run
+// whose printed backend is CPU.
+int mel_band_roformer_parity(const char* model_gguf, const char* audio_wav, int verbosity);
 
 #ifdef __cplusplus
 }

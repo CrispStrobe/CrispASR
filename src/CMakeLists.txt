@@ -1695,6 +1695,18 @@ if(NOT MSVC)
 endif()
 
 # ---------------------------------------------------------------------------
+# mt3 — Magenta MT3 multi-instrument transcription (Apache-2.0, ~96 MB F16)
+# ---------------------------------------------------------------------------
+add_library(mt3 STATIC mt3.h mt3.cpp)
+set_target_properties(mt3 PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(mt3 PUBLIC .)
+target_compile_features   (mt3 PUBLIC cxx_std_17)
+target_link_libraries     (mt3 PUBLIC crispasr-core ggml ggml-base crispasr_link_ggml_cpu)
+if(NOT MSVC)
+    target_compile_options(mt3 PRIVATE -O3)
+endif()
+
+# ---------------------------------------------------------------------------
 # audioseal — Meta AudioSeal watermark generator + detector (MIT, ~5M params)
 # ---------------------------------------------------------------------------
 add_library(audioseal STATIC audioseal.h audioseal.cpp)
@@ -2818,6 +2830,9 @@ if (TARGET piano-transcription)
 endif()
 if (TARGET basic-pitch)
     target_link_libraries(crispasr-lib PUBLIC basic-pitch)
+endif()
+if (TARGET mt3)
+    target_link_libraries(crispasr-lib PUBLIC mt3)
 endif()
 if (TARGET kugelaudio)
     target_link_libraries(crispasr-lib PUBLIC kugelaudio)

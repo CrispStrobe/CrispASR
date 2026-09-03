@@ -1422,17 +1422,32 @@ beats and you never have to merge two lists to reconstruct the grid.
 
 Another standalone task: audio in, **note events** out — onset, offset, MIDI
 pitch, name and velocity. Routes to its own dispatcher before any ASR backend
-is built, like `--pitch` / `--chords` / `--separate`. Two backends share the
+is built, like `--pitch` / `--chords` / `--separate`. Three backends share the
 surface, selected by GGUF architecture: **`piano-transcription`** (ByteDance
-CRNN, 88-key piano, the higher-accuracy piano specialist) and
-**`basic-pitch`** (Spotify, ~110 KB, polyphonic any-instrument, #250 — no
-pedal events).
+CRNN, 88-key piano, the higher-accuracy piano specialist), **`basic-pitch`**
+(Spotify, ~110 KB, polyphonic any-instrument, #250 — no pedal events), and
+**`mt3`** (Google Magenta, ~96 MB, MULTI-INSTRUMENT — every note carries a
+General MIDI program and drums are a separate class; alias
+`music-transcription`).
+
+`--piano-format` takes `text` (default), `json`, or **`midi`**. The MIDI form
+writes a format-1 Standard MIDI File — one track per program, drums on GM
+channel 10 — to the matching `-of` name, or the input path with its extension
+replaced. That is the only form that reaches a DAW or notation editor; text and
+JSON are for inspection and diffing.
+
+MT3's per-note program survives into `--piano-format json` (`program`,
+`instrument`, `is_drum` keys) and adds one trailing column to the text form
+(`prog=<n>` or `drum`) after the existing five. It is NOT carried by the
+session C ABI, whose note quad is fixed-width.
 
 ```bash
 crispasr --piano -m auto --auto-download -f piano.wav
 crispasr --piano --piano-format json -m piano-transcription-f16.gguf -f piano.wav
 # any-instrument polyphonic, tiny model:
 crispasr --piano --backend basic-pitch -m auto --auto-download -f guitar.wav
+# multi-instrument, straight to a MIDI file:
+crispasr --piano --backend mt3 -m auto --auto-download -f band.wav --piano-format midi
 ```
 
 Default output is one tab-separated line per note — `onset_sec`, `offset_sec`,
@@ -1661,6 +1676,7 @@ default quantized model for the selected backend into
 | orpheus | `cstr/orpheus-3b-0.1-ft-GGUF` (Q8_0) + SNAC codec | ~3.7 GB + ~80 MB | Llama-3 based; US-English |
 | chatterbox | `cstr/chatterbox-GGUF` (Q8_0 T3 + Q8_0 S3Gen) | ~610 MB + ~349 MB | S3Gen + T3; multilingual |
 | chatterbox-nano | `cstr/chatterbox-nano-GGUF` (Q8_0 T3) + Turbo S3Gen companion | ~345 MB + ~627 MB | GPT2-small T3 on the Turbo S3Gen (#382); English |
+| raon | `cstr/raon-opentts-0.3b-GGUF` (F16, single GGUF) | ~959 MB | KRAFTON Raon-OpenTTS 0.3B on the F5 runtime; EN zero-shot cloning; **CC-BY-NC-4.0** (non-commercial, license gate) |
 | chatterbox-finnish-nano | `JJarvinen/chatterbox-finnish-nano-GGUF` (Q8_0 T3) + Turbo S3Gen companion | ~329 MB + ~627 MB | Finnish-only Nano v0.1.3; MIT |
 | piper | `cstr/piper-en_US-lessac-medium-GGUF` (F16) | ~30 MB | Lightweight, many voices via `--voice` |
 | tada-1b | `cstr/tada-tts-1b-GGUF` (Q4_K + F16 codec) | ~1.7 GB + ~250 MB | English-only; `--voice tada-ref.gguf` |

@@ -2,9 +2,39 @@
 """Assert every bundled kaggle_harness.py matches the canonical one.
 
 Each tools/kaggle/<kernel>/ directory ships its own copy of
-tools/kaggle/kaggle_harness.py, because `kaggle kernels push` uploads only the
-files in the push directory and the bundled copy is the fallback used when the
+tools/kaggle/kaggle_harness.py, intended as the fallback used when the
 in-kernel `git clone` fails (CPU workers get no internet at all).
+
+⚠ THAT FALLBACK DOES NOT WORK — PROVEN IN PRODUCTION 2026-09-03. A
+sidon-quant-cuda draw landed on a worker with no internet; the clone failed
+("could not read Username for 'https://github.com'"), the script took the
+fallback branch, and the run died with:
+
+    ModuleNotFoundError: No module named 'kaggle_harness'
+
+That is the exact no-internet scenario these copies exist for, happening for
+real, with the protection absent — so `kaggle kernels push` on a script kernel
+uploads ONLY `code_file` and the bundled copy never reaches the worker.
+
+(Note for anyone re-deriving this: `kaggle kernels pull` returning a single .py
+does NOT establish it — pull is selective by design, its `--metadata` flag
+*generates* kernel-metadata.json rather than fetching one, so it says nothing
+about what push uploaded. The ModuleNotFoundError is the evidence; the pull
+observation is not.)
+
+Consequences: keeping the copies byte-identical is cheap hygiene and nothing
+more — a green run of this check is NOT evidence that the no-internet path
+works, because that path is broken for every script kernel in the tree. The
+only delivery route that survives no internet is publishing the harness as a
+Kaggle DATASET listed in each kernel's `dataset_sources` (the mechanism the
+hf-token dataset already uses), after which these copies and this check can be
+retired. That is a cross-kernel policy change spanning several owners, so it
+belongs to the maintainer rather than to whoever reads this next.
+
+Note also that 7 of the 61 bundled copies are untracked (a `.gitignore` glob
+added after 54 had already been committed), so they cannot propagate through a
+commit at all — harmless while the copies are local-testing conveniences,
+load-bearing if anyone revives the fallback without fixing the delivery route.
 
 Nothing kept those copies in sync. On 2026-07-20 there were **four** distinct
 versions across 53 files, and the canonical one was used by exactly one kernel.

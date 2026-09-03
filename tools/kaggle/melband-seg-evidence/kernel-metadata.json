@@ -1,0 +1,14 @@
+{
+  "id": "${KAGGLE_ACCOUNT}/crispasr-melband-seg-evidence",
+  "title": "crispasr-melband-seg-evidence",
+  "code_file": "crispasr-melband-seg-evidence.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "true",
+  "dataset_sources": ["${KAGGLE_ACCOUNT}/crispasr-hf-token", "${KAGGLE_ACCOUNT}/crispasr-ccache"],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}

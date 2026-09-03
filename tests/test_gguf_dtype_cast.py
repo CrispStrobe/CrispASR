@@ -98,6 +98,20 @@ def test_the_shipped_converter_casts():
     ast.parse(src)
     assert "arr = arr.astype(np.float16)" in src
     assert "gguf.quants.quantize(arr.astype(np.float32), qt)" in src
+
+
+def test_bananamind_converter_casts_too():
+    """e242f9bd fixed the identical latent F16 bug in the bananamind converter
+    ("F32 bytes written, F16 type labels stamped on them" — corrupt local f16s
+    from before the fix surfaced 2026-09-03). Pin that fix the same way; it
+    was present but untested."""
+    import ast
+    import pathlib
+
+    path = pathlib.Path(__file__).parent.parent / "models" / "convert-bananamind-tts-to-gguf.py"
+    src = path.read_text()
+    ast.parse(src)
+    assert "arr = arr.astype(np.float16)" in src
     # ...and the conversion has to come BEFORE the write, not after it.
     assert src.index("arr = arr.astype(np.float16)") < src.index("writer.add_tensor(name, arr, raw_dtype=qt)")
 

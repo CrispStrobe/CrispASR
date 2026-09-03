@@ -42,6 +42,7 @@
 #include "btc_chords.h"
 #include "tabcnn.h"
 #include "basic_pitch.h"
+#include "mt3.h"
 #include "piano_transcription.h"
 #include "beatrice_phone.h"
 #include "beatrice_pitch.h"
@@ -1306,6 +1307,11 @@ int main(int argc, char** argv) {
         // diff binary), so the backend shipped with no per-stage evidence.
         return mel_band_roformer_diff(model_path.c_str(), ref_path.c_str(), audio_path.c_str(), /*verbosity=*/2);
     }
+    if (backend_name == "mbr-parity" || backend_name == "mel-band-parity") {
+        // Change 176 Phase 1: standalone graph-vs-CPU band-split parity on a
+        // wav (no Python fixture needed). model_path = GGUF, audio_path = wav.
+        return mel_band_roformer_parity(model_path.c_str(), audio_path.c_str(), /*verbosity=*/2);
+    }
     if (backend_name == "rvc" || backend_name == "rvc-svc") {
         // model_path = rvc GGUF, ref_path = dump from tools/rvc_torch_parity.py.
         // Input-aligned AND noise-aligned: the reference carries input_phone,
@@ -1360,6 +1366,22 @@ int main(int argc, char** argv) {
             return 2;
         }
         return basic_pitch_diff(model_path.c_str(), ref_path.c_str(), pcm.data(), (int)pcm.size(), /*verbosity=*/2);
+    }
+    if (backend_name == "mt3") {
+        // model_path = mt3 GGUF, ref_path = ref.gguf from
+        // tools/reference_backends/mt3.py.
+        //
+        // The reference carries the exact 32768-sample segment 0 it fed the
+        // model (audio_segment0) and that is the first stage compared, so a
+        // segmentation or resampler difference shows up as itself rather than
+        // silently shifting the mel and everything after it.
+        std::vector<float> pcm;
+        std::vector<std::vector<float>> stereo_unused;
+        if (!read_audio_data(audio_path, pcm, stereo_unused, /*stereo=*/false, /*target_rate=*/16000)) {
+            fprintf(stderr, "crispasr-diff: failed to read audio '%s'\n", audio_path.c_str());
+            return 2;
+        }
+        return mt3_diff(model_path.c_str(), ref_path.c_str(), pcm.data(), (int)pcm.size(), /*verbosity=*/2);
     }
     if (backend_name == "htdemucs") {
         // model_path = htdemucs GGUF (f32 for a clean structural diff), ref_path =

@@ -62,7 +62,7 @@ public:
 
     const char* name() const override { return "kokoro"; }
 
-    uint32_t capabilities() const override { return CAP_TTS | CAP_AUTO_DOWNLOAD; }
+    uint32_t capabilities() const override { return CAP_TTS | CAP_AUTO_DOWNLOAD | CAP_TTS_SPEED; }
 
     std::vector<crispasr_segment> transcribe(const float* /*samples*/, int /*n_samples*/, int64_t /*t_offset_cs*/,
                                              const whisper_params& /*params*/) override {
@@ -161,6 +161,12 @@ public:
             }
             voice_loaded_ = true;
         }
+
+        // Apply per-request speaking rate / duration scaling. Explicitly reset
+        // to 1.0f when tts_speed <= 0.0f or default to prevent state leakage
+        // across consecutive requests on the shared context.
+        const float length_scale = (params.tts_speed > 0.0f) ? (1.0f / params.tts_speed) : 1.0f;
+        kokoro_set_length_scale(ctx_, length_scale);
 
         // #316: --tts-phonemes drives the acoustic model directly, skipping the
         // G2P. This is the seam a pronunciation bug lives on — feeding another

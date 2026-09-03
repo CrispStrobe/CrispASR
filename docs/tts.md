@@ -1,7 +1,8 @@
 # Text-to-Speech (TTS)
 
-CrispASR ships **thirty-five open-weights TTS engine families** (55 registered
-TTS backends once variants are counted — see `docs/feature-matrix.md`) behind
+CrispASR ships **62 registered open-weights TTS backends** — roughly three
+dozen distinct engine families once variants are folded; the authoritative
+auto-generated list is [`docs/feature-matrix.md`](feature-matrix.md) — behind
 the same `crispasr` binary, each with a distinct voice / quality / footprint
 trade-off:
 

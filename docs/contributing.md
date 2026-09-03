@@ -313,7 +313,21 @@ endif()
 - `python/crispasr/_binding.py` — add the name to the TTS-backend lists in
   the `synthesize` comment + docstring.
 - `bindings/go/crispasr_session.go` — add to the header/type comments.
-  Go links `-lcrispasr` (not per-backend), so **no LDFLAGS change**.
+- ⚠ `bindings/go/whisper.go` — **REGENERATE THE cgo LDFLAGS**. This step used
+  to be documented here as unnecessary ("Go links `-lcrispasr`, not
+  per-backend"), which is wrong and cost two red-CI incidents (basic-pitch,
+  then mt3): the `#cgo linux/darwin LDFLAGS` lines enumerate EVERY static
+  library by name, so a new `add_library(<backend> STATIC …)` in
+  `src/CMakeLists.txt` must be added there or the Go bindings fail to link
+  with `undefined reference to <backend>_*`. Do not hand-edit the list — run
+
+  ```bash
+  python tools/sync_go_cgo_ldflags.py           # regenerates from a cmake graph
+  python tools/sync_go_cgo_ldflags.py --check   # what CI asserts
+  ```
+
+  `tools/check-backend-wiring.py` runs the `--check` form; a failure prints
+  `RESULT: FAIL (Go cgo LDFLAGS drift)` and names this script.
 - `flutter/crispasr/lib/src/crispasr.dart` — add to the synthesize
   docstring. Dart uses `DynamicLibrary.lookupFunction` with symbol-presence
   checks, so new C-ABI functions are discovered automatically.

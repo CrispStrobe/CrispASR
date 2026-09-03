@@ -536,9 +536,9 @@ stays default-locked.
 resampling of the synthesised float32 buffer — backends produce at
 their native rate, the server resamples before format dispatch.
 Quality loss vs. a sinc resampler is minimal at modest speeds
-(0.5x .. 2.0x) for speech. Backends that grow native duration knobs
-will plumb `params.tts_speed` through directly and bypass this path
-(future work).
+(0.5x .. 2.0x) for speech. Backends that declare `CAP_TTS_SPEED` (e.g. Kokoro)
+plumb `params.tts_speed` through directly and bypass this path to preserve
+fundamental frequency ($F_0$) and formants without pitch distortion.
 
 ### Python OpenAI SDK example
 

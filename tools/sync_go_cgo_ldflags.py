@@ -39,9 +39,22 @@ EXCLUDE_LIBS = {"common", "ggml-metal", "ggml-blas"}
 LIB_NAME_MAP = {"crispasr-lib": "crispasr"}
 
 
-def generate_dot(dot_path):
-    """Run cmake --graphviz to produce the dependency dot file."""
-    build_dir = os.path.join(tempfile.gettempdir(), "crispasr_graphviz_build")
+def generate_dot(dot_path, build_dir=None):
+    """Run cmake --graphviz to produce the dependency dot file.
+
+    The scratch build dir must be UNIQUE per invocation. It used to be a fixed
+    `<tmp>/crispasr_graphviz_build`, which collides whenever two checkouts of
+    this repo run the tool on one machine — several sessions plus git worktrees
+    is the normal case here. Observed 2026-09-03: a stale cache left by a
+    worktree made `--check` die with "The source ... does not match the source
+    ... used to generate cache", which reads like an LDFLAGS drift failure and
+    is not one. The worse version of the collision is silent: a cache from a
+    tree cmake considers compatible gets REUSED, and the dot then describes a
+    different backend set than the one being checked — a false verdict rather
+    than an error.
+    """
+    if build_dir is None:
+        build_dir = tempfile.mkdtemp(prefix="crispasr_graphviz_")
     cmd = [
         "cmake",
         "-S", REPO_ROOT,
@@ -92,9 +105,10 @@ RE_DARWIN_LIBS = re.compile(
 
 def sync(dot_path=None, check=False):
     if dot_path is None:
-        dot_path = os.path.join(tempfile.gettempdir(), "crispasr_sync.dot")
+        tmp_build = tempfile.mkdtemp(prefix="crispasr_graphviz_")
+        dot_path = os.path.join(tmp_build, "crispasr_sync.dot")
         print(f"Generating dot file at {dot_path} ...", file=sys.stderr)
-        generate_dot(dot_path)
+        generate_dot(dot_path, build_dir=tmp_build)
 
     libs = get_libs(dot_path)
     if not libs:

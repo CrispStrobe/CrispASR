@@ -12,6 +12,7 @@
 #include "core/fft.h"
 #include "core/gguf_loader.h"
 #include "core/gpu_backend_pref.h"
+#include "sidon_rpe_gates.h" // #416 follow-up: length-aware RPE formulation choice
 
 #include <algorithm>
 #include <chrono>
@@ -95,18 +96,35 @@ enum class sidon_rpe_mode {
     bucket_direct // dot per bucket, gather index supplied host-side already shaped [T, T, H]
 };
 
-static sidon_rpe_mode parse_rpe_mode() {
+// Resolve the RPE formulation for a graph of THIS length. Decided per graph
+// build, not once at init: the choice depends on T (see sidon_rpe_gates.h), and
+// reading it at init also made CRISPASR_SIDON_RPE inert for anything that set
+// it after loading the model — which is exactly how the mode-equivalence check
+// in tests/test_sidon_live.cpp ended up comparing bucket-direct against itself.
+static sidon_rpe_mode resolve_rpe_mode(int T, int head_dim, int heads, bool is_gpu, int verbosity) {
+    namespace g = sidon_rpe_gates;
     const char* e = getenv("CRISPASR_SIDON_RPE");
-    if (!e || !e[0])
-        return sidon_rpe_mode::bucket_direct;
-    if (std::strcmp(e, "expand") == 0)
+
+    static bool warned_unknown = false;
+    if (g::env_mode_is_unknown(e) && !warned_unknown) {
+        warned_unknown = true;
+        std::fprintf(stderr,
+                     "sidon: unknown CRISPASR_SIDON_RPE='%s' (expand|bucket|bucket-direct); using bucket-direct\n", e);
+    }
+
+    const g::Resolved r = g::resolve(e, getenv("CRISPASR_SIDON_RPE_BUDGET_MB"), T, head_dim, heads, is_gpu);
+    if (r.auto_expand && verbosity)
+        std::fprintf(stderr, "sidon: RPE auto-selected 'expand' (T=%d, +%.1f MiB transient)\n", T,
+                     (double)g::expand_extra_bytes(T, head_dim, heads) / (1024.0 * 1024.0));
+
+    switch (r.m) {
+    case g::mode::expand:
         return sidon_rpe_mode::expand;
-    if (std::strcmp(e, "bucket") == 0)
+    case g::mode::bucket:
         return sidon_rpe_mode::bucket;
-    if (std::strcmp(e, "bucket-direct") == 0)
-        return sidon_rpe_mode::bucket_direct;
-    std::fprintf(stderr, "sidon: unknown CRISPASR_SIDON_RPE='%s' (expand|bucket|bucket-direct); using bucket-direct\n",
-                 e);
+    case g::mode::bucket_direct:
+        break;
+    }
     return sidon_rpe_mode::bucket_direct;
 }
 
@@ -722,6 +740,15 @@ static bool prepare_predictor_graph(sidon_context* ctx, int T) {
         return false;
     }
 
+    // Length-aware RPE choice (#416 follow-up). Must precede the build: it
+    // changes which tensors the graph materialises.
+    {
+        const int H = ctx->model.hp.heads;
+        const int hd = H > 0 ? ctx->model.hp.hidden / H : 0;
+        const bool is_gpu = ctx->backend && !core_cpu_backend::is_cpu(ctx->backend);
+        ctx->rpe_mode = resolve_rpe_mode(T, hd, H, is_gpu, ctx->params.verbosity);
+    }
+
     ctx->predictor_graph = build_predictor_graph(ctx, ctx->predictor_ctx, T);
     if (ctx->predictor_vulkan)
         report_unsupported_vulkan_ops(ctx, ctx->backend, ctx->predictor_graph, "predictor");
@@ -814,7 +841,8 @@ sidon_context* sidon_init_from_file(const char* path, sidon_context_params param
         return nullptr;
     }
     prepare_fastconv(ctx);
-    ctx->rpe_mode = parse_rpe_mode();
+    // ctx->rpe_mode is resolved per graph build (it depends on T) — see
+    // resolve_rpe_mode() and prepare_predictor_graph().
     if (const char* e = getenv("CRISPASR_SIDON_QUANT_RPE"); e && e[0] && e[0] != '0')
         ctx->quant_rpe = true;
     ctx->predictor_sched = make_stage_scheduler(ctx->backend, ctx->backend_cpu);

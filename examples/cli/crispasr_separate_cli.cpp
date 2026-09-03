@@ -97,6 +97,8 @@ int crispasr_run_separate(const whisper_params& params) {
             // #414: forward the CLI's GPU intent — zero-initialized default
             // params carry use_gpu=false, which silently pinned separation to
             // CPU even on GPU builds (the moonshine "encoder gap" trap).
+            // Graph/fused/segment toggles come from default_params + the
+            // CRISPASR_MELBAND_* env overrides (Change 176), resolved in init.
             auto mp = mel_band_roformer_default_params();
             mp.use_gpu = params.use_gpu;
             mp.n_threads = params.n_threads;

@@ -56,6 +56,12 @@ def _load_config(model_dir: Path):
     m.setdefault("stft_n_fft", a.get("n_fft", 2048))
     m.setdefault("stft_hop_length", a.get("hop_length", 441))
     m.setdefault("stft_win_length", a.get("n_fft", 2048))
+    # chunk_size = the inference window the checkpoint was TRAINED on (Kim
+    # vocals: 352800 = 8.0 s @ 44100). The runtime defaults segmentation to it;
+    # a 10 s default would extrapolate RoPE 25% past training (PR #422 review).
+    # Some configs keep it under `audio`; default 0 = omit the KV entirely so
+    # old runtimes fall back to their own 8 s default.
+    m.setdefault("chunk_size", a.get("chunk_size", 0))
     return m
 
 
@@ -153,6 +159,8 @@ def main():
     w.add_uint32("mel-band-roformer.stft_hop_length", hop)
     w.add_uint32("mel-band-roformer.stft_win_length", win)
     w.add_uint32("mel-band-roformer.stft_normalized", 1 if cfg.get("stft_normalized", False) else 0)
+    if cfg.get("chunk_size"):
+        w.add_uint32("mel-band-roformer.chunk_size", int(cfg["chunk_size"]))
     w.add_string("mel-band-roformer.instruments_json",
                  json.dumps(cfg.get("training", {}).get("instruments", ["vocals", "other"])
                             if isinstance(cfg.get("training"), dict) else ["vocals", "other"]))

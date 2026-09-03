@@ -138,6 +138,7 @@ enum crispasr_capability : uint32_t {
                                         // dispatcher. Note this backend emits scores, not a
                                         // decided tablature: the constrained Viterbi/DP that
                                         // picks a playable fingering belongs to the caller.
+    CAP_TTS_SPEED = 1u << 29,           // backend handles tts_speed / duration scaling natively without pitch shift
 };
 
 // ---------------------------------------------------------------------------
@@ -161,6 +162,11 @@ public:
 
     // Bitmask of crispasr_capability flags.
     virtual uint32_t capabilities() const = 0;
+
+    // True if this backend handles speaking-rate / speed scaling natively
+    // (via duration predictor, pace, ODE speed, etc.) without pitch shift.
+    // When true, server-side post-synthesis resampling is bypassed.
+    virtual bool handles_tts_speed() const { return (capabilities() & CAP_TTS_SPEED) != 0; }
 
     // Load the model and prepare internal state. Returns false on failure.
     // Params are passed by const-ref — backends should only read the fields

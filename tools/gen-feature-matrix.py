@@ -96,6 +96,10 @@ CAP_LABELS: list[tuple[str, str, str]] = [
      "True token-level streaming output."),
     ("tab", "Tab",
      "Guitar tablature: per-frame per-string fret scores (--tab)."),
+    ("tts-speed", "TTS Speed",
+     "Scales speaking rate natively in the acoustic model (--tts-speed). The "
+     "server skips its post-synthesis linear resampler for these backends, so "
+     "pitch is not shifted and the rate is not applied twice."),
 ]
 
 

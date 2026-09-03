@@ -1,0 +1,84 @@
+# Deep static analysis, split out of lint.yml (2026-09-03).
+#
+# Why a separate workflow: lint.yml's concurrency group cancels the previous
+# run on every push, and with the multi-session fleet merging every few
+# minutes the slow cppcheck job never finished — main went 2 days with five
+# consecutive cancelled Lint runs and therefore NO cppcheck verdict at all
+# (a cancelled run is indistinguishable from one that never ran). Here the
+# concurrency group does NOT cancel in progress: one run always completes,
+# and at most one newest pending run queues behind it. The nightly schedule
+# is the backstop so a quiet day still gets a verdict on the final tree.
+name: Lint Deep
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**.c'
+      - '**.cpp'
+      - '**.h'
+      - '**.hpp'
+      - '.github/workflows/lint-deep.yml'
+  schedule:
+    - cron: '20 2 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+
+  # cppcheck: fast additional static analysis (no compilation required)
+  # Catches a complementary set of bugs vs clang-tidy.
+
+  cppcheck:
+    name: cppcheck (static analysis)
+    # Pin the runner image, not ubuntu-latest: cppcheck is apt-installed and its
+    # version tracks the image, so `ubuntu-latest` flipping (e.g. 22.04 -> 24.04)
+    # silently changes which findings fire and can turn Lint red with NO code
+    # change (clang-format is version-pinned for exactly this reason). 22.04
+    # ships cppcheck 2.7; bump this line deliberately when adopting a new version.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Install cppcheck
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends cppcheck
+          cppcheck --version   # record the pinned version in the log
+
+      - name: Run cppcheck
+        # --error-exitcode=1: fail on any error-level finding.
+        # --enable=warning,style,performance,portability: broad coverage.
+        # --suppress=*:ggml/*: skip third-party ggml code.
+        # --std=c++17: match the codebase standard.
+        run: |
+          cppcheck \
+            --error-exitcode=1 \
+            --enable=warning,performance,portability \
+            --inline-suppr \
+            --std=c++17 \
+            --suppress=missingIncludeSystem \
+            --suppress=unmatchedSuppression \
+            --suppress=duplicateAssignExpression \
+            -i ggml \
+            -i bindings \
+            --suppress='*:examples/server/*' \
+            --suppress='*:*httplib.h' \
+            --suppress='*:*json.hpp' \
+            --suppress='*:src/miniaudio.h' \
+            --suppress='*:*miniaudio.h' \
+            --suppress='*:*stb_vorbis.c' \
+            --suppress='*:*rnnoise/*' \
+            --suppress=unknownMacro \
+            --suppress=nullPointerOutOfMemory \
+            --suppress=nullPointerArithmeticOutOfMemory \
+            --suppress=toomanyconfigs \
+            --suppress=invalidFunctionArg \
+            --quiet \
+            src/ examples/cli/ crisp_audio/
+
