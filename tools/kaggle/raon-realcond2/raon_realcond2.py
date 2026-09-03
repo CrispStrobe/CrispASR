@@ -87,7 +87,10 @@ from f5_tts.model.modules import MelSpec  # noqa: E402
 from f5_tts.model.utils import get_tokenizer, list_str_to_idx  # noqa: E402
 conf = yaml.safe_load(open(cfg)); a = conf["model"]["arch"]; mspec = conf["model"]["mel_spec"]
 n_mel = mspec["n_mel_channels"]
-DEV = "cuda" if torch.cuda.is_available() else "cpu"
+# FORCE CPU for torch: Kaggle's PyTorch has no sm_60 kernels, so CFM.sample
+# CUDA-errors on a P100 (the ref-dump forced CPU for the same reason). C++/ggml
+# stays on GPU independently (ggml-cuda ships sm_60/75). CPU is why we cap ref_T.
+DEV = "cpu"
 sd = torch.load(ckpt, map_location="cpu", weights_only=True)["ema_model_state_dict"]
 sd = {k.replace("ema_model.", ""): v for k, v in sd.items() if k.startswith("ema_model.") and "mel_spec" not in k}
 vocab_map, _ = get_tokenizer(vocab, "custom")
@@ -97,11 +100,9 @@ model = CFM(
     mel_spec_kwargs=mspec,
     vocab_char_map={c: i for c, i in vocab_map.items() if i < ckpt_text - 1},
 )
-try:
-    model.load_state_dict(sd, strict=False); model = model.to(DEV).eval()
-except Exception as e:
-    print("GPU load failed, CPU:", str(e)[:150], flush=True); DEV = "cpu"; model = model.to("cpu").eval()
-step("cfm_built", dev=DEV)
+model.load_state_dict(sd, strict=False); model = model.to(DEV).eval()
+torch.set_num_threads(os.cpu_count() or 4)
+step("cfm_built", dev=DEV, threads=os.cpu_count())
 
 # jfk ref-mel via the model's own extractor (CPU stft) then to DEV
 import wave as _w
@@ -109,7 +110,12 @@ _wf = _w.open(str(ref_wav), "rb"); _n = _wf.getnframes()
 _a = np.frombuffer(_wf.readframes(_n), dtype=np.int16).astype(np.float32) / 32768.0; _wf.close()
 wav = torch.from_numpy(_a).unsqueeze(0)
 with torch.no_grad():
-    ref_mel = MelSpec(**mspec)(wav)[0].T.contiguous()  # (ref_T, n_mel), CPU
+    ref_mel = MelSpec(**mspec)(wav)[0].T.contiguous()  # (full_ref_T, n_mel), CPU
+# Cap ref length so the CPU CFM.sample (no GPU on P100) is tractable. A ~2.4 s
+# ref is a valid voice prompt, and the sampler bug (if any) is per-step, not
+# scale-specific — it must show at T~300 as much as T~965.
+REF_CAP = int(os.environ.get("RAON_REF_CAP", "150"))
+ref_mel = ref_mel[:REF_CAP].contiguous()
 ref_T = ref_mel.shape[0]
 ref_text = "And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
 gen_text = "The quick brown fox jumps over the lazy dog."
