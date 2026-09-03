@@ -1,0 +1,14 @@
+{
+  "id": "chr1s4/crispasr-raon-drift-03b",
+  "title": "crispasr-raon-drift-03b",
+  "code_file": "raon_drift_03b.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "true",
+  "dataset_sources": ["chr1s4/crispasr-hf-token", "chr1s4/crispasr-ccache"],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}
