@@ -71,7 +71,8 @@ os.environ["LD_LIBRARY_PATH"] = str(CLI.parent) + ":" + os.environ.get("LD_LIBRA
 gguf = hf_hub_download(f"cstr/raon-opentts-{SIZE.lower()}-GGUF", f"raon-opentts-{SIZE.lower()}-f16.gguf",
                        local_dir=str(MODELS), token=HF_TOKEN or None)
 ref_wav = CLONE / "samples" / "jfk.wav"
-step("built")
+BACKEND = {"0.3B": "raon", "1B": "raon-1b"}[SIZE]
+step("built", backend=BACKEND)
 
 ckpt = dl(REPO, CKPT_FILE, SIZE); cfg = dl(REPO, "config.yaml", SIZE); vocab = dl(REPO, "vocab.txt", SIZE)
 from f5_tts.model.backbones.dit import DiT  # noqa: E402
@@ -123,23 +124,32 @@ def load(d, n):
 x0[0].contiguous().numpy().astype(np.float32).tofile(IN / "x.bin")
 cond[0].contiguous().numpy().astype(np.float32).tofile(IN / "cond.bin"); tok.tofile(IN / "tokens.bin")
 e1 = dict(os.environ); e1["CRISPASR_F5_INPUT_PROBE"] = str(IN)
-sh(f"{CLI} --backend raon-1b -m {gguf} --voice {ref_wav} --ref-text x --tts probe --tts-output {WORK/'o.wav'} -t 4 --i-have-rights", env=e1, timeout=1800)
+sh(f"{CLI} --backend {BACKEND} -m {gguf} --voice {ref_wav} --ref-text x --tts probe --tts-output {WORK/'o.wav'} -t 4 --i-have-rights", env=e1, timeout=1800)
 cpp_hidden = load(IN, "cpp_hidden.bin"); cpp_temb = load(IN, "cpp_temb.bin")
 
 # C++ DIT_PROBE with the ORACLE's hidden+temb -> isolates the blocks on identical input
 o_hidden.tofile(DT / "hidden.bin"); o_temb.tofile(DT / "temb.bin"); (DT / "shape.txt").write_text(f"{T}")
 e2 = dict(os.environ); e2["CRISPASR_F5_DIT_PROBE"] = str(DT)
-sh(f"{CLI} --backend raon-1b -m {gguf} --voice {ref_wav} --ref-text x --tts probe --tts-output {WORK/'o.wav'} -t 4 --i-have-rights", env=e2, timeout=1800)
+sh(f"{CLI} --backend {BACKEND} -m {gguf} --voice {ref_wav} --ref-text x --tts probe --tts-output {WORK/'o.wav'} -t 4 --i-have-rights", env=e2, timeout=1800)
 
-block_md = []
-for k in range(depth):
-    block_md.append(maxdiff(o_blocks[k], load(DT, f"cpp_block_{k}.bin")))
+def relerr(md, ref):
+    # max|diff| normalized by the block's RMS magnitude (calibration #2): a
+    # uniform relative rate is f16 rounding; absolute grows just because
+    # activations grow through the stack, masking a genuine single-op jump.
+    if md is None:
+        return None
+    rms = float(np.sqrt(np.mean(ref.astype(np.float64) ** 2)))
+    return round(md / rms, 7) if rms > 0 else None
+
+block_md = [maxdiff(o_blocks[k], load(DT, f"cpp_block_{k}.bin")) for k in range(depth)]
+block_rel = [relerr(block_md[k], o_blocks[k]) for k in range(depth)]
 result = {"size": SIZE, "T": T, "depth": depth, "t": tval,
-          "time_embed_maxdiff": maxdiff(o_temb, cpp_temb),
-          "input_embed_maxdiff": maxdiff(o_hidden, cpp_hidden),
+          "time_embed_maxdiff": maxdiff(o_temb, cpp_temb), "time_embed_relerr": relerr(maxdiff(o_temb, cpp_temb), o_temb),
+          "input_embed_maxdiff": maxdiff(o_hidden, cpp_hidden), "input_embed_relerr": relerr(maxdiff(o_hidden, cpp_hidden), o_hidden),
           "velocity_maxdiff_injected_oracle_hidden": maxdiff(o_vel, load(DT, "cpp_velocity.bin")),
-          "block_maxdiff": [None if x is None else round(x, 7) for x in block_md]}
+          "block_maxdiff": [None if x is None else round(x, 7) for x in block_md],
+          "block_relerr": block_rel}
 (WORK / "raon_drift.json").write_text(json.dumps(result, indent=2))
 print(json.dumps(result, indent=2), flush=True)
-step("DONE", temb_md=result["time_embed_maxdiff"], input_md=result["input_embed_maxdiff"],
-     block0=result["block_maxdiff"][0], blocklast=result["block_maxdiff"][-1])
+step("DONE", temb_rel=result["time_embed_relerr"], input_rel=result["input_embed_relerr"],
+     block0_rel=block_rel[0], blocklast_rel=block_rel[-1])
