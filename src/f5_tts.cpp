@@ -101,16 +101,24 @@ static bool f5_f16_act_enabled() {
     return v != 0;
 }
 
-// CRISPASR_F5_NO_FLASH=1 replaces the fused flash-attention in each DiT block with
-// a manual mul_mat/soft_max_ext/mul_mat path (F32 throughout). This is an A/B for
-// the flash kernel's KQ-accumulation precision: ggml_flash_attn_ext_set_prec's
-// GGML_PREC_F32 hint is silently ignored by some flash kernels (observed on P100/
-// sm_60), so the manual path is the hint-independent way to isolate the flash op.
-static bool f5_no_flash_enabled() {
+// DiT attention: default to a manual mul_mat/soft_max_ext/mul_mat SDPA path (F32
+// throughout), which is correct on every backend. Fused ggml_flash_attn_ext is
+// faster but accumulates the KQ product in F16 on flash kernels that ignore the
+// GGML_PREC_F32 hint (observed on P100/sm_60) — measured to drift ~16x more than
+// f16-weight rounding alone on the 0.3B and to NaN on the deeper/wider 1B. So
+// flash is OPT-IN: CRISPASR_F5_FLASH=1 selects it (safe only where the prec hint
+// is honoured). CRISPASR_F5_NO_FLASH=1 is still accepted (forces manual) for
+// back-compat. TODO: replace the env gate with an init-time probe that runs both
+// paths once and auto-selects manual where they diverge (self-calibrating, no
+// hardware allowlist).
+static bool f5_use_flash_attn() {
     static int v = -1;
     if (v < 0) {
-        const char* e = crispasr_env::get("CRISPASR_F5_NO_FLASH");
-        v = (e && *e && *e != '0') ? 1 : 0;
+        const char* no = crispasr_env::get("CRISPASR_F5_NO_FLASH");
+        const char* yes = crispasr_env::get("CRISPASR_F5_FLASH");
+        bool force_manual = (no && *no && *no != '0');
+        bool opt_in_flash = (yes && *yes && *yes != '0');
+        v = (opt_in_flash && !force_manual) ? 1 : 0;
     }
     return v != 0;
 }
@@ -1212,21 +1220,21 @@ static bool f5_dit_cache_build(f5_tts_context* ctx, int T, int B) {
         // Attention (bidirectional, no mask). q/k/v are (head_dim, T, n_heads, B) here.
         float attn_scale = 1.0f / sqrtf((float)head_dim);
         ggml_tensor* attn_out;
-        if (f5_no_flash_enabled()) {
-            // Manual SDPA, F32 throughout — hint-independent A/B vs the flash kernel.
+        if (f5_use_flash_attn()) {
+            // Fused flash-attention (opt-in). Request F32 KQ accumulation — honored
+            // by most backends, but silently ignored by some flash kernels (P100/
+            // sm_60), which is why manual SDPA is the default. Sibling backends
+            // (bark_tts, beat_this, chatterbox) set this hint too.
+            attn_out = ggml_flash_attn_ext(cache.gctx, q, k, v, nullptr, attn_scale, 0.0f, 0.0f);
+            ggml_flash_attn_ext_set_prec(attn_out, GGML_PREC_F32);
+        } else {
+            // Manual SDPA, F32 throughout — correct on every backend (default).
             ggml_tensor* kq = ggml_mul_mat(cache.gctx, k, q); // (T_k, T_q, n_heads, B)
             kq = ggml_soft_max_ext(cache.gctx, kq, nullptr, attn_scale, 0.0f);
             ggml_tensor* v_t = ggml_cont(cache.gctx, ggml_transpose(cache.gctx, v)); // (T_k, head_dim, n_heads, B)
             ggml_tensor* kqv = ggml_mul_mat(cache.gctx, v_t, kq);                    // (head_dim, T_q, n_heads, B)
             // → (head_dim, n_heads, T, B), matching flash_attn_ext's output layout.
             attn_out = ggml_cont(cache.gctx, ggml_permute(cache.gctx, kqv, 0, 2, 1, 3));
-        } else {
-            attn_out = ggml_flash_attn_ext(cache.gctx, q, k, v, nullptr, attn_scale, 0.0f, 0.0f);
-            // Request F32 KQ accumulation. Honored by most backends, but silently
-            // ignored by some flash kernels (P100/sm_60) — CRISPASR_F5_NO_FLASH is
-            // the fallback there. Sibling backends (bark_tts, beat_this, chatterbox)
-            // set this hint too.
-            ggml_flash_attn_ext_set_prec(attn_out, GGML_PREC_F32);
         }
         // Collapse heads to inner_dim = n_heads*head_dim, NOT dim: F5 Attention
         // sets inner_dim independently (dim_head defaults to 64), so inner_dim !=
