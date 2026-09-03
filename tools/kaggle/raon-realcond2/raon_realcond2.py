@@ -104,27 +104,39 @@ model.load_state_dict(sd, strict=False); model = model.to(DEV).eval()
 torch.set_num_threads(os.cpu_count() or 4)
 step("cfm_built", dev=DEV, threads=os.cpu_count())
 
-# jfk ref-mel via the model's own extractor (CPU stft) then to DEV
-import wave as _w
-_wf = _w.open(str(ref_wav), "rb"); _n = _wf.getnframes()
-_a = np.frombuffer(_wf.readframes(_n), dtype=np.int16).astype(np.float32) / 32768.0; _wf.close()
-wav = torch.from_numpy(_a).unsqueeze(0)
+# REPRODUCE THE REF-DUMP'S EXACT (converging) ref: its own example wav +
+# matched transcript, or its random-noise fallback. My jfk+guessed-transcript
+# diverged because ref audio and text were INCONSISTENT; the ref-dump converged
+# because they matched (or the ref carried no info). This is the known-good
+# control per the "library/its-own-setup is the oracle" rule.
+import soundfile as sf  # noqa: E402
+import torchaudio.functional as AF  # noqa: E402
+ref_src = next((p for p in (RAON / "src/f5_tts/infer/examples").rglob("*.wav")), None)
+wav = None; ref_kind = "random-noise-fallback"; ref_text = "reference"
+if ref_src is not None:
+    try:
+        data, sr0 = sf.read(str(ref_src), dtype="float32")
+        if data.ndim > 1:
+            data = data.mean(1)
+        w0 = torch.from_numpy(np.ascontiguousarray(data)).unsqueeze(0)
+        if sr0 != mspec["target_sample_rate"]:
+            w0 = AF.resample(w0, sr0, mspec["target_sample_rate"])
+        wav = w0
+        ref_text = os.environ.get("RAON_REF_TEXT", "Some call me nature, others call me mother nature.")
+        ref_kind = f"example:{ref_src.name}"
+    except Exception as e:
+        print("ref load failed, random fallback:", str(e)[:150], flush=True)
+if wav is None:
+    torch.manual_seed(0); wav = torch.randn(1, mspec["target_sample_rate"] * 3) * 0.1
+    ref_text = "reference"
 with torch.no_grad():
-    ref_mel = MelSpec(**mspec)(wav)[0].T.contiguous()  # (full_ref_T, n_mel), CPU
-# Cap ref length so the CPU CFM.sample (no GPU on P100) is tractable. A ~2.4 s
-# ref is a valid voice prompt, and the sampler bug (if any) is per-step, not
-# scale-specific — it must show at T~300 as much as T~965.
-REF_CAP = int(os.environ.get("RAON_REF_CAP", "150"))
-ref_mel = ref_mel[:REF_CAP].contiguous()
+    ref_mel = MelSpec(**mspec)(wav)[0].T.contiguous()  # (ref_T, n_mel), CPU
 ref_T = ref_mel.shape[0]
-# ref_text MUST match the (capped) ref audio, else text/audio disagree and even
-# the oracle CFM.sample diverges. The first ~2.4 s of jfk is its opening phrase.
-# Duration = 2*ref_T is the ref-dump's known-good setting (it converged).
-ref_text = "And so my fellow Americans"
-gen_text = "Hello there my friend."
+gen_text = "The quick brown fox jumps over the lazy dog."
 full_text = ref_text + " " + gen_text
-D = 2 * ref_T
+D = 2 * ref_T   # the ref-dump's known-good duration
 tok = list_str_to_idx([list(full_text)], model.vocab_char_map)[0].numpy().astype(np.int32)
+step("ref_source", kind=ref_kind, ref_T=ref_T)
 step("setup", ref_T=ref_T, D=D, nt=int(tok.size))
 
 # ── CONTROL: CFM.sample (the known-good sampler), capture trajectory ───────
