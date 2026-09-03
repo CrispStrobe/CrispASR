@@ -139,8 +139,8 @@ rc = sh(f"{CLI} --backend raon-1b -m {gguf} --voice {ref_wav} --ref-text x --tts
         f"--tts-output {WORK/'o.wav'} -t 4 --seed 42 --i-have-rights -v", env=env, timeout=1800)
 print(rc.stderr[-1200:], flush=True)
 
-def cpp_gen_std(k):
-    p = PROBE / f"ode_step_{k}.bin"
+def gen_std_from(dirp, k):
+    p = Path(dirp) / f"ode_step_{k}.bin"
     if not p.exists():
         return None
     v = np.fromfile(p, dtype=np.float32)
@@ -148,12 +148,51 @@ def cpp_gen_std(k):
         return None
     return round(float(v.reshape(T, n_mel)[ref_T:].std()), 3)
 
-cpp_gen = [cpp_gen_std(k) for k in range(33)]
+cpp_gen = [gen_std_from(PROBE, k) for k in range(33)]
+
+# ── GUARD 1 (against FALSE POSITIVE): the injection MUST have landed. C++'s
+#    ode_step_0 is the init x = the injected y0. If it isn't bitwise y0, C++ ran
+#    its OWN noise and any divergence is meaningless — void the run. ──
+s0p = PROBE / "ode_step_0.bin"
+inj_cos, inj_norm = None, 0.0
+if s0p.exists():
+    s0 = np.fromfile(s0p, dtype=np.float32)
+    if s0.size == y0.size:
+        a, b = y0.reshape(-1).astype(np.float64), s0.astype(np.float64)
+        inj_norm = float(np.linalg.norm(b))
+        if np.linalg.norm(a) > 0 and inj_norm > 0:
+            inj_cos = float(a.dot(b) / (np.linalg.norm(a) * inj_norm))
+injection_landed = (inj_cos is not None and abs(inj_cos - 1.0) < 1e-5 and inj_norm > 0
+                    and float(np.abs(y0.reshape(-1) - np.fromfile(s0p, dtype=np.float32)).max()) < 1e-4)
+step("GUARD1_injection", cos=None if inj_cos is None else round(inj_cos, 6), norm=round(inj_norm, 2),
+     landed=bool(injection_landed))
+
+# ── GUARD 2 (against FABRICATED POSITIVE): perturb y0 by a known epsilon, run
+#    C++ again, and confirm the gen-region-std metric actually MOVES. If a
+#    deliberately corrupted injection still reads identical, the metric is blind
+#    and neither branch of the clean-read table means anything. ──
+PROBE2 = TMP / "ode_perturb"; PROBE2.mkdir(exist_ok=True)
+y0p = y0 + (0.5 * np.random.RandomState(1).standard_normal(y0.shape)).astype(np.float32)
+(PROBE2 / "shape.txt").write_text(f"{T} {tok.size}")
+y0p.tofile(PROBE2 / "x0.bin"); stepcond.tofile(PROBE2 / "cond.bin"); tok.tofile(PROBE2 / "tokens.bin")
+env2 = dict(os.environ); env2["CRISPASR_F5_ODE_PROBE"] = str(PROBE2)
+sh(f"{CLI} --backend raon-1b -m {gguf} --voice {ref_wav} --ref-text x --tts probe "
+   f"--tts-output {WORK/'o2.wav'} -t 4 --seed 42 --i-have-rights", env=env2, timeout=1800)
+cpp_gen_perturbed = [gen_std_from(PROBE2, k) for k in range(33)]
+# the metric must distinguish the perturbed run at some step (>0.02 abs on std, or a NaN-vs-finite split)
+metric_sensitive = any(
+    (g is None) != (p is None) or (g is not None and p is not None and abs(g - p) > 0.02)
+    for g, p in zip(cpp_gen, cpp_gen_perturbed))
+step("GUARD2_metric_sensitive", sensitive=bool(metric_sensitive))
+
 result = {"size": SIZE, "ref_T": ref_T, "T": T,
+          "GUARD1_injection_landed": bool(injection_landed), "injection_cos": None if inj_cos is None else round(inj_cos, 6),
+          "GUARD2_metric_sensitive": bool(metric_sensitive),
+          "VALID": bool(injection_landed and metric_sensitive),
           "CONTROL_ref_gen_std": ref_gen_std, "CONTROL_ref_full_std": ref_full_std,
-          "CPP_gen_std": cpp_gen,
+          "CPP_gen_std": cpp_gen, "CPP_gen_std_perturbed": cpp_gen_perturbed,
           "control_converged": (ref_gen_std[-1] is not None and ref_gen_std[-1] < 1.3),
           "cpp_diverged": (cpp_gen[-1] is None or (cpp_gen[-1] or 9) > 1.3)}
 (WORK / "raon_realcond2.json").write_text(json.dumps(result, indent=2))
 print(json.dumps(result, indent=2), flush=True)
-step("DONE", control_ok=result["control_converged"], cpp_diverged=result["cpp_diverged"])
+step("DONE", VALID=result["VALID"], control_ok=result["control_converged"], cpp_diverged=result["cpp_diverged"], g1=result["GUARD1_injection_landed"], g2=result["GUARD2_metric_sensitive"])
