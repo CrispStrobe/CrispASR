@@ -68,6 +68,11 @@ if not CLI.exists():
     c = [p for p in (CLONE / "build").rglob("crispasr") if p.is_file() and os.access(p, os.X_OK)]
     CLI = c[0] if c else None
 os.environ["LD_LIBRARY_PATH"] = str(CLI.parent) + ":" + os.environ.get("LD_LIBRARY_PATH", "")
+# Manual-SDPA A/B: the flash kernel ignores GGML_PREC_F32 on P100/sm_60, so isolate
+# the flash op with the hint-independent manual attention path (default on for this
+# diagnostic; set CRISPASR_F5_NO_FLASH=0 to measure the flash baseline instead).
+os.environ.setdefault("CRISPASR_F5_NO_FLASH", "1")
+step("attn_mode", no_flash=os.environ["CRISPASR_F5_NO_FLASH"])
 gguf = hf_hub_download(f"cstr/raon-opentts-{SIZE.lower()}-GGUF", f"raon-opentts-{SIZE.lower()}-f16.gguf",
                        local_dir=str(MODELS), token=HF_TOKEN or None)
 ref_wav = CLONE / "samples" / "jfk.wav"
