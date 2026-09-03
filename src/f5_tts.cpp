@@ -2853,14 +2853,24 @@ int f5_tts_synthesize(struct f5_tts_context* ctx, const char* text, float** pcm_
         }
         if (T > 0 && (int)x.size() == T * mel_dim && (int)cond.size() == T * mel_dim) {
             std::vector<float> temb = compute_time_embed(ctx, t_val);
+            // COND arm (drop_audio_cond=false, drop_text=false)
             std::vector<float> text_embed = compute_text_embed(ctx, tokens.data(), (int)tokens.size(), T);
             std::vector<float> hidden =
                 f5_compute_hidden(ctx, x.data(), T, mel_dim, cond.data(), text_embed.data(), text_dim, false, false, 0);
             wr("cpp_temb.bin", temb);
             wr("cpp_text_embed.bin", text_embed);
             wr("cpp_hidden.bin", hidden);
-            fprintf(stderr, "f5_tts: INPUT_PROBE T=%d nt=%zu → temb %zu text_embed %zu hidden %zu\n", T, tokens.size(),
-                    temb.size(), text_embed.size(), hidden.size());
+            // UNCOND arm (CFG null: drop_audio_cond=true, drop_text=true) — the
+            // arm every earlier probe skipped; CFG amplifies its error 2×.
+            std::vector<float> text_embed_u =
+                compute_text_embed(ctx, tokens.data(), (int)tokens.size(), T, /*drop_text=*/true);
+            std::vector<float> hidden_u = f5_compute_hidden(ctx, x.data(), T, mel_dim, cond.data(), text_embed_u.data(),
+                                                            text_dim, /*drop_audio_cond=*/true, /*drop_text=*/true, 0);
+            std::vector<float> vel_u = f5_dit_run(ctx, hidden_u.data(), T, temb.data());
+            wr("cpp_text_embed_uncond.bin", text_embed_u);
+            wr("cpp_hidden_uncond.bin", hidden_u);
+            wr("cpp_velocity_uncond.bin", vel_u);
+            fprintf(stderr, "f5_tts: INPUT_PROBE T=%d nt=%zu → cond+uncond arms dumped\n", T, tokens.size());
         } else {
             fprintf(stderr, "f5_tts: INPUT_PROBE bad inputs (T=%d x=%zu cond=%zu)\n", T, x.size(), cond.size());
         }
