@@ -28,10 +28,12 @@ struct mel_band_roformer_params {
     int n_threads;  // 0 = auto
     bool use_gpu;   // attempt GPU acceleration (Metal/CUDA); CPU otherwise
     int gpu_device; // GPU device index
-    // Change 176: segmentation toggles (defaults = validated 10 s Demucs-split).
+    // Change 176: segmentation toggles. Default segment length comes from the
+    // checkpoint's trained chunk_size (GGUF metadata; 8 s Kim fallback) — NOT
+    // a fixed 10 s, which would extrapolate RoPE 25% past training (review #422).
     // Graph/fused/GPU are NOT caller fields — they resolve once in init via
     // mel_band_gates::resolve() (env AUTO/override, mirrors htdemucs #414).
-    int segment_seconds; // Demucs-style split length; <=0 = default (10 s), 1 = per-second
+    int segment_seconds; // Demucs-style split length; <=0 = trained chunk_size, 1 = per-second
     bool no_segment;     // 1 = whole-buffer forward even for long audio (A/B)
 };
 
@@ -81,6 +83,12 @@ int mel_band_roformer_diff(const char* model_gguf, const char* ref_gguf, const c
 // STFT/gather front-end). No Python fixture needed. Returns 0 iff the graph
 // stage passes the cos threshold (>= 0.9995) with equal output sizes.
 // verbosity: 1 = result, 2 = result + magnitudes.
+//
+// NOTE (review #422): this inits from default_params() with use_gpu=false, so
+// a bare run compares CPU-graph against CPU-reference even on a GPU host; set
+// CRISPASR_MELBAND_GPU=1 for a GPU run. The init line prints the backend name
+// ("mel_band_roformer: backend = ...") — do not record a "GPU PASS" from a run
+// whose printed backend is CPU.
 int mel_band_roformer_parity(const char* model_gguf, const char* audio_wav, int verbosity);
 
 #ifdef __cplusplus

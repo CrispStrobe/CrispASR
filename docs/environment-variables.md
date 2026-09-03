@@ -864,10 +864,12 @@ All three optimisation gates are output-equivalent: the per-stage diff reports
   bisection arm. The full decision table is unit-locked in
   tests/test-mel-band-gates.cpp.
 - `CRISPASR_MELBAND_SEG_S` — override the Demucs-style segment length in
-  seconds (`params.segment_seconds`; <=0 → default 10 s). The attention
-  matrix is O(T²·bands·heads), so long inputs are split into ~10 s segments
-  with 25% overlap and a triangular weight (bounds VRAM; the unsegmented
-  whole-buffer path OOMs on any clip beyond ~10 s).
+  seconds (`params.segment_seconds`; <=0 → the checkpoint's trained
+  `chunk_size` from GGUF metadata, 8 s Kim fallback — do NOT expect 10 s: the
+  earlier hardcoded 10 s ran RoPE 25% past the trained window, review #422).
+  The attention matrix is O(T²·bands·heads), so long inputs are split into
+  segments with 25% overlap and a triangular weight (bounds VRAM; the
+  unsegmented whole-buffer path OOMs on any clip beyond ~10 s).
 - `CRISPASR_MELBAND_NO_SEGMENT` — process the whole track in one pass instead
   of the segmented overlap-add schedule (A/B against the old behaviour).
 

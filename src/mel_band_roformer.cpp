@@ -82,6 +82,7 @@ struct mel_band_roformer_hparams {
     int stereo = 1;
     int audio_channels = 2;
     int sample_rate = 44100;
+    int chunk_size = 0; // trained inference window in samples (Kim vocals: 352800 = 8.0 s @ 44100); 0 = unknown
     int n_fft = 2048;
     int hop = 441;
     int win = 2048;
@@ -261,7 +262,7 @@ mel_band_roformer_params mel_band_roformer_default_params(void) {
     p.n_threads = 0;
     p.use_gpu = false; // CPU path is the default (E2); gates AUTO-upgrade to GPU
     p.gpu_device = 0;
-    p.segment_seconds = 0; // <=0 -> default 10 s (Demucs split for long audio)
+    p.segment_seconds = 0; // <=0 -> trained chunk_size from GGUF (8 s Kim fallback)
     p.no_segment = false;  // segmented forward for >1-segment inputs
     return p;
 }
@@ -297,6 +298,11 @@ mel_band_roformer_context* mel_band_roformer_init_from_file(const char* model_pa
     hp.stereo = (int)core_gguf::kv_u32(meta, "mel-band-roformer.stereo", hp.stereo);
     hp.audio_channels = (int)core_gguf::kv_u32(meta, "mel-band-roformer.audio_channels", hp.audio_channels);
     hp.sample_rate = (int)core_gguf::kv_u32(meta, "mel-band-roformer.sample_rate", hp.sample_rate);
+    // Trained inference window (samples). The converter writes it when the
+    // checkpoint config carries it; 0 = absent -> the 8 s Kim fallback in
+    // mel_band_roformer_separate. Segmentation at the TRAINED chunk matters:
+    // 10 s would run the time-transformer's RoPE 25% past training (review #422).
+    hp.chunk_size = (int)core_gguf::kv_u32(meta, "mel-band-roformer.chunk_size", hp.chunk_size);
     hp.n_fft = (int)core_gguf::kv_u32(meta, "mel-band-roformer.stft_n_fft", hp.n_fft);
     hp.hop = (int)core_gguf::kv_u32(meta, "mel-band-roformer.stft_hop_length", hp.hop);
     hp.win = (int)core_gguf::kv_u32(meta, "mel-band-roformer.stft_win_length", hp.win);
@@ -1670,8 +1676,11 @@ mel_band_roformer_result* mel_band_roformer_separate(mel_band_roformer_context* 
     const int channels = ctx->hp.audio_channels;
 
     // Segmented forward for long audio (Demucs split=True pattern). Segment
-    // length from params.segment_seconds (<=0 -> 10 s default: hop=441 =>
-    // ~1001 STFT frames => ~2 GB attention scores on GPU; well under 24 GB).
+    // length from params.segment_seconds; <=0 -> the checkpoint's TRAINED
+    // chunk (GGUF chunk_size, Kim vocals 352800 = 8.0 s @ 44100; fallback 8 s
+    // when the GGUF predates the metadata). Review #422: the earlier hardcoded
+    // 10 s default ran the time-transformer's RoPE positions 25% past anything
+    // seen in training on every segment of long audio.
     // Env overrides for CLI A/B: CRISPASR_MELBAND_SEG_S, CRISPASR_MELBAND_NO_SEGMENT.
     int seg_s = ctx->params.segment_seconds;
     if (const char* seg_env = std::getenv("CRISPASR_MELBAND_SEG_S")) {
@@ -1682,7 +1691,11 @@ mel_band_roformer_result* mel_band_roformer_separate(mel_band_roformer_context* 
     bool no_seg = ctx->params.no_segment;
     if (const char* ns_env = std::getenv("CRISPASR_MELBAND_NO_SEGMENT"))
         no_seg = ns_env[0] && atoi(ns_env) != 0;
-    const int seg_len = (seg_s > 0 ? seg_s : 10) * ctx->hp.sample_rate;
+    // Default segment: the checkpoint's trained chunk. hp.chunk_size is in
+    // samples; 8 s is the Kim vocals chunk (352800 @ 44100) for GGUFs that
+    // predate the metadata (review #422: 10 s extrapolated RoPE).
+    const int default_seg_s = ctx->hp.chunk_size > 0 ? ctx->hp.chunk_size / ctx->hp.sample_rate : 8;
+    const int seg_len = (seg_s > 0 ? seg_s : default_seg_s) * ctx->hp.sample_rate;
     if (no_seg || n_samples <= seg_len || seg_len <= 0)
         return mel_band_roformer_separate_full(ctx, pcm, n_samples, in_channels);
 
