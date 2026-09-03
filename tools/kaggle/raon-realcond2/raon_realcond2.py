@@ -117,10 +117,13 @@ with torch.no_grad():
 REF_CAP = int(os.environ.get("RAON_REF_CAP", "150"))
 ref_mel = ref_mel[:REF_CAP].contiguous()
 ref_T = ref_mel.shape[0]
-ref_text = "And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
-gen_text = "The quick brown fox jumps over the lazy dog."
+# ref_text MUST match the (capped) ref audio, else text/audio disagree and even
+# the oracle CFM.sample diverges. The first ~2.4 s of jfk is its opening phrase.
+# Duration = 2*ref_T is the ref-dump's known-good setting (it converged).
+ref_text = "And so my fellow Americans"
+gen_text = "Hello there my friend."
 full_text = ref_text + " " + gen_text
-rate = ref_T / max(1, len(ref_text)); D = ref_T + int(rate * len(gen_text))
+D = 2 * ref_T
 tok = list_str_to_idx([list(full_text)], model.vocab_char_map)[0].numpy().astype(np.int32)
 step("setup", ref_T=ref_T, D=D, nt=int(tok.size))
 
