@@ -1198,6 +1198,12 @@ static bool f5_dit_cache_build(f5_tts_context* ctx, int T, int B) {
         // Flash attention (bidirectional, no mask)
         float attn_scale = 1.0f / sqrtf((float)head_dim);
         ggml_tensor* attn_out = ggml_flash_attn_ext(cache.gctx, q, k, v, nullptr, attn_scale, 0.0f, 0.0f);
+        // Accumulate the KQ product in F32. Without this, ggml's CUDA flash kernel
+        // defaults to F16 KQ accumulation, which diverges from torch SDPA (F32) by
+        // ~1e-3 per attention — an op-level difference beyond weight-precision rounding
+        // that compounds across the DiT stack (fatal on the deeper/wider 1B, tolerated
+        // on the 0.3B). Sibling backends (bark_tts, beat_this, chatterbox) set this too.
+        ggml_flash_attn_ext_set_prec(attn_out, GGML_PREC_F32);
         // Collapse heads to inner_dim = n_heads*head_dim, NOT dim: F5 Attention
         // sets inner_dim independently (dim_head defaults to 64), so inner_dim !=
         // dim in general (1B: dim=1408, inner=1536). attn_o then maps inner→dim.
