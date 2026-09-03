@@ -133,6 +133,20 @@ text_embed = cap["text_embed"][0].contiguous().numpy().astype(np.float32)  # (T,
 velocity = cap["velocity"][0].contiguous().numpy().astype(np.float32)      # (T, mel)
 depth = len(blk_out)
 ref_blocks = [blk_out[k][0].contiguous().numpy().astype(np.float32) for k in range(depth)]
+
+# ── UNCOND arm capture (CFG null: drop_audio_cond + drop_text) ─────────────
+capu = {}
+u1 = dit.input_embed.register_forward_hook(lambda m, i, o: capu.__setitem__("hidden", o.detach()))
+u4 = dit.text_embed.register_forward_hook(lambda m, i, o: capu.__setitem__("text_embed", o.detach()))
+u3 = dit.proj_out.register_forward_hook(lambda m, i, o: capu.__setitem__("velocity", o.detach()))
+dit.clear_cache()
+with torch.no_grad():
+    _ = dit(x, cond, text_ids, time_t, drop_audio_cond=True, drop_text=True, cfg_infer=False)
+for h in [u1, u4, u3]:
+    h.remove()
+u_text_embed = capu["text_embed"][0].contiguous().numpy().astype(np.float32)
+u_hidden = capu["hidden"][0].contiguous().numpy().astype(np.float32)
+u_velocity = capu["velocity"][0].contiguous().numpy().astype(np.float32)
 tok = text_ids[0].numpy().astype(np.int32)
 (PROBE / "shape.txt").write_text(f"{T} {tok.size}")
 (PROBE / "t.txt").write_text(str(float(time_t.item())))
@@ -172,14 +186,17 @@ def compare(ref, cpp):
 pc = compare(hidden, (hidden * 1.7).reshape(-1))
 result = {"size": SIZE, "T": T, "depth": depth,
           "positive_control_scale1.7": pc,
-          "input_path": {"temb": compare(temb, load("cpp_temb.bin")),
-                         "text_embed": compare(text_embed, load("cpp_text_embed.bin")),
-                         "hidden": compare(hidden, load("cpp_hidden.bin"))},
-          "velocity": compare(velocity, load("cpp_velocity.bin")),
+          "cond_input_path": {"temb": compare(temb, load("cpp_temb.bin")),
+                              "text_embed": compare(text_embed, load("cpp_text_embed.bin")),
+                              "hidden": compare(hidden, load("cpp_hidden.bin"))},
+          "UNCOND_arm": {"text_embed": compare(u_text_embed, load("cpp_text_embed_uncond.bin")),
+                         "hidden": compare(u_hidden, load("cpp_hidden_uncond.bin")),
+                         "velocity": compare(u_velocity, load("cpp_velocity_uncond.bin"))},
+          "cond_velocity": compare(velocity, load("cpp_velocity.bin")),
           "blocks": [{"k": k, **(compare(ref_blocks[k], load(f"cpp_block_{k}.bin")) or {})} for k in range(depth)]}
 (WORK / "raon_dit_diff.json").write_text(json.dumps(result, indent=2))
 print(json.dumps(result, indent=2), flush=True)
 nr = [b.get("norm_ratio") for b in result["blocks"] if b.get("norm_ratio")]
-step("DONE", velocity=result["velocity"], block0_nr=result["blocks"][0].get("norm_ratio"),
+step("DONE", cond_velocity=result["cond_velocity"], uncond=result["UNCOND_arm"]["velocity"], block0_nr=result["blocks"][0].get("norm_ratio"),
      blocklast_nr=result["blocks"][-1].get("norm_ratio"),
      norm_ratio_span=[min(nr), max(nr)] if nr else None)
