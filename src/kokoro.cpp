@@ -2578,6 +2578,13 @@ extern "C" struct kokoro_context_params kokoro_context_default_params(void) {
     return p;
 }
 
+extern "C" struct kokoro_context* kokoro_context_create_for_testing(struct kokoro_context_params params) {
+    auto* c = new kokoro_context();
+    c->params = params;
+    c->n_threads = params.n_threads > 0 ? params.n_threads : 4;
+    return c;
+}
+
 extern "C" struct kokoro_context* kokoro_init_from_file(const char* path_model, struct kokoro_context_params params) {
     if (!path_model) {
         fprintf(stderr, "kokoro: null model path\n");
@@ -3606,11 +3613,25 @@ extern "C" void kokoro_set_n_threads(struct kokoro_context* ctx, int n_threads) 
 extern "C" void kokoro_set_length_scale(struct kokoro_context* ctx, float scale) {
     if (!ctx)
         return;
+    // NaN is not a speed request, it is malformed input — so it must land on
+    // the NEUTRAL value, not inside the clamp range. length_scale is 1/speed,
+    // so the 0.25 floor is the FASTEST setting (4x) and the most degraded
+    // output; folding NaN into it would mean the input path least likely to be
+    // deliberate silently selects the worst-sounding extreme. Fall back to the
+    // no-op instead, and leave the clamp to handle values that are real.
+    if (std::isnan(scale))
+        scale = 1.0f;
     if (scale < 0.25f)
         scale = 0.25f;
     if (scale > 4.0f)
         scale = 4.0f;
     ctx->params.length_scale = scale;
+}
+
+extern "C" float kokoro_get_length_scale(const struct kokoro_context* ctx) {
+    if (!ctx)
+        return 1.0f;
+    return ctx->params.length_scale;
 }
 
 extern "C" void kokoro_free(struct kokoro_context* ctx) {

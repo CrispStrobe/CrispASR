@@ -1,0 +1,14 @@
+{
+  "id": "chr1s4/crispasr-melband-seg-evidence",
+  "title": "crispasr-melband-seg-evidence",
+  "code_file": "crispasr-melband-seg-evidence.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "true",
+  "dataset_sources": ["chr1s4/crispasr-hf-token", "chr1s4/crispasr-ccache"],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}

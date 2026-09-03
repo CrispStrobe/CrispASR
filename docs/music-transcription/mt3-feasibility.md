@@ -60,7 +60,7 @@ Format, confirmed by fetching the objects:
   gzip-level-1 chunk `0.0`, `dtype "<f4"`, `order C`. Decoded
   `continuous_inputs_projection.kernel/0.0` end-to-end with `gzip` +
   `np.frombuffer` → `(512,512) float32`. **Works.**
-- Small params (51 LayerNorm `scale` vectors, `(512,)`) are stored **inline in the
+- Small params (42 LayerNorm `scale` vectors (memo originally said 51 — corrected by the phase-1 full decode: 147 zarr + 42 inline = 189 params), `(512,)`) are stored **inline in the
   895 KB msgpack `checkpoint`** under `/optimizer/target/...` as flax
   ExtType(code=1) = `[shape, dtype, bytes]`. Decoded with `msgpack` + a 12-line
   `ext_hook`. **Works, no flax needed.**

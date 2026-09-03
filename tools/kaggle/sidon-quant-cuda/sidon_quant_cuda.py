@@ -75,6 +75,7 @@ SIDON_REPO = "cstr/Sidon-GGUF"
 # q6_k is included even though the reporter did not try it: if q8_0 and q4_k
 # fail it says whether EVERY quant is affected or only some, which separates
 # "quantized weights in general" from "one specific quant type's kernel".
+LEGACY_FILE = "sidon-legacy-q8_0.gguf"  # rebuilt in-kernel; see the note in main()
 SIDON_FILES = ["sidon-v0.1-f16.gguf", "sidon-v0.1-q8_0.gguf",
                "sidon-v0.1-q6_k.gguf", "sidon-v0.1-q4_k.gguf"]
 
@@ -102,7 +103,8 @@ def build_crispasr():
         raise RuntimeError("cmake configure failed")
     jobs = kh.safe_build_jobs(gpu=True)
     with kh.build_heartbeat("build.ninja", interval_s=30):
-        kh.sh_with_progress(f"cmake --build build -j{jobs} --target crispasr-cli", cwd=str(CLONE))
+        kh.sh_with_progress(f"cmake --build build -j{jobs} --target crispasr-cli crispasr-quantize",
+                            cwd=str(CLONE))
     binp = CLONE / "build" / "bin" / "crispasr"
     if not binp.exists():
         raise RuntimeError("crispasr binary not produced")
@@ -192,7 +194,25 @@ def run_sidon(binp, model, tag, gpu, quant_rpe=False):
     return res
 
 
+SCRIPT_VERSION = "2026-09-03.2"  # bump when arms/capture/predicate change
+
+
 def main():
+    kh.provenance(SCRIPT_VERSION, clone_dir=CLONE)
+    # Settle an open question at zero cost, since this prints before the sm_60
+    # early-exit and therefore rides on any draw, good or bad: does
+    # `kaggle kernels push` upload the WHOLE directory or only code_file?
+    # ~/kaggle_usage.md says "everything in the push directory"; a peer inferred
+    # "only code_file" from `kernels pull` returning a single .py — but pull is
+    # selective by design (its -m flag GENERATES metadata rather than fetching
+    # it), so that observation cannot settle it either way. This lists what the
+    # script can actually see next to itself at runtime, which is the only thing
+    # that decides whether the bundled kaggle_harness.py fallback can ever fire.
+    try:
+        kh.step("upload_probe", script_dir=str(HERE),
+                siblings=sorted(p.name for p in HERE.iterdir()))
+    except Exception as e:
+        kh.step("upload_probe_failed", error=repr(e))
     smi = sh("nvidia-smi --query-gpu=name,driver_version --format=csv,noheader")
     gpu_name = (smi.stdout or "").strip()
     cc_out = sh("nvidia-smi --query-gpu=compute_cap --format=csv,noheader")
@@ -239,6 +259,25 @@ def main():
                             local_dir=str(MODELS), token=HF_TOKEN or None)
     kh.step("models.ready", files=SIDON_FILES)
 
+    # THE PUBLISHED QUANTS CAN NO LONGER REPRODUCE THIS. cstr/Sidon-GGUF was
+    # re-quantized and re-uploaded 2026-09-03, so distance_embedding now ships
+    # as F16 — which makes CRISPASR_SIDON_QUANT_RPE=1 a NO-OP on those files:
+    # the gate only bites when the tensor is actually quantized. Running the
+    # arms on the HF q8_0 would yield a confident "CUDA is fine" from an arm
+    # that never reached the code (and would fail validity gate V3 below,
+    # identical arms). Rebuild the pre-fix file locally; --tensor-type
+    # deliberately overrides the arch guards.
+    legacy = MODELS / LEGACY_FILE
+    qbin = CLONE / "build" / "bin" / "crispasr-quantize"
+    if not qbin.exists():
+        raise RuntimeError("crispasr-quantize not built — cannot rebuild the legacy quant")
+    rq = sh(f"{qbin} {MODELS}/sidon-v0.1-f16.gguf {legacy} q8_0 "
+            f"--tensor-type 'distance_embedding=q8_0'", timeout=1800)
+    if rq.returncode != 0 or not legacy.exists():
+        kh.step("legacy_quant_FAILED", stderr=(rq.stderr or "")[-1500:])
+        raise RuntimeError("legacy quant rebuild failed")
+    kh.step("legacy_quant.ready", path=str(legacy), bytes=legacy.stat().st_size)
+
     results = {"gpu": gpu_name, "compute_cap": cc_raw,
                "mmq_reachable": mmq_reachable, "branch": BRANCH, "runs": {}}
 
@@ -251,7 +290,8 @@ def main():
     #                 have the same defect Vulkan does?)
     #   cpu         — control on the same box
     # f16 needs no cudaq arm: its table is not quantized, so the gate is a no-op.
-    for f in SIDON_FILES:
+    swept = SIDON_FILES + [LEGACY_FILE]
+    for f in swept:
         short = f.replace("sidon-v0.1-", "").replace(".gguf", "")
         arms = [("cuda", True, False), ("cpu", False, False)]
         if "f16" not in f:
@@ -272,8 +312,13 @@ def main():
         m = r.get("measured") or {}
         return bool(r.get("rc") == 0 and m.get("peak", 0) > 0.01)
 
+    # Derive from what was actually SWEPT, not from SIDON_FILES. The published
+    # quants can no longer reproduce (their distance_embedding is F16, so the
+    # gate is a no-op), so a verdict computed over SIDON_FILES alone would read
+    # "not reproduced" from three arms that never reached the code — while
+    # silently excluding sidon-legacy-q8_0, the only model that CAN reproduce.
     quants = [f.replace("sidon-v0.1-", "").replace(".gguf", "")
-              for f in SIDON_FILES if "f16" not in f]
+              for f in swept if "f16" not in f]
     # The defect on CUDA: pre-fix arm silent while its own CPU control is fine.
     repro = [q for q in quants
              if not ok(f"{q}_cudaq") and ok(f"{q}_cpu") and ok("f16_cuda")]

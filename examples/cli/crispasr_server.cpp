@@ -2882,8 +2882,8 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             rp.tts_min_speech_tokens = body["min_speech_tokens"].get<int>();
 
         // Wire speed into params so backends with native duration control
-        // (e.g. melotts length_scale, piper noise_w) can use it directly.
-        // The post-synth resampler below still applies as a fallback.
+        // (CAP_TTS_SPEED, e.g. kokoro) can use it directly.
+        // The post-synth resampler below applies as a fallback for backends without native speed.
         rp.tts_speed = speed;
 
         bool stream = body.value("stream", false);
@@ -2904,6 +2904,7 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         // voxcpm2-tts emits 48 kHz. Hard-coding 24 kHz here is why
         // voxcpm2 output played at half speed before this fix (#122).
         const int sr_out = backend->tts_sample_rate();
+        const bool backend_handles_speed = backend->handles_tts_speed();
 
         // 75e: streaming mode — synthesize per-sentence and push each
         // chunk to the client as raw PCM via chunked transfer encoding.
@@ -2978,11 +2979,11 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             // Captures by value only (it is copied into the detached worker
             // thread, which outlives this handler scope — a `[&]` default would
             // dangle).
-            auto push_pcm = [sq, sr_out, speed, enqueue](const float* pcm, int n_samples) {
+            auto push_pcm = [sq, sr_out, speed, backend_handles_speed, enqueue](const float* pcm, int n_samples) {
                 if (!pcm || n_samples <= 0)
                     return;
                 std::vector<float> chunk(pcm, pcm + n_samples);
-                if (speed != 1.0f) {
+                if (!backend_handles_speed && speed != 1.0f) {
                     const int in_n = (int)chunk.size();
                     const int out_n = std::max(1, (int)((float)in_n / speed));
                     std::vector<float> rs((size_t)out_n);
@@ -3128,12 +3129,11 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         }
         set_marking_headers(res);
 
-        // Apply speed via linear-interpolation resampler. speed=1.0 is a
-        // no-op. Quality loss vs a sinc resampler is minimal at modest
-        // speeds (0.5x .. 2.0x) for speech; backends that grow native
-        // duration knobs will plumb through `rp.tts_speed` directly and
-        // bypass this path.
-        if (speed != 1.0f) {
+        // Apply speed via linear-interpolation resampler when the backend does
+        // not natively scale duration (CAP_TTS_SPEED). Backends declaring
+        // CAP_TTS_SPEED handle rp.tts_speed internally during synthesis,
+        // preserving natural pitch and avoiding double-scaling.
+        if (!backend_handles_speed && speed != 1.0f) {
             const int in_n = (int)pcm.size();
             const int out_n = std::max(1, (int)((float)in_n / speed));
             std::vector<float> resampled((size_t)out_n);

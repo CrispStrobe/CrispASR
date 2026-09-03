@@ -3124,11 +3124,23 @@ ggml_tensor* cv3_dit_block_apply(ggml_context* ctx0, ggml_tensor* x, ggml_tensor
 static inline ggml_tensor* CV3MM(ggml_context* c, ggml_tensor* w, ggml_tensor* x) {
     // Default ON: verified on the shipped q4_k LLM + q8_0 flow — the detector
     // reports 133 broadcasting quantized matmuls per graph without the fold and
-    // 0 with it, and the synthesized audio is equivalent (identical RMS
-    // 0.084879, magnitude-spectrum correlation 1.000000; not byte-identical
-    // because a flow-matching ODE amplifies reduction-order differences).
+    // 0 with it, and the synthesized PCM is BIT-IDENTICAL either way — the fold
+    // is an exact restatement, so this is equality, not approximate agreement.
+    // (An earlier note here claimed "not byte-identical, a flow-matching ODE
+    // amplifies reduction-order differences". That was wrong, and wrong in an
+    // instructive way: the comparison was `cmp` over the whole FILE, and the
+    // only differing bytes start at offset 117411 — past the 117164-byte PCM
+    // payload, in the trailing C2PA/AI-disclosure chunk, which carries a
+    // timestamp. The instrument reported a difference that was not in the thing
+    // being compared, and a plausible-sounding explanation was invented for it.)
     // CRISPASR_COSYVOICE3_FOLD_BCAST=0 restores the legacy path.
-    static const bool fold = core_quant_bcast::fold_enabled("CRISPASR_COSYVOICE3_FOLD_BCAST", true);
+    // Read per call, NOT cached in a function-local static. A cached static is
+    // immutable for the process, so any in-process A/B of this gate silently
+    // compares one path against ITSELF and passes by construction — the exact
+    // bug found in the sidon RPE test, where parse_rpe_mode() ran once at init
+    // while the test flipped the env per iteration. This is a getenv on a
+    // graph-build path, not a hot loop, so the cost is not worth the hazard.
+    const bool fold = core_quant_bcast::fold_enabled("CRISPASR_COSYVOICE3_FOLD_BCAST", true);
     return fold ? core_quant_bcast::mul_mat_fold_batch(c, w, x) : ggml_mul_mat(c, w, x);
 }
 

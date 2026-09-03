@@ -598,6 +598,11 @@ suffixes.
 - `CRISPASR_F5_DURATION_CLAMP` — clamp the per-char speech rate into a sane English band so a reference whose audio/transcript lengths are mismatched can't truncate (or balloon) the output (#294). Default on; set `0` to restore the exact upstream `ref_T / ref_text_len * gen_text_len / speed` estimate.
 - `CRISPASR_F5_EMBED_GPU`
 - `CRISPASR_F5_F16_ACT`
+- `CRISPASR_F5_HIFIGAN_CPU` — `1` restores the pre-`a72fb66d` CPU-loop
+  HiFi-GAN decode (A/B fallback; the default ggml `core_hifigan` graph path
+  is ~250x faster on GPU and cosine-1.000000 identical).
+- `CRISPASR_F5_VOCODE_MEL` — debug probe: vocode this mel dump directly,
+  bypassing the DiT (used for the CPU-vs-graph vocoder parity A/B).
 - `CRISPASR_F5_FORCE_SCALAR`
 - `CRISPASR_F5_REF_MAX_SEC` — clip the reference audio to this many seconds before it drives the duration estimate (upstream parity: 12 s). Default `12`; set `0` to disable the clip.
 - `CRISPASR_F5_REF_TRIM_SILENCE` — strip leading/trailing silence and collapse internal silences >~1 s in the reference audio (upstream parity). Default on; set `0` to disable.
@@ -654,7 +659,13 @@ suffixes.
 - `CRISPASR_FUNASR_LLM_LAYERS`
 - `CRISPASR_FUNASR_NAN_CHECK`
 - `CRISPASR_FUNASR_NO_FA`
-- `CRISPASR_FUNASR_STEP_CACHE`
+- `CRISPASR_FUNASR_ENC_CACHE` — `0` disables the exact-T_lfr encoder graph
+  cache (repeat-length calls skip the 7.5–23.9 ms graph rebuild). Default on.
+- `CRISPASR_FUNASR_STEP_BUCKET` — width of the cached decode-graph Lk buckets
+  (default 16, the measured optimum; `>= kv_max_ctx` reproduces the old
+  fixed-Lk design, which is a ~69% decode regression — A/B arm only).
+- `CRISPASR_FUNASR_STEP_CACHE` — `0` disables the bucketed per-step decode
+  graph cache (bit-identical either way). Default on.
 
 ### Gemma-4 E2B
 
@@ -833,7 +844,34 @@ All three optimisation gates are output-equivalent: the per-stage diff reports
 
 ### Mel-Band RoFormer (source separation)
 
-- `CRISPASR_MBR_PROFILE`
+- `CRISPASR_MBR_PROFILE` — print a per-stage wall-time breakdown of one forward
+  pass (stft+pack / band_split / run_time / run_freq / mask_est / synthesize).
+- `CRISPASR_MELBAND_GGML` — run the ggml graph path instead of the legacy CPU
+  path. Since the Change-176 graph port the default is **AUTO**: ON exactly
+  when a real GPU backend is present and permitted (the fused single graph
+  measured ~112x faster than the per-layer graphs — RTF ~0.09 vs ~10 on an
+  RTX 3090 Ti), OFF on CPU-only hosts. `=1`/`=0` force either way.
+- `CRISPASR_MELBAND_GPU` — GPU permission (CUDA > Metal > Vulkan). Default
+  AUTO follows the caller's use_gpu (CLI default on); an explicit `=0`/`=1`
+  beats the caller in both directions — so `=0` genuinely opts out even
+  though the CLI defaults `use_gpu=true` (#414 review semantics). On GPU-less
+  hosts everything resolves to the CPU path regardless.
+- `CRISPASR_MELBAND_FUSED` — single fused graph: band-split + the full
+  time/freq transformer stack + mask estimator on-device in one graph, no
+  per-layer host↔device roundtrips (the measured-fastest path on GPU).
+  Default **AUTO**: ON with the GPU graph path, OFF otherwise. `=1` alone
+  implies the graph path it needs; `=0` on GPU keeps the per-layer-graph
+  bisection arm. The full decision table is unit-locked in
+  tests/test-mel-band-gates.cpp.
+- `CRISPASR_MELBAND_SEG_S` — override the Demucs-style segment length in
+  seconds (`params.segment_seconds`; <=0 → the checkpoint's trained
+  `chunk_size` from GGUF metadata, 8 s Kim fallback — do NOT expect 10 s: the
+  earlier hardcoded 10 s ran RoPE 25% past the trained window, review #422).
+  The attention matrix is O(T²·bands·heads), so long inputs are split into
+  segments with 25% overlap and a triangular weight (bounds VRAM; the
+  unsegmented whole-buffer path OOMs on any clip beyond ~10 s).
+- `CRISPASR_MELBAND_NO_SEGMENT` — process the whole track in one pass instead
+  of the segmented overlap-add schedule (A/B against the old behaviour).
 
 ### MeloTTS
 
@@ -1111,6 +1149,11 @@ All three optimisation gates are output-equivalent: the per-stage diff reports
 - `CRISPASR_PARLER_PROMPT_IDS`
 - `CRISPASR_PARLER_TTS_BENCH`
 
+### Piano transcription
+
+- `CRISPASR_PIANO_SERIAL` — `1` restores the single-threaded conv/GRU/linear
+  compute (the default parallel path is bit-identical; #305, ~1.7x).
+
 ### Piper
 
 - `CRISPASR_PIPER_FORCE_SCALAR`
@@ -1213,9 +1256,18 @@ All three optimisation gates are output-equivalent: the per-stage diff reports
 
 - `CRISPASR_SIDON_FASTCONV` — DAC convolution mode (`off`, `k1-f16`, `k1-f32`, or `full`). Unset defaults to
   `k1-f16` on CUDA and `off` on Vulkan/CPU.
-- `CRISPASR_SIDON_RPE` — relative-position-bias formulation: `bucket-direct` (default), `bucket`, or `expand`
-  (legacy `[head_dim, T, T]` expansion, ~1 GiB more predictor workspace at `T≈2825`; keeps the Vulkan
-  `mul_mat` batching branch). All three are algebraically equivalent.
+- `CRISPASR_SIDON_RPE` — relative-position-bias formulation: `bucket-direct`, `bucket`, or `expand` (legacy
+  `[head_dim, T, T]` expansion; keeps the Vulkan `mul_mat` batching branch). All three are algebraically
+  equivalent. Unset defaults to **AUTO**, resolved per graph build because the choice depends on the input
+  length: `expand` on a GPU backend while its extra transient footprint (`4·T²·(head_dim+1−heads)`, i.e.
+  `196·T²` bytes for the shipped model — 58 MiB at `T=557`, 1.64 GiB at the 3000-frame cap) fits
+  `CRISPASR_SIDON_RPE_BUDGET_MB`, and `bucket-direct` otherwise. AUTO exists because `expand` measured **2.7×
+  faster in the predictor** on the #416 reporter's GTX 1660 SUPER (213.80 ms vs 575.25 ms at `T=557`, same
+  file and binary). AUTO stays off on CPU: that speedup is one device's measurement and CPU behaviour is
+  left exactly as it was. An explicit value is honoured as given and never auto-overridden — it is the #416
+  bisection handle. The decision table is unit-locked in `tests/test-sidon-rpe-gates.cpp`.
+- `CRISPASR_SIDON_RPE_BUDGET_MB` — AUTO's budget in MiB for `expand`'s extra transient footprint (default
+  `256`, which admits `expand` up to `T≈1170`, ~23 s of audio). `0` disables AUTO, pinning `bucket-direct`.
 - `CRISPASR_SIDON_DECODER_CHUNK_FRAMES` — maximum DAC core size in feature frames (default `512`). `0` decodes
   the whole utterance in one graph (~4.5 GiB at `T≈2825` vs ~0.79 GiB chunked). Chunked output is bit-exact
   against the whole-utterance decode.

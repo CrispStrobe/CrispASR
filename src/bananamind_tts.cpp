@@ -16,6 +16,7 @@
 #include "bananamind_tts.h"
 
 #include "core/gguf_loader.h"
+#include "core/gpu_backend_pref.h" // crispasr_init_gpu_backend (#214)
 #include "core/hifigan.h"
 #include "core/lstm.h"
 #include "core/crispasr_env.h"
@@ -51,6 +52,31 @@ static bool debug_enabled() {
 // ---------------------------------------------------------------------------
 // Bench instrumentation (BANANAMIND_TTS_BENCH=1)
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Vocoder path gate (CRISPASR_BANANAMIND_VOC_LEGACY=1)
+// ---------------------------------------------------------------------------
+//
+// The HiFi-GAN vocoder is ~50-78% of this backend's synthesis wall. It has
+// always run through core_hifigan::forward(), but was missed by the two
+// rollouts that sped that primitive up for its siblings:
+//
+//   * a862f2de wired col2im_1d into every ConvTranspose1d runtime — speecht5,
+//     fastpitch and zonos got pre-permuted upsample kernels; bananamind did
+//     not, so its four `voc.ups.*` stages still took the legacy
+//     ggml_conv_transpose_1d + view + cont branch in core/hifigan.h.
+//   * the FASTCONV cast-kill (cf. 323e96f2) never reached it either.
+//
+// The new path is the default. Setting CRISPASR_BANANAMIND_VOC_LEGACY=1
+// restores the old one exactly (no ups_w_perm, no FASTCONV) as the A/B arm.
+static bool bananamind_voc_legacy() {
+    static int v = -1;
+    if (v < 0) {
+        const char* e = crispasr_env::get("CRISPASR_BANANAMIND_VOC_LEGACY");
+        v = (e && *e && *e != '0') ? 1 : 0;
+    }
+    return v == 1;
+}
 
 static bool bananamind_tts_bench_enabled() {
     static int v = -1;
@@ -318,12 +344,23 @@ struct bananamind_tts_context {
     bananamind_tokenizer tokenizer;
 
     // Backend
-    ggml_backend_t backend = nullptr;
+    ggml_backend_t backend = nullptr;     // primary (GPU when available, else CPU)
+    ggml_backend_t backend_cpu = nullptr; // always CPU (n_threads + per-op fallback)
+    ggml_backend_sched_t sched = nullptr;
 
     // Weight storage
     ggml_context* w_ctx = nullptr;
     ggml_backend_buffer_t w_buf = nullptr;
     core_gguf::tensor_map tensors;
+
+    // Pre-permuted HiFi-GAN upsample weights for the decomposed col2im path,
+    // and the FASTCONV F32 kernel cache. Both empty under
+    // CRISPASR_BANANAMIND_VOC_LEGACY=1, which makes core_hifigan::forward()
+    // take exactly the branches it took before.
+    std::vector<ggml_tensor*> ups_w_perm;
+    ggml_context* ctx_perm = nullptr;
+    ggml_backend_buffer_t buf_perm = nullptr;
+    core_dac::fastconv_cache voc_fc;
 
     // Helper
     ggml_tensor* W(const std::string& name) const {
@@ -540,11 +577,11 @@ static std::vector<float> run_encoder(bananamind_tts_context* ctx, const std::ve
     ggml_set_output(lstm_out);
     ggml_build_forward_expand(gf, lstm_out);
 
-    // Allocate
-    ggml_gallocr_t galloc = ggml_gallocr_new(ggml_backend_get_default_buffer_type(ctx->backend));
-    if (!ggml_gallocr_alloc_graph(galloc, gf)) {
+    // Allocate through the scheduler so unsupported ops fall back to CPU
+    // per-op when `backend` is a GPU.
+    ggml_backend_sched_reset(ctx->sched);
+    if (!ggml_backend_sched_alloc_graph(ctx->sched, gf)) {
         fprintf(stderr, "bananamind_tts: encoder graph alloc failed\n");
-        ggml_gallocr_free(galloc);
         ggml_free(gc);
         return {};
     }
@@ -589,7 +626,7 @@ static std::vector<float> run_encoder(bananamind_tts_context* ctx, const std::ve
     }
 
     // Compute
-    ggml_backend_graph_compute(ctx->backend, gf);
+    ggml_backend_sched_graph_compute(ctx->sched, gf);
 
     // Read output: (H, T) -> flat (ne[0]-contiguous = T_H interleaved)
     ggml_tensor* out = ggml_graph_get_tensor(gf, "encoder_out");
@@ -608,7 +645,6 @@ static std::vector<float> run_encoder(bananamind_tts_context* ctx, const std::ve
         fprintf(stderr, "\n");
     }
 
-    ggml_gallocr_free(galloc);
     ggml_free(gc);
     return result;
 }
@@ -1148,10 +1184,9 @@ static std::vector<float> run_postnet(bananamind_tts_context* ctx, const std::ve
     ggml_cgraph* gf = ggml_new_graph_custom(gc, 4096, false);
     ggml_build_forward_expand(gf, h);
 
-    ggml_gallocr_t galloc = ggml_gallocr_new(ggml_backend_get_default_buffer_type(ctx->backend));
-    if (!ggml_gallocr_alloc_graph(galloc, gf)) {
+    ggml_backend_sched_reset(ctx->sched);
+    if (!ggml_backend_sched_alloc_graph(ctx->sched, gf)) {
         fprintf(stderr, "bananamind_tts: postnet graph alloc failed\n");
-        ggml_gallocr_free(galloc);
         ggml_free(gc);
         return mel;
     }
@@ -1171,7 +1206,7 @@ static std::vector<float> run_postnet(bananamind_tts_context* ctx, const std::ve
         ggml_backend_tensor_set(bn.shift_t, bn.shift_data.data(), 0, bn.shift_data.size() * sizeof(float));
     }
 
-    ggml_backend_graph_compute(ctx->backend, gf);
+    ggml_backend_sched_graph_compute(ctx->sched, gf);
 
     ggml_tensor* out = ggml_graph_get_tensor(gf, "postnet_out");
     // Read ggml ne[0]-contiguous data and transpose back to row-major (T, M)
@@ -1182,7 +1217,6 @@ static std::vector<float> run_postnet(bananamind_tts_context* ctx, const std::ve
         for (int m = 0; m < M; m++)
             result[t * M + m] = raw[m * T_mel + t];
 
-    ggml_gallocr_free(galloc);
     ggml_free(gc);
     return result;
 }
@@ -1226,18 +1260,20 @@ static std::vector<float> run_vocoder(bananamind_tts_context* ctx, const std::ve
     ggml_set_name(mel_t, "voc_mel_in");
     ggml_set_input(mel_t);
 
-    // core_hifigan::forward expects (T, C) time-first which is what we have
-    ggml_tensor* wav = core_hifigan::forward(gc, mel_t, ctx->tensors, "voc", hp.voc_hp);
+    // core_hifigan::forward expects (T, C) time-first which is what we have.
+    // ups_w_perm selects the decomposed mul_mat + col2im_1d transpose-conv
+    // (empty under CRISPASR_BANANAMIND_VOC_LEGACY=1 → old ggml_conv_transpose_1d
+    // branch); voc_fc is the FASTCONV F32 kernel cache (disabled likewise).
+    ggml_tensor* wav = core_hifigan::forward(gc, mel_t, ctx->tensors, "voc", hp.voc_hp, ctx->ups_w_perm, &ctx->voc_fc);
     ggml_set_name(wav, "voc_wav_out");
     ggml_set_output(wav);
 
     ggml_cgraph* gf = ggml_new_graph_custom(gc, 16384, false);
     ggml_build_forward_expand(gf, wav);
 
-    ggml_gallocr_t galloc = ggml_gallocr_new(ggml_backend_get_default_buffer_type(ctx->backend));
-    if (!ggml_gallocr_alloc_graph(galloc, gf)) {
+    ggml_backend_sched_reset(ctx->sched);
+    if (!ggml_backend_sched_alloc_graph(ctx->sched, gf)) {
         fprintf(stderr, "bananamind_tts: vocoder graph alloc failed\n");
-        ggml_gallocr_free(galloc);
         ggml_free(gc);
         return {};
     }
@@ -1253,14 +1289,13 @@ static std::vector<float> run_vocoder(bananamind_tts_context* ctx, const std::ve
     ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "voc_mel_in"), mel_transposed.data(), 0,
                             T_mel * M * sizeof(float));
 
-    ggml_backend_graph_compute(ctx->backend, gf);
+    ggml_backend_sched_graph_compute(ctx->sched, gf);
 
     ggml_tensor* wav_out = ggml_graph_get_tensor(gf, "voc_wav_out");
     int n_samples = (int)ggml_nelements(wav_out);
     std::vector<float> pcm(n_samples);
     ggml_backend_tensor_get(wav_out, pcm.data(), 0, n_samples * sizeof(float));
 
-    ggml_gallocr_free(galloc);
     ggml_free(gc);
 
     // Trim to expected length
@@ -1295,18 +1330,90 @@ struct bananamind_tts_context* bananamind_tts_init_from_file(const char* path_mo
     ctx->n_threads = params.n_threads;
     ctx->verbosity = params.verbosity;
 
-    ctx->backend = core_cpu_backend::init();
-    if (!ctx->backend) {
+    ctx->backend_cpu = core_cpu_backend::init();
+    if (!ctx->backend_cpu) {
         fprintf(stderr, "bananamind_tts: failed to init CPU backend\n");
         delete ctx;
         return nullptr;
     }
-    core_cpu_backend::set_n_threads(ctx->backend, params.n_threads);
+    core_cpu_backend::set_n_threads(ctx->backend_cpu, params.n_threads);
+
+    // GPU when one is available and asked for; CPU otherwise. The scheduler
+    // below keeps the CPU backend in the list so any op without a device
+    // kernel still runs.
+    //
+    // On a CPU-only build crispasr_init_gpu_backend() falls through to
+    // ggml_backend_init_best(), which hands back a SECOND, DISTINCT CPU
+    // backend. Keeping it would put two CPU backends in the scheduler and
+    // silently drop params.n_threads (set_n_threads was applied to
+    // backend_cpu, not to that one), so detect it and collapse back.
+    ctx->backend = params.use_gpu ? crispasr_init_gpu_backend() : ctx->backend_cpu;
+    if (ctx->backend && ctx->backend != ctx->backend_cpu && core_cpu_backend::is_cpu(ctx->backend)) {
+        ggml_backend_free(ctx->backend);
+        ctx->backend = ctx->backend_cpu;
+    }
+    if (!ctx->backend)
+        ctx->backend = ctx->backend_cpu;
+    if (params.verbosity >= 1 && ctx->backend != ctx->backend_cpu)
+        fprintf(stderr, "bananamind_tts: using GPU backend: %s\n", ggml_backend_name(ctx->backend));
 
     if (!load_model(ctx, path_model)) {
-        ggml_backend_free(ctx->backend);
+        if (ctx->backend != ctx->backend_cpu)
+            ggml_backend_free(ctx->backend);
+        ggml_backend_free(ctx->backend_cpu);
         delete ctx;
         return nullptr;
+    }
+
+    // ── Backend scheduler (all three graphs run through it) ──
+    {
+        ggml_backend_t backends[2];
+        int n_be = 0;
+        backends[n_be++] = ctx->backend;
+        if (ctx->backend_cpu != ctx->backend)
+            backends[n_be++] = ctx->backend_cpu;
+
+        // 32768: headroom over the largest of the three graphs (the vocoder,
+        // whose own cgraph is sized 16384).
+        ctx->sched = ggml_backend_sched_new(backends, nullptr, n_be,
+                                            /*graph_size=*/32768,
+                                            /*parallel=*/false, /*op_offload=*/false);
+        if (!ctx->sched) {
+            fprintf(stderr, "bananamind_tts: failed to create backend scheduler\n");
+            bananamind_tts_free(ctx);
+            return nullptr;
+        }
+    }
+
+    // ── HiFi-GAN vocoder priming (skipped entirely on the legacy arm) ──
+    if (!bananamind_voc_legacy()) {
+        // Pre-permute the four ConvTranspose1d upsample kernels for the
+        // decomposed col2im_1d path. Mirrors fastpitch_tts.cpp / speecht5_tts.cpp.
+        const int n = ctx->hp.voc_hp.num_upsamples();
+        std::vector<ggml_tensor*> srcs(n);
+        std::vector<ggml_tensor**> dsts(n);
+        ctx->ups_w_perm.resize(n, nullptr);
+        for (int i = 0; i < n; i++) {
+            srcs[i] = ctx->W("voc.ups." + std::to_string(i) + ".weight");
+            dsts[i] = &ctx->ups_w_perm[i];
+        }
+        core_convt::permute_convt1d_weights_batch(srcs.data(), dsts.data(), n, ctx->backend, &ctx->ctx_perm,
+                                                  &ctx->buf_perm);
+
+        // FASTCONV: bake one F32 copy of each F16 vocoder conv kernel so the
+        // fork's per-graph F16→F32 cast becomes a no-op. Every published
+        // bananamind build keeps voc.* in F32 (even the q8_0 one), so this
+        // bakes 0 kernels there and only pays off for a future F16 build.
+        const char* e = crispasr_env::get("CRISPASR_BANANAMIND_FASTCONV");
+        const bool on = !e || (e[0] != '0');
+        auto convs = core_hifigan::collect_fastconv_kernels(ctx->tensors, "voc", ctx->hp.voc_hp);
+        ctx->voc_fc.bake(ctx->backend, convs, on);
+        if (crispasr_env::get("CRISPASR_BANANAMIND_FASTCONV_DEBUG")) {
+            fprintf(stderr, "bananamind_tts: FASTCONV %s — baked %zu F32 kernels from %zu voc convs\n",
+                    ctx->voc_fc.enabled ? "ON" : "OFF", ctx->voc_fc.f32.size(), convs.size());
+        }
+    } else if (params.verbosity >= 1) {
+        fprintf(stderr, "bananamind_tts: CRISPASR_BANANAMIND_VOC_LEGACY=1 — legacy vocoder path\n");
     }
 
     return ctx;
@@ -1315,12 +1422,21 @@ struct bananamind_tts_context* bananamind_tts_init_from_file(const char* path_mo
 void bananamind_tts_free(struct bananamind_tts_context* ctx) {
     if (!ctx)
         return;
+    if (ctx->sched)
+        ggml_backend_sched_free(ctx->sched);
+    ctx->voc_fc.free();
+    if (ctx->buf_perm)
+        ggml_backend_buffer_free(ctx->buf_perm); // permuted ups kernels
+    if (ctx->ctx_perm)
+        ggml_free(ctx->ctx_perm);
     if (ctx->w_buf)
         core_gguf::release_weight_buffer(ctx->w_buf);
     if (ctx->w_ctx)
         ggml_free(ctx->w_ctx);
-    if (ctx->backend)
+    if (ctx->backend && ctx->backend != ctx->backend_cpu)
         ggml_backend_free(ctx->backend);
+    if (ctx->backend_cpu)
+        ggml_backend_free(ctx->backend_cpu);
     delete ctx;
 }
 

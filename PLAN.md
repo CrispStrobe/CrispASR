@@ -118,7 +118,7 @@ is the authority.
 | runtime | detector, real run | default | evidence |
 |---|---|---|---|
 | beat-this | **29** sites (attn q/k/v/o/gates + BOTH FFN layers, r2=113) | fold **ON** | 29 -> 0; emitted beats BYTE-IDENTICAL |
-| cosyvoice3-tts | **133** per graph (DiT q/k/v/o + both FFN across 22 blocks + proj_out, r2=2 from default CFG batching) | fold **ON** | 133 -> 0; identical RMS 0.084879, spectral corr 1.000000 (not byte-identical — an ODE amplifies reduction order) |
+| cosyvoice3-tts | **133** per graph (DiT q/k/v/o + both FFN across 22 blocks + proj_out, r2=2 from default CFG batching) | fold **ON** | 133 -> 0; synthesized PCM **bit-identical** (an earlier 'not byte-identical' note was my `cmp` reading the trailing C2PA timestamp chunk, not the audio) |
 | qwen3-asr | **0**, despite `audio.conv_out.weight` being Q4_K 7680x896 and matching the pattern | fold **OFF** | all 7 compute sites hooked, real 66 s multi-chunk run (132 words) — cannot demonstrate the site firing, so not flipped |
 
 Static reading had found 3 sites in beat-this and 1 in cosyvoice3; reality was

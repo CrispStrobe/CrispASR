@@ -164,7 +164,13 @@ static inline ggml_tensor* MM(ggml_context* c, ggml_tensor* w, ggml_tensor* x) {
     // reports 29 broadcasting quantized matmuls without the fold and 0 with it,
     // and the emitted beats are byte-identical either way. Set
     // CRISPASR_BEATTHIS_FOLD_BCAST=0 to restore the legacy path.
-    static const bool fold = core_quant_bcast::fold_enabled("CRISPASR_BEATTHIS_FOLD_BCAST", true);
+    // Read per call, NOT cached in a function-local static. A cached static is
+    // immutable for the process, so any in-process A/B of this gate silently
+    // compares one path against ITSELF and passes by construction — the exact
+    // bug found in the sidon RPE test, where parse_rpe_mode() ran once at init
+    // while the test flipped the env per iteration. This is a getenv on a
+    // graph-build path, not a hot loop, so the cost is not worth the hazard.
+    const bool fold = core_quant_bcast::fold_enabled("CRISPASR_BEATTHIS_FOLD_BCAST", true);
     return fold ? core_quant_bcast::mul_mat_fold_batch(c, w, x) : ggml_mul_mat(c, w, x);
 }
 

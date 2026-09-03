@@ -189,7 +189,15 @@ TEST_CASE("sidon speech restoration", "[integration][sidon]") {
     // the in-graph REPEAT of the gather index. Reordered float arithmetic means
     // these are close, not identical, and the DAC amplifies the difference — so
     // check the magnitudes too, since cosine alone is scale-blind.
-    for (const char* mode : {"expand", "bucket-direct"}) {
+    //
+    // NOTE: until the #416 follow-up this loop compared bucket-direct against
+    // itself. CRISPASR_SIDON_RPE was read once in sidon_init (parse_rpe_mode)
+    // and never again, so setting it here — on an already-loaded ctx — changed
+    // nothing and both iterations ran whatever init had chosen. The mode is now
+    // resolved per graph build (resolve_rpe_mode), so these env settings take
+    // effect and the comparison is real. `bucket` is included for the same
+    // reason: all three are claimed equivalent, so all three get checked.
+    for (const char* mode : {"expand", "bucket", "bucket-direct"}) {
         ScopedTestEnv rpe("CRISPASR_SIDON_RPE", mode);
         const auto alt = sidon_restore(ctx, input.data(), (int)input.size());
         REQUIRE(alt.size() == output.size());

@@ -55,6 +55,9 @@ struct kokoro_context_params kokoro_context_default_params(void);
 // Load Kokoro / StyleTTS2 GGUF. Returns nullptr on failure.
 struct kokoro_context* kokoro_init_from_file(const char* path_model, struct kokoro_context_params params);
 
+// Lightweight test context without loading weights. Free with kokoro_free().
+struct kokoro_context* kokoro_context_create_for_testing(struct kokoro_context_params params);
+
 void kokoro_free(struct kokoro_context* ctx);
 void kokoro_set_n_threads(struct kokoro_context* ctx, int n_threads);
 
@@ -65,6 +68,7 @@ void kokoro_set_n_threads(struct kokoro_context* ctx, int n_threads);
 // scalar. Clamped to [0.25, 4.0] — outside that range the predictor
 // output goes unusable. Read on every kokoro_synthesize call.
 void kokoro_set_length_scale(struct kokoro_context* ctx, float scale);
+float kokoro_get_length_scale(const struct kokoro_context* ctx);
 
 // Load a voice-pack GGUF (arch="kokoro-voice"). Each pack stores ONE
 // voice — single tensor `voice.pack[max_phon, 1, 256]`, plus

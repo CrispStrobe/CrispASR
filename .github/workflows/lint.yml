@@ -6,7 +6,7 @@ name: Lint
 #
 #   clang-format --dry-run  →  black / ruff-format check (style)
 #   clang-tidy              →  ruff-lint + mypy + bandit (correctness + types + security)
-#   cppcheck                →  additional static analysis (fast, no compilation needed)
+#   (cppcheck moved to lint-deep.yml 2026-09-03 — non-cancelling, so it actually completes)
 
 on:
   # Manual re-run. Without this, a commit whose push did not match the paths
@@ -158,7 +158,7 @@ on:
   # 12 of the last 40 main runs were cancelled (30%), including five Lint runs
   # in a row while two branches landed in quick succession — and a cancelled
   # run is indistinguishable from one that never ran. Cancelling is still the
-  # right default for a burst of pushes (this workflow's cppcheck job alone is
+  # right default for a burst of pushes (the slow cppcheck job was moved to lint-deep.yml for this reason — it was
   # ~40 min), so rather than stop cancelling we guarantee a floor: main gets a
   # complete lint at least once a day.
   #
@@ -263,61 +263,6 @@ jobs:
         run: |
           cmake --build build-tidy --target crispasr-lib 2>&1 | tee tidy.log
           grep -q 'warning:' tidy.log && echo "::warning::clang-tidy warnings found" || true
-
-  # ---------------------------------------------------------------------------
-  # cppcheck: fast additional static analysis (no compilation required)
-  # Catches a complementary set of bugs vs clang-tidy.
-  # ---------------------------------------------------------------------------
-  cppcheck:
-    name: cppcheck (static analysis)
-    # Pin the runner image, not ubuntu-latest: cppcheck is apt-installed and its
-    # version tracks the image, so `ubuntu-latest` flipping (e.g. 22.04 -> 24.04)
-    # silently changes which findings fire and can turn Lint red with NO code
-    # change (clang-format is version-pinned for exactly this reason). 22.04
-    # ships cppcheck 2.7; bump this line deliberately when adopting a new version.
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: recursive
-
-      - name: Install cppcheck
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends cppcheck
-          cppcheck --version   # record the pinned version in the log
-
-      - name: Run cppcheck
-        # --error-exitcode=1: fail on any error-level finding.
-        # --enable=warning,style,performance,portability: broad coverage.
-        # --suppress=*:ggml/*: skip third-party ggml code.
-        # --std=c++17: match the codebase standard.
-        run: |
-          cppcheck \
-            --error-exitcode=1 \
-            --enable=warning,performance,portability \
-            --inline-suppr \
-            --std=c++17 \
-            --suppress=missingIncludeSystem \
-            --suppress=unmatchedSuppression \
-            --suppress=duplicateAssignExpression \
-            -i ggml \
-            -i bindings \
-            --suppress='*:examples/server/*' \
-            --suppress='*:*httplib.h' \
-            --suppress='*:*json.hpp' \
-            --suppress='*:src/miniaudio.h' \
-            --suppress='*:*miniaudio.h' \
-            --suppress='*:*stb_vorbis.c' \
-            --suppress='*:*rnnoise/*' \
-            --suppress=unknownMacro \
-            --suppress=nullPointerOutOfMemory \
-            --suppress=nullPointerArithmeticOutOfMemory \
-            --suppress=toomanyconfigs \
-            --suppress=invalidFunctionArg \
-            --quiet \
-            src/ examples/cli/ crisp_audio/
-
   # ---------------------------------------------------------------------------
   # README language metadata vs upstream model cards (regression catcher
   # for issue #50: granite-4.1-plus / -nar / -3.3-2b copy-pasted `ja` into
