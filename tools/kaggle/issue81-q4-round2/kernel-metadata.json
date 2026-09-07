@@ -1,13 +1,16 @@
 {
-  "id": "chr1str/crispasr-issue-81-q4-round2",
+  "id": "chr1str/crispasr-issue-81-q4-round-2",
   "title": "CrispASR issue 81 Q4 round 2",
-  "code_file": "issue81_q4_round2.py",
+  "code_file": "issue81_q4_round2_tdt.py",
   "language": "python",
   "kernel_type": "script",
   "is_private": "true",
   "enable_gpu": "true",
   "enable_internet": "true",
-  "dataset_sources": ["chr1str/crispasr-hf-token", "chr1str/crispasr-ccache"],
+  "dataset_sources": [
+    "chr1str/crispasr-hf-token",
+    "chr1str/crispasr-ccache"
+  ],
   "competition_sources": [],
   "kernel_sources": [],
   "model_sources": []
