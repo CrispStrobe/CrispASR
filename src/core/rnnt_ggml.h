@@ -244,8 +244,11 @@ static inline bool decoder_init(Decoder& d, ggml_backend_t backend, ggml_tensor*
     d.j_lg = ggml_add(d.jctx, ggml_mul_mat(d.jctx, out_w, mid), out_b);
     ggml_set_output(d.j_lg);
     if (n_vocab_blk > 0 && n_dur > 0 && n_vocab_blk + n_dur <= d.Vt) {
-        ggml_tensor* vocab = ggml_view_1d(d.jctx, d.j_lg, n_vocab_blk, 0);
-        ggml_tensor* durations = ggml_view_1d(d.jctx, d.j_lg, n_dur, (size_t)n_vocab_blk * sizeof(float));
+        // CUDA argmax requires a contiguous source.  These slices retain the
+        // full-logit row stride, so materialize them before selecting.
+        ggml_tensor* vocab = ggml_cont(d.jctx, ggml_view_1d(d.jctx, d.j_lg, n_vocab_blk, 0));
+        ggml_tensor* durations =
+            ggml_cont(d.jctx, ggml_view_1d(d.jctx, d.j_lg, n_dur, (size_t)n_vocab_blk * sizeof(float)));
         d.j_tok = ggml_argmax(d.jctx, vocab);
         d.j_dur = ggml_argmax(d.jctx, durations);
         ggml_set_output(d.j_tok);
@@ -271,9 +274,11 @@ static inline bool decoder_init(Decoder& d, ggml_backend_t backend, ggml_tensor*
         ggml_tensor* pred = ggml_add(d.jbctx, ggml_mul_mat(d.jbctx, pred_w, d.jb_pu), pred_b);
         ggml_tensor* batch_mid = ggml_relu(d.jbctx, ggml_add(d.jbctx, d.jb_pe, pred));
         d.jb_lg = ggml_add(d.jbctx, ggml_mul_mat(d.jbctx, out_w, batch_mid), out_b);
-        ggml_tensor* vocab = ggml_view_2d(d.jbctx, d.jb_lg, n_vocab_blk, joint_batch, d.jb_lg->nb[1], 0);
-        ggml_tensor* durations =
-            ggml_view_2d(d.jbctx, d.jb_lg, n_dur, joint_batch, d.jb_lg->nb[1], (size_t)n_vocab_blk * sizeof(float));
+        ggml_tensor* vocab = ggml_cont(
+            d.jbctx, ggml_view_2d(d.jbctx, d.jb_lg, n_vocab_blk, joint_batch, d.jb_lg->nb[1], 0));
+        ggml_tensor* durations = ggml_cont(
+            d.jbctx, ggml_view_2d(d.jbctx, d.jb_lg, n_dur, joint_batch, d.jb_lg->nb[1],
+                                  (size_t)n_vocab_blk * sizeof(float)));
         d.jb_tok = ggml_argmax(d.jbctx, vocab);
         d.jb_dur = ggml_argmax(d.jbctx, durations);
         for (ggml_tensor* out : {d.jb_lg, d.jb_tok, d.jb_dur})
