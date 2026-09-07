@@ -1411,6 +1411,14 @@ static bool parakeet_gpu_encoder_projection(const parakeet_context* ctx) {
 #endif
 }
 
+static int parakeet_gpu_joint_batch() {
+    const char* value = crispasr_env::get("CRISPASR_RNNT_GPU_BATCH");
+    if (!value)
+        return 0;
+    const int batch = std::atoi(value);
+    return batch == 4 || batch == 8 ? batch : 0;
+}
+
 extern "C" int parakeet_decode_uses_backend(struct parakeet_context* ctx) {
     return (ctx && parakeet_ggml_decode_active(ctx)) ? 1 : 0;
 }
@@ -1423,7 +1431,8 @@ static bool parakeet_init_ggml_decoder(parakeet_context* ctx, core_rnnt_ggml::De
         core_rnnt_ggml::decoder_init(gdec, ctx->backend, p.embed_w, p.lstm0_w_ih, p.lstm0_b_ih, p.lstm0_w_hh,
                                      p.lstm0_b_hh, p.lstm1_w_ih, p.lstm1_b_ih, p.lstm1_w_hh, p.lstm1_b_hh, j.pred_w,
                                      j.pred_b, j.out_w, j.out_b, (int)ctx->model.hparams.pred_hidden,
-                                     (int)ctx->model.hparams.joint_hidden);
+                                     (int)ctx->model.hparams.joint_hidden, (int)ctx->model.hparams.blank_id + 1,
+                                     (int)ctx->model.hparams.n_tdt_durations, parakeet_gpu_joint_batch());
     }
     return ggml_dec;
 }
@@ -1557,28 +1566,83 @@ static std::vector<parakeet_emitted_token> parakeet_tdt_decode(parakeet_context*
     std::mt19937_64 rng(ctx->decode_seed != 0 ? ctx->decode_seed : (uint64_t)std::random_device{}());
 
     const bool has_hotwords = !ctx->hotword_trie.empty();
+    const bool debug_decode = crispasr_env::get("CRISPASR_PARAKEET_DEBUG") != nullptr;
+    const bool gpu_select =
+        ggml_dec && !sampling && !has_hotwords && !debug_decode && crispasr_env::truthy("CRISPASR_RNNT_GPU_SELECT");
+    const int gpu_batch = ggml_dec && !sampling && !has_hotwords && !debug_decode ? gdec.j_batch : 0;
+    std::vector<float> batch_proj;
+    std::vector<int32_t> batch_tok;
+    std::vector<int32_t> batch_dur;
+    if (gpu_batch)
+        batch_proj.resize((size_t)gpu_batch * J.joint_hidden);
     core_context_bias::MatchState hw_state;
 
     int t = 0;
     int total_steps = 0;
     while (t < T_enc) {
+        bool batch_selected = false;
+        int batch_row = 0;
+        int selected_tok = 0;
+        int selected_dur = 0;
+        if (gpu_batch) {
+            const int batch_start = t;
+            const int rows = std::min(gpu_batch, T_enc - batch_start);
+            std::copy(all_proj_e.data() + (size_t)batch_start * J.joint_hidden,
+                      all_proj_e.data() + (size_t)(batch_start + rows) * J.joint_hidden, batch_proj.data());
+            std::fill(batch_proj.begin() + (size_t)rows * J.joint_hidden, batch_proj.end(), 0.0f);
+            if (core_rnnt_ggml::decoder_joint_batch_select(gdec, batch_proj.data(), pred_out.data(), batch_tok,
+                                                           batch_dur)) {
+                int scan_t = batch_start;
+                bool needs_scalar_step = false;
+                while (scan_t < T_enc && scan_t - batch_start < rows) {
+                    const int row = scan_t - batch_start;
+                    const int tok = batch_tok[(size_t)row];
+                    const int dur = batch_dur[(size_t)row];
+                    const int skip = (int)hp.tdt_durations[(size_t)dur];
+                    if (tok != blank_id) {
+                        t = scan_t;
+                        batch_row = row;
+                        selected_tok = tok;
+                        selected_dur = dur;
+                        batch_selected = true;
+                        break;
+                    }
+                    if (skip == 0) {
+                        t = scan_t;
+                        needs_scalar_step = true;
+                        break;
+                    }
+                    total_steps++;
+                    scan_t += skip;
+                    t = scan_t;
+                }
+                if (!batch_selected && !needs_scalar_step && t != batch_start)
+                    continue;
+            }
+        }
+
         // §232: use pre-computed projection instead of per-frame sgemv
         std::copy(all_proj_e.data() + (size_t)t * J.joint_hidden, all_proj_e.data() + (size_t)(t + 1) * J.joint_hidden,
                   proj_e.data());
 
         int n_inner = 0;
         while (n_inner < max_per_step) {
-            if (ggml_dec)
+            int tok = batch_selected ? selected_tok : 0;
+            int dur_id = batch_selected ? selected_dur : 0;
+            const bool selected_on_gpu =
+                batch_selected ||
+                (gpu_select && core_rnnt_ggml::decoder_joint_select(gdec, proj_e.data(), pred_out.data(), tok, dur_id));
+            if (!selected_on_gpu && ggml_dec)
                 parakeet_joint_step_ggml(ctx, gdec, proj_e.data(), pred_out.data(), logits);
-            else
+            else if (!selected_on_gpu)
                 joint_step(J, proj_e.data(), pred_out.data(), logits);
 
             // CTC-WS phrase boost on vocab logits (not duration logits)
-            if (has_hotwords)
+            if (!selected_on_gpu && has_hotwords)
                 core_context_bias::apply_bias(ctx->hotword_trie, hw_state, logits.data(), n_vocab_blk,
                                               ctx->hotword_boost);
 
-            if (crispasr_env::get("CRISPASR_PARAKEET_DEBUG") && total_steps < 5) {
+            if (!selected_on_gpu && debug_decode && total_steps < 5) {
                 // Show first few logits
                 int best = 0;
                 float best_v = logits[0];
@@ -1597,12 +1661,14 @@ static std::vector<parakeet_emitted_token> parakeet_tdt_decode(parakeet_context*
             // either way — they're trained as a 5-way classifier and
             // sampling them would just inject random latency without any
             // quality benefit.
-            int tok = 0;
-            float tok_lp = logits[0];
-            for (int v = 1; v < n_vocab_blk; v++) {
-                if (logits[v] > tok_lp) {
-                    tok_lp = logits[v];
-                    tok = v;
+            float tok_lp = 0.0f;
+            if (!selected_on_gpu) {
+                tok_lp = logits[0];
+                for (int v = 1; v < n_vocab_blk; v++) {
+                    if (logits[v] > tok_lp) {
+                        tok_lp = logits[v];
+                        tok = v;
+                    }
                 }
             }
             if (sampling) {
@@ -1632,12 +1698,13 @@ static std::vector<parakeet_emitted_token> parakeet_tdt_decode(parakeet_context*
             }
 
             // Argmax over the duration logits (last n_dur entries)
-            int dur_id = 0;
-            float dur_lp = logits[n_vocab_blk];
-            for (int d = 1; d < n_dur; d++) {
-                if (logits[n_vocab_blk + d] > dur_lp) {
-                    dur_lp = logits[n_vocab_blk + d];
-                    dur_id = d;
+            if (!selected_on_gpu) {
+                float dur_lp = logits[n_vocab_blk];
+                for (int d = 1; d < n_dur; d++) {
+                    if (logits[n_vocab_blk + d] > dur_lp) {
+                        dur_lp = logits[n_vocab_blk + d];
+                        dur_id = d;
+                    }
                 }
             }
             int dur_skip = (int)hp.tdt_durations[dur_id]; // 0..4
@@ -1669,6 +1736,14 @@ static std::vector<parakeet_emitted_token> parakeet_tdt_decode(parakeet_context*
                 continue;
             }
 
+            if (selected_on_gpu) {
+                if (batch_selected)
+                    core_rnnt_ggml::decoder_joint_batch_read_logits(gdec, batch_row, logits);
+                else
+                    core_rnnt_ggml::decoder_joint_read_logits(gdec, logits);
+                tok_lp = logits[tok];
+            }
+
             // Softmax probability of the picked token, scoped to the
             // vocab+blank half of the joint logits (the duration logits
             // are a separate softmax). Numerically stable: subtract the
@@ -1691,6 +1766,7 @@ static std::vector<parakeet_emitted_token> parakeet_tdt_decode(parakeet_context*
                 parakeet_predictor_step_ggml(ctx, gdec, tok, state, pred_out);
             else
                 predictor_step(W, tok, state, pred_out);
+            batch_selected = false;
 
             // Diagnostic: dump predictor stats for the first few emissions
             // so we can compare with NeMo step-by-step (not just SOS).
