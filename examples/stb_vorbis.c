@@ -947,8 +947,29 @@ static void *make_block_array(void *mem, int count, int size)
    return p;
 }
 
+// CrispASR patch (security): is a declared byte-length plausible for this
+// stream? Every string in the comment header is preceded by its own u32 length
+// and must actually be present, so a declared length longer than the whole file
+// is a malformed header, not a big string. Derived from the data, so it cannot
+// reject a real file. stream_len is 0 for stdio-backed streams; there we can
+// only fall back to the int-overflow bound at the call site.
+static int length_is_plausible(vorb *f, int len)
+{
+   if (len < 0) return FALSE;
+   if (f->stream_len > 0 && (uint32) len > f->stream_len) return FALSE;
+   return TRUE;
+}
+
 static void *setup_malloc(vorb *f, int sz)
 {
+   // CrispASR patch (security): the parameter is an int, and nearly every
+   // caller passes `sizeof(T) * count` computed in size_t, so a large
+   // attacker-controlled count truncates on the way in — and can land
+   // negative. Callers then size their loops from the UNtruncated count.
+   // The comment_list case is bounded at its own call site (see start_decoder);
+   // this is the choke point that stops any other call site failing the same
+   // way, and a negative sz would otherwise reach malloc as a huge size_t.
+   if (sz < 0) return NULL;
    sz = (sz+7) & ~7; // round up to nearest 8 for alignment of future allocs.
    f->setup_memory_required += sz;
    if (f->alloc.alloc_buffer) {
@@ -3650,6 +3671,10 @@ static int start_decoder(vorb *f)
    if (!vorbis_validate(header))                    return error(f, VORBIS_invalid_setup);
    //file vendor
    len = get32_packet(f);
+   // CrispASR patch (security): same class as comment_list below — `len` is an
+   // attacker-controlled u32 and `len+1` can overflow int before it is even
+   // passed on. Reject an implausible length instead of allocating for it.
+   if (!length_is_plausible(f, len) || len == INT_MAX) return error(f, VORBIS_invalid_setup);
    f->vendor = (char*)setup_malloc(f, sizeof(char) * (len+1));
    if (f->vendor == NULL)                           return error(f, VORBIS_outofmem);
    for(i=0; i < len; ++i) {
@@ -3661,7 +3686,38 @@ static int start_decoder(vorb *f)
    f->comment_list = NULL;
    if (f->comment_list_length > 0)
    {
-      f->comment_list = (char**) setup_malloc(f, sizeof(char*) * (f->comment_list_length));
+      // CrispASR patch (security): BOUND THE COUNT BEFORE THE MULTIPLY.
+      //
+      // setup_malloc takes an `int`, so `sizeof(char*) * comment_list_length`
+      // is computed as size_t and then TRUNCATED on the way in, while the
+      // memset below computes the same product and does not. Found by
+      // linux-fuzz-smoke: with comment_list_length = 1646854400 the product is
+      // 13,174,835,200, truncating to 289,933,312 — and ASAN reported exactly
+      // that allocation size and exactly that write size. The allocation
+      // truncates; the consumer does not.
+      //
+      // Two bounds, cheapest first:
+      //   1. The count must be small enough that the product cannot truncate.
+      //      setup_malloc also rounds up with (sz+7)&~7, so leave that room.
+      //   2. Every comment costs at least 4 bytes in the packet — its own u32
+      //      length field — so a file of N bytes cannot legitimately declare
+      //      more than N/4 comments. This is derived from the data rather than
+      //      being a magic number, and it cannot reject a real file: one with
+      //      C comments necessarily carries at least 4*C bytes. stream_len is 0
+      //      for stdio-backed streams, so that arm is skipped there and bound 1
+      //      still applies.
+      //
+      // Upstream nothings/stb has the same truncating call and no fix as of
+      // 2026-09-07; it lacks this memset, so instead of one huge write its
+      // loop below walks comment_list[i] past the short allocation.
+      int max_comments = (int) (((size_t) INT_MAX - 7u) / sizeof(char*));
+      if (f->stream_len > 0 && (f->stream_len / 4u) < (uint32) max_comments)
+         max_comments = (int) (f->stream_len / 4u);
+      if (f->comment_list_length > max_comments) {
+         f->comment_list_length = 0;   // keep "length describes the array" true
+         return error(f, VORBIS_invalid_setup);
+      }
+      f->comment_list = (char**) setup_malloc(f, (int) (sizeof(char*) * (size_t) f->comment_list_length));
       // CrispASR patch: the length is already the ATTACKER-CONTROLLED value read
       // above, so returning here with a NULL array leaves the two out of step and
       // vorbis_deinit walks `comment_list_length` entries of a null pointer. Keep
@@ -3685,6 +3741,8 @@ static int start_decoder(vorb *f)
 
    for(i=0; i < f->comment_list_length; ++i) {
       len = get32_packet(f);
+      // CrispASR patch (security): as for the vendor string above.
+      if (!length_is_plausible(f, len) || len == INT_MAX) return error(f, VORBIS_invalid_setup);
       f->comment_list[i] = (char*)setup_malloc(f, sizeof(char) * (len+1));
       if (f->comment_list[i] == NULL)               return error(f, VORBIS_outofmem);
 
