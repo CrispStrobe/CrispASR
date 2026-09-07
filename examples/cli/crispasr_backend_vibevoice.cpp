@@ -134,8 +134,7 @@ public:
         // together with a decode path that actually reads the value — cf.
         // crispasr_backend_gemma4_e2b.cpp, "so CAP_TEMPERATURE is real, not
         // just a claim". CAP_BEAM_SEARCH was already, correctly, absent.
-        uint32_t caps = CAP_TIMESTAMPS_CTC | CAP_AUTO_DOWNLOAD | CAP_FLASH_ATTN | CAP_DIARIZE |
-                        CAP_PUNCTUATION_NATIVE;
+        uint32_t caps = CAP_TIMESTAMPS_CTC | CAP_AUTO_DOWNLOAD | CAP_FLASH_ATTN | CAP_DIARIZE | CAP_PUNCTUATION_NATIVE;
         // The streaming 1.5B checkpoint is ASR-only and has no acoustic
         // decoder. The generic alias keeps its historical dual-mode claim
         // until a loaded streaming checkpoint lets us narrow it.

@@ -868,8 +868,7 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
             // frontend for every 3.47 s window, so frontend drift compounds
             // across persistent decoder state. Kaggle parity decides whether
             // the published Q4 needs these encoder tensors retained at F16.
-            !(vibevoice_asr_frontend_f16 &&
-              (sname.find("at_enc.") == 0 || sname.find("st_enc.") == 0)) &&
+            !(vibevoice_asr_frontend_f16 && (sname.find("at_enc.") == 0 || sname.find("st_enc.") == 0)) &&
             !(is_zonos && (sname.find("heads.") == 0 || sname.find("embeddings.") == 0 ||
                            sname.find("prefix_conditioner.") == 0)) &&
             !(is_bark &&
