@@ -63,6 +63,19 @@ static inline bool fc_attn_cont() {
     return v != 0;
 }
 
+// Experimental direct CUDA convolution A/B for the dw-striding subsampler.
+// Bit 0 replaces the first 3x3 conv's im2col+GEMM graph with CONV_2D; bit 1
+// does the same for the two depthwise convs. Kept opt-in until backend timing
+// and transcript parity are established for every default backend.
+static inline int fc_direct_subsample_conv() {
+    static int v = -1;
+    if (v < 0) {
+        const char* e = std::getenv("CRISPASR_FC_DIRECT_SUBSAMPLE_CONV");
+        v = e ? std::atoi(e) : 0;
+    }
+    return v;
+}
+
 // GPU manual-attention gate (issue #81 GPU phase). CUDA's flash_attn_ext
 // rejects the FastConformer per-head rel-pos mask (fattn.cu guard on
 // mask->ne[2] != 1), so every flash node falls back to CPU — 24 GPU↔CPU
@@ -237,7 +250,9 @@ static inline ggml_tensor* build_pre_encode(ggml_context* ctx0, ggml_tensor* mel
         return ggml_cast(ctx0, ggml_reshape_4d(ctx0, b, 1, 1, b->ne[0], 1), GGML_TYPE_F32);
     };
 
-    ggml_tensor* cur = ggml_conv_2d(ctx0, w.conv0_w, mel, 2, 2, 1, 1, 1, 1);
+    const int direct_conv = fc_direct_subsample_conv();
+    ggml_tensor* cur = (direct_conv & 1) ? ggml_conv_2d_direct(ctx0, w.conv0_w, mel, 2, 2, 1, 1, 1, 1)
+                                         : ggml_conv_2d(ctx0, w.conv0_w, mel, 2, 2, 1, 1, 1, 1);
     cur = ggml_add(ctx0, cur, bias_4d(w.conv0_b));
     if (gf)
         snap_conv4d(ctx0, gf, cur, "pre_enc_c0");
@@ -245,7 +260,8 @@ static inline ggml_tensor* build_pre_encode(ggml_context* ctx0, ggml_tensor* mel
     if (stage_mask_t0) // zero pad frames before the next k=3 conv (see header note)
         cur = ggml_mul(ctx0, cur, stage_mask_t0);
 
-    cur = ggml_conv_2d_dw(ctx0, w.conv2_w, cur, 2, 2, 1, 1, 1, 1);
+    cur = (direct_conv & 2) ? ggml_conv_2d_dw_direct(ctx0, w.conv2_w, cur, 2, 2, 1, 1, 1, 1)
+                            : ggml_conv_2d_dw(ctx0, w.conv2_w, cur, 2, 2, 1, 1, 1, 1);
     cur = ggml_add(ctx0, cur, bias_4d(w.conv2_b));
     if (gf)
         snap_conv4d(ctx0, gf, cur, "pre_enc_c2");
@@ -257,7 +273,8 @@ static inline ggml_tensor* build_pre_encode(ggml_context* ctx0, ggml_tensor* mel
     if (stage_mask_t1) // zero pad frames before the next k=3 conv
         cur = ggml_mul(ctx0, cur, stage_mask_t1);
 
-    cur = ggml_conv_2d_dw(ctx0, w.conv5_w, cur, 2, 2, 1, 1, 1, 1);
+    cur = (direct_conv & 2) ? ggml_conv_2d_dw_direct(ctx0, w.conv5_w, cur, 2, 2, 1, 1, 1, 1)
+                            : ggml_conv_2d_dw(ctx0, w.conv5_w, cur, 2, 2, 1, 1, 1, 1);
     cur = ggml_add(ctx0, cur, bias_4d(w.conv5_b));
     if (gf)
         snap_conv4d(ctx0, gf, cur, "pre_enc_c5");
