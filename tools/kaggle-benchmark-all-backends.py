@@ -308,7 +308,13 @@ SWEEP_REPO = os.environ.get("CRISPASR_SWEEP_REPO", "cstr/crispasr-kaggle-progres
 # with a ggml version that is no longer in the build — and, because a matching
 # tag makes the kernel SKIP finished backends, would also have resumed a sweep
 # taken before the bump. Both halves of that are wrong: stale label, stale data.
-RUN_TAG = os.environ.get("CRISPASR_SWEEP_RUN", "ggml-v0.23")
+# 2026-09-07 second bump. The first ggml-v0.23 run completed all 83 backends,
+# so EVERY backend now has a result file under that tag — and sweep_done()
+# treats any result as done, pass or fail. Re-running the licence/voice/quant
+# fixes under the same tag would have skipped all 83, finished in seconds having
+# tested nothing, and looked like a successful run. The tag is the only thing
+# that makes a fix actually execute.
+RUN_TAG = os.environ.get("CRISPASR_SWEEP_RUN", "ggml-v0.23-licensed")
 SWEEP_PREFIX = f"full-backend-sweep/{RUN_TAG}"
 
 # The kernel git-clones CrispASR at runtime, so the C++ under test is always
