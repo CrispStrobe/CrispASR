@@ -18857,3 +18857,13 @@ kernels. An opt-in experiment must gate graph construction itself, or use a
 separate graph, if its baseline is meant to represent shipping code. We removed
 the experimental graph and direct-convolution arms after measurement rather than
 leaving dormant nodes in every decoder session.
+
+
+The encoder matrix rejected three similarly plausible shortcuts. ggml's direct
+standard and depthwise CUDA convolutions were 3.3% and 25.8% slower than the
+existing lowering, while the fork's per-head flash-attention path was 57.2%
+slower on sm_60. Selectively preserving FFN tensors at Q8 matched speed but
+changed the transcript; F16 changed it and lost 3.8%. Backend support is not a
+performance result, and a higher-precision intermediate is not automatically a
+safe quantization exception. Keep each lever isolated until both timing and
+end-to-end text parity pass.
