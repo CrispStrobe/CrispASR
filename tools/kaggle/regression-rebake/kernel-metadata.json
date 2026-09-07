@@ -1,0 +1,14 @@
+{
+  "id": "chr1s4/crispasr-regression-rebake",
+  "title": "crispasr-regression-rebake",
+  "code_file": "rebake.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "true",
+  "competition_sources": [],
+  "dataset_sources": ["chr1s4/crispasr-hf-token", "chr1s4/crispasr-ccache"],
+  "kernel_sources": [],
+  "model_sources": []
+}
