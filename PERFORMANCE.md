@@ -882,7 +882,9 @@ needs a per-stage look).
 | onnx-asr parakeet-ctc CUDA fp32, 134 s varied speech, in-process | **214×** (tdt 121×) |
 | onnx-asr parakeet-ctc CPU int8, 134 s varied | 5.8× (tdt 5.7×) |
 
-**Q4 round-2 rejected arms (same P100 run, 2026-09-07).** Device-side
+**Q4 round-2 rejected arms (P100, 2026-09-07; Kaggle
+`chr1str/crispasr-issue-81-q4-round-2`, encoder matrix v1 at `b82b7baf`,
+TDT matrix v3 at `c0527382`).** Device-side
 selection preserved exact transcripts but improved the experimental baseline by
 only 0.17% on the 134 s clip. Speculative joint batches lost 2.5–8.1%. The
 selection graph also made its argmax outputs part of the graph when the runtime
