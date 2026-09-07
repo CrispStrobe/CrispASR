@@ -233,6 +233,7 @@ ASR backends.
 | kokoro (TTS)        | ✓     | ✓     | —     | —     | Q5_K and below break the German backbone — ship F16 + Q8_0 only.         |
 | qwen3-tts           | ✓     | ✓     | ✓     | ✓     |                                                                          |
 | vibevoice (TTS)     | ✓     | ✓     | ✓     | ✓     | F16 + Q4_K shipped.                                                      |
+| vibevoice-streaming (ASR) | ✓ | ✓ | ✓ | ✓ | Q4_K is validated against the persistent-stream F16 path; set `CRISPASR_VIBEVOICE_ASR_FRONTEND_F16=1` while quantizing to keep the encoder frontend in F16 for an A/B arm. |
 | chatterbox (TTS)    | ✓     | ✓     | ✓     | ✓     | Vocoder/F0/embeddings auto-skipped. F16 + Q8_0 + Q4_K shipped. On **Metal** a quantized S3Gen CFM has its `s3.fd.*` weights dequantised to F16 at load and kept GPU-resident (Metal's q8 mat-vec kernel requantises activations to q8 and corrupts the CFM — NaN/garbage; F16 weights take the correct `mul_mm_f16_f32_hp` path at full GPU speed). F16 S3Gen and all CUDA are unaffected. `CRISPASR_S3GEN_UNET_CPU=1` forces the slower all-CPU route. |
 
 > The cells marked `—` are not just "untested" — they have a known

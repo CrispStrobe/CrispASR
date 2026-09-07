@@ -1412,7 +1412,9 @@ end-to-end cosine cannot do.
 ### VibeVoice
 
 - `CRISPASR_VIBEVOICE_ASR_PROMPT`
-- `CRISPASR_VIBEVOICE_ASR_SAMPLE`
+- `CRISPASR_VIBEVOICE_ASR_SAMPLE` — streaming ASR samples the acoustic
+  posterior by default, matching upstream. Set `0` for deterministic
+  posterior-mean reference diffs or `1` to force sampling.
 - `CRISPASR_VIBEVOICE_ATTN_PREC`
 - `CRISPASR_VIBEVOICE_BENCH`
 - `CRISPASR_VIBEVOICE_BITNET_ACT_QUANT`

@@ -4,6 +4,12 @@ CrispASR supports three streaming modes — pipe input, microphone
 capture, and continuous live mode — and per-token confidence output.
 All work with every supported backend.
 
+`--backend vibevoice-streaming -m auto` uses the model's native streaming
+protocol: fixed 2.93-second chunks, 0.53-second lookahead, and one persistent
+decoder cache for the whole session. `--stream-step`, `--stream-length`, and
+`--stream-keep` therefore do not change its receptive field. A final flush
+pads one last partial chunk and does not decode retained lookahead twice.
+
 > **Streaming TTS output** (the reverse direction) is documented in its own
 > section at the bottom — [Streaming synthesized audio](#streaming-synthesized-audio-out).
 
