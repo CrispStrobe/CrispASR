@@ -2805,8 +2805,7 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
 #endif
 #ifdef CA_HAVE_VIBEVOICE
     if (s->backend == "vibevoice" || s->backend == "vibevoice-streaming" || s->backend == "vibevoice-tts" ||
-        s->backend == "vibevoice-1.5b" ||
-        s->backend == "vibevoice-tts-1.5b" || s->backend == "vibevoice-tts-base") {
+        s->backend == "vibevoice-1.5b" || s->backend == "vibevoice-tts-1.5b" || s->backend == "vibevoice-tts-base") {
         s->backend = "vibevoice";
         vibevoice_context_params p = vibevoice_context_default_params();
         p.n_threads = s->n_threads;

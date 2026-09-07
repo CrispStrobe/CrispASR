@@ -86,6 +86,7 @@ def main():
             preprocessor_cfg = json.load(f)
     chunk_frames = int(preprocessor_cfg.get("chunk_frames", 22))
     lookahead_frames = int(preprocessor_cfg.get("lookahead_frames", 4))
+    frame_samples = int(preprocessor_cfg.get("speech_tok_compress_ratio", total_downsample))
     sample_rate = int(preprocessor_cfg.get("target_sample_rate", 24000))
     normalize_audio = bool(preprocessor_cfg.get("normalize_audio", True))
 
@@ -147,6 +148,7 @@ def main():
     if is_asr_streaming:
         writer.add_uint32("vibevoice.streaming.chunk_frames", chunk_frames)
         writer.add_uint32("vibevoice.streaming.lookahead_frames", lookahead_frames)
+        writer.add_uint32("vibevoice.streaming.frame_samples", frame_samples)
         writer.add_uint32("vibevoice.streaming.sample_rate", sample_rate)
         writer.add_uint32("vibevoice.streaming.normalize_audio", 1 if normalize_audio else 0)
         writer.add_uint32("vibevoice.streaming.max_position_embeddings", max_position_embeddings)

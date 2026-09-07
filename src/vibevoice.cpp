@@ -95,6 +95,7 @@ struct vibevoice_hparams {
     bool asr_streaming = false;
     int stream_chunk_frames = 22;
     int stream_lookahead_frames = 4;
+    int stream_frame_samples = 3200;
     int stream_sample_rate = 24000;
     int stream_max_position_embeddings = 65536;
     bool stream_normalize_audio = true;
@@ -282,12 +283,11 @@ extern "C" struct vibevoice_context* vibevoice_init_from_file(const char* path_m
     hp.asr_streaming = core_gguf::kv_u32(gctx, "vibevoice.asr_streaming", 0) != 0;
     hp.stream_chunk_frames = core_gguf::kv_u32(gctx, "vibevoice.streaming.chunk_frames", 22);
     hp.stream_lookahead_frames = core_gguf::kv_u32(gctx, "vibevoice.streaming.lookahead_frames", 4);
+    hp.stream_frame_samples = core_gguf::kv_u32(gctx, "vibevoice.streaming.frame_samples", hp.total_downsample);
     hp.stream_sample_rate = core_gguf::kv_u32(gctx, "vibevoice.streaming.sample_rate", 24000);
-    hp.stream_max_position_embeddings =
-        core_gguf::kv_u32(gctx, "vibevoice.streaming.max_position_embeddings", 65536);
+    hp.stream_max_position_embeddings = core_gguf::kv_u32(gctx, "vibevoice.streaming.max_position_embeddings", 65536);
     hp.stream_normalize_audio = core_gguf::kv_u32(gctx, "vibevoice.streaming.normalize_audio", 1) != 0;
-    hp.stream_text_chunk_end_id =
-        core_gguf::kv_u32(gctx, "vibevoice.streaming.text_chunk_end_id", 151665);
+    hp.stream_text_chunk_end_id = core_gguf::kv_u32(gctx, "vibevoice.streaming.text_chunk_end_id", 151665);
     hp.stream_speech_start_id = core_gguf::kv_u32(gctx, "vibevoice.streaming.speech_start_id", 151646);
     hp.stream_speech_end_id = core_gguf::kv_u32(gctx, "vibevoice.streaming.speech_end_id", 151647);
 
@@ -1452,236 +1452,233 @@ static ggml_cgraph* vibevoice_build_asr_decoder_graph(vibevoice_context* ctx, in
         return it != m.tensors.end() ? it->second : nullptr;
     };
 
-        size_t mem = ctx->compute_meta.size();
-        ggml_init_params ip = {mem, ctx->compute_meta.data(), true};
-        ggml_context* ctx0 = ggml_init(ip);
-        ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 65536, false);
+    size_t mem = ctx->compute_meta.size();
+    ggml_init_params ip = {mem, ctx->compute_meta.data(), true};
+    ggml_context* ctx0 = ggml_init(ip);
+    ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 65536, false);
 
-        ggml_tensor* embeds = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, hp.d_lm, n_tokens);
-        ggml_set_name(embeds, "dec_input");
-        ggml_set_input(embeds);
+    ggml_tensor* embeds = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, hp.d_lm, n_tokens);
+    ggml_set_name(embeds, "dec_input");
+    ggml_set_input(embeds);
 
-        ggml_tensor* positions = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, n_tokens);
-        ggml_set_name(positions, "positions");
-        ggml_set_input(positions);
+    ggml_tensor* positions = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, n_tokens);
+    ggml_set_name(positions, "positions");
+    ggml_set_input(positions);
 
-        ggml_tensor* causal_mask = nullptr;
-        if (n_tokens > 1) {
-            causal_mask = ggml_new_tensor_2d(ctx0, GGML_TYPE_F16, n_past + n_tokens, n_tokens);
-            ggml_set_name(causal_mask, "causal_mask");
-            ggml_set_input(causal_mask);
-        }
+    ggml_tensor* causal_mask = nullptr;
+    if (n_tokens > 1) {
+        causal_mask = ggml_new_tensor_2d(ctx0, GGML_TYPE_F16, n_past + n_tokens, n_tokens);
+        ggml_set_name(causal_mask, "causal_mask");
+        ggml_set_input(causal_mask);
+    }
 
-        const core_attn::KvSelfAttnParams kvp = {
-            /*n_heads*/ hp.n_heads,
-            /*n_kv_heads*/ hp.n_kv_heads,
-            /*head_dim*/ hp.head_dim,
-            /*n_kv_grp*/ hp.n_heads / hp.n_kv_heads,
-            /*n_ctx_orig*/ 0,
-            /*rope_theta*/ hp.rope_theta,
-            /*rope_beta_fast*/ 0.0f,
-            /*rope_beta_slow*/ 0.0f,
-            /*attn_scale*/ 1.0f / sqrtf((float)hp.head_dim),
-            /*qk_norm_eps*/ 0.0f,
-            /*gqa_mode*/ core_attn::GQA_NATIVE,
-            /*rope_type*/ GGML_ROPE_TYPE_NEOX, // Qwen2 uses NEOX RoPE
-        };
+    const core_attn::KvSelfAttnParams kvp = {
+        /*n_heads*/ hp.n_heads,
+        /*n_kv_heads*/ hp.n_kv_heads,
+        /*head_dim*/ hp.head_dim,
+        /*n_kv_grp*/ hp.n_heads / hp.n_kv_heads,
+        /*n_ctx_orig*/ 0,
+        /*rope_theta*/ hp.rope_theta,
+        /*rope_beta_fast*/ 0.0f,
+        /*rope_beta_slow*/ 0.0f,
+        /*attn_scale*/ 1.0f / sqrtf((float)hp.head_dim),
+        /*qk_norm_eps*/ 0.0f,
+        /*gqa_mode*/ core_attn::GQA_NATIVE,
+        /*rope_type*/ GGML_ROPE_TYPE_NEOX, // Qwen2 uses NEOX RoPE
+    };
 
-        ggml_tensor* cur = embeds;
-        for (int il = 0; il < hp.n_lm_layers; il++) {
-            char p[64];
-            snprintf(p, sizeof(p), "lm.layers.%d", il);
-            ggml_tensor* residual = cur;
+    ggml_tensor* cur = embeds;
+    for (int il = 0; il < hp.n_lm_layers; il++) {
+        char p[64];
+        snprintf(p, sizeof(p), "lm.layers.%d", il);
+        ggml_tensor* residual = cur;
 
-            // Pre-RMSNorm
-            cur = ggml_rms_norm(ctx0, cur, 1e-6f);
-            cur = ggml_mul(ctx0, cur, G(std::string(p) + ".attn_ln.weight"));
-
-            // Qwen2 has bias on Q and K projections.
-            // Apply Q/K projections with bias BEFORE kv_self_attn,
-            // then pass identity weights so kv_self_attn skips the projection.
-            // Actually simpler: inline the attention with bias.
-            {
-                ggml_tensor* q_w = G(std::string(p) + ".attn.q_proj.weight");
-                ggml_tensor* k_w = G(std::string(p) + ".attn.k_proj.weight");
-                ggml_tensor* v_w = G(std::string(p) + ".attn.v_proj.weight");
-                ggml_tensor* o_w = G(std::string(p) + ".attn.o_proj.weight");
-                ggml_tensor* q_b = G(std::string(p) + ".attn.q_proj.bias");
-                ggml_tensor* k_b = G(std::string(p) + ".attn.k_proj.bias");
-                ggml_tensor* v_b = G(std::string(p) + ".attn.v_proj.bias");
-
-                int T_cur = (int)cur->ne[1];
-                int Lk = n_past + T_cur;
-
-                // Q, K, V projections with bias
-                // BitNet quantizes the INPUT of every projection, so q/k/v share a
-                // single quantization of `cur` — what one activation_quant()
-                // ahead of three BitLinears does.
-                ggml_tensor* cur_q = vibevoice_aq(ctx0, cur);
-                ggml_tensor* Q = ggml_mul_mat(ctx0, q_w, cur_q);
-                if (q_b)
-                    Q = ggml_add(ctx0, Q, q_b);
-                ggml_tensor* K = ggml_mul_mat(ctx0, k_w, cur_q);
-                if (k_b)
-                    K = ggml_add(ctx0, K, k_b);
-                ggml_tensor* V = ggml_mul_mat(ctx0, v_w, cur_q);
-                if (v_b)
-                    V = ggml_add(ctx0, V, v_b);
-
-                // Reshape for multi-head
-                Q = ggml_reshape_3d(ctx0, Q, kvp.head_dim, kvp.n_heads, T_cur);
-                K = ggml_reshape_3d(ctx0, K, kvp.head_dim, kvp.n_kv_heads, T_cur);
-                V = ggml_reshape_3d(ctx0, V, kvp.head_dim, kvp.n_kv_heads, T_cur);
-
-                // RoPE
-                Q = ggml_rope_ext(ctx0, Q, positions, nullptr, kvp.head_dim, GGML_ROPE_TYPE_NEOX, 0, kvp.rope_theta,
-                                  1.0f, 0.0f, 1.0f, 0.0f, 0.0f);
-                K = ggml_rope_ext(ctx0, K, positions, nullptr, kvp.head_dim, GGML_ROPE_TYPE_NEOX, 0, kvp.rope_theta,
-                                  1.0f, 0.0f, 1.0f, 0.0f, 0.0f);
-
-                // Write K, V to cache
-                ggml_tensor* K_perm = ggml_permute(ctx0, K, 0, 2, 1, 3);
-                ggml_tensor* V_perm = ggml_permute(ctx0, V, 0, 2, 1, 3);
-                ggml_tensor* k_view = ggml_view_4d(ctx0, ctx->kv_k, kvp.head_dim, T_cur, kvp.n_kv_heads, 1,
-                                                   ctx->kv_k->nb[1], ctx->kv_k->nb[2], ctx->kv_k->nb[3],
-                                                   (size_t)il * ctx->kv_k->nb[3] + (size_t)n_past * ctx->kv_k->nb[1]);
-                ggml_tensor* v_view = ggml_view_4d(ctx0, ctx->kv_v, kvp.head_dim, T_cur, kvp.n_kv_heads, 1,
-                                                   ctx->kv_v->nb[1], ctx->kv_v->nb[2], ctx->kv_v->nb[3],
-                                                   (size_t)il * ctx->kv_v->nb[3] + (size_t)n_past * ctx->kv_v->nb[1]);
-                ggml_build_forward_expand(gf, ggml_cpy(ctx0, K_perm, k_view));
-                ggml_build_forward_expand(gf, ggml_cpy(ctx0, V_perm, v_view));
-
-                // Read full K, V from cache
-                ggml_tensor* Kfull =
-                    ggml_cont(ctx0, ggml_view_3d(ctx0, ctx->kv_k, kvp.head_dim, Lk, kvp.n_kv_heads, ctx->kv_k->nb[1],
-                                                 ctx->kv_k->nb[2], (size_t)il * ctx->kv_k->nb[3]));
-                ggml_tensor* Vfull =
-                    ggml_cont(ctx0, ggml_view_3d(ctx0, ctx->kv_v, kvp.head_dim, Lk, kvp.n_kv_heads, ctx->kv_v->nb[1],
-                                                 ctx->kv_v->nb[2], (size_t)il * ctx->kv_v->nb[3]));
-
-                // Permute Q for flash-attn: [hd, T, nh]
-                Q = ggml_cont(ctx0, ggml_permute(ctx0, Q, 0, 2, 1, 3));
-
-                // Flash attention (native GQA).
-                //
-                // GGML_PREC_F32 is set explicitly, matching 0xShug0/audio.cpp
-                // (`attention_precision = GGML_PREC_F32` in its Qwen decoder) and
-                // the fp32 softmax/accumulation of the PyTorch reference.
-                //
-                // On CPU this is a NO-OP and was verified as one: ggml's
-                // ggml_compute_forward_flash_attn_ext dispatches GGML_PREC_DEFAULT
-                // and GGML_PREC_F32 to the same F32-accumulator kernel. It bites on
-                // GPU — ggml-metal-device.m branches on `fa_prec == GGML_PREC_F32`,
-                // and CUDA/Vulkan likewise pick an F16-accumulation path otherwise.
-                //
-                // That asymmetry matches the one thing #369's reporter could not
-                // explain: their Windows/Vulkan run and my macOS/CPU run agreed
-                // character-for-character on the file that keeps its language cue
-                // and diverged on the one that loses it. F16 accumulation is
-                // exactly where backend kernels differ, and only a knife-edge
-                // input surfaces it. CRISPASR_VIBEVOICE_ATTN_PREC=default restores
-                // ggml's default for A/B.
-                static const bool attn_prec_f32 = [] {
-                    const char* v = crispasr_env::get("CRISPASR_VIBEVOICE_ATTN_PREC");
-                    return !(v && strcmp(v, "default") == 0);
-                }();
-                ggml_tensor* attn_out =
-                    ggml_flash_attn_ext(ctx0, Q, Kfull, Vfull, causal_mask, kvp.attn_scale, 0.0f, 0.0f);
-                if (attn_prec_f32)
-                    ggml_flash_attn_ext_set_prec(attn_out, GGML_PREC_F32);
-
-                attn_out = ggml_reshape_2d(ctx0, attn_out, hp.d_lm, T_cur);
-                attn_out = ggml_mul_mat(ctx0, o_w, vibevoice_aq(ctx0, attn_out));
-
-                cur = ggml_add(ctx0, residual, attn_out);
-            }
-
-            // FFN: RMSNorm + SwiGLU
-            residual = cur;
-            cur = ggml_rms_norm(ctx0, cur, 1e-6f);
-            cur = ggml_mul(ctx0, cur, G(std::string(p) + ".ffn_ln.weight"));
-            ggml_tensor* gate_w = G(std::string(p) + ".ffn.gate.weight");
-            ggml_tensor* up_w = G(std::string(p) + ".ffn.up.weight");
-            ggml_tensor* down_w = G(std::string(p) + ".ffn.down.weight");
-            ggml_tensor* ffn = nullptr;
-            if (vibevoice_bitnet_act_quant_enabled()) {
-                // swiglu() inlined so down_proj's input is quantized too. It is a
-                // BitLinear like the other six, and covering only the easy call
-                // sites would make a null result meaningless.
-                ggml_tensor* cur_q = vibevoice_aq(ctx0, cur);
-                ggml_tensor* gate = ggml_mul_mat(ctx0, gate_w, cur_q);
-                ggml_tensor* up = ggml_mul_mat(ctx0, up_w, cur_q);
-                ggml_tensor* mlp = ggml_mul(ctx0, ggml_silu(ctx0, gate), up);
-                ffn = ggml_mul_mat(ctx0, down_w, vibevoice_aq(ctx0, mlp));
-            } else {
-                ffn = core_ffn::swiglu(ctx0, cur, gate_w, up_w, down_w);
-            }
-            cur = ggml_add(ctx0, residual, ffn);
-        }
-
-        // Final RMSNorm
+        // Pre-RMSNorm
         cur = ggml_rms_norm(ctx0, cur, 1e-6f);
-        cur = ggml_mul(ctx0, cur, G("lm.norm.weight"));
+        cur = ggml_mul(ctx0, cur, G(std::string(p) + ".attn_ln.weight"));
 
-        // LM head: VibeVoice-ASR-7B has a SEPARATE lm_head.weight (not tied to tok_emb).
-        // Fall back to tok_emb if lm_head is absent (older 1.5B converts may tie).
-        if (n_tokens > 1) {
-            cur = ggml_view_1d(ctx0, cur, hp.d_lm, (size_t)(n_tokens - 1) * hp.d_lm * sizeof(float));
-            cur = ggml_reshape_2d(ctx0, cur, hp.d_lm, 1);
+        // Qwen2 has bias on Q and K projections.
+        // Apply Q/K projections with bias BEFORE kv_self_attn,
+        // then pass identity weights so kv_self_attn skips the projection.
+        // Actually simpler: inline the attention with bias.
+        {
+            ggml_tensor* q_w = G(std::string(p) + ".attn.q_proj.weight");
+            ggml_tensor* k_w = G(std::string(p) + ".attn.k_proj.weight");
+            ggml_tensor* v_w = G(std::string(p) + ".attn.v_proj.weight");
+            ggml_tensor* o_w = G(std::string(p) + ".attn.o_proj.weight");
+            ggml_tensor* q_b = G(std::string(p) + ".attn.q_proj.bias");
+            ggml_tensor* k_b = G(std::string(p) + ".attn.k_proj.bias");
+            ggml_tensor* v_b = G(std::string(p) + ".attn.v_proj.bias");
+
+            int T_cur = (int)cur->ne[1];
+            int Lk = n_past + T_cur;
+
+            // Q, K, V projections with bias
+            // BitNet quantizes the INPUT of every projection, so q/k/v share a
+            // single quantization of `cur` — what one activation_quant()
+            // ahead of three BitLinears does.
+            ggml_tensor* cur_q = vibevoice_aq(ctx0, cur);
+            ggml_tensor* Q = ggml_mul_mat(ctx0, q_w, cur_q);
+            if (q_b)
+                Q = ggml_add(ctx0, Q, q_b);
+            ggml_tensor* K = ggml_mul_mat(ctx0, k_w, cur_q);
+            if (k_b)
+                K = ggml_add(ctx0, K, k_b);
+            ggml_tensor* V = ggml_mul_mat(ctx0, v_w, cur_q);
+            if (v_b)
+                V = ggml_add(ctx0, V, v_b);
+
+            // Reshape for multi-head
+            Q = ggml_reshape_3d(ctx0, Q, kvp.head_dim, kvp.n_heads, T_cur);
+            K = ggml_reshape_3d(ctx0, K, kvp.head_dim, kvp.n_kv_heads, T_cur);
+            V = ggml_reshape_3d(ctx0, V, kvp.head_dim, kvp.n_kv_heads, T_cur);
+
+            // RoPE
+            Q = ggml_rope_ext(ctx0, Q, positions, nullptr, kvp.head_dim, GGML_ROPE_TYPE_NEOX, 0, kvp.rope_theta, 1.0f,
+                              0.0f, 1.0f, 0.0f, 0.0f);
+            K = ggml_rope_ext(ctx0, K, positions, nullptr, kvp.head_dim, GGML_ROPE_TYPE_NEOX, 0, kvp.rope_theta, 1.0f,
+                              0.0f, 1.0f, 0.0f, 0.0f);
+
+            // Write K, V to cache
+            ggml_tensor* K_perm = ggml_permute(ctx0, K, 0, 2, 1, 3);
+            ggml_tensor* V_perm = ggml_permute(ctx0, V, 0, 2, 1, 3);
+            ggml_tensor* k_view = ggml_view_4d(ctx0, ctx->kv_k, kvp.head_dim, T_cur, kvp.n_kv_heads, 1,
+                                               ctx->kv_k->nb[1], ctx->kv_k->nb[2], ctx->kv_k->nb[3],
+                                               (size_t)il * ctx->kv_k->nb[3] + (size_t)n_past * ctx->kv_k->nb[1]);
+            ggml_tensor* v_view = ggml_view_4d(ctx0, ctx->kv_v, kvp.head_dim, T_cur, kvp.n_kv_heads, 1,
+                                               ctx->kv_v->nb[1], ctx->kv_v->nb[2], ctx->kv_v->nb[3],
+                                               (size_t)il * ctx->kv_v->nb[3] + (size_t)n_past * ctx->kv_v->nb[1]);
+            ggml_build_forward_expand(gf, ggml_cpy(ctx0, K_perm, k_view));
+            ggml_build_forward_expand(gf, ggml_cpy(ctx0, V_perm, v_view));
+
+            // Read full K, V from cache
+            ggml_tensor* Kfull =
+                ggml_cont(ctx0, ggml_view_3d(ctx0, ctx->kv_k, kvp.head_dim, Lk, kvp.n_kv_heads, ctx->kv_k->nb[1],
+                                             ctx->kv_k->nb[2], (size_t)il * ctx->kv_k->nb[3]));
+            ggml_tensor* Vfull =
+                ggml_cont(ctx0, ggml_view_3d(ctx0, ctx->kv_v, kvp.head_dim, Lk, kvp.n_kv_heads, ctx->kv_v->nb[1],
+                                             ctx->kv_v->nb[2], (size_t)il * ctx->kv_v->nb[3]));
+
+            // Permute Q for flash-attn: [hd, T, nh]
+            Q = ggml_cont(ctx0, ggml_permute(ctx0, Q, 0, 2, 1, 3));
+
+            // Flash attention (native GQA).
+            //
+            // GGML_PREC_F32 is set explicitly, matching 0xShug0/audio.cpp
+            // (`attention_precision = GGML_PREC_F32` in its Qwen decoder) and
+            // the fp32 softmax/accumulation of the PyTorch reference.
+            //
+            // On CPU this is a NO-OP and was verified as one: ggml's
+            // ggml_compute_forward_flash_attn_ext dispatches GGML_PREC_DEFAULT
+            // and GGML_PREC_F32 to the same F32-accumulator kernel. It bites on
+            // GPU — ggml-metal-device.m branches on `fa_prec == GGML_PREC_F32`,
+            // and CUDA/Vulkan likewise pick an F16-accumulation path otherwise.
+            //
+            // That asymmetry matches the one thing #369's reporter could not
+            // explain: their Windows/Vulkan run and my macOS/CPU run agreed
+            // character-for-character on the file that keeps its language cue
+            // and diverged on the one that loses it. F16 accumulation is
+            // exactly where backend kernels differ, and only a knife-edge
+            // input surfaces it. CRISPASR_VIBEVOICE_ATTN_PREC=default restores
+            // ggml's default for A/B.
+            static const bool attn_prec_f32 = [] {
+                const char* v = crispasr_env::get("CRISPASR_VIBEVOICE_ATTN_PREC");
+                return !(v && strcmp(v, "default") == 0);
+            }();
+            ggml_tensor* attn_out = ggml_flash_attn_ext(ctx0, Q, Kfull, Vfull, causal_mask, kvp.attn_scale, 0.0f, 0.0f);
+            if (attn_prec_f32)
+                ggml_flash_attn_ext_set_prec(attn_out, GGML_PREC_F32);
+
+            attn_out = ggml_reshape_2d(ctx0, attn_out, hp.d_lm, T_cur);
+            attn_out = ggml_mul_mat(ctx0, o_w, vibevoice_aq(ctx0, attn_out));
+
+            cur = ggml_add(ctx0, residual, attn_out);
         }
-        ggml_tensor* lm_head_w = G("lm_head.weight");
-        if (!lm_head_w)
-            lm_head_w = G("lm.tok_emb.weight");
-        cur = ggml_mul_mat(ctx0, lm_head_w, cur);
 
-        ggml_set_name(cur, "logits");
-        ggml_set_output(cur);
-        ggml_build_forward_expand(gf, cur);
-        return gf;
+        // FFN: RMSNorm + SwiGLU
+        residual = cur;
+        cur = ggml_rms_norm(ctx0, cur, 1e-6f);
+        cur = ggml_mul(ctx0, cur, G(std::string(p) + ".ffn_ln.weight"));
+        ggml_tensor* gate_w = G(std::string(p) + ".ffn.gate.weight");
+        ggml_tensor* up_w = G(std::string(p) + ".ffn.up.weight");
+        ggml_tensor* down_w = G(std::string(p) + ".ffn.down.weight");
+        ggml_tensor* ffn = nullptr;
+        if (vibevoice_bitnet_act_quant_enabled()) {
+            // swiglu() inlined so down_proj's input is quantized too. It is a
+            // BitLinear like the other six, and covering only the easy call
+            // sites would make a null result meaningless.
+            ggml_tensor* cur_q = vibevoice_aq(ctx0, cur);
+            ggml_tensor* gate = ggml_mul_mat(ctx0, gate_w, cur_q);
+            ggml_tensor* up = ggml_mul_mat(ctx0, up_w, cur_q);
+            ggml_tensor* mlp = ggml_mul(ctx0, ggml_silu(ctx0, gate), up);
+            ffn = ggml_mul_mat(ctx0, down_w, vibevoice_aq(ctx0, mlp));
+        } else {
+            ffn = core_ffn::swiglu(ctx0, cur, gate_w, up_w, down_w);
+        }
+        cur = ggml_add(ctx0, residual, ffn);
+    }
 
+    // Final RMSNorm
+    cur = ggml_rms_norm(ctx0, cur, 1e-6f);
+    cur = ggml_mul(ctx0, cur, G("lm.norm.weight"));
+
+    // LM head: VibeVoice-ASR-7B has a SEPARATE lm_head.weight (not tied to tok_emb).
+    // Fall back to tok_emb if lm_head is absent (older 1.5B converts may tie).
+    if (n_tokens > 1) {
+        cur = ggml_view_1d(ctx0, cur, hp.d_lm, (size_t)(n_tokens - 1) * hp.d_lm * sizeof(float));
+        cur = ggml_reshape_2d(ctx0, cur, hp.d_lm, 1);
+    }
+    ggml_tensor* lm_head_w = G("lm_head.weight");
+    if (!lm_head_w)
+        lm_head_w = G("lm.tok_emb.weight");
+    cur = ggml_mul_mat(ctx0, lm_head_w, cur);
+
+    ggml_set_name(cur, "logits");
+    ggml_set_output(cur);
+    ggml_build_forward_expand(gf, cur);
+    return gf;
 }
 
 static bool vibevoice_run_asr_decoder(vibevoice_context* ctx, const float* embeds, int n_tokens, int n_past,
                                       std::vector<float>& logits) {
     auto& hp = ctx->model.hp;
 
-        std::vector<int32_t> positions(n_tokens);
-        for (int i = 0; i < n_tokens; i++)
-            positions[i] = n_past + i;
+    std::vector<int32_t> positions(n_tokens);
+    for (int i = 0; i < n_tokens; i++)
+        positions[i] = n_past + i;
 
-        std::vector<ggml_fp16_t> mask;
-        if (n_tokens > 1) {
-            int Lk = n_past + n_tokens;
-            mask.resize((size_t)n_tokens * Lk, ggml_fp32_to_fp16(0.0f));
-            ggml_fp16_t neg_inf = ggml_fp32_to_fp16(-INFINITY);
-            for (int q = 0; q < n_tokens; q++)
-                for (int k = 0; k < Lk; k++)
-                    if (k > n_past + q)
-                        mask[(size_t)q * Lk + k] = neg_inf;
-        }
+    std::vector<ggml_fp16_t> mask;
+    if (n_tokens > 1) {
+        int Lk = n_past + n_tokens;
+        mask.resize((size_t)n_tokens * Lk, ggml_fp32_to_fp16(0.0f));
+        ggml_fp16_t neg_inf = ggml_fp32_to_fp16(-INFINITY);
+        for (int q = 0; q < n_tokens; q++)
+            for (int k = 0; k < Lk; k++)
+                if (k > n_past + q)
+                    mask[(size_t)q * Lk + k] = neg_inf;
+    }
 
-        ggml_cgraph* gf = vibevoice_build_asr_decoder_graph(ctx, n_tokens, n_past);
-        ggml_backend_sched_reset(ctx->sched);
-        if (!ggml_backend_sched_alloc_graph(ctx->sched, gf))
-            return false;
+    ggml_cgraph* gf = vibevoice_build_asr_decoder_graph(ctx, n_tokens, n_past);
+    ggml_backend_sched_reset(ctx->sched);
+    if (!ggml_backend_sched_alloc_graph(ctx->sched, gf))
+        return false;
 
-        ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "dec_input"), embeds, 0,
-                                (size_t)hp.d_lm * n_tokens * sizeof(float));
-        ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "positions"), positions.data(), 0,
-                                positions.size() * sizeof(int32_t));
-        if (n_tokens > 1)
-            ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "causal_mask"), mask.data(), 0,
-                                    mask.size() * sizeof(ggml_fp16_t));
+    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "dec_input"), embeds, 0,
+                            (size_t)hp.d_lm * n_tokens * sizeof(float));
+    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "positions"), positions.data(), 0,
+                            positions.size() * sizeof(int32_t));
+    if (n_tokens > 1)
+        ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "causal_mask"), mask.data(), 0,
+                                mask.size() * sizeof(ggml_fp16_t));
 
-        if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS)
-            return false;
+    if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS)
+        return false;
 
-        ggml_tensor* lt = ggml_graph_get_tensor(gf, "logits");
-        int V = (int)lt->ne[0];
-        logits.resize(V);
-        ggml_backend_tensor_get(lt, logits.data(), 0, V * sizeof(float));
-        return true;
-
+    ggml_tensor* lt = ggml_graph_get_tensor(gf, "logits");
+    int V = (int)lt->ne[0];
+    logits.resize(V);
+    ggml_backend_tensor_get(lt, logits.data(), 0, V * sizeof(float));
+    return true;
 }
 
 // Internal: shared implementation for `vibevoice_transcribe` and
@@ -5829,8 +5826,7 @@ static bool vibevoice_stream_prefill(vibevoice_stream* s) {
     std::vector<float> embeds = run_token_embedding_lookup(s->ctx, ids.data(), (int)ids.size());
     const char* dump_dir = crispasr_env::get("CRISPASR_VIBEVOICE_DUMP_DIR");
     vibevoice_dump_i32(dump_dir, "prompt_ids", ids.data(), ids.size());
-    if (embeds.size() != (size_t)ids.size() * m.hp.d_lm ||
-        !vibevoice_stream_reserve_kv(s, (int)ids.size() + 512))
+    if (embeds.size() != (size_t)ids.size() * m.hp.d_lm || !vibevoice_stream_reserve_kv(s, (int)ids.size() + 512))
         return false;
     vibevoice_stream_kv_scope scope(s);
     ggml_backend_buffer_clear(s->kv_buf, 0);
@@ -5845,7 +5841,7 @@ static bool vibevoice_stream_prefill(vibevoice_stream* s) {
 static bool vibevoice_stream_process_window(vibevoice_stream* s, const float* window,
                                             vibevoice_stream_callback callback, void* user_data) {
     auto& hp = s->ctx->model.hp;
-    const int window_samples = (hp.stream_chunk_frames + hp.stream_lookahead_frames) * hp.total_downsample;
+    const int window_samples = (hp.stream_chunk_frames + hp.stream_lookahead_frames) * hp.stream_frame_samples;
     int n_frames = 0, d_lm = 0;
     // Each official encode_speech call consumes fresh posterior noise. The
     // native sampler is independently seeded, so advance it per chunk instead
@@ -5873,8 +5869,7 @@ static bool vibevoice_stream_process_window(vibevoice_stream* s, const float* wi
     std::vector<float> embeds((size_t)n_input * d_lm);
     memcpy(embeds.data(), marker_embeds.data(), (size_t)d_lm * sizeof(float));
     memcpy(embeds.data() + d_lm, features.data(), features.size() * sizeof(float));
-    memcpy(embeds.data() + (size_t)(n_frames + 1) * d_lm, marker_embeds.data() + d_lm,
-           (size_t)d_lm * sizeof(float));
+    memcpy(embeds.data() + (size_t)(n_frames + 1) * d_lm, marker_embeds.data() + d_lm, (size_t)d_lm * sizeof(float));
 
     if (!vibevoice_stream_reserve_kv(s, s->kv_n_used + n_input + 257))
         return false;
@@ -5915,6 +5910,24 @@ static bool vibevoice_stream_process_window(vibevoice_stream* s, const float* wi
         return false;
     ++s->ctx->kv_n_used;
 
+    // Match the official reference's persistent-state probe: layer 0, final
+    // sequence position, every KV head. This catches a stream that happens to
+    // decode one chunk correctly but loses or rebuilds its cache afterward.
+    if (dump_dir && dump_dir[0]) {
+        std::vector<float> kv_tail((size_t)hp.n_kv_heads * hp.head_dim);
+        std::vector<ggml_fp16_t> kv_tail_f16((size_t)hp.head_dim);
+        for (int ih = 0; ih < hp.n_kv_heads; ++ih) {
+            const size_t offset =
+                (size_t)ih * s->ctx->kv_k->nb[2] + (size_t)(s->ctx->kv_n_used - 1) * s->ctx->kv_k->nb[1];
+            ggml_backend_tensor_get(s->ctx->kv_k, kv_tail_f16.data(), offset,
+                                    (size_t)hp.head_dim * sizeof(ggml_fp16_t));
+            for (int id = 0; id < hp.head_dim; ++id)
+                kv_tail[(size_t)ih * hp.head_dim + id] = ggml_fp16_to_fp32(kv_tail_f16[(size_t)id]);
+        }
+        snprintf(dump_name, sizeof(dump_name), "chunk_%03d_kv_key0_tail", s->chunk_index);
+        vibevoice_dump_f32(dump_dir, dump_name, kv_tail.data(), kv_tail.size());
+    }
+
     if (!output.empty()) {
         std::vector<int32_t> dumped(output.begin(), output.end());
         snprintf(dump_name, sizeof(dump_name), "chunk_%03d_generated_ids", s->chunk_index);
@@ -5933,11 +5946,11 @@ extern "C" bool vibevoice_is_asr_streaming(const vibevoice_context* ctx) {
 }
 
 extern "C" int vibevoice_stream_chunk_samples(const vibevoice_context* ctx) {
-    return ctx ? ctx->model.hp.stream_chunk_frames * ctx->model.hp.total_downsample : 0;
+    return ctx ? ctx->model.hp.stream_chunk_frames * ctx->model.hp.stream_frame_samples : 0;
 }
 
 extern "C" int vibevoice_stream_lookahead_samples(const vibevoice_context* ctx) {
-    return ctx ? ctx->model.hp.stream_lookahead_frames * ctx->model.hp.total_downsample : 0;
+    return ctx ? ctx->model.hp.stream_lookahead_frames * ctx->model.hp.stream_frame_samples : 0;
 }
 
 extern "C" vibevoice_stream* vibevoice_stream_open(vibevoice_context* ctx, const char* context) {
@@ -5959,7 +5972,7 @@ extern "C" vibevoice_stream* vibevoice_stream_open(vibevoice_context* ctx, const
 }
 
 extern "C" int vibevoice_stream_feed(vibevoice_stream* s, const float* samples, int n_samples, bool flush,
-                                      vibevoice_stream_callback callback, void* user_data) {
+                                     vibevoice_stream_callback callback, void* user_data) {
     if (!s || !s->ready || s->finished || n_samples < 0 || (n_samples > 0 && !samples))
         return -1;
     if (n_samples > 0)
@@ -6010,7 +6023,7 @@ extern "C" void vibevoice_stream_free(vibevoice_stream* s) {
 }
 
 static char* vibevoice_transcribe_streaming_model(vibevoice_context* ctx, const float* samples, int n_samples,
-                                                   const char* context) {
+                                                  const char* context) {
     vibevoice_stream* stream = vibevoice_stream_open(ctx, context);
     if (!stream)
         return nullptr;
