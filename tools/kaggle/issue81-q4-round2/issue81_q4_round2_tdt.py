@@ -20,7 +20,7 @@ TEMP = Path("/kaggle/temp") if Path("/kaggle/temp").is_dir() else Path("/tmp")
 REPO = TEMP / "CrispASR"
 BUILD = TEMP / "build"
 BRANCH = "perf/81-round2"
-SCRIPT_VERSION = "issue81-round2-v2"
+SCRIPT_VERSION = "issue81-round2-v3"
 
 subprocess.check_call([
     "git", "clone", "--depth", "1", "-b", BRANCH,
