@@ -20,7 +20,7 @@ WORK = Path("/kaggle/working")
 TEMP = Path("/kaggle/temp") if Path("/kaggle/temp").is_dir() else Path("/tmp")
 REPO = TEMP / "CrispASR"
 BUILD = TEMP / "build"
-BRANCH = "perf/81-round2"
+BRANCH = "bench/81-q4-direct-conv"
 SCRIPT_VERSION = "issue81-round2-v1"
 
 subprocess.check_call([
