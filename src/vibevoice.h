@@ -15,6 +15,7 @@ extern "C" {
 #endif
 
 struct vibevoice_context;
+struct vibevoice_stream;
 
 struct vibevoice_context_params {
     int n_threads;
@@ -123,6 +124,21 @@ float* vibevoice_encode_speech(struct vibevoice_context* ctx, const float* sampl
 // semantic (st_enc.*) tokenizer encoder tensors needed for transcription.
 // TTS-only variants (vibevoice-realtime-0.5b etc.) return false.
 bool vibevoice_has_asr(const struct vibevoice_context* ctx);
+
+// Native VibeVoice-ASR-Streaming session. Input is 24 kHz mono PCM. The
+// checkpoint-defined chunk and lookahead sizes are used; caller step/length
+// settings do not change the model's receptive field. Each callback contains
+// the newly completed text chunk. `flush` pads and processes a final partial
+// window. Returns the number of chunks emitted, or a negative error code.
+typedef void (*vibevoice_stream_callback)(const char* chunk_text, void* user_data);
+struct vibevoice_stream* vibevoice_stream_open(struct vibevoice_context* ctx, const char* context);
+int vibevoice_stream_feed(struct vibevoice_stream* stream, const float* samples, int n_samples, bool flush,
+                          vibevoice_stream_callback callback, void* user_data);
+void vibevoice_stream_reset(struct vibevoice_stream* stream);
+void vibevoice_stream_free(struct vibevoice_stream* stream);
+bool vibevoice_is_asr_streaming(const struct vibevoice_context* ctx);
+int vibevoice_stream_chunk_samples(const struct vibevoice_context* ctx);
+int vibevoice_stream_lookahead_samples(const struct vibevoice_context* ctx);
 
 // ── TTS API (requires GGUF converted with --include-decoder) ─────────────────
 
