@@ -1,5 +1,15 @@
 # CrispASR — Pending work
 
+## NOW 2026-09-07 — #81 Q4 CUDA optimization round 2
+
+Worktree `.claude/worktrees/perf-81-round2`, branch `perf/81-round2`. Audit the
+CrispStrobe ggml fork against current upstream for convolution, per-head flash
+attention, CUDA graph and reduction improvements. Benchmark direct subsampler
+convolution, adaptive GPU TDT batching, device-side selection, per-head flash
+attention and selective hot-tensor precision as isolated Q4 arms. Preserve
+exact transcript parity, measure P100 through the Kaggle harness, and keep
+Ada/RTX 4070 conclusions explicitly separate from sm_60 evidence.
+
 ## DONE 2026-09-07 — #81 Q4 FastConformer profiling
 
 The P100 profile found TDT's encoder-to-joint projection consuming about
