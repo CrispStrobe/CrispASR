@@ -43,12 +43,13 @@ commit = subprocess.check_output(["git", "-C", REPO, "rev-parse", "HEAD"], text=
 kh.step("provenance", commit=commit)
 
 kh.step("dependencies")
+run([sys.executable, "-m", "pip", "install", "--quiet", "--upgrade", "--force-reinstall",
+     "huggingface_hub==0.36.0"])
 run([sys.executable, "-m", "pip", "install", "--quiet", "transformers>=4.51.3,<5", "accelerate",
-     "safetensors", "huggingface_hub", "hf_transfer", "librosa", "soundfile", "ml-collections", "absl-py"])
+     "safetensors", "librosa", "soundfile", "ml-collections", "absl-py"])
 if not UPSTREAM.exists():
     run(["git", "clone", "--depth", "1", "https://github.com/microsoft/VibeVoice.git", UPSTREAM], timeout=1200)
 run([sys.executable, "-m", "pip", "install", "--quiet", "--no-deps", "-e", UPSTREAM])
-os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
 
 from huggingface_hub import HfApi, snapshot_download  # noqa: E402
 
