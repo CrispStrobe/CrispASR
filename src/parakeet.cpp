@@ -1390,6 +1390,15 @@ static bool parakeet_ggml_decode_active(const parakeet_context* ctx) {
     return ggml_dec;
 }
 
+// Issue #81 measured the TDT decoder at 66% of Q4 wall time on a P100. Its
+// first operation was still the T*640*1024 encoder projection in a scalar CPU
+// loop on non-Apple builds. Keep the backend projection gated until the P100
+// A/B proves transcript parity and a useful win.
+static bool parakeet_gpu_encoder_projection() {
+    const char* e = crispasr_env::get("CRISPASR_RNNT_GPU_ENC_PROJ");
+    return e && *e && *e != '0';
+}
+
 extern "C" int parakeet_decode_uses_backend(struct parakeet_context* ctx) {
     return (ctx && parakeet_ggml_decode_active(ctx)) ? 1 : 0;
 }
@@ -1494,8 +1503,14 @@ static std::vector<parakeet_emitted_token> parakeet_tdt_decode(parakeet_context*
     // Replaces T_enc individual sgemv calls inside the decode loop with
     // a single bulk computation. On macOS uses batched sgemm; on Linux
     // falls back to per-frame sgemv (still benefits from locality).
-    std::vector<float> all_proj_e((size_t)T_enc * J.joint_hidden);
-    {
+    std::vector<float> all_proj_e;
+    const auto _proj_t0 = std::chrono::steady_clock::now();
+    const bool gpu_enc_proj =
+        ggml_dec && parakeet_gpu_encoder_projection() &&
+        core_rnnt_ggml::decoder_project_encoder(gdec, ctx->model.joint.enc_w, ctx->model.joint.enc_b, enc, T_enc,
+                                                J.d_model, all_proj_e);
+    if (!gpu_enc_proj) {
+        all_proj_e.resize((size_t)T_enc * J.joint_hidden);
         for (int t = 0; t < T_enc; t++) {
             float* dst = all_proj_e.data() + (size_t)t * J.joint_hidden;
             std::copy(J.enc_b.begin(), J.enc_b.end(), dst);
@@ -1520,6 +1535,7 @@ static std::vector<parakeet_emitted_token> parakeet_tdt_decode(parakeet_context*
         }
 #endif
     }
+    const auto _proj_t1 = std::chrono::steady_clock::now();
 
     // Sampling state — only touched when ctx->decode_temperature > 0.
     // We initialize unconditionally because seeding a mt19937_64 is
@@ -1703,9 +1719,10 @@ static std::vector<parakeet_emitted_token> parakeet_tdt_decode(parakeet_context*
 
     if (time_dec) {
         auto _dt1 = std::chrono::steady_clock::now();
-        fprintf(stderr, "parakeet: tdt_decode %.1f ms (%s, T_enc=%d, %zu tokens)\n",
+        fprintf(stderr, "parakeet: tdt_decode %.1f ms (%s, T_enc=%d, %zu tokens, enc_proj=%.1f ms %s)\n",
                 std::chrono::duration<double, std::milli>(_dt1 - _dt0).count(), ggml_dec ? "ggml" : "cblas", T_enc,
-                emitted.size());
+                emitted.size(), std::chrono::duration<double, std::milli>(_proj_t1 - _proj_t0).count(),
+                gpu_enc_proj ? "backend" : "cpu");
     }
     return emitted;
 }

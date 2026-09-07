@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Q4 FastConformer stage baseline on a Kaggle P100 (issue #81).
+"""Q4 FastConformer profiling and TDT encoder-projection A/B on a P100 (#81).
 
-This first pass measures before changing the runtime. It benchmarks the CTC
-and TDT Q4_K models on short and varied long audio, captures their existing
-per-stage timers, and runs the expensive per-node FastConformer profiler on a
-single JFK pass. A later A/B kernel may test only the bottleneck this identifies.
+It benchmarks the CTC and TDT Q4_K models on short and varied long audio,
+captures their existing per-stage timers, and runs the expensive per-node
+FastConformer profiler on one CTC JFK pass. For the measured TDT bottleneck it
+A/B tests the opt-in backend encoder-to-joint projection against the scalar CPU
+projection. Transcript equality and repeat stability are hard gates.
 """
 
 import json
@@ -146,9 +147,11 @@ print("RESULT::" + json.dumps(out), flush=True)
 '''
 
 
-def run_child(kind, mode):
-    env = dict(os.environ)
+def run_child(kind, mode, env_extra=None):
+    env = dict(os.environ, **(env_extra or {}))
     env["CRISPASR_PARAKEET_BENCH" if kind == "tdt" else "CRISPASR_CANARY_CTC_BENCH"] = "1"
+    if kind == "tdt":
+        env["CRISPASR_PARAKEET_DECODE_TIMING"] = "1"
     if mode == "profile":
         env["CRISPASR_FC_PROFILE"] = "1"
     proc = subprocess.run(
@@ -169,6 +172,7 @@ def run_child(kind, mode):
     for stage, value in stage_re.findall(proc.stderr):
         stages.setdefault(stage, []).append(float(value))
     profile_lines = [line.strip() for line in proc.stderr.splitlines() if "cc_profile:" in line]
+    decode_lines = [line.strip() for line in proc.stderr.splitlines() if "parakeet: tdt_decode" in line]
     for clip, row in data.items():
         if not all(row["texts"]):
             raise RuntimeError(f"{kind}/{mode}/{clip} produced empty text")
@@ -176,26 +180,34 @@ def run_child(kind, mode):
         row["median_s"] = statistics.median(row["times_s"][1:] or row["times_s"])
         row["rtf_x"] = durations[clip] / row["median_s"]
         row["word_count"] = len(row["texts"][-1].split())
-    return {"clips": data, "stage_ms": stages, "profile_lines": profile_lines}
+    return {"clips": data, "stage_ms": stages, "profile_lines": profile_lines, "decode_lines": decode_lines}
 
 
 results = {"commit": commit, "cuda_arch": arch, "durations_s": durations, "models": {}}
-for kind in ("ctc", "tdt"):
-    kh.step(f"baseline.{kind}")
-    baseline = run_child(kind, "baseline")
-    kh.step(f"profile.{kind}")
-    profile = run_child(kind, "profile")
-    results["models"][kind] = {"baseline": baseline, "profile": profile}
+kh.step("baseline.ctc")
+ctc_baseline = run_child("ctc", "baseline")
+kh.step("profile.ctc")
+ctc_profile = run_child("ctc", "profile")
+results["models"]["ctc"] = {"baseline": ctc_baseline, "profile": ctc_profile}
+
+kh.step("baseline.tdt")
+tdt_baseline = run_child("tdt", "baseline", {"CRISPASR_RNNT_GPU_ENC_PROJ": "0"})
+kh.step("gpu-proj.tdt")
+tdt_gpu_proj = run_child("tdt", "gpu-proj", {"CRISPASR_RNNT_GPU_ENC_PROJ": "1"})
+results["models"]["tdt"] = {"baseline": tdt_baseline, "gpu-proj": tdt_gpu_proj}
 
 results["validation"] = {
     "passed": all(
         row["transcript_stable"]
-        for model in results["models"].values()
-        for row in model["baseline"]["clips"].values()
+        for model in results["models"].values() for row in model["baseline"]["clips"].values()
+    ) and all(
+        tdt_gpu_proj["clips"][clip]["texts"][-1] == tdt_baseline["clips"][clip]["texts"][-1]
+        and tdt_gpu_proj["clips"][clip]["transcript_stable"]
+        for clip in clip_paths
     )
 }
 if not results["validation"]["passed"]:
-    raise RuntimeError("a baseline transcript changed between identical runs")
+    raise RuntimeError("a transcript changed within an arm or across the TDT A/B")
 
 (WORK / "results.json").write_text(json.dumps(results, indent=2) + "\n")
 kh.step("done", validation=results["validation"])
