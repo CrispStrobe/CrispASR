@@ -1,0 +1,14 @@
+{
+  "id": "${KAGGLE_ACCOUNT}/crispasr-ggml-v023-q4-ab",
+  "title": "CrispASR ggml v0.23 Q4 A-B",
+  "code_file": "ggml_v023_q4_ab.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "true",
+  "dataset_sources": ["${KAGGLE_ACCOUNT}/crispasr-hf-token", "${KAGGLE_ACCOUNT}/crispasr-ccache"],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}
