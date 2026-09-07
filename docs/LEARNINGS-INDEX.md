@@ -17,7 +17,7 @@ per-backend porting detail (Per-model port notes + the family cross-reference).
 Reach for the topic groups when you are stuck on a *technique*, and the
 cross-reference when you already know which model you are touching.
 
-## Index by topic (299 lessons)
+## Index by topic (301 lessons)
 
 **Security & untrusted input** (2)
 
@@ -34,7 +34,7 @@ cross-reference when you already know which model you are touching.
 - L16962 — consent record — BIND to the audio, don't chain the log
 - L18257 — watermark detector — swap the STATISTIC, not the threshold
 
-**Build, CI, release & packaging** (21)
+**Build, CI, release & packaging** (22)
 
 - L637 — A packaging step that destroys the state a later step reads — and scripts that only run in a release job
 - L941 — A guard job that runs ONE compiler family guards one compiler family
@@ -57,6 +57,7 @@ cross-reference when you already know which model you are touching.
 - L11429 — Kaggle as a batch-rebake target: seven fragilities the script has to work around
 - L14873 — CI has no NVIDIA GPU — a CUDA-only graph path (mimo RVQ) is guarded by an on-Kaggle exact-parity smoke, not CI (#309)
 - L15700 — #313 Rust crates on crates.io via git dep
+- L18871 — An upstream-sync PR must target the branch consumers pin, and cache export belongs after the build
 
 **Multi-surface wiring — CLI / C ABI / bindings / server** (29)
 
@@ -90,7 +91,7 @@ cross-reference when you already know which model you are touching.
 - L18525 — A streaming callback over a growing buffer is buffered inference unless the public session owns every cache
 - L18550 — A managed assembly and its native library cannot share a name, and a live test that skips itself is not a test
 
-**Parity, the diff harness & ground truth** (41)
+**Parity, the diff harness & ground truth** (42)
 
 - L39 — The long-form recipe is part of the blueprint — and a comment citing the blueprint is not the blueprint
 - L169 — A model family's per-size behaviour lives in the reference RUNTIME, not the modelling code
@@ -133,6 +134,7 @@ cross-reference when you already know which model you are touching.
 - L15986 — #333 madlad400 quants + T5 parity
 - L16858 — chatterbox hift_pcm(ref_mel) cos≈0.879 was a diff-harness layout bug (source_stft fed transposed), not a…
 - L18488 — Chatterbox Multilingual V3: checkpoint names, quant hashes, and a non-silent clone are not parity
+- L18837 — Device-side argmax can cost more than the readback it removes, and an unused graph output still runs
 
 **ggml graphs, allocation & caching** (44)
 

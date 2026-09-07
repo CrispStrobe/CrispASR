@@ -93,6 +93,7 @@ _D = "Process, triage & documentation discipline"
 
 # Heading-prefix -> topic, for the ones the keyword rules misfile.
 OVERRIDES = {
+    "An upstream-sync PR must target the branch consumers pin": "Build, CI, release & packaging",
     "A managed assembly and its native library cannot share a name": _M,
     "One red job hides every job behind it": _D,
     "A reference that shares the runtime's assumption": _P,

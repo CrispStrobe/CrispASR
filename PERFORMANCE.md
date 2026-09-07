@@ -882,6 +882,56 @@ needs a per-stage look).
 | onnx-asr parakeet-ctc CUDA fp32, 134 s varied speech, in-process | **214×** (tdt 121×) |
 | onnx-asr parakeet-ctc CPU int8, 134 s varied | 5.8× (tdt 5.7×) |
 
+**Q4 round-2 rejected arms (P100, 2026-09-07; Kaggle
+`chr1str/crispasr-issue-81-q4-round-2`, encoder matrix v1 at `b82b7baf`,
+TDT matrix v3 at `c0527382`).** Device-side
+selection preserved exact transcripts but improved the experimental baseline by
+only 0.17% on the 134 s clip. Speculative joint batches lost 2.5–8.1%. The
+selection graph also made its argmax outputs part of the graph when the runtime
+switch was off, so that arm was removed rather than retained as a dormant option.
+
+| arm | 134 s median | x-RT | vs same-run baseline |
+|---|---:|---:|---:|
+| selection-graph baseline | 1.2062 s | 111.15× | — |
+| device argmax | 1.2042 s | 111.34× | +0.17% |
+| batch 4 | 1.2369 s | 108.39× | −2.48% |
+| batch 8 | 1.2700 s | 105.57× | −5.02% |
+| batch 4 + device argmax | 1.2284 s | 109.14× | −1.81% |
+| batch 8 + device argmax | 1.3044 s | 102.79× | −7.52% |
+
+The preceding CTC matrix rejected the other proposed Q4 levers on the same
+134 s varied clip. Direct standard/depthwise convolution reduced throughput,
+and enabling the fork's per-head flash-attention path on sm_60 was more than
+2× slower. Keeping selected FFN tensors at Q8 or F16 either failed transcript
+parity or lost speed.
+
+| CTC arm | x-RT | result |
+|---|---:|---|
+| baseline | **163.09×** | exact/stable |
+| direct initial conv | 157.78× | −3.3% |
+| direct depthwise conv | 120.94× | −25.8% |
+| both direct convs | 117.17× | −28.2% |
+| per-head flash attention | 69.87× | −57.2% |
+| flash + both direct convs | 60.11× | −63.1% |
+| selected FFN Q8 | 163.06× | transcript changed |
+| selected FFN F16 | 156.95× | transcript changed and −3.8% |
+
+**ggml v0.23 fork consolidation (P100 sm_60, 2026-09-07; Kaggle
+`chr1s4/crispasr-ggml-v0-23-q4-a-b` v3).** The old fork pin and merged
+v0.23 runtime used separate source-compatible CrispASR checkouts, the same Q4
+Parakeet TDT model and audio, and an account-matched warm ccache dataset.
+Transcripts were stable and byte-identical. v0.23 was neutral-to-faster:
+
+| clip | old fork | ggml v0.23 | change |
+|---|---:|---:|---:|
+| JFK, 11.00 s | 85.44× | **87.44×** | +2.34% |
+| varied speech, 134.07 s | 115.38× | **115.99×** | +0.53% |
+
+The benchmark exercised ggml runtime commit `069a517d`; the merged default
+commit `2dd13edd` has the same runtime source tree (later commits only add
+patch guards, CI, and merge ancestry). Kaggle validation passed and the
+`chr1s4/crispasr-ccache` seed was refreshed to version 13.
+
 CUDA rows resolved (2026-07-12, kernel `issue81-onnx-bench` v16, real
 134 s varied LibriSpeech, load-excluded, 301-word proof-of-work,
 same-run onnx head-to-head): the honest-methodology re-run with the

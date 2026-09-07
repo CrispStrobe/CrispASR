@@ -1,5 +1,10 @@
 **Title:** `ggml : fix ggml_conv_1d output layout for batch N > 1`
 
+**Status (2026-09-07):** Still absent from upstream v0.23. Re-ported in the
+CrispStrobe v0.23 consolidation and revalidated there: standard N=1..3 and
+depthwise N=1..4 pass (maximum absolute error 2.384e-7).
+
+
 ---
 
 `ggml_conv_1d` builds its result as
