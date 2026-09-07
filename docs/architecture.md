@@ -513,6 +513,14 @@ tok_emb shape (vocab_size + 3). Supports arbitrarily long audio input.
 σ-VAE ConvNeXt encoders + Qwen2.5-7B decoder. Dual-mode: ASR (with
 timestamps, diarization, hotwords) and TTS (DPM-Solver++ flow matching).
 
+The `vibevoice-streaming` checkpoint uses the same encoder family with a
+Qwen2.5-1.5B decoder and a different protocol. The prompt is prefixed once,
+then each 2.93-second audio chunk is encoded with 0.53 seconds of right
+lookahead. Speech features, generated text tokens, and a chunk-end token all
+advance one persistent decoder KV cache. `vibevoice_stream_feed()` retains the
+lookahead between calls and only pads the final partial chunk, so CLI and C ABI
+streaming do not re-run a growing audio window.
+
 **The ASR answer is JSON, and the adapter parses it.** The system prompt says
 "transcribes audio input into text output in JSON format" and the user turn asks
 for the keys `Start time, End time, Speaker ID, Content`, so the model replies

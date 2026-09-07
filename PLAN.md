@@ -1,5 +1,29 @@
 # CrispASR — Pending work
 
+## NOW 2026-09-07 — #81 Q4 FastConformer profiling
+
+After #426 merges, claim a separate #81 worktree, profile the Q4
+FastConformer/Parakeet path on a Kaggle P100 with `CRISPASR_FC_PROFILE=1`, and
+only optimize stages the measurement identifies before repeating the same A/B.
+
+## DONE 2026-09-07 — #426 native VibeVoice streaming Q4
+
+PR #428 ports the upstream VibeVoice-ASR-Streaming-1.5B protocol: 70,400-sample
+chunks plus 12,800-sample lookahead at 24 kHz, a single exact Qwen prompt
+prefill, persistent per-session decoder KV, and the upstream chunk delimiter.
+It is exposed through the CLI and C streaming ABI, including a stateful
+16→24 kHz resampler. Conversion embeds the exact tokenizer and streaming
+metadata; the registry serves the validated 1.86 GB Q4_K artifact.
+
+Kaggle P100 kernel `chr1str/crispasr-vibevoice-streaming-426-q4` at
+`f9f96dd2` passed every hard gate. Native F16 matched all 31 prompt IDs,
+prefill logits reached 0.9999998 cosine, all four post-delimiter KV probes
+exceeded 0.99999997 cosine, and all 34 generated IDs matched the official
+implementation exactly. Plain Q4_K and the 868 MB larger frontend-F16 arm both
+matched the F16 transcript and generated IDs exactly, so the smaller plain Q4
+was selected. Its deterministic pass took 6.82 s; sampled-posterior output was
+also correct and nonempty.
+
 ## DONE 2026-09-07 — #427 merge hardening and issue follow-up audit
 
 Merged #427 (`593881a3`) and followed with `fde5614e`: the ASR environment

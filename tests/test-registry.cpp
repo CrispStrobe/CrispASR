@@ -178,6 +178,13 @@ TEST_CASE("registry: vibevoice has entry", "[unit][registry]") {
     REQUIRE(found);
 }
 
+TEST_CASE("registry: vibevoice streaming resolves the validated Q4", "[unit][registry]") {
+    CrispasrRegistryEntry e;
+    REQUIRE(crispasr_registry_lookup("vibevoice-streaming", e));
+    REQUIRE(e.filename == "vibevoice-asr-streaming-1.5b-q4_k.gguf");
+    REQUIRE(e.url.find("vibevoice-asr-streaming-1.5b-GGUF") != std::string::npos);
+}
+
 TEST_CASE("registry: wav2vec2 aligner aliases resolve", "[unit][registry]") {
     CrispasrRegistryEntry e;
     REQUIRE(crispasr_registry_lookup("wav2vec2-aligner", e));

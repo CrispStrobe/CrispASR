@@ -1663,6 +1663,7 @@ default quantized model for the selected backend into
 | omniasr-llm | `cstr/omniasr-llm-300m-v2-GGUF` | ~1019 MB |
 | hubert | `cstr/hubert-large-ls960-ft-GGUF` | ~200 MB |
 | data2vec | `cstr/data2vec-audio-960h-GGUF` | ~60 MB |
+| vibevoice-streaming | `cstr/vibevoice-asr-streaming-1.5b-GGUF` (Q4_K) | ~1.86 GB |
 
 **TTS backends** — all auto-download the model + a default voice pack:
 

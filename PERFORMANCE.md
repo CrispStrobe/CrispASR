@@ -2280,7 +2280,15 @@ core infrastructure.
 **VibeVoice** (`vibevoice.cpp`):
 - Has: layer offload, pre-permuted ConvT weights, flash attn (decoder),
   dual CFG KV caches, pre-filled voice prompt KV, PyTorch-exact MT19937
-  Gaussian noise
+  Gaussian noise. **Streaming ASR 1.5B (2026-09-07, Kaggle P100):** native
+  2.93 s chunks + 0.53 s lookahead with persistent decoder KV; Q4_K decoded
+  the four-chunk JFK fixture in 6.82 s versus 8.26 s F16. Both emitted the
+  official transcript and all 34 official token IDs exactly. F16 prompt-logit
+  cosine was 0.9999998 and its four post-delimiter KV-tail cosines were all
+  above 0.99999997. Plain Q4_K is 1.86 GB; retaining both acoustic encoders in
+  F16 grew it to 2.73 GB without changing the transcript or token IDs, so the
+  plain Q4_K arm is the shipped artifact. Kernel:
+  `chr1str/crispasr-vibevoice-streaming-426-q4`, commit `f9f96dd2`.
 - Gap: acoustic+semantic encoders run serial (could fuse/parallel),
   pred head graph rebuilt per DPM step, no CPU embd cache, DPM schedule
   coefficients recomputed per call
