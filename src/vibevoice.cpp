@@ -5818,7 +5818,7 @@ static bool vibevoice_stream_prefill(vibevoice_stream* s) {
         prompt.pop_back();
         prompt += " and extra info: " + trimmed + "\n";
     }
-    std::vector<int32_t> ids = core_bpe::tokenize_simple(m.token_to_id, m.merge_rank, prompt);
+    std::vector<int32_t> ids = core_bpe::tokenize_qwen(m.token_to_id, m.merge_rank, prompt);
     if (ids.empty()) {
         fprintf(stderr, "vibevoice: streaming prompt tokenization failed\n");
         return false;
