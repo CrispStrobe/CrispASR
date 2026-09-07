@@ -96,8 +96,44 @@ SLOW_BACKENDS = [
     ("mini-omni2",        "Mini-Omni2",              300, "Q4_K, multi-stream speech+chat"),
     # NOTE: vibevoice-1.5b is a TTS model (vibevoice-1.5b-tts-q4_k.gguf), not ASR
     # — moved to TTS_BACKENDS below (running it as ASR produced an empty transcript).
+
+    # ── 2026-09-07 coverage pass ────────────────────────────────────────────
+    # The sweep covered 44 of the 66 canonical backends. These are the missing
+    # ASR ones that can resolve through `-m auto`, plus distinct MODELS that
+    # share an existing runtime. That distinction matters here and nowhere
+    # else: tools/check-backend-wiring.py calls raon/quds-fa "aliases" because
+    # they reuse the f5 and parakeet RUNTIMES, which is the right answer for a
+    # wiring audit and the wrong one for a model sweep — a different checkpoint
+    # is a different thing to transcribe with, and covering f5-tts says nothing
+    # about whether Raon's weights work.
+    ("gigaam",            "GigaAM v2 RNNT (ru)",     180, "Q4_K, Russian; conformer RNNT"),
+    ("canary-qwen",       "Canary-Qwen 2.5B",        300, "Q4_K, canary encoder + Qwen LLM decoder"),
+    ("higgs-stt",         "Higgs STT",               240, "Q4_K"),
+    ("ark-asr",           "Ark-ASR",                 240, "Q4_K"),
+    ("moss-transcribe",   "MOSS Transcribe",         300, "Q4_K, en-only (declared f33c398b)"),
+    ("moss-diarize",      "MOSS Diarize",            300, "Q4_K, ASR + speaker turns"),
+    ("reazonspeech",      "ReazonSpeech RNNT (ja)",  180, "Q4_K, Japanese"),
+    ("quds-fa",           "Quds v4 Persian RNNT",    120, "Q8_0 ~122MB; parakeet runtime, Persian weights"),
+    ("omniasr-300m",      "OmniASR LLM 300M",        120, "Q4_K, smaller omniasr variant"),
+    ("omniasr-llm-1b",    "OmniASR LLM 1B",          240, "Q4_K"),
+    ("qwen3-1.7b",        "Qwen3 ASR 1.7B",          240, "Q4_K, larger qwen3 variant"),
 ]
 
+# Backends that CANNOT go through `-m auto`: the registry has no auto-download
+# entry for them (verified from `--list-backends-json` caps, not assumed), so a
+# sweep row would fail on model resolution and read as a backend failure. They
+# need an explicit `-m <path>` and are listed here so the omission is a recorded
+# decision rather than an oversight.
+NO_AUTODOWNLOAD = ["sidon", "miotts", "bananamind-tts", "omnivoice"]
+
+# NOTE 2026-09-07: two ids here named backends the binary does not expose, so
+# those rows could never have succeeded — `cosyvoice3` (real id
+# `cosyvoice3-tts`) and `vibevoice-tts` (no such backend; `vibevoice-1.5b` was
+# already covered separately, so that slot now points at the uncovered
+# `vibevoice-bitnet`). Found by validating every id in these lists against
+# `--list-backends-json` before pushing, which is worth doing every time: a
+# wrong id fails on the worker and reads exactly like a broken backend.
+#
 # TTS backends suitable for Kaggle time limits (small/fast models first,
 # then larger ones). Each entry downloads via -m auto, synthesises a phrase,
 # checks output WAV exists and has >1000 bytes. Models are cleaned up after
@@ -117,9 +153,9 @@ TTS_BACKENDS = [
     ("orpheus",           "Orpheus 3B-FT",           300, "Q8_0, ~3.5GB, Llama-3.2 + SNAC"),
     # ── previously-uncovered TTS backends (full-sweep coverage) ──
     ("qwen3-tts-customvoice", "Qwen3-TTS CustomVoice", 300, "Q8_0, talker+12Hz codec, built-in speakers"),
-    ("vibevoice-tts",     "VibeVoice TTS",           300, "Q4_K, diffusion TTS"),
+    ("vibevoice-bitnet",     "VibeVoice TTS",           300, "Q4_K, diffusion TTS"),
     ("chatterbox",        "Chatterbox",              300, "Q4_K, T3 + S3Gen voice clone"),
-    ("cosyvoice3",        "CosyVoice3",              300, "Q4_K, flow-matching + HiFT"),
+    ("cosyvoice3-tts",        "CosyVoice3",              300, "Q4_K, flow-matching + HiFT"),
     ("indextts",          "IndexTTS",                300, "Q4_K, GPT + BigVGAN vocoder"),
     ("zonos",             "Zonos",                   240, "F16, transformer TTS (EOS-sensitive on Q4_K)"),
     ("melotts",           "MeloTTS",                  90, "F16, VITS multilingual"),
@@ -133,6 +169,25 @@ TTS_BACKENDS = [
     # deliberately does NOT pin the quant — the sweep should exercise the path a
     # user actually gets from `-m auto`.
     ("kugelaudio",        "KugelAudio",              900, "Q4_K ~5.7GB via -m auto (F16 17.3GB needs >16GB VRAM)"),
+    # ── 2026-09-07 coverage pass ────────────────────────────────────────────
+    # Missing canonical TTS backends that resolve via `-m auto`, plus distinct
+    # MODELS on shared runtimes. Every one of these is exercised the same way
+    # the rest are: synthesise a phrase, then feed the audio back through
+    # parakeet ASR and score the word overlap — a TTS backend that emits a
+    # valid-looking WAV of noise fails that, where a file-size check passes it.
+    ("moss-tts",          "MOSS TTS",                300, "Q4_K, voice-cloning"),
+    ("moss-tts-local",    "MOSS TTS (local voice)",  300, "Q4_K, voice-cloning"),
+    ("dots-tts",          "Dots TTS",                240, "Q4_K"),
+    ("voxtral-tts",       "Voxtral TTS",             300, "Q4_K"),
+    ("qwen3-tts",         "Qwen3-TTS 0.6B",          240, "Q4_K, streaming + voice-cloning"),
+    ("raon",              "Raon-OpenTTS 0.3B",       300, "F16 ~959MB, CC-BY-NC; f5 runtime, ggml HiFi-GAN"),
+    ("confucius4-tts",    "Confucius4 TTS",          300, "Q4_K, zero-shot"),
+    ("chatterbox-nano",   "Chatterbox Nano",         180, "Q4_K, small T3 + Turbo S3Gen"),
+    ("chatterbox-turbo",  "Chatterbox Turbo",        240, "Q4_K"),
+    ("pocket-tts-de",     "Pocket-TTS German",       120, "Q8_0 ~124MB distilled 6L"),
+    ("pocket-tts-fr",     "Pocket-TTS French",       180, "Q8_0 ~365MB undistilled 24L preview"),
+    ("tada-1b",           "TADA TTS 1B",             300, "Q4_K"),
+    ("cosyvoice3-tts-rl", "CosyVoice3 RL",           300, "Q4_K, RL-tuned variant"),
 ]
 
 # Text MT backends (translate a sentence; not ASR/TTS but part of the backend
