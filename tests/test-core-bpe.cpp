@@ -153,6 +153,11 @@ TEST_CASE("bpe — bpe_one empty input", "[unit][bpe]") {
     REQUIRE(ids.empty());
 }
 
+TEST_CASE("bpe — Qwen pretokenizer preserves prompt punctuation and newline", "[unit][bpe][qwen]") {
+    const auto pieces = core_bpe::qwen_pretokenize("audio, content\n");
+    REQUIRE(pieces == std::vector<std::string>{"audio", ",", " content", "\n"});
+}
+
 // ── detokenize ─────────────────────────────────────────────────────────────
 
 TEST_CASE("bpe — detokenize simple ASCII tokens", "[unit][bpe]") {

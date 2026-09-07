@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from difflib import SequenceMatcher
 from pathlib import Path
 
@@ -103,9 +104,11 @@ def native(model, label, mean=True):
     env = {"CRISPASR_VIBEVOICE_DUMP_DIR": dump}
     if mean:
         env["CRISPASR_VIBEVOICE_ASR_SAMPLE"] = "0"
+    started = time.perf_counter()
     proc = run([cli, "--backend", "vibevoice", "-m", model, "-f", REPO / "samples/jfk.wav", "-nt"],
                env=env, timeout=7200, capture=True)
-    return dump, "\n".join(x.strip() for x in proc.stdout.splitlines() if x.strip())
+    elapsed = time.perf_counter() - started
+    return dump, "\n".join(x.strip() for x in proc.stdout.splitlines() if x.strip()), elapsed
 
 
 def compare(ref, got):
@@ -129,8 +132,10 @@ def compare(ref, got):
 results = {"commit": commit, "cuda_arch": arch, "models": {}}
 for model, label in ((f16, "f16"), (q4_plain, "q4-plain"), (q4_front, "q4-frontend-f16")):
     kh.step(f"native.{label}")
-    dump, text = native(model, label)
-    results["models"][label] = {"bytes": model.stat().st_size, "text": text, "diff": compare(ref_dir, dump)}
+    dump, text, elapsed = native(model, label)
+    results["models"][label] = {
+        "bytes": model.stat().st_size, "elapsed_s": elapsed, "text": text, "diff": compare(ref_dir, dump)
+    }
 
 f16_text = results["models"]["f16"]["text"]
 for label in ("q4-plain", "q4-frontend-f16"):
@@ -143,12 +148,48 @@ plain_score = results["models"]["q4-plain"]["text_similarity_to_f16"]
 front_score = results["models"]["q4-frontend-f16"]["text_similarity_to_f16"]
 selected = q4_front if front_score > plain_score else q4_plain
 results["selected"] = selected.name
+selected_label = "q4-frontend-f16" if selected == q4_front else "q4-plain"
 
-kh.step("native.selected.sampled")
-_, sampled_text = native(selected, "selected-sampled", mean=False)
-results["sampled_text"] = sampled_text
+# Hard gates: a successful process is insufficient if it silently emits empty
+# or divergent text. Check the fixed prompt, each persistent chunk's token IDs,
+# the post-delimiter KV probes, and the selected Q4 transcript.
+ref_manifest = json.loads((ref_dir / "manifest.json").read_text())
+ref_text = " ".join(ref_manifest["transcript"].split())
+f16_norm = " ".join(f16_text.split())
+validation_errors = []
+f16_diff = results["models"]["f16"]["diff"]
+selected_diff = results["models"][selected_label]["diff"]
+if not f16_norm or SequenceMatcher(None, ref_text, f16_norm).ratio() < 0.95:
+    validation_errors.append("native F16 transcript diverges from the official reference")
+if not f16_diff.get("prompt_ids", {}).get("exact", False):
+    validation_errors.append("native prompt token IDs are not exact")
+for ci in range(len(ref_manifest["chunks"])):
+    ids_key = f"chunk_{ci:03d}_generated_ids"
+    kv_key = f"chunk_{ci:03d}_kv_key0_tail"
+    if not f16_diff.get(ids_key, {}).get("exact", False):
+        validation_errors.append(f"native F16 {ids_key} differs")
+    if not selected_diff.get(ids_key, {}).get("exact", False):
+        validation_errors.append(f"selected Q4 {ids_key} differs")
+    if f16_diff.get(kv_key, {}).get("cos", 0.0) < 0.90:
+        validation_errors.append(f"native F16 {kv_key} is missing or below 0.90 cosine")
+if results["models"][selected_label]["text_similarity_to_f16"] < 0.95:
+    validation_errors.append("selected Q4 transcript diverges from native F16")
+results["validation"] = {"passed": not validation_errors, "errors": validation_errors,
+                         "reference_text": ref_manifest["transcript"]}
 
 result_path = WORK / "results.json"
+if validation_errors:
+    result_path.write_text(json.dumps(results, ensure_ascii=False, indent=2) + "\n")
+    print(json.dumps(results, ensure_ascii=False, indent=2), flush=True)
+    raise RuntimeError("; ".join(validation_errors))
+
+kh.step("native.selected.sampled")
+_, sampled_text, sampled_elapsed = native(selected, "selected-sampled", mean=False)
+results["sampled_text"] = sampled_text
+results["sampled_elapsed_s"] = sampled_elapsed
+if not sampled_text.strip():
+    raise RuntimeError("selected Q4 sampled-posterior run produced empty text")
+
 result_path.write_text(json.dumps(results, ensure_ascii=False, indent=2) + "\n")
 print(json.dumps(results, ensure_ascii=False, indent=2), flush=True)
 
