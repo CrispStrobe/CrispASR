@@ -897,6 +897,23 @@ switch was off, so that arm was removed rather than retained as a dormant option
 | batch 4 + device argmax | 1.2284 s | 109.14× | −1.81% |
 | batch 8 + device argmax | 1.3044 s | 102.79× | −7.52% |
 
+The preceding CTC matrix rejected the other proposed Q4 levers on the same
+134 s varied clip. Direct standard/depthwise convolution reduced throughput,
+and enabling the fork's per-head flash-attention path on sm_60 was more than
+2× slower. Keeping selected FFN tensors at Q8 or F16 either failed transcript
+parity or lost speed.
+
+| CTC arm | x-RT | result |
+|---|---:|---|
+| baseline | **163.09×** | exact/stable |
+| direct initial conv | 157.78× | −3.3% |
+| direct depthwise conv | 120.94× | −25.8% |
+| both direct convs | 117.17× | −28.2% |
+| per-head flash attention | 69.87× | −57.2% |
+| flash + both direct convs | 60.11× | −63.1% |
+| selected FFN Q8 | 163.06× | transcript changed |
+| selected FFN F16 | 156.95× | transcript changed and −3.8% |
+
 CUDA rows resolved (2026-07-12, kernel `issue81-onnx-bench` v16, real
 134 s varied LibriSpeech, load-excluded, 301-word proof-of-work,
 same-run onnx head-to-head): the honest-methodology re-run with the
