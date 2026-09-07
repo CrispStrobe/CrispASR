@@ -24,6 +24,9 @@
 #include "ggml-backend.h"
 #include "crispasr_imatrix.h"
 #include "ggml-cpu.h"
+#if defined(GGML_USE_CUDA)
+#include "ggml-cuda.h"
+#endif
 #if defined(GGML_USE_METAL)
 #include "ggml-metal.h"
 #endif
@@ -1393,11 +1396,19 @@ static bool parakeet_ggml_decode_active(const parakeet_context* ctx) {
 // Issue #81 measured the TDT decoder at 66% of Q4 wall time on a P100. Its
 // first operation was still the T*640*1024 encoder projection in a scalar CPU
 // loop on non-Apple builds. The Q4 P100 A/B cut varied-audio TDT wall time from
-// 2.57 s to 1.15 s with an identical 301-word transcript, so use the backend
-// projection whenever GPU decode is active. `=0` retains the measured fallback.
-static bool parakeet_gpu_encoder_projection() {
-    const char* e = crispasr_env::get("CRISPASR_RNNT_GPU_ENC_PROJ");
-    return !e || *e != '0';
+// 2.56 s to 1.15 s with an identical 301-word transcript, so use the backend
+// projection by default on the measured CUDA path. Other GPU backends remain
+// opt-in until they have the same transcript and timing evidence; `=0` retains
+// the measured scalar fallback everywhere.
+static bool parakeet_gpu_encoder_projection(const parakeet_context* ctx) {
+    if (const char* e = crispasr_env::get("CRISPASR_RNNT_GPU_ENC_PROJ"))
+        return *e == '1';
+#if defined(GGML_USE_CUDA)
+    return ggml_backend_is_cuda(ctx->backend);
+#else
+    (void)ctx;
+    return false;
+#endif
 }
 
 extern "C" int parakeet_decode_uses_backend(struct parakeet_context* ctx) {
@@ -1507,7 +1518,7 @@ static std::vector<parakeet_emitted_token> parakeet_tdt_decode(parakeet_context*
     std::vector<float> all_proj_e;
     const auto _proj_t0 = std::chrono::steady_clock::now();
     const bool gpu_enc_proj =
-        ggml_dec && parakeet_gpu_encoder_projection() &&
+        ggml_dec && parakeet_gpu_encoder_projection(ctx) &&
         core_rnnt_ggml::decoder_project_encoder(gdec, ctx->model.joint.enc_w, ctx->model.joint.enc_b, enc, T_enc,
                                                 d_model, all_proj_e);
     if (!gpu_enc_proj) {

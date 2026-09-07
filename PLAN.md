@@ -1,12 +1,16 @@
 # CrispASR — Pending work
 
-## NOW 2026-09-07 — #81 Q4 FastConformer profiling
+## DONE 2026-09-07 — #81 Q4 FastConformer profiling
 
-Worktree `.claude/worktrees/perf-81-fastconformer-q4-p100`, branch
-`perf/81-fastconformer-q4-p100`. Profile the Q4 FastConformer CTC and Parakeet
-TDT paths on a Kaggle P100 with the existing stage timers and
-`CRISPASR_FC_PROFILE=1`; only optimize the measured bottleneck, then repeat the
-same Q4/audio/transcript A/B and merge independently.
+The P100 profile found TDT's encoder-to-joint projection consuming about
+1.40 s as scalar CPU work ahead of the GPU decoder. A single backend graph cut
+it to 4.0 ms and improved the 134 s varied Q4 run from 52.4× to 116.1× real
+time, with the exact same stable 301-word transcript. This nearly closes the
+historical 121× onnx-asr TDT CUDA comparison. CTC reached 158.6× and remained
+encoder-bound; stable graph buckets of 25/50/100 frames measured
+156.5×/158.2×/154.9×, so none became default. Kernel
+`chr1str/crispasr-issue-81-q4-p100-profile` v4, commit `39c2a7b2`, passed all
+hard gates on sm_60.
 
 ## DONE 2026-09-07 — #426 native VibeVoice streaming Q4
 
@@ -4281,38 +4285,20 @@ non-gaps; detail in HISTORY.)
 
 ---
 
-## §246 issue #81 endgame — close the remaining ~1.4× CUDA gap to onnx-asr (OPEN)
+## §246 issue #81 endgame — CUDA comparison (DONE for TDT; CTC residual measured)
 
-Current: parakeet-ctc q8_0 CUDA manual-attn = 153× RT warm (jfk×5 55 s,
-in-process) vs onnx-asr CUDA fp32 = 207× (134 s varied). ~0.36 s/55 s left to
-find. **Gate: measure before building** — the handover's bottleneck theory was
-wrong; profile first.
+The Q4 P100 stage split found a concrete TDT bottleneck outside the encoder:
+the scalar CPU encoder-to-joint projection. Moving it into one backend graph
+improved the honest 134 s varied run from 52.4× to 116.1×, within about 4% of
+the historical 121× onnx-asr result. Projection time fell from about 1.40 s to
+4.0 ms and the 301-word transcript remained exact and stable.
 
-**TO DO (ranked by expected value):**
-1. **Per-stage split on CUDA first** (cheap, decides everything below): extend
-   `tools/kaggle/fc-unified-graph-ab` to run `CANARY_CTC_BENCH=1` +
-   `CRISPASR_FC_PROFILE=1` on P100 — mel vs encoder+ctc vs readout. Mel is
-   host-side single-threaded FFT (`cc_fft_r2c`); may be a triple-digit-ms
-   constant onnx doesn't pay. If so: parallelize `core_mel` (unused
-   `mel_parallel` flag already in mel.cpp) or overlap mel with previous graph's
-   compute.
-2. **F16 vs Q8_0 on GPU**: P100 has 2:1 fp16, no tensor cores; onnx runs fp32
-   cuBLAS. Our q8_0 mmq may lose to plain f16/f32 GEMM at these shapes — one
-   kernel arm with the F16 GGUF answers it.
-3. **CUDA-graph replay**: verify ggml-cuda graph capture engages across our
-   rebuild-per-call graphs (same topology → should). If not, `CRISPASR_FC_BUCKET`
-   gives stable topology; retry small buckets (100 mel frames ≈ 1 s; smaller
-   pads waste less).
-4. **Upstream flash fix (structural)**: teach `fattn.cu` to accept per-head masks
-   (`mask->ne[2] != 1` guard) so flash works for Shaw rel-pos models on CUDA —
-   reclaims fused-attention traffic manual attn re-materializes ((T,T,H) ×24).
-   Upstream PR to ggml-org/llama.cpp per repo convention (mechanical-AI
-   disclosure only).
-5. **Honest re-run**: canonical number is the 134 s-varied load-excluded
-   methodology (issue81-onnx-bench), not jfk×5.
-
-**Also OPEN:** VPS 4-core x86 re-bench with shipped defaults (pre-fix 2.1× vs
-onnx-CPU 3.1×; handover synced at `handover-prompts/issue81-fc-perf.md`).
+CTC is 158.6× on the same Q4 method versus the historical 214× onnx-asr fp32
+run. Its profile is encoder-bound. The remaining candidate tested here,
+25/50/100-frame stable graph buckets, all lost on varied audio despite winning
+on the short JFK clip, so no bucket default shipped. The residual ~1.35× CTC
+gap requires a structural encoder/kernel improvement rather than another
+unmeasured scheduling switch.
 
 ## §247 roll #81 techniques out to the other runtimes (OPEN)
 
