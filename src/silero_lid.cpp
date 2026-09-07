@@ -852,7 +852,7 @@ extern "C" struct silero_lid_context* silero_lid_init(const char* gguf_path, int
     }
 
     if (!lid_load(ctx->model, gguf_path, ctx->backend, ctx->backend_cpu)) {
-        delete ctx;
+        silero_lid_free(ctx);
         return nullptr;
     }
 
