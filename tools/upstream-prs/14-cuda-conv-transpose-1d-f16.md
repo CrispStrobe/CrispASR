@@ -1,5 +1,8 @@
 **Title:** `CUDA: support F16 weights in conv_transpose_1d`
 
+**Status (2026-09-07):** Still absent from upstream v0.23; rebase the carried implementation and validate current CUDA architectures before filing.
+
+
 ---
 
 ## Background

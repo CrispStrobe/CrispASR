@@ -1,18 +1,7 @@
 **Title:** `ggml-cuda : support per-head additive mask in FLASH_ATTN_EXT (MMA-F16 path)`
 
-**Status:** design + minimal patch sketched (this doc), not yet
-implemented in code, not yet bench-validated. Originally drafted
-on the retired `issue81-phase1-uar-wip` branch; rewritten on main
-2026-05-23 against current ggml master after closer reading of
-the MMA-F16 kernel and discovering the launcher already plumbs
-the needed strides — only the kernel body needs to consume them.
+**Status (2026-09-07):** Implemented behind `GGML_CUDA_CRISPASR_FA_PERHEAD_MASK` and re-ported to v0.23. P100 Q4 A/B was substantially slower; keep opt-in pending validation on tensor-core GPUs.
 
-Tracking as the next concrete A1000 perf step after the fused
-`norm_affine` + `siglu` win landed in `d758fe69` (which closed
-target (b) of the issue #81 gap analysis). This PR targets the
-**other** dominant CPU-fallback cost — target (a) of the same
-analysis — which is `FLASH_ATTN_EXT` falling back to CPU on
-per-head additive masks.
 
 ---
 

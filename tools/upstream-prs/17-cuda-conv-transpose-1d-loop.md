@@ -1,5 +1,8 @@
 **Title:** `CUDA: tighten input-position loop in conv_transpose_1d`
 
+**Status (2026-09-07):** Upstreamed by `af684904` / llama.cpp#25310. Retain as historical evidence; do not replay the patch.
+
+
 ---
 
 ## Background

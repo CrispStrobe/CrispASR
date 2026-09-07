@@ -1,5 +1,8 @@
 **Title:** `ggml-webgpu : add NORM, IM2COL, POOL_2D, CONV_TRANSPOSE_2D, UPSCALE, ARANGE`
 
+**Status (2026-09-07):** Partially upstreamed. NORM, IM2COL and UPSCALE are present; regenerate this proposal for only POOL_2D, CONV_TRANSPOSE_2D and ARANGE.
+
+
 ---
 
 The WebGPU backend covers the transformer op set but none of the ops that
