@@ -1,6 +1,6 @@
 **Title:** `ggml : add col2im_1d — composable building block for ConvTranspose1d`
 
-**Status (2026-09-07):** Retired as an outbound proposal: upstream added `col2im_1d` in `d962a305`. CrispASR adaptation still requires reference parity because the old fork op used different crop semantics.
+**Status (2026-09-07):** Retired as an outbound proposal: upstream added `col2im_1d` in `d962a305`. CrispASR now requests the full signal and crops through a view; the CPU audio-op parity gate passes on v0.23.
 
 
 ---
