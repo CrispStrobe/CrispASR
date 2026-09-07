@@ -27,7 +27,10 @@ subprocess.check_call([
     "git", "clone", "--depth", "1", "-b", BRANCH,
     "https://github.com/CrispStrobe/CrispASR", str(REPO),
 ])
-subprocess.check_call(["git", "submodule", "update", "--init", "ggml"], cwd=REPO)
+subprocess.check_call(
+    ["git", "submodule", "update", "--init", "ggml", "third_party/c2pa-audio"],
+    cwd=REPO,
+)
 sys.path.insert(0, str(REPO / "tools" / "kaggle"))
 import kaggle_harness as kh  # noqa: E402
 
