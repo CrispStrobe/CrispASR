@@ -272,4 +272,46 @@ static inline void decoder_joint(Decoder& d, const float* proj_e, const float* p
     ggml_backend_tensor_get(d.j_lg, logits.data(), 0, (size_t)d.Vt * sizeof(float));
 }
 
+// Project all encoder frames through the joint network's encoder branch in one
+// backend matmul: out[T,Jh] = enc[T,D] @ enc_w[Jh,D]^T + enc_b[Jh]. The
+// transducer loop consumes the projected rows on the CPU, so this performs one
+// H2D and one D2H per utterance while avoiding the non-Apple scalar fallback's
+// T*Jh*D multiply-add loop. Returns false so callers can retain that fallback
+// when a backend cannot allocate or execute the graph.
+static inline bool decoder_project_encoder(Decoder& d, ggml_tensor* enc_w, ggml_tensor* enc_b, const float* enc, int T,
+                                           int D, std::vector<float>& out) {
+    if (!d.active() || !enc_w || !enc_b || !enc || T <= 0 || D <= 0 || enc_w->ne[0] != D || enc_w->ne[1] != d.Jh)
+        return false;
+
+    const size_t mem = ggml_tensor_overhead() * 16 + ggml_graph_overhead();
+    ggml_context* cx = ggml_init({mem, nullptr, true});
+    if (!cx)
+        return false;
+
+    ggml_tensor* x = ggml_new_tensor_2d(cx, GGML_TYPE_F32, D, T);
+    ggml_set_input(x);
+    ggml_tensor* y = ggml_add(cx, ggml_mul_mat(cx, enc_w, x), enc_b);
+    ggml_set_output(y);
+    ggml_cgraph* gf = ggml_new_graph(cx);
+    ggml_build_forward_expand(gf, y);
+
+    ggml_gallocr_t alloc = ggml_gallocr_new(ggml_backend_get_default_buffer_type(d.backend));
+    if (!alloc || !ggml_gallocr_alloc_graph(alloc, gf)) {
+        if (alloc)
+            ggml_gallocr_free(alloc);
+        ggml_free(cx);
+        return false;
+    }
+
+    ggml_backend_tensor_set(x, enc, 0, (size_t)T * D * sizeof(float));
+    const bool ok = ggml_backend_graph_compute(d.backend, gf) == GGML_STATUS_SUCCESS;
+    if (ok) {
+        out.resize((size_t)T * d.Jh);
+        ggml_backend_tensor_get(y, out.data(), 0, out.size() * sizeof(float));
+    }
+    ggml_gallocr_free(alloc);
+    ggml_free(cx);
+    return ok;
+}
+
 } // namespace core_rnnt_ggml
