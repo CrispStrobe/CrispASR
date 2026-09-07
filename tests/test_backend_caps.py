@@ -214,6 +214,7 @@ _NO_VOICE_CLONING_BACKENDS = {
     "qwen3-tts-1.7b-customvoice",
     "qwen3-tts-1.7b-voicedesign",
     "vibevoice",
+    "vibevoice-streaming",
 }
 
 
@@ -262,6 +263,13 @@ class TestCapabilityJSON(unittest.TestCase):
             return
         self.assertNotIn("src-tgt-language", self.by_name["whisper"],
                          "whisper uses --language for target; src-tgt-language is for separate -sl/-tl flags")
+
+    def test_vibevoice_streaming_declares_only_its_real_mode(self):
+        if "vibevoice-streaming" not in self.by_name:
+            return
+        caps = self.by_name["vibevoice-streaming"]
+        self.assertIn("streaming", caps)
+        self.assertNotIn("tts", caps, "the 1.5B streaming checkpoint has no TTS decoder")
 
 
 @unittest.skipUnless(os.path.exists(BIN), f"crispasr binary not found — set CRISPASR_BIN or build first")

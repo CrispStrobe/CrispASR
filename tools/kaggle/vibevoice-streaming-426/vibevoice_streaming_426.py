@@ -46,7 +46,7 @@ kh.step("dependencies")
 run([sys.executable, "-m", "pip", "install", "--quiet", "--upgrade", "--force-reinstall",
      "huggingface_hub==0.36.0"])
 run([sys.executable, "-m", "pip", "install", "--quiet", "transformers>=4.51.3,<5", "accelerate",
-     "safetensors", "librosa", "soundfile", "ml-collections", "absl-py"])
+     "safetensors", "librosa", "soundfile", "ml-collections", "absl-py", "gguf"])
 # Token discovery validates credentials through huggingface_hub before the
 # pinned wheel exists. Drop those cached modules before later imports.
 for module_name in list(sys.modules):
