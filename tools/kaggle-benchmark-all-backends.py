@@ -106,14 +106,24 @@ SLOW_BACKENDS = [
     # wiring audit and the wrong one for a model sweep — a different checkpoint
     # is a different thing to transcribe with, and covering f5-tts says nothing
     # about whether Raon's weights work.
-    ("gigaam",            "GigaAM v2 RNNT (ru)",     180, "Q4_K, Russian; conformer RNNT"),
     ("canary-qwen",       "Canary-Qwen 2.5B",        300, "Q4_K, canary encoder + Qwen LLM decoder"),
     ("higgs-stt",         "Higgs STT",               240, "Q4_K"),
     ("ark-asr",           "Ark-ASR",                 240, "Q4_K"),
     ("moss-transcribe",   "MOSS Transcribe",         300, "Q4_K, en-only (declared f33c398b)"),
     ("moss-diarize",      "MOSS Diarize",            300, "Q4_K, ASR + speaker turns"),
-    ("reazonspeech",      "ReazonSpeech RNNT (ja)",  180, "Q4_K, Japanese"),
-    ("quds-fa",           "Quds v4 Persian RNNT",    120, "Q8_0 ~122MB; parakeet runtime, Persian weights"),
+    # NOT ADDED — and the reason is a correction to my own first pass.
+    # gigaam (ru), reazonspeech (ja) and quds-fa (fa) were added here on
+    # 2026-09-07 and immediately produced FAIL / EMPTY / CRASH. Those verdicts
+    # were meaningless: THIS SWEEP TRANSCRIBES ONE FIXED ENGLISH CLIP
+    # (samples/jfk.wav, see JFK_WAV below), so a Russian model scoring WER 0.5
+    # on English is the correct behaviour of a healthy model, reported as a
+    # failure. A row that is red when the thing works is worse than no row.
+    # They come back when the runner accepts a per-backend clip — samples/
+    # already carries fleurs_ja_*.wav, paraformer_zh.wav and ko-369.wav, but
+    # the loops below unpack a 4-tuple, so that is a real change, not a field.
+    # (quds-fa additionally needs CRISPASR_ACCEPT_LICENSE: it is CC-BY-NC-4.0
+    # and license_gate_allows_download() refuses before fetching a byte, which
+    # is what the 0.27 s CRASH actually was.)
     ("omniasr-300m",      "OmniASR LLM 300M",        120, "Q4_K, smaller omniasr variant"),
     ("omniasr-llm-1b",    "OmniASR LLM 1B",          240, "Q4_K"),
     ("qwen3-1.7b",        "Qwen3 ASR 1.7B",          240, "Q4_K, larger qwen3 variant"),
