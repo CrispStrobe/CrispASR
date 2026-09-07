@@ -139,7 +139,7 @@ public:
         if (allow_generic_no_voice_)
             caps |= CAP_VOICE_CLONING;
         if (vibevoice_is_asr_streaming(ctx_))
-            caps |= CAP_STREAMING | CAP_UNBOUNDED_INPUT;
+            caps |= CAP_STREAMING;
         return caps;
     }
 

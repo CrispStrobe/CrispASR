@@ -47,14 +47,24 @@ run([sys.executable, "-m", "pip", "install", "--quiet", "--upgrade", "--force-re
      "huggingface_hub==0.36.0"])
 run([sys.executable, "-m", "pip", "install", "--quiet", "transformers>=4.51.3,<5", "accelerate",
      "safetensors", "librosa", "soundfile", "ml-collections", "absl-py"])
+# Token discovery validates credentials through huggingface_hub before the
+# pinned wheel exists. Drop those cached modules before later imports.
+for module_name in list(sys.modules):
+    if module_name == "huggingface_hub" or module_name.startswith("huggingface_hub."):
+        del sys.modules[module_name]
 if not UPSTREAM.exists():
     run(["git", "clone", "--depth", "1", "https://github.com/microsoft/VibeVoice.git", UPSTREAM], timeout=1200)
 run([sys.executable, "-m", "pip", "install", "--quiet", "--no-deps", "-e", UPSTREAM])
 
-from huggingface_hub import HfApi, snapshot_download  # noqa: E402
-
 kh.step("model.download")
-snapshot = Path(snapshot_download("microsoft/VibeVoice-ASR-Streaming-1.5B", local_dir=MODEL_DIR))
+# kaggle_harness may import huggingface_hub while resolving secrets, before the
+# compatible wheel is installed. Download in a fresh interpreter so Python does
+# not retain that stale module graph.
+run([sys.executable, "-c", (
+    "from huggingface_hub import snapshot_download; "
+    f"snapshot_download('microsoft/VibeVoice-ASR-Streaming-1.5B', local_dir={str(MODEL_DIR)!r})"
+)], timeout=7200)
+snapshot = MODEL_DIR
 
 kh.step("reference.mean")
 ref_dir = TEMP / "reference-mean"
@@ -143,6 +153,7 @@ print(json.dumps(results, ensure_ascii=False, indent=2), flush=True)
 
 token = os.environ.get("HF_TOKEN")
 if token:
+    from huggingface_hub import HfApi  # noqa: E402
     api = HfApi(token=token)
     repo_id = "cstr/vibevoice-asr-streaming-1.5b-GGUF"
     api.create_repo(repo_id, repo_type="model", private=False, exist_ok=True)

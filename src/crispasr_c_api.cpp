@@ -1253,8 +1253,9 @@ CA_EXPORT int crispasr_stream_feed(crispasr_stream* s, const float* pcm, int n_s
 #ifdef CA_HAVE_VIBEVOICE
     if (s->vibevoice_stream_state) {
         std::vector<float> pcm24 = crispasr_vibevoice_stream_resample(s, pcm, n_samples, false);
-        return vibevoice_stream_feed((vibevoice_stream*)s->vibevoice_stream_state, pcm24.data(), (int)pcm24.size(),
-                                     false, crispasr_vibevoice_stream_text, s);
+        const int rc = vibevoice_stream_feed((vibevoice_stream*)s->vibevoice_stream_state, pcm24.data(),
+                                             (int)pcm24.size(), false, crispasr_vibevoice_stream_text, s);
+        return rc > 0 ? 1 : rc;
     }
 #endif
     s->accum.insert(s->accum.end(), pcm, pcm + n_samples);
@@ -1336,8 +1337,9 @@ CA_EXPORT int crispasr_stream_flush(crispasr_stream* s) {
 #ifdef CA_HAVE_VIBEVOICE
     if (s->vibevoice_stream_state) {
         std::vector<float> tail = crispasr_vibevoice_stream_resample(s, nullptr, 0, true);
-        return vibevoice_stream_feed((vibevoice_stream*)s->vibevoice_stream_state, tail.data(), (int)tail.size(), true,
-                                     crispasr_vibevoice_stream_text, s);
+        const int rc = vibevoice_stream_feed((vibevoice_stream*)s->vibevoice_stream_state, tail.data(),
+                                             (int)tail.size(), true, crispasr_vibevoice_stream_text, s);
+        return rc > 0 ? 1 : rc;
     }
 #endif
     if (s->accum.empty())
@@ -2802,7 +2804,8 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
     }
 #endif
 #ifdef CA_HAVE_VIBEVOICE
-    if (s->backend == "vibevoice" || s->backend == "vibevoice-tts" || s->backend == "vibevoice-1.5b" ||
+    if (s->backend == "vibevoice" || s->backend == "vibevoice-streaming" || s->backend == "vibevoice-tts" ||
+        s->backend == "vibevoice-1.5b" ||
         s->backend == "vibevoice-tts-1.5b" || s->backend == "vibevoice-tts-base") {
         s->backend = "vibevoice";
         vibevoice_context_params p = vibevoice_context_default_params();
@@ -4426,7 +4429,7 @@ CA_EXPORT int crispasr_session_available_backends(char* out_csv, int out_cap) {
     list += ",wav2vec2";
 #endif
 #ifdef CA_HAVE_VIBEVOICE
-    list += ",vibevoice,vibevoice-tts,vibevoice-1.5b";
+    list += ",vibevoice,vibevoice-streaming,vibevoice-tts,vibevoice-1.5b";
 #endif
 #ifdef CA_HAVE_KUGELAUDIO
     list += ",kugelaudio";

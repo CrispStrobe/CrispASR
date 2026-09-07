@@ -151,7 +151,8 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& name
         return crispasr_make_fastconformer_ctc_backend();
     if (name == "wav2vec2" || name == "hubert" || name == "data2vec")
         return crispasr_make_wav2vec2_backend();
-    if (name == "vibevoice" || name == "vibevoice-bitnet" || name == "vibevoice-asr-bitnet")
+    if (name == "vibevoice" || name == "vibevoice-streaming" || name == "vibevoice-bitnet" ||
+        name == "vibevoice-asr-bitnet")
         return crispasr_make_vibevoice_backend();
     if (name == "vibevoice-tts")
         return crispasr_make_vibevoice_tts_backend();
@@ -342,6 +343,7 @@ std::vector<std::string> crispasr_list_backends() {
         "hubert",
         "data2vec",
         "vibevoice",
+        "vibevoice-streaming",
         "vibevoice-bitnet",
         "kugelaudio",
         "qwen3-tts",
