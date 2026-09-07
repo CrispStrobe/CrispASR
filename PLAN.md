@@ -2,9 +2,11 @@
 
 ## NOW 2026-09-07 — #81 Q4 FastConformer profiling
 
-After #426 merges, claim a separate #81 worktree, profile the Q4
-FastConformer/Parakeet path on a Kaggle P100 with `CRISPASR_FC_PROFILE=1`, and
-only optimize stages the measurement identifies before repeating the same A/B.
+Worktree `.claude/worktrees/perf-81-fastconformer-q4-p100`, branch
+`perf/81-fastconformer-q4-p100`. Profile the Q4 FastConformer CTC and Parakeet
+TDT paths on a Kaggle P100 with the existing stage timers and
+`CRISPASR_FC_PROFILE=1`; only optimize the measured bottleneck, then repeat the
+same Q4/audio/transcript A/B and merge independently.
 
 ## DONE 2026-09-07 — #426 native VibeVoice streaming Q4
 
