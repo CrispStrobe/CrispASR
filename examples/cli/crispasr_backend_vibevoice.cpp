@@ -138,7 +138,7 @@ public:
             CAP_TIMESTAMPS_CTC | CAP_AUTO_DOWNLOAD | CAP_FLASH_ATTN | CAP_TTS | CAP_DIARIZE | CAP_PUNCTUATION_NATIVE;
         if (allow_generic_no_voice_)
             caps |= CAP_VOICE_CLONING;
-        if (vibevoice_is_asr_streaming(ctx_))
+        if (backend_name_ == "vibevoice-streaming" || vibevoice_is_asr_streaming(ctx_))
             caps |= CAP_STREAMING;
         return caps;
     }
@@ -168,7 +168,7 @@ public:
         // immediately so the user gets a clear diagnostic before any audio is
         // processed.  TTS-only aliases ("vibevoice-tts", "vibevoice-1.5b")
         // legitimately lack these tensors and must not fail here.
-        if (backend_name_ == "vibevoice" && !vibevoice_has_asr(ctx_)) {
+        if ((backend_name_ == "vibevoice" || backend_name_ == "vibevoice-streaming") && !vibevoice_has_asr(ctx_)) {
             fprintf(stderr,
                     "crispasr[vibevoice]: error: '%s' is a TTS-only model (no at_enc.*/st_enc.* tensors).\n"
                     "  Use --backend vibevoice-tts for this model, or download the ASR model:\n"
@@ -433,6 +433,10 @@ private:
 
 std::unique_ptr<CrispasrBackend> crispasr_make_vibevoice_backend() {
     return std::unique_ptr<CrispasrBackend>(new VibeVoiceBackend("vibevoice", false));
+}
+
+std::unique_ptr<CrispasrBackend> crispasr_make_vibevoice_streaming_backend() {
+    return std::unique_ptr<CrispasrBackend>(new VibeVoiceBackend("vibevoice-streaming", false));
 }
 
 std::unique_ptr<CrispasrBackend> crispasr_make_vibevoice_tts_backend() {

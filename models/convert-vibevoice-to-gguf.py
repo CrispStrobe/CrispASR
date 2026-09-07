@@ -60,6 +60,7 @@ def main():
     n_kv_heads = dec_cfg["num_key_value_heads"]  # 2
     d_ffn = dec_cfg["intermediate_size"]         # 8960
     vocab_size = dec_cfg["vocab_size"]            # 151936
+    max_position_embeddings = int(dec_cfg.get("max_position_embeddings", 65536))
     rope_theta = dec_cfg.get("rope_theta", 1000000.0)
     head_dim = d_lm // n_heads                   # 128
     vae_dim_acoustic = at_cfg.get("vae_dim", 64)
@@ -148,6 +149,7 @@ def main():
         writer.add_uint32("vibevoice.streaming.lookahead_frames", lookahead_frames)
         writer.add_uint32("vibevoice.streaming.sample_rate", sample_rate)
         writer.add_uint32("vibevoice.streaming.normalize_audio", 1 if normalize_audio else 0)
+        writer.add_uint32("vibevoice.streaming.max_position_embeddings", max_position_embeddings)
 
     # TTS-specific metadata (VibeVoice-Realtime streaming model)
     tts_n_layers = cfg.get("tts_backbone_num_hidden_layers", 0)

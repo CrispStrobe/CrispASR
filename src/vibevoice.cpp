@@ -96,6 +96,7 @@ struct vibevoice_hparams {
     int stream_chunk_frames = 22;
     int stream_lookahead_frames = 4;
     int stream_sample_rate = 24000;
+    int stream_max_position_embeddings = 65536;
     bool stream_normalize_audio = true;
     int stream_text_chunk_end_id = 151665;
     int stream_speech_start_id = 151646;
@@ -282,6 +283,8 @@ extern "C" struct vibevoice_context* vibevoice_init_from_file(const char* path_m
     hp.stream_chunk_frames = core_gguf::kv_u32(gctx, "vibevoice.streaming.chunk_frames", 22);
     hp.stream_lookahead_frames = core_gguf::kv_u32(gctx, "vibevoice.streaming.lookahead_frames", 4);
     hp.stream_sample_rate = core_gguf::kv_u32(gctx, "vibevoice.streaming.sample_rate", 24000);
+    hp.stream_max_position_embeddings =
+        core_gguf::kv_u32(gctx, "vibevoice.streaming.max_position_embeddings", 65536);
     hp.stream_normalize_audio = core_gguf::kv_u32(gctx, "vibevoice.streaming.normalize_audio", 1) != 0;
     hp.stream_text_chunk_end_id =
         core_gguf::kv_u32(gctx, "vibevoice.streaming.text_chunk_end_id", 151665);
@@ -5726,12 +5729,18 @@ static void vibevoice_stream_release_kv(vibevoice_stream* s) {
 }
 
 static bool vibevoice_stream_reserve_kv(vibevoice_stream* s, int needed) {
+    if (needed > s->ctx->model.hp.stream_max_position_embeddings) {
+        fprintf(stderr, "vibevoice: streaming context limit exceeded (%d > %d tokens)\n", needed,
+                s->ctx->model.hp.stream_max_position_embeddings);
+        return false;
+    }
     if (needed <= s->kv_max_ctx)
         return true;
     const auto& hp = s->ctx->model.hp;
     int cap = std::max(1024, s->kv_max_ctx);
     while (cap < needed)
         cap *= 2;
+    cap = std::min(cap, s->ctx->model.hp.stream_max_position_embeddings);
 
     const ggml_type type = GGML_TYPE_F16;
     const size_t one_size = (size_t)ggml_type_size(type) * hp.head_dim * cap * hp.n_kv_heads * hp.n_lm_layers;
@@ -5966,7 +5975,10 @@ extern "C" int vibevoice_stream_feed(vibevoice_stream* s, const float* samples, 
         s->pcm.erase(s->pcm.begin(), s->pcm.begin() + chunk);
         ++emitted;
     }
-    if (flush && ((emitted == 0 && !s->pcm.empty()) || (int)s->pcm.size() > lookahead)) {
+    // Once at least one window has run, the remaining `lookahead` samples were
+    // already encoded as that window's right context. A later empty flush must
+    // not decode those samples a second time.
+    if (flush && ((s->chunk_index == 0 && !s->pcm.empty()) || (int)s->pcm.size() > lookahead)) {
         std::vector<float> padded((size_t)window, 0.0f);
         memcpy(padded.data(), s->pcm.data(), s->pcm.size() * sizeof(float));
         if (!vibevoice_stream_process_window(s, padded.data(), callback, user_data))

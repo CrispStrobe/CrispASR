@@ -69,7 +69,8 @@ snapshot = MODEL_DIR
 kh.step("reference.mean")
 ref_dir = TEMP / "reference-mean"
 run([sys.executable, REPO / "tools/vibevoice_asr_streaming_ref.py", "--model", snapshot,
-     "--audio", REPO / "samples/jfk.wav", "--output-dir", ref_dir, "--mean-acoustic"], timeout=7200)
+     "--audio", REPO / "samples/jfk.wav", "--output-dir", ref_dir, "--mean-acoustic",
+     "--device", "cpu"], timeout=7200)
 
 kh.step("convert.f16")
 f16 = TEMP / "vibevoice-asr-streaming-1.5b-f16.gguf"
