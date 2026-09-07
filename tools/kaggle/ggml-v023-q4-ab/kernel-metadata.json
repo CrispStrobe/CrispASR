@@ -1,0 +1,14 @@
+{
+  "id": "chr1str/crispasr-ggml-v023-q4-ab",
+  "title": "CrispASR ggml v0.23 Q4 A-B",
+  "code_file": "ggml_v023_q4_ab.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "true",
+  "dataset_sources": ["chr1str/crispasr-hf-token", "chr1str/crispasr-ccache"],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}
