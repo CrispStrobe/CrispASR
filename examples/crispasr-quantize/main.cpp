@@ -432,6 +432,12 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
     const bool is_vibevoice = (arch.find("vibevoice") != std::string::npos);
     const char* env_vv_all = std::getenv("CRISPASR_VIBEVOICE_QUANT_ALL");
     const bool vibevoice_quant_all = is_vibevoice && env_vv_all && *env_vv_all && *env_vv_all != '0';
+    bool vibevoice_asr_streaming = false;
+    if (const int key = gguf_find_key(ctx_in, "vibevoice.asr_streaming"); key >= 0)
+        vibevoice_asr_streaming = gguf_get_val_u32(ctx_in, key) != 0;
+    const char* env_vv_frontend = std::getenv("CRISPASR_VIBEVOICE_ASR_FRONTEND_F16");
+    const bool vibevoice_asr_frontend_f16 =
+        vibevoice_asr_streaming && env_vv_frontend && *env_vv_frontend && *env_vv_frontend != '0';
 
     // Zonos TTS: 26-layer GQA transformer + 9-codebook DAC heads.
     // Uniformly quantizing all tensors inflates the EOS logit at prefill
@@ -858,6 +864,12 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
             !(is_vibevoice && !vibevoice_quant_all &&
               (sname.find("pred.") == 0 || sname.find("at_conn.") == 0 || sname.find("se_conn.") == 0 ||
                sname.find("tts_eos.") == 0 || sname.find("tts_types.") == 0)) &&
+            // A/B gate for #426. The streaming checkpoint recomputes this
+            // frontend for every 3.47 s window, so frontend drift compounds
+            // across persistent decoder state. Kaggle parity decides whether
+            // the published Q4 needs these encoder tensors retained at F16.
+            !(vibevoice_asr_frontend_f16 &&
+              (sname.find("at_enc.") == 0 || sname.find("st_enc.") == 0)) &&
             !(is_zonos && (sname.find("heads.") == 0 || sname.find("embeddings.") == 0 ||
                            sname.find("prefix_conditioner.") == 0)) &&
             !(is_bark &&

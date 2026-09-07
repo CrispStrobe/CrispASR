@@ -76,6 +76,18 @@ def main():
     for r in encoder_ratios:
         total_downsample *= r
 
+    architectures = cfg.get("architectures", [])
+    is_asr_streaming = any("ASRStreaming" in str(name) for name in architectures)
+    preprocessor_path = os.path.join(model_dir, "preprocessor_config.json")
+    preprocessor_cfg = {}
+    if os.path.isfile(preprocessor_path):
+        with open(preprocessor_path, encoding="utf-8") as f:
+            preprocessor_cfg = json.load(f)
+    chunk_frames = int(preprocessor_cfg.get("chunk_frames", 22))
+    lookahead_frames = int(preprocessor_cfg.get("lookahead_frames", 4))
+    sample_rate = int(preprocessor_cfg.get("target_sample_rate", 24000))
+    normalize_audio = bool(preprocessor_cfg.get("normalize_audio", True))
+
     print(f"VibeVoice-ASR: d_lm={d_lm}, n_layers={n_lm_layers}, heads={n_heads}/{n_kv_heads}")
     print(f"  acoustic vae_dim={vae_dim_acoustic}, semantic vae_dim={vae_dim_semantic}")
     print(f"  encoder: {n_stages} stages, depths={encoder_depths}, ratios={encoder_ratios}")
@@ -130,6 +142,12 @@ def main():
     writer.add_array("vibevoice.encoder_ratios", encoder_ratios)
     writer.add_uint32("vibevoice.has_decoder", 1 if args.include_decoder else 0)
     writer.add_array("vibevoice.encoder_depths", encoder_depths)
+    writer.add_uint32("vibevoice.asr_streaming", 1 if is_asr_streaming else 0)
+    if is_asr_streaming:
+        writer.add_uint32("vibevoice.streaming.chunk_frames", chunk_frames)
+        writer.add_uint32("vibevoice.streaming.lookahead_frames", lookahead_frames)
+        writer.add_uint32("vibevoice.streaming.sample_rate", sample_rate)
+        writer.add_uint32("vibevoice.streaming.normalize_audio", 1 if normalize_audio else 0)
 
     # TTS-specific metadata (VibeVoice-Realtime streaming model)
     tts_n_layers = cfg.get("tts_backbone_num_hidden_layers", 0)
@@ -162,12 +180,42 @@ def main():
 
         vocab_map = tok.get_vocab()
         inv = {v: k for k, v in vocab_map.items()}
-        max_id = max(inv.keys())
+        # The decoder logits use config.vocab_size, which may include reserved
+        # rows beyond the highest tokenizer ID. Keep the arrays aligned so a
+        # generated reserved ID remains representable and bounds-safe.
+        max_id = max(max(inv.keys()), vocab_size - 1)
         vocab_list = [inv.get(i, f"<unk_{i}>") for i in range(max_id + 1)]
         writer.add_array("tokenizer.ggml.tokens", vocab_list)
+
+        tokenizer_json = os.path.join(model_dir, "tokenizer.json")
+        if os.path.isfile(tokenizer_json):
+            with open(tokenizer_json, encoding="utf-8") as f:
+                tok_json = json.load(f)
+            raw_merges = tok_json.get("model", {}).get("merges", [])
+            merges = [" ".join(x) if isinstance(x, list) else str(x) for x in raw_merges]
+            if merges:
+                writer.add_array("tokenizer.ggml.merges", merges)
+                print(f"  BPE merges embedded: {len(merges)}")
+
+        if is_asr_streaming and not os.path.isfile(tokenizer_json):
+            raise RuntimeError("streaming conversion requires tokenizer.json with exact BPE merges")
+
+        if is_asr_streaming:
+            required = {
+                "vibevoice.streaming.text_chunk_end_id": "<|text_chunk_end|>",
+                "vibevoice.streaming.speech_start_id": "<|object_ref_start|>",
+                "vibevoice.streaming.speech_end_id": "<|object_ref_end|>",
+            }
+            for key, token in required.items():
+                token_id = tok.convert_tokens_to_ids(token)
+                if token_id is None or token_id < 0 or token_id == tok.unk_token_id:
+                    raise RuntimeError(f"streaming checkpoint is missing required token {token}")
+                writer.add_uint32(key, int(token_id))
         writer.add_uint32("vibevoice.has_tokenizer", 1)
         print(f"  Qwen2 tokenizer: {len(vocab_list)} tokens embedded")
     except Exception as e:
+        if is_asr_streaming:
+            raise RuntimeError(f"streaming tokenizer conversion failed: {e}") from e
         writer.add_uint32("vibevoice.has_tokenizer", 0)
         print(f"  Tokenizer not embedded: {e}")
 

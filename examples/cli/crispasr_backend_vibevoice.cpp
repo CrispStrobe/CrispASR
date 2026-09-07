@@ -68,6 +68,45 @@ static std::vector<float> resample_16k_to_24k(const float* in, int n_in) {
     return out;
 }
 
+class VibeVoiceRealtimeSession final : public CrispasrRealtimeSession {
+public:
+    VibeVoiceRealtimeSession(vibevoice_context* ctx, const std::string& context)
+        : stream_(vibevoice_stream_open(ctx, context.empty() ? nullptr : context.c_str())) {}
+    ~VibeVoiceRealtimeSession() override { vibevoice_stream_free(stream_); }
+
+    bool valid() const { return stream_ != nullptr; }
+
+    bool append(const float* samples, int n_samples, bool flush, callback on_text) override {
+        if (!stream_)
+            return false;
+        struct State {
+            VibeVoiceRealtimeSession* self;
+            callback* fn;
+        } state{this, &on_text};
+        auto chunk_cb = [](const char* chunk, void* user) {
+            auto& state = *static_cast<State*>(user);
+            if (chunk)
+                state.self->text_ += chunk;
+            if (!state.self->text_.empty())
+                (*state.fn)(state.self->text_, false);
+        };
+        if (vibevoice_stream_feed(stream_, samples, n_samples, flush, chunk_cb, &state) < 0)
+            return false;
+        if (flush)
+            on_text(text_, true);
+        return true;
+    }
+
+    void reset() override {
+        vibevoice_stream_reset(stream_);
+        text_.clear();
+    }
+
+private:
+    vibevoice_stream* stream_ = nullptr;
+    std::string text_;
+};
+
 class VibeVoiceBackend : public CrispasrBackend {
 public:
     VibeVoiceBackend(std::string backend_name, bool allow_generic_no_voice)
@@ -99,6 +138,8 @@ public:
             CAP_TIMESTAMPS_CTC | CAP_AUTO_DOWNLOAD | CAP_FLASH_ATTN | CAP_TTS | CAP_DIARIZE | CAP_PUNCTUATION_NATIVE;
         if (allow_generic_no_voice_)
             caps |= CAP_VOICE_CLONING;
+        if (vibevoice_is_asr_streaming(ctx_))
+            caps |= CAP_STREAMING | CAP_UNBOUNDED_INPUT;
         return caps;
     }
 
@@ -244,6 +285,15 @@ public:
         seg.t1 = t_offset_cs + dur_cs;
         out.push_back(std::move(seg));
         return out;
+    }
+
+    std::unique_ptr<CrispasrRealtimeSession> create_realtime_session(const whisper_params& params) override {
+        if (!vibevoice_is_asr_streaming(ctx_))
+            return nullptr;
+        auto session = std::make_unique<VibeVoiceRealtimeSession>(ctx_, params.context);
+        if (!session->valid())
+            return nullptr;
+        return session;
     }
 
     std::vector<float> synthesize(const std::string& text, const whisper_params& params) override {

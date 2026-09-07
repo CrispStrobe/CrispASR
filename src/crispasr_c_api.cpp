@@ -1047,6 +1047,15 @@ struct crispasr_stream {
     // PLAN #7 — opaque voxtral4b_stream*; native incremental encoder + LLM
     // decode-on-flush. Mutually exclusive with `ctx`.
     void* voxtral4b_stream_state = nullptr;
+
+    // Issue #426 — native VibeVoice-ASR-Streaming decoder state. The public
+    // stream ABI uses 16 kHz PCM, so this wrapper also owns the exact 3:2
+    // resampler phase across feed boundaries.
+    void* vibevoice_stream_state = nullptr;
+    int64_t vibevoice_input_count = 0;
+    int64_t vibevoice_output_count = 0;
+    float vibevoice_last_sample = 0.0f;
+    bool vibevoice_has_last_sample = false;
 };
 
 CA_EXPORT crispasr_stream* crispasr_stream_open(whisper_context* ctx, int n_threads, int step_ms, int length_ms,
@@ -1091,8 +1100,61 @@ CA_EXPORT void crispasr_stream_close(crispasr_stream* s) {
         s->voxtral4b_stream_state = nullptr;
     }
 #endif
+#ifdef CA_HAVE_VIBEVOICE
+    if (s->vibevoice_stream_state) {
+        vibevoice_stream_free((vibevoice_stream*)s->vibevoice_stream_state);
+        s->vibevoice_stream_state = nullptr;
+    }
+#endif
     delete s;
 }
+
+#ifdef CA_HAVE_VIBEVOICE
+static std::vector<float> crispasr_vibevoice_stream_resample(crispasr_stream* s, const float* pcm, int n_samples,
+                                                             bool flush) {
+    const int64_t old_total = s->vibevoice_input_count;
+    const int64_t new_total = old_total + n_samples;
+    const int64_t base = old_total - (s->vibevoice_has_last_sample ? 1 : 0);
+    std::vector<float> src;
+    src.reserve((size_t)n_samples + 1);
+    if (s->vibevoice_has_last_sample)
+        src.push_back(s->vibevoice_last_sample);
+    if (pcm && n_samples > 0)
+        src.insert(src.end(), pcm, pcm + n_samples);
+
+    std::vector<float> out;
+    while (true) {
+        const int64_t pos_num = s->vibevoice_output_count * 2; // source position / 3
+        const int64_t i0 = pos_num / 3;
+        const int frac_num = (int)(pos_num % 3);
+        if ((!flush && i0 + 1 >= new_total) || (flush && i0 >= new_total) || i0 < base)
+            break;
+        const size_t local0 = (size_t)(i0 - base);
+        if (local0 >= src.size())
+            break;
+        const float a = src[local0];
+        const float b = local0 + 1 < src.size() ? src[local0 + 1] : a;
+        out.push_back(a + (b - a) * ((float)frac_num / 3.0f));
+        ++s->vibevoice_output_count;
+    }
+    s->vibevoice_input_count = new_total;
+    if (n_samples > 0) {
+        s->vibevoice_last_sample = pcm[n_samples - 1];
+        s->vibevoice_has_last_sample = true;
+    }
+    return out;
+}
+
+static void crispasr_vibevoice_stream_text(const char* chunk, void* user) {
+    auto* s = static_cast<crispasr_stream*>(user);
+    if (chunk)
+        s->out_text += chunk;
+    s->out_t0_s = 0.0;
+    s->out_t1_s = (double)s->vibevoice_input_count / 16000.0;
+    s->has_output = true;
+    ++s->decode_counter;
+}
+#endif
 
 static int crispasr_stream_run_decode(crispasr_stream* s) {
     // Assemble the decode window: tail of `history` (length `n_samples_take`)
@@ -1188,6 +1250,13 @@ CA_EXPORT int crispasr_stream_feed(crispasr_stream* s, const float* pcm, int n_s
         return voxtral4b_stream_feed((voxtral4b_stream*)s->voxtral4b_stream_state, pcm, n_samples);
     }
 #endif
+#ifdef CA_HAVE_VIBEVOICE
+    if (s->vibevoice_stream_state) {
+        std::vector<float> pcm24 = crispasr_vibevoice_stream_resample(s, pcm, n_samples, false);
+        return vibevoice_stream_feed((vibevoice_stream*)s->vibevoice_stream_state, pcm24.data(), (int)pcm24.size(),
+                                     false, crispasr_vibevoice_stream_text, s);
+    }
+#endif
     s->accum.insert(s->accum.end(), pcm, pcm + n_samples);
     s->stream_time_s += (double)n_samples / 16000.0;
 
@@ -1262,6 +1331,13 @@ CA_EXPORT int crispasr_stream_flush(crispasr_stream* s) {
 #if __has_include("voxtral4b.h")
     if (s->voxtral4b_stream_state) {
         return voxtral4b_stream_flush((voxtral4b_stream*)s->voxtral4b_stream_state);
+    }
+#endif
+#ifdef CA_HAVE_VIBEVOICE
+    if (s->vibevoice_stream_state) {
+        std::vector<float> tail = crispasr_vibevoice_stream_resample(s, nullptr, 0, true);
+        return vibevoice_stream_feed((vibevoice_stream*)s->vibevoice_stream_state, tail.data(), (int)tail.size(), true,
+                                     crispasr_vibevoice_stream_text, s);
     }
 #endif
     if (s->accum.empty())
@@ -10022,6 +10098,24 @@ CA_EXPORT crispasr_stream* crispasr_session_stream_open(crispasr_session* s, int
             return nullptr;
         auto* w = new crispasr_stream();
         w->voxtral4b_stream_state = vs;
+        return w;
+    }
+#endif
+#ifdef CA_HAVE_VIBEVOICE
+    if (s->vibevoice_ctx && vibevoice_is_asr_streaming(s->vibevoice_ctx)) {
+        // The checkpoint fixes chunk/lookahead sizes. Preserve the common ABI
+        // arguments for source compatibility, but do not reinterpret them.
+        (void)n_threads;
+        (void)step_ms;
+        (void)length_ms;
+        (void)keep_ms;
+        (void)language;
+        (void)translate;
+        vibevoice_stream* vs = vibevoice_stream_open(s->vibevoice_ctx, nullptr);
+        if (!vs)
+            return nullptr;
+        auto* w = new crispasr_stream();
+        w->vibevoice_stream_state = vs;
         return w;
     }
 #endif
