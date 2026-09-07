@@ -827,6 +827,40 @@ second is small and unbreaks the platform immediately.
 Found while reproducing #369, and NOT that issue's cause: the reporter is on
 Windows CPU/Vulkan and sees wrong-language output, not silence.
 
+## CLAIMED 2026-09-07 — stb_vorbis heap overflow (security), root cause found
+
+Worktree: main (`/mnt/volume1/CrispASR`). Taking the OPEN item below.
+
+ROOT CAUSE, confirmed by arithmetic against the ASAN report, not inferred:
+
+    f->comment_list_length = get32_packet(f);                  // attacker uint32
+    f->comment_list = setup_malloc(f, sizeof(char*) * f->comment_list_length);
+    memset(f->comment_list, 0, sizeof(char*) * f->comment_list_length);
+
+`setup_malloc(vorb *f, int sz)` takes an **int**. With length = 1646854400,
+`8 * length` = 13,174,835,200 truncates to **289,933,312** — exactly the
+allocation size ASAN reported. The `memset` computes the same product but
+`sizeof` makes it `size_t`, so it is **13,174,835,200** — exactly the write size
+ASAN reported. THE ALLOCATION TRUNCATES AND THE CONSUMER DOES NOT. Same shape as
+the `resample_polyphase` n_out overflow fixed 2026-09-04 (int guard over a value
+that had already wrapped).
+
+UPSTREAM HAS NOT FIXED IT (checked, per the next-steps note below):
+nothings/stb master still has `setup_malloc(vorb *f, int sz)` and the same
+truncating multiply. So there is nothing to pull, the vendored patch is correct,
+and upstream is vulnerable by the same truncation — it lacks our `memset`, so
+instead of one 13 GB write its `for` loop walks `comment_list[i]` past the short
+allocation. Worth reporting upstream once ours is fixed.
+
+NOTE the memset is itself a CrispASR patch, added to fix an earlier fuzz crash
+(NULL comment_list freed by vorbis_deinit). It did not create the truncation, but
+it converted a gradual overflow into an immediate 13 GB one.
+
+Plan: bound `comment_list_length` before allocating so the product cannot
+truncate, size the allocation in `size_t`, craft a minimal Ogg reproducer into
+`tests/fuzz/regressions/` (which now actually replays — the copy step counts its
+seeds since 2026-09-04), and let `linux-fuzz-smoke` be the gate.
+
 ## OPEN 2026-08-18 — stb_vorbis heap overflow on untrusted audio (security)
 
 Found incidentally by `linux-fuzz-smoke` on PR #371, which does not touch that
