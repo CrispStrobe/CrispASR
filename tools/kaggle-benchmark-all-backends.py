@@ -293,8 +293,32 @@ SWEEP_REPO = os.environ.get("CRISPASR_SWEEP_REPO", "cstr/crispasr-kaggle-progres
 # kernel SKIP backends that already have a result file. "latest" currently holds
 # 60 finished backends from an earlier pin, so reusing it would skip nearly the
 # whole sweep and say nothing about the tree under test.
-RUN_TAG = os.environ.get("CRISPASR_SWEEP_RUN", "ggml-v0.17b")
+# 2026-09-07: bumped v0.17b -> v0.23. The tree pins ggml 2dd13edd (v0.23.0,
+# CrispStrobe/ggml#3), so a run tagged v0.17b would have labelled the results
+# with a ggml version that is no longer in the build — and, because a matching
+# tag makes the kernel SKIP finished backends, would also have resumed a sweep
+# taken before the bump. Both halves of that are wrong: stale label, stale data.
+RUN_TAG = os.environ.get("CRISPASR_SWEEP_RUN", "ggml-v0.23")
 SWEEP_PREFIX = f"full-backend-sweep/{RUN_TAG}"
+
+# The kernel git-clones CrispASR at runtime, so the C++ under test is always
+# fresh from main while THIS SCRIPT is frozen at the last `kaggle kernels push`.
+# A run can therefore build the newest code and score it with an outdated
+# harness, and nothing in the log looks wrong. Print both halves so the log
+# always says which script and which tree produced a verdict.
+SWEEP_SCRIPT_VERSION = "2026-09-07-coverage-83"
+def _print_provenance():
+    import subprocess as _sp
+    sha = "unknown"
+    try:
+        sha = _sp.check_output(["git", "-C", CRISPASR_DIR, "rev-parse", "--short", "HEAD"],
+                               text=True, stderr=_sp.DEVNULL).strip()
+    except Exception:
+        pass
+    print(f"[sweep] script_version={SWEEP_SCRIPT_VERSION}  crispasr_clone={sha}  run_tag={RUN_TAG}",
+          flush=True)
+
+_print_provenance()
 # Optional subset filter: CRISPASR_SWEEP_ONLY="f5-tts,chatterbox,..." runs ONLY
 # those backends (skips all others) — for targeted re-tests of a fixed subset.
 SWEEP_ONLY = {x.strip() for x in os.environ.get("CRISPASR_SWEEP_ONLY", "").split(",") if x.strip()}
