@@ -521,6 +521,47 @@ if MODE == "rebake":
             "numpy", "gguf",
         ])
 
+    # ── Optional per-backend reference deps (2026-09-07) ──────────────────
+    # The list above is the NeMo family's, which is why parakeet-* and
+    # canary-1b-v2 bake and 32 other entries return `dump_reference exit=1`.
+    # The v3 rebake log named every missing import:
+    #     funasr, whisper, qwen_asr, fireredasr, mimo_audio_tokenizer, src
+    # plus a transformers too old for VoxtralRealtimeForConditionalGeneration.
+    #
+    # INSTALLED ONE AT A TIME AND TOLERANTLY, on purpose. The block above is a
+    # check_call, so a single unavailable wheel there would abort the whole
+    # rebake and take the backends that DO work down with it — trading 9 good
+    # dumps for a dependency that only ever mattered to one entry. Each of
+    # these was confirmed to exist on PyPI before being listed; the loop is
+    # belt-and-braces for a yanked release or a resolver conflict on the day.
+    OPTIONAL_REF_DEPS = [
+        "funasr",           # funasr-nano, funasr-mlt-nano, sensevoice, paraformer
+        "openai-whisper",   # imported as `whisper` by several reference dumpers
+        "qwen-asr",         # qwen3-asr-0.6b
+        "fireredasr",       # firered-asr2-aed, firered-lid
+        "modelscope",       # funasr/sensevoice model resolution
+    ]
+    for _dep in OPTIONAL_REF_DEPS:
+        with build_heartbeat(f"pip.install.optional.{_dep}"):
+            rc = subprocess.call([sys.executable, "-m", "pip", "install", "--quiet", _dep])
+            if rc == 0:
+                print("  optional ref dep %s: ok" % _dep, flush=True)
+            else:
+                print("  optional ref dep %s: UNAVAILABLE (rc=%d) — its backends will "
+                      "still report dump_reference exit=1" % (_dep, rc), flush=True)
+
+    # Voxtral realtime needs a newer transformers than Kaggle ships; upgrading
+    # is separate from the list above because it MUTATES an existing pin that
+    # the NeMo stack also depends on, so a failure here is worth seeing rather
+    # than silently tolerated alongside the optional installs.
+    with build_heartbeat("pip.install.transformers_upgrade"):
+        rc = subprocess.call([sys.executable, "-m", "pip", "install", "--quiet",
+                              "--upgrade", "transformers"])
+        print("  transformers upgrade: %s" % ("ok" if rc == 0 else "FAILED rc=%d" % rc), flush=True)
+    # mimo_audio_tokenizer is NOT on PyPI (checked: 404). mimo-asr and
+    # mimo-audio-tokenizer stay unbakeable until their reference module vendors
+    # it or points at a source checkout. Recorded so the gap is a known one.
+
 # ─────────────────────────── cell 3 (code) ───────────────────────────
 step("cell_3_begin")
 # ── Clone + build CrispASR ────────────────────────────────────────────────
