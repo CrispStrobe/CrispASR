@@ -873,6 +873,9 @@ needs a per-stage look).
 
 | measurement | x-RT |
 |---|---|
+| CrispASR parakeet-ctc Q4_K, manual attn, 134 s varied, load-excl | **158.6×** |
+| CrispASR parakeet-tdt Q4_K, backend joint projection, 134 s varied, load-excl | **116.1×** |
+| same TDT, scalar CPU joint projection | 52.4× |
 | CrispASR parakeet-ctc Q8_0, manual attn, warm in-process, jfk×5 55 s | **153×** (11 s: 116×) |
 | same, flash-with-CPU-fallback (old default) | 48× (11 s: 61×) |
 | CrispASR parakeet-ctc Q8_0, manual attn, **134 s varied, load-excl (honest)** | **137×** (tdt 49.5×) |
@@ -889,6 +892,18 @@ handover's "~1.4×" claim on independent honest methodology. (The 153×
 in-process row is repeat-audio jfk×5, ~6% cache-friendly and warm —
 kept as the best-case in-process figure; the 137× row is the fair
 varied-audio comparison against onnx.)
+
+Q4 follow-up (2026-09-07, kernel
+`chr1str/crispasr-issue-81-q4-p100-profile` v4, commit `39c2a7b2`, P100
+sm_60): profiling found that TDT spent about 1.40 s of its 2.56 s wall time in
+the encoder-to-joint projection, which still ran as scalar CPU code before the
+GPU decoder loop. One backend matmul reduced that projection to 4.0 ms and the
+total to 1.155 s: **52.4× → 116.1×**, 2.21× faster overall and about 4% below
+the historical 121× onnx-asr TDT CUDA result. Every repeat produced the same
+301-word transcript across both arms. CTC remained encoder-bound at **158.6×**.
+Stable graph buckets of 25/50/100 mel frames reached 156.5×/158.2×/154.9× on
+the varied set, all below the unbucketed control, so `CRISPASR_FC_BUCKET`
+remains opt-in.
 
 **VPS 4-core x86 re-bench (2026-07-12, DONE)**: parakeet-ctc-0.6b q8_0,
 jfk 11 s, same-box A/B (load ~2.5) — new defaults **5.43 s (2.0× RT)**

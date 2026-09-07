@@ -159,6 +159,7 @@ surviving artifact. Applied on both the CLI and the session C-ABI.
 | `CRISPASR_MAES_BETA` / `_MAES_GAMMA` / `_MAES_NUM_STEPS` | MAES beam-search parameters. |
 | `CRISPASR_TDT_BATCH` / `CRISPASR_RNNT_BATCH` | Batch the TDT / RNNT joint decode. |
 | `CRISPASR_RNNT_GGML_PERSTEP` | Per-step (vs. persistent-graph) ggml RNNT decode. |
+| `CRISPASR_RNNT_GPU_ENC_PROJ` | Parakeet's backend encoder-to-joint projection is default on CUDA. `0` restores the scalar CPU projection; `1` opts other GPU backends in. |
 | `CRISPASR_NGRAM_LOOPFIX_OFF` | Disable the n-gram decode-loop breaker. |
 | `CRISPASR_STREAM_SLICE_MEMO` | Memoize per-slice streaming partial decodes by absolute sample range (#404). **Default ON** — finals byte-equal, wall −12 % CPU / −6 % GPU in the quiet-box A/B; `=0` re-decodes closed slices every step. |
 | `CRISPASR_GAP_FILL` / `_GAP_FILL_MIN_CS` | Re-transcribe spans a first pass left empty (long audio); on by default for parakeet, threshold non-JA 300 cs / JA 100 cs. |
