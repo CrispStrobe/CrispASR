@@ -1,5 +1,8 @@
 **Title:** `ggml-cuda : tile cpy_scalar_transpose along grid_y`
 
+**Status (2026-09-07):** Retired. Upstream v0.23 contains broader CUDA cpy grid-limit fixes; the old patch must not be replayed.
+
+
 ---
 
 `ggml_cpy_scalar_cuda`'s transposed branch asserts `grid_y < USHRT_MAX`.

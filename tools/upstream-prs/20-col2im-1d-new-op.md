@@ -1,11 +1,7 @@
 **Title:** `ggml : add col2im_1d — composable building block for ConvTranspose1d`
 
-**Status:** RFC / new op, not filed. Lower priority than 01/06; gated behind the
-`aa_snake_beta` new-op RFC (#07) so we only have one new-op review open at a
-time. This is the op behind PRs #04/#14/#17 (the `conv_transpose_1d`
-perf/F16 patches) — upstreaming it gives ggml a *decomposed* transposed-conv
-path that sidesteps those issues entirely, so consider it an alternative
-strategy to patching the monolithic kernel.
+**Status (2026-09-07):** Retired as an outbound proposal: upstream added `col2im_1d` in `d962a305`. CrispASR adaptation still requires reference parity because the old fork op used different crop semantics.
+
 
 ---
 

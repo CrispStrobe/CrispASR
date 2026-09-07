@@ -1,5 +1,8 @@
 **Title:** `ggml-sched : fix cross-backend copy insertion for small mixed-backend graphs`
 
+**Status (2026-09-07):** Upstream `08130cff` supersedes the fork k-quant GET_ROWS implementation. This scheduler report remains separate and should be revalidated against v0.23.
+
+
 ---
 
 ## Root cause

@@ -1,5 +1,8 @@
 **Target:** ggml-org/ggml (standing via #1477) — Metal im2col flat dispatch.
 
+**Status (2026-09-07):** Still needed, but the patch targets the deleted monolithic Metal shader. Re-port to v0.23 `kernels/conv.metal` and current dispatch, then repeat the A/B suite.
+
+
 **⚠ PROSE MUST BE HUMAN-AUTHORED.** llama.cpp/ggml's contribution policy
 rejects AI-written PR text. Everything below is the fact sheet + patch for a
 human to compose the PR from — do not paste it verbatim.

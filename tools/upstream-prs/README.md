@@ -6,30 +6,30 @@ Redacted descriptions in own voice.
 | # | Subject | Code provenance | Status |
 | - | --- | --- | --- |
 | 01 | `ggml-cpu : avoid F16 saturation in MUL_MAT(F16, F32) on ARM NEON` | yours (5eef4e2 + the older conv-cast hunks) — bundles type-traits change with conv-graph kernel cast in one PR | drafted |
-| 02 | `CUDA: handle OW > 65535 in im2col (2D and 3D)` | yours (1552434, re-applied in ca6c523) | ggml-org/ggml#1485 closed (wrong repo); refiled at [ggml-org/llama.cpp#22944](https://github.com/ggml-org/llama.cpp/pull/22944) 2026-05-11 |
-| 03 | `CUDA: tile cpy_scalar_transpose along grid_y` | AI-authored (2639461) — re-derive yourself before sending | gated on llama.cpp#22944 merge |
+| 02 | `CUDA: handle OW > 65535 in im2col (2D and 3D)` | yours (1552434, re-applied in ca6c523) | ✅ upstreamed by `e79014c1` via [llama.cpp#22944](https://github.com/ggml-org/llama.cpp/pull/22944); retire patch |
+| 03 | `CUDA: tile cpy_scalar_transpose along grid_y` | AI-authored (2639461) | retired: superseded by upstream CUDA cpy grid-limit fixes |
 | 04 | `metal : tighten input-position loop in kernel_conv_transpose_1d` | yours (4990da8) | ✅ merged [#1477](https://github.com/ggml-org/ggml/pull/1477) 2026-05-10 |
 | 05 | `ggml-cuda : per-row-contiguous unary (Phase 1 UAR)` | superseded by `d758fe69` on main (fused norm_affine + siglu removes the strided view entirely) | retired 2026-05-23, WIP branch deleted |
-| 06 | `ggml-cuda : per-head mask in flash_attn_ext (MMA-F16 path)` | design + kernel-level patch sketch in `06-cuda-fa-perhead-mask.md` (~45 LOC across `fattn.cu` + `fattn-mma-f16.cuh` + test-backend-ops) | drafted on main 2026-05-23, not yet implemented |
+| 06 | `ggml-cuda : per-head mask in flash_attn_ext (MMA-F16 path)` | fork implementation, guarded by `GGML_CUDA_CRISPASR_FA_PERHEAD_MASK` | still absent upstream; re-ported to v0.23, P100 A/B is slower so keep opt-in and validate newer architectures |
 | 07 | `metal : kernel_aa_snake_beta — fused AA SnakeBeta for BigVGAN v2` | drafted from upstream IndexTTS CUDA reference (Apache 2.0) — needs implementation | RFC scope only; new ggml op |
 | 08 | `metal : fix cross-simdgroup reduction in kernel_norm / kernel_rms_norm / kernel_l2_norm` | yours — bisected from kokoro short-input audio regression; see [`tests/test_metal_norm_repro.cpp`](../../tests/test_metal_norm_repro.cpp) | drafted, not yet filed |
 | 09 | `metal : Q8_0 × F32 bit-match mul_mat under GGML_PREC_F32` | yours (752baec) — Q8_0 counterpart to the existing Q4_K bit-match path | drafted, not yet filed |
 | 10 | `metal/ggml-alloc : long F32 GPU graphs accumulate drift sensitive to in-place buffer reuse pattern` | yours — bisected through chatterbox-tts UNet; bug report, no patch | drafted, not yet filed |
 | 11 | `metal/sched : mixed CPU+GPU op pinning produces NaN at large input dimensions` | yours — same UNet repro; bug report, no patch | drafted, not yet filed |
 | 14 | `CUDA: support F16 weights in conv_transpose_1d` | yours (555deb98) — fixes issue #126 SNAC + orpheus CUDA segfault; templates kernel on src0 type, relaxes F32-only assert + supports_op | validated on RunPod A40 sm_86 2026-05-26, not yet filed |
-| 16 | `ggml-cuda : add k-quant support to GET_ROWS (Q2_K–Q6_K)` | ours (3bf9a599) — uses `ggml_get_to_fp32_cuda()` row-dequant, copies indices to host, sequential kernel launch per row; also adds Q2_K–Q6_K to `supports_op` | ✅ validated on RunPod RTX 3090 sm_86 2026-06-05 (mimo-asr Q4_K embed, 2.0× RT, correct JFK); `16-sched-small-graph-cross-backend.md` also documents the scheduler cross-backend routing bug for small graphs |
-| 17 | `CUDA: tighten input-position loop in conv_transpose_1d` | ours (f8fc8b8e) — CUDA analog of merged Metal PR #04; i_min/i_max analytical bounds eliminate O(IL) naive loop (was ~200× wasted iterations at TTS codec scale, causing TDR on AMD RX 7900 XTX + NVIDIA RTX 5060 Ti; see #155); bit-identical output | validated locally; CUDA hardware test pending; gated on PR #14 (applies on top of F16 template) — not yet filed |
-| 18 | `metal : implement cpy_tensor for shared buffers (avoid host-staging copy)` | ours — found via #161 KV-snapshot work; Metal shared `cpy_tensor` returns false unconditionally, so a same-backend `ggml_backend_tensor_copy` on unified memory malloc-bounces through host instead of a 1-line `memcpy`; ~10 LOC + reference `.patch` | drafted on M1 2026-06-10, not yet filed |
+| 16 | `ggml-cuda : add k-quant support to GET_ROWS (Q2_K–Q6_K)` | ours (3bf9a599); scheduler bug report shares the document | GET_ROWS upstreamed by `08130cff`; retire the slower host-sync implementation, retain scheduler issue separately |
+| 17 | `CUDA: tighten input-position loop in conv_transpose_1d` | ours (f8fc8b8e), same analytical bounds | ✅ upstreamed by `af684904` / llama.cpp#25310; retire patch |
+| 18 | `metal : implement cpy_tensor for shared buffers (avoid host-staging copy)` | ours — found via #161 KV-snapshot work | upstream v0.23 has the direct compatible shared-buffer copy; retire patch |
 | 19 | `vulkan: flash_attn_ext coopmat2 path produces wrong output on AMD RDNA4 (RX 9700 XT)` | bug report, no patch — bisected from issue #171 VibeVoice TTS garbage; same graph is verbatim on Metal + Vulkan/MoltenVK (`FA_SCALAR`, `matrix cores: none`), garbles only on RDNA4 (`FA_COOPMAT2`). EOS classifier amplifies the attention drift into over-generation | **draft — awaiting hardware confirmation** (`GGML_VK_DISABLE_COOPMAT2=1`) from #171 reporter; then file at ggml-org/llama.cpp (vulkan) or escalate to Mesa/RADV |
-| 20 | `ggml : add col2im_1d — composable building block for ConvTranspose1d` | ours (PR #160) — new op; inverse-of-`im2col` gather that completes a decomposed `mul_mat`+`col2im_1d` transposed conv (the path behind #04/#14/#17). Upstream has no forward `col2im_1d`. Recommend collapsing to F32-in/F32-out before filing (F16/BF16 input was speculative + shipped the dst-type bug fixed 2026-06-19) | RFC / new op — file after #07; ggml-org/ggml (core + all backends) |
+| 20 | `ggml : add col2im_1d — composable building block for ConvTranspose1d` | ours (PR #160), with semantics that differed from the later upstream op | ✅ upstreamed by `d962a305`; retire outbound proposal and parity-test call-site adaptation |
 | 21 | `vulkan: vkResetCommandPool faults on native RADV/NVIDIA under a many-small-graph workload` | bug report, no patch — issue #215 moss-transcribe segfault. The queue-drain hypothesis (`waitIdle` before `resetCommandPool`) was **DISPROVEN** on the reporter's RADV hardware: the guard ran on a valid queue and `resetCommandPool` still faulted, so it is not "reset with pending buffers" — looks like graph-scale state corruption (TADA-#192 signature, native-only, unreproducible on MoltenVK). App-level fix is device-scoped CPU fallback for native Vulkan | **bug report — disproven patch removed; awaiting native-HW isolation before filing** at ggml-org/llama.cpp (vulkan) |
-| 22 | `ggml-webgpu : add NORM, IM2COL, POOL_2D, CONV_TRANSPOSE_2D, UPSCALE, ARANGE` | ours — six element-exact ports of the CPU reference semantics; closes the CNN-op hole that makes OCR/detection graphs (DBNet, classic-LayerNorm ViT recognizers) split to CPU per layer under sched or silently drop ops sched-less (encoder `default:` returns nullopt with no diagnostic) | drafted (`.patch` present), not yet filed; ggml-org/llama.cpp (webgpu lives there) |
-| 23 | `metal : fix im2col occupancy for batch-1 (inference) convolutions` | ours (fork `89a2039d`, `kernel_im2col_flat` on `sync/upstream-v0.17`) — the standard kernel sizes threadgroup dim 0 from batch `N`, so batch-1 inference convs and the `conv_2d_dw` lowering (IC==1, N=C·batch) run near-serial (~0.4 GB/s measured); flat one-thread-per-dst-element grid is 2.3× on the PP-OCRv6 medium recognizer (im2col was 70% of the graph), 1.6× layout_detect, 1.85× melotts hifigan, byte-identical. ⚠ int64 divmod is emulated on Apple GPUs — the fully-flat int64 cut was SLOWER; grid-borne indices + 32-bit row-local divmods only | patch + numbers ready (round N+1 task 8) — **prose must be human-authored** (llama.cpp AI policy); venue ggml-org/ggml (metal direct, standing via #1477) |
+| 22 | `ggml-webgpu : OCR/CNN ops` | ours — originally NORM, IM2COL, POOL_2D, CONV_TRANSPOSE_2D, UPSCALE, ARANGE | partially upstreamed: keep only POOL_2D, CONV_TRANSPOSE_2D and ARANGE; regenerate against current llama.cpp |
+| 23 | `metal : fix im2col occupancy for batch-1 inference` | ours (`89a2039d`), measured 2.3× OCR / 1.6× layout / 1.85× vocoder | still needed; re-port from monolithic shader to v0.23 `kernels/conv.metal` and repeat A/B |
 | 24 | `ggml : fix ggml_conv_1d output layout for batch N > 1` | ours — the mul_mat result is `[N*OL, OC]` (OC slowest) but the final reshape declares `[OL, OC, N]` (N slowest); identical only at N=1, so every batched conv_1d consumer reads transposed data (repro: N=2 cos 0.41, N=3 cos 0.06 vs direct conv). Fix reshapes to the true `[OL, N, OC]` then permutes; N==1 keeps the zero-copy path bit-identical. Standalone repros `24-conv-1d-batch-reshape.repro.cpp` + `.dw-repro.cpp` | drafted with repros, not yet filed; ggml-org/ggml (core) |
 
 The `.patch` files are clean diffs; they are reference shape, not
-literal `git am` payloads — line numbers are relative to our vendored
-ggml master snapshot (fetched 2026-05-05) and may drift before you
+literal `git am` payloads — line numbers are relative to our v0.17-era vendored
+ggml snapshot and may drift before you
 open the PR.
 
 `UPSTREAM-SYNC.md` is the INBOUND counterpart: what we should take FROM
@@ -38,9 +38,9 @@ failed on ARM for weeks because our vendored ggml predated two upstream SVE
 fixes (`6aab1bcb`, `f69bdbb3`, both cherry-picked 2026-07-29). It also records
 that upstream now has its own `col2im_1d`, which supersedes draft 20.
 
-`MASTER-AUDIT.md` records the cross-check against `ggml-org/ggml`
-master (fetched 2026-05-05): all four still apply in shape; none
-have been fixed upstream. Note: `im2col` gained a second target
+`MASTER-AUDIT.md` records the 2026-09-07 cross-check against
+`ggml-org/ggml@e91ded11` (v0.23.0). Several patches are now upstream-owned;
+do not replay the old patch set wholesale. Note: `im2col` gained a second target
 site (`im2col_3d_kernel`) since v0.10.0; the PR 02 patch covers
 both kernels.
 
@@ -76,18 +76,20 @@ explicitly in the Requirements section.
 ## Sending
 
 We are **not** a first-time contributor — PR **04** is merged at
-ggml-org/ggml (#1477) and **02** is filed at ggml-org/llama.cpp (#22944),
+ggml-org/ggml (#1477) and **02** was merged through ggml-org/llama.cpp (#22944),
 so the new-contributor "1 open PR per repo" cap does not gate us at
 ggml-org/ggml. Still send sequentially per repo as a courtesy and to keep
-reviewer load sane. Order — easiest reviewer call first:
+reviewer load sane. Order for remaining work, easiest reviewer call first:
 
-1. ✅ **04** Metal perf → merged at ggml-org/ggml as [#1477](https://github.com/ggml-org/ggml/pull/1477) 2026-05-10
-2. 📤 **02** CUDA im2col → filed at ggml-org/llama.cpp as [#22944](https://github.com/ggml-org/llama.cpp/pull/22944) 2026-05-11 (after ggml#1485 was redirected)
-3. **03** CUDA cpy → file at ggml-org/llama.cpp after #22944 merges; re-derive the kernel-tiling code yourself first
-4. **14** CUDA conv_transpose_1d F16 → file at ggml-org/llama.cpp; small (2 files, ~25 LOC), pure-perf no-regression for existing F32 callers — should be an easy reviewer call
-5. **17** CUDA conv_transpose_1d loop → file at ggml-org/llama.cpp after #14 merges; 1 file, +14/−22 on top of #14; CUDA analog of ggml#1477 — reviewer will recognise the pattern
-6. **18** Metal cpy_tensor → file at ggml-org/ggml (touches `ggml-metal/` only, same path as merged #04); ~10 LOC, no-regression fast path with clean fallback — easy reviewer call, and we have standing there from #1477
-7. **01** CPU F16 → file at ggml-org/ggml (touches ggml-cpu/ + ggml.c); design-discussion expected, consider opening an issue first
+1. ✅ **04** and **02** are upstream; archive their local patches.
+2. **14** CUDA conv-transpose F16 — rebase and validate on current CUDA.
+3. **01** CPU F16 accumulation — validate ARM and open design discussion if needed.
+4. **24** conv1d batch layout — rerun standalone repros on v0.23.
+5. **22** WebGPU — split out only the three missing ops.
+6. **23** Metal im2col — re-port to the modular shader and repeat the published A/B matrix.
+7. **06** CUDA per-head FA — keep opt-in until a tensor-core GPU shows a win.
+
+Retired patches **03**, **16 GET_ROWS**, **17**, **18**, and **20** must not be filed or replayed.
 
 Per upstream:
 

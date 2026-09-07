@@ -1,5 +1,8 @@
 **Title:** `ggml-cuda : handle OW > 65535 in im2col`
 
+**Status (2026-09-07):** Upstreamed by `e79014c1` via llama.cpp#22944. Retain this document as historical verification; do not replay the patch.
+
+
 ---
 
 `im2col_cuda` dispatches with `block_nums.y = OW`. CUDA caps grid Y at
