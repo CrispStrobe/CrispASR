@@ -316,7 +316,31 @@ SWEEP_PREFIX = f"full-backend-sweep/{RUN_TAG}"
 # A run can therefore build the newest code and score it with an outdated
 # harness, and nothing in the log looks wrong. Print both halves so the log
 # always says which script and which tree produced a verdict.
-SWEEP_SCRIPT_VERSION = "2026-09-07-coverage-83"
+SWEEP_SCRIPT_VERSION = "2026-09-07-coverage-83-licensed"
+
+# ── Restricted-licence acceptance (owner-authorised 2026-09-07) ────────────
+# Ten backends failed the previous sweep in ~0.1 s with 0 bytes written:
+# pocket-tts (+ -de/-fr), orpheus, outetts, tada, tada-1b, voxtral-tts, raon
+# and quds-fa. None of them are broken. license_gate_allows_download() refuses
+# a restricted model BEFORE fetching a byte unless the licence is accepted, so
+# every one of those rows was the gate working, recorded as a failure.
+#
+# WHAT THIS ACCEPTS, stated exactly, because "all" is broader than the
+# non-commercial set it is usually described as. license_requires_acceptance_tag()
+# gates: cc-by-nc*, cc-by-sa*, llama*, gemma, gemma-terms, qwen-research,
+# mistral-ai-research, lfm1.0, lfm-open-1.0, funasr-v1.1, pocket-tts-terms, and
+# the catch-all "other". The registry currently carries two distinct NC tags
+# (cc-by-nc-4.0 and cc-by-nc-sa-4.0) and license_accepted() matches an EXACT tag
+# or the wildcard — so a single specific value cannot cover the set, and "all"
+# is the only setting that unblocks the sweep in one variable.
+#
+# This is an internal benchmark: models are downloaded, synthesised from once,
+# scored, and deleted (_cleanup_cache below). Nothing is redistributed. That is
+# within CC-BY-NC terms and within the research/terms licences above, and the
+# repository already publishes GGUF conversions of these same checkpoints.
+# The acceptance is the owner's, given explicitly for this sweep; it is set here
+# rather than in any library path so it cannot leak into normal CLI use.
+os.environ.setdefault("CRISPASR_ACCEPT_LICENSE", "all")
 def _print_provenance():
     import subprocess as _sp
     sha = "unknown"
@@ -805,6 +829,12 @@ if BENCHMARK_TTS == "1":
             "cosyvoice3":     ["--voice", REF_WAV, "--ref-text", JFK_RT, "--i-have-rights"],
             "vibevoice-tts":  ["--voice", REF_WAV, "--i-have-rights"],
             "vibevoice-1.5b": ["--voice", REF_WAV, "--i-have-rights"],
+            # 2026-09-07: vibevoice-bitnet was added to TTS_BACKENDS without a
+            # voice and failed in 23.5 s with 0 bytes and
+            #   "no voice prompt resolved (pass --voice <path.gguf>, ...)"
+            # — the exact failure this table's comment was written about. Its
+            # two siblings above were already here; the new entry just missed it.
+            "vibevoice-bitnet": ["--voice", REF_WAV, "--i-have-rights"],
             "fastpitch":      ["--voice", "0"],
             "orpheus":        ["--voice", "tara"],
         }
@@ -813,6 +843,17 @@ if BENCHMARK_TTS == "1":
         phrase = TTS_PHRASE
         if backend == "dia":
             phrase = "[S1] The quick brown fox jumps over the lazy dog. This is a longer prompt for Dia which needs over one hundred characters to produce good output quality."
+
+        # Per-backend quantisation. `-m auto` takes each registry default, and
+        # for kugelaudio that is F16 at ~17.3 GB — which tried to allocate
+        # 16483.91 MiB on a 16269 MiB P100 and died with
+        #   "failed to allocate 17.28 GB on 'CUDA0' for the model weights"
+        # after 289 s. The sweep entry's own note already said "Q4_K ~5.7GB via
+        # -m auto (F16 17.3GB needs >16GB VRAM)", so the intent was Q4_K and the
+        # resolution silently disagreed with it. Ask for the quant explicitly
+        # rather than trusting the default to stay small enough.
+        quant_args = {"kugelaudio": ["--model-quant", "q4_k"]}
+        cmd += quant_args.get(backend, [])
 
         cmd += ["--tts", phrase]
 
