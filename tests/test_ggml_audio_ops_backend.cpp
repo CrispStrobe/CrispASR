@@ -47,6 +47,8 @@ static ggml_backend_t init_test_backend() {
     if (ggml_backend_cuda_get_device_count() <= 0)
         return nullptr;
     return ggml_backend_cuda_init(0);
+#elif defined(CRISPASR_TEST_BACKEND_CPU)
+    return ggml_backend_cpu_init();
 #else
     return nullptr;
 #endif
@@ -59,6 +61,8 @@ static const char* backend_name() {
     return "vulkan";
 #elif defined(CRISPASR_TEST_BACKEND_CUDA)
     return "cuda";
+#elif defined(CRISPASR_TEST_BACKEND_CPU)
+    return "cpu";
 #else
     return "unknown";
 #endif

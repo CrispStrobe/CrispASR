@@ -4682,6 +4682,10 @@ function(add_ggml_audio_ops_backend_test TEST_TARGET BACKEND_DEF BACKEND_TARGET)
         SKIP_RETURN_CODE 4)
 endfunction()
 
+add_ggml_audio_ops_backend_test(test_ggml_audio_ops_cpu
+    CRISPASR_TEST_BACKEND_CPU
+    crispasr_link_ggml_cpu)
+
 if(APPLE AND TARGET ggml-metal)
     add_ggml_audio_ops_backend_test(test_ggml_audio_ops_metal
         "CRISPASR_TEST_BACKEND_METAL;CRISPASR_TEST_COL2IM_F16"

@@ -18,7 +18,7 @@ one monolithic shader to one library per operation.
 | 16 | CUDA k-quant GET_ROWS | **Upstreamed** by `08130cff`. Upstream dispatch avoids the fork patch's host index copy, sequential launches, and CUDA-graph disable. | Retire fork implementation and use upstream. The scheduler report in the same document remains a separate concern. |
 | 17 | CUDA conv-transpose loop bounds | **Upstreamed** by `af684904` (`llama.cpp#25310`). | Retire local outbound patch. |
 | 18 | Metal shared-buffer tensor copy | **Upstreamed/superseded.** v0.23 directly copies compatible shared buffers. | Retire local outbound patch. |
-| 20 | `col2im_1d` | **Upstreamed** by `d962a305`. | Retire the outbound op proposal; adapt CrispASR call sites only after parity tests because old fork semantics differed. |
+| 20 | `col2im_1d` | **Upstreamed** by `d962a305`. | Retire the outbound op proposal; use the existing full-signal + view-crop adaptation, covered by the audio-op parity test. |
 | 22 | WebGPU OCR ops | **Partly upstreamed:** NORM, IM2COL and UPSCALE exist; POOL_2D, CONV_TRANSPOSE_2D and ARANGE remain missing. | Split and regenerate a smaller patch against current llama.cpp WebGPU. |
 | 23 | Metal im2col occupancy | Still absent, but the monolithic `.metal` patch no longer applies after modularization. | Re-port to `kernels/conv.metal` and current dispatch, then repeat Metal A/B measurements. |
 | 24 | conv1d batch layout/depthwise support | Still absent. | Rebase on v0.23 and run the standalone batch repros. |
