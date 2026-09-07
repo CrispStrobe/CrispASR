@@ -1392,11 +1392,12 @@ static bool parakeet_ggml_decode_active(const parakeet_context* ctx) {
 
 // Issue #81 measured the TDT decoder at 66% of Q4 wall time on a P100. Its
 // first operation was still the T*640*1024 encoder projection in a scalar CPU
-// loop on non-Apple builds. Keep the backend projection gated until the P100
-// A/B proves transcript parity and a useful win.
+// loop on non-Apple builds. The Q4 P100 A/B cut varied-audio TDT wall time from
+// 2.57 s to 1.15 s with an identical 301-word transcript, so use the backend
+// projection whenever GPU decode is active. `=0` retains the measured fallback.
 static bool parakeet_gpu_encoder_projection() {
     const char* e = crispasr_env::get("CRISPASR_RNNT_GPU_ENC_PROJ");
-    return e && *e && *e != '0';
+    return !e || *e != '0';
 }
 
 extern "C" int parakeet_decode_uses_backend(struct parakeet_context* ctx) {
@@ -1508,7 +1509,7 @@ static std::vector<parakeet_emitted_token> parakeet_tdt_decode(parakeet_context*
     const bool gpu_enc_proj =
         ggml_dec && parakeet_gpu_encoder_projection() &&
         core_rnnt_ggml::decoder_project_encoder(gdec, ctx->model.joint.enc_w, ctx->model.joint.enc_b, enc, T_enc,
-                                                J.d_model, all_proj_e);
+                                                d_model, all_proj_e);
     if (!gpu_enc_proj) {
         all_proj_e.resize((size_t)T_enc * J.joint_hidden);
         for (int t = 0; t < T_enc; t++) {

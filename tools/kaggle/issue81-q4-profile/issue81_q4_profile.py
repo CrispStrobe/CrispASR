@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Q4 FastConformer profiling and TDT encoder-projection A/B on a P100 (#81).
 
-It benchmarks the CTC and TDT Q4_K models on short and varied long audio,
-captures their existing per-stage timers, and runs the expensive per-node
-FastConformer profiler on one CTC JFK pass. For the measured TDT bottleneck it
-A/B tests the opt-in backend encoder-to-joint projection against the scalar CPU
-projection. Transcript equality and repeat stability are hard gates.
+It benchmarks the CTC and TDT Q4_K models on short and varied long audio and
+captures their existing per-stage timers. For the measured TDT bottleneck it
+A/B tests the backend encoder-to-joint projection against the scalar CPU
+projection. For the remaining CTC encoder cost it tests small 25/50/100-frame
+graph buckets. Transcript equality and repeat stability are hard gates.
 """
 
 import json
@@ -185,10 +185,12 @@ def run_child(kind, mode, env_extra=None):
 
 results = {"commit": commit, "cuda_arch": arch, "durations_s": durations, "models": {}}
 kh.step("baseline.ctc")
-ctc_baseline = run_child("ctc", "baseline")
-kh.step("profile.ctc")
-ctc_profile = run_child("ctc", "profile")
-results["models"]["ctc"] = {"baseline": ctc_baseline, "profile": ctc_profile}
+ctc_baseline = run_child("ctc", "baseline", {"CRISPASR_FC_BUCKET": "0"})
+ctc_arms = {"baseline": ctc_baseline}
+for bucket in (25, 50, 100):
+    kh.step(f"bucket-{bucket}.ctc")
+    ctc_arms[f"bucket-{bucket}"] = run_child("ctc", f"bucket-{bucket}", {"CRISPASR_FC_BUCKET": str(bucket)})
+results["models"]["ctc"] = ctc_arms
 
 kh.step("baseline.tdt")
 tdt_baseline = run_child("tdt", "baseline", {"CRISPASR_RNNT_GPU_ENC_PROJ": "0"})
@@ -200,6 +202,10 @@ results["validation"] = {
     "passed": all(
         row["transcript_stable"]
         for model in results["models"].values() for row in model["baseline"]["clips"].values()
+    ) and all(
+        arm["clips"][clip]["texts"][-1] == ctc_baseline["clips"][clip]["texts"][-1]
+        and arm["clips"][clip]["transcript_stable"]
+        for name, arm in ctc_arms.items() if name != "baseline" for clip in clip_paths
     ) and all(
         tdt_gpu_proj["clips"][clip]["texts"][-1] == tdt_baseline["clips"][clip]["texts"][-1]
         and tdt_gpu_proj["clips"][clip]["transcript_stable"]
