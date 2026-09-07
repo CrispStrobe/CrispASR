@@ -40,7 +40,7 @@ os.environ["CRISPASR_REGRESSION_BUILD"] = os.environ.get("CRISPASR_REGRESSION_BU
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
 os.environ["CRISPASR_REF_DEVICE"] = "cpu"
 
-SCRIPT_VERSION = "2026-09-07-rebake-3-cpu-torch"
+SCRIPT_VERSION = "2026-09-07-rebake-4-refdeps"
 WORK = pathlib.Path("/kaggle/working")
 
 # Clone into a SEPARATE bootstrap dir: the canonical script manages its own
