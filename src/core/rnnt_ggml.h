@@ -166,6 +166,13 @@ struct Decoder {
     ggml_cgraph* jgf = nullptr;
     ggml_gallocr_t jalloc = nullptr;
     ggml_tensor *j_pe = nullptr, *j_pu = nullptr, *j_lg = nullptr;
+    ggml_tensor *j_tok = nullptr, *j_dur = nullptr;
+    int j_batch = 0;
+    ggml_context* jbctx = nullptr;
+    ggml_cgraph* jbgf = nullptr;
+    ggml_gallocr_t jballoc = nullptr;
+    ggml_tensor *jb_pe = nullptr, *jb_pu = nullptr, *jb_lg = nullptr;
+    ggml_tensor *jb_tok = nullptr, *jb_dur = nullptr;
 
     Decoder() = default;
     Decoder(const Decoder&) = delete;
@@ -179,6 +186,10 @@ struct Decoder {
             ggml_gallocr_free(jalloc);
         if (jctx)
             ggml_free(jctx);
+        if (jballoc)
+            ggml_gallocr_free(jballoc);
+        if (jbctx)
+            ggml_free(jbctx);
     }
     bool active() const { return pgf != nullptr; }
 };
@@ -187,7 +198,8 @@ struct Decoder {
 static inline bool decoder_init(Decoder& d, ggml_backend_t backend, ggml_tensor* embed_w, ggml_tensor* l0_wih,
                                 ggml_tensor* l0_bih, ggml_tensor* l0_whh, ggml_tensor* l0_bhh, ggml_tensor* l1_wih,
                                 ggml_tensor* l1_bih, ggml_tensor* l1_whh, ggml_tensor* l1_bhh, ggml_tensor* pred_w,
-                                ggml_tensor* pred_b, ggml_tensor* out_w, ggml_tensor* out_b, int H, int Jh) {
+                                ggml_tensor* pred_b, ggml_tensor* out_w, ggml_tensor* out_b, int H, int Jh,
+                                int n_vocab_blk = 0, int n_dur = 0, int joint_batch = 0) {
     d.backend = backend;
     d.H = H;
     d.Jh = Jh;
@@ -231,11 +243,48 @@ static inline bool decoder_init(Decoder& d, ggml_backend_t backend, ggml_tensor*
     mid = ggml_relu(d.jctx, ggml_add(d.jctx, mid, d.j_pe));
     d.j_lg = ggml_add(d.jctx, ggml_mul_mat(d.jctx, out_w, mid), out_b);
     ggml_set_output(d.j_lg);
+    if (n_vocab_blk > 0 && n_dur > 0 && n_vocab_blk + n_dur <= d.Vt) {
+        ggml_tensor* vocab = ggml_view_1d(d.jctx, d.j_lg, n_vocab_blk, 0);
+        ggml_tensor* durations = ggml_view_1d(d.jctx, d.j_lg, n_dur, (size_t)n_vocab_blk * sizeof(float));
+        d.j_tok = ggml_argmax(d.jctx, vocab);
+        d.j_dur = ggml_argmax(d.jctx, durations);
+        ggml_set_output(d.j_tok);
+        ggml_set_output(d.j_dur);
+    }
     d.jgf = ggml_new_graph(d.jctx);
     ggml_build_forward_expand(d.jgf, d.j_lg);
+    if (d.j_tok) {
+        ggml_build_forward_expand(d.jgf, d.j_tok);
+        ggml_build_forward_expand(d.jgf, d.j_dur);
+    }
     d.jalloc = ggml_gallocr_new(buft);
     if (!ggml_gallocr_alloc_graph(d.jalloc, d.jgf))
         return false;
+
+    if (n_vocab_blk > 0 && n_dur > 0 && joint_batch > 1) {
+        d.j_batch = joint_batch;
+        d.jbctx = ggml_init({ggml_tensor_overhead() * 48 + ggml_graph_overhead(), nullptr, true});
+        d.jb_pe = ggml_new_tensor_2d(d.jbctx, GGML_TYPE_F32, Jh, joint_batch);
+        d.jb_pu = ggml_new_tensor_1d(d.jbctx, GGML_TYPE_F32, H);
+        ggml_set_input(d.jb_pe);
+        ggml_set_input(d.jb_pu);
+        ggml_tensor* pred = ggml_add(d.jbctx, ggml_mul_mat(d.jbctx, pred_w, d.jb_pu), pred_b);
+        ggml_tensor* batch_mid = ggml_relu(d.jbctx, ggml_add(d.jbctx, d.jb_pe, pred));
+        d.jb_lg = ggml_add(d.jbctx, ggml_mul_mat(d.jbctx, out_w, batch_mid), out_b);
+        ggml_tensor* vocab = ggml_view_2d(d.jbctx, d.jb_lg, n_vocab_blk, joint_batch, d.jb_lg->nb[1], 0);
+        ggml_tensor* durations =
+            ggml_view_2d(d.jbctx, d.jb_lg, n_dur, joint_batch, d.jb_lg->nb[1], (size_t)n_vocab_blk * sizeof(float));
+        d.jb_tok = ggml_argmax(d.jbctx, vocab);
+        d.jb_dur = ggml_argmax(d.jbctx, durations);
+        for (ggml_tensor* out : {d.jb_lg, d.jb_tok, d.jb_dur})
+            ggml_set_output(out);
+        d.jbgf = ggml_new_graph(d.jbctx);
+        for (ggml_tensor* out : {d.jb_lg, d.jb_tok, d.jb_dur})
+            ggml_build_forward_expand(d.jbgf, out);
+        d.jballoc = ggml_gallocr_new(buft);
+        if (!ggml_gallocr_alloc_graph(d.jballoc, d.jbgf))
+            return false;
+    }
     return true;
 }
 
@@ -270,6 +319,47 @@ static inline void decoder_joint(Decoder& d, const float* proj_e, const float* p
     ggml_backend_graph_compute(d.backend, d.jgf);
     logits.resize(d.Vt);
     ggml_backend_tensor_get(d.j_lg, logits.data(), 0, (size_t)d.Vt * sizeof(float));
+}
+
+// Run the persistent joint graph and read only its two classifier decisions.
+// The full logits remain resident and can be fetched afterwards for confidence
+// when a non-blank token is actually emitted.
+static inline bool decoder_joint_select(Decoder& d, const float* proj_e, const float* pred_u, int& tok, int& dur) {
+    if (!d.j_tok || !d.j_dur)
+        return false;
+    ggml_backend_tensor_set(d.j_pe, proj_e, 0, (size_t)d.Jh * sizeof(float));
+    ggml_backend_tensor_set(d.j_pu, pred_u, 0, (size_t)d.H * sizeof(float));
+    ggml_backend_graph_compute(d.backend, d.jgf);
+    int32_t selected[2] = {};
+    ggml_backend_tensor_get(d.j_tok, &selected[0], 0, sizeof(int32_t));
+    ggml_backend_tensor_get(d.j_dur, &selected[1], 0, sizeof(int32_t));
+    tok = selected[0];
+    dur = selected[1];
+    return true;
+}
+
+static inline void decoder_joint_read_logits(Decoder& d, std::vector<float>& logits) {
+    logits.resize(d.Vt);
+    ggml_backend_tensor_get(d.j_lg, logits.data(), 0, (size_t)d.Vt * sizeof(float));
+}
+
+static inline bool decoder_joint_batch_select(Decoder& d, const float* proj_e, const float* pred_u,
+                                              std::vector<int32_t>& tok, std::vector<int32_t>& dur) {
+    if (!d.jbgf || !d.jb_tok || !d.jb_dur || d.j_batch <= 1)
+        return false;
+    ggml_backend_tensor_set(d.jb_pe, proj_e, 0, (size_t)d.Jh * d.j_batch * sizeof(float));
+    ggml_backend_tensor_set(d.jb_pu, pred_u, 0, (size_t)d.H * sizeof(float));
+    ggml_backend_graph_compute(d.backend, d.jbgf);
+    tok.resize(d.j_batch);
+    dur.resize(d.j_batch);
+    ggml_backend_tensor_get(d.jb_tok, tok.data(), 0, (size_t)d.j_batch * sizeof(int32_t));
+    ggml_backend_tensor_get(d.jb_dur, dur.data(), 0, (size_t)d.j_batch * sizeof(int32_t));
+    return true;
+}
+
+static inline void decoder_joint_batch_read_logits(Decoder& d, int row, std::vector<float>& logits) {
+    logits.resize(d.Vt);
+    ggml_backend_tensor_get(d.jb_lg, logits.data(), (size_t)row * d.Vt * sizeof(float), (size_t)d.Vt * sizeof(float));
 }
 
 // Project all encoder frames through the joint network's encoder branch in one
