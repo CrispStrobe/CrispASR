@@ -25,7 +25,22 @@ os.environ["CRISPASR_REGRESSION_MODE"] = "rebake"
 os.environ["CRISPASR_REGRESSION_UPLOAD"] = "1"
 os.environ["CRISPASR_REGRESSION_BUILD"] = os.environ.get("CRISPASR_REGRESSION_BUILD", "cpu")
 
-SCRIPT_VERSION = "2026-09-07-rebake-1"
+# HIDE THE GPU FROM TORCH. v2 lost 8 backends to
+#   torch.AcceleratorError: CUDA error: no kernel image is available
+# which is kaggle_usage.md gotcha #23: Kaggle's preinstalled torch has dropped
+# sm_60, so a P100 draw is fatal to any torch code — and P100 is effectively the
+# only draw right now (#21). nemotron, canary-1b-v2, parakeet-tdt-0.6b-ja,
+# granite-4.1-*, voxtral4b and vibevoice each downloaded their model, loaded it,
+# and died on the first kernel launch, ~100 s each.
+#
+# Reference dumps do not need a GPU — the canonical regression kernel is
+# deliberately enable_gpu:false. But a CPU-only Kaggle worker loses internet
+# (gotcha #3) and this job must pull from HF, so the kernel keeps its GPU and
+# simply does not show it to torch. Same effect, without giving up the network.
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+os.environ["CRISPASR_REF_DEVICE"] = "cpu"
+
+SCRIPT_VERSION = "2026-09-07-rebake-3-cpu-torch"
 WORK = pathlib.Path("/kaggle/working")
 
 # Clone into a SEPARATE bootstrap dir: the canonical script manages its own
