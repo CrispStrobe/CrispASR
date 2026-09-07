@@ -1,5 +1,16 @@
 # CrispASR — Pending work
 
+## NOW 2026-09-07 — #426 VibeVoice streaming Q4, then #81 Q4 profiling
+
+Worktree `.claude/worktrees/feat-426-vibevoice-streaming-q4`, branch
+`feat/426-vibevoice-streaming-q4`. First port the upstream
+VibeVoice-ASR-Streaming-1.5B chunk protocol onto the existing backend with
+persistent decoder/KV state, convert and quantize Q4, dump the official
+reference, and prove streaming parity/end-to-end behavior on Kaggle. Merge that
+independently. Then claim a separate #81 worktree, profile the Q4
+FastConformer/Parakeet path on a Kaggle P100 with `CRISPASR_FC_PROFILE=1`, and
+only optimize stages the measurement identifies before repeating the same A/B.
+
 ## DONE 2026-09-07 — #427 merge hardening and issue follow-up audit
 
 Merged #427 (`593881a3`) and followed with `fde5614e`: the ASR environment
