@@ -14,6 +14,7 @@
 
 set(TARGET crispasr-quantize)
 add_executable(${TARGET} main.cpp)
+target_compile_features(${TARGET} PRIVATE cxx_std_17)
 
 include(DefaultTargetOptions)
 

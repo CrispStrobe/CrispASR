@@ -1,5 +1,8 @@
 **Title:** `metal : implement cpy_tensor for shared buffers (avoid host-staging copy)`
 
+**Status (2026-09-07):** Retired. Upstream v0.23 directly copies compatible shared Metal buffers.
+
+
 **Repo:** ggml-org/ggml (direct — `src/ggml-metal/**`, same as merged PR #04).
 
 ---

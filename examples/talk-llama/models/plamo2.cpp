@@ -266,7 +266,7 @@ ggml_tensor* llm_build_plamo2::build_plamo2_mamba_layer(llm_graph_input_rs* inp,
             // Custom operator to optimize the parallel associative scan
             // as described in the Annex D of the Mamba paper.
             // => {d_inner, n_seq_tokens, n_seqs} and {d_state, d_inner, n_seqs}
-            return ggml_ssm_scan(ctx, ssm, x, dt, A, B, C, ids);
+            return ggml_ssm_scan(ctx, ssm, x, dt, A, B, C, ids, /*K=*/1);
         };
 
         ggml_tensor* y_ssm = build_rs(inp, ssm_states_all, hparams.n_embd_s(), ubatch.n_seqs, get_ssm_rows);

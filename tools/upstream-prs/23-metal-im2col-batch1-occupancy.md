@@ -1,5 +1,10 @@
 **Target:** ggml-org/ggml (standing via #1477) — Metal im2col flat dispatch.
 
+**Status (2026-09-07):** Still needed. Re-ported in the CrispStrobe v0.23
+consolidation to `kernels/conv.metal` and the current dispatch; repeat the
+published M1 A/B suite before filing upstream.
+
+
 **⚠ PROSE MUST BE HUMAN-AUTHORED.** llama.cpp/ggml's contribution policy
 rejects AI-written PR text. Everything below is the fact sheet + patch for a
 human to compose the PR from — do not paste it verbatim.
