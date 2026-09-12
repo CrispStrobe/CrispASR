@@ -1522,6 +1522,27 @@ restores bandwidth while preserving speaker identity.
   the padding (A/B, and for reproducing pre-padding reference dumps). The
   lookahead consumes ~75 frames of the input-duration cap.
 
+- **Parity against upstream (measured 2026-09-12).** The predictor handoff
+  matches the upstream TorchScript reference at **cos 0.994072** on
+  `samples/jfk.wav`, at frame offset **1** (exactly the documented `lead_frames`
+  lead-in) with magnitude ratio **1.0003**. Reproduce with
+  `CRISPASR_SIDON_DUMP_HANDOFF=<path>` against `predictor_feats` in
+  `sidon-ref.gguf` (built by `tools/reference_backends/sidon_ref_dump.py`);
+  ours carries 625 frames to the reference's 549, the 76-frame difference being
+  the lead + 1.5 s lookahead pad, so ALIGN BEFORE COMPARING or an offset reads
+  as a divergence.
+
+  Two cautions that cost time when they were not written down:
+  - **Do not judge this port by waveform cosine.** The same run scores only
+    **0.63** against `sidon-ref-48k.wav` at near-zero lag while the RMS ratio is
+    0.979 — a 0.994 → 0.63 drop across a neural decoder is a phase difference,
+    not an error. The reference dumper's own docstring reaches for "ASR
+    round-trip / corr" for exactly this reason.
+  - **No parity figure existed before this line.** The reference dumper and the
+    reference GGUF were committed months earlier, but nothing recorded what the
+    port scores against them, so there was no baseline a regression could fail
+    against. If you change the predictor, re-measure and update this number.
+
 - **Working memory:** two independent bounds, each measured at `T≈2825`
   (~55 s) with `sidon-v0.1-q8_0` on Metal. Use `CRISPASR_SIDON_DEBUG=1` to
   print the per-stage scheduler workspace; process RSS is *not* a usable proxy
