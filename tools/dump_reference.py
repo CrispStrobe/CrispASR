@@ -273,6 +273,10 @@ REGISTERED_BACKENDS: Dict[str, str] = {
     # model_dir = FunAudioLLM/Fun-CosyVoice3-0.5B-2512 HF snapshot.
     # Audio arg is unused (the per-block test vector is seeded random).
     "cosyvoice3-tts": "reference_backends.cosyvoice3_tts",
+    # FireRedTTS3 (#377): Qwen3-1.7B LLM + PatchEncoder + DiT flow head
+    # over continuous RedAE latents. Runs the full upstream pipeline on
+    # CPU (Kaggle-only: ~13 GB of fp32 weights).
+    "fireredtts3": "reference_backends.fireredtts3_tts",
     # F5-TTS v1 Base: DiT-based flow-matching TTS with Vocos vocoder.
     # model_dir = /mnt/storage/f5-tts (containing F5TTS_v1_Base/ + vocos/).
     # Audio arg is a reference voice WAV for cloning (16 kHz); synth text
@@ -597,6 +601,8 @@ def main() -> None:
                     "KOKORO_PHONEMES", "KOKORO_VOICE", "KOKORO_SEED", "CHATTERBOX_SYN_TEXT",
                     "CHATTERBOX_LANG",
                     "CHATTERBOX_SEED",
+                    "FIREREDTTS3_SYN_TEXT", "FIREREDTTS3_PROMPT_TEXT", "FIREREDTTS3_LANG",
+                    "FIREREDTTS3_SEED",
                     "CHATTERBOX_DEVICE",
                     "VOXCPM2_SYN_TEXT", "VOXCPM2_USE_REF",
                     "F5_TTS_SYN_TEXT", "F5_TTS_REF_TEXT", "F5_TTS_SEED",
