@@ -29,6 +29,9 @@
 #include "core/audio_resample.h"   // Sidon S2S input-rate conversion
 
 #include <atomic>
+#include <chrono>
+#include <fstream>
+#include <filesystem>
 #include <climits> // INT_MIN (parakeet att_context_* sentinels) — issue #257
 #include <cstddef> // offsetof (diarize ABI layout static_asserts) — issue #332
 #include <cstdint>
@@ -8452,6 +8455,66 @@ static std::vector<float> indextts_resample_16k_to_24k(const float* in, int n) {
     return out;
 }
 #endif
+
+// #432: set the reference voice from IN-MEMORY samples.
+//
+// rslife: passing a reference only as a path "forces going through filesystem
+// IO and creating temporary files when a segment of a wav file needs to be
+// passed" — you have the PCM in hand, and the API makes you write it out.
+//
+// WHY THIS DELEGATES THROUGH THE PATH FUNCTION RATHER THAN CALLING BACKENDS
+// DIRECTLY. Seven backends already take PCM (f5_tts_set_reference,
+// pocket_tts_set_voice, moss_tts_set_reference_wav, miotts_set_reference,
+// irodori_tts_set_reference, ...), so a direct route is tempting and would
+// avoid the write. It would also bypass crispasr_session_set_voice's consent
+// and Art. 50(4) marking logic, which is keyed on the reference's provenance
+// and emits the [CONSENT] audit line. Skipping that for the in-memory path
+// would make the compliance trail depend on WHICH OVERLOAD a caller happened
+// to use, which is precisely the kind of silent gap #435's phonemizer had.
+// One behaviour, one audit trail.
+//
+// So the write still happens — but inside the library, once, in the system temp
+// directory, and it is cleaned up on every exit path. The caller's problem
+// (materialising and reaping temp files around a Vec<f32>) is solved; the
+// library's own IO is an implementation detail that per-backend PCM routes can
+// remove later without changing this signature.
+CA_EXPORT int crispasr_session_set_voice_samples(crispasr_session* s, const float* pcm, int32_t n_samples,
+                                                 int32_t sample_rate, const char* ref_text_or_null) {
+    if (!s || !pcm || n_samples <= 0 || sample_rate <= 0)
+        return -1;
+
+    std::string wav = crispasr_make_wav_int16(pcm, (int)n_samples, (int)sample_rate);
+    if (wav.empty())
+        return -1;
+
+    std::error_code ec;
+    std::filesystem::path dir = std::filesystem::temp_directory_path(ec);
+    if (ec)
+        return -1;
+    // Distinct per call and per process: two sessions setting a voice at once
+    // must not race on one filename, and a leftover from a crashed run must not
+    // be silently adopted as this call's reference.
+    // A steady-clock stamp plus an in-process counter, rather than a PID: it is
+    // unique across concurrent calls in this process and across processes
+    // without needing a getpid()/GetCurrentProcessId() split.
+    static std::atomic<uint64_t> seq{0};
+    const auto stamp = (unsigned long long)std::chrono::steady_clock::now().time_since_epoch().count();
+    const std::filesystem::path tmp = dir / ("crispasr-voice-" + std::to_string(stamp) + "-" +
+                                             std::to_string((unsigned long long)seq.fetch_add(1)) + ".wav");
+
+    {
+        std::ofstream f(tmp, std::ios::binary);
+        if (!f)
+            return -1;
+        f.write(wav.data(), (std::streamsize)wav.size());
+        if (!f)
+            return -1;
+    }
+
+    const int rc = crispasr_session_set_voice(s, tmp.string().c_str(), ref_text_or_null);
+    std::filesystem::remove(tmp, ec); // best effort; the reference is already loaded
+    return rc;
+}
 
 CA_EXPORT int crispasr_session_set_voice(crispasr_session* s, const char* path, const char* ref_text_or_null) {
     if (!s || !path)

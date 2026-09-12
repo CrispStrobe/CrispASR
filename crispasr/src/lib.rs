@@ -919,6 +919,53 @@ impl Session {
         Ok(())
     }
 
+    /// Set the reference voice from samples you already hold (#432).
+    ///
+    /// [`set_voice`](Self::set_voice) takes a path, which forces a temp file
+    /// whenever the reference is a *segment* of a WAV you have already decoded.
+    /// This takes the buffer directly.
+    ///
+    /// `pcm` is mono float32 at `sample_rate`. `ref_text` follows the same rule
+    /// as `set_voice`: backends that clone from raw audio need the reference
+    /// transcript.
+    ///
+    /// The library still serialises to a temp WAV internally and routes through
+    /// the same code path as `set_voice`, so consent handling and AI-Act
+    /// marking are identical for both — a clone does not get a different audit
+    /// trail for arriving as a buffer. That write is an implementation detail
+    /// and can be removed per-backend later without changing this signature.
+    pub fn set_voice_samples(
+        &self,
+        pcm: &[f32],
+        sample_rate: i32,
+        ref_text: Option<&str>,
+    ) -> Result<(), String> {
+        if pcm.is_empty() {
+            return Err("set_voice_samples: empty sample buffer".to_string());
+        }
+        if sample_rate <= 0 {
+            return Err(format!("set_voice_samples: invalid sample_rate {sample_rate}"));
+        }
+        let crt = match ref_text {
+            Some(t) => Some(CString::new(t).map_err(|e| e.to_string())?),
+            None => None,
+        };
+        let rt_ptr = crt.as_ref().map(|c| c.as_ptr()).unwrap_or(std::ptr::null());
+        let rc = unsafe {
+            crispasr_sys::crispasr_session_set_voice_samples(
+                self.handle,
+                pcm.as_ptr(),
+                pcm.len() as i32,
+                sample_rate,
+                rt_ptr,
+            )
+        };
+        if rc != 0 {
+            return Err(format!("set_voice_samples failed (rc={rc})"));
+        }
+        Ok(())
+    }
+
     /// Select a fixed/preset speaker by NAME for backends that bake names
     /// into the GGUF (orpheus). Names are e.g. `"tara"`/`"leo"` for
     /// canopylabs English; `"Anton"`/`"Sophie"` for Kartoffel_Orpheus DE.

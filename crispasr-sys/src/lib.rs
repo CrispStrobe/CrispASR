@@ -441,6 +441,14 @@ extern "C" {
     // #433: backend -> verb ("capability") lookup.
     pub fn crispasr_backend_caps_abi(backend: *const c_char, out_csv: *mut c_char, out_cap: c_int) -> c_int;
     pub fn crispasr_backend_caps_list_abi(out_buf: *mut c_char, out_cap: c_int) -> c_int;
+    // #432: reference voice from in-memory samples.
+    pub fn crispasr_session_set_voice_samples(
+        s: *mut CrispasrSession,
+        pcm: *const f32,
+        n_samples: c_int,
+        sample_rate: c_int,
+        ref_text_or_null: *const c_char,
+    ) -> c_int;
 
     /// Describe the exact canonical artifact bundle downloaded by `-m auto`.
     /// Returns its artifact count, 0 on miss, or a negative argument/buffer error.

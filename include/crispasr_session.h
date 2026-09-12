@@ -424,6 +424,17 @@ CRISPASR_SESSION_API int crispasr_session_set_codec_path(crispasr_session* s, co
 // has no voice-setting implementation.
 CRISPASR_SESSION_API int crispasr_session_set_voice(crispasr_session* s, const char* path,
                                                     const char* ref_text_or_null);
+
+// #432: same thing, from samples you already hold — no temp file of your own.
+// `pcm` is mono float32 at `sample_rate`; `ref_text_or_null` follows the same
+// rule as above (required for WAV-style cloning on backends that need it).
+//
+// The library serialises the samples to a temp WAV internally and routes them
+// through crispasr_session_set_voice, so consent handling and the Art. 50(4)
+// marking behave identically for both entry points — a clone must not acquire a
+// different audit trail by arriving as a buffer instead of a path.
+CRISPASR_SESSION_API int crispasr_session_set_voice_samples(crispasr_session* s, const float* pcm, int32_t n_samples,
+                                                            int32_t sample_rate, const char* ref_text_or_null);
 // #201: configure the TADA encoder + aligner GGUFs used for on-the-fly voice
 // cloning, i.e. crispasr_session_set_voice(s, "ref.wav", "<transcript>") on a
 // TADA session. The .wav clone path is opt-in (experimental) — enable it with
