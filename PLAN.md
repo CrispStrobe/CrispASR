@@ -880,6 +880,39 @@ and reproduces nothing today, so that row is retired rather than restored.
 
 REMAINING, small: report the truncation upstream to nothings/stb.
 
+## TRIAGED 2026-09-12 — #436 X-ASR + Dolphin-CN-Dialect (both NEW architectures)
+
+Reporter xbin9679-lab asks for two ASR models. Licences are clear (both
+Apache-2.0, checked via the HF API, not inferred from the card text). The cost
+is that NEITHER fits a runtime we already have:
+
+- **X-ASR** (`GilgameshWind/X-ASR-zh-en`) — tags say
+  `x-asr-zipformer-transducer, icefall, k2, sherpa-onnx`. We have **zero**
+  zipformer code (`grep -rli zipformer src/ models/ tools/` → 0 files). The k2
+  hits in this repo are `k2-fsa/OmniVoice`, a TTS model, and coincidental.
+  Zipformer is not a FastConformer variant: downsampling stacks, bypass
+  connections and Swoosh activations are all structurally different, so
+  `parakeet.cpp` is a template at best, not a base.
+  ONE REAL LEVER: it ships sherpa-onnx exports, and #387 (Quds) established the
+  pattern for porting from an ONNX-only release —
+  `models/convert-nemo-rnnt-onnx-to-gguf.py` recovers anonymous initializers by
+  tracing consumer scopes. That converter is FastConformer-contract, so it is a
+  precedent rather than a tool that will just work here.
+
+- **Dolphin-CN-Dialect** (`DataoceanAI1/dolphin-cn-dialect-small-streaming`) —
+  ships `global_cmvn`, `train.yaml`, `units.txt`, `small.cn.streaming.pt`, which
+  is the WeNet layout. Our only wenet-e2e code is `src/wespeaker.cpp`, a speaker
+  EMBEDDER — it shares an upstream org and nothing else. A WeNet U2++
+  conformer encoder/decoder is a new runtime.
+
+So: two new encoder families, each a multi-day port on the scale of #387/#250,
+not an afternoon. Worth doing — both are permissive and fill real gaps (Chinese
+dialects; streaming zh-en) — but scope it honestly before claiming it.
+
+Prerequisite either way, per HARD RULE #1: read the icefall / WeNet inference
+path line by line first. Streaming models in particular hide their chunking and
+cache contracts in the inference loop, not in the config.
+
 ## Start here
 
 Live work only. Completed threads move to `HISTORY.md`; technical deep-dives to
