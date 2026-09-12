@@ -37,7 +37,7 @@ WORK = Path("/kaggle/working")
 SCRATCH = Path("/tmp")               # 70 GB here vs ~20 GB in working
 CLONE = SCRATCH / "CrispASR"
 CRISPASR_URL = "https://github.com/CrispStrobe/CrispASR.git"
-SCRIPT_VERSION = "2026-09-12-sidon-length-parity-3-jobs"
+SCRIPT_VERSION = "2026-09-12-sidon-length-parity-4-refrepo"
 RESULTS = WORK / "results.json"
 LENGTHS = [11, 30, 50, 62]
 
@@ -103,10 +103,22 @@ log(f"[parity] built {CRISPASR} ({CRISPASR.stat().st_size} bytes)")
 # ── models: our GGUF + the upstream TorchScript modules ──────────────────────
 from huggingface_hub import hf_hub_download, list_repo_files
 GGUF = hf_hub_download("cstr/Sidon-GGUF", "sidon-v0.1-f16.gguf", local_dir=str(SCRATCH/"m"))
-files = list_repo_files("sarulab-speech/sidon_raw_weight")
+# The TorchScript modules live in sidon-v0.1, NOT sidon_raw_weight. v3 asked
+# the wrong repo and got the LoRA adapter + DAC state dict
+# (adapter_model.safetensors, decoder_state_dict.pt) — the raw weights, from
+# which a reference would have to be reassembled. The card is explicit: "For
+# the inference with best performance, please use the torchscript version
+# which is available here" -> sarulab-speech/sidon-v0.1. Both MIT.
+REF_REPO = "sarulab-speech/sidon-v0.1"
+files = list_repo_files(REF_REPO)
 log(f"[parity] upstream repo files: {files[:20]}")
 def pick(sub):
-    c = [f for f in files if sub in f.lower() and f.endswith(".pt")]
+    # _cpu explicitly: the repo also ships *_cuda.pt, and a CUDA TorchScript
+    # module needs a matching device at load time. The reference must be
+    # reproducible regardless of which accelerator this kernel draws.
+    c = [f for f in files if sub in f.lower() and f.endswith("_cpu.pt")]
+    if not c:
+        c = [f for f in files if sub in f.lower() and f.endswith(".pt")]
     return c[0] if c else None
 fe_f, dec_f = pick("feature_extractor"), pick("decoder")
 if not fe_f or not dec_f:
@@ -114,8 +126,8 @@ if not fe_f or not dec_f:
     RESULTS.write_text(json.dumps({"conclusive": False, "reason": "torchscript modules not found",
                                    "files": files}, indent=2))
     raise SystemExit(0)
-FE = hf_hub_download("sarulab-speech/sidon_raw_weight", fe_f, local_dir=str(SCRATCH/"m"))
-DEC = hf_hub_download("sarulab-speech/sidon_raw_weight", dec_f, local_dir=str(SCRATCH/"m"))
+FE = hf_hub_download(REF_REPO, fe_f, local_dir=str(SCRATCH/"m"))
+DEC = hf_hub_download(REF_REPO, dec_f, local_dir=str(SCRATCH/"m"))
 log(f"[parity] fe={FE}\n[parity] dec={DEC}")
 
 import numpy as np, torch
