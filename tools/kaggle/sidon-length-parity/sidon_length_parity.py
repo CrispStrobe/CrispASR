@@ -37,7 +37,7 @@ WORK = Path("/kaggle/working")
 SCRATCH = Path("/tmp")               # 70 GB here vs ~20 GB in working
 CLONE = SCRATCH / "CrispASR"
 CRISPASR_URL = "https://github.com/CrispStrobe/CrispASR.git"
-SCRIPT_VERSION = "2026-09-12-sidon-length-parity-1"
+SCRIPT_VERSION = "2026-09-12-sidon-length-parity-2-logs"
 RESULTS = WORK / "results.json"
 LENGTHS = [11, 30, 50, 62]
 
@@ -72,13 +72,23 @@ cfg = ["cmake", "-S", str(CLONE), "-B", str(BUILD), "-G", "Ninja",
        "-DCMAKE_BUILD_TYPE=Release"] + kh.cache_and_link_flags()
 r = subprocess.run(cfg, capture_output=True, text=True)
 if r.returncode != 0:
-    log("build.configure FAILED"); log((r.stderr or "")[-2000:]); raise SystemExit(1)
+    log(f"build.configure FAILED rc={r.returncode}")
+    log("---- configure stdout ----"); log((r.stdout or "<empty>")[-3000:])
+    log("---- configure stderr ----"); log((r.stderr or "<empty>")[-3000:])
+    raise SystemExit(1)
+log("build.configure ok; tail: " + (r.stdout or "")[-600:])
 jobs = kh.safe_build_jobs(gpu=False)
 with kh.build_heartbeat("build.crispasr"):
     r = subprocess.run(["cmake", "--build", str(BUILD), "--target", "crispasr", "-j", str(jobs)],
                        capture_output=True, text=True)
 if r.returncode != 0:
-    log("build FAILED"); log((r.stdout or "")[-3000:]); raise SystemExit(1)
+    # BOTH streams. v1 logged stdout only and ninja writes its errors to stderr,
+    # so the failure line said "build FAILED" followed by nothing — a diagnostic
+    # that cannot show the failure it exists to report.
+    log(f"build FAILED rc={r.returncode}")
+    log("---- build stdout (tail) ----"); log((r.stdout or "<empty>")[-4000:])
+    log("---- build stderr (tail) ----"); log((r.stderr or "<empty>")[-4000:])
+    raise SystemExit(1)
 CRISPASR = BUILD / "bin" / "crispasr"
 # HARD RULE #8: judge by proof-of-work, not an exit code.
 if not CRISPASR.is_file():
