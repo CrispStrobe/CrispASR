@@ -884,8 +884,23 @@ void sidon_free(sidon_context* ctx) {
 // Upload the frontend features and the clipped relative-distance bucket table
 // per (key, query). The table is identical for every head; bucket_direct wants
 // it replicated H times because ggml_get_rows batches the index on (ne2, ne3).
-static void set_predictor_inputs(sidon_context* ctx, const std::vector<float>& feats, int T) {
-    ggml_backend_tensor_set(ctx->predictor_input, feats.data(), 0, feats.size() * sizeof(float));
+// frame_offset (#431): feed only the window starting at that frame. The graph
+// has already been prepared for exactly T frames, so the element count of
+// predictor_input IS T * feat_dim — deriving the stride from the tensor rather
+// than taking it as a parameter keeps the two from disagreeing.
+//
+// At frame_offset 0 with T == the full frame count this writes feats.size()
+// floats from feats.data(), which is byte-for-byte the previous behaviour.
+static void set_predictor_inputs(sidon_context* ctx, const std::vector<float>& feats, int T, int frame_offset = 0) {
+    const size_t need = (size_t)ggml_nelements(ctx->predictor_input);
+    const size_t feat_dim = T > 0 ? need / (size_t)T : 0;
+    const size_t offset_floats = (size_t)frame_offset * feat_dim;
+    if (offset_floats + need > feats.size()) {
+        std::fprintf(stderr, "sidon: predictor window [%d,+%d) exceeds the %zu-float feature buffer\n", frame_offset, T,
+                     feats.size());
+        return;
+    }
+    ggml_backend_tensor_set(ctx->predictor_input, feats.data() + offset_floats, 0, need * sizeof(float));
     const int n_heads = ctx->model.hp.heads;
     const size_t plane = (size_t)T * T;
     const size_t n_planes = ctx->rpe_mode == sidon_rpe_mode::bucket_direct ? (size_t)n_heads : 1;
@@ -1057,37 +1072,125 @@ std::vector<float> sidon_restore(sidon_context* ctx, const float* samples, int n
         if (v > 0)
             max_frames = v;
     }
-    if (T > max_frames) {
-        fprintf(stderr,
-                "sidon: input too long — %d feature frames (~%.1f s) exceeds the %d-frame cap; "
-                "O(T^2) attention would OOM. Split the audio or raise CRISPASR_SIDON_MAX_FRAMES.\n",
-                T, (double)T / 50.0, max_frames);
-        return {};
-    }
+    // #431: T > max_frames used to be a hard refusal — "split the audio or raise
+    // CRISPASR_SIDON_MAX_FRAMES" — which rejected any clip over ~58.5 s. The
+    // reporter's real input was 54 MINUTES, so neither suggestion is a fix:
+    // raising the cap re-introduces the O(T^2) blowup the cap exists to prevent,
+    // and asking a user to pre-split with ffmpeg is asking them to implement the
+    // feature by hand.
+    //
+    // The cap is right about the ATTENTION and wrong about the UTTERANCE. This
+    // function already chunks the DAC decoder below — core window, context on
+    // both sides, crop to the core — precisely so a long clip decodes in bounded
+    // memory. The predictor simply never got the same treatment. So the cap now
+    // bounds ONE PREDICTOR WINDOW instead of the whole file, and anything longer
+    // is processed as overlapping windows using that existing idiom.
+    //
+    // Short inputs are untouched: at T <= max_frames the whole-utterance path
+    // below runs exactly as before, so nothing that works today changes.
+    const bool predictor_chunked = (T > max_frames);
     const auto frontend_done = clock::now();
 
-    if (!prepare_predictor_graph(ctx, T)) {
-        release_predictor_workspace(ctx);
-        release_decoder_workspace(ctx);
-        return {};
-    }
-    const auto graph_done = clock::now();
+    const int pred_hidden = ctx->model.hp.hidden;
+    std::vector<float> predictor_features;
+    std::chrono::steady_clock::time_point graph_done, predictor_start, predictor_done;
 
-    set_predictor_inputs(ctx, feats, T);
-    const auto predictor_start = clock::now();
-    core_quant_bcast::audit(ctx->predictor_graph, "sidon");
-    if (ggml_backend_sched_graph_compute(ctx->predictor_sched, ctx->predictor_graph) != GGML_STATUS_SUCCESS) {
-        std::fprintf(stderr, "sidon: predictor graph compute failed\n");
-        release_predictor_workspace(ctx);
-        release_decoder_workspace(ctx);
-        return {};
-    }
-    ggml_backend_sched_synchronize(ctx->predictor_sched);
-    const auto predictor_done = clock::now();
+    if (!predictor_chunked) {
+        // ── Whole-utterance path. Unchanged, and reached for every input that
+        //    worked before this change, so short clips stay bit-identical.
+        if (!prepare_predictor_graph(ctx, T)) {
+            release_predictor_workspace(ctx);
+            release_decoder_workspace(ctx);
+            return {};
+        }
+        graph_done = clock::now();
 
-    std::vector<float> predictor_features((size_t)ggml_nelements(ctx->predictor_output));
-    ggml_backend_tensor_get(ctx->predictor_output, predictor_features.data(), 0,
-                            predictor_features.size() * sizeof(float));
+        set_predictor_inputs(ctx, feats, T);
+        predictor_start = clock::now();
+        core_quant_bcast::audit(ctx->predictor_graph, "sidon");
+        if (ggml_backend_sched_graph_compute(ctx->predictor_sched, ctx->predictor_graph) != GGML_STATUS_SUCCESS) {
+            std::fprintf(stderr, "sidon: predictor graph compute failed\n");
+            release_predictor_workspace(ctx);
+            release_decoder_workspace(ctx);
+            return {};
+        }
+        ggml_backend_sched_synchronize(ctx->predictor_sched);
+        predictor_done = clock::now();
+
+        predictor_features.resize((size_t)ggml_nelements(ctx->predictor_output));
+        ggml_backend_tensor_get(ctx->predictor_output, predictor_features.data(), 0,
+                                predictor_features.size() * sizeof(float));
+    } else {
+        // ── Windowed path (#431). Same core/context/crop shape the DAC decoder
+        //    uses below: run a window, keep only the frames its CORE owns, slide.
+        //
+        //    Context frames exist because attention at a core edge would
+        //    otherwise see a truncated sequence. They are cropped away, so they
+        //    cost compute and never reach the output. This is NOT bit-identical
+        //    to a whole-utterance run — attention over a window is a different
+        //    computation — but the alternative for these inputs was no output at
+        //    all, and every frame is still produced with a full context span on
+        //    both sides except at the true file boundaries.
+        //
+        //    The window is sized to the SAME cap the whole-utterance path
+        //    obeys, so peak attention memory is unchanged: whatever T the user's
+        //    machine could handle before, it still handles, just repeatedly.
+        int pred_context_frames = 300;
+        if (const char* e = getenv("CRISPASR_SIDON_PREDICTOR_CONTEXT_FRAMES"); e && e[0]) {
+            const int v = atoi(e);
+            if (v >= 0)
+                pred_context_frames = v;
+        }
+        if (pred_context_frames * 2 >= max_frames)
+            pred_context_frames = std::max(0, (max_frames / 4));
+        const int pred_core_frames = std::max(1, max_frames - 2 * pred_context_frames);
+
+        std::fprintf(stderr,
+                     "sidon: %d feature frames (~%.1f s) exceeds the %d-frame attention cap — "
+                     "processing as %d-frame windows with %d frames of context each side\n",
+                     T, (double)T / 50.0, max_frames, pred_core_frames, pred_context_frames);
+
+        predictor_features.assign((size_t)T * pred_hidden, 0.0f);
+        graph_done = clock::now();
+        predictor_start = clock::now();
+
+        for (int core_start = 0; core_start < T; core_start += pred_core_frames) {
+            const int core_end = std::min(T, core_start + pred_core_frames);
+            int win_start = std::max(0, core_start - pred_context_frames);
+            int win_end = std::min(T, core_end + pred_context_frames);
+            const int win_frames = win_end - win_start;
+
+            if (!prepare_predictor_graph(ctx, win_frames)) {
+                release_predictor_workspace(ctx);
+                release_decoder_workspace(ctx);
+                return {};
+            }
+            // feats is [T, feat_dim] frame-major; hand the window its own slice.
+            set_predictor_inputs(ctx, feats, win_frames, win_start);
+            core_quant_bcast::audit(ctx->predictor_graph, "sidon");
+            if (ggml_backend_sched_graph_compute(ctx->predictor_sched, ctx->predictor_graph) != GGML_STATUS_SUCCESS) {
+                std::fprintf(stderr, "sidon: predictor graph compute failed on window [%d,%d)\n", win_start, win_end);
+                release_predictor_workspace(ctx);
+                release_decoder_workspace(ctx);
+                return {};
+            }
+            ggml_backend_sched_synchronize(ctx->predictor_sched);
+
+            std::vector<float> win_out((size_t)ggml_nelements(ctx->predictor_output));
+            ggml_backend_tensor_get(ctx->predictor_output, win_out.data(), 0, win_out.size() * sizeof(float));
+            if (win_out.size() < (size_t)win_frames * pred_hidden) {
+                std::fprintf(stderr, "sidon: predictor window produced %zu floats, expected %d\n", win_out.size(),
+                             win_frames * pred_hidden);
+                release_predictor_workspace(ctx);
+                release_decoder_workspace(ctx);
+                return {};
+            }
+            std::copy(win_out.begin() + (size_t)(core_start - win_start) * pred_hidden,
+                      win_out.begin() + (size_t)(core_end - win_start) * pred_hidden,
+                      predictor_features.begin() + (size_t)core_start * pred_hidden);
+        }
+        predictor_done = clock::now();
+    }
 
     // Judge the predictor BEFORE the DAC consumes it, so a bad handoff is
     // attributed to the predictor rather than to the decoder it poisons.
