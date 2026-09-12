@@ -123,6 +123,7 @@ public:
         // Set language if specified
         if (!p.language.empty()) {
             zonos_tts_set_language(ctx_, p.language.c_str());
+            cur_language_ = p.language; // #435: baseline for the per-request check
         }
 
         // Load reference voice for speaker cloning
@@ -143,6 +144,21 @@ public:
     std::vector<float> synthesize(const std::string& text, const whisper_params& params) override {
         if (!ctx_ || text.empty()) {
             return {};
+        }
+
+        // #435: honour the PER-REQUEST language. init() froze whatever the CLI
+        // was started with (default en-us), and synthesize() applied only
+        // temperature and seed — so `POST /v1/audio/speech {"language":"ru"}`
+        // reached a throwaway params struct and never the model. A server
+        // started without -l phonemised every language as en-us, which for
+        // Cyrillic meant no usable phonemes at all.
+        //
+        // Tracked so the call is skipped when nothing changed: zonos resolves
+        // the string to a language_id and espeak re-selects its voice, neither
+        // of which is worth redoing per request.
+        if (!params.language.empty() && params.language != "auto" && params.language != cur_language_) {
+            zonos_tts_set_language(ctx_, params.language.c_str());
+            cur_language_ = params.language;
         }
 
         if (params.temperature > 0.0f) {
@@ -169,6 +185,9 @@ public:
 
 private:
     zonos_tts_context* ctx_ = nullptr;
+    // #435: language currently applied to ctx_, so a per-request change is
+    // detected and an unchanged one costs nothing.
+    std::string cur_language_;
 };
 
 } // namespace

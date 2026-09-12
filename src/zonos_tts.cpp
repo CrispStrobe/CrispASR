@@ -33,6 +33,7 @@
 #include "core/gguf_loader.h"
 #include "core/gpu_backend_pref.h" // crispasr_init_gpu_backend (#214)
 #include "core/crispasr_env.h"
+#include "espeak_dlopen.h" // #435: in-process libespeak-ng, same loader kokoro/piper use
 
 #include "ggml-backend.h"
 #include "ggml-cpu.h"
@@ -46,6 +47,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <mutex>
 #include <cstring>
 #include <map>
 #include <random>
@@ -763,6 +765,62 @@ static std::vector<int32_t> text_to_phoneme_ids(const char* text) {
 #define pclose _pclose
 #endif
 
+// In-process libespeak-ng, tried BEFORE the popen path (#435).
+//
+// Zonos was the only TTS backend phonemizing exclusively through
+// popen("espeak-ng ..."). kokoro and piper have used the dlopen path for a long
+// time via phonemizer.cpp, but that file is built into the kokoro target, not
+// core, so zonos cannot call it without rewiring the link. espeak_dlopen.h is
+// header-only, so the loading half is reused directly and only the ~20 lines of
+// init sequencing are mirrored here — from phonemizer.cpp's
+// phonemize_espeak_dlopen(), which is the version that demonstrably runs.
+//
+// Why it matters: the Windows prebuilt ships no espeak-ng.exe (the #157
+// bundling covers piper + kokoro only), so on a stock Windows box the popen
+// path always failed and every non-ASCII script fell through to raw character
+// tokenisation — see tokenize_text_full() below.
+static bool phonemize_espeak_inproc(const std::string& lang, const std::string& text, std::string& out) {
+    static std::mutex mu;
+    static bool inited = false;
+    static bool init_failed = false;
+    static std::string cur_voice;
+    std::lock_guard<std::mutex> g(mu);
+    if (init_failed)
+        return false;
+
+    auto& dl = espeak_dl_get();
+    if (!inited) {
+        if (!dl.load())
+            return false;
+        const char* data_path = std::getenv("CRISPASR_ESPEAK_DATA_PATH");
+        const int sr = dl.Initialize(CRISPASR_ESPEAK_AUDIO_OUTPUT_SYNCHRONOUS, 0, data_path,
+                                     CRISPASR_ESPEAK_INITIALIZE_PHONEME_IPA | CRISPASR_ESPEAK_INITIALIZE_DONT_EXIT);
+        if (sr < 0) {
+            init_failed = true;
+            return false;
+        }
+        inited = true;
+    }
+    if (!dl.loaded)
+        return false;
+    if (cur_voice != lang) {
+        if (dl.SetVoiceByName(lang.c_str()) != 0)
+            return false;
+        cur_voice = lang;
+    }
+    out.clear();
+    const void* tp = text.c_str();
+    while (tp) {
+        const char* chunk = dl.TextToPhonemes(&tp, CRISPASR_ESPEAK_CHARS_UTF8, 0x02);
+        if (chunk && *chunk) {
+            if (!out.empty())
+                out += ' ';
+            out += chunk;
+        }
+    }
+    return !out.empty();
+}
+
 // Run espeak-ng via popen to get IPA phonemes for the given text.
 // Returns the IPA string, or empty string on failure.
 static std::string phonemize_espeak(const std::string& lang, const std::string& text) {
@@ -857,15 +915,56 @@ static std::string phonemize_espeak(const std::string& lang, const std::string& 
     return out;
 }
 
-// Full tokenization: text -> espeak-ng IPA -> phoneme IDs.
-// Falls back to raw character tokenization if espeak-ng is unavailable.
+// Does this text contain anything outside plain ASCII? Raw-character
+// tokenisation can only ever work for ASCII, because the phoneme map is IPA
+// symbols and text_to_phoneme_ids() SILENTLY DROPS everything it cannot map.
+static bool text_is_pure_ascii(const char* text) {
+    for (const unsigned char* p = (const unsigned char*)text; *p; ++p)
+        if (*p >= 0x80)
+            return false;
+    return true;
+}
+
+// Full tokenization: text -> espeak-ng IPA -> phoneme IDs (#435).
+//
+// Cascade, mirroring kokoro/piper: in-process libespeak-ng, then the external
+// espeak-ng binary, then — only for pure ASCII — raw character tokenisation.
+//
+// THE LAST STEP USED TO RUN FOR EVERY INPUT, AND THAT IS THE BUG. The phoneme
+// map holds IPA symbols, and text_to_phoneme_ids() skips unmapped codepoints
+// without comment, so "Привет, это тест синтеза речи." became THREE tokens
+// (BOS, one punctuation mark, EOS) and the model was handed essentially no
+// conditioning. It then produced ~0.9 s of confident garbage and returned
+// success. English survived by accident — it is the one script the IPA table
+// happens to cover well enough to be intelligible.
+//
+// A backend that cannot phonemise must say so, not synthesise noise: a caller
+// can act on an error and cannot act on plausible-sounding rubbish.
 static std::vector<int32_t> tokenize_text_full(const char* text, const char* lang = "en-us") {
-    std::string ipa = phonemize_espeak(lang ? lang : "en-us", text);
-    if (!ipa.empty()) {
+    const std::string l = lang ? lang : "en-us";
+
+    std::string ipa;
+    if (phonemize_espeak_inproc(l, text, ipa) && !ipa.empty())
         return text_to_phoneme_ids(ipa.c_str());
+
+    ipa = phonemize_espeak(l, text);
+    if (!ipa.empty())
+        return text_to_phoneme_ids(ipa.c_str());
+
+    if (!text_is_pure_ascii(text)) {
+        fprintf(stderr,
+                "zonos_tts: ERROR: no phonemizer available and the text is not ASCII (lang=%s).\n"
+                "  Zonos conditions on IPA phonemes; without espeak-ng every non-ASCII character\n"
+                "  is dropped, which yields a near-empty prompt and unintelligible audio.\n"
+                "  Install espeak-ng (in-process libespeak-ng is preferred and is picked up\n"
+                "  automatically; CRISPASR_ESPEAK_DATA_PATH overrides the data directory), or\n"
+                "  put the espeak-ng binary on PATH. Refusing to synthesise noise.\n",
+                l.c_str());
+        return {};
     }
-    // Fallback: tokenize raw text characters
-    fprintf(stderr, "zonos_tts: WARN: espeak-ng not available, using raw text tokenization\n");
+
+    fprintf(stderr, "zonos_tts: WARN: espeak-ng not available, using raw ASCII tokenization "
+                    "(quality will be degraded; install espeak-ng for proper phonemes)\n");
     return text_to_phoneme_ids(text);
 }
 
@@ -1656,6 +1755,13 @@ float* zonos_tts_build_conditioning_prefix(struct zonos_tts_context* ctx, const 
         lang = ctx->cond_state.language_codes[ctx->cond_state.language_id].c_str();
 
     auto phoneme_ids = tokenize_text_full(text, lang);
+    // #435: empty means the phonemizer refused (non-ASCII with no espeak-ng).
+    // These are diagnostic/debug entry points, but they feed the same prefix
+    // builder, so an empty prompt here is just as meaningless as in synthesis.
+    if (phoneme_ids.empty()) {
+        fprintf(stderr, "zonos_tts: no phoneme tokens — refusing (see the error above)\n");
+        return nullptr;
+    }
     int cond_len = 0, uncond_len = 0;
     float* cond = build_prefix_cpu(ctx, phoneme_ids, false, &cond_len);
     float* uncond = build_prefix_cpu(ctx, phoneme_ids, true, &uncond_len);
@@ -1695,6 +1801,13 @@ float* zonos_tts_get_prefill_hidden(struct zonos_tts_context* ctx, const char* t
         lang = ctx->cond_state.language_codes[ctx->cond_state.language_id].c_str();
 
     auto phoneme_ids = tokenize_text_full(text, lang);
+    // #435: empty means the phonemizer refused (non-ASCII with no espeak-ng).
+    // These are diagnostic/debug entry points, but they feed the same prefix
+    // builder, so an empty prompt here is just as meaningless as in synthesis.
+    if (phoneme_ids.empty()) {
+        fprintf(stderr, "zonos_tts: no phoneme tokens — refusing (see the error above)\n");
+        return nullptr;
+    }
     int cond_len = 0, uncond_len = 0;
     float* cond_prefix = build_prefix_cpu(ctx, phoneme_ids, false, &cond_len);
     float* uncond_prefix = build_prefix_cpu(ctx, phoneme_ids, true, &uncond_len);
@@ -1777,6 +1890,13 @@ float* zonos_tts_run_ar_steps_dump(struct zonos_tts_context* ctx, const char* te
     if (ctx->cond_state.language_id >= 0 && ctx->cond_state.language_id < (int)ctx->cond_state.language_codes.size())
         lang = ctx->cond_state.language_codes[ctx->cond_state.language_id].c_str();
     auto phoneme_ids = tokenize_text_full(text, lang);
+    // #435: empty means the phonemizer refused (non-ASCII with no espeak-ng).
+    // These are diagnostic/debug entry points, but they feed the same prefix
+    // builder, so an empty prompt here is just as meaningless as in synthesis.
+    if (phoneme_ids.empty()) {
+        fprintf(stderr, "zonos_tts: no phoneme tokens — refusing (see the error above)\n");
+        return nullptr;
+    }
 
     int cond_len = 0, uncond_len = 0;
     float* cond_prefix = build_prefix_cpu(ctx, phoneme_ids, false, &cond_len);
@@ -1952,6 +2072,13 @@ int32_t* zonos_tts_synthesize_codes(struct zonos_tts_context* ctx, const char* t
         lang = ctx->cond_state.language_codes[ctx->cond_state.language_id].c_str();
     }
     auto phoneme_ids = tokenize_text_full(text, lang);
+    // Empty means tokenize_text_full REFUSED (no phonemizer for non-ASCII text,
+    // #435). Propagate it: synthesising from a near-empty prompt is what
+    // produced ~0.9 s of garbage at a success return code.
+    if (phoneme_ids.empty()) {
+        fprintf(stderr, "zonos_tts: no phoneme tokens — refusing to synthesise (see the error above)\n");
+        return nullptr;
+    }
     if (ctx->params.verbosity >= 1) {
         fprintf(stderr, "zonos_tts: %zu phoneme tokens (lang=%s)\n", phoneme_ids.size(), lang);
     }
