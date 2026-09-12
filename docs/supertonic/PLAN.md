@@ -2,18 +2,29 @@
 
 ## NOW — active work
 
-- [x] Licence verified from HF card 2026-09-12: model = OpenRAIL-M (`license: openrail`
-  tag on Supertone/supertonic-3, not gated), sample code MIT. Attribution +
-  responsible-use restrictions → registry `license` field must carry it.
-- [x] Blueprint read line-by-line: `supertone-inc/supertonic` `py/example_onnx.py` +
-  `py/helper.py` (MIT). Upstream pipeline reproduced locally with onnxruntime
-  (3.1 s clip, `M1` voice) as ground truth.
-- [x] All four ONNX graphs reverse-engineered (see notes below).
-- [ ] Converter → GGUF (single file, all voices embedded)
-- [ ] Reference dumper (onnxruntime intermediates, fixed noise)
-- [ ] C++ runtime + 12-point wiring
-- [ ] Kaggle build + diff + TTS→ASR roundtrip
-- [ ] HF upload + registry
+- [x] Licence OpenRAIL-M verified from HF card (not gated).
+- [x] Blueprint read line-by-line (py/helper.py) + all 4 ONNX graphs reversed.
+- [x] Converter → GGUF (200 MB f16, 723 tensors) — runs locally.
+- [x] Reference dumper (ORT intermediates, seeded noise).
+- [x] C++ runtime + full 12-point wiring (src, CLI adapter, factory, arch map,
+  CMake, C-ABI session ×10 points, registry, quantizer, diff harness, tests,
+  README/docs/tts.md, Go LDFLAGS). All syntax-checked with g++ -fsyntax-only.
+- [~] Kaggle validate: kernel `chr1str/crispasr-supertonic-434`.
+  - v1 ERROR: reference dumper had been authored against the MAIN tree by the
+    bash-cwd trap and never reached the branch — clone had no file. Fixed in
+    commit e58b06da; v2 relaunched.
+- [ ] Per-stage diff ALL PASS + TTS→ASR roundtrip (CPU + GPU) + control arm.
+- [ ] HF upload (f16 checkpointed pre-validation; ref.gguf on validation pass).
+
+## VERIFIED vs ASSUMED (honest ledger)
+- VERIFIED: upstream ORT pipeline reproduced locally (3.1 s wav, M1). Converter
+  asserts every baked constant (CFG 4/3, rotary theta, time freqs, attn scales,
+  edge-pad amounts) against the graph, so those are checked, not assumed.
+- ASSUMED until the Kaggle diff returns: that the C++ ggml graph reproduces the
+  ORT per-stage tensors. The VITS relative attention, GST tanh-key cross-attn,
+  length-normalised rotary, and the CFG-fused Euler update are hand-derived from
+  the graph and NOT yet validated against a reference dump. This is the whole
+  point of the diff kernel; do not claim parity before it is green + roundtrip.
 
 ## Model facts (from onnx/tts.json + graph inspection, NOT guessed)
 
