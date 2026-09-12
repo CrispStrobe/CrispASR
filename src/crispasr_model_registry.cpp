@@ -1116,6 +1116,15 @@ constexpr Entry k_registry[] = {
      "https://huggingface.co/KRAFTON/Raon-OpenTTS-1B)"},
     // Irodori-TTS v3 500M: RF-DiT flow-matching TTS with zero-shot voice
     // cloning via DAC-VAE latents. 48 kHz output, Japanese-focused.
+    // Supertonic-3 (#434): Supertone/supertonic-3, non-AR flow-matching TTS,
+    // 44.1 kHz, 31 languages, 10 preset voices baked into the single GGUF
+    // (unicode indexer + NFKD tables included — no companions). Weights are
+    // OpenRAIL-M: permissive incl. commercial, but carries use restrictions +
+    // attribution, so the license field prints on first download.
+    {"supertonic", "supertonic3-f16.gguf",
+     "https://huggingface.co/cstr/supertonic-3-GGUF/resolve/main/supertonic3-f16.gguf",
+     "~200 MB", nullptr, nullptr, nullptr,
+     "OpenRAIL-M — use restrictions + attribution: https://huggingface.co/Supertone/supertonic-3"},
     {"irodori-tts", "irodori-tts-500m-v3-q4_k.gguf",
      "https://huggingface.co/cstr/irodori-tts-GGUF/resolve/main/irodori-tts-500m-v3-q4_k.gguf",
      "~852 MB",

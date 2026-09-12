@@ -95,6 +95,7 @@
 #include "tada_encoder.h"
 #include "tada_tts.h"
 #include "dots_tts.h"
+#include "supertonic_tts.h"
 #include "t5_translate.h"
 #include "miocodec.h"
 #include "miotts.h"
@@ -1254,6 +1255,11 @@ int main(int argc, char** argv) {
     // dots-tts: self-contained per-stage parity checks (no audio needed). The
     // reference is the isolated component dump from
     // tools/reference_backends/dots_tts_reference.py.
+    // supertonic-tts (#434): self-contained — ref carries text/voice/steps
+    // and the seeded noise; audio arg is ignored.
+    if (backend_name == "supertonic-tts" || backend_name == "supertonic") {
+        return supertonic_tts_diff(model_path.c_str(), ref_path.c_str(), /*verbosity=*/2);
+    }
     if (backend_name == "dots-tts") {
         int rp = dots_tts_penc_diff(model_path.c_str(), ref_path.c_str(), /*verbosity=*/2);
         int rd = dots_tts_dit_diff(model_path.c_str(), ref_path.c_str(), /*verbosity=*/2);

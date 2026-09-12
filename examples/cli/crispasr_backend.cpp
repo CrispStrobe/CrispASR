@@ -80,6 +80,7 @@ std::unique_ptr<CrispasrBackend> crispasr_make_outetts_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_zonos_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_f5_tts_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_irodori_tts_backend();
+std::unique_ptr<CrispasrBackend> crispasr_make_supertonic_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_bark_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_pocket_tts_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_speecht5_backend();
@@ -213,6 +214,9 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& name
         return crispasr_make_f5_tts_backend();
     if (name == "irodori-tts" || name == "irodori_tts" || name == "irodori")
         return crispasr_make_irodori_tts_backend();
+    if (name == "supertonic" || name == "supertonic-tts" || name == "supertonic_tts" || name == "supertonic3" ||
+        name == "supertonic-3")
+        return crispasr_make_supertonic_backend();
     if (name == "pocket-tts" || name == "pocket_tts" || name == "pockettts" || name == "pocket" ||
         name == "pocket-tts-de" || name == "pocket-tts-german" || name == "pocket-tts-es" ||
         name == "pocket-tts-spanish" || name == "pocket-tts-it" || name == "pocket-tts-italian" ||

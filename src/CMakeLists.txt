@@ -2027,6 +2027,15 @@ endif()
 endif()
 
 # ---------------------------------------------------------------------------
+# supertonic-tts — Supertonic-3 non-AR flow-matching TTS (#434, native ggml)
+# ---------------------------------------------------------------------------
+add_library(supertonic-tts STATIC supertonic_tts.h supertonic_tts.cpp)
+set_target_properties(supertonic-tts PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(supertonic-tts PUBLIC .)
+target_compile_features   (supertonic-tts PUBLIC cxx_std_17)
+target_link_libraries     (supertonic-tts PUBLIC crispasr-core ggml ggml-base crispasr_link_ggml_cpu)
+
+# ---------------------------------------------------------------------------
 # irodori-tts — Aratako/Irodori-TTS RF-DiT flow matching TTS (native ggml)
 # ---------------------------------------------------------------------------
 add_library(irodori-tts STATIC irodori_tts.h irodori_tts.cpp)
