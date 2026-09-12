@@ -1,5 +1,15 @@
 # CrispASR — Pending work
 
+## CLAIMED 2026-09-12 — #434 supertonic-3
+
+Worktree `.claude/worktrees/feat-434-supertonic`, branch `feat/434-supertonic`.
+Port Supertonic-3 TTS (Supertone/supertonic-3, ONNX-only distribution:
+text_encoder + duration_predictor + vector_estimator + vocoder, ~400 MB,
+non-AR flow matching, 44.1 kHz). Licence to be re-verified from the HF card
+before shipping. Converter + backend + diff harness (ONNX intermediates as
+reference) + TTS-to-ASR roundtrip acceptance. Heavy build/convert/validate on
+Kaggle chr1str.
+
 ## DONE 2026-09-07 — #81 Q4 CUDA optimization round 2
 
 Worktree `.claude/worktrees/perf-81-round2`, branch `perf/81-round2`. Audit the
