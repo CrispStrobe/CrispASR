@@ -195,13 +195,20 @@ def main():
     w.add_float32("supertonic_ref.speed", args.speed)
     w.add_uint32("supertonic_ref.seed", args.seed)
     w.add_uint32("supertonic_ref.sample_rate", sr)
+    # Store 2-D stages TIME-MAJOR [T, C]. The C++ runtime uses ggml (C, T) with
+    # C as the fast axis, whose row-major image is numpy [T, C]; ONNX tensors
+    # are channel-major [C, T]. Transposing here makes a raw byte copy on the
+    # C++ side line up, so the diff measures the model, not a layout swap.
     for name, arr in stages.items():
+        out = arr
+        if arr.ndim == 2:
+            out = np.ascontiguousarray(arr.T)  # [C,T] -> [T,C]
         if arr.dtype == np.int32:
-            w.add_tensor(name, np.ascontiguousarray(arr), raw_dtype=GGMLQuantizationType.I32)
+            w.add_tensor(name, np.ascontiguousarray(out), raw_dtype=GGMLQuantizationType.I32)
         else:
-            w.add_tensor(name, np.ascontiguousarray(arr.astype(np.float32)),
+            w.add_tensor(name, np.ascontiguousarray(out.astype(np.float32)),
                          raw_dtype=GGMLQuantizationType.F32)
-        print(f"  stage {name}: shape {arr.shape} |x|={np.abs(arr).mean():.6f}")
+        print(f"  stage {name}: stored shape {out.shape} (src {arr.shape}) |x|={np.abs(arr).mean():.6f}")
     w.write_header_to_file()
     w.write_kv_data_to_file()
     w.write_tensors_to_file()
