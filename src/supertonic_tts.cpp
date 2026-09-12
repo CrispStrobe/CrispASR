@@ -946,6 +946,8 @@ struct supertonic_context_params supertonic_context_default_params(void) {
 }
 
 struct supertonic_context* supertonic_init_from_file(const char* path_model, supertonic_context_params params) {
+    if (!path_model || !*path_model)
+        return nullptr;
     auto* ctx = new supertonic_context();
     ctx->params = params;
 

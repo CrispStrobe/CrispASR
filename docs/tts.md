@@ -33,6 +33,7 @@ trade-off:
 - [IndexTTS](#indextts--chineseenglish-voice-cloning) — Chinese/English voice cloning
   - [Chinese text normalization](#indextts-chinese-text-normalization)
 - [Irodori-TTS](#irodori-tts--japanese-voice-cloning--emoji-emotion-control) — Japanese, emoji emotion control
+- [Supertonic-3](#supertonic-3--fast-multilingual-on-device-tts) — 31 languages, non-AR flow matching, 44.1 kHz
 - [Reference-conditioning cache](#reference-conditioning-cache)
 - [Local speaker output (`--tts-play`)](#local-speaker-output---tts-play)
 - [AI-generated audio provenance & watermarking](#ai-generated-audio-provenance--watermarking)
@@ -58,6 +59,7 @@ trade-off:
 | [`f5-tts`](#f5-tts--dit-flow-matching-voice-cloning) | F5-TTS v1 Base: 22-layer DiT flow-matching TTS + Vocos iSTFT vocoder. MIT license. High-quality zero-shot voice cloning from 3-15s reference audio. 24 kHz output. English + Chinese (built-in pinyin g2p, #294). | Yes (`--voice <ref.wav> --ref-text "transcript"`) | ~953 MB via `-m auto` (single F16 GGUF, DiT + Vocos) |
 | [`raon`](#f5-tts--dit-flow-matching-voice-cloning) | Raon-OpenTTS 0.3B (KRAFTON): F5-TTS DiT on the same runtime, paired with a 16 kHz HiFi-GAN vocoder (sbhifigan16k, slaney mel). English zero-shot voice cloning. **CC-BY-NC-4.0** (non-commercial; auto-download prints the restriction). TTS→ASR roundtrip validated (0.90). Note: CPU vocoder ~40s/utterance. | Yes (`--voice <ref.wav> --ref-text "transcript"`) | ~959 MB via `-m auto` (single GGUF: DiT + HiFi-GAN) |
 | [`raon-1b`](#f5-tts--dit-flow-matching-voice-cloning) | Raon-OpenTTS 1B (KRAFTON): the larger DiT (dim 1408, depth 28, 24x64 heads) on the same runtime and the same sbhifigan16k HiFi-GAN vocoder as `raon`. **CC-BY-NC-4.0** (non-commercial; auto-download prints the restriction). TTS->ASR roundtrip validated on Kaggle GPU. Needs the default manual-SDPA attention path — `CRISPASR_F5_FLASH=1` reintroduces the F16 KQ accumulation that made this size diverge to NaN on kernels ignoring the precision hint. | Yes (`--voice <ref.wav> --ref-text "transcript"`) | ~2.8 GB via `-m auto` (single GGUF: DiT + HiFi-GAN) |
+| [`supertonic`](#supertonic-3--fast-multilingual-on-device-tts) | Supertonic-3: non-autoregressive flow-matching TTS (Supertone). ConvNeXt+attention text encoder, 8-step Euler flow with baked-in CFG (4·cond − 3·uncond), ConvNeXt vocoder at 512 samples/frame. 44.1 kHz, 31 languages, ~99 M params. OpenRAIL-M weights (use restrictions + attribution). 10 fixed preset voices baked into the single GGUF — no cloning in the open release. `--voice F1..F5/M1..M5`, `--tts-speed`, `--tts-steps`. | No (fixed presets) | ~200 MB F16 (single file) |
 | [`irodori-tts`](#irodori-tts--japanese-voice-cloning--emoji-emotion-control) | Irodori-TTS: RF-DiT flow-matching TTS with LowRankAdaLN + JointAttention + half-RoPE + SwiGLU. 48 kHz via Semantic-DACVAE-Japanese-32dim codec. MIT license. Japanese-focused (llm-jp-3 tokenizer). Zero-shot voice cloning from any reference WAV (DAC-VAE encoder + speaker CFG); emoji emotion control; duration predictor for output length. **VoiceDesign** (600M-v3): adds caption encoder for style/emotion control via text descriptions (`--instruct "calm adult male, deep voice"`); independent text/speaker/caption CFG. | Yes (`--voice <ref.wav> --i-have-rights`) | ~526 MB Q4_K (VoiceDesign) / ~852 MB Q4_K (base) + DAC-VAE codec |
 | [`indextts`](#indextts--chineseenglish-voice-cloning) | IndexTTS-1.5: GPT-2 AR (24L/1280d) mel-code generator + BigVGAN vocoder. Designed for Chinese+English. Zero-shot voice cloning from any reference WAV. | Yes (`--voice <ref.wav>`) | ~2.4 GB via `-m auto` (GPT F16 + BigVGAN F16) |
 | [`cosyvoice3-tts`](#cosyvoice3--voice-cloning-from-a-wav) | Fun-CosyVoice3-0.5B-2512: Qwen2-0.5B AR speech-token LM + DiT-CFM (10-step Euler) + HiFT (NSF + iSTFT) @ 24 kHz. 9 languages + 18 Chinese dialects. Ships an 8-voice baked bank (`zero_shot` + `fleurs-{en,de,zh,ja,fr,es,ko}`). | Yes — baked-bank name via `--voice <name>`, **or** native arbitrary-WAV cloning via `--voice <ref.wav> --ref-text "..."` (ports speech_tokenizer_v3 + CAMPPlus + matcha mel to ggml; speech tokens byte-exact vs ONNX). | ~1.2 GB via `-m auto` (Q4_K LLM + Q8_0 flow + HiFT + s3tok + campplus + voices) |
@@ -124,7 +126,7 @@ object pipeline. To test raw streaming in `cmd.exe`, request
 | **`mini-omni2`** | gpt-omni/mini-omni2: Whisper-small encoder + Qwen2-0.5B LLM with 8-stream architecture + SNAC 24 kHz decoder → 24 kHz. Also does ASR and speech-to-speech. MIT license. Requires `--codec-model snac-24khz.gguf` companion. | No | ~1.0 GB Q4_K + ~80 MB SNAC companion |
 | **`voxtral-tts`** | Mistral Voxtral-4B-TTS-2603: Ministral-3B AR backbone (26L GQA, NORMAL/adjacent-pair RoPE) + 3L bidirectional flow-matching acoustic transformer (8-step Euler ODE + CFG α=1.2, no positional encoding) + Voxtral codec decoder (ALiBi sliding-window attention + reflect-causal conv + ConvTranspose upsampling) → 24 kHz. 20 preset voices across 9 languages (en/fr/de/es/it/pt/nl/ar/hi); strong on French technical text. CC-BY-NC-4.0. | No (20 preset voices via `--voice <name>`, e.g. `fr_female`) | ~2.4 GB Q4_K / ~4.3 GB Q8_0 / ~8.2 GB F16 via `-m auto` |
 
-All backends write mono WAV via `--tts-output` (22 kHz for piper/fastpitch/bananamind-tts/confucius4-tts, 16 kHz for speecht5, 44.1 kHz for melotts/dia/parler-tts/zonos-tts, 48 kHz for voxcpm2-tts/dots-tts/irodori-tts/moss-tts-local/sidon, 24 kHz for most others). Programmatic callers don't need this table: `crispasr_session_output_sample_rate()` returns the active backend's output rate, with `crispasr_session_input_channels()` / `output_channels()` alongside (everything is mono today) — #332.
+All backends write mono WAV via `--tts-output` (22 kHz for piper/fastpitch/bananamind-tts/confucius4-tts, 16 kHz for speecht5, 44.1 kHz for melotts/dia/parler-tts/zonos-tts/supertonic, 48 kHz for voxcpm2-tts/dots-tts/irodori-tts/moss-tts-local/sidon, 24 kHz for most others). Programmatic callers don't need this table: `crispasr_session_output_sample_rate()` returns the active backend's output rate, with `crispasr_session_input_channels()` / `output_channels()` alongside (everything is mono today) — #332.
 
 ## dots.tts — voice cloning and performance
 
@@ -2076,3 +2078,38 @@ negligible for longer text and for repeated server requests). Pass
 `--no-spoken-disclaimer` / `"spoken_disclaimer": false` to skip it when you
 provide AI-disclosure another way — the watermark and C2PA provenance are
 still embedded.
+
+
+## Supertonic-3 — fast multilingual on-device TTS
+
+[Supertone/supertonic-3](https://huggingface.co/Supertone/supertonic-3) — a
+~99 M-param non-autoregressive flow-matching TTS built for on-device speed.
+The upstream distribution is ONNX-only; CrispASR runs a native ggml port of
+all four graphs (duration predictor, text encoder, vector estimator, vocoder),
+converted into ONE GGUF that embeds the unicode indexer, the NFKD text tables
+and all ten preset voice styles. 44.1 kHz output, 31 languages.
+
+Weights are **OpenRAIL-M**: commercial use allowed, but the license carries
+use restrictions and an attribution requirement (printed on first download).
+The open release has FIXED preset voices only — `--voice` selects a preset
+name (`F1`..`F5`, `M1`..`M5`), not a reference WAV; there is no voice cloning.
+
+```bash
+# English, default voice M1
+crispasr --backend supertonic -m auto --tts "Hello from Supertonic." -o out.wav
+
+# German, female preset, a little faster, fewer flow steps
+crispasr --backend supertonic -m auto --tts "Guten Tag, wie geht es dir?" \
+    -l de --voice F2 --tts-speed 1.1 --tts-steps 8 -o out_de.wav
+```
+
+- `-l LANG` — one of: en ko ja ar bg cs da de el es et fi fr hi hr hu id it
+  lt lv nl pl pt ro ru sk sl sv tr uk vi (language is conditioned via
+  `<lang>` tags in the character stream; there is no phonemizer).
+- `--tts-steps N` — flow-matching Euler steps (default 8). Each step runs two
+  vector-field passes (classifier-free guidance is part of the model's
+  update rule: `v = 4·v_cond − 3·v_uncond`).
+- `--tts-speed X` — multiplies the upstream default rate 1.05.
+- Long text is chunked at sentence boundaries (300 chars; 120 for ko/ja) and
+  joined with 0.3 s silences, matching the upstream SDK.
+- Env: `SUPERTONIC_BENCH=1` prints per-stage timings.

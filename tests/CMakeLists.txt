@@ -1656,6 +1656,43 @@ catch_discover_tests(test-dots-tts-params
 )
 endif()
 
+# ─── test-supertonic-params — Catch2 unit tests for supertonic_context_params
+# defaults and null-guard coverage. No GGUF required. ──────────────────────────
+if (TARGET supertonic-tts)
+add_executable(test-supertonic-params
+    test-supertonic-params.cpp
+)
+target_include_directories(test-supertonic-params PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-supertonic-params PRIVATE
+    Catch2::Catch2WithMain
+    supertonic-tts
+)
+catch_discover_tests(test-supertonic-params
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit;supertonic"
+)
+endif()
+
+# ─── test-supertonic-live — live integration tests for Supertonic-3 TTS
+if (TARGET supertonic-tts)
+add_executable(test-supertonic-live
+    test_supertonic_live.cpp
+)
+target_include_directories(test-supertonic-live PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-supertonic-live PRIVATE
+    Catch2::Catch2WithMain
+    supertonic-tts
+)
+catch_discover_tests(test-supertonic-live
+    TEST_SPEC "[live]"
+    PROPERTIES LABELS "live;supertonic"
+)
+endif()
+
 # ─── test-confucius4-tts-params — Catch2 unit tests for confucius4_tts_params
 # defaults and null-guard coverage. No GGUF required. ──────────────────────────
 if (TARGET confucius4-tts)
