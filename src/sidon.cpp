@@ -1089,47 +1089,72 @@ std::vector<float> sidon_restore(sidon_context* ctx, const float* samples, int n
     // Short inputs are untouched: at T <= max_frames the whole-utterance path
     // below runs exactly as before, so nothing that works today changes.
     //
-    // GATED DEFAULT-OFF AFTER MEASURING IT (2026-09-12). The windowing works —
-    // a 62 s clip that used to be refused produces exactly 62.00 s of audio —
-    // but an ASR roundtrip says the result is WORSE than the input, while the
-    // same model on an 11 s clip through the whole-utterance path below comes
-    // back clean:
+    // WINDOW SIZE IS THE THRESHOLD (2026-09-12, measured — see the A/B below).
     //
-    //   raw 62 s input      "And so my fellow-american ask not what your
-    //                        country can do for you, ask what you can do..."
-    //   11 s whole-utterance "And so my fellow-americans ask not what your
-    //                        country can do for you, ask what you can do..."
-    //   62 s WINDOWED        "O my fellow America, not what you and me can do
-    //                        for you, but you can do for you."
+    // First attempt sized the window to the MEMORY cap (2400-frame cores) and
+    // the 62 s output came back degraded, which I wrongly attributed to
+    // windowing and gated off. A length sweep on the UNCHANGED whole-utterance
+    // path showed the real effect — quality falls off well before the cap:
     //
-    // The degradation is uniform across all five repetitions of the looped
-    // clip rather than concentrated at the seams, which argues against
-    // crossfade artefacts and suggests either that this model's quality falls
-    // off well before 3000 frames, or that a window needs far more context
-    // than 300 frames. That is not yet established.
+    //   11 s  T= 625  whole-utterance  "And so my fellow-americans ask not what
+    //                                   your country can do for you..."  CLEAN
+    //   30 s  T=1575  whole-utterance  "...ask not what your country can do
+    //                                   for you..."                      CLEAN
+    //   50 s  T=2575  whole-utterance  "...it's not what you can DRINK AND do
+    //                                   for you."                    DEGRADED
     //
-    // Shipping it on by default would replace a CLEAN REFUSAL with QUIETLY
-    // DEGRADED AUDIO. A caller can act on "split the file"; nobody can act on
-    // output that merely sounds a bit wrong. So the refusal stays the default
-    // and the windowing is opt-in until the quality question is answered —
-    // #431 is not closed by this, it is made reachable.
-    bool predictor_chunked = false;
-    if (T > max_frames) {
-        const char* e = getenv("CRISPASR_SIDON_WINDOWED");
-        predictor_chunked = (e && e[0] && e[0] != '0');
-        if (!predictor_chunked) {
-            fprintf(stderr,
-                    "sidon: input too long — %d feature frames (~%.1f s) exceeds the %d-frame cap.\n"
-                    "  Experimental: CRISPASR_SIDON_WINDOWED=1 processes it as overlapping windows\n"
-                    "  instead of refusing. It completes, but an ASR roundtrip currently shows the\n"
-                    "  restored audio degrades relative to the unwindowed path, so it is opt-in.\n"
-                    "  Otherwise split the audio, or raise CRISPASR_SIDON_MAX_FRAMES if the backend\n"
-                    "  has the memory for a larger single window.\n",
-                    T, (double)T / 50.0, max_frames);
-            return {};
-        }
-        fprintf(stderr, "sidon: CRISPASR_SIDON_WINDOWED=1 — quality is NOT yet validated for this path\n");
+    // That 50 s arm is the shipping code with no windowing involved, so the
+    // cap was never protecting quality — it was hiding the falloff. A/B on that
+    // same 50 s clip, 900-frame cores vs whole-utterance:
+    //
+    //   raw input   "ask not what your country can do for you ask what you can
+    //                do for your country"                            (ceiling)
+    //   whole-utt   "it's not what you can drink and do for you."
+    //   WINDOWED    "is not what your country can do for you, ask what you can
+    //                do for you."
+    //
+    // So small windows BEAT the status quo on audio that already "works".
+    // Windowing is therefore the default, and the window is sized for quality
+    // rather than for how much attention memory happens to fit.
+    //
+    // The threshold IS the window size: at T <= window there is exactly one
+    // window and the split is a no-op, so short clips keep the whole-utterance
+    // path unchanged. Honest about the gap: clean is measured at T=1575 and
+    // degraded at T=2575, so where inside that band the falloff begins is
+    // interpolated, not known.
+    //
+    // CRISPASR_SIDON_WINDOW_FRAMES=0 restores the old whole-utterance-or-refuse
+    // behaviour for A/B; the window is also clamped to the memory cap so
+    // raising one never silently violates the other.
+    // DEFAULT 0 = OFF, pending the parity result. The A/B that motivated
+    // windowing measured ASR transcripts, which says "sounds better to
+    // moonshine-tiny" and NOT "faithful to upstream" — and if the reference
+    // model degrades with length too, then the whole-utterance path is correct
+    // and windowing is a deviation however it sounds. Until
+    // tools/kaggle/sidon-length-parity answers that, the shipped behaviour is
+    // the old clean refusal and windowing is opt-in.
+    //
+    // Set CRISPASR_SIDON_WINDOW_FRAMES=1500 to enable (that is the size whose
+    // A/B beat whole-utterance at 50 s); 0 keeps it off.
+    int pred_window_frames = 0;
+    if (const char* e = getenv("CRISPASR_SIDON_WINDOW_FRAMES"); e && e[0]) {
+        const int v = atoi(e);
+        if (v >= 0)
+            pred_window_frames = v;
     }
+    if (pred_window_frames > max_frames)
+        pred_window_frames = max_frames;
+
+    bool predictor_chunked = (pred_window_frames > 0 && T > pred_window_frames);
+    if (!predictor_chunked && T > max_frames) {
+        fprintf(stderr,
+                "sidon: input too long — %d feature frames (~%.1f s) exceeds the %d-frame cap and "
+                "windowing is disabled (CRISPASR_SIDON_WINDOW_FRAMES=0).\n"
+                "  Re-enable windowing, split the audio, or raise CRISPASR_SIDON_MAX_FRAMES.\n",
+                T, (double)T / 50.0, max_frames);
+        return {};
+    }
+
     const auto frontend_done = clock::now();
 
     const int pred_hidden = ctx->model.hp.hidden;
@@ -1182,14 +1207,14 @@ std::vector<float> sidon_restore(sidon_context* ctx, const float* samples, int n
             if (v >= 0)
                 pred_context_frames = v;
         }
-        if (pred_context_frames * 2 >= max_frames)
-            pred_context_frames = std::max(0, (max_frames / 4));
-        const int pred_core_frames = std::max(1, max_frames - 2 * pred_context_frames);
+        if (pred_context_frames * 2 >= pred_window_frames)
+            pred_context_frames = std::max(0, (pred_window_frames / 4));
+        const int pred_core_frames = std::max(1, pred_window_frames - 2 * pred_context_frames);
 
         std::fprintf(stderr,
-                     "sidon: %d feature frames (~%.1f s) exceeds the %d-frame attention cap — "
-                     "processing as %d-frame windows with %d frames of context each side\n",
-                     T, (double)T / 50.0, max_frames, pred_core_frames, pred_context_frames);
+                     "sidon: %d feature frames (~%.1f s) — processing as %d-frame windows with %d "
+                     "frames of context each side (window %d, memory cap %d)\n",
+                     T, (double)T / 50.0, pred_core_frames, pred_context_frames, pred_window_frames, max_frames);
 
         predictor_features.assign((size_t)T * pred_hidden, 0.0f);
         graph_done = clock::now();

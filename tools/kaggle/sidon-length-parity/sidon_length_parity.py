@@ -37,7 +37,7 @@ WORK = Path("/kaggle/working")
 SCRATCH = Path("/tmp")               # 70 GB here vs ~20 GB in working
 CLONE = SCRATCH / "CrispASR"
 CRISPASR_URL = "https://github.com/CrispStrobe/CrispASR.git"
-SCRIPT_VERSION = "2026-09-12-sidon-length-parity-2-logs"
+SCRIPT_VERSION = "2026-09-12-sidon-length-parity-3-jobs"
 RESULTS = WORK / "results.json"
 LENGTHS = [11, 30, 50, 62]
 
@@ -77,10 +77,15 @@ if r.returncode != 0:
     log("---- configure stderr ----"); log((r.stderr or "<empty>")[-3000:])
     raise SystemExit(1)
 log("build.configure ok; tail: " + (r.stdout or "")[-600:])
+# safe_build_jobs returns a SHELL SNIPPET ("$(nproc)"), not a number — every
+# working kernel interpolates it into a shell string. v2 passed it to a
+# list-form subprocess.run, where nothing expands it, and the build died with
+#   '-j' invalid number '$(nproc)' given.
+# Run it through a shell, the way the callers that demonstrably work do.
 jobs = kh.safe_build_jobs(gpu=False)
 with kh.build_heartbeat("build.crispasr"):
-    r = subprocess.run(["cmake", "--build", str(BUILD), "--target", "crispasr", "-j", str(jobs)],
-                       capture_output=True, text=True)
+    r = subprocess.run(f"cmake --build {BUILD} --target crispasr -j{jobs}",
+                       shell=True, capture_output=True, text=True)
 if r.returncode != 0:
     # BOTH streams. v1 logged stdout only and ninja writes its errors to stderr,
     # so the failure line said "build FAILED" followed by nothing — a diagnostic
@@ -150,6 +155,12 @@ def ours_feats(wav_path, windowed):
                        capture_output=True, text=True, env=env, timeout=5400)
     if not dump.is_file():
         return None, (r.stderr or "")[-600:]
+    # The windowed arm must ACTUALLY window. If the binary predates the env var
+    # (it clones main at runtime — gotcha #24) the flag is ignored, both arms run
+    # the same path, and the comparison silently becomes A-vs-A. Demand the proof
+    # line the windowed path prints.
+    if windowed and "windows with" not in (r.stderr or ""):
+        return None, "WINDOWED ARM DID NOT WINDOW — env var ignored by this binary: " + (r.stderr or "")[-400:]
     a = np.fromfile(dump, dtype=np.float32)
     return a.reshape(-1, 1024), None
 
