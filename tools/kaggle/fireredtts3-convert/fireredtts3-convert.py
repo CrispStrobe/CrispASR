@@ -22,7 +22,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-SCRIPT_VERSION = "v1"
+SCRIPT_VERSION = "v2"
 WORK = Path("/kaggle/working")
 REPO = WORK / "CrispASR"
 TEMP = Path("/kaggle/temp") if Path("/kaggle/temp").is_dir() else Path("/tmp")
@@ -80,6 +80,15 @@ if not UP.exists():
     subprocess.check_call(["git", "clone", "--depth", "1",
                            "https://github.com/FireRedTeam/FireRedTTS3.git",
                            str(UP)])
+# RedAE/Core hardcode attn_implementation='flash_attention_2' at
+# CONSTRUCTION time — no flash-attn on Kaggle CPU, so patch the source.
+npatched = 0
+for f in (UP / "fireredtts3").rglob("*.py"):
+    t = f.read_text(encoding="utf-8")
+    if "flash_attention_2" in t:
+        f.write_text(t.replace("flash_attention_2", "sdpa"), encoding="utf-8")
+        npatched += 1
+print(f"  patched flash_attention_2→sdpa in {npatched} files")
 sys.path.insert(0, str(UP))
 
 import torch  # noqa: E402

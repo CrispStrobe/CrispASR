@@ -69,6 +69,28 @@ def required_packages() -> list[str]:
             "FireRedTTS3 repo on FIREREDTTS3_UPSTREAM"]
 
 
+def _prepare_upstream(up: str) -> str:
+    """Copy the upstream tree to a scratch dir and swap the hardcoded
+    attn_implementation='flash_attention_2' for 'sdpa'. The hardcode lives
+    inside RedAE/Core __init__, so it fails at CONSTRUCTION on any box
+    without flash-attn — a post-hoc config override never gets to run."""
+    import shutil
+    import tempfile
+    dst = Path(tempfile.gettempdir()) / "fireredtts3-upstream-sdpa"
+    if not (dst / "fireredtts3").is_dir():
+        shutil.copytree(Path(up) / "fireredtts3", dst / "fireredtts3",
+                        dirs_exist_ok=True)
+    n = 0
+    for f in (dst / "fireredtts3").rglob("*.py"):
+        t = f.read_text(encoding="utf-8")
+        if "flash_attention_2" in t:
+            f.write_text(t.replace("flash_attention_2", "sdpa"),
+                         encoding="utf-8")
+            n += 1
+    print(f"[frt-ref] patched flash_attention_2→sdpa in {n} files under {dst}")
+    return str(dst)
+
+
 def _force_sdpa(model) -> int:
     n = 0
     for mod in model.modules():
@@ -84,7 +106,7 @@ def dump(model_dir: Path, audio: np.ndarray, stages: Set[str], **kwargs) -> Dict
     if not up or not Path(up).is_dir():
         raise SystemExit("FIREREDTTS3_UPSTREAM must point at a clone of "
                          "github.com/FireRedTeam/FireRedTTS3")
-    sys.path.insert(0, up)
+    sys.path.insert(0, _prepare_upstream(up))
 
     import torch
     import torchaudio
