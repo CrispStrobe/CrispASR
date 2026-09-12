@@ -1088,7 +1088,48 @@ std::vector<float> sidon_restore(sidon_context* ctx, const float* samples, int n
     //
     // Short inputs are untouched: at T <= max_frames the whole-utterance path
     // below runs exactly as before, so nothing that works today changes.
-    const bool predictor_chunked = (T > max_frames);
+    //
+    // GATED DEFAULT-OFF AFTER MEASURING IT (2026-09-12). The windowing works —
+    // a 62 s clip that used to be refused produces exactly 62.00 s of audio —
+    // but an ASR roundtrip says the result is WORSE than the input, while the
+    // same model on an 11 s clip through the whole-utterance path below comes
+    // back clean:
+    //
+    //   raw 62 s input      "And so my fellow-american ask not what your
+    //                        country can do for you, ask what you can do..."
+    //   11 s whole-utterance "And so my fellow-americans ask not what your
+    //                        country can do for you, ask what you can do..."
+    //   62 s WINDOWED        "O my fellow America, not what you and me can do
+    //                        for you, but you can do for you."
+    //
+    // The degradation is uniform across all five repetitions of the looped
+    // clip rather than concentrated at the seams, which argues against
+    // crossfade artefacts and suggests either that this model's quality falls
+    // off well before 3000 frames, or that a window needs far more context
+    // than 300 frames. That is not yet established.
+    //
+    // Shipping it on by default would replace a CLEAN REFUSAL with QUIETLY
+    // DEGRADED AUDIO. A caller can act on "split the file"; nobody can act on
+    // output that merely sounds a bit wrong. So the refusal stays the default
+    // and the windowing is opt-in until the quality question is answered —
+    // #431 is not closed by this, it is made reachable.
+    bool predictor_chunked = false;
+    if (T > max_frames) {
+        const char* e = getenv("CRISPASR_SIDON_WINDOWED");
+        predictor_chunked = (e && e[0] && e[0] != '0');
+        if (!predictor_chunked) {
+            fprintf(stderr,
+                    "sidon: input too long — %d feature frames (~%.1f s) exceeds the %d-frame cap.\n"
+                    "  Experimental: CRISPASR_SIDON_WINDOWED=1 processes it as overlapping windows\n"
+                    "  instead of refusing. It completes, but an ASR roundtrip currently shows the\n"
+                    "  restored audio degrades relative to the unwindowed path, so it is opt-in.\n"
+                    "  Otherwise split the audio, or raise CRISPASR_SIDON_MAX_FRAMES if the backend\n"
+                    "  has the memory for a larger single window.\n",
+                    T, (double)T / 50.0, max_frames);
+            return {};
+        }
+        fprintf(stderr, "sidon: CRISPASR_SIDON_WINDOWED=1 — quality is NOT yet validated for this path\n");
+    }
     const auto frontend_done = clock::now();
 
     const int pred_hidden = ctx->model.hp.hidden;
