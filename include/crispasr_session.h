@@ -339,6 +339,19 @@ CRISPASR_SESSION_API int crispasr_registry_lookup_by_filename_abi(const char* fi
                                                                   int32_t filename_cap, char* out_url, int32_t url_cap,
                                                                   char* out_size, int32_t size_cap);
 CRISPASR_SESSION_API int crispasr_registry_list_backends_abi(char* out_csv, int32_t out_cap);
+
+// #433: what VERBS can this backend perform? detect_backend() returns a name
+// only, and several backends serve more than one purpose (voxcpm: tts + s2s;
+// gemma: asr + translate). Capabilities are comma-separated names such as
+// "tts,voice-cloning,auto-download".
+//   crispasr_backend_caps_abi:      one backend. >=0 = length, -3 = unknown name.
+//   crispasr_backend_caps_list_abi: all of them, "<name>\t<caps>\n" per line.
+//                                   Call with (nullptr, 0) to SIZE it: the return
+//                                   is the negative required byte count. A too-small
+//                                   buffer returns the same, so a caller never has
+//                                   to guess and a truncation can never pass as data.
+CRISPASR_SESSION_API int crispasr_backend_caps_abi(const char* backend, char* out_csv, int32_t out_cap);
+CRISPASR_SESSION_API int crispasr_backend_caps_list_abi(char* out_buf, int32_t out_cap);
 typedef enum crispasr_registry_artifact_kind {
     CRISPASR_REGISTRY_ARTIFACT_PRIMARY = 0,
     CRISPASR_REGISTRY_ARTIFACT_COMPANION = 1,

@@ -340,6 +340,68 @@ impl Session {
             .collect()
     }
 
+    /// What can this backend actually *do*? (#433)
+    ///
+    /// [`detect_backend`](Self::detect_backend) returns a name and nothing
+    /// else, but several backends serve more than one purpose — `lfm2-audio`
+    /// and `mini-omni2` are both `tts` **and** `s2s`, and `gemma4-e2b` does
+    /// recognition and translation. Pair the two calls to answer "what can I do
+    /// with this file?".
+    ///
+    /// Returns the capability names, e.g. `["auto-download", "tts", "s2s"]`.
+    /// An unknown backend is an error rather than an empty list, because a
+    /// backend that genuinely declares no capabilities is a different answer.
+    pub fn backend_caps(backend: &str) -> Result<Vec<String>, String> {
+        let name = CString::new(backend).map_err(|e| format!("invalid backend: {e}"))?;
+        let mut buf = [0i8; 1024];
+        let n = unsafe {
+            crispasr_sys::crispasr_backend_caps_abi(name.as_ptr(), buf.as_mut_ptr(), buf.len() as i32)
+        };
+        if n == -3 {
+            return Err(format!("unknown backend '{backend}'"));
+        }
+        if n < 0 {
+            return Err(format!("backend_caps failed (code {n})"));
+        }
+        let s = unsafe { CStr::from_ptr(buf.as_ptr()) }.to_string_lossy().into_owned();
+        Ok(s.split(',').filter(|x| !x.is_empty()).map(|x| x.to_string()).collect())
+    }
+
+    /// Every backend paired with its verbs (#433).
+    ///
+    /// The "available backend list containing verb info" the issue asked for —
+    /// without shelling out to `crispasr --list-backends-json` and parsing
+    /// stdout, which was previously the only way to reach this data.
+    pub fn list_backends_with_caps() -> Result<Vec<(String, Vec<String>)>, String> {
+        // Ask once with an empty buffer: a negative return is the required size,
+        // so the buffer is never guessed and never silently truncated.
+        let need = unsafe { crispasr_sys::crispasr_backend_caps_list_abi(std::ptr::null_mut(), 0) };
+        let cap = if need < 0 { (-need) as usize } else { 65536 };
+        let mut buf = vec![0i8; cap.max(1024)];
+        let n = unsafe {
+            crispasr_sys::crispasr_backend_caps_list_abi(buf.as_mut_ptr(), buf.len() as i32)
+        };
+        if n < 0 {
+            return Err(format!("list_backends_with_caps failed (code {n})"));
+        }
+        let s = unsafe { CStr::from_ptr(buf.as_ptr()) }.to_string_lossy().into_owned();
+        Ok(s.lines()
+            .filter(|l| !l.is_empty())
+            .map(|l| {
+                let mut it = l.splitn(2, '\t');
+                let name = it.next().unwrap_or("").to_string();
+                let caps = it
+                    .next()
+                    .unwrap_or("")
+                    .split(',')
+                    .filter(|x| !x.is_empty())
+                    .map(|x| x.to_string())
+                    .collect();
+                (name, caps)
+            })
+            .collect())
+    }
+
     /// Detect the backend from a GGUF file without opening it.
     pub fn detect_backend(model_path: &str) -> Result<String, String> {
         let path = CString::new(model_path).map_err(|e| format!("invalid path: {e}"))?;

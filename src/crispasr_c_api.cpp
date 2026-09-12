@@ -44,9 +44,10 @@
 #include <vector>
 
 #include "crispasr.h"
-#include "crispasr_vad.h"     // VAD slicing + stitching (shared with CLI)
-#include "crispasr_diarize.h" // Speaker diarization (shared with CLI)
-#include "crispasr_lid.h"     // Language identification (shared with CLI)
+#include "core/backend_caps_table.h" // #433: backend -> verb lookup
+#include "crispasr_vad.h"            // VAD slicing + stitching (shared with CLI)
+#include "crispasr_diarize.h"        // Speaker diarization (shared with CLI)
+#include "crispasr_lid.h"            // Language identification (shared with CLI)
 #if defined(CRISPASR_RNNOISE)
 #include "crispasr_enhance.h" // RNNoise audio enhancement (shared with CLI)
 #endif
@@ -8098,6 +8099,58 @@ CA_EXPORT int crispasr_registry_list_backends_abi(char* out_csv, int32_t out_cap
         return -2;
     std::memcpy(out_csv, acc.data(), acc.size());
     out_csv[acc.size()] = '\0';
+    return (int)acc.size();
+}
+
+// #433: capability ("verb") lookup. detect_backend() names the backend and says
+// nothing about what it can DO, so a caller learns "voxcpm" and still cannot
+// tell that it does both TTS and S2S, or that gemma does ASR and translate.
+//
+// The authoritative data is each adapter's capabilities(), but those adapters
+// compile into the crispasr executable rather than libcrispasr, so they are not
+// reachable from here. src/core/backend_caps_table.h mirrors the binary's own
+// `--list-backends-json` output and CI fails on drift — same arrangement as
+// omnivoice_lang_table.h. The binary stays the source of truth; this only makes
+// the answer linkable.
+CA_EXPORT int crispasr_backend_caps_abi(const char* backend, char* out_csv, int32_t out_cap) {
+    if (!backend || !out_csv || out_cap <= 0)
+        return -1;
+    for (int i = 0; i < core_backend_caps::k_backend_caps_count; ++i) {
+        const auto& e = core_backend_caps::k_backend_caps[i];
+        if (std::strcmp(e.name, backend) != 0)
+            continue;
+        const size_t n = std::strlen(e.caps_csv);
+        if ((int)n + 1 > out_cap)
+            return -2;
+        std::memcpy(out_csv, e.caps_csv, n);
+        out_csv[n] = '\0';
+        return (int)n;
+    }
+    return -3; // unknown backend — distinct from "known backend, no capabilities"
+}
+
+// Every backend and its verbs in one call, so a binding can answer "what can I
+// do with this file?" without shelling out to the CLI and parsing stdout.
+// Lines are "<name>\t<caps_csv>\n"; a line with an empty second field is a
+// backend that declares no capabilities, which is different from absent.
+CA_EXPORT int crispasr_backend_caps_list_abi(char* out_buf, int32_t out_cap) {
+    // A (nullptr, 0) call is a SIZE PROBE, not an error: it returns the negative
+    // required size so a caller can allocate exactly once. Without this the
+    // caller has to guess a buffer size and hope, and a guess that is too small
+    // is indistinguishable from a genuine failure.
+    const bool probe = (out_buf == nullptr || out_cap <= 0);
+    std::string acc;
+    for (int i = 0; i < core_backend_caps::k_backend_caps_count; ++i) {
+        const auto& e = core_backend_caps::k_backend_caps[i];
+        acc += e.name;
+        acc.push_back('\t');
+        acc += e.caps_csv;
+        acc.push_back('\n');
+    }
+    if (probe || (int)acc.size() + 1 > out_cap)
+        return -(int)(acc.size() + 1); // negative required size, so callers can size the buffer
+    std::memcpy(out_buf, acc.data(), acc.size());
+    out_buf[acc.size()] = '\0';
     return (int)acc.size();
 }
 

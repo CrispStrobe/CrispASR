@@ -438,6 +438,9 @@ extern "C" {
 
     /// Shared known-model registry lookup by filename (exact then fuzzy).
     pub fn crispasr_registry_list_backends_abi(out_csv: *mut c_char, out_cap: c_int) -> c_int;
+    // #433: backend -> verb ("capability") lookup.
+    pub fn crispasr_backend_caps_abi(backend: *const c_char, out_csv: *mut c_char, out_cap: c_int) -> c_int;
+    pub fn crispasr_backend_caps_list_abi(out_buf: *mut c_char, out_cap: c_int) -> c_int;
 
     /// Describe the exact canonical artifact bundle downloaded by `-m auto`.
     /// Returns its artifact count, 0 on miss, or a negative argument/buffer error.
