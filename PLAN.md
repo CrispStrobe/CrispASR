@@ -1,5 +1,17 @@
 # CrispASR — Pending work
 
+## CLAIMED 2026-09-12 — #377 FireRedTTS3
+
+Worktree `.claude/worktrees/feat-377-fireredtts3`, branch `feat/377-fireredtts3`.
+Port FireRedTTS3 (FireRedTeam/FireRedTTS3, Apache-2.0) — the last remaining
+model in #377 (Confucius4-TTS and Raon-OpenTTS are already shipped). Base
+variant: Qwen3 LLM backbone over continuous speech representations + redae
+acoustic autoencoder + CAM++ speaker encoder, 16 kHz, zero-shot voice cloning.
+Porting from the OFFICIAL fp32 checkpoint (~8.5 GB); the drbaph int8 mirror is
+Hadamard-rotated comfy-kitchen weights and unsuitable as a conversion source.
+Heavy convert/refdump on Kaggle chr1s4 (chr1str is taken by a parallel task).
+Converter + backend + diff harness + TTS-to-ASR roundtrip acceptance.
+
 ## CLAIMED 2026-09-12 — #434 supertonic-3
 
 Worktree `.claude/worktrees/feat-434-supertonic`, branch `feat/434-supertonic`.
