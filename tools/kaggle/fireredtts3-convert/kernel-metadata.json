@@ -1,0 +1,14 @@
+{
+  "id": "chr1s4/crispasr-fireredtts3-convert",
+  "title": "crispasr-fireredtts3-convert",
+  "code_file": "fireredtts3-convert.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "false",
+  "enable_internet": "true",
+  "dataset_sources": ["chr1s4/crispasr-hf-token"],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}
