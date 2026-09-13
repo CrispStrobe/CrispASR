@@ -1522,6 +1522,28 @@ restores bandwidth while preserving speaker identity.
   the padding (A/B, and for reproducing pre-padding reference dumps). The
   lookahead consumes ~75 frames of the input-duration cap.
 
+- **Length behaviour (measured 2026-09-13, #431).** Parity with upstream is FLAT
+  in input length — our predictor handoff scores 0.994 / 0.997 / 0.997 / 0.997
+  against the reference at 11 / 30 / 50 / 62 s. But the model's own restoration
+  quality is NOT flat: an ASR roundtrip over the 62 s output is markedly worse
+  than over the 11 s one, on the faithful path. Since we match the reference at
+  0.997 throughout, that degradation is SIDON'S behaviour, not a port defect —
+  do not chase it as one.
+
+  Corollary worth knowing before optimising: windowing the predictor makes ASR
+  transcripts of long audio look better while moving AWAY from the reference
+  (0.991 / 0.987 / 0.974 at 30 / 50 / 62 s, worsening with each added window).
+  It was tried and removed. Unlike the DAC's chunking — exact because the
+  decoder is fully convolutional with cores sized by `dac_receptive_frames()` —
+  attention has no receptive field, so no amount of context makes a windowed
+  core exact.
+
+  The input cap is therefore a MEMORY bound only. It derives from
+  `CRISPASR_SIDON_MEM_BUDGET_MB` (default 4096) via the measured anchor above,
+  giving ~4000 frames (~78 s). Attention grows as O(T^2), so a 54-minute
+  recording needs ~1.5 TiB for the relative index alone — splitting very long
+  audio is inherent, not a limitation of this implementation.
+
 - **Parity against upstream (measured 2026-09-12).** The predictor handoff
   matches the upstream TorchScript reference at **cos 0.994072** on
   `samples/jfk.wav`, at frame offset **1** (exactly the documented `lead_frames`
