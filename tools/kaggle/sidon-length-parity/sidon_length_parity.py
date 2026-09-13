@@ -37,7 +37,7 @@ WORK = Path("/kaggle/working")
 SCRATCH = Path("/tmp")               # 70 GB here vs ~20 GB in working
 CLONE = SCRATCH / "CrispASR"
 CRISPASR_URL = "https://github.com/CrispStrobe/CrispASR.git"
-SCRIPT_VERSION = "2026-09-12-sidon-length-parity-4-refrepo"
+SCRIPT_VERSION = "2026-09-13-sidon-length-parity-5-reuse-dumper"
 RESULTS = WORK / "results.json"
 LENGTHS = [11, 30, 50, 62]
 
@@ -131,9 +131,20 @@ DEC = hf_hub_download(REF_REPO, dec_f, local_dir=str(SCRATCH/"m"))
 log(f"[parity] fe={FE}\n[parity] dec={DEC}")
 
 import numpy as np, torch
-from transformers import SeamlessM4TFeatureExtractor
-fx = SeamlessM4TFeatureExtractor.from_pretrained("facebook/w2v-bert-2.0")
+# REUSE THE PROVEN DUMPER instead of re-deriving its calling convention. v4
+# called fe(input_features, attention_mask) and died with
+#   forward() expected at most 2 argument(s) but received 3
+# because the traced module takes the mel ALONE. tools/reference_backends/
+# sidon_ref_dump.py has called it correctly since it was written; importing it
+# means the convention cannot drift out of step with the dumper that produced
+# sidon-ref.gguf in the first place.
+sys.path.insert(0, str(CLONE / "tools" / "reference_backends"))
+import sidon_ref_dump as srd  # noqa: E402
 fe = torch.jit.load(FE, map_location="cpu").eval()
+try:
+    log(f"[parity] fe.forward schema: {fe.forward.schema}")
+except Exception:
+    pass
 
 def read_wav(p):
     w = wave.open(str(p), "rb")
@@ -146,12 +157,12 @@ def make_clip(seconds, out):
                            "-ar", "16000", "-ac", "1", str(out)])
 
 def ref_feats(wav_path):
-    pcm, sr = read_wav(wav_path)
+    pcm, _sr = read_wav(wav_path)
+    mel = srd.seamless_mel(pcm)                  # [1, T, 160]
     with torch.no_grad():
-        f = fx(pcm, sampling_rate=sr, return_tensors="pt")
-        out = fe(f["input_features"], f["attention_mask"]) if "attention_mask" in f else fe(f["input_features"])
-    t = out[0] if isinstance(out, (tuple, list)) else out
-    return t.squeeze(0).float().numpy()          # [T, 1024]
+        out = fe(mel)                            # ONE argument — see above
+    hidden = srd.pick_hidden(out)                # the [.,.,1024] handoff
+    return hidden.squeeze(0).float().cpu().numpy()   # [T, 1024]
 
 def ours_feats(wav_path, windowed):
     dump = SCRATCH / ("h_%s.f32" % ("win" if windowed else "whole"))
