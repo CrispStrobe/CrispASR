@@ -38,7 +38,7 @@ from pathlib import Path
 
 WORK = Path("/kaggle/working"); SCRATCH = Path("/tmp")
 CLONE = SCRATCH / "CrispASR"
-SCRIPT_VERSION = "2026-09-13-zonos-lang-435-1"
+SCRIPT_VERSION = "2026-09-13-zonos-lang-435-2"
 RU = "Привет, это тест синтеза речи."
 EN = "Hello, this is a test of speech synthesis."
 
@@ -91,30 +91,71 @@ log(f"[zonos] model={M}\n[zonos] codec={C}")
 
 def synth(text, lang, out, hostile):
     env = dict(os.environ)
-    if hostile:   # hide BOTH routes: the binary and the shared library
-        env["PATH"] = "/nonexistent"
+    if hostile:
+        # v1 set PATH and LD_LIBRARY_PATH to /nonexistent and believed that
+        # disabled espeak. IT DOES NOT: the in-process route dlopens the soname,
+        # and LD_LIBRARY_PATH only ADDS search directories -- the system path
+        # still resolves libespeak-ng.so.1. Both Russian arms then produced
+        # byte-identical 205002-byte WAVs, which is what a no-op looks like.
+        # Espeak is now physically removed instead (see remove_espeak below);
+        # this only clears the data-dir override.
         env["CRISPASR_ESPEAK_DATA_PATH"] = "/nonexistent"
-        env["LD_LIBRARY_PATH"] = "/nonexistent"
     cmd = [str(CRISPASR),"--backend","zonos","-m",M,"--codec-model",C,
            "-l",lang,"--tts",text,"--tts-output",str(out)]
     p = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=1800)
     sz = out.stat().st_size if out.exists() else 0
-    return {"rc": p.returncode, "wav_bytes": sz, "stderr_tail": (p.stderr or "")[-1200:]}
+    # KEEP THE WHOLE STREAM. v1 kept only the last 1200 chars; the backend prints
+    # "N phoneme tokens (lang=XX)" BEFORE synthesis, so the model-loading and
+    # generation logs pushed it out of the window and every arm read lang=''.
+    # The signal existed and the instrument threw it away.
+    err = p.stderr or ""
+    return {"rc": p.returncode, "wav_bytes": sz, "stderr": err, "stderr_tail": err[-1500:]}
+
+def remove_espeak():
+    """Physically remove espeak, then PROVE it is gone.
+
+    Returns (gone: bool, note: str). If it is not gone, the hostile arms are
+    marked inconclusive rather than reported as passes -- an arm that cannot
+    disable the dependency it is testing proves nothing, and in v1 it silently
+    "passed" by producing perfectly good Russian audio.
+    """
+    subprocess.run("apt-get remove -y --purge espeak-ng espeak-ng-data libespeak-ng1 "
+                   ">/dev/null 2>&1 || true", shell=True)
+    # apt may leave the runtime .so behind; move every candidate out of the way.
+    subprocess.run("for f in $(find /usr/lib /usr/local/lib /lib -name 'libespeak*' 2>/dev/null); "
+                   "do mv \"$f\" \"$f.hidden\" 2>/dev/null || true; done", shell=True)
+    leftover = subprocess.run("find /usr/lib /usr/local/lib /lib -name 'libespeak*' "
+                              "! -name '*.hidden' 2>/dev/null", shell=True,
+                              capture_output=True, text=True).stdout.strip()
+    on_path = shutil.which("espeak-ng") or shutil.which("espeak")
+    if on_path or leftover:
+        return False, f"espeak still reachable (binary={on_path!r}, libs={leftover!r})"
+    return True, ""
 
 res = {"script_version": SCRIPT_VERSION, "clone": sha, "arms": {}}
-for name, text, lang, hostile in (
-        ("russian_with_espeak", RU, "ru", False),
-        ("russian_no_espeak",   RU, "ru", True),
-        ("english_no_espeak",   EN, "en", True)):
+
+# ORDER MATTERS: removal is global and irreversible in this container, so every
+# arm that NEEDS espeak runs first.
+ESPEAK_ARMS  = (("russian_with_espeak", RU, "ru", False),)
+HOSTILE_ARMS = (("russian_no_espeak",   RU, "ru", True),
+                ("english_no_espeak",   EN, "en", True))
+
+def run_arm(name, text, lang, hostile):
     out = SCRATCH/f"{name}.wav"
     if out.exists(): out.unlink()
     a = synth(text, lang, out, hostile)
-    toks = [l for l in a["stderr_tail"].splitlines() if "phoneme tokens" in l]
+    toks = [l for l in a["stderr"].splitlines() if "phoneme tokens" in l]
     a["phoneme_line"] = toks[-1] if toks else ""
-    a["refused"] = "Refusing to synthesise noise" in a["stderr_tail"] or "no phoneme tokens" in a["stderr_tail"]
+    a["refused"] = ("Refusing to synthesise noise" in a["stderr"]
+                    or "no phoneme tokens" in a["stderr"])
+    a.pop("stderr", None)   # keep results.json readable; stderr_tail is retained
     res["arms"][name] = a
     log(f"[zonos] {name}: rc={a['rc']} wav={a['wav_bytes']} refused={a['refused']} | {a['phoneme_line'][:90]}")
     (WORK/"results.json").write_text(json.dumps(res, indent=2))
+    return a
+
+for _a in ESPEAK_ARMS:
+    run_arm(*_a)
 
 # Arm 4: the per-request language must reach the model on EACH CALL.
 #
@@ -178,11 +219,27 @@ srv_log.close()
 res["arms"]["language_applied"] = {"requested": ["ru", "en"], "printed": lang_seen,
                                    "note": srv_note, "method": "single server process, 2 requests"}
 
+# ── espeak is no longer needed; remove it and run the hostile arms ──
+gone, why = remove_espeak()
+res["espeak_removed"] = gone
+res["espeak_removed_note"] = why
+log(f"[zonos] espeak removed: {gone} {why}")
+if gone:
+    for _a in HOSTILE_ARMS:
+        run_arm(*_a)
+else:
+    log("[zonos] SKIPPING hostile arms: could not disable espeak, so they would "
+        "prove nothing. Reported as inconclusive, NOT as passes.")
+
 A = res["arms"]
 verdict = {
   "ru_with_espeak_produced_audio": A["russian_with_espeak"]["wav_bytes"] > 1000,
-  "ru_without_espeak_refused":     A["russian_no_espeak"]["refused"] and A["russian_no_espeak"]["wav_bytes"] == 0,
-  "en_without_espeak_still_works": A["english_no_espeak"]["wav_bytes"] > 1000,
+  # `.get` because the hostile arms are SKIPPED when espeak could not be
+  # removed. A missing arm must not read as a pass, and must not read as a
+  # failure of the fix either -- res["espeak_removed"] says which it is.
+  "ru_without_espeak_refused":     bool(A.get("russian_no_espeak", {}).get("refused")) and
+                                   A.get("russian_no_espeak", {}).get("wav_bytes", -1) == 0,
+  "en_without_espeak_still_works": A.get("english_no_espeak", {}).get("wav_bytes", 0) > 1000,
   # Requires BOTH that each call printed its own requested language AND that the
   # two differ -- a backend frozen at init would print the same value twice, and
   # a backend that printed nothing would pass an equality-only check vacuously.
@@ -191,7 +248,14 @@ verdict = {
   "per_request_language_applied": [x.split("-")[0] for x in lang_seen] == ["ru", "en"],
 }
 res["verdict"] = verdict
+# CONCLUSIVE is separate from PASS. If espeak could not be removed, arms 2 and 3
+# did not run, and "all_pass == False" would misreport a missing measurement as a
+# failed one. v1 made the opposite error: it reported arms that ran but could not
+# fail.
+res["conclusive"] = bool(gone)
 res["all_pass"] = all(verdict.values())
 (WORK/"results.json").write_text(json.dumps(res, indent=2))
 log("[zonos] VERDICT " + json.dumps(verdict))
 log("[zonos] ALL PASS" if res["all_pass"] else "[zonos] NOT ALL PASS")
+if not res["conclusive"]:
+    log("[zonos] INCONCLUSIVE: espeak could not be removed; arms 2-3 did not run.")
