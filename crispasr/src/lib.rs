@@ -402,6 +402,44 @@ impl Session {
             .collect())
     }
 
+    /// Every backend that can open this GGUF, primary first (#433).
+    ///
+    /// [`detect_backend`](Self::detect_backend) is 1:1 — one architecture
+    /// string, one backend — and that is not always the whole truth. A voxcpm2
+    /// GGUF opens both as `voxcpm2-tts` (the full TTS pipeline) and as
+    /// `voxcpm2-vae` (the standalone causal VAE upscaler): the VAE entry point
+    /// calls the same loader with `vae_only`, and there is no separate VAE
+    /// model to download. Before this, a caller had no way to discover the
+    /// second name.
+    ///
+    /// The relation is DECLARED, not inferred: nothing in a GGUF says "another
+    /// backend can also read this", so it is a recorded fact about the runtimes
+    /// (`core_arch::alternates`).
+    ///
+    /// An unknown architecture is an `Err`, matching `detect_backend` — an
+    /// empty list would not distinguish "not recognised" from "recognised, no
+    /// alternates".
+    pub fn detect_backends(model_path: &str) -> Result<Vec<String>, String> {
+        let path = CString::new(model_path).map_err(|e| format!("invalid path: {e}"))?;
+        // Sized for the longest plausible list; the ABI returns -5 rather than
+        // truncating, so a too-small buffer can never under-report.
+        let mut buf = [0i8; 512];
+        let n = unsafe {
+            crispasr_sys::crispasr_detect_backends_from_gguf(
+                path.as_ptr(),
+                buf.as_mut_ptr(),
+                buf.len() as i32,
+            )
+        };
+        if n <= 0 {
+            return Err(format!("backend detection failed (code {n})"));
+        }
+        let s = unsafe { CStr::from_ptr(buf.as_ptr()) }
+            .to_string_lossy()
+            .into_owned();
+        Ok(s.lines().filter(|l| !l.is_empty()).map(|l| l.to_string()).collect())
+    }
+
     /// Detect the backend from a GGUF file without opening it.
     pub fn detect_backend(model_path: &str) -> Result<String, String> {
         let path = CString::new(model_path).map_err(|e| format!("invalid path: {e}"))?;

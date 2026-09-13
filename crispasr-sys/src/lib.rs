@@ -837,6 +837,13 @@ extern "C" {
         out_cap: c_int,
     ) -> c_int;
 
+    // #433: every backend that can open this file, newline-separated.
+    pub fn crispasr_detect_backends_from_gguf(
+        path: *const c_char,
+        out: *mut c_char,
+        out_cap: c_int,
+    ) -> c_int;
+
     // --- FireRedPunc punctuation restoration ---
     pub fn crispasr_punc_init(model_path: *const c_char) -> *mut c_void;
     pub fn crispasr_punc_process(ctx: *mut c_void, text: *const c_char) -> *mut c_char;

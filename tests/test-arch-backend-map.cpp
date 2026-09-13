@@ -268,6 +268,51 @@ TEST_CASE("every emitted backend name is a name a surface can open", "[unit][arc
     }
 }
 
+TEST_CASE("alternates: every declared name is a real backend, and primary comes first", "[unit][arch][backend-map]") {
+    // The alternates table (#433) says "this OTHER backend opens the same file".
+    // Both sides have to be names a surface can actually open, or the plural
+    // detect hands callers a name that cannot be used — worse than omitting it.
+    size_t na = 0;
+    const core_arch::alternate* a = core_arch::alternates(&na);
+    REQUIRE(na > 0); // an empty table would make every check below vacuous
+
+    size_t n = 0;
+    const core_arch::entry* k = core_arch::table(&n);
+    std::set<std::string> mapped;
+    for (size_t i = 0; i < n; i++)
+        mapped.insert(k[i].backend);
+
+    for (size_t i = 0; i < na; i++) {
+        INFO(a[i].backend << " -> also " << a[i].also);
+        // The primary must be something backend_for_arch() can actually return,
+        // otherwise the entry is unreachable and silently does nothing.
+        CHECK(mapped.count(a[i].backend) == 1);
+        // The alternate must be a real backend name too.
+        CHECK(mapped.count(a[i].also) == 1);
+        // An entry that points at itself would duplicate the primary.
+        CHECK(std::string(a[i].backend) != std::string(a[i].also));
+    }
+}
+
+TEST_CASE("backends_for_arch returns the primary first, then its alternates", "[unit][arch][backend-map]") {
+    // Known arch with an alternate: both names, primary first.
+    auto v = core_arch::backends_for_arch("voxcpm2");
+    REQUIRE(v.size() == 2);
+    CHECK(v[0] == "voxcpm2-tts");
+    CHECK(v[1] == "voxcpm2-vae");
+
+    // Known arch WITHOUT an alternate: exactly one name. This is the control —
+    // without it the test above would pass just as well if the function
+    // appended alternates to everything.
+    auto w = core_arch::backends_for_arch("whisper");
+    CHECK(w.size() == 1);
+
+    // Unknown arch: empty, same contract as backend_for_arch returning "".
+    CHECK(core_arch::backends_for_arch("definitely-not-an-arch").empty());
+    CHECK(core_arch::backends_for_arch("").empty());
+    CHECK(core_arch::backends_for_arch(nullptr).empty());
+}
+
 // ---------------------------------------------------------------------------
 // The ABI-level guard. Everything above would still have passed if
 // `crispasr_detect_backend_from_gguf` had kept its own private copy of the

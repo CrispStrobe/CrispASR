@@ -1502,6 +1502,50 @@ CA_EXPORT nemotron_result* crispasr_nemotron_transcribe(nemotron_context* ctx, c
 #include "ggml-backend.h"
 #include "gguf.h"
 
+// #433: EVERY backend that can open this file, newline-separated, primary
+// first. detect_backend() is 1:1 and that is not always the whole truth — a
+// voxcpm2 GGUF opens both as voxcpm2-tts and as voxcpm2-vae (same loader,
+// vae_only flag, no separate model in the registry), and a caller had no way to
+// discover the second. See core_arch::alternates().
+//
+// Returns the number of bytes written, or a negative code matching
+// crispasr_detect_backend_from_gguf. A buffer too small is -5, NOT a truncated
+// list: a silently cut list would name fewer backends than exist, which is the
+// failure this function was added to remove.
+CA_EXPORT int crispasr_detect_backends_from_gguf(const char* path, char* out, int out_cap) {
+    if (!path || !out || out_cap <= 0)
+        return -1;
+    out[0] = '\0';
+
+    gguf_init_params p = {/*no_alloc*/ true, /*ctx*/ nullptr};
+    gguf_context* gctx = gguf_init_from_file(path, p);
+    if (!gctx)
+        return -2;
+    const int key_id = gguf_find_key(gctx, "general.architecture");
+    if (key_id < 0) {
+        gguf_free(gctx);
+        return -3;
+    }
+    const char* arch = gguf_get_val_str(gctx, key_id);
+    if (!arch) {
+        gguf_free(gctx);
+        return -4;
+    }
+    const std::vector<std::string> names = core_arch::backends_for_arch(arch);
+    gguf_free(gctx);
+
+    std::string joined;
+    for (size_t i = 0; i < names.size(); i++) {
+        if (i)
+            joined += '\n';
+        joined += names[i];
+    }
+    if ((int)joined.size() + 1 > out_cap)
+        return -5;
+    std::memcpy(out, joined.c_str(), joined.size() + 1);
+    return (int)joined.size();
+}
+
 CA_EXPORT int crispasr_detect_backend_from_gguf(const char* path, char* out_name, int out_cap) {
     if (!path || !out_name || out_cap <= 0)
         return -1;

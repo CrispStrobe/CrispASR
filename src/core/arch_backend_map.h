@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 // ---------------------------------------------------------------------------
 // `general.architecture` → CrispASR backend name: the SINGLE source of truth.
 //
@@ -320,6 +322,56 @@ inline const char* backend_for_arch(const char* arch) {
 
 inline std::string backend_for_arch(const std::string& arch) {
     return std::string(backend_for_arch(arch.c_str()));
+}
+
+// ---------------------------------------------------------------------------
+// #433: backends that open the SAME FILE as the detected one.
+//
+// backend_for_arch() is 1:1 by construction — one architecture string, one
+// backend. That is not always the whole truth. A voxcpm2 GGUF is openable both
+// as `voxcpm2-tts` (the full TTS pipeline) and as `voxcpm2-vae` (the standalone
+// causal VAE upscaler): voxcpm2_vae_init_from_file() calls the SAME
+// voxcpm2_init_internal() loader with vae_only=true, and there is no separate
+// VAE model in the registry. detect_backend() named one of them and a caller
+// had no way to learn the other existed.
+//
+// This is a DECLARED relation, not an inferred one. There is no property of a
+// GGUF that says "a second backend can also read this"; it is a fact about the
+// runtimes, so it is written down here where the arch table already lives, and
+// pinned by tests/test-arch-backend-map.cpp like everything else in this file.
+//
+// Keep entries to real cases: the alternate must open the identical file with
+// no companion, no re-conversion and no extra flag. Family variants that need a
+// different GGUF do NOT belong here.
+struct alternate {
+    const char* backend; // what backend_for_arch() returns
+    const char* also;    // another backend that opens the same file
+};
+
+inline const alternate* alternates(size_t* n_out) {
+    static const alternate k[] = {
+        {"voxcpm2-tts", "voxcpm2-vae"},
+    };
+    if (n_out)
+        *n_out = sizeof(k) / sizeof(k[0]);
+    return k;
+}
+
+// Every backend that can open a file of this architecture, primary FIRST.
+// Empty when the architecture is unknown — same contract as backend_for_arch().
+inline std::vector<std::string> backends_for_arch(const char* arch) {
+    std::vector<std::string> out;
+    const char* primary = backend_for_arch(arch);
+    if (!primary || !*primary)
+        return out;
+    out.emplace_back(primary);
+    size_t n = 0;
+    const alternate* a = alternates(&n);
+    for (size_t i = 0; i < n; i++) {
+        if (std::strcmp(a[i].backend, primary) == 0)
+            out.emplace_back(a[i].also);
+    }
+    return out;
 }
 
 } // namespace core_arch

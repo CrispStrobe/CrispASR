@@ -3700,6 +3700,37 @@ def detect_backend_from_gguf(
     return out.value.decode("utf-8")
 
 
+def detect_backends_from_gguf(
+    gguf_path: str,
+    *,
+    lib_path: Optional[str] = None,
+) -> list:
+    """Every backend that can open this GGUF, primary first (#433).
+
+    ``detect_backend_from_gguf`` is 1:1 — one architecture string, one backend —
+    and that is not always the whole truth. A voxcpm2 GGUF opens both as
+    ``voxcpm2-tts`` (the full TTS pipeline) and as ``voxcpm2-vae`` (the
+    standalone causal VAE upscaler): the VAE entry point calls the same loader
+    with ``vae_only``, and there is no separate VAE model to download.
+
+    Returns ``[]`` when the architecture maps to no backend, matching
+    ``detect_backend_from_gguf`` returning ``""``.
+    """
+    lib = ctypes.CDLL(lib_path or _find_lib())
+    fn = lib.crispasr_detect_backends_from_gguf
+    fn.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int]
+    fn.restype = ctypes.c_int
+
+    cap = 512
+    out = ctypes.create_string_buffer(cap)
+    rc = fn(gguf_path.encode("utf-8"), out, cap)
+    # rc == -5 is "buffer too small", never a truncated list — the ABI refuses
+    # rather than naming fewer backends than exist.
+    if rc < 0:
+        raise RuntimeError(f"detect_backends_from_gguf failed (rc={rc})")
+    return [l for l in out.value.decode("utf-8").splitlines() if l]
+
+
 # =========================================================================
 # Direct Parakeet API (bypasses unified session)
 # =========================================================================
