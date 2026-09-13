@@ -26,7 +26,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-SCRIPT_VERSION = "v1"
+SCRIPT_VERSION = "v2"
 WORK = Path("/kaggle/working")
 REPO = WORK / "CrispASR"
 TEMP = Path("/kaggle/temp") if Path("/kaggle/temp").is_dir() else Path("/tmp")
@@ -42,7 +42,7 @@ if not REPO.exists():
     subprocess.check_call(["git", "clone", "--depth", "1", "-b", BRANCH,
                            "https://github.com/CrispStrobe/CrispASR", str(REPO)])
 subprocess.check_call(["git", "log", "--oneline", "-1"], cwd=str(REPO))
-subprocess.check_call(["git", "submodule", "update", "--init", "ggml"], cwd=str(REPO))
+subprocess.check_call(["git", "submodule", "update", "--init", "--recursive"], cwd=str(REPO))
 sys.path.insert(0, str(REPO / "tools" / "kaggle"))
 import kaggle_harness as kh  # noqa: E402
 
