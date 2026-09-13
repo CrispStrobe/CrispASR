@@ -199,7 +199,21 @@ for script, outs in ((("tools/gen-feature-matrix.py"), ("docs/feature-matrix.md"
             dst.write_bytes(src.read_bytes())
             print(f"    -> {o} ({src.stat().st_size} bytes)")
         else:
-            print(f"    !! {o} not produced")
+            print(f"    !! {o} NOT PRODUCED")
+            continue
+        # Also emit the file INTO THE LOG, base64'd. kernels_logs returns in
+        # seconds; kernels_output pulls the whole working dir including .ccache
+        # and stalls for many minutes (documented gotcha). These artifacts are
+        # ~17 KB + ~12 KB, so the log is by far the cheaper channel. The HTML is
+        # skipped -- it is regenerable from the same binary and not worth 106 KB
+        # of log.
+        if not o.endswith(".html"):
+            import base64
+            b64 = base64.b64encode(src.read_bytes()).decode()
+            print(f"===B64-BEGIN {o} {len(b64)}===", flush=True)
+            for i in range(0, len(b64), 2000):
+                print(b64[i:i + 2000], flush=True)
+            print(f"===B64-END {o}===", flush=True)
 
 # ── quantize ────────────────────────────────────────────────────────────────
 kh.step("quantize q4_k + upload")
