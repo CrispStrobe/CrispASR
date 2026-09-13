@@ -111,11 +111,31 @@ for name, text, lang, hostile in (
     log(f"[zonos] {name}: rc={a['rc']} wav={a['wav_bytes']} refused={a['refused']} | {a['phoneme_line'][:90]}")
     (WORK/"results.json").write_text(json.dumps(res, indent=2))
 
+# Arm 4: the per-request language must reach the model on EACH call, not be
+# frozen at init. The backend prints "N phoneme tokens (lang=XX)"; run ru then
+# en in sequence and require the printed lang to track the request.
+lang_seen = []
+for lang, text in (("ru", RU), ("en", EN)):
+    out = SCRATCH / f"langarm_{lang}.wav"
+    if out.exists(): out.unlink()
+    a = synth(text, lang, out, hostile=False)
+    got = ""
+    for line in a["stderr_tail"].splitlines():
+        if "phoneme tokens (lang=" in line:
+            got = line.split("lang=")[1].rstrip(")").strip()
+    lang_seen.append(got)
+    log(f"[zonos] language_applied[{lang}]: printed lang={got!r} rc={a['rc']}")
+res["arms"]["language_applied"] = {"requested": ["ru", "en"], "printed": lang_seen}
+
 A = res["arms"]
 verdict = {
   "ru_with_espeak_produced_audio": A["russian_with_espeak"]["wav_bytes"] > 1000,
   "ru_without_espeak_refused":     A["russian_no_espeak"]["refused"] and A["russian_no_espeak"]["wav_bytes"] == 0,
   "en_without_espeak_still_works": A["english_no_espeak"]["wav_bytes"] > 1000,
+  # Requires BOTH that each call printed its own requested language AND that the
+  # two differ -- a backend frozen at init would print the same value twice, and
+  # a backend that printed nothing would pass an equality-only check vacuously.
+  "per_request_language_applied": lang_seen == ["ru", "en"],
 }
 res["verdict"] = verdict
 res["all_pass"] = all(verdict.values())
