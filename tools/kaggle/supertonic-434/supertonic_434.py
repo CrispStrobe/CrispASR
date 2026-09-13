@@ -7,7 +7,7 @@ Verdict gates (results.json "validation"):
   3. CONTROL: the upstream ONNX reference wav passes the SAME ASR at >= 0.8
      (else the ASR arm, not the port, is at fault and the run is inconclusive).
   4. GPU-synthesised wav passes the same transcript gate (CUDA correctness).
-SCRIPT_VERSION = v5
+SCRIPT_VERSION = v6
 """
 
 import json
@@ -56,7 +56,7 @@ import kaggle_harness as kh  # noqa: E402
 kh.init_progress()
 kh.resolve_hf_token()
 commit = subprocess.check_output(["git", "-C", REPO, "rev-parse", "HEAD"], text=True).strip()
-print(f"SCRIPT_VERSION=v5 clone={commit}", flush=True)
+print(f"SCRIPT_VERSION=v6 clone={commit}", flush=True)
 kh.step("provenance", commit=commit)
 
 kh.step("dependencies")
@@ -120,7 +120,7 @@ diff = build / "bin/crispasr-diff"
 if not cli.exists() or not diff.exists():
     raise RuntimeError("build produced no binaries (proof-of-work check)")
 
-results = {"commit": commit, "cuda_arch": arch, "script_version": "v5"}
+results = {"commit": commit, "cuda_arch": arch, "script_version": "v6"}
 
 kh.step("diff.stages")
 p = run([diff, "supertonic-tts", f16, ref, REPO / "samples/jfk.wav"], capture=True, check=False)
@@ -201,6 +201,37 @@ else:
         errors.append(f"CPU synth failed roundtrip (ok={cpu_ok} overlap={ov_cpu:.2f})")
     if not gpu_ok or ov_gpu < 0.8:
         errors.append(f"GPU synth failed roundtrip (ok={gpu_ok} overlap={ov_gpu:.2f})")
+# ── wiring audit + regen of the artifacts a NEW BACKEND makes stale ────────
+# ci.yml runs check-backend-wiring.py, and a new backend leaves
+# docs/feature-matrix.{md,html} and src/core/backend_caps_table.h behind. Both
+# are derived from `crispasr --list-backends-json`, so they can only be produced
+# where a build carrying this backend exists -- not on the dev box, which cannot
+# build. Emitting them here is what lets the branch merge without CI failing on
+# a staleness that has nothing to do with the port's correctness.
+kh.step("wiring audit + regen")
+rw = run([sys.executable, str(REPO / "tools" / "check-backend-wiring.py"),
+          "--crispasr", str(cli)], capture=True, check=False)
+print((rw.stdout or "")[-2500:], flush=True)
+results["wiring_stdout_tail"] = (rw.stdout or "")[-2000:]
+results["wiring_rc"] = rw.returncode
+for script, outs in (("tools/gen-feature-matrix.py",
+                      ("docs/feature-matrix.md", "docs/feature-matrix.html")),
+                     ("tools/gen-backend-caps-table.py",
+                      ("src/core/backend_caps_table.h",))):
+    rg = run([sys.executable, str(REPO / script), "--crispasr", str(cli)],
+             capture=True, check=False, cwd=str(REPO))
+    print(f"  {script}: rc={rg.returncode} {(rg.stdout or '')[-300:]} {(rg.stderr or '')[-300:]}", flush=True)
+    for o in outs:
+        src_p = REPO / o
+        if src_p.is_file():
+            dst = WORK / "regen" / o
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_bytes(src_p.read_bytes())
+            print(f"    -> {o} ({src_p.stat().st_size} bytes)", flush=True)
+        else:
+            # "not produced" must not look like "produced, unchanged".
+            print(f"    !! {o} NOT PRODUCED", flush=True)
+
 results["validation"] = {"passed": not errors, "errors": errors}
 
 (WORK / "results.json").write_text(json.dumps(results, ensure_ascii=False, indent=2) + "\n")
