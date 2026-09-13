@@ -38,7 +38,7 @@ from pathlib import Path
 
 WORK = Path("/kaggle/working"); SCRATCH = Path("/tmp")
 CLONE = SCRATCH / "CrispASR"
-SCRIPT_VERSION = "2026-09-13-zonos-lang-435-3"
+SCRIPT_VERSION = "2026-09-13-zonos-lang-435-4"
 RU = "Привет, это тест синтеза речи."
 EN = "Hello, this is a test of speech synthesis."
 
@@ -246,6 +246,11 @@ verdict = {
   # One process, two requests. Pre-fix BOTH print the startup language ("en-us"),
   # so ["ru","en"] is reachable only if the per-request language is applied.
   "per_request_language_applied": [x.split("-")[0] for x in lang_seen] == ["ru", "en"],
+  # Pin WHICH English. v3 passed the line above while resolving "en" to en-029
+  # (Caribbean): the first prefix match in alphabetical table order. Of 96 codes
+  # only "en" and "fr" lack a plain entry, so the choice has to be stated rather
+  # than inherited from the file's ordering.
+  "en_resolves_to_en_us": len(lang_seen) > 1 and lang_seen[1] == "en-us",
 }
 res["verdict"] = verdict
 # CONCLUSIVE is separate from PASS. If espeak could not be removed, arms 2 and 3

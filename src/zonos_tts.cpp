@@ -610,20 +610,58 @@ int zonos_tts_set_language(struct zonos_tts_context* ctx, const char* lang_code)
             return 0;
         }
     }
-    // #435: fall back to a REGIONAL variant. The table holds espeak codes
-    // ("en-us", "fr-fr", ...), so a bare "en" matched nothing and this returned
-    // -1, leaving the previous language in place. That was invisible for "en"
-    // because en-us is already the default, so `-l en` looked like it worked
-    // while doing nothing; for a server it meant a request for "en" after one
-    // for "ru" kept speaking Russian.
-    const std::string prefix = std::string(lang_code) + "-";
-    for (size_t i = 0; i < ctx->cond_state.language_codes.size(); i++) {
-        const std::string& c = ctx->cond_state.language_codes[i];
-        if (c.size() > prefix.size() && c.compare(0, prefix.size(), prefix) == 0) {
-            ctx->cond_state.language_id = (int)i;
-            fprintf(stderr, "zonos_tts: language '%s' resolved to '%s'\n", lang_code, c.c_str());
-            return 0;
+    // #435: fall back to a REGIONAL variant. The table holds espeak codes, so a
+    // bare "en" matched nothing and this returned -1, leaving the previous
+    // language in place. That was invisible for "en" because en-us is already
+    // the default, so `-l en` looked like it worked while doing nothing; for a
+    // server it meant a request for "en" after one for "ru" kept speaking
+    // Russian.
+    //
+    // WHICH variant is not arbitrary. Of the 96 codes only two bases lack a
+    // plain entry — "en" and "fr" — and taking the first prefix match in table
+    // order picks by the ALPHABET: "en" landed on en-029 (Caribbean) and "fr"
+    // would land on fr-be (Belgian). Measured, not assumed: v3 of the #435
+    // kernel requested "en" and the backend printed lang=en-029.
+    const std::string base = lang_code;
+    auto select = [&](const std::string& want) -> int {
+        for (size_t i = 0; i < ctx->cond_state.language_codes.size(); i++)
+            if (ctx->cond_state.language_codes[i] == want)
+                return (int)i;
+        return -1;
+    };
+    // 1. The conventional variant for a base that has no plain code. en-us also
+    //    matches the default this context is constructed with (see init).
+    static const struct {
+        const char* base;
+        const char* want;
+    } kPreferred[] = {{"en", "en-us"}};
+    int hit = -1;
+    for (const auto& pref : kPreferred) {
+        if (base == pref.base) {
+            hit = select(pref.want);
+            break;
         }
+    }
+    // 2. The xx-xx form, which is how espeak names most national defaults
+    //    (fr -> fr-fr). Keeps this general instead of growing the table above.
+    if (hit < 0)
+        hit = select(base + "-" + base);
+    // 3. Otherwise the SHORTEST prefix match, so the choice is a stable property
+    //    of the codes rather than of their order in the file.
+    if (hit < 0) {
+        const std::string prefix = base + "-";
+        for (size_t i = 0; i < ctx->cond_state.language_codes.size(); i++) {
+            const std::string& c = ctx->cond_state.language_codes[i];
+            if (c.size() > prefix.size() && c.compare(0, prefix.size(), prefix) == 0)
+                if (hit < 0 || c.size() < ctx->cond_state.language_codes[(size_t)hit].size())
+                    hit = (int)i;
+        }
+    }
+    if (hit >= 0) {
+        ctx->cond_state.language_id = hit;
+        fprintf(stderr, "zonos_tts: language '%s' resolved to '%s'\n", lang_code,
+                ctx->cond_state.language_codes[(size_t)hit].c_str());
+        return 0;
     }
     fprintf(stderr, "zonos_tts: unknown language code '%s'\n", lang_code);
     return -1;
