@@ -318,6 +318,7 @@ static bool frt_graph_compute(fireredtts3_tts_context* ctx, frt_graph& g) {
     if (ggml_backend_sched_graph_compute(ctx->sched, g.gf) != GGML_STATUS_SUCCESS) {
         std::fprintf(stderr, "fireredtts3: graph compute failed\n");
         ggml_free(g.ctx0);
+        g.ctx0 = nullptr;
         return false;
     }
     return true;
@@ -2048,7 +2049,11 @@ extern "C" int fireredtts3_tts_diff(const char* core_gguf, const char* redae_ggu
             if (f) {
                 std::fwrite(ref_noise.data(), sizeof(float), ref_noise.size(), f);
                 std::fclose(f);
+#ifdef _WIN32
+                _putenv_s("FIREREDTTS3_NOISE", npath.c_str());
+#else
                 setenv("FIREREDTTS3_NOISE", npath.c_str(), 1);
+#endif
             }
         }
         std::vector<float> ref_ids;
