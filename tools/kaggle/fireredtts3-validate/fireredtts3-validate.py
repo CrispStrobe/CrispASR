@@ -26,7 +26,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-SCRIPT_VERSION = "v4-campp-trace"
+SCRIPT_VERSION = "v5-campp-trace-segpoolfix"
 WORK = Path("/kaggle/working")
 REPO = WORK / "CrispASR"
 TEMP = Path("/kaggle/temp") if Path("/kaggle/temp").is_dir() else Path("/tmp")
@@ -49,9 +49,21 @@ import kaggle_harness as kh  # noqa: E402
 kh.init_progress()
 
 kh.step("install deps")
-kh.sh_with_progress("pip install -q huggingface_hub hf_transfer openai-whisper")
+kh.sh_with_progress("pip install -q huggingface_hub hf_transfer openai-whisper gguf")
 tool = kh.install_build_toolchain()
 print(f"  toolchain: {tool}")
+
+# Assert the EXACT symbol the consumer imports, HERE, before the build.
+# v4 spent the whole CUDA build and the entire per-stage diff and then died on
+# `from gguf import GGUFReader` at the second-to-last line -- 5927 lines of log
+# for a missing pip package. Cheap checks belong before expensive ones, and the
+# check must name the symbol actually used, not a proxy for it.
+try:
+    from gguf import GGUFReader as _probe_GGUFReader  # noqa: F401
+except Exception as _e:
+    raise SystemExit(f"gguf.GGUFReader unavailable after install: {_e!r} "
+                     f"-- failing now rather than after the build")
+print("  gguf.GGUFReader: importable")
 
 hf_token = kh.resolve_hf_token()
 if hf_token:
