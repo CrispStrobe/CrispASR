@@ -10,11 +10,23 @@
   CMake, C-ABI session ×10 points, registry, quantizer, diff harness, tests,
   README/docs/tts.md, Go LDFLAGS). All syntax-checked with g++ -fsyntax-only.
 - [~] Kaggle validate: kernel `chr1str/crispasr-supertonic-434`.
-  - v1 ERROR: reference dumper had been authored against the MAIN tree by the
-    bash-cwd trap and never reached the branch — clone had no file. Fixed in
-    commit e58b06da; v2 relaunched.
-- [ ] Per-stage diff ALL PASS + TTS→ASR roundtrip (CPU + GPU) + control arm.
-- [ ] HF upload (f16 checkpointed pre-validation; ref.gguf on validation pass).
+  - v1 ERROR: ref dumper missing from branch (bash-cwd trap). Fixed e58b06da.
+  - v2 ERROR, two findings: (a) te_* stages cos~0 with |mine|==|ref| to 1e-6 =
+    the pre-e32ca6f2 reference layout transpose; (b) GGML_ASSERT(can_repeat)
+    at ggml.c:2274 — ConvNeXt gamma ships (1,C,1) and cannot broadcast against
+    (C,T); killed the vf graph AND both synth arms. Fixed c084a6d6.
+    POSITIVES: text_ids byte-identical, dur PASS (whole CPU dp path correct),
+    control_overlap 1.0 (ASR arm + upstream reference both sound).
+  - v3 ERROR, one finding: everything cos=1.000000 through xt_8; ONLY "audio"
+    failed (cos~0, |mine|/|ref|=0.613 — NOT a transpose signature). Localised
+    locally with a numpy op-for-op sim of the C++ vocoder vs ORT with promoted
+    Pad outputs: the VOCODER convs are CAUSAL — edge pad (K-1)*dil entirely on
+    the LEFT (embed 6/0, convnext (K-1)*dil/0, head 2/0) while vf/dp/te are
+    symmetric. Causal numpy sim == ORT end-to-end at cos 0.999999. Fixed
+    5cf3c481; v4 in flight.
+- [ ] v4: per-stage diff ALL PASS + TTS→ASR roundtrip (CPU + GPU) + control.
+- [x] HF: f16 checkpointed; model card with license: openrail VERIFIED landed
+  (api.model_info cardData). ref.gguf uploads on validation pass.
 
 ## VERIFIED vs ASSUMED (honest ledger)
 - VERIFIED: upstream ORT pipeline reproduced locally (3.1 s wav, M1). Converter
