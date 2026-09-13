@@ -38,7 +38,7 @@ from pathlib import Path
 
 WORK = Path("/kaggle/working"); SCRATCH = Path("/tmp")
 CLONE = SCRATCH / "CrispASR"
-SCRIPT_VERSION = "2026-09-13-zonos-lang-435-2"
+SCRIPT_VERSION = "2026-09-13-zonos-lang-435-3"
 RU = "Привет, это тест синтеза речи."
 EN = "Hello, this is a test of speech synthesis."
 
