@@ -590,7 +590,7 @@ func (s *CrispasrSession) SetFrequencyPenalty(penalty float32) error {
 }
 
 // SetTTSSteps sets the diffusion / CFM / masked-iterative step count for
-// step-based TTS backends (chatterbox, vibevoice, kugelaudio, tada, irodori,
+// step-based TTS backends (chatterbox, vibevoice, kugelaudio, tada, irodori, supertonic,
 // omnivoice). Higher = better fidelity, slower. Other backends silently no-op.
 func (s *CrispasrSession) SetTTSSteps(steps int) error {
 	rc := C.crispasr_session_set_tts_steps(s.handle, C.int(steps))

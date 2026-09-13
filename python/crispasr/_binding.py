@@ -2330,7 +2330,7 @@ class Session:
 
     def set_tts_steps(self, steps: int) -> None:
         """Set the diffusion / CFM / masked-iterative step count for step-based
-        TTS backends (chatterbox, vibevoice, kugelaudio, tada, irodori, omnivoice).
+        TTS backends (chatterbox, vibevoice, kugelaudio, tada, irodori, omnivoice, supertonic).
 
         Higher = better fidelity, slower. Soft no-op (rc=-2) when the active
         backend has no step-based stage.
@@ -2864,7 +2864,7 @@ class Session:
         ``kokoro``, ``orpheus``, ``chatterbox``, ``indextts``, ``voxcpm2-tts``,
         ``csm``, ``dia``, ``fastpitch``, ``bananamind-tts``, ``speecht5``,
         ``melotts``, ``piper``, ``parler-tts``, ``outetts``, ``cosyvoice3-tts``,
-        ``pocket-tts``, ``f5-tts``, ``irodori-tts``, ``bark``, ``kugelaudio``, ``tada``,
+        ``pocket-tts``, ``f5-tts``, ``irodori-tts``, ``supertonic``, ``bark``, ``kugelaudio``, ``tada``,
         ``lfm2-audio``, ``voxtral-tts``, ``dots-tts``, ``omnivoice``.
         For qwen3-tts call :meth:`set_codec_path` and one of:
 

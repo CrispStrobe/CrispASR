@@ -130,6 +130,10 @@ REGISTERED_BACKENDS: Dict[str, str] = {
     # audio arg is a real multi-speaker clip.
     "tiron":      "reference_backends.tiron",
     "parakeet":   "reference_backends.parakeet",
+    # Supertonic-3 (#434): ONNX-only distribution — the reference IS the
+    # onnxruntime pipeline (standalone script; run it directly, not via this
+    # dispatcher). Kept here for discoverability.
+    "supertonic-tts": "reference_backends.supertonic_tts",
     # WeSpeaker ResNet34-LM speaker embedder (#324). model_dir is a snapshot of
     # Wespeaker/wespeaker-voxceleb-resnet34-LM (containing `avg_model`), or the
     # checkpoint path itself. Needs the upstream package importable — either

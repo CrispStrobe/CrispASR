@@ -265,6 +265,14 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
     // run on it but do not expect much.
     const bool is_btc = (arch == "btc");
 
+    // Supertonic-3 (#434): quantize ONLY the big vector-field / vocoder 2-D
+    // matmul weights (vf.* / voc.*). Everything else — the CPU-side duration
+    // predictor + text encoder (dp.* / te.*, tiny), the char embedders, the
+    // baked style prototypes / uncond tokens, all voice.* presets and the
+    // text.* index tables — stays at source precision. The dwconv kernels are
+    // 3-D and already fall out via ok_dims.
+    const bool is_supertonic = (arch == "supertonic-tts");
+
     const bool is_chatterbox =
         (arch.find("chatterbox") != std::string::npos || arch.find("kartoffelbox") != std::string::npos);
     // CosyVoice3: the three sub-models live in separate GGUFs but share the
@@ -798,6 +806,8 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
             // `--q4_k` silently falls back to Q4_0. That fallback is why the q4
             // row costs so much -- it is Q4_0, not a k-quant.
             !(is_tabcnn && sname == "head.weight") &&
+            // Supertonic-3: allow-list vf.*/voc.* (see is_supertonic note).
+            !(is_supertonic && !(sname.rfind("vf.", 0) == 0 || sname.rfind("voc.", 0) == 0)) &&
             !(is_granite_family && !granite_quant_all && sname.find("enc.") == 0) &&
             // MOSS-Audio: keep encoder + adapter + deepstack at F16
             !(arch == "moss_audio" &&

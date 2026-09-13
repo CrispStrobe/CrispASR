@@ -287,6 +287,10 @@
 #include "irodori_tts.h"
 #define CA_HAVE_IRODORI_TTS 1
 #endif
+#if __has_include("supertonic_tts.h")
+#include "supertonic_tts.h"
+#define CA_HAVE_SUPERTONIC 1
+#endif
 #if __has_include("m2m100.h")
 #include "m2m100.h"
 #define CA_HAVE_M2M100 1
@@ -2151,6 +2155,9 @@ struct crispasr_session {
 #ifdef CA_HAVE_IRODORI_TTS
     irodori_tts_context* irodori_ctx = nullptr;
 #endif
+#ifdef CA_HAVE_SUPERTONIC
+    supertonic_context* supertonic_ctx = nullptr;
+#endif
 #ifdef CA_HAVE_PIPER
     piper_tts_context* piper_ctx = nullptr;
 #endif
@@ -3758,6 +3765,22 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
         return s;
     }
 #endif
+#ifdef CA_HAVE_SUPERTONIC
+    if (s->backend == "supertonic" || s->backend == "supertonic-tts" || s->backend == "supertonic_tts" ||
+        s->backend == "supertonic3" || s->backend == "supertonic-3") {
+        s->backend = "supertonic";
+        supertonic_context_params p = supertonic_context_default_params();
+        p.n_threads = s->n_threads;
+        p.verbosity = g_open_verbosity_tls;
+        p.use_gpu = g_open_use_gpu_tls;
+        s->supertonic_ctx = supertonic_init_from_file(model_path, p);
+        if (!s->supertonic_ctx) {
+            delete s;
+            return nullptr;
+        }
+        return s;
+    }
+#endif
 #ifdef CA_HAVE_PIPER
     if (s->backend == "piper" || s->backend == "piper-tts") {
         s->backend = "piper";
@@ -4179,6 +4202,10 @@ CA_EXPORT int crispasr_session_output_sample_rate(crispasr_session* s) {
     if (s->irodori_ctx)
         return irodori_tts_sample_rate(s->irodori_ctx);
 #endif
+#ifdef CA_HAVE_SUPERTONIC
+    if (s->supertonic_ctx)
+        return supertonic_sample_rate(s->supertonic_ctx);
+#endif
 #ifdef CA_HAVE_MELOTTS
     if (s->melotts_ctx)
         return melotts_sample_rate(s->melotts_ctx);
@@ -4578,6 +4605,9 @@ CA_EXPORT int crispasr_session_available_backends(char* out_csv, int out_cap) {
 #endif
 #ifdef CA_HAVE_IRODORI_TTS
     list += ",irodori-tts";
+#endif
+#ifdef CA_HAVE_SUPERTONIC
+    list += ",supertonic";
 #endif
 #ifdef CA_HAVE_PIPER
     list += ",piper";
@@ -8593,6 +8623,12 @@ CA_EXPORT int crispasr_session_set_voice(crispasr_session* s, const char* path, 
         return 0;
     }
 #endif
+#ifdef CA_HAVE_SUPERTONIC
+    if (s->supertonic_ctx) {
+        // `path` is a preset name (F1..F5 / M1..M5); Supertonic-3 has no cloning.
+        return supertonic_set_voice(s->supertonic_ctx, path);
+    }
+#endif
 #ifdef CA_HAVE_COSYVOICE3
     if (s->cosyvoice3_ctx) {
         // `path` is either a baked-bank voice name (e.g. "fleurs-en") or a
@@ -9551,6 +9587,22 @@ static float* crispasr_session_synthesize_raw_impl(crispasr_session* s, const ch
         float* pcm = nullptr;
         int sr = 0;
         int n = irodori_tts_synthesize(s->irodori_ctx, text, &pcm, &sr);
+        if (n <= 0 || !pcm)
+            return nullptr;
+        *out_n_samples = n;
+        return pcm;
+    }
+#endif
+#ifdef CA_HAVE_SUPERTONIC
+    if (s->supertonic_ctx) {
+        // Supertonic-3 outputs 44.1 kHz mono. Language follows the sticky
+        // session languages (target first — this is the OUTPUT language).
+        const std::string lang = !s->target_language.empty() ? s->target_language
+                                 : (!s->source_language.empty() ? s->source_language : "");
+        if (!lang.empty() && lang != "auto")
+            supertonic_set_language(s->supertonic_ctx, lang.c_str());
+        int n = 0;
+        float* pcm = supertonic_synthesize(s->supertonic_ctx, text, &n);
         if (n <= 0 || !pcm)
             return nullptr;
         *out_n_samples = n;
@@ -11197,6 +11249,10 @@ CA_EXPORT void crispasr_session_close(crispasr_session* s) {
     if (s->irodori_ctx)
         irodori_tts_free(s->irodori_ctx);
 #endif
+#ifdef CA_HAVE_SUPERTONIC
+    if (s->supertonic_ctx)
+        supertonic_free(s->supertonic_ctx);
+#endif
 #ifdef CA_HAVE_PIPER
     if (s->piper_ctx)
         piper_tts_free(s->piper_ctx);
@@ -11856,6 +11912,12 @@ CA_EXPORT int crispasr_session_set_tts_seed(crispasr_session* s, uint64_t seed) 
         touched++;
     }
 #endif
+#ifdef CA_HAVE_SUPERTONIC
+    if (s->supertonic_ctx) {
+        supertonic_set_seed(s->supertonic_ctx, (uint64_t)seed);
+        touched++;
+    }
+#endif
 #ifdef CA_HAVE_MELOTTS
     if (s->melotts_ctx) {
         melotts_set_seed(s->melotts_ctx, (uint32_t)seed);
@@ -11926,6 +11988,14 @@ CA_EXPORT int crispasr_session_set_tts_steps(crispasr_session* s, int steps) {
         // Irodori flow-matching Euler ODE step count (default 40). Read live per
         // synthesize(), so mutation changes the next call's diffusion density (#241).
         irodori_tts_set_ode_steps(s->irodori_ctx, steps);
+        touched++;
+    }
+#endif
+#ifdef CA_HAVE_SUPERTONIC
+    if (s->supertonic_ctx) {
+        // Supertonic-3 flow-matching Euler step count (default 8; each step is
+        // two vector-field passes because CFG is inside the update).
+        supertonic_set_total_steps(s->supertonic_ctx, steps);
         touched++;
     }
 #endif

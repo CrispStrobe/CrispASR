@@ -53,6 +53,7 @@ add_executable(${TARGET}
     crispasr_backend_indextts.cpp
     crispasr_backend_f5_tts.cpp
     crispasr_backend_irodori_tts.cpp
+    crispasr_backend_supertonic.cpp
     crispasr_backend_pocket_tts.cpp
     crispasr_backend_csm.cpp
     crispasr_backend_parler.cpp
@@ -273,6 +274,7 @@ target_link_libraries(crispasr-diff PRIVATE
     parler-tts
     mini-omni2
     dots-tts
+    supertonic-tts
     confucius4-tts
     miotts
     miocodec
@@ -384,6 +386,7 @@ target_link_libraries(${TARGET} PRIVATE
     dots-tts
     confucius4-tts
     irodori-tts
+    supertonic-tts
     pocket-tts
     csm-tts
     voxcpm2_tts

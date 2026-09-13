@@ -100,6 +100,35 @@ def main():
     refs_dir = sorted(p.name for p in (ROOT / "tools/reference_backends").glob("*.py"))
     adapters = {p.name for p in (ROOT / "examples/cli").glob("crispasr_backend_*.cpp")}
 
+    # ADAPTERS THAT CLAIM A NAME THE ROSTER DOES NOT LIST.
+    #
+    # Canonicality in the rest of this file is derived FROM the roster, which is
+    # circular: a backend absent from crispasr_list_backends() is not canonical,
+    # so it is never iterated, so nothing checks it. The reverse c_api check
+    # above does not close this either, because it accepts any name the FACTORY
+    # resolves -- and a forgotten roster entry is still factory-resolvable.
+    #
+    # Caught two real cases: supertonic (#434) shipped a working backend, a
+    # factory entry, a c_api entry and a dedicated adapter while --list-backends
+    # did not know it existed, so it was missing from the feature matrix and
+    # from backend_caps_table.h, and the audit reported PASS. irodori-tts had
+    # been in that state already, and a comment in this very file listed it as
+    # an "alias" -- it is not: canary-ctc, omniasr-llm-unlimited and
+    # vibevoice-tts each have a BASE entry in the roster (canary, omniasr,
+    # vibevoice), while irodori-tts had no related roster entry at all.
+    #
+    # The authority is the adapter's own name() -- matching on FILENAME STEMS
+    # gives 7 false positives (btc -> btc-chords, rvc -> rvc-svc, ...), while
+    # name() gives an exact answer with none.
+    adapter_claims = {}
+    for ap in (ROOT / "examples/cli").glob("crispasr_backend_*.cpp"):
+        try:
+            src = ap.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for nm in re.findall(r'const char\*\s*name\(\)\s*const\s*override\s*\{\s*return\s*"([^"]+)"', src):
+            adapter_claims.setdefault(nm, ap.name)
+
     # Prose names a backend the way a READER would, not the way the CLI does:
     # `crepe` appears as "CREPE", `tabcnn` as "TabCNN", `beat-this` as
     # "Beat This!". A raw case-sensitive substring test called all three
@@ -150,9 +179,15 @@ def main():
     cli_names = {name for name, _caps in backends}
     # A name is fine if the CLI ROSTER lists it *or* the CLI FACTORY resolves it
     # as an alias -- several backends are advertised by the c_api under an alias
-    # (canary-ctc, irodori-tts, vibevoice-tts, omniasr-llm-unlimited) and are
-    # genuinely reachable. Only a name with NEITHER is unreachable from the CLI,
-    # which is the state btc-chords was in.
+    # (canary-ctc, vibevoice-tts, omniasr-llm-unlimited) and are genuinely
+    # reachable. Only a name with NEITHER is unreachable from the CLI, which is
+    # the state btc-chords was in.
+    #
+    # irodori-tts USED TO BE LISTED HERE and did not belong: the test for a real
+    # alias is that its BASE name is in the roster (canary, vibevoice, omniasr
+    # all are), and irodori-tts had no related roster entry at all. It was a
+    # missing roster line wearing an alias label, which is why this check kept
+    # passing over it. See the adapter_claims check above.
     # Reachability is decided by ASKING THE BINARY, not by parsing the dispatch
     # chain: some backends resolve by prefix (`name.rfind("omniasr", 0) == 0`)
     # or through multi-alias conditions that no regex will reliably cover.
@@ -405,9 +440,22 @@ def main():
     # four conditions, so a run whose only problem was Go LDFLAGS drift reported
     # a required *wiring* gap two lines below "✅ REQUIRED wiring: ..." — the
     # reader then hunts through the advisory list for a gap that isn't there.
+    unrostered = sorted(n for n in adapter_claims if n not in cli_names)
+    if unrostered:
+        print()
+        print(f"\u274c Adapters claiming a name the CLI roster omits ({len(unrostered)}):")
+        for n in unrostered:
+            print(f"   {n:24s} {adapter_claims[n]}")
+        print("   These are NOT aliases: an alias has a base name in the roster.")
+        print("   Add them to crispasr_list_backends() in examples/cli/crispasr_backend.cpp,")
+        print("   then regenerate docs/feature-matrix.* and src/core/backend_caps_table.h.")
+        print("   Until then --list-backends cannot see them and this audit skips them.")
+
     causes = []
     if required_fail:
         causes.append("required wiring gap")
+    if unrostered:
+        causes.append("adapter missing from the CLI roster")
     if capi_only:
         causes.append("c_api-only backend")
     if lib_fail:
