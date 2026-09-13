@@ -26,7 +26,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-SCRIPT_VERSION = "v5-campp-trace-segpoolfix"
+SCRIPT_VERSION = "v6-regen-generated"
 WORK = Path("/kaggle/working")
 REPO = WORK / "CrispASR"
 TEMP = Path("/kaggle/temp") if Path("/kaggle/temp").is_dir() else Path("/tmp")
@@ -179,6 +179,27 @@ print(ra.stdout[-2500:])
 print(ra.stderr[-500:])
 rb = subprocess.run([str(BIN / "crispasr"), "--list-backends-json"], capture_output=True, text=True)
 (WORK / "backends.json").write_text(rb.stdout)
+
+# Regenerate the two artifacts that a NEW BACKEND makes stale. Both are derived
+# from `crispasr --list-backends-json`, so they can only be produced where a
+# build with this backend exists -- not on the dev box, which cannot build.
+# The wiring audit's one REQUIRED gap is "fireredtts3 missing:
+# feature-matrix(regen?)"; this closes it by emitting the files for commit.
+kh.step("regen generated docs/tables")
+for script, outs in ((("tools/gen-feature-matrix.py"), ("docs/feature-matrix.md", "docs/feature-matrix.html")),
+                     (("tools/gen-backend-caps-table.py"), ("src/core/backend_caps_table.h",))):
+    rg = subprocess.run([sys.executable, str(REPO / script), "--crispasr", str(BIN / "crispasr")],
+                        capture_output=True, text=True, cwd=str(REPO))
+    print(f"  {script}: rc={rg.returncode} {(rg.stdout or '')[-300:]} {(rg.stderr or '')[-300:]}")
+    for o in outs:
+        src = REPO / o
+        if src.is_file():
+            dst = WORK / "regen" / o
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_bytes(src.read_bytes())
+            print(f"    -> {o} ({src.stat().st_size} bytes)")
+        else:
+            print(f"    !! {o} not produced")
 
 # ── quantize ────────────────────────────────────────────────────────────────
 kh.step("quantize q4_k + upload")
