@@ -1019,7 +1019,7 @@ struct supertonic_context* supertonic_init_from_file(const char* path_model, sup
         return nullptr;
     }
     if (core_cpu_backend::is_cpu(ctx->backend))
-        ggml_backend_cpu_set_n_threads(ctx->backend, params.n_threads > 0 ? params.n_threads : 4);
+        core_cpu_backend::set_n_threads(ctx->backend, params.n_threads > 0 ? params.n_threads : 4);
 
     if (!core_gguf::load_weights(path_model, ctx->backend, "supertonic", ctx->weights)) {
         supertonic_free(ctx);
@@ -1215,7 +1215,7 @@ void supertonic_free(struct supertonic_context* ctx) {
 
 void supertonic_set_n_threads(struct supertonic_context* ctx, int n_threads) {
     if (ctx && core_cpu_backend::is_cpu(ctx->backend) && n_threads > 0)
-        ggml_backend_cpu_set_n_threads(ctx->backend, n_threads);
+        core_cpu_backend::set_n_threads(ctx->backend, n_threads);
 }
 
 int supertonic_set_voice(struct supertonic_context* ctx, const char* voice) {

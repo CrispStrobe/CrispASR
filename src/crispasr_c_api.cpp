@@ -9670,8 +9670,8 @@ static float* crispasr_session_synthesize_raw_impl(crispasr_session* s, const ch
     if (s->supertonic_ctx) {
         // Supertonic-3 outputs 44.1 kHz mono. Language follows the sticky
         // session languages (target first — this is the OUTPUT language).
-        const std::string lang = !s->target_language.empty() ? s->target_language
-                                 : (!s->source_language.empty() ? s->source_language : "");
+        const std::string lang =
+            !s->target_language.empty() ? s->target_language : (!s->source_language.empty() ? s->source_language : "");
         if (!lang.empty() && lang != "auto")
             supertonic_set_language(s->supertonic_ctx, lang.c_str());
         int n = 0;

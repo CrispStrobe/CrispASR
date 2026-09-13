@@ -1200,10 +1200,10 @@ extern "C" struct fireredtts3_tts_context* fireredtts3_tts_init_from_file(
     if (!ctx->backend)
         ctx->backend = core_cpu_backend::init();
     ctx->backend_cpu = core_cpu_backend::init();
-    if (ggml_backend_is_cpu(ctx->backend))
-        ggml_backend_cpu_set_n_threads(ctx->backend, params.n_threads > 0 ? params.n_threads : 4);
-    if (ggml_backend_is_cpu(ctx->backend_cpu))
-        ggml_backend_cpu_set_n_threads(ctx->backend_cpu, params.n_threads > 0 ? params.n_threads : 4);
+    if (core_cpu_backend::is_cpu(ctx->backend))
+        core_cpu_backend::set_n_threads(ctx->backend, params.n_threads > 0 ? params.n_threads : 4);
+    if (core_cpu_backend::is_cpu(ctx->backend_cpu))
+        core_cpu_backend::set_n_threads(ctx->backend_cpu, params.n_threads > 0 ? params.n_threads : 4);
 
     // ---- metadata ----
     {
