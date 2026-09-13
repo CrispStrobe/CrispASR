@@ -228,6 +228,19 @@ for script, outs in (("tools/gen-feature-matrix.py",
             dst.parent.mkdir(parents=True, exist_ok=True)
             dst.write_bytes(src_p.read_bytes())
             print(f"    -> {o} ({src_p.stat().st_size} bytes)", flush=True)
+            # Emit it INTO THE LOG too, base64'd. kernels_logs returns in
+            # seconds; kernels_output pulls the whole working dir including
+            # .ccache and stalls for many minutes (documented gotcha) -- 82 MB
+            # and still crawling when this was written. These are ~17 KB and
+            # ~12 KB. The HTML is skipped: regenerable from the same binary and
+            # not worth 106 KB of log.
+            if not o.endswith(".html"):
+                import base64
+                b64 = base64.b64encode(src_p.read_bytes()).decode()
+                print(f"===B64-BEGIN {o} {len(b64)}===", flush=True)
+                for i in range(0, len(b64), 2000):
+                    print(b64[i:i + 2000], flush=True)
+                print(f"===B64-END {o}===", flush=True)
         else:
             # "not produced" must not look like "produced, unchanged".
             print(f"    !! {o} NOT PRODUCED", flush=True)
