@@ -26,7 +26,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-SCRIPT_VERSION = "v2"
+SCRIPT_VERSION = "v3-diffonly"
 WORK = Path("/kaggle/working")
 REPO = WORK / "CrispASR"
 TEMP = Path("/kaggle/temp") if Path("/kaggle/temp").is_dir() else Path("/tmp")
@@ -104,9 +104,28 @@ print(r.stderr[-4000:])
 print(f"  diff rc={r.returncode}")
 diff_pass = (r.returncode == 0)
 
+DO_HEAVY = False  # v3: diff-only iteration — quant + roundtrips already done
+                  # (f16 overlap 1.00, q4k 0.83 vs control 0.83, q4_k on HF)
+
+# ── wiring audit + backends.json (for feature-matrix regen) ────────────────
+kh.step("wiring audit")
+ra = subprocess.run([sys.executable, str(REPO / "tools" / "check-backend-wiring.py"),
+                     "--crispasr", str(BIN / "crispasr")], capture_output=True, text=True)
+print(ra.stdout[-2500:])
+print(ra.stderr[-500:])
+rb = subprocess.run([str(BIN / "crispasr"), "--list-backends-json"], capture_output=True, text=True)
+(WORK / "backends.json").write_text(rb.stdout)
+
 # ── quantize ────────────────────────────────────────────────────────────────
 kh.step("quantize q4_k + upload")
 base_q4 = str(MD / "fireredtts3-base-q4_k.gguf")
+if not DO_HEAVY:
+    print("  skipped (diff-only mode)")
+    (WORK / "verdict.txt").write_text(f"diff_pass={diff_pass} (diff-only run)\n")
+    kh.step("verdict")
+    print(f"VERDICT diff_pass={diff_pass} (diff-only)")
+    print("FRT_VALIDATE_OK" if diff_pass else "FRT_VALIDATE_FAIL", flush=True)
+    raise SystemExit(0)
 rq = subprocess.run([str(BIN / "crispasr-quantize"), base_f16, base_q4, "q4_k"],
                     capture_output=True, text=True)
 print(rq.stdout[-1500:])
