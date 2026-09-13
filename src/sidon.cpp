@@ -939,7 +939,12 @@ std::vector<float> sidon_extract_hidden(sidon_context* ctx, const float* pcm_16k
     std::vector<float> feats = make_features(ctx->model, pcm_16k, n_samples, T);
     if (T <= 0)
         return {};
-    int max_frames = 3000; // same O(T^2) attention guard as sidon_restore
+    // Same O(T^2) hazard as sidon_restore, but a fixed cap here on purpose:
+    // this is the encoder-only feature path (#431 changed sidon_restore's cap to
+    // be derived from a memory budget). Callers of extract_hidden are tooling
+    // and diff harnesses on short clips, not user audio, so the simple bound
+    // stays until something actually needs the budget form.
+    int max_frames = 3000;
     if (const char* e = getenv("CRISPASR_SIDON_MAX_FRAMES"); e && e[0]) {
         const int v = atoi(e);
         if (v > 0)
@@ -1059,99 +1064,68 @@ std::vector<float> sidon_restore(sidon_context* ctx, const float* samples, int n
     if (T <= 0)
         return {};
 
-    // Guard against O(T^2) attention blowup. The predictor materializes
-    // (heads, T, T) relative indices and attention scores, so cost grows
-    // quadratically in the feature-frame count T (~50 frames/sec of input).
-    // Restoration is utterance-scale; cap T and fail cleanly rather than let a
-    // multi-minute clip exhaust memory. After the required 1.5 s lookahead,
-    // the default ~3000-frame cap permits ~58.5 s of user audio; override it
-    // only when the selected backend has sufficient memory.
-    int max_frames = 3000;
+    // #431 — WHY THIS IS A MEMORY BOUND AND NOT A QUALITY ONE.
+    //
+    // Measured against the upstream TorchScript reference on Kaggle
+    // (tools/kaggle/sidon-length-parity, chr1s4/crispasr-sidon-length-parity v5),
+    // comparing our predictor handoff to the reference's at four lengths:
+    //
+    //   length   whole-utterance vs REF     windowed vs REF
+    //    11 s    0.994072                   (no split: T < window)
+    //    30 s    0.997032                   0.991427
+    //    50 s    0.997106                   0.986650
+    //    62 s    0.997073                   0.973793
+    //
+    // Two conclusions, both of which contradict what I believed this morning:
+    //
+    // 1. THE WHOLE-UTTERANCE PATH DOES NOT DEGRADE WITH LENGTH. It sits at
+    //    ~0.997 from 30 s to 62 s. An ASR roundtrip had suggested otherwise and
+    //    was measuring something else — transcript quality under a tiny ASR is
+    //    not fidelity to the reference, and here the two pointed opposite ways.
+    //
+    // 2. WINDOWING THE PREDICTOR IS A DEVIATION, and a worsening one: 0.991 ->
+    //    0.987 -> 0.974 as windows multiply. It was removed rather than gated,
+    //    because a path known to diverge is not a fallback. The attempt is in
+    //    git history (cf3e6fe2, dbffc3a7, 112c52a1) with its evidence.
+    //    The reason it cannot work is structural: the DAC chunking a few hundred
+    //    lines below IS exact, because the decoder is fully convolutional and
+    //    its cores are sized from dac_receptive_frames(); attention has no
+    //    receptive field, so no context size makes a windowed core exact.
+    //
+    // So the cap guards MEMORY, and the only honest fix for "a 60 s file should
+    // work" is to let it work where the memory exists. The predictor's
+    // relative-position attention grows as O(T^2): the docs' measured anchor is
+    // 2042 MiB at T=2825, so the budget below is inverted through that.
+    //
+    // For very long audio this is not squeamishness — at the reporter's actual
+    // 54-minute file, T = 162000 and the relative index ALONE is ~1.5 TiB.
+    // Splitting is inherent there, and the message says so instead of implying
+    // we simply have not tried hard enough.
+    int budget_mb = 4096;
+    if (const char* e = getenv("CRISPASR_SIDON_MEM_BUDGET_MB"); e && e[0]) {
+        const int v = atoi(e);
+        if (v > 0)
+            budget_mb = v;
+    }
+    // T_max = 2825 * sqrt(budget / 2042), the docs' measured point inverted.
+    int max_frames = (int)(2825.0 * std::sqrt((double)budget_mb / 2042.0));
+    if (max_frames < 256)
+        max_frames = 256;
     if (const char* e = getenv("CRISPASR_SIDON_MAX_FRAMES"); e && e[0]) {
         const int v = atoi(e);
         if (v > 0)
-            max_frames = v;
+            max_frames = v; // explicit override wins over the budget
     }
-    // #431: T > max_frames used to be a hard refusal — "split the audio or raise
-    // CRISPASR_SIDON_MAX_FRAMES" — which rejected any clip over ~58.5 s. The
-    // reporter's real input was 54 MINUTES, so neither suggestion is a fix:
-    // raising the cap re-introduces the O(T^2) blowup the cap exists to prevent,
-    // and asking a user to pre-split with ffmpeg is asking them to implement the
-    // feature by hand.
-    //
-    // The cap is right about the ATTENTION and wrong about the UTTERANCE. This
-    // function already chunks the DAC decoder below — core window, context on
-    // both sides, crop to the core — precisely so a long clip decodes in bounded
-    // memory. The predictor simply never got the same treatment. So the cap now
-    // bounds ONE PREDICTOR WINDOW instead of the whole file, and anything longer
-    // is processed as overlapping windows using that existing idiom.
-    //
-    // Short inputs are untouched: at T <= max_frames the whole-utterance path
-    // below runs exactly as before, so nothing that works today changes.
-    //
-    // WINDOW SIZE IS THE THRESHOLD (2026-09-12, measured — see the A/B below).
-    //
-    // First attempt sized the window to the MEMORY cap (2400-frame cores) and
-    // the 62 s output came back degraded, which I wrongly attributed to
-    // windowing and gated off. A length sweep on the UNCHANGED whole-utterance
-    // path showed the real effect — quality falls off well before the cap:
-    //
-    //   11 s  T= 625  whole-utterance  "And so my fellow-americans ask not what
-    //                                   your country can do for you..."  CLEAN
-    //   30 s  T=1575  whole-utterance  "...ask not what your country can do
-    //                                   for you..."                      CLEAN
-    //   50 s  T=2575  whole-utterance  "...it's not what you can DRINK AND do
-    //                                   for you."                    DEGRADED
-    //
-    // That 50 s arm is the shipping code with no windowing involved, so the
-    // cap was never protecting quality — it was hiding the falloff. A/B on that
-    // same 50 s clip, 900-frame cores vs whole-utterance:
-    //
-    //   raw input   "ask not what your country can do for you ask what you can
-    //                do for your country"                            (ceiling)
-    //   whole-utt   "it's not what you can drink and do for you."
-    //   WINDOWED    "is not what your country can do for you, ask what you can
-    //                do for you."
-    //
-    // So small windows BEAT the status quo on audio that already "works".
-    // Windowing is therefore the default, and the window is sized for quality
-    // rather than for how much attention memory happens to fit.
-    //
-    // The threshold IS the window size: at T <= window there is exactly one
-    // window and the split is a no-op, so short clips keep the whole-utterance
-    // path unchanged. Honest about the gap: clean is measured at T=1575 and
-    // degraded at T=2575, so where inside that band the falloff begins is
-    // interpolated, not known.
-    //
-    // CRISPASR_SIDON_WINDOW_FRAMES=0 restores the old whole-utterance-or-refuse
-    // behaviour for A/B; the window is also clamped to the memory cap so
-    // raising one never silently violates the other.
-    // DEFAULT 0 = OFF, pending the parity result. The A/B that motivated
-    // windowing measured ASR transcripts, which says "sounds better to
-    // moonshine-tiny" and NOT "faithful to upstream" — and if the reference
-    // model degrades with length too, then the whole-utterance path is correct
-    // and windowing is a deviation however it sounds. Until
-    // tools/kaggle/sidon-length-parity answers that, the shipped behaviour is
-    // the old clean refusal and windowing is opt-in.
-    //
-    // Set CRISPASR_SIDON_WINDOW_FRAMES=1500 to enable (that is the size whose
-    // A/B beat whole-utterance at 50 s); 0 keeps it off.
-    int pred_window_frames = 0;
-    if (const char* e = getenv("CRISPASR_SIDON_WINDOW_FRAMES"); e && e[0]) {
-        const int v = atoi(e);
-        if (v >= 0)
-            pred_window_frames = v;
-    }
-    if (pred_window_frames > max_frames)
-        pred_window_frames = max_frames;
-
-    bool predictor_chunked = (pred_window_frames > 0 && T > pred_window_frames);
-    if (!predictor_chunked && T > max_frames) {
+    if (T > max_frames) {
+        const double est_mb = 2042.0 * ((double)T / 2825.0) * ((double)T / 2825.0);
         fprintf(stderr,
-                "sidon: input too long — %d feature frames (~%.1f s) exceeds the %d-frame cap and "
-                "windowing is disabled (CRISPASR_SIDON_WINDOW_FRAMES=0).\n"
-                "  Re-enable windowing, split the audio, or raise CRISPASR_SIDON_MAX_FRAMES.\n",
-                T, (double)T / 50.0, max_frames);
+                "sidon: input is %d feature frames (~%.1f s); the predictor's O(T^2) attention would need "
+                "roughly %.0f MiB, over the %d MiB budget (cap %d frames, ~%.1f s).\n"
+                "  If this machine has the memory: CRISPASR_SIDON_MEM_BUDGET_MB=%.0f (or set "
+                "CRISPASR_SIDON_MAX_FRAMES=%d directly).\n"
+                "  Otherwise split the audio — attention cost grows with the SQUARE of duration, so very long "
+                "recordings cannot be restored in one pass at any budget.\n",
+                T, (double)T / 50.0, est_mb, budget_mb, max_frames, (double)max_frames / 50.0, est_mb * 1.1, T);
         return {};
     }
 
@@ -1161,102 +1135,28 @@ std::vector<float> sidon_restore(sidon_context* ctx, const float* samples, int n
     std::vector<float> predictor_features;
     std::chrono::steady_clock::time_point graph_done, predictor_start, predictor_done;
 
-    if (!predictor_chunked) {
-        // ── Whole-utterance path. Unchanged, and reached for every input that
-        //    worked before this change, so short clips stay bit-identical.
-        if (!prepare_predictor_graph(ctx, T)) {
-            release_predictor_workspace(ctx);
-            release_decoder_workspace(ctx);
-            return {};
-        }
-        graph_done = clock::now();
-
-        set_predictor_inputs(ctx, feats, T);
-        predictor_start = clock::now();
-        core_quant_bcast::audit(ctx->predictor_graph, "sidon");
-        if (ggml_backend_sched_graph_compute(ctx->predictor_sched, ctx->predictor_graph) != GGML_STATUS_SUCCESS) {
-            std::fprintf(stderr, "sidon: predictor graph compute failed\n");
-            release_predictor_workspace(ctx);
-            release_decoder_workspace(ctx);
-            return {};
-        }
-        ggml_backend_sched_synchronize(ctx->predictor_sched);
-        predictor_done = clock::now();
-
-        predictor_features.resize((size_t)ggml_nelements(ctx->predictor_output));
-        ggml_backend_tensor_get(ctx->predictor_output, predictor_features.data(), 0,
-                                predictor_features.size() * sizeof(float));
-    } else {
-        // ── Windowed path (#431). Same core/context/crop shape the DAC decoder
-        //    uses below: run a window, keep only the frames its CORE owns, slide.
-        //
-        //    Context frames exist because attention at a core edge would
-        //    otherwise see a truncated sequence. They are cropped away, so they
-        //    cost compute and never reach the output. This is NOT bit-identical
-        //    to a whole-utterance run — attention over a window is a different
-        //    computation — but the alternative for these inputs was no output at
-        //    all, and every frame is still produced with a full context span on
-        //    both sides except at the true file boundaries.
-        //
-        //    The window is sized to the SAME cap the whole-utterance path
-        //    obeys, so peak attention memory is unchanged: whatever T the user's
-        //    machine could handle before, it still handles, just repeatedly.
-        int pred_context_frames = 300;
-        if (const char* e = getenv("CRISPASR_SIDON_PREDICTOR_CONTEXT_FRAMES"); e && e[0]) {
-            const int v = atoi(e);
-            if (v >= 0)
-                pred_context_frames = v;
-        }
-        if (pred_context_frames * 2 >= pred_window_frames)
-            pred_context_frames = std::max(0, (pred_window_frames / 4));
-        const int pred_core_frames = std::max(1, pred_window_frames - 2 * pred_context_frames);
-
-        std::fprintf(stderr,
-                     "sidon: %d feature frames (~%.1f s) — processing as %d-frame windows with %d "
-                     "frames of context each side (window %d, memory cap %d)\n",
-                     T, (double)T / 50.0, pred_core_frames, pred_context_frames, pred_window_frames, max_frames);
-
-        predictor_features.assign((size_t)T * pred_hidden, 0.0f);
-        graph_done = clock::now();
-        predictor_start = clock::now();
-
-        for (int core_start = 0; core_start < T; core_start += pred_core_frames) {
-            const int core_end = std::min(T, core_start + pred_core_frames);
-            int win_start = std::max(0, core_start - pred_context_frames);
-            int win_end = std::min(T, core_end + pred_context_frames);
-            const int win_frames = win_end - win_start;
-
-            if (!prepare_predictor_graph(ctx, win_frames)) {
-                release_predictor_workspace(ctx);
-                release_decoder_workspace(ctx);
-                return {};
-            }
-            // feats is [T, feat_dim] frame-major; hand the window its own slice.
-            set_predictor_inputs(ctx, feats, win_frames, win_start);
-            core_quant_bcast::audit(ctx->predictor_graph, "sidon");
-            if (ggml_backend_sched_graph_compute(ctx->predictor_sched, ctx->predictor_graph) != GGML_STATUS_SUCCESS) {
-                std::fprintf(stderr, "sidon: predictor graph compute failed on window [%d,%d)\n", win_start, win_end);
-                release_predictor_workspace(ctx);
-                release_decoder_workspace(ctx);
-                return {};
-            }
-            ggml_backend_sched_synchronize(ctx->predictor_sched);
-
-            std::vector<float> win_out((size_t)ggml_nelements(ctx->predictor_output));
-            ggml_backend_tensor_get(ctx->predictor_output, win_out.data(), 0, win_out.size() * sizeof(float));
-            if (win_out.size() < (size_t)win_frames * pred_hidden) {
-                std::fprintf(stderr, "sidon: predictor window produced %zu floats, expected %d\n", win_out.size(),
-                             win_frames * pred_hidden);
-                release_predictor_workspace(ctx);
-                release_decoder_workspace(ctx);
-                return {};
-            }
-            std::copy(win_out.begin() + (size_t)(core_start - win_start) * pred_hidden,
-                      win_out.begin() + (size_t)(core_end - win_start) * pred_hidden,
-                      predictor_features.begin() + (size_t)core_start * pred_hidden);
-        }
-        predictor_done = clock::now();
+    if (!prepare_predictor_graph(ctx, T)) {
+        release_predictor_workspace(ctx);
+        release_decoder_workspace(ctx);
+        return {};
     }
+    graph_done = clock::now();
+
+    set_predictor_inputs(ctx, feats, T);
+    predictor_start = clock::now();
+    core_quant_bcast::audit(ctx->predictor_graph, "sidon");
+    if (ggml_backend_sched_graph_compute(ctx->predictor_sched, ctx->predictor_graph) != GGML_STATUS_SUCCESS) {
+        std::fprintf(stderr, "sidon: predictor graph compute failed\n");
+        release_predictor_workspace(ctx);
+        release_decoder_workspace(ctx);
+        return {};
+    }
+    ggml_backend_sched_synchronize(ctx->predictor_sched);
+    predictor_done = clock::now();
+
+    predictor_features.resize((size_t)ggml_nelements(ctx->predictor_output));
+    ggml_backend_tensor_get(ctx->predictor_output, predictor_features.data(), 0,
+                            predictor_features.size() * sizeof(float));
 
     // Judge the predictor BEFORE the DAC consumes it, so a bad handoff is
     // attributed to the predictor rather than to the decoder it poisons.
