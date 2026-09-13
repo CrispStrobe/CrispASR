@@ -7,7 +7,7 @@ Verdict gates (results.json "validation"):
   3. CONTROL: the upstream ONNX reference wav passes the SAME ASR at >= 0.8
      (else the ASR arm, not the port, is at fault and the run is inconclusive).
   4. GPU-synthesised wav passes the same transcript gate (CUDA correctness).
-SCRIPT_VERSION = v3
+SCRIPT_VERSION = v4
 """
 
 import json
@@ -56,7 +56,7 @@ import kaggle_harness as kh  # noqa: E402
 kh.init_progress()
 kh.resolve_hf_token()
 commit = subprocess.check_output(["git", "-C", REPO, "rev-parse", "HEAD"], text=True).strip()
-print(f"SCRIPT_VERSION=v3 clone={commit}", flush=True)
+print(f"SCRIPT_VERSION=v4 clone={commit}", flush=True)
 kh.step("provenance", commit=commit)
 
 kh.step("dependencies")
@@ -120,7 +120,7 @@ diff = build / "bin/crispasr-diff"
 if not cli.exists() or not diff.exists():
     raise RuntimeError("build produced no binaries (proof-of-work check)")
 
-results = {"commit": commit, "cuda_arch": arch, "script_version": "v3"}
+results = {"commit": commit, "cuda_arch": arch, "script_version": "v4"}
 
 kh.step("diff.stages")
 p = run([diff, "supertonic-tts", f16, ref, REPO / "samples/jfk.wav"], capture=True, check=False)
