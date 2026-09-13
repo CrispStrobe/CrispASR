@@ -771,7 +771,13 @@ static ggml_tensor* g_convnext(ggml_context* g, ggml_tensor* x, ggml_tensor* con
     y = ggml_mul_mat(g, w[6], y); // (C,T)
     if (w[7])
         y = ggml_add(g, y, w[7]);
-    y = ggml_mul(g, y, w[8]);
+    // gamma ships in its ONNX shape (1,C,1) -> gguf ne [1,C,1]; that cannot
+    // broadcast against (C,T) (ne1 C vs T) and fired GGML_ASSERT(can_repeat)
+    // on the first Kaggle run. Flatten to (C) so it repeats along time.
+    ggml_tensor* gamma = w[8];
+    if (gamma->ne[0] == 1 && gamma->ne[1] > 1)
+        gamma = ggml_reshape_1d(g, gamma, ggml_nelements(gamma));
+    y = ggml_mul(g, y, gamma);
     return ggml_add(g, x, y);
 }
 
