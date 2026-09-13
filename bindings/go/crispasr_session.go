@@ -5,7 +5,7 @@ package whisper
 // qwen3-tts, moss-tts, orpheus, chatterbox, csm, dia, zonos-tts, speecht5, fastpitch,
 // bananamind-tts, melotts, piper, parler-tts, outetts, indextts, voxcpm2-tts,
 // cosyvoice3-tts, pocket-tts, f5-tts, bark, kugelaudio, tada, lfm2-audio,
-// dots-tts, ...)
+// dots-tts, fireredtts3, ...)
 // and S2S-capable backends (lfm2-audio, mini-omni2), plus the kokoro
 // per-language model + voice resolver (PLAN #56 opt 2b).
 

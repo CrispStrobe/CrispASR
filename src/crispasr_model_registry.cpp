@@ -1023,6 +1023,17 @@ constexpr Entry k_registry[] = {
     // Qwen2.5-1.5B LLM + 18L DiT flow-matching + BigVGAN vocoder.
     // No discrete codec tokens — generates continuous latents patch-by-patch.
     // BPE text input (no phonemes). Vocoder is a separate GGUF companion.
+    // FireRedTTS3 (#377): FireRedTeam zero-shot voice-cloning TTS —
+    // Qwen3-1.7B LLM + PatchEncoder + DiT flow head over continuous RedAE
+    // latents (24 kHz). The redae companion carries the RedAE autoencoder +
+    // CAM++ speaker encoder. ICL cloning: --voice ref.wav --ref-text "...";
+    // without --voice a default English prompt baked into the core is used.
+    {"fireredtts3", "fireredtts3-base-q4_k.gguf",
+     "https://huggingface.co/cstr/fireredtts3-GGUF/resolve/main/fireredtts3-base-q4_k.gguf",
+     "~1.6 GB",
+     "fireredtts3-redae-f16.gguf",
+     "https://huggingface.co/cstr/fireredtts3-GGUF/resolve/main/fireredtts3-redae-f16.gguf",
+     "~1.2 GB", "Apache-2.0 (base FireRedTeam/FireRedTTS3)"},
     {"dots-tts", "dots-tts-soar-f16.gguf",
      "https://huggingface.co/cstr/dots-tts-soar-GGUF/resolve/main/dots-tts-soar-f16.gguf",
      "~4.4 GB",
