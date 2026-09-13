@@ -11813,6 +11813,12 @@ CA_EXPORT int crispasr_session_set_tts_seed(crispasr_session* s, uint64_t seed) 
         touched++;
     }
 #endif
+#ifdef CA_HAVE_FIREREDTTS3
+    if (s->fireredtts3_ctx) {
+        fireredtts3_tts_set_seed(s->fireredtts3_ctx, seed);
+        touched++;
+    }
+#endif
 #ifdef CA_HAVE_CHATTERBOX
     if (s->chatterbox_ctx) {
         chatterbox_set_seed((chatterbox_context*)s->chatterbox_ctx, (uint32_t)seed);

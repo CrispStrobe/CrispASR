@@ -77,6 +77,9 @@ void fireredtts3_tts_pcm_free(float* pcm);
 
 int fireredtts3_tts_sample_rate(const struct fireredtts3_tts_context* ctx); // 24000
 
+// Reseed the flow-noise RNG for the next synthesis (0 = keep current).
+void fireredtts3_tts_set_seed(struct fireredtts3_tts_context* ctx, uint64_t seed);
+
 void fireredtts3_tts_free(struct fireredtts3_tts_context* ctx);
 
 // Self-contained per-stage diff runner against a reference GGUF produced by

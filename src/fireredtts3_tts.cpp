@@ -1839,6 +1839,13 @@ extern "C" void fireredtts3_tts_pcm_free(float* pcm) {
     std::free(pcm);
 }
 
+extern "C" void fireredtts3_tts_set_seed(struct fireredtts3_tts_context* ctx, uint64_t seed) {
+    if (!ctx || seed == 0)
+        return;
+    ctx->params.seed = seed;
+    ctx->rng_seeded = false;
+}
+
 extern "C" int fireredtts3_tts_sample_rate(const struct fireredtts3_tts_context* ctx) {
     return ctx ? ctx->ae_sr : 24000;
 }

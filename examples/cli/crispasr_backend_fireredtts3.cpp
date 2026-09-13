@@ -180,7 +180,8 @@ public:
     std::vector<float> synthesize(const std::string& text, const whisper_params& params) override {
         if (!ctx_ || text.empty())
             return {};
-        (void)params;
+        if (params.seed != 0)
+            fireredtts3_tts_set_seed(ctx_, params.seed);
         int n = 0;
         float* pcm = fireredtts3_tts_synthesize(ctx_, text.c_str(), &n);
         if (!pcm || n <= 0)
