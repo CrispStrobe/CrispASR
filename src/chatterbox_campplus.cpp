@@ -6,6 +6,8 @@
 
 #include "chatterbox_campplus.h"
 
+#include "core/campplus_segpool.h"
+
 #include "core/fft.h"
 #include "core/kaldi_fbank.h"
 #include "core/mel.h"
@@ -676,39 +678,33 @@ static std::vector<float> dense_layer_forward(const float* in, int C_in_actual, 
             s += row[t];
         gmean[(size_t)c] = s / (float)T;
     }
-    // seg_pool: avg_pool1d(k=100, s=100, ceil_mode=True). Number of
-    // segments = ceil(T / 100). For each segment, mean of the values
-    // in that segment per channel; then expand back to (bn, T) by
-    // tiling each segment value across the 100 (or remainder) frames
-    // it covered. ceil_mode behaviour: when T % 100 != 0, the last
-    // segment covers the partial tail; pytorch's avg_pool1d with
-    // ceil_mode=True averages over the actual frames present
-    // (count_include_pad=True default uses 0-padding, but kernel doesn't
-    // extend past T when ceil_mode shrinks it) — actually
-    // F.avg_pool1d with ceil_mode=True INCLUDES partial windows; the
-    // divisor is the kernel size unless count_include_pad=False.
+    // seg_pool: avg_pool1d(k=100, s=100, ceil_mode=True), n_seg = ceil(T/100),
+    // each segment value broadcast back across the frames it covered.
     //
-    // Let's keep it simple: average the actual values in each segment
-    // (matches `count_include_pad=True` default with kernel=100 stride=100;
-    // when the last segment is shorter, the divisor is still kernel=100
-    // — torch's behaviour). Then broadcast each segment value to all
-    // its frames.
+    // THE LAST SEGMENT'S DIVISOR IS THE ACTUAL FRAME COUNT, NOT THE KERNEL.
+    // This was wrong here and the comment that replaced this one argued itself
+    // into the wrong answer in prose ("actually ... the divisor is the kernel
+    // size ... Let's keep it simple"). It is settled by running torch, not by
+    // reasoning about count_include_pad:
+    //
+    //   F.avg_pool1d(torch.ones(1,1,551), kernel_size=100, stride=100,
+    //                ceil_mode=True)  ->  all six segments are exactly 1.0
+    //
+    // An all-ones input is the control: dividing the 51-frame tail by 100 would
+    // give 0.51, so the two rules are distinguishable and torch picks the count.
+    // ATen computes the window as hend = min(hstart+k, L+pad) and then takes
+    // pool_size = hend - hstart, so count_include_pad=True still divides by the
+    // CLAMPED width (51), never by k.
+    //
+    // Impact: the tail of every CAM++ dense layer got a context scaled by
+    // n_in_seg/100 -- at T=551 that is 0.51x over 9% of frames, compounded
+    // through 52 dense layers, feeding a sigmoid gate. Shared by every CAM++
+    // consumer (chatterbox, confucius4, cosyvoice3, dots, fireredtts3); their
+    // acceptance was end-to-end and never diffed this stage against upstream.
     constexpr int kSegLen = 100;
-    const int n_seg = (T + kSegLen - 1) / kSegLen;
-    std::vector<float> seg((size_t)l.bn_channels * (size_t)n_seg, 0.0f);
-    for (int c = 0; c < l.bn_channels; c++) {
-        const float* row = bo.data() + (size_t)c * (size_t)T;
-        for (int s = 0; s < n_seg; s++) {
-            const int t0 = s * kSegLen;
-            float ss = 0.0f;
-            const int n_in_seg = std::min(kSegLen, T - t0);
-            for (int t = 0; t < n_in_seg; t++)
-                ss += row[t0 + t];
-            // PyTorch's avg_pool1d(ceil_mode=True) divides by the kernel
-            // size (count_include_pad=True default).
-            seg[(size_t)c * (size_t)n_seg + (size_t)s] = ss / (float)kSegLen;
-        }
-    }
+    std::vector<float> seg((size_t)l.bn_channels * (size_t)campplus_segpool::n_segments(T, kSegLen), 0.0f);
+    campplus_segpool::avg(bo.data(), l.bn_channels, T, kSegLen, seg.data());
+    const int n_seg = campplus_segpool::n_segments(T, kSegLen);
     // ctx = mean + seg_pool(x) broadcast back to (bn, T)
     std::vector<float> ctx((size_t)l.bn_channels * (size_t)T, 0.0f);
     for (int c = 0; c < l.bn_channels; c++) {

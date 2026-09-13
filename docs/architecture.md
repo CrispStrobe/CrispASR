@@ -1523,6 +1523,49 @@ restores bandwidth while preserving speaker identity.
   the padding (A/B, and for reproducing pre-padding reference dumps). The
   lookahead consumes ~75 frames of the input-duration cap.
 
+- **Length behaviour (measured 2026-09-13, #431).** Parity with upstream is FLAT
+  in input length — our predictor handoff scores 0.994 / 0.997 / 0.997 / 0.997
+  against the reference at 11 / 30 / 50 / 62 s. But the model's own restoration
+  quality is NOT flat: an ASR roundtrip over the 62 s output is markedly worse
+  than over the 11 s one, on the faithful path. Since we match the reference at
+  0.997 throughout, that degradation is SIDON'S behaviour, not a port defect —
+  do not chase it as one.
+
+  Corollary worth knowing before optimising: windowing the predictor makes ASR
+  transcripts of long audio look better while moving AWAY from the reference
+  (0.991 / 0.987 / 0.974 at 30 / 50 / 62 s, worsening with each added window).
+  It was tried and removed. Unlike the DAC's chunking — exact because the
+  decoder is fully convolutional with cores sized by `dac_receptive_frames()` —
+  attention has no receptive field, so no amount of context makes a windowed
+  core exact.
+
+  The input cap is therefore a MEMORY bound only. It derives from
+  `CRISPASR_SIDON_MEM_BUDGET_MB` (default 4096) via the measured anchor above,
+  giving ~4000 frames (~78 s). Attention grows as O(T^2), so a 54-minute
+  recording needs ~1.5 TiB for the relative index alone — splitting very long
+  audio is inherent, not a limitation of this implementation.
+
+- **Parity against upstream (measured 2026-09-12).** The predictor handoff
+  matches the upstream TorchScript reference at **cos 0.994072** on
+  `samples/jfk.wav`, at frame offset **1** (exactly the documented `lead_frames`
+  lead-in) with magnitude ratio **1.0003**. Reproduce with
+  `CRISPASR_SIDON_DUMP_HANDOFF=<path>` against `predictor_feats` in
+  `sidon-ref.gguf` (built by `tools/reference_backends/sidon_ref_dump.py`);
+  ours carries 625 frames to the reference's 549, the 76-frame difference being
+  the lead + 1.5 s lookahead pad, so ALIGN BEFORE COMPARING or an offset reads
+  as a divergence.
+
+  Two cautions that cost time when they were not written down:
+  - **Do not judge this port by waveform cosine.** The same run scores only
+    **0.63** against `sidon-ref-48k.wav` at near-zero lag while the RMS ratio is
+    0.979 — a 0.994 → 0.63 drop across a neural decoder is a phase difference,
+    not an error. The reference dumper's own docstring reaches for "ASR
+    round-trip / corr" for exactly this reason.
+  - **No parity figure existed before this line.** The reference dumper and the
+    reference GGUF were committed months earlier, but nothing recorded what the
+    port scores against them, so there was no baseline a regression could fail
+    against. If you change the predictor, re-measure and update this number.
+
 - **Working memory:** two independent bounds, each measured at `T≈2825`
   (~55 s) with `sidon-v0.1-q8_0` on Metal. Use `CRISPASR_SIDON_DEBUG=1` to
   print the per-stage scheduler workspace; process RSS is *not* a usable proxy
