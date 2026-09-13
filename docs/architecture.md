@@ -1346,6 +1346,46 @@ Converts text + reference audio to mel spectrograms via ODE-based diffusion
 (typically 32 Euler steps), then vocodes with a shared vocoder. Zero-shot
 voice cloning.
 
+### fireredtts3
+
+FireRedTTS3 (FireRedTeam/FireRedTTS3, Apache-2.0): zero-shot in-context voice
+cloning over CONTINUOUS speech representations rather than discrete codec
+tokens. A Qwen3-1.7B backbone (28L, d=2048) runs over 64-d 25 Hz latents
+produced by RedAE, with an 8-layer PatchEncoder on the prompt side and an
+11-layer DiT flow head that denoises the next latent window. RedAE is a Qwen3
+autoencoder (18L encoder + 4L CLS downsample, 18L decoder, d=896, sliding
+window 64) whose Vocos-style ISTFT head reconstructs 24 kHz mono. Speaker
+identity comes from a CAM++ 512-d x-vector projected separately into the LLM
+(`spk_proj_llm`) and the DiT (`spk_proj_dit`).
+
+Cloning is `--voice ref.wav --ref-text "<transcript>"`; the transcript is
+auto-transcribed when `--ref-text` is absent. Without `--voice` a default
+English prompt baked into the core GGUF is used.
+
+**The DiT flow head must stay F16** — `crispasr-quantize` quantizes only the LLM
+backbone, the same constraint dots-tts has.
+
+Parity against the reference (kernel `chr1s4/crispasr-fireredtts3-validate`):
+`penc_prompt`, `prefill_embeds`, `llm_prefill_out`, `stop_scores`,
+`latents_gen` and `dec_hidden` all at cos 1.000000, `gen_audio` 0.999999,
+`spk_llm` 1.000000, `spk_dit` 0.999991, `spk_emb` 0.999452.
+
+Two notes worth keeping, because both cost time:
+
+- **The CAM++ speaker path was the last thing to converge, and the bug was not
+  in this backend.** `spk_emb` sat at cos 0.268 with magnitude 1.67x until a
+  shared `seg_pooling` defect was fixed (`src/core/campplus_segpool.h`): the
+  partial tail window of `avg_pool1d(k=100, ceil_mode=True)` was divided by the
+  kernel size instead of by its own width. Feeding the stage the REFERENCE
+  fbank is what localised it — bad output from known-good input indicts the
+  network, not its input.
+- **`campp_fbank` sits at cos 0.997589 by design, gated at 0.995.** That
+  residual is the resampler, not a fbank convention error: we reach 16 kHz with
+  `core_audio::resample_polyphase`, the reference uses
+  `torchaudio.functional.resample`, and one clip through both into the
+  IDENTICAL kaldi fbank gives cos 0.998250. int16 scaling was tested and ruled
+  out (it costs cos 0.952). The cost downstream is 0.0005 of embedding cosine.
+
 ### lfm2-audio
 
 LiquidAI LFM2.5-Audio (LFM Open v1.0, 1.5B): end-to-end multimodal

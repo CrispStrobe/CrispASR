@@ -17,9 +17,9 @@
 namespace core_backend_caps {
 
 struct BackendCaps {
-  const char *name;     // backend id, as accepted by --backend
-  uint32_t bits;        // CAP_* bitmask, as reported by the CLI
-  const char *caps_csv; // comma-separated capability names, stable order
+    const char* name;     // backend id, as accepted by --backend
+    uint32_t bits;        // CAP_* bitmask, as reported by the CLI
+    const char* caps_csv; // comma-separated capability names, stable order
 };
 
 static const BackendCaps k_backend_caps[] = {
@@ -34,25 +34,18 @@ static const BackendCaps k_backend_caps[] = {
      "timestamps-native,timestamps-ctc,word-timestamps,token-confidence,"
      "translate,diarize,temperature,beam-search,flash-attn,punctuation-toggle,"
      "src-tgt-language,auto-download,parallel-processors"},
-    {"canary-qwen", 534280u,
-     "token-confidence,temperature,beam-search,flash-attn,auto-download"},
-    {"chatterbox", 210176u,
-     "temperature,flash-attn,src-tgt-language,auto-download,tts,voice-cloning"},
-    {"chatterbox-finnish-nano", 210176u,
-     "temperature,flash-attn,src-tgt-language,auto-download,tts,voice-cloning"},
-    {"chatterbox-nano", 210176u,
-     "temperature,flash-attn,src-tgt-language,auto-download,tts,voice-cloning"},
-    {"chatterbox-turbo", 210176u,
-     "temperature,flash-attn,src-tgt-language,auto-download,tts,voice-cloning"},
+    {"canary-qwen", 534280u, "token-confidence,temperature,beam-search,flash-attn,auto-download"},
+    {"chatterbox", 210176u, "temperature,flash-attn,src-tgt-language,auto-download,tts,voice-cloning"},
+    {"chatterbox-finnish-nano", 210176u, "temperature,flash-attn,src-tgt-language,auto-download,tts,voice-cloning"},
+    {"chatterbox-nano", 210176u, "temperature,flash-attn,src-tgt-language,auto-download,tts,voice-cloning"},
+    {"chatterbox-turbo", 210176u, "temperature,flash-attn,src-tgt-language,auto-download,tts,voice-cloning"},
     {"cohere", 28493u,
      "timestamps-native,word-timestamps,token-confidence,diarize,temperature,"
      "beam-search,flash-attn,punctuation-toggle,auto-download,parallel-"
      "processors"},
     {"confucius4-tts", 205056u, "temperature,auto-download,tts,voice-cloning"},
-    {"cosyvoice3-tts", 210176u,
-     "temperature,flash-attn,src-tgt-language,auto-download,tts,voice-cloning"},
-    {"cosyvoice3-tts-rl", 210176u,
-     "temperature,flash-attn,src-tgt-language,auto-download,tts,voice-cloning"},
+    {"cosyvoice3-tts", 210176u, "temperature,flash-attn,src-tgt-language,auto-download,tts,voice-cloning"},
+    {"cosyvoice3-tts-rl", 210176u, "temperature,flash-attn,src-tgt-language,auto-download,tts,voice-cloning"},
     {"crepe", 17833984u, "auto-download,pitch"},
     {"csm", 73984u, "temperature,auto-download,tts"},
     {"csm-tts", 73984u, "temperature,auto-download,tts"},
@@ -106,27 +99,21 @@ static const BackendCaps k_backend_caps[] = {
     {"hubert", 548938u,
      "timestamps-ctc,token-confidence,diarize,auto-download,parallel-"
      "processors"},
-    {"indextts", 206080u,
-     "temperature,flash-attn,auto-download,tts,voice-cloning"},
+    {"indextts", 206080u, "temperature,flash-attn,auto-download,tts,voice-cloning"},
     {"irodori-tts", 204800u, "auto-download,tts,voice-cloning"},
-    {"kartoffel-orpheus-de-natural", 75008u,
-     "temperature,flash-attn,auto-download,tts"},
-    {"kartoffel-orpheus-de-synthetic", 75008u,
-     "temperature,flash-attn,auto-download,tts"},
-    {"kartoffelbox-turbo", 210176u,
-     "temperature,flash-attn,src-tgt-language,auto-download,tts,voice-cloning"},
+    {"kartoffel-orpheus-de-natural", 75008u, "temperature,flash-attn,auto-download,tts"},
+    {"kartoffel-orpheus-de-synthetic", 75008u, "temperature,flash-attn,auto-download,tts"},
+    {"kartoffelbox-turbo", 210176u, "temperature,flash-attn,src-tgt-language,auto-download,tts,voice-cloning"},
     {"kokoro", 536944640u, "auto-download,tts,tts-speed"},
     {"kugelaudio", 65536u, "tts"},
     {"kyutai-stt", 12109u,
      "timestamps-native,word-timestamps,token-confidence,diarize,temperature,"
      "beam-search,flash-attn,punctuation-toggle,auto-download"},
-    {"lahgtna-chatterbox", 210176u,
-     "temperature,flash-attn,src-tgt-language,auto-download,tts,voice-cloning"},
+    {"lahgtna-chatterbox", 210176u, "temperature,flash-attn,src-tgt-language,auto-download,tts,voice-cloning"},
     {"lex-au-orpheus-de", 75008u, "temperature,flash-attn,auto-download,tts"},
     {"lfm2-audio", 2695680u, "beam-search,auto-download,tts,s2s"},
     {"m2m100", 12832u, "translate,beam-search,src-tgt-language,auto-download"},
-    {"m2m100-wmt21", 12832u,
-     "translate,beam-search,src-tgt-language,auto-download"},
+    {"m2m100-wmt21", 12832u, "translate,beam-search,src-tgt-language,auto-download"},
     {"madlad", 12832u, "translate,beam-search,src-tgt-language,auto-download"},
     {"mega-asr", 32618u,
      "timestamps-ctc,token-confidence,translate,diarize,temperature,beam-"
@@ -145,16 +132,11 @@ static const BackendCaps k_backend_caps[] = {
     {"moonshine-streaming", 272202u,
      "timestamps-ctc,token-confidence,diarize,temperature,beam-search,flash-"
      "attn,punctuation-native,auto-download"},
-    {"moss-audio", 271104u,
-     "temperature,beam-search,punctuation-native,auto-download"},
-    {"moss-diarize", 270913u,
-     "timestamps-native,diarize,beam-search,punctuation-native,auto-download"},
-    {"moss-transcribe", 270848u,
-     "beam-search,punctuation-native,auto-download"},
-    {"moss-tts", 206080u,
-     "temperature,flash-attn,auto-download,tts,voice-cloning"},
-    {"moss-tts-local", 206080u,
-     "temperature,flash-attn,auto-download,tts,voice-cloning"},
+    {"moss-audio", 271104u, "temperature,beam-search,punctuation-native,auto-download"},
+    {"moss-diarize", 270913u, "timestamps-native,diarize,beam-search,punctuation-native,auto-download"},
+    {"moss-transcribe", 270848u, "beam-search,punctuation-native,auto-download"},
+    {"moss-tts", 206080u, "temperature,flash-attn,auto-download,tts,voice-cloning"},
+    {"moss-tts-local", 206080u, "temperature,flash-attn,auto-download,tts,voice-cloning"},
     {"mt3", 134225921u, "timestamps-native,auto-download,piano"},
     {"nemotron", 9185101u,
      "timestamps-native,word-timestamps,token-confidence,diarize,temperature,"
@@ -174,17 +156,14 @@ static const BackendCaps k_backend_caps[] = {
     {"omnivoice", 196608u, "tts,voice-cloning"},
     {"omnivoice-singing", 196608u, "tts,voice-cloning"},
     {"orpheus", 75008u, "temperature,flash-attn,auto-download,tts"},
-    {"outetts", 206080u,
-     "temperature,flash-attn,auto-download,tts,voice-cloning"},
-    {"paraformer", 11330u,
-     "timestamps-ctc,diarize,flash-attn,punctuation-toggle,auto-download"},
+    {"outetts", 206080u, "temperature,flash-attn,auto-download,tts,voice-cloning"},
+    {"paraformer", 11330u, "timestamps-ctc,diarize,flash-attn,punctuation-toggle,auto-download"},
     {"parakeet", 1601357u,
      "timestamps-native,word-timestamps,token-confidence,diarize,temperature,"
      "beam-search,flash-attn,punctuation-toggle,auto-download,parallel-"
      "processors"},
     {"parler-tts", 73984u, "temperature,auto-download,tts"},
-    {"piano-transcription", 134225921u,
-     "timestamps-native,auto-download,piano"},
+    {"piano-transcription", 134225921u, "timestamps-native,auto-download,piano"},
     {"piper", 65536u, "tts"},
     {"pocket-tts", 205056u, "temperature,auto-download,tts,voice-cloning"},
     {"pocket-tts-de", 205056u, "temperature,auto-download,tts,voice-cloning"},
@@ -210,12 +189,9 @@ static const BackendCaps k_backend_caps[] = {
     {"qwen3-tts-1.7b-base", 8598784u,
      "temperature,flash-attn,src-tgt-language,auto-download,tts,voice-cloning,"
      "streaming"},
-    {"qwen3-tts-1.7b-customvoice", 8467712u,
-     "temperature,flash-attn,src-tgt-language,auto-download,tts,streaming"},
-    {"qwen3-tts-1.7b-voicedesign", 8467712u,
-     "temperature,flash-attn,src-tgt-language,auto-download,tts,streaming"},
-    {"qwen3-tts-customvoice", 8467712u,
-     "temperature,flash-attn,src-tgt-language,auto-download,tts,streaming"},
+    {"qwen3-tts-1.7b-customvoice", 8467712u, "temperature,flash-attn,src-tgt-language,auto-download,tts,streaming"},
+    {"qwen3-tts-1.7b-voicedesign", 8467712u, "temperature,flash-attn,src-tgt-language,auto-download,tts,streaming"},
+    {"qwen3-tts-customvoice", 8467712u, "temperature,flash-attn,src-tgt-language,auto-download,tts,streaming"},
     {"raon", 204800u, "auto-download,tts,voice-cloning"},
     {"reazonspeech", 1601357u,
      "timestamps-native,word-timestamps,token-confidence,diarize,temperature,"
@@ -235,13 +211,11 @@ static const BackendCaps k_backend_caps[] = {
     {"tada-1b", 73984u, "temperature,auto-download,tts"},
     {"tada-3b-ml", 73984u, "temperature,auto-download,tts"},
     {"tada-tts-1b", 73984u, "temperature,auto-download,tts"},
-    {"vibevoice", 336962u,
-     "timestamps-ctc,diarize,flash-attn,punctuation-native,auto-download,tts"},
+    {"vibevoice", 336962u, "timestamps-ctc,diarize,flash-attn,punctuation-native,auto-download,tts"},
     {"vibevoice-1.5b", 468034u,
      "timestamps-ctc,diarize,flash-attn,punctuation-native,auto-download,tts,"
      "voice-cloning"},
-    {"vibevoice-bitnet", 336962u,
-     "timestamps-ctc,diarize,flash-attn,punctuation-native,auto-download,tts"},
+    {"vibevoice-bitnet", 336962u, "timestamps-ctc,diarize,flash-attn,punctuation-native,auto-download,tts"},
     {"vibevoice-streaming", 8660034u,
      "timestamps-ctc,diarize,flash-attn,punctuation-native,auto-download,"
      "streaming"},
@@ -262,13 +236,10 @@ static const BackendCaps k_backend_caps[] = {
      "timestamps-native,word-timestamps,token-confidence,language-detect,"
      "translate,diarize,grammar,temperature,beam-search,flash-attn,punctuation-"
      "native,auto-download,parallel-processors,vad-internal"},
-    {"zonos", 206080u,
-     "temperature,flash-attn,auto-download,tts,voice-cloning"},
-    {"zonos-tts", 206080u,
-     "temperature,flash-attn,auto-download,tts,voice-cloning"},
+    {"zonos", 206080u, "temperature,flash-attn,auto-download,tts,voice-cloning"},
+    {"zonos-tts", 206080u, "temperature,flash-attn,auto-download,tts,voice-cloning"},
 };
 
-static const int k_backend_caps_count =
-    (int)(sizeof(k_backend_caps) / sizeof(k_backend_caps[0]));
+static const int k_backend_caps_count = (int)(sizeof(k_backend_caps) / sizeof(k_backend_caps[0]));
 
 } // namespace core_backend_caps
