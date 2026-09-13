@@ -7,7 +7,7 @@ Verdict gates (results.json "validation"):
   3. CONTROL: the upstream ONNX reference wav passes the SAME ASR at >= 0.8
      (else the ASR arm, not the port, is at fault and the run is inconclusive).
   4. GPU-synthesised wav passes the same transcript gate (CUDA correctness).
-SCRIPT_VERSION = v4
+SCRIPT_VERSION = v5
 """
 
 import json
@@ -56,7 +56,7 @@ import kaggle_harness as kh  # noqa: E402
 kh.init_progress()
 kh.resolve_hf_token()
 commit = subprocess.check_output(["git", "-C", REPO, "rev-parse", "HEAD"], text=True).strip()
-print(f"SCRIPT_VERSION=v4 clone={commit}", flush=True)
+print(f"SCRIPT_VERSION=v5 clone={commit}", flush=True)
 kh.step("provenance", commit=commit)
 
 kh.step("dependencies")
@@ -120,7 +120,7 @@ diff = build / "bin/crispasr-diff"
 if not cli.exists() or not diff.exists():
     raise RuntimeError("build produced no binaries (proof-of-work check)")
 
-results = {"commit": commit, "cuda_arch": arch, "script_version": "v4"}
+results = {"commit": commit, "cuda_arch": arch, "script_version": "v5"}
 
 kh.step("diff.stages")
 p = run([diff, "supertonic-tts", f16, ref, REPO / "samples/jfk.wav"], capture=True, check=False)
@@ -134,12 +134,27 @@ results["diff_all_pass"] = "ALL PASS" in p.stdout
 def synth(label, extra):
     out = WORK / f"st_{label}.wav"
     t0 = time.perf_counter()
+    # NOTE: the TTS output flag is --tts-output. There is no "-o": cli.cpp has
+    # -of/--output-file (transcript) and --tts-output (audio). v4 passed "-o",
+    # so the CLI printed usage and exited before synthesising anything, in
+    # 0.13 s, and the roundtrip scored 0.00 against a control of 1.00. That
+    # read as "the audio is wrong" when every per-stage diff, including the
+    # final audio at cos 0.999996, had already passed.
     pr = run([cli, "--backend", "supertonic", "-m", f16, "--tts", TEXT, "-l", LANG,
-              "--voice", VOICE, "-o", out, *extra], capture=True, check=False)
+              "--voice", VOICE, "--tts-output", out, *extra], capture=True, check=False)
     el = time.perf_counter() - t0
     print(pr.stdout[-2000:] if pr.stdout else "", flush=True)
     if pr.stderr:
         print(f"== synth {label} stderr ==\n" + pr.stderr[-4000:], flush=True)
+    # A usage dump is a REJECTED ARGUMENT, not a synthesis failure. Without this
+    # the two are indistinguishable in the result JSON, and the wrong one gets
+    # investigated.
+    blob = (pr.stdout or "") + (pr.stderr or "")
+    if "usage:" in blob.lower() or "--tts-output FNAME" in blob:
+        raise RuntimeError(
+            f"synth {label}: the CLI printed usage -> an argument was rejected, "
+            f"nothing was synthesised. Fix the command line, do not read this as "
+            f"a model failure. rc={pr.returncode}")
     ok = pr.returncode == 0 and out.exists() and out.stat().st_size > 40000
     return out, ok, el
 
