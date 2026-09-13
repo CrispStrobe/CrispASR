@@ -10,8 +10,56 @@ card). Reference ref.gguf on cstr/crispasr-regression-fixtures
 transcribes (whisper-base) as 'All there, how are you today?' vs target
 'Hello there, how are you today?' — overlap 0.83. In flight:
 chr1s4/crispasr-fireredtts3-validate (CPU build + per-stage diff with
-noise replay + q4_k + TTS-to-ASR roundtrip). Next: iterate diff → C++
-fixes until stages pass and the roundtrip matches the control.
+noise replay + q4_k + TTS-to-ASR roundtrip).
+
+### 2026-09-13 — the spk_emb divergence was a SHARED CAM++ bug, now fixed
+
+v3 localised it to the embedder half: spk_emb_orafb (the x-vector computed on
+the REFERENCE fbank) failed at cos 0.278 with |mine|/|ref| = 1.67 while the
+fbank itself read 0.9976. Cosine near zero with a magnitude ratio far from 1 is
+a "different class" signature, not precision — and against the ORACLE fbank it
+could only be the network.
+
+Cause: CAM++ `seg_pooling` is `F.avg_pool1d(k=100, stride=100, ceil_mode=True)`,
+and the port divided EVERY window by 100 including the partial tail. Torch
+divides the tail by its own width. Fixed on main (8bf88724), pinned by
+tests/test-campplus-segpool.cpp. It was shared by chatterbox, confucius4,
+cosyvoice3, dots and fireredtts3 — all accepted END-TO-END, which is exactly why
+a tail-only error survived: no acceptance test diffs that stage against upstream.
+
+Result on v5 — the fix was the whole of it:
+
+    spk_emb_orafb   cos 0.277717 -> 0.999997   |mine| 35.09 -> 20.97 (ref 20.96)
+    spk_emb         cos 0.268065 -> 0.999452   |mine| 35.63 -> 20.92 (ref 20.96)
+
+Every other stage passes: penc_prompt / prefill_embeds / llm_prefill_out /
+stop_scores / latents_gen / dec_hidden at cos 1.000000, gen_audio 0.999999.
+
+### The remaining campp_fbank 0.9976 is the RESAMPLER — do not chase it as a bug
+
+campp_fbank reads cos 0.997589 with |mine| 827.1 vs |ref| 821.8 (0.64%). Two
+candidates were tested locally against torch rather than argued:
+
+  - **int16 scaling: ruled OUT.** `kaldi.fbank` on [-1,1] input vs the same
+    input x32768 differs by cos 0.952 / 11% magnitude — an order larger than
+    what we see. And the reference (`extract_kaldi_mel`) feeds torchaudio's
+    [-1,1] floats, so `int16_scale = false` in compute_fbank is CORRECT.
+    (A constant scale mostly cancels under per-utterance mean subtraction; what
+    does not cancel is which low-energy bins hit Kaldi's log floor.)
+  - **Resampler family: CONSISTENT.** C++ resamples 24k->16k with
+    `core_audio::resample_polyphase`; the reference uses
+    `torchaudio.functional.resample`. Running the same clip through both and
+    then through the identical fbank gives cos 0.998250 with a 0.4% magnitude
+    difference — the same order as observed.
+
+Cost downstream is negligible and bounded by measurement: spk_emb on OUR fbank
+scores 0.999452 against 0.999997 on the oracle fbank, so the resampler delta
+costs 0.0005 of embedding cosine. Matching it exactly would mean reimplementing
+torchaudio's Kaiser-windowed sinc, which is not worth it for that.
+
+Next: commit the regenerated docs/feature-matrix.{md,html} and
+src/core/backend_caps_table.h emitted by kernel v6 (a new backend makes both
+stale, and ci.yml:80 runs check-backend-wiring.py), then merge.
 
 Worktree `.claude/worktrees/feat-377-fireredtts3`, branch `feat/377-fireredtts3`.
 Port FireRedTTS3 (FireRedTeam/FireRedTTS3, Apache-2.0) — the last remaining
