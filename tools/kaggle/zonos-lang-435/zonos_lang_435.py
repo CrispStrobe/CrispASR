@@ -21,12 +21,17 @@ ARMS, and each is designed so a pass cannot be mistaken for a skip:
   3. english_no_espeak     same hostile environment, ASCII text. Expect SUCCESS:
      ASCII still takes the raw-tokenisation path. This is the control that stops
      arm 2 from passing for the trivial reason "the binary refuses everything".
-  4. language_applied      server-style: one process, synthesise ru then en,
-     confirming the per-request language is applied per call rather than frozen
-     at init. Compares the two phoneme-token counts printed by the backend.
+  4. language_applied      ONE `crispasr --server` process started with -l en,
+     then two POST /v1/audio/speech requests carrying "language":"ru" and
+     "language":"en". Requires the backend's own "phoneme tokens (lang=XX)" line
+     to track the REQUEST. This is the only arm that can see the second half of
+     the bug: a long-lived server applied its startup language to every request.
 
 Arm 3 is the one that makes arms 1 and 2 mean anything. Without it, a binary
-that simply failed on all input would score a clean pass.
+that simply failed on all input would score a clean pass. Arm 4 had the same
+disease in v1 of this script -- it used two separate CLI processes, so each one
+set its language at INIT, a path that was never broken. It would have passed on
+the unfixed build. Two processes cannot test what only one process can exhibit.
 """
 import json, os, subprocess, sys, time, shutil
 from pathlib import Path
@@ -111,21 +116,67 @@ for name, text, lang, hostile in (
     log(f"[zonos] {name}: rc={a['rc']} wav={a['wav_bytes']} refused={a['refused']} | {a['phoneme_line'][:90]}")
     (WORK/"results.json").write_text(json.dumps(res, indent=2))
 
-# Arm 4: the per-request language must reach the model on EACH call, not be
-# frozen at init. The backend prints "N phoneme tokens (lang=XX)"; run ru then
-# en in sequence and require the printed lang to track the request.
-lang_seen = []
-for lang, text in (("ru", RU), ("en", EN)):
-    out = SCRATCH / f"langarm_{lang}.wav"
-    if out.exists(): out.unlink()
-    a = synth(text, lang, out, hostile=False)
-    got = ""
-    for line in a["stderr_tail"].splitlines():
-        if "phoneme tokens (lang=" in line:
-            got = line.split("lang=")[1].rstrip(")").strip()
-    lang_seen.append(got)
-    log(f"[zonos] language_applied[{lang}]: printed lang={got!r} rc={a['rc']}")
-res["arms"]["language_applied"] = {"requested": ["ru", "en"], "printed": lang_seen}
+# Arm 4: the per-request language must reach the model on EACH CALL.
+#
+# v1 OF THIS SCRIPT GOT THIS WRONG AND WOULD HAVE PASSED ON THE BROKEN BINARY.
+# It spawned TWO SEPARATE `crispasr --tts` processes with -l ru and -l en. Each
+# process sets the language at INIT, which the pre-fix build already honoured --
+# the bug was that a LONG-LIVED process ignored the language on subsequent
+# requests. Two processes cannot see that. The arm tested the one path that was
+# never broken and would have reported a pass either way.
+#
+# The real path is the server: init once with -l en, then POST two
+# /v1/audio/speech requests carrying different "language" values, and require
+# the backend's own "N phoneme tokens (lang=XX)" line to track the REQUEST.
+# Pre-fix, both requests phonemise as the startup language.
+import urllib.request, socket
+
+def wait_port(port, proc, timeout_s=900):
+    for _ in range(timeout_s):
+        if proc.poll() is not None:
+            return False
+        with socket.socket() as sk:
+            sk.settimeout(1.0)
+            if sk.connect_ex(("127.0.0.1", port)) == 0:
+                return True
+        time.sleep(1)
+    return False
+
+PORT = 8137
+srv_log = open(SCRATCH / "server.log", "wb")
+srv = subprocess.Popen(
+    [str(CRISPASR), "--server", "--backend", "zonos", "-m", M, "--codec-model", C,
+     "-l", "en", "--port", str(PORT)],
+    stdout=srv_log, stderr=subprocess.STDOUT)
+lang_seen, srv_note = [], ""
+if not wait_port(PORT, srv):
+    srv_note = "server did not come up"
+    log(f"[zonos] language_applied: {srv_note} (rc={srv.poll()})")
+else:
+    for lang, text in (("ru", RU), ("en", EN)):
+        body = json.dumps({"input": text, "language": lang}).encode()
+        req = urllib.request.Request(f"http://127.0.0.1:{PORT}/v1/audio/speech",
+                                     data=body, headers={"Content-Type": "application/json"})
+        mark = srv_log.tell()
+        try:
+            with urllib.request.urlopen(req, timeout=1800) as r:
+                nbytes = len(r.read())
+        except Exception as e:
+            nbytes = 0; log(f"[zonos] request {lang} failed: {e}")
+        srv_log.flush()
+        tail = Path(SCRATCH / "server.log").read_bytes()[mark:].decode("utf-8", "replace")
+        got = ""
+        for line in tail.splitlines():
+            if "phoneme tokens (lang=" in line:
+                got = line.split("lang=")[1].rstrip(")").strip()
+        lang_seen.append(got)
+        log(f"[zonos] language_applied[{lang}]: printed lang={got!r} wav_bytes={nbytes}")
+srv.terminate()
+try: srv.wait(timeout=30)
+except Exception: srv.kill()
+srv_log.close()
+res["arms"]["language_applied"] = {"requested": ["ru", "en"], "printed": lang_seen,
+                                   "note": srv_note, "method": "single server process, 2 requests"}
 
 A = res["arms"]
 verdict = {
@@ -135,7 +186,9 @@ verdict = {
   # Requires BOTH that each call printed its own requested language AND that the
   # two differ -- a backend frozen at init would print the same value twice, and
   # a backend that printed nothing would pass an equality-only check vacuously.
-  "per_request_language_applied": lang_seen == ["ru", "en"],
+  # One process, two requests. Pre-fix BOTH print the startup language ("en-us"),
+  # so ["ru","en"] is reachable only if the per-request language is applied.
+  "per_request_language_applied": [x.split("-")[0] for x in lang_seen] == ["ru", "en"],
 }
 res["verdict"] = verdict
 res["all_pass"] = all(verdict.values())
