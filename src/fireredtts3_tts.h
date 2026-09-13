@@ -37,7 +37,7 @@ struct fireredtts3_tts_context;
 
 struct fireredtts3_tts_context_params {
     int n_threads;
-    int verbosity;        // 0=silent, 1=normal, 2=verbose
+    int verbosity; // 0=silent, 1=normal, 2=verbose
     bool use_gpu;
     uint64_t seed;        // RNG seed; 0 = upstream default 1234
     int n_timesteps;      // flow ODE steps; 0 = default 10

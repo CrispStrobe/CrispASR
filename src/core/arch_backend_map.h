@@ -259,6 +259,8 @@ inline const entry* table(size_t* n_out) {
         {"dia-tts",                   "dia"},
         {"dia_tts",                   "dia"},
         {"dots-tts",                  "dots-tts"},
+        {"fireredtts3",               "fireredtts3"},
+        {"fireredtts3-redae",         "fireredtts3"},
         {"dots_tts",                  "dots-tts"},
         {"dots.tts",                  "dots-tts"},
         {"confucius4-tts",            "confucius4-tts"},

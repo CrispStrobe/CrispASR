@@ -95,6 +95,7 @@
 #include "tada_encoder.h"
 #include "tada_tts.h"
 #include "dots_tts.h"
+#include "fireredtts3_tts.h"
 #include "t5_translate.h"
 #include "miocodec.h"
 #include "miotts.h"
@@ -1249,6 +1250,36 @@ int main(int argc, char** argv) {
     // tiron (#295): decoded-output acceptance vs the reference transcript.
     if (backend_name == "tiron") {
         return tiron_diff(model_path, ref_path, audio_path);
+    }
+
+    // fireredtts3 (#377): self-contained per-stage runner. model_path = core
+    // GGUF; the redae companion resolves from FIREREDTTS3_REDAE or as a
+    // sibling fireredtts3-redae-*.gguf; audio_path = the PROMPT wav the
+    // reference used (16 kHz mono, e.g. samples/jfk.wav).
+    if (backend_name == "fireredtts3") {
+        std::string redae;
+        if (const char* e = std::getenv("FIREREDTTS3_REDAE")) {
+            redae = e;
+        } else {
+            auto sep = model_path.find_last_of("/\\");
+            std::string dir = (sep == std::string::npos) ? std::string(".") : model_path.substr(0, sep);
+            for (const char* name :
+                 {"fireredtts3-redae-f16.gguf", "fireredtts3-redae-q8_0.gguf", "fireredtts3-redae.gguf"}) {
+                std::string cp = dir + "/" + name;
+                FILE* f = fopen(cp.c_str(), "rb");
+                if (f) {
+                    fclose(f);
+                    redae = cp;
+                    break;
+                }
+            }
+        }
+        if (redae.empty()) {
+            fprintf(stderr, "fireredtts3 diff: redae companion not found (set FIREREDTTS3_REDAE)\n");
+            return 2;
+        }
+        return fireredtts3_tts_diff(model_path.c_str(), redae.c_str(), ref_path.c_str(), audio_path.c_str(),
+                                    /*verbosity=*/2);
     }
 
     // dots-tts: self-contained per-stage parity checks (no audio needed). The

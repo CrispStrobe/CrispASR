@@ -588,6 +588,13 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
     //   - penc.in_proj/out_proj/ds_conv — PatchEncoder I/O
     // Vocoder and speaker encoder are in separate GGUFs — quantize normally.
     const bool is_dots_tts = (arch.find("dots-tts") != std::string::npos || arch.find("dots_tts") != std::string::npos);
+    // FireRedTTS3 (#377): mirror the dots.tts lesson — a flow-matching head
+    // audibly degrades under weight quantization, so keep the WHOLE DiT and
+    // the PatchEncoder at F16; quantize only the Qwen3-1.7B backbone matmuls.
+    // The redae companion (arch fireredtts3-redae) is an autoencoder over
+    // 24 kHz audio — also quality-critical: quantize nothing but the Qwen3
+    // stack projections there, keep in/out/istft I/O at F16.
+    const bool is_fireredtts3 = (arch.find("fireredtts3") != std::string::npos);
     // ARK-ASR-3B: keep the tied embedding/lm_head (dec.embed.weight) and the
     // whole Whisper encoder + adapter (mel-sensitive, small vs the 36L decoder)
     // at F16; quantize only the decoder attn/ffn projections.
@@ -837,6 +844,12 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
                sname == "cosyvoice3.flow.input_embd.w" || sname == "cosyvoice3.flow.spk_affine.w" ||
                sname == "cosyvoice3.s3tok.fsq.proj.w")) &&
             !is_f5tts &&
+            !(is_fireredtts3 &&
+              (sname.find("frt.dit") == 0 || sname.find("frt.penc.") == 0 || sname.find("frt.spk_proj_") == 0 ||
+               sname.find("frt.stop_head.") == 0 || sname.find("frt.llm.tok_emb.") == 0 ||
+               sname.find("frt.dprompt.") == 0 || sname.find("frt.enc.in_proj") == 0 ||
+               sname.find("frt.enc.out_proj.") == 0 || sname.find("frt.dec.in_proj.") == 0 ||
+               sname.find("frt.dec.istft_") == 0 || sname.find("campp.") == 0)) &&
             !(is_dots_tts && (sname.find("dots.dit.") == 0 || sname.find(".adaln.") != std::string::npos ||
                               sname.find("dots.hidden_proj.") == 0 || sname.find("dots.latent_proj.") == 0 ||
                               sname.find("dots.coordinate_proj.") == 0 || sname.find("dots.xvec_proj.") == 0 ||

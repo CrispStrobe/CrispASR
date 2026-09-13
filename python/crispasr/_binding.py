@@ -1949,7 +1949,7 @@ class Session:
         return vocab
 
     # ---------------------------------------------------------------------
-    # TTS synthesis (vibevoice, qwen3-tts, miotts, moss-tts, moss-tts-local, confucius4-tts, omnivoice, kokoro, orpheus, chatterbox, outetts, indextts, voxcpm2, csm, dia, zonos-tts, bark, speecht5, parler-tts, pocket-tts, kugelaudio, tada, lfm2-audio, dots-tts)
+    # TTS synthesis (vibevoice, qwen3-tts, miotts, moss-tts, moss-tts-local, confucius4-tts, omnivoice, kokoro, orpheus, chatterbox, outetts, indextts, voxcpm2, csm, dia, zonos-tts, bark, speecht5, parler-tts, pocket-tts, kugelaudio, tada, lfm2-audio, dots-tts, fireredtts3)
     # ---------------------------------------------------------------------
 
     def set_codec_path(self, path: str) -> None:
@@ -2865,7 +2865,7 @@ class Session:
         ``csm``, ``dia``, ``fastpitch``, ``bananamind-tts``, ``speecht5``,
         ``melotts``, ``piper``, ``parler-tts``, ``outetts``, ``cosyvoice3-tts``,
         ``pocket-tts``, ``f5-tts``, ``irodori-tts``, ``bark``, ``kugelaudio``, ``tada``,
-        ``lfm2-audio``, ``voxtral-tts``, ``dots-tts``, ``omnivoice``.
+        ``lfm2-audio``, ``voxtral-tts``, ``dots-tts``, ``fireredtts3``, ``omnivoice``.
         For qwen3-tts call :meth:`set_codec_path` and one of:
 
         * :meth:`set_voice` — Base variants (WAV + ref_text, or voice-pack GGUF)

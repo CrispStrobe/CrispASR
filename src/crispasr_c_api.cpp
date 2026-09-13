@@ -27,6 +27,7 @@
 #include "parakeet_orchestrate.h" // improvements Phase 1: shared parakeet transcribe orchestration
 #include "core/gpu_backend_pref.h" // crispasr_set_gpu_backend_pref (#214)
 #include "core/audio_resample.h"   // Sidon S2S input-rate conversion
+#include "core/wav_reader.h"       // fireredtts3 set_voice WAV decode
 
 #include <atomic>
 #include <chrono>
@@ -238,6 +239,10 @@
 #if __has_include("dots_tts.h")
 #include "dots_tts.h"
 #define CA_HAVE_DOTS_TTS 1
+#endif
+#if __has_include("fireredtts3_tts.h")
+#include "fireredtts3_tts.h"
+#define CA_HAVE_FIREREDTTS3 1
 #endif
 #if __has_include("pocket_tts.h")
 #include "pocket_tts.h"
@@ -2100,6 +2105,9 @@ struct crispasr_session {
 #ifdef CA_HAVE_DOTS_TTS
     dots_tts_context* dots_tts_ctx = nullptr;
 #endif
+#ifdef CA_HAVE_FIREREDTTS3
+    fireredtts3_tts_context* fireredtts3_ctx = nullptr;
+#endif
 #ifdef CA_HAVE_POCKET
     pocket_tts_context* pocket_tts_ctx = nullptr;
 #endif
@@ -3443,6 +3451,39 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
         return s;
     }
 #endif
+#ifdef CA_HAVE_FIREREDTTS3
+    if (s->backend == "fireredtts3" || s->backend == "fireredtts3-tts" || s->backend == "firered-tts3") {
+        s->backend = "fireredtts3";
+        fireredtts3_tts_context_params p = fireredtts3_tts_context_default_params();
+        p.n_threads = s->n_threads;
+        p.verbosity = g_open_verbosity_tls;
+        p.use_gpu = g_open_use_gpu_tls;
+        p.seed = g_open_seed_tls;
+        s->fireredtts3_ctx = fireredtts3_tts_init_from_file(model_path, p);
+        if (!s->fireredtts3_ctx) {
+            delete s;
+            return nullptr;
+        }
+        // RedAE + CAM++ companion is required for synthesis; auto-resolve a
+        // sibling GGUF next to the model.
+        {
+            std::string mp = model_path ? model_path : "";
+            auto sep = mp.find_last_of("/\\");
+            std::string dir = (sep == std::string::npos) ? std::string(".") : mp.substr(0, sep);
+            for (const char* name : {"fireredtts3-redae-f16.gguf", "fireredtts3-redae-q8_0.gguf",
+                                     "fireredtts3-redae-q4_k.gguf", "fireredtts3-redae.gguf"}) {
+                std::string cp = dir + "/" + name;
+                FILE* f = fopen(cp.c_str(), "rb");
+                if (f) {
+                    fclose(f);
+                    fireredtts3_tts_set_redae_path(s->fireredtts3_ctx, cp.c_str());
+                    break;
+                }
+            }
+        }
+        return s;
+    }
+#endif
 #ifdef CA_HAVE_CONFUCIUS4_TTS
     if (s->backend == "confucius4-tts" || s->backend == "confucius4_tts" || s->backend == "confucius4") {
         s->backend = "confucius4-tts";
@@ -4216,6 +4257,10 @@ CA_EXPORT int crispasr_session_output_sample_rate(crispasr_session* s) {
     if (s->dots_tts_ctx)
         return 48000;
 #endif
+#ifdef CA_HAVE_FIREREDTTS3
+    if (s->fireredtts3_ctx)
+        return fireredtts3_tts_sample_rate(s->fireredtts3_ctx);
+#endif
 #ifdef CA_HAVE_SIDON
     if (s->sidon_ctx)
         return 48000;
@@ -4542,6 +4587,9 @@ CA_EXPORT int crispasr_session_available_backends(char* out_csv, int out_cap) {
 #endif
 #ifdef CA_HAVE_DOTS_TTS
     list += ",dots-tts";
+#endif
+#ifdef CA_HAVE_FIREREDTTS3
+    list += ",fireredtts3";
 #endif
 #ifdef CA_HAVE_POCKET
     list += ",pocket-tts,pocket-tts-de,pocket-tts-es,pocket-tts-it,pocket-tts-pt,pocket-tts-fr";
@@ -8674,6 +8722,26 @@ CA_EXPORT int crispasr_session_set_voice(crispasr_session* s, const char* path, 
         return confucius4_tts_set_voice_path(s->confucius4_ctx, path);
     }
 #endif
+#ifdef CA_HAVE_FIREREDTTS3
+    if (s->fireredtts3_ctx) {
+        // ICL voice cloning: reference WAV + its transcript. The transcript is
+        // REQUIRED (it is prepended to the target text); pass it as
+        // ref_text_or_null.
+        if (!ends_with_wav(path))
+            return -2;
+        if (!ref_text_or_null || !*ref_text_or_null)
+            return -3;
+        std::vector<float> pcm;
+        int sr = 0;
+        if (!crispasr::core::read_wav_mono_pcm16(path, pcm, sr) || pcm.empty())
+            return -1;
+        if (sr != 16000)
+            pcm = core_audio::resample_polyphase(pcm.data(), (int)pcm.size(), sr, 16000);
+        if (fireredtts3_tts_set_voice_pcm(s->fireredtts3_ctx, pcm.data(), (int)pcm.size()) != 0)
+            return -1;
+        return fireredtts3_tts_set_ref_text(s->fireredtts3_ctx, ref_text_or_null);
+    }
+#endif
 #ifdef CA_HAVE_DOTS_TTS
     if (s->dots_tts_ctx) {
         // Voice cloning from a reference WAV (the speaker encoder was loaded at
@@ -9442,6 +9510,11 @@ static float* crispasr_session_synthesize_raw_impl(crispasr_session* s, const ch
         // Dia emits 44.1 kHz mono float (DAC codec); PCM is malloc'd and freed
         // via crispasr_pcm_free, same as the other TTS backends.
         return dia_tts_synthesize(s->dia_tts_ctx, text, out_n_samples);
+    }
+#endif
+#ifdef CA_HAVE_FIREREDTTS3
+    if (s->fireredtts3_ctx) {
+        return fireredtts3_tts_synthesize(s->fireredtts3_ctx, text, out_n_samples);
     }
 #endif
 #ifdef CA_HAVE_DOTS_TTS
@@ -11144,6 +11217,10 @@ CA_EXPORT void crispasr_session_close(crispasr_session* s) {
 #ifdef CA_HAVE_DIA
     if (s->dia_tts_ctx)
         dia_tts_free(s->dia_tts_ctx);
+#endif
+#ifdef CA_HAVE_FIREREDTTS3
+    if (s->fireredtts3_ctx)
+        fireredtts3_tts_free(s->fireredtts3_ctx);
 #endif
 #ifdef CA_HAVE_DOTS_TTS
     if (s->dots_tts_ctx)

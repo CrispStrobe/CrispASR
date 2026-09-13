@@ -61,6 +61,7 @@ add_executable(${TARGET}
     crispasr_backend_bark.cpp
     crispasr_backend_dia.cpp
     crispasr_backend_dots_tts.cpp
+    crispasr_backend_fireredtts3.cpp
     crispasr_backend_confucius4_tts.cpp
     crispasr_backend_voxcpm2_tts.cpp
     crispasr_backend_voxcpm2_vae.cpp
@@ -273,6 +274,7 @@ target_link_libraries(crispasr-diff PRIVATE
     parler-tts
     mini-omni2
     dots-tts
+    fireredtts3
     confucius4-tts
     miotts
     miocodec
@@ -382,6 +384,7 @@ target_link_libraries(${TARGET} PRIVATE
     bark-tts
     dia-tts
     dots-tts
+    fireredtts3
     confucius4-tts
     irodori-tts
     pocket-tts

@@ -85,6 +85,7 @@ std::unique_ptr<CrispasrBackend> crispasr_make_pocket_tts_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_speecht5_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_dia_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_dots_tts_backend();
+std::unique_ptr<CrispasrBackend> crispasr_make_fireredtts3_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_confucius4_tts_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_parler_tts_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_fastpitch_backend();
@@ -299,6 +300,8 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& name
         return crispasr_make_dia_backend();
     if (name == "dots-tts" || name == "dots_tts" || name == "dots" || name == "dots.tts")
         return crispasr_make_dots_tts_backend();
+    if (name == "fireredtts3" || name == "fireredtts3-tts" || name == "firered-tts3" || name == "fireredtts-3")
+        return crispasr_make_fireredtts3_backend();
     if (name == "confucius4-tts" || name == "confucius4_tts" || name == "confucius4")
         return crispasr_make_confucius4_tts_backend();
     if (name == "parler-tts" || name == "parler_tts" || name == "parler" || name == "parlertts")
@@ -421,6 +424,7 @@ std::vector<std::string> crispasr_list_backends() {
         "dia",
         "dia-tts",
         "dots-tts",
+        "fireredtts3",
         "confucius4-tts",
         "parler-tts",
         "zonos",
@@ -787,6 +791,8 @@ std::string crispasr_detect_backend_from_gguf(const std::string& model_path) {
         return "confucius4-tts";
     if (contains_ci("dots-tts") || contains_ci("dots_tts") || contains_ci("dots.tts"))
         return "dots-tts";
+    if (contains_ci("fireredtts3"))
+        return "fireredtts3";
     if (contains_ci("csm") || contains_ci("sesame"))
         return "csm";
     if (contains_ci("parler") && contains_ci("tts"))

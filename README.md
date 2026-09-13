@@ -301,6 +301,7 @@ quick-start commands and engine selection guidance.
 | pocket-tts | yes | temp | 24 | yes | — |
 | tada | yes | temp | 24 | yes | — |
 | dots-tts | yes (`--voice ref.wav`) | 16-step CFG Euler | 48 | yes | — |
+| fireredtts3 | yes (`--voice ref.wav --ref-text "..."`) | 10-step CFG Euler | 24 | yes | — |
 | confucius4-tts | yes (`--voice ref.wav`) | 25-step CFG Euler | 22.05 | yes | — |
 
 \* CustomVoice variant only; Base uses baked speakers via `--voice <name>`.

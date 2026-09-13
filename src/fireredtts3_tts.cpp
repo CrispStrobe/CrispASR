@@ -59,6 +59,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <map>
 #include <unordered_map>
 #include <vector>
 
@@ -153,10 +154,10 @@ struct fireredtts3_tts_context {
     // Weight storage
     ggml_context* core_ctx = nullptr;
     ggml_backend_buffer_t core_buf = nullptr;
-    std::unordered_map<std::string, ggml_tensor*> core_tensors;
+    std::map<std::string, ggml_tensor*> core_tensors;
     ggml_context* redae_ctx = nullptr;
     ggml_backend_buffer_t redae_buf = nullptr;
-    std::unordered_map<std::string, ggml_tensor*> redae_tensors;
+    std::map<std::string, ggml_tensor*> redae_tensors;
 
     // ── core hparams ──
     int llm_n_layers = 28, llm_d = 2048, llm_heads = 16, llm_kv_heads = 8, llm_head_dim = 128;
@@ -252,7 +253,7 @@ struct fireredtts3_tts_context {
 
     // Params
     fireredtts3_tts_context_params params{};
-    core_torch_rng::mt19937_state rng{};
+    crispasr::core::mt19937_state rng{};
     bool rng_seeded = false;
 };
 
@@ -260,13 +261,12 @@ struct fireredtts3_tts_context {
 // Small helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-static ggml_tensor* frt_get(const std::unordered_map<std::string, ggml_tensor*>& m, const std::string& name) {
+static ggml_tensor* frt_get(const std::map<std::string, ggml_tensor*>& m, const std::string& name) {
     auto it = m.find(name);
     return it == m.end() ? nullptr : it->second;
 }
 
-static ggml_tensor* frt_req(const std::unordered_map<std::string, ggml_tensor*>& m, const std::string& name,
-                            bool& ok) {
+static ggml_tensor* frt_req(const std::map<std::string, ggml_tensor*>& m, const std::string& name, bool& ok) {
     ggml_tensor* t = frt_get(m, name);
     if (!t) {
         std::fprintf(stderr, "fireredtts3: missing tensor '%s'\n", name.c_str());
@@ -708,8 +708,7 @@ static ggml_tensor* frt_dit_body(fireredtts3_tts_context* ctx, ggml_context* ctx
     // FinalLayer: LayerNorm (no affine, eps 1e-6) + modulate(shift, scale) + linear
     ggml_tensor* ada = frt_linear(ctx0, ctx->dit_final_adaln_w, ctx->dit_final_adaln_b, ggml_silu(ctx0, t_emb));
     const int d = ctx->dit_d;
-    ggml_tensor* f_shift =
-        ggml_cont(ctx0, ggml_view_2d(ctx0, ada, d, 1, ada->nb[1], 0));
+    ggml_tensor* f_shift = ggml_cont(ctx0, ggml_view_2d(ctx0, ada, d, 1, ada->nb[1], 0));
     ggml_tensor* f_scale =
         ggml_cont(ctx0, ggml_view_2d(ctx0, ada, d, 1, ada->nb[1], (size_t)d * ggml_element_size(ada)));
     ggml_tensor* h = ggml_norm(ctx0, x, 1e-6f); // LayerNorm without affine
@@ -724,13 +723,13 @@ static ggml_tensor* frt_dit_body(fireredtts3_tts_context* ctx, ggml_context* ctx
 static bool frt_flow_solve(fireredtts3_tts_context* ctx, const float* hist, const float* noise, const float* cond3,
                            const float* spk, std::vector<float>& out) {
     frt_bench_stage bench_("flow_solve");
-    const int ps = ctx->patch_size;                    // 4
-    const int hl = ctx->n_hist_patches * ps;           // 8
-    const int T = hl + ps;                             // 12
-    const int ld = ctx->redae_dim;                     // 64
-    const int nt = ctx->params.n_timesteps;            // 10
-    const float cfg = ctx->params.cfg_scale;           // 2.0
-    const int in_ch = ld + ctx->dit_d + ctx->spk_dim;  // 1600
+    const int ps = ctx->patch_size;                   // 4
+    const int hl = ctx->n_hist_patches * ps;          // 8
+    const int T = hl + ps;                            // 12
+    const int ld = ctx->redae_dim;                    // 64
+    const int nt = ctx->params.n_timesteps;           // 10
+    const float cfg = ctx->params.cfg_scale;          // 2.0
+    const int in_ch = ld + ctx->dit_d + ctx->spk_dim; // 1600
 
     // t_span = 1 - cos(linspace(0, 1, nt+1) * pi/2)
     std::vector<float> t_span(nt + 1);
@@ -948,8 +947,7 @@ static bool frt_redae_encode(fireredtts3_tts_context* ctx, const float* pcm24, i
         ggml_tensor* h = frt_qwen3_forward(g.ctx0, x, ctx->encds_blocks, ctx->encds_norm_w, positions, mask, dsdm);
         // take token index B-1 (the CLS) of each group
         ggml_tensor* hc = ggml_cont(g.ctx0, h);
-        ggml_tensor* cls_rows =
-            ggml_view_2d(g.ctx0, hc, d, G, hc->nb[1] * B, hc->nb[1] * (B - 1));
+        ggml_tensor* cls_rows = ggml_view_2d(g.ctx0, hc, d, G, hc->nb[1] * B, hc->nb[1] * (B - 1));
         cls_rows = ggml_cont(g.ctx0, cls_rows);
         ggml_tensor* lat = frt_linear(g.ctx0, ctx->enc_out_w, ctx->enc_out_b, cls_rows); // (64, G)
         ggml_set_name(lat, "latents");
@@ -1076,8 +1074,8 @@ static bool frt_redae_decode(fireredtts3_tts_context* ctx, const float* latents,
     // "same" padding ISTFT with the SHIPPED window; python divides by the
     // window envelope unconditionally after asserting > 1e-11.
     pcm = core_istft::istft(mag.data(), phase.data(), n_fft, ctx->ae_patch, T50,
-                            ctx->istft_window.empty() ? nullptr : ctx->istft_window.data(), core_istft::TRIM_SAME,
-                            0.0f, 1e-11f, false);
+                            ctx->istft_window.empty() ? nullptr : ctx->istft_window.data(), core_istft::TRIM_SAME, 0.0f,
+                            1e-11f, false);
     return true;
 }
 
@@ -1109,7 +1107,7 @@ static bool frt_tokenize(fireredtts3_tts_context* ctx, const std::string& lang, 
 // Loading
 // ─────────────────────────────────────────────────────────────────────────────
 
-static bool frt_bind_qwen3_blocks(const std::unordered_map<std::string, ggml_tensor*>& tm, const std::string& prefix,
+static bool frt_bind_qwen3_blocks(const std::map<std::string, ggml_tensor*>& tm, const std::string& prefix,
                                   int n_layers, std::vector<frt_qwen3_block>& blocks) {
     blocks.resize(n_layers);
     bool ok = true;
@@ -1132,8 +1130,8 @@ static bool frt_bind_qwen3_blocks(const std::unordered_map<std::string, ggml_ten
     return ok;
 }
 
-static bool frt_bind_ditblocks(const std::unordered_map<std::string, ggml_tensor*>& tm, const std::string& prefix,
-                               int n_layers, bool with_conv_adaln, std::vector<frt_ditblock>& blocks) {
+static bool frt_bind_ditblocks(const std::map<std::string, ggml_tensor*>& tm, const std::string& prefix, int n_layers,
+                               bool with_conv_adaln, std::vector<frt_ditblock>& blocks) {
     blocks.resize(n_layers);
     bool ok = true;
     for (int i = 0; i < n_layers; i++) {
@@ -1180,9 +1178,8 @@ extern "C" struct fireredtts3_tts_context_params fireredtts3_tts_context_default
     return p;
 }
 
-extern "C" struct fireredtts3_tts_context* fireredtts3_tts_init_from_file(const char* path_model,
-                                                                          struct fireredtts3_tts_context_params
-                                                                              params) {
+extern "C" struct fireredtts3_tts_context* fireredtts3_tts_init_from_file(
+    const char* path_model, struct fireredtts3_tts_context_params params) {
     auto* ctx = new fireredtts3_tts_context();
     ctx->params = params;
     if (ctx->params.seed == 0)
@@ -1207,7 +1204,7 @@ extern "C" struct fireredtts3_tts_context* fireredtts3_tts_init_from_file(const 
 
     // ---- metadata ----
     {
-        gguf_context* g = core_gguf::read_metadata(path_model);
+        gguf_context* g = core_gguf::open_metadata(path_model);
         if (!g) {
             std::fprintf(stderr, "fireredtts3: cannot read %s\n", path_model);
             fireredtts3_tts_free(ctx);
@@ -1356,7 +1353,7 @@ extern "C" int fireredtts3_tts_set_redae_path(struct fireredtts3_tts_context* ct
         return 1;
     }
     {
-        gguf_context* g = core_gguf::read_metadata(path);
+        gguf_context* g = core_gguf::open_metadata(path);
         if (!g) {
             std::fprintf(stderr, "fireredtts3: cannot read %s\n", path);
             return 1;
@@ -1490,8 +1487,8 @@ extern "C" int fireredtts3_tts_set_redae_path(struct fireredtts3_tts_context* ct
                 blocks[bi]->layers.assign(nlayers[bi], cb_campplus_dense_layer{});
                 blocks[bi]->dilation = dils[bi];
                 for (int li = 0; li < nlayers[bi]; li++) {
-                    bind_dense_layer(blocks[bi]->layers[li], P + ".xvector.block" + std::to_string(bi + 1) +
-                                                                 ".tdnnd" + std::to_string(li + 1));
+                    bind_dense_layer(blocks[bi]->layers[li],
+                                     P + ".xvector.block" + std::to_string(bi + 1) + ".tdnnd" + std::to_string(li + 1));
                 }
             }
             ctx->has_campp = true;
@@ -1514,8 +1511,7 @@ extern "C" int fireredtts3_tts_set_redae_path(struct fireredtts3_tts_context* ct
 
 // Pad (LEFT) to a multiple, resample, encode, CAM++ — the prompt path of
 // FireRedTTS3Base.generate.
-extern "C" int fireredtts3_tts_set_voice_pcm(struct fireredtts3_tts_context* ctx, const float* pcm_16k,
-                                             int n_samples) {
+extern "C" int fireredtts3_tts_set_voice_pcm(struct fireredtts3_tts_context* ctx, const float* pcm_16k, int n_samples) {
     if (!ctx || !pcm_16k || n_samples <= 0)
         return 1;
     if (!ctx->redae_ctx) {
@@ -1523,7 +1519,7 @@ extern "C" int fireredtts3_tts_set_voice_pcm(struct fireredtts3_tts_context* ctx
         return 1;
     }
     // 16 k → 24 k
-    std::vector<float> pcm24 = core_resample::resample_polyphase(pcm_16k, n_samples, 16000, ctx->ae_sr);
+    std::vector<float> pcm24 = core_audio::resample_polyphase(pcm_16k, n_samples, 16000, ctx->ae_sr);
     // LEFT-pad to a multiple of downsample_rate * patch_size (960 * 4)
     const int mult = ctx->ae_patch * ctx->ae_ds_rate * ctx->patch_size;
     const int target = (int)((pcm24.size() + mult - 1) / mult) * mult;
@@ -1541,7 +1537,7 @@ extern "C" int fireredtts3_tts_set_voice_pcm(struct fireredtts3_tts_context* ctx
         std::fprintf(stderr, "fireredtts3: no campplus in redae GGUF\n");
         return 1;
     }
-    std::vector<float> pcm16 = core_resample::resample_polyphase(pcm24.data(), (int)pcm24.size(), ctx->ae_sr, 16000);
+    std::vector<float> pcm16 = core_audio::resample_polyphase(pcm24.data(), (int)pcm24.size(), ctx->ae_sr, 16000);
     ctx->voice_spk = chatterbox_campplus::embed_speaker(ctx->campp, ctx->campp_rt, pcm16.data(), (int)pcm16.size(),
                                                         /*stats_var_floor=*/0.0f);
     if (ctx->voice_spk.size() != (size_t)ctx->spk_dim) {
@@ -1658,7 +1654,7 @@ static bool frt_generate(fireredtts3_tts_context* ctx, const std::vector<int32_t
         }
     }
     if (!ctx->rng_seeded) {
-        core_torch_rng::mt19937_seed(ctx->rng, (uint32_t)ctx->params.seed);
+        crispasr::core::mt19937_seed(ctx->rng, (uint32_t)ctx->params.seed);
         ctx->rng_seeded = true;
     }
 
@@ -1738,7 +1734,7 @@ static bool frt_generate(fireredtts3_tts_context* ctx, const std::vector<int32_t
             std::memcpy(noise.data(), noise_file.data() + noise_pos, noise.size() * sizeof(float));
             noise_pos += noise.size();
         } else {
-            core_torch_rng::fill_gaussian_noise(noise.data(), (int)noise.size(), ctx->rng);
+            crispasr::core::fill_gaussian_noise(noise.data(), (int)noise.size(), ctx->rng);
         }
         if (dbg)
             dbg->noise_used.insert(dbg->noise_used.end(), noise.begin(), noise.end());
@@ -1898,8 +1894,8 @@ frt_cmp_result frt_compare(const float* mine, const float* ref, size_t n, double
     return r;
 }
 
-bool frt_ref_tensor(const std::unordered_map<std::string, ggml_tensor*>& rm, const char* name,
-                    std::vector<float>& out, ggml_tensor** t_out = nullptr) {
+bool frt_ref_tensor(const std::map<std::string, ggml_tensor*>& rm, const char* name, std::vector<float>& out,
+                    ggml_tensor** t_out = nullptr) {
     auto it = rm.find(name);
     if (it == rm.end())
         return false;
@@ -1923,7 +1919,7 @@ extern "C" int fireredtts3_tts_diff(const char* core_gguf, const char* redae_ggu
                                     const char* prompt_wav_path, int verbosity) {
     fireredtts3_tts_context_params p = fireredtts3_tts_context_default_params();
     p.verbosity = verbosity;
-    p.use_gpu = core_env::flag("CRISPASR_DIFF_GPU", false);
+    p.use_gpu = core_env::on("CRISPASR_DIFF_GPU");
     fireredtts3_tts_context* ctx = fireredtts3_tts_init_from_file(core_gguf, p);
     if (!ctx)
         return 2;
@@ -1945,14 +1941,14 @@ extern "C" int fireredtts3_tts_diff(const char* core_gguf, const char* redae_ggu
     // ── prompt audio: 16 k mono WAV, resample + LEFT pad like generate() ──
     std::vector<float> wav16;
     int wav_sr = 0;
-    if (!core_wav::read_wav_mono_pcm16(prompt_wav_path, wav16, wav_sr) || wav16.empty()) {
+    if (!crispasr::core::read_wav_mono_pcm16(prompt_wav_path, wav16, wav_sr) || wav16.empty()) {
         std::fprintf(stderr, "fireredtts3_diff: cannot read %s\n", prompt_wav_path);
         fireredtts3_tts_free(ctx);
         return 2;
     }
     if (wav_sr != 16000)
-        wav16 = core_resample::resample_polyphase(wav16.data(), (int)wav16.size(), wav_sr, 16000);
-    std::vector<float> pcm24 = core_resample::resample_polyphase(wav16.data(), (int)wav16.size(), 16000, ctx->ae_sr);
+        wav16 = core_audio::resample_polyphase(wav16.data(), (int)wav16.size(), wav_sr, 16000);
+    std::vector<float> pcm24 = core_audio::resample_polyphase(wav16.data(), (int)wav16.size(), 16000, ctx->ae_sr);
     const int mult = ctx->ae_patch * ctx->ae_ds_rate * ctx->patch_size;
     const int target = (int)((pcm24.size() + mult - 1) / mult) * mult;
     if ((int)pcm24.size() < target)
@@ -1988,10 +1984,9 @@ extern "C" int fireredtts3_tts_diff(const char* core_gguf, const char* redae_ggu
     // ── stage: campp fbank + spk_emb ──
     std::vector<float> ref_spk;
     if (frt_ref_tensor(rm, "spk_emb", ref_spk)) {
-        std::vector<float> pcm16 =
-            core_resample::resample_polyphase(pcm24.data(), (int)pcm24.size(), ctx->ae_sr, 16000);
-        std::vector<float> spk = chatterbox_campplus::embed_speaker(ctx->campp, ctx->campp_rt, pcm16.data(),
-                                                                    (int)pcm16.size(), 0.0f);
+        std::vector<float> pcm16 = core_audio::resample_polyphase(pcm24.data(), (int)pcm24.size(), ctx->ae_sr, 16000);
+        std::vector<float> spk =
+            chatterbox_campplus::embed_speaker(ctx->campp, ctx->campp_rt, pcm16.data(), (int)pcm16.size(), 0.0f);
         if (spk.size() == ref_spk.size())
             frt_report("spk_emb", frt_compare(spk.data(), ref_spk.data(), spk.size(), 0.995), fails);
     }
@@ -2014,7 +2009,7 @@ extern "C" int fireredtts3_tts_diff(const char* core_gguf, const char* redae_ggu
     // verdicts are independent of upstream-stage drift.
     const std::vector<float>& lat_in = have_ref_lat ? ref_lat : my_latents;
     const int T_in = have_ref_lat ? (int)(ref_lat.size() / ctx->redae_dim) : T_lat;
-    const std::vector<float>& spk_in = ref_spk.empty() ? std::vector<float>() : ref_spk;
+    const std::vector<float>& spk_in = ref_spk;
     if (spk_in.empty()) {
         std::fprintf(stderr, "fireredtts3_diff: no spk_emb in ref — cannot continue\n");
         fireredtts3_tts_free(ctx);
@@ -2098,8 +2093,7 @@ extern "C" int fireredtts3_tts_diff(const char* core_gguf, const char* redae_ggu
             const int T_all = (int)(ref_all.size() / ctx->redae_dim);
             if (frt_redae_decode(ctx, ref_all.data(), T_all, pcm, &dec_hidden)) {
                 if (frt_ref_tensor(rm, "dec_hidden", ref_v) && ref_v.size() == dec_hidden.size())
-                    frt_report("dec_hidden", frt_compare(dec_hidden.data(), ref_v.data(), ref_v.size(), 0.999),
-                               fails);
+                    frt_report("dec_hidden", frt_compare(dec_hidden.data(), ref_v.data(), ref_v.size(), 0.999), fails);
                 const size_t trim = (size_t)T_in * ctx->ae_patch * ctx->ae_ds_rate;
                 if (pcm.size() > trim) {
                     size_t n = std::min(pcm.size() - trim, ref_audio.size());
