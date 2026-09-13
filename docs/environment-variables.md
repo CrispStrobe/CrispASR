@@ -1277,6 +1277,22 @@ All three optimisation gates are output-equivalent: the per-stage diff reports
   transient.
 - `CRISPASR_SIDON_MAX_FRAMES` — predictor input cap in feature frames (default `3000`, ~58.5 s after the
   lookahead). Guards the `O(T^2)` attention.
+- `CRISPASR_SIDON_WINDOW_FRAMES` — predictor window size in feature frames.
+  **Default `0` = off**, i.e. input past `CRISPASR_SIDON_MAX_FRAMES` is refused as
+  before. Set to e.g. `1500` to process long input as overlapping windows
+  instead (#431). Off by default because the evidence is incomplete: windowed
+  output beat the whole-utterance path on a 50 s ASR roundtrip, but an ASR
+  roundtrip measures "sounds better to a small ASR", not "faithful to upstream",
+  and those can disagree. `tools/kaggle/sidon-length-parity` is the experiment
+  that settles it. The window doubles as the threshold — at `T <= window` there
+  is one window and the split is a no-op — and it is clamped to
+  `CRISPASR_SIDON_MAX_FRAMES` so raising one cannot silently violate the other.
+- `CRISPASR_SIDON_PREDICTOR_CONTEXT_FRAMES` — context frames on each side of a
+  window (default `300`), cropped away after the run. Unlike the DAC's chunking,
+  whose cores are exact because the decoder is fully convolutional with a finite
+  receptive field (`dac_receptive_frames()`), attention has no receptive field,
+  so no context size makes a windowed core exact — this trades compute for
+  boundary quality rather than buying correctness.
 - `CRISPASR_SIDON_DEBUG` — print per-stage scheduler workspace sizes (per backend) after graph allocation.
 - `CRISPASR_SIDON_DUMP_HANDOFF` — directory/path for the predictor→DAC handoff tensor dump.
 

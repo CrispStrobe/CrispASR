@@ -1,5 +1,38 @@
 # CrispASR — Pending work
 
+## CLAIMED 2026-09-12 — #377 FireRedTTS3
+
+NOW (2026-09-13): converter + refdump + runtime + full wiring DONE on
+branch feat/377-fireredtts3 (7220c67b). f16 GGUFs live on
+cstr/fireredtts3-GGUF (base 4.15 GiB, redae+campp 1.01 GiB, Apache-2.0
+card). Reference ref.gguf on cstr/crispasr-regression-fixtures
+(fireredtts3/jfk_11s). CONTROL ARM done: the Python pipeline's own audio
+transcribes (whisper-base) as 'All there, how are you today?' vs target
+'Hello there, how are you today?' — overlap 0.83. In flight:
+chr1s4/crispasr-fireredtts3-validate (CPU build + per-stage diff with
+noise replay + q4_k + TTS-to-ASR roundtrip). Next: iterate diff → C++
+fixes until stages pass and the roundtrip matches the control.
+
+Worktree `.claude/worktrees/feat-377-fireredtts3`, branch `feat/377-fireredtts3`.
+Port FireRedTTS3 (FireRedTeam/FireRedTTS3, Apache-2.0) — the last remaining
+model in #377 (Confucius4-TTS and Raon-OpenTTS are already shipped). Base
+variant: Qwen3 LLM backbone over continuous speech representations + redae
+acoustic autoencoder + CAM++ speaker encoder, 16 kHz, zero-shot voice cloning.
+Porting from the OFFICIAL fp32 checkpoint (~8.5 GB); the drbaph int8 mirror is
+Hadamard-rotated comfy-kitchen weights and unsuitable as a conversion source.
+Heavy convert/refdump on Kaggle chr1s4 (chr1str is taken by a parallel task).
+Converter + backend + diff harness + TTS-to-ASR roundtrip acceptance.
+
+## CLAIMED 2026-09-12 — #434 supertonic-3
+
+Worktree `.claude/worktrees/feat-434-supertonic`, branch `feat/434-supertonic`.
+Port Supertonic-3 TTS (Supertone/supertonic-3, ONNX-only distribution:
+text_encoder + duration_predictor + vector_estimator + vocoder, ~400 MB,
+non-AR flow matching, 44.1 kHz). Licence to be re-verified from the HF card
+before shipping. Converter + backend + diff harness (ONNX intermediates as
+reference) + TTS-to-ASR roundtrip acceptance. Heavy build/convert/validate on
+Kaggle chr1str.
+
 ## DONE 2026-09-07 — #81 Q4 CUDA optimization round 2
 
 Worktree `.claude/worktrees/perf-81-round2`, branch `perf/81-round2`. Audit the
@@ -857,6 +890,39 @@ README's previously-missing seed value (`0x3FFFFFFF`) was generated and tested
 and reproduces nothing today, so that row is retired rather than restored.
 
 REMAINING, small: report the truncation upstream to nothings/stb.
+
+## TRIAGED 2026-09-12 — #436 X-ASR + Dolphin-CN-Dialect (both NEW architectures)
+
+Reporter xbin9679-lab asks for two ASR models. Licences are clear (both
+Apache-2.0, checked via the HF API, not inferred from the card text). The cost
+is that NEITHER fits a runtime we already have:
+
+- **X-ASR** (`GilgameshWind/X-ASR-zh-en`) — tags say
+  `x-asr-zipformer-transducer, icefall, k2, sherpa-onnx`. We have **zero**
+  zipformer code (`grep -rli zipformer src/ models/ tools/` → 0 files). The k2
+  hits in this repo are `k2-fsa/OmniVoice`, a TTS model, and coincidental.
+  Zipformer is not a FastConformer variant: downsampling stacks, bypass
+  connections and Swoosh activations are all structurally different, so
+  `parakeet.cpp` is a template at best, not a base.
+  ONE REAL LEVER: it ships sherpa-onnx exports, and #387 (Quds) established the
+  pattern for porting from an ONNX-only release —
+  `models/convert-nemo-rnnt-onnx-to-gguf.py` recovers anonymous initializers by
+  tracing consumer scopes. That converter is FastConformer-contract, so it is a
+  precedent rather than a tool that will just work here.
+
+- **Dolphin-CN-Dialect** (`DataoceanAI1/dolphin-cn-dialect-small-streaming`) —
+  ships `global_cmvn`, `train.yaml`, `units.txt`, `small.cn.streaming.pt`, which
+  is the WeNet layout. Our only wenet-e2e code is `src/wespeaker.cpp`, a speaker
+  EMBEDDER — it shares an upstream org and nothing else. A WeNet U2++
+  conformer encoder/decoder is a new runtime.
+
+So: two new encoder families, each a multi-day port on the scale of #387/#250,
+not an afternoon. Worth doing — both are permissive and fill real gaps (Chinese
+dialects; streaming zh-en) — but scope it honestly before claiming it.
+
+Prerequisite either way, per HARD RULE #1: read the icefall / WeNet inference
+path line by line first. Streaming models in particular hide their chunking and
+cache contracts in the inference loop, not in the config.
 
 ## Start here
 
