@@ -22,7 +22,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-SCRIPT_VERSION = "v2"
+SCRIPT_VERSION = "v3"
 WORK = Path("/kaggle/working")
 REPO = WORK / "CrispASR"
 TEMP = Path("/kaggle/temp") if Path("/kaggle/temp").is_dir() else Path("/tmp")

@@ -388,7 +388,8 @@ def main():
                 n += 1
         print(f"  redae tensors: {n} (3 unused embed_tokens dropped)")
 
-        # CAM++ speaker encoder — raw torch names under campplus.*
+        # CAM++ speaker encoder — raw torch names under campp.* (the full
+        # "campplus." prefix pushed block BN stats past the 64-char GGML name cap)
         # (confucius4_bind_campplus expects this exact layout).
         sd = torch.load(str(md / "campp" / "campplus_voxceleb.bin"),
                         weights_only=True, map_location="cpu")
@@ -396,7 +397,7 @@ def main():
         for k, t in sorted(sd.items()):
             if "num_batches_tracked" in k:
                 continue
-            add_tensor(w, "campplus." + k, t)
+            add_tensor(w, "campp." + k, t)
             ncp += 1
         w.add_int32("frt.campplus.embedding_size", 512)
         print(f"  campplus tensors: {ncp}")
