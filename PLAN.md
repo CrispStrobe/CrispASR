@@ -2,6 +2,17 @@
 
 ## CLAIMED 2026-09-12 — #377 FireRedTTS3
 
+NOW (2026-09-13): converter + refdump + runtime + full wiring DONE on
+branch feat/377-fireredtts3 (7220c67b). f16 GGUFs live on
+cstr/fireredtts3-GGUF (base 4.15 GiB, redae+campp 1.01 GiB, Apache-2.0
+card). Reference ref.gguf on cstr/crispasr-regression-fixtures
+(fireredtts3/jfk_11s). CONTROL ARM done: the Python pipeline's own audio
+transcribes (whisper-base) as 'All there, how are you today?' vs target
+'Hello there, how are you today?' — overlap 0.83. In flight:
+chr1s4/crispasr-fireredtts3-validate (CPU build + per-stage diff with
+noise replay + q4_k + TTS-to-ASR roundtrip). Next: iterate diff → C++
+fixes until stages pass and the roundtrip matches the control.
+
 Worktree `.claude/worktrees/feat-377-fireredtts3`, branch `feat/377-fireredtts3`.
 Port FireRedTTS3 (FireRedTeam/FireRedTTS3, Apache-2.0) — the last remaining
 model in #377 (Confucius4-TTS and Raon-OpenTTS are already shipped). Base
