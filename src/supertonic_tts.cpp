@@ -740,25 +740,37 @@ static void st_te_forward(supertonic_context* ctx, const int32_t* ids, int n, co
 
 // ── ggml graph helpers ──────────────────────────────────────────────────
 
-// EDGE (replicate) pad along ne0 (time) of x (T,C): returns (T+2p, C).
-static ggml_tensor* g_edge_pad(ggml_context* g, ggml_tensor* x, int p) {
-    if (p <= 0)
+// EDGE (replicate) pad along ne0 (time) of x (T,C): pl columns of x[0] on
+// the left, pr columns of x[T-1] on the right.
+static ggml_tensor* g_edge_pad(ggml_context* g, ggml_tensor* x, int pl, int pr) {
+    if (pl <= 0 && pr <= 0)
         return x;
     const int64_t T = x->ne[0], C = x->ne[1];
-    ggml_tensor* l = ggml_cont(g, ggml_view_2d(g, x, 1, C, x->nb[1], 0));
-    ggml_tensor* r = ggml_cont(g, ggml_view_2d(g, x, 1, C, x->nb[1], (T - 1) * x->nb[0]));
-    ggml_tensor* lp = ggml_repeat(g, l, ggml_new_tensor_2d(g, GGML_TYPE_F32, p, C));
-    ggml_tensor* rp = ggml_repeat(g, r, ggml_new_tensor_2d(g, GGML_TYPE_F32, p, C));
-    return ggml_concat(g, ggml_concat(g, lp, x, 0), rp, 0);
+    ggml_tensor* y = x;
+    if (pl > 0) {
+        ggml_tensor* l = ggml_cont(g, ggml_view_2d(g, x, 1, C, x->nb[1], 0));
+        ggml_tensor* lp = ggml_repeat(g, l, ggml_new_tensor_2d(g, GGML_TYPE_F32, pl, C));
+        y = ggml_concat(g, lp, y, 0);
+    }
+    if (pr > 0) {
+        ggml_tensor* r = ggml_cont(g, ggml_view_2d(g, x, 1, C, x->nb[1], (T - 1) * x->nb[0]));
+        ggml_tensor* rp = ggml_repeat(g, r, ggml_new_tensor_2d(g, GGML_TYPE_F32, pr, C));
+        y = ggml_concat(g, y, rp, 0);
+    }
+    return y;
 }
 
 // ConvNeXt block in-graph. x: (C,T). w[9]: dw_w,dw_b,ln_w,ln_b,pw1_w,pw1_b,
 // pw2_w,pw2_b,gamma. dw_w ne (K,1,C); pw ne (in,out). EDGE pad.
-static ggml_tensor* g_convnext(ggml_context* g, ggml_tensor* x, ggml_tensor* const w[9], int dil, float eps) {
+// The vector field pads SYMMETRICALLY ((K/2)*dil each side); the vocoder is
+// CAUSAL — the full (K-1)*dil on the LEFT (measured from the ONNX Pad
+// outputs, tools/kaggle/supertonic-434; a symmetric pad time-shifts every
+// conv and decorrelates the audio while keeping its magnitude).
+static ggml_tensor* g_convnext(ggml_context* g, ggml_tensor* x, ggml_tensor* const w[9], int dil, float eps,
+                               bool causal) {
     const int K = (int)w[0]->ne[0];
-    const int pad = (K / 2) * dil;
     ggml_tensor* xt = ggml_cont(g, ggml_transpose(g, x)); // (T,C)
-    xt = g_edge_pad(g, xt, pad);
+    xt = causal ? g_edge_pad(g, xt, (K - 1) * dil, 0) : g_edge_pad(g, xt, (K / 2) * dil, (K / 2) * dil);
     ggml_tensor* dw = ggml_conv_1d_dw(g, w[0], xt, 1, 0, dil); // (T,C)
     dw = ggml_add(g, dw, ggml_reshape_2d(g, w[1], 1, w[1]->ne[0]));
     ggml_tensor* y = ggml_cont(g, ggml_transpose(g, dw)); // (C,T)
@@ -817,13 +829,13 @@ static ggml_tensor* g_vf_half(supertonic_context* ctx, ggml_context* g, ggml_ten
         const st_vf_block& B = ctx->vf_blocks[b];
         // convnext_0 x4
         for (int i = 0; i < 4; i++)
-            x = g_convnext(g, x, B.cn[i], B.cn_dil[i], ctx->vf_convnext_eps);
+            x = g_convnext(g, x, B.cn[i], B.cn_dil[i], ctx->vf_convnext_eps, /*causal=*/false);
         // time cond
         ggml_tensor* tc = ggml_mul_mat(g, B.time_w, t_emb); // (512,1)
         tc = ggml_add(g, tc, B.time_b);
         x = ggml_add(g, x, tc);
         // convnext_1
-        x = g_convnext(g, x, B.cn[4], B.cn_dil[4], ctx->vf_convnext_eps);
+        x = g_convnext(g, x, B.cn[4], B.cn_dil[4], ctx->vf_convnext_eps, /*causal=*/false);
         // rotary text cross-attn (8 heads x 64)
         {
             ggml_tensor* q = ggml_add(g, ggml_mul_mat(g, B.attn_qw, x), B.attn_qb);    // (512,N)
@@ -848,7 +860,7 @@ static ggml_tensor* g_vf_half(supertonic_context* ctx, ggml_context* g, ggml_ten
             x = ggml_add(g, ggml_mul(g, x, B.attn_ln_w), B.attn_ln_b);
         }
         // convnext_2
-        x = g_convnext(g, x, B.cn[5], B.cn_dil[5], ctx->vf_convnext_eps);
+        x = g_convnext(g, x, B.cn[5], B.cn_dil[5], ctx->vf_convnext_eps, /*causal=*/false);
         // GST style cross-attn (2 heads x 128, keys tanh'd)
         {
             ggml_tensor* q = ggml_add(g, ggml_mul_mat(g, B.st_qw, x), B.st_qb);  // (256,N)
@@ -872,7 +884,7 @@ static ggml_tensor* g_vf_half(supertonic_context* ctx, ggml_context* g, ggml_ten
         }
     }
     for (int i = 0; i < 4; i++)
-        x = g_convnext(g, x, ctx->vf_last_cn[i], 1, ctx->vf_convnext_eps);
+        x = g_convnext(g, x, ctx->vf_last_cn[i], 1, ctx->vf_convnext_eps, /*causal=*/false);
     return ggml_mul_mat(g, ctx->vf_proj_out, x); // (144,N)
 }
 
@@ -1397,18 +1409,18 @@ static bool st_run_vocoder(supertonic_context* ctx, const std::vector<float>& la
     x = ggml_reshape_2d(g, x, 24, T6);                // (24, 6N)
     x = ggml_add(g, ggml_mul(g, x, stdv), mean);
     // embed conv k7 EDGE pad 3: (T,C) layout
-    ggml_tensor* xt = ggml_cont(g, ggml_transpose(g, x)); // (T6,24)
-    xt = g_edge_pad(g, xt, 3);
+    ggml_tensor* xt = ggml_cont(g, ggml_transpose(g, x));            // (T6,24)
+    xt = g_edge_pad(g, xt, 6, 0);                                    // CAUSAL k7: full K-1 on the left
     ggml_tensor* h = ggml_conv_1d(g, ctx->voc_embed_w, xt, 1, 0, 1); // (T6,512)
     h = ggml_add(g, h, ggml_reshape_2d(g, ctx->voc_embed_b, 1, 512));
     h = ggml_cont(g, ggml_transpose(g, h)); // (512,T6)
     for (int i = 0; i < 10; i++)
-        h = g_convnext(g, h, ctx->voc_cn[i], ctx->voc_cn_dil[i], ctx->voc_convnext_eps);
+        h = g_convnext(g, h, ctx->voc_cn[i], ctx->voc_cn_dil[i], ctx->voc_convnext_eps, /*causal=*/true);
     // folded BatchNorm
     h = ggml_add(g, ggml_mul(g, h, bnsc), bnsh);
     // head layer1 k3 EDGE pad 1
-    ggml_tensor* ht = ggml_cont(g, ggml_transpose(g, h)); // (T6,512)
-    ht = g_edge_pad(g, ht, 1);
+    ggml_tensor* ht = ggml_cont(g, ggml_transpose(g, h));            // (T6,512)
+    ht = g_edge_pad(g, ht, 2, 0);                                    // CAUSAL k3
     ggml_tensor* y = ggml_conv_1d(g, ctx->voc_head1_w, ht, 1, 0, 1); // (T6,2048)
     y = ggml_add(g, y, ggml_reshape_2d(g, ctx->voc_head1_b, 1, 2048));
     y = ggml_cont(g, ggml_transpose(g, y)); // (2048,T6)
