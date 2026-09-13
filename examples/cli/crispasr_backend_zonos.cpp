@@ -122,8 +122,11 @@ public:
 
         // Set language if specified
         if (!p.language.empty()) {
-            zonos_tts_set_language(ctx_, p.language.c_str());
-            cur_language_ = p.language; // #435: baseline for the per-request check
+            // Only record it as applied if it WAS applied (see synthesize()).
+            if (zonos_tts_set_language(ctx_, p.language.c_str()) == 0)
+                cur_language_ = p.language; // #435: baseline for the per-request check
+            else
+                fprintf(stderr, "crispasr[zonos]: warning: could not set language '%s'\n", p.language.c_str());
         }
 
         // Load reference voice for speaker cloning
@@ -157,8 +160,18 @@ public:
         // the string to a language_id and espeak re-selects its voice, neither
         // of which is worth redoing per request.
         if (!params.language.empty() && params.language != "auto" && params.language != cur_language_) {
-            zonos_tts_set_language(ctx_, params.language.c_str());
-            cur_language_ = params.language;
+            // #435: latch ONLY on success. Recording the request unconditionally
+            // made a FAILED switch sticky: the next request for the same
+            // language compared equal to cur_language_, skipped the call, and
+            // the model kept the language it was actually still set to. A
+            // failure has to stay retryable, and it has to be audible.
+            if (zonos_tts_set_language(ctx_, params.language.c_str()) == 0)
+                cur_language_ = params.language;
+            else
+                fprintf(stderr,
+                        "crispasr[zonos]: warning: request language '%s' not applied; "
+                        "still speaking '%s'\n",
+                        params.language.c_str(), cur_language_.c_str());
         }
 
         if (params.temperature > 0.0f) {

@@ -610,6 +610,21 @@ int zonos_tts_set_language(struct zonos_tts_context* ctx, const char* lang_code)
             return 0;
         }
     }
+    // #435: fall back to a REGIONAL variant. The table holds espeak codes
+    // ("en-us", "fr-fr", ...), so a bare "en" matched nothing and this returned
+    // -1, leaving the previous language in place. That was invisible for "en"
+    // because en-us is already the default, so `-l en` looked like it worked
+    // while doing nothing; for a server it meant a request for "en" after one
+    // for "ru" kept speaking Russian.
+    const std::string prefix = std::string(lang_code) + "-";
+    for (size_t i = 0; i < ctx->cond_state.language_codes.size(); i++) {
+        const std::string& c = ctx->cond_state.language_codes[i];
+        if (c.size() > prefix.size() && c.compare(0, prefix.size(), prefix) == 0) {
+            ctx->cond_state.language_id = (int)i;
+            fprintf(stderr, "zonos_tts: language '%s' resolved to '%s'\n", lang_code, c.c_str());
+            return 0;
+        }
+    }
     fprintf(stderr, "zonos_tts: unknown language code '%s'\n", lang_code);
     return -1;
 }
@@ -851,6 +866,17 @@ static std::string phonemize_espeak(const std::string& lang, const std::string& 
     while (!out.empty() && (out.back() == '\n' || out.back() == '\r' || out.back() == ' '))
         out.pop_back();
 
+    // #435: did ESPEAK produce anything, as distinct from "this string is not
+    // empty"? Captured HERE, before the tail punctuation below is appended.
+    // Without it, a missing espeak-ng returns "" from popen, the punctuation
+    // append turns that into "." for any sentence ending in a period, and the
+    // caller's `!ipa.empty()` check reads that as successful phonemisation.
+    // Measured: with espeak removed, both "Привет, это тест синтеза речи." and
+    // "Hello, this is a test of speech synthesis." produced exactly 3 tokens
+    // (BOS + "." + EOS) at a SUCCESS exit code -- the original bug, with the
+    // non-ASCII guard never reached because the cascade returned one step early.
+    const bool espeak_produced_phonemes = !out.empty();
+
     // Python phonemizer uses preserve_punctuation=True with punctuation_marks from
     // conditioning.py: ';:,.!?¡¿—…"«»""() *~-/\\&'. Non-space punctuation characters
     // that appear at the TAIL of the original text are appended to the IPA so the
@@ -909,6 +935,10 @@ static std::string phonemize_espeak(const std::string& lang, const std::string& 
             }
         }
     }
+    // Only decorate a REAL phonemisation. Appending punctuation to an empty
+    // result manufactures a non-empty string that means nothing.
+    if (!espeak_produced_phonemes)
+        return "";
     if (!tail_punct.empty())
         out += tail_punct;
 
