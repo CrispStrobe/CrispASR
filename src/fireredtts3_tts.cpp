@@ -1180,6 +1180,8 @@ extern "C" struct fireredtts3_tts_context_params fireredtts3_tts_context_default
 
 extern "C" struct fireredtts3_tts_context* fireredtts3_tts_init_from_file(
     const char* path_model, struct fireredtts3_tts_context_params params) {
+    if (!path_model || !*path_model)
+        return nullptr;
     auto* ctx = new fireredtts3_tts_context();
     ctx->params = params;
     if (ctx->params.seed == 0)

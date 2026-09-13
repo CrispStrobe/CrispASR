@@ -1636,6 +1636,24 @@ catch_discover_tests(test-cosyvoice3-params
     PROPERTIES LABELS "unit;cosyvoice3"
 )
 
+# ─── test-fireredtts3-params — Catch2 unit tests for fireredtts3 params defaults
+# and null-guards (#377). No model required.
+add_executable(test-fireredtts3-params
+    test-fireredtts3-params.cpp
+)
+target_include_directories(test-fireredtts3-params PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+)
+target_link_libraries(test-fireredtts3-params PRIVATE
+    Catch2::Catch2WithMain
+    fireredtts3
+    chatterbox
+)
+catch_discover_tests(test-fireredtts3-params
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit;fireredtts3"
+)
+
 # ─── test-dots-tts-params — Catch2 unit tests for dots_tts_context_params defaults
 # and null-guard coverage. No GGUF required. ───────────────────────────────────
 if (TARGET dots-tts)
