@@ -26,7 +26,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-SCRIPT_VERSION = "v3-diffonly"
+SCRIPT_VERSION = "v4-campp-trace"
 WORK = Path("/kaggle/working")
 REPO = WORK / "CrispASR"
 TEMP = Path("/kaggle/temp") if Path("/kaggle/temp").is_dir() else Path("/tmp")
@@ -91,6 +91,58 @@ print(f"  base={base_f16}\n  redae={redae_f16}\n  ref={ref_gguf}")
 env = dict(os.environ)
 env["FIREREDTTS3_REDAE"] = redae_f16
 env["OMP_NUM_THREADS"] = "4"
+env["CRISPASR_CHATTERBOX_DEBUG"] = "1"  # per-stage CAM++ norms in the diff log
+
+# ── torch CAM++ per-stage reference trace (28 MB model, CPU) ───────────────
+kh.step("torch campp stage trace")
+import numpy as np  # noqa: E402
+
+UP = TEMP / "FireRedTTS3-upstream"
+if not UP.exists():
+    subprocess.check_call(["git", "clone", "--depth", "1",
+                           "https://github.com/FireRedTeam/FireRedTTS3.git", str(UP)])
+sys.path.insert(0, str(UP))
+import torch  # noqa: E402
+from gguf import GGUFReader  # noqa: E402
+from fireredtts3.campp.DTDNN import CAMPPlus  # noqa: E402
+
+campp_bin = hf_hub_download("FireRedTeam/FireRedTTS3", "campp/campplus_voxceleb.bin",
+                            local_dir=str(MD), token=hf_token)
+cm = CAMPPlus(feat_dim=80, embedding_size=512)
+cm.load_state_dict(torch.load(campp_bin, weights_only=True, map_location="cpu"))
+cm.eval()
+rr = GGUFReader(ref_gguf)
+fb = None
+spk_ref = None
+for t in rr.tensors:
+    if t.name == "campp_fbank":
+        fb = np.array(t.data, dtype=np.float32).reshape(-1, 80)
+    if t.name == "spk_emb":
+        spk_ref = np.array(t.data, dtype=np.float32)
+print(f"  ref fbank {fb.shape} |x|={np.linalg.norm(fb):.4f}")
+stages = {}
+
+
+def mk_hook(name):
+    def h(mod, i, o):
+        stages[name] = o.detach()
+    return h
+
+
+cm.head.register_forward_hook(mk_hook("fcm"))
+for nm in ["tdnn", "block1", "transit1", "block2", "transit2", "block3",
+           "transit3", "out_nonlinear", "stats", "dense"]:
+    getattr(cm.xvector, nm).register_forward_hook(mk_hook(nm))
+with torch.no_grad():
+    emb = cm(torch.from_numpy(fb).unsqueeze(0))
+for k in ["fcm", "tdnn", "block1", "transit1", "block2", "transit2", "block3",
+          "transit3", "out_nonlinear", "stats", "dense"]:
+    v = stages[k].float().numpy().reshape(-1)
+    print(f"  TORCH {k:14s} shape={tuple(stages[k].shape)} |x|={np.linalg.norm(v):10.4f} "
+          f"first5={np.round(v[:5], 4)}")
+e = emb[0].numpy()
+cosr = float(e @ spk_ref / (np.linalg.norm(e) * np.linalg.norm(spk_ref)))
+print(f"  TORCH emb |x|={np.linalg.norm(e):.4f} cos_vs_ref_spk={cosr:.6f}")
 
 # ── per-stage diff ──────────────────────────────────────────────────────────
 kh.step("crispasr-diff fireredtts3 (f16)")

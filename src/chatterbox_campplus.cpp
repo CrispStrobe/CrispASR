@@ -907,6 +907,15 @@ std::vector<float> compute_xvector(const cb_campplus_model& m, cb_campplus_runti
     cache.initialised = true;
 
     const bool dbg = crispasr_env::get("CRISPASR_CHATTERBOX_DEBUG") != nullptr;
+    auto dbg_norm = [&](const char* name, const float* v, size_t n) {
+        if (!dbg)
+            return;
+        double s2 = 0;
+        for (size_t i = 0; i < n; i++)
+            s2 += (double)v[i] * v[i];
+        fprintf(stderr, "campplus: %-14s n=%zu |x|=%.4f first5=%.4f %.4f %.4f %.4f %.4f\n", name, n, std::sqrt(s2),
+                n > 0 ? v[0] : 0.f, n > 1 ? v[1] : 0.f, n > 2 ? v[2] : 0.f, n > 3 ? v[3] : 0.f, n > 4 ? v[4] : 0.f);
+    };
 
     // FCM head: (T, 80) → (320, T)
     int C_fcm = 0, T_fcm = 0;
@@ -917,6 +926,7 @@ std::vector<float> compute_xvector(const cb_campplus_model& m, cb_campplus_runti
     }
     if (dbg)
         fprintf(stderr, "campplus: post-FCM C=%d T=%d\n", C_fcm, T_fcm);
+    dbg_norm("fcm", fcm.data(), fcm.size());
 
     // tdnn: 320→128, k=5, s=2, p=2 → (128, T/2)
     constexpr int kTdnnPad = 2;
@@ -927,26 +937,34 @@ std::vector<float> compute_xvector(const cb_campplus_model& m, cb_campplus_runti
     relu_inplace(post_tdnn.data(), post_tdnn.size());
     if (dbg)
         fprintf(stderr, "campplus: post-tdnn C=%d T=%d\n", state->xv_tdnn.out_dim, T_tdnn);
+    dbg_norm("tdnn", post_tdnn.data(), post_tdnn.size());
 
     // block1: 12 layers, dilation=1 → 128 + 12*32 = 512
     int C_blk1 = 0;
     auto post_blk1 = dense_block_forward(post_tdnn.data(), 128, T_tdnn, state->block1, C_blk1);
     if (dbg)
         fprintf(stderr, "campplus: post-block1 C=%d T=%d\n", C_blk1, T_tdnn);
+    dbg_norm("block1", post_blk1.data(), post_blk1.size());
 
     // transit1: BN(512) + ReLU + Conv1d 1×1 (512→256), bias=False
     BNFolded bn_t1 = fold_bn(m.transit1.bn_m, m.transit1.bn_v, m.transit1.bn_w, m.transit1.bn_b, C_blk1);
     auto post_t1 = bn_relu_conv1d(bn_t1, post_blk1.data(), C_blk1, T_tdnn, state->xv_transit1.lin_w,
                                   state->xv_transit1.lin_b, 1, 256, 1, 0);
 
+    dbg_norm("transit1", post_t1.data(), post_t1.size());
+
     // block2: 24 layers, dilation=2 → 256 + 24*32 = 1024
     int C_blk2 = 0;
     auto post_blk2 = dense_block_forward(post_t1.data(), 256, T_tdnn, state->block2, C_blk2);
+
+    dbg_norm("block2", post_blk2.data(), post_blk2.size());
 
     // transit2: BN(1024) + ReLU + Conv1d 1×1 (1024→512)
     BNFolded bn_t2 = fold_bn(m.transit2.bn_m, m.transit2.bn_v, m.transit2.bn_w, m.transit2.bn_b, C_blk2);
     auto post_t2 = bn_relu_conv1d(bn_t2, post_blk2.data(), C_blk2, T_tdnn, state->xv_transit2.lin_w,
                                   state->xv_transit2.lin_b, 1, 512, 1, 0);
+
+    dbg_norm("transit2", post_t2.data(), post_t2.size());
 
     // block3: 16 layers, dilation=2 → 512 + 16*32 = 1024
     int C_blk3 = 0;
@@ -954,6 +972,8 @@ std::vector<float> compute_xvector(const cb_campplus_model& m, cb_campplus_runti
 
     if (dbg)
         fprintf(stderr, "campplus: post-block3 C=%d T=%d\n", C_blk3, T_tdnn);
+
+    dbg_norm("block3", post_blk3.data(), post_blk3.size());
 
     // transit3: BN(1024) + ReLU + Conv1d 1×1 (1024→512)
     BNFolded bn_t3 = fold_bn(m.transit3.bn_m, m.transit3.bn_v, m.transit3.bn_w, m.transit3.bn_b, C_blk3);
@@ -967,8 +987,11 @@ std::vector<float> compute_xvector(const cb_campplus_model& m, cb_campplus_runti
         apply_bn_inplace(post_t3.data(), 512, T_tdnn, state->xv_out_nl.bn);
     relu_inplace(post_t3.data(), post_t3.size());
 
+    dbg_norm("out_nl", post_t3.data(), post_t3.size());
+
     // StatsPool → (1024,)
     auto stats = stats_pool(post_t3.data(), 512, T_tdnn, (double)stats_var_floor);
+    dbg_norm("stats", stats.data(), stats.size());
 
     // dense: Conv1d(1024→emb_dim, k=1) + BN(affine=False). emb_dim is 192 for
     // chatterbox's CAM++ and 512 for dots.tts — inferred from the actual
@@ -989,6 +1012,7 @@ std::vector<float> compute_xvector(const cb_campplus_model& m, cb_campplus_runti
     std::vector<float> emb((size_t)emb_dim);
     for (int i = 0; i < emb_dim; i++)
         emb[(size_t)i] = dense_pre[(size_t)i];
+    dbg_norm("dense", emb.data(), emb.size());
     return emb;
 }
 
