@@ -35,7 +35,7 @@ NOT MEASURED, AND WHY (stated, never estimated)
     the watermark back on for any output that cannot carry a manifest), so this
     kernel deliberately does NOT pass -DCRISPASR_NO_C2PA_NATIVE=ON.
 
-SCRIPT_VERSION = v2
+SCRIPT_VERSION = v3
 """
 
 import json
@@ -49,7 +49,7 @@ import sys
 import time
 from pathlib import Path
 
-SCRIPT_VERSION = "v2"
+SCRIPT_VERSION = "v3"
 
 WORK = Path("/kaggle/working")
 TEMP = Path("/kaggle/temp/st-bench")
@@ -195,19 +195,78 @@ kh.step("download.done",
         audiocpp_q8_mb=round((AC_Q8_DIR / "supertonic-3-q8_0.gguf").stat().st_size / 1e6, 1))
 
 
+GGML_TYPE_NAMES = {
+    0: "F32", 1: "F16", 2: "Q4_0", 3: "Q4_1", 6: "Q5_0", 7: "Q5_1", 8: "Q8_0",
+    9: "Q8_1", 10: "Q2_K", 11: "Q3_K", 12: "Q4_K", 13: "Q5_K", 14: "Q6_K",
+    15: "Q8_K", 16: "IQ2_XXS", 17: "IQ2_XS", 18: "IQ3_XXS", 19: "IQ1_S",
+    20: "IQ4_NL", 21: "IQ3_S", 22: "IQ2_S", 23: "IQ4_XS", 24: "I8", 25: "I16",
+    26: "I32", 27: "I64", 28: "F64", 29: "IQ1_M", 30: "BF16", 39: "TQ1_0",
+    40: "TQ2_0",
+}
+
+
 def gguf_dtype_histogram(path):
     """What is ACTUALLY in the file. A package labelled q8_0 that is byte-for-byte
-    the size of the orig-dtype package has earned the question."""
+    the size of the orig-dtype package has earned the question.
+
+    Hand-rolled, and NOT gguf.GGUFReader, because that reader expands every KV
+    array ELEMENT BY ELEMENT into its own numpy object (see _get_field_parts:
+    `for idx in range(alen[0]): ... aparts += curr_parts`). audio.cpp's package
+    carries its 37 companion resources inside the GGUF as one uint8 KV array of
+    57,057,963 elements, so asking that reader for a tensor list allocated tens
+    of gigabytes and the OOM killer took the whole run down -- after the build,
+    after the quantize, for a diagnostic line. This walks the header, seeks past
+    array payloads without materialising them, and stops at the tensor table."""
+    SCALAR = {0: 1, 1: 1, 2: 2, 3: 2, 4: 4, 5: 4, 6: 4, 7: 1, 10: 8, 11: 8, 12: 8}
     try:
-        from gguf import GGUFReader
-        r = GGUFReader(str(path))
-        hist, nelem = {}, 0
-        for t in r.tensors:
-            name = getattr(t.tensor_type, "name", str(t.tensor_type))
-            hist[name] = hist.get(name, 0) + 1
-            nelem += int(np.prod(t.shape))
+        with open(path, "rb") as f:
+            def rd(fmt):
+                return struct.unpack(fmt, f.read(struct.calcsize(fmt)))[0]
+            if f.read(4) != b"GGUF":
+                return {"error": "not a GGUF file"}
+            rd("<I")                      # version
+            n_tensors = rd("<Q")
+            n_kv = rd("<Q")
+
+            def skip_str():
+                f.seek(rd("<Q"), 1)
+
+            def skip_val(t):
+                if t == 8:
+                    skip_str()
+                elif t == 9:
+                    et = rd("<I")
+                    n = rd("<Q")
+                    if et == 8:
+                        for _ in range(n):
+                            f.seek(rd("<Q"), 1)
+                    else:
+                        f.seek(SCALAR[et] * n, 1)   # seek, never allocate
+                else:
+                    f.seek(SCALAR[t], 1)
+
+            kv_keys = []
+            for _ in range(n_kv):
+                n = rd("<Q")
+                kv_keys.append(f.read(n).decode("utf-8", "replace"))
+                skip_val(rd("<I"))
+
+            hist, nelem = {}, 0
+            for _ in range(n_tensors):
+                skip_str()
+                nd = rd("<I")
+                dims = [rd("<Q") for _ in range(nd)]
+                tt = rd("<I")
+                rd("<Q")                  # offset
+                name = GGML_TYPE_NAMES.get(tt, f"type_{tt}")
+                hist[name] = hist.get(name, 0) + 1
+                c = 1
+                for d in dims:
+                    c *= d
+                nelem += c
         return {"file_mb": round(Path(path).stat().st_size / 1e6, 1),
-                "n_tensors": len(r.tensors), "elements": int(nelem), "types": hist}
+                "n_tensors": int(n_tensors), "elements": int(nelem),
+                "types": hist, "kv_keys": kv_keys}
     except Exception as e:
         return {"error": f"{type(e).__name__}: {e}"}
 
@@ -357,6 +416,14 @@ if AUDIOCPP_SHA:
     # accepts) is worth one shot -- but only when the first attempt died early
     # enough that a second build still fits the session.
     if ACLI is None and secs < 1500:
+        # Ubuntu 22.04 (which this worker is) has no g++-13 in its default
+        # archive -- jammy tops out at g++-12 -- so an `apt-get install g++-13`
+        # on its own cannot succeed. The toolchain PPA is what makes the retry
+        # a real retry instead of a second way to fail.
+        subprocess.run("apt-get install -y --no-install-recommends "
+                       "software-properties-common && "
+                       "add-apt-repository -y ppa:ubuntu-toolchain-r/test && "
+                       "apt-get update -qq", shell=True, capture_output=True)
         rc = subprocess.run("apt-get install -y --no-install-recommends g++-13",
                             shell=True, capture_output=True).returncode
         g13 = shutil.which("g++-13")
@@ -366,6 +433,15 @@ if AUDIOCPP_SHA:
                                                    TEMP / "build-audiocpp-g13")
             AC_ATTEMPTS.append({"label": "cuda-gcc13", "seconds": round(secs2, 1),
                                 "error": err2})
+            if ACLI is not None:
+                # A confound, and it has to be stated: CrispASR is built with the
+                # stock g++ and audio.cpp with g++-13, so a CPU-arm difference is
+                # no longer purely an implementation difference.
+                BUILD_LOG["compiler_asymmetry"] = (
+                    "audio.cpp built with g++-13, CrispASR with the stock g++ "
+                    "(" + HW.get("gxx", "?") + ") -- CPU arms carry a compiler confound")
+                print("===COMPILER-ASYMMETRY=== " + BUILD_LOG["compiler_asymmetry"],
+                      flush=True)
             AC_HAS_CUDA = ACLI is not None
             secs = secs2
         else:
@@ -728,6 +804,14 @@ for arm in ARMS:
           f"slope_rtf={rec.get('slope_rtf_excl_startup')} "
           f"control={rec.get('control_ratio_32_over_8')}x "
           f"discriminates={rec['control_discriminates']}", flush=True)
+
+# Emit the timing table NOW, before equivalence and ASR. The v2 run lost a
+# 29-minute build and a completed quantize to an OOM in a diagnostic that ran
+# after them; anything already measured goes into the log the moment it exists.
+print("===PARTIAL-BENCH-JSON-BEGIN===", flush=True)
+print(json.dumps({"hardware": HW, "cuda_arch": ARCH, "build": BUILD_LOG,
+                  "bench": BENCH}, ensure_ascii=False, indent=2), flush=True)
+print("===PARTIAL-BENCH-JSON-END===", flush=True)
 
 # ─────────────────────── audio equivalence + ASR ───────────────────────────
 
