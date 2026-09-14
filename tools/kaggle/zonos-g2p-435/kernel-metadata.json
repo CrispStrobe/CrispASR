@@ -1,0 +1,14 @@
+{
+  "id": "chr1s4/crispasr-zonos-g2p-435",
+  "title": "CrispASR zonos g2p 435",
+  "code_file": "zonos_g2p_435.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "false",
+  "enable_internet": "true",
+  "competition_sources": [],
+  "dataset_sources": ["chr1s4/crispasr-hf-token", "chr1s4/crispasr-ccache"],
+  "kernel_sources": [],
+  "model_sources": []
+}

@@ -1,0 +1,459 @@
+#!/usr/bin/env python3
+"""#435 follow-on: is the BUILT-IN G2P good enough to drop espeak-ng (GPL-3.0)?
+
+#435 is fixed -- zonos now REFUSES instead of synthesising noise when it cannot
+phonemise. That leaves the dependency itself. crispasr-core ships built-in G2P
+for en/de/fr/es, and zonos can now reach it (CRISPASR_ZONOS_G2P=builtin|espeak|auto).
+The open question is quality, and the honest answer needs numbers per language.
+
+THE RISK THIS KERNEL EXISTS TO MEASURE
+--------------------------------------
+The built-ins emit IPA in the espeak dialect; zonos's phoneme map comes from its
+own conditioning.py symbol list; and text_to_phoneme_ids() SILENTLY DROPS every
+codepoint outside that list. That silent drop IS #435 -- Cyrillic became three
+tokens at a success exit code. So "the builtin produced a wav" proves nothing. A
+builtin path could drop 30% of its symbols and still sound like speech.
+
+Therefore every language is scored on the PAYLOAD, not the container:
+  * the phoneme-ID sequence from each path, compared position-by-position and by
+    token-level Levenshtein similarity (a single inserted phoneme wrecks the
+    positional score, so both are reported);
+  * cp_dropped/cp_total per path -- how much of what the G2P emitted zonos could
+    not map. A path that drops more is VISIBLY worse, not silently worse;
+  * an ASR roundtrip (parakeet-tdt-0.6b-v3, 25 European languages) word-F1
+    against the input text.
+
+CONTROLS -- a readout that renders the same for good and bad input is worthless
+------------------------------------------------------------------------------
+  0. INSTRUMENT SELF-TEST, before anything heavy. Every metric is run on
+     known-answer and DEGENERATE inputs (identical -> 1.0, disjoint -> 0.0, two
+     EMPTY sequences -> 0.0 and NOT 1.0, which is the exact shape of the #435
+     failure). If any of them is wrong the kernel exits before spending a
+     session producing numbers from a broken ruler.
+  1. WRONG-LANGUAGE END-TO-END CONTROL. English text phonemised as German,
+     through the identical code path and scored by the identical metrics. If
+     agreement and word-F1 do not FALL there, the comparison cannot fail and no
+     "builtin agrees with espeak" result from this run means anything.
+  2. DROP-COUNTER KNOWN-ANSWER CONTROL. After espeak is purged, "Test 123." at
+     -l ru takes the raw-ASCII path; zonos's inventory has letters and
+     punctuation but NO DIGITS, so cp_dropped must be >= 3 and the histogram
+     must name U+0031..U+0033. A counter that reads 0 there is not measuring.
+  3. LICENCE-GOAL ARM. espeak is physically removed and PROVEN gone (the same
+     purge+verify as zonos-lang-435), then all four languages run again in
+     builtin mode. That is the actual deliverable: does zonos work at all with
+     no GPL dependency present? Russian in the same environment must still
+     REFUSE -- the #435 guarantee must survive this change.
+
+Nothing here flips a default. The default stays espeak-first; this run produces
+the evidence that would justify moving it, per language, or not.
+"""
+import json, os, re, shutil, socket, subprocess, sys, time, unicodedata
+from pathlib import Path
+
+WORK = Path("/kaggle/working"); SCRATCH = Path("/tmp")
+CLONE = SCRATCH / "CrispASR"
+SCRIPT_VERSION = "2026-09-14-zonos-g2p-435-1"
+
+# Short on purpose: zonos generates on CPU here and runtime scales with the
+# audio length. ~10 words is enough for a word-F1 to mean something.
+TEXTS = {
+    "en": "The quick brown fox jumps over the lazy dog today.",
+    "de": "Der schnelle braune Fuchs springt heute über den faulen Hund.",
+    "fr": "Le rapide renard brun saute par dessus le chien paresseux.",
+    "es": "El rapido zorro marron salta sobre el perro perezoso hoy.",
+    "ru": "Привет, это тест синтеза речи.",
+}
+
+def log(m):
+    print(m, flush=True)
+    try: (WORK/"progress.txt").open("a").write(f"{time.strftime('%H:%M:%S')} {m}\n")
+    except Exception: pass
+
+# ── 0. THE INSTRUMENT, AND ITS SELF-TEST ────────────────────────────────────
+# Written and checked BEFORE any model is downloaded. Guards authored after the
+# fact have never been observed to work.
+
+def lev(a, b):
+    if not a: return len(b)
+    if not b: return len(a)
+    prev = list(range(len(b) + 1))
+    for i, x in enumerate(a, 1):
+        cur = [i]
+        for j, y in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (x != y)))
+        prev = cur
+    return prev[-1]
+
+def lev_sim(a, b):
+    """1.0 identical, 0.0 disjoint. TWO EMPTY SEQUENCES ARE 0.0, NOT 1.0 --
+    'both produced nothing' is the #435 failure, and it must never score as
+    perfect agreement."""
+    if not a or not b: return 0.0
+    return max(0.0, 1.0 - lev(a, b) / max(len(a), len(b)))
+
+def positional_match(a, b):
+    """Fraction of positions that agree, over the LONGER sequence, so a length
+    mismatch cannot be hidden. Empty -> 0.0 for the same reason as above."""
+    if not a or not b: return 0.0
+    n = min(len(a), len(b))
+    return sum(1 for i in range(n) if a[i] == b[i]) / max(len(a), len(b))
+
+_WORD = re.compile(r"[^\w]+", re.UNICODE)
+
+def norm_words(s):
+    s = unicodedata.normalize("NFKC", s or "").lower()
+    return [w for w in _WORD.split(s) if w]
+
+def word_f1(ref, hyp):
+    """Token F1 with multiplicity. Empty on either side -> 0.0: an ASR that
+    returned nothing must not tie with a perfect transcript."""
+    r, h = norm_words(ref), norm_words(hyp)
+    if not r or not h: return 0.0
+    from collections import Counter
+    inter = sum((Counter(r) & Counter(h)).values())
+    if inter == 0: return 0.0
+    p, rc = inter / len(h), inter / len(r)
+    return 2 * p * rc / (p + rc)
+
+def self_test():
+    """Prove each metric distinguishes the two states it must distinguish."""
+    checks = [
+        ("lev_sim identical",        lev_sim([1,2,3],[1,2,3]), 1.0),
+        ("lev_sim disjoint",         lev_sim([1,2,3],[7,8,9]), 0.0),
+        ("lev_sim one substitution", lev_sim([1,2,3],[1,9,3]), 2/3),
+        ("lev_sim BOTH EMPTY",       lev_sim([],[]),           0.0),
+        ("lev_sim one empty",        lev_sim([1,2],[]),        0.0),
+        ("pos identical",            positional_match([1,2,3],[1,2,3]), 1.0),
+        ("pos disjoint",             positional_match([1,2,3],[7,8,9]), 0.0),
+        ("pos length mismatch",      positional_match([1,2,3],[1,2,3,4]), 0.75),
+        ("pos BOTH EMPTY",           positional_match([],[]),  0.0),
+        ("f1 identical",             word_f1("the quick brown fox","The quick brown fox!"), 1.0),
+        ("f1 disjoint",              word_f1("the quick brown fox","zzz yyy xxx"), 0.0),
+        ("f1 half",                  word_f1("a b c d","a b x y"), 0.5),
+        ("f1 BOTH EMPTY",            word_f1("",""),           0.0),
+        ("f1 empty hyp",             word_f1("a b c",""),      0.0),
+    ]
+    bad = [(n, got, want) for n, got, want in checks if abs(got - want) > 1e-9]
+    for n, got, want in checks:
+        log(f"[selftest] {n}: {got:.4f} (want {want:.4f}) {'OK' if abs(got-want)<=1e-9 else 'FAIL'}")
+    return bad
+
+_bad = self_test()
+if _bad:
+    (WORK/"results.json").write_text(json.dumps(
+        {"script_version": SCRIPT_VERSION, "conclusive": False,
+         "reason": "metric self-test failed; refusing to report numbers from a broken instrument",
+         "failures": [{"check": n, "got": g, "want": w} for n, g, w in _bad]}, indent=2))
+    log("[selftest] FAILED — aborting before any measurement")
+    raise SystemExit(1)
+log("[selftest] all metrics distinguish good from bad, including the empty-vs-empty case")
+
+# ── 1. build ────────────────────────────────────────────────────────────────
+if not CLONE.exists():
+    subprocess.check_call(["git","clone","--depth","1","--recurse-submodules",
+                           "--shallow-submodules","-b","feat/zonos-builtin-g2p",
+                           "https://github.com/CrispStrobe/CrispASR.git",str(CLONE)])
+sys.path.insert(0, str(CLONE/"tools"/"kaggle"))
+import kaggle_harness as kh  # noqa: E402
+kh.init_progress()
+sha = subprocess.run(["git","-C",str(CLONE),"rev-parse","--short","HEAD"],
+                     capture_output=True,text=True).stdout.strip()
+log(f"[g2p] script_version={SCRIPT_VERSION} clone={sha}")
+HF_TOKEN = kh.resolve_hf_token(); os.environ.setdefault("HF_TOKEN", HF_TOKEN or "")
+
+res = {"script_version": SCRIPT_VERSION, "clone": sha, "langs": {}, "controls": {}}
+def save():
+    (WORK/"results.json").write_text(json.dumps(res, indent=2, ensure_ascii=False))
+
+kh.install_build_toolchain()
+BUILD = SCRATCH/"build"
+# BUILD_SHARED_LIBS=OFF on purpose: phonemizer.cpp moved from the kokoro target
+# into crispasr-core, and the bug that arrangement originally fixed (#316 AUR)
+# only shows up in a STATIC link, where library order decides whether
+# crispasr_cache.o survives long enough for phonemizer.o to reference it.
+r = subprocess.run(["cmake","-S",str(CLONE),"-B",str(BUILD),"-G","Ninja",
+                    "-DCMAKE_BUILD_TYPE=Release","-DBUILD_SHARED_LIBS=OFF"]+kh.cache_and_link_flags(),
+                   capture_output=True,text=True)
+if r.returncode != 0:
+    log("configure FAILED"); log((r.stdout or "")[-3000:]); log((r.stderr or "")[-3000:]); raise SystemExit(1)
+with kh.build_heartbeat("build.crispasr"):
+    r = subprocess.run(f"cmake --build {BUILD} --target crispasr -j{kh.safe_build_jobs(gpu=False)}",
+                       shell=True, capture_output=True, text=True)
+if r.returncode != 0:
+    log(f"build FAILED rc={r.returncode}")
+    log((r.stdout or "<empty>")[-6000:]); log((r.stderr or "<empty>")[-6000:]); raise SystemExit(1)
+CRISPASR = BUILD/"bin"/"crispasr"
+if not CRISPASR.is_file():
+    log("build claimed success but produced no binary"); raise SystemExit(1)
+# Proof-of-work, not an exit code: the linker's own final line.
+link_lines = [l for l in (r.stdout or "").splitlines() if "Linking" in l and "crispasr" in l]
+log(f"[g2p] static link OK: {link_lines[-1] if link_lines else '(ccache/no-op build)'}")
+res["static_link_ok"] = True
+save()
+
+# crispasr-diff is the target the #316 AUR report actually failed to link.
+# Building it is the specific regression check for the phonemizer move.
+with kh.build_heartbeat("build.crispasr-diff"):
+    rd = subprocess.run(f"cmake --build {BUILD} --target crispasr-diff -j{kh.safe_build_jobs(gpu=False)}",
+                        shell=True, capture_output=True, text=True)
+res["crispasr_diff_static_link_ok"] = (rd.returncode == 0 and (BUILD/"bin"/"crispasr-diff").is_file())
+log(f"[g2p] crispasr-diff static link: {res['crispasr_diff_static_link_ok']}")
+if not res["crispasr_diff_static_link_ok"]:
+    log((rd.stdout or "")[-4000:]); log((rd.stderr or "")[-4000:])
+save()
+
+subprocess.run("apt-get install -y espeak-ng >/dev/null 2>&1 || true", shell=True)
+have_espeak = shutil.which("espeak-ng") is not None
+log(f"[g2p] espeak-ng present: {have_espeak}")
+res["espeak_installed"] = have_espeak
+if not have_espeak:
+    res["conclusive"] = False
+    res["reason"] = "espeak-ng unavailable; there is no control arm to compare the builtin against"
+    save(); raise SystemExit(0)
+
+from huggingface_hub import hf_hub_download
+M  = hf_hub_download("cstr/zonos-v0.1-transformer-GGUF","zonos-v0.1-transformer-q8_0.gguf",local_dir=str(SCRATCH/"m"))
+C  = hf_hub_download("cstr/dac-44khz-GGUF","dac-44khz-f16.gguf",local_dir=str(SCRATCH/"m"))
+AS = hf_hub_download("cstr/parakeet-tdt-0.6b-v3-GGUF","parakeet-tdt-0.6b-v3-q4_k.gguf",local_dir=str(SCRATCH/"m"))
+log(f"[g2p] model={M}\n[g2p] codec={C}\n[g2p] asr={AS}")
+
+# ── 2. one synth, fully instrumented ────────────────────────────────────────
+G2P_RE = re.compile(r"^zonos_g2p: (.*)$")
+
+def parse_g2p(stderr):
+    """Pull the instrumented readout out of the backend's own stderr.
+
+    Keeps the WHOLE stream, not a tail: the readout is printed before synthesis
+    and the generation logs are long enough to push it out of any window (the
+    mistake zonos-lang-435 v1 made, which made every arm read lang='')."""
+    out = {"path": "", "fields": {}, "ipa": "", "ids": [], "dropped": {}}
+    for line in stderr.splitlines():
+        m = G2P_RE.match(line.strip())
+        if not m: continue
+        body = m.group(1)
+        if body.startswith("ipa="):
+            out["ipa"] = body[4:]
+        elif body.startswith("ids="):
+            out["ids"] = [int(x) for x in body[4:].split(",") if x.strip()]
+        elif body.startswith("dropped="):
+            d = {}
+            for part in body[8:].split(","):
+                if ":" in part:
+                    k, v = part.split(":", 1); d[k] = int(v)
+            out["dropped"] = d
+        else:
+            for kv in body.split():
+                if "=" in kv:
+                    k, v = kv.split("=", 1)
+                    out["fields"][k] = v
+            out["path"] = out["fields"].get("path", out["path"])
+    return out
+
+def synth(text, lang, mode, out_path, tag):
+    env = dict(os.environ)
+    env["CRISPASR_ZONOS_G2P"] = mode
+    env["CRISPASR_ZONOS_G2P_DEBUG"] = "1"
+    if out_path.exists(): out_path.unlink()
+    cmd = [str(CRISPASR),"--backend","zonos","-m",M,"--codec-model",C,
+           "-l",lang,"--seed","42","--tts",text,"--tts-output",str(out_path)]
+    t0 = time.time()
+    p = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=3600)
+    err = p.stderr or ""
+    g = parse_g2p(err)
+    rec = {"tag": tag, "mode": mode, "lang": lang, "rc": p.returncode,
+           "wav_bytes": out_path.stat().st_size if out_path.exists() else 0,
+           "secs": round(time.time() - t0, 1),
+           "g2p_path": g["path"], "ipa": g["ipa"], "ids": g["ids"],
+           "dropped_hist": g["dropped"],
+           "cp_total": int(g["fields"].get("cp_total", -1)),
+           "cp_mapped": int(g["fields"].get("cp_mapped", -1)),
+           "cp_dropped": int(g["fields"].get("cp_dropped", -1)),
+           "resolved_lang": g["fields"].get("lang", ""),
+           "refused": ("Refusing to synthesise noise" in err or "no phoneme tokens" in err),
+           # Which dictionaries actually loaded. Without this, an EN arm that
+           # silently fell back to letter-to-sound rules would be reported as
+           # "the builtin", and the number would be about a different thing.
+           "g2p_dicts": [l.strip() for l in err.splitlines() if l.strip().startswith("g2p: ")],
+           "stderr_tail": err[-800:]}
+    rec["drop_rate"] = (rec["cp_dropped"] / rec["cp_total"]) if rec["cp_total"] > 0 else None
+    log(f"[g2p] {tag}: rc={rec['rc']} path={rec['g2p_path']} ntok={len(rec['ids'])} "
+        f"drop={rec['cp_dropped']}/{rec['cp_total']} wav={rec['wav_bytes']} {rec['secs']}s")
+    return rec
+
+def asr(wav, lang):
+    if not Path(wav).is_file() or Path(wav).stat().st_size < 1000:
+        return ""
+    p = subprocess.run([str(CRISPASR),"--backend","parakeet","-m",AS,"-f",str(wav),
+                        "-l",lang,"-nt"], capture_output=True, text=True, timeout=1800)
+    diag = ("crispasr","parakeet:","ggml","main:","system_info:","whisper")
+    cand = [l.strip() for l in (p.stdout or "").splitlines()
+            if l.strip() and not l.strip().lower().startswith(diag)]
+    return cand[-1] if cand else ""
+
+# ── 3. per-language arms, espeak present ────────────────────────────────────
+for lang in ("en","de","fr","es"):
+    text = TEXTS[lang]
+    e = synth(text, lang, "espeak",  SCRATCH/f"{lang}-espeak.wav",  f"{lang}/espeak")
+    b = synth(text, lang, "builtin", SCRATCH/f"{lang}-builtin.wav", f"{lang}/builtin")
+    e["asr"] = asr(SCRATCH/f"{lang}-espeak.wav", lang)
+    b["asr"] = asr(SCRATCH/f"{lang}-builtin.wav", lang)
+    e["word_f1"] = word_f1(text, e["asr"])
+    b["word_f1"] = word_f1(text, b["asr"])
+    # An arm only counts if the path it was supposed to exercise is the path
+    # that ran. A builtin arm that silently fell through to espeak would
+    # otherwise report perfect agreement with espeak -- with itself.
+    ok_paths = e["g2p_path"].startswith("espeak") and b["g2p_path"] == "builtin"
+    res["langs"][lang] = {
+        "text": text, "espeak": e, "builtin": b,
+        "paths_as_intended": ok_paths,
+        "ntok_espeak": len(e["ids"]), "ntok_builtin": len(b["ids"]),
+        "positional_match": positional_match(e["ids"], b["ids"]),
+        "lev_sim": lev_sim(e["ids"], b["ids"]),
+        "drop_rate_espeak": e["drop_rate"], "drop_rate_builtin": b["drop_rate"],
+        "word_f1_espeak": e["word_f1"], "word_f1_builtin": b["word_f1"],
+    }
+    L = res["langs"][lang]
+    log(f"[g2p] == {lang}: pos={L['positional_match']:.3f} lev={L['lev_sim']:.3f} "
+        f"drop e={L['drop_rate_espeak']} b={L['drop_rate_builtin']} "
+        f"f1 e={L['word_f1_espeak']:.3f} b={L['word_f1_builtin']:.3f} intended={ok_paths}")
+    log(f"[g2p]    espeak  asr: {e['asr'][:110]!r}")
+    log(f"[g2p]    builtin asr: {b['asr'][:110]!r}")
+    save()
+
+# Russian: no built-in covers it. Recorded so the report can say what espeak is
+# still load-bearing for, rather than implying the licence goal is complete.
+ru = synth(TEXTS["ru"], "ru", "builtin", SCRATCH/"ru-builtin-espeakpresent.wav", "ru/builtin-with-espeak")
+res["langs"]["ru"] = {"text": TEXTS["ru"], "builtin_mode": ru,
+                      "note": "no built-in G2P for ru; builtin mode must fall through to espeak"}
+res["controls"]["ru_falls_through_to_espeak"] = ru["g2p_path"].startswith("espeak")
+save()
+
+# ── 4. CONTROL 1: wrong-language, end to end ────────────────────────────────
+# English text phonemised as German. Same binary, same metrics. If this does not
+# score WORSE than en/en, the comparison above cannot fail and means nothing.
+wl = synth(TEXTS["en"], "de", "espeak", SCRATCH/"control-en-as-de.wav", "control/en-text-as-de")
+wl["asr"] = asr(SCRATCH/"control-en-as-de.wav", "en")
+wl["word_f1"] = word_f1(TEXTS["en"], wl["asr"])
+en_ids = res["langs"]["en"]["espeak"]["ids"]
+res["controls"]["wrong_language"] = {
+    "arm": wl,
+    "positional_match_vs_en_espeak": positional_match(en_ids, wl["ids"]),
+    "lev_sim_vs_en_espeak": lev_sim(en_ids, wl["ids"]),
+    "word_f1": wl["word_f1"],
+    "word_f1_en_espeak": res["langs"]["en"]["word_f1_espeak"],
+}
+c = res["controls"]["wrong_language"]
+log(f"[g2p] CONTROL wrong-language: pos={c['positional_match_vs_en_espeak']:.3f} "
+    f"lev={c['lev_sim_vs_en_espeak']:.3f} f1={c['word_f1']:.3f} "
+    f"(en/en f1 was {c['word_f1_en_espeak']:.3f})")
+save()
+
+# ── 5. purge espeak, then the licence-goal arms ─────────────────────────────
+def remove_espeak():
+    subprocess.run("apt-get remove -y --purge espeak-ng espeak-ng-data libespeak-ng1 "
+                   ">/dev/null 2>&1 || true", shell=True)
+    subprocess.run("for f in $(find /usr/lib /usr/local/lib /lib -name 'libespeak*' 2>/dev/null); "
+                   "do mv \"$f\" \"$f.hidden\" 2>/dev/null || true; done", shell=True)
+    leftover = subprocess.run("find /usr/lib /usr/local/lib /lib -name 'libespeak*' "
+                              "! -name '*.hidden' 2>/dev/null", shell=True,
+                              capture_output=True, text=True).stdout.strip()
+    on_path = shutil.which("espeak-ng") or shutil.which("espeak")
+    if on_path or leftover:
+        return False, f"espeak still reachable (binary={on_path!r}, libs={leftover!r})"
+    return True, ""
+
+gone, why = remove_espeak()
+res["espeak_removed"] = gone; res["espeak_removed_note"] = why
+log(f"[g2p] espeak removed: {gone} {why}")
+save()
+
+if gone:
+    # THE DELIVERABLE: zonos with no GPL dependency present at all.
+    for lang in ("en","de","fr","es"):
+        text = TEXTS[lang]
+        a = synth(text, lang, "builtin", SCRATCH/f"{lang}-noespeak.wav", f"{lang}/builtin-no-espeak")
+        a["asr"] = asr(SCRATCH/f"{lang}-noespeak.wav", lang)
+        a["word_f1"] = word_f1(text, a["asr"])
+        base = res["langs"][lang]["builtin"]["ids"]
+        res["langs"][lang]["no_espeak"] = {
+            "arm": a, "word_f1": a["word_f1"],
+            # Must be identical to the with-espeak builtin arm: same G2P, same
+            # input. A difference means espeak was leaking into the builtin path.
+            "ids_identical_to_builtin_arm": a["ids"] == base,
+        }
+        log(f"[g2p] == {lang} NO-ESPEAK: path={a['g2p_path']} wav={a['wav_bytes']} "
+            f"f1={a['word_f1']:.3f} ids_same={a['ids']==base}")
+        save()
+
+    # The #435 guarantee must survive: no phonemizer for ru => refuse, 0 bytes.
+    ru2 = synth(TEXTS["ru"], "ru", "builtin", SCRATCH/"ru-noespeak.wav", "ru/no-espeak")
+    res["controls"]["ru_refuses_without_espeak"] = bool(ru2["refused"]) and ru2["wav_bytes"] == 0
+    res["langs"]["ru"]["no_espeak"] = ru2
+    log(f"[g2p] ru without espeak: refused={ru2['refused']} wav={ru2['wav_bytes']} rc={ru2['rc']}")
+
+    # ── CONTROL 2: the drop counter's known answer ──────────────────────────
+    # "Test 123." at -l ru: no espeak, no builtin for ru, text is pure ASCII ->
+    # the raw-ASCII path. zonos's inventory has letters and punctuation but NO
+    # DIGITS, so exactly the three digits must be counted as dropped.
+    dc = synth("Test 123.", "ru", "espeak", SCRATCH/"control-drop.wav", "control/drop-counter")
+    digits_seen = {k for k in dc["dropped_hist"] if k in ("U+0031","U+0032","U+0033")}
+    res["controls"]["drop_counter"] = {
+        "arm": dc, "path": dc["g2p_path"], "cp_dropped": dc["cp_dropped"],
+        "digit_codepoints_named": sorted(digits_seen),
+        "fires": dc["g2p_path"] == "ascii" and dc["cp_dropped"] >= 3 and len(digits_seen) == 3,
+    }
+    log(f"[g2p] CONTROL drop-counter: path={dc['g2p_path']} dropped={dc['cp_dropped']} "
+        f"hist={dc['dropped_hist']} fires={res['controls']['drop_counter']['fires']}")
+    save()
+else:
+    log("[g2p] espeak could not be removed — the licence-goal arms did NOT run. "
+        "Reported as inconclusive, NOT as failures.")
+
+# ── 6. verdict ──────────────────────────────────────────────────────────────
+# Per language, and deliberately not a single boolean: the answer is expected to
+# differ by language, and "builtin is fine for es, worse for en" is the useful
+# result, not a pass/fail.
+ctl = res["controls"]
+wlc = ctl.get("wrong_language", {})
+controls_fire = {
+    # The wrong-language arm must score materially WORSE on both the ID
+    # agreement and the roundtrip than the matched-language arm did.
+    "wrong_language_lowers_agreement": wlc.get("lev_sim_vs_en_espeak", 1.0) < 0.75,
+    "wrong_language_lowers_word_f1":
+        wlc.get("word_f1", 1.0) < max(0.0, wlc.get("word_f1_en_espeak", 0.0) - 0.15),
+    "drop_counter_fires": bool(ctl.get("drop_counter", {}).get("fires")),
+    "ru_still_refuses_without_espeak": bool(ctl.get("ru_refuses_without_espeak")),
+}
+res["controls_fire"] = controls_fire
+# If the controls did not fire, the per-language numbers are not evidence.
+res["conclusive"] = bool(gone) and all(controls_fire.values())
+
+per_lang = {}
+for lang in ("en","de","fr","es"):
+    L = res["langs"].get(lang, {})
+    if not L: continue
+    ne = L.get("no_espeak", {})
+    per_lang[lang] = {
+        "paths_as_intended": L.get("paths_as_intended"),
+        "lev_sim": round(L.get("lev_sim", 0.0), 4),
+        "positional_match": round(L.get("positional_match", 0.0), 4),
+        "drop_rate_espeak": L.get("drop_rate_espeak"),
+        "drop_rate_builtin": L.get("drop_rate_builtin"),
+        "word_f1_espeak": round(L.get("word_f1_espeak", 0.0), 4),
+        "word_f1_builtin": round(L.get("word_f1_builtin", 0.0), 4),
+        "word_f1_builtin_no_espeak": round(ne.get("word_f1", 0.0), 4) if ne else None,
+        # The proposal, stated as a claim that the numbers above support or not.
+        # Deliberately conservative: the builtin must not lose more than 0.10 of
+        # word-F1 and must not drop a larger share of its own symbols.
+        "builtin_good_enough_to_default":
+            bool(L.get("paths_as_intended")
+                 and L.get("word_f1_builtin", 0.0) >= L.get("word_f1_espeak", 0.0) - 0.10
+                 and (L.get("drop_rate_builtin") or 0.0) <= (L.get("drop_rate_espeak") or 0.0) + 0.02),
+    }
+res["per_language_verdict"] = per_lang
+save()
+log("[g2p] CONTROLS " + json.dumps(controls_fire))
+log("[g2p] PER-LANGUAGE " + json.dumps(per_lang, ensure_ascii=False))
+if not res["conclusive"]:
+    log("[g2p] INCONCLUSIVE: a control did not fire, or espeak could not be removed. "
+        "The per-language numbers above are NOT evidence in that state.")
