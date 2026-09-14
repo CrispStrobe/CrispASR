@@ -17,6 +17,10 @@ on:
       - include/**
       - src/crispasr_c_api.cpp
       - src/CMakeLists.txt
+      # This job runs the backend wiring audit (below), so a change to the
+      # audit itself must re-run it — otherwise the gate's own regressions
+      # land unexercised.
+      - tools/check-backend-wiring.py
       - .github/workflows/bindings-rust.yml
   pull_request:
     paths:
@@ -25,6 +29,10 @@ on:
       - include/**
       - src/crispasr_c_api.cpp
       - src/CMakeLists.txt
+      # This job runs the backend wiring audit (below), so a change to the
+      # audit itself must re-run it — otherwise the gate's own regressions
+      # land unexercised.
+      - tools/check-backend-wiring.py
       - .github/workflows/bindings-rust.yml
 
 concurrency:
