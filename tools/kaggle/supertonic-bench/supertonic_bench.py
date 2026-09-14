@@ -35,7 +35,7 @@ NOT MEASURED, AND WHY (stated, never estimated)
     the watermark back on for any output that cannot carry a manifest), so this
     kernel deliberately does NOT pass -DCRISPASR_NO_C2PA_NATIVE=ON.
 
-SCRIPT_VERSION = v4
+SCRIPT_VERSION = v5
 """
 
 import json
@@ -49,7 +49,7 @@ import sys
 import time
 from pathlib import Path
 
-SCRIPT_VERSION = "v4"
+SCRIPT_VERSION = "v5"
 
 WORK = Path("/kaggle/working")
 TEMP = Path("/kaggle/temp/st-bench")
@@ -392,20 +392,56 @@ QUANT_INFO["q4_k_type_counts"] = {t: len(v) for t, v in _by_type.items()}
 print(f"q4_k types: {QUANT_INFO['q4_k_type_counts']}", flush=True)
 print(f"q4_k tensors in a type the supertonic binder cannot read: {fallbacks}", flush=True)
 
-CA_Q4K_SAFE = None
-if fallbacks:
-    CA_Q4K_SAFE = MODELS / "crispasr" / "supertonic3-q4_k-loadable.gguf"
-    ov = []
-    for name, _t in fallbacks:
-        ov += ["--tensor-type", "^" + re.escape(name) + "$=f16"]
-    ps = run([QUANT, CA_F16, CA_Q4K_SAFE, "q4_k", *ov], timeout=3600)
-    (WORK / "quantize-q4_k-safe.log").write_text((ps.stdout or "") + "\n--stderr--\n" + (ps.stderr or ""))
-    if not CA_Q4K_SAFE.exists():
-        print("===Q4K-SAFE-QUANTIZE-FAILED=== " + (ps.stderr or "")[-1500:], flush=True)
-        CA_Q4K_SAFE = None
-    else:
-        QUANT_INFO["q4_k_safe_mb"] = round(CA_Q4K_SAFE.stat().st_size / 1e6, 1)
-        QUANT_INFO["q4_k_safe_overrides"] = [n for n, _ in fallbacks]
+# v4 proved the fix above was the wrong shape: forcing just the Q4_0 tensors
+# back to f16 produced a file that failed on the NEXT tensor,
+# "vf.time_encoder.mlp.2.linear.weight has unsupported type 12" -- Q4_K itself.
+# supertonic's read_f32() binder (src/supertonic_tts.cpp:195) reads a handful of
+# weights straight to std::vector<float> on the CPU side and accepts ONLY F32 and
+# F16, so ANY quantization of those specific tensors makes the model unloadable,
+# whatever the type. The set is small (vf.time_encoder.mlp.*, voc.head.layer2,
+# ...) but guessing it from the source is how you get a fourth run that fails on
+# the fifth tensor. So DISCOVER it: quantize, try to load, read the name out of
+# the error, exclude it, repeat. Each cycle is one quantize plus a one-step
+# synth, and the converged list is itself the finding.
+def build_loadable_q4k(max_iter=30):
+    out = MODELS / "crispasr" / "supertonic3-q4_k-loadable.gguf"
+    probe = OUTS / "q4k_probe.wav"
+    excluded, trace = [], []
+    for it in range(max_iter):
+        ov = []
+        for n in excluded:
+            ov += ["--tensor-type", "^" + re.escape(n) + "$=f16"]
+        pq2 = run([QUANT, CA_F16, out, "q4_k", *ov], timeout=3600)
+        if not out.exists():
+            return None, excluded, trace + [f"quantize failed: {(pq2.stderr or '')[-300:]}"]
+        pl = run([str(CLI), "--backend", "supertonic", "-m", str(out), "--tts",
+                  "Probe.", "-l", LANG, "--voice", VOICE, "--tts-steps", "1",
+                  "--seed", str(SEED), "--no-gpu", "--tts-output", str(probe)],
+                 timeout=900)
+        blob = (pl.stdout or "") + (pl.stderr or "")
+        m = re.search(r"supertonic: (\S+) has unsupported type (\d+)", blob)
+        if m:
+            excluded.append(m.group(1))
+            trace.append(f"iter {it}: {m.group(1)} type {m.group(2)}")
+            continue
+        if pl.returncode == 0 and probe.exists():
+            trace.append(f"iter {it}: loads and synthesises")
+            return out, excluded, trace
+        trace.append(f"iter {it}: rc={pl.returncode} {blob[-300:]}")
+        return None, excluded, trace
+    return None, excluded, trace + ["did not converge"]
+
+
+CA_Q4K_SAFE, Q4K_EXCLUDED, Q4K_TRACE = build_loadable_q4k()
+QUANT_INFO["q4_k_loadable_excluded"] = Q4K_EXCLUDED
+QUANT_INFO["q4_k_loadable_trace"] = Q4K_TRACE
+print("q4_k loadability search:\n  " + "\n  ".join(Q4K_TRACE), flush=True)
+if CA_Q4K_SAFE:
+    QUANT_INFO["q4_k_safe_mb"] = round(CA_Q4K_SAFE.stat().st_size / 1e6, 1)
+else:
+    print("===Q4K-NO-LOADABLE-VARIANT=== no exclusion set made the q4_k GGUF "
+          "loadable; there is no CrispASR q4_k number to report and that is the "
+          "result, not an omission.", flush=True)
 kh.step("quantize.done", **QUANT_INFO)
 
 GGUF_HIST = {
@@ -484,32 +520,83 @@ except Exception as e:
     print("===AUDIOCPP-CLONE-FAILED=== " + BUILD_LOG["audiocpp_clone"], flush=True)
 
 if AUDIOCPP_SHA:
-    # -DGGML_CUDA_NO_VMM=ON is not a tuning knob here, it is THE fix for v3's
-    # failure. ggml links CUDA::cuda_driver only for the VMM pool allocator:
-    #     if (NOT GGML_CUDA_NO_VMM) target_link_libraries(ggml-cuda PRIVATE CUDA::cuda_driver)
-    # and this worker's CUDAToolkit find does not produce that imported target,
-    # so v3 died at GENERATE time with
+    # v3 and v4 both lost their CUDA arm to the SAME missing thing, one step
+    # apart, and the second cost 45 minutes to find out.
+    #
+    #   v3, at generate time in 16 s:
     #     Target "ggml-cuda" links to: CUDA::cuda_driver but the target was not found
-    # after a clean 16 s configure. CrispASR has always passed this flag
-    # (kh.cuda_build_flags), which is why only audio.cpp hit it -- so matching it
-    # also removes a build-configuration difference between the two arms rather
-    # than adding one.
-    cuda_cfg = ["-DENGINE_ENABLE_CUDA=ON", f"-DCMAKE_CUDA_ARCHITECTURES={ARCH}",
-                "-DGGML_CUDA_NO_VMM=ON"]
+    #   v4, with -DGGML_CUDA_NO_VMM=ON, at LINK time after 2728 s:
+    #     attention_fallback.cpp: undefined reference to `cuDeviceGet'
+    #
+    # The NO_VMM flag only moved the failure: it stops ggml needing
+    # CUDA::cuda_driver, but audio.cpp's own engine::core::resolve_flash_attention
+    # calls the CUDA driver API directly and was relying on ggml's transitive
+    # link. The single root cause under both is that this worker has no
+    # libcuda.so for FindCUDAToolkit to find -- only libcuda.so.1 and/or a stubs
+    # tree CMake does not search -- so the imported target is never created.
+    #
+    # So: find a driver library, give it the .so name CMake looks for, name it
+    # explicitly in the cache, put -lcuda on the link line as a second route,
+    # and let ggml keep its default VMM setting. Then PROVE the link works with
+    # a three-line program before spending another 45 minutes finding out at
+    # [945/946].
+    driver_lib = None
+    import glob as _glob
+    cands = (_glob.glob("/usr/local/cuda*/targets/*/lib/stubs/libcuda.so")
+             + _glob.glob("/usr/local/cuda*/lib64/stubs/libcuda.so")
+             + _glob.glob("/usr/lib/x86_64-linux-gnu/libcuda.so")
+             + _glob.glob("/usr/lib/x86_64-linux-gnu/libcuda.so.1")
+             + _glob.glob("/usr/lib/x86_64-linux-gnu/libcuda.so.*"))
+    print(f"libcuda candidates: {cands}", flush=True)
+    BUILD_LOG["libcuda_candidates"] = cands
+    if cands:
+        _d = Path("/kaggle/temp/cudalink")
+        _d.mkdir(parents=True, exist_ok=True)
+        driver_lib = _d / "libcuda.so"
+        if driver_lib.is_symlink() or driver_lib.exists():
+            driver_lib.unlink()
+        driver_lib.symlink_to(cands[0])
+        os.environ["LIBRARY_PATH"] = f"{_d}:" + os.environ.get("LIBRARY_PATH", "")
+        BUILD_LOG["libcuda_used"] = cands[0]
+
+    # Cheap check before the expensive one: exactly the symbol v4 died on.
+    probe_ok, probe_msg = False, "no libcuda found"
+    if driver_lib:
+        pd = Path("/kaggle/temp/cudaprobe")
+        pd.mkdir(parents=True, exist_ok=True)
+        (pd / "probe.c").write_text(
+            "#include <cuda.h>\nint main(void){CUdevice d;cuDeviceGet(&d,0);return 0;}\n")
+        inc = _glob.glob("/usr/local/cuda*/targets/*/include") + ["/usr/local/cuda/include"]
+        pr = run(["gcc", str(pd / "probe.c"), "-o", str(pd / "probe"),
+                  *[f"-I{i}" for i in inc], f"-L{driver_lib.parent}", "-lcuda"],
+                 timeout=300)
+        probe_ok = pr.returncode == 0 and (pd / "probe").exists()
+        probe_msg = ((pr.stderr or "") + (pr.stdout or ""))[-800:] or "ok"
+    BUILD_LOG["libcuda_link_probe_ok"] = probe_ok
+    BUILD_LOG["libcuda_link_probe_msg"] = probe_msg
+    print(f"cuDeviceGet link probe: ok={probe_ok} {probe_msg}", flush=True)
+    if not probe_ok:
+        # Say it now, not at [945/946] three quarters of an hour from now.
+        print("===CUDA-DRIVER-LINK-UNAVAILABLE=== cuDeviceGet cannot be linked on "
+              "this worker; audio.cpp's CUDA arm cannot be built here. Skipping "
+              "straight to the CPU-only build rather than burning 45 minutes to "
+              "rediscover it at link time.", flush=True)
+
+    cuda_cfg = ["-DENGINE_ENABLE_CUDA=ON", f"-DCMAKE_CUDA_ARCHITECTURES={ARCH}"]
     nvcc = "/usr/local/cuda/bin/nvcc"
     if os.path.isfile(nvcc):
         cuda_cfg.append(f"-DCMAKE_CUDA_COMPILER={nvcc}")
-    # Belt and braces: if a libcuda stub IS present, name it explicitly so
-    # FindCUDAToolkit can define the target even when VMM is wanted.
-    for stub in ("/usr/local/cuda/lib64/stubs/libcuda.so",
-                 "/usr/lib/x86_64-linux-gnu/libcuda.so"):
-        if os.path.isfile(stub):
-            cuda_cfg += [f"-DCUDA_cuda_driver_LIBRARY={stub}",
-                         f"-DCUDA_CUDA_LIBRARY={stub}"]
-            break
+    if driver_lib:
+        cuda_cfg += [f"-DCUDA_cuda_driver_LIBRARY={driver_lib}",
+                     f"-DCUDA_CUDA_LIBRARY={driver_lib}",
+                     f"-DCMAKE_EXE_LINKER_FLAGS=-L{driver_lib.parent} -lcuda"]
 
-    ACLI, secs, err = try_build_audiocpp("cuda", cuda_cfg, BUILD_AC)
-    AC_ATTEMPTS.append({"label": "cuda", "seconds": round(secs, 1), "error": err})
+    if probe_ok:
+        ACLI, secs, err = try_build_audiocpp("cuda", cuda_cfg, BUILD_AC)
+        AC_ATTEMPTS.append({"label": "cuda", "seconds": round(secs, 1), "error": err})
+    else:
+        secs, err = 0.0, "skipped: cuDeviceGet link probe failed"
+        AC_ATTEMPTS.append({"label": "cuda", "seconds": 0.0, "error": err})
     AC_HAS_CUDA = ACLI is not None
 
     # audio.cpp documents GCC >= 13. If the stock compiler was not it, a retry
@@ -1098,6 +1185,11 @@ RESULT = {
 RESULTS.write_text(json.dumps(RESULT, ensure_ascii=False, indent=2) + "\n")
 
 print("\n" + "=" * 72, flush=True)
+# The GPU is a lottery and it CHANGED between runs (v3 drew a P100, v4 drew
+# 2x T4). Numbers from different runs are not comparable, so the hardware is
+# printed with the table, not only buried in the JSON.
+print("HARDWARE: " + HW.get("gpu_csv", "?").replace("\n", " | ")
+      + f"  cuda_arch={ARCH}  cpu={HW.get('cpu_model')}  threads={NTHREADS}", flush=True)
 print("===SUMMARY-TABLE===", flush=True)
 hdr = f"{'arm':28} {'status':10} {'long_rtf':>9} {'xl_rtf':>8} {'slope_rtf':>10} {'32/8':>6} {'asr':>6}"
 print(hdr, flush=True)
