@@ -52,7 +52,7 @@ from pathlib import Path
 
 WORK = Path("/kaggle/working"); SCRATCH = Path("/tmp")
 CLONE = SCRATCH / "CrispASR"
-SCRIPT_VERSION = "2026-09-14-zonos-g2p-435-3"
+SCRIPT_VERSION = "2026-09-14-zonos-g2p-435-4"
 
 # Short on purpose: zonos generates on CPU here and runtime scales with the
 # audio length. ~10 words is enough for a word-F1 to mean something.
@@ -68,6 +68,19 @@ TEXTS = {
     "es": "El rápido zorro marrón salta sobre el perro perezoso hoy.",
     "ru": "Привет, это тест синтеза речи.",
 }
+
+# Spanish gets THREE sentences, the others one. Not arbitrary: en/de/fr produced
+# byte-identical numbers across two independent runs, so one sentence is already
+# reproducible for them. Spanish did not -- between run 2 and run 3 the espeak
+# arm went 0.700 -> 0.111 and the built-in arm 0.421 -> 0.632 from an accent
+# change alone, on a fixed seed. At N=1 the Spanish roundtrip is a coin, and a
+# coin cannot decide a default. These three carry the features Spanish G2P
+# actually has to get right: written accents, rr, and ñ.
+ES_MULTI = [
+    "El rápido zorro marrón salta sobre el perro perezoso hoy.",
+    "Mañana por la tarde vamos a comprar pan y leche fresca.",
+    "La niña pequeña corre por el parque con su perro blanco.",
+]
 
 def log(m):
     print(m, flush=True)
@@ -120,6 +133,23 @@ def word_f1(ref, hyp):
     p, rc = inter / len(h), inter / len(r)
     return 2 * p * rc / (p + rc)
 
+def word_f1_micro(pairs):
+    """Micro-average over several (ref, hyp) pairs: pool the counts, then one
+    P/R/F1. NOT the mean of per-sentence F1s -- that lets one short sentence
+    outvote a long one, and it hides a single catastrophic arm inside an
+    average. Empty on either side still contributes 0 matches, so a collapsed
+    sentence drags the pooled score down instead of being skipped."""
+    from collections import Counter
+    inter = nref = nhyp = 0
+    for ref, hyp in pairs:
+        r, h = norm_words(ref), norm_words(hyp)
+        inter += sum((Counter(r) & Counter(h)).values())
+        nref += len(r); nhyp += len(h)
+    if not nref or not nhyp or inter == 0:
+        return 0.0
+    p, rc = inter / nhyp, inter / nref
+    return 2 * p * rc / (p + rc)
+
 def self_test():
     """Prove each metric distinguishes the two states it must distinguish."""
     checks = [
@@ -137,6 +167,12 @@ def self_test():
         ("f1 half",                  word_f1("a b c d","a b x y"), 0.5),
         ("f1 BOTH EMPTY",            word_f1("",""),           0.0),
         ("f1 empty hyp",             word_f1("a b c",""),      0.0),
+        ("micro identical",          word_f1_micro([("a b","a b"),("c d","c d")]), 1.0),
+        ("micro disjoint",           word_f1_micro([("a b","x y"),("c d","z w")]), 0.0),
+        # One perfect sentence must NOT hide one collapsed sentence: pooled
+        # 2 matches over 4 ref and 2 hyp tokens -> P=1.0, R=0.5, F1=2/3.
+        ("micro one arm collapsed",  word_f1_micro([("a b","a b"),("c d","")]),    2/3),
+        ("micro all empty",          word_f1_micro([("",""),("","")]),             0.0),
     ]
     bad = [(n, got, want) for n, got, want in checks if abs(got - want) > 1e-9]
     for n, got, want in checks:
@@ -334,6 +370,44 @@ for lang in ("en","de","fr","es"):
     log(f"[g2p]    builtin asr: {b['asr'][:110]!r}")
     save()
 
+# ── 3b. Spanish, three sentences, because one was not enough ────────────────
+# The single-sentence Spanish result was not reproducible (see ES_MULTI). Pool
+# the tokens across three sentences and score once, so no single arm decides.
+es_pairs = {"espeak": [], "builtin": []}
+es_arms = []
+for i, text in enumerate(ES_MULTI):
+    for mode in ("espeak", "builtin"):
+        a = synth(text, "es", mode, SCRATCH/f"es{i}-{mode}.wav", f"es[{i}]/{mode}")
+        a["asr"] = asr(SCRATCH/f"es{i}-{mode}.wav", "es")
+        a["ref"] = text
+        a["word_f1_sentence"] = word_f1(text, a["asr"])
+        es_pairs[mode].append((text, a["asr"]))
+        es_arms.append(a)
+        log(f"[g2p]    es[{i}]/{mode} f1={a['word_f1_sentence']:.3f} asr={a['asr'][:90]!r}")
+        save()
+es_ids_ok = all(x["g2p_path"].startswith("espeak") for x in es_arms if x["mode"] == "espeak") and \
+            all(x["g2p_path"] == "builtin" for x in es_arms if x["mode"] == "builtin")
+res["es_multi"] = {
+    "sentences": ES_MULTI,
+    "paths_as_intended": es_ids_ok,
+    "word_f1_micro_espeak": word_f1_micro(es_pairs["espeak"]),
+    "word_f1_micro_builtin": word_f1_micro(es_pairs["builtin"]),
+    # es_arms is flat and interleaved (sentence0/espeak, sentence0/builtin, ...),
+    # so the SENTENCE index is k//2 -- labelling it with the flat index would
+    # report sentence 2 as sentence 5.
+    "per_sentence": [{"sentence": k // 2, "mode": a["mode"], "f1": a["word_f1_sentence"],
+                      "ref": a["ref"], "asr": a["asr"], "ipa": a["ipa"]}
+                     for k, a in enumerate(es_arms)],
+    "lev_sim_per_sentence": [
+        lev_sim([x for x in es_arms[2*i]["ids"]], [x for x in es_arms[2*i+1]["ids"]])
+        for i in range(len(ES_MULTI))],
+}
+EM = res["es_multi"]
+log(f"[g2p] == es MULTI({len(ES_MULTI)} sentences): micro-f1 espeak={EM['word_f1_micro_espeak']:.3f} "
+    f"builtin={EM['word_f1_micro_builtin']:.3f} lev_per_sentence="
+    + ",".join(f"{v:.3f}" for v in EM["lev_sim_per_sentence"]))
+save()
+
 # Russian: no built-in covers it. Recorded so the report can say what espeak is
 # still load-bearing for, rather than implying the licence goal is complete.
 ru = synth(TEXTS["ru"], "ru", "builtin", SCRATCH/"ru-builtin-espeakpresent.wav", "ru/builtin-with-espeak")
@@ -479,12 +553,37 @@ for lang in ("en","de","fr","es"):
         # word-F1 and must not drop a larger share of its own symbols.
         "builtin_dicts_loaded": L.get("builtin", {}).get("g2p_dicts", []),
         "builtin_ran_on_lts_only_no_dict": not L.get("builtin", {}).get("g2p_dicts"),
+        # A comparison needs a BASELINE that itself works. Run 3 scored Spanish
+        # "good enough to default" purely because the espeak control arm had
+        # collapsed to 0.111 -- the built-in's 0.632 cleared `espeak - 0.10`
+        # while being the WORST built-in score of the four languages. A
+        # predicate that passes for that reason is not measuring what it is
+        # named for, so a control arm below this floor makes the language
+        # INCONCLUSIVE rather than a pass.
+        "espeak_baseline_usable": L.get("word_f1_espeak", 0.0) >= 0.60,
         "builtin_good_enough_to_default":
             bool(L.get("paths_as_intended")
                  and L.get("builtin", {}).get("g2p_dicts")
+                 and L.get("word_f1_espeak", 0.0) >= 0.60
                  and L.get("word_f1_builtin", 0.0) >= L.get("word_f1_espeak", 0.0) - 0.10
                  and (L.get("drop_rate_builtin") or 0.0) <= (L.get("drop_rate_espeak") or 0.0) + 0.02),
     }
+# Spanish is judged on the POOLED three-sentence arm; the single-sentence entry
+# stays visible so the instability that motivated it is still on the record.
+EM = res.get("es_multi")
+if EM and "es" in per_lang:
+    per_lang["es"]["single_sentence_word_f1_espeak"] = per_lang["es"]["word_f1_espeak"]
+    per_lang["es"]["single_sentence_word_f1_builtin"] = per_lang["es"]["word_f1_builtin"]
+    per_lang["es"]["word_f1_espeak"] = round(EM["word_f1_micro_espeak"], 4)
+    per_lang["es"]["word_f1_builtin"] = round(EM["word_f1_micro_builtin"], 4)
+    per_lang["es"]["n_sentences"] = len(EM["sentences"])
+    per_lang["es"]["espeak_baseline_usable"] = EM["word_f1_micro_espeak"] >= 0.60
+    per_lang["es"]["builtin_good_enough_to_default"] = bool(
+        EM["paths_as_intended"]
+        and res["langs"]["es"]["builtin"].get("g2p_dicts")
+        and EM["word_f1_micro_espeak"] >= 0.60
+        and EM["word_f1_micro_builtin"] >= EM["word_f1_micro_espeak"] - 0.10)
+
 res["per_language_verdict"] = per_lang
 en = res["langs"].get("en", {})
 if en.get("ascii_no_espeak") and en.get("no_espeak"):
