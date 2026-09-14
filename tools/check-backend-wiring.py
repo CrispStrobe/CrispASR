@@ -277,16 +277,45 @@ def main():
         sys.exit(f"error: --lib {args.lib} does not exist.")
 
     if libpath:
-        nmr = subprocess.run(["nm", "-gU", str(libpath)], capture_output=True, text=True)
-        raw = nmr.stdout
-        dem = subprocess.run(["c++filt"], input=raw, capture_output=True, text=True).stdout
+        # `nm -gU` IS NOT PORTABLE, AND ITS FAILURE IS SILENT-SHAPED.
+        # -U means --defined-only on macOS nm and on binutils >= 2.39, but on
+        # binutils 2.38 (ubuntu-22.04, which is what bindings-rust.yml runs on)
+        # -U is --unicode and `nm -gU lib.so` exits 1 with "invalid argument to
+        # -U/--unicode". stdout is then empty, which reads as "no backend
+        # symbols are present" -- a fabricated list of ~70 missing backends from
+        # a library that contains every one of them.
+        #
+        # So ask nm for nothing but the global symbols, which every nm spells
+        # the same way, and do the defined/undefined split here: the type column
+        # is U (undefined), v/w (weak undefined) for symbols that are merely
+        # REFERENCED. That distinction is the whole point of the check -- a
+        # backend whose object was dropped still leaves an undefined reference
+        # behind in a shared library, so counting those as present would make
+        # the check pass on exactly the bug it exists to catch.
+        nmr = subprocess.run(["nm", "-g", str(libpath)], capture_output=True, text=True)
+        sym_re = re.compile(r"^\s*(?:[0-9a-fA-F]+)?\s*([A-Za-z?])\s+(\S+)\s*$")
+        defined = [m.group(2) for m in (sym_re.match(l) for l in nmr.stdout.splitlines())
+                   if m and m.group(1) not in "UuvwV"]
+        dem = subprocess.run(["c++filt"], input="\n".join(defined),
+                             capture_output=True, text=True).stdout
+
         # A READOUT THAT CANNOT REPORT ITS OWN FAILURE IS NOT A GATE.
-        # `nm` on a stripped library prints "no symbols" to stderr and nothing to
-        # stdout; an nm too old for -U errors out the same way. Either way `dem`
-        # is empty, EVERY backend then looks absent, and 100+ bogus failures are
-        # indistinguishable from a real regression. Say which it is.
+        # Three ways to end up with an empty/garbage symbol list: nm errored,
+        # the library is stripped ("no symbols"), or the output format did not
+        # parse. All three make EVERY backend look absent, and 100+ bogus
+        # failures are indistinguishable from a real regression.
+        #
+        # The last line is a POSITIVE CONTROL, not a formality: crispasr_session_open
+        # is in this library in every configuration that can build it at all, so
+        # if the table cannot produce it the table is wrong, whatever else it
+        # seems to say about backends.
         if nmr.returncode != 0 or not dem.strip():
             lib_unreadable = (nmr.stderr.strip().splitlines() or ["nm produced no output"])[-1]
+            libpath = None
+        elif "crispasr_session_open" not in dem:
+            lib_unreadable = (f"{len(defined)} defined symbols read from {libpath.name}, "
+                              f"but not crispasr_session_open — the symbol table is not "
+                              f"being parsed correctly")
             libpath = None
         else:
             inits = dict(inits_all)
