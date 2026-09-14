@@ -76,6 +76,13 @@ jobs:
       # only on a REQUIRED gap; registry/test/README gaps stay advisory. Run on
       # Linux deliberately: the script's Go cgo-LDFLAGS drift check is unreliable
       # on macOS, where Metal/BLAS default on and pollute the linux link line.
+      #
+      # NOT covered here: the script's shipped-library check, which reads a
+      # built libcrispasr's symbol table. This job configures without
+      # BUILD_SHARED_LIBS, so there is no .so to read and that one check prints
+      # "skipped". It has teeth in bindings-rust.yml, the job that does build a
+      # shared libcrispasr on Linux — and which triggers on exactly the paths a
+      # new backend touches (src/crispasr_c_api.cpp, src/CMakeLists.txt).
       - name: Backend wiring audit
         run: python3 tools/check-backend-wiring.py --crispasr ./build/bin/crispasr
 
