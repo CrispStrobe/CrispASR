@@ -17,6 +17,10 @@ on:
       - include/**
       - src/crispasr_c_api.cpp
       - src/CMakeLists.txt
+      # This job runs the backend wiring audit (below), so a change to the
+      # audit itself must re-run it — otherwise the gate's own regressions
+      # land unexercised.
+      - tools/check-backend-wiring.py
       - .github/workflows/bindings-rust.yml
   pull_request:
     paths:
@@ -25,6 +29,10 @@ on:
       - include/**
       - src/crispasr_c_api.cpp
       - src/CMakeLists.txt
+      # This job runs the backend wiring audit (below), so a change to the
+      # audit itself must re-run it — otherwise the gate's own regressions
+      # land unexercised.
+      - tools/check-backend-wiring.py
       - .github/workflows/bindings-rust.yml
 
 concurrency:
@@ -49,16 +57,46 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_SHARED_LIBS=ON \
             -DCRISPASR_BUILD_TESTS=OFF \
-            -DCRISPASR_BUILD_EXAMPLES=OFF \
+            -DCRISPASR_BUILD_EXAMPLES=ON \
             -DCRISPASR_BUILD_SERVER=OFF \
             -DGGML_CUDA=OFF \
             -DCRISPASR_OPUS_FETCH=ON
-          # crispasr-lib, not crispasr: with CRISPASR_BUILD_EXAMPLES=OFF the
-          # `crispasr` target does not exist here at all (it is the CLI's
-          # OUTPUT_NAME, defined with the examples), and Make fails with
-          # "No rule to make target 'crispasr'". crispasr-lib is the shared
-          # library the sys crate links.
-          cmake --build build -j"$(nproc)" --target crispasr-lib
+          # crispasr-lib, not crispasr: `crispasr` is the CLI's OUTPUT_NAME, not
+          # a target name, and Make fails with "No rule to make target
+          # 'crispasr'". crispasr-lib is the shared library the sys crate links.
+          #
+          # crispasr-cli is built alongside it for the wiring audit below, which
+          # needs the backend roster (`crispasr --list-backends-json`) to know
+          # what the shared library is supposed to contain. That is also why
+          # CRISPASR_BUILD_EXAMPLES is ON here: the CLI lives under examples/,
+          # and with it OFF the target does not exist at all.
+          cmake --build build -j"$(nproc)" --target crispasr-lib crispasr-cli
+
+      # THE ONLY PLACE IN CI WHERE THIS CAN RUN AT ALL.
+      #
+      # check-backend-wiring.py's shipped-library check reads the SYMBOL TABLE
+      # of a built libcrispasr and asserts every backend's `<x>_init_from_file`
+      # survived the link -- CMake linkage is not evidence, because the linker
+      # drops a static-archive member that nothing references. That is not a
+      # hypothetical: v0.8.17 shipped a .dylib with no mel_band_roformer_*
+      # symbols in it while the CLI worked, because the CLI links the static
+      # archive directly and the bindings do not.
+      #
+      # ci.yml's `Backend wiring audit` step runs the same script, but that job
+      # configures without BUILD_SHARED_LIBS, so no shared library is ever
+      # produced, the check prints "skipped" and the run goes green having
+      # proved nothing. This job is the one that builds a shared libcrispasr on
+      # Linux, so this is where the check has teeth -- and it guards exactly the
+      # consumer it is about, since the Rust/Python/Go/Dart/C# bindings all load
+      # this .so rather than linking the archives.
+      #
+      # --require-lib turns "no library found" from a silent skip into a
+      # failure, so this step cannot decay back into a no-op if the build
+      # config above ever changes.
+      - name: Backend wiring audit (shipped-library symbols)
+        run: |
+          python3 tools/check-backend-wiring.py \
+            --crispasr ./build/bin/crispasr --require-lib
 
       - name: cargo check (both crates)
         env:
