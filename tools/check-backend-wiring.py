@@ -75,6 +75,14 @@ def main():
                     help="path to the crispasr binary (default: build/bin/crispasr)")
     ap.add_argument("--verbose", action="store_true",
                     help="print every backend, not just problems")
+    # The shipped-library check needs the .so/.dylib that BELONGS TO the binary
+    # being audited. Two escapes from the hardcoded <repo>/build/src guess:
+    ap.add_argument("--lib", default=None,
+                    help="path to the built libcrispasr shared library "
+                         "(default: found next to --crispasr, then <repo>/build/src)")
+    ap.add_argument("--require-lib", action="store_true",
+                    help="fail instead of silently skipping when no shared "
+                         "libcrispasr can be found (use in CI)")
     args = ap.parse_args()
 
     if not Path(args.crispasr).exists():
@@ -227,25 +235,70 @@ def main():
             pass
 
     lib_fail = []
+    lib_unreadable = None
     libpath = None
-    for c in ("build/src/libcrispasr.dylib", "build/src/libcrispasr.so",
-              "build/src/libcrispasr.1.dylib"):
-        if (ROOT / c).exists():
-            libpath = ROOT / c
+
+    # WHERE THE LIBRARY IS LOOKED FOR, AND WHY THE ORDER MATTERS.
+    #
+    # This used to test ONLY <repo>/build/src/libcrispasr.{so,dylib}, with no
+    # relation to the --crispasr binary it was auditing. That makes two silent
+    # wrong answers possible, and both have been observed:
+    #
+    #   * SILENT SKIP. Every out-of-tree build (Kaggle builds into
+    #     /kaggle/temp/build-cuda; ci.yml's own audit builds into ./build but
+    #     with BUILD_SHARED_LIBS off, so no .so is produced at all) leaves
+    #     <repo>/build/src empty, the check prints "skipped" and the run passes
+    #     while proving nothing. The gate had never once executed in CI.
+    #   * STALE FALSE POSITIVES. A months-old <repo>/build/src/libcrispasr.so
+    #     left over from an earlier checkout, audited against a freshly built
+    #     binary, reports every backend added since as "absent from the shipped
+    #     library" -- a list of ~23 names that are all correctly wired. Symbol
+    #     presence is only ground truth when the symbols come from the SAME
+    #     build as the roster they are checked against.
+    #
+    # So: an explicit --lib wins, then the library that sits in the binary's own
+    # build tree (build/bin/crispasr -> build/src/libcrispasr.so), and only then
+    # the legacy repo-relative guess.
+    cli_dir = Path(args.crispasr).resolve().parent          # <build>/bin
+    cands = []
+    if args.lib:
+        cands.append(Path(args.lib))
+    for d in (cli_dir.parent / "src", cli_dir.parent, cli_dir):
+        cands += [d / n for n in ("libcrispasr.dylib", "libcrispasr.so",
+                                  "libcrispasr.1.dylib")]
+    cands += [ROOT / c for c in ("build/src/libcrispasr.dylib",
+                                 "build/src/libcrispasr.so",
+                                 "build/src/libcrispasr.1.dylib")]
+    for c in cands:
+        if c.exists():
+            libpath = c
             break
+    if args.lib and libpath != Path(args.lib):
+        sys.exit(f"error: --lib {args.lib} does not exist.")
+
     if libpath:
-        raw = subprocess.run(["nm", "-gU", str(libpath)], capture_output=True, text=True).stdout
+        nmr = subprocess.run(["nm", "-gU", str(libpath)], capture_output=True, text=True)
+        raw = nmr.stdout
         dem = subprocess.run(["c++filt"], input=raw, capture_output=True, text=True).stdout
-        inits = dict(inits_all)
+        # A READOUT THAT CANNOT REPORT ITS OWN FAILURE IS NOT A GATE.
+        # `nm` on a stripped library prints "no symbols" to stderr and nothing to
+        # stdout; an nm too old for -U errors out the same way. Either way `dem`
+        # is empty, EVERY backend then looks absent, and 100+ bogus failures are
+        # indistinguishable from a real regression. Say which it is.
+        if nmr.returncode != 0 or not dem.strip():
+            lib_unreadable = (nmr.stderr.strip().splitlines() or ["nm produced no output"])[-1]
+            libpath = None
+        else:
+            inits = dict(inits_all)
 
-        def runtime_stem(n):
-            b = n.replace("-", "_")
-            return [b, b.replace("_tts", ""), b + "_tts", b.replace("_asr", ""), b + "_asr"]
+            def runtime_stem(n):
+                b = n.replace("-", "_")
+                return [b, b.replace("_tts", ""), b + "_tts", b.replace("_asr", ""), b + "_asr"]
 
-        for name, _caps in backends:
-            hit = next((v for v in runtime_stem(name) if v in inits), None)
-            if hit and (hit + "_init_from_file") not in dem:
-                lib_fail.append((name, hit))
+            for name, _caps in backends:
+                hit = next((v for v in runtime_stem(name) if v in inits), None)
+                if hit and (hit + "_init_from_file") not in dem:
+                    lib_fail.append((name, hit))
 
     # ---------------------------------------------------------------------
     # ORPHAN-RUNTIME check: a runtime in NEITHER the CLI roster NOR the c_api
@@ -391,8 +444,14 @@ def main():
         print("   The linker drops a static-lib object nothing references, so CMake linkage\n"
               "   is NOT evidence the code ships. Reference it from src/crispasr_c_api.cpp\n"
               "   (a session arm), then rebuild and re-check.")
+    elif lib_unreadable:
+        print(f"\n❌ shipped-library check could not read symbols: {lib_unreadable}")
+        print("   (stripped library, or an `nm` without -U/--defined-only — the check\n"
+              "    is NOT passing, it is blind. Do not read this as a green run.)")
     elif not libpath:
         print("\n(shipped-library check skipped: no built libcrispasr found — build it to enable)")
+    else:
+        print(f"✅ Shipped library: every backend runtime is present in {libpath.name}.")
 
     if capi_only:
         print(f"\n❌ Advertised by the C ABI but ABSENT from the CLI roster ({len(capi_only)}):")
@@ -460,6 +519,10 @@ def main():
         causes.append("c_api-only backend")
     if lib_fail:
         causes.append("missing symbol in shipped library")
+    if lib_unreadable:
+        causes.append("shipped library symbols unreadable")
+    if args.require_lib and not libpath and not lib_unreadable:
+        causes.append("--require-lib: no shared libcrispasr to audit")
     if not comp_missing and orphans:
         causes.append("orphan runtime")
     if not go_ok and not is_macos:
