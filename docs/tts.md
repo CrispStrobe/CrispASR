@@ -16,6 +16,7 @@ trade-off:
 - [Output language and cross-lingual cloning](#output-language-and-cross-lingual-cloning--tl---sl) — `-tl` / `-sl`, what each backend does
 - [G2P Phonemization](#g2p-phonemization---g2p-dict) — `--g2p-dict`, number expansion, phoneme dialects
   - [Driving the phonemes directly (`--tts-phonemes`)](#driving-the-phonemes-directly---tts-phonemes)
+  - [Zonos G2P strategy (`CRISPASR_ZONOS_G2P`)](#zonos-g2p-strategy-crispasr_zonos_g2p) — built-in vs espeak, measured per language
 - [Kokoro](#kokoro--multilingual-smallest) — multilingual, smallest
 - [Qwen3-TTS](#qwen3-tts--voice-cloning-highest-fidelity) — voice cloning, highest fidelity
   - [qwen3-tts environment switches](#qwen3-tts-environment-switches)
@@ -826,6 +827,60 @@ Dictionary sources at [cstr/g2p-dicts](https://huggingface.co/datasets/cstr/g2p-
 - **Pre-generated IPA** (primary): piper-compatible phonetic transcriptions for EN/DE/FR/ES
 - **CMUdict** (BSD): [cmusphinx/cmudict](https://github.com/cmusphinx/cmudict), English ARPAbet
 - **OLaPh** (MIT): [iisys-hof/olaph](https://github.com/iisys-hof/olaph), 13 languages
+
+### Zonos G2P strategy (`CRISPASR_ZONOS_G2P`)
+
+Zonos conditions on IPA phonemes, and until #435 it could only get them from
+espeak-ng (GPL-3.0). It now also reaches the built-in EN/DE/FR/ES G2P that
+`crispasr-core` ships:
+
+| Value | Behavior |
+|-------|----------|
+| `auto` | espeak-ng first, built-in G2P as a fallback below it (default) |
+| `espeak` | espeak-ng only — the built-in is never consulted |
+| `builtin` | Built-in G2P first, espeak-ng only where no built-in covers the language |
+
+**The default stays espeak-first, deliberately.** The built-ins emit IPA in the
+espeak dialect, but zonos's phoneme inventory is its own 185-symbol
+`conditioning.py` list and anything outside it is dropped *silently* — so
+"the built-in produced audio" is not evidence that it produced the right audio.
+`CRISPASR_ZONOS_G2P_DEBUG=1` prints the path taken, the IPA, the phoneme-ID
+sequence and the count of unmapped codepoints, which is what that question
+actually needs.
+
+#### Measured (Kaggle, CPU, zonos q8_0, ASR roundtrip via parakeet-tdt-0.6b-v3)
+
+`lev` is token-level Levenshtein similarity between the espeak and built-in
+phoneme-ID sequences; `F1` is word-F1 of an ASR roundtrip against the input.
+
+| Lang | lev | F1 espeak | F1 built-in | Verdict |
+|------|-----|-----------|-------------|---------|
+| en | 0.95 | 1.00 | 1.00 | Built-in matches espeak. **Needs CMUdict** — see below. |
+| de | 0.94 | 1.00 | 1.00 | Built-in matches espeak; transcripts identical. |
+| fr | 0.95 | 0.84 | 0.95 | Built-in *beats* espeak (`renard` vs `renarbre`), reproduced across runs. |
+| es | 0.82–0.94 | 0.57 | 0.81 | Built-in higher on all 3 sentences, but the espeak baseline is itself weak — see below. |
+| ru | — | — | n/a | **No built-in.** espeak-ng remains required, and without it zonos refuses (#435). |
+
+With espeak-ng physically removed, en/de/fr/es all synthesise and produce
+byte-identical phoneme IDs to the with-espeak built-in run, and Russian still
+refuses with a non-zero exit and a zero-byte file.
+
+Caveats, because these numbers are easy to over-read:
+
+- **English depends on CMUdict actually loading.** Without it,
+  `phonemize_builtin_en` keeps returning true and falls through to the
+  letter-to-sound rules — "quick brown" becomes `kˈʌɪk bɹˈoʊn`, which an ASR
+  reads back as "cook bone" (F1 1.00 → 0.80). The dictionary auto-downloads; set
+  `CRISPASR_CMUDICT_PATH` if your machine cannot reach the network.
+- **Spanish has no trustworthy baseline.** The espeak arm scores 0.57, so the
+  comparison says as much about the model's Spanish as about the G2P. The
+  built-in was higher on every sentence, but that is "no evidence of harm", not
+  a proof of parity. The two G2Ps also spell the trill differently — espeak
+  writes `ɾɾ`, the built-in writes `r` — and both are in the inventory, so the
+  drop counter cannot see this; only the roundtrip can.
+- **French nasal vowels lose their tilde on both paths.** U+0303 is genuinely
+  absent from zonos's 185 symbols, so this is upstream behaviour, not a
+  CrispASR defect.
 
 ## Kokoro — multilingual, smallest
 
