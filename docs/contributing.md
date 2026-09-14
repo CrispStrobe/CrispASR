@@ -460,6 +460,31 @@ dumpers are handled, not false-flagged:
 python tools/check-backend-wiring.py --crispasr ./build/bin/crispasr   # exit 1 on a required gap
 ```
 
+**The shipped-library check, and how to read it.** One of the audit's checks is
+not source text: it reads the symbol table of a *built* `libcrispasr` and asserts
+each backend's `<x>_init_from_file` survived the link, because the linker drops a
+static-archive member that nothing references and CMake linkage therefore proves
+nothing. It only runs when a shared library exists, so:
+
+```bash
+cmake -S . -B build -DBUILD_SHARED_LIBS=ON && cmake --build build --target crispasr-lib crispasr-cli
+python tools/check-backend-wiring.py --crispasr ./build/bin/crispasr --require-lib
+```
+
+- Without `-DBUILD_SHARED_LIBS=ON` there is no `.so`, the check prints
+  `skipped`, and the run passes **having proved nothing**. `--require-lib` turns
+  that skip into a failure; use it wherever the result is treated as a gate.
+- The library is now located next to the `--crispasr` binary you pass (with
+  `--lib PATH` to override), *not* at a fixed `build/src/` path. Auditing a
+  library from a **different build** than the binary is the classic false
+  positive here: a stale `build/src/libcrispasr.so` checked against a fresh
+  roster reports every backend added since as "ABSENT from the shipped library"
+  — a long list of names that are all correctly wired. Before adding session
+  arms for such a list, confirm the two artifacts came from one build.
+- In CI the check has teeth in `bindings-rust.yml`, the job that builds a shared
+  `libcrispasr` on Linux; `ci.yml`'s wiring-audit step builds a static library
+  and skips it.
+
 > ⚠️ **Commit from a separate `git worktree`, or `git pull --rebase`
 > immediately before committing.** A `git add -A` / `commit -a` from a
 > parallel session over a stale tree silently reverts others' work through
