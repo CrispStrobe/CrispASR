@@ -35,7 +35,7 @@ NOT MEASURED, AND WHY (stated, never estimated)
     the watermark back on for any output that cannot carry a manifest), so this
     kernel deliberately does NOT pass -DCRISPASR_NO_C2PA_NATIVE=ON.
 
-SCRIPT_VERSION = v3
+SCRIPT_VERSION = v4
 """
 
 import json
@@ -49,7 +49,7 @@ import sys
 import time
 from pathlib import Path
 
-SCRIPT_VERSION = "v3"
+SCRIPT_VERSION = "v4"
 
 WORK = Path("/kaggle/working")
 TEMP = Path("/kaggle/temp/st-bench")
@@ -205,6 +205,50 @@ GGML_TYPE_NAMES = {
 }
 
 
+def gguf_tensor_names_by_type(path):
+    """{type_name: [tensor names]} for the file. Same seek-don't-allocate walk."""
+    SCALAR = {0: 1, 1: 1, 2: 2, 3: 2, 4: 4, 5: 4, 6: 4, 7: 1, 10: 8, 11: 8, 12: 8}
+    out = {}
+    try:
+        with open(path, "rb") as f:
+            def rd(fmt):
+                return struct.unpack(fmt, f.read(struct.calcsize(fmt)))[0]
+            if f.read(4) != b"GGUF":
+                return {}
+            rd("<I")
+            n_tensors = rd("<Q")
+            n_kv = rd("<Q")
+
+            def skip_val(t):
+                if t == 8:
+                    f.seek(rd("<Q"), 1)
+                elif t == 9:
+                    et = rd("<I")
+                    n = rd("<Q")
+                    if et == 8:
+                        for _ in range(n):
+                            f.seek(rd("<Q"), 1)
+                    else:
+                        f.seek(SCALAR[et] * n, 1)
+                else:
+                    f.seek(SCALAR[t], 1)
+
+            for _ in range(n_kv):
+                f.seek(rd("<Q"), 1)
+                skip_val(rd("<I"))
+            for _ in range(n_tensors):
+                n = rd("<Q")
+                name = f.read(n).decode("utf-8", "replace")
+                nd = rd("<I")
+                f.seek(8 * nd, 1)
+                tt = rd("<I")
+                rd("<Q")
+                out.setdefault(GGML_TYPE_NAMES.get(tt, f"type_{tt}"), []).append(name)
+    except Exception:
+        return {}
+    return out
+
+
 def gguf_dtype_histogram(path):
     """What is ACTUALLY in the file. A package labelled q8_0 that is byte-for-byte
     the size of the orig-dtype package has earned the question.
@@ -323,17 +367,55 @@ BUILD_LOG["crispasr"] = "ok"
 kh.step("quantize.q4_k")
 CA_Q4K = MODELS / "crispasr" / "supertonic3-q4_k.gguf"
 pq = run([QUANT, CA_F16, CA_Q4K, "q4_k"], timeout=3600)
-print((pq.stdout or "")[-4000:], flush=True)
+(WORK / "quantize-q4_k.log").write_text((pq.stdout or "") + "\n--stderr--\n" + (pq.stderr or ""))
+print((pq.stdout or "")[-2500:], flush=True)
 if not CA_Q4K.exists():
     raise RuntimeError("crispasr-quantize produced no q4_k file:\n" + (pq.stderr or "")[-4000:])
-kh.step("quantize.done", q4k_mb=round(CA_Q4K.stat().st_size / 1e6, 1))
+QUANT_INFO = {"q4_k_mb": round(CA_Q4K.stat().st_size / 1e6, 1)}
+
+# v3 finding: `crispasr-quantize ... q4_k` emits a GGUF the supertonic backend
+# REFUSES TO LOAD -- "vf.time_encoder.mlp.0.linear.weight has unsupported type 2"
+# (type 2 = Q4_0). Five tensors whose row width is not a multiple of the 256-wide
+# Q4_K super-block fall back to Q4_0, and supertonic's read_f32() binder handles
+# only F32 and F16. That is a real CrispASR defect and it is reported as one --
+# the plain q4_k arm below is still run so the failure appears in the results
+# rather than being quietly designed around. But a benchmark also owes a NUMBER,
+# so a second GGUF forces exactly those fallback tensors back to f16 via the
+# existing --tensor-type override, and that one is the measurable q4_k arm.
+# Asked of the FILE, not of the log text: a fallback that the quantizer does
+# not announce would be invisible to a stdout parse, and this has to be exact.
+_by_type = gguf_tensor_names_by_type(CA_Q4K)
+fallbacks = [(n, t) for t, names in _by_type.items()
+             if t not in ("F32", "F16", "I32", "I64", "Q4_K") for n in names]
+QUANT_INFO["fallback_tensors"] = fallbacks
+QUANT_INFO["q4_k_type_counts"] = {t: len(v) for t, v in _by_type.items()}
+print(f"q4_k types: {QUANT_INFO['q4_k_type_counts']}", flush=True)
+print(f"q4_k tensors in a type the supertonic binder cannot read: {fallbacks}", flush=True)
+
+CA_Q4K_SAFE = None
+if fallbacks:
+    CA_Q4K_SAFE = MODELS / "crispasr" / "supertonic3-q4_k-loadable.gguf"
+    ov = []
+    for name, _t in fallbacks:
+        ov += ["--tensor-type", "^" + re.escape(name) + "$=f16"]
+    ps = run([QUANT, CA_F16, CA_Q4K_SAFE, "q4_k", *ov], timeout=3600)
+    (WORK / "quantize-q4_k-safe.log").write_text((ps.stdout or "") + "\n--stderr--\n" + (ps.stderr or ""))
+    if not CA_Q4K_SAFE.exists():
+        print("===Q4K-SAFE-QUANTIZE-FAILED=== " + (ps.stderr or "")[-1500:], flush=True)
+        CA_Q4K_SAFE = None
+    else:
+        QUANT_INFO["q4_k_safe_mb"] = round(CA_Q4K_SAFE.stat().st_size / 1e6, 1)
+        QUANT_INFO["q4_k_safe_overrides"] = [n for n, _ in fallbacks]
+kh.step("quantize.done", **QUANT_INFO)
 
 GGUF_HIST = {
     "crispasr_f16": gguf_dtype_histogram(CA_F16),
     "crispasr_q4_k": gguf_dtype_histogram(CA_Q4K),
     "audiocpp_f16": gguf_dtype_histogram(AC_F16_DIR / "supertonic-3-f16.gguf"),
-    "audiocpp_q8_0": gguf_dtype_histogram(AC_Q8_DIR / "supertonic-3-q8_0.gguf"),
+    "audiocpp_q8_0_file": gguf_dtype_histogram(AC_Q8_DIR / "supertonic-3-q8_0.gguf"),
 }
+if CA_Q4K_SAFE:
+    GGUF_HIST["crispasr_q4_k_loadable"] = gguf_dtype_histogram(CA_Q4K_SAFE)
 print("GGUF dtype histograms:\n" + json.dumps(GGUF_HIST, indent=1), flush=True)
 
 # -- audio.cpp -------------------------------------------------------------
@@ -402,10 +484,29 @@ except Exception as e:
     print("===AUDIOCPP-CLONE-FAILED=== " + BUILD_LOG["audiocpp_clone"], flush=True)
 
 if AUDIOCPP_SHA:
-    cuda_cfg = ["-DENGINE_ENABLE_CUDA=ON", f"-DCMAKE_CUDA_ARCHITECTURES={ARCH}"]
+    # -DGGML_CUDA_NO_VMM=ON is not a tuning knob here, it is THE fix for v3's
+    # failure. ggml links CUDA::cuda_driver only for the VMM pool allocator:
+    #     if (NOT GGML_CUDA_NO_VMM) target_link_libraries(ggml-cuda PRIVATE CUDA::cuda_driver)
+    # and this worker's CUDAToolkit find does not produce that imported target,
+    # so v3 died at GENERATE time with
+    #     Target "ggml-cuda" links to: CUDA::cuda_driver but the target was not found
+    # after a clean 16 s configure. CrispASR has always passed this flag
+    # (kh.cuda_build_flags), which is why only audio.cpp hit it -- so matching it
+    # also removes a build-configuration difference between the two arms rather
+    # than adding one.
+    cuda_cfg = ["-DENGINE_ENABLE_CUDA=ON", f"-DCMAKE_CUDA_ARCHITECTURES={ARCH}",
+                "-DGGML_CUDA_NO_VMM=ON"]
     nvcc = "/usr/local/cuda/bin/nvcc"
     if os.path.isfile(nvcc):
         cuda_cfg.append(f"-DCMAKE_CUDA_COMPILER={nvcc}")
+    # Belt and braces: if a libcuda stub IS present, name it explicitly so
+    # FindCUDAToolkit can define the target even when VMM is wanted.
+    for stub in ("/usr/local/cuda/lib64/stubs/libcuda.so",
+                 "/usr/lib/x86_64-linux-gnu/libcuda.so"):
+        if os.path.isfile(stub):
+            cuda_cfg += [f"-DCUDA_cuda_driver_LIBRARY={stub}",
+                         f"-DCUDA_CUDA_LIBRARY={stub}"]
+            break
 
     ACLI, secs, err = try_build_audiocpp("cuda", cuda_cfg, BUILD_AC)
     AC_ATTEMPTS.append({"label": "cuda", "seconds": round(secs, 1), "error": err})
@@ -503,6 +604,7 @@ try:
     import soundfile as sf
     REF_WAV = OUTS / "reference_onnx.wav"
     sf.write(str(REF_WAV), audio, 44100)
+    REF_EXTENT = {"audio_s": round(audio.size / 44100, 4)}
     kh.step("reference.ok", samples=int(audio.size), seconds=round(audio.size / 44100, 2))
 except Exception as e:
     REF_ERR = f"{type(e).__name__}: {e}"
@@ -654,13 +756,30 @@ def crispasr_cmd(gguf, device, text, out, steps, no_watermark=False):
     return cmd
 
 
-def audiocpp_cmd(model_dir, device, text, out, steps):
+def audiocpp_cmd(model_dir, device, text, out, steps, extra=()):
     return [str(ACLI), "--task", "tts", "--family", "supertonic",
             "--model", str(model_dir),
             "--backend", "cuda" if device == "gpu" else "cpu",
             "--language", LANG, "--text", text, "--voice-id", VOICE,
             "--num-inference-steps", str(steps), "--seed", str(SEED),
-            "--threads", NTHREADS, "--metrics", "--out", str(out)]
+            "--threads", NTHREADS, "--metrics", "--out", str(out), *extra]
+
+
+def speech_extent(x, sr, rel_thresh=0.01):
+    """Leading silence, trailing silence, and the span between them."""
+    if x.size == 0:
+        return {}
+    peak = float(np.max(np.abs(x)))
+    if peak <= 0:
+        return {"peak": 0.0, "speech_s": 0.0, "lead_silence_s": 0.0,
+                "tail_silence_s": round(len(x) / sr, 3)}
+    idx = np.nonzero(np.abs(x) > rel_thresh * peak)[0]
+    if idx.size == 0:
+        return {"peak": peak, "speech_s": 0.0}
+    return {"peak": round(peak, 5),
+            "lead_silence_s": round(float(idx[0]) / sr, 3),
+            "tail_silence_s": round(float(len(x) - 1 - idx[-1]) / sr, 3),
+            "speech_s": round(float(idx[-1] - idx[0] + 1) / sr, 3)}
 
 
 def one_run(cmd, out, timeout=3600):
@@ -690,6 +809,12 @@ def one_run(cmd, out, timeout=3600):
         rec["status"] = "NO_OUTPUT"
     else:
         rec["status"] = "ok"
+        m = re.search(r"metrics\.wall_ms=([0-9.]+)", blob)
+        if m:
+            rec["engine_internal_wall_s"] = round(float(m.group(1)) / 1000.0, 4)
+        m = re.search(r"metrics\.x_realtime=([0-9.]+)", blob)
+        if m:
+            rec["engine_internal_x_realtime"] = float(m.group(1))
         # The CLI overrides --no-watermark for any output that cannot carry a
         # C2PA manifest and says so on stderr. A "watermark off" arm that was
         # silently re-forced must not be reported as one.
@@ -700,12 +825,20 @@ def one_run(cmd, out, timeout=3600):
         rec["audio_s"] = round(len(x) / sr, 4)
         rec["sample_rate"] = sr
         rec["rtf"] = round(rec["audio_s"] / wall, 3) if wall > 0 else None
+        # Total duration alone cannot tell "this engine speaks more slowly" from
+        # "this engine pads the tail". v3 had CrispASR at 17.56 s against the ONNX
+        # reference's 15.57 s and no way to say which. Trimming to the first and
+        # last sample above 1% of peak separates them.
+        rec.update(speech_extent(x, sr))
     return rec
 
 
 ARMS = []
 if CLI.exists():
-    for tag, gguf in (("f16", CA_F16), ("q4_k", CA_Q4K)):
+    ca_models = [("f16", CA_F16), ("q4_k", CA_Q4K)]
+    if CA_Q4K_SAFE:
+        ca_models.append(("q4_k_loadable", CA_Q4K_SAFE))
+    for tag, gguf in ca_models:
         for dev in ("cpu", "gpu"):
             ARMS.append({"id": f"crispasr_{tag}_{dev}", "engine": "crispasr",
                          "precision": tag, "device": dev, "model": gguf,
@@ -717,18 +850,32 @@ if CLI.exists():
                      "no_watermark": True})
 if ACLI is not None:
     ac_devs = ("cpu", "gpu") if AC_HAS_CUDA else ("cpu",)
-    for tag, d in (("f16", AC_F16_DIR), ("q8_0", AC_Q8_DIR)):
+    # v3 finding, straight off the dtype histogram: the file published as
+    # supertonic-3-q8_0.gguf contains 698 F32 + 72 I64 tensors and NOT ONE
+    # quantized tensor -- it is byte-for-byte the same size as
+    # supertonic-3-orig.gguf (454,072,836 both). Benchmarking it and calling the
+    # result "audio.cpp q8_0" would have been a fabricated arm. audio.cpp
+    # quantizes at LOAD time instead, via --session-option
+    # supertonic.weight_type, so that is what the q8_0 arm actually passes, and
+    # the file-as-shipped is reported under its real precision.
+    ac_variants = [
+        ("f16", AC_F16_DIR, ()),
+        ("origf32", AC_Q8_DIR, ()),
+        ("q8_0rt", AC_Q8_DIR, ("--session-option", "supertonic.weight_type=q8_0")),
+    ]
+    for tag, d, extra in ac_variants:
         for dev in ac_devs:
             ARMS.append({"id": f"audiocpp_{tag}_{dev}", "engine": "audiocpp",
                          "precision": tag, "device": dev, "model": d,
-                         "no_watermark": False})
+                         "no_watermark": False, "extra": extra})
 
 
 def build_cmd(arm, text, out, steps):
     if arm["engine"] == "crispasr":
         return crispasr_cmd(arm["model"], arm["device"], text, out, steps,
                             no_watermark=arm["no_watermark"])
-    return audiocpp_cmd(arm["model"], arm["device"], text, out, steps)
+    return audiocpp_cmd(arm["model"], arm["device"], text, out, steps,
+                        extra=arm.get("extra", ()))
 
 
 kh.step("bench.start", arms=[a["id"] for a in ARMS],
@@ -761,6 +908,10 @@ for arm in ARMS:
     okxl = [r for r in rec["xl"] if r["status"] == "ok"]
     rec["status"] = "ok" if ok else (rec["long"][0]["status"] if rec["long"] else "NO_RUNS")
     if ok:
+        for k in ("speech_s", "lead_silence_s", "tail_silence_s", "peak",
+                  "engine_internal_wall_s", "engine_internal_x_realtime"):
+            if k in ok[0]:
+                rec[k] = ok[0][k]
         best = min(r["wall_s"] for r in ok)
         rec["long_best_wall_s"] = round(best, 4)
         rec["long_audio_s"] = ok[0]["audio_s"]
@@ -817,6 +968,10 @@ print("===PARTIAL-BENCH-JSON-END===", flush=True)
 
 kh.step("equivalence")
 EQUIV = {"reference_available": REF_WAV is not None, "reference_error": REF_ERR}
+if REF_WAV is not None:
+    _rx, _rsr = read_wav_payload(REF_WAV)
+    EQUIV["reference_extent"] = dict(speech_extent(_rx, _rsr),
+                                     audio_s=round(len(_rx) / _rsr, 4))
 loaded = {}
 for aid in BENCH:
     w = OUTS / f"{aid}_long.wav"
@@ -834,12 +989,13 @@ if REF_WAV is not None:
 PAIRS = [
     ("crispasr_f16_cpu", "audiocpp_f16_cpu"),
     ("crispasr_f16_gpu", "audiocpp_f16_gpu"),
-    ("crispasr_f16_cpu_nowm", "audiocpp_f16_cpu"),
-    ("crispasr_f16_cpu", "crispasr_f16_cpu_nowm"),   # isolates the watermark
-    ("crispasr_f16_cpu", "crispasr_q4_k_cpu"),       # isolates CrispASR quantization
-    ("crispasr_f16_cpu", "crispasr_f16_gpu"),        # CPU/GPU agreement, CrispASR
-    ("audiocpp_f16_cpu", "audiocpp_q8_0_cpu"),       # isolates audio.cpp quantization
-    ("audiocpp_f16_cpu", "audiocpp_f16_gpu"),        # CPU/GPU agreement, audio.cpp
+    ("crispasr_f16_cpu_nowm", "audiocpp_origf32_cpu"),
+    ("crispasr_f16_cpu", "crispasr_f16_cpu_nowm"),        # isolates the watermark
+    ("crispasr_f16_cpu", "crispasr_q4_k_loadable_cpu"),   # CrispASR quantization
+    ("crispasr_f16_cpu", "crispasr_f16_gpu"),             # CPU/GPU agreement, CrispASR
+    ("audiocpp_origf32_cpu", "audiocpp_f16_cpu"),         # audio.cpp f16 cast
+    ("audiocpp_origf32_cpu", "audiocpp_q8_0rt_cpu"),      # audio.cpp load-time q8_0
+    ("audiocpp_f16_cpu", "audiocpp_f16_gpu"),             # CPU/GPU agreement, audio.cpp
 ]
 EQUIV["pairs"] = {}
 for a, b in PAIRS:
