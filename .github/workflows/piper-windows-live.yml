@@ -135,8 +135,34 @@ jobs:
               -m proof-models/ggml-base.en.bin --no-gpu -l en -np `
               -f proof/cori-server.wav 2>&1) -join "`n"
             Write-Host $asr
-            if ($LASTEXITCODE -ne 0 -or $asr -notmatch '(?i)great job') {
-              throw 'Whisper did not recover the HTTP synthesis'
+            # Word overlap against the WHOLE prompt, not a single magic phrase.
+            #
+            # This used to be `-notmatch '(?i)great job'`, which is fragile in
+            # BOTH directions. It failed a run whose transcript was
+            # "Hello how are you today?  UT-Tay Quit Job Today." — sentence one
+            # recovered perfectly, sentence two garbled — and it would equally
+            # have PASSED if only those two words survived and the rest were
+            # noise. A whole-prompt overlap catches the multi-sentence case the
+            # single phrase was blind to, which is the case this arm exists for:
+            # the CLI arm above sends ONE sentence and passed in the same run.
+            $expected = 'hello how are you today you did a great job today'
+            $heard = ($asr -replace '[^\p{L}\p{N}\s]', ' ').ToLower()
+            # UNIQUE words on the expected side. Counting duplicates scores the
+            # known-bad transcript at 0.73 — ABOVE a 0.70 threshold — because
+            # "you" and "today" each appear twice and both survived. Deduped it
+            # scores 0.67 and fails, while a correct transcript scores 1.00 and
+            # pure noise 0.00. Verified against those exact strings before this
+            # gate was trusted.
+            $want  = $expected -split '\s+' | Where-Object { $_ } | Select-Object -Unique
+            $got   = $heard    -split '\s+' | Where-Object { $_ }
+            $hits  = ($want | Where-Object { $got -contains $_ }).Count
+            $overlap = if ($want.Count) { $hits / $want.Count } else { 0 }
+            Write-Host ("HTTP ASR word overlap: {0:N2} ({1}/{2})" -f $overlap, $hits, $want.Count)
+            if ($LASTEXITCODE -ne 0 -or $overlap -lt 0.7) {
+              # Keep the audio so the next failure is diagnosable instead of
+              # being re-run until it passes.
+              Copy-Item proof/cori-server.wav proof/FAILED-cori-server.wav -ErrorAction SilentlyContinue
+              throw ("Whisper did not recover the HTTP synthesis (overlap {0:N2} < 0.70). Heard: {1}" -f $overlap, $heard)
             }
             Write-Host 'PIPER_WINDOWS_LIVE_OK — exact Cori lookup + CLI WAV + HTTP WAV + streaming PCM'
           } finally {
