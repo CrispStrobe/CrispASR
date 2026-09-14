@@ -528,7 +528,25 @@ def main():
     # four conditions, so a run whose only problem was Go LDFLAGS drift reported
     # a required *wiring* gap two lines below "✅ REQUIRED wiring: ..." — the
     # reader then hunts through the advisory list for a gap that isn't there.
-    unrostered = sorted(n for n in adapter_claims if n not in cli_names)
+    # Compare adapter claims against the roster IN SOURCE, not against the
+    # binary's --list-backends-json.
+    #
+    # cli_names comes from the BINARY, and a binary older than the roster it is
+    # being judged against manufactures false positives: a local build from
+    # 04:19 audited against a roster committed at 10:44 reported supertonic,
+    # irodori-tts and fireredtts3 as "claimed by an adapter but absent from the
+    # roster" when the source roster listed all three. That is the same
+    # stale-artifact failure as the shipped-library check above, in the check
+    # written to catch roster omissions -- so it is fixed the same way: both
+    # sides of THIS comparison are source-derived, and cannot skew apart.
+    roster_src = set()
+    try:
+        _be = (ROOT / "examples/cli/crispasr_backend.cpp").read_text(errors="ignore")
+        _i = _be.index("std::vector<std::string> crispasr_list_backends()")
+        roster_src = set(re.findall(r'"([^"]+)"', _be[_i:_be.index("};", _i)]))
+    except (OSError, ValueError):
+        roster_src = set(cli_names)  # fall back rather than fabricate a gap
+    unrostered = sorted(n for n in adapter_claims if n not in roster_src)
     if unrostered:
         print()
         print(f"\u274c Adapters claiming a name the CLI roster omits ({len(unrostered)}):")
@@ -538,6 +556,30 @@ def main():
         print("   Add them to crispasr_list_backends() in examples/cli/crispasr_backend.cpp,")
         print("   then regenerate docs/feature-matrix.* and src/core/backend_caps_table.h.")
         print("   Until then --list-backends cannot see them and this audit skips them.")
+
+    # STALENESS GUARD. Several checks below ask the BINARY what it knows, which
+    # is the right design -- some backends resolve by prefix or through
+    # multi-alias conditions no regex covers. But a binary older than the
+    # sources it is judged against turns every backend added since into a
+    # fabricated gap, and the report then names backends instead of naming the
+    # stale artifact. Observed: a build from 04:19 audited against a roster
+    # committed at 10:44 produced six findings across three checks, all of them
+    # the same two new backends.
+    try:
+        _bin_mtime = os.path.getmtime(args.crispasr)
+        _newer = [
+            rel for rel in ("examples/cli/crispasr_backend.cpp", "src/crispasr_c_api.cpp")
+            if (ROOT / rel).is_file() and os.path.getmtime(ROOT / rel) > _bin_mtime
+        ]
+        if _newer:
+            print()
+            print("\u26a0\ufe0f  THE BINARY IS OLDER THAN THE SOURCES IT IS BEING JUDGED AGAINST:")
+            for rel in _newer:
+                print(f"   {rel} is newer than {args.crispasr}")
+            print("   Any backend added since that build will be reported as missing from the")
+            print("   roster / unreachable / orphaned. REBUILD before believing the gaps below.")
+    except OSError:
+        pass
 
     causes = []
     if required_fail:
