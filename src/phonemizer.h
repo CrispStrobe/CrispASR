@@ -50,6 +50,51 @@ bool phonemize_espeak_popen(const std::string& lang, const std::string& text, st
 bool phonemize_builtin_en(const std::string& lang, const std::string& text, std::string& out,
                           bool misaki_style = false);
 
+// #435: the three output conventions a CONSUMER picks, mirroring g2p_en::style
+// without dragging core/g2p_en.h (1700 lines, Kokoro-shaped) into this header.
+// They are not properties of the dictionary — one dictionary serves several
+// consumers with different conventions, which is why they are a parameter and
+// not a build flag.
+struct g2p_style {
+    // Contextual function-word rules (the/to/a/an/in) + the capitalisation
+    // stress rule. Needs the NEXT word's phonemes. Off for espeak-derived
+    // dictionaries: those already encode their own reductions.
+    bool context_words = false;
+    // Carry `,.;:!?` through into the phoneme string. Required by any model
+    // whose symbol table contains punctuation — that is how it pauses, and
+    // dropping it delivers a paragraph in one breath. Zonos is one: its Python
+    // reference phonemizes with `preserve_punctuation=True`.
+    bool emit_punctuation = false;
+    // Keep a hyphenated compound as one word.
+    bool join_hyphenated = false;
+};
+
+// Same English G2P, with the conventions stated explicitly instead of chosen by
+// a bool. The `bool misaki_style` overload above remains the Kokoro spelling and
+// is unchanged; this one exists because "espeak conventions BUT keep the
+// punctuation" is a real combination that the bool cannot express.
+bool phonemize_builtin_en(const std::string& lang, const std::string& text, std::string& out, const g2p_style& style);
+
+// Which built-in G2P covers `lang`, or nullptr when none does.
+// Returns one of the literals "en", "de", "fr", "es".
+//
+// Matches the PRIMARY SUBTAG exactly ("en-us" -> en, "es-419" -> es), which the
+// individual phonemize_builtin_* functions do NOT: they test
+// `lang.find("de") != npos`, so "sv" is safe but a voice name like "nl-de" or a
+// three-letter code containing the digraph would be claimed by the wrong
+// language. Callers that dispatch by language should ask here first.
+const char* builtin_g2p_language(const std::string& lang);
+
+// #435: one entry point for a phoneme-conditioned TTS backend — dispatch to the
+// built-in G2P for `lang` with the TTS conventions applied (punctuation carried
+// through). Returns false when no built-in covers `lang`, so the caller falls
+// through to espeak rather than shipping silence.
+//
+// This is the whole point of phonemizer.cpp living in crispasr-core: any backend
+// that links the core lib can now reach a non-GPL G2P for en/de/fr/es without
+// depending on kokoro.
+bool phonemize_builtin_tts(const std::string& lang, const std::string& text, std::string& out);
+
 // #316: same, but Tier 0 is misaki's own lexicon (Kokoro's G2P, Apache-2.0)
 // instead of CMUdict — ~94% phoneme agreement with misaki on ordinary prose vs
 // ~58% for the CMUdict path. Output is still in the espeak dialect for words
