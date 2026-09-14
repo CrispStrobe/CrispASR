@@ -35,7 +35,7 @@ NOT MEASURED, AND WHY (stated, never estimated)
     the watermark back on for any output that cannot carry a manifest), so this
     kernel deliberately does NOT pass -DCRISPASR_NO_C2PA_NATIVE=ON.
 
-SCRIPT_VERSION = v1
+SCRIPT_VERSION = v2
 """
 
 import json
@@ -49,7 +49,7 @@ import sys
 import time
 from pathlib import Path
 
-SCRIPT_VERSION = "v1"
+SCRIPT_VERSION = "v2"
 
 WORK = Path("/kaggle/working")
 TEMP = Path("/kaggle/temp/st-bench")
@@ -229,7 +229,22 @@ BUILD_LOG = {}
 # there is no way to measure CrispASR's synthesis cost separately from its
 # provenance cost. The clone above is --recursive, so third_party/c2pa-audio
 # (2 files, no external deps) is present.
+C2PA_SRC = REPO / "third_party/c2pa-audio/src/c2pa_native.cpp"
+if not C2PA_SRC.is_file():
+    # --recursive is supposed to have brought it; if the submodule fetch was
+    # skipped or failed, cmake dies with "Cannot find source file". Try once
+    # more, then give up on the watermark-off arm rather than on the whole run.
+    run(["git", "-C", str(REPO), "submodule", "update", "--init", "--recursive",
+         "third_party/c2pa-audio"], timeout=1800)
+C2PA_NATIVE = C2PA_SRC.is_file()
 ca_flags = [f for f in kh.cache_and_link_flags() if "NO_C2PA_NATIVE" not in f]
+if not C2PA_NATIVE:
+    ca_flags.append("-DCRISPASR_NO_C2PA_NATIVE=ON")
+    print("===C2PA-SUBMODULE-MISSING=== building with the native signer OFF. "
+          "The CLI will then FORCE the watermark on for every output, so the "
+          "*_nowm arms will measure the watermarked path -- they are marked "
+          "watermark_actually_disabled=false, not silently believed.", flush=True)
+BUILD_LOG["c2pa_native"] = C2PA_NATIVE
 ca_cfg = ["-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release", "-DGGML_NATIVE=OFF",
           *kh.cuda_build_flags(ARCH), *ca_flags]
 
@@ -599,6 +614,12 @@ def one_run(cmd, out, timeout=3600):
         rec["status"] = "NO_OUTPUT"
     else:
         rec["status"] = "ok"
+        # The CLI overrides --no-watermark for any output that cannot carry a
+        # C2PA manifest and says so on stderr. A "watermark off" arm that was
+        # silently re-forced must not be reported as one.
+        if "--no-watermark" in cmd:
+            rec["watermark_actually_disabled"] = not re.search(
+                r"--no-watermark is overridden|watermark is kept", blob, re.I)
         x, sr = read_wav_payload(out)
         rec["audio_s"] = round(len(x) / sr, 4)
         rec["sample_rate"] = sr
@@ -656,6 +677,10 @@ for arm in ARMS:
         build_cmd(arm, TEXT_LONG, OUTS / f"{aid}_long32.wav", STEPS_CONTROL),
         OUTS / f"{aid}_long32.wav")
 
+    if arm["no_watermark"]:
+        flags = [r.get("watermark_actually_disabled") for r in rec["long"]
+                 if r["status"] == "ok"]
+        rec["watermark_actually_disabled"] = bool(flags) and all(flags)
     ok = [r for r in rec["long"] if r["status"] == "ok"]
     okxl = [r for r in rec["xl"] if r["status"] == "ok"]
     rec["status"] = "ok" if ok else (rec["long"][0]["status"] if rec["long"] else "NO_RUNS")
@@ -783,6 +808,10 @@ elif not AC_HAS_CUDA:
     problems.append("audio.cpp built CPU-only -- its GPU arms are ABSENT, not slow")
 if not METRIC["passed"]:
     problems.append("comparator self-test failed -- cosines untrustworthy")
+for aid, r in BENCH.items():
+    if r.get("no_watermark") and r.get("watermark_actually_disabled") is False:
+        problems.append(f"{aid}: --no-watermark was OVERRIDDEN by the CLI -- this arm "
+                        "is NOT a watermark-free measurement")
 for a, good in control_ok.items():
     if not good:
         problems.append(f"{a}: timing instrument did not discriminate 8 vs 32 steps")
@@ -804,6 +833,7 @@ RESULT = {
     "cuda_arch": ARCH,
     "threads": NTHREADS,
     "build": BUILD_LOG,
+    "c2pa_native_compiled_in": BUILD_LOG.get("c2pa_native"),
     "gguf_dtype_histograms": GGUF_HIST,
     "texts": {"short": TEXT_SHORT, "long": TEXT_LONG, "xl_chars": len(TEXT_XL)},
     "settings": {"lang": LANG, "voice": VOICE, "seed": SEED, "steps": STEPS,
