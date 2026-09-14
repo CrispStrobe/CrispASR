@@ -52,7 +52,7 @@ from pathlib import Path
 
 WORK = Path("/kaggle/working"); SCRATCH = Path("/tmp")
 CLONE = SCRATCH / "CrispASR"
-SCRIPT_VERSION = "2026-09-14-zonos-g2p-435-1"
+SCRIPT_VERSION = "2026-09-14-zonos-g2p-435-2"
 
 # Short on purpose: zonos generates on CPU here and runtime scales with the
 # audio length. ~10 words is enough for a word-F1 to mean something.
@@ -385,6 +385,22 @@ if gone:
             f"f1={a['word_f1']:.3f} ids_same={a['ids']==base}")
         save()
 
+    # THE ONE BEHAVIOURAL DELTA of the `auto` default: on a box with no espeak,
+    # English used to take the raw-ASCII path (letters tokenised as if they were
+    # IPA -- zonos's inventory does contain A-Za-z, so it produces sound). `auto`
+    # now puts the built-in in front of it. Measure that displaced path directly,
+    # so the change is justified by a number and not by "IPA must beat letters".
+    asc = synth(TEXTS["en"], "en", "espeak", SCRATCH/"en-ascii.wav", "en/ascii-no-espeak")
+    asc["asr"] = asr(SCRATCH/"en-ascii.wav", "en")
+    asc["word_f1"] = word_f1(TEXTS["en"], asc["asr"])
+    res["langs"]["en"]["ascii_no_espeak"] = {
+        "arm": asc, "word_f1": asc["word_f1"],
+        "path_was_ascii": asc["g2p_path"] == "ascii",
+    }
+    log(f"[g2p] == en ASCII-FALLBACK (what `auto` now displaces): path={asc['g2p_path']} "
+        f"f1={asc['word_f1']:.3f} asr={asc['asr'][:90]!r}")
+    save()
+
     # The #435 guarantee must survive: no phonemizer for ru => refuse, 0 bytes.
     ru2 = synth(TEXTS["ru"], "ru", "builtin", SCRATCH/"ru-noespeak.wav", "ru/no-espeak")
     res["controls"]["ru_refuses_without_espeak"] = bool(ru2["refused"]) and ru2["wav_bytes"] == 0
@@ -442,6 +458,8 @@ for lang in ("en","de","fr","es"):
         "word_f1_espeak": round(L.get("word_f1_espeak", 0.0), 4),
         "word_f1_builtin": round(L.get("word_f1_builtin", 0.0), 4),
         "word_f1_builtin_no_espeak": round(ne.get("word_f1", 0.0), 4) if ne else None,
+        "word_f1_ascii_no_espeak":
+            round(L["ascii_no_espeak"]["word_f1"], 4) if L.get("ascii_no_espeak") else None,
         # The proposal, stated as a claim that the numbers above support or not.
         # Deliberately conservative: the builtin must not lose more than 0.10 of
         # word-F1 and must not drop a larger share of its own symbols.
@@ -451,6 +469,18 @@ for lang in ("en","de","fr","es"):
                  and (L.get("drop_rate_builtin") or 0.0) <= (L.get("drop_rate_espeak") or 0.0) + 0.02),
     }
 res["per_language_verdict"] = per_lang
+en = res["langs"].get("en", {})
+if en.get("ascii_no_espeak") and en.get("no_espeak"):
+    res["auto_fallback_justified_for_en"] = {
+        "builtin_word_f1": en["no_espeak"]["word_f1"],
+        "ascii_word_f1": en["ascii_no_espeak"]["word_f1"],
+        "ascii_path_confirmed": en["ascii_no_espeak"]["path_was_ascii"],
+        # The `auto` default only ever displaces the ASCII path, so this is the
+        # only comparison that can justify or condemn it.
+        "builtin_beats_ascii":
+            en["no_espeak"]["word_f1"] > en["ascii_no_espeak"]["word_f1"],
+    }
+    log("[g2p] AUTO-FALLBACK " + json.dumps(res["auto_fallback_justified_for_en"]))
 save()
 log("[g2p] CONTROLS " + json.dumps(controls_fire))
 log("[g2p] PER-LANGUAGE " + json.dumps(per_lang, ensure_ascii=False))
