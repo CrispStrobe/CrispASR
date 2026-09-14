@@ -832,6 +832,69 @@ static std::vector<int32_t> text_to_phoneme_ids(const char* text) {
 // bundling covers piper + kokoro only), so on a stock Windows box the popen
 // path always failed and every non-ASCII script fell through to raw character
 // tokenisation — see tokenize_text_full() below.
+// #435 follow-up: the tail-punctuation compensation, shared.
+//
+// It used to live ONLY in the popen path. #435 added phonemize_espeak_inproc()
+// and put it FIRST in the cascade, so the DEFAULT path silently stopped doing
+// this -- zonos dropped the sentence-final punctuation token that the Python
+// reference keeps via preserve_punctuation=True. Found by diffing the two
+// espeak paths against each other, not by a test: both produce speech, and the
+// missing token only shows up as a slightly wrong prosodic boundary.
+//
+// Returns the trailing punctuation run of `text` in the model's inventory, or
+// "" when there is none.
+static std::string zonos_tail_punctuation(const std::string& text) {
+    static const uint8_t PUNCT_BYTES[] = {';',  ':',  ',',  '.', '!', '?', 0xc2, 0xa1, // ¡ (U+00A1)
+                                          0xc2, 0xbf,                                  // ¿ (U+00BF)
+                                          0xe2, 0x80, 0x94,                            // — (U+2014)
+                                          0xe2, 0x80, 0xa6,                            // … (U+2026)
+                                          '"',  ')',  '(',  '*', '~', '-', '/',  '\\', '&', 0};
+    static const std::string PUNCT_ASCII = ";:,.!?\"()*~-/\\&)";
+    std::string tail_punct;
+    size_t tpos = text.size();
+    while (tpos > 0) {
+        const uint8_t c = (uint8_t)text[tpos - 1];
+        bool is_punct = false;
+        if (c < 0x80) {
+            if (PUNCT_ASCII.find((char)c) != std::string::npos)
+                is_punct = true;
+        } else {
+            for (const uint8_t* q = PUNCT_BYTES; *q;) {
+                if (*q >= 0x80) {
+                    int seq = (*q & 0xE0) == 0xC0 ? 2 : (*q & 0xF0) == 0xE0 ? 3 : 4;
+                    if ((int)(tpos) >= seq) {
+                        bool match = true;
+                        for (int k = 0; k < seq && match; k++)
+                            match = (uint8_t)text[tpos - seq + k] == q[k];
+                        if (match) {
+                            is_punct = true;
+                            break;
+                        }
+                    }
+                    q += (*q & 0xE0) == 0xC0 ? 2 : (*q & 0xF0) == 0xE0 ? 3 : 4;
+                } else {
+                    q++;
+                }
+            }
+        }
+        if (!is_punct)
+            break;
+        if (c < 0x80) {
+            tail_punct = std::string(1, (char)c) + tail_punct;
+            tpos--;
+        } else {
+            int seq = (c & 0xE0) == 0xC0 ? 2 : (c & 0xF0) == 0xE0 ? 3 : 4;
+            if ((int)tpos >= seq) {
+                tail_punct = text.substr(tpos - seq, seq) + tail_punct;
+                tpos -= seq;
+            } else {
+                break;
+            }
+        }
+    }
+    return tail_punct;
+}
+
 static bool phonemize_espeak_inproc(const std::string& lang, const std::string& text, std::string& out) {
     static std::mutex mu;
     static bool inited = false;
@@ -871,6 +934,13 @@ static bool phonemize_espeak_inproc(const std::string& lang, const std::string& 
             out += chunk;
         }
     }
+    if (out.empty())
+        return false;
+    // Same compensation the popen path does, and for the same reason: espeak
+    // drops trailing punctuation, the Python phonemizer keeps it, and the token
+    // count has to match. Guarded on espeak having produced something, so this
+    // can never manufacture a non-empty result out of nothing (#435).
+    out += zonos_tail_punctuation(text);
     return !out.empty();
 }
 
@@ -915,64 +985,11 @@ static std::string phonemize_espeak(const std::string& lang, const std::string& 
     // non-ASCII guard never reached because the cascade returned one step early.
     const bool espeak_produced_phonemes = !out.empty();
 
-    // Python phonemizer uses preserve_punctuation=True with punctuation_marks from
-    // conditioning.py: ';:,.!?¡¿—…"«»""() *~-/\\&'. Non-space punctuation characters
-    // that appear at the TAIL of the original text are appended to the IPA so the
-    // token count matches. espeak-ng drops them; the phonemizer library keeps them.
-    static const uint8_t PUNCT_BYTES[] = {';',  ':',  ',',  '.', '!', '?', 0xc2, 0xa1, // ¡ (U+00A1)
-                                          0xc2, 0xbf,                                  // ¿ (U+00BF)
-                                          0xe2, 0x80, 0x94,                            // — (U+2014)
-                                          0xe2, 0x80, 0xa6,                            // … (U+2026)
-                                          '"',  ')',  '(',  '*', '~', '-', '/',  '\\', '&', 0};
-    // Build a set of punctuation bytes for fast lookup
-    static const std::string PUNCT_ASCII = ";:,.!?\"()*~-/\\&)";
-    // Scan the original text from the end, collecting non-space punctuation
-    std::string tail_punct;
-    size_t tpos = text.size();
-    while (tpos > 0) {
-        const uint8_t c = (uint8_t)text[tpos - 1];
-        // Quick ASCII check
-        bool is_punct = false;
-        if (c < 0x80) {
-            if (PUNCT_ASCII.find((char)c) != std::string::npos)
-                is_punct = true;
-        } else {
-            // Check multi-byte sequences against PUNCT_BYTES
-            for (const uint8_t* p = PUNCT_BYTES; *p;) {
-                if (*p >= 0x80) {
-                    // How many bytes does this sequence take?
-                    int seq = (*p & 0xE0) == 0xC0 ? 2 : (*p & 0xF0) == 0xE0 ? 3 : 4;
-                    if ((int)(tpos) >= seq) {
-                        bool match = true;
-                        for (int k = 0; k < seq && match; k++)
-                            match = (uint8_t)text[tpos - seq + k] == p[k];
-                        if (match) {
-                            is_punct = true;
-                            break;
-                        }
-                    }
-                    p += (*p & 0xE0) == 0xC0 ? 2 : (*p & 0xF0) == 0xE0 ? 3 : 4;
-                } else {
-                    p++;
-                }
-            }
-        }
-        if (!is_punct)
-            break;
-        // Collect this punctuation char/sequence
-        if (c < 0x80) {
-            tail_punct = std::string(1, (char)c) + tail_punct;
-            tpos--;
-        } else {
-            int seq = (c & 0xE0) == 0xC0 ? 2 : (c & 0xF0) == 0xE0 ? 3 : 4;
-            if ((int)tpos >= seq) {
-                tail_punct = text.substr(tpos - seq, seq) + tail_punct;
-                tpos -= seq;
-            } else {
-                break;
-            }
-        }
-    }
+    // Trailing punctuation espeak drops but the Python phonemizer keeps, so
+    // the token count matches. Shared with the in-process path -- it used to
+    // be inlined here only, which is how the in-process path (added in #435
+    // and placed FIRST) silently stopped doing it.
+    const std::string tail_punct = zonos_tail_punctuation(text);
     // Only decorate a REAL phonemisation. Appending punctuation to an empty
     // result manufactures a non-empty string that means nothing.
     if (!espeak_produced_phonemes)
