@@ -52,7 +52,7 @@ from pathlib import Path
 
 WORK = Path("/kaggle/working"); SCRATCH = Path("/tmp")
 CLONE = SCRATCH / "CrispASR"
-SCRIPT_VERSION = "2026-09-14-zonos-g2p-435-2"
+SCRIPT_VERSION = "2026-09-14-zonos-g2p-435-3"
 
 # Short on purpose: zonos generates on CPU here and runtime scales with the
 # audio length. ~10 words is enough for a word-F1 to mean something.
@@ -60,7 +60,12 @@ TEXTS = {
     "en": "The quick brown fox jumps over the lazy dog today.",
     "de": "Der schnelle braune Fuchs springt heute über den faulen Hund.",
     "fr": "Le rapide renard brun saute par dessus le chien paresseux.",
-    "es": "El rapido zorro marron salta sobre el perro perezoso hoy.",
+    # ACCENTED. v2 ran this line without its accents and the Spanish result was
+    # not a measurement of the G2P: Spanish stress is carried by the written
+    # accent, so "rapido" denies the phonemizer the only cue it has and the
+    # built-in emitted `rapiðo` with no stress mark at all. A fixture that
+    # withholds the input feature under test measures the fixture.
+    "es": "El rápido zorro marrón salta sobre el perro perezoso hoy.",
     "ru": "Привет, это тест синтеза речи.",
 }
 
@@ -278,6 +283,15 @@ def synth(text, lang, mode, out_path, tag):
     rec["drop_rate"] = (rec["cp_dropped"] / rec["cp_total"]) if rec["cp_total"] > 0 else None
     log(f"[g2p] {tag}: rc={rec['rc']} path={rec['g2p_path']} ntok={len(rec['ids'])} "
         f"drop={rec['cp_dropped']}/{rec['cp_total']} wav={rec['wav_bytes']} {rec['secs']}s")
+    # WHICH DICTIONARY, in the log. In v2 this landed only in results.json and
+    # the English arm ran with NO dictionary at all -- letter-to-sound rules
+    # phonemising "quick brown" as "cook bone" -- which was invisible until the
+    # json was pulled afterwards. A builtin arm running on the LTS fallback is
+    # not measuring the built-in G2P, so the log has to say so while the run is
+    # still readable.
+    if rec["g2p_path"] == "builtin":
+        log(f"[g2p]    dicts: {rec['g2p_dicts'] or 'NONE — letter-to-sound rules only'}")
+        log(f"[g2p]    ipa: {rec['ipa'][:160]}")
     return rec
 
 def asr(wav, lang):
@@ -463,8 +477,11 @@ for lang in ("en","de","fr","es"):
         # The proposal, stated as a claim that the numbers above support or not.
         # Deliberately conservative: the builtin must not lose more than 0.10 of
         # word-F1 and must not drop a larger share of its own symbols.
+        "builtin_dicts_loaded": L.get("builtin", {}).get("g2p_dicts", []),
+        "builtin_ran_on_lts_only_no_dict": not L.get("builtin", {}).get("g2p_dicts"),
         "builtin_good_enough_to_default":
             bool(L.get("paths_as_intended")
+                 and L.get("builtin", {}).get("g2p_dicts")
                  and L.get("word_f1_builtin", 0.0) >= L.get("word_f1_espeak", 0.0) - 0.10
                  and (L.get("drop_rate_builtin") or 0.0) <= (L.get("drop_rate_espeak") or 0.0) + 0.02),
     }
