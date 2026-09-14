@@ -198,17 +198,41 @@ static void ensure_cmudict_loaded() {
         }
     }
 #ifdef CRISPASR_HAS_CACHE
-    // Auto-download (BSD license, public domain data)
-    static const char* CMUDICT_URL =
-        "https://raw.githubusercontent.com/cmusphinx/cmudict/refs/heads/master/cmudict.dict";
-    std::string path = crispasr_cache::ensure_cached_file("cmudict.dict", CMUDICT_URL, /*quiet=*/true, "crispasr", "");
-    if (!path.empty()) {
+    // Auto-download (BSD license, public domain data).
+    //
+    // TWO hosts, upstream first, and the second one is not redundancy for its
+    // own sake: measured on Kaggle 2026-09-14, English was the ONLY language
+    // whose dictionary failed to load, and it is the only one fetched from
+    // raw.githubusercontent.com -- the de/fr/es dicts below come from
+    // huggingface.co and all three arrived. GitHub access from a Kaggle worker
+    // is documented-flaky, so English silently dropped to the letter-to-sound
+    // rules and phonemised "quick brown" as `kˈʌɪk bɹˈoʊn`, which an ASR
+    // roundtrip read back as "cook bone". That is not a G2P limitation being
+    // measured, it is a download being measured, and the two are indistinguishable
+    // from the output.
+    //
+    // piper_tts.cpp has fetched the same file from the HF mirror all along, so
+    // the mirror is not new infrastructure -- this path simply never used it.
+    // Upstream stays FIRST: when it is reachable nothing about the result
+    // changes, so this can only turn a silent degradation into a working
+    // dictionary.
+    static const char* CMUDICT_URLS[] = {
+        "https://raw.githubusercontent.com/cmusphinx/cmudict/refs/heads/master/cmudict.dict",
+        "https://huggingface.co/datasets/cstr/g2p-dicts/resolve/main/cmudict.dict",
+    };
+    for (const char* url : CMUDICT_URLS) {
+        std::string path = crispasr_cache::ensure_cached_file("cmudict.dict", url, /*quiet=*/true, "crispasr", "");
+        if (path.empty())
+            continue;
         int n = g2p_en::load_cmudict_file(g_g2p_ctx.dict, path);
         if (n > 0) {
             fprintf(stderr, "g2p: loaded CMUdict (%d entries) from %s\n", n, path.c_str());
             return;
         }
     }
+    fprintf(stderr, "g2p: WARNING: no English CMUdict could be loaded — falling back to "
+                    "letter-to-sound rules, which mispronounce common words. Set "
+                    "CRISPASR_CMUDICT_PATH to a local cmudict.dict to avoid this.\n");
 #endif
 }
 
