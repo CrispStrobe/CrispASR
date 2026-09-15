@@ -978,3 +978,65 @@ and it should have been done before the first parity run.
 One known, benign deviation: Gemma's `byte_fallback` emits `<0xXX>` tokens for
 out-of-vocab pieces while `bpe_one` falls back per codepoint. With a
 262k-entry vocab the paths coincide for any text the model has embeddings for.
+
+---
+
+## Phase-2 RESULTS — run 2 (f16 vs bf16): THE PORT IS CORRECT
+
+**50/55 stages pass, and the worst cosine across all fifty is 0.999861.**
+The five failures are the two known input-side defects, both already fixed but
+not yet re-run. Not one model stage fails.
+
+| stage | cos | magnitude ratio | argmax |
+|---|---|---|---|
+| `te_seg0_hidden` | 0.999963 | 1.0000 | — |
+| `te_seg1_hidden` | 0.999970 | 1.0003 | — |
+| `te_proj_out` | 0.999933 | 0.9988 | — |
+| `backbone_inputs_embeds` | 0.999957 | 0.9992 | — |
+| `backbone_layer0…27` | 0.999997 → 0.999976 | 0.998–1.002 | — |
+| `backbone_logits_frame0` | 0.999992 | 0.9977 | **404 = 404 ✓** |
+| `dd_logits_frame0_cb1…cb15` | 0.999991 → 0.999861 | 0.998–1.001 | **all 15 match** |
+| `dd_codes_frame0_stepwise` | — | — | **exact, 16/16** |
+
+That settles every open architectural question at once. The bidirectional
+text encoder with its symmetric `[i-255, i+256]` window and unmasked full
+layers is right. The dual RoPE — theta 1e4 sliding, theta 1e6 with a constant
+`freq_factors` vector of 8.0 for the "linear" full layers — is right, and no
+change to `core_attn::kv_self_attn` was needed. Gemma's `1 + w` folded at
+conversion time is right. The Qwen3 backbone off the nested config (theta 1e6,
+eps 1e-6) is right. The depth decoder's llama3 RoPE with
+`original_max_position_embeddings = 16`, and the 15 pre-transposed per-codebook
+heads indexed by `cache_position - 1`, are right.
+
+### The depth decoder was never broken — it was the quantizer
+
+Run 1 read 1/16 codes matching at frame 0 and the localisation table pointed
+at RoPE scaling and head indices. All of that was wrong: on f16 the SAME code
+produces the oracle's entire frame-0 vector exactly —
+
+```
+404 172 340 1357 644 528 1025 1250 122 730 1219 1452 1957 443 416 1187
+```
+
+— because run 1 diffed **q4_k against bf16**. The tell was already in the
+data and was read correctly at the time: a *monotonic* cosine decay with
+layer depth at pinned magnitude ratios is accumulating quantization noise, not
+a structural bug, which appears as a step at one layer. The lesson is to diff
+the reference-precision artifact FIRST and only then ask what quantization
+costs; a whole round of architectural suspicion was spent on the quantizer.
+
+**This is also a real finding about the published q4_k**: it does not preserve
+frame-0 codes at all (1/16), while still producing intelligible speech. The
+quant policy protects the embeddings and the output heads but leaves the depth
+decoder's 434 M attention/MLP weights at q4_k, and 15 sequential steps compound
+the noise. Worth an A/B before q4_k is called the default.
+
+### The five failures, all input-side, all already fixed
+
+| stage | measured | status |
+|---|---|---|
+| `ref_codes` | 61.8% | resampler mismatch — harness fixed (both sides 24 kHz); needs the regenerated fixture |
+| `prompt_input_ids` / `_mask` / `_len` | 64.9% / 78.4% / 0% | wrong tokenizer + missing instruction — **both fixed**, tokenizer verified 27/27 offline |
+| `codes` | 3.9% | downstream of the prompt; generation ran on the mistokenized prompt |
+
+Expected next run: 55/55.
