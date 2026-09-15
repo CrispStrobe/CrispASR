@@ -56,7 +56,7 @@ import sys
 import time
 from pathlib import Path
 
-SCRIPT_VERSION = "v3-ref-text"
+SCRIPT_VERSION = "v4-gate-probe-covers-so"
 WORK = Path("/kaggle/working")
 TEMP = Path("/kaggle/temp") if Path("/kaggle/temp").is_dir() else Path("/tmp")
 REPO = TEMP / "CrispASR"
@@ -120,15 +120,23 @@ BIN = REPO / "build" / "bin" / "crispasr"
 assert BIN.exists(), f"missing {BIN} -- the build did not produce the binary"
 print(f"  built: {BIN} ({BIN.stat().st_size} bytes)")
 
-# Proof the dump hook is actually IN this binary. Without it every backend would
-# report "no record" and that would read like a backend failure rather than a
-# stale build.
-_strings = subprocess.run(["strings", str(BIN)], capture_output=True, text=True).stdout
-assert "CRISPASR_CAMPP_DUMP_EMB" in _strings, \
-    "binary has no CRISPASR_CAMPP_DUMP_EMB -- wrong branch or a stale object"
-assert "CRISPASR_CAMPP_LEGACY_SEGPOOL" in _strings, \
-    "binary has no CRISPASR_CAMPP_LEGACY_SEGPOOL -- the A/B gate is not in this build"
-print("  binary carries both env gates")
+# Proof both env gates are actually IN this build. Without it, "no record" from
+# every backend would read like a backend failure rather than a stale object or
+# the wrong branch.
+#
+# The search has to cover the shared libraries, not just the executable: this
+# configuration links libcrispasr.so, and chatterbox_campplus.o lands there, so
+# `strings` on the 3.7 MB launcher alone finds neither gate and the check fails
+# on a build that is perfectly fine.
+_search = [BIN] + sorted((REPO / "build").rglob("*.so"))
+_strings = ""
+for _p in _search:
+    _strings += subprocess.run(["strings", str(_p)], capture_output=True, text=True).stdout
+for _gate, _why in (("CRISPASR_CAMPP_DUMP_EMB", "the embedding dump is not in this build"),
+                    ("CRISPASR_CAMPP_LEGACY_SEGPOOL", "the A/B gate is not in this build")):
+    assert _gate in _strings, (f"{_gate} missing from {len(_search)} binaries/libraries -- {_why} "
+                               f"(wrong branch, or a stale object)")
+print(f"  both env gates present across {len(_search)} binaries/libraries")
 
 PROMPT_WAV = REPO / "samples" / "jfk.wav"
 assert PROMPT_WAV.exists(), f"missing reference wav {PROMPT_WAV}"
