@@ -1227,6 +1227,13 @@ inline std::vector<std::string> tokenize(const std::string& text) {
     return tokens;
 }
 
+// An OPENING mark leads the phrase that follows it; a closing mark trails the
+// word before it. Attaching both to the word before produces `mʲirʲe,« stalʲitsə»`,
+// where the guillemet is glued to the comma instead of to the word it opens.
+inline bool is_opening_punct_cp(uint32_t c) {
+    return c == '(' || c == 0x00AB /*«*/ || c == 0x201C /*“*/ || c == 0x201E /*„*/;
+}
+
 // True when the token is a single punctuation codepoint (so it is a mark, not a
 // word). `emit` says whether the consumer's symbol table has it.
 inline bool token_is_punct(const std::string& t, bool* emit) {
@@ -1254,8 +1261,16 @@ inline std::string text_to_ipa(const context& ctx, const std::string& text) {
             continue;
         }
         if (punct) {
-            ipa += w; // attaches to the word before it
-            pending_space = true;
+            const uint32_t cp = utf8_to_cps(w)[0];
+            if (is_opening_punct_cp(cp)) {
+                if (!ipa.empty() && ipa.back() != ' ')
+                    ipa += ' ';
+                ipa += w;
+                pending_space = false; // the word it opens attaches to it
+            } else {
+                ipa += w; // a closing mark attaches to the word before it
+                pending_space = true;
+            }
             continue;
         }
         const std::string ph = word_to_ipa(ctx, w);

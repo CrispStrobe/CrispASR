@@ -234,6 +234,25 @@ inline std::string expand(const std::string& text) {
             words += detail::digits_each(frac_part);
         }
 
+        // `%` is not in any TTS phoneme inventory, so an unexpanded one is
+        // dropped silently — the same defect as the digits, one character
+        // later. The counted-noun form is already available, and percent takes
+        // it like any other noun: 1 процент, 2 процента, 5 процентов.
+        {
+            size_t j = i;
+            if (j < n && text[j] == ' ')
+                j++;
+            if (j < n && text[j] == '%' && frac_part.empty() && int_part.size() <= 12) {
+                int64_t value = 0;
+                for (char c : int_part)
+                    value = value * 10 + (c - '0');
+                static const char* const kPercent[3] = {"процент", "процента", "процентов"};
+                words += " ";
+                words += kPercent[detail::plural_form(value)];
+                i = j + 1;
+            }
+        }
+
         if (!out.empty() && out.back() != ' ' && out.back() != '\n')
             out += ' ';
         out += words;
