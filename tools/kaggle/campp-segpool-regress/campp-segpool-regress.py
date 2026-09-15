@@ -56,7 +56,7 @@ import sys
 import time
 from pathlib import Path
 
-SCRIPT_VERSION = "v6-onnx-ref-for-cosyvoice3"
+SCRIPT_VERSION = "v6-onnx-ref-both-arms-w2v"
 WORK = Path("/kaggle/working")
 TEMP = Path("/kaggle/temp") if Path("/kaggle/temp").is_dir() else Path("/tmp")
 REPO = TEMP / "CrispASR"
@@ -334,8 +334,12 @@ BACKENDS = [
          extra=["--codec-model", "@chatterbox-v3-s3gen-q8_0.gguf"], env={},
          ref="chatterbox", var_floor=0.0, timeout=3600),
     dict(name="confucius4-tts", repo="cstr/confucius4-tts-GGUF",
+         # w2v-BERT is what supplies the T2S condition_emb. Without it the
+         # backend logs "no T2S condition_emb" and synthesises 0.15 s of
+         # silence -- which looks exactly like a seg_pool regression and is not
+         # one. The CLI discovers it as a sibling.
          files=["confucius4-tts-t2s-q4_k.gguf", "confucius4-tts-s2a-q4_k.gguf",
-                "confucius4-tts-bigvgan-22k-f16.gguf"],
+                "confucius4-tts-bigvgan-22k-f16.gguf", "confucius4-tts-w2v-f16.gguf"],
          model="confucius4-tts-t2s-q4_k.gguf",
          extra=["--codec-model", "@confucius4-tts-s2a-q4_k.gguf", "--tts-steps", "16", "-l", "en"],
          env={}, ref="funasr", var_floor=0.0, timeout=5400),
@@ -533,28 +537,52 @@ if not whisper_model.exists():
 ORIG = set(w.strip(".,!?").lower() for w in TEST_TEXT.split())
 import soundfile as sf  # noqa: E402
 
-for cfg in BACKENDS:
-    name = cfg["name"]
-    res = results.get(name, {})
-    wav = MD / name / "out_fixed.wav"
+def score_wav(wav):
     if not wav.exists() or wav.stat().st_size <= 100:
-        res["e2e"] = "NO_WAV"
-        print(f"  [{name}] e2e NO_WAV")
-        continue
+        return {"e2e": "NO_WAV"}
     a = subprocess.run([str(BIN), "-m", str(whisper_model), "-f", str(wav),
                         "--no-gpu", "--no-prints"], capture_output=True, text=True, timeout=1200)
     clean = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", a.stdout)
     hit = {w for w in ORIG if w in clean.lower()}
     dat, sr = sf.read(str(wav))
     rms = float(np.sqrt(np.mean(np.square(dat)))) if len(dat) else 0.0
-    res.update(e2e_overlap=len(hit) / len(ORIG), e2e_rms=rms, e2e_sec=len(dat) / sr,
-               e2e_transcript=clean.strip()[:300])
-    # A silent file transcribes to nothing and would otherwise score 0 overlap
-    # the same way garbled speech does; separate the two.
-    res["e2e"] = ("SILENT" if rms < 1e-4 else
-                  "PASS" if len(hit) / len(ORIG) >= 0.6 else "WEAK")
-    print(f"  [{name}] e2e {res['e2e']} overlap={len(hit)}/{len(ORIG)} "
-          f"rms={rms:.4f} {len(dat)/sr:.2f}s :: {clean.strip()[:160]}")
+    dur = len(dat) / sr if sr else 0.0
+    ov = len(hit) / len(ORIG)
+    # Separate the ways a wav can score zero: silence, a stub too short to hold
+    # the sentence, and real-but-wrong speech all read as "overlap 0" otherwise.
+    if rms < 1e-4:
+        v = "SILENT"
+    elif dur < 0.5:
+        v = "STUB"
+    elif ov >= 0.6:
+        v = "PASS"
+    else:
+        v = "WEAK"
+    return {"e2e": v, "e2e_overlap": ov, "e2e_rms": rms, "e2e_sec": dur,
+            "e2e_transcript": clean.strip()[:300]}
+
+
+for cfg in BACKENDS:
+    name = cfg["name"]
+    res = results.setdefault(name, {})
+    # BOTH arms. Scoring only the default arm cannot tell "the fix broke this"
+    # from "this was already broken here" -- and the second is what a missing
+    # companion model or a bad flag looks like.
+    fx = score_wav(MD / name / "out_fixed.wav")
+    lg = score_wav(MD / name / "out_legacy.wav")
+    res.update(fx)
+    res["e2e_legacy"] = lg
+    if fx["e2e"] in ("PASS",):
+        res["e2e_attribution"] = "fixed arm passes"
+    elif lg.get("e2e") == "PASS":
+        res["e2e_attribution"] = "REGRESSION: legacy arm passes, fixed arm does not"
+    else:
+        res["e2e_attribution"] = ("both arms fail the same way -- not attributable to "
+                                  "seg_pool (config/model gap or a pre-existing issue)")
+    print(f"  [{name}] e2e fixed={fx['e2e']} legacy={lg.get('e2e')} "
+          f"overlap={fx.get('e2e_overlap')} rms={fx.get('e2e_rms')} "
+          f"{fx.get('e2e_sec', 0):.2f}s :: {fx.get('e2e_transcript', '')[:140]}")
+    print(f"  [{name}] attribution: {res['e2e_attribution']}")
 
 # ── verdict ─────────────────────────────────────────────────────────────────
 kh.step("verdict")
@@ -589,6 +617,8 @@ for cfg in BACKENDS:
     r = results.get(n, {})
     if r.get("detail"):
         print(f"  {n}: {r['detail']}")
+    if r.get("e2e_attribution"):
+        print(f"  {n}: e2e {r['e2e_attribution']}  (legacy arm: {r.get('e2e_legacy', {}).get('e2e')})")
     if r.get("reference_error"):
         print(f"  {n}: reference_error {r['reference_error']}")
     for k, v in r.items():
