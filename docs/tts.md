@@ -914,11 +914,12 @@ phoneme-ID sequences; `F1` is word-F1 of an ASR roundtrip against the input.
 | de | 0.94 | 1.00 | 1.00 | Built-in matches espeak; transcripts identical. |
 | fr | 0.95 | 0.84 | 0.95 | Built-in *beats* espeak (`renard` vs `renarbre`), reproduced across runs. |
 | es | 0.82–0.94 | 0.57 | 0.81 | Built-in higher on all 3 sentences, but the espeak baseline is itself weak — see below. |
-| ru | — | — | n/a | **No built-in.** espeak-ng remains required, and without it zonos refuses (#435). |
+| ru | 0.77 / 0.76 / 0.63 | 0.585 | 0.293 | **INCONCLUSIVE — default stays espeak.** Zero dropped symbols on either path, but the espeak baseline is itself below the 0.60 floor. See below. |
 
-With espeak-ng physically removed, en/de/fr/es all synthesise and produce
-byte-identical phoneme IDs to the with-espeak built-in run, and Russian still
-refuses with a non-zero exit and a zero-byte file.
+With espeak-ng physically removed, en/de/fr/es/ru all synthesise and produce
+byte-identical phoneme IDs to the with-espeak built-in run. A language with no
+built-in at all (`ja`) still refuses with a non-zero exit and a zero-byte file —
+the #435 guarantee did not weaken when Russian gained a G2P.
 
 Caveats, because these numbers are easy to over-read:
 
@@ -927,6 +928,48 @@ Caveats, because these numbers are easy to over-read:
   letter-to-sound rules — "quick brown" becomes `kˈʌɪk bɹˈoʊn`, which an ASR
   reads back as "cook bone" (F1 1.00 → 0.80). The dictionary auto-downloads; set
   `CRISPASR_CMUDICT_PATH` if your machine cannot reach the network.
+- **Russian is inconclusive, and not for the reason it looks like.** Measured on
+  three sentences with espeak physically removed and the removal verified
+  (`chr1s4/crispasr-zonos-g2p-ru`). What the run settles:
+
+  - the built-in path drops **zero** codepoints — and that number means
+    something because a control fires on that exact path: a one-line dictionary
+    carrying the upstream backtick stress marker, injected through
+    `CRISPASR_RU_DICT_PATH`, makes the counter report `dropped=1 {U+0060: 1}`.
+    Without that arm, "dropped nothing" is a negative the instrument has never
+    been shown capable of contradicting. espeak's own `ru` voice, by contrast,
+    emits `^` (U+005E) which zonos cannot map — 0.0172% against the built-in's
+    0.0000%, which is asserted by a unit test rather than merely observed;
+  - zonos still synthesises Russian with **no GPL dependency present at all**,
+    producing byte-identical phoneme IDs to the with-espeak built-in run;
+  - the #435 guarantee survives: a language with no built-in (`ja`) still
+    refuses with a non-zero exit and a zero-byte file.
+
+  What it does **not** settle is the default. The espeak arm scores 0.585 —
+  below the 0.60 floor — and 0.000 on one of the three sentences. Zonos-v0.1
+  does not list Russian among its languages, so the roundtrip is measuring
+  zonos's Russian more than it is measuring the G2P. A built-in that "wins"
+  against a collapsed baseline proves nothing; that is exactly the mistake
+  Spanish was nearly passed on.
+
+- **The phoneme-ID gap for Russian is a SPELLING difference, not an error.**
+  espeak's `ru` voice and the built-in transcribe the same sounds in different
+  symbols:
+
+  ```
+  ours    məɫɐkˈo i xlʲep lʲɪʐˈat na stɐlʲˈe v bɐlʲʂˈoj kˈomnətʲe
+  espeak  mʌɭʌkˈo ɪ xɭʲˈep ɭʲiʒˈɑt nə stʌɭʲˈe v bʌɭʃˈoj kˈomnʌtʲi
+  ```
+
+  Over 2,200 dictionary words phonemised both ways, raw symbol agreement is
+  57.7% and not one word matches exactly — and **every symbol on both sides is
+  inside zonos's inventory, so the drop counter is blind to this by
+  construction.** A model conditions on the spelling it was trained on, and
+  zonos was phonemised with espeak. `CRISPASR_ZONOS_RU_DIALECT=espeak` rewrites
+  the built-in's output into espeak's conventions, taking agreement to 88.0%;
+  whether that helps the audio is a separate measurement and the default is
+  unchanged until it reports.
+
 - **Spanish has no trustworthy baseline.** The espeak arm scores 0.57, so the
   comparison says as much about the model's Spanish as about the G2P. The
   built-in was higher on every sentence, but that is "no evidence of harm", not
