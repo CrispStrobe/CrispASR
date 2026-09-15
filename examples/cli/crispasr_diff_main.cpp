@@ -1416,11 +1416,13 @@ static int bt2_tts_dump(const std::string& model_path, const std::string& fixtur
             fprintf(stderr, "bt2-tts: codec init failed ('%s')\n", codec_env);
             return 1;
         }
-        // The fixture's ref_audio is the RAW clip at its native rate.
+        // The fixture's ref_audio is 24 kHz BY CONTRACT (breeze_refdump.py
+        // resamples once and dumps exactly what it fed the tokenizer), so
+        // nothing is resampled here. That makes this stage a comparison of the
+        // codec ENCODER against the codec encoder. The runtime's own
+        // 16 kHz -> 24 kHz path is a separate question, diffed as its own
+        // stage against ref_audio_native rather than hidden inside this one.
         std::vector<float> pcm = f_refaudio.f;
-        const int src_sr = 16000;
-        if (src_sr != 24000)
-            pcm = core_audio::resample_polyphase(pcm.data(), (int)pcm.size(), src_sr, 24000);
         int32_t* codes = nullptr;
         int nfr = 0;
         if (qwen3_tts_encode_pcm_to_codes(codec, pcm.data(), (int)pcm.size(), &codes, &nfr) == 0 && codes) {
@@ -1431,6 +1433,21 @@ static int bt2_tts_dump(const std::string& model_path, const std::string& fixtur
             fprintf(stderr, "bt2-tts: reference encode FAILED — stage 0 unavailable\n");
         }
         qwen3_tts_free(codec);
+    }
+
+    // STAGE 0b — the resampler, on its own. If ref_codes now matches and this
+    // does not, the runtime's resampler differs from the reference's and the
+    // production clone path (which DOES resample) is affected even though the
+    // harness no longer is. Naming it as a stage is what keeps that from being
+    // rediscovered later as a mystery.
+    {
+        Npy native;
+        if (npy_read(fixture_dir + "/ref_audio_native.npy", native) && !native.f.empty()) {
+            std::vector<float> up = core_audio::resample_polyphase(native.f.data(), (int)native.f.size(), 16000, 24000);
+            put_f(out_dir, "ref_audio", up.data(), {(int64_t)up.size()});
+            printf("bt2-tts: resampled %zu @16k -> %zu @24k (fixture ref_audio %zu)\n", native.f.size(), up.size(),
+                   f_refaudio.f.size());
+        }
     }
 
     // ---- model --------------------------------------------------------------

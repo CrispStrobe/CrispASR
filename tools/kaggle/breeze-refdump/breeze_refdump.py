@@ -150,7 +150,7 @@ import kaggle_harness as kh  # noqa: E402
 
 kh.init_progress()
 # Bump when the arms, capture or predicate change (see kh.provenance).
-SCRIPT_VERSION = "2026-09-15.7"
+SCRIPT_VERSION = "2026-09-15.8"
 # kh.provenance landed in the harness AFTER this kernel was first pushed, so the
 # 2026-09-02 run died in 10 s with AttributeError against its own fresh clone
 # (gotcha #24, the two-halves trap). Never let provenance logging be fatal.
@@ -283,6 +283,31 @@ def f32(t):
 REF_WAV = CLONE / "samples" / "jfk.wav"
 wav, sr = sf.read(str(REF_WAV), always_2d=True, dtype="float32")
 wav = np.mean(wav, axis=1)
+
+# RESAMPLE HERE, ONCE, AND DUMP WHAT THE CODEC ACTUALLY SAW.
+#
+# Upstream (breeze_infer/audio.py:14-16) reads the clip at its native rate and
+# hands `sr=sample_rate` to the tokenizer, which resamples internally. That is
+# faithful to production and it is also unmeasurable: the C++ runtime resamples
+# with core_audio::resample_polyphase, so two different resamplers see the same
+# file and the codes diverge before a single transformer weight is involved.
+# Measured on run 1: 138 frames on both sides, but only 61.8% of codes equal,
+# first divergence at index 7 — and every later stage inherits it.
+#
+# So the fixture now feeds the tokenizer 24 kHz directly (sr == 24000, nothing
+# to resample) and dumps exactly those samples. ref_codes then compares the
+# CODEC ENCODER against the codec encoder, which is a question the harness can
+# actually answer. `ref_audio_native` keeps the raw clip so the resampler
+# itself can still be diffed on its own, as its own stage, rather than as a
+# mystery inside ref_codes.
+import torchaudio  # noqa: E402
+
+if sr != 24000:
+    wav24 = torchaudio.functional.resample(torch.as_tensor(wav), sr, 24000).numpy()
+else:
+    wav24 = wav
+save("ref_audio_native", wav.astype(np.float32))
+wav, sr = wav24.astype(np.float32), 24000
 enc = audio_tokenizer.encode(wav, sr=sr)
 
 
