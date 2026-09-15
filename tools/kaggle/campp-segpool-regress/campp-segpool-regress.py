@@ -56,7 +56,7 @@ import sys
 import time
 from pathlib import Path
 
-SCRIPT_VERSION = "v4-gate-probe-covers-so"
+SCRIPT_VERSION = "v5-consent-flags"
 WORK = Path("/kaggle/working")
 TEMP = Path("/kaggle/temp") if Path("/kaggle/temp").is_dir() else Path("/tmp")
 REPO = TEMP / "CrispASR"
@@ -376,7 +376,14 @@ for cfg in BACKENDS:
         cmd = [str(BIN), "--backend", name, "-m", str(d / cfg["model"]),
                "--voice", str(PROMPT_WAV), "--tts", TEST_TEXT,
                "--tts-output", str(wav), "--seed", "42",
-               "--i-have-rights", "--no-spoken-disclaimer"] + extra
+               # Two SEPARATE attestations: --i-have-rights covers the cloning
+               # itself, --accept-marking-responsibility is what lets any
+               # provenance opt-out be honored. Passing only the first made all
+               # ten arms exit rc=12 at argument validation; three of them had
+               # already computed their embedding by then, which is why those
+               # numbers survived and the other two produced nothing at all.
+               "--i-have-rights", "--accept-marking-responsibility",
+               "--no-spoken-disclaimer"] + extra
         t0 = time.monotonic()
         try:
             r = subprocess.run(cmd, capture_output=True, text=True, timeout=cfg["timeout"], env=env)
