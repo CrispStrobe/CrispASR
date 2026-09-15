@@ -899,3 +899,45 @@ the masked buffer, while the reference dumps its logits *before* its own
 suppression. The fix is to dump raw and mask a copy for sampling. A stage that
 is merely being measured wrong must never be able to report as a catastrophic
 failure — it sends the next person to the wrong place.
+
+### The fixture is NOT the clone branch — and the tokenizer target is now known
+
+Two findings from diffing the fixture's `prompt_input_ids` against the real
+Gemma tokenizer offline (no Kaggle run needed; `tokenizer.json` is 32 MB).
+
+**1. `meta.json` mislabelled the branch.** It said
+`ref_edit_tata (clone branch, cfg_scale=1.0)`. The ids say otherwise: segment 2
+is
+
+```
+[2, 262146, 262156, 130171, 8207, 532, 14769, 236761, 262157, 818, 3823, ...]
+      [S0]  <ins_bos>  ...instruction...        <ins_eos>  The quick ...
+```
+
+`prepare_inputs` always builds from `template.build_segments`, which for
+`ref_edit_tata` is `_ref_edit_tata_segments` — the **instruction** variant.
+`build_negative_segments` (the real clone branch) is only reached when
+`guidance_scale != 1.0`. So `guidance_scale=1.0` does keep it single-branch —
+the true half of the old claim — but the single branch is the positive,
+instruction-carrying one.
+
+Consequence: a C++ prompt built without the instruction **cannot** match those
+ids however good its tokenizer is. Run 1's `L=208 vs 185` therefore blamed the
+tokenizer for a difference that was partly a missing `<ins_bos>…<ins_eos>`
+span. The arm now passes `"Speak clearly and naturally."`, and the fixture
+records its own `instruction` so this is not re-derived.
+
+**2. The tokenizer target is exactly reproducible.** With the real tokenizer:
+
+| segment | fixture | `[2] + tokenizers.encode(...)` | match |
+|---|---|---|---|
+| seg0 (`[S0]` + ref_text) | 27 ids | 27 ids | **exact** |
+| seg1 (`[S0]` + syn_text, no instruction) | — | 12 ids | n/a |
+
+seg0 matching exactly confirms the *structure* the port assumes — a `<bos>`
+at every text segment head, `[S0]` as the single id 262146 — and confirms that
+`Tokenizer.from_file(tokenizer.json)` reproduces the oracle. So the remaining
+gap is purely `core_bpe::tokenize_simple`, whose whitespace-split
+pre-tokenizer inflated 39 true tokens to ~69. The fix is a real Gemma
+pre-tokenizer, and there is now a ground-truth oracle to test it against
+offline, one string at a time, with no GPU and no Kaggle run.

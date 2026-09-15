@@ -150,7 +150,7 @@ import kaggle_harness as kh  # noqa: E402
 
 kh.init_progress()
 # Bump when the arms, capture or predicate change (see kh.provenance).
-SCRIPT_VERSION = "2026-09-15.8"
+SCRIPT_VERSION = "2026-09-15.9"
 # kh.provenance landed in the harness AFTER this kernel was first pushed, so the
 # 2026-09-02 run died in 10 s with AttributeError against its own fresh clone
 # (gotcha #24, the two-halves trap). Never let provenance logging be fatal.
@@ -331,11 +331,23 @@ save("ref_codes", ref_codes)
 step("ref_encoded", sr=sr, n_samples=int(wav.shape[0]), ref_frames=int(ref_codes.shape[0]))
 
 # ── prompt assembly (Voice Clone) ─────────────────────────────────────────
-# `ref_edit_tata` is the only template that carries a reference clip; the
-# clone branch is exactly `_ref_clone_tata_segments` (templates.py:74-84):
-#   [S0]{ref_text}  <|AUDIO|>*T_ref <|audio_eos|>  [S0]{text}
-# Passing guidance_scale=1.0 with both dual scales None keeps it single-branch
-# (templates.py:292-297) — the CFG multi-branch dumps are a phase-2 follow-up.
+# `ref_edit_tata` is the only template that carries a reference clip.
+#
+# ⚠ CORRECTED 2026-09-15. This block previously claimed the dump used the
+# "clone branch". It does not, and the fixture's own ids prove it: segment 2
+# contains 262156/262157 (<ins_bos>/<ins_eos>) wrapped around the instruction.
+# prepare_inputs ALWAYS builds from `template.build_segments`
+# (templates.py:"positive_segments = ..."), which for ref_edit_tata is
+# `_ref_edit_tata_segments` — the INSTRUCTION variant:
+#     [S0]{ref_text} | <|AUDIO|>*T_ref <|audio_eos|> | [S0]<ins_bos>{ins}<ins_eos>{text}
+# `build_negative_segments` (the actual clone branch) is only reached when
+# guidance_scale != 1.0. So guidance_scale=1.0 keeps this SINGLE-BRANCH, which
+# was the true half of the old claim, but the single branch is the positive,
+# instruction-carrying one.
+#
+# This matters to anything comparing against the fixture: a C++ prompt built
+# WITHOUT the instruction cannot match these ids no matter how good its
+# tokenizer is.
 request = {
     "id": "breeze-ref",
     "text": SYN_TEXT,
@@ -533,7 +545,8 @@ meta = {
     "syn_text": SYN_TEXT,
     "ref_text": REF_TEXT,
     "ref_wav": "samples/jfk.wav",
-    "template": "ref_edit_tata (clone branch, cfg_scale=1.0)",
+    "template": "ref_edit_tata POSITIVE branch (ref_text + audio + <ins_bos>instruction<ins_eos>text), cfg_scale=1.0, single branch",
+    "instruction": request["instruction"],
     "attn_implementation": "eager",
     "dtype": "bfloat16",
     "device": RUN_DEVICE,

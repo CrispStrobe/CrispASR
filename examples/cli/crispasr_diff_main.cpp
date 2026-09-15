@@ -1466,12 +1466,19 @@ static int bt2_tts_dump(const std::string& model_path, const std::string& fixtur
     const char* SYN = "The quick brown fox jumps over the lazy dog.";
     const char* REF = "And so my fellow Americans, ask not what your country can do for you, "
                       "ask what you can do for your country.";
+    // The fixture is ref_edit_tata's POSITIVE branch, which wraps an
+    // instruction in <ins_bos>/<ins_eos> before the target text — its segment 2
+    // literally contains ids 262156 and 262157. Omitting this makes
+    // prompt_input_ids unmatchable regardless of tokenizer quality, which is
+    // how run 1 reported L=208 vs 185 and sent the blame to the tokenizer
+    // alone.
+    const char* INSTR = "Speak clearly and naturally.";
 
     // ---- STAGE 1 — prompt ids (our tokenizer vs the oracle's) ---------------
     {
         std::vector<int32_t> ids(L + 64), mask(L + 64), seg(16);
         int n_segs = 0;
-        const int got = breeze_tts_2_run_prompt_dump(ctx, SYN, REF, ref_frames, nullptr, ids.data(), mask.data(),
+        const int got = breeze_tts_2_run_prompt_dump(ctx, SYN, REF, ref_frames, INSTR, ids.data(), mask.data(),
                                                      seg.data(), L + 64, 16, &n_segs);
         if (got > 0) {
             put_i(out_dir, "prompt_input_ids", ids.data(), {std::min(got, L + 64)});
