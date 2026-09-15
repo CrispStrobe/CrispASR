@@ -43,7 +43,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-SCRIPT_VERSION = "2026-09-15.1"
+SCRIPT_VERSION = "2026-09-15.2"
 WORK = Path("/kaggle/working")
 TEMP = Path("/kaggle/temp") if Path("/kaggle/temp").is_dir() else WORK
 REPO = WORK / "CrispASR"
@@ -72,7 +72,12 @@ if not REPO.exists():
     for attempt in range(4):
         if REPO.exists():
             shutil.rmtree(REPO)
-        rc = subprocess.run(["git", "clone", "--depth", "1", "-b", BRANCH,
+        # --recursive is not optional: ggml and third_party/c2pa-audio are
+        # submodules, and cmake fails at configure time without them ("re-clone
+        # with git clone --recursive"), which is how run 1 died after a clean
+        # 7 GB download and a successful conversion.
+        rc = subprocess.run(["git", "clone", "--depth", "1", "--recursive",
+                             "--shallow-submodules", "-b", BRANCH,
                              "https://github.com/CrispStrobe/CrispASR",
                              str(REPO)]).returncode
         if rc == 0:
@@ -81,6 +86,10 @@ if not REPO.exists():
     else:
         raise SystemExit("clone failed after 4 attempts")
 subprocess.check_call(["git", "log", "--oneline", "-1"], cwd=str(REPO))
+# Belt and braces: a --recursive clone that partially failed still
+# leaves an empty submodule dir, and cmake's error for that is the same.
+subprocess.run(["git", "submodule", "update", "--init", "--recursive", "--depth", "1"],
+               cwd=str(REPO), check=False)
 sys.path.insert(0, str(REPO / "tools" / "kaggle"))
 import kaggle_harness as kh  # noqa: E402
 

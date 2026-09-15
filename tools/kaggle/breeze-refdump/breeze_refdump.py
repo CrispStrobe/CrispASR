@@ -150,7 +150,7 @@ import kaggle_harness as kh  # noqa: E402
 
 kh.init_progress()
 # Bump when the arms, capture or predicate change (see kh.provenance).
-SCRIPT_VERSION = "2026-09-15.3"
+SCRIPT_VERSION = "2026-09-15.4"
 # kh.provenance landed in the harness AFTER this kernel was first pushed, so the
 # 2026-09-02 run died in 10 s with AttributeError against its own fresh clone
 # (gotcha #24, the two-halves trap). Never let provenance logging be fatal.
@@ -366,16 +366,42 @@ merged = model._merge_input_ids_with_input_values(
 merged_embeds = merged["inputs_embeds"] if isinstance(merged, dict) else merged
 save("backbone_inputs_embeds", f32(merged_embeds[0]))
 
-bb_out = model.backbone_model(
-    inputs_embeds=merged_embeds,
-    attention_mask=inputs["attention_mask"],
-    use_cache=False,
-    output_hidden_states=True,
-    return_dict=True,
-)
+# The backbone is assembled by breeze_backbone_factory, not by a stock
+# transformers model class, and its wrapper does NOT propagate
+# output_hidden_states — run 9 asked for them, was handed None, and died
+# iterating it. Per-layer states are the whole point of this dump (they are
+# what bisects a backbone drift to one layer), so capture them with forward
+# hooks, which depend on nothing the wrapper chooses to return.
+_bb_layer_hs = []
+
+
+def _cap(_mod, _inp, out):
+    _bb_layer_hs.append(out[0] if isinstance(out, tuple) else out)
+
+
+_handles = [layer.register_forward_hook(_cap) for layer in model.backbone_model.layers]
+try:
+    bb_out = model.backbone_model(
+        inputs_embeds=merged_embeds,
+        attention_mask=inputs["attention_mask"],
+        use_cache=False,
+        return_dict=True,
+    )
+finally:
+    for h in _handles:
+        h.remove()
+
 h_last = bb_out.last_hidden_state[0, -1]              # (2048,)
 save("backbone_hidden_frame0", f32(h_last))
-for j, hs in enumerate(bb_out.hidden_states):
+# Index 0 is the layer-0 OUTPUT here (the hook fires after the layer), so
+# backbone_layer{J} is "the residual stream after layer J" — the same
+# convention csm_tts.cpp's layer_outputs uses, and NOT the hidden_states
+# convention where index 0 is the input embedding. backbone_inputs_embeds is
+# dumped separately and is that input.
+if not _bb_layer_hs:
+    raise SystemExit("backbone forward hooks captured nothing — the per-layer "
+                     "bisect would be silently missing from the fixture")
+for j, hs in enumerate(_bb_layer_hs):
     save(f"backbone_layer{j}_frame0", f32(hs[0, -1]))
 logits0 = model.lm_head(h_last)                       # (2052,)
 save("backbone_logits_frame0", f32(logits0))
