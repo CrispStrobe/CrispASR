@@ -21,6 +21,34 @@
 // every consumer (chatterbox, confucius4, cosyvoice3, dots, fireredtts3) was
 // accepted end-to-end, and no acceptance test diffs this stage against
 // upstream, so nothing could see it.
+//
+// ⚠ cosyvoice3 IS THE EXCEPTION, AND IT IS NOT AN OPINION -- IT IS MEASURED.
+// Four of the five consumers have a PyTorch upstream, where the rule above is
+// right. cosyvoice3 does not: upstream CosyVoice runs `campplus.onnx`, our
+// cosyvoice3 campplus GGUF was converted from that same graph, and the eight
+// speaker embeddings baked into the shipped cosyvoice3-voices.gguf were
+// produced by it. That graph implements the KERNEL-SIZE divisor. Same weights,
+// same mean-subtracted Kaldi fbank, one clip, both lengths:
+//
+//   T_cam = 100 (no partial tail)  onnx == torch-fixed == torch-legacy,
+//                                  cos 1.000000, |x| 12.4381 for all three
+//   T_cam = 173 (73-frame tail)    onnx == torch-LEGACY exactly
+//                                  (cos 1.000000, |x| 14.1197 both), while
+//                                  torch-fixed gives cos 0.992663, |x| 12.5890
+//
+// The no-tail row is the control: it rules out any weight or front-end
+// difference between the export and the checkpoint and pins the divergence to
+// the partial-tail window alone. (The mechanism inside the export is NOT
+// isolated -- replaying the exported AveragePool's own attributes standalone
+// divides by the window width, like torch. Recorded as measured behaviour, not
+// as an explained cause.)
+//
+// Consequence, for whoever looks at this next: for cosyvoice3 the fix moves the
+// runtime `--voice ref.wav` embedding AWAY from upstream, and desynchronises it
+// from that backend's own baked voice bank -- the same voice now yields two
+// different embeddings depending on which path you take. Do not "re-fix" this
+// header for cosyvoice3; if it is addressed, it belongs at the cosyvoice3
+// call site, which is the only consumer with a non-PyTorch reference.
 
 #include <algorithm>
 #include <cstddef>
