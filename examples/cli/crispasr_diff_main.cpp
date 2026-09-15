@@ -100,6 +100,8 @@
 #include "t5_translate.h"
 #include "miocodec.h"
 #include "miotts.h"
+#include "breeze_tts_2.h"
+#include "core/audio_resample.h"
 #include "crepe.h"
 #if __has_include("kugelaudio.h")
 #include "kugelaudio.h"
@@ -1218,6 +1220,355 @@ static int tiron_diff(const std::string& model, const std::string& ref_path, con
     return pass ? 0 : 1;
 }
 
+// ===========================================================================
+// bt2-tts (#412) — Breeze TTS 2 stage dump for the diff harness.
+//
+// Unlike the other arms here this one does not carry its own comparison: the
+// reference is a set of .npy fixtures on HF, and
+// tools/reference_backends/breeze_tts_2.py is already the comparator that
+// consumes a directory of C++ <stage>.npy files. So this WRITES that
+// directory, and the Python half prints cosine, |ref| vs |cpp| and argmax.
+//
+// Usage:  crispasr-diff bt2-tts <model.gguf> <fixture_dir> <out_dir>
+//         BREEZE_CODEC=/path/to/qwen3-tts-tokenizer-12hz.gguf
+//
+// Every stage is fed the ORACLE's input wherever one exists — oracle segment
+// ids into the text encoder, oracle embeddings into the backbone, oracle
+// hidden state and cb0 into the depth decoder. That is what makes a failure
+// indict the stage rather than its input.
+// ===========================================================================
+
+namespace bt2diff {
+
+struct Npy {
+    std::vector<int64_t> shape;
+    bool is_int = false;
+    std::vector<float> f;
+    std::vector<int32_t> i;
+    size_t count() const {
+        size_t n = 1;
+        for (int64_t d : shape)
+            n *= (size_t)d;
+        return shape.empty() ? 0 : n;
+    }
+};
+
+static bool npy_read(const std::string& path, Npy& out) {
+    FILE* fp = std::fopen(path.c_str(), "rb");
+    if (!fp)
+        return false;
+    char magic[6];
+    if (std::fread(magic, 1, 6, fp) != 6 || std::memcmp(magic, "\x93NUMPY", 6) != 0) {
+        std::fclose(fp);
+        return false;
+    }
+    unsigned char ver[2];
+    std::fread(ver, 1, 2, fp);
+    size_t hlen = 0;
+    if (ver[0] == 1) {
+        uint16_t h16 = 0;
+        std::fread(&h16, 2, 1, fp);
+        hlen = h16;
+    } else {
+        uint32_t h32 = 0;
+        std::fread(&h32, 4, 1, fp);
+        hlen = h32;
+    }
+    std::string hdr(hlen, '\0');
+    std::fread(&hdr[0], 1, hlen, fp);
+
+    if (hdr.find("'fortran_order': True") != std::string::npos) {
+        fprintf(stderr, "bt2diff: %s is Fortran-order; refusing to guess\n", path.c_str());
+        std::fclose(fp);
+        return false;
+    }
+    const size_t dpos = hdr.find("'descr'");
+    const std::string descr = hdr.substr(dpos, 24);
+    if (descr.find("i4") != std::string::npos)
+        out.is_int = true;
+    else if (descr.find("f4") == std::string::npos) {
+        fprintf(stderr, "bt2diff: %s has unsupported dtype (%s)\n", path.c_str(), descr.c_str());
+        std::fclose(fp);
+        return false;
+    }
+    const size_t sp = hdr.find("'shape'");
+    const size_t lp = hdr.find('(', sp), rp = hdr.find(')', sp);
+    out.shape.clear();
+    {
+        std::string dims = hdr.substr(lp + 1, rp - lp - 1);
+        size_t pos = 0;
+        while (pos < dims.size()) {
+            while (pos < dims.size() && !isdigit((unsigned char)dims[pos]))
+                pos++;
+            if (pos >= dims.size())
+                break;
+            int64_t v = 0;
+            while (pos < dims.size() && isdigit((unsigned char)dims[pos]))
+                v = v * 10 + (dims[pos++] - '0');
+            out.shape.push_back(v);
+        }
+    }
+    const size_t n = out.count();
+    if (out.is_int) {
+        out.i.resize(n);
+        std::fread(out.i.data(), sizeof(int32_t), n, fp);
+    } else {
+        out.f.resize(n);
+        std::fread(out.f.data(), sizeof(float), n, fp);
+    }
+    std::fclose(fp);
+    return true;
+}
+
+static bool npy_write(const std::string& path, const void* data, const std::vector<int64_t>& shape, bool is_int) {
+    std::string dims;
+    for (size_t k = 0; k < shape.size(); k++)
+        dims += std::to_string(shape[k]) + ",";
+    std::string hdr =
+        std::string("{'descr': '") + (is_int ? "<i4" : "<f4") + "', 'fortran_order': False, 'shape': (" + dims + "), }";
+    // The header (magic+ver+len+dict) must be a multiple of 64 bytes and end
+    // with \n, or numpy rejects the file.
+    size_t pre = 10 + hdr.size() + 1;
+    size_t pad = (64 - (pre % 64)) % 64;
+    hdr.append(pad, ' ');
+    hdr.push_back('\n');
+
+    FILE* fp = std::fopen(path.c_str(), "wb");
+    if (!fp) {
+        fprintf(stderr, "bt2diff: cannot write %s\n", path.c_str());
+        return false;
+    }
+    std::fwrite("\x93NUMPY", 1, 6, fp);
+    const unsigned char ver[2] = {1, 0};
+    std::fwrite(ver, 1, 2, fp);
+    const uint16_t hl = (uint16_t)hdr.size();
+    std::fwrite(&hl, 2, 1, fp);
+    std::fwrite(hdr.data(), 1, hdr.size(), fp);
+    size_t n = 1;
+    for (int64_t d : shape)
+        n *= (size_t)d;
+    std::fwrite(data, is_int ? sizeof(int32_t) : sizeof(float), n, fp);
+    std::fclose(fp);
+    return true;
+}
+
+static void put_f(const std::string& dir, const char* name, const float* d, std::vector<int64_t> shape) {
+    npy_write(dir + "/" + name + ".npy", d, shape, false);
+    printf("  dump %-34s [", name);
+    for (size_t k = 0; k < shape.size(); k++)
+        printf("%s%lld", k ? ", " : "", (long long)shape[k]);
+    printf("]\n");
+    fflush(stdout);
+}
+
+static void put_i(const std::string& dir, const char* name, const int32_t* d, std::vector<int64_t> shape) {
+    npy_write(dir + "/" + name + ".npy", d, shape, true);
+    printf("  dump %-34s [", name);
+    for (size_t k = 0; k < shape.size(); k++)
+        printf("%s%lld", k ? ", " : "", (long long)shape[k]);
+    printf("]\n");
+    fflush(stdout);
+}
+
+} // namespace bt2diff
+
+static int bt2_tts_dump(const std::string& model_path, const std::string& fixture_dir, const std::string& out_dir) {
+    using namespace bt2diff;
+    const char* codec_env = std::getenv("BREEZE_CODEC");
+    if (!codec_env || !*codec_env) {
+        fprintf(stderr, "bt2-tts: set BREEZE_CODEC to the qwen3-tts-tokenizer-12hz GGUF\n");
+        return 1;
+    }
+
+    // ---- fixture inputs -----------------------------------------------------
+    Npy f_ids, f_mask, f_seglen, f_refcodes, f_refaudio, f_embeds, f_hidden, f_logits;
+    auto need = [&](const char* n, Npy& dst) {
+        if (!npy_read(fixture_dir + "/" + n + std::string(".npy"), dst)) {
+            fprintf(stderr, "bt2-tts: missing fixture %s.npy in %s\n", n, fixture_dir.c_str());
+            return false;
+        }
+        return true;
+    };
+    if (!need("prompt_input_ids", f_ids) || !need("prompt_text_ids_mask", f_mask) ||
+        !need("prompt_text_ids_len", f_seglen) || !need("ref_codes", f_refcodes) || !need("ref_audio", f_refaudio) ||
+        !need("backbone_inputs_embeds", f_embeds) || !need("backbone_hidden_frame0", f_hidden) ||
+        !need("backbone_logits_frame0", f_logits))
+        return 1;
+
+    const int L = (int)f_ids.count();
+    const int ref_frames = (int)f_refcodes.shape[0];
+    printf("bt2-tts: fixture L=%d  ref_frames=%d  ref_audio=%d samples\n", L, ref_frames, (int)f_refaudio.count());
+
+    // =========================================================================
+    // STAGE 0 — ref_codes. FIRST, and deliberately so.
+    // The oracle hands jfk.wav to the tokenizer at 16 kHz and lets IT resample;
+    // the runtime pre-resamples to 24 kHz with resample_polyphase. Two
+    // resamplers on the clone reference change the prompt before a single
+    // transformer weight is touched, and every later stage would inherit it
+    // while looking like a model bug.
+    // =========================================================================
+    {
+        auto cp = qwen3_tts_context_default_params();
+        cp.n_threads = 4;
+        cp.verbosity = 1;
+        qwen3_tts_context* codec = qwen3_tts_init_codec_only(codec_env, cp);
+        if (!codec) {
+            fprintf(stderr, "bt2-tts: codec init failed ('%s')\n", codec_env);
+            return 1;
+        }
+        // The fixture's ref_audio is the RAW clip at its native rate.
+        std::vector<float> pcm = f_refaudio.f;
+        const int src_sr = 16000;
+        if (src_sr != 24000)
+            pcm = core_audio::resample_polyphase(pcm.data(), (int)pcm.size(), src_sr, 24000);
+        int32_t* codes = nullptr;
+        int nfr = 0;
+        if (qwen3_tts_encode_pcm_to_codes(codec, pcm.data(), (int)pcm.size(), &codes, &nfr) == 0 && codes) {
+            put_i(out_dir, "ref_codes", codes, {nfr, 16});
+            printf("bt2-tts: our ref encode -> %d frames (oracle %d)\n", nfr, ref_frames);
+            qwen3_tts_codes_free(codes);
+        } else {
+            fprintf(stderr, "bt2-tts: reference encode FAILED — stage 0 unavailable\n");
+        }
+        qwen3_tts_free(codec);
+    }
+
+    // ---- model --------------------------------------------------------------
+    auto bp = breeze_tts_2_context_default_params();
+    bp.n_threads = 8;
+    bp.verbosity = 1;
+    bp.use_gpu = true;
+    bp.codec_path = codec_env;
+    breeze_tts_2_context* ctx = breeze_tts_2_init_from_file(model_path.c_str(), bp);
+    if (!ctx) {
+        fprintf(stderr, "bt2-tts: model init failed\n");
+        return 1;
+    }
+
+    const int n_cb = 16, d_te = 1152, d_bb = 2048, v_dd = 2051, n_bb_layers = 28;
+    const char* SYN = "The quick brown fox jumps over the lazy dog.";
+    const char* REF = "And so my fellow Americans, ask not what your country can do for you, "
+                      "ask what you can do for your country.";
+
+    // ---- STAGE 1 — prompt ids (our tokenizer vs the oracle's) ---------------
+    {
+        std::vector<int32_t> ids(L + 64), mask(L + 64), seg(16);
+        int n_segs = 0;
+        const int got = breeze_tts_2_run_prompt_dump(ctx, SYN, REF, ref_frames, nullptr, ids.data(), mask.data(),
+                                                     seg.data(), L + 64, 16, &n_segs);
+        if (got > 0) {
+            put_i(out_dir, "prompt_input_ids", ids.data(), {std::min(got, L + 64)});
+            put_i(out_dir, "prompt_text_ids_mask", mask.data(), {std::min(got, L + 64)});
+            put_i(out_dir, "prompt_text_ids_len", seg.data(), {n_segs});
+            printf("bt2-tts: our prompt L=%d segs=%d (oracle L=%d segs=%d)\n", got, n_segs, L, (int)f_seglen.count());
+        }
+    }
+
+    // ---- STAGE 2 — text encoder, per segment, on ORACLE ids -----------------
+    std::vector<float> all_hidden;
+    {
+        int pos = 0, k = 0;
+        while (pos < L) {
+            const bool is_text = f_mask.i[pos] != 0;
+            int start = pos;
+            while (pos < L && (f_mask.i[pos] != 0) == is_text)
+                pos++;
+            if (!is_text)
+                continue;
+            const int seg_len = pos - start;
+            std::vector<float> h((size_t)seg_len * d_te);
+            if (breeze_tts_2_run_text_encoder_dump(ctx, &f_ids.i[start], seg_len, h.data(), nullptr, 0) == seg_len) {
+                char nm[32];
+                std::snprintf(nm, sizeof(nm), "te_seg%d_hidden", k);
+                put_f(out_dir, nm, h.data(), {seg_len, d_te});
+                all_hidden.insert(all_hidden.end(), h.begin(), h.end());
+            }
+            k++;
+        }
+    }
+
+    // ---- STAGE 2b — projection, on our own encoder output -------------------
+    if (!all_hidden.empty()) {
+        const int n = (int)(all_hidden.size() / d_te);
+        std::vector<float> proj((size_t)n * d_bb);
+        if (breeze_tts_2_run_text_proj_dump(ctx, all_hidden.data(), n, proj.data()) == n)
+            put_f(out_dir, "te_proj_out", proj.data(), {n, d_bb});
+    }
+
+    // ---- STAGE 3 — prompt assembly, on ORACLE ids + ORACLE ref_codes --------
+    {
+        std::vector<float> emb((size_t)L * d_bb);
+        if (breeze_tts_2_run_prefill_embeds_dump(ctx, f_ids.i.data(), f_mask.i.data(), L, f_refcodes.i.data(),
+                                                 ref_frames, emb.data()) == L)
+            put_f(out_dir, "backbone_inputs_embeds", emb.data(), {L, d_bb});
+    }
+
+    // ---- STAGE 4 — backbone, on ORACLE inputs_embeds ------------------------
+    {
+        std::vector<float> hid(d_bb), logits(2052);
+        std::vector<std::vector<float>> layers((size_t)n_bb_layers, std::vector<float>(d_bb));
+        std::vector<float*> lp((size_t)n_bb_layers);
+        for (int j = 0; j < n_bb_layers; j++)
+            lp[(size_t)j] = layers[(size_t)j].data();
+        if (breeze_tts_2_run_backbone_dump(ctx, f_embeds.f.data(), L, hid.data(), logits.data(), lp.data(),
+                                           n_bb_layers) == L) {
+            put_f(out_dir, "backbone_hidden_frame0", hid.data(), {d_bb});
+            put_f(out_dir, "backbone_logits_frame0", logits.data(), {2052});
+            for (int j = 0; j < n_bb_layers; j++) {
+                char nm[40];
+                std::snprintf(nm, sizeof(nm), "backbone_layer%d_frame0", j);
+                put_f(out_dir, nm, layers[(size_t)j].data(), {d_bb});
+            }
+            int am = 0;
+            for (int i = 1; i < 2052; i++)
+                if (logits[i] > logits[am])
+                    am = i;
+            printf("bt2-tts: SMOKE argmax_cb0 = %d (oracle 404)%s\n", am, am == 404 ? "  ✓" : "  ✗ MISMATCH");
+        }
+    }
+
+    // ---- STAGE 5 — depth decoder, on ORACLE hidden + ORACLE cb0 -------------
+    {
+        int oracle_cb0 = 0;
+        for (int i = 1; i < (int)f_logits.count(); i++)
+            if (f_logits.f[i] > f_logits.f[oracle_cb0])
+                oracle_cb0 = i;
+        std::vector<std::vector<float>> cbl(15, std::vector<float>(v_dd));
+        std::vector<float*> cbp(15);
+        for (int i = 0; i < 15; i++)
+            cbp[(size_t)i] = cbl[(size_t)i].data();
+        std::vector<int32_t> codes(n_cb);
+        if (breeze_tts_2_run_depth_dump(ctx, f_hidden.f.data(), oracle_cb0, cbp.data(), codes.data()) == 0) {
+            for (int c = 1; c <= 15; c++) {
+                char nm[40];
+                std::snprintf(nm, sizeof(nm), "dd_logits_frame0_cb%d", c);
+                put_f(out_dir, nm, cbl[(size_t)c - 1].data(), {v_dd});
+            }
+            put_i(out_dir, "dd_codes_frame0_stepwise", codes.data(), {n_cb});
+            printf("bt2-tts: SMOKE frame0 codes =");
+            for (int i = 0; i < n_cb; i++)
+                printf(" %d", codes[(size_t)i]);
+            printf("\n");
+        }
+    }
+
+    // ---- STAGE 6 — full greedy generation, on ORACLE ref_codes --------------
+    {
+        const int cap = 24;
+        std::vector<int32_t> codes((size_t)cap * n_cb, 0);
+        const int nf =
+            breeze_tts_2_run_generate_codes_ref(ctx, SYN, REF, f_refcodes.i.data(), ref_frames, codes.data(), cap);
+        if (nf > 0)
+            put_i(out_dir, "codes", codes.data(), {nf, n_cb});
+        else
+            fprintf(stderr, "bt2-tts: generation produced no frames\n");
+    }
+
+    breeze_tts_2_free(ctx);
+    printf("bt2-tts: dump complete -> %s\n", out_dir.c_str());
+    return 0;
+}
+
 int main(int argc, char** argv) {
     // #333: madlad/t5 is a TEXT model — there is no audio to pass, so it is
     // dispatched before the 5-arg gate rather than made to carry a dummy path.
@@ -1225,6 +1576,12 @@ int main(int argc, char** argv) {
         const std::string b = argv[1];
         if (b == "madlad" || b == "t5")
             return t5_translate_diff(argv[2], argv[3], /*verbosity=*/2);
+        // #412. Dispatched here because its 3rd and 4th args are a fixture
+        // DIRECTORY and an output DIRECTORY — the reference is a set of .npy
+        // files on HF, not a ref.gguf, and there is no input wav (the clone
+        // reference is inside the fixture).
+        if ((b == "bt2-tts" || b == "breeze-tts-2") && argc >= 5)
+            return bt2_tts_dump(argv[2], argv[3], argv[4]);
     }
     if (argc < 5) {
         fprintf(stderr,

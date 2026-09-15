@@ -171,6 +171,24 @@ int breeze_tts_2_run_depth_dump(struct breeze_tts_2_context* ctx, const float* b
 int breeze_tts_2_run_generate_codes(struct breeze_tts_2_context* ctx, const char* text, const float* ref_pcm,
                                     int ref_n_samples, const char* ref_text, int32_t* out_codes, int max_frames_cap);
 
+// Stage 2b: prompt assembly ALL the way to backbone_inputs_embeds, driven by
+// the oracle's own prompt ids / text mask / reference codes rather than by our
+// tokenizer and our resampler. That separation is the point: if this matches
+// and the ids do not, the bug is in tokenization; if this fails on oracle ids,
+// the bug is in the scatter of text-encoder rows and audio embeddings.
+// out_embeds is [L, hidden_size]. Returns L, or <0 on error.
+int breeze_tts_2_run_prefill_embeds_dump(struct breeze_tts_2_context* ctx, const int32_t* ids, const int32_t* text_mask,
+                                         int L, const int32_t* ref_codes, int ref_frames, float* out_embeds);
+
+// Stage 5b: greedy generation from PRE-ENCODED reference codes, skipping the
+// codec encoder entirely. The oracle hands its reference clip to the tokenizer
+// at 16 kHz and lets it resample; the runtime pre-resamples to 24 kHz. Feeding
+// the oracle's ref_codes removes that difference from the comparison, so a
+// code mismatch here cannot be blamed on resampling.
+int breeze_tts_2_run_generate_codes_ref(struct breeze_tts_2_context* ctx, const char* text, const char* ref_text,
+                                        const int32_t* ref_codes, int ref_frames, int32_t* out_codes,
+                                        int max_frames_cap);
+
 // Prompt assembly, exposed on its own because it is invisible until the audio
 // is garbage. Writes the flattened prompt token ids, the per-position text
 // mask, and the per-segment text lengths, matching prompt_input_ids /

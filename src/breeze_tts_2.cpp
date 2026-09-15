@@ -2004,7 +2004,8 @@ namespace {
 // Shared body for every synthesis entry point.
 static float* synth_impl(breeze_tts_2_context* c, const char* text, const char* instruction, const float* ref_pcm,
                          int ref_n_samples, const char* ref_text, int* out_n_samples, bool greedy, int frame_cap,
-                         std::vector<std::vector<int32_t>>* out_frames) {
+                         std::vector<std::vector<int32_t>>* out_frames, const int32_t* pre_ref_codes = nullptr,
+                         int pre_ref_frames = 0) {
     if (out_n_samples)
         *out_n_samples = 0;
     if (!c || !text || !*text)
@@ -2014,7 +2015,13 @@ static float* synth_impl(breeze_tts_2_context* c, const char* text, const char* 
     // qwen3-tts context the decoder comes from.
     std::vector<int32_t> ref_codes;
     int ref_frames = 0;
-    if (ref_pcm && ref_n_samples > 0) {
+    if (pre_ref_codes && pre_ref_frames > 0) {
+        // Caller already has codes (the diff harness, feeding the oracle's).
+        // Skips the codec encoder AND the resampler, so neither can be blamed
+        // for a downstream mismatch.
+        ref_codes.assign(pre_ref_codes, pre_ref_codes + (size_t)pre_ref_frames * c->model.hp.num_codebooks);
+        ref_frames = pre_ref_frames;
+    } else if (ref_pcm && ref_n_samples > 0) {
         if (!c->codec) {
             fprintf(stderr, "breeze_tts_2: a reference clip was given but no codec is loaded — the reference "
                             "cannot be encoded. Pass the qwen3-tts-tokenizer-12hz GGUF via --codec-model.\n");
@@ -2212,6 +2219,58 @@ extern "C" int breeze_tts_2_run_generate_codes(struct breeze_tts_2_context* ctx,
     if (pcm)
         qwen3_tts_pcm_free(pcm);
     // No codec is not a failure here: the fixture stage is the CODES.
+    if (frames.empty())
+        return -1;
+    const int n_cb = (int)ctx->model.hp.num_codebooks;
+    const int n = std::min((int)frames.size(), max_frames_cap);
+    for (int f = 0; f < n; f++)
+        std::memcpy(out_codes + (size_t)f * n_cb, frames[(size_t)f].data(), (size_t)n_cb * sizeof(int32_t));
+    return n;
+}
+
+extern "C" int breeze_tts_2_run_prefill_embeds_dump(struct breeze_tts_2_context* ctx, const int32_t* ids,
+                                                    const int32_t* text_mask, int L, const int32_t* ref_codes,
+                                                    int ref_frames, float* out_embeds) {
+    if (!ctx || !ids || !text_mask || L <= 0 || !out_embeds)
+        return -1;
+    // Rebuild the segment list from the ORACLE's ids and mask rather than from
+    // our own tokenizer: a run of equal mask values IS a segment, which is
+    // exactly the invariant templates.py maintains (text_ids_len carries one
+    // entry per text segment, and the mask is false across the audio span).
+    std::vector<PromptSegment> segs;
+    int i = 0;
+    while (i < L) {
+        const bool is_text = text_mask[i] != 0;
+        PromptSegment seg;
+        seg.is_text = is_text;
+        while (i < L && (text_mask[i] != 0) == is_text) {
+            seg.ids.push_back(ids[i]);
+            i++;
+        }
+        segs.push_back(std::move(seg));
+    }
+    AssembledPrompt prompt;
+    if (!assemble_prompt(ctx, segs, ref_frames > 0 ? ref_codes : nullptr, ref_frames, prompt))
+        return -1;
+    if (prompt.L != L) {
+        fprintf(stderr, "breeze_tts_2: reassembled prompt is %d tokens, fixture says %d\n", prompt.L, L);
+        return -1;
+    }
+    std::memcpy(out_embeds, prompt.embeds.data(), prompt.embeds.size() * sizeof(float));
+    return prompt.L;
+}
+
+extern "C" int breeze_tts_2_run_generate_codes_ref(struct breeze_tts_2_context* ctx, const char* text,
+                                                   const char* ref_text, const int32_t* ref_codes, int ref_frames,
+                                                   int32_t* out_codes, int max_frames_cap) {
+    if (!ctx || !text || !out_codes || max_frames_cap <= 0)
+        return -1;
+    std::vector<std::vector<int32_t>> frames;
+    int n_samples = 0;
+    float* pcm = synth_impl(ctx, text, nullptr, nullptr, 0, ref_text, &n_samples, /*greedy*/ true, max_frames_cap,
+                            &frames, ref_codes, ref_frames);
+    if (pcm)
+        qwen3_tts_pcm_free(pcm);
     if (frames.empty())
         return -1;
     const int n_cb = (int)ctx->model.hp.num_codebooks;
