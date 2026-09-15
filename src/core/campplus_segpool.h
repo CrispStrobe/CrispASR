@@ -30,25 +30,36 @@ namespace campplus_segpool {
 
 // WHICH REFERENCE a consumer must match on the PARTIAL TAIL window.
 //
-// These are not "right" and "wrong" — they are two upstreams, and a backend is
-// correct only against its own. Measured by RUNNING both, not by reading specs:
+// ALL FIVE CAM++ CONSUMERS WANT window_width. That is measured, and it was
+// briefly believed otherwise, so the evidence is recorded here rather than
+// re-litigated.
 //
-//   torch  F.avg_pool1d(ceil_mode=True) divides the tail by its OWN width.
-//          Verified: all-ones, T=551 -> every segment exactly 1.0.
+// An earlier probe compared an ISOLATED AveragePool export at T_cam=173 and
+// concluded that campplus.onnx — cosyvoice3's upstream — divides the tail by
+// the kernel size, which would have made cosyvoice3 the one consumer needing
+// kernel_size. Running the ACTUAL C++ arms against the ACTUAL campplus.onnx on
+// real input (T_cam=549, tail=49) says the opposite, with the fbank pinned
+// identical across arms so the pooling is the only variable:
 //
-//   onnx   campplus.onnx as EXPORTED divides the tail by the KERNEL size.
-//          Verified by running the real graph, with a no-tail control
-//          (T_cam=100) where all arms agree at cos 1.000000 -- which rules out
-//          any weight or front-end difference and pins it to the tail alone.
-//          At T_cam=173 the graph matches the kernel-size arm EXACTLY
-//          (cos 1.000000, |x| 14.1197) and the width arm only to 0.992663.
-//          NOTE the isolated OPERATOR with those same attributes divides by
-//          width, so the spec would have said "ONNX agrees with torch". The
-//          exported graph does not. The mechanism inside the export was not
-//          isolated; this is measured behaviour, not an explained cause.
+//     cosyvoice3   cos_fixed 0.999999   cos_legacy 0.998052
+//                  |fixed|   13.6296    |legacy|   14.0340   |onnx ref| 13.6330
+//
+// A second, independent reference (funasr) agrees to 7 decimals. Every other
+// consumer reports the same direction against its own upstream, and fireredtts3
+// reproduces its known signature (0.99999 fixed vs 0.264 legacy), so the
+// instrument is trustworthy. All five: TOWARD_REFERENCE on the fixed arm.
+//
+// The lesson worth keeping: an isolated operator with the same attributes is
+// NOT the graph. Measure the arms you ship against the reference you ship
+// against, on the input you ship with.
+//
+// kernel_size therefore has no production caller. It is kept ONLY so the old
+// divisor can be rebuilt for A/B — same purpose as
+// CRISPASR_CAMPP_LEGACY_SEGPOOL — because "the fix moved it toward upstream"
+// has to stay a measurement rather than becoming folklore.
 enum class tail_divisor {
-    window_width, // torch  — chatterbox, confucius4, dots, fireredtts3
-    kernel_size,  // onnx   — cosyvoice3 ONLY
+    window_width, // what ALL FIVE consumers match. The default.
+    kernel_size,  // the old divisor, for A/B only — no production caller.
 };
 
 
