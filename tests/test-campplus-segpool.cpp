@@ -19,6 +19,9 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cmath>
+#include <cstdlib>
+#include <string>
 #include <vector>
 
 using namespace campplus_segpool;
@@ -97,4 +100,117 @@ TEST_CASE("campplus seg_pool tolerates degenerate inputs", "[unit][tts][campplus
     avg(out.data(), 1, 10, 0, out.data());
     for (float v : out)
         REQUIRE(close_to(v, -99.0f)); // untouched
+}
+
+// ---------------------------------------------------------------------------
+// CRISPASR_CAMPP_LEGACY_SEGPOOL — the A/B gate's own contract.
+//
+// The gate exists so the fix can be measured against the behaviour four shipped
+// backends (chatterbox, confucius4, cosyvoice3, dots-tts) were accepted with.
+// A measurement taken through it is only worth reading if the gate does exactly
+// two things and no more:
+//
+//   * it must change the PARTIAL TAIL, or a per-backend "the two arms agree"
+//     result means the gate never reached that backend rather than "the fix is
+//     a no-op there" — vacuous, and it reads like a pass;
+//   * it must change NOTHING ELSE, so a clip whose frame count is a whole
+//     number of windows has to come out bit-identical in both arms. That case
+//     is the one that separates "the divisor changed" from "something else
+//     changed too", and it is arithmetic, so it belongs here rather than in a
+//     Kaggle run.
+//
+// Asserted in code because both properties are invisible to every end-to-end
+// acceptance test these backends have -- which is how the original divisor bug
+// survived five consumers in the first place.
+namespace {
+struct ScopedLegacySegpool {
+    bool had_prev = false;
+    std::string prev;
+    explicit ScopedLegacySegpool(const char* value) {
+        if (const char* p = std::getenv("CRISPASR_CAMPP_LEGACY_SEGPOOL")) {
+            had_prev = true;
+            prev = p;
+        }
+        if (value)
+            setenv("CRISPASR_CAMPP_LEGACY_SEGPOOL", value, 1);
+        else
+            unsetenv("CRISPASR_CAMPP_LEGACY_SEGPOOL");
+    }
+    ~ScopedLegacySegpool() {
+        if (had_prev)
+            setenv("CRISPASR_CAMPP_LEGACY_SEGPOOL", prev.c_str(), 1);
+        else
+            unsetenv("CRISPASR_CAMPP_LEGACY_SEGPOOL");
+    }
+};
+
+// A ramp, so every window has a distinct mean and an accidental agreement
+// cannot come from the input being degenerate.
+std::vector<float> ramp(int C, int T) {
+    std::vector<float> v((size_t)C * (size_t)T);
+    for (int c = 0; c < C; c++)
+        for (int t = 0; t < T; t++)
+            v[(size_t)c * (size_t)T + (size_t)t] = (float)(t + 1) * (float)(c + 1) * 0.125f;
+    return v;
+}
+
+std::vector<float> run_seg_pool(const char* legacy_env, int C, int T, int k) {
+    ScopedLegacySegpool guard(legacy_env);
+    std::vector<float> in = ramp(C, T);
+    std::vector<float> out((size_t)C * (size_t)campplus_segpool::n_segments(T, k), -99.0f);
+    campplus_segpool::avg(in.data(), C, T, k, out.data());
+    return out;
+}
+} // namespace
+
+TEST_CASE("campplus seg_pool legacy gate changes ONLY the partial tail", "[unit][tts][campplus][segpool]") {
+    const int C = 3, k = 100;
+
+    SECTION("exact multiple of the window: both arms must agree bit-for-bit") {
+        // T = 400 -> 4 full windows, no tail. n_in_seg == seg_len everywhere, so
+        // the two divisors are the same number and the gate has nothing to do.
+        // If this ever differs, the gate is reaching something it must not.
+        const int T = 400;
+        REQUIRE(campplus_segpool::n_segments(T, k) == 4);
+        const std::vector<float> fixed = run_seg_pool(nullptr, C, T, k);
+        const std::vector<float> legacy = run_seg_pool("1", C, T, k);
+        REQUIRE(fixed.size() == legacy.size());
+        for (size_t i = 0; i < fixed.size(); i++)
+            REQUIRE(fixed[i] == legacy[i]); // bit-for-bit: same divisor, same order
+    }
+
+    SECTION("partial tail present: the arms MUST differ, and only in the tail") {
+        // T = 451 -> 4 full windows + a 51-frame tail. Anything that agrees in
+        // the tail here means the gate is not reaching the code under test, and
+        // every "identical" reading taken through it would be vacuous.
+        const int T = 451;
+        const int n_seg = campplus_segpool::n_segments(T, k);
+        REQUIRE(n_seg == 5);
+        const std::vector<float> fixed = run_seg_pool(nullptr, C, T, k);
+        const std::vector<float> legacy = run_seg_pool("1", C, T, k);
+        REQUIRE(fixed.size() == legacy.size());
+        for (int c = 0; c < C; c++) {
+            for (int sgi = 0; sgi < n_seg - 1; sgi++) {
+                const size_t i = (size_t)c * (size_t)n_seg + (size_t)sgi;
+                REQUIRE(fixed[i] == legacy[i]); // full windows are untouched
+            }
+            const size_t tail = (size_t)c * (size_t)n_seg + (size_t)(n_seg - 1);
+            REQUIRE(fixed[tail] != legacy[tail]);
+            // The legacy arm divided a 51-frame window by 100, so it is low by
+            // exactly 51/100 -- a magnitude error, which cosine alone hides.
+            REQUIRE(std::abs(legacy[tail] - fixed[tail] * (51.0f / 100.0f)) <= 1e-4f * std::abs(fixed[tail]));
+        }
+    }
+
+    SECTION("the gate is off by default") {
+        // Nothing in the suite may leave it set: a stray value would silently
+        // put every later assertion on the known-wrong divisor.
+        ScopedLegacySegpool guard(nullptr);
+        REQUIRE(std::getenv("CRISPASR_CAMPP_LEGACY_SEGPOOL") == nullptr);
+        const int T = 451, n_seg = campplus_segpool::n_segments(T, k);
+        std::vector<float> in((size_t)T, 1.0f);
+        std::vector<float> out((size_t)n_seg, -99.0f);
+        campplus_segpool::avg(in.data(), 1, T, k, out.data());
+        REQUIRE(close_to(out[(size_t)n_seg - 1], 1.0f)); // fixed divisor, not 0.51
+    }
 }
