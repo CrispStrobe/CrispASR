@@ -169,7 +169,10 @@ surviving artifact. Applied on both the CLI and the session C-ABI.
 | Variable | Purpose |
 |----------|---------|
 | `CRISPASR_CMUDICT_PATH` | Path to the CMUdict pronunciation dictionary. |
-| `CRISPASR_DE_DICT_PATH` / `_FR_DICT_PATH` / `_ES_DICT_PATH` | Language-specific pronunciation dictionaries. |
+| `CRISPASR_DE_DICT_PATH` / `_FR_DICT_PATH` / `_ES_DICT_PATH` / `_RU_DICT_PATH` | Language-specific pronunciation dictionaries. |
+| `CRISPASR_RU_HETERONYMS_PATH` | Path to the Russian heteronym list. Only read when `CRISPASR_G2P_RU_HETERONYM_WARN` is on — it is diagnostic data, not a lookup tier. |
+| `CRISPASR_G2P_RU_HETERONYM_WARN` | `1` prints one line per input word that the upstream project flagged as genuinely ambiguous. Those 17,359 words are DISJOINT from the 812,953-entry vocabulary — they were removed because upstream could not choose a reading — so they have no dictionary entry and the letter-to-sound rules pick one reading from spelling alone. Common words are in that set (`все`, `уже`, `потом`, `чем`, `небо`, `тест`). Off by default; on, it turns a mispronunciation that looks like a rule bug into a named, explained limitation. Writing the `ё` or an explicit combining acute (`замо́к`) in the input resolves many of them, and both are honoured. |
+| `CRISPASR_G2P_RU_ANALOGY` | `0` disables the Russian stress-analogy tier, which finds a known relative of an OOV word (strip up to 3 letters, glue a short list of inflectional endings back on) and borrows its stress. On by default and measured on 10,000 held-out dictionary words: stressed-syllable index right 93.9% with it and 47.1% without; exact IPA match 79.4% vs 40.9%. The lever exists because it is the one tier that can take a stress from a word that merely LOOKS related. |
 | `CRISPASR_G2P_DICT_SOURCE` / `_G2P_MODEL_PATH` | G2P dictionary source / neural G2P model path. |
 | `CRISPASR_ESPEAK_DATA_PATH` | eSpeak-NG data directory. |
 | `CRISPASR_MISAKI_DICT_PATH` | Path to the misaki US contextual-word dictionary (default `~/.cache/crispasr/misaki-us.txt`) used by the English misaki G2P (#316). |
@@ -1562,13 +1565,35 @@ end-to-end cosine cannot do.
   phonemizer zonos tries first (#435). `espeak` is the pre-#435-follow-on
   cascade bit for bit (in-process libespeak-ng → the `espeak-ng` binary → raw
   ASCII → refuse) and never consults the built-in G2P; `builtin` puts the
-  built-in EN/DE/FR/ES G2P from `crispasr-core` first; `auto` keeps espeak
+  built-in EN/DE/FR/ES/RU G2P from `crispasr-core` first; `auto` keeps espeak
   first and uses the built-in only as a fallback below it. The default is
   **not** `builtin`: the built-ins emit espeak-dialect IPA while zonos's
   inventory comes from its own `conditioning.py` symbol list, and unmapped
   codepoints are dropped silently — the failure mode that made #435 look like a
   working backend. A language's default moves only on per-language agreement
   and drop measurements, never on "it produced audio".
+- `CRISPASR_ZONOS_RU_DIALECT` — `native` (default) | `espeak`. Which SPELLING of
+  the Russian phonemes to hand the model when the built-in G2P produces them.
+  `native` is what `crispasr-core`'s Russian G2P emits — a narrow transcription
+  (`ɐ`/`ə` reduction gradation, `ʂ`/`ʐ` retroflexes, `lʲ` vs `ɫ`, `æ` fronting).
+  `espeak` rewrites the same sounds into espeak-ng's `ru` conventions (`ʌ`, `ʃ`,
+  `ʒ`, `ɭ`, `ɑ`, `y`). Not cosmetic and **invisible to the drop counter**: every
+  symbol on both sides is inside zonos's inventory, so nothing is dropped either
+  way — but a model conditions on the spelling it was TRAINED on, and zonos was
+  phonemised with espeak. Measured over 2,200 dictionary words phonemised both
+  ways, raw symbol agreement between the two spellings is 57.7% and the
+  conversion takes it to 88.0%. Same class of problem as `CRISPASR_KOKORO_MISAKI_IPA`
+  (#316), one language further on.
+  **Off by default because it was measured and it LOSES.** It did raise
+  phoneme-ID agreement with the espeak arm on all three test sentences
+  (0.773/0.759/0.627 → 0.818/0.852/0.847) — and took the ASR roundtrip from
+  0.293 to **0.000** on every sentence, in both the with-espeak and the
+  espeak-removed runs. Six arms, six zeros; it was the only arm that never
+  produced a recognisable transcript. Agreement with the tool a model was
+  trained on turns out not to be a proxy for the quality of its audio. Kept as
+  a lever because a different consumer (a piper or kokoro Russian voice trained
+  on espeak) may want it, but it must not be enabled for zonos without a new
+  measurement.
 - `CRISPASR_ZONOS_G2P_DEBUG` — `1` prints the phonemisation readout to stderr:
   which path ran, the IPA, the full phoneme-ID sequence, and how many emitted
   codepoints zonos's inventory could not map (with a histogram of which). Off

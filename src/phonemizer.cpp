@@ -7,6 +7,7 @@
 #include "core/g2p_de.h"
 #include "core/g2p_fr.h"
 #include "core/g2p_es.h"
+#include "core/g2p_ru.h"
 // Auto-download support — only when compiled as part of crispasr-lib.
 // Unit tests compile phonemizer.cpp standalone without the cache library.
 #ifdef CRISPASR_BUILD
@@ -46,6 +47,33 @@ static const g2p_dict_urls G2P_URLS_ES = {
     "https://huggingface.co/datasets/cstr/g2p-dicts/resolve/main/espeak_es.tsv",
     "olaph_es.txt",
     "https://huggingface.co/datasets/cstr/g2p-dicts/resolve/main/olaph_es.txt",
+};
+// Russian. Derived from bene-ges/ru_g2p_ipa_bert_large, **CC-BY-4.0** —
+// attribution is a licence CONDITION, not a courtesy, so it is stated here
+// beside the URL as well as on the dataset card:
+//
+//     ru_g2p_ipa.tsv / ru_heteronyms.txt
+//       derived from https://huggingface.co/bene-ges/ru_g2p_ipa_bert_large
+//       by bene-ges, licensed CC-BY-4.0 (https://creativecommons.org/licenses/by/4.0/).
+//       Changes: the ` (U+0060) stress marker was rewritten to ˈ (U+02C8),
+//       the IPA was wrapped in /…/, and 1,952 `(по)…` keys were dropped.
+//
+// Unlike the other languages here there is no second provider: this is the only
+// free, stress-resolved Russian pronunciation dictionary at this scale that we
+// found, so both slots point at it.
+static const g2p_dict_urls G2P_URLS_RU = {
+    "ru_g2p_ipa.tsv",
+    "https://huggingface.co/datasets/cstr/g2p-dicts/resolve/main/ru_g2p_ipa.tsv",
+    nullptr,
+    nullptr,
+};
+// The heteronym list travels the same road. It is NOT a second dictionary — see
+// ensure_ru_dict_loaded() for what it is and is not good for.
+static const g2p_dict_urls G2P_URLS_RU_HET = {
+    "ru_heteronyms.txt",
+    "https://huggingface.co/datasets/cstr/g2p-dicts/resolve/main/ru_heteronyms.txt",
+    nullptr,
+    nullptr,
 };
 static const g2p_dict_urls G2P_URLS_IT = {
     "olaph_it.txt",
@@ -492,6 +520,61 @@ bool phonemize_builtin_es(const std::string& lang, const std::string& text, std:
     return !out.empty();
 }
 
+// ── Built-in Russian G2P (dictionary + LTS rules) ────────────────────
+
+static g2p_ru::context g_g2p_ru_ctx;
+static std::mutex g_g2p_ru_mu;
+static bool g_g2p_ru_tried = false;
+
+static void ensure_ru_dict_loaded() {
+    if (g_g2p_ru_ctx.dict.loaded || g_g2p_ru_tried)
+        return;
+    g_g2p_ru_tried = true;
+    int n = try_load_dict(g_g2p_ru_ctx.dict, "CRISPASR_RU_DICT_PATH", G2P_URLS_RU, g2p_ru::load_ipa_dict_file);
+    if (n > 0)
+        fprintf(stderr, "g2p: loaded Russian IPA dict (%d entries)\n", n);
+
+    // The heteronym list is DIAGNOSTIC, not a lookup tier. Upstream removed
+    // these 17,359 words from the vocabulary because it could not choose a
+    // reading for them, so there is nothing here to look up — they are exactly
+    // the words the letter-to-sound rules have to handle, and the rules pick
+    // ONE reading from spelling with no sentence context. Fetching the list
+    // buys the ability to SAY so when it happens instead of leaving a
+    // mispronunciation looking like a rule bug.
+    //
+    // Only fetched when someone asked to be told, so the default path does not
+    // pull a file it will never read.
+    const char* warn = std::getenv("CRISPASR_G2P_RU_HETERONYM_WARN");
+    g_g2p_ru_ctx.warn_heteronyms = warn && *warn && std::strcmp(warn, "0") != 0;
+    if (g_g2p_ru_ctx.warn_heteronyms) {
+        int h = try_load_dict(g_g2p_ru_ctx.het, "CRISPASR_RU_HETERONYMS_PATH", G2P_URLS_RU_HET,
+                              g2p_ru::load_heteronyms_file);
+        if (h > 0)
+            fprintf(stderr, "g2p: loaded Russian heteronym list (%d words)\n", h);
+    }
+
+    // The stress-analogy tier. On by default and worth 47 points: measured by
+    // holding each of 10,000 dictionary words OUT of the dictionary and asking
+    // the rules for it, the stressed-syllable index is right 93.9% of the time
+    // with analogy and 47.1% without (exact IPA match 79.4% vs 40.9%). The
+    // escape hatch exists because it is the one tier that can take a stress
+    // from a word that merely LOOKS related.
+    if (const char* v = std::getenv("CRISPASR_G2P_RU_ANALOGY"); v && *v && std::strcmp(v, "0") == 0)
+        g_g2p_ru_ctx.stress_analogy = false;
+}
+
+bool phonemize_builtin_ru(const std::string& lang, const std::string& text, std::string& out, bool tts_punctuation) {
+    if (!lang.empty() && lang.find("ru") == std::string::npos)
+        return false;
+    {
+        std::lock_guard<std::mutex> g(g_g2p_ru_mu);
+        ensure_ru_dict_loaded();
+    }
+    g_g2p_ru_ctx.emit_punctuation = tts_punctuation;
+    out = g2p_ru::text_to_ipa(g_g2p_ru_ctx, text);
+    return !out.empty();
+}
+
 // ── language dispatch for the built-in G2P (#435) ────────────────────
 
 const char* builtin_g2p_language(const std::string& lang) {
@@ -511,6 +594,8 @@ const char* builtin_g2p_language(const std::string& lang) {
         return "fr";
     if (p == "es")
         return "es";
+    if (p == "ru")
+        return "ru";
     return nullptr;
 }
 
@@ -532,6 +617,8 @@ bool phonemize_builtin_tts(const std::string& lang, const std::string& text, std
         return phonemize_builtin_de(lang, text, out, /*tts_punctuation=*/true);
     if (std::strcmp(fam, "fr") == 0)
         return phonemize_builtin_fr(lang, text, out, /*tts_punctuation=*/true);
+    if (std::strcmp(fam, "ru") == 0)
+        return phonemize_builtin_ru(lang, text, out, /*tts_punctuation=*/true);
     return phonemize_builtin_es(lang, text, out, /*tts_punctuation=*/true);
 }
 

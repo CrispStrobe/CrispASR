@@ -430,6 +430,17 @@ static bool phonemize_builtin(const std::string& voice, const std::string& text,
         out = g2p_es::text_to_ipa(g_g2p_es_ctx, text);
         return !out.empty();
     }
+    // Russian goes through crispasr-core's phonemizer rather than a bare
+    // g2p_ru::context, because that is what owns the 813K-entry dictionary and
+    // its auto-download. A local context would give the letter-to-sound rules
+    // only, which is a different and much worse thing wearing the same name.
+    //
+    // This whole function is the tier BELOW espeak (see phonemize_espeak), so
+    // this changes nothing on a machine that has espeak-ng — it is the
+    // difference between Russian speech and no Russian at all on one that does
+    // not.
+    if (voice.find("ru") != std::string::npos)
+        return crispasr::phonemize_builtin_ru(voice, text, out, /*tts_punctuation=*/false);
     // English: LTS + CMUdict (always available)
     {
         std::lock_guard<std::mutex> g(g_g2p_mu);

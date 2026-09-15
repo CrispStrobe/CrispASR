@@ -804,7 +804,62 @@ The phonemization cascade tries in order:
 
 Override per-language dict paths with env vars:
 `CRISPASR_CMUDICT_PATH`, `CRISPASR_DE_DICT_PATH`,
-`CRISPASR_FR_DICT_PATH`, `CRISPASR_ES_DICT_PATH`.
+`CRISPASR_FR_DICT_PATH`, `CRISPASR_ES_DICT_PATH`,
+`CRISPASR_RU_DICT_PATH`.
+
+### Russian G2P — and the one thing it cannot do
+
+Russian is covered by a 812,953-entry IPA dictionary with lexical stress
+already resolved ([`bene-ges/ru_g2p_ipa_bert_large`](https://huggingface.co/bene-ges/ru_g2p_ipa_bert_large),
+**CC-BY-4.0**), published as `ru_g2p_ipa.tsv` on
+[cstr/g2p-dicts](https://huggingface.co/datasets/cstr/g2p-dicts), in front of
+letter-to-sound rules covering palatalisation, voicing assimilation, final
+devoicing, and stress-driven vowel reduction. Stress is the hard half of
+Russian G2P — it is not predictable from spelling and it changes the VOWELS,
+not just the prosody (`молоко` is `[məɫɐkˈo]`: the same letter as three
+different sounds, chosen entirely by distance from the stress).
+
+**Heteronyms are a real, stated limitation, not a rough edge.** The upstream
+project shipped a second file listing 17,359 words it judged genuinely
+ambiguous — and it *removed* them from the vocabulary. The two files are
+disjoint: 0 of the 17,359 appear in the dictionary. They are not entries with a
+chosen reading; they are the words upstream could not choose for. So there is
+no "dictionary reading" to take for `замок` (castle / lock) or `мука`
+(flour / torment), and the letter-to-sound rules pick ONE reading from spelling
+alone. On a genuine heteronym that is wrong roughly half the time.
+
+A dictionary cannot carry sentence context and this one does not pretend to.
+Resolving these needs a model that sees the sentence.
+
+Frequent words are in that set, largely for a mechanical reason: the
+dictionary's keys fold `ё` to `е`, so every `ё`/`е` minimal pair (`всё`/`все`,
+`нёбо`/`небо`) collapses into one ambiguous key and was dropped. Two things
+you can do about it, both honoured by the G2P:
+
+- **write the `ё`.** It is always stressed, so it fixes the stress and the
+  vowel quality at once — `всё` and `все` come out different.
+- **write an explicit stress mark** (combining acute, U+0301) where it matters:
+  `за́мок` → `[ˈzamək]`, `замо́к` → `[zɐmˈok]`. An explicit mark outranks the
+  dictionary when the two disagree, because it is the writer disambiguating on
+  purpose. It is stripped before lookup and never reaches the phoneme string.
+
+Set `CRISPASR_G2P_RU_HETERONYM_WARN=1` to have each ambiguous input word named
+on stderr as it occurs.
+
+Measured, so the two tiers are not read as equally good:
+
+| | |
+|---|---|
+| Dictionary coverage on running text | 89.7% of word tokens (1,073 tokens of Russian Wikipedia summaries) |
+| Rule path, stressed-syllable index correct | 93.9% (control, analogy tier off: 47.1%) |
+| Rule path, exact IPA match vs the dictionary | 79.4% (control: 40.9%) |
+| Rule path, symbol accuracy | 96.6% (control: 82.3%) |
+
+The rule-path rows are a 10,000-word holdout: each word was *removed* from the
+dictionary before the rules were asked for it. That sample is mostly inflected
+forms whose stem is still in the dictionary, which is what the analogy tier
+feeds on — it is not representative of a surname or a neologism, for which only
+the by-syllable-count fallback is left (right 27-61% of the time).
 
 ### Kokoro G2P strategy (`CRISPASR_KOKORO_G2P`)
 
@@ -831,7 +886,7 @@ Dictionary sources at [cstr/g2p-dicts](https://huggingface.co/datasets/cstr/g2p-
 ### Zonos G2P strategy (`CRISPASR_ZONOS_G2P`)
 
 Zonos conditions on IPA phonemes, and until #435 it could only get them from
-espeak-ng (GPL-3.0). It now also reaches the built-in EN/DE/FR/ES G2P that
+espeak-ng (GPL-3.0). It now also reaches the built-in EN/DE/FR/ES/RU G2P that
 `crispasr-core` ships:
 
 | Value | Behavior |
@@ -859,11 +914,12 @@ phoneme-ID sequences; `F1` is word-F1 of an ASR roundtrip against the input.
 | de | 0.94 | 1.00 | 1.00 | Built-in matches espeak; transcripts identical. |
 | fr | 0.95 | 0.84 | 0.95 | Built-in *beats* espeak (`renard` vs `renarbre`), reproduced across runs. |
 | es | 0.82–0.94 | 0.57 | 0.81 | Built-in higher on all 3 sentences, but the espeak baseline is itself weak — see below. |
-| ru | — | — | n/a | **No built-in.** espeak-ng remains required, and without it zonos refuses (#435). |
+| ru | 0.77 / 0.76 / 0.63 | 0.585 | 0.293 | **Default stays espeak.** All 7 controls fire, so the numbers are evidence — and the evidence does not support a flip: zero dropped symbols on either path, but the built-in is lower and the espeak baseline is itself below the 0.60 floor. See below. |
 
-With espeak-ng physically removed, en/de/fr/es all synthesise and produce
-byte-identical phoneme IDs to the with-espeak built-in run, and Russian still
-refuses with a non-zero exit and a zero-byte file.
+With espeak-ng physically removed, en/de/fr/es/ru all synthesise and produce
+byte-identical phoneme IDs to the with-espeak built-in run. A language with no
+built-in at all (`ja`) still refuses with a non-zero exit and a zero-byte file —
+the #435 guarantee did not weaken when Russian gained a G2P.
 
 Caveats, because these numbers are easy to over-read:
 
@@ -872,6 +928,59 @@ Caveats, because these numbers are easy to over-read:
   letter-to-sound rules — "quick brown" becomes `kˈʌɪk bɹˈoʊn`, which an ASR
   reads back as "cook bone" (F1 1.00 → 0.80). The dictionary auto-downloads; set
   `CRISPASR_CMUDICT_PATH` if your machine cannot reach the network.
+- **Russian is inconclusive, and not for the reason it looks like.** Measured on
+  three sentences with espeak physically removed and the removal verified
+  (`chr1s4/crispasr-zonos-g2p-ru`). What the run settles:
+
+  - the built-in path drops **zero** codepoints — and that number means
+    something because a control fires on that exact path: a one-line dictionary
+    carrying the upstream backtick stress marker, injected through
+    `CRISPASR_RU_DICT_PATH`, makes the counter report `dropped=1 {U+0060: 1}`.
+    Without that arm, "dropped nothing" is a negative the instrument has never
+    been shown capable of contradicting. espeak's own `ru` voice, by contrast,
+    emits `^` (U+005E) which zonos cannot map — 0.0172% against the built-in's
+    0.0000%, which is asserted by a unit test rather than merely observed;
+  - zonos still synthesises Russian with **no GPL dependency present at all**,
+    producing byte-identical phoneme IDs to the with-espeak built-in run;
+  - the #435 guarantee survives: a language with no built-in (`ja`) still
+    refuses with a non-zero exit and a zero-byte file.
+
+  What it does **not** settle is the default. The espeak arm scores 0.585 —
+  below the 0.60 floor — and 0.000 on one of the three sentences. Zonos-v0.1
+  does not list Russian among its languages, so the roundtrip is measuring
+  zonos's Russian more than it is measuring the G2P. A built-in that "wins"
+  against a collapsed baseline proves nothing; that is exactly the mistake
+  Spanish was nearly passed on.
+
+- **The phoneme-ID gap for Russian is a SPELLING difference, not an error.**
+  espeak's `ru` voice and the built-in transcribe the same sounds in different
+  symbols:
+
+  ```
+  ours    məɫɐkˈo i xlʲep lʲɪʐˈat na stɐlʲˈe v bɐlʲʂˈoj kˈomnətʲe
+  espeak  mʌɭʌkˈo ɪ xɭʲˈep ɭʲiʒˈɑt nə stʌɭʲˈe v bʌɭʃˈoj kˈomnʌtʲi
+  ```
+
+  Over 2,200 dictionary words phonemised both ways, raw symbol agreement is
+  57.7% and not one word matches exactly — and **every symbol on both sides is
+  inside zonos's inventory, so the drop counter is blind to this by
+  construction.** `CRISPASR_ZONOS_RU_DIALECT=espeak` rewrites the built-in's
+  output into espeak's conventions, taking agreement to 88.0%.
+
+- **And converting to espeak's spelling made the audio WORSE, which is the most
+  useful thing this pair of runs produced.** The reasoning was that zonos was
+  phonemised with espeak, so handing it espeak's symbols should help. It did
+  raise phoneme-ID agreement on every sentence (0.773/0.759/0.627 →
+  0.818/0.852/0.847) — and took the ASR roundtrip from 0.293 to **0.000** on
+  every sentence, in both the with-espeak and espeak-removed runs. Six arms,
+  six zeros; the only arm of the three that never produced a recognisable
+  transcript, read back by the ASR as Polish and Dutch.
+
+  So **agreement with the tool a model was trained on is not a proxy for the
+  quality of its audio.** A mechanism story with a measured 30-point number
+  attached is exactly the shape of thing that ships without a roundtrip. The
+  switch is kept, gated and off, the same way `CRISPASR_G2P_DE_UNSTRESS` is.
+
 - **Spanish has no trustworthy baseline.** The espeak arm scores 0.57, so the
   comparison says as much about the model's Spanish as about the G2P. The
   built-in was higher on every sentence, but that is "no evidence of harm", not

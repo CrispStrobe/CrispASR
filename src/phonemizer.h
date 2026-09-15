@@ -76,7 +76,7 @@ struct g2p_style {
 bool phonemize_builtin_en(const std::string& lang, const std::string& text, std::string& out, const g2p_style& style);
 
 // Which built-in G2P covers `lang`, or nullptr when none does.
-// Returns one of the literals "en", "de", "fr", "es".
+// Returns one of the literals "en", "de", "fr", "es", "ru".
 //
 // Matches the PRIMARY SUBTAG exactly ("en-us" -> en, "es-419" -> es), which the
 // individual phonemize_builtin_* functions do NOT: they test
@@ -91,8 +91,8 @@ const char* builtin_g2p_language(const std::string& lang);
 // through to espeak rather than shipping silence.
 //
 // This is the whole point of phonemizer.cpp living in crispasr-core: any backend
-// that links the core lib can now reach a non-GPL G2P for en/de/fr/es without
-// depending on kokoro.
+// that links the core lib can now reach a non-GPL G2P for en/de/fr/es/ru
+// without depending on kokoro.
 bool phonemize_builtin_tts(const std::string& lang, const std::string& text, std::string& out);
 
 // #316: same, but Tier 0 is misaki's own lexicon (Kokoro's G2P, Apache-2.0)
@@ -123,8 +123,32 @@ bool phonemize_builtin_fr(const std::string& lang, const std::string& text, std:
 bool phonemize_builtin_es(const std::string& lang, const std::string& text, std::string& out,
                           bool tts_punctuation = false);
 
+// Built-in Russian G2P: a 813K-entry IPA dictionary with lexical stress already
+// resolved (bene-ges/ru_g2p_ipa_bert_large, CC-BY-4.0) in front of letter-to-
+// sound rules that cover palatalisation, voicing assimilation, final devoicing
+// and stress-driven vowel reduction.
+//
+// TWO LIMITS, because a caller that does not know them will read the output as
+// a bug rather than as the state of the art here:
+//
+//  * HETERONYMS. The upstream project shipped 17,359 words it judged genuinely
+//    ambiguous and REMOVED them from the vocabulary — the two files are
+//    disjoint. So `замок`, `мука`, `все`, `уже`, `потом` have no dictionary
+//    reading at all and go to the rules, which pick ONE of the readings from
+//    spelling alone. A dictionary cannot carry sentence context and this one
+//    does not pretend to. `CRISPASR_G2P_RU_HETERONYM_WARN=1` names them on
+//    stderr as they occur.
+//  * `ё` WRITTEN AS `е`. Russian text routinely omits the diaeresis, and the
+//    dictionary's own keys fold it away as well. When the input writes `ё` it
+//    is used (it is both a stress and a vowel-quality signal); when the input
+//    writes `е` for it, neither path can recover it.
+//
+// For non-Russian, returns false and falls through.
+bool phonemize_builtin_ru(const std::string& lang, const std::string& text, std::string& out,
+                          bool tts_punctuation = false);
+
 // Try all available phonemizers in priority order.
-// Order: builtin_{en,de,fr,es} → espeak_dlopen → espeak_popen
+// Order: builtin_{en,de,fr,es,ru} → espeak_dlopen → espeak_popen
 inline bool phonemize(const std::string& lang, const std::string& text, std::string& out) {
     if (phonemize_builtin_en(lang, text, out))
         return true;
@@ -133,6 +157,8 @@ inline bool phonemize(const std::string& lang, const std::string& text, std::str
     if (phonemize_builtin_fr(lang, text, out))
         return true;
     if (phonemize_builtin_es(lang, text, out))
+        return true;
+    if (phonemize_builtin_ru(lang, text, out))
         return true;
     if (phonemize_espeak_dlopen(lang, text, out))
         return true;

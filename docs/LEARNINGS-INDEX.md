@@ -17,7 +17,7 @@ per-backend porting detail (Per-model port notes + the family cross-reference).
 Reach for the topic groups when you are stuck on a *technique*, and the
 cross-reference when you already know which model you are touching.
 
-## Index by topic (301 lessons)
+## Index by topic (302 lessons)
 
 **Security & untrusted input** (2)
 
@@ -357,13 +357,14 @@ cross-reference when you already know which model you are touching.
 - L18205 — Four bugs that together caused empty/garbage transcripts; all patched in src/vibevoice.cpp +…
 - L18430 — "Verified byte-identical at 225 s" verified a clip, not a length — and a decoder that drops spans needs a repair pass, not a better cap
 
-**Uncategorised** (5)
+**Uncategorised** (6)
 
 - L214 — An arm that fails under every condition cannot discriminate a fix
 - L235 — Hardcoded token ids need a guard that DECODES them
 - L286 — Model-emitted sentinels are not transcript text
 - L18657 — An ISA gate that "safely refuses" the only CPU module ships a process that cannot run — and every safety layer downstream assumed the layer above had fired
 - L18770 — An amplifying decoder needs a bound against INPUT SIZE, not duration — and the regression corpus that would have caught it had never been committed
+- L18893 — A phoneme dialect mismatch is invisible to every guard built to catch a bad G2P
 
 ## Cross-reference by model / family
 
@@ -407,6 +408,6 @@ lookup, not a partition.
 - **irodori** (2) — L1941, L15202
 - **f5-tts** (1) — L14544
 - **kokoro** (4) — L906, L7782, L15839, L16512
-- **zonos** (1) — L12209
+- **zonos** (2) — L12209, L18893
 - **omniasr / omnivoice** (6) — L733, L1636, L5103, L14341, L14369, L14755
 - **glm / mimo / mega** (3) — L11557, L14252, L14309

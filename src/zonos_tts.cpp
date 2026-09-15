@@ -34,7 +34,8 @@
 #include "core/gpu_backend_pref.h" // crispasr_init_gpu_backend (#214)
 #include "core/crispasr_env.h"
 #include "espeak_dlopen.h" // #435: in-process libespeak-ng, same loader kokoro/piper use
-#include "phonemizer.h"    // #435: built-in EN/DE/FR/ES G2P, now in crispasr-core
+#include "core/g2p_ru.h"   // g2p_ru::to_espeak_dialect — see phonemize_builtin_zonos
+#include "phonemizer.h"    // #435: built-in EN/DE/FR/ES/RU G2P, now in crispasr-core
 
 #include "ggml-backend.h"
 #include "ggml-cpu.h"
@@ -1109,14 +1110,52 @@ static bool builtin_is_default_for(const std::string& lang) {
     return std::strcmp(prim, "en") == 0 || std::strcmp(prim, "de") == 0 || std::strcmp(prim, "fr") == 0;
 }
 
-// Built-in (non-GPL) G2P for the languages crispasr-core covers: en/de/fr/es.
+// Built-in (non-GPL) G2P for the languages crispasr-core covers: en/de/fr/es/ru.
 // Punctuation is carried through, matching the Python reference's
 // `preserve_punctuation=True`, so the tail-punctuation compensation the espeak
 // popen path needs does not apply here — the marks are already in the string.
+// Russian: which SPELLING of the phonemes to hand the model.
+//
+//   native — what crispasr-core's Russian G2P emits: a narrow transcription
+//            (ɐ/ə reduction gradation, ʂ/ʐ retroflexes, lʲ vs ɫ, æ fronting).
+//   espeak — the same sounds rewritten in espeak-ng's `ru` conventions
+//            (ʌ, ʃ/ʒ, ɭ, ɑ, y). See g2p_ru::to_espeak_dialect.
+//
+// This is NOT cosmetic and the drop counter cannot see it: every symbol on both
+// sides is inside zonos's inventory, so nothing is dropped either way — but the
+// model conditions on the spelling it was TRAINED on, and zonos was phonemised
+// with espeak. Raw agreement between the two spellings is 57.7% over 2,200
+// words; the conversion takes it to 88.0%.
+//
+// Which one is better for the AUDIO was a question for a measurement, and the
+// measurement came back against the espeak spelling: chr1s4/crispasr-zonos-g2p-ru
+// v2 raised phoneme-ID agreement with the espeak arm on all three sentences
+// (0.773/0.759/0.627 -> 0.818/0.852/0.847) and took the ASR roundtrip from
+// 0.293 to 0.000 on every one of them, in both the with-espeak and the
+// espeak-removed runs. The default is therefore `native`, on evidence rather
+// than on caution. CRISPASR_ZONOS_RU_DIALECT=espeak still selects the other arm
+// for anyone who wants to re-measure it.
+static bool zonos_ru_espeak_dialect() {
+    const char* v = crispasr_env::get("CRISPASR_ZONOS_RU_DIALECT");
+    if (!v || !*v)
+        return false;
+    if (std::strcmp(v, "espeak") == 0)
+        return true;
+    if (std::strcmp(v, "native") == 0)
+        return false;
+    fprintf(stderr, "zonos_tts: WARN: CRISPASR_ZONOS_RU_DIALECT='%s' is not one of espeak|native; using native\n", v);
+    return false;
+}
+
 static bool phonemize_builtin_zonos(const std::string& lang, const std::string& text, std::string& out) {
     out.clear();
     if (!crispasr::phonemize_builtin_tts(lang, text, out))
         return false;
+    if (!out.empty()) {
+        const char* fam = crispasr::builtin_g2p_language(lang);
+        if (fam && std::strcmp(fam, "ru") == 0 && zonos_ru_espeak_dialect())
+            out = g2p_ru::to_espeak_dialect(out);
+    }
     return !out.empty();
 }
 
@@ -1155,7 +1194,7 @@ static void g2p_debug_dump(g2p_mode mode, const std::string& lang, const char* p
 // Full tokenization: text -> IPA -> phoneme IDs (#435).
 //
 // Cascade, mirroring kokoro/piper: in-process libespeak-ng, then the external
-// espeak-ng binary, then the built-in G2P (en/de/fr/es), then — only for pure
+// espeak-ng binary, then the built-in G2P (en/de/fr/es/ru), then — only for pure
 // ASCII — raw character tokenisation. CRISPASR_ZONOS_G2P reorders it; see
 // g2p_mode above.
 //
@@ -1208,7 +1247,7 @@ static std::vector<int32_t> tokenize_text_full(const char* text, const char* lan
                 "zonos_tts: ERROR: no phonemizer available and the text is not ASCII (lang=%s).\n"
                 "  Zonos conditions on IPA phonemes; without a phonemizer every non-ASCII character\n"
                 "  is dropped, which yields a near-empty prompt and unintelligible audio.\n"
-                "  The built-in G2P covers en/de/fr/es only and does not cover this language.\n"
+                "  The built-in G2P covers en/de/fr/es/ru only and does not cover this language.\n"
                 "  Install espeak-ng (in-process libespeak-ng is preferred and is picked up\n"
                 "  automatically; CRISPASR_ESPEAK_DATA_PATH overrides the data directory), or\n"
                 "  put the espeak-ng binary on PATH. Refusing to synthesise noise.\n",
