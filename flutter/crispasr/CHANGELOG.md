@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.8.33
+
+* **Two new TTS backends**: Supertonic-3 (`--backend supertonic`, 44.1 kHz
+  non-autoregressive flow matching, 10 voices, OpenRAIL-M) and FireRedTTS3
+  (`--backend fireredtts3`, zero-shot voice cloning, Apache-2.0) — closing the
+  last model in #377.
+* **Sidon accepts long audio** (#431). The input cap now derives from a memory
+  budget instead of a hardcoded frame count, and `CRISPASR_SIDON_SPLIT=1`
+  restores very long files as N exact passes cut at energy minima.
+* **Zonos no longer emits noise for non-Latin scripts** (#435). A missing
+  phonemizer now refuses loudly instead of synthesising a near-empty prompt,
+  and the per-request language is honoured.
+* **New API**: `set_voice_samples()` (#432), `backend_caps()` /
+  `list_backends_with_caps()` and `detect_backends()` (#433) — the last names
+  every backend that can open a given file, not just one.
+* **Built-in G2P replaces espeak-ng for en/de/fr** in zonos, removing that
+  GPL-3.0 dependency for those languages.
+* Fixes: supertonic q4_k was unloadable; a shared CAM++ pooling defect affecting
+  five backends; `voxcpm2-vae` reachable by `-m auto`.
+
 ## 0.8.32
 
 * **Four new backends**: Raon-OpenTTS speech synthesis, Quds Persian
