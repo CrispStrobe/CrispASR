@@ -694,3 +694,27 @@ backbone layers.
    special-token splitting. `prompt_input_ids` in the fixture is what settles
    whether that reproduces the Gemma tokenizer; `breeze_tts_2_run_prompt_dump`
    exists for exactly that comparison.
+
+### ⚠ Reference-conditioning mismatch to check FIRST
+
+The fixture exists as of 2026-09-15 (62 stages at
+`cstr/crispasr-regression-fixtures/breeze-tts-2/`, dumped on a T4). Before
+reading anything downstream of it, check this:
+
+`ref_encoded {"sr": 16000, "n_samples": 176000, "ref_frames": 138}` — the
+oracle hands `samples/jfk.wav` to the audio tokenizer **at 16 kHz** and lets
+the tokenizer resample internally. The C++ adapter instead resamples to 24 kHz
+with `core_audio::resample_polyphase` and hands over 24 kHz. Those are two
+different resamplers, so `ref_codes` can differ before a single transformer
+weight is touched — and a different reference prompt drifts everything after
+it, in a way that looks like a model bug.
+
+`ref_codes` is a dumped stage precisely so this is answerable rather than
+mysterious: diff it first. If it differs, the fix is to align the oracle and
+the runtime on one resampling path, not to chase the divergence downstream.
+
+Frame-0 landmarks for a fast smoke check, from the completed run:
+`argmax_cb0 = 404`, and the frame-0 code vector is
+`[404, 172, 340, 1357, 644, 528, 1025, 1250, 122, 730, 1219, 1452, 1957, 443, 416, 1187]`.
+Generated grid is `codes (24, 16)`; `codec_audio` is 46 080 samples, which is
+exactly 24 frames x 1920, so the codec's frame arithmetic checks out.
