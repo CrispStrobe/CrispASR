@@ -516,8 +516,21 @@ TEST_CASE("builtin_g2p_language matches the PRIMARY SUBTAG, not a substring", "[
         CHECK(std::string(builtin_g2p_language("en_US")) == "en");  // underscore form
     }
 
+    SECTION("Russian is covered now") {
+        // This section used to assert `builtin_g2p_language("ru") == nullptr`.
+        // That was true when written and is not any more: a built-in Russian
+        // G2P ships (812,953-entry CC-BY-4.0 dictionary + LTS fallback), so the
+        // dispatcher must route ru rather than fall through to espeak.
+        //
+        // Note this says nothing about zonos's DEFAULT, which still prefers
+        // espeak for ru — zonos-v0.1 does not list Russian, so its roundtrip
+        // could not certify the swap in either direction. Coverage and default
+        // are separate questions and this test only answers the first.
+        CHECK(std::string(builtin_g2p_language("ru")) == "ru");
+        CHECK(std::string(builtin_g2p_language("RU")) == "ru");
+    }
+
     SECTION("uncovered languages return nullptr, so the caller falls through") {
-        CHECK(builtin_g2p_language("ru") == nullptr);
         CHECK(builtin_g2p_language("ja") == nullptr);
         CHECK(builtin_g2p_language("cmn") == nullptr);
         CHECK(builtin_g2p_language("") == nullptr);
@@ -562,7 +575,10 @@ TEST_CASE("phonemize_builtin_tts carries punctuation through", "[unit][g2p][phon
     }
 
     SECTION("an uncovered language is refused, not silently mis-phonemised") {
-        std::string ru;
-        CHECK_FALSE(crispasr::phonemize_builtin_tts("ru", "Привет", ru));
+        // ru is no longer the example — it is covered. Japanese still is not,
+        // and refusing is the point: a silent mis-phonemisation is what made
+        // zonos emit confident noise for Cyrillic in #435.
+        std::string ja;
+        CHECK_FALSE(crispasr::phonemize_builtin_tts("ja", "\xe3\x81\x93\xe3\x82\x93", ja));
     }
 }
