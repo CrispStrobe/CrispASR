@@ -1314,6 +1314,12 @@ inline std::string text_to_ipa(const context& ctx, const std::string& text) {
 // One tempting rule was measured and REJECTED: moving `ˈ` from before the
 // stressed vowel to the syllable onset drops agreement to 75.1%. espeak's ru
 // voice marks the vowel too, so the placement was already right.
+//
+// One further rule is measured, better, and deliberately NOT here yet:
+// rewriting `tɕ` (ч) to espeak's `tʃʲ` takes agreement to 89.6% and exact
+// matches to 36.1%. It is held back so that this function is byte-for-byte the
+// one the Kaggle arm measured — a result reported for code that was not the
+// code that ran is not a result. Add it with the next run, not before it.
 inline std::string to_espeak_dialect(const std::string& ipa) {
     const std::vector<uint32_t> cps = utf8_to_cps(ipa);
     std::vector<uint32_t> out;

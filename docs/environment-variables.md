@@ -1572,6 +1572,18 @@ end-to-end cosine cannot do.
   codepoints are dropped silently — the failure mode that made #435 look like a
   working backend. A language's default moves only on per-language agreement
   and drop measurements, never on "it produced audio".
+- `CRISPASR_ZONOS_RU_DIALECT` — `native` (default) | `espeak`. Which SPELLING of
+  the Russian phonemes to hand the model when the built-in G2P produces them.
+  `native` is what `crispasr-core`'s Russian G2P emits — a narrow transcription
+  (`ɐ`/`ə` reduction gradation, `ʂ`/`ʐ` retroflexes, `lʲ` vs `ɫ`, `æ` fronting).
+  `espeak` rewrites the same sounds into espeak-ng's `ru` conventions (`ʌ`, `ʃ`,
+  `ʒ`, `ɭ`, `ɑ`, `y`). Not cosmetic and **invisible to the drop counter**: every
+  symbol on both sides is inside zonos's inventory, so nothing is dropped either
+  way — but a model conditions on the spelling it was TRAINED on, and zonos was
+  phonemised with espeak. Measured over 2,200 dictionary words phonemised both
+  ways, raw symbol agreement between the two spellings is 57.7% and the
+  conversion takes it to 88.0%. Same class of problem as `CRISPASR_KOKORO_MISAKI_IPA`
+  (#316), one language further on.
 - `CRISPASR_ZONOS_G2P_DEBUG` — `1` prints the phonemisation readout to stderr:
   which path ran, the IPA, the full phoneme-ID sequence, and how many emitted
   codepoints zonos's inventory could not map (with a histogram of which). Off
