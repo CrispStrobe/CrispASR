@@ -29,6 +29,7 @@ static const BackendCaps k_backend_caps[] = {
     {"bark-tts", 205056u, "temperature,auto-download,tts,voice-cloning"},
     {"basic-pitch", 134225921u, "timestamps-native,auto-download,piano"},
     {"beat-this", 68165632u, "auto-download,beats"},
+    {"bt2-tts", 205056u, "temperature,auto-download,tts,voice-cloning"},
     {"btc-chords", 34611200u, "auto-download,chords"},
     {"canary", 1605487u,
      "timestamps-native,timestamps-ctc,word-timestamps,token-confidence,"

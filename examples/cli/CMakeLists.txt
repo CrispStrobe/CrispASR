@@ -89,6 +89,7 @@ add_executable(${TARGET}
     crispasr_backend_mimo_asr.cpp
     crispasr_backend_ark_asr.cpp
     crispasr_backend_miotts.cpp
+    crispasr_backend_bt2_tts.cpp
     crispasr_backend_piano_transcription.cpp
     crispasr_backend_basic_pitch.cpp
     crispasr_backend_mt3.cpp
@@ -280,6 +281,7 @@ target_link_libraries(crispasr-diff PRIVATE
     confucius4-tts
     miotts
     miocodec
+    breeze_tts_2
     crepe
     crispasr-diff-lib
     ${FFMPEG_LIBRARIES}
@@ -411,6 +413,7 @@ target_link_libraries(${TARGET} PRIVATE
     moss_transcribe
     moss_transcribe_diarize
     miotts
+    breeze_tts_2
     ${FFMPEG_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}
     $<$<BOOL:${WIN32}>:winhttp>

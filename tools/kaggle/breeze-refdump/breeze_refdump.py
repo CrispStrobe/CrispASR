@@ -150,7 +150,7 @@ import kaggle_harness as kh  # noqa: E402
 
 kh.init_progress()
 # Bump when the arms, capture or predicate change (see kh.provenance).
-SCRIPT_VERSION = "2026-09-15.4"
+SCRIPT_VERSION = "2026-09-15.5"
 # kh.provenance landed in the harness AFTER this kernel was first pushed, so the
 # 2026-09-02 run died in 10 s with AttributeError against its own fresh clone
 # (gotcha #24, the two-halves trap). Never let provenance logging be fatal.
@@ -406,7 +406,7 @@ for j, hs in enumerate(_bb_layer_hs):
 logits0 = model.lm_head(h_last)                       # (2052,)
 save("backbone_logits_frame0", f32(logits0))
 step("backbone_prefill_done", L=int(merged_embeds.shape[1]),
-     n_hidden_states=len(bb_out.hidden_states),
+     n_layer_states=len(_bb_layer_hs),
      argmax_cb0=int(logits0.argmax().item()))
 
 # ── stage 4: depth decoder, frame 0, per-codebook logits ──────────────────
