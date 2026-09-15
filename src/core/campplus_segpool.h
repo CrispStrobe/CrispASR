@@ -24,6 +24,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdlib>
 
 namespace campplus_segpool {
 
@@ -39,6 +40,9 @@ inline void avg(const float* in, int C, int T, int seg_len, float* out) {
     if (!in || !out || C <= 0 || T <= 0 || seg_len <= 0)
         return;
     const int n_seg = n_segments(T, seg_len);
+    // Read once per call, not per element.
+    const char* lg = std::getenv("CRISPASR_CAMPP_LEGACY_SEGPOOL");
+    const bool legacy = lg && lg[0] && lg[0] != '0';
     for (int c = 0; c < C; c++) {
         const float* row = in + (size_t)c * (size_t)T;
         for (int s = 0; s < n_seg; s++) {
@@ -49,7 +53,17 @@ inline void avg(const float* in, int C, int T, int seg_len, float* out) {
                 ss += row[t0 + t];
             // Divide by the frames ACTUALLY in this window. n_in_seg ==
             // seg_len for every full segment, so only the tail differs.
-            out[(size_t)c * (size_t)n_seg + (size_t)s] = ss / (float)n_in_seg;
+            //
+            // CRISPASR_CAMPP_LEGACY_SEGPOOL=1 restores the OLD divisor (always
+            // seg_len). It exists purely so the fix can be A/B'd against the
+            // behaviour four shipped backends were accepted with -- chatterbox,
+            // confucius4, cosyvoice3 and dots-tts all changed when this was
+            // corrected. Without a way to rebuild the old number, "the fix moved
+            // it closer to upstream" would be an assertion rather than a
+            // measurement. Do not use it for anything else: it is a known-wrong
+            // divisor, kept only to be compared against.
+            const float divisor = legacy ? (float)seg_len : (float)n_in_seg;
+            out[(size_t)c * (size_t)n_seg + (size_t)s] = ss / divisor;
         }
     }
 }
