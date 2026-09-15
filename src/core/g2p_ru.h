@@ -1324,11 +1324,34 @@ inline std::string text_to_ipa(const context& ctx, const std::string& text) {
 // stressed vowel to the syllable onset drops agreement to 75.1%. espeak's ru
 // voice marks the vowel too, so the placement was already right.
 //
-// One further rule is measured, better, and deliberately NOT here yet:
+// ── AND THEN THE AUDIO SAID NO ───────────────────────────────────────────────
+//
+// THIS CONVERSION IS OFF BY DEFAULT BECAUSE IT WAS MEASURED AND IT LOSES.
+//
+// It does exactly what it was built to do — phoneme-ID agreement with the
+// espeak arm rose on all three test sentences, 0.773/0.759/0.627 → 0.818/0.852/
+// 0.847 — and the ASR roundtrip through zonos went from 0.293 to **0.000**, on
+// every sentence, in both the with-espeak and the espeak-removed runs. Six arms,
+// six zeros. It is the only one of the three arms that never once produced a
+// recognisable transcript; the ASR read its output as Polish and Dutch.
+//
+// So the reasoning this function was built on — "the model was trained on
+// espeak's spelling, therefore matching that spelling will help" — is FALSE
+// here, and it is worth stating why it was so persuasive: it is a mechanism
+// story with a measured 30-point number attached, which is exactly the shape
+// that gets shipped without a roundtrip. **Agreement with the tool a model was
+// trained on is not a proxy for the quality of the audio**, and no amount of
+// symbol-level evidence substitutes for listening to the output.
+//
+// It is kept, gated and off, for the same reason CRISPASR_G2P_DE_UNSTRESS and
+// CRISPASR_KOKORO_DE_MISAKI_ALPHABET are kept: the lever is the evidence, and a
+// different consumer (a piper or kokoro Russian voice trained on espeak) may
+// yet want it. It must not be turned on for zonos without a new measurement.
+//
+// One further rule is measured, better on AGREEMENT, and deliberately not here:
 // rewriting `tɕ` (ч) to espeak's `tʃʲ` takes agreement to 89.6% and exact
-// matches to 36.1%. It is held back so that this function is byte-for-byte the
-// one the Kaggle arm measured — a result reported for code that was not the
-// code that ran is not a result. Add it with the next run, not before it.
+// matches to 36.1%. Given the result above, "better on agreement" is no longer
+// a reason to add anything. Add it with the next run, not before it.
 inline std::string to_espeak_dialect(const std::string& ipa) {
     const std::vector<uint32_t> cps = utf8_to_cps(ipa);
     std::vector<uint32_t> out;

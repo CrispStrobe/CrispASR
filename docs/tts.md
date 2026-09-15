@@ -914,7 +914,7 @@ phoneme-ID sequences; `F1` is word-F1 of an ASR roundtrip against the input.
 | de | 0.94 | 1.00 | 1.00 | Built-in matches espeak; transcripts identical. |
 | fr | 0.95 | 0.84 | 0.95 | Built-in *beats* espeak (`renard` vs `renarbre`), reproduced across runs. |
 | es | 0.82–0.94 | 0.57 | 0.81 | Built-in higher on all 3 sentences, but the espeak baseline is itself weak — see below. |
-| ru | 0.77 / 0.76 / 0.63 | 0.585 | 0.293 | **INCONCLUSIVE — default stays espeak.** Zero dropped symbols on either path, but the espeak baseline is itself below the 0.60 floor. See below. |
+| ru | 0.77 / 0.76 / 0.63 | 0.585 | 0.293 | **Default stays espeak.** All 7 controls fire, so the numbers are evidence — and the evidence does not support a flip: zero dropped symbols on either path, but the built-in is lower and the espeak baseline is itself below the 0.60 floor. See below. |
 
 With espeak-ng physically removed, en/de/fr/es/ru all synthesise and produce
 byte-identical phoneme IDs to the with-espeak built-in run. A language with no
@@ -964,11 +964,22 @@ Caveats, because these numbers are easy to over-read:
   Over 2,200 dictionary words phonemised both ways, raw symbol agreement is
   57.7% and not one word matches exactly — and **every symbol on both sides is
   inside zonos's inventory, so the drop counter is blind to this by
-  construction.** A model conditions on the spelling it was trained on, and
-  zonos was phonemised with espeak. `CRISPASR_ZONOS_RU_DIALECT=espeak` rewrites
-  the built-in's output into espeak's conventions, taking agreement to 88.0%;
-  whether that helps the audio is a separate measurement and the default is
-  unchanged until it reports.
+  construction.** `CRISPASR_ZONOS_RU_DIALECT=espeak` rewrites the built-in's
+  output into espeak's conventions, taking agreement to 88.0%.
+
+- **And converting to espeak's spelling made the audio WORSE, which is the most
+  useful thing this pair of runs produced.** The reasoning was that zonos was
+  phonemised with espeak, so handing it espeak's symbols should help. It did
+  raise phoneme-ID agreement on every sentence (0.773/0.759/0.627 →
+  0.818/0.852/0.847) — and took the ASR roundtrip from 0.293 to **0.000** on
+  every sentence, in both the with-espeak and espeak-removed runs. Six arms,
+  six zeros; the only arm of the three that never produced a recognisable
+  transcript, read back by the ASR as Polish and Dutch.
+
+  So **agreement with the tool a model was trained on is not a proxy for the
+  quality of its audio.** A mechanism story with a measured 30-point number
+  attached is exactly the shape of thing that ships without a roundtrip. The
+  switch is kept, gated and off, the same way `CRISPASR_G2P_DE_UNSTRESS` is.
 
 - **Spanish has no trustworthy baseline.** The espeak arm scores 0.57, so the
   comparison says as much about the model's Spanish as about the G2P. The

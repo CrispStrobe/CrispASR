@@ -1584,6 +1584,16 @@ end-to-end cosine cannot do.
   ways, raw symbol agreement between the two spellings is 57.7% and the
   conversion takes it to 88.0%. Same class of problem as `CRISPASR_KOKORO_MISAKI_IPA`
   (#316), one language further on.
+  **Off by default because it was measured and it LOSES.** It did raise
+  phoneme-ID agreement with the espeak arm on all three test sentences
+  (0.773/0.759/0.627 → 0.818/0.852/0.847) — and took the ASR roundtrip from
+  0.293 to **0.000** on every sentence, in both the with-espeak and the
+  espeak-removed runs. Six arms, six zeros; it was the only arm that never
+  produced a recognisable transcript. Agreement with the tool a model was
+  trained on turns out not to be a proxy for the quality of its audio. Kept as
+  a lever because a different consumer (a piper or kokoro Russian voice trained
+  on espeak) may want it, but it must not be enabled for zonos without a new
+  measurement.
 - `CRISPASR_ZONOS_G2P_DEBUG` — `1` prints the phonemisation readout to stderr:
   which path ran, the IPA, the full phoneme-ID sequence, and how many emitted
   codepoints zonos's inventory could not map (with a histogram of which). Off

@@ -1127,9 +1127,14 @@ static bool builtin_is_default_for(const std::string& lang) {
 // with espeak. Raw agreement between the two spellings is 57.7% over 2,200
 // words; the conversion takes it to 88.0%.
 //
-// Which one is better for the AUDIO is a question for a measurement, not for
-// this comment, so the default is the untouched native spelling until a run
-// says otherwise. CRISPASR_ZONOS_RU_DIALECT=espeak selects the other arm.
+// Which one is better for the AUDIO was a question for a measurement, and the
+// measurement came back against the espeak spelling: chr1s4/crispasr-zonos-g2p-ru
+// v2 raised phoneme-ID agreement with the espeak arm on all three sentences
+// (0.773/0.759/0.627 -> 0.818/0.852/0.847) and took the ASR roundtrip from
+// 0.293 to 0.000 on every one of them, in both the with-espeak and the
+// espeak-removed runs. The default is therefore `native`, on evidence rather
+// than on caution. CRISPASR_ZONOS_RU_DIALECT=espeak still selects the other arm
+// for anyone who wants to re-measure it.
 static bool zonos_ru_espeak_dialect() {
     const char* v = crispasr_env::get("CRISPASR_ZONOS_RU_DIALECT");
     if (!v || !*v)

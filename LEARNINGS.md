@@ -18941,6 +18941,32 @@ drops agreement to 75.1%, because espeak's ru voice marks the vowel too.
 Another, `tɕ`→`tʃʲ`, measured better (89.6%) and was deliberately held out of
 the shipped function so that the code matches the arm that was measured.
 
+**And then the second run measured the audio, and the whole story was wrong.**
+The conversion did exactly what it was built to do — phoneme-ID agreement with
+the espeak arm rose on all three sentences, 0.773/0.759/0.627 → 0.818/0.852/
+0.847 — and the ASR roundtrip went from 0.293 to **0.000**, on every sentence,
+in both the with-espeak and the espeak-removed runs. Six arms, six zeros. It
+was the only one of the three arms that never once produced a recognisable
+transcript; the ASR read its output as Polish and Dutch.
+
+**Agreement with the tool a model was trained on is not a proxy for the quality
+of its audio.** That is the durable lesson, and it is worth noticing how well
+disguised it was: this was not a hunch. It was a mechanism story ("the model
+conditions on the spelling it saw") with a derived, controlled, 30-point
+symbol-level number attached and a rejected-alternative rule to show the
+derivation was honest. That combination is exactly the shape that ships as a
+default without anyone running the roundtrip — and it would have been a
+regression from 0.293 to 0.000. **HARD RULE #3 is not a formality that a good
+enough intermediate metric can buy you out of.** The switch is kept, gated and
+off, the way CRISPASR_G2P_DE_UNSTRESS is: the lever is the evidence.
+
+A prediction made before the run is worth recording too, because it shows the
+error was specifically in the INFERENCE and not in the model of the mechanism.
+A local character-level proxy predicted the dialect arm's agreement would land
+near 0.85/0.84/0.91; it landed at 0.818/0.852/0.847. The mechanism was
+understood correctly. What did not follow was that better agreement meant
+better audio.
+
 Two further things the run taught about instruments rather than about Russian.
 First, a control leg compared the wrong-language arm's word-F1 against the
 baseline for sentence 0 — whose espeak score was itself 0.000, so the leg could
@@ -18950,9 +18976,11 @@ not fire whatever the control produced. Its agreement leg fired decisively
 Second, the espeak baseline for Russian was 0.585, below the pre-registered 0.60
 floor, and 0.000 on one of three sentences — zonos-v0.1 does not list Russian
 among its languages. So the roundtrip measures zonos's Russian more than it
-measures the G2P, and the honest verdict is INCONCLUSIVE for the default flip,
-not a pass and not a failure. Spanish was once passed for exactly the mirror of
-that reason.
+measures the G2P, and the default flip is not supportable on it either way.
+Spanish was once passed for exactly the mirror of that reason. Note the
+asymmetry that makes this still usable: a baseline too weak to certify a PASS
+can still register a catastrophic failure, which is how the 0.000 dialect arm
+was readable at all.
 
 The data itself carried one more lesson, unrelated to measurement. The upstream
 project shipped `heteronyms.txt` alongside the vocabulary, and the two files are
