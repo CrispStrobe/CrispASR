@@ -1558,6 +1558,22 @@ end-to-end cosine cannot do.
 - `CRISPASR_ZONOS_DECODE_CTX`
 - `CRISPASR_ZONOS_DIFF_N_STEPS`
 - `CRISPASR_ZONOS_FASTCONV`
+- `CRISPASR_ZONOS_G2P` — `builtin` | `espeak` | `auto` (default). Which
+  phonemizer zonos tries first (#435). `espeak` is the pre-#435-follow-on
+  cascade bit for bit (in-process libespeak-ng → the `espeak-ng` binary → raw
+  ASCII → refuse) and never consults the built-in G2P; `builtin` puts the
+  built-in EN/DE/FR/ES G2P from `crispasr-core` first; `auto` keeps espeak
+  first and uses the built-in only as a fallback below it. The default is
+  **not** `builtin`: the built-ins emit espeak-dialect IPA while zonos's
+  inventory comes from its own `conditioning.py` symbol list, and unmapped
+  codepoints are dropped silently — the failure mode that made #435 look like a
+  working backend. A language's default moves only on per-language agreement
+  and drop measurements, never on "it produced audio".
+- `CRISPASR_ZONOS_G2P_DEBUG` — `1` prints the phonemisation readout to stderr:
+  which path ran, the IPA, the full phoneme-ID sequence, and how many emitted
+  codepoints zonos's inventory could not map (with a histogram of which). Off
+  by default; it exists so a comparison between two G2P paths can come back
+  negative instead of "both produced a wav".
 - `CRISPASR_ZONOS_SPEAKER_EMB_PATH`
 - `CRISPASR_ZONOS_TTS_BENCH`
 - `CRISPASR_ZONOS_TTS_TEXT`

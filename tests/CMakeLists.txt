@@ -1937,13 +1937,12 @@ target_link_libraries(test-kokoro-params PRIVATE
     Catch2::Catch2WithMain
     kokoro
 )
-# #316: kokoro now compiles phonemizer.cpp with CRISPASR_BUILD, which enables the
-# G2P dictionary auto-download (previously dead code — the macro was defined
-# nowhere). That pulls in crispasr_cache::ensure_cached_file, which lives in
-# crispasr-lib. crispasr-lib links kokoro, so kokoro cannot link it back; every
-# real binary resolves the symbol because it links crispasr-lib. This test links
-# kokoro ALONE, so it compiles the one translation unit it needs directly.
-target_sources(test-kokoro-params PRIVATE ${PROJECT_SOURCE_DIR}/src/crispasr_cache.cpp)
+# #316/#435: phonemizer.cpp and crispasr_cache.cpp both live in crispasr-core
+# now, which kokoro links PUBLIC — so linking kokoro ALONE (as this test does)
+# resolves the G2P auto-download path from that one archive. The explicit
+# `target_sources(... crispasr_cache.cpp)` this line used to carry is no longer
+# needed; it existed only because the caller and the callee sat in two different
+# libraries with an unfavourable link order.
 catch_discover_tests(test-kokoro-params
     TEST_SPEC "[unit]"
     PROPERTIES LABELS "unit;kokoro"

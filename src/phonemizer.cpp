@@ -66,6 +66,7 @@ static const g2p_dict_urls G2P_URLS_PT = {
     "https://raw.githubusercontent.com/open-dict-data/ipa-dict/refs/heads/master/data/pt.txt",
 };
 
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -197,17 +198,41 @@ static void ensure_cmudict_loaded() {
         }
     }
 #ifdef CRISPASR_HAS_CACHE
-    // Auto-download (BSD license, public domain data)
-    static const char* CMUDICT_URL =
-        "https://raw.githubusercontent.com/cmusphinx/cmudict/refs/heads/master/cmudict.dict";
-    std::string path = crispasr_cache::ensure_cached_file("cmudict.dict", CMUDICT_URL, /*quiet=*/true, "crispasr", "");
-    if (!path.empty()) {
+    // Auto-download (BSD license, public domain data).
+    //
+    // TWO hosts, upstream first, and the second one is not redundancy for its
+    // own sake: measured on Kaggle 2026-09-14, English was the ONLY language
+    // whose dictionary failed to load, and it is the only one fetched from
+    // raw.githubusercontent.com -- the de/fr/es dicts below come from
+    // huggingface.co and all three arrived. GitHub access from a Kaggle worker
+    // is documented-flaky, so English silently dropped to the letter-to-sound
+    // rules and phonemised "quick brown" as `kˈʌɪk bɹˈoʊn`, which an ASR
+    // roundtrip read back as "cook bone". That is not a G2P limitation being
+    // measured, it is a download being measured, and the two are indistinguishable
+    // from the output.
+    //
+    // piper_tts.cpp has fetched the same file from the HF mirror all along, so
+    // the mirror is not new infrastructure -- this path simply never used it.
+    // Upstream stays FIRST: when it is reachable nothing about the result
+    // changes, so this can only turn a silent degradation into a working
+    // dictionary.
+    static const char* CMUDICT_URLS[] = {
+        "https://raw.githubusercontent.com/cmusphinx/cmudict/refs/heads/master/cmudict.dict",
+        "https://huggingface.co/datasets/cstr/g2p-dicts/resolve/main/cmudict.dict",
+    };
+    for (const char* url : CMUDICT_URLS) {
+        std::string path = crispasr_cache::ensure_cached_file("cmudict.dict", url, /*quiet=*/true, "crispasr", "");
+        if (path.empty())
+            continue;
         int n = g2p_en::load_cmudict_file(g_g2p_ctx.dict, path);
         if (n > 0) {
             fprintf(stderr, "g2p: loaded CMUdict (%d entries) from %s\n", n, path.c_str());
             return;
         }
     }
+    fprintf(stderr, "g2p: WARNING: no English CMUdict could be loaded — falling back to "
+                    "letter-to-sound rules, which mispronounce common words. Set "
+                    "CRISPASR_CMUDICT_PATH to a local cmudict.dict to avoid this.\n");
 #endif
 }
 
@@ -345,7 +370,10 @@ bool phonemize_misaki_en(const std::string& lang, const std::string& text, std::
     return !out.empty();
 }
 
-bool phonemize_builtin_en(const std::string& lang, const std::string& text, std::string& out, bool misaki_style) {
+// Shared body for both public English entry points. `st` is already resolved to
+// the consumer's conventions by the time it gets here.
+static bool builtin_en_with_style(const std::string& lang, const std::string& text, std::string& out,
+                                  const g2p_en::style& st) {
     // Only handles English
     if (!lang.empty() && lang.find("en") == std::string::npos && lang != "auto")
         return false;
@@ -354,12 +382,24 @@ bool phonemize_builtin_en(const std::string& lang, const std::string& text, std:
         ensure_cmudict_loaded();
         ensure_neural_g2p_loaded();
     }
+    out = g2p_en::text_to_ipa(g_g2p_ctx, text, st);
+    return !out.empty();
+}
+
+bool phonemize_builtin_en(const std::string& lang, const std::string& text, std::string& out, bool misaki_style) {
     // #316: this ONE context serves two consumers — piper, which wants espeak's
     // conventions, and Kokoro's fallback for when the misaki lexicon could not
     // be fetched. The dictionary is the same; the output conventions are not,
     // and Kokoro needs its punctuation whichever dictionary it ended up with.
-    out = g2p_en::text_to_ipa(g_g2p_ctx, text, misaki_style ? g2p_en::misaki_style() : g_g2p_ctx.consumer());
-    return !out.empty();
+    return builtin_en_with_style(lang, text, out, misaki_style ? g2p_en::misaki_style() : g_g2p_ctx.consumer());
+}
+
+bool phonemize_builtin_en(const std::string& lang, const std::string& text, std::string& out, const g2p_style& style) {
+    g2p_en::style st;
+    st.context_words = style.context_words;
+    st.emit_punctuation = style.emit_punctuation;
+    st.join_hyphenated = style.join_hyphenated;
+    return builtin_en_with_style(lang, text, out, st);
 }
 
 // ── Built-in German G2P (LTS rules + optional IPA dictionary) ────────
@@ -450,6 +490,49 @@ bool phonemize_builtin_es(const std::string& lang, const std::string& text, std:
     g_g2p_es_ctx.emit_punctuation = tts_punctuation;
     out = g2p_es::text_to_ipa(g_g2p_es_ctx, text);
     return !out.empty();
+}
+
+// ── language dispatch for the built-in G2P (#435) ────────────────────
+
+const char* builtin_g2p_language(const std::string& lang) {
+    // Primary subtag only, lowercased: "en-us" -> "en", "es_419" -> "es".
+    // An EXACT compare, not a substring test — see the header for why.
+    std::string p;
+    for (char c : lang) {
+        if (c == '-' || c == '_')
+            break;
+        p += (char)std::tolower((unsigned char)c);
+    }
+    if (p == "en")
+        return "en";
+    if (p == "de")
+        return "de";
+    if (p == "fr")
+        return "fr";
+    if (p == "es")
+        return "es";
+    return nullptr;
+}
+
+bool phonemize_builtin_tts(const std::string& lang, const std::string& text, std::string& out) {
+    const char* fam = builtin_g2p_language(lang);
+    if (!fam)
+        return false;
+    // Punctuation ON for every language here: a phoneme-conditioned TTS model
+    // has `,.;:!?` in its symbol table and uses them for prosody. Contextual
+    // function words and hyphen-joining stay OFF — those are misaki/Kokoro
+    // conventions, and the consumers of this entry point are trained on
+    // espeak-shaped phonemes.
+    if (std::strcmp(fam, "en") == 0) {
+        g2p_style st;
+        st.emit_punctuation = true;
+        return phonemize_builtin_en(lang, text, out, st);
+    }
+    if (std::strcmp(fam, "de") == 0)
+        return phonemize_builtin_de(lang, text, out, /*tts_punctuation=*/true);
+    if (std::strcmp(fam, "fr") == 0)
+        return phonemize_builtin_fr(lang, text, out, /*tts_punctuation=*/true);
+    return phonemize_builtin_es(lang, text, out, /*tts_punctuation=*/true);
 }
 
 // ── espeak-ng via dlopen ─────────────────────────────────────────────
