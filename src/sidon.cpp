@@ -11,6 +11,7 @@
 #include "core/dac_decoder.h"
 #include "core/fft.h"
 #include "core/gguf_loader.h"
+#include "core/audio_chunking.h"
 #include "core/gpu_backend_pref.h"
 #include "sidon_rpe_gates.h" // #416 follow-up: length-aware RPE formulation choice
 
@@ -1022,7 +1023,35 @@ void warn_if_degenerate(const SignalStats& s, size_t n, const char* stage, const
 }
 } // namespace
 
-std::vector<float> sidon_restore(sidon_context* ctx, const float* samples, int n_samples) {
+// 16 kHz in, 48 kHz out; the predictor runs at 50 frames/s.
+static constexpr int kSidonInputSR = 16000;
+
+// The frame cap, in ONE place. It used to be computed inline inside the restore
+// path; the split wrapper needs the same number to size its chunks, and two
+// copies of a bound that must agree is how they stop agreeing.
+static int sidon_resolve_max_frames() {
+    int budget_mb = 4096;
+    if (const char* e = getenv("CRISPASR_SIDON_MEM_BUDGET_MB"); e && e[0]) {
+        const int v = atoi(e);
+        if (v > 0)
+            budget_mb = v;
+    }
+    // T_max = 2825 * sqrt(budget / 2042), the docs' measured point inverted.
+    int max_frames = (int)(2825.0 * std::sqrt((double)budget_mb / 2042.0));
+    if (max_frames < 256)
+        max_frames = 256;
+    if (const char* e = getenv("CRISPASR_SIDON_MAX_FRAMES"); e && e[0]) {
+        const int v = atoi(e);
+        if (v > 0)
+            max_frames = v; // explicit override wins over the budget
+    }
+    return max_frames;
+}
+
+// One EXACT pass. No windowing, no approximation: this is the faithful
+// forward, and the only thing that changed is its name. sidon_restore()
+// below decides whether to call it once or once per chunk.
+static std::vector<float> sidon_restore_exact(sidon_context* ctx, const float* samples, int n_samples) {
     if (!ctx || !samples || n_samples < 400)
         return {};
     if (ctx->model.hp.encoder_only) {
@@ -1101,20 +1130,12 @@ std::vector<float> sidon_restore(sidon_context* ctx, const float* samples, int n
     // 54-minute file, T = 162000 and the relative index ALONE is ~1.5 TiB.
     // Splitting is inherent there, and the message says so instead of implying
     // we simply have not tried hard enough.
+    const int max_frames = sidon_resolve_max_frames();
     int budget_mb = 4096;
     if (const char* e = getenv("CRISPASR_SIDON_MEM_BUDGET_MB"); e && e[0]) {
         const int v = atoi(e);
         if (v > 0)
             budget_mb = v;
-    }
-    // T_max = 2825 * sqrt(budget / 2042), the docs' measured point inverted.
-    int max_frames = (int)(2825.0 * std::sqrt((double)budget_mb / 2042.0));
-    if (max_frames < 256)
-        max_frames = 256;
-    if (const char* e = getenv("CRISPASR_SIDON_MAX_FRAMES"); e && e[0]) {
-        const int v = atoi(e);
-        if (v > 0)
-            max_frames = v; // explicit override wins over the budget
     }
     if (T > max_frames) {
         const double est_mb = 2042.0 * ((double)T / 2825.0) * ((double)T / 2825.0);
@@ -1123,8 +1144,11 @@ std::vector<float> sidon_restore(sidon_context* ctx, const float* samples, int n
                 "roughly %.0f MiB, over the %d MiB budget (cap %d frames, ~%.1f s).\n"
                 "  If this machine has the memory: CRISPASR_SIDON_MEM_BUDGET_MB=%.0f (or set "
                 "CRISPASR_SIDON_MAX_FRAMES=%d directly).\n"
-                "  Otherwise split the audio — attention cost grows with the SQUARE of duration, so very long "
-                "recordings cannot be restored in one pass at any budget.\n",
+                "  Or set CRISPASR_SIDON_SPLIT=1 to restore it as several EXACT chunks cut at energy "
+                "minima, each given real neighbouring audio as context.\n"
+                "  Attention cost grows with the SQUARE of duration, so a very long recording cannot be "
+                "restored in one pass at ANY budget — and sidon's own quality degrades on long input, so "
+                "chunking is not merely a fallback.\n",
                 T, (double)T / 50.0, est_mb, budget_mb, max_frames, (double)max_frames / 50.0, est_mb * 1.1, T);
         return {};
     }
@@ -1310,4 +1334,120 @@ std::vector<float> sidon_restore(sidon_context* ctx, const float* samples, int n
                      ms(total_start, total_done));
     }
     return pcm;
+}
+
+// ---------------------------------------------------------------------------
+// Long-input path (#431 follow-up): N EXACT passes, not one approximate pass.
+//
+// The predictor is w2v-BERT self-attention with a relative-position bias, so
+// cost grows as O(T^2) and the floor is the [T, T] bias itself -- a flash
+// kernel does not help, because its mask would be that same [T, T]. Upstream
+// has the same property: sarulab-speech/sidon-v0.1 ships TorchScript modules
+// only, with no split mode and no chunking guidance, so there is no reference
+// behaviour to match here and nothing upstream does better.
+//
+// THIS IS NOT THE WINDOWING THAT WAS TRIED AND REMOVED. That made a SINGLE
+// logical forward approximate by feeding the attention overlapping windows,
+// and it measurably moved AWAY from the reference (0.991/0.987/0.974 at
+// 30/50/62 s against a flat 0.997 for the faithful path) while making ASR
+// transcripts look better. Attention has no receptive field, so no amount of
+// context makes a windowed core exact.
+//
+// Splitting the AUDIO is a different thing: each chunk is a complete, faithful
+// forward of a shorter clip. The seams are in the output waveform, not in the
+// attention. And it is not merely a fallback -- sidon's own restoration
+// quality DEGRADES on long input (measured: a 62 s output transcribes markedly
+// worse than an 11 s one, on the faithful path), so several short exact passes
+// are better output than one long one would be even if it fit.
+//
+// Two things make the seams cheap:
+//   * cuts land at ENERGY MINIMA (audio_chunking), so a boundary falls in
+//     the quietest place available rather than mid-phoneme;
+//   * each chunk is fed REAL neighbouring audio as context and the extra is
+//     cropped from the output afterwards, so a chunk from the middle of a file
+//     does not see zeros where its neighbours should be.
+//
+// Opt-in. The default remains the refusal, because silently changing what a
+// long file produces is a behaviour change the caller did not ask for.
+static int sidon_split_context_samples() {
+    int ctx_ms = 500;
+    if (const char* e = getenv("CRISPASR_SIDON_SPLIT_CONTEXT_MS"); e && e[0]) {
+        const int v = atoi(e);
+        if (v >= 0)
+            ctx_ms = v;
+    }
+    return (ctx_ms * kSidonInputSR) / 1000;
+}
+
+std::vector<float> sidon_restore(sidon_context* ctx, const float* samples, int n_samples) {
+    if (!ctx || !samples || n_samples < 400)
+        return {};
+
+    const int max_frames = sidon_resolve_max_frames();
+    // ~50 predictor frames per second at 16 kHz input.
+    const int frames_per_sample_div = kSidonInputSR / 50;
+    const long long est_frames = (long long)n_samples / frames_per_sample_div;
+
+    const char* split_env = getenv("CRISPASR_SIDON_SPLIT");
+    const bool split_enabled = split_env && split_env[0] && split_env[0] != '0';
+
+    if (est_frames <= max_frames || !split_enabled) {
+        // Unchanged path, including the existing refusal and its guidance.
+        return sidon_restore_exact(ctx, samples, n_samples);
+    }
+
+    // Leave room for the context padding on BOTH sides inside the frame cap.
+    const int ctx_samples = sidon_split_context_samples();
+    long long budget_samples = (long long)max_frames * frames_per_sample_div - 2LL * ctx_samples;
+    // Keep a margin: the frontend's own lead-in and 1.5 s lookahead also consume
+    // frames, and overshooting the cap turns a chunk into a refusal.
+    budget_samples -= 2LL * kSidonInputSR;
+    if (budget_samples < kSidonInputSR) {
+        std::fprintf(stderr,
+                     "sidon: CRISPASR_SIDON_SPLIT is set but the frame cap (%d) leaves no room for a chunk "
+                     "once context and lookahead are accounted for. Raise CRISPASR_SIDON_MEM_BUDGET_MB.\n",
+                     max_frames);
+        return {};
+    }
+
+    const auto ranges =
+        audio_chunking::split_at_energy_minima(samples, (size_t)n_samples, (size_t)budget_samples,
+                                               /*search_window_samples=*/(size_t)(kSidonInputSR), /*win_samples=*/1600);
+    if (ranges.empty())
+        return {};
+
+    std::fprintf(stderr,
+                 "sidon: input is ~%lld frames (~%.1f s), over the %d-frame cap; restoring as %zu exact chunks "
+                 "cut at energy minima with %.0f ms of real context each (CRISPASR_SIDON_SPLIT).\n",
+                 est_frames, (double)est_frames / 50.0, max_frames, ranges.size(),
+                 1000.0 * (double)ctx_samples / (double)kSidonInputSR);
+
+    std::vector<float> out;
+    out.reserve((size_t)n_samples * 3);
+    for (size_t i = 0; i < ranges.size(); i++) {
+        const size_t b = ranges[i].first, e = ranges[i].second;
+        // Extend with REAL neighbouring audio, then crop the same amount back
+        // off the 48 kHz output. A chunk from the middle of a file must not see
+        // zeros where its neighbours are.
+        const size_t lo = (b > (size_t)ctx_samples) ? b - (size_t)ctx_samples : 0;
+        const size_t hi = std::min((size_t)n_samples, e + (size_t)ctx_samples);
+        const int lead = (int)(b - lo);
+        const int tail = (int)(hi - e);
+
+        std::vector<float> piece = sidon_restore_exact(ctx, samples + lo, (int)(hi - lo));
+        if (piece.empty()) {
+            std::fprintf(stderr, "sidon: chunk %zu/%zu failed; aborting split restore\n", i + 1, ranges.size());
+            return {};
+        }
+        // Output is 48 kHz for 16 kHz input: exactly 3 samples out per sample in.
+        const size_t crop_lead = (size_t)lead * 3;
+        const size_t crop_tail = (size_t)tail * 3;
+        if (piece.size() <= crop_lead + crop_tail) {
+            std::fprintf(stderr, "sidon: chunk %zu/%zu shorter than its own context padding; aborting\n", i + 1,
+                         ranges.size());
+            return {};
+        }
+        out.insert(out.end(), piece.begin() + (long)crop_lead, piece.end() - (long)crop_tail);
+    }
+    return out;
 }

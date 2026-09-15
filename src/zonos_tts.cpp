@@ -34,6 +34,7 @@
 #include "core/gpu_backend_pref.h" // crispasr_init_gpu_backend (#214)
 #include "core/crispasr_env.h"
 #include "espeak_dlopen.h" // #435: in-process libespeak-ng, same loader kokoro/piper use
+#include "phonemizer.h"    // #435: built-in EN/DE/FR/ES G2P, now in crispasr-core
 
 #include "ggml-backend.h"
 #include "ggml-cpu.h"
@@ -789,24 +790,49 @@ static uint32_t utf8_decode(const char** pp) {
     return cp;
 }
 
+// #435 follow-up: what the silent drop actually cost.
+//
+// text_to_phoneme_ids() maps what it recognises and DISCARDS the rest without a
+// word — which is exactly how #435 stayed invisible (Cyrillic reduced to three
+// tokens at a success exit code). Any claim that one G2P is as good as another
+// has to be able to see that, so the tokenizer can now report it. Nothing reads
+// these counters in the default path; they exist so a measurement can fail.
+struct phoneme_tok_stats {
+    int codepoints = 0;     // codepoints seen
+    int mapped = 0;         // codepoints that produced an ID
+    int dropped = 0;        // codepoints ABSENT from the zonos inventory
+    int format_skipped = 0; // ZWJ/ZWNJ/ZWSP/BOM — deliberately ignored, not a loss
+    std::map<uint32_t, int> dropped_hist;
+};
+
 // Convert a text string (already IPA if from espeak-ng, or raw text) to phoneme IDs.
 // Skips zero-width joiners (U+200D) and other Unicode control chars that
 // espeak-ng may insert but Python's phonemizer strips.
-static std::vector<int32_t> text_to_phoneme_ids(const char* text) {
+static std::vector<int32_t> text_to_phoneme_ids(const char* text, phoneme_tok_stats* st = nullptr) {
     static auto map = build_phoneme_map();
     std::vector<int32_t> ids;
     ids.push_back(2); // BOS
     for (const char* p = text; *p;) {
         uint32_t cp = utf8_decode(&p);
         // Skip Unicode control/format characters (Cf category): ZWJ, ZWNJ, etc.
-        if (cp == 0x200D || cp == 0x200C || cp == 0x200B || cp == 0xFEFF)
+        if (cp == 0x200D || cp == 0x200C || cp == 0x200B || cp == 0xFEFF) {
+            if (st)
+                st->format_skipped++;
             continue;
+        }
+        if (st)
+            st->codepoints++;
         auto it = map.find(cp);
         if (it != map.end()) {
             ids.push_back(it->second);
+            if (st)
+                st->mapped++;
+        } else if (st) {
+            // Skip unmapped characters silently (matching Python's behavior of
+            // only tokenizing known symbols and ignoring others) -- but COUNT it.
+            st->dropped++;
+            st->dropped_hist[cp]++;
         }
-        // Skip unmapped characters silently (matching Python's behavior of
-        // only tokenizing known symbols and ignoring others)
     }
     ids.push_back(3); // EOS
     return ids;
@@ -832,6 +858,69 @@ static std::vector<int32_t> text_to_phoneme_ids(const char* text) {
 // bundling covers piper + kokoro only), so on a stock Windows box the popen
 // path always failed and every non-ASCII script fell through to raw character
 // tokenisation — see tokenize_text_full() below.
+// #435 follow-up: the tail-punctuation compensation, shared.
+//
+// It used to live ONLY in the popen path. #435 added phonemize_espeak_inproc()
+// and put it FIRST in the cascade, so the DEFAULT path silently stopped doing
+// this -- zonos dropped the sentence-final punctuation token that the Python
+// reference keeps via preserve_punctuation=True. Found by diffing the two
+// espeak paths against each other, not by a test: both produce speech, and the
+// missing token only shows up as a slightly wrong prosodic boundary.
+//
+// Returns the trailing punctuation run of `text` in the model's inventory, or
+// "" when there is none.
+static std::string zonos_tail_punctuation(const std::string& text) {
+    static const uint8_t PUNCT_BYTES[] = {';',  ':',  ',',  '.', '!', '?', 0xc2, 0xa1, // ¡ (U+00A1)
+                                          0xc2, 0xbf,                                  // ¿ (U+00BF)
+                                          0xe2, 0x80, 0x94,                            // — (U+2014)
+                                          0xe2, 0x80, 0xa6,                            // … (U+2026)
+                                          '"',  ')',  '(',  '*', '~', '-', '/',  '\\', '&', 0};
+    static const std::string PUNCT_ASCII = ";:,.!?\"()*~-/\\&)";
+    std::string tail_punct;
+    size_t tpos = text.size();
+    while (tpos > 0) {
+        const uint8_t c = (uint8_t)text[tpos - 1];
+        bool is_punct = false;
+        if (c < 0x80) {
+            if (PUNCT_ASCII.find((char)c) != std::string::npos)
+                is_punct = true;
+        } else {
+            for (const uint8_t* q = PUNCT_BYTES; *q;) {
+                if (*q >= 0x80) {
+                    int seq = (*q & 0xE0) == 0xC0 ? 2 : (*q & 0xF0) == 0xE0 ? 3 : 4;
+                    if ((int)(tpos) >= seq) {
+                        bool match = true;
+                        for (int k = 0; k < seq && match; k++)
+                            match = (uint8_t)text[tpos - seq + k] == q[k];
+                        if (match) {
+                            is_punct = true;
+                            break;
+                        }
+                    }
+                    q += (*q & 0xE0) == 0xC0 ? 2 : (*q & 0xF0) == 0xE0 ? 3 : 4;
+                } else {
+                    q++;
+                }
+            }
+        }
+        if (!is_punct)
+            break;
+        if (c < 0x80) {
+            tail_punct = std::string(1, (char)c) + tail_punct;
+            tpos--;
+        } else {
+            int seq = (c & 0xE0) == 0xC0 ? 2 : (c & 0xF0) == 0xE0 ? 3 : 4;
+            if ((int)tpos >= seq) {
+                tail_punct = text.substr(tpos - seq, seq) + tail_punct;
+                tpos -= seq;
+            } else {
+                break;
+            }
+        }
+    }
+    return tail_punct;
+}
+
 static bool phonemize_espeak_inproc(const std::string& lang, const std::string& text, std::string& out) {
     static std::mutex mu;
     static bool inited = false;
@@ -871,6 +960,13 @@ static bool phonemize_espeak_inproc(const std::string& lang, const std::string& 
             out += chunk;
         }
     }
+    if (out.empty())
+        return false;
+    // Same compensation the popen path does, and for the same reason: espeak
+    // drops trailing punctuation, the Python phonemizer keeps it, and the token
+    // count has to match. Guarded on espeak having produced something, so this
+    // can never manufacture a non-empty result out of nothing (#435).
+    out += zonos_tail_punctuation(text);
     return !out.empty();
 }
 
@@ -915,64 +1011,11 @@ static std::string phonemize_espeak(const std::string& lang, const std::string& 
     // non-ASCII guard never reached because the cascade returned one step early.
     const bool espeak_produced_phonemes = !out.empty();
 
-    // Python phonemizer uses preserve_punctuation=True with punctuation_marks from
-    // conditioning.py: ';:,.!?¡¿—…"«»""() *~-/\\&'. Non-space punctuation characters
-    // that appear at the TAIL of the original text are appended to the IPA so the
-    // token count matches. espeak-ng drops them; the phonemizer library keeps them.
-    static const uint8_t PUNCT_BYTES[] = {';',  ':',  ',',  '.', '!', '?', 0xc2, 0xa1, // ¡ (U+00A1)
-                                          0xc2, 0xbf,                                  // ¿ (U+00BF)
-                                          0xe2, 0x80, 0x94,                            // — (U+2014)
-                                          0xe2, 0x80, 0xa6,                            // … (U+2026)
-                                          '"',  ')',  '(',  '*', '~', '-', '/',  '\\', '&', 0};
-    // Build a set of punctuation bytes for fast lookup
-    static const std::string PUNCT_ASCII = ";:,.!?\"()*~-/\\&)";
-    // Scan the original text from the end, collecting non-space punctuation
-    std::string tail_punct;
-    size_t tpos = text.size();
-    while (tpos > 0) {
-        const uint8_t c = (uint8_t)text[tpos - 1];
-        // Quick ASCII check
-        bool is_punct = false;
-        if (c < 0x80) {
-            if (PUNCT_ASCII.find((char)c) != std::string::npos)
-                is_punct = true;
-        } else {
-            // Check multi-byte sequences against PUNCT_BYTES
-            for (const uint8_t* p = PUNCT_BYTES; *p;) {
-                if (*p >= 0x80) {
-                    // How many bytes does this sequence take?
-                    int seq = (*p & 0xE0) == 0xC0 ? 2 : (*p & 0xF0) == 0xE0 ? 3 : 4;
-                    if ((int)(tpos) >= seq) {
-                        bool match = true;
-                        for (int k = 0; k < seq && match; k++)
-                            match = (uint8_t)text[tpos - seq + k] == p[k];
-                        if (match) {
-                            is_punct = true;
-                            break;
-                        }
-                    }
-                    p += (*p & 0xE0) == 0xC0 ? 2 : (*p & 0xF0) == 0xE0 ? 3 : 4;
-                } else {
-                    p++;
-                }
-            }
-        }
-        if (!is_punct)
-            break;
-        // Collect this punctuation char/sequence
-        if (c < 0x80) {
-            tail_punct = std::string(1, (char)c) + tail_punct;
-            tpos--;
-        } else {
-            int seq = (c & 0xE0) == 0xC0 ? 2 : (c & 0xF0) == 0xE0 ? 3 : 4;
-            if ((int)tpos >= seq) {
-                tail_punct = text.substr(tpos - seq, seq) + tail_punct;
-                tpos -= seq;
-            } else {
-                break;
-            }
-        }
-    }
+    // Trailing punctuation espeak drops but the Python phonemizer keeps, so
+    // the token count matches. Shared with the in-process path -- it used to
+    // be inlined here only, which is how the in-process path (added in #435
+    // and placed FIRST) silently stopped doing it.
+    const std::string tail_punct = zonos_tail_punctuation(text);
     // Only decorate a REAL phonemisation. Appending punctuation to an empty
     // result manufactures a non-empty string that means nothing.
     if (!espeak_produced_phonemes)
@@ -993,10 +1036,101 @@ static bool text_is_pure_ascii(const char* text) {
     return true;
 }
 
-// Full tokenization: text -> espeak-ng IPA -> phoneme IDs (#435).
+// #435 follow-up: which G2P runs, and in what order.
+//
+//   espeak  — today's cascade, bit-for-bit: in-process libespeak-ng, then the
+//             espeak-ng binary, then ASCII, then refuse. The built-in G2P is
+//             never consulted. This is the control arm for the measurement.
+//   builtin — built-in G2P FIRST, espeak only where no built-in covers the
+//             language. The arm under test.
+//   auto    — DEFAULT. espeak first (so nobody's output moves), with the
+//             built-in as a fallback BELOW it. The only behavioural delta from
+//             `espeak` is on a box with no espeak at all, where the built-in
+//             displaces a path that already prints "quality will be degraded"
+//             and tokenises raw ASCII characters as if they were IPA.
+//
+// The default is deliberately NOT `builtin`. The built-ins emit IPA in the
+// espeak dialect, but zonos's inventory comes from its own conditioning.py
+// symbol list and text_to_phoneme_ids() drops anything outside it WITHOUT
+// SAYING SO — the same silent drop that made #435 look like a working backend.
+// So "the built-in produced audio" is not evidence; per-language agreement and
+// drop counts are, and until those exist for a language its default stays put.
+enum class g2p_mode { espeak_only, builtin_first, automatic };
+
+static g2p_mode zonos_g2p_mode() {
+    const char* v = crispasr_env::get("CRISPASR_ZONOS_G2P");
+    if (!v || !*v)
+        return g2p_mode::automatic;
+    if (std::strcmp(v, "builtin") == 0)
+        return g2p_mode::builtin_first;
+    if (std::strcmp(v, "espeak") == 0)
+        return g2p_mode::espeak_only;
+    if (std::strcmp(v, "auto") == 0)
+        return g2p_mode::automatic;
+    fprintf(stderr, "zonos_tts: WARN: CRISPASR_ZONOS_G2P='%s' is not one of builtin|espeak|auto; using auto\n", v);
+    return g2p_mode::automatic;
+}
+
+static const char* g2p_mode_name(g2p_mode m) {
+    switch (m) {
+    case g2p_mode::espeak_only:
+        return "espeak";
+    case g2p_mode::builtin_first:
+        return "builtin";
+    default:
+        return "auto";
+    }
+}
+
+// Built-in (non-GPL) G2P for the languages crispasr-core covers: en/de/fr/es.
+// Punctuation is carried through, matching the Python reference's
+// `preserve_punctuation=True`, so the tail-punctuation compensation the espeak
+// popen path needs does not apply here — the marks are already in the string.
+static bool phonemize_builtin_zonos(const std::string& lang, const std::string& text, std::string& out) {
+    out.clear();
+    if (!crispasr::phonemize_builtin_tts(lang, text, out))
+        return false;
+    return !out.empty();
+}
+
+// Emit the numbers that decide whether a G2P path is good enough. Off unless
+// CRISPASR_ZONOS_G2P_DEBUG is set; one machine-parsable line per field so a
+// harness can diff the PAYLOAD (the ID sequence, the drop histogram) rather
+// than the container ("it produced a wav").
+static void g2p_debug_dump(g2p_mode mode, const std::string& lang, const char* path, const std::string& ipa,
+                           const std::vector<int32_t>& ids, const phoneme_tok_stats& st) {
+    if (!crispasr_env::truthy("CRISPASR_ZONOS_G2P_DEBUG"))
+        return;
+    fprintf(stderr,
+            "zonos_g2p: mode=%s lang=%s path=%s ipa_bytes=%zu cp_total=%d cp_mapped=%d cp_dropped=%d "
+            "cp_format_skipped=%d ntok=%zu\n",
+            g2p_mode_name(mode), lang.c_str(), path, ipa.size(), st.codepoints, st.mapped, st.dropped,
+            st.format_skipped, ids.size());
+    fprintf(stderr, "zonos_g2p: ipa=%s\n", ipa.c_str());
+    std::string idlist;
+    for (size_t i = 0; i < ids.size(); ++i) {
+        if (i)
+            idlist += ',';
+        idlist += std::to_string(ids[i]);
+    }
+    fprintf(stderr, "zonos_g2p: ids=%s\n", idlist.c_str());
+    std::string drops;
+    for (const auto& kv : st.dropped_hist) {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "U+%04X:%d", kv.first, kv.second);
+        if (!drops.empty())
+            drops += ',';
+        drops += buf;
+    }
+    fprintf(stderr, "zonos_g2p: dropped=%s\n", drops.c_str());
+}
+
+// Full tokenization: text -> IPA -> phoneme IDs (#435).
 //
 // Cascade, mirroring kokoro/piper: in-process libespeak-ng, then the external
-// espeak-ng binary, then — only for pure ASCII — raw character tokenisation.
+// espeak-ng binary, then the built-in G2P (en/de/fr/es), then — only for pure
+// ASCII — raw character tokenisation. CRISPASR_ZONOS_G2P reorders it; see
+// g2p_mode above.
 //
 // THE LAST STEP USED TO RUN FOR EVERY INPUT, AND THAT IS THE BUG. The phoneme
 // map holds IPA symbols, and text_to_phoneme_ids() skips unmapped codepoints
@@ -1010,30 +1144,57 @@ static bool text_is_pure_ascii(const char* text) {
 // can act on an error and cannot act on plausible-sounding rubbish.
 static std::vector<int32_t> tokenize_text_full(const char* text, const char* lang = "en-us") {
     const std::string l = lang ? lang : "en-us";
+    const g2p_mode mode = zonos_g2p_mode();
+
+    // One place that turns an IPA string into IDs, so every path is measured
+    // the same way and none of them can quietly skip the readout.
+    auto finish = [&](const char* path, const std::string& ipa) {
+        phoneme_tok_stats st;
+        std::vector<int32_t> ids = text_to_phoneme_ids(ipa.c_str(), &st);
+        g2p_debug_dump(mode, l, path, ipa, ids, st);
+        return ids;
+    };
 
     std::string ipa;
+
+    if (mode == g2p_mode::builtin_first && phonemize_builtin_zonos(l, text, ipa))
+        return finish("builtin", ipa);
+
     if (phonemize_espeak_inproc(l, text, ipa) && !ipa.empty())
-        return text_to_phoneme_ids(ipa.c_str());
+        return finish("espeak_inproc", ipa);
 
     ipa = phonemize_espeak(l, text);
     if (!ipa.empty())
-        return text_to_phoneme_ids(ipa.c_str());
+        return finish("espeak_popen", ipa);
+
+    // Below espeak, above the raw-ASCII path: a real phonemisation for the four
+    // languages crispasr-core covers beats tokenising letters as if they were
+    // IPA symbols, and it is the only route that works at all for de/fr/es text
+    // with diacritics on a box without espeak.
+    if (mode != g2p_mode::espeak_only && phonemize_builtin_zonos(l, text, ipa))
+        return finish("builtin", ipa);
 
     if (!text_is_pure_ascii(text)) {
         fprintf(stderr,
                 "zonos_tts: ERROR: no phonemizer available and the text is not ASCII (lang=%s).\n"
-                "  Zonos conditions on IPA phonemes; without espeak-ng every non-ASCII character\n"
+                "  Zonos conditions on IPA phonemes; without a phonemizer every non-ASCII character\n"
                 "  is dropped, which yields a near-empty prompt and unintelligible audio.\n"
+                "  The built-in G2P covers en/de/fr/es only and does not cover this language.\n"
                 "  Install espeak-ng (in-process libespeak-ng is preferred and is picked up\n"
                 "  automatically; CRISPASR_ESPEAK_DATA_PATH overrides the data directory), or\n"
                 "  put the espeak-ng binary on PATH. Refusing to synthesise noise.\n",
                 l.c_str());
+        if (crispasr_env::truthy("CRISPASR_ZONOS_G2P_DEBUG"))
+            fprintf(stderr,
+                    "zonos_g2p: mode=%s lang=%s path=refused ipa_bytes=0 cp_total=0 cp_mapped=0 "
+                    "cp_dropped=0 cp_format_skipped=0 ntok=0\n",
+                    g2p_mode_name(mode), l.c_str());
         return {};
     }
 
     fprintf(stderr, "zonos_tts: WARN: espeak-ng not available, using raw ASCII tokenization "
                     "(quality will be degraded; install espeak-ng for proper phonemes)\n");
-    return text_to_phoneme_ids(text);
+    return finish("ascii", text);
 }
 
 } // namespace

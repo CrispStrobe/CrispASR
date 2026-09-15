@@ -1332,6 +1332,24 @@ constexpr Entry k_registry[] = {
     {"voxcpm2-tts", "voxcpm2-q4_k.gguf",
      "https://huggingface.co/cstr/voxcpm2-GGUF/resolve/main/voxcpm2-q4_k.gguf",
      "~1.6 GB", nullptr, nullptr},
+    // #433: the SAME artifact, reachable under the VAE backend's own name.
+    //
+    // voxcpm2-vae is a second backend over one file, not a second model:
+    // voxcpm2_vae_init_from_file() calls the same voxcpm2_init_internal()
+    // loader with vae_only=true. Without an entry here `-m auto --backend
+    // voxcpm2-vae` could not resolve anything and the user had to know to pass
+    // the TTS GGUF by path — which is exactly the discoverability gap the
+    // reporter hit.
+    //
+    // Deliberately the same filename, not a separate VAE-only export. The cache
+    // keys on the filename, so anyone who already pulled it for TTS gets the VAE
+    // backend for free, and there is no second artifact to convert, host,
+    // version and keep in sync — a VAE-only GGUF cut from the same weights is a
+    // divergence risk for a saving that only matters to someone who wants the
+    // upscaler and nothing else. Split it out if that case turns up.
+    {"voxcpm2-vae", "voxcpm2-q4_k.gguf",
+     "https://huggingface.co/cstr/voxcpm2-GGUF/resolve/main/voxcpm2-q4_k.gguf",
+     "~1.6 GB", nullptr, nullptr},
     // CosyVoice3 0.5B-2512: FunAudioLLM streaming multilingual TTS,
     // Apache 2.0, 9 languages + 18 Chinese dialects, 24 kHz, zero-shot
     // voice cloning via baked voices.gguf. Three-stage pipeline (LLM
