@@ -1082,6 +1082,33 @@ static const char* g2p_mode_name(g2p_mode m) {
     }
 }
 
+// Languages where the BUILT-IN G2P is the default ahead of espeak.
+//
+// Only what was measured, per language, on chr1s4/crispasr-zonos-g2p-435 with
+// espeak physically removed and the removal verified:
+//
+//     en   ASR word-F1 1.00 vs espeak 1.00, 0 dropped symbols
+//     de   1.00 vs 1.00, 0 dropped, transcripts byte-identical
+//     fr   0.95 vs espeak's 0.84 -- the built-in is BETTER here
+//                  (`renard`, where espeak says `renarbre`)
+//
+// es is deliberately NOT here. Its built-in scored 0.81 against an espeak
+// BASELINE of only 0.57, so the higher number is absence of evidence of harm,
+// not proof of parity -- and the two spell the trill differently (espeak `ɾɾ`,
+// built-in `r`) while BOTH symbols are in zonos's inventory, so the drop
+// counter is blind to it by construction. Everything else (ru included) has no
+// built-in at all and must keep espeak.
+//
+// The point of the flip is the LICENCE: espeak-ng is GPL-3.0 and the built-in
+// G2P is not, so for these three languages zonos no longer needs it at all.
+// CRISPASR_ZONOS_G2P=espeak restores the old order exactly.
+static bool builtin_is_default_for(const std::string& lang) {
+    const char* prim = crispasr::builtin_g2p_language(lang);
+    if (!prim || !*prim)
+        return false;
+    return std::strcmp(prim, "en") == 0 || std::strcmp(prim, "de") == 0 || std::strcmp(prim, "fr") == 0;
+}
+
 // Built-in (non-GPL) G2P for the languages crispasr-core covers: en/de/fr/es.
 // Punctuation is carried through, matching the Python reference's
 // `preserve_punctuation=True`, so the tail-punctuation compensation the espeak
@@ -1157,7 +1184,9 @@ static std::vector<int32_t> tokenize_text_full(const char* text, const char* lan
 
     std::string ipa;
 
-    if (mode == g2p_mode::builtin_first && phonemize_builtin_zonos(l, text, ipa))
+    const bool builtin_leads =
+        mode == g2p_mode::builtin_first || (mode == g2p_mode::automatic && builtin_is_default_for(l));
+    if (builtin_leads && phonemize_builtin_zonos(l, text, ipa))
         return finish("builtin", ipa);
 
     if (phonemize_espeak_inproc(l, text, ipa) && !ipa.empty())
