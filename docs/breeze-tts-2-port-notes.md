@@ -789,3 +789,31 @@ non-causal mask is the one attention shape this repo has not run before.
 under flash and right under eager, the bug is in how the mask reaches
 flash-attention, not in the weights or the constants — and that A/B costs one
 env var instead of a day.
+
+### The harness was tested before the model was
+
+An instrument that cannot report failure makes every number it prints
+worthless, so the comparison path was validated on known-answer and degenerate
+inputs first, locally, before any Kaggle run scored anything:
+
+* **npy writer** (C++ → numpy): 4 shape/dtype combinations round-tripped with
+  exact value equality, not just matching shapes.
+* **npy reader** (numpy → C++): run against the REAL fixture files; shapes,
+  dtypes and leading values identical to `np.load`.
+* **comparator, identical inputs**: 9/9 PASS, cos 1.000000, ratio 1.0000.
+* **comparator, injected faults** — the arm that matters:
+
+  | injected | caught by | reported |
+  |---|---|---|
+  | `te_seg0_hidden` x 2.0, *scale only* | magnitude | **cos=1.000000** and FAIL, `ratio=2.0000` |
+  | `backbone_logits` argmax swapped | argmax | cos 0.975, `argmax ref=404 cpp=999 MISMATCH` |
+  | one code off by one | int equality | `exact=False first_bad=7` |
+  | untouched stages | — | still PASS (no false positives) |
+
+  Exit code 1 on failures, 0 on a clean dump, so the kernel's `compare_rc` is
+  a real signal rather than decoration.
+
+The first row is the entire argument for the magnitude columns: a stage wrong
+by a uniform factor of two scores a **perfect cosine**. Without `|ref|`/`|cpp|`
+a 2x-wrong text encoder would have been reported as a flawless pass, which is
+exactly how the htdemucs iSTFT and CQT bugs survived as long as they did.
