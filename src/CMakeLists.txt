@@ -146,7 +146,7 @@ add_library(crispasr-lib
             # and by the C-ABI `crispasr_align_words_abi`. Both canary-ctc
             # and qwen3-forced-aligner paths route through one call.
             crispasr_aligner.cpp
-            # Built-in G2P phonemizers (EN/DE/FR/ES) live in crispasr-core
+            # Built-in G2P phonemizers (EN/DE/FR/ES/RU) live in crispasr-core
             # (phonemizer.cpp), NOT here and no longer in kokoro — #435 needs
             # them from zonos too, and any backend that links crispasr-core now
             # reaches them without a new edge in the link graph.
@@ -888,7 +888,7 @@ add_library(crispasr-core STATIC
             # find the symbol in the leaf lib, not the higher crispasr-lib (#316).
             crispasr_cache.h
             crispasr_cache.cpp
-            # Built-in G2P (EN/DE/FR/ES) + the espeak-ng dlopen/popen fallbacks.
+            # Built-in G2P (EN/DE/FR/ES/RU) + the espeak-ng dlopen/popen fallbacks.
             # MOVED HERE FROM kokoro (#435): zonos links only crispasr-core and
             # needs a phonemizer whose licence is not GPL-3.0, and kokoro is not
             # a dependency any other backend should acquire just to phonemise.
