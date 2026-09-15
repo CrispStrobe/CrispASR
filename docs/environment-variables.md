@@ -169,7 +169,10 @@ surviving artifact. Applied on both the CLI and the session C-ABI.
 | Variable | Purpose |
 |----------|---------|
 | `CRISPASR_CMUDICT_PATH` | Path to the CMUdict pronunciation dictionary. |
-| `CRISPASR_DE_DICT_PATH` / `_FR_DICT_PATH` / `_ES_DICT_PATH` | Language-specific pronunciation dictionaries. |
+| `CRISPASR_DE_DICT_PATH` / `_FR_DICT_PATH` / `_ES_DICT_PATH` / `_RU_DICT_PATH` | Language-specific pronunciation dictionaries. |
+| `CRISPASR_RU_HETERONYMS_PATH` | Path to the Russian heteronym list. Only read when `CRISPASR_G2P_RU_HETERONYM_WARN` is on — it is diagnostic data, not a lookup tier. |
+| `CRISPASR_G2P_RU_HETERONYM_WARN` | `1` prints one line per input word that the upstream project flagged as genuinely ambiguous. Those 17,359 words are DISJOINT from the 812,953-entry vocabulary — they were removed because upstream could not choose a reading — so they have no dictionary entry and the letter-to-sound rules pick one reading from spelling alone. Common words are in that set (`все`, `уже`, `потом`, `чем`, `небо`, `тест`). Off by default; on, it turns a mispronunciation that looks like a rule bug into a named, explained limitation. Writing the `ё` or an explicit combining acute (`замо́к`) in the input resolves many of them, and both are honoured. |
+| `CRISPASR_G2P_RU_ANALOGY` | `0` disables the Russian stress-analogy tier, which finds a known relative of an OOV word (strip up to 3 letters, glue a short list of inflectional endings back on) and borrows its stress. On by default and measured on 10,000 held-out dictionary words: stressed-syllable index right 93.9% with it and 47.1% without; exact IPA match 79.4% vs 40.9%. The lever exists because it is the one tier that can take a stress from a word that merely LOOKS related. |
 | `CRISPASR_G2P_DICT_SOURCE` / `_G2P_MODEL_PATH` | G2P dictionary source / neural G2P model path. |
 | `CRISPASR_ESPEAK_DATA_PATH` | eSpeak-NG data directory. |
 | `CRISPASR_MISAKI_DICT_PATH` | Path to the misaki US contextual-word dictionary (default `~/.cache/crispasr/misaki-us.txt`) used by the English misaki G2P (#316). |
@@ -1562,7 +1565,7 @@ end-to-end cosine cannot do.
   phonemizer zonos tries first (#435). `espeak` is the pre-#435-follow-on
   cascade bit for bit (in-process libespeak-ng → the `espeak-ng` binary → raw
   ASCII → refuse) and never consults the built-in G2P; `builtin` puts the
-  built-in EN/DE/FR/ES G2P from `crispasr-core` first; `auto` keeps espeak
+  built-in EN/DE/FR/ES/RU G2P from `crispasr-core` first; `auto` keeps espeak
   first and uses the built-in only as a fallback below it. The default is
   **not** `builtin`: the built-ins emit espeak-dialect IPA while zonos's
   inventory comes from its own `conditioning.py` symbol list, and unmapped

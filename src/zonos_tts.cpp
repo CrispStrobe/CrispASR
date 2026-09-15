@@ -34,7 +34,7 @@
 #include "core/gpu_backend_pref.h" // crispasr_init_gpu_backend (#214)
 #include "core/crispasr_env.h"
 #include "espeak_dlopen.h" // #435: in-process libespeak-ng, same loader kokoro/piper use
-#include "phonemizer.h"    // #435: built-in EN/DE/FR/ES G2P, now in crispasr-core
+#include "phonemizer.h"    // #435: built-in EN/DE/FR/ES/RU G2P, now in crispasr-core
 
 #include "ggml-backend.h"
 #include "ggml-cpu.h"
@@ -1109,7 +1109,7 @@ static bool builtin_is_default_for(const std::string& lang) {
     return std::strcmp(prim, "en") == 0 || std::strcmp(prim, "de") == 0 || std::strcmp(prim, "fr") == 0;
 }
 
-// Built-in (non-GPL) G2P for the languages crispasr-core covers: en/de/fr/es.
+// Built-in (non-GPL) G2P for the languages crispasr-core covers: en/de/fr/es/ru.
 // Punctuation is carried through, matching the Python reference's
 // `preserve_punctuation=True`, so the tail-punctuation compensation the espeak
 // popen path needs does not apply here — the marks are already in the string.
@@ -1155,7 +1155,7 @@ static void g2p_debug_dump(g2p_mode mode, const std::string& lang, const char* p
 // Full tokenization: text -> IPA -> phoneme IDs (#435).
 //
 // Cascade, mirroring kokoro/piper: in-process libespeak-ng, then the external
-// espeak-ng binary, then the built-in G2P (en/de/fr/es), then — only for pure
+// espeak-ng binary, then the built-in G2P (en/de/fr/es/ru), then — only for pure
 // ASCII — raw character tokenisation. CRISPASR_ZONOS_G2P reorders it; see
 // g2p_mode above.
 //
@@ -1208,7 +1208,7 @@ static std::vector<int32_t> tokenize_text_full(const char* text, const char* lan
                 "zonos_tts: ERROR: no phonemizer available and the text is not ASCII (lang=%s).\n"
                 "  Zonos conditions on IPA phonemes; without a phonemizer every non-ASCII character\n"
                 "  is dropped, which yields a near-empty prompt and unintelligible audio.\n"
-                "  The built-in G2P covers en/de/fr/es only and does not cover this language.\n"
+                "  The built-in G2P covers en/de/fr/es/ru only and does not cover this language.\n"
                 "  Install espeak-ng (in-process libespeak-ng is preferred and is picked up\n"
                 "  automatically; CRISPASR_ESPEAK_DATA_PATH overrides the data directory), or\n"
                 "  put the espeak-ng binary on PATH. Refusing to synthesise noise.\n",

@@ -804,7 +804,62 @@ The phonemization cascade tries in order:
 
 Override per-language dict paths with env vars:
 `CRISPASR_CMUDICT_PATH`, `CRISPASR_DE_DICT_PATH`,
-`CRISPASR_FR_DICT_PATH`, `CRISPASR_ES_DICT_PATH`.
+`CRISPASR_FR_DICT_PATH`, `CRISPASR_ES_DICT_PATH`,
+`CRISPASR_RU_DICT_PATH`.
+
+### Russian G2P — and the one thing it cannot do
+
+Russian is covered by a 812,953-entry IPA dictionary with lexical stress
+already resolved ([`bene-ges/ru_g2p_ipa_bert_large`](https://huggingface.co/bene-ges/ru_g2p_ipa_bert_large),
+**CC-BY-4.0**), published as `ru_g2p_ipa.tsv` on
+[cstr/g2p-dicts](https://huggingface.co/datasets/cstr/g2p-dicts), in front of
+letter-to-sound rules covering palatalisation, voicing assimilation, final
+devoicing, and stress-driven vowel reduction. Stress is the hard half of
+Russian G2P — it is not predictable from spelling and it changes the VOWELS,
+not just the prosody (`молоко` is `[məɫɐkˈo]`: the same letter as three
+different sounds, chosen entirely by distance from the stress).
+
+**Heteronyms are a real, stated limitation, not a rough edge.** The upstream
+project shipped a second file listing 17,359 words it judged genuinely
+ambiguous — and it *removed* them from the vocabulary. The two files are
+disjoint: 0 of the 17,359 appear in the dictionary. They are not entries with a
+chosen reading; they are the words upstream could not choose for. So there is
+no "dictionary reading" to take for `замок` (castle / lock) or `мука`
+(flour / torment), and the letter-to-sound rules pick ONE reading from spelling
+alone. On a genuine heteronym that is wrong roughly half the time.
+
+A dictionary cannot carry sentence context and this one does not pretend to.
+Resolving these needs a model that sees the sentence.
+
+Frequent words are in that set, largely for a mechanical reason: the
+dictionary's keys fold `ё` to `е`, so every `ё`/`е` minimal pair (`всё`/`все`,
+`нёбо`/`небо`) collapses into one ambiguous key and was dropped. Two things
+you can do about it, both honoured by the G2P:
+
+- **write the `ё`.** It is always stressed, so it fixes the stress and the
+  vowel quality at once — `всё` and `все` come out different.
+- **write an explicit stress mark** (combining acute, U+0301) where it matters:
+  `за́мок` → `[ˈzamək]`, `замо́к` → `[zɐmˈok]`. An explicit mark outranks the
+  dictionary when the two disagree, because it is the writer disambiguating on
+  purpose. It is stripped before lookup and never reaches the phoneme string.
+
+Set `CRISPASR_G2P_RU_HETERONYM_WARN=1` to have each ambiguous input word named
+on stderr as it occurs.
+
+Measured, so the two tiers are not read as equally good:
+
+| | |
+|---|---|
+| Dictionary coverage on running text | 89.7% of word tokens (1,073 tokens of Russian Wikipedia summaries) |
+| Rule path, stressed-syllable index correct | 93.9% (control, analogy tier off: 47.1%) |
+| Rule path, exact IPA match vs the dictionary | 79.4% (control: 40.9%) |
+| Rule path, symbol accuracy | 96.6% (control: 82.3%) |
+
+The rule-path rows are a 10,000-word holdout: each word was *removed* from the
+dictionary before the rules were asked for it. That sample is mostly inflected
+forms whose stem is still in the dictionary, which is what the analogy tier
+feeds on — it is not representative of a surname or a neologism, for which only
+the by-syllable-count fallback is left (right 27-61% of the time).
 
 ### Kokoro G2P strategy (`CRISPASR_KOKORO_G2P`)
 
@@ -831,7 +886,7 @@ Dictionary sources at [cstr/g2p-dicts](https://huggingface.co/datasets/cstr/g2p-
 ### Zonos G2P strategy (`CRISPASR_ZONOS_G2P`)
 
 Zonos conditions on IPA phonemes, and until #435 it could only get them from
-espeak-ng (GPL-3.0). It now also reaches the built-in EN/DE/FR/ES G2P that
+espeak-ng (GPL-3.0). It now also reaches the built-in EN/DE/FR/ES/RU G2P that
 `crispasr-core` ships:
 
 | Value | Behavior |
