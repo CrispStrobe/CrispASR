@@ -584,3 +584,113 @@ kaggle kernels push -p tools/kaggle/breeze-refdump      # maintainer only
 python tools/reference_backends/breeze_tts_2.py --list
 python tools/reference_backends/breeze_tts_2.py --cpp-dump /path/to/cpp/dumps
 ```
+
+---
+
+## Phase-2 state (2026-09-15)
+
+### What exists now
+
+| Artifact | State |
+|---|---|
+| `src/breeze_tts_2.{h,cpp}` | written, **compile-verified only** — no stage has been measured |
+| `examples/cli/crispasr_backend_bt2_tts.cpp` | backend key `bt2-tts`, aliases resolve `breeze-tts-2` |
+| registry / arch map / caps table / factory / `crispasr_list_backends()` | wired |
+| `tests/test-registry.cpp` | NC gate asserted, with controls |
+| `cstr/breeze-tts-2-GGUF` | f16 5.71 GB, q8_0 3.19 GiB, q4_k 2.05 GiB — **pre-norm-fold, being regenerated** |
+| reference fixture | **not yet produced** — see below |
+
+Conversion reconciles exactly with §2 of this document: 778 tensors,
+2 850.2 M live params, 351 tensors / 633.1 M params dropped.
+
+### The backend key is `bt2-tts`, not `breeze-tts2`
+
+§4 of the Agreement bars the licensor's marks as the **primary name** of a
+derivative. The feasibility memo judged `breeze-tts2` acceptable as descriptive
+attribution; the owner's instruction for phase 2 was not to lead the key with
+it. So the primary key is `bt2-tts` and `breeze-tts-2` / `breeze-tts2` /
+`breeze_tts_2` remain as aliases, which keeps the model findable under its
+published name while the name CrispASR presents is not theirs. The HF repo
+`cstr/breeze-tts-2-GGUF` is unchanged — a repo name IS descriptive attribution.
+
+### Scope decision on CFG: neither Option A nor Option B, yet
+
+§5 recommended shipping Option B (serial branches) behind
+`CRISPASR_BREEZE_CFG_BRANCHES`. Phase 2 has **not** done that. What is in the
+tree:
+
+* both KV caches are allocated with a trailing dim of `n_layers * n_branch`
+  and both graph builders take a `branch` index, so the cache topology and the
+  `il = layer * n_branch + branch` arithmetic are already in place and cost
+  nothing at `n_branch == 1`;
+* `n_branch` is pinned to 1, and the two things Option B still needs are
+  per-branch prompt assembly (three different prompts, three different lengths,
+  three different `n_past`) and the logits combine at every backbone step plus
+  every depth step.
+
+So this build reaches **Voice Clone and plain TTS**, and does not reach **Voice
+Design or Voice Direction**. That is enforced rather than documented:
+`breeze_tts_2_capabilities()` returns only `1 << BREEZE_CFG_NONE`,
+`breeze_tts_2_synthesize_guided()` refuses anything else, and the CLI adapter
+refuses `--tts-instruct` at init. The reason to refuse rather than downgrade is
+specific to this failure mode: a single-branch run of a Voice Design request
+produces fluent, natural speech that ignores the instruction entirely, and no
+property of the output reveals it.
+
+### Two decisions worth not re-deriving
+
+**The encoder's "linear" RoPE needs no core change.** `rope_type="linear"` means
+`inv_freq /= 8` with `attention_scaling = 1.0`. `core_attn::kv_self_attn`
+hardcodes `freq_scale = 1.0f`, so the obvious route is to add a field to
+`KvSelfAttnParams`. It is not needed: ggml computes `theta / freq_factors[i]`
+per pair, so a **constant** `freq_factors` vector of `8.0` is exactly linear
+scaling. Twenty other callers of that function stay untouched.
+
+**Gemma's `1 + w` is folded at conversion time.** `T5Gemma2RMSNorm` is
+`x * (1 + w)` and that includes `q_norm`/`k_norm`, which are applied *inside*
+`kv_self_attn` as a plain `rms_norm * w`. The converter therefore adds 1.0 to
+every `te.*norm*` weight and sets `breeze.te.norm_weights_pre_offset`; the
+runtime refuses to load a GGUF that claims the Gemma form without it. Note the
+pair of KV keys: `norm_unit_offset` describes the architecture,
+`norm_weights_pre_offset` describes the bytes.
+
+### The reference oracle: what it took
+
+The fixture still does not exist, and the reasons are worth recording because
+each one cost a run:
+
+1. `kh.provenance` was called before it existed in the harness — the kernel
+   clones the harness fresh but carries its own frozen script, so the two
+   halves disagreed (gotcha #24). Killed the run in 10 s.
+2. The P100 guard exited on every draw. Kaggle was P100-pinned and its torch
+   has no sm_60 kernels, so "re-push to redraw" was an instruction to loop
+   forever. Now falls back to CPU — the dump needs ~24 frames and 7 GB of host
+   RAM, not a GPU. (Re-measured 2026-09-15: the pool handed out a **T4**,
+   host RAM 33.7 GB. The P100 pin is not currently holding.)
+3. `np.asarray` on a CUDA tensor from the audio tokenizer.
+4. `output_hidden_states=True` on a backbone assembled by
+   `breeze_backbone_factory` — the wrapper accepts the flag and returns
+   `None`. Per-layer states now come from forward hooks. ⚠ **Convention:** the
+   hooks fire *after* each layer, so `backbone_layer{J}` is the residual stream
+   after layer J — NOT the `hidden_states` convention where index 0 is the
+   input embedding. `backbone_inputs_embeds` is that input, dumped separately.
+5. `model.generate()` without `audio_tokenizer=`, which drops into the dead
+   Mimi branch and reaches for `quantizer.cardinality`.
+
+Everything up to and including `backbone_logits_frame0` has been observed to
+dump successfully: prompt L=185 over 2 text segments (27 and 19 tokens),
+`te_proj_out [46, 2048]`, `backbone_inputs_embeds [185, 2048]`, all 28
+backbone layers.
+
+### Owed before any parity claim
+
+1. `crispasr-diff` arm for `bt2-tts` — deliberately not written yet, so its
+   stage shapes can be read off the fixture rather than guessed.
+2. Per-stage cosine **and magnitude** against the fixture, in the §7 order.
+3. Greedy exact-code equality, then the TTS→ASR roundtrip (en + zh), with the
+   reference `breeze-ref.wav` run through the same ASR first as a control.
+4. A tokenizer check: the C++ prompt builder uses
+   `core_bpe::tokenize_simple` (as `gemma4_e2b.cpp` does) plus explicit
+   special-token splitting. `prompt_input_ids` in the fixture is what settles
+   whether that reproduces the Gemma tokenizer; `breeze_tts_2_run_prompt_dump`
+   exists for exactly that comparison.
