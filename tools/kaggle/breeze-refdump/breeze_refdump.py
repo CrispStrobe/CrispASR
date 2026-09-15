@@ -150,7 +150,7 @@ import kaggle_harness as kh  # noqa: E402
 
 kh.init_progress()
 # Bump when the arms, capture or predicate change (see kh.provenance).
-SCRIPT_VERSION = "2026-09-15.5"
+SCRIPT_VERSION = "2026-09-15.6"
 # kh.provenance landed in the harness AFTER this kernel was first pushed, so the
 # 2026-09-02 run died in 10 s with AttributeError against its own fresh clone
 # (gotcha #24, the two-halves trap). Never let provenance logging be fatal.
@@ -446,8 +446,16 @@ step("depth_decoder_frame0_done", codes=frame0)
 
 # ── stage 5: full generate (codes) + codec decode ─────────────────────────
 set_all_seeds(SEED)
+# generate() takes an `audio_tokenizer` kwarg (generation_breeze.py:1100) and
+# WITHOUT it falls into the `audio_tokenizer is None` branch, which reaches for
+# self.codec_model.quantizer.cardinality — an attribute the bundled Mimi class
+# does not have on this transformers version. That branch is dead weight
+# anyway: runtime.py always loads the Qwen3 tokenizer, and the Mimi codec in
+# the checkpoint is a training leftover we drop from the GGUF entirely. Pass
+# the real tokenizer and the whole branch is skipped.
 gen = model.generate(**{k: v for k, v in inputs.items() if v is not None},
-                     output_audio=True, return_dict_in_generate=True)
+                     output_audio=True, audio_tokenizer=audio_tokenizer,
+                     return_dict_in_generate=True)
 codes = gen.sequences                                      # (B, T, 16)
 if codes.ndim == 3:
     codes = codes[0]
@@ -467,8 +475,15 @@ for f in range(min(N_DUMP_FRAMES, codes.shape[0])):
 
 audio = gen.audio[0] if getattr(gen, "audio", None) else None
 if audio is None:
-    dec = audio_tokenizer.decode(torch.as_tensor(codes)[None].to(DEVICE))
-    audio = dec["audio"][0] if isinstance(dec, dict) else dec
+    # Same call shape upstream uses (generation_breeze.py:1324) — a dict with a
+    # LIST of code tensors, not a batched tensor. The previous form here was a
+    # guess and would have decoded the wrong thing if it had ever been reached.
+    from models.generation_breeze import _extract_decoded_audio_tensor
+
+    dec = audio_tokenizer.decode(
+        {"audio_codes": [torch.as_tensor(codes).to(DEVICE)]}
+    )
+    audio = _extract_decoded_audio_tensor(dec)
 audio = to_np(audio, np.float32).reshape(-1)
 save("codec_audio", audio)
 sf.write(str(WORK / "breeze-ref.wav"), audio, 24000, subtype="PCM_16")
