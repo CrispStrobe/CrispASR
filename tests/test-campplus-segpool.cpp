@@ -123,6 +123,23 @@ TEST_CASE("campplus seg_pool tolerates degenerate inputs", "[unit][tts][campplus
 // acceptance test these backends have -- which is how the original divisor bug
 // survived five consumers in the first place.
 namespace {
+// Portable env helpers (Windows has no POSIX setenv/unsetenv) — same shape as
+// tests/test-bench-enabled.cpp, which already owns this pattern.
+void test_setenv(const char* k, const char* v) {
+#if defined(_WIN32)
+    _putenv_s(k, v);
+#else
+    ::setenv(k, v, 1);
+#endif
+}
+void test_unsetenv(const char* k) {
+#if defined(_WIN32)
+    _putenv_s(k, "");
+#else
+    ::unsetenv(k);
+#endif
+}
+
 struct ScopedLegacySegpool {
     bool had_prev = false;
     std::string prev;
@@ -132,15 +149,15 @@ struct ScopedLegacySegpool {
             prev = p;
         }
         if (value)
-            setenv("CRISPASR_CAMPP_LEGACY_SEGPOOL", value, 1);
+            test_setenv("CRISPASR_CAMPP_LEGACY_SEGPOOL", value);
         else
-            unsetenv("CRISPASR_CAMPP_LEGACY_SEGPOOL");
+            test_unsetenv("CRISPASR_CAMPP_LEGACY_SEGPOOL");
     }
     ~ScopedLegacySegpool() {
         if (had_prev)
-            setenv("CRISPASR_CAMPP_LEGACY_SEGPOOL", prev.c_str(), 1);
+            test_setenv("CRISPASR_CAMPP_LEGACY_SEGPOOL", prev.c_str());
         else
-            unsetenv("CRISPASR_CAMPP_LEGACY_SEGPOOL");
+            test_unsetenv("CRISPASR_CAMPP_LEGACY_SEGPOOL");
     }
 };
 
@@ -206,7 +223,11 @@ TEST_CASE("campplus seg_pool legacy gate changes ONLY the partial tail", "[unit]
         // Nothing in the suite may leave it set: a stray value would silently
         // put every later assertion on the known-wrong divisor.
         ScopedLegacySegpool guard(nullptr);
-        REQUIRE(std::getenv("CRISPASR_CAMPP_LEGACY_SEGPOOL") == nullptr);
+        // On Windows _putenv_s(k, "") leaves the name defined but empty rather
+        // than removing it, so assert what the header actually keys off (an
+        // empty value is "off") instead of the pointer being null.
+        const char* raw = std::getenv("CRISPASR_CAMPP_LEGACY_SEGPOOL");
+        REQUIRE((raw == nullptr || raw[0] == '\0'));
         const int T = 451, n_seg = campplus_segpool::n_segments(T, k);
         std::vector<float> in((size_t)T, 1.0f);
         std::vector<float> out((size_t)n_seg, -99.0f);
