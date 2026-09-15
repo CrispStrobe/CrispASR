@@ -195,9 +195,11 @@ TEST_CASE("Russian LTS: ё is always stressed and carries its own vowel", "[g2p_
     // the quality come out of it.
     const std::string yo = lts("ёлка");
     CHECK(has(yo, "\xc9\xb5")); // ɵ
-    CHECK(yo.find("\xcb\x88") == std::string::npos ||
-          yo.find("\xcb\x88") < yo.find("\xc9\xb5")); // the mark precedes it
-    CHECK(has(lts("жёлтый"), "o"));                   // after hard ж it is [o], not [ɵ]
+    // Extra parens: Catch2's expression decomposer cannot take `a == b || c < d`
+    // and rejects it as a chained comparison at compile time.
+    CHECK((yo.find("\xcb\x88") == std::string::npos ||
+           yo.find("\xcb\x88") < yo.find("\xc9\xb5"))); // the mark precedes it
+    CHECK(has(lts("жёлтый"), "o"));                     // after hard ж it is [o], not [ɵ]
     CHECK_FALSE(has(lts("жёлтый"), "\xc9\xb5"));
     // всё vs все — the ё is the ONLY thing separating them, in the input and
     // in the output. (The dictionary cannot: its keys fold ё to е.)
