@@ -56,7 +56,7 @@ import sys
 import time
 from pathlib import Path
 
-SCRIPT_VERSION = "v2-companion-paths"
+SCRIPT_VERSION = "v3-ref-text"
 WORK = Path("/kaggle/working")
 TEMP = Path("/kaggle/temp") if Path("/kaggle/temp").is_dir() else Path("/tmp")
 REPO = TEMP / "CrispASR"
@@ -301,7 +301,12 @@ BACKENDS = [
          files=["cosyvoice3-llm-q4_k.gguf", "cosyvoice3-flow-q8_0.gguf",
                 "cosyvoice3-hift-f16.gguf", "cosyvoice3-s3tok-f16.gguf",
                 "cosyvoice3-campplus-f16.gguf", "cosyvoice3-voices.gguf"],
-         model="cosyvoice3-llm-q4_k.gguf", extra=["-l", "en"], env={},
+         model="cosyvoice3-llm-q4_k.gguf",
+         # Without --ref-text the backend AUTO-TRANSCRIBES the clip (downloading
+         # an ASR model mid-run) and bails if that fails. jfk.wav's transcript is
+         # known, so pin it: an uncontrolled dependency inside the arm under test
+         # can only turn into a failure that looks like a seg_pool result.
+         extra=["-l", "en", "--ref-text", JFK_TEXT], env={},
          ref="funasr", var_floor=0.0, timeout=3600),
     dict(name="dots-tts", repo="cstr/dots-tts-soar-GGUF",
          files=["dots-tts-soar-q4_k.gguf", "dots-tts-soar-vocoder-q4_k.gguf",
