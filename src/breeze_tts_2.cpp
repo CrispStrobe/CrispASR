@@ -1658,11 +1658,17 @@ static bool depth_decode_frame(breeze_tts_2_context* c, const float* bb_hidden, 
         std::vector<float> logits((size_t)vocab, 0.0f);
         if (!fetch(gf, "dd_logits", logits.data(), logits.size()))
             return false;
-        mask_reserved(logits.data(), vocab, hp);
+        // Dump the RAW logits, then mask a COPY for sampling. The reserved-id
+        // mask writes -inf into [2048, 2051), and the reference dumps its
+        // logits before its own suppression — so masking in place made |cpp|
+        // inf and every cosine NaN, which reported as a catastrophic failure
+        // of a stage that was merely being measured wrong.
         if (out_logits)
             (*out_logits)[(size_t)cbi - 1] = logits;
+        std::vector<float> sampling_logits = logits;
+        mask_reserved(sampling_logits.data(), vocab, hp);
         codes[(size_t)cbi] =
-            sample_logits(logits.data(), vocab, temperature, (int)hp.s_top_k, hp.s_top_p, c->rng_state);
+            sample_logits(sampling_logits.data(), vocab, temperature, (int)hp.s_top_k, hp.s_top_p, c->rng_state);
     }
     return true;
 }

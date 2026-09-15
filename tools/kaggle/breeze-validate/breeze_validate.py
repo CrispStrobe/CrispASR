@@ -43,7 +43,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-SCRIPT_VERSION = "2026-09-15.1"
+SCRIPT_VERSION = "2026-09-15.2"
 WORK = Path("/kaggle/working")
 TEMP = Path("/kaggle/temp") if Path("/kaggle/temp").is_dir() else WORK
 REPO = WORK / "CrispASR"
@@ -111,8 +111,17 @@ from huggingface_hub import hf_hub_download, snapshot_download  # noqa: E402
 
 # ── artifacts ───────────────────────────────────────────────────────────────
 kh.step("download artifacts")
-model = hf_hub_download(HF_MODEL, "breeze-tts-2-q4_k.gguf", token=hf_token,
+# f16 BY DEFAULT, and that is the point of this run. The first pass diffed a
+# q4_k model against a bf16 reference and read 0.9988 at layer 10 decaying to
+# 0.998 by layer 27 — a smooth decay with depth, which is the signature of
+# accumulating QUANTIZATION noise, not of a structural bug. Diffing f16 against
+# bf16 removes that confound: if the cosines jump, the port is right and the
+# q4_k numbers were quantization; if they stay, there is a real porting bug and
+# the layer where it starts is the answer. BREEZE_QUANT=q4_k re-runs the A/B.
+QUANT = os.environ.get("BREEZE_QUANT", "f16")
+model = hf_hub_download(HF_MODEL, f"breeze-tts-2-{QUANT}.gguf", token=hf_token,
                         local_dir=str(TEMP / "m"))
+verdict["quant"] = QUANT
 codec = hf_hub_download(HF_CODEC, "qwen3-tts-tokenizer-12hz.gguf", token=hf_token,
                         local_dir=str(TEMP / "m"))
 fixdir = snapshot_download(HF_FIX, repo_type="dataset", token=hf_token,

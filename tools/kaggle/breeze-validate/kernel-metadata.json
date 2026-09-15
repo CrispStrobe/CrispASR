@@ -7,7 +7,10 @@
   "is_private": "true",
   "enable_gpu": "false",
   "enable_internet": "true",
-  "dataset_sources": ["chr1str/crispasr-hf-token"],
+  "dataset_sources": [
+    "chr1str/crispasr-hf-token",
+    "chr1str/crispasr-ccache"
+  ],
   "competition_sources": [],
   "kernel_sources": [],
   "model_sources": []
