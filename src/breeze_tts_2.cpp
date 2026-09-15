@@ -728,7 +728,11 @@ static void tokenize_with_specials(const breeze_model& m, const std::string& tex
     auto flush = [&]() {
         if (pending.empty())
             return;
-        auto ids = core_bpe::tokenize_simple(m.token_to_id, m.merge_rank, pending);
+        // SentencePiece BPE, not GPT-2 byte-level: Gemma's normalizer turns
+        // each space into U+2581 and merges across the whole string. Measured
+        // against the reference fixture, tokenize_simple() turned 39 true
+        // tokens into ~69 and made the prompt unmatchable.
+        auto ids = core_bpe::tokenize_spm_bpe(m.token_to_id, m.merge_rank, pending);
         out.insert(out.end(), ids.begin(), ids.end());
         pending.clear();
     };

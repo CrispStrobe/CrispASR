@@ -941,3 +941,40 @@ gap is purely `core_bpe::tokenize_simple`, whose whitespace-split
 pre-tokenizer inflated 39 true tokens to ~69. The fix is a real Gemma
 pre-tokenizer, and there is now a ground-truth oracle to test it against
 offline, one string at a time, with no GPU and no Kaggle run.
+
+### Tokenizer defect: CLOSED, verified offline
+
+`core_bpe::tokenize_simple` was the wrong algorithm, not a near miss. Gemma's
+`tokenizer.json` is explicit:
+
+```
+normalizer    {"type":"Replace","pattern":{"String":" "},"content":"▁"}
+model.type    "BPE",  byte_fallback: true,  514906 merges
+```
+
+So: replace every space with U+2581 and BPE-merge across the **whole string**;
+word boundaries ride on the ▁ marker. `tokenize_simple` instead whitespace-
+splits and pushes every byte through GPT-2's `bytes_to_unicode()` — a different
+scheme from the first step onward, which is why 39 true tokens came out as ~69.
+
+Fixed by adding `core_bpe::tokenize_spm_bpe()` (additive — no existing caller
+changes) and pointing the Breeze prompt builder at it. `bpe_one()`'s
+rank-ordered merge loop was already correct and is reused unchanged.
+
+Verified by compiling the **shipping** header against the real vocab and merges
+and tokenizing the oracle's own reference text:
+
+```
+fixture seg0 : [2, 262146, 3133, 834, 1041, 12339, 14522, 236764, 2679, 711, ...]
+C++ output   : [2, 262146, 3133, 834, 1041, 12339, 14522, 236764, 2679, 711, ...]
+EXACT MATCH  : True  (27/27)
+```
+
+No build, no GPU, no Kaggle run — the fixture is ground truth and the
+tokenizer is a pure function, so it can be held to exact equality on the
+workstation. That is the cheapest verification available anywhere in this port
+and it should have been done before the first parity run.
+
+One known, benign deviation: Gemma's `byte_fallback` emits `<0xXX>` tokens for
+out-of-vocab pieces while `bpe_one` falls back per codepoint. With a
+262k-entry vocab the paths coincide for any text the model has embeddings for.

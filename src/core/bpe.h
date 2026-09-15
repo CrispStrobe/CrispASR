@@ -290,6 +290,48 @@ inline std::vector<int32_t> tokenize_simple(const std::unordered_map<std::string
     return result;
 }
 
+// SentencePiece-style BPE, as Gemma / T5Gemma2 use it. NOT the GPT-2
+// byte-level scheme that tokenize_simple() implements.
+//
+// The two differ at the very first step and therefore everywhere after it:
+//
+//   GPT-2 (tokenize_simple): whitespace-split, prepend " " to later words,
+//       then map every raw byte through bytes_to_unicode() before merging.
+//   SentencePiece BPE (here): replace each space with U+2581 (▁), NO byte
+//       encoding at all, then merge across the WHOLE string — word boundaries
+//       are carried by the ▁ marker, not by splitting.
+//
+// tokenizer.json for Gemma states this directly:
+//   normalizer    {"type":"Replace","pattern":{"String":" "},"content":"▁"}
+//   model.type    "BPE", byte_fallback true, 514906 merges
+//
+// Verified against the Breeze TTS 2 reference fixture (#412): this algorithm
+// reproduces the oracle's prompt segment 0 exactly, 27 ids for 27, where
+// tokenize_simple() inflated the same text from 39 true tokens to about 69.
+//
+// One known deviation, benign for these vocabularies: Gemma's byte_fallback
+// emits "<0xXX>" tokens for anything outside the vocab, while bpe_one() falls
+// back to per-codepoint lookup. A 262k-entry vocab covers essentially every
+// codepoint, so the paths coincide in practice; text that exercises the
+// difference would be text the model has no embedding for either way.
+inline std::vector<int32_t> tokenize_spm_bpe(const std::unordered_map<std::string, int32_t>& token_to_id,
+                                             const std::unordered_map<std::string, int32_t>& merge_rank,
+                                             const std::string& text) {
+    std::vector<int32_t> result;
+    if (text.empty())
+        return result;
+    std::string norm;
+    norm.reserve(text.size() + text.size() / 4);
+    for (char ch : text) {
+        if (ch == ' ')
+            norm += "\xe2\x96\x81"; // U+2581 LOWER ONE EIGHTH BLOCK
+        else
+            norm.push_back(ch);
+    }
+    bpe_one(token_to_id, merge_rank, norm, result);
+    return result;
+}
+
 // Qwen2/3's GPT-2 regex pre-tokenizer, with non-ASCII UTF-8 bytes kept in
 // letter runs. Unlike tokenize_simple(), this preserves terminal newlines and
 // splits punctuation/digits exactly where Qwen's tokenizer does.
