@@ -59,6 +59,34 @@ static const std::set<uint32_t>& ru_inventory() {
     return s;
 }
 
+// espeak-ng's `ru` spelling of the same sounds. A DIFFERENT set — that is the
+// whole point of the conversion — and every member was checked against zonos's
+// conditioning.py symbol list, so converting loses nothing downstream either.
+static const std::set<uint32_t>& ru_espeak_inventory() {
+    static const std::set<uint32_t> s = [] {
+        std::set<uint32_t> v = ru_inventory();
+        // Symbols the conversion REMOVES from the output.
+        for (uint32_t cp : {(uint32_t)'a', (uint32_t)0x00E6, (uint32_t)0x0250, (uint32_t)0x0259, (uint32_t)0x0268,
+                            (uint32_t)0x028A, (uint32_t)0x0289, (uint32_t)0x0275, (uint32_t)0x0282, (uint32_t)0x0290,
+                            (uint32_t)0x026B, (uint32_t)'l', (uint32_t)0x02D0})
+            v.erase(cp);
+        // ...and the ones it introduces: ɑ ʌ y ʃ ʒ ɭ.
+        for (uint32_t cp :
+             {(uint32_t)0x0251, (uint32_t)0x028C, (uint32_t)'y', (uint32_t)0x0283, (uint32_t)0x0292, (uint32_t)0x026D})
+            v.insert(cp);
+        return v;
+    }();
+    return s;
+}
+
+static std::set<uint32_t> outside(const std::string& ipa, const std::set<uint32_t>& inv) {
+    std::set<uint32_t> bad;
+    for (uint32_t cp : utf8_to_cps(ipa))
+        if (cp != ' ' && !inv.count(cp))
+            bad.insert(cp);
+    return bad;
+}
+
 static std::set<uint32_t> outside_inventory(const std::string& ipa) {
     std::set<uint32_t> bad;
     for (uint32_t cp : utf8_to_cps(ipa))
@@ -372,6 +400,57 @@ TEST_CASE("Russian LTS emits nothing outside the dictionary's own inventory", "[
         CHECK_FALSE(ipa.empty());
         CHECK(outside_inventory(ipa).empty());
     }
+}
+
+TEST_CASE("espeak dialect: the conversion changes the spelling and not the inventory", "[g2p_ru][dialect]") {
+    // A consumer trained on espeak's Russian spelling needs espeak's symbols.
+    // Neither spelling loses anything to a TTS inventory — which is exactly why
+    // this mismatch is invisible to a drop counter and needs its own test.
+    g2p_ru::context ctx;
+    const std::string native = g2p_ru::text_to_ipa(ctx, "молоко и хлеб лежат на столе");
+    const std::string esp = g2p_ru::to_espeak_dialect(native);
+    CHECK(native != esp); // the control: it must actually do something
+    CHECK(outside_inventory(native).empty());
+    CHECK(outside(esp, ru_espeak_inventory()).empty());
+    // And the two sets really are different, so the check above is not the one
+    // above it wearing a different name: the converted string must contain
+    // symbols the NATIVE inventory does not have.
+    CHECK_FALSE(outside_inventory(esp).empty());
+
+    // Each rule, on its own, against the symbol espeak actually writes.
+    CHECK(g2p_ru::to_espeak_dialect("\xc9\xab") == "\xc9\xad"); // ɫ -> ɭ
+    CHECK(g2p_ru::to_espeak_dialect("l") == "\xc9\xad");        // l -> ɭ (espeak spells both the same)
+    CHECK(g2p_ru::to_espeak_dialect("\xca\x82") == "\xca\x83"); // ʂ -> ʃ
+    CHECK(g2p_ru::to_espeak_dialect("\xca\x90") == "\xca\x92"); // ʐ -> ʒ
+    CHECK(g2p_ru::to_espeak_dialect("\xc9\xa8") == "y");        // ɨ -> y
+    CHECK(g2p_ru::to_espeak_dialect("\xc9\x90") == "\xca\x8c"); // ɐ -> ʌ
+    CHECK(g2p_ru::to_espeak_dialect("\xc9\x99") == "\xca\x8c"); // ə -> ʌ
+    CHECK(g2p_ru::to_espeak_dialect("a") == "\xc9\x91");        // a -> ɑ
+    CHECK(g2p_ru::to_espeak_dialect("\xc3\xa6") == "\xc9\x91"); // æ -> ɑ
+    CHECK(g2p_ru::to_espeak_dialect("\xca\x8a") == "u");        // ʊ -> u
+    CHECK(g2p_ru::to_espeak_dialect("\xca\x89") == "u");        // ʉ -> u
+
+    // щ: ours ɕː, espeak ɕʲ.
+    CHECK(g2p_ru::to_espeak_dialect("\xc9\x95\xcb\x90") == "\xc9\x95\xca\xb2");
+    // A long consonant is written twice, not with a length mark.
+    CHECK(g2p_ru::to_espeak_dialect("n\xcb\x90") == "nn");
+    // ɪ survives word-finally and becomes plain i inside a word.
+    CHECK(g2p_ru::to_espeak_dialect("r\xca\xb2"
+                                    "e"
+                                    "t\xc9\x95\xc9\xaa") == "r\xca\xb2"
+                                                            "e"
+                                                            "t\xc9\x95\xc9\xaa");
+    CHECK(g2p_ru::to_espeak_dialect("\xc9\xaa"
+                                    "n") == "in");
+    // ...and a mark at a WORD boundary inside a phrase is still word-final.
+    CHECK(g2p_ru::to_espeak_dialect("\xc9\xaa \xc9\xaa"
+                                    "n") == "\xc9\xaa in");
+
+    // Idempotence is NOT claimed and must not be assumed: the conversion maps
+    // several source symbols onto one target, so it is lossy by construction.
+    // Running it twice is a bug waiting to happen, and this records that the
+    // second pass is a no-op only because the targets are outside the map.
+    CHECK(g2p_ru::to_espeak_dialect(esp) == esp);
 }
 
 TEST_CASE("Russian number words also stay inside the inventory", "[g2p_ru][inventory]") {

@@ -34,6 +34,7 @@
 #include "core/gpu_backend_pref.h" // crispasr_init_gpu_backend (#214)
 #include "core/crispasr_env.h"
 #include "espeak_dlopen.h" // #435: in-process libespeak-ng, same loader kokoro/piper use
+#include "core/g2p_ru.h"   // g2p_ru::to_espeak_dialect — see phonemize_builtin_zonos
 #include "phonemizer.h"    // #435: built-in EN/DE/FR/ES/RU G2P, now in crispasr-core
 
 #include "ggml-backend.h"
@@ -1113,10 +1114,43 @@ static bool builtin_is_default_for(const std::string& lang) {
 // Punctuation is carried through, matching the Python reference's
 // `preserve_punctuation=True`, so the tail-punctuation compensation the espeak
 // popen path needs does not apply here — the marks are already in the string.
+// Russian: which SPELLING of the phonemes to hand the model.
+//
+//   native — what crispasr-core's Russian G2P emits: a narrow transcription
+//            (ɐ/ə reduction gradation, ʂ/ʐ retroflexes, lʲ vs ɫ, æ fronting).
+//   espeak — the same sounds rewritten in espeak-ng's `ru` conventions
+//            (ʌ, ʃ/ʒ, ɭ, ɑ, y). See g2p_ru::to_espeak_dialect.
+//
+// This is NOT cosmetic and the drop counter cannot see it: every symbol on both
+// sides is inside zonos's inventory, so nothing is dropped either way — but the
+// model conditions on the spelling it was TRAINED on, and zonos was phonemised
+// with espeak. Raw agreement between the two spellings is 57.7% over 2,200
+// words; the conversion takes it to 88.0%.
+//
+// Which one is better for the AUDIO is a question for a measurement, not for
+// this comment, so the default is the untouched native spelling until a run
+// says otherwise. CRISPASR_ZONOS_RU_DIALECT=espeak selects the other arm.
+static bool zonos_ru_espeak_dialect() {
+    const char* v = crispasr_env::get("CRISPASR_ZONOS_RU_DIALECT");
+    if (!v || !*v)
+        return false;
+    if (std::strcmp(v, "espeak") == 0)
+        return true;
+    if (std::strcmp(v, "native") == 0)
+        return false;
+    fprintf(stderr, "zonos_tts: WARN: CRISPASR_ZONOS_RU_DIALECT='%s' is not one of espeak|native; using native\n", v);
+    return false;
+}
+
 static bool phonemize_builtin_zonos(const std::string& lang, const std::string& text, std::string& out) {
     out.clear();
     if (!crispasr::phonemize_builtin_tts(lang, text, out))
         return false;
+    if (!out.empty()) {
+        const char* fam = crispasr::builtin_g2p_language(lang);
+        if (fam && std::strcmp(fam, "ru") == 0 && zonos_ru_espeak_dialect())
+            out = g2p_ru::to_espeak_dialect(out);
+    }
     return !out.empty();
 }
 

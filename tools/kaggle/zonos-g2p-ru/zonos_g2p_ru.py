@@ -66,15 +66,45 @@ en/de/fr/es run the wrong-language control moved word-F1 by only 0.20 while
 moving ID agreement to 0.494. The roundtrip is the BLUNTER instrument. Gaps
 under ~0.2 of word-F1 are not evidence of anything.
 
+WHAT v1 FOUND, AND WHY v2 HAS A THIRD ARM
+-----------------------------------------
+v1 (saved as zonos-g2p-ru-v1.log; re-pushing destroys the previous log, so it
+was pulled first) came back with every control firing except one, and one clear
+finding: the built-in path drops ZERO codepoints, proven by a control that
+fires on that exact path. But the roundtrip favoured espeak, 0.585 to 0.293,
+and the espeak baseline itself was under the 0.60 gate, so it was INCONCLUSIVE.
+
+Running espeak's ru voice over 2,200 dictionary words locally said why. The two
+G2Ps describe the same sounds in DIFFERENT SYMBOLS — raw agreement 57.7%, not
+one word identical:
+
+  ours   məɫɐkˈo i xlʲep lʲɪʐˈat na stɐlʲˈe v bɐlʲʂˈoj kˈomnətʲe
+  espeak mʌɭʌkˈo ɪ xɭʲˈep ɭʲiʒˈɑt nə stʌɭʲˈe v bʌɭʃˈoj kˈomnʌtʲi
+
+Every symbol on BOTH sides is inside zonos's inventory, so the drop counter is
+blind to this by construction — it is the #316 problem (Kokoro trained on
+misaki's spelling) one language further on. g2p_ru::to_espeak_dialect now
+rewrites the former into the latter, taking agreement to 88.0%, and
+CRISPASR_ZONOS_RU_DIALECT=espeak selects it. Whether that helps the AUDIO is
+what this run is for; the third arm is the test.
+
+TWO FIXES TO THE INSTRUMENT ITSELF, from v1:
+  * the wrong-language F1 leg compared against ru sentence 0, whose espeak
+    baseline was itself 0.000 — so it could not fire no matter what the control
+    produced. It now compares against the espeak MICRO F1 over all three
+    sentences. (Its agreement leg fired decisively either way: lev 0.063.)
+  * per-sentence espeak IPA is now logged, not just the builtin's, so the two
+    spellings can be read off the log instead of inferred.
+
 Nothing here flips a default. This run produces the evidence that would justify
-moving Russian to builtin-first, or not.
+moving Russian to builtin-first, or not, and the same for the dialect switch.
 """
 import json, os, re, shutil, socket, subprocess, sys, time, unicodedata
 from pathlib import Path
 
 WORK = Path("/kaggle/working"); SCRATCH = Path("/tmp")
 CLONE = SCRATCH / "CrispASR"
-SCRIPT_VERSION = "2026-09-15-zonos-g2p-ru-1"
+SCRIPT_VERSION = "2026-09-15-zonos-g2p-ru-2"
 
 # Short on purpose: zonos generates on CPU here and runtime scales with the
 # audio length. ~10 words is enough for a word-F1 to mean something.
@@ -406,71 +436,108 @@ for lang in ("en",):
 # extra download and turns "heteronyms are a limitation" into a list of the
 # specific words in these specific sentences that took the rule path.
 RU_ENV = {"CRISPASR_G2P_RU_HETERONYM_WARN": "1"}
-ru_pairs = {"espeak": [], "builtin": []}
+# THREE arms, not two. The third is the built-in G2P with its output rewritten
+# into espeak's Russian spelling — same sounds, the symbols the model was
+# trained on. Naming them explicitly (rather than by the CRISPASR_ZONOS_G2P mode
+# alone) because two of them run in the SAME mode and differ only by the dialect
+# switch, and an arm that cannot be told apart in the log is not an arm.
+ARMS = [
+    ("espeak",  "espeak",  {}),
+    ("builtin", "builtin", {}),
+    ("builtin-espeak-dialect", "builtin", {"CRISPASR_ZONOS_RU_DIALECT": "espeak"}),
+]
+ru_pairs = {name: [] for name, _, _ in ARMS}
 ru_arms = []
 for i, text in enumerate(RU_MULTI):
-    for mode in ("espeak", "builtin"):
-        a = synth(text, "ru", mode, SCRATCH/f"ru{i}-{mode}.wav", f"ru[{i}]/{mode}",
-                  extra_env=RU_ENV)
-        a["asr"] = asr(SCRATCH/f"ru{i}-{mode}.wav", "ru")
+    for name, mode, env in ARMS:
+        a = synth(text, "ru", mode, SCRATCH/f"ru{i}-{name}.wav", f"ru[{i}]/{name}",
+                  extra_env={**RU_ENV, **env})
+        a["arm"] = name
+        a["asr"] = asr(SCRATCH/f"ru{i}-{name}.wav", "ru")
         a["ref"] = text
         a["word_f1_sentence"] = word_f1(text, a["asr"])
-        ru_pairs[mode].append((text, a["asr"]))
+        ru_pairs[name].append((text, a["asr"]))
         ru_arms.append(a)
-        log(f"[g2p]    ru[{i}]/{mode} path={a['g2p_path']} f1={a['word_f1_sentence']:.3f} "
+        log(f"[g2p]    ru[{i}]/{name} path={a['g2p_path']} f1={a['word_f1_sentence']:.3f} "
             f"drop={a['cp_dropped']}/{a['cp_total']} asr={a['asr'][:90]!r}")
-        if a["mode"] == "builtin":
-            log(f"[g2p]       ipa: {a['ipa'][:200]}")
-            for h in a["heteronyms_hit"]:
-                log(f"[g2p]       {h}")
+        # The IPA of EVERY arm, so the spellings can be compared in the log.
+        log(f"[g2p]       ipa: {a['ipa'][:200]}")
+        for h in a["heteronyms_hit"]:
+            log(f"[g2p]       {h}")
         save()
 
 # Which dictionary actually loaded. Without this an arm that fell back to the
 # letter-to-sound rules would be reported as "the builtin", and the number would
 # be about a different thing entirely. This is the trap the en arm fell into in
 # an earlier run of the sibling kernel.
-ru_builtin_arms = [a for a in ru_arms if a["mode"] == "builtin"]
+ru_builtin_arms = [a for a in ru_arms if a["arm"] == "builtin"]
 ru_dicts = ru_builtin_arms[0]["g2p_dicts"] if ru_builtin_arms else []
 ru_dict_loaded = any("Russian IPA dict" in d for d in ru_dicts)
 log(f"[g2p] ru builtin dicts: {ru_dicts or 'NONE — letter-to-sound rules only'}")
 
+NA = len(ARMS)
+def arm_at(sent, name):
+    """The arm for one sentence. ru_arms is flat and interleaved, so indexing it
+    by the flat position would report sentence 2 as sentence 5 — the exact
+    off-by-N the sibling kernel had to fix once already."""
+    k = [n for n, _, _ in ARMS].index(name)
+    return ru_arms[sent * NA + k]
+
 res["ru"] = {
     "sentences": RU_MULTI,
     "paths_as_intended":
-        all(a["g2p_path"].startswith("espeak") for a in ru_arms if a["mode"] == "espeak") and
-        all(a["g2p_path"] == "builtin" for a in ru_arms if a["mode"] == "builtin"),
+        all(a["g2p_path"].startswith("espeak") for a in ru_arms if a["arm"] == "espeak") and
+        all(a["g2p_path"] == "builtin" for a in ru_arms if a["arm"] != "espeak"),
     "dict_loaded": ru_dict_loaded,
     "dict_lines": ru_dicts,
+    "word_f1_micro": {name: word_f1_micro(ru_pairs[name]) for name, _, _ in ARMS},
     "word_f1_micro_espeak": word_f1_micro(ru_pairs["espeak"]),
     "word_f1_micro_builtin": word_f1_micro(ru_pairs["builtin"]),
-    # ru_arms is flat and interleaved (sentence0/espeak, sentence0/builtin, ...),
-    # so the SENTENCE index is k//2.
-    "per_sentence": [{"sentence": k // 2, "mode": a["mode"], "f1": a["word_f1_sentence"],
+    "word_f1_micro_builtin_espeak_dialect": word_f1_micro(ru_pairs["builtin-espeak-dialect"]),
+    "per_sentence": [{"sentence": k // NA, "arm": a["arm"], "f1": a["word_f1_sentence"],
                       "path": a["g2p_path"], "ref": a["ref"], "asr": a["asr"], "ipa": a["ipa"],
                       "cp_total": a["cp_total"], "cp_dropped": a["cp_dropped"],
                       "heteronyms_hit": a["heteronyms_hit"],
                       "dropped_hist": a["dropped_hist"], "ntok": len(a["ids"])}
                      for k, a in enumerate(ru_arms)],
-    "lev_sim_per_sentence": [lev_sim(ru_arms[2*i]["ids"], ru_arms[2*i+1]["ids"])
+    # Agreement with the espeak arm, per sentence, for BOTH built-in spellings.
+    # The dialect conversion is a claim that this number moves; here it either
+    # does or it does not.
+    "lev_sim_per_sentence": [lev_sim(arm_at(i, "espeak")["ids"], arm_at(i, "builtin")["ids"])
                              for i in range(len(RU_MULTI))],
-    "positional_match_per_sentence": [positional_match(ru_arms[2*i]["ids"], ru_arms[2*i+1]["ids"])
+    "positional_match_per_sentence": [positional_match(arm_at(i, "espeak")["ids"],
+                                                       arm_at(i, "builtin")["ids"])
                                       for i in range(len(RU_MULTI))],
+    "lev_sim_dialect_per_sentence": [
+        lev_sim(arm_at(i, "espeak")["ids"], arm_at(i, "builtin-espeak-dialect")["ids"])
+        for i in range(len(RU_MULTI))],
+    "positional_match_dialect_per_sentence": [
+        positional_match(arm_at(i, "espeak")["ids"], arm_at(i, "builtin-espeak-dialect")["ids"])
+        for i in range(len(RU_MULTI))],
     # THE headline drop numbers. The builtin ru dictionary was published with its
     # upstream backtick stress marker rewritten to U+02C8 precisely so this
     # number is 0; if the rewrite had been missed it would be ~7.6% and the
     # audio would still have sounded like speech.
-    "cp_dropped_espeak": sum(a["cp_dropped"] for a in ru_arms if a["mode"] == "espeak"),
-    "cp_total_espeak": sum(a["cp_total"] for a in ru_arms if a["mode"] == "espeak"),
-    "cp_dropped_builtin": sum(a["cp_dropped"] for a in ru_arms if a["mode"] == "builtin"),
-    "cp_total_builtin": sum(a["cp_total"] for a in ru_arms if a["mode"] == "builtin"),
+    "cp_dropped": {name: sum(a["cp_dropped"] for a in ru_arms if a["arm"] == name)
+                   for name, _, _ in ARMS},
+    "cp_total": {name: sum(a["cp_total"] for a in ru_arms if a["arm"] == name)
+                 for name, _, _ in ARMS},
+    "cp_dropped_espeak": sum(a["cp_dropped"] for a in ru_arms if a["arm"] == "espeak"),
+    "cp_total_espeak": sum(a["cp_total"] for a in ru_arms if a["arm"] == "espeak"),
+    "cp_dropped_builtin": sum(a["cp_dropped"] for a in ru_arms if a["arm"] == "builtin"),
+    "cp_total_builtin": sum(a["cp_total"] for a in ru_arms if a["arm"] == "builtin"),
 }
 R = res["ru"]
 R["drop_rate_espeak"] = R["cp_dropped_espeak"] / R["cp_total_espeak"] if R["cp_total_espeak"] > 0 else None
 R["drop_rate_builtin"] = R["cp_dropped_builtin"] / R["cp_total_builtin"] if R["cp_total_builtin"] > 0 else None
-log(f"[g2p] == ru({len(RU_MULTI)} sentences): micro-f1 espeak={R['word_f1_micro_espeak']:.3f} "
-    f"builtin={R['word_f1_micro_builtin']:.3f} "
-    f"lev=" + ",".join(f"{v:.3f}" for v in R["lev_sim_per_sentence"]) +
-    f" drop e={R['drop_rate_espeak']} b={R['drop_rate_builtin']} dict_loaded={ru_dict_loaded}")
+R["drop_rate"] = {name: (R["cp_dropped"][name] / R["cp_total"][name] if R["cp_total"][name] else None)
+                  for name, _, _ in ARMS}
+log(f"[g2p] == ru({len(RU_MULTI)} sentences) micro-f1: " +
+    "  ".join(f"{n}={R['word_f1_micro'][n]:.3f}" for n, _, _ in ARMS))
+log("[g2p]    lev vs espeak  native : " + ",".join(f"{v:.3f}" for v in R["lev_sim_per_sentence"]))
+log("[g2p]    lev vs espeak  dialect: " + ",".join(f"{v:.3f}" for v in R["lev_sim_dialect_per_sentence"]))
+log("[g2p]    drop rate: " + "  ".join(f"{n}={R['drop_rate'][n]}" for n, _, _ in ARMS) +
+    f"  dict_loaded={ru_dict_loaded}")
 save()
 
 # ── 5. CONTROL 1: wrong-language, end to end ────────────────────────────────
@@ -479,18 +546,23 @@ save()
 wl = synth(RU_MULTI[0], "de", "espeak", SCRATCH/"control-ru-as-de.wav", "control/ru-text-as-de")
 wl["asr"] = asr(SCRATCH/"control-ru-as-de.wav", "ru")
 wl["word_f1"] = word_f1(RU_MULTI[0], wl["asr"])
-ru0_espeak_ids = ru_arms[0]["ids"]
+ru0_espeak_ids = arm_at(0, "espeak")["ids"]
 res["controls"]["wrong_language"] = {
     "arm": wl,
     "positional_match_vs_ru_espeak": positional_match(ru0_espeak_ids, wl["ids"]),
     "lev_sim_vs_ru_espeak": lev_sim(ru0_espeak_ids, wl["ids"]),
     "word_f1": wl["word_f1"],
-    "word_f1_ru_espeak_sentence0": ru_arms[0]["word_f1_sentence"],
+    # v1 compared this against SENTENCE 0, whose espeak baseline was itself
+    # 0.000 — so the leg could not fire whatever the control produced. A control
+    # that cannot fail is not a control. The reference is now the pooled espeak
+    # score over all three sentences.
+    "word_f1_ru_espeak_micro": R["word_f1_micro_espeak"],
+    "word_f1_ru_espeak_sentence0": arm_at(0, "espeak")["word_f1_sentence"],
 }
 c = res["controls"]["wrong_language"]
 log(f"[g2p] CONTROL wrong-language: pos={c['positional_match_vs_ru_espeak']:.3f} "
     f"lev={c['lev_sim_vs_ru_espeak']:.3f} f1={c['word_f1']:.3f} "
-    f"(ru/ru sentence0 f1 was {c['word_f1_ru_espeak_sentence0']:.3f})")
+    f"(ru/ru espeak micro-f1 was {c['word_f1_ru_espeak_micro']:.3f})")
 save()
 
 # ── 6. CONTROL 2b: the drop counter, ON THE BUILTIN RU PATH ─────────────────
@@ -538,33 +610,37 @@ save()
 
 if gone:
     # THE DELIVERABLE: Russian through zonos with no GPL dependency present.
-    ne_pairs = []
-    ne_arms = []
-    for i, text in enumerate(RU_MULTI):
-        a = synth(text, "ru", "builtin", SCRATCH/f"ru{i}-noespeak.wav", f"ru[{i}]/builtin-no-espeak",
-                  extra_env=RU_ENV)
-        a["asr"] = asr(SCRATCH/f"ru{i}-noespeak.wav", "ru")
-        a["word_f1_sentence"] = word_f1(text, a["asr"])
-        ne_pairs.append((text, a["asr"]))
-        ne_arms.append(a)
-        base = ru_arms[2*i+1]["ids"]
-        log(f"[g2p] == ru[{i}] NO-ESPEAK: path={a['g2p_path']} wav={a['wav_bytes']} "
-            f"f1={a['word_f1_sentence']:.3f} ids_same={a['ids']==base}")
+    # Both built-in spellings, so the licence-goal arm covers whichever one the
+    # verdict ends up recommending.
+    ne = {}
+    for name, _, env in ARMS[1:]:
+        pairs = []
+        arms = []
+        for i, text in enumerate(RU_MULTI):
+            a = synth(text, "ru", "builtin", SCRATCH/f"ru{i}-noespeak-{name}.wav",
+                      f"ru[{i}]/{name}-no-espeak", extra_env={**RU_ENV, **env})
+            a["asr"] = asr(SCRATCH/f"ru{i}-noespeak-{name}.wav", "ru")
+            a["word_f1_sentence"] = word_f1(text, a["asr"])
+            pairs.append((text, a["asr"]))
+            arms.append(a)
+            log(f"[g2p] == ru[{i}] NO-ESPEAK {name}: path={a['g2p_path']} wav={a['wav_bytes']} "
+                f"f1={a['word_f1_sentence']:.3f} ids_same={a['ids']==arm_at(i, name)['ids']}")
+            save()
+        ne[name] = {
+            "word_f1_micro": word_f1_micro(pairs),
+            # Must be identical to the with-espeak arm of the same name: same
+            # G2P, same input. A difference means espeak was leaking into the
+            # built-in path.
+            "ids_identical_to_with_espeak_arm":
+                all(arms[i]["ids"] == arm_at(i, name)["ids"] for i in range(len(RU_MULTI))),
+            "per_sentence": [{"sentence": i, "f1": arms[i]["word_f1_sentence"],
+                              "path": arms[i]["g2p_path"], "asr": arms[i]["asr"],
+                              "wav_bytes": arms[i]["wav_bytes"]} for i in range(len(RU_MULTI))],
+        }
+        log(f"[g2p] ru NO-ESPEAK {name}: micro-f1={ne[name]['word_f1_micro']:.3f} "
+            f"ids_identical={ne[name]['ids_identical_to_with_espeak_arm']}")
         save()
-    res["ru"]["no_espeak"] = {
-        "word_f1_micro": word_f1_micro(ne_pairs),
-        # Must be identical to the with-espeak builtin arms: same G2P, same
-        # input. A difference means espeak was leaking into the builtin path.
-        "ids_identical_to_builtin_arms":
-            all(ne_arms[i]["ids"] == ru_arms[2*i+1]["ids"] for i in range(len(RU_MULTI))),
-        "per_sentence": [{"sentence": i, "f1": ne_arms[i]["word_f1_sentence"],
-                          "path": ne_arms[i]["g2p_path"], "asr": ne_arms[i]["asr"],
-                          "wav_bytes": ne_arms[i]["wav_bytes"]} for i in range(len(RU_MULTI))],
-    }
-    log("[g2p] ru NO-ESPEAK micro-f1 = "
-        f"{res['ru']['no_espeak']['word_f1_micro']:.3f} "
-        f"ids_identical={res['ru']['no_espeak']['ids_identical_to_builtin_arms']}")
-    save()
+    res["ru"]["no_espeak"] = ne
 
     # The #435 guarantee must SURVIVE Russian gaining a G2P: a language with no
     # built-in and non-ASCII text must still refuse rather than synthesise noise.
@@ -604,7 +680,7 @@ controls_fire = {
     # sibling run the same control moved F1 by only 0.20.
     "wrong_language_lowers_agreement": wlc.get("lev_sim_vs_ru_espeak", 1.0) < 0.75,
     "wrong_language_lowers_word_f1":
-        wlc.get("word_f1", 1.0) < max(0.0, wlc.get("word_f1_ru_espeak_sentence0", 0.0) - 0.15),
+        wlc.get("word_f1", 1.0) < max(0.0, wlc.get("word_f1_ru_espeak_micro", 0.0) - 0.15),
     "drop_counter_fires": bool(ctl.get("drop_counter", {}).get("fires")),
     "backtick_drop_fires_on_builtin_ru": bool(ctl.get("backtick_drop_on_builtin_ru", {}).get("fires")),
     "no_builtin_language_still_refuses": bool(ctl.get("no_builtin_language_still_refuses")),
@@ -629,12 +705,27 @@ res["ru_verdict"] = {
     "drop_rate_builtin": R["drop_rate_builtin"],
     "word_f1_micro_espeak": ru_f1_e,
     "word_f1_micro_builtin": ru_f1_b,
-    "word_f1_micro_builtin_no_espeak": res["ru"].get("no_espeak", {}).get("word_f1_micro"),
+    "word_f1_micro_builtin_no_espeak":
+        res["ru"].get("no_espeak", {}).get("builtin", {}).get("word_f1_micro"),
+    "word_f1_micro_builtin_espeak_dialect": R["word_f1_micro_builtin_espeak_dialect"],
+    "lev_sim_dialect_per_sentence": R["lev_sim_dialect_per_sentence"],
+    "positional_match_dialect_per_sentence": R["positional_match_dialect_per_sentence"],
+    "drop_rate_builtin_espeak_dialect": R["drop_rate"]["builtin-espeak-dialect"],
+    # The dialect switch is a claim about SPELLING, so it is judged on the
+    # agreement metric first (where it either moves or does not) and on the
+    # roundtrip second (which is the blunter instrument).
+    "dialect_raises_agreement":
+        (sum(R["lev_sim_dialect_per_sentence"]) > sum(R["lev_sim_per_sentence"])),
+    "dialect_raises_word_f1":
+        R["word_f1_micro_builtin_espeak_dialect"] > R["word_f1_micro_builtin"],
     "espeak_baseline_usable": ru_f1_e >= 0.60,
+    # Judged on the BEST of the two built-in spellings: the question the flip
+    # answers is "can zonos drop espeak for Russian", and either spelling
+    # answers it if it holds up.
     "builtin_good_enough_to_default": bool(
         R["paths_as_intended"] and R["dict_loaded"]
         and ru_f1_e >= 0.60
-        and ru_f1_b >= ru_f1_e - 0.10
+        and max(ru_f1_b, R["word_f1_micro_builtin_espeak_dialect"]) >= ru_f1_e - 0.10
         and (R["drop_rate_builtin"] or 0.0) <= (R["drop_rate_espeak"] or 0.0) + 0.02),
     # Stated separately because it is TRUE even when the roundtrip is
     # inconclusive: zonos may simply not speak Russian well enough for an ASR

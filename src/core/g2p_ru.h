@@ -1284,4 +1284,97 @@ inline std::string text_to_ipa(const context& ctx, const std::string& text) {
     return ipa;
 }
 
+// ── espeak's Russian spelling, for consumers trained on it ──────────────────
+//
+// This file's own transcription and espeak-ng's `ru` voice describe the SAME
+// sounds in different symbols, and the difference is large: measured over 2,200
+// dictionary words phonemised both ways, raw symbol agreement between them is
+// 57.7% and not one word matches exactly.
+//
+//   ours   məɫɐkˈo i xlʲep lʲɪʐˈat na stɐlʲˈe v bɐlʲʂˈoj kˈomnətʲe
+//   espeak mʌɭʌkˈo ɪ xɭʲˈep ɭʲiʒˈɑt nə stʌɭʲˈe v bʌɭʃˈoj kˈomnʌtʲi
+//
+// That matters because a TTS model conditions on the SPELLING it was trained
+// on, not on the sounds. Zonos was phonemised with espeak, so feeding it this
+// file's symbols hands it combinations it never saw — and because every symbol
+// on both sides is inside zonos's inventory, the drop counter cannot see the
+// mismatch at all. It is the #316 problem (Kokoro trained on misaki's spelling,
+// 58% agreement from CMUdict) one language further on, and the fix has the same
+// shape: the G2P keeps emitting its own, more accurate transcription, and the
+// CONSUMER converts.
+//
+// The map is DERIVED, not assumed: each rule is the majority alignment over
+// those 2,200 word pairs. Measured effect, with the unconverted arm as the
+// control:
+//
+//                             symbol agreement    exact word match
+//   unconverted (control)          57.7%                0.0%
+//   converted                      88.0%               32.6%
+//
+// One tempting rule was measured and REJECTED: moving `ˈ` from before the
+// stressed vowel to the syllable onset drops agreement to 75.1%. espeak's ru
+// voice marks the vowel too, so the placement was already right.
+inline std::string to_espeak_dialect(const std::string& ipa) {
+    const std::vector<uint32_t> cps = utf8_to_cps(ipa);
+    std::vector<uint32_t> out;
+    out.reserve(cps.size() + 8);
+    for (size_t i = 0; i < cps.size(); i++) {
+        const uint32_t c = cps[i];
+        // щ: ours ɕː, espeak ɕʲ.
+        if (c == 0x0255 && i + 1 < cps.size() && cps[i + 1] == 0x02D0) {
+            out.push_back(0x0255);
+            out.push_back(0x02B2);
+            i++;
+            continue;
+        }
+        // A long consonant is written twice rather than with a length mark.
+        if (c == 0x02D0) {
+            if (!out.empty())
+                out.push_back(out.back());
+            continue;
+        }
+        // ɪ survives only word-finally (`речи` rʲˈetʃʲɪ); elsewhere espeak
+        // writes plain i.
+        if (c == 0x026A) {
+            const bool word_final = (i + 1 == cps.size()) || cps[i + 1] == ' ' || is_separator_cp(cps[i + 1]);
+            out.push_back(word_final ? 0x026A : 'i');
+            continue;
+        }
+        switch (c) {
+        case 'a':
+        case 0x00E6:               // æ
+            out.push_back(0x0251); // ɑ
+            break;
+        case 0x0250:               // ɐ
+        case 0x0259:               // ə
+            out.push_back(0x028C); // ʌ
+            break;
+        case 0x0268: // ɨ
+            out.push_back('y');
+            break;
+        case 0x028A: // ʊ
+        case 0x0289: // ʉ
+            out.push_back('u');
+            break;
+        case 0x0275: // ɵ
+            out.push_back('e');
+            break;
+        case 0x0282:               // ʂ
+            out.push_back(0x0283); // ʃ
+            break;
+        case 0x0290:               // ʐ
+            out.push_back(0x0292); // ʒ
+            break;
+        case 0x026B: // ɫ
+        case 'l':
+            out.push_back(0x026D); // ɭ — espeak writes both hard and soft л this way
+            break;
+        default:
+            out.push_back(c);
+            break;
+        }
+    }
+    return cps_to_utf8(out);
+}
+
 } // namespace g2p_ru
