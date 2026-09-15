@@ -764,3 +764,28 @@ the converter's intentions:
 
 All three config decoys are therefore dodged *in the artifact*, which is the
 only place it counts.
+
+### If a stage fails: where to look, in order
+
+The §7 sequence localises by construction — first divergence is the bug — but
+the *candidates* differ per stage, and the encoder is where this port has no
+precedent to lean on.
+
+| First failing stage | Look at, in this order |
+|---|---|
+| `ref_codes` | the resampler mismatch above. Nothing else. |
+| `prompt_input_ids` | `core_bpe::tokenize_simple` vs Gemma's tokenizer; then the `<bos>` per text segment; then whether `[S0]`/`<ins_*>` were split as single ids by `tokenize_with_specials`. |
+| `te_seg*_hidden` | 1. the symmetric window (`[i-255, i+256]`, NOT left-only, and NOT 512 either side); 2. whether full layers 5/11/17/23 got a mask at all (they must get **none**); 3. the `+1` norm fold — applied twice, or not at all; 4. `attn_scale` = `query_pre_attn_scalar^-0.5`; 5. `embed_scale` = sqrt(1152); 6. the dual RoPE (theta 1e4 sliding / 1e6 + constant freq_factors 8.0 full). |
+| `te_proj_out` | the projection is one mat-mul; if the hidden matched and this does not, it is an orientation bug. |
+| `backbone_inputs_embeds` | the scatter: text rows to text positions, summed ref-audio frames to `<\|AUDIO\|>` positions, and the all-`codebook_eos` frame at `<\|audio_eos\|>`. |
+| `backbone_layer{J}` | bisect J. Qwen3 q/k-norm, theta 1e6, eps 1e-6 — if J=0 fails, it is not the backbone, it is the embeds. |
+| `dd_logits_frame0_cb{C}` | if low C pass and high C fail, suspect the llama3 `rope_freq_factors` (orig_max_pos 16); if ALL C are shifted by one codebook, it is the `cache_position - 1` head index. |
+| `codes` | with every stage above passing, this is sampling: reserved-id masking `[2048, 2051)`, the EOS class at 2051, or the repetition penalty. |
+
+**Escape hatch worth knowing before bisecting the encoder.** The symmetric,
+non-causal mask is the one attention shape this repo has not run before.
+`CRISPASR_CORE_ATTN_EAGER_F32=1` swaps `ggml_flash_attn_ext` for an explicit
+`mul_mat -> soft_max_ext -> mul_mat` with F32 scores. If the encoder is wrong
+under flash and right under eager, the bug is in how the mask reaches
+flash-attention, not in the weights or the constants — and that A/B costs one
+env var instead of a day.
