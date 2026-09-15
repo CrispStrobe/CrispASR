@@ -739,3 +739,28 @@ Still open (a validation item, not a known bug): *which* token history HF's
 backbone's `input_ids` are audio frames rather than text, so "the history" is
 ambiguous; the C++ applies it over the generated codebook-0 tokens. Confirm
 against a non-greedy reference run before treating the normal path as faithful.
+
+### Published artifacts, read back rather than asserted
+
+`cstr/breeze-tts-2-GGUF` regenerated 2026-09-15 with the norm fold:
+f16 5.32 GiB, q8_0 3.19 GiB, q4_k **2.05 GiB**, 778 tensors / 2 850.2 M live
+params, 351 tensors / 633.1 M dropped. The q4_k figure is what the quant
+policy predicts once `te.token_embd` is held at source precision; set
+`CRISPASR_BREEZE_QUANT_TEXT_EMBD=1` to include it and land near 1.75 GB.
+
+The KV block of the **published** q4_k was fetched with an HTTP range request
+and parsed (143 KV entries, 778 tensors). Verified in the shipped file, not in
+the converter's intentions:
+
+| key | value | what it rules out |
+|---|---|---|
+| `breeze.bb.rope_theta` | `1000000.0` | the top-level 500000 decoy |
+| `breeze.bb.rms_norm_eps` | `1e-06` | the top-level 1e-5 decoy |
+| `breeze.te.causal` | `False` | `use_bidirectional_attention: false` |
+| `breeze.te.rope_factor_full` | `8.0` | — |
+| `breeze.te.norm_weights_pre_offset` | `True` | a GGUF the runtime would reject |
+| `general.license` | `"other"` | a tag that would NOT trip the NC gate |
+| `breeze.license.notice` | verbatim, incl. `RESONIA, INC` | §4(b) |
+
+All three config decoys are therefore dodged *in the artifact*, which is the
+only place it counts.

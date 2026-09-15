@@ -150,7 +150,7 @@ import kaggle_harness as kh  # noqa: E402
 
 kh.init_progress()
 # Bump when the arms, capture or predicate change (see kh.provenance).
-SCRIPT_VERSION = "2026-09-15.6"
+SCRIPT_VERSION = "2026-09-15.7"
 # kh.provenance landed in the harness AFTER this kernel was first pushed, so the
 # 2026-09-02 run died in 10 s with AttributeError against its own fresh clone
 # (gotcha #24, the two-halves trap). Never let provenance logging be fatal.
@@ -255,6 +255,15 @@ if GREEDY:
         gc.temperature = 1.0
         gc.top_k = 0
         gc.top_p = 1.0
+        # STATE the penalty rather than inherit it. repetition_penalty is
+        # absent from generation_config.json — infer.py and api.py pass 1.1 at
+        # CALL time, so it belongs to the synthesis recipe, not the model. This
+        # dump does not pass it, so the codes here are penalty-free and the C++
+        # greedy path matches that deliberately (GenOptions::repetition_penalty).
+        # Pinning it means the two arms agree because both declare 1.0, not
+        # because both happen to inherit the same library default — which is
+        # the kind of agreement that quietly ends when a default changes.
+        gc.repetition_penalty = 1.0
 model.generation_config.max_new_tokens = MAX_FRAMES
 step("model_loaded", greedy=GREEDY, max_frames=MAX_FRAMES,
      dtype=str(next(model.parameters()).dtype))
