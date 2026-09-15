@@ -56,7 +56,7 @@ import sys
 import time
 from pathlib import Path
 
-SCRIPT_VERSION = "v1"
+SCRIPT_VERSION = "v2-companion-paths"
 WORK = Path("/kaggle/working")
 TEMP = Path("/kaggle/temp") if Path("/kaggle/temp").is_dir() else Path("/tmp")
 REPO = TEMP / "CrispASR"
@@ -285,7 +285,11 @@ def ref_embed(kind, fbank, var_floor):
 BACKENDS = [
     dict(name="chatterbox", repo="cstr/chatterbox-GGUF",
          files=["chatterbox-v3-t3-q8_0.gguf", "chatterbox-v3-s3gen-q8_0.gguf"],
-         model="chatterbox-v3-t3-q8_0.gguf", extra=[], env={},
+         model="chatterbox-v3-t3-q8_0.gguf",
+         # discover_s3gen()'s sibling list holds the NON-v3 names
+         # ("chatterbox-s3gen-q8_0.gguf"), so a v3 s3gen beside the v3 t3 is
+         # never found -- name it explicitly instead of relying on discovery.
+         extra=["--codec-model", "@chatterbox-v3-s3gen-q8_0.gguf"], env={},
          ref="chatterbox", var_floor=0.0, timeout=3600),
     dict(name="confucius4-tts", repo="cstr/confucius4-tts-GGUF",
          files=["confucius4-tts-t2s-q4_k.gguf", "confucius4-tts-s2a-q4_k.gguf",
@@ -295,7 +299,7 @@ BACKENDS = [
          env={}, ref="funasr", var_floor=0.0, timeout=5400),
     dict(name="cosyvoice3-tts", repo="cstr/cosyvoice3-0.5b-2512-GGUF",
          files=["cosyvoice3-llm-q4_k.gguf", "cosyvoice3-flow-q8_0.gguf",
-                "cosyvoice3-hift-f16.gguf", "cosyvoice3-s3tok-q4_k.gguf",
+                "cosyvoice3-hift-f16.gguf", "cosyvoice3-s3tok-f16.gguf",
                 "cosyvoice3-campplus-f16.gguf", "cosyvoice3-voices.gguf"],
          model="cosyvoice3-llm-q4_k.gguf", extra=["-l", "en"], env={},
          ref="funasr", var_floor=0.0, timeout=3600),
@@ -310,7 +314,8 @@ BACKENDS = [
     dict(name="fireredtts3", repo="cstr/fireredtts3-GGUF",
          files=["fireredtts3-base-q4_k.gguf", "fireredtts3-redae-f16.gguf"],
          model="fireredtts3-base-q4_k.gguf", extra=["--ref-text", JFK_TEXT],
-         env={"FIREREDTTS3_REDAE": "@fireredtts3-redae-f16.gguf"},
+         env={},  # the CLI discovers fireredtts3-redae-f16.gguf as a sibling
+
          ref="voxceleb", var_floor=0.0, timeout=3600, control=True),
 ]
 
