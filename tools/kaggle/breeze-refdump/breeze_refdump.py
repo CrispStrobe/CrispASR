@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""Breeze TTS 2 reference-oracle dump on a Kaggle GPU (#412, PHASE 1).
+"""Breeze TTS 2 reference-oracle dump on a Kaggle worker (#412).
 
-WHY KAGGLE: the upstream needs Linux + CUDA and ~7.7 GiB VRAM in eager mode
-(README), and the checkpoint is 6.97 GB bf16 — it does not fit the 8 GB VPS.
+WHY KAGGLE: the checkpoint is 6.97 GB bf16 and does not fit the 8 GB VPS.
+The README asks for CUDA, but nothing here needs it: this dumps ~24 frames,
+not throughput. Since Kaggle is P100-pinned and its torch has no sm_60
+kernels (gotchas #21-#23), the GPU is the one resource we cannot count on —
+so a too-old draw falls back to the CPU rather than discarding the session.
 Everything here is the reference half of the diff harness; the C++ half lands
 in phase 2 and is compared with `tools/reference_backends/breeze_tts_2.py`.
 
@@ -66,6 +69,7 @@ ENV
   BREEZE_GREEDY      1 (default) / 0
   BREEZE_MAX_FRAMES  cap the AR loop (default 24; enough for 5 dumped frames)
   BREEZE_DUMP_TE_LAYERS  1 to also dump all 27 text-encoder layer states
+  BREEZE_FORCE_CPU   1 to run on the CPU even when a usable GPU was drawn
   CRISPASR_REF       CrispASR branch to clone (default main)
 
 DO NOT run/push this from an agent session — the maintainer pushes it.
@@ -146,8 +150,14 @@ import kaggle_harness as kh  # noqa: E402
 
 kh.init_progress()
 # Bump when the arms, capture or predicate change (see kh.provenance).
-SCRIPT_VERSION = "2026-09-03.1"
-kh.provenance(SCRIPT_VERSION, clone_dir=CLONE)
+SCRIPT_VERSION = "2026-09-15.2"
+# kh.provenance landed in the harness AFTER this kernel was first pushed, so the
+# 2026-09-02 run died in 10 s with AttributeError against its own fresh clone
+# (gotcha #24, the two-halves trap). Never let provenance logging be fatal.
+if hasattr(kh, "provenance"):
+    kh.provenance(SCRIPT_VERSION, clone_dir=CLONE)
+else:
+    step("provenance_unavailable", script_version=SCRIPT_VERSION)
 HF_TOKEN = kh.resolve_hf_token()
 step("cloned", crispasr_ref=CRISPASR_REF, hf_token_ok=bool(HF_TOKEN))
 
@@ -179,18 +189,44 @@ assert torch.cuda.is_available(), "this kernel needs enable_gpu=true"
 _cap = torch.cuda.get_device_capability(0)
 _name = torch.cuda.get_device_name(0)
 print(f"[gpu] {_name} sm_{_cap[0]}{_cap[1]}", flush=True)
-if _cap < (7, 0):
+
+# GPU LOTTERY, RESOLVED BY NOT PLAYING IT.
+# Kaggle's preinstalled torch has no kernels below sm_70 (gotcha #23) and the
+# accelerator is effectively P100-pinned with no working API selector (#21,
+# #22) — ~20 consecutive P100 draws across both accounts. The previous version
+# of this kernel exited on a P100 draw and told the operator to "re-push to
+# redraw", which is a coin-flip that has not come up once: the reference
+# oracle was simply unobtainable.
+#
+# It does not have to be. This dump needs ~24 frames, not throughput, and the
+# host has far more RAM than the checkpoint (6.97 GB bf16). So on a too-old
+# GPU we run the SAME model, SAME dtype, SAME eager attention on the CPU.
+# Nothing about the reference changes except where the matmuls happen.
+# Set BREEZE_FORCE_CPU=1 to take this path even on a good GPU (A/B control).
+_host_gb = None
+try:
+    _host_gb = round(os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / 1e9, 1)
+except Exception:
+    pass
+FORCE_CPU = os.environ.get("BREEZE_FORCE_CPU", "0") == "1"
+if FORCE_CPU or _cap < (7, 0):
+    DEVICE = "cpu"
+    why = "forced" if FORCE_CPU else f"gpu_too_old_sm_{_cap[0]}{_cap[1]}"
     print(
-        f"P100_LOTTERY_RETRY: drew {_name} (sm_{_cap[0]}{_cap[1]}); this torch "
-        f"build has no kernels below sm_70. Nothing was computed — re-push to redraw.",
+        f"CPU_FALLBACK: {why}; this torch build has no kernels below sm_70. "
+        f"Running the reference on the CPU instead of discarding the session "
+        f"(host RAM {_host_gb} GB vs a 6.97 GB bf16 checkpoint). Slower, "
+        f"numerically equivalent, and it actually produces the fixture.",
         flush=True,
     )
-    Path("/kaggle/working/lottery_retry.json").write_text(
-        json.dumps({"conclusive": False, "reason": "gpu_too_old", "gpu": _name,
-                    "capability": f"sm_{_cap[0]}{_cap[1]}"}, indent=1))
-    raise SystemExit(0)
-
-DEVICE = "cuda:0"
+else:
+    DEVICE = "cuda:0"
+# The arm that ran must be visible in the artifact, not only in the log — a
+# fixture that does not say where it came from cannot be argued with later.
+RUN_DEVICE = DEVICE
+RUN_GPU = _name
+step("device_selected", device=DEVICE, gpu=_name,
+     capability=f"sm_{_cap[0]}{_cap[1]}", host_ram_gb=_host_gb)
 
 # ── checkpoint ────────────────────────────────────────────────────────────
 from huggingface_hub import snapshot_download  # noqa: E402
@@ -410,6 +446,9 @@ meta = {
     "template": "ref_edit_tata (clone branch, cfg_scale=1.0)",
     "attn_implementation": "eager",
     "dtype": "bfloat16",
+    "device": RUN_DEVICE,
+    "gpu_drawn": RUN_GPU,
+    "script_version": SCRIPT_VERSION,
     "num_codebooks": int(cfg.num_codebooks),
     "audio_vocab_size": int(cfg.audio_vocab_size),
     "audio_token_id": int(cfg.audio_token_id),
