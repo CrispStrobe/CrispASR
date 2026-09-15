@@ -276,6 +276,12 @@ struct dictionary {
 
 // Same TSV shape the de/fr/es dicts use: `word<TAB>/ipa/`, '#' comments, a
 // header line that parses harmlessly as one junk entry.
+//
+// COST, measured rather than guessed: 812,953 entries in a std::map cost ~137 MB
+// of RSS once loaded. That is the same order as the 667K-entry German dict this
+// mirrors, and it is paid ONCE, lazily, on the first Russian phonemisation —
+// but it is real, and a caller on a memory-tight device should know it before
+// it surprises them. CRISPASR_RU_DICT_PATH can point at a smaller subset.
 inline int load_ipa_dict_file(dictionary& dict, const std::string& path) {
     FILE* f = fopen(path.c_str(), "r");
     if (!f)
