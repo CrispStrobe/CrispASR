@@ -146,13 +146,19 @@ add_library(crispasr-lib
             # and by the C-ABI `crispasr_align_words_abi`. Both canary-ctc
             # and qwen3-forced-aligner paths route through one call.
             crispasr_aligner.cpp
-            # Built-in G2P phonemizers (EN/DE/FR/ES) live in the kokoro
-            # target (phonemizer.cpp) — only kokoro calls them.
+            # Built-in G2P phonemizers (EN/DE/FR/ES) live in crispasr-core
+            # (phonemizer.cpp), NOT here and no longer in kokoro — #435 needs
+            # them from zonos too, and any backend that links crispasr-core now
+            # reaches them without a new edge in the link graph.
             # HF download + filesystem cache (`crispasr_cache.cpp`) lives in
-            # crispasr-core, NOT here — kokoro's phonemizer.cpp calls
-            # crispasr_cache::ensure_cached_file (#316 CMUdict auto-download) and
-            # only links crispasr-core, so a static build (BUILD_SHARED_LIBS=OFF)
-            # left crispasr-diff's link unresolved when it lived here (#316 AUR).
+            # crispasr-core, NOT here — phonemizer.cpp calls
+            # crispasr_cache::ensure_cached_file (#316 CMUdict auto-download), and
+            # a static build (BUILD_SHARED_LIBS=OFF) links crispasr-lib BEFORE the
+            # backend libs, so the linker dropped crispasr_cache.o before
+            # phonemizer.o asked for it and crispasr-diff failed to link (#316 AUR).
+            # Both now sit in the SAME archive, which is stronger than the old
+            # arrangement: ld rescans a single archive to closure, so the
+            # phonemizer -> cache reference cannot be order-dependent at all.
             # Known-model registry lookup (backend → canonical GGUF URL).
             # CLI keeps the TTY prompting shim; the library does the
             # non-interactive resolve.
@@ -882,7 +888,30 @@ add_library(crispasr-core STATIC
             # find the symbol in the leaf lib, not the higher crispasr-lib (#316).
             crispasr_cache.h
             crispasr_cache.cpp
+            # Built-in G2P (EN/DE/FR/ES) + the espeak-ng dlopen/popen fallbacks.
+            # MOVED HERE FROM kokoro (#435): zonos links only crispasr-core and
+            # needs a phonemizer whose licence is not GPL-3.0, and kokoro is not
+            # a dependency any other backend should acquire just to phonemise.
+            # The one special dependency — crispasr_cache::ensure_cached_file for
+            # the #316 dictionary auto-download — is the file directly above, so
+            # this move puts caller and callee in one archive and makes the
+            # #316 AUR static-link ordering failure unreachable rather than fixed.
+            phonemizer.h
+            phonemizer.cpp
             )
+# #316/#435: CRISPASR_BUILD gates phonemizer.cpp's `#include "crispasr_cache.h"`
+# and its CRISPASR_HAS_CACHE define — without it every G2P dictionary
+# auto-download in that file is dead code and English silently falls back to the
+# letter-to-sound rules ("this" -> θˈɪs).
+#
+# Scoped to the ONE SOURCE rather than to the target on purpose. CRISPASR_BUILD
+# is also the dllexport switch in include/crispasr*.h (`#ifdef CRISPASR_SHARED /
+# #ifdef CRISPASR_BUILD`), so defining it for all of crispasr-core would flip
+# every public declaration this target sees from dllimport to dllexport on a
+# Windows shared build. A source property is directory-scoped, so it also does
+# not leak into tests/CMakeLists.txt, where test-g2p-en deliberately compiles
+# phonemizer.cpp standalone WITHOUT the cache library.
+set_source_files_properties(phonemizer.cpp PROPERTIES COMPILE_DEFINITIONS CRISPASR_BUILD)
 target_include_directories(crispasr-core PUBLIC . ../include)
 if (WIN32)
     # crispasr_cache.cpp's HF auto-download uses WinHTTP. MSVC auto-links via
@@ -897,7 +926,11 @@ endif()
 # here as a private include path for this target only.
 target_include_directories(crispasr-core PRIVATE ../ggml/src)
 target_compile_features   (crispasr-core PUBLIC cxx_std_17)
-target_link_libraries     (crispasr-core PUBLIC ggml-base ggml)
+# ${CMAKE_DL_LIBS} for phonemizer.cpp's espeak_dlopen.h (dlopen/dlsym). It was
+# never listed while the file lived in kokoro because every executable happened
+# to pull -ldl in via crispasr-lib; crispasr-core is linked by targets that do
+# not (tests, crispasr-diff), so state the dependency where it is incurred.
+target_link_libraries     (crispasr-core PUBLIC ggml-base ggml ${CMAKE_DL_LIBS})
 # §176f: the STFT frame loop in core/mel.cpp is OpenMP-parallel (each frame's
 # FFT is independent → bit-identical output). Link OpenMP when available; the
 # pragma is #ifdef _OPENMP-guarded so non-OMP builds keep the serial path.
@@ -1911,31 +1944,15 @@ endif()
 # ---------------------------------------------------------------------------
 # kokoro — hexgrad/Kokoro-82M + yl4579/StyleTTS2-LJSpeech (iSTFTNet TTS)
 # ---------------------------------------------------------------------------
-# phonemizer.cpp lives here — only kokoro calls phonemize_builtin_*.
-add_library(kokoro STATIC kokoro.h kokoro.cpp phonemizer.cpp phonemizer.h)
+# phonemizer.cpp USED to live here ("only kokoro calls phonemize_builtin_*").
+# It moved to crispasr-core in #435 — zonos needs the built-in G2P too, and it
+# links crispasr-core only. kokoro keeps the same calls; it just resolves them
+# from the leaf lib it already links PUBLIC.
+add_library(kokoro STATIC kokoro.h kokoro.cpp)
 set_target_properties(kokoro PROPERTIES POSITION_INDEPENDENT_CODE ON)
-# #316: enable the G2P dictionary auto-download in phonemizer.cpp.
-#
-# CRISPASR_HAS_CACHE was referenced there but DEFINED NOWHERE, so every
-# auto-download in that file — CMUdict included — was dead code. A user without
-# a pre-seeded ~/.cache/crispasr/cmudict.dict silently got no English dictionary
-# at all and fell through to the letter-to-sound rules ("this" -> θˈɪs), which
-# is a large part of what #316 sounded like.
-#
-# The gate is CRISPASR_BUILD, which guards both the #include and the
-# CRISPASR_HAS_CACHE define — and it was only ever set on crispasr-lib, and only
-# under BUILD_SHARED_LIBS, so it was never true where phonemizer.cpp is
-# compiled.
-#
-# crispasr_cache.cpp now lives in crispasr-core (the leaf lib kokoro already
-# links), NOT crispasr-lib. Originally it was in crispasr-lib and the reference
-# was left for the final executable to resolve — but a static build
-# (BUILD_SHARED_LIBS=OFF) links crispasr-lib BEFORE kokoro, so the linker
-# discarded crispasr_cache.o before phonemizer.o referenced it and crispasr-diff
-# failed to link (#316 AUR report). Moving the symbol to crispasr-core — which
-# every backend static lib depends on — resolves it in all link configs with no
-# cycle (mirrors crispasr_imatrix).
-target_compile_definitions(kokoro PRIVATE CRISPASR_BUILD)
+# #316's CRISPASR_BUILD define moved with phonemizer.cpp to crispasr-core, as a
+# SOURCE property on that one file (see the crispasr-core block above for why it
+# must not be a target-wide define). Nothing else in kokoro.cpp reads it.
 target_include_directories(kokoro PUBLIC .)
 target_compile_features   (kokoro PUBLIC cxx_std_17)
 target_link_libraries     (kokoro PUBLIC crispasr-core ggml ggml-base crispasr_link_ggml_cpu)

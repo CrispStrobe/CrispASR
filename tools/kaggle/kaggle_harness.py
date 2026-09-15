@@ -675,6 +675,37 @@ def kaggle_token_from_dataset(filename: str = "hf_token.txt") -> str | None:
     return None
 
 
+def hf_token_rejected(tok: str, url: str = "https://huggingface.co/api/whoami-v2") -> bool:
+    """True only when HF EXPLICITLY rejects the token (401/403).
+
+    An EXPIRED token is worse than no token: every huggingface_hub call sends
+    it, and HF answers 401 even for a PUBLIC repo, so downloads that would
+    have worked anonymously fail with "Repository Not Found ... make sure you
+    are authenticated". Observed 2026-09-15: the supertonic-vs-audio.cpp bench
+    died on `Supertone/supertonic-3` — a repo that is public and ungated —
+    with "User Access Token 'collabmerge' is expired", after a 45-minute build.
+
+    FAILS OPEN on network trouble. A timeout or DNS failure is not evidence
+    that the token is bad, and discarding a good token because the validator
+    could not reach HF would break authenticated uploads for an unrelated
+    reason. Only an explicit 401/403 counts.
+    """
+    import urllib.error
+    import urllib.request
+    # `url` is injectable ONLY so the caller can prove this function is able to
+    # return False. Without that control, a validator that rejected everything
+    # would look identical to one that works — and it would silently strip a
+    # perfectly good token from every kernel.
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {tok}"})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            return r.status in (401, 403)
+    except urllib.error.HTTPError as e:
+        return e.code in (401, 403)
+    except Exception:
+        return False  # fail open: cannot tell, keep the token
+
+
 def resolve_hf_token(secret_name: str = "HF_TOKEN",
                      require: bool = False) -> str | None:
     """3-tier HF auth: env HF_TOKEN → Kaggle Secret (with retry) → mounted
@@ -693,6 +724,23 @@ def resolve_hf_token(secret_name: str = "HF_TOKEN",
     tok = (os.environ.get("HF_TOKEN")
            or kaggle_secret(secret_name)
            or kaggle_token_from_dataset())
+    # A token HF rejects must be DROPPED, not passed on. Keeping it turns every
+    # public download into a 401 (see hf_token_rejected). Anonymous access is
+    # strictly better than bad credentials for the public cstr/* repos this
+    # docstring promises work unauthenticated.
+    if tok and hf_token_rejected(tok):
+        print("HF auth: the resolved token is REJECTED by HF (expired or "
+              "revoked). Dropping it and continuing ANONYMOUSLY — public repos "
+              "still work; anything private or gated will fail from here.",
+              flush=True)
+        os.environ.pop("HF_TOKEN", None)
+        os.environ.pop("HUGGING_FACE_HUB_TOKEN", None)
+        if require:
+            raise SystemExit(
+                "FATAL: the HF token is expired/revoked and this kernel "
+                "UPLOADS — refresh the hf-token dataset before rerunning, "
+                "rather than losing the artifacts to 401s at the end.")
+        tok = None
     if tok:
         os.environ["HF_TOKEN"] = tok
         os.environ["HUGGING_FACE_HUB_TOKEN"] = tok

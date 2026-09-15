@@ -209,8 +209,34 @@ static bool read_f32(core_gguf::tensor_map& tm, const std::string& name, std::ve
         for (size_t i = 0; i < n; i++)
             out[i] = ggml_fp16_to_fp32(tmp[i]);
     } else {
-        std::fprintf(stderr, "supertonic: %s has unsupported type %d\n", name.c_str(), (int)t->type);
-        return false;
+        // Any QUANTISED type: dequantise through ggml's own type traits.
+        //
+        // This helper used to accept F32 and F16 only, which made the backend
+        // unloadable from a quantised GGUF: `crispasr-quantize ... q4_k` emits
+        // Q4_0 (type 2) for tensors whose shape does not suit a K-quant block,
+        // and loading then died with "vf.time_encoder.mlp.0.linear.weight has
+        // unsupported type 2" before a single frame was synthesised. Measured
+        // on Kaggle: every q4_k arm reported MODEL_LOAD_FAILED at 0.27 s.
+        //
+        // Going through to_float rather than naming types keeps this correct
+        // for whatever the quantiser picks next, instead of trading one
+        // hardcoded list for a longer one.
+        const ggml_type_traits* tr = ggml_get_type_traits(t->type);
+        if (!tr || !tr->to_float) {
+            std::fprintf(stderr, "supertonic: %s has type %d with no dequantiser\n", name.c_str(), (int)t->type);
+            return false;
+        }
+        const size_t blk = (size_t)ggml_blck_size(t->type);
+        if (blk == 0 || (n % blk) != 0) {
+            // to_float works in whole blocks; a partial tail would read past
+            // the buffer. Refuse loudly rather than corrupt the weights.
+            std::fprintf(stderr, "supertonic: %s has %zu elements, not a multiple of the type-%d block size %zu\n",
+                         name.c_str(), n, (int)t->type, blk);
+            return false;
+        }
+        std::vector<uint8_t> raw(ggml_nbytes(t));
+        ggml_backend_tensor_get(t, raw.data(), 0, raw.size());
+        tr->to_float(raw.data(), out.data(), (int64_t)n);
     }
     return true;
 }
