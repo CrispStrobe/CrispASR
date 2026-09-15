@@ -109,6 +109,14 @@
 // itself uses, so the rules and the dictionary speak the same dialect and an
 // OOV word does not arrive in a different accent from its neighbours.
 // tests/test-g2p-ru.cpp asserts that mechanically, over both paths.
+//
+// Worth knowing, because it is the reverse of the assumption that the GPL
+// dependency is the safe option: espeak-ng's own `ru` voice does NOT have this
+// property. Over the same 2,200 words it emits `^` (U+005E) five times, and
+// U+005E is in no TTS phoneme inventory we target — zonos drops it without a
+// word. Measured drop against zonos's symbol list: espeak 0.0172%, this file
+// 0.0000%. A tiny number, but it is the built-in that can be proven to stay
+// inside the inventory and espeak that cannot.
 
 #pragma once
 
