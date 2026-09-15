@@ -56,7 +56,7 @@ import sys
 import time
 from pathlib import Path
 
-SCRIPT_VERSION = "v5-consent-flags"
+SCRIPT_VERSION = "v6-onnx-ref-for-cosyvoice3"
 WORK = Path("/kaggle/working")
 TEMP = Path("/kaggle/temp") if Path("/kaggle/temp").is_dir() else Path("/tmp")
 REPO = TEMP / "CrispASR"
@@ -80,7 +80,7 @@ import kaggle_harness as kh  # noqa: E402
 kh.init_progress()
 
 kh.step("install deps")
-kh.sh_with_progress("pip install -q huggingface_hub hf_transfer gguf soundfile safetensors")
+kh.sh_with_progress("pip install -q huggingface_hub hf_transfer gguf soundfile safetensors onnxruntime")
 tool = kh.install_build_toolchain()
 print(f"  toolchain: {tool}")
 
@@ -242,6 +242,38 @@ def ref_state_dict(kind):
     return sd, dim
 
 
+_ORT_CACHE = {}
+
+
+def onnx_campplus_embed(fbank):
+    """CosyVoice's OWN reference: campplus.onnx, run through onnxruntime.
+
+    cosyvoice3 is the one consumer here whose upstream is NOT PyTorch. Its
+    campplus GGUF was converted from campplus.onnx, its shipped voice bank was
+    baked with campplus.onnx, and upstream CosyVoice runs campplus.onnx at
+    inference. Measured locally on this clip, that graph does NOT agree with
+    PyTorch eager on the partial tail:
+
+        T_cam = 100 (no tail)  onnx == torch-fixed == torch-legacy, cos 1.000000
+        T_cam = 173 (tail 73)  onnx == torch-LEGACY exactly (cos 1.000000,
+                               |x| 14.1197), vs torch-fixed cos 0.992663
+                               (|x| 12.5890)
+
+    The no-tail row is the control: it rules out a weight or front-end
+    difference and pins the divergence to the partial-tail divisor alone. So
+    scoring cosyvoice3 against PyTorch would score it against the wrong
+    reference and report the fix as an improvement when, for THIS backend, it
+    moves away from what upstream produces.
+    """
+    import onnxruntime as ort
+    if "sess" not in _ORT_CACHE:
+        p = hf_hub_download("FunAudioLLM/CosyVoice2-0.5B", "campplus.onnx", token=hf_token)
+        _ORT_CACHE["sess"] = ort.InferenceSession(p, providers=["CPUExecutionProvider"])
+    so = _ORT_CACHE["sess"]
+    x = np.ascontiguousarray(fbank)[None, :, :].astype(np.float32)
+    return so.run(None, {so.get_inputs()[0].name: x})[0].ravel().astype(np.float32)
+
+
 def ref_embed(kind, fbank, var_floor):
     """Run upstream CAMPPlus on the fbank the C++ actually consumed.
 
@@ -251,6 +283,8 @@ def ref_embed(kind, fbank, var_floor):
     the out_nonlinear hook so the clamp is applied the same way, rather than
     quietly measuring a different pooling rule and calling the gap a regression.
     """
+    if kind == "onnx_campplus":
+        return onnx_campplus_embed(fbank)
     sd, dim = ref_state_dict(kind)
     m = CAMPPlus(feat_dim=fbank.shape[1], embedding_size=dim)
     missing, unexpected = m.load_state_dict(sd, strict=False)
@@ -315,7 +349,12 @@ BACKENDS = [
          # known, so pin it: an uncontrolled dependency inside the arm under test
          # can only turn into a failure that looks like a seg_pool result.
          extra=["-l", "en", "--ref-text", JFK_TEXT], env={},
-         ref="funasr", var_floor=0.0, timeout=3600),
+         # PRIMARY reference is campplus.onnx -- the graph upstream actually
+         # runs, the one these GGUF weights came from, and the one that baked
+         # the shipped voice bank. `funasr` (PyTorch eager, same weights) is
+         # carried as a SECONDARY so the disagreement between the two is
+         # visible in the table rather than hidden behind whichever was picked.
+         ref="onnx_campplus", ref_also=["funasr"], var_floor=0.0, timeout=3600),
     dict(name="dots-tts", repo="cstr/dots-tts-soar-GGUF",
          files=["dots-tts-soar-q4_k.gguf", "dots-tts-soar-vocoder-q4_k.gguf",
                 "dots-tts-soar-spk-f16.gguf"],
@@ -462,6 +501,15 @@ for cfg in BACKENDS:
                 res["reference_verdict"] = "NO_CHANGE"
             else:
                 res["reference_verdict"] = "TOWARD_REFERENCE" if cf > cl else "AWAY_FROM_REFERENCE"
+            for alt in cfg.get("ref_also", []):
+                try:
+                    r2 = ref_embed(alt, fb_f, cfg["var_floor"])
+                    res[f"alt_{alt}"] = {
+                        "cos_fixed": cosine(emb_f, r2), "cos_legacy": cosine(emb_l, r2),
+                        "norm_ref": float(np.linalg.norm(r2)),
+                    }
+                except Exception as e2:
+                    res[f"alt_{alt}"] = {"error": repr(e2)}
         except Exception as e:
             res["reference_verdict"] = "NO_REFERENCE"
             res["reference_error"] = repr(e)
@@ -543,6 +591,9 @@ for cfg in BACKENDS:
         print(f"  {n}: {r['detail']}")
     if r.get("reference_error"):
         print(f"  {n}: reference_error {r['reference_error']}")
+    for k, v in r.items():
+        if k.startswith("alt_"):
+            print(f"  {n}: secondary reference {k[4:]} -> {v}")
 
 (WORK / "campp_segpool_results.json").write_text(json.dumps(results, indent=2, default=str))
 print()
