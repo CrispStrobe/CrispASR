@@ -43,9 +43,10 @@
 // `небо`, `дорога`, `стоит`, `тест` are all in it. A large part of the reason
 // is mechanical: because the keys fold `ё`→`е`, every `ё`/`е` minimal pair
 // (`всё`/`все`, `нёбо`/`небо`) collapses into one ambiguous key and gets
-// dropped. When the INPUT text writes `ё` explicitly, the ambiguity is gone
-// from the input even though it is gone from the dictionary too — and the rules
-// below use it, which recovers a good share of that set for free.
+// dropped. But the ambiguity is only in the DICTIONARY's keys: when the input
+// text writes `ё`, it says which word it means, and the rules below use that —
+// which recovers a good share of that set for free. An explicit combining
+// acute (`замо́к`) does the same for the rest.
 //
 // A DICTIONARY CANNOT CARRY SENTENCE CONTEXT. For a genuine heteronym
 // (`замок` = castle or lock, `мука` = flour or torment) the rules below pick
