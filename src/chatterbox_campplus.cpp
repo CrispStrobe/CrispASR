@@ -251,6 +251,13 @@ struct CampplusCache {
     int block2_out_C = 0; // 256 + 24*32 = 1024
     int block3_out_C = 0; // 512 + 16*32 = 1024
     int after_transit3_C = 512;
+
+    // T at the CAM layers' seg_pooling, from the LAST compute_xvector call.
+    // Recorded rather than recomputed: whether a partial tail window exists is
+    // the control for the CRISPASR_CAMPP_LEGACY_SEGPOOL A/B, and a control
+    // derived by re-deriving the same conv arithmetic the code under test uses
+    // would agree with it by construction even if both were wrong.
+    int last_T_cam = 0;
 };
 
 // Fold a 4-D Conv2d weight (PyTorch (out, in, kH, kW) flattened in
@@ -931,6 +938,7 @@ std::vector<float> compute_xvector(const cb_campplus_model& m, cb_campplus_runti
     if (post_tdnn.empty())
         return {};
     relu_inplace(post_tdnn.data(), post_tdnn.size());
+    state->last_T_cam = T_tdnn;
     if (dbg)
         fprintf(stderr, "campplus: post-tdnn C=%d T=%d\n", state->xv_tdnn.out_dim, T_tdnn);
     dbg_norm("tdnn", post_tdnn.data(), post_tdnn.size());
@@ -1012,6 +1020,57 @@ std::vector<float> compute_xvector(const cb_campplus_model& m, cb_campplus_runti
     return emb;
 }
 
+// CRISPASR_CAMPP_DUMP_EMB=<path>: append one record per embed_speaker() call to
+// <path>, so the CAM++ speaker stage can be read out of ANY consumer through its
+// real CLI path -- chatterbox, confucius4, cosyvoice3, dots and fireredtts3 all
+// funnel through this one function, and only fireredtts3 and (partly) chatterbox
+// have a per-stage diff entry point that reaches it.
+//
+// It exists to make the CRISPASR_CAMPP_LEGACY_SEGPOOL A/B measurable on the four
+// backends that were never re-validated after the seg_pooling divisor fix. The
+// record carries the frame counts as well as the vector, because the control for
+// that A/B is arithmetic, not statistical: `T_cam % 100 == 0` means there is no
+// partial tail and the two arms MUST agree bit-for-bit, while `T_cam % 100 != 0`
+// means they MUST differ. Without T in the record the "identical" case cannot be
+// told apart from the gate simply not reaching the backend.
+//
+// The fbank travels WITH the embedding on purpose. A reference CAMPPlus run on
+// its own front end would fold any Kaldi-fbank difference into the same number
+// as the seg_pooling difference, and the two are not separable after the fact.
+// Handing the reference the exact features this forward consumed leaves the
+// CAMPPlus forward as the only thing that can differ.
+//
+// Record format (little-endian, self-delimiting so multiple calls concatenate):
+//   magic   char[4]  "CPE2"
+//   n_samp  int32    input PCM samples
+//   T_fbank int32    fbank frames
+//   T_cam   int32    frames at seg_pooling (post-tdnn, stride 2)
+//   dim     int32    embedding dimension
+//   n_mels  int32    fbank bins (0 = fbank omitted)
+//   emb     float32[dim]
+//   fbank   float32[T_fbank * n_mels]   mean-subtracted, row-major (T, n_mels)
+static void campp_dump_embedding(const char* path, const std::vector<float>& emb, const std::vector<float>& fbank,
+                                 int n_samples, int T_fbank, int n_mels, int T_cam) {
+    if (!path || !path[0] || emb.empty())
+        return;
+    FILE* f = fopen(path, "ab");
+    if (!f) {
+        fprintf(stderr, "campplus: CRISPASR_CAMPP_DUMP_EMB: cannot open '%s' for append\n", path);
+        return;
+    }
+    const bool with_fb = fbank.size() == (size_t)T_fbank * (size_t)n_mels && !fbank.empty();
+    const int32_t hdr[5] = {(int32_t)n_samples, (int32_t)T_fbank, (int32_t)T_cam, (int32_t)emb.size(),
+                            with_fb ? (int32_t)n_mels : 0};
+    fwrite("CPE2", 1, 4, f);
+    fwrite(hdr, sizeof(int32_t), 5, f);
+    fwrite(emb.data(), sizeof(float), emb.size(), f);
+    if (with_fb)
+        fwrite(fbank.data(), sizeof(float), fbank.size(), f);
+    fclose(f);
+    fprintf(stderr, "campplus: dumped %zu-d embedding (n_samples=%d T_fbank=%d T_cam=%d, tail=%d, fbank=%s) -> %s\n",
+            emb.size(), n_samples, T_fbank, T_cam, T_cam % 100, with_fb ? "yes" : "no", path);
+}
+
 std::vector<float> embed_speaker(const cb_campplus_model& m, cb_campplus_runtime& cache, const float* pcm_16k,
                                  int n_samples, float stats_var_floor) {
     cb_campplus_bench_stage _bs_total("embed_speaker");
@@ -1019,7 +1078,11 @@ std::vector<float> embed_speaker(const cb_campplus_model& m, cb_campplus_runtime
     auto fb = compute_fbank(pcm_16k, n_samples, T);
     if (fb.empty() || T <= 0)
         return {};
-    return compute_xvector(m, cache, fb.data(), T, stats_var_floor);
+    auto emb = compute_xvector(m, cache, fb.data(), T, stats_var_floor);
+    const auto* st = static_cast<const CampplusCache*>(cache.impl);
+    campp_dump_embedding(std::getenv("CRISPASR_CAMPP_DUMP_EMB"), emb, fb, n_samples, T,
+                         T > 0 ? (int)(fb.size() / (size_t)T) : 0, st ? st->last_T_cam : 0);
+    return emb;
 }
 
 // ---------------------------------------------------------------------------
