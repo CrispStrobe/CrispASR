@@ -89,6 +89,43 @@ TEST_CASE("campplus seg_pool keeps channels independent", "[unit][tts][campplus]
             REQUIRE(close_to(out[(size_t)c * n_seg + s], (float)c));
 }
 
+TEST_CASE("campplus seg_pool: the two upstream tail conventions differ, and only on the tail",
+          "[unit][tts][campplus][segpool]") {
+    // cosyvoice3's upstream is campplus.onnx, NOT PyTorch, and the exported
+    // graph divides the partial tail by the KERNEL size. Measured by running
+    // the real graph: at T_cam=173 it matches the kernel-size arm exactly
+    // (cos 1.000000) and the width arm only to 0.992663.
+    const int T = 551, k = 100;
+    const int n = n_segments(T, k);
+    std::vector<float> in((size_t)T, 1.0f);
+    std::vector<float> w((size_t)n, -99.0f), ks((size_t)n, -99.0f);
+    avg(in.data(), 1, T, k, w.data(), tail_divisor::window_width);
+    avg(in.data(), 1, T, k, ks.data(), tail_divisor::kernel_size);
+
+    // Every FULL segment must agree — if they differ anywhere but the tail the
+    // flag is changing something it has no business touching.
+    for (int s = 0; s < n - 1; s++) {
+        INFO("full segment " << s);
+        REQUIRE(close_to(w[(size_t)s], ks[(size_t)s]));
+    }
+    // The tail is the whole difference: 51 frames of ones.
+    REQUIRE(close_to(w[(size_t)n - 1], 1.0f));   // torch: own width
+    REQUIRE(close_to(ks[(size_t)n - 1], 0.51f)); // onnx:  kernel size
+
+    // CONTROL: with no partial tail the two conventions MUST be identical.
+    // Without this the test above would pass equally on an implementation that
+    // differed everywhere, and the ONNX no-tail arm (T_cam=100, cos 1.000000
+    // across all three) is exactly what pinned the divergence to the tail.
+    const int Tex = 500;
+    const int nex = n_segments(Tex, k);
+    std::vector<float> inex((size_t)Tex, 1.0f);
+    std::vector<float> wex((size_t)nex, -99.0f), kex((size_t)nex, -99.0f);
+    avg(inex.data(), 1, Tex, k, wex.data(), tail_divisor::window_width);
+    avg(inex.data(), 1, Tex, k, kex.data(), tail_divisor::kernel_size);
+    for (int s = 0; s < nex; s++)
+        REQUIRE(close_to(wex[(size_t)s], kex[(size_t)s]));
+}
+
 TEST_CASE("campplus seg_pool tolerates degenerate inputs", "[unit][tts][campplus][segpool]") {
     std::vector<float> out(4, -99.0f);
     avg(nullptr, 1, 10, 100, out.data());

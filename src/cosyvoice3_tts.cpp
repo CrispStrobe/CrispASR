@@ -5620,7 +5620,8 @@ bool cv3_extract_native_runtime_voice(cosyvoice3_tts_context* ctx, const char* w
         return false;
 
     std::vector<float> native_spk =
-        chatterbox_campplus::embed_speaker(ctx->campplus.model, ctx->campplus.cache, pcm16.data(), (int)pcm16.size());
+        chatterbox_campplus::embed_speaker(ctx->campplus.model, ctx->campplus.cache, pcm16.data(), (int)pcm16.size(),
+                                           /*stats_var_floor=*/0.0f, campplus_segpool::tail_divisor::kernel_size);
     if (native_spk.size() != 192)
         return false;
 
@@ -6353,7 +6354,8 @@ extern "C" int cosyvoice3_tts_extract_spk_emb(struct cosyvoice3_tts_context* ctx
         if (sr != 16000)
             pcm = core_audio::resample_polyphase(pcm.data(), (int)pcm.size(), sr, 16000);
         auto emb =
-            chatterbox_campplus::embed_speaker(ctx->campplus.model, ctx->campplus.cache, pcm.data(), (int)pcm.size());
+            chatterbox_campplus::embed_speaker(ctx->campplus.model, ctx->campplus.cache, pcm.data(), (int)pcm.size(),
+                                               /*stats_var_floor=*/0.0f, campplus_segpool::tail_divisor::kernel_size);
         if (emb.size() != 192)
             return -1;
         std::memcpy(out_spk_emb, emb.data(), 192 * sizeof(float));

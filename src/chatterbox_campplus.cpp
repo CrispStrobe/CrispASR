@@ -625,7 +625,8 @@ static void fcm_forward(const CampplusCache& cache, const float* feat_t_80, int 
 // CAMDenseTDNNLayer forward. `in` is (C_in, T) where C_in is the running
 // concatenation channel count; `out` ends up appended (concat) onto in
 // to form the next input.
-static std::vector<float> dense_layer_forward(const float* in, int C_in_actual, int T, const DenseLayerCache& l) {
+static std::vector<float> dense_layer_forward(const float* in, int C_in_actual, int T, const DenseLayerCache& l,
+                                              campplus_segpool::tail_divisor tail) {
     // nonl1.bn(in_channels) → ReLU → l1 1×1 conv → nonl2.bn → ReLU →
     // CAM layer. nonl1's BN expects the full running C_in which equals
     // l.in_channels. (Per the dense block construction in xvector.py
@@ -703,7 +704,7 @@ static std::vector<float> dense_layer_forward(const float* in, int C_in_actual, 
     // acceptance was end-to-end and never diffed this stage against upstream.
     constexpr int kSegLen = 100;
     std::vector<float> seg((size_t)l.bn_channels * (size_t)campplus_segpool::n_segments(T, kSegLen), 0.0f);
-    campplus_segpool::avg(bo.data(), l.bn_channels, T, kSegLen, seg.data());
+    campplus_segpool::avg(bo.data(), l.bn_channels, T, kSegLen, seg.data(), tail);
     const int n_seg = campplus_segpool::n_segments(T, kSegLen);
     // ctx = mean + seg_pool(x) broadcast back to (bn, T)
     std::vector<float> ctx((size_t)l.bn_channels * (size_t)T, 0.0f);
@@ -751,15 +752,15 @@ static std::vector<float> dense_layer_forward(const float* in, int C_in_actual, 
 
 // CAMDenseTDNNBlock.forward — sequentially concat each layer's output
 // onto the running input.
-static std::vector<float> dense_block_forward(const float* in, int C_in, int T, const std::vector<DenseLayerCache>& blk,
-                                              int& C_out) {
+static std::vector<float> dense_block_forward(campplus_segpool::tail_divisor tail, const float* in, int C_in, int T,
+                                              const std::vector<DenseLayerCache>& blk, int& C_out) {
     std::vector<float> running((size_t)C_in * (size_t)T);
     std::memcpy(running.data(), in, running.size() * sizeof(float));
     int C_running = C_in;
 
     for (size_t li = 0; li < blk.size(); li++) {
         const auto& l = blk[li];
-        auto delta = dense_layer_forward(running.data(), C_running, T, l);
+        auto delta = dense_layer_forward(running.data(), C_running, T, l, tail);
         if (delta.empty())
             return {};
         std::vector<float> next((size_t)(C_running + l.cam_out) * (size_t)T, 0.0f);
@@ -886,7 +887,7 @@ cb_campplus_runtime::~cb_campplus_runtime() {
 // ---------------------------------------------------------------------------
 
 std::vector<float> compute_xvector(const cb_campplus_model& m, cb_campplus_runtime& cache, const float* feat_t_80,
-                                   int T, float stats_var_floor) {
+                                   int T, float stats_var_floor, campplus_segpool::tail_divisor tail) {
     if (!feat_t_80 || T <= 0)
         return {};
     if (!m.head.conv1_w || !m.tdnn.lin_w || !m.dense.lin_w || m.block1.layers.empty()) {
@@ -937,7 +938,7 @@ std::vector<float> compute_xvector(const cb_campplus_model& m, cb_campplus_runti
 
     // block1: 12 layers, dilation=1 → 128 + 12*32 = 512
     int C_blk1 = 0;
-    auto post_blk1 = dense_block_forward(post_tdnn.data(), 128, T_tdnn, state->block1, C_blk1);
+    auto post_blk1 = dense_block_forward(tail, post_tdnn.data(), 128, T_tdnn, state->block1, C_blk1);
     if (dbg)
         fprintf(stderr, "campplus: post-block1 C=%d T=%d\n", C_blk1, T_tdnn);
     dbg_norm("block1", post_blk1.data(), post_blk1.size());
@@ -951,7 +952,7 @@ std::vector<float> compute_xvector(const cb_campplus_model& m, cb_campplus_runti
 
     // block2: 24 layers, dilation=2 → 256 + 24*32 = 1024
     int C_blk2 = 0;
-    auto post_blk2 = dense_block_forward(post_t1.data(), 256, T_tdnn, state->block2, C_blk2);
+    auto post_blk2 = dense_block_forward(tail, post_t1.data(), 256, T_tdnn, state->block2, C_blk2);
 
     dbg_norm("block2", post_blk2.data(), post_blk2.size());
 
@@ -964,7 +965,7 @@ std::vector<float> compute_xvector(const cb_campplus_model& m, cb_campplus_runti
 
     // block3: 16 layers, dilation=2 → 512 + 16*32 = 1024
     int C_blk3 = 0;
-    auto post_blk3 = dense_block_forward(post_t2.data(), 512, T_tdnn, state->block3, C_blk3);
+    auto post_blk3 = dense_block_forward(tail, post_t2.data(), 512, T_tdnn, state->block3, C_blk3);
 
     if (dbg)
         fprintf(stderr, "campplus: post-block3 C=%d T=%d\n", C_blk3, T_tdnn);
@@ -1013,13 +1014,13 @@ std::vector<float> compute_xvector(const cb_campplus_model& m, cb_campplus_runti
 }
 
 std::vector<float> embed_speaker(const cb_campplus_model& m, cb_campplus_runtime& cache, const float* pcm_16k,
-                                 int n_samples, float stats_var_floor) {
+                                 int n_samples, float stats_var_floor, campplus_segpool::tail_divisor tail) {
     cb_campplus_bench_stage _bs_total("embed_speaker");
     int T = 0;
     auto fb = compute_fbank(pcm_16k, n_samples, T);
     if (fb.empty() || T <= 0)
         return {};
-    return compute_xvector(m, cache, fb.data(), T, stats_var_floor);
+    return compute_xvector(m, cache, fb.data(), T, stats_var_floor, tail);
 }
 
 // ---------------------------------------------------------------------------

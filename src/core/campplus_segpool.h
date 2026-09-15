@@ -28,6 +28,30 @@
 
 namespace campplus_segpool {
 
+// WHICH REFERENCE a consumer must match on the PARTIAL TAIL window.
+//
+// These are not "right" and "wrong" — they are two upstreams, and a backend is
+// correct only against its own. Measured by RUNNING both, not by reading specs:
+//
+//   torch  F.avg_pool1d(ceil_mode=True) divides the tail by its OWN width.
+//          Verified: all-ones, T=551 -> every segment exactly 1.0.
+//
+//   onnx   campplus.onnx as EXPORTED divides the tail by the KERNEL size.
+//          Verified by running the real graph, with a no-tail control
+//          (T_cam=100) where all arms agree at cos 1.000000 -- which rules out
+//          any weight or front-end difference and pins it to the tail alone.
+//          At T_cam=173 the graph matches the kernel-size arm EXACTLY
+//          (cos 1.000000, |x| 14.1197) and the width arm only to 0.992663.
+//          NOTE the isolated OPERATOR with those same attributes divides by
+//          width, so the spec would have said "ONNX agrees with torch". The
+//          exported graph does not. The mechanism inside the export was not
+//          isolated; this is measured behaviour, not an explained cause.
+enum class tail_divisor {
+    window_width, // torch  — chatterbox, confucius4, dots, fireredtts3
+    kernel_size,  // onnx   — cosyvoice3 ONLY
+};
+
+
 // ceil_mode=True: the trailing partial window still produces a segment.
 inline int n_segments(int T, int seg_len) {
     if (T <= 0 || seg_len <= 0)
@@ -36,7 +60,8 @@ inline int n_segments(int T, int seg_len) {
 }
 
 // `in` is (C, T) row-major; `out` is (C, n_segments(T, seg_len)) row-major.
-inline void avg(const float* in, int C, int T, int seg_len, float* out) {
+inline void avg(const float* in, int C, int T, int seg_len, float* out,
+                tail_divisor tail = tail_divisor::window_width) {
     if (!in || !out || C <= 0 || T <= 0 || seg_len <= 0)
         return;
     const int n_seg = n_segments(T, seg_len);
@@ -54,15 +79,10 @@ inline void avg(const float* in, int C, int T, int seg_len, float* out) {
             // Divide by the frames ACTUALLY in this window. n_in_seg ==
             // seg_len for every full segment, so only the tail differs.
             //
-            // CRISPASR_CAMPP_LEGACY_SEGPOOL=1 restores the OLD divisor (always
-            // seg_len). It exists purely so the fix can be A/B'd against the
-            // behaviour four shipped backends were accepted with -- chatterbox,
-            // confucius4, cosyvoice3 and dots-tts all changed when this was
-            // corrected. Without a way to rebuild the old number, "the fix moved
-            // it closer to upstream" would be an assertion rather than a
-            // measurement. Do not use it for anything else: it is a known-wrong
-            // divisor, kept only to be compared against.
-            const float divisor = legacy ? (float)seg_len : (float)n_in_seg;
+            // The caller names its upstream; the env var forces kernel_size
+            // globally for A/B measurement.
+            const bool use_kernel = legacy || tail == tail_divisor::kernel_size;
+            const float divisor = use_kernel ? (float)seg_len : (float)n_in_seg;
             out[(size_t)c * (size_t)n_seg + (size_t)s] = ss / divisor;
         }
     }
