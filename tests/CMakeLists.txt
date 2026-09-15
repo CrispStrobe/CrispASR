@@ -4895,6 +4895,20 @@ catch_discover_tests(test-g2p-es
     PROPERTIES TIMEOUT 30
 )
 
+# ─── test-g2p-ru — Catch2 tests for Russian G2P + Russian number words ──────
+add_executable(test-g2p-ru test-g2p-ru.cpp)
+target_include_directories(test-g2p-ru PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/ggml/include
+    ${PROJECT_SOURCE_DIR}/include
+)
+target_link_libraries(test-g2p-ru PRIVATE Catch2::Catch2WithMain)
+catch_discover_tests(test-g2p-ru
+    EXTRA_ARGS --colour-mode ansi
+    PROPERTIES LABELS "unit;g2p;russian"
+    PROPERTIES TIMEOUT 30
+)
+
 # ─── test-espeak-phonemize — Catch2 tests for espeak-ng phonemization ───────
 # Tests espeak availability, piper text/IPA synthesis, input validation.
 # Requires PIPER_TEST_MODEL env var or -DPIPER_TEST_MODEL=... for live tests.
