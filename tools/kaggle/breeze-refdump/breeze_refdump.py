@@ -150,7 +150,7 @@ import kaggle_harness as kh  # noqa: E402
 
 kh.init_progress()
 # Bump when the arms, capture or predicate change (see kh.provenance).
-SCRIPT_VERSION = "2026-09-15.2"
+SCRIPT_VERSION = "2026-09-15.3"
 # kh.provenance landed in the harness AFTER this kernel was first pushed, so the
 # 2026-09-02 run died in 10 s with AttributeError against its own fresh clone
 # (gotcha #24, the two-halves trap). Never let provenance logging be fatal.
@@ -275,7 +275,23 @@ REF_WAV = CLONE / "samples" / "jfk.wav"
 wav, sr = sf.read(str(REF_WAV), always_2d=True, dtype="float32")
 wav = np.mean(wav, axis=1)
 enc = audio_tokenizer.encode(wav, sr=sr)
-ref_codes = np.asarray(enc["audio_codes"][0], dtype=np.int32)   # (T_ref, 16)
+
+
+def to_np(x, dtype):
+    """Tensors coming back from the audio tokenizer live on the GPU, and
+    np.asarray on a cuda tensor raises rather than copying. Run 7 reached the
+    model load and died here — 15 minutes to learn one missing .cpu()."""
+    if torch.is_tensor(x):
+        x = x.detach().cpu()
+        if x.dtype in (torch.bfloat16, torch.float16):
+            # numpy has no bf16 — np.asarray on one raises rather than
+            # widening. The model runs in bf16 throughout, so this is on the
+            # path for every float dump, not a corner case.
+            x = x.float()
+    return np.asarray(x, dtype=dtype)
+
+
+ref_codes = to_np(enc["audio_codes"][0], np.int32)              # (T_ref, 16)
 save("ref_audio", wav.astype(np.float32))
 save("ref_codes", ref_codes)
 step("ref_encoded", sr=sr, n_samples=int(wav.shape[0]), ref_frames=int(ref_codes.shape[0]))
@@ -427,8 +443,7 @@ audio = gen.audio[0] if getattr(gen, "audio", None) else None
 if audio is None:
     dec = audio_tokenizer.decode(torch.as_tensor(codes)[None].to(DEVICE))
     audio = dec["audio"][0] if isinstance(dec, dict) else dec
-audio = np.asarray(audio.detach().float().cpu() if torch.is_tensor(audio) else audio,
-                   dtype=np.float32).reshape(-1)
+audio = to_np(audio, np.float32).reshape(-1)
 save("codec_audio", audio)
 sf.write(str(WORK / "breeze-ref.wav"), audio, 24000, subtype="PCM_16")
 step("generate_done", frames=int(codes.shape[0]), n_samples=int(audio.shape[0]))
