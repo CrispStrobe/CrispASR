@@ -1676,6 +1676,10 @@ struct GenOptions {
     float depth_temperature = 0.9f;
     int max_frames = 750;
     bool greedy = false;
+    // 1.0 == off. Kept SEPARATE from `greedy` rather than derived from it,
+    // because they answer different questions and the diff harness needs both
+    // set deliberately. See the call sites.
+    float repetition_penalty = 1.0f;
 };
 
 static bool generate_codes(breeze_tts_2_context* c, const AssembledPrompt& prompt, const GenOptions& opt,
@@ -1724,7 +1728,7 @@ static bool generate_codes(breeze_tts_2_context* c, const AssembledPrompt& promp
 
     for (int f = 0; f < opt.max_frames; f++) {
         mask_reserved(bb_logits.data(), n_logits, hp);
-        apply_repetition_penalty(bb_logits.data(), n_logits, cb0_history, hp.s_repetition_penalty);
+        apply_repetition_penalty(bb_logits.data(), n_logits, cb0_history, opt.repetition_penalty);
         const int32_t cb0 =
             sample_logits(bb_logits.data(), n_logits, bb_temp, (int)hp.s_top_k, hp.s_top_p, c->rng_state);
         if (cb0 == (int32_t)hp.backbone_eos_token_id)
@@ -2041,6 +2045,14 @@ static float* synth_impl(breeze_tts_2_context* c, const char* text, const char* 
     opt.depth_temperature = c->params.depth_temperature;
     opt.greedy = greedy;
     opt.max_frames = frame_cap > 0 ? frame_cap : c->max_new_tokens;
+    // Repetition penalty is NOT in generation_config.json — infer.py and
+    // api.py pass 1.1 at call time, so it is part of the shipped SYNTHESIS
+    // recipe and not part of the model's defaults. The Kaggle reference oracle
+    // calls generate() without it, which means the fixture's `codes` are
+    // penalty-free; applying 1.1 in the greedy path would therefore diverge
+    // from the fixture by construction and send the first bisect chasing a
+    // difference that is ours, not the model's.
+    opt.repetition_penalty = greedy ? 1.0f : c->model.hp.s_repetition_penalty;
 
     std::vector<std::vector<int32_t>> frames;
     if (!generate_codes(c, prompt, opt, frames))

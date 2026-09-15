@@ -718,3 +718,24 @@ Frame-0 landmarks for a fast smoke check, from the completed run:
 `[404, 172, 340, 1357, 644, 528, 1025, 1250, 122, 730, 1219, 1452, 1957, 443, 416, 1187]`.
 Generated grid is `codes (24, 16)`; `codec_audio` is 46 080 samples, which is
 exactly 24 frames x 1920, so the codec's frame arithmetic checks out.
+
+### Repetition penalty is part of the recipe, not the model
+
+`repetition_penalty` is **absent from `generation_config.json`**. `infer.py:86`
+and `breeze_infer/api.py:92` pass `REPETITION_PENALTY = 1.1` at call time, so
+it belongs to the shipped *synthesis* recipe, not to the checkpoint's defaults
+— which is precisely the §3.5 table's "infer.py:26" footnote, read correctly.
+
+The consequence for parity: the reference oracle calls `generate()` **without**
+it, so the fixture's `codes` are penalty-free. A C++ greedy run that applied
+1.1 would diverge from the fixture by construction, and the first bisect would
+be spent chasing a difference that is ours. The runtime therefore uses 1.0 on
+the greedy/diff path and 1.1 on the normal synthesis path, as an explicit
+`GenOptions` field rather than something derived from `greedy` — they are two
+different questions.
+
+Still open (a validation item, not a known bug): *which* token history HF's
+`RepetitionPenaltyLogitsProcessor` sees on the normal path. For this model the
+backbone's `input_ids` are audio frames rather than text, so "the history" is
+ambiguous; the C++ applies it over the generated codebook-0 tokens. Confirm
+against a non-greedy reference run before treating the normal path as faithful.
