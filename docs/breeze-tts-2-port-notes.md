@@ -817,3 +817,85 @@ The first row is the entire argument for the magnitude columns: a stage wrong
 by a uniform factor of two scores a **perfect cosine**. Without `|ref|`/`|cpp|`
 a 2x-wrong text encoder would have been reported as a flawless pass, which is
 exactly how the htdemucs iSTFT and CQT bugs survived as long as they did.
+
+---
+
+## Phase-2 RESULTS — run 1 (q4_k vs bf16), 2026-09-15
+
+**It synthesises, and the ASR roundtrip reads it back.**
+
+| | |
+|---|---|
+| WAV | 94 080 samples @ 24 kHz = **3.92 s**, peak 0.53, rms 0.084 (not silence) |
+| ASR on our audio | *"The quick brown dot fox jumps over the lazy dog."* |
+| target | *"The quick brown fox jumps over the lazy dog."* |
+| ASR on the ORACLE's own clip (control) | *"The quick brown fox jumped in."* |
+| `--list-backends` | `bt2-tts` present |
+| NC gate, `-m auto` without acceptance | **REFUSED** |
+
+The control matters: the oracle's fixture audio is capped at 24 frames
+(1.92 s), so its transcript is *supposed* to be truncated. It confirms the ASR
+works and that our (uncapped) audio is the more complete of the two. One
+inserted word — and that is with a mistokenized prompt and a mis-encoded
+reference clip, both measured below. The model is more robust than the port.
+
+### Per-stage, and why 7/55 "passing" understates it
+
+Run 1 diffed the **q4_k** model against a **bf16** reference, which was a
+mistake in experimental design, not a result:
+
+```
+backbone_layer0   cos=0.999849      backbone_layer10  cos=0.998825
+backbone_layer1   cos=0.999672      backbone_layer20  cos=0.998375
+backbone_layer5   cos=0.999031      backbone_layer27  cos=0.998024
+backbone_logits   cos=0.999230   argmax ref=404 cpp=404  ✓
+```
+
+A **monotonic** decay with depth, with magnitude ratios pinned at 0.99-1.01
+throughout, is the signature of accumulating quantization noise — not of a
+structural bug, which shows up as a step at one layer. Judging the port by
+these is judging the quantizer. Re-run on f16 before concluding anything about
+the transformer stacks.
+
+`argmax_cb0 = 404` matching the oracle exactly, off oracle-supplied
+embeddings, is the strongest single signal that prompt assembly → backbone →
+lm_head is right.
+
+### Three real defects, two of them predicted in advance
+
+| Stage | Measured | Cause |
+|---|---|---|
+| `ref_codes` | 61.8% equal, 138 frames both, first bad at 7 | the resampler mismatch, predicted and recorded before the run. Now removed from the harness by giving both sides 24 kHz, and kept as its own `ref_audio` stage. |
+| `prompt_input_ids` | 64.9% equal, our L=208 vs 185 | `core_bpe::tokenize_simple` does not reproduce Gemma's tokenizer. Predicted. **Open.** |
+| `dd_codes_frame0_stepwise` | 1/16 equal (only cb0, from the backbone) | the depth decoder diverges from codebook 1 with EXACT inputs. **Open, and the main suspect.** |
+
+### The depth decoder — what has been ruled out
+
+Fed the oracle's `backbone_hidden_frame0` and the oracle's `cb0 = 404`, our
+codebook 1 is already wrong. Read line by line against `models/breeze.py`
+after the run, these are **eliminated**:
+
+* `BreezeRMSNorm` is plain `weight * normed` (`breeze.py:129-134`) — NOT the
+  Gemma `1 + w` form. Our implementation matches.
+* `BreezeDecoderLayer` is standard Llama pre-norm (`:405-425`). Matches.
+* `BreezeAttention`: `scaling = head_dim ** -0.5`, `is_causal = True`, no
+  q/k norm (`:302-305`). Matches.
+* The `depth.cb_head.{i}` orientation, re-derived index by index: the
+  converter's transpose makes `ggml_mul_mat` compute `h @ weight[i]`, which is
+  what `F.linear(h, weight[i].T)` means. Correct.
+* Not an off-by-one in the head index either — our cb1 is not the oracle's
+  cb2, and no shift of the sequence aligns them.
+
+The discriminating measurement is the **raw** `dd_logits_frame0_cb1` cosine,
+which run 1 could not produce because the dump was masked (below). A cosine
+near 1 with a different argmax means numeric drift; a cosine near 0 means
+something structural.
+
+### A measurement bug worth naming
+
+`dd_logits_frame0_cb*` came back `cos=nan`, `|cpp|=inf`. Not a model failure:
+`mask_reserved` writes `-inf` into `[2048, 2051)` and the dump was taken from
+the masked buffer, while the reference dumps its logits *before* its own
+suppression. The fix is to dump raw and mask a copy for sampling. A stage that
+is merely being measured wrong must never be able to report as a catastrophic
+failure — it sends the next person to the wrong place.
