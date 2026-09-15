@@ -30,36 +30,46 @@ namespace campplus_segpool {
 
 // WHICH REFERENCE a consumer must match on the PARTIAL TAIL window.
 //
-// ALL FIVE CAM++ CONSUMERS WANT window_width. That is measured, and it was
-// briefly believed otherwise, so the evidence is recorded here rather than
-// re-litigated.
+// FOUR of the five consumers are settled: chatterbox, confucius4, dots-tts and
+// fireredtts3 all have PyTorch upstreams and all measure TOWARD_REFERENCE on
+// window_width, with the fbank pinned identical across arms so pooling is the
+// only variable, and fireredtts3 reproducing its known 0.99999-vs-0.264
+// signature to prove the instrument:
 //
-// An earlier probe compared an ISOLATED AveragePool export at T_cam=173 and
-// concluded that campplus.onnx — cosyvoice3's upstream — divides the tail by
-// the kernel size, which would have made cosyvoice3 the one consumer needing
-// kernel_size. Running the ACTUAL C++ arms against the ACTUAL campplus.onnx on
-// real input (T_cam=549, tail=49) says the opposite, with the fbank pinned
-// identical across arms so the pooling is the only variable:
+//     chatterbox/confucius4  cos 0.999999 vs 0.998062   |ref| 13.6330
+//     dots-tts               cos 0.999996 vs 0.999839   |ref| 20.4277
+//     fireredtts3            cos 0.999997 vs 0.264410   |ref| 20.9117
 //
-//     cosyvoice3   cos_fixed 0.999999   cos_legacy 0.998052
-//                  |fixed|   13.6296    |legacy|   14.0340   |onnx ref| 13.6330
+// COSYVOICE3 IS NOT SETTLED. Its upstream is campplus.onnx, and two runs on the
+// SAME clip (jfk.wav, T_cam=549, tail=49) disagree:
 //
-// A second, independent reference (funasr) agrees to 7 decimals. Every other
-// consumer reports the same direction against its own upstream, and fireredtts3
-// reproduces its known signature (0.99999 fixed vs 0.264 legacy), so the
-// instrument is trustworthy. All five: TOWARD_REFERENCE on the fixed arm.
+//     onnxruntime on Kaggle   |onnx| 13.6330  -> agrees with window_width
+//     onnxruntime 1.23.2      |onnx| 14.0386  -> agrees with kernel_size exactly
 //
-// The lesson worth keeping: an isolated operator with the same attributes is
-// NOT the graph. Measure the arms you ship against the reference you ship
-// against, on the input you ship with.
+// i.e. onnxruntime builds disagree with each other on AveragePool(ceil_mode=1),
+// so "what does ONNX do" has no single answer to look up.
 //
-// kernel_size therefore has no production caller. It is kept ONLY so the old
-// divisor can be rebuilt for A/B — same purpose as
-// CRISPASR_CAMPP_LEGACY_SEGPOOL — because "the fix moved it toward upstream"
-// has to stay a measurement rather than becoming folklore.
+// One fact is independent of that, and it is the uncomfortable one: the eight
+// speaker embeddings BAKED INTO the shipped cosyvoice3-voices.gguf match
+// kernel_size exactly (cos 1.000000, |x| 14.1197 on zero_shot). That artifact
+// was produced by this project's own converter on another machine. So with
+// window_width the runtime `--voice ref.wav` path and the baked voice bank
+// describe the same voice slightly differently (cos ~0.998).
+//
+// We ship window_width for cosyvoice3 anyway, for now: it is what the other
+// four use, end-to-end passes 8/8 on BOTH arms, and flipping on a contested
+// measurement is how this already produced one regression. Tracked, not closed.
+// Resolving it needs the onnxruntime version pinned on both sides, and probably
+// a re-bake of the voice bank against whichever convention wins.
+//
+// Two lessons paid for here:
+//   * an ISOLATED operator with the same attributes is NOT the graph -- probing
+//     an exported AveragePool alone gave the opposite answer and put a
+//     regression on main;
+//   * end-to-end cannot decide this at all. Every backend passes on both arms.
 enum class tail_divisor {
-    window_width, // what ALL FIVE consumers match. The default.
-    kernel_size,  // the old divisor, for A/B only — no production caller.
+    window_width, // settled for 4 of 5; the default, incl. cosyvoice3 for now.
+    kernel_size,  // no production caller; A/B, and the cosyvoice3 candidate.
 };
 
 

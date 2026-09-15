@@ -60,11 +60,19 @@ neither in the way the first attempt assumed.
   instead of by its own width, in code shared by five backends. For fireredtts3
   it was decisive: `spk_emb` went 0.268 → 0.999452.
 
-  **cosyvoice3 is the exception, and it is not a bug there.** Its upstream is
-  `campplus.onnx`, not PyTorch, and the exported graph divides by the kernel
-  size — measured by running the real graph, with a no-partial-tail control
-  where all arms agree at cos 1.000000. Its baked voice bank was produced that
-  way. The tail convention is now named per consumer.
+  Confirmed for chatterbox, confucius4 and dots-tts as well, each against its
+  own PyTorch upstream, with the fbank pinned identical so pooling is the only
+  variable.
+
+  **cosyvoice3 is tracked as unresolved.** Its upstream is `campplus.onnx`, and
+  two runs on the same clip disagree — one onnxruntime build matches the new
+  divisor, another matches the old one exactly. Independently of that, the eight
+  speaker embeddings baked into the shipped voice bank match the OLD divisor, so
+  the `--voice ref.wav` path and the baked bank now describe the same voice
+  slightly differently (cos ~0.998). End-to-end passes 8/8 on both, and
+  cosyvoice3 ships with the same convention as the other four for now. Closing
+  it needs the onnxruntime version pinned on both sides and probably a re-bake
+  of the voice bank.
 
 - **zonos: built-in G2P is the default for en/de/fr**, so espeak-ng (GPL-3.0) is
   no longer needed for them. Flipped only on measured evidence — en 1.00 vs
