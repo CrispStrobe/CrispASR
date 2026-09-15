@@ -35,7 +35,7 @@ NOT MEASURED, AND WHY (stated, never estimated)
     the watermark back on for any output that cannot carry a manifest), so this
     kernel deliberately does NOT pass -DCRISPASR_NO_C2PA_NATIVE=ON.
 
-SCRIPT_VERSION = v5
+SCRIPT_VERSION = v6 (rerun against the q4_k loader fix, main 516bf0e9)
 """
 
 import json
@@ -49,7 +49,7 @@ import sys
 import time
 from pathlib import Path
 
-SCRIPT_VERSION = "v5"
+SCRIPT_VERSION = "v6"
 
 WORK = Path("/kaggle/working")
 TEMP = Path("/kaggle/temp/st-bench")
