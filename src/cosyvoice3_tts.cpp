@@ -3121,6 +3121,33 @@ ggml_tensor* cv3_dit_block_apply(ggml_context* ctx0, ggml_tensor* x, ggml_tensor
 // runtime detector counts 133 per graph — q/k/v/o and both FFN layers across all
 // 22 blocks — far more than reading the source suggested. Gated; the fold is an
 // exact restatement (a linear is per-token independent). See core/quant_bcast.h.
+// #431-adj: which CAM++ tail divisor THIS backend uses, selectable.
+//
+// cosyvoice3's upstream is campplus.onnx and the question is genuinely open:
+// two onnxruntime builds disagree on AveragePool(ceil_mode=1) for the same
+// clip, while the eight embeddings baked into the shipped cosyvoice3-voices.gguf
+// match the LEGACY divisor exactly (cos 1.000000, |x| 14.1197 on zero_shot).
+//
+// Both paths synthesise correctly — the end-to-end roundtrip is 8/8 on each —
+// so this is not a correctness switch, it is a CONSISTENCY one:
+//
+//   default (fixed)  matches the other four CAM++ backends and the torch
+//                    reference; `--voice ref.wav` differs from the baked bank
+//                    by cos ~0.998 for the same voice.
+//   legacy           matches the baked voice bank, so a voice cloned from a WAV
+//                    and the same voice taken from the bank agree.
+//
+// CRISPASR_COSYVOICE3_CAMPP_TAIL=legacy selects the second. Backend-specific on
+// purpose: CRISPASR_CAMPP_LEGACY_SEGPOOL exists too, but it is global and would
+// drag chatterbox, confucius4, dots-tts and fireredtts3 away from their own
+// (settled) PyTorch references to fix a cosyvoice3-only question.
+static campplus_segpool::tail_divisor cosyvoice3_campp_tail() {
+    const char* e = crispasr_env::get("CRISPASR_COSYVOICE3_CAMPP_TAIL");
+    if (e && (std::strcmp(e, "legacy") == 0 || std::strcmp(e, "kernel") == 0))
+        return campplus_segpool::tail_divisor::kernel_size;
+    return campplus_segpool::tail_divisor::window_width;
+}
+
 static inline ggml_tensor* CV3MM(ggml_context* c, ggml_tensor* w, ggml_tensor* x) {
     // Default ON: verified on the shipped q4_k LLM + q8_0 flow — the detector
     // reports 133 broadcasting quantized matmuls per graph without the fold and
@@ -5620,7 +5647,8 @@ bool cv3_extract_native_runtime_voice(cosyvoice3_tts_context* ctx, const char* w
         return false;
 
     std::vector<float> native_spk =
-        chatterbox_campplus::embed_speaker(ctx->campplus.model, ctx->campplus.cache, pcm16.data(), (int)pcm16.size());
+        chatterbox_campplus::embed_speaker(ctx->campplus.model, ctx->campplus.cache, pcm16.data(), (int)pcm16.size(),
+                                           /*stats_var_floor=*/0.0f, cosyvoice3_campp_tail());
     if (native_spk.size() != 192)
         return false;
 
@@ -6353,7 +6381,8 @@ extern "C" int cosyvoice3_tts_extract_spk_emb(struct cosyvoice3_tts_context* ctx
         if (sr != 16000)
             pcm = core_audio::resample_polyphase(pcm.data(), (int)pcm.size(), sr, 16000);
         auto emb =
-            chatterbox_campplus::embed_speaker(ctx->campplus.model, ctx->campplus.cache, pcm.data(), (int)pcm.size());
+            chatterbox_campplus::embed_speaker(ctx->campplus.model, ctx->campplus.cache, pcm.data(), (int)pcm.size(),
+                                               /*stats_var_floor=*/0.0f, cosyvoice3_campp_tail());
         if (emb.size() != 192)
             return -1;
         std::memcpy(out_spk_emb, emb.data(), 192 * sizeof(float));

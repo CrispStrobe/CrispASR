@@ -1404,7 +1404,13 @@ static bool parakeet_gpu_encoder_projection(const parakeet_context* ctx) {
     if (const char* e = crispasr_env::get("CRISPASR_RNNT_GPU_ENC_PROJ"))
         return *e == '1';
 #if defined(GGML_USE_CUDA)
-    return ggml_backend_is_cuda(ctx->backend);
+    // ggml_backend_is_cuda() is a CUDA-MODULE symbol: linking it into
+    // libcrispasr.so fails with "undefined reference" in the release CUDA
+    // build. Test the backend NAME instead, which is core ggml and is what
+    // granite_speech, dots_tts and omnivoice already do. ROCm is included
+    // for the same reason granite_speech includes it.
+    const char* be_name = ctx->backend ? ggml_backend_name(ctx->backend) : nullptr;
+    return be_name && (std::strstr(be_name, "CUDA") || std::strstr(be_name, "ROCm"));
 #else
     (void)ctx;
     return false;

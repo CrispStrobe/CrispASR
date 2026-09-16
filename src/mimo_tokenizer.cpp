@@ -443,7 +443,14 @@ extern "C" struct mimo_tokenizer_context* mimo_tokenizer_init_from_file(const ch
     if (const char* e = std::getenv("CRISPASR_MIMO_TOK_CPU"); e && *e && *e != '0')
         weights_be = ctx->backend_cpu;
 #if defined(GGML_USE_CUDA)
-    ctx->cuda_rvq_available = weights_be == ctx->backend && ggml_backend_is_cuda(ctx->backend);
+    // ggml_backend_is_cuda() is a CUDA-MODULE symbol: linking it into
+    // libcrispasr.so fails with "undefined reference" in the release CUDA
+    // build. Test the backend NAME instead, which is core ggml and is what
+    // granite_speech, dots_tts and omnivoice already do. ROCm is included
+    // for the same reason granite_speech includes it.
+    const char* be_name = ctx->backend ? ggml_backend_name(ctx->backend) : nullptr;
+    ctx->cuda_rvq_available =
+        weights_be == ctx->backend && be_name && (std::strstr(be_name, "CUDA") || std::strstr(be_name, "ROCm"));
 #endif
     core_gguf::WeightLoad wl;
     if (!core_gguf::load_weights(path_model, weights_be, "mimo_tokenizer", wl)) {

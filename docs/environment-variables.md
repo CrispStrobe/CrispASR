@@ -1603,3 +1603,21 @@ end-to-end cosine cannot do.
 - `CRISPASR_ZONOS_TTS_BENCH`
 - `CRISPASR_ZONOS_TTS_TEXT`
 - `CRISPASR_ZONOS_VULKAN_NATIVE`
+
+### `CRISPASR_COSYVOICE3_CAMPP_TAIL`
+
+`legacy` makes cosyvoice3's CAM++ speaker encoder use the old partial-tail
+divisor. Default is the same convention as every other CAM++ backend.
+
+Both paths synthesise correctly — the TTS→ASR roundtrip is 8/8 on each — so this
+is a CONSISTENCY switch, not a correctness one. The eight speaker embeddings
+baked into the shipped `cosyvoice3-voices.gguf` were produced with the old
+divisor, so by default a voice cloned from a WAV and the same voice taken from
+the bank differ by cos ~0.998. Set this to `legacy` if you need those two paths
+to agree.
+
+Why cosyvoice3 specifically is unsettled: its upstream is `campplus.onnx`, and
+two onnxruntime builds disagree about `AveragePool(ceil_mode=1)` on the same
+clip. `CRISPASR_CAMPP_LEGACY_SEGPOOL` also exists but is GLOBAL — it would drag
+chatterbox, confucius4, dots-tts and fireredtts3 away from their own settled
+PyTorch references to answer a cosyvoice3-only question.
