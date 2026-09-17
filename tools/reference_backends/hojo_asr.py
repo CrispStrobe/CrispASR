@@ -29,15 +29,27 @@ feeds a float tensor into a BFloat16 Linear and torch raises
     RuntimeError: expected m1 and m2 to have the same dtype,
                   but got: float != c10::BFloat16
 
-`bind_lm_dtype()` below wraps `encode_speech` so its output is cast to the
-decoder's own dtype, which is what autocast would have produced anyway.
-Casting the DECODER to f32 instead would be 17.6 GB and OOM a Kaggle box.
+`bind_lm_dtype()` reconciles the two. It has two strategies and the choice
+matters for WALL TIME, not just correctness:
 
-The consequence is honest and worth stating: every stage up to and including
-`speech_embeds` is pure F32 and should reach ~1.0 cosine, while
-`prefill_logits_step0` is computed in BF16 and will not. Judge the LM stage by
-argmax agreement and by the decoded text, not by the fourth decimal of a
-cosine.
+  * **f32 decoder (default on CPU).** Casts the decoder's parameters to f32 in
+    place, one at a time so the peak is ~f32 size rather than f32 + bf16 at
+    once. ~17.6 GB for the decoder, ~21 GB with the encoder and adapter — it
+    fits a ~30 GB box. torch's CPU f32 gemm goes through oneDNN.
+  * **cast the speech embeddings to bf16** (`prefer_f32_lm=False`, and the only
+    option on GPU). Cheap in memory and what CUDA autocast effectively does.
+
+The first version of this file used the second strategy on CPU "to avoid
+17.6 GB" — and cost a Kaggle run 90 minutes, because PyTorch has no fast CPU
+path for bf16 gemm on a machine without AMX. Measured against the real shapes:
+1.11 TFLOP of prefill plus 7.06 TFLOP of beam-4 decode is ~2 minutes at
+~60 GFLOPS (f32/oneDNN) and ~45 minutes at ~3 GFLOPS (bf16 fallback), per
+utterance. Checking that an arm RUNS is not the same as checking it is
+affordable.
+
+With the f32 decoder the whole reference is f32 end to end, which is also the
+cleanest possible parity target: bf16 is the checkpoint's storage dtype, not a
+semantic choice, and the C++ runs f16 weights with f32 accumulation.
 
 Memory
 ------
@@ -76,33 +88,105 @@ def _np(t):
     return t.detach().to("cpu").float().numpy()
 
 
-def bind_lm_dtype(model):
-    """Cast encode_speech's output to the decoder's dtype (see the module note).
+def _rss_gb():
+    try:
+        with open("/proc/self/status") as f:
+            for line in f:
+                if line.startswith("VmRSS:"):
+                    return int(line.split()[1]) / 1024 / 1024
+    except OSError:
+        pass
+    return float("nan")
 
-    Idempotent, and a no-op when the dtypes already agree — so the GPU path,
-    where autocast handles it, is untouched. Shared with the Kaggle control
-    arm rather than duplicated there: two copies of an adaptation like this
-    drift, and then the control arm stops being a control.
+
+def bind_lm_dtype(model, prefer_f32_lm=None):
+    """Make the speech embeddings and the decoder agree on a dtype.
+
+    See the module note. `prefer_f32_lm` defaults to True on CPU (fast oneDNN
+    f32 gemm, ~21 GB) and False elsewhere (GPU autocast already handles it).
+    Idempotent, and a no-op when the dtypes already agree.
     """
     if getattr(model, "_crispasr_lm_dtype_bound", False):
         return model
     import torch
 
     lm_dtype = next(model.decoder_model.parameters()).dtype
-    inner = model.encode_speech
+    if lm_dtype == torch.float32:
+        model._crispasr_lm_dtype_bound = True
+        return model
 
-    def wrapped(*args, **kwargs):
-        emb, attn = inner(*args, **kwargs)
-        if emb.dtype != lm_dtype:
-            emb = emb.to(lm_dtype)
-        return emb, attn
+    on_cpu = model.device.type == "cpu"
+    if prefer_f32_lm is None:
+        prefer_f32_lm = on_cpu
+    if os.environ.get("HOJO_ASR_LM_F32"):
+        prefer_f32_lm = os.environ["HOJO_ASR_LM_F32"] not in ("0", "", "false")
 
-    if lm_dtype != torch.float32:
+    if prefer_f32_lm:
+        before = _rss_gb()
+        n = 0
+        for prm in model.decoder_model.parameters():
+            if prm.dtype != torch.float32:
+                prm.data = prm.data.float()
+                n += prm.numel()
+        for buf in model.decoder_model.buffers():
+            if buf.is_floating_point() and buf.dtype != torch.float32:
+                buf.data = buf.data.float()
+        print(f"  [ref] decoder cast {lm_dtype} -> float32 ({n/1e9:.2f} B params); "
+              f"RSS {before:.1f} -> {_rss_gb():.1f} GB. bf16 gemm has no fast CPU "
+              f"path; f32 is ~20x quicker here.")
+    else:
+        inner = model.encode_speech
+
+        def wrapped(*args, **kwargs):
+            emb, attn = inner(*args, **kwargs)
+            if emb.dtype != lm_dtype:
+                emb = emb.to(lm_dtype)
+            return emb, attn
+
         model.encode_speech = wrapped
         print(f"  [ref] encode_speech output cast to {lm_dtype} for the LM "
               f"(upstream relies on CUDA autocast for this)")
     model._crispasr_lm_dtype_bound = True
     return model
+
+
+def decode_rate_probe(model, spectrogram, spectrogram_lens, max_new):
+    """Time one prefill + one decode step and PROJECT the full decode cost.
+
+    Exists because a 90-minute Kaggle run was spent discovering that a arm
+    which ran correctly ran 20x too slowly. The projection is printed before
+    the expensive call, so the log explains its own wall time instead of
+    leaving it to be inferred afterwards.
+    """
+    import time
+
+    import torch
+
+    with torch.no_grad():
+        speech, _ = model.encode_speech(spectrogram, spectrogram_lens)
+        bos = torch.ones(1, 1, dtype=torch.int32, device=model.device) * model.bos_token_id
+        emb = model.decoder_model.model.embed_tokens(bos)
+        inp = torch.cat([emb, speech.to(emb.dtype)], dim=1)
+
+        t0 = time.perf_counter()
+        out = model.decoder_model(inputs_embeds=inp, use_cache=True)
+        t_prefill = time.perf_counter() - t0
+
+        nxt = out.logits[:, -1:, :].argmax(-1)
+        step_emb = model.decoder_model.model.embed_tokens(nxt)
+        t0 = time.perf_counter()
+        model.decoder_model(inputs_embeds=step_emb, past_key_values=out.past_key_values, use_cache=True)
+        t_step = time.perf_counter() - t0
+
+    beams = int(model.config.generate.get("num_beams", 4))
+    projected = t_prefill + t_step * beams * max_new
+    print(f"  [ref] prefill {t_prefill:.1f}s over {inp.shape[1]} positions; "
+          f"decode {t_step:.2f}s/step; beams={beams}, max_new={max_new}")
+    print(f"  [ref] PROJECTED worst-case decode: {projected/60:.1f} min for this utterance")
+    if projected > 15 * 60:
+        print("  [ref] !! that is slow enough to suspect a dtype without a fast "
+              "kernel — check the cast above before blaming the build", flush=True)
+    return projected
 
 
 def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
@@ -202,6 +286,9 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
 
     # ---- 4. the package's own decode, recipe untouched ----
     if "generated_text" in stages:
+        decode_rate_probe(model, spectrogram, spectrogram_lens,
+                          max(10, min(int(model.config.generate.get("max_new_tokens", 200)),
+                                      speech_embeddings.shape[1] * 2 + 10)))
         gen_cfg = dict(model.config.generate)
         if os.environ.get("HOJO_ASR_MAX_NEW"):
             gen_cfg["max_new_tokens"] = int(os.environ["HOJO_ASR_MAX_NEW"])
