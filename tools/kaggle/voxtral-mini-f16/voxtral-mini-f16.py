@@ -34,6 +34,7 @@ Push (under chr1s4 — its crispasr-hf-token clone is the one attached):
 import hashlib
 import json
 import os
+import pathlib
 import shutil
 import subprocess
 import sys
@@ -44,7 +45,7 @@ from pathlib import Path
 # Bump on every push. Gotcha #24: the kernel script is frozen at the last push
 # while the cloned C++/converters are always fresh from the branch, so the log
 # has to show BOTH halves or a stale harness silently scores a fresh run.
-SCRIPT_VERSION = "437-f16-v1"
+SCRIPT_VERSION = "437-f16-v2"
 
 BRANCH = "feat/437-voxtral-f16"
 REPO_URL = "https://github.com/CrispStrobe/CrispASR"
@@ -62,18 +63,35 @@ MODELS = [
         # consolidated.safetensors is a 9.35 GB duplicate of the sharded
         # weights in Mistral's own naming; the converter globs `model-*` and
         # would ignore it, so fetching it would burn 9 GB of disk for nothing.
-        "allow": ["model-*.safetensors", "config.json", "tekken.json"],
+        # preprocessor_config.json is NOT optional: convert-voxtral-to-gguf.py
+        # builds audio.mel_filters from WhisperFeatureExtractor.from_pretrained(),
+        # which reads it. v1 of this kernel left it out of allow_patterns and the
+        # conversion died AFTER downloading 9.35 GB and writing the tekken blob
+        # ("Can't load feature extractor ... containing a preprocessor_config.json").
+        # Grepping the converter for '.json' does not find it — the dependency
+        # is inside from_pretrained(), not a literal path.
+        "allow": ["model-*.safetensors", "config.json", "tekken.json",
+                  "preprocessor_config.json"],
+        "require": ["config.json", "tekken.json", "preprocessor_config.json"],
         # The published q4_k has 765 tensors; F16 must have the same count.
         "expect_tensors": 765,
+        # source (8.71 GiB) + F16 (8.72 GiB) coexist while the converter runs.
+        "need_gib": 18.0,
     },
     {
         "name": "voxtral-mini-4b-realtime",
         "src_repo": "mistralai/Voxtral-Mini-4B-Realtime-2602",
         "hf_repo": "cstr/voxtral-mini-4b-realtime-GGUF",
         "converter": "models/convert-voxtral4b-to-gguf.py",
-        "allow": ["model.safetensors", "config.json", "tekken.json"],
+        # The 4B converter computes its own mel filterbank, so it needs no
+        # preprocessor/processor config — but fetch it anyway, it is 1 KB and
+        # the require-list below is what actually decides.
+        "allow": ["model.safetensors", "config.json", "tekken.json",
+                  "processor_config.json"],
+        "require": ["config.json", "tekken.json"],
         # Published q4_k has 714 tensors.
         "expect_tensors": 714,
+        "need_gib": 17.0,
     },
 ]
 
@@ -201,18 +219,59 @@ def hub_blob_facts(repo: str, filename: str, tries: int = 8) -> dict | None:
     return None
 
 
+def verify_published(m: dict, url: str) -> bool:
+    """Run tools/verify-remote-gguf.py against the PUBLISHED file."""
+    if not VERIFIER.exists():
+        log("  SKIP  verifier not in the clone (old branch?) — header unverified")
+        return False
+    rc = subprocess.call([
+        sys.executable, str(VERIFIER), url,
+        "--self-test",
+        "--expect-dominant", "F16",
+        "--min-tensors", str(m["expect_tensors"]),
+        "--forbid-dtype", "Q4_K", "--forbid-dtype", "Q8_0",
+    ])
+    log(f"  verify-remote-gguf exit={rc}")
+    return rc == 0
+
+
 results = {}
 
 for m in MODELS:
     name = m["name"]
     out_name = f"{name}-f16.gguf"
     url = f"https://huggingface.co/{m['hf_repo']}/resolve/main/{out_name}"
-    r = {"uploaded": False, "sha_match": False, "header_ok": False, "error": None}
+    r = {"uploaded": False, "sha_match": False, "header_ok": False,
+         "skipped": False, "error": None}
     results[name] = r
     log(f"\n################ {name} ################")
+
+    # Idempotent: v1 shipped the 4B and died on the 3B, so a re-push must not
+    # re-transfer 8.9 GB that is already correct on the hub. "Already there" is
+    # not taken on faith — the skip only happens when the published file passes
+    # the SAME header read-back a fresh upload would have to pass.
+    kh.step(f"{name}: check whether it is already published")
+    existing = hub_blob_facts(m["hf_repo"], out_name, tries=1)
+    if existing is not None:
+        log(f"  hub already has {out_name} ({(existing.get('lfs') or {}).get('size')} bytes)")
+        if verify_published(m, url):
+            r.update(uploaded=True, sha_match=True, header_ok=True, skipped=True)
+            log("  SKIP — published file verifies; nothing to do")
+            continue
+        log("  published file does NOT verify — reconverting and overwriting")
+    else:
+        log(f"  hub does not have {out_name} yet")
+
     src_dir = None
     f16 = TEMP / out_name
     try:
+        free = kh.free_gb(str(TEMP)) or 0.0
+        log(f"  pre-flight: {free:.1f} GiB free on {TEMP}")
+        if free and free < m["need_gib"]:
+            raise RuntimeError(
+                f"need ~{m['need_gib']} GiB (source + F16 coexist during conversion), "
+                f"only {free:.1f} GiB free"
+            )
         kh.step(f"{name}: download source")
         scratch = TEMP / f"{name}-src"
         scratch.mkdir(parents=True, exist_ok=True)
@@ -222,6 +281,15 @@ for m in MODELS:
         )
         log(f"  src: {src_dir}")
         log(f"  {df(TEMP)}")
+
+        # Fail in seconds on a missing input rather than 9 GB and two minutes
+        # into the conversion. v1's 3B leg died this way: preprocessor_config.json
+        # was not in allow_patterns, and nothing noticed until the converter
+        # reached WhisperFeatureExtractor.from_pretrained().
+        missing = [f for f in m["require"] if not (pathlib.Path(src_dir) / f).is_file()]
+        if missing:
+            raise RuntimeError(f"snapshot is missing required input files: {missing}")
+        log(f"  required inputs present: {m['require']}")
 
         kh.step(f"{name}: convert F16")
         kh.sh_with_progress(
@@ -279,18 +347,7 @@ for m in MODELS:
 
         # ── check 3: read the published header back ──────────────────────────
         kh.step(f"{name}: verify published header")
-        if VERIFIER.exists():
-            rc = subprocess.call([
-                sys.executable, str(VERIFIER), url,
-                "--self-test",
-                "--expect-dominant", "F16",
-                "--min-tensors", str(m["expect_tensors"]),
-                "--forbid-dtype", "Q4_K", "--forbid-dtype", "Q8_0",
-            ])
-            r["header_ok"] = rc == 0
-            log(f"  verify-remote-gguf exit={rc}")
-        else:
-            log("  SKIP  verifier not in the clone (old branch?) — header unverified")
+        r["header_ok"] = verify_published(m, url)
 
     except Exception as e:  # noqa: BLE001
         import traceback
@@ -311,6 +368,7 @@ for name, r in results.items():
     all_ok &= ok
     log(f"  {name:30s} {'PASS' if ok else 'FAIL'}  "
         f"uploaded={r['uploaded']} sha_match={r['sha_match']} header_ok={r['header_ok']}"
+        + (" (already published, re-verified)" if r["skipped"] else "")
         + (f"  err={r['error']}" if r["error"] else ""))
 log(f"  VERDICT: {'ALL_MODELS_PUBLISHED' if all_ok else 'INCOMPLETE'}")
 (WORK / "verdict.json").write_text(json.dumps(
