@@ -44,7 +44,6 @@
 # ─────────────────────────── cell 1 (code) ───────────────────────────
 import json
 import os
-import re
 import shutil
 import statistics
 import subprocess
@@ -99,7 +98,12 @@ sh(["cmake", "-S", str(REPO), "-B", str(BUILD), "-DCMAKE_BUILD_TYPE=Release",
 with kh.build_heartbeat("cmake.build"):
     kh.sh_with_progress(
         f"stdbuf -oL -eL cmake --build {BUILD} --target crispasr-cli -j{kh.safe_build_jobs(gpu=False)}")
-CLI = next(c for c in BUILD.rglob("crispasr-cli") if c.is_file() and os.access(c, os.X_OK))
+# The CMake TARGET is `crispasr-cli` but OUTPUT_NAME is `crispasr`
+# (examples/cli/CMakeLists.txt:349) -- there is no file called crispasr-cli.
+CLI = BUILD / "bin" / "crispasr"
+if not (CLI.is_file() and os.access(CLI, os.X_OK)):
+    cands = sorted(str(c) for c in BUILD.rglob("crispasr*") if c.is_file() and os.access(c, os.X_OK))
+    raise SystemExit(f"crispasr binary not at {CLI}. Executables actually built: {cands[:20]}")
 os.environ["LD_LIBRARY_PATH"] = f"{BUILD / 'src'}:{os.environ.get('LD_LIBRARY_PATH', '')}"
 kh.step("built", cli=str(CLI))
 
@@ -121,32 +125,48 @@ ARMS = [
 
 
 def run_arm(name, env, audio):
-    cmd = [str(CLI), "--backend", "voxtral", "--model", GGUF, "--file", audio, "--threads", "4"]
+    """Returns (seconds, rc, combined_output, transcript).
+
+    The transcript comes from --output-txt, not from scraping stdout: a stdout
+    extractor that silently yields "" would make every arm match, which is
+    exactly what this experiment must not be able to fake.
+
+    The .txt is DELETED first and its existence asserted after. Without that, a
+    file left by the previous arm would be read as this arm's result -- arms
+    would agree because they read the same stale bytes.
+    """
+    # crispasr_make_out_path (examples/cli/crispasr_output.cpp:35) STRIPS the
+    # audio extension, so samples/jfk.wav -> samples/jfk.txt.
+    txt = Path(audio).with_suffix(".txt")
+    if txt.exists():
+        txt.unlink()
+
+    cmd = [str(CLI), "--backend", "voxtral", "--model", GGUF, "--file", audio,
+           "--threads", "4", "--output-txt", "--no-timestamps"]
     t0 = time.time()
     r = sh(cmd, env={**env, "OMP_NUM_THREADS": "4"}, check=False, timeout=3600, quiet=True)
     dt = time.time() - t0
-    return dt, r.returncode, r.stdout
 
-
-def transcript_of(out):
-    # Everything the CLI printed that is not a diagnostic line. Kept crude on
-    # purpose: a clever extractor that silently returns "" for every arm would
-    # make all arms match.
-    lines = [ln.strip() for ln in out.splitlines()
-             if ln.strip() and not re.match(r"^(voxtral|crispasr|ggml|load|whisper|llama)[:_]", ln.strip(), re.I)]
-    return " ".join(lines).strip()
+    if not txt.exists():
+        print(f"--- {name}: --output-txt produced no {txt}; stdout tail ---\n{r.stdout[-3000:]}", flush=True)
+        return dt, (r.returncode or 90), r.stdout, None
+    transcript = " ".join(txt.read_text(errors="replace").split()).strip()
+    return dt, r.returncode, r.stdout, transcript
 
 
 results = {}
 for name, env, arm_audio in ARMS:
     times, texts, actives = [], [], []
     for i in range(REPS):
-        dt, rc, out = run_arm(name, env, arm_audio)
-        if rc != 0:
+        dt, rc, out, tr = run_arm(name, env, arm_audio)
+        if rc != 0 or tr is None:
             print(f"--- {name} rep{i} FAILED rc={rc} ---\n{out[-4000:]}", flush=True)
-            raise SystemExit(f"{name} exited {rc} — arm cannot be compared")
+            raise SystemExit(f"{name} exited {rc} / no transcript — arm cannot be compared")
+        if not tr:
+            raise SystemExit(f"{name} rep{i}: EMPTY transcript — an empty string would compare equal "
+                             f"to every other empty arm and fake a pass")
         times.append(dt)
-        texts.append(transcript_of(out))
+        texts.append(tr)
         actives.append("step-graph cache ACTIVE" in out)
         kh.step(f"{name}_rep{i}", sec=round(dt, 2), active=actives[-1])
     results[name] = {
