@@ -43,7 +43,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-SCRIPT_VERSION = "2026-09-15.2"
+SCRIPT_VERSION = "2026-09-17.1"
 WORK = Path("/kaggle/working")
 TEMP = Path("/kaggle/temp") if Path("/kaggle/temp").is_dir() else WORK
 REPO = WORK / "CrispASR"
@@ -58,10 +58,15 @@ SYN_TEXT = "The quick brown fox jumps over the lazy dog."
 REF_TEXT = ("And so my fellow Americans, ask not what your country can do for you, "
             "ask what you can do for your country.")
 
-# The fixture's frame 0 — the cheap gate.
-SMOKE_CB0 = 404
-SMOKE_FRAME0 = [404, 172, 340, 1357, 644, 528, 1025, 1250, 122, 730,
-                1219, 1452, 1957, 443, 416, 1187]
+# The cheap gate reads its landmarks FROM THE FIXTURE at runtime, not from
+# constants pinned here. Run 4 showed why: the fixture was regenerated, its
+# frame-0 codes legitimately changed, and the hardcoded vector then reported a
+# MISMATCH for a stage that the comparator scored as passing. A gate that goes
+# stale when the thing it guards is updated produces false alarms, and a false
+# alarm on the cheap gate is worse than no cheap gate — it sends you to
+# investigate a stage that is fine.
+SMOKE_CB0 = None
+SMOKE_FRAME0 = None
 
 verdict = {"script_version": SCRIPT_VERSION, "conclusive": False}
 
@@ -187,6 +192,13 @@ verdict["dump_stages"] = len(list(dump.glob("*.npy")))
 import numpy as np  # noqa: E402
 
 smoke = {}
+ref_f0_path = Path(fixdir) / "dd_codes_frame0_stepwise.npy"
+ref_lg_path = Path(fixdir) / "backbone_logits_frame0.npy"
+if ref_f0_path.exists():
+    SMOKE_FRAME0 = np.load(ref_f0_path).tolist()
+if ref_lg_path.exists():
+    SMOKE_CB0 = int(np.argmax(np.load(ref_lg_path)))
+smoke["landmarks_from_fixture"] = {"cb0": SMOKE_CB0, "frame0": SMOKE_FRAME0}
 f0 = dump / "dd_codes_frame0_stepwise.npy"
 if f0.exists():
     got = np.load(f0).tolist()

@@ -150,7 +150,7 @@ import kaggle_harness as kh  # noqa: E402
 
 kh.init_progress()
 # Bump when the arms, capture or predicate change (see kh.provenance).
-SCRIPT_VERSION = "2026-09-17.1"
+SCRIPT_VERSION = "2026-09-17.2"
 # kh.provenance landed in the harness AFTER this kernel was first pushed, so the
 # 2026-09-02 run died in 10 s with AttributeError against its own fresh clone
 # (gotcha #24, the two-halves trap). Never let provenance logging be fatal.
@@ -308,8 +308,6 @@ else:
     wav24 = wav
 save("ref_audio_native", wav.astype(np.float32))
 wav, sr = wav24.astype(np.float32), 24000
-enc = audio_tokenizer.encode(wav, sr=sr)
-
 # ...AND MAKE THE PROMPT USE THE SAME AUDIO.
 #
 # The previous version of this change resampled only the audio it DUMPED.
@@ -326,8 +324,22 @@ enc = audio_tokenizer.encode(wav, sr=sr)
 # one audio array feed every consumer: the dump, the prompt and generation.
 REF_WAV_24K = WORK / "ref_24k.wav"
 sf.write(str(REF_WAV_24K), wav, sr, subtype="PCM_16")
+# ...AND READ IT BACK BEFORE ENCODING.
+#
+# "One array feeds every consumer" has to mean the array the PROMPT sees.
+# sf.write(subtype="PCM_16") quantizes float32 to int16 and
+# encode_prompt_audio reads it back as float32, so encoding the pre-write
+# array would dump codes from samples that no longer exist anywhere else.
+# That residual showed up as backbone_inputs_embeds stalling at cos 0.971269
+# — better than the 0.937599 of the previous bug and still not parity, which
+# is exactly what a small, uniform input difference looks like.
+wav, _sr_back = sf.read(str(REF_WAV_24K), always_2d=True, dtype="float32")
+wav = np.mean(wav, axis=1)
+assert _sr_back == sr, f"wrote {sr} Hz, read back {_sr_back} Hz"
 step("ref_resampled_for_prompt", src_sr=16000, dst_sr=sr, n_samples=int(wav.shape[0]),
-     path=str(REF_WAV_24K))
+     path=str(REF_WAV_24K), note="dump encodes the READ-BACK samples, as the prompt does")
+
+enc = audio_tokenizer.encode(wav, sr=sr)
 
 
 def to_np(x, dtype):
