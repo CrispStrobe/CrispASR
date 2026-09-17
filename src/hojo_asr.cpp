@@ -234,6 +234,13 @@ struct hojo_asr_model {
     // halves (sin block then cos block) — the audio tower's convention. The
     // adapter's table (adp.pe) is INTERLEAVED and comes from the checkpoint.
     std::vector<float> audio_pe;
+
+    // Mel front end, copied verbatim out of the checkpoint when the converter
+    // baked it (HARD RULE 2: a shipped filterbank makes every
+    // htk-vs-slaney / norm= / periodic-vs-symmetric question unaskable).
+    std::vector<float> mel_filters; // (n_mels, n_freqs), MelsFreqs layout
+    std::vector<float> mel_window;  // (n_fft,), periodic Hann
+    bool mel_from_checkpoint = false;
 };
 
 struct hojo_asr_vocab {
@@ -516,6 +523,33 @@ static bool hojo_asr_load_model(hojo_asr_model& model, hojo_asr_vocab& vocab, co
         b.ffn_down_w = get("ffn.down.weight");
     }
 
+    // ---- mel filterbank + window, straight out of the checkpoint ----
+    {
+        const int n_freqs = (int)model.hparams.n_fft / 2 + 1;
+        const int n_mels = (int)model.hparams.n_mels;
+        ggml_tensor* fb = try_get(model, "audio.mel_filters");
+        ggml_tensor* win = try_get(model, "audio.mel_window");
+        const bool fb_ok = fb && fb->type == GGML_TYPE_F32 && fb->ne[0] == n_freqs && fb->ne[1] == n_mels;
+        const bool win_ok = win && win->type == GGML_TYPE_F32 && win->ne[0] == (int)model.hparams.n_fft;
+        if (fb_ok && win_ok) {
+            model.mel_filters.resize((size_t)n_mels * n_freqs);
+            ggml_backend_tensor_get(fb, model.mel_filters.data(), 0, model.mel_filters.size() * sizeof(float));
+            model.mel_window.resize(model.hparams.n_fft);
+            ggml_backend_tensor_get(win, model.mel_window.data(), 0, model.mel_window.size() * sizeof(float));
+            model.mel_from_checkpoint = true;
+            fprintf(stderr, "hojo_asr: mel filterbank (%d x %d) + window (%u) taken from the GGUF\n", n_mels, n_freqs,
+                    model.hparams.n_fft);
+        } else {
+            // Say WHICH state we are in: a rebuilt filterbank is a different
+            // (and weaker) configuration from a copied one, and a readout that
+            // renders both identically is useless.
+            fprintf(stderr,
+                    "hojo_asr: WARNING no baked mel filterbank in the GGUF (%s) — rebuilding a Slaney bank; "
+                    "reconvert with a transformers-capable converter for exact parity\n",
+                    fb ? "present but wrong shape/type" : "absent");
+        }
+    }
+
     // ---- encoder sinusoidal position table ----
     // SinusoidsPositionEmbedding: CONCAT halves — pe[p] = [sin(p·w) | cos(p·w)].
     // (The adapter's own table is INTERLEAVED and ships in the GGUF; the two
@@ -611,12 +645,19 @@ extern "C" float* hojo_asr_compute_mel(struct hojo_asr_context* ctx, const float
     const int n_mels_val = (int)hp.n_mels;
     const int n_freqs = n_fft / 2 + 1;
 
-    std::vector<float> hann(n_fft);
-    for (int i = 0; i < n_fft; i++)
-        hann[i] = 0.5f * (1.0f - std::cos(2.0f * (float)M_PI * (float)i / (float)n_fft));
-
-    std::vector<float> mel_filters =
-        core_mel::build_slaney_fb((int)hp.sample_rate, n_fft, n_mels_val, 0.0f, -1.0f, core_mel::FbLayout::MelsFreqs);
+    const auto& model = ctx->model;
+    std::vector<float> hann;
+    std::vector<float> mel_filters;
+    if (model.mel_from_checkpoint) {
+        hann = model.mel_window;
+        mel_filters = model.mel_filters;
+    } else {
+        hann.resize(n_fft);
+        for (int i = 0; i < n_fft; i++)
+            hann[i] = 0.5f * (1.0f - std::cos(2.0f * (float)M_PI * (float)i / (float)n_fft));
+        mel_filters = core_mel::build_slaney_fb((int)hp.sample_rate, n_fft, n_mels_val, 0.0f, -1.0f,
+                                                core_mel::FbLayout::MelsFreqs);
+    }
 
     core_mel::FftR2C fft_fn = [](const float* in, int N, float* out) { hojo_asr_fft(const_cast<float*>(in), N, out); };
     core_mel::Params mel_params;
