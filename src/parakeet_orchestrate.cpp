@@ -7,6 +7,7 @@
 #include "parakeet_orchestrate.h"
 
 #include "core/asr_segment_group.h"
+#include "core/sys_mem.h"
 
 #include <algorithm>
 #include <cctype>
@@ -593,8 +594,29 @@ resolved_strategy resolve_strategy(parakeet_context* ctx, int n_samples, bool is
             rs.strat = parakeet_strategy::STREAMED;
         } else if (!mode_off && !mode_force_single) {
             double budget = 0.0, coeff = 8.0;
-            if (const char* e = getenv("CRISPASR_PARAKEET_VRAM_BUDGET_MB"))
-                budget = atof(e);
+            // #441: an UNSET budget used to mean "policy disabled", which left a
+            // ~123 GB single-pass allocation to be attempted on a 15 GB machine.
+            // Linux overcommit granted it about half the time (RSS stayed ~1 GB,
+            // because the buffer is never fully written) and refused it the rest,
+            // and the refusal was dereferenced — so the symptom was an
+            // INTERMITTENT SIGSEGV rather than a diagnosable error. The estimate
+            // and the switch to STREAMED were both already implemented; only the
+            // budget was missing. Default it to what the machine can give.
+            //
+            // Half of MemAvailable, because the encoder bias is not the only live
+            // allocation — weights, activations and the decoder share the pool.
+            // An EXPLICIT 0 still disables the policy, so that escape hatch
+            // survives; only "unset" changes meaning.
+            const char* bud_env = getenv("CRISPASR_PARAKEET_VRAM_BUDGET_MB");
+            if (bud_env) {
+                budget = atof(bud_env);
+            } else {
+                const double avail = core_sys_mem::available_mb();
+                // -1 means "could not determine". Treating that as 0 would turn
+                // an unreadable /proc into a policy that refuses every input.
+                if (avail > 0.0)
+                    budget = avail * 0.5;
+            }
             if (const char* e = getenv("CRISPASR_PARAKEET_MEM_COEFF"))
                 coeff = atof(e);
             const int T_enc = parakeet_est_enc_frames(ctx, n_samples);

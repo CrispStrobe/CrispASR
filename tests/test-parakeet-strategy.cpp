@@ -181,3 +181,28 @@ TEST_CASE("singlepass_fits_budget gating", "[unit][parakeet-strategy][improvemen
     // A short clip (T≈250, 20 s) fits even a tiny budget.
     REQUIRE(parakeet_singlepass_fits_budget(250, 8, 256.0, 8.0));
 }
+
+TEST_CASE("issue #441: the 47.5-minute input cannot pass a real machine's budget",
+          "[unit][parakeet-strategy][issue441]") {
+    // The reported crash: 2850.1 s @ 16 kHz on a 15 GB box, CPU build. hop=160,
+    // subsampling=8, so T_enc = (n/160)/8. The single-pass estimate must exceed
+    // half of that machine's memory by a wide margin, which is what makes the
+    // policy switch to STREAMED before allocating anything.
+    const int T_enc = (int)((2850.1 * 16000) / 160) / 8;
+    REQUIRE(T_enc == 35626);
+
+    const double budget_15gb_box = 0.5 * 15.0 * 1024.0; // the new default: half of MemAvailable
+    REQUIRE_FALSE(parakeet_singlepass_fits_budget(T_enc, 8, budget_15gb_box, 8.0));
+
+    // NEGATIVE CONTROL. The bug was that an UNSET budget meant "disabled", and
+    // a disabled policy says "fits" for any input at all. If this ever starts
+    // returning false, the guard above is no longer testing the thing that
+    // actually changed -- it would be passing because the predicate refuses
+    // everything, not because the budget is being applied.
+    REQUIRE(parakeet_singlepass_fits_budget(T_enc, 8, 0.0, 8.0));
+
+    // And the guard must NOT fire on ordinary input on the same machine: a
+    // 60 s clip has to stay on the seamless single-pass path.
+    const int T_60s = (int)((60.0 * 16000) / 160) / 8;
+    REQUIRE(parakeet_singlepass_fits_budget(T_60s, 8, budget_15gb_box, 8.0));
+}
