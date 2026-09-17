@@ -1,24 +1,30 @@
 # CrispASR — Pending work
 
-## NOW 2026-09-17 — nemotron flash-attn F16-KQ accuracy defect (fix in flight)
+## DONE 2026-09-17 — nemotron flash-attn F16-KQ accuracy defect
 
 Found during the PR #424 audit: `src/nemotron.cpp` conformer attention used
-fused `ggml_flash_attn_ext` at both call sites (streaming + non-streaming) with
-no `set_prec`, and `ggml_flash_attn_ext_set_prec(F32)` is silently ignored on
-P100/sm_60 (proven on Raon in `src/f5_tts.cpp`, commit 5a29c9d3). So GPU
-transcripts drift on that hardware, independent of quant.
+fused `ggml_flash_attn_ext` at both call sites with no `set_prec`, and
+`ggml_flash_attn_ext_set_prec(F32)` is silently ignored on P100/sm_60 (proven
+on Raon, `src/f5_tts.cpp` 5a29c9d3). Fix: `nemotron_sdpa` helper — manual
+`mul_mat`/`soft_max`/`mul_mat` SDPA in F32 as the DEFAULT, fused flash opt-in
+via `CRISPASR_NEMOTRON_FLASH=1` (read per call). Mirrors f5_tts.
 
-Fix (branch `fix/nemotron-flash-prec`, this worktree): a shared `nemotron_sdpa`
-helper — manual `mul_mat`/`soft_max`/`mul_mat` SDPA in F32 as the DEFAULT
-(correct on every backend), fused flash OPT-IN via `CRISPASR_NEMOTRON_FLASH=1`
-(read per call, not cached). Mirrors f5_tts's manual-default/flash-opt-in.
-Graph math written + reshaped to match flash's head-major output; syntax-clean.
+VERIFIED (Kaggle `chr1s4/crispasr-verify-nemotron-flash`, **Tesla T4/sm_75**
+draw): manual (default), fused-flash, and CPU all produce the SAME coherent
+Russian transcript on the short + 56 s streamed clips — differences are trivial
+RNNT token-boundary flips (GPU-vs-CPU float ordering), not garbage. So the
+manual path is correct and non-regressive. The P100-specific drift REMOVAL was
+not directly shown (T4 draw honours the path either way); it holds by
+construction — manual F32 cannot accumulate KQ in F16 — plus the f5 precedent.
+Landed on main; a follow-up P100 draw could demonstrate the removal directly if
+wanted, but is not blocking.
 
-- NEXT: Kaggle CUDA kernel builds the branch and roundtrips manual (default) vs
-  CPU vs flash(env=1) on the drawn GPU (ideally P100) — manual must match CPU
-  and fix the flash drift. Then ff-merge to main + record result here.
-- This is internal tracking (issues are for outside reporters); a wrongly-filed
-  GitHub issue for this was deleted.
+Follow-ups: confucius4_tts routed onto the new `core/sdpa.h`
+(branch `fix/confucius4-flash-prec`, verification pending); canary + cohere to
+be MEASURED (GPU-vs-CPU on P100) before any fix — see the LEARNINGS entry
+"Fused ggml_flash_attn_ext accumulates KQ in F16 …" for the triage-by-sensitivity
+principle. nemotron_sdpa can be refactored onto core/sdpa.h later (DRY).
+(A GitHub issue wrongly filed for this was deleted — internal tracking only.)
 
 ## DONE 2026-09-17 — #437 no reference/F16 models for the Voxtral Mini repos
 
