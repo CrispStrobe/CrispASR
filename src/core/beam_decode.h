@@ -23,6 +23,25 @@
 // long generations, the right next step is `*_kv_save` / `*_kv_restore`
 // per backend, not making this helper smarter.
 //
+//     THAT ASSUMPTION DOES NOT HOLD FOR THE TEXT-TO-TEXT CALLERS.
+// m2m100 (incl. wmt21) and t5_translate/madlad have NO audio encoder to
+// dominate, and their generation length is bounded by max_length (200), not by
+// how long someone spoke. So the quadratic term is the whole cost there.
+// Measured on m2m100-418m q8_0, 4 threads, a one-sentence input:
+//
+//     beam 1   8.95 s   15 tokens        (load + encode dominate)
+//     beam 5  13.74 s   17 tokens        1.53x — fine
+//
+// ~6.7 ms per decoder forward, so the TAIL is what matters: a generation that
+// reaches max_length costs beam 5 x 200^2/2 = 100,000 forwards, ~11 minutes on
+// the 418M and proportionally worse on the 4.7B wmt21 checkpoints. Typical
+// sentences are nowhere near that; runaway generations — exactly the failure
+// #439 reported — are. Bounding max_length is therefore not only an output-
+// quality fix, it is what keeps beam search affordable at all.
+//
+// The real fix for these two callers is kv_save/kv_restore (O(beam_size × T)),
+// not lowering the beam count back to something that decodes badly.
+//
 // Caller contract
 // ---------------
 // Caller is responsible for:

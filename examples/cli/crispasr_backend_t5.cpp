@@ -98,7 +98,9 @@ public:
             }
         }
         t5_translate_set_beam_size(ctx_, params.beam_size > 0 ? params.beam_size : 1);
-        const int max_tokens = params.translate_max_tokens > 0 ? params.translate_max_tokens : 256;
+        // 0 -> t5_translate's own default (200). The literal 256 here was a
+        // second copy of the same number-from-nowhere; see whisper_params.h.
+        const int max_tokens = params.translate_max_tokens > 0 ? params.translate_max_tokens : 0;
         char* out = t5_translate(ctx_, input.c_str(), max_tokens);
         if (!out) {
             return {};

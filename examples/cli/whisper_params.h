@@ -652,7 +652,13 @@ struct whisper_params {
     //     / `-trtl` flags only matter when the primary backend's
     //     `-sl`/`-tl` mean something else (e.g., 2-stage piping).
     std::string text_input;
-    int translate_max_tokens = 256;
+    // 0 = let the backend apply its own documented default (#439). Both
+    // translate runtimes already default to 200 when passed <= 0, matching
+    // m2m100/wmt21's config.json max_length; madlad declares none and 200 is
+    // the runtime's own figure. This was 256 — a number from nowhere that
+    // SILENTLY OVERRODE both, because `translate_max_tokens > 0` is true for
+    // the default, so every "fall back to the backend" branch was dead code.
+    int translate_max_tokens = 0;
     std::string translate_source_lang; // overrides source_lang for the translator stage
     std::string translate_target_lang; // overrides target_lang for the translator stage
 

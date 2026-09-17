@@ -1128,6 +1128,25 @@ extern "C" char* m2m100_translate(struct m2m100_context* ctx, const char* text, 
             std::memcpy(out, lg.data(), lg.size() * sizeof(float));
             return out;
         };
+        // core_beam_decode replays each beam's whole suffix every step, so the
+        // decoder work is O(beam × T²/2), not O(T). Its header assumes an audio
+        // encoder dominates wall time — true for the ASR callers, false here:
+        // this is text-to-text, and the cost IS the decode. Typical sentences
+        // are cheap (measured 1.53× at T=17 on the 418M), but a generation that
+        // runs to max_new_tokens is not, and a runaway is exactly what #439
+        // reported. Print the worst case rather than let it be discovered as a
+        // hang — a silent 100,000-forward decode looks identical to a crash.
+        if (ctx->beam_size > 1) {
+            const long long worst =
+                (long long)ctx->beam_size * (long long)max_new_tokens * (long long)max_new_tokens / 2;
+            if (worst > 20000) {
+                std::fprintf(stderr,
+                             "m2m100: beam %d with up to %d tokens is worst-case ~%lld decoder forwards "
+                             "(beam search replays each beam's suffix per step). Cap with "
+                             "--translate-max-tokens, or use --beam-size 1 for greedy.\n",
+                             ctx->beam_size, max_new_tokens, worst);
+            }
+        }
         core_beam_decode::Config bcfg;
         bcfg.max_new_tokens = max_new_tokens;
         bcfg.eos_id = hp.eos_token_id;

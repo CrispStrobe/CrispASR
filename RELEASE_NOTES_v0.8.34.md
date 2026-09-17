@@ -114,6 +114,24 @@ written down, and deliberately not extended.
   tuning preference for these checkpoints — it is the decode they were released
   with. `--beam-size 1` still selects greedy.
 
+  The 256 took two attempts. It did not live in the m2m100 adapter but in
+  `whisper_params::translate_max_tokens` itself, so every "fall back to the
+  backend's own default" branch in the translate adapters was dead code —
+  `translate_max_tokens > 0` is true for the default — and the first fix changed
+  one of those dead branches and accordingly changed nothing. The CLI default is
+  now `0`, meaning "let the backend decide"; both translate runtimes already
+  resolve that to 200. The same literal was duplicated in the t5/madlad adapter.
+
+  `core_beam_decode` replays each beam's whole suffix every step, so beam search
+  here is O(beam × T²/2) — its header assumes an audio encoder dominates wall
+  time, which is true for the twelve ASR callers and false for the two
+  text-to-text ones. Measured: 8.95 s greedy vs 13.74 s at beam 5 on a
+  one-sentence input (m2m100-418m q8_0, 4 threads), i.e. 1.53×. The tail is the
+  hazard — a generation reaching the 200-token bound costs ~100,000 decoder
+  forwards, so bounding max_length is what keeps beam affordable, not just what
+  stops a runaway. The runtime now prints that projection whenever beam > 1
+  rather than letting it be discovered as a hang.
+
 - **#435 zonos — non-Latin scripts.** The substance was fixed in v0.8.33; this
   release removes the remaining false promise (below). Still open pending
   confirmation from a release build.
@@ -188,8 +206,9 @@ reads it" from "the reader is in another file".
 
 ## Behaviour changes worth knowing
 
-- **m2m100 / wmt21 now default to beam size 5.** Better output, roughly 5×
-  slower. `--beam-size 1` restores the old behaviour.
+- **m2m100 / wmt21 now default to beam size 5.** Measured 1.53× on a
+  one-sentence input, not 5× — but see the #439 entry for the quadratic tail.
+  `--beam-size 1` restores greedy.
 - **sidon splits long input instead of refusing it.** `CRISPASR_SIDON_SPLIT=0`
   restores the refusal.
 - **parakeet may now choose streamed encoding** on long audio where it
