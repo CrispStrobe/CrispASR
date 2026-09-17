@@ -35,7 +35,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-SCRIPT_VERSION = "v3"
+SCRIPT_VERSION = "v4"
 WORK = Path("/kaggle/working")
 REPO = WORK / "CrispASR"
 TEMP = Path("/kaggle/temp") if Path("/kaggle/temp").is_dir() else Path("/tmp")
@@ -224,10 +224,24 @@ kh.sh_with_progress(
     f"&& {BIN}/test-hojo-asr-frames")
 
 kh.step("wiring audit")
-subprocess.run([sys.executable, str(REPO / "tools" / "check-backend-wiring.py"),
-                "--crispasr", str(BIN / "crispasr")], check=False)
-subprocess.run([str(BIN / "crispasr"), "--list-backends"], check=False,
-               stdout=subprocess.PIPE)
+aud = subprocess.run([sys.executable, str(REPO / "tools" / "check-backend-wiring.py"),
+                      "--crispasr", str(BIN / "crispasr")], capture_output=True, text=True)
+print(aud.stdout[-6000:])
+print(f"  wiring audit rc={aud.returncode}")
+lb = subprocess.run([str(BIN / "crispasr"), "--list-backends"], capture_output=True, text=True)
+hit = [l for l in lb.stdout.splitlines() if "hojo" in l.lower()]
+print(f"  --list-backends sees hojo-asr: {hit if hit else 'NO — the backend is invisible'}")
+
+kh.step("regenerate the feature matrix")
+# Generated from `crispasr --list-backends-json`, so it can only be produced
+# where a binary exists. Copied to /kaggle/working to come back as output.
+subprocess.run([sys.executable, str(REPO / "tools" / "gen-feature-matrix.py")],
+               cwd=str(REPO), check=False)
+fm = REPO / "docs" / "feature-matrix.md"
+if fm.exists():
+    shutil.copy(fm, WORK / "feature-matrix.md")
+    rows = [l for l in fm.read_text().splitlines() if "hojo" in l.lower()]
+    print(f"  feature-matrix hojo rows: {rows if rows else 'NONE — regeneration would DROP it'}")
 
 # ---------------------------------------------------------------------------
 sec("5. reference dump (upstream package via forward hooks)")
