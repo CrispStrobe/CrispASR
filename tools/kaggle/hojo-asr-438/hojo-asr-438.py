@@ -35,7 +35,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-SCRIPT_VERSION = "v4"
+SCRIPT_VERSION = "v5"
 WORK = Path("/kaggle/working")
 REPO = WORK / "CrispASR"
 TEMP = Path("/kaggle/temp") if Path("/kaggle/temp").is_dir() else Path("/tmp")
@@ -175,15 +175,20 @@ import json, sys
 sys.path.insert(0, {str(REPO / "tools")!r})
 from reference_backends.hojo_asr import bind_lm_dtype
 from hojo_asr import HOJO_ASR
+import time as _t0
+_load0 = _t0.perf_counter()
 model = HOJO_ASR.load_model({src!r}, device="cpu")
 model.eval()
+print(f"  [control] load_model took {{_t0.perf_counter()-_load0:.1f}} s", flush=True)
 bind_lm_dtype(model)
 out = {{}}
+import time as _time
 for name, path in {[(n, str(p)) for n, p in arms]!r}:
+    t0 = _time.perf_counter()
     with open(path, "rb") as f:
         res = model.run_infer([f.read()], batch_size=1, cuda_enabled=False)
     out[name] = res[0]["text"]
-    print(f"  CONTROL[{{name}}] = {{out[name]!r}}", flush=True)
+    print(f"  CONTROL[{{name}}] = {{out[name]!r}}  ({{_time.perf_counter()-t0:.1f}} s)", flush=True)
 json.dump(out, open({str(TEMP / "control.json")!r}, "w"))
 ''')
 rc = subprocess.run([sys.executable, str(ctrl_script)]).returncode
