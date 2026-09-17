@@ -12,6 +12,7 @@
 
 #include "core/attention.h"
 #include "core/ecapa_tdnn.h"
+#include "core/sdpa.h" // manual-F32-default SDPA / flash opt-in (#nemotron flash class)
 #include "core/spm_bpe.h"
 #include "core/audio_resample.h"
 #include "core/wav_reader.h"
@@ -2566,8 +2567,13 @@ static bool s2a_dit_cache_build(confucius4_tts_context* ctx, int T, int mel_dim,
             v = ggml_permute(cache.gctx, v, 0, 2, 1, 3);
 
             float scale = 1.0f / sqrtf((float)head_dim);
-            ggml_tensor* attn = ggml_flash_attn_ext(cache.gctx, q, k, v, cache.attn_mask, scale, 0.0f, 0.0f);
-            attn = ggml_reshape_2d(cache.gctx, attn, dim, Tg);
+            // Flow-matching estimator (f5-class): default to manual F32 SDPA —
+            // fused flash accumulates KQ in F16 and set_prec is ignored on some
+            // GPUs (P100/sm_60), which corrupts the ODE. Fused is opt-in via
+            // CRISPASR_CONFUCIUS4_FLASH=1. cache.attn_mask is the (Tg,Tg) F16
+            // block-diagonal CFG mask, or nullptr when not fused (full attn).
+            ggml_tensor* attn = core_sdpa::attn(cache.gctx, q, k, v, cache.attn_mask, dim, Tg, scale,
+                                                core_sdpa::flash_enabled("CRISPASR_CONFUCIUS4_FLASH"));
 
             ggml_tensor* attn_proj = ggml_mul_mat(cache.gctx, wo, attn);
             x = ggml_add(cache.gctx, x, attn_proj);
