@@ -922,6 +922,59 @@ struct nemotron_stream_block_outputs {
     ggml_tensor* conv_cache = nullptr;
 };
 
+// Whether the conformer self-attention uses the fused ggml_flash_attn_ext.
+//
+// Default FALSE — a manual mul_mat / soft_max / mul_mat SDPA in F32, correct on
+// every backend. Fused flash is OPT-IN via CRISPASR_NEMOTRON_FLASH=1: it is
+// faster but accumulates the KQ product in F16, and on flash kernels that
+// ignore the GGML_PREC_F32 hint (observed on P100/sm_60) the result drifts —
+// the same defect f5_tts documents and defaults away from. nemotron's attention
+// tensors are small, so the manual path's cost is minor next to the correctness.
+//
+// READ PER CALL, not cached in a static: a cached read is fixed for the process,
+// so flipping the env on a live context would change nothing and an A/B would
+// silently compare one path against itself. The read is on the graph-build path,
+// not a per-frame loop.
+static bool nemotron_use_flash_attn() {
+    const char* e = getenv("CRISPASR_NEMOTRON_FLASH");
+    return e && e[0] && e[0] != '0';
+}
+
+// Scaled dot-product attention for the conformer blocks, shared by the
+// streaming and non-streaming paths.
+//   Q_u:      (head_dim, T_q,  n_heads)   — permuted views, as flash consumes them
+//   K_, V_:   (head_dim, T_kv, n_heads)
+//   bias_f32: (T_kv, T_q, n_heads) F32 additive term, ALREADY multiplied by
+//             `scale` (the conformer BD rel-pos bias, plus any window -inf mask)
+// Returns the attention output reshaped to (d, T_q), matching what both call
+// sites did after flash_attn_ext.
+static ggml_tensor* nemotron_sdpa(ggml_context* ctx0, ggml_tensor* Q_u, ggml_tensor* K_, ggml_tensor* V_,
+                                  ggml_tensor* bias_f32, int d, int T_q, float scale, bool use_flash) {
+    if (use_flash) {
+        // flash_attn_ext requires an F16 mask; it applies `scale` to QK^T and
+        // adds the mask, so bias_f32 (pre-scaled) is the correct additive term.
+        ggml_tensor* mask = ggml_cast(ctx0, bias_f32, GGML_TYPE_F16);
+        ggml_tensor* out = ggml_flash_attn_ext(ctx0, Q_u, K_, V_, mask, scale, 0.0f, 0.0f);
+        ggml_flash_attn_ext_set_prec(out, GGML_PREC_F32); // honoured only on some devices; harmless elsewhere
+        return ggml_reshape_2d(ctx0, out, d, T_q);
+    }
+    // Manual F32 SDPA: softmax(scale*QK^T + bias) · V, accumulated in F32.
+    // cont the permuted Q/K so mul_mat is safe on every backend (the fused path
+    // deliberately skips these copies; the correctness path pays them).
+    ggml_tensor* Kc = ggml_cont(ctx0, K_);
+    ggml_tensor* Qc = ggml_cont(ctx0, Q_u);
+    ggml_tensor* scores = ggml_mul_mat(ctx0, Kc, Qc); // (T_kv, T_q, n_heads) = QK^T per head
+    ggml_mul_mat_set_prec(scores, GGML_PREC_F32);
+    scores = ggml_scale(ctx0, scores, scale);  // scale*QK^T
+    scores = ggml_add(ctx0, scores, bias_f32); // + scale*(BD [+ window]); -inf entries mask to ~0
+    scores = ggml_soft_max(ctx0, scores);      // F32 softmax over the key axis
+    ggml_tensor* V_perm = ggml_cont(ctx0, ggml_permute(ctx0, V_, 1, 0, 2, 3)); // (T_kv, head_dim, n_heads)
+    ggml_tensor* attn = ggml_mul_mat(ctx0, V_perm, scores);                    // (head_dim, T_q, n_heads)
+    ggml_mul_mat_set_prec(attn, GGML_PREC_F32);
+    attn = ggml_cont(ctx0, ggml_permute(ctx0, attn, 0, 2, 1, 3)); // (head_dim, n_heads, T_q)
+    return ggml_reshape_2d(ctx0, attn, d, T_q);
+}
+
 // ---- Streaming block: split into stages with separate cache inputs ----
 // new_in:    (d, T_new) — new frames for this chunk
 // cache_ch:  (d, T_cache) — cached post-FFN1 frames from previous chunks (or nullptr)
@@ -1018,10 +1071,10 @@ static ggml_tensor* nemotron_build_block_streaming(ggml_context* ctx0, ggml_tens
     const float scale = 1.0f / sqrtf((float)head_dim);
     ggml_tensor* BD_c = ggml_cont(ctx0, BD);
     ggml_tensor* BD_scaled = ggml_scale(ctx0, BD_c, scale);
-    ggml_tensor* BD_mask = ggml_cast(ctx0, BD_scaled, GGML_TYPE_F16);
 
-    ggml_tensor* attn_out = ggml_flash_attn_ext(ctx0, Q_u, K_, V_, BD_mask, scale, 0.0f, 0.0f);
-    attn_out = ggml_reshape_2d(ctx0, attn_out, d, T_new);
+    // Manual F32 SDPA by default; fused flash under CRISPASR_NEMOTRON_FLASH=1.
+    // No window mask in the streaming path — the window is the cache size.
+    ggml_tensor* attn_out = nemotron_sdpa(ctx0, Q_u, K_, V_, BD_scaled, d, T_new, scale, nemotron_use_flash_attn());
 
     attn_out = mm_bias(e.attn_out_w, attn_out, e.attn_out_b);
     cur = ggml_add(ctx0, inpAttn, attn_out);
@@ -1152,28 +1205,25 @@ static ggml_tensor* nemotron_build_block(ggml_context* ctx0, ggml_tensor* cur, g
     ggml_tensor* BD_c = ggml_cont(ctx0, BD);
     ggml_tensor* BD_scaled = ggml_scale(ctx0, BD_c, scale);
 
-    // Combine rel-pos bias with the streaming window mask
-    ggml_tensor* attn_mask;
+    // Additive attention bias in F32 = scale*BD [+ window -inf mask]. The manual
+    // SDPA adds this directly; the fused path casts it to F16 internally.
+    ggml_tensor* attn_bias_f32;
     if (window_mask) {
         // window_mask is (T, T) F16 with -inf outside the window, 0 inside.
-        // BD_scaled is (T, T, n_heads) F32. Add window_mask (broadcast over heads)
-        // then cast to F16 for flash_attn_ext.
+        // BD_scaled is (T, T, n_heads) F32; broadcast the window mask over heads.
         ggml_tensor* wm_f32 = ggml_cast(ctx0, window_mask, GGML_TYPE_F32);
-        // Reshape window_mask to (T, T, 1) for broadcast
         ggml_tensor* wm_3d = ggml_reshape_3d(ctx0, wm_f32, T, T, 1);
-        ggml_tensor* combined =
+        attn_bias_f32 =
             ggml_add(ctx0, BD_scaled, ggml_repeat(ctx0, wm_3d, ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, T, T, n_heads)));
-        attn_mask = ggml_cast(ctx0, combined, GGML_TYPE_F16);
     } else {
-        attn_mask = ggml_cast(ctx0, BD_scaled, GGML_TYPE_F16);
+        attn_bias_f32 = BD_scaled;
     }
 
-    // Keep Q/K/V as permuted views; flash_attn_ext consumes this layout directly,
-    // so materializing them with ggml_cont would only add redundant copies.
+    // Keep Q/K/V as permuted views; the fused path consumes this layout directly
+    // and the manual path conts them internally.
     ggml_tensor* V_ = ggml_permute(ctx0, ggml_reshape_3d(ctx0, V, head_dim, n_heads, T), 0, 2, 1, 3);
 
-    ggml_tensor* attn_out = ggml_flash_attn_ext(ctx0, Q_u, K_, V_, attn_mask, scale, 0.0f, 0.0f);
-    attn_out = ggml_reshape_2d(ctx0, attn_out, d, T);
+    ggml_tensor* attn_out = nemotron_sdpa(ctx0, Q_u, K_, V_, attn_bias_f32, d, T, scale, nemotron_use_flash_attn());
 
     attn_out = mm_bias(e.attn_out_w, attn_out, e.attn_out_b);
     cur = ggml_add(ctx0, inpAttn, attn_out);
