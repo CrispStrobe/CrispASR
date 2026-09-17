@@ -44,7 +44,7 @@ from pathlib import Path
 
 # Gotcha #24: kernel script is frozen at the last push while the clone is
 # always fresh. Print both.
-SCRIPT_VERSION = "437-roundtrip-v1"
+SCRIPT_VERSION = "437-roundtrip-v2"
 
 BRANCH = "feat/437-voxtral-f16"
 REPO_URL = "https://github.com/CrispStrobe/CrispASR"
@@ -208,11 +208,31 @@ for ref in (BRANCH, "main"):
 if cloned is None:
     log("CLONE_FAILED")
     raise SystemExit(1)
+# ALL submodules, not just ggml. v1 initialised ggml only and died at cmake
+# configure: examples/cli/CMakeLists.txt:19 hard-fails without
+# third_party/c2pa-audio/src/sha256.h, because the CLI records consent hashes
+# even when C2PA signing is off. The convert kernel never needed the CLI, so
+# `--init ggml` had always been enough there — a habit that did not transfer.
 try:
-    subprocess.check_call(["git", "submodule", "update", "--init", "--depth", "1", "ggml"],
-                          cwd=str(REPO))
+    subprocess.check_call(
+        ["git", "submodule", "update", "--init", "--recursive", "--depth", "1"],
+        cwd=str(REPO))
 except Exception as e:  # noqa: BLE001
     log(f"  submodule init: {e}")
+
+# Assert the two headers cmake will look for, so a missing submodule costs
+# seconds and names itself instead of surfacing 90 s later as a FATAL_ERROR
+# in the middle of a configure log.
+REQUIRED_SUBMODULE_FILES = [
+    REPO / "ggml" / "CMakeLists.txt",
+    REPO / "third_party" / "c2pa-audio" / "src" / "sha256.h",
+]
+missing = [str(f) for f in REQUIRED_SUBMODULE_FILES if not f.is_file()]
+if missing:
+    log(f"SUBMODULES_INCOMPLETE: {missing}")
+    raise SystemExit(1)
+log(f"  submodules OK: {[f.name for f in REQUIRED_SUBMODULE_FILES]}")
+
 sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=str(REPO)).decode().strip()
 log(f"  branch={cloned} sha={sha}")
 
