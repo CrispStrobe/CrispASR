@@ -188,6 +188,12 @@ struct Cache {
                 why = "gallocr reserve failed";
             } else {
                 n_builds++;
+                // Positive trace. Without it an A/B cannot tell "the cache ran
+                // and matched" from "the cache silently fell back and the two
+                // arms were the same code" — which look identical in both the
+                // transcript and the timing, and the second reads as success.
+                std::fprintf(stderr, "%s: step-graph cache ACTIVE — built bucket Lk=%d (width=%d, %d built)\n", tag, lk,
+                             width > 0 ? width : kDefaultWidth, n_builds);
                 entries.push_back(std::move(e));
                 return &entries.back();
             }

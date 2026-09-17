@@ -104,9 +104,17 @@ public:
         // LLM context and the AR decoder would cold-start at every
         // boundary — the failure mode the 2026-05-25 long-form matrix
         // measured at 64/35/20/9 % coverage (60/120/300/600 s).
-        return CAP_TIMESTAMPS_CTC | CAP_AUTO_DOWNLOAD | CAP_TEMPERATURE | CAP_PUNCTUATION_TOGGLE | CAP_FLASH_ATTN |
-               CAP_TOKEN_CONFIDENCE | CAP_TRANSLATE | CAP_SRC_TGT_LANGUAGE | CAP_BEAM_SEARCH | CAP_DIARIZE |
-               CAP_PARALLEL_PROCESSORS | CAP_UNBOUNDED_INPUT | CAP_INTERNAL_CHUNKING;
+        // NOT CAP_TEMPERATURE. The claim was false: run_voxtral_family's
+        // greedy branch is a hand-rolled argmax loop with no temperature,
+        // seed or frequency penalty, and the beam branch only takes a beam
+        // Config — `--temperature` never reaches either. Declaring the cap
+        // suppressed the CLI's own "unsupported flag" warning, so the flag
+        // was accepted in silence and simply ignored, which is worse than
+        // refusing it. Restore the cap together with routing that loop
+        // through core_greedy_decode (which already implements all three).
+        return CAP_TIMESTAMPS_CTC | CAP_AUTO_DOWNLOAD | CAP_PUNCTUATION_TOGGLE | CAP_FLASH_ATTN | CAP_TOKEN_CONFIDENCE |
+               CAP_TRANSLATE | CAP_SRC_TGT_LANGUAGE | CAP_BEAM_SEARCH | CAP_DIARIZE | CAP_PARALLEL_PROCESSORS |
+               CAP_UNBOUNDED_INPUT | CAP_INTERNAL_CHUNKING;
     }
 
     bool init(const whisper_params& p) override {
