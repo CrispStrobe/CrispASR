@@ -52,6 +52,18 @@
 // `generate()` by HOJO_ASR.infer): num_beams=4, do_sample=False,
 // repetition_penalty=2.0, length_penalty=1.0, and
 // max_new_tokens = max(10, min(200, T_enc*2 + 10)).
+//
+// ⚠ ONE KNOWN DIVERGENCE FROM `generate()`, recorded so a transcript diff is
+// not misread as a port bug: `core_beam_decode` ranks beams by raw cumulative
+// log-probability, while transformers divides by `length ** length_penalty`
+// when finalising. With length_penalty=1.0 and beams expanded in lockstep the
+// two orderings are identical — every live beam has the same length, so the
+// division is a monotone transform. They can differ only when a beam finishes
+// EARLY: transformers rewards the shorter finished hypothesis, this helper
+// carries its raw score forward. So a transcript mismatch confined to an
+// utterance where one beam hit <|im_end|> well before the others is this, not
+// the encoder. Greedy (`-bs 1`) has no such divergence and is the cleaner arm
+// for localising a parity failure.
 
 #pragma once
 
