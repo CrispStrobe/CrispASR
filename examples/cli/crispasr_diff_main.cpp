@@ -87,6 +87,7 @@
 #include "parler_tts.h"
 #include "melotts.h"
 #include "moss_audio.h"
+#include "hojo_asr.h"
 #include "moss_transcribe.h"
 #include "lfm2_audio.h"
 #include "mini_omni2.h"
@@ -7362,6 +7363,99 @@ int main(int argc, char** argv) {
         }
 
         moss_audio_free(ctx);
+    } else if (backend_name == "hojo-asr") {
+        auto cp = hojo_asr_context_default_params();
+        cp.n_threads = 4;
+        cp.verbosity = 1;
+        if (const char* g = std::getenv("CRISPASR_DIFF_USE_GPU"); g && g[0] == '1') {
+            cp.use_gpu = true;
+            fprintf(stderr, "[crispasr-diff] CRISPASR_DIFF_USE_GPU=1 -> hojo_asr use_gpu=true\n");
+        }
+        hojo_asr_context* ctx = hojo_asr_init_from_file(model_path.c_str(), cp);
+        if (!ctx) {
+            fprintf(stderr, "failed to load hojo-asr model\n");
+            return 4;
+        }
+
+        // ---- mel_spectrogram ----
+        int n_mels = 0, T_mel = 0;
+        float* mel = hojo_asr_compute_mel(ctx, samples.data(), (int)samples.size(), &n_mels, &T_mel);
+        if (mel) {
+            auto rep = ref.compare("mel_spectrogram", mel, (size_t)n_mels * T_mel);
+            print_row("mel_spectrogram", rep, COS_THRESHOLD);
+            record(rep);
+        } else {
+            printf("[ERR ] mel_spectrogram         (compute failed)\n");
+            n_fail++;
+        }
+
+        if (mel) {
+            int T_enc = 0, d_enc = 0;
+            float* enc = hojo_asr_run_encoder(ctx, mel, n_mels, T_mel, &T_enc, &d_enc);
+            free(mel);
+            if (enc) {
+                auto rep = ref.compare("encoder_output", enc, (size_t)T_enc * d_enc);
+                print_row("encoder_output", rep, COS_THRESHOLD);
+                record(rep);
+
+                int adapt_T = 0, adapt_d = 0;
+                float* pre_ln = nullptr;
+                float* speech = hojo_asr_run_adapter(ctx, enc, T_enc, d_enc, &adapt_T, &adapt_d, &pre_ln);
+                free(enc);
+                if (speech) {
+                    if (pre_ln && ref.has("adapter_output")) {
+                        auto rp = ref.compare("adapter_output", pre_ln, (size_t)adapt_T * adapt_d);
+                        print_row("adapter_output", rp, COS_THRESHOLD);
+                        record(rp);
+                    }
+                    auto ra = ref.compare("speech_embeds", speech, (size_t)adapt_T * adapt_d);
+                    print_row("speech_embeds", ra, COS_THRESHOLD);
+                    record(ra);
+
+                    // ---- LM prefill: [embed(<|im_start|>)] ++ speech ----
+                    const int d_llm = adapt_d;
+                    const int n_prompt = adapt_T + 1;
+                    std::vector<float> embeds((size_t)d_llm * n_prompt, 0.0f);
+                    int32_t bos = (int32_t)hojo_asr_bos_token_id(ctx);
+                    float* bos_emb = hojo_asr_embed_tokens(ctx, &bos, 1);
+                    if (bos_emb) {
+                        memcpy(embeds.data(), bos_emb, (size_t)d_llm * sizeof(float));
+                        free(bos_emb);
+                        memcpy(embeds.data() + (size_t)d_llm, speech, (size_t)d_llm * adapt_T * sizeof(float));
+                        if (ref.has("prefill_inputs_embeds")) {
+                            auto re = ref.compare("prefill_inputs_embeds", embeds.data(), embeds.size());
+                            print_row("prefill_inputs_embeds", re, COS_THRESHOLD);
+                            record(re);
+                        }
+                        hojo_asr_kv_init(ctx, n_prompt + 16);
+                        int vocab = 0;
+                        float* logits = hojo_asr_run_llm_kv(ctx, embeds.data(), n_prompt, 0, nullptr, &vocab);
+                        if (logits) {
+                            auto rl = ref.compare("prefill_logits_step0", logits, (size_t)vocab);
+                            print_row("prefill_logits_step0", rl, COS_THRESHOLD);
+                            record(rl);
+                            int am = 0;
+                            for (int i = 1; i < vocab; i++)
+                                if (logits[i] > logits[am])
+                                    am = i;
+                            printf("  C++ first-token argmax = %d  ('%s')\n", am,
+                                   hojo_asr_token_text(ctx, am) ? hojo_asr_token_text(ctx, am) : "?");
+                            free(logits);
+                        }
+                    }
+                    free(pre_ln);
+                    free(speech);
+                } else {
+                    printf("[ERR ] speech_embeds           (adapter failed)\n");
+                    n_fail++;
+                }
+            } else {
+                printf("[ERR ] encoder_output         (encoder failed)\n");
+                n_fail++;
+            }
+        }
+
+        hojo_asr_free(ctx);
     } else if (backend_name == "moss-transcribe") {
         auto cp = moss_transcribe_context_default_params();
         cp.n_threads = 4;
