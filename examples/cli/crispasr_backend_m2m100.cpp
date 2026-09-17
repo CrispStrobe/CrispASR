@@ -61,8 +61,22 @@ public:
         if (!ctx_ || text.empty() || src_lang.empty() || tgt_lang.empty()) {
             return {};
         }
-        m2m100_set_beam_size(ctx_, params.beam_size > 0 ? params.beam_size : 1);
-        const int max_tokens = params.translate_max_tokens > 0 ? params.translate_max_tokens : 256;
+        // #439: default to the checkpoint's own generation settings, not ours.
+        // facebook/m2m100_418M, wmt21-dense-24-wide-en-x and -x-en ALL declare
+        // num_beams=5 and max_length=200 in config.json. We defaulted to greedy
+        // (beam 1), and greedy on a 4.7B translation model collapses into
+        // repetition — the reported output was "Like, really, really, ..." for
+        // 258 tokens. Beam search is not a tuning preference for these models;
+        // it is the decode the checkpoints were released with.
+        //
+        // `--beam-size 1` still selects greedy for anyone who wants the speed.
+        m2m100_set_beam_size(ctx_, params.beam_size > 0 ? params.beam_size : 5);
+        // 0 = "use the runtime's default", which is already 200 (m2m100.cpp),
+        // matching config.json's max_length. The adapter previously passed 256,
+        // overriding that with a number from nowhere — and 256 is why the
+        // reported run emitted 258 tokens instead of stopping at the reference
+        // bound. Keep ONE source of truth for the cap.
+        const int max_tokens = params.translate_max_tokens > 0 ? params.translate_max_tokens : 0;
         char* out = m2m100_translate(ctx_, text.c_str(), src_lang.c_str(), tgt_lang.c_str(), max_tokens);
         if (!out) {
             return {};
