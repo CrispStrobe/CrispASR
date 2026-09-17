@@ -5413,6 +5413,17 @@ catch_discover_tests(test-btc-vocab
         WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
 )
 
+# ─── test-hojo-asr-frames — #438 Hojo-ASR frame schedule (hermetic, unit)
+add_executable(test-hojo-asr-frames test-hojo-asr-frames.cpp)
+target_include_directories(test-hojo-asr-frames PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(test-hojo-asr-frames PRIVATE Catch2::Catch2WithMain)
+catch_discover_tests(test-hojo-asr-frames
+    TEST_SPEC "[hojo]"
+    PROPERTIES
+        LABELS unit
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+)
+
 # ─── test-htdemucs-binbcast — issue #398 CUDA binbcast F16-src1 guard (hermetic, unit)
 add_executable(test-htdemucs-binbcast test-htdemucs-binbcast.cpp)
 target_include_directories(test-htdemucs-binbcast PRIVATE
