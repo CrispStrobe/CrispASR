@@ -150,7 +150,7 @@ import kaggle_harness as kh  # noqa: E402
 
 kh.init_progress()
 # Bump when the arms, capture or predicate change (see kh.provenance).
-SCRIPT_VERSION = "2026-09-15.9"
+SCRIPT_VERSION = "2026-09-17.1"
 # kh.provenance landed in the harness AFTER this kernel was first pushed, so the
 # 2026-09-02 run died in 10 s with AttributeError against its own fresh clone
 # (gotcha #24, the two-halves trap). Never let provenance logging be fatal.
@@ -310,6 +310,25 @@ save("ref_audio_native", wav.astype(np.float32))
 wav, sr = wav24.astype(np.float32), 24000
 enc = audio_tokenizer.encode(wav, sr=sr)
 
+# ...AND MAKE THE PROMPT USE THE SAME AUDIO.
+#
+# The previous version of this change resampled only the audio it DUMPED.
+# The prompt is built by prepare_inputs -> _resolve_segment_audio_codes ->
+# encode_prompt_audio(audio_tokenizer, audio_path), which re-reads the file
+# from disk at its native rate — so the fixture ended up internally
+# inconsistent: ref_codes came from 24 kHz while the audio embeddings inside
+# backbone_inputs_embeds came from 16 kHz. The diff harness caught it as
+# backbone_inputs_embeds collapsing from cos 0.999957 to 0.937599 while
+# ref_codes was byte-identical across a regeneration that changed ref_codes
+# completely — a fixture disagreeing with itself.
+#
+# Writing the resampled clip out and pointing the request at THAT file makes
+# one audio array feed every consumer: the dump, the prompt and generation.
+REF_WAV_24K = WORK / "ref_24k.wav"
+sf.write(str(REF_WAV_24K), wav, sr, subtype="PCM_16")
+step("ref_resampled_for_prompt", src_sr=16000, dst_sr=sr, n_samples=int(wav.shape[0]),
+     path=str(REF_WAV_24K))
+
 
 def to_np(x, dtype):
     """Tensors coming back from the audio tokenizer live on the GPU, and
@@ -353,7 +372,9 @@ request = {
     "text": SYN_TEXT,
     "instruction": "Speak clearly and naturally.",
     "speaker": "S0",
-    "ref_audio_path": str(REF_WAV),
+    # The 24 kHz copy, NOT the 16 kHz original: everything downstream must see
+    # the same samples ref_codes was computed from.
+    "ref_audio_path": str(REF_WAV_24K),
     "ref_text": REF_TEXT,
 }
 set_all_seeds(SEED)
