@@ -7413,12 +7413,21 @@ int main(int argc, char** argv) {
                             auto rl = ref.compare("prefill_logits_step0", logits, (size_t)vocab);
                             print_row("prefill_logits_step0", rl, COS_THRESHOLD);
                             record(rl);
+                            // Top-1 agreement is the instrument that actually
+                            // decides the LM stage. The reference decoder runs
+                            // f32 while the C++ carries F16 weights, so the
+                            // logits cosine is precision-bound by construction;
+                            // whether the same token wins is not.
+                            auto ra1 = ref.compare_argmax("prefill_logits_step0", logits, (size_t)vocab);
+                            print_row("prefill_argmax_step0", ra1, COS_THRESHOLD);
+                            record(ra1);
                             int am = 0;
                             for (int i = 1; i < vocab; i++)
                                 if (logits[i] > logits[am])
                                     am = i;
-                            printf("  C++ first-token argmax = %d  ('%s')\n", am,
-                                   hojo_asr_token_text(ctx, am) ? hojo_asr_token_text(ctx, am) : "?");
+                            printf("  C++ first-token argmax = %d  ('%s')   ref top-1 agreement %d/%d\n", am,
+                                   hojo_asr_token_text(ctx, am) ? hojo_asr_token_text(ctx, am) : "?", ra1.top1_match,
+                                   ra1.top1_total);
                             free(logits);
                         }
                     }
