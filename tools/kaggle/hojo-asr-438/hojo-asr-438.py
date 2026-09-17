@@ -35,7 +35,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-SCRIPT_VERSION = "v2"
+SCRIPT_VERSION = "v3"
 WORK = Path("/kaggle/working")
 REPO = WORK / "CrispASR"
 TEMP = Path("/kaggle/temp") if Path("/kaggle/temp").is_dir() else Path("/tmp")
@@ -166,11 +166,18 @@ sec("2. CONTROL ARM — the upstream package transcribes the audio first")
 # so it runs before anything is built and its output is printed verbatim.
 control = {}
 ctrl_script = TEMP / "control_arm.py"
+# bind_lm_dtype comes from tools/reference_backends/hojo_asr.py rather than
+# being re-typed here: upstream only runs on CUDA, so on CPU the f32 speech
+# embeddings hit the BF16 decoder and torch raises. Two copies of that
+# adaptation would drift, and then the control arm stops controlling anything.
 ctrl_script.write_text(f'''
 import json, sys
-import numpy as np, soundfile as sf
+sys.path.insert(0, {str(REPO / "tools")!r})
+from reference_backends.hojo_asr import bind_lm_dtype
 from hojo_asr import HOJO_ASR
 model = HOJO_ASR.load_model({src!r}, device="cpu")
+model.eval()
+bind_lm_dtype(model)
 out = {{}}
 for name, path in {[(n, str(p)) for n, p in arms]!r}:
     with open(path, "rb") as f:
@@ -326,4 +333,7 @@ print(f"  f16 uploaded : {HF_REPO}/{F16.name}")
 print(f"  q4_k uploaded: {HF_REPO}/{Q4.name}" if Q4.exists() else "  q4_k: NOT PRODUCED")
 print(f"  refs uploaded: {sorted(refs)}")
 print(f"  control      : {control}")
+if not control:
+    print("  !! THE CONTROL ARM DID NOT RUN — treat every cosine above as unvalidated",
+          flush=True)
 print("=== done ===", flush=True)

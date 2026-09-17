@@ -279,21 +279,33 @@ def fold_conv_batchnorm(get, n_blocks, eps=1e-5):
 
 
 def check_pe_table(pe, d_model):
-    """The shipped RelPositionalEncoding table must match WeNet's formula.
+    """The shipped RelPositionalEncoding table must match WeNet's CONVENTION.
 
     sin/cos are INTERLEAVED here (pe[:, 0::2] = sin, pe[:, 1::2] = cos) — the
     audio encoder's SinusoidsPositionEmbedding uses concat-halves instead. The
-    two conventions live 40 lines apart in the same forward pass, so the table
-    is shipped verbatim and this check only documents which one is which.
+    two live 40 lines apart in the same forward pass, so the table is shipped
+    verbatim and this check exists only to notice if the convention ever
+    changes under us.
+
+    It is deliberately NOT a precision check. torch builds the table in float32
+    and `position * div_term` reaches ~5000, so sin/cos of it carries ~1e-4 of
+    float32 error against a float64 recomputation — measured 4.1e-4 on the
+    real checkpoint. A convention error (interleaved vs concat-halves, or a
+    different base) moves entries by O(1). Gating anywhere between those two
+    scales would be a test that fails on arithmetic and passes on the bug it
+    was written for; both deltas are returned so the log shows which regime we
+    are in.
     """
     max_len = pe.shape[0]
-    pos = np.arange(max_len, dtype=np.float64)[:, None]
-    div = np.exp(np.arange(0, d_model, 2, dtype=np.float64) * -(np.log(10000.0) / d_model))
-    ref = np.zeros((max_len, d_model), dtype=np.float64)
-    ref[:, 0::2] = np.sin(pos * div)
-    ref[:, 1::2] = np.cos(pos * div)
-    err = float(np.max(np.abs(ref - pe.astype(np.float64))))
-    return err
+    out = {}
+    for tag, dt in (("f64", np.float64), ("f32", np.float32)):
+        pos = np.arange(max_len, dtype=dt)[:, None]
+        div = np.exp(np.arange(0, d_model, 2, dtype=dt) * dt(-(np.log(10000.0) / d_model)))
+        ref = np.zeros((max_len, d_model), dtype=dt)
+        ref[:, 0::2] = np.sin(pos * div)
+        ref[:, 1::2] = np.cos(pos * div)
+        out[tag] = float(np.max(np.abs(ref.astype(np.float64) - pe.astype(np.float64))))
+    return out
 
 
 def main():
@@ -501,9 +513,14 @@ def main():
             # whose values feed linear_pos, not the residual stream).
             arr = np.ascontiguousarray(arr[0])
             err = check_pe_table(arr, arr.shape[1])
-            print(f"  adapter.pe {arr.shape}: max|shipped - WeNet formula| = {err:.3e}")
-            if err > 1e-5:
-                raise SystemExit("adapter.pe does not match the RelPositionalEncoding formula")
+            print(f"  adapter.pe {arr.shape}: max|shipped - WeNet formula| = "
+                  f"{err['f32']:.3e} (f32 recompute), {err['f64']:.3e} (f64 recompute)")
+            # O(1) means a different convention/base; ~1e-4 is float32 arithmetic.
+            if min(err["f32"], err["f64"]) > 1e-2:
+                raise SystemExit(
+                    "adapter.pe does not match the RelPositionalEncoding convention "
+                    f"(min delta {min(err['f32'], err['f64']):.3e}) — check interleaved "
+                    "vs concat-halves and the rotary base before shipping this")
             writer.add_tensor(gguf_name, arr.astype(np.float32),
                               raw_dtype=GGMLQuantizationType.F32)
             mapped += 1
