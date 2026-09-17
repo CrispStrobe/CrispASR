@@ -35,7 +35,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-SCRIPT_VERSION = "v5"
+SCRIPT_VERSION = "v6"
 WORK = Path("/kaggle/working")
 REPO = WORK / "CrispASR"
 TEMP = Path("/kaggle/temp") if Path("/kaggle/temp").is_dir() else Path("/tmp")
@@ -292,14 +292,24 @@ sec("7. CONV TILING A/B — tiled vs untiled encoder, exact-equality check")
 for name, wav in arms:
     tiled = TEMP / f"enc-tiled-{name}.bin"
     untiled = TEMP / f"enc-untiled-{name}.bin"
+    schedules = {}
     for out, tile in ((tiled, "64"), (untiled, "0")):
         env = dict(os.environ)
         env["CRISPASR_HOJO_ASR_ENC_DUMP"] = str(out)
-        subprocess.run([str(BIN / "crispasr"), "-m", str(F16), "--backend", "hojo-asr",
-                        "-f", str(wav), "--max-new-tokens", "1"],
-                       env={**env, "CRISPASR_HOJO_ASR_CONV_TILE": tile},
-                       capture_output=True, text=True)
-    if tiled.exists() and untiled.exists():
+        r = subprocess.run([str(BIN / "crispasr"), "-m", str(F16), "--backend", "hojo-asr",
+                            "-f", str(wav), "--max-new-tokens", "1"],
+                           env={**env, "CRISPASR_HOJO_ASR_CONV_TILE": tile},
+                           capture_output=True, text=True)
+        line = [l for l in r.stderr.splitlines() if "conv_schedule=" in l]
+        schedules[tile] = line[-1].strip() if line else "(runtime never reported a schedule)"
+        print(f"  [{name}] tile={tile}: {schedules[tile]}")
+    # The A/B is only evidence if the two arms actually ran DIFFERENT schedules.
+    # Identical dumps from two identical runs would read as "tiling is exact"
+    # while proving only that the env knob did nothing.
+    if schedules.get("64") == schedules.get("0"):
+        print(f"  [{name}] !! BOTH ARMS RAN THE SAME SCHEDULE — the A/B is inert, "
+              f"not passing ({schedules.get('64')})")
+    elif tiled.exists() and untiled.exists():
         import numpy as np
         a = np.fromfile(tiled, dtype=np.float32)
         b = np.fromfile(untiled, dtype=np.float32)
