@@ -1040,3 +1040,57 @@ the noise. Worth an A/B before q4_k is called the default.
 | `codes` | 3.9% | downstream of the prompt; generation ran on the mistokenized prompt |
 
 Expected next run: 55/55.
+
+---
+
+## Phase-2 RESULTS — run 3 (f16 + fixed tokenizer + regenerated fixture)
+
+**53/56.** Three failures, one of them a fixture bug introduced by the
+previous commit and since fixed.
+
+What the tokenizer fix bought, end to end in the real pipeline:
+
+| stage | run 2 | run 3 |
+|---|---|---|
+| `prompt_input_ids` | 64.9%, L=208 | **exact**, L=185 |
+| `prompt_text_ids_mask` | 78.4% | **exact** |
+| `prompt_text_ids_len` | 0% | **exact** |
+| `ref_codes` | 61.8% | **98.78%** |
+| ASR roundtrip | "The quick brown **dot** fox jumps over the lazy dog." | "**A** quick brown fox jumps over the lazy dog." |
+
+`ref_audio` — the runtime's own 16 → 24 kHz resample against the reference's —
+passes at **cos = 1.000000, ratio 1.0001**. `core_audio::resample_polyphase`
+matches torchaudio's resampler essentially exactly, which **retires the
+resampler as a suspect** for anything downstream. That was worth making its own
+stage rather than leaving it inside `ref_codes`.
+
+`ref_codes` at 98.78% (first divergence at flat index 601) is now a clean
+codec-encoder-vs-codec-encoder comparison with no resampler in it. ~27 codes of
+2208 differ; that residual is the qwen3-tts encoder port, and it is the one
+genuinely open numerical item.
+
+### `backbone_inputs_embeds` 0.999957 → 0.937599: a fixture disagreeing with itself
+
+Not the model. The previous commit resampled only the audio the fixture
+**dumps**; the prompt is built by `prepare_inputs` →
+`encode_prompt_audio(audio_tokenizer, audio_path)`, which re-reads the wav from
+disk at its native rate. So `ref_codes` came from 24 kHz while the audio
+embeddings inside the fixture's own `backbone_inputs_embeds` still came from
+16 kHz.
+
+The proof is worth keeping, because it is a general shape:
+
+```
+across a regeneration that changed ref_codes almost completely (35% agreement),
+backbone_inputs_embeds came back BYTE-IDENTICAL
+```
+
+A prompt that does not move when its own reference codes move is reading a
+different audio source. Fixed by writing the resampled clip to disk and
+pointing the request at that file, so one audio array feeds the dump, the
+prompt and generation alike.
+
+Note how it surfaced: **one stage collapsed while its neighbours held**. A
+single end-to-end score would have shown marginally worse audio and nothing
+else. That is the argument for per-stage diffing, made by the harness catching
+its own author's bug.
