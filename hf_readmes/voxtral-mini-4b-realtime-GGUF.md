@@ -34,9 +34,13 @@ Converted and tested with [CrispASR](https://github.com/CrispStrobe/CrispASR), a
 
 | File | Quant | Size | Description |
 |------|-------|------|-------------|
-| `voxtral-mini-4b-realtime.gguf` | F16 | 8.3 GB | Full precision (reference) |
-| `voxtral-mini-4b-realtime-q8_0.gguf` | Q8_0 | 4.5 GB | 8-bit quantized |
+| `voxtral-mini-4b-realtime-f16.gguf` | F16 | 8.3 GB | Full precision (reference) — what the quants below are cut from |
+| `voxtral-mini-4b-realtime-q8_0.gguf` | Q8_0 | 4.4 GB | 8-bit quantized |
 | `voxtral-mini-4b-realtime-q4_k.gguf` | Q4_K | 2.4 GB | 4-bit K-quant (recommended) |
+
+⚠ This table used to name the F16 `voxtral-mini-4b-realtime.gguf`, and no such
+file was ever uploaded. The published name is `…-f16.gguf`, matching the quant
+suffix CrispASR's `-m auto:f16` resolver expects.
 
 ## Performance (CPU, 4 threads, AVX2, jfk.wav 11s)
 
@@ -109,10 +113,10 @@ huggingface-cli download cstr/canary-ctc-aligner-GGUF \
 ```bash
 python models/convert-voxtral4b-to-gguf.py \
     --input /path/to/Voxtral-Mini-4B-Realtime-2602 \
-    --output voxtral-mini-4b-realtime.gguf
+    --output voxtral-mini-4b-realtime-f16.gguf
 
 # Then quantize
-./build/bin/crispasr-quantize voxtral-mini-4b-realtime.gguf \
+./build/bin/crispasr-quantize voxtral-mini-4b-realtime-f16.gguf \
     voxtral-mini-4b-realtime-q4_k.gguf q4_k
 ```
 
@@ -121,3 +125,11 @@ python models/convert-voxtral4b-to-gguf.py \
 - Model: [Mistral AI](https://mistral.ai/) — Apache 2.0
 - GGUF conversion: [CrispASR](https://github.com/CrispStrobe/CrispASR)
 - Port cross-referenced against [voxtral.c](https://github.com/antirez/voxtral.c), [voxmlx](https://github.com/awni/voxmlx), [voxtral-mini-realtime-rs](https://github.com/TrevorS/voxtral-mini-realtime-rs)
+
+## Provenance and EU AI Act Art. 53 note
+
+- **Upstream model:** [mistralai/Voxtral-Mini-4B-Realtime-2602](https://huggingface.co/mistralai/Voxtral-Mini-4B-Realtime-2602) — published by `mistralai`.
+- **Upstream licence:** `apache-2.0`. This repository redistributes under the same terms; it grants no rights the upstream licence does not.
+- **What was done here:** format conversion and/or quantisation only (GGUF). No training, no fine-tuning, no merging, no distillation, no change to architecture, vocabulary or capability. Only the numeric representation of the upstream weights differs.
+- **Training data:** documented — where it is documented at all — by the upstream provider; see the upstream model card. No training data was used, added or selected by this repository. No training-content summary was found on the upstream model card at the time of writing; that documentation gap is upstream's and is not filled here.
+- **Provider status:** under Regulation (EU) 2024/1689 the upstream authors remain the provider of this model. Converting the serialisation format does not make this repository the provider of a new general-purpose AI model, and no such claim is made. Questions about training content, copyright policy or model capability belong upstream.

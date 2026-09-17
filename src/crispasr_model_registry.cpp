@@ -139,11 +139,34 @@ constexpr Entry k_registry[] = {
      "snac-24khz.gguf",
      "https://huggingface.co/cstr/snac-24khz-GGUF/resolve/main/snac-24khz.gguf",
      "~80 MB"},
+    // Voxtral Mini 3B. Q4_K stays the auto-download default (first row wins
+    // for a bare backend lookup): identical transcript to F16 on jfk.wav at
+    // 2.2x the speed. `-m auto:f16` does not need the F16 row — it reaches the
+    // q4_k row and apply_quant_to_filename() rewrites the suffix — which is
+    // exactly how #437 stayed invisible: the rewrite happily SYNTHESISED a URL
+    // for an F16 that had never been uploaded, and only a 404 at download time
+    // said so. The F16/Q8_0 rows below are what
+    // crispasr_registry_lookup_by_filename() resolves, so a user naming the
+    // file gets its real size instead of an empty one, and
+    // tools/check-registry-urls.py now HEADs all three per backend — a
+    // published-or-not check the synthesised URL never got.
     {"voxtral", "voxtral-mini-3b-2507-q4_k.gguf",
      "https://huggingface.co/cstr/voxtral-mini-3b-2507-GGUF/resolve/main/voxtral-mini-3b-2507-q4_k.gguf", "~2.5 GB", nullptr, nullptr},
+    {"voxtral", "voxtral-mini-3b-2507-q8_0.gguf",
+     "https://huggingface.co/cstr/voxtral-mini-3b-2507-GGUF/resolve/main/voxtral-mini-3b-2507-q8_0.gguf", "~4.6 GB", nullptr, nullptr},
+    {"voxtral", "voxtral-mini-3b-2507-f16.gguf",
+     "https://huggingface.co/cstr/voxtral-mini-3b-2507-GGUF/resolve/main/voxtral-mini-3b-2507-f16.gguf", "~8.7 GB", nullptr, nullptr},
+    // Voxtral Mini 4B Realtime, same layering. The q4_k size here read
+    // "~3.3 GB" until #437 measured the published file: it is 2.35 GiB.
     {"voxtral4b", "voxtral-mini-4b-realtime-q4_k.gguf",
      "https://huggingface.co/cstr/voxtral-mini-4b-realtime-GGUF/resolve/main/voxtral-mini-4b-realtime-q4_k.gguf",
-     "~3.3 GB", nullptr, nullptr},
+     "~2.4 GB", nullptr, nullptr},
+    {"voxtral4b", "voxtral-mini-4b-realtime-q8_0.gguf",
+     "https://huggingface.co/cstr/voxtral-mini-4b-realtime-GGUF/resolve/main/voxtral-mini-4b-realtime-q8_0.gguf",
+     "~4.4 GB", nullptr, nullptr},
+    {"voxtral4b", "voxtral-mini-4b-realtime-f16.gguf",
+     "https://huggingface.co/cstr/voxtral-mini-4b-realtime-GGUF/resolve/main/voxtral-mini-4b-realtime-f16.gguf",
+     "~8.3 GB", nullptr, nullptr},
     {"granite", "granite-speech-4.0-1b-q4_k.gguf",
      "https://huggingface.co/cstr/granite-speech-4.0-1b-GGUF/resolve/main/granite-speech-4.0-1b-q4_k.gguf", "~2.94 GB", nullptr, nullptr},
     {"granite-4.1", "granite-speech-4.1-2b-q4_k.gguf",

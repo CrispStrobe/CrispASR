@@ -1651,7 +1651,7 @@ default quantized model for the selected backend into
 | parakeet | `cstr/parakeet-tdt-0.6b-v3-GGUF` | ~467 MB |
 | canary | `cstr/canary-1b-v2-GGUF` | ~600 MB |
 | voxtral | `cstr/voxtral-mini-3b-2507-GGUF` | ~2.5 GB |
-| voxtral4b | `cstr/voxtral-mini-4b-realtime-GGUF` | ~3.3 GB |
+| voxtral4b | `cstr/voxtral-mini-4b-realtime-GGUF` | ~2.4 GB |
 | granite | `cstr/granite-speech-4.0-1b-GGUF` | ~2.94 GB |
 | granite-4.1 | `cstr/granite-speech-4.1-2b-GGUF` | ~2.94 GB |
 | granite-4.1-plus | `cstr/granite-speech-4.1-2b-plus-GGUF` | ~2.96 GB |

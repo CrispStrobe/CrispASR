@@ -17,7 +17,7 @@ per-backend porting detail (Per-model port notes + the family cross-reference).
 Reach for the topic groups when you are stuck on a *technique*, and the
 cross-reference when you already know which model you are touching.
 
-## Index by topic (302 lessons)
+## Index by topic (303 lessons)
 
 **Security & untrusted input** (2)
 
@@ -34,7 +34,7 @@ cross-reference when you already know which model you are touching.
 - L16962 — consent record — BIND to the audio, don't chain the log
 - L18257 — watermark detector — swap the STATISTIC, not the threshold
 
-**Build, CI, release & packaging** (22)
+**Build, CI, release & packaging** (23)
 
 - L637 — A packaging step that destroys the state a later step reads — and scripts that only run in a release job
 - L941 — A guard job that runs ONE compiler family guards one compiler family
@@ -58,6 +58,7 @@ cross-reference when you already know which model you are touching.
 - L14873 — CI has no NVIDIA GPU — a CUDA-only graph path (mimo RVQ) is guarded by an on-Kaggle exact-parity smoke, not CI (#309)
 - L15700 — #313 Rust crates on crates.io via git dep
 - L18871 — An upstream-sync PR must target the branch consumers pin, and cache export belongs after the build
+- L18996 — A convert-and-upload pipeline has no readout at its last step, and the dependency that broke the run was not a path in the source
 
 **Multi-surface wiring — CLI / C ABI / bindings / server** (29)
 
@@ -400,7 +401,7 @@ lookup, not a partition.
 - **titanet / speaker-id** (1) — L8850
 - **audioseal** (1) — L13050
 - **cohere** (7) — L813, L3860, L11365, L13021, L15085, L15365, L16913
-- **voxtral** (11) — L3757, L3860, L3908, L4068, L4460, L11301, L11365, L11392, L11527, L16210, L17414
+- **voxtral** (12) — L3757, L3860, L3908, L4068, L4460, L11301, L11365, L11392, L11527, L16210, L17414, L18996
 - **granite** (3) — L2500, L3757, L15085
 - **ark-asr** (3) — L352, L16690, L17414
 - **higgs-stt** (2) — L1189, L17787
