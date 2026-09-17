@@ -259,6 +259,7 @@ TEST_CASE("every emitted backend name is a name a surface can open", "[unit][arc
         "piano-transcription",
         "basic-pitch",
         "mt3",
+        "bt2-tts", // Breeze-TTS-2 (#412)
     };
     size_t n = 0;
     const core_arch::entry* k = core_arch::table(&n);
