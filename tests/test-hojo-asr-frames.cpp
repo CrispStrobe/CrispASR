@@ -115,38 +115,106 @@ TEST_CASE("hojo single short utterance is convolved at its own width", "[hojo]")
     REQUIRE(p.T_enc == 125);
 }
 
-TEST_CASE("hojo conv tiles cover every input a kept output reads", "[hojo]") {
-    // Output frame o reads input frames [8o-7, 8o+7]. A tile's window must
-    // contain that whole span for every output it keeps, at a LOCAL index that
-    // is never 0 (index 0 is the frame contaminated by the conv's zero pad).
-    for (int tile : {1, 3, 8, 64, 375}) {
-        for (int n_out : {1, 2, 7, 64, 65, 125, 375}) {
-            std::vector<bool> produced((size_t)n_out, false);
-            for (int o0 = 0; o0 < n_out; o0 += tile) {
-                const int o1 = (o0 + tile < n_out) ? (o0 + tile) : n_out;
-                const TileWindow w = tile_window(o0, o1);
+TEST_CASE("hojo conv tiles reproduce the untiled conv exactly", "[hojo]") {
+    // Output frame o reads input frames [8o-7, 8o+7]. A tile must (a) map each
+    // kept output to a local index covering that same span, and (b) clip that
+    // span ONLY where the full array would clip it — because the conv's
+    // padding is a literal zero vector injected at each level, which is NOT
+    // the same as feeding zeros in as input (that gives gelu(bias) at level 1
+    // and propagates). Getting (b) wrong perturbs exactly the first and last
+    // frame of every chunk, which is small enough to leave a transcript
+    // readable and therefore invisible without this check.
+    for (int win_T : {64, 1000, 3000}) {
+        const int n_out_full = conv_stem_out_len(win_T);
+        for (int tile : {1, 3, 8, 64, 375, 4096}) {
+            for (int n_out : {1, 2, 7, 64, 65, 125, 375}) {
+                if (n_out > n_out_full)
+                    continue;
+                std::vector<bool> produced((size_t)n_out, false);
+                for (int o0 = 0; o0 < n_out; o0 += tile) {
+                    const int o1 = (o0 + tile < n_out) ? (o0 + tile) : n_out;
+                    const TileWindow w = tile_window(o0, o1, win_T);
 
-                REQUIRE(w.keep_from >= 1);
-                REQUIRE(w.keep_count == o1 - o0);
-                REQUIRE(w.out_offset == o0);
-                // The window must actually produce keep_from + keep_count frames.
-                REQUIRE(conv_stem_out_len(w.width) >= w.keep_from + w.keep_count);
+                    REQUIRE(w.width > 0);
+                    REQUIRE(w.mel_offset >= 0);
+                    REQUIRE(w.mel_offset % 8 == 0);
+                    REQUIRE(w.mel_offset + w.width <= win_T);
+                    REQUIRE(w.keep_count == o1 - o0);
+                    REQUIRE(w.out_offset == o0);
+                    REQUIRE(conv_stem_out_len(w.width) >= w.keep_from + w.keep_count);
 
-                for (int o = o0; o < o1; o++) {
-                    const int local = w.keep_from + (o - o0);
-                    // local index -> the same global output frame
-                    REQUIRE(w.mel_offset + 8 * local == 8 * o);
-                    // containment: [8o-7, 8o+7] inside [mel_offset, mel_offset+width)
-                    REQUIRE(8 * o - 7 >= w.mel_offset);
-                    REQUIRE(8 * o + 7 < w.mel_offset + w.width);
-                    REQUIRE(!produced[(size_t)o]);
-                    produced[(size_t)o] = true;
+                    for (int o = o0; o < o1; o++) {
+                        const int local = w.keep_from + (o - o0);
+                        // same global output frame
+                        REQUIRE(w.mel_offset + 8 * local == 8 * o);
+                        // left edge: clipped in the tile iff clipped in the full array
+                        REQUIRE(((8 * local - 7 < 0) == (8 * o - 7 < 0)));
+                        // right edge: likewise
+                        REQUIRE(((8 * local + 7 >= w.width) == (8 * o + 7 >= win_T)));
+                        REQUIRE(!produced[(size_t)o]);
+                        produced[(size_t)o] = true;
+                    }
                 }
+                for (int o = 0; o < n_out; o++)
+                    REQUIRE(produced[(size_t)o]);
             }
-            for (int o = 0; o < n_out; o++)
-                REQUIRE(produced[(size_t)o]);
         }
     }
+}
+
+TEST_CASE("hojo positive control: an unclamped tile window breaks the edges", "[hojo]") {
+    // The first draft, kept here so the guard above cannot go blind. It agrees
+    // in the interior and disagrees at the array boundary, which is precisely
+    // the failure mode that is hard to see in a transcript.
+    auto unclamped = [](int o0, int o1) {
+        TileWindow w;
+        w.mel_offset = 8 * o0 - kConvHalo;
+        w.width = 8 * (o1 - o0) + 2 * kConvHalo;
+        w.keep_from = 1;
+        w.keep_count = o1 - o0;
+        w.out_offset = o0;
+        return w;
+    };
+    const int win_T = 1000;
+    // interior tile: identical
+    {
+        const TileWindow a = tile_window(8, 16, win_T);
+        const TileWindow b = unclamped(8, 16);
+        REQUIRE(a.mel_offset == b.mel_offset);
+        REQUIRE(a.width == b.width);
+        REQUIRE(a.keep_from == b.keep_from);
+    }
+    // first tile: the unclamped window starts before the array and would feed
+    // zeros where the conv must pad instead
+    {
+        const TileWindow a = tile_window(0, 8, win_T);
+        const TileWindow b = unclamped(0, 8);
+        REQUIRE(a.mel_offset == 0);
+        REQUIRE(b.mel_offset == -8);
+        REQUIRE(a.keep_from == 0);
+        REQUIRE(b.keep_from == 1);
+        REQUIRE(a.mel_offset != b.mel_offset);
+    }
+    // last tile: the unclamped window runs past the array end
+    {
+        const int n_out = conv_stem_out_len(win_T);
+        const TileWindow a = tile_window(n_out - 4, n_out, win_T);
+        const TileWindow b = unclamped(n_out - 4, n_out);
+        REQUIRE(a.mel_offset + a.width <= win_T);
+        REQUIRE(b.mel_offset + b.width > win_T);
+    }
+}
+
+TEST_CASE("hojo a whole-chunk tile never reads past what it needs", "[hojo]") {
+    // A tail chunk is padded out to the longest chunk, so most of win_T is
+    // zeros the kept outputs never read. The window must shrink to match.
+    const int win_T = 3000; // pad_sequence width
+    const int n_out = 125;  // a 1000-frame tail chunk
+    const TileWindow w = tile_window(0, n_out, win_T);
+    REQUIRE(w.mel_offset == 0);
+    REQUIRE(w.width == 8 * n_out + 8);
+    REQUIRE(w.width < win_T);
+    REQUIRE(conv_stem_out_len(w.width) >= n_out);
 }
 
 TEST_CASE("hojo repetition penalty matches transformers", "[hojo]") {
