@@ -6395,6 +6395,39 @@ extern "C" int qwen3_tts_set_voice_prompt(struct qwen3_tts_context* ctx, const c
     return 0;
 }
 
+extern "C" int qwen3_tts_encode_pcm_to_codes(struct qwen3_tts_context* ctx, const float* pcm, int n_samples,
+                                             int32_t** out_codes, int* out_n_frames) {
+    if (out_codes) {
+        *out_codes = nullptr;
+    }
+    if (out_n_frames) {
+        *out_n_frames = 0;
+    }
+    if (!ctx || !pcm || n_samples <= 0 || !out_codes) {
+        return -1;
+    }
+    if (!ctx->cenc.loaded) {
+        fprintf(stderr, "qwen3_tts: encode_pcm_to_codes: codec encoder not loaded\n");
+        return -1;
+    }
+    std::vector<int32_t> codes;
+    int T_frames = 0;
+    if (!run_cenc(ctx, pcm, n_samples, codes, T_frames) || codes.empty()) {
+        fprintf(stderr, "qwen3_tts: encode_pcm_to_codes: codec encode failed\n");
+        return -1;
+    }
+    auto* out = (int32_t*)std::malloc(codes.size() * sizeof(int32_t));
+    if (!out) {
+        return -1;
+    }
+    std::memcpy(out, codes.data(), codes.size() * sizeof(int32_t));
+    *out_codes = out;
+    if (out_n_frames) {
+        *out_n_frames = T_frames;
+    }
+    return 0;
+}
+
 extern "C" int qwen3_tts_set_voice_prompt_with_text(struct qwen3_tts_context* ctx, const char* wav_path,
                                                     const char* ref_text) {
     if (!ctx) {

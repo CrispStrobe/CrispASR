@@ -447,6 +447,49 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
     const bool vibevoice_asr_frontend_f16 =
         vibevoice_asr_streaming && env_vv_frontend && *env_vv_frontend && *env_vv_frontend != '0';
 
+    // Breeze TTS 2 (#412): T5Gemma2 text encoder -> Qwen3 backbone -> 12L depth
+    // decoder over 16 codebooks. Four families stay at source precision, all of
+    // them small and all of them decision-making rather than bulk compute:
+    //   backbone.audio_embd.weight  the TIED summed-codebook embedding. One
+    //       physical tensor is bound to BOTH the backbone's audio input embed
+    //       and the depth decoder's token embed (config.tie_codebooks_embeddings,
+    //       breeze.py:1102-1108), so quantization error here is paid twice per
+    //       codebook per frame, on a pure lookup that has no matmul to average
+    //       it out. 134 MB at F16.
+    //   backbone.codebook0_head.weight  2052 rows, where row 2051 IS the
+    //       backbone EOS class (breeze.py:922-923). An EOS logit nudged by
+    //       quantization noise changes the UTTERANCE LENGTH, which is the
+    //       zonos failure mode above, one file down. 8 MB.
+    //   depth.cb_head.{0..14}.weight  the 15 per-codebook output heads. Their
+    //       argmax IS the emitted code; there is no downstream layer to absorb
+    //       a wrong pick, and a head-15 error is inaudible as "a bug" and
+    //       audible as codec grit. 63 MB for all fifteen.
+    //   te_proj.weight / depth.projection.weight  the two single-tensor bridges
+    //       between components (1152->2048 text encoder -> backbone; 2048->1024
+    //       backbone hidden -> depth frame 0). Every text token and every frame
+    //       passes through one of them. 9 MB together.
+    // Total carve-out ~214 MB, against a ~2.85 B live-parameter model.
+    //
+    // te.token_embd.weight (262158 x 1152, 302 M params / 604 MB at F16) is the
+    // one genuinely expensive call. It is kept at source precision BY DEFAULT,
+    // following every other TTS backend here (bark token_embd, chatterbox
+    // t3.text_emb, zonos embeddings, dia embedding): in TTS a text-embedding row
+    // is a pronunciation, and a mangled row is a mispronounced word rather than
+    // a slightly worse average. Set CRISPASR_BREEZE_QUANT_TEXT_EMBD=1 to include
+    // it and save ~450 MB, which is the difference between a ~2.2 GB and a
+    // ~1.75 GB q4_k. That is a real trade and it should be measured, not assumed
+    // — hence a switch rather than a silent choice in either direction.
+    //
+    // ⚠ SHAPE NOTE, not a rule: the text encoder is d=1152 and 1152 % 256 == 128,
+    // so NO tensor whose ne0 is 1152 (te.token_embd, te.blk.*.attn_{q,k,v},
+    // te.blk.*.ffn_{gate,up}) can be a k-quant — those fall back to a legacy
+    // quant even when --q4_k is asked for. te.blk.*.attn_output (ne0 1024) and
+    // te.blk.*.ffn_down (ne0 6912) k-quantize normally. Expect a mixed text
+    // encoder and do not read the fallback as a bug.
+    const bool is_breeze = (arch == "breeze-tts-2");
+    const char* env_bz_te = std::getenv("CRISPASR_BREEZE_QUANT_TEXT_EMBD");
+    const bool breeze_quant_text_embd = is_breeze && env_bz_te && *env_bz_te && *env_bz_te != '0';
+
     // Zonos TTS: 26-layer GQA transformer + 9-codebook DAC heads.
     // Uniformly quantizing all tensors inflates the EOS logit at prefill
     // by ~0.9 units (−1.125 → −0.21 in Q4_K), pushing P(EOS) from ~38 %
@@ -892,6 +935,10 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
             // across persistent decoder state. Kaggle parity decides whether
             // the published Q4 needs these encoder tensors retained at F16.
             !(vibevoice_asr_frontend_f16 && (sname.find("at_enc.") == 0 || sname.find("st_enc.") == 0)) &&
+            !(is_breeze && (sname == "backbone.audio_embd.weight" || sname == "backbone.codebook0_head.weight" ||
+                            sname.rfind("depth.cb_head.", 0) == 0 || sname == "te_proj.weight" ||
+                            sname == "depth.projection.weight" ||
+                            (!breeze_quant_text_embd && sname == "te.token_embd.weight"))) &&
             !(is_zonos && (sname.find("heads.") == 0 || sname.find("embeddings.") == 0 ||
                            sname.find("prefix_conditioner.") == 0)) &&
             !(is_bark &&

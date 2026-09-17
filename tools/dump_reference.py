@@ -108,6 +108,8 @@ REGISTERED_BACKENDS: Dict[str, str] = {
     # fp32 checkpoint ONE TENSOR AT A TIME, so it fits a ~13 GB box.
     "madlad":     "reference_backends.madlad",
     "miotts":     "reference_backends.miotts",
+    "breeze-tts-2": "reference_backends.breeze_tts_2",
+    "bt2-tts":    "reference_backends.breeze_tts_2",
     "moss-tts":   "reference_backends.moss_tts",
     "qwen3":      "reference_backends.qwen3",
     "higgs-stt":  "reference_backends.higgs_stt",

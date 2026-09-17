@@ -1660,6 +1660,25 @@ if(NOT MSVC)
 endif()
 
 # ---------------------------------------------------------------------------
+# breeze_tts_2 — Breeze TTS 2 (#412). T5Gemma2 text encoder + Qwen3 backbone
+# + 12L depth decoder over 16 codebooks.
+#
+# Links qwen3_tts PUBLIC, and not for convenience: Breeze's bundled audio
+# tokenizer is bit-identical to Qwen3-TTS-Tokenizer-12Hz, so the codec is that
+# backend's, loaded from a companion GGUF. The weights this backend runs are
+# NON-COMMERCIAL (BreezeBlue Research and Non-Commercial License); the code is
+# a port of Apache-2.0 inference code and carries no such restriction.
+# ---------------------------------------------------------------------------
+add_library(breeze_tts_2 STATIC breeze_tts_2.h breeze_tts_2.cpp)
+set_target_properties(breeze_tts_2 PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(breeze_tts_2 PUBLIC .)
+target_compile_features   (breeze_tts_2 PUBLIC cxx_std_17)
+target_link_libraries     (breeze_tts_2 PUBLIC crispasr-core qwen3_tts ggml ggml-base crispasr_link_ggml_cpu)
+if(NOT MSVC)
+    target_compile_options(breeze_tts_2 PRIVATE -O3)
+endif()
+
+# ---------------------------------------------------------------------------
 # miotts — Aratako/MioTTS (Qwen3 LLM + MioCodec FSQ → 24kHz waveform)
 # ---------------------------------------------------------------------------
 add_library(miotts STATIC miotts.h miotts.cpp)
@@ -2916,6 +2935,9 @@ if (TARGET moss_transcribe_diarize)
 endif()
 if (TARGET qwen3_tts)
     target_link_libraries(crispasr-lib PUBLIC qwen3_tts)
+endif()
+if (TARGET breeze_tts_2)
+    target_link_libraries(crispasr-lib PUBLIC breeze_tts_2)
 endif()
 if (TARGET omnivoice)
     target_link_libraries(crispasr-lib PUBLIC omnivoice)

@@ -222,7 +222,23 @@ def compare_stage(name: str, ref: np.ndarray, cpp: np.ndarray) -> dict:
     d = np.abs(ref.astype(np.float64).ravel()[:n] - cpp.astype(np.float64).ravel()[:n])
     r["max_abs"] = float(d.max()) if n else 0.0
     r["mean_abs"] = float(d.mean()) if n else 0.0
-    r["pass"] = r["cos"] >= COS_THRESHOLD and not r.get("shape_mismatch")
+    # MAGNITUDE. Cosine divides scale out, so a stage that is wrong by a
+    # uniform factor passes every cosine check ever run against it — this has
+    # bitten the repo three times (htdemucs iSTFT sat at cos 1.000000 with an
+    # inverted scale; CQT reported correlation 0.9999 with every bin low by up
+    # to 152x). The norms are the column that catches it, so they are printed
+    # next to the cosine and the ratio is part of the pass predicate.
+    r["ref_norm"] = float(np.linalg.norm(ref.astype(np.float64).ravel()[:n]))
+    r["cpp_norm"] = float(np.linalg.norm(cpp.astype(np.float64).ravel()[:n]))
+    if r["ref_norm"] > 0.0:
+        r["norm_ratio"] = r["cpp_norm"] / r["ref_norm"]
+    else:
+        r["norm_ratio"] = 1.0 if r["cpp_norm"] == 0.0 else float("inf")
+    # Deliberately TIGHTER than the defect class it guards: a tolerance wider
+    # than the bug is not a test. A 2x scale error must fail this.
+    scale_ok = 0.98 <= r["norm_ratio"] <= 1.02
+    r["scale_ok"] = scale_ok
+    r["pass"] = r["cos"] >= COS_THRESHOLD and scale_ok and not r.get("shape_mismatch")
     if name.startswith(ARGMAX_STAGES):
         r["ref_argmax"] = int(np.argmax(ref))
         r["cpp_argmax"] = int(np.argmax(cpp))
@@ -267,8 +283,12 @@ def compare(cpp_dump: Path, download: bool = True,
             if "argmax_match" in r:
                 extra = (f"  argmax ref={r['ref_argmax']} cpp={r['cpp_argmax']}"
                          f" {'ok' if r['argmax_match'] else 'MISMATCH'}")
+            if not r.get("scale_ok", True):
+                extra += f"  SCALE x{r['norm_ratio']:.4f}"
             print(f"[{tag}] {r['stage']:<{width}}  cos={r['cos']:.6f}  "
-                  f"maxabs={r['max_abs']:.3e}  {tuple(r['ref_shape'])}{extra}")
+                  f"|ref|={r['ref_norm']:.4g} |cpp|={r['cpp_norm']:.4g} "
+                  f"ratio={r['norm_ratio']:.4f}  maxabs={r['max_abs']:.3e}  "
+                  f"{tuple(r['ref_shape'])}{extra}")
         else:
             print(f"[{tag}] {r['stage']:<{width}}  exact={r['exact']}  "
                   f"match={r['match_frac']:.4f}  first_bad={r['first_mismatch']}  "

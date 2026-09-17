@@ -1135,6 +1135,28 @@ constexpr Entry k_registry[] = {
     // TTS→ASR roundtrip validated on Kaggle (word overlap 0.90). The HiFi-GAN
     // vocoder runs through the shared GPU-capable core_hifigan graph (#387);
     // the DiT ODE loop is the remaining cost and runs on-device in a GPU build.
+    // Breeze TTS 2 (#412): T5Gemma2 text encoder -> Qwen3 backbone -> 12L depth
+    // decoder over 16 codebooks at 12.5 Hz, en + zh. The codec is NOT in the
+    // model file — Breeze's bundled audio tokenizer is bit-identical to
+    // Qwen3-TTS-Tokenizer-12Hz, so it rides along as the companion below
+    // rather than being repacked.
+    //
+    // The licence string MUST begin with the bare word "other": license_tag()
+    // takes everything up to the first space, and "other" is on the restricted
+    // list, which is what makes crispasr_license_requires_acceptance() true and
+    // makes -m auto refuse without CRISPASR_ACCEPT_LICENSE=other. Rewording
+    // this to lead with anything else silently un-gates non-commercial weights.
+    // tests/test-registry.cpp pins that, including a control that the same
+    // predicate returns false for a permissive string.
+    {"bt2-tts", "breeze-tts-2-q4_k.gguf",
+     "https://huggingface.co/cstr/breeze-tts-2-GGUF/resolve/main/breeze-tts-2-q4_k.gguf",
+     "~2.2 GB",
+     "qwen3-tts-tokenizer-12hz.gguf",
+     "https://huggingface.co/cstr/qwen3-tts-tokenizer-12hz-GGUF/resolve/main/qwen3-tts-tokenizer-12hz.gguf",
+     "~60 MB",
+     "other — NON-COMMERCIAL use only (BreezeBlue Research and Non-Commercial License Agreement v1.1, "
+     "RESONIA INC; quantization is a Derivative Model under §1.3 so this GGUF inherits the terms; "
+     "hosting-as-a-service is commercial under §1.7(b); https://huggingface.co/BreezeBlue/Breeze-TTS-2)"},
     {"raon", "raon-opentts-0.3b-f16.gguf",
      "https://huggingface.co/cstr/raon-opentts-0.3b-GGUF/resolve/main/raon-opentts-0.3b-f16.gguf",
      "~959 MB", nullptr, nullptr, nullptr,

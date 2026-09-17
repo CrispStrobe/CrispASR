@@ -87,6 +87,45 @@ TEST_CASE("registry: non-permissive supported weights carry policy metadata", "[
     }
 }
 
+TEST_CASE("registry: the Breeze TTS 2 non-commercial gate actually blocks", "[unit][registry][license]") {
+    // #412. The weights are non-commercial and this is the only thing standing
+    // between `-m auto` and downloading them without acceptance, so it gets its
+    // own test rather than a row in the table above.
+    CrispasrRegistryEntry e;
+    REQUIRE(crispasr_registry_lookup("bt2-tts", e));
+
+    // The prose a user is shown must actually say what the restriction is.
+    REQUIRE(std::string(e.license).find("NON-COMMERCIAL") != std::string::npos);
+    REQUIRE(std::string(e.license).find("BreezeBlue") != std::string::npos);
+
+    // The gate fires.
+    REQUIRE(crispasr_license_requires_acceptance(e.license));
+
+    // ...and the bundle -m auto consults agrees. A gate that is true in one
+    // accessor and false in the one the download path reads is not a gate.
+    CrispasrRegistryBundle bundle;
+    REQUIRE(crispasr_registry_default_bundle("bt2-tts", bundle));
+    REQUIRE(bundle.requires_license_acceptance);
+
+    // The codec companion must be listed, or a -m auto user gets a model that
+    // loads and cannot render audio.
+    REQUIRE(e.companion_filename == "qwen3-tts-tokenizer-12hz.gguf");
+
+    // CONTROL. Everything above would also pass if
+    // crispasr_license_requires_acceptance() simply returned true for every
+    // input — so prove it can say no. This is the pairing the "readout must be
+    // able to report failure" rule exists for.
+    REQUIRE_FALSE(crispasr_license_requires_acceptance("apache-2.0"));
+    REQUIRE_FALSE(crispasr_license_requires_acceptance("CC-BY-4.0 — attribution required"));
+
+    // SECOND CONTROL, on the tag parser rather than the predicate: the gate
+    // keys on the FIRST WORD of the licence string. If someone reworded the
+    // entry to lead with a permissive word and left "other" later in the
+    // sentence, the gate would silently stop firing while the prose still read
+    // as restrictive.
+    REQUIRE_FALSE(crispasr_license_requires_acceptance("apache-2.0 (not other, despite the word other here)"));
+}
+
 TEST_CASE("registry: default bundle rejects unknown backends", "[unit][registry]") {
     CrispasrRegistryBundle bundle;
     REQUIRE_FALSE(crispasr_registry_default_bundle("nonexistent-backend-xyz", bundle));

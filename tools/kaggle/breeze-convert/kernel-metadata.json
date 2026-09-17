@@ -1,0 +1,14 @@
+{
+  "id": "chr1s4/crispasr-breeze-convert",
+  "title": "crispasr-breeze-convert",
+  "code_file": "breeze_convert.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "false",
+  "enable_internet": "true",
+  "dataset_sources": ["chr1s4/crispasr-hf-token"],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}

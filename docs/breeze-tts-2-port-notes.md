@@ -584,3 +584,620 @@ kaggle kernels push -p tools/kaggle/breeze-refdump      # maintainer only
 python tools/reference_backends/breeze_tts_2.py --list
 python tools/reference_backends/breeze_tts_2.py --cpp-dump /path/to/cpp/dumps
 ```
+
+---
+
+## Phase-2 state (2026-09-15)
+
+### What exists now
+
+| Artifact | State |
+|---|---|
+| `src/breeze_tts_2.{h,cpp}` | written, **compile-verified only** — no stage has been measured |
+| `examples/cli/crispasr_backend_bt2_tts.cpp` | backend key `bt2-tts`, aliases resolve `breeze-tts-2` |
+| registry / arch map / caps table / factory / `crispasr_list_backends()` | wired |
+| `tests/test-registry.cpp` | NC gate asserted, with controls |
+| `cstr/breeze-tts-2-GGUF` | f16 5.71 GB, q8_0 3.19 GiB, q4_k 2.05 GiB — **pre-norm-fold, being regenerated** |
+| reference fixture | **not yet produced** — see below |
+
+Conversion reconciles exactly with §2 of this document: 778 tensors,
+2 850.2 M live params, 351 tensors / 633.1 M params dropped.
+
+### The backend key is `bt2-tts`, not `breeze-tts2`
+
+§4 of the Agreement bars the licensor's marks as the **primary name** of a
+derivative. The feasibility memo judged `breeze-tts2` acceptable as descriptive
+attribution; the owner's instruction for phase 2 was not to lead the key with
+it. So the primary key is `bt2-tts` and `breeze-tts-2` / `breeze-tts2` /
+`breeze_tts_2` remain as aliases, which keeps the model findable under its
+published name while the name CrispASR presents is not theirs. The HF repo
+`cstr/breeze-tts-2-GGUF` is unchanged — a repo name IS descriptive attribution.
+
+### Scope decision on CFG: neither Option A nor Option B, yet
+
+§5 recommended shipping Option B (serial branches) behind
+`CRISPASR_BREEZE_CFG_BRANCHES`. Phase 2 has **not** done that. What is in the
+tree:
+
+* both KV caches are allocated with a trailing dim of `n_layers * n_branch`
+  and both graph builders take a `branch` index, so the cache topology and the
+  `il = layer * n_branch + branch` arithmetic are already in place and cost
+  nothing at `n_branch == 1`;
+* `n_branch` is pinned to 1, and the two things Option B still needs are
+  per-branch prompt assembly (three different prompts, three different lengths,
+  three different `n_past`) and the logits combine at every backbone step plus
+  every depth step.
+
+So this build reaches **Voice Clone and plain TTS**, and does not reach **Voice
+Design or Voice Direction**. That is enforced rather than documented:
+`breeze_tts_2_capabilities()` returns only `1 << BREEZE_CFG_NONE`,
+`breeze_tts_2_synthesize_guided()` refuses anything else, and the CLI adapter
+refuses `--tts-instruct` at init. The reason to refuse rather than downgrade is
+specific to this failure mode: a single-branch run of a Voice Design request
+produces fluent, natural speech that ignores the instruction entirely, and no
+property of the output reveals it.
+
+### Two decisions worth not re-deriving
+
+**The encoder's "linear" RoPE needs no core change.** `rope_type="linear"` means
+`inv_freq /= 8` with `attention_scaling = 1.0`. `core_attn::kv_self_attn`
+hardcodes `freq_scale = 1.0f`, so the obvious route is to add a field to
+`KvSelfAttnParams`. It is not needed: ggml computes `theta / freq_factors[i]`
+per pair, so a **constant** `freq_factors` vector of `8.0` is exactly linear
+scaling. Twenty other callers of that function stay untouched.
+
+**Gemma's `1 + w` is folded at conversion time.** `T5Gemma2RMSNorm` is
+`x * (1 + w)` and that includes `q_norm`/`k_norm`, which are applied *inside*
+`kv_self_attn` as a plain `rms_norm * w`. The converter therefore adds 1.0 to
+every `te.*norm*` weight and sets `breeze.te.norm_weights_pre_offset`; the
+runtime refuses to load a GGUF that claims the Gemma form without it. Note the
+pair of KV keys: `norm_unit_offset` describes the architecture,
+`norm_weights_pre_offset` describes the bytes.
+
+### The reference oracle: what it took
+
+The fixture still does not exist, and the reasons are worth recording because
+each one cost a run:
+
+1. `kh.provenance` was called before it existed in the harness — the kernel
+   clones the harness fresh but carries its own frozen script, so the two
+   halves disagreed (gotcha #24). Killed the run in 10 s.
+2. The P100 guard exited on every draw. Kaggle was P100-pinned and its torch
+   has no sm_60 kernels, so "re-push to redraw" was an instruction to loop
+   forever. Now falls back to CPU — the dump needs ~24 frames and 7 GB of host
+   RAM, not a GPU. (Re-measured 2026-09-15: the pool handed out a **T4**,
+   host RAM 33.7 GB. The P100 pin is not currently holding.)
+3. `np.asarray` on a CUDA tensor from the audio tokenizer.
+4. `output_hidden_states=True` on a backbone assembled by
+   `breeze_backbone_factory` — the wrapper accepts the flag and returns
+   `None`. Per-layer states now come from forward hooks. ⚠ **Convention:** the
+   hooks fire *after* each layer, so `backbone_layer{J}` is the residual stream
+   after layer J — NOT the `hidden_states` convention where index 0 is the
+   input embedding. `backbone_inputs_embeds` is that input, dumped separately.
+5. `model.generate()` without `audio_tokenizer=`, which drops into the dead
+   Mimi branch and reaches for `quantizer.cardinality`.
+
+Everything up to and including `backbone_logits_frame0` has been observed to
+dump successfully: prompt L=185 over 2 text segments (27 and 19 tokens),
+`te_proj_out [46, 2048]`, `backbone_inputs_embeds [185, 2048]`, all 28
+backbone layers.
+
+### Owed before any parity claim
+
+1. `crispasr-diff` arm for `bt2-tts` — deliberately not written yet, so its
+   stage shapes can be read off the fixture rather than guessed.
+2. Per-stage cosine **and magnitude** against the fixture, in the §7 order.
+3. Greedy exact-code equality, then the TTS→ASR roundtrip (en + zh), with the
+   reference `breeze-ref.wav` run through the same ASR first as a control.
+4. A tokenizer check: the C++ prompt builder uses
+   `core_bpe::tokenize_simple` (as `gemma4_e2b.cpp` does) plus explicit
+   special-token splitting. `prompt_input_ids` in the fixture is what settles
+   whether that reproduces the Gemma tokenizer; `breeze_tts_2_run_prompt_dump`
+   exists for exactly that comparison.
+
+### ⚠ Reference-conditioning mismatch to check FIRST
+
+The fixture exists as of 2026-09-15 (62 stages at
+`cstr/crispasr-regression-fixtures/breeze-tts-2/`, dumped on a T4). Before
+reading anything downstream of it, check this:
+
+`ref_encoded {"sr": 16000, "n_samples": 176000, "ref_frames": 138}` — the
+oracle hands `samples/jfk.wav` to the audio tokenizer **at 16 kHz** and lets
+the tokenizer resample internally. The C++ adapter instead resamples to 24 kHz
+with `core_audio::resample_polyphase` and hands over 24 kHz. Those are two
+different resamplers, so `ref_codes` can differ before a single transformer
+weight is touched — and a different reference prompt drifts everything after
+it, in a way that looks like a model bug.
+
+`ref_codes` is a dumped stage precisely so this is answerable rather than
+mysterious: diff it first. If it differs, the fix is to align the oracle and
+the runtime on one resampling path, not to chase the divergence downstream.
+
+Frame-0 landmarks for a fast smoke check, from the completed run:
+`argmax_cb0 = 404`, and the frame-0 code vector is
+`[404, 172, 340, 1357, 644, 528, 1025, 1250, 122, 730, 1219, 1452, 1957, 443, 416, 1187]`.
+Generated grid is `codes (24, 16)`; `codec_audio` is 46 080 samples, which is
+exactly 24 frames x 1920, so the codec's frame arithmetic checks out.
+
+### Repetition penalty is part of the recipe, not the model
+
+`repetition_penalty` is **absent from `generation_config.json`**. `infer.py:86`
+and `breeze_infer/api.py:92` pass `REPETITION_PENALTY = 1.1` at call time, so
+it belongs to the shipped *synthesis* recipe, not to the checkpoint's defaults
+— which is precisely the §3.5 table's "infer.py:26" footnote, read correctly.
+
+The consequence for parity: the reference oracle calls `generate()` **without**
+it, so the fixture's `codes` are penalty-free. A C++ greedy run that applied
+1.1 would diverge from the fixture by construction, and the first bisect would
+be spent chasing a difference that is ours. The runtime therefore uses 1.0 on
+the greedy/diff path and 1.1 on the normal synthesis path, as an explicit
+`GenOptions` field rather than something derived from `greedy` — they are two
+different questions.
+
+Still open (a validation item, not a known bug): *which* token history HF's
+`RepetitionPenaltyLogitsProcessor` sees on the normal path. For this model the
+backbone's `input_ids` are audio frames rather than text, so "the history" is
+ambiguous; the C++ applies it over the generated codebook-0 tokens. Confirm
+against a non-greedy reference run before treating the normal path as faithful.
+
+### Published artifacts, read back rather than asserted
+
+`cstr/breeze-tts-2-GGUF` regenerated 2026-09-15 with the norm fold:
+f16 5.32 GiB, q8_0 3.19 GiB, q4_k **2.05 GiB**, 778 tensors / 2 850.2 M live
+params, 351 tensors / 633.1 M dropped. The q4_k figure is what the quant
+policy predicts once `te.token_embd` is held at source precision; set
+`CRISPASR_BREEZE_QUANT_TEXT_EMBD=1` to include it and land near 1.75 GB.
+
+The KV block of the **published** q4_k was fetched with an HTTP range request
+and parsed (143 KV entries, 778 tensors). Verified in the shipped file, not in
+the converter's intentions:
+
+| key | value | what it rules out |
+|---|---|---|
+| `breeze.bb.rope_theta` | `1000000.0` | the top-level 500000 decoy |
+| `breeze.bb.rms_norm_eps` | `1e-06` | the top-level 1e-5 decoy |
+| `breeze.te.causal` | `False` | `use_bidirectional_attention: false` |
+| `breeze.te.rope_factor_full` | `8.0` | — |
+| `breeze.te.norm_weights_pre_offset` | `True` | a GGUF the runtime would reject |
+| `general.license` | `"other"` | a tag that would NOT trip the NC gate |
+| `breeze.license.notice` | verbatim, incl. `RESONIA, INC` | §4(b) |
+
+All three config decoys are therefore dodged *in the artifact*, which is the
+only place it counts.
+
+### If a stage fails: where to look, in order
+
+The §7 sequence localises by construction — first divergence is the bug — but
+the *candidates* differ per stage, and the encoder is where this port has no
+precedent to lean on.
+
+| First failing stage | Look at, in this order |
+|---|---|
+| `ref_codes` | the resampler mismatch above. Nothing else. |
+| `prompt_input_ids` | `core_bpe::tokenize_simple` vs Gemma's tokenizer; then the `<bos>` per text segment; then whether `[S0]`/`<ins_*>` were split as single ids by `tokenize_with_specials`. |
+| `te_seg*_hidden` | 1. the symmetric window (`[i-255, i+256]`, NOT left-only, and NOT 512 either side); 2. whether full layers 5/11/17/23 got a mask at all (they must get **none**); 3. the `+1` norm fold — applied twice, or not at all; 4. `attn_scale` = `query_pre_attn_scalar^-0.5`; 5. `embed_scale` = sqrt(1152); 6. the dual RoPE (theta 1e4 sliding / 1e6 + constant freq_factors 8.0 full). |
+| `te_proj_out` | the projection is one mat-mul; if the hidden matched and this does not, it is an orientation bug. |
+| `backbone_inputs_embeds` | the scatter: text rows to text positions, summed ref-audio frames to `<\|AUDIO\|>` positions, and the all-`codebook_eos` frame at `<\|audio_eos\|>`. |
+| `backbone_layer{J}` | bisect J. Qwen3 q/k-norm, theta 1e6, eps 1e-6 — if J=0 fails, it is not the backbone, it is the embeds. |
+| `dd_logits_frame0_cb{C}` | if low C pass and high C fail, suspect the llama3 `rope_freq_factors` (orig_max_pos 16); if ALL C are shifted by one codebook, it is the `cache_position - 1` head index. |
+| `codes` | with every stage above passing, this is sampling: reserved-id masking `[2048, 2051)`, the EOS class at 2051, or the repetition penalty. |
+
+**Escape hatch worth knowing before bisecting the encoder.** The symmetric,
+non-causal mask is the one attention shape this repo has not run before.
+`CRISPASR_CORE_ATTN_EAGER_F32=1` swaps `ggml_flash_attn_ext` for an explicit
+`mul_mat -> soft_max_ext -> mul_mat` with F32 scores. If the encoder is wrong
+under flash and right under eager, the bug is in how the mask reaches
+flash-attention, not in the weights or the constants — and that A/B costs one
+env var instead of a day.
+
+### The harness was tested before the model was
+
+An instrument that cannot report failure makes every number it prints
+worthless, so the comparison path was validated on known-answer and degenerate
+inputs first, locally, before any Kaggle run scored anything:
+
+* **npy writer** (C++ → numpy): 4 shape/dtype combinations round-tripped with
+  exact value equality, not just matching shapes.
+* **npy reader** (numpy → C++): run against the REAL fixture files; shapes,
+  dtypes and leading values identical to `np.load`.
+* **comparator, identical inputs**: 9/9 PASS, cos 1.000000, ratio 1.0000.
+* **comparator, injected faults** — the arm that matters:
+
+  | injected | caught by | reported |
+  |---|---|---|
+  | `te_seg0_hidden` x 2.0, *scale only* | magnitude | **cos=1.000000** and FAIL, `ratio=2.0000` |
+  | `backbone_logits` argmax swapped | argmax | cos 0.975, `argmax ref=404 cpp=999 MISMATCH` |
+  | one code off by one | int equality | `exact=False first_bad=7` |
+  | untouched stages | — | still PASS (no false positives) |
+
+  Exit code 1 on failures, 0 on a clean dump, so the kernel's `compare_rc` is
+  a real signal rather than decoration.
+
+The first row is the entire argument for the magnitude columns: a stage wrong
+by a uniform factor of two scores a **perfect cosine**. Without `|ref|`/`|cpp|`
+a 2x-wrong text encoder would have been reported as a flawless pass, which is
+exactly how the htdemucs iSTFT and CQT bugs survived as long as they did.
+
+---
+
+## Phase-2 RESULTS — run 1 (q4_k vs bf16), 2026-09-15
+
+**It synthesises, and the ASR roundtrip reads it back.**
+
+| | |
+|---|---|
+| WAV | 94 080 samples @ 24 kHz = **3.92 s**, peak 0.53, rms 0.084 (not silence) |
+| ASR on our audio | *"The quick brown dot fox jumps over the lazy dog."* |
+| target | *"The quick brown fox jumps over the lazy dog."* |
+| ASR on the ORACLE's own clip (control) | *"The quick brown fox jumped in."* |
+| `--list-backends` | `bt2-tts` present |
+| NC gate, `-m auto` without acceptance | **REFUSED** |
+
+The control matters: the oracle's fixture audio is capped at 24 frames
+(1.92 s), so its transcript is *supposed* to be truncated. It confirms the ASR
+works and that our (uncapped) audio is the more complete of the two. One
+inserted word — and that is with a mistokenized prompt and a mis-encoded
+reference clip, both measured below. The model is more robust than the port.
+
+### Per-stage, and why 7/55 "passing" understates it
+
+Run 1 diffed the **q4_k** model against a **bf16** reference, which was a
+mistake in experimental design, not a result:
+
+```
+backbone_layer0   cos=0.999849      backbone_layer10  cos=0.998825
+backbone_layer1   cos=0.999672      backbone_layer20  cos=0.998375
+backbone_layer5   cos=0.999031      backbone_layer27  cos=0.998024
+backbone_logits   cos=0.999230   argmax ref=404 cpp=404  ✓
+```
+
+A **monotonic** decay with depth, with magnitude ratios pinned at 0.99-1.01
+throughout, is the signature of accumulating quantization noise — not of a
+structural bug, which shows up as a step at one layer. Judging the port by
+these is judging the quantizer. Re-run on f16 before concluding anything about
+the transformer stacks.
+
+`argmax_cb0 = 404` matching the oracle exactly, off oracle-supplied
+embeddings, is the strongest single signal that prompt assembly → backbone →
+lm_head is right.
+
+### Three real defects, two of them predicted in advance
+
+| Stage | Measured | Cause |
+|---|---|---|
+| `ref_codes` | 61.8% equal, 138 frames both, first bad at 7 | the resampler mismatch, predicted and recorded before the run. Now removed from the harness by giving both sides 24 kHz, and kept as its own `ref_audio` stage. |
+| `prompt_input_ids` | 64.9% equal, our L=208 vs 185 | `core_bpe::tokenize_simple` does not reproduce Gemma's tokenizer. Predicted. **Open.** |
+| `dd_codes_frame0_stepwise` | 1/16 equal (only cb0, from the backbone) | the depth decoder diverges from codebook 1 with EXACT inputs. **Open, and the main suspect.** |
+
+### The depth decoder — what has been ruled out
+
+Fed the oracle's `backbone_hidden_frame0` and the oracle's `cb0 = 404`, our
+codebook 1 is already wrong. Read line by line against `models/breeze.py`
+after the run, these are **eliminated**:
+
+* `BreezeRMSNorm` is plain `weight * normed` (`breeze.py:129-134`) — NOT the
+  Gemma `1 + w` form. Our implementation matches.
+* `BreezeDecoderLayer` is standard Llama pre-norm (`:405-425`). Matches.
+* `BreezeAttention`: `scaling = head_dim ** -0.5`, `is_causal = True`, no
+  q/k norm (`:302-305`). Matches.
+* The `depth.cb_head.{i}` orientation, re-derived index by index: the
+  converter's transpose makes `ggml_mul_mat` compute `h @ weight[i]`, which is
+  what `F.linear(h, weight[i].T)` means. Correct.
+* Not an off-by-one in the head index either — our cb1 is not the oracle's
+  cb2, and no shift of the sequence aligns them.
+
+The discriminating measurement is the **raw** `dd_logits_frame0_cb1` cosine,
+which run 1 could not produce because the dump was masked (below). A cosine
+near 1 with a different argmax means numeric drift; a cosine near 0 means
+something structural.
+
+### A measurement bug worth naming
+
+`dd_logits_frame0_cb*` came back `cos=nan`, `|cpp|=inf`. Not a model failure:
+`mask_reserved` writes `-inf` into `[2048, 2051)` and the dump was taken from
+the masked buffer, while the reference dumps its logits *before* its own
+suppression. The fix is to dump raw and mask a copy for sampling. A stage that
+is merely being measured wrong must never be able to report as a catastrophic
+failure — it sends the next person to the wrong place.
+
+### The fixture is NOT the clone branch — and the tokenizer target is now known
+
+Two findings from diffing the fixture's `prompt_input_ids` against the real
+Gemma tokenizer offline (no Kaggle run needed; `tokenizer.json` is 32 MB).
+
+**1. `meta.json` mislabelled the branch.** It said
+`ref_edit_tata (clone branch, cfg_scale=1.0)`. The ids say otherwise: segment 2
+is
+
+```
+[2, 262146, 262156, 130171, 8207, 532, 14769, 236761, 262157, 818, 3823, ...]
+      [S0]  <ins_bos>  ...instruction...        <ins_eos>  The quick ...
+```
+
+`prepare_inputs` always builds from `template.build_segments`, which for
+`ref_edit_tata` is `_ref_edit_tata_segments` — the **instruction** variant.
+`build_negative_segments` (the real clone branch) is only reached when
+`guidance_scale != 1.0`. So `guidance_scale=1.0` does keep it single-branch —
+the true half of the old claim — but the single branch is the positive,
+instruction-carrying one.
+
+Consequence: a C++ prompt built without the instruction **cannot** match those
+ids however good its tokenizer is. Run 1's `L=208 vs 185` therefore blamed the
+tokenizer for a difference that was partly a missing `<ins_bos>…<ins_eos>`
+span. The arm now passes `"Speak clearly and naturally."`, and the fixture
+records its own `instruction` so this is not re-derived.
+
+**2. The tokenizer target is exactly reproducible.** With the real tokenizer:
+
+| segment | fixture | `[2] + tokenizers.encode(...)` | match |
+|---|---|---|---|
+| seg0 (`[S0]` + ref_text) | 27 ids | 27 ids | **exact** |
+| seg1 (`[S0]` + syn_text, no instruction) | — | 12 ids | n/a |
+
+seg0 matching exactly confirms the *structure* the port assumes — a `<bos>`
+at every text segment head, `[S0]` as the single id 262146 — and confirms that
+`Tokenizer.from_file(tokenizer.json)` reproduces the oracle. So the remaining
+gap is purely `core_bpe::tokenize_simple`, whose whitespace-split
+pre-tokenizer inflated 39 true tokens to ~69. The fix is a real Gemma
+pre-tokenizer, and there is now a ground-truth oracle to test it against
+offline, one string at a time, with no GPU and no Kaggle run.
+
+### Tokenizer defect: CLOSED, verified offline
+
+`core_bpe::tokenize_simple` was the wrong algorithm, not a near miss. Gemma's
+`tokenizer.json` is explicit:
+
+```
+normalizer    {"type":"Replace","pattern":{"String":" "},"content":"▁"}
+model.type    "BPE",  byte_fallback: true,  514906 merges
+```
+
+So: replace every space with U+2581 and BPE-merge across the **whole string**;
+word boundaries ride on the ▁ marker. `tokenize_simple` instead whitespace-
+splits and pushes every byte through GPT-2's `bytes_to_unicode()` — a different
+scheme from the first step onward, which is why 39 true tokens came out as ~69.
+
+Fixed by adding `core_bpe::tokenize_spm_bpe()` (additive — no existing caller
+changes) and pointing the Breeze prompt builder at it. `bpe_one()`'s
+rank-ordered merge loop was already correct and is reused unchanged.
+
+Verified by compiling the **shipping** header against the real vocab and merges
+and tokenizing the oracle's own reference text:
+
+```
+fixture seg0 : [2, 262146, 3133, 834, 1041, 12339, 14522, 236764, 2679, 711, ...]
+C++ output   : [2, 262146, 3133, 834, 1041, 12339, 14522, 236764, 2679, 711, ...]
+EXACT MATCH  : True  (27/27)
+```
+
+No build, no GPU, no Kaggle run — the fixture is ground truth and the
+tokenizer is a pure function, so it can be held to exact equality on the
+workstation. That is the cheapest verification available anywhere in this port
+and it should have been done before the first parity run.
+
+One known, benign deviation: Gemma's `byte_fallback` emits `<0xXX>` tokens for
+out-of-vocab pieces while `bpe_one` falls back per codepoint. With a
+262k-entry vocab the paths coincide for any text the model has embeddings for.
+
+---
+
+## Phase-2 RESULTS — run 2 (f16 vs bf16): THE PORT IS CORRECT
+
+**50/55 stages pass, and the worst cosine across all fifty is 0.999861.**
+The five failures are the two known input-side defects, both already fixed but
+not yet re-run. Not one model stage fails.
+
+| stage | cos | magnitude ratio | argmax |
+|---|---|---|---|
+| `te_seg0_hidden` | 0.999963 | 1.0000 | — |
+| `te_seg1_hidden` | 0.999970 | 1.0003 | — |
+| `te_proj_out` | 0.999933 | 0.9988 | — |
+| `backbone_inputs_embeds` | 0.999957 | 0.9992 | — |
+| `backbone_layer0…27` | 0.999997 → 0.999976 | 0.998–1.002 | — |
+| `backbone_logits_frame0` | 0.999992 | 0.9977 | **404 = 404 ✓** |
+| `dd_logits_frame0_cb1…cb15` | 0.999991 → 0.999861 | 0.998–1.001 | **all 15 match** |
+| `dd_codes_frame0_stepwise` | — | — | **exact, 16/16** |
+
+That settles every open architectural question at once. The bidirectional
+text encoder with its symmetric `[i-255, i+256]` window and unmasked full
+layers is right. The dual RoPE — theta 1e4 sliding, theta 1e6 with a constant
+`freq_factors` vector of 8.0 for the "linear" full layers — is right, and no
+change to `core_attn::kv_self_attn` was needed. Gemma's `1 + w` folded at
+conversion time is right. The Qwen3 backbone off the nested config (theta 1e6,
+eps 1e-6) is right. The depth decoder's llama3 RoPE with
+`original_max_position_embeddings = 16`, and the 15 pre-transposed per-codebook
+heads indexed by `cache_position - 1`, are right.
+
+### The depth decoder was never broken — it was the quantizer
+
+Run 1 read 1/16 codes matching at frame 0 and the localisation table pointed
+at RoPE scaling and head indices. All of that was wrong: on f16 the SAME code
+produces the oracle's entire frame-0 vector exactly —
+
+```
+404 172 340 1357 644 528 1025 1250 122 730 1219 1452 1957 443 416 1187
+```
+
+— because run 1 diffed **q4_k against bf16**. The tell was already in the
+data and was read correctly at the time: a *monotonic* cosine decay with
+layer depth at pinned magnitude ratios is accumulating quantization noise, not
+a structural bug, which appears as a step at one layer. The lesson is to diff
+the reference-precision artifact FIRST and only then ask what quantization
+costs; a whole round of architectural suspicion was spent on the quantizer.
+
+**This is also a real finding about the published q4_k**: it does not preserve
+frame-0 codes at all (1/16), while still producing intelligible speech. The
+quant policy protects the embeddings and the output heads but leaves the depth
+decoder's 434 M attention/MLP weights at q4_k, and 15 sequential steps compound
+the noise. Worth an A/B before q4_k is called the default.
+
+### The five failures, all input-side, all already fixed
+
+| stage | measured | status |
+|---|---|---|
+| `ref_codes` | 61.8% | resampler mismatch — harness fixed (both sides 24 kHz); needs the regenerated fixture |
+| `prompt_input_ids` / `_mask` / `_len` | 64.9% / 78.4% / 0% | wrong tokenizer + missing instruction — **both fixed**, tokenizer verified 27/27 offline |
+| `codes` | 3.9% | downstream of the prompt; generation ran on the mistokenized prompt |
+
+Expected next run: 55/55.
+
+---
+
+## Phase-2 RESULTS — run 3 (f16 + fixed tokenizer + regenerated fixture)
+
+**53/56.** Three failures, one of them a fixture bug introduced by the
+previous commit and since fixed.
+
+What the tokenizer fix bought, end to end in the real pipeline:
+
+| stage | run 2 | run 3 |
+|---|---|---|
+| `prompt_input_ids` | 64.9%, L=208 | **exact**, L=185 |
+| `prompt_text_ids_mask` | 78.4% | **exact** |
+| `prompt_text_ids_len` | 0% | **exact** |
+| `ref_codes` | 61.8% | **98.78%** |
+| ASR roundtrip | "The quick brown **dot** fox jumps over the lazy dog." | "**A** quick brown fox jumps over the lazy dog." |
+
+`ref_audio` — the runtime's own 16 → 24 kHz resample against the reference's —
+passes at **cos = 1.000000, ratio 1.0001**. `core_audio::resample_polyphase`
+matches torchaudio's resampler essentially exactly, which **retires the
+resampler as a suspect** for anything downstream. That was worth making its own
+stage rather than leaving it inside `ref_codes`.
+
+`ref_codes` at 98.78% (first divergence at flat index 601) is now a clean
+codec-encoder-vs-codec-encoder comparison with no resampler in it. ~27 codes of
+2208 differ; that residual is the qwen3-tts encoder port, and it is the one
+genuinely open numerical item.
+
+### `backbone_inputs_embeds` 0.999957 → 0.937599: a fixture disagreeing with itself
+
+Not the model. The previous commit resampled only the audio the fixture
+**dumps**; the prompt is built by `prepare_inputs` →
+`encode_prompt_audio(audio_tokenizer, audio_path)`, which re-reads the wav from
+disk at its native rate. So `ref_codes` came from 24 kHz while the audio
+embeddings inside the fixture's own `backbone_inputs_embeds` still came from
+16 kHz.
+
+The proof is worth keeping, because it is a general shape:
+
+```
+across a regeneration that changed ref_codes almost completely (35% agreement),
+backbone_inputs_embeds came back BYTE-IDENTICAL
+```
+
+A prompt that does not move when its own reference codes move is reading a
+different audio source. Fixed by writing the resampled clip to disk and
+pointing the request at that file, so one audio array feeds the dump, the
+prompt and generation alike.
+
+Note how it surfaced: **one stage collapsed while its neighbours held**. A
+single end-to-end score would have shown marginally worse audio and nothing
+else. That is the argument for per-stage diffing, made by the harness catching
+its own author's bug.
+
+### The voice-consent gate stopped the first quant A/B, correctly
+
+Run 1 of the quant A/B pinned the speaker by cloning `samples/jfk.wav`, which
+is the better experimental control. All twelve syntheses were refused with
+`rc=17` — `crispasr_run.cpp:3518`, voice cloning requires `--i-have-rights`,
+attesting *"I have the consent of the speaker whose voice this clones, or it
+is my own voice."*
+
+That flag was **not** passed and should not be. `jfk.wav` is a real person, the
+attestation is a claim only someone with standing can make, and an automated
+benchmark ticking it to obtain its numbers is exactly the box-checking the gate
+exists to prevent. The control was right; the experiment was wrong.
+
+The A/B therefore synthesises **unconditioned**, with a fixed seed and length
+cap across arms. The speaker is whatever the model produces rather than a
+pinned reference — a genuinely weaker control, recorded here rather than
+glossed. The metric is still intelligibility of the same four sentences under
+three quantizations. If a speaker-pinned version is wanted, a human passes
+`--i-have-rights`; that is an escalation, not something to engineer around.
+
+Second lesson from the same run, and a self-inflicted one: the failure stderr
+was captured into a dict field that the summary dropped, so twelve identical
+refusals reported a bare `rc=17` and the cause had to be recovered by reading
+the C++ afterwards. **The reason is now printed at the point of failure.** The
+rule it broke — a readout must be able to report failure — is written in these
+very notes.
+
+### Fixture self-consistency, proved both directions
+
+The fix (write the resampled clip to disk; point the request at it) was
+confirmed by the mirror image of the evidence that exposed the bug:
+
+| regeneration | `ref_codes` | `backbone_inputs_embeds` |
+|---|---|---|
+| broken (dump resampled, prompt not) | changed almost completely | **byte-identical** |
+| fixed (one array feeds both) | **unchanged** (agreement 1.0) | changed (maxabs 0.59) |
+
+First the codes moved and the prompt did not; then the prompt moved to catch up
+while the codes stood still. Together those say the prompt now reads the same
+audio its own reference codes came from.
+
+---
+
+## Quant A/B — does q4_k deserve to be the registry default? (2026-09-17)
+
+Four sentences, three quantizations, one seed, unconditioned synthesis, scored
+by whisper. **Recommendation: keep q4_k. No registry change, no carve-out
+change.**
+
+| quant | size | raw WER | **normalised WER** | frame-0 codes |
+|---|---|---|---|---|
+| q4_k | 2.05 GiB | 0.0814 | **0.0357** | 1/16 |
+| q8_0 | 3.19 GiB | 0.0913 | **0.0278** | 16/16 |
+| f16 | 5.32 GiB | 0.0278 | **0.0000** | 16/16 |
+
+### The raw numbers rank them wrongly, and it matters
+
+Raw WER puts q4_k *ahead* of q8_0. That ordering is an artifact: whisper writes
+"seventeen" as "17" and Americanises "travellers"/"harbour", and q8_0 happened
+to collect one more of those spelling artifacts. Those are the ASR's
+orthographic conventions, not the model's pronunciation.
+
+Normalising numbers and British/American spellings before scoring flips the
+order and separates the arms properly. The per-sentence transcripts, so the
+reading can be checked rather than taken:
+
+| | q4_k | q8_0 | f16 |
+|---|---|---|---|
+| pangram | exact | exact | exact |
+| "…seventeen blue umbrellas **in** Manchester…" | exact | **"and" Manchester** | exact |
+| "…the weather **had turned**…" | **"returned"** | exact | exact |
+| "…close the window…" | exact | exact | exact |
+
+**One real word error each for q4_k and q8_0; none for f16.** The metric now
+normalises digits and spelling so a future run cannot be misled the same way.
+
+### What this settles
+
+1. **f16 is materially better** — perfect on all four sentences against one
+   error apiece for both quants. Anyone who wants reference quality should take
+   the f16, and it is published.
+2. **q4_k and q8_0 are indistinguishable.** One real error each; the remaining
+   0.008 WER gap is the *length* of one error. At n=4 that is nothing.
+3. **Code exactness does not predict audio quality.** This is the sharpest
+   result of the three: q8_0 reproduces the oracle's frame-0 codes **exactly,
+   16/16**, and still made a real word error, while q4_k matched **1/16** and
+   made one too. Every code-level gate this port owns is therefore blind to
+   what quantization does perceptually — which is precisely why this A/B had to
+   exist and why no code-level metric should be promoted into a quality gate.
+
+So the honest answer is the cheap one: **q4_k loses code exactness and sounds
+the same.** Spending +1.14 GiB of every user's download on q8_0 buys exactness
+that demonstrably does not reach the audio.
+
+### Where this is weak
+
+* **n = 4 sentences.** Enough to show f16 clear of both quants; nowhere near
+  enough to separate q4_k from q8_0, and it is not claimed to. A firm ranking
+  of those two would need tens of sentences.
+* **Unconditioned speaker.** Cloning would pin the voice and was the better
+  control, but it requires `--i-have-rights` — a consent attestation an
+  automated benchmark may not make. Each arm therefore has its own voice, which
+  is a genuine confound for intelligibility.
+* **Single ASR.** whisper's own error floor is inside every number; it is
+  shared across arms, so comparisons hold even though absolute values are
+  inflated.

@@ -244,6 +244,7 @@ quick-start commands and engine selection guidance.
 
 | Backend | Models | Architecture | Languages | License |
 |---------|--------|-------------|-----------|---------|
+| **bt2-tts** | [`breeze-tts-2`](https://huggingface.co/cstr/breeze-tts-2-GGUF) | T5Gemma2 text encoder + Qwen3 backbone + 12L depth decoder over 16 codebooks @ 12.5 Hz; voice cloning. Codec companion is the shipped qwen3-tts tokenizer. **NON-COMMERCIAL weights** — needs `--accept-license other`. Derived from Breeze TTS 2 by BreezeBlue and licensed for research and non-commercial use only. | en, zh | other (BreezeBlue Research & Non-Commercial) |
 | **miotts** | [`MioTTS-0.6B`](https://huggingface.co/cstr/miotts-0.6b-GGUF) | Qwen3 LLM + MioCodec-v2 FSQ codec (25 Hz, 44.1 kHz output) | ja, en | Apache-2.0 |
 | **vibevoice-tts** | [`VibeVoice-Realtime-0.5B`](https://huggingface.co/cstr/vibevoice-realtime-0.5b-GGUF), [`VibeVoice-1.5B`](https://huggingface.co/cstr/vibevoice-1.5b-GGUF) | DPM-Solver++ + σ-VAE decoder; voice presets or cloning | en, zh | MIT |
 | **kugelaudio** | [`kugelaudio-0-open`](https://huggingface.co/cstr/kugelaudio-0-open-GGUF) | Qwen2.5-7B LM + 4L DiT diffusion + acoustic VAE decoder; voice cloning | multilingual | Apache-2.0 |

@@ -66,6 +66,7 @@ std::unique_ptr<CrispasrBackend> crispasr_make_paraformer_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_sensevoice_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_sidon_backend();
 std::unique_ptr<CrispasrBackend> crispasr_create_miotts_backend();
+std::unique_ptr<CrispasrBackend> crispasr_create_bt2_tts_backend();
 std::unique_ptr<CrispasrBackend> crispasr_create_piano_transcription_backend();
 std::unique_ptr<CrispasrBackend> crispasr_create_basic_pitch_backend();
 std::unique_ptr<CrispasrBackend> crispasr_create_mt3_backend();
@@ -173,6 +174,13 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& name
         return crispasr_make_qwen3_tts_backend();
     if (name == "miotts" || name == "mio-tts" || name == "mio_tts" || name == "miotts-0.6b")
         return crispasr_create_miotts_backend();
+    // Breeze TTS 2 (#412). The primary key does NOT lead with the licensor's
+    // mark (LICENSE §4); the descriptive aliases are attribution, which §4
+    // permits, and keep the model discoverable by the name it is published
+    // under.
+    if (name == "bt2-tts" || name == "bt2" || name == "bt2tts" || name == "breeze-tts-2" || name == "breeze_tts_2" ||
+        name == "breeze-tts2")
+        return crispasr_create_bt2_tts_backend();
     if (name == "piano-transcription" || name == "piano_transcription" || name == "piano-trans")
         return crispasr_create_piano_transcription_backend();
     if (name == "basic-pitch" || name == "basic_pitch" || name == "basicpitch")
@@ -357,6 +365,7 @@ std::vector<std::string> crispasr_list_backends() {
         "kugelaudio",
         "qwen3-tts",
         "miotts",
+        "bt2-tts",
         "piano-transcription",
         "basic-pitch",
         "mt3",

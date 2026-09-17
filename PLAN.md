@@ -61,6 +61,55 @@ converter computes its own filterbank and was unaffected. Kernel v1 shipped the
 asserted the moment the snapshot lands, and is idempotent (it skips a model
 whose published F16 already passes the same read-back), so the re-run cost one
 range request for the 4B instead of 8.9 GB.
+## CLAIMED 2026-09-15 — #412 Breeze TTS 2 (backend key `bt2-tts`)
+
+NOW (2026-09-17): **the port is correct.** Run 2 on f16 vs the bf16 oracle:
+**50/55 stages, worst cosine 0.999861**, and not one MODEL stage fails.
+Text encoder 0.999963/0.999970, projection 0.999933, prompt assembly
+0.999957, all 28 backbone layers 0.999997 → 0.999976, codebook-0 head
+0.999992 with argmax 404 = 404, all fifteen depth heads 0.999991 → 0.999861
+with every argmax matching, and frame-0 codes **exact, 16/16**.
+
+It speaks: 3.92 s of 24 kHz audio, ASR roundtrip "The quick brown dot fox
+jumps over the lazy dog." against target "The quick brown fox jumps over the
+lazy dog.", with the oracle's own clip run through the same ASR as the
+control. NC gate refuses `-m auto` without acceptance, by observation.
+`cstr/breeze-tts-2-GGUF` is PUBLIC; LICENSE §4(a)-(d) verified anonymously.
+
+THE ONE TRAP WORTH CARRYING FORWARD: run 1 diffed **q4_k against bf16** and
+read 1/16 frame-0 codes, which sent a whole round of suspicion at the depth
+decoder's llama3 RoPE and head indices. The same code on f16 is exact. The
+tell was in the data — a MONOTONIC cosine decay with layer depth at pinned
+magnitude ratios is the quantizer, not a structural bug, which appears as a
+step at one layer. **Diff the reference-precision artifact first.**
+
+Open:
+1. Run 3 in flight (f16 + fixed tokenizer + regenerated fixture) — expect
+   55/55. The 5 remaining failures in run 2 were all input-side and are
+   already fixed: the ref_codes resampler (harness now feeds both sides
+   24 kHz) and the Gemma tokenizer + missing instruction on the prompt
+   stages.
+2. **q4_k fidelity — RESOLVED 2026-09-17: keep q4_k, change nothing.** The
+   three-way A/B (4 sentences, 1 seed, whisper-scored) gives normalised WER
+   q4_k 0.0357 / q8_0 0.0278 / f16 0.0000 at 2.05 / 3.19 / 5.32 GiB. One real
+   word error each for the two quants, none for f16. The +1.14 GiB for q8_0
+   buys code exactness (16/16 frame-0 codes vs q4_k's 1/16) that demonstrably
+   does NOT reach the audio. f16 is materially better and is published for
+   anyone who wants it.
+   Two things to carry: RAW WER ranked the quants backwards because whisper
+   normalises "seventeen"→"17" and Americanises spellings — the metric now
+   normalises both. And code exactness does not predict audio quality: q8_0 is
+   code-EXACT and still made a real error, so no code-level metric should be
+   promoted into a quality gate.
+3. **CFG multi-branch is NOT implemented** — Voice Clone and plain TTS ship;
+   Voice Design and Voice Direction are REFUSED at three layers rather than
+   silently downgraded. The cache topology and branch index are in place;
+   what is missing is per-branch prompt assembly and the logits combine.
+
+Branch feat/412-breeze-tts-2. Artifacts: cstr/breeze-tts-2-GGUF (f16 5.32,
+q8_0 3.19, q4_k 2.05 GiB), fixture at cstr/crispasr-regression-fixtures
+breeze-tts-2/ (65 stages). Kernels: chr1s4/crispasr-breeze-{refdump,convert},
+chr1str/crispasr-breeze-validate.
 
 ## CLAIMED 2026-09-12 — #377 FireRedTTS3
 

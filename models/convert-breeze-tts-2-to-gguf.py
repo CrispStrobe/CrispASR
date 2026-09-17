@@ -450,6 +450,11 @@ def main() -> None:
     s("breeze.te.hidden_activation", te["hidden_activation"])
     # RMSNorm is Gemma-style: out = x_normed * (1 + w). t5gemma2_compat.py:125.
     b("breeze.te.norm_unit_offset", True)
+    # ...and the +1 is ALREADY FOLDED into every te.*norm* tensor this file
+    # writes (see is_te_norm/emit). The pair matters: norm_unit_offset
+    # describes the ARCHITECTURE, this describes the BYTES. A reader who sees
+    # only the first would apply the offset twice.
+    b("breeze.te.norm_weights_pre_offset", True)
     # embed_scale = sqrt(hidden_size), applied on lookup. t5gemma2_compat.py:606.
     f32("breeze.te.embed_scale", float(te["hidden_size"]) ** 0.5)
     u32("breeze.te.eoi_token_index", te["eoi_token_index"])
@@ -672,8 +677,30 @@ def main() -> None:
     written_params = 0
     seen_audio_embd = False
 
+    def is_te_norm(gn: str) -> bool:
+        """Text-encoder RMSNorm gains, which need Gemma's +1 folded in.
+
+        Everything under te.* whose name carries "norm": the four block norms,
+        the per-head q_norm/k_norm, and te.output_norm. NOT te.token_embd and
+        NOT te.eoi_embd.
+        """
+        return gn.startswith("te.") and "norm" in gn
+
     def emit(gn: str, t: "torch.Tensor"):
         nonlocal n_written, written_params
+        if is_te_norm(gn):
+            # T5Gemma2RMSNorm computes `x_normed * (1 + w)` (t5gemma2_compat.py
+            # :125) — including q_norm and k_norm, which the C++ runtime applies
+            # INSIDE core_attn::kv_self_attn, where it can only do the plain
+            # `rms_norm * w` that Qwen3 needs. Rather than fork shared attention
+            # code for one backend, fold the +1 here, exactly as llama.cpp's
+            # Gemma converter does.
+            #
+            # This makes the stored weights differ from the checkpoint's, so it
+            # is recorded as breeze.te.norm_weights_pre_offset below and the
+            # runtime REFUSES to load a GGUF that claims the Gemma form without
+            # it. A silent disagreement here is a model that runs and is wrong.
+            t = t.to(torch.float32) + 1.0
         arr, qt = to_out(t, out_dtype, gn)
         w.add_tensor(gn, arr, raw_dtype=qt)
         n_written += 1
