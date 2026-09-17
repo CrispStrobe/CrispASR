@@ -49,7 +49,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-SCRIPT_VERSION = "2026-09-17.2"
+SCRIPT_VERSION = "2026-09-17.3"
 WORK = Path("/kaggle/working")
 TEMP = Path("/kaggle/temp") if Path("/kaggle/temp").is_dir() else WORK
 REPO = WORK / "CrispASR"
@@ -85,8 +85,28 @@ def save():
     (WORK / "quant_ab.json").write_text(json.dumps(verdict, indent=1))
 
 
+# Orthographic normalisation BEFORE scoring. Run 2 showed why this is not
+# fussiness: whisper writes "seventeen" as "17" and Americanises "travellers"
+# and "harbour". Those are the ASR's spelling conventions, not the TTS's
+# pronunciation, and unnormalised they dominated the ranking — q8_0 scored
+# WORSE than q4_k purely by collecting one more spelling artifact. A metric
+# that ranks quantizers by the ASR's orthography is measuring the wrong thing.
+_NUMBERS = {"0": "zero", "1": "one", "2": "two", "3": "three", "4": "four", "5": "five",
+            "6": "six", "7": "seven", "8": "eight", "9": "nine", "10": "ten",
+            "11": "eleven", "12": "twelve", "13": "thirteen", "14": "fourteen",
+            "15": "fifteen", "16": "sixteen", "17": "seventeen", "18": "eighteen",
+            "19": "nineteen", "20": "twenty"}
+_BRIT = {"traveller": "traveler", "travellers": "travelers", "harbour": "harbor",
+         "colour": "color", "favourite": "favorite", "neighbour": "neighbor",
+         "theatre": "theater", "centre": "center", "realise": "realize"}
+
+
 def norm_words(s):
-    return re.sub(r"[^a-z0-9' ]+", " ", s.lower()).split()
+    out = []
+    for w in re.sub(r"[^a-z0-9' ]+", " ", s.lower()).split():
+        w = _NUMBERS.get(w, w)
+        out.append(_BRIT.get(w, w))
+    return out
 
 
 def wer(ref, hyp):

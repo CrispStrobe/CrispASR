@@ -1135,3 +1135,69 @@ confirmed by the mirror image of the evidence that exposed the bug:
 First the codes moved and the prompt did not; then the prompt moved to catch up
 while the codes stood still. Together those say the prompt now reads the same
 audio its own reference codes came from.
+
+---
+
+## Quant A/B — does q4_k deserve to be the registry default? (2026-09-17)
+
+Four sentences, three quantizations, one seed, unconditioned synthesis, scored
+by whisper. **Recommendation: keep q4_k. No registry change, no carve-out
+change.**
+
+| quant | size | raw WER | **normalised WER** | frame-0 codes |
+|---|---|---|---|---|
+| q4_k | 2.05 GiB | 0.0814 | **0.0357** | 1/16 |
+| q8_0 | 3.19 GiB | 0.0913 | **0.0278** | 16/16 |
+| f16 | 5.32 GiB | 0.0278 | **0.0000** | 16/16 |
+
+### The raw numbers rank them wrongly, and it matters
+
+Raw WER puts q4_k *ahead* of q8_0. That ordering is an artifact: whisper writes
+"seventeen" as "17" and Americanises "travellers"/"harbour", and q8_0 happened
+to collect one more of those spelling artifacts. Those are the ASR's
+orthographic conventions, not the model's pronunciation.
+
+Normalising numbers and British/American spellings before scoring flips the
+order and separates the arms properly. The per-sentence transcripts, so the
+reading can be checked rather than taken:
+
+| | q4_k | q8_0 | f16 |
+|---|---|---|---|
+| pangram | exact | exact | exact |
+| "…seventeen blue umbrellas **in** Manchester…" | exact | **"and" Manchester** | exact |
+| "…the weather **had turned**…" | **"returned"** | exact | exact |
+| "…close the window…" | exact | exact | exact |
+
+**One real word error each for q4_k and q8_0; none for f16.** The metric now
+normalises digits and spelling so a future run cannot be misled the same way.
+
+### What this settles
+
+1. **f16 is materially better** — perfect on all four sentences against one
+   error apiece for both quants. Anyone who wants reference quality should take
+   the f16, and it is published.
+2. **q4_k and q8_0 are indistinguishable.** One real error each; the remaining
+   0.008 WER gap is the *length* of one error. At n=4 that is nothing.
+3. **Code exactness does not predict audio quality.** This is the sharpest
+   result of the three: q8_0 reproduces the oracle's frame-0 codes **exactly,
+   16/16**, and still made a real word error, while q4_k matched **1/16** and
+   made one too. Every code-level gate this port owns is therefore blind to
+   what quantization does perceptually — which is precisely why this A/B had to
+   exist and why no code-level metric should be promoted into a quality gate.
+
+So the honest answer is the cheap one: **q4_k loses code exactness and sounds
+the same.** Spending +1.14 GiB of every user's download on q8_0 buys exactness
+that demonstrably does not reach the audio.
+
+### Where this is weak
+
+* **n = 4 sentences.** Enough to show f16 clear of both quants; nowhere near
+  enough to separate q4_k from q8_0, and it is not claimed to. A firm ranking
+  of those two would need tens of sentences.
+* **Unconditioned speaker.** Cloning would pin the voice and was the better
+  control, but it requires `--i-have-rights` — a consent attestation an
+  automated benchmark may not make. Each arm therefore has its own voice, which
+  is a genuine confound for intelligibility.
+* **Single ASR.** whisper's own error floor is inside every number; it is
+  shared across arms, so comparisons hold even though absolute values are
+  inflated.
