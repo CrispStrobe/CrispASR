@@ -4791,7 +4791,8 @@ template <typename Ctx> struct VoxtralFamilyOps {
 template <typename Ctx>
 static crispasr_session_result* run_voxtral_family(Ctx* ctx, const VoxtralFamilyOps<Ctx>& ops, const float* pcm,
                                                    int n_samples, const std::string& language,
-                                                   const std::string& ask = std::string(), int beam_size = 1) {
+                                                   const std::string& ask = std::string(), int beam_size = 1,
+                                                   float temperature = 0.0f, uint64_t seed = 0) {
     auto* r = new crispasr_session_result();
     r->segments.reserve(1);
 
@@ -4947,20 +4948,19 @@ static crispasr_session_result* run_voxtral_family(Ctx* ctx, const VoxtralFamily
         }
     } else {
         int n_past = total_tokens;
+        // temperature > 0 switches this loop from argmax to sampling. Seeded
+        // once outside the loop so a fixed seed reproduces the whole sequence;
+        // re-seeding per step would make every step draw from the same state.
+        std::mt19937_64 rng(seed != 0 ? seed : (uint64_t)std::random_device{}());
         for (int step = 0; step < kMaxNewTokens; ++step) {
             const float* last = logits + (size_t)(out_n_tok - 1) * (size_t)out_vocab;
-            int best = 0;
-            float best_score = last[0];
-            for (int i = 1; i < out_vocab; ++i) {
-                if (last[i] > best_score) {
-                    best_score = last[i];
-                    best = i;
-                }
-            }
-            float sum_exp = 0.f;
-            for (int i = 0; i < out_vocab; ++i)
-                sum_exp += expf(last[i] - best_score);
-            const float picked_p = (sum_exp > 0.f) ? (1.0f / sum_exp) : 0.0f;
+            int best = core_greedy_decode::argmax(last, out_vocab);
+            if (temperature > 0.0f)
+                best = core_greedy_decode::sample_temp(last, out_vocab, temperature, rng);
+            // Probability of the token actually PICKED, not of the argmax —
+            // they differ once sampling is on, and reporting the argmax's
+            // confidence for a sampled token would silently overstate it.
+            const float picked_p = core_greedy_decode::softmax_of(last, out_vocab, best, last[best]);
             std::free(logits);
             logits = nullptr;
 
@@ -6825,7 +6825,8 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
         ops.token_text = &voxtral_token_text;
         ops.audio_pad_id = 24; // Tekken <audio_pad>
         ops.eos_id = 2;        // Tekken </s>
-        auto* vr = run_voxtral_family(s->voxtral_ctx, ops, pcm, n_samples, lang, s->ask, s->beam_size);
+        auto* vr = run_voxtral_family(s->voxtral_ctx, ops, pcm, n_samples, lang, s->ask, s->beam_size, s->temperature,
+                                      s->seed);
         // Fire per-token callbacks from the voxtral result words.
         if (vr && s->token_cb) {
             int tok_idx = 0;
