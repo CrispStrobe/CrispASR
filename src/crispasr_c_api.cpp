@@ -180,6 +180,10 @@
 #include "confucius4_tts.h"
 #define CA_HAVE_CONFUCIUS4_TTS 1
 #endif
+#if __has_include("breeze_tts_2.h")
+#include "breeze_tts_2.h"
+#define CA_HAVE_BT2_TTS 1
+#endif
 #if __has_include("piano_transcription.h")
 #include "piano_transcription.h"
 #define CA_HAVE_PIANO_TRANSCRIPTION 1
@@ -2018,6 +2022,9 @@ struct crispasr_session {
 #ifdef CA_HAVE_CONFUCIUS4_TTS
     confucius4_tts_context* confucius4_ctx = nullptr;
 #endif
+#ifdef CA_HAVE_BT2_TTS
+    breeze_tts_2_context* bt2_ctx = nullptr;
+#endif
 #ifdef CA_HAVE_PIANO_TRANSCRIPTION
     piano_transcription_ctx* piano_ctx = nullptr;
 #endif
@@ -3536,6 +3543,47 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
     }
 #endif
 #ifdef CA_HAVE_CONFUCIUS4_TTS
+#ifdef CA_HAVE_BT2_TTS
+    if (s->backend == "bt2-tts" || s->backend == "bt2" || s->backend == "bt2tts" || s->backend == "breeze-tts-2" ||
+        s->backend == "breeze_tts_2" || s->backend == "breeze-tts2") {
+        s->backend = "bt2-tts";
+        auto cp = breeze_tts_2_context_default_params();
+        cp.n_threads = s->n_threads;
+        cp.verbosity = g_open_verbosity_tls;
+        cp.use_gpu = g_open_use_gpu_tls;
+        if (g_open_temperature_tls > 0.0f)
+            cp.temperature = g_open_temperature_tls;
+        // Resolve the codec BEFORE the model load, mirroring the CLI adapter:
+        // without it the runtime still produces CODES but no audio, and
+        // discovering that after a multi-second load is the worse failure.
+        std::string bt2_codec;
+        {
+            std::string dir = model_path;
+            const size_t sep = dir.find_last_of("/\\");
+            if (sep != std::string::npos)
+                dir.resize(sep);
+            else
+                dir = ".";
+            for (const char* n : {"qwen3-tts-tokenizer-12hz.gguf", "qwen3-tts-tokenizer-12hz-f16.gguf"}) {
+                std::string cand = dir + "/" + n;
+                FILE* f = fopen(cand.c_str(), "rb");
+                if (f) {
+                    fclose(f);
+                    bt2_codec = cand;
+                    break;
+                }
+            }
+        }
+        if (!bt2_codec.empty())
+            cp.codec_path = bt2_codec.c_str();
+        s->bt2_ctx = breeze_tts_2_init_from_file(model_path, cp);
+        if (!s->bt2_ctx) {
+            delete s;
+            return nullptr;
+        }
+        return s;
+    }
+#endif
     if (s->backend == "confucius4-tts" || s->backend == "confucius4_tts" || s->backend == "confucius4") {
         s->backend = "confucius4-tts";
         confucius4_tts_params p = confucius4_tts_default_params();
@@ -4564,6 +4612,9 @@ CA_EXPORT int crispasr_session_available_backends(char* out_csv, int out_cap) {
 #endif
 #ifdef CA_HAVE_CONFUCIUS4_TTS
     list += ",confucius4-tts";
+#endif
+#ifdef CA_HAVE_BT2_TTS
+    list += ",bt2-tts";
 #endif
 #ifdef CA_HAVE_PIANO_TRANSCRIPTION
     list += ",piano-transcription";
@@ -9459,6 +9510,20 @@ static float* crispasr_session_synthesize_raw_impl(crispasr_session* s, const ch
     }
 #endif
 #ifdef CA_HAVE_CONFUCIUS4_TTS
+#ifdef CA_HAVE_BT2_TTS
+    if (s->bt2_ctx) {
+        int n = 0;
+        // Plain TTS only here. Voice Clone / Voice Design need a reference clip
+        // and an instruction string, which this ABI has no way to carry --
+        // exposing them through a text-only entry point would silently answer a
+        // different question than the caller asked. They stay CLI-only until
+        // the ABI grows a way to pass them.
+        float* pcm = breeze_tts_2_synthesize(s->bt2_ctx, text, &n);
+        if (out_n_samples)
+            *out_n_samples = n;
+        return pcm;
+    }
+#endif
     if (s->confucius4_ctx) {
         // ISO lang code drives the LANGUAGE_TOKEN_MAP prompt; "auto" must not
         // leak into it (mirrors the CLI adapter).
@@ -11208,6 +11273,10 @@ CA_EXPORT void crispasr_session_close(crispasr_session* s) {
 #ifdef CA_HAVE_CONFUCIUS4_TTS
     if (s->confucius4_ctx)
         confucius4_tts_free(s->confucius4_ctx);
+#endif
+#ifdef CA_HAVE_BT2_TTS
+    if (s->bt2_ctx)
+        breeze_tts_2_free(s->bt2_ctx);
 #endif
 #ifdef CA_HAVE_PIANO_TRANSCRIPTION
     if (s->piano_ctx)
