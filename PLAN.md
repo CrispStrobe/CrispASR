@@ -1,5 +1,22 @@
 # CrispASR — Pending work
 
+## DONE 2026-09-17 — flash-attn F16-KQ triage across AR/flow backends
+
+Followed the nemotron fix (see below) with the LEARNINGS-recorded triage:
+- **confucius4_tts**: flow-matching estimator (f5-class). Fixed onto the new
+  shared `core/sdpa.h` (manual F32 default, fused flash opt-in via
+  `CRISPASR_CONFUCIUS4_FLASH=1`). VERIFIED on Kaggle T4
+  (`chr1s4/crispasr-triage-flash-backends`): manual default TTS->ASR overlap
+  0.75 (intelligible, 329 KB audio), non-regressive. Merged.
+- **canary, cohere** (AED/decoder): MEASURED GPU-vs-CPU on T4 — byte-identical
+  transcripts, no drift. Left alone per the fix-by-sensitivity principle (a
+  P100 re-roll would be more definitive but they agreed exactly; low priority).
+- **Deprioritized** (encoders / non-AR): qwen3_tts, csm_tts, kyutai_stt,
+  moss_audio, moss_transcribe, gemma4_e2b, fastpitch_tts — flash is in robust
+  encoder/parallel paths where F16 KQ does not move the output.
+- FOLLOW-UP (low priority): refactor nemotron_sdpa and f5_tts's manual path
+  onto `core/sdpa.h` (DRY; each needs a re-verify roundtrip before landing).
+
 ## DONE 2026-09-17 — nemotron flash-attn F16-KQ accuracy defect
 
 Found during the PR #424 audit: `src/nemotron.cpp` conformer attention used

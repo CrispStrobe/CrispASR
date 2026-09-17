@@ -490,6 +490,12 @@ suffixes.
 - `CRISPASR_CONFUCIUS4_COND_DIR`
 - `CRISPASR_CONFUCIUS4_COND_PYEMB`
 - `CRISPASR_CONFUCIUS4_DUMP_S2A`
+- `CRISPASR_CONFUCIUS4_FLASH` — `1` opts the flow-matching estimator (DiT)
+  attention into the fused `ggml_flash_attn_ext` kernel. Default is a manual
+  softmax(QKᵀ)·V path in F32 (via `core/sdpa.h`), correct on every backend; the
+  fused kernel accumulates KQ in F16 and its precision hint is ignored on some
+  GPUs (P100/sm_60), which corrupts the ODE integration for a flow model. Set
+  only where the hint is honoured (read per call).
 - `CRISPASR_CONFUCIUS4_GRAPH_EMBED`
 - `CRISPASR_CONFUCIUS4_LR_LEGACY`
 - `CRISPASR_CONFUCIUS4_MAX_LAYERS`
