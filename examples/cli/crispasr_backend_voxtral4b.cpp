@@ -41,8 +41,16 @@ public:
     const char* name() const override { return "voxtral4b"; }
 
     uint32_t capabilities() const override {
-        return CAP_TIMESTAMPS_CTC | CAP_AUTO_DOWNLOAD | CAP_TEMPERATURE | CAP_PUNCTUATION_TOGGLE | CAP_FLASH_ATTN |
-               CAP_TOKEN_CONFIDENCE | CAP_BEAM_SEARCH | CAP_DIARIZE | CAP_PARALLEL_PROCESSORS;
+        // NOT CAP_TEMPERATURE, for the reason #369 records against vibevoice:
+        // `temperature` appears NOWHERE in src/voxtral4b.cpp, so no value the
+        // caller sets can reach the sampler. Declaring the cap is what
+        // SUPPRESSES the CLI's "unsupported by this backend" warning, so the
+        // flag is accepted in silence and ignored -- which cost the #369
+        // reporter real time establishing from outside that different --seed
+        // values return character-identical output. Re-declare it only
+        // together with a decode path that actually reads the value.
+        return CAP_TIMESTAMPS_CTC | CAP_AUTO_DOWNLOAD | CAP_PUNCTUATION_TOGGLE | CAP_FLASH_ATTN | CAP_TOKEN_CONFIDENCE |
+               CAP_BEAM_SEARCH | CAP_DIARIZE | CAP_PARALLEL_PROCESSORS;
     }
 
     bool init(const whisper_params& p) override {

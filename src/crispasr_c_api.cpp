@@ -6489,6 +6489,14 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
             dec_cfg.eos_id = eos_id;
             dec_cfg.vocab_size = vocab;
             dec_cfg.frequency_penalty = s->frequency_penalty;
+            // s->temperature / s->seed default to 0, so this is a no-op unless the
+            // caller actually passed --temperature: Config.temperature <= 0 is the
+            // historical argmax path. Without these two lines the backend declared
+            // CAP_TEMPERATURE while decoding at a hardcoded 0 -- and declaring the
+            // cap is what SUPPRESSED the CLI's "unsupported flag" warning, so the
+            // flag was accepted in silence and ignored.
+            dec_cfg.temperature = s->temperature;
+            dec_cfg.seed = s->seed;
             dec = core_greedy_decode::run_with_probs(s->qwen3_ctx, first_tok, first_p, prompt_len_q3,
                                                      qwen3_asr_embed_tokens, qwen3_asr_run_llm_kv, dec_cfg);
         }
@@ -6747,6 +6755,14 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
             dec_cfg.eos_id = eos_tok;
             dec_cfg.vocab_size = vocab;
             dec_cfg.frequency_penalty = s->frequency_penalty;
+            // s->temperature / s->seed default to 0, so this is a no-op unless the
+            // caller actually passed --temperature: Config.temperature <= 0 is the
+            // historical argmax path. Without these two lines the backend declared
+            // CAP_TEMPERATURE while decoding at a hardcoded 0 -- and declaring the
+            // cap is what SUPPRESSED the CLI's "unsupported flag" warning, so the
+            // flag was accepted in silence and ignored.
+            dec_cfg.temperature = s->temperature;
+            dec_cfg.seed = s->seed;
             dec = core_greedy_decode::run_with_probs(s->granite_ctx, first_tok, first_p, total_prompt,
                                                      granite_speech_embed_tokens, granite_speech_run_llm_kv, dec_cfg);
         }
