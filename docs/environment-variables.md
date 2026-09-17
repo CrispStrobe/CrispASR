@@ -1503,7 +1503,11 @@ end-to-end cosine cannot do.
   graph cache (cached graph per Lk bucket, driven through gallocr instead of
   the scheduler). Bit-identical to the default per-call path: bucket padding
   is masked `-inf`, which flash-attn skips outright. Default **off** — the
-  speed-up is measured on funasr's geometry, not yet on Voxtral's.
+  speed-up is measured on funasr's geometry, and on Voxtral it does NOT
+  appear: a decode-isolated A/B measured 189.8 ms/step off vs 192.0 ms/step on
+  (1.2% slower, output bit-identical). Graph prep is ~2 ms against a ~190 ms
+  step here, so there is nothing to win. Left in place as opt-in because it is
+  proven exact and the trade-off differs on cheaper decoders.
 - `CRISPASR_VOXTRAL_STEP_BUCKET` — bucket width for the above (default 16).
   Narrow buckets matter: setting this at or above `kv_max_ctx` reproduces the
   single fixed-Lk graph design, which measured **+69% decode CPU** on funasr

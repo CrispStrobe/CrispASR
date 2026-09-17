@@ -238,6 +238,18 @@ if not clock_fires:
 
 speedup = results["A_off"]["decode_ms"] / results["B_w16"]["decode_ms"]
 
+# The point of the run is "is the cache FASTER". v3 reported PASS for a 1.2%
+# REGRESSION because the fail-list only gated on identity and the controls --
+# a verdict that cannot report the very outcome it exists to detect. A cache
+# that is slower than no cache is a failed experiment, not a passing one.
+MIN_SPEEDUP = 1.02
+if speedup < MIN_SPEEDUP:
+    fail.append(f"B_w16 is not meaningfully faster than A_off on decode "
+                f"({speedup:.3f}x, need >= {MIN_SPEEDUP}). Bit-identity holds, but the "
+                f"speed claim does NOT: graph-prep is a negligible share of a "
+                f"{results['B_w16']['ms_per_step']:.0f} ms decode step on this model, so the "
+                f"cache buys nothing here. Keep it default-off.")
+
 print("\n" + "=" * 72)
 print(f"{'arm':<14}{'best s':>10}{'median s':>11}{'cache':>8}{'stable':>8}")
 for n, r in results.items():

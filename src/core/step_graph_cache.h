@@ -19,6 +19,27 @@
 // (Lk - n_past) x layers x head_dim and dominates immediately. Round Lk up to
 // a NARROW stride, never to a power of two and never to max_ctx.
 //
+//     MEASURED ON VOXTRAL-3B: NO WIN. THE LEVER IS MODEL-SIZE-DEPENDENT.
+// Kaggle A/B (chr1s4/crispasr-voxtral-stepcache-ab v3, q4_k, 4 CPU threads,
+// decode time isolated via CRISPASR_VOXTRAL_BENCH, best of 3):
+//
+//     arm                     decode ms   ms/step
+//     cache off                    4934     189.8
+//     cache on, width 16           4993     192.0   <- 1.2% SLOWER
+//     cache on, width >= max_ctx  17767     683.3   <- 3.6x slower
+//
+// Output was bit-identical across all three. The saving this cache offers is
+// ~2 ms of graph prep per step; a voxtral decode step costs ~190 ms, so the
+// prep is ~1% of it and the bucket's own mask build + gallocr alloc costs
+// slightly more than it saves. funasr's win was real because its step is far
+// cheaper -- the SAME 2 ms is a large share there. So the question is not
+// "which width" but "is prep a meaningful fraction of a step at all", and for
+// a 3B/30-layer/d=3072 decoder it is not. Do not wire this into another large
+// AR decoder expecting a speed-up; measure the step cost first.
+//
+// The max_ctx row is the useful half: it confirms the trap below on a second
+// model, and at 3.6x it is far worse here than the +69% funasr measured.
+//
 //     THE WIDTH IS HARDWARE- AND MODEL-SPECIFIC. MEASURE IT.
 // A bucket of width w wastes w/2 keys on average. Break-even is
 // w ~= prep_ms / per_key_ms. funasr measured per_key_ms ~= 0.28 on x86 CPU
