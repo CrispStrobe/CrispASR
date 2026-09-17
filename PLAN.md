@@ -28,13 +28,18 @@ Open:
    already fixed: the ref_codes resampler (harness now feeds both sides
    24 kHz) and the Gemma tokenizer + missing instruction on the prompt
    stages.
-2. **q4_k fidelity is a real open question for the registry default.** q4_k
-   preserves none of frame 0's codes beyond cb0 while still producing
-   intelligible speech, so code-exactness and audio quality have come apart.
-   The quant policy protects embeddings and output heads but leaves the depth
-   decoder's 434 M attention/MLP weights quantized, and 15 sequential steps
-   compound it. Needs an ASR-quality A/B (`BREEZE_QUANT=q4_k`) before q4_k
-   stays the default, not a reflex change to the carve-out.
+2. **q4_k fidelity — RESOLVED 2026-09-17: keep q4_k, change nothing.** The
+   three-way A/B (4 sentences, 1 seed, whisper-scored) gives normalised WER
+   q4_k 0.0357 / q8_0 0.0278 / f16 0.0000 at 2.05 / 3.19 / 5.32 GiB. One real
+   word error each for the two quants, none for f16. The +1.14 GiB for q8_0
+   buys code exactness (16/16 frame-0 codes vs q4_k's 1/16) that demonstrably
+   does NOT reach the audio. f16 is materially better and is published for
+   anyone who wants it.
+   Two things to carry: RAW WER ranked the quants backwards because whisper
+   normalises "seventeen"→"17" and Americanises spellings — the metric now
+   normalises both. And code exactness does not predict audio quality: q8_0 is
+   code-EXACT and still made a real error, so no code-level metric should be
+   promoted into a quality gate.
 3. **CFG multi-branch is NOT implemented** — Voice Clone and plain TTS ship;
    Voice Design and Voice Direction are REFUSED at three layers rather than
    silently downgraded. The cache topology and branch index are in place;
