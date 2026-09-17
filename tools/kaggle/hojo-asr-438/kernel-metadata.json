@@ -1,0 +1,14 @@
+{
+  "id": "chr1s4/crispasr-hojo-asr-438",
+  "title": "crispasr-hojo-asr-438",
+  "code_file": "hojo-asr-438.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "false",
+  "enable_internet": "true",
+  "dataset_sources": ["chr1s4/crispasr-hf-token", "chr1s4/crispasr-ccache"],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}
