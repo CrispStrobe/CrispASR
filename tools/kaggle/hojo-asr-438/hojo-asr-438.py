@@ -35,7 +35,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-SCRIPT_VERSION = "v6"
+SCRIPT_VERSION = "v7"
 WORK = Path("/kaggle/working")
 REPO = WORK / "CrispASR"
 TEMP = Path("/kaggle/temp") if Path("/kaggle/temp").is_dir() else Path("/tmp")
@@ -244,19 +244,35 @@ subprocess.run([sys.executable, str(REPO / "tools" / "gen-feature-matrix.py")],
                cwd=str(REPO), check=False)
 fm = REPO / "docs" / "feature-matrix.md"
 if fm.exists():
-    shutil.copy(fm, WORK / "feature-matrix.md")
     rows = [l for l in fm.read_text().splitlines() if "hojo" in l.lower()]
     print(f"  feature-matrix hojo rows: {rows if rows else 'NONE — regeneration would DROP it'}")
+    # NOT copied out as a committable artifact. This binary is built from a
+    # BRANCH based on an older main, so it does not know about backends merged
+    # since (breeze-tts-2, voxtral-f16, ...) and the generator would silently
+    # delete their rows. The matrix must be regenerated from a build of main
+    # AFTER this branch merges. All we want here is the yes/no above.
+    print("  (matrix intentionally NOT exported — regenerate from post-merge main)")
 
 # ---------------------------------------------------------------------------
 sec("5. reference dump (upstream package via forward hooks)")
 refs = {}
+ref_greedy = {}
+ref_beam = {}
 for name, wav in arms:
     ref = TEMP / f"hojo-asr-{name}-ref.gguf"
-    rc = subprocess.run([sys.executable, str(REPO / "tools" / "dump_reference.py"),
+    rd = subprocess.run([sys.executable, str(REPO / "tools" / "dump_reference.py"),
                          "--backend", "hojo-asr", "--model-dir", src,
                          "--audio", str(wav), "--output", str(ref),
-                         "--max-new-tokens", "200"]).returncode
+                         "--max-new-tokens", "200"], capture_output=True, text=True)
+    print(rd.stdout[-8000:])
+    if rd.stderr.strip():
+        print("  [stderr]", rd.stderr[-3000:])
+    rc = rd.returncode
+    for line in rd.stdout.splitlines():
+        if "generated_text_greedy:" in line:
+            ref_greedy[name] = line.split("generated_text_greedy:", 1)[1].strip()
+        elif "generated_text (beams=" in line:
+            ref_beam[name] = line.split("):", 1)[1].strip()
     if rc != 0 or not ref.exists():
         print(f"  !! reference dump FAILED for {name}", flush=True)
         continue
@@ -343,17 +359,46 @@ else:
 
 # ---------------------------------------------------------------------------
 sec("10. END-TO-END — the real CLI, read the output (HARD RULE 3c)")
+# GREEDY is the roundtrip arm, and it is matched: the reference emits a
+# num_beams=1 transcript with every other setting identical, so a difference
+# here is the port rather than the search strategy.
+#
+# The beam arm is CAPPED. core_beam_decode replays each beam's whole suffix
+# every step, so beam 4 over 200 tokens is 80,400 token-forwards (~4 h on this
+# 4.4 B decoder) versus greedy's 200. An uncapped beam arm here would not
+# produce a slow result -- it would produce no result, by blowing the 12 h
+# kernel cap. 48 tokens exercises the same code path in ~17 min.
+import time as _time
+
 for name, wav in arms:
     for label, gguf in (("f16", F16), ("q4_k", Q4)):
         if not Path(gguf).exists():
             continue
+        t0 = _time.perf_counter()
         r = subprocess.run([str(BIN / "crispasr"), "-m", str(gguf), "--backend", "hojo-asr",
-                            "-f", str(wav)], capture_output=True, text=True)
-        print(f"\n  CLI[{label}/{name}] rc={r.returncode}")
-        print(f"  C++     : {r.stdout.strip()[:400]!r}")
-        print(f"  CONTROL : {control.get(name, '(control arm failed)')!r}")
+                            "-f", str(wav), "-bs", "1"], capture_output=True, text=True)
+        dt = _time.perf_counter() - t0
+        print(f"\n  CLI[{label}/{name}] greedy rc={r.returncode} ({dt:.1f} s)")
+        print(f"    C++ greedy    : {r.stdout.strip()[:400]!r}")
+        print(f"    REF greedy    : {ref_greedy.get(name, '(no greedy reference)')}")
+        print(f"    REF beam4     : {ref_beam.get(name, '(no beam reference)')}")
+        print(f"    CONTROL beam4 : {control.get(name, '(control arm failed)')!r}")
         if r.returncode != 0:
-            print(f"  [stderr] {r.stderr[-2000:]}")
+            print(f"    [stderr] {r.stderr[-2000:]}")
+
+    # One capped beam run per arm, on f16 only, purely to exercise + time the
+    # beam path. Not a parity arm.
+    if Path(F16).exists():
+        t0 = _time.perf_counter()
+        rb = subprocess.run([str(BIN / "crispasr"), "-m", str(F16), "--backend", "hojo-asr",
+                             "-f", str(wav), "-bs", "4", "--max-new-tokens", "48"],
+                            capture_output=True, text=True)
+        print(f"  CLI[f16/{name}] beam4 capped@48 rc={rb.returncode} "
+              f"({_time.perf_counter()-t0:.1f} s)")
+        print(f"    C++ beam4(48) : {rb.stdout.strip()[:300]!r}")
+        cost = [l for l in rb.stderr.splitlines() if "token-forwards" in l]
+        if cost:
+            print(f"    {cost[-1].strip()}")
 
 # ---------------------------------------------------------------------------
 sec("11. checkpoint ccache + summary")

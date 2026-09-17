@@ -16,7 +16,15 @@ Stages
   prefill_inputs_embeds  (1+T_enc, 2560)   [embed(<|im_start|>)] ++ speech
   prefill_logits_step0   (vocab,)          logits at the last prefill position
   prefill_argmax_step0   (1,)              argmax of the above
-  generated_text         str               the package's own beam-search output
+  generated_text         str               the package's own beam-4 output (the recipe)
+  generated_text_greedy  str               the same pipeline at num_beams=1
+
+Why both: the C++ runtime defaults to GREEDY, because `core_beam_decode`
+replays each beam's whole suffix every step (O(B*T^2) vs greedy's O(T)) and
+beam 4 on this 4.4 B decoder is hours per utterance. Comparing C++ greedy
+against a beam-4 reference would conflate decode strategy with port
+correctness, so the reference emits both and the roundtrip compares like with
+like.
 
 CPU dtype adaptation (the one place this file deviates from upstream)
 --------------------------------------------------------------------
@@ -81,6 +89,7 @@ DEFAULT_STAGES = [
     "prefill_logits_step0",
     "prefill_argmax_step0",
     "generated_text",
+    "generated_text_greedy",
 ]
 
 
@@ -301,7 +310,24 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
             texts = model.infer(batch, gen_cfg)
         text = texts[0].replace("<|im_end|>", "").replace("<|endoftext|>", "").strip()
         out["generated_text"] = text
-        print(f"  generated_text: {text!r}")
+        print(f"  generated_text (beams={gen_cfg.get('num_beams')}): {text!r}")
+
+    if "generated_text_greedy" in stages:
+        # Matched arm for the C++ default. Same recipe otherwise -- only
+        # num_beams changes -- so a difference between this and the C++ output
+        # is the port, not the search.
+        g_cfg = dict(model.config.generate)
+        g_cfg["num_beams"] = 1
+        if os.environ.get("HOJO_ASR_MAX_NEW"):
+            g_cfg["max_new_tokens"] = int(os.environ["HOJO_ASR_MAX_NEW"])
+        elif max_new_tokens > 0:
+            g_cfg["max_new_tokens"] = int(max_new_tokens)
+        batch = {"spectrogram": spectrogram, "spectrogram_lens": spectrogram_lens}
+        with torch.no_grad():
+            g_texts = model.infer(batch, g_cfg)
+        g_text = g_texts[0].replace("<|im_end|>", "").replace("<|endoftext|>", "").strip()
+        out["generated_text_greedy"] = g_text
+        print(f"  generated_text_greedy: {g_text!r}")
 
     for name, arr in out.items():
         if isinstance(arr, np.ndarray):

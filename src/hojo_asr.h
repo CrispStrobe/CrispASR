@@ -102,8 +102,19 @@ typedef void (*hojo_asr_token_cb)(int tok_id, float prob, void* userdata);
 void hojo_asr_transcribe_cb(struct hojo_asr_context* ctx, const float* samples, int n_samples, hojo_asr_token_cb cb,
                             void* userdata);
 
-// Beam width. <= 0 keeps the checkpoint's own `generate.num_beams` (4) so the
-// default decode matches the reference recipe; 1 forces greedy.
+// Beam width. <= 0 means GREEDY (see the cost note below); pass 4 for the
+// checkpoint's own `generate.num_beams` recipe.
+//
+// ⚠ COST: `core_beam_decode` rebuilds each beam's KV by replaying its entire
+// generated suffix every step, so beam search is O(B*T^2) token-forwards where
+// greedy is O(T). On this 4.4 B decoder and a 9-second clip that is 80,400
+// forwards versus 200 — roughly four hours versus three minutes on CPU. That
+// is why greedy is the default even though the checkpoint's recipe is beam 4:
+// a default nobody can afford to run is not faithfulness, it is a hang.
+// The runtime prints the projected forward count whenever beam > 1.
+// The real fix is `core_beam_decode::run_with_probs_branched` (per-beam KV
+// snapshots, O(B*T)), which needs `hojo_asr_kv_save`/`kv_restore` — not yet
+// implemented, and the reason beam 4 is opt-in rather than removed.
 void hojo_asr_set_beam_size(struct hojo_asr_context* ctx, int beam_size);
 
 // #292: forward --max-new-tokens. <= 0 keeps the checkpoint's own cap.
