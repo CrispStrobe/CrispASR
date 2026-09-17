@@ -1029,8 +1029,27 @@ All three optimisation gates are output-equivalent: the per-stage diff reports
 - `CRISPASR_NEMOTRON_CONTEXT_PRESET`
 - `CRISPASR_NEMOTRON_DEBUG`
 - `CRISPASR_NEMOTRON_DECODE_TIMING`
+- `CRISPASR_NEMOTRON_FLASH` — `1` opts the conformer self-attention into the
+  fused `ggml_flash_attn_ext` kernel. Default is a manual softmax(QKᵀ)·V path in
+  F32, which is correct on every backend; the fused kernel is faster but
+  accumulates the KQ product in F16 and its `GGML_PREC_F32` hint is silently
+  ignored on some GPUs (P100/sm_60), where it drifts the RNNT emission. Set only
+  where the precision hint is honoured (read per call).
 - `CRISPASR_NEMOTRON_FORCE_SCALAR`
 - `CRISPASR_NEMOTRON_GGML_DECODE`
+- `CRISPASR_NEMOTRON_GPU_DIRECT_CONV` — `1` enables direct-convolution kernels in
+  the GPU pre-encode (part of the #424 fast path; off by default).
+- `CRISPASR_NEMOTRON_GPU_FASTPATH` — `1` enables all four #424 GPU
+  optimizations at once (joint precompute + direct conv + streaming cache +
+  prompt MLP). Off by default: the streamed variant measurably changed output
+  in the audit, so the fast path ships opt-in until proven transcript-neutral.
+- `CRISPASR_NEMOTRON_GPU_JOINT` — `1` precomputes the RNNT joint's encoder
+  projection as one batched GPU matmul (off by default; the most
+  borderline-emission-sensitive of the fast-path pieces).
+- `CRISPASR_NEMOTRON_GPU_PROMPT` — `1` runs the language-prompt MLP on the GPU
+  (off by default).
+- `CRISPASR_NEMOTRON_GPU_STREAM_CACHE` — `1` keeps the per-layer streaming state
+  in a device-resident ping-pong cache across chunks (off by default).
 - `CRISPASR_NEMOTRON_MAES`
 - `CRISPASR_NEMOTRON_NO_WINDOW_MASK`
 - `CRISPASR_NEMOTRON_STREAMING`
