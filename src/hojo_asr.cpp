@@ -1725,13 +1725,27 @@ static char* hojo_asr_impl(struct hojo_asr_context* ctx, const float* samples, i
         return nullptr;
 
     const float rep_penalty = hp.gen_repetition_penalty;
-    const int beam = ctx->beam_size > 0 ? ctx->beam_size : (int)hp.gen_num_beams;
+    // The checkpoint's recipe is num_beams=4, but `core_beam_decode` rebuilds
+    // each beam's KV by REPLAYING its whole suffix every step, so beam search
+    // costs O(B*T^2) token-forwards against greedy's O(T). On this 4.4 B
+    // decoder that is 80,400 forwards vs 200 for a 9-second clip -- hours
+    // rather than minutes. A default nobody can afford to run is not a
+    // faithful default, so greedy is the default and `-bs 4` selects the
+    // checkpoint's recipe explicitly.
+    const int beam = ctx->beam_size > 0 ? ctx->beam_size : 1;
 
     // 6. Decode
     std::vector<int32_t> generated;
     {
         hojo_asr_bench_stage _b("decode");
         if (beam > 1) {
+            // Say what this is about to cost before spending it.
+            const long long fwd = (long long)beam * max_new * (max_new + 1) / 2;
+            fprintf(stderr,
+                    "hojo_asr: beam=%d over <=%d tokens -> %lld token-forwards "
+                    "(replay-from-prefix, O(B*T^2)); greedy would be %d. Use -bs 1 "
+                    "if this is too slow.\n",
+                    beam, max_new, fwd, max_new);
             // The repetition penalty is applied INSIDE replay_fn, over that
             // beam's own suffix — which is exactly the per-beam `input_ids`
             // transformers penalises. Step 0 is unpenalised in both (the
@@ -1959,8 +1973,8 @@ extern "C" void hojo_asr_free(struct hojo_asr_context* ctx) {
     delete ctx;
 }
 
-// <= 0 keeps the checkpoint's own generate.num_beams (4), so the default decode
-// is the reference recipe rather than greedy.
+// <= 0 means greedy. The checkpoint's recipe is num_beams=4 and it is still one
+// flag away (-bs 4), but replay-from-prefix makes it O(B*T^2) — see hojo_asr.h.
 extern "C" void hojo_asr_set_beam_size(struct hojo_asr_context* ctx, int beam_size) {
     if (ctx)
         ctx->beam_size = beam_size > 0 ? beam_size : 0;

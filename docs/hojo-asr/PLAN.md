@@ -94,6 +94,17 @@ C++ reproduces it as `permute(0,2,1,3)` on `(F, T, C)` then
   "`CRISPASR_HOJO_ASR_CONV_TILE` did nothing" — both give max|delta| = 0. The
   encoder now prints `conv_schedule=tiled|untiled …` and the kernel refuses to
   score the comparison unless the two arms report different schedules.
+* **The default decode was a hang, not a recipe.** I made beam 4 the default
+  for fidelity to `config.yaml`. `core_beam_decode` rebuilds each beam's KV by
+  replaying its entire suffix every step, so beam search is O(B*T^2)
+  token-forwards where greedy is O(T): 80,400 vs 200 for a 9-second clip on
+  this 4.4 B decoder, roughly four hours vs three minutes. The Kaggle
+  end-to-end step ran four of those and would have blown the 12 h cap. Greedy
+  is now the default, `-bs 4` selects the checkpoint's recipe, the runtime
+  prints the projected forward count whenever beam > 1, and the reference emits
+  a matched `generated_text_greedy` so the roundtrip compares like with like.
+  Proper fix (a follow-up): `run_with_probs_branched` + `hojo_asr_kv_save` /
+  `kv_restore`, which is O(B*T).
 * **A cosine is the wrong instrument for the LM stage.** With an f32 reference
   and F16 C++ weights the logits cosine is precision-bound by construction. The
   arm now also reports `compare_argmax` top-1 agreement, which answers the
@@ -104,8 +115,12 @@ C++ reproduces it as `permute(0,2,1,3)` on `(F, T, C)` then
 * **Per-stage parity numbers and the ASR roundtrip are NOT in yet.** The port
   is unvalidated until the kernel reports them; nothing here should be read as
   a parity claim.
-* `docs/feature-matrix.md` is generated from a built binary and is regenerated
-  on the Kaggle worker; the result still has to be committed back.
+* `docs/feature-matrix.md` must be regenerated from a build of **main after
+  this branch merges**, never from this branch. The generator reads a live
+  `crispasr --list-backends-json`, so a binary built here — from a base that
+  predates breeze-tts-2 (#412) and voxtral-f16 (#437) — would silently delete
+  their rows. The kernel only checks whether hojo-asr *appears*; it
+  deliberately does not export the file.
 * No local validation arm exists: q4_k is ~4.4 GB (tied embedding + audio
   tower stay F16) against 8 GB of shared VPS RAM. The diff loop lives on
   Kaggle. A q8_0 audio tower is the obvious size follow-up once parity holds.
