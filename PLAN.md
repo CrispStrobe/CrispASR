@@ -1,5 +1,25 @@
 # CrispASR — Pending work
 
+## NOW 2026-09-17 — nemotron flash-attn F16-KQ accuracy defect (fix in flight)
+
+Found during the PR #424 audit: `src/nemotron.cpp` conformer attention used
+fused `ggml_flash_attn_ext` at both call sites (streaming + non-streaming) with
+no `set_prec`, and `ggml_flash_attn_ext_set_prec(F32)` is silently ignored on
+P100/sm_60 (proven on Raon in `src/f5_tts.cpp`, commit 5a29c9d3). So GPU
+transcripts drift on that hardware, independent of quant.
+
+Fix (branch `fix/nemotron-flash-prec`, this worktree): a shared `nemotron_sdpa`
+helper — manual `mul_mat`/`soft_max`/`mul_mat` SDPA in F32 as the DEFAULT
+(correct on every backend), fused flash OPT-IN via `CRISPASR_NEMOTRON_FLASH=1`
+(read per call, not cached). Mirrors f5_tts's manual-default/flash-opt-in.
+Graph math written + reshaped to match flash's head-major output; syntax-clean.
+
+- NEXT: Kaggle CUDA kernel builds the branch and roundtrips manual (default) vs
+  CPU vs flash(env=1) on the drawn GPU (ideally P100) — manual must match CPU
+  and fix the flash drift. Then ff-merge to main + record result here.
+- This is internal tracking (issues are for outside reporters); a wrongly-filed
+  GitHub issue for this was deleted.
+
 ## DONE 2026-09-17 — #437 no reference/F16 models for the Voxtral Mini repos
 
 Worktree `.claude/worktrees/voxtral-f16`, branch `feat/437-voxtral-f16`.
