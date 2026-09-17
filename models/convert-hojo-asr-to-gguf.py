@@ -527,7 +527,12 @@ def main():
             del t, arr
             continue
 
-        if arr.ndim >= 2:
+        # pos_bias_u / pos_bias_v are 2-D (n_heads, head_dim) but are ADDED to
+        # an F32 Q in the graph, and ggml's broadcast ops reject F32 (+) F16 on
+        # every backend. They are 2560 floats each, so keep them F32 rather
+        # than paying for an in-graph cast on every layer of every call.
+        force_f32 = gguf_name.endswith(".pos_bias_u") or gguf_name.endswith(".pos_bias_v")
+        if arr.ndim >= 2 and not force_f32:
             arr = np.ascontiguousarray(arr.astype(out_dtype))
             dtype = ggml_type
         else:
