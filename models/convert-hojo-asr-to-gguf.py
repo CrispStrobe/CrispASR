@@ -426,12 +426,20 @@ def main():
         from transformers import WhisperFeatureExtractor
         fe = WhisperFeatureExtractor(feature_size=n_mels, sampling_rate=16000,
                                      hop_length=mel_hop, n_fft=mel_n_fft, chunk_length=40)
-        mel_filters = np.ascontiguousarray(np.asarray(fe.mel_filters, dtype=np.float32))
+        # transformers stores (num_frequency_bins, num_mel_filters) = (201, 128)
+        # and multiplies by `mel_filters.T`. The runtime's core_mel wants the
+        # MelsFreqs layout (128, 201), so the transpose happens HERE, once, next
+        # to the source of truth -- not as a guess at load time.
+        mel_filters = np.ascontiguousarray(
+            np.asarray(fe.mel_filters, dtype=np.float32).T)
+        assert mel_filters.shape == (n_mels, mel_n_fft // 2 + 1), mel_filters.shape
         writer.add_tensor("audio.mel_filters", mel_filters)
-        win = np.asarray([0.5 * (1.0 - np.cos(2.0 * np.pi * i / mel_n_fft))
-                          for i in range(mel_n_fft)], dtype=np.float32)
+        # torch.hann_window defaults to PERIODIC: 0.5*(1 - cos(2*pi*i/N)).
+        win = np.asarray(
+            [0.5 * (1.0 - np.cos(2.0 * np.pi * i / mel_n_fft)) for i in range(mel_n_fft)],
+            dtype=np.float32)
         writer.add_tensor("audio.mel_window", win)
-        print(f"  mel_filters {mel_filters.shape}, mel_window {win.shape}")
+        print(f"  mel_filters {mel_filters.shape} (mels x freqs), mel_window {win.shape}")
     except ImportError:
         print("  WARNING: transformers not available, skipping mel filter bake")
 
