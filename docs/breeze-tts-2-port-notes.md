@@ -1094,3 +1094,44 @@ Note how it surfaced: **one stage collapsed while its neighbours held**. A
 single end-to-end score would have shown marginally worse audio and nothing
 else. That is the argument for per-stage diffing, made by the harness catching
 its own author's bug.
+
+### The voice-consent gate stopped the first quant A/B, correctly
+
+Run 1 of the quant A/B pinned the speaker by cloning `samples/jfk.wav`, which
+is the better experimental control. All twelve syntheses were refused with
+`rc=17` — `crispasr_run.cpp:3518`, voice cloning requires `--i-have-rights`,
+attesting *"I have the consent of the speaker whose voice this clones, or it
+is my own voice."*
+
+That flag was **not** passed and should not be. `jfk.wav` is a real person, the
+attestation is a claim only someone with standing can make, and an automated
+benchmark ticking it to obtain its numbers is exactly the box-checking the gate
+exists to prevent. The control was right; the experiment was wrong.
+
+The A/B therefore synthesises **unconditioned**, with a fixed seed and length
+cap across arms. The speaker is whatever the model produces rather than a
+pinned reference — a genuinely weaker control, recorded here rather than
+glossed. The metric is still intelligibility of the same four sentences under
+three quantizations. If a speaker-pinned version is wanted, a human passes
+`--i-have-rights`; that is an escalation, not something to engineer around.
+
+Second lesson from the same run, and a self-inflicted one: the failure stderr
+was captured into a dict field that the summary dropped, so twelve identical
+refusals reported a bare `rc=17` and the cause had to be recovered by reading
+the C++ afterwards. **The reason is now printed at the point of failure.** The
+rule it broke — a readout must be able to report failure — is written in these
+very notes.
+
+### Fixture self-consistency, proved both directions
+
+The fix (write the resampled clip to disk; point the request at it) was
+confirmed by the mirror image of the evidence that exposed the bug:
+
+| regeneration | `ref_codes` | `backbone_inputs_embeds` |
+|---|---|---|
+| broken (dump resampled, prompt not) | changed almost completely | **byte-identical** |
+| fixed (one array feeds both) | **unchanged** (agreement 1.0) | changed (maxabs 0.59) |
+
+First the codes moved and the prompt did not; then the prompt moved to catch up
+while the codes stood still. Together those say the prompt now reads the same
+audio its own reference codes came from.
