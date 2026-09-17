@@ -266,7 +266,13 @@ static void aa_snake_beta_op(struct ggml_tensor* dst, const struct ggml_tensor* 
     auto& snake_tmp = p->scratch_snake[ith];
     // Step C-1 A/B knob — INDEXTTS_AA_SCALAR=1 forces the scalar paths for the
     // SnakeBeta and downsample stages so we can bench Accelerate's contribution.
-    static const bool s_force_scalar = crispasr_env::get("CRISPASR_INDEXTTS_AA_SCALAR") != nullptr;
+    // Read per call, NOT cached in a function-local static: a cached read is
+    // fixed for the process, so flipping the env on a live context changes
+    // nothing and both arms of an in-process A/B silently run the same path.
+    // This is a ggml custom-op callback (once per worker per op node, ~tens of
+    // calls per generation), not a per-sample hot loop, so the getenv cost is
+    // negligible; and getenv reads are thread-safe absent a concurrent setenv.
+    const bool s_force_scalar = crispasr_env::get("CRISPASR_INDEXTTS_AA_SCALAR") != nullptr;
     if ((int)padded.size() < T_padded)
         padded.resize(T_padded);
     if ((int)upsampled.size() < T_up)
