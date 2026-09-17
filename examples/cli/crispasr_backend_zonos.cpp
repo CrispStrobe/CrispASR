@@ -63,7 +63,15 @@ public:
     const char* name() const override { return "zonos"; }
 
     uint32_t capabilities() const override {
-        return CAP_TTS | CAP_AUTO_DOWNLOAD | CAP_TEMPERATURE | CAP_FLASH_ATTN | CAP_VOICE_CLONING;
+        // NOT CAP_VOICE_CLONING (#435). zonos_tts_set_voice() is a hard stub
+        // returning -1 ("not yet implemented") — cloning needs a ResNet293
+        // speaker encoder that is not ported. The only other route,
+        // zonos_tts_set_speaker_embedding(), is called from NOWHERE in the CLI
+        // or the C API and has no flag, so there is no path to a cloned voice
+        // at all. Declaring the cap made `--voice` accepted, warned about, and
+        // then silently answered with a RANDOM speaker. Re-declare it with a
+        // working encoder, not before.
+        return CAP_TTS | CAP_AUTO_DOWNLOAD | CAP_TEMPERATURE | CAP_FLASH_ATTN;
     }
 
     int tts_sample_rate() const override { return 44100; }
@@ -136,7 +144,14 @@ public:
             if (v.size() > 4 && (v.substr(v.size() - 4) == ".wav" || v.substr(v.size() - 4) == ".mp3" ||
                                  v.substr(v.size() - 5) == ".flac")) {
                 if (zonos_tts_set_voice(ctx_, v.c_str()) != 0) {
-                    fprintf(stderr, "crispasr[zonos]: warning: failed to load voice from '%s'\n", v.c_str());
+                    // Not a file problem: the speaker encoder is not implemented.
+                    // Saying "failed to load" sent #435's reporter looking at
+                    // their wav. Name the real cause and the real consequence.
+                    fprintf(stderr,
+                            "crispasr[zonos]: --voice is NOT supported by this backend: the speaker "
+                            "encoder (ResNet293) is not implemented, so '%s' was ignored and a RANDOM "
+                            "speaker will be used. This is not a problem with your file.\n",
+                            v.c_str());
                 }
             }
         }
