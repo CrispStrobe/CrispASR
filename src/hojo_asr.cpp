@@ -984,22 +984,49 @@ extern "C" float* hojo_asr_run_encoder(struct hojo_asr_context* ctx, const float
     if (!result)
         return nullptr;
 
+    // PHASE 1 — every chunk's conv stem, BEFORE any transformer graph runs.
+    //
+    // The conv graph is reused across chunks (and across tiles) of the same
+    // width, which is only safe while no LARGER graph passes through the same
+    // sched in between: a bigger graph regrows the sched's gallocr, frees the
+    // ggml_backend_buffer structs the cached graph's tensors still point at,
+    // and the next sched_alloc_graph reads them. That is the #215 Vulkan
+    // segfault / ASan heap-use-after-free, and interleaving conv and
+    // transformer per chunk walks straight into it.
+    std::vector<float> hidden((size_t)d * T_enc, 0.0f);
+    {
+        int off = 0;
+        for (int c = 0; c < num_chunks; c++) {
+            const int valid = plan.chunks[c].valid;
+            if (!hojo_asr_conv_chunk(ctx, mel, n_mels, T_mel, plan.chunks[c].t0, plan.chunks[c].len, win_T, valid,
+                                     hidden.data() + (size_t)off * d)) {
+                free(result);
+                return nullptr;
+            }
+            // Per-chunk sinusoidal positions restart at 0.
+            for (int t = 0; t < valid; t++) {
+                const float* pe = ctx->model.audio_pe.data() + (size_t)t * d;
+                float* dst = hidden.data() + (size_t)(off + t) * d;
+                for (int j = 0; j < d; j++)
+                    dst[j] += pe[j];
+            }
+            off += valid;
+        }
+    }
+    // The conv graph must not outlive phase 1 for the same reason.
+    if (ctx->conv_ctx) {
+        ggml_free(ctx->conv_ctx);
+        ctx->conv_ctx = nullptr;
+        ctx->conv_gf = nullptr;
+        ctx->conv_win = 0;
+    }
+
+    // PHASE 2 — the 32-layer tower, once per chunk. Attention is
+    // block-diagonal over chunks in the reference and every other op is
+    // per-frame, so per-chunk full attention is the same computation.
     int out_off = 0;
     for (int c = 0; c < num_chunks; c++) {
         const int valid = plan.chunks[c].valid;
-        const int t0 = plan.chunks[c].t0;
-        std::vector<float> hidden((size_t)d * valid, 0.0f);
-        if (!hojo_asr_conv_chunk(ctx, mel, n_mels, T_mel, t0, plan.chunks[c].len, win_T, valid, hidden.data())) {
-            free(result);
-            return nullptr;
-        }
-        // Per-chunk sinusoidal positions restart at 0.
-        for (int t = 0; t < valid; t++) {
-            const float* pe = ctx->model.audio_pe.data() + (size_t)t * d;
-            float* dst = hidden.data() + (size_t)t * d;
-            for (int j = 0; j < d; j++)
-                dst[j] += pe[j];
-        }
 
         ggml_cgraph* gf = hojo_asr_build_encoder_xf_graph(ctx, valid);
         ggml_backend_sched_reset(ctx->sched);
@@ -1008,7 +1035,7 @@ extern "C" float* hojo_asr_run_encoder(struct hojo_asr_context* ctx, const float
             free(result);
             return nullptr;
         }
-        ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "xf_input"), hidden.data(), 0,
+        ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "xf_input"), hidden.data() + (size_t)out_off * d, 0,
                                 (size_t)d * valid * sizeof(float));
         if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS) {
             fprintf(stderr, "hojo_asr: encoder xf compute failed (chunk %d)\n", c);
