@@ -78,6 +78,27 @@ C++ reproduces it as `permute(0,2,1,3)` on `(F, T, C)` then
 * The reference cannot run on CPU as shipped (upstream relies on CUDA autocast
   to reconcile F32 speech embeddings with a BF16 decoder).
 
+### The instrument bugs (worth more than the code bugs)
+
+* **A reachable arm is not an affordable arm.** My first CPU fix cast the
+  speech embeddings to bf16 so the BF16 decoder would accept them — correct,
+  cheap in memory, and it put the whole Qwen3-4B decode on PyTorch's CPU bf16
+  path, which has no fast kernel without AMX. Costed against the real shapes:
+  1.11 TFLOP prefill + 7.06 TFLOP of beam-4 decode is ~2 min/utterance at
+  ~60 GFLOPS (f32/oneDNN) and ~45 min at ~3 GFLOPS. Two arms: 4 min vs 90. A
+  Kaggle run sat at 90 minutes and the tempting explanation was a cold ccache.
+  Fix: f32 decoder on CPU, plus `decode_rate_probe()`, which times one prefill
+  and one step and **prints the projected total before the expensive call**.
+* **An A/B whose arms might be identical proves nothing.** The tiled-vs-untiled
+  encoder check could not distinguish "tiling is exact" from
+  "`CRISPASR_HOJO_ASR_CONV_TILE` did nothing" — both give max|delta| = 0. The
+  encoder now prints `conv_schedule=tiled|untiled …` and the kernel refuses to
+  score the comparison unless the two arms report different schedules.
+* **A cosine is the wrong instrument for the LM stage.** With an f32 reference
+  and F16 C++ weights the logits cosine is precision-bound by construction. The
+  arm now also reports `compare_argmax` top-1 agreement, which answers the
+  question the cosine cannot.
+
 ### Not done / next
 
 * **Per-stage parity numbers and the ASR roundtrip are NOT in yet.** The port
