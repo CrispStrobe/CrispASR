@@ -71,6 +71,13 @@ catch_discover_tests(test-campplus-segpool
     TEST_SPEC "[unit][tts][campplus][segpool]"
     PROPERTIES LABELS "unit;tts;campplus")
 
+add_executable(test-step-graph-cache test-step-graph-cache.cpp)
+target_include_directories(test-step-graph-cache PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(test-step-graph-cache PRIVATE Catch2::Catch2WithMain ggml ggml-base)
+catch_discover_tests(test-step-graph-cache
+    TEST_SPEC "[unit][core][stepcache]"
+    PROPERTIES LABELS "unit;core;stepcache")
+
 add_executable(test-cosyvoice3-hift-simdconv test-cosyvoice3-hift-simdconv.cpp)
 target_include_directories(test-cosyvoice3-hift-simdconv PRIVATE ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(test-cosyvoice3-hift-simdconv PRIVATE Catch2::Catch2WithMain Threads::Threads)

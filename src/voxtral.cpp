@@ -23,6 +23,8 @@
 #include "ggml-cpu.h"
 #include "gguf.h"
 
+#include "core/step_graph_cache.h" // bucketed cached decode-step graphs
+
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -235,6 +237,11 @@ struct voxtral_context {
     ggml_cgraph* cached_enc_gf = nullptr;
     ggml_context* cached_enc_ctx = nullptr;
     std::vector<uint8_t> cached_enc_meta;
+
+    // Cached, Lk-bucketed single-token decode graphs. Opt-in until measured
+    // on this model's geometry — see core/step_graph_cache.h on why the
+    // bucket width is not portable between backends.
+    core_step_cache::Cache step_cache;
 };
 
 // ===========================================================================
@@ -950,6 +957,12 @@ extern "C" voxtral_context* voxtral_init_from_file(const char* path, voxtral_con
 extern "C" void voxtral_free(voxtral_context* ctx) {
     if (!ctx)
         return;
+    // Before any backend goes away: the cached step graphs own gallocr
+    // allocations made against ctx->backend, and ~Cache would otherwise run
+    // from `delete ctx` below — i.e. after the backend is freed. Same hazard
+    // the "free the primary backend last" note at the end of this function
+    // describes.
+    ctx->step_cache.clear();
     if (ctx->cached_enc_ctx)
         ggml_free(ctx->cached_enc_ctx);
     if (ctx->sched)
@@ -1009,7 +1022,8 @@ extern "C" const uint8_t* voxtral_token_text(voxtral_context* ctx, int id, int* 
 // KV-cached LLM graph (Stage V3) — same pattern as qwen3_asr's build_graph_llm_kv
 // ===========================================================================
 
-static ggml_cgraph* voxtral_build_graph_llm_kv(voxtral_context* ctx, int n_past, int n_tokens) {
+static ggml_cgraph* voxtral_build_graph_llm_kv(voxtral_context* ctx, int n_past, int n_tokens,
+                                               ggml_context* arena_ctx = nullptr, int fixed_lk = 0) {
     const auto& m = ctx->model;
     const auto& hp = m.hparams;
     const int d = (int)hp.llm_d_model;
@@ -1021,16 +1035,22 @@ static ggml_cgraph* voxtral_build_graph_llm_kv(voxtral_context* ctx, int n_past,
     const float theta = hp.llm_rope_theta;
     const float attn_scale = 1.0f / std::sqrt((float)hd);
     const int T = n_tokens;
-    const int Lk = n_past + T;
+    const int Lk = fixed_lk > 0 ? fixed_lk : (n_past + T);
 
     GGML_ASSERT(ctx->kv_k && ctx->kv_v && Lk <= ctx->kv_max_ctx);
 
-    ggml_init_params ip = {
-        /*mem_size=*/ctx->compute_meta.size(),
-        /*mem_buffer=*/ctx->compute_meta.data(),
-        /*no_alloc=*/true,
-    };
-    ggml_context* ctx0 = ggml_init(ip);
+    // Bucketed mode supplies its own arena, which must outlive this call: the
+    // shared compute_meta is overwritten by the very next builder call, so a
+    // graph cached out of it would be silently corrupt rather than stale.
+    ggml_context* ctx0 = arena_ctx;
+    if (!ctx0) {
+        ggml_init_params ip = {
+            /*mem_size=*/ctx->compute_meta.size(),
+            /*mem_buffer=*/ctx->compute_meta.data(),
+            /*no_alloc=*/true,
+        };
+        ctx0 = ggml_init(ip);
+    }
     ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 16384, false);
 
     ggml_tensor* embeds = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, d, T);
@@ -1039,8 +1059,11 @@ static ggml_cgraph* voxtral_build_graph_llm_kv(voxtral_context* ctx, int n_past,
     ggml_tensor* positions = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, T);
     ggml_set_name(positions, "positions");
     ggml_set_input(positions);
+    // Bucketed mode declares the mask even at T==1: padding slots in
+    // [n_past+1, Lk) must be -inf for the cached graph to stay bit-identical
+    // to a tight-Lk one. Without it the step would attend to stale KV rows.
     ggml_tensor* causal_mask = nullptr;
-    if (T > 1) {
+    if (T > 1 || fixed_lk > 0) {
         causal_mask = ggml_new_tensor_2d(ctx0, GGML_TYPE_F16, Lk, T);
         ggml_set_name(causal_mask, "causal_mask");
         ggml_set_input(causal_mask);
@@ -1072,11 +1095,16 @@ static ggml_cgraph* voxtral_build_graph_llm_kv(voxtral_context* ctx, int n_past,
         // Decode path (T==1) passes no mask to flash-attn; prefill (T>1)
         // passes the causal mask. core_attn::kv_self_attn threads whichever
         // we give it down to ggml_flash_attn_ext.
-        ggml_tensor* attn =
-            core_attn::kv_self_attn(ctx0, gf, x, b.attn_q_w, b.attn_k_w, b.attn_v_w, b.attn_output_w,
-                                    /*q_norm_w*/ nullptr, /*k_norm_w*/ nullptr, positions,
-                                    (T == 1) ? nullptr : causal_mask, ctx->kv_k, ctx->kv_v, (int)il, n_past, kvp,
-                                    /*qkv_w*/ b.attn_qkv_w);
+        // Bucketed mode routes the K/V scatter through kv_indices=positions so
+        // the destination row is a runtime input; the default static-offset
+        // path bakes n_past into the graph as a literal byte offset and would
+        // write to the building n_past on every reuse.
+        ggml_tensor* eff_mask = (T == 1 && fixed_lk == 0) ? nullptr : causal_mask;
+        ggml_tensor* eff_kv_idx = (fixed_lk > 0) ? positions : nullptr;
+        ggml_tensor* attn = core_attn::kv_self_attn(ctx0, gf, x, b.attn_q_w, b.attn_k_w, b.attn_v_w, b.attn_output_w,
+                                                    /*q_norm_w*/ nullptr, /*k_norm_w*/ nullptr, positions, eff_mask,
+                                                    ctx->kv_k, ctx->kv_v, (int)il, n_past, kvp, /*qkv_w*/ b.attn_qkv_w,
+                                                    /*fixed_kv_len*/ fixed_lk, /*kv_indices*/ eff_kv_idx);
         cur = ggml_add(ctx0, residual, attn);
 
         residual = cur;
@@ -1093,7 +1121,8 @@ static ggml_cgraph* voxtral_build_graph_llm_kv(voxtral_context* ctx, int n_past,
     cur = ggml_mul_mat(ctx0, m.llm.output_w, cur);
     ggml_set_name(cur, "logits");
     ggml_build_forward_expand(gf, cur);
-    ggml_free(ctx0);
+    if (!arena_ctx)
+        ggml_free(ctx0);
     return gf;
 }
 
@@ -1121,6 +1150,23 @@ extern "C" bool voxtral_kv_init(voxtral_context* ctx, int max_ctx) {
         return false;
     if (ctx->kv_k)
         return true;
+    // Cached step graphs hold views into kv_k/kv_v; drop them before the
+    // buffers below are (re)allocated.
+    ctx->step_cache.clear();
+    // Opt-in until measured on voxtral's geometry. core/step_graph_cache.h
+    // explains why the funasr-measured width of 16 is not transferable.
+    ctx->step_cache.enabled = false;
+    if (const char* v = crispasr_env::get("CRISPASR_VOXTRAL_STEP_CACHE")) {
+        ctx->step_cache.enabled = (*v && *v != '0');
+    }
+    // Setting the width >= kv_max_ctx reproduces the single-graph
+    // fixed_kv_len=kv_max_ctx design that measured +69% decode CPU on funasr.
+    // It exists as the A/B arm, not as a recommendation.
+    if (const char* v = crispasr_env::get("CRISPASR_VOXTRAL_STEP_BUCKET")) {
+        const int b = (v && *v) ? std::atoi(v) : 0;
+        if (b > 0)
+            ctx->step_cache.width = b;
+    }
     const auto& hp = ctx->model.hparams;
     const int hd = (int)hp.llm_head_dim, n_kv = (int)hp.llm_n_kv_heads, nl = (int)hp.llm_n_layers;
     ggml_init_params kp = {ggml_tensor_overhead() * 4 + 1024, nullptr, true};
@@ -1180,6 +1226,53 @@ extern "C" float* voxtral_run_llm_kv(voxtral_context* ctx, const float* inputs_e
     voxtral_bench_stage _b("llm_kv");
     const auto& hp = ctx->model.hparams;
     const int d = (int)hp.llm_d_model, vocab = (int)hp.llm_vocab_size, Lk = n_past + n_tokens;
+
+    // ---- Cached bucketed step path (T==1 only; prefill stays dynamic). ----
+    // Bypasses ggml_backend_sched deliberately: the cached graph holds views
+    // into the persistent KV buffers and sched re-plans around them per call.
+    // step_cache.get_or_build has already verified every op runs on
+    // ctx->backend, since there is no sched here to fall back to.
+    if (n_tokens == 1 && ctx->step_cache.enabled) {
+        core_step_cache::Entry* e = ctx->step_cache.get_or_build(
+            ctx->backend, n_past + 1, ctx->kv_max_ctx, 16384, "voxtral", [&](ggml_context* arena, int lk) {
+                // n_past=0 is deliberate: kv_indices=positions makes the
+                // K/V destination row a runtime input, so one graph is
+                // correct at every n_past in the bucket.
+                return voxtral_build_graph_llm_kv(ctx, /*n_past=*/0,
+                                                  /*n_tokens=*/1, arena, lk);
+            });
+        if (e) {
+            ggml_cgraph* gf = e->graph;
+            if (!ggml_gallocr_alloc_graph(e->galloc, gf)) {
+                fprintf(stderr, "voxtral: failed to alloc cached step graph\n");
+                return nullptr;
+            }
+            const int32_t pos1 = (int32_t)n_past;
+            std::vector<ggml_fp16_t> smask;
+            core_step_cache::fill_decode_mask(smask, n_past, e->lk);
+            ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "inputs_embeds"), inputs_embeds, 0,
+                                    (size_t)d * sizeof(float));
+            ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "positions"), &pos1, 0, sizeof(int32_t));
+            ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "causal_mask"), smask.data(), 0,
+                                    smask.size() * sizeof(ggml_fp16_t));
+            if (ggml_backend_graph_compute(ctx->backend, gf) != GGML_STATUS_SUCCESS) {
+                fprintf(stderr, "voxtral: cached step graph compute failed\n");
+                return nullptr;
+            }
+            ggml_tensor* sout = ggml_graph_get_tensor(gf, "logits");
+            if (!sout)
+                return nullptr;
+            ctx->kv_n_used = n_past + 1;
+            if (out_n_tokens)
+                *out_n_tokens = 1;
+            if (out_vocab_size)
+                *out_vocab_size = vocab;
+            float* sr = (float*)malloc((size_t)vocab * sizeof(float));
+            ggml_backend_tensor_get(sout, sr, 0, (size_t)vocab * sizeof(float));
+            return sr;
+        }
+        // get_or_build failed and disabled itself — fall through to per-call.
+    }
 
     std::vector<int32_t> pos(n_tokens);
     for (int i = 0; i < n_tokens; i++)

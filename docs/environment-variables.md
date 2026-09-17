@@ -1499,6 +1499,16 @@ end-to-end cosine cannot do.
 
 - `CRISPASR_VOXTRAL_BENCH`
 - `CRISPASR_VOXTRAL_FUSED_QKV`
+- `CRISPASR_VOXTRAL_STEP_CACHE` — `1` enables the bucketed per-step decode
+  graph cache (cached graph per Lk bucket, driven through gallocr instead of
+  the scheduler). Bit-identical to the default per-call path: bucket padding
+  is masked `-inf`, which flash-attn skips outright. Default **off** — the
+  speed-up is measured on funasr's geometry, not yet on Voxtral's.
+- `CRISPASR_VOXTRAL_STEP_BUCKET` — bucket width for the above (default 16).
+  Narrow buckets matter: setting this at or above `kv_max_ctx` reproduces the
+  single fixed-Lk graph design, which measured **+69% decode CPU** on funasr
+  because each step then reads the whole KV window. It is an A/B arm, not a
+  tuning knob to raise.
 - `CRISPASR_VOXTRAL_TTS_CODEC_FROM_FILE`
 - `CRISPASR_VOXTRAL_TTS_DEBUG`
 - `CRISPASR_VOXTRAL_TTS_DIFF_DUMP`
