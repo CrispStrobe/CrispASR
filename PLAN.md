@@ -1,5 +1,67 @@
 # CrispASR — Pending work
 
+## DONE 2026-09-17 — #437 no reference/F16 models for the Voxtral Mini repos
+
+Worktree `.claude/worktrees/voxtral-f16`, branch `feat/437-voxtral-f16`.
+
+Both F16 GGUFs are LIVE and read back correct:
+
+| File | Size | Tensors | Dtypes |
+|---|---:|---:|---|
+| `cstr/voxtral-mini-3b-2507-GGUF/voxtral-mini-3b-2507-f16.gguf` | 9,363,264,128 B (8.72 GiB) | 765 | F16=408, F32=357 |
+| `cstr/voxtral-mini-4b-realtime-GGUF/voxtral-mini-4b-realtime-f16.gguf` | 8,876,017,344 B (8.27 GiB) | 714 | F16=411, F32=303 |
+
+Those dtype counts are the published q4_k files with the quantised tensors put
+back: 3B q4_k is Q4_K=406 + F16=2 + F32=357, 4B q4_k is Q4_K=409 + F16=2 +
+F32=303. Nothing else moved.
+
+Not a port — a convert-and-upload. Both converters have always emitted F16
+(`crispasr-quantize` needs one as input, and the 3B card already quoted the
+F16's size and timings); the publish step was simply never in the recipe.
+`tools/kaggle/voxtral-mini-f16/` runs the EXISTING converters unchanged on
+Kaggle (chr1s4, CPU session — the models are 9 GB, they cannot be built here).
+
+Verification is deliberately not the kernel log. `tools/verify-remote-gguf.py`
+range-reads the PUBLISHED header, re-derives the file size the tensor table
+implies and compares it with the served Content-Length, then asserts the
+dominant dtype is F16 and that no Q4_K/Q8_0 tensor is present. Its `--self-test`
+watches six controls fail first (truncation, cut header, bad magic, trailing
+garbage, and the same file built as Q4_K so the dtype readout is shown to
+discriminate). Alongside it: local sha256 before upload == the hub's `lfs.oid`,
+which is the sha256 of the stored content. Both models pass all three, from the
+kernel and again independently from the VPS.
+
+`tools/check-registry-urls.py --backend voxtral` was watched reporting
+`404 .../voxtral-mini-3b-2507-f16.gguf` before the upload and clean after — the
+row is what makes the check able to see the gap at all.
+
+Registry (`src/crispasr_model_registry.cpp`): F16 + Q8_0 rows added for both
+backends, after the q4_k row so Q4_K stays the `-m auto` default (first match
+wins), following the sensevoice/paraformer layering. Note `-m auto:f16` never
+needed the row — `apply_quant_to_filename()` rewrites the suffix — which is
+precisely how this stayed invisible: the rewrite synthesised a download URL for
+a file that had never been published, and only a 404 at download time said so.
+The 4B q4_k size was also wrong (`~3.3 GB` against a measured 2.35 GiB); fixed
+here and in `docs/cli.md`.
+
+Cards: `hf_readmes/voxtral-mini-{3b-2507,4b-realtime}-GGUF.md` updated and
+published. The 4B card had documented an F16 named
+`voxtral-mini-4b-realtime.gguf` — a file that never existed and did not even
+carry the `-f16` suffix the resolver expects. The LIVE cards also carried a
+"Provenance and EU AI Act Art. 53 note" section the repo copies lack (3 of 145
+`hf_readmes/` have it), so the merge went live-card + our edits, and the
+uploader refuses to push when the live content has drifted from its baseline.
+
+GOTCHA that cost the first run: `convert-voxtral-to-gguf.py` builds
+`audio.mel_filters` from `WhisperFeatureExtractor.from_pretrained(input_dir)`,
+so it needs `preprocessor_config.json` — a dependency that is not a path in the
+source and that grepping the converter for `.json` does not find. The 4B
+converter computes its own filterbank and was unaffected. Kernel v1 shipped the
+4B and died on the 3B after a 9.35 GB download; v2 adds a per-model require-list
+asserted the moment the snapshot lands, and is idempotent (it skips a model
+whose published F16 already passes the same read-back), so the re-run cost one
+range request for the 4B instead of 8.9 GB.
+
 ## CLAIMED 2026-09-12 — #377 FireRedTTS3
 
 NOW (2026-09-13): converter + refdump + runtime + full wiring DONE on
