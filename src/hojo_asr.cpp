@@ -1064,6 +1064,15 @@ extern "C" float* hojo_asr_run_encoder(struct hojo_asr_context* ctx, const float
         out_off += valid;
     }
 
+    // Always name the conv schedule that produced this output. The tiled and
+    // untiled paths must agree exactly, and an A/B that cannot tell "both arms
+    // tiled" from "tiling is exact" would report a broken instrument as a fact
+    // about the code — so the arm identifies itself in the log.
+    {
+        const int tile_now = hojo_asr_conv_tile_frames();
+        fprintf(stderr, "hojo_asr: conv_schedule=%s tile=%d chunks=%d T_enc=%d\n", tile_now > 0 ? "tiled" : "untiled",
+                tile_now, num_chunks, T_enc);
+    }
     if (const char* dp = crispasr_env::get("CRISPASR_HOJO_ASR_ENC_DUMP")) {
         FILE* f = fopen(dp, "wb");
         if (f) {
