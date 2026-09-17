@@ -846,7 +846,7 @@ static bool hojo_asr_conv_chunk(hojo_asr_context* ctx, const float* mel, int n_m
 
     for (int o0 = 0; o0 < n_out; o0 += tile) {
         const int o1 = std::min(o0 + tile, n_out);
-        const core_hojo_frames::TileWindow w = core_hojo_frames::tile_window(o0, o1);
+        const core_hojo_frames::TileWindow w = core_hojo_frames::tile_window(o0, o1, win_T);
         if (!run_window(t0 + w.mel_offset, w.width, w.keep_from, w.keep_count, w.out_offset))
             return false;
     }

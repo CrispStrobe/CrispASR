@@ -110,15 +110,36 @@ struct TileWindow {
 
 // One tile of the conv schedule, covering output frames [o0, o1).
 //
-// The window starts kConvHalo frames before the first kept output's own start
-// (8*o0), so output `o0` — which needs inputs down to 8*o0 - 7 — is fully
-// covered and the conv's zero pad at the window edge is only ever read by the
-// throw-away frame at local index 0. Same on the right.
-inline TileWindow tile_window(int o0, int o1) {
+// The window is [8*o0 - 8, 8*o1 + 8) INTERSECTED with the real array
+// [0, win_T). Both halves of that matter, and the intersection is the whole
+// subtlety:
+//
+//  * The 8-frame halo covers every input a kept output reads, so in the
+//    interior no kept output ever touches a padded position.
+//  * The clamp is what makes the EDGES exact rather than merely plausible.
+//    A first draft shifted the window to -8 and zero-filled the halo, on the
+//    reasoning that the conv pads with zeros anyway. It does not: the conv
+//    pads by injecting a literal zero vector at EACH level, whereas feeding
+//    zeros as INPUT produces gelu(conv(0,0,0) + bias) = gelu(bias) at level 1
+//    and propagates that non-zero value upward. The two differ exactly where
+//    the untiled conv would have hit its own boundary -- the first and last
+//    output frame of the chunk. Clamping puts the tile's boundary where the
+//    full array's boundary is, so the same padding lands in the same place.
+//
+// mel_offset is always a multiple of 8 (either 0 or 8*(o0-1)), which is what
+// lets keep_from be o0 - mel_offset/8, and what makes
+// conv_stem_out_len(win_T - mel_offset) == conv_stem_out_len(win_T) - mel_offset/8.
+inline TileWindow tile_window(int o0, int o1, int win_T) {
+    int s = 8 * o0 - kConvHalo;
+    if (s < 0)
+        s = 0;
+    int e = 8 * o1 + kConvHalo;
+    if (e > win_T)
+        e = win_T;
     TileWindow w;
-    w.mel_offset = 8 * o0 - kConvHalo;
-    w.width = 8 * (o1 - o0) + 2 * kConvHalo;
-    w.keep_from = 1;
+    w.mel_offset = s;
+    w.width = e - s;
+    w.keep_from = o0 - s / 8;
     w.keep_count = o1 - o0;
     w.out_offset = o0;
     return w;
