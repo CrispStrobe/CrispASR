@@ -1693,6 +1693,19 @@ if(GGML_CUDA)
 endif()
 
 # ---------------------------------------------------------------------------
+# hojo_asr — HojoAI/Hojo-ASR-Multi-V1 (Qwen3-Omni audio tower + WeNet Conformer
+# adapter + Qwen3-4B LLM). Shares the audio tower with moss_transcribe.
+# ---------------------------------------------------------------------------
+add_library(hojo_asr STATIC hojo_asr.h hojo_asr.cpp)
+set_target_properties(hojo_asr PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(hojo_asr PUBLIC .)
+target_compile_features   (hojo_asr PUBLIC cxx_std_17)
+target_link_libraries     (hojo_asr PUBLIC crispasr-core ggml ggml-base crispasr_link_ggml_cpu)
+if (NOT MSVC)
+    target_compile_options(hojo_asr PRIVATE -O3)
+endif()
+
+# ---------------------------------------------------------------------------
 # moss_transcribe — OpenMOSS-Team/MOSS-Transcribe-preview-2B (Qwen3-Omni audio encoder + Qwen3-1.7B LLM)
 # ---------------------------------------------------------------------------
 add_library(moss_transcribe STATIC moss_transcribe.h moss_transcribe.cpp)
@@ -3027,6 +3040,9 @@ if (TARGET moss_tts)
 endif()
 if (TARGET moss_tts_local)
     target_link_libraries(crispasr-lib PUBLIC moss_tts_local)
+endif()
+if (TARGET hojo_asr)
+    target_link_libraries(crispasr-lib PUBLIC hojo_asr)
 endif()
 if (TARGET moss_transcribe)
     target_link_libraries(crispasr-lib PUBLIC moss_transcribe)
