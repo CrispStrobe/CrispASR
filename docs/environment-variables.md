@@ -1277,6 +1277,14 @@ All three optimisation gates are output-equivalent: the per-stage diff reports
 
 ### Sidon
 
+- `CRISPASR_SIDON_SPLIT` — **default on.** When the input exceeds the predictor's
+  frame cap, restore it as several EXACT chunks cut at energy minima, each given
+  real neighbouring audio as context, instead of refusing. Set to `0` to restore
+  the old hard refusal. It engages only past the cap, so it cannot change the
+  result for input that already fit (#431 — a 60 s clip is 3075 frames against a
+  3000-frame cap, so even one minute was refused).
+- `CRISPASR_SIDON_SPLIT_CONTEXT_MS` — context given to each side of a split chunk
+  (default 500 ms).
 - `CRISPASR_SIDON_FASTCONV` — DAC convolution mode (`off`, `k1-f16`, `k1-f32`, or `full`). Unset defaults to
   `k1-f16` on CUDA and `off` on Vulkan/CPU.
 - `CRISPASR_SIDON_RPE` — relative-position-bias formulation: `bucket-direct`, `bucket`, or `expand` (legacy

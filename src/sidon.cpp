@@ -1144,8 +1144,9 @@ static std::vector<float> sidon_restore_exact(sidon_context* ctx, const float* s
                 "roughly %.0f MiB, over the %d MiB budget (cap %d frames, ~%.1f s).\n"
                 "  If this machine has the memory: CRISPASR_SIDON_MEM_BUDGET_MB=%.0f (or set "
                 "CRISPASR_SIDON_MAX_FRAMES=%d directly).\n"
-                "  Or set CRISPASR_SIDON_SPLIT=1 to restore it as several EXACT chunks cut at energy "
-                "minima, each given real neighbouring audio as context.\n"
+                "  Splitting into EXACT chunks (cut at energy minima, each given real neighbouring audio "
+                "as context) is the default and would have handled this; you have set "
+                "CRISPASR_SIDON_SPLIT=0, which disables it.\n"
                 "  Attention cost grows with the SQUARE of duration, so a very long recording cannot be "
                 "restored in one pass at ANY budget — and sidon's own quality degrades on long input, so "
                 "chunking is not merely a fallback.\n",
@@ -1388,8 +1389,15 @@ std::vector<float> sidon_restore(sidon_context* ctx, const float* samples, int n
     const int frames_per_sample_div = kSidonInputSR / 50;
     const long long est_frames = (long long)n_samples / frames_per_sample_div;
 
+    // #431: splitting is the DEFAULT. It only ever engages when the input
+    // already exceeds the frame cap — the exact case that previously produced a
+    // hard refusal — and it is verified exact, so the change can only turn a
+    // failure into a result. The reporter's 60 s clip yields 3075 frames against
+    // a 3000-frame cap, so even a one-minute file was refused; "split the audio"
+    // as advice asks the user to do by hand what the runtime can do exactly.
+    // CRISPASR_SIDON_SPLIT=0 restores the refusal.
     const char* split_env = getenv("CRISPASR_SIDON_SPLIT");
-    const bool split_enabled = split_env && split_env[0] && split_env[0] != '0';
+    const bool split_enabled = !(split_env && split_env[0] == '0');
 
     if (est_frames <= max_frames || !split_enabled) {
         // Unchanged path, including the existing refusal and its guidance.
