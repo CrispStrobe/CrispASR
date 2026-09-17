@@ -44,6 +44,7 @@
 # ─────────────────────────── cell 1 (code) ───────────────────────────
 import json
 import os
+import re
 import shutil
 import statistics
 import subprocess
@@ -125,7 +126,7 @@ ARMS = [
 
 
 def run_arm(name, env, audio):
-    """Returns (seconds, rc, combined_output, transcript).
+    """Returns (seconds, rc, combined_output, transcript, bench).
 
     The transcript comes from --output-txt, not from scraping stdout: a stdout
     extractor that silently yields "" would make every arm match, which is
@@ -144,21 +145,36 @@ def run_arm(name, env, audio):
     cmd = [str(CLI), "--backend", "voxtral", "--model", GGUF, "--file", audio,
            "--threads", "4", "--output-txt", "--no-timestamps"]
     t0 = time.time()
-    r = sh(cmd, env={**env, "OMP_NUM_THREADS": "4"}, check=False, timeout=3600, quiet=True)
+    r = sh(cmd, env={**env, "OMP_NUM_THREADS": "4", "CRISPASR_VOXTRAL_BENCH": "1"},
+           check=False, timeout=3600, quiet=True)
     dt = time.time() - t0
 
     if not txt.exists():
         print(f"--- {name}: --output-txt produced no {txt}; stdout tail ---\n{r.stdout[-3000:]}", flush=True)
-        return dt, (r.returncode or 90), r.stdout, None
+        return dt, (r.returncode or 90), r.stdout, None, {}
     transcript = " ".join(txt.read_text(errors="replace").split()).strip()
-    return dt, r.returncode, r.stdout, transcript
+
+    # CRISPASR_VOXTRAL_BENCH=1 emits one "voxtral_bench: llm_kv  X ms" per call.
+    # The FIRST is prefill (T>1); every later one is a single decode step, which
+    # is the only thing the step-graph cache touches. v2 compared END-TO-END wall
+    # clock instead, where 91 s is dominated by model load and the encoder -- so a
+    # large decode effect showed up as a 0.3% total and the run was uninterpretable.
+    lk = [float(x) for x in re.findall(r"voxtral_bench:\s+llm_kv\s+([0-9.]+) ms", r.stdout)]
+    prefill_ms = lk[0] if lk else 0.0
+    steps = lk[1:]
+    return dt, r.returncode, r.stdout, transcript, {
+        "prefill_ms": round(prefill_ms, 2),
+        "decode_ms": round(sum(steps), 2),
+        "n_steps": len(steps),
+        "ms_per_step": round(sum(steps) / len(steps), 3) if steps else 0.0,
+    }
 
 
 results = {}
 for name, env, arm_audio in ARMS:
-    times, texts, actives = [], [], []
+    times, texts, actives, benches = [], [], [], []
     for i in range(REPS):
-        dt, rc, out, tr = run_arm(name, env, arm_audio)
+        dt, rc, out, tr, bench = run_arm(name, env, arm_audio)
         if rc != 0 or tr is None:
             print(f"--- {name} rep{i} FAILED rc={rc} ---\n{out[-4000:]}", flush=True)
             raise SystemExit(f"{name} exited {rc} / no transcript — arm cannot be compared")
@@ -166,12 +182,21 @@ for name, env, arm_audio in ARMS:
             raise SystemExit(f"{name} rep{i}: EMPTY transcript — an empty string would compare equal "
                              f"to every other empty arm and fake a pass")
         times.append(dt)
+        benches.append(bench)
         texts.append(tr)
         actives.append("step-graph cache ACTIVE" in out)
         kh.step(f"{name}_rep{i}", sec=round(dt, 2), active=actives[-1])
+    dec = [b.get("decode_ms", 0.0) for b in benches if b.get("n_steps")]
+    if not dec:
+        raise SystemExit(f"{name}: no voxtral_bench llm_kv lines — the decode clock is BLIND, "
+                         f"and a blind clock reports the same number for every arm")
     results[name] = {
         "best_s": round(min(times), 3),
         "median_s": round(statistics.median(times), 3),
+        "decode_ms": round(min(dec), 2),
+        "n_steps": benches[0].get("n_steps", 0),
+        "ms_per_step": round(min(dec) / max(benches[0].get("n_steps", 1), 1), 3),
+        "prefill_ms": benches[0].get("prefill_ms", 0.0),
         "text": texts[0],
         "text_stable": len(set(texts)) == 1,
         "cache_active": any(actives),
@@ -201,14 +226,17 @@ if not identical:
                 f"  A: {results['A_off']['text'][:300]!r}\n  B: {results['B_w16']['text'][:300]!r}")
 
 # 3. clock control: C (fixed at max_ctx) must be clearly slower than A.
-speed_ratio_C = results["C_maxctx"]["best_s"] / results["A_off"]["best_s"]
+# Judge DECODE time. v2 used wall clock and C/A came out at 1.142 against an
+# arbitrary 1.15 bar -- a REAL 14% effect misread as a failed control. Decode is
+# the only thing this feature touches, so it is the only honest denominator.
+speed_ratio_C = results["C_maxctx"]["decode_ms"] / results["A_off"]["decode_ms"]
 clock_fires = speed_ratio_C > 1.15
 if not clock_fires:
     fail.append(f"C_maxctx/A_off = {speed_ratio_C:.3f} — the known-bad fixed-Lk design did NOT measure "
                 f"slower. The clock cannot see decode cost here (dominated by load/encode?), so the "
                 f"B-vs-A timing below is NOT interpretable")
 
-speedup = results["A_off"]["best_s"] / results["B_w16"]["best_s"]
+speedup = results["A_off"]["decode_ms"] / results["B_w16"]["decode_ms"]
 
 print("\n" + "=" * 72)
 print(f"{'arm':<14}{'best s':>10}{'median s':>11}{'cache':>8}{'stable':>8}")
