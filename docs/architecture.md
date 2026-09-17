@@ -653,6 +653,78 @@ are injected as residual adds at LM blocks 0, 1, and 2, preserving
 multi-resolution audio features (low-level prosody/transients alongside
 high-level semantics) through the LM's early layers.
 
+### hojo-asr
+
+Multilingual conversational ASR (HojoAI/Hojo-ASR-Multi-V1, Apache-2.0,
+~5.2B params) in the classic **Encoder → Adapter → LLM** layout. Every
+weight — encoder, adapter and decoder — lives in the single
+`merged_full_model.safetensors` (11.96 GB); the bare
+`Qwen3-Omni-30B-A3B-Instruct/config.json` that ships beside it supplies
+audio hyper-parameters only and **no 30B checkpoint is ever fetched**.
+
+**Front end.** `WhisperFeatureExtractor(feature_size=128, n_fft=400,
+hop=160)` called with `padding=False`, so the 128-bin log-mel is the
+audio's natural length at 100 fps. The `chunk_length=40` in the reference
+only moves the unused `padding="max_length"` cap — nothing is ever padded
+to 30 s or 40 s, unlike most Whisper-derived front ends.
+
+**Encoder.** The *stock* Qwen3-Omni "AuT" audio tower — the same one
+[`moss-transcribe`](#moss-transcribe) runs — with `n_window=1500` and
+`n_window_infer=3000` patched in at construction: 3×Conv2d(3×3, stride 2,
+pad 1, 480 ch, GELU) → `conv_out` Linear(480·16=7680 → 1280, no bias) →
+per-chunk sinusoidal positions → 32 pre-LN layers (1280d, 20 heads, FFN
+5120, GELU) → `ln_post` → `proj1` → GELU → `proj2` (→2048). Mel is cut
+into 3000-frame (30 s) chunks with **block-diagonal attention** over them,
+so every chunk is mathematically independent; positions restart at 0 in
+each. 8× time downsample → 12.5 encoder frames per second.
+
+The conv stem is where the model card's "multi-frame acoustic fusion"
+actually lives: `conv_out` flattens (channel, freq) with **freq fastest**,
+fusing 8 mel frames × 128 mel bins into one 1280-d frame. That is the
+only frame-stacking in the model, and getting its order wrong yields
+fluent, confident, wrong transcripts.
+
+**Adapter.** A **WeNet `ConformerEncoder`** — `(2048 → 2560,
+linear_units=640, num_blocks=2, input_layer="linear")` with every other
+argument at WeNet's defaults: 4 heads, `rel_pos`, macaron (ff_scale 0.5),
+SiLU, cnn kernel 15, non-causal, BatchNorm, pre-LN, eps 1e-5. It is **1:1
+in time** — `linear_units: 640` is the conformer FFN's inner width, not a
+2:1 stack, and its input dim 2048 is simply the encoder's `output_dim`.
+
+Two details are invisible in the tensor shapes and wrong by default:
+`LinearNoSubsampling` feeds `RelPositionalEncoding`, whose forward applies
+**`x = x * sqrt(2560)`** (a 50.6× scale on the residual stream) and returns
+the position table *separately* — it is never added to `x`; and WeNet
+**deletes `rel_shift`**, so the positional term is
+`(q + pos_bias_v)·(W_pos·pe[0:T])ᵀ` with no shift, i.e. an absolute-position
+bias rather than Transformer-XL relative. The per-block conv module's
+`norm` is an eval-mode `BatchNorm1d`, folded to a per-channel (scale, shift)
+by the converter. A final `ln_speech` LayerNorm(2560) follows the
+bottleneck.
+
+**Decoder.** Qwen3-4B-Instruct-2507 (36L, 2560d, 32Q/8KV, head_dim 128,
+SwiGLU 9728, QK-norm, RoPE θ=5e6, RMS eps 1e-6), embeddings resized to
+151670 (Qwen3's 151669 + an added `[PAD]`), tied `lm_head`.
+
+**Conditioning.** `inputs_embeds = [embed(<|im_start|>)] ++ speech` —
+there is **no text prompt, no chat template and no audio placeholder
+token**. That is the entire conditioning, so `--ask` and `-l` have nowhere
+to go and are explicitly reported as ignored. Decode follows the
+checkpoint's `config.yaml` `generate:` block: beam 4, `do_sample=False`,
+`repetition_penalty=2.0`, `length_penalty=1.0`, and
+`max_new_tokens = max(10, min(200, T_enc·2 + 10))`. The repetition penalty
+is applied per beam over that beam's own generated suffix, matching
+transformers' `RepetitionPenaltyLogitsProcessor` — generating from
+`inputs_embeds` means the speech frames and the BOS are not tokens and are
+never penalised.
+
+**Runtime notes.** Attention runs per chunk rather than over one flat
+sequence with a block-diagonal mask (identical result; avoids a 112 MB mask
+for ten minutes of audio), and the conv stem is tiled along time with an
+8-frame halo (exact, since output frame `o` reads inputs `[8o-7, 8o+7]`;
+`CRISPASR_HOJO_ASR_CONV_TILE=0` restores the untiled path for A/B).
+Languages: de, fr, it, pt, es tagged; the card also claims ja, ar, ko, ru.
+
 ### moss-transcribe
 
 Dedicated ASR sibling of moss-audio (same author). Uses the **stock
