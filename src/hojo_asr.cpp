@@ -1162,8 +1162,15 @@ static ggml_cgraph* hojo_asr_build_adapter_graph(hojo_asr_context* ctx, int T) {
             ggml_tensor* P = ggml_mul_mat(ctx0, blk.attn_pos_w, pos); // linear_pos, no bias
 
             Q = ggml_reshape_3d(ctx0, Q, hd, nh, T);
-            ggml_tensor* bu = ggml_reshape_3d(ctx0, blk.pos_bias_u, hd, nh, 1);
-            ggml_tensor* bv = ggml_reshape_3d(ctx0, blk.pos_bias_v, hd, nh, 1);
+            // pos_bias_* are added to an F32 Q; ggml's binbcast rejects
+            // F32 (+) F16 on every backend, so cast defensively even though
+            // the converter already emits these two F32.
+            ggml_tensor* bu_src =
+                blk.pos_bias_u->type == GGML_TYPE_F32 ? blk.pos_bias_u : ggml_cast(ctx0, blk.pos_bias_u, GGML_TYPE_F32);
+            ggml_tensor* bv_src =
+                blk.pos_bias_v->type == GGML_TYPE_F32 ? blk.pos_bias_v : ggml_cast(ctx0, blk.pos_bias_v, GGML_TYPE_F32);
+            ggml_tensor* bu = ggml_reshape_3d(ctx0, bu_src, hd, nh, 1);
+            ggml_tensor* bv = ggml_reshape_3d(ctx0, bv_src, hd, nh, 1);
             ggml_tensor* Qu = ggml_cont(ctx0, ggml_permute(ctx0, ggml_add(ctx0, Q, bu), 0, 2, 1, 3)); // (hd,T,nh)
             ggml_tensor* Qv = ggml_cont(ctx0, ggml_permute(ctx0, ggml_add(ctx0, Q, bv), 0, 2, 1, 3));
 
