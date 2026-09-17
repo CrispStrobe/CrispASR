@@ -35,7 +35,7 @@ NOT MEASURED, AND WHY (stated, never estimated)
     the watermark back on for any output that cannot carry a manifest), so this
     kernel deliberately does NOT pass -DCRISPASR_NO_C2PA_NATIVE=ON.
 
-SCRIPT_VERSION = v7 (q4_k loader fix + anonymous HF fallback)
+SCRIPT_VERSION = v8 (shipping build flags: OpenBLAS + AVX2/FMA/F16C)
 """
 
 import json
@@ -49,7 +49,7 @@ import sys
 import time
 from pathlib import Path
 
-SCRIPT_VERSION = "v7"
+SCRIPT_VERSION = "v8"
 
 WORK = Path("/kaggle/working")
 TEMP = Path("/kaggle/temp/st-bench")
@@ -348,7 +348,23 @@ if not C2PA_NATIVE:
           "*_nowm arms will measure the watermarked path -- they are marked "
           "watermark_actually_disabled=false, not silently believed.", flush=True)
 BUILD_LOG["c2pa_native"] = C2PA_NATIVE
-ca_cfg = ["-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release", "-DGGML_NATIVE=OFF",
+# Match what release.yml ACTUALLY SHIPS for linux-x86_64, not a default build.
+#
+# v7 measured a configuration CrispASR does not ship: -DGGML_NATIVE=OFF alone,
+# with no BLAS backend. ggml's variant mechanism still supplied AVX2/FMA/F16C
+# (confirmed in the v7 log: "Adding CPU backend variant ggml-cpu:
+# -msse4.2;-mf16c;-mfma;-mbmi2;-mavx;-mavx2"), so ISA was NOT the gap — but
+# ggml-blas was never registered, and the shipped build enables it. A CPU
+# benchmark that omits the matmul backend the release uses measures something
+# nobody runs.
+#
+# audio.cpp keeps the same ISA policy it had in v7 (see the CPU-ISA note at its
+# configure site) so the arms stay comparable on instruction set; this changes
+# only the BLAS path, which is a CrispASR build option with no audio.cpp
+# equivalent to mirror.
+ca_cfg = ["-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release",
+          "-DGGML_NATIVE=OFF", "-DGGML_AVX2=ON", "-DGGML_FMA=ON", "-DGGML_F16C=ON",
+          "-DGGML_OPENBLAS=ON",
           *kh.cuda_build_flags(ARCH), *ca_flags]
 
 kh.step("build.crispasr", flags=" ".join(ca_cfg))
