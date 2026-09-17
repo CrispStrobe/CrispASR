@@ -11,10 +11,11 @@ THE DESIGN.
   * three arms — f16 (the ceiling), q8_0 (the middle), q4_k (the default);
   * the SAME four sentences and the SAME voice in every arm, because a single
     short clip cannot separate three codecs;
-  * voice cloning from the repo's own samples/jfk.wav with --ref-text, so the
-    speaker is FIXED rather than whatever an unconditioned run invents — an
-    uncontrolled voice would show up as quality variation that is nothing of
-    the sort;
+  * UNCONDITIONED synthesis, not voice cloning. Cloning would pin the speaker
+    and be the better control, but it requires --i-have-rights, an attestation
+    that the operator has the speaker's consent. That is not a box an automated
+    benchmark may tick, so the weaker control is the correct one here and the
+    limitation is stated rather than worked around;
   * one fixed seed and one max-new-tokens cap across all arms, so no arm can
     win or lose on utterance length;
   * WER and word-overlap against the known target text, plus the raw
@@ -48,7 +49,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-SCRIPT_VERSION = "2026-09-17.1"
+SCRIPT_VERSION = "2026-09-17.2"
 WORK = Path("/kaggle/working")
 TEMP = Path("/kaggle/temp") if Path("/kaggle/temp").is_dir() else WORK
 REPO = WORK / "CrispASR"
@@ -65,9 +66,6 @@ FIX_PREFIX = "breeze-tts-2"
 # actionable q4_k-vs-q8_0 answer rather than nothing.
 QUANTS = ["q4_k", "q8_0", "f16"]
 SEED = "42"
-
-REF_TEXT = ("And so my fellow Americans, ask not what your country can do for you, "
-            "ask what you can do for your country.")
 
 # Four sentences, deliberately varied: a pangram, digits and a proper noun, a
 # longer clause, and ordinary prose. One short clip cannot separate three
@@ -163,8 +161,9 @@ codec = hf_hub_download(HF_CODEC, "qwen3-tts-tokenizer-12hz.gguf", token=hf_toke
 fixdir = str(Path(snapshot_download(HF_FIX, repo_type="dataset", token=hf_token,
                                     allow_patterns=[f"{FIX_PREFIX}/*"],
                                     local_dir=str(TEMP / "fix"))) / FIX_PREFIX)
-VOICE = REPO / "samples" / "jfk.wav"
-assert VOICE.is_file(), "samples/jfk.wav missing — the voice must be FIXED across arms"
+# No voice reference is loaded: see the synthesis call for why cloning is not
+# used here. Leaving a VOICE path defined but unused would imply the speaker is
+# pinned when it is not.
 
 env = dict(os.environ, CRISPASR_ACCEPT_LICENSE="other", BREEZE_CODEC=codec)
 
@@ -204,17 +203,36 @@ for q in QUANTS:
     arm["sentences"] = []
     for i, text in enumerate(SENTENCES):
         wav = WORK / f"{q}_{i}.wav"
+        # NO --voice. Cloning requires --i-have-rights, whose attestation is
+        # "I have the consent of the speaker whose voice this clones, or it is
+        # my own voice." samples/jfk.wav is a real person; that is a claim only
+        # a human with standing can make, and auto-passing the flag to make a
+        # benchmark run would be exactly the box-ticking the gate exists to
+        # prevent. Run 1 of this A/B discovered that the hard way: all twelve
+        # syntheses were refused with rc=17 and the gate was right to do it.
+        #
+        # Unconditioned synthesis instead, with a fixed seed and length cap.
+        # The speaker is then whatever the model produces rather than a pinned
+        # reference — a weaker control, and stated as such — but the metric is
+        # INTELLIGIBILITY of the same four sentences under three quantizations,
+        # which this still measures honestly.
         s = subprocess.run([str(crispasr), "--backend", "bt2-tts", "-m", gguf,
                             "--codec-model", codec, "--accept-license", "other",
-                            "--voice", str(VOICE), "--ref-text", REF_TEXT,
                             "--seed", SEED, "--max-new-tokens", "220",
                             "--tts", text, "--tts-output", str(wav)],
                            capture_output=True, text=True, timeout=7200, env=env)
         row = {"target": text, "synth_rc": s.returncode, "wav": wav.is_file()}
         if not wav.is_file():
-            row["stderr"] = s.stderr[-800:]
+            row["stderr"] = s.stderr[-1500:]
             arm["sentences"].append(row)
-            print(f"[{q}][{i}] SYNTH FAILED rc={s.returncode}", flush=True)
+            # PRINT the reason. Run 1 captured stderr into a dict field that the
+            # summary dropped, so twelve identical failures reported a bare
+            # "rc=17" and the cause had to be recovered from the C++ source
+            # afterwards. A readout that cannot say why it failed wastes the
+            # whole run it was measuring.
+            print(f"[{q}][{i}] SYNTH FAILED rc={s.returncode}\n"
+                  f"    stdout: {s.stdout[-400:].strip()}\n"
+                  f"    stderr: {s.stderr[-1200:].strip()}", flush=True)
             continue
         import soundfile as sf
         a, sr = sf.read(str(wav))
