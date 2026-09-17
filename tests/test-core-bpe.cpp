@@ -178,3 +178,88 @@ TEST_CASE("bpe — detokenize skips out-of-range IDs", "[unit][bpe]") {
     std::string result = core_bpe::detokenize(id_to_token, ids.data(), ids.size());
     REQUIRE(result == "ok");
 }
+
+// ── SentencePiece BPE (Gemma / T5Gemma2), core_bpe::tokenize_spm_bpe ───────
+//
+// #412. This is a DIFFERENT algorithm from tokenize_simple(), not a variant of
+// it, and the difference is invisible at a glance: both "tokenize text with
+// BPE". Breeze TTS 2 shipped with the wrong one and produced a 208-token
+// prompt where the reference had 185, which surfaced only as a parity failure
+// three stages downstream.
+//
+// The vocabulary here is synthetic and tiny on purpose: these pin the
+// ALGORITHM (▁ substitution, rank-ordered merging across the whole string,
+// fallback) rather than any model's tokens, so they keep working when no
+// checkpoint is present. The real-vocabulary check is exact equality against
+// the Breeze fixture's prompt ids, which needs a 262k vocab and lives with the
+// diff harness.
+
+namespace {
+
+// ▁ is U+2581, three UTF-8 bytes. Spelled out so a stray editor normalisation
+// cannot silently turn it into a plain space and make these tests vacuous.
+const std::string kLower = "\xe2\x96\x81";
+
+struct SpmFixture {
+    std::unordered_map<std::string, int32_t> vocab;
+    std::unordered_map<std::string, int32_t> merges;
+    SpmFixture() {
+        vocab = {{"a", 1}, {"b", 2}, {"c", 3}, {kLower, 10}, {kLower + "a", 11},
+                 {"ab", 20}, {kLower + "ab", 21}, {"abc", 30}};
+        // "left right", lowest rank merges first.
+        merges = {{kLower + " a", 0}, {"a b", 1}, {kLower + "a b", 2}, {"ab c", 3}};
+    }
+};
+
+} // namespace
+
+TEST_CASE("spm-bpe — a space becomes U+2581 and changes the result", "[unit][bpe][spm]") {
+    SpmFixture f;
+    // No space: a+b merge to "ab".
+    REQUIRE(core_bpe::tokenize_spm_bpe(f.vocab, f.merges, "ab") == std::vector<int32_t>{20});
+    // Leading space: the ▁ participates in merging and yields a DIFFERENT id.
+    // If the normalizer were dropped, or a space were left as a space, this
+    // would collapse onto the line above.
+    REQUIRE(core_bpe::tokenize_spm_bpe(f.vocab, f.merges, " ab") == std::vector<int32_t>{21});
+}
+
+TEST_CASE("spm-bpe — merging runs across the whole string, not per word", "[unit][bpe][spm]") {
+    SpmFixture f;
+    // "a b" normalises to a ▁ b. No pair in the table matches, so all three
+    // symbols survive — which is only observable because merging is NOT
+    // confined within whitespace-delimited words.
+    REQUIRE(core_bpe::tokenize_spm_bpe(f.vocab, f.merges, "a b") == std::vector<int32_t>{1, 10, 2});
+}
+
+TEST_CASE("spm-bpe — merges apply in rank order, not left to right", "[unit][bpe][spm]") {
+    SpmFixture f;
+    // " a" -> ▁ a, and rank 0 merges it to ▁a.
+    REQUIRE(core_bpe::tokenize_spm_bpe(f.vocab, f.merges, " a") == std::vector<int32_t>{11});
+}
+
+TEST_CASE("spm-bpe — unknown symbols fall back per codepoint", "[unit][bpe][spm]") {
+    SpmFixture f;
+    // 'z' is in neither vocab nor merges: it must not abort the tokenization
+    // or swallow the neighbouring tokens.
+    const auto ids = core_bpe::tokenize_spm_bpe(f.vocab, f.merges, "az");
+    REQUIRE(ids.size() == 1);
+    REQUIRE(ids[0] == 1); // 'a' survives; 'z' has no id and is dropped
+}
+
+TEST_CASE("spm-bpe — empty input yields no tokens", "[unit][bpe][spm]") {
+    SpmFixture f;
+    REQUIRE(core_bpe::tokenize_spm_bpe(f.vocab, f.merges, "").empty());
+}
+
+TEST_CASE("spm-bpe — is NOT interchangeable with tokenize_simple", "[unit][bpe][spm]") {
+    // The regression guard that matters. Both functions have the same
+    // signature and both "do BPE", so the cheapest wrong refactor is to alias
+    // one to the other. On a vocabulary built for SentencePiece they must
+    // disagree: tokenize_simple byte-encodes through bytes_to_unicode() and
+    // splits on whitespace, so it cannot produce the ▁-joined token at all.
+    SpmFixture f;
+    const auto spm = core_bpe::tokenize_spm_bpe(f.vocab, f.merges, " ab");
+    const auto simple = core_bpe::tokenize_simple(f.vocab, f.merges, " ab");
+    REQUIRE(spm == std::vector<int32_t>{21});
+    REQUIRE(spm != simple);
+}
