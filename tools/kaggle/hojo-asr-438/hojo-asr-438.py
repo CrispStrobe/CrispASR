@@ -35,7 +35,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-SCRIPT_VERSION = "v1"
+SCRIPT_VERSION = "v2"
 WORK = Path("/kaggle/working")
 REPO = WORK / "CrispASR"
 TEMP = Path("/kaggle/temp") if Path("/kaggle/temp").is_dir() else Path("/tmp")
@@ -79,11 +79,17 @@ def disk():
 # ---------------------------------------------------------------------------
 kh.step("install deps")
 # --no-deps on hojo-asr: it pins torch==2.8.0 exactly, and reinstalling torch on
-# Kaggle costs ~20 minutes and can break torchaudio. The package itself is pure
-# Python; its real requirements are transformers (for Qwen3-Omni) and omegaconf.
+# Kaggle costs ~20 minutes and can break torchaudio. Its real requirements are
+# transformers (for Qwen3-Omni), omegaconf, and -- non-obviously --
+# openai-whisper: hojo_asr/wenet/utils/common.py does
+# `from whisper.tokenizer import LANGUAGES`, so the package will not even
+# import without it. v1 of this kernel found that in 90 seconds because the
+# import check below runs before anything expensive.
+os.environ.setdefault("NUMBA_DISABLE_CUDA", "1")  # numba (via openai-whisper) probes CUDA on import
 kh.sh_with_progress(
     "pip install -q gguf safetensors huggingface_hub hf_transfer omegaconf "
-    "soundfile 'transformers>=4.57.3,<5.0.0' && pip install -q --no-deps hojo-asr")
+    "soundfile 'transformers>=4.57.3,<5.0.0' openai-whisper "
+    "&& pip install -q --no-deps hojo-asr")
 subprocess.run([sys.executable, "-c",
                 "import torch, torchaudio, transformers, hojo_asr; "
                 "print('torch', torch.__version__); "
