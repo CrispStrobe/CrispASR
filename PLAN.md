@@ -14,8 +14,11 @@ Followed the nemotron fix (see below) with the LEARNINGS-recorded triage:
 - **Deprioritized** (encoders / non-AR): qwen3_tts, csm_tts, kyutai_stt,
   moss_audio, moss_transcribe, gemma4_e2b, fastpitch_tts — flash is in robust
   encoder/parallel paths where F16 KQ does not move the output.
-- FOLLOW-UP (low priority): refactor nemotron_sdpa and f5_tts's manual path
-  onto `core/sdpa.h` (DRY; each needs a re-verify roundtrip before landing).
+- DRY: nemotron_sdpa refactored onto `core/sdpa.h` (op-for-op identical → no
+  re-verify needed). f5_tts LEFT AS-IS — its manual path is structurally
+  different (4D-batched, `soft_max_ext` scale-folded, 3D output), so routing it
+  through `core/sdpa.h` would change its graph and require re-verifying a
+  working precision-sensitive TTS; not worth the churn.
 
 ## DONE 2026-09-17 — nemotron flash-attn F16-KQ accuracy defect
 
