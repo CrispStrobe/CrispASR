@@ -41,16 +41,15 @@ public:
     const char* name() const override { return "voxtral4b"; }
 
     uint32_t capabilities() const override {
-        // NOT CAP_TEMPERATURE, for the reason #369 records against vibevoice:
-        // `temperature` appears NOWHERE in src/voxtral4b.cpp, so no value the
-        // caller sets can reach the sampler. Declaring the cap is what
-        // SUPPRESSES the CLI's "unsupported by this backend" warning, so the
-        // flag is accepted in silence and ignored -- which cost the #369
-        // reporter real time establishing from outside that different --seed
-        // values return character-identical output. Re-declare it only
-        // together with a decode path that actually reads the value.
-        return CAP_TIMESTAMPS_CTC | CAP_AUTO_DOWNLOAD | CAP_PUNCTUATION_TOGGLE | CAP_FLASH_ATTN | CAP_TOKEN_CONFIDENCE |
-               CAP_BEAM_SEARCH | CAP_DIARIZE | CAP_PARALLEL_PROCESSORS;
+        // CAP_TEMPERATURE is REAL here, unlike the 3B voxtral adapter: this
+        // adapter runs its OWN decode loop (see transcribe()) and sets
+        // dec_cfg.temperature / .seed / .frequency_penalty from params before
+        // calling core_greedy_decode::sample_temp. `temperature` not appearing
+        // in src/voxtral4b.cpp proves nothing — the loop lives here, not there,
+        // and searching only the backend .cpp is how this cap briefly got
+        // removed in a7354b7d.
+        return CAP_TIMESTAMPS_CTC | CAP_AUTO_DOWNLOAD | CAP_TEMPERATURE | CAP_PUNCTUATION_TOGGLE | CAP_FLASH_ATTN |
+               CAP_TOKEN_CONFIDENCE | CAP_BEAM_SEARCH | CAP_DIARIZE | CAP_PARALLEL_PROCESSORS;
     }
 
     bool init(const whisper_params& p) override {
