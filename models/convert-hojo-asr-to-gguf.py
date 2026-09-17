@@ -273,6 +273,25 @@ def fold_conv_batchnorm(get, n_blocks, eps=1e-5):
         var = get(p + "running_var").float().numpy().astype(np.float64)
         scale = w / np.sqrt(var + eps)
         shift = b - mean * scale
+
+        # Verify the identity on the REAL buffers, not on a toy. A probe with
+        # production-realistic magnitude (the running stats say what scale the
+        # activations live at) through both forms must agree to float64 epsilon.
+        rng = np.random.default_rng(0)
+        probe = mean[:, None] + np.sqrt(var)[:, None] * rng.standard_normal((w.size, 8))
+        ref = (probe - mean[:, None]) / np.sqrt(var[:, None] + eps) * w[:, None] + b[:, None]
+        got = probe * scale[:, None] + shift[:, None]
+        err = float(np.max(np.abs(ref - got)))
+        # Positive control: dropping the shift must be caught, so the tolerance
+        # is known to be narrower than the defect it is guarding against.
+        err_noshift = float(np.max(np.abs(ref - probe * scale[:, None])))
+        if err > 1e-9 or err_noshift <= 1e-9:
+            raise SystemExit(
+                f"BatchNorm fold failed for block {i}: err={err:.3e}, "
+                f"no-shift control={err_noshift:.3e}")
+        if i == 0:
+            print(f"  BN fold identity: max|delta| = {err:.3e} "
+                  f"(no-shift control {err_noshift:.3e})")
         out[f"adapter.blk.{i}.conv.norm.scale"] = scale.astype(np.float32)
         out[f"adapter.blk.{i}.conv.norm.shift"] = shift.astype(np.float32)
     return out
