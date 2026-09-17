@@ -653,6 +653,36 @@ def dry_run(manifest: dict, backend_filter: str | None = None) -> int:
     from huggingface_hub import HfApi
     from huggingface_hub.errors import HfHubHTTPError
 
+    # An EXPIRED token is worse than no token: huggingface_hub sends it and HF
+    # answers 401 even for a PUBLIC repo, so a stale credential breaks a repo
+    # that would have worked anonymously. cstr/crispasr-regression-fixtures is
+    # public and ungated, and the 2026-09-16 nightly died on exactly that —
+    # "Repository Not Found ... make sure you are authenticated" against a repo
+    # needing no authentication at all.
+    #
+    # Fails OPEN on anything but an explicit 401/403: a timeout is not evidence
+    # that a token is bad, and dropping a good one would break private fetches
+    # for an unrelated reason.
+    _tok = os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN")
+    if _tok:
+        try:
+            import urllib.error
+            import urllib.request
+            _rq = urllib.request.Request(
+                "https://huggingface.co/api/whoami-v2",
+                headers={"Authorization": f"Bearer {_tok}"})
+            with urllib.request.urlopen(_rq, timeout=20) as _r:
+                _rejected = _r.status in (401, 403)
+        except urllib.error.HTTPError as _e:
+            _rejected = _e.code in (401, 403)
+        except Exception:
+            _rejected = False
+        if _rejected:
+            print("\033[33mWARN\033[0m  HF_TOKEN is expired or revoked — dropping it "
+                  "and continuing anonymously (the fixtures and gguf repos are public).")
+            os.environ.pop("HF_TOKEN", None)
+            os.environ.pop("HUGGING_FACE_HUB_TOKEN", None)
+
     api = HfApi()
     fx_repo = manifest["fixtures"]["repo"]
     fx_rev = manifest["fixtures"]["revision"]
