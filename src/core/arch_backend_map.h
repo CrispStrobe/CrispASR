@@ -148,6 +148,8 @@ inline const entry* table(size_t* n_out) {
         {"ark_asr",                   "ark-asr"},
         {"moss_audio",                "moss-audio"},
         {"moss-audio",                "moss-audio"},
+        {"hojo_asr",                  "hojo-asr"},
+        {"hojo-asr",                  "hojo-asr"},
         {"moss_transcribe",           "moss-transcribe"},
         {"moss-transcribe",           "moss-transcribe"},
         {"moss_transcribe_diarize",   "moss-diarize"},

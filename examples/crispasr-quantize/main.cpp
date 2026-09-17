@@ -862,6 +862,14 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
             // MOSS-Audio: keep encoder + adapter + deepstack at F16
             !(arch == "moss_audio" &&
               (sname.find("enc.") == 0 || sname.find("adapter.") == 0 || sname.find("deepstack.") == 0)) &&
+            // Hojo-ASR: keep the audio tower (enc.*), the whole Conformer
+            // adapter + ln_speech, and the TIED token embedding at F16.
+            // `llm.embed.weight` doubles as the output head, so quantizing it
+            // corrupts both the input embeddings and every logit. The adapter is
+            // only 136 M params but carries the entire speech→LM projection and
+            // includes 3-D Conv1d weights (ne0 = 1) that no k-quant block fits.
+            !(arch == "hojo_asr" && (sname.find("enc.") == 0 || sname.find("adapter.") == 0 ||
+                                     sname.find("ln_speech.") == 0 || sname == "llm.embed.weight")) &&
             // MOSS-Transcribe: keep encoder + adapter at F16
             // MOSS-Transcribe: keep the audio encoder + adapter at F16, and the
             // TIED token embedding at F16 — `llm.embed.weight` doubles as the

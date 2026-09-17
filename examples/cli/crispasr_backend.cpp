@@ -59,6 +59,7 @@ std::unique_ptr<CrispasrBackend> crispasr_make_ark_asr_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_moss_audio_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_moss_tts_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_moss_tts_local_backend();
+std::unique_ptr<CrispasrBackend> crispasr_make_hojo_asr_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_moss_transcribe_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_moss_transcribe_diarize_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_funasr_backend();
@@ -291,6 +292,8 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& name
         return crispasr_make_ark_asr_backend();
     if (name == "moss-audio" || name == "moss_audio" || name == "mossaudio")
         return crispasr_make_moss_audio_backend();
+    if (name == "hojo-asr" || name == "hojo_asr" || name == "hojo")
+        return crispasr_make_hojo_asr_backend();
     if (name == "moss-transcribe" || name == "moss_transcribe" || name == "mosstranscribe")
         return crispasr_make_moss_transcribe_backend();
     if (name == "moss-diarize" || name == "moss_diarize" || name == "moss-transcribe-diarize" ||
@@ -423,6 +426,7 @@ std::vector<std::string> crispasr_list_backends() {
         "omniasr-llm-1b",
         "mimo-asr",
         "ark-asr",
+        "hojo-asr",
         "moss-audio",
         "moss-transcribe",
         "moss-diarize",
@@ -815,6 +819,8 @@ std::string crispasr_detect_backend_from_gguf(const std::string& model_path) {
         return "parler-tts";
     if (contains_ci("zonos"))
         return "zonos";
+    if (contains_ci("hojo"))
+        return "hojo-asr";
     if (contains_ci("moss") && contains_ci("diarize"))
         return "moss-diarize";
     if (contains_ci("moss") && contains_ci("transcribe"))
