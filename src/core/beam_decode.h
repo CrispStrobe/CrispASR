@@ -23,7 +23,18 @@
 // long generations, the right next step is `*_kv_save` / `*_kv_restore`
 // per backend, not making this helper smarter.
 //
-//     THAT ASSUMPTION DOES NOT HOLD FOR THE TEXT-TO-TEXT CALLERS.
+//     WHAT THAT ASSUMPTION ACTUALLY SAYS — IT IS NARROWER THAN IT READS.
+// "The audio encoder dominates" is not a claim about ASR. It is a claim about
+// SMALL-DECODER ASR, and it fails from both directions:
+//   * no encoder at all — m2m100 (incl. wmt21) and t5_translate/madlad are
+//     text-to-text, so the quadratic decode term is the entire cost;
+//   * an encoder dwarfed by its decoder — hojo-asr has a real audio encoder in
+//     front of a 4.4B LM, and beam 4 over a 9 s clip costs ~248 min against
+//     ~3.5 min greedy, because the decoder is where the time is.
+// Before relying on this helper, ask whether the DECODER is cheap relative to
+// whatever precedes it — not whether the backend has an encoder.
+//
+//     CONCRETELY, FOR THE TEXT-TO-TEXT CALLERS.
 // m2m100 (incl. wmt21) and t5_translate/madlad have NO audio encoder to
 // dominate, and their generation length is bounded by max_length (200), not by
 // how long someone spoke. So the quadratic term is the whole cost there.
