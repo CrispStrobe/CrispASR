@@ -1779,8 +1779,51 @@ static char* hojo_asr_impl(struct hojo_asr_context* ctx, const float* samples, i
             if (!generated.empty() && generated.back() == (int)hp.eos_token_id)
                 generated.pop_back();
         } else {
+            const bool trace = [] {
+                const char* e = crispasr_env::get("CRISPASR_HOJO_ASR_LOGIT_TRACE");
+                return e && *e && *e != '0';
+            }();
             for (int step = 0; step < max_new; step++) {
                 hojo_asr_apply_repetition_penalty(logits, vocab, generated.data(), (int)generated.size(), rep_penalty);
+
+                // Per-step top-3 with the top1-top2 margin. A greedy transcript
+                // that differs from the reference by one token is either a real
+                // defect or a near-tie that quantisation tipped; only the margin
+                // at the divergent step tells the two apart, and nothing else in
+                // the pipeline records it.
+                if (trace) {
+                    int t1 = -1, t2 = -1, t3 = -1;
+                    float v1 = -INFINITY, v2 = -INFINITY, v3 = -INFINITY;
+                    for (int i = 0; i < vocab; i++) {
+                        const float v = logits[i];
+                        if (!std::isfinite(v))
+                            continue;
+                        if (v > v1) {
+                            v3 = v2;
+                            t3 = t2;
+                            v2 = v1;
+                            t2 = t1;
+                            v1 = v;
+                            t1 = i;
+                        } else if (v > v2) {
+                            v3 = v2;
+                            t3 = t2;
+                            v2 = v;
+                            t2 = i;
+                        } else if (v > v3) {
+                            v3 = v;
+                            t3 = i;
+                        }
+                    }
+                    auto txt = [&](int id) {
+                        const char* t = hojo_asr_token_text(ctx, id);
+                        return t ? core_bpe::token_bytes_to_utf8(t) : std::string("?");
+                    };
+                    fprintf(stderr,
+                            "hojo_asr_trace: step=%3d margin=%.6f  top1=%d '%s' %.6f  "
+                            "top2=%d '%s' %.6f  top3=%d '%s' %.6f\n",
+                            step, v1 - v2, t1, txt(t1).c_str(), v1, t2, txt(t2).c_str(), v2, t3, txt(t3).c_str(), v3);
+                }
                 // NaN-robust argmax: seed -inf, skip non-finite, abort if the
                 // whole row is non-finite (a silent all-NaN row would otherwise
                 // decode as token 0 forever).
