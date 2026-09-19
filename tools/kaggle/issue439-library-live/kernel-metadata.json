@@ -1,5 +1,5 @@
 {
-  "id": "chr1str/crispasr-issue439-library-live",
+  "id": "chr1s4/crispasr-issue439-library-live",
   "title": "crispasr-issue439-library-live",
   "code_file": "crispasr-issue439-library-live.py",
   "language": "python",
@@ -8,8 +8,8 @@
   "enable_gpu": "true",
   "enable_internet": "true",
   "dataset_sources": [
-    "chr1str/crispasr-hf-token",
-    "chr1str/crispasr-ccache"
+    "chr1s4/crispasr-hf-token",
+    "chr1s4/crispasr-ccache"
   ],
   "competition_sources": [],
   "kernel_sources": [],
