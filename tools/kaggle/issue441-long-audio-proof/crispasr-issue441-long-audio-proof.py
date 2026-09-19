@@ -6,6 +6,7 @@ import re
 import resource
 import selectors
 import signal
+import shutil
 import subprocess
 import sys
 import time
@@ -14,8 +15,7 @@ from pathlib import Path
 
 WORK = Path("/kaggle/working")
 TEMP = Path("/kaggle/temp")
-REPO = TEMP / "CrispASR"
-OLD_REPO = TEMP / "CrispASR-v0833"
+REPO = WORK / "CrispASR"
 CURRENT_BUILD = TEMP / "build-issue441-current"
 OLD_BUILD = TEMP / "build-issue441-v0833"
 MODELS = TEMP / "models"
@@ -59,9 +59,9 @@ def build(source: Path, build_dir: Path, label: str) -> Path:
 
 CURRENT_BIN = build(REPO, CURRENT_BUILD, "current")
 sh(f"git -C {REPO} fetch --depth 1 origin tag v0.8.33")
-sh(f"git -C {REPO} worktree add --detach {OLD_REPO} v0.8.33")
-sh(f"git -C {OLD_REPO} submodule update --init --recursive")
-OLD_BIN = build(OLD_REPO, OLD_BUILD, "old")
+sh(f"git -C {REPO} checkout --detach v0.8.33")
+sh(f"git -C {REPO} submodule update --init --recursive")
+OLD_BIN = build(REPO, OLD_BUILD, "old")
 
 MODELS.mkdir(exist_ok=True)
 os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
@@ -103,6 +103,9 @@ def make_clip() -> Path:
 
 
 clip = make_clip()
+# The seeded source path is temporary. Keep only final evidence in
+# /kaggle/working so output retrieval never walks a checkout or build tree.
+shutil.rmtree(REPO)
 
 
 def parse_last_srt(path: Path) -> float:
