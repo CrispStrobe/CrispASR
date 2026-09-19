@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.8.34
+
+* **Breeze-TTS-2 (`bt2-tts`)** adds plain synthesis, voice cloning, and voice
+  design. Its GGUFs retain the upstream non-commercial licence.
+* **Linux CUDA 12 and CUDA 13 CLI packages return** after v0.8.33's release
+  jobs failed to link their dynamically loaded ggml backends (#442).
+* **Parakeet long audio is bounded at the encoder allocation itself** and uses
+  cgroup-aware available memory, preventing the intermittent 123.6 GB request
+  and NULL dereference reported on a 47.5-minute input (#441).
+* **Sidon splits oversized recordings by default** instead of asking users to
+  do it manually, while inputs that fit keep the same single-pass path (#431).
+* M2M100/WMT21 translation now uses each checkpoint's beam-5, 200-token decode
+  defaults in both CLI and library sessions, avoiding repetition collapse
+  (#439). Zonos rejects unsupported voice cloning and switches per-request
+  languages reliably (#435).
+
 ## 0.8.33
 
 * **Two new TTS backends**: Supertonic-3 (`--backend supertonic`, 44.1 kHz
