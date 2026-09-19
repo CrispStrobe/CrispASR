@@ -10,6 +10,7 @@
 
 #include "core/cpu_packed_conv1d.h"
 #include "core/crispasr_env.h"
+#include "core/env_gate.h"
 #include "core/parallel_for.h"
 
 #include <algorithm>
@@ -313,11 +314,29 @@ inline void conv_row(const float* in, float* out, int IC, int H, int W, const bp
 
 } // namespace bp_conv_fast
 
-// Gate. The reference loop stays the default until the fast path is proven on
-// this corpus; CRISPASR_BASIC_PITCH_FASTCONV=1 selects it, and =0 is the way
-// back once the default flips.
+// Gate. DEFAULT ON since the CI A/B closed the verdict;
+// CRISPASR_BASIC_PITCH_FASTCONV=0 is the way back to the reference loop, which
+// is kept verbatim as bp_conv2d_ref and is never removed.
+//
+// It defaults on because it wins on speed AND quality, which is the bar. On
+// quality it is not merely non-regressed but BYTE-IDENTICAL, on both runners,
+// at 1 and 4 threads (tests/test-basic-pitch-conv.cpp, and the raw heads plus
+// all note events end to end). On speed, measured one-arm-per-process, cold
+// run discarded, median of 3, on clean CI runners rather than the
+// oversubscribed dev VPS (run 35471451173):
+//
+//   ubuntu-24.04, 4 cores, avx2+fma   reference 130.9 ms -> 72.1 (1.82x) t1
+//                                                        -> 36.5 (3.58x) t2
+//                                                        -> 34.4 (3.81x) t4
+//   macos-14, M1 3 cores, NEON        reference  85.3 ms -> 80.4 (1.06x) t1
+//                                                        -> 35.6 (2.39x) t4
+//
+// Note what those two rows say together: on aarch64 the SIMD half is worth
+// almost nothing (NEON is already 4-wide at baseline, so t1 gains 6% from the
+// register blocking alone) and the entire arm64 win is threading, while on
+// x86-64 both halves pay. Neither platform regresses.
 inline bool bp_fastconv_on() {
-    static const bool on = crispasr_env::truthy("CRISPASR_BASIC_PITCH_FASTCONV");
+    static const bool on = !core_env::explicitly_off("CRISPASR_BASIC_PITCH_FASTCONV");
     return on;
 }
 

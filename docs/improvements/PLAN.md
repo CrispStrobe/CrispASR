@@ -19,7 +19,12 @@ working path — per the dev-guide), with an **A/B method** and **unit tests**.
       extending `CRISPASR_PORTABLE_CPU` to cover `src/` too (it loops over
       `GGML_*` only today), which closes a real trap at zero cost regardless of
       what is decided about enabling ISA.
-- [ ] **Basic Pitch conv fast path — flip the default?** Implemented and gated
+- [x] **Basic Pitch conv fast path — DEFAULT FLIPPED ON** (CI run 35471451173:
+      1.82x/3.81x ubuntu-24.04, 2.39x macos-14, byte-identical on both).
+      Follow-up: `core_parallel::for_each_chunk` spawns threads per conv call,
+      so `n_threads=4` costs 70% more CPU than 2 for 6% less wall — route
+      through `core/worker_pool.h`. Original notes:
+- [x] **(superseded) Basic Pitch conv fast path — flip the default?** Implemented and gated
       (`CRISPASR_BASIC_PITCH_FASTCONV`, branch `perf/basic-pitch-conv`), output
       proven byte-identical (`tests/test-basic-pitch-conv.cpp`, plus raw-head
       FNV + norms end-to-end). SIMD half wins on speed AND quality, so it clears

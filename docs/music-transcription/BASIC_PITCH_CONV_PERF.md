@@ -1,8 +1,9 @@
 # Basic Pitch — convolution path A/B
 
-Branch `perf/basic-pitch-conv`. Status: **fast path implemented, byte-identical,
-measurably faster, default still OFF.** See the verdict at the bottom for what
-would justify flipping it.
+Branch `perf/basic-pitch-conv`. Status: **shipped as the default.** Byte-identical
+output, 1.82x on x86-64 single-threaded and 3.81x with 4 threads, 2.39x on
+arm64, measured on clean CI runners. `CRISPASR_BASIC_PITCH_FASTCONV=0` returns
+to the reference loop, which is kept verbatim and is never removed.
 
 ## 1. The premise in the file header was wrong
 
@@ -161,7 +162,57 @@ Two results worth stating plainly because they contradict the obvious guesses:
 1.45× on the convolutions dilutes to 1.32× on the file because the CQT, WAV
 read, resample and note-creation are untouched.
 
-### Threading: honestly unmeasurable on this box
+### The clean-box measurement (CI run 35471451173) — this is the real result
+
+Everything above is from the contended VPS. `.github/workflows/basic-pitch-conv-ab.yml`
+runs the same hermetic harness on GitHub runners: one arm per process, cold run
+discarded, median of 3, arms back to back. Variance on the Linux runner was
+**0.05%** — compare the VPS's 2-4x wall swings.
+
+**ubuntu-24.04, 4 cores, avx2 + fma (no avx512):**
+
+| arm | wall ms | cpu ms | speedup | achieved parallelism |
+|---|---|---|---|---|
+| reference | 130.9 | 130.9 | 1.00× | 1.00 |
+| avx2, 1 thread | **72.1** | 72.1 | **1.82×** | 1.00 |
+| avx2, 2 threads | **36.5** | 72.7 | **3.58×** | 1.99 |
+| avx2, 4 threads | **34.4** | 123.2 | **3.81×** | 3.92 |
+| avx2+fma, 1 thread | 71.8 | 71.8 | 1.82× | 1.00 |
+
+**macos-14, Apple M1 (virtual), 3 cores, NEON:**
+
+| arm | wall ms | cpu ms | speedup | achieved parallelism |
+|---|---|---|---|---|
+| reference | 85.3 | 84.9 | 1.00× | 1.00 |
+| avx2 (→ portable kernel), 1 thread | 80.4 | 80.3 | 1.06× | 1.00 |
+| … 2 threads | 46.7 | 86.9 | 1.83× | 1.95 |
+| … 4 threads | **35.6** | 87.9 | **2.39×** | 2.63 |
+
+Four things fall out of those two tables, and three of them contradict a
+reasonable prior:
+
+1. **The SIMD win is bigger on a clean box than CPU time suggested** — 1.82×,
+   not the 1.45× the VPS measured. CPU time on an oversubscribed machine
+   *understates* the win, because cache and memory contention hurt the faster
+   kernel proportionally more.
+2. **FMA buys nothing, now confirmed on clean hardware** (71.8 vs 72.1 ms,
+   0.4%). The kernel is load/dependency-bound, not FP-bound — `contour_conv`
+   reuses each input element about 8 times (OC = 8), against ~936 in a dense
+   GEMM. So the bit-identical kernel is also the fastest one, and bit-identity
+   costs nothing.
+3. **On arm64 the SIMD half is worth almost nothing** — 1.06×. NEON is baseline
+   on aarch64, so the portable path was already 4-wide and the 6% is the
+   register blocking alone. The brief predicted this; it is now measured. The
+   entire arm64 win (2.39×) is threading.
+4. **4 threads costs 70% more CPU than 2 for 6% more wall** (123.2 vs 72.7 ms
+   CPU, 34.4 vs 36.5 ms wall). `core_parallel::for_each_chunk` spawns
+   `std::thread`s per call — six convolutions per window, so the spawn cost is
+   paid ~84 times for a 22 s file. For a batch or server workload `n_threads=2`
+   is the better operating point today, and routing this through the existing
+   `core/worker_pool.h` would remove the trade entirely. Recorded as a
+   follow-up, not fixed here.
+
+### Threading on the dev VPS: honestly unmeasurable
 
 Total CPU rises only 162.4 → 167.7 ms (+3%) from 1 to 4 threads, so the split is
 close to free. But achieved parallelism (`cpu_min / wall_min`) never exceeded
@@ -255,24 +306,25 @@ that is working.
 
 ## 7. Verdict
 
-### Should the default flip?
+### Should the default flip? — yes, and it has
 
-**The evidence supports it, and it has deliberately not been flipped here.**
 The dev guide's bar is "wins on speed AND quality". Quality is not merely
-non-regressed, it is byte-identical, so no regression is possible. Speed is
-+45% on the convolutions and +32% on the file, on a stable metric, in separate
-processes. That clears the bar.
+non-regressed, it is **byte-identical**, on both runners, at 1 and 4 threads, so
+no regression is possible. Speed is **1.82× / 3.81× on x86-64 and 2.39× on
+arm64**, measured the way the guide requires — one arm per process, cold run
+discarded, median of 3, identical load — on clean boxes rather than the
+oversubscribed VPS, reproducing to 0.05%.
 
-Two reasons it is left gated, per the brief and rule 3a:
+`bp_fastconv_on()` now reads `!core_env::explicitly_off(...)`, so the default is
+on and `CRISPASR_BASIC_PITCH_FASTCONV=0` is the documented way back.
+`bp_conv2d_ref` is kept verbatim and is never removed — it is the
+regression-bisection mechanism and the thing the unit test diffs against.
 
-1. The brief asked for the old path to stay default until proven, and half the
-   design — threading — is **not** proven on this box.
-2. Every measurement here is from one contended 4-core Skylake VPS. A clean run
-   (CI, or a Kaggle box) confirming the AVX2 CPU-time win and showing real
-   wall-clock scaling at `n_threads = 4` is a cheap way to remove all doubt.
-
-Flipping is then a one-line change to `bp_fastconv_on()` (to
-`!crispasr_env::explicitly_off(...)`), with the gate kept as the way back.
+The one caveat that came with the flip, stated plainly: `n_threads` defaults to
+4 in `basic_pitch_default_params()`, and at 4 threads the per-call
+`std::thread` spawn costs 70% more CPU than 2 threads for 6% less wall. Callers
+that care about total CPU (batch, server) should pass `n_threads = 2` until the
+spawn is replaced with `core/worker_pool.h`.
 
 ### `ggml_conv_2d` or direct SIMD, for *this* backend?
 
