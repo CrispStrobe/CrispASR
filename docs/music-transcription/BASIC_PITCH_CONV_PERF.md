@@ -96,7 +96,7 @@ bit-identical (an FMA rounds once where mul+add rounds twice, and GCC contracts
 inside an `avx512f` target clone because AVX-512F carries FMA); they are never
 auto-selected and exist only to price that rounding.
 
-## 4. Two mistakes worth recording
+## 4. Three mistakes worth recording
 
 Both were caught by measurement, and both would have shipped as "wins".
 
@@ -111,6 +111,16 @@ Both were caught by measurement, and both would have shipped as "wins".
   cannot auto-vectorise — a branchy reduction into a scalar. The reference's own
   shape (`kw` outer, `wo` inner and contiguous) is the fast one; the fallback
   now *is* that shape, restricted to a range.
+
+- **Flipping the default broke the CI A/B, silently and in the "everything is
+  fine" direction.** The harness's reference arm passed *no* env var, which was
+  correct only while the gate defaulted off. The moment the default flipped,
+  that arm became the fast path, and run 35471993867 duly reported `1.00x` for
+  every arm with a green tick. Fixed by setting
+  `CRISPASR_BASIC_PITCH_FASTCONV=0` explicitly **and** asserting the arm name
+  the harness prints (`[arm=…]`) against what was requested, so a harness that
+  measures the wrong thing fails instead of reporting parity. A gate's default
+  is part of every harness that reads it.
 
 Also: `core/cpu_packed_conv1d.h` `#undef`s `CRISPASR_CPU_PACKED_CONV1D_X86` at
 the end of the header, so `#if CRISPASR_CPU_PACKED_CONV1D_X86` in a consumer

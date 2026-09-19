@@ -70,6 +70,8 @@ jobs:
           for t in 1 4; do
             CRISPASR_BASIC_PITCH_FASTCONV=1 ./basic-pitch-conv-ab --check "$t"
           done
+          # and the shipped default, whatever it currently is
+          ./basic-pitch-conv-ab --check 4
           # And prove the guard can fail: avx2fma contracts into FMA and must
           # NOT be reported identical. On a host without FMA this arm falls
           # back to the bit-identical kernel, so only assert where it applies.
@@ -87,26 +89,43 @@ jobs:
       - name: Timing A/B
         run: |
           set -e
-          run_arm() { # tag, isa (empty = reference), threads
+          # tag, isa ("off" = the reference loop), threads, expected arm name.
+          #
+          # The reference arm MUST set CRISPASR_BASIC_PITCH_FASTCONV=0
+          # explicitly. It used to pass no env at all, which was correct only
+          # while the gate defaulted off; the moment the default flipped, that
+          # arm silently became the fast path and every ratio collapsed to
+          # 1.00x. Hence expected_arm below: the harness prints which arm it
+          # actually ran, and we assert it rather than assume it.
+          run_arm() {
             for rep in 0 1 2 3; do
-              if [ -z "$2" ]; then
-                out=$(./basic-pitch-conv-ab 10 "$3")
+              if [ "$2" = "off" ]; then
+                out=$(CRISPASR_BASIC_PITCH_FASTCONV=0 ./basic-pitch-conv-ab 10 "$3")
               else
                 out=$(CRISPASR_BASIC_PITCH_FASTCONV=1 \
                       CRISPASR_BASIC_PITCH_CONV_ISA="$2" ./basic-pitch-conv-ab 10 "$3")
               fi
+              got=$(echo "$out" | sed -n 's/.*\[arm=\([^ ]*\) .*/\1/p')
+              if [ "$got" != "$4" ]; then
+                echo "::error::arm $1 ran as '\''$got'\'', expected '\''$4'\'' — the A/B is comparing the wrong thing"
+                exit 1
+              fi
               # discard rep 0 (cold)
-              [ "$rep" = "0" ] && continue
-              echo "$1 $(echo "$out" | awk '/^TOTAL/{print $3, $6}') \
-                   $(echo "$out" | awk '/^achieved_parallelism/{print $2}')"
+              if [ "$rep" != "0" ]; then
+                echo "$1 $(echo "$out" | awk '/^TOTAL/{print $3, $6}') \
+                     $(echo "$out" | awk '/^achieved_parallelism/{print $2}')"
+              fi
             done
           }
+          # On a host without AVX2 (e.g. arm64) the fast arms resolve to the
+          # portable kernel, which the harness names "scalar".
+          if [ "$RUNNER_ARCH" = "X64" ]; then FAST=avx2; FMA=avx2fma; else FAST=scalar; FMA=scalar; fi
           {
-            run_arm reference ""        1
-            run_arm avx2-t1   avx2      1
-            run_arm avx2-t2   avx2      2
-            run_arm avx2-t4   avx2      4
-            run_arm fma-t1    avx2fma   1
+            run_arm reference off       1 reference
+            run_arm avx2-t1   "$FAST"   1 "$FAST"
+            run_arm avx2-t2   "$FAST"   2 "$FAST"
+            run_arm avx2-t4   "$FAST"   4 "$FAST"
+            run_arm fma-t1    "$FMA"    1 "$FMA"
           } | tee arms.txt
 
           python3 - <<'PY'
