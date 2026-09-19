@@ -523,6 +523,75 @@ bool crispasr_words_have_positive_span(const std::vector<crispasr_word>& words) 
     return !words.empty() && words.back().t1 > words.front().t0;
 }
 
+// The Python forced-aligner blueprint runs once for an audio chunk and that
+// chunk's complete transcript.  Doing one model call per ASR segment loses the
+// global monotonic sequence and was the root of #444.  Align the slice once,
+// then partition the returned units back onto the original display segments.
+static bool crispasr_align_slice_segments(const std::string& aligner_model, const std::vector<float>& samples,
+                                          int range_start, int range_end, int64_t offset_cs, int n_threads,
+                                          bool force_aligner, std::vector<crispasr_segment>& segs,
+                                          bool* out_load_failed = nullptr) {
+    std::vector<size_t> targets;
+    std::vector<size_t> counts;
+    std::string transcript;
+    size_t expected_words = 0;
+    for (size_t i = 0; i < segs.size(); i++) {
+        if (!segs[i].words.empty() && !force_aligner)
+            continue;
+        const size_t n = crispasr_tokenise_align_words(segs[i].text).size();
+        if (n == 0)
+            continue;
+        if (!transcript.empty())
+            transcript += ' ';
+        transcript += segs[i].text;
+        targets.push_back(i);
+        counts.push_back(n);
+        expected_words += n;
+    }
+    if (targets.empty() || range_end <= range_start)
+        return false;
+
+    auto aligned = crispasr_align_words(aligner_model, transcript, samples.data() + range_start,
+                                        range_end - range_start, offset_cs, n_threads, out_load_failed);
+    if (aligned.size() != expected_words) {
+        fprintf(stderr, "crispasr[aligner]: slice returned %zu units for %zu inputs; keeping ASR timestamps\n",
+                aligned.size(), expected_words);
+        return false;
+    }
+
+    // A model class outside the supplied clip is not a usable alignment.
+    // Reject the complete result rather than installing a partly clamped,
+    // apparently precise subtitle track.
+    const int64_t end_cs = offset_cs + (int64_t)(range_end - range_start) * 100 / 16000;
+    int64_t previous_end = offset_cs;
+    for (const auto& w : aligned) {
+        if (w.t0_cs < previous_end || w.t1_cs < w.t0_cs || w.t0_cs < offset_cs || w.t1_cs > end_cs + 8) {
+            fprintf(stderr,
+                    "crispasr[aligner]: non-monotonic/out-of-range slice result at %lld..%lld cs "
+                    "(clip %lld..%lld); keeping ASR timestamps\n",
+                    (long long)w.t0_cs, (long long)w.t1_cs, (long long)offset_cs, (long long)end_cs);
+            return false;
+        }
+        previous_end = w.t1_cs;
+    }
+    if (aligned.back().t1_cs <= aligned.front().t0_cs)
+        return false;
+
+    size_t cursor = 0;
+    for (size_t j = 0; j < targets.size(); j++) {
+        auto& seg = segs[targets[j]];
+        seg.words.clear();
+        seg.words.reserve(counts[j]);
+        for (size_t k = 0; k < counts[j]; k++) {
+            auto& src = aligned[cursor++];
+            seg.words.push_back({std::move(src.text), src.t0_cs, src.t1_cs});
+        }
+        seg.t0 = seg.words.front().t0;
+        seg.t1 = seg.words.back().t1;
+    }
+    return true;
+}
+
 // True if any segment carries a non-whitespace character (i.e. real text).
 // Bytes <= 0x20 are ASCII whitespace/control; UTF-8 continuation/lead bytes
 // are >= 0x80, so this also counts non-Latin scripts as text.
@@ -1264,13 +1333,13 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, co
             for (auto& seg : segs) {
                 if (!seg.words.empty() && !params.force_aligner)
                     continue;
-                // Find the original audio region for this segment.
-                const int s = (int)((double)seg.t0 / 100.0 * SR);
-                const int e = std::min((int)samples.size(), (int)((double)seg.t1 / 100.0 * SR));
-                if (e > s) {
+                // Align this segment against its own original-audio region.
+                const auto range = crispasr_alignment_audio_range(seg.t0, seg.t1, 0, (int)samples.size(), SR);
+                if (range.valid()) {
                     bool load_failed = false;
-                    auto words = crispasr_ctc_align(params.aligner_model, seg.text, samples.data() + s, e - s, seg.t0,
-                                                    params.n_threads, &load_failed);
+                    auto words =
+                        crispasr_ctc_align(params.aligner_model, seg.text, samples.data() + range.start,
+                                           range.end - range.start, range.offset_cs, params.n_threads, &load_failed);
                     aligner_load_failed = aligner_load_failed || load_failed;
                     if (crispasr_words_have_positive_span(words)) {
                         seg.t0 = words.front().t0;
@@ -1617,19 +1686,10 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, co
                     params.force_aligner ? 1 : 0, want_align ? 1 : 0);
         }
         if (want_align) {
-            for (auto& seg : segs) {
-                if (!seg.words.empty() && !params.force_aligner)
-                    continue;
-                bool load_failed = false;
-                auto words = crispasr_ctc_align(params.aligner_model, seg.text, samples.data() + sl.start,
-                                                sl.end - sl.start, sl.t0_cs, params.n_threads, &load_failed);
-                aligner_load_failed = aligner_load_failed || load_failed;
-                if (crispasr_words_have_positive_span(words)) {
-                    seg.t0 = words.front().t0;
-                    seg.t1 = words.back().t1;
-                    seg.words = std::move(words);
-                }
-            }
+            bool load_failed = false;
+            crispasr_align_slice_segments(params.aligner_model, samples, sl.start, sl.end, sl.t0_cs, params.n_threads,
+                                          params.force_aligner, segs, &load_failed);
+            aligner_load_failed = aligner_load_failed || load_failed;
         }
 
         // Issue #267: diarize AFTER alignment so word timestamps (native
@@ -5063,21 +5123,8 @@ int crispasr_run_backend(const whisper_params& params_in) {
                         want_align ? 1 : 0);
             }
             if (want_align) {
-                for (auto & seg : segs) {
-                    if (!seg.words.empty() && !params.force_aligner) continue; // already aligned
-                    auto words = crispasr_ctc_align(
-                        params.aligner_model,
-                        seg.text,
-                        samples.data() + sl.start,
-                        sl.end - sl.start,
-                        sl.t0_cs,
-                        params.n_threads);
-                    if (crispasr_words_have_positive_span(words)) {
-                        seg.t0 = words.front().t0;
-                        seg.t1 = words.back().t1;
-                        seg.words = std::move(words);
-                    }
-                }
+                crispasr_align_slice_segments(params.aligner_model, samples, sl.start, sl.end, sl.t0_cs,
+                                               params.n_threads, params.force_aligner, segs);
             }
 
             // Issue #267: diarize AFTER alignment so word timestamps

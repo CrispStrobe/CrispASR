@@ -49,6 +49,21 @@ struct CrispasrAlignedSegment {
     size_t word_end = 0;
 };
 
+// Absolute sample interval used when aligning one ASR segment.  Keeping this
+// calculation beside the aligner prevents per-slice callers from accidentally
+// feeding every segment the whole VAD slice (issue #444), which resets each
+// segment's timestamps to the same slice origin.
+struct CrispasrAlignmentAudioRange {
+    int start = 0;         // absolute sample index, inclusive
+    int end = 0;           // absolute sample index, exclusive
+    int64_t offset_cs = 0; // timestamp corresponding to start
+
+    bool valid() const { return end > start; }
+};
+
+CrispasrAlignmentAudioRange crispasr_alignment_audio_range(int64_t segment_t0_cs, int64_t segment_t1_cs,
+                                                           int slice_start, int slice_end, int sample_rate);
+
 /// Split text into alignment "words": whitespace-delimited for
 /// space-delimited languages, per-character for CJK. This is the exact
 /// splitter the aligner backends use — callers that map aligned words back

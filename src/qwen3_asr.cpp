@@ -1365,6 +1365,7 @@ extern "C" const char* qwen3_asr_token_text(qwen3_asr_context* ctx, int id) {
 #include "core/bpe.h"
 #include "core/gpu_backend_pref.h" // crispasr_init_gpu_backend (#214)
 #include "core/ggml_cpu_backend.h"
+#include "core/qwen3_forced_aligner.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -2209,14 +2210,17 @@ extern "C" int qwen3_asr_align_words(struct qwen3_asr_context* ctx, const float*
         ids.push_back(audio_pad_id);
     ids.push_back(audio_end_id);
 
-    // Tokenize each word separately and append two timestamp markers
-    // after it. Whitespace-split English / Latin scripts work fine
-    // through the standard BPE encoder; CJK languages need char-level
-    // pre-tokenization which is tracked as a follow-up. The leading
-    // space convention matches GPT-2 BPE: each non-first word starts
-    // with a space so the tokenizer recognises it as a word boundary.
+    // Tokenize each alignment unit separately and append two timestamp
+    // markers.  The Python blueprint constructs
+    //
+    //   unit<timestamp><timestamp>unit<timestamp><timestamp>...
+    //
+    // with no spaces inserted between units.  A timestamp marker is a hard
+    // tokenizer boundary, so tokenizing each unit separately is equivalent,
+    // but adding a GPT-2 leading space (the old behaviour) is not: it changes
+    // every non-first unit's ids and therefore the aligner's predictions.
     for (int w = 0; w < n_words; w++) {
-        const std::string word = (w == 0) ? std::string(words[w]) : std::string(" ") + words[w];
+        const std::string word = words[w];
         int n = 0;
         int32_t* arr = qwen3_asr_tokenize(ctx, word.c_str(), &n);
         if (arr && n > 0) {
@@ -2296,63 +2300,12 @@ extern "C" int qwen3_asr_align_words(struct qwen3_asr_context* ctx, const float*
         return -7;
     }
 
-    // 6b. Fix timestamp monotonicity via LIS (longest increasing subsequence).
-    // The reference Qwen3-ForcedAligner uses LIS to find the longest monotone
-    // chain, then interpolates outliers. This is more robust than a simple
-    // forward clamp for cases where large inversions occur mid-sequence.
-    {
-        const int M = (int)ts_classes.size();
-        // O(n log n) LIS — find indices of the longest non-decreasing subsequence
-        std::vector<int> dp; // dp[i] = smallest tail value for IS of length i+1
-        std::vector<int> parent(M, -1);
-        std::vector<int> idx_map; // which index produced each dp entry
-
-        for (int i = 0; i < M; i++) {
-            int val = ts_classes[i];
-            // Binary search for first dp entry > val (upper_bound for non-decreasing)
-            auto it = std::upper_bound(dp.begin(), dp.end(), val);
-            int pos = (int)(it - dp.begin());
-            if (pos == (int)dp.size()) {
-                dp.push_back(val);
-                idx_map.push_back(i);
-            } else {
-                dp[pos] = val;
-                idx_map[pos] = i;
-            }
-            parent[i] = (pos > 0) ? idx_map[pos - 1] : -1;
-        }
-
-        // Traceback: find which indices are in the LIS
-        std::vector<bool> in_lis(M, false);
-        int k = idx_map.back();
-        while (k >= 0) {
-            in_lis[k] = true;
-            k = parent[k];
-        }
-
-        // Interpolate outliers: for each non-LIS element, set it to the
-        // value of the nearest LIS neighbor (linear interpolation between
-        // the previous and next LIS values).
-        int prev_lis = -1;
-        int prev_val = 0;
-        for (int i = 0; i < M; i++) {
-            if (in_lis[i]) {
-                // Fill any gap between prev_lis and i
-                if (prev_lis >= 0) {
-                    for (int j = prev_lis + 1; j < i; j++) {
-                        // Linear interpolation
-                        float frac = (float)(j - prev_lis) / (float)(i - prev_lis);
-                        ts_classes[j] = prev_val + (int)(frac * (float)(ts_classes[i] - prev_val));
-                    }
-                }
-                prev_lis = i;
-                prev_val = ts_classes[i];
-            }
-        }
-        // Fill trailing non-LIS elements
-        for (int j = prev_lis + 1; j < M; j++)
-            ts_classes[j] = prev_val;
-    }
+    // 6b. Blueprint-exact timestamp repair.  Keep the first longest
+    // non-decreasing subsequence selected by the Python O(n^2) DP.  Runs of
+    // one or two rejected values snap to their nearest retained neighbour;
+    // longer runs interpolate.  Both the tie rule and the short-run rule
+    // differ materially from the former O(n log n)/always-interpolate port.
+    core_qwen3_forced_aligner::fix_timestamps(ts_classes);
 
     // Ensure each word's end >= start.
     for (int w = 0; w < n_words; w++) {

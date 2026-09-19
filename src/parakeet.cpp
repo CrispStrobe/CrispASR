@@ -14,7 +14,9 @@
 
 #include "parakeet.h"
 #include "core/crispasr_env.h"
+#include "core/sys_mem.h"
 #include "parakeet_ja_detect.h"
+#include "parakeet_memory_policy.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -897,6 +899,29 @@ static std::vector<float> parakeet_encode_mel(parakeet_context* ctx, const float
                                               int* out_T_enc) {
     if (n_mels != (int)ctx->model.hparams.n_mels) {
         fprintf(stderr, "parakeet: mel feature mismatch (%d vs %d)\n", n_mels, (int)ctx->model.hparams.n_mels);
+        return {};
+    }
+
+    // #441: enforce the physical-memory invariant at the allocation boundary,
+    // independently of every CLI/session routing decision. If an explicit
+    // chunk flag is ever lost again, or a direct library caller invokes the
+    // single-pass API on a multi-hour buffer, the full-attention graph is
+    // refused before ggml asks the OS for it. Normal orchestration selects
+    // streamed windows before reaching this last line of defence.
+    const int sub = std::max(1, (int)ctx->model.hparams.subsampling_factor);
+    const int T_est = std::max(1, T_mel / sub);
+    const int H = std::max(1, (int)ctx->model.hparams.n_heads);
+    double coeff = 8.0;
+    if (const char* e = getenv("CRISPASR_PARAKEET_MEM_COEFF"))
+        coeff = atof(e);
+    double available = core_sys_mem::available_mb();
+    if (const char* e = getenv("CRISPASR_PARAKEET_AVAILABLE_MB"))
+        available = atof(e); // deterministic CI/live-test override
+    if (!parakeet_encoder_fits_available_memory(T_est, H, available, coeff)) {
+        fprintf(stderr,
+                "crispasr[parakeet]: refusing encoder graph: est %.0f MiB exceeds safe share of %.0f MiB "
+                "available (T=%d, H=%d); use streamed/chunked orchestration\n",
+                parakeet_est_singlepass_peak_mb(T_est, H, coeff), available, T_est, H);
         return {};
     }
 
@@ -3518,6 +3543,10 @@ extern "C" float* parakeet_encode(struct parakeet_context* ctx, const float* sam
         fprintf(stderr, "parakeet: encoder OK (%d frames)\n", T_enc);
     const int d = (int)ctx->model.hparams.d_model;
     float* out = (float*)malloc(enc.size() * sizeof(float));
+    if (!out) {
+        fprintf(stderr, "parakeet: failed to allocate %zu-byte encoder output\n", enc.size() * sizeof(float));
+        return nullptr;
+    }
     memcpy(out, enc.data(), enc.size() * sizeof(float));
     if (out_T_enc)
         *out_T_enc = T_enc;
@@ -3530,7 +3559,7 @@ extern "C" float* parakeet_encode(struct parakeet_context* ctx, const float* sam
 // (single-pass) and parakeet_decode_frames (streamed / chunked) so every path
 // emits a word list — previously decode_frames left r->words null and the CLI
 // adapter only *copies* r->words, so streamed/chunked output had no words.
-static void parakeet_group_words(parakeet_result* r, int frame_dur_cs) {
+static bool parakeet_group_words(parakeet_result* r, int frame_dur_cs) {
     // ----- Group sub-word tokens into words -----
     //
     // Latin SentencePiece convention: a token starting with U+2581 (▁ → ' ')
@@ -3658,8 +3687,14 @@ static void parakeet_group_words(parakeet_result* r, int frame_dur_cs) {
 
     r->n_words = (int)words.size();
     r->words = (parakeet_word_data*)calloc(r->n_words > 0 ? r->n_words : 1, sizeof(parakeet_word_data));
+    if (!r->words) {
+        fprintf(stderr, "parakeet: failed to allocate word results\n");
+        r->n_words = 0;
+        return false;
+    }
     for (int i = 0; i < r->n_words; i++)
         r->words[i] = words[i];
+    return true;
 }
 
 extern "C" struct parakeet_result* parakeet_decode_frames(struct parakeet_context* ctx, const float* enc_frames,
@@ -3696,8 +3731,14 @@ extern "C" struct parakeet_result* parakeet_decode_frames(struct parakeet_contex
 
     // Build result (same as the tail of parakeet_transcribe_ex)
     auto* r = (parakeet_result*)calloc(1, sizeof(parakeet_result));
+    if (!r)
+        return nullptr;
     r->n_tokens = (int)emitted.size();
     r->tokens = (parakeet_token_data*)calloc(r->n_tokens > 0 ? r->n_tokens : 1, sizeof(parakeet_token_data));
+    if (!r->tokens) {
+        parakeet_result_free(r);
+        return nullptr;
+    }
     std::string text;
     const int frame_dur_cs = (int)ctx->model.hparams.frame_dur_cs;
     for (int i = 0; i < r->n_tokens; i++) {
@@ -3718,10 +3759,17 @@ extern "C" struct parakeet_result* parakeet_decode_frames(struct parakeet_contex
     if (!text.empty() && text[0] == ' ')
         text = text.substr(1);
     r->text = strdup(text.c_str());
+    if (!r->text) {
+        parakeet_result_free(r);
+        return nullptr;
+    }
 
     // Word grouping (issue #257): the streamed / chunked paths funnel through
     // here, so build words too — otherwise those paths emit none.
-    parakeet_group_words(r, frame_dur_cs);
+    if (!parakeet_group_words(r, frame_dur_cs)) {
+        parakeet_result_free(r);
+        return nullptr;
+    }
 
     return r;
 }
@@ -3858,8 +3906,14 @@ extern "C" struct parakeet_result* parakeet_transcribe_chunked(struct parakeet_c
 
     // 3. Build result (reuse the same result-building code as transcribe_ex)
     auto* r = (parakeet_result*)calloc(1, sizeof(parakeet_result));
+    if (!r)
+        return nullptr;
     r->n_tokens = (int)emitted.size();
     r->tokens = (parakeet_token_data*)calloc(r->n_tokens > 0 ? r->n_tokens : 1, sizeof(parakeet_token_data));
+    if (!r->tokens) {
+        parakeet_result_free(r);
+        return nullptr;
+    }
     std::string text;
     const int frame_dur_cs = (int)ctx->model.hparams.frame_dur_cs;
     for (int i = 0; i < r->n_tokens; i++) {
@@ -4123,8 +4177,15 @@ extern "C" struct parakeet_result* parakeet_transcribe_ex(struct parakeet_contex
     if (!text.empty() && text[0] == ' ')
         text = text.substr(1);
     r->text = strdup(text.c_str());
+    if (!r->text) {
+        parakeet_result_free(r);
+        return nullptr;
+    }
 
-    parakeet_group_words(r, frame_dur_cs);
+    if (!parakeet_group_words(r, frame_dur_cs)) {
+        parakeet_result_free(r);
+        return nullptr;
+    }
 
     return r;
 }

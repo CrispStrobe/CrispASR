@@ -1158,7 +1158,9 @@ All three optimisation gates are output-equivalent: the per-stage diff reports
 - `CRISPASR_PARAKEET_LONGFORM_WINDOW`
 - `CRISPASR_PARAKEET_MAES`
 - `CRISPASR_PARAKEET_MEM_COEFF`
-- `CRISPASR_PARAKEET_MEM_POLICY`
+- `CRISPASR_PARAKEET_MEM_POLICY` — `auto` (default), `streamed`, or `off`.
+  `off` disables proactive routing but cannot disable the encoder's
+  physical-memory allocation guard.
 - `CRISPASR_PARAKEET_PIPELINE`
 - `CRISPASR_PARAKEET_QUANT_ALL`
 - `CRISPASR_PARAKEET_SIMULATE_ENCODE_OOM`

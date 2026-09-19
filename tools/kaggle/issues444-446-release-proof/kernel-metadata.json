@@ -1,0 +1,14 @@
+{
+  "id": "chr1s4/crispasr-issues-444-and-446-release-proof",
+  "title": "crispasr-issues-444-and-446-release-proof",
+  "code_file": "crispasr-issues444-446-release-proof.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "true",
+  "competition_sources": [],
+  "dataset_sources": ["chr1s4/crispasr-hf-token", "chr1s4/crispasr-ccache"],
+  "kernel_sources": [],
+  "model_sources": []
+}

@@ -477,8 +477,8 @@ multilingual / v3 / EN models behave very differently:
 | `CRISPASR_PARAKEET_INTERNAL_CHUNKING` | non-JA on, JA off | `0` = revert to the dispatcher's chunk-30 + overlap-save + LCS-merge path (A/B). |
 | `CRISPASR_PARAKEET_STREAM_CHUNK` | 0 (auto: 8 JA / 30 non-JA) | Streamed-path encoder chunk size (seconds). |
 | `CRISPASR_PARAKEET_STREAM_OVERLAP` | 2 | Streamed-path encoder overlap (seconds). |
-| `CRISPASR_PARAKEET_VRAM_BUDGET_MB` | 0 (off) | Proactive memory policy: if single-pass full attention's estimated O(T²) rel-pos bias exceeds this, use the streamed (bounded-window) encoder *before* allocating — avoids the OOM spike on small GPUs. 0 = disabled (single-pass as before; the reactive OOM fallback still backstops). |
-| `CRISPASR_PARAKEET_MEM_POLICY` | `auto` | `auto` honours the VRAM budget; `single`/`streamed` force that path; `off` disables the proactive check (reactive-only). |
+| `CRISPASR_PARAKEET_VRAM_BUDGET_MB` | half available memory | Proactive memory policy: if single-pass full attention's estimated O(T²) rel-pos bias exceeds this, use the streamed (bounded-window) encoder before allocating. `0` disables proactive routing; the physical-memory guard at the encoder remains active. |
+| `CRISPASR_PARAKEET_MEM_POLICY` | `auto` | `auto` honours the memory budget; `streamed` forces that path; `off` disables proactive routing. No mode can disable the encoder's physical-memory guard. |
 | `CRISPASR_PARAKEET_MEM_COEFF` | 8.0 | O(T²) estimate coefficient. Default calibrated so a ~4 min clip (T≈2800, 8 heads) estimates ~1.9 GiB, matching a measured CUDA allocation. |
 | `CRISPASR_SESSION_UNIFIED_DISPATCH` | 1 | No effect on the CLI. `0` makes the session/bindings API use its older parakeet code path instead of the one shared with the CLI — for troubleshooting comparisons only. |
 

@@ -499,7 +499,8 @@ struct llm_tokenizer_bpe : llm_tokenizer {
                 // Groups digits with leading 1-2 based on total length modulo 3
                 "\\p{AFMoE_digits}",
                 // CJK and Asian scripts (using direct Unicode literals)
-                "[一-鿿㐀-䶿豈-﫿぀-ゟ゠-ヿ･-ﾟ⼀-⿟เ-๿຀-໿ក-៿က-႟ꩠ-ꩿꧠ-꧿가-힯ᄀ-ᇿ]"
+                "[一-鿿㐀-䶿豈-﫿぀-ゟ゠-ヿ･-ﾟ⼀-⿟เ-๿຀-໿ក-៿က-႟ꩠ-ꩿꧠ-꧿가-힯ᄀ-"
+                "ᇿ]"
                 "+",
                 // Main BPE pattern
                 "[!\"#$%&'()*+,\\-./:;<=>?@\\[\\\\\\]^_`{|}~][A-Za-z]+|[^\\r\\n\\p{L}\\p{P}\\p{S}]?[\\p{L}\\p{M}]+| "
@@ -512,6 +513,14 @@ struct llm_tokenizer_bpe : llm_tokenizer {
                 // "(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\\r\\n\\p{L}\\p{N}]?(?:\\p{L}\\p{M}*(?: \\p{L}\\p{M}*)*)+|\\p{N}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n/]?|\\s*[\\r\\n]|\\s+(?!\\S)|\\s+"
                 "(?:'[sS]|'[tT]|'[rR][eE]|'[vV][eE]|'[mM]|'[lL][lL]|'[dD])|[^\\r\\n\\p{L}\\p{N}]?(?:\\p{L}\\p{M}*(?: "
                 "\\p{L}\\p{M}*)*)+|\\p{N}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n/]?|\\s*[\\r\\n]|\\s+(?!\\S)|\\s+",
+            };
+            break;
+        case LLAMA_VOCAB_PRE_TYPE_MINICPM5:
+            // Backported from llama.cpp 9777256c3 (#23384).
+            regex_exprs = {
+                "\\p{N}{1,3}",
+                "(?:'[sS]|'[tT]|'[rR][eE]|'[vV][eE]|'[mM]|'[lL][lL]|'[dD])|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}+| "
+                "?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+",
             };
             break;
         default:
@@ -1867,6 +1876,10 @@ void llama_vocab::impl::load(llama_model_loader& ml, const LLM_KV& kv) {
                 pre_type = LLAMA_VOCAB_PRE_TYPE_DEFAULT;
             } else if (tokenizer_pre == "default") {
                 pre_type = LLAMA_VOCAB_PRE_TYPE_DEFAULT;
+            } else if (tokenizer_pre == "minicpm5") {
+                // Backported from llama.cpp 9777256c3 (#23384).
+                pre_type = LLAMA_VOCAB_PRE_TYPE_MINICPM5;
+                ignore_merges = true;
             } else if (tokenizer_pre == "llama3" || tokenizer_pre == "llama-v3" || tokenizer_pre == "llama-bpe" ||
                        tokenizer_pre == "falcon3" || tokenizer_pre == "falcon-h1" || tokenizer_pre == "pixtral" ||
                        tokenizer_pre == "midm-2.0" || tokenizer_pre == "lfm2" || tokenizer_pre == "jina-v5-nano") {

@@ -83,20 +83,40 @@ written down, and deliberately not extended.
 ## Fixed
 
 - **#441 parakeet — intermittent SIGSEGV on a 47.5-minute input.** The kernel
-  refused a 123.6 GB allocation and the result was dereferenced. The guard was
-  already implemented and never armed: `resolve_strategy()` estimates the
-  single-pass encoder's O(T²) relative-position bias and switches to the
-  streamed encoder when it will not fit — but an unset budget meant "policy
-  disabled", and the predicate returns "fits" for *any* input at budget 0. So
-  the default path was "estimate it, then ignore the estimate and allocate
-  anyway". The budget now defaults to half of `MemAvailable`; an explicit `0`
-  still disables it.
+  refused a 123.6 GB allocation and the result was dereferenced. The reporter's
+  explicit `--chunk-seconds 419` bypassed the shared strategy resolver, and a
+  direct runtime call could still reach the allocation with the proactive
+  policy disabled. Explicit chunk requests now pass through the resolver, and
+  the encoder allocation has a cgroup-aware physical-memory guard that cannot
+  be disabled. Result, token, text, and word allocations are checked too.
 
-  Why it was intermittent is what makes the diagnosis certain: the reporter saw
-  RSS steady at ~1.0 GB *in a run that completed*. The buffer is never fully
-  written, so Linux overcommit granted it lazily about half the time and refused
-  it the rest. Their own correction — "it finished" — is what made the mechanism
-  legible.
+  The exact 45,602,304-sample CPU command completed on Kaggle in 3,675.52 s,
+  selected `route=chunk-segmented`, reached 2,173,180 KiB peak RSS, and wrote
+  SRT through 2,849.14 s. A forced unsafe A/B made the intermittent failure
+  deterministic: v0.8.33 requested 123,601,944,576 bytes and segfaulted; this
+  build printed the allocation refusal and never requested more than
+  3,221,225,472 bytes in that arm. The proof harness's original 8 GiB virtual
+  mapping assertion was 2,097,152 bytes too strict for ggml's bounded 8 GiB
+  arena bookkeeping; the resident-memory limit passed, and the corrected
+  harness uses the same 12 GiB ceiling as the tested memory budget.
+
+- **#444 Qwen3 forced alignment — subtitle timestamps could run backwards with
+  VAD.** CrispASR invoked the aligner independently for each ASR segment, while
+  the Python reference aligns one audio chunk and its complete transcript in a
+  single pass. The native path now follows that flow and partitions the global
+  word sequence back onto the display segments. It also preserves the original
+  Chinese script, removes punctuation before creating timestamp slots, avoids
+  an extra GPT-2 leading-space token, and ports the reference's exact LIS repair
+  rules. Non-monotonic or out-of-range model results are rejected instead of
+  overwriting the ASR timestamps. The reporter's exact MP3 and command produced
+  29 ordered, non-overlapping SRT cues from 16.34 s through 90.25 s on T4
+  (rc=0, 12.8x realtime).
+
+- **#446 MiniCPM5-2B chat/translation model load.** The vendored llama.cpp
+  rejected `tokenizer.ggml.pre=minicpm5`. The tokenizer support from upstream
+  llama.cpp #23384 (`9777256c3`) is backported without pulling unrelated
+  llama.cpp changes into the release. The official MiniCPM5-2B Q4_K_M GGUF
+  loaded and generated through `crispasr-chat` on T4 (rc=0).
 
 - **#431 sidon — a 60 s file was refused.** v0.8.33 raised the cap and added
   `CRISPASR_SIDON_SPLIT=1`; the reporter's one-minute clip still produced 3075
@@ -218,8 +238,9 @@ reads it" from "the reader is in another file".
 - **sidon splits long input instead of refusing it.** `CRISPASR_SIDON_SPLIT=0`
   restores the refusal.
 - **parakeet may now choose streamed encoding** on long audio where it
-  previously attempted a single pass. `CRISPASR_PARAKEET_MEM_POLICY=single`
-  forces the old path; `CRISPASR_PARAKEET_VRAM_BUDGET_MB=0` disables the policy.
+  previously attempted a single pass. `CRISPASR_PARAKEET_MEM_POLICY=off` or
+  `CRISPASR_PARAKEET_VRAM_BUDGET_MB=0` disables proactive routing, while a
+  non-disableable physical-memory guard still rejects impossible encoder graphs.
 - **nemotron GPU attention is manual F32 by default**, which is slower than
   fused flash. `CRISPASR_NEMOTRON_FLASH=1` opts back in.
 - **zonos `--voice` is now refused** rather than silently ignored.

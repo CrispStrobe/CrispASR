@@ -16,7 +16,10 @@
 // already accounts for reclaimable page cache. MemFree would read as near-zero
 // on any warm machine and make this guard fire constantly.
 
+#include <algorithm>
 #include <cstdio>
+#include <cstdlib>
+#include <limits>
 
 #ifdef __linux__
 #include <cstring>
@@ -28,6 +31,37 @@
 #endif
 
 namespace core_sys_mem {
+
+#ifdef __linux__
+inline double read_number_file_mb(const char* path) {
+    FILE* f = std::fopen(path, "r");
+    if (!f)
+        return -1.0;
+    char value[128] = {0};
+    const bool ok = std::fgets(value, sizeof(value), f) != nullptr;
+    std::fclose(f);
+    if (!ok || std::strncmp(value, "max", 3) == 0)
+        return -1.0;
+    char* end = nullptr;
+    const double bytes = std::strtod(value, &end);
+    return end != value && bytes >= 0.0 ? bytes / (1024.0 * 1024.0) : -1.0;
+}
+
+inline double cgroup_available_mb() {
+    // cgroup v2, then v1. Some CI/container hosts expose the host's generous
+    // MemAvailable while enforcing a much smaller cgroup limit; using only
+    // /proc/meminfo would let an impossible encoder graph through (#441).
+    double limit = read_number_file_mb("/sys/fs/cgroup/memory.max");
+    double used = read_number_file_mb("/sys/fs/cgroup/memory.current");
+    if (limit <= 0.0 || used < 0.0) {
+        limit = read_number_file_mb("/sys/fs/cgroup/memory/memory.limit_in_bytes");
+        used = read_number_file_mb("/sys/fs/cgroup/memory/memory.usage_in_bytes");
+    }
+    if (limit <= 0.0 || used < 0.0 || limit > 1024.0 * 1024.0 * 1024.0)
+        return -1.0; // effectively unlimited sentinel
+    return std::max(0.0, limit - used);
+}
+#endif
 
 // Physical memory an allocation could plausibly obtain right now, in MiB.
 // Returns -1 when it cannot be determined — callers MUST treat that as
@@ -48,6 +82,9 @@ inline double available_mb() {
         }
     }
     std::fclose(f);
+    const double cg = cgroup_available_mb();
+    if (cg >= 0.0)
+        return mb > 0.0 ? std::min(mb, cg) : cg;
     return mb;
 #elif defined(__APPLE__)
     // free + inactive + purgeable is the closest analogue to MemAvailable.

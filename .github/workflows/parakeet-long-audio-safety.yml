@@ -1,0 +1,39 @@
+name: Parakeet long-audio safety
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'src/parakeet.cpp'
+      - 'src/parakeet_orchestrate.cpp'
+      - 'src/parakeet_orchestrate.h'
+      - 'src/parakeet_memory_policy.h'
+      - 'src/core/sys_mem.h'
+      - 'tests/test-parakeet-strategy.cpp'
+      - '.github/workflows/parakeet-long-audio-safety.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/parakeet.cpp'
+      - 'src/parakeet_orchestrate.cpp'
+      - 'src/parakeet_orchestrate.h'
+      - 'src/parakeet_memory_policy.h'
+      - 'src/core/sys_mem.h'
+      - 'tests/test-parakeet-strategy.cpp'
+
+permissions:
+  contents: read
+
+jobs:
+  issue-441-route-and-allocation-guard:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - name: Configure focused test build
+        run: cmake -S . -B build -GNinja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DCRISPASR_BUILD_SERVER=OFF
+      - name: Compile routing test and Parakeet runtime
+        run: cmake --build build --target test-parakeet-strategy parakeet -- -j2
+      - name: Prove reporter route and physical-memory guard
+        run: build/bin/test-parakeet-strategy '[issue441]' --reporter compact
