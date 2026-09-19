@@ -1,6 +1,6 @@
 [package]
 name = "crispasr"
-version = "0.8.33"
+version = "0.8.34"
 edition = "2021"
 description = "Safe Rust wrapper for CrispASR — lightweight on-device speech recognition (Whisper, Qwen3-ASR, FastConformer, and more)."
 license = "MIT"
@@ -18,7 +18,7 @@ categories = ["multimedia::audio", "api-bindings"]
 # README.md for the two consumption modes (git build-from-source vs crates.io
 # release + a pre-built lib via CRISPASR_LIB_DIR).
 [dependencies]
-crispasr-sys = { path = "../crispasr-sys", version = "0.8.33" }
+crispasr-sys = { path = "../crispasr-sys", version = "0.8.34" }
 
 [features]
 default = []
