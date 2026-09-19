@@ -179,43 +179,52 @@ runs the same hermetic harness on GitHub runners: one arm per process, cold run
 discarded, median of 3, arms back to back. Variance on the Linux runner was
 **0.05%** — compare the VPS's 2-4x wall swings.
 
+Two independent runs, on different runner hardware. **35472080871** is the
+authoritative one (35471451173 predates the default flip; both are valid, and
+quoting both gives the runner-to-runner spread, which is larger than the
+within-run variance).
+
 **ubuntu-24.04, 4 cores, avx2 + fma (no avx512):**
 
-| arm | wall ms | cpu ms | speedup | achieved parallelism |
-|---|---|---|---|---|
-| reference | 130.9 | 130.9 | 1.00× | 1.00 |
-| avx2, 1 thread | **72.1** | 72.1 | **1.82×** | 1.00 |
-| avx2, 2 threads | **36.5** | 72.7 | **3.58×** | 1.99 |
-| avx2, 4 threads | **34.4** | 123.2 | **3.81×** | 3.92 |
-| avx2+fma, 1 thread | 71.8 | 71.8 | 1.82× | 1.00 |
+| arm | wall ms | cpu ms | speedup | par | (earlier run) |
+|---|---|---|---|---|---|
+| reference | 104.8 | 104.8 | 1.00× | 1.00 | 130.9 |
+| avx2, 1 thread | **63.1** | 63.1 | **1.66×** | 1.00 | 1.82× |
+| avx2, 2 threads | **32.1** | 63.7 | **3.26×** | 1.98 | 3.58× |
+| avx2, 4 threads | **29.2** | 111.9 | **3.59×** | 3.87 | 3.81× |
+| avx2+fma, 1 thread | 61.3 | 61.3 | 1.71× | 1.00 | 1.82× |
 
 **macos-14, Apple M1 (virtual), 3 cores, NEON:**
 
-| arm | wall ms | cpu ms | speedup | achieved parallelism |
-|---|---|---|---|---|
-| reference | 85.3 | 84.9 | 1.00× | 1.00 |
-| avx2 (→ portable kernel), 1 thread | 80.4 | 80.3 | 1.06× | 1.00 |
-| … 2 threads | 46.7 | 86.9 | 1.83× | 1.95 |
-| … 4 threads | **35.6** | 87.9 | **2.39×** | 2.63 |
+| arm | wall ms | cpu ms | speedup | par | (earlier run) |
+|---|---|---|---|---|---|
+| reference | 94.8 | 94.4 | 1.00× | 1.00 | 85.3 |
+| avx2 (→ portable kernel), 1 thread | 94.2 | 94.2 | **1.01×** | 1.00 | 1.06× |
+| … 2 threads | 42.3 | 83.5 | 2.24× | 1.98 | 1.83× |
+| … 4 threads | **35.6** | 87.1 | **2.67×** | 2.65 | 2.39× |
+
+Taking the two runs together: **x86-64 ~1.7× from SIMD alone and ~3.6× at 4
+threads; arm64 nothing from SIMD and ~2.5× at 4 threads.**
 
 Four things fall out of those two tables, and three of them contradict a
 reasonable prior:
 
-1. **The SIMD win is bigger on a clean box than CPU time suggested** — 1.82×,
+1. **The SIMD win is bigger on a clean box than CPU time suggested** — ~1.7×,
    not the 1.45× the VPS measured. CPU time on an oversubscribed machine
    *understates* the win, because cache and memory contention hurt the faster
    kernel proportionally more.
-2. **FMA buys nothing, now confirmed on clean hardware** (71.8 vs 72.1 ms,
-   0.4%). The kernel is load/dependency-bound, not FP-bound — `contour_conv`
+2. **FMA buys ~0–3%, now bounded on clean hardware** (61.3 vs 63.1 ms in one
+   run, 71.8 vs 72.1 in the other — i.e. within or barely above run-to-run
+   spread, and nowhere near the 2× a compute-bound kernel would show). The kernel is load/dependency-bound, not FP-bound — `contour_conv`
    reuses each input element about 8 times (OC = 8), against ~936 in a dense
    GEMM. So the bit-identical kernel is also the fastest one, and bit-identity
    costs nothing.
-3. **On arm64 the SIMD half is worth almost nothing** — 1.06×. NEON is baseline
+3. **On arm64 the SIMD half is worth nothing** — 1.01× and 1.06×. NEON is baseline
    on aarch64, so the portable path was already 4-wide and the 6% is the
    register blocking alone. The brief predicted this; it is now measured. The
    entire arm64 win (2.39×) is threading.
-4. **4 threads costs 70% more CPU than 2 for 6% more wall** (123.2 vs 72.7 ms
-   CPU, 34.4 vs 36.5 ms wall). `core_parallel::for_each_chunk` spawns
+4. **4 threads costs ~75% more CPU than 2 for ~9% more wall** (111.9 vs 63.7 ms
+   CPU, 29.2 vs 32.1 ms wall). `core_parallel::for_each_chunk` spawns
    `std::thread`s per call — six convolutions per window, so the spawn cost is
    paid ~84 times for a 22 s file. For a batch or server workload `n_threads=2`
    is the better operating point today, and routing this through the existing
@@ -321,7 +330,7 @@ that is working.
 The dev guide's bar is "wins on speed AND quality". Quality is not merely
 non-regressed, it is **byte-identical**, on both runners, at 1 and 4 threads, so
 no regression is possible. Speed is **1.82× / 3.81× on x86-64 and 2.39× on
-arm64**, measured the way the guide requires — one arm per process, cold run
+arm64** (~1.7× / ~3.6× / ~2.5× across two runs), measured the way the guide requires — one arm per process, cold run
 discarded, median of 3, identical load — on clean boxes rather than the
 oversubscribed VPS, reproducing to 0.05%.
 
