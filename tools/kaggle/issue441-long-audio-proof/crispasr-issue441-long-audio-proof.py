@@ -6,7 +6,6 @@ import re
 import resource
 import selectors
 import signal
-import shutil
 import subprocess
 import sys
 import time
@@ -17,10 +16,9 @@ WORK = Path("/kaggle/working")
 TEMP = Path("/kaggle/temp")
 REPO = TEMP / "CrispASR"
 OLD_REPO = TEMP / "CrispASR-v0833"
-BUILD = TEMP / "build-issue441"
+CURRENT_BUILD = TEMP / "build-issue441-current"
+OLD_BUILD = TEMP / "build-issue441-v0833"
 MODELS = TEMP / "models"
-CURRENT_BIN = TEMP / "crispasr-current"
-OLD_BIN = TEMP / "crispasr-v0833"
 REF = os.environ.get("CRISPASR_REF", "fix/441-proof")
 N_SAMPLES = 45_602_304
 LIMIT_BYTES = 12 * 1024**3
@@ -43,29 +41,27 @@ kh.install_build_toolchain()
 sh("apt-get update -qq && apt-get install -y -qq strace time")
 
 
-def build(source: Path, destination: Path, label: str) -> None:
-    if BUILD.exists():
-        shutil.rmtree(BUILD)
+def build(source: Path, build_dir: Path, label: str) -> Path:
     flags = " ".join(kh.cuda_build_flags(kh.detect_cuda_arch()))
     cache = " ".join(kh.cache_and_link_flags())
     with kh.build_heartbeat(f"{label}.configure"):
         kh.sh_with_progress(
-            f"cmake {source} -B{BUILD} -GNinja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF {flags} {cache}"
+            f"cmake {source} -B{build_dir} -GNinja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON {flags} {cache}"
         )
     with kh.build_heartbeat(f"{label}.build"):
         kh.sh_with_progress(
-            f"stdbuf -oL -eL cmake --build {BUILD} --target crispasr-cli -- -j{kh.safe_build_jobs(gpu=True)}"
+            f"stdbuf -oL -eL cmake --build {build_dir} --target crispasr-cli -- -j{kh.safe_build_jobs(gpu=True)}"
         )
-    shutil.copy2(BUILD / "bin" / "crispasr", destination)
-    destination.chmod(0o755)
-    kh.step(f"{label}.build.done", binary_bytes=destination.stat().st_size)
+    binary = build_dir / "bin" / "crispasr"
+    kh.step(f"{label}.build.done", binary_bytes=binary.stat().st_size)
+    return binary
 
 
-build(REPO, CURRENT_BIN, "current")
+CURRENT_BIN = build(REPO, CURRENT_BUILD, "current")
 sh(f"git -C {REPO} fetch --depth 1 origin tag v0.8.33")
 sh(f"git -C {REPO} worktree add --detach {OLD_REPO} v0.8.33")
 sh(f"git -C {OLD_REPO} submodule update --init --recursive")
-build(OLD_REPO, OLD_BIN, "old")
+OLD_BIN = build(OLD_REPO, OLD_BUILD, "old")
 
 MODELS.mkdir(exist_ok=True)
 os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
