@@ -4527,10 +4527,20 @@ with speech. Always use VAD to trim silence before alignment.
 
 The reference implementation (`qwen3_forced_aligner.py`) has a
 `fix_timestamp()` function using longest-increasing-subsequence (LIS)
-to correct non-monotonic timestamps. We use a simpler forward clamp
-(each timestamp >= previous). This handles most cases but may miss
-complex inversions. Parakeet's native TDT timestamps are always
-better when available.
+to correct non-monotonic timestamps. Our timestamp-head implementation also
+uses LIS and interpolation; a forward clamp remains only at forced-aligner
+chunk boundaries.
+
+That correction is local to one aligner call.  The VAD per-slice caller used
+to run every ASR segment against the *whole* slice with `sl.t0_cs` as the
+offset.  A slice with several text segments therefore produced several
+individually monotone word lists that all restarted at the same time, and the
+combined SRT still ran backwards (#444).  The producer-side fix is to align
+each text segment against `[seg.t0, seg.t1]`, clamped to the parent slice, with
+that interval's absolute time as the offset.  A final consumer clamp would
+hide the wrong audio/text pairing and leave plausible-looking bad timings.
+
+Parakeet's native TDT timestamps remain preferable when available.
 
 ### CrispASR vs voxtral.c: 3.8× faster on CPU
 

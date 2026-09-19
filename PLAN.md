@@ -1,5 +1,23 @@
 # CrispASR — Pending work
 
+## #446 MiniCPM5 chat/translation model load — IN PROGRESS (2026-09-19)
+
+The vendored llama.cpp rejects GGUFs whose `tokenizer.ggml.pre` is
+`minicpm5`.  Backport upstream llama.cpp #23384 (`9777256c3`) narrowly: the
+pre-tokenizer enum, regex, and loader dispatch.  Verify by loading and
+generating from the official MiniCPM5-2B GGUF through CrispASR's libllama
+chat path; do not mix a wholesale llama.cpp resync into the release.
+
+## #444 Qwen3 forced-aligner VAD timestamp reset — IN PROGRESS (2026-09-19)
+
+The per-slice alignment path currently aligns every ASR segment against the
+entire VAD slice with the slice's start timestamp.  When one slice contains
+multiple Qwen3 segments, each alignment therefore restarts from the same time
+origin and later subtitle cues can run backwards.  Align each segment only
+against its own clamped audio interval, cover every duplicated CLI execution
+path, and pin the interval calculation and monotonic display result with a
+regression test before release.
+
 ## DONE 2026-09-19 — #439 library default still used greedy
 
 Worktree `.claude/worktrees/fix-439-library`, branch

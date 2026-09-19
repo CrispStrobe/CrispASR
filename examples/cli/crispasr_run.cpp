@@ -1264,13 +1264,13 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, co
             for (auto& seg : segs) {
                 if (!seg.words.empty() && !params.force_aligner)
                     continue;
-                // Find the original audio region for this segment.
-                const int s = (int)((double)seg.t0 / 100.0 * SR);
-                const int e = std::min((int)samples.size(), (int)((double)seg.t1 / 100.0 * SR));
-                if (e > s) {
+                // Align this segment against its own original-audio region.
+                const auto range = crispasr_alignment_audio_range(seg.t0, seg.t1, 0, (int)samples.size(), SR);
+                if (range.valid()) {
                     bool load_failed = false;
-                    auto words = crispasr_ctc_align(params.aligner_model, seg.text, samples.data() + s, e - s, seg.t0,
-                                                    params.n_threads, &load_failed);
+                    auto words =
+                        crispasr_ctc_align(params.aligner_model, seg.text, samples.data() + range.start,
+                                           range.end - range.start, range.offset_cs, params.n_threads, &load_failed);
                     aligner_load_failed = aligner_load_failed || load_failed;
                     if (crispasr_words_have_positive_span(words)) {
                         seg.t0 = words.front().t0;
@@ -1620,9 +1620,13 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, co
             for (auto& seg : segs) {
                 if (!seg.words.empty() && !params.force_aligner)
                     continue;
+                const auto range = crispasr_alignment_audio_range(seg.t0, seg.t1, sl.start, sl.end, SR);
+                if (!range.valid())
+                    continue;
                 bool load_failed = false;
-                auto words = crispasr_ctc_align(params.aligner_model, seg.text, samples.data() + sl.start,
-                                                sl.end - sl.start, sl.t0_cs, params.n_threads, &load_failed);
+                auto words =
+                    crispasr_ctc_align(params.aligner_model, seg.text, samples.data() + range.start,
+                                       range.end - range.start, range.offset_cs, params.n_threads, &load_failed);
                 aligner_load_failed = aligner_load_failed || load_failed;
                 if (crispasr_words_have_positive_span(words)) {
                     seg.t0 = words.front().t0;
@@ -5065,12 +5069,15 @@ int crispasr_run_backend(const whisper_params& params_in) {
             if (want_align) {
                 for (auto & seg : segs) {
                     if (!seg.words.empty() && !params.force_aligner) continue; // already aligned
+                    const auto range =
+                        crispasr_alignment_audio_range(seg.t0, seg.t1, sl.start, sl.end, SR);
+                    if (!range.valid()) continue;
                     auto words = crispasr_ctc_align(
                         params.aligner_model,
                         seg.text,
-                        samples.data() + sl.start,
-                        sl.end - sl.start,
-                        sl.t0_cs,
+                        samples.data() + range.start,
+                        range.end - range.start,
+                        range.offset_cs,
                         params.n_threads);
                     if (crispasr_words_have_positive_span(words)) {
                         seg.t0 = words.front().t0;

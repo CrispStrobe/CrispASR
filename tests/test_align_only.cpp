@@ -43,6 +43,32 @@ TEST_CASE("align-only: crispasr_aligner_free_cache does not crash when empty", "
     crispasr_aligner_free_cache(); // double-free safety
 }
 
+TEST_CASE("align-only: each segment gets its own audio interval", "[unit][align][issue444]") {
+    constexpr int sr = 16000;
+    const int slice_start = 10 * sr;
+    const int slice_end = 100 * sr;
+
+    // Two segments in one VAD slice must not both restart at the slice origin.
+    const auto first = crispasr_alignment_audio_range(7197, 8509, slice_start, slice_end, sr);
+    const auto second = crispasr_alignment_audio_range(8893, 8901, slice_start, slice_end, sr);
+    REQUIRE(first.valid());
+    REQUIRE(second.valid());
+    CHECK(first.start == 7197 * sr / 100);
+    CHECK(first.end == 8509 * sr / 100);
+    CHECK(first.offset_cs == 7197);
+    CHECK(second.start >= first.end);
+    CHECK(second.offset_cs == 8893);
+
+    // Context-expanded timestamps are clipped to the actual slice samples.
+    const auto clipped = crispasr_alignment_audio_range(500, 12000, slice_start, slice_end, sr);
+    REQUIRE(clipped.valid());
+    CHECK(clipped.start == slice_start);
+    CHECK(clipped.end == slice_end);
+    CHECK(clipped.offset_cs == 1000);
+
+    CHECK_FALSE(crispasr_alignment_audio_range(5000, 5000, slice_start, slice_end, sr).valid());
+}
+
 // Join cue texts back into the flat transcript --align-only feeds the aligner.
 static std::string extract_srt_text(const std::string& raw) {
     std::string text_only;

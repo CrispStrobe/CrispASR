@@ -58,6 +58,8 @@ enum llama_vocab_pre_type {
     LLAMA_VOCAB_PRE_TYPE_TINY_AYA = 47,
     LLAMA_VOCAB_PRE_TYPE_JOYAI_LLM = 48,
     LLAMA_VOCAB_PRE_TYPE_JAIS2 = 49,
+    // Backported from llama.cpp 9777256c3 (#23384).
+    LLAMA_VOCAB_PRE_TYPE_MINICPM5 = 50,
 };
 
 struct LLM_KV;

@@ -723,3 +723,22 @@ static std::vector<CrispasrAlignedWord> align_words_impl(const std::string& alig
     }
     return restore_text(std::move(out));
 }
+// Convert a segment's absolute centisecond timestamps to a sample interval and
+// clamp it to the audio slice that produced the segment.  Use integer math so
+// adjacent segments get stable boundaries on every platform; round the end up
+// to avoid dropping a partial centisecond of speech.
+CrispasrAlignmentAudioRange crispasr_alignment_audio_range(int64_t segment_t0_cs, int64_t segment_t1_cs,
+                                                           int slice_start, int slice_end, int sample_rate) {
+    CrispasrAlignmentAudioRange out;
+    if (sample_rate <= 0 || slice_end <= slice_start || segment_t1_cs <= segment_t0_cs)
+        return out;
+
+    const int64_t raw_start = segment_t0_cs * sample_rate / 100;
+    const int64_t raw_end = (segment_t1_cs * sample_rate + 99) / 100;
+    out.start = (int)std::clamp<int64_t>(raw_start, slice_start, slice_end);
+    out.end = (int)std::clamp<int64_t>(raw_end, slice_start, slice_end);
+    if (!out.valid())
+        return {};
+    out.offset_cs = (int64_t)out.start * 100 / sample_rate;
+    return out;
+}
