@@ -37,4 +37,3 @@ jobs:
         run: cmake --build build --target test-parakeet-strategy parakeet -- -j2
       - name: Prove reporter route and physical-memory guard
         run: build/bin/test-parakeet-strategy '[issue441]' --reporter compact
-

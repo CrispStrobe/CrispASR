@@ -71,7 +71,7 @@ inline ggml_tensor* attn(ggml_context* ctx, ggml_tensor* Q, ggml_tensor* K, ggml
         ggml_tensor* mf = (mask->type == GGML_TYPE_F32) ? mask : ggml_cast(ctx, mask, GGML_TYPE_F32);
         scores = ggml_add(ctx, scores, mf);
     }
-    scores = ggml_soft_max(ctx, scores); // F32 softmax over the key axis
+    scores = ggml_soft_max(ctx, scores);                                    // F32 softmax over the key axis
     ggml_tensor* V_perm = ggml_cont(ctx, ggml_permute(ctx, V, 1, 0, 2, 3)); // (T_kv, head_dim, n_heads)
     ggml_tensor* attn = ggml_mul_mat(ctx, V_perm, scores);                  // (head_dim, T_q, n_heads)
     ggml_mul_mat_set_prec(attn, GGML_PREC_F32);
