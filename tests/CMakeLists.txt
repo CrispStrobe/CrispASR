@@ -35,6 +35,13 @@ if (EMSCRIPTEN)
     return()
 endif()
 
+# ─── test-basic-pitch-conv — SIMD/threaded conv must match the scalar loop
+# byte for byte (hermetic: no GGUF, no audio).
+add_executable(test-basic-pitch-conv test-basic-pitch-conv.cpp)
+target_include_directories(test-basic-pitch-conv PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(test-basic-pitch-conv PRIVATE Catch2::Catch2WithMain Threads::Threads)
+catch_discover_tests(test-basic-pitch-conv PROPERTIES LABELS "unit;basic-pitch")
+
 add_executable(test-chatterbox-f0-simd test-chatterbox-f0-simd.cpp)
 target_include_directories(test-chatterbox-f0-simd PRIVATE ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(test-chatterbox-f0-simd PRIVATE Catch2::Catch2WithMain Threads::Threads)
