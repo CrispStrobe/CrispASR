@@ -5035,3 +5035,12 @@ known-upstream skip in that test first). Suggested first steps: diff the
 ggml vs legacy logits on the same 30 s slice; verify the index→label
 table against the ONNX blueprint's ordering; check the mel/frontend
 scale columns, not just cosine.
+## #441 proof and allocation hardening — IN PROGRESS (2026-09-19)
+
+- [x] Route the reporter's explicit `--chunk-seconds 419` command through the
+  shared strategy resolver and print the selected bounded encoder route.
+- [x] Add a non-disableable, cgroup-aware physical-memory guard at the encoder
+  allocation boundary, independent of CLI/session routing.
+- [x] Check Parakeet result/output allocations before writing through them.
+- [ ] GitHub CI deterministic route/allocation-failure proof.
+- [ ] Kaggle v0.8.33/current A/B and three constrained CPU real-model runs.

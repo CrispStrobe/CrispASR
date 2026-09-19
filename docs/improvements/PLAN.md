@@ -322,9 +322,10 @@ a catch-and-retry instead of one decision.
 single-pass / windowed / streamed proactively (bound the O(T²) bias you can't
 afford before allocating it). Keep the reactive fallback as a backstop.
 
-**Env gate:** `CRISPASR_PARAKEET_MEM_POLICY` = `auto` (new default) | `single` |
-`windowed` | `streamed` | `off` (current reactive-only behaviour). Never removes
-the existing `--att-context` / `--chunk-seconds` / `CRISPASR_FC_WINDOWED_ATTN`.
+**Env gate:** `CRISPASR_PARAKEET_MEM_POLICY` = `auto` (new default) | `windowed`
+| `streamed` | `off` (proactive routing disabled). Never removes the existing
+`--att-context` / `--chunk-seconds` / `CRISPASR_FC_WINDOWED_ATTN`, and never
+disables the physical-memory guard at the encoder allocation boundary.
 
 **A/B method:** back-to-back on the reporter's 225 s clip + a long clip; decoded
 output equality vs single-pass within tolerance + peak-footprint (`phys_footprint`

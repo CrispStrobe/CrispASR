@@ -218,8 +218,9 @@ reads it" from "the reader is in another file".
 - **sidon splits long input instead of refusing it.** `CRISPASR_SIDON_SPLIT=0`
   restores the refusal.
 - **parakeet may now choose streamed encoding** on long audio where it
-  previously attempted a single pass. `CRISPASR_PARAKEET_MEM_POLICY=single`
-  forces the old path; `CRISPASR_PARAKEET_VRAM_BUDGET_MB=0` disables the policy.
+  previously attempted a single pass. `CRISPASR_PARAKEET_MEM_POLICY=off` or
+  `CRISPASR_PARAKEET_VRAM_BUDGET_MB=0` disables proactive routing, while a
+  non-disableable physical-memory guard still rejects impossible encoder graphs.
 - **nemotron GPU attention is manual F32 by default**, which is slower than
   fused flash. `CRISPASR_NEMOTRON_FLASH=1` opts back in.
 - **zonos `--voice` is now refused** rather than silently ignored.

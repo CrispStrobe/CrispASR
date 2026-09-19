@@ -16,6 +16,7 @@
 #pragma once
 
 #include "parakeet.h"
+#include "parakeet_memory_policy.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -250,22 +251,6 @@ inline std::vector<std::pair<int64_t, int64_t>> parakeet_find_gaps(std::vector<s
 // so the gate errs toward the safe streamed path. Env-tunable via
 // CRISPASR_PARAKEET_MEM_COEFF. This is a heuristic gate, NOT an exact allocator
 // model — the reactive OOM fallback still backstops a wrong estimate.
-inline double parakeet_est_singlepass_peak_mb(int T_enc, int n_heads, double coeff) {
-    if (T_enc <= 0 || n_heads <= 0)
-        return 0.0;
-    const double T = (double)T_enc;
-    return coeff * T * T * (double)n_heads * 4.0 / (1024.0 * 1024.0);
-}
-
-// Does single-pass fit `budget_mb`? A non-positive budget means "no budget set"
-// → always fits (policy disabled, historical behaviour). A non-positive coeff
-// disables the estimate → always fits.
-inline bool parakeet_singlepass_fits_budget(int T_enc, int n_heads, double budget_mb, double coeff) {
-    if (budget_mb <= 0.0 || coeff <= 0.0)
-        return true;
-    return parakeet_est_singlepass_peak_mb(T_enc, n_heads, coeff) <= budget_mb;
-}
-
 // Full orchestration: mel → path selection → decode → segmentation, returning
 // the neutral segment list. `is_ja` is passed in (callers already detect it, or
 // pass parakeet_vocab_is_japanese(ctx)). Reads the same CRISPASR_PARAKEET_*

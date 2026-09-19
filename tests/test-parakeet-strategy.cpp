@@ -205,4 +205,23 @@ TEST_CASE("issue #441: the 47.5-minute input cannot pass a real machine's budget
     // 60 s clip has to stay on the seamless single-pass path.
     const int T_60s = (int)((60.0 * 16000) / 160) / 8;
     REQUIRE(parakeet_singlepass_fits_budget(T_60s, 8, budget_15gb_box, 8.0));
+
+    // The allocation-site guard is independent of routing knobs. Even a
+    // caller that forces single-pass cannot request the reported graph on a
+    // 15 GB machine; a normal 60 s graph remains allowed.
+    REQUIRE_FALSE(parakeet_encoder_fits_available_memory(T_enc, 8, 15.0 * 1024.0, 8.0));
+    REQUIRE(parakeet_encoder_fits_available_memory(T_60s, 8, 15.0 * 1024.0, 8.0));
+}
+
+TEST_CASE("issue #441: reporter's explicit chunk command selects the bounded route",
+          "[unit][parakeet-strategy][issue441]") {
+    parakeet_strategy_in in;
+    in.n_samples = 45602304;
+    in.sample_rate = 16000;
+    in.is_ja = false;
+    in.chunk_seconds_explicit = true;
+    in.chunk_seconds = 419;
+    in.stream_threshold_s = 300;
+    in.longform_enabled = true;
+    REQUIRE(parakeet_pick_strategy(in) == parakeet_strategy::CHUNK_SEGMENTED);
 }
