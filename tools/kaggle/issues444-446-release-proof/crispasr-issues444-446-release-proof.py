@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -12,7 +13,8 @@ TEMP = Path("/kaggle/temp")
 REPO = WORK / "CrispASR"
 BUILD = TEMP / "build-issues444-446"
 MODELS = TEMP / "models"
-SHA = "a9c627a1d465a1de36290831a0e1ca20df0c7ec3"
+SHA = "521a3a626c8bfbead69c12825366ace9135f53d4"
+SCRIPT_VERSION = "v2-blueprint-alignment-independent-arms"
 
 
 def run(cmd, *, cwd=None, capture=False):
@@ -31,6 +33,7 @@ import kaggle_harness as kh  # noqa: E402
 kh.init_progress()
 kh.resolve_hf_token()
 kh.step("script.start", sha=SHA)
+kh.provenance(SCRIPT_VERSION, REPO)
 kh.install_build_toolchain()
 
 flags = kh.cuda_build_flags(kh.detect_cuda_arch())
@@ -43,6 +46,11 @@ with kh.build_heartbeat("build"):
         f"stdbuf -oL -eL cmake --build {BUILD} --target crispasr-cli crispasr-chat "
         f"-- -j{kh.safe_build_jobs(gpu=True)}"
     )
+
+# The built binaries live under /kaggle/temp.  Removing the clone prevents
+# `kaggle kernels output` from paging through thousands of repository files
+# before it reaches the proof artifacts.
+shutil.rmtree(REPO)
 
 run([sys.executable, "-m", "pip", "install", "-q", "huggingface_hub", "hf_transfer"])
 os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
@@ -69,37 +77,44 @@ prefix = WORK / "issue444-current"
 cmd = [str(cli), "--backend", "qwen3-1.7b", "-m", str(qwen), "--vad", "-vm", "firered",
        "-vmsd", "30", "-am", str(aligner), "--split-on-punct", "-osrt", "-ojf", "-l", "zh",
        "-f", str(audio), "-of", str(prefix), "-t", "4", "-v"]
-p = run(cmd, capture=True)
-(WORK / "issue444-current.log").write_text(p.stdout)
+with kh.build_heartbeat("issue444.inference", interval_s=30):
+    qwen_p = subprocess.run(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+(WORK / "issue444-current.log").write_text(qwen_p.stdout or "")
 
 srt = prefix.with_suffix(".srt")
-assert srt.exists() and srt.stat().st_size > 0
 stamps = []
-for m in re.finditer(r"(\d+):(\d+):(\d+),(\d+)\s+-->\s+(\d+):(\d+):(\d+),(\d+)", srt.read_text()):
-    v = list(map(int, m.groups()))
-    start = ((v[0] * 60 + v[1]) * 60 + v[2]) * 1000 + v[3]
-    end = ((v[4] * 60 + v[5]) * 60 + v[6]) * 1000 + v[7]
-    stamps.append((start, end))
-assert stamps and all(e >= s for s, e in stamps)
-assert all(stamps[i][0] >= stamps[i - 1][1] for i in range(1, len(stamps))), stamps
-kh.step("issue444.pass", cues=len(stamps), first_ms=stamps[0][0], last_ms=stamps[-1][1])
+if srt.exists():
+    for m in re.finditer(r"(\d+):(\d+):(\d+),(\d+)\s+-->\s+(\d+):(\d+):(\d+),(\d+)", srt.read_text()):
+        v = list(map(int, m.groups()))
+        start = ((v[0] * 60 + v[1]) * 60 + v[2]) * 1000 + v[3]
+        end = ((v[4] * 60 + v[5]) * 60 + v[6]) * 1000 + v[7]
+        stamps.append((start, end))
+issue444_pass = (qwen_p.returncode == 0 and bool(stamps) and all(e >= s for s, e in stamps)
+                 and all(stamps[i][0] >= stamps[i - 1][1] for i in range(1, len(stamps))))
+kh.step("issue444.result", passed=issue444_pass, rc=qwen_p.returncode, cues=len(stamps),
+        first_ms=stamps[0][0] if stamps else None, last_ms=stamps[-1][1] if stamps else None)
 
 chat = BUILD / "bin" / "crispasr-chat"
-p = subprocess.run([str(chat), "-m", str(minicpm), "-c", "512", "-t", "4",
-                    "--max-tokens", "8", "--temp", "0", "--one-shot", "--no-color"],
-                   input="Reply with OK.", text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-(WORK / "issue446-chat.stdout").write_text(p.stdout)
-(WORK / "issue446-chat.stderr").write_text(p.stderr)
-assert p.returncode == 0, p.stderr[-4000:]
-assert p.stdout.strip(), "MiniCPM5 loaded but generated no output"
-assert "unknown pre-tokenizer" not in p.stderr
-kh.step("issue446.pass", output=p.stdout.strip()[:200])
+with kh.build_heartbeat("issue446.inference", interval_s=30):
+    chat_p = subprocess.run([str(chat), "-m", str(minicpm), "-c", "512", "-t", "4",
+                             "--max-tokens", "8", "--temp", "0", "--one-shot", "--no-color"],
+                            input="Reply with OK.", text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+(WORK / "issue446-chat.stdout").write_text(chat_p.stdout)
+(WORK / "issue446-chat.stderr").write_text(chat_p.stderr)
+issue446_pass = (chat_p.returncode == 0 and bool(chat_p.stdout.strip())
+                 and "unknown pre-tokenizer" not in chat_p.stderr)
+kh.step("issue446.result", passed=issue446_pass, rc=chat_p.returncode, output=chat_p.stdout.strip()[:200])
 
 summary = {
     "sha": SHA,
-    "issue444": {"passed": True, "cues": len(stamps), "first_ms": stamps[0][0], "last_ms": stamps[-1][1]},
-    "issue446": {"passed": True, "output": p.stdout.strip()[:200]},
+    "script_version": SCRIPT_VERSION,
+    "issue444": {"passed": issue444_pass, "rc": qwen_p.returncode, "cues": len(stamps),
+                 "first_ms": stamps[0][0] if stamps else None,
+                 "last_ms": stamps[-1][1] if stamps else None},
+    "issue446": {"passed": issue446_pass, "rc": chat_p.returncode, "output": chat_p.stdout.strip()[:200]},
 }
 (WORK / "issues444-446-summary.json").write_text(json.dumps(summary, indent=2) + "\n")
 kh.export_ccache_tar()
-kh.step("script.end", passed=True)
+passed = issue444_pass and issue446_pass
+kh.step("script.end", passed=passed)
+assert passed, summary
