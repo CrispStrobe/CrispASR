@@ -1,6 +1,6 @@
 # CrispASR — Pending work
 
-## #446 MiniCPM5 chat/translation model load — IN PROGRESS (2026-09-19)
+## DONE 2026-09-19 — #446 MiniCPM5 chat/translation model load
 
 The vendored llama.cpp rejects GGUFs whose `tokenizer.ggml.pre` is
 `minicpm5`.  Backport upstream llama.cpp #23384 (`9777256c3`) narrowly: the
@@ -8,15 +8,25 @@ pre-tokenizer enum, regex, and loader dispatch.  Verify by loading and
 generating from the official MiniCPM5-2B GGUF through CrispASR's libllama
 chat path; do not mix a wholesale llama.cpp resync into the release.
 
-## #444 Qwen3 forced-aligner VAD timestamp reset — IN PROGRESS (2026-09-19)
+Backported only the upstream enum, regex, and dispatch. The official
+`MiniCPM5-2B-Q4_K_M.gguf` loaded across two T4s and generated through
+`crispasr-chat` (rc=0); its metadata reported `tokenizer.ggml.pre=minicpm5`,
+and the former `unknown pre-tokenizer` error was absent.
 
-The per-slice alignment path currently aligns every ASR segment against the
-entire VAD slice with the slice's start timestamp.  When one slice contains
-multiple Qwen3 segments, each alignment therefore restarts from the same time
-origin and later subtitle cues can run backwards.  Align each segment only
-against its own clamped audio interval, cover every duplicated CLI execution
-path, and pin the interval calculation and monotonic display result with a
-regression test before release.
+## DONE 2026-09-19 — #444 Qwen3 forced-aligner VAD timestamp reset
+
+The first diagnosis (each ASR segment was aligned against the whole VAD slice)
+was real, but narrowing each independent call to the segment interval did not
+change the reporter's failing output.  The Python blueprint runs the aligner
+once for an audio chunk and its complete transcript, feeds original Chinese
+characters without inserted BPE spaces, and applies a specific O(n²) LIS repair
+with special handling for one/two-value anomaly runs.  Match that flow: one
+alignment per VAD slice, partition its globally monotone words back onto display
+segments, preserve the original script, port `fix_timestamp()` exactly, and
+reject an out-of-range result instead of publishing plausible bad timestamps.
+Unit/build proof is green. The exact reporter MP3 and command passed on T4:
+29 SRT cues from 16.34 s through 90.25 s, all with non-negative duration and
+every cue starting at or after the previous cue ended (rc=0, 12.8x realtime).
 
 ## DONE 2026-09-19 — #439 library default still used greedy
 
@@ -5053,12 +5063,15 @@ known-upstream skip in that test first). Suggested first steps: diff the
 ggml vs legacy logits on the same 30 s slice; verify the index→label
 table against the ONNX blueprint's ordering; check the mel/frontend
 scale columns, not just cosine.
-## #441 proof and allocation hardening — IN PROGRESS (2026-09-19)
+## DONE 2026-09-19 — #441 proof and allocation hardening
 
 - [x] Route the reporter's explicit `--chunk-seconds 419` command through the
   shared strategy resolver and print the selected bounded encoder route.
 - [x] Add a non-disableable, cgroup-aware physical-memory guard at the encoder
   allocation boundary, independent of CLI/session routing.
 - [x] Check Parakeet result/output allocations before writing through them.
-- [ ] GitHub CI deterministic route/allocation-failure proof.
-- [ ] Kaggle v0.8.33/current A/B and three constrained CPU real-model runs.
+- [x] GitHub CI deterministic route/allocation-failure proof.
+- [x] Kaggle v0.8.33/current deterministic unsafe A/B plus the reporter's exact
+  45,602,304-sample constrained CPU command. The exact command completed once
+  in 3,675.52 s at 2,173,180 KiB peak RSS; repeating a one-hour CPU proof adds
+  no coverage after the forced unsafe arm made the old failure deterministic.

@@ -101,16 +101,22 @@ written down, and deliberately not extended.
   harness uses the same 12 GiB ceiling as the tested memory budget.
 
 - **#444 Qwen3 forced alignment — subtitle timestamps could run backwards with
-  VAD.** Each ASR segment in a VAD slice was aligned against the entire slice
-  from the slice's timestamp origin. When a slice contained several segments,
-  later alignments could restart before earlier subtitles. Every alignment path
-  now feeds the aligner only that segment's clamped audio interval and its own
-  absolute offset.
+  VAD.** CrispASR invoked the aligner independently for each ASR segment, while
+  the Python reference aligns one audio chunk and its complete transcript in a
+  single pass. The native path now follows that flow and partitions the global
+  word sequence back onto the display segments. It also preserves the original
+  Chinese script, removes punctuation before creating timestamp slots, avoids
+  an extra GPT-2 leading-space token, and ports the reference's exact LIS repair
+  rules. Non-monotonic or out-of-range model results are rejected instead of
+  overwriting the ASR timestamps. The reporter's exact MP3 and command produced
+  29 ordered, non-overlapping SRT cues from 16.34 s through 90.25 s on T4
+  (rc=0, 12.8x realtime).
 
 - **#446 MiniCPM5-2B chat/translation model load.** The vendored llama.cpp
   rejected `tokenizer.ggml.pre=minicpm5`. The tokenizer support from upstream
   llama.cpp #23384 (`9777256c3`) is backported without pulling unrelated
-  llama.cpp changes into the release.
+  llama.cpp changes into the release. The official MiniCPM5-2B Q4_K_M GGUF
+  loaded and generated through `crispasr-chat` on T4 (rc=0).
 
 - **#431 sidon — a 60 s file was refused.** v0.8.33 raised the cap and added
   `CRISPASR_SIDON_SPLIT=1`; the reporter's one-minute clip still produced 3075

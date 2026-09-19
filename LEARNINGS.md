@@ -4525,20 +4525,24 @@ with speech. Always use VAD to trim silence before alignment.
 
 ### Qwen3 forced aligner monotonicity
 
-The reference implementation (`qwen3_forced_aligner.py`) has a
-`fix_timestamp()` function using longest-increasing-subsequence (LIS)
-to correct non-monotonic timestamps. Our timestamp-head implementation also
-uses LIS and interpolation; a forward clamp remains only at forced-aligner
-chunk boundaries.
+The reference implementation (`qwen3_forced_aligner.py`, QwenLM/Qwen3-ASR
+`7c6daf77`) runs once for an audio chunk and its complete transcript. Its
+`fix_timestamp()` is an O(n²) longest-non-decreasing-subsequence DP: it selects
+the first maximum-length chain, snaps anomaly runs of one or two values to the
+nearest retained neighbour, and linearly interpolates only longer runs. An
+O(n log n) LIS with a different tie rule and unconditional interpolation is not
+equivalent; `[0, 0, 1, 0]` becomes `[0, 0, 1, 1]` in the blueprint but became
+`[0, 0, 0, 0]` in the former port.
 
-That correction is local to one aligner call.  The VAD per-slice caller used
-to run every ASR segment against the *whole* slice with `sl.t0_cs` as the
-offset.  A slice with several text segments therefore produced several
-individually monotone word lists that all restarted at the same time, and the
-combined SRT still ran backwards (#444).  The producer-side fix is to align
-each text segment against `[seg.t0, seg.t1]`, clamped to the parent slice, with
-that interval's absolute time as the offset.  A final consumer clamp would
-hide the wrong audio/text pairing and leave plausible-looking bad timings.
+The VAD caller compounded that divergence by making one aligner call per ASR
+segment. Narrowing each call to `[seg.t0, seg.t1]` still failed the reporter's
+exact audio because it preserved the wrong inference flow. The correct port is
+one alignment for the VAD slice and its joined transcript, followed by a
+deterministic partition of the globally monotone words back onto display
+segments. Chinese must remain in its original script, punctuation must not get
+timestamp slots, and no leading BPE space may be invented between alignment
+units. Reject results outside the supplied audio slice; a final output clamp
+would hide a producer failure behind plausible timestamps (#444).
 
 Parakeet's native TDT timestamps remain preferable when available.
 
