@@ -40,12 +40,22 @@ cannot silently invalidate it.
 
 Two things, and the first is the bigger surprise:
 
-1. **The build ships baseline x86-64.** `CMAKE_CXX_FLAGS` is empty in
-   `build/CMakeCache.txt` and `GGML_AVX/AVX2/AVX512` are all `OFF`, so
-   `basic_pitch.cpp` compiles with `-O3 -DNDEBUG -fPIC … -fopenmp` and nothing
-   else. GCC auto-vectorised the contiguous `stride_w == 1` inner loop to 4-wide
-   SSE (`mulps`/`addps` on `%xmm`) and could go no wider. This is not specific
-   to this backend — it is the whole tree.
+1. **CrispASR's own sources compile at baseline x86-64, while ggml does not.**
+   `CMAKE_CXX_FLAGS` is empty in `build/CMakeCache.txt`, and the ninja rule for
+   this TU is `-O3 -DNDEBUG -fPIC … -fopenmp` with no `-march` at all. GCC
+   auto-vectorised the contiguous `stride_w == 1` inner loop to 4-wide SSE and
+   could go no wider — `basic_pitch.cpp.o` in the current build has **1460
+   `%xmm` references, zero `%ymm`, zero `vfmadd`**.
+
+   ⚠ Do *not* read `GGML_AVX2:BOOL=OFF` in the cache as "ggml is baseline too" —
+   that was my first conclusion and it is wrong. `GGML_NATIVE:BOOL=ON`
+   supersedes those switches, and `libggml-cpu.so` in the same build carries
+   **19886 `%ymm` references and 5427 AVX/FMA instructions**. So the tree has an
+   asymmetry: the vendored ggml gets the host's full ISA, CrispASR's `src/`
+   does not. That asymmetry, not a blanket "no AVX anywhere", is the tree-wide
+   finding. (It also means a local `GGML_NATIVE=ON` build is not what ships;
+   the release binaries are portable, which is exactly why the kernel added
+   here dispatches at runtime instead of asking for `-march`.)
 2. **`n_threads` never reached the convolutions.** It appears twice in
    `basic_pitch.cpp`: a default, and `core_cpu_backend::set_n_threads`, which in
    this backend governs GGUF loading only. The conv loops were single-threaded,
@@ -286,13 +296,14 @@ is the experiment — not a wholesale port.
 A recommendation with its evidence, not work done:
 
 1. **The `CMAKE_CXX_FLAGS`-is-empty finding is tree-wide and is the cheapest
-   lever in this document.** Nothing in this build gets AVX2 — not this backend
-   and not ggml (`GGML_AVX2:BOOL=OFF`). Any conv-heavy or DSP-heavy backend in
-   this tree is running 4-wide. Before porting anything to ggml, someone should
-   establish whether that is deliberate (portable-binary policy, in which case
-   runtime dispatch like this one is the only route) or an oversight. This is
-   worth a targeted audit; `linux-isa-fallback-verify.yml` already exists as the
-   place to hang it.
+   lever in this document.** Every hand-written kernel under `src/` — not just
+   this backend — compiles 4-wide, while the ggml it sits next to is built
+   native. Any conv-heavy or DSP-heavy backend in this tree is therefore leaving
+   the same ~45% on the table that this one was, and the ones that already route
+   through ggml are not. Since the shipped binaries must stay portable, the
+   route is runtime dispatch of the kind added here, not a build flag. Worth a
+   targeted audit before any porting work; `linux-isa-fallback-verify.yml`
+   already exists as the place to hang it.
 2. **The im2col arithmetic is the screening test, and it is one multiplication.**
    Compute `(H·W_out)·(IC·KH·KW)·4` bytes and compare with `OC`. Large matrix and
    small `OC` ⇒ direct SIMD. Modest matrix and `OC ≥ 32` ⇒ `ggml_conv_2d` is

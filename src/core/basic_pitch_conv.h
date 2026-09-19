@@ -78,8 +78,12 @@ inline std::vector<float> bp_conv2d_ref(const std::vector<float>& in, int IC, in
 //
 // Two things the reference loop above leaves on the table:
 //
-//   1. The build ships baseline x86-64 (CMAKE_CXX_FLAGS is empty, GGML_AVX2 is
-//      OFF), so GCC auto-vectorised the contiguous stride_w==1 inner loop to
+//   1. CrispASR's own sources compile at baseline x86-64 (CMAKE_CXX_FLAGS is
+//      empty; this TU's ninja rule carries no -march, and the resulting .o has
+//      1460 %xmm references and zero %ymm). Note the vendored ggml is NOT in
+//      the same position — GGML_NATIVE=ON gives libggml-cpu the host ISA — so
+//      the gap is specific to hand-written kernels under src/. GCC
+//      auto-vectorised the contiguous stride_w==1 inner loop to
 //      4-wide SSE and nothing wider. Per-function __attribute__((target(...)))
 //      plus a runtime __builtin_cpu_supports check widens that to AVX2/AVX-512
 //      without making the shipped binary unportable — the same Isa/best_isa
