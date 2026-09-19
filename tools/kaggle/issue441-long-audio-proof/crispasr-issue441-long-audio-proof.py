@@ -177,6 +177,11 @@ def unsafe_probe(binary: Path, label: str) -> dict:
     env = {
         **os.environ,
         "CRISPASR_PARAKEET_AVAILABLE_MB": "12000",
+        # Put both revisions on the unsafe single-pass route. A zero explicit
+        # chunk size alone still selects LONGFORM for a 47.5-minute clip and
+        # would make this negative control test another bounded path.
+        "CRISPASR_PARAKEET_STREAM_THRESHOLD": "99999",
+        "CRISPASR_PARAKEET_LONGFORM": "0",
         "CRISPASR_PARAKEET_MEM_POLICY": "off",
     }
     p = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
