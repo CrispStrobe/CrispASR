@@ -10,6 +10,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "crispasr_aligner.h"
+#include "core/qwen3_forced_aligner.h"
 
 #include <chrono>
 #include <cstdio>
@@ -207,7 +208,7 @@ TEST_CASE("align-only: tokenise_align_words", "[unit][align]") {
         CHECK(w[3] == "bar");
     }
     SECTION("CJK splits per character") {
-        auto w = crispasr_tokenise_align_words("你好world");
+        auto w = crispasr_tokenise_align_words("你好，world!");
         REQUIRE(w.size() == 3);
         CHECK(w[0] == "你");
         CHECK(w[1] == "好");
@@ -216,6 +217,19 @@ TEST_CASE("align-only: tokenise_align_words", "[unit][align]") {
     SECTION("empty") {
         CHECK(crispasr_tokenise_align_words("").empty());
         CHECK(crispasr_tokenise_align_words("  \n\t").empty());
+    }
+}
+
+TEST_CASE("align-only: Qwen3 timestamp repair matches Python blueprint", "[unit][align][issue444]") {
+    SECTION("first-maximum LIS tie and short anomaly snapping") {
+        std::vector<int> ts{0, 0, 1, 0};
+        core_qwen3_forced_aligner::fix_timestamps(ts);
+        CHECK(ts == std::vector<int>{0, 0, 1, 1});
+    }
+    SECTION("long anomaly run interpolates") {
+        std::vector<int> ts{0, 8, 7, 6, 5, 16};
+        core_qwen3_forced_aligner::fix_timestamps(ts);
+        CHECK(ts == std::vector<int>{0, 8, 10, 12, 14, 16});
     }
 }
 
