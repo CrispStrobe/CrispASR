@@ -13,7 +13,7 @@ TEMP = Path("/kaggle/temp")
 REPO = WORK / "CrispASR"
 BUILD = TEMP / "build-issues444-446"
 MODELS = TEMP / "models"
-SHA = "521a3a626c8bfbead69c12825366ace9135f53d4"
+SHA = "521a3a62457e213f615509ec655bd323634d4388"
 SCRIPT_VERSION = "v2-blueprint-alignment-independent-arms"
 
 
