@@ -157,7 +157,21 @@ Total CPU rises only 162.4 → 167.7 ms (+3%) from 1 to 4 threads, so the split 
 close to free. But achieved parallelism (`cpu_min / wall_min`) never exceeded
 **0.94×** at any thread count — the machine has no spare cores, and even the
 1-thread arm measured 0.71×. **The wall-clock threading win is therefore NOT
-demonstrated.** On an idle 4-core box the arithmetic implies ~43 ms/window, but
+demonstrated.**
+
+How oversubscribed this box is, measured directly with `/usr/bin/time -f "%P"`:
+
+| requested threads | CPU% achieved (3 runs) |
+|---|---|
+| 1 | 51%, 36%, 41% |
+| 2 | 42%, 45%, 49% |
+| 4 | 46%, 51%, 54% |
+
+A **single-threaded** process gets less than half of one core here. A 4-thread
+request cannot be given 4 cores, so no thread count can exceed 100% and the
+measurement is meaningless in either direction. The threaded path is wired and
+proven correct (byte-identical at `n_threads = 4` in both the unit test and the
+end-to-end run); its speed is simply not knowable from this machine. On an idle 4-core box the arithmetic implies ~43 ms/window, but
 that is a projection, not a measurement, and it is not being claimed.
 
 ### Proof the work actually happened
