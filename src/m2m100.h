@@ -18,12 +18,17 @@ struct m2m100_context_params {
 
 struct m2m100_context_params m2m100_context_default_params(void);
 
+// Generation default declared by every supported M2M100/WMT21 checkpoint.
+// Exposed so adapters and tests use the runtime's single source of truth.
+int m2m100_default_beam_size(void);
+
 // Load model from GGUF file produced by convert-m2m100-to-gguf.py
 struct m2m100_context* m2m100_init_from_file(const char* path_model, struct m2m100_context_params params);
 
 void m2m100_free(struct m2m100_context* ctx);
 
-// Beam search width. 1 = greedy (default); >1 = replay-from-prefix beam.
+// Beam search width. 1 = greedy; >1 = replay-from-prefix beam. Default is 5,
+// matching the supported checkpoints' generation_config (#439).
 void m2m100_set_beam_size(struct m2m100_context* ctx, int beam_size);
 
 // Translate text from src_lang to tgt_lang.

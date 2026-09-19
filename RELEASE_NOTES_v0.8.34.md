@@ -114,6 +114,12 @@ written down, and deliberately not extended.
   tuning preference for these checkpoints — it is the decode they were released
   with. `--beam-size 1` still selects greedy.
 
+  The reporter first encountered this through library use, and the first fix
+  covered only the CLI: a fresh low-level M2M100 context and a fresh session
+  still retained beam 1. Beam 5 is now the runtime default, the CLI reads that
+  single source of truth, and an explicit session `set_beam_size(1)` still
+  selects greedy.
+
   The 256 took two attempts. It did not live in the m2m100 adapter but in
   `whisper_params::translate_max_tokens` itself, so every "fall back to the
   backend's own default" branch in the translate adapters was dead code —

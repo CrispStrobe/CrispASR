@@ -1806,8 +1806,11 @@ struct crispasr_session {
     //   canary          — canary_set_beam_size (branched-KV AED beam)
     //   cohere          — cohere_set_beam_size (branched-KV AED beam)
     // Silent no-op for: voxtral4b (streaming, no beam hook), CTC/NAR backends.
-    // Default 1 preserves greedy bit-identical output (no-regression contract).
+    // Default 1 preserves greedy bit-identical output for ASR backends. The
+    // explicit bit lets model families with a different documented default
+    // (M2M100/WMT21 uses beam 5) distinguish "unset" from an explicit 1.
     int beam_size = 1;
+    bool beam_size_explicit = false;
 
     // Opt-in capture of the per-frame CTC logits on backends that produce a
     // dense CTC grid (Omni CTC, wav2vec2/hubert/data2vec, canary-ctc), via
@@ -10362,7 +10365,7 @@ CA_EXPORT char* crispasr_session_translate_text(crispasr_session* s, const char*
 #endif
 #ifdef CA_HAVE_M2M100
     if (s->m2m100_ctx) {
-        if (s->beam_size > 1)
+        if (s->beam_size_explicit)
             m2m100_set_beam_size(s->m2m100_ctx, s->beam_size);
         return m2m100_translate(s->m2m100_ctx, text, src_lang, tgt_lang, max_tokens > 0 ? max_tokens : 200);
     }
@@ -12536,6 +12539,7 @@ CA_EXPORT int crispasr_session_set_beam_size(crispasr_session* s, int n) {
     if (!s)
         return -1;
     s->beam_size = n > 0 ? n : 1;
+    s->beam_size_explicit = true;
     return 0;
 }
 

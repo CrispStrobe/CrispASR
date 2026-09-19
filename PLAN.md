@@ -1,5 +1,19 @@
 # CrispASR — Pending work
 
+## DONE 2026-09-19 — #439 library default still used greedy
+
+Worktree `.claude/worktrees/fix-439-library`, branch
+`fix/439-library-default`. Audit found that the CLI fix set M2M100/WMT21 to
+beam 5, but the low-level runtime and session C ABI still defaulted to beam 1;
+the reporter encountered the loop through library use first. Make beam 5 the
+runtime default, preserve an explicit session `set_beam_size(1)` override, and
+pin the model-family default with a unit test.
+
+Audit result: the low-level runtime now owns the beam-5 default; the CLI reads
+that value instead of duplicating it, and the session ABI distinguishes an
+unset width from an explicit `set_beam_size(1)`. Focused unit test passes and
+the changed runtime, C-ABI and CLI adapter objects compile.
+
 ## DONE 2026-09-17 — flash-attn F16-KQ triage across AR/flow backends
 
 Followed the nemotron fix (see below) with the LEARNINGS-recorded triage:

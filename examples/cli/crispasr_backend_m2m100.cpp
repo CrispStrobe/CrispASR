@@ -70,7 +70,7 @@ public:
         // it is the decode the checkpoints were released with.
         //
         // `--beam-size 1` still selects greedy for anyone who wants the speed.
-        m2m100_set_beam_size(ctx_, params.beam_size > 0 ? params.beam_size : 5);
+        m2m100_set_beam_size(ctx_, params.beam_size > 0 ? params.beam_size : m2m100_default_beam_size());
         // 0 = "use the runtime's default", which is already 200 (m2m100.cpp),
         // matching config.json's max_length. The adapter previously passed 256,
         // overriding that with a number from nowhere — and 256 is why the

@@ -215,7 +215,7 @@ struct m2m100_context {
     ggml_context* cross_kv_ctx = nullptr;
     ggml_backend_buffer_t cross_kv_buf = nullptr;
     int cross_T_enc = 0;
-    int beam_size = 1;
+    int beam_size = m2m100_default_beam_size();
 };
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -940,6 +940,12 @@ extern "C" struct m2m100_context_params m2m100_context_default_params(void) {
     p.verbosity = 1;
     p.use_gpu = true; // §232: GPU allowed by default; the is_metal gate + env decide actual use
     return p;
+}
+
+extern "C" int m2m100_default_beam_size(void) {
+    // facebook/m2m100_418M and both WMT21 dense directions declare
+    // num_beams=5. Greedy is an explicit opt-in for this model family (#439).
+    return 5;
 }
 
 extern "C" struct m2m100_context* m2m100_init_from_file(const char* path_model, struct m2m100_context_params params) {

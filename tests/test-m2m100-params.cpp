@@ -11,6 +11,13 @@ TEST_CASE("m2m100_params: default values are sensible", "[unit][m2m100]") {
     REQUIRE(p.verbosity >= 0);
 }
 
+TEST_CASE("issue #439: M2M100 library default follows checkpoint beam width", "[unit][m2m100][issue439]") {
+    // All supported M2M100/WMT21 checkpoints declare num_beams=5. The original
+    // fix changed only the CLI adapter, leaving direct and session API callers
+    // on greedy decoding -- the surface where the reporter first saw the loop.
+    REQUIRE(m2m100_default_beam_size() == 5);
+}
+
 TEST_CASE("m2m100_init_from_file: null path returns nullptr", "[unit][m2m100]") {
     struct m2m100_context_params p = m2m100_context_default_params();
     struct m2m100_context* ctx = m2m100_init_from_file(nullptr, p);
