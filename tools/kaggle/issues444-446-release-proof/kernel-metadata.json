@@ -1,6 +1,6 @@
 {
-  "id": "chr1s4/crispasr-issues444-446-release-proof",
-  "title": "CrispASR issues 444 and 446 release proof",
+  "id": "chr1s4/crispasr-issues-444-and-446-release-proof",
+  "title": "crispasr-issues-444-and-446-release-proof",
   "code_file": "crispasr-issues444-446-release-proof.py",
   "language": "python",
   "kernel_type": "script",
