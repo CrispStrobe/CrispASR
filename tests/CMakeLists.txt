@@ -35,6 +35,15 @@ if (EMSCRIPTEN)
     return()
 endif()
 
+# ─── basic-pitch-conv-ab — hermetic conv A/B (no GGUF, no audio) ──────────────
+# Unlike the other *-ab harnesses this one needs no models, so CI can run it.
+# That matters: the VPS this was developed on gives a single-threaded process
+# 36-54%% of one core, so the threaded arm is unmeasurable there.
+# See docs/music-transcription/BASIC_PITCH_CONV_PERF.md.
+add_executable(basic-pitch-conv-ab basic-pitch-conv-ab.cpp)
+target_include_directories(basic-pitch-conv-ab PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(basic-pitch-conv-ab PRIVATE Threads::Threads)
+
 # ─── test-basic-pitch-conv — SIMD/threaded conv must match the scalar loop
 # byte for byte (hermetic: no GGUF, no audio).
 add_executable(test-basic-pitch-conv test-basic-pitch-conv.cpp)

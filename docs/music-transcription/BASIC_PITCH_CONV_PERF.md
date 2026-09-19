@@ -231,17 +231,27 @@ n_notes=153
 | fast avx2+fma, 1 thread | differs: same 153 notes, same midi/start/end/velocity, `amplitude` differs in the 8th decimal; head norms agree to 9 digits |
 | fast avx512f, 1 thread | differs, same character |
 
-### A correction to the brief's baseline
+### 151 vs 153 note events — build drift, not a harness bug
 
-The brief's expected baseline was **151** note events. This build (repo `main`
-at `fed73fb4`, `basic-pitch-f16.gguf`) produces **153** on both arms. The
-earliest event matches exactly — midi 51 at 34.8 ms, velocity 74 — as does the
-distinct-pitch set. The 151 came from the Dart harness against the **published
-pub 0.8.33 `.so`**, i.e. a different build, and quite possibly a different
-resampler path into 22.05 kHz. The discrepancy is *not* caused by this change:
-the reference arm of this binary, with the gate off, also gives 153. Whoever
-owns that harness should re-baseline against a locally built `.so` before
-treating 151 as ground truth.
+The Dart A/B harness reports **151** note events on this clip; this work
+measures **153**. Both are correct, for their own build.
+
+The harness opens `build/src/libcrispasr.so.0.8.33`, which was **linked on 17
+September**; the numbers here come from compiling current `src/`, which has
+moved since. The earliest event is identical in both (midi 51 at 34.8 ms,
+velocity 74) and so is the distinct-pitch set — consistent with drift somewhere
+downstream rather than a different model or front end.
+
+**Nothing here depends on which number is "right".** The A/B needs byte
+equality between the reference and fast arms *within one build*, and that is
+what was established: the gate-off arm of this binary also gives 153.
+
+⚠ An earlier revision of this document blamed the harness and said it should be
+re-baselined. That was wrong on two counts — the pub package ships no `.so` at
+all (it is pure Dart FFI and opens whatever `libPath` names), and the harness
+reproduces 151 deterministically. Recorded because "the other tool is
+mis-measuring" is a tempting and expensive conclusion to reach about a tool
+that is working.
 
 ## 7. Verdict
 
@@ -295,15 +305,15 @@ is the experiment — not a wholesale port.
 
 A recommendation with its evidence, not work done:
 
-1. **The `CMAKE_CXX_FLAGS`-is-empty finding is tree-wide and is the cheapest
-   lever in this document.** Every hand-written kernel under `src/` — not just
-   this backend — compiles 4-wide, while the ggml it sits next to is built
-   native. Any conv-heavy or DSP-heavy backend in this tree is therefore leaving
-   the same ~45% on the table that this one was, and the ones that already route
-   through ggml are not. Since the shipped binaries must stay portable, the
-   route is runtime dispatch of the kind added here, not a build flag. Worth a
-   targeted audit before any porting work; `linux-isa-fallback-verify.yml`
-   already exists as the place to hang it.
+1. **The `src/`-gets-no-ISA-flags finding is tree-wide, is worth more than this
+   optimisation, and has been written up on its own** —
+   `docs/improvements/SRC_ISA_GAP.md`. Short version: 15 release legs hand ggml
+   `-DGGML_AVX2=ON -DGGML_FMA=ON -DGGML_F16C=ON` and two more ship full
+   multi-variant runtime dispatch, while `release.yml` contains **zero**
+   occurrences of `CMAKE_CXX_FLAGS` — so every hand-written kernel under `src/`
+   ships baseline x86-64 on every leg, including the legs that deliberately give
+   ggml AVX2. Any conv-heavy or DSP-heavy backend is leaving roughly the same
+   45% on the table this one was. Settle that before doing per-kernel work here.
 2. **The im2col arithmetic is the screening test, and it is one multiplication.**
    Compute `(H·W_out)·(IC·KH·KW)·4` bytes and compare with `OC`. Large matrix and
    small `OC` ⇒ direct SIMD. Modest matrix and `OC ≥ 32` ⇒ `ggml_conv_2d` is
