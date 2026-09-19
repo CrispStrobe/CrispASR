@@ -24,7 +24,8 @@ def run(cmd, *, cwd=None, capture=False):
                           stderr=subprocess.STDOUT if capture else None)
 
 
-run(["git", "clone", "--recursive", "https://github.com/CrispStrobe/CrispASR", str(REPO)])
+run(["git", "clone", "--recursive", "--branch", "fix/441-proof", "--single-branch",
+     "https://github.com/CrispStrobe/CrispASR", str(REPO)])
 run(["git", "checkout", "--detach", SHA], cwd=REPO)
 run(["git", "submodule", "update", "--init", "--recursive"], cwd=REPO)
 sys.path.insert(0, str(REPO / "tools" / "kaggle"))
