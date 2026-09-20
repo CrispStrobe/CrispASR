@@ -767,3 +767,54 @@ CrispasrAlignmentAudioRange crispasr_alignment_audio_range(int64_t segment_t0_cs
     out.offset_cs = (int64_t)out.start * 100 / sample_rate;
     return out;
 }
+
+std::vector<CrispasrAlignmentRun> crispasr_plan_alignment_runs(const std::vector<std::pair<int64_t, int64_t>>& ranges) {
+    const size_t n = ranges.size();
+    std::vector<bool> joined(n, false);
+
+    // A backwards start means the ASR timestamp tokens lost chronology. Grow
+    // the repair island across every neighbouring segment whose time interval
+    // intersects it. This captures #444's 71.97, 88.93, 75.93 sequence, while
+    // leaving earlier well-ordered cues on their precise per-segment path.
+    for (size_t i = 1; i < n; i++) {
+        if (ranges[i].first >= ranges[i - 1].first)
+            continue;
+        size_t left = i - 1;
+        size_t right = i + 1;
+        int64_t lo = std::min(ranges[i - 1].first, ranges[i].first);
+        int64_t hi = std::max(ranges[i - 1].second, ranges[i].second);
+        while (left > 0 && ranges[left - 1].second > lo) {
+            --left;
+            lo = std::min(lo, ranges[left].first);
+            hi = std::max(hi, ranges[left].second);
+        }
+        while (right < n && ranges[right].first < hi) {
+            lo = std::min(lo, ranges[right].first);
+            hi = std::max(hi, ranges[right].second);
+            ++right;
+        }
+        for (size_t k = left; k + 1 < right; k++)
+            joined[k] = true;
+    }
+
+    std::vector<CrispasrAlignmentRun> out;
+    for (size_t begin = 0; begin < n;) {
+        size_t end = begin + 1;
+        while (end < n && joined[end - 1])
+            ++end;
+        int64_t lo = ranges[begin].first;
+        int64_t hi = ranges[begin].second;
+        for (size_t k = begin + 1; k < end; k++) {
+            lo = std::min(lo, ranges[k].first);
+            hi = std::max(hi, ranges[k].second);
+        }
+        // A monotone overlap is not an ordering failure. Keep the accurate
+        // one-segment call, but stop it at the next anchor so its words cannot
+        // overlap the following cue.
+        if (end == begin + 1 && end < n && ranges[end].first > lo)
+            hi = std::min(hi, ranges[end].first);
+        out.push_back({begin, end, lo, hi});
+        begin = end;
+    }
+    return out;
+}

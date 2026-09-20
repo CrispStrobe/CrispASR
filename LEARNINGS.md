@@ -4534,15 +4534,23 @@ O(n log n) LIS with a different tie rule and unconditional interpolation is not
 equivalent; `[0, 0, 1, 0]` becomes `[0, 0, 1, 1]` in the blueprint but became
 `[0, 0, 0, 0]` in the former port.
 
-The VAD caller compounded that divergence by making one aligner call per ASR
-segment. Narrowing each call to `[seg.t0, seg.t1]` still failed the reporter's
-exact audio because it preserved the wrong inference flow. The correct port is
-one alignment for the VAD slice and its joined transcript, followed by a
-deterministic partition of the globally monotone words back onto display
-segments. Chinese must remain in its original script, punctuation must not get
-timestamp slots, and no leading BPE space may be invented between alignment
-units. Reject results outside the supplied audio slice; a final output clamp
-would hide a producer failure behind plausible timestamps (#444).
+The VAD caller originally made one aligner call per ASR segment. Narrowing each
+call to `[seg.t0, seg.t1]` did not repair a source sequence such as 71.97,
+88.93, 75.93 seconds: those anchors were already out of order. Replacing that
+with one alignment for the complete VAD slice removed the overlap, but the
+reporter's follow-up exposed the other failure mode: the global pass
+redistributed ordinary cues across silence and pulled several starts 1.4–1.9
+seconds early.
+
+The correct scope follows the evidence. Align monotone segments locally so
+their reliable ASR anchors remain constraints. When a start jumps backwards,
+grow a connected interval around that anomaly and run the blueprint's joint
+alignment only for that island. For a monotone overlap, cap the earlier local
+audio interval at the next start anchor. Test both properties: an ordered cue
+stream alone can be consistently wrong, so the live gate also bounds movement
+of known-good anchors. Chinese remains in its original script, punctuation gets
+no timestamp slots, and no leading BPE space is invented between alignment
+units. Reject results outside the supplied audio range (#444).
 
 Parakeet's native TDT timestamps remain preferable when available.
 

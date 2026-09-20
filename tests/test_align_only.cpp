@@ -70,6 +70,38 @@ TEST_CASE("align-only: each segment gets its own audio interval", "[unit][align]
     CHECK_FALSE(crispasr_alignment_audio_range(5000, 5000, slice_start, slice_end, sr).valid());
 }
 
+TEST_CASE("align-only: only backward timestamp islands use joint alignment", "[unit][align][issue444]") {
+    SECTION("monotone overlaps stay locally anchored") {
+        const std::vector<std::pair<int64_t, int64_t>> ranges{{4151, 4735}, {4589, 4741}, {4949, 5405}};
+        const auto runs = crispasr_plan_alignment_runs(ranges);
+        REQUIRE(runs.size() == 3);
+        CHECK(runs[0].begin == 0);
+        CHECK(runs[0].end == 1);
+        CHECK(runs[0].t0_cs == 4151);
+        CHECK(runs[0].t1_cs == 4589); // capped at the next reliable start anchor
+        CHECK(runs[1].t0_cs == 4589);
+        CHECK(runs[1].t1_cs == 4741);
+    }
+
+    SECTION("reporter backward run is isolated from its monotone neighbours") {
+        const std::vector<std::pair<int64_t, int64_t>> ranges{
+            {6970, 7197}, {7197, 8509}, {8893, 8901}, {7593, 8049},
+            {8089, 8193}, {8353, 8809}, {8849, 9033}, {9100, 9200},
+        };
+        const auto runs = crispasr_plan_alignment_runs(ranges);
+        REQUIRE(runs.size() == 3);
+        CHECK(runs[0].begin == 0);
+        CHECK(runs[0].end == 1);
+        CHECK(runs[0].t1_cs == 7197);
+        CHECK(runs[1].begin == 1);
+        CHECK(runs[1].end == 7);
+        CHECK(runs[1].t0_cs == 7197);
+        CHECK(runs[1].t1_cs == 9033);
+        CHECK(runs[2].begin == 7);
+        CHECK(runs[2].end == 8);
+    }
+}
+
 // Join cue texts back into the flat transcript --align-only feeds the aligner.
 static std::string extract_srt_text(const std::string& raw) {
     std::string text_only;

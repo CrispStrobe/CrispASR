@@ -37,7 +37,14 @@ Backported only the upstream enum, regex, and dispatch. The official
 `crispasr-chat` (rc=0); its metadata reported `tokenizer.ggml.pre=minicpm5`,
 and the former `unknown pre-tokenizer` error was absent.
 
-## DONE 2026-09-19 — #444 Qwen3 forced-aligner VAD timestamp reset
+## REOPENED 2026-09-20 — #444 Qwen3 forced-aligner VAD timestamp reset
+
+The v0.8.34 whole-slice replacement removed overlaps but failed the reporter's
+accuracy check: several otherwise-valid cues moved 1.4–1.9 seconds early. The
+acceptance contract is now two-dimensional: ordered/non-overlapping output and
+bounded displacement from reliable ASR anchors. The replacement under test
+keeps local alignment for monotone ranges and applies joint blueprint repair
+only to the connected island around a real backward timestamp jump.
 
 The first diagnosis (each ASR segment was aligned against the whole VAD slice)
 was real, but narrowing each independent call to the segment interval did not
@@ -50,7 +57,8 @@ segments, preserve the original script, port `fix_timestamp()` exactly, and
 reject an out-of-range result instead of publishing plausible bad timestamps.
 Unit/build proof is green. The exact reporter MP3 and command passed on T4:
 29 SRT cues from 16.34 s through 90.25 s, all with non-negative duration and
-every cue starting at or after the previous cue ended (rc=0, 12.8x realtime).
+every cue starting at or after the previous cue ended (rc=0, 12.8x realtime),
+but that gate checked ordering only and therefore missed the regression above.
 
 ## DONE 2026-09-19 — #439 library default still used greedy
 
