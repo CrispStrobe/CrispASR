@@ -89,14 +89,18 @@ def ms(parts):
     return ((h * 60 + m) * 60 + s) * 1000 + milli
 
 
-def execute(binary, label):
+def execute(binary, label, *, align=True):
     prefix = WORK / label
     cmd = [str(binary), "--backend", "qwen3-1.7b", "-m", str(qwen), "--vad", "-vm", "firered",
-           "-vmsd", "30", "-am", str(aligner), "--split-on-punct", "-osrt", "-ojf", "-l", "zh",
-           "-f", str(audio), "-of", str(prefix), "-t", "4", "-v"]
+           "-vmsd", "30"]
+    if align:
+        cmd += ["-am", str(aligner)]
+    cmd += ["--split-on-punct", "-osrt", "-ojf", "-l", "zh",
+            "-f", str(audio), "-of", str(prefix), "-t", "4", "-v"]
     started = time.time()
     with kh.build_heartbeat(f"{label}.inference", interval_s=30):
-        p = subprocess.run(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        p = subprocess.run(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                           env={**os.environ, "CRISPASR_ALIGN_DEBUG": "1"})
     elapsed = round(time.time() - started, 2)
     (WORK / f"{label}.log").write_text(p.stdout or "")
     srt_path = prefix.with_suffix(".srt")
@@ -114,6 +118,7 @@ def execute(binary, label):
     return p.returncode, elapsed, rows
 
 
+raw_rc, raw_s, raw_rows = execute(current, "current-raw", align=False)
 baseline_rc, baseline_s, baseline_rows = execute(baseline, "v0834")
 current_rc, current_s, current_rows = execute(current, "current")
 
@@ -147,6 +152,7 @@ passed = baseline_rc == 0 and current_rc == 0 and baseline_reproduced and ordere
 summary = {
     "sha": sha,
     "passed": passed,
+    "raw": {"rc": raw_rc, "elapsed_s": raw_s, "cues": len(raw_rows)},
     "baseline": {"rc": baseline_rc, "elapsed_s": baseline_s, "cues": len(baseline_rows)},
     "current": {"rc": current_rc, "elapsed_s": current_s, "cues": len(current_rows)},
     "baseline_reproduced": baseline_reproduced,

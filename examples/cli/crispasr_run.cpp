@@ -549,8 +549,24 @@ static bool crispasr_align_slice_segments(const std::string& aligner_model, cons
     if (targets.empty() || range_end <= range_start)
         return false;
 
+    const bool debug_runs = [] {
+        const char* value = getenv("CRISPASR_ALIGN_DEBUG");
+        return value && atoi(value) != 0;
+    }();
+    if (debug_runs) {
+        fprintf(stderr, "crispasr[aligner-debug]: %zu target(s) in slice %lld..%lld cs\n", targets.size(),
+                (long long)((int64_t)range_start * 100 / 16000), (long long)((int64_t)range_end * 100 / 16000));
+        for (size_t p = 0; p < anchors.size(); p++)
+            fprintf(stderr, "crispasr[aligner-debug]: target[%zu]=%lld..%lld text='%s'\n", p,
+                    (long long)anchors[p].first, (long long)anchors[p].second, segs[targets[p]].text.c_str());
+    }
+
     bool changed = false;
-    for (const auto& run : crispasr_plan_alignment_runs(anchors)) {
+    const auto runs = crispasr_plan_alignment_runs(anchors);
+    for (const auto& run : runs) {
+        if (debug_runs)
+            fprintf(stderr, "crispasr[aligner-debug]: run[%zu..%zu)=%lld..%lld cs\n", run.begin, run.end,
+                    (long long)run.t0_cs, (long long)run.t1_cs);
         const auto audio = crispasr_alignment_audio_range(run.t0_cs, run.t1_cs, range_start, range_end, 16000);
         if (!audio.valid())
             continue;
