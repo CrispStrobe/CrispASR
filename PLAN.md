@@ -1,5 +1,21 @@
 # CrispASR — Pending work
 
+## CLAIMED 2026-09-20 — roadmap cleanup, #445 Orukeet, #438 Hojo-ASR, #337 native HIP, profiler/F16 audit
+
+Worktree `.claude/worktrees/roadmap-445-438-337-perf`, staged strictly in that
+order with a pushed checkpoint between stages. First archive every completed
+`PLAN.md` item into `HISTORY.md` and synchronize the roadmap-facing docs. Then:
+
+1. convert and prove Orukeet through the CrispASR Parakeet runtime;
+2. port Hojo-ASR-Multi-V1 with reference-stage parity;
+3. isolate and fix the two native gfx1100 Qwen3-TTS failures from #337, retaining
+   the safe fallbacks until real-device proof passes;
+4. generalize the scheduler per-node profiler and use it to audit/fix hidden F16
+   matmuls in quantized GGUF runtimes.
+
+Do not overlap these stages: finish, validate, document, and push each before
+starting the next.
+
 ## DONE 2026-09-19 — #446 MiniCPM5 chat/translation model load
 
 The vendored llama.cpp rejects GGUFs whose `tokenizer.ggml.pre` is
