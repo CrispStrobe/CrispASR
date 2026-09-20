@@ -910,14 +910,15 @@ static bool qwen3_tts_codec_decode_uses_cuda(const qwen3_tts_context* c) {
            crispasr_env::get("CRISPASR_QWEN3_TTS_CODEC_GPU") != nullptr || qwen3_tts_codec_use_gpu_by_default(c);
 }
 
-// #304: the qwen3-tts talker LM (and code_predictor) miscompute on the Vulkan
-// backend — on a Tesla P100 the AR decode runs away into a ~324 s clip of
-// clipping noise (peak 1.0) with empty ASR, vs a correct ~7 s render on CPU.
-// The codec is already CPU-pinned (see qwen3_tts_codec_use_gpu_by_default); this
-// routes the talker to CPU too when the GPU backend is Vulkan — the same
-// ggml-vulkan graph-corruption class already gated to CPU in cosyvoice3 (#304),
-// tada-codec (#192), moss (#215). SubtitleEdit ships the Vulkan Windows build to
-// every Windows user. Metal + CUDA keep the native GPU talker. Override with
+// #337 (Vulkan): the qwen3-tts talker LM (and code_predictor) were reported to
+// miscompute on the Vulkan backend — on a Tesla P100 the AR decode runs away
+// into a ~324 s clip of clipping noise (peak 1.0) with empty ASR, vs a correct
+// ~7 s render on CPU. The codec is already CPU-pinned (see
+// qwen3_tts_codec_use_gpu_by_default); this routes the talker to CPU too when
+// the GPU backend is Vulkan — the same ggml-vulkan graph-corruption class
+// already gated to CPU in cosyvoice3 (#304), tada-codec (#192), moss (#215).
+// SubtitleEdit ships the Vulkan Windows build to every Windows user. Metal +
+// CUDA keep the native GPU talker. Override with
 // CRISPASR_QWEN3_TTS_VULKAN_NATIVE=1.
 static void qwen3_tts_route_off_vulkan(qwen3_tts_context* c, int verbosity) {
     if (c->backend == c->backend_cpu || !std::strstr(ggml_backend_name(c->backend), "Vulkan")) {
@@ -928,8 +929,8 @@ static void qwen3_tts_route_off_vulkan(qwen3_tts_context* c, int verbosity) {
         return;
     }
     if (verbosity >= 1) {
-        fprintf(stderr, "qwen3_tts: Vulkan backend detected — running talker on CPU (#304 Vulkan "
-                        "miscompute; set CRISPASR_QWEN3_TTS_VULKAN_NATIVE=1 to override)\n");
+        fprintf(stderr, "qwen3_tts: Vulkan backend detected — running talker on CPU (#337 Vulkan "
+                        "talker/code-predictor miscompute; set CRISPASR_QWEN3_TTS_VULKAN_NATIVE=1 to override)\n");
     }
     ggml_backend_free(c->backend);
     c->backend = c->backend_cpu;
@@ -1212,7 +1213,19 @@ ggml_cgraph* build_graph_code_pred_kv(qwen3_tts_context* c, int n_past, int n_to
     // o15_force >= 0 pins the topology choice (CP_DIRECT builds O15-shaped
     // graphs regardless of the env); < 0 keeps the env-driven behaviour.
     const bool o15 = o15_force >= 0 ? o15_force != 0 : env_bool_default("CRISPASR_QWEN3_TTS_O15", false);
-    const int Lk = o15 ? c->cp_kv_max_ctx : (n_past + T);
+    // #337: the causal mask's width MUST equal the KV length the attention
+    // helper below actually reads, because the Vulkan flash-attention shader
+    // derives the mask row stride from KV, not from mask->ne[0] (see
+    // flash_attn_base.glsl: `m_stride = (p.gqa_ratio > 1) ? (p.gqa_ratio >> 16)
+    // : KV`). Pinning fixed_kv only at T==1 built the T=2 step-0 graph with a
+    // cp_kv_max_ctx-wide mask while kv_self_attn still read Lk = n_past + T = 2
+    // rows, so Vulkan read the mask with stride 2 over a stride-16 buffer and
+    // masked the wrong keys. That is the frame-0 code-predictor miscompute
+    // behind the Vulkan/gfx1100 #337 runaway. Pin fixed_kv for every O15 graph
+    // (the documented intent: "pin Lk = cp_kv_max_ctx for all code_pred
+    // graphs"); the mask fill already uses cp_kv_max_ctx for every O15 shape.
+    const int fixed_kv = o15 ? c->cp_kv_max_ctx : 0;
+    const int Lk = fixed_kv > 0 ? fixed_kv : (n_past + T);
 
     ggml_context* ctx0 = arena_ctx;
     if (!ctx0) {
@@ -1268,7 +1281,6 @@ ggml_cgraph* build_graph_code_pred_kv(qwen3_tts_context* c, int n_past, int n_to
         // Lk = n_past + T. Also pass `positions` as kv_indices so the K/V
         // cache write becomes a runtime-indexed scatter — required for the
         // cached-graph reuse path (skip_plan) to be correct across n_past.
-        const int fixed_kv = (o15 && T == 1) ? c->cp_kv_max_ctx : 0;
         ggml_tensor* eff_mask = (T == 1 && !o15) ? nullptr : causal_mask;
         ggml_tensor* eff_kv_indices = o15 ? positions : nullptr;
         ggml_tensor* attn =
