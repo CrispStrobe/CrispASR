@@ -112,6 +112,12 @@ written down, and deliberately not extended.
   29 ordered, non-overlapping SRT cues from 16.34 s through 90.25 s on T4
   (rc=0, 12.8x realtime).
 
+  **Known v0.8.34 regression:** that proof checked ordering but not displacement
+  from good ASR anchors. The reporter subsequently found several cues shifted
+  up to 2.35 seconds early because punctuation-free aligned units triggered the
+  output layer's text-fraction fallback; #444 was reopened and the display
+  units are being fixed on main without changing the model's timestamp slots.
+
 - **#446 MiniCPM5-2B chat/translation model load.** The vendored llama.cpp
   rejected `tokenizer.ggml.pre=minicpm5`. The tokenizer support from upstream
   llama.cpp #23384 (`9777256c3`) is backported without pulling unrelated

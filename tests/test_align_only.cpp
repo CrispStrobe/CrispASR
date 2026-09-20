@@ -220,6 +220,34 @@ TEST_CASE("align-only: tokenise_align_words", "[unit][align]") {
     }
 }
 
+TEST_CASE("align-only: display units restore punctuation without adding timestamp slots", "[unit][align][issue444]") {
+    SECTION("CJK sentence punctuation attaches to the preceding character") {
+        const auto labels = crispasr_tokenise_align_words("你好，world!再见？");
+        const auto display = crispasr_tokenise_align_display_words("你好，world!再见？");
+        REQUIRE(labels == std::vector<std::string>{"你", "好", "world", "再", "见"});
+        REQUIRE(display == std::vector<std::string>{"你", "好，", "world!", "再", "见？"});
+        CHECK(display.size() == labels.size());
+    }
+
+    SECTION("leading and repeated punctuation preserve the one-to-one map") {
+        const auto labels = crispasr_tokenise_align_words("“你好……” test-case.");
+        const auto display = crispasr_tokenise_align_display_words("“你好……” test-case.");
+        REQUIRE(display.size() == labels.size());
+        REQUIRE(display.size() == 4);
+        CHECK(display[0] == "“你");
+        CHECK(display[1] == "好……”");
+        CHECK(display[2] == "test-");
+        CHECK(display[3] == "case.");
+    }
+
+    SECTION("an opening quote after whitespace attaches to the following word") {
+        const auto labels = crispasr_tokenise_align_words("hello “world”");
+        const auto display = crispasr_tokenise_align_display_words("hello “world”");
+        REQUIRE(display.size() == labels.size());
+        REQUIRE(display == std::vector<std::string>{"hello", "“world”"});
+    }
+}
+
 TEST_CASE("align-only: Qwen3 timestamp repair matches Python blueprint", "[unit][align][issue444]") {
     SECTION("first-maximum LIS tie and short anomaly snapping") {
         std::vector<int> ts{0, 0, 1, 0};

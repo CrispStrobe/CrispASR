@@ -4534,15 +4534,27 @@ O(n log n) LIS with a different tie rule and unconditional interpolation is not
 equivalent; `[0, 0, 1, 0]` becomes `[0, 0, 1, 1]` in the blueprint but became
 `[0, 0, 0, 0]` in the former port.
 
-The VAD caller compounded that divergence by making one aligner call per ASR
-segment. Narrowing each call to `[seg.t0, seg.t1]` still failed the reporter's
-exact audio because it preserved the wrong inference flow. The correct port is
-one alignment for the VAD slice and its joined transcript, followed by a
-deterministic partition of the globally monotone words back onto display
-segments. Chinese must remain in its original script, punctuation must not get
-timestamp slots, and no leading BPE space may be invented between alignment
-units. Reject results outside the supplied audio slice; a final output clamp
-would hide a producer failure behind plausible timestamps (#444).
+The VAD caller originally made one aligner call per ASR segment. Replacing that
+with one alignment for the complete VAD slice removed the overlap, but the
+reporter's follow-up exposed an apparently separate failure: several starts
+moved 1.4–2.35 seconds early. Exact A/B showed the aligned and no-aligner output
+had almost identical interpolated boundaries, while the CLI supplied one long
+text segment per VAD slice. The model was not moving those sentence boundaries.
+
+The output layer was. Blueprint parity correctly removed punctuation before
+creating timestamp slots, and the aligned words therefore carried no sentence
+marks. `--split-on-punct` saw punctuation in the original segment but none in
+its words, declared the word timings unusable, and split the text by UTF-8 byte
+fraction across the whole segment. Preserve two forms: punctuation-free labels
+for inference, and a one-to-one display copy with punctuation reattached to the
+adjacent word. The latter lets sentence splitting use measured word boundaries
+without inventing model slots.
+
+Test both properties: an ordered cue stream alone can be consistently wrong, so
+the live gate also bounds movement of known-good anchors. Chinese remains in
+its original script, punctuation gets no timestamp slots, and no leading BPE
+space is invented between alignment units. Reject results outside the supplied
+audio range (#444).
 
 Parakeet's native TDT timestamps remain preferable when available.
 

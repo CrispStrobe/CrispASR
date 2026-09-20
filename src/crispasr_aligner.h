@@ -71,6 +71,12 @@ CrispasrAlignmentAudioRange crispasr_alignment_audio_range(int64_t segment_t0_cs
 /// naive space count.
 std::vector<std::string> crispasr_tokenise_align_words(const std::string& text);
 
+/// The same alignment units with punctuation reattached to the neighbouring
+/// unit for display. Alignment models must not receive punctuation timestamp
+/// slots, but subtitle splitting still needs sentence-ending marks on the
+/// returned words so it can use their measured times instead of interpolation.
+std::vector<std::string> crispasr_tokenise_align_display_words(const std::string& text);
+
 /// Parse SRT content into cue texts (indices and timestamps discarded,
 /// multi-line cue text joined with spaces, whitespace-only cues dropped).
 std::vector<std::string> crispasr_parse_srt_cues(const std::string& raw);
