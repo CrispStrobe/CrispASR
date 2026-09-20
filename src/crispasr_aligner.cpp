@@ -100,6 +100,13 @@ static bool is_alignment_punctuation(uint32_t cp) {
            (cp >= 0xFF00 && cp <= 0xFF65);   // Fullwidth punctuation
 }
 
+static bool is_opening_punctuation(uint32_t cp) {
+    return cp == '(' || cp == '[' || cp == '{' || cp == 0x2018 || cp == 0x201C || // ‘ “
+           cp == 0x3008 || cp == 0x300A || cp == 0x300C || cp == 0x300E ||        // 〈《「『
+           cp == 0x3010 || cp == 0x3014 || cp == 0x3016 || cp == 0x3018 ||        // 【〔〖〘
+           cp == 0x301A || cp == 0xFF08 || cp == 0xFF3B || cp == 0xFF5B;          // 〚（［｛
+}
+
 // Decode one UTF-8 codepoint from pos, return (codepoint, byte_length).
 static std::pair<uint32_t, int> decode_utf8(const std::string& s, size_t pos) {
     unsigned char b = (unsigned char)s[pos];
@@ -176,7 +183,9 @@ std::vector<std::string> tokenise_display_words(const std::string& text) {
             flush();
         } else if (is_alignment_punctuation(cp)) {
             flush();
-            if (!out.empty())
+            if (is_opening_punctuation(cp))
+                prefix += bytes;
+            else if (!out.empty())
                 out.back() += bytes;
             else
                 prefix += bytes;

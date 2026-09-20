@@ -239,6 +239,13 @@ TEST_CASE("align-only: display units restore punctuation without adding timestam
         CHECK(display[2] == "test-");
         CHECK(display[3] == "case.");
     }
+
+    SECTION("an opening quote after whitespace attaches to the following word") {
+        const auto labels = crispasr_tokenise_align_words("hello “world”");
+        const auto display = crispasr_tokenise_align_display_words("hello “world”");
+        REQUIRE(display.size() == labels.size());
+        REQUIRE(display == std::vector<std::string>{"hello", "“world”"});
+    }
 }
 
 TEST_CASE("align-only: Qwen3 timestamp repair matches Python blueprint", "[unit][align][issue444]") {
