@@ -151,6 +151,50 @@ std::vector<std::string> tokenise_words(const std::string& text) {
     return out;
 }
 
+// Build the same number of units as tokenise_words(), but preserve punctuation
+// on the unit next to it. The aligner labels remain punctuation-free; this form
+// is only restored after inference so --split-on-punct can use measured word
+// timestamps. Without it, crispasr_make_disp_segments treats otherwise-useful
+// CJK character timings as unusable and interpolates every sentence across the
+// enclosing VAD segment (#444's v0.8.34 timing-accuracy regression).
+std::vector<std::string> tokenise_display_words(const std::string& text) {
+    std::vector<std::string> out;
+    std::string current;
+    std::string prefix;
+    const auto flush = [&]() {
+        if (current.empty())
+            return;
+        out.push_back(prefix + current);
+        prefix.clear();
+        current.clear();
+    };
+
+    for (size_t i = 0; i < text.size();) {
+        const auto [cp, len] = decode_utf8(text, i);
+        const std::string bytes = text.substr(i, len);
+        if (cp == ' ' || cp == '\n' || cp == '\t' || cp == '\r') {
+            flush();
+        } else if (is_alignment_punctuation(cp)) {
+            flush();
+            if (!out.empty())
+                out.back() += bytes;
+            else
+                prefix += bytes;
+        } else if (is_cjk_codepoint(cp)) {
+            flush();
+            out.push_back(prefix + bytes);
+            prefix.clear();
+        } else {
+            current += bytes;
+        }
+        i += len;
+    }
+    flush();
+    if (!prefix.empty() && !out.empty())
+        out.back() += prefix;
+    return out;
+}
+
 bool path_contains_ci(const std::string& p, const char* needle) {
     std::string lo;
     lo.reserve(p.size());
@@ -394,6 +438,10 @@ std::vector<CrispasrAlignedWord> align_wav2vec2_ctc(const std::string& model_pat
 
 std::vector<std::string> crispasr_tokenise_align_words(const std::string& text) {
     return tokenise_words(text);
+}
+
+std::vector<std::string> crispasr_tokenise_align_display_words(const std::string& text) {
+    return tokenise_display_words(text);
 }
 
 std::vector<std::string> crispasr_parse_srt_cues(const std::string& raw) {
@@ -642,6 +690,7 @@ static std::vector<CrispasrAlignedWord> align_words_impl(const std::string& alig
     // original words back onto the aligned timings before returning.
     // Disable the romanized labels with CRISPASR_ALIGN_NO_ROMANIZE=1.
     const auto orig_words = tokenise_words(transcript);
+    const auto display_words = tokenise_display_words(transcript);
     std::vector<std::string> label_words = orig_words;
     {
         const char* no_rom = std::getenv("CRISPASR_ALIGN_NO_ROMANIZE");
@@ -669,9 +718,9 @@ static std::vector<CrispasrAlignedWord> align_words_impl(const std::string& alig
     // aligns label_words 1:1, so a size match is the expected case; on a
     // mismatch (an arm dropped words) keep the arm's text rather than guess.
     auto restore_text = [&](std::vector<CrispasrAlignedWord> v) {
-        if (v.size() == orig_words.size()) {
+        if (v.size() == orig_words.size() && display_words.size() == orig_words.size()) {
             for (size_t i = 0; i < v.size(); i++)
-                v[i].text = orig_words[i];
+                v[i].text = display_words[i];
         } else if (!v.empty()) {
             fprintf(stderr,
                     "crispasr[aligner]: aligned %zu words for %zu inputs — keeping the aligner's "
@@ -765,56 +814,5 @@ CrispasrAlignmentAudioRange crispasr_alignment_audio_range(int64_t segment_t0_cs
     if (!out.valid())
         return {};
     out.offset_cs = (int64_t)out.start * 100 / sample_rate;
-    return out;
-}
-
-std::vector<CrispasrAlignmentRun> crispasr_plan_alignment_runs(const std::vector<std::pair<int64_t, int64_t>>& ranges) {
-    const size_t n = ranges.size();
-    std::vector<bool> joined(n, false);
-
-    // A backwards start means the ASR timestamp tokens lost chronology. Grow
-    // the repair island across every neighbouring segment whose time interval
-    // intersects it. This captures #444's 71.97, 88.93, 75.93 sequence, while
-    // leaving earlier well-ordered cues on their precise per-segment path.
-    for (size_t i = 1; i < n; i++) {
-        if (ranges[i].first >= ranges[i - 1].first)
-            continue;
-        size_t left = i - 1;
-        size_t right = i + 1;
-        int64_t lo = std::min(ranges[i - 1].first, ranges[i].first);
-        int64_t hi = std::max(ranges[i - 1].second, ranges[i].second);
-        while (left > 0 && ranges[left - 1].second > lo) {
-            --left;
-            lo = std::min(lo, ranges[left].first);
-            hi = std::max(hi, ranges[left].second);
-        }
-        while (right < n && ranges[right].first < hi) {
-            lo = std::min(lo, ranges[right].first);
-            hi = std::max(hi, ranges[right].second);
-            ++right;
-        }
-        for (size_t k = left; k + 1 < right; k++)
-            joined[k] = true;
-    }
-
-    std::vector<CrispasrAlignmentRun> out;
-    for (size_t begin = 0; begin < n;) {
-        size_t end = begin + 1;
-        while (end < n && joined[end - 1])
-            ++end;
-        int64_t lo = ranges[begin].first;
-        int64_t hi = ranges[begin].second;
-        for (size_t k = begin + 1; k < end; k++) {
-            lo = std::min(lo, ranges[k].first);
-            hi = std::max(hi, ranges[k].second);
-        }
-        // A monotone overlap is not an ordering failure. Keep the accurate
-        // one-segment call, but stop it at the next anchor so its words cannot
-        // overlap the following cue.
-        if (end == begin + 1 && end < n && ranges[end].first > lo)
-            hi = std::min(hi, ranges[end].first);
-        out.push_back({begin, end, lo, hi});
-        begin = end;
-    }
     return out;
 }

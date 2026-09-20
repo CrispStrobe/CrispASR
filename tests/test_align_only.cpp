@@ -70,38 +70,6 @@ TEST_CASE("align-only: each segment gets its own audio interval", "[unit][align]
     CHECK_FALSE(crispasr_alignment_audio_range(5000, 5000, slice_start, slice_end, sr).valid());
 }
 
-TEST_CASE("align-only: only backward timestamp islands use joint alignment", "[unit][align][issue444]") {
-    SECTION("monotone overlaps stay locally anchored") {
-        const std::vector<std::pair<int64_t, int64_t>> ranges{{4151, 4735}, {4589, 4741}, {4949, 5405}};
-        const auto runs = crispasr_plan_alignment_runs(ranges);
-        REQUIRE(runs.size() == 3);
-        CHECK(runs[0].begin == 0);
-        CHECK(runs[0].end == 1);
-        CHECK(runs[0].t0_cs == 4151);
-        CHECK(runs[0].t1_cs == 4589); // capped at the next reliable start anchor
-        CHECK(runs[1].t0_cs == 4589);
-        CHECK(runs[1].t1_cs == 4741);
-    }
-
-    SECTION("reporter backward run is isolated from its monotone neighbours") {
-        const std::vector<std::pair<int64_t, int64_t>> ranges{
-            {6970, 7197}, {7197, 8509}, {8893, 8901}, {7593, 8049},
-            {8089, 8193}, {8353, 8809}, {8849, 9033}, {9100, 9200},
-        };
-        const auto runs = crispasr_plan_alignment_runs(ranges);
-        REQUIRE(runs.size() == 3);
-        CHECK(runs[0].begin == 0);
-        CHECK(runs[0].end == 1);
-        CHECK(runs[0].t1_cs == 7197);
-        CHECK(runs[1].begin == 1);
-        CHECK(runs[1].end == 7);
-        CHECK(runs[1].t0_cs == 7197);
-        CHECK(runs[1].t1_cs == 9033);
-        CHECK(runs[2].begin == 7);
-        CHECK(runs[2].end == 8);
-    }
-}
-
 // Join cue texts back into the flat transcript --align-only feeds the aligner.
 static std::string extract_srt_text(const std::string& raw) {
     std::string text_only;
@@ -249,6 +217,27 @@ TEST_CASE("align-only: tokenise_align_words", "[unit][align]") {
     SECTION("empty") {
         CHECK(crispasr_tokenise_align_words("").empty());
         CHECK(crispasr_tokenise_align_words("  \n\t").empty());
+    }
+}
+
+TEST_CASE("align-only: display units restore punctuation without adding timestamp slots", "[unit][align][issue444]") {
+    SECTION("CJK sentence punctuation attaches to the preceding character") {
+        const auto labels = crispasr_tokenise_align_words("你好，world!再见？");
+        const auto display = crispasr_tokenise_align_display_words("你好，world!再见？");
+        REQUIRE(labels == std::vector<std::string>{"你", "好", "world", "再", "见"});
+        REQUIRE(display == std::vector<std::string>{"你", "好，", "world!", "再", "见？"});
+        CHECK(display.size() == labels.size());
+    }
+
+    SECTION("leading and repeated punctuation preserve the one-to-one map") {
+        const auto labels = crispasr_tokenise_align_words("“你好……” test-case.");
+        const auto display = crispasr_tokenise_align_display_words("“你好……” test-case.");
+        REQUIRE(display.size() == labels.size());
+        REQUIRE(display.size() == 4);
+        CHECK(display[0] == "“你");
+        CHECK(display[1] == "好……”");
+        CHECK(display[2] == "test-");
+        CHECK(display[3] == "case.");
     }
 }
 

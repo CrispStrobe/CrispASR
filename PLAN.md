@@ -2,10 +2,11 @@
 
 ## CLAIMED 2026-09-20 — #444 forced-aligner timing regression
 
-The v0.8.34 whole-slice alignment removed overlaps but pulled valid subtitle
-boundaries materially earlier than the ASR anchors on the reporter clip. Reopen
-the issue, reproduce the exact command, and require both monotonic output and
-bounded timing displacement before replacing the release fix. Worktree
+The v0.8.34 whole-slice alignment removed overlaps, but its punctuation-free
+alignment units made `--split-on-punct` discard valid word timings and
+interpolate cues across each VAD segment; starts moved up to 2.35 seconds from
+the reporter's reliable anchors. Reopen the issue, reproduce the exact command,
+and require both monotonic output and bounded timing displacement. Worktree
 `.claude/worktrees/fix-444-timing`, branch `fix/444-timing`.
 
 ## CLAIMED 2026-09-20 — roadmap cleanup, #445 Orukeet, #438 Hojo-ASR, #337 native HIP, profiler/F16 audit
@@ -40,11 +41,13 @@ and the former `unknown pre-tokenizer` error was absent.
 ## REOPENED 2026-09-20 — #444 Qwen3 forced-aligner VAD timestamp reset
 
 The v0.8.34 whole-slice replacement removed overlaps but failed the reporter's
-accuracy check: several otherwise-valid cues moved 1.4–1.9 seconds early. The
+accuracy check: several otherwise-valid cues moved 1.4–2.35 seconds early. The
 acceptance contract is now two-dimensional: ordered/non-overlapping output and
-bounded displacement from reliable ASR anchors. The replacement under test
-keeps local alignment for monotone ranges and applies joint blueprint repair
-only to the connected island around a real backward timestamp jump.
+bounded displacement from reliable ASR anchors. Exact live A/B found the model
+alignment was not the source of the shift: punctuation removal made the output
+layer classify the aligned CJK characters as unusable for sentence splitting,
+then synthesize timings from UTF-8 text-length fractions. Restore punctuation
+onto the display copy of each aligned unit without adding model timestamp slots.
 
 The first diagnosis (each ASR segment was aligned against the whole VAD slice)
 was real, but narrowing each independent call to the segment interval did not

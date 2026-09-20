@@ -114,8 +114,9 @@ written down, and deliberately not extended.
 
   **Known v0.8.34 regression:** that proof checked ordering but not displacement
   from good ASR anchors. The reporter subsequently found several cues shifted
-  1.4–1.9 seconds early by the whole-slice pass; #444 was reopened and the fix
-  is being replaced on main with local alignment plus anomaly-island repair.
+  up to 2.35 seconds early because punctuation-free aligned units triggered the
+  output layer's text-fraction fallback; #444 was reopened and the display
+  units are being fixed on main without changing the model's timestamp slots.
 
 - **#446 MiniCPM5-2B chat/translation model load.** The vendored llama.cpp
   rejected `tokenizer.ggml.pre=minicpm5`. The tokenizer support from upstream

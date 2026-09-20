@@ -523,113 +523,73 @@ bool crispasr_words_have_positive_span(const std::vector<crispasr_word>& words) 
     return !words.empty() && words.back().t1 > words.front().t0;
 }
 
-// Preserve precise ASR anchors by aligning ordinary segments independently.
-// When the ASR timestamp tokens jump backwards, align only that connected
-// island jointly so the blueprint's monotone repair can restore its text order.
-// A whole-slice pass fixed #444's overlap but redistributed every cue across
-// silence and pulled good subtitles seconds early (reporter follow-up).
+// The Python forced-aligner blueprint runs once for an audio chunk and that
+// chunk's complete transcript.  Doing one model call per ASR segment loses the
+// global monotonic sequence and was the root of #444.  Align the slice once,
+// then partition the returned units back onto the original display segments.
 static bool crispasr_align_slice_segments(const std::string& aligner_model, const std::vector<float>& samples,
                                           int range_start, int range_end, int64_t offset_cs, int n_threads,
                                           bool force_aligner, std::vector<crispasr_segment>& segs,
                                           bool* out_load_failed = nullptr) {
-    (void)offset_cs; // every planned run derives its exact offset from its clipped sample range
     std::vector<size_t> targets;
     std::vector<size_t> counts;
-    std::vector<std::pair<int64_t, int64_t>> anchors;
+    std::string transcript;
+    size_t expected_words = 0;
     for (size_t i = 0; i < segs.size(); i++) {
         if (!segs[i].words.empty() && !force_aligner)
             continue;
         const size_t n = crispasr_tokenise_align_words(segs[i].text).size();
         if (n == 0)
             continue;
+        if (!transcript.empty())
+            transcript += ' ';
+        transcript += segs[i].text;
         targets.push_back(i);
         counts.push_back(n);
-        anchors.push_back({segs[i].t0, segs[i].t1});
+        expected_words += n;
     }
     if (targets.empty() || range_end <= range_start)
         return false;
 
-    const bool debug_runs = [] {
-        const char* value = getenv("CRISPASR_ALIGN_DEBUG");
-        return value && atoi(value) != 0;
-    }();
-    if (debug_runs) {
-        fprintf(stderr, "crispasr[aligner-debug]: %zu target(s) in slice %lld..%lld cs\n", targets.size(),
-                (long long)((int64_t)range_start * 100 / 16000), (long long)((int64_t)range_end * 100 / 16000));
-        for (size_t p = 0; p < anchors.size(); p++)
-            fprintf(stderr, "crispasr[aligner-debug]: target[%zu]=%lld..%lld text='%s'\n", p,
-                    (long long)anchors[p].first, (long long)anchors[p].second, segs[targets[p]].text.c_str());
+    auto aligned = crispasr_align_words(aligner_model, transcript, samples.data() + range_start,
+                                        range_end - range_start, offset_cs, n_threads, out_load_failed);
+    if (aligned.size() != expected_words) {
+        fprintf(stderr, "crispasr[aligner]: slice returned %zu units for %zu inputs; keeping ASR timestamps\n",
+                aligned.size(), expected_words);
+        return false;
     }
 
-    bool changed = false;
-    const auto runs = crispasr_plan_alignment_runs(anchors);
-    for (const auto& run : runs) {
-        if (debug_runs)
-            fprintf(stderr, "crispasr[aligner-debug]: run[%zu..%zu)=%lld..%lld cs\n", run.begin, run.end,
-                    (long long)run.t0_cs, (long long)run.t1_cs);
-        const auto audio = crispasr_alignment_audio_range(run.t0_cs, run.t1_cs, range_start, range_end, 16000);
-        if (!audio.valid())
-            continue;
-
-        std::string transcript;
-        size_t expected_words = 0;
-        for (size_t p = run.begin; p < run.end; p++) {
-            if (!transcript.empty())
-                transcript += ' ';
-            transcript += segs[targets[p]].text;
-            expected_words += counts[p];
-        }
-
-        bool load_failed = false;
-        auto aligned = crispasr_align_words(aligner_model, transcript, samples.data() + audio.start,
-                                            audio.end - audio.start, audio.offset_cs, n_threads, &load_failed);
-        if (out_load_failed)
-            *out_load_failed = *out_load_failed || load_failed;
-        if (aligned.size() != expected_words) {
-            fprintf(stderr, "crispasr[aligner]: run returned %zu units for %zu inputs; keeping ASR timestamps\n",
-                    aligned.size(), expected_words);
-            continue;
-        }
-
-        const int64_t end_cs = audio.offset_cs + (int64_t)(audio.end - audio.start) * 100 / 16000;
-        int64_t previous_end = audio.offset_cs;
-        bool valid = aligned.back().t1_cs > aligned.front().t0_cs;
-        for (auto& word : aligned) {
-            if (word.t0_cs < previous_end || word.t1_cs < word.t0_cs || word.t0_cs < audio.offset_cs ||
-                word.t1_cs > end_cs + 8) {
-                valid = false;
-                break;
-            }
-            // Timestamp classes are 80 ms wide. Clip that rounding tail to
-            // the next ASR anchor so two otherwise-correct local calls cannot
-            // recreate an overlap at their shared boundary.
-            word.t0_cs = std::min(word.t0_cs, end_cs);
-            word.t1_cs = std::min(word.t1_cs, end_cs);
-            previous_end = word.t1_cs;
-        }
-        if (!valid) {
+    // A model class outside the supplied clip is not a usable alignment.
+    // Reject the complete result rather than installing a partly clamped,
+    // apparently precise subtitle track.
+    const int64_t end_cs = offset_cs + (int64_t)(range_end - range_start) * 100 / 16000;
+    int64_t previous_end = offset_cs;
+    for (const auto& w : aligned) {
+        if (w.t0_cs < previous_end || w.t1_cs < w.t0_cs || w.t0_cs < offset_cs || w.t1_cs > end_cs + 8) {
             fprintf(stderr,
-                    "crispasr[aligner]: non-monotonic/out-of-range run result (clip %lld..%lld cs); "
-                    "keeping ASR timestamps\n",
-                    (long long)audio.offset_cs, (long long)end_cs);
-            continue;
+                    "crispasr[aligner]: non-monotonic/out-of-range slice result at %lld..%lld cs "
+                    "(clip %lld..%lld); keeping ASR timestamps\n",
+                    (long long)w.t0_cs, (long long)w.t1_cs, (long long)offset_cs, (long long)end_cs);
+            return false;
         }
-
-        size_t cursor = 0;
-        for (size_t p = run.begin; p < run.end; p++) {
-            auto& seg = segs[targets[p]];
-            seg.words.clear();
-            seg.words.reserve(counts[p]);
-            for (size_t k = 0; k < counts[p]; k++) {
-                auto& src = aligned[cursor++];
-                seg.words.push_back({std::move(src.text), src.t0_cs, src.t1_cs});
-            }
-            seg.t0 = seg.words.front().t0;
-            seg.t1 = seg.words.back().t1;
-        }
-        changed = true;
+        previous_end = w.t1_cs;
     }
-    return changed;
+    if (aligned.back().t1_cs <= aligned.front().t0_cs)
+        return false;
+
+    size_t cursor = 0;
+    for (size_t j = 0; j < targets.size(); j++) {
+        auto& seg = segs[targets[j]];
+        seg.words.clear();
+        seg.words.reserve(counts[j]);
+        for (size_t k = 0; k < counts[j]; k++) {
+            auto& src = aligned[cursor++];
+            seg.words.push_back({std::move(src.text), src.t0_cs, src.t1_cs});
+        }
+        seg.t0 = seg.words.front().t0;
+        seg.t1 = seg.words.back().t1;
+    }
+    return true;
 }
 
 // True if any segment carries a non-whitespace character (i.e. real text).

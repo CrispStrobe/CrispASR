@@ -4534,23 +4534,27 @@ O(n log n) LIS with a different tie rule and unconditional interpolation is not
 equivalent; `[0, 0, 1, 0]` becomes `[0, 0, 1, 1]` in the blueprint but became
 `[0, 0, 0, 0]` in the former port.
 
-The VAD caller originally made one aligner call per ASR segment. Narrowing each
-call to `[seg.t0, seg.t1]` did not repair a source sequence such as 71.97,
-88.93, 75.93 seconds: those anchors were already out of order. Replacing that
+The VAD caller originally made one aligner call per ASR segment. Replacing that
 with one alignment for the complete VAD slice removed the overlap, but the
-reporter's follow-up exposed the other failure mode: the global pass
-redistributed ordinary cues across silence and pulled several starts 1.4–1.9
-seconds early.
+reporter's follow-up exposed an apparently separate failure: several starts
+moved 1.4–2.35 seconds early. Exact A/B showed the aligned and no-aligner output
+had almost identical interpolated boundaries, while the CLI supplied one long
+text segment per VAD slice. The model was not moving those sentence boundaries.
 
-The correct scope follows the evidence. Align monotone segments locally so
-their reliable ASR anchors remain constraints. When a start jumps backwards,
-grow a connected interval around that anomaly and run the blueprint's joint
-alignment only for that island. For a monotone overlap, cap the earlier local
-audio interval at the next start anchor. Test both properties: an ordered cue
-stream alone can be consistently wrong, so the live gate also bounds movement
-of known-good anchors. Chinese remains in its original script, punctuation gets
-no timestamp slots, and no leading BPE space is invented between alignment
-units. Reject results outside the supplied audio range (#444).
+The output layer was. Blueprint parity correctly removed punctuation before
+creating timestamp slots, and the aligned words therefore carried no sentence
+marks. `--split-on-punct` saw punctuation in the original segment but none in
+its words, declared the word timings unusable, and split the text by UTF-8 byte
+fraction across the whole segment. Preserve two forms: punctuation-free labels
+for inference, and a one-to-one display copy with punctuation reattached to the
+adjacent word. The latter lets sentence splitting use measured word boundaries
+without inventing model slots.
+
+Test both properties: an ordered cue stream alone can be consistently wrong, so
+the live gate also bounds movement of known-good anchors. Chinese remains in
+its original script, punctuation gets no timestamp slots, and no leading BPE
+space is invented between alignment units. Reject results outside the supplied
+audio range (#444).
 
 Parakeet's native TDT timestamps remain preferable when available.
 

@@ -113,7 +113,7 @@ def execute(binary, label, *, align=True):
         lines = cue.splitlines()
         rows.append({"start_ms": ms(match.groups()[:4]), "end_ms": ms(match.groups()[4:]),
                      "text": " ".join(lines[2:]).strip()})
-    (WORK / f"{label}.json").write_text(json.dumps(rows, ensure_ascii=False, indent=2) + "\n")
+    (WORK / f"{label}-parsed.json").write_text(json.dumps(rows, ensure_ascii=False, indent=2) + "\n")
     kh.step(f"{label}.result", rc=p.returncode, elapsed_s=elapsed, cues=len(rows))
     return p.returncode, elapsed, rows
 
@@ -128,6 +128,7 @@ def by_text(rows):
 
 
 bad = by_text(baseline_rows)
+raw = by_text(raw_rows)
 fixed = by_text(current_rows)
 expected_starts = {
     "你找谁？": 28630,
@@ -143,11 +144,13 @@ ordered = (bool(current_rows)
            and all(current_rows[i]["start_ms"] >= current_rows[i - 1]["end_ms"]
                    for i in range(1, len(current_rows))))
 baseline_reproduced = ("你找谁？" in bad and bad["你找谁？"]["start_ms"] <= 27500)
+raw_interpolation_reproduced = ("你找谁？" in raw and raw["你找谁？"]["start_ms"] <= 27500)
 anchors_pass = len(anchor_errors) == len(expected_starts) and max(anchor_errors.values()) <= 400
 late_repair = ("你……" in fixed and "他们个个憨是憨，哥是哥的，凭什么要我连轴转？" in fixed
                and fixed["你……"]["end_ms"]
                <= fixed["他们个个憨是憨，哥是哥的，凭什么要我连轴转？"]["start_ms"])
-passed = baseline_rc == 0 and current_rc == 0 and baseline_reproduced and ordered and anchors_pass and late_repair
+passed = (raw_rc == 0 and baseline_rc == 0 and current_rc == 0 and raw_interpolation_reproduced
+          and baseline_reproduced and ordered and anchors_pass and late_repair)
 
 summary = {
     "sha": sha,
@@ -156,6 +159,7 @@ summary = {
     "baseline": {"rc": baseline_rc, "elapsed_s": baseline_s, "cues": len(baseline_rows)},
     "current": {"rc": current_rc, "elapsed_s": current_s, "cues": len(current_rows)},
     "baseline_reproduced": baseline_reproduced,
+    "raw_interpolation_reproduced": raw_interpolation_reproduced,
     "ordered": ordered,
     "anchor_errors_ms": anchor_errors,
     "late_repair": late_repair,

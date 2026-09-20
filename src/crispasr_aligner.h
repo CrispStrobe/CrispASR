@@ -31,7 +31,6 @@
 
 #include <cstdint>
 #include <string>
-#include <utility>
 #include <vector>
 
 struct CrispasrAlignedWord {
@@ -62,21 +61,6 @@ struct CrispasrAlignmentAudioRange {
     bool valid() const { return end > start; }
 };
 
-// One alignment call planned from a sequence of ASR segment anchors. `begin`
-// and `end` index the input sequence (end-exclusive). Ordinary monotone input
-// produces one run per segment. A connected island containing a backward
-// timestamp jump becomes one multi-segment run so the aligner can repair that
-// local ordering defect without redistributing every cue in the VAD slice.
-struct CrispasrAlignmentRun {
-    size_t begin = 0;
-    size_t end = 0;
-    int64_t t0_cs = 0;
-    int64_t t1_cs = 0;
-};
-
-std::vector<CrispasrAlignmentRun> crispasr_plan_alignment_runs(
-    const std::vector<std::pair<int64_t, int64_t>>& segment_ranges);
-
 CrispasrAlignmentAudioRange crispasr_alignment_audio_range(int64_t segment_t0_cs, int64_t segment_t1_cs,
                                                            int slice_start, int slice_end, int sample_rate);
 
@@ -86,6 +70,12 @@ CrispasrAlignmentAudioRange crispasr_alignment_audio_range(int64_t segment_t0_cs
 /// onto larger units (SRT cues, lines) must count with this, not with a
 /// naive space count.
 std::vector<std::string> crispasr_tokenise_align_words(const std::string& text);
+
+/// The same alignment units with punctuation reattached to the neighbouring
+/// unit for display. Alignment models must not receive punctuation timestamp
+/// slots, but subtitle splitting still needs sentence-ending marks on the
+/// returned words so it can use their measured times instead of interpolation.
+std::vector<std::string> crispasr_tokenise_align_display_words(const std::string& text);
 
 /// Parse SRT content into cue texts (indices and timestamps discarded,
 /// multi-line cue text joined with spaces, whitespace-only cues dropped).
