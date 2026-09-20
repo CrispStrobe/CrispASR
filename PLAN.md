@@ -1,5 +1,13 @@
 # CrispASR — Pending work
 
+## CLAIMED 2026-09-20 — #444 forced-aligner timing regression
+
+The v0.8.34 whole-slice alignment removed overlaps but pulled valid subtitle
+boundaries materially earlier than the ASR anchors on the reporter clip. Reopen
+the issue, reproduce the exact command, and require both monotonic output and
+bounded timing displacement before replacing the release fix. Worktree
+`.claude/worktrees/fix-444-timing`, branch `fix/444-timing`.
+
 ## CLAIMED 2026-09-20 — roadmap cleanup, #445 Orukeet, #438 Hojo-ASR, #337 native HIP, profiler/F16 audit
 
 Worktree `.claude/worktrees/roadmap-445-438-337-perf`, staged strictly in that
