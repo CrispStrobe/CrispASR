@@ -654,8 +654,11 @@ CRISPASR_SESSION_API float crispasr_session_beats_tempo_bpm(crispasr_session* s)
 // resampling: silently resampling audio would move every beat time.
 CRISPASR_SESSION_API int crispasr_session_beats_sample_rate(crispasr_session* s);
 
-// Polyphonic piano transcription: mono PCM at the model's native rate
-// (16000 Hz for piano-transcription) -> note events.
+// Polyphonic note transcription: mono PCM at the model's native rate
+// -> note events. Served by piano-transcription (16000 Hz), basic-pitch
+// (22050) and MT3 (16000) alike; query crispasr_session_piano_sample_rate
+// rather than assuming, and note the pcm_16k parameter name is a fossil of
+// the first backend to use this entry point.
 //
 // Returns note count (>0) on success, 0 for "ran, found nothing", -1 on error
 // or a backend with no piano arm. Retrieve the notes with
@@ -676,6 +679,22 @@ CRISPASR_SESSION_API int crispasr_session_piano_n_notes(crispasr_session* s);
 // typed-array read (the same reason crispasr_session_pitch_frames is flat).
 // midi_note is 21-108 (A0-C8); velocity is 0-127.
 CRISPASR_SESSION_API const float* crispasr_session_piano_notes(crispasr_session* s, int* out_n_notes);
+// GM program per note, session-owned, parallel to crispasr_session_piano_notes
+// and the same length in notes. Valid until the next crispasr_session_piano
+// call or session close.
+//
+//   0-127  General MIDI program — which instrument played the note
+//   128    percussion (GM channel 10), which carries no meaningful program
+//   -1     the model does not identify an instrument
+//
+// A separate array rather than a fifth float in the note record, because
+// widening that record would break every existing reader of this ABI. A
+// caller that does not ask is unaffected.
+//
+// Only MT3 fills this with real values; piano-transcription and basic-pitch
+// report -1 throughout. -1 rather than 0 because 0 is "Acoustic Grand Piano"
+// and would be indistinguishable from a genuine answer.
+CRISPASR_SESSION_API const int* crispasr_session_piano_note_programs(crispasr_session* s, int* out_n_notes);
 CRISPASR_SESSION_API int crispasr_session_piano_sample_rate(crispasr_session* s);
 CRISPASR_SESSION_API const char* crispasr_session_last_synth_error(crispasr_session* s);
 CRISPASR_SESSION_API char* crispasr_session_translate_text(crispasr_session* s, const char* text, const char* src_lang,

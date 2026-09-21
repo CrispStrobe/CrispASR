@@ -2095,12 +2095,29 @@ struct crispasr_session {
 #ifdef CA_HAVE_CREPE
     crepe_context* crepe_ctx = nullptr;
     std::vector<crepe_frame> crepe_last_frames;
-#ifdef CA_HAVE_PIANO_TRANSCRIPTION
+#endif
+#if defined(CA_HAVE_PIANO_TRANSCRIPTION) || defined(CA_HAVE_BASIC_PITCH) || defined(CA_HAVE_MT3)
     // Flattened {onset_ms, offset_ms, midi, velocity} per note. Flattened
     // rather than kept as piano_note_event[] so the C ABI can hand out one
     // contiguous float view (see crispasr_session_piano_notes).
+    //
+    // Guarded by all three note-event backends, not by PIANO_TRANSCRIPTION
+    // alone and not nested inside CA_HAVE_CREPE. It used to be both: a build
+    // with basic-pitch or MT3 but without CREPE would not have compiled the
+    // very branches that push into it, and one without piano-transcription
+    // had crispasr_session_piano_n_notes reporting a count while
+    // crispasr_session_piano_notes returned nullptr.
     std::vector<float> piano_last_notes;
-#endif
+
+    // GM program per note, parallel to piano_last_notes, -1 where the model
+    // does not identify an instrument.
+    //
+    // MT3's whole point is that it is multi-instrument — mt3_note_event
+    // carries program, instrument and is_drum — and the flat float record
+    // above has nowhere to put that. Rather than widen a layout every
+    // existing reader depends on, this is a parallel array reached through
+    // its own accessor: callers that do not ask are unaffected.
+    std::vector<int> piano_last_programs;
 #endif
 #ifdef CA_HAVE_KYUTAI
     void* kyutai_ctx = nullptr;
@@ -11041,6 +11058,7 @@ CA_EXPORT int crispasr_session_piano(crispasr_session* s, const float* pcm_16k, 
 #ifdef CA_HAVE_PIANO_TRANSCRIPTION
     if (s->piano_ctx) {
         s->piano_last_notes.clear();
+        s->piano_last_programs.clear();
         piano_transcription_result res{};
         if (piano_transcription_transcribe(s->piano_ctx, pcm_16k, n_samples, &res) != 0)
             return -1;
@@ -11054,6 +11072,10 @@ CA_EXPORT int crispasr_session_piano(crispasr_session* s, const float* pcm_16k, 
             s->piano_last_notes.push_back(e.offset_time * 1000.0f);
             s->piano_last_notes.push_back((float)e.midi_note);
             s->piano_last_notes.push_back((float)e.velocity);
+            // A piano model identifies no instrument; 0 would read as
+            // "Acoustic Grand Piano" and be indistinguishable from a real
+            // answer, so the absence is explicit.
+            s->piano_last_programs.push_back(-1);
         }
         const int n = res.n_notes;
         piano_transcription_result_free(&res);
@@ -11066,6 +11088,7 @@ CA_EXPORT int crispasr_session_piano(crispasr_session* s, const float* pcm_16k, 
         // Basic Pitch wants 22050 Hz — callers must ask
         // crispasr_session_piano_sample_rate() rather than assume 16 kHz.
         s->piano_last_notes.clear();
+        s->piano_last_programs.clear();
         basic_pitch_result res{};
         if (basic_pitch_transcribe(s->basic_pitch_ctx_, pcm_16k, n_samples, &res) != 0)
             return -1;
@@ -11076,6 +11099,7 @@ CA_EXPORT int crispasr_session_piano(crispasr_session* s, const float* pcm_16k, 
             s->piano_last_notes.push_back(e.end_time * 1000.0f);
             s->piano_last_notes.push_back((float)e.midi_note);
             s->piano_last_notes.push_back((float)e.velocity);
+            s->piano_last_programs.push_back(-1); // instrument-agnostic
         }
         const int n = res.n_notes;
         basic_pitch_result_free(&res);
@@ -11084,10 +11108,12 @@ CA_EXPORT int crispasr_session_piano(crispasr_session* s, const float* pcm_16k, 
 #endif
 #ifdef CA_HAVE_MT3
     if (s->mt3_ctx) {
-        // `pcm_16k` really is 16 kHz here. The program per note is dropped:
-        // the flat layout is [start_ms, end_ms, midi, velocity] and widening it
-        // would break every existing reader of this ABI.
+        // `pcm_16k` really is 16 kHz here. The flat layout stays
+        // [start_ms, end_ms, midi, velocity] because widening it would break
+        // every existing reader; the GM program goes into the parallel array
+        // that crispasr_session_piano_note_programs hands out.
         s->piano_last_notes.clear();
+        s->piano_last_programs.clear();
         mt3_result res{};
         if (mt3_transcribe(s->mt3_ctx, pcm_16k, n_samples, &res) != 0)
             return -1;
@@ -11098,6 +11124,10 @@ CA_EXPORT int crispasr_session_piano(crispasr_session* s, const float* pcm_16k, 
             s->piano_last_notes.push_back(e.end_time * 1000.0f);
             s->piano_last_notes.push_back((float)e.pitch);
             s->piano_last_notes.push_back((float)e.velocity);
+            // Drums are channel 10 in GM and carry no meaningful program, so
+            // they are reported as the dedicated sentinel rather than as
+            // whatever program field the model happened to emit.
+            s->piano_last_programs.push_back(e.is_drum ? 128 : e.program);
         }
         const int n = res.n_notes;
         mt3_result_free(&res);
@@ -11122,12 +11152,32 @@ CA_EXPORT const float* crispasr_session_piano_notes(crispasr_session* s, int* ou
         *out_n_notes = 0;
     if (!s)
         return nullptr;
-#ifdef CA_HAVE_PIANO_TRANSCRIPTION
+    // Matches crispasr_session_piano_n_notes. It used to be
+    // CA_HAVE_PIANO_TRANSCRIPTION alone, so a build with basic-pitch or MT3
+    // but without piano-transcription reported a note count and then handed
+    // back nullptr.
+#if defined(CA_HAVE_PIANO_TRANSCRIPTION) || defined(CA_HAVE_BASIC_PITCH) || defined(CA_HAVE_MT3)
     if (s->piano_last_notes.empty())
         return nullptr;
     if (out_n_notes)
         *out_n_notes = (int)(s->piano_last_notes.size() / 4);
     return s->piano_last_notes.data();
+#else
+    return nullptr;
+#endif
+}
+
+CA_EXPORT const int* crispasr_session_piano_note_programs(crispasr_session* s, int* out_n_notes) {
+    if (out_n_notes)
+        *out_n_notes = 0;
+    if (!s)
+        return nullptr;
+#if defined(CA_HAVE_PIANO_TRANSCRIPTION) || defined(CA_HAVE_BASIC_PITCH) || defined(CA_HAVE_MT3)
+    if (s->piano_last_programs.empty())
+        return nullptr;
+    if (out_n_notes)
+        *out_n_notes = (int)s->piano_last_programs.size();
+    return s->piano_last_programs.data();
 #else
     return nullptr;
 #endif
