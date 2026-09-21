@@ -213,6 +213,16 @@ surviving artifact. Applied on both the CLI and the session C-ABI.
 | `CRISPASR_SERVER_WORKERS` / `CRISPASR_API_KEYS` | HTTP server worker count / API keys. |
 | `CRISPASR_TEST_STREAM_THROW` | Test-only: lets the server's streaming worker throw on the magic input `__throw_test__` (both the variable *and* the input are required, so it cannot fire in production). |
 
+### Basic Pitch (music transcription)
+
+Full A/B and the reasoning behind the defaults: `docs/music-transcription/BASIC_PITCH_CONV_PERF.md`.
+
+| Variable | Purpose |
+|----------|---------|
+| `CRISPASR_BASIC_PITCH_FASTCONV` | `0` returns to the original scalar convolution loop. **Default ON** since the CI A/B (run 35471451173): the SIMD + threaded path is byte-identical to the reference (`tests/test-basic-pitch-conv.cpp`) and measured 1.82x single-threaded / 3.81x at 4 threads on ubuntu-24.04, 2.39x at 4 threads on macos-14. The reference loop is kept verbatim as `bp_conv2d_ref` and is never removed. ⚠ At `n_threads=4` the per-call thread spawn costs ~70% more CPU than `n_threads=2` for ~6% less wall; batch/server callers should prefer 2. |
+| `CRISPASR_BASIC_PITCH_CONV_ISA` | `scalar` \| `avx2` \| `avx2fma` \| `avx512` — override kernel dispatch for A/B. Only `scalar` and `avx2` (the auto-selected pair) are bit-identical to the reference loop; `avx2fma` and `avx512` contract into FMA and are never selected automatically. |
+| `CRISPASR_BASIC_PITCH_TIMING` | Print the per-window `cqt / hstack / conv / activation` split to stderr. The convolutions are ~484 MMAC/window against ~6 for the CQT, contrary to what this file's header used to claim. |
+
 ### Container / launcher
 
 Read by the Docker images and `.devops/run-server.sh`, not by the C++ itself —

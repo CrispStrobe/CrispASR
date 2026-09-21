@@ -1,0 +1,154 @@
+# Closes the one open question in docs/music-transcription/BASIC_PITCH_CONV_PERF.md.
+#
+# The convolution fast path (CRISPASR_BASIC_PITCH_FASTCONV) was developed on a
+# VPS so oversubscribed that a SINGLE-threaded process measured 36-54% of one
+# core. The SIMD half was still measurable there via CPU time (+45% on the
+# convolutions, reproducing to ±2%), but the THREADED half was not measurable
+# in either direction — no thread count can exceed 100% CPU on a box that will
+# not give you one core. That is the only reason the gate still defaults off.
+#
+# A GitHub runner is the clean box. This workflow does what the dev guide's A/B
+# rules require and the VPS could not:
+#
+#   * every arm in its OWN PROCESS (the gates are function-local statics, and a
+#     shared process warms caches across arms),
+#   * cold run discarded, median of >= 3,
+#   * both arms under identical load, back to back,
+#   * proof the work actually happened, not an exit code (HARD RULE 8) — the
+#     harness prints per-layer MMAC and achieved parallelism, and the
+#     correctness leg would fail if an arm short-circuited.
+#
+# The harness is hermetic: no GGUF, no audio, no network. It is the six real
+# conv shapes from bp_forward_window with fixed-PRNG weights.
+name: Basic Pitch conv A/B
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/basic-pitch-conv-ab.yml
+      - src/core/basic_pitch_conv.h
+      - src/basic_pitch.cpp
+      - tests/basic-pitch-conv-ab.cpp
+      - tests/test-basic-pitch-conv.cpp
+
+jobs:
+  ab:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04, name: linux-x86_64 }
+          - { os: macos-14,     name: macos-arm64 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Built exactly as the tree builds it: -O3 -DNDEBUG and NO -march. The
+      # point of the kernel is that it dispatches at runtime instead.
+      - name: Build harness
+        run: |
+          c++ -std=gnu++17 -O3 -DNDEBUG -Isrc -pthread \
+              tests/basic-pitch-conv-ab.cpp -o basic-pitch-conv-ab
+          ls -l basic-pitch-conv-ab
+
+      - name: Host ISA
+        run: |
+          echo "nproc: $(getconf _NPROCESSORS_ONLN)"
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            grep -o -m1 -E 'avx2|avx512f|fma' /proc/cpuinfo | sort -u | tr '\n' ' '; echo
+            uptime
+          else
+            sysctl -n machdep.cpu.brand_string hw.optional.arm64 || true
+            sysctl -n vm.loadavg
+          fi
+
+      # 1. Correctness first. A perf number from a wrong kernel is worthless.
+      - name: Byte-equality (reference vs fast, 1 and 4 threads)
+        run: |
+          set -e
+          for t in 1 4; do
+            CRISPASR_BASIC_PITCH_FASTCONV=1 ./basic-pitch-conv-ab --check "$t"
+          done
+          # and the shipped default, whatever it currently is
+          ./basic-pitch-conv-ab --check 4
+          # And prove the guard can fail: avx2fma contracts into FMA and must
+          # NOT be reported identical. On a host without FMA this arm falls
+          # back to the bit-identical kernel, so only assert where it applies.
+          if ./basic-pitch-conv-ab --check 1 >/dev/null 2>&1 && \
+             [ "$RUNNER_ARCH" = "X64" ]; then
+            if CRISPASR_BASIC_PITCH_FASTCONV=1 CRISPASR_BASIC_PITCH_CONV_ISA=avx2fma \
+               ./basic-pitch-conv-ab --check 1; then
+              echo "::error::avx2fma reported bit-identical — the guard is not discriminating"
+              exit 1
+            fi
+            echo "guard confirmed: avx2fma correctly reported as DIFFERS"
+          fi
+
+      # 2. Timing. Separate process per arm, cold discarded, median of 3.
+      - name: Timing A/B
+        run: |
+          set -e
+          # tag, isa ("off" = the reference loop), threads, expected arm name.
+          #
+          # The reference arm MUST set CRISPASR_BASIC_PITCH_FASTCONV=0
+          # explicitly. It used to pass no env at all, which was correct only
+          # while the gate defaulted off; the moment the default flipped, that
+          # arm silently became the fast path and every ratio collapsed to
+          # 1.00x. Hence expected_arm below: the harness prints which arm it
+          # actually ran, and we assert it rather than assume it.
+          run_arm() {
+            for rep in 0 1 2 3; do
+              if [ "$2" = "off" ]; then
+                out=$(CRISPASR_BASIC_PITCH_FASTCONV=0 ./basic-pitch-conv-ab 10 "$3")
+              else
+                out=$(CRISPASR_BASIC_PITCH_FASTCONV=1 \
+                      CRISPASR_BASIC_PITCH_CONV_ISA="$2" ./basic-pitch-conv-ab 10 "$3")
+              fi
+              got=$(echo "$out" | sed -n 's/.*\[arm=\([^ ]*\) .*/\1/p')
+              if [ "$got" != "$4" ]; then
+                echo "::error::arm $1 ran as '\''$got'\'', expected '\''$4'\'' — the A/B is comparing the wrong thing"
+                exit 1
+              fi
+              # discard rep 0 (cold)
+              if [ "$rep" != "0" ]; then
+                echo "$1 $(echo "$out" | awk '/^TOTAL/{print $3, $6}') \
+                     $(echo "$out" | awk '/^achieved_parallelism/{print $2}')"
+              fi
+            done
+          }
+          # On a host without AVX2 (e.g. arm64) the fast arms resolve to the
+          # portable kernel, which the harness names "scalar".
+          if [ "$RUNNER_ARCH" = "X64" ]; then FAST=avx2; FMA=avx2fma; else FAST=scalar; FMA=scalar; fi
+          {
+            run_arm reference off       1 reference
+            run_arm avx2-t1   "$FAST"   1 "$FAST"
+            run_arm avx2-t2   "$FAST"   2 "$FAST"
+            run_arm avx2-t4   "$FAST"   4 "$FAST"
+            run_arm fma-t1    "$FMA"    1 "$FMA"
+          } | tee arms.txt
+
+          python3 - <<'PY'
+          import collections, statistics
+          w = collections.defaultdict(list); c = collections.defaultdict(list); p = collections.defaultdict(list)
+          for line in open("arms.txt"):
+              f = line.split()
+              if len(f) < 4: continue
+              w[f[0]].append(float(f[1])); c[f[0]].append(float(f[2])); p[f[0]].append(float(f[3]))
+          bw = statistics.median(w["reference"]); bc = statistics.median(c["reference"])
+          print(f'{"arm":10s} {"wall ms":>9s} {"cpu ms":>8s} {"wall x":>7s} {"cpu x":>6s} {"par":>5s}')
+          for k in w:
+              mw, mc = statistics.median(w[k]), statistics.median(c[k])
+              print(f'{k:10s} {mw:9.1f} {mc:8.1f} {bw/mw:6.2f}x {bc/mc:5.2f}x {max(p[k]):5.2f}')
+          par = max(p["avx2-t4"])
+          if par < 1.5:
+              print(f"::warning::achieved parallelism at 4 threads was only {par:.2f}x — "
+                    "this runner had no spare cores, the threading arm is NOT measured here")
+          else:
+              print(f"threading arm IS measured on this runner: {par:.2f}x achieved parallelism")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: basic-pitch-conv-ab-${{ matrix.name }}
+          path: arms.txt

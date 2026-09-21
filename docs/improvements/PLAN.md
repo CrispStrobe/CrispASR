@@ -6,6 +6,34 @@ working path — per the dev-guide), with an **A/B method** and **unit tests**.
 
 ## NOW — active work
 
+### §I6 — `src/` ships baseline x86-64 on every release leg (NEW, undecided)
+- [ ] **Decide whether this is policy or oversight.** `release.yml` hands ggml
+      AVX2+FMA+F16C on 15 legs and full `GGML_CPU_ALL_VARIANTS` runtime dispatch
+      on 2 more, but contains **zero** `CMAKE_CXX_FLAGS` — so every hand-written
+      kernel under `src/` compiles generic x86-64 (SSE2, 4-wide) on every
+      artifact we ship, including the legs that deliberately give ggml AVX2.
+      Evidence, options and open questions: **`docs/improvements/SRC_ISA_GAP.md`**.
+      Measured worth on the one kernel tried (Basic Pitch `contour_conv`):
+      **+45% on the convolutions, +32% end-to-end, byte-identical output** — see
+      `docs/music-transcription/BASIC_PITCH_CONV_PERF.md`. Cheapest first step is
+      extending `CRISPASR_PORTABLE_CPU` to cover `src/` too (it loops over
+      `GGML_*` only today), which closes a real trap at zero cost regardless of
+      what is decided about enabling ISA.
+- [x] **Basic Pitch conv fast path — DEFAULT FLIPPED ON** (CI run 35471451173:
+      1.82x/3.81x ubuntu-24.04, 2.39x macos-14, byte-identical on both).
+      Follow-up: `core_parallel::for_each_chunk` spawns threads per conv call,
+      so `n_threads=4` costs 70% more CPU than 2 for 6% less wall — route
+      through `core/worker_pool.h`. Original notes:
+- [x] **(superseded) Basic Pitch conv fast path — flip the default?** Implemented and gated
+      (`CRISPASR_BASIC_PITCH_FASTCONV`, branch `perf/basic-pitch-conv`), output
+      proven byte-identical (`tests/test-basic-pitch-conv.cpp`, plus raw-head
+      FNV + norms end-to-end). SIMD half wins on speed AND quality, so it clears
+      the dev-guide bar; the THREADED half is unproven because the dev VPS gives
+      a single-threaded process 36–54% of one core. `.github/workflows/basic-pitch-conv-ab.yml`
+      runs the A/B on a clean runner (one arm per process, cold discarded,
+      median of 3, achieved-parallelism reported). Flip once that is green.
+
+
 ### Follow-ups (2026-07-16) — from the session-long-audio arc
 - [x] **F1 — reuse `core_repeat` beyond moonshine.** DONE for **firered_asr**
       (evidence-gated — a runaway was DEMONSTRATED, not assumed). Audit: most ASR

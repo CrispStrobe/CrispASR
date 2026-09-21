@@ -4,16 +4,21 @@
 // basic_pitch/layers/{nnaudio,signal}.py. See src/basic_pitch.h for the
 // architecture and models/convert-basic-pitch-to-gguf.py for the weights.
 //
-// The whole network is six small convolutions, so everything runs in plain
-// C++ loops rather than a ggml graph: at (172, 264, 8) the largest activation
-// is 363k floats and the biggest conv is 8x8x3x39, which a graph would only
-// add scheduling overhead to. ggml is still used for GGUF loading, which is
-// what every other backend here does.
+// The whole network is six convolutions, so everything runs in plain C++ loops
+// rather than a ggml graph. ggml is still used for GGUF loading, which is what
+// every other backend here does.
 //
-// The expensive part is the CQT front end (core/cqt2010v2.h), not the network.
+// WARNING: this header used to say the six convolutions were "small" and that
+// "the expensive part is the CQT front end, not the network". Both are wrong,
+// and the second shaped this file for a long time. Per 43844-sample window
+// (T=172) the six call sites in bp_forward_window cost 484.4 MMAC, of which
+// contour_conv (8->8, 3x39, out 172x264) alone is 340.0 MMAC = 70%, against
+// roughly 6 MMAC for the CQT. Run with CRISPASR_BASIC_PITCH_TIMING=1 to print
+// the split. See bp_conv_fast below for what follows from that.
 
 #include "basic_pitch.h"
 
+#include "core/basic_pitch_conv.h"
 #include "core/cqt2010v2.h"
 #include "core/gguf_loader.h"
 #include "core/ggml_cpu_backend.h"
@@ -26,6 +31,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <chrono>
 #include <string>
 #include <vector>
 
@@ -58,17 +64,17 @@ struct bp_hparams {
     std::vector<int> harmonic_shifts{-36, 0, 36, 57, 72, 84, 93, 101};
 };
 
+using core_basic_pitch::bp_conv;
+using core_basic_pitch::bp_conv2d;
+using core_basic_pitch::bp_fastconv_on;
+using core_basic_pitch::bp_timing_on;
+namespace bp_conv_fast = core_basic_pitch::bp_conv_fast;
+
 // ─── Weights ────────────────────────────────────────────────────────────────
 //
 // Materialised as float vectors at load: the whole model is ~40k weights, so
 // keeping a second F32 copy costs 160 kB and removes an F16 conversion from
 // every inner loop.
-
-struct bp_conv {
-    std::vector<float> w; // [OC][IC][KH][KW]
-    std::vector<float> b; // [OC]
-    int oc = 0, ic = 0, kh = 0, kw = 0;
-};
 
 struct bp_weights {
     std::vector<float> cqt_real;     // [36 * 256]
@@ -126,54 +132,6 @@ static void bp_sigmoid(std::vector<float>& v) {
         x = 1.0f / (1.0f + std::exp(-x));
 }
 
-// 2-D correlation. Input is channel-major [IC][H][W]; output [OC][H][W_out].
-// Time stride is always 1 (upstream never strides time); frequency stride is
-// `stride_w`. Padding is symmetric, matching the TF "same" pads the ONNX
-// export made explicit (see the table in src/basic_pitch.h's port notes).
-static std::vector<float> bp_conv2d(const std::vector<float>& in, int IC, int H, int W, const bp_conv& c, int stride_w,
-                                    int pad_h, int pad_w, int& W_out) {
-    W_out = (W + 2 * pad_w - c.kw) / stride_w + 1;
-    std::vector<float> out((size_t)c.oc * (size_t)H * (size_t)W_out);
-    const int KH = c.kh, KW = c.kw, OC = c.oc;
-    for (int oc = 0; oc < OC; oc++) {
-        const float bias = c.b[(size_t)oc];
-        for (int h = 0; h < H; h++) {
-            float* orow = out.data() + ((size_t)oc * (size_t)H + (size_t)h) * (size_t)W_out;
-            for (int wo = 0; wo < W_out; wo++)
-                orow[wo] = bias;
-            for (int ic = 0; ic < IC; ic++) {
-                const float* wbase = c.w.data() + ((size_t)oc * (size_t)IC + (size_t)ic) * (size_t)KH * (size_t)KW;
-                for (int kh = 0; kh < KH; kh++) {
-                    const int ih = h + kh - pad_h;
-                    if (ih < 0 || ih >= H)
-                        continue;
-                    const float* irow = in.data() + ((size_t)ic * (size_t)H + (size_t)ih) * (size_t)W;
-                    const float* krow = wbase + (size_t)kh * (size_t)KW;
-                    for (int kw = 0; kw < KW; kw++) {
-                        const float kv = krow[kw];
-                        if (kv == 0.0f)
-                            continue;
-                        // iw = wo*stride - pad + kw; keep wo inside [0, W_out)
-                        // and iw inside [0, W).
-                        int wo0 = 0;
-                        const int num = pad_w - kw;
-                        if (num > 0)
-                            wo0 = (num + stride_w - 1) / stride_w;
-                        int wo1 = W_out;
-                        const int lim = W - 1 + pad_w - kw;
-                        if (lim < 0)
-                            continue;
-                        wo1 = std::min(W_out, lim / stride_w + 1);
-                        for (int wo = wo0; wo < wo1; wo++)
-                            orow[wo] += kv * irow[wo * stride_w - pad_w + kw];
-                    }
-                }
-            }
-        }
-    }
-    return out;
-}
-
 // ─── Front end: CQT → NormalizedLog → BN → HarmonicStacking ─────────────────
 
 // Output is channel-major [n_harmonics][T][264], which is what bp_conv2d wants.
@@ -214,6 +172,19 @@ struct bp_window_out {
 static bool bp_forward_window(const basic_pitch_ctx* ctx, const float* window, int n, bp_window_out& out) {
     const bp_hparams& hp = ctx->hp;
     const bp_weights& w = ctx->w;
+    const int nth = ctx->params.n_threads > 0 ? ctx->params.n_threads : 1;
+
+    // CRISPASR_BASIC_PITCH_TIMING=1 prints the per-stage split. It exists to
+    // settle where this backend actually spends its time.
+    const bool timing = bp_timing_on();
+    using bp_clock = std::chrono::steady_clock;
+    bp_clock::time_point t_mark = bp_clock::now();
+    double ms_cqt = 0, ms_stack = 0, ms_conv = 0, ms_act = 0;
+    auto lap = [&](double& acc) {
+        const bp_clock::time_point now = bp_clock::now();
+        acc += std::chrono::duration<double, std::milli>(now - t_mark).count();
+        t_mark = now;
+    };
 
     core_cqt2010v2::Params cp;
     cp.n_bins = (int)hp.cqt_n_bins;
@@ -237,6 +208,9 @@ static bool bp_forward_window(const basic_pitch_ctx* ctx, const float* window, i
     }
     out.T = T;
 
+    if (timing)
+        lap(ms_cqt);
+
     out.normlog = out.cqt;
     core_cqt2010v2::normalized_log(out.normlog.data(), out.normlog.size(), hp.norm_log_eps);
 
@@ -247,6 +221,8 @@ static bool bp_forward_window(const basic_pitch_ctx* ctx, const float* window, i
         v = v * hp.cqt_bn_scale + hp.cqt_bn_shift;
 
     out.hstack = bp_harmonic_stack(hp, bn, T);
+    if (timing)
+        lap(ms_stack);
 
     const int NF = (int)hp.n_freq_bins_contours; // 264
     const int NN = (int)hp.n_freq_bins_notes;    // 88
@@ -254,31 +230,62 @@ static bool bp_forward_window(const basic_pitch_ctx* ctx, const float* window, i
 
     // ── contour head ───────────────────────────────────────────────────────
     int w1 = 0, w2 = 0;
-    std::vector<float> h = bp_conv2d(out.hstack, NH, T, NF, w.contour_conv, 1, 1, 19, w1);
+    std::vector<float> h = bp_conv2d(out.hstack, NH, T, NF, w.contour_conv, 1, 1, 19, w1, nth);
+    if (timing)
+        lap(ms_conv);
     bp_relu(h);
-    std::vector<float> contour = bp_conv2d(h, w.contour_conv.oc, T, w1, w.contour_out, 1, 2, 2, w2);
+    if (timing)
+        lap(ms_act);
+    std::vector<float> contour = bp_conv2d(h, w.contour_conv.oc, T, w1, w.contour_out, 1, 2, 2, w2, nth);
+    if (timing)
+        lap(ms_conv);
     bp_sigmoid(contour);
+    if (timing)
+        lap(ms_act);
     out.contour = contour; // [1][T][264] == [T][264]
 
     // ── note head (takes the contour map as a single channel) ──────────────
-    std::vector<float> nh = bp_conv2d(contour, 1, T, w2, w.note_conv, 3, 3, 2, w1);
+    std::vector<float> nh = bp_conv2d(contour, 1, T, w2, w.note_conv, 3, 3, 2, w1, nth);
+    if (timing)
+        lap(ms_conv);
     bp_relu(nh);
-    std::vector<float> note_pre = bp_conv2d(nh, w.note_conv.oc, T, w1, w.note_out, 1, 3, 1, w2);
+    if (timing)
+        lap(ms_act);
+    std::vector<float> note_pre = bp_conv2d(nh, w.note_conv.oc, T, w1, w.note_out, 1, 3, 1, w2, nth);
+    if (timing)
+        lap(ms_conv);
     bp_sigmoid(note_pre); // x_notes_pre — the sigmoid IS part of this layer
     out.note = note_pre;
 
     // ── onset head ─────────────────────────────────────────────────────────
-    std::vector<float> oh = bp_conv2d(out.hstack, NH, T, NF, w.onset_conv, 3, 2, 1, w1);
+    std::vector<float> oh = bp_conv2d(out.hstack, NH, T, NF, w.onset_conv, 3, 2, 1, w1, nth);
+    if (timing)
+        lap(ms_conv);
     bp_relu(oh);
+    if (timing)
+        lap(ms_act);
     // Concat([x_notes_pre, oh], axis=channels) — note map FIRST, matching the
     // ONNX Concat input order.
     const int oc = w.onset_conv.oc;
     std::vector<float> cat((size_t)(oc + 1) * (size_t)T * (size_t)NN);
     std::memcpy(cat.data(), note_pre.data(), (size_t)T * (size_t)NN * sizeof(float));
     std::memcpy(cat.data() + (size_t)T * (size_t)NN, oh.data(), (size_t)oc * (size_t)T * (size_t)NN * sizeof(float));
-    std::vector<float> onset = bp_conv2d(cat, oc + 1, T, NN, w.onset_out, 1, 1, 1, w2);
+    std::vector<float> onset = bp_conv2d(cat, oc + 1, T, NN, w.onset_out, 1, 1, 1, w2, nth);
+    if (timing)
+        lap(ms_conv);
     bp_sigmoid(onset);
+    if (timing)
+        lap(ms_act);
     out.onset = onset;
+    if (timing) {
+        lap(ms_act);
+        fprintf(stderr,
+                "basic-pitch timing: cqt %.1f ms  hstack %.1f ms  conv %.1f ms  act %.1f ms  "
+                "(conv %s, threads %d, 484.4 MMAC -> %.2f GMAC/s)\n",
+                ms_cqt, ms_stack, ms_conv, ms_act,
+                bp_fastconv_on() ? bp_conv_fast::kernel_name(bp_conv_fast::pick_kernel()) : "reference", nth,
+                ms_conv > 0 ? 0.4844 / (ms_conv / 1000.0) : 0.0);
+    }
     return true;
 }
 
