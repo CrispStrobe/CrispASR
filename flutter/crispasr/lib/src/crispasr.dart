@@ -2327,6 +2327,24 @@ typedef Beat = ({double timeS, bool isDownbeat});
 /// field, decide the mapping explicitly rather than reusing this value.
 typedef PianoNote = ({int midi, double onMs, double offMs, int velocity});
 
+/// One transcribed note with the instrument that played it, as returned by
+/// [CrispasrSession.pianoNotesWithPrograms].
+///
+/// - `program` — General MIDI program 0-127; **128** for percussion (GM
+///   channel 10, which carries no meaningful program); **-1** when the model
+///   does not identify an instrument.
+///
+/// Only MT3 fills this in. piano-transcription and basic-pitch report -1
+/// throughout — deliberately -1 and not 0, because 0 is "Acoustic Grand
+/// Piano" and would be indistinguishable from a real answer.
+typedef PianoNoteWithProgram = ({
+  int midi,
+  double onMs,
+  double offMs,
+  int velocity,
+  int program,
+});
+
 /// One separated source stem, as returned by [CrispasrSession.separate].
 ///
 /// - `name` — the model's own label for the stem (`drums`, `bass`, `other`,
@@ -4701,6 +4719,52 @@ class CrispasrSession {
       calloc.free(inPtr);
       calloc.free(nPtr);
     }
+  }
+
+  /// [pianoNotes], plus the General MIDI program of each note.
+  ///
+  /// MT3's reason for existing is that it is multi-instrument, and the flat
+  /// note record this ABI hands out has nowhere to put that — so the programs
+  /// travel in a parallel array and this is the call that reads both.
+  ///
+  /// Returns -1 for every program against a dylib that predates
+  /// `crispasr_session_piano_note_programs`, or against a model that does not
+  /// identify instruments, so a caller can use this unconditionally and read
+  /// the sentinel rather than probing for the symbol.
+  List<PianoNoteWithProgram> pianoNotesWithPrograms(Float32List pcm16k) {
+    final notes = pianoNotes(pcm16k);
+    if (notes.isEmpty) return const <PianoNoteWithProgram>[];
+
+    var programs = List<int>.filled(notes.length, -1);
+    if (_lib.providesSymbol('crispasr_session_piano_note_programs')) {
+      final fn = _lib.lookupFunction<
+          Pointer<Int32> Function(Pointer<Void>, Pointer<Int32>),
+          Pointer<Int32> Function(Pointer<Void>, Pointer<Int32>)>(
+        'crispasr_session_piano_note_programs',
+      );
+      final nPtr = calloc<Int32>();
+      try {
+        final ptr = fn(_handle, nPtr);
+        final n = nPtr.value;
+        if (ptr != nullptr && n >= notes.length) {
+          programs = List<int>.of(ptr.asTypedList(notes.length));
+        }
+      } finally {
+        calloc.free(nPtr);
+      }
+    }
+
+    return List<PianoNoteWithProgram>.generate(
+      notes.length,
+      (i) => (
+        onMs: notes[i].onMs,
+        offMs: notes[i].offMs,
+        midi: notes[i].midi,
+        velocity: notes[i].velocity,
+        program: programs[i],
+      ),
+      growable: false,
+    );
   }
 
   /// Native input sample rate the loaded piano model expects, in Hz (16000).
