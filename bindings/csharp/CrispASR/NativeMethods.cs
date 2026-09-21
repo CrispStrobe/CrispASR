@@ -493,6 +493,8 @@ namespace CrispASR
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr crispasr_session_piano_notes(IntPtr s, out int nNotes);
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern IntPtr crispasr_session_piano_note_programs(IntPtr s, out int nNotes);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int crispasr_session_piano_sample_rate(IntPtr s);
 
         // pitch (F0)
