@@ -11152,11 +11152,11 @@ CA_EXPORT const float* crispasr_session_piano_notes(crispasr_session* s, int* ou
         *out_n_notes = 0;
     if (!s)
         return nullptr;
-    // Matches crispasr_session_piano_n_notes. It used to be
+#if defined(CA_HAVE_PIANO_TRANSCRIPTION) || defined(CA_HAVE_BASIC_PITCH) || defined(CA_HAVE_MT3)
+    // The guard matches crispasr_session_piano_n_notes. It used to be
     // CA_HAVE_PIANO_TRANSCRIPTION alone, so a build with basic-pitch or MT3
     // but without piano-transcription reported a note count and then handed
     // back nullptr.
-#if defined(CA_HAVE_PIANO_TRANSCRIPTION) || defined(CA_HAVE_BASIC_PITCH) || defined(CA_HAVE_MT3)
     if (s->piano_last_notes.empty())
         return nullptr;
     if (out_n_notes)
