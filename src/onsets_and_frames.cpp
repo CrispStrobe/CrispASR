@@ -61,6 +61,14 @@ static constexpr int OAF_GATE_C = 3;
 static constexpr int OAF_CONV_HALO = 3;
 static constexpr int OAF_CONV_CHUNK = 256;
 
+// Timestep chunk for the graph BiLSTM. The recurrence is unrolled into the
+// graph at ~16 nodes per step, so node count -- and with it the metadata arena,
+// which is ggml_tensor_overhead() per node -- scales linearly in T. Chunking
+// with a carried (h, c) bounds it at a fixed cost and is EXACT, because the
+// recurrence is exact: chunk k starts from the state chunk k-1 ended with.
+// 512 steps is ~8200 nodes, ~6 MB of metadata, on a box with 7 GB.
+static constexpr int OAF_LSTM_GRAPH_CHUNK = 512;
+
 // ─── Weights ────────────────────────────────────────────────────────────────
 
 // One direction of an LSTM. W is consumed by ggml_mul_mat and therefore stays
@@ -68,6 +76,7 @@ static constexpr int OAF_CONV_CHUNK = 256;
 // recurrence in plain C++ and is dequantised once at load.
 struct oaf_lstm_dir {
     ggml_tensor* W = nullptr; // [in, 4H] in ggml ne order
+    ggml_tensor* R_t = nullptr; // the same recurrence matrix as a ggml tensor, [H, 4H] in ne order
     std::vector<float> R;     // [4H, H] row-major
     std::vector<float> b;     // [4H]
 };
@@ -130,6 +139,12 @@ struct onsets_and_frames_ctx {
     ggml_gallocr_t alloc_conv = nullptr; // conv-stack chunk
     ggml_gallocr_t alloc_proj = nullptr; // LSTM input projection
     ggml_gallocr_t alloc_head = nullptr; // output head
+    ggml_gallocr_t alloc_lstm = nullptr; // unrolled BiLSTM recurrence (CRISPASR_OAF_GRAPH_LSTM)
+
+    // Separate from graph_meta: the unrolled recurrence needs megabytes of
+    // tensor overhead where the other three shapes need kilobytes, and sharing
+    // one arena would hold the big allocation for the life of the context.
+    std::vector<uint8_t> lstm_meta;
 };
 
 // ─── Bench instrumentation (docs/contributing.md §1) ────────────────────────
@@ -220,6 +235,7 @@ static bool load_lstm_dir(core_gguf::tensor_map& tm, const std::string& p, oaf_l
     ggml_tensor* b = core_gguf::require(tm, (p + ".b").c_str(), "oaf");
     if (!d.W || !R || !b)
         return false;
+    d.R_t = R; // lives in ctx->w_ctx; the graph recurrence consumes it directly
     d.R = oaf_to_f32(R);
     d.b = oaf_to_f32(b);
     return true;
@@ -358,6 +374,8 @@ void onsets_and_frames_free(struct onsets_and_frames_ctx* ctx) {
         ggml_gallocr_free(ctx->alloc_proj);
     if (ctx->alloc_head)
         ggml_gallocr_free(ctx->alloc_head);
+    if (ctx->alloc_lstm)
+        ggml_gallocr_free(ctx->alloc_lstm);
     if (ctx->w_buf)
         core_gguf::release_weight_buffer(ctx->w_buf);
     if (ctx->w_ctx)
@@ -690,6 +708,168 @@ static void oaf_lstm_recurrence(const oaf_lstm_dir& d, const std::vector<float>&
     }
 }
 
+// ─── The same recurrence, unrolled into a ggml graph ────────────────────────
+//
+// Opt in with CRISPASR_OAF_GRAPH_LSTM=1. The scalar path above stays the
+// default and is never deleted (dev guide A/B rule 1, playbook §5.7 item 3).
+//
+// WHY THIS EXISTS, measured rather than assumed. Playbook §8 item 2 lists
+// "whether a ggml-graph BiLSTM beats a scalar recurrence at O&F's sequence
+// length" as explicitly NOT established, and §1b gives the reason to doubt it:
+// core/lstm.h unrolls ~12 nodes per timestep, and at T ~ 3000 that is a
+// ~200k-node graph across three BiLSTMs, where graph-build, tensor overhead and
+// gallocr planning all scale linearly and the per-step work is only a 384x1536
+// mat-vec. So it was screened before it was written, one direction, this box,
+// single-threaded:
+//
+//   T      scalar (whole cell)    unrolled graph (build + alloc + compute)
+//   313    289 ms  0.924 ms/step   2.1 +  4.2 +  54.0 =  60.2 ms  0.192 ms/step
+//   1875  1704 ms  0.909 ms/step  10.1 + 30.6 + 321.7 = 362.4 ms  0.193 ms/step
+//   3000  2903 ms  0.968 ms/step  13.3 + 48.1 + 517.8 = 579.1 ms  0.193 ms/step
+//
+// The graph is ~4.7x cheaper and -- the part that answers §1b -- its per-step
+// cost is FLAT in T. Node count does not degrade it; build and alloc together
+// stay around 10% of the total even at 48000 nodes. The gap is not mysterious:
+// docs/improvements/SRC_ISA_GAP.md establishes that everything under src/ ships
+// baseline x86-64 with no -march, so the scalar loop above runs SSE2 4-wide at
+// ~1.3 GFLOP/s, while ggml's mul_mat reaches its AVX2/FMA kernel through
+// runtime dispatch.
+//
+// NOT BIT-IDENTICAL, and it cannot be: ggml's mul_mat reduces in a different
+// order than the serial `s += Rr[i] * h[i]` loop, and this is a feedback path,
+// so a last-ulp difference at step 0 propagates. That is exactly why it is
+// gated and why the decision rests on the parity harness and the F1 numbers
+// rather than on the speedup.
+static bool oaf_lstm_graph_enabled() {
+    static int v = -1;
+    if (v < 0) {
+        const char* e = crispasr_env::get("CRISPASR_OAF_GRAPH_LSTM");
+        v = (e && *e && *e != '0') ? 1 : 0;
+    }
+    return v != 0;
+}
+
+static bool oaf_lstm_recurrence_graph(onsets_and_frames_ctx* ctx, const oaf_lstm_dir& d,
+                                      const std::vector<float>& gates, int T, int H, bool reverse, float* out,
+                                      int stride, int off) {
+    if (!d.R_t)
+        return false;
+    const int G = 4 * H;
+
+    // Carried across chunks, so chunking is exact rather than approximate.
+    std::vector<float> h_carry((size_t)H, 0.0f), c_carry((size_t)H, 0.0f);
+    std::vector<float> h_all;
+
+    for (int s0 = 0; s0 < T; s0 += OAF_LSTM_GRAPH_CHUNK) {
+        const int s1 = std::min(T, s0 + OAF_LSTM_GRAPH_CHUNK);
+        const int n_steps = s1 - s0;
+
+        const size_t n_nodes = (size_t)n_steps * 20 + 64;
+        const size_t need = ggml_tensor_overhead() * n_nodes + ggml_graph_overhead_custom(n_nodes, false);
+        if (ctx->lstm_meta.size() < need)
+            ctx->lstm_meta.resize(need);
+        ggml_init_params ip = {ctx->lstm_meta.size(), ctx->lstm_meta.data(), true};
+        ggml_context* c0 = ggml_init(ip);
+        if (!c0)
+            return false;
+        ggml_cgraph* gf = ggml_new_graph_custom(c0, n_nodes, false);
+
+        // Inputs. EVERY input is re-set after the alloc below, including the
+        // "constant-shaped" carries: gallocr may hand an input's slot to a
+        // later intermediate and the symptom is chunk 0 exact, chunk 1 onward
+        // diverged (playbook §6.6).
+        ggml_tensor* g_in = ggml_new_tensor_2d(c0, GGML_TYPE_F32, G, n_steps);
+        ggml_set_name(g_in, "gates");
+        ggml_set_input(g_in);
+        ggml_tensor* h0 = ggml_new_tensor_1d(c0, GGML_TYPE_F32, H);
+        ggml_set_name(h0, "h0");
+        ggml_set_input(h0);
+        ggml_tensor* c0t = ggml_new_tensor_1d(c0, GGML_TYPE_F32, H);
+        ggml_set_name(c0t, "c0");
+        ggml_set_input(c0t);
+        ggml_tensor* h_out = ggml_new_tensor_2d(c0, GGML_TYPE_F32, H, n_steps);
+        ggml_set_name(h_out, "h_all");
+        ggml_set_output(h_out);
+
+        ggml_tensor* h = h0;
+        ggml_tensor* cs = c0t;
+        for (int k = 0; k < n_steps; k++) {
+            ggml_tensor* g = ggml_view_1d(c0, g_in, G, (size_t)k * G * sizeof(float));
+            // The one piece of real arithmetic per step: R @ h_{t-1}.
+            ggml_tensor* sum = ggml_add(c0, g, ggml_mul_mat(c0, d.R_t, h));
+            // ONNX gate order is i, o, f, c — not PyTorch's i, f, g, o.
+            ggml_tensor* it = ggml_sigmoid(c0, ggml_view_1d(c0, sum, H, (size_t)OAF_GATE_I * H * sizeof(float)));
+            ggml_tensor* ot = ggml_sigmoid(c0, ggml_view_1d(c0, sum, H, (size_t)OAF_GATE_O * H * sizeof(float)));
+            ggml_tensor* ft = ggml_sigmoid(c0, ggml_view_1d(c0, sum, H, (size_t)OAF_GATE_F * H * sizeof(float)));
+            ggml_tensor* ct = ggml_tanh(c0, ggml_view_1d(c0, sum, H, (size_t)OAF_GATE_C * H * sizeof(float)));
+            cs = ggml_add(c0, ggml_mul(c0, ft, cs), ggml_mul(c0, it, ct));
+            h = ggml_mul(c0, ot, ggml_tanh(c0, cs));
+            ggml_build_forward_expand(
+                gf, ggml_cpy(c0, h, ggml_view_1d(c0, h_out, H, (size_t)k * H * sizeof(float))));
+        }
+        // The final (h, c) are read back to seed the next chunk, so they must
+        // survive allocation too.
+        ggml_set_name(cs, "c_last");
+        ggml_set_output(cs);
+        ggml_build_forward_expand(gf, cs);
+        ggml_tensor* h_last = h;
+        ggml_set_name(h_last, "h_last");
+        ggml_set_output(h_last);
+        ggml_build_forward_expand(gf, h_last);
+
+        if (!ctx->alloc_lstm)
+            ctx->alloc_lstm = ggml_gallocr_new(ggml_backend_get_default_buffer_type(ctx->backend));
+        if (!ctx->alloc_lstm || !ggml_gallocr_alloc_graph(ctx->alloc_lstm, gf)) {
+            std::fprintf(stderr, "oaf: graph BiLSTM allocation failed (steps=%d, nodes=%d)\n", n_steps,
+                         ggml_graph_n_nodes(gf));
+            ggml_free(c0);
+            return false;
+        }
+
+        // Gates for this chunk, in step order — reversed for the backward pass.
+        std::vector<float> g_chunk((size_t)n_steps * G);
+        for (int k = 0; k < n_steps; k++) {
+            const int t = reverse ? (T - 1 - (s0 + k)) : (s0 + k);
+            std::memcpy(g_chunk.data() + (size_t)k * G, gates.data() + (size_t)t * G, (size_t)G * sizeof(float));
+        }
+        ggml_backend_tensor_set(g_in, g_chunk.data(), 0, g_chunk.size() * sizeof(float));
+        ggml_backend_tensor_set(h0, h_carry.data(), 0, (size_t)H * sizeof(float));
+        ggml_backend_tensor_set(c0t, c_carry.data(), 0, (size_t)H * sizeof(float));
+
+        core_cpu_backend::set_n_threads(ctx->backend, oaf_nthreads(ctx));
+        if (ggml_backend_graph_compute(ctx->backend, gf) != GGML_STATUS_SUCCESS) {
+            std::fprintf(stderr, "oaf: graph BiLSTM compute failed\n");
+            ggml_free(c0);
+            return false;
+        }
+
+        h_all.resize((size_t)n_steps * H);
+        ggml_backend_tensor_get(h_out, h_all.data(), 0, h_all.size() * sizeof(float));
+        ggml_backend_tensor_get(h_last, h_carry.data(), 0, (size_t)H * sizeof(float));
+        ggml_backend_tensor_get(cs, c_carry.data(), 0, (size_t)H * sizeof(float));
+        for (int k = 0; k < n_steps; k++) {
+            const int t = reverse ? (T - 1 - (s0 + k)) : (s0 + k);
+            std::memcpy(out + (size_t)t * stride + off, h_all.data() + (size_t)k * H, (size_t)H * sizeof(float));
+        }
+        ggml_free(c0);
+    }
+    return true;
+}
+
+// Dispatch. The scalar path is the default; the graph path is opt-in and falls
+// BACK to the scalar one if it fails, so the gate can never make the model stop
+// working — only slower.
+static bool oaf_run_recurrence(onsets_and_frames_ctx* ctx, const oaf_lstm_dir& d, const std::vector<float>& gates,
+                               int T, int H, bool reverse, float* out, int stride, int off) {
+    if (oaf_lstm_graph_enabled()) {
+        if (oaf_lstm_recurrence_graph(ctx, d, gates, T, H, reverse, out, stride, off))
+            return true;
+        std::fprintf(stderr, "oaf: graph BiLSTM failed, falling back to the scalar recurrence\n");
+    }
+    oaf_lstm_recurrence(d, gates, T, H, reverse, out, stride, off);
+    return true;
+}
+
 // x: [T, in] row-major. Returns [T, 2H] row-major, forward half first —
 // the order the ONNX graph's Transpose/Reshape pair produces.
 static bool oaf_bilstm(onsets_and_frames_ctx* ctx, const oaf_lstm& l, const std::vector<float>& x, int T,
@@ -703,11 +883,13 @@ static bool oaf_bilstm(onsets_and_frames_ctx* ctx, const oaf_lstm& l, const std:
     std::vector<float> gates;
     if (!oaf_lstm_input_proj(ctx, l.fwd, x.data(), T, in_size, gate_size, gates))
         return false;
-    oaf_lstm_recurrence(l.fwd, gates, T, H, /*reverse*/ false, out.data(), 2 * H, 0);
+    if (!oaf_run_recurrence(ctx, l.fwd, gates, T, H, /*reverse*/ false, out.data(), 2 * H, 0))
+        return false;
 
     if (!oaf_lstm_input_proj(ctx, l.rev, x.data(), T, in_size, gate_size, gates))
         return false;
-    oaf_lstm_recurrence(l.rev, gates, T, H, /*reverse*/ true, out.data(), 2 * H, H);
+    if (!oaf_run_recurrence(ctx, l.rev, gates, T, H, /*reverse*/ true, out.data(), 2 * H, H))
+        return false;
     if (sink)
         sink->put(stage_name, out.data(), out.size());
     return true;
