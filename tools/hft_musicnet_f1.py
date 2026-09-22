@@ -56,6 +56,12 @@ MEL_EPS = 1e-8
 HOP_SEC = HOP / SR
 MUSICNET_LABEL_RATE = 44100.0   # sample indices, not seconds
 
+# How far the C++ and Python decoders may disagree on a note time before the
+# cross-check complains. They run the same algorithm on the same heads; the
+# only difference is float32 against float64 in the sub-frame refinement,
+# which is worth tens of microseconds.
+DECODER_TOL_S = 1e-3
+
 # The three piano-only pieces of the ten, so the solo-piano row can be split
 # out the way §35.3 of the flutter_tuner report does.
 SOLO_PIANO = {"1759", "2303", "2556"}
@@ -334,13 +340,35 @@ def main() -> int:
                 # Same heads, two decoders. They must agree note for note; if
                 # they do not, the F1 below is measuring this script rather
                 # than the runtime the CLI ships.
-                py = sorted((round(a, 3), round(b, 3), int(round(69 + 12 * np.log2(p_ / 440.0))))
-                            for (a, b), p_ in zip(est_int, est_pitch))
-                cx = sorted((round(r[0], 3), round(r[1], 3), int(r[2])) for r in cpp_notes)
-                if py != cx:
-                    same = len(set(py) & set(cx))
-                    decoder_note = (f"  [!! C++ decoder {len(cx)} notes vs python {len(py)}, "
-                                    f"{same} shared]")
+                #
+                # Matched with a tolerance, not by exact equality of rounded
+                # times. The sub-frame onset refinement is float32 in C++ and
+                # float64 here, which moves a time by tens of MICROseconds —
+                # and an exact comparison of values rounded to a millisecond
+                # then disagrees on every note that happens to sit near a
+                # rounding boundary. That produced a "1374 of 1457 shared"
+                # warning on a pair of decoders whose worst disagreement was
+                # 68 us. The count must match exactly; the times must agree to
+                # DECODER_TOL_S, which is two orders of magnitude inside
+                # mir_eval's 50 ms onset tolerance.
+                cxn = [(float(r[0]), float(r[1]), int(r[2])) for r in cpp_notes]
+                pyn = [(float(a), float(b), int(round(69 + 12 * np.log2(p_ / 440.0))))
+                       for (a, b), p_ in zip(est_int, est_pitch)]
+                worst = 0.0
+                by_pitch: dict[int, list] = {}
+                for a_, b_, p_ in pyn:
+                    by_pitch.setdefault(p_, []).append((a_, b_))
+                unmatched = 0
+                for a_, b_, p_ in cxn:
+                    cands = by_pitch.get(p_)
+                    if not cands:
+                        unmatched += 1
+                        continue
+                    j = min(range(len(cands)), key=lambda i: abs(cands[i][0] - a_))
+                    worst = max(worst, abs(cands[j][0] - a_), abs(cands[j][1] - b_))
+                if len(cxn) != len(pyn) or unmatched or worst > DECODER_TOL_S:
+                    decoder_note = (f"  [!! C++ decoder {len(cxn)} notes vs python {len(pyn)}, "
+                                    f"{unmatched} unmatched, worst |dt| {worst * 1e3:.3f} ms]")
 
             p, r, f1, _ = mir_eval.transcription.precision_recall_f1_overlap(
                 ref_int, ref_pitch, est_int, est_pitch, offset_ratio=None)
