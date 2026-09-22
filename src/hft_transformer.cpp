@@ -411,8 +411,20 @@ float* hft_transformer_mel(struct hft_transformer_ctx* ctx, const float* pcm, in
 
 // ─── Graph building blocks ──────────────────────────────────────────────────
 
+// Every weight GEMM in this model is position-wise, so the token and batch
+// axes can be flattened into one before the multiply and restored after. That
+// matters more than it looks: `ggml_mul_mat` loops over ne2×ne3 and issues one
+// GEMM call per batch element, so a [256, 256, 32] activation becomes 32
+// separate 256×256×256 multiplies that each re-stream the weight matrix,
+// where the flattened form is a single 256×8192×256 one that loads it once.
+// The reshape is a view — same memory, same arithmetic, same result.
 static ggml_tensor* hft_linear_apply(ggml_context* c, const hft_linear& l, ggml_tensor* x) {
-    return ggml_add(c, ggml_mul_mat(c, l.w, x), l.b);
+    const int64_t n0 = x->ne[0], n1 = x->ne[1], n2 = x->ne[2], n3 = x->ne[3];
+    ggml_tensor* flat = (n2 * n3 > 1 && ggml_is_contiguous(x)) ? ggml_reshape_2d(c, x, n0, n1 * n2 * n3) : x;
+    ggml_tensor* y = ggml_add(c, ggml_mul_mat(c, l.w, flat), l.b);
+    if (flat != x)
+        y = ggml_reshape_4d(c, y, y->ne[0], n1, n2, n3);
+    return y;
 }
 
 static ggml_tensor* hft_layer_norm(ggml_context* c, const hft_layer& l, ggml_tensor* x, float eps) {
