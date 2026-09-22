@@ -411,7 +411,16 @@ for the per-task flags and output formats.
   and F1-identical to its ONNX export at f32 and Q8_0. Q4_0 GGUF 18.6 MiB,
   Q8_0 30.8 MiB, F32 101.9 MiB. See
   [docs/music-transcription/ONSETS_AND_FRAMES.md](docs/music-transcription/ONSETS_AND_FRAMES.md).
-- All four take `--piano-format text|json|midi`; `midi` writes a Standard
+- **hFT-Transformer** (`--backend hft-transformer`) — Toyama et al.'s
+  hierarchical frequency-time transformer (MIT), the most accurate solo-piano
+  model here and by far the smallest: **70.5% note F1 on MusicNet's piano
+  pieces** from 5.5 M parameters, Q8_0 GGUF 7.0 MiB, Q4_0 4.5 MiB, F32
+  21.8 MiB. It is also much the most expensive to run — 249 GFLOP of matrix
+  multiply per 2 s of audio, and quantisation buys almost none of it back on a
+  CPU without int8 dot-product instructions. Read
+  [docs/music-transcription/HFT_TRANSFORMER.md](docs/music-transcription/HFT_TRANSFORMER.md)
+  before choosing it over `onsets-and-frames`.
+- All five take `--piano-format text|json|midi`; `midi` writes a Standard
   MIDI File.
 - **Guitar tablature** (`--tab`) — per-frame fret-per-string grid via **TabCNN**
   (Wiggins & Kim, ISMIR 2019; CC BY 4.0 weights). The backend emits per-string
