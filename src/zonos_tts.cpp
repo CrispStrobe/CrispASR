@@ -30,6 +30,7 @@
 #include "core/attention.h"
 #include "core/dac_decoder.h"
 #include "core/ffn.h"
+#include "core/subprocess.h"
 #include "core/gguf_loader.h"
 #include "core/gpu_backend_pref.h" // crispasr_init_gpu_backend (#214)
 #include "core/crispasr_env.h"
@@ -839,12 +840,6 @@ static std::vector<int32_t> text_to_phoneme_ids(const char* text, phoneme_tok_st
     return ids;
 }
 
-// MSVC uses _popen/_pclose instead of popen/pclose.
-#ifdef _WIN32
-#define popen _popen
-#define pclose _pclose
-#endif
-
 // In-process libespeak-ng, tried BEFORE the popen path (#435).
 //
 // Zonos was the only TTS backend phonemizing exclusively through
@@ -971,32 +966,24 @@ static bool phonemize_espeak_inproc(const std::string& lang, const std::string& 
     return !out.empty();
 }
 
-// Run espeak-ng via popen to get IPA phonemes for the given text.
+// Run espeak-ng as a subprocess to get IPA phonemes for the given text.
 // Returns the IPA string, or empty string on failure.
+//
+// argv, no shell: both lang and text can come from a server request. The old
+// popen() command line left lang unquoted and, on Windows, wrapped text in
+// double quotes cmd.exe does not escape. "--" ends option parsing so text that
+// starts with '-' is still read as text.
 static std::string phonemize_espeak(const std::string& lang, const std::string& text) {
-    // Build command: espeak-ng -q --ipa=3 -v <lang> "<text>"
-    // Escape text for shell
-    std::string escaped;
-    for (char c : text) {
-        if (c == '\'')
-            escaped += "'\\''";
-        else
-            escaped += c;
-    }
-#ifdef _WIN32
-    std::string cmd = "espeak-ng -q --ipa=3 -v " + lang + " \"" + escaped + "\" 2>NUL";
-#else
-    std::string cmd = "espeak-ng -q --ipa=3 -v " + lang + " '" + escaped + "' 2>/dev/null";
-#endif
-    FILE* fp = popen(cmd.c_str(), "r");
-    if (!fp)
+    core_subprocess::ReadPipe p;
+    if (!p.open({"espeak-ng", "-q", "--ipa=3", "-v", lang, "--", text})) {
         return "";
+    }
     std::string out;
     char buf[256];
-    while (fgets(buf, sizeof(buf), fp)) {
+    while (fgets(buf, sizeof(buf), p.out)) {
         out += buf;
     }
-    pclose(fp);
+    p.close();
     // Trim trailing whitespace
     while (!out.empty() && (out.back() == '\n' || out.back() == '\r' || out.back() == ' '))
         out.pop_back();

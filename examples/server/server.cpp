@@ -904,7 +904,24 @@ int main(int argc, char** argv) {
             // remove temp file
             std::remove(temp_filename.c_str());
         } else {
-            if (!::read_audio_data(audio_file.content, pcmf32, pcmf32s, params.diarize)) {
+            // read_audio_data() takes a PATH. Passing the upload's bytes there
+            // made every request fail (they are not a file name) and fed the
+            // bytes to the ffmpeg fallback as its input argument. Spool the
+            // upload to a server-named temp file and decode that instead.
+            const std::string temp_filename = generate_temp_filename(sparams.tmp_dir, "crispasr-server", ".audio");
+            {
+                std::ofstream temp_file{temp_filename, std::ios::binary};
+                temp_file.write(audio_file.content.data(), (std::streamsize)audio_file.content.size());
+                if (!temp_file) {
+                    std::remove(temp_filename.c_str());
+                    res.status = 500;
+                    res.set_content("{\"error\":\"failed to spool upload\"}", "application/json");
+                    return;
+                }
+            }
+            const bool ok = ::read_audio_data(temp_filename, pcmf32, pcmf32s, params.diarize);
+            std::remove(temp_filename.c_str());
+            if (!ok) {
                 fprintf(stderr, "error: failed to read audio data\n");
                 const std::string error_resp = "{\"error\":\"failed to read audio data\"}";
                 res.status = 400;

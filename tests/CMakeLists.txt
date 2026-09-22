@@ -5781,3 +5781,19 @@ foreach(_stub fastconformer-ctc wav2vec2 bananamind-tts)
     target_link_libraries(${_tgt} PRIVATE Catch2::Catch2WithMain)
     catch_discover_tests(${_tgt} TEST_SPEC "[unit]" PROPERTIES LABELS "unit")
 endforeach()
+
+# ─── test-subprocess — core/subprocess.h must hand argv to the child verbatim,
+# never through a shell (server uploads and TTS request fields reach it).
+add_executable(test-subprocess
+    test-subprocess.cpp
+)
+target_include_directories(test-subprocess PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-subprocess PRIVATE
+    Catch2::Catch2WithMain
+)
+catch_discover_tests(test-subprocess
+    TEST_SPEC "[subprocess]"
+    PROPERTIES LABELS "unit;subprocess"
+)

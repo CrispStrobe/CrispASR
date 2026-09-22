@@ -79,6 +79,7 @@
 #include <algorithm> // std::any_of — reaches us transitively today, which is
                      // exactly how #355 broke the Windows build
 #include <atomic>
+#include <cctype>
 #include <cerrno>
 #include <chrono>
 #include <cmath>
@@ -170,11 +171,21 @@ static std::string log_sanitize(const std::string& s, size_t cap = 256) {
 
 static std::string write_temp_audio(const char* data, size_t size, const std::string& original_filename = "") {
     // Extract extension from original filename
+    // The extension only steers decoder sniffing; it comes from the client's
+    // filename, so keep it to ".[A-Za-z0-9]{1,8}" and drop anything else. A
+    // quote, "$(", or a path separator here would otherwise ride along into
+    // every place the temp path is used.
     std::string ext;
     if (!original_filename.empty()) {
         auto dot = original_filename.rfind('.');
-        if (dot != std::string::npos)
-            ext = original_filename.substr(dot); // e.g. ".m4a"
+        if (dot != std::string::npos) {
+            const std::string cand = original_filename.substr(dot + 1); // e.g. "m4a"
+            bool ok = !cand.empty() && cand.size() <= 8;
+            for (unsigned char ch : cand)
+                ok = ok && std::isalnum(ch);
+            if (ok)
+                ext = "." + cand;
+        }
     }
 #ifdef _WIN32
     char tmp_dir[MAX_PATH];
