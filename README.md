@@ -406,9 +406,10 @@ for the per-task flags and output formats.
   `music-transcription`) — MT3's T5 encoder/decoder emits note events with
   per-instrument programs (F16 GGUF ≈ 96 MB).
 - **Onsets & Frames** (`--backend onsets-and-frames`) — Hawthorne et al.'s
-  piano transcriber (MIT), the best solo-piano model here per note: **69.1%
-  note F1 on MusicNet's piano pieces against Basic Pitch's 57.5%**. Q4_0 GGUF
-  ≈ 20 MB, Q8_0 ≈ 32 MB, F32 ≈ 107 MB. See
+  piano transcriber (MIT), the best solo-piano model here per megabyte:
+  **69.0% note F1 on MusicNet's piano pieces against Basic Pitch's 57.5%**,
+  and F1-identical to its ONNX export at f32 and Q8_0. Q4_0 GGUF 18.6 MiB,
+  Q8_0 30.8 MiB, F32 101.9 MiB. See
   [docs/music-transcription/ONSETS_AND_FRAMES.md](docs/music-transcription/ONSETS_AND_FRAMES.md).
 - All four take `--piano-format text|json|midi`; `midi` writes a Standard
   MIDI File.

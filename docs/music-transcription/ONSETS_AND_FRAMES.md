@@ -193,30 +193,51 @@ ONNX row below lands on 59.7% / 42.4% / **49.6%**, which is that report's
 number to the digit, so the harness is calibrated before anything is claimed
 for the port.
 
-| arm | P | R | **F1** | F1 w/ offsets | solo piano | everything else |
-| --- | --- | --- | --- | --- | --- | --- |
-| ONNX export, onnxruntime | 59.7% | 42.4% | **49.6%** | 13.8% | **69.0%** | 40.5% |
-| ggml **f32** | 59.7% | 42.4% | **49.6%** | 13.8% | **69.0%** | 40.5% |
+| arm | size | P | R | **F1** | F1 w/ offsets | solo piano | everything else |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| ONNX export, onnxruntime | 101.1 MiB | 59.7% | 42.4% | **49.6%** | 13.8% | **69.0%** | 40.5% |
+| ggml **f32** | 101.9 MiB | 59.7% | 42.4% | **49.6%** | 13.8% | **69.0%** | 40.5% |
+| ggml **q8_0** | 30.8 MiB | 59.7% | 42.4% | **49.6%** | 13.9% | **69.0%** | 40.5% |
+| ggml **q4_0** | 18.6 MiB | 60.1% | 42.0% | **49.5%** | 13.3% | **68.9%** | 40.2% |
 
-Per piece, the f32 port and the ONNX export agree to the last printed digit on
-all ten:
+Per piece:
 
 | piece | 1759 | 1819 | 2106 | 2191 | 2298 | 2303 | 2382 | 2416 | 2556 | 2628 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | ONNX | 59.8 | 41.4 | 27.1 | 40.5 | 51.9 | 86.5 | 20.1 | 44.0 | 70.9 | 63.1 |
 | ggml f32 | 59.8 | 41.4 | 27.1 | 40.5 | 51.9 | 86.5 | 20.1 | 44.0 | 70.9 | 63.1 |
+| ggml q8_0 | 59.9 | 41.1 | 27.2 | 40.5 | 52.1 | 86.5 | 20.2 | 44.0 | 70.9 | 63.1 |
+| ggml q4_0 | 59.4 | 41.6 | 26.9 | 40.8 | 51.7 | 87.1 | 19.9 | 43.0 | 70.7 | 62.9 |
 
-So **the port is not approximately the model, it is the model**: identical note
-lists, identical F1, on every piece in the corpus. That also closes the loop on
-the decoder, which the activation diff cannot see — the script decodes both
-arms in Python and separately checks the C++ runtime's own note list against
-that Python decode, note for note, and reports a mismatch if there is one.
-There was none.
+**At f32 the port is not approximately the model, it is the model**: identical
+note lists, identical F1, on every piece in the corpus. That also closes the
+loop on the decoder, which the activation diff cannot see — the script decodes
+both arms in Python and separately checks the C++ runtime's own note list
+against that Python decode, note for note, and reports a mismatch if there is
+one. There was none, at any quantisation.
+
+**What quantisation costs.** q8_0 is free: 49.6% / 69.0%, the same numbers to
+the digit, for a third of the size. q4_0 costs **0.1 point of note F1** (49.6%
+→ 49.5%) and **0.1 point on solo piano** (69.0% → 68.9%) — inside the noise of
+a 13,589-note corpus, and the per-piece column shows it going both ways (2303
+*gains* 0.6, 2416 loses 1.0). It is not free on the harder metric: **F1 with
+offsets required drops 13.8% → 13.3%**, a 3.6% relative loss, which is what one
+would expect given that the frame head is the head q4_0 perturbs most (cos
+0.9935 against onset's 0.9989) and the frame head is precisely what sets a
+note's duration.
+
+So the recommendation is **q4_0 for onset-and-pitch work** — note detection,
+MIDI capture, anything scored the way the table's headline column is — and
+**q8_0 when note durations matter**, or simply as the default if 30.8 MiB is
+affordable, because at that size the port is bit-for-bit as good as fp32 and
+there is no judgement call to make. There is no case for f32 in an application:
+it is 3.3× the size of q8_0 for no measurable accuracy.
 
 **Against Basic Pitch, which is what CrispASR would otherwise reach for on
-piano: 69.0% against 57.5% on the solo-piano pieces.** Neither beats MT3's
-76.5% overall, and O&F is not a general transcriber — half this corpus is
-strings and winds and it scores 40.5% there. It is the piano arm.
+piano: 69.0% against 57.5% on the solo-piano pieces** (68.9% at q4_0, for
+18.6 MiB). Neither beats MT3's 76.5% overall, and O&F is not a general
+transcriber — half this corpus is strings and winds and it scores 40.5% there.
+It is the piano arm.
 
 ### Cost
 
@@ -228,6 +249,14 @@ seconds per audio second** is the number to read; the runtime records both.
 | arm | cpu-s per audio-s | wall-clock × real time (contended) |
 | --- | --- | --- |
 | ggml f32 | **0.73** | 0.67× |
+| ggml q8_0 | 0.75 | 1.01× |
+| ggml q4_0 | 0.75 | 0.77× |
+
+Quantisation buys no speed here, and the reason is structural rather than
+surprising: the quantised weights are consumed by `ggml_mul_mat`, which is the
+fc and the LSTM input projection, and the profile of this model is 46%
+convolution. Those run from F32 kernels either way. The wall-clock spread
+between the rows is the box's load average, not the arms.
 
 Native ONNX Runtime reaches 0.055× wall on the same box (§36.1), so the ggml
 port is currently the slower runtime by roughly an order of magnitude. That is
