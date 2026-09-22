@@ -120,6 +120,16 @@ struct btc_chords_context {
     // Per-stage capture for the parity diff. Off in the normal path.
     bool capture = false;
     std::map<std::string, std::vector<float>> captures;
+
+    // One allocator for the one graph shape, kept for the life of the context.
+    // btc_forward_block used to ggml_gallocr_new/_free per call, and it is
+    // called once per block from the chunk loop in btc_chords_recognize -- the
+    // #132 pattern src/crispasr.cpp:197-203 documents, where per-call
+    // disposable allocators fragment memory and cost 2-5x. T is fixed by the
+    // chunk geometry, so a single allocator is a direct substitution: a
+    // ggml_gallocr keeps its buffer whenever the next graph fits, and the arena
+    // grows monotonically (src/hft_transformer.cpp:108-115).
+    ggml_gallocr_t alloc_block = nullptr;
 };
 
 // Record an intermediate. Graph tensors MUST be ggml_set_output before being
@@ -341,6 +351,8 @@ btc_chords_context* btc_chords_init_from_file(const char* model_path, btc_chords
 void btc_chords_free(btc_chords_context* ctx) {
     if (!ctx)
         return;
+    if (ctx->alloc_block)
+        ggml_gallocr_free(ctx->alloc_block);
     if (ctx->buf_w)
         core_gguf::release_weight_buffer(ctx->buf_w);
     if (ctx->ctx_w)
@@ -429,13 +441,18 @@ static bool btc_forward_block(btc_chords_context* ctx, const float* feat, int T,
     ggml_build_forward_expand(gf, out);
     for (auto& kv : taps)
         ggml_build_forward_expand(gf, kv.second);
-    ggml_gallocr_t alloc = ggml_gallocr_new(ggml_backend_get_default_buffer_type(ctx->backend));
-    if (!ggml_gallocr_alloc_graph(alloc, gf)) {
+    if (!ctx->alloc_block)
+        ctx->alloc_block = ggml_gallocr_new(ggml_backend_get_default_buffer_type(ctx->backend));
+    if (!ctx->alloc_block || !ggml_gallocr_alloc_graph(ctx->alloc_block, gf)) {
         fprintf(stderr, "btc: graph alloc failed\n");
-        ggml_gallocr_free(alloc);
         ggml_free(g);
         return false;
     }
+    // Every ggml_set_input tensor below is re-set on every call, including the
+    // masks and the timing signal, which are constant for a given T: gallocr
+    // may hand an input's slot to a later intermediate once the allocator is
+    // reused across calls (playbook §6.6). They already were; this comment is
+    // the reason they must stay that way.
 
     // Normalise with the checkpoint's own scalar stats.
     std::vector<float> norm((size_t)T * hp.feature_size);
@@ -469,7 +486,6 @@ static bool btc_forward_block(btc_chords_context* ctx, const float* feat, int T,
     logits_out.assign((size_t)ggml_nelements(out), 0.0f);
     ggml_backend_tensor_get(out, logits_out.data(), 0, logits_out.size() * sizeof(float));
 
-    ggml_gallocr_free(alloc);
     ggml_free(g);
     return true;
 }
