@@ -356,6 +356,47 @@ bitwise. Three calls, both arms: **bitwise identical to run 0** every time.
 
 ---
 
+### Note-level F1 on MusicNet — the task-level gate
+
+`tools/oaf_musicnet_f1.py`, all ten MusicNet test pieces, `-t 1`,
+`MKL_NUM_THREADS=1`, both arms through the same decoder.
+
+**The graph arm against the native-onnxruntime reference, per piece:**
+
+| piece | P | R | **F1** | F1+off | notes est |
+| --- | --- | --- | --- | --- | --- |
+| 1759 | 63.0 | 57.0 | 59.8 | 18.4 → **18.5** | 1559 |
+| 1819 | 47.0 | 36.9 | 41.4 | 5.5 | 1038 |
+| 2106 | 40.9 | 20.3 | 27.1 | 1.5 | 993 |
+| 2191 | 53.9 | 32.5 | 40.5 | 4.1 | 332 |
+| 2298 | 61.6 | 44.8 | 51.9 | 24.4 | 703 |
+| 2303 | 88.2 | 85.0 | 86.5 | 32.5 | 692 |
+| 2382 | 46.3 | 12.8 | 20.1 | 12.6 | 542 |
+| 2416 | 44.7 | 43.4 | 44.0 | 11.9 | 1344 |
+| 2556 | 74.6 | 67.5 | 70.9 | 22.1 | 1308 |
+| 2628 | 73.6 | 55.1 | 63.1 | 10.6 | 1137 |
+
+**Note-level precision, recall, F1 and the estimated note count are identical to
+onnxruntime on all ten pieces.** Diffed programmatically, not by eye. The single
+deviation anywhere in the table is `F1+off` on 1759, 18.4 → 18.5 — the
+offset-sensitive variant, which requires the note *end* to agree within a
+tolerance, so a sub-frame drift on a handful of long notes moves it by a tenth
+while the onset/pitch decision does not move at all. That is the expected
+signature of a non-bit-identical recurrence, and it is the right size.
+
+Throughput on the same run is steady at **0.431–0.449 CPU-s per audio-second**
+across all ten pieces, which corroborates the 60 s clip figure (0.435) on real
+full-length material rather than a hand-cut excerpt.
+
+**The default (scalar) arm's F1 needs no re-measurement**, and this is worth
+stating rather than leaving implicit: its decoded output is unchanged by
+construction — identical note counts on both clips, 26/26 stages at cos
+1.0000000, and bitwise-identical repeated calls — so its F1 is still the
+documented 49.6% overall / 69.0% solo piano. A run of it was started and killed
+partway to give the machine to the arm whose number was actually unknown.
+
+---
+
 ## What is still open
 
 1. **The 4.0× gap to ONNX Runtime is not closed.** After both changes the
