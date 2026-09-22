@@ -716,6 +716,12 @@ static inline ggml_tensor* kv_self_attn(ggml_context* ctx0, ggml_cgraph* gf, ggm
     const int grp = p.n_kv_grp;
     const int T = (int)x->ne[1];
     const int Lk = fixed_kv_len > 0 ? fixed_kv_len : (n_past + T);
+    // #337: the mask must be exactly Lk wide. ggml_flash_attn_ext does not check
+    // it, CPU/CUDA/Metal read the mask through its own strides and so tolerate a
+    // wider one, but the Vulkan FA shader derives the mask row stride from KV and
+    // silently masks the wrong keys. The eager path asserts the same thing inside
+    // ggml_soft_max_ext; checking here makes every backend fail at graph build.
+    GGML_ASSERT(!causal_mask || causal_mask->ne[0] == Lk);
 
     // ---- Q/K/V projections ----
     ggml_tensor* Q;
