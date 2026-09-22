@@ -9,6 +9,23 @@ the reporter's reliable anchors. Reopen the issue, reproduce the exact command,
 and require both monotonic output and bounded timing displacement. Worktree
 `.claude/worktrees/fix-444-timing`, branch `fix/444-timing`.
 
+## CLAIMED 2026-09-22 — #445 Orukeet + Confucius4-R2T2, then #438 Hojo, #436
+
+Taking over #445 from the 2026-09-20 roadmap claim below: its worktree
+(`roadmap-445-438-337-perf`) has no commits or changes since the claim, which
+is past the one-day staleness rule. Worktree
+`.claude/worktrees/fix-451-chunked`, branch `feat/445-orukeet-convert`.
+NOW: orukeet F16 converted locally from the pinned r3 `.nemo` (sha256
+031c8dda…, matches the report); tensor audit matches orukeet's own export
+audit (74 fixed buffers identical to stock v3, all else changed); JFK
+transcript exact. Next: NeMo reference dump on Kaggle (2.5 GB checkpoint),
+crispasr-diff, quants, HF upload, registry entry. #438 Hojo continues from the
+existing `feat/438-hojo-asr` branch rather than restarting.
+
+Done this session: #448 merged (8c359d80 + da258942 mask-width assert),
+#453 fixed (817d6bf3), #452 merged (1aa0d55f) plus a shell-injection fix in
+the audio-decode fallback found while testing it (6409647a).
+
 ## CLAIMED 2026-09-20 — roadmap cleanup, #445 Orukeet, #438 Hojo-ASR, #337 native HIP, profiler/F16 audit
 
 Worktree `.claude/worktrees/roadmap-445-438-337-perf`, staged strictly in that
