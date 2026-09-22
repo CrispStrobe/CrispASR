@@ -578,118 +578,89 @@ bool parse_str_to_bool(const std::string& s) {
     return false;
 }
 
+// httplib 0.57 moved multipart parts off Request and into Request::form, split
+// into files (parts with a filename) and fields (those without). 0.20 put every
+// part in one map, so these lookups accept either side to keep that behavior.
+bool has_part(const Request& req, const std::string& key) {
+    return req.form.has_file(key) || req.form.has_field(key);
+}
+
+FormData part_of(const Request& req, const std::string& key) {
+    if (req.form.has_file(key)) {
+        return req.form.get_file(key);
+    }
+    FormData p;
+    p.name = key;
+    p.content = req.form.get_field(key);
+    return p;
+}
+
+std::string part_content(const Request& req, const std::string& key) {
+    return part_of(req, key).content;
+}
+
 void get_req_parameters(const Request& req, whisper_params& params) {
-    if (req.has_file("offset_t")) {
-        params.offset_t_ms = std::stoi(req.get_file_value("offset_t").content);
-    }
-    if (req.has_file("offset_n")) {
-        params.offset_n = std::stoi(req.get_file_value("offset_n").content);
-    }
-    if (req.has_file("duration")) {
-        params.duration_ms = std::stoi(req.get_file_value("duration").content);
-    }
-    if (req.has_file("max_context")) {
-        params.max_context = std::stoi(req.get_file_value("max_context").content);
-    }
-    if (req.has_file("max_len")) {
-        params.max_len = std::stoi(req.get_file_value("max_len").content);
-    }
-    if (req.has_file("best_of")) {
-        params.best_of = std::stoi(req.get_file_value("best_of").content);
-    }
-    if (req.has_file("beam_size")) {
-        params.beam_size = std::stoi(req.get_file_value("beam_size").content);
-    }
-    if (req.has_file("audio_ctx")) {
-        params.audio_ctx = std::stof(req.get_file_value("audio_ctx").content);
-    }
-    if (req.has_file("word_thold")) {
-        params.word_thold = std::stof(req.get_file_value("word_thold").content);
-    }
-    if (req.has_file("entropy_thold")) {
-        params.entropy_thold = std::stof(req.get_file_value("entropy_thold").content);
-    }
-    if (req.has_file("logprob_thold")) {
-        params.logprob_thold = std::stof(req.get_file_value("logprob_thold").content);
-    }
-    if (req.has_file("debug_mode")) {
-        params.debug_mode = parse_str_to_bool(req.get_file_value("debug_mode").content);
-    }
-    if (req.has_file("translate")) {
-        params.translate = parse_str_to_bool(req.get_file_value("translate").content);
-    }
-    if (req.has_file("diarize")) {
-        params.diarize = parse_str_to_bool(req.get_file_value("diarize").content);
-    }
-    if (req.has_file("tinydiarize")) {
-        params.tinydiarize = parse_str_to_bool(req.get_file_value("tinydiarize").content);
-    }
-    if (req.has_file("split_on_word")) {
-        params.split_on_word = parse_str_to_bool(req.get_file_value("split_on_word").content);
-    }
-    if (req.has_file("no_timestamps")) {
-        params.no_timestamps = parse_str_to_bool(req.get_file_value("no_timestamps").content);
-    }
-    if (req.has_file("language")) {
-        params.language = req.get_file_value("language").content;
-    }
-    if (req.has_file("detect_language")) {
-        params.detect_language = parse_str_to_bool(req.get_file_value("detect_language").content);
-    }
-    if (req.has_file("prompt")) {
-        params.prompt = req.get_file_value("prompt").content;
-    }
-    if (req.has_file("response_format")) {
-        params.response_format = req.get_file_value("response_format").content;
-    }
-    if (req.has_file("temperature")) {
-        params.temperature = std::stof(req.get_file_value("temperature").content);
-    }
-    if (req.has_file("max_tokens")) {
-        params.max_tokens = std::stoi(req.get_file_value("max_tokens").content);
-    }
-    if (req.has_file("max_new_tokens")) {
-        params.max_tokens = std::stoi(req.get_file_value("max_new_tokens").content);
-    }
-    if (req.has_file("frequency_penalty")) {
-        params.frequency_penalty = std::stof(req.get_file_value("frequency_penalty").content);
-    }
-    if (req.has_file("seed")) {
-        params.seed = (uint64_t)std::stoull(req.get_file_value("seed").content);
-    }
-    if (req.has_file("temperature_inc")) {
-        params.temperature_inc = std::stof(req.get_file_value("temperature_inc").content);
-    }
-    if (req.has_file("suppress_non_speech")) {
-        params.suppress_nst = parse_str_to_bool(req.get_file_value("suppress_non_speech").content);
-    }
-    if (req.has_file("suppress_nst")) {
-        params.suppress_nst = parse_str_to_bool(req.get_file_value("suppress_nst").content);
-    }
-    if (req.has_file("vad")) {
-        params.vad = parse_str_to_bool(req.get_file_value("vad").content);
-    }
-    if (req.has_file("vad_threshold")) {
-        params.vad_threshold = std::stof(req.get_file_value("vad_threshold").content);
-    }
-    if (req.has_file("vad_min_speech_duration_ms")) {
-        params.vad_min_speech_duration_ms = std::stof(req.get_file_value("vad_min_speech_duration_ms").content);
-    }
-    if (req.has_file("vad_min_silence_duration_ms")) {
-        params.vad_min_silence_duration_ms = std::stof(req.get_file_value("vad_min_silence_duration_ms").content);
-    }
-    if (req.has_file("vad_max_speech_duration_s")) {
-        params.vad_max_speech_duration_s = std::stof(req.get_file_value("vad_max_speech_duration_s").content);
-    }
-    if (req.has_file("vad_speech_pad_ms")) {
-        params.vad_speech_pad_ms = std::stoi(req.get_file_value("vad_speech_pad_ms").content);
-    }
-    if (req.has_file("vad_samples_overlap")) {
-        params.vad_samples_overlap = std::stof(req.get_file_value("vad_samples_overlap").content);
-    }
-    if (req.has_file("no_language_probabilities")) {
-        params.no_language_probabilities = parse_str_to_bool(req.get_file_value("no_language_probabilities").content);
-    }
+    const auto get_num = [&](const char* key, auto& dst) {
+        if (!has_part(req, key)) {
+            return;
+        }
+        const std::string v = part_content(req, key);
+        if constexpr (std::is_same_v<std::decay_t<decltype(dst)>, uint64_t>) {
+            dst = (uint64_t)std::stoull(v);
+        } else if constexpr (std::is_floating_point_v<std::decay_t<decltype(dst)>>) {
+            dst = std::stof(v);
+        } else {
+            dst = std::stoi(v);
+        }
+    };
+    const auto get_bool = [&](const char* key, auto& dst) {
+        if (has_part(req, key)) {
+            dst = parse_str_to_bool(part_content(req, key));
+        }
+    };
+    const auto get_text = [&](const char* key, auto& dst) {
+        if (has_part(req, key)) {
+            dst = part_content(req, key);
+        }
+    };
+
+    get_num("offset_t", params.offset_t_ms);
+    get_num("offset_n", params.offset_n);
+    get_num("duration", params.duration_ms);
+    get_num("max_context", params.max_context);
+    get_num("max_len", params.max_len);
+    get_num("best_of", params.best_of);
+    get_num("beam_size", params.beam_size);
+    get_num("audio_ctx", params.audio_ctx);
+    get_num("word_thold", params.word_thold);
+    get_num("entropy_thold", params.entropy_thold);
+    get_num("logprob_thold", params.logprob_thold);
+    get_bool("debug_mode", params.debug_mode);
+    get_bool("translate", params.translate);
+    get_bool("diarize", params.diarize);
+    get_bool("tinydiarize", params.tinydiarize);
+    get_bool("split_on_word", params.split_on_word);
+    get_bool("no_timestamps", params.no_timestamps);
+    get_text("language", params.language);
+    get_bool("detect_language", params.detect_language);
+    get_text("prompt", params.prompt);
+    get_text("response_format", params.response_format);
+    get_num("temperature", params.temperature);
+    get_num("max_tokens", params.max_tokens);
+    get_num("max_new_tokens", params.max_tokens);
+    get_num("frequency_penalty", params.frequency_penalty);
+    get_num("seed", params.seed);
+    get_num("temperature_inc", params.temperature_inc);
+    get_bool("suppress_non_speech", params.suppress_nst);
+    get_bool("suppress_nst", params.suppress_nst);
+    get_bool("vad", params.vad);
+    get_num("vad_threshold", params.vad_threshold);
+    get_num("vad_min_speech_duration_ms", params.vad_min_speech_duration_ms);
+    get_num("vad_min_silence_duration_ms", params.vad_min_silence_duration_ms);
+    get_num("vad_max_speech_duration_s", params.vad_max_speech_duration_s);
+    get_num("vad_speech_pad_ms", params.vad_speech_pad_ms);
+    get_num("vad_samples_overlap", params.vad_samples_overlap);
+    get_bool("no_language_probabilities", params.no_language_probabilities);
 }
 
 } // namespace
@@ -886,14 +857,14 @@ int main(int argc, char** argv) {
         std::lock_guard<std::mutex> lock(whisper_mutex);
 
         // first check user requested fields of the request
-        if (!req.has_file("file")) {
+        if (!has_part(req, "file")) {
             fprintf(stderr, "error: no 'file' field in the request\n");
             const std::string error_resp = "{\"error\":\"no 'file' field in the request\"}";
             res.status = 400;
             res.set_content(error_resp, "application/json");
             return;
         }
-        auto audio_file = req.get_file_value("file");
+        auto audio_file = part_of(req, "file");
 
         // check non-required fields
         get_req_parameters(req, params);
@@ -1193,14 +1164,14 @@ int main(int argc, char** argv) {
     svr->Post(sparams.request_path + "/load", [&](const Request& req, Response& res) {
         std::lock_guard<std::mutex> lock(whisper_mutex);
         state.store(SERVER_STATE_LOADING_MODEL);
-        if (!req.has_file("model")) {
+        if (!has_part(req, "model")) {
             fprintf(stderr, "error: no 'model' field in the request\n");
             const std::string error_resp = "{\"error\":\"no 'model' field in the request\"}";
             res.status = 400;
             res.set_content(error_resp, "application/json");
             return;
         }
-        std::string model = req.get_file_value("model").content;
+        std::string model = part_content(req, "model");
         if (!is_file_exist(model.c_str())) {
             fprintf(stderr, "error: 'model': %s not found!\n", model.c_str());
             const std::string error_resp = "{\"error\":\"model not found!\"}";
