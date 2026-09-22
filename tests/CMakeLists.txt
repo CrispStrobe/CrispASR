@@ -3438,6 +3438,25 @@ catch_discover_tests(test-mel-band-gates
     PROPERTIES LABELS "unit;mel-band"
 )
 
+# ─── test-mel-blas-parity — guards core_mel's cblas_sgemm projection against a
+# BLAS that returns the wrong answer (found on a host where find_package(BLAS)
+# picked threaded MKL alongside libgomp). Links crispasr-core so it exercises
+# whatever BLAS this build actually chose.
+add_executable(test-mel-blas-parity
+    test-mel-blas-parity.cpp
+)
+target_include_directories(test-mel-blas-parity PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-mel-blas-parity PRIVATE
+    Catch2::Catch2WithMain
+    crispasr-core
+)
+catch_discover_tests(test-mel-blas-parity
+    TEST_SPEC "[mel]"
+    PROPERTIES LABELS "unit;mel"
+)
+
 # ─── test-uroman — Catch2 unit tests for core/uroman.h romanization.
 # Validates Arabic + Cyrillic romanization for CTC forced alignment (#252).
 add_executable(test-uroman

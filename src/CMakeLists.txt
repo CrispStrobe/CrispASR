@@ -703,7 +703,21 @@ else()
     # so this find_package(BLAS) call is steered toward MKL automatically.
     # cohere.cpp also does a bare `#include <cblas.h>` under HAVE_BLAS — gate on
     # the header being reachable (see crispasr-core note above re: MSYS2).
-    crispasr_prefer_cblas()
+    #
+    # Without that explicit opt-in, prefer OpenBLAS for the same reason
+    # crispasr-core does (see the comment there): find_package(BLAS) on a host
+    # that merely HAS Debian's MKL installed returns the threaded MKL, whose
+    # sgemm is silently wrong once libgomp is also in the process. COHERE_MKL=ON
+    # is a deliberate choice and still wins.
+    if(NOT COHERE_MKL)
+        find_library(COHERE_OPENBLAS NAMES openblas openblasp openblaso QUIET)
+    endif()
+    if(COHERE_OPENBLAS)
+        set(BLAS_FOUND ON)
+        set(BLAS_LIBRARIES ${COHERE_OPENBLAS})
+    else()
+        crispasr_prefer_cblas()
+    endif()
     find_path(CBLAS_INCLUDE_DIR cblas.h PATH_SUFFIXES openblas)
     if(BLAS_FOUND AND CBLAS_INCLUDE_DIR)
         target_link_libraries(cohere PUBLIC ${BLAS_LIBRARIES})
@@ -960,18 +974,33 @@ if(CRISPASR_MEL_BLAS AND NOT MSVC)
         # OpenBLAS) cblas.h lives under an `openblas/` subdir not on the default
         # include path — so only enable HAVE_BLAS when cblas.h is actually
         # reachable, otherwise fall back to the scalar mel projection.
-        crispasr_prefer_cblas(QUIET)
+        #
+        # PREFER OPENBLAS EXPLICITLY, exactly as mel-band-roformer does below,
+        # and for a second reason on top of that one's "the Netlib reference
+        # cblas is a scalar loop": on a host carrying Debian's MKL,
+        # find_package(BLAS) returns `libmkl_intel_thread`, which lands in a
+        # process that already has libgomp. Two OpenMP runtimes in one process,
+        # and the resulting cblas_sgemm returns its upper output columns
+        # MULTIPLIED BY THE THREAD COUNT — ln(4) of log-domain error at four
+        # threads, ln(3) at three, lower columns correct, nothing raised. Every
+        # core_mel backend reads a mis-shaped spectrum and simply scores worse.
+        # tests/test-mel-blas-parity.cpp is the guard; this is the preference
+        # that keeps it green on hosts where OpenBLAS is also installed.
+        find_library(CRISPASR_CORE_OPENBLAS NAMES openblas openblasp openblaso QUIET)
         find_path(CBLAS_INCLUDE_DIR cblas.h PATH_SUFFIXES openblas)
-        if(BLAS_FOUND AND CBLAS_INCLUDE_DIR)
-            target_link_libraries     (crispasr-core PRIVATE ${BLAS_LIBRARIES})
+        if(CRISPASR_CORE_OPENBLAS AND CBLAS_INCLUDE_DIR)
+            target_link_libraries     (crispasr-core PRIVATE ${CRISPASR_CORE_OPENBLAS})
             target_include_directories(crispasr-core PRIVATE ${CBLAS_INCLUDE_DIR})
             target_compile_definitions(crispasr-core PRIVATE HAVE_BLAS)
+            message(STATUS "crispasr-core: linking OpenBLAS ${CRISPASR_CORE_OPENBLAS} for the mel projection")
         else()
-            find_library(OPENBLAS_LIB openblas QUIET)
-            if(OPENBLAS_LIB AND CBLAS_INCLUDE_DIR)
-                target_link_libraries     (crispasr-core PRIVATE ${OPENBLAS_LIB})
+            crispasr_prefer_cblas(QUIET)
+            if(BLAS_FOUND AND CBLAS_INCLUDE_DIR)
+                target_link_libraries     (crispasr-core PRIVATE ${BLAS_LIBRARIES})
                 target_include_directories(crispasr-core PRIVATE ${CBLAS_INCLUDE_DIR})
                 target_compile_definitions(crispasr-core PRIVATE HAVE_BLAS)
+                message(STATUS "crispasr-core: OpenBLAS not found; mel projection uses ${BLAS_LIBRARIES} "
+                               "— run ctest -R mel-blas-parity to confirm it is correct")
             else()
                 message(STATUS "crispasr-core: cblas.h not found — using scalar mel projection")
             endif()
