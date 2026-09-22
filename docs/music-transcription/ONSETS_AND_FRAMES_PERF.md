@@ -115,6 +115,15 @@ correlation 0.9999 while every bin was low by up to 152×.
 Baseline, 4 s of MusicNet 2303, f32: **all 26 stages PASS at cos = 1.0000000**,
 max_abs ≤ 1.9e-05, every `|mine|`/`|ref|` pair identical to six figures.
 
+⚠ **Be clear about what the `mel` stage in this harness does and does not
+prove.** Because the reference is dumped from this runtime's own mel, that stage
+compares `core_mel` against itself and reports `max_abs = 0.000e+00` — it
+catches a *change* to the front end between the dump and the diff, and nothing
+else. The real front-end check is still `tools/oaf_parity.py`, which compares
+against torchaudio and where the honest number is `max 2.946e-02, cos
+1.00000000` — not bit-identical, as it should not be. Run both; they answer
+different questions.
+
 ---
 
 ## Step 1 — hoist the three allocators
@@ -307,6 +316,35 @@ than the scalar one:
 Which is what you would expect: ORT's LSTM also computes the recurrent term as a
 GEMM, so the graph path is structurally nearer the reference than the serial
 loop was.
+
+**End-to-end against native onnxruntime**, `tools/oaf_parity.py`, 10 s clip,
+`-t 1`, both runtimes handed the same mel:
+
+| head | scalar max_abs | graph max_abs |
+| --- | --- | --- |
+| onset | 6.099e-07 | **5.503e-07** |
+| offset | 6.854e-07 | **5.960e-07** |
+| frame | 1.062e-06 | 1.395e-06 |
+| activation | 1.957e-06 | 1.957e-06 |
+| velocity | 8.899e-08 | 8.899e-08 |
+
+`cos = 1.00000000` on every head in both arms. Front end: `max 2.946e-02, cos
+1.00000000` against torchaudio, unchanged.
+
+Two things worth reading off that table. **`activation` and `velocity` are
+bit-identical between the two arms** — which they must be, because neither head
+passes through a BiLSTM, and that is a free structural check that the gate is
+touching only what it claims to. And the three heads that *do* pass through one
+move by well under a part in a million.
+
+**Decision agreement at the shipped thresholds**, which is the number that
+matters for a transcriber rather than the RMS over 27,544 mostly-near-zero
+cells:
+
+| arm | onset | frame |
+| --- | --- | --- |
+| scalar | **100.0000%** (90 above vs 90 in the reference) | **100.0000%** (217 vs 217) |
+| graph | **100.0000%** (90 above vs 90 in the reference) | **100.0000%** (217 vs 217) |
 
 **Repeated-call validation** (§5.7 item 5, §6.7). A persistent gallocr may alias
 an input tensor's slot with a later intermediate, and the symptom is run 0
