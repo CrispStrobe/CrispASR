@@ -258,6 +258,7 @@ TEST_CASE("every emitted backend name is a name a surface can open", "[unit][arc
         "beat-this",
         "piano-transcription",
         "basic-pitch",
+        "onsets-and-frames",
         "mt3",
         "bt2-tts", // Breeze-TTS-2 (#412)
     };
