@@ -36,8 +36,8 @@ struct hft_hparams {
     float fmin = 0.0f;
     float fmax = 8000.0f;
     float mel_eps = 1e-8f;
-    uint32_t n_frame = 128;  // frames answered per window
-    uint32_t n_margin = 32;  // margin frames each side
+    uint32_t n_frame = 128; // frames answered per window
+    uint32_t n_margin = 32; // margin frames each side
     uint32_t classes_num = 88;
     uint32_t begin_note = 21; // MIDI A0
     uint32_t hidden = 256;
@@ -82,7 +82,7 @@ struct hft_layer {
 };
 
 struct hft_weights {
-    hft_linear front;       // fused Conv2d(1,4,(1,5)) + Linear(244, 256)
+    hft_linear front;                    // fused Conv2d(1,4,(1,5)) + Linear(244, 256)
     ggml_tensor* pos_enc_freq = nullptr; // [256 dim, 256 pos] in ggml ne order
     ggml_tensor* pos_dec_freq = nullptr; // [256 dim,  88 pos]
     ggml_tensor* pos_dec_time = nullptr; // [256 dim, 128 pos]
@@ -187,8 +187,8 @@ static bool load_linear(core_gguf::tensor_map& tm, const std::string& p, hft_lin
 }
 
 static bool load_attn(core_gguf::tensor_map& tm, const std::string& p, hft_attn& a) {
-    return load_linear(tm, p + ".q", a.q) && load_linear(tm, p + ".k", a.k) &&
-           load_linear(tm, p + ".v", a.v) && load_linear(tm, p + ".o", a.o);
+    return load_linear(tm, p + ".q", a.q) && load_linear(tm, p + ".k", a.k) && load_linear(tm, p + ".v", a.v) &&
+           load_linear(tm, p + ".o", a.o);
 }
 
 static bool load_layer(core_gguf::tensor_map& tm, const std::string& p, hft_layer& l, bool self, bool cross) {
@@ -218,8 +218,7 @@ struct hft_transformer_params hft_transformer_default_params(void) {
     };
 }
 
-struct hft_transformer_ctx* hft_transformer_init_from_file(const char* path,
-                                                           struct hft_transformer_params params) {
+struct hft_transformer_ctx* hft_transformer_init_from_file(const char* path, struct hft_transformer_params params) {
     auto* ctx = new hft_transformer_ctx();
     ctx->params = params;
 
@@ -327,8 +326,7 @@ struct hft_transformer_ctx* hft_transformer_init_from_file(const char* path,
     }
     ctx->mel_fb = hft_to_f32(w.mel_fb);
     if ((int)ctx->mel_fb.size() != (int)hp.n_mels * n_freqs) {
-        std::fprintf(stderr, "hft: mel_fb is %zu floats, expected %d\n", ctx->mel_fb.size(),
-                     (int)hp.n_mels * n_freqs);
+        std::fprintf(stderr, "hft: mel_fb is %zu floats, expected %d\n", ctx->mel_fb.size(), (int)hp.n_mels * n_freqs);
         hft_transformer_free(ctx);
         return nullptr;
     }
@@ -425,8 +423,8 @@ static ggml_tensor* hft_layer_norm(ggml_context* c, const hft_layer& l, ggml_ten
 
 // Multi-head attention. q_in is [H, Nq, B], kv_in is [H, Nk, B]; both the
 // batch dimensions must match. Returns [H, Nq, B].
-static ggml_tensor* hft_attention(ggml_context* c, const hft_attn& a, ggml_tensor* q_in, ggml_tensor* kv_in,
-                                  int n_head, float scale) {
+static ggml_tensor* hft_attention(ggml_context* c, const hft_attn& a, ggml_tensor* q_in, ggml_tensor* kv_in, int n_head,
+                                  float scale) {
     const int64_t H = q_in->ne[0];
     const int64_t Nq = q_in->ne[1];
     const int64_t B = q_in->ne[2];
@@ -443,18 +441,18 @@ static ggml_tensor* hft_attention(ggml_context* c, const hft_attn& a, ggml_tenso
     // v needs its head-dim axis last for the P·V product: [Nk, hd, n_head, B]
     v = ggml_cont(c, ggml_permute(c, ggml_reshape_4d(c, v, hd, n_head, Nk, B), 1, 2, 0, 3));
 
-    ggml_tensor* kq = ggml_mul_mat(c, k, q);                       // [Nk, Nq, n_head, B]
+    ggml_tensor* kq = ggml_mul_mat(c, k, q); // [Nk, Nq, n_head, B]
     kq = ggml_soft_max_ext(c, kq, nullptr, scale, 0.0f);
-    ggml_tensor* kqv = ggml_mul_mat(c, v, kq);                     // [hd, Nq, n_head, B]
-    kqv = ggml_cont(c, ggml_permute(c, kqv, 0, 2, 1, 3));          // [hd, n_head, Nq, B]
+    ggml_tensor* kqv = ggml_mul_mat(c, v, kq);            // [hd, Nq, n_head, B]
+    kqv = ggml_cont(c, ggml_permute(c, kqv, 0, 2, 1, 3)); // [hd, n_head, Nq, B]
     kqv = ggml_reshape_3d(c, kqv, H, Nq, B);
     return hft_linear_apply(c, a.o, kqv);
 }
 
 // x = LN(x + Attn(...)); … ; x = LN(x + FF(x)). `enc` is the cross-attention
 // memory and may be null for a self-attention-only layer.
-static ggml_tensor* hft_apply_layer(ggml_context* c, const hft_layer& l, ggml_tensor* x, ggml_tensor* enc,
-                                    int n_head, float scale, float ln_eps) {
+static ggml_tensor* hft_apply_layer(ggml_context* c, const hft_layer& l, ggml_tensor* x, ggml_tensor* enc, int n_head,
+                                    float scale, float ln_eps) {
     if (l.has_self)
         x = hft_layer_norm(c, l, ggml_add(c, x, hft_attention(c, l.self, x, x, n_head, scale)), ln_eps);
     if (l.has_cross)
@@ -498,7 +496,7 @@ static bool hft_encode_chunk(hft_transformer_ctx* ctx, const float* taps, int n_
     ggml_set_input(x);
 
     // Fused conv + token embedding, then ×√256 and the frequency positions.
-    ggml_tensor* h = hft_linear_apply(c, w.front, x);     // [H, bins, n_chunk]
+    ggml_tensor* h = hft_linear_apply(c, w.front, x); // [H, bins, n_chunk]
     h = ggml_scale(c, h, emb_scale);
     h = ggml_add(c, h, w.pos_enc_freq);
     for (const auto& l : w.enc)
@@ -540,8 +538,8 @@ static bool hft_encode_chunk(hft_transformer_ctx* ctx, const float* taps, int n_
 // ─── Time decoder + heads, one 128-frame window ─────────────────────────────
 
 struct hft_window_out {
-    std::vector<float> onset, offset, mpe;    // [n_frame * 88], post-sigmoid
-    std::vector<float> velocity;              // [n_frame * 88], argmax bin
+    std::vector<float> onset, offset, mpe; // [n_frame * 88], post-sigmoid
+    std::vector<float> velocity;           // [n_frame * 88], argmax bin
 };
 
 // pitch_major: [hidden, n_frame, 88] — the frequency decoder's output with
@@ -725,8 +723,8 @@ struct hft_event {
 // the first strictly different neighbour is smaller. The time is then refined
 // between the neighbours, which is where hFT gets onset resolution finer than
 // its 16 ms frame.
-static void hft_detect_event(const std::vector<float>& data, int T, int K, int pitch, float threshold,
-                             float hop_sec, std::vector<hft_event>& out) {
+static void hft_detect_event(const std::vector<float>& data, int T, int K, int pitch, float threshold, float hop_sec,
+                             std::vector<hft_event>& out) {
     out.clear();
     auto at = [&](int i) { return data[(size_t)i * K + pitch]; };
     for (int i = 0; i < T; i++) {
@@ -846,8 +844,7 @@ static void hft_extract_notes(const hft_heads& h, const hft_hparams& hp, const h
                 time_onset < notes.back().offset_time) {
                 notes.back().offset_time = time_onset;
             }
-            notes.push_back({time_onset, offset_value, (int)hp.begin_note + pitch,
-                             std::max(0, std::min(127, vel))});
+            notes.push_back({time_onset, offset_value, (int)hp.begin_note + pitch, std::max(0, std::min(127, vel))});
         }
     }
     std::stable_sort(notes.begin(), notes.end(),

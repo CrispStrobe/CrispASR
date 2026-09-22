@@ -119,8 +119,7 @@ struct hft_transformer_result {
 };
 
 // Initialize from a GGUF file. Returns nullptr on failure.
-struct hft_transformer_ctx* hft_transformer_init_from_file(const char* path,
-                                                           struct hft_transformer_params params);
+struct hft_transformer_ctx* hft_transformer_init_from_file(const char* path, struct hft_transformer_params params);
 
 void hft_transformer_free(struct hft_transformer_ctx* ctx);
 
