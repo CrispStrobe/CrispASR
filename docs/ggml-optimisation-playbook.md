@@ -9,10 +9,11 @@ so — a playbook that is confidently wrong is worse than one with gaps marked.
 **What it is not.** General ggml advice. Everything below is specific to this
 repository as of 2026-09-22.
 
-**Read order.** The decision table (§1) is the lookup. §2–§4 are the three
-patterns you must get right. §5 is the verification you must pass. §6 is the
-list of things that went wrong here before. §7 applies all of it to the six
-note/piano/transcription backends.
+**Read order.** §0 corrects two premises. The decision table (§1) is the
+lookup. §2 (graph lifecycle), §3 (threading) and §4 (quantisation) are the
+three patterns you must get right. §5 is the verification you must pass. §6 is
+the list of things that went wrong here before. §7 applies all of it to the six
+note/piano/transcription backends. §8 lists what is *not* established.
 
 **Related documents, all still authoritative:**
 
@@ -21,7 +22,7 @@ note/piano/transcription backends.
 | `../crispasr-crispembed-dev.md` (sibling of the repo root, untracked) | the method: HARD RULES, the port pipeline, A/B discipline. Where it and this file disagree, **it wins**. |
 | `docs/LEARNINGS-INDEX.md` → `LEARNINGS.md` | 44 lessons under "ggml graphs, allocation & caching" alone. Grep the heading, then read. |
 | `docs/music-transcription/BASIC_PITCH_CONV_PERF.md` | the im2col-vs-direct-SIMD screening test, measured |
-| `docs/music-transcription/HFT_TRANSFORMER.md` | the quantisation result (§6 below) and a GEMM-vs-ORT comparison |
+| `docs/music-transcription/HFT_TRANSFORMER.md` | the quantisation result (§4 below) and a GEMM-vs-ORT comparison |
 | `docs/improvements/SRC_ISA_GAP.md` | `src/` ships baseline x86-64 on every release leg |
 | `docs/concurrency.md` | the three layers of parallelism and how they contend |
 
@@ -77,7 +78,7 @@ and to the whole `*_simdconv.h` family.
 | **softmax** | `ggml_soft_max_ext(ctx, scores, mask, scale, 0.0f)` | `src/btc_chords.cpp:195` | the `scale` argument applies to the logits, not Q. Check which one your reference scales. |
 | **LayerNorm** | `ggml_norm` **only if** the reference is biased-variance with eps inside the sqrt | `src/btc_chords.cpp:11-13` | BTC's norm is unbiased std with eps *outside* the sqrt, so `ggml_norm` **cannot** be used and it is built from primitives. Pocket-TTS's flow net stayed manual for the same reason (`LEARNINGS.md` L12837). Check before assuming. |
 | **BatchNorm** | fold into the preceding conv at load time — **branching on the conv tensor's dtype** | `src/piano_transcription.cpp:229` (`fuse_bn`); the trap is `LEARNINGS.md` L1778 | `ggml_backend_tensor_get/set` with an F16-sized buffer against an F32 tensor silently corrupts the layer. Also: if a ReLU sits *between* conv and BN, the fold is invalid — CREPE ships BN as a per-channel affine instead (`crepe.cpp:10-12`). |
-| **mel / STFT front end** | `src/core/mel.h` (already threaded), `src/core/fft.h` | `src/piano_transcription.cpp`, `src/onsets_and_frames.cpp`, `src/mt3.cpp` | ⚠ see issue **#453**, open as of today: *"core_mel: threaded MKL silently multiplies the upper mel bins by the thread count."* Nothing in the working tree references it yet; verified as filed on GitHub, not from a grep of this checkout. |
+| **mel / STFT front end** | `src/core/mel.h` (already threaded), `src/core/fft.h` | `src/piano_transcription.cpp`, `src/onsets_and_frames.cpp`, `src/mt3.cpp` | ⚠ issue **#453** (open): *"core_mel: threaded MKL silently multiplies the upper mel bins by the thread count."* The in-tree evidence is `tools/oaf_parity.py:84-102`, which pins `MKL_NUM_THREADS=1` for exactly this. See §5.4. |
 | **CQT front end** | `src/core/cqt.h`, `src/core/cqt2010v2.h` | `src/btc_chords.cpp`, `src/basic_pitch.cpp` | HARD RULE 2b: a CQT missing librosa's `scale=True` passed correlation 0.9999 while every bin was low by up to 152×. Assert the algebraic invariant (`L1 == sqrt(N_k)`), not a tolerance. |
 | **ISTFT** | `src/core/istft.h` | — | CPU. |
 
@@ -465,10 +466,14 @@ This tree has hit all three. Do not treat this as theoretical.
 3. **Two OpenMP runtimes in one process corrupting output** — commit
    `00822744`. Relevant to BLAS selection at build time.
 
-And see issue **#453** (open, filed today): *core_mel: threaded MKL silently
-multiplies the upper mel bins by the thread count*. This is a **correctness**
-bug caused by threading, in a front end three of the six models use. Verified
-as filed on GitHub; nothing in this checkout references it.
+4. **Threaded MKL corrupting a mel front end** — issue **#453**, open:
+   *core_mel: threaded MKL silently multiplies the upper mel bins by the thread
+   count*. This is a **correctness** bug caused by threading, in a front end
+   three of the six models use. The in-tree evidence predates the issue:
+   `tools/oaf_parity.py:84-102` already pins `MKL_NUM_THREADS=1` and its comment
+   calls it "a host defect, not a model one". Any timing or parity run of a
+   mel-front-end model on a box with threaded MKL must pin the BLAS thread
+   count first — see §5.4.
 
 ---
 
@@ -579,7 +584,226 @@ first conclusion reached in the Basic Pitch work and it was wrong.
 
 ## 5. The parity procedure
 
-*(Section filled in from the verification inventory — see below.)*
+A perf change is done when its **output is proven equal to a trusted
+reference**, not when it compiles and is fast
+(`../crispasr-crispembed-dev.md`, HARD RULE and the A/B section). This section
+is how that proof is produced in this tree today.
+
+### 5.0 The shape of it
+
+Three pieces, in order: a **Python/ONNX reference dumper** writes per-stage
+intermediates; the **C++ side** reproduces the same stages; a **diff tool**
+reports per-stage cosine plus magnitudes and gates on a threshold. Debug from
+the **earliest failing stage** — first divergence is the bug.
+
+**Cosine is scale-blind. Always read the `|mine|` vs `|ref|` columns.** HARD
+RULE 2b: a stage wrong by a uniform factor passes cosine, Pearson, argmax
+agreement and SNR-vs-normalised-reference alike. This has bitten this tree three
+times, including a CQT missing librosa's `scale=True` that reported correlation
+0.9999 and 97.6% peak match while every bin was low by up to **152×**.
+
+**Mark intermediates with `ggml_set_name()` *and* `ggml_set_output()`.** Without
+the latter ggml reuses the memory and a later layer overwrites the value you
+meant to read. Reading an unmarked *input* tensor after compute is the same bug
+from the other side (§6.6).
+
+### 5.1 The generic path — `dump_reference.py` + `crispasr-diff`
+
+```bash
+python tools/dump_reference.py --backend <name> --model-dir <HF id|path>     --audio samples/jfk.wav --output ref.gguf
+build/bin/crispasr-diff <backend> model.gguf ref.gguf audio.wav
+```
+
+`tools/dump_reference.py` args (`:520-545`): `--backend`, `--model-dir`,
+`--audio`, `--output`, `--stages` (comma-separated; empty = the backend's
+`DEFAULT_STAGES`), `--max-new-tokens`, `--list-backends`. Audio load is stdlib
+`wave` only and requires **16-bit PCM at exactly 16 kHz** (`:405-427`).
+
+**Registering a backend** (4 steps, `../crispasr-crispembed-dev.md`):
+1. `tools/reference_backends/<name>.py` exposing
+   `dump(model_dir, audio, stages, max_new_tokens) -> dict[str, ndarray]` and
+   `DEFAULT_STAGES` (contract at `dump_reference.py:78-90`);
+2. a line in `REGISTERED_BACKENDS` (`dump_reference.py:113-396`);
+3. an arm in `examples/cli/crispasr_diff_main.cpp`;
+4. either stage APIs on the C++ side, or the self-contained
+   `<name>_diff(model_gguf, ref_gguf, ...)` pattern — which is what all the
+   music backends use.
+
+**Metrics.** `crispasr_diff::Report` (`examples/cli/crispasr_diff.h:81-102`)
+carries `max_abs`, `mean_abs`, `rms`, `rms_data`, `rms_ref`, `norm_ratio`,
+`cos_min`, `cos_mean`, `top1_match/top1_total`, `n_nonfinite`.
+`is_pass(cos_threshold = 0.999f)` (`.h:101`) = `found && n_nonfinite == 0 &&
+cos_min >= cos_threshold`. The global gate is `COS_THRESHOLD = 0.999f`
+(`crispasr_diff_main.cpp:1835`); the summary line and exit code are at `:8690`
+(`0` on pass, `6` on failure).
+
+### 5.2 Which of the six is wired to what — read this before planning a rewrite
+
+| model | reference dumper | `crispasr-diff` arm | in `tests/regression/manifest.json`? |
+| --- | --- | --- | --- |
+| `basic_pitch` | `tools/reference_backends/basic_pitch.py` — **standalone script, not the `dump()` contract** (see 5.3) | `:1772-1786` → `basic_pitch_diff` (`src/basic_pitch.cpp:824-922`), `COS_MIN = 0.999` at `:840` | no |
+| `crepe` | `tools/reference_backends/crepe.py` — proper `dump()` + `DEFAULT_STAGES` (`:83-89, :128-224`) | inline in `main()`, `:8580-8672` | no |
+| `btc_chords` | `tools/btc_torch_parity.py` (4th arg writes the ref GGUF) | `:1706-1710` → `btc_chords_diff` | no |
+| `piano_transcription` | — (diff replays; mel recomputed) | `:1755-1770` → `piano_transcription_diff`, chaining `piano_transcription_mel_spectrogram()` then `_acoustic_model()` | no |
+| `mt3` | — | `:1788-1803` → `mt3_diff` | no |
+| **`onsets_and_frames`** | **none** | **none** | no |
+
+**None of the six is in the nightly CI regression matrix.**
+`.github/workflows/regression.yml:150-186` is entirely ASR/TTS backends. The
+only CI these models get is `basic-pitch-conv-ab.yml`, which gates the SIMD
+conv path's **byte-equality and speed**, not model parity.
+
+**Two gaps worth stating plainly:**
+
+- **`onsets_and_frames` has no per-layer parity path at all** — see 5.4 for
+  what it does have.
+- **`crepe`'s per-layer stages are dumped but not compared.**
+  `crispasr_diff_main.cpp:8663-8669` skips `frames` / `conv1_out..conv6_out` /
+  `embedding` with the comment that `src/crepe.h` exposes no per-layer stage
+  API; only `activation` is truly diffed. Its real per-layer gate is
+  `tools/crepe_numpy_parity.py`, which `crepe.cpp:3-5` says must be changed
+  first if the graph changes.
+
+### 5.3 Worked recipe — per-layer cosine parity for `basic_pitch`
+
+⚠ `basic_pitch` is listed in `REGISTERED_BACKENDS` but its module has **no
+`dump()` and no `DEFAULT_STAGES`** — it is a standalone script with its own
+argparse (`basic_pitch.py:312-321`) and its own `write_ref_gguf`
+(`:296-309`). Invoking it through `tools/dump_reference.py` will fail. The
+usage example in its own docstring (`:39-42`) is stale. **This is the actual
+sequence:**
+
+```bash
+PY=/mnt/volume1/miniconda/bin/python     # torch 2.11, onnxruntime 1.23.2, librosa 0.11
+                                         # needs: $PY -m pip install gguf
+
+# 1. convert the upstream ONNX to GGUF
+$PY models/convert-basic-pitch-to-gguf.py     --input  /mnt/storage/gguf-models/basic-pitch-src/nmp.onnx     --output /mnt/storage/gguf-models/basic-pitch-f16.gguf
+
+# 2. build the diff driver
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --target crispasr-diff -j$(nproc)
+
+# 3. dump the reference (standalone script, NOT dump_reference.py)
+$PY tools/reference_backends/basic_pitch.py     --model      /mnt/storage/gguf-models/basic-pitch-src/nmp.onnx     --audio      samples/jfk.wav     --output-dir /mnt/storage/parity/basic-pitch-ref
+
+# 4. per-stage cosine diff
+build/bin/crispasr-diff basic-pitch     /mnt/storage/gguf-models/basic-pitch-f16.gguf     /mnt/storage/parity/basic-pitch-ref/ref.gguf     samples/jfk.wav
+```
+
+Stages compared, in order (`src/basic_pitch.cpp:857-916`): `audio_window0`,
+`cqt_magnitude`, `normalized_log`, `harmonic_stack`, `head_contour`,
+`head_note`, `head_onset`, `unwrapped_{contour,note,onset}`.
+
+A pass prints one line per stage with `cos=` and `max_abs=` and the element
+counts, then `basic-pitch diff: PASS (0 failing stages)`, exit code 0. Any
+stage below `cos = 0.999`, or a size mismatch, flips that line to `FAIL` and
+the process exits 1.
+
+*(Keep parity artefacts on `/mnt/storage`, not `/mnt/volume1`.)*
+
+### 5.4 The Onsets & Frames path — what exists, and its two limits
+
+O&F compares against **native onnxruntime**, not a PyTorch dump, through a
+bespoke pair of tools.
+
+```bash
+# C++ side: writes mel + all five heads + decoded notes to <prefix>.*
+cmake --build build --target oaf-parity-dump -j$(nproc)
+build/bin/oaf-parity-dump <model.gguf> <audio.wav> <out-prefix> [n_threads]
+
+# Python driver: runs the above, then ORT, and reports
+python tools/oaf_parity.py     --model build/.../onsets-and-frames-f32.gguf     --audio some.wav     --dump  build/bin/oaf-parity-dump     --onnx  /mnt/storage/tuner-bench/onnx/onsets_and_frames.onnx     [--threads 4] [--seconds 0] [--workdir DIR]
+
+# Note-level F1 on MusicNet, N arms through one decoder
+python tools/oaf_musicnet_f1.py     --musicnet /mnt/storage/tuner-bench/datasets/musicnet/musicnet     --arm onnx=/mnt/storage/tuner-bench/onnx/onsets_and_frames.onnx     --arm f32=/path/onsets-and-frames-f32.gguf     --arm q4_0=/path/onsets-and-frames-q4_0.gguf     --dump build/bin/oaf-parity-dump --workdir /mnt/storage/oaf-f1
+```
+
+`oaf-parity-dump` (`tests/oaf_parity_dump.cpp`) is a plain `main()`, built as a
+standalone binary (`tests/CMakeLists.txt:5684-5686`) and deliberately **not**
+registered with CTest because it needs a model, a WAV and onnxruntime
+(`:5681-5683`). It writes `<prefix>.mel.f32` (T×229), the five heads as T×88
+post-sigmoid, a `.meta.txt` with frame counts and wall/CPU realtime factors,
+and a `.notes.tsv`.
+
+`tools/oaf_parity.py` compares in two stages — front end, then heads on the
+**same** mel, so a model bug cannot hide behind a front-end one (`:5-11`) — and
+prints `max_abs / mean_abs / rms / cos / |mine| / |ref|` (`:105-125`), plus
+raw-decision agreement at onset 0.5 / frame 0.5 (`:190-199`).
+
+**Two limits, both important for the rewrite:**
+
+1. **It is not per-layer.** Five heads and a mel is end-of-pipeline. A
+   regression introduced inside a ConvStack or a BiLSTM shows up as "the onset
+   head moved", not as a layer. Building an O&F dumper on the `crepe.py`
+   contract is the cheapest thing you can do before touching the file.
+2. **There is no PASS/FAIL gate.** The script always exits 0 unless the C++
+   dump subprocess itself fails (`:154-156`). It is a diagnostic report. Any CI
+   use needs a threshold added.
+
+It also documents a real ONNX export bug you will trip over: the graph's
+`output_names` were assigned to a five-output forward with a **one-slot shift**
+(`oaf_parity.py:44-50`) — `onset→onset, offset→offset, activation→frame,
+frame→velocity, velocity→679`.
+
+**And it contains the in-tree evidence for issue #453.** `blas_safe_env()`
+(`oaf_parity.py:84-102`) pins `MKL_NUM_THREADS=1`, because Debian's threaded
+MKL `sgemm`, linked alongside `libgomp`, silently corrupts the mel projection's
+upper bins by a factor tied to the thread count. The comment calls it "a host
+defect, not a model one." Issue **#453** ("core_mel: threaded MKL silently
+multiplies the upper mel bins by the thread count", open) is the same
+phenomenon filed against `core/mel.h`. **Any parity run of a mel-front-end
+model on this box must pin the BLAS thread count, or the reference and the
+runtime will disagree for reasons that have nothing to do with your change.**
+
+### 5.5 The other parity tools in the tree
+
+| tool | what it does | invocation |
+| --- | --- | --- |
+| `tools/btc_torch_parity.py` | an *executable spec*: reimplements BTC's forward in raw numpy from the GGUF weights and checks it against the real PyTorch `BTC_model`. Gate: `cos < 0.9999 or argmax_agree < 1.0` → `sys.exit("FAIL")` (`:226-227`) | `python tools/btc_torch_parity.py <btc-chords.gguf> <btc_model.pt> <BTC-ISMIR19 dir> [ref-dump.gguf]` — the 4th arg writes the per-stage ref GGUF for `crispasr-diff btc` |
+| `tools/beatrice_torch_parity.py` | dumps Beatrice per-stage refs, and **gates on relative max-abs (`TOL = 1e-6`), not cosine** — the file documents a wrong-GELU bug that still scored `cos = 0.9999996` (`:326-333`). Plus a hard non-finite check before any tolerance check | `python tools/beatrice_torch_parity.py --component pitch_estimator --model <ckpt.pt> --audio samples/jfk.wav --output beatrice-pitch-ref.gguf --trainer-path <dir>` |
+| `tools/cb_turbo_perlayer_dump_pyref.py` + `tools/cb_turbo_perlayer_diff.py` | Chatterbox-turbo GPT-2 per-layer CPU-vs-PyTorch (#94). The dumper patches `GPT2Block.forward` to capture post-attn/post-FFN at T==1 AR steps; the differ globs `/tmp/{cb,py}_gpt2_step_*` and prints `cos / rms_cpp / rms_py / rms_diff / max_abs_diff` per layer | the C++ side is driven by `CRISPASR_CHATTERBOX_DUMP_GPT2_LAYERS=1` with `CRISPASR_CHATTERBOX_T3_SEED=0` and **`OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1`** on the Python side (full command in the dumper's docstring, `:17-34`) |
+| `tools/compare_probe_dumps.py` | Chatterbox S3Gen UNet CPU-vs-GPU bisector. No args; reads fixed `/tmp/cb-unet-dump-{cpu,gpu}-probe-*.bin`, per-stage cosine, then a column-level drill-down for any stage below `cos 0.99` (`:114-160`) | `python tools/compare_probe_dumps.py`, after two `crispasr` runs with `CRISPASR_S3GEN_UNET_PROBE_BLOCK1=<N>` |
+
+**The `beatrice_torch_parity.py` lesson generalises**: for a stage whose error
+is a small rotation rather than a scaling, relative max-abs is the stronger
+gate. Pick the statistic that the defect you fear would actually fail.
+
+### 5.6 C++ dump knobs for these models
+
+| var | file:line | effect |
+| --- | --- | --- |
+| `CRISPASR_BTC_DUMP_FEAT=<path>` | `btc_chords.cpp:542-551` | **writes a file**: raw-binary dump of the computed log-CQT feature matrix. Exists because the per-stage diff replays the reference's own `input_feat` and therefore *cannot* catch a CQT mismatch |
+| `CRISPASR_BTC_DEBUG` | `btc_chords.cpp:140` | stderr debug |
+| `CRISPASR_CREPE_DEBUG` | `crepe.cpp:330` | stderr prints at `:434, :460` |
+| `CRISPASR_CREPE_NO_BAKE_F32=1` | `crepe.cpp:392` | A/B the in-graph F16→F32 kernel cast |
+| `CRISPASR_BASIC_PITCH_FASTCONV=0` | `basic_pitch_conv.h:338-341` | revert to the reference conv loop |
+| `CRISPASR_BASIC_PITCH_CONV_ISA=scalar\|avx2\|avx2fma\|avx512` | same | force a kernel for A/B |
+| `CRISPASR_BASIC_PITCH_TIMING=1` | `basic_pitch.cpp` | per-window cqt/hstack/conv/activation split to stderr |
+| `CRISPASR_PIANO_SERIAL=1` | `piano_transcription.cpp:218` | force `n_threads = 1`, recovering the exact serial order |
+| `CRISPASR_AUDIT_QUANT_BCAST=1` | `quant_bcast.h:63-72` | walk the graph for quantised `MUL_MAT` nodes whose src1 batch dims exceed src0's |
+
+⚠ **`basic_pitch.cpp`, `piano_transcription.cpp` and `mt3.cpp` have no `getenv`
+calls at all.** Any new path in those files needs its gate added — env-var
+gating is mandatory (`../crispasr-crispembed-dev.md` §"Env-var gating").
+
+### 5.7 The minimum bar for a rewrite in this family
+
+1. **Before touching anything**: capture the current output and a timing
+   baseline, one arm per process, CPU time primary.
+2. **Add the per-layer dumper if the model lacks one** — O&F does; crepe's is
+   half-wired. This is the step people skip and then pay for.
+3. **Gate the new path behind an env var and keep the old one.** Never delete
+   the working path.
+4. **Diff per stage, from the earliest.** Read `|mine|` and `|ref|`, not just
+   cosine.
+5. **Validate with a repeated-call test**, not a single run — second-use
+   allocator corruption is invisible to a one-shot CLI invocation (§6.7).
+6. **Judge the decoded output too**, not only the tensors: note events, F1.
+   `tools/oaf_musicnet_f1.py` is the task-level gate for the piano models.
+7. **Flip the default only when the new path wins on speed *and* quality.**
+   Otherwise it stays opt-in — the inverse-default rule.
+
 
 ---
 
@@ -727,4 +951,267 @@ ggml executes every graph output. An opt-in experiment whose baseline still
 
 ## 7. Which of the six models gets which treatment
 
-*(Section completed below, after the primitives and parity inventories.)*
+### Summary
+
+| model | lines | graph today | verdict |
+| --- | --- | --- | --- |
+| `src/onsets_and_frames.cpp` | 862 | 3 graphs, allocator per call | **Fix the lifecycle. Do not rewrite.** Highest value per unit of work in the set. |
+| `src/btc_chords.cpp` | 756 | full graph transformer, allocator per block | **One-line-shaped fix.** Hoist the allocator; otherwise leave alone. |
+| `src/basic_pitch.cpp` | 922 | none, by decision | **Leave it.** The graph-free design is measured-correct. One narrow follow-up. |
+| `src/piano_transcription.cpp` | 1461 | none, by decision | **Leave the loops. Screen one layer.** The #305 argument holds. |
+| `src/crepe.cpp` | 524 | persistent build-once graph | **Leave it — and copy it.** This is a reference implementation, not a problem. |
+| `src/mt3.cpp` | 1815 | 7 graphs, sched, 2 KV caches | **Leave it.** The premise that it has no graph is wrong. |
+
+So: **one backend needs real work, one needs a small fix, and four are either
+already right or right for reasons that were argued and measured.** That is a
+different conclusion from "three of six never build a graph", and the
+difference is the call-graph point in §0.
+
+---
+
+### `src/onsets_and_frames.cpp` — fix the lifecycle, in that order
+
+This is the one with a measured gap: **0.671 CPU-seconds per audio-second
+single-threaded against native ONNX Runtime's 0.103**, 6.5×
+(`docs/music-transcription/HFT_TRANSFORMER.md` §"the gap to ORT"). The same doc
+names the two causes: *"the O&F port is a scalar C++ recurrence and a fresh
+allocator per chunk."*
+
+**Do these in order, measuring between each. The order is the point.**
+
+1. **Hoist the allocators.** Three `ggml_gallocr_new` sites, one of them inside
+   the per-chunk loop; zero `ggml_gallocr_reserve` calls anywhere in the file
+   (§6.1 has the line numbers). Replace with one allocator per graph shape as a
+   context member, `ggml_gallocr_reserve`'d once, on the
+   `src/hft_transformer.cpp:108-115` pattern — whose comment names this exact
+   bug as its reason for existing. This is mechanical, low-risk, and it is the
+   change most likely to move the number.
+2. **Apply `n_threads`.** Check for §6.4 (`n_threads` stored, never applied).
+   `core_cpu_backend::set_n_threads` immediately before each
+   `ggml_backend_graph_compute`, as `hft_transformer.cpp:537, 607` does.
+3. **Fuse the three conv-stack chunk graphs and the five head graphs into
+   fewer computes.** Eight `gallocr_alloc` + compute round trips per forward is
+   a lot of dispatch for a small model. The voxcpm2 result is the precedent:
+   folding many tiny graphs into one per-call graph gave **2.3× on CPU before
+   any other change** (`LEARNINGS.md` L9079), and the win was amortising
+   graph-build overhead, not the matmul work.
+4. **Only then consider the BiLSTM.** §1b is the argument: `core/lstm.h` unrolls
+   ~12 nodes per timestep, and at O&F's T ≈ 3000 frames per 30 s that is a
+   ~200k-node graph across three BiLSTMs. **I have not measured it and I am not
+   claiming the graph BiLSTM wins at that T.** If steps 1–3 close most of the
+   gap, this may not be worth doing at all. If it is attempted, chunk T with
+   carried `(h, c)` to bound the node count — exact, because the recurrence is
+   exact.
+
+**Before any of it, build the parity harness.** O&F is the one model of the six
+with **no `tools/reference_backends/` dumper and no `crispasr-diff` arm** — see
+§5. What it has — `tests/oaf_parity_dump.cpp` + `tools/oaf_parity.py` against
+native onnxruntime — is end-of-pipeline (mel plus five heads), **not per-layer,
+and not a gate**: the script always exits 0 unless the dump subprocess itself
+fails (`oaf_parity.py:154-156`). A per-layer cosine check is what localises a
+regression in step 3 or 4 to a layer instead of to "the output moved". Adding
+an O&F dumper on the `crepe.py` contract (§5.1) and a threshold to
+`oaf_parity.py` is cheap next to debugging without them. Also pin
+`MKL_NUM_THREADS=1` for every run — see §5.4 and issue #453.
+
+**Do not skip the gate.** `../crispasr-crispembed-dev.md` A/B rule 1: keep both
+paths behind an env var, never delete the working one.
+
+---
+
+### `src/btc_chords.cpp` — hoist the allocator, stop there
+
+Already a full ggml graph: transformer with two attention blocks per layer,
+`ggml_soft_max_ext` with the correct mask, `mul_mat` throughout
+(`btc_chords.cpp:185-200, 393-424`). The only lifecycle defect is
+`ggml_gallocr_new` at `:432` / `ggml_gallocr_free` at `:472` inside
+`btc_forward_block` (`:366`), which is called per block from the loop at `:576`.
+
+T is fixed by the chunk geometry (`:513`), so this is the easy case: one
+context-member allocator, reserved once, is a direct substitution. Everything
+else in the file — including the hand-built LayerNorm, which `ggml_norm`
+genuinely **cannot** express (`btc_chords.cpp:11-13`) — should be left alone.
+It has a parity spec (`tools/btc_torch_parity.py`, held at cos ≥ 0.99999,
+`btc_chords.cpp:3-5`), so the change is cheaply verifiable.
+
+---
+
+### `src/basic_pitch.cpp` — leave it graph-free
+
+The graph-free design is not an oversight; it is the measured answer, and the
+reasoning generalises. `docs/music-transcription/BASIC_PITCH_CONV_PERF.md` §7
+prices `ggml_conv_2d` for the dominant layer:
+
+> The im2col matrix for `contour_conv` is `45408 × 936` floats = **170.0 MB per
+> window**, against a current largest activation of 1.45 MB … But the decisive
+> argument is that the blow-up buys nothing. `contour_conv` has **OC = 8**. …
+> pay 170 MB of writes and 170 MB of reads to save nothing.
+
+The direct-SIMD path already ships as the default and is **byte-identical** to
+the reference loop at 1 and 4 threads, at **1.82× / 3.81× on x86-64 and 2.39× on
+arm64** on clean CI runners.
+
+Two narrow follow-ups, both already scoped in that document, neither a rewrite:
+
+- **`onset_conv` is the one layer where `ggml_conv_2d` could plausibly win** —
+  im2col is 12.1 MB, `OC = 32`, so there is real amortisation. 20% of the
+  network, currently 1.86 GMAC/s, untouched by the SIMD work because
+  `stride_w == 3` gives a gathered inner loop. Route *only that layer*, measure,
+  keep it gated.
+- **`core_parallel::for_each_chunk` spawns threads per call**, so 4 threads
+  costs ~75% more CPU than 2 for ~9% less wall. `n_threads = 2` is the better
+  operating point today; `core/worker_pool.h` would remove the trade.
+
+If anything here gets a ggml treatment, the `ggml_map_custom1` bridge (§1a) is
+the shape to consider — but there is no evidence it would help, because nothing
+in this model needs a scheduler.
+
+---
+
+### `src/piano_transcription.cpp` — the #305 argument holds; leave the loops
+
+The brief asked whether "rewrite everything as graphs" is correct here. **It is
+not, and the file says why.** `piano_transcription.cpp:205-214`:
+
+```
+// #305: everything below the mel front-end (which core_mel already threads) ran
+// on one core — the 3x3 convs, the dense layers and the two GRU directions.
+// Each is split along an axis whose iterations write disjoint outputs and only
+// READ shared inputs, and the innermost accumulation order is untouched, so the
+// result is bit-identical to the serial path. Opt out with
+// CRISPASR_PIANO_SERIAL=1.
+//
+// Deliberately NOT parallelized: the four acoustic_model_forward calls in
+// piano_transcription_transcribe. Running those concurrently would hold four
+// sets of conv activations at once, and the box this ships on has 8 GB.
+```
+
+Three things make this a good design rather than an unfinished one:
+
+1. **The bit-identity claim is structural, not a tolerance.** The parallel axis
+   writes disjoint outputs and the innermost accumulation order is unchanged.
+   `core_parallel`'s own contract (`parallel_for.h:27-30`) requires exactly
+   this, and `for_each_task` at `nthreads == 1` runs tasks in the original
+   order (`piano_transcription.cpp:419-421`), so the serial path is recoverable
+   exactly.
+2. **The thing it declines to parallelise, it declines for a stated resource
+   reason**, not from neglect.
+3. **The threading is not fighting a ggml threadpool**, because there is no
+   graph to fight. Converting to graphs would introduce exactly the nesting
+   hazard §3 warns about, unless the hand-threading came out at the same time.
+
+What *would* be worth doing, as a screened experiment and not a rewrite:
+
+- **Run the im2col arithmetic on its conv layers.** They are wide-channel 2-D
+  convs into GRUs, which `BASIC_PITCH_CONV_PERF.md` §7.3 predicts is on the
+  *favourable* side of the line. One multiplication tells you; if it is
+  favourable, route one layer and measure.
+- **Note that it already uses `core/parallel_for.h`, `core/mel.h` and
+  `core/fft.h`** — it is one of the better-integrated files in this set, and
+  `fuse_bn` (`:229`) is the shared-pattern BatchNorm fold.
+- The GRU has the same `core/gru.h` question as O&F's LSTM, with the same
+  §1b caveat and the additional fact that `gru.h` has never had a production
+  caller. Low priority.
+
+---
+
+### `src/crepe.cpp` — a reference implementation, not a problem
+
+524 lines, one persistent build-once graph, a context-member `gallocr`
+(`:135`) allocated once (`:452-453`) and freed only at teardown (`:470`). It
+independently applies four separate lessons this tree learned the hard way:
+deliberate avoidance of `ggml_conv_1d` for both correctness and cost reasons
+(`:150-164`), symmetric-pad-then-drop-a-column for Metal's asymmetric-PAD
+restriction (`:12-16`), re-setting every input on every compute (`:308`), and
+baking F32 conv kernels once at load because the in-graph cast re-runs per
+compute (`:386-400`, measured at RTF 31 on M1 before the fix).
+
+It is also validated against `tools/crepe_numpy_parity.py` at cos = 1.0 on both
+capacities, with the file header instructing that the script changes first
+(`:3-5`).
+
+**Recommendation: change nothing, and use it as the template for the O&F
+rewrite.** The one open item its own header names is that batch > 1 is
+unavailable because ggml's `ggml_conv_1d` batch path is broken here
+(`:21-26`) — if that is ever fixed upstream, CREPE gets batching for free.
+
+---
+
+### `src/mt3.cpp` — the premise is wrong
+
+The brief listed mt3 as "0 ggml graph ops, no threading, a transformer doing
+that across 1815 lines". That is not what the file does:
+
+| | where |
+| --- | --- |
+| encoder graph | `mt3.cpp:708, 728, 771` |
+| cross-KV projection graph | `:839-861` |
+| decoder step graph with in-graph KV writes | `:888, 931-932, 987` |
+| persistent scheduler | `ggml_backend_sched_graph_compute` at `:861, 1008, 1046` |
+| decoder KV cache, 4-D, own context + backend buffer | `:788-795` |
+| cross-attention KV cache, per layer, rebuilt only when `T_enc` changes | `:802-821` (`:802` short-circuits on an unchanged length) |
+| a comment costing out `sched_reset`/`alloc_graph` per step against graph size | `:680` |
+
+That is the standard pattern §2/§3 describe, correctly applied. Its cross-KV
+caching in particular — build once per encoder length, reuse across every
+decode step — is the piece of KV machinery that *does* transplant to a
+non-AR setting, and worth reading if another model needs it.
+
+**Recommendation: no rewrite.** If mt3 is slow, the honest next step is a
+per-node trace, not a port — `LEARNINGS.md` L14428's three graph-construction
+wastes (K=1 convs through im2col, CPU-placed pad nodes, per-graph F16→F32
+kernel casts) are all things a trace finds in one run and a rewrite would
+reproduce. And L14605's rule applies: **the big wins are bugs, not micro-opts.**
+
+---
+
+### What to measure before and after, for all of them
+
+Per `docs/music-transcription/BASIC_PITCH_CONV_PERF.md` §5 and the dev guide's
+A/B rules: **CPU time** (`CLOCK_PROCESS_CPUTIME_ID`, min of ≥8 in-process
+iterations, ≥3 separate processes per arm, cold process discarded) as the
+primary metric, wall reported alongside as a lower bound. One arm per process.
+Assert the arm name the binary prints against the arm you asked for. And prove
+the work happened — an exit code is not proof (HARD RULE 8).
+
+This box is not a measurement instrument: a single-threaded process here gets
+less than half of one core, and wall-clock swings 2–4× run to run. Use CI
+runners (`.github/workflows/basic-pitch-conv-ab.yml` is the template; it
+reproduced to 0.05% variance) or a Kaggle box for any number that will be
+quoted.
+
+
+
+---
+
+## 8. What this document does not establish
+
+Stated explicitly so nobody builds on a gap thinking it is a finding.
+
+1. **Whether selecting ggml's repack extra buffer type actually speeds anything
+   up here.** §4 establishes that it is unreachable for every `core_gguf`
+   backend and that q8_0 measured *slower*. It does not establish the win,
+   and the measuring box has no AVX-512 VNNI. The mmap-incompatibility in §4 is
+   inferred from how the two mechanisms work, not verified.
+2. **Whether a ggml-graph BiLSTM beats a scalar recurrence at O&F's sequence
+   length.** §1b sets out the node-count concern. Nobody has measured it. The
+   recommendation in §7 is deliberately ordered so this question is answered
+   *after* the cheap fixes, on real numbers.
+3. **Whether hand-threading around a ggml graph is explicitly forbidden
+   anywhere in this tree.** I found no such comment. §3's rule is a conclusion
+   drawn from the hFT thread-scaling number, the three documented
+   oversubscription cases, and how ggml's spin-wait barriers work — not a quote.
+4. **How much of the 6.5× O&F gap each of the four steps in §7 recovers.**
+   `docs/music-transcription/HFT_TRANSFORMER.md` names the allocator and the
+   scalar recurrence as the two causes; it does not apportion them.
+5. **Whether `core/gru.h` and `core/cross_attn.h` are correct.** Both are
+   written, both have zero production callers, and `gru.h` has a unit test while
+   `cross_attn.h` has nothing. Treat adopting either as a port.
+6. **Anything about GPU backends for these six models.** Everything here is the
+   CPU path. The GPU portability traps in `../crispasr-crispembed-dev.md`
+   (Metal asymmetric PAD, no k-quant CPY, the weight-less-first-op sched bug)
+   apply and are not restated.
+7. **The benchmark numbers in this document were not taken on this box.** Every
+   quoted figure comes from a CI runner, a Kaggle box, or a cited document.
+   This VPS gives a single-threaded process less than half a core; nothing timed
+   here should be quoted.
