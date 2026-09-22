@@ -200,6 +200,10 @@
 #include "onsets_and_frames.h"
 #define CA_HAVE_ONSETS_AND_FRAMES 1
 #endif
+#if __has_include("hft_transformer.h")
+#include "hft_transformer.h"
+#define CA_HAVE_HFT_TRANSFORMER 1
+#endif
 #if __has_include("moss_tts.h")
 #include "moss_tts.h"
 #define CA_HAVE_MOSS_TTS 1
@@ -2055,6 +2059,12 @@ struct crispasr_session {
     // reuses crispasr_session_piano* rather than growing a parallel API.
     onsets_and_frames_ctx* oaf_ctx = nullptr;
 #endif
+#ifdef CA_HAVE_HFT_TRANSFORMER
+    // Fifth model behind the same note-event surface, and the smallest: 5.5 M
+    // parameters against Onsets & Frames' 26.5 M. Same contract — 16 kHz in,
+    // note events out — so it reuses crispasr_session_piano* too.
+    hft_transformer_ctx* hft_ctx = nullptr;
+#endif
 #ifdef CA_HAVE_MOSS_TTS
     moss_tts_context* moss_tts_ctx = nullptr;
 #endif
@@ -2107,7 +2117,7 @@ struct crispasr_session {
     std::vector<crepe_frame> crepe_last_frames;
 #endif
 #if defined(CA_HAVE_PIANO_TRANSCRIPTION) || defined(CA_HAVE_BASIC_PITCH) || defined(CA_HAVE_MT3) ||                    \
-    defined(CA_HAVE_ONSETS_AND_FRAMES)
+    defined(CA_HAVE_ONSETS_AND_FRAMES) || defined(CA_HAVE_HFT_TRANSFORMER)
     // Flattened {onset_ms, offset_ms, midi, velocity} per note. Flattened
     // rather than kept as piano_note_event[] so the C ABI can hand out one
     // contiguous float view (see crispasr_session_piano_notes).
@@ -3051,6 +3061,20 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
         p.use_gpu = s->use_gpu;
         s->oaf_ctx = onsets_and_frames_init_from_file(model_path, p);
         if (!s->oaf_ctx) {
+            delete s;
+            return nullptr;
+        }
+        return s;
+    }
+#endif
+#ifdef CA_HAVE_HFT_TRANSFORMER
+    if (s->backend == "hft-transformer" || s->backend == "hft_transformer") {
+        hft_transformer_params p = hft_transformer_default_params();
+        p.n_threads = s->n_threads;
+        p.verbosity = g_open_verbosity_tls;
+        p.use_gpu = s->use_gpu;
+        s->hft_ctx = hft_transformer_init_from_file(model_path, p);
+        if (!s->hft_ctx) {
             delete s;
             return nullptr;
         }
@@ -4669,6 +4693,9 @@ CA_EXPORT int crispasr_session_available_backends(char* out_csv, int out_cap) {
 #endif
 #ifdef CA_HAVE_ONSETS_AND_FRAMES
     list += ",onsets-and-frames";
+#endif
+#ifdef CA_HAVE_HFT_TRANSFORMER
+    list += ",hft-transformer";
 #endif
 #ifdef CA_HAVE_MT3
     list += ",mt3";
@@ -11186,6 +11213,30 @@ CA_EXPORT int crispasr_session_piano(crispasr_session* s, const float* pcm_16k, 
         return n;
     }
 #endif
+#ifdef CA_HAVE_HFT_TRANSFORMER
+    if (s->hft_ctx) {
+        // `pcm_16k` really is 16 kHz here.
+        s->piano_last_notes.clear();
+        s->piano_last_programs.clear();
+        hft_transformer_result res{};
+        if (hft_transformer_transcribe(s->hft_ctx, pcm_16k, n_samples, &res) != 0)
+            return -1;
+        s->piano_last_notes.reserve((size_t)res.n_notes * 4);
+        for (int i = 0; i < res.n_notes; i++) {
+            const hft_transformer_note_event& e = res.note_events[i];
+            s->piano_last_notes.push_back(e.onset_time * 1000.0f);
+            s->piano_last_notes.push_back(e.offset_time * 1000.0f);
+            s->piano_last_notes.push_back((float)e.midi_note);
+            s->piano_last_notes.push_back((float)e.velocity);
+            // A piano model identifies no instrument; -1, not 0 (= grand
+            // piano), so a caller can tell "unknown" from "acoustic piano".
+            s->piano_last_programs.push_back(-1);
+        }
+        const int n = res.n_notes;
+        hft_transformer_result_free(&res);
+        return n;
+    }
+#endif
     return -1;
 }
 
@@ -11193,7 +11244,7 @@ CA_EXPORT int crispasr_session_piano_n_notes(crispasr_session* s) {
     if (!s)
         return 0;
 #if defined(CA_HAVE_PIANO_TRANSCRIPTION) || defined(CA_HAVE_BASIC_PITCH) || defined(CA_HAVE_MT3) ||                    \
-    defined(CA_HAVE_ONSETS_AND_FRAMES)
+    defined(CA_HAVE_ONSETS_AND_FRAMES) || defined(CA_HAVE_HFT_TRANSFORMER)
     return (int)(s->piano_last_notes.size() / 4);
 #else
     return 0;
@@ -11206,7 +11257,7 @@ CA_EXPORT const float* crispasr_session_piano_notes(crispasr_session* s, int* ou
     if (!s)
         return nullptr;
 #if defined(CA_HAVE_PIANO_TRANSCRIPTION) || defined(CA_HAVE_BASIC_PITCH) || defined(CA_HAVE_MT3) ||                    \
-    defined(CA_HAVE_ONSETS_AND_FRAMES)
+    defined(CA_HAVE_ONSETS_AND_FRAMES) || defined(CA_HAVE_HFT_TRANSFORMER)
     // The guard matches crispasr_session_piano_n_notes. It used to be
     // CA_HAVE_PIANO_TRANSCRIPTION alone, so a build with basic-pitch or MT3
     // but without piano-transcription reported a note count and then handed
@@ -11227,7 +11278,7 @@ CA_EXPORT const int* crispasr_session_piano_note_programs(crispasr_session* s, i
     if (!s)
         return nullptr;
 #if defined(CA_HAVE_PIANO_TRANSCRIPTION) || defined(CA_HAVE_BASIC_PITCH) || defined(CA_HAVE_MT3) ||                    \
-    defined(CA_HAVE_ONSETS_AND_FRAMES)
+    defined(CA_HAVE_ONSETS_AND_FRAMES) || defined(CA_HAVE_HFT_TRANSFORMER)
     if (s->piano_last_programs.empty())
         return nullptr;
     if (out_n_notes)
@@ -11256,6 +11307,10 @@ CA_EXPORT int crispasr_session_piano_sample_rate(crispasr_session* s) {
 #ifdef CA_HAVE_ONSETS_AND_FRAMES
     if (s->oaf_ctx)
         return (int)onsets_and_frames_sample_rate(s->oaf_ctx);
+#endif
+#ifdef CA_HAVE_HFT_TRANSFORMER
+    if (s->hft_ctx)
+        return (int)hft_transformer_sample_rate(s->hft_ctx);
 #endif
     return 0;
 }
@@ -11405,6 +11460,10 @@ CA_EXPORT void crispasr_session_close(crispasr_session* s) {
 #ifdef CA_HAVE_ONSETS_AND_FRAMES
     if (s->oaf_ctx)
         onsets_and_frames_free(s->oaf_ctx);
+#endif
+#ifdef CA_HAVE_HFT_TRANSFORMER
+    if (s->hft_ctx)
+        hft_transformer_free(s->hft_ctx);
 #endif
 #ifdef CA_HAVE_MOSS_TTS
     if (s->moss_tts_ctx)

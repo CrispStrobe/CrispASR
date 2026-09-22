@@ -259,6 +259,7 @@ TEST_CASE("every emitted backend name is a name a surface can open", "[unit][arc
         "piano-transcription",
         "basic-pitch",
         "onsets-and-frames",
+        "hft-transformer",
         "mt3",
         "bt2-tts", // Breeze-TTS-2 (#412)
     };

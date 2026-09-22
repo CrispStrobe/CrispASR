@@ -303,6 +303,8 @@ inline const entry* table(size_t* n_out) {
         {"mt3",                       "mt3"},
         {"onsets-and-frames",         "onsets-and-frames"},
         {"onsets_and_frames",         "onsets-and-frames"},
+        {"hft-transformer",           "hft-transformer"},
+        {"hft_transformer",           "hft-transformer"},
     };
     if (n_out)
         *n_out = sizeof(k) / sizeof(k[0]);

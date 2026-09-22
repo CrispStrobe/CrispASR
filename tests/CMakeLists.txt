@@ -5685,6 +5685,33 @@ add_executable(oaf-parity-dump oaf_parity_dump.cpp)
 target_include_directories(oaf-parity-dump PRIVATE ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(oaf-parity-dump PRIVATE onsets-and-frames)
 
+# ─── test - hft-transformer — live integration tests
+add_executable(test-hft-transformer
+    test_hft_transformer_live.cpp
+)
+target_include_directories(test-hft-transformer PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/examples
+)
+target_link_libraries(test-hft-transformer PRIVATE
+    Catch2::Catch2WithMain
+    hft-transformer
+)
+catch_discover_tests(test-hft-transformer
+    TEST_SPEC "[hft-transformer]"
+    PROPERTIES
+        LABELS live
+        SKIP_RETURN_CODE 4
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+)
+
+# ─── hft-parity-dump — the C++ half of tools/hft_parity.py.
+# Not registered with CTest, for the same reason oaf-parity-dump is not: it
+# needs a model, a WAV and onnxruntime on the other side of it.
+add_executable(hft-parity-dump hft_parity_dump.cpp)
+target_include_directories(hft-parity-dump PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(hft-parity-dump PRIVATE hft-transformer)
+
 # ─── test - mt3 — live integration tests (#250, multi-instrument)
 # Stage parity is the crispasr-diff mt3 harness's job; this covers the C ABI
 # contract, the decode-budget knob and the drum/instrument invariants.

@@ -93,6 +93,7 @@ add_executable(${TARGET}
     crispasr_backend_piano_transcription.cpp
     crispasr_backend_basic_pitch.cpp
     crispasr_backend_onsets_and_frames.cpp
+    crispasr_backend_hft_transformer.cpp
     crispasr_backend_mt3.cpp
     crispasr_backend_moss_audio.cpp
     crispasr_backend_moss_tts.cpp

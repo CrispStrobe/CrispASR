@@ -8,6 +8,7 @@
 
 #include "basic_pitch.h"
 #include "mt3.h"
+#include "hft_transformer.h"
 #include "onsets_and_frames.h"
 #include "core/gguf_loader.h" // core_gguf::open_metadata / kv_str
 #include "core/midi_writer.h" // --piano-format midi
@@ -361,6 +362,92 @@ int run_onsets_and_frames(const whisper_params& params, const std::string& model
     return rc;
 }
 
+// ── hFT-Transformer (§36.3 of the CrispTuner benchmark) ─────────────────────
+//
+// A fifth model behind the same --piano verb, and the smallest of them: 5.5 M
+// parameters, 7 MiB of Q8_0 weights. It scores 70.5% note F1 on MusicNet's
+// solo-piano pieces against Onsets & Frames' 69.0% and Basic Pitch's 57.5%.
+//
+// It has no usable threshold lever. The decoder's `mode_velocity='ignore_zero'`
+// gate — drop any note whose velocity head reads zero at the onset frame — is
+// what filters, and it filters better than the onset threshold does; see
+// hft_transformer.h.
+void print_hft_notes_text(const hft_transformer_result& r) {
+    for (int i = 0; i < r.n_notes; i++) {
+        const hft_transformer_note_event& n = r.note_events[i];
+        printf("%.3f\t%.3f\t%d\t%s\t%d\n", n.onset_time, n.offset_time, n.midi_note,
+               midi_note_name(n.midi_note).c_str(), n.velocity);
+    }
+}
+
+void print_hft_notes_json(const hft_transformer_result& r, const std::string& fname) {
+    printf("{\n");
+    printf("  \"file\": \"%s\",\n", fname.c_str());
+    printf("  \"n_notes\": %d,\n", r.n_notes);
+    printf("  \"notes\": [\n");
+    for (int i = 0; i < r.n_notes; i++) {
+        const hft_transformer_note_event& n = r.note_events[i];
+        printf("    {\"onset\": %.3f, \"offset\": %.3f, \"midi\": %d, \"name\": \"%s\", \"velocity\": %d}%s\n",
+               n.onset_time, n.offset_time, n.midi_note, midi_note_name(n.midi_note).c_str(), n.velocity,
+               i + 1 < r.n_notes ? "," : "");
+    }
+    printf("  ]\n}\n");
+}
+
+int run_hft_transformer(const whisper_params& params, const std::string& model, bool json, bool midi) {
+    hft_transformer_params op = hft_transformer_default_params();
+    op.n_threads = params.n_threads;
+    op.verbosity = params.no_prints ? 0 : 1;
+    op.use_gpu = params.use_gpu;
+    hft_transformer_ctx* ctx = hft_transformer_init_from_file(model.c_str(), op);
+    if (!ctx) {
+        fprintf(stderr, "crispasr: --piano: failed to load '%s'\n", model.c_str());
+        return 2;
+    }
+    const int sr = (int)hft_transformer_sample_rate(ctx);
+
+    int rc = 0;
+    size_t midi_idx = 0;
+    for (const auto& fname : params.fname_inp) {
+        const size_t midi_i = midi_idx++;
+        std::vector<float> mono;
+        std::vector<std::vector<float>> stereo;
+        if (!read_audio_data(fname, mono, stereo, /*stereo=*/false, /*target_rate=*/sr)) {
+            fprintf(stderr, "crispasr: error: cannot read '%s'\n", fname.c_str());
+            rc = 20;
+            continue;
+        }
+        hft_transformer_result res{};
+        if (hft_transformer_transcribe(ctx, mono.data(), (int)mono.size(), &res) != 0) {
+            fprintf(stderr, "crispasr: --piano failed on '%s'\n", fname.c_str());
+            rc = 1;
+            continue;
+        }
+        if (midi) {
+            std::vector<core_midi::Note> mn;
+            mn.reserve((size_t)res.n_notes);
+            for (int i = 0; i < res.n_notes; i++) {
+                const hft_transformer_note_event& e = res.note_events[i];
+                mn.push_back({e.onset_time, e.offset_time, e.midi_note, e.velocity, 0, false});
+            }
+            if (!write_midi(mn, params, fname, midi_i))
+                rc = 1;
+        } else if (json) {
+            print_hft_notes_json(res, fname);
+        } else {
+            if (!params.no_prints && params.fname_inp.size() > 1)
+                printf("# %s\n", fname.c_str());
+            print_hft_notes_text(res);
+        }
+        if (!params.no_prints)
+            fprintf(stderr, "crispasr: %s: %d notes\n", fname.c_str(), res.n_notes);
+        hft_transformer_result_free(&res);
+    }
+
+    hft_transformer_free(ctx);
+    return rc;
+}
+
 } // namespace
 
 int crispasr_run_piano(const whisper_params& params) {
@@ -392,7 +479,7 @@ int crispasr_run_piano(const whisper_params& params) {
     }
     const std::string arch = core_gguf::kv_str(meta, "general.architecture", "");
     core_gguf::free_metadata(meta);
-    // Four models answer --piano. Dispatch on the GGUF's own architecture
+    // Five models answer --piano. Dispatch on the GGUF's own architecture
     // rather than on --backend, so a plain `--piano -m <basic-pitch.gguf>` works.
     if (arch == "basic-pitch" || arch == "basic_pitch")
         return run_basic_pitch(params, model, json, midi);
@@ -400,6 +487,8 @@ int crispasr_run_piano(const whisper_params& params) {
         return run_mt3(params, model, json, midi);
     if (arch == "onsets-and-frames" || arch == "onsets_and_frames")
         return run_onsets_and_frames(params, model, json, midi);
+    if (arch == "hft-transformer" || arch == "hft_transformer")
+        return run_hft_transformer(params, model, json, midi);
     if (arch != "piano-transcription" && arch != "piano_transcription") {
         fprintf(stderr, "crispasr: --piano: '%s' is not a note-event model (arch='%s').\n", model.c_str(),
                 arch.c_str());

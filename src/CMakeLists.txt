@@ -1777,6 +1777,19 @@ if(NOT MSVC)
 endif()
 
 # ---------------------------------------------------------------------------
+# hft-transformer — hFT-Transformer piano transcription (MIT, 5.5M params:
+# 22 MB F32 / 7 MB Q8_0 / 5 MB Q4_0)
+# ---------------------------------------------------------------------------
+add_library(hft-transformer STATIC hft_transformer.h hft_transformer.cpp)
+set_target_properties(hft-transformer PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(hft-transformer PUBLIC .)
+target_compile_features   (hft-transformer PUBLIC cxx_std_17)
+target_link_libraries     (hft-transformer PUBLIC crispasr-core ggml ggml-base crispasr_link_ggml_cpu)
+if(NOT MSVC)
+    target_compile_options(hft-transformer PRIVATE -O3)
+endif()
+
+# ---------------------------------------------------------------------------
 # basic-pitch — Spotify Basic Pitch, polyphonic note events (Apache-2.0, ~110 KB F16)
 # ---------------------------------------------------------------------------
 add_library(basic-pitch STATIC basic_pitch.h basic_pitch.cpp)
@@ -2932,6 +2945,9 @@ if (TARGET basic-pitch)
 endif()
 if (TARGET onsets-and-frames)
     target_link_libraries(crispasr-lib PUBLIC onsets-and-frames)
+endif()
+if (TARGET hft-transformer)
+    target_link_libraries(crispasr-lib PUBLIC hft-transformer)
 endif()
 if (TARGET mt3)
     target_link_libraries(crispasr-lib PUBLIC mt3)

@@ -779,6 +779,20 @@ constexpr Entry k_registry[] = {
     {"onsets-and-frames", "onsets-and-frames-q8_0.gguf",
      "https://huggingface.co/cstr/onsets-and-frames-GGUF/resolve/main/onsets-and-frames-q8_0.gguf",
      "~31 MB"},
+    // hFT-Transformer (Toyama et al., ISMIR 2023, MIT): piano note events from
+    // a hierarchical frequency-time transformer, 5.5 M parameters. The
+    // smallest strong piano transcriber measured here — 70.5% note F1 on
+    // MusicNet's solo-piano pieces against Onsets & Frames' 69.0% — at 7 MiB
+    // of q8_0 weights. It is also by far the most EXPENSIVE to run: 249 GFLOP
+    // of matrix multiply per 2 s of audio, and q8_0 buys almost none of that
+    // back on a CPU without int8 dot-product instructions. Read
+    // docs/music-transcription/HFT_TRANSFORMER.md before choosing it over
+    // onsets-and-frames. NOTE: the HF repo is not uploaded yet, so
+    // auto-download will 404; build the GGUF locally with
+    // models/convert-hft-transformer-to-gguf.py.
+    {"hft-transformer", "hft-transformer-q8_0.gguf",
+     "https://huggingface.co/cstr/hft-transformer-GGUF/resolve/main/hft-transformer-q8_0.gguf",
+     "~7 MB"},
     {"piano-transcription", "piano-transcription-f16.gguf",
      "https://huggingface.co/cstr/piano-transcription-GGUF/resolve/main/piano-transcription-f16.gguf",
      "~77 MB"},
