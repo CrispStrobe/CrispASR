@@ -417,6 +417,29 @@ construction — identical note counts on both clips, 26/26 stages at cos
 documented 49.6% overall / 69.0% solo piano. A run of it was started and killed
 partway to give the machine to the arm whose number was actually unknown.
 
+### The in-tree test suite
+
+`ctest -R "onsets|btc"`, with `CRISPASR_MODEL_ONSETS_AND_FRAMES` pointed at a
+real GGUF and `MKL_NUM_THREADS=1`: **18/18 pass**, including the three O&F
+*live* tests (`init and sample rate`, `mel geometry`, `note events are well
+formed`). Run across all four cells:
+
+| | scalar (default) | `CRISPASR_OAF_GRAPH_LSTM=1` |
+| --- | --- | --- |
+| f32 | 3/3 pass | 3/3 pass |
+| q8_0 | 3/3 pass | 3/3 pass |
+
+The three `btc-chords` live tests skip for want of a model, as they do on any
+box without one — see the open item below.
+
+This was run locally on purpose. GitHub CI could not be used as the gate for
+this work: `main` took three pushes from other sessions while these commits were
+landing, and the workflow concurrency group cancelled every in-flight run before
+the main `CI` job finished. `Lint`, `pages build and deployment`, `Build WASM`
+and `Docker Smoke` did each complete **successfully** on SHAs carrying this
+code, so the compile and style gates are covered; the unit-test gate is covered
+by the table above rather than by a green tick.
+
 ---
 
 ## What is still open
