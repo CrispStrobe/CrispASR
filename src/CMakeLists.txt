@@ -672,6 +672,43 @@ endif()
 # to find_package(BLAS) for OpenBLAS/MKL/Accelerate, which bundle the cblas
 # symbols. Sets BLAS_FOUND / BLAS_LIBRARIES for the caller. Pass QUIET to
 # suppress the "found" message. Header (cblas.h) discovery stays at call sites.
+#
+# #453: when that fallback lands on THREADED MKL (`libmkl_intel_thread`, what
+# find_package(BLAS) returns on a host that merely has Debian's MKL installed),
+# swap it for `libmkl_sequential` and drop `libiomp5`. The Intel threading
+# layer brings its own OpenMP runtime into a process that already carries
+# libgomp, and cblas_sgemm then returns its upper output columns multiplied by
+# the thread count (tests/test-mel-blas-parity.cpp). Every caller of this macro
+# uses sgemm for a small projection, so the sequential layer costs nothing
+# measurable. COHERE_MKL=ON is exempt: ggml's own BLAS backend then links the
+# threaded layer into the same process, and two MKL threading layers cannot
+# be mixed in one link.
+function(crispasr_mkl_sequential out_var)
+    set(_libs ${${out_var}})
+    set(_swapped OFF)
+    set(_result "")
+    foreach(_lib IN LISTS _libs)
+        if(_lib MATCHES "mkl_intel_thread")
+            string(REPLACE "mkl_intel_thread" "mkl_sequential" _seq "${_lib}")
+            if(NOT EXISTS "${_seq}")
+                message(WARNING "BLAS resolved to threaded MKL (${_lib}) but ${_seq} is missing; "
+                                "the mel projection may be wrong (#453) — run ctest -R mel-blas-parity")
+                return()
+            endif()
+            list(APPEND _result "${_seq}")
+            set(_swapped ON)
+        elseif(_lib MATCHES "iomp5")
+            # The Intel OpenMP runtime is only needed by the threaded layer.
+        else()
+            list(APPEND _result "${_lib}")
+        endif()
+    endforeach()
+    if(_swapped)
+        message(STATUS "BLAS: threaded MKL replaced by mkl_sequential (#453: two OpenMP runtimes corrupt sgemm)")
+        set(${out_var} "${_result}" PARENT_SCOPE)
+    endif()
+endfunction()
+
 macro(crispasr_prefer_cblas)
     find_package(CBLAS ${ARGN})
     if(CBLAS_FOUND)
@@ -679,6 +716,9 @@ macro(crispasr_prefer_cblas)
         set(BLAS_LIBRARIES ${CBLAS_LIBRARIES})
     else()
         find_package(BLAS ${ARGN})
+    endif()
+    if(BLAS_FOUND AND NOT COHERE_MKL)
+        crispasr_mkl_sequential(BLAS_LIBRARIES)
     endif()
 endmacro()
 
