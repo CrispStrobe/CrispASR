@@ -768,6 +768,17 @@ constexpr Entry k_registry[] = {
     {"miotts", "miotts-0.6b-q8_0.gguf",
      "https://huggingface.co/cstr/miotts-0.6b-GGUF/resolve/main/miotts-0.6b-q8_0.gguf",
      "~723 MB"},
+    // Onsets & Frames (Hawthorne et al. 2018, MIT): piano note events, from
+    // the ddPn08/onsets-and-frames checkpoint's ONNX export. q8_0 rather than
+    // f16 or q4_0 deliberately — measured on all ten MusicNet test pieces it
+    // is F1-identical to fp32 (49.6% overall, 69.0% solo piano) at a third of
+    // the size, while q4_0 costs 0.5 points of F1-with-offsets because it
+    // perturbs the frame head, which sets note durations, five times as hard
+    // as the onset head. q4_0 and f32 are in the same repo for callers that
+    // want them.
+    {"onsets-and-frames", "onsets-and-frames-q8_0.gguf",
+     "https://huggingface.co/cstr/onsets-and-frames-GGUF/resolve/main/onsets-and-frames-q8_0.gguf",
+     "~31 MB"},
     {"piano-transcription", "piano-transcription-f16.gguf",
      "https://huggingface.co/cstr/piano-transcription-GGUF/resolve/main/piano-transcription-f16.gguf",
      "~77 MB"},
