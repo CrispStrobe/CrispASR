@@ -7,7 +7,17 @@
 // mismatch does not raise, it just scores worse, so the mel is dumped and
 // compared FIRST and a model difference cannot hide behind it.
 //
-//   oaf-parity-dump <model.gguf> <audio.wav> <out-prefix> [n_threads]
+//   oaf-parity-dump <model.gguf> <audio.wav> <out-prefix> [n_threads] [n_repeats]
+//
+// n_repeats > 1 transcribes the same audio that many times on the SAME context
+// and asserts every run is bitwise identical to the first. That is the
+// repeated-call validation docs/ggml-optimisation-playbook.md §5.7 item 5 and
+// §6.7 require of any persistent-allocator change: a gallocr that outlives the
+// call may alias an input tensor's slot with a later intermediate, and the
+// symptom is run 0 correct and run 1 onward quietly wrong -- invisible to a
+// one-shot CLI invocation, which is how this class of bug has shipped before
+// (#208, and LEARNINGS.md L14367 on omnivoice). It also reports the per-run
+// CPU cost, so a timing arm gets a median instead of a single sample.
 //
 // Writes <prefix>.mel.f32 (T × 229) and <prefix>.<head>.f32 (T × 88, after the
 // sigmoid) for head in onset, offset, frame, activation, velocity, plus
@@ -15,6 +25,7 @@
 
 #include "onsets_and_frames.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #ifndef _WIN32
@@ -106,6 +117,7 @@ int main(int argc, char** argv) {
     const std::string wav = argv[2];
     const std::string prefix = argv[3];
     const int nthreads = argc > 4 ? std::atoi(argv[4]) : 4;
+    const int nrepeats = argc > 5 ? std::max(1, std::atoi(argv[5])) : 1;
 
     std::vector<float> pcm;
     int sr = 0;
@@ -153,6 +165,54 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "oaf-parity-dump: transcribe failed (%d)\n", rc);
         onsets_and_frames_free(ctx);
         return 5;
+    }
+
+    // Repeated-call validation. See the header comment: this is the only thing
+    // that surfaces second-use allocator corruption, and it compares the FULL
+    // head tensors bitwise, not the note list, because a drifted activation can
+    // decode to the same notes and still be a bug.
+    for (int rep = 1; rep < nrepeats; rep++) {
+        const double rc0 = cpu_ms();
+        const auto rt0 = std::chrono::steady_clock::now();
+        onsets_and_frames_result r2{};
+        if (onsets_and_frames_transcribe(ctx, pcm.data(), (int)pcm.size(), &r2) != 0) {
+            std::fprintf(stderr, "oaf-parity-dump: repeat %d failed\n", rep);
+            onsets_and_frames_free(ctx);
+            return 5;
+        }
+        const double rms_ = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - rt0).count();
+        const double rcpu = cpu_ms() - rc0;
+        bool same = r2.n_frames == res.n_frames && r2.n_notes == res.n_notes && r2.n_classes == res.n_classes;
+        const size_t nn = (size_t)res.n_frames * res.n_classes;
+        const float* mine[5] = {r2.onset_output, r2.offset_output, r2.frame_output, r2.activation_output,
+                                r2.velocity_output};
+        const float* first[5] = {res.onset_output, res.offset_output, res.frame_output, res.activation_output,
+                                 res.velocity_output};
+        const char* hname[5] = {"onset", "offset", "frame", "activation", "velocity"};
+        for (int k = 0; same && k < 5; k++) {
+            if (!mine[k] || !first[k]) {
+                same = false;
+                break;
+            }
+            for (size_t i = 0; i < nn; i++) {
+                if (mine[k][i] != first[k][i]) {
+                    std::fprintf(stderr,
+                                 "oaf-parity-dump: REPEAT %d DIVERGED at %s[%zu]: %.9g vs %.9g on run 0 -- this is "
+                                 "second-use allocator corruption (playbook §6.7)\n",
+                                 rep, hname[k], i, (double)mine[k][i], (double)first[k][i]);
+                    same = false;
+                    break;
+                }
+            }
+        }
+        std::printf("  repeat %d: %s  (%d frames, %d notes, %.1f ms wall / %.1f ms cpu)\n", rep,
+                    same ? "bitwise identical to run 0" : "*** DIVERGED ***", r2.n_frames, r2.n_notes, rms_, rcpu);
+        onsets_and_frames_result_free(&r2);
+        if (!same) {
+            onsets_and_frames_result_free(&res);
+            onsets_and_frames_free(ctx);
+            return 6;
+        }
     }
 
     const size_t n = (size_t)res.n_frames * res.n_classes;
