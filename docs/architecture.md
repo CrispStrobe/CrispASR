@@ -286,7 +286,7 @@ everything below follows it.
 - **Beats / downbeats** (`beat-this`) — `CAP_BEATS` (bit 26), `--beats`,
   `crispasr_beats_cli.{h,cpp}`.
 - **Piano transcription** (`piano-transcription`, `basic-pitch`, `mt3`,
-  `onsets-and-frames`) — `CAP_PIANO` (bit 27), `--piano`,
+  `onsets-and-frames`, `hft-transformer`) — `CAP_PIANO` (bit 27), `--piano`,
   `crispasr_piano_cli.{h,cpp}`.
 - **Guitar tablature** (`tabcnn`) — `CAP_TAB` (bit 28), `--tab`,
   `crispasr_tab_cli.{h,cpp}`. See [tabcnn](#tabcnn) below.
@@ -793,6 +793,50 @@ has already folded BatchNorm into the convolutions).
   following it; it does not trust the names.
 - F32 GGUF 107 MB, Q8_0 32 MB, Q4_0 20 MB
 - `--piano -m onsets-and-frames-q4_0.gguf -f piano.wav`
+
+### hft-transformer
+
+`hFT-Transformer` (Toyama et al., ISMIR 2023; `sony/hFT-Transformer`, MIT) —
+piano transcription, 5.48 M parameters, converted from the **pruned** ONNX
+export. The most accurate solo-piano model here and much the smallest; also
+much the most expensive to run. See
+[docs/music-transcription/HFT_TRANSFORMER.md](music-transcription/HFT_TRANSFORMER.md).
+
+- **Input:** 16 kHz mono → STFT(2048, hop=256, **periodic** Hann, **constant**
+  (zero) pad) → **power 2.0** → mel(256 bins, 0–8000 Hz, **HTK** scale,
+  **slaney** filter norm) → `log(mel + 1e-8)` — an *add*, not a clamp. The
+  filterbank and the window are computed by the converter and **stored in the
+  GGUF**. Unlike Onsets & Frames, hFT does **not** drop a sample before the
+  STFT, so `T = n/hop + 1`.
+- **Windowing:** the model answers 128 frames at a time from a 192-frame
+  window — 32 margin frames of `log(1e-8)` each side, tail padded to a multiple
+  of 128.
+- **Encoder** (batch 128 frames × 256 frequency tokens): per (frame, bin) the
+  65-frame window → Conv2d(1→4, (1,5)) → flatten 4·61 = 244 → Linear(244→256),
+  × √256, + `pos_embedding_freq`; 3 × post-LN transformer layer.
+- **Frequency decoder** (88 pitch queries cross-attending to those 256 tokens):
+  `layer_zero` is cross-attention only; 2 further layers are self + cross + FF.
+- **Time decoder** (batch 88 pitches × 128 time tokens): 3 layers, then
+  `Linear(256→1)` for onset / offset / mpe and `Linear(256→128)` for velocity.
+- Attention is 4 heads × 64, scale 1/8 everywhere. Every head emits **logits**;
+  the runtime applies the sigmoid, and the velocity head is decoded by argmax
+  over its 128 bins.
+- ⚠ **Each layer has ONE LayerNorm applied two or three times** — the
+  checkpoint has a single set of gains per layer, not one per application.
+- The converter **fuses** the (1,5) convolution into `tok_embedding_freq` into
+  one `Linear(65→256)`. Both are linear in the 65-tap window with nothing
+  between them, so the collapse is exact (`--verify-fusion`: 7.1e-07 relative);
+  the GGUF records `hft.front_end` and the loader refuses a file that declares
+  a different one.
+- ⚠ **The decoder's `mode_velocity='ignore_zero'` gate is the model's only
+  working filter** — it drops any note whose velocity head reads zero at the
+  onset frame, and it filters better than the onset threshold, which is flat
+  across 0.2–0.7.
+- The whole model runs in ggml graphs (no hand-rolled recurrence), with the
+  encoder and frequency decoder evaluated in frame chunks that are
+  bit-identical to the unchunked result.
+- F32 GGUF 21.8 MiB, Q8_0 7.0 MiB, Q4_0 4.5 MiB
+- `--piano -m hft-transformer-q8_0.gguf -f piano.wav`
 
 ### miotts
 
