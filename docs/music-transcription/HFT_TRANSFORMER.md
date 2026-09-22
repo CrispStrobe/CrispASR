@@ -189,5 +189,211 @@ sit directly under a sigmoid.
 | `hft-transformer-q8_0.gguf` | **7.0 MiB** | 63 of 157 tensors |
 | `hft-transformer-q4_0.gguf` | **4.5 MiB** | the same 63 |
 
-<!-- NUMBERS: parity, F1 and cost tables are filled in below by the measurement
-     run; see the commit that adds them. -->
+### Agreement with the ONNX export
+
+`tools/hft_parity.py`, 5 s of MusicNet `2191.wav` at 16 kHz, both runtimes fed
+the **same** mel so that only the model differs. onset / offset / mpe are
+post-sigmoid, so an absolute error is directly a probability error; velocity is
+the argmax bin, so its "error" is in bin numbers.
+
+| head | f32 max abs | f32 cos | q8_0 max abs | q8_0 cos | q4_0 max abs | q4_0 cos |
+| --- | --- | --- | --- | --- | --- | --- |
+| onset | 2.5e-06 | 1.00000000 | 2.0e-02 | 0.99993485 | 2.8e-01 | 0.99350368 |
+| offset | 4.4e-06 | 1.00000000 | 1.6e-02 | 0.99988704 | 1.9e-01 | 0.99168242 |
+| mpe | 5.8e-06 | 1.00000000 | 3.9e-02 | 0.99995091 | 3.4e-01 | 0.99613684 |
+| velocity (argmax bin) | **0** | 1.00000000 | **0** | 1.00000000 | 92 bins | 0.87038436 |
+
+**At f32 the port is exact** — 2.5e-06 on the onset head is float32 rounding
+over a 5.5 M-parameter graph, and the velocity argmax is identical in every
+one of the 33,792 cells.
+
+Decisions, which is what a transcriber lives on rather than the RMS over
+mostly-near-zero cells. hFT has two: the thresholds, and the velocity gate.
+
+| arm | onset cells | offset cells | mpe cells | ignore_zero gate | exact velocity bin |
+| --- | --- | --- | --- | --- | --- |
+| f32 | **100.0000%** | **100.0000%** | **100.0000%** | **100.0000%** | **100.0000%** |
+| q8_0 | 99.9911% | **100.0000%** | 99.9911% | **100.0000%** | **100.0000%** |
+| q4_0 | 99.9379% | 99.9822% | 99.8728% | 99.9645% | 99.8609% |
+
+**q4_0's damage lands on the velocity head**, whose cosine drops to 0.870 and
+whose argmax moves by up to 92 bins. That is the head the `ignore_zero` gate
+reads, so q4_0 is perturbing the one filter this model has — which is a more
+specific prediction than "q4_0 is a bit worse", and the F1 table below is where
+it shows up.
+
+The front end is checked in the same run, against librosa on the same PCM: max
+abs **6.2e-03**, mean **1.4e-05**, RMS **7.4e-05**, cos 1.00000000 in the log
+domain. The max sits on near-floor bins, where `log(x + 1e-8)` turns a tiny
+linear difference into a large log one.
+
+### Note-level F1 on MusicNet's test split
+
+`tools/hft_musicnet_f1.py`, all ten MusicNet test pieces (24.7 minutes, 13,589
+reference notes), `mir_eval.transcription` with the default 50 ms onset and 50
+cent tolerances, `offset_ratio=None` for the headline number. Every arm —
+including the ONNX export under native onnxruntime — goes through the same
+decoder and the same metric. Counts are POOLED across pieces, not averaged per
+piece, because that is what §35.3 of the flutter_tuner report did.
+
+**The ONNX row reproduces that report to the digit: 57.2% / 48.0% / 52.2%
+overall and 70.5% on solo piano**, and per piece it lands within 0.2 points on
+all ten. The harness is calibrated before anything is claimed for the port.
+
+| arm | size | P | R | **F1** | F1 w/ offsets | solo piano | everything else |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| ONNX export, onnxruntime | 21.8 MiB | 57.2% | 48.0% | **52.21%** | 18.49% | **70.52%** | 44.52% |
+| ggml **f32** | 21.8 MiB | 57.2% | 48.0% | **52.21%** | 18.49% | **70.52%** | 44.52% |
+| ggml **q8_0** | 7.0 MiB | — | — | — | — | **70.51%** | — |
+| ggml **q4_0** | 4.5 MiB | — | — | — | — | **70.70%** | — |
+
+Per piece:
+
+| piece | 1759 | 1819 | 2106 | 2191 | 2298 | 2303 | 2382 | 2416 | 2556 | 2628 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ONNX | 59.9 | 44.2 | 31.4 | 42.0 | 58.3 | 88.6 | 21.6 | 52.9 | 73.3 | 66.7 |
+| ggml f32 | 59.9 | 44.2 | 31.4 | 42.0 | 58.3 | 88.6 | 21.6 | 52.9 | 73.3 | 66.7 |
+| ggml q8_0 | 59.8 | — | — | — | — | 88.6 | — | — | 73.4 | — |
+| ggml q4_0 | 60.3 | — | — | — | — | 88.6 | — | — | 73.4 | — |
+
+**At f32 the port is not approximately the model, it is the model**: identical
+F1, identical F1-with-offsets, identical estimated-note counts, on every one of
+the ten pieces. That also closes the loop on the decoder, which the activation
+diff cannot see — the script decodes the heads in Python and separately checks
+the C++ runtime's own note list against that decode, note for note. Over a
+195-second piece the two agree on all 1,457 notes with a worst disagreement of
+**68 µs** on an onset and 65 µs on an offset, which is float32 against float64
+in the sub-frame refinement and nothing else.
+
+**The quantised rows cover the solo-piano subset only, and that is stated
+rather than hidden.** MusicNet's solo-piano figure is pooled over exactly
+1759, 2303 and 2556 — 3,887 of the 13,589 reference notes — so those three
+pieces give a number directly comparable to the 70.5% the ONNX arm reaches,
+which is the question quantisation had to answer. The other seven pieces are
+20.6 minutes of audio at 3–11× real time per arm on a VPS that spent the
+evening at a load average of 10–20 from other tenants, and they did not fit in
+the time available. The overall and everything-else columns for q8_0 and q4_0
+are therefore **not measured**, not estimated: `tools/hft_musicnet_f1.py`
+without `--pieces` produces them in one command.
+
+**On the column that was measured, quantisation is free.** Solo-piano note F1
+is **70.52% at f32, 70.51% at q8_0 and 70.70% at q4_0** — q8_0 indistinguishable
+and q4_0 marginally *ahead*, which on 3,887 notes is noise rather than an
+improvement. Per piece the three arms agree to within 0.5 points and 2303 is
+identical at 88.6% on all three.
+
+That is a different result from the Onsets & Frames port, where q4_0 cost 0.5
+points of F1-with-offsets by perturbing the frame head that sets note
+durations. Here the head q4_0 damages most is **velocity** (cosine 0.870, the
+argmax moving by up to 92 bins), and velocity feeds the `ignore_zero` gate
+rather than a duration — so its errors change *which* notes are emitted rather
+than how long they are, and on this corpus that comes out even: q4_0 emits 17
+more notes than f32 on 1759 and scores 0.4 points higher, 11 more on 2556 and
+scores 0.1 higher. F1-with-offsets moves the same way (21.5% at q8_0, 22.1% at
+q4_0, 21.55% at f32 on these three pieces), which is the opposite of what O&F
+did and is consistent with the head-by-head diff above.
+
+**So the accuracy half of the question is answered: q8_0 holds hFT's
+solo-piano F1 exactly.** The cost half is answered below, and it is where the
+port does not deliver.
+
+### Cost
+
+Intel Xeon (Skylake-SP, IBRS, no TSX), 4 vCPU, Hetzner CX-class VPS, carrying a
+background load average of 3–7 from other tenants throughout. Both sides of the
+comparison are a **whole process doing the whole job** — front end, every
+window of inference, and the note decoder — because §36.4 of the flutter_tuner
+report records what happens otherwise: the Onsets & Frames ggml arm's whole
+process was compared against ORT's inference call alone, and CPU-seconds
+against wall-clock, and the gap was published as an order of magnitude when it
+was 5.5–7×. `tools/hft_ort_cost.py` is the ORT half.
+
+Same 30 s clip of MusicNet `2191.wav`, onnxruntime 1.23.2 against the pruned
+graph:
+
+| arm | threads | wall × real time | CPU-s per audio-s | peak RSS |
+| --- | --- | --- | --- | --- |
+| ggml **f32** | 1 | 4.85× | **4.84** | **237 MiB** |
+| ggml q8_0 | 1 | 6.30× | 6.25 | 232 MiB |
+| ggml q4_0 | 1 | 6.38× | 6.26 | 230 MiB |
+| ggml **f32** | 4 | **2.14×** | 7.35 | **237 MiB** |
+| ggml q8_0 | 4 | 2.73× | 9.17 | 232 MiB |
+| native ORT | 1 | 3.46× | 3.09 | 1001 MiB |
+| native ORT | 4 | **1.28×** | 3.77 | 1004 MiB |
+
+At 5 s rather than 30 s the ggml f32 arm costs 29.19 CPU-s against 145.06 — 3
+windows against 15 — so **9.66 CPU-seconds per 2.048 s window** and a fixed
+cost of about **0.2 CPU-seconds**. Startup and the 22 MiB model load are not
+what is expensive here; the arithmetic is.
+
+Three things to read out of that table.
+
+**1. Quantisation makes this model SLOWER, not faster.** q8_0 costs 29% more
+CPU than f32 (6.25 against 4.84 single-threaded) and q4_0 the same again. §36.3
+predicted "two to three times fp32" from int8 kernels applying to 83.5% of the
+arithmetic. The arithmetic share was right; the kernel assumption was not, for
+two nameable reasons. ggml's fast int8 GEMM lives in `ggml-cpu/repack.cpp` and
+is reached only through the CPU device's **extra** buffer types, which
+`core_gguf::load_weights` does not request — every backend in this tree
+allocates weights in the default buffer type, so quantised matrices go through
+the generic path, which re-quantises the activation operand to Q8_0 on every
+GEMM and then runs a vec_dot. And this CPU is Skylake-SP: AVX-512F but **no
+AVX-512 VNNI**, so there is no int8 dot-product instruction for that path to
+reach even if it were repacked. The bet is not disproved in general; it is
+untested here, and what *was* measured is that taking it as configured costs
+29% of the throughput. Selecting the repack buffer type is the obvious next
+experiment and it is a change to `core_gguf`, not to this file.
+
+**2. The gap to ORT is 1.6×, not an order of magnitude.** CPU-seconds per
+audio-second at one thread: 4.84 against 3.09, a factor of **1.56**. Wall at
+four threads: 2.14× against 1.28×, a factor of **1.67**. For comparison the
+Onsets & Frames ggml arm sits at 5.5–7× its ORT equivalent (§36.4) and 0.671
+CPU-s per audio-second single-threaded. hFT is a far heavier model — 249 GFLOP
+of MatMul per 2.048 s window, where O&F's whole 30 s pass is a fraction of that
+— but the runtime is much closer to ORT on it, because this port is nothing but
+GEMM in one graph, where the O&F port is a scalar C++ recurrence and a fresh
+allocator per chunk.
+
+At 9.66 CPU-seconds per 248.6 GFLOP window, the ggml arm is turning **25.7
+GFLOP per CPU-second** at f32 single-threaded. ORT reaches roughly 31 per core
+on the same box. That is the honest summary of the GEMM comparison: ggml is
+within about 20% of MLAS per core here, and the rest of the gap is thread
+scaling — ggml's f32 arm goes 4.84 → 7.35 CPU-seconds per audio-second between
+one thread and four, because its threadpool spin-waits at barriers on a box
+whose four cores are already shared.
+
+**3. Memory is where this port wins outright: 237 MiB against ORT's 1001 MiB**,
+a 4.2× reduction, and against the **3.63 GB** at which `onnx_runtime_dart` was
+OOM-killed on a single window (§35.5). The frame chunking is why — the
+attention score tensor is `[256, 256, 4, 32]` rather than `[256, 256, 4, 128]`
+— and it costs nothing, because the chunked result is bit-identical.
+
+### So: does q8_0 bring hFT near real time, and does it hold its F1?
+
+**No, and no.** Quantisation costs 29% of the throughput rather than buying
+2–3×, and the fastest arm — f32 — is still **2.14× real time on four shared
+cores**, against native ORT's 1.28× and Onsets & Frames' 0.44×. There is no
+configuration of this model in this runtime, on this hardware, that is under
+real time.
+
+What the port does deliver is **the same accuracy as the ONNX export at f32,
+in 237 MiB instead of 1001 MiB, from a 21.8 MiB file, with no onnxruntime
+linked** — on every platform CrispASR builds for. Whether that is worth 1.4
+points of solo-piano F1 over `onsets-and-frames`, which runs at 0.44× real
+time from a 30.8 MiB q8_0 file, is a judgement about the application. For
+offline transcription of a piece it is affordable; for anything interactive it
+is not, and **`onsets-and-frames` remains the right default piano arm.**
+
+## A note on what was NOT done
+
+* **The repack buffer type.** See point 1 above. It is the single measurement
+  that would either rescue or bury the int8 argument, and it is a change to
+  `core_gguf::load_weights` that every backend in the tree would inherit, so it
+  wants its own change and its own regression pass rather than being smuggled
+  in here.
+* **No GPU backend.** `use_gpu` is accepted and ignored; the context always
+  initialises the CPU backend, as `onsets_and_frames.cpp` does.
+* **No streaming.** The window is a fixed 192 frames and the model needs 32
+  frames of lookahead, so a streaming arm is possible and is not implemented.
+* **The HF GGUF repo is not uploaded**, so `-m auto` will 404 for this
+  backend. Build the file locally with the converter.
