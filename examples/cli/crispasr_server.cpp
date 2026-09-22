@@ -223,11 +223,30 @@ static std::string write_temp_audio(const char* data, size_t size, const std::st
 #endif
 }
 
+// httplib 0.57 moved multipart parts off Request and into Request::form, split
+// into files (parts with a filename) and fields (those without). 0.20 put every
+// part in one map, so the "is this part present / what is its content" lookups
+// below accept either side to keep that behavior.
+using form_part = httplib::FormData;
+
+static bool req_has_part(const httplib::Request& req, const std::string& key) {
+    return req.form.has_file(key) || req.form.has_field(key);
+}
+
+static form_part req_part(const httplib::Request& req, const std::string& key) {
+    if (req.form.has_file(key))
+        return req.form.get_file(key);
+    form_part p;
+    p.name = key;
+    p.content = req.form.get_field(key);
+    return p;
+}
+
 // Read a form field as a trimmed string, or return a default.
 static std::string form_string(const httplib::Request& req, const std::string& key, const std::string& def = "") {
     std::string v;
-    if (req.has_file(key)) {
-        v = req.get_file_value(key).content;
+    if (req_has_part(req, key)) {
+        v = req_part(req, key).content;
     } else if (req.has_param(key)) {
         v = req.get_param_value(key);
     } else {
@@ -295,9 +314,9 @@ static bool is_authorized(const httplib::Request& req, const std::vector<std::st
 
 // Parse a form field as float, returning `def` on missing or parse error.
 static float form_float(const httplib::Request& req, const std::string& key, float def) {
-    if (!req.has_file(key) && !req.has_param(key))
+    if (!req_has_part(req, key) && !req.has_param(key))
         return def;
-    const std::string v = req.has_file(key) ? req.get_file_value(key).content : req.get_param_value(key);
+    const std::string v = req_has_part(req, key) ? req_part(req, key).content : req.get_param_value(key);
     try {
         size_t pos = 0;
         float f = std::stof(v, &pos);
@@ -311,9 +330,9 @@ static float form_float(const httplib::Request& req, const std::string& key, flo
 }
 
 static int form_int(const httplib::Request& req, const std::string& key, int def) {
-    if (!req.has_file(key) && !req.has_param(key))
+    if (!req_has_part(req, key) && !req.has_param(key))
         return def;
-    const std::string v = req.has_file(key) ? req.get_file_value(key).content : req.get_param_value(key);
+    const std::string v = req_has_part(req, key) ? req_part(req, key).content : req.get_param_value(key);
     try {
         size_t pos = 0;
         int n = std::stoi(v, &pos);
@@ -326,9 +345,9 @@ static int form_int(const httplib::Request& req, const std::string& key, int def
 }
 
 static uint64_t form_u64(const httplib::Request& req, const std::string& key, uint64_t def) {
-    if (!req.has_file(key) && !req.has_param(key))
+    if (!req_has_part(req, key) && !req.has_param(key))
         return def;
-    const std::string v = req.has_file(key) ? req.get_file_value(key).content : req.get_param_value(key);
+    const std::string v = req_has_part(req, key) ? req_part(req, key).content : req.get_param_value(key);
     try {
         size_t pos = 0;
         uint64_t n = std::stoull(v, &pos);
@@ -508,7 +527,7 @@ struct progress_scope {
     progress_scope(const progress_scope&) = delete;
     progress_scope& operator=(const progress_scope&) = delete;
 };
-static transcription_result do_transcribe(const httplib::MultipartFormData& audio_file, CrispasrBackend* backend,
+static transcription_result do_transcribe(const form_part& audio_file, CrispasrBackend* backend,
                                           std::mutex& model_mutex, whisper_params rp, bool need_timestamps,
                                           fireredpunc_context* punc_ctx = nullptr, pcs_context* pcs_ctx = nullptr,
                                           truecaser_context* tc_ctx = nullptr,
@@ -1510,24 +1529,18 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
     // buffer gigabytes into RAM (OOM DoS) before auth/routing even run — the
     // body is read (and, for multipart, fully accumulated) BEFORE the route
     // handler + require_auth. set_payload_max_length makes httplib's read_content
-    // reject an over-cap Content-Length with 413 and skip the body WITHOUT
-    // buffering it — the clean fix for the normal (Content-Length) upload path.
+    // reject an over-cap body with 413 and skip the rest WITHOUT buffering it —
+    // the vendored 0.57 reader enforces this on BOTH the Content-Length and the
+    // Transfer-Encoding: chunked path, so streamed uploads (OpenAI SDK file
+    // handles) are bounded the same way as buffered ones.
     const size_t max_upload_bytes = 512ull * 1024 * 1024; // 512 MB — far above any real audio upload
     svr.set_payload_max_length(max_upload_bytes);
 
     // A pre-routing handler runs before body read + route dispatch (httplib
-    // routing() calls it before read_content). httplib's CHUNKED reader does
-    // NOT honour payload_max_length (only the Content-Length path does), so a
-    // Transfer-Encoding: chunked upload would bypass the cap and buffer
-    // unbounded — reject chunked bodies on mutating requests here. When
-    // --cors-origin is set this handler also attaches CORS + answers OPTIONS.
+    // routing() calls it before read_content). When --cors-origin is set this
+    // handler attaches CORS headers + answers OPTIONS.
     const std::string cors_origin = params.server_cors_origin;
     svr.set_pre_routing_handler([cors_origin](const Request& req, Response& res) {
-        if ((req.method == "POST" || req.method == "PUT") && req.has_header("Transfer-Encoding")) {
-            // Chunked/streamed upload — not bounded by set_payload_max_length.
-            res.status = 411; // Length Required — resend with a Content-Length.
-            return Server::HandlerResponse::Handled;
-        }
         if (!cors_origin.empty()) {
             res.set_header("Access-Control-Allow-Origin", cors_origin);
             res.set_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, DELETE");
@@ -1557,7 +1570,7 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
     // workers run without contending. Everything else stays on the primary
     // backend + model_mutex (serialized, unchanged). asr_pool is null unless
     // CRISPASR_SERVER_WORKERS>1.
-    auto dispatch_transcribe = [&](const httplib::MultipartFormData& audio_file, const whisper_params& rp,
+    auto dispatch_transcribe = [&](const form_part& audio_file, const whisper_params& rp,
                                    bool need_ts) -> transcription_result {
         const bool lang_explicit = !rp.language.empty() && rp.language != "auto";
         const bool no_post = !punc_ctx && !pcs_ctx && !tc_ctx && !tc_crf_ctx && !tc_lstm_ctx;
@@ -1667,12 +1680,12 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
                        "separation_disabled");
             return;
         }
-        if (!req.has_file("file")) {
+        if (!req_has_part(req, "file")) {
             json_error(res, 400, "no 'file' field in multipart upload");
             return;
         }
 
-        const auto& audio_file = req.get_file_value("file");
+        const auto audio_file = req_part(req, "file");
         const std::string stems_csv = form_string(req, "stems", "");
         fprintf(stderr, "crispasr-server: /v1/audio/separation received '%s' (%zu bytes, stems='%s')\n",
                 log_sanitize(audio_file.filename).c_str(), audio_file.content.size(), log_sanitize(stems_csv).c_str());
@@ -1813,12 +1826,12 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             json_error(res, 503, "model loading");
             return;
         }
-        if (!req.has_file("file")) {
+        if (!req_has_part(req, "file")) {
             json_error(res, 400, "no 'file' field in multipart upload");
             return;
         }
 
-        auto audio_file = req.get_file_value("file");
+        auto audio_file = req_part(req, "file");
         fprintf(stderr, "crispasr-server: /inference received '%s' (%zu bytes)\n",
                 log_sanitize(audio_file.filename).c_str(), audio_file.content.size());
 
@@ -1838,7 +1851,7 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             rp.diarize_method = form_string(req, "diarize_method", "energy");
         rp.diarize_embedder = form_string(req, "diarize_embedder", rp.diarize_embedder);
         rp.diarize_cluster_threshold = form_float(req, "diarize_cluster_threshold", rp.diarize_cluster_threshold);
-        rp.diarize_cluster_threshold_explicit = req.has_file("diarize_cluster_threshold");
+        rp.diarize_cluster_threshold_explicit = req_has_part(req, "diarize_cluster_threshold");
         rp.diarize_max_speakers = form_int(req, "diarize_max_speakers", rp.diarize_max_speakers);
         rp.vad = form_bool(req, "vad", rp.vad);
         rp.vad_threshold = form_float(req, "vad_threshold", rp.vad_threshold);
@@ -1890,7 +1903,7 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         rp.detect_language = form_bool(req, "detect_language", rp.detect_language);
         rp.lid_backend = form_string(req, "lid_backend", rp.lid_backend);
         rp.lid_model = form_string(req, "lid_model", rp.lid_model);
-        if (req.has_file("chunk_seconds") || req.has_param("chunk_seconds"))
+        if (req_has_part(req, "chunk_seconds") || req.has_param("chunk_seconds"))
             rp.chunk_seconds_explicit = true;
         rp.chunk_seconds = form_int(req, "chunk_seconds", rp.chunk_seconds);
         rp.no_timestamps = form_bool(req, "no_timestamps", rp.no_timestamps);
@@ -2007,12 +2020,12 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             json_error(res, 503, "model is still loading");
             return;
         }
-        if (!req.has_file("file")) {
+        if (!req_has_part(req, "file")) {
             json_error(res, 400, "missing required field 'file'");
             return;
         }
 
-        auto audio_file = req.get_file_value("file");
+        auto audio_file = req_part(req, "file");
         fprintf(stderr, "crispasr-server: /v1/audio/transcriptions received '%s' (%zu bytes)\n",
                 audio_file.filename.c_str(), audio_file.content.size());
 
@@ -2064,7 +2077,7 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             rp.diarize_method = "energy";
         rp.diarize_embedder = form_string(req, "diarize_embedder", rp.diarize_embedder);
         rp.diarize_cluster_threshold = form_float(req, "diarize_cluster_threshold", rp.diarize_cluster_threshold);
-        rp.diarize_cluster_threshold_explicit = req.has_file("diarize_cluster_threshold");
+        rp.diarize_cluster_threshold_explicit = req_has_part(req, "diarize_cluster_threshold");
         rp.diarize_max_speakers = form_int(req, "diarize_max_speakers", rp.diarize_max_speakers);
         rp.vad = form_bool(req, "vad", rp.vad);
         rp.vad_threshold = form_float(req, "vad_threshold", rp.vad_threshold);
@@ -2111,7 +2124,7 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         rp.detect_language = form_bool(req, "detect_language", rp.detect_language);
         rp.lid_backend = form_string(req, "lid_backend", rp.lid_backend);
         rp.lid_model = form_string(req, "lid_model", rp.lid_model);
-        if (req.has_file("chunk_seconds") || req.has_param("chunk_seconds"))
+        if (req_has_part(req, "chunk_seconds") || req.has_param("chunk_seconds"))
             rp.chunk_seconds_explicit = true;
         rp.chunk_seconds = form_int(req, "chunk_seconds", rp.chunk_seconds);
         rp.no_timestamps = form_bool(req, "no_timestamps", rp.no_timestamps);
@@ -3250,11 +3263,11 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             return;
         }
 
-        if (!req.has_file("file")) {
+        if (!req_has_part(req, "file")) {
             json_error(res, 400, "missing 'file' field (multipart audio upload)", "missing_required_field", "file");
             return;
         }
-        const auto& audio_file = req.get_file_value("file");
+        const auto audio_file = req_part(req, "file");
 
         // Decode input audio to 16 kHz mono PCM.
         std::string tmp_path =
@@ -3277,12 +3290,12 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         }
 
         std::string response_format = "wav";
-        if (req.has_file("response_format"))
-            response_format = req.get_file_value("response_format").content;
+        if (req_has_part(req, "response_format"))
+            response_format = req_part(req, "response_format").content;
 
         whisper_params rp = params;
-        if (req.has_file("language"))
-            rp.language = req.get_file_value("language").content;
+        if (req_has_part(req, "language"))
+            rp.language = req_part(req, "language").content;
 
         const int sr_out = backend->tts_sample_rate();
 
@@ -3452,11 +3465,11 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             json_error(res, 400, "server has no --voice-dir configured; cannot store voice files");
             return;
         }
-        if (!req.has_file("voice")) {
+        if (!req_has_part(req, "voice")) {
             json_error(res, 400, "missing multipart 'voice' file field");
             return;
         }
-        const auto& voice_file = req.get_file_value("voice");
+        const auto voice_file = req_part(req, "voice");
         if (voice_file.content.size() < 44) {
             json_error(res, 400, "uploaded file is too small to be a valid audio file");
             return;
@@ -3468,7 +3481,7 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         // safe default for "may I keep a recording of this person's voice" —
         // either the attestation exists or the upload must not happen.
         const std::string upload_consent =
-            req.has_file("consent_attestation") ? req.get_file_value("consent_attestation").content : std::string();
+            req_has_part(req, "consent_attestation") ? req_part(req, "consent_attestation").content : std::string();
         if (upload_consent.empty()) {
             json_error(res, 400,
                        "uploading a voice reference requires a 'consent_attestation' form field. "
@@ -3482,8 +3495,8 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
 
         // Derive voice name: from "name" form field, or from uploaded filename stem.
         std::string voice_name;
-        if (req.has_file("name")) {
-            voice_name = req.get_file_value("name").content;
+        if (req_has_part(req, "name")) {
+            voice_name = req_part(req, "name").content;
         } else if (!voice_file.filename.empty()) {
             voice_name = std::filesystem::path(voice_file.filename).stem().string();
         }
@@ -3516,8 +3529,8 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
 
         // If a "transcript" text field is provided, write the paired .txt
         // (Qwen3-TTS ICL prefill format: <name>.wav + <name>.txt).
-        if (req.has_file("transcript")) {
-            const auto& txt = req.get_file_value("transcript");
+        if (req_has_part(req, "transcript")) {
+            const auto txt = req_part(req, "transcript");
             std::string txt_path = params.tts_voice_dir + "/" + voice_name + ".txt";
             std::ofstream txt_out(txt_path);
             if (txt_out) {

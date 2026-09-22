@@ -730,12 +730,15 @@ key when keys are configured (only `/health` is public).
 
 ## Request limits & error handling
 
-- **Upload cap: 512 MB.** A larger `Content-Length` is rejected with `413`
-  before the body is buffered (so an oversized multipart cannot OOM the
-  process ahead of auth/routing).
-- **Chunked uploads are refused.** cpp-httplib's chunked reader does not honour
-  the payload cap, so a `POST`/`PUT` carrying `Transfer-Encoding` gets `411
-  Length Required` — resend with a `Content-Length`.
+- **Upload cap: 512 MB.** An upload whose body crosses the cap — by
+  `Content-Length` or while streaming — is rejected with `413`, and the server
+  buffers at most the cap (so an oversized multipart cannot OOM the process
+  ahead of auth/routing).
+- **Chunked uploads work.** `Transfer-Encoding: chunked` request bodies are
+  read and bounded by the same 512 MB cap as `Content-Length` ones (the
+  vendored cpp-httplib 0.57 chunked reader enforces the payload limit), so
+  OpenAI SDK calls that stream a file handle (`fs.createReadStream(...)`,
+  `fs.openSync` + `Readable`) upload directly.
 - An unmatched route returns `{"error": "not found. Use POST /v1/audio/transcriptions"}`;
   an exception inside a handler returns a structured `500` naming the reason
   rather than being mislabelled as a 404.
