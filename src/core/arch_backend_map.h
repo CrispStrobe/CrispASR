@@ -301,6 +301,8 @@ inline const entry* table(size_t* n_out) {
         {"basic-pitch",               "basic-pitch"},
         {"basic_pitch",               "basic-pitch"},
         {"mt3",                       "mt3"},
+        {"onsets-and-frames",         "onsets-and-frames"},
+        {"onsets_and_frames",         "onsets-and-frames"},
     };
     if (n_out)
         *n_out = sizeof(k) / sizeof(k[0]);

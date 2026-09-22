@@ -69,6 +69,7 @@ std::unique_ptr<CrispasrBackend> crispasr_create_miotts_backend();
 std::unique_ptr<CrispasrBackend> crispasr_create_bt2_tts_backend();
 std::unique_ptr<CrispasrBackend> crispasr_create_piano_transcription_backend();
 std::unique_ptr<CrispasrBackend> crispasr_create_basic_pitch_backend();
+std::unique_ptr<CrispasrBackend> crispasr_create_onsets_and_frames_backend();
 std::unique_ptr<CrispasrBackend> crispasr_create_mt3_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_voxcpm2_tts_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_voxcpm2_vae_backend();
@@ -185,6 +186,8 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& name
         return crispasr_create_piano_transcription_backend();
     if (name == "basic-pitch" || name == "basic_pitch" || name == "basicpitch")
         return crispasr_create_basic_pitch_backend();
+    if (name == "onsets-and-frames" || name == "onsets_and_frames" || name == "onsetsandframes")
+        return crispasr_create_onsets_and_frames_backend();
     if (name == "mt3" || name == "music-transcription" || name == "music_transcription")
         return crispasr_create_mt3_backend();
     if (name == "moss-tts-local" || name == "moss_tts_local" || name == "moss-tts-local-v1.5" ||
@@ -368,6 +371,7 @@ std::vector<std::string> crispasr_list_backends() {
         "bt2-tts",
         "piano-transcription",
         "basic-pitch",
+        "onsets-and-frames",
         "mt3",
         "moss-tts",
         "moss-tts-local",
@@ -831,6 +835,8 @@ std::string crispasr_detect_backend_from_gguf(const std::string& model_path) {
         return "piano-transcription";
     if (contains_ci("basic") && contains_ci("pitch"))
         return "basic-pitch";
+    if (contains_ci("onsets") && contains_ci("frames"))
+        return "onsets-and-frames";
     if (contains_ci("mt3"))
         return "mt3";
     if (contains_ci("gigaam"))

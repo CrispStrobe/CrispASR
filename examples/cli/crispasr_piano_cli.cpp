@@ -8,6 +8,7 @@
 
 #include "basic_pitch.h"
 #include "mt3.h"
+#include "onsets_and_frames.h"
 #include "core/gguf_loader.h" // core_gguf::open_metadata / kv_str
 #include "core/midi_writer.h" // --piano-format midi
 #include "piano_transcription.h"
@@ -276,6 +277,90 @@ int run_basic_pitch(const whisper_params& params, const std::string& model, bool
     return rc;
 }
 
+// ── Onsets & Frames (§36.3 of the CrispTuner benchmark) ─────────────────────
+//
+// A fourth model behind the same --piano verb, and the second piano-specific
+// one. It is here because it transcribes solo piano markedly better than Basic
+// Pitch — 69.1% note F1 against 57.5% on MusicNet's piano pieces — at 20 MB of
+// Q4_0 weights rather than 106 MB of F32, which is the size class that makes
+// the difference shippable. Velocity comes from a trained head, so unlike
+// Basic Pitch's the number printed here means something.
+void print_oaf_notes_text(const onsets_and_frames_result& r) {
+    for (int i = 0; i < r.n_notes; i++) {
+        const onsets_and_frames_note_event& n = r.note_events[i];
+        printf("%.3f\t%.3f\t%d\t%s\t%d\n", n.onset_time, n.offset_time, n.midi_note,
+               midi_note_name(n.midi_note).c_str(), n.velocity);
+    }
+}
+
+void print_oaf_notes_json(const onsets_and_frames_result& r, const std::string& fname) {
+    printf("{\n");
+    printf("  \"file\": \"%s\",\n", fname.c_str());
+    printf("  \"n_notes\": %d,\n", r.n_notes);
+    printf("  \"notes\": [\n");
+    for (int i = 0; i < r.n_notes; i++) {
+        const onsets_and_frames_note_event& n = r.note_events[i];
+        printf("    {\"onset\": %.3f, \"offset\": %.3f, \"midi\": %d, \"name\": \"%s\", \"velocity\": %d}%s\n",
+               n.onset_time, n.offset_time, n.midi_note, midi_note_name(n.midi_note).c_str(), n.velocity,
+               i + 1 < r.n_notes ? "," : "");
+    }
+    printf("  ]\n}\n");
+}
+
+int run_onsets_and_frames(const whisper_params& params, const std::string& model, bool json, bool midi) {
+    onsets_and_frames_params op = onsets_and_frames_default_params();
+    op.n_threads = params.n_threads;
+    op.verbosity = params.no_prints ? 0 : 1;
+    op.use_gpu = params.use_gpu;
+    onsets_and_frames_ctx* ctx = onsets_and_frames_init_from_file(model.c_str(), op);
+    if (!ctx) {
+        fprintf(stderr, "crispasr: --piano: failed to load '%s'\n", model.c_str());
+        return 2;
+    }
+    const int sr = (int)onsets_and_frames_sample_rate(ctx);
+
+    int rc = 0;
+    size_t midi_idx = 0;
+    for (const auto& fname : params.fname_inp) {
+        const size_t midi_i = midi_idx++;
+        std::vector<float> mono;
+        std::vector<std::vector<float>> stereo;
+        if (!read_audio_data(fname, mono, stereo, /*stereo=*/false, /*target_rate=*/sr)) {
+            fprintf(stderr, "crispasr: error: cannot read '%s'\n", fname.c_str());
+            rc = 20;
+            continue;
+        }
+        onsets_and_frames_result res{};
+        if (onsets_and_frames_transcribe(ctx, mono.data(), (int)mono.size(), &res) != 0) {
+            fprintf(stderr, "crispasr: --piano failed on '%s'\n", fname.c_str());
+            rc = 1;
+            continue;
+        }
+        if (midi) {
+            std::vector<core_midi::Note> mn;
+            mn.reserve((size_t)res.n_notes);
+            for (int i = 0; i < res.n_notes; i++) {
+                const onsets_and_frames_note_event& e = res.note_events[i];
+                mn.push_back({e.onset_time, e.offset_time, e.midi_note, e.velocity, 0, false});
+            }
+            if (!write_midi(mn, params, fname, midi_i))
+                rc = 1;
+        } else if (json) {
+            print_oaf_notes_json(res, fname);
+        } else {
+            if (!params.no_prints && params.fname_inp.size() > 1)
+                printf("# %s\n", fname.c_str());
+            print_oaf_notes_text(res);
+        }
+        if (!params.no_prints)
+            fprintf(stderr, "crispasr: %s: %d notes\n", fname.c_str(), res.n_notes);
+        onsets_and_frames_result_free(&res);
+    }
+
+    onsets_and_frames_free(ctx);
+    return rc;
+}
+
 } // namespace
 
 int crispasr_run_piano(const whisper_params& params) {
@@ -307,12 +392,14 @@ int crispasr_run_piano(const whisper_params& params) {
     }
     const std::string arch = core_gguf::kv_str(meta, "general.architecture", "");
     core_gguf::free_metadata(meta);
-    // Three models answer --piano. Dispatch on the GGUF's own architecture
+    // Four models answer --piano. Dispatch on the GGUF's own architecture
     // rather than on --backend, so a plain `--piano -m <basic-pitch.gguf>` works.
     if (arch == "basic-pitch" || arch == "basic_pitch")
         return run_basic_pitch(params, model, json, midi);
     if (arch == "mt3")
         return run_mt3(params, model, json, midi);
+    if (arch == "onsets-and-frames" || arch == "onsets_and_frames")
+        return run_onsets_and_frames(params, model, json, midi);
     if (arch != "piano-transcription" && arch != "piano_transcription") {
         fprintf(stderr, "crispasr: --piano: '%s' is not a note-event model (arch='%s').\n", model.c_str(),
                 arch.c_str());

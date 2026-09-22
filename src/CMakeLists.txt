@@ -1764,6 +1764,19 @@ if(NOT MSVC)
 endif()
 
 # ---------------------------------------------------------------------------
+# onsets-and-frames — Onsets & Frames piano transcription (MIT, 26.5M params:
+# 107 MB F32 / 32 MB Q8_0 / 20 MB Q4_0)
+# ---------------------------------------------------------------------------
+add_library(onsets-and-frames STATIC onsets_and_frames.h onsets_and_frames.cpp)
+set_target_properties(onsets-and-frames PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(onsets-and-frames PUBLIC .)
+target_compile_features   (onsets-and-frames PUBLIC cxx_std_17)
+target_link_libraries     (onsets-and-frames PUBLIC crispasr-core ggml ggml-base crispasr_link_ggml_cpu)
+if(NOT MSVC)
+    target_compile_options(onsets-and-frames PRIVATE -O3)
+endif()
+
+# ---------------------------------------------------------------------------
 # basic-pitch — Spotify Basic Pitch, polyphonic note events (Apache-2.0, ~110 KB F16)
 # ---------------------------------------------------------------------------
 add_library(basic-pitch STATIC basic_pitch.h basic_pitch.cpp)
@@ -2916,6 +2929,9 @@ if (TARGET piano-transcription)
 endif()
 if (TARGET basic-pitch)
     target_link_libraries(crispasr-lib PUBLIC basic-pitch)
+endif()
+if (TARGET onsets-and-frames)
+    target_link_libraries(crispasr-lib PUBLIC onsets-and-frames)
 endif()
 if (TARGET mt3)
     target_link_libraries(crispasr-lib PUBLIC mt3)

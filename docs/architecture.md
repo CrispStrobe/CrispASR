@@ -285,8 +285,9 @@ everything below follows it.
   `crispasr_chords_cli.{h,cpp}`.
 - **Beats / downbeats** (`beat-this`) — `CAP_BEATS` (bit 26), `--beats`,
   `crispasr_beats_cli.{h,cpp}`.
-- **Piano transcription** (`piano-transcription`) — `CAP_PIANO` (bit 27),
-  `--piano`, `crispasr_piano_cli.{h,cpp}`.
+- **Piano transcription** (`piano-transcription`, `basic-pitch`, `mt3`,
+  `onsets-and-frames`) — `CAP_PIANO` (bit 27), `--piano`,
+  `crispasr_piano_cli.{h,cpp}`.
 - **Guitar tablature** (`tabcnn`) — `CAP_TAB` (bit 28), `--tab`,
   `crispasr_tab_cli.{h,cpp}`. See [tabcnn](#tabcnn) below.
 
@@ -757,6 +758,41 @@ transcription producing MIDI note events (88 keys, 100fps).
 - **Post-processing:** regression binarization (monotonicity check) → note detection (onset/offset/frame thresholds) → MIDI events
 - F16 GGUF: 77 MB, F32: 154 MB
 - `--backend piano-transcription -m piano-transcription-f16.gguf -f piano.wav`
+
+### onsets-and-frames
+
+`Onsets and Frames` (Hawthorne et al., ISMIR 2018; MIT reimplementation) —
+piano transcription, 26.49 M parameters, converted from the ONNX export (which
+has already folded BatchNorm into the convolutions).
+
+- **Input:** 16 kHz mono → STFT(2048, hop=512, **periodic** Hann, reflect pad)
+  → **magnitude** (power 1.0, not power 2.0) → mel(229 bins, 30–8000 Hz, **HTK**
+  scale, **slaney** filter norm) → `log(clamp(·, 1e-5))`. All four of those
+  emphasised settings are non-default somewhere; the filterbank and the window
+  are computed by the converter and **stored in the GGUF** so the question
+  cannot be got wrong at runtime.
+- **4× ConvStack** (onset / offset / frame / velocity, all reading the same mel):
+  Conv2d(1→48,3×3)+ReLU, Conv2d(48→48,3×3)+ReLU, MaxPool(1,2),
+  Conv2d(48→96,3×3)+ReLU, MaxPool(1,2), flatten to 96·57 = 5472 → Linear(5472→768)
+- **onset / offset:** ConvStack → BiLSTM(768→384) → Linear(768→88)
+- **frame_stack:** ConvStack → Linear(768→88) — this is the *activation*, not the
+  frame head
+- **combined_stack:** cat(onset, offset, activation) [264] → BiLSTM(264→384) →
+  Linear(768→88) — **this** is the frame head
+- Every head emits **logits**; the runtime applies the sigmoid, so
+  `onset_threshold` / `frame_threshold` are probabilities.
+- The ConvStacks and the linear layers run in a ggml graph (time-chunked with a
+  3-frame halo, which is bit-identical and bounds the im2col working set); the
+  BiLSTM is computed by hand outside it, as `piano_transcription.cpp` does for
+  Kong's BiGRU. **ONNX LSTM gate order is `iofc`, not PyTorch's `ifgo`** — the
+  GGUF records the order and the loader refuses a file that disagrees.
+- ⚠ **The ONNX export's output names are shifted by one** (four `output_names`
+  for a five-output forward), so the tensor called `frame` is the activation and
+  the one called `velocity` is the frame head. The converter establishes the
+  mapping structurally, by finding the Concat of three graph outputs and
+  following it; it does not trust the names.
+- F32 GGUF 107 MB, Q8_0 32 MB, Q4_0 20 MB
+- `--piano -m onsets-and-frames-q4_0.gguf -f piano.wav`
 
 ### miotts
 

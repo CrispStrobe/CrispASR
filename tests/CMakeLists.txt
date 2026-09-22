@@ -5658,6 +5658,33 @@ catch_discover_tests(test-piano-transcription
         WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
 )
 
+# ─── test - onsets-and-frames — live integration tests
+add_executable(test-onsets-and-frames
+    test_onsets_and_frames_live.cpp
+)
+target_include_directories(test-onsets-and-frames PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/examples
+)
+target_link_libraries(test-onsets-and-frames PRIVATE
+    Catch2::Catch2WithMain
+    onsets-and-frames
+)
+catch_discover_tests(test-onsets-and-frames
+    TEST_SPEC "[onsets-and-frames]"
+    PROPERTIES
+        LABELS live
+        SKIP_RETURN_CODE 4
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+)
+
+# ─── oaf-parity-dump — the C++ half of tools/oaf_parity.py.
+# Not registered with CTest: it needs a model, a WAV and onnxruntime on the
+# other side of it. Built so the parity script cannot drift from the runtime.
+add_executable(oaf-parity-dump oaf_parity_dump.cpp)
+target_include_directories(oaf-parity-dump PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(oaf-parity-dump PRIVATE onsets-and-frames)
+
 # ─── test - mt3 — live integration tests (#250, multi-instrument)
 # Stage parity is the crispasr-diff mt3 harness's job; this covers the C ABI
 # contract, the decode-budget knob and the drum/instrument invariants.

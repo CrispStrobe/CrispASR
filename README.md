@@ -405,7 +405,12 @@ for the per-task flags and output formats.
 - **Multi-instrument transcription** (`--backend mt3`, alias
   `music-transcription`) — MT3's T5 encoder/decoder emits note events with
   per-instrument programs (F16 GGUF ≈ 96 MB).
-- All three take `--piano-format text|json|midi`; `midi` writes a Standard
+- **Onsets & Frames** (`--backend onsets-and-frames`) — Hawthorne et al.'s
+  piano transcriber (MIT), the best solo-piano model here per note: **69.1%
+  note F1 on MusicNet's piano pieces against Basic Pitch's 57.5%**. Q4_0 GGUF
+  ≈ 20 MB, Q8_0 ≈ 32 MB, F32 ≈ 107 MB. See
+  [docs/music-transcription/ONSETS_AND_FRAMES.md](docs/music-transcription/ONSETS_AND_FRAMES.md).
+- All four take `--piano-format text|json|midi`; `midi` writes a Standard
   MIDI File.
 - **Guitar tablature** (`--tab`) — per-frame fret-per-string grid via **TabCNN**
   (Wiggins & Kim, ISMIR 2019; CC BY 4.0 weights). The backend emits per-string
