@@ -22,6 +22,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <map>
 #include <string>
 #include <thread>
 #include <vector>
@@ -395,13 +396,40 @@ float* onsets_and_frames_mel(struct onsets_and_frames_ctx* ctx, const float* pcm
     return buf;
 }
 
+// ─── Per-layer stage capture (the diff harness) ─────────────────────────────
+//
+// O&F was the one model of the six with no per-layer parity path at all — what
+// it had (tests/oaf_parity_dump.cpp + tools/oaf_parity.py) compares a mel and
+// five heads, so a regression inside a ConvStack or a BiLSTM surfaces as "the
+// onset head moved" rather than as a layer. These taps are what localise it.
+//
+// Every captured tensor is marked with BOTH ggml_set_name and ggml_set_output:
+// without the latter gallocr reuses the memory and a later layer overwrites the
+// value (playbook §5.0/§6.6). Capture is opt-in — a null sink costs one branch
+// per chunk on the production path and constructs no extra graph nodes, which
+// matters because ggml executes every graph output (§6.8).
+
+struct oaf_stage_sink {
+    std::map<std::string, std::vector<float>> stages;
+    void put(const std::string& name, const float* p, size_t n) { stages[name].assign(p, p + n); }
+};
+
+// Per-chunk conv intermediates, in ggml's [F, T, C] element order — which is
+// exactly ONNX's [1, C, T, F] flattened, so no transposition is needed and only
+// the time axis has to be trimmed of its halo.
+struct oaf_chunk_taps {
+    std::vector<float> conv[3];
+    int64_t F[3] = {0, 0, 0}; // ne0 per conv output
+    int64_t C[3] = {0, 0, 0}; // channel count per conv output
+};
+
 // ─── ConvStack, in a ggml graph ─────────────────────────────────────────────
 
 // mel_chunk: T_chunk frames of n_mels floats each, frame-major (so ne0 is the
 // mel axis). Returns fc_out floats per frame, same ordering — element (t, f) at
 // t * fc_out + f.
 static bool oaf_conv_stack_chunk(onsets_and_frames_ctx* ctx, const oaf_conv_stack& cs, const float* mel_chunk,
-                                 int T_chunk, std::vector<float>& out) {
+                                 int T_chunk, std::vector<float>& out, oaf_chunk_taps* taps = nullptr) {
     auto& hp = ctx->hp;
     const int n_mels = (int)hp.n_mels;
 
@@ -428,6 +456,14 @@ static bool oaf_conv_stack_chunk(onsets_and_frames_ctx* ctx, const oaf_conv_stac
             // ONNX MaxPool kernel_shape (1, 2) is (time, freq); ggml's k0/s0
             // act on ne0, which is the frequency axis here.
             h = ggml_pool_2d(ctx0, h, GGML_OP_POOL_MAX, /*k0*/ 2, /*k1*/ 1, /*s0*/ 2, /*s1*/ 1, /*p0*/ 0, /*p1*/ 0);
+        }
+        if (taps) {
+            // conv<i> is the ONNX stage after ReLU (i == 0) or after ReLU then
+            // MaxPool (i >= 1) — the value names the reference dumper exports.
+            const char* nm[3] = {"conv0", "conv1", "conv2"};
+            ggml_set_name(h, nm[i]);
+            ggml_set_output(h);
+            ggml_build_forward_expand(gf, h);
         }
     }
     // h: [F = n_mels/4, T, C = 96, 1]. The reference flattens [B, T, C, F] with
@@ -464,6 +500,19 @@ static bool oaf_conv_stack_chunk(onsets_and_frames_ctx* ctx, const oaf_conv_stac
     out.resize((size_t)ggml_nelements(res));
     ggml_backend_tensor_get(res, out.data(), 0, out.size() * sizeof(float));
 
+    if (taps) {
+        const char* nm[3] = {"conv0", "conv1", "conv2"};
+        for (int i = 0; i < 3; i++) {
+            ggml_tensor* t = ggml_graph_get_tensor(gf, nm[i]);
+            if (!t)
+                continue;
+            taps->F[i] = t->ne[0];
+            taps->C[i] = t->ne[2];
+            taps->conv[i].resize((size_t)ggml_nelements(t));
+            ggml_backend_tensor_get(t, taps->conv[i].data(), 0, taps->conv[i].size() * sizeof(float));
+        }
+    }
+
     ggml_gallocr_free(alloc);
     ggml_free(ctx0);
     return true;
@@ -471,15 +520,21 @@ static bool oaf_conv_stack_chunk(onsets_and_frames_ctx* ctx, const oaf_conv_stac
 
 // mel: [T, n_mels] row-major. Returns [T, fc_out] row-major.
 static bool oaf_conv_stack(onsets_and_frames_ctx* ctx, const oaf_conv_stack& cs, const std::vector<float>& mel, int T,
-                           std::vector<float>& out) {
+                           std::vector<float>& out, oaf_stage_sink* sink = nullptr, const char* stage_prefix = "") {
     oaf_bench_stage _b("conv_stack");
     auto& hp = ctx->hp;
     const int n_mels = (int)hp.n_mels;
     const int fc_out = (int)hp.fc_out;
     out.assign((size_t)T * fc_out, 0.0f);
 
+    // Whole-sequence conv taps, assembled from the chunks the same way fc_out
+    // is: each chunk contributes only its non-halo interior.
+    std::vector<float> tap_all[3];
+    int64_t tap_F[3] = {0, 0, 0}, tap_C[3] = {0, 0, 0};
+
     std::vector<float> chunk_in;
     std::vector<float> chunk_out;
+    oaf_chunk_taps taps;
     for (int t0 = 0; t0 < T; t0 += OAF_CONV_CHUNK) {
         const int t1 = std::min(T, t0 + OAF_CONV_CHUNK);
         const int lo = std::max(0, t0 - OAF_CONV_HALO);
@@ -487,7 +542,7 @@ static bool oaf_conv_stack(onsets_and_frames_ctx* ctx, const oaf_conv_stack& cs,
         const int T_chunk = hi - lo;
         chunk_in.resize((size_t)T_chunk * n_mels);
         std::memcpy(chunk_in.data(), mel.data() + (size_t)lo * n_mels, (size_t)T_chunk * n_mels * sizeof(float));
-        if (!oaf_conv_stack_chunk(ctx, cs, chunk_in.data(), T_chunk, chunk_out))
+        if (!oaf_conv_stack_chunk(ctx, cs, chunk_in.data(), T_chunk, chunk_out, sink ? &taps : nullptr))
             return false;
         if ((int)chunk_out.size() != T_chunk * fc_out) {
             std::fprintf(stderr, "oaf: conv stack returned %zu floats, expected %d\n", chunk_out.size(),
@@ -496,6 +551,31 @@ static bool oaf_conv_stack(onsets_and_frames_ctx* ctx, const oaf_conv_stack& cs,
         }
         std::memcpy(out.data() + (size_t)t0 * fc_out, chunk_out.data() + (size_t)(t0 - lo) * fc_out,
                     (size_t)(t1 - t0) * fc_out * sizeof(float));
+        if (sink) {
+            for (int i = 0; i < 3; i++) {
+                if (taps.conv[i].empty())
+                    continue;
+                const int64_t F = taps.F[i], C = taps.C[i];
+                tap_F[i] = F;
+                tap_C[i] = C;
+                tap_all[i].resize((size_t)C * T * F);
+                for (int64_t c = 0; c < C; c++) {
+                    std::memcpy(tap_all[i].data() + ((size_t)c * T + t0) * F,
+                                taps.conv[i].data() + ((size_t)c * T_chunk + (t0 - lo)) * F,
+                                (size_t)(t1 - t0) * F * sizeof(float));
+                }
+            }
+        }
+    }
+    if (sink) {
+        for (int i = 0; i < 3; i++) {
+            if (tap_all[i].empty())
+                continue;
+            sink->put(std::string(stage_prefix) + "conv" + std::to_string(i), tap_all[i].data(), tap_all[i].size());
+        }
+        sink->put(std::string(stage_prefix) + "fc", out.data(), out.size());
+        (void)tap_C;
+        (void)tap_F;
     }
     return true;
 }
@@ -591,7 +671,7 @@ static void oaf_lstm_recurrence(const oaf_lstm_dir& d, const std::vector<float>&
 // x: [T, in] row-major. Returns [T, 2H] row-major, forward half first —
 // the order the ONNX graph's Transpose/Reshape pair produces.
 static bool oaf_bilstm(onsets_and_frames_ctx* ctx, const oaf_lstm& l, const std::vector<float>& x, int T,
-                       std::vector<float>& out) {
+                       std::vector<float>& out, oaf_stage_sink* sink = nullptr, const char* stage_name = "") {
     oaf_bench_stage _b("bilstm");
     const int H = (int)ctx->hp.lstm_hidden;
     const int in_size = l.input_size;
@@ -606,6 +686,8 @@ static bool oaf_bilstm(onsets_and_frames_ctx* ctx, const oaf_lstm& l, const std:
     if (!oaf_lstm_input_proj(ctx, l.rev, x.data(), T, in_size, gate_size, gates))
         return false;
     oaf_lstm_recurrence(l.rev, gates, T, H, /*reverse*/ true, out.data(), 2 * H, H);
+    if (sink)
+        sink->put(stage_name, out.data(), out.size());
     return true;
 }
 
@@ -613,7 +695,8 @@ static bool oaf_bilstm(onsets_and_frames_ctx* ctx, const oaf_lstm& l, const std:
 
 // x: [T, in] row-major. Returns [T, 88] LOGITS, row-major.
 static bool oaf_apply_head(onsets_and_frames_ctx* ctx, const oaf_head& hd, const std::vector<float>& x, int T,
-                           int in_size, std::vector<float>& out) {
+                           int in_size, std::vector<float>& out, oaf_stage_sink* sink = nullptr,
+                           const char* stage_name = "") {
     if (ctx->graph_meta.empty())
         ctx->graph_meta.resize(4u * 1024 * 1024);
     ggml_init_params ip = {ctx->graph_meta.size(), ctx->graph_meta.data(), true};
@@ -649,6 +732,8 @@ static bool oaf_apply_head(onsets_and_frames_ctx* ctx, const oaf_head& hd, const
     ggml_backend_tensor_get(res, out.data(), 0, out.size() * sizeof(float));
     ggml_gallocr_free(alloc);
     ggml_free(ctx0);
+    if (sink)
+        sink->put(stage_name, out.data(), out.size());
     return true;
 }
 
@@ -659,7 +744,8 @@ struct oaf_heads {
     int T = 0;
 };
 
-static bool oaf_forward(onsets_and_frames_ctx* ctx, const float* pcm, int n_samples, oaf_heads& out) {
+static bool oaf_forward(onsets_and_frames_ctx* ctx, const float* pcm, int n_samples, oaf_heads& out,
+                        oaf_stage_sink* sink = nullptr, const std::vector<float>* mel_override = nullptr) {
     auto& hp = ctx->hp;
     auto& w = ctx->weights;
     const int K = (int)hp.classes_num;
@@ -667,39 +753,47 @@ static bool oaf_forward(onsets_and_frames_ctx* ctx, const float* pcm, int n_samp
     const int H2 = 2 * (int)hp.lstm_hidden;
 
     int T = 0;
-    auto mel = oaf_log_mel(ctx, pcm, n_samples, T);
+    std::vector<float> mel;
+    if (mel_override) {
+        mel = *mel_override;
+        T = (int)(mel.size() / (size_t)hp.n_mels);
+    } else {
+        mel = oaf_log_mel(ctx, pcm, n_samples, T);
+    }
     if (T <= 0)
         return false;
     out.T = T;
+    if (sink)
+        sink->put("mel", mel.data(), mel.size());
 
     std::vector<float> cs_out, lstm_out;
 
     // onset
-    if (!oaf_conv_stack(ctx, w.onset_cs, mel, T, cs_out))
+    if (!oaf_conv_stack(ctx, w.onset_cs, mel, T, cs_out, sink, "onset_"))
         return false;
-    if (!oaf_bilstm(ctx, w.onset_lstm, cs_out, T, lstm_out))
+    if (!oaf_bilstm(ctx, w.onset_lstm, cs_out, T, lstm_out, sink, "onset_bilstm"))
         return false;
-    if (!oaf_apply_head(ctx, w.onset_head, lstm_out, T, H2, out.onset))
+    if (!oaf_apply_head(ctx, w.onset_head, lstm_out, T, H2, out.onset, sink, "onset_logits"))
         return false;
 
     // offset
-    if (!oaf_conv_stack(ctx, w.offset_cs, mel, T, cs_out))
+    if (!oaf_conv_stack(ctx, w.offset_cs, mel, T, cs_out, sink, "offset_"))
         return false;
-    if (!oaf_bilstm(ctx, w.offset_lstm, cs_out, T, lstm_out))
+    if (!oaf_bilstm(ctx, w.offset_lstm, cs_out, T, lstm_out, sink, "offset_bilstm"))
         return false;
-    if (!oaf_apply_head(ctx, w.offset_head, lstm_out, T, H2, out.offset))
+    if (!oaf_apply_head(ctx, w.offset_head, lstm_out, T, H2, out.offset, sink, "offset_logits"))
         return false;
 
     // activation (frame_stack — NOT the frame head, whatever the export calls it)
-    if (!oaf_conv_stack(ctx, w.activation_cs, mel, T, cs_out))
+    if (!oaf_conv_stack(ctx, w.activation_cs, mel, T, cs_out, sink, "activation_"))
         return false;
-    if (!oaf_apply_head(ctx, w.activation_head, cs_out, T, fc_out, out.activation))
+    if (!oaf_apply_head(ctx, w.activation_head, cs_out, T, fc_out, out.activation, sink, "activation_logits"))
         return false;
 
     // velocity
-    if (!oaf_conv_stack(ctx, w.velocity_cs, mel, T, cs_out))
+    if (!oaf_conv_stack(ctx, w.velocity_cs, mel, T, cs_out, sink, "velocity_"))
         return false;
-    if (!oaf_apply_head(ctx, w.velocity_head, cs_out, T, fc_out, out.velocity))
+    if (!oaf_apply_head(ctx, w.velocity_head, cs_out, T, fc_out, out.velocity, sink, "velocity_logits"))
         return false;
 
     // combined stack: cat(onset, offset, activation) — LOGITS, no sigmoid,
@@ -711,9 +805,11 @@ static bool oaf_forward(onsets_and_frames_ctx* ctx, const float* pcm, int n_samp
         std::memcpy(row + K, out.offset.data() + (size_t)t * K, (size_t)K * sizeof(float));
         std::memcpy(row + 2 * K, out.activation.data() + (size_t)t * K, (size_t)K * sizeof(float));
     }
-    if (!oaf_bilstm(ctx, w.frame_lstm, comb, T, lstm_out))
+    if (sink)
+        sink->put("combined_input", comb.data(), comb.size());
+    if (!oaf_bilstm(ctx, w.frame_lstm, comb, T, lstm_out, sink, "frame_bilstm"))
         return false;
-    if (!oaf_apply_head(ctx, w.frame_head, lstm_out, T, H2, out.frame))
+    if (!oaf_apply_head(ctx, w.frame_head, lstm_out, T, H2, out.frame, sink, "frame_logits"))
         return false;
 
     for (auto* v : {&out.onset, &out.offset, &out.activation, &out.frame, &out.velocity})
@@ -859,4 +955,148 @@ void onsets_and_frames_result_free(struct onsets_and_frames_result* result) {
     std::free(result->activation_output);
     std::free(result->velocity_output);
     std::memset(result, 0, sizeof(*result));
+}
+
+// ─── Diff harness ───────────────────────────────────────────────────────────
+//
+// Per-stage cosine parity against the ONNX reference, on the pattern
+// src/basic_pitch.cpp:824 established. Registered as
+// `crispasr-diff onsets-and-frames <model.gguf> <ref.gguf> <audio.wav>`.
+//
+// The reference GGUF is produced by tools/reference_backends/onsets_and_frames.py,
+// which runs the ONNX graph under onnxruntime with the intermediate value names
+// promoted to graph outputs. That script is fed the mel THIS runtime computed
+// (oaf-parity-dump writes it), so downstream stages isolate the model from the
+// front end exactly as tools/oaf_parity.py:5-11 does — and the `mel` stage is
+// still compared first, so a front-end difference surfaces as itself rather
+// than silently shifting every cosine after it.
+//
+// COSINE IS SCALE-BLIND. The |mine| / |ref| RMS columns are printed for every
+// stage and are the thing to read when a stage "passes" but the model is wrong
+// by a uniform factor (playbook §5.0, HARD RULE 2b).
+
+static double oaf_cosine(const float* a, const float* b, int64_t n) {
+    double num = 0.0, na = 0.0, nb = 0.0;
+    for (int64_t i = 0; i < n; i++) {
+        num += (double)a[i] * (double)b[i];
+        na += (double)a[i] * (double)a[i];
+        nb += (double)b[i] * (double)b[i];
+    }
+    if (na <= 0.0 || nb <= 0.0)
+        return 0.0;
+    return num / (std::sqrt(na) * std::sqrt(nb));
+}
+
+static double oaf_rms(const float* a, int64_t n) {
+    double s = 0.0;
+    for (int64_t i = 0; i < n; i++)
+        s += (double)a[i] * (double)a[i];
+    return n > 0 ? std::sqrt(s / (double)n) : 0.0;
+}
+
+static bool oaf_ref_get(const core_gguf::WeightLoad& rw, const std::string& name, std::vector<float>& out) {
+    auto it = rw.tensors.find(name);
+    if (it == rw.tensors.end())
+        return false;
+    const int64_t n = ggml_nelements(it->second);
+    out.resize((size_t)n);
+    ggml_backend_tensor_get(it->second, out.data(), 0, (size_t)n * sizeof(float));
+    return true;
+}
+
+int onsets_and_frames_diff(const char* model_gguf, const char* ref_gguf, const float* pcm_16k, int n_samples,
+                           int verbosity) {
+    onsets_and_frames_params p = onsets_and_frames_default_params();
+    p.verbosity = 0;
+    p.n_threads = 1; // determinism first; this harness is not a timing run
+    onsets_and_frames_ctx* ctx = onsets_and_frames_init_from_file(model_gguf, p);
+    if (!ctx) {
+        std::fprintf(stderr, "onsets_and_frames_diff: failed to load model %s\n", model_gguf);
+        return 2;
+    }
+    core_gguf::WeightLoad rw;
+    if (!core_gguf::load_weights(ref_gguf, ctx->backend, "oaf_ref", rw)) {
+        std::fprintf(stderr, "onsets_and_frames_diff: failed to load reference %s\n", ref_gguf);
+        onsets_and_frames_free(ctx);
+        return 2;
+    }
+
+    // The reference was dumped on a mel this same runtime produced, so replay
+    // that mel rather than recomputing it — then the model stages compare the
+    // model alone. The `mel` stage below still checks our recomputation of it.
+    std::vector<float> ref_mel;
+    const bool have_ref_mel = oaf_ref_get(rw, "mel", ref_mel);
+
+    oaf_stage_sink sink;
+    oaf_heads heads;
+    if (!oaf_forward(ctx, pcm_16k, n_samples, heads, &sink, have_ref_mel ? &ref_mel : nullptr)) {
+        std::fprintf(stderr, "onsets_and_frames_diff: forward pass failed\n");
+        core_gguf::free_weights(rw);
+        onsets_and_frames_free(ctx);
+        return 2;
+    }
+
+    // Our own front end, compared against the reference's copy of it. With the
+    // replay above this is the ONLY place a mel difference can show, which is
+    // the point: it cannot hide inside a downstream cosine.
+    if (have_ref_mel) {
+        int T_mine = 0;
+        auto mine_mel = oaf_log_mel(ctx, pcm_16k, n_samples, T_mine);
+        sink.stages["mel"] = mine_mel;
+    }
+
+    // The global gate. examples/cli/crispasr_diff.h:101 uses the same value.
+    const double COS_THRESHOLD = 0.999;
+    int n_fail = 0, n_cmp = 0;
+
+    static const char* kStages[] = {
+        "mel",
+        "onset_conv0",    "onset_conv1",    "onset_conv2",    "onset_fc",
+        "offset_conv0",   "offset_conv1",   "offset_conv2",   "offset_fc",
+        "activation_conv0", "activation_conv1", "activation_conv2", "activation_fc",
+        "velocity_conv0", "velocity_conv1", "velocity_conv2", "velocity_fc",
+        "onset_bilstm",   "onset_logits",
+        "offset_bilstm",  "offset_logits",
+        "activation_logits",
+        "velocity_logits",
+        "combined_input", "frame_bilstm",   "frame_logits",
+    };
+
+    std::fprintf(stderr, "onsets-and-frames diff (T=%d, n_samples=%d, mel %s):\n", heads.T, n_samples,
+                 have_ref_mel ? "replayed from reference" : "recomputed");
+    for (const char* stage : kStages) {
+        auto it = sink.stages.find(stage);
+        std::vector<float> ref;
+        if (it == sink.stages.end() || !oaf_ref_get(rw, stage, ref)) {
+            if (verbosity >= 2)
+                std::fprintf(stderr, "  %-20s SKIP (absent from %s)\n", stage,
+                             it == sink.stages.end() ? "runtime" : "reference");
+            continue;
+        }
+        const std::vector<float>& mine = it->second;
+        n_cmp++;
+        const int64_t n = (int64_t)std::min(mine.size(), ref.size());
+        const double cos = oaf_cosine(mine.data(), ref.data(), n);
+        double mad = 0.0;
+        for (int64_t i = 0; i < n; i++)
+            mad = std::max(mad, std::fabs((double)mine[i] - (double)ref[i]));
+        const bool ok = cos >= COS_THRESHOLD && mine.size() == ref.size();
+        if (!ok)
+            n_fail++;
+        if (verbosity >= 1 || !ok) {
+            std::fprintf(stderr, "  %-20s %s cos=%.7f max_abs=%.3e  |mine|=%.6g |ref|=%.6g  (n=%zu/%zu)\n", stage,
+                         ok ? "PASS" : "FAIL", cos, mad, oaf_rms(mine.data(), n), oaf_rms(ref.data(), n), mine.size(),
+                         ref.size());
+        }
+    }
+
+    core_gguf::free_weights(rw);
+    onsets_and_frames_free(ctx);
+    std::fprintf(stderr, "onsets-and-frames diff: %s (%d of %d stages failing)\n", n_fail == 0 ? "PASS" : "FAIL",
+                 n_fail, n_cmp);
+    if (n_cmp == 0) {
+        std::fprintf(stderr, "onsets-and-frames diff: no stage was compared — the reference is empty or misnamed\n");
+        return 2;
+    }
+    return n_fail == 0 ? 0 : 1;
 }

@@ -42,6 +42,7 @@
 #include "btc_chords.h"
 #include "tabcnn.h"
 #include "basic_pitch.h"
+#include "onsets_and_frames.h"
 #include "mt3.h"
 #include "piano_transcription.h"
 #include "beatrice_phone.h"
@@ -1784,6 +1785,25 @@ int main(int argc, char** argv) {
             return 2;
         }
         return basic_pitch_diff(model_path.c_str(), ref_path.c_str(), pcm.data(), (int)pcm.size(), /*verbosity=*/2);
+    }
+    if (backend_name == "onsets-and-frames" || backend_name == "oaf") {
+        // model_path = onsets-and-frames GGUF, ref_path = ref.gguf from
+        // tools/reference_backends/onsets_and_frames.py.
+        //
+        // O&F had NO per-layer parity path at all before this arm — what it had
+        // (tests/oaf_parity_dump.cpp + tools/oaf_parity.py) is a mel and five
+        // heads, so a regression inside a ConvStack or a BiLSTM read as "the
+        // onset head moved". The reference carries the mel it was run on, which
+        // the runtime replays, so downstream stages isolate the model from the
+        // front end; the `mel` stage is compared first regardless.
+        std::vector<float> pcm;
+        std::vector<std::vector<float>> stereo_unused;
+        if (!read_audio_data(audio_path, pcm, stereo_unused, /*stereo=*/false, /*target_rate=*/16000)) {
+            fprintf(stderr, "crispasr-diff: failed to read audio '%s'\n", audio_path.c_str());
+            return 2;
+        }
+        return onsets_and_frames_diff(model_path.c_str(), ref_path.c_str(), pcm.data(), (int)pcm.size(),
+                                      /*verbosity=*/2);
     }
     if (backend_name == "mt3") {
         // model_path = mt3 GGUF, ref_path = ref.gguf from

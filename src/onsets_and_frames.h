@@ -109,6 +109,13 @@ uint32_t onsets_and_frames_sample_rate(const struct onsets_and_frames_ctx* ctx);
 // Returns a malloc'd buffer the caller frees with free(); *out_frames receives T.
 float* onsets_and_frames_mel(struct onsets_and_frames_ctx* ctx, const float* pcm, int n_samples, int* out_frames);
 
+// Per-stage cosine parity against a reference GGUF from
+// tools/reference_backends/onsets_and_frames.py. Returns 0 on PASS, 1 if any
+// stage falls below cos 0.999, 2 on a harness error. See the implementation's
+// comment block in src/onsets_and_frames.cpp for the procedure.
+int onsets_and_frames_diff(const char* model_gguf, const char* ref_gguf, const float* pcm_16k, int n_samples,
+                           int verbosity);
+
 #ifdef __cplusplus
 }
 #endif
