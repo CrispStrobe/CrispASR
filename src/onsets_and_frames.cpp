@@ -75,10 +75,10 @@ static constexpr int OAF_LSTM_GRAPH_CHUNK = 512;
 // in whatever type the GGUF holds (q4_0 included); R is used by the per-step
 // recurrence in plain C++ and is dequantised once at load.
 struct oaf_lstm_dir {
-    ggml_tensor* W = nullptr; // [in, 4H] in ggml ne order
+    ggml_tensor* W = nullptr;   // [in, 4H] in ggml ne order
     ggml_tensor* R_t = nullptr; // the same recurrence matrix as a ggml tensor, [H, 4H] in ne order
-    std::vector<float> R;     // [4H, H] row-major
-    std::vector<float> b;     // [4H]
+    std::vector<float> R;       // [4H, H] row-major
+    std::vector<float> b;       // [4H]
 };
 
 struct oaf_lstm {
@@ -804,8 +804,7 @@ static bool oaf_lstm_recurrence_graph(onsets_and_frames_ctx* ctx, const oaf_lstm
             ggml_tensor* ct = ggml_tanh(c0, ggml_view_1d(c0, sum, H, (size_t)OAF_GATE_C * H * sizeof(float)));
             cs = ggml_add(c0, ggml_mul(c0, ft, cs), ggml_mul(c0, it, ct));
             h = ggml_mul(c0, ot, ggml_tanh(c0, cs));
-            ggml_build_forward_expand(
-                gf, ggml_cpy(c0, h, ggml_view_1d(c0, h_out, H, (size_t)k * H * sizeof(float))));
+            ggml_build_forward_expand(gf, ggml_cpy(c0, h, ggml_view_1d(c0, h_out, H, (size_t)k * H * sizeof(float))));
         }
         // The final (h, c) are read back to seed the next chunk, so they must
         // survive allocation too.
@@ -1251,16 +1250,13 @@ int onsets_and_frames_diff(const char* model_gguf, const char* ref_gguf, const f
     int n_fail = 0, n_cmp = 0;
 
     static const char* kStages[] = {
-        "mel",
-        "onset_conv0",    "onset_conv1",    "onset_conv2",    "onset_fc",
-        "offset_conv0",   "offset_conv1",   "offset_conv2",   "offset_fc",
-        "activation_conv0", "activation_conv1", "activation_conv2", "activation_fc",
-        "velocity_conv0", "velocity_conv1", "velocity_conv2", "velocity_fc",
-        "onset_bilstm",   "onset_logits",
-        "offset_bilstm",  "offset_logits",
-        "activation_logits",
-        "velocity_logits",
-        "combined_input", "frame_bilstm",   "frame_logits",
+        "mel",           "onset_conv0",       "onset_conv1",      "onset_conv2",
+        "onset_fc",      "offset_conv0",      "offset_conv1",     "offset_conv2",
+        "offset_fc",     "activation_conv0",  "activation_conv1", "activation_conv2",
+        "activation_fc", "velocity_conv0",    "velocity_conv1",   "velocity_conv2",
+        "velocity_fc",   "onset_bilstm",      "onset_logits",     "offset_bilstm",
+        "offset_logits", "activation_logits", "velocity_logits",  "combined_input",
+        "frame_bilstm",  "frame_logits",
     };
 
     std::fprintf(stderr, "onsets-and-frames diff (T=%d, n_samples=%d, mel %s):\n", heads.T, n_samples,
