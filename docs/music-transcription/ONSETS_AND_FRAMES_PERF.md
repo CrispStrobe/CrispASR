@@ -388,6 +388,28 @@ Throughput on the same run is steady at **0.431–0.449 CPU-s per audio-second**
 across all ten pieces, which corroborates the 60 s clip figure (0.435) on real
 full-length material rather than a hand-cut excerpt.
 
+**Aggregate over all ten pieces, f32 and q8_0, both with the graph BiLSTM:**
+
+| arm | P | R | **F1** | F1+off | **solo piano** | rest | xRT | cpu-s/s |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `f32graph` | 59.7% | 42.4% | **49.6%** | 13.8% | **69.0%** | 40.5% | 0.756 | 0.442 |
+| `q8graph` | 59.7% | 42.4% | **49.6%** | 13.9% | 68.9% | 40.4% | 0.739 | 0.425 |
+
+**49.6% overall and 69.0% solo piano is exactly the figure this port is
+documented at.** The graph BiLSTM reproduces it to the last printed digit at
+f32, and q8_0 lands on the same overall F1 with solo piano 0.1 point lower —
+which is q8_0 quantisation, not the recurrence: the per-piece q8 deltas
+(41.1 vs 41.4, 27.2 vs 27.1, 52.0 vs 51.9, 43.9 vs 44.0 …) scatter in *both*
+directions around the f32 values, which is what rounding noise looks like and
+not what a systematic error looks like.
+
+One incidental result worth flagging because it cuts against a finding elsewhere
+in the playbook: **q8_0 is slightly FASTER than f32 here**, 0.425 vs 0.442
+CPU-s per audio-second, where §4 reports hFT measuring q8_0 at 29% *more* CPU
+than f32. Small, one box, one model — but it means §4's "quantise for size, and
+measure" is doing real work as advice, and this model should not be assumed to
+follow hFT's result.
+
 **The default (scalar) arm's F1 needs no re-measurement**, and this is worth
 stating rather than leaving implicit: its decoded output is unchanged by
 construction — identical note counts on both clips, 26/26 stages at cos
@@ -407,7 +429,12 @@ partway to give the machine to the arm whose number was actually unknown.
    likely a kernel or ISA question than a graph-shape one. `SRC_ISA_GAP.md` is
    the other half of it.
 2. **`-t 4` costs 25% more CPU than `-t 2` for no wall gain.** Unexplained here.
-3. **`src/btc_chords.cpp`'s allocator hoist is not validated at runtime.**
+3. **q8_0 measured slightly FASTER than f32 here (0.425 vs 0.442 CPU-s per
+   audio-second)**, where playbook §4 reports hFT measuring q8_0 at 29% more CPU
+   than f32. One box, one model, a small margin — but it should not be explained
+   away, and it means this model's quantisation cost has to be measured rather
+   than inherited from hFT's result.
+4. **`src/btc_chords.cpp`'s allocator hoist is not validated at runtime.**
    Neither a btc-chords GGUF, nor the BTC PyTorch checkpoint, nor the
    BTC-ISMIR19 tree exists on this box, so `tools/btc_torch_parity.py` and
    `crispasr-diff btc` could not be run. The 12 btc unit tests pass but never
@@ -416,5 +443,5 @@ partway to give the machine to the arm whose number was actually unknown.
    inspection — `btc_forward_block` has exactly five `ggml_set_input` tensors and
    re-sets all five after every alloc — but it wants a parity run from someone
    with the checkpoint.
-4. **None of these numbers was taken on a clean machine.** They are within-box
+5. **None of these numbers was taken on a clean machine.** They are within-box
    A/Bs and should be reproduced on a CI runner before being quoted anywhere.
