@@ -111,6 +111,25 @@ struct onsets_and_frames_ctx {
     std::vector<float> mel_fb; // [n_mels * n_freqs], MelsFreqs layout
     std::vector<float> hann;   // [n_fft]
     std::vector<uint8_t> graph_meta;
+
+    // One allocator per graph shape, kept for the life of the context, on the
+    // src/hft_transformer.cpp:108-115 pattern — whose own comment names THIS
+    // file's fresh-allocator-per-chunk as the bug it exists to avoid.
+    //
+    // Before this, ggml_gallocr_new/_free ran eight-plus times per forward: once
+    // per conv-stack chunk (inside the per-chunk loop), twice per BiLSTM
+    // direction, and once per head. That is the #132 pattern documented at
+    // src/crispasr.cpp:197-203 — per-call disposable allocators fragmenting
+    // memory and costing 2-5x. A gallocr keeps its buffer when the next graph
+    // fits, so reuse costs nothing and the arena grows monotonically.
+    //
+    // gallocr, NOT a scheduler, and the cgraph is rebuilt every call rather
+    // than cached: caching a cgraph across calls on a shared sched leaves the
+    // previous allocation's buffer/data on the cached tensors and the second
+    // call onward reads stale memory (core/step_graph_cache.h:66-70, #208).
+    ggml_gallocr_t alloc_conv = nullptr; // conv-stack chunk
+    ggml_gallocr_t alloc_proj = nullptr; // LSTM input projection
+    ggml_gallocr_t alloc_head = nullptr; // output head
 };
 
 // ─── Bench instrumentation (docs/contributing.md §1) ────────────────────────
@@ -333,6 +352,12 @@ struct onsets_and_frames_ctx* onsets_and_frames_init_from_file(const char* path,
 void onsets_and_frames_free(struct onsets_and_frames_ctx* ctx) {
     if (!ctx)
         return;
+    if (ctx->alloc_conv)
+        ggml_gallocr_free(ctx->alloc_conv);
+    if (ctx->alloc_proj)
+        ggml_gallocr_free(ctx->alloc_proj);
+    if (ctx->alloc_head)
+        ggml_gallocr_free(ctx->alloc_head);
     if (ctx->w_buf)
         core_gguf::release_weight_buffer(ctx->w_buf);
     if (ctx->w_ctx)
@@ -478,21 +503,22 @@ static bool oaf_conv_stack_chunk(onsets_and_frames_ctx* ctx, const oaf_conv_stac
     ggml_set_output(h);
     ggml_build_forward_expand(gf, h);
 
-    ggml_gallocr_t alloc = ggml_gallocr_new(ggml_backend_get_default_buffer_type(ctx->backend));
-    if (!alloc || !ggml_gallocr_alloc_graph(alloc, gf)) {
+    if (!ctx->alloc_conv)
+        ctx->alloc_conv = ggml_gallocr_new(ggml_backend_get_default_buffer_type(ctx->backend));
+    if (!ctx->alloc_conv || !ggml_gallocr_alloc_graph(ctx->alloc_conv, gf)) {
         std::fprintf(stderr, "oaf: conv-stack graph allocation failed (T=%d)\n", T_chunk);
-        if (alloc)
-            ggml_gallocr_free(alloc);
         ggml_free(ctx0);
         return false;
     }
+    // Re-set every input on every compute: gallocr may hand an input's slot to
+    // a later intermediate, and the symptom is chunk 0 exact and chunk 1 onward
+    // diverged (playbook §6.6). This assignment is that re-set.
     ggml_tensor* in = ggml_graph_get_tensor(gf, "mel");
     ggml_backend_tensor_set(in, mel_chunk, 0, (size_t)n_mels * T_chunk * sizeof(float));
 
     core_cpu_backend::set_n_threads(ctx->backend, oaf_nthreads(ctx));
     if (ggml_backend_graph_compute(ctx->backend, gf) != GGML_STATUS_SUCCESS) {
         std::fprintf(stderr, "oaf: conv-stack graph compute failed\n");
-        ggml_gallocr_free(alloc);
         ggml_free(ctx0);
         return false;
     }
@@ -513,7 +539,6 @@ static bool oaf_conv_stack_chunk(onsets_and_frames_ctx* ctx, const oaf_conv_stac
         }
     }
 
-    ggml_gallocr_free(alloc);
     ggml_free(ctx0);
     return true;
 }
@@ -602,11 +627,10 @@ static bool oaf_lstm_input_proj(onsets_and_frames_ctx* ctx, const oaf_lstm_dir& 
     ggml_set_output(g);
     ggml_build_forward_expand(gf, g);
 
-    ggml_gallocr_t alloc = ggml_gallocr_new(ggml_backend_get_default_buffer_type(ctx->backend));
-    if (!alloc || !ggml_gallocr_alloc_graph(alloc, gf)) {
+    if (!ctx->alloc_proj)
+        ctx->alloc_proj = ggml_gallocr_new(ggml_backend_get_default_buffer_type(ctx->backend));
+    if (!ctx->alloc_proj || !ggml_gallocr_alloc_graph(ctx->alloc_proj, gf)) {
         std::fprintf(stderr, "oaf: LSTM input-projection allocation failed\n");
-        if (alloc)
-            ggml_gallocr_free(alloc);
         ggml_free(ctx0);
         return false;
     }
@@ -614,13 +638,11 @@ static bool oaf_lstm_input_proj(onsets_and_frames_ctx* ctx, const oaf_lstm_dir& 
     core_cpu_backend::set_n_threads(ctx->backend, oaf_nthreads(ctx));
     if (ggml_backend_graph_compute(ctx->backend, gf) != GGML_STATUS_SUCCESS) {
         std::fprintf(stderr, "oaf: LSTM input-projection compute failed\n");
-        ggml_gallocr_free(alloc);
         ggml_free(ctx0);
         return false;
     }
     out.resize((size_t)T * gate_size);
     ggml_backend_tensor_get(ggml_graph_get_tensor(gf, "g"), out.data(), 0, out.size() * sizeof(float));
-    ggml_gallocr_free(alloc);
     ggml_free(ctx0);
 
     // Fold in the (already Wb + Rb) bias here rather than as a graph node: it
@@ -713,24 +735,21 @@ static bool oaf_apply_head(onsets_and_frames_ctx* ctx, const oaf_head& hd, const
     ggml_set_output(y);
     ggml_build_forward_expand(gf, y);
 
-    ggml_gallocr_t alloc = ggml_gallocr_new(ggml_backend_get_default_buffer_type(ctx->backend));
-    if (!alloc || !ggml_gallocr_alloc_graph(alloc, gf)) {
-        if (alloc)
-            ggml_gallocr_free(alloc);
+    if (!ctx->alloc_head)
+        ctx->alloc_head = ggml_gallocr_new(ggml_backend_get_default_buffer_type(ctx->backend));
+    if (!ctx->alloc_head || !ggml_gallocr_alloc_graph(ctx->alloc_head, gf)) {
         ggml_free(ctx0);
         return false;
     }
     ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "x"), x.data(), 0, (size_t)in_size * T * sizeof(float));
     core_cpu_backend::set_n_threads(ctx->backend, oaf_nthreads(ctx));
     if (ggml_backend_graph_compute(ctx->backend, gf) != GGML_STATUS_SUCCESS) {
-        ggml_gallocr_free(alloc);
         ggml_free(ctx0);
         return false;
     }
     ggml_tensor* res = ggml_graph_get_tensor(gf, "y");
     out.resize((size_t)ggml_nelements(res));
     ggml_backend_tensor_get(res, out.data(), 0, out.size() * sizeof(float));
-    ggml_gallocr_free(alloc);
     ggml_free(ctx0);
     if (sink)
         sink->put(stage_name, out.data(), out.size());
