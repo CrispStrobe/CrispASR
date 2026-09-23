@@ -503,8 +503,16 @@ the x86 CPU — GitHub's pool is heterogeneous and this run drew a third one.**
 | O&F q8_0 vs f32 | 2.84 vs 2.90 — **0.98×** | 3.91 vs 4.44 — 0.88× |
 
 Guards: `x86: q8_0 correctly declined and fell back to the mmap path`;
-`arm64: q8_0 repacked, as expected`; `pitch sequence: IDENTICAL` on both. The
-arm64 figures reproduce the previous run to within 0.4%.
+`arm64: q8_0 repacked, as expected`; `pitch sequence: IDENTICAL` on both.
+
+**Reproducibility.** These are not one-shot numbers. Run 35822849587, a fresh
+dispatch that happened to draw the same EPYC 9V74, gives f32 25.76, q8_0
+generic 21.72, q4_0 generic 23.60, **q4_0 + repack 19.08** — every figure
+within **1.4%** of the run above, and every ratio identical to two decimals
+(0.84 / 0.92 / 0.74 / 0.98). The arm64 figures likewise reproduce to 0.4%
+across two runs. A clean runner plus interleaved, one-process-per-arm
+measurement gives a genuinely stable A/B, which is exactly what the VPS could
+not.
 
 **And this settles the VNNI question for CPU_REPACK on x86.** The EPYC 9V74
 has `avx512_vnni = 1`. The repacked path's lead there is **1.24×**, *smaller*
