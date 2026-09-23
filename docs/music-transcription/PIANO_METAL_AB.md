@@ -170,3 +170,58 @@ medians of three after a discarded cold run, every arm in its own process.
      piano-metal-ab-{hft,oaf} on the most recent manual dispatch. -->
 
 ---
+
+## 5. What could not be measured, and what it would take
+
+| question | status | what it needs |
+| --- | --- | --- |
+| Metal throughput for hFT | **unanswered** | a GPU with simdgroup matmul. Not available on any hosted GitHub macOS image (§2). A self-hosted Apple Silicon runner, or a Mac. |
+| Metal throughput for O&F | **unanswered** | as above. Note the prior is weaker here anyway: ~46% conv, ~29% LSTM, and the LSTM is a host-side sequential recurrence a GPU cannot help with, so a device↔host copy per chunk is added against a partial win. |
+| Metal *numerical* parity (fp32-vs-fp16 per op) | **unanswered** | the same. The harness for it is written and gated — per-head cosine at 0.999 against the CPU path, non-finite values a hard failure, plus a note-level pitch-sequence comparison — it simply has never had a GPU to run against. |
+| whether q8_0-on-Metal hits the Chatterbox CFM trap | **unanswered, but the prior is "no"** | `docs/quantize.md` records that Metal's q8 **mat-vec** kernel requantises activations and corrupts the CFM. hFT flattens its position-wise GEMMs into one many-row `mul_mat` (`8f76e054`) and O&F's convs go through `im2col`+`mul_mat`, so both are matrix-**matrix**. That is a reason to expect safety, not evidence of it; the q8_0 arm is compared like every other one when a GPU exists to run it. |
+| hFT CPU-vs-ONNX parity, re-confirmed on this binary | **not completed here** | `tools/hft_parity.py` imports `torch` and `torchaudio` solely to resample the input to canonical 16 kHz mono. On this VPS, under 6 GB of 7 GB used and a load average of 14–28, `import torch` did not complete in 240 s. A shim that skips the resample (the clip is already canonical) is at `/mnt/storage/tmp-metal-ab/hft_parity_notorch.py`, untracked, and was still running when this was written. O&F's 26-stage result in §3 covers the same code path in `core/gguf_loader` and `core/mel`. |
+
+**The honest summary of the Metal question: it is open.** Nothing here shows
+Metal helping, and nothing here shows it failing to help. What is settled is
+that the port can now *reach* a GPU, that it degrades rather than aborts on one
+that cannot serve it, and that the measurement harness exists and is gated.
+
+---
+
+## 6. For the CrispTuner settings copy
+
+The string in question is `transcriptionModelSpeedUnmeasured` in
+`lib/l10n/app_en.arb` of `flutter_tuner`:
+
+> "How fast this model runs on a phone, tablet or Mac has not been measured. It
+> may not keep up with live playing."
+
+That is still the correct thing to say, and this work does not license removing
+it. What it can be narrowed by is in §4: the Apple Silicon **CPU** figures are
+real measurements on Apple Silicon, not VPS extrapolations, and they are a lower
+bound because GitHub's macOS runner is a virtualised 3-vCPU slice rather than a
+whole laptop or phone SoC. Any GPU claim would need §5's missing runner first.
+
+---
+
+## 7. Reproducing
+
+```bash
+# the A/B, on demand (no push trigger, deliberately)
+gh workflow run piano-metal-ab.yml --ref main
+
+# one arm locally, either backend, from one binary
+CRISPASR_PARITY_USE_GPU=1 build/bin/hft-parity-dump model.gguf clip.wav out 4   # GPU
+CRISPASR_HFT_NO_GPU=1     build/bin/hft-parity-dump model.gguf clip.wav out 4   # CPU
+CRISPASR_OAF_NO_GPU=1     build/bin/oaf-parity-dump model.gguf clip.wav out 4
+
+# the ONNX anchor of §3
+build/bin/oaf-parity-dump oaf-f32.gguf clip.wav ref 1
+MKL_NUM_THREADS=1 python3 tools/reference_backends/onsets_and_frames.py \
+    --onnx onsets_and_frames.onnx --mel ref.mel.f32 --output ref.gguf
+build/bin/crispasr-diff onsets-and-frames oaf-f32.gguf ref.gguf clip.wav
+```
+
+`MKL_NUM_THREADS=1` is mandatory for any parity or timing run of a mel front-end
+model here — CrispASR issue #453, "core_mel: threaded MKL silently multiplies
+the upper mel bins by the thread count".
