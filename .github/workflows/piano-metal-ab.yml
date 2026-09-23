@@ -177,6 +177,7 @@ jobs:
       # on whichever one is last.
       - name: A/B — CPU vs Metal, every arm in its own process
         run: |
+          set -o pipefail   # tee would otherwise swallow a python failure and the step would go green on no data
           python3 - <<'PY' | tee ab-raw.txt
           import json, os, pathlib, statistics, subprocess, sys
 
@@ -187,7 +188,6 @@ jobs:
           quants = [q for q in os.environ["QUANTS"].split() if pathlib.Path(f"m/{q}.gguf").exists()]
           clips  = [("short", "clip-short.wav"), ("long", "clip-long.wav")]
 
-          arms = [(q, be, cl) for q in quants for be in ("cpu", "metal") for cl in ("short", "long")]
           res  = {}
 
           def run(q, be, clip, tag):
@@ -226,6 +226,37 @@ jobs:
               meta["_backend_line"] = line
               return meta
 
+          # PREFLIGHT, before spending 48 runs on it: can this runner's GPU
+          # actually execute the model at all? GitHub's hosted macos-14 exposes
+          # an "Apple Paravirtual device" (MTLGPUFamilyApple5) with
+          # `simdgroup matrix mul. = false`, so ggml-metal supports NO MUL_MAT
+          # there and the runtime now declines the GPU and falls back rather
+          # than aborting. That is a property of the runner, not of the port,
+          # and it must be reported as such -- not as a failure, and above all
+          # not silently averaged into a "Metal is the same speed as CPU".
+          metal_ok, metal_why = True, ""
+          probe_q = quants[-1]     # the smallest file, so the probe is cheap
+          try:
+              run(probe_q, "metal", "short", "preflight")
+          except SystemExit as e:
+              metal_ok, metal_why = False, str(e)
+          blob = open("out/preflight.stderr").read() if pathlib.Path("out/preflight.stderr").exists() else ""
+          caps = [l for l in blob.splitlines()
+                  if "simdgroup" in l or "GPU name" in l or "GPU family" in l or "cannot MUL_MAT" in l]
+          print("=== Metal preflight ===")
+          for l in caps: print("  " + l)
+          print(f"  usable for this model: {metal_ok}")
+          if not metal_why and not metal_ok: metal_why = "preflight declined"
+          if not metal_ok:
+              print(f"  reason: {metal_why}")
+              print("::warning::this runner's GPU cannot run the model -- CPU arms only. "
+                    "The Metal question is UNANSWERED here, not answered negatively.")
+          open("metal-usable.txt", "w").write(f"{int(metal_ok)}\n{metal_why}\n" + "\n".join(caps) + "\n")
+          print()
+
+          backends = ("cpu", "metal") if metal_ok else ("cpu",)
+          arms = [(q, be, cl) for q in quants for be in backends for cl in ("short", "long")]
+
           for rep in range(4):
               order = arms[rep % len(arms):] + arms[:rep % len(arms)]
               for q, be, cl in order:
@@ -237,16 +268,25 @@ jobs:
                   if rep:  # rep 0 is cold
                       res.setdefault(tag, []).append(m)
 
-          json.dump({k: [{kk: vv for kk, vv in m.items() if not kk.startswith("_")} for m in v]
-                     for k, v in res.items()}, open("ab.json", "w"), indent=1)
+          json.dump({"_metal_usable": metal_ok, "_metal_why": metal_why,
+                     "_arms": {k: [{kk: vv for kk, vv in m.items() if not kk.startswith("_")} for m in v]
+                               for k, v in res.items()}}, open("ab.json", "w"), indent=1)
           print("\nwrote ab.json")
           PY
 
       - name: The table
         run: |
+          set -o pipefail
           python3 - <<'PY' | tee ab-table.txt
           import json, os, statistics
-          d = json.load(open("ab.json"))
+          blob = json.load(open("ab.json"))
+          d = blob["_arms"]
+          if not blob["_metal_usable"]:
+              print("!! METAL NOT MEASURABLE ON THIS RUNNER -- CPU arms only.")
+              print(f"!! {blob['_metal_why']}")
+              print("!! The CPU numbers below still stand on their own: they are Apple")
+              print("!! Silicon CPU figures, which is half the question this run exists for.")
+              print()
           med = lambda tag, f: statistics.median([m[f] for m in d[tag]]) if tag in d else None
           MODEL = "${{ matrix.model }}"
           quants = [q for q in os.environ["QUANTS"].split() if f"{q}-cpu-short" in d]
@@ -313,8 +353,14 @@ jobs:
       # NaN is a hard failure.
       - name: Parity — Metal against the CPU path, per head
         run: |
+          set -o pipefail
           python3 - <<'PY' | tee parity.txt
-          import numpy as np, os, pathlib, sys
+          import json, numpy as np, os, pathlib, sys
+          if not json.load(open("ab.json"))["_metal_usable"]:
+              print("no Metal arm on this runner -- there is nothing to compare the CPU path against.")
+              print("CPU-vs-ONNX parity is unchanged and is covered by tools/hft_parity.py and")
+              print("crispasr-diff onsets-and-frames; this step asserts the GPU delta only.")
+              raise SystemExit(0)
           HEADS = "${{ matrix.heads }}".split()
           quants = [q for q in os.environ["QUANTS"].split() if pathlib.Path(f"m/{q}.gguf").exists()]
           bad = []
@@ -380,6 +426,89 @@ jobs:
             ab-table.txt
             ab.json
             parity.txt
+            metal-usable.txt
             out/*.meta.txt
             out/*.stderr
             out/*.notes.tsv
+
+  # ===========================================================================
+  # Which hosted macOS image, if any, has a GPU that can run this at all?
+  #
+  # The first run of this workflow found that macos-14 does NOT: its GPU is an
+  # "Apple Paravirtual device" (MTLGPUFamilyApple5) reporting
+  #
+  #     simdgroup reduction   = false
+  #     simdgroup matrix mul. = false
+  #
+  # and ggml-metal's ggml_metal_device_supports_op() consults exactly those two
+  # flags for GGML_OP_MUL_MAT (ggml-metal-device.m:1960), so no matmul kernel
+  # is available. A dense-GEMM model has nothing to run there.
+  #
+  # That is a property of GitHub's macOS virtualisation, not of Apple Silicon,
+  # so before concluding "Metal cannot be measured on CI" it is worth asking
+  # every image. This job is deliberately cheap -- one binary, one 5 MB model,
+  # one 3 s clip -- so asking four images costs a few minutes, not an hour.
+  # Its verdict decides whether the A/B above can ever produce a Metal column.
+  # ===========================================================================
+  metal-capability:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, macos-15, macos-26, macos-latest]
+    runs-on: ${{ matrix.os }}
+    name: GPU capability on ${{ matrix.os }}
+    continue-on-error: true   # an image that does not exist yet must not fail the run
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Identify
+        run: |
+          echo "image : ${{ matrix.os }}"
+          echo "chip  : $(sysctl -n machdep.cpu.brand_string)"
+          echo "cores : $(sysctl -n hw.ncpu)"
+          echo "macOS : $(sw_vers -productVersion) build $(sw_vers -buildVersion)"
+          system_profiler SPDisplaysDataType 2>/dev/null | sed -n '1,12p' || true
+      - name: Build
+        run: |
+          set -e
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+                -DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON -DGGML_NATIVE=ON \
+                -DCRISPASR_BUILD_TESTS=ON -DCRISPASR_BUILD_SERVER=OFF
+          cmake --build build --target hft-parity-dump -j "$(sysctl -n hw.ncpu)"
+      - name: Ask the device
+        env:
+          CRISPASR_PARITY_USE_GPU: "1"
+          MKL_NUM_THREADS: "1"
+        run: |
+          set -e
+          curl -fsSL -o hft.gguf \
+            https://huggingface.co/cstr/hft-transformer-GGUF/resolve/main/hft-transformer-q4_0.gguf
+          python3 - <<'PY'
+          import wave
+          w = wave.open("samples/jfk.wav"); pcm = w.readframes(w.getnframes()); w.close()
+          o = wave.open("clip.wav", "wb"); o.setnchannels(1); o.setsampwidth(2); o.setframerate(16000)
+          o.writeframes(pcm[: 3 * 2 * 16000]); o.close()
+          PY
+          # The abort this used to take is now a graceful decline, so a runner
+          # without matmul kernels exits 0 having run on the CPU -- which is why
+          # the VERDICT below reads the backend line rather than the exit code.
+          ./build/bin/hft-parity-dump hft.gguf clip.wav probe 3 > probe.out 2> probe.err || true
+          echo "=== device ==="
+          grep -E "GPU name|GPU family|simdgroup|unified memory|cannot MUL_MAT|backend = " probe.err || true
+          echo "=== result ==="
+          tail -2 probe.out || true
+          echo
+          if grep -q "backend = .*(GPU)" probe.err && ! grep -q "cannot MUL_MAT" probe.err; then
+            echo "VERDICT ${{ matrix.os }}: GPU USABLE — the A/B can be run on this image"
+          else
+            echo "VERDICT ${{ matrix.os }}: GPU NOT USABLE for a dense-GEMM model"
+          fi | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: metal-capability-${{ matrix.os }}
+          path: |
+            probe.err
+            probe.out

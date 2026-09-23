@@ -16,6 +16,7 @@
 #include "ggml-backend.h"
 #include "ggml-cpu.h"
 #include "ggml.h"
+#include "gguf.h"
 
 #include <algorithm>
 #include <chrono>
@@ -285,6 +286,16 @@ struct hft_transformer_ctx* hft_transformer_init_from_file(const char* path, str
     // GGUF that says otherwise carries a 244-wide embedding this runtime has
     // no conv to feed, and would run on garbage rather than fail.
     const std::string front = core_gguf::kv_str(meta, "hft.front_end", "fused-conv-tok-embedding");
+
+    // The dtypes actually present in this file, collected while the metadata
+    // context is still open, so the GPU-capability probe below can ask about
+    // the kernels this model will really need rather than a guess.
+    std::vector<ggml_type> gguf_types;
+    for (int64_t i = 0, nt = gguf_get_n_tensors(meta); i < nt; i++) {
+        const ggml_type t = gguf_get_tensor_type(meta, i);
+        if (std::find(gguf_types.begin(), gguf_types.end(), t) == gguf_types.end())
+            gguf_types.push_back(t);
+    }
     core_gguf::free_metadata(meta);
     if (front != "fused-conv-tok-embedding") {
         std::fprintf(stderr, "hft: GGUF declares front end '%s'; this runtime implements the fused one\n",
@@ -330,6 +341,20 @@ struct hft_transformer_ctx* hft_transformer_init_from_file(const char* path, str
     // ends in ggml_backend_init_best(), which returns the CPU backend on a
     // CPU-only build. Ask the device what it is, so the line an A/B greps for
     // cannot claim a GPU that is not there.
+    // A GPU that cannot MUL_MAT is worse than no GPU: this model drives a single
+    // backend through ggml_gallocr, so an op the device declines aborts the
+    // process rather than falling back. GitHub's hosted macos-14 runner is
+    // exactly that case -- an "Apple Paravirtual device" with simdgroup matrix
+    // multiply disabled, where the first encoder GEMM died with "unsupported op
+    // 'MUL_MAT'". Ask first, and degrade to the CPU instead.
+    if (!core_cpu_backend::is_cpu(ctx->backend) && !crispasr_backend_supports_mul_mat(ctx->backend, gguf_types)) {
+        ggml_backend_free(ctx->backend);
+        ctx->backend = core_cpu_backend::init();
+        if (!ctx->backend) {
+            delete ctx;
+            return nullptr;
+        }
+    }
     if (params.verbosity >= 1)
         std::fprintf(stderr, "hft: backend = %s (%s)\n", ggml_backend_name(ctx->backend),
                      core_cpu_backend::is_cpu(ctx->backend) ? "CPU" : "GPU");

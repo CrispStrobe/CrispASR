@@ -16,6 +16,7 @@
 #include "ggml-backend.h"
 #include "ggml-cpu.h"
 #include "ggml.h"
+#include "gguf.h"
 
 #include <algorithm>
 #include <chrono>
@@ -317,6 +318,16 @@ struct onsets_and_frames_ctx* onsets_and_frames_init_from_file(const char* path,
     // The converter and this file must agree about the LSTM gate order; a
     // disagreement produces a model that runs and emits plausible garbage.
     const std::string gate_order = core_gguf::kv_str(meta, "oaf.lstm_gate_order", "iofc");
+
+    // The dtypes actually present in this file, collected while the metadata
+    // context is still open, so the GPU-capability probe below can ask about
+    // the kernels this model will really need rather than a guess.
+    std::vector<ggml_type> gguf_types;
+    for (int64_t i = 0, nt = gguf_get_n_tensors(meta); i < nt; i++) {
+        const ggml_type t = gguf_get_tensor_type(meta, i);
+        if (std::find(gguf_types.begin(), gguf_types.end(), t) == gguf_types.end())
+            gguf_types.push_back(t);
+    }
     core_gguf::free_metadata(meta);
     if (gate_order != "iofc") {
         std::fprintf(stderr, "oaf: GGUF declares LSTM gate order '%s'; this runtime implements 'iofc'\n",
@@ -352,6 +363,20 @@ struct onsets_and_frames_ctx* onsets_and_frames_init_from_file(const char* path,
     // Ask the device rather than inferring from "the GPU call returned
     // non-null": crispasr_init_gpu_backend() ends in ggml_backend_init_best(),
     // which hands back the CPU backend on a CPU-only build.
+    // A GPU that cannot MUL_MAT is worse than no GPU: this model drives a single
+    // backend through ggml_gallocr, so an op the device declines aborts the
+    // process rather than falling back. GitHub's hosted macos-14 runner is
+    // exactly that case -- an "Apple Paravirtual device" with simdgroup matrix
+    // multiply disabled, where the first encoder GEMM died with "unsupported op
+    // 'MUL_MAT'". Ask first, and degrade to the CPU instead.
+    if (!core_cpu_backend::is_cpu(ctx->backend) && !crispasr_backend_supports_mul_mat(ctx->backend, gguf_types)) {
+        ggml_backend_free(ctx->backend);
+        ctx->backend = core_cpu_backend::init();
+        if (!ctx->backend) {
+            delete ctx;
+            return nullptr;
+        }
+    }
     if (params.verbosity >= 1)
         std::fprintf(stderr, "oaf: backend = %s (%s)\n", ggml_backend_name(ctx->backend),
                      core_cpu_backend::is_cpu(ctx->backend) ? "CPU" : "GPU");
