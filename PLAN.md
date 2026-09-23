@@ -31,6 +31,19 @@ check). #436 X-ASR merged 2026-09-23 (CI 35835631235 green): streaming Zipformer
 transducer converted from the sherpa-onnx export; F16 every stage cos >= 0.99999,
 tokens + text identical to sherpa-onnx at 480 and 160 ms, streaming = one-shot.
 #436 done.
+Kaldi-fbank recheck (2026-09-23, fix/kaldi-mel-domain, CI 35868696147): core_kaldi
++ firered_asr/firered_vad build triangles in mel, as Kaldi/knf/torchaudio do.
+Every reference was rebaked on Kaggle (tools/kaggle/kaldi-mel-final), and every
+stage passes at F16 for wespeaker, sensevoice, funasr, firered-asr, dolphin and
+CAM++. Found and fixed on the way:
+- SenseVoice never applied am.mvn CMVN (upstream does), so its rich tags were
+  off. The GGUFs were re-uploaded with CMVN.
+- Paraformer skipped the sqrt(d)+sinusoidal PE at encoder entry.
+- The sensevoice/paraformer dumpers used a CMVN-less front-end, and the
+  funasr/_hooks captures aliased tensors that were later changed in place.
+- The FireRed dumper used knf's default dither (3e-5, random).
+Paraformer zh still differs by one CIF row: a float32 fire-threshold tie
+(running sum 1 ULP from 1.0); the text is identical.
 
 Done this session: #448 merged (8c359d80 + da258942 mask-width assert),
 #453 fixed (817d6bf3), #452 merged (1aa0d55f) plus a shell-injection fix in
