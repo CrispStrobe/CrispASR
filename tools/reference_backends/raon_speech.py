@@ -13,7 +13,7 @@ Two passes:
   2. Audio stages: audio_encoder + input_adaptor cast to fp32 and fed fp32
      audio, so the stages are not bf16-rounded:
 
-  raon_mel_chunk0       (n_mels, T0)   first chunk's log-mel (encoder input)
+  raon_mel_chunk{c}     (n_mels, T_c)  each 8 s chunk's log-mel (encoder input)
   raon_encoder_output   (N, 2048)      12.5 Hz encoder frames kept by the mask
   raon_adaptor_output   (N, 4096)      LLM-ready audio embeddings
 
@@ -95,7 +95,7 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str], max_new_tokens
             feats = kwargs.get("input_features", args[0] if args else None)
             lens = kwargs.get("feature_lens", args[1] if len(args) > 1 else None)
             if "mel" not in cap:
-                cap["mel"] = _own(feats[0, :, : int(lens[0])])
+                cap["mel"] = [_own(feats[b, :, : int(lens[b])]) for b in range(feats.shape[0])]
 
         def ad_pre(_m, args, kwargs):
             cap["ad_in"] = _own(args[0] if args else kwargs["inputs"])
@@ -117,11 +117,12 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str], max_new_tokens
     m_in = cap["ad_mask"].bool()
     m_out = cap["ad_out_mask"].bool()
     if "raon_mel_chunk0" in stages:
-        out["raon_mel_chunk0"] = cap["mel"].float().numpy()
+        for c, m in enumerate(cap["mel"]):  # every 8 s chunk; the diff reads chunk 0 and the last
+            out[f"raon_mel_chunk{c}"] = m.float().numpy()
     if "raon_encoder_output" in stages:
         out["raon_encoder_output"] = cap["ad_in"][m_in].float().numpy()
     if "raon_adaptor_output" in stages:
         out["raon_adaptor_output"] = cap["ad_out"][m_out].float().numpy()
-    print(f"  raon stages: mel0 {tuple(cap['mel'].shape)} enc {int(m_in.sum())} frames "
+    print(f"  raon stages: mels {[tuple(m.shape) for m in cap['mel']]} enc {int(m_in.sum())} frames "
           f"adaptor {int(m_out.sum())} frames, placeholders {int((out.get('llm_input_ids', np.zeros(0)) == 151676).sum())}")
     return out

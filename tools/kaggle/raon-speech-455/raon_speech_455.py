@@ -18,6 +18,9 @@ from pathlib import Path
 WORK = Path("/kaggle/working"); OUT = WORK / "out"; OUT.mkdir(parents=True, exist_ok=True)
 REPO = WORK / "CrispASR"; BUILD = REPO / "build"
 res = {"errors": [], "disk": {}, "diff": {}, "cli": {}, "ref": {}}
+# DIAG: reference stages + F16 diff only (no greedy text, quants, CLI or upload)
+DIAG = True
+res["diag"] = DIAG
 
 
 def save():
@@ -51,11 +54,12 @@ try:
     import kaggle_harness as kh
     kh.resolve_hf_token(); os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
     kh.install_build_toolchain()
-    arch = kh.detect_cuda_arch()
+    arch = None if DIAG else kh.detect_cuda_arch()
+    gpu_flags = [] if DIAG else kh.cuda_build_flags(arch)
     kh.sh(f"cmake -S {REPO} -B {BUILD} -G Ninja -DCMAKE_BUILD_TYPE=Release -DCRISPASR_OPUS=OFF -DCRISPASR_AMR=OFF "
-          f"-DCRISPASR_BUILD_TESTS=ON " + " ".join(kh.cuda_build_flags(arch) + kh.cache_and_link_flags()))
+          f"-DCRISPASR_BUILD_TESTS=ON " + " ".join(gpu_flags + kh.cache_and_link_flags()))
     with kh.build_heartbeat("build"):
-        kh.sh(f"cmake --build {BUILD} -j{kh.safe_build_jobs(gpu=True)} "
+        kh.sh(f"cmake --build {BUILD} -j{kh.safe_build_jobs(gpu=not DIAG)} "
               f"--target crispasr crispasr-diff crispasr-quantize test-torchaudio-resample")
     rc, out, err = run([str(BUILD / "bin/test-torchaudio-resample")], "unit-resample.log")
     res["unit_resample"] = {"rc": rc, "tail": out[-300:]}; save()
@@ -76,7 +80,8 @@ try:
     for c, w in wav.items():
         ref = big / f"raon-{c}-ref.gguf"
         rc, out, err = run([str(venv / "bin/python"), str(REPO / "tools/dump_reference.py"), "--backend", "raon-speech",
-                            "--model-dir", md, "--audio", w, "--output", str(ref), "--max-new-tokens", "256"],
+                            "--model-dir", md, "--audio", w, "--output", str(ref), "--max-new-tokens", "256"]
+                           + (["--stages", "raw_audio,raon_mel_chunk0,raon_encoder_output,raon_adaptor_output"] if DIAG else []),
                            f"dump-{c}.log", env=env, cwd=str(REPO / "tools"), timeout=10800)
         import gguf
         R = res["ref"].setdefault(c, {"rc": rc})
@@ -112,6 +117,8 @@ try:
             ok = False
         save()
 
+    if DIAG:
+        raise SystemExit(0)
     ggufs = {"f16": f16}
     for qt in ("q8_0", "q4_k"):
         p = big / f"raon-speech-9b-{qt}.gguf"
@@ -144,6 +151,8 @@ try:
                             repo_id="cstr/crispasr-regression-fixtures", repo_type="dataset")
         res["uploaded"] = target
     save()
+except SystemExit:
+    pass
 except BaseException:
     res["errors"].append(traceback.format_exc()[-4000:])
 finally:

@@ -1909,8 +1909,8 @@ extern "C" bool qwen3_asr_is_raon_speech(qwen3_asr_context* ctx) {
 }
 
 extern "C" float* qwen3_asr_raon_encode_stages(qwen3_asr_context* ctx, const float* samples, int n_samples,
-                                               float** out_mel0, int* out_T0, float** out_enc, int* out_enc_dim,
-                                               int* out_N, int* out_dim) {
+                                               int mel_chunk, float** out_mel, int* out_T, float** out_enc,
+                                               int* out_enc_dim, int* out_N, int* out_dim) {
     if (!ctx || !samples || n_samples <= 0 || !ctx->model.hparams.raon_speech)
         return nullptr;
     const auto& hp = ctx->model.hparams;
@@ -1963,11 +1963,12 @@ extern "C" float* qwen3_asr_raon_encode_stages(qwen3_asr_context* ctx, const flo
         for (int m = 0; m < n_mels; m++)
             std::memcpy(melc.data() + (size_t)m * feat_len, mel + (size_t)m * T_mel, (size_t)feat_len * sizeof(float));
         free(mel);
-        if (c == 0 && out_mel0) {
-            *out_mel0 = (float*)malloc(melc.size() * sizeof(float));
-            std::memcpy(*out_mel0, melc.data(), melc.size() * sizeof(float));
-            if (out_T0)
-                *out_T0 = feat_len;
+        const int want = mel_chunk < 0 ? n_chunks - 1 : mel_chunk;
+        if (c == want && out_mel) {
+            *out_mel = (float*)malloc(melc.size() * sizeof(float));
+            std::memcpy(*out_mel, melc.data(), melc.size() * sizeof(float));
+            if (out_T)
+                *out_T = feat_len;
         }
 
         int N_c = 0, dim = 0;
@@ -2009,7 +2010,7 @@ extern "C" float* qwen3_asr_raon_encode_stages(qwen3_asr_context* ctx, const flo
 
 extern "C" float* qwen3_asr_raon_encode(qwen3_asr_context* ctx, const float* samples, int n_samples, int* out_N,
                                         int* out_dim) {
-    return qwen3_asr_raon_encode_stages(ctx, samples, n_samples, nullptr, nullptr, nullptr, nullptr, out_N, out_dim);
+    return qwen3_asr_raon_encode_stages(ctx, samples, n_samples, 0, nullptr, nullptr, nullptr, nullptr, out_N, out_dim);
 }
 
 extern "C" bool qwen3_asr_kv_init(qwen3_asr_context* ctx, int max_ctx) {

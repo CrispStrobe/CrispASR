@@ -169,13 +169,14 @@ int qwen3_asr_lm_head_dim(struct qwen3_asr_context* ctx);
 // 12.5 Hz frame grid and an EmbeddingAdaptor to the LLM width. Use
 // qwen3_asr_raon_encode instead of compute_mel + run_encoder; it returns
 // LLM-ready embeddings (out_N rows of out_dim). The _stages variant also
-// returns chunk 0's mel (n_mels x T0, mel-major) and the pre-adaptor
-// encoder frames (out_N x enc_dim) for the diff harness; free() them.
+// returns one chunk's mel (mel_chunk; -1 = the last; n_mels x T, mel-major)
+// and the pre-adaptor encoder frames (out_N x enc_dim) for the diff harness;
+// free() them.
 bool qwen3_asr_is_raon_speech(struct qwen3_asr_context* ctx);
 float* qwen3_asr_raon_encode(struct qwen3_asr_context* ctx, const float* samples, int n_samples, int* out_N,
                              int* out_dim);
-float* qwen3_asr_raon_encode_stages(struct qwen3_asr_context* ctx, const float* samples, int n_samples,
-                                    float** out_mel0, int* out_T0, float** out_enc, int* out_enc_dim, int* out_N,
+float* qwen3_asr_raon_encode_stages(struct qwen3_asr_context* ctx, const float* samples, int n_samples, int mel_chunk,
+                                    float** out_mel, int* out_T, float** out_enc, int* out_enc_dim, int* out_N,
                                     int* out_dim);
 
 // Run a single full-T forward pass through the LLM body (NOT autoregressive,

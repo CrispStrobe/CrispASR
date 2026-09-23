@@ -2645,9 +2645,11 @@ int main(int argc, char** argv) {
     } else if (backend_name == "raon-speech") {
         // #455 Raon-Speech-9B: the reference is tools/reference_backends/
         // raon_speech.py (fp32, RaonModel.get_audio_input_embeds). Stages:
-        //   raon_mel_chunk0       (n_mels, T0)  first 8 s chunk's log-mel
+        //   raon_mel_chunk{c}     (n_mels, T_c) each 8 s chunk's log-mel
         //   raon_encoder_output   (N, 2048)     kept 12.5 Hz encoder frames
         //   raon_adaptor_output   (N, 4096)     LLM-ready audio embeddings
+        // Frames below the threshold are listed with their chunk, so a
+        // divergence confined to one chunk (e.g. the padded last one) shows.
         auto cp = qwen3_asr_context_default_params();
         cp.n_threads = 4;
         cp.verbosity = 0;
@@ -2659,37 +2661,101 @@ int main(int argc, char** argv) {
                 qwen3_asr_free(ctx);
             return 4;
         }
-        float *mel0 = nullptr, *enc = nullptr;
-        int T0 = 0, enc_dim = 0, N = 0, dim = 0;
-        float* emb = qwen3_asr_raon_encode_stages(ctx, samples.data(), (int)samples.size(), &mel0, &T0, &enc, &enc_dim,
-                                                  &N, &dim);
-        if (!emb) {
-            printf("[ERR ] raon_encode_stages returned null\n");
-            n_fail++;
-        } else {
-            const struct {
-                const char* name;
-                const float* data;
-                size_t n;
-            } stages[] = {
-                {"raon_mel_chunk0", mel0, (size_t)128 * T0},
-                {"raon_encoder_output", enc, (size_t)N * enc_dim},
-                {"raon_adaptor_output", emb, (size_t)N * dim},
-            };
-            for (const auto& st : stages) {
-                if (!ref.has(st.name)) {
-                    printf("[SKIP] %-24s not in reference\n", st.name);
-                    continue;
-                }
-                auto rep = ref.compare(st.name, st.data, st.n);
-                print_row(st.name, rep, COS_THRESHOLD);
-                record(rep);
+        const int n_chunks = (int)((samples.size() * 3 / 2 + 191999) / 192000); // 8 s chunks at 24 kHz
+        for (int mc = 0; mc < n_chunks; mc++) {
+            char name[32];
+            snprintf(name, sizeof(name), "raon_mel_chunk%d", mc);
+            if (!ref.has(name))
+                continue;
+            float *mel = nullptr, *enc = nullptr;
+            int T = 0, enc_dim = 0, N = 0, dim = 0;
+            float* emb = qwen3_asr_raon_encode_stages(ctx, samples.data(), (int)samples.size(), mc, &mel, &T, &enc,
+                                                      &enc_dim, &N, &dim);
+            if (!emb) {
+                printf("[ERR ] raon_encode_stages returned null\n");
+                n_fail++;
+                break;
             }
-            printf("       raon frames: C++ N=%d (enc %d -> %d), mel chunk0 T=%d\n", N, enc_dim, dim, T0);
+            auto rep = ref.compare(name, mel, (size_t)128 * T);
+            print_row(name, rep, COS_THRESHOLD);
+            record(rep);
+            if (mc == 0) {
+                const struct {
+                    const char* name;
+                    const float* data;
+                    int dim;
+                } st[] = {{"raon_encoder_output", enc, enc_dim}, {"raon_adaptor_output", emb, dim}};
+                for (const auto& x : st) {
+                    if (!ref.has(x.name))
+                        continue;
+                    auto r2 = ref.compare(x.name, x.data, (size_t)N * x.dim);
+                    print_row(x.name, r2, COS_THRESHOLD);
+                    record(r2);
+                    auto rf = ref.get_f32(x.name);
+                    if (!rf.first || rf.second != (size_t)N * x.dim)
+                        continue;
+                    int shown = 0;
+                    for (int i = 0; i < N && shown < 24; i++) {
+                        const float* a = x.data + (size_t)i * x.dim;
+                        const float* b = rf.first + (size_t)i * x.dim;
+                        double ab = 0, aa = 0, bb = 0;
+                        for (int k = 0; k < x.dim; k++) {
+                            ab += (double)a[k] * b[k];
+                            aa += (double)a[k] * a[k];
+                            bb += (double)b[k] * b[k];
+                        }
+                        const double c = ab / (std::sqrt(aa * bb) + 1e-30);
+                        if (c < COS_THRESHOLD) {
+                            printf("       %s frame %d (chunk %d) cos=%.6f |cpp|=%.3f |ref|=%.3f\n", x.name, i, i / 100,
+                                   c, std::sqrt(aa), std::sqrt(bb));
+                            shown++;
+                        }
+                    }
+                }
+                printf("       raon frames: C++ N=%d (enc %d -> %d), chunks=%d\n", N, enc_dim, dim, n_chunks);
+                // Isolation: the C++ encoder on the REFERENCE mel of each chunk,
+                // against the reference frames of that chunk (100 per full chunk).
+                auto renc = ref.get_f32("raon_encoder_output");
+                for (int c2 = 0; c2 < n_chunks && renc.first; c2++) {
+                    char mn[32];
+                    snprintf(mn, sizeof(mn), "raon_mel_chunk%d", c2);
+                    auto rm = ref.get_f32(mn);
+                    auto rs = ref.shape(mn);
+                    if (!rm.first || rs.size() < 2)
+                        continue;
+                    const int Tm = (int)rs[0]; // numpy (128, T): ne = [T, 128]
+                    int Nc = 0, dc = 0;
+                    float* e2 = qwen3_asr_run_encoder(ctx, rm.first, 128, Tm, &Nc, &dc);
+                    if (!e2)
+                        continue;
+                    const int base = c2 * 100;
+                    double worst = 1.0;
+                    int worst_i = -1, n_cmp = 0;
+                    for (int i = 0; i < Nc && base + i < N && i < 100; i++) {
+                        const float* a = e2 + (size_t)i * dc;
+                        const float* b = renc.first + (size_t)(base + i) * dc;
+                        double ab = 0, aa = 0, bb = 0;
+                        for (int k = 0; k < dc; k++) {
+                            ab += (double)a[k] * b[k];
+                            aa += (double)a[k] * a[k];
+                            bb += (double)b[k] * b[k];
+                        }
+                        const double cs = ab / (std::sqrt(aa * bb) + 1e-30);
+                        n_cmp++;
+                        if (cs < worst) {
+                            worst = cs;
+                            worst_i = i;
+                        }
+                    }
+                    printf("       encoder(ref %s): T=%d -> %d frames, vs ref frames [%d..%d): worst cos=%.6f at %d\n",
+                           mn, Tm, Nc, base, base + n_cmp, worst, worst_i);
+                    free(e2);
+                }
+            }
+            free(mel);
+            free(enc);
+            free(emb);
         }
-        free(mel0);
-        free(enc);
-        free(emb);
         qwen3_asr_free(ctx);
     } else if (backend_name == "qwen3") {
         auto cp = qwen3_asr_context_default_params();
