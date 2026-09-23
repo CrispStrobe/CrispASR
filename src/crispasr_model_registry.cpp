@@ -716,6 +716,14 @@ constexpr Entry k_registry[] = {
     // that split are not a held-out measurement.
     {"orukeet", "orukeet-q4_k.gguf", "https://huggingface.co/cstr/orukeet-GGUF/resolve/main/orukeet-q4_k.gguf",
      "~402 MB", nullptr, nullptr, nullptr, "CC-BY-SA-4.0 (see https://huggingface.co/oruk/orukeet)"},
+    // Dolphin CN-Dialect small streaming (#436) — DataoceanAI, E-Branchformer +
+    // Transformer decoder + CTC, Mandarin plus 20+ Chinese dialects. Q4_K is the
+    // default: on 15 in-domain clips it matched F16 exactly on 13 and differed by
+    // one trailing particle on the other two, as Q8_0 did (tools/kaggle/dolphin-quant-text).
+    {"dolphin", "dolphin-cn-dialect-small-streaming-q4_k.gguf",
+     "https://huggingface.co/cstr/dolphin-cn-dialect-small-streaming-GGUF/resolve/main/"
+     "dolphin-cn-dialect-small-streaming-q4_k.gguf",
+     "~258 MB", nullptr, nullptr},
     // parakeet-tdt-1.1b — larger TDT, English-only, 42-layer encoder
     // (vs 24 for 0.6b). Lowercase + no punctuation output. Slower but
     // wins on very long-tail vocabulary.
