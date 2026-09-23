@@ -508,6 +508,10 @@ target_include_directories(crispasr-f0-eval PRIVATE ${CMAKE_SOURCE_DIR}/src)
 # quantised MUL_MAT faster on this host? See docs/ggml-optimisation-playbook.md
 # §4. Links ggml directly (no crispasr-lib) so it stays cheap to build and
 # runnable anywhere ggml builds, including a Kaggle worker.
-add_executable(crispasr-repack-probe crispasr_repack_probe.cpp)
-target_link_libraries(crispasr-repack-probe PRIVATE ggml ggml-base ggml-cpu)
+# Under GGML_BACKEND_DL ggml-cpu is a loadable MODULE, which CMake refuses to
+# link, and the probe calls the CPU backend directly — so it is not built there.
+if (NOT GGML_BACKEND_DL)
+    add_executable(crispasr-repack-probe crispasr_repack_probe.cpp)
+    target_link_libraries(crispasr-repack-probe PRIVATE ggml ggml-base ggml-cpu)
+endif()
 include(DefaultTargetOptions)
