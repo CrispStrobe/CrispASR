@@ -63,3 +63,20 @@ a CIFS download silently corrupted a checkpoint on 2026-09-23).
    convs are causal.
 7. **Subsampling:** Conv2d(1→768, 3, s2)+ReLU, Conv2d(768→768, 3, s2)+ReLU,
    flatten (b, t, c·f) channel-major, Linear(768·19 → 768). Mask keeps [2::2][2::2].
+
+## Features, decoder, search
+
+8. **Features:** `waveform * 32768` → `torchaudio.compliance.kaldi.fbank(**fbank_conf)`
+   = 80 bins, 25/10 ms, povey window, snip_edges, **dither 0.1** — upstream's own
+   inference is therefore random run to run. The reference dump must pass
+   dither=0; the C++ uses 0 (core_kaldi fbank with int16 scale), and the model
+   card should say so. Then global CMVN (JSON `global_cmvn`).
+9. **Decoder:** pre-norm Transformer, 12 blocks, ReLU FFN, embedding × √d plus
+   ABSOLUTE interleaved sinusoids, `after_norm`, untied output Linear.
+10. **Prompt:** `[sos, <lang>, <region>, <asr>, <notimestamp>]`. When the caller
+    gives no language/region they are predicted greedily by the decoder from
+    `[sos]` (`predict_lang_region_timestamp`), one step each.
+11. **Search:** WeNet CTC prefix beam (beam 10, per-frame top-k = beam) → attention
+    rescoring: score(hyp) = Σ decoder log-p of hyp tokens at offset 4 + log-p(eos);
+    ctc_weight 0, reverse_weight 0. Output tokens keep the 4 prefix tokens.
+    core_ctc::prefix_beam_search and core_kaldi fbank exist and are reusable.
