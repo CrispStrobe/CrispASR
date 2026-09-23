@@ -436,8 +436,63 @@ that changed the answer is visible rather than celebrated).
 
 ---
 
-### 5a. End-to-end: the mechanism works, and one number is not a rounding
-difference
+### 5a. End-to-end, whole model, on clean runners
+
+Run 35819605846, `end-to-end` legs. `crispasr --piano`, hFT on
+`samples/jfk.wav`, one process per arm, arms interleaved with a rotating start
+order, cold rep discarded, **median of 3**, CPU seconds (user+sys) via
+`getrusage(RUSAGE_CHILDREN)`, `MKL_NUM_THREADS=1`, `-t 1`. Runner load ~1.0.
+
+| arm | `ubuntu-24.04` (EPYC 7763, AVX2) | `ubuntu-24.04-arm` (dotprod/i8mm) |
+| --- | --- | --- |
+| hFT f32 | 12.88 cpu-s | 102.5 cpu-s |
+| hFT q8_0 (generic) | 14.05 — **1.09× f32** | 51.4 — **0.50× f32** |
+| hFT q4_0 (generic) | 15.7 — 1.22× f32 | 56.5 — 0.55× f32 |
+| **hFT q4_0 + repack** | **9.3 — 0.72× f32** | **35.7 — 0.35× f32** |
+| **repack vs generic q4_0** | **1.69×** | **1.58×** |
+| O&F f32 | 1.58 cpu-s | 4.37 cpu-s |
+| O&F q8_0 | 1.57 — **0.99× f32** | 3.85 — 0.88× f32 |
+| peak RSS, any hFT arm | 233–234 MiB | 233 MiB |
+
+**This is the measured, reproducible speedup the investigation was after.**
+Routing hFT's q4_0 weights through the repack buffer type makes the whole model
+**1.69× faster on x86 and 1.58× faster on arm64** than the same GGUF without
+it — and on x86 it is what finally makes quantisation pay at all: q4_0 goes
+from 1.22× the cost of f32 to **0.72×**.
+
+Four things fall out of that table that were not measurable before:
+
+1. **hFT's q8_0 penalty is 1.09× on the EPYC, not 1.29×.** §3c predicted this
+   from the kernel measurements and it holds at whole-model scale. The 29%
+   figure in `HFT_TRANSFORMER.md` is a Skylake-SP/AVX-512 number. It should not
+   be quoted as an x86-wide one.
+2. **On arm64, quantisation is a large win with no repacking at all** — q8_0
+   alone is **0.50× f32**, i.e. the model runs twice as fast quantised. Playbook
+   §4's "quantise for size, not speed" is an x86 statement.
+3. **O&F q8_0 is 0.99× f32 on a clean machine.** The VPS's 0.96× was not a
+   speedup and the difference was not real; §4b predicted "indistinguishable"
+   from the GGUF's tensor types and that is exactly what a load-1.0 box shows.
+   **This is the cleanest possible confirmation of the contradiction's
+   resolution**, and it needed a quiet machine to see.
+4. **The mmap trade cost nothing measurable here.** Peak RSS is 233–234 MiB
+   across every arm including the repacked one, against the 237 MiB
+   `HFT_TRANSFORMER.md` records. For a 22 MB model, giving up zero-copy mmap is
+   free. That is *not* evidence about a multi-gigabyte one — see §6.2.
+
+⚠ One thing to note rather than explain away: the arm64 runner is **8× slower
+than the EPYC on hFT f32** (102.5 vs 12.88 cpu-s) while the hermetic job has
+its f32 `MUL_MAT` only 2.2× slower for the same shape. Something outside the
+weight GEMMs — most likely the mel front end or the conv path — is
+disproportionately slow on that runner. The within-machine ratios above are
+interleaved A/Bs and are unaffected, but the cross-machine absolute numbers
+should not be compared until that is understood.
+
+The **q8_0 + repack** arm — the one that matters most on arm64, since q8_0 is
+what every GGUF here ships — was missing from this run and was added
+afterwards. Its whole-model number is pending.
+
+### 5b. Parity: what the repacked kernel changes in the output
+
 
 `end-to-end linux-x86_64`, run 35817927145, on the EPYC runner with
 `hft-transformer-q4_0.gguf`:
