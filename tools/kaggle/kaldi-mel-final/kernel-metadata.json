@@ -1,0 +1,3 @@
+{"id": "chr1s4/crispasr-kaldi-mel-final", "title": "CrispASR Kaldi Mel Final", "code_file": "kaldi_mel_final.py",
+ "language": "python", "kernel_type": "script", "is_private": "true", "enable_gpu": "false", "enable_internet": "true",
+ "dataset_sources": ["chr1s4/crispasr-hf-token", "chr1s4/crispasr-ccache"], "competition_sources": [], "kernel_sources": []}
