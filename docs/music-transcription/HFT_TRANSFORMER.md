@@ -332,17 +332,29 @@ Three things to read out of that table.
 CPU than f32 (6.25 against 4.84 single-threaded) and q4_0 the same again. §36.3
 predicted "two to three times fp32" from int8 kernels applying to 83.5% of the
 arithmetic. The arithmetic share was right; the kernel assumption was not, for
-two nameable reasons. ggml's fast int8 GEMM lives in `ggml-cpu/repack.cpp` and
-is reached only through the CPU device's **extra** buffer types, which
-`core_gguf::load_weights` does not request — every backend in this tree
-allocates weights in the default buffer type, so quantised matrices go through
-the generic path, which re-quantises the activation operand to Q8_0 on every
-GEMM and then runs a vec_dot. And this CPU is Skylake-SP: AVX-512F but **no
-AVX-512 VNNI**, so there is no int8 dot-product instruction for that path to
-reach even if it were repacked. The bet is not disproved in general; it is
-untested here, and what *was* measured is that taking it as configured costs
-29% of the throughput. Selecting the repack buffer type is the obvious next
-experiment and it is a change to `core_gguf`, not to this file.
+two nameable reasons. ggml's fast repacked int8 GEMM lives in
+`ggml/src/ggml-cpu/repack.cpp` and is reached only through the CPU device's
+**extra** buffer types, via the registry proc address
+`ggml_backend_dev_get_extra_bufts`. `GGML_CPU_REPACK` is ON in this build, so
+the code is compiled in — but `core_gguf::load_weights` never asks for an
+extra buffer type, so every backend that loads through it (which is all six
+transcription models) takes ggml's generic route, which re-quantises the
+activation operand to Q8_0 on every GEMM and then runs a `vec_dot`.
+
+**One correction worth carrying, because it was got wrong here first:** the
+repack path is *not* unreached everywhere in the tree. `src/crispasr.cpp`
+requests it, llama.cpp-style, for the whisper backend. It is unreachable for
+everything that loads through `core_gguf`, which is a different and narrower
+claim. `docs/ggml-optimisation-playbook.md` §4 is the authority, has the line
+numbers, and prices the three obstacles to fixing it — per-op routing (the
+extra buffer types support only `MUL_MAT` and `GET_ROWS`), a likely conflict
+with the zero-copy mmap path, and the fact that this box is Skylake-SP with
+AVX-512F but **no AVX-512 VNNI**, so there is no int8 dot-product instruction
+for the repacked path to reach even once it is selected.
+
+So the bet is not disproved in general; it is **untested** here, for a reason
+that is now located in `core/gguf_loader.cpp` rather than in this file. What
+*was* measured is that taking it as configured costs 29% of the throughput.
 
 **2. The gap to ORT is 1.6×, not an order of magnitude.** CPU-seconds per
 audio-second at one thread: 4.84 against 3.09, a factor of **1.56**. Wall at
