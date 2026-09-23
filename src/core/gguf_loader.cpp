@@ -1323,7 +1323,7 @@ static const std::vector<ggml_backend_buffer_type_t>& cpu_extra_bufts() {
 //
 // So select by name, and let the name be overridden for A/B work.
 static ggml_backend_buffer_type_t repack_buft() {
-    static ggml_backend_buffer_type_t chosen = [] () -> ggml_backend_buffer_type_t {
+    static ggml_backend_buffer_type_t chosen = []() -> ggml_backend_buffer_type_t {
         const char* want = std::getenv("CRISPASR_GGUF_EXTRA_BUFT");
         const char* name = (want && *want) ? want : "CPU_REPACK";
         for (auto* b : cpu_extra_bufts()) {
@@ -1525,8 +1525,8 @@ bool load_weights_repack(const char* path, ggml_backend_t cpu_backend, IsMatmulW
         *n_repacked = (int)rep_tensors.size();
     // Name the buffer type. An A/B that does not say which extra buffer type
     // it selected is not reproducible — see the note on repack_buft().
-    fprintf(stderr, "%s: extra buffer type '%s': %zu MiB (%zu tensors) repacked, %zu MiB (%zu tensors) default\n",
-            tag, ggml_backend_buft_name(rbuft), rep_size / 1048576, rep_tensors.size(), def_size / 1048576,
+    fprintf(stderr, "%s: extra buffer type '%s': %zu MiB (%zu tensors) repacked, %zu MiB (%zu tensors) default\n", tag,
+            ggml_backend_buft_name(rbuft), rep_size / 1048576, rep_tensors.size(), def_size / 1048576,
             def_tensors.size());
 
     gguf_free(gctx);

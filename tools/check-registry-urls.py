@@ -56,9 +56,22 @@ def is_download_url(url: str) -> bool:
     return any(h in url for h in DOWNLOAD_HINTS) or url.endswith(MODEL_SUFFIXES)
 
 
+# Adjacent C string literals are one string to the compiler:
+#     "https://huggingface.co/cstr/foo-GGUF/resolve/main/"
+#     "foo-q4_k.gguf",
+# is a single URL. Matching line by line saw only the first half and HEADed the
+# bare directory (404) — the dolphin row, 2026-09-23. Join them the way the
+# compiler does before looking for URLs.
+ADJACENT_LITERALS_RE = re.compile(r'"[ \t]*\n[ \t]*"')
+
+
+def join_adjacent_literals(text: str) -> str:
+    return ADJACENT_LITERALS_RE.sub("", text)
+
+
 def parse_registry(path: Path):
     """Yield (backend, url) in file order."""
-    text = path.read_text(errors="replace")
+    text = join_adjacent_literals(path.read_text(errors="replace"))
     out, current = [], None
     for line in text.splitlines():
         stripped = line.strip()

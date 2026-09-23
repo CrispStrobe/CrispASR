@@ -848,7 +848,10 @@ public:
                 suffix = "language " + core_qwen3_stream::utf8_encode(cfg_.force_language) + "<asr_text>";
             return be_->stream_generate(audio, suffix + prefix, max_new);
         };
-        reset();
+        // Qualified: the class is final, so this is the call that happens
+        // anyway — spelled non-virtual (cppcheck virtualCallInConstructor).
+        // cppcheck-suppress virtualCallInConstructor
+        Qwen3RealtimeSession::reset();
     }
 
     bool append(const float* samples, int n_samples, bool flush, callback on_text) override {

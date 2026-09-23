@@ -571,8 +571,14 @@ std::vector<nbest_hyp> ctc_prefix_beam(const float* logp, int T, int V, int beam
         const float* lp = logp + (size_t)t * V;
         for (int v = 0; v < V; v++)
             idx[v] = v;
-        std::partial_sort(idx.begin(), idx.begin() + beam, idx.end(),
-                          [&](int a, int b) { return lp[a] > lp[b] || (lp[a] == lp[b] && a < b); });
+        std::partial_sort(idx.begin(), idx.begin() + beam, idx.end(), [&](int a, int b) {
+            // Highest log-prob first, lower index on a tie. The values
+            // are read first so the tie-break on the indices does not
+            // read as a bounds check after use (cppcheck
+            // arrayIndexThenCheck).
+            const float la = lp[a], lb = lp[b];
+            return la > lb || (la == lb && a < b);
+        });
         std::vector<std::pair<std::vector<int32_t>, PS>> next;
         std::map<std::vector<int32_t>, size_t> where;
         auto at = [&](const std::vector<int32_t>& k) -> PS& {
