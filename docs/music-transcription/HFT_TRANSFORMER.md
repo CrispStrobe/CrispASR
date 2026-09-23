@@ -354,10 +354,22 @@ for the repacked path to reach even once it is selected.
 **Update — this has now been tested.** `docs/ggml-repack-buft-evaluation.md`
 is the authority. Three things it changes here:
 
-- The 29% is **real and reproduced at the kernel level**, with no model
-  involved: generic-path q8_0 `MUL_MAT` measures 1.08–1.31× the cost of f32
-  for transformer-shaped GEMMs on this box. At 83.5% weight GEMM that predicts
-  1.08–1.26× whole-model, and 1.29× was measured. Not noise.
+- The 29% is **real on the box it was measured on** and reproduced there at
+  the kernel level with no model involved: generic-path q8_0 `MUL_MAT` measures
+  1.08–1.31× the cost of f32 for transformer-shaped GEMMs on that Skylake-SP
+  VPS. At 83.5% weight GEMM that predicts 1.08–1.26× whole-model, and 1.29×
+  was measured. Not noise.
+- ⚠ **But it does not generalise, and the same A/B on clean runners shows how
+  far it does not.** Whole-model, one process per arm, interleaved, median of
+  3: on GitHub's AMD EPYC 7763 hFT q8_0 is **1.09×** f32 (14.05 vs 12.88
+  cpu-s), and on `ubuntu-24.04-arm` it is **0.50×** — the model runs **twice as
+  fast** quantised. Skylake-SP is the worst case because its AVX-512 makes the
+  *f32* GEMM unusually fast, not because the quantised path is slow in absolute
+  terms. **Quote the 29% as an AVX-512 x86 figure or not at all.**
+- **q4_0 through the repack buffer type is now the fastest arm of all**: 9.3
+  cpu-s on the EPYC, **0.72× f32** and **1.69×** the same GGUF without
+  repacking; 35.7 cpu-s on arm64, **0.35× f32**. Peak RSS is unchanged at
+  233–234 MiB, so giving up zero-copy mmap costs nothing at this model size.
 - The repack buffer type **is** offered on this box, and it does pay — 1.4–5.6×
   over the generic quantised path — **without needing VNNI**. The AVX2 kernels
   do not use it; the interleaved layout pays on its own.

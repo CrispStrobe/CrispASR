@@ -543,6 +543,23 @@ three things below. Summary of what changed:**
   `q4_0` generic 1.22–1.44× f32 → repacked **0.76–0.97×** f32; `q4_K` generic
   1.83–3.02× f32 → repacked **0.48–0.66×** f32. A Kaggle AVX2-only Xeon agrees
   at 1.9–3.4× over the generic path, with a far tighter spread.
+- 🔑 **Measured end-to-end, whole model, on clean CI runners** (run
+  35819605846; `crispasr --piano`, hFT, one process per arm, interleaved,
+  median of 3, `MKL_NUM_THREADS=1`):
+
+  | arm | EPYC 7763 (AVX2) | arm64 (dotprod/i8mm) |
+  | --- | --- | --- |
+  | hFT f32 | 12.88 cpu-s | 102.5 cpu-s |
+  | hFT q8_0 | 14.05 (**1.09×** f32) | 51.4 (**0.50×** f32) |
+  | hFT q4_0 generic | 15.7 (1.22×) | 56.5 (0.55×) |
+  | **hFT q4_0 + repack** | **9.3 (0.72×)** | **35.7 (0.35×)** |
+  | **repack vs generic** | **1.69×** | **1.58×** |
+  | O&F q8_0 vs f32 | **0.99×** | 0.88× |
+
+  Two corrections to this section's headline claims fall straight out of it.
+  **hFT's 29% q8_0 penalty is 1.09× on the EPYC** — it is a Skylake-SP/AVX-512
+  number, not an x86-wide one. And **on arm64 q8_0 alone is 0.50× f32**: the
+  model runs twice as fast quantised with no repacking at all.
 - 🔑 **The answer splits by ISA, and the arm64 half is a large win for the
   models exactly as they ship.** Measured on clean GitHub runners
   (run 35817843249, three legs green), q8_0 `MUL_MAT`, repacked vs generic:

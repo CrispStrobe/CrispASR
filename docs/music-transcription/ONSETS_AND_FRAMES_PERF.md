@@ -478,7 +478,12 @@ by the table above rather than by a green tick.
 
    ≈2% exposure at a 1.1–1.3× kernel penalty predicts about **+0.6%** overall.
    The measured difference was 3.8%, in the other direction, on a box whose
-   spread for a *single* arm is 20–50%. The caution in the original entry —
+   spread for a *single* arm is 20–50%.
+
+   **Re-measured on a clean runner it is 0.99×** — 1.57 vs 1.58 CPU-s, one
+   process per arm, interleaved, median of 3, runner load ~1.0 (CI run
+   35819605846). Indistinguishable, exactly as the GGUF's tensor types predict.
+   The 0.96× on the VPS was contention, not a speedup. The caution in the original entry —
    "one box, one model, a small margin" — was exactly right; the margin was
    below the measurement floor.
 
