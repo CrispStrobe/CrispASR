@@ -60,6 +60,7 @@
 #include "parakeet.h"
 #include "wespeaker.h"
 #include "gigaam.h"
+#include "xasr.h"
 #include "dolphin.h"
 #include "canary.h"
 #include "canary_qwen.h"
@@ -4479,6 +4480,123 @@ int main(int argc, char** argv) {
             dolphin_result_free(r);
         }
         dolphin_free(ctx);
+    } else if (backend_name == "xasr") {
+        // X-ASR (#436): streaming Zipformer2 transducer. Reference:
+        // tools/reference_backends/xasr.py (icefall modules on the ONNX export's
+        // weights, driven chunk by chunk like sherpa-onnx). The chunk size and tail
+        // padding come from the reference, so both sides decode the same windows.
+        auto cp = xasr_context_default_params();
+        cp.n_threads = 4;
+        cp.verbosity = 0;
+        cp.use_gpu = false;
+        if (!ref.meta("chunk_ms").empty())
+            cp.chunk_ms = std::atoi(ref.meta("chunk_ms").c_str());
+        if (!ref.meta("tail_pad_ms").empty())
+            cp.tail_pad_ms = std::atoi(ref.meta("tail_pad_ms").c_str());
+        xasr_context* ctx = xasr_init_from_file(model_path.c_str(), cp);
+        if (!ctx) {
+            fprintf(stderr, "failed to load xasr model\n");
+            return 4;
+        }
+        // ---- fbank (ours, same tail padding) ----
+        {
+            int T = 0;
+            float* fb = xasr_compute_fbank(ctx, samples.data(), (int)samples.size(), &T);
+            if (fb) {
+                auto rep = ref.compare("fbank", fb, (size_t)T * 80);
+                print_row("fbank", rep, COS_THRESHOLD);
+                record(rep);
+                free(fb);
+            }
+        }
+        // ---- chunk loop on the REFERENCE fbank ----
+        std::vector<float> ref_enc;
+        int ref_n_enc = 0;
+        {
+            auto fb = ref.get_f32("fbank");
+            auto shp = ref.shape("fbank");
+            if (fb.first && shp.size() >= 2) {
+                const int T = (int)shp[1];
+                const int S = xasr_n_stacks(ctx), chunk = xasr_chunk_frames(ctx);
+                // windows start every 2*chunk frames: at most T / (2*chunk) + 1 of them
+                const int n_chunks_max = T / (2 * chunk) + 1;
+                int dmax = 0;
+                for (int s = 0; s < S; s++)
+                    dmax = std::max(dmax, xasr_stack_dim(ctx, s));
+                std::vector<std::vector<float>> bufs((size_t)S + 2,
+                                                     std::vector<float>((size_t)n_chunks_max * chunk * dmax));
+                std::vector<float*> ptrs((size_t)S + 2);
+                for (size_t i = 0; i < ptrs.size(); i++)
+                    ptrs[i] = bufs[i].data();
+                int n_enc = 0, dim = 0;
+                float* enc = xasr_run_encoder(ctx, fb.first, T, &n_enc, &dim, ptrs.data(), (int)ptrs.size());
+                if (enc) {
+                    const int n50 = 2 * n_enc;
+                    auto r0 = ref.compare("embed_out", ptrs[0], (size_t)n50 * xasr_stack_dim(ctx, 0));
+                    print_row("embed_out", r0, COS_THRESHOLD);
+                    record(r0);
+                    for (int s = 0; s < S; s++) {
+                        char nm[32];
+                        snprintf(nm, sizeof(nm), "stack_%d", s);
+                        auto r = ref.compare(nm, ptrs[(size_t)s + 1], (size_t)n50 * xasr_stack_dim(ctx, s));
+                        print_row(nm, r, COS_THRESHOLD);
+                        record(r);
+                    }
+                    auto rf = ref.compare("enc_full", ptrs[(size_t)S + 1], (size_t)n_enc * dmax);
+                    print_row("enc_full", rf, COS_THRESHOLD);
+                    record(rf);
+                    auto re = ref.compare("encoder_out", enc, (size_t)n_enc * dim);
+                    print_row("encoder_out(ref_fbank)", re, COS_THRESHOLD);
+                    record(re);
+                    free(enc);
+                }
+            }
+            auto e = ref.get_f32("encoder_out");
+            auto es = ref.shape("encoder_out");
+            if (e.first && es.size() >= 2) {
+                ref_n_enc = (int)es[1];
+                ref_enc.assign(e.first, e.first + e.second);
+            }
+        }
+        // ---- greedy search on the REFERENCE encoder_out ----
+        if (!ref_enc.empty()) {
+            std::vector<float> first((size_t)xasr_vocab(ctx));
+            int n_tok = 0;
+            int32_t* toks = xasr_greedy(ctx, ref_enc.data(), ref_n_enc, &n_tok, first.data());
+            auto rl = ref.compare("first_logits", first.data(), first.size());
+            print_row("first_logits", rl, COS_THRESHOLD);
+            record(rl);
+            auto rt = ref.get_f32("tokens");
+            bool same = rt.first && rt.second == (size_t)n_tok;
+            for (int i = 0; same && i < n_tok; i++)
+                same = (int)rt.first[i] == toks[i];
+            printf("%s tokens(ref_enc)         %d vs %zu\n", same ? "[PASS]" : "[FAIL]", n_tok,
+                   rt.first ? rt.second : 0);
+            if (!same)
+                n_fail++;
+            free(toks);
+        }
+        // ---- end to end: our fbank, chunk loop, greedy ----
+        {
+            int T = 0;
+            float* fb = xasr_compute_fbank(ctx, samples.data(), (int)samples.size(), &T);
+            int n_enc = 0, dim = 0, n_tok = 0;
+            float* enc = fb ? xasr_run_encoder(ctx, fb, T, &n_enc, &dim, nullptr, 0) : nullptr;
+            int32_t* toks = enc ? xasr_greedy(ctx, enc, n_enc, &n_tok, nullptr) : nullptr;
+            char* txt = toks ? xasr_tokens_to_text(ctx, toks, n_tok) : nullptr;
+            const std::string want = ref.meta("text"), got = txt ? txt : "";
+            const bool same = !want.empty() && got == want;
+            printf("%s text                   %s\n", same ? "[PASS]" : "[FAIL]", same ? "identical to reference" : "");
+            if (!same) {
+                printf("       ref: %s\n       cpp: %s\n", want.c_str(), got.c_str());
+                n_fail++;
+            }
+            free(fb);
+            free(enc);
+            free(toks);
+            free(txt);
+        }
+        xasr_free(ctx);
     } else if (backend_name == "gigaam") {
         // GigaAM-v3: rotary Conformer + CTC or RNN-T head.
         // Reference: tools/reference_backends/gigaam.py (the HF blueprint).

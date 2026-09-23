@@ -11,6 +11,7 @@ std::unique_ptr<CrispasrBackend> crispasr_make_whisper_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_nemotron_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_gigaam_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_dolphin_backend();
+std::unique_ptr<CrispasrBackend> crispasr_make_xasr_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_parakeet_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_canary_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_canary_qwen_backend();
@@ -126,6 +127,8 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& name
         return crispasr_make_gigaam_backend();
     if (name == "dolphin")
         return crispasr_make_dolphin_backend();
+    if (name == "xasr" || name == "x-asr")
+        return crispasr_make_xasr_backend();
     if (name == "nemotron" || name == "nemotron-streaming" || name == "nemotron-3.5" || name == "nemotron-asr" ||
         name == "nemotron-speech-streaming")
         return crispasr_make_nemotron_backend();
@@ -349,6 +352,7 @@ std::vector<std::string> crispasr_list_backends() {
         "nemotron",
         "gigaam",
         "dolphin",
+        "xasr",
         "parakeet",
         "reazonspeech",
         "quds-fa",
@@ -859,6 +863,8 @@ std::string crispasr_detect_backend_from_gguf(const std::string& model_path) {
         return "gigaam";
     if (contains_ci("dolphin"))
         return "dolphin";
+    if (contains_ci("x-asr") || contains_ci("xasr"))
+        return "xasr";
     if (contains_ci("ggml-") && contains_ci(".bin"))
         return "whisper";
 

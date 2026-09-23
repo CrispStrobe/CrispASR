@@ -1221,6 +1221,21 @@ if(NOT MSVC)
 endif()
 
 # ---------------------------------------------------------------------------
+# X-ASR — icefall streaming Zipformer2 transducer (#436)
+# ---------------------------------------------------------------------------
+add_library(xasr STATIC
+            xasr.h
+            xasr.cpp
+            )
+target_include_directories(xasr PUBLIC . ../include)
+target_compile_features   (xasr PUBLIC cxx_std_17)
+set_target_properties(xasr PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_link_libraries     (xasr PUBLIC ggml ggml-base Threads::Threads crispasr-core)
+if(NOT MSVC)
+    target_compile_options(xasr PRIVATE -O3)
+endif()
+
+# ---------------------------------------------------------------------------
 # WeSpeaker ResNet34-LM — speaker embedding (#324 FoxNose diarization)
 # ---------------------------------------------------------------------------
 add_library(wespeaker STATIC
@@ -2900,6 +2915,9 @@ endif()
 # ---------------------------------------------------------------------------
 if (TARGET gigaam)
     target_link_libraries(crispasr-lib PUBLIC gigaam)
+endif()
+if (TARGET xasr)
+    target_link_libraries(crispasr-lib PUBLIC xasr)
 endif()
 if (TARGET dolphin)
     target_link_libraries(crispasr-lib PUBLIC dolphin)
