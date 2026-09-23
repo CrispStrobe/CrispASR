@@ -13,9 +13,10 @@ splits cleanly in two.**
 * **On arm64 it is a large win for the models exactly as they ship.** Nothing
   is declined — q8_0 included — and q8_0 gets **2.3–2.4×** over the generic
   path on Linux arm64, and **3.1–3.4× on Apple Silicon**, the platform
-  CrispASR actually ships to. It compounds with a fact x86 does not prepare you for:
-  on arm64 the *generic* quantised path is already **3× faster** than f32, so
-  q8_0 + repack lands at **0.13–0.15× the cost of f32**, roughly **7×**.
+  CrispASR actually ships to. It compounds with a fact x86 does not prepare
+  you for: on arm64 the *generic* quantised path is already **2.2–3.1× faster**
+  than f32 before any repacking, so q8_0 + repack lands at **0.13–0.15× the
+  cost of f32** — roughly **7×** faster than running the model at f32.
 * **On x86 it cannot help any model in this tree today.** ggml has no repacked
   q8_0 kernel for x86 at all, and every quantised GGUF here is q8_0. q4_0 and
   q4_K do gain 1.7–2.9× on a clean runner, so the lever is real — it just
@@ -107,9 +108,20 @@ type exists but which tensors it accepts — §2.
 
 **1.3 The buffer type supports `MUL_MAT` and `MUL_MAT_ID` — not `GET_ROWS`.**
 `repack::extra_buffer_type::supports_op` (`repack.cpp:4774`) accepts only those
-two ops, with a 2-D `src[0]` and an F32 `src[1]`. Playbook §4 and the comment at
-`src/crispasr.cpp:1945` both say "`MUL_MAT` and `GET_ROWS`"; against this ggml
-version that is stale. It does not change the conclusion — it narrows it.
+two ops, with a 2-D `src[0]` and an F32 `src[1]`. Playbook §4 and the comment
+above the switch in `weight_buft_supported` (`src/crispasr.cpp:1957`) both say
+"`MUL_MAT` and `GET_ROWS`"; against this ggml version that is stale. It is a
+stale comment rather than a bug — that function builds a probe op and *asks*
+the buffer type, so a `GET_ROWS` weight is correctly refused at runtime. It
+does not change the conclusion; it narrows it.
+
+Worth stating explicitly, because it reframes what this work is: **the whisper
+backend already has all of this**, and has had since it was written
+llama.cpp-style. A quantised whisper GGUF in CrispASR is already taking the
+repack path where its ISA has a kernel. What was missing was everything loading
+through `core_gguf`, which is the six transcription models and most of the rest
+— and `src/crispasr.cpp:1925-1937` is the working reference the loader change
+in §5 was modelled on.
 
 **1.4 It is incompatible with the zero-copy mmap path — verified, not
 inferred.** Playbook §4 marked this as inference. It is now checked. `gguf_loader.cpp:657`
@@ -175,7 +187,9 @@ equally (playbook §6.9). `MKL_NUM_THREADS=1` pinned. Best-of-N reported,
 because on a shared box the minimum is the closest thing to an uncontended
 sample; medians are given in the raw output.
 
-Reproduce: `crispasr-repack-probe --threads 1 --reps 40`.
+Reproduce: `crispasr-repack-probe --threads 1 --reps 40` for the interleaved
+view below, or `--arm default` / `--arm repack` in separate processes for the
+one §3c treats as primary.
 
 ### 3a. VPS — Skylake-SP, AVX-512F, no VNNI — ⚠ load average 6.4, corroborating only
 
@@ -296,11 +310,21 @@ the GGUF headers.
 GEMM, so essentially all of the arithmetic runs on a quantised weight through
 ggml's generic path.
 
-§3 measures that path's cost directly, with no model involved: generic q8_0
-`MUL_MAT` is **1.08–1.31× f32** for transformer-shaped GEMMs. Applied to 83.5%
-of the work that predicts a 1.07–1.26× whole-model penalty; 1.29× was measured.
-**hFT's 29% is a real kernel effect and is now reproduced from first
-principles.**
+§3a measures that path's cost directly **on the same machine hFT's 29% was
+measured on**, with no model, decoder or front end involved: generic q8_0
+`MUL_MAT` is **1.08–1.31× f32** for transformer-shaped GEMMs on that Skylake-SP
+box. Applied to 83.5% of the work that predicts a 1.07–1.26× whole-model
+penalty; 1.29× was measured. **hFT's 29% is a real kernel effect on that
+host**, not a measurement artefact — the mechanism is that ggml's generic path
+re-quantises the activation to Q8_0 on every GEMM and then runs a `vec_dot`.
+
+⚠ But it is a statement about *that ISA*. On the clean AVX2-only EPYC the same
+kernel measurement gives **0.84–1.05×** — no penalty — and on arm64 it gives
+**0.32–0.45×**, a large speedup. The reason Skylake-SP is the worst case is
+that AVX-512 makes its *f32* GEMM unusually fast, so the quantised path loses
+by comparison rather than being slow in absolute terms. **Do not generalise
+hFT's 29% beyond AVX-512 x86.** Re-measuring it on a clean runner of each class
+is what the end-to-end CI job is for.
 
 ### 4b. Onsets & Frames' q8_0 barely quantises anything on the hot path
 
@@ -386,6 +410,15 @@ Three constraints from §1 and §2a are handled and not assumed away:
 activation, nothing else eligible. Its predicate is "ends in `.weight` and is
 not a `.ln.` tensor" — the layer-norm weights are `ggml_mul` operands and the
 positional tables are `ggml_add` operands, so both are excluded by name.
+
+Validated against the real file rather than by reading: over
+`hft-transformer-q8_0.gguf`'s 157 tensors the predicate selects **67, rejects
+90, and rejects no quantised tensor at all**. All 67 are 2-D. Of them 63 are
+Q8_0 and four — `hft.encoder.front.weight` and the `mpe`/`offset`/`onset`
+heads — are F32 even in the quantised file, so `repack_buft_accepts()` sends
+those four to the default partition on every ISA. No missed opportunity and no
+mis-selection, which is the check any further adopter should run before
+trusting a name-based predicate.
 
 One thing the adoption got wrong first time and is worth flagging for the next
 adopter: `load_weights_repack()` returns **two** buffers, `wl.buf` for the

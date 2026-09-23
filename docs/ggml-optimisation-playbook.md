@@ -560,7 +560,7 @@ three things below. Summary of what changed:**
   including Apple Silicon, it is worth 2.3–3.4× on the files as they exist.
 - ⚠ **"Quantisation does not make CPU inference faster" is an AVX-512 x86
   statement, not a universal one.** On arm64 the *generic* quantised path is
-  already ~3× faster than f32 before any repacking, and q8_0 + repack lands at
+  already 2.2–3.1× faster than f32 before any repacking, and q8_0 + repack lands at
   **0.12–0.15× the cost of f32**. Even on x86 the sign is ISA-dependent:
   generic q8_0 measures 1.08–1.31× f32 on the Skylake-SP VPS but 0.84–1.05× on
   an AVX2-only EPYC, because Skylake-SP's AVX-512 makes its *f32* GEMM fast and

@@ -410,11 +410,11 @@ hFT measuring q8_0 at 29% *more* CPU than f32.
 ⚠ This originally read "q8_0 is slightly FASTER than f32 here", and that was
 over-reading a 3.8% difference on a box whose spread for a single arm is
 20–50%. `docs/ggml-repack-buft-evaluation.md` §4 settles it: hFT's 29% is a
-real kernel effect, but this model is 46% convolution and 29% LSTM, so at most
-19% of its work is even exposed to it, and the largest effect its op mix can
-produce is a few percent. §4's "quantise for size, and measure" is still doing
-real work as advice — with the addition that the op mix tells you beforehand
-how much the measurement can move at all.
+real kernel effect, but this model's q8_0 GGUF leaves **every convolution
+weight in F32** — 72% of the forward by the table above — and its LSTM `R`
+matrices are dequantised at load, so only about 2% of the forward is exposed
+to the quantised GEMM path at all. The largest effect it could show is under
+a percent. See "What is still open" item 3.
 
 **The default (scalar) arm's F1 needs no re-measurement**, and this is worth
 stating rather than leaving implicit: its decoded output is unchanged by
@@ -460,17 +460,32 @@ by the table above rather than by a green tick.
 2. **`-t 4` costs 25% more CPU than `-t 2` for no wall gain.** Unexplained here.
 3. ~~**q8_0 measured slightly FASTER than f32 here**~~ — **RESOLVED, and the
    right reading is "indistinguishable", not "faster".**
-   `docs/ggml-repack-buft-evaluation.md` §4 has the working. In short: hFT's
-   29% is real and has now been reproduced at the kernel level with no model
-   involved — generic-path q8_0 `MUL_MAT` costs 1.08–1.31× f32 for
-   transformer-shaped GEMMs on this box, and hFT is 83.5% weight GEMM. This
-   model is 46% convolution, 29% LSTM, 19% dense, so **at most 19% of its work
-   is even eligible** for that penalty; propagating the kernel number through
-   that mix predicts +2% to +6% overall. The measured difference was 3.8% —
-   the right magnitude, and well inside the 20–50% run-to-run spread this box
-   shows for the *same* arm. The sign carries no information. The caution in
-   the original entry — "one box, one model, a small margin" — was the correct
-   instinct; the margin was simply below the measurement floor.
+   `docs/ggml-repack-buft-evaluation.md` §4 has the working. hFT's 29% is real
+   and has now been reproduced at the kernel level with no model involved:
+   generic-path q8_0 `MUL_MAT` costs 1.08–1.31× f32 for transformer-shaped
+   GEMMs, and hFT is 83.5% weight GEMM with all 63 of its quantised tensors on
+   that path.
+
+   This model is not, and the GGUF header says so. `onsets-and-frames-q8_0.gguf`
+   has **19 Q8_0 tensors and 43 F32** — and **every convolution weight is
+   F32**, which is 72% of the forward by the table above. The LSTM `R`
+   matrices are Q8_0 in the file but `onsets_and_frames.cpp:76` dequantises
+   them once at load, so the scalar recurrence — 91% of the BiLSTM — never
+   sees a quantised tensor either. What is actually exposed to ggml's
+   quantised GEMM path is the LSTM input projections (19.1 + 18.0 ms of ~600
+   ms per BiLSTM, ≈1.7% of the forward) and the fc/head GEMMs, which this
+   profile records as below the noise floor.
+
+   ≈2% exposure at a 1.1–1.3× kernel penalty predicts about **+0.6%** overall.
+   The measured difference was 3.8%, in the other direction, on a box whose
+   spread for a *single* arm is 20–50%. The caution in the original entry —
+   "one box, one model, a small margin" — was exactly right; the margin was
+   below the measurement floor.
+
+   **The rule this yields is sharper than "measure":** open the GGUF and look
+   at which tensors are actually quantised before predicting anything from a
+   quantisation A/B. A converter that leaves the convolutions in F32 has
+   already decided the A/B cannot move.
 
    The generalisable lesson: **the op mix tells you in advance how far a
    quantisation A/B can possibly move.** A model that spends 81% of its time
