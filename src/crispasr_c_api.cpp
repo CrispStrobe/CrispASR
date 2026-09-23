@@ -84,6 +84,10 @@
 #include "gigaam.h"
 #define CA_HAVE_GIGAAM 1
 #endif
+#if __has_include("xasr.h")
+#include "xasr.h"
+#define CA_HAVE_XASR 1
+#endif
 #if __has_include("dolphin.h")
 #include "dolphin.h"
 #define CA_HAVE_DOLPHIN 1
@@ -1962,6 +1966,9 @@ struct crispasr_session {
 #ifdef CA_HAVE_GIGAAM
     gigaam_context* gigaam_ctx = nullptr;
 #endif
+#ifdef CA_HAVE_XASR
+    xasr_context* xasr_ctx = nullptr;
+#endif
 #ifdef CA_HAVE_DOLPHIN
     dolphin_context* dolphin_ctx = nullptr;
 #endif
@@ -2658,6 +2665,24 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
         gp.use_flash = g_open_flash_attn_tls;
         s->gigaam_ctx = gigaam_init_from_file(model_path, gp);
         if (!s->gigaam_ctx) {
+            delete s;
+            return nullptr;
+        }
+        return s;
+    }
+#endif
+#ifdef CA_HAVE_XASR
+    if (s->backend == "xasr") {
+        xasr_context_params xp = xasr_context_default_params();
+        xp.n_threads = s->n_threads;
+        xp.verbosity = g_open_verbosity_tls;
+        xp.use_gpu = g_open_use_gpu_tls;
+        if (const char* v = std::getenv("CRISPASR_XASR_CHUNK_MS"))
+            xp.chunk_ms = std::atoi(v);
+        if (const char* v = std::getenv("CRISPASR_XASR_TAIL_PAD_MS"))
+            xp.tail_pad_ms = std::atoi(v);
+        s->xasr_ctx = xasr_init_from_file(model_path, xp);
+        if (!s->xasr_ctx) {
             delete s;
             return nullptr;
         }
@@ -4665,6 +4690,9 @@ CA_EXPORT int crispasr_session_available_backends(char* out_csv, int out_cap) {
 #ifdef CA_HAVE_GIGAAM
     list += ",gigaam";
 #endif
+#ifdef CA_HAVE_XASR
+    list += ",xasr";
+#endif
 #ifdef CA_HAVE_DOLPHIN
     list += ",dolphin";
 #endif
@@ -6303,6 +6331,23 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
         }
         r->segments.push_back(std::move(seg));
         gigaam_result_free(gr);
+        return r;
+    }
+#endif
+#ifdef CA_HAVE_XASR
+    if (s->backend == "xasr" && s->xasr_ctx) {
+        // X-ASR hears zh + en itself; source_language is not a steering knob here.
+        char* text = xasr_transcribe(s->xasr_ctx, pcm, n_samples);
+        if (!text) {
+            delete r;
+            return nullptr;
+        }
+        crispasr_session_seg seg;
+        seg.text = text;
+        seg.t0 = 0;
+        seg.t1 = (int64_t)n_samples * 100 / 16000;
+        free(text);
+        r->segments.push_back(std::move(seg));
         return r;
     }
 #endif
@@ -11432,6 +11477,10 @@ CA_EXPORT void crispasr_session_close(crispasr_session* s) {
 #ifdef CA_HAVE_GIGAAM
     if (s->gigaam_ctx)
         gigaam_free(s->gigaam_ctx);
+#endif
+#ifdef CA_HAVE_XASR
+    if (s->xasr_ctx)
+        xasr_free(s->xasr_ctx);
 #endif
 #ifdef CA_HAVE_DOLPHIN
     if (s->dolphin_ctx)
