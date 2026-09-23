@@ -221,22 +221,30 @@ medians of three after a discarded cold run, every arm in its own process.
 **The machine, named:** GitHub `macos-14`, `arch=ARM64`, chip reported as
 **Apple M1 (Virtual)**, **3 logical cores (3 P + 0 E)**, 7 GiB, macOS 14.
 `ggml_metal_device_init` reports `MTL0 (Apple Paravirtual device)`,
-`MTLGPUFamilyApple5`, both simdgroup flags false — hence §2. Run
-[35832266132](https://github.com/CrispStrobe/CrispASR/actions/runs/35832266132),
-three threads, clips of 3 s and 30 s, `MKL_NUM_THREADS=1`.
+`MTLGPUFamilyApple5`, both simdgroup flags false — hence §2. Three threads,
+clips of 3 s and 30 s, `MKL_NUM_THREADS=1`, medians of three after a discarded
+cold run, every arm in its own process.
+
+**Two independent runs**, on different runner instances, are reported side by
+side. A perf number from one run of one virtual machine is a rumour; two
+agreeing runs are evidence, and where they *disagree* that is reported too
+rather than the nicer of the pair being quoted. Runs
+[35832266132](https://github.com/CrispStrobe/CrispASR/actions/runs/35832266132)
+and
+[35834423457](https://github.com/CrispStrobe/CrispASR/actions/runs/35834423457).
 
 ### hFT-Transformer
 
-| quant | clip | cpu-s / audio-s | × real time | peak RSS | notes |
+| quant | clip | cpu-s / audio-s (run 1 / run 2) | × real time (run 1 / run 2) | peak RSS | notes |
 | --- | --- | --- | --- | --- | --- |
-| f32 | 3 s | 3.517 | 1.223 | 290 MiB | 31 |
-| f32 | 30 s | 2.617 | **0.926** | 311 MiB | 274 |
-| q8_0 | 3 s | 2.211 | 0.761 | 280 MiB | 31 |
-| q8_0 | 30 s | 1.765 | **0.621** | 309 MiB | 274 |
-| q4_0 | 3 s | 2.450 | 0.859 | 277 MiB | 27 |
-| q4_0 | 30 s | 1.581 | **0.563** | 302 MiB | 261 |
+| f32 | 3 s | 3.517 / 3.274 | 1.223 / 1.153 | 290 / 274 MiB | 31 |
+| f32 | 30 s | 2.617 / 2.407 | **0.926 / 0.833** | 311 / 302 MiB | 274 |
+| q8_0 | 3 s | 2.211 / 2.208 | 0.761 / 0.752 | 280 / 274 MiB | 31 |
+| q8_0 | 30 s | 1.765 / 1.724 | **0.621 / 0.614** | 309 / 295 MiB | 274 |
+| q4_0 | 3 s | 2.450 / 2.433 | 0.859 / 0.831 | 277 / 272 MiB | 27 |
+| q4_0 | 30 s | 1.581 / 1.632 | **0.563 / 0.572** | 302 / 293 MiB | 261 |
 
-Fixed vs marginal, solved from the two clip lengths:
+Fixed vs marginal, solved from the two clip lengths (run 1):
 
 | quant | fixed cost | marginal × real time |
 | --- | --- | --- |
@@ -245,48 +253,55 @@ Fixed vs marginal, solved from the two clip lengths:
 | q4_0 | 0.98 s | 0.530× |
 
 **hFT runs under real time on Apple Silicon, on the CPU alone, at every
-quantisation — with no GPU involved.** 0.93× at f32, 0.62× at q8_0, 0.56× at
-q4_0 on the 30 s clip; marginally 0.89× / 0.61× / 0.53×. Against the
-**2.14× real time** measured on the contended x86 VPS, that is a **2.3–3.8×
-difference**, and it is the difference between "cannot keep up with live
-playing" and "keeps up with better than a third of the budget spare".
+quantisation — with no GPU involved.** 0.93 / 0.83× at f32, 0.62 / 0.61× at
+q8_0, 0.56 / 0.57× at q4_0 on the 30 s clip; marginally 0.89× / 0.61× / 0.53×.
+Against the **2.14× real time** measured on the contended x86 VPS that is a
+**2.3–3.8× difference**, and it is the difference between "cannot keep up with
+live playing" and "keeps up with a third of the budget spare".
+
+Note count is identical across runs to the note (274 / 274 / 261), so the arms
+are computing the same thing and only the clock differs.
 
 The caveat cuts the *right* way for once: this is a **virtualised 3-vCPU slice
 of an M1**, the oldest Apple Silicon generation, with no E cores and a third of
 a laptop's core count. A real M-series Mac, and very likely a current iPhone,
 has more. **0.93× is a floor, not a ceiling.**
 
-Quantisation buys ~1.5× (f32 → q4_0 marginal, 0.893 → 0.530) and costs almost
-nothing in RSS here — the weights are only 22 / 7 / 5 MB, so the 280–310 MiB
-peak is activations and the front end, not the model.
+Quantisation buys hFT about **1.5×** (f32 → q4_0 marginal, 0.893 → 0.530) and
+reproduces cleanly across both runs. It costs almost nothing in RSS here — the
+weights are 22 / 7 / 5 MB, so the ~290 MiB peak is activations and the front
+end, not the model.
 
 ### Onsets & Frames
 
-| quant | clip | cpu-s / audio-s | × real time | peak RSS | notes |
+| quant | clip | cpu-s / audio-s (run 1 / run 2) | × real time (run 1 / run 2) | peak RSS | notes |
 | --- | --- | --- | --- | --- | --- |
-| f32 | 3 s | 0.332 | 0.172 | 182 MiB | 14 |
-| f32 | 30 s | 0.277 | **0.161** | 300 MiB | 150 |
-| q8_0 | 3 s | 0.270 | 0.149 | 112 MiB | 13 |
-| q8_0 | 30 s | 0.302 | **0.163** | 225 MiB | 149 |
-| q4_0 | 3 s | 0.314 | 0.162 | 100 MiB | 17 |
-| q4_0 | 30 s | 0.330 | **0.174** | 220 MiB | 141 |
-
-Marginal: f32 0.160×, q8_0 0.165×, q4_0 0.175× real time. Fixed cost is
-0.03 s at f32 and *negative* at q8_0/q4_0 — i.e. below the noise floor of a
-two-point fit, which is the honest reading of −0.05 s.
+| f32 | 3 s | 0.332 / 0.307 | 0.172 / 0.182 | 182 / 179 MiB | 14 |
+| f32 | 30 s | 0.277 / 0.293 | **0.161 / 0.159** | 300 / 296 MiB | 150 |
+| q8_0 | 3 s | 0.270 / 0.294 | 0.149 / 0.158 | 112 / 108 MiB | 13 |
+| q8_0 | 30 s | 0.302 / 0.299 | **0.163 / 0.163** | 225 / 228 MiB | 149 |
+| q4_0 | 3 s | 0.314 / 0.307 | 0.162 / 0.165 | 100 / 96 MiB | 17 |
+| q4_0 | 30 s | 0.330 / 0.296 | **0.174 / 0.160** | 220 / 216 MiB | 141 |
 
 **O&F is roughly 6× faster than real time on the same machine, and
-quantisation does not help it — it very slightly hurts.** q4_0 is 9% slower
-than f32 marginally. That is consistent with the shape of the model: the cost
-is convolution and a host-side LSTM recurrence, not weight bandwidth, so
-dequantising on the fly is pure overhead. What quantisation *does* buy is
-memory — peak RSS 300 → 220 MiB, and 182 → 100 MiB on the short clip — which
-on a phone may matter more than the 9%.
+quantisation does not change its speed in either direction.** Run 1 looked like
+q4_0 costing 8% over f32 (0.174 vs 0.161); run 2 does not reproduce it (0.160
+vs 0.159). Two runs disagreeing by more than the effect means the effect is
+noise, and the honest statement is **"no measurable speed difference between
+f32, q8_0 and q4_0 for O&F"** — not the more interesting negative the first run
+suggested.
 
-**hFT decodes 274 notes to O&F's 150 on the same 30 s clip**, at ~3.5× the
-cost. Neither is "right" — the clip is speech fed to a piano transcriber, so
-nearly every detection is marginal — but it is a reminder that these two are
-not interchangeable at equal settings.
+That null result is itself consistent with the shape of the model: the cost is
+convolution and a host-side LSTM recurrence, not weight bandwidth, so there is
+little for a smaller weight to buy. What quantisation *does* buy, and this does
+reproduce, is **memory** — peak RSS 300 → ~220 MiB on the 30 s clip, and
+180 → ~100 MiB on the short one. On a phone that may matter more than speed
+that was never the constraint.
+
+**hFT decodes 274 notes to O&F's 150 on the same 30 s clip**, at ~5× the CPU
+cost. Neither is "right" — `samples/jfk.wav` is speech fed to a piano
+transcriber, so nearly every detection is marginal — but it is a reminder that
+the two are not interchangeable at equal settings.
 
 ---
 
