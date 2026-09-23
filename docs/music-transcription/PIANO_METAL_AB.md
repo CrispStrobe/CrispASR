@@ -80,6 +80,20 @@ This is not a Metal limitation and not an Apple Silicon one — it is GitHub's
 macOS virtualisation. Real M-series hardware reports `simdgroup matrix mul =
 true` and takes the `mul_mm` path.
 
+**Asked of every hosted image, not just the one that failed first.** The
+`metal-capability` job in the workflow builds one binary and runs one 3 s clip
+on each, so the question costs minutes rather than hours:
+
+| image | GPU | simdgroup reduction / matrix mul | verdict |
+| --- | --- | --- | --- |
+| `macos-14` | MTL0 (Apple Paravirtual device), Apple5 | false / false | **not usable** |
+| `macos-15` | MTL0 (Apple Paravirtual device), Apple5 | false / false | **not usable** |
+| `macos-26` | MTL0 (Apple Paravirtual device), Apple5 | false / false | **not usable** |
+| `macos-latest` | MTL0 (Apple Paravirtual device), Apple5 | false / false | **not usable** |
+
+All four, identically. There is no hosted GitHub macOS image on which a
+dense-GEMM ggml model can use the GPU.
+
 ### 2a. The bug the crash exposed, and the fix
 
 The abort is not specific to these models. Any backend that drives a **single**
@@ -178,9 +192,23 @@ documented q4_0 figures are onset 0.99350, offset 0.99168, mpe 0.99614,
 velocity 0.870, and the f32 row is 1.00000000 across the board. The differences
 above are q4_0 quantisation, which is what that table is for; they are not
 introduced here. (A different clip, so the numbers are in the same regime rather
-than identical.) The f32 leg — the one that should read 1.00000000 and is
-therefore the decisive check on the refactor — was still running when this was
-written.
+than identical.) **The f32 leg is the decisive check on the refactor, and it is exact:**
+
+```
+log-mel      max 8.920e-02  rms 1.733e-03  cos 0.99999997  |mine| 1657  |ref| 1657
+onset        max 4.261e-06  rms 5.993e-08  cos 1.00000000  |mine| 10.64  |ref| 10.64
+offset       max 2.333e-06  rms 4.606e-08  cos 1.00000000  |mine| 6.343  |ref| 6.343
+mpe          max 2.550e-06  rms 1.003e-07  cos 1.00000000  |mine| 20.71  |ref| 20.71
+velocity     max 0.000e+00  rms 0.000e+00  cos 1.00000000  |mine| 537.4  |ref| 537.4
+
+onset / offset / mpe: 100.0000% of 22528 decision cells agree, in both directions
+velocity: 100.0000% on the ignore_zero gate AND on the exact argmax bin
+```
+
+`velocity` at max abs **exactly 0.0** — bit-identical to onnxruntime — and the
+other three within 4.3e-06 on activations of magnitude 6–21. The `log-mel` row
+is the C++ front end against librosa's, which is a different computation and
+always differed by ~1e-3 RMS; it is unchanged.
 
 ---
 
@@ -270,7 +298,6 @@ not interchangeable at equal settings.
 | Metal throughput for O&F | **unanswered** | as above. Note the prior is weaker here anyway: ~46% conv, ~29% LSTM, and the LSTM is a host-side sequential recurrence a GPU cannot help with, so a device↔host copy per chunk is added against a partial win. |
 | Metal *numerical* parity (fp32-vs-fp16 per op) | **unanswered** | the same. The harness for it is written and gated — per-head cosine at 0.999 against the CPU path, non-finite values a hard failure, plus a note-level pitch-sequence comparison — it simply has never had a GPU to run against. |
 | whether q8_0-on-Metal hits the Chatterbox CFM trap | **unanswered, but the prior is "no"** | `docs/quantize.md` records that Metal's q8 **mat-vec** kernel requantises activations and corrupts the CFM. hFT flattens its position-wise GEMMs into one many-row `mul_mat` (`8f76e054`) and O&F's convs go through `im2col`+`mul_mat`, so both are matrix-**matrix**. That is a reason to expect safety, not evidence of it; the q8_0 arm is compared like every other one when a GPU exists to run it. |
-| hFT CPU-vs-ONNX parity, re-confirmed on this binary | **not completed here** | `tools/hft_parity.py` imports `torch` and `torchaudio` solely to resample the input to canonical 16 kHz mono. On this VPS, under 6 GB of 7 GB used and a load average of 14–28, `import torch` did not complete in 240 s. A shim that skips the resample (the clip is already canonical) is at `/mnt/storage/tmp-metal-ab/hft_parity_notorch.py`, untracked, and was still running when this was written. O&F's 26-stage result in §3 covers the same code path in `core/gguf_loader` and `core/mel`. |
 
 **The honest summary of the Metal question: it is open.** Nothing here shows
 Metal helping, and nothing here shows it failing to help. What is settled is
