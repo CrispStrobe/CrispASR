@@ -39,11 +39,13 @@ marginal. It is not closed.
 > **On Apple Silicon, and on quantisation.** `PIANO_METAL_AB.md` §4 measures
 > O&F on a GitHub `macos-14` runner (chip "Apple M1 (Virtual)", 3 cores,
 > 3 threads) at **0.161× real time at f32** — about 6× faster than real time —
-> and finds that **quantisation does not help it**: q4_0 is ~9% *slower* than
-> f32 marginally (0.175× vs 0.160×), which fits a model whose cost is
-> convolution and a host-side LSTM recurrence rather than weight bandwidth.
-> What q8_0/q4_0 buy is memory: peak RSS 300 → 220 MiB on a 30 s clip. That
-> doc also records why there is no GPU column.
+> and finds **no measurable speed difference between f32, q8_0 and q4_0** —
+> two independent runs disagree by more than any effect, so the first run's
+> apparent 8% q4_0 penalty is noise and is retracted there. That null is
+> consistent with a model whose cost is convolution and a host-side LSTM
+> recurrence rather than weight bandwidth. What q8_0/q4_0 do buy, and this
+> reproduces, is memory: peak RSS 300 → ~220 MiB on a 30 s clip. That doc also
+> records why there is no GPU column.
 
 ---
 
