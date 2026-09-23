@@ -14,6 +14,18 @@ and require both monotonic output and bounded timing displacement. Worktree
 Worktree `.claude/worktrees/feat-436-dolphin`, branch `feat/436-dolphin`.
 NOW: blueprint read (docs/dolphin/PLAN.md on the branch); converter next.
 
+## CLAIMED 2026-09-23 — #455 Raon-Speech-9B (speech-to-text only)
+
+Worktree `.claude/worktrees/feat-455-raon-speech`, branch `feat/455-raon-speech`.
+ASR subset = Qwen3-Omni audio tower (24L/1024, proj2 -> 2048) + 2-layer
+EmbeddingAdaptor (2048->4096 GELU 4096->4096, RMSNorm) + Qwen3 36L/4096 LLM
+(RoPE theta 5e6, untied lm_head, vocab 153723). Plan: a `raon-speech` variant
+of the qwen3-asr runtime (adaptor after proj2, 8 s chunks with per-chunk mel
+max, 13 Hz -> 12.5 Hz truncation, placeholder 151676, prompt "Transcribe the
+audio into text"). Talker / Mimi / code predictor are not converted.
+CC-BY-NC-4.0: NC-gated registry entry like raon. 18 GB bf16 -> conversion and
+reference run on Kaggle only.
+
 ## CLAIMED 2026-09-23 — #454 moondream parakeet-ultra / parakeet-redux
 
 Worktree `.claude/worktrees/feat-454-parakeet`, branch `feat/454-parakeet-hf`.
