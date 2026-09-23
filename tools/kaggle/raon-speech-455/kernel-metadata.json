@@ -1,0 +1,3 @@
+{"id": "chr1s4/crispasr-raon-speech-455", "title": "CrispASR Raon Speech 455", "code_file": "raon_speech_455.py",
+ "language": "python", "kernel_type": "script", "is_private": "true", "enable_gpu": "true", "enable_internet": "true",
+ "dataset_sources": ["chr1s4/crispasr-hf-token", "chr1s4/crispasr-ccache"], "competition_sources": [], "kernel_sources": []}
