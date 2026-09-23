@@ -15,9 +15,11 @@ inline bool codec_must_use_cpu(const char* backend_name, bool native_override) {
     return is_rocm_backend(backend_name) && !native_override;
 }
 
-// The second #337 defect was narrower: only the 5-layer, 1024-wide predictor
-// from the 0.6B F16 artifact emitted NaN. Quantized 0.6B and both 1.7B variants
-// were clean in the reporter's matrix, so retain their native HIP paths.
+// The second #337 defect was narrower: the 5-layer, 1024-wide predictor
+// from the 0.6B F16 artifact overflowed when HIP narrowed a large SwiGLU
+// activation for an F16 down-projection matmul. The native override now bakes
+// F32 down weights; retain the conservative CPU default pending validation on
+// more GPUs. Quantized 0.6B and both 1.7B variants retain native HIP.
 inline bool code_predictor_must_use_cpu(const char* backend_name, bool native_override, int n_layers, int d_model,
                                         bool weights_are_f16) {
     return is_rocm_backend(backend_name) && !native_override && n_layers == 5 && d_model == 1024 && weights_are_f16;
