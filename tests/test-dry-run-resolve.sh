@@ -50,6 +50,7 @@ parakeet-tdt-1.1b|parakeet-tdt-1.1b-q4_k.gguf
 orukeet|orukeet-q4_k.gguf
 confucius4-r2t2|confucius4-r2t2-q4_k.gguf
 dolphin|dolphin-cn-dialect-small-streaming-q4_k.gguf|dolphin
+xasr|x-asr-zh-en-q8_0.gguf|xasr
 "
 while IFS='|' read -r arg expected backend; do
     [ -z "$arg" ] && continue

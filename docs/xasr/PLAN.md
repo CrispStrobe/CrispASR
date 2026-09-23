@@ -122,3 +122,11 @@ Mel-domain triangles give mean |Δ| 5.3e-5, and max 1.9e-4 wherever
 log-energy > −5; the few larger values are near-floor bins (log ≈ −15, float32
 FFT rounding). The historic Hz-domain triangles would give mean |Δ| 2.6e-3,
 max 5.2e-2.
+
+## NOW (2026-09-23)
+
+F16 parity on the first real run (tools/kaggle/xasr-pipeline, fcf080e2): every
+stage has worst-frame cos ≥ 0.99999 on jfk and zh at 480 ms and 160 ms. The
+tokens and the sherpa-rendered text are identical, and streaming in 370 ms
+pieces equals one-shot. Q8_0 (168 MB) is the registry default; Q4_K (93 MB)
+keeps zh identical but drops English punctuation.

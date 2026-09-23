@@ -724,6 +724,12 @@ constexpr Entry k_registry[] = {
      "https://huggingface.co/cstr/dolphin-cn-dialect-small-streaming-GGUF/resolve/main/"
      "dolphin-cn-dialect-small-streaming-q4_k.gguf",
      "~258 MB", nullptr, nullptr},
+    // X-ASR zh-en (#436) — GilgameshWind, icefall streaming Zipformer2
+    // transducer (zh + en, punctuation + casing). One GGUF serves all four
+    // upstream chunk sizes (CRISPASR_XASR_CHUNK_MS). Q8_0 by default: zh
+    // transcripts match F16 at Q8_0 and Q4_K; Q4_K drops English punctuation.
+    {"xasr", "x-asr-zh-en-q8_0.gguf", "https://huggingface.co/cstr/x-asr-zh-en-GGUF/resolve/main/x-asr-zh-en-q8_0.gguf",
+     "~168 MB", nullptr, nullptr},
     // parakeet-tdt-1.1b — larger TDT, English-only, 42-layer encoder
     // (vs 24 for 0.6b). Lowercase + no punctuation output. Slower but
     // wins on very long-tail vocabulary.
