@@ -377,27 +377,40 @@ activation, nothing else eligible.
 
 ---
 
-## 6. What remains untestable here, and why
+## 6. What is still open, and what is untestable from here
 
-1. **Whether a CPU with an int8 dot-product instruction changes the picture.**
-   Neither machine has VNNI, AVX-VNNI or AMX, and neither is arm64. The Kaggle
-   arm was pushed specifically to move this variable and drew an AVX2-only
-   Xeon. Expect the repacked path to widen its lead where VNNI exists — ggml's
-   `mul_sum_i8_pairs` has a `_mm512_dpbusd_epi32` branch
-   (`arch/x86/repack.cpp:124`) that neither machine took — but that is a
-   prediction, not a measurement.
-2. **arm64.** The type table inverts there (§2): q8_0 gains a kernel, and it is
-   the quantisation every model in this tree already ships. **On a phone this
-   lever may well pay for the models as they exist today, where on x86 it does
-   not.** That is the single most valuable untested case and it needs a device
-   or a CI runner on `macos-14`/`ubuntu-24.04-arm`.
-3. **Whether q4_0 or q4_K is accurate enough to adopt.** This document is about
-   throughput. hFT's own table already records q4_0 at the same throughput as
-   q8_0 and does not report its F1. Switching a shipping model from q8_0 to
-   q4_K to reach this fast path is an accuracy decision that needs the
+1. **Whether a CPU with an int8 dot-product instruction widens the x86 lead.**
+   **Untestable from this project's hardware, not merely untested.** Four x86
+   machines have been checked — the Skylake-SP VPS, a Kaggle GCE Xeon, and
+   GitHub's AMD EPYC 7763 — and **none has AVX-512 VNNI, AVX-VNNI or AMX**.
+   ggml's `mul_sum_i8_pairs` does have a `_mm512_dpbusd_epi32` branch
+   (`arch/x86/repack.cpp:124`) that no machine here took, so the repacked path
+   should widen its lead where VNNI exists. That is a prediction. Answering it
+   needs a Sapphire Rapids / Ice Lake box, a self-hosted runner, or a cloud
+   instance chosen by CPU family.
+2. **Whether to adopt it on arm64, which is a decision rather than a
+   measurement.** §3c answers the measurement: 2.3–3.4× on q8_0, on the GGUFs
+   as they ship, on both Apple Silicon and Linux arm64. What is not yet priced
+   is the other side of §1.4 — the repack path **gives up the zero-copy mmap**,
+   so it trades load time and resident memory for GEMM throughput. hFT is a
+   22 MB model and will not notice; a multi-gigabyte one might, and
+   `gguf_loader.cpp`'s mmap path exists because a 14.9 GB F16 GGUF was
+   thrashing swap on a 16 GB Mac. **Measure RSS and load time per model before
+   turning this on for a large one.** The end-to-end CI job reports both.
+3. **Whether q4_0 or q4_K holds its accuracy well enough to adopt on x86.**
+   This document is about throughput only. On x86 the lever requires
+   re-quantising away from q8_0, and `crispasr_model_registry.cpp:794` already
+   notes that q4_0 "damages" onsets-and-frames. That is a question for the
    note-level F1 harness, not this one.
-4. **Nothing in §3 was taken on a clean machine.** The VPS is a shared 4-vCPU
-   box carrying a load average of 4–7. The Kaggle worker is quieter but is
-   still shared infrastructure. Both arms of every comparison were interleaved
-   so contention cannot masquerade as a result, which is the most that can be
-   done without a dedicated machine.
+4. **The other five `core_gguf` backends.** Only `src/hft_transformer.cpp`
+   adopts `load_weights_repack()` so far. Each further adopter needs its own
+   predicate and an audit that no op other than `MUL_MAT`/`MUL_MAT_ID` touches
+   those tensors (§5.1). `src/onsets_and_frames.cpp` is a poor candidate for a
+   different reason: §4b shows its convolutions are F32 in the GGUF and its
+   LSTM recurrence dequantises at load, so there is almost nothing on its hot
+   path for the repack buffer type to act on.
+5. **The VPS numbers in §3a should not be quoted.** They are kept because they
+   agree in sign and rough magnitude with the clean runs, and because the
+   Skylake-SP-vs-EPYC disagreement in §3c is a genuine ISA finding rather than
+   noise. But they were taken at a load average of 6.4 on a box that reached 40
+   the same night. Cite §3b and §3c.
