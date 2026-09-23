@@ -2,6 +2,19 @@
 
 ## NOW — active work
 
+**2026-09-23: F16 parity achieved on the first run** (kernel
+`chr1s4/crispasr-436-dolphin-pipeline`, commit 5776f678). Against the upstream
+package (dither 0) on paraformer_zh.wav and jfk.wav, every `crispasr-diff` stage
+PASSes: fbank 1.000000, subsample ≥0.999999, all 12 E-Branchformer blocks
+≥0.999417, encoder output ≥0.999064, CTC log-probs 1.000000 (argmax identical on
+every frame), and the decoded text — prompt tokens, predicted <zh><CN>, beam +
+rescoring — is IDENTICAL to upstream on both clips. GGUFs on
+cstr/dolphin-cn-dialect-small-streaming-GGUF (F16 789 MB, Q8_0 443 MB, Q4_K 258 MB).
+
+Open: Q8_0/Q4_K degrade more than expected in blocks 6-11 (Q8_0 jfk worst-frame
+encoder cos 0.34, although CTC argmax still matches every frame and the zh text is
+identical at Q8_0 and Q4_K). Next: quant A/B keeping candidate tensors at F16.
+
 Branch `feat/436-dolphin`. Target: `DataoceanAI1/dolphin-cn-dialect-small-streaming`
 (asked for in #436), with the runtime written for the whole Dolphin family
 (base / small / cn / cn.streaming / cn.prompt share one architecture).
