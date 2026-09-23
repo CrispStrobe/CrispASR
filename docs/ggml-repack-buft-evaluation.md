@@ -20,25 +20,36 @@ one, in either direction.
 
 ---
 
-## 0. The machines
+## 0. The machines, and which numbers to trust
 
-| | VPS (`crispasr-dev`) | Kaggle CPU worker |
-| --- | --- | --- |
-| CPU | Intel Xeon Skylake-SP (IBRS, no TSX) | Intel Xeon @ 2.20 GHz (GCE) |
-| cores | 4 vCPU, shared, load average 4–7 throughout | 4 vCPU |
-| AVX2 | yes | yes |
-| AVX-512F/DQ/CD/BW/VL | **yes** | no |
-| AVX-512 VNNI | **no** | **no** |
-| AVX-VNNI | no | **no** |
-| AMX-INT8 | **no** | **no** |
-| ARM dotprod / i8mm | n/a | n/a |
+| | VPS (`crispasr-dev`) | Kaggle CPU worker | GitHub `ubuntu-24.04` / `ubuntu-24.04-arm` / `macos-14` |
+| --- | --- | --- | --- |
+| CPU | Intel Xeon Skylake-SP (IBRS, no TSX) | Intel Xeon @ 2.20 GHz (GCE) | see §3c — printed per run |
+| cores | 4 vCPU, **shared** | 4 vCPU, shared | 4, dedicated |
+| load during measurement | **6.4 one-minute, rising to 40 later in the night** | ~0 | ~0 |
+| AVX2 | yes | yes | yes |
+| AVX-512F/DQ/CD/BW/VL | yes | no | printed per run |
+| AVX-512 VNNI | **no** | **no** | printed per run |
+| AMX-INT8 | **no** | **no** | printed per run |
+| ARM dotprod / i8mm | n/a | n/a | the two arm64 legs |
 
-**Neither machine has an int8 dot-product instruction.** That was the one
-variable the Kaggle arm existed to move, and Kaggle drew a CPU without it. So
-the VNNI / AMX / arm64-dotprod question remains untested — see §6. What Kaggle
-*did* contribute is a second, far quieter x86 machine: its run-to-run spread is
-under 1%, against 20–50% on the contended VPS, so it confirms the VPS result
-was not an artefact of noise.
+⚠ **Read the load row before the numbers.** The VPS is a shared 4-vCPU box that
+was carrying a load average of 6 when §3a was taken and reached 40 later the
+same night. Interleaving the arms — which every measurement here does — removes
+*some* of that error, but not memory pressure and not cache thrash, and no
+number taken there is fit to quote on its own.
+`BASIC_PITCH_CONV_PERF.md` records the same trap from the other side: a
+threading win that was invisible on this VPS measured 3.6–3.8× on a clean
+runner. **The Kaggle and CI numbers are the ones to cite; the VPS numbers are
+kept because they agree, and are labelled so nobody quotes them as primary.**
+
+**Neither x86 machine reachable without CI has an int8 dot-product
+instruction.** The Kaggle arm was pushed specifically to move that variable and
+drew a CPU without it. That is what `.github/workflows/ggml-repack-buft-ab.yml`
+is for: `ubuntu-24.04` is Ice Lake / Cascade Lake class and may have AVX-512
+VNNI, and the two arm64 legs have `dotprod`/`i8mm`, where ggml's type table
+inverts (§2) and q8_0 — the quantisation every GGUF in this tree actually
+ships — does get a kernel.
 
 ---
 
@@ -127,7 +138,7 @@ sample; medians are given in the raw output.
 
 Reproduce: `crispasr-repack-probe --threads 1 --reps 40`.
 
-### VPS — Skylake-SP, AVX-512F, no VNNI, 1 thread, best of 40
+### 3a. VPS — Skylake-SP, AVX-512F, no VNNI — ⚠ load average 6.4, corroborating only
 
 | shape (K,N,M) | type | generic vs f32 | repacked vs f32 | **repack vs generic** |
 | --- | --- | --- | --- | --- |
@@ -144,7 +155,7 @@ Reproduce: `crispasr-repack-probe --threads 1 --reps 40`.
 | | q4_K | 2.14× slower | **0.66×** | **3.23×** |
 | | q6_K | 1.81× slower | *no kernel* | — |
 
-### Kaggle — AVX2-only Xeon, no AVX-512, no VNNI, best of 25
+### 3b. Kaggle — AVX2-only Xeon, no AVX-512, no VNNI, quiet machine, best of 25
 
 | shape | type | repack vs generic, 1 thread | 4 threads |
 | --- | --- | --- | --- |

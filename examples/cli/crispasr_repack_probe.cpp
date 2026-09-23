@@ -17,7 +17,17 @@
 // contended box perturbs both arms equally (playbook §6.9).
 //
 // Usage:
-//   crispasr-repack-probe [--threads N] [--reps N] [--shape K,N,M] ...
+//   crispasr-repack-probe [--threads N] [--reps N] [--shape K,N,M]...
+//                         [--arm both|default|repack] [--type f32|q8_0|...]
+//
+// `--arm` runs ONE arm only and prints a single machine-readable line per
+// (shape, type). The tree's A/B discipline (BASIC_PITCH_CONV_PERF.md, and
+// .github/workflows/basic-pitch-conv-ab.yml) wants every arm in its OWN
+// PROCESS, because a shared process warms caches across arms and because a
+// process-local static can make the second arm not be the arm you think. The
+// default `both` mode interleaves in-process, which is the right tool on a
+// contended box where between-process drift is the larger error; on a clean
+// runner, prefer one process per arm and discard the cold run.
 //
 // NOTE: report the ISA with every number. A negative result on a machine
 // without AVX-512 VNNI / AMX (x86) or dotprod / i8mm (arm64) does not
@@ -172,6 +182,8 @@ int main(int argc, char ** argv) {
 
     int n_threads = 1;
     int reps      = 25;
+    std::string arm_sel  = "both";
+    std::string type_sel;
     std::vector<Shape> shapes;
 
     for (int i = 1; i < argc; i++) {
@@ -179,12 +191,15 @@ int main(int argc, char ** argv) {
         auto next = [&]() -> const char * { return i + 1 < argc ? argv[++i] : nullptr; };
         if (a == "--threads") { const char * v = next(); if (v) n_threads = atoi(v); }
         else if (a == "--reps") { const char * v = next(); if (v) reps = atoi(v); }
+        else if (a == "--arm") { const char * v = next(); if (v) arm_sel = v; }
+        else if (a == "--type") { const char * v = next(); if (v) type_sel = v; }
         else if (a == "--shape") {
             const char * v = next();
             long long K = 0, N = 0, M = 0;
             if (v && sscanf(v, "%lld,%lld,%lld", &K, &N, &M) == 3) shapes.push_back({K, N, M});
         } else if (a == "-h" || a == "--help") {
-            printf("usage: crispasr-repack-probe [--threads N] [--reps N] [--shape K,N,M]...\n");
+            printf("usage: crispasr-repack-probe [--threads N] [--reps N] [--shape K,N,M]...\n"
+                   "                              [--arm both|default|repack] [--type NAME]\n");
             return 0;
         }
     }
@@ -231,6 +246,40 @@ int main(int argc, char ** argv) {
         { GGML_TYPE_Q4_K, "q4_K" },
         { GGML_TYPE_Q6_K, "q6_K" },
     };
+
+    if (arm_sel == "default" || arm_sel == "repack") {
+        // One arm, one process. Machine-readable:
+        //   ARM <arm> <type> <K> <N> <M> <threads> <best_ms> <median_ms> <checksum> <status>
+        // status is `ok`, or `declined` when the repack buffer type has no
+        // kernel for that (type, shape, ISA) — which is a result, not a skip.
+        const bool want_repack = (arm_sel == "repack");
+        for (Shape s : shapes) {
+            for (auto ty : types) {
+                if (!type_sel.empty() && type_sel != ty.n) continue;
+                Arm a;
+                if (!build_arm(a, ty.t, s, n_threads, want_repack ? extra[0] : nullptr,
+                               arm_sel.c_str()))
+                    return 1;
+                if (!a.usable) {
+                    printf("ARM %s %s %lld %lld %lld %d - - - declined\n", arm_sel.c_str(), ty.n,
+                           (long long)s.K, (long long)s.N, (long long)s.M, n_threads);
+                    continue;
+                }
+                for (int i = 0; i < 3; i++) ggml_backend_graph_compute(a.backend, a.gf);
+                for (int i = 0; i < reps; i++) {
+                    double t0 = now_ms();
+                    ggml_backend_graph_compute(a.backend, a.gf);
+                    a.times.push_back(now_ms() - t0);
+                }
+                finish_arm(a);
+                Stats st = summarise(a.times);
+                printf("ARM %s %s %lld %lld %lld %d %.4f %.4f %.6f ok\n", arm_sel.c_str(), ty.n,
+                       (long long)s.K, (long long)s.N, (long long)s.M, n_threads,
+                       st.best, st.med, a.checksum);
+            }
+        }
+        return 0;
+    }
 
     for (Shape s : shapes) {
         printf("\n== shape K=%lld N=%lld M=%lld, threads=%d, reps=%d (interleaved) ==\n",

@@ -52,6 +52,8 @@ jobs:
     name: ${{ matrix.name }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Host ISA — report this with every number below
         run: |
@@ -97,19 +99,69 @@ jobs:
               -Wl,-rpath,"$PWD/$LIBDIR"
           ls -l repack-probe
 
-      # The probe interleaves its own arms round-robin and alternates which
-      # goes first, so even here contention cannot masquerade as a result.
-      - name: A/B — 1 thread
+      # One arm per PROCESS, cold run discarded, median of >= 3 — the same
+      # discipline basic-pitch-conv-ab.yml encodes, and for the same reasons: a
+      # shared process warms caches across arms. (The probe's default in-process
+      # interleave is the right tool on a *contended* box, where between-process
+      # drift dominates. On a clean runner it is not.)
+      #
+      # `--arm ... ` prints one machine-readable ARM line per (type, shape),
+      # with status `ok` or `declined`. `declined` means the repack buffer type
+      # has no kernel for that type on this ISA — a result, not a skip.
+      - name: A/B — separate process per arm
         env:
           MKL_NUM_THREADS: "1"          # CrispASR issue #453
           OPENBLAS_NUM_THREADS: "1"
-        run: ./repack-probe --threads 1 --reps 40 | tee ab-t1.txt
+        run: |
+          set -e
+          NPROC=$(getconf _NPROCESSORS_ONLN)
+          : > arms.txt
+          for t in 1 "$NPROC"; do
+            for arm in default repack; do
+              for rep in 0 1 2 3; do
+                out=$(./repack-probe --arm "$arm" --threads "$t" --reps 30 | grep '^ARM ')
+                # rep 0 is cold: page faults on the weight buffer and a
+                # first-touch of the repacked layout. Discard it.
+                [ "$rep" = 0 ] || echo "$out" >> arms.txt
+              done
+            done
+          done
+          cat arms.txt
 
-      - name: A/B — all cores
+      # The paired in-process view as well, for the human-readable ratio table
+      # and because it cross-checks the separate-process numbers.
+      - name: A/B — interleaved, human-readable
         env:
           MKL_NUM_THREADS: "1"
           OPENBLAS_NUM_THREADS: "1"
-        run: ./repack-probe --threads "$(getconf _NPROCESSORS_ONLN)" --reps 40 | tee ab-tN.txt
+        run: |
+          ./repack-probe --threads 1 --reps 40 | tee ab-t1.txt
+          ./repack-probe --threads "$(getconf _NPROCESSORS_ONLN)" --reps 40 | tee ab-tN.txt
+
+      # Median across the surviving reps, per (arm, type, shape, threads), and
+      # the ratio. Awk rather than a script file so the workflow stays hermetic.
+      - name: Ratios from the separate-process arms
+        run: |
+          sort -k2,2 -k3,3 -k4,4 -k5,5 -k6,6 -k7,7 arms.txt | awk '
+            $10 == "ok" { key = $3" "$4" "$5" "$6" "$7; v[key" "$2][++n[key" "$2]] = $8 }
+            $10 == "declined" { dec[$3" "$7] = 1 }
+            END {
+              printf "%-6s %-18s %-3s %10s %10s %8s\n", "type", "shape(K,N,M)", "thr", "default", "repack", "speedup"
+              for (k in n) { split(k, p, " "); key = p[1]" "p[2]" "p[3]" "p[4]" "p[5]; arms[key] = 1 }
+              for (key in arms) {
+                nd = n[key" default"]; nr = n[key" repack"]
+                if (!nd) continue
+                asort_med(v[key" default"], nd); d = med
+                if (nr) { asort_med(v[key" repack"], nr); r = med } else r = 0
+                split(key, p, " ")
+                if (r > 0) printf "%-6s %-18s %-3s %10.4f %10.4f %7.2fx\n", p[1], p[2]","p[3]","p[4], p[5], d, r, d/r
+                else       printf "%-6s %-18s %-3s %10.4f %10s %8s\n", p[1], p[2]","p[3]","p[4], p[5], d, "-", "declined"
+              }
+            }
+            function asort_med(a, cnt,   i, j, t) {
+              for (i = 1; i <= cnt; i++) for (j = i+1; j <= cnt; j++) if (a[j] < a[i]) { t=a[i]; a[i]=a[j]; a[j]=t }
+              med = a[int((cnt+1)/2)]
+            }' | sort | tee ratios.txt
 
       # A probe that silently found no repack buffer type would otherwise pass
       # green and be read as "measured, no win". Make the distinction explicit.
@@ -132,3 +184,5 @@ jobs:
           path: |
             ab-t1.txt
             ab-tN.txt
+            arms.txt
+            ratios.txt
