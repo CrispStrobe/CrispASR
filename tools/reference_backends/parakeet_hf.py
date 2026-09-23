@@ -86,6 +86,15 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str], max_new_tokens
     from . import _hooks
 
     model, md = _load(model_dir)
+    # The moondream repos ship no generation_config.json; set what transformers'
+    # convert_nemo_to_hf.py writes for a TDT model (start = blank, the duration
+    # logits suppressed from the token argmax).
+    gc = model.generation_config
+    if gc.decoder_start_token_id is None:
+        gc.decoder_start_token_id = model.config.blank_token_id
+        durs = getattr(model.config, "durations", None)
+        if durs and not gc.suppress_tokens:
+            gc.suppress_tokens = list(range(model.config.vocab_size, model.config.vocab_size + len(durs)))
     # moondream ships no preprocessor_config.json; the default extractor is 80
     # mels, these checkpoints take encoder_config.num_mel_bins (128)
     if (md / "preprocessor_config.json").exists():
