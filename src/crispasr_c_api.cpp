@@ -3987,7 +3987,11 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
     }
 #endif
 #ifdef CA_HAVE_F5TTS
-    if (s->backend == "f5-tts" || s->backend == "f5tts" || s->backend == "f5") {
+    // raon / raon-1b: Raon-OpenTTS rides the f5-tts runtime (#387). The CLI
+    // factory accepts both names; the session did not, so an explicit
+    // open(..., "raon") from a binding returned null.
+    if (s->backend == "f5-tts" || s->backend == "f5tts" || s->backend == "f5" || s->backend == "raon" ||
+        s->backend == "raon-1b") {
         s->backend = "f5-tts";
         f5_tts_params p = f5_tts_default_params();
         p.n_threads = s->n_threads;
@@ -4534,6 +4538,13 @@ CA_EXPORT int crispasr_session_output_sample_rate(crispasr_session* s) {
         return 16000;
 #endif
         // Every remaining audio-producing ctx uses the 24 kHz adapter default.
+#ifdef CA_HAVE_BT2_TTS
+    // Breeze-TTS-2 renders through the qwen3-tts-tokenizer-12hz codec (24 kHz),
+    // as its CLI adapter's tts_sample_rate() says. It had no arm here and
+    // reported 0 Hz (tests/test-session-output-rate-parity.cpp).
+    if (s->bt2_ctx)
+        return 24000;
+#endif
 #ifdef CA_HAVE_BARK
     if (s->bark_ctx)
         return 24000;
@@ -9264,13 +9275,17 @@ CA_EXPORT int crispasr_session_set_voice(crispasr_session* s, const char* path, 
 #endif
 #ifdef CA_HAVE_F5TTS
     if (s->f5tts_ctx) {
-        // F5-TTS clones from a reference WAV + its transcript. Load
-        // directly at 24 kHz — avoids the lossy 16k→24k resample path.
+        // F5-TTS clones from a reference WAV + its transcript. Load it
+        // directly at the MODEL's mel rate — 24 kHz for F5-TTS (Vocos), 16 kHz
+        // for Raon-OpenTTS (#387, sbhifigan16k) — as the CLI adapter does. A
+        // hard-coded 24 kHz fed Raon a reference its mel front-end read as
+        // 1.5x longer and lower (tests/test-f5-session-voice-rate-live.sh).
         if (!ends_with_wav(path))
             return -2;
         float* pcm = nullptr;
         int n = 0, sr = 0;
-        if (crispasr_audio_load_at_rate(path, 24000, &pcm, &n, &sr) != 0 || !pcm || n <= 0) {
+        const int model_sr = f5_tts_sample_rate(s->f5tts_ctx);
+        if (crispasr_audio_load_at_rate(path, model_sr > 0 ? model_sr : 24000, &pcm, &n, &sr) != 0 || !pcm || n <= 0) {
             if (pcm)
                 free(pcm);
             return -1;

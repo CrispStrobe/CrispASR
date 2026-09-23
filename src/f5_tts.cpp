@@ -2706,8 +2706,8 @@ static std::vector<float> f5_preprocess_ref_audio(const float* pcm, int n, int s
     return out;
 }
 
-int f5_tts_set_reference(struct f5_tts_context* ctx, const float* pcm_24k, int n_samples, const char* ref_text) {
-    if (!ctx || !pcm_24k || n_samples <= 0)
+int f5_tts_set_reference(struct f5_tts_context* ctx, const float* pcm, int n_samples, const char* ref_text) {
+    if (!ctx || !pcm || n_samples <= 0)
         return -1;
 
     // Reference preprocessing (upstream parity): silence-strip + clip. Gated so
@@ -2719,13 +2719,12 @@ int f5_tts_set_reference(struct f5_tts_context* ctx, const float* pcm_24k, int n
     float ref_max_sec = max_env ? (float)atof(max_env) : 12.0f;
     const char* trim_env = crispasr_env::get("CRISPASR_F5_REF_TRIM_SILENCE");
     bool ref_trim = !(trim_env && std::strcmp(trim_env, "0") == 0);
-    std::vector<float> ref_pcm =
-        f5_preprocess_ref_audio(pcm_24k, n_samples, ctx->hp.sample_rate, ref_max_sec, ref_trim);
+    std::vector<float> ref_pcm = f5_preprocess_ref_audio(pcm, n_samples, ctx->hp.sample_rate, ref_max_sec, ref_trim);
     if (ctx->verbosity >= 1 && (int)ref_pcm.size() != n_samples) {
         fprintf(stderr, "f5_tts: ref preprocess %d -> %zu samples (%.2f -> %.2f s)\n", n_samples, ref_pcm.size(),
                 (float)n_samples / (float)ctx->hp.sample_rate, (float)ref_pcm.size() / (float)ctx->hp.sample_rate);
     }
-    pcm_24k = ref_pcm.data();
+    pcm = ref_pcm.data();
     n_samples = (int)ref_pcm.size();
 
     // Compute mel spectrogram of reference audio. sbhifigan16k (#387) uses the
@@ -2733,8 +2732,8 @@ int f5_tts_set_reference(struct f5_tts_context* ctx, const float* pcm_24k, int n
     int T_ref;
     const bool sbmel = (ctx->hp.mel_spec_type == "sbhifigan16k");
     ctx->ref_mel =
-        compute_mel_spectrogram(pcm_24k, n_samples, ctx->hp.n_fft, ctx->hp.hop_length, ctx->hp.win_length,
-                                ctx->hp.mel_dim, T_ref, (float)ctx->hp.sample_rate, sbmel ? &ctx->mel_fb : nullptr,
+        compute_mel_spectrogram(pcm, n_samples, ctx->hp.n_fft, ctx->hp.hop_length, ctx->hp.win_length, ctx->hp.mel_dim,
+                                T_ref, (float)ctx->hp.sample_rate, sbmel ? &ctx->mel_fb : nullptr,
                                 sbmel ? &ctx->mel_window : nullptr, sbmel ? ctx->hp.mel_center : true);
 
     // If mel computation not yet implemented, allow setting ref_mel directly

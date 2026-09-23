@@ -6,6 +6,28 @@ technical deep-dives are in `LEARNINGS.md`.
 
 ---
 
+## Session ABI TTS sample-rate bugs (from CrisperWeaver), fixed 2026-09-23
+
+Three session-ABI defects, all invisible to the CLI, found by a downstream
+Flutter app driving the bindings:
+(1) `crispasr_session_set_voice` loaded an f5-tts reference at a hard-coded
+24 kHz. Raon-OpenTTS (#387) runs the f5-tts runtime with a 16 kHz mel
+front-end, so every binding fed it a reference read at the wrong rate: the
+reference mel came out 747 frames against the CLI's 680, cos 0.94. It now
+loads at `f5_tts_sample_rate()`, as the CLI adapter already did; `f5_tts.h`'s
+`pcm_24k` parameter, which invited the constant, is now `pcm` and documented
+as model-rate. F5-TTS proper (24 kHz) is unchanged by construction.
+(2) `crispasr_session_output_sample_rate` had no `bt2_ctx` arm, so
+Breeze-TTS-2 reported 0 Hz; it returns the codec's 24 kHz like the CLI.
+(3) The session's f5-tts open arm rejected `raon` / `raon-1b`, names the CLI
+factory accepts, so an explicit open from a binding returned null.
+Guards, each observed failing first: `test-session-output-rate-parity` (unit,
+structural — every synthesize arm must have a rate arm; it named `bt2_ctx`
+and nothing else), and `test-f5-session-voice-rate-live.sh`, which compares
+the reference mel the session and the CLI build via `CRISPASR_F5_DUMP_REFMEL`
+without synthesising (4 s; a first output-length version took 1 h 50 min
+and was confounded by the CLI's spoken disclosure).
+
 ## PR #427 generic ASR environment-parity harness, fixed 2026-09-06
 
 Merged the contributed backend-agnostic harness for comparing baseline,

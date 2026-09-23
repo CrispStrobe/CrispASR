@@ -37,11 +37,14 @@ struct f5_tts_context* f5_tts_init_from_file(const char* path_model, struct f5_t
 
 void f5_tts_free(struct f5_tts_context* ctx);
 
-// Set reference audio for voice cloning. The reference audio is 24 kHz mono PCM.
-// Must be called before synthesize. Returns 0 on success, -1 on failure.
-int f5_tts_set_reference(struct f5_tts_context* ctx, const float* pcm_24k, int n_samples, const char* ref_text);
+// Set reference audio for voice cloning: mono PCM at f5_tts_sample_rate(ctx) —
+// 24 kHz for F5-TTS, 16 kHz for Raon-OpenTTS. Not always 24 kHz: the mel
+// front-end runs at the model's rate, and a reference at any other rate is read
+// as longer/shorter and pitch-shifted. Must be called before synthesize.
+// Returns 0 on success, -1 on failure.
+int f5_tts_set_reference(struct f5_tts_context* ctx, const float* pcm, int n_samples, const char* ref_text);
 
-// Synthesize text to mono 24 kHz PCM.
+// Synthesize text to mono PCM at f5_tts_sample_rate(ctx) (see *sample_rate_out).
 // Returns number of samples written, 0 on failure.
 // Caller owns the returned buffer (malloc'd; free with free()).
 int f5_tts_synthesize(struct f5_tts_context* ctx, const char* text, float** pcm_out, int* sample_rate_out);

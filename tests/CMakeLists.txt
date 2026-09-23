@@ -3330,6 +3330,21 @@ catch_discover_tests(test-session-setter-parity
     PROPERTIES LABELS "unit;setter-parity"
 )
 
+# ─── test-session-output-rate-parity — every synthesize arm in the session ABI
+# must have a crispasr_session_output_sample_rate arm (bt2-tts shipped without
+# one and reported 0 Hz). Structural: reads src/crispasr_c_api.cpp, no weights.
+add_executable(test-session-output-rate-parity
+    test-session-output-rate-parity.cpp
+)
+target_compile_definitions(test-session-output-rate-parity PRIVATE
+    CRISPASR_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
+)
+target_link_libraries(test-session-output-rate-parity PRIVATE Catch2::Catch2WithMain)
+catch_discover_tests(test-session-output-rate-parity
+    TEST_SPEC "[output-rate-parity]"
+    PROPERTIES LABELS "unit;output-rate-parity"
+)
+
 # ─── test-segment-hygiene — §W2 length cap, §W5 repeat merge, §W6 filters.
 # All three live downstream of the logits, where crispasr-diff reads
 # cos 1.000000 whether they work or not. This is the only check they get.
@@ -5287,6 +5302,16 @@ add_test(NAME test-quds-fa-live
 set_tests_properties(test-quds-fa-live PROPERTIES
     LABELS "live;quds"
     TIMEOUT 300)
+
+# ─── test-f5-session-voice-rate-live — the session ABI must load an f5-tts
+# reference at the model's rate (Raon is 16 kHz): session and CLI output
+# lengths must agree. SKIPs without a Raon model (CRISPASR_RAON_MODEL).
+add_test(NAME test-f5-session-voice-rate-live
+    COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test-f5-session-voice-rate-live.sh
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+set_tests_properties(test-f5-session-voice-rate-live PROPERTIES
+    LABELS "live;f5-tts"
+    TIMEOUT 900)
 
 # ─── test-separate-live — §248 source separation smoke test. SKIPs cleanly
 # without a mel-band-roformer model (CRISPASR_MBR_MODEL / CRISPASR_MODELS_DIR).
