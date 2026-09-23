@@ -67,7 +67,7 @@ try:
 
     # ---- reference (transformers 4.57.3 in its own environment) ----
     venv = Path("/tmp/raonenv")
-    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "virtualenv"], check=True)
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "virtualenv", "gguf"], check=True)
     subprocess.run([sys.executable, "-m", "virtualenv", "-q", "--system-site-packages", str(venv)], check=True)
     run([str(venv / "bin/pip"), "install", "-q", "transformers==4.57.3", "speechbrain", "soundfile", "gguf", "pyyaml"],
         "pip-raon.log")
