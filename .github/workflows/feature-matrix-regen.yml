@@ -1,0 +1,45 @@
+name: Feature matrix regen
+
+# Regenerate docs/feature-matrix.{md,html} from a CI build of any ref and run
+# the backend wiring audit. The generator reads a live `crispasr
+# --list-backends-json`, so it needs a full CLI build — too heavy for the shared
+# dev box. Dispatch on a feature branch that is rebased onto main, download the
+# artifact, and commit the two files:
+#   gh workflow run feature-matrix-regen.yml --ref <branch>
+#   gh run download <run-id> -n feature-matrix -D docs/
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regen:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Build CPU CLI
+        run: |
+          set -euo pipefail
+          cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release -DCRISPASR_BUILD_SERVER=OFF
+          cmake --build build --target crispasr-cli -j4
+
+      - name: Regenerate matrix and audit wiring
+        run: |
+          set -euo pipefail
+          python tools/gen-feature-matrix.py --crispasr build/bin/crispasr
+          python tools/check-backend-wiring.py --crispasr build/bin/crispasr
+
+      - name: Upload regenerated matrix
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: feature-matrix
+          path: |
+            docs/feature-matrix.md
+            docs/feature-matrix.html
