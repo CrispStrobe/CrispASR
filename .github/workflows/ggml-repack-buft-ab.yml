@@ -1,0 +1,134 @@
+# Does selecting ggml's CPU repack extra buffer type make quantised matmul
+# faster, and on which ISAs? Closes item 1 of
+# docs/ggml-optimisation-playbook.md §8. Full write-up:
+# docs/ggml-repack-buft-evaluation.md.
+#
+# WHY THIS RUNS ON CI RATHER THAN THE DEV VPS. The VPS is a 4-vCPU shared box
+# that has carried a load average of 6 to 40 all night. Interleaving the arms
+# controls for *some* of that, but not for memory pressure or cache thrash, and
+# no amount of repetition rescues a timing number from a ten-times
+# oversubscribed machine. BASIC_PITCH_CONV_PERF.md makes exactly this contrast:
+# a threading win invisible on the VPS measured 3.6-3.8x on a clean runner.
+#
+# The other reason is ISA coverage, which is the real variable here:
+#
+#   * The VPS is Skylake-SP  — AVX-512F/DQ/CD/BW/VL, NO VNNI, NO AMX.
+#   * A Kaggle CPU worker    — AVX2 only, NO AVX-512, NO VNNI, NO AMX.
+#   * GitHub ubuntu-24.04 x64 is Ice Lake / Cascade Lake class and MAY have
+#     AVX-512 VNNI — the int8 dot-product instruction neither other machine
+#     has, and the one ggml's repacked kernels can use where present.
+#   * GitHub macos-14 is arm64 with dotprod and i8mm, where ggml's repack type
+#     table INVERTS: q8_0 gets a kernel there and q4_K's AVX2 one does not
+#     apply. Since every quantised GGUF in this tree is q8_0, the arm64 answer
+#     is the one that decides whether this lever helps a phone build.
+#
+# So the first thing every leg prints is the ISA it actually got. A number
+# without its machine is worthless, and a negative on one ISA says nothing
+# about another.
+#
+# workflow_dispatch is deliberate: CrispASR CI runs get cancelled by
+# concurrency-group supersession when other sessions push, and a superseded
+# perf run is worse than no perf run because it looks like a failure.
+name: ggml repack buft A/B
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/ggml-repack-buft-ab.yml
+      - examples/cli/crispasr_repack_probe.cpp
+      - src/core/gguf_loader.cpp
+
+jobs:
+  ab:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04,     name: linux-x86_64 }
+          - { os: ubuntu-24.04-arm, name: linux-arm64 }
+          - { os: macos-14,         name: macos-arm64 }
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Host ISA — report this with every number below
+        run: |
+          echo "runner: ${{ matrix.os }} (${{ matrix.name }})  arch=$RUNNER_ARCH"
+          echo "nproc : $(getconf _NPROCESSORS_ONLN)"
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            grep -m1 'model name' /proc/cpuinfo || true
+            echo "--- the flags that decide this question ---"
+            for f in avx2 avx512f avx512vl avx512bw avx512_vnni avx_vnni amx_int8 \
+                     asimddp i8mm sve; do
+              if grep -qw "$f" /proc/cpuinfo; then echo "  $f = 1"; else echo "  $f = 0"; fi
+            done
+            uptime
+            free -g || true
+          else
+            sysctl -n machdep.cpu.brand_string || true
+            sysctl -a 2>/dev/null | grep -E 'hw.optional.(arm64|arm.FEAT_DotProd|arm.FEAT_I8MM)' || true
+            sysctl -n vm.loadavg
+          fi
+
+      # Only ggml and the probe, not the whole tree — the probe links ggml
+      # directly for exactly this reason. GGML_NATIVE=ON so the runner's own
+      # ISA is used, which is the point.
+      - name: Build ggml + probe
+        run: |
+          set -e
+          cmake -S ggml -B bld -DCMAKE_BUILD_TYPE=Release \
+                -DGGML_NATIVE=ON -DGGML_CPU_REPACK=ON \
+                -DGGML_BUILD_TESTS=OFF -DGGML_BUILD_EXAMPLES=OFF
+          cmake --build bld --target ggml ggml-base ggml-cpu -j "$(getconf _NPROCESSORS_ONLN)"
+          LIBDIR=$(dirname "$(find bld -name 'libggml-cpu.*' | head -1)")
+          echo "LIBDIR=$LIBDIR" >> "$GITHUB_ENV"
+          # GGML_MAX_NAME must match the library's, because ggml_tensor::extra
+          # sits immediately after name[GGML_MAX_NAME]. Compiling the probe with
+          # a different value reads extra at the wrong offset and silently
+          # reports "no repack kernel" for every tensor. This standalone ggml
+          # build takes the header default; read it rather than hard-coding it.
+          MAXNAME=$(sed -n 's/^#[[:space:]]*define[[:space:]]*GGML_MAX_NAME[[:space:]]*\([0-9]*\).*/\1/p' ggml/include/ggml.h | head -1)
+          echo "GGML_MAX_NAME=$MAXNAME"
+          c++ -O2 -std=c++17 -DGGML_MAX_NAME="$MAXNAME" \
+              -I ggml/include examples/cli/crispasr_repack_probe.cpp \
+              -o repack-probe -L "$LIBDIR" -lggml -lggml-base -lggml-cpu \
+              -Wl,-rpath,"$PWD/$LIBDIR"
+          ls -l repack-probe
+
+      # The probe interleaves its own arms round-robin and alternates which
+      # goes first, so even here contention cannot masquerade as a result.
+      - name: A/B — 1 thread
+        env:
+          MKL_NUM_THREADS: "1"          # CrispASR issue #453
+          OPENBLAS_NUM_THREADS: "1"
+        run: ./repack-probe --threads 1 --reps 40 | tee ab-t1.txt
+
+      - name: A/B — all cores
+        env:
+          MKL_NUM_THREADS: "1"
+          OPENBLAS_NUM_THREADS: "1"
+        run: ./repack-probe --threads "$(getconf _NPROCESSORS_ONLN)" --reps 40 | tee ab-tN.txt
+
+      # A probe that silently found no repack buffer type would otherwise pass
+      # green and be read as "measured, no win". Make the distinction explicit.
+      - name: Say which of the three outcomes this leg is
+        run: |
+          if grep -q 'extra buffer types offered: 0' ab-t1.txt || \
+             grep -q 'no extra buffer type on this host' ab-t1.txt; then
+            echo "::warning::NO repack buffer type offered on ${{ matrix.name }} — untestable here, not a negative result"
+          elif grep -q 'repack [0-9.]*x' ab-t1.txt; then
+            echo "repack buffer type present AND exercised on ${{ matrix.name }}"
+          else
+            echo "::warning::repack buffer type offered on ${{ matrix.name }} but DECLINED every type probed"
+          fi
+          echo "--- types with no kernel on this ISA ---"
+          grep 'DECLINED' ab-t1.txt || echo "(none)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: repack-ab-${{ matrix.name }}
+          path: |
+            ab-t1.txt
+            ab-tN.txt
