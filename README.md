@@ -417,8 +417,8 @@ for the per-task flags and output formats.
   model here and by far the smallest: **70.5% note F1 on MusicNet's piano
   pieces** from 5.5 M parameters, Q8_0 GGUF 7.0 MiB, Q4_0 4.5 MiB, F32
   21.8 MiB. It is also much the most expensive to run — 249 GFLOP of matrix
-  multiply per 2 s of audio, and quantisation buys almost none of it back on a
-  CPU without int8 dot-product instructions. Read
+  multiply per 2 s of audio, and quantisation makes it *slower*, not faster, on
+  a CPU without int8 dot-product instructions. Read
   [docs/music-transcription/HFT_TRANSFORMER.md](docs/music-transcription/HFT_TRANSFORMER.md)
   before choosing it over `onsets-and-frames`.
 - All five take `--piano-format text|json|midi`; `midi` writes a Standard

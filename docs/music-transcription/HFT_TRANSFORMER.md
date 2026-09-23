@@ -244,8 +244,8 @@ all ten. The harness is calibrated before anything is claimed for the port.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | ONNX export, onnxruntime | 21.8 MiB | 57.2% | 48.0% | **52.21%** | 18.49% | **70.52%** | 44.52% |
 | ggml **f32** | 21.8 MiB | 57.2% | 48.0% | **52.21%** | 18.49% | **70.52%** | 44.52% |
-| ggml **q8_0** | 7.0 MiB | — | — | — | — | **70.51%** | — |
-| ggml **q4_0** | 4.5 MiB | — | — | — | — | **70.70%** | — |
+| ggml **q8_0** | 7.0 MiB | 57.3% | 48.0% | **52.23%** | 18.50% | **70.51%** | 44.54% |
+| ggml **q4_0** | 4.5 MiB | 57.5% | 48.4% | **52.55%** | 18.77% | **70.71%** | 44.90% |
 
 Per piece:
 
@@ -253,49 +253,48 @@ Per piece:
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | ONNX | 59.9 | 44.2 | 31.4 | 42.0 | 58.3 | 88.6 | 21.6 | 52.9 | 73.3 | 66.7 |
 | ggml f32 | 59.9 | 44.2 | 31.4 | 42.0 | 58.3 | 88.6 | 21.6 | 52.9 | 73.3 | 66.7 |
-| ggml q8_0 | 59.8 | — | — | — | — | 88.6 | — | — | 73.4 | — |
-| ggml q4_0 | 60.3 | — | — | — | — | 88.6 | — | — | 73.4 | — |
+| ggml q8_0 | 59.8 | 44.3 | 31.3 | 42.0 | 58.3 | 88.6 | 21.6 | 52.9 | 73.4 | 66.8 |
+| ggml q4_0 | 60.3 | 44.5 | 31.7 | 43.7 | 58.7 | 88.6 | 22.0 | 52.8 | 73.4 | 67.0 |
 
 **At f32 the port is not approximately the model, it is the model**: identical
 F1, identical F1-with-offsets, identical estimated-note counts, on every one of
-the ten pieces. That also closes the loop on the decoder, which the activation
-diff cannot see — the script decodes the heads in Python and separately checks
-the C++ runtime's own note list against that decode, note for note. Over a
-195-second piece the two agree on all 1,457 notes with a worst disagreement of
-**68 µs** on an onset and 65 µs on an offset, which is float32 against float64
-in the sub-frame refinement and nothing else.
+the ten pieces and on every column. That also closes the loop on the decoder,
+which the activation diff cannot see — the script decodes the heads in Python
+and separately checks the C++ runtime's own note list against that decode, note
+for note. Over a 195-second piece the two agree on all 1,457 notes with a worst
+disagreement of **68 µs** on an onset and 65 µs on an offset, which is float32
+against float64 in the sub-frame refinement and nothing else.
 
-**The quantised rows cover the solo-piano subset only, and that is stated
-rather than hidden.** MusicNet's solo-piano figure is pooled over exactly
-1759, 2303 and 2556 — 3,887 of the 13,589 reference notes — so those three
-pieces give a number directly comparable to the 70.5% the ONNX arm reaches,
-which is the question quantisation had to answer. The other seven pieces are
-20.6 minutes of audio at 3–11× real time per arm on a VPS that spent the
-evening at a load average of 10–20 from other tenants, and they did not fit in
-the time available. The overall and everything-else columns for q8_0 and q4_0
-are therefore **not measured**, not estimated: `tools/hft_musicnet_f1.py`
-without `--pieces` produces them in one command.
+**q8_0 is free.** 52.23% against 52.21%, 70.51% solo piano against 70.52%,
+18.50% with offsets against 18.49% — inside rounding on a 13,589-note corpus,
+for a third of the size. Per piece the largest disagreement anywhere is 0.1
+points.
 
-**On the column that was measured, quantisation is free.** Solo-piano note F1
-is **70.52% at f32, 70.51% at q8_0 and 70.70% at q4_0** — q8_0 indistinguishable
-and q4_0 marginally *ahead*, which on 3,887 notes is noise rather than an
-improvement. Per piece the three arms agree to within 0.5 points and 2303 is
-identical at 88.6% on all three.
+**q4_0 does not cost accuracy here; it very slightly gains.** 52.55% against
+52.21%, and up on eight pieces of ten. That is 0.34 points on 13,589 notes and
+should be read as noise rather than as an improvement — but it is worth saying
+why it is *not* the loss the Onsets & Frames port measured, because the
+mechanism is specific and it was predicted by the head-by-head diff above.
 
-That is a different result from the Onsets & Frames port, where q4_0 cost 0.5
-points of F1-with-offsets by perturbing the frame head that sets note
-durations. Here the head q4_0 damages most is **velocity** (cosine 0.870, the
-argmax moving by up to 92 bins), and velocity feeds the `ignore_zero` gate
-rather than a duration — so its errors change *which* notes are emitted rather
-than how long they are, and on this corpus that comes out even: q4_0 emits 17
-more notes than f32 on 1759 and scores 0.4 points higher, 11 more on 2556 and
-scores 0.1 higher. F1-with-offsets moves the same way (21.5% at q8_0, 22.1% at
-q4_0, 21.55% at f32 on these three pieces), which is the opposite of what O&F
-did and is consistent with the head-by-head diff above.
+O&F's q4_0 cost 0.5 points of F1-with-offsets because the head it perturbed
+most was the **frame** head, and the frame head sets note durations. Here the
+head q4_0 damages most is **velocity** — cosine 0.870, argmax moving by up to
+92 bins — and velocity does not set a duration. It feeds the `ignore_zero`
+gate. So q4_0's errors change *which* notes survive rather than how long they
+last, and on this corpus that comes out marginally in q4_0's favour: it emits
+more notes than f32 on nine pieces (1,472 against 1,457 on 1759; 1,310 against
+1,288 on 1819) and both precision and recall move up together, which is what a
+**better-calibrated filter** looks like rather than a noisier one.
+
+That is a result about this corpus and this gate, not a recommendation to
+prefer 4-bit weights. The honest reading is that hFT's accuracy is
+**insensitive to weight precision down to 4 bits**, which is unusual and is
+consistent with a model whose output is dominated by a discrete gate rather
+than by a regression.
 
 **So the accuracy half of the question is answered: q8_0 holds hFT's
-solo-piano F1 exactly.** The cost half is answered below, and it is where the
-port does not deliver.
+solo-piano F1 exactly, and so does q4_0.** The cost half is answered below,
+and it is where the port does not deliver.
 
 ### Cost
 
@@ -374,11 +373,19 @@ scaling — ggml's f32 arm goes 4.84 → 7.35 CPU-seconds per audio-second betwe
 one thread and four, because its threadpool spin-waits at barriers on a box
 whose four cores are already shared.
 
-**3. Memory is where this port wins outright: 237 MiB against ORT's 1001 MiB**,
-a 4.2× reduction, and against the **3.63 GB** at which `onnx_runtime_dart` was
-OOM-killed on a single window (§35.5). The frame chunking is why — the
-attention score tensor is `[256, 256, 4, 32]` rather than `[256, 256, 4, 128]`
-— and it costs nothing, because the chunked result is bit-identical.
+**3. Memory is where this port wins outright: 237 MiB against ORT's 1001 MiB**
+on the 30 s clip, a 4.2× reduction, and against the **3.63 GB** at which
+`onnx_runtime_dart` was OOM-killed on a single window (§35.5). The frame
+chunking is why — the attention score tensor is `[256, 256, 4, 32]` rather than
+`[256, 256, 4, 128]` — and it costs nothing, because the chunked result is
+bit-identical.
+
+It is not flat in the length of the audio, though, and the doc should say so:
+over the MusicNet split the peak was **799 MiB at f32 and 714 MiB quantised**
+on pieces of 1.5–3.8 minutes, against ORT's 1001 MiB, so the honest headline is
+a 1.25–1.4× reduction on a real piece and 4.2× on a short one. The part that
+grows is the runtime's own buffers — the padded log-mel and the four head
+arrays are linear in the clip — not the graph arena, which the chunking pins.
 
 ### So: does q8_0 bring hFT near real time, and does it hold its F1?
 
@@ -405,6 +412,15 @@ is not, and **`onsets-and-frames` remains the right default piano arm.**
   in here.
 * **No GPU backend.** `use_gpu` is accepted and ignored; the context always
   initialises the CPU backend, as `onsets_and_frames.cpp` does.
+* **No per-stage reference dumper.** `tools/hft_parity.py` compares the mel
+  and all four heads against native onnxruntime, which is end-of-pipeline: a
+  regression introduced inside the encoder shows up as "the onset head moved",
+  not as a layer. `tools/reference_backends/onsets_and_frames.py` plus the
+  `crispasr-diff onsets-and-frames` arm is what the per-layer half looks like,
+  and hFT has no equivalent — `tools/check-backend-wiring.py` reports it as an
+  advisory gap, correctly. A file in `tools/reference_backends/` with no
+  `crispasr-diff` arm to consume it would silence the checker without adding a
+  gate, so it was not written.
 * **No streaming.** The window is a fixed 192 frames and the model needs 32
   frames of lookahead, so a streaming arm is possible and is not implemented.
 * **The HF GGUF repo is not uploaded**, so `-m auto` will 404 for this

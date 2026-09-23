@@ -791,9 +791,11 @@ constexpr Entry k_registry[] = {
     // a hierarchical frequency-time transformer, 5.5 M parameters. The
     // smallest strong piano transcriber measured here — 70.5% note F1 on
     // MusicNet's solo-piano pieces against Onsets & Frames' 69.0% — at 7 MiB
-    // of q8_0 weights. It is also by far the most EXPENSIVE to run: 249 GFLOP
-    // of matrix multiply per 2 s of audio, and q8_0 buys almost none of that
-    // back on a CPU without int8 dot-product instructions. Read
+    // of q8_0 weights, and quantisation is free on accuracy: 52.23% overall
+    // and 70.51% solo piano at q8_0 against fp32's 52.21% / 70.52%. It is also
+    // by far the most EXPENSIVE to run: 249 GFLOP of matrix multiply per 2 s
+    // of audio, and q8_0 costs 29% MORE cpu than f32 rather than less, on a
+    // CPU without int8 dot-product instructions. Read
     // docs/music-transcription/HFT_TRANSFORMER.md before choosing it over
     // onsets-and-frames. NOTE: the HF repo is not uploaded yet, so
     // auto-download will 404; build the GGUF locally with
