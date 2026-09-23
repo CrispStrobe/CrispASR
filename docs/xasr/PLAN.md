@@ -84,3 +84,39 @@ Target: `--backend xasr`, bit-for-bit behaviour of sherpa-onnx
 - Joiner: output_linear(tanh(enc_proj + dec_proj)).
 - sherpa greedy: tokens start as [−1]·(ctx−1) + [0]. At most **one symbol per
   frame**: argmax, emit if y ∉ {0 (blank), unk}, and re-run the decoder only after an emission.
+
+## Weight source: the sherpa-onnx export, not `pretrained.pt`
+
+`streaming_exp/pretrained.pt` (epoch 4, `model` and `model_avg`) is **not** the
+exported model. Of 579 tensors comparable by name, none equals the ONNX
+initializer, `decoder.embedding` included (max |Δ| 17.9, and up to 34 elsewhere).
+Run on the same fbank chunks, a torch encoder with those weights was unrelated
+to the ONNX encoder (cos_min −0.12), and transcribed garbage where sherpa was
+right. Both control arms of `tools/kaggle/xasr-ref` fired.
+
+What the export looks like (`tools/kaggle/xasr-onnx-graph`):
+- The four chunk exports share every weight bit for bit: named initializers and
+  all 344 anonymous MatMul weights.
+- Named initializers keep PyTorch names (convs, biases, norms, bypass scales,
+  decoder, joiner).
+- The Linear weights are `onnx::MatMul_*`, stored transposed, and appear in
+  execution order: embed.out; per layer in_proj, linear_pos, ff1 in/out,
+  nonlin in/out, attn1 in/out, conv1 in/out, ff2 in/out, attn2 in/out,
+  conv2 in/out, ff3 in/out; then encoder_proj. The shapes line up one to one.
+- `linear_pos` is not folded.
+- The downsample `softmax(bias)` was constant-folded to (ds,1,1) constants,
+  in the order 2,4,8,4,2 (stacks 1..5), then 2 (downsample_output). The
+  converter stores log-weights, so softmax restores them.
+- `chunkwise_conv_scale` stays a full (2, C, K) anonymous initializer
+  (matched by first use + shape), so it is not chunk-specific.
+- The per-layer `bypass_scale` ("TODO: remove it") is absent, which is fine
+  because it is never read.
+
+## Features vs kaldi-native-fbank
+
+`core_kaldi` gained opt-in `snip_edges=false` and `mel_domain_triangles`.
+Against knf 1.22.3 on jfk + 1.6 s of silence the frame counts are equal.
+Mel-domain triangles give mean |Δ| 5.3e-5, and max 1.9e-4 wherever
+log-energy > −5; the few larger values are near-floor bins (log ≈ −15, float32
+FFT rounding). The historic Hz-domain triangles would give mean |Δ| 2.6e-3,
+max 5.2e-2.
