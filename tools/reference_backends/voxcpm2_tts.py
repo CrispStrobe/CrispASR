@@ -36,6 +36,10 @@ Usage:
 """
 
 from __future__ import annotations
+try:
+    from reference_backends._safe_capture import own as _own
+except ImportError:  # run as a standalone script from this directory
+    from _safe_capture import own as _own
 
 import gc
 import os
@@ -316,10 +320,10 @@ def _run_prefill(
         layer_last_out = [None]
 
         def hook_layer0(module, input, output):
-            layer0_out[0] = output[0].detach() if isinstance(output, tuple) else output.detach()
+            layer0_out[0] = _own(output[0].detach() if isinstance(output, tuple) else output.detach())
 
         def hook_layer_last(module, input, output):
-            layer_last_out[0] = output[0].detach() if isinstance(output, tuple) else output.detach()
+            layer_last_out[0] = _own(output[0].detach() if isinstance(output, tuple) else output.detach())
 
         h0 = model.base_lm.layers[0].register_forward_hook(hook_layer0)
         n_layers = len(model.base_lm.layers)

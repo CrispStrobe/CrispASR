@@ -16,6 +16,10 @@ Usage:
 """
 
 from __future__ import annotations
+try:
+    from reference_backends._safe_capture import own as _own
+except ImportError:  # run as a standalone script from this directory
+    from _safe_capture import own as _own
 
 import argparse
 import os
@@ -129,9 +133,9 @@ def main():
             if isinstance(out, tuple):
                 for i, o in enumerate(out):
                     if isinstance(o, torch.Tensor):
-                        intermediates[f"{name}.{i}"] = o.detach().cpu()
+                        intermediates[f"{name}.{i}"] = _own(o.detach().cpu())
             elif isinstance(out, torch.Tensor):
-                intermediates[name] = out.detach().cpu()
+                intermediates[name] = _own(out.detach().cpu())
         return hook_fn
 
     hooks = []
