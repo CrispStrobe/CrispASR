@@ -92,8 +92,11 @@ try:
     res["unit_tests"] = (r.stdout + r.stderr)[-1500:]; save()
     ONLY_FIRST_TWO = True
     for rev in ("ctc", "rnnt", "e2e_ctc", "e2e_rnnt"):
-        audit(f"gigaam-{rev}", "gigaam", "ai-sage/GigaAM-v3", ["gguf", "sentencepiece", "hydra-core", "omegaconf", "pyannote.audio"],
+        audit(f"gigaam-{rev}", "gigaam", "ai-sage/GigaAM-v3", ["gguf", "sentencepiece", "hydra-core", "omegaconf", "pyannote.audio",
+                                                          "transformers==4.57.3"],  # remote code predates 5.x meta init
               env={"GIGAAM_REVISION": rev})
+    if ONLY_FIRST_TWO:  # v3 covered lfm2-audio (clean)
+        raise SystemExit(0)
     # liquid_audio.from_pretrained takes a repo id, not a directory
     audit("lfm2-audio", "lfm2-audio", "LiquidAI/LFM2.5-Audio-1.5B", ["gguf", "liquid-audio"])
     if ONLY_FIRST_TWO:  # the v2 run covered the rest: clean
