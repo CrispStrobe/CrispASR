@@ -437,6 +437,11 @@ static ggml_tensor* hft_layer_norm(ggml_context* c, const hft_layer& l, ggml_ten
 // batch dimensions must match. Returns [H, Nq, B].
 static ggml_tensor* hft_attention(ggml_context* c, const hft_attn& a, ggml_tensor* q_in, ggml_tensor* kv_in, int n_head,
                                   float scale) {
+    // Self-attention passes q_in for both, so neither is ever null. The
+    // assert is here because the alternative — a layer that claims
+    // cross-attention with no memory to attend to — is a null dereference two
+    // frames down the stack with nothing to say which layer did it.
+    GGML_ASSERT(q_in != nullptr && kv_in != nullptr);
     const int64_t H = q_in->ne[0];
     const int64_t Nq = q_in->ne[1];
     const int64_t B = q_in->ne[2];
@@ -462,13 +467,24 @@ static ggml_tensor* hft_attention(ggml_context* c, const hft_attn& a, ggml_tenso
 }
 
 // x = LN(x + Attn(...)); … ; x = LN(x + FF(x)). `enc` is the cross-attention
-// memory and may be null for a self-attention-only layer.
+// memory. A self-attention-only layer has none, and callers pass null for it.
+//
+// `enc` is resolved to `x` rather than forwarded raw, so `hft_attention` can
+// never receive a null operand. That is not only for cppcheck's benefit,
+// though it is the fix for a `ctunullpointer` it reports on the encoder call
+// site: the guard that makes the raw form safe today is `l.has_cross`, a
+// runtime field set at load time, and anything that ever sets it on a layer
+// whose caller has no memory turns the raw form into a null dereference with
+// no diagnostic. Resolving here makes that failure a wrong ANSWER rather than
+// a crash, and the GGML_ASSERT in hft_attention covers the rest.
 static ggml_tensor* hft_apply_layer(ggml_context* c, const hft_layer& l, ggml_tensor* x, ggml_tensor* enc, int n_head,
                                     float scale, float ln_eps) {
     if (l.has_self)
         x = hft_layer_norm(c, l, ggml_add(c, x, hft_attention(c, l.self, x, x, n_head, scale)), ln_eps);
-    if (l.has_cross)
-        x = hft_layer_norm(c, l, ggml_add(c, x, hft_attention(c, l.cross, x, enc, n_head, scale)), ln_eps);
+    if (l.has_cross) {
+        ggml_tensor* mem = enc ? enc : x;
+        x = hft_layer_norm(c, l, ggml_add(c, x, hft_attention(c, l.cross, x, mem, n_head, scale)), ln_eps);
+    }
     ggml_tensor* ff = hft_linear_apply(c, l.ff1, x);
     ff = ggml_relu(c, ff);
     ff = hft_linear_apply(c, l.ff2, ff);
