@@ -257,17 +257,19 @@ static void compute_fbank_vad(const float* pcm, int n_samples, std::vector<float
         auto hz2mel = [](float hz) { return 1127.0f * logf(1.0f + hz / 700.0f); };
         auto mel2hz = [](float m) { return 700.0f * (expf(m / 1127.0f) - 1.0f); };
         float ml = hz2mel(low_freq), mh = hz2mel(high_freq);
-        std::vector<float> c(n_mels + 2);
-        for (int i = 0; i < n_mels + 2; i++)
-            c[i] = mel2hz(ml + i * (mh - ml) / (n_mels + 1));
-        for (int m = 0; m < n_mels; m++)
-            for (int k = 0; k < bins; k++) {
-                float f = (float)k * sr / n_fft;
-                if (f > c[m] && f <= c[m + 1] && c[m + 1] > c[m])
-                    mel_fb[m * bins + k] = (f - c[m]) / (c[m + 1] - c[m]);
-                else if (f > c[m + 1] && f < c[m + 2] && c[m + 2] > c[m + 1])
-                    mel_fb[m * bins + k] = (c[m + 2] - f) / (c[m + 2] - c[m + 1]);
+        (void)mel2hz;
+        // Triangles linear in MEL below Nyquist, as kaldi-native-fbank builds
+        // them (same fix as firered_asr's front-end).
+        const float delta = (mh - ml) / (float)(n_mels + 1);
+        for (int m = 0; m < n_mels; m++) {
+            const float left = ml + (float)m * delta, center = left + delta, right = center + delta;
+            for (int k = 0; k < n_fft / 2; k++) {
+                const float mel = hz2mel((float)k * sr / n_fft);
+                if (mel > left && mel < right)
+                    mel_fb[m * bins + k] =
+                        mel <= center ? (mel - left) / (center - left) : (right - mel) / (right - center);
             }
+        }
     }
     std::vector<float> window(win);
     for (int i = 0; i < win; i++) {

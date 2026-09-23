@@ -696,17 +696,18 @@ static void compute_fbank(const float* pcm, int n_samples, std::vector<float>& f
         auto mel2hz = [](float m) { return 700.0f * (expf(m / 1127.0f) - 1.0f); };
         float mel_lo = hz2mel(low_freq);
         float mel_hi = hz2mel(high_freq);
-        std::vector<float> center(n_mels + 2);
-        for (int i = 0; i < n_mels + 2; i++)
-            center[i] = mel2hz(mel_lo + i * (mel_hi - mel_lo) / (n_mels + 1));
-
+        (void)mel2hz;
+        // Triangles linear in MEL over the n_fft/2 bins below Nyquist, as
+        // kaldi-native-fbank (FireRedASR's reference front-end) builds them; the
+        // Hz-linear form used before drifted from it (log-mel mean |d| ~2.6e-3).
+        const float delta = (mel_hi - mel_lo) / (float)(n_mels + 1);
         for (int m = 0; m < n_mels; m++) {
-            for (int k = 0; k < n_fft_bins; k++) {
-                float freq = (float)k * sample_rate / n_fft;
-                if (freq > center[m] && freq <= center[m + 1] && center[m + 1] > center[m])
-                    mel_fb[m * n_fft_bins + k] = (freq - center[m]) / (center[m + 1] - center[m]);
-                else if (freq > center[m + 1] && freq < center[m + 2] && center[m + 2] > center[m + 1])
-                    mel_fb[m * n_fft_bins + k] = (center[m + 2] - freq) / (center[m + 2] - center[m + 1]);
+            const float left = mel_lo + (float)m * delta, center = left + delta, right = center + delta;
+            for (int k = 0; k < n_fft / 2; k++) {
+                const float mel = hz2mel((float)k * sample_rate / n_fft);
+                if (mel > left && mel < right)
+                    mel_fb[m * n_fft_bins + k] =
+                        mel <= center ? (mel - left) / (center - left) : (right - mel) / (right - center);
             }
         }
     }

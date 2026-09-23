@@ -6,6 +6,8 @@
 // preemphasis_coefficient=0.97, remove_dc_offset=True, raw_energy=True,
 // round_to_power_of_two=True, snip_edges=True, window_type='povey'.
 //
+// Triangles are built in the mel domain, as Kaldi does (mel_domain_triangles).
+//
 // Useful for any speaker / VAD encoder trained against Kaldi's `fbank`
 // pipeline. Currently consumed by the chatterbox CAMPPlus port (80-bin)
 // and structurally identical to the `compute_fbank` helper inlined in
@@ -46,9 +48,11 @@ struct FbankParams {
     // outside the signal are mirrored, and T = (n + hop/2) / hop — what
     // kaldi-native-fbank / sherpa-onnx use. Default true keeps the historic framing.
     bool snip_edges = true;
-    // Kaldi / torchaudio build the triangles in the MEL domain; the historic
-    // path here builds them in Hz. Opt in for bit-level parity with knf.
-    bool mel_domain_triangles = false;
+    // Kaldi, kaldi-native-fbank and torchaudio.compliance.kaldi build the
+    // triangles linear in MEL. Until 2026-09 this file built them linear in Hz,
+    // and every Kaldi-fbank backend drifted from its reference by that much
+    // (log-mel mean |d| ~2.6e-3). false keeps the Hz form for an explicit caller.
+    bool mel_domain_triangles = true;
 };
 // high_freq: 0 = Nyquist, negative = Nyquist + high_freq (Kaldi's convention, e.g. -400).
 

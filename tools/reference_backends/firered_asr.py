@@ -113,6 +113,10 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
     opts.frame_opts.frame_length_ms = 25.0
     opts.frame_opts.frame_shift_ms = 10.0
     opts.mel_opts.num_bins = 80
+    # kaldi-native-fbank's default dither is 3e-5 (random), which moves silent
+    # frames by whole log units and made this reference differ run to run. The
+    # C++ front-end has no dither; pin it to 0 so the reference is reproducible.
+    opts.frame_opts.dither = 0.0
     fbank_comp = knf.OnlineFbank(opts)
     # Scale to int16 range: FireRedASR CMVN was trained on int16-scaled fbank.
     fbank_comp.accept_waveform(16000, (audio * 32768.0).tolist())
