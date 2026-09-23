@@ -86,7 +86,12 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str], max_new_tokens
     from . import _hooks
 
     model, md = _load(model_dir)
-    fe = ParakeetFeatureExtractor()
+    # moondream ships no preprocessor_config.json; the default extractor is 80
+    # mels, these checkpoints take encoder_config.num_mel_bins (128)
+    if (md / "preprocessor_config.json").exists():
+        fe = ParakeetFeatureExtractor.from_pretrained(str(md))
+    else:
+        fe = ParakeetFeatureExtractor(feature_size=int(model.config.encoder_config.num_mel_bins))
     tok = AutoTokenizer.from_pretrained(str(md))
     out: Dict[str, np.ndarray] = {}
     if "raw_audio" in stages:
