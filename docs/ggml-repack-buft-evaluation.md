@@ -37,14 +37,14 @@ one, in either direction.
 
 | | VPS (`crispasr-dev`) | Kaggle CPU worker | GitHub `ubuntu-24.04` / `ubuntu-24.04-arm` / `macos-14` |
 | --- | --- | --- | --- |
-| CPU | Intel Xeon Skylake-SP (IBRS, no TSX) | Intel Xeon @ 2.20 GHz (GCE) | see §3c — printed per run |
+| CPU | Intel Xeon Skylake-SP (IBRS, no TSX) | Intel Xeon @ 2.20 GHz (GCE) | AMD EPYC 7763 / arm64 / Apple Silicon |
 | cores | 4 vCPU, **shared** | 4 vCPU, shared | 4, dedicated |
 | load during measurement | **6.4 one-minute, rising to 40 later in the night** | ~0 | ~0 |
 | AVX2 | yes | yes | yes |
-| AVX-512F/DQ/CD/BW/VL | yes | no | printed per run |
-| AVX-512 VNNI | **no** | **no** | printed per run |
-| AMX-INT8 | **no** | **no** | printed per run |
-| ARM dotprod / i8mm | n/a | n/a | the two arm64 legs |
+| AVX-512F/DQ/CD/BW/VL | yes | no | **no** (EPYC 7763 is AVX2) |
+| AVX-512 VNNI | **no** | **no** | **no** |
+| AMX-INT8 | **no** | **no** | **no** |
+| ARM dotprod / i8mm | n/a | n/a | **yes** on both arm64 legs (`i8mm` on Linux arm64 only) |
 
 ⚠ **Read the load row before the numbers.** The VPS is a shared 4-vCPU box that
 was carrying a load average of 6 when §3a was taken and reached 40 later the
