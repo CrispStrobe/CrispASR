@@ -1,0 +1,14 @@
+{
+  "id": "chr1str/crispasr-ggml-repack-buft-probe",
+  "title": "CrispASR ggml repack buft probe",
+  "code_file": "repack_buft_probe.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "false",
+  "enable_internet": "false",
+  "competition_sources": [],
+  "dataset_sources": ["chr1str/crispasr-repack-probe-src"],
+  "kernel_sources": [],
+  "model_sources": []
+}
