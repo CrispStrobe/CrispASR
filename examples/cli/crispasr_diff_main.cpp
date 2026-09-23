@@ -60,6 +60,7 @@
 #include "parakeet.h"
 #include "wespeaker.h"
 #include "gigaam.h"
+#include "dolphin.h"
 #include "canary.h"
 #include "canary_qwen.h"
 #include "cohere.h"
@@ -4387,6 +4388,97 @@ int main(int argc, char** argv) {
             n_fail++;
         }
         granite_nle_free(ctx);
+    } else if (backend_name == "dolphin") {
+        // Dolphin (#436): E-Branchformer + Transformer decoder + CTC.
+        // Reference: tools/reference_backends/dolphin.py (upstream package, dither 0).
+        auto cp = dolphin_context_default_params();
+        cp.n_threads = 4;
+        cp.verbosity = 0;
+        cp.use_gpu = false;
+        dolphin_context* ctx = dolphin_init_from_file(model_path.c_str(), cp);
+        if (!ctx) {
+            fprintf(stderr, "failed to load dolphin model\n");
+            return 4;
+        }
+        const int n_mels = dolphin_n_mels(ctx);
+        // ---- fbank (ours) ----
+        {
+            int T = 0;
+            float* fb = dolphin_compute_fbank(ctx, samples.data(), (int)samples.size(), &T);
+            if (fb) {
+                auto rep = ref.compare("fbank", fb, (size_t)T * n_mels);
+                print_row("fbank", rep, COS_THRESHOLD);
+                record(rep);
+                free(fb);
+            }
+        }
+        // ---- encoder on the REFERENCE fbank: subsampling + every block ----
+        std::vector<float> ref_enc;
+        int ref_T_enc = 0;
+        {
+            auto fb = ref.get_f32("fbank");
+            auto shp = ref.shape("fbank");
+            if (fb.first && shp.size() >= 2) {
+                const int T = (int)shp[1];
+                const int L = dolphin_n_layers(ctx);
+                const int d_max = 1024, T_max = T / 4 + 8;
+                std::vector<std::vector<float>> bufs((size_t)L + 1, std::vector<float>((size_t)d_max * T_max));
+                std::vector<float*> ptrs((size_t)L + 1);
+                for (int i = 0; i <= L; i++)
+                    ptrs[(size_t)i] = bufs[(size_t)i].data();
+                int T_enc = 0, d = 0;
+                float* enc = dolphin_run_encoder(ctx, fb.first, T, &T_enc, &d, ptrs.data(), (int)ptrs.size());
+                if (enc) {
+                    auto r0 = ref.compare("subsample_out", ptrs[0], (size_t)T_enc * d);
+                    print_row("subsample_out", r0, COS_THRESHOLD);
+                    record(r0);
+                    for (int il = 0; il < L; il++) {
+                        char nm[32];
+                        snprintf(nm, sizeof(nm), "enc_blk_%02d", il);
+                        auto r = ref.compare(nm, ptrs[(size_t)il + 1], (size_t)T_enc * d);
+                        print_row(nm, r, COS_THRESHOLD);
+                        record(r);
+                    }
+                    auto re = ref.compare("encoder_output", enc, (size_t)T_enc * d);
+                    print_row("encoder_output(ref_fbank)", re, COS_THRESHOLD);
+                    record(re);
+                    free(enc);
+                }
+            }
+            auto e = ref.get_f32("encoder_output");
+            auto es = ref.shape("encoder_output");
+            if (e.first && es.size() >= 2) {
+                ref_T_enc = (int)es[1];
+                ref_enc.assign(e.first, e.first + e.second);
+            }
+        }
+        // ---- CTC head on the REFERENCE encoder output ----
+        if (!ref_enc.empty()) {
+            int V = 0;
+            float* lp = dolphin_ctc_logprobs(ctx, ref_enc.data(), ref_T_enc, &V);
+            if (lp) {
+                auto r = ref.compare("ctc_logprobs", lp, (size_t)ref_T_enc * V);
+                print_row("ctc_logprobs", r, COS_THRESHOLD);
+                record(r);
+                auto r2 = ref.compare_argmax("ctc_logprobs", lp, (size_t)ref_T_enc * V);
+                print_row("ctc_logprobs_top1", r2, COS_THRESHOLD);
+                free(lp);
+            }
+        }
+        // ---- end to end: our fbank, encoder, beam + rescoring ----
+        {
+            dolphin_result* r = dolphin_transcribe_ex(ctx, samples.data(), (int)samples.size(), nullptr, nullptr);
+            const std::string want = ref.meta("text");
+            const std::string got = r ? r->raw_text : "";
+            const bool same = !want.empty() && got == want;
+            printf("%s text                   %s\n", same ? "[PASS]" : "[FAIL]", same ? "identical to reference" : "");
+            if (!same) {
+                printf("       ref: %s\n       cpp: %s\n", want.c_str(), got.c_str());
+                n_fail++;
+            }
+            dolphin_result_free(r);
+        }
+        dolphin_free(ctx);
     } else if (backend_name == "gigaam") {
         // GigaAM-v3: rotary Conformer + CTC or RNN-T head.
         // Reference: tools/reference_backends/gigaam.py (the HF blueprint).

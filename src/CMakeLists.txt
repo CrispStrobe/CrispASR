@@ -1206,6 +1206,21 @@ if(APPLE)
 endif()
 
 # ---------------------------------------------------------------------------
+# Dolphin (DataoceanAI) — E-Branchformer + Transformer decoder + CTC (#436)
+# ---------------------------------------------------------------------------
+add_library(dolphin STATIC
+            dolphin.h
+            dolphin.cpp
+            )
+target_include_directories(dolphin PUBLIC . ../include)
+target_compile_features   (dolphin PUBLIC cxx_std_17)
+set_target_properties(dolphin PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_link_libraries     (dolphin PUBLIC ggml ggml-base Threads::Threads crispasr-core)
+if(NOT MSVC)
+    target_compile_options(dolphin PRIVATE -O3)
+endif()
+
+# ---------------------------------------------------------------------------
 # WeSpeaker ResNet34-LM — speaker embedding (#324 FoxNose diarization)
 # ---------------------------------------------------------------------------
 add_library(wespeaker STATIC
@@ -2885,6 +2900,9 @@ endif()
 # ---------------------------------------------------------------------------
 if (TARGET gigaam)
     target_link_libraries(crispasr-lib PUBLIC gigaam)
+endif()
+if (TARGET dolphin)
+    target_link_libraries(crispasr-lib PUBLIC dolphin)
 endif()
 if (TARGET wespeaker)
     target_link_libraries(crispasr-lib PUBLIC wespeaker)

@@ -142,7 +142,10 @@ def main():
             arr = arr.reshape(arr.shape[-2], arr.shape[-1])  # (5000, d)
         if name.endswith(("csgu_conv.weight", "merge_conv.weight")):
             arr = arr.reshape(arr.shape[0], arr.shape[-1])  # (C, K) depthwise
-        big = arr.ndim >= 2 and not name.endswith((".pe", "pos_bias_u", "pos_bias_v"))
+        # The two depthwise convs run as ggml_ssm_conv, which requires F32
+        # kernels; they are tiny (C x 31), so keep them F32 with the 1-D tensors.
+        big = arr.ndim >= 2 and not name.endswith((".pe", "pos_bias_u", "pos_bias_v", "csgu_conv.weight",
+                                                   "merge_conv.weight"))
         w.add_tensor(name, arr.astype(np.float16 if big else np.float32))
         n += 1
     w.write_header_to_file()
