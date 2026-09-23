@@ -23,6 +23,7 @@
 #include "qwen3_asr.h"
 
 #include <cctype>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -71,7 +72,35 @@ public:
             stream_recipe_ = core_gguf::kv_str(meta, "qwen3asr.streaming_recipe", "");
             gguf_free(meta);
         }
+        raon_ = qwen3_asr_is_raon_speech(ctx_);
         return true;
+    }
+
+    // #455 Raon-Speech has its own front end (8 s chunks at 24 kHz, per-chunk
+    // mel, 12.5 Hz frames, EmbeddingAdaptor); everything else is Qwen3-ASR's.
+    float* encode_audio(const float* samples, int n_samples, int* N_enc, int* pdim) {
+        if (raon_)
+            return qwen3_asr_raon_encode(ctx_, samples, n_samples, N_enc, pdim);
+        int n_mels = 0, T_mel = 0;
+        float* mel = qwen3_asr_compute_mel(ctx_, samples, n_samples, &n_mels, &T_mel);
+        if (!mel)
+            return nullptr;
+        float* emb = qwen3_asr_run_encoder(ctx_, mel, n_mels, T_mel, N_enc, pdim);
+        free(mel);
+        return emb;
+    }
+
+    // RaonPipeline.stt: no system turn; the instruction follows the audio.
+    // --ask replaces the default instruction (the model is instruction-tuned).
+    static std::string raon_prompt(int N_enc, const std::string& ask) {
+        std::string text = "<|im_start|>user\n<|audio_start|>";
+        text.reserve(text.size() + (size_t)N_enc * 13 + 96);
+        for (int i = 0; i < N_enc; i++)
+            text += "<|audio_pad|>"; // id 151676 (= Raon's <|audio_input_placeholder|>)
+        text += "<|audio_end|>";
+        text += ask.empty() ? std::string("Transcribe the audio into text") : ask;
+        text += "<|im_end|>\n<|im_start|>assistant\n";
+        return text;
     }
 
     std::vector<crispasr_segment> transcribe(const float* samples, int n_samples, int64_t t_offset_cs,
@@ -80,18 +109,9 @@ public:
         if (!ctx_)
             return out;
 
-        // ---- Mel ----
-        int n_mels = 0, T_mel = 0;
-        float* mel = qwen3_asr_compute_mel(ctx_, samples, n_samples, &n_mels, &T_mel);
-        if (!mel) {
-            fprintf(stderr, "crispasr[qwen3]: mel failed\n");
-            return out;
-        }
-
-        // ---- Encoder ----
+        // ---- Mel + encoder ----
         int N_enc = 0, pdim = 0;
-        float* audio_embeds = qwen3_asr_run_encoder(ctx_, mel, n_mels, T_mel, &N_enc, &pdim);
-        free(mel);
+        float* audio_embeds = encode_audio(samples, n_samples, &N_enc, &pdim);
         if (!audio_embeds) {
             fprintf(stderr, "crispasr[qwen3]: encoder failed\n");
             return out;
@@ -156,6 +176,10 @@ public:
         text += "<|audio_end|><|im_end|>\n"
                 "<|im_start|>assistant\n";
         text += assistant_prefill;
+        if (raon_) {
+            text = raon_prompt(N_enc, params.ask);
+            assistant_prefill.clear();
+        }
 
         int n_prompt = 0;
         int32_t* raw_ids = qwen3_asr_tokenize(ctx_, text.c_str(), &n_prompt);
@@ -226,6 +250,8 @@ public:
                 fprintf(stderr, "crispasr[qwen3]: prefill failed\n");
                 return out;
             }
+            if (raon_ && eos_id >= 0 && eos_id < vocab)
+                logits[(size_t)(n_t - 1) * vocab + eos_id] = -INFINITY; // disable_eos_on_first_output
             const float* last_logits = logits + (n_t - 1) * vocab;
 
             auto replay = [this](qwen3_asr_context* /*ctx*/, const int32_t* toks, int n, int pl) -> float* {
@@ -276,7 +302,7 @@ public:
                 if (raw.size() >= 5 && raw[0] == '[' && raw[1] == 'P' && raw[2] == 'A' && raw[3] == 'D')
                     continue;
                 std::string txt = decode_token(raw);
-                if (assistant_prefill.empty() && raw == "language") {
+                if (!raon_ && assistant_prefill.empty() && raw == "language") {
                     capture_language = true;
                     continue;
                 }
@@ -338,6 +364,8 @@ public:
                 dec_cfg.vocab_size = vocab;
 
             const int last_off = (n_t - 1) * vocab;
+            if (raon_ && eos_id >= 0 && eos_id < vocab)
+                logits[last_off + eos_id] = -INFINITY; // disable_eos_on_first_output
             int next = 0;
             float next_p = 1.0f;
             if (dec_cfg.temperature > 0.0f) {
@@ -413,7 +441,7 @@ public:
             // was NOT prefilled — with the forced-language prefill the model
             // emits transcript text directly and a literal leading word
             // "language" must not be swallowed.
-            if (assistant_prefill.empty() && txt == "language") {
+            if (!raon_ && assistant_prefill.empty() && txt == "language") {
                 capture_language = true;
                 continue;
             }
@@ -503,16 +531,9 @@ public:
         if (!ctx_)
             return;
 
-        // ---- Mel ----
-        int n_mels = 0, T_mel = 0;
-        float* mel = qwen3_asr_compute_mel(ctx_, samples, n_samples, &n_mels, &T_mel);
-        if (!mel)
-            return;
-
-        // ---- Encoder ----
+        // ---- Mel + encoder ----
         int N_enc = 0, pdim = 0;
-        float* audio_embeds = qwen3_asr_run_encoder(ctx_, mel, n_mels, T_mel, &N_enc, &pdim);
-        free(mel);
+        float* audio_embeds = encode_audio(samples, n_samples, &N_enc, &pdim);
         if (!audio_embeds)
             return;
 
@@ -550,6 +571,10 @@ public:
             text += "<|audio_pad|>";
         text += "<|audio_end|><|im_end|>\n<|im_start|>assistant\n";
         text += assistant_prefill;
+        if (raon_) {
+            text = raon_prompt(N_enc, params.ask);
+            assistant_prefill.clear();
+        }
 
         int n_prompt = 0;
         int32_t* raw_ids = qwen3_asr_tokenize(ctx_, text.c_str(), &n_prompt);
@@ -623,6 +648,8 @@ public:
         int first_token = 0;
         float first_prob = 1.0f;
         const int last_off = (n_t - 1) * vocab;
+        if (raon_ && eos_id >= 0 && eos_id < vocab)
+            logits[last_off + eos_id] = -INFINITY; // disable_eos_on_first_output
         if (params.temperature > 0.0f) {
             std::mt19937_64 seed_rng((params.seed != 0 ? params.seed : (uint64_t)std::random_device{}()) ^
                                      (uint64_t)0x9E3779B97F4A7C15ull);
@@ -652,7 +679,7 @@ public:
             if (raw.size() >= 5 && raw[0] == '[' && raw[1] == 'P' && raw[2] == 'A' && raw[3] == 'D')
                 return;
             std::string txt = decode_token(raw);
-            if (txt == "language") {
+            if (!raon_ && txt == "language") {
                 capture_language = true;
                 return;
             }
@@ -688,13 +715,8 @@ public:
     std::string stream_generate(const std::vector<float>& audio, const std::string& assistant_suffix, int max_new) {
         if (!ctx_ || audio.empty())
             return {};
-        int n_mels = 0, T_mel = 0;
-        float* mel = qwen3_asr_compute_mel(ctx_, audio.data(), (int)audio.size(), &n_mels, &T_mel);
-        if (!mel)
-            return {};
         int N_enc = 0, pdim = 0;
-        float* audio_embeds = qwen3_asr_run_encoder(ctx_, mel, n_mels, T_mel, &N_enc, &pdim);
-        free(mel);
+        float* audio_embeds = encode_audio(audio.data(), (int)audio.size(), &N_enc, &pdim);
         if (!audio_embeds)
             return {};
         // qwen_asr _build_text_prompt with context="" (the chat template puts
@@ -704,6 +726,8 @@ public:
             text += "<|audio_pad|>";
         text += "<|audio_end|><|im_end|>\n<|im_start|>assistant\n";
         text += assistant_suffix;
+        if (raon_)
+            text = raon_prompt(N_enc, "") + assistant_suffix;
         int n_prompt = 0;
         int32_t* raw_ids = qwen3_asr_tokenize(ctx_, text.c_str(), &n_prompt);
         if (!raw_ids) {
@@ -821,6 +845,7 @@ private:
 
     qwen3_asr_context* ctx_ = nullptr;
     std::string stream_recipe_; // GGUF qwen3asr.streaming_recipe ("r2t2" or "")
+    bool raon_ = false;         // #455 Raon-Speech-9B GGUF
 };
 
 // Realtime session: Confucius4-R2T2's prefix-rollback streaming, driven by the

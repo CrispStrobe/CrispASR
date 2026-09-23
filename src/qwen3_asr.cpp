@@ -123,6 +123,15 @@ struct qwen3_asr_hparams {
     uint32_t audio_pad_token_id = 151676;
     uint32_t eos_token_id = 151645;
     uint32_t pad_token_id = 151643;
+
+    // #455 Raon-Speech-9B (qwen3asr.variant = "raon-speech"): the same audio
+    // tower + Qwen3 LLM, plus a 2-layer EmbeddingAdaptor between them and a
+    // 24 kHz, 8 s-chunked front end (see qwen3_asr_raon_encode_stages).
+    bool raon_speech = false;
+    float adaptor_eps = 1e-6f;
+    uint32_t raon_chunk_samples = 192000;       // 8 s at 24 kHz
+    uint32_t raon_samples_per_frame = 1920;     // 24 kHz / 12.5 Hz
+    uint32_t raon_audio_output_pad_id = 151677; // masked at every decode step
 };
 
 // ===========================================================================
@@ -182,6 +191,10 @@ struct qwen3_asr_llm {
     std::vector<qwen3_asr_llm_block> blocks;
     ggml_tensor* output_norm_w = nullptr;
     ggml_tensor* output_w = nullptr;
+    // #455 Raon input adaptor: fc1 (enc_out -> d) -> GELU -> fc2 -> RMSNorm
+    ggml_tensor* adaptor_fc1_w = nullptr;
+    ggml_tensor* adaptor_fc2_w = nullptr;
+    ggml_tensor* adaptor_norm_w = nullptr;
 };
 
 struct qwen3_asr_model {
@@ -319,6 +332,13 @@ static bool qwen3_asr_load_model(qwen3_asr_model& model, qwen3_asr_vocab& vocab,
         hp.audio_pad_token_id = core_gguf::kv_u32(gctx, "qwen3asr.audio_pad_token_id", hp.audio_pad_token_id);
         hp.eos_token_id = core_gguf::kv_u32(gctx, "qwen3asr.eos_token_id", hp.eos_token_id);
         hp.pad_token_id = core_gguf::kv_u32(gctx, "qwen3asr.pad_token_id", hp.pad_token_id);
+        hp.raon_speech = core_gguf::kv_str(gctx, "qwen3asr.variant", "") == "raon-speech";
+        hp.adaptor_eps = core_gguf::kv_f32(gctx, "qwen3asr.adaptor.norm_eps", hp.adaptor_eps);
+        hp.raon_chunk_samples = core_gguf::kv_u32(gctx, "qwen3asr.raon.chunk_samples", hp.raon_chunk_samples);
+        hp.raon_samples_per_frame =
+            core_gguf::kv_u32(gctx, "qwen3asr.raon.samples_per_frame", hp.raon_samples_per_frame);
+        hp.raon_audio_output_pad_id =
+            core_gguf::kv_u32(gctx, "qwen3asr.raon.audio_output_pad_id", hp.raon_audio_output_pad_id);
 
         auto tokens = core_gguf::kv_str_array(gctx, "tokenizer.ggml.tokens");
         if (!tokens.empty()) {
@@ -454,6 +474,13 @@ static bool qwen3_asr_load_model(qwen3_asr_model& model, qwen3_asr_vocab& vocab,
     // different head. ne[1] is the row count after ggml's [in, out]
     // storage convention.
     model.hparams.llm_lm_head_dim = (uint32_t)l.output_w->ne[1];
+    if (model.hparams.raon_speech) {
+        l.adaptor_fc1_w = require(model, "adaptor.fc1.weight");
+        l.adaptor_fc2_w = require(model, "adaptor.fc2.weight");
+        l.adaptor_norm_w = require(model, "adaptor.norm.weight");
+        if (!l.adaptor_fc1_w || !l.adaptor_fc2_w || !l.adaptor_norm_w)
+            return false;
+    }
     if (model.hparams.llm_lm_head_dim == 0) {
         model.hparams.llm_lm_head_dim = model.hparams.llm_vocab_size;
     }
@@ -580,6 +607,7 @@ static void qwen3_asr_fft(float* in, int N, float* out) {
 // ===========================================================================
 
 #include "core/mel.h"
+#include "core/torchaudio_resample.h"
 #include "core/ffn.h"
 #include "core/attention.h"
 
@@ -1825,6 +1853,165 @@ extern "C" float* qwen3_asr_run_encoder(qwen3_asr_context* ctx, const float* mel
     return result;
 }
 
+// ===========================================================================
+// #455 Raon-Speech-9B front end + EmbeddingAdaptor
+//
+// Mirrors RaonPipeline.stt (modeling_raon.py): the processor resamples the
+// input to 24 kHz and cuts it into 8 s chunks, right-padded to the longest
+// chunk. Each chunk is resampled 24k -> 16k (torchaudio sinc_interp_hann),
+// masked to its valid length, turned into a Whisper log-mel with the max
+// taken over THAT chunk, and encoded on its own (crisp_audio: the same
+// Qwen3-Omni tower, positions restarting per 100-frame conv chunk). The
+// 13 Hz encoder output is truncated to ceil(padded_len_24k / 1920) frames,
+// the frames that cover valid samples are kept, and the adaptor maps them
+// to the LLM width.
+// ===========================================================================
+
+static ggml_cgraph* qwen3_asr_build_graph_adaptor(qwen3_asr_context* ctx, int N, int in_dim) {
+    const auto& l = ctx->model.llm;
+    ggml_init_params ip = {ctx->compute_meta.size(), ctx->compute_meta.data(), true};
+    ggml_context* ctx0 = ggml_init(ip);
+    ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 64, false);
+    ggml_tensor* x = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, in_dim, N);
+    ggml_set_name(x, "adaptor_in");
+    ggml_set_input(x);
+    ggml_tensor* cur = ggml_mul_mat(ctx0, l.adaptor_fc1_w, x);
+    cur = ggml_gelu_erf(ctx0, cur); // nn.GELU() default: exact erf
+    cur = ggml_mul_mat(ctx0, l.adaptor_fc2_w, cur);
+    cur = ggml_rms_norm(ctx0, cur, ctx->model.hparams.adaptor_eps);
+    cur = ggml_mul(ctx0, cur, l.adaptor_norm_w);
+    ggml_set_name(cur, "adaptor_out");
+    ggml_build_forward_expand(gf, cur);
+    ggml_free(ctx0);
+    return gf;
+}
+
+static bool qwen3_asr_run_adaptor(qwen3_asr_context* ctx, const float* x, int N, int in_dim, std::vector<float>& out) {
+    ggml_cgraph* gf = qwen3_asr_build_graph_adaptor(ctx, N, in_dim);
+    ggml_backend_sched_reset(ctx->sched);
+    if (!ggml_backend_sched_alloc_graph(ctx->sched, gf)) {
+        fprintf(stderr, "qwen3_asr: failed to alloc adaptor graph\n");
+        return false;
+    }
+    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "adaptor_in"), x, 0, (size_t)in_dim * N * sizeof(float));
+    if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS) {
+        fprintf(stderr, "qwen3_asr: adaptor graph compute failed\n");
+        return false;
+    }
+    ggml_tensor* o = ggml_graph_get_tensor(gf, "adaptor_out");
+    out.resize((size_t)ggml_nelements(o));
+    ggml_backend_tensor_get(o, out.data(), 0, out.size() * sizeof(float));
+    return true;
+}
+
+extern "C" bool qwen3_asr_is_raon_speech(qwen3_asr_context* ctx) {
+    return ctx && ctx->model.hparams.raon_speech;
+}
+
+extern "C" float* qwen3_asr_raon_encode_stages(qwen3_asr_context* ctx, const float* samples, int n_samples,
+                                               float** out_mel0, int* out_T0, float** out_enc, int* out_enc_dim,
+                                               int* out_N, int* out_dim) {
+    if (!ctx || !samples || n_samples <= 0 || !ctx->model.hparams.raon_speech)
+        return nullptr;
+    const auto& hp = ctx->model.hparams;
+    const int hop = (int)hp.hop_length;
+    const int n_fft = (int)hp.n_fft;
+    const int CH = (int)hp.raon_chunk_samples;
+    const int SPF = (int)hp.raon_samples_per_frame;
+
+    // Processor: any rate -> 24 kHz (the CLI hands us 16 kHz).
+    const std::vector<float> a24 = core_torchaudio::resample(samples, n_samples, 16000, 24000);
+    const int L24 = (int)a24.size();
+    std::vector<int> off, len24;
+    for (int o = 0; o < L24; o += CH) {
+        off.push_back(o);
+        len24.push_back(std::min(CH, L24 - o));
+    }
+    const int n_chunks = (int)off.size();
+    const int padded24 = n_chunks > 1 ? CH : L24; // pad_sequence to the longest chunk
+
+    // Encoder side: batch-resample the padded chunks 24k -> 16k; lengths are
+    // floor(len * 16000 / 24000) in float32, as torch computes them.
+    const core_torchaudio::SincKernel k24to16 = core_torchaudio::sinc_resample_kernel(24000, 16000);
+    std::vector<int> len16(n_chunks), eff(n_chunks);
+    int target = 0;
+    for (int c = 0; c < n_chunks; c++) {
+        const float v = (float)len24[c] * 16000.0f / 24000.0f;
+        len16[c] = (int)std::floor(v);
+        eff[c] = std::max(len16[c], n_fft); // WhisperFeatureExtractor pads short clips to n_fft
+        target = std::max(target, eff[c]);
+    }
+    const int n_idx = (target + hop - 1) / hop; // sample_mask[:, ::hop]
+    const int drop = (target % hop != 0) ? 1 : 0;
+
+    std::vector<float> enc_all; // kept encoder frames, (enc_dim) per row
+    int enc_dim = 0, n_kept = 0;
+    for (int c = 0; c < n_chunks; c++) {
+        std::vector<float> buf24((size_t)padded24, 0.0f);
+        std::memcpy(buf24.data(), a24.data() + off[c], (size_t)len24[c] * sizeof(float));
+        std::vector<float> w16 = core_torchaudio::resample(buf24.data(), padded24, k24to16);
+        w16.resize((size_t)target, 0.0f);
+        for (int i = eff[c]; i < target; i++)
+            w16[i] = 0.0f;
+
+        int n_mels = 0, T_mel = 0;
+        float* mel = qwen3_asr_compute_mel(ctx, w16.data(), target, &n_mels, &T_mel);
+        if (!mel)
+            return nullptr;
+        const int feat_len = std::min(std::min((eff[c] + hop - 1) / hop, n_idx - drop), T_mel);
+        std::vector<float> melc((size_t)n_mels * feat_len);
+        for (int m = 0; m < n_mels; m++)
+            std::memcpy(melc.data() + (size_t)m * feat_len, mel + (size_t)m * T_mel, (size_t)feat_len * sizeof(float));
+        free(mel);
+        if (c == 0 && out_mel0) {
+            *out_mel0 = (float*)malloc(melc.size() * sizeof(float));
+            std::memcpy(*out_mel0, melc.data(), melc.size() * sizeof(float));
+            if (out_T0)
+                *out_T0 = feat_len;
+        }
+
+        int N_c = 0, dim = 0;
+        float* enc = qwen3_asr_run_encoder(ctx, melc.data(), n_mels, feat_len, &N_c, &dim);
+        if (!enc)
+            return nullptr;
+        enc_dim = dim;
+        // AuTWrapper: truncate / zero-pad to ceil(padded24 / 1920) frames, then
+        // keep the frames that cover at least one valid 24 kHz sample.
+        const int expected = (padded24 + SPF - 1) / SPF;
+        const int keep = std::min(expected, (len24[c] + SPF - 1) / SPF);
+        const size_t base = enc_all.size();
+        enc_all.resize(base + (size_t)keep * dim, 0.0f);
+        const int have = std::min(keep, N_c);
+        std::memcpy(enc_all.data() + base, enc, (size_t)have * dim * sizeof(float));
+        free(enc);
+        n_kept += keep;
+    }
+    if (n_kept <= 0)
+        return nullptr;
+    if (out_enc) {
+        *out_enc = (float*)malloc(enc_all.size() * sizeof(float));
+        std::memcpy(*out_enc, enc_all.data(), enc_all.size() * sizeof(float));
+    }
+    if (out_enc_dim)
+        *out_enc_dim = enc_dim;
+
+    std::vector<float> adapted;
+    if (!qwen3_asr_run_adaptor(ctx, enc_all.data(), n_kept, enc_dim, adapted))
+        return nullptr;
+    if (out_N)
+        *out_N = n_kept;
+    if (out_dim)
+        *out_dim = (int)(adapted.size() / (size_t)n_kept);
+    float* result = (float*)malloc(adapted.size() * sizeof(float));
+    std::memcpy(result, adapted.data(), adapted.size() * sizeof(float));
+    return result;
+}
+
+extern "C" float* qwen3_asr_raon_encode(qwen3_asr_context* ctx, const float* samples, int n_samples, int* out_N,
+                                        int* out_dim) {
+    return qwen3_asr_raon_encode_stages(ctx, samples, n_samples, nullptr, nullptr, nullptr, nullptr, out_N, out_dim);
+}
+
 extern "C" bool qwen3_asr_kv_init(qwen3_asr_context* ctx, int max_ctx) {
     if (!ctx || max_ctx <= 0)
         return false;
@@ -1981,6 +2168,9 @@ extern "C" float* qwen3_asr_run_llm_kv(qwen3_asr_context* ctx, const float* inpu
         *out_vocab_size = vocab;
     float* result = (float*)malloc((size_t)vocab * sizeof(float));
     ggml_backend_tensor_get(out, result, 0, (size_t)vocab * sizeof(float));
+    // Raon masks <|audio_output_pad|> at every step (text-only STT output).
+    if (hp.raon_speech && hp.raon_audio_output_pad_id < (uint32_t)vocab)
+        result[hp.raon_audio_output_pad_id] = -INFINITY;
     return result;
 }
 

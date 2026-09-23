@@ -2797,7 +2797,8 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
     // architecturally identical to qwen3, so it loads through the same
     // dispatch. Same alias set the CLI accepts in
     // examples/cli/crispasr_backend.cpp::resolve_make_fn().
-    if (s->backend == "qwen3" || s->backend == "mega-asr" || s->backend == "mega_asr" || s->backend == "megaasr") {
+    if (s->backend == "qwen3" || s->backend == "mega-asr" || s->backend == "mega_asr" || s->backend == "megaasr" ||
+        s->backend == "raon-speech") {
         qwen3_asr_context_params p = qwen3_asr_context_default_params();
         p.n_threads = s->n_threads;
         p.verbosity = g_open_verbosity_tls;
@@ -6595,21 +6596,28 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
     // mega-asr is handled here too via the qwen3_ctx — it's just
     // qwen3 weights with a merged robustness LoRA. See the matching
     // alias set in crispasr_session_open_explicit.
-    if ((s->backend == "qwen3" || s->backend == "mega-asr" || s->backend == "mega_asr" || s->backend == "megaasr") &&
+    if ((s->backend == "qwen3" || s->backend == "mega-asr" || s->backend == "mega_asr" || s->backend == "megaasr" ||
+         s->backend == "raon-speech") &&
         s->qwen3_ctx) {
         // qwen3-asr's runtime _transcribe() is a stub. Drive the building
         // blocks the CLI adapter uses (compute_mel → run_encoder → tokenize
         // → embed+splice → kv_init → run_llm_kv prefill → greedy decode).
         // Capture per-step softmax probability via core_greedy_decode.
-        int n_mels = 0, T_mel = 0;
-        float* mel = qwen3_asr_compute_mel(s->qwen3_ctx, pcm, n_samples, &n_mels, &T_mel);
-        if (!mel) {
-            delete r;
-            return nullptr;
-        }
+        // #455 Raon-Speech-9B has its own front end (8 s chunks at 24 kHz,
+        // per-chunk mel, EmbeddingAdaptor) and prompt (no system turn).
+        const bool raon = qwen3_asr_is_raon_speech(s->qwen3_ctx);
         int N_enc = 0, pdim = 0;
-        float* audio_embeds = qwen3_asr_run_encoder(s->qwen3_ctx, mel, n_mels, T_mel, &N_enc, &pdim);
-        std::free(mel);
+        float* audio_embeds = nullptr;
+        if (raon) {
+            audio_embeds = qwen3_asr_raon_encode(s->qwen3_ctx, pcm, n_samples, &N_enc, &pdim);
+        } else {
+            int n_mels = 0, T_mel = 0;
+            float* mel = qwen3_asr_compute_mel(s->qwen3_ctx, pcm, n_samples, &n_mels, &T_mel);
+            if (mel) {
+                audio_embeds = qwen3_asr_run_encoder(s->qwen3_ctx, mel, n_mels, T_mel, &N_enc, &pdim);
+                std::free(mel);
+            }
+        }
         if (!audio_embeds) {
             delete r;
             return nullptr;
@@ -6652,6 +6660,14 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
         }
         text += "<|im_end|>\n<|im_start|>assistant\n";
         text += assistant_prefill;
+        if (raon) { // RaonPipeline.stt; --ask replaces the instruction
+            text = "<|im_start|>user\n<|audio_start|>";
+            for (int i = 0; i < N_enc; i++)
+                text += "<|audio_pad|>";
+            text += "<|audio_end|>";
+            text += s->ask.empty() ? std::string("Transcribe the audio into text") : s->ask;
+            text += "<|im_end|>\n<|im_start|>assistant\n";
+        }
 
         int n_prompt = 0;
         int32_t* raw_ids = qwen3_asr_tokenize(s->qwen3_ctx, text.c_str(), &n_prompt);
@@ -6716,6 +6732,8 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
 
         const int last_off = (n_t - 1) * vocab;
         const int prompt_len_q3 = (int)ids.size();
+        if (raon && eos_id >= 0 && eos_id < vocab)
+            logits[last_off + eos_id] = -INFINITY; // Raon disable_eos_on_first_output
 
         core_greedy_decode::Result dec;
         if (s->beam_size > 1) {
@@ -6784,7 +6802,7 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
             if (raw.size() >= 5 && raw[0] == '[' && raw[1] == 'P' && raw[2] == 'A' && raw[3] == 'D')
                 continue;
             std::string piece = gpt2_byte_decode(raw);
-            if (piece == "language") {
+            if (!raon && piece == "language") {
                 capture_language = true;
                 continue;
             }

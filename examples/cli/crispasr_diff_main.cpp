@@ -1615,7 +1615,8 @@ int main(int argc, char** argv) {
         fprintf(stderr,
                 "usage: %s <backend> <model.gguf> <reference.gguf> <audio.wav>\n"
                 "\n"
-                "  backend       one of: voxtral, voxtral4b, qwen3, qwen3-tts, qwen3-tts-codec, omnivoice, tada-tts, "
+                "  backend       one of: voxtral, voxtral4b, qwen3, raon-speech, qwen3-tts, qwen3-tts-codec, "
+                "omnivoice, tada-tts, "
                 "tada-encoder, kokoro, granite, "
                 "granite-4.1, "
                 "granite-nle, parakeet, gigaam, wespeaker, chatterbox, voxcpm2-tts, "
@@ -2641,6 +2642,55 @@ int main(int argc, char** argv) {
             }
         }
         chatterbox_free(ctx);
+    } else if (backend_name == "raon-speech") {
+        // #455 Raon-Speech-9B: the reference is tools/reference_backends/
+        // raon_speech.py (fp32, RaonModel.get_audio_input_embeds). Stages:
+        //   raon_mel_chunk0       (n_mels, T0)  first 8 s chunk's log-mel
+        //   raon_encoder_output   (N, 2048)     kept 12.5 Hz encoder frames
+        //   raon_adaptor_output   (N, 4096)     LLM-ready audio embeddings
+        auto cp = qwen3_asr_context_default_params();
+        cp.n_threads = 4;
+        cp.verbosity = 0;
+        cp.use_gpu = std::getenv("CRISPASR_DIFF_NO_GPU") == nullptr;
+        qwen3_asr_context* ctx = qwen3_asr_init_from_file(model_path.c_str(), cp);
+        if (!ctx || !qwen3_asr_is_raon_speech(ctx)) {
+            fprintf(stderr, "raon-speech: failed to load a raon-speech qwen3asr GGUF\n");
+            if (ctx)
+                qwen3_asr_free(ctx);
+            return 4;
+        }
+        float *mel0 = nullptr, *enc = nullptr;
+        int T0 = 0, enc_dim = 0, N = 0, dim = 0;
+        float* emb = qwen3_asr_raon_encode_stages(ctx, samples.data(), (int)samples.size(), &mel0, &T0, &enc, &enc_dim,
+                                                  &N, &dim);
+        if (!emb) {
+            printf("[ERR ] raon_encode_stages returned null\n");
+            n_fail++;
+        } else {
+            const struct {
+                const char* name;
+                const float* data;
+                size_t n;
+            } stages[] = {
+                {"raon_mel_chunk0", mel0, (size_t)128 * T0},
+                {"raon_encoder_output", enc, (size_t)N * enc_dim},
+                {"raon_adaptor_output", emb, (size_t)N * dim},
+            };
+            for (const auto& st : stages) {
+                if (!ref.has(st.name)) {
+                    printf("[SKIP] %-24s not in reference\n", st.name);
+                    continue;
+                }
+                auto rep = ref.compare(st.name, st.data, st.n);
+                print_row(st.name, rep, COS_THRESHOLD);
+                record(rep);
+            }
+            printf("       raon frames: C++ N=%d (enc %d -> %d), mel chunk0 T=%d\n", N, enc_dim, dim, T0);
+        }
+        free(mel0);
+        free(enc);
+        free(emb);
+        qwen3_asr_free(ctx);
     } else if (backend_name == "qwen3") {
         auto cp = qwen3_asr_context_default_params();
         cp.n_threads = 4;

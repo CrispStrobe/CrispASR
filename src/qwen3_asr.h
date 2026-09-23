@@ -164,6 +164,20 @@ float* qwen3_asr_run_llm_kv(struct qwen3_asr_context* ctx, const float* inputs_e
 // Qwen3-ForcedAligner-0.6B this is 5000 (timestamp classes).
 int qwen3_asr_lm_head_dim(struct qwen3_asr_context* ctx);
 
+// #455 Raon-Speech-9B (GGUF qwen3asr.variant = "raon-speech"). The audio
+// path differs from Qwen3-ASR: 8 s chunks at 24 kHz, per-chunk mel, a
+// 12.5 Hz frame grid and an EmbeddingAdaptor to the LLM width. Use
+// qwen3_asr_raon_encode instead of compute_mel + run_encoder; it returns
+// LLM-ready embeddings (out_N rows of out_dim). The _stages variant also
+// returns chunk 0's mel (n_mels x T0, mel-major) and the pre-adaptor
+// encoder frames (out_N x enc_dim) for the diff harness; free() them.
+bool qwen3_asr_is_raon_speech(struct qwen3_asr_context* ctx);
+float* qwen3_asr_raon_encode(struct qwen3_asr_context* ctx, const float* samples, int n_samples, int* out_N,
+                             int* out_dim);
+float* qwen3_asr_raon_encode_stages(struct qwen3_asr_context* ctx, const float* samples, int n_samples,
+                                    float** out_mel0, int* out_T0, float** out_enc, int* out_enc_dim, int* out_N,
+                                    int* out_dim);
+
 // Run a single full-T forward pass through the LLM body (NOT autoregressive,
 // no KV cache) starting from already-embedded inputs. Returns the lm_head
 // logits at every position (not just last-token), shape

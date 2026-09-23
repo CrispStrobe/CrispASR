@@ -5890,3 +5890,18 @@ catch_discover_tests(test-kaldi-fbank
     TEST_SPEC "[kaldi_fbank]"
     PROPERTIES LABELS "unit"
 )
+
+# ─── test-torchaudio-resample — header-only torchaudio sinc resampler (#455) ───
+add_executable(test-torchaudio-resample
+    test-torchaudio-resample.cpp
+)
+target_include_directories(test-torchaudio-resample PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-torchaudio-resample PRIVATE
+    Catch2::Catch2WithMain
+)
+catch_discover_tests(test-torchaudio-resample
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit;resample"
+)

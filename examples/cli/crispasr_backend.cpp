@@ -158,8 +158,9 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& name
         name == "higgsaudiostt")
         return crispasr_make_higgs_stt_backend();
     if (name == "qwen3" || name == "qwen3-1.7b" || name == "qwen3_1.7b" || name == "qwen3_17b" || name == "mega-asr" ||
-        name == "mega_asr" || name == "megaasr")
-        return crispasr_make_qwen3_backend();
+        name == "mega_asr" || name == "megaasr" || name == "raon-speech" || name == "raon-speech-9b" ||
+        name == "raon_speech")
+        return crispasr_make_qwen3_backend(); // #455 Raon-Speech rides the qwen3-asr runtime
     if (name == "fastconformer-ctc" || name == "fastconformer_ctc" || name == "canary-ctc" || name == "canary_ctc")
         return crispasr_make_fastconformer_ctc_backend();
     if (name == "wav2vec2" || name == "hubert" || name == "data2vec")
@@ -371,6 +372,7 @@ std::vector<std::string> crispasr_list_backends() {
         "qwen3",
         "qwen3-1.7b",
         "mega-asr",
+        "raon-speech",
         "higgs-stt",
         "fastconformer-ctc",
         "wav2vec2",
@@ -756,6 +758,8 @@ std::string crispasr_detect_backend_from_gguf(const std::string& model_path) {
         return "outetts";
     if (contains_ci("indextts"))
         return "indextts";
+    if (contains_ci("raon-speech") || contains_ci("raon_speech"))
+        return "qwen3"; // #455 speech-to-text, not Raon-OpenTTS
     if (contains_ci("f5-tts") || contains_ci("f5tts") || contains_ci("F5TTS") || contains_ci("raon"))
         return "f5-tts"; // #387 Raon-OpenTTS rides the f5-tts runtime
     if (contains_ci("pocket-tts") || contains_ci("pocket_tts") || contains_ci("pockettts"))

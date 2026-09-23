@@ -115,6 +115,32 @@ DIRECT_HF = {
     "lm_head.weight": "output.weight",
 }
 
+# #455 KRAFTON/Raon-Speech-9B (model_type "raon"): only the speech-to-text
+# subset is converted. Talker, code predictor, Mimi codec, output adaptor and
+# speaker encoder are skipped (they only serve speech output).
+DIRECT_RAON = {
+    "audio_encoder.encoder.conv2d1.weight": "audio.conv.1.weight",
+    "audio_encoder.encoder.conv2d1.bias": "audio.conv.1.bias",
+    "audio_encoder.encoder.conv2d2.weight": "audio.conv.2.weight",
+    "audio_encoder.encoder.conv2d2.bias": "audio.conv.2.bias",
+    "audio_encoder.encoder.conv2d3.weight": "audio.conv.3.weight",
+    "audio_encoder.encoder.conv2d3.bias": "audio.conv.3.bias",
+    "audio_encoder.encoder.conv_out.weight": "audio.conv_out.weight",
+    "audio_encoder.encoder.conv_out.bias": "audio.conv_out.bias",
+    "audio_encoder.encoder.ln_post.weight": "audio.ln_post.weight",
+    "audio_encoder.encoder.ln_post.bias": "audio.ln_post.bias",
+    "audio_encoder.encoder.proj1.weight": "audio.proj1.weight",
+    "audio_encoder.encoder.proj1.bias": "audio.proj1.bias",
+    "audio_encoder.encoder.proj2.weight": "audio.proj2.weight",
+    "audio_encoder.encoder.proj2.bias": "audio.proj2.bias",
+    "input_adaptor.proj.0.weight": "adaptor.fc1.weight",
+    "input_adaptor.proj.2.weight": "adaptor.fc2.weight",
+    "input_adaptor.post_norm.weight": "adaptor.norm.weight",
+    "text_model.embed_tokens.weight": "token_embd.weight",
+    "text_model.norm.weight": "output_norm.weight",
+    "lm_head.weight": "output.weight",
+}
+
 # Audio layer patterns for both formats
 AUDIO_LAYER_PATTERNS_THINKER = [
     (r"thinker\.audio_tower\.layers\.(\d+)\.", "audio.blk.{}."),
@@ -170,6 +196,8 @@ TEXT_SUB = {
 def detect_format(tensor_names: list[str]) -> str:
     """Detect whether safetensors use thinker.* or model.* prefix."""
     for name in tensor_names:
+        if name.startswith(("audio_encoder.encoder.", "text_model.", "input_adaptor.")):
+            return "raon"
         if name.startswith("thinker."):
             return "thinker"
         if name.startswith("model."):
@@ -182,6 +210,10 @@ def build_remap(fmt: str) -> callable:
     direct = DIRECT_THINKER if fmt == "thinker" else DIRECT_HF
     audio_pats = AUDIO_LAYER_PATTERNS_THINKER if fmt == "thinker" else AUDIO_LAYER_PATTERNS_HF
     text_pats = TEXT_LAYER_PATTERNS_THINKER if fmt == "thinker" else TEXT_LAYER_PATTERNS_HF
+    if fmt == "raon":
+        direct = DIRECT_RAON
+        audio_pats = [(r"audio_encoder\.encoder\.layers\.(\d+)\.", "audio.blk.{}.")]
+        text_pats = [(r"text_model\.layers\.(\d+)\.", "blk.{}.")]
 
     def remap_name(hf_name: str) -> str | None:
         if hf_name in direct:
@@ -372,8 +404,22 @@ def convert(input_dir: Path, out_path: Path, streaming_recipe: str = "") -> None
     with open(input_dir / "config.json", "r", encoding="utf-8") as f:
         cfg = json.load(f)
 
+    raon = cfg.get("model_type") == "raon"
     # Detect config format: non-hf has thinker_config wrapper, hf has flat structure
-    if "thinker_config" in cfg:
+    if raon:
+        audio = cfg["audio_encoder_config"]
+        text = cfg["text_model_config"]
+        adaptor_cfg = cfg.get("input_adaptor_config") or {}
+        if int(adaptor_cfg.get("output_time_scale", 1)) != 1 or not adaptor_cfg.get("use_post_norm", True):
+            sys.exit(f"unsupported Raon input adaptor config: {adaptor_cfg}")
+        if cfg.get("aut_is_causal"):
+            sys.exit("causal AuT encoders are not supported (aut_is_causal=true)")
+        # modeling_raon.py: <|audio_start|> 151669, <|audio_end|> 151670, the
+        # STT placeholder is <|audio_input_placeholder|> 151676.
+        audio_start_id, audio_end_id, audio_pad_id = 151669, 151670, 151676
+        tie_word_embeddings = bool(text.get("tie_word_embeddings", False))
+        print("  config format: raon (speech-to-text subset)")
+    elif "thinker_config" in cfg:
         thinker = cfg["thinker_config"]
         audio = thinker["audio_config"]
         text = thinker["text_config"]
@@ -471,6 +517,14 @@ def convert(input_dir: Path, out_path: Path, streaming_recipe: str = "") -> None
     writer.add_uint32("qwen3asr.audio_pad_token_id", audio_pad_id)
     writer.add_uint32("qwen3asr.eos_token_id", 151645)
     writer.add_uint32("qwen3asr.pad_token_id", 151643)
+    if raon:
+        writer.add_string("qwen3asr.variant", "raon-speech")
+        writer.add_float32("qwen3asr.adaptor.norm_eps", float(adaptor_cfg.get("norm_eps", 1e-6)))
+        # 8 s STT chunks at the 24 kHz processor rate (RaonPipeline.stt), and
+        # the 12.5 Hz frame grid (24000 / 1920) the placeholders count in.
+        writer.add_uint32("qwen3asr.raon.chunk_samples", 192000)
+        writer.add_uint32("qwen3asr.raon.samples_per_frame", 1920)
+        writer.add_uint32("qwen3asr.raon.audio_output_pad_id", 151677)
 
     # Tokenizer
     writer.add_tokenizer_model("gpt2")

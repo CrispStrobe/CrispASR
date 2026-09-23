@@ -116,6 +116,7 @@ REGISTERED_BACKENDS: Dict[str, str] = {
     "bt2-tts":    "reference_backends.breeze_tts_2",
     "moss-tts":   "reference_backends.moss_tts",
     "qwen3":      "reference_backends.qwen3",
+    "raon-speech": "reference_backends.raon_speech",  # #455 Raon-Speech-9B STT
     # X-ASR (#436): icefall streaming Zipformer2 transducer, driven chunk by chunk
     # like sherpa-onnx. Needs XASR_ICEFALL_DIR (icefall zipformer/ sources).
     "xasr":       "reference_backends.xasr",
