@@ -92,6 +92,10 @@ import numpy as np
 #   1. tools/reference_backends/<name>.py  with dump() + DEFAULT_STAGES
 #   2. one line here.
 REGISTERED_BACKENDS: Dict[str, str] = {
+    # Dolphin (DataoceanAI) E-Branchformer + Transformer decoder + CTC (#436).
+    # model_dir holds <name>.pt + train.yaml + units.txt + global_cmvn;
+    # DOLPHIN_MODEL_NAME picks the registry name (default small.cn.streaming).
+    "dolphin":    "reference_backends.dolphin",
     # dots.tts (rednote-hilab/dots.tts-soar) TTS: Qwen2.5-1.5B LLM +
     # 18L DiT flow-matching head + 24L VAESemanticEncoder (PatchEncoder)
     # + BigVGAN vocoder. The C++ diff branch ("dots-tts") validates the
