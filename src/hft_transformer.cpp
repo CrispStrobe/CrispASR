@@ -386,10 +386,10 @@ struct hft_transformer_ctx* hft_transformer_init_from_file(const char* path, str
     // backend. On a GPU backend take the ordinary loader; the GEMM is going to
     // a device kernel anyway, which is the whole point of being there.
     int n_repacked = 0;
-    const bool loaded = core_cpu_backend::is_cpu(ctx->backend)
-                            ? core_gguf::load_weights_repack(path, ctx->backend, is_hft_matmul_weight, nullptr,
-                                                             "hft", wl, &n_repacked)
-                            : core_gguf::load_weights(path, ctx->backend, "hft", wl);
+    const bool loaded =
+        core_cpu_backend::is_cpu(ctx->backend)
+            ? core_gguf::load_weights_repack(path, ctx->backend, is_hft_matmul_weight, nullptr, "hft", wl, &n_repacked)
+            : core_gguf::load_weights(path, ctx->backend, "hft", wl);
     if (!loaded) {
         ggml_backend_free(ctx->backend);
         delete ctx;
