@@ -96,21 +96,23 @@ fast path exactly as a `ggml_backend_sched` model does. The playbook did not
 claim otherwise, but it is worth stating, because it is why a loader change is
 sufficient and no model needs restructuring.
 
-**1.2 A repack buffer type IS offered on both machines.** §4 raised the
-possibility that `ggml_backend_dev_get_extra_bufts` would return nothing
-without VNNI, making the question moot. It does not: `CPU_REPACK` is offered on
-both, because `ggml_backend_cpu_get_extra_buffer_types()`
-(`ggml-cpu.cpp:42`) gates it on the *compile-time* `GGML_USE_CPU_REPACK`
-(ON here) and nothing else. That branch of the question is closed.
+**1.2 A repack buffer type IS offered on every machine tested** — the VPS, a
+Kaggle Xeon, and all three CI runners. Playbook §4 raised the possibility that
+`ggml_backend_dev_get_extra_bufts` would return nothing without VNNI, making
+the question moot. It does not: `CPU_REPACK` is offered everywhere, because
+`ggml_backend_cpu_get_extra_buffer_types()` (`ggml-cpu.cpp:42`) gates it on the
+*compile-time* `GGML_USE_CPU_REPACK` (ON in this build) and nothing else. That
+branch of the question is closed. What varies by ISA is not whether the buffer
+type exists but which tensors it accepts — §2.
 
 **1.3 The buffer type supports `MUL_MAT` and `MUL_MAT_ID` — not `GET_ROWS`.**
 `repack::extra_buffer_type::supports_op` (`repack.cpp:4774`) accepts only those
-two ops, with a 2-D `src[0]` and an F32 `src[1]`. §4 and the comment at
+two ops, with a 2-D `src[0]` and an F32 `src[1]`. Playbook §4 and the comment at
 `src/crispasr.cpp:1945` both say "`MUL_MAT` and `GET_ROWS`"; against this ggml
 version that is stale. It does not change the conclusion — it narrows it.
 
 **1.4 It is incompatible with the zero-copy mmap path — verified, not
-inferred.** §4 marked this as inference. It is now checked. `gguf_loader.cpp:657`
+inferred.** Playbook §4 marked this as inference. It is now checked. `gguf_loader.cpp:657`
 wraps the file mapping in a backend buffer with a custom iface and binds each
 `tensor->data` straight at an offset into the map; **it never calls
 `set_tensor` at all**. Repacking *is* a `set_tensor` that rewrites the bytes
@@ -123,7 +125,7 @@ resident private page for every weight byte.
 ## 2. The measurement that matters: which types get a kernel
 
 `ggml_repack_get_optimal_repack_type` (`repack.cpp:4528`) is a table over
-(quant type, ISA, `ne[1]` divisibility). Read out on x86:
+(quant type, ISA, `ne[1]` divisibility). Read out:
 
 | GGUF type | x86 | arm64 (dotprod/i8mm) | gate |
 | --- | --- | --- | --- |
@@ -142,6 +144,7 @@ Every quantised model here ships q8_0 — verified by reading the GGUF headers:
 with `ne[1] % 8 == 0`, so they are repack-eligible *by shape* on every ISA. On
 x86 they are declined anyway, because q8_0 has no repacked kernel there. On
 arm64 all 63 are accepted.
+
 The AVX2 kernels that do exist (`arch/x86/repack.cpp:2026`) use
 `gemm_q4_b32_8x8_q8_0_lut_avx` and do **not** need VNNI — they fall back to
 `maddubs`-style accumulation — which is why the win below shows up on machines
@@ -150,8 +153,9 @@ there is no int8 dot-product for the repacked path to reach") was too
 pessimistic: the *layout* pays on its own.
 
 On arm64 the table is the other way round, and §3c measures it: q8_0 gets a
-kernel under `dotprod`/`i8mm` and is 2.3–2.4× faster repacked. **Do not carry
-the x86 conclusion to a phone build, in either direction.**
+kernel and is 2.3–2.4× faster repacked on Linux arm64, 3.1–3.4× on Apple
+Silicon. **Do not carry the x86 conclusion to a phone build, in either
+direction.**
 
 ### 2a. A trap for anyone wiring this up
 
