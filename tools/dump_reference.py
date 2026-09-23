@@ -116,6 +116,9 @@ REGISTERED_BACKENDS: Dict[str, str] = {
     "bt2-tts":    "reference_backends.breeze_tts_2",
     "moss-tts":   "reference_backends.moss_tts",
     "qwen3":      "reference_backends.qwen3",
+    # X-ASR (#436): icefall streaming Zipformer2 transducer, driven chunk by chunk
+    # like sherpa-onnx. Needs XASR_ICEFALL_DIR (icefall zipformer/ sources).
+    "xasr":       "reference_backends.xasr",
     "higgs-stt":  "reference_backends.higgs_stt",
     "voxtral":    "reference_backends.voxtral",
     "voxtral4b":  "reference_backends.voxtral4b",
