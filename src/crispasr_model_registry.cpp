@@ -784,6 +784,21 @@ constexpr Entry k_registry[] = {
     // perturbs the frame head, which sets note durations, five times as hard
     // as the onset head. q4_0 and f32 are in the same repo for callers that
     // want them.
+    // hFT-Transformer (Toyama et al., ISMIR 2023, sony/hFT-Transformer, MIT):
+    // piano note events from a hierarchical frequency-time transformer.
+    // q4_0 deliberately, and unusually: measured on all ten MusicNet test
+    // pieces it LOSES nothing against fp32 (52.55% vs 52.21% overall, 70.71%
+    // vs 70.52% solo piano). The head q4_0 perturbs most here is velocity,
+    // and velocity feeds the decoder's ignore_zero gate rather than a note
+    // duration -- so its errors change which notes survive, not how long
+    // they last. Contrast onsets-and-frames above, where q4_0 damages the
+    // frame head and costs 0.5 points of F1-with-offsets.
+    // Read docs/music-transcription/HFT_TRANSFORMER.md before choosing this
+    // over onsets-and-frames: it is 1.4 points better on solo piano and
+    // roughly 5x the compute.
+    {"hft-transformer", "hft-transformer-q4_0.gguf",
+     "https://huggingface.co/cstr/hft-transformer-GGUF/resolve/main/hft-transformer-q4_0.gguf",
+     "~4.5 MB"},
     {"onsets-and-frames", "onsets-and-frames-q8_0.gguf",
      "https://huggingface.co/cstr/onsets-and-frames-GGUF/resolve/main/onsets-and-frames-q8_0.gguf",
      "~31 MB"},
