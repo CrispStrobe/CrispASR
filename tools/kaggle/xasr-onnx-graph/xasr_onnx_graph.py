@@ -40,16 +40,48 @@ try:
                 c = cshape(x)
                 if c and c[1] == "init":
                     mm.append([i, nd.op_type, nd.name, j, c[2], c[0]])
-        if nd.op_type in ("Mul", "Add", "MatMul"):
-            for j, x in enumerate(nd.input):
-                c = cshape(x)
-                if c and int(np.prod(c[0])) >= 2 and not (c[1] == "init" and not c[2].startswith("onnx::")):
-                    muls.append([i, nd.op_type, nd.name, j, c[1], c[2], c[0]])
     res["n_nodes"] = len(m.graph.node)
-    res["weight_nodes"] = mm
     res["n_weight_matmul_anon"] = sum(1 for x in mm if x[1] == "MatMul" and x[4].startswith("onnx::"))
-    res["const_ops"] = muls[:400]
-    res["const_op_shapes"] = dict(collections.Counter(str(x[6]) for x in muls))
+    # every anonymous NON-MatMul initializer / constant with >= 16 elements: shape + the op chain it feeds
+    for ch in (160, 1920):
+        mc = ms[ch]
+        ini = {t.name: t for t in mc.graph.initializer}
+        cst = {}
+        for nd in mc.graph.node:
+            if nd.op_type == "Constant":
+                for a in nd.attribute:
+                    if a.name == "value":
+                        cst[nd.output[0]] = numpy_helper.to_array(a.t)
+        cons = collections.defaultdict(list)
+        for i, nd in enumerate(mc.graph.node):
+            for x in nd.input:
+                cons[x].append(i)
+        nodes = mc.graph.node
+        def chain(name, depth=4):
+            out, cur = [], name
+            for _ in range(depth):
+                if not cons[cur]:
+                    break
+                nd = nodes[cons[cur][0]]
+                out.append(f"{nd.op_type}({nd.name})")
+                cur = nd.output[0]
+            return " > ".join(out)
+        rows = []
+        for n, t in ini.items():
+            if not n.startswith("onnx::"):
+                continue
+            if any(nodes[i].op_type == "MatMul" for i in cons[n]):
+                continue
+            size = int(np.prod(t.dims)) if len(t.dims) else 1
+            if size >= 16:
+                rows.append(["init", n, list(t.dims), cons[n][0] if cons[n] else -1, chain(n)])
+        for n, v in cst.items():
+            if v.size >= 16:
+                rows.append(["const", n, list(v.shape), cons[n][0] if cons[n] else -1, chain(n)])
+        rows.sort(key=lambda r: r[3])
+        res[f"anon_nonmatmul_{ch}"] = rows
+        res[f"anon_nonmatmul_shapes_{ch}"] = dict(collections.Counter(str(r[2]) for r in rows))
+        save()
     # do exports share weights?
     named = {t.name: numpy_helper.to_array(t) for t in m.graph.initializer if not t.name.startswith("onnx::")}
     for ch in (160, 960, 1920):

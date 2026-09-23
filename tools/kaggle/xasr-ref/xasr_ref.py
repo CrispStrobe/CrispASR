@@ -46,9 +46,11 @@ try:
     res["onnx_sha_ok"] = True; save()
     os.environ["XASR_ICEFALL_DIR"] = str(ICE)
     f16 = M / "x-asr-zh-en-f16.gguf"
-    out = subprocess.check_output([sys.executable, str(REPO / "models/convert-xasr-to-gguf.py"), "--models-dir", str(md),
-                                   "--output", str(f16)], text=True)
-    res["convert"] = out.strip()
+    cv = subprocess.run([sys.executable, str(REPO / "models/convert-xasr-to-gguf.py"), "--models-dir", str(md),
+                         "--output", str(f16)], capture_output=True, text=True)
+    res["convert"] = (cv.stdout + cv.stderr).strip()[-3000:]; save()
+    if cv.returncode != 0:
+        raise RuntimeError("convert failed: " + res["convert"])
     api.create_repo("cstr/x-asr-zh-en-GGUF", repo_type="model", exist_ok=True)
     api.upload_file(path_or_fileobj=str(f16), path_in_repo=f16.name, repo_id="cstr/x-asr-zh-en-GGUF", repo_type="model")
     res["f16_bytes"] = f16.stat().st_size; save()

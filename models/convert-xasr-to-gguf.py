@@ -21,8 +21,9 @@ Recovering names from the ONNX graph (docs/xasr/PLAN.md):
     in_proj, linear_pos, ff1 in/out, nonlin in/out, attn1 in/out, conv1 in/out,
     ff2 in/out, attn2 in/out, conv2 in/out, ff3 in/out, then encoder_proj —
     matched in order and checked shape by shape;
-  * the chunkwise-conv scale tables (2, C, K) are anonymous initializers,
-    matched by first use and shape;
+  * each chunkwise-conv scale table (2, C, K) was split by constant folding
+    into two anonymous (C, K) rows (left edge, right edge), matched in
+    first-use order and restacked;
   * the downsample softmax weights were constant-folded to (ds, 1, 1)
     constants; they are stored as log-weights so softmax() restores them.
 
@@ -149,18 +150,23 @@ def onnx_state_dict(chunk_dir):
             if shp and sd[pre + k + ".weight"].shape != shp:
                 sys.exit(f"shape check failed: {pre + k} {sd[pre + k + '.weight'].shape} != {shp}")
 
-    # Chunkwise-conv scale tables (2, C, K), anonymous, in first-use order.
-    scales = sorted((first_use.get(n, 1 << 30), n) for n, t in inits.items()
-                    if n.startswith("onnx::") and len(t.dims) == 3 and t.dims[0] == 2)
-    want = [(layer_prefix(s, l, ds) + f"conv_module{c}.depthwise_conv.chunkwise_conv_scale", (2, hp["dims"][s], hp["kernel"][s]))
+    # Chunkwise-conv scale tables. Constant folding split each (2, C, K)
+    # parameter into its two rows, left_edge = scale[0] and right_edge = scale[1]:
+    # two anonymous (C, K) initializers that feed a Slice (chunk < K) or a Concat
+    # (chunk >= K). _get_chunk_scale touches the left edge first, so in first-use
+    # order they come as (left, right) per conv module.
+    mm_inputs = {nd.input[1] for nd in m.graph.node if nd.op_type == "MatMul" and len(nd.input) > 1}
+    edges = sorted((first_use.get(n, 1 << 30), n) for n, t in inits.items()
+                   if n.startswith("onnx::") and len(t.dims) == 2 and n not in mm_inputs)
+    want = [(layer_prefix(s, l, ds) + f"conv_module{c}.depthwise_conv.chunkwise_conv_scale", (hp["dims"][s], hp["kernel"][s]))
             for s in range(S) for l in range(hp["n_layers"][s]) for c in (1, 2)]
-    if len(scales) != len(want):
-        sys.exit(f"{enc}: {len(scales)} (2,C,K) initializers, expected {len(want)}")
-    for (n, shp), (_, src) in zip(want, scales):
-        a = arr(src)
-        if a.shape != shp:
-            sys.exit(f"chunk scale order mismatch at {n}: {a.shape} != {shp}")
-        sd[n] = a
+    if len(edges) != 2 * len(want):
+        sys.exit(f"{enc}: {len(edges)} anonymous 2-D non-MatMul initializers, expected {2 * len(want)} (C, K) edges")
+    for i, (n, shp) in enumerate(want):
+        left, right = arr(edges[2 * i][1]), arr(edges[2 * i + 1][1])
+        if left.shape != shp or right.shape != shp:
+            sys.exit(f"chunk scale order mismatch at {n}: {left.shape}/{right.shape} != {shp}")
+        sd[n] = np.stack([left, right])
 
     # Downsample weights: constant-folded softmax(bias) of shape (ds, 1, 1).
     folded = []
