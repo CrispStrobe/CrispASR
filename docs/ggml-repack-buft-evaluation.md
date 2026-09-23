@@ -487,9 +487,23 @@ disproportionately slow on that runner. The within-machine ratios above are
 interleaved A/Bs and are unaffected, but the cross-machine absolute numbers
 should not be compared until that is understood.
 
-The **q8_0 + repack** arm — the one that matters most on arm64, since q8_0 is
-what every GGUF here ships — was missing from this run and was added
-afterwards. Its whole-model number is pending.
+#### The arm64 q8_0 number — the one that decides adoption
+
+Run 35819665631 added the missing arm. On `ubuntu-24.04-arm`, whole model,
+same protocol:
+
+| arm | cpu-s | vs f32 | vs its own generic arm |
+| --- | --- | --- | --- |
+| hFT f32 | 102.96 | 1.00× | — |
+| hFT q8_0 generic | 51.70 | 0.50× | — |
+| **hFT q8_0 + repack** | **37.71** | **0.37×** | **1.37×** |
+| hFT q4_0 generic | 56.96 | 0.55× | — |
+| hFT q4_0 + repack | 35.98 | 0.35× | 1.58× |
+
+The CI guard confirmed it took the intended path (`arm64: q8_0 repacked, as
+expected`). **So the GGUF that ships today, unchanged, runs 1.37× faster whole-
+model on arm64 with this one loader change, and 2.7× faster than f32.** That is
+the number the adoption decision turns on.
 
 ### 5b. Parity: what the repacked kernel changes in the output
 
@@ -555,15 +569,36 @@ end-to-end measurements.**
 
 ## 6. What is still open, and what is untestable from here
 
-1. **Whether a CPU with an int8 dot-product instruction widens the x86 lead.**
-   **Untestable from this project's hardware, not merely untested.** Four x86
-   machines have been checked — the Skylake-SP VPS, a Kaggle GCE Xeon, and
-   GitHub's AMD EPYC 7763 — and **none has AVX-512 VNNI, AVX-VNNI or AMX**.
-   ggml's `mul_sum_i8_pairs` does have a `_mm512_dpbusd_epi32` branch
-   (`arch/x86/repack.cpp:124`) that no machine here took, so the repacked path
-   should widen its lead where VNNI exists. That is a prediction. Answering it
-   needs a Sapphire Rapids / Ice Lake box, a self-hosted runner, or a cloud
-   instance chosen by CPU family.
+1. **Whether a CPU with an int8 dot-product instruction widens the x86 lead —
+   reachable after all, and the first accidental look at it is a negative.**
+
+   This section previously said VNNI was untestable from this project's
+   hardware. **That was wrong.** GitHub's `ubuntu-24.04` pool is
+   **heterogeneous**: most runs drew an AMD EPYC 7763 (AVX2, no VNNI, no AMX),
+   but run 35819665631 drew an **INTEL(R) XEON(R) PLATINUM 8573C** (Emerald
+   Rapids) reporting `avx512_vnni = 1` **and** `amx_int8 = 1`. So the hardware
+   is reachable, just not deterministically — re-dispatch until the log names
+   the CPU you want.
+
+   That run also exposed a **bug in the loader**, which is why its numbers are
+   not in §5a. `ggml_backend_cpu_get_extra_buffer_types()` pushes **AMX first**
+   when the build has `__AMX_INT8__ && __AVX512VNNI__`, and
+   `load_weights_repack()` was taking `v[0]` — so on that host it selected
+   **AMX, not repack**, and reported "repacking" q8_0 on x86, which has no q8_0
+   repack kernel at all. The CI guard caught it and failed the job. Selection
+   is now by name (`CRISPASR_GGUF_EXTRA_BUFT` overrides) and the load line
+   prints which buffer type it used.
+
+   **The accidental AMX measurement is a result in its own right, and it is a
+   negative:** on that Emerald Rapids host every quantised hFT arm cost
+   **1.42–1.51× f32** (q8_0 27.1, q4_0 28.3, f32 19.1 cpu-s) — AMX made the
+   model *slower*. The playbook's expectation that VNNI/AMX would widen the
+   repacked path's lead is **not supported** by the one look we have. Caveats
+   it deserves: this was AMX rather than CPU_REPACK, it was a single
+   unintended run, and hFT's GEMMs may simply be too small for AMX tiles. **A
+   deliberate run on a named 8573C, with CPU_REPACK selected explicitly, is the
+   single most valuable remaining measurement** and the tooling for it now
+   exists.
 2. **Whether to adopt it on arm64, which is a decision rather than a
    measurement.** §3c answers the measurement: 2.3–3.4× on q8_0, on the GGUFs
    as they ship, on both Apple Silicon and Linux arm64. What is not yet priced
