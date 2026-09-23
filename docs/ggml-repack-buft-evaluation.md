@@ -369,15 +369,37 @@ Three constraints from §1 and §2a are handled and not assumed away:
    `repack_buft_accepts()` before it is written, so the null dereference in §2a
    cannot be reached. The answer is cached per (type, ne0, ne1).
 3. **mmap.** This path gives up the zero-copy mmap, and says so at the call
-   site. When no tensor is accepted — the q8_0-on-x86 case, i.e. every shipping
-   quantised model today — it falls back to plain `load_weights()` and keeps
-   mmap, so adopting it costs nothing where it cannot help.
+   site. When no tensor is accepted it falls back to plain `load_weights()` and
+   keeps mmap, **so adopting it costs nothing on a machine where it cannot
+   help**. That fallback is not hypothetical: it is what every q8_0 model does
+   on x86, and it means the same binary takes the fast path on arm64 and the
+   mmap path on x86 without a build flag or a conditional at the call site.
+
+   It also means the *cost* side of the trade only appears where the *benefit*
+   does, which is the right way round — but the cost is real and unmeasured for
+   large models. See §6.2.
 
 `CRISPASR_GGUF_REPACK=0` disables it without a rebuild.
 
 `src/hft_transformer.cpp` is the first adopter: 83.5% weight GEMM, every
 `hft_linear::w` used exactly once as `ggml_mul_mat` src[0] with an F32
-activation, nothing else eligible.
+activation, nothing else eligible. Its predicate is "ends in `.weight` and is
+not a `.ln.` tensor" — the layer-norm weights are `ggml_mul` operands and the
+positional tables are `ggml_add` operands, so both are excluded by name.
+
+One thing the adoption got wrong first time and is worth flagging for the next
+adopter: `load_weights_repack()` returns **two** buffers, `wl.buf` for the
+repack partition and `wl.buf_cpu` for the default one, and a model that stores
+only the first leaks the second — which is most of the tensor count. Same
+shape as `load_weights_split()`, and the same trap.
+
+`.github/workflows/ggml-repack-buft-ab.yml` is the harness, with three guards
+that matter more than they look: it asserts the repack arm actually printed
+its load line (so a silent fallback cannot be reported as a measured null), it
+asserts the **control** arm did not (so the A/B cannot compare an arm against
+itself — the exact failure `basic-pitch-conv-ab.yml` records having hit when a
+default flipped), and it diffs the decoded notes between arms (so a speedup
+that changed the answer is visible rather than celebrated).
 
 ---
 
