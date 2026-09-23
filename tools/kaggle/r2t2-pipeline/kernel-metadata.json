@@ -1,0 +1,3 @@
+{"id": "chr1s4/crispasr-445-r2t2-pipeline", "title": "CrispASR 445 R2T2 Pipeline", "code_file": "r2t2_pipeline.py",
+ "language": "python", "kernel_type": "script", "is_private": "true", "enable_gpu": "false", "enable_internet": "true",
+ "dataset_sources": ["chr1s4/crispasr-hf-token", "chr1s4/crispasr-ccache"], "competition_sources": [], "kernel_sources": []}

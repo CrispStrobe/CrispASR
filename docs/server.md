@@ -791,6 +791,14 @@ final short chunk and resets all per-turn state. Other backends use a safe
 commit-only fallback; `session.created.partial_transcription` tells the client
 which contract is active.
 
+Qwen3-ASR models converted with `--streaming-recipe r2t2` (Confucius4-R2T2, `-m
+confucius4-r2t2`) also get a realtime session: every append re-decodes the audio
+so far with the previous transcript, minus its last token, as the assistant
+prefix. That's R2T2's prefix-rollback algorithm, on its `example.py` schedule
+(160 ms steps). Deltas are append-only. `CRISPASR_QWEN3_STREAM=1` enables the
+session for other Qwen3-ASR models, and `CRISPASR_QWEN3_STREAM_STEP_MS`,
+`_LOOKAHEAD_MS` and `_UNFIXED_TOKENS` tune it.
+
 `--vad --vad-model MODEL` enables server-side turn detection on this endpoint.
 PCM is held outside ASR until speech is detected, a bounded onset buffer protects
 the first phoneme, `input_audio_buffer.speech_started` / `.speech_stopped` events

@@ -182,6 +182,13 @@ constexpr Entry k_registry[] = {
     {"qwen3-1.7b", "qwen3-asr-1.7b-q4_k.gguf",
      "https://huggingface.co/cstr/qwen3-asr-1.7b-GGUF/resolve/main/qwen3-asr-1.7b-q4_k.gguf",
      "~1.3 GB", nullptr, nullptr},
+    // confucius4-r2t2 (#445) — NetEase Youdao's streaming Qwen3-ASR-1.7B
+    // fine-tune (tied lm_head). Carries qwen3asr.streaming_recipe=r2t2, which
+    // enables the prefix-rollback realtime session (CrispasrRealtimeSession).
+    // Weights are under the NetEase Youdao Model Use License, not open source.
+    {"confucius4-r2t2", "confucius4-r2t2-q4_k.gguf",
+     "https://huggingface.co/cstr/confucius4-r2t2-GGUF/resolve/main/confucius4-r2t2-q4_k.gguf", "~1.5 GB", nullptr,
+     nullptr, nullptr, "NetEase Youdao Model Use License (see https://huggingface.co/cstr/confucius4-r2t2-GGUF)"},
     // Qwen3-ASR-1.7B fine-tuned for Japanese anime/galgame speech (Apache-2.0).
     // Same architecture as qwen3-1.7b; uses the standard qwen3 backend.
     {"qwen3-ja-anime", "qwen3-asr-1.7b-ja-anime-q4_k.gguf",

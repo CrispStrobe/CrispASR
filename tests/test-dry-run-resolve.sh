@@ -48,6 +48,7 @@ parakeet|parakeet-tdt-0.6b-v3-q4_k.gguf
 parakeet-v2|parakeet-tdt-0.6b-v2-q4_k.gguf
 parakeet-tdt-1.1b|parakeet-tdt-1.1b-q4_k.gguf
 orukeet|orukeet-q4_k.gguf
+confucius4-r2t2|confucius4-r2t2-q4_k.gguf
 "
 while IFS='|' read -r arg expected; do
     [ -z "$arg" ] && continue
