@@ -1,41 +1,53 @@
 #!/usr/bin/env python3
 """Convert X-ASR (icefall streaming Zipformer2 transducer) to GGUF — #436.
 
-Input is the upstream training checkpoint `streaming_exp/pretrained.pt`
-(model hyper-parameters are stored in it) plus any chunk folder's
-`tokens.txt`. One GGUF serves every chunk size: chunk size and left context
-are runtime choices of a Zipformer2, and the four sherpa-onnx exports differ
-only in them (docs/xasr/PLAN.md).
+The source is the sherpa-onnx export upstream ships
+(`deployment/models/chunk-*ms-model/{encoder,decoder,joiner}-*.onnx` +
+`tokens.txt`). The training checkpoint in the repo (`streaming_exp/pretrained.pt`)
+is NOT the exported model — every one of its tensors differs from the ONNX
+weights — so it is not used.
 
-  python models/convert-xasr-to-gguf.py --pt pretrained.pt --tokens tokens.txt \\
-      --state model_avg --output x-asr-zh-en-f16.gguf
+  python models/convert-xasr-to-gguf.py --models-dir deployment/models \\
+      --output x-asr-zh-en-f16.gguf
 
-`--state` picks which weights of the checkpoint to export (`model` or
-`model_avg`); use the one the sherpa-onnx exports carry — the reference
-kernel checks this against the ONNX initializers before converting.
+The four chunk exports share every weight bit for bit (checked by
+tools/kaggle/xasr-onnx-graph); they differ only in chunk size and left
+context, so one GGUF serves all four and records their table.
 
-Tensor names are shortened to fit GGUF's 64-byte limit:
-  encoder_embed.*                          -> emb.*
-  encoder.encoders.S[.encoder].layers.L.*  -> z.S.L.*   (module names abbreviated)
-  encoder.encoders.S.downsample.bias       -> z.S.ds_bias
-  encoder.encoders.S.out_combiner.*        -> z.S.combiner
-  encoder.downsample_output.bias           -> z.out_ds_bias
-  decoder.* / joiner.*                     -> dec.* / join.*
-Matrices go to F16; convolutions, every 1-D tensor and the small scale
-tables stay F32. simple_am_proj / simple_lm_proj (pruned-RNNT training
-heads) and the unused per-layer `bypass_scale` are dropped.
+Recovering names from the ONNX graph (docs/xasr/PLAN.md):
+  * named initializers keep their PyTorch names;
+  * the 344 Linear weights are anonymous (`onnx::MatMul_*`, stored transposed)
+    and appear in the encoder's execution order: embed.out, then per layer
+    in_proj, linear_pos, ff1 in/out, nonlin in/out, attn1 in/out, conv1 in/out,
+    ff2 in/out, attn2 in/out, conv2 in/out, ff3 in/out, then encoder_proj —
+    matched in order and checked shape by shape;
+  * the chunkwise-conv scale tables (2, C, K) are anonymous initializers,
+    matched by first use and shape;
+  * the downsample softmax weights were constant-folded to (ds, 1, 1)
+    constants; they are stored as log-weights so softmax() restores them.
+
+Tensor names are shortened to fit GGUF's 64-byte limit (see rename()).
+Matrices go to F16; convolutions, 1-D tensors and scale tables stay F32.
 """
 import argparse
 import re
 import sys
+from pathlib import Path
 
 import numpy as np
-import torch
 
 try:
     import gguf
 except ImportError:
     sys.exit("pip install gguf")
+
+LAYER_LINEARS = [
+    "self_attn_weights.in_proj", "self_attn_weights.linear_pos", "feed_forward1.in_proj", "feed_forward1.out_proj",
+    "nonlin_attention.in_proj", "nonlin_attention.out_proj", "self_attn1.in_proj", "self_attn1.out_proj",
+    "conv_module1.in_proj", "conv_module1.out_proj", "feed_forward2.in_proj", "feed_forward2.out_proj",
+    "self_attn2.in_proj", "self_attn2.out_proj", "conv_module2.in_proj", "conv_module2.out_proj",
+    "feed_forward3.in_proj", "feed_forward3.out_proj",
+]
 
 SUB = [
     ("self_attn_weights.in_proj.", "aw.in."),
@@ -66,15 +78,128 @@ SUB = [
 ]
 
 
+def ints(s):
+    return [int(x) for x in str(s).split(",")]
+
+
+def layer_prefix(s, l, ds):
+    return f"encoder.encoders.{s}." + ("encoder." if ds[s] > 1 else "") + f"layers.{l}."
+
+
+def onnx_state_dict(chunk_dir):
+    """PyTorch-named state dict + hyper-parameters from one sherpa-onnx chunk export."""
+    import onnx
+    from onnx import numpy_helper
+
+    chunk_dir = Path(chunk_dir)
+    enc = next(chunk_dir.glob("encoder-*.onnx"))
+    dec = next(chunk_dir.glob("decoder-*.onnx"))
+    joi = next(chunk_dir.glob("joiner-*.onnx"))
+    m = onnx.load(str(enc))
+    meta = {p.key: p.value for p in m.metadata_props}
+    inits = {t.name: t for t in m.graph.initializer}
+    consts = {}
+    first_use = {}
+    for i, nd in enumerate(m.graph.node):
+        if nd.op_type == "Constant":
+            for a in nd.attribute:
+                if a.name == "value":
+                    consts[nd.output[0]] = numpy_helper.to_array(a.t)
+        for x in nd.input:
+            first_use.setdefault(x, i)
+    arr = lambda n: numpy_helper.to_array(inits[n])  # noqa: E731
+
+    hp = {
+        "n_layers": ints(meta["num_encoder_layers"]), "dims": ints(meta["encoder_dims"]),
+        "kernel": ints(meta["cnn_module_kernels"]), "n_heads": ints(meta["num_heads"]),
+        "qd": ints(meta["query_head_dims"]), "vd": ints(meta["value_head_dims"]),
+        "decode_chunk_len": int(meta["decode_chunk_len"]), "T": int(meta["T"]),
+    }
+    left = ints(meta["left_context_len"])
+    hp["left_context_frames"] = left[0]
+    hp["downsample"] = [left[0] // v for v in left]
+    ds = hp["downsample"]
+    S = len(hp["dims"])
+
+    sd = {n: arr(n) for n in inits if not n.startswith("onnx::")}
+    sd = {re.sub(r"^encoder_proj\.", "joiner.encoder_proj.", k): v for k, v in sd.items()}
+
+    # Linear weights: anonymous MatMul initializers in execution order.
+    names = ["encoder_embed.out.weight"]
+    for s in range(S):
+        for l in range(hp["n_layers"][s]):
+            names += [layer_prefix(s, l, ds) + n + ".weight" for n in LAYER_LINEARS]
+    names.append("joiner.encoder_proj.weight")
+    anon = [nd.input[1] for nd in m.graph.node
+            if nd.op_type == "MatMul" and len(nd.input) > 1 and nd.input[1] in inits and nd.input[1].startswith("onnx::")]
+    if len(anon) != len(names):
+        sys.exit(f"{enc}: {len(anon)} anonymous MatMul weights, expected {len(names)}")
+    for n, a in zip(names, anon):
+        w = arr(a).T.copy()  # MatMul(x, W^T): stored (in, out)
+        b = n[:-len("weight")] + "bias"
+        if b in sd and sd[b].shape[0] != w.shape[0]:
+            sys.exit(f"order mismatch at {n}: weight out {w.shape[0]} vs bias {sd[b].shape[0]}")
+        sd[n] = w
+    for s in range(S):
+        d, H = hp["dims"][s], hp["n_heads"][s]
+        pre = layer_prefix(s, 0, ds)
+        exp = {"self_attn_weights.linear_pos": None, "nonlin_attention.in_proj": (3 * (3 * d // 4), d),
+               "self_attn1.in_proj": (H * hp["vd"][s], d), "conv_module1.in_proj": (2 * d, d)}
+        for k, shp in exp.items():
+            if shp and sd[pre + k + ".weight"].shape != shp:
+                sys.exit(f"shape check failed: {pre + k} {sd[pre + k + '.weight'].shape} != {shp}")
+
+    # Chunkwise-conv scale tables (2, C, K), anonymous, in first-use order.
+    scales = sorted((first_use.get(n, 1 << 30), n) for n, t in inits.items()
+                    if n.startswith("onnx::") and len(t.dims) == 3 and t.dims[0] == 2)
+    want = [(layer_prefix(s, l, ds) + f"conv_module{c}.depthwise_conv.chunkwise_conv_scale", (2, hp["dims"][s], hp["kernel"][s]))
+            for s in range(S) for l in range(hp["n_layers"][s]) for c in (1, 2)]
+    if len(scales) != len(want):
+        sys.exit(f"{enc}: {len(scales)} (2,C,K) initializers, expected {len(want)}")
+    for (n, shp), (_, src) in zip(want, scales):
+        a = arr(src)
+        if a.shape != shp:
+            sys.exit(f"chunk scale order mismatch at {n}: {a.shape} != {shp}")
+        sd[n] = a
+
+    # Downsample weights: constant-folded softmax(bias) of shape (ds, 1, 1).
+    folded = []
+    for n, v in list(consts.items()) + [(n, arr(n)) for n in inits if n.startswith("onnx::")]:
+        if v.ndim == 3 and v.shape[1:] == (1, 1) and v.shape[0] in (2, 4, 8) and abs(float(v.sum()) - 1.0) < 1e-4:
+            folded.append((first_use.get(n, 1 << 30), v.reshape(-1)))
+    folded.sort(key=lambda x: x[0])
+    want_ds = [(f"encoder.encoders.{s}.downsample.bias", ds[s]) for s in range(S) if ds[s] > 1]
+    want_ds.append(("encoder.downsample_output.bias", 2))
+    if [len(v) for _, v in folded] != [k for _, k in want_ds]:
+        sys.exit(f"downsample weights: found sizes {[len(v) for _, v in folded]}, expected {[k for _, k in want_ds]}")
+    for (n, _), (_, w) in zip(want_ds, folded):
+        sd[n] = np.log(w.astype(np.float64)).astype(np.float32)  # softmax(log w) == w
+
+    md = onnx.load(str(dec))
+    dmeta = {p.key: p.value for p in md.metadata_props}
+    for t in md.graph.initializer:
+        k = re.sub(r"^decoder_proj\.", "joiner.decoder_proj.", t.name)
+        sd[k] = numpy_helper.to_array(t)
+    mj = onnx.load(str(joi))
+    for t in mj.graph.initializer:
+        sd["joiner." + t.name] = numpy_helper.to_array(t)
+
+    hp["context_size"] = int(dmeta["context_size"])
+    hp["vocab_size"] = int(dmeta["vocab_size"])
+    hp["pos_dim"] = sd[layer_prefix(0, 0, ds) + "self_attn_weights.linear_pos.weight"].shape[1]
+    hp["pd"] = [sd[layer_prefix(s, 0, ds) + "self_attn_weights.linear_pos.weight"].shape[0] // hp["n_heads"][s] for s in range(S)]
+    hp["ffn_dim"] = [sd[layer_prefix(s, 0, ds) + "feed_forward2.in_proj.weight"].shape[0] for s in range(S)]
+    hp["decoder_dim"] = sd["decoder.embedding.weight"].shape[1]
+    hp["joiner_dim"] = sd["joiner.output_linear.weight"].shape[1]
+    hp["feature_dim"] = [d.dim_value for d in m.graph.input[0].type.tensor_type.shape.dim][2]
+    return sd, hp
+
+
 def rename(k):
-    """checkpoint name -> GGUF name, or None to drop."""
-    if k.startswith(("simple_am_proj.", "simple_lm_proj.")):
-        return None
+    """PyTorch name -> GGUF name, or None to drop."""
     m = re.match(r"^encoder\.encoders\.(\d+)\.(?:encoder\.)?layers\.(\d+)\.(.+)$", k)
     if m:
         s, l, rest = m.groups()
-        if rest == "bypass_scale":  # "TODO: remove it" in icefall; never read
-            return None
         for a, b in SUB:
             rest = rest.replace(a, b)
         if not re.fullmatch(r"(aw|sa[12]|ff[123]|na|cv[12])\.[a-z_.]+|norm\.(bias|log_scale)|bypass(_mid)?", rest):
@@ -98,30 +223,29 @@ def rename(k):
     raise KeyError(f"unmapped tensor: {k}")
 
 
-def ints(v):
-    if isinstance(v, int):
-        return [v]
-    return [int(x) for x in str(v).split(",")]
-
-
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--pt", required=True)
-    ap.add_argument("--tokens", required=True)
+    ap.add_argument("--models-dir", required=True, help="deployment/models (holds chunk-*ms-model/)")
     ap.add_argument("--output", required=True)
-    ap.add_argument("--state", default="model_avg", choices=["model", "model_avg"])
     ap.add_argument("--name", default="x-asr-zh-en")
     a = ap.parse_args()
 
-    ck = torch.load(a.pt, map_location="cpu", weights_only=False)
-    sd = ck[a.state]
-    if not ck.get("causal", False):
-        sys.exit("only the causal (streaming) Zipformer2 is implemented")
-    if ck.get("use_ctc") or ck.get("use_attention_decoder") or not ck.get("use_transducer", True):
-        sys.exit("expected a transducer-only checkpoint")
+    dirs = sorted(Path(a.models_dir).glob("chunk-*ms-model"), key=lambda p: int(re.search(r"(\d+)ms", p.name).group(1)))
+    if not dirs:
+        sys.exit(f"no chunk-*ms-model/ under {a.models_dir}")
+    sd, hp = onnx_state_dict(dirs[0])
+    table = []
+    import onnx
+    for d in dirs:
+        meta = {p.key: p.value for p in onnx.load(str(next(d.glob("encoder-*.onnx"))), load_external_data=False).metadata_props}
+        for k in ("num_encoder_layers", "encoder_dims", "cnn_module_kernels", "num_heads"):
+            if ints(meta[k]) != hp[{"num_encoder_layers": "n_layers", "encoder_dims": "dims",
+                                    "cnn_module_kernels": "kernel", "num_heads": "n_heads"}[k]]:
+                sys.exit(f"{d}: architecture differs from {dirs[0]}")
+        table.append((int(meta["decode_chunk_len"]) * 10, ints(meta["left_context_len"])[0]))
 
     toks = []
-    for line in open(a.tokens, encoding="utf-8"):
+    for line in open(dirs[0] / "tokens.txt", encoding="utf-8"):
         line = line.rstrip("\n")
         if not line:
             continue
@@ -129,42 +253,31 @@ def main():
         if int(idx) != len(toks):
             sys.exit(f"tokens.txt: id {idx} out of order")
         toks.append(tok)
-    if len(toks) != int(ck["vocab_size"]):
-        sys.exit(f"tokens.txt has {len(toks)} entries, vocab_size is {ck['vocab_size']}")
+    if len(toks) != hp["vocab_size"]:
+        sys.exit(f"tokens.txt has {len(toks)} entries, vocab_size is {hp['vocab_size']}")
 
     w = gguf.GGUFWriter(a.output, "xasr")
     w.add_name(a.name)
-    ds = ints(ck["downsampling_factor"])
-    n = len(ds)
-
-    def per_stack(key):
-        v = ints(ck[key])
-        return v * n if len(v) == 1 else v
-
-    for key, gk in (("num_encoder_layers", "n_layers"), ("downsampling_factor", "downsample"),
-                    ("feedforward_dim", "ffn_dim"), ("num_heads", "n_heads"), ("encoder_dim", "dims"),
-                    ("query_head_dim", "query_head_dim"), ("value_head_dim", "value_head_dim"),
-                    ("pos_head_dim", "pos_head_dim"), ("cnn_module_kernel", "conv_kernel")):
-        w.add_array(f"xasr.{gk}", per_stack(key))
-    for key in ("pos_dim", "decoder_dim", "joiner_dim", "context_size", "vocab_size", "blank_id", "feature_dim"):
-        w.add_uint32(f"xasr.{key}", int(ck[key]))
+    for key, gk in (("n_layers", "n_layers"), ("downsample", "downsample"), ("ffn_dim", "ffn_dim"),
+                    ("n_heads", "n_heads"), ("dims", "dims"), ("qd", "query_head_dim"), ("vd", "value_head_dim"),
+                    ("pd", "pos_head_dim"), ("kernel", "conv_kernel")):
+        w.add_array(f"xasr.{gk}", [int(x) for x in hp[key]])
+    for key in ("pos_dim", "decoder_dim", "joiner_dim", "context_size", "vocab_size", "feature_dim"):
+        w.add_uint32(f"xasr.{key}", int(hp[key]))
+    w.add_uint32("xasr.blank_id", 0)
     w.add_uint32("xasr.unk_id", toks.index("<unk>") if "<unk>" in toks else 0xFFFFFFFF)
-    # Chunk sizes (100 Hz frames per decode chunk) and the left context (50 Hz
-    # frames) the four upstream sherpa-onnx exports were made with.
-    w.add_array("xasr.chunk_ms", [160, 480, 960, 1920])
-    w.add_array("xasr.left_context_frames", [96, 256, 256, 256])
+    w.add_array("xasr.chunk_ms", [c for c, _ in table])
+    w.add_array("xasr.left_context_frames", [l for _, l in table])
     w.add_array("tokenizer.ggml.tokens", toks)
 
     cnt = 0
-    for k, t in sd.items():
+    for k in sorted(sd):
         name = rename(k)
         if name is None:
             continue
-        arr = t.detach().float().numpy()
-        if name.startswith(("z.", "join.", "dec.emb", "emb.out.")) and arr.ndim == 2 and "chunk_scale" not in name:
+        arr = np.asarray(sd[k], dtype=np.float32)
+        if name.startswith(("z.", "join.", "dec.emb", "emb.out.")) and arr.ndim == 2:
             arr = arr.astype(np.float16)
-        else:
-            arr = arr.astype(np.float32)
         if arr.ndim == 0:
             arr = arr.reshape(1)
         w.add_tensor(name, arr)
@@ -173,7 +286,7 @@ def main():
     w.write_kv_data_to_file()
     w.write_tensors_to_file()
     w.close()
-    print(f"wrote {a.output}: {cnt} tensors from '{a.state}', vocab {len(toks)}")
+    print(f"wrote {a.output}: {cnt} tensors, chunks {table}, vocab {len(toks)}")
 
 
 if __name__ == "__main__":

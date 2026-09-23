@@ -9,9 +9,12 @@ subsampling,decoder,joiner}.py. `k2`, `icefall.utils` and `encoder_interface`
 are stubbed — at inference k2 only supplies the Swoosh activations, which are
 replaced by the same formulas the ONNX export uses.
 
-model_dir holds `pretrained.pt` and `tokens.txt`.
-  XASR_STATE        checkpoint weights to load: model_avg (default) or model
-  XASR_CHUNK_MS     160 / 480 (default) / 960 / 1920
+model_dir is upstream's `deployment/models` (chunk-*ms-model/ with the
+sherpa-onnx encoder/decoder/joiner + tokens.txt). Weights come from the ONNX
+export through models/convert-xasr-to-gguf.py:onnx_state_dict — the same
+extraction the converter uses; `streaming_exp/pretrained.pt` is a different
+(earlier) checkpoint and is not used.
+  XASR_CHUNK_MS     160 / 480 (default) / 960 / 1920 — picks the export and geometry
   XASR_TAIL_PAD_MS  silence appended before input_finished; default T*10+1000
                     (the runtime's default: every real frame lands in a
                     decoded window, and the transducer gets 1 s to emit)
@@ -35,6 +38,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import re
 import sys
 import types
 from pathlib import Path
@@ -45,9 +49,6 @@ import numpy as np
 DEFAULT_STAGES = ["raw_audio", "fbank", "embed_out", "enc_full", "encoder_out", "first_logits", "tokens", "text"] + [
     f"stack_{i}" for i in range(6)
 ]
-
-CHUNKS = {160: 96, 480: 256, 960: 256, 1920: 256}  # chunk_ms -> left_context_frames (sherpa exports)
-
 
 def _stub_icefall(icefall_dir: str):
     import torch
@@ -79,6 +80,16 @@ def _ints(v):
     return [int(x) for x in str(v).split(",")]
 
 
+def _converter():
+    import importlib.util
+
+    path = Path(__file__).resolve().parents[2] / "models" / "convert-xasr-to-gguf.py"
+    spec = importlib.util.spec_from_file_location("convert_xasr", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def build(model_dir: Path, chunk_ms: int):
     import torch
 
@@ -88,29 +99,30 @@ def build(model_dir: Path, chunk_ms: int):
     from decoder import Decoder
     from joiner import Joiner
 
-    ck = torch.load(str(model_dir / "pretrained.pt"), map_location="cpu", weights_only=False)
-    state = os.environ.get("XASR_STATE", "model_avg")
-    sd = ck[state]
-    dims = _ints(ck["encoder_dim"])
-    chunk = chunk_ms // 20  # 50 Hz frames after encoder_embed
-    left = CHUNKS[chunk_ms]
+    chunk_dir = Path(model_dir) / f"chunk-{chunk_ms}ms-model"
+    sd, hp = _converter().onnx_state_dict(chunk_dir)
+    sd = {k: torch.from_numpy(np.ascontiguousarray(v)) for k, v in sd.items()}
+    dims = hp["dims"]
+    chunk = hp["decode_chunk_len"] // 2  # 50 Hz frames after encoder_embed
+    left = hp["left_context_frames"]
     enc = Zipformer2(
-        output_downsampling_factor=2, downsampling_factor=tuple(_ints(ck["downsampling_factor"])),
-        num_encoder_layers=_ints(ck["num_encoder_layers"]), encoder_dim=dims,
-        encoder_unmasked_dim=_ints(ck["encoder_unmasked_dim"]), query_head_dim=_ints(ck["query_head_dim"]),
-        pos_head_dim=_ints(ck["pos_head_dim"]), value_head_dim=_ints(ck["value_head_dim"]),
-        pos_dim=int(ck["pos_dim"]), num_heads=_ints(ck["num_heads"]), feedforward_dim=_ints(ck["feedforward_dim"]),
-        cnn_module_kernel=_ints(ck["cnn_module_kernel"]), dropout=0.0, warmup_batches=4000.0, causal=True,
+        output_downsampling_factor=2, downsampling_factor=tuple(hp["downsample"]), num_encoder_layers=hp["n_layers"],
+        encoder_dim=dims, encoder_unmasked_dim=dims, query_head_dim=hp["qd"], pos_head_dim=hp["pd"],
+        value_head_dim=hp["vd"], pos_dim=hp["pos_dim"], num_heads=hp["n_heads"], feedforward_dim=hp["ffn_dim"],
+        cnn_module_kernel=hp["kernel"], dropout=0.0, warmup_batches=4000.0, causal=True,
         chunk_size=[chunk], left_context_frames=[left])
-    embed = Conv2dSubsampling(in_channels=int(ck["feature_dim"]), out_channels=dims[0], dropout=0.0)
-    dec = Decoder(vocab_size=int(ck["vocab_size"]), decoder_dim=int(ck["decoder_dim"]), blank_id=int(ck["blank_id"]),
-                  context_size=int(ck["context_size"]))
-    joi = Joiner(encoder_dim=max(dims), decoder_dim=int(ck["decoder_dim"]), joiner_dim=int(ck["joiner_dim"]),
-                 vocab_size=int(ck["vocab_size"]))
+    embed = Conv2dSubsampling(in_channels=hp["feature_dim"], out_channels=dims[0], dropout=0.0)
+    dec = Decoder(vocab_size=hp["vocab_size"], decoder_dim=hp["decoder_dim"], blank_id=0, context_size=hp["context_size"])
+    joi = Joiner(encoder_dim=max(dims), decoder_dim=hp["decoder_dim"], joiner_dim=hp["joiner_dim"],
+                 vocab_size=hp["vocab_size"])
 
     def load(mod, prefix):
         sub = {k[len(prefix):]: v for k, v in sd.items() if k.startswith(prefix)}
-        mod.load_state_dict(sub, strict=True)
+        missing, unexpected = mod.load_state_dict(sub, strict=False)
+        # the per-layer `bypass_scale` ("TODO: remove it") is never read, so the export drops it
+        missing = [k for k in missing if not re.fullmatch(r".*layers\.\d+\.bypass_scale", k)]
+        if missing or unexpected:
+            raise RuntimeError(f"{prefix}: missing={missing[:8]} unexpected={unexpected[:8]}")
 
     load(enc, "encoder.")
     load(embed, "encoder_embed.")
@@ -118,7 +130,7 @@ def build(model_dir: Path, chunk_ms: int):
     load(joi, "joiner.")
     for m in (enc, embed, dec, joi):
         m.eval()
-    return ck, enc, embed, dec, joi, chunk, left
+    return hp, enc, embed, dec, joi, chunk, left
 
 
 def fbank(audio: np.ndarray, tail_pad_ms: int) -> np.ndarray:
@@ -224,8 +236,9 @@ def tokens_to_text(toks, table):
 
 def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str], max_new_tokens: int = 0) -> Dict[str, np.ndarray]:
     chunk_ms = int(os.environ.get("XASR_CHUNK_MS", "480"))
-    ck, enc, embed, dec, joi, chunk, left = build(Path(model_dir), chunk_ms)
-    table = [ln.rstrip("\n").rsplit(" ", 1)[0] for ln in open(Path(model_dir) / "tokens.txt", encoding="utf-8") if ln.strip()]
+    hp, enc, embed, dec, joi, chunk, left = build(Path(model_dir), chunk_ms)
+    tok_path = Path(model_dir) / f"chunk-{chunk_ms}ms-model" / "tokens.txt"
+    table = [ln.rstrip("\n").rsplit(" ", 1)[0] for ln in open(tok_path, encoding="utf-8") if ln.strip()]
     run.unk_id = table.index("<unk>") if "<unk>" in table else -1
     T = 2 * chunk + 13
     tail = int(os.environ.get("XASR_TAIL_PAD_MS", str(T * 10 + 1000)))

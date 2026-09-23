@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """CrispASR #436 (X-ASR) — reference fixtures + F16 GGUF, with two control arms.
 
-1. pretrained.pt: verify sha256 against HF's LFS oid.
-2. Which checkpoint state do the sherpa-onnx exports carry? Compare every
-   named ONNX initializer with `model` and `model_avg`; convert the match.
-3. convert-xasr-to-gguf.py -> F16; upload.
+1. The sherpa-onnx exports: verify every sha256 against HF's LFS oid.
+2. (pretrained.pt is a different checkpoint — xasr-onnx-map — so the ONNX
+   export is the source for both the GGUF and the reference.)
+3. convert-xasr-to-gguf.py --models-dir -> F16; upload.
 4. tools/dump_reference.py --backend xasr for jfk + zh at chunk 480 (and 160,
    the export with the shorter 96-frame left context); upload each ref.gguf.
 5. Control A: the ONNX encoder (onnxruntime) on the same fbank chunks, states
@@ -33,40 +33,26 @@ try:
         subprocess.check_call(["curl", "-sfL", "-o", str(ICE / f),
                                f"https://raw.githubusercontent.com/k2-fsa/icefall/{ice_sha}/egs/librispeech/ASR/zipformer/{f}"])
     res["icefall_sha"] = ice_sha; save()
-    pt = hf_hub_download(R, "streaming_exp/pretrained.pt", local_dir=str(M))
-    info = api.get_paths_info(R, ["streaming_exp/pretrained.pt"])[0]
-    h = hashlib.sha256()
-    with open(pt, "rb") as f:
-        for b in iter(lambda: f.read(1 << 24), b""): h.update(b)
-    res["pt_sha256"] = h.hexdigest(); res["pt_sha_ok"] = h.hexdigest() == info.lfs.sha256; save()
-    if not res["pt_sha_ok"]: raise RuntimeError("pretrained.pt sha256 mismatch")
-    md = M / "md"; md.mkdir(exist_ok=True)
-    os.symlink(pt, md / "pretrained.pt")
-    for ch in (160, 480):
-        for part in ("encoder", "decoder", "joiner"):
-            hf_hub_download(R, f"deployment/models/chunk-{ch}ms-model/{part}-{ch}ms.onnx", local_dir=str(M))
-    tok = hf_hub_download(R, "deployment/models/chunk-480ms-model/tokens.txt", local_dir=str(M))
-    shutil.copy(tok, md / "tokens.txt")
-    import numpy as np, onnx, torch
-    from onnx import numpy_helper
-    ck = torch.load(pt, map_location="cpu", weights_only=False)
-    om = onnx.load(str(M / "deployment/models/chunk-480ms-model/encoder-480ms.onnx"))
-    diffs = {"model": 0.0, "model_avg": 0.0}; n = 0
-    for t in om.graph.initializer:
-        if t.name.startswith("encoder") and t.name in ck["model"]:
-            a = numpy_helper.to_array(t).astype(np.float64); n += 1
-            for s in diffs:
-                diffs[s] = max(diffs[s], float(np.abs(ck[s][t.name].double().numpy() - a).max()))
-    del om, ck
-    res["state_diff"] = diffs; res["state_n"] = n
-    state = min(diffs, key=diffs.get); res["state"] = state; save()
-    os.environ["XASR_STATE"] = state; os.environ["XASR_ICEFALL_DIR"] = str(ICE)
+    from huggingface_hub import snapshot_download
+    snapshot_download(R, allow_patterns=["deployment/models/*"], local_dir=str(M))
+    md = M / "deployment/models"
+    for p in md.glob("chunk-*/*.onnx"):
+        info = api.get_paths_info(R, [str(p.relative_to(M))])[0]
+        h = hashlib.sha256()
+        with open(p, "rb") as f:
+            for blk in iter(lambda: f.read(1 << 24), b""): h.update(blk)
+        if info.lfs is not None and h.hexdigest() != info.lfs.sha256:
+            raise RuntimeError(f"sha256 mismatch: {p}")
+    res["onnx_sha_ok"] = True; save()
+    os.environ["XASR_ICEFALL_DIR"] = str(ICE)
     f16 = M / "x-asr-zh-en-f16.gguf"
-    subprocess.check_call([sys.executable, str(REPO / "models/convert-xasr-to-gguf.py"), "--pt", pt, "--tokens", tok,
-                           "--state", state, "--output", str(f16)])
+    out = subprocess.check_output([sys.executable, str(REPO / "models/convert-xasr-to-gguf.py"), "--models-dir", str(md),
+                                   "--output", str(f16)], text=True)
+    res["convert"] = out.strip()
     api.create_repo("cstr/x-asr-zh-en-GGUF", repo_type="model", exist_ok=True)
     api.upload_file(path_or_fileobj=str(f16), path_in_repo=f16.name, repo_id="cstr/x-asr-zh-en-GGUF", repo_type="model")
     res["f16_bytes"] = f16.stat().st_size; save()
+    import numpy as np
     wav = {"jfk": str(REPO / "samples/jfk.wav"), "zh": str(REPO / "samples/paraformer_zh.wav")}
     import soundfile as sf
     import sherpa_onnx
@@ -74,7 +60,7 @@ try:
     from reference_backends import xasr as X
     for ch in (480, 160):
         os.environ["XASR_CHUNK_MS"] = str(ch)
-        d = M / f"deployment/models/chunk-{ch}ms-model"
+        d = md / f"chunk-{ch}ms-model"
         for c, w in wav.items():
             tag = c if ch == 480 else f"{c}-c{ch}"
             ref = M / f"{tag}.gguf"
@@ -112,7 +98,7 @@ try:
                                         "max_abs": float(np.abs(eo - te).max()), "ref_rms": float(np.sqrt((te ** 2).mean()))}
             save()
             # Control B: sherpa-onnx with identical tail padding
-            rec = sherpa_onnx.OnlineRecognizer.from_transducer(tokens=str(md / "tokens.txt"), encoder=str(d / f"encoder-{ch}ms.onnx"),
+            rec = sherpa_onnx.OnlineRecognizer.from_transducer(tokens=str(d / "tokens.txt"), encoder=str(d / f"encoder-{ch}ms.onnx"),
                   decoder=str(d / f"decoder-{ch}ms.onnx"), joiner=str(d / f"joiner-{ch}ms.onnx"), num_threads=4,
                   feature_dim=80, decoding_method="greedy_search")
             a, sr = sf.read(w, dtype="float32")

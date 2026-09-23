@@ -1,0 +1,3 @@
+{"id": "chr1s4/crispasr-436-xasr-onnx-graph", "title": "CrispASR 436 XASR ONNX Graph", "code_file": "xasr_onnx_graph.py",
+ "language": "python", "kernel_type": "script", "is_private": "true", "enable_gpu": "false", "enable_internet": "true",
+ "dataset_sources": ["chr1s4/crispasr-hf-token"], "competition_sources": [], "kernel_sources": []}
