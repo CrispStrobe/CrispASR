@@ -274,7 +274,13 @@ jobs:
           WAV = "samples/jfk.wav"
           ARMS = [
               ("hft-f32",          "m/hft-f32.gguf",  "0"),
-              ("hft-q8_0",         "m/hft-q8_0.gguf", "0"),
+              ("hft-q8_0-generic", "m/hft-q8_0.gguf", "0"),
+              # q8_0 + repack is the arm that matters most, and only on arm64:
+              # x86 has no repacked q8_0 kernel, so there it is a duplicate of
+              # the generic arm and the loader falls back (keeping mmap). On
+              # arm64 it is the whole point -- q8_0 is what every quantised
+              # GGUF in this tree actually ships.
+              ("hft-q8_0-repack",  "m/hft-q8_0.gguf", "1"),
               ("hft-q4_0-generic", "m/hft-q4_0.gguf", "0"),
               ("hft-q4_0-repack",  "m/hft-q4_0.gguf", "1"),
               ("oaf-f32",          "m/oaf-f32.gguf",  "0"),
@@ -310,7 +316,8 @@ jobs:
               v = times[name]
               if v:
                   print(f"{name:<20} {statistics.median(v):7.2f} cpu-s (n={len(v)})")
-          for name in ("hft-f32", "hft-q8_0", "hft-q4_0-generic", "hft-q4_0-repack"):
+          for name in ("hft-f32", "hft-q8_0-generic", "hft-q8_0-repack",
+                       "hft-q4_0-generic", "hft-q4_0-repack"):
               if times.get(name) and times.get("hft-f32"):
                   base = statistics.median(times["hft-f32"])
                   if base:
@@ -324,15 +331,32 @@ jobs:
       # Two guards on the A/B itself, then one on the answer.
       - name: Assert the arms were actually different
         run: |
-          echo "== did the repack arm take the fast path? =="
+          echo "== did the q4_0 repack arm take the fast path? =="
           grep -h 'repack buffer type' hft-q4_0-repack.log || {
             echo "::error::the repack arm fell back; its number duplicates the generic arm"; exit 1; }
-          echo "== and the control must NOT have =="
+          echo "== and its control must NOT have =="
           if grep -h 'repack buffer type' hft-q4_0-generic.log; then
             echo "::error::the control arm took the repack path; the A/B compared the wrong thing"
             exit 1
           fi
           echo "control clean"
+
+          # q8_0 is expected to take the fast path on arm64 and to fall back on
+          # x86, so assert the ISA-conditional behaviour rather than a fixed
+          # outcome -- getting this backwards either way would be a real bug.
+          echo
+          echo "== q8_0: fast path on arm64, fallback on x86 =="
+          if grep -qw asimddp /proc/cpuinfo || grep -qw i8mm /proc/cpuinfo; then
+            grep -h 'repack buffer type' hft-q8_0-repack.log || {
+              echo "::error::arm64 has a q8_0 repack kernel but the loader did not use it"; exit 1; }
+            echo "arm64: q8_0 repacked, as expected"
+          else
+            if grep -h 'repack buffer type' hft-q8_0-repack.log; then
+              echo "::error::x86 has no q8_0 repack kernel, yet the loader claims it repacked -- check repack_buft_accepts()"
+              exit 1
+            fi
+            echo "x86: q8_0 correctly declined and fell back to the mmap path"
+          fi
 
       # Note lines are: onset  offset  midi  name  velocity.
       # The repacked kernel quantises the activation identically but accumulates
