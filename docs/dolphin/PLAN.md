@@ -36,3 +36,30 @@ a CIFS download silently corrupted a checkpoint on 2026-09-23).
 3. Reference dump backend (`tools/reference_backends/dolphin.py`) — Kaggle CPU.
 4. Runtime + diff harness arm; parity per stage; then decoded-output check.
 5. Registry, quantizer rules, CLI/C-ABI wiring (12-point checklist).
+
+## Encoder facts the shapes would allow you to get wrong (model.py, read line by line)
+
+1. **"rel_pos" is not relative.** `pos_enc_layer_type: rel_pos` → WeNet's legacy
+   `RelPositionalEncoding`: input scaled by √d, `pos_emb = pe[0:T]` (ABSOLUTE
+   positions 0..T-1, sin/cos **interleaved** 0::2 / 1::2, max_len 5000).
+2. **No rel_shift.** `use_sdpa: true` takes the SDPA branch of
+   `RelPositionMultiHeadedAttention`: `bd = (q + pos_bias_v)·(linear_pos(pe))ᵀ`
+   (T×T, no shift) is folded into the attention mask, `ac = (q + pos_bias_u)·kᵀ`,
+   scores = (ac + bd)/√d_k. FastConformer's rel-pos code (2T-1, shifted) would be
+   silently wrong here.
+3. **CSGU pads BEFORE its LayerNorm.** Causal cgMLP: `x_g` is left-padded with
+   (kernel-1) zeros, THEN LayerNorm, THEN depthwise conv — so the padded frames the
+   conv sees are the LayerNorm *bias*, not zeros. Gate activation = identity;
+   out = x_r * conv(norm(x_g)); cgMLP = Linear(768→3072) + exact GELU → CSGU →
+   Linear(1536→768).
+4. **Merge = merge_proj(concat + dwconv(concat)).** Depthwise conv over the 1536
+   concat channels, kernel 31, causal (left pad 30, zeros — no norm here), plus
+   the un-convolved concat, then Linear(1536→768), added to the residual.
+5. **Layer order:** macaron FFN (½·, Swish) → [norm_mha → rel-pos MHA] ‖
+   [norm_mlp → cgMLP] → merge → FFN (½·, Swish) → **norm_final per layer**, and
+   the encoder's `after_norm` on top of the last layer.
+6. **Attention is full-context at inference.** `use_dynamic_chunk` + 
+   `decoding_chunk_size=-1` → chunk = whole utterance. Only the two depthwise
+   convs are causal.
+7. **Subsampling:** Conv2d(1→768, 3, s2)+ReLU, Conv2d(768→768, 3, s2)+ReLU,
+   flatten (b, t, c·f) channel-major, Linear(768·19 → 768). Mask keeps [2::2][2::2].
