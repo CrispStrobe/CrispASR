@@ -140,6 +140,9 @@ REGISTERED_BACKENDS: Dict[str, str] = {
     # audio arg is a real multi-speaker clip.
     "tiron":      "reference_backends.tiron",
     "parakeet":   "reference_backends.parakeet",
+    # transformers-format ParakeetForTDT (#454: moondream parakeet-ultra / -redux);
+    # same stage names as the NeMo "parakeet" dumper.
+    "parakeet-hf": "reference_backends.parakeet_hf",
     # Supertonic-3 (#434): ONNX-only distribution — the reference IS the
     # onnxruntime pipeline (standalone script; run it directly, not via this
     # dispatcher). Kept here for discoverability.

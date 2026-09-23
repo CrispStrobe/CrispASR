@@ -180,6 +180,137 @@ def load_nemo_disk(nemo_path: Path, extract_dir: Path) -> dict:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# HF-transformers ParakeetForTDT checkpoints (#454: moondream/parakeet-ultra,
+# moondream/parakeet-redux). Same architecture as the NeMo v3 model with
+# transformers' names, no .nemo: rename to the NeMo keys (so the rest of this
+# converter is shared), synthesise the featurizer filterbank + window exactly
+# as NeMo / transformers' ParakeetFeatureExtractor build them, and dequantise
+# parakeet-redux's base-3 packed ternary weights.
+# ---------------------------------------------------------------------------
+
+_HF_LAYER_SUBS = [
+    ("self_attn.q_proj.", "self_attn.linear_q."),
+    ("self_attn.k_proj.", "self_attn.linear_k."),
+    ("self_attn.v_proj.", "self_attn.linear_v."),
+    ("self_attn.o_proj.", "self_attn.linear_out."),
+    ("self_attn.relative_k_proj.", "self_attn.linear_pos."),
+    ("self_attn.bias_u", "self_attn.pos_bias_u"),
+    ("self_attn.bias_v", "self_attn.pos_bias_v"),
+    ("conv.norm.", "conv.batch_norm."),
+]
+
+
+def hf_to_nemo_name(k: str) -> str | None:
+    """transformers ParakeetForTDT key -> NeMo key, or None to drop."""
+    if k.startswith("vad_head."):
+        return None  # moondream's speech-activity head; transcription does not use it
+    if k.startswith("encoder.subsampling.layers."):
+        return k.replace("encoder.subsampling.layers.", "encoder.pre_encode.conv.")
+    if k.startswith("encoder.subsampling.linear."):
+        return k.replace("encoder.subsampling.linear.", "encoder.pre_encode.out.")
+    if k.startswith("encoder.layers."):
+        for a, b in _HF_LAYER_SUBS:
+            k = k.replace(a, b)
+        return k
+    if k == "decoder.embedding.weight":
+        return "decoder.prediction.embed.weight"
+    if k.startswith("decoder.lstm."):
+        return "decoder.prediction.dec_rnn.lstm." + k[len("decoder.lstm."):]
+    if k.startswith("decoder.decoder_projector."):
+        return "joint.pred." + k[len("decoder.decoder_projector."):]
+    if k.startswith("encoder_projector."):
+        return "joint.enc." + k[len("encoder_projector."):]
+    if k.startswith("joint.head."):
+        return "joint.joint_net.2." + k[len("joint.head."):]
+    return k
+
+
+def dequant_ternary(qweight, scales, in_features: int, group: int):
+    """parakeet-redux 'thrush-ternary-v2': element i of a row is base-3 digit i%5
+    of byte i//5 (least significant first), w = scales[row, i // group] * (code - 1)."""
+    q = qweight.to(torch.int64)
+    digits = torch.stack([(q // (3 ** d)) % 3 for d in range(5)], dim=-1)  # (rows, bytes, 5)
+    codes = digits.reshape(q.shape[0], -1)[:, :in_features]
+    s = scales.to(torch.float32).repeat_interleave(group, dim=1)[:, :in_features]
+    return s * (codes.to(torch.float32) - 1.0)
+
+
+def load_hf(path: str) -> dict:
+    """An HF ParakeetForTDT snapshot (dir or repo id) -> the dict convert() expects."""
+    import json
+    from safetensors.torch import load_file
+
+    p = Path(path)
+    if not p.is_dir():
+        from huggingface_hub import snapshot_download
+        p = Path(snapshot_download(path, allow_patterns=["config.json", "model.safetensors", "tokenizer.json",
+                                                         "ternary.json"]))
+    cfg = json.loads((p / "config.json").read_text())
+    if cfg.get("model_type") != "parakeet_tdt":
+        sys.exit(f"{p}: model_type {cfg.get('model_type')!r}, expected parakeet_tdt")
+    raw = load_file(str(p / "model.safetensors"))
+    tern = None
+    if (p / "ternary.json").exists():
+        tern = json.loads((p / "ternary.json").read_text())
+        if tern.get("format") != "thrush-ternary-v2" or tern.get("quant", {}).get("mode") != "ternary":
+            sys.exit(f"unsupported ternary format: {tern.get('format')}")
+    group = int(cfg.get("ternary_group_size", 128))
+    enc = cfg["encoder_config"]
+    d, ffd = enc["hidden_size"], enc["intermediate_size"]
+
+    sd = {}
+    for k, t in raw.items():
+        if k.endswith(".scales"):
+            continue
+        if k.endswith(".qweight"):
+            base = k[: -len(".qweight")]
+            in_f = ffd if base.endswith("linear2") else d
+            w = dequant_ternary(t, raw[base + ".scales"], in_f, group)
+            if ".conv.pointwise_conv" in base:
+                w = w.unsqueeze(-1)  # Conv1d(k=1) layout (out, in, 1)
+            k, t = base + ".weight", w
+        n = hf_to_nemo_name(k)
+        if n is not None:
+            sd[n] = t
+    if tern is not None:
+        n_tern = sum(1 for k in raw if k.endswith(".qweight"))
+        print(f"  ternary: dequantised {n_tern} matrices (group {group})")
+
+    # Featurizer, as NeMo's FilterbankFeatures and transformers'
+    # ParakeetFeatureExtractor build it: librosa slaney mel over n_fft 512, and a
+    # symmetric Hann window of 400 samples.
+    import librosa
+    sr, n_fft, win, hop, n_mels = 16000, 512, 400, 160, int(enc.get("num_mel_bins", 128))
+    fb = librosa.filters.mel(sr=sr, n_fft=n_fft, n_mels=n_mels, fmin=0.0, fmax=sr / 2, norm="slaney")
+    sd["preprocessor.featurizer.fb"] = torch.from_numpy(np.asarray(fb, dtype=np.float32))[None]
+    sd["preprocessor.featurizer.window"] = torch.hann_window(win, periodic=False)
+
+    tok = json.loads((p / "tokenizer.json").read_text())["model"]["vocab"]
+    vocab = [None] * len(tok)
+    for piece, i in (tok.items() if isinstance(tok, dict) else [(pc, i) for i, (pc, _) in enumerate(tok)]):
+        vocab[i] = piece
+    if any(v is None for v in vocab):
+        sys.exit("tokenizer.json: vocab ids are not contiguous")
+
+    nemo_cfg = {
+        "preprocessor": {"sample_rate": sr, "features": n_mels, "n_fft": n_fft, "window_size": win / sr,
+                         "window_stride": hop / sr},
+        "encoder": {"feat_in": n_mels, "d_model": d, "n_layers": enc["num_hidden_layers"],
+                    "n_heads": enc["num_attention_heads"], "ff_expansion_factor": ffd // d,
+                    "subsampling_factor": enc["subsampling_factor"],
+                    "subsampling_conv_channels": enc["subsampling_conv_channels"],
+                    "conv_kernel_size": enc["conv_kernel_size"], "xscaling": bool(enc.get("scale_input", False)),
+                    "self_attention_model": "rel_pos"},
+        "decoder": {"prednet": {"pred_hidden": cfg["decoder_hidden_size"],
+                                "pred_rnn_layers": cfg["num_decoder_layers"]},
+                    "durations": cfg["durations"]},
+        "joint": {"jointnet": {"joint_hidden": int(sd["joint.pred.weight"].shape[0])}},
+    }
+    import yaml
+    return {"weights": sd, "config_str": yaml.safe_dump(nemo_cfg), "vocab": vocab}
+
+
 def remap_name(nemo_name: str) -> str | None:
     """
     Map NeMo state-dict keys to GGUF-friendly names.
@@ -308,13 +439,16 @@ _QUANT_TYPE_MAP: dict[str, gguf.GGMLQuantizationType] = {
 }
 
 
-def convert(nemo_path: Path, out_path: Path, quant: str | None = None,
-            extract_dir: Path | None = None) -> None:
+def convert(nemo_path: Path | None, out_path: Path, quant: str | None = None,
+            extract_dir: Path | None = None, hf: str | None = None) -> None:
     quant_type = _QUANT_TYPE_MAP.get(quant.lower()) if quant else None
     if quant and quant_type is None:
         sys.exit(f"Unknown --quant type '{quant}'. Choices: {list(_QUANT_TYPE_MAP)}")
 
-    if extract_dir is not None:
+    if hf is not None:
+        print(f"Loading: {hf}  (HF-transformers ParakeetForTDT)")
+        nemo_data = load_hf(hf)
+    elif extract_dir is not None:
         print(f"Loading: {nemo_path}  (disk extract to {extract_dir}, mmap)")
         nemo_data = load_nemo_disk(nemo_path, extract_dir)
     else:
@@ -347,9 +481,12 @@ def convert(nemo_path: Path, out_path: Path, quant: str | None = None,
         )
 
     import io as _io
-    sp = spm.SentencePieceProcessor()
-    sp.LoadFromSerializedProto(nemo_data["spm_bytes"])
-    vocab = [sp.id_to_piece(i) for i in range(sp.get_piece_size())]
+    if "vocab" in nemo_data:
+        vocab = nemo_data["vocab"]
+    else:
+        sp = spm.SentencePieceProcessor()
+        sp.LoadFromSerializedProto(nemo_data["spm_bytes"])
+        vocab = [sp.id_to_piece(i) for i in range(sp.get_piece_size())]
     print(f"  vocab:  {len(vocab)} pieces")
 
     # ----- write GGUF -----
@@ -600,7 +737,10 @@ def convert(nemo_path: Path, out_path: Path, quant: str | None = None,
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Convert Parakeet .nemo → GGUF (F16 or quantized)")
-    p.add_argument("--nemo", required=True, type=Path, help="path to .nemo file")
+    src = p.add_mutually_exclusive_group(required=True)
+    src.add_argument("--nemo", type=Path, help="path to .nemo file")
+    src.add_argument("--hf", help="HF-transformers ParakeetForTDT snapshot dir or repo id "
+                                  "(e.g. moondream/parakeet-ultra, moondream/parakeet-redux)")
     p.add_argument("--output", required=True, type=Path, help="output GGUF path")
     p.add_argument("--quant", default=None, help="quantize linear weights (e.g. q4_k, q8_0); default: F16")
     p.add_argument("--extract-dir", default=None, type=Path,
@@ -610,4 +750,4 @@ def parse_args() -> argparse.Namespace:
 
 if __name__ == "__main__":
     args = parse_args()
-    convert(args.nemo, args.output, quant=args.quant, extract_dir=args.extract_dir)
+    convert(args.nemo, args.output, quant=args.quant, extract_dir=args.extract_dir, hf=args.hf)

@@ -1,0 +1,3 @@
+{"id": "chr1s4/crispasr-parakeet-hf-454", "title": "CrispASR Parakeet HF 454", "code_file": "parakeet_hf_454.py",
+ "language": "python", "kernel_type": "script", "is_private": "true", "enable_gpu": "false", "enable_internet": "true",
+ "dataset_sources": ["chr1s4/crispasr-hf-token", "chr1s4/crispasr-ccache"], "competition_sources": [], "kernel_sources": []}
