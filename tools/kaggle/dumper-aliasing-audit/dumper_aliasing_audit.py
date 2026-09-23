@@ -90,12 +90,14 @@ try:
     r = subprocess.run([sys.executable, "-m", "pytest", "-q", "-rs", str(REPO / "tests/test_ref_capture_aliasing.py")],
                        capture_output=True, text=True, cwd=str(REPO / "tests"))
     res["unit_tests"] = (r.stdout + r.stderr)[-1500:]; save()
+    ONLY_FIRST_TWO = True
     for rev in ("ctc", "rnnt", "e2e_ctc", "e2e_rnnt"):
-        audit(f"gigaam-{rev}", "gigaam", "ai-sage/GigaAM-v3", ["gguf", "sentencepiece", "hydra-core", "omegaconf"],
+        audit(f"gigaam-{rev}", "gigaam", "ai-sage/GigaAM-v3", ["gguf", "sentencepiece", "hydra-core", "omegaconf", "pyannote.audio"],
               env={"GIGAAM_REVISION": rev})
-    md = snapshot_download("LiquidAI/LFM2.5-Audio-1.5B", local_dir=str(T / "lfm2"))
-    audit("lfm2-audio", "lfm2-audio", md, ["gguf", "liquid-audio"])
-    shutil.rmtree(T / "lfm2", ignore_errors=True)
+    # liquid_audio.from_pretrained takes a repo id, not a directory
+    audit("lfm2-audio", "lfm2-audio", "LiquidAI/LFM2.5-Audio-1.5B", ["gguf", "liquid-audio"])
+    if ONLY_FIRST_TWO:  # the v2 run covered the rest: clean
+        raise SystemExit(0)
     md = snapshot_download("Qwen/Qwen3-TTS-12Hz-0.6B-Base", local_dir=str(T / "q3tts"))
     audit("qwen3-tts", "qwen3-tts", md, ["gguf", "qwen-tts"])
     shutil.rmtree(T / "q3tts", ignore_errors=True)
@@ -110,6 +112,8 @@ try:
     subprocess.check_call(["git", "clone", "--depth", "1", "https://github.com/FireRedTeam/FireRedTTS3.git", str(T / "frt-up")])
     audit("fireredtts3", "fireredtts3", src, ["gguf", "safetensors"],
           env={"FIREREDTTS3_UPSTREAM": str(T / "frt-up"), "FIREREDTTS3_SEED": "1234", "OMP_NUM_THREADS": "4"})
+except SystemExit:
+    pass
 except BaseException:
     res["errors"].append(traceback.format_exc())
 finally:
