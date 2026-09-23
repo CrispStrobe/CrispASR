@@ -503,3 +503,11 @@ install(TARGETS crispasr-chat RUNTIME BUNDLE DESTINATION bin)
 add_executable(crispasr-f0-eval crispasr_f0_eval.cpp)
 target_link_libraries(crispasr-f0-eval PRIVATE crispasr-lib crepe beatrice-pitch)
 target_include_directories(crispasr-f0-eval PRIVATE ${CMAKE_SOURCE_DIR}/src)
+
+# crispasr-repack-probe — does ggml's CPU repack extra buffer type make
+# quantised MUL_MAT faster on this host? See docs/ggml-optimisation-playbook.md
+# §4. Links ggml directly (no crispasr-lib) so it stays cheap to build and
+# runnable anywhere ggml builds, including a Kaggle worker.
+add_executable(crispasr-repack-probe crispasr_repack_probe.cpp)
+target_link_libraries(crispasr-repack-probe PRIVATE ggml ggml-base ggml-cpu)
+include(DefaultTargetOptions)
