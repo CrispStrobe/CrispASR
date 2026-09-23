@@ -154,8 +154,33 @@ The run also re-confirms the O&F throughput the perf doc records —
 `ONSETS_AND_FRAMES_PERF.md`'s 0.5301 — so the backend-selection change costs
 nothing on the CPU path.
 
-hFT's CPU path is likewise unchanged; its `tools/hft_parity.py` leg is noted in
-§5 under what could not be completed.
+**hFT, `tools/hft_parity.py` against the pruned ONNX export**, run through a
+shim that skips the `torch`/`torchaudio` resample (the clip is already canonical
+16 kHz mono; `import torch` does not complete in 240 s on this box under memory
+pressure). q4_0, 3 s clip, both runtimes handed the **same** mel so a model
+difference cannot hide behind a front-end one:
+
+```
+log-mel      max 8.920e-02  rms 1.733e-03  cos 0.99999997  |mine| 1657  |ref| 1657
+onset        max 3.073e-01  rms 8.513e-03  cos 0.99308555  |mine| 10.30  |ref| 10.64
+offset       max 1.936e-01  rms 4.803e-03  cos 0.99353446  |mine| 6.267  |ref| 6.343
+mpe          max 3.744e-01  rms 1.434e-02  cos 0.99475080  |mine| 20.22  |ref| 20.71
+velocity     max 7.600e+01  rms 1.408e+00  cos 0.91973923  |mine| 507.2  |ref| 537.4
+
+onset    99.9245% of 22528 decision cells agree (175 above vs 188 in the reference)
+offset   99.9822%
+mpe      99.7292%
+velocity 99.9600% on the ignore_zero GATE, 99.7869% on the exact argmax bin
+```
+
+**Read that against `HFT_TRANSFORMER.md` §q4_0, not against 1.0**: the
+documented q4_0 figures are onset 0.99350, offset 0.99168, mpe 0.99614,
+velocity 0.870, and the f32 row is 1.00000000 across the board. The differences
+above are q4_0 quantisation, which is what that table is for; they are not
+introduced here. (A different clip, so the numbers are in the same regime rather
+than identical.) The f32 leg — the one that should read 1.00000000 and is
+therefore the decisive check on the refactor — was still running when this was
+written.
 
 ---
 
