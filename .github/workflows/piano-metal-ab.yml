@@ -50,9 +50,11 @@ on:
         description: "Length of the long clip, seconds (the short one is 3 s)"
         type: string
         default: "30"
-  push:
-    paths:
-      - .github/workflows/piano-metal-ab.yml
+
+# No `push:` trigger. The first version had one, filtered to this file, and it
+# still fired on a feature branch that had merely merged main -- two extra
+# macOS matrices for nothing. A perf workflow that runs when nobody asked is
+# both expensive (macOS minutes bill at 10x) and noisy.
 
 jobs:
   ab:
