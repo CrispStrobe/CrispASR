@@ -33,6 +33,11 @@ name: ggml repack buft A/B
 
 on:
   workflow_dispatch:
+    inputs:
+      end_to_end:
+        description: "Also build the CLI and re-measure hFT / O&F on a clean runner"
+        type: boolean
+        default: false
   push:
     paths:
       - .github/workflows/ggml-repack-buft-ab.yml
@@ -186,3 +191,129 @@ jobs:
             ab-tN.txt
             arms.txt
             ratios.txt
+
+  # ===========================================================================
+  # End-to-end, on a clean runner. Optional: it builds the CLI, which the
+  # hermetic job above deliberately does not.
+  #
+  # This exists because everything in docs/music-transcription/*_PERF.md was
+  # measured on the dev VPS at a load average of 3-20 (and the box hit 40 the
+  # night this was written), and the docs say so in writing. Until today those
+  # numbers could not be re-taken anywhere: the GGUFs were Kaggle outputs
+  # published nowhere a runner could reach. cstr/hft-transformer-GGUF and
+  # cstr/onsets-and-frames-GGUF are now public and in the model registry, so a
+  # runner can fetch them and the figures can be firmed up.
+  #
+  # Two questions in one run:
+  #   1. Does routing hFT's q4_0 weights through the repack buffer type change
+  #      whole-model CPU time? (CRISPASR_GGUF_REPACK=0 is the control.)
+  #   2. What are hFT's and O&F's f32-vs-q8_0 costs on a machine at load ~0,
+  #      against the VPS's 1.29x and 0.96x?
+  # ===========================================================================
+  end-to-end:
+    if: inputs.end_to_end
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04,     name: linux-x86_64 }
+          - { os: ubuntu-24.04-arm, name: linux-arm64 }
+    runs-on: ${{ matrix.os }}
+    name: end-to-end ${{ matrix.name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Host ISA
+        run: |
+          grep -m1 'model name' /proc/cpuinfo || true
+          for f in avx2 avx512f avx512_vnni amx_int8 asimddp i8mm sve; do
+            if grep -qw "$f" /proc/cpuinfo; then echo "  $f = 1"; else echo "  $f = 0"; fi
+          done
+          echo "nproc: $(nproc)"; uptime
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake g++
+
+      # GGML_NATIVE=ON, unlike ci.yml: this job is measuring, not checking
+      # portability, and the ISA is the variable under test.
+      - name: Build CLI
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=ON \
+                -DCRISPASR_BUILD_TESTS=OFF -DCRISPASR_BUILD_SERVER=OFF
+          cmake --build build --target crispasr-cli -j "$(nproc)"
+
+      - name: Fetch models
+        run: |
+          set -e
+          mkdir -p m
+          base_h=https://huggingface.co/cstr/hft-transformer-GGUF/resolve/main
+          base_o=https://huggingface.co/cstr/onsets-and-frames-GGUF/resolve/main
+          for q in f32 q8_0 q4_0; do
+            curl -fsSL -o "m/hft-$q.gguf" "$base_h/hft-transformer-$q.gguf"
+            curl -fsSL -o "m/oaf-$q.gguf" "$base_o/onsets-and-frames-$q.gguf" || \
+              echo "::warning::onsets-and-frames-$q.gguf not fetched"
+          done
+          ls -l m
+
+      # Arms interleaved round-robin with a rotating start order, every arm in
+      # its own process, cold rep discarded. CPU seconds (user+sys), not wall:
+      # wall on a 4-core runner conflates the thread-scaling question with the
+      # quantisation one.
+      - name: Interleaved A/B
+        env:
+          MKL_NUM_THREADS: "1"          # CrispASR issue #453
+          OPENBLAS_NUM_THREADS: "1"
+        run: |
+          set -u
+          WAV=samples/jfk.wav
+          declare -a N=(hft-f32 hft-q8_0 hft-q4_0-generic hft-q4_0-repack oaf-f32 oaf-q8_0)
+          declare -a M=(m/hft-f32.gguf m/hft-q8_0.gguf m/hft-q4_0.gguf m/hft-q4_0.gguf \
+                        m/oaf-f32.gguf m/oaf-q8_0.gguf)
+          declare -a R=(0 0 0 1 0 0)
+          for i in "${!N[@]}"; do : > "${N[$i]}.times"; done
+          for rep in 0 1 2 3; do
+            k=$(( rep % ${#N[@]} ))
+            order="$(seq $k $(( ${#N[@]} - 1 )); seq 0 $(( k - 1 )) 2>/dev/null || true)"
+            for i in $order; do
+              [ -f "${M[$i]}" ] || continue
+              t=$( { /usr/bin/time -f "%U %S %e" env CRISPASR_GGUF_REPACK="${R[$i]}" \
+                      ./build/bin/crispasr --piano -m "${M[$i]}" -t 1 -f "$WAV" \
+                      > "${N[$i]}.notes" 2>"${N[$i]}.log"; } 2>&1 | tail -1 )
+              # rep 0 is cold: page cache, first touch, dynamic loader.
+              [ "$rep" = 0 ] || echo "$t" >> "${N[$i]}.times"
+              echo "rep $rep ${N[$i]} user+sys+wall: $t"
+            done
+          done
+          echo
+          echo "== CPU seconds (user+sys), median of 3, load $(cut -d' ' -f1 /proc/loadavg) =="
+          for n in "${N[@]}"; do
+            [ -s "$n.times" ] || continue
+            awk '{print $1+$2}' "$n.times" | sort -n | \
+              awk -v n="$n" '{a[NR]=$1} END {printf "%-20s %7.2f cpu-s (n=%d)\n", n, a[int((NR+1)/2)], NR}'
+          done
+          echo
+          echo "== did the repack arm actually take the fast path? =="
+          grep -h 'repack buffer type' hft-q4_0-repack.log || \
+            echo "NO -- the repack arm fell back; its number is a duplicate of the generic arm"
+          echo "== and the control must NOT have =="
+          grep -h 'repack buffer type' hft-q4_0-generic.log && \
+            echo "::error::the control arm took the repack path; the A/B compared the wrong thing" || \
+            echo "control clean"
+          echo
+          echo "== decoded-note parity between the repack and generic arms =="
+          if diff -q hft-q4_0-repack.notes hft-q4_0-generic.notes; then
+            echo "identical"
+          else
+            echo "::warning::repack and generic arms decoded different notes"
+            diff hft-q4_0-repack.notes hft-q4_0-generic.notes | head -20
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: repack-e2e-${{ matrix.name }}
+          path: |
+            *.times
+            *.notes
+            *.log
