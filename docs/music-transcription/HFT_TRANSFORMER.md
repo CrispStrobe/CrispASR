@@ -49,6 +49,16 @@ which the reasoning would still hold.
 | `tests/hft_parity_dump.cpp` | dumps mel + heads for the ONNX diff |
 | `tools/hft_parity.py` | numeric agreement vs native onnxruntime |
 | `tools/hft_musicnet_f1.py` | note-level F1 on MusicNet's test split |
+| `.github/workflows/piano-metal-ab.yml` | CPU-vs-GPU A/B on macOS; see `PIANO_METAL_AB.md` |
+
+> **Speed, on Apple Silicon rather than the VPS.** `PIANO_METAL_AB.md` §4
+> measures hFT at **0.926× real time at f32, 0.621× at q8_0 and 0.563× at
+> q4_0** on a GitHub `macos-14` runner (chip "Apple M1 (Virtual)", 3 cores,
+> 3 threads, 30 s clip) — i.e. **under real time at every quantisation, on the
+> CPU alone**, against the 2.14× this document's own figures record on the
+> contended x86 VPS. The same doc explains why no GPU number accompanies it:
+> no hosted GitHub macOS image exposes a GPU that can run a dense-GEMM model.
+
 
 ```
 python models/convert-hft-transformer-to-gguf.py \

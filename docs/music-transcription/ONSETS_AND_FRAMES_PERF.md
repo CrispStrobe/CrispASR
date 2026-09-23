@@ -36,6 +36,15 @@ model-load and front-end cost removed, i.e. the number that scales with clip
 length. The gap to native ONNX Runtime's 0.103 goes from **5.9× to 4.0×**
 marginal. It is not closed.
 
+> **On Apple Silicon, and on quantisation.** `PIANO_METAL_AB.md` §4 measures
+> O&F on a GitHub `macos-14` runner (chip "Apple M1 (Virtual)", 3 cores,
+> 3 threads) at **0.161× real time at f32** — about 6× faster than real time —
+> and finds that **quantisation does not help it**: q4_0 is ~9% *slower* than
+> f32 marginally (0.175× vs 0.160×), which fits a model whose cost is
+> convolution and a host-side LSTM recurrence rather than weight bandwidth.
+> What q8_0/q4_0 buy is memory: peak RSS 300 → 220 MiB on a 30 s clip. That
+> doc also records why there is no GPU column.
+
 ---
 
 ## The measurement box
