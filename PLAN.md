@@ -27,7 +27,10 @@ schedule), F16 offline + streaming final text identical to upstream on en + zh.
 #438 Hojo merged 2026-09-23 (CI 35824656929 green; F16 7/7 stages PASS, greedy text
 identical to upstream). #436 Dolphin merged 2026-09-23 (CI 35828799990 green; F16 every stage PASS,
 text identical to upstream on zh + jfk; Q4_K default after a 15-clip transcript
-check). #436 X-ASR on feat/436-xasr: F16 parity on every stage, waiting on CI.
+check). #436 X-ASR merged 2026-09-23 (CI 35835631235 green): streaming Zipformer2
+transducer converted from the sherpa-onnx export; F16 every stage cos >= 0.99999,
+tokens + text identical to sherpa-onnx at 480 and 160 ms, streaming = one-shot.
+#436 done.
 
 Done this session: #448 merged (8c359d80 + da258942 mask-width assert),
 #453 fixed (817d6bf3), #452 merged (1aa0d55f) plus a shell-injection fix in
