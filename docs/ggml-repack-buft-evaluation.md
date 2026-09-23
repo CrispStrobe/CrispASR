@@ -43,13 +43,28 @@ threading win that was invisible on this VPS measured 3.6–3.8× on a clean
 runner. **The Kaggle and CI numbers are the ones to cite; the VPS numbers are
 kept because they agree, and are labelled so nobody quotes them as primary.**
 
-**Neither x86 machine reachable without CI has an int8 dot-product
-instruction.** The Kaggle arm was pushed specifically to move that variable and
-drew a CPU without it. That is what `.github/workflows/ggml-repack-buft-ab.yml`
-is for: `ubuntu-24.04` is Ice Lake / Cascade Lake class and may have AVX-512
-VNNI, and the two arm64 legs have `dotprod`/`i8mm`, where ggml's type table
-inverts (§2) and q8_0 — the quantisation every GGUF in this tree actually
-ships — does get a kernel.
+### 0a. What the runners actually are — and the ISA result that came free
+
+`ubuntu-24.04` was expected to be Ice Lake / Cascade Lake class and therefore to
+carry AVX-512 VNNI, the instruction this whole question turns on. **It is not.**
+Read straight out of the job log:
+
+| runner | CPU | avx2 | avx512f | avx512_vnni | amx_int8 | asimddp | i8mm | sve |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `ubuntu-24.04` | **AMD EPYC 7763** (Zen 3) | 1 | 0 | 0 | 0 | — | — | — |
+| `ubuntu-24.04-arm` | (arm64) | — | — | — | — | **1** | **1** | **1** |
+
+So **four** machines have now been checked — the VPS (Skylake-SP), a Kaggle GCE
+Xeon, and a GitHub EPYC 7763 — and **not one x86 machine reachable from here has
+an int8 dot-product instruction.** The VNNI/AMX question is not "untested
+because nobody ran it"; it is untestable from this project's available hardware.
+Say that rather than implying a negative.
+
+The arm64 leg is the more valuable one in any case, and is the reason the
+workflow has three legs rather than one. `asimddp` + `i8mm` is exactly where
+ggml's repack table gives **q8_0** a kernel (§2) — and q8_0 is the quantisation
+every GGUF in this tree actually ships. **x86 has already answered "this lever
+cannot help the models as they exist"; arm64 is where it might.**
 
 ---
 
