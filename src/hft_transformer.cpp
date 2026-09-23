@@ -10,6 +10,7 @@
 #include "core/fft.h"
 #include "core/ggml_cpu_backend.h"
 #include "core/gguf_loader.h"
+#include "core/gpu_backend_pref.h" // crispasr_init_gpu_backend (#214)
 #include "core/mel.h"
 
 #include "ggml-backend.h"
@@ -154,18 +155,36 @@ static void hft_fft_r2c(const float* in, int N, float* out) {
     }
 }
 
+// Read a weight tensor to host F32.
+//
+// The raw `t->data` pointer is only dereferenceable when the tensor lives in a
+// host buffer. That was always true while this file hard-coded the CPU
+// backend; it is NOT true once the weights can land in a Metal/CUDA/Vulkan
+// buffer, where `data` is a device address (or, on Metal, an offset into an
+// MTLBuffer that happens to be readable only because Apple Silicon is unified
+// — relying on that is how a CUDA build gets a silent segfault). So stage the
+// bytes through ggml_backend_tensor_get(), which every backend implements, and
+// dequantise from the staging copy.
 static std::vector<float> hft_to_f32(const ggml_tensor* t) {
     const int64_t n = t ? ggml_nelements(t) : 0;
     std::vector<float> out((size_t)n);
     if (!t)
         return out;
+    const bool host = !t->buffer || ggml_backend_buffer_is_host(t->buffer);
+    std::vector<uint8_t> staged;
+    const void* src = t->data;
+    if (!host) {
+        staged.resize(ggml_nbytes(t));
+        ggml_backend_tensor_get(t, staged.data(), 0, staged.size());
+        src = staged.data();
+    }
     if (t->type == GGML_TYPE_F32) {
-        std::memcpy(out.data(), t->data, (size_t)n * sizeof(float));
+        std::memcpy(out.data(), src, (size_t)n * sizeof(float));
         return out;
     }
     const ggml_type_traits* tr = ggml_get_type_traits(t->type);
     if (tr && tr->to_float)
-        tr->to_float(t->data, out.data(), n);
+        tr->to_float(src, out.data(), n);
     else
         std::fprintf(stderr, "hft: no dequantiser for tensor type %s\n", ggml_type_name(t->type));
     return out;
@@ -176,6 +195,15 @@ static int hft_nthreads(const hft_transformer_ctx* ctx) {
         return ctx->params.n_threads;
     unsigned hw = std::thread::hardware_concurrency();
     return hw == 0 ? 1 : (int)std::min(hw, 8u);
+}
+
+// core_cpu_backend::set_n_threads() is ggml_backend_cpu_set_n_threads() in the
+// ordinary (non-DL) build, and that one asserts ggml_backend_is_cpu(). Calling
+// it on a Metal backend aborts the process, so every site is guarded now that
+// ctx->backend may not be the CPU.
+static inline void hft_set_threads(const hft_transformer_ctx* ctx) {
+    if (core_cpu_backend::is_cpu(ctx->backend))
+        core_cpu_backend::set_n_threads(ctx->backend, hft_nthreads(ctx));
 }
 
 static inline float hft_sigmoid(float x) {
@@ -276,7 +304,36 @@ struct hft_transformer_ctx* hft_transformer_init_from_file(const char* path, str
         return nullptr;
     }
 
-    ctx->backend = core_cpu_backend::init();
+    // CUDA > Metal > Vulkan > CPU, the src/crepe.cpp:346 pattern (issue #214).
+    // hFT is 83.5% dense weight GEMM by FLOP (§36.2 of the flutter_tuner
+    // benchmark: 248.6 GFLOP per 2.048 s window, only 16.5% attention), so it
+    // is the piano arm with the most to gain from a GPU — dense matmul is what
+    // Metal is for.
+    //
+    // Two knobs, and they mean different things on purpose:
+    //   * params.use_gpu — the caller's intent. It was already in the struct
+    //     and was never read; that is now fixed rather than deleted. The CLI
+    //     sets it from --no-gpu / --gpu-backend (whisper_params::use_gpu
+    //     defaults true), the library default stays false.
+    //   * CRISPASR_HFT_NO_GPU=1 — forces CPU whatever the caller asked for, so
+    //     an A/B can run both arms from one binary without a code change.
+    const bool no_gpu = crispasr_env::get("CRISPASR_HFT_NO_GPU") != nullptr || !params.use_gpu;
+    ctx->backend = no_gpu ? nullptr : crispasr_init_gpu_backend();
+    if (!ctx->backend)
+        ctx->backend = core_cpu_backend::init();
+    if (!ctx->backend) {
+        std::fprintf(stderr, "hft: no ggml backend could be initialised\n");
+        delete ctx;
+        return nullptr;
+    }
+    // Not `ctx->backend != nullptr after the GPU call`: crispasr_init_gpu_backend()
+    // ends in ggml_backend_init_best(), which returns the CPU backend on a
+    // CPU-only build. Ask the device what it is, so the line an A/B greps for
+    // cannot claim a GPU that is not there.
+    if (params.verbosity >= 1)
+        std::fprintf(stderr, "hft: backend = %s (%s)\n", ggml_backend_name(ctx->backend),
+                     core_cpu_backend::is_cpu(ctx->backend) ? "CPU" : "GPU");
+
     core_gguf::WeightLoad wl;
     // ggml's repacked int8 GEMM (docs/ggml-optimisation-playbook.md §4) is
     // reached only by putting the weight in the CPU device's extra buffer
@@ -297,8 +354,18 @@ struct hft_transformer_ctx* hft_transformer_init_from_file(const char* path, str
             return false;
         return n.find(".ln.") == std::string::npos;
     };
+    //
+    // The repack buffer type is a property of the CPU *device* — ggml offers no
+    // such extra buffer type for Metal/CUDA/Vulkan, and load_weights_repack()
+    // would classify every weight against a buft that does not exist for this
+    // backend. On a GPU backend take the ordinary loader; the GEMM is going to
+    // a device kernel anyway, which is the whole point of being there.
     int n_repacked = 0;
-    if (!core_gguf::load_weights_repack(path, ctx->backend, is_hft_matmul_weight, nullptr, "hft", wl, &n_repacked)) {
+    const bool loaded = core_cpu_backend::is_cpu(ctx->backend)
+                            ? core_gguf::load_weights_repack(path, ctx->backend, is_hft_matmul_weight, nullptr,
+                                                             "hft", wl, &n_repacked)
+                            : core_gguf::load_weights(path, ctx->backend, "hft", wl);
+    if (!loaded) {
         ggml_backend_free(ctx->backend);
         delete ctx;
         return nullptr;
@@ -577,7 +644,7 @@ static bool hft_encode_chunk(hft_transformer_ctx* ctx, const float* taps, int n_
     }
     ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "taps"), taps, 0,
                             (size_t)taps_n * bins * n_chunk * sizeof(float));
-    core_cpu_backend::set_n_threads(ctx->backend, hft_nthreads(ctx));
+    hft_set_threads(ctx);
     if (ggml_backend_graph_compute(ctx->backend, gf) != GGML_STATUS_SUCCESS) {
         std::fprintf(stderr, "hft: encoder graph compute failed\n");
         ggml_free(c);
@@ -647,7 +714,7 @@ static bool hft_decode_time(hft_transformer_ctx* ctx, const float* pitch_major, 
         return false;
     }
     ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "in"), pitch_major, 0, (size_t)H * T * K * sizeof(float));
-    core_cpu_backend::set_n_threads(ctx->backend, hft_nthreads(ctx));
+    hft_set_threads(ctx);
     if (ggml_backend_graph_compute(ctx->backend, gf) != GGML_STATUS_SUCCESS) {
         std::fprintf(stderr, "hft: time-decoder graph compute failed\n");
         ggml_free(c);

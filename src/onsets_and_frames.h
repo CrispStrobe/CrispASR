@@ -52,6 +52,14 @@ struct onsets_and_frames_ctx;
 struct onsets_and_frames_params {
     int n_threads;
     int verbosity; // 0=silent, 1=normal, 2=verbose (keeps raw head outputs)
+
+    // Honoured since the Metal wiring: true tries CUDA > Metal > Vulkan and
+    // falls back to the CPU backend, false goes straight to the CPU. Default
+    // false; the CLI passes its own --no-gpu/--gpu-backend derived value.
+    // CRISPASR_OAF_NO_GPU=1 forces CPU regardless (the A/B control). Note the
+    // BiLSTM stays on the host either way, so a GPU moves only the ConvStack
+    // and the two GEMMs -- measured, not assumed, in
+    // docs/music-transcription/PIANO_METAL_AB.md.
     bool use_gpu;
 
     // Post-processing, on sigmoid-ed activations.

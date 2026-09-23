@@ -10,6 +10,7 @@
 #include "core/fft.h"
 #include "core/gguf_loader.h"
 #include "core/ggml_cpu_backend.h"
+#include "core/gpu_backend_pref.h" // crispasr_init_gpu_backend (#214)
 #include "core/mel.h"
 
 #include "ggml-backend.h"
@@ -186,18 +187,34 @@ static void oaf_fft_r2c(const float* in, int N, float* out) {
 // tensor_to_f32 this goes through ggml's type traits, so a q4_0 / q8_0 GGUF
 // loads the same way an F32 one does — the quantised file is the point of the
 // port and a loader that only understood F32/F16 would defeat it.
+//
+// `t->data` is only a dereferenceable host pointer when the tensor lives in a
+// host buffer. That held while this file hard-coded the CPU backend; it does
+// not once the weights can land in a Metal/CUDA/Vulkan buffer. Stage through
+// ggml_backend_tensor_get(), which every backend implements. This matters here
+// beyond the mel filterbank and window: the BiLSTM recurrence runs on the host
+// (see the ConvStack/BiLSTM split in the header), so R and b are read back
+// every load.
 static std::vector<float> oaf_to_f32(const ggml_tensor* t) {
-    const int64_t n = ggml_nelements(t);
+    const int64_t n = t ? ggml_nelements(t) : 0;
     std::vector<float> out((size_t)n);
     if (!t)
         return out;
+    const bool host = !t->buffer || ggml_backend_buffer_is_host(t->buffer);
+    std::vector<uint8_t> staged;
+    const void* src = t->data;
+    if (!host) {
+        staged.resize(ggml_nbytes(t));
+        ggml_backend_tensor_get(t, staged.data(), 0, staged.size());
+        src = staged.data();
+    }
     if (t->type == GGML_TYPE_F32) {
-        std::memcpy(out.data(), t->data, (size_t)n * sizeof(float));
+        std::memcpy(out.data(), src, (size_t)n * sizeof(float));
         return out;
     }
     const ggml_type_traits* tr = ggml_get_type_traits(t->type);
     if (tr && tr->to_float) {
-        tr->to_float(t->data, out.data(), n);
+        tr->to_float(src, out.data(), n);
     } else {
         std::fprintf(stderr, "oaf: no dequantiser for tensor type %s\n", ggml_type_name(t->type));
     }
@@ -209,6 +226,15 @@ static int oaf_nthreads(const onsets_and_frames_ctx* ctx) {
         return ctx->params.n_threads;
     unsigned hw = std::thread::hardware_concurrency();
     return hw == 0 ? 1 : (int)std::min(hw, 8u);
+}
+
+// core_cpu_backend::set_n_threads() is ggml_backend_cpu_set_n_threads() in the
+// ordinary (non-DL) build, and that one asserts ggml_backend_is_cpu(). Calling
+// it on a Metal backend aborts the process, so every site is guarded now that
+// ctx->backend may not be the CPU.
+static inline void oaf_set_threads(const onsets_and_frames_ctx* ctx) {
+    if (core_cpu_backend::is_cpu(ctx->backend))
+        core_cpu_backend::set_n_threads(ctx->backend, oaf_nthreads(ctx));
 }
 
 static inline float oaf_sigmoid(float x) {
@@ -299,7 +325,37 @@ struct onsets_and_frames_ctx* onsets_and_frames_init_from_file(const char* path,
         return nullptr;
     }
 
-    ctx->backend = core_cpu_backend::init();
+    // CUDA > Metal > Vulkan > CPU, the src/crepe.cpp:346 pattern (issue #214).
+    //
+    // Unlike hFT this one is NOT obviously a GPU win and the wiring does not
+    // assume it is. O&F is ~46% convolution and ~29% LSTM by FLOP, and the
+    // LSTM here is a host-side sequential recurrence (see the ConvStack/BiLSTM
+    // split in the header) that a GPU cannot help with — it only adds a
+    // device↔host copy per chunk boundary. The ConvStack and the two GEMMs are
+    // what can move. Whether that nets out positive is a measurement, not an
+    // assumption; see docs/music-transcription/PIANO_METAL_AB.md.
+    //
+    // Two knobs, deliberately distinct:
+    //   * params.use_gpu — the caller's intent. Already in the struct, never
+    //     read until now; honoured rather than deleted.
+    //   * CRISPASR_OAF_NO_GPU=1 — forces CPU whatever the caller asked, so one
+    //     binary can run both A/B arms.
+    const bool no_gpu = crispasr_env::get("CRISPASR_OAF_NO_GPU") != nullptr || !params.use_gpu;
+    ctx->backend = no_gpu ? nullptr : crispasr_init_gpu_backend();
+    if (!ctx->backend)
+        ctx->backend = core_cpu_backend::init();
+    if (!ctx->backend) {
+        std::fprintf(stderr, "oaf: no ggml backend could be initialised\n");
+        delete ctx;
+        return nullptr;
+    }
+    // Ask the device rather than inferring from "the GPU call returned
+    // non-null": crispasr_init_gpu_backend() ends in ggml_backend_init_best(),
+    // which hands back the CPU backend on a CPU-only build.
+    if (params.verbosity >= 1)
+        std::fprintf(stderr, "oaf: backend = %s (%s)\n", ggml_backend_name(ctx->backend),
+                     core_cpu_backend::is_cpu(ctx->backend) ? "CPU" : "GPU");
+
     core_gguf::WeightLoad wl;
     if (!core_gguf::load_weights(path, ctx->backend, "oaf", wl)) {
         ggml_backend_free(ctx->backend);
@@ -534,7 +590,7 @@ static bool oaf_conv_stack_chunk(onsets_and_frames_ctx* ctx, const oaf_conv_stac
     ggml_tensor* in = ggml_graph_get_tensor(gf, "mel");
     ggml_backend_tensor_set(in, mel_chunk, 0, (size_t)n_mels * T_chunk * sizeof(float));
 
-    core_cpu_backend::set_n_threads(ctx->backend, oaf_nthreads(ctx));
+    oaf_set_threads(ctx);
     if (ggml_backend_graph_compute(ctx->backend, gf) != GGML_STATUS_SUCCESS) {
         std::fprintf(stderr, "oaf: conv-stack graph compute failed\n");
         ggml_free(ctx0);
@@ -653,7 +709,7 @@ static bool oaf_lstm_input_proj(onsets_and_frames_ctx* ctx, const oaf_lstm_dir& 
         return false;
     }
     ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "x"), x, 0, (size_t)in_size * T * sizeof(float));
-    core_cpu_backend::set_n_threads(ctx->backend, oaf_nthreads(ctx));
+    oaf_set_threads(ctx);
     if (ggml_backend_graph_compute(ctx->backend, gf) != GGML_STATUS_SUCCESS) {
         std::fprintf(stderr, "oaf: LSTM input-projection compute failed\n");
         ggml_free(ctx0);
@@ -835,7 +891,7 @@ static bool oaf_lstm_recurrence_graph(onsets_and_frames_ctx* ctx, const oaf_lstm
         ggml_backend_tensor_set(h0, h_carry.data(), 0, (size_t)H * sizeof(float));
         ggml_backend_tensor_set(c0t, c_carry.data(), 0, (size_t)H * sizeof(float));
 
-        core_cpu_backend::set_n_threads(ctx->backend, oaf_nthreads(ctx));
+        oaf_set_threads(ctx);
         if (ggml_backend_graph_compute(ctx->backend, gf) != GGML_STATUS_SUCCESS) {
             std::fprintf(stderr, "oaf: graph BiLSTM compute failed\n");
             ggml_free(c0);
@@ -923,7 +979,7 @@ static bool oaf_apply_head(onsets_and_frames_ctx* ctx, const oaf_head& hd, const
         return false;
     }
     ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "x"), x.data(), 0, (size_t)in_size * T * sizeof(float));
-    core_cpu_backend::set_n_threads(ctx->backend, oaf_nthreads(ctx));
+    oaf_set_threads(ctx);
     if (ggml_backend_graph_compute(ctx->backend, gf) != GGML_STATUS_SUCCESS) {
         ggml_free(ctx0);
         return false;

@@ -129,6 +129,12 @@ int main(int argc, char** argv) {
     onsets_and_frames_params p = onsets_and_frames_default_params();
     p.n_threads = nthreads;
     p.verbosity = 2; // keeps the raw head outputs
+    // Parity is a CPU question by default, so nothing changes for existing
+    // callers on a CUDA/Metal box. CRISPASR_PARITY_USE_GPU=1 opts the dump
+    // onto the GPU backend so the SAME harness can answer "does the GPU path
+    // produce the same numbers?" -- which is the only way that question gets
+    // an honest answer. CRISPASR_OAF_NO_GPU=1 still wins over it.
+    p.use_gpu = std::getenv("CRISPASR_PARITY_USE_GPU") != nullptr;
     onsets_and_frames_ctx* ctx = onsets_and_frames_init_from_file(model.c_str(), p);
     if (!ctx) {
         std::fprintf(stderr, "oaf-parity-dump: failed to load %s\n", model.c_str());

@@ -76,6 +76,13 @@ struct hft_transformer_ctx;
 struct hft_transformer_params {
     int n_threads;
     int verbosity; // 0=silent, 1=normal, 2=verbose (keeps raw head outputs)
+
+    // Honoured since the Metal wiring: true tries CUDA > Metal > Vulkan and
+    // falls back to the CPU backend, false goes straight to the CPU. Default
+    // false (see hft_transformer_default_params); the CLI passes its own
+    // --no-gpu/--gpu-backend derived value. CRISPASR_HFT_NO_GPU=1 in the
+    // environment forces CPU regardless, which is how the A/B arms are run.
+    // n_threads is then ignored, since it only configures the CPU backend.
     bool use_gpu;
 
     // Post-processing, on sigmoid-ed activations. The reference defaults are
