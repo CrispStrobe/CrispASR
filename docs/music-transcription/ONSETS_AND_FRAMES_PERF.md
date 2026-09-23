@@ -403,12 +403,18 @@ which is q8_0 quantisation, not the recurrence: the per-piece q8 deltas
 directions around the f32 values, which is what rounding noise looks like and
 not what a systematic error looks like.
 
-One incidental result worth flagging because it cuts against a finding elsewhere
-in the playbook: **q8_0 is slightly FASTER than f32 here**, 0.425 vs 0.442
-CPU-s per audio-second, where §4 reports hFT measuring q8_0 at 29% *more* CPU
-than f32. Small, one box, one model — but it means §4's "quantise for size, and
-measure" is doing real work as advice, and this model should not be assumed to
-follow hFT's result.
+One incidental result worth flagging: **q8_0 and f32 are indistinguishable
+here**, 0.425 vs 0.442 CPU-s per audio-second, where §4 of the playbook reports
+hFT measuring q8_0 at 29% *more* CPU than f32.
+
+⚠ This originally read "q8_0 is slightly FASTER than f32 here", and that was
+over-reading a 3.8% difference on a box whose spread for a single arm is
+20–50%. `docs/ggml-repack-buft-evaluation.md` §4 settles it: hFT's 29% is a
+real kernel effect, but this model is 46% convolution and 29% LSTM, so at most
+19% of its work is even exposed to it, and the largest effect its op mix can
+produce is a few percent. §4's "quantise for size, and measure" is still doing
+real work as advice — with the addition that the op mix tells you beforehand
+how much the measurement can move at all.
 
 **The default (scalar) arm's F1 needs no re-measurement**, and this is worth
 stating rather than leaving implicit: its decoded output is unchanged by
@@ -452,11 +458,24 @@ by the table above rather than by a green tick.
    likely a kernel or ISA question than a graph-shape one. `SRC_ISA_GAP.md` is
    the other half of it.
 2. **`-t 4` costs 25% more CPU than `-t 2` for no wall gain.** Unexplained here.
-3. **q8_0 measured slightly FASTER than f32 here (0.425 vs 0.442 CPU-s per
-   audio-second)**, where playbook §4 reports hFT measuring q8_0 at 29% more CPU
-   than f32. One box, one model, a small margin — but it should not be explained
-   away, and it means this model's quantisation cost has to be measured rather
-   than inherited from hFT's result.
+3. ~~**q8_0 measured slightly FASTER than f32 here**~~ — **RESOLVED, and the
+   right reading is "indistinguishable", not "faster".**
+   `docs/ggml-repack-buft-evaluation.md` §4 has the working. In short: hFT's
+   29% is real and has now been reproduced at the kernel level with no model
+   involved — generic-path q8_0 `MUL_MAT` costs 1.08–1.31× f32 for
+   transformer-shaped GEMMs on this box, and hFT is 83.5% weight GEMM. This
+   model is 46% convolution, 29% LSTM, 19% dense, so **at most 19% of its work
+   is even eligible** for that penalty; propagating the kernel number through
+   that mix predicts +2% to +6% overall. The measured difference was 3.8% —
+   the right magnitude, and well inside the 20–50% run-to-run spread this box
+   shows for the *same* arm. The sign carries no information. The caution in
+   the original entry — "one box, one model, a small margin" — was the correct
+   instinct; the margin was simply below the measurement floor.
+
+   The generalisable lesson: **the op mix tells you in advance how far a
+   quantisation A/B can possibly move.** A model that spends 81% of its time
+   on ops quantisation does not touch cannot show a large effect either way,
+   so a small measured difference there is a null result, not a finding.
 4. **`src/btc_chords.cpp`'s allocator hoist is not validated at runtime.**
    Neither a btc-chords GGUF, nor the BTC PyTorch checkpoint, nor the
    BTC-ISMIR19 tree exists on this box, so `tools/btc_torch_parity.py` and

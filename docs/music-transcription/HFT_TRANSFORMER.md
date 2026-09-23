@@ -351,9 +351,25 @@ with the zero-copy mmap path, and the fact that this box is Skylake-SP with
 AVX-512F but **no AVX-512 VNNI**, so there is no int8 dot-product instruction
 for the repacked path to reach even once it is selected.
 
-So the bet is not disproved in general; it is **untested** here, for a reason
-that is now located in `core/gguf_loader.cpp` rather than in this file. What
-*was* measured is that taking it as configured costs 29% of the throughput.
+**Update — this has now been tested.** `docs/ggml-repack-buft-evaluation.md`
+is the authority. Three things it changes here:
+
+- The 29% is **real and reproduced at the kernel level**, with no model
+  involved: generic-path q8_0 `MUL_MAT` measures 1.08–1.31× the cost of f32
+  for transformer-shaped GEMMs on this box. At 83.5% weight GEMM that predicts
+  1.08–1.26× whole-model, and 1.29× was measured. Not noise.
+- The repack buffer type **is** offered on this box, and it does pay — 1.4–5.6×
+  over the generic quantised path — **without needing VNNI**. The AVX2 kernels
+  do not use it; the interleaved layout pays on its own.
+- But it **cannot rescue this model's q8_0 GGUF on x86**: ggml has no repacked
+  q8_0 kernel for x86 at all (it is gated on NEON+dotprod/i8mm or RISC-V).
+  Reaching the fast path on x86 means q4_0 or q4_K, which is an accuracy
+  question this document has not asked. On arm64 the table inverts and q8_0
+  does get a kernel — so the same GGUF may behave differently on a phone.
+
+`src/hft_transformer.cpp` now loads through `core_gguf::load_weights_repack()`,
+which is a no-op (and keeps the zero-copy mmap) for the q8_0 and f32 files on
+x86, and takes the fast path for q4_0/q4_K.
 
 **2. The gap to ORT is 1.6×, not an order of magnitude.** CPU-seconds per
 audio-second at one thread: 4.84 against 3.09, a factor of **1.56**. Wall at

@@ -525,26 +525,50 @@ all six transcription models and most of the rest.
 
 ### What is and is not the conclusion
 
+**This section was written before the lever had been measured. It has now been
+measured — `ggml-repack-buft-evaluation.md` is the authority, and it corrects
+three things below. Summary of what changed:**
+
 - ✅ **The lever is real and it is in `core/gguf_loader.cpp`, not in any model
-  file.** Adding an extra-buft-aware allocation path there, on the
-  `crispasr.cpp` model, would apply tree-wide in one change.
-- ⚠ **It is not a free win and I have not measured it.** Three things stand in
-  the way, and an implementer should price them before starting:
-  1. The repack buffer type supports only `MUL_MAT` and `GET_ROWS`, so tensors
-     must be routed per-op, which is exactly what `weight_buft_supported`
-     exists to do.
-  2. It is likely **incompatible with the zero-copy mmap path**
-     (`gguf_loader.cpp:609-660`): repacking rewrites the weight bytes into a
-     buffer the buft owns, which is not what binding tensors into a file map
-     does. Expect to trade mmap's memory win for repack's speed win, per
-     backend. *I have not verified this; it is inference from the two
-     mechanisms' shapes and should be checked before it is relied on.*
-  3. The measurement box is Skylake-SP: AVX-512F but **no AVX-512 VNNI**, so
-     there is no int8 dot-product instruction for the repacked path to reach
-     even once it is selected. A verdict needs hardware with VNNI, or arm64
-     with dotprod/i8mm.
+  file.** Still true. `core_gguf::load_weights_repack()` is now that path.
+- ❌ **"…would apply tree-wide in one change" was wrong.** The loader cannot
+  know which tensors are used as `MUL_MAT` `src[0]`; only the model can. Every
+  adopting backend must supply a predicate and be checked for other uses of
+  those tensors, exactly as `crispasr.cpp:1945` does with a probe op. It is a
+  one-line change *per model*, on top of one shared loader.
+- ❌ **"no VNNI, so there is nothing for the repacked path to reach" was too
+  pessimistic.** The AVX2 kernels do not use VNNI — the interleaved *layout*
+  pays on its own. Measured on this very box (Skylake-SP, no VNNI, no AMX),
+  single thread, interleaved arms, best of 40:
+  `q4_0` generic 1.22–1.44× f32 → repacked **0.76–0.97×** f32; `q4_K` generic
+  1.83–3.02× f32 → repacked **0.48–0.66×** f32. A Kaggle AVX2-only Xeon agrees
+  at 1.9–3.4× over the generic path, with a far tighter spread.
+- ⛔ **But it cannot help any quantised model in this tree today, on x86.**
+  `ggml_repack_get_optimal_repack_type` (`repack.cpp:4528`) has **no q8_0
+  branch for x86 at all** — q8_0 is gated on NEON+dotprod/i8mm or RISC-V. Every
+  quantised GGUF here is q8_0. Reaching this path on x86 means re-quantising to
+  q4_0 or q4_K, which is an accuracy decision, not a perf one. On **arm64 the
+  table inverts** and q8_0 *does* get a kernel — so this lever may pay on a
+  phone for the models as they already exist. Untested; highest-value gap left.
+- ✅ **The mmap incompatibility is now verified, not inferred.** The path at
+  `gguf_loader.cpp:657` binds `tensor->data` into the file map and **never
+  calls `set_tensor`**, while repacking *is* a `set_tensor` that rewrites the
+  bytes. They cannot both hold for one tensor.
+- ⚠ **Correction: the buft supports `MUL_MAT` and `MUL_MAT_ID`, not
+  `GET_ROWS`** (`repack.cpp:4774`). The comment at `crispasr.cpp:1945` is stale
+  against this ggml version.
+- ⚠ **A trap.** `ggml_backend_cpu_repack_buffer_set_tensor` dereferences
+  `tensor->extra` unconditionally, and `init_tensor` leaves it null when it has
+  no kernel for that (type, shape, ISA). Writing a declined tensor into the
+  repack buft is a **null dereference, not a fallback**. Classify first;
+  `core_gguf::repack_buft_accepts()` does that by asking ggml.
 - ❌ **Do not quantise a compute-bound CPU model expecting speed today.**
-  Quantise for size, and measure.
+  Still the right default. Generic-path q8_0 measures 1.08–1.31× the cost of
+  f32 for transformer-shaped GEMMs on this box — which is the mechanism behind
+  hFT's 29%, reproduced without a model. Quantise for size, and measure.
+
+Run `crispasr-repack-probe` on any new machine before assuming any of this
+transfers to it.
 
 ### The narrower quantisation lever that *is* proven
 
@@ -1188,11 +1212,15 @@ quoted.
 
 Stated explicitly so nobody builds on a gap thinking it is a finding.
 
-1. **Whether selecting ggml's repack extra buffer type actually speeds anything
-   up here.** §4 establishes that it is unreachable for every `core_gguf`
-   backend and that q8_0 measured *slower*. It does not establish the win,
-   and the measuring box has no AVX-512 VNNI. The mmap-incompatibility in §4 is
-   inferred from how the two mechanisms work, not verified.
+1. ~~**Whether selecting ggml's repack extra buffer type actually speeds
+   anything up here.**~~ **SETTLED** — `ggml-repack-buft-evaluation.md`, and §4
+   above is updated. It is offered here, it pays 1.4–5.6× for q4_0/q4_K without
+   needing VNNI, and it does nothing for q8_0 on x86 because ggml has no q8_0
+   repack kernel for x86 at all. The mmap incompatibility is now verified
+   rather than inferred. What is still open is narrower and is listed there:
+   **arm64, where q8_0 does get a kernel and the models as they ship might
+   benefit**, and whether any CPU with VNNI/AMX changes the ratios (neither
+   machine reachable from here has one).
 2. **Whether a ggml-graph BiLSTM beats a scalar recurrence at O&F's sequence
    length.** §1b sets out the node-count concern. Nobody has measured it. The
    recommendation in §7 is deliberately ordered so this question is answered
