@@ -881,7 +881,8 @@ extern "C" struct xasr_context* xasr_init_from_file(const char* path, struct xas
         max_ds = std::max(max_ds, d);
     G.decode_chunk_len = G.chunk_ms / 10;
     G.chunk = G.decode_chunk_len / 2;
-    if (left < 0 || G.chunk % (2 * max_ds) != 0) {
+    // every stack's SimpleDownsample and the output downsample-by-2 need exact groups
+    if (left < 0 || G.chunk % max_ds != 0 || G.chunk % 2 != 0) {
         fprintf(stderr, "xasr: unsupported chunk size %d ms\n", G.chunk_ms);
         xasr_free(c);
         return nullptr;
