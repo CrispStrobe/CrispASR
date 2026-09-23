@@ -42,7 +42,9 @@ def audit(name, backend, model_dir, pip, env=None, audio="jfk.wav", stages=None,
     try:
         venv = T / f"venv-{name}"
         if not venv.exists():
-            subprocess.check_call([sys.executable, "-m", "venv", "--system-site-packages", str(venv)])
+            # Kaggle's python has no ensurepip, so the stdlib venv cannot bootstrap;
+            # virtualenv carries its own pip.
+            subprocess.check_call([sys.executable, "-m", "virtualenv", "-q", "--system-site-packages", str(venv)])
             if pip:
                 r = subprocess.run([str(venv / "bin/pip"), "install", "-q"] + pip, capture_output=True, text=True)
                 (OUT / f"pip-{name}.log").write_text(r.stdout[-5000:] + r.stderr[-10000:])
@@ -82,7 +84,7 @@ try:
     sys.path.insert(0, str(REPO / "tools" / "kaggle"))
     import kaggle_harness as kh
     kh.resolve_hf_token(); os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "gguf"])
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "gguf", "virtualenv", "pytest"])
     from huggingface_hub import snapshot_download
     T.mkdir(parents=True, exist_ok=True)
     r = subprocess.run([sys.executable, "-m", "pytest", "-q", "-rs", str(REPO / "tests/test_ref_capture_aliasing.py")],
