@@ -14,6 +14,15 @@ and require both monotonic output and bounded timing displacement. Worktree
 Worktree `.claude/worktrees/feat-436-dolphin`, branch `feat/436-dolphin`.
 NOW: blueprint read (docs/dolphin/PLAN.md on the branch); converter next.
 
+## CLAIMED 2026-09-23 — #454 moondream parakeet-ultra / parakeet-redux
+
+Worktree `.claude/worktrees/feat-454-parakeet`, branch `feat/454-parakeet-hf`.
+Both are HF-transformers ParakeetForTDT checkpoints (the stock v3 architecture,
+HF tensor names, no .nemo), so the work is converter-side: HF names -> the
+existing parakeet GGUF layout, a synthesised NeMo featurizer filterbank, and
+for redux an exact dequant of the base-3 packed ternary weights. Reference:
+transformers ParakeetForTDT. Runtime changes are not expected.
+
 ## CLAIMED 2026-09-22 — #445 Orukeet + Confucius4-R2T2, then #438 Hojo, #436
 
 Taking over #445 from the 2026-09-20 roadmap claim below: its worktree
