@@ -228,21 +228,41 @@ int main(int argc, char** argv) {
     write_f32(prefix + ".activation.f32", res.activation_output, n);
     write_f32(prefix + ".velocity.f32", res.velocity_output, n);
 
+    // Peak RSS, the same field hft-parity-dump has emitted since it was
+    // written. Added here so the two piano arms can be put in one table --
+    // a CPU-vs-GPU A/B has to report memory as well as time, because moving
+    // weights onto a device changes where the bytes live, not just how fast
+    // they are read.
+    auto peak_rss_mib = []() -> double {
+#ifndef _WIN32
+        rusage ru{};
+        getrusage(RUSAGE_SELF, &ru);
+#ifdef __APPLE__
+        return (double)ru.ru_maxrss / 1048576.0; // bytes on macOS
+#else
+        return (double)ru.ru_maxrss / 1024.0; // kilobytes on Linux
+#endif
+#else
+        return 0.0;
+#endif
+    };
+
     const double audio_sec = (double)pcm.size() / 16000.0;
     FILE* meta = std::fopen((prefix + ".meta.txt").c_str(), "w");
     if (meta) {
         std::fprintf(meta,
                      "frames %d\nclasses %d\nmel_frames %d\nnotes %d\naudio_seconds %.4f\n"
-                     "elapsed_ms %.2f\nrealtime_factor %.4f\ncpu_ms %.2f\ncpu_factor %.4f\nthreads %d\n",
+                     "elapsed_ms %.2f\nrealtime_factor %.4f\ncpu_ms %.2f\ncpu_factor %.4f\nthreads %d\n"
+                     "peak_rss_mib %.1f\n",
                      res.n_frames, res.n_classes, mel_frames, res.n_notes, audio_sec, ms,
                      ms / 1000.0 / (audio_sec > 0 ? audio_sec : 1.0), cpu,
-                     cpu / 1000.0 / (audio_sec > 0 ? audio_sec : 1.0), nthreads);
+                     cpu / 1000.0 / (audio_sec > 0 ? audio_sec : 1.0), nthreads, peak_rss_mib());
         std::fclose(meta);
     }
     std::printf("frames=%d notes=%d %.1f ms wall / %.1f ms cpu for %.2f s audio "
-                "(%.4f x real time, %.4f cpu-s per audio-s, %d threads)\n",
+                "(%.4f x real time, %.4f cpu-s per audio-s, %d threads, peak RSS %.0f MiB)\n",
                 res.n_frames, res.n_notes, ms, cpu, audio_sec, ms / 1000.0 / (audio_sec > 0 ? audio_sec : 1.0),
-                cpu / 1000.0 / (audio_sec > 0 ? audio_sec : 1.0), nthreads);
+                cpu / 1000.0 / (audio_sec > 0 ? audio_sec : 1.0), nthreads, peak_rss_mib());
 
     // Note events, so the F1 scorer does not have to re-implement the decoder.
     FILE* nf = std::fopen((prefix + ".notes.tsv").c_str(), "w");

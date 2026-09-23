@@ -1,0 +1,385 @@
+# Does the GPU help the two newest piano arms, and by how much?
+#
+# hFT-Transformer and Onsets & Frames both called core_cpu_backend::init()
+# unconditionally until the commit that added this file, so neither had ever
+# run on a GPU. Both are now wired through core/gpu_backend_pref.h (the
+# src/crepe.cpp:346 pattern, issue #214). This workflow is the measurement that
+# decides what that is worth.
+#
+# WHY THIS RUNS ON CI RATHER THAN THE DEV VPS. Same reason
+# ggml-repack-buft-ab.yml says: the VPS is a 4-vCPU shared box that has carried
+# a load average of 6 to 40 all night, and no amount of repetition rescues a
+# timing number from a ten-times oversubscribed machine. The stronger reason
+# here is that the VPS has no Metal at all, so the arm under test cannot be run
+# on it even badly.
+#
+# THE DECISION THIS FEEDS. CrispTuner's settings copy currently says hFT is
+# "too slow for live use". That is measured fact on a contended x86 VPS (2.14x
+# real time) and may well be false on the Apple Silicon the app ships on. §36.2
+# of bench/REPORT.md in flutter_tuner measured hFT at 83.5% dense weight GEMM —
+# 248.6 GFLOP per 2.048 s window, ~121 GFLOP/s just to hold real time. That is
+# a demanding CPU figure and an easy GPU one, which is the hypothesis.
+#
+# O&F IS NOT THE SAME BET and this workflow does not assume it is: ~46%
+# convolution, ~29% LSTM, and the LSTM is a host-side sequential recurrence a
+# GPU cannot help with. It is measured because "Metal does not help O&F" is a
+# result that closes a question, not a failure.
+#
+# DISCIPLINE, kept from ggml-repack-buft-ab.yml and basic-pitch-conv-ab.yml:
+#   * every arm in its own PROCESS (a shared process warms caches across arms);
+#   * the cold run discarded, median of >= 3 after it;
+#   * arms back to back under identical load, with a rotating start order;
+#   * PROOF the work actually happened — each arm's stderr is grepped for the
+#     "backend = Metal (GPU)" / "backend = CPU (CPU)" line and the job fails if
+#     an arm ran on the backend it was not supposed to. An exit code proves
+#     nothing here: the CPU fallback is deliberate and silent by design.
+#
+# workflow_dispatch is deliberate: CrispASR CI runs get cancelled by
+# concurrency-group supersession whenever another session pushes, and a
+# superseded perf run is worse than no perf run because it looks like a failure.
+name: piano Metal A/B (hFT + Onsets & Frames)
+
+on:
+  workflow_dispatch:
+    inputs:
+      quants:
+        description: "Space-separated quantisations to measure"
+        type: string
+        default: "f32 q8_0 q4_0"
+      long_seconds:
+        description: "Length of the long clip, seconds (the short one is 3 s)"
+        type: string
+        default: "30"
+  push:
+    paths:
+      - .github/workflows/piano-metal-ab.yml
+
+jobs:
+  ab:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macos-14 rather than macos-latest: "latest" moves, and a perf
+          # number whose machine is not pinned is not comparable to the next
+          # one. Both are Apple Silicon; the chip is printed below regardless,
+          # because a number without its machine is worthless.
+          - { model: hft, os: macos-14, prefix: hft-transformer,   repo: cstr/hft-transformer-GGUF,   dump: hft-parity-dump, heads: "onset offset mpe velocity" }
+          - { model: oaf, os: macos-14, prefix: onsets-and-frames, repo: cstr/onsets-and-frames-GGUF, dump: oaf-parity-dump, heads: "onset offset frame activation velocity" }
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.model }} CPU-vs-Metal
+    timeout-minutes: 180
+    env:
+      # CrispASR issue #453: core_mel silently multiplies the upper mel bins by
+      # the thread count under threaded MKL. tools/oaf_parity.py pins these for
+      # exactly this reason and calls it a host defect. Pinned here too, so the
+      # front end cannot vary between arms.
+      MKL_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      QUANTS: ${{ github.event.inputs.quants || 'f32 q8_0 q4_0' }}
+      LONG_SECONDS: ${{ github.event.inputs.long_seconds || '30' }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Name the runner and the chip
+        run: |
+          echo "runner    : ${{ matrix.os }}  arch=$RUNNER_ARCH  ($(uname -m))"
+          echo "chip      : $(sysctl -n machdep.cpu.brand_string)"
+          echo "cores     : $(sysctl -n hw.ncpu) logical, $(sysctl -n hw.perflevel0.physicalcpu 2>/dev/null || echo '?') P + $(sysctl -n hw.perflevel1.physicalcpu 2>/dev/null || echo '?') E"
+          echo "memory    : $(( $(sysctl -n hw.memsize) / 1073741824 )) GiB"
+          echo "macOS     : $(sw_vers -productVersion)  build $(sw_vers -buildVersion)"
+          echo "loadavg   : $(sysctl -n vm.loadavg)"
+          echo "--- GPU ---"
+          system_profiler SPDisplaysDataType 2>/dev/null | sed -n '1,14p' || true
+          echo
+          echo "!! CAVEAT TO CARRY WITH EVERY NUMBER BELOW: GitHub's macOS arm64"
+          echo "!! runner is a VIRTUALISED slice (3 vCPU of an M1-class part),"
+          echo "!! not a whole laptop or phone SoC. The CPU arm is therefore"
+          echo "!! pessimistic relative to a real M-series Mac, and the GPU"
+          echo "!! slice is likewise not a full GPU. Read the RATIO, and read"
+          echo "!! the absolute real-time factors as a lower bound on what the"
+          echo "!! shipped devices can do."
+
+      # GGML_METAL=ON is what ci.yml:402 already builds on macOS, so this is
+      # the shipped configuration and not a special one. GGML_METAL_EMBED_LIBRARY
+      # puts the .metal source in the binary, so no runtime path lookup can
+      # silently fail and drop the whole thing back to the CPU — which would
+      # turn this A/B into two identical arms.
+      #
+      # Only the two parity-dump targets are built, not the CLI. They link just
+      # {hft-transformer|onsets-and-frames} + crispasr-core, they already print
+      # wall, CPU-seconds-per-audio-second, real-time factor, note count and
+      # peak RSS, and they dump every head activation to .f32 — which is the
+      # parity half of this job. Building the whole CLI would cost 20 minutes
+      # of macOS runner time for nothing extra.
+      - name: Build (Metal on)
+        run: |
+          set -e
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+                -DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON -DGGML_NATIVE=ON \
+                -DCRISPASR_BUILD_TESTS=ON -DCRISPASR_BUILD_SERVER=OFF
+          cmake --build build --target ${{ matrix.dump }} -j "$(sysctl -n hw.ncpu)"
+          ls -l "build/bin/${{ matrix.dump }}"
+
+      # Both repos are public and in src/crispasr_model_registry.cpp as of
+      # today; before that these models could not be run on CI at all.
+      - name: Fetch models
+        run: |
+          set -e
+          mkdir -p m
+          for q in $QUANTS; do
+            url="https://huggingface.co/${{ matrix.repo }}/resolve/main/${{ matrix.prefix }}-$q.gguf"
+            if curl -fsSL -o "m/$q.gguf" "$url"; then
+              echo "fetched $q  $(ls -l "m/$q.gguf" | awk '{print $5}') bytes"
+            else
+              echo "::warning::${{ matrix.prefix }}-$q.gguf not fetched — that arm will be skipped"
+              rm -f "m/$q.gguf"
+            fi
+          done
+          ls -l m
+          test -n "$(ls m)" || { echo "::error::no models fetched, nothing to measure"; exit 1; }
+
+      # Two clip lengths so FIXED cost (model load, graph planning, Metal
+      # pipeline construction) separates from MARGINAL cost (per-second of
+      # audio). A single length cannot tell them apart, and for a tuner the
+      # marginal one is what decides "live use".
+      - name: Make the clips
+        run: |
+          python3 - <<'PY'
+          import wave, os
+          src = "samples/jfk.wav"
+          w = wave.open(src); n, sr, ch, sw = w.getnframes(), w.getframerate(), w.getnchannels(), w.getsampwidth()
+          pcm = w.readframes(n); w.close()
+          print(f"{src}: {n} frames, {sr} Hz, {ch} ch, {sw*8} bit, {n/sr:.2f} s")
+          assert sr == 16000 and ch == 1 and sw == 2, "the dumps require 16 kHz mono 16-bit"
+          def write(path, data):
+              o = wave.open(path, "wb"); o.setnchannels(1); o.setsampwidth(2); o.setframerate(16000)
+              o.writeframes(data); o.close()
+              print(f"  {path}: {len(data)//2/16000:.2f} s")
+          bps = 2 * 16000
+          write("clip-short.wav", pcm[: 3 * bps])
+          long_s = int(os.environ["LONG_SECONDS"])
+          need = long_s * bps
+          reps = -(-need // len(pcm))
+          write("clip-long.wav", (pcm * reps)[:need])
+          PY
+
+      # ── the A/B itself ───────────────────────────────────────────────────
+      #
+      # One process per arm; rep 0 discarded (page cache, dyld, and on Metal
+      # the pipeline-state construction, which is a genuinely large one-time
+      # cost this tree already caps — see core_metal_cache::apply()); median of
+      # the three that follow. Arms are run back to back with a rotating start
+      # order so a drift in runner load falls on every arm equally rather than
+      # on whichever one is last.
+      - name: A/B — CPU vs Metal, every arm in its own process
+        run: |
+          python3 - <<'PY' | tee ab-raw.txt
+          import json, os, pathlib, statistics, subprocess, sys
+
+          DUMP  = "build/bin/${{ matrix.dump }}"
+          MODEL = "${{ matrix.model }}"
+          NOGPU = {"hft": "CRISPASR_HFT_NO_GPU", "oaf": "CRISPASR_OAF_NO_GPU"}[MODEL]
+          NPROC = int(subprocess.check_output(["sysctl", "-n", "hw.ncpu"]).strip())
+          quants = [q for q in os.environ["QUANTS"].split() if pathlib.Path(f"m/{q}.gguf").exists()]
+          clips  = [("short", "clip-short.wav"), ("long", "clip-long.wav")]
+
+          arms = [(q, be, cl) for q in quants for be in ("cpu", "metal") for cl in ("short", "long")]
+          res  = {}
+
+          def run(q, be, clip, tag):
+              env = dict(os.environ)
+              # The dump's params default to use_gpu=false, so the Metal arm has
+              # to opt in; the CPU arm sets the model's own NO_GPU override, which
+              # wins over everything. Both arms are therefore explicit -- neither
+              # relies on a default that could change underneath this workflow.
+              if be == "metal":
+                  env["CRISPASR_PARITY_USE_GPU"] = "1"
+                  env.pop(NOGPU, None)
+              else:
+                  env.pop("CRISPASR_PARITY_USE_GPU", None)
+                  env[NOGPU] = "1"
+              wav = dict(clips)[clip]
+              pre = f"out/{tag}"
+              pathlib.Path("out").mkdir(exist_ok=True)
+              with open(pre + ".stderr", "w") as err:
+                  rc = subprocess.run([DUMP, f"m/{q}.gguf", wav, pre, str(NPROC)],
+                                      stdout=subprocess.DEVNULL, stderr=err, env=env).returncode
+              if rc != 0:
+                  sys.stderr.write(open(pre + ".stderr").read()[-4000:])
+                  raise SystemExit(f"::error::{tag} exited {rc} -- an arm that cannot run is a finding, not a skip")
+              meta = {}
+              for line in open(pre + ".meta.txt"):
+                  k, _, v = line.partition(" ")
+                  meta[k.strip()] = float(v)
+              # Proof the arm ran where it was told to. The CPU fallback is
+              # deliberate and silent, so without this a Metal arm that quietly
+              # fell back would be reported as "Metal is exactly as fast as CPU".
+              blob = open(pre + ".stderr").read()
+              want = "(GPU)" if be == "metal" else "(CPU)"
+              line = next((l for l in blob.splitlines() if ": backend = " in l), "<no backend line>")
+              if want not in line:
+                  raise SystemExit(f"::error::{tag} wanted {want} but the runtime said: {line}")
+              meta["_backend_line"] = line
+              return meta
+
+          for rep in range(4):
+              order = arms[rep % len(arms):] + arms[:rep % len(arms)]
+              for q, be, cl in order:
+                  tag = f"{q}-{be}-{cl}"
+                  m = run(q, be, cl, f"{tag}-rep{rep}")
+                  print(f"rep {rep}  {tag:<22} {m['cpu_factor']:7.3f} cpu-s/audio-s  "
+                        f"{m['realtime_factor']:7.3f} x RT  {m['peak_rss_mib']:6.0f} MiB  "
+                        f"notes={m['notes']:.0f}  [{m['_backend_line'].strip()}]", flush=True)
+                  if rep:  # rep 0 is cold
+                      res.setdefault(tag, []).append(m)
+
+          json.dump({k: [{kk: vv for kk, vv in m.items() if not kk.startswith("_")} for m in v]
+                     for k, v in res.items()}, open("ab.json", "w"), indent=1)
+          print("\nwrote ab.json")
+          PY
+
+      - name: The table
+        run: |
+          python3 - <<'PY' | tee ab-table.txt
+          import json, os, statistics
+          d = json.load(open("ab.json"))
+          med = lambda tag, f: statistics.median([m[f] for m in d[tag]]) if tag in d else None
+          MODEL = "${{ matrix.model }}"
+          quants = [q for q in os.environ["QUANTS"].split() if f"{q}-cpu-short" in d]
+          hdr = (f"{'quant':<6} {'clip':<6} {'backend':<7} {'cpu-s/audio-s':>14} {'x real time':>12} "
+                 f"{'peak RSS MiB':>13} {'notes':>6}")
+          print(hdr); print("-" * len(hdr))
+          for q in quants:
+              for cl in ("short", "long"):
+                  for be in ("cpu", "metal"):
+                      t = f"{q}-{be}-{cl}"
+                      if t not in d: continue
+                      print(f"{q:<6} {cl:<6} {be:<7} {med(t,'cpu_factor'):14.3f} "
+                            f"{med(t,'realtime_factor'):12.3f} {med(t,'peak_rss_mib'):13.0f} "
+                            f"{med(t,'notes'):6.0f}")
+          print()
+          print(f"{'quant':<6} {'clip':<6} {'Metal speedup (wall)':>22} {'Metal speedup (cpu-s)':>23}")
+          for q in quants:
+              for cl in ("short", "long"):
+                  a, b = f"{q}-cpu-{cl}", f"{q}-metal-{cl}"
+                  if a in d and b in d:
+                      print(f"{q:<6} {cl:<6} {med(a,'realtime_factor')/med(b,'realtime_factor'):21.2f}x "
+                            f"{med(a,'cpu_factor')/med(b,'cpu_factor'):22.2f}x")
+          print()
+          # Fixed vs marginal: solve wall = fixed + marginal * seconds from the
+          # two clip lengths. This is what a tuner cares about -- a big fixed
+          # cost is paid once at model load, a big marginal cost is paid forever.
+          print(f"{'quant':<6} {'backend':<7} {'fixed s':>9} {'marginal x RT':>14}")
+          for q in quants:
+              for be in ("cpu", "metal"):
+                  s, l = f"{q}-{be}-short", f"{q}-{be}-long"
+                  if s in d and l in d:
+                      ts, tl = med(s,'elapsed_ms')/1000, med(l,'elapsed_ms')/1000
+                      ss, sl = med(s,'audio_seconds'), med(l,'audio_seconds')
+                      marg = (tl - ts) / (sl - ss)
+                      print(f"{q:<6} {be:<7} {ts - marg*ss:9.2f} {marg:13.3f}x")
+          print()
+          print("UNDER REAL TIME means 'x real time' < 1.0 on the long clip.")
+          for q in quants:
+              for be in ("cpu", "metal"):
+                  t = f"{q}-{be}-long"
+                  if t in d:
+                      rt = med(t, 'realtime_factor')
+                      print(f"  {MODEL}-{q:<5} {be:<6} {rt:6.3f} x RT  -> "
+                            f"{'UNDER real time' if rt < 1.0 else 'over real time'}")
+          PY
+          cat ab-table.txt >> "$GITHUB_STEP_SUMMARY"
+
+      # ── correctness ──────────────────────────────────────────────────────
+      #
+      # A GPU backend that produces different numbers is a bug, not a speedup.
+      # Metal is fp32-or-fp16 depending on the op, so SOME difference is
+      # expected; the job of this step is to say HOW LARGE rather than to
+      # pretend there is none. Cosine alone is scale-blind, so the magnitude of
+      # each side is printed next to it (the lesson crispasr-diff carries in its
+      # |mine|/|ref| columns).
+      #
+      # Watched for specifically: docs/quantize.md records that Metal's q8
+      # mat-VEC kernel requantises activations and corrupts Chatterbox's CFM
+      # (NaN/garbage), which is why q8 weights are dequantised to F16 at load
+      # there. Neither of these models should reach that kernel -- hFT flattens
+      # its position-wise GEMMs into one many-row mul_mat (8f76e054) and O&F's
+      # convs go through im2col+mul_mat, both matrix-MATRIX -- but "should" is
+      # not a measurement, so the q8_0 arm is compared like every other and any
+      # NaN is a hard failure.
+      - name: Parity — Metal against the CPU path, per head
+        run: |
+          python3 - <<'PY' | tee parity.txt
+          import numpy as np, os, pathlib, sys
+          HEADS = "${{ matrix.heads }}".split()
+          quants = [q for q in os.environ["QUANTS"].split() if pathlib.Path(f"m/{q}.gguf").exists()]
+          bad = []
+          print(f"{'quant':<6} {'head':<9} {'cosine':>10} {'max|d|':>10} {'mean|d|':>10} "
+                f"{'|cpu|':>10} {'|metal|':>10}")
+          for q in quants:
+              # rep3 of the long clip: the last run of each arm, same input, both
+              # written by the same binary.
+              a = f"out/{q}-cpu-long-rep3"; b = f"out/{q}-metal-long-rep3"
+              for h in HEADS:
+                  fa, fb = pathlib.Path(f"{a}.{h}.f32"), pathlib.Path(f"{b}.{h}.f32")
+                  if not (fa.exists() and fb.exists()):
+                      print(f"{q:<6} {h:<9} {'(missing)':>10}"); continue
+                  x = np.fromfile(fa, dtype=np.float32); y = np.fromfile(fb, dtype=np.float32)
+                  if x.shape != y.shape:
+                      print(f"{q:<6} {h:<9} SHAPE {x.shape} vs {y.shape}"); bad.append((q,h,"shape")); continue
+                  if not np.isfinite(y).all():
+                      n = int((~np.isfinite(y)).sum())
+                      print(f"{q:<6} {h:<9} {n} NON-FINITE values on the Metal side")
+                      bad.append((q,h,"nan")); continue
+                  cos = float(x @ y / (np.linalg.norm(x) * np.linalg.norm(y) + 1e-30))
+                  d = np.abs(x - y)
+                  print(f"{q:<6} {h:<9} {cos:10.6f} {d.max():10.3e} {d.mean():10.3e} "
+                        f"{np.abs(x).mean():10.3e} {np.abs(y).mean():10.3e}")
+                  if cos < 0.999:
+                      bad.append((q, h, f"cosine {cos:.6f}"))
+          print()
+          # Note-level output. If this moves, it is a FINDING and gets reported,
+          # not smoothed -- a threshold sitting on a knife edge moving one short
+          # note is expected; the pitch sequence changing is not.
+          print("note-level, CPU vs Metal (long clip):")
+          for q in quants:
+              try:
+                  la = [l.split("\t") for l in open(f"out/{q}-cpu-long-rep3.notes.tsv") if l.strip()]
+                  lb = [l.split("\t") for l in open(f"out/{q}-metal-long-rep3.notes.tsv") if l.strip()]
+              except FileNotFoundError:
+                  print(f"  {q}: no notes.tsv"); continue
+              pa, pb = [r[2] for r in la], [r[2] for r in lb]
+              if pa == pb:
+                  on = max((abs(float(x[0])-float(y[0])) for x, y in zip(la, lb)), default=0.0)
+                  off = max((abs(float(x[1])-float(y[1])) for x, y in zip(la, lb)), default=0.0)
+                  vel = max((abs(int(x[3])-int(y[3])) for x, y in zip(la, lb)), default=0)
+                  print(f"  {q}: {len(pa)} notes, pitch sequence IDENTICAL, "
+                        f"max onset shift {on*1000:.1f} ms, offset {off*1000:.1f} ms, velocity delta {vel}")
+              else:
+                  print(f"  {q}: NOTE OUTPUT DIFFERS — cpu {len(pa)} notes, metal {len(pb)} notes")
+                  bad.append((q, "notes", f"{len(pa)} vs {len(pb)}"))
+          print()
+          if bad:
+              for q, h, why in bad:
+                  print(f"::error::{q} {h}: {why}")
+              sys.exit(1)
+          print("all heads within cosine 0.999 of the CPU path, and the pitch sequences match")
+          PY
+          cat parity.txt >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: piano-metal-ab-${{ matrix.model }}
+          path: |
+            ab-raw.txt
+            ab-table.txt
+            ab.json
+            parity.txt
+            out/*.meta.txt
+            out/*.stderr
+            out/*.notes.tsv
