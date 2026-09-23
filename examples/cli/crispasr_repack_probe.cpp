@@ -232,6 +232,25 @@ int main(int argc, char ** argv) {
         for (ggml_backend_buffer_type_t * b = get_extra(dev); b && *b; ++b) extra.push_back(*b);
         printf("extra buffer types offered: %zu\n", extra.size());
         for (auto b : extra) printf("  - %s\n", ggml_backend_buft_name(b));
+        // The CPU device can offer several, and the order is not neutral:
+        // ggml pushes AMX first on a build with __AMX_INT8__ && __AVX512VNNI__.
+        // Select by name so a run on Emerald Rapids measures what it says it
+        // measures; --buft picks a different one.
+        const char * want = getenv("CRISPASR_EXTRA_BUFT");
+        if (!want) want = "CPU_REPACK";
+        std::vector<ggml_backend_buffer_type_t> sel;
+        for (auto b : extra) {
+            const char * n = ggml_backend_buft_name(b);
+            if (n && strcmp(n, want) == 0) sel.push_back(b);
+        }
+        if (sel.empty() && !extra.empty()) {
+            printf("NOTE: '%s' not offered here; falling back to '%s'\n", want,
+                   ggml_backend_buft_name(extra[0]));
+        } else {
+            extra = sel;
+        }
+        printf("measuring extra buffer type: %s\n",
+               extra.empty() ? "(none)" : ggml_backend_buft_name(extra[0]));
     }
     if (extra.empty()) {
         printf("\nRESULT: no extra buffer type on this host. The repack fast path\n"

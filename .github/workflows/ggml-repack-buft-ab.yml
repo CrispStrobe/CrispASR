@@ -63,6 +63,10 @@ jobs:
       - name: Host ISA — report this with every number below
         run: |
           echo "runner: ${{ matrix.os }} (${{ matrix.name }})  arch=$RUNNER_ARCH"
+          echo "!! GitHub's ubuntu-24.04 pool is HETEROGENEOUS: it hands out both"
+          echo "!! AMD EPYC 7763 (AVX2, no VNNI) and Intel Xeon Platinum 8573C"
+          echo "!! (AVX-512 VNNI + AMX-INT8). Read the model name below before"
+          echo "!! comparing this run to any other."
           echo "nproc : $(getconf _NPROCESSORS_ONLN)"
           if [ "$RUNNER_OS" = "Linux" ]; then
             grep -m1 'model name' /proc/cpuinfo || true
@@ -332,10 +336,10 @@ jobs:
       - name: Assert the arms were actually different
         run: |
           echo "== did the q4_0 repack arm take the fast path? =="
-          grep -h 'repack buffer type' hft-q4_0-repack.log || {
+          grep -h 'extra buffer type' hft-q4_0-repack.log || {
             echo "::error::the repack arm fell back; its number duplicates the generic arm"; exit 1; }
           echo "== and its control must NOT have =="
-          if grep -h 'repack buffer type' hft-q4_0-generic.log; then
+          if grep -h 'extra buffer type' hft-q4_0-generic.log; then
             echo "::error::the control arm took the repack path; the A/B compared the wrong thing"
             exit 1
           fi
@@ -347,11 +351,11 @@ jobs:
           echo
           echo "== q8_0: fast path on arm64, fallback on x86 =="
           if grep -qw asimddp /proc/cpuinfo || grep -qw i8mm /proc/cpuinfo; then
-            grep -h 'repack buffer type' hft-q8_0-repack.log || {
+            grep -h 'extra buffer type' hft-q8_0-repack.log || {
               echo "::error::arm64 has a q8_0 repack kernel but the loader did not use it"; exit 1; }
             echo "arm64: q8_0 repacked, as expected"
           else
-            if grep -h 'repack buffer type' hft-q8_0-repack.log; then
+            if grep -h 'extra buffer type' hft-q8_0-repack.log; then
               echo "::error::x86 has no q8_0 repack kernel, yet the loader claims it repacked -- check repack_buft_accepts()"
               exit 1
             fi

@@ -1308,9 +1308,32 @@ static const std::vector<ggml_backend_buffer_type_t>& cpu_extra_bufts() {
     return bufts;
 }
 
+// Pick the extra buffer type to use.
+//
+// ⚠ NOT v[0]. The CPU device can offer more than one extra buffer type, and
+// the order is fixed by ggml_backend_cpu_get_extra_buffer_types()
+// (ggml-cpu.cpp:42), which pushes AMX FIRST when the build has
+// __AMX_INT8__ && __AVX512VNNI__ — i.e. on any GGML_NATIVE build on Sapphire
+// Rapids or Emerald Rapids. Taking v[0] there silently selects AMX instead of
+// repack. That is not a hypothetical: GitHub's ubuntu-24.04 pool is
+// heterogeneous and hands out both AMD EPYC 7763 (AVX2, no VNNI) and Intel
+// Xeon Platinum 8573C (AVX-512 VNNI + AMX-INT8), and on the latter the first
+// version of this function selected AMX, repacked q8_0 on x86 — which has no
+// q8_0 *repack* kernel at all — and measured hFT 1.4–1.5× SLOWER than f32.
+//
+// So select by name, and let the name be overridden for A/B work.
 static ggml_backend_buffer_type_t repack_buft() {
-    const auto& v = cpu_extra_bufts();
-    return v.empty() ? nullptr : v[0];
+    static ggml_backend_buffer_type_t chosen = [] () -> ggml_backend_buffer_type_t {
+        const char* want = std::getenv("CRISPASR_GGUF_EXTRA_BUFT");
+        const char* name = (want && *want) ? want : "CPU_REPACK";
+        for (auto* b : cpu_extra_bufts()) {
+            const char* n = ggml_backend_buft_name(b);
+            if (n && std::strcmp(n, name) == 0)
+                return b;
+        }
+        return nullptr;
+    }();
+    return chosen;
 }
 
 // Opt-out, so a field failure can be bisected without a rebuild.
@@ -1500,8 +1523,11 @@ bool load_weights_repack(const char* path, ggml_backend_t cpu_backend, IsMatmulW
 
     if (n_repacked)
         *n_repacked = (int)rep_tensors.size();
-    fprintf(stderr, "%s: repack buffer type: %zu MiB (%zu tensors) repacked, %zu MiB (%zu tensors) default\n", tag,
-            rep_size / 1048576, rep_tensors.size(), def_size / 1048576, def_tensors.size());
+    // Name the buffer type. An A/B that does not say which extra buffer type
+    // it selected is not reproducible — see the note on repack_buft().
+    fprintf(stderr, "%s: extra buffer type '%s': %zu MiB (%zu tensors) repacked, %zu MiB (%zu tensors) default\n",
+            tag, ggml_backend_buft_name(rbuft), rep_size / 1048576, rep_tensors.size(), def_size / 1048576,
+            def_tensors.size());
 
     gguf_free(gctx);
     return true;
