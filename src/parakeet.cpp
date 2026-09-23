@@ -3226,7 +3226,10 @@ static ggml_cgraph* parakeet_build_graph_encoder_dump(parakeet_context* ctx, int
         cur = tag; // chain next layer off the tagged tensor (numerics fix)
     }
 
-    ggml_set_name(cur, "enc_out");
+    // Do NOT rename cur here: after the loop it IS the dump_layer_{n-1} tag.
+    // Naming it "enc_out" deleted that tag from the graph, so the last layer's
+    // dump was never read and crispasr-diff compared the reference against an
+    // untouched zero buffer, which scored PASS (#445).
     ggml_build_forward_expand(gf, cur);
     ggml_free(ctx0);
     return gf;

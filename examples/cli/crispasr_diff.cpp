@@ -295,6 +295,16 @@ Report Ref::compare(const std::string& name, const float* data, size_t n_elem, C
                 if (!finite_row)
                     continue;
                 const double denom = std::sqrt(na) * std::sqrt(nb);
+                // A row that is all-zero on exactly one side is a total
+                // mismatch, not an undefined one: skipping it left cos_min at
+                // its 1.0 seed, so an output buffer the runtime never wrote
+                // scored cos=1.000000 PASS (#445: parakeet encoder_layer_23).
+                const bool zero_a = na <= 1e-24, zero_b = nb <= 1e-24;
+                if (zero_a != zero_b) {
+                    r.cos_min = std::min(r.cos_min, 0.0f);
+                    cos_rows++;
+                    continue;
+                }
                 if (denom > 1e-12) {
                     const float cs = (float)(dot / denom);
                     if (cs < r.cos_min)

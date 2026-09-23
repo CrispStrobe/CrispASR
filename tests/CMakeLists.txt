@@ -5797,3 +5797,21 @@ catch_discover_tests(test-subprocess
     TEST_SPEC "[subprocess]"
     PROPERTIES LABELS "unit;subprocess"
 )
+
+# ─── test-crispasr-diff-compare — Ref::compare must fail a candidate buffer
+# the runtime never wrote (all-zero rows), not score it cos=1 PASS (#445).
+# crispasr-diff-lib is defined later (examples/cli); link names resolve at
+# generate time, so guard on the option that creates it rather than TARGET.
+if (CRISPASR_BUILD_EXAMPLES)
+    add_executable(test-crispasr-diff-compare
+        test-crispasr-diff-compare.cpp
+    )
+    target_link_libraries(test-crispasr-diff-compare PRIVATE
+        Catch2::Catch2WithMain
+        crispasr-diff-lib
+    )
+    catch_discover_tests(test-crispasr-diff-compare
+        TEST_SPEC "[diff]"
+        PROPERTIES LABELS "unit;diff"
+    )
+endif()
