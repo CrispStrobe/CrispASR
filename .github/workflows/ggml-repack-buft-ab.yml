@@ -143,45 +143,41 @@ jobs:
           ./repack-probe --threads 1 --reps 40 | tee ab-t1.txt
           ./repack-probe --threads "$(getconf _NPROCESSORS_ONLN)" --reps 40 | tee ab-tN.txt
 
-      # Median across the surviving reps, per (arm, type, shape, threads), and
-      # the ratio. Awk rather than a script file so the workflow stays hermetic.
+      # Median across the surviving reps, per (arm, type, shape, threads).
+      # python3 rather than awk: the first cut of this was awk and it silently
+      # emitted a header and no rows, which is the worst possible failure for a
+      # perf step -- it looks like "measured, nothing to report".
       - name: Ratios from the separate-process arms
         run: |
-          sort -k2,2 -k3,3 -k4,4 -k5,5 -k6,6 -k7,7 arms.txt | awk '
-            $10 == "ok" { key = $3" "$4" "$5" "$6" "$7; v[key" "$2][++n[key" "$2]] = $8 }
-            $10 == "declined" { dec[$3" "$7] = 1 }
-            END {
-              printf "%-6s %-18s %-3s %10s %10s %8s\n", "type", "shape(K,N,M)", "thr", "default", "repack", "speedup"
-              for (k in n) { split(k, p, " "); key = p[1]" "p[2]" "p[3]" "p[4]" "p[5]; arms[key] = 1 }
-              for (key in arms) {
-                nd = n[key" default"]; nr = n[key" repack"]
-                if (!nd) continue
-                asort_med(v[key" default"], nd); d = med
-                if (nr) { asort_med(v[key" repack"], nr); r = med } else r = 0
-                split(key, p, " ")
-                if (r > 0) printf "%-6s %-18s %-3s %10.4f %10.4f %7.2fx\n", p[1], p[2]","p[3]","p[4], p[5], d, r, d/r
-                else       printf "%-6s %-18s %-3s %10.4f %10s %8s\n", p[1], p[2]","p[3]","p[4], p[5], d, "-", "declined"
-              }
-            }
-            function asort_med(a, cnt,   i, j, t) {
-              for (i = 1; i <= cnt; i++) for (j = i+1; j <= cnt; j++) if (a[j] < a[i]) { t=a[i]; a[i]=a[j]; a[j]=t }
-              med = a[int((cnt+1)/2)]
-            }' | sort | tee ratios.txt
-
-      # A probe that silently found no repack buffer type would otherwise pass
-      # green and be read as "measured, no win". Make the distinction explicit.
-      - name: Say which of the three outcomes this leg is
-        run: |
-          if grep -q 'extra buffer types offered: 0' ab-t1.txt || \
-             grep -q 'no extra buffer type on this host' ab-t1.txt; then
-            echo "::warning::NO repack buffer type offered on ${{ matrix.name }} — untestable here, not a negative result"
-          elif grep -q 'repack [0-9.]*x' ab-t1.txt; then
-            echo "repack buffer type present AND exercised on ${{ matrix.name }}"
-          else
-            echo "::warning::repack buffer type offered on ${{ matrix.name }} but DECLINED every type probed"
-          fi
-          echo "--- types with no kernel on this ISA ---"
-          grep 'DECLINED' ab-t1.txt || echo "(none)"
+          python3 - arms.txt <<'PY' | tee ratios.txt
+          import sys, collections, statistics
+          rows = collections.defaultdict(list); declined = set()
+          for line in open(sys.argv[1]):
+              p = line.split()
+              if len(p) < 10 or p[0] != "ARM":
+                  continue
+              arm, ty, K, N, M, thr = p[1], p[2], p[3], p[4], p[5], p[6]
+              key = (ty, K, N, M, thr)
+              if p[-1] == "declined":
+                  declined.add((key, arm)); continue
+              rows[(key, arm)].append(float(p[7]))      # best-of within the process
+          print(f"{'type':<6} {'shape(K,N,M)':<16} {'thr':<4} {'default':>9} {'repack':>9} {'speedup':>9}")
+          seen = {k for (k, a) in rows} | {k for (k, a) in declined}
+          if not seen:
+              sys.exit("no ARM rows parsed -- the probe printed nothing usable")
+          for k in sorted(seen, key=lambda x: (int(x[4]), x[1], x[0])):
+              d = rows.get((k, "default"))
+              if not d:
+                  continue
+              dm = statistics.median(d)
+              r = rows.get((k, "repack"))
+              shape = f"{k[1]},{k[2]},{k[3]}"
+              if r:
+                  rm = statistics.median(r)
+                  print(f"{k[0]:<6} {shape:<16} {k[4]:<4} {dm:9.4f} {rm:9.4f} {dm/rm:8.2f}x")
+              else:
+                  print(f"{k[0]:<6} {shape:<16} {k[4]:<4} {dm:9.4f} {'-':>9} {'declined':>9}")
+          PY
 
       - uses: actions/upload-artifact@v4
         with:

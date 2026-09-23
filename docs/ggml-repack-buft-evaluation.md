@@ -6,11 +6,24 @@ resolves the disagreement between the hFT-Transformer and Onsets & Frames
 quantisation numbers that §4 and `ONSETS_AND_FRAMES_PERF.md` both flag as
 unexplained.
 
-**Short answer: yes, it is offered, and yes it pays — a lot — but not for the
-quantisation every model in this tree actually ships.** On x86 ggml has no
-repacked q8_0 kernel at all, so the models that exist today gain nothing. q4_0
-and q4_K gain 1.4–3.4×, which is enough to turn quantisation from a throughput
-*loss* into a throughput *win* against f32.
+**Short answer: yes, it is offered on every machine tested, and yes it pays —
+but which quantisations it pays for depends entirely on the ISA, and the answer
+splits cleanly in two.**
+
+* **On arm64 it is a large win for the models exactly as they ship.** Nothing
+  is declined — q8_0 included — and q8_0 gets **2.3–2.4×** over the generic
+  path on Linux arm64, and **3.1–3.4× on Apple Silicon**, the platform
+  CrispASR actually ships to. It compounds with a fact x86 does not prepare you for:
+  on arm64 the *generic* quantised path is already **3× faster** than f32, so
+  q8_0 + repack lands at **0.13–0.15× the cost of f32**, roughly **7×**.
+* **On x86 it cannot help any model in this tree today.** ggml has no repacked
+  q8_0 kernel for x86 at all, and every quantised GGUF here is q8_0. q4_0 and
+  q4_K do gain 1.7–2.9× on a clean runner, so the lever is real — it just
+  requires re-quantising, which is an accuracy decision.
+
+If CrispASR cares about phones and Apple Silicon, **this is worth adopting**.
+If the target is an x86 server, it is worth nothing until something is
+re-quantised.
 
 Everything below was measured with `crispasr-repack-probe`
 (`examples/cli/crispasr_repack_probe.cpp`) and, for the end-to-end arm, the
@@ -112,16 +125,23 @@ resident private page for every weight byte.
 `ggml_repack_get_optimal_repack_type` (`repack.cpp:4528`) is a table over
 (quant type, ISA, `ne[1]` divisibility). Read out on x86:
 
-| GGUF type | x86 repack kernel? | gate |
-| --- | --- | --- |
-| **q8_0** | **NO** | NEON+dotprod / NEON+i8mm / RISC-V only — no AVX2 or AVX-512 branch exists |
-| q4_0 | yes | `ggml_cpu_has_avx2() && ne[1] % 8 == 0` → `q4_0_8x8_q8_0` |
-| q4_K | yes | `ggml_cpu_has_avx2() && ne[1] % 8 == 0` → `q4_K_8x8_q8_K` |
-| q5_K, q6_K | **NO** | NEON only |
-| iq4_nl, mxfp4 | yes | AVX2 |
+| GGUF type | x86 | arm64 (dotprod/i8mm) | gate |
+| --- | --- | --- | --- |
+| **q8_0** | **NO** | **yes** | NEON+dotprod / NEON+i8mm / RISC-V only — no AVX2 or AVX-512 branch exists |
+| q4_0 | yes | yes | `avx2 && ne[1] % 8 == 0` → `q4_0_8x8_q8_0`; NEON via dotprod/i8mm |
+| q4_K | yes | yes | `avx2 && ne[1] % 8 == 0` → `q4_K_8x8_q8_K` |
+| q5_K, q6_K | **NO** | **yes** | NEON only |
+| iq4_nl, mxfp4 | yes | yes | AVX2 / NEON+dotprod |
+
+Confirmed at runtime, not just read: the x86 runs decline q8_0, q5_K and q6_K,
+and the arm64 run declines **nothing**.
 
 **This is the finding that decides the whole question for this tree today.**
-Every quantised model here ships q8_0, and q8_0 has no repacked kernel on x86.
+Every quantised model here ships q8_0 — verified by reading the GGUF headers:
+`hft-transformer-q8_0.gguf` is 63 Q8_0 tensors and 94 F32, and all 63 are 2-D
+with `ne[1] % 8 == 0`, so they are repack-eligible *by shape* on every ISA. On
+x86 they are declined anyway, because q8_0 has no repacked kernel there. On
+arm64 all 63 are accepted.
 The AVX2 kernels that do exist (`arch/x86/repack.cpp:2026`) use
 `gemm_q4_b32_8x8_q8_0_lut_avx` and do **not** need VNNI — they fall back to
 `maddubs`-style accumulation — which is why the win below shows up on machines
@@ -129,9 +149,9 @@ that have no int8 instruction at all. The playbook's reasoning ("no VNNI, so
 there is no int8 dot-product for the repacked path to reach") was too
 pessimistic: the *layout* pays on its own.
 
-On arm64 the table is the other way round — q8_0 *does* have a kernel under
-`dotprod`/`i8mm`, while q4_K's AVX2 branch obviously does not apply. **Nothing
-in this document should be carried to a phone build.**
+On arm64 the table is the other way round, and §3c measures it: q8_0 gets a
+kernel under `dotprod`/`i8mm` and is 2.3–2.4× faster repacked. **Do not carry
+the x86 conclusion to a phone build, in either direction.**
 
 ### 2a. A trap for anyone wiring this up
 
@@ -190,6 +210,65 @@ Numerical agreement between arms is ~1e-7 relative on the output sum — the
 repacked kernel quantises the activation the same way, so this is rounding
 order, not a different answer.
 
+### 3c. GitHub Actions — clean runners, the numbers to cite
+
+`.github/workflows/ggml-repack-buft-ab.yml`, run 35817843249. Dedicated
+4-core runners at load ~0. Two independent views are taken and they agree to a
+few percent: the in-process interleave above, and **one arm per process with
+the cold run discarded and the median of three**, which is the discipline
+`basic-pitch-conv-ab.yml` encodes. The table below is the separate-process one.
+
+**`ubuntu-24.04-arm` — arm64, `dotprod` + `i8mm` + `sve`. Nothing declined.**
+
+| type | 1 thread, K=512 N=2048 M=256 | 4 threads | vs f32 (generic → repacked) |
+| --- | --- | --- | --- |
+| f32 | 30.99 ms | 8.15 ms | — |
+| **q8_0** | 9.86 → **4.15 ms**, **2.37×** | 2.52 → **1.04 ms**, **2.42×** | 0.32× → **0.13×** |
+| q4_0 | 12.16 → 3.44 ms, **3.54×** | 3.10 → 0.86 ms, **3.59×** | 0.39× → **0.11×** |
+| q4_K | 11.10 → 6.17 ms, 1.80× | 2.87 → 1.56 ms, 1.83× | 0.36× → 0.20× |
+| q6_K | 17.73 → 8.01 ms, 2.21× | 4.53 → 1.98 ms, 2.29× | 0.57× → 0.26× |
+
+The other two shapes give 2.26–2.37× for q8_0 and 3.34–3.59× for q4_0, so the
+effect is flat in shape and in thread count.
+
+**`macos-14` — Apple Silicon, `neon` + `dotprod` (ggml reports `i8mm` = 0).
+Nothing declined.** This is the platform CrispASR actually ships to.
+
+| type | 1 thread, K=512 N=2048 M=256 | vs f32 (generic → repacked) |
+| --- | --- | --- |
+| f32 | 17.41 ms | — |
+| **q8_0** | 7.99 → **2.40 ms**, **3.33×** | 0.45× → **0.13×** |
+| q4_0 | 9.12 → 2.24 ms, **4.07×** | 0.52× → **0.12×** |
+| q4_K | 8.11 → 3.16 ms, 2.57× | 0.48× → 0.19× |
+| q6_K | 13.11 → 6.16 ms, 2.13× | 0.92× → 0.46× |
+
+Apple Silicon is the **best** case measured anywhere: q8_0 at 3.1–3.4× over the
+generic path, and 4.0× for q4_0. Note it reaches this with `dotprod` but
+without `i8mm`.
+
+**`ubuntu-24.04` — AMD EPYC 7763, AVX2, no AVX-512, no VNNI.**
+
+| type | 1 thread, K=512 N=2048 M=256 | 4 threads | vs f32 |
+| --- | --- | --- | --- |
+| f32 | 14.43 ms | 6.73 ms | — |
+| **q8_0** | 13.48 ms, **declined** | 5.95 ms, **declined** | 0.92×, no repack kernel |
+| q4_0 | 17.54 → 6.58 ms, **2.67×** | 7.79 → 3.05 ms, **2.55×** | 1.20× → **0.45×** |
+| q4_K | 12.31 → 5.91 ms, **2.08×** | 5.41 → 2.71 ms, 1.99× | 0.83× → **0.40×** |
+| q6_K | 14.66 ms, **declined** | 6.35 ms, declined | 1.00×, no repack kernel |
+
+⚠ **One number here disagrees with the VPS and the disagreement is real, not
+noise.** Generic-path q8_0 measures **0.84–1.05× f32 on the EPYC** but
+**1.08–1.31× f32 on the Skylake-SP VPS**. That is an ISA difference, not
+contention: Skylake-SP has AVX-512, so its *f32* GEMM is unusually fast, which
+makes the quantised path look correspondingly worse. **hFT's 29% q8_0 penalty
+may therefore be specific to AVX-512 hosts and not an x86-wide fact.** The
+end-to-end CI job exists partly to settle that; until it has, treat "quantising
+costs you throughput" as a statement about AVX-512 x86, which is where it was
+measured.
+
+Numerical agreement between arms is 1e-8 to 5e-7 relative on the output sum
+across every machine and type — rounding order, not a different answer.
+
 ---
 
 ## 4. The hFT / Onsets & Frames contradiction, resolved
@@ -201,40 +280,69 @@ The two measurements were:
 * Onsets & Frames: q8_0 at **0.96× the CPU of f32** (0.425 vs 0.442),
   `ONSETS_AND_FRAMES_PERF.md`.
 
-**The hFT number is real and is now reproduced at the kernel level.** §3 shows
-generic-path q8_0 costing 1.08–1.31× f32 for transformer-shaped GEMMs on this
-exact box, with no model, no decoder and no front end involved. hFT is 83.5%
-weight GEMM, so a 1.1–1.3× kernel penalty across 83.5% of the work is a
-1.08–1.26× whole-model penalty. The measured 1.29× sits at the top of that
-range. It is a mechanism, not noise: quantised weights force ggml's generic
-path to re-quantise the activation to Q8_0 on every GEMM and then run a
-`vec_dot`, and on this ISA that costs more than the f32 GEMM it replaces.
+They are not in conflict, and the reason is not op mix in the abstract — it is
+**which tensors the two converters actually quantise**, read straight out of
+the GGUF headers.
 
-**The O&F number is not a contradiction. It is a null result being read as a
-sign.** O&F's op mix is 46% convolution, 29% LSTM, 19% dense. Convolution goes
-through `ggml_conv_2d`'s im2col and the LSTM is a scalar C++ recurrence;
-**neither touches a quantised weight GEMM**, so at most 19% of the work is even
-eligible for the q8_0 penalty. Propagating §3's kernel penalty through that mix
-predicts a whole-model change of roughly **+2% to +6%** — call it ±0.01 on a
-0.44 CPU-s-per-audio-second figure. The measured difference was **0.017, i.e.
-3.8%**, on a box whose run-to-run spread for the *same* arm is 20–50% (§3).
-The margin is inside the noise floor by a wide margin, and its sign carries no
-information.
+### 4a. hFT's q8_0 is quantised everywhere that matters
 
-So the two numbers are not in conflict: one model is dominated by the op that
-quantisation penalises and shows the penalty; the other spends 81% of its time
-on ops quantisation does not touch and shows nothing, which is exactly what the
-op mixes predict.
+`hft-transformer-q8_0.gguf`: 157 tensors, **63 Q8_0 and 94 F32**. All 63 are
+2-D, all have `ne[1] % 8 == 0`, and every one of them is used exactly once as
+`src[0]` of `ggml_mul_mat` in `hft_linear_apply()`. The model is 83.5% weight
+GEMM, so essentially all of the arithmetic runs on a quantised weight through
+ggml's generic path.
 
-**What this costs the reader:** `ONSETS_AND_FRAMES_PERF.md`'s "q8_0 is slightly
-FASTER than f32 here" should be read as "q8_0 and f32 are indistinguishable
-here, as the op mix predicts". Its own caution — "small, one box, one model" —
-was the right instinct. §4 of the playbook needs no correction on this point;
-its "quantise for size, and measure" advice survives, with the addition that
-**which** ops the model spends its time in tells you in advance how much the
-measurement can possibly move.
+§3 measures that path's cost directly, with no model involved: generic q8_0
+`MUL_MAT` is **1.08–1.31× f32** for transformer-shaped GEMMs. Applied to 83.5%
+of the work that predicts a 1.07–1.26× whole-model penalty; 1.29× was measured.
+**hFT's 29% is a real kernel effect and is now reproduced from first
+principles.**
 
----
+### 4b. Onsets & Frames' q8_0 barely quantises anything on the hot path
+
+`onsets-and-frames-q8_0.gguf`: 62 tensors, **19 Q8_0 and 43 F32**. Two facts
+decide it:
+
+1. **Every convolution weight stays F32** — all twelve
+   `oaf.*.conv{0,1,2}.weight` are F32 `[3,3,·,·]`. The measured profile in
+   `ONSETS_AND_FRAMES_PERF.md` puts the conv stacks at **72% of the forward**.
+   Seventy-two per cent of this model's work never touches a quantised weight
+   at all, in either GGUF.
+2. **The LSTM recurrence never sees a quantised tensor either.** The `R`
+   matrices are Q8_0 in the file, but `src/onsets_and_frames.cpp:76` is
+   explicit: the recurrence "is dequantised once at load". The same doc
+   measures the recurrence at **91% of the BiLSTM**, and the BiLSTM at 27% of
+   the forward.
+
+What is left exposed to ggml's quantised GEMM path is the LSTM **input
+projections** — 19.1 + 18.0 ms out of ~600 ms per BiLSTM, so about **1.7% of
+the whole forward** — plus the `fc`/`head` GEMMs, which that profile records as
+*below the noise floor*. Call the exposure 2%.
+
+At §3's 1.1–1.3× kernel penalty, 2% exposure predicts a whole-model difference
+of about **+0.6%**. The measured difference was **3.8%, in the other
+direction**, on a box whose run-to-run spread for a *single* arm is 20–50%
+(§0). **It is a null result, and its sign carries no information.**
+
+### 4c. What to take from it
+
+* hFT's 29% is real. Do not explain it away.
+* O&F's "q8_0 is slightly faster" should read "q8_0 and f32 are
+  indistinguishable here, as the file's own tensor types predict".
+* ⚠ The brief that prompted this work described O&F as "46% convolution, 29%
+  LSTM, 19% dense". **That split is not what the tree measured** — its own
+  instrumented profile is 72% conv / 27% BiLSTM / heads below the noise floor,
+  and the 19%-dense figure in particular overstates the quantised share by
+  roughly an order of magnitude. The conclusion is the same either way, but
+  more strongly on the real numbers.
+* The generalisable rule is sharper than "measure": **open the GGUF and look at
+  which tensors are actually quantised before predicting anything from a
+  quantisation A/B.** A converter that leaves the convolutions in F32 has
+  already decided that the A/B cannot move.
+* A corollary worth flagging separately: O&F's q8_0 GGUF **dequantises its
+  largest quantised tensors back to F32 at load**, so the file is smaller but
+  the resident set is not correspondingly smaller. That is a size claim worth
+  re-checking, not a perf one, and it is out of scope here.
 
 ## 5. What was changed in the tree
 
