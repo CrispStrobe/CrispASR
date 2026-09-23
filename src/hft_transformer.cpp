@@ -99,6 +99,10 @@ struct hft_transformer_ctx {
 
     ggml_context* w_ctx = nullptr;
     ggml_backend_buffer_t w_buf = nullptr;
+    // load_weights_repack() returns TWO weight buffers: the repack partition
+    // in wl.buf and the default one in wl.buf_cpu. Both must be released, and
+    // wl.buf_cpu is null on the ordinary (non-repack) path.
+    ggml_backend_buffer_t w_buf_cpu = nullptr;
     ggml_backend_t backend = nullptr;
 
     std::vector<float> mel_fb; // [n_mels * n_freqs], MelsFreqs layout
@@ -301,6 +305,7 @@ struct hft_transformer_ctx* hft_transformer_init_from_file(const char* path, str
     }
     ctx->w_ctx = wl.ctx;
     ctx->w_buf = wl.buf;
+    ctx->w_buf_cpu = wl.buf_cpu;
 
     auto& w = ctx->weights;
     auto& tm = wl.tensors;
@@ -374,6 +379,8 @@ void hft_transformer_free(struct hft_transformer_ctx* ctx) {
         ggml_gallocr_free(ctx->alloc_time);
     if (ctx->w_buf)
         core_gguf::release_weight_buffer(ctx->w_buf);
+    if (ctx->w_buf_cpu)
+        core_gguf::release_weight_buffer(ctx->w_buf_cpu);
     if (ctx->w_ctx)
         ggml_free(ctx->w_ctx);
     if (ctx->backend)
