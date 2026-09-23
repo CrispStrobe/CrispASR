@@ -487,6 +487,37 @@ disproportionately slow on that runner. The within-machine ratios above are
 interleaved A/Bs and are unaffected, but the cross-machine absolute numbers
 should not be compared until that is understood.
 
+#### Final run, both legs green, both guards satisfied (run 35820466189)
+
+This is the authoritative end-to-end table: the loader selects the buffer type
+by name, the parity guard is the corrected one, and both legs passed. **Note
+the x86 CPU — GitHub's pool is heterogeneous and this run drew a third one.**
+
+| arm | `ubuntu-24.04` = **AMD EPYC 9V74**, AVX-512 **VNNI**, no AMX | `ubuntu-24.04-arm`, dotprod |
+| --- | --- | --- |
+| hFT f32 | 25.56 cpu-s | 102.67 cpu-s |
+| hFT q8_0 generic | 21.55 — **0.84× f32** | 51.79 — 0.50× f32 |
+| hFT q8_0 + repack | 21.53 — 0.84× (*declined, fell back*) | **37.58 — 0.37×**, **1.38× over generic** |
+| hFT q4_0 generic | 23.28 — 0.91× f32 | 56.92 — 0.55× f32 |
+| **hFT q4_0 + repack** | **18.81 — 0.74×**, **1.24× over generic** | **36.02 — 0.35×**, **1.58× over generic** |
+| O&F q8_0 vs f32 | 2.84 vs 2.90 — **0.98×** | 3.91 vs 4.44 — 0.88× |
+
+Guards: `x86: q8_0 correctly declined and fell back to the mmap path`;
+`arm64: q8_0 repacked, as expected`; `pitch sequence: IDENTICAL` on both. The
+arm64 figures reproduce the previous run to within 0.4%.
+
+**And this settles the VNNI question for CPU_REPACK on x86.** The EPYC 9V74
+has `avx512_vnni = 1`. The repacked path's lead there is **1.24×**, *smaller*
+than the **1.69×** measured on the VNNI-less EPYC 7763 — because VNNI speeds
+up the **generic** path too: q4_0 generic is 0.91× f32 on the 9V74 against
+1.22× on the 7763. So VNNI does not widen the repack lead; it narrows it, by
+lifting the baseline. The repacked path still wins, everywhere it has a kernel.
+
+The other thing this table shows, and it is the broadest correction in this
+document: **on a VNNI x86 CPU, quantisation is already faster than f32 with no
+repacking at all** — q8_0 at 0.84×. Playbook §4's "quantising does not make
+CPU inference faster" holds only for older x86 without VNNI.
+
 #### The arm64 q8_0 number — the one that decides adoption
 
 Run 35819665631 added the missing arm. On `ubuntu-24.04-arm`, whole model,

@@ -575,8 +575,14 @@ three things below. Summary of what changed:**
   quantised GGUF in this tree is q8_0. So on x86 this lever is worth nothing
   without re-quantising to q4_0/q4_K, which is an accuracy decision; on arm64,
   including Apple Silicon, it is worth 2.3–3.4× on the files as they exist.
-- ⚠ **"Quantisation does not make CPU inference faster" is an AVX-512 x86
-  statement, not a universal one.** On arm64 the *generic* quantised path is
+- ⚠ **"Quantisation does not make CPU inference faster" is a statement about
+  OLD x86 — pre-VNNI — and nothing else.** Measured whole-model, hFT q8_0
+  against f32, one process per arm, interleaved, median of 3: **1.29×** on the
+  Skylake-SP VPS (AVX-512, no VNNI), **1.09×** on an AMD EPYC 7763 (AVX2),
+  **0.84×** on an AMD EPYC 9V74 (AVX-512 **VNNI**) and **0.50×** on arm64. On
+  anything with an int8 dot-product instruction, quantisation is a *speedup*
+  before any repacking at all.
+- ⚠ **The original statement in ISA terms.** On arm64 the *generic* quantised path is
   already 2.2–3.1× faster than f32 before any repacking, and q8_0 + repack lands at
   **0.12–0.15× the cost of f32**. Even on x86 the sign is ISA-dependent:
   generic q8_0 measures 1.08–1.31× f32 on the Skylake-SP VPS but 0.84–1.05× on
