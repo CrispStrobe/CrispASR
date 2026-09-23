@@ -13,8 +13,8 @@ Target: `--backend xasr`, bit-for-bit behaviour of sherpa-onnx
 - Kaldi fbank, 80 bins, 25/10 ms, Povey window, preemph 0.97, remove DC,
   low 20 Hz, **high −400 → Nyquist−400 = 7600 Hz**, dither 0,
   **snip_edges = false**, samples in [−1, 1] (`normalize_samples = true`, no ×32768).
-- Kaldi builds its triangles in the mel domain; `core_kaldi` builds them in Hz.
-  Measure the difference against knf before deciding whether this needs an opt-in flag.
+- Kaldi builds its triangles in the mel domain, while `core_kaldi` historically
+  builds them in Hz. X-ASR uses the opt-in `mel_domain_triangles` (measured below).
 
 ### Chunk pump (sherpa `OnlineRecognizerTransducerImpl`)
 - Encoder input window `T = decode_chunk_len + 13` frames (13 = 7 + 2·3:
@@ -107,8 +107,10 @@ What the export looks like (`tools/kaggle/xasr-onnx-graph`):
 - The downsample `softmax(bias)` was constant-folded to (ds,1,1) constants,
   in the order 2,4,8,4,2 (stacks 1..5), then 2 (downsample_output). The
   converter stores log-weights, so softmax restores them.
-- `chunkwise_conv_scale` stays a full (2, C, K) anonymous initializer
-  (matched by first use + shape), so it is not chunk-specific.
+- `chunkwise_conv_scale` never shows up as a folded Mul constant, so it is
+  expected to be a full (2, C, K) anonymous initializer, which would make it
+  chunk-independent. This is not yet observed: the converter matches it by
+  first use + shape and exits if the count or shapes disagree.
 - The per-layer `bypass_scale` ("TODO: remove it") is absent, which is fine
   because it is never read.
 
