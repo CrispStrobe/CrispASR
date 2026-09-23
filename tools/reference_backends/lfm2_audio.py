@@ -29,6 +29,10 @@ Env vars:
 """
 
 from __future__ import annotations
+try:
+    from reference_backends._safe_capture import own as _own
+except ImportError:  # run as a standalone script from this directory
+    from _safe_capture import own as _own
 
 import os
 from pathlib import Path
@@ -91,7 +95,7 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
             # feats: (B=1, n_mels, T_mel)
             T_valid = int(feat_len[0].item())
             m = feats[0, :, :T_valid].transpose(0, 1).contiguous()
-            mel_captured["mel_spectrogram"] = m.detach().float()
+            mel_captured["mel_spectrogram"] = _own(m.detach().float())
         h_mel = processor.audio_processor.register_forward_hook(mel_hook)
 
     # --- Build chat state (triggers preprocessor via add_audio) ---
@@ -112,7 +116,7 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
         def pre_enc_hook(module, inp, output):
             # pre_encode returns (d_model, T_enc) tensor
             t = output if isinstance(output, torch.Tensor) else output[0]
-            pre_enc_captured["pre_encode_output"] = t.detach().float()
+            pre_enc_captured["pre_encode_output"] = _own(t.detach().float())
         h_pre_enc = model.conformer.pre_encode.register_forward_hook(pre_enc_hook)
 
     # --- Hook: per-encoder-layer ---
@@ -126,7 +130,7 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
                 def make_enc_hook(name):
                     def hook(module, inp, output):
                         t = output if isinstance(output, torch.Tensor) else output[0]
-                        enc_layer_captured[name] = t.detach().float()
+                        enc_layer_captured[name] = _own(t.detach().float())
                     return hook
                 enc_layer_handles.append(layer.register_forward_hook(make_enc_hook(stage_name)))
 
@@ -139,7 +143,7 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
             # enc: (B, D, T) — transpose to (T, D)
             T_enc = int(enc_len[0].item())
             e = enc[0, :, :T_enc].transpose(0, 1).contiguous()
-            enc_captured["encoder_output"] = e.detach().float()
+            enc_captured["encoder_output"] = _own(e.detach().float())
         h_enc = model.conformer.register_forward_hook(enc_hook)
 
     # --- Hook: audio adapter ---
@@ -147,7 +151,7 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
 
     if "adapter_output" in stages:
         def adap_hook(module, inp, output):
-            adap_captured["adapter_output"] = output.detach().float()
+            adap_captured["adapter_output"] = _own(output.detach().float())
         h_adap = model.audio_adapter.register_forward_hook(adap_hook)
 
     # --- Hook: LFM2 per-layer ---
@@ -160,7 +164,7 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
             def make_hook(name):
                 def hook(module, inp, output):
                     t = output if isinstance(output, torch.Tensor) else output[0]
-                    lfm_captured[name] = t.detach().float()
+                    lfm_captured[name] = _own(t.detach().float())
                 return hook
             lfm_handles.append(layer.register_forward_hook(make_hook(stage_name)))
 
@@ -169,7 +173,7 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
 
     if "lfm_output" in stages:
         def lfm_out_hook(module, inp, output):
-            lfm_out_captured["lfm_output"] = output.last_hidden_state.detach().float()
+            lfm_out_captured["lfm_output"] = _own(output.last_hidden_state.detach().float())
         h_lfm = model.lfm.register_forward_hook(lfm_out_hook)
 
     # --- Run prefill to capture encoder + adapter + LFM backbone ---
@@ -204,7 +208,7 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
                 def make_ao_hook(name):
                     def hook(module, inp, output):
                         t = output if isinstance(output, torch.Tensor) else output[0]
-                        ao_layer_captured[name] = t.detach().float()
+                        ao_layer_captured[name] = _own(t.detach().float())
                     return hook
                 ao_handles.append(layer.register_forward_hook(make_ao_hook(stage_name)))
 

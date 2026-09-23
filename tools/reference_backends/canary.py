@@ -31,6 +31,10 @@ Usage:
 """
 
 from __future__ import annotations
+try:
+    from reference_backends._safe_capture import own as _own
+except ImportError:  # run as a standalone script from this directory
+    from _safe_capture import own as _own
 
 from pathlib import Path
 from typing import Dict, Set
@@ -151,7 +155,7 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
                 def _make_hook(name):
                     def hook(_m, _inp, out):
                         t = out[0] if isinstance(out, (tuple, list)) else out
-                        pre_conv_captured[name] = t.detach().cpu().float()
+                        pre_conv_captured[name] = _own(t.detach().cpu().float())
                     return hook
                 pre_conv_handles.append(
                     conv_seq[idx].register_forward_hook(_make_hook(stage_name)))

@@ -24,6 +24,10 @@ Set QWEN3_TTS_CODEC_CODE=K to use K as the constant code value (default 0).
 """
 
 from __future__ import annotations
+try:
+    from reference_backends._safe_capture import own as _own
+except ImportError:  # run as a standalone script from this directory
+    from _safe_capture import own as _own
 
 import os
 import sys
@@ -109,7 +113,7 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
     if "codec_rvq_out" in stages:
         def cap_rvq(_mod, args):
             if "codec_rvq_out" not in captures and args:
-                captures["codec_rvq_out"] = args[0].detach().cpu().float()
+                captures["codec_rvq_out"] = _own(args[0].detach().cpu().float())
         handles.append(decoder.pre_conv.register_forward_pre_hook(cap_rvq))
     # Transformer-output-after-permute: the transformer's own last_hidden_state
     # is (B, T, 1024); after `.permute(0, 2, 1)` in Decoder.forward it's
@@ -118,7 +122,7 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
         def cap_xfmr(_mod, args, _kw):
             h = args[0] if args else None
             if h is not None and "codec_xfmr_out" not in captures:
-                captures["codec_xfmr_out"] = h.detach().cpu().float()
+                captures["codec_xfmr_out"] = _own(h.detach().cpu().float())
         handles.append(decoder.upsample[0][0].register_forward_pre_hook(
             cap_xfmr, with_kwargs=True))
 

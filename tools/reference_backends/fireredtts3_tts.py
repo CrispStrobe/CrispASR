@@ -45,6 +45,10 @@ Stages:
 """
 
 from __future__ import annotations
+try:
+    from reference_backends._safe_capture import own as _own
+except ImportError:  # run as a standalone script from this directory
+    from _safe_capture import own as _own
 
 import os
 import sys
@@ -141,7 +145,7 @@ def dump(model_dir: Path, audio: np.ndarray, stages: Set[str], **kwargs) -> Dict
     enc_hidden = {}
 
     def _enc_hook(mod, args, kwargs, out):
-        enc_hidden["v"] = out.last_hidden_state.detach().float()
+        enc_hidden["v"] = _own(out.last_hidden_state.detach().float())
 
     h1 = redae.encoder.qwen3.register_forward_hook(_enc_hook, with_kwargs=True)
     with torch.no_grad():
@@ -262,7 +266,7 @@ def dump(model_dir: Path, audio: np.ndarray, stages: Set[str], **kwargs) -> Dict
     dec_hidden = {}
 
     def _dec_hook(mod, args, kwargs, out):
-        dec_hidden["v"] = out.last_hidden_state.detach().float()
+        dec_hidden["v"] = _own(out.last_hidden_state.detach().float())
 
     h2 = redae.decoder.qwen3.register_forward_hook(_dec_hook, with_kwargs=True)
     with torch.no_grad():

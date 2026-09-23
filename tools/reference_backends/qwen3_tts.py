@@ -31,6 +31,10 @@ doesn't break. The synth text and ref text are env-configurable
 """
 
 from __future__ import annotations
+try:
+    from reference_backends._safe_capture import own as _own
+except ImportError:  # run as a standalone script from this directory
+    from _safe_capture import own as _own
 
 import os
 from pathlib import Path
@@ -229,7 +233,7 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
             if embeds is None and len(args) >= 5:
                 embeds = args[4]  # signature: (input_ids, attention_mask, position_ids, past_key_values, inputs_embeds)
             if embeds is not None:
-                captures["talker_inputs_embeds"] = embeds[0].detach().cpu().float()
+                captures["talker_inputs_embeds"] = _own(embeds[0].detach().cpu().float())
         handles.append(talker.model.register_forward_pre_hook(cap_embeds, with_kwargs=True))
 
     # ---- Per-step code-predictor capture ----
@@ -253,7 +257,7 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
             x = args[0]
             if isinstance(x, torch.Tensor):
                 # x shape: (1, T, hidden_size). Save flat (T, hidden_size).
-                captures[f"cp_step{i}_input_embed"] = x[0].detach().cpu().float()
+                captures[f"cp_step{i}_input_embed"] = _own(x[0].detach().cpu().float())
             cp_step_counter["i"] += 1
 
         handles.append(
@@ -270,7 +274,7 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
                     # output: (1, T, vocab). Last position only — matches
                     # what build_graph_code_pred_kv emits at the "logits"
                     # output node.
-                    captures[key] = output[0, -1].detach().cpu().float()
+                    captures[key] = _own(output[0, -1].detach().cpu().float())
             return hook
 
         for i in range(len(talker.code_predictor.lm_head)):

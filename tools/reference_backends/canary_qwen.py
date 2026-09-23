@@ -34,6 +34,10 @@ Usage:
 """
 
 from __future__ import annotations
+try:
+    from reference_backends._safe_capture import own as _own
+except ImportError:  # run as a standalone script from this directory
+    from _safe_capture import own as _own
 
 import sys
 from pathlib import Path
@@ -96,7 +100,7 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
 
     def _hook(name):
         def fn(_m, _inp, o):
-            cap[name] = o
+            cap[name] = _own(o)
         return fn
 
     handles = []

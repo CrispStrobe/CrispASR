@@ -69,6 +69,10 @@ catalogue of plan/source divergences caught during M3-M9):
 """
 
 from __future__ import annotations
+try:
+    from reference_backends._safe_capture import own as _own
+except ImportError:  # run as a standalone script from this directory
+    from _safe_capture import own as _own
 
 import os
 import sys
@@ -274,7 +278,7 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
             if hasattr(t, "last_hidden_state"):
                 t = t.last_hidden_state
             if isinstance(t, torch.Tensor):
-                captures[name] = t.detach().cpu().float()
+                captures[name] = _own(t.detach().cpu().float())
         return h
 
     def pre_hook(name):
@@ -283,7 +287,7 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
                 return
             x = args[0]
             if isinstance(x, torch.Tensor):
-                captures[name] = x.detach().cpu().float()
+                captures[name] = _own(x.detach().cpu().float())
         return h
 
     # ---- Hook registrations ----

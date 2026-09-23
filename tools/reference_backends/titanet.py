@@ -26,6 +26,10 @@ Usage:
 """
 
 from __future__ import annotations
+try:
+    from reference_backends._safe_capture import own as _own
+except ImportError:  # run as a standalone script from this directory
+    from _safe_capture import own as _own
 
 from pathlib import Path
 from typing import Dict, Set
@@ -90,7 +94,7 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
                 def hook(module, input, output):
                     # output is (x, length) tuple; x is (B, C, T)
                     x = output[0] if isinstance(output, tuple) else output
-                    captured[name] = x[0].detach().cpu().float()  # (C, T)
+                    captured[name] = _own(x[0].detach().cpu().float())  # (C, T)
                 return hook
             handles.append(blocks[bi].register_forward_hook(make_hook(stage)))
 

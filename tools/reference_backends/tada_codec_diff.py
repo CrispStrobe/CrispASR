@@ -16,6 +16,7 @@ Usage
 #      python tools/reference_backends/tada_codec_diff.py \
 #        --features /mnt/volume1/tmp-overflow/tada_features.bin \
 #        [--no-denorm]   # if C++ features are already denormalized
+"""
 
 import argparse
 import os
