@@ -33,6 +33,7 @@
 #else
 #  include <arpa/inet.h>
 #  include <netinet/in.h>
+#  include <sys/select.h>
 #  include <sys/socket.h>
 #  include <unistd.h>
    typedef int socket_t;
@@ -338,6 +339,15 @@ static void ws_handle_connection(socket_t client_fd) {
 
 static void ws_listener_thread() {
     while (g_ws_running.load()) {
+        // Wait for a connection with a timeout so the loop re-checks g_ws_running:
+        // closing a listening socket does not wake a blocked accept() on Linux, so
+        // a bare accept() made ws_stream_stop()'s join hang and SIGTERM never finish.
+        fd_set rfds;
+        FD_ZERO(&rfds);
+        FD_SET(g_ws_listen_fd, &rfds);
+        struct timeval tv = {1, 0};
+        if (select((int)g_ws_listen_fd + 1, &rfds, nullptr, nullptr, &tv) <= 0)
+            continue;
         struct sockaddr_in addr;
         socklen_t addr_len = sizeof(addr);
         socket_t client = accept(g_ws_listen_fd, (struct sockaddr*)&addr, &addr_len);
@@ -403,10 +413,10 @@ extern "C" int ws_stream_start(const char* model_path, int port, int n_threads) 
 extern "C" void ws_stream_stop(void) {
     if (!g_ws_running.load()) return;
     g_ws_running.store(false);
+    if (g_ws_thread.joinable())
+        g_ws_thread.join(); // the select() loop exits within ~1 s
     if (g_ws_listen_fd != INVALID_SOCKET) {
         CLOSE_SOCKET(g_ws_listen_fd);
         g_ws_listen_fd = INVALID_SOCKET;
     }
-    if (g_ws_thread.joinable())
-        g_ws_thread.join();
 }

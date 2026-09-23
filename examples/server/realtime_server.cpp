@@ -23,6 +23,7 @@ typedef SOCKET socket_t;
 #else
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <unistd.h>
 typedef int socket_t;
@@ -554,6 +555,15 @@ static void rt_handle_connection(rt_session* sess) {
 
 static void rt_listener_thread(CrispasrBackend* backend, std::mutex* model_mutex, whisper_params base_params) {
     while (g_rt_running.load()) {
+        // select() with a timeout, not a bare accept(): closing a listening socket
+        // does not wake a blocked accept() on Linux, so realtime_server_stop()'s
+        // join would hang and the server could not shut down.
+        fd_set rfds;
+        FD_ZERO(&rfds);
+        FD_SET(g_rt_listen_fd, &rfds);
+        struct timeval tv = {1, 0};
+        if (select((int)g_rt_listen_fd + 1, &rfds, nullptr, nullptr, &tv) <= 0)
+            continue;
         struct sockaddr_in addr;
         socklen_t addr_len = sizeof(addr);
         socket_t client = accept(g_rt_listen_fd, (struct sockaddr*)&addr, &addr_len);
@@ -609,10 +619,10 @@ void realtime_server_stop() {
     if (!g_rt_running.load())
         return;
     g_rt_running.store(false);
+    if (g_rt_thread.joinable())
+        g_rt_thread.join(); // the select() loop exits within ~1 s
     if (g_rt_listen_fd != INVALID_SOCKET) {
         CLOSE_SOCKET(g_rt_listen_fd);
         g_rt_listen_fd = INVALID_SOCKET;
     }
-    if (g_rt_thread.joinable())
-        g_rt_thread.join();
 }
