@@ -32,9 +32,11 @@
 #if defined(__APPLE__)
 #include <TargetConditionals.h>
 #endif
-// iOS forbids spawning processes; Android has posix_spawn only from API 28.
-// Neither ships ffmpeg / espeak-ng binaries, so there open() just fails.
-#if (defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE) || (defined(__ANDROID_API__) && __ANDROID_API__ < 28)
+// iOS forbids spawning processes; Android has posix_spawn only from API 28;
+// Emscripten has no posix_spawnp at all (wasm-ld: undefined symbol). None of
+// them ships ffmpeg / espeak-ng binaries, so there open() just fails.
+#if (defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE) || (defined(__ANDROID_API__) && __ANDROID_API__ < 28) ||           \
+    defined(__EMSCRIPTEN__)
 #define CORE_SUBPROCESS_UNAVAILABLE 1
 #endif
 
