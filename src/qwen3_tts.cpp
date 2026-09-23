@@ -5412,11 +5412,13 @@ static bool run_cenc(qwen3_tts_context* c, const float* audio, int n_samples, st
         return false;
     }
     ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "pcm_input"), audio, 0, (size_t)n_samples * sizeof(float));
-    // Set causal mask. T_enc = T_audio/960 (4*5*6*8 SEANet stride product)
+    // SEANet rounds partial audio frames up; floor(n_samples / 960) leaves the
+    // final mask row(s) uninitialized and can produce NaNs in attention.
     {
-        const int T_enc = n_samples / 960;
         ggml_tensor* mask_t = ggml_graph_get_tensor(gf, "cenc_mask");
-        if (mask_t && T_enc > 1) {
+        if (mask_t) {
+            const int T_enc = (int)mask_t->ne[0];
+            GGML_ASSERT(mask_t->ne[1] == T_enc);
             auto mask = build_cenc_mask(T_enc);
             ggml_backend_tensor_set(mask_t, mask.data(), 0, mask.size() * sizeof(ggml_fp16_t));
         }
@@ -6180,7 +6182,9 @@ extern "C" struct qwen3_tts_context* qwen3_tts_init_from_file(const char* path_m
                                        ggml_backend_name(c->backend), hip_cp_native, (int)c->hp.cp_n_layers,
                                        (int)c->hp.cp_d_model, cp_transformer_is_f16);
     if (explicit_cp_cpu || hip_f16_cp_fallback) {
-        const enum ggml_type copy_type = explicit_cp_cpu ? code_pred_cpu_copy_type_from_env(cp_be) : GGML_TYPE_F16;
+        // The CPU graph mixes F32 activations with these weights; copying them
+        // as F16 makes ggml-cpu reject F32 + F16 binary ops on this path.
+        const enum ggml_type copy_type = explicit_cp_cpu ? code_pred_cpu_copy_type_from_env(cp_be) : GGML_TYPE_F32;
         if (!copy_cp_weights_to_cpu(c, copy_type)) {
             fprintf(stderr, "qwen3_tts: code_pred CPU pin requested but copy failed; using main backend\n");
         } else if (hip_f16_cp_fallback && c->params.verbosity >= 1) {
@@ -6542,9 +6546,10 @@ extern "C" float* qwen3_tts_cenc_extract_stage(struct qwen3_tts_context* ctx, co
     }
     ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "pcm_input"), audio, 0, (size_t)n_samples * sizeof(float));
     {
-        const int T_enc = n_samples / 960;
         ggml_tensor* mask_t = ggml_graph_get_tensor(gf, "cenc_mask");
-        if (mask_t && T_enc > 1) {
+        if (mask_t) {
+            const int T_enc = (int)mask_t->ne[0];
+            GGML_ASSERT(mask_t->ne[1] == T_enc);
             auto mask = build_cenc_mask(T_enc);
             ggml_backend_tensor_set(mask_t, mask.data(), 0, mask.size() * sizeof(ggml_fp16_t));
         }
