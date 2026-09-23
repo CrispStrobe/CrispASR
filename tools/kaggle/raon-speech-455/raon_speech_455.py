@@ -118,6 +118,21 @@ try:
         save()
 
     if DIAG:
+        # the reflect-pad fix changes every crisp_audio mel: re-check the
+        # qwen3-asr family fixtures (Confucius4-R2T2, F16) still pass
+        import gguf, numpy as np, soundfile as sf
+        from huggingface_hub import hf_hub_download
+        r2 = hf_hub_download("cstr/confucius4-r2t2-GGUF", "confucius4-r2t2-f16.gguf", local_dir=str(big / "r2t2"))
+        res["r2t2"] = {}
+        for c in ("jfk", "zh"):
+            fx = hf_hub_download("cstr/crispasr-regression-fixtures", f"r2t2/{c}/ref.gguf", repo_type="dataset",
+                                 local_dir=str(big / "fx"))
+            ra = [t for t in gguf.GGUFReader(fx).tensors if t.name == "raw_audio"][0]
+            wv = str(big / f"r2t2-{c}.wav")
+            sf.write(wv, np.array(ra.data, dtype=np.float32).reshape(-1), 16000)
+            rc, out, err = run([str(BUILD / "bin/crispasr-diff"), "qwen3", r2, fx, wv], f"diff-r2t2-{c}.log", env=cpu_env)
+            res["r2t2"][c] = {"rc": rc, "rows": [l for l in out.splitlines() if l.startswith("[")]}
+            save()
         raise SystemExit(0)
     ggufs = {"f16": f16}
     for qt in ("q8_0", "q4_k"):

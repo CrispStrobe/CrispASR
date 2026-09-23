@@ -692,6 +692,7 @@ extern "C" float* qwen3_asr_compute_mel(qwen3_asr_context* ctx, const float* sam
     p.matmul = core_mel::MatmulPrecision::Double;
     p.log_eps = 1e-10f;
     p.center_pad = true;
+    p.center_pad_reflect = true; // torch.stft / WhisperFeatureExtractor: pad_mode="reflect"
     p.drop_last_frame = true;
 
     int T_ret = 0;
