@@ -116,3 +116,57 @@ above all not a silent CPU fallback quietly averaged into "Metal is exactly as
 fast as CPU", which is the most plausible-looking wrong answer available.
 
 ---
+
+## 3. Correctness: the CPU path is unchanged, verified against ONNX
+
+The wiring touches how the backend is chosen and how weight bytes are read, not
+the arithmetic — but "by construction" is not a measurement, so the existing
+per-stage harness was re-run against native onnxruntime on the rebuilt binary.
+
+**Onsets & Frames, `crispasr-diff onsets-and-frames`, 26 stages, gated at cosine
+0.999** — `onsets-and-frames-f32.gguf` against
+`/mnt/storage/tuner-bench/onnx/onsets_and_frames.onnx`, 3 s clip:
+
+```
+onsets-and-frames diff: PASS (0 of 26 stages failing)
+```
+
+Every stage returns `cos=1.0000000`, with `max_abs` between 2.7e-07 and 9.5e-06
+and `|mine|` equal to `|ref|` to six figures — the magnitude columns matter
+because cosine is scale-blind. The extremes:
+
+| stage | cosine | max abs | \|mine\| | \|ref\| |
+| --- | --- | --- | --- | --- |
+| `mel` | 1.0000000 | 0.000e+00 | 4.78099 | 4.78099 |
+| `onset_conv0` | 1.0000000 | 9.537e-06 | 1.01310 | 1.01310 |
+| `onset_bilstm` | 1.0000000 | 3.472e-06 | 0.624737 | 0.624737 |
+| `onset_logits` | 1.0000000 | 9.537e-06 | 11.4813 | 11.4813 |
+| `frame_logits` | 1.0000000 | 8.583e-06 | 9.50199 | 9.50199 |
+| `velocity_logits` | 1.0000000 | 2.682e-07 | 0.349392 | 0.349392 |
+
+A `mel` stage at max_abs exactly 0.0 is expected and is not a tautology: the
+reference is *run on the mel the C++ runtime computed*, precisely so that a
+front-end difference cannot hide behind a model one, and the stage is compared
+anyway to catch a front-end change as itself.
+
+The run also re-confirms the O&F throughput the perf doc records —
+**0.545 cpu-s per audio-second at one thread**, against
+`ONSETS_AND_FRAMES_PERF.md`'s 0.5301 — so the backend-selection change costs
+nothing on the CPU path.
+
+hFT's CPU path is likewise unchanged; its `tools/hft_parity.py` leg is noted in
+§5 under what could not be completed.
+
+---
+
+## 4. What the Apple Silicon **CPU** numbers say
+
+Metal could not be measured (§2), but the CPU arms ran on Apple Silicon, and
+they answer most of the question the work was commissioned for. These are
+medians of three after a discarded cold run, every arm in its own process.
+
+<!-- TABLE PENDING: the A/B run was still queued behind a saturated Actions
+     queue when this section was written. See the workflow artifact
+     piano-metal-ab-{hft,oaf} on the most recent manual dispatch. -->
+
+---
