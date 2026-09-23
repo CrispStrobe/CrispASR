@@ -763,6 +763,58 @@ void greedy_run(const xasr_model& m, greedy_state& gs, const float* enc, int n_e
     }
 }
 
+// sherpa-onnx text-utils: IsCJK / IsPunct (code-point ranges) for RemoveSpaceBetweenCjk.
+bool is_cjk(char32_t cp) {
+    return (cp >= 0x1100 && cp <= 0x11FF) || (cp >= 0x2E80 && cp <= 0xA4CF) || (cp >= 0xA840 && cp <= 0xD7AF) ||
+           (cp >= 0xF900 && cp <= 0xFAFF) || (cp >= 0xFE30 && cp <= 0xFE4F) || (cp >= 0xFF65 && cp <= 0xFFDC) ||
+           (cp >= 0x20000 && cp <= 0x2FFFF);
+}
+
+bool is_punct(char32_t cp) {
+    return (cp >= 0x21 && cp <= 0x2F) || (cp >= 0x3A && cp <= 0x40) || (cp >= 0x5B && cp <= 0x60) ||
+           (cp >= 0x7B && cp <= 0x7E) || (cp >= 0x3000 && cp <= 0x303F) || (cp >= 0xFF01 && cp <= 0xFF0F) ||
+           (cp >= 0xFF1A && cp <= 0xFF20) || (cp >= 0xFF3B && cp <= 0xFF40) || (cp >= 0xFF5B && cp <= 0xFF65);
+}
+
+std::u32string utf8_to_u32(const std::string& s) {
+    std::u32string out;
+    for (size_t i = 0; i < s.size();) {
+        const uint8_t c = (uint8_t)s[i];
+        const int n = c < 0x80 ? 1 : (c >> 5) == 6 ? 2 : (c >> 4) == 14 ? 3 : (c >> 3) == 30 ? 4 : 1;
+        char32_t cp = n == 1 ? c : n == 2 ? (c & 0x1F) : n == 3 ? (c & 0x0F) : (c & 0x07);
+        for (int k = 1; k < n && i + (size_t)k < s.size(); k++)
+            cp = (cp << 6) | ((uint8_t)s[i + (size_t)k] & 0x3F);
+        out.push_back(cp);
+        i += (size_t)n;
+    }
+    return out;
+}
+
+std::string u32_to_utf8(const std::u32string& u) {
+    std::string out;
+    for (char32_t cp : u) {
+        if (cp < 0x80) {
+            out += (char)cp;
+        } else if (cp < 0x800) {
+            out += (char)(0xC0 | (cp >> 6));
+            out += (char)(0x80 | (cp & 0x3F));
+        } else if (cp < 0x10000) {
+            out += (char)(0xE0 | (cp >> 12));
+            out += (char)(0x80 | ((cp >> 6) & 0x3F));
+            out += (char)(0x80 | (cp & 0x3F));
+        } else {
+            out += (char)(0xF0 | (cp >> 18));
+            out += (char)(0x80 | ((cp >> 12) & 0x3F));
+            out += (char)(0x80 | ((cp >> 6) & 0x3F));
+            out += (char)(0x80 | (cp & 0x3F));
+        }
+    }
+    return out;
+}
+
+// sherpa-onnx Convert(): join the symbols ('▁' prefix -> space, <unk> dropped),
+// RemoveSpaceBetweenCjk (a space between two CJK characters or before
+// punctuation goes), then drop leading spaces.
 std::string detok(const xasr_model& m, const int32_t* toks, int n) {
     std::string s;
     for (int i = 0; i < n; i++) {
@@ -773,7 +825,16 @@ std::string detok(const xasr_model& m, const int32_t* toks, int n) {
             sym.replace(0, 3, " ");
         s += sym;
     }
-    return s;
+    const std::u32string u = utf8_to_u32(s);
+    std::u32string out;
+    for (size_t i = 0; i < u.size(); i++) {
+        if (i > 0 && u[i] == U' ' && i + 1 < u.size() && ((is_cjk(u[i - 1]) && is_cjk(u[i + 1])) || is_punct(u[i + 1])))
+            continue;
+        out.push_back(u[i]);
+    }
+    s = u32_to_utf8(out);
+    const size_t b = s.find_first_not_of(' ');
+    return b == std::string::npos ? std::string() : s.substr(b);
 }
 
 char* dup_str(const std::string& s) {
@@ -971,9 +1032,7 @@ bool stream_accept(xasr_stream* s, const float* pcm, int n, bool flush) {
 }
 
 std::string stream_text(const xasr_stream* s) {
-    std::string t = detok(s->c->model, s->gs.toks.data(), (int)s->gs.toks.size());
-    const size_t b = t.find_first_not_of(' ');
-    return b == std::string::npos ? std::string() : t.substr(b);
+    return detok(s->c->model, s->gs.toks.data(), (int)s->gs.toks.size());
 }
 
 } // namespace

@@ -31,7 +31,7 @@ Stages (every per-chunk stage concatenated over chunks, time-major):
   encoder_out      (C*chunk/2, 512) after joiner.encoder_proj
   first_logits     (V,)          joiner logits of the first encoder frame, blank context
   tokens           (L,)          greedy tokens (sherpa: <=1 symbol per frame, skip blank/unk)
-  text             str
+  text             str           rendered as sherpa-onnx does (RemoveSpaceBetweenCjk + leading-space strip)
 """
 
 from __future__ import annotations
@@ -222,16 +222,37 @@ def run(enc, embed, dec, joi, feats: np.ndarray, chunk: int, left: int, caps=Non
     return hyp[ctx:], first_logits
 
 
+def _is_cjk(cp):
+    return (0x1100 <= cp <= 0x11FF or 0x2E80 <= cp <= 0xA4CF or 0xA840 <= cp <= 0xD7AF or 0xF900 <= cp <= 0xFAFF
+            or 0xFE30 <= cp <= 0xFE4F or 0xFF65 <= cp <= 0xFFDC or 0x20000 <= cp <= 0x2FFFF)
+
+
+def _is_punct(cp):
+    return (0x21 <= cp <= 0x2F or 0x3A <= cp <= 0x40 or 0x5B <= cp <= 0x60 or 0x7B <= cp <= 0x7E
+            or 0x3000 <= cp <= 0x303F or 0xFF01 <= cp <= 0xFF0F or 0xFF1A <= cp <= 0xFF20 or 0xFF3B <= cp <= 0xFF40
+            or 0xFF5B <= cp <= 0xFF65)
+
+
 def tokens_to_text(toks, table):
+    """sherpa-onnx Convert(): join symbols (leading \u2581 -> space, <unk> dropped),
+    RemoveSpaceBetweenCjk, then RemoveLeadingSpaces."""
     s = ""
     for t in toks:
         sym = table[t]
         if sym == "<unk>":
             continue
-        if len(sym.encode()) >= 3 and sym.startswith("▁"):
+        if len(sym.encode()) >= 3 and sym.startswith("\u2581"):
             sym = " " + sym[1:]
         s += sym
-    return s
+    if len(s) >= 2:
+        out = [s[0]]
+        for i in range(1, len(s)):
+            if s[i] == " " and i + 1 < len(s) and (
+                    (_is_cjk(ord(s[i - 1])) and _is_cjk(ord(s[i + 1]))) or _is_punct(ord(s[i + 1]))):
+                continue
+            out.append(s[i])
+        s = "".join(out)
+    return s.lstrip(" ")
 
 
 def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str], max_new_tokens: int = 0) -> Dict[str, np.ndarray]:

@@ -4600,9 +4600,7 @@ int main(int argc, char** argv) {
                 free(part);
                 part = xasr_stream_accept(st, samples.data() + off, n, off + n >= samples.size());
             }
-            std::string lead = got;
-            lead.erase(0, lead.find_first_not_of(' '));
-            const bool st_same = part && lead == part;
+            const bool st_same = part && got == part;
             printf("%s stream(370ms pieces)   %s\n", st_same ? "[PASS]" : "[FAIL]",
                    st_same ? "identical to one-shot" : (part ? part : "(null)"));
             if (!st_same)
