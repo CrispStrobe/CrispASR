@@ -582,12 +582,11 @@ three things below. Summary of what changed:**
   **0.84×** on an AMD EPYC 9V74 (AVX-512 **VNNI**) and **0.50×** on arm64. On
   anything with an int8 dot-product instruction, quantisation is a *speedup*
   before any repacking at all.
-- ⚠ **The original statement in ISA terms.** On arm64 the *generic* quantised path is
-  already 2.2–3.1× faster than f32 before any repacking, and q8_0 + repack lands at
-  **0.12–0.15× the cost of f32**. Even on x86 the sign is ISA-dependent:
-  generic q8_0 measures 1.08–1.31× f32 on the Skylake-SP VPS but 0.84–1.05× on
-  an AVX2-only EPYC, because Skylake-SP's AVX-512 makes its *f32* GEMM fast and
-  so makes the quantised path look worse by comparison.
+  At the kernel level the same story: the *generic* quantised `MUL_MAT` is
+  already 2.2–3.1× faster than f32 on arm64 before any repacking, and q8_0 +
+  repack lands at **0.12–0.15× the cost of f32**. Why Skylake-SP is the worst
+  case: its AVX-512 makes the *f32* GEMM unusually fast, so the quantised path
+  loses by comparison rather than being slow in absolute terms.
 - ✅ **The mmap incompatibility is now verified, not inferred.** The path at
   `gguf_loader.cpp:657` binds `tensor->data` into the file map and **never
   calls `set_tensor`**, while repacking *is* a `set_tensor` that rewrites the
