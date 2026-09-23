@@ -43,6 +43,11 @@ try:
     run([sys.executable, "-m", "pip", "uninstall", "-y", "torchvision"], "pip-uninstall-tv.log")
     res["torch"] = subprocess.run([sys.executable, "-c", "import torch,torchaudio,transformers;print(torch.__version__,torchaudio.__version__,transformers.__version__)"],
                                   capture_output=True, text=True).stdout.strip()
+    # PyPI's chatterbox-tts predates the V3 t3_model option the dumper uses;
+    # run the upstream GitHub source (the dumper honours RESEMBLE_CHATTERBOX_SRC).
+    subprocess.check_call(["git", "clone", "--depth", "1", "https://github.com/resemble-ai/chatterbox", "/tmp/chatterbox-src"])
+    os.environ["RESEMBLE_CHATTERBOX_SRC"] = "/tmp/chatterbox-src/src"
+    res["chatterbox_src"] = subprocess.check_output(["git", "-C", "/tmp/chatterbox-src", "rev-parse", "HEAD"], text=True).strip()
     from huggingface_hub import HfApi, hf_hub_download, snapshot_download
     api = HfApi()
     md = snapshot_download("ResembleAI/chatterbox", local_dir=str(M / "chatterbox"))
