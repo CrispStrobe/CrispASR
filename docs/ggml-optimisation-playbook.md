@@ -543,13 +543,28 @@ three things below. Summary of what changed:**
   `q4_0` generic 1.22–1.44× f32 → repacked **0.76–0.97×** f32; `q4_K` generic
   1.83–3.02× f32 → repacked **0.48–0.66×** f32. A Kaggle AVX2-only Xeon agrees
   at 1.9–3.4× over the generic path, with a far tighter spread.
-- ⛔ **But it cannot help any quantised model in this tree today, on x86.**
+- 🔑 **The answer splits by ISA, and the arm64 half is a large win for the
+  models exactly as they ship.** Measured on clean GitHub runners
+  (run 35817843249, three legs green), q8_0 `MUL_MAT`, repacked vs generic:
+
+  | runner | ISA | q8_0 | q4_0 | declined |
+  | --- | --- | --- | --- | --- |
+  | `macos-14` | neon + dotprod | **3.1–3.4×** | 4.0× | *nothing* |
+  | `ubuntu-24.04-arm` | dotprod + i8mm + sve | **2.3–2.4×** | 3.3–3.6× | *nothing* |
+  | `ubuntu-24.04` | AMD EPYC 7763, AVX2 | **no kernel** | 2.3–2.7× | q8_0, q5_K, q6_K |
+
   `ggml_repack_get_optimal_repack_type` (`repack.cpp:4528`) has **no q8_0
-  branch for x86 at all** — q8_0 is gated on NEON+dotprod/i8mm or RISC-V. Every
-  quantised GGUF here is q8_0. Reaching this path on x86 means re-quantising to
-  q4_0 or q4_K, which is an accuracy decision, not a perf one. On **arm64 the
-  table inverts** and q8_0 *does* get a kernel — so this lever may pay on a
-  phone for the models as they already exist. Untested; highest-value gap left.
+  branch for x86 at all** — it is gated on NEON+dotprod/i8mm or RISC-V. Every
+  quantised GGUF in this tree is q8_0. So on x86 this lever is worth nothing
+  without re-quantising to q4_0/q4_K, which is an accuracy decision; on arm64,
+  including Apple Silicon, it is worth 2.3–3.4× on the files as they exist.
+- ⚠ **"Quantisation does not make CPU inference faster" is an AVX-512 x86
+  statement, not a universal one.** On arm64 the *generic* quantised path is
+  already ~3× faster than f32 before any repacking, and q8_0 + repack lands at
+  **0.12–0.15× the cost of f32**. Even on x86 the sign is ISA-dependent:
+  generic q8_0 measures 1.08–1.31× f32 on the Skylake-SP VPS but 0.84–1.05× on
+  an AVX2-only EPYC, because Skylake-SP's AVX-512 makes its *f32* GEMM fast and
+  so makes the quantised path look worse by comparison.
 - ✅ **The mmap incompatibility is now verified, not inferred.** The path at
   `gguf_loader.cpp:657` binds `tensor->data` into the file map and **never
   calls `set_tensor`**, while repacking *is* a `set_tensor` that rewrites the
@@ -1214,13 +1229,15 @@ Stated explicitly so nobody builds on a gap thinking it is a finding.
 
 1. ~~**Whether selecting ggml's repack extra buffer type actually speeds
    anything up here.**~~ **SETTLED** — `ggml-repack-buft-evaluation.md`, and §4
-   above is updated. It is offered here, it pays 1.4–5.6× for q4_0/q4_K without
-   needing VNNI, and it does nothing for q8_0 on x86 because ggml has no q8_0
-   repack kernel for x86 at all. The mmap incompatibility is now verified
-   rather than inferred. What is still open is narrower and is listed there:
-   **arm64, where q8_0 does get a kernel and the models as they ship might
-   benefit**, and whether any CPU with VNNI/AMX changes the ratios (neither
-   machine reachable from here has one).
+   above is updated. It is offered on every machine tested. It pays **2.3–3.4×
+   for q8_0 on arm64 — the models exactly as they ship, no re-quantisation** —
+   and 2.1–2.7× for q4_0/q4_K on x86, where q8_0 gets no repack kernel at all.
+   None of that needs VNNI. The mmap incompatibility is now verified rather
+   than inferred. What remains open is narrower: whether a CPU with VNNI or AMX
+   changes the x86 ratios — **no x86 machine reachable from this project has
+   one**, the VPS, a Kaggle Xeon and GitHub's EPYC 7763 all lack it — and
+   whether q4_0/q4_K hold their accuracy well enough to be worth adopting on
+   x86, which is a question for the F1 harness and not this one.
 2. **Whether a ggml-graph BiLSTM beats a scalar recurrence at O&F's sequence
    length.** §1b sets out the node-count concern. Nobody has measured it. The
    recommendation in §7 is deliberately ordered so this question is answered
