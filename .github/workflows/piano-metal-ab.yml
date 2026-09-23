@@ -356,13 +356,23 @@ jobs:
       - name: Parity — Metal against the CPU path, per head
         run: |
           set -o pipefail
+          # numpy is NOT preinstalled on GitHub's macOS python3, and the first
+          # version of this step imported it at the top -- so on a runner with
+          # no Metal arm to compare, where this step has nothing to do at all,
+          # it still died with ModuleNotFoundError and failed the job. Decide
+          # whether there is work first, and only then pay for the dependency.
+          if ! python3 -c 'import json,sys; sys.exit(0 if json.load(open("ab.json"))["_metal_usable"] else 1)'; then
+            {
+              echo "no Metal arm on this runner -- there is nothing to compare the CPU path against."
+              echo "CPU-vs-ONNX parity is unchanged and is covered by tools/hft_parity.py and"
+              echo "crispasr-diff onsets-and-frames; this step asserts the GPU delta only."
+            } | tee parity.txt
+            cat parity.txt >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          python3 -m pip install --quiet --disable-pip-version-check numpy
           python3 - <<'PY' | tee parity.txt
           import json, numpy as np, os, pathlib, sys
-          if not json.load(open("ab.json"))["_metal_usable"]:
-              print("no Metal arm on this runner -- there is nothing to compare the CPU path against.")
-              print("CPU-vs-ONNX parity is unchanged and is covered by tools/hft_parity.py and")
-              print("crispasr-diff onsets-and-frames; this step asserts the GPU delta only.")
-              raise SystemExit(0)
           HEADS = "${{ matrix.heads }}".split()
           quants = [q for q in os.environ["QUANTS"].split() if pathlib.Path(f"m/{q}.gguf").exists()]
           bad = []

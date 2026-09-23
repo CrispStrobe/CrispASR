@@ -190,9 +190,75 @@ Metal could not be measured (§2), but the CPU arms ran on Apple Silicon, and
 they answer most of the question the work was commissioned for. These are
 medians of three after a discarded cold run, every arm in its own process.
 
-<!-- TABLE PENDING: the A/B run was still queued behind a saturated Actions
-     queue when this section was written. See the workflow artifact
-     piano-metal-ab-{hft,oaf} on the most recent manual dispatch. -->
+**The machine, named:** GitHub `macos-14`, `arch=ARM64`, chip reported as
+**Apple M1 (Virtual)**, **3 logical cores (3 P + 0 E)**, 7 GiB, macOS 14.
+`ggml_metal_device_init` reports `MTL0 (Apple Paravirtual device)`,
+`MTLGPUFamilyApple5`, both simdgroup flags false — hence §2. Run
+[35832266132](https://github.com/CrispStrobe/CrispASR/actions/runs/35832266132),
+three threads, clips of 3 s and 30 s, `MKL_NUM_THREADS=1`.
+
+### hFT-Transformer
+
+| quant | clip | cpu-s / audio-s | × real time | peak RSS | notes |
+| --- | --- | --- | --- | --- | --- |
+| f32 | 3 s | 3.517 | 1.223 | 290 MiB | 31 |
+| f32 | 30 s | 2.617 | **0.926** | 311 MiB | 274 |
+| q8_0 | 3 s | 2.211 | 0.761 | 280 MiB | 31 |
+| q8_0 | 30 s | 1.765 | **0.621** | 309 MiB | 274 |
+| q4_0 | 3 s | 2.450 | 0.859 | 277 MiB | 27 |
+| q4_0 | 30 s | 1.581 | **0.563** | 302 MiB | 261 |
+
+Fixed vs marginal, solved from the two clip lengths:
+
+| quant | fixed cost | marginal × real time |
+| --- | --- | --- |
+| f32 | 0.99 s | 0.893× |
+| q8_0 | 0.47 s | 0.605× |
+| q4_0 | 0.98 s | 0.530× |
+
+**hFT runs under real time on Apple Silicon, on the CPU alone, at every
+quantisation — with no GPU involved.** 0.93× at f32, 0.62× at q8_0, 0.56× at
+q4_0 on the 30 s clip; marginally 0.89× / 0.61× / 0.53×. Against the
+**2.14× real time** measured on the contended x86 VPS, that is a **2.3–3.8×
+difference**, and it is the difference between "cannot keep up with live
+playing" and "keeps up with better than a third of the budget spare".
+
+The caveat cuts the *right* way for once: this is a **virtualised 3-vCPU slice
+of an M1**, the oldest Apple Silicon generation, with no E cores and a third of
+a laptop's core count. A real M-series Mac, and very likely a current iPhone,
+has more. **0.93× is a floor, not a ceiling.**
+
+Quantisation buys ~1.5× (f32 → q4_0 marginal, 0.893 → 0.530) and costs almost
+nothing in RSS here — the weights are only 22 / 7 / 5 MB, so the 280–310 MiB
+peak is activations and the front end, not the model.
+
+### Onsets & Frames
+
+| quant | clip | cpu-s / audio-s | × real time | peak RSS | notes |
+| --- | --- | --- | --- | --- | --- |
+| f32 | 3 s | 0.332 | 0.172 | 182 MiB | 14 |
+| f32 | 30 s | 0.277 | **0.161** | 300 MiB | 150 |
+| q8_0 | 3 s | 0.270 | 0.149 | 112 MiB | 13 |
+| q8_0 | 30 s | 0.302 | **0.163** | 225 MiB | 149 |
+| q4_0 | 3 s | 0.314 | 0.162 | 100 MiB | 17 |
+| q4_0 | 30 s | 0.330 | **0.174** | 220 MiB | 141 |
+
+Marginal: f32 0.160×, q8_0 0.165×, q4_0 0.175× real time. Fixed cost is
+0.03 s at f32 and *negative* at q8_0/q4_0 — i.e. below the noise floor of a
+two-point fit, which is the honest reading of −0.05 s.
+
+**O&F is roughly 6× faster than real time on the same machine, and
+quantisation does not help it — it very slightly hurts.** q4_0 is 9% slower
+than f32 marginally. That is consistent with the shape of the model: the cost
+is convolution and a host-side LSTM recurrence, not weight bandwidth, so
+dequantising on the fly is pure overhead. What quantisation *does* buy is
+memory — peak RSS 300 → 220 MiB, and 182 → 100 MiB on the short clip — which
+on a phone may matter more than the 9%.
+
+**hFT decodes 274 notes to O&F's 150 on the same 30 s clip**, at ~3.5× the
+cost. Neither is "right" — the clip is speech fed to a piano transcriber, so
+nearly every detection is marginal — but it is a reminder that these two are
+not interchangeable at equal settings.
 
 ---
 
