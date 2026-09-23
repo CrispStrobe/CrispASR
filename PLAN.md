@@ -20,12 +20,11 @@ Taking over #445 from the 2026-09-20 roadmap claim below: its worktree
 (`roadmap-445-438-337-perf`) has no commits or changes since the claim, which
 is past the one-day staleness rule. Worktree
 `.claude/worktrees/fix-451-chunked`, branch `feat/445-orukeet-convert`.
-NOW: orukeet F16 converted locally from the pinned r3 `.nemo` (sha256
-031c8dda…, matches the report); tensor audit matches orukeet's own export
-audit (74 fixed buffers identical to stock v3, all else changed); JFK
-transcript exact. Next: NeMo reference dump on Kaggle (2.5 GB checkpoint),
-crispasr-diff, quants, HF upload, registry entry. #438 Hojo continues from the
-existing `feat/438-hojo-asr` branch rather than restarting.
+NOW: #445 done — orukeet merged earlier (4234bcd8 region + 7c614be7), and
+Confucius4-R2T2 merged 2026-09-23 (feat/445-r2t2, CI 35824680242 green): tied
+lm_head conversion, prefix-rollback streaming session (R2T2's example.py
+schedule), F16 offline + streaming final text identical to upstream on en + zh.
+#438 Hojo and #436 (Dolphin, X-ASR) are on their branches, waiting on CI.
 
 Done this session: #448 merged (8c359d80 + da258942 mask-width assert),
 #453 fixed (817d6bf3), #452 merged (1aa0d55f) plus a shell-injection fix in
