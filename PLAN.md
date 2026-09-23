@@ -1,5 +1,17 @@
 # CrispASR — Pending work
 
+## CLAIMED 2026-09-23 — session ABI TTS sample-rate bugs (found from CrisperWeaver)
+
+Two bugs in the session ABI, both invisible to the CLI:
+(1) `crispasr_session_set_voice` loads an f5-tts reference at a hard-coded
+24 kHz, but Raon-OpenTTS (#387, f5-tts runtime) runs its mel front-end at
+16 kHz — the CLI adapter already resamples to `f5_tts_sample_rate()`;
+(2) `crispasr_session_output_sample_rate` has no `bt2_ctx` arm, so
+Breeze-TTS-2 reports 0 Hz. Guard (2) with a synthesize-vs-rate arm parity
+unit test; guard (1) with a session-vs-CLI output-length live test.
+Worktree `.claude/worktrees/fix-session-tts-rates`, branch
+`fix/session-tts-rates`.
+
 ## CLAIMED 2026-09-20 — #444 forced-aligner timing regression
 
 The v0.8.34 whole-slice alignment removed overlaps, but its punctuation-free
