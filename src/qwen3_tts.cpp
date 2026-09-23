@@ -3045,11 +3045,13 @@ static bool promote_cp_hip_down_weights(qwen3_tts_context* c) {
             weights.push_back(&block.ffn_down_w);
         }
     }
-    if (weights.empty()) return true;
+    if (weights.empty())
+        return true;
 
     ggml_init_params ip = {ggml_tensor_overhead() * (weights.size() + 1) + 256, nullptr, true};
     c->cp_hip_down_ctx = ggml_init(ip);
-    if (!c->cp_hip_down_ctx) return false;
+    if (!c->cp_hip_down_ctx)
+        return false;
 
     std::vector<ggml_tensor*> copies;
     for (ggml_tensor** src : weights) {
@@ -3058,7 +3060,8 @@ static bool promote_cp_hip_down_weights(qwen3_tts_context* c) {
         copies.push_back(dst);
     }
     c->cp_hip_down_buf = ggml_backend_alloc_ctx_tensors(c->cp_hip_down_ctx, c->backend);
-    if (!c->cp_hip_down_buf) return false;
+    if (!c->cp_hip_down_buf)
+        return false;
 
     std::vector<ggml_fp16_t> half;
     std::vector<float> full;
@@ -3070,10 +3073,12 @@ static bool promote_cp_hip_down_weights(qwen3_tts_context* c) {
         ggml_fp16_to_fp32_row(half.data(), full.data(), (int64_t)n);
         ggml_backend_tensor_set(copies[i], full.data(), 0, n * sizeof(float));
     }
-    for (size_t i = 0; i < weights.size(); ++i) *weights[i] = copies[i];
+    for (size_t i = 0; i < weights.size(); ++i)
+        *weights[i] = copies[i];
     if (c->params.verbosity >= 1) {
-        fprintf(stderr, "qwen3_tts: native ROCm code_pred: promoted %zu FFN down weights to F32 (%zu MB)\n",
-                weights.size(), ggml_backend_buffer_get_size(c->cp_hip_down_buf) / (1024 * 1024));
+        fprintf(stderr, "qwen3_tts: code_pred (%s): promoted %zu F16 FFN down weights to F32 (%zu MB)\n",
+                ggml_backend_name(c->backend), weights.size(),
+                ggml_backend_buffer_get_size(c->cp_hip_down_buf) / (1024 * 1024));
     }
     return true;
 }
@@ -6230,10 +6235,18 @@ extern "C" struct qwen3_tts_context* qwen3_tts_init_from_file(const char* path_m
         c->code_pred.lm_head[0] && qwen3_tts_hip_policy::code_predictor_must_use_cpu(
                                        ggml_backend_name(c->backend), hip_cp_native, (int)c->hp.cp_n_layers,
                                        (int)c->hp.cp_d_model, cp_transformer_is_f16);
-    if (hip_cp_native && !explicit_cp_cpu && qwen3_tts_hip_policy::is_rocm_backend(ggml_backend_name(c->backend)) &&
-        c->hp.cp_n_layers == 5 && c->hp.cp_d_model == 1024 && cp_transformer_is_f16 &&
+    // F16 down projections overflow wherever the backend's F16 GEMM narrows
+    // the F32 SwiGLU activation (CUDA / ROCm / Vulkan / SYCL) — not only on HIP.
+    // Bake F32 copies once whenever the predictor stays on such a backend.
+    // CRISPASR_QWEN3_TTS_CP_F32_DOWN=0|1 overrides the policy for A/B tests.
+    const char* f32_down_env = crispasr_env::get("CRISPASR_QWEN3_TTS_CP_F32_DOWN");
+    const int f32_down_override = f32_down_env ? (std::atoi(f32_down_env) != 0 ? 1 : 0) : -1;
+    const bool cp_stays_on_backend = !(explicit_cp_cpu || hip_f16_cp_fallback);
+    if (cp_stays_on_backend &&
+        qwen3_tts_hip_policy::promote_cp_down_to_f32(ggml_backend_name(c->backend), cp_transformer_is_f16,
+                                                     f32_down_override) &&
         !promote_cp_hip_down_weights(c)) {
-        fprintf(stderr, "qwen3_tts: native ROCm code_pred F32 down-weight allocation failed\n");
+        fprintf(stderr, "qwen3_tts: code_pred F32 down-weight allocation failed\n");
         qwen3_tts_free(c);
         return nullptr;
     }

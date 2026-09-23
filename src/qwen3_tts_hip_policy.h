@@ -25,4 +25,27 @@ inline bool code_predictor_must_use_cpu(const char* backend_name, bool native_ov
     return is_rocm_backend(backend_name) && !native_override && n_layers == 5 && d_model == 1024 && weights_are_f16;
 }
 
+// #337/#457: an F16 x F32 matmul narrows the F32 activation to half on
+// backends whose GEMM runs in F16 — cuBLAS / hipBLAS (CUDA and ROCm share the
+// ggml-cuda path) and Vulkan's mul_mm (shared-memory tiles in F16). A SwiGLU
+// intermediate above 65504 (the 0.6B-F16 code predictor reaches ~156000) then
+// becomes Inf and every output of that projection NaN. ggml-cpu keeps F32
+// activations for F16 weights (CrispASR patch #38: vec_dot_type F32) and
+// Metal's f16 x f32 kernels read src1 as float, so neither narrows.
+inline bool f16_matmul_narrows_activations(const char* backend_name) {
+    if (backend_name == nullptr)
+        return false;
+    return std::strncmp(backend_name, "CUDA", 4) == 0 || is_rocm_backend(backend_name) ||
+           std::strncmp(backend_name, "Vulkan", 6) == 0 || std::strncmp(backend_name, "SYCL", 4) == 0;
+}
+
+// Promote the code predictor's F16 FFN down-projection weights to F32 when the
+// predictor runs on a narrowing backend. env_override: -1 = policy, 0 = never,
+// 1 = always (A/B testing on any backend).
+inline bool promote_cp_down_to_f32(const char* backend_name, bool weights_are_f16, int env_override) {
+    if (!weights_are_f16 || env_override == 0)
+        return false;
+    return env_override == 1 || f16_matmul_narrows_activations(backend_name);
+}
+
 } // namespace qwen3_tts_hip_policy

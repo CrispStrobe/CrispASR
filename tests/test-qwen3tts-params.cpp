@@ -57,3 +57,22 @@ TEST_CASE("qwen3_tts HIP policy defaults known-bad paths to CPU", "[unit][qwen3_
     REQUIRE_FALSE(code_predictor_must_use_cpu("ROCm0", false, 28, 2048, true));
     REQUIRE_FALSE(code_predictor_must_use_cpu("CUDA0", false, 5, 1024, true));
 }
+
+TEST_CASE("qwen3_tts F32 down-projection promotion follows the narrowing backends", "[unit][qwen3_tts][hip]") {
+    using namespace qwen3_tts_hip_policy;
+
+    for (const char* be : {"CUDA0", "ROCm0", "Vulkan0", "SYCL0"}) {
+        INFO(be);
+        REQUIRE(f16_matmul_narrows_activations(be));
+        REQUIRE(promote_cp_down_to_f32(be, true, -1));
+        REQUIRE_FALSE(promote_cp_down_to_f32(be, false, -1)); // quantized / F32 weights: nothing to promote
+        REQUIRE_FALSE(promote_cp_down_to_f32(be, true, 0));   // explicit opt-out
+    }
+    for (const char* be : {"CPU", "Metal", "BLAS"}) {
+        INFO(be);
+        REQUIRE_FALSE(f16_matmul_narrows_activations(be));
+        REQUIRE_FALSE(promote_cp_down_to_f32(be, true, -1));
+        REQUIRE(promote_cp_down_to_f32(be, true, 1)); // forced for A/B
+    }
+    REQUIRE_FALSE(f16_matmul_narrows_activations(nullptr));
+}
