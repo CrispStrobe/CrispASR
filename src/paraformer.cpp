@@ -624,8 +624,15 @@ static std::string paraformer_transcribe_impl(paraformer_context* ctx, const flo
         ggml_tensor* inp = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, D_lfr_actual, T_lfr);
         ggml_set_name(inp, "features");
         ggml_set_input(inp);
+        // SANMEncoder with input_layer "pe": xs *= sqrt(output_size), then
+        // SinusoidalPositionEncoder adds sin|cos of positions 1..T over the input
+        // width. Missing before 2026-09: encoder_layer_0 sat at cos ~0.95 against
+        // upstream while the text still came out right.
+        ggml_tensor* pe_in = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, D_lfr_actual, T_lfr);
+        ggml_set_name(pe_in, "enc_pe");
+        ggml_set_input(pe_in);
 
-        ggml_tensor* cur = inp;
+        ggml_tensor* cur = ggml_add(ctx0, ggml_scale(ctx0, inp, std::sqrt((float)D)), pe_in);
 
         // Encoder: entry block(s)
         int enc_layer_idx = 0;
@@ -708,6 +715,18 @@ static std::string paraformer_transcribe_impl(paraformer_context* ctx, const flo
             fprintf(stderr, "paraformer: encoder input OK: T_lfr=%d, D_lfr=%d, bytes=%zu\n", T_lfr, D_lfr_actual,
                     lfr_bytes);
         ggml_backend_tensor_set(inp, lfr.data(), 0, lfr_bytes);
+        // sinusoidal PE (FunASR SinusoidalPositionEncoder): positions 1..T,
+        // depth = input width; first half sin, second half cos
+        const int Dp = D_lfr_actual, half = Dp / 2;
+        const float log_inc = std::log(10000.0f) / (float)(half - 1);
+        std::vector<float> pe((size_t)Dp * (size_t)T_lfr);
+        for (int t = 0; t < T_lfr; t++)
+            for (int i = 0; i < half; i++) {
+                const float a = (float)(t + 1) * std::exp(-log_inc * (float)i);
+                pe[(size_t)t * Dp + i] = std::sin(a);
+                pe[(size_t)t * Dp + half + i] = std::cos(a);
+            }
+        ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "enc_pe"), pe.data(), 0, pe.size() * sizeof(float));
     }
     if (ctx->verbosity >= 2)
         fprintf(stderr, "paraformer: running encoder graph...\n");
