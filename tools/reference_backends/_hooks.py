@@ -68,7 +68,7 @@ def _hook_factory(captured: Dict, name: str, *, first_call_only: bool = False) -
         else:
             t = output
         if isinstance(t, torch.Tensor):
-            captured[name] = t.detach().cpu().float()
+            captured[name] = t.detach().cpu().float().clone()  # own storage: a later in-place op must not rewrite the capture
     return hook
 
 
@@ -147,7 +147,7 @@ def capture_per_call(
             else:
                 t = output
             if isinstance(t, torch.Tensor):
-                captured[name_fmt.format(name=base, idx=idx)] = t.detach().cpu().float()
+                captured[name_fmt.format(name=base, idx=idx)] = t.detach().cpu().float().clone()  # own storage: a later in-place op must not rewrite the capture
         return hook
 
     handles = []

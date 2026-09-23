@@ -104,7 +104,7 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
         feats, feats_lens = fe(sig, sig_len)
         T_lfr = int(feats_lens.item())
         if "mel_features" in stages:
-            out["mel_features"] = feats[0, :T_lfr].cpu().float().numpy()
+            out["mel_features"] = feats[0, :T_lfr].cpu().float().numpy().copy()  # a view: the encoder later scales feats in place
 
         # 2. Prepend the 4 query embeds (textnorm + language + event + emotion).
         # Replicate SenseVoiceSmall.inference's prepend order: first textnorm
