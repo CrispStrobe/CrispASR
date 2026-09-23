@@ -17,7 +17,7 @@ per-backend porting detail (Per-model port notes + the family cross-reference).
 Reach for the topic groups when you are stuck on a *technique*, and the
 cross-reference when you already know which model you are touching.
 
-## Index by topic (304 lessons)
+## Index by topic (305 lessons)
 
 **Security & untrusted input** (2)
 
@@ -60,7 +60,7 @@ cross-reference when you already know which model you are touching.
 - L18897 — An upstream-sync PR must target the branch consumers pin, and cache export belongs after the build
 - L19022 — A convert-and-upload pipeline has no readout at its last step, and the dependency that broke the run was not a path in the source
 
-**Multi-surface wiring — CLI / C ABI / bindings / server** (30)
+**Multi-surface wiring — CLI / C ABI / bindings / server** (31)
 
 - L404 — Four ways a measurement lied in one session — and the experiment to run when you lack the reporter's hardware
 - L455 — A guard that no toolchain runs, and a test literal that pins the MODEL instead of the feature
@@ -92,6 +92,7 @@ cross-reference when you already know which model you are touching.
 - L18551 — A streaming callback over a growing buffer is buffered inference unless the public session owns every cache
 - L18576 — A managed assembly and its native library cannot share a name, and a live test that skips itself is not a test
 - L19087 — Fused ggml_flash_attn_ext accumulates KQ in F16 and set_prec is silently ignored on P100/sm_60 — a repo-wide latent class, but fix by SENSITIVITY not by count
+- L19124 — The session ABI re-implements every backend — a rate the CLI resamples is a constant there, and a runtime probe turns a 2-hour check into 4 seconds
 
 **Parity, the diff harness & ground truth** (42)
 
@@ -408,7 +409,7 @@ lookup, not a partition.
 - **higgs-stt** (2) — L1189, L17813
 - **dots-tts** (2) — L2064, L17440
 - **irodori** (2) — L1941, L15228
-- **f5-tts** (2) — L14570, L19087
+- **f5-tts** (3) — L14570, L19087, L19124
 - **kokoro** (4) — L906, L7808, L15865, L16538
 - **zonos** (2) — L12235, L18919
 - **omniasr / omnivoice** (6) — L733, L1636, L5129, L14367, L14395, L14781
