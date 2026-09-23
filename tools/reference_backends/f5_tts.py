@@ -35,6 +35,10 @@ Usage:
 """
 
 from __future__ import annotations
+try:
+    from reference_backends._safe_capture import own as _own
+except ImportError:  # run as a standalone script from this directory
+    from _safe_capture import own as _own
 
 import os
 import sys
@@ -211,21 +215,21 @@ def dump(model_dir: Path, audio: np.ndarray, stages: Set[str],
     if "text_embed" in stages:
         def text_embed_hook(module, inp, output):
             if "text_embed" not in first_step_captures:
-                first_step_captures["text_embed"] = output.detach().cpu().float()
+                first_step_captures["text_embed"] = _own(output.detach().cpu().float())
         hooks.append(transformer.text_embed.register_forward_hook(text_embed_hook))
 
     # Hook: time_embed
     if "time_embed" in stages:
         def time_embed_hook(module, inp, output):
             if "time_embed" not in first_step_captures:
-                first_step_captures["time_embed"] = output.detach().cpu().float()
+                first_step_captures["time_embed"] = _own(output.detach().cpu().float())
         hooks.append(transformer.time_embed.register_forward_hook(time_embed_hook))
 
     # Hook: input_embed (captured on first step, conditioned path)
     if "input_embed" in stages:
         def input_embed_hook(module, inp, output):
             if step_counter[0] == 0 and "input_embed" not in first_step_captures:
-                first_step_captures["input_embed"] = output.detach().cpu().float()
+                first_step_captures["input_embed"] = _own(output.detach().cpu().float())
         hooks.append(transformer.input_embed.register_forward_hook(input_embed_hook))
 
     # Hook: DiT layers (captured on first ODE step)
@@ -235,7 +239,7 @@ def dump(model_dir: Path, audio: np.ndarray, stages: Set[str],
             def make_hook(name):
                 def hook(module, inp, output):
                     if step_counter[0] == 0 and name not in dit_layer_captures:
-                        dit_layer_captures[name] = output.detach().cpu().float()
+                        dit_layer_captures[name] = _own(output.detach().cpu().float())
                 return hook
             hooks.append(block.register_forward_hook(make_hook(stage_name)))
 
@@ -331,7 +335,7 @@ def dump(model_dir: Path, audio: np.ndarray, stages: Set[str],
         if "vocos_backbone_out" in stages:
             backbone_out = [None]
             def voc_hook(module, inp, output):
-                backbone_out[0] = output.detach().cpu().float()
+                backbone_out[0] = _own(output.detach().cpu().float())
             h = vocoder.backbone.register_forward_hook(voc_hook)
             audio_out = vocoder.decode(gen_mel_t)
             h.remove()

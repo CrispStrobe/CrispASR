@@ -1,0 +1,3 @@
+{"id": "chr1s4/crispasr-dumper-aliasing-audit", "title": "CrispASR Dumper Aliasing Audit", "code_file": "dumper_aliasing_audit.py",
+ "language": "python", "kernel_type": "script", "is_private": "true", "enable_gpu": "false", "enable_internet": "true",
+ "dataset_sources": ["chr1s4/crispasr-hf-token"], "competition_sources": [], "kernel_sources": []}

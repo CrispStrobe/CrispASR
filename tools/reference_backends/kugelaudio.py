@@ -22,6 +22,10 @@ Env vars:
   KUGELAUDIO_CFG      cfg scale (default: 3.0)
 """
 
+try:
+    from reference_backends._safe_capture import own as _own
+except ImportError:  # run as a standalone script from this directory
+    from _safe_capture import own as _own
 import os
 import numpy as np
 from pathlib import Path
@@ -97,11 +101,11 @@ def dump(model_dir: Path, audio: np.ndarray, stages: set, **kwargs) -> dict:
     def make_hook(name):
         def hook_fn(module, inp, out):
             if isinstance(out, tuple):
-                captures[name] = out[0].detach().cpu().float()
+                captures[name] = _own(out[0].detach().cpu().float())
             elif hasattr(out, "last_hidden_state"):
-                captures[name] = out.last_hidden_state.detach().cpu().float()
+                captures[name] = _own(out.last_hidden_state.detach().cpu().float())
             else:
-                captures[name] = out.detach().cpu().float()
+                captures[name] = _own(out.detach().cpu().float())
         return hook_fn
 
     hooks = []

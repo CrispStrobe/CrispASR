@@ -582,6 +582,14 @@ def main() -> None:
         max_new_tokens=args.max_new_tokens,
     )
 
+    # Captures are owned copies (reference_backends/_safe_capture.py); list any
+    # whose source tensor changed after capture — each would have been a
+    # corrupted reference under the old view-returning .numpy() — and record
+    # the verdict in the archive's metadata.
+    from reference_backends import _safe_capture
+    alias_hits = _safe_capture.report()
+    alias_note = "none" if not alias_hits else "; ".join(f"{w} x{n}" for w, (n, _) in alias_hits)
+
     # Always include raw audio so C++ tests can feed it in without
     # re-reading the WAV.
     if "raw_audio" in stages:
@@ -600,6 +608,7 @@ def main() -> None:
 
     # Serialize
     meta = {
+        "aliasing_after_capture": alias_note,
         "backend":  args.backend,
         "model_dir": str(args.model_dir.resolve()),
         "audio":    str(args.audio.resolve()),
