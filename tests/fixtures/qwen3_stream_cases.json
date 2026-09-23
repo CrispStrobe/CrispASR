@@ -1,0 +1,398 @@
+[
+{
+"in": "",
+"repfix": "",
+"parse_asr": [
+"",
+""
+],
+"parse_asr_forced_en": [
+"",
+""
+],
+"parse_lang": [
+"",
+""
+],
+"parse_lang_forced_en": [
+"",
+""
+],
+"punct": "",
+"cjk": ""
+},
+{
+"in": "   ",
+"repfix": "   ",
+"parse_asr": [
+"",
+""
+],
+"parse_asr_forced_en": [
+"",
+""
+],
+"parse_lang": [
+"",
+""
+],
+"parse_lang_forced_en": [
+"",
+""
+],
+"punct": "   ",
+"cjk": "   "
+},
+{
+"in": "language English<asr_text>Hello, world.",
+"repfix": "language English<asr_text>Hello, world.",
+"parse_asr": [
+"English",
+"Hello, world."
+],
+"parse_asr_forced_en": [
+"English",
+"language English<asr_text>Hello, world."
+],
+"parse_lang": [
+"English",
+"Hello, world."
+],
+"parse_lang_forced_en": [
+"English",
+"language English<asr_text>Hello, world."
+],
+"punct": "language English<asr_text>Hello, world.",
+"cjk": "language English<asr_text>Hello, world."
+},
+{
+"in": "language Chinese<asr_text>你好 世界 ,好 .",
+"repfix": "language Chinese<asr_text>你好 世界 ,好 .",
+"parse_asr": [
+"Chinese",
+"你好 世界 ,好 ."
+],
+"parse_asr_forced_en": [
+"English",
+"language Chinese<asr_text>你好 世界 ,好 ."
+],
+"parse_lang": [
+"Chinese",
+"你好 世界 ,好 ."
+],
+"parse_lang_forced_en": [
+"English",
+"language Chinese<asr_text>你好 世界 ,好 ."
+],
+"punct": "language Chinese<asr_text>你好 世界 ，好 。",
+"cjk": "language Chinese<asr_text>你好世界 ,好 ."
+},
+{
+"in": "language None<asr_text>",
+"repfix": "language None<asr_text>",
+"parse_asr": [
+"",
+""
+],
+"parse_asr_forced_en": [
+"English",
+"language None<asr_text>"
+],
+"parse_lang": [
+"",
+""
+],
+"parse_lang_forced_en": [
+"English",
+"language None<asr_text>"
+],
+"punct": "language None<asr_text>",
+"cjk": "language None<asr_text>"
+},
+{
+"in": "language None<asr_text> stray",
+"repfix": "language None<asr_text> stray",
+"parse_asr": [
+"",
+"stray"
+],
+"parse_asr_forced_en": [
+"English",
+"language None<asr_text> stray"
+],
+"parse_lang": [
+"",
+"stray"
+],
+"parse_lang_forced_en": [
+"English",
+"language None<asr_text> stray"
+],
+"punct": "language None<asr_text> stray",
+"cjk": "language None<asr_text> stray"
+},
+{
+"in": "no tag here  ",
+"repfix": "no tag here  ",
+"parse_asr": [
+"",
+"no tag here"
+],
+"parse_asr_forced_en": [
+"English",
+"no tag here"
+],
+"parse_lang": [
+"",
+"no tag here"
+],
+"parse_lang_forced_en": [
+"English",
+"no tag here"
+],
+"punct": "no tag here  ",
+"cjk": "no tag here  "
+},
+{
+"in": "　language german\n<asr_text> Guten Tag ",
+"repfix": "　language german\n<asr_text> Guten Tag ",
+"parse_asr": [
+"German",
+"Guten Tag"
+],
+"parse_asr_forced_en": [
+"English",
+"language german\n<asr_text> Guten Tag"
+],
+"parse_lang": [
+"German",
+"Guten Tag"
+],
+"parse_lang_forced_en": [
+"English",
+"　language german\n<asr_text> Guten Tag"
+],
+"punct": "　language german\n<asr_text> Guten Tag ",
+"cjk": "　language german\n<asr_text> Guten Tag "
+},
+{
+"in": "language English<asr_text>hahahahahahahahahahahahahahahahahahahahahahahahahahahahahaha end",
+"repfix": "language English<asr_text>ha end",
+"parse_asr": [
+"English",
+"ha end"
+],
+"parse_asr_forced_en": [
+"English",
+"language English<asr_text>ha end"
+],
+"parse_lang": [
+"English",
+"hahahahahahahahahahahahahahahahahahahahahahahahahahahahahaha end"
+],
+"parse_lang_forced_en": [
+"English",
+"language English<asr_text>hahahahahahahahahahahahahahahahahahahahahahahahahahahahahaha end"
+],
+"punct": "language English<asr_text>hahahahahahahahahahahahahahahahahahahahahahahahahahahahahaha end",
+"cjk": "language English<asr_text>hahahahahahahahahahahahahahahahahahahahahahahahahahahahahaha end"
+},
+{
+"in": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab",
+"repfix": "ab",
+"parse_asr": [
+"",
+"ab"
+],
+"parse_asr_forced_en": [
+"English",
+"ab"
+],
+"parse_lang": [
+"",
+"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab"
+],
+"parse_lang_forced_en": [
+"English",
+"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab"
+],
+"punct": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab",
+"cjk": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab"
+},
+{
+"in": "xabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabctail",
+"repfix": "xabctail",
+"parse_asr": [
+"",
+"xabctail"
+],
+"parse_asr_forced_en": [
+"English",
+"xabctail"
+],
+"parse_lang": [
+"",
+"xabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabctail"
+],
+"parse_lang_forced_en": [
+"English",
+"xabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabctail"
+],
+"punct": "xabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabctail",
+"cjk": "xabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabctail"
+},
+{
+"in": "中文,测试.English, test!  (括号)",
+"repfix": "中文,测试.English, test!  (括号)",
+"parse_asr": [
+"",
+"中文,测试.English, test!  (括号)"
+],
+"parse_asr_forced_en": [
+"English",
+"中文,测试.English, test!  (括号)"
+],
+"parse_lang": [
+"",
+"中文,测试.English, test!  (括号)"
+],
+"parse_lang_forced_en": [
+"English",
+"中文,测试.English, test!  (括号)"
+],
+"punct": "中文，测试。English, test!  (括号）",
+"cjk": "中文,测试.English, test!  (括号)"
+},
+{
+"in": "价格是 3.5 元,好吗?",
+"repfix": "价格是 3.5 元,好吗?",
+"parse_asr": [
+"",
+"价格是 3.5 元,好吗?"
+],
+"parse_asr_forced_en": [
+"English",
+"价格是 3.5 元,好吗?"
+],
+"parse_lang": [
+"",
+"价格是 3.5 元,好吗?"
+],
+"parse_lang_forced_en": [
+"English",
+"价格是 3.5 元,好吗?"
+],
+"punct": "价格是 3.5 元，好吗？",
+"cjk": "价格是 3.5 元,好吗?"
+},
+{
+"in": "\"quoted\",yes.",
+"repfix": "\"quoted\",yes.",
+"parse_asr": [
+"",
+"\"quoted\",yes."
+],
+"parse_asr_forced_en": [
+"English",
+"\"quoted\",yes."
+],
+"parse_lang": [
+"",
+"\"quoted\",yes."
+],
+"parse_lang_forced_en": [
+"English",
+"\"quoted\",yes."
+],
+"punct": "\"quoted\",yes.",
+"cjk": "\"quoted\",yes."
+},
+{
+"in": "é,ü.",
+"repfix": "é,ü.",
+"parse_asr": [
+"",
+"é,ü."
+],
+"parse_asr_forced_en": [
+"English",
+"é,ü."
+],
+"parse_lang": [
+"",
+"é,ü."
+],
+"parse_lang_forced_en": [
+"English",
+"é,ü."
+],
+"punct": "é,ü.",
+"cjk": "é,ü."
+},
+{
+"in": "language French\r\n<asr_text>Bonjour, à tous.",
+"repfix": "language French\r\n<asr_text>Bonjour, à tous.",
+"parse_asr": [
+"French",
+"Bonjour, à tous."
+],
+"parse_asr_forced_en": [
+"English",
+"language French\r\n<asr_text>Bonjour, à tous."
+],
+"parse_lang": [
+"French",
+"Bonjour, à tous."
+],
+"parse_lang_forced_en": [
+"English",
+"language French\r\n<asr_text>Bonjour, à tous."
+],
+"punct": "language French\r\n<asr_text>Bonjour, à tous.",
+"cjk": "language French\r\n<asr_text>Bonjour, à tous."
+},
+{
+"in": "language English<asr_text>one|two",
+"repfix": "language English<asr_text>one|two",
+"parse_asr": [
+"English",
+"one|two"
+],
+"parse_asr_forced_en": [
+"English",
+"language English<asr_text>one|two"
+],
+"parse_lang": [
+"English",
+"one|two"
+],
+"parse_lang_forced_en": [
+"English",
+"language English<asr_text>one|two"
+],
+"punct": "language English<asr_text>one|two",
+"cjk": "language English<asr_text>one|two"
+},
+{
+"in": "  mixed 中 文 字 and  words ",
+"repfix": "  mixed 中 文 字 and  words ",
+"parse_asr": [
+"",
+"mixed 中 文 字 and  words"
+],
+"parse_asr_forced_en": [
+"English",
+"mixed 中 文 字 and  words"
+],
+"parse_lang": [
+"",
+"mixed 中 文 字 and  words"
+],
+"parse_lang_forced_en": [
+"English",
+"  mixed 中 文 字 and  words"
+],
+"punct": "  mixed 中 文 字 and  words ",
+"cjk": "  mixed 中文字 and  words "
+}
+]

@@ -111,14 +111,21 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
         "conv2_out":     (audio_tower.conv2d2, "conv2d2"),
         "conv3_out":     (audio_tower.conv2d3, "conv2d3"),
         "conv_out":      (audio_tower.conv_out, "conv_out"),
-        "enc_blk00_out": (audio_tower.layers[0], "layers[0]"),
-        "enc_blk17_out": (audio_tower.layers[-1], "layers[-1]"),
         "ln_post_out":   (audio_tower.ln_post, "ln_post"),
         "proj1_out":     (audio_tower.proj1, "proj1"),
         "proj2_out":     (audio_tower.proj2, "proj2"),
     }
+    # Every encoder block under its REAL index. This used to capture only
+    # layers[0] and layers[-1], naming the last one "enc_blk17_out" — right
+    # for the 18-layer 0.6B, but for the 24-layer 1.7B the C++ side compared
+    # its block 17 against the reference's block 23 (#445). Asking for any
+    # enc_blk* stage (or the legacy enc_blk17_out) captures them all.
+    want_blocks = any(st.startswith("enc_blk") for st in stages)
+    if want_blocks:
+        for i, layer in enumerate(audio_tower.layers):
+            hook_map[f"enc_blk{i:02d}_out"] = (layer, f"layers[{i}]")
     for stage_name, (mod, readable) in hook_map.items():
-        if stage_name in stages:
+        if stage_name in stages or (want_blocks and stage_name.startswith("enc_blk")):
             handles.append(mod.register_forward_hook(cap(stage_name)))
 
     # ---- Run the audio encoder ----

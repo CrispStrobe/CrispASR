@@ -367,7 +367,7 @@ def _compute_mel_filters(sr: int = 16000, n_fft: int = 400, n_mels: int = 128) -
 # ---------------------------------------------------------------------------
 
 
-def convert(input_dir: Path, out_path: Path) -> None:
+def convert(input_dir: Path, out_path: Path, streaming_recipe: str = "") -> None:
     print(f"Loading: {input_dir}")
     with open(input_dir / "config.json", "r", encoding="utf-8") as f:
         cfg = json.load(f)
@@ -381,7 +381,9 @@ def convert(input_dir: Path, out_path: Path) -> None:
         audio_start_id = thinker.get("audio_start_token_id", 151669)
         audio_end_id = thinker.get("audio_end_token_id", 151670)
         audio_pad_id = thinker.get("audio_token_id", 151676)
-        tie_word_embeddings = thinker.get("tie_word_embeddings", False)
+        # The flag can sit on the thinker OR on its text_config (Confucius4-R2T2,
+        # #445, sets only text_config.tie_word_embeddings and ships no lm_head).
+        tie_word_embeddings = thinker.get("tie_word_embeddings", text.get("tie_word_embeddings", False))
         print("  config format: non-hf (thinker_config)")
     else:
         audio = cfg["audio_config"]
@@ -420,6 +422,11 @@ def convert(input_dir: Path, out_path: Path) -> None:
 
     # Audio params
     writer.add_uint32("qwen3asr.sample_rate", 16000)
+    if streaming_recipe:
+        # Selects the streaming schedule the CLI/server realtime session uses
+        # by default (examples/cli/crispasr_backend_qwen3.cpp). "r2t2" is
+        # Confucius4-R2T2's example.py driver: 160 ms steps, rollback 1 token.
+        writer.add_string("qwen3asr.streaming_recipe", streaming_recipe)
     writer.add_uint32("qwen3asr.n_mels", audio.get("num_mel_bins", 128))
     writer.add_uint32("qwen3asr.n_fft", 400)
     writer.add_uint32("qwen3asr.win_length", 400)
@@ -548,6 +555,10 @@ def convert(input_dir: Path, out_path: Path) -> None:
     if not has_output_weight and tie_word_embeddings and token_embd_data is not None:
         print("  tie_word_embeddings: copying token_embd.weight → output.weight")
         writer.add_tensor("output.weight", token_embd_data)
+    elif not has_output_weight:
+        # The runtime requires output.weight; a GGUF without it cannot load.
+        raise SystemExit("error: checkpoint has no lm_head and the config does not set "
+                         "tie_word_embeddings — refusing to write a GGUF without output.weight")
         n_written += 1
         n_f16 += 1
 
@@ -573,9 +584,11 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument("--input", required=True, type=Path, help="HF model directory")
     p.add_argument("--output", required=True, type=Path, help="output GGUF path")
+    p.add_argument("--streaming-recipe", default="", choices=["", "r2t2"],
+                   help="record the model's streaming recipe (r2t2 = Confucius4-R2T2, #445)")
     return p.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
-    convert(args.input, args.output)
+    convert(args.input, args.output, args.streaming_recipe)

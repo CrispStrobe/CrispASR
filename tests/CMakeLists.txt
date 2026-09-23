@@ -5815,3 +5815,24 @@ if (CRISPASR_BUILD_EXAMPLES)
         PROPERTIES LABELS "unit;diff"
     )
 endif()
+
+# ─── test-qwen3-stream — core/qwen3_stream.h (Qwen3-ASR / Confucius4-R2T2
+# prefix-rollback streaming, #445) against outputs of the upstream Python
+# helpers (tests/fixtures/qwen3_stream_cases.json).
+add_executable(test-qwen3-stream
+    test-qwen3-stream.cpp
+)
+target_include_directories(test-qwen3-stream PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/examples
+)
+target_compile_definitions(test-qwen3-stream PRIVATE
+    CRISPASR_TEST_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures"
+)
+target_link_libraries(test-qwen3-stream PRIVATE
+    Catch2::Catch2WithMain
+)
+catch_discover_tests(test-qwen3-stream
+    TEST_SPEC "[qwen3-stream]"
+    PROPERTIES LABELS "unit;qwen3-stream"
+)

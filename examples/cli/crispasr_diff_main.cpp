@@ -2716,7 +2716,8 @@ int main(int argc, char** argv) {
                 if (enc)
                     free(enc);
                 std::vector<std::string> names = {"ln_post_out", "proj1_out"};
-                for (int il = 0; il < 18; il++) {
+                // Every block the reference carries (0.6B has 18, 1.7B 24).
+                for (int il = 0; il < 64; il++) {
                     char nm[32];
                     snprintf(nm, sizeof(nm), "enc_blk%02d_out", il);
                     names.push_back(nm);
