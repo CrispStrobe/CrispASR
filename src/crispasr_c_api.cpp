@@ -84,6 +84,10 @@
 #include "gigaam.h"
 #define CA_HAVE_GIGAAM 1
 #endif
+#if __has_include("dolphin.h")
+#include "dolphin.h"
+#define CA_HAVE_DOLPHIN 1
+#endif
 #if __has_include("canary.h")
 #include "canary.h"
 #define CA_HAVE_CANARY 1
@@ -1958,6 +1962,9 @@ struct crispasr_session {
 #ifdef CA_HAVE_GIGAAM
     gigaam_context* gigaam_ctx = nullptr;
 #endif
+#ifdef CA_HAVE_DOLPHIN
+    dolphin_context* dolphin_ctx = nullptr;
+#endif
 #ifdef CA_HAVE_CANARY
     canary_context* canary_ctx = nullptr;
 #endif
@@ -2651,6 +2658,20 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
         gp.use_flash = g_open_flash_attn_tls;
         s->gigaam_ctx = gigaam_init_from_file(model_path, gp);
         if (!s->gigaam_ctx) {
+            delete s;
+            return nullptr;
+        }
+        return s;
+    }
+#endif
+#ifdef CA_HAVE_DOLPHIN
+    if (s->backend == "dolphin") {
+        dolphin_context_params dp = dolphin_context_default_params();
+        dp.n_threads = s->n_threads;
+        dp.verbosity = g_open_verbosity_tls;
+        dp.use_gpu = g_open_use_gpu_tls;
+        s->dolphin_ctx = dolphin_init_from_file(model_path, dp);
+        if (!s->dolphin_ctx) {
             delete s;
             return nullptr;
         }
@@ -4644,6 +4665,9 @@ CA_EXPORT int crispasr_session_available_backends(char* out_csv, int out_cap) {
 #ifdef CA_HAVE_GIGAAM
     list += ",gigaam";
 #endif
+#ifdef CA_HAVE_DOLPHIN
+    list += ",dolphin";
+#endif
 #ifdef CA_HAVE_CANARY
     list += ",canary";
 #endif
@@ -6279,6 +6303,33 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
         }
         r->segments.push_back(std::move(seg));
         gigaam_result_free(gr);
+        return r;
+    }
+#endif
+#ifdef CA_HAVE_DOLPHIN
+    if (s->backend == "dolphin" && s->dolphin_ctx) {
+        // Dolphin's language is two-level: "zh" (region predicted) or "zh-SICHUAN"
+        // (both forced); empty lets the decoder predict both, as upstream does.
+        std::string lang, region;
+        if (!s->source_language.empty() && s->source_language != "auto") {
+            const size_t dash = s->source_language.find('-');
+            lang = s->source_language.substr(0, dash);
+            if (dash != std::string::npos)
+                region = s->source_language.substr(dash + 1);
+        }
+        dolphin_result* dr =
+            dolphin_transcribe_ex(s->dolphin_ctx, pcm, n_samples, lang.empty() ? nullptr : lang.c_str(),
+                                  region.empty() ? nullptr : region.c_str());
+        if (!dr) {
+            delete r;
+            return nullptr;
+        }
+        crispasr_session_seg seg;
+        seg.text = dr->text ? dr->text : "";
+        seg.t0 = 0;
+        seg.t1 = (int64_t)n_samples * 100 / 16000;
+        r->segments.push_back(std::move(seg));
+        dolphin_result_free(dr);
         return r;
     }
 #endif
@@ -11381,6 +11432,10 @@ CA_EXPORT void crispasr_session_close(crispasr_session* s) {
 #ifdef CA_HAVE_GIGAAM
     if (s->gigaam_ctx)
         gigaam_free(s->gigaam_ctx);
+#endif
+#ifdef CA_HAVE_DOLPHIN
+    if (s->dolphin_ctx)
+        dolphin_free(s->dolphin_ctx);
 #endif
 #ifdef CA_HAVE_CANARY
     if (s->canary_ctx)

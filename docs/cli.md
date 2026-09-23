@@ -229,7 +229,7 @@ document (issue #228).
 | `--lcs-dedup auto\|on\|off` | NeMo-style sub-word LCS dedup across chunk boundaries (default `auto` — fires when chunking with overlap) |
 | `--lcs-min-length N` | Minimum LCS length to act on (default 1; raise to 3-4 on long-silence audio where blank tokens dominate boundaries) |
 | `--parakeet-decoder ctc\|tdt\|maes` | Select decode strategy: `ctc` (CTC head), `tdt` (TDT greedy/beam, default), `maes` (MAES beam search — requires `-bs N` with N>1) |
-| `-bs N`, `--beam-size N` | Parakeet TDT/RNNT beam search width (default: unset = greedy). `2`–`4` recommended with hotwords or MAES. CTC decode is frame-synchronous and always greedy |
+| `-bs N`, `--beam-size N` | Parakeet TDT/RNNT beam search width (default: unset = greedy). `2`–`4` recommended with hotwords or MAES. CTC decode is frame-synchronous and always greedy. `dolphin`: CTC prefix-beam + attention-rescoring width (default 10, upstream's) |
 | `--sensitivity conservative\|balanced\|aggressive` | Named bundle of the four whisper fallback thresholds (`-et`, `-lpt`, `-nth`, temperature step). `balanced` is the shipped default and always a no-op. See below |
 
 #### `--sensitivity` — the four decode thresholds as one knob
