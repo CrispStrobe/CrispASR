@@ -436,6 +436,41 @@ that changed the answer is visible rather than celebrated).
 
 ---
 
+### 5a. End-to-end: the mechanism works, and one number is not a rounding
+difference
+
+`end-to-end linux-x86_64`, run 35817927145, on the EPYC runner with
+`hft-transformer-q4_0.gguf`:
+
+```
+hft: repack buffer type: 2 MiB (63 tensors) repacked, 1 MiB (94 tensors) default
+```
+
+All 63 quantised tensors took the fast path, the 94 F32 ones went to the
+default partition, and the control arm (`CRISPASR_GGUF_REPACK=0`) printed
+nothing — so the two arms really were different, which is the thing a perf A/B
+most often gets wrong silently.
+
+**The decoded notes are not bit-identical, and the difference is worth stating
+precisely.** Onsets, offsets and pitches match on every note. One note's
+**velocity** moved by 3 units (`1.183 1.491 60 C4` at 65 vs 68). That is the
+expected consequence of §3's ~1e-7 accumulation-order difference tipping a
+velocity quantisation boundary — the same signature `HFT_TRANSFORMER.md`
+records for its non-bit-identical recurrence. It is not a different
+transcription. The workflow now fails on a changed onset/offset/pitch and
+merely reports a changed velocity, because those two are not the same finding.
+
+⚠ **The first end-to-end run produced no timing at all and did not look like
+it.** `/usr/bin/time` is not installed on GitHub's ubuntu runners, so every arm
+recorded an empty string and the summary printed `0.00 cpu-s` for all six — a
+number, not an error. It is now taken with
+`resource.getrusage(RUSAGE_CHILDREN)`, which needs no package. Whole-model
+timings will come from the re-run; **until they land, the whole-model claims in
+this document are the VPS ones and §3's kernel measurements, not clean-runner
+end-to-end measurements.**
+
+---
+
 ## 6. What is still open, and what is untestable from here
 
 1. **Whether a CPU with an int8 dot-product instruction widens the x86 lead.**

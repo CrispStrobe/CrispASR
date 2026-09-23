@@ -257,53 +257,106 @@ jobs:
       # its own process, cold rep discarded. CPU seconds (user+sys), not wall:
       # wall on a 4-core runner conflates the thread-scaling question with the
       # quantisation one.
+      #
+      # Timing is taken with resource.getrusage(RUSAGE_CHILDREN) rather than
+      # /usr/bin/time, which is NOT installed on GitHub's ubuntu runners --
+      # the first cut used it and every arm silently recorded an empty string,
+      # so the summary printed 0.00 cpu-s for all six and looked like a
+      # measurement rather than a missing binary. getrusage needs no package
+      # and behaves the same on macOS.
       - name: Interleaved A/B
         env:
           MKL_NUM_THREADS: "1"          # CrispASR issue #453
           OPENBLAS_NUM_THREADS: "1"
         run: |
-          set -u
-          WAV=samples/jfk.wav
-          declare -a N=(hft-f32 hft-q8_0 hft-q4_0-generic hft-q4_0-repack oaf-f32 oaf-q8_0)
-          declare -a M=(m/hft-f32.gguf m/hft-q8_0.gguf m/hft-q4_0.gguf m/hft-q4_0.gguf \
-                        m/oaf-f32.gguf m/oaf-q8_0.gguf)
-          declare -a R=(0 0 0 1 0 0)
-          for i in "${!N[@]}"; do : > "${N[$i]}.times"; done
-          for rep in 0 1 2 3; do
-            k=$(( rep % ${#N[@]} ))
-            order="$(seq $k $(( ${#N[@]} - 1 )); seq 0 $(( k - 1 )) 2>/dev/null || true)"
-            for i in $order; do
-              [ -f "${M[$i]}" ] || continue
-              t=$( { /usr/bin/time -f "%U %S %e" env CRISPASR_GGUF_REPACK="${R[$i]}" \
-                      ./build/bin/crispasr --piano -m "${M[$i]}" -t 1 -f "$WAV" \
-                      > "${N[$i]}.notes" 2>"${N[$i]}.log"; } 2>&1 | tail -1 )
-              # rep 0 is cold: page cache, first touch, dynamic loader.
-              [ "$rep" = 0 ] || echo "$t" >> "${N[$i]}.times"
-              echo "rep $rep ${N[$i]} user+sys+wall: $t"
-            done
-          done
-          echo
-          echo "== CPU seconds (user+sys), median of 3, load $(cut -d' ' -f1 /proc/loadavg) =="
-          for n in "${N[@]}"; do
-            [ -s "$n.times" ] || continue
-            awk '{print $1+$2}' "$n.times" | sort -n | \
-              awk -v n="$n" '{a[NR]=$1} END {printf "%-20s %7.2f cpu-s (n=%d)\n", n, a[int((NR+1)/2)], NR}'
-          done
-          echo
-          echo "== did the repack arm actually take the fast path? =="
-          grep -h 'repack buffer type' hft-q4_0-repack.log || \
-            echo "NO -- the repack arm fell back; its number is a duplicate of the generic arm"
+          python3 - <<'PY'
+          import os, resource, statistics, subprocess, pathlib, sys
+          WAV = "samples/jfk.wav"
+          ARMS = [
+              ("hft-f32",          "m/hft-f32.gguf",  "0"),
+              ("hft-q8_0",         "m/hft-q8_0.gguf", "0"),
+              ("hft-q4_0-generic", "m/hft-q4_0.gguf", "0"),
+              ("hft-q4_0-repack",  "m/hft-q4_0.gguf", "1"),
+              ("oaf-f32",          "m/oaf-f32.gguf",  "0"),
+              ("oaf-q8_0",         "m/oaf-q8_0.gguf", "0"),
+          ]
+          ARMS = [a for a in ARMS if pathlib.Path(a[1]).exists()]
+          times = {n: [] for n, _, _ in ARMS}
+
+          def cpu_of_children():
+              r = resource.getrusage(resource.RUSAGE_CHILDREN)
+              return r.ru_utime + r.ru_stime, r.ru_maxrss
+
+          for rep in range(4):
+              order = ARMS[rep % len(ARMS):] + ARMS[:rep % len(ARMS)]
+              for name, model, repack in order:
+                  env = dict(os.environ, CRISPASR_GGUF_REPACK=repack)
+                  before, _ = cpu_of_children()
+                  with open(f"{name}.notes", "w") as out, open(f"{name}.log", "w") as err:
+                      subprocess.run(["./build/bin/crispasr", "--piano", "-m", model,
+                                      "-t", "1", "-f", WAV],
+                                     stdout=out, stderr=err, env=env, check=False)
+                  after, rss = cpu_of_children()
+                  dt = after - before
+                  # rep 0 is cold: page cache, first touch, dynamic loader.
+                  if rep:
+                      times[name].append(dt)
+                  print(f"rep {rep} {name:<20} {dt:7.2f} cpu-s  (peak child RSS so far {rss//1024} MiB)",
+                        flush=True)
+
+          print()
+          print(f"== CPU seconds (user+sys), median of 3, load {os.getloadavg()[0]:.2f} ==")
+          for name, _, _ in ARMS:
+              v = times[name]
+              if v:
+                  print(f"{name:<20} {statistics.median(v):7.2f} cpu-s (n={len(v)})")
+          for name in ("hft-f32", "hft-q8_0", "hft-q4_0-generic", "hft-q4_0-repack"):
+              if times.get(name) and times.get("hft-f32"):
+                  base = statistics.median(times["hft-f32"])
+                  if base:
+                      print(f"  {name:<20} {statistics.median(times[name])/base:5.2f}x f32")
+          if times.get("oaf-f32") and times.get("oaf-q8_0"):
+              b = statistics.median(times["oaf-f32"])
+              if b:
+                  print(f"  oaf-q8_0             {statistics.median(times['oaf-q8_0'])/b:5.2f}x f32")
+          PY
+
+      # Two guards on the A/B itself, then one on the answer.
+      - name: Assert the arms were actually different
+        run: |
+          echo "== did the repack arm take the fast path? =="
+          grep -h 'repack buffer type' hft-q4_0-repack.log || {
+            echo "::error::the repack arm fell back; its number duplicates the generic arm"; exit 1; }
           echo "== and the control must NOT have =="
-          grep -h 'repack buffer type' hft-q4_0-generic.log && \
-            echo "::error::the control arm took the repack path; the A/B compared the wrong thing" || \
-            echo "control clean"
-          echo
-          echo "== decoded-note parity between the repack and generic arms =="
-          if diff -q hft-q4_0-repack.notes hft-q4_0-generic.notes; then
-            echo "identical"
+          if grep -h 'repack buffer type' hft-q4_0-generic.log; then
+            echo "::error::the control arm took the repack path; the A/B compared the wrong thing"
+            exit 1
+          fi
+          echo "control clean"
+
+      # Note lines are: onset  offset  midi  name  velocity.
+      # The repacked kernel quantises the activation identically but accumulates
+      # in a different order, so ~1e-7 relative differences are expected and can
+      # tip a velocity byte. A changed ONSET, OFFSET or PITCH would not be
+      # rounding and is a failure; a velocity that moved is reported and
+      # allowed.
+      - name: Decoded-note parity between the repack and generic arms
+        run: |
+          cut -f1-4 hft-q4_0-repack.notes  > a.4
+          cut -f1-4 hft-q4_0-generic.notes > b.4
+          if diff -q a.4 b.4 > /dev/null; then
+            echo "onset/offset/pitch: IDENTICAL across $(wc -l < a.4) notes"
           else
-            echo "::warning::repack and generic arms decoded different notes"
-            diff hft-q4_0-repack.notes hft-q4_0-generic.notes | head -20
+            echo "::error::repack changed onset, offset or pitch -- not a rounding difference"
+            diff a.4 b.4 | head -20
+            exit 1
+          fi
+          if diff -q hft-q4_0-repack.notes hft-q4_0-generic.notes > /dev/null; then
+            echo "velocity: identical too"
+          else
+            n=$(diff hft-q4_0-repack.notes hft-q4_0-generic.notes | grep -c '^<')
+            echo "velocity: $n note(s) differ by rounding, onset/offset/pitch unaffected:"
+            diff hft-q4_0-repack.notes hft-q4_0-generic.notes | head -10
           fi
 
       - uses: actions/upload-artifact@v4
