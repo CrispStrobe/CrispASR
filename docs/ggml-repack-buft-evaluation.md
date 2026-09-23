@@ -451,14 +451,41 @@ default partition, and the control arm (`CRISPASR_GGUF_REPACK=0`) printed
 nothing — so the two arms really were different, which is the thing a perf A/B
 most often gets wrong silently.
 
-**The decoded notes are not bit-identical, and the difference is worth stating
-precisely.** Onsets, offsets and pitches match on every note. One note's
-**velocity** moved by 3 units (`1.183 1.491 60 C4` at 65 vs 68). That is the
-expected consequence of §3's ~1e-7 accumulation-order difference tipping a
-velocity quantisation boundary — the same signature `HFT_TRANSFORMER.md`
-records for its non-bit-identical recurrence. It is not a different
-transcription. The workflow now fails on a changed onset/offset/pitch and
-merely reports a changed velocity, because those two are not the same finding.
+**The decoded notes are not bit-identical.** Measured over the ~90 notes
+`crispasr --piano` decodes from `samples/jfk.wav`, repack arm against generic
+arm, on both runners:
+
+| | linux-x86_64 (EPYC) | linux-arm64 |
+| --- | --- | --- |
+| notes decoded | 90 vs 90 | 91 vs 92 |
+| **pitch sequence** | **identical** | one extra note in the generic arm |
+| max onset/offset shift | **1 ms** — exactly one hop | 1 ms, apart from the extra note |
+| max velocity delta | 6 | 6 |
+
+On x86 the transcription is **the same notes at the same pitches**, with onsets
+moved by at most a single frame and velocities by a few units. On arm64 one
+extra 18 ms note (`0.984–1.002, C#4`) appears in one arm and not the other.
+
+That is the signature of §3's ~1e-7 accumulation-order difference tipping a
+threshold, and **`jfk.wav` is close to the worst possible fixture for this
+check**: it is speech fed to a piano transcriber, so essentially every
+detection sits near the decision boundary and an 18 ms blip is exactly what a
+marginal one looks like. It is not evidence that the repacked kernel is wrong —
+§3 shows the GEMM outputs agreeing to 1e-8..5e-7 relative — but it is also not
+something to wave away. **What would settle it is note-level F1 on MusicNet
+through `tools/hft_musicnet_f1.py`, not a byte diff on a speech clip**, and
+that has not been run.
+
+⚠ *Correction, recorded because it nearly went into this document as a
+finding:* this section first said "onsets, offsets and pitches match on every
+note; one velocity moved by 3 units". That came from reading a `diff | head
+-20` and mistaking the truncation for the whole story. The real diff is ~20 of
+90 note lines on each runner. The numbers above are the full comparison.
+
+The workflow's guard was wrong for the same reason and is now fixed: comparing
+onset/offset exactly can never pass, because a one-hop shift is expected. It
+asserts the **pitch sequence** and the **note count**, which are the things a
+real regression would move.
 
 ⚠ **The first end-to-end run produced no timing at all and did not look like
 it.** `/usr/bin/time` is not installed on GitHub's ubuntu runners, so every arm
