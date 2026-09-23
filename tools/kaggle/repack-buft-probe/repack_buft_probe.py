@@ -70,28 +70,49 @@ except Exception:
 
 # ---------------------------------------------------------------- sources ---
 banner("SOURCES — from dataset_sources (no internet on a Kaggle CPU worker)")
-tar_path = None
-for root in ["/kaggle/input", "/kaggle/input/datasets"]:
-    for p in Path(root).rglob("repack-probe-src.tar.gz"):
-        tar_path = p
-        break
-    if tar_path:
-        break
-if tar_path is None:
-    print("FATAL: repack-probe-src.tar.gz not found under /kaggle/input.")
-    print("Contents of /kaggle/input:")
-    for p in Path("/kaggle/input").rglob("*"):
+# `kaggle datasets create -r tar` makes Kaggle EXTRACT the archive at mount
+# time, so the worker usually sees the tree directly and never a .tar.gz.
+# Handle both, and print the mount tree when neither turns up.
+ggml_dir = None
+probe_cpp = None
+for cand in Path("/kaggle/input").rglob("ggml/include/ggml.h"):
+    ggml_dir = cand.parent.parent
+    break
+for cand in Path("/kaggle/input").rglob("crispasr_repack_probe.cpp"):
+    probe_cpp = cand
+    break
+
+if ggml_dir is None:
+    tar_path = next(iter(Path("/kaggle/input").rglob("repack-probe-src.tar.gz")), None)
+    if tar_path is not None:
+        print("extracting", tar_path)
+        src = WORK / "src"
+        src.mkdir(exist_ok=True)
+        with tarfile.open(tar_path) as tf:
+            tf.extractall(src)
+        ggml_dir = src / "ggml"
+        probe_cpp = src / "examples" / "cli" / "crispasr_repack_probe.cpp"
+
+if ggml_dir is None or probe_cpp is None or not ggml_dir.exists() or not probe_cpp.exists():
+    print("FATAL: could not locate ggml source and/or the probe .cpp under /kaggle/input.")
+    for p in sorted(Path("/kaggle/input").glob("*/*/*"))[:80]:
         print("   ", p)
     sys.exit(1)
-print("found:", tar_path)
-src = WORK / "src"
-src.mkdir(exist_ok=True)
-with tarfile.open(tar_path) as tf:
-    tf.extractall(src)
-ggml_dir = src / "ggml"
-probe_cpp = src / "examples" / "cli" / "crispasr_repack_probe.cpp"
-print("ggml:", ggml_dir, ggml_dir.exists())
-print("probe:", probe_cpp, probe_cpp.exists())
+
+# The mount is read-only; CMake needs to read only, so an in-source path is
+# fine, but copy anyway so nothing tries to write next to the sources.
+if str(ggml_dir).startswith("/kaggle/input"):
+    import shutil
+    local = WORK / "src"
+    local.mkdir(exist_ok=True)
+    if not (local / "ggml").exists():
+        shutil.copytree(ggml_dir, local / "ggml", symlinks=True, dirs_exist_ok=True)
+    ggml_dir = local / "ggml"
+    shutil.copy(probe_cpp, local / "crispasr_repack_probe.cpp")
+    probe_cpp = local / "crispasr_repack_probe.cpp"
+
+print("ggml :", ggml_dir)
+print("probe:", probe_cpp)
 
 # ------------------------------------------------------------------ build ---
 banner("BUILD — ggml CPU backend with repack enabled, native ISA")

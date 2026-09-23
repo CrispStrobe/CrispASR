@@ -274,7 +274,27 @@ struct hft_transformer_ctx* hft_transformer_init_from_file(const char* path, str
 
     ctx->backend = core_cpu_backend::init();
     core_gguf::WeightLoad wl;
-    if (!core_gguf::load_weights(path, ctx->backend, "hft", wl)) {
+    // ggml's repacked int8 GEMM (docs/ggml-optimisation-playbook.md §4) is
+    // reached only by putting the weight in the CPU device's extra buffer
+    // type. hFT is 83.5% weight GEMM, so it is the model with the most to
+    // gain. Every hft_linear::w is used exactly once, as src[0] of
+    // ggml_mul_mat in hft_linear_apply(), with an F32 activation — which is
+    // precisely the contract load_weights_repack() requires. Nothing else in
+    // this model is: the layer-norm weights are ggml_mul operands and the
+    // positional tables are ggml_add operands, so both are excluded by name.
+    //
+    // No-ops (and keeps zero-copy mmap) when the host offers no repack buffer
+    // type, or when no weight is of a type it has a kernel for — which is the
+    // case for the q8_0 GGUF on x86, where ggml has no q8_0 repack kernel at
+    // all. q4_0 and q4_K are the quantisations this helps.
+    auto is_hft_matmul_weight = [](const char* name, void*) -> bool {
+        const std::string n = name;
+        if (n.size() < 7 || n.compare(n.size() - 7, 7, ".weight") != 0)
+            return false;
+        return n.find(".ln.") == std::string::npos;
+    };
+    int n_repacked = 0;
+    if (!core_gguf::load_weights_repack(path, ctx->backend, is_hft_matmul_weight, nullptr, "hft", wl, &n_repacked)) {
         ggml_backend_free(ctx->backend);
         delete ctx;
         return nullptr;

@@ -172,6 +172,75 @@ using IsGpuTensor = bool (*)(const char* tensor_name, void* user);
 bool load_weights_split(const char* path, ggml_backend_t gpu_backend, ggml_backend_t cpu_backend, IsGpuTensor is_gpu,
                         void* user, const char* model_tag, WeightLoad& out);
 
+// ---------------------------------------------------------------------------
+// ggml CPU repack ("extra") buffer type — docs/ggml-optimisation-playbook.md §4
+// ---------------------------------------------------------------------------
+//
+// ggml's repacked int8 GEMM (ggml/src/ggml-cpu/repack.cpp) is several times
+// faster than the generic quantised path, and it is reached ONLY by putting
+// the weight in the CPU device's *extra* buffer type. Dispatch is keyed on the
+// weight's buffer type inside ggml_compute_forward itself
+// (ggml-cpu.c: ggml_cpu_extra_compute_forward), so no ggml_backend_sched is
+// required — a model on a raw gallocr gets it too.
+//
+// Measured on the CrispASR VPS (Xeon Skylake-SP, AVX-512F/DQ/CD/BW/VL,
+// NO AVX-512 VNNI, NO AMX), single thread, interleaved A/B, best-of-40:
+//
+//   q4_0  generic 1.22-1.44x f32   ->  repacked 0.76-0.97x f32   (1.4-1.7x)
+//   q4_K  generic 1.83-3.02x f32   ->  repacked 0.48-0.66x f32   (3.2-5.6x)
+//   q8_0  generic 1.08-1.31x f32   ->  NO x86 repack kernel exists
+//
+// Reproduce with `crispasr-repack-probe`. Four things an adopter must know:
+//
+//  1. **q8_0 has no x86 repack kernel at all.** ggml_repack_get_optimal_repack_type
+//     gates GGML_TYPE_Q8_0 on NEON + dotprod/i8mm (or RISC-V), with no AVX2 or
+//     AVX-512 branch. Every q8_0 model in this tree therefore gains nothing from
+//     this path on x86 — it needs q4_0 or q4_K. On arm64 with dotprod, q8_0 does
+//     have a kernel, so this is an ISA-specific statement, not a general one.
+//  2. **The repack buffer type's set_tensor dereferences tensor->extra
+//     unconditionally.** When it has no kernel for a given (type, shape, ISA) it
+//     leaves extra null, so writing such a tensor is a null dereference, not a
+//     graceful fallback. Tensors must be classified BEFORE they are written,
+//     which is what repack_buft_accepts() below is for.
+//  3. **The buffer type supports only MUL_MAT and MUL_MAT_ID**, with a 2-D
+//     src[0] and an F32 src[1]. (Not GET_ROWS — src/crispasr.cpp's comment
+//     saying otherwise is stale against this ggml version.) The loader cannot
+//     tell which tensors are used that way; only the model can, hence the
+//     predicate.
+//  4. **This path gives up the zero-copy mmap of load_weights().** Verified,
+//     not inferred: the mmap path binds tensor->data straight into the file map
+//     and never calls set_tensor at all, while repacking is precisely a
+//     set_tensor that rewrites the bytes into a buffer the buft owns. The two
+//     cannot coexist for the same tensor. Expect load-time and RSS cost in
+//     exchange for GEMM throughput, and measure both.
+
+// Returns true when the CPU repack buffer type on THIS host has a repacked
+// kernel for a 2-D tensor of this type and shape — i.e. when putting such a
+// tensor in that buffer type is safe and useful. False when no repack buffer
+// type is offered at all. Cheap: allocates and frees one tensor's worth of
+// memory to ask ggml rather than duplicating its dispatch table.
+bool repack_buft_accepts(ggml_type type, int64_t ne0, int64_t ne1);
+
+// Load weights onto `cpu_backend`, placing every tensor for which
+// `is_matmul_weight(name, user)` is true AND repack_buft_accepts() agrees into
+// ggml's CPU repack buffer type, and everything else into the default one.
+//
+// The predicate must be true ONLY for tensors used exclusively as src[0] of a
+// 2-D MUL_MAT / MUL_MAT_ID with an F32 activation. A tensor in the repack
+// buffer type has had its bytes rewritten into an interleaved layout: reading
+// it back, copying it, or using it in any other op will not do what you mean.
+//
+// `n_repacked`, when non-null, receives how many tensors actually landed in the
+// repack buffer type. Zero is a normal outcome — no repack buft on this host,
+// or no tensor of a type it has a kernel for — and not an error; the load still
+// succeeds via the default buffer type.
+//
+// Ownership matches load_weights_split(): out.buf is the repack partition,
+// out.buf_cpu the default one, and free_weights() releases both.
+using IsMatmulWeight = bool (*)(const char* tensor_name, void* user);
+bool load_weights_repack(const char* path, ggml_backend_t cpu_backend, IsMatmulWeight is_matmul_weight, void* user,
+                         const char* model_tag, WeightLoad& out, int* n_repacked = nullptr);
+
 // PLAN #69a — generic predicate for the "<prefix><N>." tensor naming
 // used by every LLM-decode backend in src/. Each backend has its own
 // prefix:

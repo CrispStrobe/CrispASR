@@ -238,14 +238,35 @@ int main(int argc, char ** argv) {
         printf("%-6s  %-9s  %-9s  %-9s  %-9s  %s\n",
                "type", "def best", "rep best", "def med", "rep med", "verdict");
 
+        double f32_best = 0, f32_med = 0;
         for (auto ty : types) {
             Arm def, rep;
             if (!build_arm(def, ty.t, s, n_threads, nullptr, "default")) continue;
             if (!build_arm(rep, ty.t, s, n_threads, extra[0], "repack")) continue;
 
+            // Even when the repack buft declines the tensor, time the default
+            // arm: the f32 row is the baseline the quantised rows are judged
+            // against, and "is generic-path q8_0 slower than f32 for this
+            // shape?" is the question behind the hFT/O&F disagreement.
             if (!rep.usable) {
-                printf("%-6s  %-9s  %-9s  %-9s  %-9s  %s\n", ty.n, "-", "-", "-", "-",
-                       "repack buft DECLINED this tensor (no kernel for this type/shape/ISA)");
+                for (int i = 0; i < 3; i++) ggml_backend_graph_compute(def.backend, def.gf);
+                for (int i = 0; i < reps; i++) {
+                    double t0 = now_ms();
+                    ggml_backend_graph_compute(def.backend, def.gf);
+                    def.times.push_back(now_ms() - t0);
+                }
+                finish_arm(def);
+                Stats ds = summarise(def.times);
+                if (ty.t == GGML_TYPE_F32) f32_best = ds.best, f32_med = ds.med;
+                char v[160];
+                if (f32_best > 0 && ty.t != GGML_TYPE_F32)
+                    snprintf(v, sizeof v, "repack DECLINED; generic path is %.2fx f32 on best, %.2fx on median",
+                             ds.best / f32_best, ds.med / f32_med);
+                else
+                    snprintf(v, sizeof v, "%s", ty.t == GGML_TYPE_F32
+                             ? "f32 baseline (repack is quant-only by design)"
+                             : "repack buft DECLINED this tensor (no kernel for this type/shape/ISA)");
+                printf("%-6s  %9.3f  %-9s  %9.3f  %-9s  %s\n", ty.n, ds.best, "-", ds.med, "-", v);
                 continue;
             }
 
@@ -271,10 +292,15 @@ int main(int argc, char ** argv) {
             Stats rs = summarise(rep.times);
             double rel_err = def.checksum == 0 ? 0
                            : std::abs(rep.checksum - def.checksum) / std::abs(def.checksum);
-            char verdict[160];
-            snprintf(verdict, sizeof verdict,
-                     "repack %.2fx on best, %.2fx on median  (sum rel-diff %.2e)",
-                     ds.best / rs.best, ds.med / rs.med, rel_err);
+            char verdict[200];
+            if (f32_best > 0)
+                snprintf(verdict, sizeof verdict,
+                         "repack %.2fx vs generic; generic %.2fx f32, repack %.2fx f32 (best; sum rel-diff %.1e)",
+                         ds.best / rs.best, ds.best / f32_best, rs.best / f32_best, rel_err);
+            else
+                snprintf(verdict, sizeof verdict,
+                         "repack %.2fx on best, %.2fx on median  (sum rel-diff %.2e)",
+                         ds.best / rs.best, ds.med / rs.med, rel_err);
             printf("%-6s  %9.3f  %9.3f  %9.3f  %9.3f  %s\n",
                    ty.n, ds.best, rs.best, ds.med, rs.med, verdict);
         }
