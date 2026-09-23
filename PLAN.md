@@ -9,6 +9,11 @@ the reporter's reliable anchors. Reopen the issue, reproduce the exact command,
 and require both monotonic output and bounded timing displacement. Worktree
 `.claude/worktrees/fix-444-timing`, branch `fix/444-timing`.
 
+## CLAIMED 2026-09-23 — #436 Dolphin-CN-Dialect (then X-ASR)
+
+Worktree `.claude/worktrees/feat-436-dolphin`, branch `feat/436-dolphin`.
+NOW: blueprint read (docs/dolphin/PLAN.md on the branch); converter next.
+
 ## CLAIMED 2026-09-22 — #445 Orukeet + Confucius4-R2T2, then #438 Hojo, #436
 
 Taking over #445 from the 2026-09-20 roadmap claim below: its worktree
