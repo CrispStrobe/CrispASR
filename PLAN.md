@@ -25,7 +25,9 @@ Confucius4-R2T2 merged 2026-09-23 (feat/445-r2t2, CI 35824680242 green): tied
 lm_head conversion, prefix-rollback streaming session (R2T2's example.py
 schedule), F16 offline + streaming final text identical to upstream on en + zh.
 #438 Hojo merged 2026-09-23 (CI 35824656929 green; F16 7/7 stages PASS, greedy text
-identical to upstream). #436 (Dolphin, X-ASR) on their branches, waiting on CI.
+identical to upstream). #436 Dolphin merged 2026-09-23 (CI 35828799990 green; F16 every stage PASS,
+text identical to upstream on zh + jfk; Q4_K default after a 15-clip transcript
+check). #436 X-ASR on feat/436-xasr: F16 parity on every stage, waiting on CI.
 
 Done this session: #448 merged (8c359d80 + da258942 mask-width assert),
 #453 fixed (817d6bf3), #452 merged (1aa0d55f) plus a shell-injection fix in
