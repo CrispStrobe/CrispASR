@@ -1,6 +1,9 @@
 name: CI
 
 on:
+  # Manual runs on a feature branch: heavy builds and tests belong on CI, not
+  # on the shared dev box (`gh workflow run ci.yml --ref <branch>`).
+  workflow_dispatch:
   push:
     branches: [main, master, integrated_cli]
   pull_request:
