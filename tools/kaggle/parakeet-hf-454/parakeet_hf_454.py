@@ -23,6 +23,10 @@ try:
     subprocess.check_call(["git", "clone", "--depth", "1", "--recurse-submodules", "--shallow-submodules", "-b", "feat/454-parakeet-hf",
                            "https://github.com/CrispStrobe/CrispASR.git", str(REPO)])
     res["head"] = subprocess.check_output(["git", "-C", str(REPO), "rev-parse", "HEAD"], text=True).strip()
+    # before anything imports huggingface_hub: transformers@main upgrades it, and a
+    # half-imported old copy then fails (as_extended_path ImportError)
+    run([sys.executable, "-m", "pip", "install", "-q", "gguf", "librosa", "safetensors", "virtualenv",
+         "git+https://github.com/huggingface/transformers.git"], "pip.log")
     sys.path.insert(0, str(REPO / "tools" / "kaggle"))
     import kaggle_harness as kh
     kh.resolve_hf_token(); os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
@@ -30,8 +34,6 @@ try:
     kh.sh(f"cmake -S {REPO} -B {BUILD} -G Ninja -DCMAKE_BUILD_TYPE=Release -DCRISPASR_OPUS=OFF -DCRISPASR_AMR=OFF " + " ".join(kh.cache_and_link_flags()))
     with kh.build_heartbeat("build"):
         kh.sh(f"cmake --build {BUILD} -j$(nproc) --target crispasr crispasr-diff crispasr-quantize")
-    run([sys.executable, "-m", "pip", "install", "-q", "gguf", "librosa", "safetensors", "virtualenv",
-         "git+https://github.com/huggingface/transformers.git"], "pip.log")
     res["transformers"] = subprocess.run([sys.executable, "-c", "import transformers;print(transformers.__version__)"],
                                          capture_output=True, text=True).stdout.strip()
     # Photon in its own environment (it may pin its own dependencies)
