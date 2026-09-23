@@ -464,11 +464,11 @@ ggml_tensor* simple_downsample(ggml_context* g, ggml_tensor* x, const std::vecto
     return acc;
 }
 
-ggml_cgraph* build_chunk_graph(xasr_context* c, bool dump) {
+ggml_cgraph* build_chunk_graph(xasr_context* c, std::vector<uint8_t>& meta, bool dump) {
     auto& m = c->model;
     const auto& hp = m.hp;
     const geom& G = c->g;
-    ggml_init_params ip = {c->compute_meta.size(), c->compute_meta.data(), true};
+    ggml_init_params ip = {meta.size(), meta.data(), true};
     ggml_context* g = ggml_init(ip);
     ggml_cgraph* gf = ggml_new_graph_custom(g, kGraphNodes, false);
 
@@ -563,16 +563,23 @@ bool ensure_sched(xasr_context* c) {
     return c->sched != nullptr;
 }
 
-// Per-stream state: every cache the chunk graph consumes, by input name.
-struct stream_state {
+// Encoder state carried from chunk to chunk: every cache the chunk graph
+// consumes (by input name) and the 50 Hz frames through encoder_embed so far.
+struct enc_state {
     std::vector<std::pair<std::string, std::vector<float>>> caches;
-    int processed = 0; // 50 Hz frames through encoder_embed so far
+    int processed = 0;
 };
 
 void set_input(ggml_cgraph* gf, const std::string& name, const std::vector<float>& v) {
     ggml_tensor* t = ggml_graph_get_tensor(gf, name.c_str());
     GGML_ASSERT(t && (size_t)ggml_nelements(t) == v.size());
     ggml_backend_tensor_set(t, v.data(), 0, v.size() * sizeof(float));
+}
+
+void set_input(ggml_cgraph* gf, const std::string& name, const float* v, size_t n) {
+    ggml_tensor* t = ggml_graph_get_tensor(gf, name.c_str());
+    GGML_ASSERT(t && (size_t)ggml_nelements(t) == n);
+    ggml_backend_tensor_set(t, v, 0, n * sizeof(float));
 }
 
 std::vector<float> get_output(ggml_cgraph* gf, const std::string& name) {
@@ -583,9 +590,8 @@ std::vector<float> get_output(ggml_cgraph* gf, const std::string& name) {
     return v;
 }
 
-stream_state init_state(xasr_context* c, ggml_cgraph* gf) {
-    stream_state st;
-    // every cache input starts as zeros of its size
+// Zero caches, sized from the graph's inputs.
+void init_caches(xasr_context* c, ggml_cgraph* gf, enc_state& st) {
     auto add = [&](const std::string& n) {
         ggml_tensor* t = ggml_graph_get_tensor(gf, n.c_str());
         GGML_ASSERT(t);
@@ -597,28 +603,35 @@ stream_state init_state(xasr_context* c, ggml_cgraph* gf) {
         for (size_t l = 0; l < s.layers.size(); l++, li++)
             for (const char* n : {"ck", "cn", "cv1", "cv2", "cc1", "cc2"})
                 add(lname(n, li));
-    return st;
+}
+
+core_kaldi::FbankParams fbank_params(const xasr_context* c) {
+    core_kaldi::FbankParams p; // sherpa-onnx FeatureExtractorConfig
+    p.n_mels = c->model.hp.feature_dim;
+    p.high_freq = -400.0f;
+    p.snip_edges = false;
+    p.mel_domain_triangles = true;
+    return p;
 }
 
 std::vector<float> fbank_of(xasr_context* c, const float* samples, int n, int& T) {
     std::vector<float> pcm(samples, samples + n);
     pcm.resize((size_t)n + (size_t)c->g.tail_pad_ms * 16, 0.0f);
-    core_kaldi::FbankParams p;
-    p.n_mels = c->model.hp.feature_dim;
-    p.high_freq = -400.0f;
-    p.snip_edges = false;
-    p.mel_domain_triangles = true;
-    return core_kaldi::compute_fbank(pcm.data(), (int)pcm.size(), p, T);
+    return core_kaldi::compute_fbank(pcm.data(), (int)pcm.size(), fbank_params(c), T);
 }
 
-// The chunk loop. enc_out gets (n_enc, joiner_dim) rows; dumps as in xasr.h.
-bool run_encoder(xasr_context* c, const float* fbank, int T, std::vector<float>& enc_out, int& n_enc,
-                 std::vector<std::vector<float>>* dumps) {
+// The chunk loop over feature rows [*pos, n_rows): sherpa's window of T frames
+// shifted by decode_chunk_len, run while pos + T < n_rows (strictly, as
+// OnlineRecognizer::IsReady). Appends (chunk/2, joiner_dim) rows to enc_out.
+bool run_chunks(xasr_context* c, std::vector<uint8_t>& meta, enc_state& st, const float* feats, int n_rows, int* pos,
+                std::vector<float>& enc_out, std::vector<std::vector<float>>* dumps) {
     const auto& hp = c->model.hp;
     const geom& G = c->g;
     const int S = (int)hp.dims.size();
+    if (*pos + G.T >= n_rows)
+        return true;
     const bool dump = dumps != nullptr;
-    ggml_cgraph* gf = build_chunk_graph(c, dump);
+    ggml_cgraph* gf = build_chunk_graph(c, meta, dump);
     if (!ensure_sched(c))
         return false;
     ggml_backend_sched_reset(c->sched);
@@ -626,17 +639,15 @@ bool run_encoder(xasr_context* c, const float* fbank, int T, std::vector<float>&
         fprintf(stderr, "xasr: chunk graph alloc failed\n");
         return false;
     }
-    stream_state st = init_state(c, gf);
+    if (st.caches.empty())
+        init_caches(c, gf, st);
     std::vector<std::vector<float>> pes((size_t)S);
     for (int s = 0; s < S; s++)
         pes[(size_t)s] = compact_pe(hp.pos_dim, G.chunk / hp.downsample[s], G.left / hp.downsample[s]);
-    if (dump)
+    if (dump && dumps->size() != (size_t)S + 2)
         dumps->assign((size_t)S + 2, {});
-    enc_out.clear();
-    n_enc = 0;
-    for (int p = 0; p + G.T < T; p += G.decode_chunk_len) {
-        set_input(gf, "feats",
-                  std::vector<float>(fbank + (size_t)p * hp.feature_dim, fbank + (size_t)(p + G.T) * hp.feature_dim));
+    for (; *pos + G.T < n_rows; *pos += G.decode_chunk_len) {
+        set_input(gf, "feats", feats + (size_t)*pos * hp.feature_dim, (size_t)G.T * hp.feature_dim);
         for (auto& kv : st.caches)
             set_input(gf, kv.first, kv.second);
         for (int s = 0; s < S; s++) {
@@ -644,7 +655,7 @@ bool run_encoder(xasr_context* c, const float* fbank, int T, std::vector<float>&
             const int ds = hp.downsample[s], left = G.left / ds, seq = G.chunk / ds;
             std::vector<float> mask((size_t)(left + seq), 0.0f);
             for (int j = 0; j < left; j++)
-                if (j * ds < G.left - st.processed)
+                if (j * ds < G.left - st.processed) // left context not filled yet
                     mask[(size_t)j] = -INFINITY;
             set_input(gf, "mask_" + std::to_string(s), mask);
         }
@@ -657,7 +668,6 @@ bool run_encoder(xasr_context* c, const float* fbank, int T, std::vector<float>&
         st.processed += G.chunk;
         const auto e = get_output(gf, "enc_out");
         enc_out.insert(enc_out.end(), e.begin(), e.end());
-        n_enc += G.chunk / 2;
         if (dump) {
             auto app = [&](size_t slot, const char* name) {
                 const auto v = get_output(gf, name);
@@ -706,17 +716,32 @@ std::vector<float> decoder_out(const xasr_model& m, const std::vector<int>& hyp)
     return out;
 }
 
-std::vector<int32_t> greedy(const xasr_model& m, const float* enc, int n_enc, float* first_logits) {
+// sherpa-onnx greedy search, resumable across chunks: tokens start as
+// [-1]*(ctx-1) + [blank]; at most one symbol per encoder frame; blank and
+// <unk> are never emitted and never re-run the decoder.
+struct greedy_state {
+    std::vector<int> hyp;
+    std::vector<float> d; // decoder_proj output for the current context
+    std::vector<int32_t> toks;
+    bool first = true;
+};
+
+void greedy_init(const xasr_model& m, greedy_state& gs) {
+    gs.hyp.assign((size_t)m.hp.context_size, -1);
+    gs.hyp.back() = m.hp.blank_id;
+    gs.d = decoder_out(m, gs.hyp);
+    gs.toks.clear();
+    gs.first = true;
+}
+
+void greedy_run(const xasr_model& m, greedy_state& gs, const float* enc, int n_enc, float* first_logits) {
     const auto& hp = m.hp;
     const int J = hp.joiner_dim, V = hp.vocab;
-    std::vector<int> hyp((size_t)hp.context_size, -1);
-    hyp.back() = hp.blank_id;
-    std::vector<float> d = decoder_out(m, hyp), t((size_t)J), logits((size_t)V);
-    std::vector<int32_t> toks;
+    std::vector<float> t((size_t)J), logits((size_t)V);
     for (int f = 0; f < n_enc; f++) {
         const float* e = enc + (size_t)f * J;
         for (int j = 0; j < J; j++)
-            t[(size_t)j] = std::tanh(e[j] + d[(size_t)j]);
+            t[(size_t)j] = std::tanh(e[j] + gs.d[(size_t)j]);
         int best = 0;
         for (int v = 0; v < V; v++) {
             float acc = m.join_out_b[(size_t)v];
@@ -727,15 +752,15 @@ std::vector<int32_t> greedy(const xasr_model& m, const float* enc, int n_enc, fl
             if (acc > logits[(size_t)best])
                 best = v;
         }
-        if (f == 0 && first_logits)
+        if (gs.first && first_logits)
             std::memcpy(first_logits, logits.data(), (size_t)V * sizeof(float));
+        gs.first = false;
         if (best != hp.blank_id && best != hp.unk_id) {
-            toks.push_back(best);
-            hyp.push_back(best);
-            d = decoder_out(m, hyp);
+            gs.toks.push_back(best);
+            gs.hyp.push_back(best);
+            gs.d = decoder_out(m, gs.hyp);
         }
     }
-    return toks;
 }
 
 std::string detok(const xasr_model& m, const int32_t* toks, int n) {
@@ -837,25 +862,28 @@ extern "C" float* xasr_compute_fbank(struct xasr_context* c, const float* sample
 extern "C" float* xasr_run_encoder(struct xasr_context* c, const float* fbank, int T, int* out_n_enc, int* out_dim,
                                    float** dumps, int n_dumps) {
     std::vector<float> enc;
-    int n_enc = 0;
     std::vector<std::vector<float>> d;
-    if (!run_encoder(c, fbank, T, enc, n_enc, dumps && n_dumps > 0 ? &d : nullptr))
+    enc_state st;
+    int pos = 0;
+    if (!run_chunks(c, c->compute_meta, st, fbank, T, &pos, enc, dumps && n_dumps > 0 ? &d : nullptr))
         return nullptr;
     for (int i = 0; dumps && i < n_dumps && i < (int)d.size(); i++)
         if (dumps[i])
             std::memcpy(dumps[i], d[(size_t)i].data(), d[(size_t)i].size() * sizeof(float));
-    *out_n_enc = n_enc;
     *out_dim = c->model.hp.joiner_dim;
+    *out_n_enc = (int)(enc.size() / (size_t)*out_dim);
     float* r = (float*)malloc(std::max<size_t>(1, enc.size()) * sizeof(float));
     std::memcpy(r, enc.data(), enc.size() * sizeof(float));
     return r;
 }
 
 extern "C" int32_t* xasr_greedy(struct xasr_context* c, const float* enc, int n_enc, int* out_n, float* first_logits) {
-    const auto toks = greedy(c->model, enc, n_enc, first_logits);
-    *out_n = (int)toks.size();
-    int32_t* r = (int32_t*)malloc(std::max<size_t>(1, toks.size()) * sizeof(int32_t));
-    std::memcpy(r, toks.data(), toks.size() * sizeof(int32_t));
+    greedy_state gs;
+    greedy_init(c->model, gs);
+    greedy_run(c->model, gs, enc, n_enc, first_logits);
+    *out_n = (int)gs.toks.size();
+    int32_t* r = (int32_t*)malloc(std::max<size_t>(1, gs.toks.size()) * sizeof(int32_t));
+    std::memcpy(r, gs.toks.data(), gs.toks.size() * sizeof(int32_t));
     return r;
 }
 
@@ -863,17 +891,120 @@ extern "C" char* xasr_tokens_to_text(struct xasr_context* c, const int32_t* toks
     return dup_str(detok(c->model, toks, n));
 }
 
-extern "C" char* xasr_transcribe(struct xasr_context* c, const float* samples, int n) {
-    int T = 0;
-    const auto fb = fbank_of(c, samples, n, T);
+// ---- streaming -------------------------------------------------------------
+//
+// Feature frames are computed as audio arrives, and are bit-identical to one
+// fbank over the whole signal. With snip_edges=false frame i covers samples
+// [160i - 120, 160i + 280), so it is final once 160i + 280 samples exist
+// (frame 0 mirrors its left edge; later frames only read real samples). The
+// tail, including the mirrored right edge, is computed on flush after the tail
+// padding is appended.
+
+struct xasr_stream {
+    xasr_context* c = nullptr;
+    std::vector<float> pcm, feats;
+    int n_frames = 0, pos = 0;
+    enc_state st;
+    greedy_state gs;
+    std::vector<uint8_t> meta;
+    bool finished = false;
+};
+
+namespace {
+
+void stream_reset(xasr_stream* s) {
+    s->pcm.clear();
+    s->feats.clear();
+    s->n_frames = s->pos = 0;
+    s->st = enc_state();
+    greedy_init(s->c->model, s->gs);
+    s->finished = false;
+}
+
+void stream_extend_frames(xasr_stream* s, bool flush) {
+    const auto p = fbank_params(s->c);
+    const int F = p.n_mels, hop = 160, win = 400, lead = win / 2 - hop / 2; // 120
+    const int n = (int)s->pcm.size();
+    if (flush) {
+        int T = 0;
+        const auto fb = core_kaldi::compute_fbank(s->pcm.data(), n, p, T);
+        if (T > s->n_frames) {
+            s->feats.insert(s->feats.end(), fb.begin() + (size_t)s->n_frames * F, fb.begin() + (size_t)T * F);
+            s->n_frames = T;
+        }
+        return;
+    }
+    const int ready = n >= win - lead ? (n - (win - lead)) / hop + 1 : 0;
+    if (ready <= s->n_frames)
+        return;
+    if (s->n_frames == 0) { // frame 0: mirrored left edge
+        int T0 = 0;
+        const auto f0 = core_kaldi::compute_fbank(s->pcm.data(), win - lead, p, T0);
+        s->feats.insert(s->feats.end(), f0.begin(), f0.begin() + F);
+        s->n_frames = 1;
+    }
+    if (ready > s->n_frames) { // frames that only read real samples: snip_edges framing over a slice
+        auto q = p;
+        q.snip_edges = true;
+        const int start = s->n_frames * hop - lead, len = (ready - 1 - s->n_frames) * hop + win;
+        int T = 0;
+        const auto fb = core_kaldi::compute_fbank(s->pcm.data() + start, len, q, T);
+        GGML_ASSERT(T == ready - s->n_frames);
+        s->feats.insert(s->feats.end(), fb.begin(), fb.end());
+        s->n_frames = ready;
+    }
+}
+
+bool stream_accept(xasr_stream* s, const float* pcm, int n, bool flush) {
+    if (s->finished)
+        return true;
+    s->pcm.insert(s->pcm.end(), pcm, pcm + n);
+    if (flush)
+        s->pcm.resize(s->pcm.size() + (size_t)s->c->g.tail_pad_ms * 16, 0.0f);
+    stream_extend_frames(s, flush);
     std::vector<float> enc;
-    int n_enc = 0;
-    if (!run_encoder(c, fb.data(), T, enc, n_enc, nullptr))
+    if (!run_chunks(s->c, s->meta, s->st, s->feats.data(), s->n_frames, &s->pos, enc, nullptr))
+        return false;
+    greedy_run(s->c->model, s->gs, enc.data(), (int)(enc.size() / (size_t)s->c->model.hp.joiner_dim), nullptr);
+    s->finished = flush;
+    return true;
+}
+
+std::string stream_text(const xasr_stream* s) {
+    std::string t = detok(s->c->model, s->gs.toks.data(), (int)s->gs.toks.size());
+    const size_t b = t.find_first_not_of(' ');
+    return b == std::string::npos ? std::string() : t.substr(b);
+}
+
+} // namespace
+
+extern "C" struct xasr_stream* xasr_stream_init(struct xasr_context* c) {
+    auto* s = new xasr_stream();
+    s->c = c;
+    s->meta.resize(c->compute_meta.size());
+    stream_reset(s);
+    return s;
+}
+
+extern "C" char* xasr_stream_accept(struct xasr_stream* s, const float* samples, int n_samples, bool flush) {
+    if (!stream_accept(s, samples, n_samples, flush))
         return nullptr;
-    const auto toks = greedy(c->model, enc.data(), n_enc, nullptr);
-    std::string s = detok(c->model, toks.data(), (int)toks.size());
-    const size_t b = s.find_first_not_of(' ');
-    return dup_str(b == std::string::npos ? std::string() : s.substr(b));
+    return dup_str(stream_text(s));
+}
+
+extern "C" void xasr_stream_reset(struct xasr_stream* s) {
+    stream_reset(s);
+}
+
+extern "C" void xasr_stream_free(struct xasr_stream* s) {
+    delete s;
+}
+
+extern "C" char* xasr_transcribe(struct xasr_context* c, const float* samples, int n) {
+    xasr_stream* s = xasr_stream_init(c);
+    char* r = xasr_stream_accept(s, samples, n, true);
+    xasr_stream_free(s);
+    return r;
 }
 
 extern "C" int xasr_n_stacks(struct xasr_context* c) {

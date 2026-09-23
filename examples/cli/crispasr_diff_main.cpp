@@ -4591,6 +4591,24 @@ int main(int argc, char** argv) {
                 printf("       ref: %s\n       cpp: %s\n", want.c_str(), got.c_str());
                 n_fail++;
             }
+            // streaming: the same audio in uneven 370 ms pieces must give the same text
+            xasr_stream* st = xasr_stream_init(ctx);
+            char* part = nullptr;
+            const int piece = 5920;
+            for (size_t off = 0; off < samples.size(); off += piece) {
+                const int n = (int)std::min<size_t>(piece, samples.size() - off);
+                free(part);
+                part = xasr_stream_accept(st, samples.data() + off, n, off + n >= samples.size());
+            }
+            std::string lead = got;
+            lead.erase(0, lead.find_first_not_of(' '));
+            const bool st_same = part && lead == part;
+            printf("%s stream(370ms pieces)   %s\n", st_same ? "[PASS]" : "[FAIL]",
+                   st_same ? "identical to one-shot" : (part ? part : "(null)"));
+            if (!st_same)
+                n_fail++;
+            free(part);
+            xasr_stream_free(st);
             free(fb);
             free(enc);
             free(toks);

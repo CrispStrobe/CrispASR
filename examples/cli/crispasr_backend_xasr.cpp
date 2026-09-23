@@ -2,7 +2,8 @@
 // transducer, zh + en), #436.
 //
 // Decodes exactly as sherpa-onnx's OnlineRecognizer greedy search: the
-// language is whatever the model hears, so -l is ignored. Knobs:
+// language is whatever the model hears, so -l is ignored. Offline
+// transcription and the realtime WebSocket session run the same stream. Knobs:
 //   CRISPASR_XASR_CHUNK_MS     160 / 480 (default) / 960 / 1920 — the upstream export's chunk size
 //   CRISPASR_XASR_TAIL_PAD_MS  trailing silence before end of input (default T*10+1000 ms)
 
@@ -18,6 +19,30 @@
 #include <string>
 
 namespace {
+
+// Realtime WebSocket session: the transducer's output is append-only by
+// construction, so every partial is simply the transcript so far.
+class XasrRealtimeSession final : public CrispasrRealtimeSession {
+public:
+    explicit XasrRealtimeSession(xasr_context* ctx) : stream_(xasr_stream_init(ctx)) {}
+    ~XasrRealtimeSession() override { xasr_stream_free(stream_); }
+
+    bool append(const float* samples, int n_samples, bool flush, callback on_text) override {
+        char* text = xasr_stream_accept(stream_, samples, n_samples, flush);
+        if (!text)
+            return false;
+        const std::string t(text);
+        free(text);
+        if (!t.empty() || flush)
+            on_text(t, flush);
+        return true;
+    }
+
+    void reset() override { xasr_stream_reset(stream_); }
+
+private:
+    xasr_stream* stream_ = nullptr;
+};
 
 class XasrBackend : public CrispasrBackend {
 public:
@@ -60,6 +85,12 @@ public:
         free(text);
         out.push_back(std::move(seg));
         return out;
+    }
+
+    std::unique_ptr<CrispasrRealtimeSession> create_realtime_session(const whisper_params&) override {
+        if (!ctx_)
+            return nullptr;
+        return std::unique_ptr<CrispasrRealtimeSession>(new XasrRealtimeSession(ctx_));
     }
 
     void shutdown() override {

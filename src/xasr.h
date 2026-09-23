@@ -29,8 +29,19 @@ struct xasr_context_params xasr_context_default_params(void);
 struct xasr_context* xasr_init_from_file(const char* path_model, struct xasr_context_params params);
 void xasr_free(struct xasr_context* ctx);
 
-// Transcript of 16 kHz mono PCM ('▁' rendered as spaces; malloc'd).
+// Transcript of 16 kHz mono PCM ('▁' rendered as spaces; malloc'd). One
+// flushed xasr_stream_accept, so offline and streaming share one code path.
 char* xasr_transcribe(struct xasr_context* ctx, const float* samples, int n_samples);
+
+// Streaming: feed 16 kHz PCM in pieces of any size; every call returns the
+// full transcript so far (malloc'd, append-only). flush = end of input: the
+// tail padding is added and the remaining frames are decoded. Pieces of any
+// size give the same tokens as one call.
+struct xasr_stream;
+struct xasr_stream* xasr_stream_init(struct xasr_context* ctx);
+char* xasr_stream_accept(struct xasr_stream* s, const float* samples, int n_samples, bool flush);
+void xasr_stream_reset(struct xasr_stream* s);
+void xasr_stream_free(struct xasr_stream* s);
 
 // ---- diff-harness hooks (crispasr-diff xasr) -----------------------------
 // Kaldi fbank of samples + the configured tail padding: (T, 80) row-major, malloc'd.
