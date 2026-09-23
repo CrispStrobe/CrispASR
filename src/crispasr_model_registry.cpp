@@ -698,6 +698,14 @@ constexpr Entry k_registry[] = {
     {"parakeet-v2", "parakeet-tdt-0.6b-v2-q4_k.gguf",
      "https://huggingface.co/cstr/parakeet-tdt-0.6b-v2-GGUF/resolve/main/parakeet-tdt-0.6b-v2-q4_k.gguf",
      "~468 MB", nullptr, nullptr},
+    // orukeet (#445) — oruk/orukeet r3, a fine-tune of parakeet-tdt-0.6b-v3
+    // with the architecture unchanged (half of the encoder's depthwise conv
+    // kernels replaced by fitted Gabor functions, then re-adapted). Same 25
+    // languages, same runtime; the backend is detected from the GGUF. Its
+    // final adaptation trained on LibriSpeech test-other, so its scores on
+    // that split are not a held-out measurement.
+    {"orukeet", "orukeet-q4_k.gguf", "https://huggingface.co/cstr/orukeet-GGUF/resolve/main/orukeet-q4_k.gguf",
+     "~402 MB", nullptr, nullptr, nullptr, "CC-BY-SA-4.0 (see https://huggingface.co/oruk/orukeet)"},
     // parakeet-tdt-1.1b — larger TDT, English-only, 42-layer encoder
     // (vs 24 for 0.6b). Lowercase + no punctuation output. Slower but
     // wins on very long-tail vocabulary.
