@@ -72,7 +72,8 @@ static void fft_radix2(float* re, float* im, int n) {
 //   2. NO Slaney area normalization — kaldi uses bare triangles. The
 //      narrower lower-frequency bins get less weight than the wider
 //      upper bins, but kaldi expects this and the trained models match.
-static std::vector<float> build_kaldi_mel_fb(int sr, int n_fft, int n_mels, float low_freq, float high_freq) {
+static std::vector<float> build_kaldi_mel_fb(int sr, int n_fft, int n_mels, float low_freq, float high_freq,
+                                             bool mel_domain) {
     const int n_bins = n_fft / 2 + 1;
     std::vector<float> fb((size_t)n_mels * (size_t)n_bins, 0.0f);
 
@@ -80,13 +81,30 @@ static std::vector<float> build_kaldi_mel_fb(int sr, int n_fft, int n_mels, floa
     auto mel2hz = [](float m) { return 700.0f * (std::exp(m / 1127.0f) - 1.0f); };
 
     if (high_freq <= 0.0f)
-        high_freq = (float)sr / 2.0f;
+        high_freq += (float)sr / 2.0f; // 0 = Nyquist, negative = Nyquist + high_freq (Kaldi)
     const float mel_lo = hz2mel(low_freq);
     const float mel_hi = hz2mel(high_freq);
 
     std::vector<float> centers((size_t)n_mels + 2);
     for (int i = 0; i < n_mels + 2; i++) {
         centers[(size_t)i] = mel2hz(mel_lo + (float)i * (mel_hi - mel_lo) / (float)(n_mels + 1));
+    }
+
+    if (mel_domain) {
+        // kaldi MelBanks / torchaudio get_mel_banks: triangles linear in mel,
+        // over the n_fft/2 bins below Nyquist (the Nyquist bin gets weight 0).
+        const float delta = (mel_hi - mel_lo) / (float)(n_mels + 1);
+        for (int m = 0; m < n_mels; m++) {
+            const float left = mel_lo + (float)m * delta, center = left + delta, right = center + delta;
+            for (int k = 0; k < n_fft / 2; k++) {
+                const float mel = hz2mel((float)k * (float)sr / (float)n_fft);
+                if (mel > left && mel < right) {
+                    fb[(size_t)m * (size_t)n_bins + (size_t)k] =
+                        mel <= center ? (mel - left) / (center - left) : (right - mel) / (right - center);
+                }
+            }
+        }
+        return fb;
     }
 
     for (int m = 0; m < n_mels; m++) {
@@ -143,22 +161,27 @@ std::vector<float> compute_fbank(const float* pcm, int n_samples, const FbankPar
     const int n_mels = p.n_mels;
     const float scale = p.int16_scale ? 32768.0f : 1.0f;
 
-    if (n_samples < win) {
-        return {};
+    int T = 0;
+    if (p.snip_edges) {
+        if (n_samples < win)
+            return {};
+        T = (n_samples - win) / hop + 1; // drop trailing partial frames
+    } else {
+        T = (n_samples + hop / 2) / hop; // kaldi NumFrames(..., flush=true)
     }
-
-    // snip_edges=True → drop trailing partial frames.
-    const int T = (n_samples - win) / hop + 1;
     if (T <= 0) {
         return {};
     }
 
     static thread_local std::vector<float> mel_fb;
-    static thread_local int mel_fb_sig = 0;
-    const int sig = p.sample_rate * 1000003 + n_fft * 1009 + n_mels;
-    if (mel_fb_sig != sig || mel_fb.empty()) {
-        mel_fb = build_kaldi_mel_fb(p.sample_rate, n_fft, n_mels, p.low_freq, p.high_freq);
-        mel_fb_sig = sig;
+    // Everything the bank depends on: a thread that alternates configurations
+    // must never be handed the previous one's filters.
+    static thread_local std::vector<float> mel_fb_key;
+    const std::vector<float> key = {(float)p.sample_rate, (float)n_fft, (float)n_mels,
+                                    p.low_freq,           p.high_freq,  (float)p.mel_domain_triangles};
+    if (mel_fb_key != key || mel_fb.empty()) {
+        mel_fb = build_kaldi_mel_fb(p.sample_rate, n_fft, n_mels, p.low_freq, p.high_freq, p.mel_domain_triangles);
+        mel_fb_key = key;
     }
 
     static thread_local std::vector<float> window;
@@ -189,12 +212,21 @@ std::vector<float> compute_fbank(const float* pcm, int n_samples, const FbankPar
         frame.resize((size_t)win);
 
     for (int t = 0; t < T; t++) {
-        const int offset = t * hop;
+        const int offset = p.snip_edges ? t * hop : t * hop + hop / 2 - win / 2;
 
-        // Pull frame and (optionally) scale to int16-magnitude.
+        // Pull frame and (optionally) scale to int16-magnitude. Without
+        // snip_edges, samples outside [0, n) mirror back in (kaldi ExtractWindow).
         float dc = 0.0f;
         for (int i = 0; i < win; i++) {
-            const float s = (offset + i < n_samples) ? pcm[offset + i] : 0.0f;
+            int j = offset + i;
+            float s = 0.0f;
+            if (p.snip_edges) {
+                s = j < n_samples ? pcm[j] : 0.0f;
+            } else {
+                while (j < 0 || j >= n_samples)
+                    j = j < 0 ? -j - 1 : 2 * n_samples - 1 - j;
+                s = pcm[j];
+            }
             frame[(size_t)i] = s * scale;
             dc += frame[(size_t)i];
         }

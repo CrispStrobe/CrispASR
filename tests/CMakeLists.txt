@@ -5847,3 +5847,21 @@ catch_discover_tests(test-qwen3-stream
     TEST_SPEC "[qwen3-stream]"
     PROPERTIES LABELS "unit;qwen3-stream"
 )
+
+# ─── test-kaldi-fbank — core_kaldi::compute_fbank vs kaldi-native-fbank ────
+# snip_edges=false + mel-domain triangles (X-ASR / sherpa-onnx, #436) pinned to
+# golden knf frames; frame-count rules; the per-thread filter cache key.
+add_executable(test-kaldi-fbank
+    test-kaldi-fbank.cpp
+    ${PROJECT_SOURCE_DIR}/src/core/kaldi_fbank.cpp
+)
+target_include_directories(test-kaldi-fbank PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-kaldi-fbank PRIVATE
+    Catch2::Catch2WithMain
+)
+catch_discover_tests(test-kaldi-fbank
+    TEST_SPEC "[kaldi_fbank]"
+    PROPERTIES LABELS "unit"
+)

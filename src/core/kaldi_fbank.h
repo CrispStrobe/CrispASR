@@ -13,8 +13,8 @@
 // fbank — that path adds an `int16_scale` knob here).
 //
 // Output is row-major (T_frames, n_mels) float32. T_frames =
-// (n_samples - win_samples) / hop_samples + 1 (kaldi snip_edges=True
-// — drops trailing partial frames).
+// (n_samples - win_samples) / hop_samples + 1 with snip_edges (the default,
+// drops trailing partial frames), or (n_samples + hop/2) / hop without.
 
 #pragma once
 
@@ -42,7 +42,15 @@ struct FbankParams {
                                      // (firered_asr / funasr trained on int16-scaled features;
                                      //  CAMPPlus / most modern speaker encoders consume raw [-1, 1])
     WindowType window_type = WindowType::Povey;
+    // Kaldi `snip_edges=false`: frame i starts at i*hop + hop/2 - win/2, samples
+    // outside the signal are mirrored, and T = (n + hop/2) / hop — what
+    // kaldi-native-fbank / sherpa-onnx use. Default true keeps the historic framing.
+    bool snip_edges = true;
+    // Kaldi / torchaudio build the triangles in the MEL domain; the historic
+    // path here builds them in Hz. Opt in for bit-level parity with knf.
+    bool mel_domain_triangles = false;
 };
+// high_freq: 0 = Nyquist, negative = Nyquist + high_freq (Kaldi's convention, e.g. -400).
 
 // Compute Kaldi-compatible filterbank features for the given 16 kHz mono
 // PCM buffer. Returns (T_frames, n_mels) row-major float32 features.
