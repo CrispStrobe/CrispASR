@@ -37,6 +37,12 @@ try:
             kh.sh(f"cmake --build {b} -j$(nproc) --target crispasr-diff")
         builds[tag] = b / "bin"
     run([sys.executable, "-m", "pip", "install", "-q", "chatterbox-tts", "gguf"], "pip.log")
+    # chatterbox-tts pins torch 2.6 but leaves Kaggle's newer torchvision, whose
+    # compiled ops then fail to register (torchvision::nms) and break
+    # transformers' import chain. Nothing here uses torchvision.
+    run([sys.executable, "-m", "pip", "uninstall", "-y", "torchvision"], "pip-uninstall-tv.log")
+    res["torch"] = subprocess.run([sys.executable, "-c", "import torch,torchaudio,transformers;print(torch.__version__,torchaudio.__version__,transformers.__version__)"],
+                                  capture_output=True, text=True).stdout.strip()
     from huggingface_hub import HfApi, hf_hub_download, snapshot_download
     api = HfApi()
     md = snapshot_download("ResembleAI/chatterbox", local_dir=str(M / "chatterbox"))
