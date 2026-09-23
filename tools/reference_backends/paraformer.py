@@ -70,12 +70,14 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
     model.eval()
 
     # Deterministic frontend
-    fe = WavFrontend(
-        cmvn_file=None, fs=16000, window="hamming", n_mels=80,
-        frame_length=25, frame_shift=10, lfr_m=7, lfr_n=6,
-        dither=0.0, upsacle_samples=True, snip_edges=True,
-    )
+    # The front-end AutoModel really uses (with the snapshot's am.mvn CMVN); a
+    # hand-built WavFrontend(cmvn_file=None) fed the encoder un-normalised
+    # features. Only the dither is changed, to 0, for a reproducible reference.
+    fe = m.kwargs["frontend"]
+    fe.dither = 0.0
     fe.eval()
+    assert getattr(fe, "cmvn", None) is not None, "expected AutoModel to load am.mvn into the frontend"
+    _ = WavFrontend  # imported for the type only
 
     sig = torch.from_numpy(audio.astype(np.float32))[None, :]
     sig_len = torch.tensor([audio.shape[0]])

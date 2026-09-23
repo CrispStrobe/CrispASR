@@ -57,6 +57,7 @@ Usage:
 
 import argparse
 import os
+import re
 import sys
 
 import numpy as np
@@ -97,6 +98,16 @@ def add_tensor(writer, name, t, *, force_f32=False):
     return dtype
 
 
+def parse_kaldi_cmvn(path):
+    """am.mvn (Kaldi AddShift + Rescale) -> (shift, scale); same parser as paraformer's."""
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    vectors = re.findall(r'\[\s*([-\d\s.eE+]+)\s*\]', text)
+    if len(vectors) < 3:
+        raise ValueError(f"expected AddShift + Rescale vectors in {path}, found {len(vectors)}")
+    return (np.array(vectors[1].split(), dtype=np.float32), np.array(vectors[2].split(), dtype=np.float32))
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -117,7 +128,7 @@ def main():
     else:
         from huggingface_hub import snapshot_download
         print(f"Downloading {args.input}")
-        base = snapshot_download(repo_id=args.input, allow_patterns=["*.pt", "*.yaml"])
+        base = snapshot_download(repo_id=args.input, allow_patterns=["*.pt", "*.yaml", "am.mvn"])
 
     model_pt = os.path.join(base, "model.pt")
     print(f"  Loading state dict from {model_pt}")
@@ -208,6 +219,16 @@ def main():
     # ---- CTC head ----
     write("sensevoice.ctc.w", sd["ctc.ctc_lo.weight"])
     write("sensevoice.ctc.b", sd["ctc.ctc_lo.bias"], force_f32=True)
+
+    # ---- CMVN (am.mvn). FunASR's loader wires it into WavFrontend whenever the
+    # model directory has it, even though config.yaml says cmvn_file: null. ----
+    cmvn_path = os.path.join(base, "am.mvn")
+    if not os.path.isfile(cmvn_path):
+        sys.exit(f"missing {cmvn_path}: upstream SenseVoice normalises its LFR features with it")
+    shift, scale = parse_kaldi_cmvn(cmvn_path)
+    add_tensor(writer, "sensevoice.cmvn_shift", shift, force_f32=True)
+    add_tensor(writer, "sensevoice.cmvn_scale", scale, force_f32=True)
+    print(f"  CMVN: shift {shift.shape}, scale {scale.shape}")
 
     print()
     print(f"  Total {n_written} tensors  (F16: {n_f16}, F32: {n_f32})")

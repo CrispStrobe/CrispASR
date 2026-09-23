@@ -134,6 +134,9 @@ struct sensevoice_model {
     ggml_tensor* query_embed_w = nullptr; // (16, 560)
     ggml_tensor* ctc_w = nullptr;         // (25055, 512)
     ggml_tensor* ctc_b = nullptr;         // (25055,)
+    // am.mvn: x = (x + shift) * scale on the LFR features. Upstream applies it;
+    // GGUFs converted before 2026-09 lack it (empty vectors).
+    std::vector<float> cmvn_shift, cmvn_scale;
 
     ggml_context* ctx = nullptr;
     ggml_backend_buffer_t buf = nullptr;
@@ -286,6 +289,18 @@ static bool sensevoice_load_model(sensevoice_model& model, sensevoice_vocab& voc
     model.query_embed_w = require(model, "sensevoice.query_embed.w");
     model.ctc_w = require(model, "sensevoice.ctc.w");
     model.ctc_b = require(model, "sensevoice.ctc.b");
+    ggml_tensor* cs = core_gguf::try_get(model.tensors, "sensevoice.cmvn_shift");
+    ggml_tensor* cc = core_gguf::try_get(model.tensors, "sensevoice.cmvn_scale");
+    if (cs && cc && ggml_nelements(cs) == (int64_t)model.hparams.input_size &&
+        ggml_nelements(cc) == (int64_t)model.hparams.input_size) {
+        model.cmvn_shift.resize((size_t)ggml_nelements(cs));
+        model.cmvn_scale.resize((size_t)ggml_nelements(cc));
+        ggml_backend_tensor_get(cs, model.cmvn_shift.data(), 0, ggml_nbytes(cs));
+        ggml_backend_tensor_get(cc, model.cmvn_scale.data(), 0, ggml_nbytes(cc));
+    } else {
+        fprintf(stderr, "sensevoice: this GGUF has no CMVN (am.mvn) tensors — it predates the fix, and its "
+                        "features differ from upstream's; re-download it from cstr/sensevoice-small-GGUF\n");
+    }
 
     compute_encoder_pe(model, 8192);
     return true;
@@ -312,6 +327,15 @@ static std::vector<float> sensevoice_compute_features(sensevoice_context* ctx, c
         return {};
     int T_lfr = 0;
     std::vector<float> lfr = core_lfr::stack(mel.data(), T, (int)hp.n_mels, (int)hp.lfr_m, (int)hp.lfr_n, T_lfr);
+    // CMVN, as upstream's WavFrontend (am.mvn): x = (x + shift) * scale
+    const auto& sh = ctx->model.cmvn_shift;
+    const auto& sc = ctx->model.cmvn_scale;
+    if (!sh.empty()) {
+        const size_t D = sh.size();
+        for (size_t t = 0; t < (size_t)T_lfr; t++)
+            for (size_t d = 0; d < D; d++)
+                lfr[t * D + d] = (lfr[t * D + d] + sh[d]) * sc[d];
+    }
     T_lfr_out = T_lfr;
     D_lfr_out = (int)hp.input_size;
     return lfr;
