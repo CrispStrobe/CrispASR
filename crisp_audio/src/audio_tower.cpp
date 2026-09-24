@@ -283,8 +283,20 @@ bool load_model(crisp_audio_context& ctx, const char* path, const crisp_audio_pa
     }
 
     // ---- pass 2: weights via shared loader ----
+    // Only this tower's tensors (<tensor_prefix>*). crisp_audio lives inside a
+    // larger GGUF - qwen3-asr / Raon-Speech carry the whole LLM next to the
+    // audio tower, and the host runtime loads that itself. load_weights() here
+    // uploaded the entire file a second time: on a GPU backend a duplicate of
+    // the LLM in VRAM (~5 GB for Raon-Speech-9B Q4_K).
     core_gguf::WeightLoad wl;
-    if (!core_gguf::load_weights(path, ctx.backend, "crisp_audio", wl)) {
+    struct Prefix {
+        std::string p;
+    } pre{tprefix};
+    auto in_tower = [](const char* name, void* user) {
+        const std::string& p = static_cast<Prefix*>(user)->p;
+        return std::strncmp(name, p.c_str(), p.size()) == 0;
+    };
+    if (!core_gguf::load_weights_filtered(path, ctx.backend, in_tower, &pre, "crisp_audio", wl)) {
         return false;
     }
     ctx.model_ctx = wl.ctx;
