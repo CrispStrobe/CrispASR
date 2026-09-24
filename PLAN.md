@@ -33,7 +33,12 @@ audio into text"). Talker / Mimi / code predictor are not converted.
 CC-BY-NC-4.0: NC-gated registry entry like raon. 18 GB bf16 -> conversion and
 reference run on Kaggle only.
 
-## CLAIMED 2026-09-23 — #454 moondream parakeet-ultra / parakeet-redux
+## DONE 2026-09-24 — #454 moondream parakeet-ultra / parakeet-redux
+
+Merged; GGUFs + cards at cstr/parakeet-{ultra,redux}-GGUF. Every diff stage passes on
+jfk + de; F16/Q8_0/Q4_K transcripts equal transformers ParakeetForTDT and moondream Photon.
+crispasr-diff now prints the worst row (index + norms) on FAIL. Original claim:
+
 
 Worktree `.claude/worktrees/feat-454-parakeet`, branch `feat/454-parakeet-hf`.
 Both are HF-transformers ParakeetForTDT checkpoints (the stock v3 architecture,

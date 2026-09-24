@@ -717,6 +717,12 @@ constexpr Entry k_registry[] = {
     {"parakeet-v2", "parakeet-tdt-0.6b-v2-q4_k.gguf",
      "https://huggingface.co/cstr/parakeet-tdt-0.6b-v2-GGUF/resolve/main/parakeet-tdt-0.6b-v2-q4_k.gguf",
      "~468 MB", nullptr, nullptr},
+    // parakeet-ultra (#454) — moondream/parakeet-ultra: parakeet-tdt-0.6b-v3
+    // architecture in transformers' ParakeetForTDT format (converter --hf).
+    // Transcripts equal transformers and moondream Photon at F16/Q8_0/Q4_K.
+    {"parakeet-ultra", "parakeet-ultra-q4_k.gguf",
+     "https://huggingface.co/cstr/parakeet-ultra-GGUF/resolve/main/parakeet-ultra-q4_k.gguf", "~402 MB", nullptr,
+     nullptr, nullptr, "CC-BY-4.0 (see https://huggingface.co/moondream/parakeet-ultra)"},
     // parakeet-redux (#454) — moondream/parakeet-redux: parakeet-tdt-0.6b-v3
     // architecture shipped in transformers' ParakeetForTDT format with a
     // base-3 packed ternary encoder; the converter dequantises it exactly
