@@ -2530,11 +2530,13 @@ static ggml_cgraph* build_locdit_graph(voxcpm2_context* ctx, ggml_context* arena
         K = ggml_rope_ext(ctx0, K, positions, kvp.rope_freq_factors, hd, GGML_ROPE_TYPE_NEOX, kvp.n_ctx_orig,
                           kvp.rope_theta, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f);
 
-        // GQA: LocDiT has n_q == n_kv (16/16), so n_kv_grp == 1 — the
-        // expansion is a no-op for this architecture. Keep the branch
-        // out for clarity and future-proofing if hp ever changes.
-        if (n_kv_grp > 1) {
-            GGML_ASSERT(B == 1); // LocDiT is 16/16; the batched graph has no GQA path
+        // GQA: the shipped checkpoint's metadata sets locdit_n_kv below
+        // locdit_n_heads (the 16/16 hparam default is not what loads), so
+        // n_kv_grp > 1 in practice.
+        // B > 1: leave K/V at n_kv heads - ggml_flash_attn_ext broadcasts GQA
+        // (n_q % n_kv == 0) itself, and the manual expansion below would need
+        // a fifth dimension. B == 1 keeps the original expansion (unchanged).
+        if (n_kv_grp > 1 && B == 1) {
             ggml_tensor* K4 = ggml_reshape_4d(ctx0, K, hd, 1, n_kv, T);
             ggml_tensor* V4 = ggml_reshape_4d(ctx0, V, hd, 1, n_kv, T);
             K4 = ggml_repeat_4d(ctx0, K4, hd, n_kv_grp, n_kv, T);
