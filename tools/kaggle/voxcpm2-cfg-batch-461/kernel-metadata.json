@@ -1,0 +1,3 @@
+{"id": "chr1s4/crispasr-voxcpm2-cfg-batch-461", "title": "CrispASR voxcpm2 cfg batch 461", "code_file": "voxcpm2_cfg_batch_461.py",
+ "language": "python", "kernel_type": "script", "is_private": "true", "enable_gpu": "true", "enable_internet": "true",
+ "dataset_sources": ["chr1s4/crispasr-hf-token", "chr1s4/crispasr-ccache"], "competition_sources": [], "kernel_sources": []}
