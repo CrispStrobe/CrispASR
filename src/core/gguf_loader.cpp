@@ -17,6 +17,8 @@
 #include <limits>
 #include <map>
 #include <mutex>
+#include <set>
+#include <string>
 #include <tuple>
 
 // core_cpu_backend:: is used unconditionally below (the zero-copy CPU mmap
@@ -1055,6 +1057,51 @@ bool is_gpu_tensor_blk(const char* tensor_name, void* user) {
     if (il < 0)
         return true;
     return il < threshold;
+}
+
+namespace {
+struct FitSet {
+    std::set<std::string> cpu;
+};
+bool fit_is_gpu(const char* name, void* user) {
+    return static_cast<FitSet*>(user)->cpu.count(name) == 0;
+}
+} // namespace
+
+bool load_weights_fit(const char* path, ggml_backend_t backend, ggml_backend_t cpu_backend, const char* model_tag,
+                      WeightLoad& out, int* n_offloaded) {
+    const char* tag = model_tag ? model_tag : "core_gguf";
+    if (n_offloaded)
+        *n_offloaded = 0;
+    if (!backend || !cpu_backend || backend == cpu_backend)
+        return load_weights(path, backend ? backend : cpu_backend, model_tag, out);
+    FitSet fit;
+    {
+        ggml_context* mctx = nullptr;
+        gguf_init_params gp = {/*.no_alloc=*/true, /*.ctx=*/&mctx};
+        gguf_context* g = gguf_init_from_file(path, gp);
+        if (!g || !mctx) {
+            if (g)
+                gguf_free(g);
+            if (mctx)
+                ggml_free(mctx);
+            return load_weights(path, backend, model_tag, out); // let it report the error
+        }
+        for (ggml_tensor* t = ggml_get_first_tensor(mctx); t; t = ggml_get_next_tensor(mctx, t)) {
+            if (!ggml_backend_supports_op(backend, t))
+                fit.cpu.insert(ggml_get_name(t));
+        }
+        gguf_free(g);
+        ggml_free(mctx);
+    }
+    if (fit.cpu.empty())
+        return load_weights(path, backend, model_tag, out);
+    for (const auto& n : fit.cpu)
+        fprintf(stderr, "%s: '%s' exceeds what %s can bind; keeping it on the CPU\n", tag, n.c_str(),
+                ggml_backend_name(backend));
+    if (n_offloaded)
+        *n_offloaded = (int)fit.cpu.size();
+    return load_weights_split(path, backend, cpu_backend, fit_is_gpu, &fit, model_tag, out);
 }
 
 bool load_weights_split(const char* path, ggml_backend_t gpu_backend, ggml_backend_t cpu_backend, IsGpuTensor is_gpu,

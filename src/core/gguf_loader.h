@@ -172,6 +172,18 @@ using IsGpuTensor = bool (*)(const char* tensor_name, void* user);
 bool load_weights_split(const char* path, ggml_backend_t gpu_backend, ggml_backend_t cpu_backend, IsGpuTensor is_gpu,
                         void* user, const char* model_tag, WeightLoad& out);
 
+// load_weights() onto `backend`, except tensors that backend cannot bind go to
+// `cpu_backend`. "Cannot bind" is the backend's own supports_op() on the weight
+// leaf - the exact check ggml_backend_sched later aborts on ("pre-allocated
+// tensor ... in a buffer that cannot run the operation"). Vulkan rejects any
+// tensor larger than maxStorageBufferRange, which a device can allocate but not
+// bind: qwen3-tts's 622 MB text embedding on lavapipe (#337). When every tensor
+// fits this IS load_weights() (mmap fast path, out.buf_cpu stays null);
+// otherwise it is load_weights_split() and the caller owns out.buf_cpu too.
+// `n_offloaded` (optional) receives the number of tensors routed to the CPU.
+bool load_weights_fit(const char* path, ggml_backend_t backend, ggml_backend_t cpu_backend, const char* model_tag,
+                      WeightLoad& out, int* n_offloaded = nullptr);
+
 // ---------------------------------------------------------------------------
 // ggml CPU repack ("extra") buffer type — docs/ggml-optimisation-playbook.md §4
 // ---------------------------------------------------------------------------

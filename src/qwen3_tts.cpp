@@ -749,6 +749,10 @@ struct qwen3_tts_context {
 
     ggml_context* ctx_w = nullptr;
     ggml_backend_buffer_t buf_w = nullptr;
+    // Weights the GPU backend cannot bind (load_weights_fit), e.g. the 622 MB
+    // text embedding past a Vulkan device's maxStorageBufferRange. Null when
+    // everything fits.
+    ggml_backend_buffer_t buf_w_cpu = nullptr;
     std::map<std::string, ggml_tensor*> tensors;
     std::vector<uint8_t> compute_meta;
 
@@ -6131,13 +6135,14 @@ extern "C" struct qwen3_tts_context* qwen3_tts_init_from_file(const char* path_m
     qwen3_tts_route_off_vulkan(c, params.verbosity);
 
     core_gguf::WeightLoad wl;
-    if (!core_gguf::load_weights(path_model, c->backend, "qwen3_tts", wl)) {
+    if (!core_gguf::load_weights_fit(path_model, c->backend, c->backend_cpu, "qwen3_tts", wl)) {
         fprintf(stderr, "qwen3_tts: failed to load weights from '%s'\n", path_model);
         delete c;
         return nullptr;
     }
     c->ctx_w = wl.ctx;
     c->buf_w = wl.buf;
+    c->buf_w_cpu = wl.buf_cpu;
     c->tensors = std::move(wl.tensors);
 
     if (!load_talker(c)) {
@@ -8077,6 +8082,9 @@ extern "C" void qwen3_tts_free(struct qwen3_tts_context* ctx) {
     }
     if (ctx->buf_w) {
         core_gguf::release_weight_buffer(ctx->buf_w);
+    }
+    if (ctx->buf_w_cpu) {
+        core_gguf::release_weight_buffer(ctx->buf_w_cpu);
     }
     if (ctx->ctx_w) {
         ggml_free(ctx->ctx_w);
