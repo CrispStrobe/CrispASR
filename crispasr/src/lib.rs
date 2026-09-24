@@ -3286,10 +3286,11 @@ impl Drop for PyannoteCache {
 unsafe impl Send for PyannoteCache {}
 
 // =========================================================================
-// FireRedPunc — punctuation restoration post-processor
+// Punctuation restoration post-processor
 // =========================================================================
 
-/// BERT-based punctuation restoration model (FireRedPunc).
+/// Punctuation restoration model: FireRedPunc, fullstop-punc,
+/// punctuate-all or PCS (see [`PuncModel::open`]).
 ///
 /// Adds punctuation and capitalization to unpunctuated ASR output.
 /// Particularly useful for CTC-based backends (wav2vec2, omniasr,
@@ -3298,7 +3299,7 @@ unsafe impl Send for PyannoteCache {}
 /// ```no_run
 /// use crispasr::PuncModel;
 ///
-/// let punc = PuncModel::open("fireredpunc-q8_0.gguf").unwrap();
+/// let punc = PuncModel::open("fullstop").unwrap(); // or "pcs", or a .gguf path
 /// let text = punc.process("and so my fellow americans ask not");
 /// println!("{text}"); // "And so my fellow americans, ask not..."
 /// ```
@@ -3309,8 +3310,14 @@ pub struct PuncModel {
 unsafe impl Send for PuncModel {}
 
 impl PuncModel {
-    /// Load a FireRedPunc GGUF model.
-    pub fn open(model_path: &str) -> Result<Self, String> {
+    /// Load a punctuation model. `model` is what `--punc-model` accepts: an
+    /// alias (`auto`, `firered`, `fullstop`, `punctuate-all`, `pcs`;
+    /// downloaded on first use) or a `.gguf` path of either family -
+    /// FireRedPunc / fullstop-punc / punctuate-all, or PCS (punctuation +
+    /// capitalisation + segmentation). The loader follows the GGUF's
+    /// architecture; a GGUF that is not a punctuation model is an `Err`.
+    pub fn open(model: &str) -> Result<Self, String> {
+        let model_path = model;
         let c_path = CString::new(model_path).map_err(|e| e.to_string())?;
         let handle = unsafe { crispasr_sys::crispasr_punc_init(c_path.as_ptr()) };
         if handle.is_null() {

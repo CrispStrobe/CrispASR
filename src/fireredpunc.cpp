@@ -522,7 +522,15 @@ static bool fireredpunc_load(fireredpunc_context& ctx, const char* path) {
     ctx.buf = wl.buf;
 
     auto& T = wl.tensors;
-    auto req = [&](const char* n) { return core_gguf::require(T, n, "fireredpunc"); };
+    // A GGUF of another model family loads its metadata fine and then misses
+    // these tensors; binding nullptr and reporting success made the first
+    // process() call segfault in ggml_mul_mat (#460). Fail the load instead.
+    bool missing = false;
+    auto req = [&](const char* n) {
+        ggml_tensor* t = core_gguf::require(T, n, "fireredpunc");
+        missing |= t == nullptr;
+        return t;
+    };
 
     ctx.tok_emb_w = req("emb.tok_emb.weight");
     ctx.pos_emb_w = req("emb.pos_emb.weight");
@@ -554,6 +562,10 @@ static bool fireredpunc_load(fireredpunc_context& ctx, const char* path) {
 
     ctx.cls_w = req("cls.weight");
     ctx.cls_b = req("cls.bias");
+    if (missing) {
+        fprintf(stderr, "fireredpunc: '%s' is not a FireRedPunc-family GGUF (required tensors missing)\n", path);
+        return false;
+    }
 
     // Scheduler. Issue #68: ggml_backend_sched_new asserts the last
     // backend is CPU when a GPU backend is present, otherwise the
@@ -820,7 +832,7 @@ static std::vector<int> fireredpunc_run(fireredpunc_context& ctx, const std::vec
 fireredpunc_context* fireredpunc_init(const char* model_path) {
     auto* ctx = new fireredpunc_context();
     if (!fireredpunc_load(*ctx, model_path)) {
-        delete ctx;
+        fireredpunc_free(ctx); // releases whatever the partial load allocated
         return nullptr;
     }
     return ctx;
