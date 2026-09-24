@@ -17,7 +17,8 @@ res = {"models": {}, "errors": []}
 def save(): (OUT / "p454.json").write_text(json.dumps(res, indent=1, ensure_ascii=False, default=str))
 def run(cmd, log, env=None, timeout=5400, cwd=None):
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=env, cwd=cwd)
-    (OUT / log).write_text(r.stdout[-40000:] + "\n--- stderr ---\n" + r.stderr[-20000:])
+    err = r.stderr if len(r.stderr) <= 24000 else r.stderr[:4000] + "\n[...]\n" + r.stderr[-20000:]
+    (OUT / log).write_text(" ".join(map(str, cmd)) + "\n" + r.stdout[-40000:] + "\n--- stderr ---\n" + err)
     return r.returncode, r.stdout, r.stderr
 try:
     subprocess.check_call(["git", "clone", "--depth", "1", "--recurse-submodules", "--shallow-submodules", "-b", "feat/454-parakeet-hf",
@@ -104,6 +105,7 @@ try:
                 if bad or (rc != 0 and not D["tolerated"]):
                     ok = False
                 for q, g in ggufs.items():
+                    R.setdefault("wav_exists", {})[f"{q}/{c}"] = os.path.exists(w)
                     rc, out, err = run([str(BUILD / "bin/crispasr"), "-m", str(g), "-f", w, "-np", "-nt"], f"cli-{short}-{q}-{c}.log")
                     R["cli"][f"{q}/{c}"] = out.strip() if rc == 0 else f"rc={rc}: {err[-300:]}"
                 if R["cli"].get(f"f16/{c}", "").strip() != D["hf_text"].strip():
