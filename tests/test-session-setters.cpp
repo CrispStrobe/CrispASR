@@ -136,3 +136,53 @@ TEST_CASE("session open: GPU-default open of missing model loads plugins and ret
     crispasr_session* s2 = crispasr_session_open_explicit("/nonexistent/crispasr-282.gguf", "whisper", 1);
     REQUIRE(s2 == nullptr);
 }
+
+// ─── standalone punctuation API: wrong GGUFs fail at init (#460) ──────────
+// A GGUF that is not a complete punctuation model used to load as
+// FireRedPunc, log "required tensor ... not found", report success and then
+// segfault in ggml_mul_mat on the first process() call.
+
+#include "ggml.h"
+#include "gguf.h"
+
+#include <cstdio>
+#include <filesystem>
+#include <string>
+
+static std::string write_tiny_gguf(const char* arch, const char* tensor_name, const char* file) {
+    const std::string path = (std::filesystem::temp_directory_path() / file).string();
+    ggml_init_params ip = {1024 * 1024, nullptr, false};
+    ggml_context* ctx = ggml_init(ip);
+    gguf_context* g = gguf_init_empty();
+    gguf_set_val_str(g, "general.architecture", arch);
+    ggml_tensor* t = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, 4);
+    ggml_set_name(t, tensor_name);
+    for (int i = 0; i < 4; i++)
+        ((float*)t->data)[i] = 0.5f * i;
+    gguf_add_tensor(g, t);
+    gguf_write_to_file(g, path.c_str(), false);
+    gguf_free(g);
+    ggml_free(ctx);
+    return path;
+}
+
+TEST_CASE("punc init: FireRedPunc-arch GGUF missing tensors -> NULL, not a later crash", "[unit][punc]") {
+    const std::string p = write_tiny_gguf("fireredpunc", "emb.tok_emb.weight", "crispasr-460-incomplete.gguf");
+    void* h = crispasr_punc_init(p.c_str());
+    REQUIRE(h == nullptr);
+    std::remove(p.c_str());
+}
+
+TEST_CASE("punc init: a GGUF of another architecture -> NULL", "[unit][punc]") {
+    const std::string p = write_tiny_gguf("whisper", "encoder.conv1.weight", "crispasr-460-foreign.gguf");
+    REQUIRE(crispasr_punc_init(p.c_str()) == nullptr);
+    std::remove(p.c_str());
+}
+
+TEST_CASE("punc init: missing file / empty / null handle are safe", "[unit][punc]") {
+    REQUIRE(crispasr_punc_init("/nonexistent/crispasr-460.gguf") == nullptr);
+    REQUIRE(crispasr_punc_init("") == nullptr);
+    REQUIRE(crispasr_punc_init(nullptr) == nullptr);
+    REQUIRE(crispasr_punc_process(nullptr, "hello") == nullptr);
+    crispasr_punc_free(nullptr); // must not crash
+}

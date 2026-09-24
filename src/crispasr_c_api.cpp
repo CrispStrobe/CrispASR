@@ -11832,37 +11832,103 @@ CA_EXPORT void crispasr_session_close(crispasr_session* s) {
 }
 
 // =========================================================================
-// FireRedPunc — punctuation restoration post-processor
+// Standalone punctuation restoration
 // =========================================================================
-// These are standalone entry points (not part of the session API) so any
-// consumer can load a punc model once and call it on arbitrary text.
+// Entry points outside the session API, so any consumer (the Rust PuncModel,
+// Python, Go ...) can load a punc model once and call it on arbitrary text.
+//
+// `model` takes what `--punc-model` takes: an alias (auto | firered |
+// fullstop | punctuate-all | pcs; auto-downloaded on first use) or a .gguf
+// path. The loader is picked from the GGUF's general.architecture - "pcs"
+// -> PCS (punctuation + capitalisation + segmentation), "fireredpunc" ->
+// FireRedPunc / fullstop-punc / punctuate-all - so a path of either family
+// works, and anything else fails here with nullptr instead of loading as
+// FireRedPunc and crashing on the first process() call (#460).
 
+namespace {
+struct ca_punc_handle {
+    int kind = 0; // 1 = fireredpunc family, 2 = pcs
+    void* ctx = nullptr;
+};
+} // namespace
+
+CA_EXPORT void* crispasr_punc_init(const char* model) {
+    if (!model || !*model)
+        return nullptr;
+    const crispasr_punc_spec spec = crispasr_resolve_punc_model(model);
+    if (spec.kind == crispasr_punc_kind::none)
+        return nullptr;
+    std::string path = spec.direct_path;
+    if (path.empty() && !spec.cache_filename.empty())
+        path = crispasr_cache::ensure_cached_file(spec.cache_filename, spec.url, /*quiet=*/true, "crispasr[punc]", "");
+    if (path.empty())
+        return nullptr;
+
+    std::string arch;
+    if (gguf_context* meta = core_gguf::open_metadata(path.c_str())) {
+        arch = core_gguf::kv_str(meta, "general.architecture", "");
+        core_gguf::free_metadata(meta);
+    } else {
+        fprintf(stderr, "crispasr_punc_init: cannot read '%s' as GGUF\n", path.c_str());
+        return nullptr;
+    }
+    auto* h = new ca_punc_handle();
+    if (arch == "pcs") {
+#ifdef CA_HAVE_PCS
+        h->kind = 2;
+        h->ctx = (void*)pcs_init(path.c_str());
+#endif
+    } else if (arch == "fireredpunc") {
 #ifdef CA_HAVE_FIREREDPUNC
-CA_EXPORT void* crispasr_punc_init(const char* model_path) {
-    return (void*)fireredpunc_init(model_path);
+        h->kind = 1;
+        h->ctx = (void*)fireredpunc_init(path.c_str());
+#endif
+    } else {
+        fprintf(stderr,
+                "crispasr_punc_init: '%s' has architecture '%s' - not a punctuation model "
+                "(expected fireredpunc or pcs)\n",
+                path.c_str(), arch.c_str());
+    }
+    if (!h->ctx) {
+        delete h;
+        return nullptr;
+    }
+    return h;
 }
 
-CA_EXPORT const char* crispasr_punc_process(void* ctx, const char* text) {
-    return fireredpunc_process((fireredpunc_context*)ctx, text);
+CA_EXPORT const char* crispasr_punc_process(void* handle, const char* text) {
+    auto* h = (ca_punc_handle*)handle;
+    if (!h || !h->ctx || !text)
+        return nullptr;
+#ifdef CA_HAVE_PCS
+    if (h->kind == 2)
+        return pcs_process((pcs_context*)h->ctx, text);
+#endif
+#ifdef CA_HAVE_FIREREDPUNC
+    if (h->kind == 1)
+        return fireredpunc_process((fireredpunc_context*)h->ctx, text);
+#endif
+    return nullptr;
 }
 
 CA_EXPORT void crispasr_punc_free_text(const char* text) {
     free(const_cast<char*>(text));
 }
 
-CA_EXPORT void crispasr_punc_free(void* ctx) {
-    fireredpunc_free((fireredpunc_context*)ctx);
-}
-#else
-CA_EXPORT void* crispasr_punc_init(const char*) {
-    return nullptr;
-}
-CA_EXPORT const char* crispasr_punc_process(void*, const char*) {
-    return nullptr;
-}
-CA_EXPORT void crispasr_punc_free_text(const char*) {}
-CA_EXPORT void crispasr_punc_free(void*) {}
+CA_EXPORT void crispasr_punc_free(void* handle) {
+    auto* h = (ca_punc_handle*)handle;
+    if (!h)
+        return;
+#ifdef CA_HAVE_PCS
+    if (h->kind == 2)
+        pcs_free((pcs_context*)h->ctx);
 #endif
+#ifdef CA_HAVE_FIREREDPUNC
+    if (h->kind == 1)
+        fireredpunc_free((fireredpunc_context*)h->ctx);
+#endif
+    delete h;
+}
 
 // =========================================================================
 // Truecaser — standalone text post-processing (init → process → free).

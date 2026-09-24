@@ -704,7 +704,11 @@ CRISPASR_SESSION_API crispasr_stream* crispasr_session_stream_open(crispasr_sess
                                                                    int length_ms, int keep_ms, const char* language,
                                                                    int translate);
 CRISPASR_SESSION_API void crispasr_session_close(crispasr_session* s);
-CRISPASR_SESSION_API void* crispasr_punc_init(const char* model_path);
+// Standalone punctuation restoration. `model` is a --punc-model value: an
+// alias (auto|firered|fullstop|punctuate-all|pcs; auto-downloaded) or a .gguf
+// path of the FireRedPunc family or PCS - dispatched on general.architecture.
+// Returns NULL for anything that is not a loadable punctuation model.
+CRISPASR_SESSION_API void* crispasr_punc_init(const char* model);
 CRISPASR_SESSION_API const char* crispasr_punc_process(void* ctx, const char* text);
 CRISPASR_SESSION_API void crispasr_punc_free_text(const char* text);
 CRISPASR_SESSION_API void crispasr_punc_free(void* ctx);
