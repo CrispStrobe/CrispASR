@@ -250,8 +250,13 @@ struct qwen3_asr_context {
     // (head_dim, max_ctx, n_kv_heads, n_layers). Allocated to backend.
     ggml_context* kv_ctx = nullptr;
     ggml_backend_buffer_t kv_buf = nullptr;
-    ggml_tensor* kv_k = nullptr;
+    ggml_tensor* kv_k = nullptr; // layer 0 of kv_k_l (non-null <=> the cache exists)
     ggml_tensor* kv_v = nullptr;
+    // One (head_dim, max_ctx, n_kv, 1) tensor per layer instead of a single 4-D
+    // tensor: Vulkan binds each tensor as one storage buffer, and a device with
+    // a 128 MiB maxStorageBufferRange (lavapipe, many mobile GPUs) cannot bind
+    // a 28-layer x 4096-ctx cache (235 MB) - ggml_backend_sched aborted on it.
+    std::vector<ggml_tensor*> kv_k_l, kv_v_l;
     int kv_max_ctx = 0;
     int kv_n_used = 0;
 
@@ -1308,7 +1313,8 @@ static ggml_cgraph* qwen3_asr_build_graph_llm_kv(qwen3_asr_context* ctx, int n_p
         // shared helper.
         ggml_tensor* attn = core_attn::kv_self_attn(
             ctx0, gf, x, b.attn_q_w, b.attn_k_w, b.attn_v_w, b.attn_output_w, b.attn_q_norm_w, b.attn_k_norm_w,
-            positions, (T == 1) ? nullptr : causal_mask, ctx->kv_k, ctx->kv_v, (int)il, n_past, kvp, b.attn_qkv_w);
+            positions, (T == 1) ? nullptr : causal_mask, ctx->kv_k_l[il], ctx->kv_v_l[il], /*il=*/0, n_past, kvp,
+            b.attn_qkv_w); // per-layer cache tensor, so its layer index is 0
         cur = ggml_add(ctx0, residual, attn);
 
         // ---- FFN ----
@@ -2029,6 +2035,8 @@ extern "C" bool qwen3_asr_kv_init(qwen3_asr_context* ctx, int max_ctx) {
         ctx->kv_ctx = nullptr;
         ctx->kv_k = nullptr;
         ctx->kv_v = nullptr;
+        ctx->kv_k_l.clear();
+        ctx->kv_v_l.clear();
         ctx->kv_max_ctx = 0;
         ctx->kv_n_used = 0;
     }
@@ -2039,7 +2047,7 @@ extern "C" bool qwen3_asr_kv_init(qwen3_asr_context* ctx, int max_ctx) {
     const int n_lay = (int)hp.llm_n_layers;
 
     ggml_init_params kp = {
-        /*mem_size=*/ggml_tensor_overhead() * 4 + 1024,
+        /*mem_size=*/ggml_tensor_overhead() * (2 * (size_t)n_lay + 4) + 1024,
         /*mem_buffer=*/nullptr,
         /*no_alloc=*/true,
     };
@@ -2050,10 +2058,16 @@ extern "C" bool qwen3_asr_kv_init(qwen3_asr_context* ctx, int max_ctx) {
     // PLAN #60e + #69e: per-half KV dtype. CRISPASR_KV_QUANT sets both,
     // CRISPASR_KV_QUANT_{K,V} override per half (default f16/f16).
     const auto kv_pair = core_attn::kv_dtype_pair_from_env("qwen3_asr");
-    ctx->kv_k = ggml_new_tensor_4d(ctx->kv_ctx, kv_pair.k, hd, max_ctx, n_kv, n_lay);
-    ctx->kv_v = ggml_new_tensor_4d(ctx->kv_ctx, kv_pair.v, hd, max_ctx, n_kv, n_lay);
-    ggml_set_name(ctx->kv_k, "kv_k");
-    ggml_set_name(ctx->kv_v, "kv_v");
+    ctx->kv_k_l.resize(n_lay);
+    ctx->kv_v_l.resize(n_lay);
+    for (int il = 0; il < n_lay; il++) {
+        ctx->kv_k_l[il] = ggml_new_tensor_4d(ctx->kv_ctx, kv_pair.k, hd, max_ctx, n_kv, 1);
+        ctx->kv_v_l[il] = ggml_new_tensor_4d(ctx->kv_ctx, kv_pair.v, hd, max_ctx, n_kv, 1);
+        ggml_format_name(ctx->kv_k_l[il], "kv_k_%d", il);
+        ggml_format_name(ctx->kv_v_l[il], "kv_v_%d", il);
+    }
+    ctx->kv_k = ctx->kv_k_l[0];
+    ctx->kv_v = ctx->kv_v_l[0];
 
     // PLAN #69b: optional KV-on-CPU spill for long-context / tight-VRAM users.
     ggml_backend_t kv_backend = core_attn::kv_backend_from_env(ctx->backend, ctx->backend_cpu, "qwen3_asr");
@@ -2078,8 +2092,8 @@ extern "C" bool qwen3_asr_kv_init(qwen3_asr_context* ctx, int max_ctx) {
         fprintf(stderr, "qwen3_asr: failed to allocate kv buffer\n");
         return false;
     }
-    const size_t kbytes = ggml_nbytes(ctx->kv_k);
-    const size_t vbytes = ggml_nbytes(ctx->kv_v);
+    const size_t kbytes = ggml_nbytes(ctx->kv_k) * (size_t)n_lay;
+    const size_t vbytes = ggml_nbytes(ctx->kv_v) * (size_t)n_lay;
     ctx->kv_max_ctx = max_ctx;
     ctx->kv_n_used = 0;
 
