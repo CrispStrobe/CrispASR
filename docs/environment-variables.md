@@ -1529,6 +1529,9 @@ end-to-end cosine cannot do.
 
 - `CRISPASR_VOXCPM2_BENCH`
 - `CRISPASR_VOXCPM2_BUCKET_CUDA`
+- `CRISPASR_VOXCPM2_CFG_BATCH=0` — run CFG's cond and uncond LocDiT forwards as two graphs
+  instead of one batch-2 graph (#461; default batched: bit-identical on CPU, -38% CFM time on
+  a T4).
 - `CRISPASR_VOXCPM2_CFG_INTERVAL`
 - `CRISPASR_VOXCPM2_CFG_INTERVAL_DEBUG`
 - `CRISPASR_VOXCPM2_CFG_VALUE`
