@@ -978,6 +978,14 @@ All three optimisation gates are output-equivalent: the per-stage diff reports
 
 ### Diarization — sortformer / Nemotron-3-Diarization (#466)
 
+- `CRISPASR_SORTFORMER_MODE` — chunk schedule when the caller sets none
+  (`--sortformer-mode` wins): `offline` (default), `low_latency`,
+  `very_low_latency`, `ultra_low_latency`. This is how C-ABI / Python / Rust
+  callers of diarize method 5 pick a streaming preset
+- `CRISPASR_NEMOTRON3_DIAR_MODE` — `crispasr-diff nemotron3-diar` only: run
+  that streaming preset (dump the reference with `NEMOTRON3_DIAR_MODE` set to
+  the same value) and also check that 100 ms pushes through the live session
+  API reproduce the one-shot rows
 - `CRISPASR_NEMOTRON3_DIAR_BENCH` — per-stage timings (mel, per-chunk encoder
   graph, speaker-cache updates)
 - `CRISPASR_DIFF_SEGMENTS_OUT` — `crispasr-diff nemotron3-diar` only: also

@@ -1077,6 +1077,7 @@ Supporting flags:
 | `--diarize-max-speakers N` | Hard cap on the cluster count (default 8) |
 | `--diarize-num-speakers N` | Pin the speaker count outright, skipping estimation (`foxnose`; `0` = estimate) |
 | `--diarize-model PATH` | Nemotron-3-Diarization GGUF for `sortformer` (`auto` = NVIDIA's q8_0; `models/convert-nemotron3-diar-to-gguf.py` makes F32/F16) |
+| `--sortformer-mode MODE` | `sortformer` chunk schedule: `offline` (default, best accuracy) or a streaming preset, `low_latency` (1.04 s), `very_low_latency` (0.64 s), `ultra_low_latency` (0.32 s) — the labels a live session with that latency would give |
 | `--sherpa-bin PATH` | `sherpa-onnx-offline-speaker-diarization` binary (default: found on `PATH`) |
 | `--sherpa-segment-model PATH` | Segmentation model for the `sherpa`/`pyannote` paths (`auto` downloads the GGUF) |
 | `--sherpa-embedding-model PATH` | Speaker-embedding ONNX for the `sherpa` path |

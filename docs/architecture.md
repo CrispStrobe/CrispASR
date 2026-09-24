@@ -1349,8 +1349,15 @@ overlapping speech included. Weights are OpenMDW-1.1 (commercial use allowed).
   missed speech (28.3 %).
 - Bench: `CRISPASR_NEMOTRON3_DIAR_BENCH=1` prints mel and per-chunk encoder
   times.
-- Streaming (the `nemotron3diar.streaming.<mode>` presets the converter records)
-  is not wired yet; the CLI and C ABI run the offline mode.
+- Streaming: `nemotron3_diar_stream_{begin,push,end,free}` is a live session
+  in transformers' streaming mode — the first chunk uses centred windows, later
+  ones the uncentred audio span the processor cuts
+  (`chunk_start = frame * hop - n_fft / 2`), the last is scored whole, and the
+  cache takes `streaming_config`'s sizes (FIFO 264, update period 222; NVIDIA's
+  GGUF records a NeMo-side schedule instead, so those keys are ignored). Presets
+  (chunk, look-ahead) in 80 ms frames: `low_latency` (9, 4), `very_low_latency`
+  (6, 2), `ultra_low_latency` (3, 1). `--sortformer-mode` /
+  `CRISPASR_SORTFORMER_MODE` run a whole file through one session.
 
 ### gigaam
 
