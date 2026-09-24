@@ -6662,6 +6662,15 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
         text += "<|im_end|>\n<|im_start|>assistant\n";
         text += assistant_prefill;
         if (raon) { // RaonPipeline.stt; --ask replaces the instruction
+            const std::string eff_lang = lang_set ? lang : s->source_language;
+            static bool warned = false;
+            if (!warned && !eff_lang.empty() && eff_lang != "auto") {
+                warned = true;
+                fprintf(stderr,
+                        "crispasr[raon-speech]: no language conditioning (en + ko are automatic); "
+                        "language '%s' ignored\n",
+                        eff_lang.c_str());
+            }
             text = "<|im_start|>user\n<|audio_start|>";
             for (int i = 0; i < N_enc; i++)
                 text += "<|audio_pad|>";

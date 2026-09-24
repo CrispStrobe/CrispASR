@@ -90,6 +90,30 @@ public:
         return emb;
     }
 
+    // Raon-Speech has no language / translation / hotword conditioning: its
+    // STT prompt is fixed (en + ko are recognised automatically). Say so once
+    // instead of silently dropping the flags (docs/contributing.md 9b).
+    static void warn_raon_ignored_flags(const whisper_params& params) {
+        static bool warned = false;
+        if (warned || params.no_prints)
+            return;
+        std::string ignored;
+        if (!params.language.empty() && params.language != "auto")
+            ignored += " --language " + params.language;
+        if (params.translate)
+            ignored += " --translate";
+        if (!params.hotwords.empty())
+            ignored += " --hotwords";
+        if (ignored.empty())
+            return;
+        warned = true;
+        fprintf(stderr,
+                "crispasr[raon-speech]: the model has no language/translation/hotword conditioning "
+                "(English and Korean are recognised automatically); ignored:%s. "
+                "Use --ask to change the instruction.\n",
+                ignored.c_str());
+    }
+
     // RaonPipeline.stt: no system turn; the instruction follows the audio.
     // --ask replaces the default instruction (the model is instruction-tuned).
     static std::string raon_prompt(int N_enc, const std::string& ask) {
@@ -177,6 +201,7 @@ public:
                 "<|im_start|>assistant\n";
         text += assistant_prefill;
         if (raon_) {
+            warn_raon_ignored_flags(params);
             text = raon_prompt(N_enc, params.ask);
             assistant_prefill.clear();
         }
@@ -572,6 +597,7 @@ public:
         text += "<|audio_end|><|im_end|>\n<|im_start|>assistant\n";
         text += assistant_prefill;
         if (raon_) {
+            warn_raon_ignored_flags(params);
             text = raon_prompt(N_enc, params.ask);
             assistant_prefill.clear();
         }

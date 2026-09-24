@@ -726,6 +726,42 @@ for ten minutes of audio), and the conv stem is tiled along time with an
 `CRISPASR_HOJO_ASR_CONV_TILE=0` restores the untiled path for A/B).
 Languages: de, fr, it, pt, es tagged; the card also claims ja, ar, ko, ru.
 
+### raon-speech
+
+Speech-to-text subset of KRAFTON/Raon-Speech-9B (CC-BY-NC-4.0, #455). The
+full model is a speech-in/speech-out duplex model. Only the transcription path
+is converted: the talker, code predictor, Mimi codec, output adaptor and
+speaker encoder serve speech output only. It runs on the **qwen3-asr runtime**
+as GGUF variant `qwen3asr.variant = raon-speech`.
+
+**Front end** (mirrors `RaonPipeline.stt`, `modeling_raon.py`). The processor
+resamples input to **24 kHz** and cuts it into **8 s chunks** (192000 samples),
+right-padded to the longest chunk. Each chunk is then resampled 24k → 16k.
+Both resamples use torchaudio's `sinc_interp_hann`, which
+`src/core/torchaudio_resample.h` ports exactly (1 ULP vs torchaudio). The
+16 kHz chunk is masked to its valid length (at least `n_fft`) and turned into
+a Whisper log-mel whose max-clip is taken **per chunk**. The STFT
+reflect-pads, like `torch.stft`; zero-padding here is what put a 0.32
+log-mel error on the first frame of every chunk that starts mid-speech.
+
+**Encoder.** The Qwen3-Omni audio tower (24 layers, d = 1024, `proj2` →
+2048), run on each chunk separately via `crisp_audio`. Positions restart per
+100-mel-frame conv chunk. The 13 Hz output is **truncated**, not resampled,
+to `ceil(padded_24k / 1920)` frames (12.5 Hz). The frames covering at least
+one valid 24 kHz sample are kept, and that count equals the number of
+`<|audio_input_placeholder|>` (id 151676) tokens in the prompt.
+
+**Adaptor.** `Linear(2048 → 4096) → GELU(erf) → Linear(4096 → 4096) →
+RMSNorm(eps 1e-6)`, applied frame-wise (`adaptor.*` tensors).
+
+**LLM.** Qwen3, 36 layers, hidden 4096, GQA 32/8, RoPE θ = 5e6, untied
+`lm_head`, vocab 153723. The prompt has no system turn:
+`<|im_start|>user\n<|audio_start|>…<|audio_end|>Transcribe the audio into
+text<|im_end|>\n<|im_start|>assistant\n`. `--ask` replaces the instruction.
+As in `generate()`, `<|audio_output_pad|>` is masked every step and
+`<|im_end|>` on the first step. The model has no language control; `-l` and
+`--translate` are ignored with a warning.
+
 ### moss-transcribe
 
 Dedicated ASR sibling of moss-audio (same author). Uses the **stock
@@ -1839,6 +1875,25 @@ Key architectural points:
   package on gTTS Japanese test audio (verified on Kaggle, 2026-06-28).
 
 Models at `cstr/reazonspeech-nemo-v2-GGUF`: F16 (1240 MB), Q8_0 (704 MB), Q4_K (455 MB).
+
+### parakeet-ultra / parakeet-redux
+
+moondream's `parakeet-ultra` and `parakeet-redux` (CC-BY-4.0, #454) are the
+stock parakeet-tdt-0.6b-v3 architecture, published in transformers'
+`ParakeetForTDT` format instead of as a `.nemo`. They run on the unmodified
+`parakeet` backend. All the work is in `models/convert-parakeet-to-gguf.py
+--hf`:
+- it maps HF tensor names onto the NeMo-derived GGUF layout;
+- it synthesises NeMo's featurizer (librosa Slaney filterbank (1, 128, 257),
+  symmetric Hann 400);
+- it takes the vocabulary from `tokenizer.json`.
+
+**redux** stores its encoder linears as base-3 packed ternary codes: five
+codes per byte, least-significant digit first, with `w = scale · (code − 1)`
+per group. The converter unpacks them exactly, so the GGUF holds ordinary
+F16/Q8_0/Q4_K weights. The reference is transformers' `ParakeetForTDT`
+(`tools/reference_backends/parakeet_hf.py`), with moondream's Photon runtime
+as an independent transcript check.
 
 ### parakeet-ctc-1.1b-ja
 
