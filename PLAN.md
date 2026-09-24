@@ -14,7 +14,14 @@ and require both monotonic output and bounded timing displacement. Worktree
 Worktree `.claude/worktrees/feat-436-dolphin`, branch `feat/436-dolphin`.
 NOW: blueprint read (docs/dolphin/PLAN.md on the branch); converter next.
 
-## CLAIMED 2026-09-23 — #455 Raon-Speech-9B (speech-to-text only)
+## DONE 2026-09-24 — #455 Raon-Speech-9B (speech-to-text only)
+
+Merged to main; GGUFs + card at cstr/raon-speech-9b-GGUF (F16/Q8_0/Q4_K), ref fixtures
+raon-speech/{jfk,ko}. F16 diff passes every stage on jfk (2 chunks) + ko; F16/Q8_0 text
+equals the remote-code greedy reference, Q4_K same words. Found on the way: crisp_audio's
+Whisper mel zero-padded the STFT edges (torch reflects) - fixed for the whole qwen3-asr
+family, R2T2 fixtures re-checked. Original claim:
+
 
 Worktree `.claude/worktrees/feat-455-raon-speech`, branch `feat/455-raon-speech`.
 ASR subset = Qwen3-Omni audio tower (24L/1024, proj2 -> 2048) + 2-layer
