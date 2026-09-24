@@ -4725,6 +4725,7 @@ CA_EXPORT int crispasr_session_available_backends(char* out_csv, int out_cap) {
 #endif
 #ifdef CA_HAVE_QWEN3
     list += ",qwen3";
+    list += ",raon-speech"; // #455: a qwen3asr GGUF with qwen3asr.variant = raon-speech
 #endif
 #ifdef CA_HAVE_HIGGS_STT
     list += ",higgs-stt";

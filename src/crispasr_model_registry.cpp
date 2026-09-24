@@ -189,6 +189,15 @@ constexpr Entry k_registry[] = {
     {"confucius4-r2t2", "confucius4-r2t2-q4_k.gguf",
      "https://huggingface.co/cstr/confucius4-r2t2-GGUF/resolve/main/confucius4-r2t2-q4_k.gguf", "~1.5 GB", nullptr,
      nullptr, nullptr, "NetEase Youdao Model Use License (see https://huggingface.co/cstr/confucius4-r2t2-GGUF)"},
+    // raon-speech (#455) — KRAFTON/Raon-Speech-9B, speech-to-text subset only
+    // (Qwen3-Omni audio tower + EmbeddingAdaptor + Qwen3 36L LLM); runs on the
+    // qwen3-asr runtime (qwen3asr.variant = raon-speech). English + Korean.
+    // CC-BY-NC-4.0: NON-COMMERCIAL, like the raon TTS entries.
+    {"raon-speech", "raon-speech-9b-q4_k.gguf",
+     "https://huggingface.co/cstr/raon-speech-9b-GGUF/resolve/main/raon-speech-9b-q4_k.gguf", "~5.0 GB", nullptr,
+     nullptr, nullptr,
+     "CC-BY-NC-4.0 — NON-COMMERCIAL use only (KRAFTON/Raon-Speech-9B, "
+     "https://huggingface.co/KRAFTON/Raon-Speech-9B)"},
     // Qwen3-ASR-1.7B fine-tuned for Japanese anime/galgame speech (Apache-2.0).
     // Same architecture as qwen3-1.7b; uses the standard qwen3 backend.
     {"qwen3-ja-anime", "qwen3-asr-1.7b-ja-anime-q4_k.gguf",

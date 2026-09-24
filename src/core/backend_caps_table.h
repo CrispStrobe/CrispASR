@@ -194,6 +194,10 @@ static const BackendCaps k_backend_caps[] = {
     {"qwen3-tts-1.7b-voicedesign", 8467712u, "temperature,flash-attn,src-tgt-language,auto-download,tts,streaming"},
     {"qwen3-tts-customvoice", 8467712u, "temperature,flash-attn,src-tgt-language,auto-download,tts,streaming"},
     {"raon", 204800u, "auto-download,tts,voice-cloning"},
+    {"raon-speech", 32618u,
+     "timestamps-ctc,token-confidence,translate,diarize,temperature,beam-"
+     "search,flash-attn,punctuation-toggle,src-tgt-language,auto-download,"
+     "parallel-processors"},
     {"reazonspeech", 1601357u,
      "timestamps-native,word-timestamps,token-confidence,diarize,temperature,"
      "beam-search,flash-attn,punctuation-toggle,auto-download,parallel-"
