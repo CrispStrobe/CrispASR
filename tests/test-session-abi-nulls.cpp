@@ -92,7 +92,7 @@ TEST_CASE("diarize ABI rejects invalid arguments with -1", "[unit][diarize]") {
     CHECK(crispasr_diarize_segments_abi(pcm.data(), nullptr, 16000, 0, &seg, 0, &opts) == -1);
     CHECK(crispasr_diarize_segments_abi(pcm.data(), nullptr, 16000, 0, &seg, 1, nullptr) == -1);
 
-    diarize_opts_abi bad_method = default_opts(5); // one past FoxNose
+    diarize_opts_abi bad_method = default_opts(6); // one past Sortformer
     CHECK(crispasr_diarize_segments_abi(pcm.data(), nullptr, 16000, 0, &seg, 1, &bad_method) == -1);
     bad_method.method = -1;
     CHECK(crispasr_diarize_segments_abi(pcm.data(), nullptr, 16000, 0, &seg, 1, &bad_method) == -1);
@@ -168,6 +168,16 @@ TEST_CASE("FoxNose with a missing embedder fails with 1, not a crash", "[unit][d
     CHECK(crispasr_diarize_segments_abi(pcm.data(), nullptr, 16000, 0, &seg, 1, &opts) == 1);
 }
 
+TEST_CASE("Sortformer with a missing model fails with 1, not a crash", "[unit][diarize]") {
+    std::vector<float> pcm(16000, 0.01f);
+    diarize_seg_abi seg = {0, 100, -1, 0};
+    diarize_opts_abi opts = default_opts(5); // Sortformer (#466); model path rides in pyannote_model_path
+    opts.pyannote_model_path = "/nonexistent/nemotron3-diar.gguf";
+    CHECK(crispasr_diarize_segments_abi(pcm.data(), nullptr, 16000, 0, &seg, 1, &opts) == 1);
+    opts.pyannote_model_path = nullptr; // no path at all is the same failure
+    CHECK(crispasr_diarize_segments_abi(pcm.data(), nullptr, 16000, 0, &seg, 1, &opts) == 1);
+}
+
 // ── #395: the turn-forwarding entry point ────────────────────────────────────
 //
 // The turns themselves need the FoxNose embedder, so what is model-free here
@@ -191,7 +201,7 @@ TEST_CASE("turns ABI rejects the same invalid arguments, plus a negative cap", "
     CHECK(crispasr_diarize_segments_turns_abi(pcm.data(), nullptr, 16000, 0, &seg, 1, &opts, turns, -1, &n_turns) ==
           -1);
 
-    diarize_opts_abi bad_method = default_opts(5); // one past FoxNose
+    diarize_opts_abi bad_method = default_opts(6); // one past Sortformer
     CHECK(crispasr_diarize_segments_turns_abi(pcm.data(), nullptr, 16000, 0, &seg, 1, &bad_method, turns, 4,
                                               &n_turns) == -1);
 

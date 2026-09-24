@@ -38,6 +38,7 @@ openvoice2          # OpenVoice V2 tone-color converter; driven by melotts
 beatrice_phone      # Beatrice v2 phone extractor  (svc pipeline)
 beatrice_pitch      # Beatrice v2 pitch estimator  (svc pipeline)
 wespeaker           # speaker embeddings for the diarization clustering stack
+nemotron3_diar      # Nemotron-3-Diarization; driven by --diarize-method sortformer / diarize ABI method 5 (#466)
 
 # --- Language ID: exposed as crispasr_text_detect_language, not as a backend ---
 text_lid            # dispatcher over the two below (src/text_lid_dispatch.h)
