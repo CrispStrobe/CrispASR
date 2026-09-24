@@ -861,6 +861,7 @@ bool crispasr_apply_foxnose_global(std::vector<crispasr_segment>& all_segs, cons
         opts.n_threads = params.n_threads;
         opts.slice_t0_cs = 0;
         opts.sortformer_model_path = resolve_sortformer_model(params);
+        opts.sortformer_mode = params.sortformer_mode;
         auto lib_segs = lib_view(all_segs);
         std::vector<CrispasrDiarizeTurn> turns;
         const float* pcm = samples.data();
@@ -985,6 +986,7 @@ bool crispasr_apply_diarize(const std::vector<float>& left, const std::vector<fl
             opts.pyannote_model_path = resolve_pyannote_model(params);
         if (lib_method == CrispasrDiarizeMethod::Sortformer)
             opts.sortformer_model_path = resolve_sortformer_model(params);
+        opts.sortformer_mode = params.sortformer_mode;
         if (lib_method == CrispasrDiarizeMethod::FoxNose) {
             // Reuses the existing --diarize-embedder / --diarize-max-speakers
             // knobs rather than inventing parallel ones.

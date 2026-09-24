@@ -2664,6 +2664,14 @@ int main(int argc, char** argv) {
             fprintf(stderr, "nemotron3-diar: failed to load '%s'\n", model_path.c_str());
             return 4;
         }
+        // Streaming presets: the reference must be dumped with the same mode.
+        if (const char* m = std::getenv("CRISPASR_NEMOTRON3_DIAR_MODE")) {
+            if (nemotron3_diar_set_mode(ctx, m) != 0) {
+                fprintf(stderr, "nemotron3-diar: unknown mode '%s'\n", m);
+                return 4;
+            }
+            printf("[INFO] mode %s\n", m);
+        }
         int T = 0, S = 0, M = 0, Ne = 0, dm = 0;
         float *mel = nullptr, *emb = nullptr, *lg = nullptr;
         float* pr = nemotron3_diar_probs_stages(ctx, samples.data(), (int)samples.size(), &T, &S, &mel, &M, &emb, &Ne,
@@ -2748,6 +2756,34 @@ int main(int argc, char** argv) {
                     n_pass++;
                 }
             }
+        }
+        // Live API: the same session pushed 100 ms at a time must give the
+        // one-shot streaming rows (buffering / audio trimming / chunk triggers).
+        if (pr && std::getenv("CRISPASR_NEMOTRON3_DIAR_MODE")) {
+            nemotron3_diar_stream* st = nemotron3_diar_stream_begin(ctx, std::getenv("CRISPASR_NEMOTRON3_DIAR_MODE"));
+            std::vector<float> live;
+            const int step = 1600;
+            for (size_t off = 0; st && off < samples.size(); off += step) {
+                int rows = 0;
+                float* p = nemotron3_diar_stream_push(st, samples.data() + off,
+                                                      (int)std::min<size_t>(step, samples.size() - off), &rows);
+                if (p)
+                    live.insert(live.end(), p, p + (size_t)rows * S);
+                free(p);
+            }
+            int rows = 0;
+            float* p = st ? nemotron3_diar_stream_end(st, &rows) : nullptr;
+            if (p)
+                live.insert(live.end(), p, p + (size_t)rows * S);
+            free(p);
+            nemotron3_diar_stream_free(st);
+            double max_abs = live.size() == (size_t)T * S ? 0.0 : 1e9;
+            for (size_t i = 0; max_abs < 1e9 && i < live.size(); i++)
+                max_abs = std::max(max_abs, (double)std::fabs(live[i] - pr[i]));
+            const bool ok = max_abs <= 1e-5;
+            printf("%s live 100 ms pushes     %zu rows vs %d one-shot, max_abs %.3g\n", ok ? "[PASS]" : "[FAIL]",
+                   live.size() / (size_t)std::max(S, 1), T, max_abs);
+            ok ? n_pass++ : n_fail++;
         }
         free(mel);
         free(emb);

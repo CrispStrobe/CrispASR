@@ -332,8 +332,17 @@ struct whisper_params {
     }
     // Methods that label speakers in one pass over the whole recording.
     bool diarize_is_global_method() const { return diarize_embedder_is_foxnose() || diarize_is_sortformer(); }
+    // The legacy whisper path labels speakers in a post-step after decoding
+    // (crispasr_apply_diarize). Only the stereo methods can be estimated live
+    // in the per-segment print callback; for every other method the live line
+    // would carry whisper's stereo-energy guess, "(speaker ?)" on mono input.
+    bool diarize_labels_after_decode() const {
+        return diarize && !diarize_method.empty() && diarize_method != "energy" && diarize_method != "xcorr";
+    }
     // GGUF for --diarize-method sortformer ("auto" / empty: NVIDIA's q8_0 GGUF).
     std::string diarize_model;
+    // #466: sortformer chunk schedule, "offline" (default) or a streaming preset.
+    std::string sortformer_mode;
     bool stream = false;
     bool mic = false;
     bool stream_continuous = false;

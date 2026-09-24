@@ -500,6 +500,8 @@ static bool whisper_params_parse_arg_backend_vad(int argc, char** argv, int& i, 
         params.diarize_method = ARGV_NEXT;
     } else if (arg == "--diarize-model") {
         params.diarize_model = ARGV_NEXT;
+    } else if (arg == "--sortformer-mode") {
+        params.sortformer_mode = ARGV_NEXT;
     } else if (arg == "--sherpa-bin") {
         params.sherpa_bin = ARGV_NEXT;
     } else if (arg == "--sherpa-segment-model") {
@@ -1191,6 +1193,10 @@ static void whisper_print_usage(int /*argc*/, char** argv, const whisper_params&
             "  --diarize-model PATH              [%-7s] GGUF for --diarize-method sortformer (a sortformer GGUF; "
             "'auto' fetches nvidia/Nemotron-3-Diarization q8_0, OpenMDW-1.1)\n",
             params.diarize_model.empty() ? "auto" : params.diarize_model.c_str());
+    fprintf(out,
+            "  --sortformer-mode MODE            [%-7s] sortformer chunk schedule: offline | low_latency (1.04 s) | "
+            "very_low_latency (0.64 s) | ultra_low_latency (0.32 s)\n",
+            params.sortformer_mode.empty() ? "offline" : params.sortformer_mode.c_str());
     fprintf(out,
             "  --diarize-embedder MODEL          [%-7s] speaker-embedding model used to cluster pyannote local "
             "tracks into globally stable speaker IDs. Pluggable; known aliases: 'auto' / 'titanet' (192-d "
@@ -3039,7 +3045,8 @@ int main(int argc, char** argv) {
             }
 
             // this callback is called on each new segment
-            if (!wparams.print_realtime) {
+            // #466: methods that label after decoding print once labelled (below).
+            if (!wparams.print_realtime && !params.diarize_labels_after_decode()) {
                 wparams.new_segment_callback = fout_factory.print_segment_callback;
                 wparams.new_segment_callback_user_data = &user_data;
             }
@@ -3146,6 +3153,12 @@ int main(int argc, char** argv) {
                                                                params);
                     }
                 }
+            }
+
+            // #466: the live callback was held back for this method; print the
+            // labelled segments now, where it would have printed them.
+            if (params.diarize_labels_after_decode() && fout_factory.print_segment_callback) {
+                crispasr_print_stdout(crispasr_make_disp_segments(segs, 0), !params.no_timestamps);
             }
 
             // macros to stringify function name

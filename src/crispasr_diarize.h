@@ -92,6 +92,11 @@ struct CrispasrDiarizeOptions {
     std::string sortformer_model_path;
     /// Speaker-activity threshold for turns (the model card / transformers use 0.5).
     float sortformer_threshold = 0.5f;
+    /// Chunk schedule: "offline" / empty (default) or a streaming preset,
+    /// "low_latency", "very_low_latency", "ultra_low_latency" — the output of
+    /// a live session with that latency. Empty falls back to
+    /// CRISPASR_SORTFORMER_MODE, which is how C-ABI callers select it.
+    std::string sortformer_mode;
 };
 
 /// A speaker turn derived from the audio, independent of the caller's

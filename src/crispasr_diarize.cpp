@@ -11,6 +11,7 @@
 #include "pyannote_seg.h"
 #include "wespeaker.h"
 
+#include "core/crispasr_env.h"
 #include "core/foxnose_pipeline.h"
 #include "nemotron3_diar.h"
 #include "core/powerset.h"
@@ -621,6 +622,18 @@ bool apply_sortformer(const float* mono, int n_samples, const CrispasrDiarizeOpt
         g_sortformer_path = g_sortformer_ctx ? opts.sortformer_model_path : std::string();
         if (!g_sortformer_ctx)
             return false;
+    }
+    std::string mode = opts.sortformer_mode;
+    if (mode.empty()) {
+        const char* e = crispasr_env::get("CRISPASR_SORTFORMER_MODE");
+        mode = (e && *e) ? e : "offline";
+    }
+    if (nemotron3_diar_set_mode(g_sortformer_ctx, mode.c_str()) != 0) {
+        fprintf(stderr,
+                "crispasr_diarize: unknown sortformer mode '%s' (offline, low_latency, very_low_latency, "
+                "ultra_low_latency)\n",
+                mode.c_str());
+        return false;
     }
     int T = 0, S = 0;
     float* probs = nemotron3_diar_probs(g_sortformer_ctx, mono, n_samples, &T, &S);

@@ -70,6 +70,10 @@ struct n3d_hparams {
     float preemph = 0.97f, log_guard = 5.960464477539063e-08f;
     // offline chunk schedule (transformers config.json)
     int chunk_len = 340, chunk_rc = 40, fifo_len = 40, update_period = 300;
+    // streaming schedule: FIFO / update period (streaming_config) and the
+    // processor's modes, (chunk_len, chunk_right_context) in encoder frames
+    int s_fifo_len = 264, s_update_period = 222;
+    int s_modes[3][2] = {{9, 4}, {6, 2}, {3, 1}};
     // speaker cache policy (streaming_config)
     int cache_len = 264, n_sil = 1;
     float thr = 0.25f, boost_latest = 0.05f, strong_rate = 0.75f, weak_rate = 1.5f, min_pos_rate = 0.5f;
@@ -80,6 +84,7 @@ struct n3d_hparams {
 struct nemotron3_diar_context {
     nemotron3_diar_params params{};
     n3d_hparams hp;
+    int mode = -1; // -1 offline, else index into hp.s_modes
     ggml_backend_t backend = nullptr, backend_cpu = nullptr;
     ggml_backend_sched_t sched = nullptr;
     core_gguf::WeightLoad wl;
@@ -373,6 +378,21 @@ bool load(nemotron3_diar_context* c, const char* path) {
         hp.chunk_rc = (int)core_gguf::kv_u32(g, (O + "chunk_right_context").c_str(), hp.chunk_rc);
         hp.fifo_len = (int)core_gguf::kv_u32(g, (O + "fifo_len").c_str(), hp.fifo_len);
         hp.update_period = (int)core_gguf::kv_u32(g, (O + "spkcache_update_period").c_str(), hp.update_period);
+        // Streaming schedule: only our converter's GGUF carries transformers' values.
+        // NVIDIA's sortformer.streaming.fifo_len / update period (0 / 264) are a
+        // different, NeMo-side schedule, so without our keys the defaults
+        // (config.json streaming_config, processor_config.json modes) apply.
+        static const char* k_modes[3] = {"low_latency", "very_low_latency", "ultra_low_latency"};
+        if (core_gguf::kv_u32(g, "nemotron3diar.streaming.low_latency.chunk_len", 0) > 0) {
+            hp.s_fifo_len = (int)core_gguf::kv_u32(g, "sortformer.streaming.fifo_len", hp.s_fifo_len);
+            hp.s_update_period =
+                (int)core_gguf::kv_u32(g, "sortformer.streaming.spkcache_update_period", hp.s_update_period);
+            for (int m = 0; m < 3; m++) {
+                const std::string P = std::string("nemotron3diar.streaming.") + k_modes[m] + ".";
+                hp.s_modes[m][0] = (int)core_gguf::kv_u32(g, (P + "chunk_len").c_str(), hp.s_modes[m][0]);
+                hp.s_modes[m][1] = (int)core_gguf::kv_u32(g, (P + "chunk_right_context").c_str(), hp.s_modes[m][1]);
+            }
+        }
         core_gguf::free_metadata(g);
     } else {
         return false;
@@ -618,8 +638,277 @@ extern "C" int nemotron3_diar_n_speakers(nemotron3_diar_context* c) {
     return c ? c->hp.n_spk : 0;
 }
 
+namespace {
+
+struct n3d_chunk {
+    int start, n, lookahead; // encoder frames: scored [start, start + n), attended up to + lookahead
+};
+
+// Streaming mode on a whole recording, the way the model card's driver feeds
+// Nemotron3DiarizationProcessor: a first chunk of (chunk + look-ahead) * 8 mel
+// frames (centred STFT), then uncentred chunks while one fits entirely in the
+// audio, then a last chunk with every remaining frame, no look-ahead, scored
+// whole (never re-split). The per-chunk features reproduce the full-utterance
+// mel frame for frame, so only the frame count differs from offline mode:
+// uncentred windows must lie inside the audio. Returns the mel frame count.
+int n3d_streaming_plan(const n3d_hparams& hp, int mode, int n_samples, std::vector<n3d_chunk>* plan) {
+    const int F = hp.subsample, cl = hp.s_modes[mode][0], rc = hp.s_modes[mode][1];
+    const int n_chunk_mel = (cl + rc) * F;
+    if (plan)
+        plan->clear();
+    const long first_samples = (long)(n_chunk_mel - 1) * hp.hop + hp.win / 2;
+    if (n_samples < first_samples) { // the whole recording is one (last) chunk
+        const int T = n_samples / hp.hop;
+        if (plan && T > 0)
+            plan->push_back({0, (T + F - 1) / F, 0});
+        return T;
+    }
+    if (plan)
+        plan->push_back({0, cl, rc});
+    long mel_idx = (long)cl * F;
+    const long per_chunk_samples = (long)n_chunk_mel * hp.hop + hp.win;
+    long start = mel_idx * hp.hop - hp.n_fft / 2;
+    while (start + per_chunk_samples <= n_samples) {
+        if (plan)
+            plan->push_back({(int)(mel_idx / F), cl, rc});
+        mel_idx += (long)cl * F;
+        start = mel_idx * hp.hop - hp.n_fft / 2;
+    }
+    const long rest = n_samples - start;
+    const long last = rest >= hp.n_fft ? (rest - hp.n_fft) / hp.hop + 1 : 0;
+    if (plan && last > 0)
+        plan->push_back({(int)(mel_idx / F), (int)((last + F - 1) / F), 0});
+    return (int)(mel_idx + last);
+}
+
+} // namespace
+
+extern "C" int nemotron3_diar_set_mode(nemotron3_diar_context* c, const char* mode) {
+    if (!c || !mode)
+        return -1;
+    static const char* k_modes[3] = {"low_latency", "very_low_latency", "ultra_low_latency"};
+    if (!std::strcmp(mode, "offline")) {
+        c->mode = -1;
+        return 0;
+    }
+    for (int m = 0; m < 3; m++) {
+        if (!std::strcmp(mode, k_modes[m])) {
+            c->mode = m;
+            return 0;
+        }
+    }
+    return -1;
+}
+
 extern "C" int nemotron3_diar_n_valid_frames(nemotron3_diar_context* c, int n_samples) {
-    return (c && c->hp.hop > 0 && n_samples > 0) ? n_samples / c->hp.hop : 0;
+    if (!c || c->hp.hop <= 0 || n_samples <= 0)
+        return 0;
+    return c->mode < 0 ? n_samples / c->hp.hop : n3d_streaming_plan(c->hp, c->mode, n_samples, nullptr);
+}
+
+namespace {
+
+// NemotronAsrStreamingFeatureExtractor on one span of audio: centred (first
+// chunk / offline) or uncentred (later streaming chunks), keeping the first
+// `keep` frames. Empty on failure.
+std::vector<float> n3d_mel(nemotron3_diar_context* c, const float* pcm, int n, bool center, int keep) {
+    const auto& hp = c->hp;
+    core_mel::Params mp;
+    mp.n_fft = hp.n_fft;
+    mp.hop_length = hp.hop;
+    mp.win_length = hp.win;
+    mp.n_mels = hp.n_mels;
+    mp.log_base = core_mel::LogBase::Ln;
+    mp.log_guard = core_mel::LogGuard::AddEpsilon;
+    mp.log_eps = hp.log_guard;
+    mp.norm = core_mel::Normalization::None;
+    mp.layout = core_mel::Layout::TimeMels;
+    mp.fb_layout = core_mel::FbLayout::MelsFreqs;
+    mp.center_pad = center;
+    mp.drop_last_frame = false;
+    mp.preemph = hp.preemph;
+    int T = 0;
+    std::vector<float> mel =
+        core_mel::compute(pcm, n, c->window.data(), hp.win, c->fb_host.data(), hp.n_fft / 2 + 1, fft_r2c, mp, T);
+    if (T < keep)
+        return {};
+    mel.resize((size_t)keep * hp.n_mels);
+    return mel;
+}
+
+} // namespace
+
+// Streaming session: the chunk-by-chunk forward of transformers' streaming mode
+// (Nemotron3DiarizationProcessor is_streaming=True + the model's speaker_cache).
+struct nemotron3_diar_stream {
+    nemotron3_diar_context* c = nullptr;
+    int cl = 0, rc = 0;
+    SpeakerCache cache;
+    std::vector<float> audio; // samples from audio_base on
+    long audio_base = 0, n_total = 0;
+    long mel_idx = 0; // first mel frame of the next chunk
+    bool started = false, ended = false;
+    // stage captures for the diff harness (scored rows only)
+    bool capture = false;
+    std::vector<float> cap_mel, cap_emb, cap_logits;
+    int cap_T = 0, cap_Ne = 0;
+};
+
+namespace {
+
+// One streaming forward: mel rows [T_chunk][M] (chunk + look-ahead), `scored`
+// encoder frames of it scored; appends the scored logits (at most `keep_frames`
+// 10 ms rows) to `out`.
+bool n3d_stream_step(nemotron3_diar_stream* st, const std::vector<float>& mel, int T_chunk, int scored, int keep_frames,
+                     std::vector<float>& out) {
+    nemotron3_diar_context* c = st->c;
+    const auto& hp = c->hp;
+    const int F = hp.subsample, S = hp.n_spk, d = hp.d, M = hp.n_mels;
+    std::vector<float> emb, x_rows, lg;
+    int Ne = 0;
+    if (!embed(c, mel, T_chunk, emb, Ne))
+        return false;
+    scored = std::min(scored, Ne);
+    st->cache.get_embeds(x_rows);
+    const int cached = (int)(x_rows.size() / d);
+    x_rows.insert(x_rows.end(), emb.begin(), emb.end());
+    const int N = cached + Ne;
+    const std::vector<uint8_t> mask(N, 1); // every streamed frame is audio
+    if (!run_chunk(c, x_rows, N, mask, lg))
+        return false;
+    st->cache.update(x_rows, N, lg, scored, mask, c->sil_host);
+    const int rows = std::min(scored * F, keep_frames);
+    out.insert(out.end(), lg.begin() + (size_t)cached * F * S, lg.begin() + (size_t)(cached * F + rows) * S);
+    if (st->capture) {
+        st->cap_mel.insert(st->cap_mel.end(), mel.begin(), mel.begin() + (size_t)std::min(rows, T_chunk) * M);
+        st->cap_emb.insert(st->cap_emb.end(), emb.begin(), emb.begin() + (size_t)scored * d);
+        st->cap_logits.insert(st->cap_logits.end(), lg.begin() + (size_t)cached * F * S,
+                              lg.begin() + (size_t)(cached * F + rows) * S);
+        st->cap_T += std::min(rows, T_chunk);
+        st->cap_Ne += scored;
+    }
+    return true;
+}
+
+// Runs every chunk the buffered audio completes; `last` also runs the final one.
+bool n3d_stream_drain(nemotron3_diar_stream* st, bool last, std::vector<float>& out) {
+    const auto& hp = st->c->hp;
+    const int F = hp.subsample, M = hp.n_mels;
+    const int n_chunk_mel = (st->cl + st->rc) * F;
+    const long first_samples = (long)(n_chunk_mel - 1) * hp.hop + hp.win / 2;
+    const long per_chunk_samples = (long)n_chunk_mel * hp.hop + hp.win;
+    (void)M;
+    if (!st->started) {
+        if (st->n_total >= first_samples) {
+            // first chunk: centred windows over the first first_samples samples
+            std::vector<float> mel = n3d_mel(st->c, st->audio.data(), (int)first_samples, true, n_chunk_mel);
+            if (mel.empty() || !n3d_stream_step(st, mel, n_chunk_mel, st->cl, st->cl * F, out))
+                return false;
+            st->started = true;
+            st->mel_idx = (long)st->cl * F;
+        } else if (last) {
+            // the whole session is one (last) chunk
+            const int T = (int)(st->n_total / hp.hop);
+            if (T > 0) {
+                std::vector<float> mel = n3d_mel(st->c, st->audio.data(), (int)st->n_total, true, T);
+                if (mel.empty() || !n3d_stream_step(st, mel, T, (T + F - 1) / F, T, out))
+                    return false;
+            }
+            return true;
+        } else {
+            return true;
+        }
+    }
+    for (;;) {
+        const long start = st->mel_idx * hp.hop - hp.n_fft / 2; // absolute sample
+        const long off = start - st->audio_base;
+        if (start + per_chunk_samples <= st->n_total) {
+            std::vector<float> mel = n3d_mel(st->c, st->audio.data() + off, (int)per_chunk_samples, false, n_chunk_mel);
+            if (mel.empty() || !n3d_stream_step(st, mel, n_chunk_mel, st->cl, st->cl * F, out))
+                return false;
+            st->mel_idx += (long)st->cl * F;
+            continue;
+        }
+        if (last) {
+            const long rest = st->n_total - start;
+            const int T = rest >= hp.n_fft ? (int)((rest - hp.n_fft) / hp.hop + 1) : 0;
+            if (T > 0) {
+                std::vector<float> mel = n3d_mel(st->c, st->audio.data() + off, (int)rest, false, T);
+                if (mel.empty() || !n3d_stream_step(st, mel, T, (T + F - 1) / F, T, out))
+                    return false;
+                st->mel_idx += T;
+            }
+        }
+        // drop audio no later chunk reads
+        const long next = st->mel_idx * hp.hop - hp.n_fft / 2;
+        if (next > st->audio_base) {
+            st->audio.erase(st->audio.begin(), st->audio.begin() + (next - st->audio_base));
+            st->audio_base = next;
+        }
+        return true;
+    }
+}
+
+float* n3d_sigmoid_rows(const std::vector<float>& lg, int S, int* out_rows) {
+    const int rows = (int)(lg.size() / S);
+    if (out_rows)
+        *out_rows = rows;
+    if (rows == 0)
+        return nullptr;
+    float* p = (float*)malloc(lg.size() * sizeof(float));
+    for (size_t i = 0; i < lg.size(); i++)
+        p[i] = 1.0f / (1.0f + std::exp(-lg[i]));
+    return p;
+}
+
+} // namespace
+
+extern "C" nemotron3_diar_stream* nemotron3_diar_stream_begin(nemotron3_diar_context* c, const char* mode) {
+    if (!c)
+        return nullptr;
+    static const char* k_modes[3] = {"low_latency", "very_low_latency", "ultra_low_latency"};
+    int m = 0;
+    if (mode && *mode) {
+        for (m = 0; m < 3 && std::strcmp(mode, k_modes[m]); m++) {
+        }
+        if (m == 3)
+            return nullptr;
+    }
+    auto* st = new nemotron3_diar_stream();
+    st->c = c;
+    st->cl = c->hp.s_modes[m][0];
+    st->rc = c->hp.s_modes[m][1];
+    st->cache.init(c->hp, c->hp.s_fifo_len, c->hp.s_update_period);
+    return st;
+}
+
+extern "C" float* nemotron3_diar_stream_push(nemotron3_diar_stream* st, const float* pcm, int n_samples,
+                                             int* out_rows) {
+    if (out_rows)
+        *out_rows = 0;
+    if (!st || st->ended || n_samples < 0 || (n_samples > 0 && !pcm))
+        return nullptr;
+    st->audio.insert(st->audio.end(), pcm, pcm + n_samples);
+    st->n_total += n_samples;
+    std::vector<float> lg;
+    if (!n3d_stream_drain(st, false, lg))
+        return nullptr;
+    return n3d_sigmoid_rows(lg, st->c->hp.n_spk, out_rows);
+}
+
+extern "C" float* nemotron3_diar_stream_end(nemotron3_diar_stream* st, int* out_rows) {
+    if (out_rows)
+        *out_rows = 0;
+    if (!st || st->ended)
+        return nullptr;
+    std::vector<float> lg;
+    const bool ok = n3d_stream_drain(st, true, lg);
+    st->ended = true;
+    return ok ? n3d_sigmoid_rows(lg, st->c->hp.n_spk, out_rows) : nullptr;
+}
+
+extern "C" void nemotron3_diar_stream_free(nemotron3_diar_stream* st) {
+    delete st;
 }
 
 extern "C" float* nemotron3_diar_probs_stages(nemotron3_diar_context* c, const float* pcm, int n_samples, int* out_T,
@@ -631,6 +920,57 @@ extern "C" float* nemotron3_diar_probs_stages(nemotron3_diar_context* c, const f
     const int M = hp.n_mels, F = hp.subsample, S = hp.n_spk, d = hp.d;
     const bool bench = n3d_bench();
     double t0 = bench ? now_ms() : 0.0;
+
+    if (c->mode >= 0) {
+        // Streaming preset: one session fed the whole recording, so this path
+        // is the same code a live caller of nemotron3_diar_stream_* runs.
+        static const char* k_modes[3] = {"low_latency", "very_low_latency", "ultra_low_latency"};
+        nemotron3_diar_stream* st = nemotron3_diar_stream_begin(c, k_modes[c->mode]);
+        if (!st)
+            return nullptr;
+        st->capture = out_mel || out_embeds || out_logits;
+        int r1 = 0, r2 = 0;
+        float* p1 = nemotron3_diar_stream_push(st, pcm, n_samples, &r1);
+        float* p2 = st->ended ? nullptr : nemotron3_diar_stream_end(st, &r2);
+        const bool ok = st->ended && (r1 == 0 || p1) && (r2 == 0 || p2) && r1 + r2 > 0;
+        float* probs = nullptr;
+        if (ok) {
+            probs = (float*)malloc((size_t)(r1 + r2) * S * sizeof(float));
+            if (r1)
+                std::memcpy(probs, p1, (size_t)r1 * S * sizeof(float));
+            if (r2)
+                std::memcpy(probs + (size_t)r1 * S, p2, (size_t)r2 * S * sizeof(float));
+            auto dup = [](const std::vector<float>& v) {
+                float* o = (float*)malloc(std::max<size_t>(v.size(), 1) * sizeof(float));
+                if (!v.empty())
+                    std::memcpy(o, v.data(), v.size() * sizeof(float));
+                return o;
+            };
+            if (out_T)
+                *out_T = r1 + r2;
+            if (out_S)
+                *out_S = S;
+            if (out_mel)
+                *out_mel = dup(st->cap_mel);
+            if (out_n_mels)
+                *out_n_mels = M;
+            if (out_embeds)
+                *out_embeds = dup(st->cap_emb);
+            if (out_Ne)
+                *out_Ne = st->cap_Ne;
+            if (out_d)
+                *out_d = d;
+            if (out_logits)
+                *out_logits = dup(st->cap_logits);
+        }
+        std::free(p1);
+        std::free(p2);
+        nemotron3_diar_stream_free(st);
+        if (bench)
+            fprintf(stderr, "  nemotron3_diar_bench: streaming %s, %.1f ms, %d frames\n", k_modes[c->mode],
+                    now_ms() - t0, r1 + r2);
+        return probs;
+    }
 
     // ---- mel: NemotronAsrStreamingFeatureExtractor (preemph, zero-padded centred STFT,
     //      symmetric Hann(win) in n_fft, slaney mel, ln(x + 2^-24), no normalisation)
@@ -669,6 +1009,9 @@ extern "C" float* nemotron3_diar_probs_stages(nemotron3_diar_context* c, const f
         emask[j] = (j * F) < valid;
 
     // ---- offline chunk loop with the speaker cache
+    std::vector<n3d_chunk> plan;
+    for (int start = 0; start < Ne; start += hp.chunk_len)
+        plan.push_back({start, std::min(hp.chunk_len, Ne - start), hp.chunk_rc});
     SpeakerCache cache;
     cache.init(hp, hp.fifo_len, hp.update_period);
     std::vector<float> all_logits;
@@ -676,10 +1019,11 @@ extern "C" float* nemotron3_diar_probs_stages(nemotron3_diar_context* c, const f
     std::vector<float> x_rows, lg;
     std::vector<uint8_t> mask;
     int n_chunks = 0;
-    for (int start = 0; start < Ne; start += hp.chunk_len) {
-        const int end = std::min(start + hp.chunk_len, Ne);
+    for (const n3d_chunk& ch : plan) {
+        const int start = ch.start;
+        const int end = std::min(start + ch.n, Ne);
         const int n_chunk = end - start;
-        const int take_end = std::min(end + hp.chunk_rc, Ne);
+        const int take_end = std::min(end + ch.lookahead, Ne);
         cache.get_embeds(x_rows);
         const int cached = (int)(x_rows.size() / d);
         x_rows.insert(x_rows.end(), emb.begin() + (size_t)start * d, emb.begin() + (size_t)take_end * d);

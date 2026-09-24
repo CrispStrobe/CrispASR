@@ -110,46 +110,53 @@ try:
             if ami.with_suffix(suf).exists(): shutil.copy(ami.with_suffix(suf), OUT / ("ami" + suf))
     res["clips"] = {k: str(v) for k, v in clips.items()}; save()
 
-    refs = {}
-    for c, w in clips.items():
-        ref = G / f"ref-{c}.gguf"
-        rc, s, out = run([sys.executable, str(REPO / "tools/dump_reference.py"), "--backend", "nemotron3-diar",
-                          "--model-dir", str(md), "--audio", str(w), "--output", str(ref)], f"ref-{c}.log", timeout=3600)
-        res["steps"][f"ref_{c}"] = {"rc": rc, "s": s}; save()
-        if rc == 0: refs[c] = ref
-
-    res["diff"] = {}; res["der"] = {}
+    MODES = ["offline", "low_latency", "very_low_latency", "ultra_low_latency"]
     rttm = read_rttm(ami.with_suffix(".rttm")) if "ami" in clips and ami.with_suffix(".rttm").exists() else None
-    for name, p in arts.items():
-        for c, ref in refs.items():
-            env = dict(os.environ); seg_out = G / f"seg-{name}-{c}.txt"; env["CRISPASR_DIFF_SEGMENTS_OUT"] = str(seg_out)
-            env["CRISPASR_NEMOTRON3_DIAR_BENCH"] = "1"
-            rc, s, out = run([str(bin_ / "crispasr-diff"), "nemotron3-diar", str(p), str(ref), str(clips[c])],
-                             f"diff-{name}-{c}.log", timeout=3600, env=env)
-            res["diff"][f"{name}/{c}"] = {"rc": rc, "s": s,
-                                           "rows": [l for l in out.splitlines() if l.startswith(("[", "  "))][:40]}
-            if seg_out.exists(): shutil.copy(seg_out, OUT / seg_out.name)
-            if c == "ami" and rttm and seg_out.exists():
-                res["der"][f"cpp-{name}"] = frame_der(rttm, read_segtxt(seg_out.read_text()))
+    res["diff"] = {}; res["der"] = {}
+    import gguf
+    for mode in MODES:
+        env_ref = dict(os.environ); env_ref["NEMOTRON3_DIAR_MODE"] = mode
+        refs = {}
+        for c, w in clips.items():
+            ref = G / f"ref-{mode}-{c}.gguf"
+            rc, s_, out = run([sys.executable, str(REPO / "tools/dump_reference.py"), "--backend", "nemotron3-diar",
+                               "--model-dir", str(md), "--audio", str(w), "--output", str(ref)],
+                              f"ref-{mode}-{c}.log", timeout=3600, env=env_ref)
+            res["steps"][f"ref_{mode}_{c}"] = {"rc": rc, "s": s_}; save()
+            if rc == 0: refs[c] = ref
+        # quantized arm only offline: parity there already bounds it
+        for name, p in arts.items():
+            if mode != "offline" and name == "nvidia_q8_0":
+                continue
+            for c, ref in refs.items():
+                env = dict(os.environ); seg_out = G / f"seg-{mode}-{name}-{c}.txt"
+                env["CRISPASR_DIFF_SEGMENTS_OUT"] = str(seg_out); env["CRISPASR_NEMOTRON3_DIAR_BENCH"] = "1"
+                if mode != "offline": env["CRISPASR_NEMOTRON3_DIAR_MODE"] = mode
+                rc, s_, out = run([str(bin_ / "crispasr-diff"), "nemotron3-diar", str(p), str(ref), str(clips[c])],
+                                  f"diff-{mode}-{name}-{c}.log", timeout=3600, env=env)
+                res["diff"][f"{mode}/{name}/{c}"] = {"rc": rc, "s": s_,
+                    "rows": [l for l in out.splitlines() if l.startswith(("[", "  "))][:40]}
+                if seg_out.exists(): shutil.copy(seg_out, OUT / seg_out.name)
+                if c == "ami" and rttm and seg_out.exists():
+                    res["der"][f"{mode}/cpp-{name}"] = frame_der(rttm, read_segtxt(seg_out.read_text()))
+                save()
+        if rttm and "ami" in refs:
+            rd = gguf.GGUFReader(str(refs["ami"]))
+            for k, f in rd.fields.items():
+                if k.endswith("segments_text"):
+                    txt = bytes(f.parts[f.data[0]]).decode()
+                    (OUT / f"seg-{mode}-transformers-ami.txt").write_text(txt)
+                    res["der"][f"{mode}/transformers"] = frame_der(rttm, read_segtxt(txt))
             save()
-    if rttm and "ami" in refs:
-        import gguf
-        rd = gguf.GGUFReader(str(refs["ami"]))
-        for k, f in rd.fields.items():
-            if k.endswith("segments_text"):
-                txt = bytes(f.parts[f.data[0]]).decode()
-                (OUT / "seg-transformers-ami.txt").write_text(txt)
-                res["der"]["transformers"] = frame_der(rttm, read_segtxt(txt))
-        save()
 
-    # End to end: whisper tiny + --diarize-method sortformer on the AMI clip. The
-    # console line comes from whisper's live callback (stereo-energy "(speaker ?)"
-    # on mono); the diarizer's labels are in the -oj file. Both routes: the legacy
-    # .bin path and the unified dispatcher (--backend whisper).
+    # End to end on the AMI clip with whisper tiny: the legacy .bin path (whose
+    # console now prints the diarizer's labels, not "(speaker ?)"), the unified
+    # dispatcher, and a streaming preset.
     if "ami" in clips and "f16" in arts:
         asr = hf_hub_download("ggerganov/whisper.cpp", "ggml-tiny.en.bin", local_dir=str(G / "w"))
         res["cli"] = {}
-        for route, extra in (("legacy", []), ("dispatch", ["--backend", "whisper"])):
+        for route, extra in (("legacy", []), ("dispatch", ["--backend", "whisper"]),
+                             ("legacy-low_latency", ["--sortformer-mode", "low_latency"])):
             of = G / f"cli-{route}"
             rc, s_, out = run([str(bin_ / "crispasr"), "-m", asr, "-f", str(clips["ami"]), "-t", "4", "--diarize",
                                "--diarize-method", "sortformer", "--diarize-model", str(arts["f16"]), "-oj", "-of",
@@ -163,7 +170,9 @@ try:
                 shutil.copy(str(of) + ".json", OUT / f"cli-{route}.json")
             except Exception as e:
                 spk = [f"json read failed: {e}"]
-            res["cli"][route] = {"rc": rc, "s": s_, "segments": spk}
+            console = [l for l in out.splitlines() if l.startswith("[")]
+            res["cli"][route] = {"rc": rc, "s": s_, "segments": spk, "console": console[:12],
+                                 "console_unlabelled": sum("(speaker ?)" in l for l in console)}
             save()
 except BaseException:
     res["errors"].append(traceback.format_exc())
