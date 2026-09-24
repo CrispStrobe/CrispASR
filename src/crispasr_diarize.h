@@ -46,6 +46,12 @@ enum class CrispasrDiarizeMethod {
     /// segment to the turn it overlaps most, so it can split a single ASR
     /// segment's speaker assignment only at segment granularity.
     FoxNose,
+    /// #466: NVIDIA Nemotron-3-Diarization (streaming Sortformer v3) - an
+    /// end-to-end model giving per-10-ms activity for up to 8 speakers in
+    /// arrival order. Needs `sortformer_model_path`. Like FoxNose it derives
+    /// turns from the audio; each caller segment gets the speaker with the most
+    /// probability mass inside it.
+    Sortformer,
 };
 
 // One ASR segment, in / out. Caller fills the centisecond range;
@@ -79,10 +85,17 @@ struct CrispasrDiarizeOptions {
     int max_speakers = 20;
     /// > 0 pins the speaker count and skips estimation entirely.
     int num_speakers = 0;
+
+    // ── Sortformer (#466) ─────────────────────────────────────────────
+    /// GGUF of Nemotron-3-Diarization (`sortformer` architecture). Required
+    /// when `method == Sortformer`.
+    std::string sortformer_model_path;
+    /// Speaker-activity threshold for turns (the model card / transformers use 0.5).
+    float sortformer_threshold = 0.5f;
 };
 
 /// A speaker turn derived from the audio, independent of the caller's
-/// segmentation. Only the FoxNose method produces these; the others label
+/// segmentation. Only FoxNose and Sortformer produce these; the others label
 /// caller segments directly and leave the vector empty.
 struct CrispasrDiarizeTurn {
     double start_s = 0.0; ///< relative to the sample buffer, not absolute

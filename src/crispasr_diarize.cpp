@@ -12,6 +12,7 @@
 #include "wespeaker.h"
 
 #include "core/foxnose_pipeline.h"
+#include "nemotron3_diar.h"
 #include "core/powerset.h"
 
 #include <algorithm>
@@ -598,6 +599,82 @@ bool apply_foxnose(const float* left, int n_samples, const CrispasrDiarizeOption
     return true;
 }
 
+// ── Sortformer (#466) ─────────────────────────────────────────────────────
+static std::mutex g_sortformer_mtx;
+static nemotron3_diar_context* g_sortformer_ctx = nullptr;
+static std::string g_sortformer_path;
+
+bool apply_sortformer(const float* mono, int n_samples, const CrispasrDiarizeOptions& opts,
+                      std::vector<CrispasrDiarizeSegment>& segs, std::vector<CrispasrDiarizeTurn>* out_turns) {
+    if (opts.sortformer_model_path.empty()) {
+        fprintf(stderr, "crispasr_diarize: sortformer needs a Nemotron-3-Diarization GGUF (--diarize-model)\n");
+        return false;
+    }
+    std::lock_guard<std::mutex> lock(g_sortformer_mtx);
+    if (!g_sortformer_ctx || g_sortformer_path != opts.sortformer_model_path) {
+        if (g_sortformer_ctx)
+            nemotron3_diar_free(g_sortformer_ctx);
+        auto p = nemotron3_diar_default_params();
+        p.n_threads = opts.n_threads;
+        p.verbosity = 0;
+        g_sortformer_ctx = nemotron3_diar_init_from_file(opts.sortformer_model_path.c_str(), p);
+        g_sortformer_path = g_sortformer_ctx ? opts.sortformer_model_path : std::string();
+        if (!g_sortformer_ctx)
+            return false;
+    }
+    int T = 0, S = 0;
+    float* probs = nemotron3_diar_probs(g_sortformer_ctx, mono, n_samples, &T, &S);
+    if (!probs || T <= 0) {
+        std::free(probs);
+        return false;
+    }
+    const double frame_s = 0.01; // one row per 10 ms
+    const float thr = opts.sortformer_threshold;
+    // Turns: runs of p > thr per speaker (Nemotron3DiarizationProcessor.extract_speaker_dict).
+    std::vector<CrispasrDiarizeTurn> turns;
+    for (int s = 0; s < S; s++) {
+        int start = -1;
+        for (int t = 0; t <= T; t++) {
+            const bool on = t < T && probs[(size_t)t * S + s] > thr;
+            if (on && start < 0)
+                start = t;
+            if (!on && start >= 0) {
+                turns.push_back({start * frame_s, t * frame_s, s});
+                start = -1;
+            }
+        }
+    }
+    std::sort(turns.begin(), turns.end(), [](const CrispasrDiarizeTurn& a, const CrispasrDiarizeTurn& b) {
+        return a.start_s < b.start_s || (a.start_s == b.start_s && a.speaker < b.speaker);
+    });
+    // Label each caller segment by the speaker with the most probability mass inside it.
+    for (auto& seg : segs) {
+        // one centisecond == one 10 ms frame
+        const int f0 = std::max(0, (int)(seg.t0_cs - opts.slice_t0_cs));
+        const int f1 = std::min(T, (int)(seg.t1_cs - opts.slice_t0_cs));
+        int best = -1;
+        double best_mass = 0.0;
+        for (int s = 0; s < S; s++) {
+            double mass = 0.0;
+            for (int t = f0; t < f1; t++)
+                mass += probs[(size_t)t * S + s];
+            if (mass > best_mass) {
+                best_mass = mass;
+                best = s;
+            }
+        }
+        // no speaker ever above threshold in the segment -> leave it unlabelled
+        bool any = false;
+        for (int t = f0; t < f1 && !any && best >= 0; t++)
+            any = probs[(size_t)t * S + best] > thr;
+        seg.speaker = any ? best : -1;
+    }
+    std::free(probs);
+    if (out_turns)
+        *out_turns = std::move(turns);
+    return true;
+}
+
 } // namespace
 
 bool crispasr_diarize_segments(const float* left, const float* right, int n_samples, bool is_stereo,
@@ -624,6 +701,8 @@ bool crispasr_diarize_segments(const float* left, const float* right, int n_samp
         return apply_pyannote(left, n_samples, opts.slice_t0_cs, segs, opts.pyannote_model_path, opts.n_threads);
     case CrispasrDiarizeMethod::FoxNose:
         return apply_foxnose(left, n_samples, opts, segs, out_turns);
+    case CrispasrDiarizeMethod::Sortformer:
+        return apply_sortformer(left, n_samples, opts, segs, out_turns);
     }
     return false;
 }

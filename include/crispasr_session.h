@@ -294,7 +294,8 @@ CRISPASR_SESSION_API int crispasr_diarize_segments_abi(const float* left_pcm, co
 // 0.8.30+ (issue #395): diarize AND hand back the speaker turns the method
 // derived from the audio, so a caller can split one of its own segments that
 // spans a speaker change — labelling alone can never resolve finer than the
-// segment grid the caller sent in. Only FoxNose (method 4) derives turns; the
+// segment grid the caller sent in. FoxNose (method 4) and Sortformer (method 5,
+// #466) derive turns; the
 // other methods report 0, which is not an error.
 //
 // A NEW SYMBOL rather than a signature change, so the existing ABI stays

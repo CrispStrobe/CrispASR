@@ -498,6 +498,8 @@ static bool whisper_params_parse_arg_backend_vad(int argc, char** argv, int& i, 
         params.lid_on_transcript = ARGV_NEXT;
     } else if (arg == "--diarize-method") {
         params.diarize_method = ARGV_NEXT;
+    } else if (arg == "--diarize-model") {
+        params.diarize_model = ARGV_NEXT;
     } else if (arg == "--sherpa-bin") {
         params.sherpa_bin = ARGV_NEXT;
     } else if (arg == "--sherpa-segment-model") {
@@ -1173,7 +1175,7 @@ static void whisper_print_usage(int /*argc*/, char** argv, const whisper_params&
             params.lid_on_transcript.c_str());
     fprintf(out,
             "  --diarize-method NAME             [%-7s] diarize method: "
-            "energy|xcorr|vad-turns|sherpa|pyannote|ecapa|foxnose\n",
+            "energy|xcorr|vad-turns|sherpa|pyannote|ecapa|foxnose|sortformer\n",
             params.diarize_method.c_str());
     fprintf(out,
             "                                             energy/xcorr: stereo channel split; vad-turns: gap-based "
@@ -1183,6 +1185,12 @@ static void whisper_print_usage(int /*argc*/, char** argv, const whisper_params&
                  "use sherpa/ecapa)\n");
     fprintf(out, "                                             sherpa/ecapa: external sherpa-onnx subprocess with "
                  "segmentation + speaker embedding + clustering\n");
+    fprintf(out, "                                             sortformer: NVIDIA Nemotron-3-Diarization, end-to-end, "
+                 "up to 8 speakers in arrival order, 10 ms resolution (one global pass; model: --diarize-model)\n");
+    fprintf(out,
+            "  --diarize-model PATH              [%-7s] GGUF for --diarize-method sortformer (a sortformer GGUF; "
+            "'auto' fetches nvidia/Nemotron-3-Diarization q8_0, OpenMDW-1.1)\n",
+            params.diarize_model.empty() ? "auto" : params.diarize_model.c_str());
     fprintf(out,
             "  --diarize-embedder MODEL          [%-7s] speaker-embedding model used to cluster pyannote local "
             "tracks into globally stable speaker IDs. Pluggable; known aliases: 'auto' / 'titanet' (192-d "

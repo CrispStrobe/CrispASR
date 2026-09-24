@@ -52,6 +52,7 @@
 #include "higgs_stt.h"
 #include "moss_transcribe_diarize.h"
 #include "qwen3_asr.h"
+#include "nemotron3_diar.h"
 #include "qwen3_tts.h"
 #include "omnivoice.h"
 #include "kokoro.h"
@@ -127,6 +128,7 @@
 #include <memory>
 #include <sys/stat.h>
 #include <string>
+#include <tuple>
 #include <vector>
 
 #ifdef _WIN32
@@ -2648,6 +2650,108 @@ int main(int argc, char** argv) {
             }
         }
         chatterbox_free(ctx);
+    } else if (backend_name == "nemotron3-diar" || backend_name == "sortformer") {
+        // #466 Nemotron-3-Diarization vs transformers
+        // (tools/reference_backends/nemotron3_diar.py): mel, stacked embeddings,
+        // per-10ms speaker logits / probabilities, the thresholded speaker
+        // decision per frame, and the segment list extract_speaker_dict builds.
+        auto dp = nemotron3_diar_default_params();
+        dp.n_threads = 4;
+        dp.verbosity = 0;
+        dp.use_gpu = std::getenv("CRISPASR_DIFF_NO_GPU") == nullptr;
+        nemotron3_diar_context* ctx = nemotron3_diar_init_from_file(model_path.c_str(), dp);
+        if (!ctx) {
+            fprintf(stderr, "nemotron3-diar: failed to load '%s'\n", model_path.c_str());
+            return 4;
+        }
+        int T = 0, S = 0, M = 0, Ne = 0, dm = 0;
+        float *mel = nullptr, *emb = nullptr, *lg = nullptr;
+        float* pr = nemotron3_diar_probs_stages(ctx, samples.data(), (int)samples.size(), &T, &S, &mel, &M, &emb, &Ne,
+                                                &dm, &lg);
+        if (!pr) {
+            printf("[ERR ] nemotron3_diar_probs_stages returned null\n");
+            n_fail++;
+        } else {
+            const struct {
+                const char* name;
+                const float* data;
+                size_t n;
+            } st[] = {{"mel", mel, (size_t)T * M},
+                      {"embeds", emb, (size_t)Ne * dm},
+                      {"logits", lg, (size_t)T * S},
+                      {"probs", pr, (size_t)T * S}};
+            for (const auto& x : st) {
+                if (!ref.has(x.name)) {
+                    printf("[SKIP] %-24s not in reference\n", x.name);
+                    continue;
+                }
+                auto rep = ref.compare(x.name, x.data, x.n);
+                print_row(x.name, rep, COS_THRESHOLD);
+                record(rep);
+            }
+            // The decision the segments are built from: sigmoid > 0.5 per (frame, speaker).
+            auto rp = ref.get_f32("probs");
+            if (rp.first && rp.second == (size_t)T * S) {
+                size_t agree = 0, flips = 0;
+                for (size_t i = 0; i < rp.second; i++) {
+                    const bool a = pr[i] > 0.5f, b = rp.first[i] > 0.5f;
+                    agree += a == b;
+                    flips += a != b;
+                }
+                const double frac = (double)agree / (double)rp.second;
+                printf("%s decisions(p>0.5)       %zu / %zu frame x speaker cells agree (%.4f%%), %zu differ\n",
+                       frac >= 0.999 ? "[PASS]" : "[FAIL]", agree, rp.second, 100.0 * frac, flips);
+                if (frac < 0.999)
+                    n_fail++;
+                else
+                    n_pass++;
+            }
+            // Segments the way Nemotron3DiarizationProcessor.extract_speaker_dict builds them.
+            std::string seg_txt;
+            std::vector<std::tuple<double, int, double>> segs;
+            for (int sp = 0; sp < S; sp++) {
+                int start = -1;
+                for (int t = 0; t <= T; t++) {
+                    const bool on = t < T && pr[(size_t)t * S + sp] > 0.5f;
+                    if (on && start < 0)
+                        start = t;
+                    if (!on && start >= 0) {
+                        segs.emplace_back(start * 0.01, sp, t * 0.01);
+                        start = -1;
+                    }
+                }
+            }
+            std::sort(segs.begin(), segs.end());
+            for (const auto& g : segs) {
+                char buf[64];
+                snprintf(buf, sizeof(buf), "%.2f %.2f %d", std::get<0>(g), std::get<2>(g), std::get<1>(g));
+                seg_txt += (seg_txt.empty() ? "" : "\n") + std::string(buf);
+            }
+            // For DER scoring against an RTTM outside the harness.
+            if (const char* seg_out = std::getenv("CRISPASR_DIFF_SEGMENTS_OUT")) {
+                if (FILE* f = fopen(seg_out, "w")) {
+                    fprintf(f, "%s\n", seg_txt.c_str());
+                    fclose(f);
+                }
+            }
+            const std::string ref_txt = ref.meta("segments_text");
+            if (!ref_txt.empty()) {
+                const bool same = ref_txt == seg_txt;
+                printf("%s segments               %zu C++ segments, %s the reference's\n", same ? "[PASS]" : "[FAIL]",
+                       segs.size(), same ? "identical to" : "DIFFERENT from");
+                if (!same) {
+                    n_fail++;
+                    printf("  C++:\n%s\n  ref:\n%s\n", seg_txt.c_str(), ref_txt.c_str());
+                } else {
+                    n_pass++;
+                }
+            }
+        }
+        free(mel);
+        free(emb);
+        free(lg);
+        free(pr);
+        nemotron3_diar_free(ctx);
     } else if (backend_name == "raon-speech") {
         // #455 Raon-Speech-9B: the reference is tools/reference_backends/
         // raon_speech.py (fp32, RaonModel.get_audio_input_embeds). Stages:

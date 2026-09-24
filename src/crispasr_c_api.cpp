@@ -8073,10 +8073,14 @@ struct crispasr_diarize_turn_abi {
 };
 
 struct crispasr_diarize_opts_abi {
-    int32_t method; // 0..4 from crispasr_diarize_method_t
+    int32_t method; // 0..5 from crispasr_diarize_method_t
     int32_t n_threads;
     int64_t slice_t0_cs;
-    const char* pyannote_model_path; // required for method 3, ignored otherwise
+    // The model GGUF of the model-based methods: the pyannote segmentation net
+    // for method 3, the Nemotron-3-Diarization sortformer GGUF for method 5
+    // (#466 - reusing the field keeps the struct, and every binding's
+    // hand-written mirror of it, unchanged). Ignored by the other methods.
+    const char* pyannote_model_path;
     // #324 FoxNose (method 4). APPEND-ONLY: bindings lay this struct out by
     // hand, so new fields go at the END and EVERY hand-written layout is
     // updated in the same commit:
@@ -8135,7 +8139,7 @@ static int diarize_segments_abi_impl(const float* left_pcm, const float* right_p
                                      int32_t n_turns_cap, int32_t* out_n_turns) {
     if (!left_pcm || !segs || n_segs <= 0 || !opts)
         return -1;
-    if (opts->method < 0 || opts->method > 4)
+    if (opts->method < 0 || opts->method > 5) // 5 = Sortformer (#466)
         return -1;
     if (n_turns_cap < 0)
         return -1;
@@ -8144,8 +8148,10 @@ static int diarize_segments_abi_impl(const float* left_pcm, const float* right_p
     lib_opts.method = static_cast<CrispasrDiarizeMethod>(opts->method);
     lib_opts.n_threads = opts->n_threads > 0 ? opts->n_threads : 4;
     lib_opts.slice_t0_cs = opts->slice_t0_cs;
-    if (opts->pyannote_model_path)
+    if (opts->pyannote_model_path) {
         lib_opts.pyannote_model_path = opts->pyannote_model_path;
+        lib_opts.sortformer_model_path = opts->pyannote_model_path; // method 5 reads the same field
+    }
     if (opts->foxnose_embedder_path)
         lib_opts.foxnose_embedder_path = opts->foxnose_embedder_path;
     lib_opts.min_speakers = opts->min_speakers > 0 ? opts->min_speakers : 1;

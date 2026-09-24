@@ -325,6 +325,20 @@ std::string resolve_pyannote_model(const whisper_params& params) {
     return mp;
 }
 
+// #466: the Nemotron-3-Diarization GGUF for --diarize-method sortformer.
+// Empty / "auto" fetches NVIDIA's own q8_0 GGUF (OpenMDW-1.1, commercial use
+// allowed) - the `sortformer` layout nemotron3_diar loads directly.
+std::string resolve_sortformer_model(const whisper_params& params) {
+    std::string mp = params.diarize_model;
+    if (mp.empty() || mp == "auto") {
+        mp = crispasr_managed_download(
+            "Nemotron-3-Diarization.q8_0.gguf",
+            "https://huggingface.co/nvidia/Nemotron-3-Diarization/resolve/main/Nemotron-3-Diarization.q8_0.gguf",
+            "openmdw-1.1", params.no_prints, "crispasr[diarize]", params.cache_dir, params.accept_license);
+    }
+    return mp;
+}
+
 // #324: resolve the WeSpeaker embedder path, auto-downloading the canonical
 // GGUF on first use when the user passed "auto" (or left it as the registry
 // default). ⚠ CC-BY-4.0 weights — see THIRD_PARTY_NOTICES.txt.
@@ -837,8 +851,28 @@ void crispasr_diarize_merged_by_slice(
 
 bool crispasr_apply_foxnose_global(std::vector<crispasr_segment>& all_segs, const std::vector<float>& samples,
                                    const whisper_params& params) {
-    if (!params.diarize || !params.diarize_embedder_is_foxnose() || all_segs.empty() || samples.empty())
+    if (!params.diarize || !params.diarize_is_global_method() || all_segs.empty() || samples.empty())
         return false;
+    if (params.diarize_is_sortformer()) {
+        // #466: one pass over the whole recording - arrival-order speaker
+        // numbering is only consistent within a single run.
+        CrispasrDiarizeOptions opts;
+        opts.method = CrispasrDiarizeMethod::Sortformer;
+        opts.n_threads = params.n_threads;
+        opts.slice_t0_cs = 0;
+        opts.sortformer_model_path = resolve_sortformer_model(params);
+        auto lib_segs = lib_view(all_segs);
+        std::vector<CrispasrDiarizeTurn> turns;
+        const float* pcm = samples.data();
+        if (!crispasr_diarize_segments(pcm, pcm, (int)samples.size(), /*is_stereo=*/false, lib_segs, opts, &turns))
+            return false;
+        apply_int_speakers_to_crispasr_segments(lib_segs, all_segs);
+        split_segments_on_foxnose_turns(all_segs, turns, /*slice_t0_cs=*/0);
+        if (!params.no_prints)
+            fprintf(stderr, "crispasr[diarize]: sortformer global pass — %zu turn(s) over %.1f s\n", turns.size(),
+                    samples.size() / 16000.0);
+        return true;
+    }
     if (params.diarize_embedder.empty()) {
         fprintf(stderr, "crispasr[diarize]: foxnose needs --diarize-embedder <wespeaker.gguf>\n");
         return false;
@@ -888,6 +922,11 @@ bool crispasr_apply_diarize(const std::vector<float>& left, const std::vector<fl
         lib_method = CrispasrDiarizeMethod::VadTurns;
     } else if (method == "pyannote") {
         lib_method = CrispasrDiarizeMethod::Pyannote;
+    } else if (params.diarize_is_sortformer()) {
+        // Diarized globally after transcription (crispasr_apply_foxnose_global).
+        if (params.diarize_foxnose_global)
+            return true;
+        lib_method = CrispasrDiarizeMethod::Sortformer;
     } else if (method == "foxnose" || method == "foxnose-diarize") {
         // The unified runner diarizes foxnose GLOBALLY after transcription
         // (crispasr_apply_foxnose_global) so speaker identities are consistent
@@ -944,6 +983,8 @@ bool crispasr_apply_diarize(const std::vector<float>& left, const std::vector<fl
         opts.slice_t0_cs = slice_t0_cs;
         if (lib_method == CrispasrDiarizeMethod::Pyannote)
             opts.pyannote_model_path = resolve_pyannote_model(params);
+        if (lib_method == CrispasrDiarizeMethod::Sortformer)
+            opts.sortformer_model_path = resolve_sortformer_model(params);
         if (lib_method == CrispasrDiarizeMethod::FoxNose) {
             // Reuses the existing --diarize-embedder / --diarize-max-speakers
             // knobs rather than inventing parallel ones.
@@ -983,7 +1024,7 @@ bool crispasr_apply_diarize(const std::vector<float>& left, const std::vector<fl
         // a caller segment spanning several speakers can be split at word-
         // aligned boundaries instead of collapsing to one label. Segments
         // without word timestamps keep their segment-level label.
-        if (lib_method == CrispasrDiarizeMethod::FoxNose)
+        if (lib_method == CrispasrDiarizeMethod::FoxNose || lib_method == CrispasrDiarizeMethod::Sortformer)
             split_segments_on_foxnose_turns(segs, foxnose_turns, slice_t0_cs);
         return true;
     }
@@ -1002,7 +1043,7 @@ bool crispasr_apply_diarize(const std::vector<float>& left, const std::vector<fl
 
     fprintf(stderr,
             "crispasr[diarize]: unknown --diarize-method '%s'. Known: energy, xcorr, "
-            "vad-turns, pyannote, sherpa. Defaulting to '%s'.\n",
+            "vad-turns, pyannote, sherpa, foxnose, sortformer. Defaulting to '%s'.\n",
             method.c_str(), is_stereo ? "energy" : "vad-turns");
     return false;
 }

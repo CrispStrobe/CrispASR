@@ -508,6 +508,7 @@ class DiarizeMethod:
     VAD_TURNS = 2   # mono-friendly, timing-based
     PYANNOTE = 3    # mono-friendly, GGUF pyannote seg model
     FOXNOSE = 4     # mono-friendly, WeSpeaker + spectral clustering
+    SORTFORMER = 5  # mono-friendly, NVIDIA Nemotron-3-Diarization (model path in pyannote_model_path)
 
 
 @dataclass
@@ -1195,10 +1196,11 @@ def diarize_segments_with_turns(
     num_speakers: int = 0,
     lib_path: Optional[str] = None,
 ) -> Tuple[bool, List[DiarizeTurn]]:
-    """Label ``segs`` and return audio-derived FoxNose speaker turns.
+    """Label ``segs`` and return audio-derived FoxNose/Sortformer speaker turns.
 
     The returned timestamps are seconds on the same absolute timeline as the
-    input segments. Non-FoxNose methods return an empty turn list.
+    input segments. Methods other than FoxNose and Sortformer return an empty
+    turn list.
     """
     return _diarize_segments_impl(
         segs, left, right=right, is_stereo=is_stereo, method=method,

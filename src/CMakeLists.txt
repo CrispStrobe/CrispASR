@@ -2611,6 +2611,18 @@ if(NOT MSVC)
 endif()
 
 # ---------------------------------------------------------------------------
+# nemotron3-diar — NVIDIA Nemotron-3-Diarization / streaming Sortformer v3 (#466)
+# ---------------------------------------------------------------------------
+add_library(nemotron3-diar STATIC nemotron3_diar.h nemotron3_diar.cpp)
+set_target_properties(nemotron3-diar PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(nemotron3-diar PUBLIC .)
+target_compile_features   (nemotron3-diar PUBLIC cxx_std_17)
+target_link_libraries     (nemotron3-diar PUBLIC crispasr-core ggml ggml-base crispasr_link_ggml_cpu)
+if(NOT MSVC)
+    target_compile_options(nemotron3-diar PRIVATE -O3)
+endif()
+
+# ---------------------------------------------------------------------------
 # silero-lid — native Silero Language Classifier 95 (GGUF, ggml-based)
 # ---------------------------------------------------------------------------
 add_library(silero-lid STATIC silero_lid.h silero_lid.cpp)
@@ -3269,6 +3281,10 @@ endif()
 # so the native diarizer's symbols resolve at libcrispasr load time.
 if (TARGET pyannote-seg)
     target_link_libraries(crispasr-lib PUBLIC pyannote-seg)
+endif()
+# Nemotron-3-Diarization likewise: the "sortformer" --diarize-method (#466).
+if (TARGET nemotron3-diar)
+    target_link_libraries(crispasr-lib PUBLIC nemotron3-diar)
 endif()
 # WeSpeaker is likewise not a backend — crispasr_diarize.cpp consumes it for
 # the "foxnose" method (#324).

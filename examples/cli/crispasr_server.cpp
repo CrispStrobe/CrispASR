@@ -924,7 +924,7 @@ static transcription_result do_transcribe(const form_part& audio_file, CrispasrB
                 // Without this the server clustered each VAD slice on its own,
                 // restarting the numbering every few seconds and reloading the
                 // WeSpeaker embedder once per slice.
-                if (rp.diarize_embedder_is_foxnose())
+                if (rp.diarize_is_global_method())
                     rp.diarize_foxnose_global = true;
 
                 // Pre-compute global caches for cross-slice consistency.

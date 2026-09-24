@@ -324,6 +324,16 @@ struct whisper_params {
     bool diarize_embedder_is_foxnose() const {
         return diarize_method == "foxnose" || diarize_method == "foxnose-diarize";
     }
+    // #466: NVIDIA Nemotron-3-Diarization (streaming Sortformer). Like foxnose
+    // it diarizes in one global pass (speakers are numbered by first arrival,
+    // so per-slice runs would renumber them). Model from --diarize-model.
+    bool diarize_is_sortformer() const {
+        return diarize_method == "sortformer" || diarize_method == "nemotron3-diar" || diarize_method == "nemotron3";
+    }
+    // Methods that label speakers in one pass over the whole recording.
+    bool diarize_is_global_method() const { return diarize_embedder_is_foxnose() || diarize_is_sortformer(); }
+    // GGUF for --diarize-method sortformer ("auto" / empty: NVIDIA's q8_0 GGUF).
+    std::string diarize_model;
     bool stream = false;
     bool mic = false;
     bool stream_continuous = false;

@@ -2820,6 +2820,11 @@ pub enum DiarizeMethod {
     /// it derives speaker turns from the audio and attributes each caller
     /// segment to the turn it overlaps most.
     FoxNose = 4,
+    /// Mono-friendly, ML-based (#466): NVIDIA Nemotron-3-Diarization
+    /// (streaming Sortformer v3). The GGUF path goes in
+    /// [`DiarizeOptions::pyannote_model_path`]. Derives speaker turns like
+    /// [`DiarizeMethod::FoxNose`].
+    Sortformer = 5,
 }
 
 /// Construct via [`Default`] and set fields as needed — the struct grows
@@ -2865,8 +2870,9 @@ impl Default for DiarizeOptions {
 /// A speaker turn the diarizer derived from the AUDIO, independent of the
 /// caller's segment grid (#395).
 ///
-/// Only [`DiarizeMethod::FoxNose`] produces these; the other methods label
-/// the caller's segments directly and yield none. `t0` / `t1` are seconds on
+/// Only [`DiarizeMethod::FoxNose`] and [`DiarizeMethod::Sortformer`] produce
+/// these; the other methods label the caller's segments directly and yield
+/// none. `t0` / `t1` are seconds on
 /// the same absolute timeline as [`DiarizeSegment`] (i.e.
 /// [`DiarizeOptions::slice_t0`] is already accounted for), so a turn and a
 /// segment compare directly. `speaker` is dense and zero-based — a turn is
@@ -2910,8 +2916,8 @@ pub fn diarize_segments(
 /// The turns are what let a caller resolve a speaker change INSIDE one of its
 /// own segments — split a merged run wherever the turn id changes, instead of
 /// accepting the majority label for the whole span. Only
-/// [`DiarizeMethod::FoxNose`] derives turns; every other method returns an
-/// empty `Vec`, which is not an error.
+/// [`DiarizeMethod::FoxNose`] and [`DiarizeMethod::Sortformer`] derive turns;
+/// every other method returns an empty `Vec`, which is not an error.
 ///
 /// The segments are labelled exactly as [`diarize_segments`] would label
 /// them; asking for turns changes nothing about the labels.
@@ -2938,7 +2944,7 @@ fn diarize_inner(
     }
 
     let path_c = match (&opts.pyannote_model_path, opts.method) {
-        (Some(p), DiarizeMethod::Pyannote) => Some(
+        (Some(p), DiarizeMethod::Pyannote | DiarizeMethod::Sortformer) => Some(
             CString::new(p.as_str())
                 .map_err(|e| format!("pyannote_model_path contains NUL: {e}"))?,
         ),

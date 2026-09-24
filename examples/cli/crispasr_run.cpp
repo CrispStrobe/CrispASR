@@ -1505,7 +1505,7 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, co
 
     // #324: foxnose diarizes in ONE global pass after transcription so speaker
     // identities are consistent across slices; the per-slice path stands down.
-    if (params.diarize && params.diarize_embedder_is_foxnose())
+    if (params.diarize && params.diarize_is_global_method())
         const_cast<whisper_params&>(params).diarize_foxnose_global = true;
 
     CrispasrPyannoteCache pyannote_cache;
