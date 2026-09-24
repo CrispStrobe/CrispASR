@@ -417,6 +417,11 @@ struct voxcpm2_context {
     ggml_context* locdit_arena_ctx = nullptr;
     ggml_cgraph* locdit_gf = nullptr;
     ggml_gallocr_t locdit_galloc = nullptr;
+    // #461: the same LocDiT with batch 2 (CFG cond + uncond in one graph).
+    std::vector<uint8_t> locdit2_arena_meta;
+    ggml_context* locdit2_arena_ctx = nullptr;
+    ggml_cgraph* locdit2_gf = nullptr;
+    ggml_gallocr_t locdit2_galloc = nullptr;
 
     // Cached LocEnc cgraph. Same constant-topology trick — LocEnc takes
     // a single patch [feat_dim, P] and emits a CLS hidden state [d_enc].
@@ -2387,7 +2392,12 @@ static std::vector<float> locdit_forward(voxcpm2_context* ctx, const float* x_ra
 //   vel      [feat_dim=64, P=4]  F32  predicted velocity
 // ---------------------------------------------------------------------------
 
-static ggml_cgraph* build_locdit_graph(voxcpm2_context* ctx, ggml_context* arena_ctx = nullptr) {
+// B = 1: one velocity. B = 2 (#461): CFG's cond and uncond forwards in one
+// graph - mu_in carries B rows of conditioning, x / cond / t are shared, and
+// every op broadcasts over the batch dim (flash-attn over ne[3]), so each
+// sample's arithmetic is the single-sample graph's. Halves the dispatches and
+// weight reads of the 18 LocDiT forwards per AR step (dispatch-bound on iGPUs).
+static ggml_cgraph* build_locdit_graph(voxcpm2_context* ctx, ggml_context* arena_ctx = nullptr, int B = 1) {
     const vox_hparams& hp = ctx->hp;
     const vox_weights& W = ctx->graph_weights();
     const int d = (int)hp.locdit_d_model;
@@ -2420,7 +2430,7 @@ static ggml_cgraph* build_locdit_graph(voxcpm2_context* ctx, ggml_context* arena
     ggml_tensor* cond_in = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, feat_dim, P);
     ggml_set_name(cond_in, "cond_in");
     ggml_set_input(cond_in);
-    ggml_tensor* mu_in = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, d, mu_toks);
+    ggml_tensor* mu_in = ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, d, mu_toks, B);
     ggml_set_name(mu_in, "mu_in");
     ggml_set_input(mu_in);
     ggml_tensor* t_sin = ggml_new_tensor_1d(ctx0, GGML_TYPE_F32, d);
@@ -2459,9 +2469,14 @@ static ggml_cgraph* build_locdit_graph(voxcpm2_context* ctx, ggml_context* arena
     cond_proj = ggml_add(ctx0, cond_proj, W.locdit_cond_proj_b);
 
     // ── Concat to [d, T=11] in order [mu_toks(2) | time(1) | cond(P) | x(P)] ──
-    ggml_tensor* mu_time = ggml_concat(ctx0, mu_in, time_token, /*dim=*/1); // [d, 3]
-    ggml_tensor* mu_time_cond = ggml_concat(ctx0, mu_time, cond_proj, 1);   // [d, 3+P=7]
-    ggml_tensor* cur = ggml_concat(ctx0, mu_time_cond, x_proj, 1);          // [d, T=11]
+    if (B > 1) { // shared per-sample inputs, one copy per batch row
+        time_token = ggml_repeat(ctx0, time_token, ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, d, 1, B));
+        cond_proj = ggml_repeat(ctx0, cond_proj, ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, d, P, B));
+        x_proj = ggml_repeat(ctx0, x_proj, ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, d, P, B));
+    }
+    ggml_tensor* mu_time = ggml_concat(ctx0, mu_in, time_token, /*dim=*/1); // [d, 3, B]
+    ggml_tensor* mu_time_cond = ggml_concat(ctx0, mu_time, cond_proj, 1);   // [d, 3+P=7, B]
+    ggml_tensor* cur = ggml_concat(ctx0, mu_time_cond, x_proj, 1);          // [d, T=11, B]
 
     // LongRoPE freq factors as a graph input (zero-copy view into the F32
     // weight tensor). NEOX RoPE expects [n_rot/2] factors; tslm_rope_short
@@ -2503,9 +2518,9 @@ static ggml_cgraph* build_locdit_graph(voxcpm2_context* ctx, ggml_context* arena
         ggml_tensor* K = ggml_mul_mat(ctx0, L.attn_k_w, x);
         ggml_tensor* V = ggml_mul_mat(ctx0, L.attn_v_w, x);
 
-        Q = ggml_reshape_3d(ctx0, Q, hd, n_q, T);
-        K = ggml_reshape_3d(ctx0, K, hd, n_kv, T);
-        V = ggml_reshape_3d(ctx0, V, hd, n_kv, T);
+        Q = ggml_reshape_4d(ctx0, Q, hd, n_q, T, B);
+        K = ggml_reshape_4d(ctx0, K, hd, n_kv, T, B);
+        V = ggml_reshape_4d(ctx0, V, hd, n_kv, T, B);
 
         // LongRoPE (NEOX) with tslm_rope_short factors. Same theta /
         // n_ctx_orig as TSLM (LocDiT inherits MiniCPM RoPE config via
@@ -2519,6 +2534,7 @@ static ggml_cgraph* build_locdit_graph(voxcpm2_context* ctx, ggml_context* arena
         // expansion is a no-op for this architecture. Keep the branch
         // out for clarity and future-proofing if hp ever changes.
         if (n_kv_grp > 1) {
+            GGML_ASSERT(B == 1); // LocDiT is 16/16; the batched graph has no GQA path
             ggml_tensor* K4 = ggml_reshape_4d(ctx0, K, hd, 1, n_kv, T);
             ggml_tensor* V4 = ggml_reshape_4d(ctx0, V, hd, 1, n_kv, T);
             K4 = ggml_repeat_4d(ctx0, K4, hd, n_kv_grp, n_kv, T);
@@ -2541,7 +2557,7 @@ static ggml_cgraph* build_locdit_graph(voxcpm2_context* ctx, ggml_context* arena
         // required for voxcpm2.
         ggml_tensor* attn = ggml_flash_attn_ext(ctx0, Q, K, V, /*mask=*/nullptr, ascale, /*max_bias*/ 0.0f,
                                                 /*logit_softcap*/ 0.0f);
-        attn = ggml_reshape_2d(ctx0, attn, hd * n_q, T);
+        attn = ggml_reshape_3d(ctx0, attn, hd * n_q, T, B);
 
         // Output projection (no bias on attn)
         attn = ggml_mul_mat(ctx0, L.attn_o_w, attn);
@@ -2559,12 +2575,14 @@ static ggml_cgraph* build_locdit_graph(voxcpm2_context* ctx, ggml_context* arena
     // Slice positions [x_offset, x_offset+P) out of [d, T=11]. View is
     // contiguous along d, strided along T (which is already contiguous
     // for cur), so ggml_view_2d works directly without ggml_cont.
-    ggml_tensor* x_tail = ggml_view_2d(ctx0, cur, d, P, cur->nb[1], (size_t)x_offset * cur->nb[1]);
+    ggml_tensor* x_tail = ggml_view_3d(ctx0, cur, d, P, B, cur->nb[1], cur->nb[2], (size_t)x_offset * cur->nb[1]);
+    if (B > 1)
+        x_tail = ggml_cont(ctx0, x_tail); // batch rows are strided in the view
     ggml_tensor* normed = ggml_rms_norm(ctx0, x_tail, eps);
     if (W.locdit_norm_w) {
         normed = ggml_mul(ctx0, normed, W.locdit_norm_w);
     }
-    ggml_tensor* vel = ggml_mul_mat(ctx0, W.locdit_out_proj_w, normed); // [feat_dim, P]
+    ggml_tensor* vel = ggml_mul_mat(ctx0, W.locdit_out_proj_w, normed); // [feat_dim, P, B]
     vel = ggml_add(ctx0, vel, W.locdit_out_proj_b);
     ggml_set_name(vel, "vel");
     ggml_set_output(vel);
@@ -2695,6 +2713,80 @@ static std::vector<float> locdit_forward_graph(voxcpm2_context* ctx, const float
     return out;
 }
 
+// #461: cached B = 2 LocDiT graph (CFG cond + uncond in one compute).
+static ggml_cgraph* get_or_build_locdit_graph_b2(voxcpm2_context* ctx) {
+    if (ctx->locdit2_gf)
+        return ctx->locdit2_gf;
+    if (!ctx->backend)
+        return nullptr;
+    ctx->locdit2_arena_meta.assign(ctx->compute_meta.size(), 0);
+    ggml_init_params ip = {ctx->locdit2_arena_meta.size(), ctx->locdit2_arena_meta.data(), /*no_alloc=*/true};
+    ctx->locdit2_arena_ctx = ggml_init(ip);
+    if (!ctx->locdit2_arena_ctx)
+        return nullptr;
+    ctx->locdit2_gf = build_locdit_graph(ctx, ctx->locdit2_arena_ctx, /*B=*/2);
+    ctx->locdit2_galloc = ggml_gallocr_new(ggml_backend_get_default_buffer_type(ctx->backend));
+    if (!ctx->locdit2_gf || !ctx->locdit2_galloc || !ggml_gallocr_reserve(ctx->locdit2_galloc, ctx->locdit2_gf)) {
+        if (ctx->locdit2_galloc)
+            ggml_gallocr_free(ctx->locdit2_galloc);
+        ctx->locdit2_galloc = nullptr;
+        ggml_free(ctx->locdit2_arena_ctx);
+        ctx->locdit2_arena_ctx = nullptr;
+        ctx->locdit2_gf = nullptr;
+        return nullptr;
+    }
+    return ctx->locdit2_gf;
+}
+
+// Both CFG velocities from one graph: row 0 conditioned on mu, row 1 on the
+// zero vector. Returns false when the batched graph is unavailable (the caller
+// then runs the two single forwards). Outputs are [T, C] row-major like
+// locdit_forward_graph.
+static bool locdit_forward_graph_cfg(voxcpm2_context* ctx, const float* x_raw, const float* mu, float t_scalar,
+                                     const float* cond_raw, float dt_scalar, std::vector<float>& v_cond,
+                                     std::vector<float>& v_uncond) {
+    const vox_hparams& hp = ctx->hp;
+    const int d = (int)hp.locdit_d_model;
+    const int feat_dim = 64;
+    const int P = (int)hp.patch_frames;
+    const int mu_toks = 2;
+    const int T = mu_toks + 1 + P + P;
+    ggml_cgraph* gf = get_or_build_locdit_graph_b2(ctx);
+    if (!gf || !ggml_gallocr_alloc_graph(ctx->locdit2_galloc, gf))
+        return false;
+    std::vector<float> mu_buf((size_t)d * mu_toks * 2, 0.0f); // [d, 2, B=2]; row 1 = zero mu
+    std::memcpy(mu_buf.data(), mu, (size_t)d * mu_toks * sizeof(float));
+    std::vector<float> t_sin = sinusoidal_time_emb(t_scalar, d);
+    std::vector<float> dt_sin = sinusoidal_time_emb(dt_scalar, d);
+    std::vector<int32_t> positions(T);
+    for (int i = 0; i < T; i++)
+        positions[i] = i;
+    ggml_tensor* in[6] = {ggml_graph_get_tensor(gf, "x_in"),   ggml_graph_get_tensor(gf, "cond_in"),
+                          ggml_graph_get_tensor(gf, "mu_in"),  ggml_graph_get_tensor(gf, "t_sin"),
+                          ggml_graph_get_tensor(gf, "dt_sin"), ggml_graph_get_tensor(gf, "positions")};
+    for (ggml_tensor* t : in)
+        if (!t)
+            return false;
+    ggml_backend_tensor_set(in[0], x_raw, 0, (size_t)feat_dim * P * sizeof(float));
+    ggml_backend_tensor_set(in[1], cond_raw, 0, (size_t)feat_dim * P * sizeof(float));
+    ggml_backend_tensor_set(in[2], mu_buf.data(), 0, mu_buf.size() * sizeof(float));
+    ggml_backend_tensor_set(in[3], t_sin.data(), 0, t_sin.size() * sizeof(float));
+    ggml_backend_tensor_set(in[4], dt_sin.data(), 0, dt_sin.size() * sizeof(float));
+    ggml_backend_tensor_set(in[5], positions.data(), 0, positions.size() * sizeof(int32_t));
+    if (core_cpu_backend::is_cpu(ctx->backend))
+        core_cpu_backend::set_n_threads(ctx->backend, ctx->n_threads);
+    if (ggml_backend_graph_compute(ctx->backend, gf) != GGML_STATUS_SUCCESS)
+        return false;
+    ggml_tensor* vel = ggml_graph_get_tensor(gf, "vel");
+    if (!vel)
+        return false;
+    std::vector<float> out((size_t)feat_dim * P * 2);
+    ggml_backend_tensor_get(vel, out.data(), 0, out.size() * sizeof(float));
+    v_cond.assign(out.begin(), out.begin() + feat_dim * P);
+    v_uncond.assign(out.begin() + feat_dim * P, out.end());
+    return true;
+}
+
 // ---------------------------------------------------------------------------
 // CFM Euler solve — sway schedule (t: 1->0), CFG-zero-star
 //
@@ -2730,6 +2822,7 @@ static std::vector<float> cfm_euler_solve(voxcpm2_context* ctx, const float* mu,
     // where flash_attn_ext F16 accumulator overflows on mu-conditioned
     // attention from the second AR step onwards (#164).
     static const bool fa_cpu = vox_env_bool("CRISPASR_VOXCPM2_FA_CPU");
+    static const bool cfg_batch = vox_env_bool_default_on("CRISPASR_VOXCPM2_CFG_BATCH");
     auto locdit_call = [&](const float* x_tc, const float* mu_in, float t_cur, const float* cond_in,
                            float dt_in) -> std::vector<float> {
         if (use_graph && !fa_cpu) {
@@ -2795,20 +2888,26 @@ static std::vector<float> cfm_euler_solve(voxcpm2_context* ctx, const float* mu,
                     x_tc[t * feat_dim + c] = x[c * P + t];
 
             double tl = bench ? vox_now_ms() : 0;
-            std::vector<float> v_cond_tc = locdit_call(x_tc.data(), mu, t_cur, cond_raw, dt_scalar);
             // Interval-CFG: recompute uncond on the first CFG-active step, the last
             // step, and every K-th step; otherwise reuse the cached uncond velocity.
-            std::vector<float> v_uncond_tc;
             const bool recompute_unc = !interval_on || v_uncond_cache_tc.empty() || (step == zero_init_steps + 1) ||
                                        (step == steps) || (((step - zero_init_steps - 1) % cfg_interval) == 0);
-            if (recompute_unc) {
-                std::vector<float> zero_mu(ctx->hp.tslm_d_model, 0.0f);
-                v_uncond_tc = locdit_call(x_tc.data(), zero_mu.data(), t_cur, cond_raw, dt_scalar);
-                if (interval_on)
-                    v_uncond_cache_tc = v_uncond_tc;
-            } else {
-                v_uncond_tc = v_uncond_cache_tc; // reuse stale uncond (the approximation)
+            std::vector<float> v_cond_tc, v_uncond_tc;
+            // #461: cond + uncond as one batch-2 graph (CRISPASR_VOXCPM2_CFG_BATCH=0 -> two forwards).
+            const bool batched =
+                recompute_unc && cfg_batch && use_graph && !fa_cpu &&
+                locdit_forward_graph_cfg(ctx, x_tc.data(), mu, t_cur, cond_raw, dt_scalar, v_cond_tc, v_uncond_tc);
+            if (!batched) {
+                v_cond_tc = locdit_call(x_tc.data(), mu, t_cur, cond_raw, dt_scalar);
+                if (recompute_unc) {
+                    std::vector<float> zero_mu(ctx->hp.tslm_d_model, 0.0f);
+                    v_uncond_tc = locdit_call(x_tc.data(), zero_mu.data(), t_cur, cond_raw, dt_scalar);
+                } else {
+                    v_uncond_tc = v_uncond_cache_tc; // reuse stale uncond (the approximation)
+                }
             }
+            if (recompute_unc && interval_on)
+                v_uncond_cache_tc = v_uncond_tc;
             if (bench)
                 sum_locdit += vox_now_ms() - tl;
 
@@ -6771,6 +6870,14 @@ void voxcpm2_free(struct voxcpm2_context* ctx) {
     if (ctx->locdit_galloc) {
         ggml_gallocr_free(ctx->locdit_galloc);
         ctx->locdit_galloc = nullptr;
+    }
+    if (ctx->locdit2_galloc) {
+        ggml_gallocr_free(ctx->locdit2_galloc);
+        ctx->locdit2_galloc = nullptr;
+    }
+    if (ctx->locdit2_arena_ctx) {
+        ggml_free(ctx->locdit2_arena_ctx);
+        ctx->locdit2_arena_ctx = nullptr;
     }
     if (ctx->locdit_arena_ctx) {
         ggml_free(ctx->locdit_arena_ctx);
