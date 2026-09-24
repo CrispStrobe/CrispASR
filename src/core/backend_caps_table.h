@@ -32,74 +32,59 @@ static const BackendCaps k_backend_caps[] = {
     {"bt2-tts", 205056u, "temperature,auto-download,tts,voice-cloning"},
     {"btc-chords", 34611200u, "auto-download,chords"},
     {"canary", 1605487u,
-     "timestamps-native,timestamps-ctc,word-timestamps,token-confidence,"
-     "translate,diarize,temperature,beam-search,flash-attn,punctuation-toggle,"
-     "src-tgt-language,auto-download,parallel-processors"},
+     "timestamps-native,timestamps-ctc,word-timestamps,token-confidence,translate,diarize,temperature,beam-search,"
+     "flash-attn,punctuation-toggle,src-tgt-language,auto-download,parallel-processors"},
     {"canary-qwen", 534280u, "token-confidence,temperature,beam-search,flash-attn,auto-download"},
     {"chatterbox", 210176u, "temperature,flash-attn,src-tgt-language,auto-download,tts,voice-cloning"},
     {"chatterbox-finnish-nano", 210176u, "temperature,flash-attn,src-tgt-language,auto-download,tts,voice-cloning"},
     {"chatterbox-nano", 210176u, "temperature,flash-attn,src-tgt-language,auto-download,tts,voice-cloning"},
     {"chatterbox-turbo", 210176u, "temperature,flash-attn,src-tgt-language,auto-download,tts,voice-cloning"},
     {"cohere", 28493u,
-     "timestamps-native,word-timestamps,token-confidence,diarize,temperature,"
-     "beam-search,flash-attn,punctuation-toggle,auto-download,parallel-"
-     "processors"},
+     "timestamps-native,word-timestamps,token-confidence,diarize,temperature,beam-search,flash-attn,punctuation-toggle,"
+     "auto-download,parallel-processors"},
     {"confucius4-tts", 205056u, "temperature,auto-download,tts,voice-cloning"},
     {"cosyvoice3-tts", 210176u, "temperature,flash-attn,src-tgt-language,auto-download,tts,voice-cloning"},
     {"cosyvoice3-tts-rl", 210176u, "temperature,flash-attn,src-tgt-language,auto-download,tts,voice-cloning"},
     {"crepe", 17833984u, "auto-download,pitch"},
     {"csm", 73984u, "temperature,auto-download,tts"},
     {"csm-tts", 73984u, "temperature,auto-download,tts"},
-    {"data2vec", 548938u,
-     "timestamps-ctc,token-confidence,diarize,auto-download,parallel-"
-     "processors"},
+    {"data2vec", 548938u, "timestamps-ctc,token-confidence,diarize,auto-download,parallel-processors"},
     {"dia", 73984u, "temperature,auto-download,tts"},
     {"dia-tts", 73984u, "temperature,auto-download,tts"},
+    {"dolphin", 270848u, "beam-search,punctuation-native,auto-download"},
     {"dots-tts", 73984u, "temperature,auto-download,tts"},
     {"f5-tts", 204800u, "auto-download,tts,voice-cloning"},
-    {"fastconformer-ctc", 1597514u,
-     "timestamps-ctc,token-confidence,diarize,auto-download,parallel-"
-     "processors"},
+    {"fastconformer-ctc", 1597514u, "timestamps-ctc,token-confidence,diarize,auto-download,parallel-processors"},
     {"fastpitch", 65536u, "tts"},
-    {"firered-asr", 534090u,
-     "timestamps-ctc,token-confidence,diarize,beam-search,flash-attn,auto-"
-     "download"},
+    {"firered-asr", 534090u, "timestamps-ctc,token-confidence,diarize,beam-search,flash-attn,auto-download"},
     {"fireredtts3", 73728u, "auto-download,tts"},
     {"fun-asr-mlt-nano", 12106u,
-     "timestamps-ctc,token-confidence,diarize,temperature,beam-search,flash-"
-     "attn,punctuation-toggle,auto-download"},
+     "timestamps-ctc,token-confidence,diarize,temperature,beam-search,flash-attn,punctuation-toggle,auto-download"},
     {"funasr", 12106u,
-     "timestamps-ctc,token-confidence,diarize,temperature,beam-search,flash-"
-     "attn,punctuation-toggle,auto-download"},
+     "timestamps-ctc,token-confidence,diarize,temperature,beam-search,flash-attn,punctuation-toggle,auto-download"},
     {"gemma4-e2b", 30562u,
-     "timestamps-ctc,translate,diarize,temperature,beam-search,flash-attn,src-"
-     "tgt-language,auto-download,parallel-processors"},
-    {"gigaam", 271373u,
-     "timestamps-native,word-timestamps,token-confidence,flash-attn,"
-     "punctuation-native,auto-download"},
-    {"glm-asr", 16234u,
-     "timestamps-ctc,token-confidence,translate,diarize,temperature,beam-"
-     "search,flash-attn,punctuation-toggle,src-tgt-language,auto-download"},
-    {"granite", 32622u,
-     "timestamps-ctc,word-timestamps,token-confidence,translate,diarize,"
-     "temperature,beam-search,flash-attn,punctuation-toggle,src-tgt-language,"
-     "auto-download,parallel-processors"},
-    {"granite-4.1", 32622u,
-     "timestamps-ctc,word-timestamps,token-confidence,translate,diarize,"
-     "temperature,beam-search,flash-attn,punctuation-toggle,src-tgt-language,"
-     "auto-download,parallel-processors"},
-    {"granite-4.1-nar", 796226u,
-     "timestamps-ctc,diarize,beam-search,flash-attn,punctuation-native,auto-"
-     "download"},
-    {"granite-4.1-plus", 32622u,
-     "timestamps-ctc,word-timestamps,token-confidence,translate,diarize,"
-     "temperature,beam-search,flash-attn,punctuation-toggle,src-tgt-language,"
-     "auto-download,parallel-processors"},
-    {"higgs-stt", 1582592u, "beam-search,flash-attn,auto-download"},
-    {"htdemucs", 5251072u, "auto-download,separate"},
-    {"hubert", 548938u,
-     "timestamps-ctc,token-confidence,diarize,auto-download,parallel-"
+     "timestamps-ctc,translate,diarize,temperature,beam-search,flash-attn,src-tgt-language,auto-download,parallel-"
      "processors"},
+    {"gigaam", 271373u,
+     "timestamps-native,word-timestamps,token-confidence,flash-attn,punctuation-native,auto-download"},
+    {"glm-asr", 16234u,
+     "timestamps-ctc,token-confidence,translate,diarize,temperature,beam-search,flash-attn,punctuation-toggle,src-tgt-"
+     "language,auto-download"},
+    {"granite", 32622u,
+     "timestamps-ctc,word-timestamps,token-confidence,translate,diarize,temperature,beam-search,flash-attn,punctuation-"
+     "toggle,src-tgt-language,auto-download,parallel-processors"},
+    {"granite-4.1", 32622u,
+     "timestamps-ctc,word-timestamps,token-confidence,translate,diarize,temperature,beam-search,flash-attn,punctuation-"
+     "toggle,src-tgt-language,auto-download,parallel-processors"},
+    {"granite-4.1-nar", 796226u, "timestamps-ctc,diarize,beam-search,flash-attn,punctuation-native,auto-download"},
+    {"granite-4.1-plus", 32622u,
+     "timestamps-ctc,word-timestamps,token-confidence,translate,diarize,temperature,beam-search,flash-attn,punctuation-"
+     "toggle,src-tgt-language,auto-download,parallel-processors"},
+    {"hft-transformer", 134225921u, "timestamps-native,auto-download,piano"},
+    {"higgs-stt", 1582592u, "beam-search,flash-attn,auto-download"},
+    {"hojo-asr", 270864u, "language-detect,beam-search,punctuation-native,auto-download"},
+    {"htdemucs", 5251072u, "auto-download,separate"},
+    {"hubert", 548938u, "timestamps-ctc,token-confidence,diarize,auto-download,parallel-processors"},
     {"indextts", 206080u, "temperature,flash-attn,auto-download,tts,voice-cloning"},
     {"irodori-tts", 204800u, "auto-download,tts,voice-cloning"},
     {"kartoffel-orpheus-de-natural", 75008u, "temperature,flash-attn,auto-download,tts"},
@@ -108,8 +93,8 @@ static const BackendCaps k_backend_caps[] = {
     {"kokoro", 536944640u, "auto-download,tts,tts-speed"},
     {"kugelaudio", 65536u, "tts"},
     {"kyutai-stt", 12109u,
-     "timestamps-native,word-timestamps,token-confidence,diarize,temperature,"
-     "beam-search,flash-attn,punctuation-toggle,auto-download"},
+     "timestamps-native,word-timestamps,token-confidence,diarize,temperature,beam-search,flash-attn,punctuation-toggle,"
+     "auto-download"},
     {"lahgtna-chatterbox", 210176u, "temperature,flash-attn,src-tgt-language,auto-download,tts,voice-cloning"},
     {"lex-au-orpheus-de", 75008u, "temperature,flash-attn,auto-download,tts"},
     {"lfm2-audio", 2695680u, "beam-search,auto-download,tts,s2s"},
@@ -117,22 +102,18 @@ static const BackendCaps k_backend_caps[] = {
     {"m2m100-wmt21", 12832u, "translate,beam-search,src-tgt-language,auto-download"},
     {"madlad", 12832u, "translate,beam-search,src-tgt-language,auto-download"},
     {"mega-asr", 32618u,
-     "timestamps-ctc,token-confidence,translate,diarize,temperature,beam-"
-     "search,flash-attn,punctuation-toggle,src-tgt-language,auto-download,"
-     "parallel-processors"},
+     "timestamps-ctc,token-confidence,translate,diarize,temperature,beam-search,flash-attn,punctuation-toggle,src-tgt-"
+     "language,auto-download,parallel-processors"},
     {"mel-band-roformer", 5251072u, "auto-download,separate"},
     {"melotts", 65536u, "tts"},
     {"mimo-asr", 272202u,
-     "timestamps-ctc,token-confidence,diarize,temperature,beam-search,flash-"
-     "attn,punctuation-native,auto-download"},
+     "timestamps-ctc,token-confidence,diarize,temperature,beam-search,flash-attn,punctuation-native,auto-download"},
     {"mini-omni2", 2171136u, "temperature,auto-download,tts,s2s"},
     {"miotts", 65536u, "tts"},
     {"moonshine", 12106u,
-     "timestamps-ctc,token-confidence,diarize,temperature,beam-search,flash-"
-     "attn,punctuation-toggle,auto-download"},
+     "timestamps-ctc,token-confidence,diarize,temperature,beam-search,flash-attn,punctuation-toggle,auto-download"},
     {"moonshine-streaming", 272202u,
-     "timestamps-ctc,token-confidence,diarize,temperature,beam-search,flash-"
-     "attn,punctuation-native,auto-download"},
+     "timestamps-ctc,token-confidence,diarize,temperature,beam-search,flash-attn,punctuation-native,auto-download"},
     {"moss-audio", 271104u, "temperature,beam-search,punctuation-native,auto-download"},
     {"moss-diarize", 270913u, "timestamps-native,diarize,beam-search,punctuation-native,auto-download"},
     {"moss-transcribe", 270848u, "beam-search,punctuation-native,auto-download"},
@@ -140,29 +121,23 @@ static const BackendCaps k_backend_caps[] = {
     {"moss-tts-local", 206080u, "temperature,flash-attn,auto-download,tts,voice-cloning"},
     {"mt3", 134225921u, "timestamps-native,auto-download,piano"},
     {"nemotron", 9185101u,
-     "timestamps-native,word-timestamps,token-confidence,diarize,temperature,"
-     "beam-search,flash-attn,punctuation-native,auto-download,streaming"},
-    {"omniasr", 10058u,
-     "timestamps-ctc,token-confidence,diarize,temperature,beam-search,flash-"
-     "attn,auto-download"},
+     "timestamps-native,word-timestamps,token-confidence,diarize,temperature,beam-search,flash-attn,punctuation-native,"
+     "auto-download,streaming"},
+    {"omniasr", 10058u, "timestamps-ctc,token-confidence,diarize,temperature,beam-search,flash-attn,auto-download"},
     {"omniasr-300m", 10058u,
-     "timestamps-ctc,token-confidence,diarize,temperature,beam-search,flash-"
-     "attn,auto-download"},
-    {"omniasr-llm", 10058u,
-     "timestamps-ctc,token-confidence,diarize,temperature,beam-search,flash-"
-     "attn,auto-download"},
+     "timestamps-ctc,token-confidence,diarize,temperature,beam-search,flash-attn,auto-download"},
+    {"omniasr-llm", 10058u, "timestamps-ctc,token-confidence,diarize,temperature,beam-search,flash-attn,auto-download"},
     {"omniasr-llm-1b", 10058u,
-     "timestamps-ctc,token-confidence,diarize,temperature,beam-search,flash-"
-     "attn,auto-download"},
+     "timestamps-ctc,token-confidence,diarize,temperature,beam-search,flash-attn,auto-download"},
     {"omnivoice", 196608u, "tts,voice-cloning"},
     {"omnivoice-singing", 196608u, "tts,voice-cloning"},
+    {"onsets-and-frames", 134225921u, "timestamps-native,auto-download,piano"},
     {"orpheus", 75008u, "temperature,flash-attn,auto-download,tts"},
     {"outetts", 206080u, "temperature,flash-attn,auto-download,tts,voice-cloning"},
     {"paraformer", 11330u, "timestamps-ctc,diarize,flash-attn,punctuation-toggle,auto-download"},
     {"parakeet", 1601357u,
-     "timestamps-native,word-timestamps,token-confidence,diarize,temperature,"
-     "beam-search,flash-attn,punctuation-toggle,auto-download,parallel-"
-     "processors"},
+     "timestamps-native,word-timestamps,token-confidence,diarize,temperature,beam-search,flash-attn,punctuation-toggle,"
+     "auto-download,parallel-processors"},
     {"parler-tts", 73984u, "temperature,auto-download,tts"},
     {"piano-transcription", 134225921u, "timestamps-native,auto-download,piano"},
     {"piper", 65536u, "tts"},
@@ -173,39 +148,29 @@ static const BackendCaps k_backend_caps[] = {
     {"pocket-tts-it", 205056u, "temperature,auto-download,tts,voice-cloning"},
     {"pocket-tts-pt", 205056u, "temperature,auto-download,tts,voice-cloning"},
     {"quds-fa", 1601357u,
-     "timestamps-native,word-timestamps,token-confidence,diarize,temperature,"
-     "beam-search,flash-attn,punctuation-toggle,auto-download,parallel-"
-     "processors"},
+     "timestamps-native,word-timestamps,token-confidence,diarize,temperature,beam-search,flash-attn,punctuation-toggle,"
+     "auto-download,parallel-processors"},
     {"qwen3", 32618u,
-     "timestamps-ctc,token-confidence,translate,diarize,temperature,beam-"
-     "search,flash-attn,punctuation-toggle,src-tgt-language,auto-download,"
-     "parallel-processors"},
+     "timestamps-ctc,token-confidence,translate,diarize,temperature,beam-search,flash-attn,punctuation-toggle,src-tgt-"
+     "language,auto-download,parallel-processors"},
     {"qwen3-1.7b", 32618u,
-     "timestamps-ctc,token-confidence,translate,diarize,temperature,beam-"
-     "search,flash-attn,punctuation-toggle,src-tgt-language,auto-download,"
-     "parallel-processors"},
-    {"qwen3-tts", 8598784u,
-     "temperature,flash-attn,src-tgt-language,auto-download,tts,voice-cloning,"
-     "streaming"},
+     "timestamps-ctc,token-confidence,translate,diarize,temperature,beam-search,flash-attn,punctuation-toggle,src-tgt-"
+     "language,auto-download,parallel-processors"},
+    {"qwen3-tts", 8598784u, "temperature,flash-attn,src-tgt-language,auto-download,tts,voice-cloning,streaming"},
     {"qwen3-tts-1.7b-base", 8598784u,
-     "temperature,flash-attn,src-tgt-language,auto-download,tts,voice-cloning,"
-     "streaming"},
+     "temperature,flash-attn,src-tgt-language,auto-download,tts,voice-cloning,streaming"},
     {"qwen3-tts-1.7b-customvoice", 8467712u, "temperature,flash-attn,src-tgt-language,auto-download,tts,streaming"},
     {"qwen3-tts-1.7b-voicedesign", 8467712u, "temperature,flash-attn,src-tgt-language,auto-download,tts,streaming"},
     {"qwen3-tts-customvoice", 8467712u, "temperature,flash-attn,src-tgt-language,auto-download,tts,streaming"},
     {"raon", 204800u, "auto-download,tts,voice-cloning"},
     {"raon-speech", 32618u,
-     "timestamps-ctc,token-confidence,translate,diarize,temperature,beam-"
-     "search,flash-attn,punctuation-toggle,src-tgt-language,auto-download,"
-     "parallel-processors"},
+     "timestamps-ctc,token-confidence,translate,diarize,temperature,beam-search,flash-attn,punctuation-toggle,src-tgt-"
+     "language,auto-download,parallel-processors"},
     {"reazonspeech", 1601357u,
-     "timestamps-native,word-timestamps,token-confidence,diarize,temperature,"
-     "beam-search,flash-attn,punctuation-toggle,auto-download,parallel-"
-     "processors"},
+     "timestamps-native,word-timestamps,token-confidence,diarize,temperature,beam-search,flash-attn,punctuation-toggle,"
+     "auto-download,parallel-processors"},
     {"rvc-svc", 8192u, "auto-download"},
-    {"sensevoice", 11346u,
-     "timestamps-ctc,language-detect,diarize,flash-attn,punctuation-toggle,"
-     "auto-download"},
+    {"sensevoice", 11346u, "timestamps-ctc,language-detect,diarize,flash-attn,punctuation-toggle,auto-download"},
     {"sesame", 73984u, "temperature,auto-download,tts"},
     {"sidon", 2097152u, "s2s"},
     {"speecht5", 73728u, "auto-download,tts"},
@@ -217,32 +182,25 @@ static const BackendCaps k_backend_caps[] = {
     {"tada-3b-ml", 73984u, "temperature,auto-download,tts"},
     {"tada-tts-1b", 73984u, "temperature,auto-download,tts"},
     {"vibevoice", 336962u, "timestamps-ctc,diarize,flash-attn,punctuation-native,auto-download,tts"},
-    {"vibevoice-1.5b", 468034u,
-     "timestamps-ctc,diarize,flash-attn,punctuation-native,auto-download,tts,"
-     "voice-cloning"},
+    {"vibevoice-1.5b", 468034u, "timestamps-ctc,diarize,flash-attn,punctuation-native,auto-download,tts,voice-cloning"},
     {"vibevoice-bitnet", 336962u, "timestamps-ctc,diarize,flash-attn,punctuation-native,auto-download,tts"},
-    {"vibevoice-streaming", 8660034u,
-     "timestamps-ctc,diarize,flash-attn,punctuation-native,auto-download,"
-     "streaming"},
+    {"vibevoice-streaming", 8660034u, "timestamps-ctc,diarize,flash-attn,punctuation-native,auto-download,streaming"},
     {"voxcpm2-tts", 204800u, "auto-download,tts,voice-cloning"},
     {"voxcpm2-vae", 2097152u, "s2s"},
     {"voxtral", 1605482u,
-     "timestamps-ctc,token-confidence,translate,diarize,temperature,beam-"
-     "search,flash-attn,punctuation-toggle,src-tgt-language,auto-download,"
-     "parallel-processors"},
+     "timestamps-ctc,token-confidence,translate,diarize,temperature,beam-search,flash-attn,punctuation-toggle,src-tgt-"
+     "language,auto-download,parallel-processors"},
     {"voxtral-tts", 73728u, "auto-download,tts"},
     {"voxtral4b", 28490u,
-     "timestamps-ctc,token-confidence,diarize,temperature,beam-search,flash-"
-     "attn,punctuation-toggle,auto-download,parallel-processors"},
-    {"wav2vec2", 548938u,
-     "timestamps-ctc,token-confidence,diarize,auto-download,parallel-"
-     "processors"},
+     "timestamps-ctc,token-confidence,diarize,temperature,beam-search,flash-attn,punctuation-toggle,auto-download,"
+     "parallel-processors"},
+    {"wav2vec2", 548938u, "timestamps-ctc,token-confidence,diarize,auto-download,parallel-processors"},
     {"whisper", 321533u,
-     "timestamps-native,word-timestamps,token-confidence,language-detect,"
-     "translate,diarize,grammar,temperature,beam-search,flash-attn,punctuation-"
-     "native,auto-download,parallel-processors,vad-internal"},
-    {"zonos", 206080u, "temperature,flash-attn,auto-download,tts,voice-cloning"},
-    {"zonos-tts", 206080u, "temperature,flash-attn,auto-download,tts,voice-cloning"},
+     "timestamps-native,word-timestamps,token-confidence,language-detect,translate,diarize,grammar,temperature,beam-"
+     "search,flash-attn,punctuation-native,auto-download,parallel-processors,vad-internal"},
+    {"xasr", 270336u, "punctuation-native,auto-download"},
+    {"zonos", 75008u, "temperature,flash-attn,auto-download,tts"},
+    {"zonos-tts", 75008u, "temperature,flash-attn,auto-download,tts"},
 };
 
 static const int k_backend_caps_count = (int)(sizeof(k_backend_caps) / sizeof(k_backend_caps[0]));
