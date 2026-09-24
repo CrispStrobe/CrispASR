@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.8.36
+
+* **New ASR backends in the bundled native library:** Dolphin CN-Dialect
+  (`dolphin`; Mandarin plus Chinese dialects, a two-level
+  `sourceLanguage` such as `zh-SICHUAN`), X-ASR zh-en (`xasr`; streaming
+  Zipformer2 transducer), Hojo-ASR-Multi-V1 (`hojo-asr`), and registry
+  entries for Orukeet and Confucius4-R2T2.
+* **Piano transcription** gains Onsets & Frames and hFT-Transformer
+  (`onsets-and-frames`, `hft-transformer`), both auto-downloading and
+  reachable through the existing piano-notes accessors.
+* **Front-end fixes** in the native library change transcripts for Kaldi-fbank
+  models (FireRedASR, SenseVoice, Paraformer and relatives), whose mel
+  triangles are now built in mel space as the reference does.
+* **Session TTS:** three defects fixed that only the session ABI (and so this
+  package) could hit; see the v0.8.36 release notes for details.
+
 ## 0.8.35
 
 * **`pianoNotesWithPrograms()`** reports the General MIDI program of each
