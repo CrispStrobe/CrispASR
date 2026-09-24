@@ -15,9 +15,10 @@ name: qwen3-tts vulkan (lavapipe)
 on:
   workflow_dispatch:
   push:
-    branches: [feat/337-vulkan-native-default]
+    branches: [main]
     paths:
       - 'src/qwen3_tts*'
+      - 'src/core/gguf_loader.*'
       - '.github/workflows/qwen3-tts-vulkan-lavapipe.yml'
 
 jobs:
