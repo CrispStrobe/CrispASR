@@ -1301,6 +1301,57 @@ Env gates: `CRISPASR_DIARIZE_BIC_WINDOW=1` (restrict silhouette to a window
 around the BIC anchor instead of the full speaker range, which is the default),
 `CRISPASR_WESPEAKER_BENCH=1`, `CRISPASR_WESPEAKER_DEBUG=1`.
 
+### nemotron3-diar (sortformer)
+
+Speaker diarization via `--diarize-method sortformer` (#466): NVIDIA
+[Nemotron-3-Diarization](https://huggingface.co/nvidia/Nemotron-3-Diarization),
+a ~100M-parameter streaming Sortformer v3. Unlike foxnose and pyannote there is
+no embedder and no clustering: one network maps audio straight to a probability
+per speaker per 10 ms, up to 8 speakers numbered in order of first appearance,
+overlapping speech included. Weights are OpenMDW-1.1 (commercial use allowed).
+
+```
+16 kHz PCM
+  -> NeMo log-mel: preemph 0.97, n_fft 512, Hann(400) centred, 128 slaney mels,
+     ln(x + 2^-24), no normalisation; frames >= floor(L/160) zeroed
+  -> 8x frame stacking (80 ms) -> Linear 1024 -> 512
+  -> offline chunk loop (340 frames + 40 right context), each chunk prefixed by
+     the Arrival-Order Speaker Cache (264) + FIFO (40) of earlier frames:
+       LayerNorm -> 31 pre-LN layers (fused qkv, NEOX RoPE, 8 heads x 64,
+       GELU MLP 2048) -> LayerNorm -> Linear 512 -> 192
+       -> sub-pixel Conv1d 192 -> 1536, reshaped to 8 x 10 ms frames
+       -> relu -> dense -> relu -> Linear -> 8 logits
+  -> speaker-cache update: per-speaker frame scores (log-prob ratio, boosts for
+     the latest / strong / weak frames), speaker-major top-k compression
+  -> sigmoid > 0.5 per speaker = turns; ASR segments take the speaker with the
+     most probability mass inside them
+```
+
+- Files: `src/nemotron3_diar.{h,cpp}` (runtime), `src/crispasr_diarize.cpp`
+  (`apply_sortformer`), `models/convert-nemotron3-diar-to-gguf.py`.
+- GGUF layout: the `sortformer` layout NVIDIA's NeMo-Speech.cpp reads, so
+  NVIDIA's own `Nemotron-3-Diarization.q8_0.gguf` (what `--diarize-model auto`
+  downloads) loads unchanged; the converter writes F32/F16 in the same layout.
+- The chunk loop and cache follow transformers'
+  `Nemotron3DiarizationForAudioFrameClassification` offline mode (chunk 340,
+  right context 40, FIFO 40, update period 300, cache 264). Chunk sizes come
+  from `nemotron3diar.offline.*` metadata, defaulting to those values.
+- The probability matrix has `floor(L/160) + 1` rows; the last is padding under
+  transformers' attention mask, so turns stop at
+  `nemotron3_diar_n_valid_frames()`.
+- Parity (`crispasr-diff nemotron3-diar`, reference
+  `tools/reference_backends/nemotron3_diar.py`, Kaggle CPU): F32 and F16 give
+  cos 1.000000 on mel, embeddings, logits and probabilities, and 100 % of the
+  p > 0.5 decisions and the segment list match transformers on
+  `samples/multispeaker.wav` and NeMo-Speech.cpp's 60 s AMI clip. NVIDIA's q8_0
+  agrees on 99.91-99.99 % of decisions. Frame DER on the AMI clip (10 ms, no
+  collar, overlap scored) is 29.5 % for both C++ and transformers; most of it is
+  missed speech (28.3 %).
+- Bench: `CRISPASR_NEMOTRON3_DIAR_BENCH=1` prints mel and per-chunk encoder
+  times.
+- Streaming (the `nemotron3diar.streaming.<mode>` presets the converter records)
+  is not wired yet; the CLI and C ABI run the offline mode.
+
 ### gigaam
 
 ai-sage/GigaAM-v3 — Russian ASR. A 16-layer **rotary** Conformer encoder

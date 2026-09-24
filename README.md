@@ -480,6 +480,7 @@ The matrix above covers 24 ASR backends. **Additional ASR backends** not shown: 
 **Speaker diarization** as a post-processing step via `--diarize`:
 - `energy` / `xcorr` — stereo-only, no extra deps
 - `foxnose` — **best accuracy, no external deps**: WeSpeaker ResNet34-LM embeddings + GMM/BIC speaker counting + spectral clustering + Viterbi smoothing. Estimates the speaker count rather than needing it up front; `--diarize-embedder auto` fetches the GGUF (24 MB, CC-BY-4.0). 7.3 % DER on VoxConverse dev where `pyannote` + TitaNet scores 7.8 %, and 3.18 % vs the upstream reference's 3.07 % when scored on turns ([more](docs/architecture.md#foxnose-diarize))
+- `sortformer` — NVIDIA [Nemotron-3-Diarization](https://huggingface.co/nvidia/Nemotron-3-Diarization) (streaming Sortformer v3, #466): one end-to-end network, up to 8 speakers in order of appearance, overlap-aware, no embedder or clustering. `--diarize-model auto` fetches NVIDIA's 107 MB q8_0 GGUF (OpenMDW-1.1, commercial use allowed). Matches transformers exactly on every p > 0.5 decision ([more](docs/architecture.md#nemotron3-diar-sortformer))
 - `pyannote` — native GGUF (no Python, no sherpa-onnx); add `--diarize-embedder auto` (TitaNet) or `--diarize-embedder indextts` (ECAPA-TDNN) for globally stable speaker IDs across long files
 - `sherpa` / `ecapa` — external [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) subprocess; runs once globally on full audio for consistent speaker IDs (#110)
 - `vad-turns` — mono-friendly gap-based proxy
