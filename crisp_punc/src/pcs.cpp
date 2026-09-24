@@ -320,7 +320,12 @@ static bool pcs_load(pcs_context& ctx, const char* path) {
     ctx.buf = wl.buf;
 
     auto& T = wl.tensors;
-    auto req = [&](const char* n) { return core_gguf::require(T, n, "pcs"); };
+    bool missing = false; // #460: a GGUF of another family must fail the load, not segfault later
+    auto req = [&](const char* n) {
+        ggml_tensor* t = core_gguf::require(T, n, "pcs");
+        missing |= t == nullptr;
+        return t;
+    };
     auto opt = [&](const char* n) -> ggml_tensor* {
         auto it = T.find(n);
         return it != T.end() ? it->second : nullptr;
@@ -375,6 +380,10 @@ static bool pcs_load(pcs_context& ctx, const char* path) {
     ctx.tc_fc1_b = opt("head.tc.fc1.bias");
     ctx.tc_fc2_w = req("head.tc.fc2.weight");
     ctx.tc_fc2_b = opt("head.tc.fc2.bias");
+    if (missing) {
+        fprintf(stderr, "pcs: '%s' is not a PCS GGUF (required tensors missing)\n", path);
+        return false;
+    }
 
     // Scheduler
     ggml_backend_t backends[2] = {ctx.backend, nullptr};
@@ -862,7 +871,7 @@ static PCSResult pcs_run(pcs_context& ctx, const std::vector<int>& token_ids) {
 pcs_context* pcs_init(const char* model_path) {
     auto* ctx = new pcs_context();
     if (!pcs_load(*ctx, model_path)) {
-        delete ctx;
+        pcs_free(ctx); // releases whatever the partial load allocated
         return nullptr;
     }
     return ctx;
