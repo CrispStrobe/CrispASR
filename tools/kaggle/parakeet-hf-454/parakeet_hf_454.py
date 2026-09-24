@@ -92,8 +92,8 @@ try:
                     if not l.startswith("[FAIL"):
                         continue
                     m = _re.search(r"cos_mean=([0-9.]+)", l)
-                    w = rows[i + 1] if i + 1 < len(rows) and "worst row" in rows[i + 1] else ""
-                    n = _re.search(r"\|cpp\|=([0-9.eE+-]+) \|ref\|=([0-9.eE+-]+)", w)
+                    worst = rows[i + 1] if i + 1 < len(rows) and "worst row" in rows[i + 1] else ""
+                    n = _re.search(r"\|cpp\|=([0-9.eE+-]+) \|ref\|=([0-9.eE+-]+)", worst)
                     if (m and n and float(m.group(1)) >= 0.9998 and float(n.group(2)) < 1.0
                             and abs(float(n.group(1)) - float(n.group(2))) <= 0.005 * float(n.group(2))
                             and not l.split()[1].startswith("encoder_output ")):
