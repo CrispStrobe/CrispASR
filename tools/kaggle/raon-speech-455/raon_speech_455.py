@@ -19,7 +19,7 @@ WORK = Path("/kaggle/working"); OUT = WORK / "out"; OUT.mkdir(parents=True, exis
 REPO = WORK / "CrispASR"; BUILD = REPO / "build"
 res = {"errors": [], "disk": {}, "diff": {}, "cli": {}, "ref": {}}
 # DIAG: reference stages + F16 diff only (no greedy text, quants, CLI or upload)
-DIAG = True
+DIAG = False
 res["diag"] = DIAG
 
 
