@@ -14,6 +14,18 @@ and require both monotonic output and bounded timing displacement. Worktree
 Worktree `.claude/worktrees/feat-436-dolphin`, branch `feat/436-dolphin`.
 NOW: blueprint read (docs/dolphin/PLAN.md on the branch); converter next.
 
+## CLAIMED 2026-09-24 — #466 NVIDIA Nemotron-3-Diarization (streaming Sortformer v3)
+
+Worktree `.claude/worktrees/feat-466-nemotron3-diar`, branch `feat/466-nemotron3-diar`.
+~100M params, OpenMDW-1.1 (commercial OK), 8 speakers in arrival order, 10 ms
+frames. NeMo log-mel (128, preemph 0.97) -> 8x feature stacking -> 31-layer pre-LN
+RoPE transformer (d=512) -> 192-d head (8 channels) -> sub-pixel Conv1D upsample.
+References: transformers Nemotron3DiarizationForAudioFrameClassification (Python,
+diff harness) and NVIDIA's Apache-2.0 NeMo-Speech.cpp (sortformer_model.cpp,
+aosc_state.cpp; uses ggml patches, so port to stock ops). DER on its AMI clip.
+Order: converter -> offline backend -> --diarize integration -> C-ABI/registry ->
+streaming AOSC presets.
+
 ## DEFERRED 2026-09-24 — #456 nyra-forced-aligner
 
 Deferred by the maintainer. Assessment posted on the issue: WavLM-large + a
