@@ -39,6 +39,7 @@ jobs:
           icd=$(ls /usr/share/vulkan/icd.d/lvp_icd*.json | head -1)
           echo "VK_ICD_FILENAMES=$icd" >> "$GITHUB_ENV"
           VK_ICD_FILENAMES=$icd vulkaninfo --summary | grep -iE "deviceName|deviceType"
+          VK_ICD_FILENAMES=$icd vulkaninfo | grep -iE "maxStorageBufferRange|maxMemoryAllocationSize" | head -4
       - name: build
         run: |
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DGGML_VULKAN=ON -DCRISPASR_BUILD_TESTS=OFF
@@ -50,6 +51,7 @@ jobs:
           curl -sSfL -o m/tts.gguf   $base/qwen3-tts-0.6b-base-GGUF/resolve/main/qwen3-tts-12hz-0.6b-base.gguf
           curl -sSfL -o m/codec.gguf $base/qwen3-tts-tokenizer-12hz-GGUF/resolve/main/qwen3-tts-tokenizer-12hz.gguf
           curl -sSfL -o m/asr.gguf   $base/parakeet-tdt-0.6b-v2-GGUF/resolve/main/parakeet-tdt-0.6b-v2-q4_k.gguf
+          curl -sSfL -o m/q3asr.gguf $base/qwen3-asr-0.6b-GGUF/resolve/main/qwen3-asr-0.6b.gguf
           ffmpeg -loglevel error -y -i samples/jfk.wav -ar 24000 m/jfk24.wav
       - name: synthesize (Vulkan default, then CPU control)
         run: |
@@ -69,3 +71,14 @@ jobs:
             echo "$a: $t"
             echo "$t" | grep -qi "voice assistant" && echo "$t" | grep -qi "evening" || { echo "::error::$a roundtrip failed: $t"; exit 1; }
           done
+      # core_gguf::load_weights itself keeps weights the GPU backend cannot bind
+      # on the CPU (every backend, not only qwen3-tts's load_weights_fit).
+      # qwen3-asr 0.6B F16 loads through plain load_weights; its 151936 x 1024
+      # F16 embedding (311 MB) is past lavapipe's storage-buffer range.
+      - name: qwen3-asr on Vulkan (generic load_weights fit)
+        run: |
+          set -o pipefail
+          timeout 1800 ./build/bin/crispasr --backend qwen3 -m m/q3asr.gguf -f samples/jfk.wav --gpu-backend vulkan -np -nt -v 2>&1 | tee q3.log
+          grep -q "using preferred GPU backend: Vulkan0" q3.log || { echo "::error::Vulkan0 not used"; exit 1; }
+          grep "keeping it on the CPU" q3.log || echo "note: nothing needed the CPU fallback on this device"
+          grep -qi "ask not what your country" q3.log || { echo "::error::qwen3-asr transcript wrong"; exit 1; }

@@ -447,6 +447,40 @@ static std::vector<ggml_backend_buffer_t> take_split_extra(ggml_backend_buffer_t
     return extra;
 }
 
+namespace {
+struct FitSet {
+    std::set<std::string> cpu;
+};
+bool fit_is_gpu(const char* name, void* user) {
+    return static_cast<FitSet*>(user)->cpu.count(name) == 0;
+}
+// Names of the tensors in `path` that `backend` cannot bind: its own
+// supports_op() on each weight leaf, the check ggml_backend_sched aborts on.
+// Empty when the file cannot be read (the real load then reports the error).
+FitSet scan_unbindable(const char* path, ggml_backend_t backend) {
+    FitSet fit;
+    ggml_context* mctx = nullptr;
+    gguf_init_params gp = {/*.no_alloc=*/true, /*.ctx=*/&mctx};
+    gguf_context* g = gguf_init_from_file(path, gp);
+    if (g && mctx) {
+        for (ggml_tensor* t = ggml_get_first_tensor(mctx); t; t = ggml_get_next_tensor(mctx, t)) {
+            if (!ggml_backend_supports_op(backend, t))
+                fit.cpu.insert(ggml_get_name(t));
+        }
+    }
+    if (g)
+        gguf_free(g);
+    if (mctx)
+        ggml_free(mctx);
+    return fit;
+}
+void log_unbindable(const char* tag, const FitSet& fit, ggml_backend_t backend) {
+    for (const auto& n : fit.cpu)
+        fprintf(stderr, "%s: '%s' exceeds what %s can bind; keeping it on the CPU\n", tag, n.c_str(),
+                ggml_backend_name(backend));
+}
+} // namespace
+
 // Issue #94 (chatterbox-turbo segfault during init on macOS / Apple
 // Silicon): the legacy alloc+copy load path takes 30-60 s for the
 // chatterbox-turbo T3 (658 MB Q8_0) on slow disks and reproducibly
@@ -978,6 +1012,35 @@ static bool load_weights_impl(const char* path, ggml_backend_t backend, IncludeT
 }
 
 bool load_weights(const char* path, ggml_backend_t backend, const char* model_tag, WeightLoad& out) {
+    // A GPU backend that cannot bind some weights (Vulkan: a tensor past
+    // maxStorageBufferRange - allocatable, not bindable) would otherwise load
+    // "fine" and abort later in ggml_backend_sched. Those weights go to a CPU
+    // buffer instead (see load_weights_fit). Callers of load_weights own only
+    // out.buf, so the CPU partition is registered as an extra of it and is
+    // released with it by release_weight_buffer(). CRISPASR_GGUF_NO_FIT=1 turns
+    // this off. A no-op on CUDA / Metal, whose supports_op accepts any leaf.
+    if (backend && !core_cpu_backend::is_cpu(backend) && !std::getenv("CRISPASR_GGUF_NO_FIT")) {
+        FitSet fit = scan_unbindable(path, backend);
+        if (!fit.cpu.empty()) {
+            const char* tag = model_tag ? model_tag : "core_gguf";
+            log_unbindable(tag, fit, backend);
+            ggml_backend_t cpu = core_cpu_backend::init();
+            const bool ok = cpu && load_weights_split(path, backend, cpu, fit_is_gpu, &fit, model_tag, out);
+            if (cpu)
+                ggml_backend_free(cpu); // the CPU buffers do not depend on the backend instance
+            if (ok && out.buf_cpu) {
+                if (out.buf) {
+                    std::vector<ggml_backend_buffer_t> owned = take_split_extra(out.buf_cpu);
+                    owned.insert(owned.begin(), out.buf_cpu);
+                    register_split_extra(out.buf, owned);
+                } else {
+                    out.buf = out.buf_cpu; // every tensor was unbindable
+                }
+                out.buf_cpu = nullptr;
+            }
+            return ok;
+        }
+    }
     return load_weights_impl(path, backend, nullptr, nullptr, model_tag, out);
 }
 
@@ -1059,49 +1122,21 @@ bool is_gpu_tensor_blk(const char* tensor_name, void* user) {
     return il < threshold;
 }
 
-namespace {
-struct FitSet {
-    std::set<std::string> cpu;
-};
-bool fit_is_gpu(const char* name, void* user) {
-    return static_cast<FitSet*>(user)->cpu.count(name) == 0;
-}
-} // namespace
-
 bool load_weights_fit(const char* path, ggml_backend_t backend, ggml_backend_t cpu_backend, const char* model_tag,
                       WeightLoad& out, int* n_offloaded) {
     const char* tag = model_tag ? model_tag : "core_gguf";
     if (n_offloaded)
         *n_offloaded = 0;
     if (!backend || !cpu_backend || backend == cpu_backend)
-        return load_weights(path, backend ? backend : cpu_backend, model_tag, out);
-    FitSet fit;
-    {
-        ggml_context* mctx = nullptr;
-        gguf_init_params gp = {/*.no_alloc=*/true, /*.ctx=*/&mctx};
-        gguf_context* g = gguf_init_from_file(path, gp);
-        if (!g || !mctx) {
-            if (g)
-                gguf_free(g);
-            if (mctx)
-                ggml_free(mctx);
-            return load_weights(path, backend, model_tag, out); // let it report the error
-        }
-        for (ggml_tensor* t = ggml_get_first_tensor(mctx); t; t = ggml_get_next_tensor(mctx, t)) {
-            if (!ggml_backend_supports_op(backend, t))
-                fit.cpu.insert(ggml_get_name(t));
-        }
-        gguf_free(g);
-        ggml_free(mctx);
-    }
+        return load_weights_impl(path, backend ? backend : cpu_backend, nullptr, nullptr, model_tag, out);
+    const FitSet fit = scan_unbindable(path, backend);
     if (fit.cpu.empty())
-        return load_weights(path, backend, model_tag, out);
-    for (const auto& n : fit.cpu)
-        fprintf(stderr, "%s: '%s' exceeds what %s can bind; keeping it on the CPU\n", tag, n.c_str(),
-                ggml_backend_name(backend));
+        return load_weights_impl(path, backend, nullptr, nullptr, model_tag, out);
+    log_unbindable(tag, fit, backend);
     if (n_offloaded)
         *n_offloaded = (int)fit.cpu.size();
-    return load_weights_split(path, backend, cpu_backend, fit_is_gpu, &fit, model_tag, out);
+    FitSet f = fit;
+    return load_weights_split(path, backend, cpu_backend, fit_is_gpu, &f, model_tag, out);
 }
 
 bool load_weights_split(const char* path, ggml_backend_t gpu_backend, ggml_backend_t cpu_backend, IsGpuTensor is_gpu,
