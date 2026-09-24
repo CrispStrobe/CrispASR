@@ -301,12 +301,22 @@ Report Ref::compare(const std::string& name, const float* data, size_t n_elem, C
                 // scored cos=1.000000 PASS (#445: parakeet encoder_layer_23).
                 const bool zero_a = na <= 1e-24, zero_b = nb <= 1e-24;
                 if (zero_a != zero_b) {
+                    if (0.0f < r.cos_min || r.cos_min_row < 0) {
+                        r.cos_min_row = (int64_t)i;
+                        r.cos_min_norm_cpp = (float)std::sqrt(na);
+                        r.cos_min_norm_ref = (float)std::sqrt(nb);
+                    }
                     r.cos_min = std::min(r.cos_min, 0.0f);
                     cos_rows++;
                     continue;
                 }
                 if (denom > 1e-12) {
                     const float cs = (float)(dot / denom);
+                    if (cs < r.cos_min || r.cos_min_row < 0) {
+                        r.cos_min_row = (int64_t)i;
+                        r.cos_min_norm_cpp = (float)std::sqrt(na);
+                        r.cos_min_norm_ref = (float)std::sqrt(nb);
+                    }
                     if (cs < r.cos_min)
                         r.cos_min = cs;
                     cos_sum += cs;
@@ -315,6 +325,7 @@ Report Ref::compare(const std::string& name, const float* data, size_t n_elem, C
             }
             if (cos_rows > 0)
                 r.cos_mean = (float)(cos_sum / cos_rows);
+            r.n_rows = (int64_t)cos_rows;
         }
     }
     return r;

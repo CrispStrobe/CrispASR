@@ -47,7 +47,8 @@ try:
     ra = [t for t in gguf.GGUFReader(de).tensors if t.name == "raw_audio"][0]
     sf.write("/tmp/de.wav", np.array(ra.data, dtype=np.float32).reshape(-1), 16000)
     wav = {"jfk": str(REPO / "samples/jfk.wav"), "de": "/tmp/de.wav"}
-    for repo, short in (("moondream/parakeet-ultra", "parakeet-ultra"), ("moondream/parakeet-redux", "parakeet-redux")):
+    # redux passed every gate and is on HF (v4); rerun ultra with the worst-row readout
+    for repo, short in (("moondream/parakeet-ultra", "parakeet-ultra"),):
         R = res["models"].setdefault(short, {"diff": {}, "cli": {}, "photon": {}})
         try:
             md = snapshot_download(repo, local_dir=str(M / short))

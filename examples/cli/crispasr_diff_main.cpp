@@ -963,6 +963,12 @@ static void print_row(const char* name, const crispasr_diff::Report& r, float co
     }
     printf("%s %-22s shape=%-16s cos_min=%.6f  cos_mean=%.6f  max_abs=%.2e  rms=%.2e%s%s\n", tag, name,
            shape_str.c_str(), r.cos_min, r.cos_mean, r.max_abs, r.rms, *extra ? "  " : "", extra);
+    // Where the worst row is, and whether it is a near-silent (tiny-norm) row
+    // whose cosine is ill-conditioned or a real divergence. FAIL rows only, so
+    // passing output keeps its format.
+    if (!r.is_pass(cos_threshold) && r.cos_min_row >= 0)
+        printf("       worst row %lld of %lld: |cpp|=%.4g |ref|=%.4g\n", (long long)r.cos_min_row, (long long)r.n_rows,
+               r.cos_min_norm_cpp, r.cos_min_norm_ref);
 }
 
 static void print_row_exact(const char* name, const crispasr_diff::Report& r, float cos_threshold,

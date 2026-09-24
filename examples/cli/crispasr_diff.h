@@ -90,6 +90,10 @@ struct Report {
     float norm_ratio = 1.0f;    // rms_data / rms_ref (1 when both are zero)
     float cos_min = 1.0f;       // worst per-row cosine similarity (-1 .. 1)
     float cos_mean = 1.0f;      // average per-row cosine similarity
+    int64_t cos_min_row = -1;   // row index of cos_min (-1 = no row compared)
+    int64_t n_rows = 0;         // rows compared
+    float cos_min_norm_cpp = 0; // L2 norms of that row: a tiny-norm row makes
+    float cos_min_norm_ref = 0; //   cosine ill-conditioned, a big one does not
     int top1_match = 0;         // logits only: tokens matching ref argmax
     int top1_total = 0;         // logits only: total tokens compared
     std::vector<int64_t> shape; // shape of the ref tensor
