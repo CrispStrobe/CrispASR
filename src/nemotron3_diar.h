@@ -32,6 +32,12 @@ void nemotron3_diar_free(struct nemotron3_diar_context* ctx);
 
 int nemotron3_diar_n_speakers(struct nemotron3_diar_context* ctx);
 
+// Frames of an n_samples recording that hold audio: floor(n_samples / hop).
+// The probability matrices have one more row (the centred STFT's last frame);
+// transformers' attention mask marks it, and every frame from here on, as
+// padding, so segment/turn extraction must stop at this count.
+int nemotron3_diar_n_valid_frames(struct nemotron3_diar_context* ctx, int n_samples);
+
 // Speaker-activity probabilities for 16 kHz mono PCM: row-major [T][S], one row
 // per 10 ms mel frame, S = n_speakers. Caller free()s. NULL on failure.
 float* nemotron3_diar_probs(struct nemotron3_diar_context* ctx, const float* pcm, int n_samples, int* out_T,

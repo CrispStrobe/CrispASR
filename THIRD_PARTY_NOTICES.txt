@@ -475,6 +475,29 @@ the published architecture and algorithms; the upstream packages are used only
 as measurement oracles by the reference dumper, never vendored or linked.
 
 ────────────────────────────────────────────────────────────────────────────────
+NVIDIA Nemotron-3-Diarization (streaming Sortformer v3) — MODEL WEIGHTS
+(https://huggingface.co/nvidia/Nemotron-3-Diarization)
+OpenMDW License Agreement v1.1
+────────────────────────────────────────────────────────────────────────────────
+
+`--diarize-method sortformer` (issue #466) downloads NVIDIA's own
+Nemotron-3-Diarization.q8_0.gguf from the model repo above;
+models/convert-nemotron3-diar-to-gguf.py converts the same repo's safetensors
+into that GGUF layout. OpenMDW-1.1 permits use, modification and
+redistribution, including commercially; redistributions must carry the
+licence and its notices.
+
+  Source model : nvidia/Nemotron-3-Diarization
+  Licence      : OpenMDW-1.1 — https://openmdw.ai/license/1-1/
+
+The ggml runtime in src/nemotron3_diar.cpp is an independent implementation.
+Its offline chunk loop and Arrival-Order Speaker Cache follow the algorithm of
+transformers' modeling_nemotron3_diarization.py (Apache-2.0, HuggingFace), which
+is also the measurement oracle for tools/reference_backends/nemotron3_diar.py.
+The GGUF tensor/metadata layout is the one NVIDIA's NeMo-Speech.cpp (Apache-2.0)
+reads, so both runtimes load the same files; no NeMo-Speech.cpp code is vendored.
+
+────────────────────────────────────────────────────────────────────────────────
 Managed model-weight policy — additional Hugging Face sources
 ────────────────────────────────────────────────────────────────────────────────
 

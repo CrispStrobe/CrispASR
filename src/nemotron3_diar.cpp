@@ -618,6 +618,10 @@ extern "C" int nemotron3_diar_n_speakers(nemotron3_diar_context* c) {
     return c ? c->hp.n_spk : 0;
 }
 
+extern "C" int nemotron3_diar_n_valid_frames(nemotron3_diar_context* c, int n_samples) {
+    return (c && c->hp.hop > 0 && n_samples > 0) ? n_samples / c->hp.hop : 0;
+}
+
 extern "C" float* nemotron3_diar_probs_stages(nemotron3_diar_context* c, const float* pcm, int n_samples, int* out_T,
                                               int* out_S, float** out_mel, int* out_n_mels, float** out_embeds,
                                               int* out_Ne, int* out_d, float** out_logits) {

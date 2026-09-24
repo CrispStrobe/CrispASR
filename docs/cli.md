@@ -1061,6 +1061,7 @@ crispasr -m auto --backend cohere -f podcast.wav \
 | `xcorr` | stereo | TDOA via cross-correlation, ±5 ms search window |
 | `vad-turns` | mono | Alternates 0/1 every >600 ms gap (mono-friendly proxy) |
 | `foxnose` | mono | **Recommended.** WeSpeaker ResNet34-LM embeddings over sliding windows -> PCA + full-covariance GMM/BIC speaker counting -> Ng-Jordan-Weiss spectral clustering -> Viterbi temporal smoothing. Estimates the speaker count; `--diarize-num-speakers N` pins it. Needs `--diarize-embedder auto` (or a WeSpeaker GGUF path). Weights are CC-BY-4.0 — see `THIRD_PARTY_NOTICES.txt` |
+| `sortformer` (alias `nemotron3-diar`) | mono | NVIDIA [Nemotron-3-Diarization](https://huggingface.co/nvidia/Nemotron-3-Diarization) (streaming Sortformer v3, #466): one end-to-end network that emits a speaker-activity probability for up to 8 speakers every 10 ms, speakers numbered in order of first appearance, overlap handled natively. Runs once globally; ASR segments are labelled by probability mass and split at speaker turns. `--diarize-model auto` (default) fetches NVIDIA's 107 MB q8_0 GGUF; OpenMDW-1.1 weights (commercial use allowed). English-trained; no embedder, no clustering, no speaker-count estimate — it never finds more than 8 |
 | `pyannote` | mono | Native GGUF pyannote-seg-3.0; runs once globally over the full audio, splits ASR segments at speaker-turn boundaries when per-word timestamps exist. Auto-downloads the GGUF via `--sherpa-segment-model auto` |
 | `sherpa` / `ecapa` | mono | External `sherpa-onnx` subprocess with segmentation + speaker-embedding model. Since #110, runs once globally over the full audio (not per-slice), producing consistent speaker IDs across the whole file. Splits ASR segments at speaker-turn boundaries when per-word timestamps exist. Requires `--sherpa-bin`, `--sherpa-segment-model`, `--sherpa-embedding-model` |
 
@@ -1075,6 +1076,7 @@ Supporting flags:
 | `--diarize-cluster-threshold F` | Cosine merge threshold (default 0.5) — consulted only when passed explicitly (#326) |
 | `--diarize-max-speakers N` | Hard cap on the cluster count (default 8) |
 | `--diarize-num-speakers N` | Pin the speaker count outright, skipping estimation (`foxnose`; `0` = estimate) |
+| `--diarize-model PATH` | Nemotron-3-Diarization GGUF for `sortformer` (`auto` = NVIDIA's q8_0; `models/convert-nemotron3-diar-to-gguf.py` makes F32/F16) |
 | `--sherpa-bin PATH` | `sherpa-onnx-offline-speaker-diarization` binary (default: found on `PATH`) |
 | `--sherpa-segment-model PATH` | Segmentation model for the `sherpa`/`pyannote` paths (`auto` downloads the GGUF) |
 | `--sherpa-embedding-model PATH` | Speaker-embedding ONNX for the `sherpa` path |

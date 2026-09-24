@@ -69,11 +69,13 @@ try:
     subprocess.check_call(["git", "clone", "--depth", "1", "--recurse-submodules", "--shallow-submodules", "-b", BRANCH,
                            "https://github.com/CrispStrobe/CrispASR.git", str(REPO)])
     res["commit"] = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=str(REPO), text=True).strip()
+    # Before kaggle_harness: it imports huggingface_hub, and a pip upgrade of an
+    # already-imported huggingface_hub leaves a half-old module in the process.
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "gguf", "safetensors", "librosa",
+                           "git+https://github.com/huggingface/transformers.git"])
     sys.path.insert(0, str(REPO / "tools" / "kaggle"))
     import kaggle_harness as kh
     kh.resolve_hf_token(); os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "gguf", "safetensors", "librosa",
-                           "git+https://github.com/huggingface/transformers.git"])
     import transformers
     res["transformers"] = transformers.__version__; save()
     from huggingface_hub import snapshot_download, hf_hub_download
@@ -140,12 +142,29 @@ try:
                 res["der"]["transformers"] = frame_der(rttm, read_segtxt(txt))
         save()
 
-    # end to end: whisper tiny + --diarize-method sortformer on the AMI clip
+    # End to end: whisper tiny + --diarize-method sortformer on the AMI clip. The
+    # console line comes from whisper's live callback (stereo-energy "(speaker ?)"
+    # on mono); the diarizer's labels are in the -oj file. Both routes: the legacy
+    # .bin path and the unified dispatcher (--backend whisper).
     if "ami" in clips and "f16" in arts:
         asr = hf_hub_download("ggerganov/whisper.cpp", "ggml-tiny.en.bin", local_dir=str(G / "w"))
-        rc, s, out = run([str(bin_ / "crispasr"), "-m", asr, "-f", str(clips["ami"]), "-t", "4", "--diarize",
-                          "--diarize-method", "sortformer", "--diarize-model", str(arts["f16"])], "cli-ami.log", timeout=3600)
-        res["cli"] = {"rc": rc, "s": s, "text": out.strip()[-3000:]}
+        res["cli"] = {}
+        for route, extra in (("legacy", []), ("dispatch", ["--backend", "whisper"])):
+            of = G / f"cli-{route}"
+            rc, s_, out = run([str(bin_ / "crispasr"), "-m", asr, "-f", str(clips["ami"]), "-t", "4", "--diarize",
+                               "--diarize-method", "sortformer", "--diarize-model", str(arts["f16"]), "-oj", "-of",
+                               str(of)] + extra, f"cli-{route}.log", timeout=3600)
+            spk = []
+            try:
+                j = json.load(open(str(of) + ".json"))
+                for sg in j.get("transcription", j.get("segments", [])):
+                    spk.append([sg.get("timestamps", {}).get("from", sg.get("start")), sg.get("speaker"),
+                                (sg.get("text") or "")[:60]])
+                shutil.copy(str(of) + ".json", OUT / f"cli-{route}.json")
+            except Exception as e:
+                spk = [f"json read failed: {e}"]
+            res["cli"][route] = {"rc": rc, "s": s_, "segments": spk}
+            save()
 except BaseException:
     res["errors"].append(traceback.format_exc())
 finally:

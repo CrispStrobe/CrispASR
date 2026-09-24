@@ -106,7 +106,7 @@ curl http://localhost:8080/v1/audio/transcriptions \
 | `target_lang` | Target language for AST backends |
 | `punctuation` | `true`/`false` — enable/disable punctuation (default: `true`; `false` strips punctuation from output) |
 | `diarize` | `true`/`false` — enable speaker diarization |
-| `diarize_method` | `energy`, `xcorr`, `vad-turns`, `sherpa`, `pyannote`, `ecapa`, `foxnose` (default: `energy`) |
+| `diarize_method` | `energy`, `xcorr`, `vad-turns`, `sherpa`, `pyannote`, `ecapa`, `foxnose`, `sortformer` (default: `energy`) |
 | `diarize_embedder` | Speaker-embedding model for cross-slice clustering (path or `auto`) |
 | `diarize_cluster_threshold` | Cosine merge threshold for embedding clustering (default: 0.5) |
 | `diarize_max_speakers` | Upper bound on speaker cluster count (default: 8) |

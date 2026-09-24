@@ -628,6 +628,8 @@ bool apply_sortformer(const float* mono, int n_samples, const CrispasrDiarizeOpt
         std::free(probs);
         return false;
     }
+    // Rows past the valid-frame count are padding (transformers masks them).
+    T = std::min(T, nemotron3_diar_n_valid_frames(g_sortformer_ctx, n_samples));
     const double frame_s = 0.01; // one row per 10 ms
     const float thr = opts.sortformer_threshold;
     // Turns: runs of p > thr per speaker (Nemotron3DiarizationProcessor.extract_speaker_dict).

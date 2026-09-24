@@ -976,6 +976,14 @@ All three optimisation gates are output-equivalent: the per-stage diff reports
 
 - `CRISPASR_MP3_ENCODER`
 
+### Diarization — sortformer / Nemotron-3-Diarization (#466)
+
+- `CRISPASR_NEMOTRON3_DIAR_BENCH` — per-stage timings (mel, per-chunk encoder
+  graph, speaker-cache updates)
+- `CRISPASR_DIFF_SEGMENTS_OUT` — `crispasr-diff nemotron3-diar` only: also
+  write the C++ segment list (`start end speaker` per line) to this path, for
+  DER scoring against an RTTM outside the harness
+
 ### Diarization — foxnose (#324)
 
 - `CRISPASR_DIARIZE_COUNT` — speaker-count estimator: `bic` (default, the

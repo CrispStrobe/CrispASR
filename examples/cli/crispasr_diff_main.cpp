@@ -2706,13 +2706,15 @@ int main(int argc, char** argv) {
                 else
                     n_pass++;
             }
-            // Segments the way Nemotron3DiarizationProcessor.extract_speaker_dict builds them.
+            // Segments the way Nemotron3DiarizationProcessor.extract_speaker_dict builds them,
+            // attention mask included: rows from the valid-frame count on never count.
             std::string seg_txt;
             std::vector<std::tuple<double, int, double>> segs;
+            const int Tv = std::min(T, nemotron3_diar_n_valid_frames(ctx, (int)samples.size()));
             for (int sp = 0; sp < S; sp++) {
                 int start = -1;
-                for (int t = 0; t <= T; t++) {
-                    const bool on = t < T && pr[(size_t)t * S + sp] > 0.5f;
+                for (int t = 0; t <= Tv; t++) {
+                    const bool on = t < Tv && pr[(size_t)t * S + sp] > 0.5f;
                     if (on && start < 0)
                         start = t;
                     if (!on && start >= 0) {
