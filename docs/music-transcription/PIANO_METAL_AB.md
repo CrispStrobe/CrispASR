@@ -7,8 +7,10 @@ negative environmental finding, one bug the attempt exposed, and a set of
 Apple Silicon **CPU** numbers that turn out to answer most of the question the
 work was commissioned for.
 
-**What it is not.** A Metal speedup number. There is not one here, and the
-reason is in §2 rather than in the port.
+**What it was not, until §8.** A Metal speedup number. GitHub's hosted macOS
+runners cannot produce one (§2). §8 is the measurement on a physical M1, which
+answers the §5 table: **Metal makes hFT 2.0–5.3× faster and O&F 1.2–1.5×
+faster, and at f32 the note output is identical to the CPU path.**
 
 ---
 
@@ -309,10 +311,11 @@ the two are not interchangeable at equal settings.
 
 | question | status | what it needs |
 | --- | --- | --- |
-| Metal throughput for hFT | **unanswered** | a GPU with simdgroup matmul. Not available on any hosted GitHub macOS image (§2). A self-hosted Apple Silicon runner, or a Mac. |
-| Metal throughput for O&F | **unanswered** | as above. Note the prior is weaker here anyway: ~46% conv, ~29% LSTM, and the LSTM is a host-side sequential recurrence a GPU cannot help with, so a device↔host copy per chunk is added against a partial win. |
-| Metal *numerical* parity (fp32-vs-fp16 per op) | **unanswered** | the same. The harness for it is written and gated — per-head cosine at 0.999 against the CPU path, non-finite values a hard failure, plus a note-level pitch-sequence comparison — it simply has never had a GPU to run against. |
-| whether q8_0-on-Metal hits the Chatterbox CFM trap | **unanswered, but the prior is "no"** | `docs/quantize.md` records that Metal's q8 **mat-vec** kernel requantises activations and corrupts the CFM. hFT flattens its position-wise GEMMs into one many-row `mul_mat` (`8f76e054`) and O&F's convs go through `im2col`+`mul_mat`, so both are matrix-**matrix**. That is a reason to expect safety, not evidence of it; the q8_0 arm is compared like every other one when a GPU exists to run it. |
+| Metal throughput for hFT | **answered (§8): 0.27–0.33× real time at every quant, 2.0–5.3× faster than CPU** | — |
+| Metal throughput for O&F | **answered (§8): 1.2–1.5× faster on 30 s of audio; no gain over 4 CPU threads on 3 s** | — |
+| Metal *numerical* parity (fp32-vs-fp16 per op) | **answered (§8): f32 notes identical; quantised arms differ from CPU-quantised, and Metal is the more accurate of the two** | — |
+| whether q8_0-on-Metal hits the Chatterbox CFM trap | **answered (§8): no.** No non-finite value anywhere, and q8_0 on Metal is *closer* to the f32 reference than q8_0 on the CPU is, on every head of both models | — |
+| hFT / O&F on an iPhone or iPad GPU | **unanswered** | a device. The M1 figures do not transfer by arithmetic. |
 
 **The honest summary of the Metal question: it is open.** Nothing here shows
 Metal helping, and nothing here shows it failing to help. What is settled is
@@ -322,6 +325,8 @@ that cannot serve it, and that the measurement harness exists and is gated.
 ---
 
 ## 6. For the CrispTuner settings copy
+
+*(Written before §8; see §8.6 for what changes.)*
 
 The string in question is `transcriptionModelSpeedUnmeasured` in
 `lib/l10n/app_en.arb` of `flutter_tuner`:
@@ -358,3 +363,213 @@ build/bin/crispasr-diff onsets-and-frames oaf-f32.gguf ref.gguf clip.wav
 `MKL_NUM_THREADS=1` is mandatory for any parity or timing run of a mel front-end
 model here — CrispASR issue #453, "core_mel: threaded MKL silently multiplies
 the upper mel bins by the thread count".
+
+---
+
+## 8. Measured on a physical M1: Metal helps both, a lot for hFT
+
+### 8.1 The machine, and what was wrong with it
+
+**Apple M1** (`machdep.cpu.brand_string` = `Apple M1`), **8 cores:
+4 P + 4 E**, 8-core GPU, 16 GiB, **macOS 26.2** (25C56). `ggml_metal_device_init`:
+
+```
+GPU name:   MTL0 (Apple M1)
+GPU family: MTLGPUFamilyApple7  (1007)
+simdgroup reduction   = true
+simdgroup matrix mul. = true
+```
+
+This is the device §2 was missing. Every Metal arm printed `backend = MTL0 (GPU)`,
+and the driver refused any arm whose backend line did not match what it was told
+to run.
+
+**The machine was not quiet, and that has to go next to every number.** It is a
+working desktop. During the runs, **29.6 of 30 GB of swap was in use**, 7 GB
+compressed and 72 MB of RAM free, with browsers and several multi-day agent
+sessions resident. No thermal or performance warning was recorded (`pmset -g therm`).
+The consequence is visible in the spreads. **Metal arms are tight**, with hFT long
+clips at 8.0–8.6 s. **Multi-threaded CPU arms are not**: hFT q8_0 at 8 threads
+ranged from 22.1 to 39.6 s. Contention hurts an 8-thread CPU arm more than a
+GPU arm, so **the 8-thread speedups below favour Metal**. The 4- and 2-thread
+arms are steadier, and those are the ones to quote.
+
+**Build:** `14888f65`, `-DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON
+-DGGML_NATIVE=ON`, the targets `hft-parity-dump` and `oaf-parity-dump`. **Driver:** the
+A/B step of `piano-metal-ab.yml` run locally with the same rules. Each arm ran in
+its own process. The cold rep was discarded and the median of 3 kept, in rotating
+order, with `MKL_NUM_THREADS=1`. The clips were 3 s and 30 s of `samples/jfk.wav`.
+Three CPU arms were measured from the same binary: **8 threads** (`hw.ncpu`,
+which the workflow uses), **4** (the P-core count), and **2** (what CrispTuner
+opens its session with). The Metal arm was measured twice, once against 8 and 4
+threads and once against 2, 192 runs in all.
+
+### 8.2 hFT-Transformer
+
+Wall time as a multiple of real time, 30 s clip (the 2-thread row comes from the second run):
+
+| quant | CPU 8 thr | CPU 4 thr | CPU 2 thr | **Metal** (run 1 / run 2) | Metal speedup vs 4 thr / 2 thr |
+| --- | --- | --- | --- | --- | --- |
+| f32 | 1.248 | 0.858 | 1.327 | **0.271 / 0.300** | 3.17× / 4.43× |
+| q8_0 | 0.985 | 0.565 | 0.776 | **0.282 / 0.325** | 2.00× / 2.39× |
+| q4_0 | 1.065 | 0.574 | 0.759 | **0.277 / 0.299** | 2.08× / 2.53× |
+
+Fixed and marginal cost, solved from the two clip lengths (run 1):
+
+| quant | CPU 4 thr fixed / marginal | Metal fixed / marginal |
+| --- | --- | --- |
+| f32 | 1.06 s / 0.823× | **0.34 s / 0.259×** |
+| q8_0 | 1.01 s / 0.532× | **0.28 s / 0.273×** |
+| q4_0 | 0.89 s / 0.544× | **0.30 s / 0.267×** |
+
+Peak RSS on the long clip was 290–302 MiB on CPU and **152–170 MiB on Metal**.
+Why it is lower was not investigated.
+
+What this says:
+
+* **hFT on Metal runs at about 0.27–0.33× real time at every quantisation.** That
+  is 3–4× headroom for live playing, on the oldest Apple Silicon GPU.
+* **Quantisation buys nothing on Metal.** f32, q8_0 and q4_0 are within noise of
+  one another. The Metal matmul dequantises every weight to `half` before the
+  multiply (§8.4), so the matmul cost is independent of storage size. Weights of
+  22 / 7 / 5 MB were never the bottleneck. On the CPU, quantisation still buys
+  about 1.5×, as §4 found.
+* **Fixed cost falls from ~1 s to ~0.3 s**, so Metal's one-time setup does not
+  cost more than the CPU's. Model load and pipeline construction are both in that figure.
+* **The CPU baseline was worse here than on the CI slice.** CPU at 4 threads,
+  f32, came to 0.858× against CI's 0.926 / 0.833×. At 8 threads it was 1.248×,
+  which includes E cores and swap contention. On a machine this loaded, a
+  physical M1 CPU did no better than a quiet virtual 3-core slice. The claim that
+  CPU hFT "keeps up" on Apple Silicon still holds at 4 and 2 threads for q8_0 and
+  q4_0, but **not for f32 at 2 threads (1.33×)**.
+
+### 8.3 Onsets & Frames
+
+| quant | clip | CPU 8 thr | CPU 4 thr | CPU 2 thr | **Metal** | Metal speedup vs 4 thr |
+| --- | --- | --- | --- | --- | --- | --- |
+| f32 | 30 s | 0.139 | 0.127 | 0.149 | **0.100 / 0.101** | 1.27× |
+| q8_0 | 30 s | 0.145 | 0.122 | 0.146 | **0.100 / 0.100** | 1.23× |
+| q4_0 | 30 s | 0.139 | 0.122 | 0.146 | **0.099 / 0.100** | 1.23× |
+| f32 | 3 s | 0.168 | 0.114 | — | **0.110** | 1.03× |
+| q8_0 | 3 s | 0.147 | 0.114 | — | **0.114** | 1.00× |
+| q4_0 | 3 s | 0.139 | 0.114 | — | **0.111** | 1.02× |
+
+**The prior that "O&F may lose" was wrong in direction but right in size.**
+Metal does not lose. On a 30 s clip it is **1.23–1.27× faster than 4 threads and
+1.45–1.47× faster than 2**. On a 3 s clip it is **level with 4 threads**: the
+host-side LSTM and the per-chunk device↔host copy absorb the whole gain. That
+matches the ~46% conv / ~29% LSTM split. The GPU only speeds up the part it can
+reach. Metal's peak RSS is about 25 MiB *higher* than CPU's on the 3 s clip,
+and about 50 MiB lower on the 30 s clip.
+
+O&F was already 7–10× faster than real time on the CPU. Metal improves a margin
+that did not need improving. It is not a reason to choose O&F over anything else.
+
+### 8.4 Numerical parity, and a gate that measures the wrong thing for quantised arms
+
+Metal against CPU (8 threads), 30 s clip, per head. The CPU 4-thread arm against
+the CPU 8-thread arm was bit-identical everywhere (max |d| = 0), so every
+difference below comes from the backend and none from threading noise.
+
+| model | quant | worst-head cosine | max \|d\| | non-finite | notes (CPU / Metal) |
+| --- | --- | --- | --- | --- | --- |
+| hFT | f32 | 0.99999738 (velocity) | 9.2e-03 (onset), velocity 2 | 0 | 274 / 274, **pitch sequence identical**, onset ≤ 0.1 ms, offset ≤ 0.2 ms, velocity Δ ≤ 2 |
+| hFT | q8_0 | **0.99123** (velocity) | velocity 76 | 0 | 280 / 274 — **differ** |
+| hFT | q4_0 | **0.99209** (velocity) | velocity 76 | 0 | 265 / 262 — **differ** |
+| O&F | f32 | 0.99999982 | 2.0e-03 | 0 | 150 / 150, **identical**, Δ 0.0 ms, velocity Δ 0 |
+| O&F | q8_0 | 0.99998647 | 1.5e-02 | 0 | 149 / 149 — **differ by one note each way** |
+| O&F | q4_0 | 0.99998635 | 1.6e-02 | 0 | 141 / 140 — **differ** |
+
+**At f32 both models pass.** The gate as written ("cosine ≥ 0.999 against the CPU
+path, and pitch sequences equal") **fails on hFT's quantised velocity head and on
+every quantised note list**. Stopping there would turn a result into the wrong
+conclusion. A quantised CPU arm is not a reference. The reference is **CPU f32**,
+which §3 shows is bit-exact to onnxruntime. Measured against it:
+
+| model | quant | head | CPU-quantised cosine to f32 | **Metal-quantised** cosine to f32 |
+| --- | --- | --- | --- | --- |
+| hFT | q8_0 | onset / offset / mpe | 0.999938 / 0.999916 / 0.999948 | **0.999971 / 0.999962 / 0.999972** |
+| hFT | q8_0 | velocity | 0.988161 | **0.995012** |
+| hFT | q4_0 | onset / offset / mpe | 0.992770 / 0.992940 / 0.993915 | **0.992880 / 0.993011 / 0.993996** |
+| hFT | q4_0 | velocity | 0.907480 | **0.913080** |
+| O&F | q8_0 | onset / frame / activation | 0.999944 / 0.999926 / 0.999996 | **0.999959 / 0.999938 / 0.999999** |
+| O&F | q4_0 | onset / frame / activation | 0.989980 / 0.986385 / 0.999692 | 0.989995 / 0.986374 / 0.999694 |
+
+The note level agrees. Notes were matched to the f32 note list by same pitch and
+onset within 50 ms:
+
+| model | quant | CPU-quantised F1 | **Metal-quantised** F1 | CPU vs Metal directly |
+| --- | --- | --- | --- | --- |
+| hFT | q8_0 | 0.9856 (280 notes, P 0.975) | **0.9964** (274 notes, P 0.996) | 6 notes only on CPU, 0 only on Metal |
+| hFT | q4_0 | 0.9202 | **0.9254** | 3 only on CPU, 0 only on Metal |
+| O&F | q8_0 | 0.9967 | 0.9967 | 1 / 1 |
+| O&F | q4_0 | 0.8591 | **0.8621** | 1 only on CPU, 0 only on Metal |
+
+**On every head of both models, Metal's quantised output is at least as close to
+the f32 reference as the CPU's, and usually closer.** The only exceptions are O&F
+q4_0 offset and frame, which tie to the fifth decimal. hFT q8_0 on Metal
+reproduces the f32 note *count* exactly. On the CPU the same weights add 6
+spurious notes.
+
+The mechanism was read from the source, not inferred:
+
+* **CPU**, `ggml/src/ggml-cpu/ggml-cpu.c:251,283`: Q4_0 and Q8_0 both have
+  `vec_dot_type = GGML_TYPE_Q8_0`. **The activations are quantised to 8-bit
+  blocks** before every dot product.
+* **Metal**, `ggml/src/ggml-metal/kernels/mul_mm.metal:746,750`:
+  `kernel_mul_mm_q4_0_f32` / `_q8_0_f32` dequantise the weights to `half`, load the
+  activations as `half`, multiply in `simdgroup_half8x8`, and **accumulate in
+  float**. fp16 activations keep more precision than q8_0 blocks.
+* **Metal at f32**, `mul_mm.metal:739`: `kernel_mul_mm_f32_f32` casts both
+  operands to `half` as well. The small f32 difference above is **fp16
+  multiplication with fp32 accumulation**, cosine ≥ 0.999997. It is not an error
+  in the port.
+
+**The Chatterbox q8 trap did not appear.** There is no non-finite value anywhere,
+and q8_0 is the arm where Metal is *most* clearly the more accurate backend.
+As predicted, both models take the matrix-matrix `mul_mm` path, not the mat-vec
+kernel.
+
+**For the workflow's parity step:** comparing quantised Metal against quantised CPU
+at 0.999 will fail on real hardware because of the *CPU's* activation
+quantisation. The gate that fits is this: f32 Metal against f32 CPU at 0.999
+with identical pitch sequences, which passes here; and each quantised arm
+compared to f32 CPU, with Metal no further from it than CPU-quantised is. That
+change is not made to `piano-metal-ab.yml` here, because no hosted runner can
+execute the Metal step anyway (§2).
+
+### 8.5 What remains open
+
+* **iPhone / iPad GPU.** The A14 and later are the same GPU family as the M1, but
+  the M1 has more GPU cores and more bandwidth, so a phone number comes from a
+  phone.
+* **A quiet-machine re-run.** It would tighten the CPU columns. It would not
+  change a conclusion: the Metal columns are tight, and even the steadiest CPU
+  arm, 4 threads, loses to Metal by 2–3× on hFT.
+
+### 8.6 For the CrispTuner settings copy
+
+CrispTuner opens its session with `nThreads: 2` and ships **hFT at q4_0**. The
+session defaults to `use_gpu = true` (`src/crispasr_c_api.cpp:1714`) and passes
+it to both arms (`:3115`, `:3129`). **With a Metal-built libcrispasr that
+contains the §1 wiring, an app user gets the Metal column without any change in
+the app.** On this M1 that is hFT q4_0 at **0.30×** real time, against **0.76×**
+on the CPU at the app's 2 threads. Both are under real time, so the current copy
+("keeps up with live playing" on an Apple Silicon Mac) is now a measurement on a
+physical Mac rather than on a virtual slice. It is still not a claim about phones.
+
+### 8.7 Reproducing
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGGML_METAL=ON \
+      -DGGML_METAL_EMBED_LIBRARY=ON -DGGML_NATIVE=ON -DCRISPASR_BUILD_TESTS=ON
+cmake --build build --target hft-parity-dump oaf-parity-dump
+# GPU arm / CPU arm, one binary, one process each
+CRISPASR_PARITY_USE_GPU=1 build/bin/hft-parity-dump hft-q4_0.gguf clip.wav out/gpu 8
+CRISPASR_HFT_NO_GPU=1     build/bin/hft-parity-dump hft-q4_0.gguf clip.wav out/cpu 4
+```
+
+The per-run log, the JSON of every arm, and the drivers are the "A/B" and
+"Parity" steps of `.github/workflows/piano-metal-ab.yml`, run locally with
+two changes: added 4- and 2-thread CPU arms, and the f32-referenced parity
+comparison of §8.4.
