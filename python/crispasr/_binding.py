@@ -3142,6 +3142,10 @@ class PuncModel:
     fastconformer-ctc, firered-asr) that output lowercase text without
     punctuation.
 
+    ``model_path`` takes a ``--punc-model`` value: an alias (``auto``,
+    ``firered``, ``fullstop``, ``punctuate-all``, ``pcs``; downloaded on
+    first use) or a .gguf path of the FireRedPunc family or PCS.
+
     Usage::
 
         punc = crispasr.PuncModel("fireredpunc-q8_0.gguf")
