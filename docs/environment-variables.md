@@ -1255,6 +1255,9 @@ All three optimisation gates are output-equivalent: the per-stage diff reports
   was observed to emit all-NaN logits.
 - `CRISPASR_QWEN3_TTS_CODEC_TRACE`
 - `CRISPASR_QWEN3_TTS_CP_BACKEND`
+- `CRISPASR_QWEN3_TTS_CP_F32_DOWN=0|1` — force off / on the F32 promotion of the code
+  predictor's F16 FFN down weights (default: on for CUDA, ROCm, Vulkan, SYCL, where an
+  F16 GEMM narrows the ~156k SwiGLU intermediate to half and overflows; #337).
 - `CRISPASR_QWEN3_TTS_CP_DIRECT`
 - `CRISPASR_QWEN3_TTS_CP_MTP_NOFUSE`
 - `CRISPASR_QWEN3_TTS_CP_STEP0_CACHE`
@@ -1268,7 +1271,10 @@ All three optimisation gates are output-equivalent: the per-stage diff reports
 - `CRISPASR_QWEN3_TTS_PROF`
 - `CRISPASR_QWEN3_TTS_SEED`
 - `CRISPASR_QWEN3_TTS_TALKER_SCHED`
-- `CRISPASR_QWEN3_TTS_VULKAN_NATIVE`
+- `CRISPASR_QWEN3_TTS_VULKAN_CPU=1` — run the talker on CPU when the GPU backend is
+  Vulkan (the pre-#337-fix default). The talker runs natively on Vulkan otherwise.
+- `CRISPASR_QWEN3_TTS_VULKAN_NATIVE` — legacy: native is now the default; `=0` still
+  requests the CPU pin.
 - `CRISPASR_QWEN3_TTS_DUMP_LOGITS=<dir>` — write the raw per-frame talker
   logits (f32, before the repetition penalty and the suppress mask) plus a
   top-5 line to stderr. The instrument for a cross-backend diff: tokens

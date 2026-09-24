@@ -76,3 +76,13 @@ TEST_CASE("qwen3_tts F32 down-projection promotion follows the narrowing backend
     }
     REQUIRE_FALSE(f16_matmul_narrows_activations(nullptr));
 }
+
+TEST_CASE("qwen3_tts Vulkan talker runs natively unless asked (#337)", "[unit][qwen3_tts][hip]") {
+    using namespace qwen3_tts_hip_policy;
+    REQUIRE_FALSE(vulkan_talker_on_cpu(nullptr, nullptr)); // new default: native
+    REQUIRE_FALSE(vulkan_talker_on_cpu("0", nullptr));
+    REQUIRE_FALSE(vulkan_talker_on_cpu(nullptr, "1")); // legacy opt-in is now a no-op
+    REQUIRE(vulkan_talker_on_cpu("1", nullptr));       // escape hatch
+    REQUIRE(vulkan_talker_on_cpu(nullptr, "0"));       // legacy explicit opt-out
+    REQUIRE(vulkan_talker_on_cpu("1", "1"));           // the CPU request wins
+}

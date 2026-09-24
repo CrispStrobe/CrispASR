@@ -1,0 +1,70 @@
+# #337: qwen3-tts's talker + code predictor + codec running NATIVELY on Vulkan,
+# on lavapipe (Mesa llvmpipe) — a second, independent Vulkan implementation next
+# to the RADV hardware run in the issue. Gates the default flip that stopped
+# pinning the Vulkan talker to CPU.
+#
+# The run uses the DEFAULT configuration (no qwen3-tts env vars) and asserts the
+# log proves the Vulkan path ran: device Vulkan0 in use, the F16 code-predictor
+# down weights promoted on Vulkan0, and no CPU pin. A CPU run is the control;
+# both WAVs must ASR-roundtrip (parakeet) to the synthesized sentence.
+# GGML_VK_VISIBLE_DEVICES=0 is required: ggml skips CPU-type Vulkan devices
+# (lavapipe) unless a device is selected explicitly.
+
+name: qwen3-tts vulkan (lavapipe)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/337-vulkan-native-default]
+    paths:
+      - 'src/qwen3_tts*'
+      - '.github/workflows/qwen3-tts-vulkan-lavapipe.yml'
+
+jobs:
+  lavapipe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      GGML_VK_VISIBLE_DEVICES: "0"
+      TEXT: "Good evening. I am the voice assistant running on this workstation."
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - name: deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build g++ libvulkan-dev spirv-headers glslc mesa-vulkan-drivers vulkan-tools ffmpeg
+          icd=$(ls /usr/share/vulkan/icd.d/lvp_icd*.json | head -1)
+          echo "VK_ICD_FILENAMES=$icd" >> "$GITHUB_ENV"
+          VK_ICD_FILENAMES=$icd vulkaninfo --summary | grep -iE "deviceName|deviceType"
+      - name: build
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DGGML_VULKAN=ON -DCRISPASR_BUILD_TESTS=OFF
+          cmake --build build --target crispasr-cli -j$(nproc)
+      - name: models
+        run: |
+          mkdir -p m
+          base=https://huggingface.co/cstr
+          curl -sSfL -o m/tts.gguf   $base/qwen3-tts-0.6b-base-GGUF/resolve/main/qwen3-tts-12hz-0.6b-base.gguf
+          curl -sSfL -o m/codec.gguf $base/qwen3-tts-tokenizer-12hz-GGUF/resolve/main/qwen3-tts-tokenizer-12hz.gguf
+          curl -sSfL -o m/asr.gguf   $base/parakeet-tdt-0.6b-v2-GGUF/resolve/main/parakeet-tdt-0.6b-v2-q4_k.gguf
+          ffmpeg -loglevel error -y -i samples/jfk.wav -ar 24000 m/jfk24.wav
+      - name: synthesize (Vulkan default, then CPU control)
+        run: |
+          set -o pipefail
+          common=(--backend qwen3-tts -m m/tts.gguf --codec-model m/codec.gguf --voice m/jfk24.wav
+                  --ref-text "And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+                  --i-have-rights --tts "$TEXT" --seed 42 -v)
+          CRISPASR_QWEN3_TTS_MAX_FRAMES=200 timeout 3000 ./build/bin/crispasr "${common[@]}" --gpu-backend vulkan --tts-output vk.wav 2>&1 | tee vk.log
+          CRISPASR_QWEN3_TTS_MAX_FRAMES=200 timeout 1800 ./build/bin/crispasr "${common[@]}" -ng --tts-output cpu.wav 2>&1 | tee cpu.log
+      - name: assert the Vulkan path ran and both round-trip
+        run: |
+          grep -q "Vulkan0" vk.log || { echo "::error::Vulkan0 not used"; exit 1; }
+          grep -q "code_pred (Vulkan0): promoted" vk.log || { echo "::error::code predictor not on Vulkan0 (F32 down promotion missing)"; exit 1; }
+          if grep -q "running the talker on CPU\|running talker on CPU" vk.log; then echo "::error::talker pinned to CPU"; exit 1; fi
+          for a in vk cpu; do
+            t=$(./build/bin/crispasr --backend parakeet -m m/asr.gguf -f $a.wav -np -nt -ng)
+            echo "$a: $t"
+            echo "$t" | grep -qi "voice assistant" && echo "$t" | grep -qi "evening" || { echo "::error::$a roundtrip failed: $t"; exit 1; }
+          done

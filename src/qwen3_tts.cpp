@@ -914,27 +914,29 @@ static bool qwen3_tts_codec_decode_uses_cuda(const qwen3_tts_context* c) {
            crispasr_env::get("CRISPASR_QWEN3_TTS_CODEC_GPU") != nullptr || qwen3_tts_codec_use_gpu_by_default(c);
 }
 
-// #337 (Vulkan): the qwen3-tts talker LM (and code_predictor) were reported to
-// miscompute on the Vulkan backend — on a Tesla P100 the AR decode runs away
-// into a ~324 s clip of clipping noise (peak 1.0) with empty ASR, vs a correct
-// ~7 s render on CPU. The codec is already CPU-pinned (see
-// qwen3_tts_codec_use_gpu_by_default); this routes the talker to CPU too when
-// the GPU backend is Vulkan — the same ggml-vulkan graph-corruption class
-// already gated to CPU in cosyvoice3 (#304), tada-codec (#192), moss (#215).
-// SubtitleEdit ships the Vulkan Windows build to every Windows user. Metal +
-// CUDA keep the native GPU talker. Override with
-// CRISPASR_QWEN3_TTS_VULKAN_NATIVE=1.
+// #337 (Vulkan): the qwen3-tts talker ran away on Vulkan (P100: a ~324 s
+// clip of noise vs ~7 s on CPU), so the talker was pinned to CPU on every
+// Vulkan device. Both root causes are now fixed:
+//   - the FA shaders read the causal mask with stride KV instead of the
+//     mask's own stride (ggml fork, proven on lavapipe: mask_pad cases fail
+//     before / pass after), and
+//   - the 0.6B-F16 code predictor's F16 down projection overflowed on every
+//     backend whose F16 GEMM narrows activations (promote_cp_down_to_f32).
+// The native path was then verified on real hardware (RX 7900 XT / RADV,
+// 0.6B F16 direct + scheduler, 1.7B Q8_0: all stop cleanly, ASR correct) and
+// on lavapipe in CI (.github/workflows/qwen3-tts-vulkan-lavapipe.yml). So the
+// talker now runs natively on Vulkan by default;
+// CRISPASR_QWEN3_TTS_VULKAN_CPU=1 restores the CPU pin as an escape hatch.
 static void qwen3_tts_route_off_vulkan(qwen3_tts_context* c, int verbosity) {
     if (c->backend == c->backend_cpu || !std::strstr(ggml_backend_name(c->backend), "Vulkan")) {
         return;
     }
-    const char* keep = crispasr_env::get("CRISPASR_QWEN3_TTS_VULKAN_NATIVE");
-    if (keep && keep[0] == '1') {
+    if (!qwen3_tts_hip_policy::vulkan_talker_on_cpu(crispasr_env::get("CRISPASR_QWEN3_TTS_VULKAN_CPU"),
+                                                    crispasr_env::get("CRISPASR_QWEN3_TTS_VULKAN_NATIVE"))) {
         return;
     }
     if (verbosity >= 1) {
-        fprintf(stderr, "qwen3_tts: Vulkan backend detected — running talker on CPU (#337 Vulkan "
-                        "talker/code-predictor miscompute; set CRISPASR_QWEN3_TTS_VULKAN_NATIVE=1 to override)\n");
+        fprintf(stderr, "qwen3_tts: CRISPASR_QWEN3_TTS_VULKAN_CPU=1 - running the talker on CPU\n");
     }
     ggml_backend_free(c->backend);
     c->backend = c->backend_cpu;

@@ -48,4 +48,16 @@ inline bool promote_cp_down_to_f32(const char* backend_name, bool weights_are_f1
     return env_override == 1 || f16_matmul_narrows_activations(backend_name);
 }
 
+// #337: pin the talker to CPU on Vulkan only on request. `vulkan_cpu` is
+// CRISPASR_QWEN3_TTS_VULKAN_CPU; `vulkan_native` is the legacy
+// CRISPASR_QWEN3_TTS_VULKAN_NATIVE (an explicit "0" there also asks for the
+// old CPU pin, so scripts written against the old default keep working).
+inline bool vulkan_talker_on_cpu(const char* vulkan_cpu, const char* vulkan_native) {
+    if (vulkan_cpu && vulkan_cpu[0] && vulkan_cpu[0] != '0')
+        return true;
+    if (vulkan_native && vulkan_native[0] == '0')
+        return true;
+    return false;
+}
+
 } // namespace qwen3_tts_hip_policy
