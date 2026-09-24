@@ -14,6 +14,16 @@ and require both monotonic output and bounded timing displacement. Worktree
 Worktree `.claude/worktrees/feat-436-dolphin`, branch `feat/436-dolphin`.
 NOW: blueprint read (docs/dolphin/PLAN.md on the branch); converter next.
 
+## DEFERRED 2026-09-24 — #456 nyra-forced-aligner
+
+Deferred by the maintainer. Assessment posted on the issue: WavLM-large + a
+Kaldi-style GMM-HMM (model.npz ~2 MB, decision trees, projections) + 41k-word
+lexicon + beam Viterbi. Inference code MIT, but model files AND outputs (the
+timestamps) are under the nyra health Non-Commercial Research License with
+share-alike and a contractual-binding clause (3.3) -> would ship as a gated NC
+GGUF; espeak-ng OOV fallback is GPL and cannot be bundled. WavLM exists in-tree
+(MioCodec). Not started.
+
 ## DONE 2026-09-24 — #455 Raon-Speech-9B (speech-to-text only)
 
 Merged to main; GGUFs + card at cstr/raon-speech-9b-GGUF (F16/Q8_0/Q4_K), ref fixtures
