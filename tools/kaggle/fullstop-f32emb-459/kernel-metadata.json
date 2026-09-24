@@ -1,0 +1,3 @@
+{"id": "chr1s4/crispasr-fullstop-f32emb-459", "title": "CrispASR fullstop f32emb 459", "code_file": "fullstop_f32emb_459.py",
+ "language": "python", "kernel_type": "script", "is_private": "true", "enable_gpu": "false", "enable_internet": "true",
+ "dataset_sources": ["chr1s4/crispasr-hf-token"], "competition_sources": [], "kernel_sources": []}
