@@ -1551,10 +1551,26 @@ extern "C" int hojo_asr_bos_token_id(struct hojo_asr_context* ctx) {
 }
 
 // HOJO_ASR.infer: max_new_tokens = max(10, min(cfg.max_new_tokens, T_enc*2 + 10)).
+//
+// #438: config.yaml's max_new_tokens (200) is a flat cap, so upstream cuts a
+// transcript off wherever it reaches 200 tokens - ~28 s of fast German speech
+// already does. Unless -n / hojo_asr_set_max_new_tokens sets one, the cap scales
+// with the audio instead: max(cfg, rate * seconds + 10) at
+// CRISPASR_HOJO_TOKENS_PER_SEC (default 8; 0 = upstream's flat cap). The
+// per-frame budget above still bounds it, and greedy tokens before the old cap
+// are unchanged - only the continuation upstream drops is added.
 extern "C" int hojo_asr_max_new_for_frames(struct hojo_asr_context* ctx, int T_enc) {
     if (!ctx)
         return 0;
-    const int cap = ctx->max_new_tokens > 0 ? ctx->max_new_tokens : (int)ctx->model.hparams.gen_max_new_tokens;
+    int cap = ctx->max_new_tokens > 0 ? ctx->max_new_tokens : (int)ctx->model.hparams.gen_max_new_tokens;
+    if (ctx->max_new_tokens <= 0) {
+        static const double rate = [] {
+            const char* e = crispasr_env::get("CRISPASR_HOJO_TOKENS_PER_SEC");
+            return (e && *e) ? std::max(0.0, std::atof(e)) : 8.0;
+        }();
+        const double seconds = T_enc / 12.5; // 100 Hz mel through three stride-2 convs
+        cap = std::max(cap, (int)std::ceil(rate * seconds) + 10);
+    }
     return core_hojo_frames::max_new_for_frames(cap, T_enc);
 }
 
@@ -1869,6 +1885,12 @@ static char* hojo_asr_impl(struct hojo_asr_context* ctx, const float* samples, i
             if (logits)
                 free(logits);
         }
+        // Ending on the cap rather than on <|im_end|> means the transcript is cut.
+        if ((int)generated.size() >= max_new)
+            fprintf(stderr,
+                    "hojo_asr: warning: stopped at the %d-token limit before the end of the transcript; raise it "
+                    "with -n / --max-new-tokens or split the audio\n",
+                    max_new);
     }
 
     // 7. Detokenize
