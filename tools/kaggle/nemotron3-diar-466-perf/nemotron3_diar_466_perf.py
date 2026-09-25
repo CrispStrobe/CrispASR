@@ -69,7 +69,7 @@ try:
 
     kh.install_build_toolchain()
     flags = kh.cache_and_link_flags()
-    builds = {"native": [], "blas": ["-DGGML_BLAS=ON", "-DGGML_BLAS_VENDOR=OpenBLAS"]}
+    builds = {"native": []}  # OpenBLAS measured no gain (run 1) - dropped
     if GPU:
         builds = {"cuda": kh.cuda_build_flags()}
     bins = {}
@@ -110,14 +110,11 @@ try:
         if rc == 0: refs[mode] = ref
     save()
 
-    ARMS = [  # (build, weights, attn, accel)
-        ("native", "f32", "manual", False), ("native", "f32", "cont", False), ("native", "f32", "flash", False),
-        ("native", "f16", "manual", False), ("native", "nvidia_q8_0", "manual", False),
-        ("blas", "f32", "manual", True), ("blas", "f16", "manual", True), ("blas", "nvidia_q8_0", "manual", True),
-        ("blas", "f32", "manual", False),  # BLAS build, accel off: same as native? (control)
-    ]
+    # run 2: the flash offline crash fixed; manual vs flash, plus the finer
+    # streaming overhead split (mel / embed / cache update)
+    ARMS = [("native", "f32", a, False) for a in ("manual", "flash")]
     if GPU:
-        ARMS = [("cuda", w, a, False) for w in ("f32", "f16", "nvidia_q8_0") for a in ("manual", "cont", "flash")]
+        ARMS = [("cuda", "f32", a, False) for a in ("manual", "flash")]
     for mode, ref in refs.items():
         for bname, wname, attn, accel in ARMS:
             if bname not in bins or wname not in arts:

@@ -57,18 +57,15 @@ bool n3d_bench() {
     return v != 0;
 }
 
-// Attention variant (#466 perf A/B): 0 manual (default), 1 manual with
-// contiguous Q/K for the KQ matmul, 2 ggml_flash_attn_ext.
-int n3d_attn_mode() {
-    static const int v = [] {
+// CRISPASR_NEMOTRON3_DIAR_ATTN=flash: ggml_flash_attn_ext instead of the
+// manual softmax(QK^T)V. Measured on the 60 s AMI clip (#466): CPU exact and
+// -11 % in low_latency; T4 -15 % but not exact (F16 accumulation flips a few
+// borderline frames). Opt-in for that reason; manual is the default.
+// (Contiguous Q/K and a BLAS/ACCEL device measured no gain and were dropped.)
+bool n3d_flash_attn() {
+    static const bool v = [] {
         const char* e = crispasr_env::get("CRISPASR_NEMOTRON3_DIAR_ATTN");
-        if (!e || !*e)
-            return 0;
-        if (!std::strcmp(e, "cont"))
-            return 1;
-        if (!std::strcmp(e, "flash"))
-            return 2;
-        return 0;
+        return e && !std::strcmp(e, "flash");
     }();
     return v;
 }
@@ -76,6 +73,7 @@ int n3d_attn_mode() {
 // Bench accumulators: graph build + alloc vs compute, summed over chunks.
 struct n3d_bench_acc {
     double build_ms = 0, compute_ms = 0;
+    double mel_ms = 0, embed_ms = 0, update_ms = 0; // streaming, outside the encoder graph
     int n = 0;
 };
 n3d_bench_acc& n3d_acc() {
@@ -116,7 +114,6 @@ struct nemotron3_diar_context {
     n3d_hparams hp;
     int mode = -1; // -1 offline, else index into hp.s_modes
     ggml_backend_t backend = nullptr, backend_cpu = nullptr;
-    ggml_backend_t backend_accel = nullptr; // BLAS etc. (CRISPASR_NEMOTRON3_DIAR_ACCEL=1, CPU runs)
     ggml_backend_sched_t sched = nullptr;
     core_gguf::WeightLoad wl;
     std::vector<uint8_t> meta;
@@ -500,17 +497,17 @@ bool run_chunk(nemotron3_diar_context* c, const std::vector<float>& x_rows, int 
     ggml_set_name(pos, "pos");
     ggml_set_input(pos);
     const bool use_mask = std::find(mask.begin(), mask.end(), 0) != mask.end();
+    const bool flash = n3d_flash_attn();
     ggml_tensor* kq_mask = nullptr;
-    if (use_mask) {
+    if (use_mask && !flash) {
         kq_mask = ggml_new_tensor_2d(g, GGML_TYPE_F32, N, N);
         ggml_set_name(kq_mask, "kq_mask");
         ggml_set_input(kq_mask);
     }
 
-    // flash attention takes an F16 mask [n_kv, n_batch]
-    const int attn_mode = n3d_attn_mode();
+    // flash attention takes an F16 mask [n_kv, n_batch] instead
     ggml_tensor* kq_mask_fa = nullptr;
-    if (attn_mode == 2 && use_mask) {
+    if (flash && use_mask) {
         kq_mask_fa = ggml_new_tensor_2d(g, GGML_TYPE_F16, N, N);
         ggml_set_name(kq_mask_fa, "kq_mask_fa");
         ggml_set_input(kq_mask_fa);
@@ -533,16 +530,12 @@ bool run_chunk(nemotron3_diar_context* c, const std::vector<float>& x_rows, int 
         Q = ggml_permute(g, Q, 0, 2, 1, 3); // [hd, N, H]
         K = ggml_permute(g, K, 0, 2, 1, 3); // [hd, N, H]
         ggml_tensor* o = nullptr;
-        if (attn_mode == 2) {
+        if (flash) {
             ggml_tensor* Vp = ggml_permute(g, V, 0, 2, 1, 3); // [hd, N, H]
             o = ggml_flash_attn_ext(g, Q, K, Vp, kq_mask_fa, scale, 0.0f, 0.0f);
             ggml_flash_attn_ext_set_prec(o, GGML_PREC_F32);
             o = ggml_reshape_2d(g, o, d, N); // result [hd, H, N]
         } else {
-            if (attn_mode == 1) {
-                Q = ggml_cont(g, Q);
-                K = ggml_cont(g, K);
-            }
             ggml_tensor* Vt = ggml_cont(g, ggml_permute(g, V, 1, 2, 0, 3)); // [N, hd, H]
             ggml_tensor* kq = ggml_mul_mat(g, K, Q);                        // [N_k, N_q, H]
             kq = ggml_soft_max_ext(g, kq, kq_mask, scale, 0.0f);
@@ -676,31 +669,9 @@ extern "C" nemotron3_diar_context* nemotron3_diar_init_from_file(const char* pat
         nemotron3_diar_free(c);
         return nullptr;
     }
-    // CPU runs may hand the large matmuls to an ACCEL device (a GGML_BLAS
-    // build registers one) - opt-in while it is being measured (#466 perf).
-    if (c->backend == c->backend_cpu) {
-        const char* e = crispasr_env::get("CRISPASR_NEMOTRON3_DIAR_ACCEL");
-        if (e && *e && *e != '0') {
-            for (size_t i = 0; i < ggml_backend_dev_count() && !c->backend_accel; ++i) {
-                ggml_backend_dev_t dev = ggml_backend_dev_get(i);
-                if (ggml_backend_dev_type(dev) == GGML_BACKEND_DEVICE_TYPE_ACCEL) {
-                    c->backend_accel = ggml_backend_dev_init(dev, nullptr);
-                    if (c->backend_accel && params.verbosity >= 1)
-                        fprintf(stderr, "nemotron3_diar: using %s\n", ggml_backend_dev_name(dev));
-                }
-            }
-            if (!c->backend_accel)
-                fprintf(stderr, "nemotron3_diar: CRISPASR_NEMOTRON3_DIAR_ACCEL set but no ACCEL device registered\n");
-        }
-    }
-    ggml_backend_t be[3];
-    int n_be = 0;
-    if (c->backend != c->backend_cpu)
-        be[n_be++] = c->backend;
-    if (c->backend_accel)
-        be[n_be++] = c->backend_accel;
-    be[n_be++] = c->backend_cpu;
-    c->sched = ggml_backend_sched_new(be, nullptr, n_be, 8192, false, false);
+    ggml_backend_t be[2] = {c->backend, c->backend_cpu};
+    const int n_be = c->backend == c->backend_cpu ? 1 : 2;
+    c->sched = ggml_backend_sched_new(be + (n_be == 1 ? 1 : 0), nullptr, n_be, 8192, false, false);
     c->meta.resize(ggml_tensor_overhead() * 8192 + ggml_graph_overhead_custom(8192, false));
     if (params.verbosity >= 1)
         fprintf(stderr, "nemotron3_diar: %d layers d=%d, %d speakers, chunk %d+%d (fifo %d, cache %d), %s\n",
@@ -715,8 +686,6 @@ extern "C" void nemotron3_diar_free(nemotron3_diar_context* c) {
     if (c->sched)
         ggml_backend_sched_free(c->sched);
     core_gguf::free_weights(c->wl);
-    if (c->backend_accel)
-        ggml_backend_free(c->backend_accel);
     if (c->backend && c->backend != c->backend_cpu)
         ggml_backend_free(c->backend);
     if (c->backend_cpu)
@@ -803,6 +772,7 @@ namespace {
 // `keep` frames. Empty on failure.
 std::vector<float> n3d_mel(nemotron3_diar_context* c, const float* pcm, int n, bool center, int keep) {
     const auto& hp = c->hp;
+    const double t0 = n3d_bench() ? now_ms() : 0.0;
     core_mel::Params mp;
     mp.n_fft = hp.n_fft;
     mp.hop_length = hp.hop;
@@ -820,6 +790,8 @@ std::vector<float> n3d_mel(nemotron3_diar_context* c, const float* pcm, int n, b
     int T = 0;
     std::vector<float> mel =
         core_mel::compute(pcm, n, c->window.data(), hp.win, c->fb_host.data(), hp.n_fft / 2 + 1, fft_r2c, mp, T);
+    if (n3d_bench())
+        n3d_acc().mel_ms += now_ms() - t0;
     if (T < keep)
         return {};
     mel.resize((size_t)keep * hp.n_mels);
@@ -857,8 +829,13 @@ bool n3d_stream_step(nemotron3_diar_stream* st, const std::vector<float>& mel, i
     const int F = hp.subsample, S = hp.n_spk, d = hp.d, M = hp.n_mels;
     std::vector<float> emb, x_rows, lg;
     int Ne = 0;
+    const bool bench = n3d_bench();
+    double t = bench ? now_ms() : 0.0;
     if (!embed(c, mel, T_chunk, emb, Ne))
         return false;
+    if (bench) {
+        n3d_acc().embed_ms += now_ms() - t;
+    }
     scored = std::min(scored, Ne);
     st->cache.get_embeds(x_rows);
     const int cached = (int)(x_rows.size() / d);
@@ -867,7 +844,11 @@ bool n3d_stream_step(nemotron3_diar_stream* st, const std::vector<float>& mel, i
     const std::vector<uint8_t> mask(N, 1); // every streamed frame is audio
     if (!run_chunk(c, x_rows, N, mask, lg))
         return false;
+    t = bench ? now_ms() : 0.0;
     st->cache.update(x_rows, N, lg, scored, mask, c->sil_host);
+    if (bench) {
+        n3d_acc().update_ms += now_ms() - t;
+    }
     const int rows = std::min(scored * F, keep_frames);
     out.insert(out.end(), lg.begin() + (size_t)cached * F * S, lg.begin() + (size_t)(cached * F + rows) * S);
     if (st->capture) {
@@ -1079,9 +1060,10 @@ extern "C" float* nemotron3_diar_probs_stages(nemotron3_diar_context* c, const f
         if (bench) {
             auto& a = n3d_acc();
             fprintf(stderr,
-                    "  nemotron3_diar_bench: streaming %s, %.1f ms (%d chunks: build+alloc %.1f, compute %.1f), %d "
-                    "frames\n",
-                    k_modes[c->mode], now_ms() - t0, a.n, a.build_ms, a.compute_ms, r1 + r2);
+                    "  nemotron3_diar_bench: streaming %s, %.1f ms (%d chunks: build+alloc %.1f, compute %.1f, "
+                    "mel %.1f, embed %.1f, cache update %.1f), %d frames\n",
+                    k_modes[c->mode], now_ms() - t0, a.n, a.build_ms, a.compute_ms, a.mel_ms, a.embed_ms, a.update_ms,
+                    r1 + r2);
             a = {};
         }
         return probs;
