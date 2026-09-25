@@ -1,3 +1,4 @@
+#include <chrono>
 #include "crispasr.h"
 #include "crispasr-arch.h"
 
@@ -6420,6 +6421,20 @@ static void whisper_suppress_invalid_grammar(whisper_context& ctx, const whisper
     //if (!allow_eot) {
     //    logits[eot] -= params.grammar_penalty;
     //}
+    // Opt-in (grammar_strict): the check above, enabled. End-of-text is only
+    // allowed once some parse of the grammar has been completed.
+    if (params.grammar_strict) {
+        bool allow_eot = false;
+        for (const auto& stack : grammar.stacks) {
+            if (stack.empty()) {
+                allow_eot = true;
+                break;
+            }
+        }
+        if (!allow_eot) {
+            logits[eot] -= params.grammar_penalty;
+        }
+    }
     //fprintf(stderr, "Allowed: (%zu tokens)\n", size - rejects.size());
 }
 
@@ -6486,6 +6501,166 @@ struct whisper_context* whisper_init_from_file_with_params_by_ref(const char* pa
 struct whisper_context* whisper_init_from_file_with_params_no_state_by_ref(const char* path_model,
                                                                            struct whisper_context_params* params) {
     return whisper_init_from_file_with_params_no_state(path_model, *params);
+}
+
+int whisper_score_texts(struct whisper_context* ctx, const float* samples, int n_samples, const char* language,
+                        const char* initial_prompt, const char** texts, int n_texts, float* out_logprobs,
+                        int* out_n_tokens, int n_threads) {
+    if (!ctx || !samples || n_samples <= 0 || !texts || n_texts <= 0 || !out_logprobs) {
+        return -1;
+    }
+    // CRISPASR_WHISPER_SCORE_PROFILE=1 prints where the time goes.
+    const bool prof = getenv("CRISPASR_WHISPER_SCORE_PROFILE") != nullptr;
+    auto now = [] { return std::chrono::steady_clock::now(); };
+    auto ms = [](auto a, auto b) { return std::chrono::duration<double, std::milli>(b - a).count(); };
+    const auto t_start = now();
+    whisper_state* state = whisper_init_state(ctx);
+    const auto t_init = now();
+    if (!state) {
+        return -2;
+    }
+    struct state_guard {
+        whisper_state* s;
+        ~state_guard() { whisper_free_state(s); }
+    } guard{state};
+
+    if (whisper_pcm_to_mel_with_state(ctx, state, samples, n_samples, n_threads) != 0) {
+        return -3;
+    }
+    const auto t_mel = now();
+    if (whisper_encode_with_state(ctx, state, 0, n_threads) != 0) {
+        return -4;
+    }
+    const auto t_enc = now();
+
+    const int n_vocab = whisper_n_vocab(ctx);
+    const int n_ctx = whisper_n_text_ctx(ctx);
+
+    // The prompt whisper_full uses for a plain transcription without
+    // timestamps, optionally preceded by previous text (initial_prompt, as in
+    // whisper_full_params.initial_prompt) to prime the vocabulary.
+    std::vector<whisper_token> prompt;
+    if (initial_prompt && initial_prompt[0]) {
+        std::vector<whisper_token> prev(n_ctx);
+        const std::string text = std::string(" ") + initial_prompt;
+        const int n_prev = whisper_tokenize(ctx, text.c_str(), prev.data(), (int)prev.size());
+        if (n_prev > 0) {
+            prompt.push_back(whisper_token_prev(ctx));
+            // Keep the most recent tokens, as whisper_full does (n_text_ctx / 2).
+            const int keep = std::min(n_prev, n_ctx / 2 - 1);
+            prompt.insert(prompt.end(), prev.begin() + (n_prev - keep), prev.begin() + n_prev);
+        }
+    }
+    prompt.push_back(whisper_token_sot(ctx));
+    if (whisper_is_multilingual(ctx)) {
+        const int lang_id = whisper_lang_id(language && language[0] ? language : "en");
+        if (lang_id < 0) {
+            return -5;
+        }
+        prompt.push_back(whisper_token_lang(ctx, lang_id));
+        prompt.push_back(whisper_token_transcribe(ctx));
+    }
+    prompt.push_back(whisper_token_not(ctx));
+    const int n_prompt = (int)prompt.size();
+    const whisper_token eot = whisper_token_eot(ctx);
+
+    auto log_softmax_at = [n_vocab](const float* row, whisper_token target) {
+        float mx = row[0];
+        for (int v = 1; v < n_vocab; ++v) {
+            mx = std::max(mx, row[v]);
+        }
+        double sum = 0.0;
+        for (int v = 0; v < n_vocab; ++v) {
+            sum += std::exp((double)(row[v] - mx));
+        }
+        return (double)(row[target] - mx) - std::log(sum);
+    };
+
+    // Decode the shared prompt once; its cache is kept and every candidate
+    // continues from it.
+    whisper_batch_prep_legacy(state->batch, prompt.data(), n_prompt, 0, 0);
+    whisper_kv_cache_seq_rm(state->kv_self, 0, 0, -1);
+    if (!whisper_decode_internal(*ctx, *state, state->batch, n_threads, false, nullptr, nullptr)) {
+        return -6;
+    }
+    const auto t_prompt = now();
+    int n_steps = 0;
+    double t_dec = 0.0, t_sm = 0.0;
+    const std::vector<float> prompt_logits(state->logits.begin() + (size_t)(n_prompt - 1) * n_vocab,
+                                           state->logits.begin() + (size_t)n_prompt * n_vocab);
+
+    // Tokenize every candidate, then visit them in token order so that
+    // neighbours share prefixes ("knight", "knight to ..."): the cache and
+    // the per-position log-probabilities of the shared part are kept and
+    // only the rest is decoded. Tokens are fed one at a time, like
+    // whisper_full's own decoding, so the decoder graph keeps its shape
+    // instead of being re-planned for every candidate length.
+    std::vector<std::vector<whisper_token>> seqs(n_texts);
+    std::vector<whisper_token> buf(n_ctx);
+    for (int t = 0; t < n_texts; ++t) {
+        out_logprobs[t] = -INFINITY;
+        if (out_n_tokens) {
+            out_n_tokens[t] = 0;
+        }
+        const std::string text = std::string(" ") + (texts[t] ? texts[t] : ""); // leading space, as Whisper emits
+        const int n = whisper_tokenize(ctx, text.c_str(), buf.data(), (int)buf.size());
+        if (n > 0 && n_prompt + n < n_ctx) {
+            seqs[t].assign(buf.begin(), buf.begin() + n);
+        }
+    }
+    std::vector<int> order(n_texts);
+    for (int t = 0; t < n_texts; ++t) {
+        order[t] = t;
+    }
+    std::sort(order.begin(), order.end(), [&](int x, int y) { return seqs[x] < seqs[y]; });
+
+    // path[i] = token i of the candidate whose tokens are in the cache;
+    // lp_after[i] = log-probabilities (full row) after path[0..i].
+    std::vector<whisper_token> path;
+    std::vector<std::vector<float>> logits_after;
+    for (int t : order) {
+        const auto& seq = seqs[t];
+        if (seq.empty()) {
+            continue;
+        }
+        size_t common = 0;
+        while (common < path.size() && common < seq.size() && path[common] == seq[common]) {
+            ++common;
+        }
+        path.resize(common);
+        logits_after.resize(common);
+        whisper_kv_cache_seq_rm(state->kv_self, 0, n_prompt + (int)common, -1);
+        for (size_t i = common; i < seq.size(); ++i) {
+            whisper_batch_prep_legacy(state->batch, &seq[i], 1, n_prompt + (int)i, 0);
+            const auto t0 = now();
+            if (!whisper_decode_internal(*ctx, *state, state->batch, n_threads, false, nullptr, nullptr)) {
+                return -6;
+            }
+            t_dec += ms(t0, now());
+            ++n_steps;
+            path.push_back(seq[i]);
+            logits_after.emplace_back(state->logits.begin(), state->logits.begin() + n_vocab);
+        }
+        const auto t1 = now();
+        double logprob = log_softmax_at(prompt_logits.data(), seq[0]);
+        for (size_t i = 0; i < seq.size(); ++i) {
+            const whisper_token target = i + 1 < seq.size() ? seq[i + 1] : eot;
+            logprob += log_softmax_at(logits_after[i].data(), target);
+        }
+        t_sm += ms(t1, now());
+        out_logprobs[t] = (float)logprob;
+        if (out_n_tokens) {
+            out_n_tokens[t] = (int)seq.size() + 1; // text tokens and end-of-text
+        }
+    }
+    if (prof) {
+        fprintf(stderr,
+                "score_texts: %d texts, init %.0f ms, mel %.0f ms, encode %.0f ms, prompt(%d) %.0f ms, "
+                "%d decode steps %.0f ms (%.1f ms/step), softmax %.0f ms, total %.0f ms\n",
+                n_texts, ms(t_start, t_init), ms(t_init, t_mel), ms(t_mel, t_enc), n_prompt, ms(t_enc, t_prompt),
+                n_steps, t_dec, n_steps ? t_dec / n_steps : 0.0, t_sm, ms(t_start, now()));
+    }
+    return 0;
 }
 
 int whisper_full_by_ref(struct whisper_context* ctx, struct whisper_full_params* params, const float* samples,
@@ -6583,6 +6758,8 @@ struct whisper_full_params whisper_full_default_params(enum whisper_sampling_str
         /* vad_params =*/whisper_vad_default_params(),
 
         /*.alt_n =*/0,
+
+        /*.grammar_strict =*/false,
     };
 
     switch (strategy) {

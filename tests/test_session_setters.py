@@ -137,6 +137,10 @@ _SETTER_SPECS = [
         "crispasr_session_set_return_logits",
         [ctypes.c_void_p, ctypes.c_int],
         [None, 1],
+    ),    (
+        "crispasr_session_set_grammar_strict",
+        [ctypes.c_void_p, ctypes.c_int],
+        [None, 1],
     ),
 ]
 
@@ -162,6 +166,8 @@ _BINDING_METHODS = [
     "set_fallback_thresholds",
     "set_whisper_decode_extras",
     "set_return_logits",
+    "set_grammar_strict",
+    "score_texts",
 ]
 
 
@@ -236,6 +242,10 @@ class TestSetterSymbols(unittest.TestCase):
 
     def test_grammar_text_null_returns_neg1(self):
         self.assertEqual(self._call_setter(*_SETTER_SPECS[16]), -1)
+
+    def test_grammar_strict_null_returns_neg1(self):
+        spec = next(x for x in _SETTER_SPECS if x[0] == "crispasr_session_set_grammar_strict")
+        self.assertEqual(self._call_setter(*spec), -1)
 
     def test_fallback_thresholds_null_returns_neg1(self):
         self.assertEqual(self._call_setter(*_SETTER_SPECS[17]), -1)

@@ -1,5 +1,24 @@
 # CrispASR — Pending work
 
+## CLAIMED 2026-09-25 — whisper: strict grammar end + candidate scoring (voice chess moves)
+
+Worktree `.claude/worktrees/feat-whisper-score-texts`, branch `feat/whisper-score-texts`.
+For CrispChess voice moves: the set of legal moves is known, so recognition is a
+choice among ~20-150 short phrases per position.
+- `whisper_full_params.grammar_strict` (session: `crispasr_session_set_grammar_strict`,
+  CLI `--grammar-strict`): no end-of-text until the grammar can be complete. The
+  check upstream whisper.cpp ships commented out; without it a constrained decode
+  stops mid-phrase ("knight to f" for "knight to f3"). Off by default.
+- `whisper_score_texts` / `crispasr_session_score_texts`: teacher-forced
+  log P(text | audio) per candidate, audio encoded once, prompt decoded once,
+  candidates visited in token order so shared prefixes are decoded once; optional
+  priming prompt. Dart `scoreTexts`, Python `score_texts`.
+- Threads: each candidate token is a tiny decoder step; at 4 threads on a loaded
+  4-core box a step took 345 ms, at 2 threads 18 ms (ggml barrier stalls).
+  `CRISPASR_WHISPER_SCORE_PROFILE=1` prints the breakdown.
+NOW: Kaggle eval `chr1s4/crispchess-voice-score` (Piper + Kokoro voices, EN/DE,
+tiny/base/small: free vs strict vs scored, with and without priming) running.
+
 ## CLAIMED 2026-09-20 — #444 forced-aligner timing regression
 
 The v0.8.34 whole-slice alignment removed overlaps, but its punctuation-free

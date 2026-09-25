@@ -560,6 +560,12 @@ struct whisper_full_params {
     // step. 0 (default) = off. Beam-search siblings are not captured —
     // they're conditional on the beam, not greedy alternatives.
     int alt_n;
+
+    // With a grammar: forbid end-of-text until the grammar can be complete.
+    // Upstream whisper.cpp ships this check commented out, so a constrained
+    // decode may stop mid-phrase ("knight to f" for "knight to f3"). Off by
+    // default: existing grammar users see no change.
+    bool grammar_strict;
 };
 
 // NOTE: this function allocates memory, and it is the responsibility of the caller to free the pointer - see whisper_free_context_params & whisper_free_params()
@@ -576,6 +582,27 @@ CRISPASR_API struct whisper_context* whisper_init_from_file_with_params_by_ref(c
                                                                                struct whisper_context_params* params);
 CRISPASR_API struct whisper_context* whisper_init_from_file_with_params_no_state_by_ref(
     const char* path_model, struct whisper_context_params* params);
+// Scores candidate transcripts of one piece of audio: for each of `texts`,
+// log P(text | audio) summed over the text's tokens and end-of-text, with the
+// decoder teacher-forced (no sampling). The audio is encoded once. Picking the
+// best-scoring candidate avoids the greedy commitment of grammar-constrained
+// decoding, which must choose a token before seeing the rest of the phrase.
+// `language` may be null (English). Returns 0 on success; out_logprobs gets
+// one value per text (-INFINITY for a text that does not fit the context) and
+// out_n_tokens (nullable) the number of tokens each sum covers, text tokens
+// plus end-of-text: divide by it to compare texts of different length, since
+// a sum of log-probabilities favours shorter texts. The shared prompt is
+// decoded once; each candidate costs only its own tokens.
+// `initial_prompt` (nullable) is previous text that primes the vocabulary,
+// e.g. a few example phrases in the expected style.
+// Each candidate token is one small decoder step, so on a busy CPU fewer
+// threads are faster: ggml's workers stall on every per-op barrier (measured
+// on a loaded 4-core box, whisper tiny: 345 ms/step at 4 threads, 18 ms at 2).
+// Set CRISPASR_WHISPER_SCORE_PROFILE=1 to print where the time goes.
+CRISPASR_API int whisper_score_texts(struct whisper_context* ctx, const float* samples, int n_samples,
+                                     const char* language, const char* initial_prompt, const char** texts, int n_texts,
+                                     float* out_logprobs, int* out_n_tokens, int n_threads);
+
 CRISPASR_API int whisper_full_by_ref(struct whisper_context* ctx, struct whisper_full_params* params,
                                      const float* samples, int n_samples);
 CRISPASR_API void crispasr_params_set_max_tokens(struct whisper_full_params* p, int n);
@@ -617,6 +644,12 @@ CRISPASR_API int crispasr_session_set_beam_size(struct crispasr_session* s, int 
 CRISPASR_API int crispasr_session_set_return_logits(struct crispasr_session* s, int enable);
 CRISPASR_API int crispasr_session_set_grammar_text(struct crispasr_session* s, const char* gbnf_text,
                                                    const char* root_rule, float penalty);
+// No end-of-text until the grammar is complete (whisper; off by default).
+CRISPASR_API int crispasr_session_set_grammar_strict(struct crispasr_session* s, int strict);
+// log P(text | audio) for each candidate text, teacher-forced (whisper only; -10 otherwise).
+CRISPASR_API int crispasr_session_score_texts(struct crispasr_session* s, const float* pcm, int n_samples,
+                                              const char* language, const char* initial_prompt, const char** texts,
+                                              int n_texts, float* out_logprobs, int* out_n_tokens);
 CRISPASR_API int crispasr_session_set_fallback_thresholds(struct crispasr_session* s, float entropy_thold,
                                                           float logprob_thold, float no_speech_thold,
                                                           float temperature_inc);

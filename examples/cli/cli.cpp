@@ -74,6 +74,7 @@ struct whisper_params {
     float logprob_thold   = -1.00f;
     float no_speech_thold =  0.6f;
     float grammar_penalty = 100.0f;
+    bool grammar_strict   = false;
     float temperature     = 0.0f;
     float temperature_inc = 0.2f;
 
@@ -292,6 +293,8 @@ static bool whisper_params_parse_arg_general(int argc, char** argv, int& i, whis
         params.grammar_rule = ARGV_NEXT;
     } else if (arg == "--grammar-penalty") {
         params.grammar_penalty = std::stof(ARGV_NEXT);
+    } else if (arg == "--grammar-strict") {
+        params.grammar_strict = true;
     } else {
         return false;
     }
@@ -1126,6 +1129,8 @@ static void whisper_print_usage(int /*argc*/, char** argv, const whisper_params&
             params.grammar_rule.c_str());
     fprintf(out, "  --grammar-penalty N               [%-7.1f] scales down logits of nongrammar tokens\n",
             params.grammar_penalty);
+    fprintf(out, "  --grammar-strict                  [%-7s] no end-of-text until the grammar is complete\n",
+            params.grammar_strict ? "true" : "false");
     // crispasr backend dispatch
     fprintf(out, "\ncrispasr backend options (select a non-whisper model):\n");
     fprintf(out,
@@ -3041,6 +3046,7 @@ int main(int argc, char** argv) {
                     wparams.n_grammar_rules = grammar_rules.size();
                     wparams.i_start_rule = grammar_parsed.symbol_ids.at(params.grammar_rule);
                     wparams.grammar_penalty = params.grammar_penalty;
+                    wparams.grammar_strict = params.grammar_strict;
                 }
             }
 

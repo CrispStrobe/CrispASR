@@ -165,6 +165,7 @@ public:
                 wp.n_grammar_rules = grammar_rules.size();
                 wp.i_start_rule = it->second;
                 wp.grammar_penalty = p.grammar_penalty;
+                wp.grammar_strict = p.grammar_strict;
                 // Beam search is required for grammar-constrained decoding.
                 wp.strategy = CRISPASR_SAMPLING_BEAM_SEARCH;
             } else {

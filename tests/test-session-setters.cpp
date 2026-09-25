@@ -108,6 +108,25 @@ TEST_CASE("session setter: set_grammar_text null-handle → -1", "[unit][setters
     REQUIRE(crispasr_session_set_grammar_text(nullptr, nullptr, nullptr, 100.0f) == -1);
 }
 
+TEST_CASE("session setter: set_grammar_strict null-handle → -1", "[unit][setters]") {
+    REQUIRE(crispasr_session_set_grammar_strict(nullptr, 1) == -1);
+}
+
+TEST_CASE("whisper params: grammar_strict is off by default", "[unit][setters]") {
+    // Existing grammar users must see no change: strict end-of-text is opt-in.
+    REQUIRE_FALSE(whisper_full_default_params(CRISPASR_SAMPLING_GREEDY).grammar_strict);
+    REQUIRE_FALSE(whisper_full_default_params(CRISPASR_SAMPLING_BEAM_SEARCH).grammar_strict);
+}
+
+TEST_CASE("score_texts: bad arguments → -1", "[unit][setters]") {
+    const float pcm[16] = {};
+    const char* texts[] = {"e4"};
+    float lp[1];
+    int nt[1];
+    REQUIRE(crispasr_session_score_texts(nullptr, pcm, 16, "en", nullptr, texts, 1, lp, nt) == -1);
+    REQUIRE(whisper_score_texts(nullptr, pcm, 16, "en", nullptr, texts, 1, lp, nt, 1) == -1);
+}
+
 TEST_CASE("session setter: set_fallback_thresholds null-handle → -1", "[unit][setters]") {
     REQUIRE(crispasr_session_set_fallback_thresholds(nullptr, 2.4f, -1.0f, 0.6f, 0.2f) == -1);
 }

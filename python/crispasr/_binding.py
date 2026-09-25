@@ -2526,6 +2526,58 @@ class Session:
         if rc != 0:
             raise RuntimeError(f"set_grammar_text failed (rc={rc})")
 
+    def set_grammar_strict(self, strict: bool = True) -> None:
+        """Forbid end-of-text until the grammar is complete (whisper; off by default)."""
+        if not hasattr(self._lib, "crispasr_session_set_grammar_strict"):
+            raise RuntimeError("crispasr_session_set_grammar_strict not present in this libcrispasr build")
+        self._lib.crispasr_session_set_grammar_strict.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        self._lib.crispasr_session_set_grammar_strict.restype = ctypes.c_int
+        rc = self._lib.crispasr_session_set_grammar_strict(self._handle, 1 if strict else 0)
+        if rc != 0:
+            raise RuntimeError(f"set_grammar_strict failed (rc={rc})")
+
+    def score_texts(
+        self, pcm, texts: List[str], language: Optional[str] = None, prompt: Optional[str] = None
+    ) -> List[Tuple[float, int]]:
+        """log P(text | audio) for each candidate, teacher-forced (whisper only).
+
+        Returns ``(logprob, n_tokens)`` per text; n_tokens counts the text's
+        tokens plus end-of-text, so ``logprob / n_tokens`` compares texts of
+        different length. ``prompt`` is optional previous text that primes the
+        vocabulary. A text that does not fit the context scores ``-inf``.
+        """
+        if not hasattr(self._lib, "crispasr_session_score_texts"):
+            raise RuntimeError("crispasr_session_score_texts not present in this libcrispasr build")
+        import numpy as np
+        pcm_arr = np.ascontiguousarray(pcm, dtype=np.float32)
+        n = len(texts)
+        c_texts = (ctypes.c_char_p * n)(*[t.encode() for t in texts])
+        out_lp = (ctypes.c_float * n)()
+        out_nt = (ctypes.c_int * n)()
+        fn = self._lib.crispasr_session_score_texts
+        fn.argtypes = [
+            ctypes.c_void_p, ctypes.POINTER(ctypes.c_float), ctypes.c_int, ctypes.c_char_p, ctypes.c_char_p,
+            ctypes.POINTER(ctypes.c_char_p), ctypes.c_int, ctypes.POINTER(ctypes.c_float),
+            ctypes.POINTER(ctypes.c_int),
+        ]
+        fn.restype = ctypes.c_int
+        rc = fn(
+            self._handle,
+            pcm_arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            int(pcm_arr.size),
+            language.encode() if language else None,
+            prompt.encode() if prompt else None,
+            c_texts,
+            n,
+            out_lp,
+            out_nt,
+        )
+        if rc == -10:
+            raise RuntimeError("score_texts: only the whisper backend can score texts")
+        if rc != 0:
+            raise RuntimeError(f"score_texts failed (rc={rc})")
+        return [(out_lp[i], out_nt[i]) for i in range(n)]
+
     def set_fallback_thresholds(
         self,
         entropy_thold: float,

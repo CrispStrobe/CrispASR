@@ -339,6 +339,9 @@ public class WhisperFullParams extends Structure {
     /** Top-N alternative-candidate tokens (0 = off) */
     public int alt_n;
 
+    /** With a grammar: no end-of-text until the grammar can be complete */
+    public CBool grammar_strict;
+
     @Override
     protected List<String> getFieldOrder() {
         return Arrays.asList("strategy", "n_threads", "n_max_text_ctx",
@@ -358,7 +361,7 @@ public class WhisperFullParams extends Structure {
                 "abort_callback", "abort_callback_user_data",
                 "logits_filter_callback", "logits_filter_callback_user_data",
                 "grammar_rules", "n_grammar_rules", "i_start_rule", "grammar_penalty",
-                "vad", "vad_model_path", "vad_params", "alt_n");
+                "vad", "vad_model_path", "vad_params", "alt_n", "grammar_strict");
     }
 
     public static class ByValue extends WhisperFullParams implements Structure.ByValue {

@@ -3397,6 +3397,102 @@ class CrispasrSession {
   /// transcribe call decodes unconstrained again.
   void clearGrammar() => setGrammar('');
 
+  /// Strict grammar decoding (whisper only): no end-of-text until the
+  /// grammar can be complete. Without it a constrained decode may stop
+  /// mid-phrase ("knight to f" for "knight to f3"). Off by default; sticky.
+  void setGrammarStrict(bool strict) {
+    if (_closed) throw StateError('CrispasrSession is closed');
+    if (!_lib.providesSymbol('crispasr_session_set_grammar_strict')) {
+      throw UnsupportedError(
+          'crispasr_session_set_grammar_strict not present in this libcrispasr build');
+    }
+    final fn = _lib.lookupFunction<
+        Int32 Function(Pointer<Void>, Int32),
+        int Function(
+            Pointer<Void>, int)>('crispasr_session_set_grammar_strict');
+    final rc = fn(_handle, strict ? 1 : 0);
+    if (rc != 0) throw Exception('setGrammarStrict failed (rc=$rc)');
+  }
+
+  /// log P(text | audio) for each of [texts] (whisper only), with the number
+  /// of tokens it covers (text tokens plus end-of-text). The decoder is
+  /// teacher-forced over each candidate; the audio is encoded and the prompt
+  /// decoded once. To choose among a known set of phrases — the legal moves of
+  /// a chess position, say — compare `logprob / tokens`: a plain sum favours
+  /// shorter texts. [pcm] is 16 kHz mono. A text that does not fit the decoder
+  /// context scores negative infinity.
+  ///
+  /// [prompt] is optional previous text that primes Whisper's vocabulary —
+  /// a few example phrases in the expected style.
+  List<({double logprob, int tokens})> scoreTexts(
+      Float32List pcm, List<String> texts,
+      {String? language, String? prompt}) {
+    if (_closed) throw StateError('CrispasrSession is closed');
+    if (texts.isEmpty) return const [];
+    if (!_lib.providesSymbol('crispasr_session_score_texts')) {
+      throw UnsupportedError(
+          'crispasr_session_score_texts not present in this libcrispasr build');
+    }
+    final fn = _lib.lookupFunction<
+        Int32 Function(
+            Pointer<Void>,
+            Pointer<Float>,
+            Int32,
+            Pointer<Utf8>,
+            Pointer<Utf8>,
+            Pointer<Pointer<Utf8>>,
+            Int32,
+            Pointer<Float>,
+            Pointer<Int32>),
+        int Function(
+            Pointer<Void>,
+            Pointer<Float>,
+            int,
+            Pointer<Utf8>,
+            Pointer<Utf8>,
+            Pointer<Pointer<Utf8>>,
+            int,
+            Pointer<Float>,
+            Pointer<Int32>)>('crispasr_session_score_texts');
+    final pcmPtr = calloc<Float>(pcm.length);
+    pcmPtr.asTypedList(pcm.length).setAll(0, pcm);
+    final langPtr = (language == null || language.isEmpty)
+        ? Pointer<Utf8>.fromAddress(0)
+        : language.toNativeUtf8();
+    final promptPtr = (prompt == null || prompt.isEmpty)
+        ? Pointer<Utf8>.fromAddress(0)
+        : prompt.toNativeUtf8();
+    final textPtrs = calloc<Pointer<Utf8>>(texts.length);
+    for (var i = 0; i < texts.length; i++) {
+      textPtrs[i] = texts[i].toNativeUtf8();
+    }
+    final out = calloc<Float>(texts.length);
+    final counts = calloc<Int32>(texts.length);
+    try {
+      final rc = fn(_handle, pcmPtr, pcm.length, langPtr, promptPtr, textPtrs,
+          texts.length, out, counts);
+      if (rc == -10) {
+        throw UnsupportedError(
+            'scoreTexts needs the whisper backend (this session is $_backend)');
+      }
+      if (rc != 0) throw Exception('scoreTexts failed (rc=$rc)');
+      return [
+        for (var i = 0; i < texts.length; i++)
+          (logprob: out[i], tokens: counts[i])
+      ];
+    } finally {
+      calloc.free(pcmPtr);
+      if (langPtr != Pointer<Utf8>.fromAddress(0)) calloc.free(langPtr);
+      if (promptPtr != Pointer<Utf8>.fromAddress(0)) calloc.free(promptPtr);
+      for (var i = 0; i < texts.length; i++) {
+        calloc.free(textPtrs[i]);
+      }
+      calloc.free(textPtrs);
+      calloc.free(out);
+      calloc.free(counts);
+    }
+  }
+
   /// Whisper text-suppression + prompt-carry extras (whisper-only;
   /// other backends silently ignore). Effective on CrispASR
   /// 0.5.11+.

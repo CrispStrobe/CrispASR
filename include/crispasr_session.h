@@ -802,6 +802,14 @@ CRISPASR_SESSION_API int crispasr_session_set_beam_size(crispasr_session* s, int
 CRISPASR_SESSION_API int crispasr_session_set_return_logits(crispasr_session* s, int enable);
 CRISPASR_SESSION_API int crispasr_session_set_grammar_text(crispasr_session* s, const char* gbnf_text,
                                                            const char* root_rule, float penalty);
+// No end-of-text until the grammar is complete (whisper; off by default).
+CRISPASR_SESSION_API int crispasr_session_set_grammar_strict(crispasr_session* s, int strict);
+// log P(text | audio) for each candidate text, teacher-forced; the audio is
+// encoded once (whisper only; returns -10 for other backends).
+CRISPASR_SESSION_API int crispasr_session_score_texts(crispasr_session* s, const float* pcm, int n_samples,
+                                                      const char* language, const char* initial_prompt,
+                                                      const char** texts, int n_texts, float* out_logprobs,
+                                                      int* out_n_tokens);
 CRISPASR_SESSION_API int crispasr_session_set_fallback_thresholds(crispasr_session* s, float entropy_thold,
                                                                   float logprob_thold, float no_speech_thold,
                                                                   float temperature_inc);

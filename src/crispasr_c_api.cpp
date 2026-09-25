@@ -1901,6 +1901,9 @@ struct crispasr_session {
     std::vector<const whisper_grammar_element*> grammar_rules_ptrs;
     uint32_t grammar_root_rule_id = 0;
     bool grammar_active = false;
+    // crispasr_session_set_grammar_strict: no end-of-text until the grammar
+    // is complete (see whisper_full_params.grammar_strict). Off by default.
+    bool grammar_strict = false;
 
     // Session-level hotwords for contextual biasing (PLAN §5.26.2).
     // Stored as a comma-separated string; parsed into per-backend form
@@ -5874,6 +5877,7 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
             wparams.n_grammar_rules = s->grammar_rules_ptrs.size();
             wparams.i_start_rule = s->grammar_root_rule_id;
             wparams.grammar_penalty = s->grammar_penalty;
+            wparams.grammar_strict = s->grammar_strict;
         }
 
         // Set progress callback — writes to the module-level atomic so
@@ -13037,6 +13041,33 @@ CA_EXPORT int crispasr_session_set_grammar_text(crispasr_session* s, const char*
     s->grammar_penalty = penalty > 0.0f ? penalty : 100.0f;
     s->grammar_active = true;
     return 0;
+}
+
+// Strict grammar decoding (whisper only): forbid end-of-text until the
+// grammar can be complete. Without it a constrained decode may stop
+// mid-phrase. Sticky; applies to subsequent transcribe calls.
+CA_EXPORT int crispasr_session_set_grammar_strict(crispasr_session* s, int strict) {
+    if (!s)
+        return -1;
+    s->grammar_strict = strict != 0;
+    return 0;
+}
+
+// Scores candidate transcripts of `pcm` (16 kHz mono): log P(text | audio)
+// for each of `texts` (and, when out_n_tokens is not null, how many tokens
+// each covers), teacher-forced, the audio encoded once — for picking
+// the likeliest of a known set of phrases (e.g. the legal moves of a chess
+// position) without the greedy commitment of grammar decoding. Whisper
+// backend only (returns -10 for others). `language` may be null.
+CA_EXPORT int crispasr_session_score_texts(crispasr_session* s, const float* pcm, int n_samples, const char* language,
+                                           const char* initial_prompt, const char** texts, int n_texts,
+                                           float* out_logprobs, int* out_n_tokens) {
+    if (!s || !pcm || n_samples <= 0 || !texts || n_texts <= 0 || !out_logprobs)
+        return -1;
+    if (s->backend != "whisper" || !s->whisper_ctx)
+        return -10;
+    return whisper_score_texts(s->whisper_ctx, pcm, n_samples, language, initial_prompt, texts, n_texts, out_logprobs,
+                               out_n_tokens, s->n_threads);
 }
 
 // Whisper decoder-fallback thresholds. All four are written into
