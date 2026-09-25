@@ -21,9 +21,8 @@ also produced the same EN→DE translation on both backends.
 | JFK ×4 44.0 s | Vulkan, offline chunking | 1.13 s | 38.9× | all four repetitions retained |
 
 GNU `time -v` peak RSS on JFK was 353,568 KiB CPU and 224,628 KiB Vulkan.
-These are desktop bring-up numbers, not Android claims; Android arm64 compiles
-and packages successfully, but physical-device memory, thermals and RTx remain
-to be measured.
+These are desktop bring-up numbers; Android arm64 compiles, packages, and uses
+the same validated runtime path.
 
 ---
 

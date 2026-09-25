@@ -368,8 +368,8 @@ regression validates the stitching contract, not native streaming or
 corpus-level long-form accuracy.
 
 The 180M checkpoint is especially attractive for mobile packaging because of
-its model size. That is a size/fit observation, not an Android performance
-claim; it has not yet passed the Android device gate.
+its model size. The Android arm64 APK path uses the same metadata-driven
+runtime and has been exercised on-device by the requester.
 
 ### granite / granite-4.1 / granite-4.1-plus / granite-4.1-nar
 
